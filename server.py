@@ -244,26 +244,44 @@ def get_article(article_id: int):
         data.update(json.loads(data["processed_json"]))
         return data
 
+SYSTEM_GRAMMAR_PROMPT = """你是一位精通德语欧标（Goethe-Zertifikat A1-C1）的资深德语教学与考点解析专家。
+用户会提供一个德语完整句子，以及他们点击的目标词汇或短语（用户可能是 A1-A2 零基础/初学者）。
+
+请详细分析该词或短语在句中的关键语法考点，特别关照初学者的痛点（如：冠词四格变化、三格动词、动词现在时变位、可分动词前缀、从句动词置后、固定介词搭配）。
+
+以严格的 JSON 格式输出，字段如下：
+{
+  "grammar_name": "考点名称（如：Akkusativ mit bestimmtem Artikel / Trennbare Verben / Nomen-Verb-Verbindung / Präposition mit Dativ）",
+  "cefr_level": "考点对应的欧标等级，只能是 A1/A2/B1/B2/C1 之一",
+  "explanation_zh": "面向初学者的通俗精炼中文解析（1-3句话，解释在句中的语法作用、为什么用这个格/变位，指出考试高频错点）",
+  "rule_formula": "语法规则或公式（如：trinken + Akkusativ: den Kaffee (m.) / fahren mit + Dativ: der U-Bahn (f.)）",
+  "collocations": ["高频用法1", "高频用法2"]
+}
+不要输出除 JSON 以外的任何文字。"""
+
 @app.post("/api/lookup/grammar")
 async def lookup_grammar(req: GrammarLookupReq):
     key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not key:
         return {
             "grammar_name": f"语法考点辨析 ({req.target_phrase})",
-            "cefr_level": "B1",
+            "cefr_level": "A1",
             "explanation_zh": "请在 .env 中配置 DEEPSEEK_API_KEY 获取实时歌德大纲 AI 分析。",
             "rule_formula": "Grammar Pattern",
             "collocations": [f"{req.target_phrase} (常用释义)"]
         }
 
-    prompt = f"句子: \"{req.sentence}\"\n目标词/短语: \"{req.target_phrase}\"\n请按照歌德欧标考试(Profile deutsch)解析语法考点。返回 JSON: {{\"grammar_name\": \"...\", \"cefr_level\": \"B1\", \"explanation_zh\": \"...\", \"rule_formula\": \"...\", \"collocations\": [\"...\"]}}"
+    user_content = f"句子: \"{req.sentence}\"\n目标词/短语: \"{req.target_phrase}\""
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             "https://api.deepseek.com/chat/completions",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json={
                 "model": "deepseek-chat",
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [
+                    {"role": "system", "content": SYSTEM_GRAMMAR_PROMPT},
+                    {"role": "user", "content": user_content}
+                ],
                 "response_format": {"type": "json_object"}
             }
         )

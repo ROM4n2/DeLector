@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 # Ensure test DB
 os.environ["DATABASE_PATH"] = "test_delector.db"
-from server import app, init_db, get_db, get_cefr_level, export_anki_deck
+from server import app, init_db, get_db, get_cefr_level, export_anki_deck, SYSTEM_GRAMMAR_PROMPT
 
 @pytest.fixture
 def test_db_path():
@@ -43,6 +43,10 @@ def test_seed_preset_articles_with_a1(client, test_db_path):
         assert any("A1" in t for t in titles)
         assert any("A2" in t for t in titles)
         assert any("B1" in t for t in titles)
+
+def test_a1_grammar_prompt_coverage():
+    assert "A1" in SYSTEM_GRAMMAR_PROMPT
+    assert "变位" in SYSTEM_GRAMMAR_PROMPT or "格" in SYSTEM_GRAMMAR_PROMPT
 
 def test_full_api_flow(client):
     # 1. Ingest text
