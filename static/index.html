@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DeLector - 德语欧标沉浸阅读与考点分析</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #fcfbf9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .de-token { display: inline; padding: 2px 4px; margin: 0 1px; border-radius: 4px; cursor: pointer; transition: all 0.15s ease; min-height: 28px; line-height: 1.8; }
+    .de-token:hover { background-color: #e7e5e4; }
+    .de-token.selected { background-color: #2563eb !important; color: white !important; }
+    .cefr-A2 { color: #0f766e; background: #f0fdfa; border-bottom: 2px solid #99f6e4; font-weight: 500; }
+    .cefr-B1 { color: #b45309; background: #fffbeb; border-bottom: 2px solid #fde68a; font-weight: 500; }
+    .cefr-B2 { color: #be123c; background: #fff1f2; border-bottom: 2px solid #fecdd3; font-weight: 600; }
+    .cefr-C1 { color: #6d28d9; background: #faf5ff; border-bottom: 2px solid #e9d5ff; font-weight: 600; }
+  </style>
+</head>
+<body class="text-stone-900 min-h-screen flex flex-col antialiased">
+
+  <!-- Header Nav -->
+  <header class="sticky top-0 z-30 flex items-center justify-between border-b border-stone-200 bg-stone-50/95 px-6 py-3.5 backdrop-blur-md">
+    <div class="flex items-center gap-3 cursor-pointer select-none" onclick="showView('home')">
+      <span class="text-2xl">📖</span>
+      <span class="font-serif text-xl font-bold tracking-tight text-stone-900">DeLector</span>
+      <span class="hidden sm:inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">歌德欧标版</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="showView('cards')" class="min-h-[44px] inline-flex items-center rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 transition active:scale-95">
+        🗂️ 卡片库 (<span id="card-count" class="font-bold ml-1">0</span>)
+      </button>
+      <a href="/api/cards/export/apkg" class="min-h-[44px] inline-flex items-center rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-800 transition active:scale-95">
+        ⬇️ 导出 Anki (.apkg)
+      </a>
+    </div>
+  </header>
+
+  <!-- View 1: Home Dashboard -->
+  <main id="view-home" class="max-w-4xl mx-auto px-6 py-10 flex-1 w-full">
+    <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-8 shadow-sm">
+      <div>
+        <span class="text-xs font-bold uppercase tracking-wider text-amber-800">Goethe-Zertifikat 智能阅读备考</span>
+        <h2 class="mt-1 font-serif text-3xl font-bold text-stone-900">德语欧标沉浸阅读与考点剖析</h2>
+        <p class="mt-2 text-sm text-stone-600 leading-relaxed">导入任意德语新闻或备考课文，本地智能标注 CEFR 等级（A2-C1），实时解析歌德核心考点并导出 Anki 卡片。</p>
+      </div>
+      <button onclick="openImportModal()" class="min-h-[48px] rounded-xl bg-amber-700 px-6 py-3.5 text-sm font-semibold text-white shadow hover:bg-amber-800 whitespace-nowrap transition active:scale-95">
+        + 导入德语文章
+      </button>
+    </div>
+
+    <!-- CEFR Legend -->
+    <div class="mb-6 flex flex-wrap items-center gap-3 text-xs bg-white p-4 rounded-xl border border-stone-200">
+      <span class="font-bold text-stone-500 mr-2">欧标难度色例：</span>
+      <span class="cefr-A2 px-2.5 py-1 rounded">A2 进阶词汇</span>
+      <span class="cefr-B1 px-2.5 py-1 rounded">B1 中级考点</span>
+      <span class="cefr-B2 px-2.5 py-1 rounded">B2 高级表达</span>
+      <span class="cefr-C1 px-2.5 py-1 rounded">C1 精通论述</span>
+    </div>
+
+    <h3 class="font-serif text-xl font-bold mb-4 text-stone-800">文稿库</h3>
+    <div id="article-list" class="space-y-3"></div>
+  </main>
+
+  <!-- View 2: Reader Workspace -->
+  <main id="view-reader" class="max-w-3xl mx-auto px-6 py-10 flex-1 w-full hidden">
+    <div class="mb-6 flex items-center justify-between border-b border-stone-200 pb-4">
+      <button onclick="showView('home')" class="min-h-[44px] inline-flex items-center text-sm font-medium text-stone-600 hover:text-stone-900 transition">
+        ← 返回文稿列表
+      </button>
+      <h2 id="reader-title" class="font-serif text-xl font-bold truncate max-w-md text-stone-900"></h2>
+    </div>
+    <div id="reader-content" class="text-xl leading-loose space-y-6 bg-white p-8 rounded-2xl border border-stone-200 shadow-sm"></div>
+  </main>
+
+  <!-- View 3: Cards List -->
+  <main id="view-cards" class="max-w-4xl mx-auto px-6 py-10 flex-1 w-full hidden">
+    <div class="mb-6 flex items-center justify-between border-b border-stone-200 pb-4">
+      <button onclick="showView('home')" class="min-h-[44px] inline-flex items-center text-sm font-medium text-stone-600 hover:text-stone-900 transition">
+        ← 返回文稿列表
+      </button>
+      <h2 class="font-serif text-2xl font-bold text-stone-900">待复习卡片库</h2>
+    </div>
+    <div id="cards-container" class="space-y-6"></div>
+  </main>
+
+  <!-- Sliding Right Drawer -->
+  <aside id="drawer" class="fixed inset-y-0 right-0 z-40 w-full max-w-md bg-white border-l border-stone-200 shadow-2xl p-6 flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out">
+    <div class="flex items-center justify-between border-b border-stone-200 pb-4">
+      <h3 class="font-serif text-lg font-bold text-stone-900">考点与词汇工作台</h3>
+      <button onclick="closeDrawer()" class="min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-400 hover:text-stone-700 text-xl font-bold">✕</button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto py-4 space-y-6">
+      <!-- Fast Info -->
+      <div class="rounded-xl border border-stone-200 bg-stone-50 p-5">
+        <div class="flex justify-between items-baseline">
+          <span id="d-word" class="text-2xl font-bold text-stone-900"></span>
+          <span id="d-cefr" class="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800"></span>
+        </div>
+        <div id="d-meta" class="mt-2 text-xs text-stone-600"></div>
+        <div class="mt-4">
+          <input id="d-def" type="text" placeholder="输入中文释义..." class="w-full rounded-lg border border-stone-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-600">
+        </div>
+        <button onclick="saveVocab()" id="btn-save-vocab" class="mt-3 w-full min-h-[44px] rounded-lg bg-stone-900 py-2.5 text-sm font-medium text-white hover:bg-stone-800 transition active:scale-98">
+          + 加入 Anki 词汇卡
+        </button>
+      </div>
+
+      <!-- DeepSeek Goethe Grammar Layer -->
+      <div class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="font-serif font-bold text-stone-900">歌德考点深度剖析</span>
+          <button onclick="analyzeGrammar()" id="btn-analyze" class="min-h-[36px] rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition active:scale-95">
+            AI 深度剖析
+          </button>
+        </div>
+        <div id="grammar-res" class="hidden space-y-3 text-sm">
+          <div class="font-bold text-indigo-950 text-base" id="g-name"></div>
+          <div class="font-mono text-xs bg-white p-3 rounded-lg border border-indigo-100 text-indigo-900" id="g-formula"></div>
+          <p class="text-stone-700 leading-relaxed text-xs" id="g-exp"></p>
+          <button onclick="saveGrammar()" id="btn-save-grammar" class="w-full min-h-[44px] rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition active:scale-98">
+            + 加入 Anki 语法卡
+          </button>
+        </div>
+      </div>
+
+      <!-- Context -->
+      <div class="rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs text-stone-600">
+        <span class="font-bold text-stone-800">原句上下文：</span>
+        <p id="d-sent" class="mt-1.5 italic leading-relaxed text-stone-700"></p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Import Modal -->
+  <div id="import-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 backdrop-blur-sm hidden">
+    <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+      <h3 class="font-serif text-xl font-bold mb-4 text-stone-900">导入德语研读材料</h3>
+      <input id="imp-title" type="text" placeholder="文章标题 (可选)" class="w-full rounded-lg border border-stone-300 px-3.5 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-amber-600">
+      <textarea id="imp-text" rows="8" placeholder="粘贴德语文章、课文或短讯..." class="w-full rounded-lg border border-stone-300 px-3.5 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-amber-600 leading-relaxed"></textarea>
+      <div class="flex justify-end gap-3">
+        <button onclick="closeImportModal()" class="min-h-[44px] rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 transition">取消</button>
+        <button onclick="submitImport()" class="min-h-[44px] rounded-lg bg-amber-700 px-5 py-2 text-sm font-medium text-white hover:bg-amber-800 transition active:scale-95">开始阅读</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentArticle = null;
+    let selectedToken = null;
+    let selectedSentence = null;
+    let grammarData = null;
+
+    async function loadArticles() {
+      const res = await fetch('/api/articles');
+      const data = await res.json();
+      const el = document.getElementById('article-list');
+      if (data.length === 0) {
+        el.innerHTML = '<div class="p-8 text-center text-stone-400 border border-dashed border-stone-300 rounded-xl bg-white">暂无文稿，点击上方按钮导入德语文章</div>';
+        return;
+      }
+      el.innerHTML = data.map(a => `
+        <div onclick="openReader(${a.id})" class="cursor-pointer flex justify-between items-center rounded-xl border border-stone-200 bg-white p-5 shadow-sm hover:border-amber-600 transition">
+          <div>
+            <h4 class="font-serif text-lg font-bold text-stone-900">${a.title}</h4>
+            <div class="text-xs text-stone-400 mt-1">${a.created_at} · ${a.char_count} 字符</div>
+          </div>
+          <span class="text-stone-400 text-lg">→</span>
+        </div>
+      `).join('');
+    }
+
+    async function openReader(id) {
+      const res = await fetch(`/api/articles/${id}`);
+      currentArticle = await res.json();
+      document.getElementById('reader-title').textContent = currentArticle.title;
+      
+      const content = document.getElementById('reader-content');
+      content.innerHTML = currentArticle.sentences.map(sent => `
+        <p class="mb-4">
+          ${sent.tokens.map(t => {
+            if (t.is_space) return ' ';
+            if (t.is_punct) return `<span>${t.text}</span>`;
+            const cefrClass = t.cefr_level ? `cefr-${t.cefr_level}` : '';
+            return `<span id="tok-${t.id}" class="de-token ${cefrClass}" onclick="inspectToken(${t.id}, ${sent.id})">${t.text}</span>`;
+          }).join('')}
+        </p>
+      `).join('');
+      showView('reader');
+    }
+
+    function inspectToken(tokenId, sentId) {
+      document.querySelectorAll('.de-token.selected').forEach(el => el.classList.remove('selected'));
+      const activeEl = document.getElementById(`tok-${tokenId}`);
+      if (activeEl) activeEl.classList.add('selected');
+
+      const sent = currentArticle.sentences.find(s => s.id === sentId);
+      const token = sent.tokens.find(t => t.id === tokenId);
+      selectedToken = token;
+      selectedSentence = sent;
+      grammarData = null;
+
+      document.getElementById('d-word').textContent = token.text;
+      document.getElementById('d-cefr').textContent = token.cefr_level ? `CEFR ${token.cefr_level}` : 'A1';
+      document.getElementById('d-meta').textContent = `原型: ${token.lemma} · 词性: ${token.pos} ${token.gender ? '· ' + token.gender : ''} ${token.case ? '· ' + token.case : ''}`;
+      document.getElementById('d-def').value = '';
+      document.getElementById('d-sent').textContent = sent.text;
+      document.getElementById('grammar-res').classList.add('hidden');
+      document.getElementById('btn-save-vocab').textContent = '+ 加入 Anki 词汇卡';
+      document.getElementById('drawer').classList.remove('translate-x-full');
+    }
+
+    async function analyzeGrammar() {
+      const btn = document.getElementById('btn-analyze');
+      btn.textContent = '分析中...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/lookup/grammar', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({sentence: selectedSentence.text, target_phrase: selectedToken.text})
+        });
+        grammarData = await res.json();
+        document.getElementById('g-name').textContent = grammarData.grammar_name;
+        document.getElementById('g-formula').textContent = grammarData.rule_formula || '';
+        document.getElementById('g-exp').textContent = grammarData.explanation_zh;
+        if (!document.getElementById('d-def').value && grammarData.collocations?.length) {
+          document.getElementById('d-def').value = grammarData.collocations[0];
+        }
+        document.getElementById('grammar-res').classList.remove('hidden');
+      } catch (err) {
+        alert('语法解析失败，请检查网络或 API Key');
+      } finally {
+        btn.textContent = 'AI 深度剖析';
+        btn.disabled = false;
+      }
+    }
+
+    async function saveVocab() {
+      const def = document.getElementById('d-def').value.trim();
+      if (!def) return alert('请输入中文释义');
+      await fetch('/api/cards/vocab', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          article_id: currentArticle.id,
+          word: selectedToken.text,
+          lemma: selectedToken.lemma,
+          pos: selectedToken.pos,
+          gender: selectedToken.gender,
+          cefr_level: selectedToken.cefr_level || 'A1',
+          definition_zh: def,
+          sentence_context: selectedSentence.text
+        })
+      });
+      document.getElementById('btn-save-vocab').textContent = '✓ 已保存到 Anki 库';
+      updateCardCount();
+    }
+
+    async function saveGrammar() {
+      if (!grammarData) return;
+      await fetch('/api/cards/grammar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          article_id: currentArticle.id,
+          sentence_context: selectedSentence.text,
+          grammar_name: grammarData.grammar_name,
+          cefr_level: grammarData.cefr_level || 'B1',
+          explanation_zh: grammarData.explanation_zh,
+          rule_formula: grammarData.rule_formula
+        })
+      });
+      document.getElementById('btn-save-grammar').textContent = '✓ 已加入语法卡';
+      updateCardCount();
+    }
+
+    async function updateCardCount() {
+      const res = await fetch('/api/cards');
+      const data = await res.json();
+      document.getElementById('card-count').textContent = data.vocab_cards.length + data.grammar_cards.length;
+    }
+
+    async function showView(view) {
+      ['home', 'reader', 'cards'].forEach(v => document.getElementById(`view-${v}`).classList.add('hidden'));
+      document.getElementById(`view-${view}`).classList.remove('hidden');
+      closeDrawer();
+      if (view === 'cards') loadCardsView();
+      if (view === 'home') loadArticles();
+    }
+
+    async function loadCardsView() {
+      const res = await fetch('/api/cards');
+      const data = await res.json();
+      const el = document.getElementById('cards-container');
+      el.innerHTML = `
+        <div>
+          <h3 class="font-bold text-lg text-stone-800 mb-3">词汇卡 (${data.vocab_cards.length})</h3>
+          ${data.vocab_cards.length === 0 ? '<div class="text-sm text-stone-400 bg-white p-4 rounded-xl border">暂无词汇卡</div>' : `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+            ${data.vocab_cards.map(c => `
+              <div class="p-5 bg-white border border-stone-200 rounded-xl shadow-sm">
+                <div class="flex justify-between items-baseline font-bold">
+                  <span class="text-lg text-stone-900">${c.word}</span>
+                  <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">${c.cefr_level}</span>
+                </div>
+                <div class="text-stone-700 mt-2 font-medium">${c.definition_zh}</div>
+                <div class="text-xs text-stone-400 mt-1">${c.lemma} (${c.pos}${c.gender ? ' · ' + c.gender : ''})</div>
+                <div class="text-xs italic text-stone-500 mt-2 border-t pt-2">${c.sentence_context}</div>
+              </div>
+            `).join('')}
+          </div>
+          `}
+        </div>
+
+        <div>
+          <h3 class="font-bold text-lg text-stone-800 mb-3">歌德语法卡 (${data.grammar_cards.length})</h3>
+          ${data.grammar_cards.length === 0 ? '<div class="text-sm text-stone-400 bg-white p-4 rounded-xl border">暂无语法卡</div>' : `
+          <div class="space-y-3">
+            ${data.grammar_cards.map(c => `
+              <div class="p-5 bg-white border border-indigo-100 rounded-xl shadow-sm space-y-2">
+                <div class="flex justify-between items-baseline font-bold text-indigo-950">
+                  <span class="text-lg">${c.grammar_name}</span>
+                  <span class="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs text-indigo-800">Goethe ${c.cefr_level}</span>
+                </div>
+                ${c.rule_formula ? `<div class="font-mono text-xs bg-slate-50 p-2.5 rounded border border-slate-200 text-slate-700">${c.rule_formula}</div>` : ''}
+                <div class="text-sm text-stone-700 leading-relaxed">${c.explanation_zh}</div>
+                <div class="text-xs italic text-stone-500 border-t pt-2">例句: ${c.sentence_context}</div>
+              </div>
+            `).join('')}
+          </div>
+          `}
+        </div>
+      `;
+    }
+
+    function openImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
+    function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
+    function closeDrawer() { 
+      document.getElementById('drawer').classList.add('translate-x-full'); 
+      document.querySelectorAll('.de-token.selected').forEach(el => el.classList.remove('selected'));
+    }
+
+    async function submitImport() {
+      const text = document.getElementById('imp-text').value.trim();
+      const title = document.getElementById('imp-title').value.trim() || '未命名文稿';
+      if (!text) return alert('请输入德语文本');
+      const res = await fetch('/api/articles/ingest', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title, raw_text: text})
+      });
+      const data = await res.json();
+      closeImportModal();
+      document.getElementById('imp-text').value = '';
+      document.getElementById('imp-title').value = '';
+      openReader(data.article_id);
+    }
+
+    loadArticles();
+    updateCardCount();
+  </script>
+</body>
+</html>
