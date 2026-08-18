@@ -1613,12 +1613,20 @@ body.drawer-open .shadow-player {
   }
 }
 
-/* ── Phase A/B/C: Cards Segments & Actions ────────────────── */
+/* ── Phase A/B/C: Cards Segments, View Modes & Deck Stage ─ */
+.cards-control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
 .cards-seg-bar {
   display: inline-flex;
   border: 1.5px solid var(--ink);
   background: var(--paper-deep);
-  margin-bottom: 1.5rem;
 }
 
 .cards-seg-btn {
@@ -1661,6 +1669,235 @@ body.drawer-open .shadow-player {
   color: var(--paper);
 }
 
+.cards-view-toggle {
+  display: inline-flex;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-deep);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.cards-mode-btn {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--rule-light);
+  padding: 0.45rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pencil);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.15s ease;
+}
+
+.cards-mode-btn:last-child {
+  border-right: none;
+}
+
+.cards-mode-btn.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ── Interactive Card Deck (扑克牌叠层舞台) ──────────────── */
+.deck-stage {
+  max-width: 620px;
+  margin: 1.5rem auto 3.5rem;
+  perspective: 1200px;
+  user-select: none;
+}
+
+.deck-meta-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--pencil);
+}
+
+.deck-counter-badge {
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  padding: 0.25rem 0.65rem;
+  letter-spacing: 0.05em;
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+/* Card Stack Container */
+.deck-stack-wrap {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  margin: 0 auto;
+}
+
+/* Layered cards underneath */
+.deck-card-layer {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.deck-card-layer-3 {
+  transform: translateY(12px) scale(0.94);
+  opacity: 0.35;
+  background: var(--paper-deep);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.deck-card-layer-2 {
+  transform: translateY(6px) scale(0.97);
+  opacity: 0.65;
+  background: var(--paper-tint);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+/* Active Poker Card */
+.deck-active-card {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 var(--ink);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2rem 2.25rem;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.deck-active-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.deck-active-card.is-swiping-left {
+  transform: translateX(-120%) rotate(-15deg) !important;
+  opacity: 0;
+}
+
+.deck-active-card.is-swiping-right {
+  transform: translateX(120%) rotate(15deg) !important;
+  opacity: 0;
+}
+
+/* Deck Card Elements */
+.deck-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.deck-word-title {
+  font-family: var(--serif-heading);
+  font-size: 2.375rem;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.deck-meta-lemma {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--pencil);
+  margin-top: 0.35rem;
+}
+
+.deck-card-body {
+  margin: 1.25rem 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.deck-def-text {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.4;
+  margin-bottom: 0.75rem;
+}
+
+.deck-sent-quote {
+  font-family: var(--serif-body);
+  font-style: italic;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--pencil);
+  padding: 0.75rem 1rem;
+  background: var(--paper-tint);
+  border-left: 3px solid var(--accent);
+}
+
+.deck-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--rule);
+}
+
+/* Stepper Controls Bar below Deck */
+.deck-nav-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.75rem;
+}
+
+.deck-btn-nav {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  padding: 0.6rem 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: all 0.12s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.deck-btn-nav:hover:not(:disabled) {
+  background: var(--paper-deep);
+  transform: translateY(-2px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.deck-btn-nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.deck-flip-prompt {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  letter-spacing: 0.05em;
+  background: var(--paper-deep);
+  padding: 0.35rem 0.75rem;
+  border: 1px dashed var(--rule);
+}
+
+/* List/Grid Card styling */
 .memo-card, .grammar-memo-card {
   position: relative;
   transition: opacity 0.2s ease, transform 0.15s ease;
@@ -1822,12 +2059,180 @@ body.drawer-open .shadow-player {
   letter-spacing: 0.04em;
 }
 
-/* ── Phase C: Broadsheet Progress Dossier ─────────────────── */
+/* ── Phase C: Leporello Folio Progress Dossier ────────────── */
 #view-progress {
   max-width: 960px;
   margin: 0 auto;
   padding: 2.5rem 2rem 6rem;
 }
+
+.dossier-masthead {
+  padding-bottom: 1.25rem;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 1.5rem;
+}
+
+.dossier-masthead-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dossier-kicker {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.dossier-headline {
+  margin: 0;
+  font-family: var(--serif-heading);
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.dossier-ticker {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  padding: 0.4rem 0.875rem;
+  letter-spacing: 0.08em;
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.dossier-ticker b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ticker-sep {
+  color: var(--rule);
+}
+
+/* Folio Nav Strip */
+.folio-nav-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule-light);
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.folio-tabs {
+  display: inline-flex;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-deep);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.folio-tab {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--rule);
+  padding: 0.45rem 1.125rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all 0.15s ease;
+}
+
+.folio-tab:last-child {
+  border-right: none;
+}
+
+.folio-tab.active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.folio-page-idx {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  color: var(--pencil);
+  text-transform: uppercase;
+}
+
+.folio-tab.active .folio-page-idx {
+  color: var(--accent);
+}
+
+.folio-page-name {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.folio-tab.active .folio-page-name {
+  color: var(--paper);
+}
+
+.folio-stepper {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.folio-step-btn {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  padding: 0.4rem 0.875rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 1.5px 1.5px 0 var(--ink);
+  transition: all 0.15s ease;
+}
+
+.folio-step-btn:hover {
+  background: var(--paper-deep);
+  transform: translateY(-1px);
+}
+
+.folio-step-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+/* Horizontal Window & Track */
+.folio-window {
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+  margin-top: 1.5rem;
+}
+
+.folio-track {
+  display: flex;
+  width: 100%;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.folio-sheet {
+  min-width: 100%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding-right: 0.25rem;
+}
+
 
 .dossier-masthead {
   padding-bottom: 1.25rem;

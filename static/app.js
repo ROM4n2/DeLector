@@ -637,18 +637,30 @@ async function saveGrammar() {
   refreshCount();
 }
 
-// ── Cards view (Phase A: Segments, Delete, Master) ───────────────────────────
+// ── Cards view (Phase A: Segments, Delete, Master, Deck Swiper) ──────────────
 let cardSegment = 'pending'; // 'pending' | 'mastered'
+let cardViewMode = 'deck';   // 'deck' | 'grid'
+let deckIndex = 0;
+let deckFlipped = false;
 let cachedCards = { vocab_cards: [], grammar_cards: [] };
 let lastDeletedCard = null;
 let undoToastTimer = null;
 
 function setCardSegment(seg) {
   cardSegment = seg;
+  deckIndex = 0;
+  deckFlipped = false;
   const btnPending = document.getElementById('seg-pending');
   const btnMastered = document.getElementById('seg-mastered');
   if (btnPending) btnPending.classList.toggle('active', seg === 'pending');
   if (btnMastered) btnMastered.classList.toggle('active', seg === 'mastered');
+  renderCardsGrid();
+}
+
+function setCardViewMode(mode) {
+  cardViewMode = mode;
+  document.getElementById('mode-btn-deck')?.classList.toggle('active', mode === 'deck');
+  document.getElementById('mode-btn-grid')?.classList.toggle('active', mode === 'grid');
   renderCardsGrid();
 }
 
@@ -683,18 +695,176 @@ function renderCardsGrid() {
 
   if (vList.length === 0 && gList.length === 0) {
     container.innerHTML = `
-      <div style="text-align:center;padding:3.5rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
-        <div style="font-size:2rem;margin-bottom:0.5rem;">${isMastered ? '🛡️' : '📭'}</div>
-        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);margin-bottom:0.35rem;">
-          ${isMastered ? '尚无已斩断/已掌握的卡片' : '卡片库空空如也'}
+      <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;box-shadow:2px 2px 0 var(--ink);">
+        <div style="font-size:2.5rem;margin-bottom:0.5rem;">${isMastered ? '🛡️' : '🎴'}</div>
+        <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">
+          ${isMastered ? '尚无已斩断/已掌握的卡片' : '扑克卡盒空空如也'}
         </div>
-        <p style="font-size:0.8125rem;color:var(--pencil);">
-          ${isMastered ? '在待复习库中点击「✓ 斩」即可将掌握的卡片归档至此。' : '在阅读器中点击生词或语法考点，即可一键收录为复习卡片。'}
+        <p style="font-size:0.8125rem;color:var(--pencil);max-width:400px;margin:0 auto;">
+          ${isMastered ? '在待复习扑克牌盒中点击「✓ 斩」即可将掌握的卡片归档至此。' : '在阅读器中点击生词或语法考点，即可一键收录为复习卡片。'}
         </p>
       </div>
     `;
     return;
   }
+
+  if (cardViewMode === 'deck') {
+    renderDeckStage(vList, gList);
+  } else {
+    renderCatalogGrid(vList, gList);
+  }
+}
+
+// ── 🎴 Tactile Deck Swiper Stage ─────────────────────────────────────────────
+function renderDeckStage(vList, gList) {
+  const container = document.getElementById('cards-container');
+  if (!container) return;
+
+  // Flatten deck (tagged with type)
+  const deck = [
+    ...vList.map(c => ({ ...c, _type: 'vocab' })),
+    ...gList.map(c => ({ ...c, _type: 'grammar' }))
+  ];
+
+  if (deckIndex >= deck.length) deckIndex = Math.max(0, deck.length - 1);
+  const card = deck[deckIndex];
+  const total = deck.length;
+  const isVocab = card._type === 'vocab';
+
+  container.innerHTML = `
+    <div class="deck-stage" id="deck-stage">
+      <div class="deck-meta-bar">
+        <span>🎴 扑克翻牌盒 · POKER STACK</span>
+        <span class="deck-counter-badge">KARTE ${deckIndex + 1} / ${total}</span>
+      </div>
+
+      <div class="deck-stack-wrap" id="deck-stack-wrap">
+        ${total > 2 ? '<div class="deck-card-layer deck-card-layer-3"></div>' : ''}
+        ${total > 1 ? '<div class="deck-card-layer deck-card-layer-2"></div>' : ''}
+
+        <div class="deck-active-card ${card.mastered ? 'is-mastered' : ''}" id="deck-active-card" onclick="toggleDeckFlip(event)">
+          <!-- Top Row -->
+          <div class="deck-card-head">
+            <div>
+              <div class="deck-word-title">${isVocab ? esc(card.word) : esc(card.grammar_name)}</div>
+              <div class="deck-meta-lemma">
+                ${isVocab ? `${esc(card.lemma || card.word)} · ${esc(card.pos || 'WORT')}${card.gender ? ' · ' + esc(card.gender) : ''}` : 'Goethe Grammatik'}
+              </div>
+            </div>
+            <div class="card-top-actions">
+              ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio('${esc(card.word)}')" title="朗读单词">🔊</button>` : ''}
+              <span class="cefr-badge badge-${card.cefr_level || 'A1'}">${card.cefr_level || 'A1'}</span>
+              <button class="card-del-btn" onclick="event.stopPropagation();deleteCard('${card._type}', ${card.id}, '${esc(isVocab ? card.word : card.grammar_name)}')" title="删除此卡片">✕</button>
+            </div>
+          </div>
+
+          <!-- Middle Body (Front / Back Flip Content) -->
+          <div class="deck-card-body">
+            <div id="deck-card-revealed" class="${deckFlipped ? '' : 'hidden'}">
+              <div class="deck-def-text">${esc(isVocab ? card.definition_zh : card.explanation_zh)}</div>
+              ${!isVocab && card.rule_formula ? `<div class="grammar-memo-formula" style="margin-bottom:0.75rem;">${esc(card.rule_formula)}</div>` : ''}
+              ${card.sentence_context ? `<div class="deck-sent-quote">${esc(card.sentence_context)}</div>` : ''}
+            </div>
+            <div id="deck-card-hidden-hint" class="${deckFlipped ? 'hidden' : ''}" style="text-align:center;padding:2rem 0;">
+              <div style="font-size:1.75rem;margin-bottom:0.35rem;opacity:0.6;">🔀</div>
+              <div class="deck-flip-prompt">点击卡片 或 按空格键 (Space) 翻面释义</div>
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="deck-card-footer" onclick="event.stopPropagation()">
+            <span class="card-stats-tag">${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
+            <button class="card-master-btn ${card.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
+              ${card.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Stepper Bar -->
+      <div class="deck-nav-controls">
+        <button class="deck-btn-nav" id="deck-btn-prev" onclick="stepDeck(-1)" ${deckIndex === 0 ? 'disabled' : ''}>
+          ‹ 上一张 (A)
+        </button>
+        <button class="btn btn-dark" style="font-size:0.75rem;padding:0.45rem 1rem;" onclick="toggleDeckFlip(event)">
+          ${deckFlipped ? '隐藏释义 (Space)' : '翻面对答案 (Space)'}
+        </button>
+        <button class="deck-btn-nav" id="deck-btn-next" onclick="stepDeck(1)" ${deckIndex >= total - 1 ? 'disabled' : ''}>
+          下一张 (D) ›
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Attach touch/mouse slide listeners for physical swipe feel
+  attachDeckSwipeListener();
+}
+
+function toggleDeckFlip(e) {
+  if (e) e.stopPropagation();
+  deckFlipped = !deckFlipped;
+  const rev = document.getElementById('deck-card-revealed');
+  const hid = document.getElementById('deck-card-hidden-hint');
+  if (rev && hid) {
+    rev.classList.toggle('hidden', !deckFlipped);
+    hid.classList.toggle('hidden', deckFlipped);
+  }
+}
+
+function stepDeck(direction) {
+  const cardEl = document.getElementById('deck-active-card');
+  if (cardEl) {
+    cardEl.classList.add(direction > 0 ? 'is-swiping-left' : 'is-swiping-right');
+  }
+  setTimeout(() => {
+    deckIndex += direction;
+    deckFlipped = false;
+    renderCardsGrid();
+  }, 160);
+}
+
+function attachDeckSwipeListener() {
+  const cardEl = document.getElementById('deck-active-card');
+  if (!cardEl) return;
+
+  let startX = 0;
+  let currentX = 0;
+  let isDragging = false;
+
+  const onTouchStart = (e) => {
+    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    isDragging = true;
+  };
+
+  const onTouchMove = (e) => {
+    if (!isDragging) return;
+    currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const diff = currentX - startX;
+    cardEl.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg)`;
+  };
+
+  const onTouchEnd = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    const diff = currentX - startX;
+    if (diff < -80) {
+      stepDeck(1);
+    } else if (diff > 80) {
+      stepDeck(-1);
+    } else {
+      cardEl.style.transform = '';
+    }
+  };
+
+  cardEl.addEventListener('touchstart', onTouchStart, { passive: true });
+  cardEl.addEventListener('touchmove', onTouchMove, { passive: true });
+  cardEl.addEventListener('touchend', onTouchEnd);
+}
+
+// ── 📑 Catalog List View (Alternative Mode) ──────────────────────────────────
+function renderCatalogGrid(vList, gList) {
+  const container = document.getElementById('cards-container');
+  if (!container) return;
 
   container.innerHTML = `
     <div class="section-label" style="margin-bottom:0.875rem;">
@@ -747,6 +917,56 @@ function renderCardsGrid() {
       </div>`).join('')}
   `;
 }
+
+// ── 📰 Leporello Folio (Horizontal Progress Dossier) ──────────────────────────
+let currentFolioPage = 0;
+
+function switchFolioPage(idx) {
+  currentFolioPage = Math.max(0, Math.min(2, idx));
+  const track = document.getElementById('folio-track');
+  if (track) {
+    track.style.transform = `translateX(-${currentFolioPage * 100}%)`;
+  }
+  for (let i = 0; i < 3; i++) {
+    const tab = document.getElementById(`folio-tab-${i}`);
+    if (tab) tab.classList.toggle('active', i === currentFolioPage);
+  }
+}
+
+function prevFolioPage() {
+  if (currentFolioPage > 0) switchFolioPage(currentFolioPage - 1);
+}
+
+function nextFolioPage() {
+  if (currentFolioPage < 2) switchFolioPage(currentFolioPage + 1);
+}
+
+// Global Hotkey handler for Deck flipping and Leporello Folio
+window.addEventListener('keydown', (e) => {
+  const isCardsActive = document.getElementById('view-cards')?.classList.contains('active');
+  const isProgressActive = document.getElementById('view-progress')?.classList.contains('active');
+  const isQuizOpen = !document.getElementById('quiz-overlay')?.classList.contains('hidden');
+
+  if (isQuizOpen) return; // Don't interfere with quiz
+
+  if (isCardsActive && cardViewMode === 'deck') {
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      toggleDeckFlip();
+    } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      stepDeck(1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      stepDeck(-1);
+    }
+  } else if (isProgressActive) {
+    if (e.key === 'ArrowRight' || e.key === 'd') {
+      nextFolioPage();
+    } else if (e.key === 'ArrowLeft' || e.key === 'a') {
+      prevFolioPage();
+    }
+  }
+});
+
 
 async function deleteCard(type, id, name) {
   try {

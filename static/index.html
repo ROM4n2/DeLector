@@ -109,20 +109,27 @@
       </div>
     </div>
 
-    <!-- Segment Switcher -->
-    <div class="cards-seg-bar">
-      <button id="seg-pending" class="cards-seg-btn active" onclick="setCardSegment('pending')">
-        待复习 <span id="seg-pending-count" class="seg-count">0</span>
-      </button>
-      <button id="seg-mastered" class="cards-seg-btn" onclick="setCardSegment('mastered')">
-        已掌握 <span id="seg-mastered-count" class="seg-count">0</span>
-      </button>
+    <!-- Segment & Mode Switcher Row -->
+    <div class="cards-control-row">
+      <div class="cards-seg-bar">
+        <button id="seg-pending" class="cards-seg-btn active" onclick="setCardSegment('pending')">
+          待复习 <span id="seg-pending-count" class="seg-count">0</span>
+        </button>
+        <button id="seg-mastered" class="cards-seg-btn" onclick="setCardSegment('mastered')">
+          已掌握 <span id="seg-mastered-count" class="seg-count">0</span>
+        </button>
+      </div>
+
+      <div class="cards-view-toggle">
+        <button id="mode-btn-deck" class="cards-mode-btn active" onclick="setCardViewMode('deck')" title="扑克牌叠层翻页模式">🎴 扑克牌盒</button>
+        <button id="mode-btn-grid" class="cards-mode-btn" onclick="setCardViewMode('grid')" title="目录全景平铺列表">📑 全景目录</button>
+      </div>
     </div>
 
     <div id="cards-container"></div>
   </main>
 
-  <!-- ── View 4: Broadsheet Progress Dossier ──────────────────── -->
+  <!-- ── View 4: Broadsheet Leporello Dossier (Horizontal Folio) ─ -->
   <main id="view-progress" class="view">
     <!-- Masthead & Ticker Ribbon -->
     <header class="dossier-masthead">
@@ -139,139 +146,171 @@
           <span class="ticker-item"><span class="ticker-label">ZEIT</span> <b id="ticker-time">0 MIN</b></span>
         </div>
       </div>
+
+      <!-- Leporello Folio Navigation Strip (Horizontal Page Tabs) -->
+      <div class="folio-nav-strip">
+        <div class="folio-tabs">
+          <button id="folio-tab-0" class="folio-tab active" onclick="switchFolioPage(0)">
+            <span class="folio-page-idx">SEITE 01</span>
+            <span class="folio-page-name">研读总纲 · METRIKEN</span>
+          </button>
+          <button id="folio-tab-1" class="folio-tab" onclick="switchFolioPage(1)">
+            <span class="folio-page-idx">SEITE 02</span>
+            <span class="folio-page-name">轨迹与谱系 · VERLAUF</span>
+          </button>
+          <button id="folio-tab-2" class="folio-tab" onclick="switchFolioPage(2)">
+            <span class="folio-page-idx">SEITE 03</span>
+            <span class="folio-page-name">印章与错题 · ARCHIV</span>
+          </button>
+        </div>
+        <div class="folio-stepper">
+          <button class="folio-step-btn" onclick="prevFolioPage()" title="上一折 (←)">‹ 前一折</button>
+          <button class="folio-step-btn" onclick="nextFolioPage()" title="下一折 (→)">后一折 ›</button>
+        </div>
+      </div>
     </header>
 
-    <!-- Daily Master Quote (Lede) -->
-    <section id="progress-motto" class="dossier-motto-section"></section>
+    <!-- Folio Horizontal Slide Window -->
+    <div class="folio-window">
+      <div id="folio-track" class="folio-track">
+        
+        <!-- Folio Sheet 1: Metrics & Master Quote -->
+        <div class="folio-sheet">
+          <section id="progress-motto" class="dossier-motto-section"></section>
 
-    <!-- Key Metrics Ledger (Single broadsheet divided table) -->
-    <section class="dossier-ledger-table">
-      <div class="ledger-col">
-        <div class="ledger-col-head">
-          <span class="ledger-col-code">STREAK</span>
-          <span class="ledger-col-title">连续研读</span>
-        </div>
-        <div class="ledger-col-num-wrap">
-          <span class="ledger-col-num" id="stat-streak">0</span>
-          <span class="ledger-col-unit">Tage</span>
-        </div>
-        <div class="ledger-col-note" id="stat-streak-note">每日操作自动累计</div>
-      </div>
+          <section class="dossier-ledger-table">
+            <div class="ledger-col">
+              <div class="ledger-col-head">
+                <span class="ledger-col-code">STREAK</span>
+                <span class="ledger-col-title">连续研读</span>
+              </div>
+              <div class="ledger-col-num-wrap">
+                <span class="ledger-col-num" id="stat-streak">0</span>
+                <span class="ledger-col-unit">Tage</span>
+              </div>
+              <div class="ledger-col-note" id="stat-streak-note">每日操作自动累计</div>
+            </div>
 
-      <div class="ledger-col">
-        <div class="ledger-col-head">
-          <span class="ledger-col-code">WÖRTER</span>
-          <span class="ledger-col-title">词汇斩获</span>
-        </div>
-        <div class="ledger-col-num-wrap">
-          <span class="ledger-col-num" id="stat-mastered-vocab">0</span>
-          <span class="ledger-col-unit">Wörter</span>
-        </div>
-        <div class="ledger-col-note" id="stat-vocab-note">已归档掌握词汇</div>
-      </div>
+            <div class="ledger-col">
+              <div class="ledger-col-head">
+                <span class="ledger-col-code">WÖRTER</span>
+                <span class="ledger-col-title">词汇斩获</span>
+              </div>
+              <div class="ledger-col-num-wrap">
+                <span class="ledger-col-num" id="stat-mastered-vocab">0</span>
+                <span class="ledger-col-unit">Wörter</span>
+              </div>
+              <div class="ledger-col-note" id="stat-vocab-note">已归档掌握词汇</div>
+            </div>
 
-      <div class="ledger-col">
-        <div class="ledger-col-head">
-          <span class="ledger-col-code">GRAMMATIK</span>
-          <span class="ledger-col-title">歌德考点</span>
-        </div>
-        <div class="ledger-col-num-wrap">
-          <span class="ledger-col-num" id="stat-mastered-grammar">0</span>
-          <span class="ledger-col-unit">Punkte</span>
-        </div>
-        <div class="ledger-col-note" id="stat-grammar-note">掌握核心语法框架</div>
-      </div>
+            <div class="ledger-col">
+              <div class="ledger-col-head">
+                <span class="ledger-col-code">GRAMMATIK</span>
+                <span class="ledger-col-title">歌德考点</span>
+              </div>
+              <div class="ledger-col-num-wrap">
+                <span class="ledger-col-num" id="stat-mastered-grammar">0</span>
+                <span class="ledger-col-unit">Punkte</span>
+              </div>
+              <div class="ledger-col-note" id="stat-grammar-note">掌握核心语法框架</div>
+            </div>
 
-      <div class="ledger-col">
-        <div class="ledger-col-head">
-          <span class="ledger-col-code">ARTIKEL</span>
-          <span class="ledger-col-title">精读长文</span>
-        </div>
-        <div class="ledger-col-num-wrap">
-          <span class="ledger-col-num" id="stat-articles">0</span>
-          <span class="ledger-col-unit">Texte</span>
-        </div>
-        <div class="ledger-col-note" id="stat-articles-note">研读长文与真题</div>
-      </div>
+            <div class="ledger-col">
+              <div class="ledger-col-head">
+                <span class="ledger-col-code">ARTIKEL</span>
+                <span class="ledger-col-title">精读长文</span>
+              </div>
+              <div class="ledger-col-num-wrap">
+                <span class="ledger-col-num" id="stat-articles">0</span>
+                <span class="ledger-col-unit">Texte</span>
+              </div>
+              <div class="ledger-col-note" id="stat-articles-note">研读长文与真题</div>
+            </div>
 
-      <div class="ledger-col">
-        <div class="ledger-col-head">
-          <span class="ledger-col-code">PRÄZISION</span>
-          <span class="ledger-col-title">测验准确率</span>
-        </div>
-        <div class="ledger-col-num-wrap">
-          <span class="ledger-col-num" id="stat-accuracy">0</span>
-          <span class="ledger-col-unit">%</span>
-        </div>
-        <div class="ledger-col-note" id="stat-accuracy-note">闪卡与默写综合正答</div>
-      </div>
+            <div class="ledger-col">
+              <div class="ledger-col-head">
+                <span class="ledger-col-code">PRÄZISION</span>
+                <span class="ledger-col-title">测验准确率</span>
+              </div>
+              <div class="ledger-col-num-wrap">
+                <span class="ledger-col-num" id="stat-accuracy">0</span>
+                <span class="ledger-col-unit">%</span>
+              </div>
+              <div class="ledger-col-note" id="stat-accuracy-note">闪卡与默写综合正答</div>
+            </div>
 
-      <div class="ledger-col">
-        <div class="ledger-col-head">
-          <span class="ledger-col-code">DAUER</span>
-          <span class="ledger-col-title">研读学时</span>
+            <div class="ledger-col">
+              <div class="ledger-col-head">
+                <span class="ledger-col-code">DAUER</span>
+                <span class="ledger-col-title">研读学时</span>
+              </div>
+              <div class="ledger-col-num-wrap">
+                <span class="ledger-col-num" id="stat-minutes">0</span>
+                <span class="ledger-col-unit">Min</span>
+              </div>
+              <div class="ledger-col-note">阅读与自测投入估算</div>
+            </div>
+          </section>
         </div>
-        <div class="ledger-col-num-wrap">
-          <span class="ledger-col-num" id="stat-minutes">0</span>
-          <span class="ledger-col-unit">Min</span>
-        </div>
-        <div class="ledger-col-note">阅读与自测投入估算</div>
-      </div>
-    </section>
 
-    <!-- Activity Chronik & CEFR Spectrum in Split Ledger Panel -->
-    <section class="dossier-panel">
-      <div class="dossier-panel-head">
-        <div class="dossier-panel-title">
-          <span class="dossier-panel-code">VERLAUF · 30 TAGE</span>
-          <h3>近 30 天研读与卡片新增轨迹</h3>
-        </div>
-        <div class="dossier-panel-meta">TÄGLICHE AKTIVITÄTS-CHRONIK</div>
-      </div>
-      <div class="dossier-chart-container">
-        <svg id="progress-chart-svg" class="dossier-chart-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
-        <div class="dossier-chart-axis">
-          <span id="chart-axis-start">VOR 30 TAGEN</span>
-          <span>● HEUTE</span>
-        </div>
-      </div>
-    </section>
+        <!-- Folio Sheet 2: 30-day Trend Chronik & CEFR Spectrum -->
+        <div class="folio-sheet">
+          <section class="dossier-panel">
+            <div class="dossier-panel-head">
+              <div class="dossier-panel-title">
+                <span class="dossier-panel-code">VERLAUF · 30 TAGE</span>
+                <h3>近 30 天研读与卡片新增轨迹</h3>
+              </div>
+              <div class="dossier-panel-meta">TÄGLICHE AKTIVITÄTS-CHRONIK</div>
+            </div>
+            <div class="dossier-chart-container">
+              <svg id="progress-chart-svg" class="dossier-chart-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
+              <div class="dossier-chart-axis">
+                <span id="chart-axis-start">VOR 30 TAGEN</span>
+                <span>● HEUTE</span>
+              </div>
+            </div>
+          </section>
 
-    <!-- CEFR Spectrum Section -->
-    <section class="dossier-panel">
-      <div class="dossier-panel-head">
-        <div class="dossier-panel-title">
-          <span class="dossier-panel-code">SPEKTRUM · CEFR</span>
-          <h3>卡片库欧标水平阶梯构成</h3>
+          <section class="dossier-panel">
+            <div class="dossier-panel-head">
+              <div class="dossier-panel-title">
+                <span class="dossier-panel-code">SPEKTRUM · CEFR</span>
+                <h3>卡片库欧标水平阶梯构成</h3>
+              </div>
+              <div class="dossier-panel-meta" id="progress-total-cards">GESAMT: 0 KARTEN</div>
+            </div>
+            <div id="progress-cefr-bar" class="reader-heatbar" style="margin-top:0.75rem;"></div>
+          </section>
         </div>
-        <div class="dossier-panel-meta" id="progress-total-cards">GESAMT: 0 KARTEN</div>
-      </div>
-      <div id="progress-cefr-bar" class="reader-heatbar" style="margin-top:0.75rem;"></div>
-    </section>
 
-    <!-- Philatelic Milestones (Academic Stamps) -->
-    <section class="dossier-panel">
-      <div class="dossier-panel-head">
-        <div class="dossier-panel-title">
-          <span class="dossier-panel-code">SIEGEL &amp; AUSZEICHNUNGEN</span>
-          <h3>学术成就印章</h3>
-        </div>
-        <div class="dossier-panel-meta">MEILENSTEINE</div>
-      </div>
-      <div id="progress-milestones" class="dossier-stamps-grid"></div>
-    </section>
+        <!-- Folio Sheet 3: Philatelic Milestones & Top Errors Table -->
+        <div class="folio-sheet">
+          <section class="dossier-panel">
+            <div class="dossier-panel-head">
+              <div class="dossier-panel-title">
+                <span class="dossier-panel-code">SIEGEL &amp; AUSZEICHNUNGEN</span>
+                <h3>学术成就印章</h3>
+              </div>
+              <div class="dossier-panel-meta">MEILENSTEINE</div>
+            </div>
+            <div id="progress-milestones" class="dossier-stamps-grid"></div>
+          </section>
 
-    <!-- Weak Points Analysis -->
-    <section id="progress-errors-wrap" class="dossier-panel hidden">
-      <div class="dossier-panel-head">
-        <div class="dossier-panel-title">
-          <span class="dossier-panel-code">SCHWACHSTELLEN-ANALYSE</span>
-          <h3>重点易错词汇梳理</h3>
+          <section id="progress-errors-wrap" class="dossier-panel hidden">
+            <div class="dossier-panel-head">
+              <div class="dossier-panel-title">
+                <span class="dossier-panel-code">SCHWACHSTELLEN-ANALYSE</span>
+                <h3>重点易错词汇梳理</h3>
+              </div>
+              <button class="btn btn-dark" style="font-size:0.6875rem;padding:0.25rem 0.65rem;" onclick="openQuizOverlay()">⚔ 专项重测</button>
+            </div>
+            <div id="progress-errors-list" class="dossier-errors-table"></div>
+          </section>
         </div>
-        <button class="btn btn-dark" style="font-size:0.6875rem;padding:0.25rem 0.65rem;" onclick="openQuizOverlay()">⚔ 专项重测</button>
+
       </div>
-      <div id="progress-errors-list" class="dossier-errors-table"></div>
-    </section>
+    </div>
   </main>
 
 
