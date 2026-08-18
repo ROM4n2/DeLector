@@ -102,64 +102,71 @@
   <aside id="drawer">
     <div class="tape-top"></div>
     <div class="drawer-header">
-      <span class="drawer-title">词汇 &amp; 歌德考点工作台</span>
-      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+      <div class="drawer-tabs">
+        <button id="d-tab-vocab" class="drawer-tab-btn active" onclick="switchDrawerTab('vocab')">📖 词汇考点</button>
+        <button id="d-tab-note" class="drawer-tab-btn" onclick="switchDrawerTab('note')">📝 随笔便签</button>
+        <button id="d-tab-all" class="drawer-tab-btn" onclick="switchDrawerTab('all')">✦ 全部</button>
+      </div>
+      <button class="drawer-close" onclick="closeDrawer()" title="关闭工作台 (Esc)">✕</button>
     </div>
 
     <div class="drawer-body">
-      <!-- Word Card -->
-      <div class="sticky-word-card">
-        <div class="sticky-word-headline">
-          <div style="display:flex;align-items:center;gap:0.5rem;">
-            <span id="d-word"></span>
-            <button class="speaker-btn" onclick="playGermanAudio(document.getElementById('d-word').textContent)" title="朗读单词">🔊</button>
+      <!-- Section 1: Vocab & Grammar Wrap -->
+      <div id="drawer-vocab-wrap" style="display:flex;flex-direction:column;gap:1.25rem;">
+        <!-- Word Card -->
+        <div class="sticky-word-card">
+          <div class="sticky-word-headline">
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <span id="d-word"></span>
+              <button class="speaker-btn" onclick="playGermanAudio(document.getElementById('d-word').textContent)" title="朗读单词">🔊</button>
+            </div>
+            <span class="cefr-badge" id="d-cefr"></span>
           </div>
-          <span class="cefr-badge" id="d-cefr"></span>
-        </div>
-        <div id="d-meta"></div>
-        <div style="margin-top:0.875rem;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <label class="input-label" style="margin:0;">中文释义 / 笔记 (选填)</label>
-            <span id="d-def-status" style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);"></span>
+          <div id="d-meta"></div>
+          <div style="margin-top:0.875rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <label class="input-label" style="margin:0;">中文释义 / 笔记 (选填)</label>
+              <span id="d-def-status" style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);"></span>
+            </div>
+            <input id="d-def" type="text" class="def-input" style="margin-top:0.35rem;" placeholder="AI 正在解析语境释义，也可直接自定义笔记…">
           </div>
-          <input id="d-def" type="text" class="def-input" style="margin-top:0.35rem;" placeholder="AI 正在解析语境释义，也可直接自定义笔记…">
-        </div>
-        <button id="save-vocab-btn" class="btn btn-dark btn-full" style="margin-top:0.75rem;" onclick="saveVocab()">
-          + 加入 Anki 词汇卡
-        </button>
-      </div>
-
-      <!-- Grammar Note Section -->
-      <div class="grammar-note">
-        <div class="grammar-note-head">
-          <span class="grammar-note-title">歌德考点深度剖析</span>
-          <button id="analyze-btn" class="btn btn-accent" style="min-height:30px;padding:0 0.75rem;font-size:0.75rem"
-            onclick="analyzeGrammar()">AI 深度剖析</button>
-        </div>
-        <div id="grammar-result" class="hidden" style="display:flex;flex-direction:column;gap:0.75rem;">
-          <div style="display:flex;align-items:baseline;justify-content:space-between;">
-            <span id="g-name"></span>
-            <span class="cefr-badge" id="g-badge"></span>
-          </div>
-          <div id="g-formula" class="hidden"></div>
-          <div id="g-exp"></div>
-          <button id="save-grammar-btn" class="btn btn-ghost btn-full" onclick="saveGrammar()">
-            + 加入 Anki 语法卡
+          <button id="save-vocab-btn" class="btn btn-dark btn-full" style="margin-top:0.75rem;" onclick="saveVocab()">
+            + 加入 Anki 词汇卡
           </button>
         </div>
-      </div>
 
-      <!-- Context Quote -->
-      <div class="context-box">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
-          <span class="input-label" style="margin:0;">原句上下文</span>
-          <button class="speaker-btn-sm" onclick="playGermanAudio(document.getElementById('d-sent').textContent)" title="朗读整句">🔊 朗读原句</button>
+        <!-- Grammar Note Section -->
+        <div class="grammar-note">
+          <div class="grammar-note-head">
+            <span class="grammar-note-title">歌德考点深度剖析</span>
+            <button id="analyze-btn" class="btn btn-accent" style="min-height:30px;padding:0 0.75rem;font-size:0.75rem"
+              onclick="analyzeGrammar()">AI 深度剖析</button>
+          </div>
+          <div id="grammar-result" class="hidden" style="display:flex;flex-direction:column;gap:0.75rem;">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;">
+              <span id="g-name"></span>
+              <span class="cefr-badge" id="g-badge"></span>
+            </div>
+            <div id="g-formula" class="hidden"></div>
+            <div id="g-exp"></div>
+            <button id="save-grammar-btn" class="btn btn-ghost btn-full" onclick="saveGrammar()">
+              + 加入 Anki 语法卡
+            </button>
+          </div>
         </div>
-        <div id="d-sent"></div>
+
+        <!-- Context Quote -->
+        <div class="context-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
+            <span class="input-label" style="margin:0;">原句上下文</span>
+            <button class="speaker-btn-sm" onclick="playGermanAudio(document.getElementById('d-sent').textContent)" title="朗读整句">🔊 朗读原句</button>
+          </div>
+          <div id="d-sent"></div>
+        </div>
       </div>
 
-      <!-- Sticky Reading Notes Section -->
-      <div id="drawer-note-section" class="sticky-reading-note-card">
+      <!-- Section 2: Sticky Reading Notes Section -->
+      <div id="drawer-note-section" class="sticky-reading-note-card hidden">
         <div class="sticky-word-headline">
           <span style="font-size:0.875rem;font-weight:700;color:var(--ink);">📝 精读随笔便签</span>
           <span id="note-badge-status" class="cefr-badge badge-A2">便签草稿</span>

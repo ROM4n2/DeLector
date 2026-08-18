@@ -506,7 +506,7 @@ function inspect(tokenId, sentId) {
   document.getElementById('d-sent').textContent = sent.text;
   document.getElementById('save-vocab-btn').textContent = '+ 加入 Anki 词汇卡';
   document.getElementById('grammar-result').classList.add('hidden');
-  openDrawer();
+  openDrawer('vocab');
 
   // Async AI quick definition lookup
   api('/api/lookup/vocab', {
@@ -528,11 +528,38 @@ function inspect(tokenId, sentId) {
   });
 }
 
-// ── Drawer ───────────────────────────────────────────────────────────────────
-function openDrawer() {
+// ── Drawer & Tabs ────────────────────────────────────────────────────────────
+let currentDrawerTab = 'vocab';
+
+function switchDrawerTab(tab) {
+  currentDrawerTab = tab;
+  const tabVocab = document.getElementById('d-tab-vocab');
+  const tabNote  = document.getElementById('d-tab-note');
+  const tabAll   = document.getElementById('d-tab-all');
+  if (tabVocab) tabVocab.classList.toggle('active', tab === 'vocab');
+  if (tabNote)  tabNote.classList.toggle('active', tab === 'note');
+  if (tabAll)   tabAll.classList.toggle('active', tab === 'all');
+
+  const vocabWrap = document.getElementById('drawer-vocab-wrap');
+  const noteSec   = document.getElementById('drawer-note-section');
+
+  if (vocabWrap) vocabWrap.classList.toggle('hidden', tab === 'note');
+  if (noteSec)   noteSec.classList.toggle('hidden', tab === 'vocab');
+
+  const bodyEl = document.querySelector('.drawer-body');
+  if (bodyEl) bodyEl.scrollTop = 0;
+
+  if (tab === 'note' && noteSec) {
+    document.getElementById('note-text-input')?.focus();
+  }
+}
+
+function openDrawer(preferredTab = null) {
   document.getElementById('drawer').classList.add('open');
   document.body.classList.add('drawer-open');
+  if (preferredTab) switchDrawerTab(preferredTab);
 }
+
 function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
   document.body.classList.remove('drawer-open');
@@ -922,8 +949,7 @@ function openNoteDrawerFromSelection() {
   document.getElementById('save-note-btn').textContent = '✓ 保存便签';
   document.getElementById('del-note-btn').classList.add('hidden');
   
-  openDrawer();
-  document.getElementById('drawer-note-section').scrollIntoView({ behavior: 'smooth' });
+  openDrawer('note');
 }
 
 function openNoteDrawerForExisting(noteId) {
@@ -940,8 +966,7 @@ function openNoteDrawerForExisting(noteId) {
   document.getElementById('save-note-btn').textContent = '✓ 更新便签';
   document.getElementById('del-note-btn').classList.remove('hidden');
 
-  openDrawer();
-  document.getElementById('drawer-note-section').scrollIntoView({ behavior: 'smooth' });
+  openDrawer('note');
 }
 
 async function aiNoteAssist() {
