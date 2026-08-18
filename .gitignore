@@ -6,3 +6,5 @@ __pycache__/
 *.db
 *.apkg
 .pytest_cache/
+.cache/
+
