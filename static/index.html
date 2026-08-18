@@ -58,7 +58,16 @@
     <div class="reader-topbar">
       <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
       <h2 id="reader-title"></h2>
-      <div id="reader-meta-badge" class="mini-level-badge mini-level-A1">A1 推荐</div>
+      <div class="reader-controls">
+        <div id="reader-meta-badge" class="mini-level-badge mini-level-A1">A1 推荐</div>
+        <div class="typo-pill">
+          <button id="btn-font-sans" class="typo-btn active" onclick="setFontMode('sans')" title="切换为清爽现代黑体">黑体</button>
+          <button id="btn-font-serif" class="typo-btn" onclick="setFontMode('serif')" title="切换为经典书卷衬线体">衬线</button>
+          <span class="typo-sep"></span>
+          <button class="typo-btn" onclick="adjustFontSize(-1)" title="减小正文字号">A-</button>
+          <button class="typo-btn" onclick="adjustFontSize(1)" title="加大正文字号">A+</button>
+        </div>
+      </div>
     </div>
 
     <!-- CEFR Distribution Heatbar & Info -->

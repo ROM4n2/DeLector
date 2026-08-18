@@ -31,6 +31,41 @@ function show(view) {
   if (view === 'cards') loadCards();
 }
 
+// ── Reader Typography Controller ─────────────────────────────────────────────
+let readerFontMode = localStorage.getItem('delector_font_mode') || 'sans';
+let readerFontSize = parseInt(localStorage.getItem('delector_font_size'), 10) || 18;
+
+function applyTypography() {
+  const content = document.getElementById('reader-content');
+  if (content) {
+    if (readerFontMode === 'serif') {
+      content.classList.add('font-serif');
+    } else {
+      content.classList.remove('font-serif');
+    }
+    content.style.setProperty('--reader-fs', `${readerFontSize / 16}rem`);
+  }
+
+  const btnSans = document.getElementById('btn-font-sans');
+  const btnSerif = document.getElementById('btn-font-serif');
+  if (btnSans && btnSerif) {
+    btnSans.classList.toggle('active', readerFontMode === 'sans');
+    btnSerif.classList.toggle('active', readerFontMode === 'serif');
+  }
+}
+
+function setFontMode(mode) {
+  readerFontMode = mode;
+  localStorage.setItem('delector_font_mode', mode);
+  applyTypography();
+}
+
+function adjustFontSize(delta) {
+  readerFontSize = Math.max(14, Math.min(24, readerFontSize + delta));
+  localStorage.setItem('delector_font_size', readerFontSize);
+  applyTypography();
+}
+
 let currentFocusedLevel = null;
 
 function toggleCefrFocus(level) {
@@ -153,6 +188,7 @@ async function openReader(id) {
     content.innerHTML = `<p class="reader-p">${fullText}</p>`;
   }
 
+  applyTypography();
   show('reader');
 }
 
@@ -400,3 +436,4 @@ document.addEventListener('keydown', (e) => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadArticles();
 refreshCount();
+applyTypography();

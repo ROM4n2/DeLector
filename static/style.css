@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Patrick+Hand&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;450;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Patrick+Hand&display=swap');
 
 /* ── Hybrid Design Tokens ─────────────────── */
 :root {
@@ -34,10 +34,13 @@
   --note-blue:   #E4F0FF;
   --tape:        rgba(43, 38, 32, 0.14);
 
-  --serif: 'Instrument Serif', Georgia, serif;
-  --sans:  'Inter', -apple-system, system-ui, sans-serif;
-  --mono:  'IBM Plex Mono', monospace;
-  --hand:  'Patrick Hand', cursive, sans-serif;
+  --serif:       'Instrument Serif', Georgia, serif;
+  --serif-text:  Charter, 'Lora', 'Source Serif 4', Georgia, serif;
+  --sans:        'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono:        'IBM Plex Mono', monospace;
+  --hand:        'Patrick Hand', cursive, sans-serif;
+  
+  --reader-fs:   1.125rem;
 }
 
 /* ── Reset & Base ────────────────────────── */
@@ -403,6 +406,49 @@ body.drawer-open #view-reader {
   text-overflow: ellipsis;
 }
 
+/* Typography & Meta Controls */
+.reader-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.typo-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+.typo-btn {
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 4px;
+  color: var(--pencil);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  line-height: 1.2;
+}
+.typo-btn:hover {
+  color: var(--ink);
+  background: rgba(255,255,255,0.6);
+}
+.typo-btn.active {
+  background: var(--ink);
+  color: #FEF9EE;
+}
+.typo-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--rule);
+  margin: 0 1px;
+}
+
 /* Reader CEFR Distribution Heatbar */
 .reader-heatbar-wrap {
   margin-bottom: 1.75rem;
@@ -485,9 +531,12 @@ body.focus-mode .tok.focus-active {
   border-radius: 12px;
   padding: 2.5rem 2.25rem;
   box-shadow: 5px 6px 0 -1px rgba(26, 23, 20, 0.12);
-  font-family: 'DM Serif Display', var(--serif);
-  font-size: 1.25rem;
-  line-height: 1.95;
+  
+  /* Modern High-Legibility Sans by default */
+  font-family: var(--sans);
+  font-size: var(--reader-fs, 1.125rem);
+  font-weight: 450;
+  line-height: 1.85;
   color: var(--ink);
   letter-spacing: 0.005em;
   
@@ -498,6 +547,13 @@ body.focus-mode .tok.focus-active {
   word-wrap: break-word;
   hyphens: auto;
   -webkit-hyphens: auto;
+}
+
+#reader-content.font-serif {
+  font-family: var(--serif-text);
+  font-weight: 400;
+  line-height: 1.95;
+  letter-spacing: 0.01em;
 }
 .reader-p {
   margin-bottom: 1.5rem;
