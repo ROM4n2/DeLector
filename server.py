@@ -495,6 +495,48 @@ def export_apkg():
     export_anki_deck(path)
     return FileResponse(path, filename="DeLector_Deck.apkg", media_type="application/octet-stream")
 
+# --- Backup & Restore Endpoints ---
+@app.get("/api/backup/export")
+def export_database_backup():
+    with get_db() as conn:
+        articles = [dict(r) for r in conn.execute("SELECT * FROM articles").fetchall()]
+        vocab = [dict(r) for r in conn.execute("SELECT * FROM vocab_cards").fetchall()]
+        grammar = [dict(r) for r in conn.execute("SELECT * FROM grammar_cards").fetchall()]
+        
+    return {
+        "version": 1,
+        "exported_at": datetime.now().isoformat(),
+        "articles": articles,
+        "vocab_cards": vocab,
+        "grammar_cards": grammar
+    }
+
+class RestoreReq(BaseModel):
+    version: Optional[int] = 1
+    articles: List[Dict[str, Any]] = []
+    vocab_cards: List[Dict[str, Any]] = []
+    grammar_cards: List[Dict[str, Any]] = []
+
+@app.post("/api/backup/restore")
+def restore_database_backup(req: RestoreReq):
+    with get_db() as conn:
+        for a in req.articles:
+            conn.execute(
+                "INSERT OR REPLACE INTO articles (id, title, raw_text, processed_json, source_url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (a.get("id"), a.get("title", "Untitled"), a.get("raw_text", ""), a.get("processed_json", "{}"), a.get("source_url", ""), a.get("created_at"))
+            )
+        for v in req.vocab_cards:
+            conn.execute(
+                "INSERT OR REPLACE INTO vocab_cards (id, article_id, word, lemma, pos, gender, cefr_level, definition_zh, sentence_context, plural, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (v.get("id"), v.get("article_id"), v.get("word", ""), v.get("lemma", ""), v.get("pos", ""), v.get("gender", ""), v.get("cefr_level", "A1"), v.get("definition_zh", ""), v.get("sentence_context", ""), v.get("plural", ""), v.get("created_at"))
+            )
+        for g in req.grammar_cards:
+            conn.execute(
+                "INSERT OR REPLACE INTO grammar_cards (id, article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula, examples_zh, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (g.get("id"), g.get("article_id"), g.get("sentence_context", ""), g.get("grammar_name", ""), g.get("cefr_level", "A1"), g.get("explanation_zh", ""), g.get("rule_formula", ""), g.get("examples_zh", ""), g.get("created_at"))
+            )
+    return {"status": "ok", "message": "全量备份恢复成功"}
+
 # Mount Static UI
 if os.path.exists("static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")

@@ -87,7 +87,12 @@
     <div class="cards-topbar">
       <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
       <h2>待复习卡片库</h2>
-      <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki (.apkg)</a>
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <button class="btn btn-ghost" onclick="downloadBackupJson()" title="导出包含文章与卡片的 JSON 备份">导出全库备份</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('backup-file-input').click()" title="从备份文件还原">还原备份</button>
+        <input id="backup-file-input" type="file" accept=".json" style="display:none;" onchange="uploadBackupJson(event)">
+        <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki (.apkg)</a>
+      </div>
     </div>
     <div id="cards-container"></div>
   </main>

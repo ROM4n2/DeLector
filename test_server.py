@@ -149,3 +149,59 @@ def test_url_ingest_endpoint_with_mock(client, monkeypatch):
     data = res.json()
     assert data["article_id"] > 0
     assert "stats" in data
+
+def test_backup_export_and_restore_roundtrip(client):
+    # 1. Export current backup
+    res = client.get("/api/backup/export")
+    assert res.status_code == 200
+    data = res.json()
+    assert "version" in data
+    assert "articles" in data
+    assert "vocab_cards" in data
+    assert "grammar_cards" in data
+    
+    # 2. Modify or add custom entry
+    custom_backup = {
+        "version": 1,
+        "articles": [{
+            "id": 999,
+            "title": "Backup Test Article",
+            "raw_text": "Ein Test für Backup.",
+            "processed_json": "{}",
+            "source_url": "https://example.com/backup",
+            "created_at": "2026-08-18 12:00:00"
+        }],
+        "vocab_cards": [{
+            "id": 999,
+            "article_id": 999,
+            "word": "Test",
+            "lemma": "Test",
+            "pos": "NOUN",
+            "gender": "Masc",
+            "cefr_level": "A1",
+            "definition_zh": "测试",
+            "sentence_context": "Ein Test.",
+            "plural": "Tests",
+            "created_at": "2026-08-18 12:00:00"
+        }],
+        "grammar_cards": [{
+            "id": 999,
+            "article_id": 999,
+            "sentence_context": "Ein Test.",
+            "grammar_name": "Nomen",
+            "cefr_level": "A1",
+            "explanation_zh": "名词",
+            "rule_formula": "Pattern",
+            "examples_zh": "例子",
+            "created_at": "2026-08-18 12:00:00"
+        }]
+    }
+    
+    # 3. Restore custom backup
+    res_restore = client.post("/api/backup/restore", json=custom_backup)
+    assert res_restore.status_code == 200
+    
+    # 4. Verify roundtrip integrity
+    res_verify = client.get("/api/articles/999")
+    assert res_verify.status_code == 200
+    assert res_verify.json()["title"] == "Backup Test Article"

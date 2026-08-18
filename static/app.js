@@ -532,6 +532,45 @@ async function loadCards() {
   `;
 }
 
+// ── Database Backup & Restore ────────────────────────────────────────────────
+async function downloadBackupJson() {
+  try {
+    const data = await api('/api/backup/export');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `delector_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('导出备份失败');
+  }
+}
+
+function uploadBackupJson(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(evt) {
+    try {
+      const payload = JSON.parse(evt.target.result);
+      await api('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      alert('备份还原成功！');
+      loadCards();
+      refreshCount();
+    } catch {
+      alert('备份文件格式不正确或还原失败');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
 // ── Import modal ──────────────────────────────────────────────────────────────
 let currentImportTab = 'text';
 
