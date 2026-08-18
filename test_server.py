@@ -2,13 +2,24 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-# Ensure test DB
+# Ensure test DBs are isolated
 os.environ["DATABASE_PATH"] = "test_delector.db"
-from server import app, init_db, get_db, get_cefr_level, export_anki_deck, SYSTEM_GRAMMAR_PROMPT, process_german_text, is_safe_public_url, clean_html_to_article
+os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
+
+from server import (
+    app, init_db, get_db, get_cefr_level, export_anki_deck,
+    SYSTEM_GRAMMAR_PROMPT, process_german_text,
+    is_safe_public_url, clean_html_to_article,
+    init_progress_db, get_progress_db,
+)
 
 @pytest.fixture
 def test_db_path():
     return "test_delector.db"
+
+@pytest.fixture
+def test_progress_path():
+    return "test_progress.db"
 
 @pytest.fixture
 def client():
@@ -16,18 +27,20 @@ def client():
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    if os.path.exists("test_delector.db"):
-        try:
-            os.remove("test_delector.db")
-        except OSError:
-            pass
+    for f in ("test_delector.db", "test_progress.db"):
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
     init_db("test_delector.db")
     yield
-    if os.path.exists("test_delector.db"):
-        try:
-            os.remove("test_delector.db")
-        except OSError:
-            pass
+    for f in ("test_delector.db", "test_progress.db"):
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
 
 def test_cefr_lookup():
     assert get_cefr_level("gehen") == "A1"
@@ -277,3 +290,143 @@ def test_audio_cache_stats_and_clear(client, monkeypatch, tmp_path):
     # 3. Verify empty
     res_stats2 = client.get("/api/audio/cache")
     assert res_stats2.json()["file_count"] == 0
+
+# ── Phase A: Delete & Master ─────────────────────────────────────────────────
+
+def test_delete_vocab_card(client):
+    """Hard-delete removes card from DB."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "lesen", "lemma": "lesen", "pos": "VERB",
+        "cefr_level": "A1", "definition_zh": "读", "sentence_context": "Ich lese."
+    })
+    assert res.status_code == 200
+    card_id = res.json()["id"]
+
+    del_res = client.delete(f"/api/cards/vocab/{card_id}")
+    assert del_res.status_code == 200
+    assert del_res.json()["deleted_id"] == card_id
+
+    cards = client.get("/api/cards").json()
+    ids = [c["id"] for c in cards["vocab_cards"]]
+    assert card_id not in ids
+
+def test_delete_nonexistent_card_returns_404(client):
+    res = client.delete("/api/cards/vocab/99999")
+    assert res.status_code == 404
+
+def test_master_vocab_card(client):
+    """Mastering a card marks it and logs to progress DB."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "schreiben", "lemma": "schreiben", "pos": "VERB",
+        "cefr_level": "A1", "definition_zh": "写", "sentence_context": "Ich schreibe."
+    })
+    card_id = res.json()["id"]
+
+    patch_res = client.patch(f"/api/cards/vocab/{card_id}/master",
+                             json={"mastered": True})
+    assert patch_res.status_code == 200
+    assert patch_res.json()["mastered"] is True
+
+    with get_db("test_delector.db") as conn:
+        row = conn.execute("SELECT mastered, mastered_at FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
+        assert row["mastered"] == 1
+        assert row["mastered_at"] is not None
+
+    with get_progress_db("test_progress.db") as conn:
+        row = conn.execute(
+            "SELECT event_type FROM study_log WHERE ref_id=? AND event_type='master_card'",
+            (card_id,)
+        ).fetchone()
+        assert row is not None
+        assert row["event_type"] == "master_card"
+
+def test_unmaster_card(client):
+    """Unmastering resets mastered flag."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "fahren", "lemma": "fahren", "pos": "VERB",
+        "cefr_level": "A1", "definition_zh": "驾驶", "sentence_context": "Er fährt."
+    })
+    card_id = res.json()["id"]
+
+    client.patch(f"/api/cards/vocab/{card_id}/master", json={"mastered": True})
+    client.patch(f"/api/cards/vocab/{card_id}/master", json={"mastered": False})
+
+    with get_db("test_delector.db") as conn:
+        row = conn.execute("SELECT mastered FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
+        assert row["mastered"] == 0
+
+# ── Phase B: Quiz Record ──────────────────────────────────────────────────────
+
+def test_quiz_record_correct(client):
+    """Correct answer increments correct_count and logs to quiz_log."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "hören", "lemma": "hören", "pos": "VERB",
+        "cefr_level": "A1", "definition_zh": "听", "sentence_context": "Ich höre Musik."
+    })
+    card_id = res.json()["id"]
+
+    quiz_res = client.post("/api/quiz/record", json={
+        "card_id": card_id, "card_type": "vocab",
+        "mode": "flashcard", "correct": True
+    })
+    assert quiz_res.status_code == 200
+
+    with get_db("test_delector.db") as conn:
+        row = conn.execute("SELECT correct_count, wrong_count FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
+        assert row["correct_count"] == 1
+        assert row["wrong_count"] == 0
+
+    with get_progress_db("test_progress.db") as conn:
+        row = conn.execute("SELECT correct FROM quiz_log WHERE card_id=?", (card_id,)).fetchone()
+        assert row["correct"] == 1
+
+def test_quiz_record_wrong(client):
+    """Wrong answer increments wrong_count."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "sehen", "lemma": "sehen", "pos": "VERB",
+        "cefr_level": "A1", "definition_zh": "看", "sentence_context": "Ich sehe dich."
+    })
+    card_id = res.json()["id"]
+
+    client.post("/api/quiz/record", json={
+        "card_id": card_id, "card_type": "vocab",
+        "mode": "dictation", "correct": False
+    })
+
+    with get_db("test_delector.db") as conn:
+        row = conn.execute("SELECT correct_count, wrong_count FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
+        assert row["wrong_count"] == 1
+        assert row["correct_count"] == 0
+
+# ── Phase C: Progress Stats ───────────────────────────────────────────────────
+
+def test_progress_stats_empty(client):
+    """Progress stats returns expected keys even with no data."""
+    res = client.get("/api/progress/stats")
+    assert res.status_code == 200
+    data = res.json()
+    for key in ("total_cards", "total_mastered", "streak", "cefr_counts",
+                "trend", "milestones", "accuracy_pct"):
+        assert key in data, f"Missing key: {key}"
+    assert len(data["trend"]) == 30
+    assert data["streak"] >= 0
+    assert data["total_cards"] >= 0  # seeded articles may produce vocab cards via NLP
+    assert data["total_articles"] >= 0
+
+def test_progress_stats_after_adding_cards(client):
+    """Progress reflects added and mastered cards."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "sprechen", "lemma": "sprechen", "pos": "VERB",
+        "cefr_level": "B1", "definition_zh": "说", "sentence_context": "Ich spreche Deutsch."
+    })
+    card_id = res.json()["id"]
+    client.patch(f"/api/cards/vocab/{card_id}/master", json={"mastered": True})
+
+    stats = client.get("/api/progress/stats").json()
+    assert stats["total_cards"] >= 1
+    assert stats["total_mastered"] >= 1
+    assert stats["cefr_counts"]["B1"] >= 1
+    # first_card milestone unlocked
+    milestones = {m["id"]: m for m in stats["milestones"]}
+    assert milestones["first_card"]["unlocked"] is True
+    assert milestones["master_10"]["unlocked"] is False  # only 1 mastered

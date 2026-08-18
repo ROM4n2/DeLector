@@ -47,14 +47,77 @@ load_env()
 AUDIO_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache", "audio")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 
+PROGRESS_DB_PATH = os.path.join(os.path.dirname(__file__), "progress.db")
+
 def get_db_path(db_path: Optional[str] = None) -> str:
     return db_path or os.environ.get("DATABASE_PATH", "delector.db")
+
+def get_progress_db_path(db_path: Optional[str] = None) -> str:
+    return db_path or os.environ.get("PROGRESS_DB_PATH", PROGRESS_DB_PATH)
 
 # --- 1. Database Layer (stdlib sqlite3) ---
 def get_db(db_path: Optional[str] = None):
     conn = sqlite3.connect(get_db_path(db_path))
     conn.row_factory = sqlite3.Row
     return conn
+
+def get_progress_db(db_path: Optional[str] = None):
+    conn = sqlite3.connect(get_progress_db_path(db_path))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_progress_db(db_path: Optional[str] = None):
+    target_path = get_progress_db_path(db_path)
+    with get_progress_db(target_path) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS study_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                ref_id INTEGER,
+                note TEXT DEFAULT '',
+                logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                card_id INTEGER NOT NULL,
+                card_type TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                correct INTEGER NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS daily_summary (
+                date TEXT PRIMARY KEY,
+                cards_added INTEGER DEFAULT 0,
+                cards_mastered INTEGER DEFAULT 0,
+                articles_read INTEGER DEFAULT 0,
+                quiz_sessions INTEGER DEFAULT 0,
+                study_minutes INTEGER DEFAULT 0
+            );
+        """)
+
+def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "", minutes: int = 0, db_path: Optional[str] = None):
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        with get_progress_db(db_path) as conn:
+            conn.execute(
+                "INSERT INTO study_log (event_type, ref_id, note) VALUES (?, ?, ?)",
+                (event_type, ref_id, note)
+            )
+            conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
+            if event_type == "add_card":
+                conn.execute("UPDATE daily_summary SET cards_added = cards_added + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(1, minutes), today))
+            elif event_type == "master_card":
+                conn.execute("UPDATE daily_summary SET cards_mastered = cards_mastered + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(1, minutes), today))
+            elif event_type == "read_article":
+                conn.execute("UPDATE daily_summary SET articles_read = articles_read + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(3, minutes), today))
+            elif event_type == "quiz_session":
+                conn.execute("UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(2, minutes), today))
+    except Exception as e:
+        print(f"[Warn] Failed to log study event: {e}")
 
 def init_db(db_path: Optional[str] = None):
     target_path = get_db_path(db_path)
@@ -81,6 +144,10 @@ def init_db(db_path: Optional[str] = None):
                 cefr_level TEXT,
                 definition_zh TEXT NOT NULL,
                 sentence_context TEXT NOT NULL,
+                mastered INTEGER DEFAULT 0,
+                mastered_at TIMESTAMP,
+                correct_count INTEGER DEFAULT 0,
+                wrong_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -94,6 +161,10 @@ def init_db(db_path: Optional[str] = None):
                 explanation_zh TEXT NOT NULL,
                 rule_formula TEXT,
                 examples_zh TEXT,
+                mastered INTEGER DEFAULT 0,
+                mastered_at TIMESTAMP,
+                correct_count INTEGER DEFAULT 0,
+                wrong_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -108,6 +179,20 @@ def init_db(db_path: Optional[str] = None):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        
+        # Migrations for existing databases
+        for tbl in ["vocab_cards", "grammar_cards"]:
+            cols = [col[1] for col in conn.execute(f"PRAGMA table_info({tbl})").fetchall()]
+            if "mastered" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN mastered INTEGER DEFAULT 0")
+            if "mastered_at" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN mastered_at TIMESTAMP")
+            if "correct_count" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN correct_count INTEGER DEFAULT 0")
+            if "wrong_count" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN wrong_count INTEGER DEFAULT 0")
+
+    init_progress_db()
     seed_preset_articles(target_path)
 
 PRESET_ARTICLES = [
@@ -576,27 +661,219 @@ async def lookup_vocab(req: VocabLookupReq):
 @app.post("/api/cards/vocab")
 def add_vocab_card(req: VocabCardReq):
     with get_db() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO vocab_cards (article_id, word, lemma, pos, gender, cefr_level, definition_zh, sentence_context) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (req.article_id, req.word, req.lemma, req.pos, req.gender, req.cefr_level, req.definition_zh, req.sentence_context)
         )
-    return {"status": "ok"}
+        card_id = cur.lastrowid
+    log_study_event("add_card", card_id, req.word)
+    return {"status": "ok", "id": card_id}
 
 @app.post("/api/cards/grammar")
 def add_grammar_card(req: GrammarCardReq):
     with get_db() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO grammar_cards (article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula) VALUES (?, ?, ?, ?, ?, ?)",
             (req.article_id, req.sentence_context, req.grammar_name, req.cefr_level, req.explanation_zh, req.rule_formula)
         )
-    return {"status": "ok"}
+        card_id = cur.lastrowid
+    log_study_event("add_card", card_id, req.grammar_name)
+    return {"status": "ok", "id": card_id}
 
 @app.get("/api/cards")
 def get_cards():
     with get_db() as conn:
-        v = [dict(r) for r in conn.execute("SELECT * FROM vocab_cards ORDER BY id DESC").fetchall()]
-        g = [dict(r) for r in conn.execute("SELECT * FROM grammar_cards ORDER BY id DESC").fetchall()]
+        v = [dict(r) for r in conn.execute(
+            "SELECT * FROM vocab_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
+        ).fetchall()]
+        g = [dict(r) for r in conn.execute(
+            "SELECT * FROM grammar_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
+        ).fetchall()]
         return {"vocab_cards": v, "grammar_cards": g}
+
+# --- Phase A: Delete & Master ---
+
+@app.delete("/api/cards/{card_type}/{card_id}")
+def delete_card(card_type: str, card_id: int):
+    if card_type not in ("vocab", "grammar"):
+        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
+    tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
+    with get_db() as conn:
+        row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"Card {card_id} not found")
+        conn.execute(f"DELETE FROM {tbl} WHERE id = ?", (card_id,))
+    log_study_event("delete_card", card_id, f"{card_type}:{card_id}")
+    return {"status": "ok", "deleted_id": card_id, "card_type": card_type}
+
+class MasterReq(BaseModel):
+    mastered: bool
+
+@app.patch("/api/cards/{card_type}/{card_id}/master")
+def toggle_master(card_type: str, card_id: int, req: MasterReq):
+    if card_type not in ("vocab", "grammar"):
+        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
+    tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
+    now_ts = datetime.now().isoformat() if req.mastered else None
+    with get_db() as conn:
+        row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"Card {card_id} not found")
+        conn.execute(
+            f"UPDATE {tbl} SET mastered = ?, mastered_at = ? WHERE id = ?",
+            (1 if req.mastered else 0, now_ts, card_id)
+        )
+    if req.mastered:
+        log_study_event("master_card", card_id, f"{card_type}:{card_id}")
+    return {"status": "ok", "id": card_id, "mastered": req.mastered}
+
+# --- Phase B: Quiz Record ---
+
+class QuizRecordReq(BaseModel):
+    card_id: int
+    card_type: str  # 'vocab' | 'grammar'
+    mode: str       # 'flashcard' | 'dictation' | 'choice'
+    correct: bool
+
+@app.post("/api/quiz/record")
+def record_quiz(req: QuizRecordReq):
+    if req.card_type not in ("vocab", "grammar"):
+        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
+    tbl = "vocab_cards" if req.card_type == "vocab" else "grammar_cards"
+    with get_db() as conn:
+        row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (req.card_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"Card {req.card_id} not found")
+        if req.correct:
+            conn.execute(f"UPDATE {tbl} SET correct_count = correct_count + 1 WHERE id = ?", (req.card_id,))
+        else:
+            conn.execute(f"UPDATE {tbl} SET wrong_count = wrong_count + 1 WHERE id = ?", (req.card_id,))
+    with get_progress_db() as conn:
+        conn.execute(
+            "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
+            (req.card_id, req.card_type, req.mode, 1 if req.correct else 0)
+        )
+        today = datetime.now().strftime("%Y-%m-%d")
+        conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
+        conn.execute(
+            "UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + 1 WHERE date = ?",
+            (today,)
+        )
+    return {"status": "ok"}
+
+# --- Phase C: Progress Stats ---
+
+class ReadLogReq(BaseModel):
+    article_id: int
+    title: Optional[str] = ""
+
+@app.post("/api/progress/log-read")
+def log_article_read(req: ReadLogReq):
+    log_study_event("read_article", req.article_id, req.title or "", minutes=8)
+    return {"status": "ok"}
+
+@app.get("/api/progress/stats")
+def get_progress_stats():
+    from datetime import timedelta
+    # --- main db ---
+    with get_db() as conn:
+        total_vocab   = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+        total_grammar = conn.execute("SELECT COUNT(*) FROM grammar_cards").fetchone()[0]
+        mastered_vocab   = conn.execute("SELECT COUNT(*) FROM vocab_cards WHERE mastered=1").fetchone()[0]
+        mastered_grammar = conn.execute("SELECT COUNT(*) FROM grammar_cards WHERE mastered=1").fetchone()[0]
+        total_articles = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+
+        # CEFR breakdown (both tables combined)
+        cefr_counts: Dict[str, int] = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
+        for row in conn.execute("SELECT cefr_level, COUNT(*) as cnt FROM vocab_cards GROUP BY cefr_level"):
+            lvl = row["cefr_level"] or "A1"
+            if lvl in cefr_counts:
+                cefr_counts[lvl] += row["cnt"]
+        for row in conn.execute("SELECT cefr_level, COUNT(*) as cnt FROM grammar_cards GROUP BY cefr_level"):
+            lvl = row["cefr_level"] or "A1"
+            if lvl in cefr_counts:
+                cefr_counts[lvl] += row["cnt"]
+
+        # Quiz accuracy from card tables
+        vc_row = conn.execute("SELECT SUM(correct_count) as c, SUM(wrong_count) as w FROM vocab_cards").fetchone()
+        gc_row = conn.execute("SELECT SUM(correct_count) as c, SUM(wrong_count) as w FROM grammar_cards").fetchone()
+        total_correct = (vc_row["c"] or 0) + (gc_row["c"] or 0)
+        total_wrong   = (vc_row["w"] or 0) + (gc_row["w"] or 0)
+        total_attempts = total_correct + total_wrong
+        accuracy_pct = round(total_correct / total_attempts * 100, 1) if total_attempts > 0 else 0.0
+
+        # Top error-prone cards (wrong_count > 2× correct_count, limit 5)
+        top_errors = []
+        for row in conn.execute(
+            "SELECT id, word, definition_zh, wrong_count, correct_count FROM vocab_cards "
+            "WHERE wrong_count > 0 ORDER BY (wrong_count * 1.0 / MAX(correct_count+1, 1)) DESC LIMIT 5"
+        ):
+            top_errors.append(dict(row))
+
+    # --- progress db ---
+    with get_progress_db() as conn:
+        # 30-day daily trend
+        today = datetime.now().date()
+        trend = []
+        for i in range(29, -1, -1):
+            d = (today - timedelta(days=i)).isoformat()
+            row = conn.execute("SELECT * FROM daily_summary WHERE date = ?", (d,)).fetchone()
+            if row:
+                trend.append(dict(row))
+            else:
+                trend.append({"date": d, "cards_added": 0, "cards_mastered": 0,
+                               "articles_read": 0, "quiz_sessions": 0, "study_minutes": 0})
+
+        # Streak calculation
+        streak = 0
+        check_date = today
+        # treat today as active if it has any study_log entries
+        for _ in range(365):
+            ds = check_date.isoformat()
+            entry = conn.execute("SELECT 1 FROM study_log WHERE date(logged_at)=? LIMIT 1", (ds,)).fetchone()
+            if entry:
+                streak += 1
+                check_date = check_date - timedelta(days=1)
+            else:
+                break
+
+        total_quiz_sessions = conn.execute("SELECT SUM(quiz_sessions) FROM daily_summary").fetchone()[0] or 0
+        total_study_minutes = conn.execute("SELECT SUM(study_minutes) FROM daily_summary").fetchone()[0] or 0
+
+    total_cards    = total_vocab + total_grammar
+    total_mastered = mastered_vocab + mastered_grammar
+
+    # Milestones
+    milestones = [
+        {"id": "first_card",     "title": "初临纸页",   "desc": "制作了第一张卡片",       "icon": "🌱", "unlocked": total_cards >= 1},
+        {"id": "first_article",  "title": "开卷有益",   "desc": "研读了第一篇德语文章",   "icon": "📖", "unlocked": total_articles >= 1},
+        {"id": "master_10",      "title": "小试牛刀",   "desc": "斩获 10 张已掌握卡片",   "icon": "⚔️", "unlocked": total_mastered >= 10},
+        {"id": "master_50",      "title": "千锤百炼",   "desc": "斩获 50 张已掌握卡片",   "icon": "🛡️", "unlocked": total_mastered >= 50},
+        {"id": "master_100",     "title": "百词斩将",   "desc": "斩获 100 张已掌握卡片",  "icon": "🏆", "unlocked": total_mastered >= 100},
+        {"id": "master_200",     "title": "词海无涯",   "desc": "斩获 200 张已掌握卡片",  "icon": "👑", "unlocked": total_mastered >= 200},
+        {"id": "streak_3",       "title": "三日不绝",   "desc": "连续打卡 3 天",          "icon": "🔥", "unlocked": streak >= 3},
+        {"id": "streak_7",       "title": "一周常胜",   "desc": "连续打卡 7 天",          "icon": "⚡", "unlocked": streak >= 7},
+        {"id": "streak_30",      "title": "月光苦读者", "desc": "连续打卡 30 天",         "icon": "🌙", "unlocked": streak >= 30},
+    ]
+
+    return {
+        "total_cards":    total_cards,
+        "total_vocab":    total_vocab,
+        "total_grammar":  total_grammar,
+        "total_mastered": total_mastered,
+        "mastered_vocab":   mastered_vocab,
+        "mastered_grammar": mastered_grammar,
+        "total_articles": total_articles,
+        "streak":         streak,
+        "total_quiz_sessions": total_quiz_sessions,
+        "total_study_minutes": total_study_minutes,
+        "total_attempts": total_attempts,
+        "accuracy_pct":   accuracy_pct,
+        "cefr_counts":    cefr_counts,
+        "top_errors":     top_errors,
+        "trend":          trend,
+        "milestones":     milestones,
+    }
 
 @app.get("/api/cards/export/apkg")
 def export_apkg():
