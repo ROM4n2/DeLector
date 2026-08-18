@@ -240,6 +240,67 @@ async function refreshCount() {
   document.getElementById('card-count').textContent = vc.length + gc.length;
 }
 
+// ── Multi-Token Phrase Selection ─────────────────────────────────────────────
+document.getElementById('reader-content')?.addEventListener('mouseup', () => {
+  const sel = window.getSelection();
+  const text = sel ? sel.toString().trim() : '';
+  if (text && text.includes(' ') && text.length > 2) {
+    inspectPhrase(text);
+  }
+});
+
+function inspectPhrase(phraseText) {
+  if (!currentArticle) return;
+  const matchedSent = currentArticle.sentences.find(s => s.text.includes(phraseText)) || currentArticle.sentences[0];
+  selectedToken = { text: phraseText, lemma: phraseText, pos: 'PHRASE', cefr_level: 'B1', gender: '', case: '' };
+  selectedSent = matchedSent;
+  grammarData = null;
+
+  document.getElementById('d-word').textContent = phraseText;
+  document.getElementById('d-cefr').textContent = 'CEFR Phrase';
+  document.getElementById('d-cefr').className = 'cefr-badge badge-B1';
+  document.getElementById('d-meta').innerHTML = '固定搭配 / 短语短句';
+  document.getElementById('d-def').value = '';
+  document.getElementById('d-sent').textContent = matchedSent ? matchedSent.text : '';
+  document.getElementById('grammar-result').classList.add('hidden');
+  document.getElementById('save-vocab-btn').textContent = '+ 加入 Anki 短语卡';
+  openDrawer();
+}
+
+// ── Global Keyboard Shortcuts ────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeDrawer();
+    closeModal();
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    const drawer = document.getElementById('drawer');
+    if (drawer.classList.contains('open')) {
+      e.preventDefault();
+      saveVocab();
+      return;
+    }
+  }
+
+  if (!['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+    if (e.key === 'j' || e.key === 'k') {
+      const tokens = Array.from(document.querySelectorAll('.tok'));
+      if (!tokens.length) return;
+      const curIndex = tokens.findIndex(el => el.classList.contains('sel'));
+      let nextIndex = 0;
+      if (e.key === 'j') {
+        nextIndex = curIndex < tokens.length - 1 ? curIndex + 1 : 0;
+      } else {
+        nextIndex = curIndex > 0 ? curIndex - 1 : tokens.length - 1;
+      }
+      tokens[nextIndex]?.click();
+      tokens[nextIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadArticles();
 refreshCount();
