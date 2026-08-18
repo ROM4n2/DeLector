@@ -308,12 +308,15 @@ def ingest(req: IngestReq):
 @app.get("/api/articles")
 def list_articles():
     with get_db() as conn:
-        rows = conn.execute("SELECT id, title, created_at, length(raw_text) as char_count, processed_json FROM articles ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, title, created_at, length(raw_text) as char_count, raw_text, processed_json FROM articles ORDER BY id DESC").fetchall()
         result = []
         for r in rows:
             d = {"id": r["id"], "title": r["title"], "created_at": r["created_at"], "char_count": r["char_count"]}
             try:
                 pj = json.loads(r["processed_json"])
+                if "stats" not in pj:
+                    pj = process_german_text(r["raw_text"])
+                    conn.execute("UPDATE articles SET processed_json = ? WHERE id = ?", (json.dumps(pj, ensure_ascii=False), r["id"]))
                 d["stats"] = pj.get("stats", {})
             except Exception:
                 d["stats"] = {}
@@ -327,7 +330,11 @@ def get_article(article_id: int):
         if not row:
             raise HTTPException(404, "Article not found")
         data = dict(row)
-        data.update(json.loads(data["processed_json"]))
+        pj = json.loads(data["processed_json"])
+        if "stats" not in pj:
+            pj = process_german_text(data["raw_text"])
+            conn.execute("UPDATE articles SET processed_json = ? WHERE id = ?", (json.dumps(pj, ensure_ascii=False), article_id))
+        data.update(pj)
         return data
 
 SYSTEM_GRAMMAR_PROMPT = """你是一位精通德语欧标（Goethe-Zertifikat A1-C1）的资深德语教学与考点解析专家。
