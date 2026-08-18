@@ -1,3 +1,10 @@
+// ── PWA Mobile Service Worker ───────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
 /* DeLector – frontend logic */
 'use strict';
 
@@ -50,6 +57,11 @@ function show(view) {
   document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
   const activeNavBtn = document.getElementById('nav-btn-' + view);
   if (activeNavBtn) activeNavBtn.classList.add('active');
+
+  // Sync mobile bottom navigation bar
+  document.querySelectorAll('.mobile-nav-btn').forEach(el => el.classList.remove('active'));
+  const activeMobBtn = document.getElementById('mob-btn-' + view);
+  if (activeMobBtn) activeMobBtn.classList.add('active');
 
   closeDrawer();
   clearCefrFocus();
@@ -637,12 +649,13 @@ async function saveGrammar() {
   refreshCount();
 }
 
-// ── Cards view (Phase A: Segments, Delete, Master, Deck Swiper) ──────────────
-let cardSegment = 'pending'; // 'pending' | 'mastered'
+// ── Cards view (v3.0: SM-2 Spaced Repetition, Due Filter, 3D Deck) ────────
+let cardSegment = 'due';     // 'due' | 'pending' | 'mastered'
 let cardViewMode = 'deck';   // 'deck' | 'grid'
 let deckIndex = 0;
 let deckFlipped = false;
 let cachedCards = { vocab_cards: [], grammar_cards: [] };
+let cachedDueCards = { due_vocab: [], due_grammar: [], due_count: 0 };
 let lastDeletedCard = null;
 let undoToastTimer = null;
 
@@ -650,10 +663,10 @@ function setCardSegment(seg) {
   cardSegment = seg;
   deckIndex = 0;
   deckFlipped = false;
-  const btnPending = document.getElementById('seg-pending');
-  const btnMastered = document.getElementById('seg-mastered');
-  if (btnPending) btnPending.classList.toggle('active', seg === 'pending');
-  if (btnMastered) btnMastered.classList.toggle('active', seg === 'mastered');
+  ['due', 'pending', 'mastered'].forEach(s => {
+    const btn = document.getElementById('seg-' + s);
+    if (btn) btn.classList.toggle('active', s === seg);
+  });
   renderCardsGrid();
 }
 
@@ -667,9 +680,15 @@ function setCardViewMode(mode) {
 async function loadCards() {
   updateAudioCacheInfo();
   try {
-    cachedCards = await api('/api/cards');
+    const [allCards, dueCards] = await Promise.all([
+      api('/api/cards'),
+      api('/api/cards/due')
+    ]);
+    cachedCards = allCards;
+    cachedDueCards = dueCards;
   } catch (e) {
     cachedCards = { vocab_cards: [], grammar_cards: [] };
+    cachedDueCards = { due_vocab: [], due_grammar: [], due_count: 0 };
   }
 
   const vAll = cachedCards.vocab_cards || [];
@@ -677,31 +696,55 @@ async function loadCards() {
   const totalPending = vAll.filter(c => !c.mastered).length + gAll.filter(c => !c.mastered).length;
   const totalMastered = vAll.filter(c => c.mastered).length + gAll.filter(c => c.mastered).length;
 
+  const sd = document.getElementById('seg-due-count');
   const sp = document.getElementById('seg-pending-count');
   const sm = document.getElementById('seg-mastered-count');
+  if (sd) sd.textContent = cachedDueCards.due_count || 0;
   if (sp) sp.textContent = totalPending;
   if (sm) sm.textContent = totalMastered;
 
   renderCardsGrid();
 }
 
+async function refreshDueCount() {
+  try {
+    cachedDueCards = await api('/api/cards/due');
+    const sd = document.getElementById('seg-due-count');
+    if (sd) sd.textContent = cachedDueCards.due_count || 0;
+  } catch (e) {}
+}
+
 function renderCardsGrid() {
-  const isMastered = cardSegment === 'mastered';
-  const vList = (cachedCards.vocab_cards || []).filter(c => isMastered ? !!c.mastered : !c.mastered);
-  const gList = (cachedCards.grammar_cards || []).filter(c => isMastered ? !!c.mastered : !c.mastered);
+  let vList = [];
+  let gList = [];
+
+  if (cardSegment === 'due') {
+    vList = cachedDueCards.due_vocab || [];
+    gList = cachedDueCards.due_grammar || [];
+  } else if (cardSegment === 'mastered') {
+    vList = (cachedCards.vocab_cards || []).filter(c => !!c.mastered);
+    gList = (cachedCards.grammar_cards || []).filter(c => !!c.mastered);
+  } else {
+    vList = (cachedCards.vocab_cards || []).filter(c => !c.mastered);
+    gList = (cachedCards.grammar_cards || []).filter(c => !c.mastered);
+  }
 
   const container = document.getElementById('cards-container');
   if (!container) return;
 
   if (vList.length === 0 && gList.length === 0) {
+    const emptyIcon = cardSegment === 'due' ? '🎉' : (cardSegment === 'mastered' ? '🛡️' : '🎴');
+    const emptyTitle = cardSegment === 'due' ? '今日复习任务已全部达成！' : (cardSegment === 'mastered' ? '尚无已掌握归档卡片' : '待复习卡片库空空如也');
+    const emptyDesc = cardSegment === 'due' ? '太棒了！艾宾浩斯记忆排程显示今日暂无到期卡片。您可以切换至「待复习全量」主动温故或进入文库精读新文章。' : '在阅读器中点击生词或语法考点，即可一键收录。';
+
     container.innerHTML = `
       <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;box-shadow:2px 2px 0 var(--ink);">
-        <div style="font-size:2.5rem;margin-bottom:0.5rem;">${isMastered ? '🛡️' : '🎴'}</div>
+        <div style="font-size:2.5rem;margin-bottom:0.5rem;">${emptyIcon}</div>
         <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">
-          ${isMastered ? '尚无已斩断/已掌握的卡片' : '扑克卡盒空空如也'}
+          ${emptyTitle}
         </div>
-        <p style="font-size:0.8125rem;color:var(--pencil);max-width:400px;margin:0 auto;">
-          ${isMastered ? '在待复习扑克牌盒中点击「✓ 斩」即可将掌握的卡片归档至此。' : '在阅读器中点击生词或语法考点，即可一键收录为复习卡片。'}
+        <p style="font-size:0.8125rem;color:var(--pencil);max-width:440px;margin:0 auto;line-height:1.6;">
+          ${emptyDesc}
         </p>
       </div>
     `;
@@ -715,12 +758,11 @@ function renderCardsGrid() {
   }
 }
 
-// ── 🎴 Tactile 3D Deck Swiper Stage (真实 3D 翻转扑克卡盒) ───────────────────
+// ── 🎴 Tactile 3D Deck Swiper Stage (SM-2 Spaced Repetition Enabled) ──────────
 function renderDeckStage(vList, gList) {
   const container = document.getElementById('cards-container');
   if (!container) return;
 
-  // Flatten deck (tagged with type)
   const deck = [
     ...vList.map(c => ({ ...c, _type: 'vocab' })),
     ...gList.map(c => ({ ...c, _type: 'grammar' }))
@@ -730,6 +772,11 @@ function renderDeckStage(vList, gList) {
   const card = deck[deckIndex];
   const total = deck.length;
   const isVocab = card._type === 'vocab';
+
+  const ef = card.ease_factor || 2.5;
+  const iv = card.interval_days || 1;
+  const nextGood = card.repetition_count === 0 ? 1 : (card.repetition_count === 1 ? 6 : Math.round(iv * ef));
+  const nextEasy = Math.round(nextGood * 1.3);
 
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
@@ -772,7 +819,7 @@ function renderDeckStage(vList, gList) {
 
             <!-- Front Footer -->
             <div class="deck-card-footer" onclick="event.stopPropagation()">
-              <span class="card-stats-tag">${card.mastered ? '🛡️ 已归档掌握' : '⏳ 待复习队列'} · ${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
+              <span class="card-stats-tag">${card.mastered ? '🛡️ 已掌握' : (card.due_date ? `⏳ 到期: ${card.due_date}` : '⏳ 待复习')} · ${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
               <button class="card-master-btn ${card.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
                 ${card.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
               </button>
@@ -788,7 +835,7 @@ function renderDeckStage(vList, gList) {
               </div>
               <div class="card-top-actions">
                 <span class="cefr-badge badge-${card.cefr_level || 'A1'}">${card.cefr_level || 'A1'}</span>
-                <span class="deck-flip-back-btn" onclick="toggleDeckFlip(event)" title="翻回正面">↶ 翻回正面</span>
+                <span class="deck-flip-back-btn" onclick="toggleDeckFlip(event)" title="翻回正面">↶ 翻回</span>
               </div>
             </div>
 
@@ -799,11 +846,23 @@ function renderDeckStage(vList, gList) {
               ${card.sentence_context ? `<div class="deck-sent-quote">${esc(card.sentence_context)}</div>` : ''}
             </div>
 
-            <!-- Back Footer -->
-            <div class="deck-card-footer" onclick="event.stopPropagation()">
-              <span class="card-stats-tag">${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
-              <button class="card-master-btn ${card.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
-                ${card.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+            <!-- SuperMemo SM-2 Rating Bar on Back -->
+            <div class="deck-sm2-rating-bar" onclick="event.stopPropagation()">
+              <button class="sm2-btn sm2-btn-again" onclick="submitCardReview('${card._type}', ${card.id}, 1)" title="完全忘记，重置为 1 天">
+                <span>1 重来</span>
+                <span class="sm2-int-tag">1天</span>
+              </button>
+              <button class="sm2-btn sm2-btn-hard" onclick="submitCardReview('${card._type}', ${card.id}, 2)" title="勉强想起">
+                <span>2 困难</span>
+                <span class="sm2-int-tag">1天</span>
+              </button>
+              <button class="sm2-btn sm2-btn-good" onclick="submitCardReview('${card._type}', ${card.id}, 3)" title="正常回忆，按艾宾浩斯递增">
+                <span>3 良好</span>
+                <span class="sm2-int-tag">${nextGood}天</span>
+              </button>
+              <button class="sm2-btn sm2-btn-easy" onclick="submitCardReview('${card._type}', ${card.id}, 4)" title="熟练掌握，大幅增加间隔">
+                <span>4 简单</span>
+                <span class="sm2-int-tag">${nextEasy}天</span>
               </button>
             </div>
           </div>
@@ -826,181 +885,26 @@ function renderDeckStage(vList, gList) {
     </div>
   `;
 
-  // Attach touch/mouse slide listeners for physical swipe feel
   attachDeckSwipeListener();
 }
 
-function toggleDeckFlip(e) {
-  if (e) e.stopPropagation();
-  deckFlipped = !deckFlipped;
-  const cardEl = document.getElementById('deck-active-card');
-  if (cardEl) {
-    cardEl.classList.toggle('is-flipped', deckFlipped);
-  }
-  const flipBtn = document.getElementById('deck-btn-flip-ctrl');
-  if (flipBtn) {
-    flipBtn.textContent = deckFlipped ? '↶ 翻回正面 (Space)' : '🔀 翻至背面 (Space)';
-  }
-}
-
-function stepDeck(direction) {
-  const cardEl = document.getElementById('deck-active-card');
-  if (cardEl) {
-    cardEl.classList.add(direction > 0 ? 'is-swiping-left' : 'is-swiping-right');
-  }
-  setTimeout(() => {
-    deckIndex += direction;
-    deckFlipped = false;
-    renderCardsGrid();
-  }, 160);
-}
-
-function attachDeckSwipeListener() {
-  const cardEl = document.getElementById('deck-active-card');
-  if (!cardEl) return;
-
-  let startX = 0;
-  let currentX = 0;
-  let isDragging = false;
-
-  const onTouchStart = (e) => {
-    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    isDragging = true;
-  };
-
-  const onTouchMove = (e) => {
-    if (!isDragging) return;
-    currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    const diff = currentX - startX;
-    cardEl.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg)`;
-  };
-
-  const onTouchEnd = () => {
-    if (!isDragging) return;
-    isDragging = false;
-    const diff = currentX - startX;
-    if (diff < -80) {
-      stepDeck(1);
-    } else if (diff > 80) {
-      stepDeck(-1);
-    } else {
-      cardEl.style.transform = '';
-    }
-  };
-
-  cardEl.addEventListener('touchstart', onTouchStart, { passive: true });
-  cardEl.addEventListener('touchmove', onTouchMove, { passive: true });
-  cardEl.addEventListener('touchend', onTouchEnd);
-}
-
-// ── 📑 Catalog List View (Alternative Mode) ──────────────────────────────────
-function renderCatalogGrid(vList, gList) {
-  const container = document.getElementById('cards-container');
-  if (!container) return;
-
-  container.innerHTML = `
-    <div class="section-label" style="margin-bottom:0.875rem;">
-      <span class="section-title">词汇卡 · VOCABULARY (${vList.length})</span>
-    </div>
-    <div class="card-grid">${vList.map(c => `
-      <div class="memo-card ${c.mastered ? 'is-mastered' : ''}" id="v-card-${c.id}">
-        <div class="memo-card-head">
-          <div style="display:flex;align-items:center;gap:0.5rem;">
-            <span class="memo-word">${esc(c.word)}</span>
-            <button class="speaker-btn" onclick="playGermanAudio('${esc(c.word)}')" title="朗读单词">🔊</button>
-          </div>
-          <div class="card-top-actions">
-            <span class="cefr-badge badge-${c.cefr_level || 'A1'}">${c.cefr_level || 'A1'}</span>
-            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, '${esc(c.word)}')" title="删除此卡片">✕</button>
-          </div>
-        </div>
-        <div class="memo-def">${esc(c.definition_zh)}</div>
-        <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos || 'WORT')}${c.gender ? ' · ' + esc(c.gender) : ''}</div>
-        <div class="memo-sent">${esc(c.sentence_context)}</div>
-        <div class="card-footer-actions">
-          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误</span>
-          <button class="card-master-btn ${c.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('vocab', ${c.id}, ${!!c.mastered})">
-            ${c.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
-          </button>
-        </div>
-      </div>`).join('')}</div>
-
-    <div class="section-label" style="margin-top:2rem;margin-bottom:0.875rem;">
-      <span class="section-title">歌德语法考点卡 · GRAMMAR (${gList.length})</span>
-    </div>
-    ${gList.map(c => `
-      <div class="grammar-memo-card ${c.mastered ? 'is-mastered' : ''}" id="g-card-${c.id}">
-        <div class="grammar-memo-head">
-          <span class="grammar-memo-name">${esc(c.grammar_name)}</span>
-          <div class="card-top-actions">
-            <span class="cefr-badge badge-${c.cefr_level || 'A1'}">Goethe ${c.cefr_level || 'A1'}</span>
-            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, '${esc(c.grammar_name)}')" title="删除此考点卡">✕</button>
-          </div>
-        </div>
-        ${c.rule_formula ? `<div class="grammar-memo-formula">${esc(c.rule_formula)}</div>` : ''}
-        <div class="grammar-memo-exp">${esc(c.explanation_zh)}</div>
-        <div class="memo-sent">${esc(c.sentence_context)}</div>
-        <div class="card-footer-actions">
-          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误</span>
-          <button class="card-master-btn ${c.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('grammar', ${c.id}, ${!!c.mastered})">
-            ${c.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
-          </button>
-        </div>
-      </div>`).join('')}
-  `;
-}
-
-// ── 📰 Leporello Folio (Horizontal Progress Dossier) ──────────────────────────
-let currentFolioPage = 0;
-
-function switchFolioPage(idx) {
-  currentFolioPage = Math.max(0, Math.min(2, idx));
-  const track = document.getElementById('folio-track');
-  if (track) {
-    track.style.transform = `translateX(-${currentFolioPage * 100}%)`;
-  }
-  for (let i = 0; i < 3; i++) {
-    const tab = document.getElementById(`folio-tab-${i}`);
-    if (tab) tab.classList.toggle('active', i === currentFolioPage);
+async function submitCardReview(type, id, grade) {
+  try {
+    await api(`/api/cards/${type}/${id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grade, card_type: type })
+    });
+    showToast(`✓ 已记录记忆评分 (SM-2 排程已更新)`);
+    stepDeck(1);
+    refreshDueCount();
+  } catch (e) {
+    console.error('Failed to submit review:', e);
   }
 }
 
-function prevFolioPage() {
-  if (currentFolioPage > 0) switchFolioPage(currentFolioPage - 1);
-}
 
-function nextFolioPage() {
-  if (currentFolioPage < 2) switchFolioPage(currentFolioPage + 1);
-}
-
-// Global Hotkey handler for Deck flipping and Leporello Folio
-window.addEventListener('keydown', (e) => {
-  const isCardsActive = document.getElementById('view-cards')?.classList.contains('active');
-  const isProgressActive = document.getElementById('view-progress')?.classList.contains('active');
-  const isQuizOpen = !document.getElementById('quiz-overlay')?.classList.contains('hidden');
-
-  if (isQuizOpen) return; // Don't interfere with quiz
-
-  if (isCardsActive && cardViewMode === 'deck') {
-    if (e.key === ' ' || e.code === 'Space') {
-      e.preventDefault();
-      toggleDeckFlip();
-    } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
-      stepDeck(1);
-    } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
-      stepDeck(-1);
-    }
-  } else if (isProgressActive) {
-    if (e.key === 'ArrowRight' || e.key === 'd') {
-      nextFolioPage();
-    } else if (e.key === 'ArrowLeft' || e.key === 'a') {
-      prevFolioPage();
-    }
-  }
-});
-
-
-async function deleteCard(type, id, name) {
+function deleteCard(type, id, name) {
   try {
     await api(`/api/cards/${type}/${id}`, { method: 'DELETE' });
     showUndoToast(`已删除卡片「${name}」`, async () => {
@@ -2003,3 +1907,142 @@ applyTypography();
 setupDropzone();
 setupSelectionTooltip();
 ShadowPlayer.init();
+
+
+
+// ── v3.0: Cloze Exercise Engine (Lückentext / C-Test) ────────────────────────
+let currentClozeExercise = null;
+let currentClozeMode = 'grammar';
+
+async function openClozeModal() {
+  if (!currentArticle) {
+    alert('请先在文库中选择并打开一篇文章！');
+    return;
+  }
+  document.getElementById('cloze-overlay')?.classList.remove('hidden');
+  const titleEl = document.getElementById('cloze-title');
+  if (titleEl) titleEl.textContent = `《${currentArticle.title || '当前文章'}》· 完形实战`;
+  switchClozeMode(currentClozeMode);
+}
+
+function closeClozeModal() {
+  document.getElementById('cloze-overlay')?.classList.add('hidden');
+}
+
+async function switchClozeMode(mode) {
+  currentClozeMode = mode;
+  ['grammar', 'vocab', 'ctest'].forEach(m => {
+    document.getElementById(`cloze-mode-btn-${m}`)?.classList.toggle('active', m === mode);
+  });
+  const bodyEl = document.getElementById('cloze-content');
+  if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--pencil);font-family:var(--mono);">⚡ 正在智能分析文章语法与词法，生成实战挖空题...</div>';
+  document.getElementById('cloze-score-display')?.classList.add('hidden');
+
+  try {
+    currentClozeExercise = await api(`/api/articles/${currentArticle.id}/exercise/cloze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+    renderClozeExercise(currentClozeExercise);
+  } catch (e) {
+    if (bodyEl) bodyEl.innerHTML = `<div style="color:var(--cherry);padding:2rem;">生成失败：${esc(e.message)}</div>`;
+  }
+}
+
+function renderClozeExercise(data) {
+  const bodyEl = document.getElementById('cloze-content');
+  if (!bodyEl) return;
+
+  let text = data.masked_text || '';
+  data.items.forEach(item => {
+    const ph = `[[BLANK_${item.index}]]`;
+    const inputHtml = `
+      <span class="cloze-blank-wrap">
+        <input type="text" class="cloze-input" data-index="${item.index}"
+          data-orig="${esc(item.original)}" data-type="${esc(item.type)}"
+          placeholder="____" autocomplete="off" autocorrect="off" autocapitalize="off"
+          onkeydown="handleClozeKey(event, ${item.index})">
+        <span class="cloze-hint-badge hidden" id="cloze-hint-${item.index}">${esc(item.hint || '')}</span>
+      </span>
+    `;
+    text = text.replace(ph, inputHtml);
+  });
+
+  bodyEl.innerHTML = text.replace(/\n/g, '<br><br>');
+  bodyEl.querySelector('.cloze-input')?.focus();
+}
+
+function handleClozeKey(e, idx) {
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    const nextInput = document.querySelector(`.cloze-input[data-index="${idx + 1}"]`);
+    if (nextInput) nextInput.focus();
+    else submitClozeExercise();
+  }
+}
+
+function revealClozeHints() {
+  document.querySelectorAll('.cloze-hint-badge').forEach(el => el.classList.remove('hidden'));
+}
+
+function resetClozeExercise() {
+  document.querySelectorAll('.cloze-input').forEach(input => {
+    input.value = '';
+    input.classList.remove('is-correct', 'is-wrong');
+  });
+  document.querySelectorAll('.cloze-correction-tag').forEach(el => el.remove());
+  document.getElementById('cloze-score-display')?.classList.add('hidden');
+  document.querySelector('.cloze-input')?.focus();
+}
+
+async function submitClozeExercise() {
+  if (!currentClozeExercise || !currentArticle) return;
+  const answers = {};
+  document.querySelectorAll('.cloze-input').forEach(input => {
+    const idx = input.getAttribute('data-index');
+    answers[idx] = input.value.trim();
+  });
+
+  try {
+    const evalRes = await api('/api/exercise/cloze/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        article_id: currentArticle.id,
+        mode: currentClozeMode,
+        answers
+      })
+    });
+
+    evalRes.results.forEach(res => {
+      const input = document.querySelector(`.cloze-input[data-index="${res.index}"]`);
+      if (input) {
+        input.classList.remove('is-correct', 'is-wrong');
+        input.classList.add(res.correct ? 'is-correct' : 'is-wrong');
+        if (!res.correct) {
+          let tag = input.parentElement.querySelector('.cloze-correction-tag');
+          if (!tag) {
+            tag = document.createElement('span');
+            tag.className = 'cloze-correction-tag';
+            input.parentElement.appendChild(tag);
+          }
+          tag.textContent = `正: ${res.expected}`;
+        }
+      }
+    });
+
+    const scoreDisp = document.getElementById('cloze-score-display');
+    const scoreText = document.getElementById('cloze-score-text');
+    const pctText = document.getElementById('cloze-pct-text');
+    if (scoreDisp) scoreDisp.classList.remove('hidden');
+    if (scoreText) scoreText.textContent = `${evalRes.score} / ${evalRes.total}`;
+    if (pctText) pctText.textContent = `${evalRes.accuracy_pct}% 正确率`;
+
+    if (evalRes.accuracy_pct >= 80) {
+      showToast(`🏆 太棒了！完形实战准确率达成 ${evalRes.accuracy_pct}%！`);
+    }
+  } catch (e) {
+    alert(`提交判分失败: ${e.message}`);
+  }
+}

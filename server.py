@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import urlparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -148,6 +148,10 @@ def init_db(db_path: Optional[str] = None):
                 mastered_at TIMESTAMP,
                 correct_count INTEGER DEFAULT 0,
                 wrong_count INTEGER DEFAULT 0,
+                due_date TEXT,
+                interval_days INTEGER DEFAULT 1,
+                ease_factor REAL DEFAULT 2.5,
+                repetition_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -165,6 +169,10 @@ def init_db(db_path: Optional[str] = None):
                 mastered_at TIMESTAMP,
                 correct_count INTEGER DEFAULT 0,
                 wrong_count INTEGER DEFAULT 0,
+                due_date TEXT,
+                interval_days INTEGER DEFAULT 1,
+                ease_factor REAL DEFAULT 2.5,
+                repetition_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -191,6 +199,15 @@ def init_db(db_path: Optional[str] = None):
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN correct_count INTEGER DEFAULT 0")
             if "wrong_count" not in cols:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN wrong_count INTEGER DEFAULT 0")
+            today_init = datetime.now().strftime('%Y-%m-%d')
+            if "due_date" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN due_date TEXT DEFAULT '{today_init}'")
+            if "interval_days" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN interval_days INTEGER DEFAULT 1")
+            if "ease_factor" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN ease_factor REAL DEFAULT 2.5")
+            if "repetition_count" not in cols:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN repetition_count INTEGER DEFAULT 0")
 
     init_progress_db()
     seed_preset_articles(target_path)
@@ -1137,6 +1154,261 @@ def restore_database_backup(req: RestoreReq):
             )
     return {"status": "ok", "message": "全量备份恢复成功"}
 
-# Mount Static UI
+
+
+
+# ── v3.0 Phase 1: SuperMemo SM-2 & Cloze Exercise Engine ──────────────────────
+
+def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) -> Tuple[int, int, float, str]:
+    """
+    SuperMemo SM-2 algorithm:
+    grade: 1 (Forgot/Again), 2 (Hard), 3 (Good), 4 (Easy)
+    """
+    quality_map = {1: 1, 2: 3, 3: 4, 4: 5}
+    q = quality_map.get(grade, 3)
+    
+    if q < 3:
+        new_rep = 0
+        new_interval = 1
+    else:
+        if rep == 0:
+            new_interval = 1
+        elif rep == 1:
+            new_interval = 6
+        else:
+            new_interval = max(1, round(interval * ef))
+        new_rep = rep + 1
+    
+    new_ef = max(1.3, ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)))
+    due_date = (datetime.now() + timedelta(days=new_interval)).strftime('%Y-%m-%d')
+    return new_rep, new_interval, round(new_ef, 2), due_date
+
+class CardReviewReq(BaseModel):
+    grade: int  # 1: Forgot, 2: Hard, 3: Good, 4: Easy
+    card_type: Optional[str] = None
+
+@app.post("/api/cards/{card_type}/{card_id}/review")
+def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
+    if card_type not in ("vocab", "grammar"):
+        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
+    tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
+    with get_db() as conn:
+        row = conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"Card {card_id} not found")
+        
+        rep = row["repetition_count"] if "repetition_count" in row.keys() and row["repetition_count"] is not None else 0
+        interval = row["interval_days"] if "interval_days" in row.keys() and row["interval_days"] is not None else 1
+        ef = row["ease_factor"] if "ease_factor" in row.keys() and row["ease_factor"] is not None else 2.5
+        
+        new_rep, new_interval, new_ef, due_date = calculate_sm2(req.grade, rep, interval, ef)
+        
+        is_correct = req.grade >= 2
+        correct_incr = 1 if is_correct else 0
+        wrong_incr = 1 if not is_correct else 0
+        
+        conn.execute(f"""
+            UPDATE {tbl} 
+            SET repetition_count = ?, interval_days = ?, ease_factor = ?, due_date = ?,
+                correct_count = correct_count + ?, wrong_count = wrong_count + ?
+            WHERE id = ?
+        """, (new_rep, new_interval, new_ef, due_date, correct_incr, wrong_incr, card_id))
+        
+        updated = dict(conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone())
+    
+    with get_progress_db() as pconn:
+        pconn.execute(
+            "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
+            (card_id, card_type, "sm2_review", 1 if is_correct else 0)
+        )
+    log_study_event("quiz_session", card_id, f"sm2:{card_type}:{card_id}")
+    return updated
+
+@app.get("/api/cards/due")
+def get_due_cards():
+    today = datetime.now().strftime('%Y-%m-%d')
+    with get_db() as conn:
+        v = [dict(r) for r in conn.execute(
+            "SELECT * FROM vocab_cards WHERE mastered = 0 AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+            (today,)
+        ).fetchall()]
+        g = [dict(r) for r in conn.execute(
+            "SELECT * FROM grammar_cards WHERE mastered = 0 AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+            (today,)
+        ).fetchall()]
+        return {
+            "due_vocab": v,
+            "due_grammar": g,
+            "due_count": len(v) + len(g),
+            "today": today
+        }
+
+def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Optional[int] = None) -> Dict[str, Any]:
+    doc = nlp(text)
+    items = []
+    tokens_output = []
+    blank_counter = 0
+
+    if mode == "grammar":
+        for sent_idx, sent in enumerate(doc.sents):
+            for token in sent:
+                is_grammar_target = (
+                    token.pos_ in ("ADP", "SCONJ", "CCONJ") or 
+                    (token.pos_ == "AUX" and token.text.lower() in ("wurde", "worden", "werden", "wäre", "hätte", "könnte", "müsste", "sollte")) or
+                    (token.pos_ == "ADJ" and len(token.text) > 3)
+                )
+                sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
+                if is_grammar_target and len(sent_blanks) < 2 and len(token.text) >= 2:
+                    items.append({
+                        "index": blank_counter,
+                        "original": token.text,
+                        "hint": f"{token.lemma_} ({token.pos_})",
+                        "type": "grammar",
+                        "sent_idx": sent_idx,
+                        "pos": token.pos_
+                    })
+                    tokens_output.append(f"[[BLANK_{blank_counter}]]")
+                    blank_counter += 1
+                else:
+                    tokens_output.append(token.text_with_ws)
+
+    elif mode == "vocab":
+        for sent_idx, sent in enumerate(doc.sents):
+            for token in sent:
+                lvl = get_cefr_level(token.lemma_)
+                is_vocab_target = token.pos_ in ("NOUN", "VERB") and lvl in ("A2", "B1", "B2", "C1") and len(token.text) >= 3
+                sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
+                if is_vocab_target and len(sent_blanks) < 2:
+                    items.append({
+                        "index": blank_counter,
+                        "original": token.text,
+                        "hint": f"{token.lemma_} [{lvl}]",
+                        "type": "vocab",
+                        "sent_idx": sent_idx,
+                        "pos": token.pos_
+                    })
+                    tokens_output.append(f"[[BLANK_{blank_counter}]]")
+                    blank_counter += 1
+                else:
+                    tokens_output.append(token.text_with_ws)
+
+    elif mode == "ctest":
+        for sent_idx, sent in enumerate(doc.sents):
+            word_in_sent_idx = 0
+            for token in sent:
+                if token.is_alpha and len(token.text) >= 3:
+                    word_in_sent_idx += 1
+                    if sent_idx >= 1 and word_in_sent_idx % 2 == 0:
+                        cut_len = (len(token.text) + 1) // 2
+                        prefix = token.text[:cut_len]
+                        suffix = token.text[cut_len:]
+                        items.append({
+                            "index": blank_counter,
+                            "original": token.text,
+                            "prefix": prefix,
+                            "suffix": suffix,
+                            "hint": f"{prefix}...",
+                            "type": "ctest",
+                            "sent_idx": sent_idx
+                        })
+                        tokens_output.append(f"{prefix}[[BLANK_{blank_counter}]]")
+                        blank_counter += 1
+                        continue
+                tokens_output.append(token.text_with_ws)
+
+    if len(items) == 0:
+        for token in doc:
+            if token.is_alpha and len(token.text) >= 4 and blank_counter < 3:
+                items.append({
+                    "index": blank_counter,
+                    "original": token.text,
+                    "hint": token.lemma_,
+                    "type": mode,
+                    "sent_idx": 0
+                })
+                tokens_output.append(f"[[BLANK_{blank_counter}]]")
+                blank_counter += 1
+            else:
+                tokens_output.append(token.text_with_ws)
+
+    masked_text = "".join(tokens_output)
+    return {
+        "mode": mode,
+        "items": items,
+        "total_blanks": len(items),
+        "masked_text": masked_text
+    }
+
+class ClozeGenReq(BaseModel):
+    mode: Optional[str] = "grammar"
+
+@app.post("/api/articles/{article_id}/exercise/cloze")
+def get_article_cloze_exercise(article_id: int, req: ClozeGenReq):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"Article {article_id} not found")
+        raw_text = row["raw_text"]
+        title = row["title"]
+    
+    data = generate_cloze_exercise(raw_text, mode=req.mode or "grammar", article_id=article_id)
+    data["article_id"] = article_id
+    data["title"] = title
+    return data
+
+class ClozeEvalReq(BaseModel):
+    article_id: int
+    mode: str
+    answers: Dict[str, str]
+
+@app.post("/api/exercise/cloze/evaluate")
+def evaluate_cloze_exercise(req: ClozeEvalReq):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM articles WHERE id = ?", (req.article_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"Article {req.article_id} not found")
+        raw_text = row["raw_text"]
+    
+    exercise = generate_cloze_exercise(raw_text, mode=req.mode, article_id=req.article_id)
+    items = exercise["items"]
+    
+    results = []
+    correct_count = 0
+    for item in items:
+        idx_str = str(item["index"])
+        user_ans = req.answers.get(idx_str, "").strip()
+        expected = item["original"]
+        
+        if item.get("type") == "ctest":
+            expected_suffix = item.get("suffix", "")
+            is_correct = (user_ans.lower() == expected_suffix.lower()) or (user_ans.lower() == expected.lower())
+        else:
+            is_correct = (user_ans.lower() == expected.lower())
+        
+        if is_correct:
+            correct_count += 1
+        
+        results.append({
+            "index": item["index"],
+            "correct": is_correct,
+            "user_answer": user_ans,
+            "expected": expected,
+            "hint": item.get("hint", ""),
+            "type": item.get("type", "grammar")
+        })
+    
+    total = len(items)
+    accuracy_pct = round((correct_count / total * 100)) if total > 0 else 0
+    
+    log_study_event("quiz_session", req.article_id, f"cloze:{req.mode}:{req.article_id}", minutes=3)
+    
+    return {
+        "score": correct_count,
+        "total": total,
+        "accuracy_pct": accuracy_pct,
+        "results": results
+    }
+
+# Mount Static UI (Catch-all must be at the very end)
 if os.path.exists("static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")

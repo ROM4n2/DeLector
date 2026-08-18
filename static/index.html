@@ -2,9 +2,14 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>DeLector — 德语欧标沉浸阅读与考点剖析</title>
   <meta name="description" content="专为德语欧标与歌德证书备考打造的沉浸阅读工作台，支持 CEFR 词汇荧光标注与深度考点解析。">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#faf8f5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DeLector">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -71,6 +76,7 @@
       <h2 id="reader-title"></h2>
       <div class="reader-controls">
         <div id="reader-meta-badge" class="mini-level-badge mini-level-A1">A1 推荐</div>
+        <button class="btn btn-accent" onclick="openClozeModal()" title="为当前文章生成歌德考点完形填空 / C-Test 实战训练" style="font-size:0.75rem;min-height:30px;padding:0 0.65rem;">⚔ 完形实战</button>
         <button class="btn btn-ghost" onclick="downloadStudyGuide()" title="一键导出全文划线、词汇与考点为 Markdown 精读讲义" style="font-size:0.75rem;min-height:30px;padding:0 0.65rem;">📥 导出讲义</button>
         <div class="typo-pill">
           <button id="btn-font-sans" class="typo-btn active" onclick="setFontMode('sans')" title="切换为清爽现代黑体">黑体</button>
@@ -112,10 +118,13 @@
     <!-- Segment & Mode Switcher Row -->
     <div class="cards-control-row">
       <div class="cards-seg-bar">
-        <button id="seg-pending" class="cards-seg-btn active" onclick="setCardSegment('pending')">
-          待复习 <span id="seg-pending-count" class="seg-count">0</span>
+        <button id="seg-due" class="cards-seg-btn active" onclick="setCardSegment('due')" title="根据 SuperMemo SM-2 算法今日到期的卡片">
+          今日到期 <span id="seg-due-count" class="seg-count">0</span>
         </button>
-        <button id="seg-mastered" class="cards-seg-btn" onclick="setCardSegment('mastered')">
+        <button id="seg-pending" class="cards-seg-btn" onclick="setCardSegment('pending')" title="所有待复习状态的卡片">
+          待复习全量 <span id="seg-pending-count" class="seg-count">0</span>
+        </button>
+        <button id="seg-mastered" class="cards-seg-btn" onclick="setCardSegment('mastered')" title="已掌握归档卡片">
           已掌握 <span id="seg-mastered-count" class="seg-count">0</span>
         </button>
       </div>
@@ -604,6 +613,66 @@
 
   <!-- Milestone Toast -->
   <div id="milestone-toast" class="milestone-toast hidden"></div>
+
+    <!-- ── Fullscreen Cloze Exercise Modal (Lückentext / C-Test) ── -->
+  <div id="cloze-overlay" class="cloze-overlay hidden">
+    <div class="cloze-modal">
+      <div class="cloze-head">
+        <div>
+          <span class="dossier-kicker">GOETHE LÜCKENTEXT &amp; C-TEST ENGINE</span>
+          <h2 id="cloze-title" style="margin:0;font-family:var(--serif-heading);font-size:1.5rem;color:var(--ink);">完形填空实战训练</h2>
+        </div>
+        <button class="drawer-close" onclick="closeClozeModal()">✕</button>
+      </div>
+
+      <!-- Cloze Mode Switcher -->
+      <div class="cloze-mode-bar">
+        <button id="cloze-mode-btn-grammar" class="cloze-mode-btn active" onclick="switchClozeMode('grammar')">
+          🎯 语法考点挖空 (介词/连词/变位)
+        </button>
+        <button id="cloze-mode-btn-vocab" class="cloze-mode-btn" onclick="switchClozeMode('vocab')">
+          📚 核心生词盲填 (B1/B2 实词)
+        </button>
+        <button id="cloze-mode-btn-ctest" class="cloze-mode-btn" onclick="switchClozeMode('ctest')">
+          ⚡ 经典 C-Test 模式 (词尾截断)
+        </button>
+      </div>
+
+      <!-- Article Cloze Body -->
+      <div id="cloze-body-wrap" class="cloze-body-wrap">
+        <div id="cloze-content" class="cloze-content" lang="de"></div>
+      </div>
+
+      <!-- Score & Actions Bar -->
+      <div class="cloze-footer">
+        <div id="cloze-score-display" class="cloze-score-display hidden">
+          <span class="cloze-score-num" id="cloze-score-text">0 / 0</span>
+          <span class="cloze-score-pct" id="cloze-pct-text">0% 准确率</span>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+          <button id="cloze-hint-btn" class="btn btn-ghost" onclick="revealClozeHints()">💡 首字母提示</button>
+          <button id="cloze-reset-btn" class="btn btn-ghost" onclick="resetClozeExercise()">↺ 重做</button>
+          <button id="cloze-submit-btn" class="btn btn-accent" onclick="submitClozeExercise()">✓ 提交判分</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Mobile Android / iOS Bottom Navigation Bar ─────────── -->
+  <nav id="mobile-bottom-nav" class="mobile-bottom-nav">
+    <button class="mobile-nav-btn active" id="mob-btn-home" onclick="show('home')">
+      <span class="mob-icon">📖</span>
+      <span class="mob-label">文库</span>
+    </button>
+    <button class="mobile-nav-btn" id="mob-btn-progress" onclick="show('progress')">
+      <span class="mob-icon">📊</span>
+      <span class="mob-label">台账</span>
+    </button>
+    <button class="mobile-nav-btn" id="mob-btn-cards" onclick="show('cards')">
+      <span class="mob-icon">🎴</span>
+      <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
+    </button>
+  </nav>
 
   <script src="/app.js"></script>
 </body>

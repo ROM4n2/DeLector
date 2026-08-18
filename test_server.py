@@ -430,3 +430,105 @@ def test_progress_stats_after_adding_cards(client):
     milestones = {m["id"]: m for m in stats["milestones"]}
     assert milestones["first_card"]["unlocked"] is True
     assert milestones["master_10"]["unlocked"] is False  # only 1 mastered
+
+
+# ── v3.0 Phase 1: SM-2 Spaced Repetition & Cloze Exercises ──────────────────
+
+def test_sm2_algorithm_calculation():
+    """Verify SuperMemo SM-2 calculation mathematics."""
+    from server import calculate_sm2
+    
+    # 1. First time success (Grade 3 - Good)
+    rep, interval, ef, due = calculate_sm2(grade=3, rep=0, interval=1, ef=2.5)
+    assert rep == 1
+    assert interval == 1
+    assert ef == 2.5
+    
+    # 2. Second consecutive success (Grade 4 - Easy)
+    rep2, interval2, ef2, due2 = calculate_sm2(grade=4, rep=rep, interval=interval, ef=ef)
+    assert rep2 == 2
+    assert interval2 == 6
+    assert ef2 > 2.5
+    
+    # 3. Third success
+    rep3, interval3, ef3, due3 = calculate_sm2(grade=3, rep=rep2, interval=interval2, ef=ef2)
+    assert rep3 == 3
+    assert interval3 >= 15
+    
+    # 4. Failure (Grade 1 - Forgot) resets repetition
+    rep_f, interval_f, ef_f, due_f = calculate_sm2(grade=1, rep=rep3, interval=interval3, ef=ef3)
+    assert rep_f == 0
+    assert interval_f == 1
+    assert ef_f < ef3
+
+def test_card_review_sm2_endpoint(client):
+    """Test POST /api/cards/{card_type}/{card_id}/review updates SM-2 schedule."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "verstehen", "lemma": "verstehen", "pos": "VERB",
+        "cefr_level": "A1", "definition_zh": "理解", "sentence_context": "Ich verstehe."
+    })
+    card_id = res.json()["id"]
+
+    # Review with Grade 3 (Good)
+    rev_res = client.post(f"/api/cards/vocab/{card_id}/review", json={
+        "grade": 3
+    })
+    assert rev_res.status_code == 200
+    card_data = rev_res.json()
+    assert card_data["repetition_count"] == 1
+    assert card_data["interval_days"] >= 1
+    assert "due_date" in card_data
+
+def test_due_cards_endpoint(client):
+    """Test GET /api/cards/due returns cards due today or earlier."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "lernen", "lemma": "lernen", "pos": "VERB",
+        "cefr_level": "A1", "definition_zh": "学习", "sentence_context": "Ich lerne."
+    })
+    
+    due_res = client.get("/api/cards/due")
+    assert due_res.status_code == 200
+    data = due_res.json()
+    assert "due_vocab" in data
+    assert "due_grammar" in data
+    assert "due_count" in data
+    assert data["due_count"] >= 1
+
+def test_cloze_exercise_generation_and_eval(client):
+    """Test Cloze exercise generation for grammar, vocab, ctest, and evaluation."""
+    # Ingest test passage
+    text = "In Deutschland lernen viele Studenten Deutsch, weil sie an einer Universität studieren möchten."
+    art_res = client.post("/api/articles/ingest", json={"title": "Cloze Test Passage", "raw_text": text})
+    art_id = art_res.json()["article_id"]
+
+    # 1. Grammar Cloze Generation
+    g_res = client.post(f"/api/articles/{art_id}/exercise/cloze", json={"mode": "grammar"})
+    assert g_res.status_code == 200
+    g_data = g_res.json()
+    assert g_data["mode"] == "grammar"
+    assert len(g_data["items"]) > 0
+    assert "masked_text" in g_data
+
+    # 2. C-Test Cloze Generation
+    c_res = client.post(f"/api/articles/{art_id}/exercise/cloze", json={"mode": "ctest"})
+    assert c_res.status_code == 200
+    c_data = c_res.json()
+    assert c_data["mode"] == "ctest"
+    assert len(c_data["items"]) > 0
+
+    # 3. Evaluate Answers
+    first_item = g_data["items"][0]
+    eval_res = client.post("/api/exercise/cloze/evaluate", json={
+        "article_id": art_id,
+        "mode": "grammar",
+        "answers": {
+            str(first_item["index"]): first_item["original"]
+        }
+    })
+    assert eval_res.status_code == 200
+    eval_data = eval_res.json()
+    assert "score" in eval_data
+    assert "total" in eval_data
+    assert "accuracy_pct" in eval_data
+    assert eval_data["results"][0]["correct"] is True
+
