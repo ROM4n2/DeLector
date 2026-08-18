@@ -30,6 +30,25 @@ function show(view) {
   if (view === 'cards') loadCards();
 }
 
+function renderMiniBar(stats) {
+  if (!stats || !stats.cefr_percentages) return '';
+  const p = stats.cefr_percentages;
+  const segs = ['A1', 'A2', 'B1', 'B2', 'C1'].map(lvl => 
+    (p[lvl] && p[lvl] > 0) ? `<div class="mini-seg ${lvl}" style="width:${p[lvl]}%" title="${lvl}: ${p[lvl]}%"></div>` : ''
+  ).join('');
+  
+  const rec = stats.recommended_level || 'A1';
+  const recClass = rec.startsWith('B2') ? 'mini-level-B2' : `mini-level-${rec}`;
+  
+  return `
+    <div class="mini-bar-wrap">
+      <span class="mini-level-badge ${recClass}">${rec} 推荐</span>
+      <div class="mini-cefr-bar">${segs}</div>
+      <span style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);">约 ${stats.est_reading_minutes || 1} 分钟</span>
+    </div>
+  `;
+}
+
 // ── Articles ─────────────────────────────────────────────────────────────────
 async function loadArticles() {
   const el = document.getElementById('article-list');
@@ -44,6 +63,7 @@ async function loadArticles() {
       <div>
         <div class="article-row-title">${esc(a.title)}</div>
         <div class="article-row-meta">${a.created_at} · ${a.char_count} 字符</div>
+        ${renderMiniBar(a.stats)}
       </div>
       <span class="article-row-arrow">→</span>
     </div>`).join('');
