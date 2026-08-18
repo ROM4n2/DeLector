@@ -1740,209 +1740,476 @@ body.drawer-open .shadow-player {
   color: var(--pencil);
 }
 
-/* ── Phase C: Progress Dashboard ──────────────────────────── */
-#view-progress {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2.5rem 2rem 5rem;
+/* ── Top Navigation Bar (Gutenberg Broadsheet Bar) ───────── */
+#nav {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 2rem; height: 58px;
+  background: var(--paper);
+  border-bottom: 2px solid var(--ink);
 }
 
-.progress-topbar {
+.nav-links {
   display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  align-items: stretch;
+  height: 100%;
+  gap: 0.25rem;
 }
 
-.progress-topbar h2 {
-  margin: 0;
-  font-family: var(--serif-heading);
-  font-size: 1.75rem;
-  color: var(--ink);
+.nav-tab {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 1.125rem;
+  height: 100%;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
 }
 
-.progress-motto {
+.nav-tab:hover {
+  background: var(--paper-deep);
+}
+
+.nav-tab.active {
+  border-bottom-color: var(--accent);
   background: var(--paper-card);
-  border: 1.5px solid var(--ink);
-  border-left: 5px solid var(--accent);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 2px 2px 0 var(--ink);
 }
 
-.motto-quote {
-  font-family: var(--hand);
-  font-size: 1.375rem;
-  line-height: 1.4;
-  color: var(--ink);
-  margin-bottom: 0.35rem;
-}
-
-.motto-author {
+.nav-tab-code {
   font-family: var(--mono);
-  font-size: 0.6875rem;
-  color: var(--pencil);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.progress-ledger-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 1px;
-  background: var(--ink);
-  border: 1.5px solid var(--ink);
-  margin-bottom: 2rem;
-  box-shadow: 3px 3px 0 var(--ink);
-}
-
-.ledger-cell {
-  background: var(--paper-card);
-  padding: 1.25rem 1rem;
-  text-align: center;
-}
-
-.ledger-label {
-  font-family: var(--mono);
-  font-size: 0.6875rem;
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
   font-weight: 600;
   color: var(--pencil);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+
+.nav-tab-label {
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.nav-tab.active .nav-tab-code {
+  color: var(--accent);
+}
+
+.nav-counter {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+.nav-anki-btn {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+/* ── Phase C: Broadsheet Progress Dossier ─────────────────── */
+#view-progress {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 6rem;
+}
+
+.dossier-masthead {
+  padding-bottom: 1.25rem;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 2rem;
+}
+
+.dossier-masthead-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dossier-kicker {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
   margin-bottom: 0.35rem;
 }
 
-.ledger-value {
+.dossier-headline {
+  margin: 0;
   font-family: var(--serif-heading);
   font-size: 2.25rem;
   font-weight: 700;
   color: var(--ink);
-  line-height: 1;
-  margin-bottom: 0.25rem;
+  line-height: 1.1;
 }
 
-.ledger-sub {
+.dossier-ticker {
   font-family: var(--mono);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  padding: 0.4rem 0.875rem;
+  letter-spacing: 0.08em;
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.dossier-ticker b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ticker-sep {
+  color: var(--rule);
+}
+
+/* Broadsheet Motto (Lede) */
+.dossier-motto-section {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  border-left: 6px solid var(--accent);
+  padding: 1.75rem 2rem;
+  margin-bottom: 2.25rem;
+  box-shadow: 3px 3px 0 var(--ink);
+  position: relative;
+}
+
+.dossier-motto-quote {
+  font-family: var(--serif-heading);
+  font-size: 1.5rem;
+  font-style: italic;
+  line-height: 1.35;
+  color: var(--ink);
+  margin-bottom: 0.625rem;
+}
+
+.dossier-motto-zh {
+  font-family: var(--serif-body);
+  font-size: 0.9375rem;
+  color: var(--pencil);
+  line-height: 1.5;
+  margin-bottom: 0.625rem;
+}
+
+.dossier-motto-author {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
-.progress-chart-wrap {
+/* Broadsheet Single Ledger Table */
+.dossier-ledger-table {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
-  padding: 1.25rem 1.5rem;
+  box-shadow: 3px 3px 0 var(--ink);
+  margin-bottom: 2.25rem;
+}
+
+.ledger-col {
+  padding: 1.25rem 1rem;
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #fff;
+  transition: background 0.15s ease;
+}
+
+.ledger-col:last-child {
+  border-right: none;
+}
+
+.ledger-col:hover {
+  background: #faf8f5;
+}
+
+.ledger-col-code {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.ledger-col-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ledger-col-num-wrap {
+  display: flex;
+  align-items: baseline;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.ledger-col-num {
+  font-family: var(--serif-display);
+  font-size: 2.75rem;
+  font-weight: 800;
+  font-feature-settings: 'tnum';
+  color: var(--ink);
+  line-height: 1;
+}
+
+.ledger-col-unit {
+  font-family: var(--serif-body);
+  font-style: italic;
+  font-size: 0.8125rem;
+  color: var(--pencil);
+  margin-left: 0.35rem;
+}
+
+.ledger-col-note {
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  line-height: 1.35;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--rule-light);
+}
+
+/* Dossier Split Panels */
+.dossier-panel {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  padding: 1.5rem 1.75rem;
   margin-bottom: 2rem;
   box-shadow: 2px 2px 0 var(--ink);
 }
 
-.progress-chart-svg {
-  width: 100%;
-  height: 90px;
-  overflow: visible;
-  margin-top: 0.75rem;
+.dossier-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--ink);
+  margin-bottom: 1rem;
 }
 
-.progress-section-title {
+.dossier-panel-code {
   font-family: var(--mono);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 0.5875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.dossier-panel-title h3 {
+  margin: 0;
+  font-family: var(--serif-heading);
+  font-size: 1.1875rem;
   color: var(--ink);
+}
+
+.dossier-panel-meta {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
   letter-spacing: 0.08em;
-  margin: 2rem 0 1rem;
+}
+
+.dossier-chart-container {
+  margin-top: 0.5rem;
+}
+
+.dossier-chart-svg {
+  width: 100%;
+  height: 110px;
+  overflow: visible;
+  display: block;
+}
+
+.dossier-chart-axis {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--rule);
+  text-transform: uppercase;
 }
 
-.progress-section-title::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--rule-light);
-}
-
-.milestones-grid {
+/* Philatelic Stamps Grid */
+.dossier-stamps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
-  margin-bottom: 2rem;
 }
 
-.milestone-card {
-  background: var(--paper-card);
-  border: 1.5px solid var(--rule);
-  padding: 1rem 1.25rem;
+.dossier-stamp {
+  border: 1.5px dashed var(--rule);
+  background: var(--paper-tint);
+  padding: 1.125rem 1.25rem;
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 110px;
+  position: relative;
   transition: all 0.15s ease;
 }
 
-.milestone-card.unlocked {
-  border-color: var(--ink);
+.dossier-stamp.unlocked {
+  border: 1.5px solid var(--ink);
   background: #fff;
   box-shadow: 2px 2px 0 var(--ink);
 }
 
-.milestone-icon {
-  font-size: 1.75rem;
-  opacity: 0.35;
-  filter: grayscale(1);
+.stamp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
-.milestone-card.unlocked .milestone-icon {
-  opacity: 1;
-  filter: none;
-}
-
-.milestone-title {
-  font-family: var(--serif-heading);
-  font-size: 1rem;
+.stamp-seal-tag {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.12em;
   font-weight: 700;
-  color: var(--ink);
-  margin-bottom: 0.15rem;
-}
-
-.milestone-desc {
-  font-size: 0.75rem;
+  text-transform: uppercase;
   color: var(--pencil);
 }
 
-.top-errors-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.stamp-icon {
+  font-size: 1.35rem;
+  filter: grayscale(1);
+  opacity: 0.35;
 }
 
-.top-error-item {
-  background: var(--paper-card);
-  border: 1px solid var(--rule-light);
-  border-left: 3px solid var(--cherry);
-  padding: 0.75rem 1rem;
+.dossier-stamp.unlocked .stamp-icon {
+  filter: none;
+  opacity: 1;
+}
+
+.stamp-title {
+  font-family: var(--serif-heading);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 0.2rem;
+}
+
+.stamp-desc {
+  font-size: 0.75rem;
+  color: var(--pencil);
+  line-height: 1.35;
+}
+
+.stamp-status-line {
+  margin-top: 0.75rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--rule-light);
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.top-error-word {
+.stamp-status-unlocked {
+  color: var(--moss);
+  font-weight: 700;
+}
+
+.stamp-status-locked {
+  color: var(--muted);
+}
+
+/* Weak Points Analysis Table */
+.dossier-errors-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.dossier-error-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 140px;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--cherry);
+  box-shadow: 1px 1px 0 var(--rule);
+}
+
+.error-col-word {
   font-family: var(--serif-heading);
-  font-size: 1.0625rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--ink);
 }
 
-.top-error-def {
+.error-col-def {
   font-size: 0.8125rem;
   color: var(--pencil);
-  margin-left: 0.75rem;
 }
 
-.top-error-ratio {
+.error-col-stat {
   font-family: var(--mono);
   font-size: 0.6875rem;
   color: var(--cherry);
+  text-align: right;
   font-weight: 600;
 }
+
+@media (max-width: 860px) {
+  .dossier-ledger-table {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .ledger-col:nth-child(3) { border-right: none; }
+  .ledger-col:nth-child(-n+3) { border-bottom: 1px solid var(--rule); }
+}
+
+@media (max-width: 600px) {
+  #view-progress { padding: 1.5rem 1rem 4rem; }
+  .dossier-ledger-table {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ledger-col { border-right: 1px solid var(--rule); }
+  .ledger-col:nth-child(2n) { border-right: none; }
+  .ledger-col:nth-child(-n+4) { border-bottom: 1px solid var(--rule); }
+  .dossier-headline { font-size: 1.75rem; }
+  .dossier-error-row { grid-template-columns: 1fr; gap: 0.25rem; }
+  .error-col-stat { text-align: left; margin-top: 0.25rem; }
+  .nav-tab-code { display: none; }
+}
+
 
 /* ── Phase B: Quiz Overlay ─────────────────────────────────── */
 .quiz-overlay {

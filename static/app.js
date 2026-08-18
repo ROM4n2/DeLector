@@ -45,6 +45,12 @@ function show(view) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   const targetView = document.getElementById('view-' + view);
   if (targetView) targetView.classList.add('active');
+
+  // Update top navigation tabs
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  const activeNavBtn = document.getElementById('nav-btn-' + view);
+  if (activeNavBtn) activeNavBtn.classList.add('active');
+
   closeDrawer();
   clearCefrFocus();
 
@@ -1099,22 +1105,28 @@ const GERMAN_MOTTOS = [
 ];
 
 async function loadProgress() {
-  // Render rotating daily quote
+  // Render rotating daily quote in Broadsheet Lede format
   const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24)) % GERMAN_MOTTOS.length;
   const motto = GERMAN_MOTTOS[dayIndex];
   const mottoEl = document.getElementById('progress-motto');
   if (mottoEl) {
     mottoEl.innerHTML = `
-      <div class="motto-quote">“${esc(motto.de)}”</div>
-      <div style="font-size:0.875rem;color:var(--ink);margin-bottom:0.25rem;">${esc(motto.zh)}</div>
-      <div class="motto-author">— ${esc(motto.author)}</div>
+      <div class="dossier-motto-quote">“${esc(motto.de)}”</div>
+      <div class="dossier-motto-zh">${esc(motto.zh)}</div>
+      <div class="dossier-motto-author">— ${esc(motto.author)}</div>
     `;
   }
 
   try {
     const stats = await api('/api/progress/stats');
 
-    // Populate Key Metrics
+    // Populate Ticker Ribbon
+    const tStreak = document.getElementById('ticker-streak');
+    const tTime = document.getElementById('ticker-time');
+    if (tStreak) tStreak.textContent = `${stats.streak || 0} TAGE`;
+    if (tTime) tTime.textContent = `${stats.total_study_minutes || 0} MIN`;
+
+    // Populate Key Metrics Ledger
     const stStreak = document.getElementById('stat-streak');
     const stVocab = document.getElementById('stat-mastered-vocab');
     const stGrammar = document.getElementById('stat-mastered-grammar');
@@ -1129,16 +1141,16 @@ async function loadProgress() {
     if (stAccuracy) stAccuracy.textContent = stats.accuracy_pct || 0;
     if (stMinutes) stMinutes.textContent = stats.total_study_minutes || 0;
 
-    // CEFR Heatbar for collected cards
+    // CEFR Heatbar Spectrum
     const cefrCounts = stats.cefr_counts || {};
     const totalCards = stats.total_cards || 0;
     const tcEl = document.getElementById('progress-total-cards');
-    if (tcEl) tcEl.textContent = `共 ${totalCards} 张`;
+    if (tcEl) tcEl.textContent = `GESAMT: ${totalCards} KARTEN`;
 
     const heatbar = document.getElementById('progress-cefr-bar');
     if (heatbar) {
       if (totalCards === 0) {
-        heatbar.innerHTML = '<div class="heat-seg" style="flex:1;background:var(--paper-deep);text-align:center;color:var(--pencil);font-size:0.6875rem;padding:0.25rem;">暂无卡片数据</div>';
+        heatbar.innerHTML = '<div class="heat-seg" style="flex:1;background:var(--paper-deep);text-align:center;color:var(--pencil);font-size:0.6875rem;padding:0.35rem;">暂无卡片数据 (Keine Kartendaten)</div>';
       } else {
         const levels = ['A1', 'A2', 'B1', 'B2', 'C1'];
         const colors = { A1: 'var(--cefr-a1)', A2: 'var(--cefr-a2)', B1: 'var(--cefr-b1)', B2: 'var(--cefr-b2)', C1: 'var(--cefr-c1)' };
@@ -1158,22 +1170,31 @@ async function loadProgress() {
     // 30-day Trend Chart
     renderTrendChart(stats.trend || []);
 
-    // Milestones
+    // Philatelic Milestones (Academic Stamps)
     const milestonesEl = document.getElementById('progress-milestones');
     if (milestonesEl) {
       const ms = stats.milestones || [];
-      milestonesEl.innerHTML = ms.map(m => `
-        <div class="milestone-card ${m.unlocked ? 'unlocked' : ''}">
-          <div class="milestone-icon">${m.icon}</div>
+      milestonesEl.innerHTML = ms.map((m, idx) => `
+        <div class="dossier-stamp ${m.unlocked ? 'unlocked' : ''}">
+          <div class="stamp-header">
+            <span class="stamp-seal-tag">[ SIEGEL ${String(idx + 1).padStart(2, '0')} ]</span>
+            <span class="stamp-icon">${m.icon}</span>
+          </div>
           <div>
-            <div class="milestone-title">${esc(m.title)}</div>
-            <div class="milestone-desc">${esc(m.desc)}</div>
+            <div class="stamp-title">${esc(m.title)}</div>
+            <div class="stamp-desc">${esc(m.desc)}</div>
+          </div>
+          <div class="stamp-status-line">
+            <span>STATUS</span>
+            <span class="${m.unlocked ? 'stamp-status-unlocked' : 'stamp-status-locked'}">
+              ${m.unlocked ? '✓ FREIGESCHALTET' : '○ OFFEN'}
+            </span>
           </div>
         </div>
       `).join('');
     }
 
-    // Top Errors
+    // Weak Points Top Errors
     const errorsWrap = document.getElementById('progress-errors-wrap');
     const errorsList = document.getElementById('progress-errors-list');
     const topErrors = stats.top_errors || [];
@@ -1181,12 +1202,10 @@ async function loadProgress() {
       if (topErrors.length > 0) {
         errorsWrap.classList.remove('hidden');
         errorsList.innerHTML = topErrors.map(e => `
-          <div class="top-error-item">
-            <div>
-              <span class="top-error-word">${esc(e.word)}</span>
-              <span class="top-error-def">${esc(e.definition_zh)}</span>
-            </div>
-            <span class="top-error-ratio">${e.wrong_count} 错 / ${e.correct_count} 对</span>
+          <div class="dossier-error-row">
+            <span class="error-col-word">${esc(e.word)}</span>
+            <span class="error-col-def">${esc(e.definition_zh)}</span>
+            <span class="error-col-stat">${e.wrong_count} 误 / ${e.correct_count} 正</span>
           </div>
         `).join('');
       } else {
@@ -1202,34 +1221,52 @@ function renderTrendChart(trend) {
   const svg = document.getElementById('progress-chart-svg');
   if (!svg) return;
 
-  const w = 600;
-  const h = 70;
-  const pad = 10;
+  const w = 760;
+  const h = 100;
+  const padX = 14;
+  const padY = 12;
 
   const maxVal = Math.max(...trend.map(d => (d.cards_added || 0) + (d.cards_mastered || 0)), 4);
-  const step = (w - pad * 2) / (trend.length - 1 || 1);
+  const step = (w - padX * 2) / (trend.length - 1 || 1);
 
   const points = trend.map((d, i) => {
     const val = (d.cards_added || 0) + (d.cards_mastered || 0);
-    const x = pad + i * step;
-    const y = h - pad - ((val / maxVal) * (h - pad * 2));
+    const x = padX + i * step;
+    const y = h - padY - ((val / maxVal) * (h - padY * 2));
     return { x, y, val, date: d.date };
   });
 
   const polylineStr = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPathStr = `M ${points[0].x.toFixed(1)} ${h - padY} ` +
+    points.map(p => `L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') +
+    ` L ${points[points.length - 1].x.toFixed(1)} ${h - padY} Z`;
 
   svg.innerHTML = `
-    <!-- Grid line -->
-    <line x1="${pad}" y1="${h - pad}" x2="${w - pad}" y2="${h - pad}" stroke="var(--rule)" stroke-width="1" stroke-dasharray="3,3" />
-    <!-- Trend line -->
+    <defs>
+      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18" />
+        <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0" />
+      </linearGradient>
+    </defs>
+    <!-- Background grid lines -->
+    <line x1="${padX}" y1="${h - padY}" x2="${w - padX}" y2="${h - padY}" stroke="var(--rule)" stroke-width="1" />
+    <line x1="${padX}" y1="${h/2}" x2="${w - padX}" y2="${h/2}" stroke="var(--rule-light)" stroke-width="1" stroke-dasharray="3,3" />
+    <!-- Gradient Fill Area -->
+    <path d="${areaPathStr}" fill="url(#chartGrad)" />
+    <!-- Trend Line -->
     <polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="square" points="${polylineStr}" />
     <!-- Dots -->
     ${points.filter(p => p.val > 0).map(p => `
-      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--ink)" stroke="var(--paper)" stroke-width="1.5">
-        <title>${p.date}: +${p.val} 卡片</title>
+      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="var(--ink)" stroke="#fff" stroke-width="2">
+        <title>${p.date}: +${p.val} 张卡片 (Hinzugefügt / Gemeistert)</title>
       </circle>
     `).join('')}
   `;
+
+  const axisStart = document.getElementById('chart-axis-start');
+  if (axisStart && trend.length > 0) {
+    axisStart.textContent = `● ${trend[0].date} (START)`;
+  }
 }
 
 async function updateAudioCacheInfo() {
