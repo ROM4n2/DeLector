@@ -15,6 +15,8 @@
   --amber-soft:  rgba(233, 132, 37, 0.12);
 
   /* CEFR Pastel Marker Tones */
+  --hl-A1:       #E2F0FF;
+  --hl-A1-ink:   #15558D;
   --hl-A2:       #D2EECB;
   --hl-A2-ink:   #1F6B27;
   --hl-B1:       #FFE9BF;
@@ -223,6 +225,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 4px;
 }
+.hl-A1 { background: var(--hl-A1); color: var(--hl-A1-ink); }
 .hl-A2 { background: var(--hl-A2); color: var(--hl-A2-ink); }
 .hl-B1 { background: var(--hl-B1); color: var(--hl-B1-ink); }
 .hl-B2 { background: var(--hl-B2); color: var(--hl-B2-ink); }
@@ -348,6 +351,7 @@ a { color: inherit; text-decoration: none; }
 .tok:hover {
   background: rgba(233, 132, 37, 0.2);
 }
+.tok.A1 { background: var(--hl-A1); }
 .tok.A2 { background: var(--hl-A2); }
 .tok.B1 { background: var(--hl-B1); }
 .tok.B2 { background: var(--hl-B2); }
@@ -450,11 +454,24 @@ a { color: inherit; text-decoration: none; }
   border-radius: 4px;
   border: 1px solid currentColor;
 }
+.badge-A1 { background: var(--hl-A1); color: var(--hl-A1-ink); border-color: var(--hl-A1-ink); }
 .badge-A2 { background: var(--hl-A2); color: var(--hl-A2-ink); border-color: var(--hl-A2-ink); }
 .badge-B1 { background: var(--hl-B1); color: var(--hl-B1-ink); border-color: var(--hl-B1-ink); }
 .badge-B2 { background: var(--hl-B2); color: var(--hl-B2-ink); border-color: var(--hl-B2-ink); }
 .badge-C1 { background: var(--hl-C1); color: var(--hl-C1-ink); border-color: var(--hl-C1-ink); }
-.badge-A1 { background: var(--paper-tint); color: var(--pencil); border-color: var(--rule); }
+
+/* Gender Badges for A1 Beginners */
+.gender-tag {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+.gender-der { background: #E3F2FD; color: #1565C0; border: 1px solid #90CAF9; }
+.gender-die { background: #FCE4EC; color: #C2185B; border: 1px solid #F48FB1; }
+.gender-das { background: #E8F5E9; color: #2E7D32; border: 1px solid #A5D6A7; }
 
 #d-meta {
   font-family: var(--mono);

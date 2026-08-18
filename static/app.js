@@ -66,10 +66,15 @@ function inspect(tokenId, sentId) {
   document.getElementById('d-word').textContent = token.text;
   document.getElementById('d-cefr').textContent = 'CEFR ' + lvl;
   document.getElementById('d-cefr').className = 'cefr-badge badge-' + lvl;
-  document.getElementById('d-meta').textContent =
-    `原型: ${token.lemma} · 词性: ${token.pos}` +
-    (token.gender ? ` · ${token.gender}` : '') +
-    (token.case   ? ` · ${token.case}`   : '');
+
+  let genderHtml = '';
+  if (token.gender === 'Masc') genderHtml = '<span class="gender-tag gender-der">der 阳性</span>';
+  else if (token.gender === 'Fem') genderHtml = '<span class="gender-tag gender-die">die 阴性</span>';
+  else if (token.gender === 'Neut') genderHtml = '<span class="gender-tag gender-das">das 中性</span>';
+
+  document.getElementById('d-meta').innerHTML =
+    `原型: <strong>${esc(token.lemma)}</strong> · 词性: ${esc(token.pos)} ${genderHtml}` +
+    (token.case ? ` · ${esc(token.case)}` : '');
   document.getElementById('d-def').value = '';
   document.getElementById('d-sent').textContent = sent.text;
   document.getElementById('save-vocab-btn').textContent = '+ 加入 Anki 词汇卡';
