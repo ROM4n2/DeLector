@@ -53,15 +53,33 @@ async function openReader(id) {
   currentArticle = await api('/api/articles/' + id);
   document.getElementById('reader-title').textContent = currentArticle.title;
   const content = document.getElementById('reader-content');
-  content.innerHTML = currentArticle.sentences.map(sent => {
-    const tokens = sent.tokens.map(t => {
-      if (t.is_space) return ' ';
-      if (t.is_punct) return `<span>${esc(t.text)}</span>`;
-      const lvl = t.cefr_level || '';
+  
+  // Format tokens into continuous paragraphs, preventing sentence-by-sentence fragmentation & overflow
+  let paraTokens = [];
+  currentArticle.sentences.forEach(sent => {
+    const sentTokens = sent.tokens.map(t => {
+      if (t.is_space) {
+        if (t.text.includes('\n\n')) return '__PARA__';
+        if (t.text.includes('\n')) return '<br>';
+        return ' ';
+      }
+      if (t.is_punct) return `<span class="punct">${esc(t.text)}</span>`;
+      const lvl = t.cefr_level || 'A1';
       return `<span id="tok-${t.id}" class="tok ${lvl}" onclick="inspect(${t.id},${sent.id})">${esc(t.text)}</span>`;
     }).join('');
-    return `<p>${tokens}</p>`;
-  }).join('');
+
+    paraTokens.push(sentTokens);
+  });
+
+  const fullText = paraTokens.join(' ');
+  const splitParas = fullText.split('__PARA__').map(p => p.trim()).filter(Boolean);
+  
+  if (splitParas.length > 0) {
+    content.innerHTML = splitParas.map(p => `<p class="reader-p">${p}</p>`).join('');
+  } else {
+    content.innerHTML = `<p class="reader-p">${fullText}</p>`;
+  }
+
   show('reader');
 }
 
@@ -98,9 +116,13 @@ function inspect(tokenId, sentId) {
 }
 
 // ── Drawer ───────────────────────────────────────────────────────────────────
-function openDrawer()  { document.getElementById('drawer').classList.add('open'); }
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.body.classList.add('drawer-open');
+}
 function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
+  document.body.classList.remove('drawer-open');
   document.querySelectorAll('.tok.sel').forEach(el => el.classList.remove('sel'));
 }
 
