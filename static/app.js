@@ -7,18 +7,37 @@ let selectedSent    = null;
 let grammarData     = null;
 
 // ── German Audio TTS ─────────────────────────────────────────────────────────
-function playGermanAudio(text, rate = 0.88) {
-  if (!('speechSynthesis' in window) || !text) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text.trim());
-  utterance.lang = 'de-DE';
-  utterance.rate = rate; // 略慢于正常语速，便于初学与备考辨音
-  
-  const voices = window.speechSynthesis.getVoices();
-  const deVoice = voices.find(v => v.lang.startsWith('de') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('German') || v.name.includes('Hedda') || v.name.includes('Stefan')));
-  if (deVoice) utterance.voice = deVoice;
-  
-  window.speechSynthesis.speak(utterance);
+// ── German Audio TTS (Edge Neural TTS + Fallback) ────────────────────────────
+async function playGermanAudio(text, rate = 0.88) {
+  if (!text) return;
+  const clean = text.trim();
+  const voice = ShadowPlayer.voice || localStorage.getItem('delector_voice') || 'de-DE-KatjaNeural';
+  const ratePercent = Math.round((rate - 1.0) * 100);
+  const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
+
+  try {
+    const resp = await fetch('/api/audio/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: clean, voice: voice, rate: rateStr })
+    });
+    if (!resp.ok) throw new Error('Neural TTS error');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.play();
+  } catch {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(clean);
+    utt.lang = 'de-DE';
+    utt.rate = rate;
+    const voices = window.speechSynthesis.getVoices();
+    const deVoice = voices.find(v => v.lang.startsWith('de') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('German') || v.name.includes('Hedda') || v.name.includes('Stefan')));
+    if (deVoice) utt.voice = deVoice;
+    window.speechSynthesis.speak(utt);
+  }
 }
 
 // ── View router ──────────────────────────────────────────────────────────────
@@ -44,7 +63,7 @@ const ShadowPlayer = {
   currentSentIdx: 0,
   mode: 'shadow', // 'continuous' | 'shadow' | 'loop'
   rate: 0.88,
-  voice: 'de-DE-KatjaNeural',
+  voice: localStorage.getItem('delector_voice') || 'de-DE-KatjaNeural',
   audioEl: null,
   pauseTimer: null,
   utterance: null,
@@ -52,6 +71,8 @@ const ShadowPlayer = {
 
   init() {
     this.audioEl = new Audio();
+    const savedVoice = localStorage.getItem('delector_voice') || 'de-DE-KatjaNeural';
+    this.setVoice(savedVoice);
     if ('speechSynthesis' in window) {
       window.speechSynthesis.onvoiceschanged = () => {
         window.speechSynthesis.getVoices();
@@ -68,10 +89,18 @@ const ShadowPlayer = {
 
   setVoice(voice) {
     this.voice = voice;
-    document.querySelectorAll('.voice-btn').forEach(b => {
-      b.classList.toggle('active', (b.id === 'voice-btn-katja' && voice.includes('Katja')) || (b.id === 'voice-btn-conrad' && voice.includes('Conrad')));
-    });
-    if (this.isPlaying) this.replay();
+    localStorage.setItem('delector_voice', voice);
+    const isKatja = voice.includes('Katja');
+    const isConrad = voice.includes('Conrad');
+    const btnKatja = document.getElementById('voice-btn-katja');
+    const btnConrad = document.getElementById('voice-btn-conrad');
+    if (btnKatja) btnKatja.classList.toggle('active', isKatja);
+    if (btnConrad) btnConrad.classList.toggle('active', isConrad);
+    if (this.isPlaying) {
+      if (this.pauseTimer) { clearTimeout(this.pauseTimer); this.pauseTimer = null; }
+      if (this.audioEl) { this.audioEl.pause(); }
+      this.speakCurrentSentence();
+    }
   },
 
   play() {
