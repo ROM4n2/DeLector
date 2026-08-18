@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 # Ensure test DB
 os.environ["DATABASE_PATH"] = "test_delector.db"
-from server import app, init_db, get_db, get_cefr_level, export_anki_deck, SYSTEM_GRAMMAR_PROMPT, process_german_text
+from server import app, init_db, get_db, get_cefr_level, export_anki_deck, SYSTEM_GRAMMAR_PROMPT, process_german_text, is_safe_public_url, clean_html_to_article
 
 @pytest.fixture
 def test_db_path():
@@ -109,3 +109,43 @@ def test_full_api_flow(client):
     apkg_res = client.get("/api/cards/export/apkg")
     assert apkg_res.status_code == 200
     assert len(apkg_res.content) > 1000
+
+def test_is_safe_public_url_filters_private_ips():
+    assert is_safe_public_url("http://127.0.0.1:8000/api") is False
+    assert is_safe_public_url("http://localhost:3000") is False
+    assert is_safe_public_url("http://192.168.1.1/admin") is False
+    assert is_safe_public_url("http://10.0.0.5/") is False
+    assert is_safe_public_url("http://169.254.169.254/latest/meta-data") is False
+    assert is_safe_public_url("ftp://example.com/file") is False
+    assert is_safe_public_url("https://www.tagesschau.de/inland/test") is True
+
+def test_clean_html_to_article():
+    mock_html = """
+    <!DOCTYPE html>
+    <html>
+    <head><title>Klimawandel in den Alpen – DER SPIEGEL</title></head>
+    <body>
+      <nav><a href="/">Home</a></nav>
+      <script>console.log("ad");</script>
+      <p>Die Temperaturen in den Alpen steigen doppelt so schnell wie im globalen Durchschnitt.</p>
+      <p>Forscher warnen vor gravierenden Folgen für das Ökosystem und den Tourismus der Region.</p>
+      <footer>Copyright 2026</footer>
+    </body>
+    </html>
+    """
+    title, body = clean_html_to_article(mock_html)
+    assert "Klimawandel in den Alpen" in title
+    assert "DER SPIEGEL" not in title
+    assert "Temperaturen in den Alpen" in body
+    assert "Copyright" not in body
+
+def test_url_ingest_endpoint_with_mock(client, monkeypatch):
+    from unittest.mock import AsyncMock
+    mock_html = "<html><head><title>Hallo Berlin</title></head><body><p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
+    monkeypatch.setattr("server.fetch_remote_html", AsyncMock(return_value=mock_html))
+    
+    res = client.post("/api/articles/ingest-url", json={"url": "https://www.dw.com/de/hallo-berlin/a-123"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["article_id"] > 0
+    assert "stats" in data

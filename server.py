@@ -3,7 +3,14 @@ import json
 import sqlite3
 import random
 import tempfile
-from typing import Optional, List, Dict, Any
+import re
+import html
+import socket
+import ipaddress
+import asyncio
+from typing import Optional, List, Dict, Any, Tuple
+from urllib.parse import urlparse
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -83,12 +90,12 @@ PRESET_ARTICLES = [
     }
 ]
 
-def ingest_article(title: str, text: str, db_path: Optional[str] = None) -> int:
+def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_url: Optional[str] = None) -> int:
     processed = process_german_text(text)
     target_path = get_db_path(db_path)
     with get_db(target_path) as conn:
-        cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json) VALUES (?, ?, ?)",
-                           (title or "Untitled", text, json.dumps(processed, ensure_ascii=False)))
+        cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
+                           (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""))
         return cur.lastrowid
 
 def seed_preset_articles(db_path: Optional[str] = None):
@@ -299,6 +306,81 @@ class GrammarCardReq(BaseModel):
 class GrammarLookupReq(BaseModel):
     sentence: str
     target_phrase: str
+
+class IngestUrlReq(BaseModel):
+    url: str
+    title: Optional[str] = ""
+
+def is_safe_public_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        if hostname.lower() in ("localhost", "127.0.0.1", "::1"):
+            return False
+            
+        ip_str = socket.gethostbyname(hostname)
+        ip_obj = ipaddress.ip_address(ip_str)
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_multicast:
+            return False
+        return True
+    except Exception:
+        return False
+
+def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
+    title_match = re.search(r'<title>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
+    title = html.unescape(title_match.group(1).strip()) if title_match else "Extracted Article"
+    title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche)', title)[0].strip()
+    
+    cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
+    
+    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    clean_paras = []
+    for p in paragraphs:
+        txt = re.sub(r'<[^>]+>', '', p)
+        txt = html.unescape(txt).strip()
+        if len(txt) > 25 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved"]):
+            clean_paras.append(txt)
+            
+    if not clean_paras:
+        raw_text = re.sub(r'<[^>]+>', ' ', cleaned)
+        clean_paras = [html.unescape(line).strip() for line in raw_text.split('\n') if len(line.strip()) > 30]
+
+    body_text = "\n\n".join(clean_paras)
+    return title, body_text
+
+async def fetch_remote_html(url: str) -> str:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+    }
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        resp = await client.get(url, headers=headers)
+        if resp.status_code != 200:
+            raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
+        if not is_safe_public_url(str(resp.url)):
+            raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
+        return resp.text
+
+@app.post("/api/articles/ingest-url")
+async def ingest_from_url(req: IngestUrlReq):
+    if not is_safe_public_url(req.url):
+        raise HTTPException(400, "无效网址或受限制的内部网络地址 (SSRF Protection)")
+    
+    raw_html = await fetch_remote_html(req.url)
+    title, body_text = clean_html_to_article(raw_html)
+    if not body_text or len(body_text.strip()) < 30:
+        raise HTTPException(400, "未能从该网页提取到有效的德语正文，请尝试直接复制粘贴")
+        
+    final_title = req.title.strip() if req.title else title
+    art_id = await asyncio.to_thread(ingest_article, final_title, body_text, None, req.url)
+    with get_db() as conn:
+        row = conn.execute("SELECT processed_json FROM articles WHERE id = ?", (art_id,)).fetchone()
+        pj = json.loads(row["processed_json"]) if row else {}
+    return {"article_id": art_id, "title": final_title, "char_count": len(body_text), "stats": pj.get("stats", {})}
 
 @app.post("/api/articles/ingest")
 def ingest(req: IngestReq):
