@@ -6,6 +6,21 @@ let selectedToken   = null;
 let selectedSent    = null;
 let grammarData     = null;
 
+// ── German Audio TTS ─────────────────────────────────────────────────────────
+function playGermanAudio(text, rate = 0.88) {
+  if (!('speechSynthesis' in window) || !text) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text.trim());
+  utterance.lang = 'de-DE';
+  utterance.rate = rate; // 略慢于正常语速，便于初学与备考辨音
+  
+  const voices = window.speechSynthesis.getVoices();
+  const deVoice = voices.find(v => v.lang.startsWith('de') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('German') || v.name.includes('Hedda') || v.name.includes('Stefan')));
+  if (deVoice) utterance.voice = deVoice;
+  
+  window.speechSynthesis.speak(utterance);
+}
+
 // ── View router ──────────────────────────────────────────────────────────────
 function show(view) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));

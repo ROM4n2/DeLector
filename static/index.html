@@ -85,7 +85,10 @@
       <!-- Word Card -->
       <div class="sticky-word-card">
         <div class="sticky-word-headline">
-          <span id="d-word"></span>
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span id="d-word"></span>
+            <button class="speaker-btn" onclick="playGermanAudio(document.getElementById('d-word').textContent)" title="朗读单词">🔊</button>
+          </div>
           <span class="cefr-badge" id="d-cefr"></span>
         </div>
         <div id="d-meta"></div>
@@ -120,7 +123,10 @@
 
       <!-- Context Quote -->
       <div class="context-box">
-        <span class="input-label">原句上下文</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
+          <span class="input-label" style="margin:0;">原句上下文</span>
+          <button class="speaker-btn-sm" onclick="playGermanAudio(document.getElementById('d-sent').textContent)" title="朗读整句">🔊 朗读原句</button>
+        </div>
         <div id="d-sent"></div>
       </div>
     </div>
