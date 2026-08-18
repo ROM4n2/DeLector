@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 # Ensure test DB
 os.environ["DATABASE_PATH"] = "test_delector.db"
-from server import app, init_db, get_db, get_cefr_level, export_anki_deck, SYSTEM_GRAMMAR_PROMPT
+from server import app, init_db, get_db, get_cefr_level, export_anki_deck, SYSTEM_GRAMMAR_PROMPT, process_german_text
 
 @pytest.fixture
 def test_db_path():
@@ -47,6 +47,24 @@ def test_seed_preset_articles_with_a1(client, test_db_path):
 def test_a1_grammar_prompt_coverage():
     assert "A1" in SYSTEM_GRAMMAR_PROMPT
     assert "变位" in SYSTEM_GRAMMAR_PROMPT or "格" in SYSTEM_GRAMMAR_PROMPT
+
+def test_cefr_text_difficulty_stats(client):
+    # 1. Direct process_german_text check
+    a1_text = "Hallo! Ich heiße Lukas. Ich lerne Deutsch und trinke Kaffee."
+    res_a1 = process_german_text(a1_text)
+    assert "stats" in res_a1
+    assert res_a1["stats"]["word_count"] > 0
+    assert res_a1["stats"]["recommended_level"] == "A1"
+    assert res_a1["stats"]["cefr_percentages"]["A1"] > 60.0
+    assert res_a1["stats"]["est_reading_minutes"] >= 1
+
+    # 2. List articles API returns stats
+    res = client.get("/api/articles")
+    assert res.status_code == 200
+    articles = res.json()
+    assert len(articles) > 0
+    assert "stats" in articles[0]
+    assert "cefr_percentages" in articles[0]["stats"]
 
 def test_full_api_flow(client):
     # 1. Ingest text

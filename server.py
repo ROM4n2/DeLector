@@ -108,18 +108,55 @@ except OSError:
     nlp = spacy.load("de_core_news_sm")
 
 CEFR_DICT = {
-    "ich": "A1", "du": "A1", "er": "A1", "sie": "A1", "es": "A1", "wir": "A1", "sein": "A1", "haben": "A1",
-    "können": "A1", "müssen": "A1", "lernen": "A1", "arbeiten": "A1", "gut": "A1", "tag": "A1", "gehen": "A1", "nach": "A1",
-    "erzählen": "A2", "erklären": "A2", "bestehen": "A2", "prüfung": "A2", "beruf": "A2", "reise": "A2", "fahren": "A2",
+    # A1 core
+    "ich": "A1", "du": "A1", "er": "A1", "sie": "A1", "es": "A1", "wir": "A1", "ihr": "A1",
+    "mein": "A1", "dein": "A1", "sein": "A1", "haben": "A1", "werden": "A1",
+    "können": "A1", "müssen": "A1", "wollen": "A1", "sollen": "A1", "dürfen": "A1", "möchten": "A1",
+    "lernen": "A1", "arbeiten": "A1", "gut": "A1", "tag": "A1", "gehen": "A1", "nach": "A1",
+    "kommen": "A1", "wohnen": "A1", "heißen": "A1", "hallo": "A1", "deutsch": "A1", "deutschkurs": "A1",
+    "trinken": "A1", "essen": "A1", "kaffee": "A1", "brot": "A1", "brötchen": "A1", "obst": "A1",
+    "kaufen": "A1", "frisch": "A1", "supermarkt": "A1", "unterricht": "A1", "spaß": "A1", "viel": "A1",
+    "morgen": "A1", "nachmittag": "A1", "abend": "A1", "u-bahn": "A1", "bahn": "A1", "kurs": "A1",
+    "jetzt": "A1", "sprachschule": "A1", "schule": "A1", "jeder": "A1", "groß": "A1", "klein": "A1",
+    "neu": "A1", "alt": "A1", "schön": "A1", "eins": "A1", "zwei": "A1", "drei": "A1", "jahr": "A1",
+    "mann": "A1", "frau": "A1", "kind": "A1", "haus": "A1", "stadt": "A1", "zimmer": "A1",
+    "der": "A1", "die": "A1", "das": "A1", "ein": "A1", "eine": "A1", "in": "A1", "an": "A1",
+    "auf": "A1", "aus": "A1", "mit": "A1", "zu": "A1", "zum": "A1", "zur": "A1", "von": "A1",
+    "bei": "A1", "für": "A1", "über": "A1", "unter": "A1", "vor": "A1", "hinter": "A1",
+    "und": "A1", "oder": "A1", "aber": "A1", "denn": "A1", "nicht": "A1", "kein": "A1",
+    "wie": "A1", "was": "A1", "wo": "A1", "woher": "A1", "wohin": "A1", "wann": "A1", "wer": "A1",
+    
+    # A2
+    "erzählen": "A2", "erklären": "A2", "bestehen": "A2", "prüfung": "A2", "beruf": "A2", "reise": "A2",
+    "fahren": "A2", "wochenende": "A2", "zug": "A2", "reservieren": "A2", "stadtzentrum": "A2",
+    "wetter": "A2", "deshalb": "A2", "ganz": "A2", "garten": "A2", "verbringen": "A2",
+    "typisch": "A2", "bayerisch": "A2", "spezialität": "A2", "traditionell": "A2", "restaurant": "A2", "probieren": "A2",
+    "besuchen": "A2", "helfen": "A2", "treffen": "A2", "beginnen": "A2", "verstehen": "A2",
+    
+    # B1
     "entscheiden": "B1", "entwickeln": "B1", "zusammenhang": "B1", "gesellschaft": "B1", "meinung": "B1",
+    "klimawandel": "B1", "klimaschutz": "B1", "herausforderung": "B1", "beitrag": "B1", "leisten": "B1",
+    "umweltschutz": "B1", "experte": "B1", "empfehlen": "B1", "umsteigen": "B1", "energie": "B1",
+    "haushalt": "B1", "sparen": "B1", "bewusst": "B1", "ernährung": "B1", "regional": "B1",
+    "lebensmittel": "B1", "ebenfalls": "B1", "rolle": "B1", "spielen": "B1", "alltag": "B1",
+    
+    # B2
     "beeinträchtigen": "B2", "gewährleisten": "B2", "hervorheben": "B2", "voraussetzen": "B2",
-    "implizieren": "C1", "fungieren": "C1", "paradigma": "C1", "unabdingbar": "C1"
+    "digitalisierung": "B2", "transformation": "B2", "arbeitsbedingung": "B2", "grundlegend": "B2",
+    "unternehmen": "B2", "mitarbeiter": "B2", "flexibel": "B2", "arbeitszeitmodell": "B2",
+    "verfügung": "B2", "vereinbarkeit": "B2", "beschäftigte": "B2", "grenze": "B2", "fortschreitend": "B2",
+    "arbeitswelt": "B2", "homeoffice": "B2", "ethisch": "B2", "fragestellung": "B2", "existenziell": "B2",
+    "tragweite": "B2",
+    
+    # C1
+    "implizieren": "C1", "fungieren": "C1", "paradigma": "C1", "unabdingbar": "C1",
+    "differenzieren": "C1", "konstatieren": "C1", "ambivalent": "C1", "sukzessive": "C1"
 }
 
 def get_cefr_level(lemma: str) -> str:
     if not lemma:
         return "A1"
-    low = lemma.lower()
+    low = lemma.lower().strip()
     if low in CEFR_DICT:
         return CEFR_DICT[low]
     if any(low.endswith(s) for s in ["ität", "ismus", "schaft", "ung"]):
@@ -132,15 +169,52 @@ def get_cefr_level(lemma: str) -> str:
         return "A2"
     return "A1"
 
+def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
+    counts = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
+    words = [t for t in tokens_list if t.get("cefr_level")]
+    total_words = len(words)
+    
+    for w in words:
+        lvl = w["cefr_level"]
+        if lvl in counts:
+            counts[lvl] += 1
+            
+    percentages = {}
+    for lvl, cnt in counts.items():
+        percentages[lvl] = round((cnt / total_words * 100), 1) if total_words > 0 else 0.0
+        
+    non_a1_count = total_words - counts["A1"]
+    non_a1_ratio = (non_a1_count / total_words) if total_words > 0 else 0.0
+    
+    if non_a1_ratio < 0.15:
+        recommended = "A1"
+    elif non_a1_ratio < 0.30:
+        recommended = "A2"
+    elif non_a1_ratio < 0.50:
+        recommended = "B1"
+    else:
+        recommended = "B2+"
+        
+    est_minutes = max(1, round(total_words / 90))  # 90 words/min 精读标准
+    
+    return {
+        "word_count": total_words,
+        "est_reading_minutes": est_minutes,
+        "recommended_level": recommended,
+        "cefr_counts": counts,
+        "cefr_percentages": percentages
+    }
+
 def process_german_text(text: str) -> Dict[str, Any]:
     doc = nlp(text)
     sentences = []
+    all_tokens = []
     for sent_idx, sent in enumerate(doc.sents):
         tokens = []
         for t in sent:
             morph = t.morph.to_dict()
             is_word = not t.is_punct and not t.is_space
-            tokens.append({
+            tok = {
                 "id": t.i,
                 "text": t.text,
                 "lemma": t.lemma_,
@@ -150,9 +224,12 @@ def process_german_text(text: str) -> Dict[str, Any]:
                 "cefr_level": get_cefr_level(t.lemma_) if is_word else "",
                 "is_punct": t.is_punct,
                 "is_space": t.is_space
-            })
+            }
+            tokens.append(tok)
+            all_tokens.append(tok)
         sentences.append({"id": sent_idx, "text": sent.text, "tokens": tokens})
-    return {"sentence_count": len(sentences), "sentences": sentences}
+    stats = calculate_cefr_stats(all_tokens)
+    return {"sentence_count": len(sentences), "sentences": sentences, "stats": stats}
 
 # --- 3. Anki Exporter ---
 VOCAB_MODEL = genanki.Model(
@@ -231,8 +308,17 @@ def ingest(req: IngestReq):
 @app.get("/api/articles")
 def list_articles():
     with get_db() as conn:
-        rows = conn.execute("SELECT id, title, created_at, length(raw_text) as char_count FROM articles ORDER BY id DESC").fetchall()
-        return [dict(r) for r in rows]
+        rows = conn.execute("SELECT id, title, created_at, length(raw_text) as char_count, processed_json FROM articles ORDER BY id DESC").fetchall()
+        result = []
+        for r in rows:
+            d = {"id": r["id"], "title": r["title"], "created_at": r["created_at"], "char_count": r["char_count"]}
+            try:
+                pj = json.loads(r["processed_json"])
+                d["stats"] = pj.get("stats", {})
+            except Exception:
+                d["stats"] = {}
+            result.append(d)
+        return result
 
 @app.get("/api/articles/{article_id}")
 def get_article(article_id: int):
