@@ -1,18 +1,13 @@
-const CACHE_NAME = 'delector-static-v3';
+const CACHE_NAME = 'delector-static-v3.0.2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/style.css',
-  '/app.js',
+  '/style.css?v=3.0.2',
+  '/app.js?v=3.0.2',
   '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
   self.skipWaiting();
 });
 
@@ -34,9 +29,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/api/')) {
     return;
   }
+  // Network first, cache fallback to avoid stale code in dev
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).then((fetchRes) => {
+    fetch(event.request)
+      .then((fetchRes) => {
         if (event.request.method === 'GET' && fetchRes.status === 200) {
           const resClone = fetchRes.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -44,7 +40,7 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return fetchRes;
-      });
-    }).catch(() => fetch(event.request))
+      })
+      .catch(() => caches.match(event.request))
   );
 });

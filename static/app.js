@@ -903,6 +903,178 @@ async function submitCardReview(type, id, grade) {
   }
 }
 
+function toggleDeckFlip(e) {
+  if (e) e.stopPropagation();
+  deckFlipped = !deckFlipped;
+  const cardEl = document.getElementById('deck-active-card');
+  if (cardEl) {
+    cardEl.classList.toggle('is-flipped', deckFlipped);
+  }
+  const flipBtn = document.getElementById('deck-btn-flip-ctrl');
+  if (flipBtn) {
+    flipBtn.textContent = deckFlipped ? '↶ 翻回正面 (Space)' : '🔀 翻至背面 (Space)';
+  }
+}
+
+function stepDeck(direction) {
+  const cardEl = document.getElementById('deck-active-card');
+  if (cardEl) {
+    cardEl.classList.add(direction > 0 ? 'is-swiping-left' : 'is-swiping-right');
+  }
+  setTimeout(() => {
+    deckIndex += direction;
+    deckFlipped = false;
+    renderCardsGrid();
+  }, 160);
+}
+
+function attachDeckSwipeListener() {
+  const cardEl = document.getElementById('deck-active-card');
+  if (!cardEl) return;
+
+  let startX = 0;
+  let currentX = 0;
+  let isDragging = false;
+
+  const onTouchStart = (e) => {
+    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    isDragging = true;
+  };
+
+  const onTouchMove = (e) => {
+    if (!isDragging) return;
+    currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const diff = currentX - startX;
+    cardEl.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg) ${deckFlipped ? 'rotateY(180deg)' : ''}`;
+  };
+
+  const onTouchEnd = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    const diff = currentX - startX;
+    if (diff < -70) {
+      stepDeck(1);
+    } else if (diff > 70) {
+      stepDeck(-1);
+    } else {
+      cardEl.style.transform = deckFlipped ? 'rotateY(180deg)' : '';
+    }
+  };
+
+  cardEl.addEventListener('touchstart', onTouchStart, { passive: true });
+  cardEl.addEventListener('touchmove', onTouchMove, { passive: true });
+  cardEl.addEventListener('touchend', onTouchEnd);
+}
+
+function renderCatalogGrid(vList, gList) {
+  const container = document.getElementById('cards-container');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="section-label" style="margin-bottom:0.875rem;">
+      <span class="section-title">词汇卡 · VOCABULARY (${vList.length})</span>
+    </div>
+    <div class="card-grid">${vList.map(c => `
+      <div class="memo-card ${c.mastered ? 'is-mastered' : ''}" id="v-card-${c.id}">
+        <div class="memo-card-head">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span class="memo-word">${esc(c.word)}</span>
+            <button class="speaker-btn" onclick="playGermanAudio('${esc(c.word)}')" title="朗读单词">🔊</button>
+          </div>
+          <div class="card-top-actions">
+            <span class="cefr-badge badge-${c.cefr_level || 'A1'}">${c.cefr_level || 'A1'}</span>
+            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, '${esc(c.word)}')" title="删除此卡片">✕</button>
+          </div>
+        </div>
+        <div class="memo-def">${esc(c.definition_zh)}</div>
+        <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos || 'WORT')}${c.gender ? ' · ' + esc(c.gender) : ''}</div>
+        <div class="memo-sent">${esc(c.sentence_context)}</div>
+        <div class="card-footer-actions">
+          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误${c.due_date ? ` · 到期: ${c.due_date}` : ''}</span>
+          <button class="card-master-btn ${c.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('vocab', ${c.id}, ${!!c.mastered})">
+            ${c.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+          </button>
+        </div>
+      </div>`).join('')}</div>
+
+    <div class="section-label" style="margin-top:2rem;margin-bottom:0.875rem;">
+      <span class="section-title">歌德语法考点卡 · GRAMMAR (${gList.length})</span>
+    </div>
+    ${gList.map(c => `
+      <div class="grammar-memo-card ${c.mastered ? 'is-mastered' : ''}" id="g-card-${c.id}">
+        <div class="grammar-memo-head">
+          <span class="grammar-memo-name">${esc(c.grammar_name)}</span>
+          <div class="card-top-actions">
+            <span class="cefr-badge badge-${c.cefr_level || 'A1'}">Goethe ${c.cefr_level || 'A1'}</span>
+            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, '${esc(c.grammar_name)}')" title="删除此考点卡">✕</button>
+          </div>
+        </div>
+        ${c.rule_formula ? `<div class="grammar-memo-formula">${esc(c.rule_formula)}</div>` : ''}
+        <div class="grammar-memo-exp">${esc(c.explanation_zh)}</div>
+        <div class="memo-sent">${esc(c.sentence_context)}</div>
+        <div class="card-footer-actions">
+          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误</span>
+          <button class="card-master-btn ${c.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('grammar', ${c.id}, ${!!c.mastered})">
+            ${c.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+          </button>
+        </div>
+      </div>`).join('')}
+  `;
+}
+
+// ── 📰 Leporello Folio (Horizontal Progress Dossier Navigation) ───────────────
+let currentFolioPage = 0;
+
+function switchFolioPage(idx) {
+  currentFolioPage = Math.max(0, Math.min(2, idx));
+  const track = document.getElementById('folio-track');
+  if (track) {
+    track.style.transform = `translateX(-${currentFolioPage * 100}%)`;
+  }
+  for (let i = 0; i < 3; i++) {
+    const tab = document.getElementById(`folio-tab-${i}`);
+    if (tab) tab.classList.toggle('active', i === currentFolioPage);
+  }
+}
+
+function prevFolioPage() {
+  if (currentFolioPage > 0) switchFolioPage(currentFolioPage - 1);
+}
+
+function nextFolioPage() {
+  if (currentFolioPage < 2) switchFolioPage(currentFolioPage + 1);
+}
+
+// Global Hotkey handler for Deck flipping and Leporello Folio
+window.addEventListener('keydown', (e) => {
+  const isCardsActive = document.getElementById('view-cards')?.classList.contains('active');
+  const isProgressActive = document.getElementById('view-progress')?.classList.contains('active');
+  const isQuizOpen = !document.getElementById('quiz-overlay')?.classList.contains('hidden');
+  const isClozeOpen = !document.getElementById('cloze-overlay')?.classList.contains('hidden');
+  const isModalOpen = document.getElementById('modal-overlay')?.style.display === 'flex';
+
+  if (isQuizOpen || isClozeOpen || isModalOpen) return;
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+  if (isCardsActive && cardViewMode === 'deck') {
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      toggleDeckFlip();
+    } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      stepDeck(1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      stepDeck(-1);
+    }
+  } else if (isProgressActive) {
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      nextFolioPage();
+    } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      prevFolioPage();
+    }
+  }
+});
+
+
 
 async function deleteCard(type, id, name) {
   try {
@@ -2046,3 +2218,59 @@ async function submitClozeExercise() {
     alert(`提交判分失败: ${e.message}`);
   }
 }
+
+// ── Explicit Window Global Exports for HTML onclick handlers ────────────────
+window.show = show;
+window.openReader = openReader;
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.inspect = inspect;
+window.closeDrawer = closeDrawer;
+window.saveVocabCard = saveVocabCard;
+window.saveGrammarCard = saveGrammarCard;
+window.playGermanAudio = playGermanAudio;
+window.setFontMode = setFontMode;
+window.adjustFontSize = adjustFontSize;
+window.downloadStudyGuide = downloadStudyGuide;
+window.toggleCefrFocus = toggleCefrFocus;
+
+// Cards & 3D Deck
+window.setCardSegment = setCardSegment;
+window.setCardViewMode = setCardViewMode;
+window.toggleDeckFlip = toggleDeckFlip;
+window.stepDeck = stepDeck;
+window.submitCardReview = submitCardReview;
+window.deleteCard = deleteCard;
+window.toggleMaster = toggleMaster;
+window.loadCards = loadCards;
+
+// Leporello Folio
+window.switchFolioPage = switchFolioPage;
+window.prevFolioPage = prevFolioPage;
+window.nextFolioPage = nextFolioPage;
+window.loadProgress = loadProgress;
+
+// Quiz Overlay
+window.openQuizOverlay = openQuizOverlay;
+window.closeQuizOverlay = closeQuizOverlay;
+window.startQuiz = startQuiz;
+window.flipFlashcard = flipFlashcard;
+window.submitFlashcard = submitFlashcard;
+window.checkDictation = checkDictation;
+window.advanceQuiz = advanceQuiz;
+window.selectChoiceOption = selectChoiceOption;
+
+// Cloze Overlay
+window.openClozeModal = openClozeModal;
+window.closeClozeModal = closeClozeModal;
+window.switchClozeMode = switchClozeMode;
+window.revealClozeHints = revealClozeHints;
+window.resetClozeExercise = resetClozeExercise;
+window.submitClozeExercise = submitClozeExercise;
+window.handleClozeKey = handleClozeKey;
+
+// Audio & Backup
+window.clearAudioCache = clearAudioCache;
+window.downloadBackupJson = downloadBackupJson;
+window.uploadBackupJson = uploadBackupJson;
+
