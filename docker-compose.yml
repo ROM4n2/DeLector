@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  delector:
+    build: .
+    container_name: delector-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./delector.db:/app/delector.db
+      - ./progress.db:/app/progress.db
+      - ./.cache:/app/.cache
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
