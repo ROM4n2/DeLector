@@ -217,3 +217,38 @@ def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     assert res.status_code == 200
     assert res.headers["content-type"] == "audio/mpeg"
     assert len(res.content) > 10
+
+def test_reading_notes_crud_and_export(client):
+    # 1. Ingest article
+    res_art = client.post("/api/articles/ingest", json={"title": "Notizen Test", "raw_text": "Berlin ist wunderbar und groß."})
+    art_id = res_art.json()["article_id"]
+
+    # 2. Create reading note
+    res_note = client.post(f"/api/articles/{art_id}/notes", json={
+        "sentence_id": 1,
+        "selected_text": "wunderbar",
+        "color": "yellow",
+        "note_content": "形容词：精彩的、极好的"
+    })
+    assert res_note.status_code == 200
+    note_id = res_note.json()["id"]
+
+    # 3. List notes
+    res_list = client.get(f"/api/articles/{art_id}/notes")
+    assert res_list.status_code == 200
+    notes = res_list.json()
+    assert len(notes) == 1
+    assert notes[0]["selected_text"] == "wunderbar"
+
+    # 4. Export study guide markdown
+    res_guide = client.get(f"/api/articles/{art_id}/export-guide")
+    assert res_guide.status_code == 200
+    assert "Notizen Test" in res_guide.text
+    assert "wunderbar" in res_guide.text
+    assert "形容词：精彩的、极好的" in res_guide.text
+
+    # 5. Delete note
+    res_del = client.delete(f"/api/notes/{note_id}")
+    assert res_del.status_code == 200
+    res_list2 = client.get(f"/api/articles/{art_id}/notes")
+    assert len(res_list2.json()) == 0

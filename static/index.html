@@ -60,6 +60,7 @@
       <h2 id="reader-title"></h2>
       <div class="reader-controls">
         <div id="reader-meta-badge" class="mini-level-badge mini-level-A1">A1 推荐</div>
+        <button class="btn btn-ghost" onclick="downloadStudyGuide()" title="一键导出全文划线、词汇与考点为 Markdown 精读讲义" style="font-size:0.75rem;min-height:30px;padding:0 0.65rem;">📥 导出讲义</button>
         <div class="typo-pill">
           <button id="btn-font-sans" class="typo-btn active" onclick="setFontMode('sans')" title="切换为清爽现代黑体">黑体</button>
           <button id="btn-font-serif" class="typo-btn" onclick="setFontMode('serif')" title="切换为经典书卷衬线体">衬线</button>
@@ -156,6 +157,26 @@
         </div>
         <div id="d-sent"></div>
       </div>
+
+      <!-- Sticky Reading Notes Section -->
+      <div id="drawer-note-section" class="sticky-reading-note-card">
+        <div class="sticky-word-headline">
+          <span style="font-size:0.875rem;font-weight:700;color:var(--ink);">📝 精读随笔便签</span>
+          <span id="note-badge-status" class="cefr-badge badge-A2">便签草稿</span>
+        </div>
+        <div id="note-quote" class="quote-text" style="margin-top:0.5rem;font-style:italic;font-size:0.8125rem;color:var(--pencil);"></div>
+        <div style="margin-top:0.75rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label class="input-label" style="margin:0;">随笔心得 / 搭配拆解</label>
+            <button id="note-ai-btn" class="btn btn-accent" style="min-height:24px;padding:0 0.5rem;font-size:0.6875rem;" onclick="aiNoteAssist()">✨ AI 速记辅助</button>
+          </div>
+          <textarea id="note-text-input" class="note-textarea" rows="3" placeholder="记录句式搭配、长难句拆解或个人心得…"></textarea>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+          <button id="save-note-btn" class="btn btn-dark" style="flex:1;" onclick="saveCurrentNote()">✓ 保存便签</button>
+          <button id="del-note-btn" class="btn btn-ghost hidden" style="color:var(--cherry);" onclick="deleteCurrentNote()" title="删除便签">🗑️</button>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -238,6 +259,18 @@
         <button class="speed-step-btn" data-speed="1.2" onclick="ShadowPlayer.setSpeed(1.2)">1.2x</button>
       </div>
     </div>
+  </div>
+
+  <!-- ── Floating Selection Tooltip (Root Level) ──────────────── -->
+  <div id="selection-tooltip" class="selection-tooltip hidden">
+    <div class="tooltip-colors">
+      <button class="hl-color-btn hl-yellow" onclick="applyHighlight('yellow')" title="黄色荧光笔"></button>
+      <button class="hl-color-btn hl-green" onclick="applyHighlight('green')" title="绿色重点笔"></button>
+      <button class="hl-color-btn hl-pink" onclick="applyHighlight('pink')" title="粉色难点笔"></button>
+    </div>
+    <span class="tooltip-sep"></span>
+    <button class="tooltip-action-btn" onclick="openNoteDrawerFromSelection()">📝 随笔</button>
+    <button class="tooltip-action-btn" onclick="playSelectedAudio()">🔊 朗读</button>
   </div>
 
   <script src="/app.js"></script>

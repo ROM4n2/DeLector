@@ -438,6 +438,7 @@ async function openReader(id) {
 
   ShadowPlayer.reset();
   applyTypography();
+  await loadArticleNotes(id);
   show('reader');
 }
 
@@ -764,31 +765,226 @@ async function refreshCount() {
   document.getElementById('card-count').textContent = vc.length + gc.length;
 }
 
-// ── Multi-Token Phrase Selection ─────────────────────────────────────────────
-document.getElementById('reader-content')?.addEventListener('mouseup', () => {
-  const sel = window.getSelection();
-  const text = sel ? sel.toString().trim() : '';
-  if (text && text.includes(' ') && text.length > 2) {
-    inspectPhrase(text);
+// ── Reading Notes & Selection Tooltip ────────────────────────────────────────
+let currentArticleNotes = [];
+let activeSelectedRangeText = '';
+let activeSelectedSentId = null;
+let activeEditingNoteId = null;
+
+async function loadArticleNotes(articleId) {
+  try {
+    currentArticleNotes = await api(`/api/articles/${articleId}/notes`);
+    renderArticleNotes();
+  } catch (e) {
+    console.error('Failed to load notes', e);
   }
-});
+}
 
-function inspectPhrase(phraseText) {
-  if (!currentArticle) return;
-  const matchedSent = currentArticle.sentences.find(s => s.text.includes(phraseText)) || currentArticle.sentences[0];
-  selectedToken = { text: phraseText, lemma: phraseText, pos: 'PHRASE', cefr_level: 'B1', gender: '', case: '' };
-  selectedSent = matchedSent;
-  grammarData = null;
+function renderArticleNotes() {
+  document.querySelectorAll('.tok').forEach(el => {
+    el.classList.remove('user-hl-yellow', 'user-hl-green', 'user-hl-pink');
+  });
+  document.querySelectorAll('.margin-note-badge').forEach(el => el.remove());
 
-  document.getElementById('d-word').textContent = phraseText;
-  document.getElementById('d-cefr').textContent = 'CEFR Phrase';
-  document.getElementById('d-cefr').className = 'cefr-badge badge-B1';
-  document.getElementById('d-meta').innerHTML = '固定搭配 / 短语短句';
-  document.getElementById('d-def').value = '';
-  document.getElementById('d-sent').textContent = matchedSent ? matchedSent.text : '';
-  document.getElementById('grammar-result').classList.add('hidden');
-  document.getElementById('save-vocab-btn').textContent = '+ 加入 Anki 短语卡';
+  if (!currentArticleNotes || !currentArticleNotes.length) return;
+
+  currentArticleNotes.forEach(note => {
+    const phrase = note.selected_text?.trim();
+    if (phrase) {
+      document.querySelectorAll('.tok').forEach(tokEl => {
+        if (phrase.includes(tokEl.textContent.trim()) || tokEl.textContent.trim() === phrase) {
+          tokEl.classList.add(`user-hl-${note.color || 'yellow'}`);
+        }
+      });
+    }
+
+    if (note.note_content && note.sentence_id) {
+      const sent = currentArticle?.sentences?.find(s => s.id === note.sentence_id);
+      if (sent && sent.tokens?.length) {
+        const lastTok = sent.tokens[sent.tokens.length - 1];
+        const lastTokEl = document.getElementById('tok-' + lastTok.id);
+        if (lastTokEl && !lastTokEl.parentNode.querySelector(`[data-note-id="${note.id}"]`)) {
+          const badge = document.createElement('span');
+          badge.className = 'margin-note-badge';
+          badge.dataset.noteId = note.id;
+          badge.innerHTML = `📌 随笔`;
+          badge.title = note.note_content;
+          badge.onclick = (e) => {
+            e.stopPropagation();
+            openNoteDrawerForExisting(note.id);
+          };
+          lastTokEl.insertAdjacentElement('afterend', badge);
+        }
+      }
+    }
+  });
+}
+
+function setupSelectionTooltip() {
+  const content = document.getElementById('reader-content');
+  const tooltip = document.getElementById('selection-tooltip');
+  if (!content || !tooltip) return;
+
+  content.addEventListener('mouseup', () => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const text = sel ? sel.toString().trim() : '';
+      if (text.length > 0 && content.contains(sel.anchorNode)) {
+        activeSelectedRangeText = text;
+        const range = sel.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        
+        let node = sel.anchorNode;
+        while (node && node !== content) {
+          if (node.id && node.id.startsWith('tok-')) {
+            const tokId = parseInt(node.id.replace('tok-', ''), 10);
+            const foundSent = currentArticle?.sentences?.find(s => s.tokens.some(t => t.id === tokId));
+            if (foundSent) activeSelectedSentId = foundSent.id;
+            break;
+          }
+          node = node.parentNode;
+        }
+
+        tooltip.style.left = `${rect.left + rect.width / 2}px`;
+        tooltip.style.top = `${rect.top - 8}px`;
+        tooltip.classList.remove('hidden');
+      } else {
+        tooltip.classList.add('hidden');
+      }
+    }, 50);
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (!tooltip.contains(e.target) && !content.contains(e.target)) {
+      tooltip.classList.add('hidden');
+    }
+  });
+}
+
+async function applyHighlight(color) {
+  if (!activeSelectedRangeText || !currentArticle) return;
+  const tooltip = document.getElementById('selection-tooltip');
+  tooltip.classList.add('hidden');
+
+  await api(`/api/articles/${currentArticle.id}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sentence_id: activeSelectedSentId || 1,
+      selected_text: activeSelectedRangeText,
+      color: color,
+      note_content: ''
+    })
+  });
+
+  await loadArticleNotes(currentArticle.id);
+  window.getSelection()?.removeAllRanges();
+}
+
+function openNoteDrawerFromSelection() {
+  if (!activeSelectedRangeText || !currentArticle) return;
+  const tooltip = document.getElementById('selection-tooltip');
+  tooltip.classList.add('hidden');
+
+  activeEditingNoteId = null;
+  document.getElementById('note-badge-status').textContent = '随笔草稿';
+  document.getElementById('note-quote').textContent = `"${activeSelectedRangeText}"`;
+  document.getElementById('note-text-input').value = '';
+  document.getElementById('save-note-btn').textContent = '✓ 保存便签';
+  document.getElementById('del-note-btn').classList.add('hidden');
+  
   openDrawer();
+  document.getElementById('drawer-note-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function openNoteDrawerForExisting(noteId) {
+  const note = currentArticleNotes.find(n => n.id === noteId);
+  if (!note) return;
+
+  activeEditingNoteId = note.id;
+  activeSelectedRangeText = note.selected_text;
+  activeSelectedSentId = note.sentence_id;
+
+  document.getElementById('note-badge-status').textContent = '已保存便签';
+  document.getElementById('note-quote').textContent = `"${note.selected_text}"`;
+  document.getElementById('note-text-input').value = note.note_content || '';
+  document.getElementById('save-note-btn').textContent = '✓ 更新便签';
+  document.getElementById('del-note-btn').classList.remove('hidden');
+
+  openDrawer();
+  document.getElementById('drawer-note-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function aiNoteAssist() {
+  if (!activeSelectedRangeText || !currentArticle) return;
+  const btn = document.getElementById('note-ai-btn');
+  btn.textContent = '✨ 解析中…';
+  btn.disabled = true;
+
+  const sent = currentArticle.sentences?.find(s => s.id === activeSelectedSentId);
+  const sentText = sent ? sent.text : activeSelectedRangeText;
+
+  try {
+    const res = await api('/api/ai/note-assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sentence: sentText, selected_text: activeSelectedRangeText })
+    });
+    
+    let summary = res.summary_zh || '';
+    if (res.key_points && res.key_points.length) {
+      summary += '\n• ' + res.key_points.join('\n• ');
+    }
+    document.getElementById('note-text-input').value = summary;
+  } catch {
+    alert('AI 速记解析失败，请检查网络配置');
+  } finally {
+    btn.textContent = '✨ AI 速记辅助';
+    btn.disabled = false;
+  }
+}
+
+async function saveCurrentNote() {
+  if (!activeSelectedRangeText || !currentArticle) return;
+  const noteText = document.getElementById('note-text-input').value.trim();
+
+  if (activeEditingNoteId) {
+    await api(`/api/notes/${activeEditingNoteId}`, { method: 'DELETE' });
+  }
+
+  await api(`/api/articles/${currentArticle.id}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sentence_id: activeSelectedSentId || 1,
+      selected_text: activeSelectedRangeText,
+      color: 'yellow',
+      note_content: noteText
+    })
+  });
+
+  document.getElementById('save-note-btn').textContent = '✓ 已保存';
+  await loadArticleNotes(currentArticle.id);
+  window.getSelection()?.removeAllRanges();
+}
+
+async function deleteCurrentNote() {
+  if (!activeEditingNoteId || !currentArticle) return;
+  if (!confirm('确定删除此条随笔便签吗？')) return;
+  await api(`/api/notes/${activeEditingNoteId}`, { method: 'DELETE' });
+  closeDrawer();
+  await loadArticleNotes(currentArticle.id);
+}
+
+function playSelectedAudio() {
+  if (!activeSelectedRangeText) return;
+  playGermanAudio(activeSelectedRangeText);
+  document.getElementById('selection-tooltip').classList.add('hidden');
+}
+
+function downloadStudyGuide() {
+  if (!currentArticle) return;
+  window.location.href = `/api/articles/${currentArticle.id}/export-guide`;
 }
 
 // ── Global Keyboard Shortcuts ────────────────────────────────────────────────
@@ -865,4 +1061,5 @@ loadArticles();
 refreshCount();
 applyTypography();
 setupDropzone();
+setupSelectionTooltip();
 ShadowPlayer.init();

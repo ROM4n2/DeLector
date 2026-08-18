@@ -73,6 +73,17 @@ def init_db(db_path: Optional[str] = None):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS reading_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id INTEGER NOT NULL,
+                sentence_id INTEGER,
+                selected_text TEXT NOT NULL,
+                color TEXT DEFAULT 'yellow',
+                note_content TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
     seed_preset_articles(target_path)
 
 PRESET_ARTICLES = [
@@ -577,6 +588,126 @@ async def get_audio_tts(req: TTSReq):
     except Exception as e:
         raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
 
+# --- Reading Notes & AI Assist Endpoints ---
+class ReadingNoteReq(BaseModel):
+    sentence_id: Optional[int] = None
+    selected_text: str
+    color: Optional[str] = "yellow"
+    note_content: Optional[str] = ""
+
+@app.get("/api/articles/{article_id}/notes")
+def list_article_notes(article_id: int):
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/articles/{article_id}/notes")
+def create_article_note(article_id: int, req: ReadingNoteReq):
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO reading_notes (article_id, sentence_id, selected_text, color, note_content) VALUES (?, ?, ?, ?, ?)",
+            (article_id, req.sentence_id, req.selected_text, req.color or "yellow", req.note_content or "")
+        )
+        return {"id": cur.lastrowid, "status": "ok"}
+
+@app.delete("/api/notes/{note_id}")
+def delete_article_note(note_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM reading_notes WHERE id = ?", (note_id,))
+        return {"status": "ok"}
+
+SYSTEM_NOTE_PROMPT = """你是一位精通德语阅读与考点剖析的资深私教。
+请根据学习者给出的德语句子和选中的文本，为学习者生成一份简洁精准的中文精读随笔备忘要点（包括句法结构简析、高频固定搭配及地道中文翻译）。
+以严格的 JSON 格式输出：
+{
+  "summary_zh": "中文一句话精读解析",
+  "key_points": ["核心要点1", "核心要点2"]
+}
+不要输出除 JSON 以外的任何文字。"""
+
+class NoteAssistReq(BaseModel):
+    sentence: str
+    selected_text: str
+
+@app.post("/api/ai/note-assist")
+async def note_assist(req: NoteAssistReq):
+    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    if not key:
+        return {
+            "summary_zh": f"精读重点：{req.selected_text}",
+            "key_points": ["请在 .env 配置 DEEPSEEK_API_KEY 获取深度 AI 语法与搭配解析。"]
+        }
+
+    user_content = f"整句: \"{req.sentence}\"\n划选部分: \"{req.selected_text}\""
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_NOTE_PROMPT},
+                        {"role": "user", "content": user_content}
+                    ],
+                    "response_format": {"type": "json_object"}
+                }
+            )
+            content = resp.json()["choices"][0]["message"]["content"]
+            return json.loads(content)
+    except Exception:
+        return {
+            "summary_zh": f"精读重点：{req.selected_text}",
+            "key_points": []
+        }
+
+# --- Study Guide Export (Markdown) ---
+@app.get("/api/articles/{article_id}/export-guide")
+def export_study_guide(article_id: int):
+    with get_db() as conn:
+        art = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
+        if not art:
+            raise HTTPException(404, "Article not found")
+        notes = conn.execute("SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+        vocab = conn.execute("SELECT * FROM vocab_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+        grammar = conn.execute("SELECT * FROM grammar_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+
+    md = [f"# {art['title']} — DeLector 精读讲义\n"]
+    md.append(f"> 导出日期: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 字符数: {len(art['raw_text'])}\n")
+    
+    if notes:
+        md.append("## 📝 精读随笔与重点批注\n")
+        for n in notes:
+            md.append(f"- **高亮原句**: *{n['selected_text']}*")
+            if n['note_content']:
+                md.append(f"  - 💡 **随笔笔记**: {n['note_content']}")
+        md.append("")
+
+    if vocab:
+        md.append("## 🗂️ 核心生词表\n")
+        md.append("| 单词 | 原型 | 词性 | CEFR | 中文释义 | 原文语境 |")
+        md.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+        for v in vocab:
+            md.append(f"| **{v['word']}** | {v['lemma']} | {v['pos']} | {v['cefr_level']} | {v['definition_zh']} | *{v['sentence_context']}* |")
+        md.append("")
+
+    if grammar:
+        md.append("## 🎓 歌德考点深度解析\n")
+        for g in grammar:
+            md.append(f"### ✦ {g['grammar_name']} ({g['cefr_level']})")
+            if g['rule_formula']:
+                md.append(f"- **语法公式**: `{g['rule_formula']}`")
+            md.append(f"- **解析**: {g['explanation_zh']}")
+            md.append(f"- **例句**: *{g['sentence_context']}*\n")
+
+    content = "\n".join(md)
+    from fastapi.responses import Response
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=study_guide_{article_id}.md"}
+    )
+
 # --- Backup & Restore Endpoints ---
 @app.get("/api/backup/export")
 def export_database_backup():
@@ -584,13 +715,15 @@ def export_database_backup():
         articles = [dict(r) for r in conn.execute("SELECT * FROM articles").fetchall()]
         vocab = [dict(r) for r in conn.execute("SELECT * FROM vocab_cards").fetchall()]
         grammar = [dict(r) for r in conn.execute("SELECT * FROM grammar_cards").fetchall()]
+        notes = [dict(r) for r in conn.execute("SELECT * FROM reading_notes").fetchall()]
         
     return {
         "version": 1,
         "exported_at": datetime.now().isoformat(),
         "articles": articles,
         "vocab_cards": vocab,
-        "grammar_cards": grammar
+        "grammar_cards": grammar,
+        "reading_notes": notes
     }
 
 class RestoreReq(BaseModel):
@@ -598,6 +731,7 @@ class RestoreReq(BaseModel):
     articles: List[Dict[str, Any]] = []
     vocab_cards: List[Dict[str, Any]] = []
     grammar_cards: List[Dict[str, Any]] = []
+    reading_notes: List[Dict[str, Any]] = []
 
 @app.post("/api/backup/restore")
 def restore_database_backup(req: RestoreReq):
@@ -616,6 +750,11 @@ def restore_database_backup(req: RestoreReq):
             conn.execute(
                 "INSERT OR REPLACE INTO grammar_cards (id, article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula, examples_zh, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (g.get("id"), g.get("article_id"), g.get("sentence_context", ""), g.get("grammar_name", ""), g.get("cefr_level", "A1"), g.get("explanation_zh", ""), g.get("rule_formula", ""), g.get("examples_zh", ""), g.get("created_at"))
+            )
+        for n in req.reading_notes:
+            conn.execute(
+                "INSERT OR REPLACE INTO reading_notes (id, article_id, sentence_id, selected_text, color, note_content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (n.get("id"), n.get("article_id"), n.get("sentence_id"), n.get("selected_text", ""), n.get("color", "yellow"), n.get("note_content", ""), n.get("created_at"))
             )
     return {"status": "ok", "message": "全量备份恢复成功"}
 
