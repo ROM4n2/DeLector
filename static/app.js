@@ -1,0 +1,223 @@
+/* DeLector – frontend logic */
+'use strict';
+
+let currentArticle = null;
+let selectedToken   = null;
+let selectedSent    = null;
+let grammarData     = null;
+
+// ── View router ──────────────────────────────────────────────────────────────
+function show(view) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  closeDrawer();
+  if (view === 'home')  loadArticles();
+  if (view === 'cards') loadCards();
+}
+
+// ── Articles ─────────────────────────────────────────────────────────────────
+async function loadArticles() {
+  const el = document.getElementById('article-list');
+  el.innerHTML = '<div class="empty-state">加载中…</div>';
+  const data = await api('/api/articles');
+  if (!data.length) {
+    el.innerHTML = '<div class="empty-state">暂无文稿，点击上方按钮导入德语文章</div>';
+    return;
+  }
+  el.innerHTML = data.map(a => `
+    <div class="article-row" onclick="openReader(${a.id})">
+      <div>
+        <div class="article-row-title">${esc(a.title)}</div>
+        <div class="article-row-meta">${a.created_at} · ${a.char_count} 字符</div>
+      </div>
+      <span class="article-row-arrow">→</span>
+    </div>`).join('');
+}
+
+async function openReader(id) {
+  currentArticle = await api('/api/articles/' + id);
+  document.getElementById('reader-title').textContent = currentArticle.title;
+  const content = document.getElementById('reader-content');
+  content.innerHTML = currentArticle.sentences.map(sent => {
+    const tokens = sent.tokens.map(t => {
+      if (t.is_space) return ' ';
+      if (t.is_punct) return `<span>${esc(t.text)}</span>`;
+      const lvl = t.cefr_level || '';
+      return `<span id="tok-${t.id}" class="tok ${lvl}" onclick="inspect(${t.id},${sent.id})">${esc(t.text)}</span>`;
+    }).join('');
+    return `<p>${tokens}</p>`;
+  }).join('');
+  show('reader');
+}
+
+// ── Token inspection ─────────────────────────────────────────────────────────
+function inspect(tokenId, sentId) {
+  document.querySelectorAll('.tok.sel').forEach(el => el.classList.remove('sel'));
+  const el = document.getElementById('tok-' + tokenId);
+  if (el) el.classList.add('sel');
+
+  const sent  = currentArticle.sentences.find(s => s.id === sentId);
+  const token = sent.tokens.find(t => t.id === tokenId);
+  selectedToken = token;
+  selectedSent  = sent;
+  grammarData   = null;
+
+  const lvl = token.cefr_level || 'A1';
+  document.getElementById('d-word').textContent = token.text;
+  document.getElementById('d-cefr').textContent = 'CEFR ' + lvl;
+  document.getElementById('d-cefr').className = 'cefr-badge badge-' + lvl;
+  document.getElementById('d-meta').textContent =
+    `原型: ${token.lemma} · 词性: ${token.pos}` +
+    (token.gender ? ` · ${token.gender}` : '') +
+    (token.case   ? ` · ${token.case}`   : '');
+  document.getElementById('d-def').value = '';
+  document.getElementById('d-sent').textContent = sent.text;
+  document.getElementById('save-vocab-btn').textContent = '+ 加入 Anki 词汇卡';
+  document.getElementById('grammar-result').classList.add('hidden');
+  openDrawer();
+}
+
+// ── Drawer ───────────────────────────────────────────────────────────────────
+function openDrawer()  { document.getElementById('drawer').classList.add('open'); }
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.querySelectorAll('.tok.sel').forEach(el => el.classList.remove('sel'));
+}
+
+// ── Grammar AI ───────────────────────────────────────────────────────────────
+async function analyzeGrammar() {
+  const btn = document.getElementById('analyze-btn');
+  btn.textContent = '分析中…';
+  btn.disabled = true;
+  try {
+    grammarData = await api('/api/lookup/grammar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ sentence: selectedSent.text, target_phrase: selectedToken.text })
+    });
+    const lvl = grammarData.cefr_level || 'B1';
+    document.getElementById('g-name').textContent    = grammarData.grammar_name;
+    document.getElementById('g-formula').textContent = grammarData.rule_formula || '';
+    document.getElementById('g-formula').classList.toggle('hidden', !grammarData.rule_formula);
+    document.getElementById('g-exp').textContent     = grammarData.explanation_zh;
+    document.getElementById('g-badge').textContent   = 'Goethe ' + lvl;
+    document.getElementById('g-badge').className     = 'cefr-badge grammar-cefr-badge badge-' + lvl;
+    if (!document.getElementById('d-def').value && grammarData.collocations?.length) {
+      document.getElementById('d-def').value = grammarData.collocations[0];
+    }
+    document.getElementById('grammar-result').classList.remove('hidden');
+  } catch {
+    alert('语法解析失败，请检查 API Key');
+  } finally {
+    btn.textContent = 'AI 深度剖析';
+    btn.disabled = false;
+  }
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+async function saveVocab() {
+  const def = document.getElementById('d-def').value.trim();
+  if (!def) { alert('请输入中文释义'); return; }
+  await api('/api/cards/vocab', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      article_id: currentArticle.id,
+      word: selectedToken.text, lemma: selectedToken.lemma,
+      pos: selectedToken.pos,   gender: selectedToken.gender,
+      cefr_level: selectedToken.cefr_level || 'A1',
+      definition_zh: def, sentence_context: selectedSent.text
+    })
+  });
+  document.getElementById('save-vocab-btn').textContent = '✓ 已保存';
+  refreshCount();
+}
+
+async function saveGrammar() {
+  if (!grammarData) return;
+  await api('/api/cards/grammar', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      article_id: currentArticle.id,
+      sentence_context: selectedSent.text,
+      grammar_name: grammarData.grammar_name,
+      cefr_level: grammarData.cefr_level || 'B1',
+      explanation_zh: grammarData.explanation_zh,
+      rule_formula: grammarData.rule_formula
+    })
+  });
+  document.getElementById('save-grammar-btn').textContent = '✓ 已加入语法卡';
+  refreshCount();
+}
+
+// ── Cards view ────────────────────────────────────────────────────────────────
+async function loadCards() {
+  const { vocab_cards: vc, grammar_cards: gc } = await api('/api/cards');
+  document.getElementById('cards-container').innerHTML = `
+    <p class="section-eyebrow">词汇卡 (${vc.length})</p>
+    <div class="card-grid">${vc.map(c => `
+      <div class="card-item">
+        <div class="card-item-head">
+          <span class="card-word">${esc(c.word)}</span>
+          <span class="cefr-badge badge-${c.cefr_level}">${c.cefr_level}</span>
+        </div>
+        <div class="card-body">
+          <div class="card-def">${esc(c.definition_zh)}</div>
+          <div class="card-meta">${esc(c.lemma)} · ${esc(c.pos)}${c.gender ? ' · ' + esc(c.gender) : ''}</div>
+          <div class="card-sent">${esc(c.sentence_context)}</div>
+        </div>
+      </div>`).join('')}</div>
+
+    <p class="section-eyebrow" style="margin-top:1.5rem">歌德语法卡 (${gc.length})</p>
+    ${gc.map(c => `
+      <div class="grammar-card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.375rem">
+          <span class="grammar-card-name">${esc(c.grammar_name)}</span>
+          <span class="cefr-badge badge-${c.cefr_level}">Goethe ${c.cefr_level}</span>
+        </div>
+        ${c.rule_formula ? `<div class="grammar-card-formula">${esc(c.rule_formula)}</div>` : ''}
+        <div class="grammar-card-exp">${esc(c.explanation_zh)}</div>
+        <div class="card-sent">${esc(c.sentence_context)}</div>
+      </div>`).join('')}
+  `;
+}
+
+// ── Import modal ──────────────────────────────────────────────────────────────
+function openModal()  { document.getElementById('modal-overlay').classList.add('open'); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+async function submitImport() {
+  const text  = document.getElementById('imp-text').value.trim();
+  const title = document.getElementById('imp-title').value.trim() || '未命名文稿';
+  if (!text) { alert('请输入德语文本'); return; }
+  const btn = document.getElementById('import-btn');
+  btn.textContent = '处理中…'; btn.disabled = true;
+  try {
+    const data = await api('/api/articles/ingest', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ title, raw_text: text })
+    });
+    closeModal();
+    document.getElementById('imp-text').value  = '';
+    document.getElementById('imp-title').value = '';
+    openReader(data.article_id);
+  } catch { alert('导入失败'); }
+  finally { btn.textContent = '开始阅读'; btn.disabled = false; }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+async function refreshCount() {
+  const { vocab_cards: vc, grammar_cards: gc } = await api('/api/cards');
+  document.getElementById('card-count').textContent = vc.length + gc.length;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadArticles();
+refreshCount();
