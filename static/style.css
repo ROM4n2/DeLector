@@ -3037,11 +3037,11 @@ body.drawer-open .shadow-player {
   color: var(--paper);
 }
 
-/* ── Interactive Card Deck (扑克牌叠层舞台) ──────────────── */
+/* ── Interactive 3D Card Deck (真实 3D 扑克翻牌效果) ────────── */
 .deck-stage {
-  max-width: 620px;
+  max-width: 640px;
   margin: 1.5rem auto 3.5rem;
-  perspective: 1200px;
+  perspective: 1400px;
   user-select: none;
 }
 
@@ -3065,13 +3065,14 @@ body.drawer-open .shadow-player {
   box-shadow: 1px 1px 0 var(--ink);
 }
 
-/* Card Stack Container (Dynamic auto-height) */
+/* Card Stack Container */
 .deck-stack-wrap {
   position: relative;
   width: 100%;
-  min-height: 360px;
+  min-height: 380px;
   height: auto;
   margin: 0 auto;
+  perspective: 1400px;
 }
 
 /* Layered cards underneath */
@@ -3087,43 +3088,33 @@ body.drawer-open .shadow-player {
 }
 
 .deck-card-layer-3 {
-  transform: translateY(10px) scale(0.95);
+  transform: translateY(12px) scale(0.95);
   opacity: 0.35;
   background: var(--paper-deep);
   box-shadow: 4px 4px 0 var(--ink);
 }
 
 .deck-card-layer-2 {
-  transform: translateY(5px) scale(0.975);
+  transform: translateY(6px) scale(0.975);
   opacity: 0.65;
   background: var(--paper-tint);
   box-shadow: 5px 5px 0 var(--ink);
 }
 
-/* Active Poker Card */
+/* Active 3D Flipping Card */
 .deck-active-card {
   position: relative;
   width: 100%;
-  min-height: 360px;
-  height: auto;
-  background: #fff;
-  border: 2px solid var(--ink);
-  border-radius: 4px;
-  box-shadow: 6px 6px 0 var(--ink);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 2rem 2.25rem;
+  min-height: 380px;
+  display: grid;
+  grid-template-areas: 'card';
   cursor: pointer;
   transform-style: preserve-3d;
-  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 0.2s ease, opacity 0.2s ease;
-  word-break: break-word;
-  overflow-wrap: break-word;
+  transition: transform 0.5s cubic-bezier(0.2, 0.85, 0.4, 1.15), box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
-.deck-active-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 8px 8px 0 var(--ink);
+.deck-active-card.is-flipped {
+  transform: rotateY(180deg);
 }
 
 .deck-active-card.is-swiping-left {
@@ -3136,7 +3127,133 @@ body.drawer-open .shadow-player {
   opacity: 0;
 }
 
-/* Deck Card Elements */
+/* Card Faces (Front & Back) */
+.deck-card-face {
+  grid-area: card;
+  width: 100%;
+  min-height: 380px;
+  height: 100%;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 var(--ink);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2.25rem 2.5rem;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.deck-card-face.card-front {
+  transform: rotateY(0deg);
+  z-index: 2;
+}
+
+.deck-card-face.card-back {
+  transform: rotateY(180deg);
+  background: #fdfbf7;
+  border-color: var(--ink);
+}
+
+.deck-active-card:hover .deck-card-face {
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+/* Front Face Elements */
+.deck-front-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 0 2rem;
+  text-align: center;
+}
+
+.deck-seal-stamp {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--pencil);
+  border: 1px dashed var(--rule);
+  padding: 0.2rem 0.6rem;
+  border-radius: 2px;
+  margin-bottom: 1.25rem;
+  text-transform: uppercase;
+}
+
+.deck-flip-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.deck-flip-icon {
+  font-size: 2rem;
+  opacity: 0.7;
+  transition: transform 0.3s ease;
+}
+
+.deck-active-card:hover .deck-flip-icon {
+  transform: rotate(180deg) scale(1.1);
+}
+
+.deck-flip-prompt {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  letter-spacing: 0.05em;
+  background: var(--paper-deep);
+  padding: 0.35rem 0.75rem;
+  border: 1px dashed var(--rule);
+}
+
+/* Back Face Elements */
+.deck-back-lemma {
+  font-family: var(--serif-heading);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin-right: 0.5rem;
+}
+
+.deck-back-tag {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0.1rem 0.4rem;
+  text-transform: uppercase;
+}
+
+.deck-flip-back-btn {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  cursor: pointer;
+  background: var(--paper-deep);
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--rule);
+}
+
+.deck-back-body {
+  margin: 1.5rem 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Common Deck Card Header & Footer */
 .deck-card-head {
   display: flex;
   justify-content: space-between;
@@ -3146,7 +3263,7 @@ body.drawer-open .shadow-player {
 
 .deck-word-title {
   font-family: var(--serif-heading);
-  font-size: 2.25rem;
+  font-size: 2.375rem;
   font-weight: 800;
   color: var(--ink);
   line-height: 1.15;
@@ -3160,16 +3277,6 @@ body.drawer-open .shadow-player {
   color: var(--pencil);
   margin-top: 0.35rem;
   word-break: break-word;
-}
-
-.deck-card-body {
-  margin: 1.25rem 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  word-break: break-word;
-  overflow-wrap: break-word;
 }
 
 .deck-def-text {
@@ -3214,6 +3321,33 @@ body.drawer-open .shadow-player {
   margin-top: 1.75rem;
 }
 
+.deck-btn-nav {
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  padding: 0.6rem 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: all 0.12s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.deck-btn-nav:hover:not(:disabled) {
+  background: var(--paper-deep);
+  transform: translateY(-2px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.deck-btn-nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 
 .deck-btn-nav {
   background: var(--paper-card);

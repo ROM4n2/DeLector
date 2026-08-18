@@ -715,7 +715,7 @@ function renderCardsGrid() {
   }
 }
 
-// ── 🎴 Tactile Deck Swiper Stage ─────────────────────────────────────────────
+// ── 🎴 Tactile 3D Deck Swiper Stage (真实 3D 翻转扑克卡盒) ───────────────────
 function renderDeckStage(vList, gList) {
   const container = document.getElementById('cards-container');
   if (!container) return;
@@ -734,7 +734,7 @@ function renderDeckStage(vList, gList) {
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
       <div class="deck-meta-bar">
-        <span>🎴 扑克翻牌盒 · POKER STACK</span>
+        <span>🎴 3D 扑克翻牌盒 · POKER FLIP STACK</span>
         <span class="deck-counter-badge">KARTE ${deckIndex + 1} / ${total}</span>
       </div>
 
@@ -742,42 +742,72 @@ function renderDeckStage(vList, gList) {
         ${total > 2 ? '<div class="deck-card-layer deck-card-layer-3"></div>' : ''}
         ${total > 1 ? '<div class="deck-card-layer deck-card-layer-2"></div>' : ''}
 
-        <div class="deck-active-card ${card.mastered ? 'is-mastered' : ''}" id="deck-active-card" onclick="toggleDeckFlip(event)">
-          <!-- Top Row -->
-          <div class="deck-card-head">
-            <div>
-              <div class="deck-word-title">${isVocab ? esc(card.word) : esc(card.grammar_name)}</div>
-              <div class="deck-meta-lemma">
-                ${isVocab ? `${esc(card.lemma || card.word)} · ${esc(card.pos || 'WORT')}${card.gender ? ' · ' + esc(card.gender) : ''}` : 'Goethe Grammatik'}
+        <!-- 3D Flipping Card Container -->
+        <div class="deck-active-card ${deckFlipped ? 'is-flipped' : ''}" id="deck-active-card" onclick="toggleDeckFlip(event)">
+          
+          <!-- 🎴 FRONT FACE (正面) -->
+          <div class="deck-card-face card-front">
+            <div class="deck-card-head">
+              <div>
+                <div class="deck-word-title">${isVocab ? esc(card.word) : esc(card.grammar_name)}</div>
+                <div class="deck-meta-lemma">
+                  ${isVocab ? `${esc(card.lemma || card.word)} · ${esc(card.pos || 'WORT')}${card.gender ? ' · ' + esc(card.gender) : ''}` : 'Goethe Grammatik'}
+                </div>
+              </div>
+              <div class="card-top-actions">
+                ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio('${esc(card.word)}')" title="朗读单词">🔊</button>` : ''}
+                <span class="cefr-badge badge-${card.cefr_level || 'A1'}">${card.cefr_level || 'A1'}</span>
+                <button class="card-del-btn" onclick="event.stopPropagation();deleteCard('${card._type}', ${card.id}, '${esc(isVocab ? card.word : card.grammar_name)}')" title="删除此卡片">✕</button>
               </div>
             </div>
-            <div class="card-top-actions">
-              ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio('${esc(card.word)}')" title="朗读单词">🔊</button>` : ''}
-              <span class="cefr-badge badge-${card.cefr_level || 'A1'}">${card.cefr_level || 'A1'}</span>
-              <button class="card-del-btn" onclick="event.stopPropagation();deleteCard('${card._type}', ${card.id}, '${esc(isVocab ? card.word : card.grammar_name)}')" title="删除此卡片">✕</button>
+
+            <!-- Front Center Watermark / Prompt -->
+            <div class="deck-front-center">
+              <div class="deck-seal-stamp">KARTEIKARTE · ${card.cefr_level || 'A1'}</div>
+              <div class="deck-flip-guide">
+                <div class="deck-flip-icon">🔀</div>
+                <div class="deck-flip-prompt">点击卡片 或 按空格 (Space) 3D 翻转背面</div>
+              </div>
+            </div>
+
+            <!-- Front Footer -->
+            <div class="deck-card-footer" onclick="event.stopPropagation()">
+              <span class="card-stats-tag">${card.mastered ? '🛡️ 已归档掌握' : '⏳ 待复习队列'} · ${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
+              <button class="card-master-btn ${card.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
+                ${card.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+              </button>
             </div>
           </div>
 
-          <!-- Middle Body (Front / Back Flip Content) -->
-          <div class="deck-card-body">
-            <div id="deck-card-revealed" class="${deckFlipped ? '' : 'hidden'}">
+          <!-- 🎴 BACK FACE (背面 180° 旋转) -->
+          <div class="deck-card-face card-back">
+            <div class="deck-card-head">
+              <div>
+                <span class="deck-back-lemma">${isVocab ? esc(card.word) : esc(card.grammar_name)}</span>
+                <span class="deck-back-tag">RÜCKSEITE · 释义</span>
+              </div>
+              <div class="card-top-actions">
+                <span class="cefr-badge badge-${card.cefr_level || 'A1'}">${card.cefr_level || 'A1'}</span>
+                <span class="deck-flip-back-btn" onclick="toggleDeckFlip(event)" title="翻回正面">↶ 翻回正面</span>
+              </div>
+            </div>
+
+            <!-- Back Center Body -->
+            <div class="deck-back-body">
               <div class="deck-def-text">${esc(isVocab ? card.definition_zh : card.explanation_zh)}</div>
-              ${!isVocab && card.rule_formula ? `<div class="grammar-memo-formula" style="margin-bottom:0.75rem;">${esc(card.rule_formula)}</div>` : ''}
+              ${!isVocab && card.rule_formula ? `<div class="grammar-memo-formula" style="margin-bottom:0.875rem;">${esc(card.rule_formula)}</div>` : ''}
               ${card.sentence_context ? `<div class="deck-sent-quote">${esc(card.sentence_context)}</div>` : ''}
             </div>
-            <div id="deck-card-hidden-hint" class="${deckFlipped ? 'hidden' : ''}" style="text-align:center;padding:2rem 0;">
-              <div style="font-size:1.75rem;margin-bottom:0.35rem;opacity:0.6;">🔀</div>
-              <div class="deck-flip-prompt">点击卡片 或 按空格键 (Space) 翻面释义</div>
+
+            <!-- Back Footer -->
+            <div class="deck-card-footer" onclick="event.stopPropagation()">
+              <span class="card-stats-tag">${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
+              <button class="card-master-btn ${card.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
+                ${card.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+              </button>
             </div>
           </div>
 
-          <!-- Footer Actions -->
-          <div class="deck-card-footer" onclick="event.stopPropagation()">
-            <span class="card-stats-tag">${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
-            <button class="card-master-btn ${card.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
-              ${card.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
-            </button>
-          </div>
         </div>
       </div>
 
@@ -786,8 +816,8 @@ function renderDeckStage(vList, gList) {
         <button class="deck-btn-nav" id="deck-btn-prev" onclick="stepDeck(-1)" ${deckIndex === 0 ? 'disabled' : ''}>
           ‹ 上一张 (A)
         </button>
-        <button class="btn btn-dark" style="font-size:0.75rem;padding:0.45rem 1rem;" onclick="toggleDeckFlip(event)">
-          ${deckFlipped ? '隐藏释义 (Space)' : '翻面对答案 (Space)'}
+        <button class="btn btn-dark" id="deck-btn-flip-ctrl" style="font-size:0.75rem;padding:0.45rem 1.25rem;" onclick="toggleDeckFlip(event)">
+          ${deckFlipped ? '↶ 翻回正面 (Space)' : '🔀 翻至背面 (Space)'}
         </button>
         <button class="deck-btn-nav" id="deck-btn-next" onclick="stepDeck(1)" ${deckIndex >= total - 1 ? 'disabled' : ''}>
           下一张 (D) ›
@@ -803,11 +833,13 @@ function renderDeckStage(vList, gList) {
 function toggleDeckFlip(e) {
   if (e) e.stopPropagation();
   deckFlipped = !deckFlipped;
-  const rev = document.getElementById('deck-card-revealed');
-  const hid = document.getElementById('deck-card-hidden-hint');
-  if (rev && hid) {
-    rev.classList.toggle('hidden', !deckFlipped);
-    hid.classList.toggle('hidden', deckFlipped);
+  const cardEl = document.getElementById('deck-active-card');
+  if (cardEl) {
+    cardEl.classList.toggle('is-flipped', deckFlipped);
+  }
+  const flipBtn = document.getElementById('deck-btn-flip-ctrl');
+  if (flipBtn) {
+    flipBtn.textContent = deckFlipped ? '↶ 翻回正面 (Space)' : '🔀 翻至背面 (Space)';
   }
 }
 
