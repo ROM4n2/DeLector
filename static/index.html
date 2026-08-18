@@ -154,16 +154,48 @@
   <!-- ── Import Modal ───────────────────────────────────────── -->
   <div id="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
-      <h3>导入德语研读材料</h3>
-      <div class="modal-field">
-        <input id="imp-title" type="text" class="modal-input" placeholder="文章标题（可选）">
+      <div class="modal-tabs">
+        <button id="tab-btn-text" class="modal-tab active" onclick="switchImportTab('text')">粘贴长文</button>
+        <button id="tab-btn-url" class="modal-tab" onclick="switchImportTab('url')">网页链接 (URL)</button>
+        <button id="tab-btn-file" class="modal-tab" onclick="switchImportTab('file')">文档上传</button>
       </div>
-      <div class="modal-field">
-        <textarea id="imp-text" class="modal-input modal-textarea" placeholder="粘贴德语课文、新闻或备考长文…"></textarea>
+
+      <!-- Tab 1: Text -->
+      <div id="import-tab-text" class="tab-content active">
+        <div class="modal-field">
+          <input id="imp-title" type="text" class="modal-input" placeholder="文章标题（可选）">
+        </div>
+        <div class="modal-field">
+          <textarea id="imp-text" class="modal-input modal-textarea" placeholder="粘贴德语课文、新闻或备考长文…"></textarea>
+        </div>
       </div>
+
+      <!-- Tab 2: URL -->
+      <div id="import-tab-url" class="tab-content">
+        <div class="modal-field">
+          <input id="imp-url-input" type="url" class="modal-input" placeholder="输入德语新闻/文章链接 (如: https://www.dw.com/...)">
+        </div>
+        <div class="modal-field">
+          <input id="imp-url-title" type="text" class="modal-input" placeholder="自定义标题（可选，默认自动提取网页标题）">
+        </div>
+        <p style="font-size:0.75rem;color:var(--pencil);line-height:1.5;margin-top:0.35rem;">
+          支持自动解析 DW 德语之声、Spiegel、Tagesschau、Zeit 等主流德语新闻正文。
+        </p>
+      </div>
+
+      <!-- Tab 3: File Upload -->
+      <div id="import-tab-file" class="tab-content">
+        <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
+          <div style="font-size:1.75rem;margin-bottom:0.35rem;">📄</div>
+          <div style="font-weight:600;color:var(--ink);">点击或拖拽德语文档至此处</div>
+          <div style="font-size:0.75rem;color:var(--pencil);margin-top:0.25rem;">支持 .txt, .md, .text 等纯文本文档</div>
+          <input id="file-input" type="file" accept=".txt,.md,.text" style="display:none;" onchange="handleFileSelect(event)">
+        </div>
+      </div>
+
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-        <button id="import-btn" class="btn btn-dark" onclick="submitImport()">开始阅读</button>
+        <button id="import-btn" class="btn btn-dark" onclick="submitActiveImport()">开始阅读</button>
       </div>
     </div>
   </div>

@@ -335,8 +335,90 @@ async function loadCards() {
 }
 
 // ── Import modal ──────────────────────────────────────────────────────────────
-function openModal()  { document.getElementById('modal-overlay').classList.add('open'); }
-function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+let currentImportTab = 'text';
+
+function switchImportTab(tab) {
+  currentImportTab = tab;
+  document.querySelectorAll('.modal-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`tab-btn-${tab}`)?.classList.add('active');
+  document.getElementById(`import-tab-${tab}`)?.classList.add('active');
+}
+
+function openModal()  {
+  document.getElementById('modal-overlay').classList.add('open');
+  switchImportTab('text');
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+async function submitActiveImport() {
+  if (currentImportTab === 'text') {
+    await submitImport();
+  } else if (currentImportTab === 'url') {
+    const url = document.getElementById('imp-url-input').value.trim();
+    const title = document.getElementById('imp-url-title').value.trim();
+    if (!url) { alert('请输入有效的德语网页链接'); return; }
+    const btn = document.getElementById('import-btn');
+    btn.textContent = '抓取解析中…'; btn.disabled = true;
+    try {
+      const data = await api('/api/articles/ingest-url', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ url, title })
+      });
+      closeModal();
+      document.getElementById('imp-url-input').value = '';
+      document.getElementById('imp-url-title').value = '';
+      openReader(data.article_id);
+    } catch (e) {
+      alert('抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入');
+    } finally {
+      btn.textContent = '开始阅读'; btn.disabled = false;
+    }
+  } else if (currentImportTab === 'file') {
+    const text = document.getElementById('imp-text').value.trim();
+    if (text) {
+      await submitImport();
+    } else {
+      document.getElementById('file-input').click();
+    }
+  }
+}
+
+function handleFileSelect(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  readFileContent(file);
+  e.target.value = '';
+}
+
+function readFileContent(file) {
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const text = evt.target.result;
+    const title = file.name.replace(/\.[^/.]+$/, "");
+    document.getElementById('imp-title').value = title;
+    document.getElementById('imp-text').value = text;
+    switchImportTab('text');
+  };
+  reader.readAsText(file, "UTF-8");
+}
+
+function setupDropzone() {
+  const dz = document.getElementById('dropzone');
+  if (!dz) return;
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evtName => {
+    dz.addEventListener(evtName, (e) => { e.preventDefault(); e.stopPropagation(); });
+  });
+  dz.addEventListener('dragover', () => dz.classList.add('dragover'));
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', (e) => {
+    dz.classList.remove('dragover');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) readFileContent(file);
+  });
+}
 
 async function submitImport() {
   const text  = document.getElementById('imp-text').value.trim();
@@ -437,3 +519,4 @@ document.addEventListener('keydown', (e) => {
 loadArticles();
 refreshCount();
 applyTypography();
+setupDropzone();

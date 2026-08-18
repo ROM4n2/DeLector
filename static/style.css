@@ -959,6 +959,48 @@ body.focus-mode .tok.focus-active {
   color: var(--ink);
   margin-bottom: 1.25rem;
 }
+
+/* Modal Tabs & Dropzone */
+.modal-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.5rem;
+}
+.modal-tab {
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pencil);
+  background: transparent;
+  border: none;
+  padding: 8px 14px;
+  min-height: 38px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.modal-tab:hover { color: var(--ink); background: var(--paper-tint); }
+.modal-tab.active { color: #FEF9EE; background: var(--ink); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.dropzone {
+  border: 2px dashed var(--rule);
+  border-radius: 8px;
+  padding: 2.25rem 1.5rem;
+  text-align: center;
+  background: var(--paper);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.dropzone:hover, .dropzone.dragover {
+  border-color: var(--accent);
+  background: rgba(216, 72, 43, 0.05);
+}
+
 .modal-field { margin-bottom: 1rem; }
 .modal-input {
   width: 100%;
