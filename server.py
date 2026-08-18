@@ -62,6 +62,42 @@ def init_db(db_path: Optional[str] = None):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+    seed_preset_articles(target_path)
+
+PRESET_ARTICLES = [
+    {
+        "title": "【A1 入门篇】Hallo Berlin! Mein erster Tag in Deutschland",
+        "text": "Guten Tag! Ich heiße Lukas und ich komme aus China. Jetzt wohne ich in Berlin und lerne Deutsch an einer Sprachschule. Jeden Morgen trinke ich einen Kaffee, esse ein Brötchen und fahre mit der U-Bahn zum Deutschkurs. Der Unterricht macht viel Spaß. Am Nachmittag gehe ich in den Supermarkt und kaufe frisches Obst und Brot."
+    },
+    {
+        "title": "【A2 进阶篇】Eine Reise nach München: Hotel und Freizeit",
+        "text": "Letztes Wochenende bin ich mit dem Zug nach München gefahren. Ich habe ein kleines Zimmer im Stadtzentrum reserviert. Das Wetter war sehr schön, deshalb habe ich den ganzen Nachmittag im Englischen Garten verbracht. Am Abend habe ich typische bayerische Spezialitäten in einem traditionellen Restaurant probiert."
+    },
+    {
+        "title": "【B1 提升篇】Klimaschutz im Alltag: Was jeder tun kann",
+        "text": "Der Klimawandel ist eine der größten Herausforderungen unserer Zeit. Viele Menschen fragen sich, wie sie im Alltag einen Beitrag zum Umweltschutz leisten können. Experten empfehlen, öfter auf das Fahrrad umzusteigen und Energie im Haushalt zu sparen. Eine bewusste Ernährung mit regionalen Lebensmitteln spielt ebenfalls eine wichtige Rolle."
+    },
+    {
+        "title": "【B2 高级篇】Die Transformation der modernen Arbeitswelt: Homeoffice",
+        "text": "Die fortschreitende Digitalisierung hat die Arbeitsbedingungen grundlegend verändert. Immer mehr Unternehmen stellen ihren Mitarbeitern flexible Arbeitszeitmodelle zur Verfügung. Obwohl das Arbeiten von zu Hause aus die Vereinbarkeit von Beruf und Familie erleichtert, stehen viele Beschäftigte vor der Herausforderung, klare Grenzen zwischen Arbeit und Freizeit zu ziehen."
+    }
+]
+
+def ingest_article(title: str, text: str, db_path: Optional[str] = None) -> int:
+    processed = process_german_text(text)
+    target_path = get_db_path(db_path)
+    with get_db(target_path) as conn:
+        cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json) VALUES (?, ?, ?)",
+                           (title or "Untitled", text, json.dumps(processed, ensure_ascii=False)))
+        return cur.lastrowid
+
+def seed_preset_articles(db_path: Optional[str] = None):
+    target = get_db_path(db_path)
+    with get_db(target) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        if count == 0:
+            for art in PRESET_ARTICLES:
+                ingest_article(art["title"], art["text"], db_path=target)
 
 # --- 2. NLP & CEFR Tagging ---
 try:
@@ -189,11 +225,7 @@ class GrammarLookupReq(BaseModel):
 
 @app.post("/api/articles/ingest")
 def ingest(req: IngestReq):
-    processed = process_german_text(req.raw_text)
-    with get_db() as conn:
-        cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json) VALUES (?, ?, ?)",
-                           (req.title or "Untitled", req.raw_text, json.dumps(processed, ensure_ascii=False)))
-        art_id = cur.lastrowid
+    art_id = ingest_article(req.title or "Untitled", req.raw_text)
     return {"article_id": art_id, "title": req.title}
 
 @app.get("/api/articles")
