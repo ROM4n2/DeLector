@@ -205,3 +205,15 @@ def test_backup_export_and_restore_roundtrip(client):
     res_verify = client.get("/api/articles/999")
     assert res_verify.status_code == 200
     assert res_verify.json()["title"] == "Backup Test Article"
+
+def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
+    from unittest.mock import AsyncMock
+    fake_mp3 = tmp_path / "fake_de.mp3"
+    fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00mock_audio_data")
+    
+    monkeypatch.setattr("server.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
+    
+    res = client.post("/api/audio/tts", json={"text": "Hallo Berlin!", "voice": "de-DE-KatjaNeural"})
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "audio/mpeg"
+    assert len(res.content) > 10

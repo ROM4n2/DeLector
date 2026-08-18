@@ -8,6 +8,7 @@ import html
 import socket
 import ipaddress
 import asyncio
+import hashlib
 from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import urlparse
 from datetime import datetime
@@ -18,6 +19,9 @@ from pydantic import BaseModel
 import httpx
 import spacy
 import genanki
+
+AUDIO_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache", "audio")
+os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 
 def get_db_path(db_path: Optional[str] = None) -> str:
     return db_path or os.environ.get("DATABASE_PATH", "delector.db")
@@ -542,6 +546,36 @@ def export_apkg():
     path = os.path.join(tmp, "DeLector_Deck.apkg")
     export_anki_deck(path)
     return FileResponse(path, filename="DeLector_Deck.apkg", media_type="application/octet-stream")
+
+# --- Edge Neural TTS Audio Endpoints ---
+class TTSReq(BaseModel):
+    text: str
+    voice: Optional[str] = "de-DE-KatjaNeural"
+    rate: Optional[str] = "+0%"
+
+async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> str:
+    clean_text = text.strip()
+    if not clean_text:
+        raise HTTPException(400, "Text cannot be empty")
+        
+    cache_key = hashlib.sha256(f"{voice}_{rate}_{clean_text}".encode("utf-8")).hexdigest()
+    cache_file = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.mp3")
+    
+    if os.path.exists(cache_file) and os.path.getsize(cache_file) > 100:
+        return cache_file
+        
+    import edge_tts
+    communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
+    await communicate.save(cache_file)
+    return cache_file
+
+@app.post("/api/audio/tts")
+async def get_audio_tts(req: TTSReq):
+    try:
+        audio_path = await generate_edge_tts_audio(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
+        return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
+    except Exception as e:
+        raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
 
 # --- Backup & Restore Endpoints ---
 @app.get("/api/backup/export")
