@@ -403,6 +403,54 @@ body.drawer-open #view-reader {
   text-overflow: ellipsis;
 }
 
+/* Reader CEFR Distribution Heatbar */
+.reader-heatbar-wrap {
+  margin-bottom: 1.75rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+}
+.heatbar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  margin-bottom: 0.625rem;
+}
+.reader-heatbar {
+  display: flex;
+  height: 24px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  background: #fff;
+}
+.heatbar-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s, transform 0.15s;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+.heatbar-seg:hover { opacity: 0.85; }
+.heatbar-seg.A1 { background: var(--hl-A1); color: var(--hl-A1-ink); }
+.heatbar-seg.A2 { background: var(--hl-A2); color: var(--hl-A2-ink); }
+.heatbar-seg.B1 { background: var(--hl-B1); color: var(--hl-B1-ink); }
+.heatbar-seg.B2 { background: var(--hl-B2); color: var(--hl-B2-ink); }
+.heatbar-seg.C1 { background: var(--hl-C1); color: var(--hl-C1-ink); }
+
 /* Paper Reading Canvas */
 #reader-content {
   background: #FFFFFF;

@@ -69,9 +69,31 @@ async function loadArticles() {
     </div>`).join('');
 }
 
+function renderReaderHeatbar(stats) {
+  if (!stats || !stats.cefr_percentages) return;
+  const p = stats.cefr_percentages;
+  const counts = stats.cefr_counts || {};
+  const segs = ['A1', 'A2', 'B1', 'B2', 'C1'].map(lvl => {
+    if (!p[lvl] || p[lvl] <= 0) return '';
+    const cnt = counts[lvl] || 0;
+    return `<div class="heatbar-seg ${lvl}" style="width:${p[lvl]}%" onclick="toggleCefrFocus('${lvl}')" title="点击聚焦 ${lvl} 级别生词 (${cnt} 词)">${lvl} ${p[lvl]}%</div>`;
+  }).join('');
+
+  document.getElementById('reader-heatbar').innerHTML = segs;
+  document.getElementById('heatbar-time').textContent = `预计精读 ${stats.est_reading_minutes || 1} 分钟 · 共 ${stats.word_count || 0} 词`;
+  
+  const rec = stats.recommended_level || 'A1';
+  const badge = document.getElementById('reader-meta-badge');
+  if (badge) {
+    badge.textContent = `${rec} 建议`;
+    badge.className = `mini-level-badge mini-level-${rec.startsWith('B2') ? 'B2' : rec}`;
+  }
+}
+
 async function openReader(id) {
   currentArticle = await api('/api/articles/' + id);
   document.getElementById('reader-title').textContent = currentArticle.title;
+  renderReaderHeatbar(currentArticle.stats);
   const content = document.getElementById('reader-content');
   
   // Format tokens into continuous paragraphs, preventing sentence-by-sentence fragmentation & overflow

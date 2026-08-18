@@ -58,8 +58,18 @@
     <div class="reader-topbar">
       <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
       <h2 id="reader-title"></h2>
-      <div style="width:72px"></div>
+      <div id="reader-meta-badge" class="mini-level-badge mini-level-A1">A1 推荐</div>
     </div>
+
+    <!-- CEFR Distribution Heatbar & Info -->
+    <div id="reader-heatbar-wrap" class="reader-heatbar-wrap">
+      <div class="heatbar-label">
+        <span>欧标难度分布 · CEFR SPECTRUM</span>
+        <span id="heatbar-time" style="font-family:var(--mono);color:var(--pencil);font-size:0.75rem;"></span>
+      </div>
+      <div id="reader-heatbar" class="reader-heatbar"></div>
+    </div>
+
     <div id="reader-content" lang="de"></div>
   </main>
 
