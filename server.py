@@ -20,6 +20,30 @@ import httpx
 import spacy
 import genanki
 
+def load_env():
+    try:
+        import dotenv
+        dotenv.load_dotenv(override=True)
+    except Exception:
+        pass
+    for base_dir in [os.path.dirname(__file__), os.getcwd()]:
+        env_file = os.path.join(base_dir, ".env")
+        if os.path.exists(env_file):
+            try:
+                with open(env_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip().strip("'").strip('"')
+                            if k:
+                                os.environ[k] = v
+            except Exception:
+                pass
+
+load_env()
+
 AUDIO_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache", "audio")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 
@@ -462,21 +486,38 @@ async def lookup_grammar(req: GrammarLookupReq):
         }
 
     user_content = f"句子: \"{req.sentence}\"\n目标词/短语: \"{req.target_phrase}\""
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.deepseek.com/chat/completions",
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={
-                "model": "deepseek-chat",
-                "messages": [
-                    {"role": "system", "content": SYSTEM_GRAMMAR_PROMPT},
-                    {"role": "user", "content": user_content}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-        )
-        content = resp.json()["choices"][0]["message"]["content"]
-        return json.loads(content)
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_GRAMMAR_PROMPT},
+                        {"role": "user", "content": user_content}
+                    ],
+                    "response_format": {"type": "json_object"}
+                }
+            )
+            if resp.status_code != 200:
+                return {
+                    "grammar_name": f"考点辨析 ({req.target_phrase})",
+                    "cefr_level": "B1",
+                    "explanation_zh": f"DeepSeek API 响应异常 ({resp.status_code})，请检查 API Key 余额或配置。",
+                    "rule_formula": "",
+                    "collocations": []
+                }
+            content = resp.json()["choices"][0]["message"]["content"]
+            return json.loads(content)
+    except Exception as e:
+        return {
+            "grammar_name": f"考点辨析 ({req.target_phrase})",
+            "cefr_level": "B1",
+            "explanation_zh": f"AI 连接超时或异常: {str(e)}",
+            "rule_formula": "",
+            "collocations": []
+        }
 
 SYSTEM_VOCAB_PROMPT = """你是一位精通德汉词典编纂的德语专家。
 请根据给定的德语句子上下文和目标词汇，给出该词在当前句中的精准中文简明释义（1-8个字）、复数形式（如果是名词）、常用同义词等。
@@ -517,6 +558,12 @@ async def lookup_vocab(req: VocabLookupReq):
                     "response_format": {"type": "json_object"}
                 }
             )
+            if resp.status_code != 200:
+                return {
+                    "definition_zh": "",
+                    "plural": "",
+                    "synonyms": []
+                }
             content = resp.json()["choices"][0]["message"]["content"]
             return json.loads(content)
     except Exception:
@@ -564,6 +611,37 @@ class TTSReq(BaseModel):
     voice: Optional[str] = "de-DE-KatjaNeural"
     rate: Optional[str] = "+0%"
 
+def get_cache_info() -> Dict[str, Any]:
+    total_size = 0
+    count = 0
+    if os.path.exists(AUDIO_CACHE_DIR):
+        for fname in os.listdir(AUDIO_CACHE_DIR):
+            fpath = os.path.join(AUDIO_CACHE_DIR, fname)
+            if os.path.isfile(fpath):
+                count += 1
+                total_size += os.path.getsize(fpath)
+    return {
+        "file_count": count,
+        "total_size_mb": round(total_size / (1024 * 1024), 2),
+        "total_size_bytes": total_size
+    }
+
+def prune_audio_cache(max_files: int = 300):
+    if not os.path.exists(AUDIO_CACHE_DIR):
+        return
+    files = []
+    for fname in os.listdir(AUDIO_CACHE_DIR):
+        fpath = os.path.join(AUDIO_CACHE_DIR, fname)
+        if os.path.isfile(fpath):
+            files.append((fpath, os.path.getmtime(fpath)))
+    if len(files) > max_files:
+        files.sort(key=lambda x: x[1])
+        for fpath, _ in files[: len(files) - max_files + 30]:
+            try:
+                os.remove(fpath)
+            except Exception:
+                pass
+
 async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> str:
     clean_text = text.strip()
     if not clean_text:
@@ -578,6 +656,7 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
     import edge_tts
     communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
     await communicate.save(cache_file)
+    prune_audio_cache()
     return cache_file
 
 @app.post("/api/audio/tts")
@@ -587,6 +666,29 @@ async def get_audio_tts(req: TTSReq):
         return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
     except Exception as e:
         raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
+
+@app.get("/api/audio/cache")
+def get_audio_cache():
+    return get_cache_info()
+
+@app.post("/api/audio/cache/clear")
+def clear_audio_cache():
+    info = get_cache_info()
+    cleared_count = 0
+    if os.path.exists(AUDIO_CACHE_DIR):
+        for fname in os.listdir(AUDIO_CACHE_DIR):
+            fpath = os.path.join(AUDIO_CACHE_DIR, fname)
+            try:
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+                    cleared_count += 1
+            except Exception:
+                pass
+    return {
+        "status": "ok",
+        "cleared_count": cleared_count,
+        "freed_mb": info["total_size_mb"]
+    }
 
 # --- Reading Notes & AI Assist Endpoints ---
 class ReadingNoteReq(BaseModel):

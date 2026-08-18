@@ -252,3 +252,28 @@ def test_reading_notes_crud_and_export(client):
     assert res_del.status_code == 200
     res_list2 = client.get(f"/api/articles/{art_id}/notes")
     assert len(res_list2.json()) == 0
+
+def test_audio_cache_stats_and_clear(client, monkeypatch, tmp_path):
+    # Mock AUDIO_CACHE_DIR to temporary directory
+    cache_dir = tmp_path / "audio_cache"
+    cache_dir.mkdir()
+    (cache_dir / "sample1.mp3").write_bytes(b"x" * 1024 * 50) # 50 KB
+    (cache_dir / "sample2.mp3").write_bytes(b"x" * 1024 * 50) # 50 KB
+
+    monkeypatch.setattr("server.AUDIO_CACHE_DIR", str(cache_dir))
+
+    # 1. Get cache stats
+    res_stats = client.get("/api/audio/cache")
+    assert res_stats.status_code == 200
+    data = res_stats.json()
+    assert data["file_count"] == 2
+    assert data["total_size_bytes"] == 1024 * 100
+
+    # 2. Clear cache
+    res_clear = client.post("/api/audio/cache/clear")
+    assert res_clear.status_code == 200
+    assert res_clear.json()["cleared_count"] == 2
+
+    # 3. Verify empty
+    res_stats2 = client.get("/api/audio/cache")
+    assert res_stats2.json()["file_count"] == 0

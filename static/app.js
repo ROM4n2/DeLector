@@ -631,6 +631,7 @@ async function saveGrammar() {
 
 // ── Cards view ────────────────────────────────────────────────────────────────
 async function loadCards() {
+  updateAudioCacheInfo();
   const { vocab_cards: vc, grammar_cards: gc } = await api('/api/cards');
   document.getElementById('cards-container').innerHTML = `
     <div class="section-label" style="margin-bottom:0.875rem;">
@@ -661,6 +662,34 @@ async function loadCards() {
         <div class="memo-sent">${esc(c.sentence_context)}</div>
       </div>`).join('')}
   `;
+}
+
+async function updateAudioCacheInfo() {
+  try {
+    const info = await api('/api/audio/cache');
+    const span = document.getElementById('cache-size-span');
+    if (span) span.textContent = `${info.total_size_mb || 0} MB`;
+  } catch {
+    // ignore
+  }
+}
+
+async function clearAudioCache() {
+  try {
+    const info = await api('/api/audio/cache');
+    if (!info.file_count) {
+      alert('当前本地语音缓存已是空的（0 MB）。');
+      return;
+    }
+    if (!confirm(`确定清理本地 ${info.file_count} 个语音缓存文件（共 ${info.total_size_mb} MB）吗？\n清理后再次播放将自动按需重新生成。`)) {
+      return;
+    }
+    const res = await api('/api/audio/cache/clear', { method: 'POST' });
+    alert(`✓ 已清理 ${res.cleared_count || 0} 个缓存音频，释放 ${res.freed_mb || 0} MB 磁盘空间！`);
+    updateAudioCacheInfo();
+  } catch {
+    alert('清理语音缓存失败');
+  }
 }
 
 // ── Database Backup & Restore ────────────────────────────────────────────────
