@@ -38,17 +38,20 @@ function show(view) {
   if (view === 'cards') loadCards();
 }
 
-// ── Shadow Reading Audio Engine ──────────────────────────────────────────────
+// ── Shadow Reading Audio Engine (Edge Neural TTS + Fallback) ────────────────
 const ShadowPlayer = {
   isPlaying: false,
   currentSentIdx: 0,
   mode: 'shadow', // 'continuous' | 'shadow' | 'loop'
   rate: 0.88,
+  voice: 'de-DE-KatjaNeural',
+  audioEl: null,
   pauseTimer: null,
   utterance: null,
   isIntentionalCancel: false,
 
   init() {
+    this.audioEl = new Audio();
     if ('speechSynthesis' in window) {
       window.speechSynthesis.onvoiceschanged = () => {
         window.speechSynthesis.getVoices();
@@ -63,6 +66,14 @@ const ShadowPlayer = {
     this.updateStatusText();
   },
 
+  setVoice(voice) {
+    this.voice = voice;
+    document.querySelectorAll('.voice-btn').forEach(b => {
+      b.classList.toggle('active', (b.id === 'voice-btn-katja' && voice.includes('Katja')) || (b.id === 'voice-btn-conrad' && voice.includes('Conrad')));
+    });
+    if (this.isPlaying) this.replay();
+  },
+
   play() {
     if (!currentArticle || !currentArticle.sentences || !currentArticle.sentences.length) return;
     this.isPlaying = true;
@@ -73,6 +84,9 @@ const ShadowPlayer = {
   pause() {
     this.isPlaying = false;
     if (this.pauseTimer) { clearTimeout(this.pauseTimer); this.pauseTimer = null; }
+    if (this.audioEl) {
+      this.audioEl.pause();
+    }
     if ('speechSynthesis' in window) {
       this.isIntentionalCancel = true;
       window.speechSynthesis.cancel();
@@ -101,56 +115,98 @@ const ShadowPlayer = {
     this.highlightSentence(this.currentSentIdx);
     this.updateStatusText();
 
-    if ('speechSynthesis' in window) {
-      this.isIntentionalCancel = true;
-      window.speechSynthesis.cancel();
-      this.isIntentionalCancel = false;
+    if (this.audioEl) {
+      this.audioEl.pause();
+      this.audioEl.removeAttribute('src');
+    }
 
-      const utt = new SpeechSynthesisUtterance(sent.text.trim());
-      utt.lang = 'de-DE';
-      utt.rate = this.rate;
+    // Convert speed rate float (e.g. 0.88) to edge-tts rate format (e.g. "-12%")
+    const ratePercent = Math.round((this.rate - 1.0) * 100);
+    const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
 
-      const voices = window.speechSynthesis.getVoices();
-      const deVoice = voices.find(v => v.lang.startsWith('de') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('German') || v.name.includes('Hedda') || v.name.includes('Stefan')));
-      if (deVoice) utt.voice = deVoice;
-
+    // 优先调用后端 Edge Neural TTS 神经高保真音频
+    fetch('/api/audio/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: sent.text, voice: this.voice, rate: rateStr })
+    }).then(resp => {
+      if (!resp.ok) throw new Error('Neural TTS error');
+      return resp.blob();
+    }).then(blob => {
+      if (!this.isPlaying) return;
+      const audioUrl = URL.createObjectURL(blob);
+      this.audioEl.src = audioUrl;
       const startTime = Date.now();
 
-      utt.onend = () => {
+      this.audioEl.onended = () => {
+        URL.revokeObjectURL(audioUrl);
         if (!this.isPlaying) return;
         const duration = Date.now() - startTime;
-
-        if (this.mode === 'loop') {
-          this.pauseTimer = setTimeout(() => this.speakCurrentSentence(), 700);
-        } else if (this.mode === 'shadow') {
-          // 影子跟读模式：停顿相当于句长的 1.1 倍（至少 2 秒，最多 6 秒）供大声跟读
-          const pauseMs = Math.max(2000, Math.min(6000, duration * 1.1));
-          this.showPauseCountdown(pauseMs);
-          this.pauseTimer = setTimeout(() => {
-            if (!this.isPlaying) return;
-            this.currentSentIdx++;
-            this.speakCurrentSentence();
-          }, pauseMs);
-        } else {
-          // 连续播放模式
-          this.pauseTimer = setTimeout(() => {
-            if (!this.isPlaying) return;
-            this.currentSentIdx++;
-            this.speakCurrentSentence();
-          }, 350);
-        }
+        this.handleSentenceFinished(duration);
       };
 
-      // 核心修复：过滤 interrupted 与 canceled，避免跳句或调速时误暂停
-      utt.onerror = (e) => {
-        if (e.error !== 'interrupted' && e.error !== 'canceled' && !this.isIntentionalCancel) {
-          this.pause();
-        }
+      this.audioEl.onerror = () => {
+        this.fallbackWebSpeech(sent);
       };
 
-      this.utterance = utt;
-      window.speechSynthesis.speak(utt);
+      this.audioEl.play().catch(() => this.fallbackWebSpeech(sent));
+    }).catch(() => {
+      this.fallbackWebSpeech(sent);
+    });
+  },
+
+  handleSentenceFinished(duration) {
+    if (this.mode === 'loop') {
+      this.pauseTimer = setTimeout(() => this.speakCurrentSentence(), 700);
+    } else if (this.mode === 'shadow') {
+      // 影子跟读模式：停顿相当于句长的 1.1 倍（至少 2 秒，最多 6 秒）供大声跟读复述
+      const pauseMs = Math.max(2000, Math.min(6000, duration * 1.1));
+      this.showPauseCountdown(pauseMs);
+      this.pauseTimer = setTimeout(() => {
+        if (!this.isPlaying) return;
+        this.currentSentIdx++;
+        this.speakCurrentSentence();
+      }, pauseMs);
+    } else {
+      // 连续播放模式
+      this.pauseTimer = setTimeout(() => {
+        if (!this.isPlaying) return;
+        this.currentSentIdx++;
+        this.speakCurrentSentence();
+      }, 350);
     }
+  },
+
+  fallbackWebSpeech(sent) {
+    if (!('speechSynthesis' in window)) return;
+    this.isIntentionalCancel = true;
+    window.speechSynthesis.cancel();
+    this.isIntentionalCancel = false;
+
+    const utt = new SpeechSynthesisUtterance(sent.text.trim());
+    utt.lang = 'de-DE';
+    utt.rate = this.rate;
+
+    const voices = window.speechSynthesis.getVoices();
+    const deVoice = voices.find(v => v.lang.startsWith('de') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('German') || v.name.includes('Hedda') || v.name.includes('Stefan')));
+    if (deVoice) utt.voice = deVoice;
+
+    const startTime = Date.now();
+
+    utt.onend = () => {
+      if (!this.isPlaying) return;
+      const duration = Date.now() - startTime;
+      this.handleSentenceFinished(duration);
+    };
+
+    utt.onerror = (e) => {
+      if (e.error !== 'interrupted' && e.error !== 'canceled' && !this.isIntentionalCancel) {
+        this.pause();
+      }
+    };
+
+    this.utterance = utt;
+    window.speechSynthesis.speak(utt);
   },
 
   seekSentence(idx) {

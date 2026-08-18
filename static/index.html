@@ -219,6 +219,12 @@
     </div>
 
     <div class="player-right">
+      <!-- Voice selector -->
+      <div class="voice-pill">
+        <button id="voice-btn-katja" class="voice-btn active" onclick="ShadowPlayer.setVoice('de-DE-KatjaNeural')" title="清脆自然女声 (Katja)">👩 Katja</button>
+        <button id="voice-btn-conrad" class="voice-btn" onclick="ShadowPlayer.setVoice('de-DE-ConradNeural')" title="沉稳磁性男声 (Conrad)">👨 Conrad</button>
+      </div>
+
       <div class="player-mode-group">
         <button class="mode-btn active" data-mode="shadow" onclick="ShadowPlayer.setMode('shadow')" title="智能影子跟读（每句停顿等候跟读）">🎙️ 跟读</button>
         <button class="mode-btn" data-mode="continuous" onclick="ShadowPlayer.setMode('continuous')" title="全文连续朗读">▶ 连读</button>
