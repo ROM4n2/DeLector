@@ -304,15 +304,34 @@ a { color: inherit; text-decoration: none; }
   max-width: 760px;
   margin: 0 auto;
   padding: 2rem 1.5rem 4rem;
-  transition: max-width 0.28s ease, margin-right 0.28s ease;
   box-sizing: border-box;
   width: 100%;
+  transition: transform 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+              margin 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+              max-width 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 首页点入文稿时的拉开/展卷效果 */
+#view-reader.active {
+  animation: readerUnfold 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes readerUnfold {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @media (min-width: 1200px) {
   body.drawer-open #view-reader {
     margin-right: calc(min(420px, 92vw) + 2rem);
-    margin-left: max(1.5rem, calc(50vw - 380px - min(420px, 92vw)/2));
+    margin-left: auto;
     max-width: 720px;
   }
 }
@@ -406,7 +425,7 @@ a { color: inherit; text-decoration: none; }
   box-shadow: -8px 0 36px rgba(26, 23, 20, 0.16);
   display: flex; flex-direction: column;
   transform: translateX(100%);
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
 }
 #drawer.open { transform: none; }
 
