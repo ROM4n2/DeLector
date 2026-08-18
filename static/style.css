@@ -1018,6 +1018,124 @@ body.focus-mode .tok.focus-active {
 .modal-textarea { resize: vertical; min-height: 160px; line-height: 1.7; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 0.625rem; margin-top: 1.25rem; }
 
+/* ── Floating Shadow Reading Dock ───────────────────────── */
+.shadow-player {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: min(720px, calc(100vw - 2rem));
+  background: rgba(26, 23, 20, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
+  color: #FEF9EE;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.shadow-player.hidden {
+  display: none !important;
+}
+
+body.drawer-open .shadow-player {
+  left: calc((100vw - var(--drawer-width) - var(--drawer-gap)) / 2);
+  width: min(600px, calc(100vw - var(--drawer-width) - 3rem));
+}
+
+.player-left, .player-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.player-btn {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #FEF9EE;
+  display: grid;
+  place-items: center;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+.player-btn:hover { background: rgba(255, 255, 255, 0.25); transform: scale(1.08); }
+.player-btn-main {
+  width: 38px; height: 38px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+}
+.player-btn-main:hover { background: #E65335; }
+
+.player-status {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+
+.player-mode-group {
+  display: flex;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 2px;
+}
+.mode-btn {
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: none;
+  color: rgba(255, 255, 255, 0.65);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.mode-btn:hover { color: #fff; }
+.mode-btn.active { background: #fff; color: var(--ink); }
+
+.speed-pill {
+  display: flex;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 2px;
+}
+.speed-step-btn {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.speed-step-btn:hover { color: #fff; }
+.speed-step-btn.active { background: var(--amber); color: #fff; }
+
+/* Karaoke Active Sentence Highlight Glow */
+.tok.reading-active {
+  background: rgba(233, 132, 37, 0.26) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 2px 0 var(--amber);
+  border-radius: 2px;
+}
+
 /* ── Utilities ───────────────────────────── */
 .hidden { display: none !important; }
 @media (max-width: 640px) {
@@ -1025,4 +1143,10 @@ body.focus-mode .tok.focus-active {
   #view-home, #view-reader, #view-cards { padding-left: 1rem; padding-right: 1rem; }
   .home-hero h1 { font-size: 2rem; }
   #nav { padding: 0 1rem; }
+  .shadow-player {
+    bottom: 0.75rem;
+    padding: 0.35rem 0.6rem;
+    width: calc(100vw - 1rem);
+  }
+  .player-status { display: none; }
 }

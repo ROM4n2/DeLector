@@ -200,6 +200,32 @@
     </div>
   </div>
 
+  <!-- ── Floating Shadow Reading Player (Root Level) ─────────── -->
+  <div id="shadow-player" class="shadow-player hidden">
+    <div class="player-left">
+      <button id="player-prev-btn" class="player-btn" onclick="ShadowPlayer.prev()" title="上一句 (←)">⏮</button>
+      <button id="player-play-btn" class="player-btn player-btn-main" onclick="ShadowPlayer.toggle()" title="播放/暂停 (Space)">▶</button>
+      <button id="player-next-btn" class="player-btn" onclick="ShadowPlayer.next()" title="下一句 (→)">⏭</button>
+      <button id="player-replay-btn" class="player-btn" onclick="ShadowPlayer.replay()" title="重播当前句 (R)">🔁</button>
+      <span id="player-status" class="player-status">句 1 / -</span>
+    </div>
+
+    <div class="player-right">
+      <div class="player-mode-group">
+        <button class="mode-btn active" data-mode="shadow" onclick="ShadowPlayer.setMode('shadow')" title="智能影子跟读（每句停顿等候跟读）">🎙️ 跟读</button>
+        <button class="mode-btn" data-mode="continuous" onclick="ShadowPlayer.setMode('continuous')" title="全文连续朗读">▶ 连读</button>
+        <button class="mode-btn" data-mode="loop" onclick="ShadowPlayer.setMode('loop')" title="单句循环练习">🔂 单句</button>
+      </div>
+
+      <div class="speed-pill">
+        <button class="speed-step-btn" data-speed="0.6" onclick="ShadowPlayer.setSpeed(0.6)">0.6x</button>
+        <button class="speed-step-btn active" data-speed="0.88" onclick="ShadowPlayer.setSpeed(0.88)">0.8x</button>
+        <button class="speed-step-btn" data-speed="1.0" onclick="ShadowPlayer.setSpeed(1.0)">1.0x</button>
+        <button class="speed-step-btn" data-speed="1.2" onclick="ShadowPlayer.setSpeed(1.2)">1.2x</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/app.js"></script>
 </body>
 </html>

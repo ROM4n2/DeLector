@@ -27,9 +27,201 @@ function show(view) {
   document.getElementById('view-' + view).classList.add('active');
   closeDrawer();
   clearCefrFocus();
+
+  const player = document.getElementById('shadow-player');
+  if (player) {
+    player.classList.toggle('hidden', view !== 'reader');
+    if (view !== 'reader') ShadowPlayer.pause();
+  }
+
   if (view === 'home')  loadArticles();
   if (view === 'cards') loadCards();
 }
+
+// ── Shadow Reading Audio Engine ──────────────────────────────────────────────
+const ShadowPlayer = {
+  isPlaying: false,
+  currentSentIdx: 0,
+  mode: 'shadow', // 'continuous' | 'shadow' | 'loop'
+  rate: 0.88,
+  pauseTimer: null,
+  utterance: null,
+  isIntentionalCancel: false,
+
+  init() {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+  },
+
+  reset() {
+    this.pause();
+    this.currentSentIdx = 0;
+    this.clearSentenceHighlight();
+    this.updateStatusText();
+  },
+
+  play() {
+    if (!currentArticle || !currentArticle.sentences || !currentArticle.sentences.length) return;
+    this.isPlaying = true;
+    this.updatePlayBtn(true);
+    this.speakCurrentSentence();
+  },
+
+  pause() {
+    this.isPlaying = false;
+    if (this.pauseTimer) { clearTimeout(this.pauseTimer); this.pauseTimer = null; }
+    if ('speechSynthesis' in window) {
+      this.isIntentionalCancel = true;
+      window.speechSynthesis.cancel();
+      this.isIntentionalCancel = false;
+    }
+    this.updatePlayBtn(false);
+    this.clearSentenceHighlight();
+  },
+
+  toggle() {
+    if (this.isPlaying) this.pause();
+    else this.play();
+  },
+
+  speakCurrentSentence() {
+    if (!this.isPlaying || !currentArticle || !currentArticle.sentences) return;
+    if (this.currentSentIdx >= currentArticle.sentences.length) {
+      this.pause();
+      this.currentSentIdx = 0;
+      return;
+    }
+
+    const sent = currentArticle.sentences[this.currentSentIdx];
+    if (!sent) return;
+
+    this.highlightSentence(this.currentSentIdx);
+    this.updateStatusText();
+
+    if ('speechSynthesis' in window) {
+      this.isIntentionalCancel = true;
+      window.speechSynthesis.cancel();
+      this.isIntentionalCancel = false;
+
+      const utt = new SpeechSynthesisUtterance(sent.text.trim());
+      utt.lang = 'de-DE';
+      utt.rate = this.rate;
+
+      const voices = window.speechSynthesis.getVoices();
+      const deVoice = voices.find(v => v.lang.startsWith('de') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('German') || v.name.includes('Hedda') || v.name.includes('Stefan')));
+      if (deVoice) utt.voice = deVoice;
+
+      const startTime = Date.now();
+
+      utt.onend = () => {
+        if (!this.isPlaying) return;
+        const duration = Date.now() - startTime;
+
+        if (this.mode === 'loop') {
+          this.pauseTimer = setTimeout(() => this.speakCurrentSentence(), 700);
+        } else if (this.mode === 'shadow') {
+          // 影子跟读模式：停顿相当于句长的 1.1 倍（至少 2 秒，最多 6 秒）供大声跟读
+          const pauseMs = Math.max(2000, Math.min(6000, duration * 1.1));
+          this.showPauseCountdown(pauseMs);
+          this.pauseTimer = setTimeout(() => {
+            if (!this.isPlaying) return;
+            this.currentSentIdx++;
+            this.speakCurrentSentence();
+          }, pauseMs);
+        } else {
+          // 连续播放模式
+          this.pauseTimer = setTimeout(() => {
+            if (!this.isPlaying) return;
+            this.currentSentIdx++;
+            this.speakCurrentSentence();
+          }, 350);
+        }
+      };
+
+      // 核心修复：过滤 interrupted 与 canceled，避免跳句或调速时误暂停
+      utt.onerror = (e) => {
+        if (e.error !== 'interrupted' && e.error !== 'canceled' && !this.isIntentionalCancel) {
+          this.pause();
+        }
+      };
+
+      this.utterance = utt;
+      window.speechSynthesis.speak(utt);
+    }
+  },
+
+  seekSentence(idx) {
+    if (!currentArticle || !currentArticle.sentences) return;
+    this.currentSentIdx = Math.max(0, Math.min(currentArticle.sentences.length - 1, idx));
+    if (this.isPlaying) {
+      if (this.pauseTimer) { clearTimeout(this.pauseTimer); this.pauseTimer = null; }
+      this.speakCurrentSentence();
+    } else {
+      this.highlightSentence(this.currentSentIdx);
+      this.updateStatusText();
+    }
+  },
+
+  next() { this.seekSentence(this.currentSentIdx + 1); },
+  prev() { this.seekSentence(this.currentSentIdx - 1); },
+  replay() { this.seekSentence(this.currentSentIdx); },
+
+  setMode(mode) {
+    this.mode = mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    if (this.isPlaying) {
+      if (this.pauseTimer) { clearTimeout(this.pauseTimer); this.pauseTimer = null; }
+      this.speakCurrentSentence();
+    }
+  },
+
+  setSpeed(rate) {
+    this.rate = rate;
+    document.querySelectorAll('.speed-step-btn').forEach(b => {
+      b.classList.toggle('active', parseFloat(b.dataset.speed) === rate);
+    });
+    if (this.isPlaying) {
+      if (this.pauseTimer) { clearTimeout(this.pauseTimer); this.pauseTimer = null; }
+      this.speakCurrentSentence();
+    }
+  },
+
+  highlightSentence(idx) {
+    document.querySelectorAll('.tok').forEach(el => el.classList.remove('reading-active'));
+    const sent = currentArticle?.sentences[idx];
+    if (!sent || !sent.tokens || !sent.tokens.length) return;
+    sent.tokens.forEach(t => {
+      const el = document.getElementById('tok-' + t.id);
+      if (el) el.classList.add('reading-active');
+    });
+    const firstTok = document.getElementById('tok-' + sent.tokens[0].id);
+    if (firstTok) firstTok.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  },
+
+  clearSentenceHighlight() {
+    document.querySelectorAll('.tok.reading-active').forEach(el => el.classList.remove('reading-active'));
+  },
+
+  updatePlayBtn(playing) {
+    const btn = document.getElementById('player-play-btn');
+    if (btn) btn.innerHTML = playing ? '⏸' : '▶';
+  },
+
+  updateStatusText() {
+    const el = document.getElementById('player-status');
+    if (el && currentArticle && currentArticle.sentences) {
+      el.textContent = `句 ${this.currentSentIdx + 1} / ${currentArticle.sentences.length}`;
+    }
+  },
+
+  showPauseCountdown(ms) {
+    const el = document.getElementById('player-status');
+    if (el) el.textContent = `🎙️ 请跟读 (${Math.round(ms/1000)}s)…`;
+  }
+};
 
 // ── Reader Typography Controller ─────────────────────────────────────────────
 let readerFontMode = localStorage.getItem('delector_font_mode') || 'sans';
@@ -188,6 +380,7 @@ async function openReader(id) {
     content.innerHTML = `<p class="reader-p">${fullText}</p>`;
   }
 
+  ShadowPlayer.reset();
   applyTypography();
   show('reader');
 }
@@ -203,6 +396,11 @@ function inspect(tokenId, sentId) {
   selectedToken = token;
   selectedSent  = sent;
   grammarData   = null;
+
+  const sentIdx = currentArticle.sentences.findIndex(s => s.id === sentId);
+  if (sentIdx >= 0) {
+    ShadowPlayer.seekSentence(sentIdx);
+  }
 
   const lvl = token.cefr_level || 'A1';
   document.getElementById('d-word').textContent = token.text;
@@ -482,12 +680,17 @@ function inspectPhrase(phraseText) {
 
 // ── Global Keyboard Shortcuts ────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
+  const isEditing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  const isModalOpen = document.getElementById('modal-overlay')?.classList.contains('open');
+
   if (e.key === 'Escape') {
     clearCefrFocus();
     closeDrawer();
     closeModal();
     return;
   }
+
+  if (isEditing || isModalOpen) return;
 
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     const drawer = document.getElementById('drawer');
@@ -498,20 +701,49 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
-  if (!['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
-    if (e.key === 'j' || e.key === 'k') {
-      const tokens = Array.from(document.querySelectorAll('.tok'));
-      if (!tokens.length) return;
-      const curIndex = tokens.findIndex(el => el.classList.contains('sel'));
-      let nextIndex = 0;
-      if (e.key === 'j') {
-        nextIndex = curIndex < tokens.length - 1 ? curIndex + 1 : 0;
-      } else {
-        nextIndex = curIndex > 0 ? curIndex - 1 : tokens.length - 1;
-      }
-      tokens[nextIndex]?.click();
-      tokens[nextIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Audio Playback Shortcuts
+  if (e.code === 'Space') {
+    const isReader = document.getElementById('view-reader')?.classList.contains('active');
+    if (isReader) {
+      e.preventDefault();
+      ShadowPlayer.toggle();
+      return;
     }
+  } else if (e.key === 'ArrowRight') {
+    const isReader = document.getElementById('view-reader')?.classList.contains('active');
+    if (isReader) {
+      e.preventDefault();
+      ShadowPlayer.next();
+      return;
+    }
+  } else if (e.key === 'ArrowLeft') {
+    const isReader = document.getElementById('view-reader')?.classList.contains('active');
+    if (isReader) {
+      e.preventDefault();
+      ShadowPlayer.prev();
+      return;
+    }
+  } else if (e.key === 'r' || e.key === 'R') {
+    const isReader = document.getElementById('view-reader')?.classList.contains('active');
+    if (isReader) {
+      e.preventDefault();
+      ShadowPlayer.replay();
+      return;
+    }
+  }
+
+  if (e.key === 'j' || e.key === 'k') {
+    const tokens = Array.from(document.querySelectorAll('.tok'));
+    if (!tokens.length) return;
+    const curIndex = tokens.findIndex(el => el.classList.contains('sel'));
+    let nextIndex = 0;
+    if (e.key === 'j') {
+      nextIndex = curIndex < tokens.length - 1 ? curIndex + 1 : 0;
+    } else {
+      nextIndex = curIndex > 0 ? curIndex - 1 : tokens.length - 1;
+    }
+    tokens[nextIndex]?.click();
+    tokens[nextIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 });
 
@@ -520,3 +752,4 @@ loadArticles();
 refreshCount();
 applyTypography();
 setupDropzone();
+ShadowPlayer.init();
