@@ -153,30 +153,32 @@ async function saveGrammar() {
 async function loadCards() {
   const { vocab_cards: vc, grammar_cards: gc } = await api('/api/cards');
   document.getElementById('cards-container').innerHTML = `
-    <p class="section-eyebrow">词汇卡 (${vc.length})</p>
+    <div class="section-label" style="margin-bottom:0.875rem;">
+      <span class="section-title">词汇卡 · VOCABULARY (${vc.length})</span>
+    </div>
     <div class="card-grid">${vc.map(c => `
-      <div class="card-item">
-        <div class="card-item-head">
-          <span class="card-word">${esc(c.word)}</span>
+      <div class="memo-card">
+        <div class="memo-card-head">
+          <span class="memo-word">${esc(c.word)}</span>
           <span class="cefr-badge badge-${c.cefr_level}">${c.cefr_level}</span>
         </div>
-        <div class="card-body">
-          <div class="card-def">${esc(c.definition_zh)}</div>
-          <div class="card-meta">${esc(c.lemma)} · ${esc(c.pos)}${c.gender ? ' · ' + esc(c.gender) : ''}</div>
-          <div class="card-sent">${esc(c.sentence_context)}</div>
-        </div>
+        <div class="memo-def">${esc(c.definition_zh)}</div>
+        <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos)}${c.gender ? ' · ' + esc(c.gender) : ''}</div>
+        <div class="memo-sent">${esc(c.sentence_context)}</div>
       </div>`).join('')}</div>
 
-    <p class="section-eyebrow" style="margin-top:1.5rem">歌德语法卡 (${gc.length})</p>
+    <div class="section-label" style="margin-bottom:0.875rem;">
+      <span class="section-title">歌德语法考点卡 · GRAMMAR (${gc.length})</span>
+    </div>
     ${gc.map(c => `
-      <div class="grammar-card">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.375rem">
-          <span class="grammar-card-name">${esc(c.grammar_name)}</span>
+      <div class="grammar-memo-card">
+        <div class="grammar-memo-head">
+          <span class="grammar-memo-name">${esc(c.grammar_name)}</span>
           <span class="cefr-badge badge-${c.cefr_level}">Goethe ${c.cefr_level}</span>
         </div>
-        ${c.rule_formula ? `<div class="grammar-card-formula">${esc(c.rule_formula)}</div>` : ''}
-        <div class="grammar-card-exp">${esc(c.explanation_zh)}</div>
-        <div class="card-sent">${esc(c.sentence_context)}</div>
+        ${c.rule_formula ? `<div class="grammar-memo-formula">${esc(c.rule_formula)}</div>` : ''}
+        <div class="grammar-memo-exp">${esc(c.explanation_zh)}</div>
+        <div class="memo-sent">${esc(c.sentence_context)}</div>
       </div>`).join('')}
   `;
 }

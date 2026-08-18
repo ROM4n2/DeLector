@@ -3,98 +3,109 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>DeLector — 德语欧标沉浸阅读</title>
-  <meta name="description" content="导入德语文章，智能标注 CEFR 等级，解析歌德核心考点，一键导出 Anki 卡片。">
+  <title>DeLector — 德语欧标沉浸阅读与考点剖析</title>
+  <meta name="description" content="专为德语欧标与歌德证书备考打造的沉浸阅读工作台，支持 CEFR 词汇荧光标注与深度考点解析。">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
+  <!-- Top Navigation -->
   <nav id="nav">
     <div class="nav-brand" onclick="show('home')">
-      DeLector <sup>歌德欧标</sup>
+      DeLector<span class="brand-dot">.</span>
+      <span class="nav-pin">GOETHE B1-C1</span>
     </div>
     <div class="nav-actions">
-      <button class="btn btn-ghost" onclick="show('cards')">卡片库 (<span id="card-count">0</span>)</button>
-      <a href="/api/cards/export/apkg" class="btn btn-ink">导出 Anki</a>
+      <button class="btn btn-ghost" onclick="show('cards')">
+        待复习卡片 (<span id="card-count" style="font-family:var(--mono);font-weight:700;">0</span>)
+      </button>
+      <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki</a>
     </div>
   </nav>
 
-  <!-- Home -->
-  <div id="view-home" class="view active">
+  <!-- ── View 1: Home Library ───────────────────────────────── -->
+  <main id="view-home" class="view active">
     <div class="home-hero">
-      <h1>德语欧标<br>沉浸阅读与考点剖析</h1>
-      <p>导入任意德语课文或新闻，本地智能标注 CEFR 等级，<br>实时解析歌德核心考点并导出 Anki 卡片。</p>
+      <div class="hero-eyebrow">
+        <span class="dot"></span>
+        <span>CEFR IMMERSIVE WORKSPACE · 歌德备考</span>
+      </div>
+      <h1>德语欧标<br><span class="accent-word">沉浸研读</span>与考点剖析</h1>
+      <p>导入任意德语长文或备考真题，本地智能标注 CEFR 难度色阶（A2-C1），实时剖析歌德核心语法考点并一键沉淀为 Anki 卡片。</p>
       <div class="home-cta">
-        <button class="btn btn-prussian" onclick="openModal()">+ 导入德语文章</button>
+        <button class="btn btn-accent" onclick="openModal()">+ 导入德语文章</button>
       </div>
     </div>
 
+    <!-- Highlighter Legend -->
     <div class="cefr-legend">
-      <strong>欧标难度：</strong>
-      <span class="legend-pip pip-A2">A2 进阶</span>
-      <span class="legend-pip pip-B1">B1 中级</span>
-      <span class="legend-pip pip-B2">B2 高级</span>
-      <span class="legend-pip pip-C1">C1 精通</span>
+      <strong>欧标色标：</strong>
+      <span class="hl-pill hl-A2">A2 进阶表达</span>
+      <span class="hl-pill hl-B1">B1 核心词汇</span>
+      <span class="hl-pill hl-B2">B2 高级搭配</span>
+      <span class="hl-pill hl-C1">C1 精通论述</span>
     </div>
 
-    <p class="section-eyebrow">文稿库</p>
+    <div class="section-label">
+      <span class="section-title">文稿库 · LIBRARY</span>
+    </div>
     <div id="article-list"></div>
-  </div>
+  </main>
 
-  <!-- Reader -->
-  <div id="view-reader" class="view">
+  <!-- ── View 2: Reader Workspace ───────────────────────────── -->
+  <main id="view-reader" class="view">
     <div class="reader-topbar">
-      <button class="btn btn-ghost" onclick="show('home')">← 返回</button>
+      <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
       <h2 id="reader-title"></h2>
       <div style="width:72px"></div>
     </div>
     <div id="reader-content"></div>
-  </div>
+  </main>
 
-  <!-- Cards -->
-  <div id="view-cards" class="view">
+  <!-- ── View 3: Cards & Review Library ─────────────────────── -->
+  <main id="view-cards" class="view">
     <div class="cards-topbar">
-      <button class="btn btn-ghost" onclick="show('home')">← 返回</button>
+      <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
       <h2>待复习卡片库</h2>
-      <a href="/api/cards/export/apkg" class="btn btn-ink">导出 Anki</a>
+      <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki (.apkg)</a>
     </div>
     <div id="cards-container"></div>
-  </div>
+  </main>
 
-  <!-- Drawer (warm zone) -->
+  <!-- ── Sticky Note Slide-over Drawer ──────────────────────── -->
   <aside id="drawer">
+    <div class="tape-top"></div>
     <div class="drawer-header">
-      <span class="drawer-label">词汇 &amp; 考点工作台</span>
+      <span class="drawer-title">词汇 &amp; 歌德考点工作台</span>
       <button class="drawer-close" onclick="closeDrawer()">✕</button>
     </div>
-    <div class="drawer-body">
 
-      <!-- Karteikarte Signature Element -->
-      <div class="karteikarte">
-        <div class="karte-head">
+    <div class="drawer-body">
+      <!-- Word Card -->
+      <div class="sticky-word-card">
+        <div class="sticky-word-headline">
           <span id="d-word"></span>
           <span class="cefr-badge" id="d-cefr"></span>
         </div>
-        <div class="karte-body">
-          <div id="d-meta"></div>
-          <div>
-            <label class="field-label">中文释义</label>
-            <input id="d-def" type="text" class="def-input" placeholder="输入中文释义…">
-          </div>
-          <button id="save-vocab-btn" class="btn btn-prussian btn-full" onclick="saveVocab()">
-            + 加入 Anki 词汇卡
-          </button>
+        <div id="d-meta"></div>
+        <div style="margin-top:0.875rem;">
+          <label class="input-label">中文释义</label>
+          <input id="d-def" type="text" class="def-input" placeholder="输入中文释义…">
         </div>
+        <button id="save-vocab-btn" class="btn btn-dark btn-full" style="margin-top:0.75rem;" onclick="saveVocab()">
+          + 加入 Anki 词汇卡
+        </button>
       </div>
 
-      <div class="grammar-section">
-        <div class="grammar-section-head">
-          <span>歌德考点深度剖析</span>
-          <button id="analyze-btn" class="btn btn-prussian" style="min-height:28px;padding:0 .625rem;font-size:.75rem"
+      <!-- Grammar Note Section -->
+      <div class="grammar-note">
+        <div class="grammar-note-head">
+          <span class="grammar-note-title">歌德考点深度剖析</span>
+          <button id="analyze-btn" class="btn btn-accent" style="min-height:30px;padding:0 0.75rem;font-size:0.75rem"
             onclick="analyzeGrammar()">AI 深度剖析</button>
         </div>
-        <div id="grammar-result" class="grammar-detail hidden">
-          <div style="display:flex;align-items:baseline;gap:.5rem">
+        <div id="grammar-result" class="hidden" style="display:flex;flex-direction:column;gap:0.75rem;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;">
             <span id="g-name"></span>
             <span class="cefr-badge" id="g-badge"></span>
           </div>
@@ -106,15 +117,15 @@
         </div>
       </div>
 
-      <div class="context-section">
-        <span class="field-label">原句上下文</span>
+      <!-- Context Quote -->
+      <div class="context-box">
+        <span class="input-label">原句上下文</span>
         <div id="d-sent"></div>
       </div>
-
     </div>
   </aside>
 
-  <!-- Import modal -->
+  <!-- ── Import Modal ───────────────────────────────────────── -->
   <div id="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
       <h3>导入德语研读材料</h3>
@@ -122,11 +133,11 @@
         <input id="imp-title" type="text" class="modal-input" placeholder="文章标题（可选）">
       </div>
       <div class="modal-field">
-        <textarea id="imp-text" class="modal-input modal-textarea" placeholder="粘贴德语文章、课文或短讯…"></textarea>
+        <textarea id="imp-text" class="modal-input modal-textarea" placeholder="粘贴德语课文、新闻或备考长文…"></textarea>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-        <button id="import-btn" class="btn btn-ink" onclick="submitImport()">开始阅读</button>
+        <button id="import-btn" class="btn btn-dark" onclick="submitImport()">开始阅读</button>
       </div>
     </div>
   </div>
