@@ -416,10 +416,30 @@ function inspect(tokenId, sentId) {
     `原型: <strong>${esc(token.lemma)}</strong> · 词性: ${esc(token.pos)} ${genderHtml}` +
     (token.case ? ` · ${esc(token.case)}` : '');
   document.getElementById('d-def').value = '';
+  document.getElementById('d-def-status').textContent = 'AI 解析中…';
   document.getElementById('d-sent').textContent = sent.text;
   document.getElementById('save-vocab-btn').textContent = '+ 加入 Anki 词汇卡';
   document.getElementById('grammar-result').classList.add('hidden');
   openDrawer();
+
+  // Async AI quick definition lookup
+  api('/api/lookup/vocab', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ sentence: sent.text, target_word: token.text })
+  }).then(res => {
+    if (res && res.definition_zh && selectedToken?.text === token.text) {
+      if (!document.getElementById('d-def').value) {
+        document.getElementById('d-def').value = res.definition_zh;
+      }
+      document.getElementById('d-def-status').textContent = '✓ AI 已预填';
+      if (res.plural) selectedToken.plural = res.plural;
+    } else {
+      document.getElementById('d-def-status').textContent = '';
+    }
+  }).catch(() => {
+    document.getElementById('d-def-status').textContent = '';
+  });
 }
 
 // ── Drawer ───────────────────────────────────────────────────────────────────
@@ -451,9 +471,6 @@ async function analyzeGrammar() {
     document.getElementById('g-exp').textContent     = grammarData.explanation_zh;
     document.getElementById('g-badge').textContent   = 'Goethe ' + lvl;
     document.getElementById('g-badge').className     = 'cefr-badge grammar-cefr-badge badge-' + lvl;
-    if (!document.getElementById('d-def').value && grammarData.collocations?.length) {
-      document.getElementById('d-def').value = grammarData.collocations[0];
-    }
     document.getElementById('grammar-result').classList.remove('hidden');
   } catch {
     alert('语法解析失败，请检查 API Key');
@@ -465,8 +482,8 @@ async function analyzeGrammar() {
 
 // ── Save ─────────────────────────────────────────────────────────────────────
 async function saveVocab() {
-  const def = document.getElementById('d-def').value.trim();
-  if (!def) { alert('请输入中文释义'); return; }
+  if (!selectedToken || !currentArticle) return;
+  const def = document.getElementById('d-def').value.trim() || selectedToken.lemma || selectedToken.text;
   await api('/api/cards/vocab', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -474,7 +491,8 @@ async function saveVocab() {
       word: selectedToken.text, lemma: selectedToken.lemma,
       pos: selectedToken.pos,   gender: selectedToken.gender,
       cefr_level: selectedToken.cefr_level || 'A1',
-      definition_zh: def, sentence_context: selectedSent.text
+      definition_zh: def, sentence_context: selectedSent.text,
+      plural: selectedToken.plural || ''
     })
   });
   document.getElementById('save-vocab-btn').textContent = '✓ 已保存';

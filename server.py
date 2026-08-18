@@ -463,6 +463,54 @@ async def lookup_grammar(req: GrammarLookupReq):
         content = resp.json()["choices"][0]["message"]["content"]
         return json.loads(content)
 
+SYSTEM_VOCAB_PROMPT = """你是一位精通德汉词典编纂的德语专家。
+请根据给定的德语句子上下文和目标词汇，给出该词在当前句中的精准中文简明释义（1-8个字）、复数形式（如果是名词）、常用同义词等。
+以严格的 JSON 格式输出：
+{
+  "definition_zh": "精准中文简明释义（如：挑战 / 减少 / 气温）",
+  "plural": "复数形式（如：die Herausforderungen，若非名词留空）",
+  "synonyms": ["同义词1", "同义词2"]
+}
+不要输出除 JSON 以外的任何文字。"""
+
+class VocabLookupReq(BaseModel):
+    sentence: str
+    target_word: str
+
+@app.post("/api/lookup/vocab")
+async def lookup_vocab(req: VocabLookupReq):
+    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    if not key:
+        return {
+            "definition_zh": "",
+            "plural": "",
+            "synonyms": []
+        }
+
+    user_content = f"句子: \"{req.sentence}\"\n目标词汇: \"{req.target_word}\""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_VOCAB_PROMPT},
+                        {"role": "user", "content": user_content}
+                    ],
+                    "response_format": {"type": "json_object"}
+                }
+            )
+            content = resp.json()["choices"][0]["message"]["content"]
+            return json.loads(content)
+    except Exception:
+        return {
+            "definition_zh": "",
+            "plural": "",
+            "synonyms": []
+        }
+
 @app.post("/api/cards/vocab")
 def add_vocab_card(req: VocabCardReq):
     with get_db() as conn:

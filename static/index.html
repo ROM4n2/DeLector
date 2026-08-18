@@ -117,8 +117,11 @@
         </div>
         <div id="d-meta"></div>
         <div style="margin-top:0.875rem;">
-          <label class="input-label">中文释义</label>
-          <input id="d-def" type="text" class="def-input" placeholder="输入中文释义…">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label class="input-label" style="margin:0;">中文释义 / 笔记 (选填)</label>
+            <span id="d-def-status" style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);"></span>
+          </div>
+          <input id="d-def" type="text" class="def-input" style="margin-top:0.35rem;" placeholder="AI 正在解析语境释义，也可直接自定义笔记…">
         </div>
         <button id="save-vocab-btn" class="btn btn-dark btn-full" style="margin-top:0.75rem;" onclick="saveVocab()">
           + 加入 Anki 词汇卡
