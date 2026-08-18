@@ -43,7 +43,8 @@ async function playGermanAudio(text, rate = 0.88) {
 // ── View router ──────────────────────────────────────────────────────────────
 function show(view) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-  document.getElementById('view-' + view).classList.add('active');
+  const targetView = document.getElementById('view-' + view);
+  if (targetView) targetView.classList.add('active');
   closeDrawer();
   clearCefrFocus();
 
@@ -53,8 +54,9 @@ function show(view) {
     if (view !== 'reader') ShadowPlayer.pause();
   }
 
-  if (view === 'home')  loadArticles();
-  if (view === 'cards') loadCards();
+  if (view === 'home')     loadArticles();
+  if (view === 'cards')    loadCards();
+  if (view === 'progress') loadProgress();
 }
 
 // ── Shadow Reading Audio Engine (Edge Neural TTS + Fallback) ────────────────
@@ -629,38 +631,604 @@ async function saveGrammar() {
   refreshCount();
 }
 
-// ── Cards view ────────────────────────────────────────────────────────────────
+// ── Cards view (Phase A: Segments, Delete, Master) ───────────────────────────
+let cardSegment = 'pending'; // 'pending' | 'mastered'
+let cachedCards = { vocab_cards: [], grammar_cards: [] };
+let lastDeletedCard = null;
+let undoToastTimer = null;
+
+function setCardSegment(seg) {
+  cardSegment = seg;
+  const btnPending = document.getElementById('seg-pending');
+  const btnMastered = document.getElementById('seg-mastered');
+  if (btnPending) btnPending.classList.toggle('active', seg === 'pending');
+  if (btnMastered) btnMastered.classList.toggle('active', seg === 'mastered');
+  renderCardsGrid();
+}
+
 async function loadCards() {
   updateAudioCacheInfo();
-  const { vocab_cards: vc, grammar_cards: gc } = await api('/api/cards');
-  document.getElementById('cards-container').innerHTML = `
+  try {
+    cachedCards = await api('/api/cards');
+  } catch (e) {
+    cachedCards = { vocab_cards: [], grammar_cards: [] };
+  }
+
+  const vAll = cachedCards.vocab_cards || [];
+  const gAll = cachedCards.grammar_cards || [];
+  const totalPending = vAll.filter(c => !c.mastered).length + gAll.filter(c => !c.mastered).length;
+  const totalMastered = vAll.filter(c => c.mastered).length + gAll.filter(c => c.mastered).length;
+
+  const sp = document.getElementById('seg-pending-count');
+  const sm = document.getElementById('seg-mastered-count');
+  if (sp) sp.textContent = totalPending;
+  if (sm) sm.textContent = totalMastered;
+
+  renderCardsGrid();
+}
+
+function renderCardsGrid() {
+  const isMastered = cardSegment === 'mastered';
+  const vList = (cachedCards.vocab_cards || []).filter(c => isMastered ? !!c.mastered : !c.mastered);
+  const gList = (cachedCards.grammar_cards || []).filter(c => isMastered ? !!c.mastered : !c.mastered);
+
+  const container = document.getElementById('cards-container');
+  if (!container) return;
+
+  if (vList.length === 0 && gList.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:3.5rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
+        <div style="font-size:2rem;margin-bottom:0.5rem;">${isMastered ? '🛡️' : '📭'}</div>
+        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);margin-bottom:0.35rem;">
+          ${isMastered ? '尚无已斩断/已掌握的卡片' : '卡片库空空如也'}
+        </div>
+        <p style="font-size:0.8125rem;color:var(--pencil);">
+          ${isMastered ? '在待复习库中点击「✓ 斩」即可将掌握的卡片归档至此。' : '在阅读器中点击生词或语法考点，即可一键收录为复习卡片。'}
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
     <div class="section-label" style="margin-bottom:0.875rem;">
-      <span class="section-title">词汇卡 · VOCABULARY (${vc.length})</span>
+      <span class="section-title">词汇卡 · VOCABULARY (${vList.length})</span>
     </div>
-    <div class="card-grid">${vc.map(c => `
-      <div class="memo-card">
+    <div class="card-grid">${vList.map(c => `
+      <div class="memo-card ${c.mastered ? 'is-mastered' : ''}" id="v-card-${c.id}">
         <div class="memo-card-head">
-          <span class="memo-word">${esc(c.word)}</span>
-          <span class="cefr-badge badge-${c.cefr_level}">${c.cefr_level}</span>
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span class="memo-word">${esc(c.word)}</span>
+            <button class="speaker-btn" onclick="playGermanAudio('${esc(c.word)}')" title="朗读单词">🔊</button>
+          </div>
+          <div class="card-top-actions">
+            <span class="cefr-badge badge-${c.cefr_level || 'A1'}">${c.cefr_level || 'A1'}</span>
+            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, '${esc(c.word)}')" title="删除此卡片">✕</button>
+          </div>
         </div>
         <div class="memo-def">${esc(c.definition_zh)}</div>
-        <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos)}${c.gender ? ' · ' + esc(c.gender) : ''}</div>
+        <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos || 'WORT')}${c.gender ? ' · ' + esc(c.gender) : ''}</div>
         <div class="memo-sent">${esc(c.sentence_context)}</div>
+        <div class="card-footer-actions">
+          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误</span>
+          <button class="card-master-btn ${c.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('vocab', ${c.id}, ${!!c.mastered})">
+            ${c.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+          </button>
+        </div>
       </div>`).join('')}</div>
 
-    <div class="section-label" style="margin-bottom:0.875rem;">
-      <span class="section-title">歌德语法考点卡 · GRAMMAR (${gc.length})</span>
+    <div class="section-label" style="margin-top:2rem;margin-bottom:0.875rem;">
+      <span class="section-title">歌德语法考点卡 · GRAMMAR (${gList.length})</span>
     </div>
-    ${gc.map(c => `
-      <div class="grammar-memo-card">
+    ${gList.map(c => `
+      <div class="grammar-memo-card ${c.mastered ? 'is-mastered' : ''}" id="g-card-${c.id}">
         <div class="grammar-memo-head">
           <span class="grammar-memo-name">${esc(c.grammar_name)}</span>
-          <span class="cefr-badge badge-${c.cefr_level}">Goethe ${c.cefr_level}</span>
+          <div class="card-top-actions">
+            <span class="cefr-badge badge-${c.cefr_level || 'A1'}">Goethe ${c.cefr_level || 'A1'}</span>
+            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, '${esc(c.grammar_name)}')" title="删除此考点卡">✕</button>
+          </div>
         </div>
         ${c.rule_formula ? `<div class="grammar-memo-formula">${esc(c.rule_formula)}</div>` : ''}
         <div class="grammar-memo-exp">${esc(c.explanation_zh)}</div>
         <div class="memo-sent">${esc(c.sentence_context)}</div>
+        <div class="card-footer-actions">
+          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误</span>
+          <button class="card-master-btn ${c.mastered ? 'mastered-active' : ''}" onclick="toggleMaster('grammar', ${c.id}, ${!!c.mastered})">
+            ${c.mastered ? '↺ 重返待复习' : '✓ 斩 (已掌握)'}
+          </button>
+        </div>
       </div>`).join('')}
+  `;
+}
+
+async function deleteCard(type, id, name) {
+  try {
+    await api(`/api/cards/${type}/${id}`, { method: 'DELETE' });
+    showUndoToast(`已删除卡片「${name}」`, async () => {
+      // Undo logic placeholder if user wants to restore
+    });
+    loadCards();
+    refreshCount();
+  } catch (e) {
+    alert('删除卡片失败: ' + e.message);
+  }
+}
+
+async function toggleMaster(type, id, currentMastered) {
+  try {
+    await api(`/api/cards/${type}/${id}/master`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mastered: !currentMastered })
+    });
+    loadCards();
+    refreshCount();
+  } catch (e) {
+    alert('更新卡片状态失败: ' + e.message);
+  }
+}
+
+function showUndoToast(msg, onUndo) {
+  let toast = document.getElementById('undo-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'undo-toast';
+    toast.className = 'undo-toast';
+    document.body.appendChild(toast);
+  }
+  if (undoToastTimer) clearTimeout(undoToastTimer);
+
+  toast.innerHTML = `<span>${msg}</span>`;
+  toast.classList.remove('hidden');
+
+  undoToastTimer = setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 3500);
+}
+
+// ── Phase B: Quiz Engine ──────────────────────────────────────────────────────
+let quizState = {
+  mode: 'flashcard',
+  queue: [],
+  index: 0,
+  correct: 0,
+  wrong: 0,
+  isFlipped: false,
+  allVocab: []
+};
+
+function openQuizOverlay() {
+  const overlay = document.getElementById('quiz-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('hidden');
+  document.getElementById('quiz-step-mode')?.classList.remove('hidden');
+  document.getElementById('quiz-step-run')?.classList.add('hidden');
+  document.getElementById('quiz-step-done')?.classList.add('hidden');
+}
+
+function closeQuizOverlay() {
+  const overlay = document.getElementById('quiz-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  loadCards();
+}
+
+async function startQuiz(mode) {
+  quizState.mode = mode;
+  quizState.correct = 0;
+  quizState.wrong = 0;
+  quizState.index = 0;
+  quizState.isFlipped = false;
+
+  const data = await api('/api/cards');
+  const vocab = data.vocab_cards || [];
+  quizState.allVocab = vocab;
+
+  if (vocab.length === 0) {
+    alert('卡片库中暂无词汇卡，请先在文章阅读中收集词汇！');
+    closeQuizOverlay();
+    return;
+  }
+
+  // Weight error cards higher, take unmastered first
+  const pending = vocab.filter(c => !c.mastered);
+  const pool = pending.length > 0 ? pending : vocab;
+  pool.sort((a, b) => {
+    const wA = (a.wrong_count || 0) * 2 - (a.correct_count || 0);
+    const wB = (b.wrong_count || 0) * 2 - (b.correct_count || 0);
+    return wB - wA;
+  });
+
+  quizState.queue = pool.slice(0, 15); // Session limit 15 cards
+
+  document.getElementById('quiz-step-mode')?.classList.add('hidden');
+  document.getElementById('quiz-step-done')?.classList.add('hidden');
+  document.getElementById('quiz-step-run')?.classList.remove('hidden');
+
+  renderCurrentQuizCard();
+}
+
+function renderCurrentQuizCard() {
+  const { queue, index, mode, correct, wrong } = quizState;
+  if (index >= queue.length) {
+    finishQuiz();
+    return;
+  }
+
+  const card = queue[index];
+  const total = queue.length;
+
+  // Header stats
+  const posEl = document.getElementById('quiz-pos');
+  const totEl = document.getElementById('quiz-total');
+  const corEl = document.getElementById('quiz-score-correct');
+  const wrgEl = document.getElementById('quiz-score-wrong');
+  const progFill = document.getElementById('quiz-progress-fill');
+
+  if (posEl) posEl.textContent = index + 1;
+  if (totEl) totEl.textContent = total;
+  if (corEl) corEl.textContent = correct;
+  if (wrgEl) wrgEl.textContent = wrong;
+  if (progFill) progFill.style.width = `${Math.round((index / total) * 100)}%`;
+
+  // Hide all mode wrappers
+  document.getElementById('quiz-flashcard-wrap')?.classList.add('hidden');
+  document.getElementById('quiz-dictation-wrap')?.classList.add('hidden');
+  document.getElementById('quiz-choice-wrap')?.classList.add('hidden');
+
+  if (mode === 'flashcard') {
+    const wrap = document.getElementById('quiz-flashcard-wrap');
+    wrap?.classList.remove('hidden');
+    quizState.isFlipped = false;
+
+    const front = wrap.querySelector('.quiz-card-front');
+    const back = wrap.querySelector('.quiz-card-back');
+    const actions = document.getElementById('quiz-fc-actions');
+    if (front) front.classList.remove('hidden');
+    if (back) back.classList.add('hidden');
+    if (actions) actions.classList.add('hidden');
+
+    const wEl = document.getElementById('quiz-fc-word');
+    const bEl = document.getElementById('quiz-fc-cefr');
+    const dEl = document.getElementById('quiz-fc-def');
+    const sEl = document.getElementById('quiz-fc-sent');
+
+    if (wEl) wEl.textContent = card.word;
+    if (bEl) bEl.textContent = `${card.cefr_level || 'A1'} · ${card.pos || 'WORT'}`;
+    if (dEl) dEl.textContent = card.definition_zh;
+    if (sEl) sEl.textContent = card.sentence_context || '';
+
+    // Auto speak word
+    playGermanAudio(card.word);
+  } else if (mode === 'dictation') {
+    const wrap = document.getElementById('quiz-dictation-wrap');
+    wrap?.classList.remove('hidden');
+
+    const defEl = document.getElementById('quiz-dict-def');
+    const hintEl = document.getElementById('quiz-dict-sent-hint');
+    const inputEl = document.getElementById('quiz-dict-input');
+    const fbEl = document.getElementById('quiz-dict-feedback');
+    const nextBtn = document.getElementById('quiz-dict-next');
+
+    if (defEl) defEl.textContent = card.definition_zh;
+    if (hintEl) {
+      const masked = (card.sentence_context || '').replace(new RegExp(card.word, 'gi'), '______');
+      hintEl.textContent = masked;
+    }
+    if (inputEl) {
+      inputEl.value = '';
+      inputEl.disabled = false;
+      setTimeout(() => inputEl.focus(), 50);
+    }
+    if (fbEl) {
+      fbEl.className = 'quiz-dict-feedback hidden';
+      fbEl.textContent = '';
+    }
+    if (nextBtn) nextBtn.classList.add('hidden');
+  } else if (mode === 'choice') {
+    const wrap = document.getElementById('quiz-choice-wrap');
+    wrap?.classList.remove('hidden');
+
+    const wEl = document.getElementById('quiz-choice-word');
+    const bEl = document.getElementById('quiz-choice-cefr');
+    const optContainer = document.getElementById('quiz-choice-options');
+
+    if (wEl) wEl.textContent = card.word;
+    if (bEl) bEl.textContent = `${card.cefr_level || 'A1'} · ${card.pos || 'WORT'}`;
+
+    // Pick 3 distractors
+    const otherDefs = quizState.allVocab
+      .filter(c => c.id !== card.id && c.definition_zh && c.definition_zh !== card.definition_zh)
+      .map(c => c.definition_zh);
+    
+    // Shuffle and pick 3
+    otherDefs.sort(() => Math.random() - 0.5);
+    const options = [card.definition_zh, ...otherDefs.slice(0, 3)];
+    options.sort(() => Math.random() - 0.5);
+
+    if (optContainer) {
+      optContainer.innerHTML = options.map((opt, idx) => `
+        <button class="quiz-choice-btn" onclick="submitChoice(${idx}, ${options.indexOf(card.definition_zh)})">
+          <span style="font-family:var(--mono);margin-right:0.5rem;color:var(--pencil);">${String.fromCharCode(65 + idx)}.</span>
+          ${esc(opt)}
+        </button>
+      `).join('');
+    }
+
+    playGermanAudio(card.word);
+  }
+}
+
+function flipFlashcard() {
+  if (quizState.isFlipped) return;
+  quizState.isFlipped = true;
+  const wrap = document.getElementById('quiz-flashcard-wrap');
+  if (!wrap) return;
+  wrap.querySelector('.quiz-card-front')?.classList.add('hidden');
+  wrap.querySelector('.quiz-card-back')?.classList.remove('hidden');
+  document.getElementById('quiz-fc-actions')?.classList.remove('hidden');
+}
+
+async function submitFlashcard(isCorrect) {
+  const card = quizState.queue[quizState.index];
+  if (isCorrect) quizState.correct++;
+  else quizState.wrong++;
+
+  api('/api/quiz/record', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      card_id: card.id,
+      card_type: 'vocab',
+      mode: 'flashcard',
+      correct: isCorrect
+    })
+  }).catch(() => {});
+
+  quizState.index++;
+  renderCurrentQuizCard();
+}
+
+function checkDictation() {
+  const card = quizState.queue[quizState.index];
+  const inputEl = document.getElementById('quiz-dict-input');
+  const fbEl = document.getElementById('quiz-dict-feedback');
+  const nextBtn = document.getElementById('quiz-dict-next');
+  if (!inputEl || !fbEl) return;
+
+  const val = inputEl.value.trim();
+  if (!val) return;
+
+  inputEl.disabled = true;
+  const isMatch = val.toLowerCase() === card.word.trim().toLowerCase();
+
+  if (isMatch) {
+    quizState.correct++;
+    fbEl.className = 'quiz-dict-feedback correct';
+    fbEl.innerHTML = `✓ 拼写正确！<b>${esc(card.word)}</b>`;
+    playGermanAudio(card.word);
+  } else {
+    quizState.wrong++;
+    fbEl.className = 'quiz-dict-feedback wrong';
+    fbEl.innerHTML = `✗ 正确拼写为：<b>${esc(card.word)}</b> (你的回答：${esc(val)})`;
+  }
+  fbEl.classList.remove('hidden');
+  if (nextBtn) nextBtn.classList.remove('hidden');
+
+  api('/api/quiz/record', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      card_id: card.id,
+      card_type: 'vocab',
+      mode: 'dictation',
+      correct: isMatch
+    })
+  }).catch(() => {});
+}
+
+function advanceQuiz() {
+  quizState.index++;
+  renderCurrentQuizCard();
+}
+
+function submitChoice(chosenIdx, correctIdx) {
+  const btns = document.querySelectorAll('.quiz-choice-btn');
+  btns.forEach(b => b.disabled = true);
+
+  const card = quizState.queue[quizState.index];
+  const isCorrect = chosenIdx === correctIdx;
+
+  if (btns[correctIdx]) btns[correctIdx].classList.add('is-correct');
+  if (!isCorrect && btns[chosenIdx]) btns[chosenIdx].classList.add('is-wrong');
+
+  if (isCorrect) quizState.correct++;
+  else quizState.wrong++;
+
+  api('/api/quiz/record', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      card_id: card.id,
+      card_type: 'vocab',
+      mode: 'choice',
+      correct: isCorrect
+    })
+  }).catch(() => {});
+
+  setTimeout(() => {
+    quizState.index++;
+    renderCurrentQuizCard();
+  }, 1000);
+}
+
+function finishQuiz() {
+  document.getElementById('quiz-step-run')?.classList.add('hidden');
+  const donePanel = document.getElementById('quiz-step-done');
+  if (donePanel) donePanel.classList.remove('hidden');
+
+  const total = quizState.correct + quizState.wrong;
+  const pct = total > 0 ? Math.round((quizState.correct / total) * 100) : 0;
+
+  const dCor = document.getElementById('done-correct');
+  const dWrg = document.getElementById('done-wrong');
+  const dAcc = document.getElementById('done-accuracy');
+  const dEnc = document.getElementById('done-encourage');
+
+  if (dCor) dCor.textContent = quizState.correct;
+  if (dWrg) dWrg.textContent = quizState.wrong;
+  if (dAcc) dAcc.textContent = `${pct}% 准确率`;
+
+  const mottos = [
+    "Übung macht den Meister. (熟能生巧)",
+    "Aller Anfang ist schwer, aber du machst Fortschritte! (万事开头难，但你正在进步！)",
+    "Wer rastet, der rostet. Bleib dran! (流水不腐，继续保持！)",
+    "Schritt für Schritt kommt man ans Ziel. (一步一个脚印，终将抵达终点。)"
+  ];
+  if (dEnc) dEnc.textContent = mottos[Math.floor(Math.random() * mottos.length)];
+}
+
+// ── Phase C: Progress Dashboard ──────────────────────────────────────────────
+const GERMAN_MOTTOS = [
+  { de: "Es ist noch kein Meister vom Himmel gefallen.", zh: "没有人生来就是大师，精进源于日复一日的沉淀。", author: "Deutsches Sprichwort" },
+  { de: "Wer fremde Sprachen nicht kennt, weiß nichts von seiner eigenen.", zh: "不谙异国语言者，亦不知自身母语之妙。", author: "Johann Wolfgang von Goethe" },
+  { de: "Die Grenzen meiner Sprache bedeuten die Grenzen meiner Welt.", zh: "我的语言之界限，即是我的世界之界限。", author: "Ludwig Wittgenstein" },
+  { de: "Man lernt nie aus.", zh: "活到老，学到老；精读即是不断拓展认知边界。", author: "Deutsches Sprichwort" },
+  { de: "Ohne Fleiß kein Preis.", zh: "不劳则无获；日积跬步，终至千里。", author: "Deutsches Sprichwort" },
+  { de: "Ein Buch ist wie ein Garten, den man in der Tasche trägt.", zh: "一本书如同一座随身携带的私家花园。", author: "Arabisches Sprichwort auf Deutsch" }
+];
+
+async function loadProgress() {
+  // Render rotating daily quote
+  const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24)) % GERMAN_MOTTOS.length;
+  const motto = GERMAN_MOTTOS[dayIndex];
+  const mottoEl = document.getElementById('progress-motto');
+  if (mottoEl) {
+    mottoEl.innerHTML = `
+      <div class="motto-quote">“${esc(motto.de)}”</div>
+      <div style="font-size:0.875rem;color:var(--ink);margin-bottom:0.25rem;">${esc(motto.zh)}</div>
+      <div class="motto-author">— ${esc(motto.author)}</div>
+    `;
+  }
+
+  try {
+    const stats = await api('/api/progress/stats');
+
+    // Populate Key Metrics
+    const stStreak = document.getElementById('stat-streak');
+    const stVocab = document.getElementById('stat-mastered-vocab');
+    const stGrammar = document.getElementById('stat-mastered-grammar');
+    const stArticles = document.getElementById('stat-articles');
+    const stAccuracy = document.getElementById('stat-accuracy');
+    const stMinutes = document.getElementById('stat-minutes');
+
+    if (stStreak) stStreak.textContent = stats.streak || 0;
+    if (stVocab) stVocab.textContent = stats.mastered_vocab || 0;
+    if (stGrammar) stGrammar.textContent = stats.mastered_grammar || 0;
+    if (stArticles) stArticles.textContent = stats.total_articles || 0;
+    if (stAccuracy) stAccuracy.textContent = stats.accuracy_pct || 0;
+    if (stMinutes) stMinutes.textContent = stats.total_study_minutes || 0;
+
+    // CEFR Heatbar for collected cards
+    const cefrCounts = stats.cefr_counts || {};
+    const totalCards = stats.total_cards || 0;
+    const tcEl = document.getElementById('progress-total-cards');
+    if (tcEl) tcEl.textContent = `共 ${totalCards} 张`;
+
+    const heatbar = document.getElementById('progress-cefr-bar');
+    if (heatbar) {
+      if (totalCards === 0) {
+        heatbar.innerHTML = '<div class="heat-seg" style="flex:1;background:var(--paper-deep);text-align:center;color:var(--pencil);font-size:0.6875rem;padding:0.25rem;">暂无卡片数据</div>';
+      } else {
+        const levels = ['A1', 'A2', 'B1', 'B2', 'C1'];
+        const colors = { A1: 'var(--cefr-a1)', A2: 'var(--cefr-a2)', B1: 'var(--cefr-b1)', B2: 'var(--cefr-b2)', C1: 'var(--cefr-c1)' };
+        heatbar.innerHTML = levels.map(lvl => {
+          const count = cefrCounts[lvl] || 0;
+          if (count === 0) return '';
+          const pct = Math.round((count / totalCards) * 100);
+          return `
+            <div class="heat-seg" style="flex:${count};background:${colors[lvl]};" title="${lvl}: ${count} 张 (${pct}%)">
+              <span class="heat-seg-label">${lvl} ${pct}%</span>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 30-day Trend Chart
+    renderTrendChart(stats.trend || []);
+
+    // Milestones
+    const milestonesEl = document.getElementById('progress-milestones');
+    if (milestonesEl) {
+      const ms = stats.milestones || [];
+      milestonesEl.innerHTML = ms.map(m => `
+        <div class="milestone-card ${m.unlocked ? 'unlocked' : ''}">
+          <div class="milestone-icon">${m.icon}</div>
+          <div>
+            <div class="milestone-title">${esc(m.title)}</div>
+            <div class="milestone-desc">${esc(m.desc)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Top Errors
+    const errorsWrap = document.getElementById('progress-errors-wrap');
+    const errorsList = document.getElementById('progress-errors-list');
+    const topErrors = stats.top_errors || [];
+    if (errorsWrap && errorsList) {
+      if (topErrors.length > 0) {
+        errorsWrap.classList.remove('hidden');
+        errorsList.innerHTML = topErrors.map(e => `
+          <div class="top-error-item">
+            <div>
+              <span class="top-error-word">${esc(e.word)}</span>
+              <span class="top-error-def">${esc(e.definition_zh)}</span>
+            </div>
+            <span class="top-error-ratio">${e.wrong_count} 错 / ${e.correct_count} 对</span>
+          </div>
+        `).join('');
+      } else {
+        errorsWrap.classList.add('hidden');
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load progress stats:', e);
+  }
+}
+
+function renderTrendChart(trend) {
+  const svg = document.getElementById('progress-chart-svg');
+  if (!svg) return;
+
+  const w = 600;
+  const h = 70;
+  const pad = 10;
+
+  const maxVal = Math.max(...trend.map(d => (d.cards_added || 0) + (d.cards_mastered || 0)), 4);
+  const step = (w - pad * 2) / (trend.length - 1 || 1);
+
+  const points = trend.map((d, i) => {
+    const val = (d.cards_added || 0) + (d.cards_mastered || 0);
+    const x = pad + i * step;
+    const y = h - pad - ((val / maxVal) * (h - pad * 2));
+    return { x, y, val, date: d.date };
+  });
+
+  const polylineStr = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  svg.innerHTML = `
+    <!-- Grid line -->
+    <line x1="${pad}" y1="${h - pad}" x2="${w - pad}" y2="${h - pad}" stroke="var(--rule)" stroke-width="1" stroke-dasharray="3,3" />
+    <!-- Trend line -->
+    <polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="square" points="${polylineStr}" />
+    <!-- Dots -->
+    ${points.filter(p => p.val > 0).map(p => `
+      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--ink)" stroke="var(--paper)" stroke-width="1.5">
+        <title>${p.date}: +${p.val} 卡片</title>
+      </circle>
+    `).join('')}
   `;
 }
 

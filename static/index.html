@@ -16,8 +16,9 @@
       <span class="nav-pin">GOETHE B1-C1</span>
     </div>
     <div class="nav-actions">
+      <button class="btn btn-ghost" onclick="show('progress')" title="每日进度台账">📊 台账</button>
       <button class="btn btn-ghost" onclick="show('cards')">
-        待复习卡片 (<span id="card-count" style="font-family:var(--mono);font-weight:700;">0</span>)
+        待复习 (<span id="card-count" style="font-family:var(--mono);font-weight:700;">0</span>)
       </button>
       <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki</a>
     </div>
@@ -87,17 +88,102 @@
   <main id="view-cards" class="view">
     <div class="cards-topbar">
       <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
-      <h2>待复习卡片库</h2>
+      <h2>卡片库</h2>
       <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-        <button id="clear-cache-btn" class="btn btn-ghost" onclick="clearAudioCache()" title="查看并清理本地 MP3 语音缓存">🗑️ 语音缓存 (<span id="cache-size-span">0 MB</span>)</button>
-        <button class="btn btn-ghost" onclick="downloadBackupJson()" title="导出包含文章与卡片的 JSON 备份">导出全库备份</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('backup-file-input').click()" title="从备份文件还原">还原备份</button>
+        <button id="quiz-start-btn" class="btn btn-dark" onclick="openQuizOverlay()" title="开始考验所有待复习卡片">⚔ 开始考验</button>
+        <button id="clear-cache-btn" class="btn btn-ghost" onclick="clearAudioCache()" title="查看并清理本地 MP3 语音缓存">🗑️ 缓存 (<span id="cache-size-span">0 MB</span>)</button>
+        <button class="btn btn-ghost" onclick="downloadBackupJson()">导出备份</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('backup-file-input').click()">还原备份</button>
         <input id="backup-file-input" type="file" accept=".json" style="display:none;" onchange="uploadBackupJson(event)">
-        <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki (.apkg)</a>
+        <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki</a>
       </div>
     </div>
+
+    <!-- Segment Switcher -->
+    <div class="cards-seg-bar">
+      <button id="seg-pending" class="cards-seg-btn active" onclick="setCardSegment('pending')">
+        待复习 <span id="seg-pending-count" class="seg-count">0</span>
+      </button>
+      <button id="seg-mastered" class="cards-seg-btn" onclick="setCardSegment('mastered')">
+        已掌握 <span id="seg-mastered-count" class="seg-count">0</span>
+      </button>
+    </div>
+
     <div id="cards-container"></div>
   </main>
+
+  <!-- ── View 4: Progress Dashboard ──────────────────────────── -->
+  <main id="view-progress" class="view">
+    <div class="progress-topbar">
+      <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
+      <h2>每日台账 · PROGRESS</h2>
+    </div>
+
+    <!-- Daily Motto -->
+    <div id="progress-motto" class="progress-motto"></div>
+
+    <!-- Key Stats Ledger -->
+    <div class="progress-ledger-grid" id="progress-stats-grid">
+      <div class="ledger-cell">
+        <div class="ledger-label">连续打卡</div>
+        <div class="ledger-value" id="stat-streak">—</div>
+        <div class="ledger-sub">天 · STREAK</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label">词汇已斩</div>
+        <div class="ledger-value" id="stat-mastered-vocab">—</div>
+        <div class="ledger-sub">张词汇卡</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label">语法已斩</div>
+        <div class="ledger-value" id="stat-mastered-grammar">—</div>
+        <div class="ledger-sub">张考点卡</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label">已读文章</div>
+        <div class="ledger-value" id="stat-articles">—</div>
+        <div class="ledger-sub">篇</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label">考验准确率</div>
+        <div class="ledger-value" id="stat-accuracy">—</div>
+        <div class="ledger-sub">%</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label">学习时长</div>
+        <div class="ledger-value" id="stat-minutes">—</div>
+        <div class="ledger-sub">分钟</div>
+      </div>
+    </div>
+
+    <!-- CEFR Heatbar -->
+    <div class="reader-heatbar-wrap" style="margin-bottom:1.5rem;">
+      <div class="heatbar-label">
+        <span>卡片库 CEFR 构成</span>
+        <span id="progress-total-cards" style="font-family:var(--mono);color:var(--pencil);">共 0 张</span>
+      </div>
+      <div id="progress-cefr-bar" class="reader-heatbar"></div>
+    </div>
+
+    <!-- 30-day Trend Chart -->
+    <div class="progress-chart-wrap">
+      <div class="heatbar-label">
+        <span>近 30 天卡片新增趋势</span>
+      </div>
+      <svg id="progress-chart-svg" class="progress-chart-svg" viewBox="0 0 600 80" preserveAspectRatio="none"></svg>
+    </div>
+
+    <!-- Milestones -->
+    <div class="progress-section-title">成就印章 · MILESTONES</div>
+    <div id="progress-milestones" class="milestones-grid"></div>
+
+    <!-- Error-prone Words -->
+    <div id="progress-errors-wrap" class="hidden">
+      <div class="progress-section-title">高频错误词 · TOP ERRORS</div>
+      <div id="progress-errors-list" class="top-errors-list"></div>
+    </div>
+  </main>
+
 
   <!-- ── Sticky Note Slide-over Drawer ──────────────────────── -->
   <aside id="drawer">
@@ -280,6 +366,115 @@
     <button class="tooltip-action-btn" onclick="openNoteDrawerFromSelection()">📝 随笔</button>
     <button class="tooltip-action-btn" onclick="playSelectedAudio()">🔊 朗读</button>
   </div>
+
+  <!-- ── Quiz Overlay ─────────────────────────────────────────── -->
+  <div id="quiz-overlay" class="quiz-overlay hidden">
+    <!-- Step 1: Mode Selector -->
+    <div id="quiz-step-mode" class="quiz-panel">
+      <div class="quiz-panel-head">
+        <h3>选择考验模式</h3>
+        <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
+      </div>
+      <div class="quiz-mode-grid">
+        <button class="quiz-mode-card" onclick="startQuiz('flashcard')">
+          <div class="quiz-mode-icon">🎴</div>
+          <div class="quiz-mode-title">闪卡自测</div>
+          <div class="quiz-mode-desc">正面看词，翻面对答案</div>
+        </button>
+        <button class="quiz-mode-card" onclick="startQuiz('dictation')">
+          <div class="quiz-mode-icon">✍️</div>
+          <div class="quiz-mode-title">默写拼写</div>
+          <div class="quiz-mode-desc">看中文义，手写德语词</div>
+        </button>
+        <button class="quiz-mode-card" onclick="startQuiz('choice')">
+          <div class="quiz-mode-icon">🎯</div>
+          <div class="quiz-mode-title">四选一</div>
+          <div class="quiz-mode-desc">从四个选项中选正确释义</div>
+        </button>
+      </div>
+      <p class="quiz-meta-note">仅测验词汇卡，错误率高的卡片优先出现</p>
+    </div>
+
+    <!-- Step 2: Quiz Runner -->
+    <div id="quiz-step-run" class="quiz-panel hidden">
+      <div class="quiz-runner-head">
+        <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
+        <div class="quiz-progress-bar-wrap">
+          <div id="quiz-progress-fill" class="quiz-progress-fill" style="width:0%"></div>
+        </div>
+        <div class="quiz-score-label">
+          <span id="quiz-score-correct">0</span> 正 / <span id="quiz-score-wrong">0</span> 误
+          · <span id="quiz-pos">1</span>/<span id="quiz-total">0</span>
+        </div>
+      </div>
+
+      <!-- Flashcard mode -->
+      <div id="quiz-flashcard-wrap" class="quiz-card-wrap hidden">
+        <div id="quiz-flashcard" class="quiz-flashcard" onclick="flipFlashcard()">
+          <div class="quiz-card-front">
+            <div id="quiz-fc-word" class="quiz-big-word"></div>
+            <div id="quiz-fc-cefr" class="quiz-fc-badge"></div>
+            <div class="quiz-flip-hint">点击翻面</div>
+          </div>
+          <div class="quiz-card-back hidden">
+            <div id="quiz-fc-def" class="quiz-fc-def"></div>
+            <div id="quiz-fc-sent" class="quiz-fc-sent"></div>
+          </div>
+        </div>
+        <div id="quiz-fc-actions" class="quiz-fc-actions hidden">
+          <button class="quiz-result-btn quiz-btn-wrong" onclick="submitFlashcard(false)">✗ 不认识</button>
+          <button class="quiz-result-btn quiz-btn-correct" onclick="submitFlashcard(true)">✓ 认识了</button>
+        </div>
+      </div>
+
+      <!-- Dictation mode -->
+      <div id="quiz-dictation-wrap" class="quiz-card-wrap hidden">
+        <div class="quiz-dictation-card">
+          <div class="quiz-dict-prompt-label">请用德语拼写：</div>
+          <div id="quiz-dict-def" class="quiz-big-def"></div>
+          <div id="quiz-dict-sent-hint" class="quiz-dict-hint"></div>
+          <div class="quiz-dict-input-row">
+            <input id="quiz-dict-input" class="quiz-dict-input" type="text"
+              placeholder="输入德语单词..." autocomplete="off" autocorrect="off"
+              onkeydown="if(event.key==='Enter')checkDictation()">
+            <button class="btn btn-dark" onclick="checkDictation()">确认</button>
+          </div>
+          <div id="quiz-dict-feedback" class="quiz-dict-feedback hidden"></div>
+          <button id="quiz-dict-next" class="btn btn-ghost btn-full hidden" onclick="advanceQuiz()">下一题 →</button>
+        </div>
+      </div>
+
+      <!-- Choice mode -->
+      <div id="quiz-choice-wrap" class="quiz-card-wrap hidden">
+        <div class="quiz-choice-card">
+          <div class="quiz-choice-question">以下哪个是 "<span id="quiz-choice-word"></span>" 的释义？</div>
+          <div id="quiz-choice-cefr" class="quiz-fc-badge" style="margin:0 auto 1rem;"></div>
+          <div id="quiz-choice-options" class="quiz-choice-options"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Completion -->
+    <div id="quiz-step-done" class="quiz-panel hidden">
+      <div id="quiz-confetti" class="quiz-confetti-canvas"></div>
+      <div class="quiz-done-content">
+        <div class="quiz-done-icon">🏆</div>
+        <h3 class="quiz-done-title">考验完成！</h3>
+        <div class="quiz-done-stats">
+          <span id="done-correct">0</span> 正确 / <span id="done-wrong">0</span> 错误
+        </div>
+        <div id="done-accuracy" class="quiz-done-accuracy"></div>
+        <div id="done-encourage" class="quiz-done-encourage"></div>
+        <div class="quiz-done-actions">
+          <button class="btn btn-ghost" onclick="closeQuizOverlay()">返回卡片库</button>
+          <button class="btn btn-dark" onclick="openQuizOverlay()">再测一遍</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Milestone Toast -->
+  <div id="milestone-toast" class="milestone-toast hidden"></div>
 
   <script src="/app.js"></script>
 </body>
