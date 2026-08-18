@@ -26,8 +26,39 @@ function show(view) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + view).classList.add('active');
   closeDrawer();
+  clearCefrFocus();
   if (view === 'home')  loadArticles();
   if (view === 'cards') loadCards();
+}
+
+let currentFocusedLevel = null;
+
+function toggleCefrFocus(level) {
+  if (currentFocusedLevel === level) {
+    clearCefrFocus();
+    return;
+  }
+  
+  currentFocusedLevel = level;
+  document.body.classList.add('focus-mode');
+  
+  // Highlight heatbar segment
+  document.querySelectorAll('.heatbar-seg').forEach(el => {
+    el.classList.toggle('focused', el.classList.contains(level));
+  });
+
+  // Focus tokens of this level
+  document.querySelectorAll('.tok').forEach(el => {
+    const matches = el.classList.contains(level);
+    el.classList.toggle('focus-active', matches);
+  });
+}
+
+function clearCefrFocus() {
+  currentFocusedLevel = null;
+  document.body.classList.remove('focus-mode');
+  document.querySelectorAll('.heatbar-seg').forEach(el => el.classList.remove('focused'));
+  document.querySelectorAll('.tok').forEach(el => el.classList.remove('focus-active'));
 }
 
 function renderMiniBar(stats) {
@@ -334,6 +365,7 @@ function inspectPhrase(phraseText) {
 // ── Global Keyboard Shortcuts ────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    clearCefrFocus();
     closeDrawer();
     closeModal();
     return;
