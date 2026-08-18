@@ -904,7 +904,7 @@ async function submitCardReview(type, id, grade) {
 }
 
 
-function deleteCard(type, id, name) {
+async function deleteCard(type, id, name) {
   try {
     await api(`/api/cards/${type}/${id}`, { method: 'DELETE' });
     showUndoToast(`已删除卡片「${name}」`, async () => {
