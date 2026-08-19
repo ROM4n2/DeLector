@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v3.6.1 全局设计系统深度升级：台账现代连续画册展台、文稿库经典单栏社论条目、包豪斯导入弹窗与外刊卡片、极薄 Ticker 与触感底部 Dock），工作区干净 |
+| 当前分支 / HEAD | `master`（含 v3.6.2 Atelier 呼吸感落地页台账重塑：0.85:1.15 不对称 Hero 展台、四角 `+` 标点与 ECHTZEIT 脉冲标签、双行反向 Wire Marquee 动态走字带、并排双面板网格），工作区干净 |
 | 测试 | **64 / 64 全绿**（`test_server.py` 49 + `test_syntax_tree.py` 15） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v3.6.1**（2026-08-19）：全局设计系统深度升级，台账重塑为现代连续画册展台、文稿库保持经典单栏社论衬线条目、包豪斯导入文献与 RSS 展台、36px 极薄元数据走字带与温润纸感触控 Dock |
+| 对外发布 | **v3.6.2**（2026-08-19）：台账重塑为 Atelier 呼吸感落地页（Atelier Landing Page），首屏 0.85:1.15 不对称 Hero 展台、歌德名言、6 核心 Ring Badges 大展盘（带四角标点 `+` 与 ECHTZEIT 脉冲）、双行反向 Wire Marquee 动态走字带、双面板紧凑并排网格 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -326,6 +326,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v3.5.2 Release `2026-08-19`** | **fix(mobile, audio & ui)**: 补齐 Android 11+ `<queries>` TTS 声明、接入有道/百度国内免翻墙在线音频兜底、扩大移动端底部 Dock 阈值至 1024px、重构台账三折页为 100% 独立 Tab 卡片规避滑轨错位 |
 | **v3.6.0 `2026-08-19`** | **feat(folio & ui)**: Phase 1 台账重塑为现代连续杂志画册展台（Continuous Exhibition Folio）+ 6 核心环形指标徽章 + 谱系/轨迹双栏展台与 CEFR 阶梯矩阵 + 火漆印章微倾斜成就展台 |
 | **v3.6.1 `2026-08-19`** | **feat(ui & design-system)**: Phase 2 全局设计系统深度同步升级：文稿库 `.articles-grid` 现代社论卡片质感（`1.5px` 墨线、`3px` 实体物理投影、等宽打字机徽章、经典衬线标题与朱砂珊瑚红悬停交互）+ 包豪斯实体工坊导入弹窗与德语外刊 RSS 展台卡片 + 36px 极薄元数据走字 Ticker + 温润纸感触控底部 Dock |
+| **v3.6.2 `2026-08-19`** | **feat(folio & landing-page)**: 台账（Folio）重塑为 Atelier 呼吸感落地页：0.85:1.15 不对称 Hero 展台、歌德名言、6 核心 Ring Badges 大展盘（带四角标点 `+` 与 ECHTZEIT 脉冲标签）、双行反向 Wire Marquee 动态走字带（上行名言语录，下行实时战报数据）、欧标/走势与错题/勋章双面板紧凑并排网格 |
 
 ---
 

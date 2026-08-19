@@ -1,4 +1,4 @@
-/* DeLector - Continuous Exhibition Folio (Journal Style Learning Progress Ledger) */
+/* DeLector - Continuous Exhibition Folio (Atelier Landing Page Learning Progress Ledger) */
 'use strict';
 
 import { esc, api } from './core.js';
@@ -68,6 +68,69 @@ export function nextFolioPage() {
   }
 }
 
+export function renderMarquees(stats = {}) {
+  const topTrack = document.getElementById('marquee-row-top');
+  const bottomTrack = document.getElementById('marquee-row-bottom');
+
+  if (topTrack) {
+    // Upper row: Classic German quotes & literary mottoes
+    const quoteItems = [
+      { de: "Es ist noch kein Meister vom Himmel gefallen.", zh: "没有人生来就是大师", author: "Deutsches Sprichwort" },
+      { de: "Die Grenzen meiner Sprache bedeuten die Grenzen meiner Welt.", zh: "我的语言之界限即我的世界之界限", author: "Ludwig Wittgenstein" },
+      { de: "Wer fremde Sprachen nicht kennt, weiß nichts von seiner eigenen.", zh: "不谙外语者亦不知母语之妙", author: "Johann Wolfgang von Goethe" },
+      { de: "Ein Buch ist wie ein Garten, den man in der Tasche trägt.", zh: "随身携带的私家花园", author: "Arabisches Sprichwort" },
+      { de: "Man lernt nie aus.", zh: "活到老学到老，拓展认知边界", author: "Deutsches Sprichwort" },
+      { de: "Aller Anfang ist schwer.", zh: "万事开头难，坚持即胜利", author: "Deutsches Sprichwort" },
+      { de: "Ohne Fleiß kein Preis.", zh: "不劳无获，日积跬步终至千里", author: "Deutsches Sprichwort" }
+    ];
+
+    const quoteHtml = quoteItems.map(q => `
+      <div class="marquee-item marquee-quote">
+        <span class="marquee-dot">✦</span>
+        <span class="marquee-text-de">“${esc(q.de)}”</span>
+        <span class="marquee-text-zh">${esc(q.zh)}</span>
+        <span class="marquee-tag">[${esc(q.author)}]</span>
+      </div>
+    `).join('');
+
+    // Duplicate twice for seamless -50% translateX loop
+    topTrack.innerHTML = quoteHtml + quoteHtml;
+  }
+
+  if (bottomTrack) {
+    // Lower row: Live metrics and stats battle report
+    const streak = stats.streak || 0;
+    const vocab = stats.mastered_vocab || 0;
+    const grammar = stats.mastered_grammar || 0;
+    const articles = stats.total_articles || 0;
+    const accuracy = stats.accuracy_pct || 0;
+    const minutes = stats.total_study_minutes || 0;
+    const totalCards = stats.total_cards || 0;
+
+    const statItems = [
+      { icon: '🔥', label: 'STREAK', val: `${streak} TAGE`, desc: '连续研读' },
+      { icon: '📖', label: 'VOKABELN', val: `${vocab} WÖRTER`, desc: '已掌握词汇' },
+      { icon: '🌳', label: 'GRAMMATIK', val: `${grammar} REGELN`, desc: '核心语法考点' },
+      { icon: '📑', label: 'ARTIKEL', val: `${articles} TEXTE`, desc: '精读篇数' },
+      { icon: '🎯', label: 'GENAUIGKEIT', val: `${accuracy}%`, desc: '测验正答率' },
+      { icon: '⏱', label: 'ZEIT', val: `${minutes} MIN`, desc: '专注学时' },
+      { icon: '🗂', label: 'KARTEN', val: `${totalCards} GESAMT`, desc: '卡片总库' }
+    ];
+
+    const statHtml = statItems.map(s => `
+      <div class="marquee-item marquee-stat">
+        <span class="marquee-dot coral">●</span>
+        <span class="marquee-stat-label">${s.label}</span>
+        <span class="marquee-stat-val">${s.val}</span>
+        <span class="marquee-stat-desc">${s.desc}</span>
+      </div>
+    `).join('');
+
+    // Duplicate twice for seamless -50% translateX loop
+    bottomTrack.innerHTML = statHtml + statHtml;
+  }
+}
+
 export async function loadProgress() {
   const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24)) % GERMAN_MOTTOS.length;
   const motto = GERMAN_MOTTOS[dayIndex];
@@ -80,8 +143,14 @@ export async function loadProgress() {
     `;
   }
 
+  // Render initial marquee even before async stats arrive
+  renderMarquees();
+
   try {
     const stats = await api('/api/progress/stats');
+
+    // Render marquees with loaded real-time stats
+    renderMarquees(stats);
 
     const tStreak = document.getElementById('ticker-streak');
     const tTime = document.getElementById('ticker-time');
@@ -269,5 +338,6 @@ if (typeof window !== 'undefined') {
   window.scrollToFolioSection = scrollToFolioSection;
   window.loadProgress = loadProgress;
   window.renderTrendChart = renderTrendChart;
+  window.renderMarquees = renderMarquees;
 }
 

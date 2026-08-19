@@ -63,6 +63,8 @@ import {
   switchFolioPage,
   prevFolioPage,
   nextFolioPage,
+  scrollToFolioSection,
+  renderMarquees,
   loadProgress
 } from './folio.js';
 import {
@@ -626,10 +628,12 @@ Object.assign(window, {
   downloadBackupJson,
   uploadBackupJson,
 
-  // Leporello Folio
+  // Atelier Landing Page Folio
   switchFolioPage,
   prevFolioPage,
   nextFolioPage,
+  scrollToFolioSection,
+  renderMarquees,
   loadProgress,
 
   // Cloze

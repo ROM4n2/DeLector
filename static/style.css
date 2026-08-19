@@ -3604,177 +3604,231 @@ body.drawer-open .shadow-player {
   color: var(--rule);
 }
 
-/* Broadsheet Motto (Top Lede Quote) */
+/* ── View 4: Atelier Landing Page Folio ───────────────────── */
+
+/* Hero Stage: 0.85fr : 1.15fr Asymmetric Grid */
+.folio-hero-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 2rem;
+  align-items: start;
+  margin-bottom: 2rem;
+}
+
+.folio-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.folio-hero-kicker-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.folio-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--coral, var(--accent, #ED6F5C));
+  display: inline-block;
+  animation: pulseDot 2.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.folio-kicker {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--coral, var(--accent, #ED6F5C));
+}
+
+.folio-hero-title {
+  font-family: var(--serif-heading);
+  font-size: clamp(2.1rem, 3.8vw, 3.25rem);
+  font-weight: 700;
+  line-height: 1.06;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.folio-hero-title em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.folio-hero-title .folio-dot {
+  color: var(--coral, var(--accent, #ED6F5C));
+}
+
+.folio-hero-lead {
+  font-family: var(--serif-body);
+  font-size: 0.9375rem;
+  color: var(--pencil);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Broadsheet Motto (Top Lede Quote Card) */
 .dossier-motto-section {
-  background: var(--paper-card);
+  background: var(--paper-card, #fff);
   border: 1.5px solid var(--ink);
-  border-left: 6px solid var(--coral, var(--accent));
-  padding: 1.5rem 1.85rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 3px 3px 0 var(--ink);
+  border-left: 5px solid var(--coral, var(--accent, #ED6F5C));
+  padding: 1.15rem 1.35rem;
+  box-shadow: 2.5px 2.5px 0 var(--ink);
+  margin-top: 0.25rem;
   position: relative;
 }
 
 .dossier-motto-quote {
   font-family: var(--serif-heading);
-  font-size: 1.45rem;
+  font-size: 1.15rem;
   font-style: italic;
   line-height: 1.35;
   color: var(--ink);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
 }
 
 .dossier-motto-zh {
-  font-family: var(--serif-body);
-  font-size: 0.9375rem;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
   color: var(--pencil);
-  line-height: 1.5;
-  margin-bottom: 0.5rem;
+  line-height: 1.45;
+  margin-bottom: 0.35rem;
 }
 
 .dossier-motto-author {
   font-family: var(--mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.12em;
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-/* Anchor Nav Strip */
-.folio-nav-strip {
+/* Hero Quick Actions & Anchor Pills */
+.folio-hero-actions {
   display: flex;
-  justify-content: flex-start;
+  flex-wrap: wrap;
   align-items: center;
-  padding-top: 1rem;
-  border-top: 1px solid var(--rule-light);
-  flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
 }
 
-.folio-tabs {
-  display: inline-flex;
-  border: 1.5px solid var(--ink);
+.folio-anchor-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.folio-anchor-pill {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1.2px solid var(--ink);
   background: var(--paper-deep);
-  box-shadow: 2px 2px 0 var(--ink);
-  flex-wrap: wrap;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.folio-tab {
-  background: transparent;
-  border: none;
-  border-right: 1px solid var(--rule);
-  padding: 0.55rem 1.15rem;
-  cursor: pointer;
+.folio-anchor-pill:hover {
+  background: var(--ink);
+  color: var(--paper);
+  transform: translateY(-1px);
+}
+
+/* Right Column: 6 Core Ring Badges Exhibition Plate */
+.folio-hero-plate {
+  background: var(--paper-card, #fff);
+  border: 1.5px solid var(--ink);
+  box-shadow: 3.5px 3.5px 0 var(--ink);
+  padding: 1.35rem 1.5rem;
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  transition: all 0.15s ease;
+  gap: 1.1rem;
 }
 
-.folio-tab:last-child {
-  border-right: none;
-}
-
-.folio-tab.active {
-  background: var(--ink);
-  color: #fff;
-}
-
-.folio-page-idx {
+/* Four Corner Plus Marks (+) */
+.corner-mark {
+  position: absolute;
   font-family: var(--mono);
-  font-size: 0.5625rem;
-  letter-spacing: 0.14em;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--coral, var(--accent, #ED6F5C));
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
+.corner-mark.tl { top: -9px; left: -9px; }
+.corner-mark.tr { top: -9px; right: -9px; }
+.corner-mark.bl { bottom: -9px; left: -9px; }
+.corner-mark.br { bottom: -9px; right: -9px; }
+
+.folio-plate-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1.2px solid var(--line, rgba(21, 20, 15, 0.16));
+  padding-bottom: 0.65rem;
+}
+
+.folio-plate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.folio-plate-tag {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.folio-plate-coord {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
   color: var(--pencil);
   text-transform: uppercase;
 }
 
-.folio-tab.active .folio-page-idx {
-  color: var(--coral, var(--accent));
-}
-
-.folio-page-name {
-  font-family: var(--sans);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.folio-tab.active .folio-page-name {
-  color: var(--paper);
-}
-
-/* Continuous Exhibition Flow */
-.folio-exhibition {
-  display: flex;
-  flex-direction: column;
-  gap: 2.75rem;
-}
-
-.folio-section {
-  scroll-margin-top: 80px;
-}
-
-.folio-sec-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  border-bottom: 1.5px solid var(--ink);
-  padding-bottom: 0.5rem;
-  margin-bottom: 1.25rem;
-}
-
-.folio-sec-title {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-}
-
-.folio-sec-num {
-  font-family: var(--mono);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--coral, var(--accent));
-  letter-spacing: 0.05em;
-}
-
-.folio-sec-title h3 {
-  margin: 0;
-  font-family: var(--sans);
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-
-.folio-sec-tag {
-  font-family: var(--mono);
-  font-size: 0.625rem;
-  color: var(--ink-faint, var(--muted));
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-/* Ring Stat Badges Grid (Plate 1) */
+/* Ring Stat Badges Grid */
 .folio-stats-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-@media (min-width: 1280px) {
-  .folio-stats-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 0.75rem;
-  }
+  gap: 0.75rem;
 }
 
 .stat-badge {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 0.85rem;
-  background: var(--paper-card);
-  border: 1.5px solid var(--ink);
-  box-shadow: 2px 2px 0 var(--ink);
+  gap: 0.65rem;
+  padding: 0.75rem 0.8rem;
+  background: var(--paper-deep);
+  border: 1.2px solid var(--ink);
+  box-shadow: 1.5px 1.5px 0 var(--ink);
   box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
@@ -3783,12 +3837,13 @@ body.drawer-open .shadow-player {
 
 .stat-badge:hover {
   transform: translateY(-2px);
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: 2.5px 2.5px 0 var(--ink);
+  background: #fff;
 }
 
 .stat-ring {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   border: 1.5px solid var(--ink);
   display: inline-flex;
@@ -3798,7 +3853,7 @@ body.drawer-open .shadow-player {
   font-size: 0.8125rem;
   font-weight: 700;
   flex-shrink: 0;
-  background: var(--paper-tint);
+  background: #fff;
   color: var(--ink);
   box-sizing: border-box;
 }
@@ -3808,9 +3863,9 @@ body.drawer-open .shadow-player {
 }
 
 .stat-ring.coral {
-  border-color: var(--coral, var(--accent));
-  color: var(--coral, var(--accent));
-  background: var(--note-pink, rgba(237, 111, 92, 0.08));
+  border-color: var(--coral, var(--accent, #ED6F5C));
+  color: var(--coral, var(--accent, #ED6F5C));
+  background: rgba(237, 111, 92, 0.08);
 }
 
 .stat-text {
@@ -3824,11 +3879,11 @@ body.drawer-open .shadow-player {
 
 .stat-text b {
   display: block;
-  font-size: 0.78125rem;
+  font-size: 0.75rem;
   color: var(--ink);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   margin-bottom: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -3842,20 +3897,156 @@ body.drawer-open .shadow-player {
   text-overflow: ellipsis;
 }
 
-/* Plate 2: Two-Col Grid (Spectrum & Trend) */
-.folio-two-col {
+.folio-plate-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed var(--rule, #D8D0C2);
+  padding-top: 0.6rem;
+}
+
+.folio-plate-meta {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ── Dual-Row Reverse Wire Marquee Dynamic Ticker ──────────── */
+.folio-marquee-section {
+  background: var(--paper-deep);
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  padding: 0.5rem 0;
+  margin: 1.75rem 0 2.25rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.marquee-row {
+  overflow: hidden;
+  padding: 0.25rem 0;
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+.marquee-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.25rem;
+  width: max-content;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.marquee-row.marquee-forward .marquee-track {
+  animation: marqueeLeft 42s linear infinite;
+}
+
+.marquee-row.marquee-reverse .marquee-track {
+  animation: marqueeRight 48s linear infinite;
+}
+
+.marquee-row:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes marqueeLeft {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marqueeRight {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-row.marquee-forward .marquee-track,
+  .marquee-row.marquee-reverse .marquee-track {
+    animation: none;
+  }
+}
+
+.marquee-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+
+.marquee-dot {
+  color: var(--coral, var(--accent, #ED6F5C));
+  font-size: 0.6875rem;
+}
+
+.marquee-dot.coral {
+  color: var(--coral, var(--accent, #ED6F5C));
+}
+
+.marquee-quote .marquee-text-de {
+  font-family: var(--serif-heading);
+  font-style: italic;
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+
+.marquee-quote .marquee-text-zh {
+  font-family: var(--sans);
+  color: var(--pencil);
+  font-size: 0.75rem;
+}
+
+.marquee-quote .marquee-tag {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.marquee-stat .marquee-stat-label {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.08em;
+}
+
+.marquee-stat .marquee-stat-val {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--coral, var(--accent, #ED6F5C));
+}
+
+.marquee-stat .marquee-stat-desc {
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+}
+
+/* ── Dual Panel Grids (Row 1 & Row 2) ──────────────────────── */
+.folio-grid-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .dossier-panel {
-  background: var(--paper-card);
+  background: var(--paper-card, #fff);
   border: 1.5px solid var(--ink);
-  padding: 1.5rem 1.75rem;
+  padding: 1.35rem 1.5rem;
   box-shadow: 2.5px 2.5px 0 var(--ink);
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .dossier-panel-head {
@@ -3872,7 +4063,7 @@ body.drawer-open .shadow-player {
   font-size: 0.5875rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--coral, var(--accent));
+  color: var(--coral, var(--accent, #ED6F5C));
   display: block;
   margin-bottom: 2px;
 }
@@ -3880,7 +4071,7 @@ body.drawer-open .shadow-player {
 .dossier-panel-title h3 {
   margin: 0;
   font-family: var(--serif-heading);
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   color: var(--ink);
 }
 
@@ -3981,7 +4172,7 @@ body.drawer-open .shadow-player {
   text-transform: uppercase;
 }
 
-/* Plate 3: Error Ledger */
+/* Error Ledger */
 .dossier-errors-table {
   display: flex;
   flex-direction: column;
@@ -3996,7 +4187,7 @@ body.drawer-open .shadow-player {
   padding: 0.75rem 1.1rem;
   background: #fff;
   border: 1.5px solid var(--ink);
-  border-left: 5px solid var(--coral, var(--cherry));
+  border-left: 5px solid var(--coral, var(--cherry, #ED6F5C));
   box-shadow: 1.5px 1.5px 0 var(--ink);
   transition: transform 0.1s ease;
 }
@@ -4020,7 +4211,7 @@ body.drawer-open .shadow-player {
 .error-col-stat {
   font-family: var(--mono);
   font-size: 0.6875rem;
-  color: var(--coral, var(--cherry));
+  color: var(--coral, var(--cherry, #ED6F5C));
   text-align: right;
   font-weight: 700;
 }
@@ -4035,21 +4226,21 @@ body.drawer-open .shadow-player {
   border: 1px dashed var(--rule);
 }
 
-/* Plate 4: Wax Seal Milestones */
+/* Wax Seal Milestones */
 .dossier-stamps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
 }
 
 .dossier-stamp {
   border: 1.5px dashed var(--rule);
   background: var(--paper-tint);
-  padding: 1.25rem 1.35rem;
+  padding: 1.1rem 1.25rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 120px;
+  min-height: 115px;
   position: relative;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -4057,7 +4248,7 @@ body.drawer-open .shadow-player {
 .dossier-stamp.unlocked {
   border: 1.5px solid var(--ink);
   background: #fff;
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
   transform: rotate(-0.5deg);
 }
 
@@ -4073,7 +4264,7 @@ body.drawer-open .shadow-player {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .stamp-seal-tag {
@@ -4098,10 +4289,10 @@ body.drawer-open .shadow-player {
 
 .stamp-title {
   font-family: var(--serif-heading);
-  font-size: 1.125rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--ink);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 
 .stamp-desc {
@@ -4111,8 +4302,8 @@ body.drawer-open .shadow-player {
 }
 
 .stamp-status-line {
-  margin-top: 0.75rem;
-  padding-top: 0.4rem;
+  margin-top: 0.65rem;
+  padding-top: 0.35rem;
   border-top: 1px dashed var(--rule-light);
   font-family: var(--mono);
   font-size: 0.625rem;
@@ -4132,31 +4323,28 @@ body.drawer-open .shadow-player {
 }
 
 @media (max-width: 1024px) {
+  .folio-hero-stage {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  .folio-grid-row {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
   .folio-stats-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.875rem;
-  }
-  .folio-two-col {
-    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 }
 
 @media (max-width: 600px) {
   #view-progress { padding: 1.5rem 1rem 4rem; }
-  .dossier-headline { font-size: 1.75rem; }
+  .folio-hero-title { font-size: 1.85rem; }
   .folio-stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
+    gap: 0.6rem;
   }
-  .folio-tabs {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-  .folio-tab {
-    border-bottom: 1px solid var(--rule);
-  }
-  .folio-stamps-grid {
+  .dossier-stamps-grid {
     grid-template-columns: 1fr;
   }
   .dossier-error-row {

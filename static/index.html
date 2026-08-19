@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=3.6.1">
+  <link rel="stylesheet" href="/style.css?v=3.6.2">
 </head>
 <body>
 
@@ -19,7 +19,7 @@
     <div class="topbar-inner">
       <span><b>DELECTOR · 2026</b> · Vol. 03 / Issue Nº 06</span>
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <span class="right"><span class="pulse"></span>System · v3.6.1 Online</span>
+      <span class="right"><span class="pulse"></span>System · v3.6.2 Online</span>
     </div>
   </div>
 
@@ -149,61 +149,63 @@
     <div id="cards-container"></div>
   </main>
 
-  <!-- ── View 4: Continuous Exhibition Folio (Journal Style Ledger) ─ -->
+  <!-- ── View 4: Atelier Landing Page Folio (Atelier Style Ledger) ─ -->
   <main id="view-progress" class="view">
-    <!-- Masthead & Ticker Ribbon -->
-    <header class="dossier-masthead">
-      <div class="dossier-masthead-top">
-        <div class="dossier-title-wrap">
-          <span class="dossier-kicker">AKADEMISCHES STUDIENBUCH · LERNFORTSCHRITT</span>
-          <h2 class="dossier-headline">每日精读台账 <span class="dossier-headline-sub">FOLIO</span></h2>
+    <!-- Hero Stage: 0.85fr : 1.15fr Asymmetric Grid -->
+    <section id="folio-sec-metrics" class="folio-hero-stage">
+      <!-- Left Column: Editorial Headline, German Motto & Actions -->
+      <div class="folio-hero-copy">
+        <div class="folio-hero-kicker-wrap">
+          <span class="folio-pulse"></span>
+          <span class="folio-kicker">ATELIER FÜR DEUTSCHE PHILOLOGIE · LERNFORTSCHRITT</span>
         </div>
-        <div id="dossier-ticker" class="dossier-ticker">
-          <span class="ticker-item"><span class="ticker-label">STATUS</span> <b id="ticker-status">AKTIV</b></span>
-          <span class="ticker-sep">/</span>
-          <span class="ticker-item"><span class="ticker-label">STREAK</span> <b id="ticker-streak">0 TAGE</b></span>
-          <span class="ticker-sep">/</span>
-          <span class="ticker-item"><span class="ticker-label">ZEIT</span> <b id="ticker-time">0 MIN</b></span>
-        </div>
-      </div>
+        <h1 class="folio-hero-title">
+          Exzellenz durch<br>
+          <em>Tägliche Hingabe.</em><span class="folio-dot">.</span>
+        </h1>
+        <p class="folio-hero-lead">
+          每日精读台账 · 记录德语语言之界限与认知之拓展。日积跬步，终至千里。
+        </p>
 
-      <!-- German Motto / Quote Card (Top Lede) -->
-      <section id="progress-motto" class="dossier-motto-section"></section>
+        <!-- German Motto / Quote Card (Top Lede) -->
+        <div id="progress-motto" class="dossier-motto-section"></div>
 
-      <!-- Exhibition Navigation Anchor Bar -->
-      <div class="folio-nav-strip">
-        <div class="folio-tabs">
-          <button id="folio-tab-0" class="folio-tab active" onclick="switchFolioPage(0)">
-            <span class="folio-page-idx">❖ #01</span>
-            <span class="folio-page-name">研读总纲 · METRIKEN</span>
+        <!-- Quick Jump & Action Strip -->
+        <div class="folio-hero-actions">
+          <button class="btn btn-dark" onclick="openQuizOverlay()" title="启动错题与弱项专项测验">
+            <span>⚔ 专项重测 (Quiz)</span>
           </button>
-          <button id="folio-tab-1" class="folio-tab" onclick="switchFolioPage(1)">
-            <span class="folio-page-idx">❖ #02</span>
-            <span class="folio-page-name">谱系与轨迹 · SPEKTRUM</span>
+          <button class="btn btn-secondary" onclick="show('articles')" title="进入德语外刊与文稿库">
+            <span>📚 文稿研读库</span>
           </button>
-          <button id="folio-tab-2" class="folio-tab" onclick="switchFolioPage(2)">
-            <span class="folio-page-idx">❖ #03</span>
-            <span class="folio-page-name">错题攻坚 · SCHWACHSTELLEN</span>
-          </button>
-          <button id="folio-tab-3" class="folio-tab" onclick="switchFolioPage(3)">
-            <span class="folio-page-idx">❖ #04</span>
-            <span class="folio-page-name">学术勋章 · SIEGEL</span>
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <!-- Continuous Exhibition Flow -->
-    <div class="folio-exhibition">
-
-      <!-- 展台 1: 6大核心研读指标 Ring Stat Badges -->
-      <section id="folio-sec-metrics" class="folio-section">
-        <div class="folio-sec-head">
-          <div class="folio-sec-title">
-            <span class="folio-sec-num">§ 01</span>
-            <h3>核心研读指标 · KERNMETRIKEN</h3>
+          <div class="folio-anchor-nav">
+            <button class="folio-anchor-pill" onclick="scrollToFolioSection('folio-sec-spectrum')" title="跳转至欧标分布与30天轨迹">
+              § 01 谱系与轨迹 ↓
+            </button>
+            <button class="folio-anchor-pill" onclick="scrollToFolioSection('folio-sec-errors')" title="跳转至错题攻坚账本">
+              § 02 错题攻坚 ↓
+            </button>
+            <button class="folio-anchor-pill" onclick="scrollToFolioSection('folio-sec-milestones')" title="跳转至学术勋章展台">
+              § 03 学术勋章 ↓
+            </button>
           </div>
-          <span class="folio-sec-tag">[ PLATE Nº 01 / METRICS ]</span>
+        </div>
+      </div>
+
+      <!-- Right Column: 6 Core Ring Badges Exhibition Plate -->
+      <div class="folio-hero-plate">
+        <!-- Four Corner Marks -->
+        <span class="corner-mark tl">+</span>
+        <span class="corner-mark tr">+</span>
+        <span class="corner-mark bl">+</span>
+        <span class="corner-mark br">+</span>
+
+        <div class="folio-plate-header">
+          <div class="folio-plate-badge">
+            <span class="folio-pulse"></span>
+            <span class="folio-plate-tag">ECHTZEIT-METRIKEN · LIVE</span>
+          </div>
+          <span class="folio-plate-coord">[ PLATE Nº 01 / STATISTIK ]</span>
         </div>
 
         <div class="folio-stats-grid">
@@ -256,90 +258,85 @@
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- 展台 2: 欧标掌握度阶梯与 30 天墨线留存走势 (双栏网格) -->
-      <section id="folio-sec-spectrum" class="folio-section">
-        <div class="folio-sec-head">
-          <div class="folio-sec-title">
-            <span class="folio-sec-num">§ 02</span>
-            <h3>谱系构成与研读轨迹 · SPEKTRUM &amp; VERLAUF</h3>
-          </div>
-          <span class="folio-sec-tag">[ PLATE Nº 02 / ANALYTICS ]</span>
+        <div class="folio-plate-footer">
+          <span class="folio-plate-meta">DEUTSCHSTUDIEN · CONTINUOUS FEED</span>
+          <span class="folio-plate-meta">AUTO-SYNCHRONISIERT</span>
         </div>
+      </div>
+    </section>
 
-        <div class="folio-two-col">
-          <!-- 左栏：CEFR 欧标掌握度阶梯矩阵 -->
-          <div class="dossier-panel">
-            <div class="dossier-panel-head">
-              <div class="dossier-panel-title">
-                <span class="dossier-panel-code">SPEKTRUM · CEFR MATRIX</span>
-                <h3>卡片库欧标阶梯分布</h3>
-              </div>
-              <div class="dossier-panel-meta" id="progress-total-cards">GESAMT: 0 KARTEN</div>
-            </div>
-            <div id="progress-cefr-bar" class="reader-heatbar" style="margin-top:0.75rem;"></div>
-            <div id="progress-cefr-ladder" class="folio-cefr-ladder"></div>
+    <!-- Dual-Row Reverse Wire Marquee Dynamic Ticker -->
+    <section class="folio-marquee-section">
+      <div class="marquee-row marquee-forward">
+        <div id="marquee-row-top" class="marquee-track"></div>
+      </div>
+      <div class="marquee-row marquee-reverse">
+        <div id="marquee-row-bottom" class="marquee-track"></div>
+      </div>
+    </section>
+
+    <!-- Dual Panel Grids -->
+    <!-- Row 1: CEFR Spectrum & 30-Day Trend Chart -->
+    <section id="folio-sec-spectrum" class="folio-grid-row">
+      <!-- Left Panel: CEFR Spectrum Matrix -->
+      <div class="dossier-panel">
+        <div class="dossier-panel-head">
+          <div class="dossier-panel-title">
+            <span class="dossier-panel-code">§ 01 · SPEKTRUM · CEFR MATRIX</span>
+            <h3>卡片库欧标阶梯分布</h3>
           </div>
+          <div class="dossier-panel-meta" id="progress-total-cards">GESAMT: 0 KARTEN</div>
+        </div>
+        <div id="progress-cefr-bar" class="reader-heatbar" style="margin-top:0.75rem;"></div>
+        <div id="progress-cefr-ladder" class="folio-cefr-ladder"></div>
+      </div>
 
-          <!-- 右栏：30 天墨线留存走势图 -->
-          <div class="dossier-panel">
-            <div class="dossier-panel-head">
-              <div class="dossier-panel-title">
-                <span class="dossier-panel-code">VERLAUF · 30 TAGE</span>
-                <h3>30 天研读与卡片新增轨迹</h3>
-              </div>
-              <div class="dossier-panel-meta">TÄGLICHE CHRONIK</div>
-            </div>
-            <div class="dossier-chart-container">
-              <svg id="progress-chart-svg" class="dossier-chart-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
-              <div class="dossier-chart-axis">
-                <span id="chart-axis-start">● VOR 30 TAGEN</span>
-                <span id="chart-axis-end">● HEUTE</span>
-              </div>
-            </div>
+      <!-- Right Panel: 30-Day Trend Chart -->
+      <div class="dossier-panel">
+        <div class="dossier-panel-head">
+          <div class="dossier-panel-title">
+            <span class="dossier-panel-code">§ 01 · VERLAUF · 30 TAGE</span>
+            <h3>30 天研读与卡片新增轨迹</h3>
+          </div>
+          <div class="dossier-panel-meta">TÄGLICHE CHRONIK</div>
+        </div>
+        <div class="dossier-chart-container">
+          <svg id="progress-chart-svg" class="dossier-chart-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
+          <div class="dossier-chart-axis">
+            <span id="chart-axis-start">● VOR 30 TAGEN</span>
+            <span id="chart-axis-end">● HEUTE</span>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <!-- 展台 3: 重点易错词汇梳理台账 -->
-      <section id="folio-sec-errors" class="folio-section">
-        <div class="folio-sec-head">
-          <div class="folio-sec-title">
-            <span class="folio-sec-num">§ 03</span>
-            <h3>重点易错词汇攻坚 · SCHWACHSTELLEN-ANALYSE</h3>
+    <!-- Row 2: Error Focus Ledger & Achievements Seals -->
+    <section id="folio-sec-errors" class="folio-grid-row">
+      <!-- Left Panel: Error Focus Ledger -->
+      <div id="progress-errors-wrap" class="dossier-panel">
+        <div class="dossier-panel-head">
+          <div class="dossier-panel-title">
+            <span class="dossier-panel-code">§ 02 · ERROR LEDGER</span>
+            <h3>高频混淆与重点错题攻坚</h3>
           </div>
-          <span class="folio-sec-tag">[ PLATE Nº 03 / ERRORS ]</span>
+          <button class="btn btn-dark" style="font-size:0.75rem;padding:0.35rem 0.85rem;" onclick="openQuizOverlay()">⚔ 专项重测</button>
         </div>
+        <div id="progress-errors-list" class="dossier-errors-table"></div>
+      </div>
 
-        <div id="progress-errors-wrap" class="dossier-panel">
-          <div class="dossier-panel-head">
-            <div class="dossier-panel-title">
-              <span class="dossier-panel-code">ERROR LEDGER</span>
-              <h3>高频混淆与错题账本</h3>
-            </div>
-            <button class="btn btn-dark" style="font-size:0.75rem;padding:0.35rem 0.85rem;" onclick="openQuizOverlay()">⚔ 专项重测</button>
+      <!-- Right Panel: Achievements Seals -->
+      <div id="folio-sec-milestones" class="dossier-panel">
+        <div class="dossier-panel-head">
+          <div class="dossier-panel-title">
+            <span class="dossier-panel-code">§ 03 · SIEGEL &amp; MEILENSTEINE</span>
+            <h3>歌德备考学术成就勋章</h3>
           </div>
-          <div id="progress-errors-list" class="dossier-errors-table"></div>
+          <div class="dossier-panel-meta">LEISTUNGSNACHWEIS</div>
         </div>
-      </section>
-
-      <!-- 展台 4: 歌德备考学术勋章印章展台 -->
-      <section id="folio-sec-milestones" class="folio-section">
-        <div class="folio-sec-head">
-          <div class="folio-sec-title">
-            <span class="folio-sec-num">§ 04</span>
-            <h3>歌德备考学术成就勋章 · SIEGEL &amp; MEILENSTEINE</h3>
-          </div>
-          <span class="folio-sec-tag">[ PLATE Nº 04 / ACHIEVEMENTS ]</span>
-        </div>
-
-        <div class="dossier-panel">
-          <div id="progress-milestones" class="dossier-stamps-grid"></div>
-        </div>
-      </section>
-
-    </div>
+        <div id="progress-milestones" class="dossier-stamps-grid"></div>
+      </div>
+    </section>
   </main>
 
 
@@ -848,7 +845,7 @@
     </button>
   </nav>
 
-  <script type="module" src="/js/main.js?v=3.6.1"></script>
+  <script type="module" src="/js/main.js?v=3.6.2"></script>
 
 
 </body>
