@@ -22,7 +22,9 @@ android {
         python {
             version "3.10"
             pip {
-                install "fastapi>=0.109.0"
+                // FastAPI >=0.100 depends on pydantic v2 -> pydantic-core (Rust/maturin),
+                // which has no prebuilt Android wheels and fails in CI during Chaquopy pip resolve.
+                install "fastapi==0.95.2"
                 install "uvicorn>=0.27.0"
                 install "httpx>=0.26.0"
                 install "genanki>=0.13.0"
