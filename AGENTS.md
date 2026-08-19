@@ -157,7 +157,8 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 | v3.3.0 `7009841` | **feat**: 德语外刊与学习源 RSS 一键订阅抓取（DW、Tagesschau、DLF、Spiegel、Zeit） |
 | `296d367` | **fix**: 修正 DLF/DW 新 RSS 源端点，支持 RDF 1.0/Atom/RSS 通用解析与正文提取增强 + 31 测试全绿 |
 | v3.4.0 | **feat**: 德语深度语言学引擎（556+ 不规则动词三态表 + 递归复合词拆解 + spaCy 可分动词框形双向联动高亮）+ 35 测试全绿 |
-| v3.5.0 (HEAD) | **feat**: 德语拓扑五场域与从句树句法引擎（`syntax_tree.py`：VF/LK/MF/RK/NF 拓扑场域切分 + 5 大核心从句 AST 递归树 + 被动/虚拟式框形识别）+ 52 测试全绿 |
+| v3.5.0 `0e0d8d8` | **feat**: 德语拓扑五场域与从句树句法引擎（`syntax_tree.py`：VF/LK/MF/RK/NF 拓扑场域切分 + 5 大核心从句 AST 递归树 + 被动/虚拟式框形识别）+ 52 测试全绿 |
+| v3.5.0 (HEAD) | **feat & build**: 全局设置弹窗（`deepseek-v4-flash` + 毫秒级延迟连通测试）+ Windows 便携版 (`package_windows.py`) 与 Android 独立单机版 (`android/`) CI/CD + 54 测试全绿 |
 
 ---
 
@@ -169,10 +170,10 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 - [x] ~~3D 卡盒与 Leporello 台账无法交互~~ — 已修复：补全所有 handler 并显式挂载到 `window`
 - [x] ~~`deleteCard` 缺 `async` 导致全页面 JS 崩溃~~ — 已修复
 - [x] ~~Leporello 台账第 2/3 页墨线折线图在某些浏览器下可能有精度问题~~ — 已修复：`normalizeCefrPct()` 最大余数法整数归一，`gap:1px` 改为段内 `border-right`，`min-width:1px; flex-shrink:0`
-- [x] ~~`/api/ai/note-assist` 需要 `.env` 中配置 `DEEPSEEK_API_KEY`~~ — 本机已配；未配时后端返回 `_stub:true` + 打印 warning；前端显示状态提示而非污染笔记框
-- [x] ~~安卓 PWA「添加到主屏幕」后侧边抽屉（bottom sheet）触屏体验待实测验证~~ — 已改善：新增半透明 backdrop 点击关闭、`overflow:hidden` 锁定背景滚动、`touch-action:pan-y` + `overscroll-behavior:contain` 防止穿透
+- [x] ~~应用内配置 API Key~~ — 已实现：全局设置弹窗（`z-index: 99999`）、`deepseek-v4-flash` 直连与毫秒级延迟测试
 - [x] ~~外刊 RSS 历史链接 404 及 DW RDF 格式解析失败~~ — 已修复：更新官方有效 RSS 地址，实现通用 XML 遍历并增强 `<article>` 抽取
-- [x] ~~德语拓扑五场域与从句树句法引擎（`syntax_tree.py`）~~ — 已实现：5 场域精确切分 + 5 大句式 AST 递归树 + 52 测试全绿
+- [x] ~~德语拓扑五场域与从句树句法引擎（`syntax_tree.py`）~~ — 已实现：5 场域精确切分 + 5 大句式 AST 递归树 + 54 测试全绿
+- [x] ~~打包发布（Windows 绿色免安装版 + Android 独立单机 APK）~~ — 已实现：`package_windows.py` 生成 143MB 独立免安装包，GitHub Actions CI/CD 自动化多端流水线已部署
 
 ---
 
@@ -185,7 +186,7 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  de_core_news_md / de_core_news_sm（已安装，无需联网）
 测试:      pytest -v
-当前测试:  52 / 52 全部通过（100% Green）
+当前测试:  54 / 54 全部通过（100% Green）
 ```
 
 
