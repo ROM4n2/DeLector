@@ -302,6 +302,7 @@ CEFR_DICT = {
 }
 
 from core_dict import lookup_core_vocab, get_core_cefr_level
+from linguistics import lookup_irregular_verb, split_komposita
 
 def get_cefr_level(lemma: str) -> str:
     if not lemma:
@@ -371,7 +372,9 @@ def process_german_text(text: str) -> Dict[str, Any]:
     all_tokens = []
     for sent_idx, sent in enumerate(doc.sents):
         tokens = []
-        for t in sent:
+        token_map = {}
+        spacy_tokens = list(sent)
+        for t in spacy_tokens:
             morph = t.morph.to_dict()
             is_word = not t.is_punct and not t.is_space
             tok = {
@@ -386,7 +389,33 @@ def process_german_text(text: str) -> Dict[str, Any]:
                 "is_space": t.is_space
             }
             tokens.append(tok)
+            token_map[t.i] = tok
             all_tokens.append(tok)
+
+        # Detect separable verb prefixes in sentence (compound:prt or svp)
+        for t in spacy_tokens:
+            if t.dep_ in ("compound:prt", "svp", "ptkv"):
+                head = t.head
+                if head and head.i in token_map:
+                    prefix_str = (t.lemma_ or t.text).lower().strip()
+                    verb_lemma = (head.lemma_ or head.text).lower().strip()
+                    if verb_lemma.startswith(prefix_str):
+                        sep_lemma = verb_lemma
+                    else:
+                        sep_lemma = f"{prefix_str}{verb_lemma}"
+                    
+                    verb_tok = token_map[head.i]
+                    prefix_tok = token_map[t.i]
+                    
+                    verb_tok["separable"] = {
+                        "sep_prefix_id": t.i,
+                        "sep_lemma": sep_lemma
+                    }
+                    prefix_tok["separable"] = {
+                        "sep_verb_id": head.i,
+                        "sep_lemma": sep_lemma
+                    }
+
         sentences.append({"id": sent_idx, "text": sent.text, "tokens": tokens})
     stats = calculate_cefr_stats(all_tokens)
     return {"sentence_count": len(sentences), "sentences": sentences, "stats": stats}
@@ -782,9 +811,10 @@ class VocabLookupReq(BaseModel):
 @app.post("/api/lookup/vocab")
 async def lookup_vocab(req: VocabLookupReq):
     # Tier 1: Local core dictionary hit (0ms zero-latency, 100% offline)
+    res = {}
     local_hit = lookup_core_vocab(req.target_word)
     if local_hit:
-        return {
+        res = {
             "definition_zh": local_hit.get("definition_zh", ""),
             "plural": local_hit.get("plural", ""),
             "gender": local_hit.get("gender"),
@@ -793,50 +823,93 @@ async def lookup_vocab(req: VocabLookupReq):
             "synonyms": [],
             "source": "local_dict"
         }
-
-    # Tier 2: DeepSeek AI contextual lookup if API key is configured
-    key = os.environ.get("DEEPSEEK_API_KEY", "")
-    if not key:
-        return {
-            "definition_zh": "",
-            "plural": "",
-            "synonyms": [],
-            "source": "none"
-        }
-
-    user_content = f"句子: \"{req.sentence}\"\n目标词汇: \"{req.target_word}\""
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                "https://api.deepseek.com/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": "deepseek-chat",
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_VOCAB_PROMPT},
-                        {"role": "user", "content": user_content}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-            )
-            if resp.status_code != 200:
-                return {
+    else:
+        # Tier 2: DeepSeek AI contextual lookup if API key is configured
+        key = os.environ.get("DEEPSEEK_API_KEY", "")
+        if not key:
+            res = {
+                "definition_zh": "",
+                "plural": "",
+                "synonyms": [],
+                "source": "none"
+            }
+        else:
+            user_content = f"句子: \"{req.sentence}\"\n目标词汇: \"{req.target_word}\""
+            try:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.post(
+                        "https://api.deepseek.com/chat/completions",
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": "deepseek-chat",
+                            "messages": [
+                                {"role": "system", "content": SYSTEM_VOCAB_PROMPT},
+                                {"role": "user", "content": user_content}
+                            ],
+                            "response_format": {"type": "json_object"}
+                        }
+                    )
+                    if resp.status_code != 200:
+                        res = {
+                            "definition_zh": "",
+                            "plural": "",
+                            "synonyms": [],
+                            "source": "ai_error"
+                        }
+                    else:
+                        content = resp.json()["choices"][0]["message"]["content"]
+                        res = json.loads(content)
+                        res["source"] = "ai"
+            except Exception:
+                res = {
                     "definition_zh": "",
                     "plural": "",
                     "synonyms": [],
-                    "source": "ai_error"
+                    "source": "ai_exception"
                 }
-            content = resp.json()["choices"][0]["message"]["content"]
-            res = json.loads(content)
-            res["source"] = "ai"
-            return res
-    except Exception:
-        return {
-            "definition_zh": "",
-            "plural": "",
-            "synonyms": [],
-            "source": "ai_exception"
+
+    # Morphology & Linguistics Layer:
+    # 1. Irregular / Strong verbs Stammformen
+    stamm = lookup_irregular_verb(req.target_word)
+    if stamm:
+        inf = getattr(stamm, "infinitiv", None) or (stamm.get("infinitiv") if hasattr(stamm, "get") else "")
+        praet = getattr(stamm, "praeteritum", None) or (stamm.get("praeteritum") if hasattr(stamm, "get") else "")
+        p2 = getattr(stamm, "partizip2", None) or (stamm.get("partizip2") if hasattr(stamm, "get") else "")
+        hilf = getattr(stamm, "hilfsverb", None) or (stamm.get("hilfsverb") if hasattr(stamm, "get") else "")
+        stamm_def = getattr(stamm, "definition_zh", None) or (stamm.get("definition_zh") if hasattr(stamm, "get") else "")
+
+        res["stammformen"] = {
+            "infinitiv": inf,
+            "praeteritum": praet,
+            "partizip2": p2,
+            "hilfsverb": hilf
         }
+        if not res.get("definition_zh") and stamm_def:
+            res["definition_zh"] = stamm_def
+            if res.get("source") == "none":
+                res["source"] = "linguistics"
+
+    # 2. Komposita compound word decomposition
+    target_clean = req.target_word.strip()
+    if len(target_clean) >= 7:
+        parts = split_komposita(target_clean)
+        if len(parts) >= 2:
+            res["komposita"] = []
+            for p in parts:
+                p_copy = dict(p)
+                if "definition_zh" not in p_copy and "def_zh" in p_copy:
+                    p_copy["definition_zh"] = p_copy["def_zh"]
+                if "def_zh" not in p_copy and "definition_zh" in p_copy:
+                    p_copy["def_zh"] = p_copy["definition_zh"]
+                res["komposita"].append(p_copy)
+            if not res.get("definition_zh"):
+                sub_defs = [p.get("definition_zh") or p.get("def_zh") for p in parts if (p.get("definition_zh") or p.get("def_zh"))]
+                if sub_defs:
+                    res["definition_zh"] = " + ".join(sub_defs)
+                    if res.get("source") == "none":
+                        res["source"] = "linguistics"
+
+    return res
 
 
 @app.post("/api/cards/vocab")

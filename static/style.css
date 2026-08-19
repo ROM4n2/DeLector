@@ -5093,3 +5093,111 @@ body.drawer-open .shadow-player {
   cursor: not-allowed;
 }
 
+/* ── Morphology: Stammformen & Komposita & Separable Verbs ─────────────────── */
+.stammformen-banner {
+  margin-top: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(192, 57, 43, 0.06);
+  border-left: 3px solid var(--cherry, #c0392b);
+  border-radius: 0 4px 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.stamm-tag {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--cherry, #c0392b);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.stamm-formula {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.9375rem;
+  color: var(--ink, #1a1a1a);
+  letter-spacing: 0.02em;
+}
+.stamm-formula strong {
+  color: var(--ink, #1a1a1a);
+}
+.stamm-formula em {
+  font-style: italic;
+  color: var(--pencil, #7f8c8d);
+  margin-right: 2px;
+}
+
+.komposita-banner {
+  margin-top: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--paper-warm, #f8f6f0);
+  border: 1px dashed var(--rule, #dcd7cb);
+  border-radius: 4px;
+}
+.komposita-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--pencil, #7f8c8d);
+  margin-bottom: 0.35rem;
+}
+.komposita-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.komposita-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--paper-card, #ffffff);
+  border: 1px solid var(--rule, #dcd7cb);
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.komposita-pill:hover {
+  background: var(--paper-warm, #f8f6f0);
+  border-color: var(--ink, #1a1a1a);
+  transform: translateY(-1px);
+}
+.komposita-pill .k-word {
+  font-weight: 700;
+  color: var(--ink, #1a1a1a);
+}
+.komposita-pill .k-gender {
+  font-size: 0.625rem;
+  color: var(--pencil, #7f8c8d);
+  font-family: var(--mono, monospace);
+}
+.komposita-pill .k-def {
+  font-size: 0.6875rem;
+  color: var(--pencil, #555);
+}
+.komposita-plus {
+  font-weight: 700;
+  color: var(--pencil, #aaa);
+  font-size: 0.75rem;
+}
+
+/* Linked Separable Verbs Highlights in Reader */
+.tok.is-separable {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--accent, #2980b9);
+  text-underline-offset: 3px;
+}
+.tok.linked-separable {
+  background-color: rgba(41, 128, 185, 0.2) !important;
+  color: var(--ink, #111) !important;
+  outline: 1.5px dashed var(--accent, #2980b9);
+  border-radius: 2px;
+  animation: pulse-linked 1.5s infinite alternate ease-in-out;
+}
+@keyframes pulse-linked {
+  from { background-color: rgba(41, 128, 185, 0.15); }
+  to { background-color: rgba(41, 128, 185, 0.35); }
+}
+
+

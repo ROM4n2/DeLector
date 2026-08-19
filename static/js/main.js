@@ -27,8 +27,10 @@ import {
   deleteCurrentNote,
   playSelectedAudio,
   downloadStudyGuide,
-  refreshCardCounters
+  refreshCardCounters,
+  inspectSubWord
 } from './reader.js';
+
 import {
   setCardSegment,
   setCardViewMode,
@@ -125,7 +127,10 @@ export async function loadFeedSources() {
   try {
     const res = await api('/api/feed/sources');
     cachedFeedSources = res.sources || [];
-    if (!cachedFeedSources.length) return;
+    if (!cachedFeedSources.length) {
+      bar.innerHTML = '<span style="color:var(--pencil);font-size:0.75rem;">暂无可用的德语订阅源</span>';
+      return;
+    }
 
     bar.innerHTML = cachedFeedSources.map(s => `
       <button class="feed-source-pill ${s.id === (activeFeedId || cachedFeedSources[0].id) ? 'active' : ''}"
@@ -142,9 +147,11 @@ export async function loadFeedSources() {
       loadFeedItems(initial.url);
     }
   } catch (e) {
-    bar.innerHTML = '<span style="color:var(--pencil);font-size:0.75rem;">无法加载订阅源</span>';
+    console.error('Failed to load feed sources:', e);
+    bar.innerHTML = `<span style="color:var(--cherry);font-size:0.75rem;">无法加载订阅源: ${e.message || '网络或服务异常'}（请重启 start.bat）</span>`;
   }
 }
+
 
 export function selectFeedSource(feedId) {
   activeFeedId = feedId;
@@ -426,6 +433,7 @@ Object.assign(window, {
   deleteCurrentNote,
   playSelectedAudio,
   downloadStudyGuide,
+  inspectSubWord,
 
   // Cards & Deck
   setCardSegment,

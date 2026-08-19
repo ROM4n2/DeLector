@@ -151,7 +151,9 @@ export async function openReader(id) {
       }
       if (t.is_punct) return `<span class="punct">${esc(t.text)}</span>`;
       const lvl = t.cefr_level || 'A1';
-      return `<span id="tok-${t.id}" class="tok ${lvl}" onclick="inspect(${t.id},${sent.id})">${esc(t.text)}</span>`;
+      const sepAttr = t.separable ? ` data-sep-partner="tok-${t.separable.sep_prefix_id || t.separable.sep_verb_id}"` : '';
+      const sepClass = t.separable ? ' is-separable' : '';
+      return `<span id="tok-${t.id}" class="tok ${lvl}${sepClass}"${sepAttr} onclick="inspect(${t.id},${sent.id})">${esc(t.text)}</span>`;
     }).join('');
 
     paraTokens.push(sentTokens);
@@ -177,6 +179,8 @@ export async function openReader(id) {
 // ── Token Inspection ────────────────────────────────────────────────────────
 export function inspect(tokenId, sentId) {
   document.querySelectorAll('.tok.sel').forEach(el => el.classList.remove('sel'));
+  document.querySelectorAll('.tok.linked-separable').forEach(el => el.classList.remove('linked-separable'));
+
   const el = document.getElementById('tok-' + tokenId);
   if (el) el.classList.add('sel');
 
@@ -185,6 +189,14 @@ export function inspect(tokenId, sentId) {
   state.selectedToken = token;
   state.selectedSent  = sent;
   state.grammarData   = null;
+
+  // Highlight separable partner if linked
+  if (token.separable) {
+    const partnerId = token.separable.sep_prefix_id || token.separable.sep_verb_id;
+    if (partnerId) {
+      document.getElementById('tok-' + partnerId)?.classList.add('linked-separable');
+    }
+  }
 
   const sentIdx = state.currentArticle.sentences.findIndex(s => s.id === sentId);
   if (sentIdx >= 0) {
@@ -201,9 +213,21 @@ export function inspect(tokenId, sentId) {
   else if (token.gender === 'Fem') genderHtml = '<span class="gender-tag gender-die">die 阴性</span>';
   else if (token.gender === 'Neut') genderHtml = '<span class="gender-tag gender-das">das 中性</span>';
 
+  let separableHtml = '';
+  if (token.separable && token.separable.sep_lemma) {
+    separableHtml = ` · 🔗 可分原形: <strong style="color:var(--accent);">${esc(token.separable.sep_lemma)}</strong>`;
+  }
+
   document.getElementById('d-meta').innerHTML =
-    `原型: <strong>${esc(token.lemma)}</strong> · 词性: ${esc(token.pos)} ${genderHtml}` +
+    `原型: <strong>${esc(token.lemma)}</strong> · 词性: ${esc(token.pos)} ${genderHtml}${separableHtml}` +
     (token.case ? ` · ${esc(token.case)}` : '');
+  
+  // Clear previous dynamic morphology sections
+  const oldStamm = document.getElementById('d-stammformen-box');
+  if (oldStamm) oldStamm.remove();
+  const oldKomposita = document.getElementById('d-komposita-box');
+  if (oldKomposita) oldKomposita.remove();
+
   document.getElementById('d-def').value = '';
   document.getElementById('d-def-status').textContent = '词库查询中…';
   document.getElementById('d-sent').textContent = sent.text;
@@ -216,8 +240,8 @@ export function inspect(tokenId, sentId) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ sentence: sent.text, target_word: token.text })
   }).then(res => {
-    if (res && res.definition_zh && state.selectedToken?.text === token.text) {
-      if (!document.getElementById('d-def').value) {
+    if (res && state.selectedToken?.text === token.text) {
+      if (res.definition_zh && !document.getElementById('d-def').value) {
         document.getElementById('d-def').value = res.definition_zh;
       }
       document.getElementById('d-def-status').textContent = res.source === 'local_dict' ? '⚡ 歌德核心词库 (0ms)' : '✓ AI 已预填';
@@ -228,6 +252,42 @@ export function inspect(tokenId, sentId) {
                      '<span class="gender-tag gender-das">das 中性</span>';
         document.getElementById('d-meta').innerHTML += ` ${gTag}`;
       }
+
+      // Render Stammformen if irregular verb
+      if (res.stammformen) {
+        state.selectedToken.stammformen = res.stammformen;
+        const sf = res.stammformen;
+        const metaEl = document.getElementById('d-meta');
+        const stammDiv = document.createElement('div');
+        stammDiv.id = 'd-stammformen-box';
+        stammDiv.className = 'stammformen-banner';
+        stammDiv.innerHTML = `
+          <span class="stamm-tag">⚡ 强变化三态</span>
+          <span class="stamm-formula"><strong>${esc(sf.infinitiv)}</strong> — ${esc(sf.praeteritum)} — <em>${esc(sf.hilfsverb)}</em> <strong>${esc(sf.partizip2)}</strong></span>
+        `;
+        metaEl.parentNode.insertBefore(stammDiv, metaEl.nextSibling);
+      }
+
+      // Render Komposita if compound noun
+      if (res.komposita && res.komposita.length >= 2) {
+        const metaEl = document.getElementById('d-stammformen-box') || document.getElementById('d-meta');
+        const kompDiv = document.createElement('div');
+        kompDiv.id = 'd-komposita-box';
+        kompDiv.className = 'komposita-banner';
+        kompDiv.innerHTML = `
+          <div class="komposita-title">🧩 复合词结构拆解:</div>
+          <div class="komposita-pills-row">
+            ${res.komposita.map(k => `
+              <span class="komposita-pill" title="点击查看子词" onclick="window.inspectSubWord('${esc(k.word)}', '${esc(k.def_zh||'')}', '${esc(k.gender||'')}')">
+                <span class="k-word">${esc(k.word)}</span>
+                ${k.gender ? `<span class="k-gender">${esc(k.gender)}</span>` : ''}
+                <span class="k-def">${esc(k.def_zh || '')}</span>
+              </span>
+            `).join('<span class="komposita-plus">+</span>')}
+          </div>
+        `;
+        metaEl.parentNode.insertBefore(kompDiv, metaEl.nextSibling);
+      }
     } else {
       document.getElementById('d-def-status').textContent = '';
     }
@@ -235,6 +295,12 @@ export function inspect(tokenId, sentId) {
     document.getElementById('d-def-status').textContent = '';
   });
 }
+
+export function inspectSubWord(word, defZh, gender) {
+  document.getElementById('d-def').value = `${word} (${gender ? gender + ', ' : ''}${defZh})`;
+  document.getElementById('d-def-status').textContent = '🧩 已选用复合子词释义';
+}
+
 
 // ── Drawer & Tabs ────────────────────────────────────────────────────────────
 export function switchDrawerTab(tab) {

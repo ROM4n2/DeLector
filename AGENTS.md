@@ -17,14 +17,15 @@
 
 | 层 | 技术 | 关键文件 |
 |---|---|---|
-| 后端 | Python 3.10+, FastAPI, spaCy `de_core_news_md`, genanki | `server.py`, `core_dict.py` (歌德离线词库) |
+| 后端 | Python 3.10+, FastAPI, spaCy `de_core_news_md`, genanki | `server.py`, `core_dict.py`, `linguistics.py` (形态学与三态表) |
 | 前端 | 原生 ES Modules（无框架、零构建），PWA | `static/index.html`, `static/js/*.js` (6大模块), `static/style.css` |
 | 数据库 | SQLite × 2 | `delector.db`（主库）, `progress.db`（学习进度） |
 | 音频缓存 | 本地 `.cache/audio/` MP3 | Edge Neural TTS (edge-tts) + Web Speech 回退 |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（**28 个测试，100% 通过**） |
+| 测试 | pytest | `test_server.py`（**35 个测试，100% 通过**） |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
+
 
 
 ---
@@ -152,7 +153,8 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 | v3.1.0 `91de593` | **fix**: Leporello 色段精度（整数归一化）+ Android PWA bottom-sheet 触屏体验（backdrop + scroll lock + touch-action）+ `/api/ai/note-assist` 配置诊断（warning log + `_stub` flag） |
 | v3.2.0 `4bbea6c` | **feat & refactor**: 前端原生 ES Modules 模块化拆分（`static/js/*.js`）+ 歌德 A1-B2 离线核心词库（`core_dict.py` 0ms 查词与冠词复数） |
 | v3.3.0 `7009841` | **feat**: 德语外刊与学习源 RSS 一键订阅抓取（DW、Tagesschau、DLF、Spiegel、Zeit） |
-| `296d367` (HEAD) | **fix**: 修正 DLF/DW 新 RSS 源端点，支持 RDF 1.0/Atom/RSS 通用解析与正文提取增强 + 31 测试全绿 |
+| `296d367` | **fix**: 修正 DLF/DW 新 RSS 源端点，支持 RDF 1.0/Atom/RSS 通用解析与正文提取增强 + 31 测试全绿 |
+| v3.4.0 (HEAD) | **feat**: 德语深度语言学引擎（556+ 不规则动词三态表 + 递归复合词拆解 + spaCy 可分动词框形双向联动高亮）+ 35 测试全绿 |
 
 ---
 
@@ -179,8 +181,9 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  de_core_news_md（已安装，无需联网）
 测试:      pytest test_server.py -v
-当前测试:  31 / 31 全部通过（100% Green）
+当前测试:  35 / 35 全部通过（100% Green）
 ```
+
 
 
 

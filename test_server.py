@@ -691,6 +691,109 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
     assert "Bundestag" in data["items"][0]["summary"]
 
 
+# ── v3.4.0 Phase: Morphology & Separable Verbs Engine ─────────────────────────
+
+def test_separable_verbs_extraction():
+    """Verify spaCy dependency extraction for German separable verbs."""
+    from server import process_german_text
+    
+    text = "Er steigt jeden Morgen in den Zug ein."
+    res = process_german_text(text)
+    assert res["sentence_count"] >= 1
+    sent = res["sentences"][0]
+    tokens = sent["tokens"]
+    
+    verb_tok = next((t for t in tokens if t["text"] == "steigt"), None)
+    prefix_tok = next((t for t in tokens if t["text"] == "ein"), None)
+    
+    assert verb_tok is not None, "Verb token 'steigt' not found"
+    assert prefix_tok is not None, "Prefix token 'ein' not found"
+    
+    assert "separable" in verb_tok, "separable info missing on verb token"
+    assert verb_tok["separable"]["sep_prefix_id"] == prefix_tok["id"]
+    assert verb_tok["separable"]["sep_lemma"] == "einsteigen"
+    
+    assert "separable" in prefix_tok, "separable info missing on prefix token"
+    assert prefix_tok["separable"]["sep_verb_id"] == verb_tok["id"]
+    assert prefix_tok["separable"]["sep_lemma"] == "einsteigen"
+
+
+def test_irregular_verb_stammformen_lookup():
+    """Verify Goethe irregular/strong verb Stammformen reverse lookup."""
+    from linguistics import lookup_irregular_verb
+    
+    # 1. Base infinitive
+    res_gehen = lookup_irregular_verb("gehen")
+    assert res_gehen is not None
+    assert res_gehen["infinitiv"] == "gehen"
+    assert res_gehen["praeteritum"] == "ging"
+    assert res_gehen["partizip2"] == "gegangen"
+    assert res_gehen["hilfsverb"] == "ist"
+    
+    # 2. Conjugated / past reverse lookup
+    res_ging = lookup_irregular_verb("ging")
+    assert res_ging is not None
+    assert res_ging["infinitiv"] == "gehen"
+    
+    res_gegangen = lookup_irregular_verb("gegangen")
+    assert res_gegangen is not None
+    assert res_gegangen["infinitiv"] == "gehen"
+    
+    # 3. Separable compound irregular verb
+    res_einsteigen = lookup_irregular_verb("einsteigen")
+    assert res_einsteigen is not None
+    assert res_einsteigen["infinitiv"] == "einsteigen"
+    assert "stieg" in res_einsteigen["praeteritum"]
+    assert res_einsteigen["partizip2"] == "eingestiegen"
+    assert res_einsteigen["hilfsverb"] == "ist"
+
+
+def test_komposita_splitting():
+    """Verify German compound noun splitting with Fugenelemente."""
+    from linguistics import split_komposita
+    
+    # 1. Two-part compound
+    klima_parts = split_komposita("Klimaschutz")
+    assert len(klima_parts) == 2
+    assert klima_parts[0]["lemma"] == "klima"
+    assert klima_parts[1]["lemma"] == "schutz"
+    
+    # 2. Three-part compound with linking -s-
+    zeit_parts = split_komposita("Arbeitszeitmodell")
+    assert len(zeit_parts) == 3
+    assert zeit_parts[0]["lemma"] == "arbeit"
+    assert zeit_parts[1]["lemma"] == "zeit"
+    assert zeit_parts[2]["lemma"] == "modell"
+
+
+def test_vocab_lookup_with_linguistics_stammformen_and_komposita(client):
+    """Test /api/lookup/vocab includes stammformen for verbs and komposita for compounds."""
+    # 1. Verb lookup returns stammformen
+    res_verb = client.post("/api/lookup/vocab", json={
+        "sentence": "Er ging gestern nach Hause.",
+        "target_word": "ging"
+    })
+    assert res_verb.status_code == 200
+    data_verb = res_verb.json()
+    assert "stammformen" in data_verb
+    assert data_verb["stammformen"]["infinitiv"] == "gehen"
+    assert data_verb["stammformen"]["praeteritum"] == "ging"
+    assert data_verb["stammformen"]["partizip2"] == "gegangen"
+    assert data_verb["stammformen"]["hilfsverb"] == "ist"
+    
+    # 2. Compound lookup returns komposita
+    res_comp = client.post("/api/lookup/vocab", json={
+        "sentence": "Klimaschutz ist eine globale Aufgabe.",
+        "target_word": "Klimaschutz"
+    })
+    assert res_comp.status_code == 200
+    data_comp = res_comp.json()
+    assert "komposita" in data_comp
+    assert len(data_comp["komposita"]) >= 2
+    assert data_comp["komposita"][0]["lemma"] == "klima"
+
+
+
 
 
 
