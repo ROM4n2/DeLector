@@ -89,34 +89,27 @@ GET  /api/articles/{id}/export-guide      导出学习指南 HTML
 GET  /api/backup/export                   导出数据库备份
 POST /api/backup/restore                  恢复数据库备份
 POST /api/articles/{id}/exercise/cloze    生成完形填空题（grammar/vocab/ctest 三模式）
+POST /api/articles/{id}/exercise/cloze    生成完形填空题（grammar/vocab/ctest 三模式）
 POST /api/exercise/cloze/evaluate         服务端判分（答案不在前端 DOM）
+GET  /api/feed/sources                    获取精选德语外刊与学习 RSS 订阅源
+GET  /api/feed/items                      解析指定 RSS/Atom 源最新文章列表
 ```
 
 **路由重要约束**：`app.mount("/", StaticFiles(...))` 是 catch-all 路由，**必须放在 server.py 最末尾**，否则所有 API 路由返回 405。
 
 ---
 
-## 前端关键函数（app.js）
+## 前端核心模块拓扑（`static/js/*.js`）
 
-| 函数 | 作用 |
+| 模块 | 关键函数 / 职责 |
 |---|---|
-| `openClozeModal()` | 打开完形填空浮层（需 `currentArticle` 已加载） |
-| `switchClozeMode(mode)` | 切换 grammar/vocab/ctest 模式，重新请求题目 |
-| `renderClozeExercise(data)` | 渲染填空题 HTML（**无 data-orig**，用 split 解析 masked_text） |
-| `revealClozeHints()` | 首字母提示：grammar/vocab 填首字母；ctest 填后半首字母 |
-| `resetClozeExercise()` | 重做：调 `renderClozeExercise(currentClozeExercise)` 重新渲染 |
-| `submitClozeExercise()` | 提交判分（POST 到服务端 `/api/exercise/cloze/evaluate`） |
-| `submitCardReview(type, id, grade)` | 提交 SM-2 评分（grade 1-4）并推进到下一张牌 |
-| `toggleDeckFlip()` | 3D 卡片翻面（空格键/点击触发） |
-| `stepDeck(direction)` | 切换卡片（A/D 键或触屏滑动） |
-| `switchFolioPage(idx)` | 切换 Leporello 三折台账页（0/1/2） |
-| `openReader(id)` | 打开文章精读视图 |
-| `inspect(word, sent)` | 词法/语法悬停分析抽屉 |
-| `openQuizOverlay()` | 打开测验浮层 |
-| `loadCards()` | 加载卡片库（同时拉取 `/api/cards/due` 今日到期） |
-| `loadProgress()` | 加载进度台账（Leporello 三折台账） |
-
-**重要**：所有 HTML `onclick=` 调用的函数必须在文件末尾显式挂载到 `window.xxx`，否则在 `'use strict'` 模式下不可见。
+| `main.js` | 路由调度 `show()`, 导入模态窗, RSS 订阅 `selectFeedSource` / `ingestFeedItem`, 全局热键与 `window` 导出 |
+| `core.js` | `api()` 请求封装, `esc()`, `normalizeCefrPct()` 整数归一化, `state` 全局共享状态 |
+| `player.js` | `ShadowPlayer` 影子跟读与控制板, Edge Neural TTS + Web Speech 离线发音回退 |
+| `reader.js` | 文章渲染 `openReader()`, 词法悬停抽屉 `inspect()`, CEFR 热力条与聚焦, 便签增删 `aiNoteAssist()` |
+| `cards.js` | 3D 拟真卡片翻转盒 `renderDeckStage()`, SM-2 间隔复习 `submitCardReview()`, Quiz 测验引擎 |
+| `folio.js` | Leporello 三折页台账 `loadProgress()`, 30 天留存墨线折线图, 歌德箴言轮播 |
+| `cloze.js` | 完形填空 & 德福 C-Test 考试 `openClozeModal()`, 首字母提示 `revealClozeHints()`, 服务端判分 |
 
 ---
 
@@ -157,7 +150,8 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 | `7e98726` | **fix**: 完形填空首字母提示与重做功能；`renderClozeExercise` 改用 split 解析避免 HTML 注入 |
 | `236e2bf` | docs: 创建 AGENTS.md 交接文档 |
 | v3.1.0 `91de593` | **fix**: Leporello 色段精度（整数归一化）+ Android PWA bottom-sheet 触屏体验（backdrop + scroll lock + touch-action）+ `/api/ai/note-assist` 配置诊断（warning log + `_stub` flag） |
-| v3.2.0 (HEAD) | **feat & refactor**: 前端原生 ES Modules 模块化拆分（`static/js/*.js`）+ 歌德 A1-B2 离线核心词库（`core_dict.py` 0ms 查词与冠词复数）+ 28 测试全绿 |
+| v3.2.0 `4bbea6c` | **feat & refactor**: 前端原生 ES Modules 模块化拆分（`static/js/*.js`）+ 歌德 A1-B2 离线核心词库（`core_dict.py` 0ms 查词与冠词复数） |
+| v3.3.0 (HEAD) | **feat**: 德语外刊与学习源 RSS 一键订阅抓取（DW Top-Thema/慢速德语、Tagesschau、DLF Kultur）+ 30 测试全绿 |
 
 ---
 
@@ -183,8 +177,9 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  de_core_news_md（已安装，无需联网）
 测试:      pytest test_server.py -v
-当前测试:  28 / 28 全部通过（100% Green）
+当前测试:  30 / 30 全部通过（100% Green）
 ```
+
 
 
 

@@ -99,6 +99,8 @@ export function show(view) {
 
 // ── Import Modal ─────────────────────────────────────────────────────────────
 let currentImportTab = 'text';
+let cachedFeedSources = [];
+let activeFeedId = null;
 
 export function switchImportTab(tab) {
   currentImportTab = tab;
@@ -106,7 +108,112 @@ export function switchImportTab(tab) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById(`tab-btn-${tab}`)?.classList.add('active');
   document.getElementById(`import-tab-${tab}`)?.classList.add('active');
+
+  const impBtn = document.getElementById('import-btn');
+  if (impBtn) {
+    impBtn.style.display = tab === 'feed' ? 'none' : 'inline-flex';
+  }
+
+  if (tab === 'feed' && !cachedFeedSources.length) {
+    loadFeedSources();
+  }
 }
+
+export async function loadFeedSources() {
+  const bar = document.getElementById('feed-sources-bar');
+  if (!bar) return;
+  try {
+    const res = await api('/api/feed/sources');
+    cachedFeedSources = res.sources || [];
+    if (!cachedFeedSources.length) return;
+
+    bar.innerHTML = cachedFeedSources.map(s => `
+      <button class="feed-source-pill ${s.id === (activeFeedId || cachedFeedSources[0].id) ? 'active' : ''}"
+        onclick="window.selectFeedSource('${s.id}')">
+        <span>${s.name}</span>
+        <span class="feed-lvl-tag">${s.level}</span>
+      </button>
+    `).join('');
+
+    const initial = cachedFeedSources.find(s => s.id === activeFeedId) || cachedFeedSources[0];
+    if (initial) {
+      activeFeedId = initial.id;
+      loadFeedItems(initial.url);
+    }
+  } catch (e) {
+    bar.innerHTML = '<span style="color:var(--pencil);font-size:0.75rem;">无法加载订阅源</span>';
+  }
+}
+
+export function selectFeedSource(feedId) {
+  activeFeedId = feedId;
+  document.querySelectorAll('.feed-source-pill').forEach(b => b.classList.remove('active'));
+  const target = cachedFeedSources.find(s => s.id === feedId);
+  if (target) {
+    document.querySelectorAll('.feed-source-pill').forEach(b => {
+      if (b.textContent.includes(target.name)) b.classList.add('active');
+    });
+    loadFeedItems(target.url);
+  }
+}
+
+export async function loadFeedItems(url) {
+  const container = document.getElementById('feed-items-container');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center;padding:2.5rem;color:var(--pencil);font-family:var(--mono);font-size:0.8125rem;">⏳ 正在抓取最新外刊列表…</div>';
+
+  try {
+    const res = await api(`/api/feed/items?url=${encodeURIComponent(url)}`);
+    const items = res.items || [];
+    if (!items.length) {
+      container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--pencil);font-size:0.8125rem;">该订阅源暂无可解析文章。</div>';
+      return;
+    }
+
+    container.innerHTML = items.map(it => `
+      <div class="feed-item-card">
+        <div class="feed-item-header">
+          <div class="feed-item-title">${it.title}</div>
+          <div class="feed-item-date">${it.pub_date ? it.pub_date.slice(0, 16) : ''}</div>
+        </div>
+        ${it.summary ? `<div class="feed-item-summary">${it.summary}</div>` : ''}
+        <div class="feed-item-footer">
+          <button class="btn-feed-ingest" onclick="window.ingestFeedItem('${encodeURIComponent(it.link)}', '${encodeURIComponent(it.title)}', this)">
+            📥 导入精读
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--cherry);font-size:0.8125rem;">抓取失败：${e.message}</div>`;
+  }
+}
+
+export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
+  const url = decodeURIComponent(encodedUrl);
+  const title = decodeURIComponent(encodedTitle);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '抓取解析中…';
+  }
+
+  try {
+    const data = await api('/api/articles/ingest-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, title })
+    });
+    closeModal();
+    openReader(data.article_id);
+  } catch (e) {
+    alert(`导入外刊失败: ${e.message}`);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '📥 导入精读';
+    }
+  }
+}
+
 
 export function openModal() {
   document.getElementById('modal-overlay')?.classList.add('open');
@@ -292,6 +399,9 @@ Object.assign(window, {
   submitActiveImport,
   handleFileSelect,
   submitImport,
+  selectFeedSource,
+  loadFeedItems,
+  ingestFeedItem,
 
   // Reader & Token Inspector
   openReader,

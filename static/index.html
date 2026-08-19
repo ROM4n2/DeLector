@@ -422,6 +422,7 @@
         <button id="tab-btn-text" class="modal-tab active" onclick="switchImportTab('text')">粘贴长文</button>
         <button id="tab-btn-url" class="modal-tab" onclick="switchImportTab('url')">网页链接 (URL)</button>
         <button id="tab-btn-file" class="modal-tab" onclick="switchImportTab('file')">文档上传</button>
+        <button id="tab-btn-feed" class="modal-tab" onclick="switchImportTab('feed')">📰 订阅外刊 (RSS)</button>
       </div>
 
       <!-- Tab 1: Text -->
@@ -457,10 +458,23 @@
         </div>
       </div>
 
+      <!-- Tab 4: RSS News Feeds -->
+      <div id="import-tab-feed" class="tab-content">
+        <div class="feed-sources-bar" id="feed-sources-bar">
+          <!-- Populated by JS -->
+        </div>
+        <div class="feed-items-container" id="feed-items-container">
+          <div style="text-align:center;padding:2rem;color:var(--pencil);font-family:var(--mono);font-size:0.8125rem;">
+            ⏳ 正在获取精选德语外刊与学习源…
+          </div>
+        </div>
+      </div>
+
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
         <button id="import-btn" class="btn btn-dark" onclick="submitActiveImport()">开始阅读</button>
       </div>
+
     </div>
   </div>
 

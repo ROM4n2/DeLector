@@ -535,10 +535,100 @@ async def ingest_from_url(req: IngestUrlReq):
         pj = json.loads(row["processed_json"]) if row else {}
     return {"article_id": art_id, "title": final_title, "char_count": len(body_text), "stats": pj.get("stats", {})}
 
+# --- RSS & News Feeds Integration ---
+PRESET_FEEDS = [
+    {
+        "id": "dw_top_thema",
+        "name": "DW 德语学习 · Top-Thema",
+        "level": "B1",
+        "category": "Lernen",
+        "url": "https://rss.dw.com/xml/rss-de-top-thema",
+        "description": "德国之声专为 B1 学习者打造的精选短文与考点"
+    },
+    {
+        "id": "dw_langsam",
+        "name": "DW · 慢速德语新闻",
+        "level": "B2",
+        "category": "Nachrichten",
+        "url": "https://rss.dw.com/xml/rss-de-langsam",
+        "description": "每日慢速发音时事要闻，适合精听磨耳朵"
+    },
+    {
+        "id": "tagesschau_news",
+        "name": "Tagesschau · 德国时事快讯",
+        "level": "B2-C1",
+        "category": "Aktuell",
+        "url": "https://www.tagesschau.de/xml/rss2/",
+        "description": "德国第一电视台权威时政要闻"
+    },
+    {
+        "id": "dlf_kultur",
+        "name": "Deutschlandfunk · 文化与读书",
+        "level": "C1",
+        "category": "Kultur",
+        "url": "https://www.deutschlandfunk.de/kultur-100.rss",
+        "description": "深度社论、文学批评与学术文化随笔"
+    }
+]
+
+import xml.etree.ElementTree as ET
+
+def parse_rss_feed(xml_text: str) -> List[Dict[str, Any]]:
+    items = []
+    try:
+        root = ET.fromstring(xml_text)
+        channel = root.find("channel")
+        if channel is not None:
+            for item in channel.findall("item"):
+                title = item.findtext("title", "").strip()
+                link = item.findtext("link", "").strip()
+                desc = item.findtext("description", "").strip()
+                pub_date = item.findtext("pubDate", "").strip()
+                clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
+                if title and link:
+                    items.append({
+                        "title": html.unescape(title),
+                        "link": link,
+                        "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
+                        "pub_date": pub_date
+                    })
+        else:
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+            for entry in root.findall("atom:entry", ns) or root.findall("entry"):
+                title = entry.findtext("atom:title", "", ns) or entry.findtext("title", "").strip()
+                link_el = entry.find("atom:link", ns) or entry.find("link")
+                link = link_el.get("href", "") if link_el is not None else ""
+                summary = entry.findtext("atom:summary", "", ns) or entry.findtext("summary", "") or entry.findtext("content", "")
+                pub_date = entry.findtext("atom:updated", "", ns) or entry.findtext("updated", "") or entry.findtext("published", "")
+                clean_summary = html.unescape(re.sub(r"<[^>]+>", "", summary)).strip()
+                if title and link:
+                    items.append({
+                        "title": html.unescape(title),
+                        "link": link,
+                        "summary": clean_summary[:220] + ("…" if len(clean_summary) > 220 else ""),
+                        "pub_date": pub_date
+                    })
+    except Exception as e:
+        pass
+    return items
+
+@app.get("/api/feed/sources")
+def get_feed_sources():
+    return {"sources": PRESET_FEEDS}
+
+@app.get("/api/feed/items")
+async def get_feed_items(url: str):
+    if not is_safe_public_url(url):
+        raise HTTPException(400, "无效网址或受限制的内部网络地址 (SSRF Protection)")
+    raw_xml = await fetch_remote_html(url)
+    items = parse_rss_feed(raw_xml)
+    return {"url": url, "count": len(items), "items": items}
+
 @app.post("/api/articles/ingest")
 def ingest(req: IngestReq):
     art_id = ingest_article(req.title or "Untitled", req.raw_text)
     return {"article_id": art_id, "title": req.title}
+
 
 @app.get("/api/articles")
 def list_articles():

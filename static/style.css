@@ -4976,3 +4976,120 @@ body.drawer-open .shadow-player {
     line-height: 2;
   }
 }
+
+/* ── RSS & News Feed Selector & List ───────────────────────────────────────── */
+.feed-sources-bar {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule);
+}
+.feed-source-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: all 0.15s ease;
+}
+.feed-source-pill:hover {
+  background: var(--paper-card);
+  border-color: var(--ink);
+}
+.feed-source-pill.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.feed-source-pill .feed-lvl-tag {
+  font-size: 0.625rem;
+  padding: 0.1rem 0.3rem;
+  background: rgba(0,0,0,0.08);
+  border-radius: 2px;
+  font-family: var(--mono);
+}
+.feed-source-pill.active .feed-lvl-tag {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+.feed-items-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+.feed-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--paper-card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.feed-item-card:hover {
+  border-color: var(--ink);
+}
+.feed-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.feed-item-title {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--ink);
+  line-height: 1.35;
+}
+.feed-item-date {
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.feed-item-summary {
+  font-size: 0.8125rem;
+  color: var(--pencil);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.feed-item-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+.btn-feed-ingest {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.btn-feed-ingest:hover {
+  opacity: 0.9;
+}
+.btn-feed-ingest:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

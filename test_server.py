@@ -620,6 +620,50 @@ def test_static_esm_modules_served(client):
         assert res.status_code == 200
         assert "javascript" in res.headers.get("content-type", "")
 
+def test_feed_sources_endpoint(client):
+    """Test GET /api/feed/sources returns preset German learning & news feeds."""
+    res = client.get("/api/feed/sources")
+    assert res.status_code == 200
+    data = res.json()
+    assert "sources" in data
+    assert len(data["sources"]) >= 4
+    ids = [s["id"] for s in data["sources"]]
+    assert "dw_top_thema" in ids
+    assert "tagesschau_news" in ids
+
+def test_feed_items_parsing_and_endpoint(client, monkeypatch):
+    """Test RSS XML fetching and parsing via /api/feed/items."""
+    sample_rss_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0">
+      <channel>
+        <title>DW Top-Thema</title>
+        <link>https://www.dw.com</link>
+        <item>
+          <title>Klimaschutz in Deutschland</title>
+          <link>https://www.dw.com/de/klimaschutz-in-deutschland/a-123456</link>
+          <description>&lt;p&gt;Deutschland will bis 2045 klimaneutral werden.&lt;/p&gt;</description>
+          <pubDate>Wed, 19 Aug 2026 08:00:00 GMT</pubDate>
+        </item>
+      </channel>
+    </rss>"""
+
+    import server
+    async def mock_fetch(url):
+        return sample_rss_xml
+
+    monkeypatch.setattr(server, "fetch_remote_html", mock_fetch)
+    monkeypatch.setattr(server, "is_safe_public_url", lambda u: True)
+
+    res = client.get("/api/feed/items?url=https://rss.dw.com/xml/rss-de-top-thema")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["count"] == 1
+    item = data["items"][0]
+    assert item["title"] == "Klimaschutz in Deutschland"
+    assert "Deutschland will bis 2045" in item["summary"]
+    assert item["link"] == "https://www.dw.com/de/klimaschutz-in-deutschland/a-123456"
+
+
 
 
 
