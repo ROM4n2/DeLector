@@ -349,7 +349,7 @@ CEFR_DICT = {
 
 from core_dict import lookup_core_vocab, get_core_cefr_level
 from linguistics import lookup_irregular_verb, split_komposita
-from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree
+from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree, split_sentences_pure_python
 
 def get_cefr_level(lemma: str) -> str:
     if not lemma:
@@ -414,9 +414,7 @@ def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
     }
 
 def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
-    raw_sents = [s.strip() for s in re.split(r'([.!?]+["\']?\s*)', text) if s.strip() and not re.match(r'^[.!?]+["\']?$', s)]
-    if not raw_sents and text.strip():
-        raw_sents = [text.strip()]
+    raw_sents = split_sentences_pure_python(text)
     sentences = []
     all_tokens = []
     global_tok_id = 0
@@ -425,11 +423,12 @@ def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
         raw_toks = re.findall(r'\w+|[^\w\s]', sent_text, re.UNICODE)
         for raw_tok in raw_toks:
             is_punct = bool(re.match(r'^[^\w\s]+$', raw_tok))
-            lemma = raw_tok.lower()
-            dict_entry = lookup_core_dict(raw_tok)
-            pos = dict_entry.get("pos", "PUNCT" if is_punct else ("NOUN" if raw_tok[0].isupper() else "ADV"))
+            # 无 spacy 时靠核心词库反查词元，命中则用词典词元覆盖朴素小写形
+            dict_entry = lookup_core_vocab(raw_tok) or {}
+            lemma = dict_entry.get("lemma") or raw_tok.lower()
+            pos = dict_entry.get("pos") or ("PUNCT" if is_punct else ("NOUN" if raw_tok[0].isupper() else "ADV"))
             gender = dict_entry.get("gender", "")
-            cefr = dict_entry.get("cefr", get_cefr_level(lemma) if not is_punct else "")
+            cefr = dict_entry.get("cefr_level") or ("" if is_punct else get_cefr_level(lemma))
             tok = {
                 "id": global_tok_id,
                 "text": raw_tok,

@@ -24,6 +24,18 @@ def get_local_ip() -> str:
     except Exception:
         return "127.0.0.1"
 
+def is_android() -> bool:
+    """是否跑在 Chaquopy/Android 运行时里。"""
+    return hasattr(sys, "getandroidapilevel") or "ANDROID_ROOT" in os.environ
+
+def get_bind_host() -> str:
+    """桌面端绑 0.0.0.0 是有意的特性（同 Wi-Fi 的手机/平板可访问）。
+
+    Android 上只有应用内的 WebView 需要连本机，绑 0.0.0.0 等于把无鉴权的
+    POST /api/settings（可改写 API Key 与 base_url）暴露给整个局域网。
+    """
+    return "127.0.0.1" if is_android() else "0.0.0.0"
+
 def open_browser(port: int):
     time.sleep(1.2)
     # Support Android Termux termux-open-url fallback
@@ -34,26 +46,33 @@ def open_browser(port: int):
 
 def main():
     port = 8000
+    android = is_android()
     if is_port_in_use(port):
         print(f"[提示] 端口 {port} 正在运行中或已被占用，正在尝试连接已有服务...")
-        open_browser(port)
+        if not android:
+            open_browser(port)
         return
 
-    ip = get_local_ip()
+    host = get_bind_host()
     print("=" * 60)
     print("  DeLector — 德语欧标沉浸阅读与考点剖析工作台")
     print("=" * 60)
-    print(f"  ● 电脑本机访问: http://localhost:{port}")
-    if ip != "127.0.0.1":
-        print(f"  ● 手机/平板访问: http://{ip}:{port} (同一 Wi-Fi 局域网)")
+    if android:
+        print(f"  ● 仅本机监听: http://127.0.0.1:{port} (应用内 WebView)")
+    else:
+        print(f"  ● 电脑本机访问: http://localhost:{port}")
+        ip = get_local_ip()
+        if ip != "127.0.0.1":
+            print(f"  ● 手机/平板访问: http://{ip}:{port} (同一 Wi-Fi 局域网)")
     print("=" * 60)
     print("  按 Ctrl+C 停止服务\n")
 
-    threading.Thread(target=open_browser, args=(port,), daemon=True).start()
-    
+    if not android:
+        threading.Thread(target=open_browser, args=(port,), daemon=True).start()
+
     import uvicorn
     from server import app
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, reload=False, log_level="info")
+    config = uvicorn.Config(app, host=host, port=port, reload=False, log_level="info")
     server = uvicorn.Server(config)
     try:
         # Disable signals in sub-threads (Android Chaquopy)

@@ -6,6 +6,7 @@ Topologisches Feldermodell (Vorfeld, Linke Satzklammer, Mittelfeld, Rechte Satzk
 100% Offline, Pure Python stdlib + spaCy NLP.
 Zero external API dependencies.
 """
+import re
 from typing import Dict, List, Any, Optional, Union, Tuple, Set
 
 try:
@@ -1150,12 +1151,27 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
 # 5. High-Level Convenience API for Full Sentences & Text
 # ==============================================================================
 
-def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
-    """Pure-Python fallback when spaCy is unavailable (e.g. mobile APK)."""
-    import re
-    sents = [s.strip() for s in re.split(r'([.!?]+["\']?\s*)', text) if s.strip() and not re.match(r'^[.!?]+["\']?$', s)]
+def split_sentences_pure_python(text: str) -> List[str]:
+    """spaCy 缺席时替代 doc.sents：按句末标点切句，并把标点保留在句尾。
+
+    旧实现用 re.split 的捕获组后再过滤纯标点片段，但捕获组带着尾随空格
+    （". "），过滤正则匹配不到，于是每个句号都会变成一个独立的"句子"。
+    """
+    parts = re.split(r'([.!?]+["\']?)', text)
+    sents = []
+    for i in range(0, len(parts), 2):
+        body = parts[i]
+        tail = parts[i + 1] if i + 1 < len(parts) else ""
+        sent = (body + tail).strip()
+        if sent:
+            sents.append(sent)
     if not sents and text.strip():
         sents = [text.strip()]
+    return sents
+
+def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
+    """Pure-Python fallback when spaCy is unavailable (e.g. mobile APK)."""
+    sents = split_sentences_pure_python(text)
     results = []
     for s_idx, sent_str in enumerate(sents):
         results.append({

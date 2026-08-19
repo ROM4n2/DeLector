@@ -36,7 +36,10 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout splashLayout;
     private TextView statusTextView;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private boolean isServerReady = false;
+    private volatile boolean isServerReady = false;
+    /** Python 侧抛异常后服务永远不会就绪，用它让轮询与重载立刻停手并保留错误信息 */
+    private volatile String fatalError = null;
+    private int reloadAttempts = 0;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -149,23 +152,39 @@ public class MainActivity extends AppCompatActivity {
             new Thread(() -> {
                 try {
                     py.getModule("start").callAttr("main");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    mainHandler.post(() -> statusTextView.setText("Python 引擎异常: " + e.getMessage()));
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                    reportFatal("Python 引擎异常", t);
                 }
             }).start();
 
             // D. Poll for server readiness
             pollServerReadiness();
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            mainHandler.post(() -> statusTextView.setText("启动异常: " + e.getMessage()));
+        } catch (Throwable t) {
+            // Throwable 而非 Exception：Python.start() 载入原生库失败抛的是 UnsatisfiedLinkError
+            t.printStackTrace();
+            reportFatal("启动异常", t);
         }
+    }
+
+    /**
+     * 记录不可恢复的失败并把完整信息留在屏幕上。
+     * 之前的实现只 setText，随后会被"服务启动超时"覆盖，导致真实的 Python traceback 永远看不到。
+     */
+    private void reportFatal(String stage, Throwable t) {
+        fatalError = stage + ": " + t;
+        mainHandler.post(() -> {
+            statusTextView.setTextIsSelectable(true);
+            statusTextView.setText(fatalError + "\n\n请把这段信息反馈给开发者（adb logcat 有完整堆栈）。");
+        });
     }
 
     private void pollServerReadiness() {
         for (int i = 0; i < 60; i++) {
+            if (fatalError != null) {
+                return; // 服务不可能再就绪，别用超时文案盖掉真实错误
+            }
             try {
                 URL url = new URL("http://127.0.0.1:8000/api/settings");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -196,6 +215,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        if (fatalError != null) {
+            return;
+        }
         mainHandler.post(() -> {
             statusTextView.setText("服务启动超时，正在重试连接...");
             webView.loadUrl("http://127.0.0.1:8000");
@@ -203,11 +225,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkAndReloadServer() {
-        mainHandler.postDelayed(() -> {
-            if (!isServerReady) {
-                webView.loadUrl("http://127.0.0.1:8000");
+        // 上限防止服务真的起不来时无限 reload（每秒一次，永不停止）
+        if (isServerReady || fatalError != null || ++reloadAttempts > 10) {
+            if (!isServerReady && fatalError == null) {
+                mainHandler.post(() -> {
+                    splashLayout.setVisibility(View.VISIBLE);
+                    webView.setVisibility(View.GONE);
+                    statusTextView.setTextIsSelectable(true);
+                    statusTextView.setText("本地服务无法连接（127.0.0.1:8000）。\n请用 adb logcat 查看 python.stderr 中的堆栈。");
+                });
             }
-        }, 1000);
+            return;
+        }
+        mainHandler.postDelayed(() -> webView.loadUrl("http://127.0.0.1:8000"), 1000);
     }
 
     private void copyAssetFolder(String srcName, File dstDir) {

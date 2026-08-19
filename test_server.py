@@ -878,3 +878,58 @@ def test_settings_test_key_without_key(client):
 
 
 
+
+# --- Android / Chaquopy runtime: spacy is absent, everything must fall back to pure Python ---
+
+def test_pure_python_pipeline_without_spacy():
+    """APK 里没有 spacy，process_german_text 走纯 Python 分支。
+
+    这条分支曾因调用不存在的 lookup_core_dict 而在 import server 时就 NameError，
+    导致安卓端 uvicorn 永远起不来、启动页一直卡住。
+    """
+    import server
+
+    result = server._process_german_text_pure_python(
+        "Der Hund schläft. Ich habe ein Buch gelesen!"
+    )
+
+    assert result["sentence_count"] == 2
+    tokens = [t for s in result["sentences"] for t in s["tokens"]]
+    assert tokens, "pure-python 分支必须产出 token"
+    # 核心词库命中时应带出 CEFR 与词性，而不是空值
+    der = next(t for t in tokens if t["text"] == "Der")
+    assert der["lemma"] == "der"
+    assert der["cefr_level"]
+    assert all(t["cefr_level"] == "" for t in tokens if t["is_punct"])
+    assert result["stats"]["word_count"] > 0
+
+def test_module_import_survives_without_spacy(monkeypatch):
+    """server 的 import 期副作用（init_db → seed_preset_articles）不能依赖 spacy。"""
+    import server
+
+    monkeypatch.setattr(server, "nlp", None)
+    seeded = server.process_german_text(server.PRESET_ARTICLES[0]["text"])
+    assert seeded["sentence_count"] > 0
+    assert seeded["sentences"][0]["tokens"]
+
+def test_syntax_tree_pure_python_sentence_split():
+    """syntax_tree 的降级分支曾有和 server 完全相同的切句 bug：句号被切成独立句子。"""
+    from syntax_tree import _analyze_syntax_tree_pure_python, split_sentences_pure_python
+
+    assert split_sentences_pure_python("Der Hund schläft. Ich lese!") == [
+        "Der Hund schläft.",
+        "Ich lese!",
+    ]
+    result = _analyze_syntax_tree_pure_python("Der Hund schläft. Ich lese!")
+    assert result["sentence_count"] == 2
+    assert [s["text"] for s in result["sentences"]] == ["Der Hund schläft.", "Ich lese!"]
+
+def test_bind_host_is_loopback_only_on_android(monkeypatch):
+    """Android 上必须只监听回环：POST /api/settings 无鉴权，绑 0.0.0.0 会暴露给整个局域网。"""
+    import start
+
+    monkeypatch.setattr(start, "is_android", lambda: True)
+    assert start.get_bind_host() == "127.0.0.1"
+
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    assert start.get_bind_host() == "0.0.0.0"
