@@ -10,6 +10,8 @@
 **DeLector** 是一个德语精读与歌德/德福备考辅助 Web App。
 单文件后端（FastAPI + spaCy NLP + SQLite）+ 单页前端（原生 JS），
 本机以 `python start.py` 或 `start.bat` 启动，访问 `http://localhost:8000`。
+详见产品特性全览清单：[`FEATURES.md`](file:///D:/Code/DeLector/FEATURES.md)。
+
 
 ---
 
