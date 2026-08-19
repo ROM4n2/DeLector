@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v3.5.1 安卓体验与音频重构），工作区干净 |
+| 当前分支 / HEAD | `master`（含 v3.5.2 安卓发音与全屏自适应台账/导航栏重构），工作区干净 |
 | 测试 | **64 / 64 全绿**（`test_server.py` 49 + `test_syntax_tree.py` 15） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
-| Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 |
-| 对外发布 | **v3.5.1 发布**（2026-08-19）：修复导入弹窗、台账/卡片响应式、DownloadManager 下载监听、物理返回键拦截、触感震动与 Android Native TTS 音频播放 |
+| Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
+| 对外发布 | **v3.5.2 发布**（2026-08-19）：Android 11+ TTS queries 权限补齐、有道/百度/Edge 德语在线音频兜底、1024px 宽幅底部常驻导航 Dock、台账 3 页自适应卡片重构 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -323,6 +323,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **PR #2 `c3de92f`** | **fix(android)**: 修复启动卡死（降级路径 `NameError`）+ 切句器去重 + Android 错误可见性与重载上限 + Android 只绑回环 + **移植真 spaCy 进 APK**（arm64-only 56.7MB）+ `extractPackages` 与模型三级加载回退 + 模型 md 优先 + **pre-commit 密钥扫描钩子**；真机验证 `nlp_engine == "spacy"` |
 | **v3.5.0 Release `2026-08-19`（重发）** | 首版发布内容是 PR #2 之前的 `4ede08f`（三 ABI、无 spaCy、纯 Python 降级），已**删除重发**：tag 重建于 master，CI 产出 arm64-only 56.7 MiB APK（`extract_packages=['de_core_news_sm','spacy','thinc']` 拆包核对）+ Windows 75.4 MB。工作流 `vv` 命名 bug 已修（`name: DeLector ${{ github.ref_name }}`） |
 | **v3.5.1 Release `2026-08-19`** | **fix(mobile & audio)**: 修复 6 大安卓交互（导入弹窗、台账/卡片响应式、DownloadManager 下载监听、物理返回键拦截、触感震动）+ 引入 Android Native TextToSpeech 原生离线发音桥接 + CI 流水线版本参数化 |
+| **v3.5.2 Release `2026-08-19`** | **fix(mobile, audio & ui)**: 补齐 Android 11+ `<queries>` TTS 声明、接入有道/百度国内免翻墙在线音频兜底、扩大移动端底部 Dock 阈值至 1024px、重构台账三折页为 100% 独立 Tab 卡片规避滑轨错位 |
 
 ---
 

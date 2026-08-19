@@ -4850,7 +4850,7 @@ body.drawer-open .shadow-player {
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   /* Navigation */
   #nav {
     padding: 0 1rem;
@@ -5033,10 +5033,46 @@ body.drawer-open .shadow-player {
     font-size: 0.625rem !important;
   }
 
+  .folio-window {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .folio-track {
+    display: block !important;
+    width: 100% !important;
+    transform: none !important;
+  }
+
   .folio-sheet {
-    width: 33.33333% !important;
+    display: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
     padding: 1rem 0.65rem !important;
     box-sizing: border-box !important;
+  }
+
+  .folio-sheet.active-sheet {
+    display: block !important;
+  }
+
+  .dossier-chart-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .dossier-chart-svg {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 90px !important;
+  }
+
+  .dossier-stamps-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
   }
 
   .dossier-motto-section {

@@ -1370,20 +1370,25 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
         prune_audio_cache()
         return cache_file
     except Exception as e:
-        # Pure-Python httpx fallback
-        try:
-            from urllib.parse import quote
-            q = quote(clean_text[:200])
-            tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=de&client=tw-ob"
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(tts_url, headers={"User-Agent": "Mozilla/5.0"})
-                if resp.status_code == 200 and len(resp.content) > 100:
-                    with open(cache_file, "wb") as f:
-                        f.write(resp.content)
-                    prune_audio_cache()
-                    return cache_file
-        except Exception:
-            pass
+        # Multi-provider pure-Python httpx fallback (accessible in mainland China)
+        from urllib.parse import quote
+        q = quote(clean_text[:250])
+        candidate_urls = [
+            f"https://dict.youdao.com/dictvoice?audio={q}&le=de",
+            f"https://fanyi.baidu.com/gettts?lan=de&text={q}&spd=3&source=web",
+            f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=de&client=tw-ob"
+        ]
+        for tts_url in candidate_urls:
+            try:
+                async with httpx.AsyncClient(timeout=6.0) as client:
+                    resp = await client.get(tts_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                    if resp.status_code == 200 and len(resp.content) > 200:
+                        with open(cache_file, "wb") as f:
+                            f.write(resp.content)
+                        prune_audio_cache()
+                        return cache_file
+            except Exception:
+                continue
         raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
 
 @app.post("/api/audio/tts")

@@ -62,7 +62,7 @@ public class MainActivity extends AppCompatActivity {
         private volatile boolean isInitialized = false;
 
         public NativeTTSBridge() {
-            tts = new TextToSpeech(MainActivity.this, status -> {
+            tts = new TextToSpeech(getApplicationContext(), status -> {
                 if (status == TextToSpeech.SUCCESS) {
                     int result = tts.setLanguage(Locale.GERMAN);
                     if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {

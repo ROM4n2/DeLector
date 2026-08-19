@@ -17,7 +17,11 @@ const GERMAN_MOTTOS = [
 export function switchFolioPage(idx) {
   currentFolioPage = Math.max(0, Math.min(2, idx));
   const track = document.getElementById('folio-track');
-  if (track) {
+  const sheets = document.querySelectorAll('.folio-sheet');
+  sheets.forEach((sh, sIdx) => {
+    sh.classList.toggle('active-sheet', sIdx === currentFolioPage);
+  });
+  if (track && window.innerWidth > 1024) {
     track.style.transform = `translateX(-${currentFolioPage * 33.33333}%)`;
   }
   for (let i = 0; i < 3; i++) {
