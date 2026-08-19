@@ -22,12 +22,11 @@ android {
         python {
             version "3.10"
             pip {
-                install "fastapi>=0.109.0"
-                install "uvicorn>=0.27.0"
-                install "httpx>=0.26.0"
-                install "genanki>=0.13.0"
-                install "spacy>=3.7.0"
-                install "https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.7.0/de_core_news_sm-3.7.0-py3-none-any.whl"
+                install "fastapi"
+                install "uvicorn"
+                install "httpx"
+                install "genanki"
+                install "spacy"
             }
         }
     }
