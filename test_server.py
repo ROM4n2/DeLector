@@ -432,37 +432,56 @@ def test_progress_stats_after_adding_cards(client):
     assert milestones["master_10"]["unlocked"] is False  # only 1 mastered
 
 
-# ── v3.0 Phase 1: SM-2 Spaced Repetition & Cloze Exercises ──────────────────
+# ── v3.0 / v3.8: FSRS Spaced Repetition & Cloze Exercises ──────────────────
 
-def test_sm2_algorithm_calculation():
-    """Verify SuperMemo SM-2 calculation mathematics."""
+def test_fsrs_algorithm_calculation():
+    """Verify modern FSRS DSR calculation mathematics and gradients."""
+    from server import calculate_fsrs, get_fsrs_next_intervals
+
+    # 1. Initial review gradients for all 4 grades
+    intervals_init = get_fsrs_next_intervals(rep=0, interval=1, ef=2.5)
+    assert intervals_init[1] == 1  # Again: 1d
+    assert intervals_init[2] == 2  # Hard: 2d
+    assert intervals_init[3] == 4  # Good: 4d
+    assert intervals_init[4] == 9  # Easy: 9d
+
+    # 2. First time review (Grade 3 - Good)
+    rep1, iv1, ef1, due1, next_ivs1 = calculate_fsrs(grade=3, rep=0, interval=1, ef=2.5)
+    assert rep1 == 1
+    assert iv1 == 4
+    assert ef1 == 4.4
+    assert isinstance(next_ivs1, dict)
+    assert len(next_ivs1) == 4
+
+    # 3. Second consecutive success (Grade 3 - Good)
+    rep2, iv2, ef2, due2, next_ivs2 = calculate_fsrs(grade=3, rep=rep1, interval=iv1, ef=ef1)
+    assert rep2 == 2
+    assert iv2 == 9
+    assert ef2 == 4.4
+
+    # 4. Third success (Grade 4 - Easy)
+    rep3, iv3, ef3, due3, next_ivs3 = calculate_fsrs(grade=4, rep=rep2, interval=iv2, ef=ef2)
+    assert rep3 == 3
+    assert iv3 >= 20
+    assert ef3 < 4.4  # Difficulty decreased for easy card
+
+    # 5. Lapse / Failure (Grade 1 - Forgot) resets repetition smoothly
+    rep_f, iv_f, ef_f, due_f, next_ivs_f = calculate_fsrs(grade=1, rep=rep3, interval=iv3, ef=ef3)
+    assert rep_f == 0
+    assert iv_f <= 2
+    assert ef_f > ef3  # Difficulty increased
+
+def test_sm2_backward_compatibility():
+    """Verify legacy calculate_sm2 wrapper returns 4-tuple and works seamlessly."""
     from server import calculate_sm2
-    
-    # 1. First time success (Grade 3 - Good)
     rep, interval, ef, due = calculate_sm2(grade=3, rep=0, interval=1, ef=2.5)
     assert rep == 1
-    assert interval == 3
-    assert ef == 2.5
-    
-    # 2. Second consecutive success (Grade 4 - Easy)
-    rep2, interval2, ef2, due2 = calculate_sm2(grade=4, rep=rep, interval=interval, ef=ef)
-    assert rep2 == 2
-    assert interval2 == 8
-    assert ef2 > 2.5
-    
-    # 3. Third success
-    rep3, interval3, ef3, due3 = calculate_sm2(grade=3, rep=rep2, interval=interval2, ef=ef2)
-    assert rep3 == 3
-    assert interval3 >= 15
-    
-    # 4. Failure (Grade 1 - Forgot) resets repetition
-    rep_f, interval_f, ef_f, due_f = calculate_sm2(grade=1, rep=rep3, interval=interval3, ef=ef3)
-    assert rep_f == 0
-    assert interval_f == 1
-    assert ef_f < ef3
+    assert interval == 4
+    assert ef == 4.4
+    assert isinstance(due, str)
 
-def test_card_review_sm2_endpoint(client):
-    """Test POST /api/cards/{card_type}/{card_id}/review updates SM-2 schedule."""
+def test_card_review_fsrs_endpoint(client):
+    """Test POST /api/cards/{card_type}/{card_id}/review updates FSRS schedule and returns next_intervals."""
     res = client.post("/api/cards/vocab", json={
         "word": "verstehen", "lemma": "verstehen", "pos": "VERB",
         "cefr_level": "A1", "definition_zh": "理解", "sentence_context": "Ich verstehe."
@@ -476,8 +495,27 @@ def test_card_review_sm2_endpoint(client):
     assert rev_res.status_code == 200
     card_data = rev_res.json()
     assert card_data["repetition_count"] == 1
-    assert card_data["interval_days"] >= 1
+    assert card_data["interval_days"] == 4
     assert "due_date" in card_data
+    assert "next_intervals" in card_data
+    assert card_data["next_intervals"]["1"] == 1 or card_data["next_intervals"][1] == 1
+    assert (card_data["next_intervals"]["3"] == 9 or card_data["next_intervals"][3] == 9)
+
+def test_get_cards_includes_next_intervals(client):
+    """Test GET /api/cards and GET /api/cards/due populate next_intervals for cards."""
+    res = client.post("/api/cards/vocab", json={
+        "word": "behalten", "lemma": "behalten", "pos": "VERB",
+        "cefr_level": "B1", "definition_zh": "保留，记住", "sentence_context": "Ich behalte das Wort."
+    })
+    assert res.status_code == 200
+
+    cards_res = client.get("/api/cards")
+    assert cards_res.status_code == 200
+    cards_data = cards_res.json()
+    assert len(cards_data["vocab_cards"]) > 0
+    first_card = cards_data["vocab_cards"][0]
+    assert "next_intervals" in first_card
+    assert (1 in first_card["next_intervals"] or "1" in first_card["next_intervals"])
 
 def test_due_cards_endpoint(client):
     """Test GET /api/cards/due returns cards due today or earlier."""

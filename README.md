@@ -13,7 +13,7 @@
 
 <p align="center">
   <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的下一代学术级伴读与句法剖析系统。</b><br/>
-  融合<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>与<b>SM-2 间隔复习</b>。
+  融合<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>与<b>FSRS 自适应记忆排程</b>。
 </p>
 
 ---
@@ -34,7 +34,7 @@
 ### 🦉 1. 德语伴读宠物（Companion Mascot）「Eule & 伙伴」混合双模系统
 - **4 大内置矢量角色 + 自定义 SVG 上传**：猫头鹰 Eule、学者猫 Katze、灵动狐 Fuchs、包豪斯机甲 Roboter，支持上传任意 $\le 64\text{KB}$ 自定义 SVG 矢量角色（内置严格 DOMParser XML 白名单消毒防 XSS）。
 - **3 层离线/在线 TTS 发声**：原生离线发声桥接 + Edge Neural TTS 纯正德语母语发音，8s 防噪音冷却。
-- **研读工坊与全局悬浮双挂载**：在台账首屏 Hero 嵌入研习大工坊，全局各处提供右下角轻量伴读气泡，在生词制卡、语法提炼、SM-2 复习、完形填空 $\ge 80\%$ 与连续打卡时触发实时德语鼓励。
+- **研读工坊与全局悬浮双挂载**：在台账首屏 Hero 嵌入研习大工坊，全局各处提供右下角轻量伴读气泡，在生词制卡、语法提炼、FSRS 间隔复习、完形填空 $\ge 80\%$ 与连续打卡时触发实时德语鼓励。
 
 ### 📊 2. Atelier 呼吸感落地页台账 (Continuous Exhibition Folio)
 - **0.85:1.15 不对称 Hero 大展台**：融合德式名言箴言卡、6 核心 Ring Badges 环形指标大展盘与四角 `+` 定位标点。
@@ -57,9 +57,9 @@
 - **现代大模型支持**：默认集成 **`deepseek-v4-flash`**（极速低延迟）与 `https://api.deepseek.com` 官方直连；
 - **毫秒级连通性测试**：一键检测 API 连接状态与响应延迟。
 
-### 🎴 5. 3D 物理拟真卡盒与 SuperMemo SM-2 排程 (3D Flashcard Deck & SM-2)
+### 🎴 5. 3D 物理拟真卡盒与 FSRS 现代认知记忆排程 (3D Flashcard Deck & FSRS)
 - **3D 拟真物理翻转**：空格键或点击卡片触发 `rotateY(180deg)` 3D 翻牌，支持左右飞牌手势；
-- **SM-2 科学排程**：艾宾浩斯间隔复习，今日到期自动提醒，支持一键导出标准 Anki `.apkg` 牌组。
+- **FSRS 现代自适应排程**：基于 DSR 三维状态机科学排程，彻底消解「沉沦死锁 (Ease Hell)」，实时预计算 4 级下一轮间隔，支持一键导出标准 Anki `.apkg` 牌组。
 
 ### ✍️ 6. 歌德完形填空 & 德福 C-Test 实战引擎 (Cloze & C-Test Engine)
 - 提供 **语法考点完形**、**高频词汇完形** 与 **标准德福 C-Test** 三大实战模式，答案仅在服务端保留并防作弊智能判分。
@@ -147,7 +147,7 @@ DeLector/
 │       ├── core.js         # API 请求与全局状态
 │       ├── main.js         # 路由调度、设置弹窗与 RSS 订阅
 │       ├── reader.js       # 文本渲染、五场域拓扑条与 AST 树抽屉
-│       ├── cards.js        # 3D 卡牌翻转盒与 SM-2 算法
+│       ├── cards.js        # 3D 卡牌翻转盒与 FSRS 自适应记忆排程算法
 │       ├── folio.js        # Leporello 三折页台账与墨线图
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
 │       └── player.js       # 神经影子跟读与 TTS 播放器
@@ -161,7 +161,7 @@ DeLector/
 ├── Dockerfile              # Docker 镜像构建文件
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖清单
-├── test_server.py          # Pytest 自动化测试套件 (49 用例)
+├── test_server.py          # Pytest 自动化测试套件 (51 用例)
 └── test_syntax_tree.py     # Pytest 句法引擎测试套件 (15 用例)
 ```
 
@@ -177,8 +177,10 @@ DeLector/
 - [x] **v3.3**：权威德语外刊 RSS 一键订阅与正文提取 (Tagesschau, DW, DLF, Spiegel, Zeit)
 - [x] **v3.4**：556+ 强变化三态表 + 复合词智能拆解 + 框形可分动词双向联动高亮
 - [x] **v3.5**：德语拓扑五场域 (Felder-Modell) 与 5 大从句 AST 句法树引擎 + 全局设置面板 (deepseek-v4-flash)
-- [ ] **v3.6 (Next)**：智能介词搭配图谱 (Präpositionen-Matrix: 动词/形容词+固定介词格)
-- [ ] **v3.7**：德语写作与长难句 AI 润色台 (Schreibwerkstatt)
+- [x] **v3.7**：德语伴读宠物（Eule & 伙伴）+ 自定义 SVG 角色工坊 + 严格 DOMParser 递归消毒
+- [x] **v3.8**：FSRS 现代自适应记忆排程器升级（DSR 三维认知模型，消除 Ease Hell，4 级下一轮间隔预计算）
+- [ ] **v3.9 (Next)**：智能介词搭配图谱 (Präpositionen-Matrix: 动词/形容词+固定介词格)
+- [ ] **v4.0**：德语写作与长难句 AI 润色台 (Schreibwerkstatt)
 
 ---
 

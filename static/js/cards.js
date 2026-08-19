@@ -132,24 +132,27 @@ export function renderDeckStage(vList, gList) {
 
   let nextAgain = 1;
   let nextHard = 2;
-  let nextGood = 3;
-  let nextEasy = 4;
+  let nextGood = 4;
+  let nextEasy = 9;
 
-  if (rep === 0) {
+  if (card.next_intervals && typeof card.next_intervals === 'object') {
+    nextAgain = card.next_intervals[1] ?? card.next_intervals['1'] ?? 1;
+    nextHard = card.next_intervals[2] ?? card.next_intervals['2'] ?? 2;
+    nextGood = card.next_intervals[3] ?? card.next_intervals['3'] ?? 4;
+    nextEasy = card.next_intervals[4] ?? card.next_intervals['4'] ?? 9;
+  } else if (rep === 0) {
     nextAgain = 1;
     nextHard = 2;
-    nextGood = 3;
-    nextEasy = 4;
-  } else if (rep === 1) {
-    nextAgain = 1;
-    nextHard = 3;
-    nextGood = 6;
-    nextEasy = 8;
+    nextGood = 4;
+    nextEasy = 9;
   } else {
-    nextAgain = 1;
-    nextHard = Math.max(iv + 1, Math.round(iv * 1.2));
-    nextGood = Math.max(iv + 1, Math.round(iv * ef));
-    nextEasy = Math.max(iv + 2, Math.round(iv * ef * 1.3));
+    // Client-side FSRS fallback estimate
+    const d = Math.min(10.0, Math.max(1.0, ef));
+    const s = Math.max(0.1, iv);
+    nextAgain = Math.max(1, Math.round(Math.min(s, 0.6 * Math.pow(d, -0.3) * Math.pow(s + 1, 0.4))));
+    nextHard = Math.max(1, Math.round(s * (1 + 0.6 * (11 - d) * Math.pow(s, -0.2) * 0.25)));
+    nextGood = Math.max(1, Math.round(s * (1 + 1.0 * (11 - d) * Math.pow(s, -0.2) * 0.25)));
+    nextEasy = Math.max(1, Math.round(s * (1 + 1.4 * (11 - d) * Math.pow(s, -0.2) * 0.25)));
   }
 
   container.innerHTML = `
@@ -272,7 +275,7 @@ export async function submitCardReview(type, id, grade) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ grade, card_type: type })
     });
-    showUndoToast(`✓ 已记录记忆评分 (SM-2 排程已更新)`);
+    showUndoToast(`✓ 已记录记忆评分 (FSRS 排程已更新)`);
     stepDeck(1);
     refreshDueCount();
     Companion.celebrate(grade >= 3 ? 'review_good' : 'review_hard');

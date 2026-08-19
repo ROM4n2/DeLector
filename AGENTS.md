@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v3.7.1 伴读宠物 Phase 2：SVG 自定义角色上传、DOMParser 白名单消毒、localStorage 注册与双挂载点全量接线），工作区干净 |
-| 测试 | **64 / 64 全绿**（`test_server.py` 49 + `test_syntax_tree.py` 15） |
+| 当前分支 / HEAD | `master`（含 v3.8.0 FSRS 认知自适应记忆排程器升级：DSR 状态机原生零依赖数学模型、`next_intervals` 4级预估字典与前端动态绑定），工作区干净 |
+| 测试 | **66 / 66 全绿**（`test_server.py` 51 + `test_syntax_tree.py` 15） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v3.7.1**（2026-08-19）：伴读宠物 Phase 2（自定义 SVG 角色上传、DOMParser 递归消毒白名单、安全协议过滤、自定义角色持久化注册、研习工坊与全局浮层双入口） |
+| 对外发布 | **v3.8.0**（2026-08-19）：FSRS 现代自适应记忆排程器升级（DSR 状态机原生数学模型、消除 Ease Hell、4 级下一轮间隔预计算字典、向下兼容 SM-2 包装） |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -205,8 +205,8 @@ POST   /api/settings/test-key                   连通性与延迟测试
 GET    /api/articles/{article_id}/export-guide  导出学习指南 HTML
 GET    /api/backup/export                       导出数据库备份
 POST   /api/backup/restore                      恢复数据库备份
-POST   /api/cards/{card_type}/{card_id}/review  SM-2 间隔复习记录（grade 1-4）
-GET    /api/cards/due                           获取今日到期卡片（SM-2 排程）
+POST   /api/cards/{card_type}/{card_id}/review  FSRS 自适应间隔复习记录（grade 1-4）
+GET    /api/cards/due                           获取今日到期卡片（FSRS 排程）
 POST   /api/articles/{article_id}/exercise/cloze 生成完形填空题（grammar/vocab/ctest）
 POST   /api/exercise/cloze/evaluate             服务端判分（答案不在前端 DOM）
 POST   /api/syntax/analyze                      拓扑五场域与从句 AST 分析
@@ -226,24 +226,36 @@ POST   /api/syntax/analyze                      拓扑五场域与从句 AST 分
 | `player.js` | `ShadowPlayer` 影子跟读与控制板, Edge Neural TTS + Web Speech 离线发音回退 |
 | `companion.js` | 德语伴读宠物（Eule & 伙伴）引擎 `Companion`, 4 款矢量 SVG 角色, A1–B1 地道短语库, 8s 冷却语音发声与情绪动效 |
 | `reader.js` | 文章渲染 `openReader()`, 词法悬停抽屉 `inspect()`, CEFR 热力条与聚焦, 便签增删 `aiNoteAssist()` |
-| `cards.js` | 3D 拟真卡片翻转盒 `renderDeckStage()`, SM-2 间隔复习 `submitCardReview()`, Quiz 测验引擎 |
+| `cards.js` | 3D 拟真卡片翻转盒 `renderDeckStage()`, FSRS 认知间隔复习 `submitCardReview()`, Quiz 测验引擎 |
 | `folio.js` | Leporello 三折页台账 `loadProgress()`, 30 天留存墨线折线图, 歌德箴言轮播 |
 | `cloze.js` | 完形填空 & 德福 C-Test 考试 `openClozeModal()`, 首字母提示 `revealClozeHints()`, 服务端判分 |
 
 ---
 
-## SuperMemo SM-2 算法（`server.py` `calculate_sm2`）
+## FSRS 认知排程架构（`server.py` `calculate_fsrs` / `calculate_sm2`）
 
-```python
-grade:  1=忘记(Forgot)  2=困难(Hard)  3=良好(Good)  4=简单(Easy)
-quality_map: {1:1, 2:3, 3:4, 4:5}
-if q < 3: reset rep=0, interval=1
-else:
-  rep==0 → interval=1
-  rep==1 → interval=6
-  else   → interval=round(interval * ef)
-new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
+现代自适应记忆排程器基于 FSRS (Free Spaced Repetition Scheduler) DSR 认知状态机模型（纯 Python `math` 原生零依赖实现）：
+
+```text
+D (Difficulty 难度, [1.0, 10.0])
+S (Stability 稳定性天数, 当 Retrievability 降至 R_target=0.90 时的耗时)
+R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
+
+初次打分标定 (rep=0):
+  S_0 = [0.5, 1.8, 3.6, 8.5] (对应 1重来/2困难/3良好/4简单)
+  D_0(g) = clamp(8.0 - (g - 1) * 1.8, 1.0, 10.0)
+  Interval = [1, 2, 4, 9] 天
+
+后续复习 (rep>0):
+  难度均值回归: D' = clamp(0.1 * 4.4 + 0.9 * (D - (g - 3) * 0.8), 1.0, 10.0)
+  成功回忆 (g>=2): S' = S * (1 + e^1.0 * (11 - D') * S^(-0.2) * (e^((1-R)*0.9) - 1) * penalty(g))
+    其中 penalty: Hard=0.6, Good=1.0, Easy=1.4
+  遗忘重置 (g=1): S' = max(0.4, min(S, 0.6 * (D')^(-0.3) * (S + 1)^0.4)), rep 重置为 0
+  排程天数: Interval(S') = max(1, round(S'))
 ```
+
+- 接口 `GET /api/cards`、`GET /api/cards/due` 与 `POST /api/cards/{type}/{id}/review` 均返回预计算的 `next_intervals: {1: d_again, 2: d_hard, 3: d_good, 4: d_easy}` 字典；
+- `calculate_sm2` 函数保留作为 4 元组封装别名，确保向后兼容。
 
 ---
 
@@ -330,6 +342,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v3.6.2 `2026-08-19`** | **feat(folio & landing-page)**: 台账（Folio）重塑为 Atelier 呼吸感落地页：0.85:1.15 不对称 Hero 展台、歌德名言、6 核心 Ring Badges 大展盘（带四角标点 `+` 与 ECHTZEIT 脉冲标签）、双行反向 Wire Marquee 动态走字带（上行名言语录，下行实时战报数据）、欧标/走势与错题/勋章双面板紧凑并排网格 |
 | **v3.7.0 `2026-08-19`** | **feat(companion & mascot)**: 德语伴读宠物（Companion Mascot）「Eule & 伙伴」混合双模系统全量落地：4 款内嵌矢量 SVG 角色（歌德猫头鹰、学者猫、灵动狐、包豪斯机甲）+ 研读工坊台账展台与全局悬浮伴读球双挂载点 + A1–B1 地道鼓励短语库 + 三层 TTS 语音发声与 8s 冷却 + 6 大物理/情绪 Keyframes 动画 + 生词卡/语法卡/SM-2 复习/完形填空/测验全链路事件接线 |
 | **v3.7.1 `2026-08-19`** | **feat(companion & upload)**: 伴读宠物 Phase 2 角色工坊上线：支持用户上传任意自定义 `.svg` 矢量图形（$\le 64\text{KB}$）、严格 DOMParser 递归白名单消毒（过滤 `<script>`、`<foreignObject>`、`on*` 与非法协议）、`localStorage` 持久化注册并在研习工坊及全局浮层无缝切换 |
+| **v3.8.0 `2026-08-19`** | **feat(fsrs & memory)**: 认知自适应记忆排程器升级为 FSRS 引擎：DSR 状态机原生零依赖数学模型（难度 $D$ 均值回归、稳定性 $S$ 幂律增长、可提取性 $R$ 遗忘衰减），消解「沉沦死锁 (Ease Hell)」；API 注入 4 级下一轮间隔预计算字典 `next_intervals`，前端 3D 翻牌盒精准动态绑定并保持向下兼容 |
 
 ---
 

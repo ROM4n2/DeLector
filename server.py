@@ -1,4 +1,5 @@
 import os
+import math
 import json
 import sqlite3
 import random
@@ -1102,6 +1103,111 @@ async def lookup_vocab(req: VocabLookupReq):
     return res
 
 
+# ── FSRS (Free Spaced Repetition Scheduler) DSR Engine ────────────────────────
+
+def _calc_fsrs_step(
+    grade: int,
+    rep: int = 0,
+    interval: int = 1,
+    ef: float = 2.5,
+    elapsed_days: Optional[int] = None,
+    target_retention: float = 0.90
+) -> Tuple[int, int, float, str]:
+    """
+    Core single-step FSRS mathematical state transition based on DSR model:
+    grade: 1 (Forgot/Again), 2 (Hard), 3 (Good), 4 (Easy)
+    """
+    grade = max(1, min(4, int(grade)))
+    target_retention = max(0.70, min(0.98, float(target_retention)))
+
+    if rep <= 0:
+        # Initial review calibration
+        s0_map = {1: 0.5, 2: 1.8, 3: 3.6, 4: 8.5}
+        d0 = max(1.0, min(10.0, 8.0 - (grade - 1) * 1.8))
+        s_prime = s0_map.get(grade, 3.6)
+        d_prime = d0
+        new_rep = 1 if grade >= 2 else 0
+    else:
+        # Subsequent review transition
+        s = max(0.1, float(interval))
+        d = max(1.0, min(10.0, float(ef)))
+        t = max(1.0, float(elapsed_days if elapsed_days is not None else interval))
+
+        # Retrievability power-law decay
+        r = (1.0 + (19.0 / 81.0) * (t / s)) ** (-0.5)
+        r = max(0.01, min(0.99, r))
+
+        # Difficulty update with mean reversion to D0(3) = 4.4
+        d0_3 = 4.4
+        delta_d = -(grade - 3) * 0.8
+        d_prime = max(1.0, min(10.0, 0.1 * d0_3 + 0.9 * (d + delta_d)))
+
+        if grade == 1:
+            # Lapse / Forgot
+            new_rep = 0
+            s_prime = max(0.4, min(s, 0.6 * (d_prime ** -0.3) * ((s + 1.0) ** 0.4)))
+        else:
+            # Successful recall
+            new_rep = rep + 1
+            penalty_map = {2: 0.6, 3: 1.0, 4: 1.4}
+            penalty = penalty_map.get(grade, 1.0)
+            factor = math.exp(1.0) * (11.0 - d_prime) * (s ** -0.2) * (math.exp((1.0 - r) * 0.9) - 1.0) * penalty
+            s_prime = max(0.4, s * (1.0 + factor))
+
+    # Calculate scheduled interval based on target retention
+    if abs(target_retention - 0.90) < 1e-6:
+        scheduled_days = s_prime
+    else:
+        scheduled_days = s_prime * (81.0 / 19.0) * (target_retention ** (-2.0) - 1.0)
+
+    new_interval = max(1, int(round(scheduled_days + 1e-9)))
+    new_ef = round(d_prime, 2)
+    due_date = (datetime.now() + timedelta(days=new_interval)).strftime('%Y-%m-%d')
+    return new_rep, new_interval, new_ef, due_date
+
+
+def get_fsrs_next_intervals(
+    rep: int = 0,
+    interval: int = 1,
+    ef: float = 2.5,
+    elapsed_days: Optional[int] = None,
+    target_retention: float = 0.90
+) -> Dict[int, int]:
+    """
+    Precalculate scheduled intervals for all 4 rating grades (1: Again, 2: Hard, 3: Good, 4: Easy).
+    """
+    return {
+        g: _calc_fsrs_step(g, rep, interval, ef, elapsed_days, target_retention)[1]
+        for g in (1, 2, 3, 4)
+    }
+
+
+def calculate_fsrs(
+    grade: int,
+    rep: int = 0,
+    interval: int = 1,
+    ef: float = 2.5,
+    elapsed_days: Optional[int] = None,
+    target_retention: float = 0.90
+) -> Tuple[int, int, float, str, Dict[int, int]]:
+    """
+    Calculate next FSRS schedule state.
+    Returns: (new_rep, new_interval, new_ef, due_date, next_intervals)
+    """
+    new_rep, new_interval, new_ef, due_date = _calc_fsrs_step(grade, rep, interval, ef, elapsed_days, target_retention)
+    next_intervals = get_fsrs_next_intervals(new_rep, new_interval, new_ef, target_retention=target_retention)
+    return new_rep, new_interval, new_ef, due_date, next_intervals
+
+
+def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) -> Tuple[int, int, float, str]:
+    """
+    Backward-compatible SM-2 wrapper over modern FSRS scheduler.
+    Returns: (new_rep, new_interval, new_ef, due_date)
+    """
+    new_rep, new_interval, new_ef, due_date, _ = calculate_fsrs(grade, rep, interval, ef)
+    return new_rep, new_interval, new_ef, due_date
+
+
 @app.post("/api/cards/vocab")
 def add_vocab_card(req: VocabCardReq):
     with get_db() as conn:
@@ -1133,6 +1239,12 @@ def get_cards():
         g = [dict(r) for r in conn.execute(
             "SELECT * FROM grammar_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
         ).fetchall()]
+        for card in v + g:
+            card["next_intervals"] = get_fsrs_next_intervals(
+                card.get("repetition_count") or 0,
+                card.get("interval_days") or 1,
+                card.get("ease_factor") or 2.5
+            )
         return {"vocab_cards": v, "grammar_cards": g}
 
 # --- Phase A: Delete & Master ---
@@ -1682,52 +1794,7 @@ def restore_database_backup(req: RestoreReq):
 
 
 
-# ── v3.0 Phase 1: SuperMemo SM-2 & Cloze Exercise Engine ──────────────────────
-
-def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) -> Tuple[int, int, float, str]:
-    """
-    SuperMemo SM-2 algorithm with progressive interval scheduling:
-    grade: 1 (Forgot/Again), 2 (Hard), 3 (Good), 4 (Easy)
-    """
-    quality_map = {1: 1, 2: 3, 3: 4, 4: 5}
-    q = quality_map.get(grade, 3)
-    
-    if q < 3:
-        new_rep = 0
-        new_interval = 1
-    else:
-        if rep == 0:
-            if grade == 4:
-                new_interval = 4
-            elif grade == 3:
-                new_interval = 3
-            elif grade == 2:
-                new_interval = 2
-            else:
-                new_interval = 1
-        elif rep == 1:
-            if grade == 4:
-                new_interval = 8
-            elif grade == 3:
-                new_interval = 6
-            elif grade == 2:
-                new_interval = 3
-            else:
-                new_interval = 1
-        else:
-            if grade == 4:
-                new_interval = max(interval + 2, round(interval * ef * 1.3))
-            elif grade == 3:
-                new_interval = max(interval + 1, round(interval * ef))
-            elif grade == 2:
-                new_interval = max(interval + 1, round(interval * 1.2))
-            else:
-                new_interval = 1
-        new_rep = rep + 1
-    
-    new_ef = max(1.3, ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)))
-    due_date = (datetime.now() + timedelta(days=new_interval)).strftime('%Y-%m-%d')
-    return new_rep, new_interval, round(new_ef, 2), due_date
+# ── v3.0 / v3.8: FSRS Spaced Repetition Review & Cloze Exercise Engine ────────
 
 class CardReviewReq(BaseModel):
     grade: int  # 1: Forgot, 2: Hard, 3: Good, 4: Easy
@@ -1747,7 +1814,7 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
         interval = row["interval_days"] if "interval_days" in row.keys() and row["interval_days"] is not None else 1
         ef = row["ease_factor"] if "ease_factor" in row.keys() and row["ease_factor"] is not None else 2.5
         
-        new_rep, new_interval, new_ef, due_date = calculate_sm2(req.grade, rep, interval, ef)
+        new_rep, new_interval, new_ef, due_date, next_intervals = calculate_fsrs(req.grade, rep, interval, ef)
         
         is_correct = req.grade >= 2
         correct_incr = 1 if is_correct else 0
@@ -1761,13 +1828,14 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
         """, (new_rep, new_interval, new_ef, due_date, correct_incr, wrong_incr, card_id))
         
         updated = dict(conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone())
+        updated["next_intervals"] = next_intervals
     
     with get_progress_db() as pconn:
         pconn.execute(
             "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
-            (card_id, card_type, "sm2_review", 1 if is_correct else 0)
+            (card_id, card_type, "fsrs_review", 1 if is_correct else 0)
         )
-    log_study_event("quiz_session", card_id, f"sm2:{card_type}:{card_id}")
+    log_study_event("quiz_session", card_id, f"fsrs:{card_type}:{card_id}")
     return updated
 
 @app.get("/api/cards/due")
@@ -1782,6 +1850,12 @@ def get_due_cards():
             "SELECT * FROM grammar_cards WHERE mastered = 0 AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
             (today,)
         ).fetchall()]
+        for card in v + g:
+            card["next_intervals"] = get_fsrs_next_intervals(
+                card.get("repetition_count") or 0,
+                card.get("interval_days") or 1,
+                card.get("ease_factor") or 2.5
+            )
         return {
             "due_vocab": v,
             "due_grammar": g,
