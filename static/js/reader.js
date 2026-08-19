@@ -151,7 +151,11 @@ export async function openReader(id) {
       }
       if (t.is_punct) return `<span class="punct">${esc(t.text)}</span>`;
       const lvl = t.cefr_level || 'A1';
-      const sepAttr = t.separable ? ` data-sep-partner="tok-${t.separable.sep_prefix_id || t.separable.sep_verb_id}"` : '';
+      let sepPartnerId = null;
+      if (t.separable) {
+        sepPartnerId = ('sep_prefix_id' in t.separable) ? t.separable.sep_prefix_id : t.separable.sep_verb_id;
+      }
+      const sepAttr = (sepPartnerId !== null && sepPartnerId !== undefined) ? ` data-sep-partner="tok-${sepPartnerId}"` : '';
       const sepClass = t.separable ? ' is-separable' : '';
       return `<span id="tok-${t.id}" class="tok ${lvl}${sepClass}"${sepAttr} onclick="inspect(${t.id},${sent.id})">${esc(t.text)}</span>`;
     }).join('');
@@ -192,11 +196,12 @@ export function inspect(tokenId, sentId) {
 
   // Highlight separable partner if linked
   if (token.separable) {
-    const partnerId = token.separable.sep_prefix_id || token.separable.sep_verb_id;
-    if (partnerId) {
+    const partnerId = ('sep_prefix_id' in token.separable) ? token.separable.sep_prefix_id : token.separable.sep_verb_id;
+    if (partnerId !== undefined && partnerId !== null) {
       document.getElementById('tok-' + partnerId)?.classList.add('linked-separable');
     }
   }
+
 
   const sentIdx = state.currentArticle.sentences.findIndex(s => s.id === sentId);
   if (sentIdx >= 0) {

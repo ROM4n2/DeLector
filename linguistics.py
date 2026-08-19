@@ -993,41 +993,71 @@ LINGUISTICS_VOCAB_EXT: Dict[str, Tuple[str, str, Optional[str], str]] = {
     "kalt": ("A1", "ADJ", None, "寒冷的，冷的"),
     "schnell": ("A1", "ADJ", None, "快的，迅速的"),
     "schwer": ("A1", "ADJ", None, "重的，难的"),
-    "leicht": ("A1", "ADJ", None, "轻的，容易的"),
     "eigen": ("B1", "ADJ", None, "自己的，特有的"),
     "fremd": ("A2", "ADJ", None, "陌生的，外国的"),
+
+    # ── Core Compounding Base Roots ──────────────────────────────────────────
+    "klima": ("A2", "NOUN", "Neut", "气候"),
+    "schutz": ("B1", "NOUN", "Masc", "保护，防御"),
+    "maßnahme": ("B1", "NOUN", "Fem", "措施，办法"),
+    "massnahme": ("B1", "NOUN", "Fem", "措施，办法"),
+    "sprach": ("A1", "NOUN", "Fem", "语言"),
+    "bund": ("B1", "NOUN", "Masc", "联邦，同盟"),
+    "regierung": ("B1", "NOUN", "Fem", "政府"),
+    "wachstum": ("B1", "NOUN", "Neut", "增长，发展"),
+    "wirtschaft": ("B1", "NOUN", "Fem", "经济，经济学"),
+    "modell": ("A2", "NOUN", "Neut", "模型，模式"),
+    "bedingung": ("B1", "NOUN", "Fem", "条件，前提"),
+    "wandel": ("B1", "NOUN", "Masc", "转变，变迁"),
 }
+
 
 
 def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
     """Retrieve morphology metadata from CORE_VOCAB_DB or LINGUISTICS_VOCAB_EXT."""
     k = token_lower.strip().lower()
-    
-    # 1. Look in core_dict
-    if k in CORE_VOCAB_DB:
-        cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[k]
-        return {
-            "lemma": k,
-            "pos": pos,
-            "gender": gender,
-            "def_zh": def_zh,
-            "cefr": cefr,
-            "source": "core_dict"
-        }
-    
-    # 2. Look in linguistics extension
-    if k in LINGUISTICS_VOCAB_EXT:
-        cefr, pos, gender, def_zh = LINGUISTICS_VOCAB_EXT[k]
-        return {
-            "lemma": k,
-            "pos": pos,
-            "gender": gender,
-            "def_zh": def_zh,
-            "cefr": cefr,
-            "source": "linguistics_ext"
-        }
+    if not k:
+        return None
 
-    # 3. Check plural stems / vowel shifts (e.g. 'wörter' -> 'wort', 'bücher' -> 'buch', 'kinder' -> 'kind')
+    def _direct_lookup(term: str) -> Optional[Dict[str, Any]]:
+        if term in CORE_VOCAB_DB:
+            cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[term]
+            return {
+                "lemma": term,
+                "pos": pos,
+                "gender": gender,
+                "def_zh": def_zh,
+                "cefr": cefr,
+                "source": "core_dict"
+            }
+        if term in LINGUISTICS_VOCAB_EXT:
+            cefr, pos, gender, def_zh = LINGUISTICS_VOCAB_EXT[term]
+            return {
+                "lemma": term,
+                "pos": pos,
+                "gender": gender,
+                "def_zh": def_zh,
+                "cefr": cefr,
+                "source": "linguistics_ext"
+            }
+        return None
+
+    # 1. Direct hit
+    hit = _direct_lookup(k)
+    if hit:
+        return hit
+
+    # 2. ss <-> ß variations
+    if "ss" in k:
+        hit = _direct_lookup(k.replace("ss", "ß"))
+        if hit:
+            return hit
+    if "ß" in k:
+        hit = _direct_lookup(k.replace("ß", "ss"))
+        if hit:
+            return hit
+
+    # 3. Known irregular plural stems
     plural_stems = {
         "wörter": "wort", "worte": "wort",
         "bücher": "buch",
@@ -1040,14 +1070,30 @@ def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
         "bäume": "baum",
         "tage": "tag",
         "bilder": "bild",
+        "ärzte": "arzt",
+        "züge": "zug",
+        "hände": "hand",
+        "mütter": "mutter",
+        "väter": "vater",
+        "brüder": "bruder",
+        "töchter": "tochter"
     }
     if k in plural_stems:
-        base = plural_stems[k]
-        info = _get_element_info(base)
-        if info:
-            return info
+        hit = _direct_lookup(plural_stems[k])
+        if hit:
+            return hit
+
+    # 4. Standard German plural endings (-en, -n, -e, -er, -s)
+    for suf in ["en", "n", "e", "er", "s"]:
+        if k.endswith(suf) and len(k) > len(suf) + 2:
+            stem = k[:-len(suf)]
+            hit = _direct_lookup(stem) or _direct_lookup(stem.replace("ss", "ß"))
+            if hit and hit.get("pos") == "NOUN":
+                return hit
 
     return None
+
+
 
 
 # ==============================================================================
@@ -1129,34 +1175,41 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
     # Scoring algorithm to pick the most natural German morphological decomposition
     def _score_partition(partition: List[Tuple[str, str, Dict[str, Any]]]) -> float:
         score = 100.0
-        # 1. Prefer fewer components (2 components > 3 spurious components)
-        score -= (len(partition) - 2) * 15.0
         
-        # 2. Last element (Grundwort / Head Noun) must preferably be a NOUN
+        # Reward solid morpheme decomposition (len >= 4)
+        all_len_ok = all(len(p[0]) >= 4 for p in partition)
+        if all_len_ok and len(partition) >= 2:
+            score += 30.0
+            
+        # Penalize spurious tiny fragments (< 4 chars unless common like alt, rot, neu)
+        short_count = sum(1 for p in partition if len(p[0]) < 4)
+        score -= short_count * 25.0
+        
+        # Last element (Grundwort / Head Noun) must preferably be a NOUN
         last_info = partition[-1][2]
         if last_info.get("pos") == "NOUN":
             score += 30.0
         elif last_info.get("pos") in ("VERB", "ADJ"):
             score -= 10.0
 
-        # 3. First element (Bestimmungswort) prefer NOUN, then VERB/ADJ
+        # First element (Bestimmungswort) prefer NOUN, then VERB/ADJ
         first_info = partition[0][2]
         if first_info.get("pos") == "NOUN":
             score += 20.0
         elif first_info.get("pos") in ("VERB", "ADJ"):
             score += 15.0
 
-        # 4. Reward each recognized core element and penalize tiny 3-letter fragments
         for part_slice, fuge, info in partition:
             if len(part_slice) >= 4:
                 score += 5.0
             if info.get("source") == "core_dict":
                 score += 10.0
             # Fuge validity check
-            if fuge == "s" and part_slice.endswith(("ung", "heit", "keit", "schaft", "ion", "tät", "tum")):
-                score += 10.0
+            if fuge == "s" and part_slice.endswith(("ung", "heit", "keit", "schaft", "ion", "tät", "tum", "utz", "tz")):
+                score += 15.0
 
         return score
+
 
     best_partition = max(valid_compounds, key=_score_partition)
 

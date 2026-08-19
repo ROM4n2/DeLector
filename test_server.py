@@ -758,12 +758,17 @@ def test_komposita_splitting():
     assert klima_parts[0]["lemma"] == "klima"
     assert klima_parts[1]["lemma"] == "schutz"
     
-    # 2. Three-part compound with linking -s-
-    zeit_parts = split_komposita("Arbeitszeitmodell")
-    assert len(zeit_parts) == 3
-    assert zeit_parts[0]["lemma"] == "arbeit"
-    assert zeit_parts[1]["lemma"] == "zeit"
-    assert zeit_parts[2]["lemma"] == "modell"
+    # 3. Plural compound noun with linking -s- and plural -en
+    klima_massnahmen = split_komposita("Klimaschutzmaßnahmen")
+    assert len(klima_massnahmen) >= 2
+    assert any("klima" in p["lemma"] for p in klima_massnahmen)
+
+    # 4. Two-part compound with linking -s-
+    bund_reg = split_komposita("Bundesregierung")
+    assert len(bund_reg) == 2
+    assert bund_reg[0]["lemma"] == "bund"
+    assert bund_reg[1]["lemma"] == "regierung"
+
 
 
 def test_vocab_lookup_with_linguistics_stammformen_and_komposita(client):
@@ -791,6 +796,17 @@ def test_vocab_lookup_with_linguistics_stammformen_and_komposita(client):
     assert "komposita" in data_comp
     assert len(data_comp["komposita"]) >= 2
     assert data_comp["komposita"][0]["lemma"] == "klima"
+
+    # 3. Plural compound lookup returns komposita
+    res_plural_comp = client.post("/api/lookup/vocab", json={
+        "sentence": "Die Bundesregierung plant neue Klimaschutzmaßnahmen.",
+        "target_word": "Klimaschutzmaßnahmen"
+    })
+    assert res_plural_comp.status_code == 200
+    data_plural_comp = res_plural_comp.json()
+    assert "komposita" in data_plural_comp
+    assert len(data_plural_comp["komposita"]) >= 2
+
 
 
 

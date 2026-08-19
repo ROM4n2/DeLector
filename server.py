@@ -418,7 +418,8 @@ def process_german_text(text: str) -> Dict[str, Any]:
 
         sentences.append({"id": sent_idx, "text": sent.text, "tokens": tokens})
     stats = calculate_cefr_stats(all_tokens)
-    return {"sentence_count": len(sentences), "sentences": sentences, "stats": stats}
+    return {"version": "3.4.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
+
 
 # --- 3. Anki Exporter ---
 VOCAB_MODEL = genanki.Model(
@@ -727,11 +728,12 @@ def get_article(article_id: int):
             raise HTTPException(404, "Article not found")
         data = dict(row)
         pj = json.loads(data["processed_json"])
-        if "stats" not in pj:
+        if "stats" not in pj or pj.get("version") != "3.4.0":
             pj = process_german_text(data["raw_text"])
             conn.execute("UPDATE articles SET processed_json = ? WHERE id = ?", (json.dumps(pj, ensure_ascii=False), article_id))
         data.update(pj)
         return data
+
 
 SYSTEM_GRAMMAR_PROMPT = """你是一位精通德语欧标（Goethe-Zertifikat A1-C1）的资深德语教学与考点解析专家。
 用户会提供一个德语完整句子，以及他们点击的目标词汇或短语（用户可能是 A1-A2 零基础/初学者）。
