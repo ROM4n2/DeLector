@@ -532,3 +532,94 @@ def test_cloze_exercise_generation_and_eval(client):
     assert "accuracy_pct" in eval_data
     assert eval_data["results"][0]["correct"] is True
 
+def test_cloze_evaluation_vocab_and_incorrect(client):
+    """Test vocab mode cloze generation and evaluation, including incorrect answer."""
+    text = "Deutsch ist eine schöne Sprache, die viele Menschen lernen."
+    art_res = client.post("/api/articles/ingest", json={"title": "Vocab Cloze", "raw_text": text})
+    art_id = art_res.json()["article_id"]
+
+    v_res = client.post(f"/api/articles/{art_id}/exercise/cloze", json={"mode": "vocab"})
+    assert v_res.status_code == 200
+    v_data = v_res.json()
+    assert v_data["mode"] == "vocab"
+    assert len(v_data["items"]) > 0
+
+    first_item = v_data["items"][0]
+    correct_ans = first_item["original"]
+    eval_res = client.post("/api/exercise/cloze/evaluate", json={
+        "article_id": art_id,
+        "mode": "vocab",
+        "answers": {str(first_item["index"]): correct_ans}
+    })
+    assert eval_res.status_code == 200
+    eval_data = eval_res.json()
+    assert eval_data["results"][0]["correct"] is True
+
+    if len(v_data["items"]) > 1:
+        second = v_data["items"][1]
+        eval_res2 = client.post("/api/exercise/cloze/evaluate", json={
+            "article_id": art_id,
+            "mode": "vocab",
+            "answers": {str(second["index"]): "wronganswer"}
+        })
+        assert eval_res2.status_code == 200
+        eval_data2 = eval_res2.json()
+        assert eval_data2["results"][0]["correct"] is False
+
+def test_cloze_evaluation_ctest(client):
+    """Test ctest mode generation and evaluation."""
+    text = "Die Universität bietet viele Kurse an, die Studenten können wählen."
+    art_res = client.post("/api/articles/ingest", json={"title": "Ctest Cloze", "raw_text": text})
+    art_id = art_res.json()["article_id"]
+    c_res = client.post(f"/api/articles/{art_id}/exercise/cloze", json={"mode": "ctest"})
+    assert c_res.status_code == 200
+    c_data = c_res.json()
+    assert c_data["mode"] == "ctest"
+    assert len(c_data["items"]) > 0
+    answers = {str(item["index"]): item["original"] for item in c_data["items"][:3]}
+    eval_res = client.post("/api/exercise/cloze/evaluate", json={
+        "article_id": art_id,
+        "mode": "ctest",
+        "answers": answers
+    })
+    assert eval_res.status_code == 200
+    eval_data = eval_res.json()
+    assert "score" in eval_data
+    assert eval_data["score"] >= 0
+
+def test_core_dict_and_offline_vocab_lookup(client):
+    """Test offline Goethe core vocabulary lookup and CEFR tagging."""
+    from core_dict import lookup_core_vocab, get_core_cefr_level
+
+    # Direct core_dict module tests
+    hit = lookup_core_vocab("Herausforderung")
+    assert hit is not None
+    assert hit["cefr_level"] == "B1"
+    assert hit["gender"] == "Fem"
+    assert "挑战" in hit["definition_zh"]
+
+    lvl = get_core_cefr_level("klimawandel")
+    assert lvl == "B1"
+
+    # API endpoint test with local dict hit (no network API key required)
+    res = client.post("/api/lookup/vocab", json={
+        "sentence": "Der Klimawandel ist eine große Herausforderung.",
+        "target_word": "Herausforderung"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["source"] == "local_dict"
+    assert "挑战" in data["definition_zh"]
+    assert data["gender"] == "Fem"
+    assert data["cefr_level"] == "B1"
+
+def test_static_esm_modules_served(client):
+    """Test all static ES Modules are served properly by FastAPI."""
+    for mod in ["main.js", "core.js", "player.js", "reader.js", "cards.js", "folio.js", "cloze.js"]:
+        res = client.get(f"/js/{mod}")
+        assert res.status_code == 200
+        assert "javascript" in res.headers.get("content-type", "")
+
+
+
+

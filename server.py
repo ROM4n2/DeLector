@@ -301,12 +301,23 @@ CEFR_DICT = {
     "differenzieren": "C1", "konstatieren": "C1", "ambivalent": "C1", "sukzessive": "C1"
 }
 
+from core_dict import lookup_core_vocab, get_core_cefr_level
+
 def get_cefr_level(lemma: str) -> str:
     if not lemma:
         return "A1"
     low = lemma.lower().strip()
+    
+    # 1. Exact core dictionary lookup
+    dict_lvl = get_core_cefr_level(low)
+    if dict_lvl:
+        return dict_lvl
+
+    # 2. Hardcoded fallback list
     if low in CEFR_DICT:
         return CEFR_DICT[low]
+        
+    # 3. Suffix and length heuristics
     if any(low.endswith(s) for s in ["ität", "ismus", "schaft", "ung"]):
         return "B2" if len(low) > 10 else "B1"
     if len(low) > 11:
@@ -316,6 +327,7 @@ def get_cefr_level(lemma: str) -> str:
     if len(low) > 4:
         return "A2"
     return "A1"
+
 
 def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
     counts = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
@@ -637,12 +649,27 @@ class VocabLookupReq(BaseModel):
 
 @app.post("/api/lookup/vocab")
 async def lookup_vocab(req: VocabLookupReq):
+    # Tier 1: Local core dictionary hit (0ms zero-latency, 100% offline)
+    local_hit = lookup_core_vocab(req.target_word)
+    if local_hit:
+        return {
+            "definition_zh": local_hit.get("definition_zh", ""),
+            "plural": local_hit.get("plural", ""),
+            "gender": local_hit.get("gender"),
+            "pos": local_hit.get("pos"),
+            "cefr_level": local_hit.get("cefr_level"),
+            "synonyms": [],
+            "source": "local_dict"
+        }
+
+    # Tier 2: DeepSeek AI contextual lookup if API key is configured
     key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not key:
         return {
             "definition_zh": "",
             "plural": "",
-            "synonyms": []
+            "synonyms": [],
+            "source": "none"
         }
 
     user_content = f"句子: \"{req.sentence}\"\n目标词汇: \"{req.target_word}\""
@@ -664,16 +691,21 @@ async def lookup_vocab(req: VocabLookupReq):
                 return {
                     "definition_zh": "",
                     "plural": "",
-                    "synonyms": []
+                    "synonyms": [],
+                    "source": "ai_error"
                 }
             content = resp.json()["choices"][0]["message"]["content"]
-            return json.loads(content)
+            res = json.loads(content)
+            res["source"] = "ai"
+            return res
     except Exception:
         return {
             "definition_zh": "",
             "plural": "",
-            "synonyms": []
+            "synonyms": [],
+            "source": "ai_exception"
         }
+
 
 @app.post("/api/cards/vocab")
 def add_vocab_card(req: VocabCardReq):

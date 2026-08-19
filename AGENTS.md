@@ -17,14 +17,15 @@
 
 | 层 | 技术 | 关键文件 |
 |---|---|---|
-| 后端 | Python 3.10+, FastAPI, spaCy `de_core_news_md`, genanki | `server.py` (1415 行) |
-| 前端 | 原生 HTML/CSS/JS（无框架），PWA | `static/index.html`, `static/app.js` (~2312 行), `static/style.css` (~4934 行) |
+| 后端 | Python 3.10+, FastAPI, spaCy `de_core_news_md`, genanki | `server.py`, `core_dict.py` (歌德离线词库) |
+| 前端 | 原生 ES Modules（无框架、零构建），PWA | `static/index.html`, `static/js/*.js` (6大模块), `static/style.css` |
 | 数据库 | SQLite × 2 | `delector.db`（主库）, `progress.db`（学习进度） |
-| 音频缓存 | 本地 `.cache/audio/` MP3 | Edge Neural TTS (edge-tts) |
+| 音频缓存 | 本地 `.cache/audio/` MP3 | Edge Neural TTS (edge-tts) + Web Speech 回退 |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（**24 个测试，100% 通过**） |
+| 测试 | pytest | `test_server.py`（**28 个测试，100% 通过**） |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
+
 
 ---
 
@@ -155,7 +156,8 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 | `3c8023f` | **fix**: 补全 `toggleDeckFlip`、`stepDeck`、`switchFolioPage` 等被覆盖的 handler；缓存版本升至 3.0.2 |
 | `7e98726` | **fix**: 完形填空首字母提示与重做功能；`renderClozeExercise` 改用 split 解析避免 HTML 注入 |
 | `236e2bf` | docs: 创建 AGENTS.md 交接文档 |
-| v3.1.0 (HEAD) | **fix**: Leporello 色段精度（整数归一化）+ Android PWA bottom-sheet 触屏体验（backdrop + scroll lock + touch-action）+ `/api/ai/note-assist` 配置诊断（warning log + `_stub` flag） |
+| v3.1.0 `91de593` | **fix**: Leporello 色段精度（整数归一化）+ Android PWA bottom-sheet 触屏体验（backdrop + scroll lock + touch-action）+ `/api/ai/note-assist` 配置诊断（warning log + `_stub` flag） |
+| v3.2.0 (HEAD) | **feat & refactor**: 前端原生 ES Modules 模块化拆分（`static/js/*.js`）+ 歌德 A1-B2 离线核心词库（`core_dict.py` 0ms 查词与冠词复数）+ 28 测试全绿 |
 
 ---
 
@@ -181,8 +183,9 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  de_core_news_md（已安装，无需联网）
 测试:      pytest test_server.py -v
-当前测试:  26 / 26 全部通过（100% Green）
+当前测试:  28 / 28 全部通过（100% Green）
 ```
+
 
 
 ---
