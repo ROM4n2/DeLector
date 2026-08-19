@@ -1259,15 +1259,18 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
                 )
                 sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
                 if is_grammar_target and len(sent_blanks) < 2 and len(token.text) >= 2:
+                    first_letter = token.text[0]
                     items.append({
                         "index": blank_counter,
                         "original": token.text,
-                        "hint": f"{token.lemma_} ({token.pos_})",
+                        "first_letter": first_letter,
+                        "lemma": token.lemma_,
+                        "pos": token.pos_,
+                        "hint": f"首字母: {first_letter}...",
                         "type": "grammar",
-                        "sent_idx": sent_idx,
-                        "pos": token.pos_
+                        "sent_idx": sent_idx
                     })
-                    tokens_output.append(f"[[BLANK_{blank_counter}]]")
+                    tokens_output.append(f"[[BLANK_{blank_counter}]]{token.whitespace_}")
                     blank_counter += 1
                 else:
                     tokens_output.append(token.text_with_ws)
@@ -1279,15 +1282,18 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
                 is_vocab_target = token.pos_ in ("NOUN", "VERB") and lvl in ("A2", "B1", "B2", "C1") and len(token.text) >= 3
                 sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
                 if is_vocab_target and len(sent_blanks) < 2:
+                    first_letter = token.text[0]
                     items.append({
                         "index": blank_counter,
                         "original": token.text,
-                        "hint": f"{token.lemma_} [{lvl}]",
+                        "first_letter": first_letter,
+                        "lemma": token.lemma_,
+                        "pos": token.pos_,
+                        "hint": f"首字母: {first_letter}... ({token.lemma_})",
                         "type": "vocab",
-                        "sent_idx": sent_idx,
-                        "pos": token.pos_
+                        "sent_idx": sent_idx
                     })
-                    tokens_output.append(f"[[BLANK_{blank_counter}]]")
+                    tokens_output.append(f"[[BLANK_{blank_counter}]]{token.whitespace_}")
                     blank_counter += 1
                 else:
                     tokens_output.append(token.text_with_ws)
@@ -1307,11 +1313,12 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
                             "original": token.text,
                             "prefix": prefix,
                             "suffix": suffix,
-                            "hint": f"{prefix}...",
+                            "first_letter": prefix,
+                            "hint": f"词首: {prefix}...",
                             "type": "ctest",
                             "sent_idx": sent_idx
                         })
-                        tokens_output.append(f"{prefix}[[BLANK_{blank_counter}]]")
+                        tokens_output.append(f"{prefix}[[BLANK_{blank_counter}]]{token.whitespace_}")
                         blank_counter += 1
                         continue
                 tokens_output.append(token.text_with_ws)
@@ -1319,14 +1326,17 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
     if len(items) == 0:
         for token in doc:
             if token.is_alpha and len(token.text) >= 4 and blank_counter < 3:
+                first_letter = token.text[0]
                 items.append({
                     "index": blank_counter,
                     "original": token.text,
-                    "hint": token.lemma_,
+                    "first_letter": first_letter,
+                    "lemma": token.lemma_,
+                    "hint": f"首字母: {first_letter}...",
                     "type": mode,
                     "sent_idx": 0
                 })
-                tokens_output.append(f"[[BLANK_{blank_counter}]]")
+                tokens_output.append(f"[[BLANK_{blank_counter}]]{token.whitespace_}")
                 blank_counter += 1
             else:
                 tokens_output.append(token.text_with_ws)

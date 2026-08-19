@@ -2127,21 +2127,38 @@ function renderClozeExercise(data) {
   if (!bodyEl) return;
 
   let text = data.masked_text || '';
-  data.items.forEach(item => {
-    const ph = `[[BLANK_${item.index}]]`;
-    const inputHtml = `
-      <span class="cloze-blank-wrap">
-        <input type="text" class="cloze-input" data-index="${item.index}"
-          data-orig="${esc(item.original)}" data-type="${esc(item.type)}"
-          placeholder="____" autocomplete="off" autocorrect="off" autocapitalize="off"
-          onkeydown="handleClozeKey(event, ${item.index})">
-        <span class="cloze-hint-badge hidden" id="cloze-hint-${item.index}">${esc(item.hint || '')}</span>
-      </span>
-    `;
-    text = text.replace(ph, inputHtml);
+  const parts = text.split(/(\[\[BLANK_\d+\]\])/g);
+  let html = '';
+
+  const itemMap = {};
+  (data.items || []).forEach(it => {
+    itemMap[it.index] = it;
   });
 
-  bodyEl.innerHTML = text.replace(/\n/g, '<br><br>');
+  parts.forEach(part => {
+    const match = part.match(/^\[\[BLANK_(\d+)\]\]$/);
+    if (match) {
+      const idx = parseInt(match[1], 10);
+      const item = itemMap[idx];
+      if (item) {
+        const ph = item.type === 'ctest' ? '...' : '____';
+        html += `
+          <span class="cloze-blank-wrap">
+            <input type="text" class="cloze-input" data-index="${item.index}"
+              data-type="${esc(item.type)}"
+              data-first-letter="${esc(item.first_letter || '')}"
+              placeholder="${ph}" autocomplete="off" autocorrect="off" autocapitalize="off"
+              onkeydown="handleClozeKey(event, ${item.index})">
+            <span class="cloze-hint-badge hidden" id="cloze-hint-${item.index}">${esc(item.hint || '')}</span>
+          </span>
+        `;
+      }
+    } else {
+      html += esc(part).replace(/\n/g, '<br>');
+    }
+  });
+
+  bodyEl.innerHTML = html;
   bodyEl.querySelector('.cloze-input')?.focus();
 }
 
@@ -2155,17 +2172,36 @@ function handleClozeKey(e, idx) {
 }
 
 function revealClozeHints() {
-  document.querySelectorAll('.cloze-hint-badge').forEach(el => el.classList.remove('hidden'));
+  if (!currentClozeExercise) return;
+  let filledCount = 0;
+  document.querySelectorAll('.cloze-input').forEach(input => {
+    const firstLetter = input.getAttribute('data-first-letter') || '';
+    const type = input.getAttribute('data-type');
+
+    if (!input.value.trim()) {
+      // ctest blanks fill in the suffix; data-first-letter holds the prefix,
+      // so we cannot derive the suffix's first letter without the full word.
+      // Just reveal the badge hint (e.g. "词首: Ha...") without auto-filling.
+      if (type !== 'ctest' && firstLetter) {
+        input.value = firstLetter;
+      }
+      input.classList.add('has-hint');
+      filledCount++;
+    }
+
+    const idx = input.getAttribute('data-index');
+    const badge = document.getElementById(`cloze-hint-${idx}`);
+    if (badge) badge.classList.remove('hidden');
+  });
+
+  showToast(`💡 已为 ${filledCount} 个空白处填入首字母提示`);
 }
 
 function resetClozeExercise() {
-  document.querySelectorAll('.cloze-input').forEach(input => {
-    input.value = '';
-    input.classList.remove('is-correct', 'is-wrong');
-  });
-  document.querySelectorAll('.cloze-correction-tag').forEach(el => el.remove());
+  if (!currentClozeExercise) return;
+  renderClozeExercise(currentClozeExercise);
   document.getElementById('cloze-score-display')?.classList.add('hidden');
-  document.querySelector('.cloze-input')?.focus();
+  showToast('↺ 已重置作答，请重新填空');
 }
 
 async function submitClozeExercise() {
