@@ -19,7 +19,7 @@
 | 测试 | **64 / 64 全绿**（`test_server.py` 49 + `test_syntax_tree.py` 15） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，spaCy 与德语模型在设备上正常加载（`nlp_engine == "spacy"`） |
-| 对外发布 | **v3.5.0 已发布**（2026-08-19）：[Android APK（58.2 MB）](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) + Windows Portable（75.4 MB）。注意：**Release 标题误写成 `DeLector vv3.5.0`**（多一个 v），tag 与资产正常 |
+| 对外发布 | v3.5.0 Release 已发布（2026-08-19）但**内容错误**：tag 指向 PR #2 之前的 `4ede08f`，发布的是**未含安卓修复的旧版**（无 spaCy、纯 Python 降级、三 ABI、无 `extractPackages`）。真机验证通过的版本**从未发布**。标题 `vv3.5.0` 是工作流 bug。**需重新发布，见待办** |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -321,7 +321,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | v3.5.0 `0e0d8d8` | **feat**: 拓扑五场域与从句 AST 引擎（`syntax_tree.py`） |
 | v3.5.0 | **feat & build**: 全局设置弹窗 + Windows 便携版与 Android 独立版 CI/CD |
 | **PR #2 `c3de92f`** | **fix(android)**: 修复启动卡死（降级路径 `NameError`）+ 切句器去重 + Android 错误可见性与重载上限 + Android 只绑回环 + **移植真 spaCy 进 APK**（arm64-only 56.7MB）+ `extractPackages` 与模型三级加载回退 + 模型 md 优先 + **pre-commit 密钥扫描钩子**；真机验证 `nlp_engine == "spacy"` |
-| **v3.5.0 Release `2026-08-19`** | **对外发布**：GitHub Releases 上线 `DeLector-v3.5.0-Android.apk`（58.2 MB，arm64-v8a only）与 `DeLector-v3.5.0-Windows-x64-Portable.zip`（75.4 MB）。标题误写为 `DeLector vv3.5.0`（见待办） |
+| **v3.5.0 Release `2026-08-19`（有误）** | **发布但内容错误**：tag `v3.5.0` → `4ede08f`（PR #2 之前）。该版 build.gradle 是**三 ABI**、**无 `extractPackages`**、**无 spaCy 依赖**；server.py 无 `_load_spacy_model` 回退。发布资产 = 未修复安卓 bug 的旧版，真机验证通过的新版未发布。标题 `vv3.5.0` 来自工作流 `name: DeLector v${{ github.ref_name }}`（ref_name 自带 `v`） |
 
 ---
 
@@ -329,11 +329,11 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 
 > 更新时间：2026-08-19
 
-- [ ] **Release 标题拼写**：v3.5.0 的 Release 名误写成 `DeLector vv3.5.0`（多一个 v），
-      tag 与资产正常。想改标题：
-      `gh release edit v3.5.0 --repo ROM4n2/DeLector --name "DeLector v3.5.0 — 德语学术精读与备考工作台"`
-- [ ] 发布资产未在本机重新下载校验（CI 从 master 构建，理论上与本地验证通过的
-      56.7MB 版本同源；发布资产 58.2MB 差异来自签名/构建类型，未复核）
+- [ ] **v3.5.0 Release 内容错误，需重新发布**：已发布资产来自 PR #2 之前的 `4ede08f`
+      （无 spaCy、纯 Python 降级、三 ABI）。真机验证通过的正确版本在 master 上但**从未发布**。
+      决定发布方案前不要改 README 下载区
+- [ ] **工作流发版 bug × 2**：`build-release.yml` 的 `name: DeLector v${{ github.ref_name }}`
+      拼出 `vv3.5.0`；`files`/`body` 硬编码了 `v3.5.0` 资产名与说明。改这两处再发版
 - [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
       md 实际加载未在本机跑过

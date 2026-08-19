@@ -23,7 +23,11 @@
 | 平台 | 版本 | 说明 | 下载通道 |
 |---|---|---|---|
 | 🪟 **Windows x64** | `v3.5.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可使用 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
-| 📱 **Android** | `v3.5.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型（`de_core_news_sm`），单机独立运行；**仅支持 64 位 ARM（arm64-v8a）**，32 位机型与模拟器装不上 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
+| 📱 **Android** | `v3.5.0` 独立单机版 | 内嵌 Python 运行时，单机独立运行 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
+
+> ⚠️ **v3.5.0 发布内容待修正**：当前 Release 是从 PR #2 之前的旧提交构建的，Android 端为
+> **纯 Python 降级 NLP**（无 spaCy 依存句法，五场域 / 从句 AST / 可分动词回连不可用），
+> 也不含 arm64-only 体积优化。真机验证通过的 spaCy 版本尚未发布，修正后本表将同步更新。
 
 ---
 
