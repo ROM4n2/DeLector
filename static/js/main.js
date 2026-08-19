@@ -231,12 +231,18 @@ export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
 
 
 export function openModal() {
-  document.getElementById('modal-overlay')?.classList.remove('hidden');
+  const el = document.getElementById('modal-overlay');
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.classList.add('open');
   switchImportTab(currentImportTab || 'text');
 }
 
 export function closeModal() {
-  document.getElementById('modal-overlay')?.classList.add('hidden');
+  const el = document.getElementById('modal-overlay');
+  if (!el) return;
+  el.classList.add('hidden');
+  el.classList.remove('open');
 }
 
 // ── Settings Modal ─────────────────────────────────────────────────────────

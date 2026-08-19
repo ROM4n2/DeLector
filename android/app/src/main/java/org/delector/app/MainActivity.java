@@ -1,15 +1,20 @@
 package org.delector.app;
 
 import android.annotation.SuppressLint;
+import android.app.DownloadManager;
 import android.content.res.AssetManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.webkit.URLUtil;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -19,6 +24,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
@@ -40,11 +46,15 @@ public class MainActivity extends AppCompatActivity {
     /** Python 侧抛异常后服务永远不会就绪，用它让轮询与重载立刻停手并保留错误信息 */
     private volatile String fatalError = null;
     private int reloadAttempts = 0;
+    private long lastBackPressTime = 0;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Keep screen on during study & shadowing
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // 1. Root Container (FrameLayout)
         FrameLayout root = new FrameLayout(this);
@@ -58,6 +68,34 @@ public class MainActivity extends AppCompatActivity {
         ws.setDomStorageEnabled(true);
         ws.setDatabaseEnabled(true);
         ws.setAllowFileAccess(true);
+        ws.setAllowContentAccess(true);
+        ws.setMediaPlaybackRequiresUserGesture(false);
+        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+        // Native Download Listener for Anki APKG, Study Guide HTML, JSON Backups
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            try {
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                String filename = URLUtil.guessFileName(url, contentDisposition, mimetype);
+                if (filename == null || filename.isEmpty() || filename.equals("downloadfile")) {
+                    filename = "DeLector_Export_" + System.currentTimeMillis() + (url.contains("apkg") ? ".apkg" : ".json");
+                }
+                request.setMimeType(mimetype);
+                request.addRequestHeader("User-Agent", userAgent);
+                request.setDescription("DeLector 德语学术导出资产");
+                request.setTitle(filename);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename);
+
+                DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                if (dm != null) {
+                    dm.enqueue(request);
+                    Toast.makeText(MainActivity.this, "已保存至系统「下载」目录: " + filename, Toast.LENGTH_LONG).show();
+                }
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "下载异常: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
         ws.setAllowContentAccess(true);
         ws.setMediaPlaybackRequiresUserGesture(false);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
@@ -289,10 +327,43 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
+        if (webView == null || !isServerReady) {
             super.onBackPressed();
+            return;
         }
+
+        String jsCheck = "(function() {" +
+                "  var modal = document.querySelector('#modal-overlay.open, #settings-overlay.open, .modal-overlay.open');" +
+                "  if (modal) {" +
+                "    if (window.closeModal) window.closeModal();" +
+                "    if (window.closeSettingsModal) window.closeSettingsModal();" +
+                "    return 'modal';" +
+                "  }" +
+                "  var drawer = document.querySelector('#drawer.open, #syntax-drawer.open');" +
+                "  if (drawer) {" +
+                "    if (window.closeDrawer) window.closeDrawer();" +
+                "    if (window.closeSyntaxDrawer) window.closeSyntaxDrawer();" +
+                "    return 'drawer';" +
+                "  }" +
+                "  var activeView = document.querySelector('.view.active');" +
+                "  if (activeView && activeView.id !== 'view-home') {" +
+                "    if (window.show) window.show('home');" +
+                "    return 'view';" +
+                "  }" +
+                "  return 'none';" +
+                "})()";
+
+        webView.evaluateJavascript(jsCheck, result -> {
+            if (result != null && (result.contains("modal") || result.contains("drawer") || result.contains("view"))) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            if (now - lastBackPressTime < 2000) {
+                finish();
+            } else {
+                lastBackPressTime = now;
+                Toast.makeText(MainActivity.this, "再按一次退出 DeLector", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }

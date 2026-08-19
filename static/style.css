@@ -4979,11 +4979,72 @@ body.drawer-open .shadow-player {
 
   /* Leporello Folio on Mobile */
   .dossier-headline {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
   }
 
   .dossier-ledger-table {
-    grid-template-columns: repeat(2, 1fr);
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+
+  .folio-spread, .folio-page {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .folio-page {
+    padding: 1rem 0.5rem !important;
+  }
+
+  /* Reader Topbar & Controls on Mobile */
+  .reader-topbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  #reader-title {
+    font-size: 1.25rem !important;
+    max-width: 100% !important;
+    word-break: break-word !important;
+    margin: 0.25rem 0 !important;
+  }
+
+  .reader-controls {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    align-items: center !important;
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  /* Cards Topbar on Mobile */
+  .cards-topbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  .cards-topbar > div {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    width: 100% !important;
+  }
+
+  .cards-control-row {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Global Mobile Overflow Guard */
+  body, html, .view {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
   }
 
   .cloze-modal {

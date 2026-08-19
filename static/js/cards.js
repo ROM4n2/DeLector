@@ -242,6 +242,9 @@ export function renderDeckStage(vList, gList) {
 
 export async function submitCardReview(type, id, grade) {
   try {
+    if (navigator.vibrate) {
+      navigator.vibrate(grade >= 3 ? [15, 30, 20] : 30);
+    }
     await api(`/api/cards/${type}/${id}/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -257,6 +260,7 @@ export async function submitCardReview(type, id, grade) {
 
 export function toggleDeckFlip(e) {
   if (e) e.stopPropagation();
+  if (navigator.vibrate) navigator.vibrate(15);
   deckFlipped = !deckFlipped;
   const cardEl = document.getElementById('deck-active-card');
   if (cardEl) {
