@@ -2,6 +2,7 @@ package org.delector.app;
 
 import android.annotation.SuppressLint;
 import android.app.DownloadManager;
+import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Color;
 import android.net.Uri;
@@ -17,6 +18,8 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -51,15 +54,20 @@ public class MainActivity extends AppCompatActivity {
     private int reloadAttempts = 0;
     private long lastBackPressTime = 0;
     private NativeTTSBridge nativeTTS;
+    private ValueCallback<Uri[]> filePathCallback;
+    private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
 
     public class NativeTTSBridge {
         private TextToSpeech tts;
-        private boolean isInitialized = false;
+        private volatile boolean isInitialized = false;
 
         public NativeTTSBridge() {
             tts = new TextToSpeech(MainActivity.this, status -> {
                 if (status == TextToSpeech.SUCCESS) {
                     int result = tts.setLanguage(Locale.GERMAN);
+                    if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        result = tts.setLanguage(Locale.GERMANY);
+                    }
                     if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
                         isInitialized = true;
                     }
@@ -68,11 +76,18 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public void speak(String text, float rate) {
-            if (tts != null && isInitialized && text != null) {
+        public boolean speak(String text, float rate) {
+            if (tts != null && isInitialized && text != null && !text.trim().isEmpty()) {
                 tts.setSpeechRate(rate);
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "delector_speech_" + System.currentTimeMillis());
+                int res = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "delector_speech_" + System.currentTimeMillis());
+                return res == TextToSpeech.SUCCESS;
             }
+            return false;
+        }
+
+        @JavascriptInterface
+        public boolean isReady() {
+            return isInitialized;
         }
 
         @JavascriptInterface
@@ -107,6 +122,33 @@ public class MainActivity extends AppCompatActivity {
         webView.setVisibility(View.GONE);
         nativeTTS = new NativeTTSBridge();
         webView.addJavascriptInterface(nativeTTS, "AndroidNativeTTS");
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (MainActivity.this.filePathCallback != null) {
+                    MainActivity.this.filePathCallback.onReceiveValue(null);
+                    MainActivity.this.filePathCallback = null;
+                }
+                MainActivity.this.filePathCallback = filePathCallback;
+
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                String[] mimetypes = {"text/plain", "text/markdown", "text/*", "application/octet-stream"};
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
+
+                try {
+                    startActivityForResult(Intent.createChooser(intent, "选择德语文章文档"), FILE_CHOOSER_REQUEST_CODE);
+                } catch (Exception e) {
+                    MainActivity.this.filePathCallback = null;
+                    Toast.makeText(MainActivity.this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    return false;
+                }
+                return true;
+            }
+        });
+
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
@@ -409,6 +451,24 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this, "再按一次退出 DeLector", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+            if (filePathCallback != null) {
+                Uri[] results = null;
+                if (resultCode == RESULT_OK && data != null) {
+                    Uri dataUri = data.getData();
+                    if (dataUri != null) {
+                        results = new Uri[]{dataUri};
+                    }
+                }
+                filePathCallback.onReceiveValue(results);
+                filePathCallback = null;
+            }
+        }
     }
 
     @Override

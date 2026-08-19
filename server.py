@@ -1363,11 +1363,28 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
     if os.path.exists(cache_file) and os.path.getsize(cache_file) > 100:
         return cache_file
         
-    import edge_tts
-    communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
-    await communicate.save(cache_file)
-    prune_audio_cache()
-    return cache_file
+    try:
+        import edge_tts
+        communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
+        await communicate.save(cache_file)
+        prune_audio_cache()
+        return cache_file
+    except Exception as e:
+        # Pure-Python httpx fallback
+        try:
+            from urllib.parse import quote
+            q = quote(clean_text[:200])
+            tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=de&client=tw-ob"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(tts_url, headers={"User-Agent": "Mozilla/5.0"})
+                if resp.status_code == 200 and len(resp.content) > 100:
+                    with open(cache_file, "wb") as f:
+                        f.write(resp.content)
+                    prune_audio_cache()
+                    return cache_file
+        except Exception:
+            pass
+        raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
 
 @app.post("/api/audio/tts")
 async def get_audio_tts(req: TTSReq):

@@ -92,6 +92,11 @@ export function show(view) {
   const activeMobBtn = document.getElementById('mob-btn-' + view);
   if (activeMobBtn) activeMobBtn.classList.add('active');
 
+  const bottomNav = document.getElementById('mobile-bottom-nav');
+  if (bottomNav) {
+    bottomNav.classList.toggle('hidden', view === 'reader');
+  }
+
   closeDrawer();
   clearCefrFocus();
 
@@ -566,6 +571,8 @@ Object.assign(window, {
   openDrawer,
   closeDrawer,
   analyzeGrammar,
+  saveVocab,
+  saveGrammar,
   saveVocabCard: saveVocab,
   saveGrammarCard: saveGrammar,
   playGermanAudio,

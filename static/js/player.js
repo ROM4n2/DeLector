@@ -7,10 +7,14 @@ export async function playGermanAudio(text, rate = 0.88) {
   if (!text) return;
   const clean = text.trim();
 
-  // 1. Android Native TTS Bridge (Zero-latency offline German TTS)
+  // 1. Try Android Native TTS Bridge first
   if (window.AndroidNativeTTS && typeof window.AndroidNativeTTS.speak === 'function') {
-    window.AndroidNativeTTS.speak(clean, rate);
-    return;
+    try {
+      const ok = window.AndroidNativeTTS.speak(clean, rate);
+      if (ok) return;
+    } catch (e) {
+      console.warn('Native TTS failed, falling back:', e);
+    }
   }
 
   const voice = ShadowPlayer.voice || localStorage.getItem('delector_voice') || 'de-DE-KatjaNeural';
@@ -28,7 +32,7 @@ export async function playGermanAudio(text, rate = 0.88) {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     audio.onended = () => URL.revokeObjectURL(url);
-    audio.play();
+    await audio.play();
   } catch {
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
@@ -131,6 +135,23 @@ export const ShadowPlayer = {
     if (this.audioEl) {
       this.audioEl.pause();
       this.audioEl.removeAttribute('src');
+    }
+
+    // Try Native TTS first on Android
+    if (window.AndroidNativeTTS && typeof window.AndroidNativeTTS.speak === 'function') {
+      try {
+        const ok = window.AndroidNativeTTS.speak(sent.text.trim(), this.rate);
+        if (ok) {
+          const estDuration = Math.max(1500, sent.text.length * 70);
+          setTimeout(() => {
+            if (!this.isPlaying) return;
+            this.handleSentenceFinished(estDuration);
+          }, estDuration);
+          return;
+        }
+      } catch (e) {
+        console.warn('Native TTS speak error:', e);
+      }
     }
 
     const ratePercent = Math.round((this.rate - 1.0) * 100);

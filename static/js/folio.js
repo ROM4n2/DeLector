@@ -18,7 +18,7 @@ export function switchFolioPage(idx) {
   currentFolioPage = Math.max(0, Math.min(2, idx));
   const track = document.getElementById('folio-track');
   if (track) {
-    track.style.transform = `translateX(-${currentFolioPage * 100}%)`;
+    track.style.transform = `translateX(-${currentFolioPage * 33.33333}%)`;
   }
   for (let i = 0; i < 3; i++) {
     const tab = document.getElementById(`folio-tab-${i}`);
