@@ -20,7 +20,7 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
         pass
 
 def build_windows():
-    version = os.environ.get("GITHUB_REF_NAME", "v3.7.1")
+    version = os.environ.get("GITHUB_REF_NAME", "v3.8.0")
     print("=" * 60)
     print(f"  DeLector {version} -- Windows Portable Packager")
     print("=" * 60)
