@@ -177,10 +177,37 @@ const PHRASES = {
 - **Android WebView**：跑 Chaquopy 版，确认原生离线 TTS 发声；影子跟读播放中触发复习反应 → 不掐断跟读；窄屏气泡/面板不溢出。
 - **后端/测试**：本阶段**纯前端**，无新路由、无新 pytest；跑现有 64 个测试确认无回归。
 
+## 阶段 2：SVG 自定义角色上传
+
+**用户工作流**（转换外包给用户，App 只收标准 SVG）：
+```
+用户在外部工具把图片转成 SVG → 面板「上传 SVG」→ App 校验 + 消毒 → registerCharacter('custom') → 渲染（降级动画）
+```
+
+**外部工具清单**（写进面板上传说明）：
+- 在线：Autotracer.org / Convertio / Vectorizer.AI（PNG/JPG → SVG 自动矢量化，免费）
+- 桌面：Inkscape（路径 → 位图描摹）/ Adobe Illustrator（图像描摹）
+- 直接画：Figma / Excalidraw / Draw.io（导出 SVG）
+- 质量前提：扁平图案 / logo / 简笔画转出来效果好；照片转出来是杂乱曲线，不适合当角色
+
+**App 侧上传处理**（`companion.js` 内）：
+1. **入口**：面板加「上传 SVG」按钮 + `<input type=file accept=".svg">`（替换现有 DOM 注释占位 `panel-upload`）。
+2. **校验**：扩展名 `.svg`；大小上限 64KB；用 `DOMParser` 解析，解析失败（非合法 XML）拒绝并提示。
+3. **消毒（必须，防存储型 XSS）**：SVG 是 XML 可内嵌 `<script>`、`on*` 事件、`<foreignObject>`、`<iframe>`、外部引用 `<image href="http://…">`。渲染走 `innerHTML`，不过滤就是存储型 XSS。流程：`DOMParser` 解析 → 遍历节点树移除危险节点/属性 → 序列化回字符串再 `innerHTML`。
+   - 移除：`<script>`、`<foreignObject>`、`<iframe>`、`<image>`、所有 `on*` 属性、`javascript:`/`data:` 协议的 href/src（`data:image/…` 白名单除外）、`<style>` 元素。
+   - 保留白名单元素：`svg g circle rect path ellipse line polygon polyline text tspan defs linearGradient radialGradient stop clipPath mask`。
+4. **注册**：`Companion.registerCharacter('custom', { name:'自定义', primary/accent 取默认, svg: 消毒后文本 })`；SVG 文本存 `localStorage.delector_companion_custom_svg`（64KB 内可存）。面板角色网格出现「自定义」槽，选中即生效。
+5. **动画降级**：用户 SVG 无 `.char-eye`/`.char-body` 类 → 只保留整角色 idle 呼吸 + 跳跃，眨眼/垂头跳过。想要眨眼：上传说明写一行"给眼睛部分加 `class="char-eye"`"。
+6. **主题色**：`var(--c-primary)` 能换色；用户 SVG 里没用变量则主题色无效（可接受，文档写明）。
+
+**范围**：文件读取 + 校验 + 消毒 + 注册 + 渲染。不接 AI、不做图片栅格化转换、不改后端。
+
+---
+
 ## 范围守卫
 **本阶段做**：预置 4 角色（内联 SVG）+ 命名 + 主题色 + 面板自定义入口 + 事件反应 + 德语发声 + 本地模板库。
 **本阶段不做（阶段 2）**：
-- **SVG 上传 UI**（文件选择/解析/存储）——只预留 `registerCharacter` 模块化接缝，上传入口留空位。
+- **SVG 上传 UI**——本阶段只预留 `registerCharacter` 模块化接缝、面板留上传占位；完整规格见上「阶段 2：SVG 自定义角色上传」。
 - AI/DeepSeek 个性化鼓励
 - 宠物成长/升级/XP/喂食
 - 设置弹窗内集成（自定义走角色自身面板）
