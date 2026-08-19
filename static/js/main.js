@@ -244,6 +244,7 @@ export async function openSettingsModal() {
   const overlay = document.getElementById('settings-overlay');
   if (!overlay) return;
   overlay.classList.remove('hidden');
+  overlay.classList.add('open');
   
   const statusEl = document.getElementById('set-key-status');
   const feedbackEl = document.getElementById('test-key-feedback');
@@ -251,7 +252,7 @@ export async function openSettingsModal() {
   
   try {
     const s = await api('/api/settings');
-    document.getElementById('set-base-url').value = s.api_base_url || 'https://api.deepseek.com/v1';
+    document.getElementById('set-base-url').value = s.api_base_url || 'https://api.deepseek.com';
     document.getElementById('set-model-name').value = s.api_model || 'deepseek-chat';
     if (s.tts_voice) document.getElementById('set-tts-voice').value = s.tts_voice;
     if (s.tts_rate) document.getElementById('set-tts-rate').value = s.tts_rate;
@@ -269,7 +270,10 @@ export async function openSettingsModal() {
 }
 
 export function closeSettingsModal() {
-  document.getElementById('settings-overlay')?.classList.add('hidden');
+  const overlay = document.getElementById('settings-overlay');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+  overlay.classList.remove('open');
 }
 
 export function toggleKeyVisibility() {

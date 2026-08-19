@@ -241,7 +241,7 @@ def get_effective_api_key(db_path: Optional[str] = None) -> str:
     return get_setting("DEEPSEEK_API_KEY", "", db_path=db_path)
 
 def get_effective_api_base_url(db_path: Optional[str] = None) -> str:
-    return get_setting("API_BASE_URL", "https://api.deepseek.com/v1", db_path=db_path)
+    return get_setting("API_BASE_URL", "https://api.deepseek.com", db_path=db_path)
 
 def get_effective_api_model(db_path: Optional[str] = None) -> str:
     return get_setting("API_MODEL", "deepseek-chat", db_path=db_path)

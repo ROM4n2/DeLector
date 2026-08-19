@@ -538,15 +538,23 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
           <div class="modal-field">
             <label class="input-label">接口地址 (Base URL)</label>
-            <input id="set-base-url" type="text" class="modal-input" placeholder="https://api.deepseek.com/v1">
+            <input id="set-base-url" type="text" class="modal-input" placeholder="https://api.deepseek.com">
+            <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">
+              <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-base-url').value='https://api.deepseek.com'">DeepSeek 官方</button>
+              <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-base-url').value='https://api.openai.com/v1'">OpenAI</button>
+            </div>
           </div>
           <div class="modal-field">
             <label class="input-label">模型名称 (Model)</label>
             <input id="set-model-name" type="text" class="modal-input" placeholder="deepseek-chat">
+            <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">
+              <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-model-name').value='deepseek-chat'">deepseek-chat (Flash/V3 极速)</button>
+              <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-model-name').value='deepseek-reasoner'">deepseek-reasoner (R1 推理)</button>
+            </div>
           </div>
         </div>
 
-        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;">
+        <div style="margin-top:0.875rem;display:flex;gap:0.5rem;align-items:center;">
           <button id="btn-test-key" class="btn btn-ghost" onclick="testApiKeyConnection()">⚡ 测试连通性</button>
           <span id="test-key-feedback" style="font-size:0.75rem;color:var(--pencil);font-family:var(--mono);"></span>
         </div>
@@ -794,6 +802,10 @@
     <button class="mobile-nav-btn" id="mob-btn-cards" onclick="show('cards')">
       <span class="mob-icon">🎴</span>
       <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
+    </button>
+    <button class="mobile-nav-btn" id="mob-btn-settings" onclick="openSettingsModal()">
+      <span class="mob-icon">⚙️</span>
+      <span class="mob-label">设置</span>
     </button>
   </nav>
 
