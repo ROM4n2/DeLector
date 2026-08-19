@@ -20,8 +20,9 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
         pass
 
 def build_windows():
+    version = os.environ.get("GITHUB_REF_NAME", "v3.7.1")
     print("=" * 60)
-    print("  DeLector v3.5.0 -- Windows Portable Packager")
+    print(f"  DeLector {version} -- Windows Portable Packager")
     print("=" * 60)
     
     root_dir = os.path.dirname(os.path.abspath(__file__))
@@ -72,7 +73,7 @@ def build_windows():
         sys.exit(result.returncode)
 
     # 3. Assemble Portable Release Directory
-    release_name = "DeLector-v3.5.0-Windows-x64-Portable"
+    release_name = f"DeLector-{version}-Windows-x64-Portable"
     release_dir = os.path.join(dist_dir, release_name)
     if os.path.exists(release_dir):
         shutil.rmtree(release_dir)
@@ -82,7 +83,7 @@ def build_windows():
         shutil.move(built_output, release_dir)
     
     # 4. Copy helper files
-    readme_content = """# DeLector — 德语学术精读与备考工作台 (v3.5.0 绿色便携版)
+    readme_content = f"""# DeLector — 德语学术精读与备考工作台 ({version} 绿色便携版)
 
 ## 🚀 启动方式
 直接双击运行 `DeLector.exe` 即可自动启动服务并在默认浏览器中打开工作台！

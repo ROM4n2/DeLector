@@ -50,6 +50,126 @@ jobs:
           name: DeLector-Windows-Portable
           path: dist/DeLector-*.zip
 
+  build-linux:
+    name: Build Linux x64 Portable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pytest
+          python -m spacy download de_core_news_sm
+
+      - name: Run Tests
+        run: |
+          pytest -v
+
+      - name: Build Linux Portable
+        run: |
+          python -m PyInstaller \
+            --name=DeLector \
+            --onedir \
+            --noconfirm \
+            --clean \
+            --add-data="static:static" \
+            --hidden-import=uvicorn.logging \
+            --hidden-import=uvicorn.loops \
+            --hidden-import=uvicorn.loops.auto \
+            --hidden-import=uvicorn.protocols \
+            --hidden-import=uvicorn.protocols.http \
+            --hidden-import=uvicorn.protocols.http.auto \
+            --hidden-import=uvicorn.protocols.websockets \
+            --hidden-import=uvicorn.protocols.websockets.auto \
+            --hidden-import=uvicorn.lifespan \
+            --hidden-import=uvicorn.lifespan.on \
+            --hidden-import=de_core_news_sm \
+            --hidden-import=spacy.lang.de \
+            --hidden-import=genanki \
+            --hidden-import=edge_tts \
+            --hidden-import=httpx \
+            --collect-all=de_core_news_sm \
+            --collect-all=spacy \
+            start.py
+          mkdir -p dist/DeLector-${{ github.ref_name }}-Linux-x64
+          cp -r dist/DeLector/* dist/DeLector-${{ github.ref_name }}-Linux-x64/
+          tar -czf dist/DeLector-${{ github.ref_name }}-Linux-x64.tar.gz -C dist DeLector-${{ github.ref_name }}-Linux-x64
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeLector-Linux-Portable
+          path: dist/DeLector-*-Linux-x64.tar.gz
+
+  build-macos:
+    name: Build macOS Portable
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pytest
+          python -m spacy download de_core_news_sm
+
+      - name: Run Tests
+        run: |
+          pytest -v
+
+      - name: Build macOS Portable
+        run: |
+          python -m PyInstaller \
+            --name=DeLector \
+            --onedir \
+            --noconfirm \
+            --clean \
+            --add-data="static:static" \
+            --hidden-import=uvicorn.logging \
+            --hidden-import=uvicorn.loops \
+            --hidden-import=uvicorn.loops.auto \
+            --hidden-import=uvicorn.protocols \
+            --hidden-import=uvicorn.protocols.http \
+            --hidden-import=uvicorn.protocols.http.auto \
+            --hidden-import=uvicorn.protocols.websockets \
+            --hidden-import=uvicorn.protocols.websockets.auto \
+            --hidden-import=uvicorn.lifespan \
+            --hidden-import=uvicorn.lifespan.on \
+            --hidden-import=de_core_news_sm \
+            --hidden-import=spacy.lang.de \
+            --hidden-import=genanki \
+            --hidden-import=edge_tts \
+            --hidden-import=httpx \
+            --collect-all=de_core_news_sm \
+            --collect-all=spacy \
+            start.py
+          mkdir -p dist/DeLector-${{ github.ref_name }}-macOS
+          cp -r dist/DeLector/* dist/DeLector-${{ github.ref_name }}-macOS/
+          tar -czf dist/DeLector-${{ github.ref_name }}-macOS.tar.gz -C dist DeLector-${{ github.ref_name }}-macOS
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeLector-macOS-Portable
+          path: dist/DeLector-*-macOS.tar.gz
+
   build-android:
     name: Build Android Standalone APK
     runs-on: ubuntu-latest
@@ -114,7 +234,7 @@ jobs:
 
   publish-github-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-android]
+    needs: [build-windows, build-linux, build-macos, build-android]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -125,6 +245,18 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: DeLector-Windows-Portable
+          path: dist/
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DeLector-Linux-Portable
+          path: dist/
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DeLector-macOS-Portable
           path: dist/
 
       - name: Download Android Artifact
@@ -138,6 +270,7 @@ jobs:
         with:
           files: |
             dist/DeLector-*.zip
+            dist/DeLector-*.tar.gz
             dist/DeLector-*.apk
           name: DeLector ${{ github.ref_name }} — 德语学术精读与备考工作台
           body: |
@@ -145,17 +278,20 @@ jobs:
 
             面向德语精读与歌德（Goethe A1–C1）、德福（TestDaF）、DSH 备考者的本地优先学术级伴读工作台。
 
-            ### 📦 下载与安装
-            - **Windows 桌面免安装绿色版**：`DeLector-${{ github.ref_name }}-Windows-x64-Portable.zip`（解压即用，双击 `DeLector.exe` 秒级启动）
-            - **Android 独立单机安装包**：`DeLector-${{ github.ref_name }}-Android.apk`（嵌入式 Python 运行时，100% 独立离线单机运行）
+            ### 📦 多平台下载与安装
+            - 🪟 **Windows 桌面免安装绿色版**：`DeLector-${{ github.ref_name }}-Windows-x64-Portable.zip`（解压即用，双击 `DeLector.exe` 秒级启动）
+            - 🍎 **macOS 桌面免安装包**：`DeLector-${{ github.ref_name }}-macOS.tar.gz`（解压运行 `start` 即可，开箱即用）
+            - 🐧 **Linux 桌面便携版**：`DeLector-${{ github.ref_name }}-Linux-x64.tar.gz`（解压运行 `start`，全发行版通用）
+            - 📱 **Android 独立单机安装包**：`DeLector-${{ github.ref_name }}-Android.apk`（嵌入式 Python 运行时与离线 TTS 桥接，100% 独立离线单机运行）
 
             ### 🚀 核心特性
+            - 🦉 **德语伴读宠物（Eule & 伙伴）混合双模系统**：4 款内嵌矢量角色 + 自定义 SVG 上传 + 德语原生 TTS 语音发声 + 9 大场景智能鼓励
+            - 📊 **Atelier 呼吸感画册落地页台账 (Folio)**：0.85:1.15 不对称 Hero 展台 + 双行反向 Wire Marquee 走字带 + 欧标掌握度阶梯矩阵与 30 天墨线走势
             - 🌳 **德语拓扑五场域 (Felder-Modell) 与 5 大从句树 AST 句法引擎**
             - ⚡ **556+ 强变化动词三态表 + 复合词智能拆解 + 可分动词框形联动**
             - 📖 **0ms 歌德核心离线词库 + CEFR 词阶热力谱 + AI 精读便签**
             - 🎴 **3D 物理翻牌盒 + SM-2 间隔复习 + Anki .apkg 一键导出**
             - ✍️ **完形填空 & 德福 C-Test 模拟与服务端防作弊判分**
-            - 🔊 **Android 原生离线发音 + Edge TTS 影子跟读器**
-            - ⚙️ **应用内设置面板**：支持配置 `deepseek-v4-flash` 与毫秒级延迟连通性测试。
+            - 📰 **德语外刊 RSS 一键订阅与文稿库极速管理（支持一键删除）**
           draft: false
           prerelease: false

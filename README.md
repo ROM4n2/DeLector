@@ -1,35 +1,45 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.5.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v3.7.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-64%2F64%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-65%2F65%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
   <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的下一代学术级伴读与句法剖析系统。</b><br/>
-  融合<b>德语经典拓扑五场域</b>、<b>AST 从句抽象语法树</b>、<b>556+ 不规则三态表</b>、<b>3D 拟真物理卡盒</b>与<b>SM-2 间隔复习</b>。
+  融合<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>与<b>SM-2 间隔复习</b>。
 </p>
 
 ---
 
-## 📦 快速下载发布包 (Downloads)
+## 📦 多平台下载发布包 (Downloads)
 
 | 平台 | 版本 | 说明 | 下载通道 |
 |---|---|---|---|
-| 🪟 **Windows x64** | `v3.5.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可使用 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
-| 📱 **Android** | `v3.5.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型（`de_core_news_sm`），单机独立运行；**仅支持 64 位 ARM（arm64-v8a）**，32 位机型与模拟器装不上 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
+| 🪟 **Windows x64** | `v3.7.1` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.7.1) |
+| 🍎 **macOS** | `v3.7.1` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.7.1) |
+| 🐧 **Linux x64** | `v3.7.1` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.7.1) |
+| 📱 **Android** | `v3.7.1` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.7.1) |
 
 ---
 
 ## 🌟 核心特性 (Features)
 
-### 🌳 1. 德语拓扑五场域与 AST 从句树句法引擎 (Topological Felder-Modell & Syntax Tree)
+### 🦉 1. 德语伴读宠物（Companion Mascot）「Eule & 伙伴」混合双模系统
+- **4 大内置矢量角色 + 自定义 SVG 上传**：猫头鹰 Eule、学者猫 Katze、灵动狐 Fuchs、包豪斯机甲 Roboter，支持上传任意 $\le 64\text{KB}$ 自定义 SVG 矢量角色（内置严格 DOMParser XML 白名单消毒防 XSS）。
+- **3 层离线/在线 TTS 发声**：原生离线发声桥接 + Edge Neural TTS 纯正德语母语发音，8s 防噪音冷却。
+- **研读工坊与全局悬浮双挂载**：在台账首屏 Hero 嵌入研习大工坊，全局各处提供右下角轻量伴读气泡，在生词制卡、语法提炼、SM-2 复习、完形填空 $\ge 80\%$ 与连续打卡时触发实时德语鼓励。
+
+### 📊 2. Atelier 呼吸感落地页台账 (Continuous Exhibition Folio)
+- **0.85:1.15 不对称 Hero 大展台**：融合德式名言箴言卡、6 核心 Ring Badges 环形指标大展盘与四角 `+` 定位标点。
+- **双行反向 Wire Marquee 动态走字带**：硬件加速匀速滚动名家引文与实时战报脉冲，两端带纸面渐变羽化遮罩，悬停平滑暂停。
+- **并排双面板紧凑罗盘**：A1–C1 掌握度阶梯矩阵、30 天墨线留存折线图、重点易错词汇攻坚账本与学术火漆印章展台。
 - **经典拓扑五场域色谱条**：精准切分 **前场 (VF)**、**左框 (LK)**、**中场 (MF)**、**右框 (RK)** 与 **后场 (NF)**，点击句末 `🌳 句法` 即可就地平滑展开。
 - **5 大核心从句抽象语法树 (AST)**：自动识别并分类 **状语从句**（原因/让步/条件/时间/目的/结果）、**关系从句**（关系代词/介词+关系词）、**带 zu 不定式**（um/ohne/anstatt...zu）、**被动与虚拟式框形**及 **主句核心干**。
 - **双向联动与一键制卡**：抽屉内点击从句节点即可触发正文脉冲光圈聚焦高亮，支持一键将从句规则公式保存至 Anki 语法卡。
