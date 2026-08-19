@@ -289,17 +289,35 @@ def seed_preset_articles(db_path: Optional[str] = None):
                 ingest_article(art["title"], art["text"], db_path=target)
 
 # --- 2. NLP & CEFR Tagging ---
+from start import is_android
+
 nlp = None
+# 记录实际生效的引擎，便于在真机上（adb logcat / GET /api/settings）确认
+# 到底是 spaCy 还是纯 Python 降级路径在跑——降级本身是静默的。
+NLP_ENGINE = "pure_python"
+NLP_ENGINE_DETAIL = "spaCy 未安装，使用纯 Python 降级路径（无依存句法/格标注）"
+
 if spacy is not None:
     try:
         nlp = spacy.load("de_core_news_sm")
-    except Exception:
-        try:
-            from spacy.cli import download
-            download("de_core_news_sm")
-            nlp = spacy.load("de_core_news_sm")
-        except Exception:
-            nlp = None
+        NLP_ENGINE = "spacy"
+        NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + de_core_news_sm"
+    except Exception as first_error:
+        # 自动下载模型只在桌面端有意义。Android 上 spacy.cli.download 会起 pip
+        # 子进程去拉 15MB 模型：Chaquopy 里必然失败，却会在 import 期阻塞启动。
+        if is_android():
+            NLP_ENGINE_DETAIL = f"spaCy 已装但模型加载失败，降级为纯 Python：{first_error}"
+        else:
+            try:
+                from spacy.cli import download
+                download("de_core_news_sm")
+                nlp = spacy.load("de_core_news_sm")
+                NLP_ENGINE = "spacy"
+                NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + de_core_news_sm（自动下载）"
+            except Exception as e:
+                NLP_ENGINE_DETAIL = f"spaCy 已装但模型不可用，降级为纯 Python：{e}"
+
+print(f"[DeLector] NLP 引擎: {NLP_ENGINE} — {NLP_ENGINE_DETAIL}", flush=True)
 
 CEFR_DICT = {
     # A1 core
@@ -1431,7 +1449,9 @@ def get_app_settings():
         "api_base_url": get_effective_api_base_url(),
         "api_model": get_effective_api_model(),
         "tts_voice": get_setting("TTS_VOICE", "de-DE-KatjaNeural"),
-        "tts_rate": get_setting("TTS_RATE", "+0%")
+        "tts_rate": get_setting("TTS_RATE", "+0%"),
+        "nlp_engine": NLP_ENGINE,
+        "nlp_engine_detail": NLP_ENGINE_DETAIL
     }
 
 @app.post("/api/settings")

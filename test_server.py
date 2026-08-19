@@ -933,3 +933,40 @@ def test_bind_host_is_loopback_only_on_android(monkeypatch):
 
     monkeypatch.setattr(start, "is_android", lambda: False)
     assert start.get_bind_host() == "0.0.0.0"
+
+def test_settings_reports_nlp_engine(client):
+    """降级是静默的，所以引擎状态必须能从 API 读到（真机上唯一的可验证途径）。"""
+    import server
+
+    res = client.get("/api/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["nlp_engine"] in ("spacy", "pure_python")
+    assert data["nlp_engine"] == server.NLP_ENGINE
+    assert data["nlp_engine_detail"]
+
+def test_android_never_downloads_model_at_import():
+    """Android 上 spacy.cli.download 会起 pip 子进程拉 15MB 模型。
+
+    Chaquopy 里必然失败，但会在 import server 期间阻塞启动——正是把 APK
+    卡在启动页的那类故障。装上 spaCy 后这段原本的死代码变成了活路径。
+    """
+    import subprocess
+    import sys
+    import os
+
+    probe = (
+        "import spacy, sys, os\n"
+        "spacy.load = lambda *a, **k: (_ for _ in ()).throw(OSError('simulated'))\n"
+        "import spacy.cli\n"
+        "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
+        "sys.path.insert(0, os.getcwd())\n"
+        "import server\n"
+        "print('ENGINE=' + server.NLP_ENGINE)\n"
+    )
+    env = {**os.environ, "ANDROID_ROOT": "/system", "PYTHONIOENCODING": "utf-8"}
+    res = subprocess.run([sys.executable, "-c", probe], capture_output=True,
+                         text=True, encoding="utf-8", errors="replace", env=env)
+    out = (res.stdout or "") + (res.stderr or "")
+    assert "DOWNLOAD_ATTEMPTED" not in out, "Android 上不得在 import 期联网下载模型"
+    assert "ENGINE=pure_python" in out

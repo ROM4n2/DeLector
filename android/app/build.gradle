@@ -16,7 +16,9 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
-            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+            // 只出 arm64-v8a：spaCy 的原生栈按 ABI 各占 ~21-29MB，三个全打是 106MB。
+            // armeabi-v7a（32 位老机型）与 x86_64（模拟器）为控制体积放弃。
+            abiFilters "arm64-v8a"
         }
 
         python {
