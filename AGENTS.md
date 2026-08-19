@@ -332,8 +332,10 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 - [ ] **v3.5.0 Release 内容错误，需重新发布**：已发布资产来自 PR #2 之前的 `4ede08f`
       （无 spaCy、纯 Python 降级、三 ABI）。真机验证通过的正确版本在 master 上但**从未发布**。
       决定发布方案前不要改 README 下载区
-- [ ] **工作流发版 bug × 2**：`build-release.yml` 的 `name: DeLector v${{ github.ref_name }}`
-      拼出 `vv3.5.0`；`files`/`body` 硬编码了 `v3.5.0` 资产名与说明。改这两处再发版
+- [ ] **工作流硬编码资产名**：`build-release.yml` 的 Windows zip / APK 文件名与 release
+      `files`/`body` 硬编码了 `v3.5.0`。本次重发恰好也是 v3.5.0 所以没影响；下次升版本
+      （如 v3.6.0）必须参数化成 `${{ github.ref_name }}`，否则资产名/说明会错。
+      `vv` 命名 bug 已修（`name: DeLector ${{ github.ref_name }}`）
 - [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
       md 实际加载未在本机跑过

@@ -138,7 +138,9 @@ jobs:
           files: |
             dist/DeLector-v3.5.0-Windows-x64-Portable.zip
             dist/DeLector-v3.5.0-Android.apk
-          name: DeLector v${{ github.ref_name }} — 德语学术精读与备考工作台
+          # github.ref_name 对 tag 触发是 "v3.5.0"（自带 v），前面不能再拼 "v "，
+          # 否则发布标题会变成 "DeLector vv3.5.0"。
+          name: DeLector ${{ github.ref_name }} — 德语学术精读与备考工作台
           body: |
             ## 🌟 DeLector v${{ github.ref_name }} 正式发布
 
