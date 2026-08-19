@@ -118,7 +118,7 @@ let activeFeedId = null;
 
 export function switchImportTab(tab) {
   currentImportTab = tab;
-  document.querySelectorAll('.modal-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.modal-tab, .import-tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById(`tab-btn-${tab}`)?.classList.add('active');
   document.getElementById(`import-tab-${tab}`)?.classList.add('active');
@@ -134,7 +134,7 @@ export function switchImportTab(tab) {
 }
 
 export async function loadFeedSources() {
-  const bar = document.getElementById('feed-sources-bar');
+  const bar = document.getElementById('feed-sources-bar') || document.getElementById('feed-sources-list');
   if (!bar) return;
   try {
     const res = await api('/api/feed/sources');
@@ -144,12 +144,13 @@ export async function loadFeedSources() {
       return;
     }
 
-    bar.innerHTML = cachedFeedSources.map(s => `
+    bar.innerHTML = cachedFeedSources.map((s, idx) => `
       <button class="feed-source-pill ${s.id === (activeFeedId || cachedFeedSources[0].id) ? 'active' : ''}"
         data-id="${s.id}"
         onclick="window.selectFeedSource('${s.id}')">
-        <span>${s.name}</span>
-        <span class="feed-lvl-tag">${s.level}</span>
+        <span class="feed-source-idx">${String(idx + 1).padStart(2, '0')}.</span>
+        <span class="feed-source-name">${esc(s.name)}</span>
+        <span class="feed-lvl-tag">${esc(s.level)}</span>
       </button>
     `).join('');
 
@@ -164,7 +165,6 @@ export async function loadFeedSources() {
   }
 }
 
-
 export function selectFeedSource(feedId) {
   activeFeedId = feedId;
   document.querySelectorAll('.feed-source-pill').forEach(b => {
@@ -176,9 +176,8 @@ export function selectFeedSource(feedId) {
   }
 }
 
-
 export async function loadFeedItems(url) {
-  const container = document.getElementById('feed-items-container');
+  const container = document.getElementById('feed-items-container') || document.getElementById('feed-items-list');
   if (!container) return;
   container.innerHTML = '<div style="text-align:center;padding:2.5rem;color:var(--pencil);font-family:var(--mono);font-size:0.8125rem;">⏳ 正在抓取最新外刊列表…</div>';
 
@@ -190,14 +189,19 @@ export async function loadFeedItems(url) {
       return;
     }
 
-    container.innerHTML = items.map(it => `
+    const currentSource = cachedFeedSources.find(s => s.id === activeFeedId);
+    const sourceName = currentSource ? currentSource.name : 'RSS';
+
+    container.innerHTML = items.map((it, idx) => `
       <div class="feed-item-card">
         <div class="feed-item-header">
-          <div class="feed-item-title">${it.title}</div>
+          <div class="feed-item-index">[ Nº ${String(idx + 1).padStart(2, '0')} ]</div>
           <div class="feed-item-date">${it.pub_date ? it.pub_date.slice(0, 16) : ''}</div>
         </div>
-        ${it.summary ? `<div class="feed-item-summary">${it.summary}</div>` : ''}
+        <div class="feed-item-title">${esc(it.title)}</div>
+        ${it.summary ? `<div class="feed-item-summary">${esc(it.summary)}</div>` : ''}
         <div class="feed-item-footer">
+          <span class="feed-item-origin">QUELLE: ${esc(it.source || sourceName)}</span>
           <button class="btn-feed-ingest" onclick="window.ingestFeedItem('${encodeURIComponent(it.link)}', '${encodeURIComponent(it.title)}', this)">
             📥 导入精读
           </button>
@@ -234,9 +238,8 @@ export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
   }
 }
 
-
 export function openModal() {
-  const el = document.getElementById('modal-overlay');
+  const el = document.getElementById('modal-overlay') || document.getElementById('import-overlay');
   if (!el) return;
   el.classList.remove('hidden');
   el.classList.add('open');
@@ -244,7 +247,7 @@ export function openModal() {
 }
 
 export function closeModal() {
-  const el = document.getElementById('modal-overlay');
+  const el = document.getElementById('modal-overlay') || document.getElementById('import-overlay');
   if (!el) return;
   el.classList.add('hidden');
   el.classList.remove('open');
@@ -382,8 +385,10 @@ export async function submitActiveImport() {
   if (currentImportTab === 'text') {
     await submitImport();
   } else if (currentImportTab === 'url') {
-    const url = document.getElementById('imp-url-input').value.trim();
-    const title = document.getElementById('imp-url-title').value.trim();
+    const urlInput = document.getElementById('imp-url-input') || document.getElementById('import-url-input');
+    const titleInput = document.getElementById('imp-url-title') || document.getElementById('import-url-title');
+    const url = urlInput ? urlInput.value.trim() : '';
+    const title = titleInput ? titleInput.value.trim() : '';
     if (!url) { alert('请输入有效的德语网页链接'); return; }
     const btn = document.getElementById('import-btn');
     btn.textContent = '抓取解析中…'; btn.disabled = true;
@@ -393,8 +398,8 @@ export async function submitActiveImport() {
         body: JSON.stringify({ url, title })
       });
       closeModal();
-      document.getElementById('imp-url-input').value = '';
-      document.getElementById('imp-url-title').value = '';
+      if (urlInput) urlInput.value = '';
+      if (titleInput) titleInput.value = '';
       openReader(data.article_id);
     } catch (e) {
       alert('抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入');
@@ -402,7 +407,8 @@ export async function submitActiveImport() {
       btn.textContent = '开始阅读'; btn.disabled = false;
     }
   } else if (currentImportTab === 'file') {
-    const text = document.getElementById('imp-text').value.trim();
+    const textInput = document.getElementById('imp-text') || document.getElementById('import-text-input');
+    const text = textInput ? textInput.value.trim() : '';
     if (text) {
       await submitImport();
     } else {
@@ -423,8 +429,10 @@ function readFileContent(file) {
   reader.onload = function(evt) {
     const text = evt.target.result;
     const title = file.name.replace(/\.[^/.]+$/, "");
-    document.getElementById('imp-title').value = title;
-    document.getElementById('imp-text').value = text;
+    const titleEl = document.getElementById('imp-title') || document.getElementById('import-title-input');
+    const textEl = document.getElementById('imp-text') || document.getElementById('import-text-input');
+    if (titleEl) titleEl.value = title;
+    if (textEl) textEl.value = text;
     switchImportTab('text');
   };
   reader.readAsText(file, "UTF-8");
@@ -446,8 +454,10 @@ export function setupDropzone() {
 }
 
 export async function submitImport() {
-  const text  = document.getElementById('imp-text').value.trim();
-  const title = document.getElementById('imp-title').value.trim() || '未命名文稿';
+  const textEl = document.getElementById('imp-text') || document.getElementById('import-text-input');
+  const titleEl = document.getElementById('imp-title') || document.getElementById('import-title-input');
+  const text  = textEl ? textEl.value.trim() : '';
+  const title = (titleEl && titleEl.value.trim()) || '未命名文稿';
   if (!text) { alert('请输入德语文本'); return; }
   const btn = document.getElementById('import-btn');
   btn.textContent = '处理中…'; btn.disabled = true;

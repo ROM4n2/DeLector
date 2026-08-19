@@ -10,9 +10,18 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=3.5.2">
+  <link rel="stylesheet" href="/style.css?v=3.6.1">
 </head>
 <body>
+
+  <!-- Top Metadata Ticker Strip (Editorial Live Strip) -->
+  <div class="top-ticker topbar">
+    <div class="topbar-inner">
+      <span><b>DELECTOR · 2026</b> · Vol. 03 / Issue Nº 06</span>
+      <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
+      <span class="right"><span class="pulse"></span>System · v3.6.1 Online</span>
+    </div>
+  </div>
 
   <!-- Top Navigation (Gutenberg Broadsheet Bar) -->
   <nav id="nav">
@@ -140,14 +149,14 @@
     <div id="cards-container"></div>
   </main>
 
-  <!-- ── View 4: Broadsheet Leporello Dossier (Horizontal Folio) ─ -->
+  <!-- ── View 4: Continuous Exhibition Folio (Journal Style Ledger) ─ -->
   <main id="view-progress" class="view">
     <!-- Masthead & Ticker Ribbon -->
     <header class="dossier-masthead">
       <div class="dossier-masthead-top">
         <div class="dossier-title-wrap">
-          <span class="dossier-kicker">AKADEMISCHE CHRONIK &amp; LERNFORTSCHRITT</span>
-          <h2 class="dossier-headline">每日精读台账</h2>
+          <span class="dossier-kicker">AKADEMISCHES STUDIENBUCH · LERNFORTSCHRITT</span>
+          <h2 class="dossier-headline">每日精读台账 <span class="dossier-headline-sub">FOLIO</span></h2>
         </div>
         <div id="dossier-ticker" class="dossier-ticker">
           <span class="ticker-item"><span class="ticker-label">STATUS</span> <b id="ticker-status">AKTIV</b></span>
@@ -158,169 +167,178 @@
         </div>
       </div>
 
-      <!-- Leporello Folio Navigation Strip (Horizontal Page Tabs) -->
+      <!-- German Motto / Quote Card (Top Lede) -->
+      <section id="progress-motto" class="dossier-motto-section"></section>
+
+      <!-- Exhibition Navigation Anchor Bar -->
       <div class="folio-nav-strip">
         <div class="folio-tabs">
           <button id="folio-tab-0" class="folio-tab active" onclick="switchFolioPage(0)">
-            <span class="folio-page-idx">SEITE 01</span>
+            <span class="folio-page-idx">❖ #01</span>
             <span class="folio-page-name">研读总纲 · METRIKEN</span>
           </button>
           <button id="folio-tab-1" class="folio-tab" onclick="switchFolioPage(1)">
-            <span class="folio-page-idx">SEITE 02</span>
-            <span class="folio-page-name">轨迹与谱系 · VERLAUF</span>
+            <span class="folio-page-idx">❖ #02</span>
+            <span class="folio-page-name">谱系与轨迹 · SPEKTRUM</span>
           </button>
           <button id="folio-tab-2" class="folio-tab" onclick="switchFolioPage(2)">
-            <span class="folio-page-idx">SEITE 03</span>
-            <span class="folio-page-name">印章与错题 · ARCHIV</span>
+            <span class="folio-page-idx">❖ #03</span>
+            <span class="folio-page-name">错题攻坚 · SCHWACHSTELLEN</span>
           </button>
-        </div>
-        <div class="folio-stepper">
-          <button class="folio-step-btn" onclick="prevFolioPage()" title="上一折 (←)">‹ 前一折</button>
-          <button class="folio-step-btn" onclick="nextFolioPage()" title="下一折 (→)">后一折 ›</button>
+          <button id="folio-tab-3" class="folio-tab" onclick="switchFolioPage(3)">
+            <span class="folio-page-idx">❖ #04</span>
+            <span class="folio-page-name">学术勋章 · SIEGEL</span>
+          </button>
         </div>
       </div>
     </header>
 
-    <!-- Folio Horizontal Slide Window -->
-    <div class="folio-window">
-      <div id="folio-track" class="folio-track">
-        
-        <!-- Folio Sheet 1: Metrics & Master Quote -->
-        <div class="folio-sheet active-sheet">
-          <section id="progress-motto" class="dossier-motto-section"></section>
+    <!-- Continuous Exhibition Flow -->
+    <div class="folio-exhibition">
 
-          <section class="dossier-ledger-table">
-            <div class="ledger-col">
-              <div class="ledger-col-head">
-                <span class="ledger-col-code">STREAK</span>
-                <span class="ledger-col-title">连续研读</span>
-              </div>
-              <div class="ledger-col-num-wrap">
-                <span class="ledger-col-num" id="stat-streak">0</span>
-                <span class="ledger-col-unit">Tage</span>
-              </div>
-              <div class="ledger-col-note" id="stat-streak-note">每日操作自动累计</div>
-            </div>
-
-            <div class="ledger-col">
-              <div class="ledger-col-head">
-                <span class="ledger-col-code">WÖRTER</span>
-                <span class="ledger-col-title">词汇斩获</span>
-              </div>
-              <div class="ledger-col-num-wrap">
-                <span class="ledger-col-num" id="stat-mastered-vocab">0</span>
-                <span class="ledger-col-unit">Wörter</span>
-              </div>
-              <div class="ledger-col-note" id="stat-vocab-note">已归档掌握词汇</div>
-            </div>
-
-            <div class="ledger-col">
-              <div class="ledger-col-head">
-                <span class="ledger-col-code">GRAMMATIK</span>
-                <span class="ledger-col-title">歌德考点</span>
-              </div>
-              <div class="ledger-col-num-wrap">
-                <span class="ledger-col-num" id="stat-mastered-grammar">0</span>
-                <span class="ledger-col-unit">Punkte</span>
-              </div>
-              <div class="ledger-col-note" id="stat-grammar-note">掌握核心语法框架</div>
-            </div>
-
-            <div class="ledger-col">
-              <div class="ledger-col-head">
-                <span class="ledger-col-code">ARTIKEL</span>
-                <span class="ledger-col-title">精读长文</span>
-              </div>
-              <div class="ledger-col-num-wrap">
-                <span class="ledger-col-num" id="stat-articles">0</span>
-                <span class="ledger-col-unit">Texte</span>
-              </div>
-              <div class="ledger-col-note" id="stat-articles-note">研读长文与真题</div>
-            </div>
-
-            <div class="ledger-col">
-              <div class="ledger-col-head">
-                <span class="ledger-col-code">PRÄZISION</span>
-                <span class="ledger-col-title">测验准确率</span>
-              </div>
-              <div class="ledger-col-num-wrap">
-                <span class="ledger-col-num" id="stat-accuracy">0</span>
-                <span class="ledger-col-unit">%</span>
-              </div>
-              <div class="ledger-col-note" id="stat-accuracy-note">闪卡与默写综合正答</div>
-            </div>
-
-            <div class="ledger-col">
-              <div class="ledger-col-head">
-                <span class="ledger-col-code">DAUER</span>
-                <span class="ledger-col-title">研读学时</span>
-              </div>
-              <div class="ledger-col-num-wrap">
-                <span class="ledger-col-num" id="stat-minutes">0</span>
-                <span class="ledger-col-unit">Min</span>
-              </div>
-              <div class="ledger-col-note">阅读与自测投入估算</div>
-            </div>
-          </section>
+      <!-- 展台 1: 6大核心研读指标 Ring Stat Badges -->
+      <section id="folio-sec-metrics" class="folio-section">
+        <div class="folio-sec-head">
+          <div class="folio-sec-title">
+            <span class="folio-sec-num">§ 01</span>
+            <h3>核心研读指标 · KERNMETRIKEN</h3>
+          </div>
+          <span class="folio-sec-tag">[ PLATE Nº 01 / METRICS ]</span>
         </div>
 
-        <!-- Folio Sheet 2: 30-day Trend Chronik & CEFR Spectrum -->
-        <div class="folio-sheet">
-          <section class="dossier-panel">
-            <div class="dossier-panel-head">
-              <div class="dossier-panel-title">
-                <span class="dossier-panel-code">VERLAUF · 30 TAGE</span>
-                <h3>近 30 天研读与卡片新增轨迹</h3>
-              </div>
-              <div class="dossier-panel-meta">TÄGLICHE AKTIVITÄTS-CHRONIK</div>
+        <div class="folio-stats-grid">
+          <!-- 1. 连续天数 -->
+          <div class="stat-badge">
+            <div class="stat-ring solid coral" id="stat-streak">0</div>
+            <div class="stat-text">
+              <b>Tage Streak</b>
+              <span id="stat-streak-note">连续研读天数</span>
             </div>
-            <div class="dossier-chart-container">
-              <svg id="progress-chart-svg" class="dossier-chart-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
-              <div class="dossier-chart-axis">
-                <span id="chart-axis-start">VOR 30 TAGEN</span>
-                <span>● HEUTE</span>
-              </div>
+          </div>
+          <!-- 2. 掌握词汇 -->
+          <div class="stat-badge">
+            <div class="stat-ring solid" id="stat-mastered-vocab">0</div>
+            <div class="stat-text">
+              <b>Vokabeln</b>
+              <span id="stat-vocab-note">掌握词汇斩获</span>
             </div>
-          </section>
+          </div>
+          <!-- 3. 掌握语法 -->
+          <div class="stat-badge">
+            <div class="stat-ring dashed" id="stat-mastered-grammar">0</div>
+            <div class="stat-text">
+              <b>Grammatik</b>
+              <span id="stat-grammar-note">核心语法考点</span>
+            </div>
+          </div>
+          <!-- 4. 精读篇数 -->
+          <div class="stat-badge">
+            <div class="stat-ring solid" id="stat-articles">0</div>
+            <div class="stat-text">
+              <b>Artikel</b>
+              <span id="stat-articles-note">精读解析文章</span>
+            </div>
+          </div>
+          <!-- 5. 测验准确率 -->
+          <div class="stat-badge">
+            <div class="stat-ring dashed coral" id="stat-accuracy">0%</div>
+            <div class="stat-text">
+              <b>Genauigkeit</b>
+              <span id="stat-accuracy-note">测验综合正答率</span>
+            </div>
+          </div>
+          <!-- 6. 研读时长 -->
+          <div class="stat-badge">
+            <div class="stat-ring solid" id="stat-minutes">0</div>
+            <div class="stat-text">
+              <b>Minuten</b>
+              <span>累计专注学时</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-          <section class="dossier-panel">
+      <!-- 展台 2: 欧标掌握度阶梯与 30 天墨线留存走势 (双栏网格) -->
+      <section id="folio-sec-spectrum" class="folio-section">
+        <div class="folio-sec-head">
+          <div class="folio-sec-title">
+            <span class="folio-sec-num">§ 02</span>
+            <h3>谱系构成与研读轨迹 · SPEKTRUM &amp; VERLAUF</h3>
+          </div>
+          <span class="folio-sec-tag">[ PLATE Nº 02 / ANALYTICS ]</span>
+        </div>
+
+        <div class="folio-two-col">
+          <!-- 左栏：CEFR 欧标掌握度阶梯矩阵 -->
+          <div class="dossier-panel">
             <div class="dossier-panel-head">
               <div class="dossier-panel-title">
-                <span class="dossier-panel-code">SPEKTRUM · CEFR</span>
-                <h3>卡片库欧标水平阶梯构成</h3>
+                <span class="dossier-panel-code">SPEKTRUM · CEFR MATRIX</span>
+                <h3>卡片库欧标阶梯分布</h3>
               </div>
               <div class="dossier-panel-meta" id="progress-total-cards">GESAMT: 0 KARTEN</div>
             </div>
             <div id="progress-cefr-bar" class="reader-heatbar" style="margin-top:0.75rem;"></div>
-          </section>
-        </div>
+            <div id="progress-cefr-ladder" class="folio-cefr-ladder"></div>
+          </div>
 
-        <!-- Folio Sheet 3: Philatelic Milestones & Top Errors Table -->
-        <div class="folio-sheet">
-          <section class="dossier-panel">
+          <!-- 右栏：30 天墨线留存走势图 -->
+          <div class="dossier-panel">
             <div class="dossier-panel-head">
               <div class="dossier-panel-title">
-                <span class="dossier-panel-code">SIEGEL &amp; AUSZEICHNUNGEN</span>
-                <h3>学术成就印章</h3>
+                <span class="dossier-panel-code">VERLAUF · 30 TAGE</span>
+                <h3>30 天研读与卡片新增轨迹</h3>
               </div>
-              <div class="dossier-panel-meta">MEILENSTEINE</div>
+              <div class="dossier-panel-meta">TÄGLICHE CHRONIK</div>
             </div>
-            <div id="progress-milestones" class="dossier-stamps-grid"></div>
-          </section>
+            <div class="dossier-chart-container">
+              <svg id="progress-chart-svg" class="dossier-chart-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
+              <div class="dossier-chart-axis">
+                <span id="chart-axis-start">● VOR 30 TAGEN</span>
+                <span id="chart-axis-end">● HEUTE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-          <section id="progress-errors-wrap" class="dossier-panel hidden">
-            <div class="dossier-panel-head">
-              <div class="dossier-panel-title">
-                <span class="dossier-panel-code">SCHWACHSTELLEN-ANALYSE</span>
-                <h3>重点易错词汇梳理</h3>
-              </div>
-              <button class="btn btn-dark" style="font-size:0.6875rem;padding:0.25rem 0.65rem;" onclick="openQuizOverlay()">⚔ 专项重测</button>
-            </div>
-            <div id="progress-errors-list" class="dossier-errors-table"></div>
-          </section>
+      <!-- 展台 3: 重点易错词汇梳理台账 -->
+      <section id="folio-sec-errors" class="folio-section">
+        <div class="folio-sec-head">
+          <div class="folio-sec-title">
+            <span class="folio-sec-num">§ 03</span>
+            <h3>重点易错词汇攻坚 · SCHWACHSTELLEN-ANALYSE</h3>
+          </div>
+          <span class="folio-sec-tag">[ PLATE Nº 03 / ERRORS ]</span>
         </div>
 
-      </div>
+        <div id="progress-errors-wrap" class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code">ERROR LEDGER</span>
+              <h3>高频混淆与错题账本</h3>
+            </div>
+            <button class="btn btn-dark" style="font-size:0.75rem;padding:0.35rem 0.85rem;" onclick="openQuizOverlay()">⚔ 专项重测</button>
+          </div>
+          <div id="progress-errors-list" class="dossier-errors-table"></div>
+        </div>
+      </section>
+
+      <!-- 展台 4: 歌德备考学术勋章印章展台 -->
+      <section id="folio-sec-milestones" class="folio-section">
+        <div class="folio-sec-head">
+          <div class="folio-sec-title">
+            <span class="folio-sec-num">§ 04</span>
+            <h3>歌德备考学术成就勋章 · SIEGEL &amp; MEILENSTEINE</h3>
+          </div>
+          <span class="folio-sec-tag">[ PLATE Nº 04 / ACHIEVEMENTS ]</span>
+        </div>
+
+        <div class="dossier-panel">
+          <div id="progress-milestones" class="dossier-stamps-grid"></div>
+        </div>
+      </section>
+
     </div>
   </main>
 
@@ -451,21 +469,39 @@
   </aside>
 
   <!-- ── Import Modal ───────────────────────────────────────── -->
-  <div id="modal-overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal">
-      <div class="modal-tabs">
-        <button id="tab-btn-text" class="modal-tab active" onclick="switchImportTab('text')">粘贴长文</button>
-        <button id="tab-btn-url" class="modal-tab" onclick="switchImportTab('url')">网页链接 (URL)</button>
-        <button id="tab-btn-file" class="modal-tab" onclick="switchImportTab('file')">文档上传</button>
-        <button id="tab-btn-feed" class="modal-tab" onclick="switchImportTab('feed')">📰 订阅外刊 (RSS)</button>
+  <div id="modal-overlay" class="modal-overlay import-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal import-modal-box">
+      <div class="modal-header import-modal-header">
+        <div class="import-header-title">
+          <span class="import-header-code">[ INGESTION // DOKUMENT ]</span>
+          <h3>导入德语研读文献</h3>
+        </div>
+        <button class="drawer-close" onclick="closeModal()" title="关闭 (Esc)">✕</button>
+      </div>
+
+      <div class="modal-tabs import-tabs">
+        <button id="tab-btn-text" class="modal-tab import-tab active" onclick="switchImportTab('text')">
+          <span>❖ 粘贴长文</span>
+        </button>
+        <button id="tab-btn-url" class="modal-tab import-tab" onclick="switchImportTab('url')">
+          <span>❖ 网页链接 (URL)</span>
+        </button>
+        <button id="tab-btn-file" class="modal-tab import-tab" onclick="switchImportTab('file')">
+          <span>❖ 文档上传</span>
+        </button>
+        <button id="tab-btn-feed" class="modal-tab import-tab" onclick="switchImportTab('feed')">
+          <span>📰 订阅外刊 (RSS)</span>
+        </button>
       </div>
 
       <!-- Tab 1: Text -->
       <div id="import-tab-text" class="tab-content active">
         <div class="modal-field">
-          <input id="imp-title" type="text" class="modal-input" placeholder="文章标题（可选）">
+          <label class="input-label" for="imp-title">文章标题（可选）</label>
+          <input id="imp-title" type="text" class="modal-input" placeholder="输入或自定义标题…">
         </div>
         <div class="modal-field">
+          <label class="input-label" for="imp-text">德语长文正文</label>
           <textarea id="imp-text" class="modal-input modal-textarea" placeholder="粘贴德语课文、新闻或备考长文…"></textarea>
         </div>
       </div>
@@ -473,22 +509,25 @@
       <!-- Tab 2: URL -->
       <div id="import-tab-url" class="tab-content">
         <div class="modal-field">
-          <input id="imp-url-input" type="url" class="modal-input" placeholder="输入德语新闻/文章链接 (如: https://www.dw.com/...)">
+          <label class="input-label" for="imp-url-input">德语新闻/文章链接 (URL)</label>
+          <input id="imp-url-input" type="url" class="modal-input" placeholder="https://www.dw.com/de/...">
         </div>
         <div class="modal-field">
-          <input id="imp-url-title" type="text" class="modal-input" placeholder="自定义标题（可选，默认自动提取网页标题）">
+          <label class="input-label" for="imp-url-title">自定义标题（可选）</label>
+          <input id="imp-url-title" type="text" class="modal-input" placeholder="自定义标题（默认自动提取并清洗网页标题）">
         </div>
-        <p style="font-size:0.75rem;color:var(--pencil);line-height:1.5;margin-top:0.35rem;">
-          支持自动解析 DW 德语之声、Spiegel、Tagesschau、Zeit 等主流德语新闻正文。
-        </p>
+        <div class="url-hint-box">
+          <span class="url-hint-icon">✦</span>
+          <span>支持自动提取与正文降噪：DW 德语之声、Spiegel、Tagesschau、DLF、Zeit 等主流德语媒体。</span>
+        </div>
       </div>
 
       <!-- Tab 3: File Upload -->
       <div id="import-tab-file" class="tab-content">
         <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
-          <div style="font-size:1.75rem;margin-bottom:0.35rem;">📄</div>
-          <div style="font-weight:600;color:var(--ink);">点击或拖拽德语文档至此处</div>
-          <div style="font-size:0.75rem;color:var(--pencil);margin-top:0.25rem;">支持 .txt, .md, .text 等纯文本文档</div>
+          <div class="dropzone-icon">📄</div>
+          <div class="dropzone-title">点击或拖拽德语文档至此处</div>
+          <div class="dropzone-desc">支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）</div>
           <input id="file-input" type="file" accept=".txt,.md,.text" style="display:none;" onchange="handleFileSelect(event)">
         </div>
       </div>
@@ -499,7 +538,7 @@
           <!-- Populated by JS -->
         </div>
         <div class="feed-items-container" id="feed-items-container">
-          <div style="text-align:center;padding:2rem;color:var(--pencil);font-family:var(--mono);font-size:0.8125rem;">
+          <div class="feed-loading-state">
             ⏳ 正在获取精选德语外刊与学习源…
           </div>
         </div>
@@ -544,6 +583,7 @@
               <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-base-url').value='https://api.deepseek.com'">DeepSeek 官方</button>
               <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-base-url').value='https://api.openai.com/v1'">OpenAI</button>
             </div>
+          </div>
           <div class="modal-field">
             <label class="input-label">模型名称 (Model)</label>
             <input id="set-model-name" type="text" class="modal-input" placeholder="deepseek-v4-flash">
@@ -788,27 +828,27 @@
     </div>
   </div>
 
-  <!-- ── Mobile Android / iOS Bottom Navigation Bar ─────────── -->
-  <nav id="mobile-bottom-nav" class="mobile-bottom-nav">
-    <button class="mobile-nav-btn active" id="mob-btn-home" onclick="show('home')">
+  <!-- ── Mobile Android / iOS Bottom Navigation Dock ─────────── -->
+  <nav id="mobile-bottom-nav" class="mobile-bottom-nav mobile-dock">
+    <button class="mobile-nav-btn dock-item active" id="mob-btn-home" onclick="show('home')">
       <span class="mob-icon">📖</span>
       <span class="mob-label">文库</span>
     </button>
-    <button class="mobile-nav-btn" id="mob-btn-progress" onclick="show('progress')">
+    <button class="mobile-nav-btn dock-item" id="mob-btn-progress" onclick="show('progress')">
       <span class="mob-icon">📊</span>
       <span class="mob-label">台账</span>
     </button>
-    <button class="mobile-nav-btn" id="mob-btn-cards" onclick="show('cards')">
+    <button class="mobile-nav-btn dock-item" id="mob-btn-cards" onclick="show('cards')">
       <span class="mob-icon">🎴</span>
       <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
     </button>
-    <button class="mobile-nav-btn" id="mob-btn-settings" onclick="openSettingsModal()">
+    <button class="mobile-nav-btn dock-item" id="mob-btn-settings" onclick="openSettingsModal()">
       <span class="mob-icon">⚙️</span>
       <span class="mob-label">设置</span>
     </button>
   </nav>
 
-  <script type="module" src="/js/main.js?v=3.5.2"></script>
+  <script type="module" src="/js/main.js?v=3.6.1"></script>
 
 
 </body>
