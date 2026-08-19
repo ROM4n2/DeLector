@@ -393,16 +393,47 @@ function clearCefrFocus() {
   document.querySelectorAll('.tok').forEach(el => el.classList.remove('focus-active'));
 }
 
+// Normalize CEFR percentages so segments always sum to exactly 100 (integer),
+// preventing sub-pixel rounding gaps in flex containers.
+function normalizeCefrPct(rawPct) {
+  const levels = ['A1', 'A2', 'B1', 'B2', 'C1'];
+  const active = levels.filter(l => rawPct[l] > 0);
+  if (!active.length) return rawPct;
+
+  // Floor each value, collect remainders
+  const floored = {};
+  const remainders = {};
+  let total = 0;
+  active.forEach(l => {
+    floored[l] = Math.floor(rawPct[l]);
+    remainders[l] = rawPct[l] - floored[l];
+    total += floored[l];
+  });
+
+  // Distribute leftover integer points by largest remainder
+  let leftover = 100 - total;
+  active
+    .slice()
+    .sort((a, b) => remainders[b] - remainders[a])
+    .forEach(l => {
+      if (leftover > 0) { floored[l]++; leftover--; }
+    });
+
+  const out = {};
+  levels.forEach(l => { out[l] = floored[l] || 0; });
+  return out;
+}
+
 function renderMiniBar(stats) {
   if (!stats || !stats.cefr_percentages) return '';
-  const p = stats.cefr_percentages;
-  const segs = ['A1', 'A2', 'B1', 'B2', 'C1'].map(lvl => 
-    (p[lvl] && p[lvl] > 0) ? `<div class="mini-seg ${lvl}" style="width:${p[lvl]}%" title="${lvl}: ${p[lvl]}%"></div>` : ''
+  const p = normalizeCefrPct(stats.cefr_percentages);
+  const segs = ['A1', 'A2', 'B1', 'B2', 'C1'].map(lvl =>
+    (p[lvl] > 0) ? `<div class="mini-seg ${lvl}" style="width:${p[lvl]}%" title="${lvl}: ${p[lvl]}%"></div>` : ''
   ).join('');
-  
+
   const rec = stats.recommended_level || 'A1';
   const recClass = rec.startsWith('B2') ? 'mini-level-B2' : `mini-level-${rec}`;
-  
+
   return `
     <div class="mini-bar-wrap">
       <span class="mini-level-badge ${recClass}">${rec} 推荐</span>
@@ -434,7 +465,7 @@ async function loadArticles() {
 
 function renderReaderHeatbar(stats) {
   if (!stats || !stats.cefr_percentages) return;
-  const p = stats.cefr_percentages;
+  const p = normalizeCefrPct(stats.cefr_percentages);
   const counts = stats.cefr_counts || {};
   const segs = ['A1', 'A2', 'B1', 'B2', 'C1'].map(lvl => {
     if (!p[lvl] || p[lvl] <= 0) return '';
@@ -444,7 +475,7 @@ function renderReaderHeatbar(stats) {
 
   document.getElementById('reader-heatbar').innerHTML = segs;
   document.getElementById('heatbar-time').textContent = `预计精读 ${stats.est_reading_minutes || 1} 分钟 · 共 ${stats.word_count || 0} 词`;
-  
+
   const rec = stats.recommended_level || 'A1';
   const badge = document.getElementById('reader-meta-badge');
   if (badge) {
@@ -452,6 +483,7 @@ function renderReaderHeatbar(stats) {
     badge.className = `mini-level-badge mini-level-${rec.startsWith('B2') ? 'B2' : rec}`;
   }
 }
+
 
 async function openReader(id) {
   currentArticle = await api('/api/articles/' + id);
@@ -1946,7 +1978,14 @@ async function aiNoteAssist() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sentence: sentText, selected_text: activeSelectedRangeText })
     });
-    
+
+    if (res._stub) {
+      // Key not configured — show hint in status text, don't overwrite the note textarea
+      const statusEl = document.getElementById('d-def-status') || document.getElementById('note-ai-status');
+      if (statusEl) statusEl.textContent = '⚠ 未配置 DEEPSEEK_API_KEY，AI 解析不可用';
+      return;
+    }
+
     let summary = res.summary_zh || '';
     if (res.key_points && res.key_points.length) {
       summary += '\n• ' + res.key_points.join('\n• ');
@@ -1959,6 +1998,7 @@ async function aiNoteAssist() {
     btn.disabled = false;
   }
 }
+
 
 async function saveCurrentNote() {
   if (!activeSelectedRangeText || !currentArticle) return;

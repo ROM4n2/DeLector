@@ -626,7 +626,7 @@ a { color: inherit; text-decoration: none; }
 
 }
 
-.mini-seg { height: 100%; }
+.mini-seg { height: 100%; min-width: 1px; flex-shrink: 0; }
 
 .mini-seg.A1 { background: var(--hl-A1-ink); }
 
@@ -982,7 +982,7 @@ body.drawer-open #view-reader {
 
   background: var(--paper-deep);
 
-  gap: 1px;
+  /* gap removed: integer-percent segments don't need gaps and overflow can accumulate */
 
 }
 
@@ -1010,9 +1010,19 @@ body.drawer-open #view-reader {
 
   padding: 0 4px;
 
+  /* Prevent tiny segments from collapsing entirely */
+  min-width: 1px;
+  flex-shrink: 0;
+
+  /* Hairline right-border acts as visual divider (replaces gap) */
+  border-right: 1px solid rgba(0,0,0,0.12);
+
 }
 
+.heatbar-seg:last-child { border-right: none; }
+
 .heatbar-seg:hover { opacity: 0.85; }
+
 
 .heatbar-seg.A1 { background: var(--hl-A1); color: var(--hl-A1-ink); }
 
@@ -1256,7 +1266,26 @@ body.focus-mode .tok.focus-active {
 
 }
 
+/* Tap-to-close backdrop (visible only when drawer is open on mobile) */
+#drawer-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 89; /* just below drawer (z-index: 90) */
+  background: rgba(26, 23, 20, 0.35);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+  cursor: pointer;
+  touch-action: none; /* prevent scroll pass-through while backdrop is active */
+}
+
+body.drawer-open #drawer-backdrop {
+  display: block;
+}
+
 #drawer.open { transform: none; }
+
+
 
 
 
@@ -4887,10 +4916,25 @@ body.drawer-open .shadow-player {
     box-shadow: 0 -8px 24px rgba(26, 23, 20, 0.2) !important;
     transform: translateY(100%);
     border-radius: 12px 12px 0 0;
+    /* Allow inner vertical scroll without propagating to page */
+    touch-action: pan-y;
+    overscroll-behavior: contain;
   }
 
   #drawer.open {
     transform: translateY(0);
+  }
+
+  /* Lock page scroll while bottom sheet is open */
+  body.drawer-open {
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* Smooth touch-scroll inside the drawer body */
+  #drawer .drawer-body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   /* 3D Poker Card on Mobile */

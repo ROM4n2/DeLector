@@ -1029,10 +1029,14 @@ class NoteAssistReq(BaseModel):
 async def note_assist(req: NoteAssistReq):
     key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not key:
+        import logging
+        logging.warning("[note-assist] DEEPSEEK_API_KEY not set — returning stub response. Add it to .env to enable AI analysis.")
         return {
             "summary_zh": f"精读重点：{req.selected_text}",
-            "key_points": ["请在 .env 配置 DEEPSEEK_API_KEY 获取深度 AI 语法与搭配解析。"]
+            "key_points": ["请在 .env 配置 DEEPSEEK_API_KEY 获取深度 AI 语法与搭配解析。"],
+            "_stub": True
         }
+
 
     user_content = f"整句: \"{req.sentence}\"\n划选部分: \"{req.selected_text}\""
     try:
