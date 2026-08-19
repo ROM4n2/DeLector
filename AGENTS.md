@@ -16,7 +16,7 @@
 | 项 | 值 |
 |---|---|
 | 当前分支 / HEAD | `master`（含 v3.8.0 FSRS 认知自适应记忆排程器升级：DSR 状态机原生零依赖数学模型、`next_intervals` 4级预估字典与前端动态绑定），工作区干净 |
-| 测试 | **66 / 66 全绿**（`test_server.py` 51 + `test_syntax_tree.py` 15） |
+| 测试 | **67 / 67 全绿**（`test_server.py` 52 + `test_syntax_tree.py` 15） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
 | 对外发布 | **v3.8.0**（2026-08-19）：FSRS 现代自适应记忆排程器升级（DSR 状态机原生数学模型、消除 Ease Hell、4 级下一轮间隔预计算字典、向下兼容 SM-2 包装） |
