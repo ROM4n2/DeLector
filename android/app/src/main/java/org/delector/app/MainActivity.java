@@ -135,11 +135,15 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("*/*");
-                String[] mimetypes = {"text/plain", "text/markdown", "text/*", "application/octet-stream"};
-                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
+                String[] mimetypes = {"text/plain", "text/markdown", "text/*", "image/svg+xml", "image/*", "application/json", "application/octet-stream"};
+                if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null && fileChooserParams.getAcceptTypes().length > 0 && !fileChooserParams.getAcceptTypes()[0].isEmpty()) {
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, fileChooserParams.getAcceptTypes());
+                } else {
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
+                }
 
                 try {
-                    startActivityForResult(Intent.createChooser(intent, "选择德语文章文档"), FILE_CHOOSER_REQUEST_CODE);
+                    startActivityForResult(Intent.createChooser(intent, "选择文件"), FILE_CHOOSER_REQUEST_CODE);
                 } catch (Exception e) {
                     MainActivity.this.filePathCallback = null;
                     Toast.makeText(MainActivity.this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_SHORT).show();
