@@ -289,17 +289,87 @@ def seed_preset_articles(db_path: Optional[str] = None):
                 ingest_article(art["title"], art["text"], db_path=target)
 
 # --- 2. NLP & CEFR Tagging ---
-nlp = None
-if spacy is not None:
+import importlib
+from pathlib import Path
+from start import is_android
+
+# md 带词向量、标注更准，是桌面端首选；sm 体积小，Android 包里装的和自动下载兜底都用它。
+# 按顺序取第一个能加载的。
+SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")
+AUTO_DOWNLOAD_MODEL = "de_core_news_sm"
+
+def _load_spacy_model(name: str):
+    """加载指定德语模型，返回 (nlp, 加载方式描述)；全部策略失败则抛 RuntimeError。
+
+    为什么不能只用 spacy.load(name)：它走 spacy.util.is_package()，查的是
+    importlib.metadata 的 .dist-info 元数据。Android 上模型是被直接拷进 Chaquopy
+    的 Python 源码目录的（见 CI 的 sync 步骤），没有 dist-info，于是即便这个包
+    import 得动，也只会报 "[E050] Can't find model"——真机上就是这么退化成纯
+    Python 路径的。所以按名称失败后要退到模块自身的 load()，最后退到数据目录路径。
+    """
+    errors = []
     try:
-        nlp = spacy.load("de_core_news_sm")
-    except Exception:
+        return spacy.load(name), name
+    except Exception as e:
+        errors.append(f"spacy.load({name!r}) -> {e}")
+
+    try:
+        module = importlib.import_module(name)
+    except Exception as e:
+        errors.append(f"import {name} -> {e}")
+        raise RuntimeError("; ".join(errors))
+
+    try:
+        # 等价于 load_model_from_init_py(module.__file__)，绕开 is_package 检查
+        return module.load(), f"{name}(module.load)"
+    except Exception as e:
+        errors.append(f"{name}.load() -> {e}")
+
+    try:
+        # meta.json 里的版本与实际数据目录名不一致时，上一步会失败，这里直接找目录
+        root = Path(module.__file__).parent
+        data_dirs = sorted(root.glob(f"{name}-*"))
+        if not data_dirs:
+            raise FileNotFoundError(f"{root} 下没有 {name}-* 数据目录")
+        return spacy.load(data_dirs[-1]), f"{name}({data_dirs[-1].name})"
+    except Exception as e:
+        errors.append(f"path load -> {e}")
+
+    raise RuntimeError("; ".join(errors))
+
+nlp = None
+# 记录实际生效的引擎，便于在真机上（adb logcat / GET /api/settings）确认
+# 到底是 spaCy 还是纯 Python 降级路径在跑——降级本身是静默的。
+NLP_ENGINE = "pure_python"
+NLP_ENGINE_DETAIL = "spaCy 未安装，使用纯 Python 降级路径（无依存句法/格标注）"
+
+if spacy is not None:
+    load_errors = []
+    for candidate in SPACY_MODEL_CANDIDATES:
         try:
-            from spacy.cli import download
-            download("de_core_news_sm")
-            nlp = spacy.load("de_core_news_sm")
-        except Exception:
-            nlp = None
+            nlp, how = _load_spacy_model(candidate)
+            NLP_ENGINE = "spacy"
+            NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}"
+            break
+        except Exception as e:
+            load_errors.append(str(e))
+
+    if nlp is None:
+        # 自动下载模型只在桌面端有意义。Android 上 spacy.cli.download 会起 pip
+        # 子进程去拉模型：Chaquopy 里必然失败，却会在 import 期阻塞启动。
+        if is_android():
+            NLP_ENGINE_DETAIL = "spaCy 已装但模型加载失败，降级为纯 Python：" + " | ".join(load_errors)
+        else:
+            try:
+                from spacy.cli import download
+                download(AUTO_DOWNLOAD_MODEL)
+                nlp, how = _load_spacy_model(AUTO_DOWNLOAD_MODEL)
+                NLP_ENGINE = "spacy"
+                NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}（自动下载）"
+            except Exception as e:
+                NLP_ENGINE_DETAIL = f"spaCy 已装但模型不可用，降级为纯 Python：{e}"
+
+print(f"[DeLector] NLP 引擎: {NLP_ENGINE} — {NLP_ENGINE_DETAIL}", flush=True)
 
 CEFR_DICT = {
     # A1 core
@@ -349,7 +419,7 @@ CEFR_DICT = {
 
 from core_dict import lookup_core_vocab, get_core_cefr_level
 from linguistics import lookup_irregular_verb, split_komposita
-from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree
+from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree, split_sentences_pure_python
 
 def get_cefr_level(lemma: str) -> str:
     if not lemma:
@@ -414,9 +484,7 @@ def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
     }
 
 def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
-    raw_sents = [s.strip() for s in re.split(r'([.!?]+["\']?\s*)', text) if s.strip() and not re.match(r'^[.!?]+["\']?$', s)]
-    if not raw_sents and text.strip():
-        raw_sents = [text.strip()]
+    raw_sents = split_sentences_pure_python(text)
     sentences = []
     all_tokens = []
     global_tok_id = 0
@@ -425,11 +493,12 @@ def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
         raw_toks = re.findall(r'\w+|[^\w\s]', sent_text, re.UNICODE)
         for raw_tok in raw_toks:
             is_punct = bool(re.match(r'^[^\w\s]+$', raw_tok))
-            lemma = raw_tok.lower()
-            dict_entry = lookup_core_dict(raw_tok)
-            pos = dict_entry.get("pos", "PUNCT" if is_punct else ("NOUN" if raw_tok[0].isupper() else "ADV"))
+            # 无 spacy 时靠核心词库反查词元，命中则用词典词元覆盖朴素小写形
+            dict_entry = lookup_core_vocab(raw_tok) or {}
+            lemma = dict_entry.get("lemma") or raw_tok.lower()
+            pos = dict_entry.get("pos") or ("PUNCT" if is_punct else ("NOUN" if raw_tok[0].isupper() else "ADV"))
             gender = dict_entry.get("gender", "")
-            cefr = dict_entry.get("cefr", get_cefr_level(lemma) if not is_punct else "")
+            cefr = dict_entry.get("cefr_level") or ("" if is_punct else get_cefr_level(lemma))
             tok = {
                 "id": global_tok_id,
                 "text": raw_tok,
@@ -1432,7 +1501,9 @@ def get_app_settings():
         "api_base_url": get_effective_api_base_url(),
         "api_model": get_effective_api_model(),
         "tts_voice": get_setting("TTS_VOICE", "de-DE-KatjaNeural"),
-        "tts_rate": get_setting("TTS_RATE", "+0%")
+        "tts_rate": get_setting("TTS_RATE", "+0%"),
+        "nlp_engine": NLP_ENGINE,
+        "nlp_engine_detail": NLP_ENGINE_DETAIL
     }
 
 @app.post("/api/settings")

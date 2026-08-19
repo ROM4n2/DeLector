@@ -94,6 +94,21 @@ docker compose up -d --build
 
 ---
 
+### 开发者：启用提交前密钥扫描（必做一次）
+
+`core.hooksPath` 是本地配置，**不随 clone 生效**，每个克隆都要手动开一次：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+启用后 [.githooks/pre-commit](.githooks/pre-commit) 会在每次提交前扫描暂存内容，拦下
+OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`*.pem`、`*.secret`
+这类文件名。占位符（`sk-xxx`、`test-key`）不会误报；确属误报时在该行加注释
+`delector:allow-secret`，不要用 `git commit --no-verify` 整体跳过。
+
+---
+
 ## 🏗️ 技术栈架构 (Tech Stack)
 
 | 领域 | 核心技术 | 说明 |

@@ -878,3 +878,156 @@ def test_settings_test_key_without_key(client):
 
 
 
+
+# --- Android / Chaquopy runtime: spacy is absent, everything must fall back to pure Python ---
+
+def test_pure_python_pipeline_without_spacy():
+    """APK 里没有 spacy，process_german_text 走纯 Python 分支。
+
+    这条分支曾因调用不存在的 lookup_core_dict 而在 import server 时就 NameError，
+    导致安卓端 uvicorn 永远起不来、启动页一直卡住。
+    """
+    import server
+
+    result = server._process_german_text_pure_python(
+        "Der Hund schläft. Ich habe ein Buch gelesen!"
+    )
+
+    assert result["sentence_count"] == 2
+    tokens = [t for s in result["sentences"] for t in s["tokens"]]
+    assert tokens, "pure-python 分支必须产出 token"
+    # 核心词库命中时应带出 CEFR 与词性，而不是空值
+    der = next(t for t in tokens if t["text"] == "Der")
+    assert der["lemma"] == "der"
+    assert der["cefr_level"]
+    assert all(t["cefr_level"] == "" for t in tokens if t["is_punct"])
+    assert result["stats"]["word_count"] > 0
+
+def test_module_import_survives_without_spacy(monkeypatch):
+    """server 的 import 期副作用（init_db → seed_preset_articles）不能依赖 spacy。"""
+    import server
+
+    monkeypatch.setattr(server, "nlp", None)
+    seeded = server.process_german_text(server.PRESET_ARTICLES[0]["text"])
+    assert seeded["sentence_count"] > 0
+    assert seeded["sentences"][0]["tokens"]
+
+def test_syntax_tree_pure_python_sentence_split():
+    """syntax_tree 的降级分支曾有和 server 完全相同的切句 bug：句号被切成独立句子。"""
+    from syntax_tree import _analyze_syntax_tree_pure_python, split_sentences_pure_python
+
+    assert split_sentences_pure_python("Der Hund schläft. Ich lese!") == [
+        "Der Hund schläft.",
+        "Ich lese!",
+    ]
+    result = _analyze_syntax_tree_pure_python("Der Hund schläft. Ich lese!")
+    assert result["sentence_count"] == 2
+    assert [s["text"] for s in result["sentences"]] == ["Der Hund schläft.", "Ich lese!"]
+
+def test_bind_host_is_loopback_only_on_android(monkeypatch):
+    """Android 上必须只监听回环：POST /api/settings 无鉴权，绑 0.0.0.0 会暴露给整个局域网。"""
+    import start
+
+    monkeypatch.setattr(start, "is_android", lambda: True)
+    assert start.get_bind_host() == "127.0.0.1"
+
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    assert start.get_bind_host() == "0.0.0.0"
+
+def test_settings_reports_nlp_engine(client):
+    """降级是静默的，所以引擎状态必须能从 API 读到（真机上唯一的可验证途径）。"""
+    import server
+
+    res = client.get("/api/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["nlp_engine"] in ("spacy", "pure_python")
+    assert data["nlp_engine"] == server.NLP_ENGINE
+    assert data["nlp_engine_detail"]
+
+def test_android_never_downloads_model_at_import():
+    """Android 上 spacy.cli.download 会起 pip 子进程拉 15MB 模型。
+
+    Chaquopy 里必然失败，但会在 import server 期间阻塞启动——正是把 APK
+    卡在启动页的那类故障。装上 spaCy 后这段原本的死代码变成了活路径。
+    """
+    import subprocess
+    import sys
+    import os
+
+    probe = (
+        "import spacy, sys, os\n"
+        "def _boom(*a, **k):\n"
+        "    raise OSError('simulated')\n"
+        # 三条加载路径全部堵死：spacy.load(名称)、模块自身 load()、按数据目录加载
+        "spacy.load = _boom\n"
+        "import spacy.util\n"
+        "spacy.util.load_model_from_init_py = _boom\n"
+        "spacy.util.load_model_from_path = _boom\n"
+        "import spacy.cli\n"
+        "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
+        "sys.path.insert(0, os.getcwd())\n"
+        "import server\n"
+        "print('ENGINE=' + server.NLP_ENGINE)\n"
+    )
+    env = {**os.environ, "ANDROID_ROOT": "/system", "PYTHONIOENCODING": "utf-8"}
+    res = subprocess.run([sys.executable, "-c", probe], capture_output=True,
+                         text=True, encoding="utf-8", errors="replace", env=env)
+    out = (res.stdout or "") + (res.stderr or "")
+    assert "DOWNLOAD_ATTEMPTED" not in out, "Android 上不得在 import 期联网下载模型"
+    assert "ENGINE=pure_python" in out
+
+def test_spacy_model_candidates_prefer_md():
+    """README 与 Dockerfile 都装 md（带词向量、标注更准），sm 只是兜底。"""
+    import server
+
+    assert server.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
+    # 自动下载走小模型：md 约 45MB，首启动拉它太慢
+    assert server.AUTO_DOWNLOAD_MODEL == "de_core_news_sm"
+
+def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
+    """spacy.load(名称) 查的是 .dist-info；Android 上模型是直接拷进源码目录的。
+
+    真机实测报的就是 "[E050] Can't find model 'de_core_news_sm'"，尽管这个包
+    import 得动。所以按名称失败后必须退到模块自身的 load()。
+    """
+    import sys
+    import types
+    import server
+
+    sentinel = object()
+    fake = types.ModuleType("de_fake_news_sm")
+    fake.load = lambda **kw: sentinel
+    monkeypatch.setitem(sys.modules, "de_fake_news_sm", fake)
+    monkeypatch.setattr(server.spacy, "load", lambda *a, **k:
+                        (_ for _ in ()).throw(OSError("[E050] Can't find model")))
+
+    nlp, how = server._load_spacy_model("de_fake_news_sm")
+    assert nlp is sentinel
+    assert "module.load" in how
+
+def test_load_spacy_model_reports_every_failed_strategy(monkeypatch):
+    """全部失败时错误信息要带上每条策略的原因，否则真机上无从判断卡在哪。"""
+    import server
+
+    monkeypatch.setattr(server.spacy, "load", lambda *a, **k:
+                        (_ for _ in ()).throw(OSError("no dist-info")))
+    with pytest.raises(RuntimeError) as excinfo:
+        server._load_spacy_model("de_definitely_not_installed")
+    message = str(excinfo.value)
+    assert "spacy.load" in message
+    assert "import de_definitely_not_installed" in message
+
+def test_android_build_extracts_spacy_data_packages():
+    """Chaquopy 默认不把包的数据文件解到磁盘（build.json 的 extract_packages 为空）。
+
+    这三个包都用 Path(__file__).parent 去 open() 真实文件，漏掉任何一个，
+    真机上 spaCy 就会静默退回纯 Python 路径。
+    """
+    gradle = open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"),
+                  encoding="utf-8").read()
+    extract_lines = [ln for ln in gradle.splitlines() if "extractPackages" in ln]
+    assert extract_lines, "build.gradle 必须声明 extractPackages"
+    declared = extract_lines[0]
+    for pkg in ("spacy", "thinc", "de_core_news_sm"):
+        assert f'"{pkg}"' in declared, f"{pkg} 的数据文件不会被解包"

@@ -16,17 +16,35 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
-            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+            // 只出 arm64-v8a：spaCy 的原生栈按 ABI 各占 ~21-29MB，三个全打是 106MB。
+            // armeabi-v7a（32 位老机型）与 x86_64（模拟器）为控制体积放弃。
+            abiFilters "arm64-v8a"
         }
 
         python {
             version "3.10"
+
+            // Chaquopy 默认不把任何包的数据文件解到文件系统（构建产物里
+            // build.json 的 extract_packages 为空），Python 代码从 .imy 压缩包里
+            // 直接执行。但这三个包会用 Path(__file__).parent / "xxx" 去 open()
+            // 真实文件，不解包就必然 FileNotFoundError：
+            //   de_core_news_sm  模型 config.cfg / 权重 / attribute_ruler patterns（29 个文件）
+            //   spacy            default_config.cfg、cli/templates/*.yml
+            //   thinc            backends/_custom_kernels.cu（模块顶层 read_text，无保护）
+            // 各包 *.dist-info/entry_points.txt 不用列——catalogue 走
+            // importlib.metadata，Chaquopy 的 ChaquopyPathFinder 能直接从 zip 读。
+            extractPackages "spacy", "thinc", "de_core_news_sm"
+
             pip {
                 install "pydantic<2.0.0"
                 install "fastapi<0.100.0"
                 install "uvicorn"
                 install "httpx"
                 install "genanki"
+                // Chaquopy 自己的 native 仓库提供 cp310/android_24 的预编译 wheel，
+                // 会连带拉入 thinc/blis/numpy/cymem/preshed/murmurhash/srsly。
+                // 不额外 pin numpy，让 Chaquopy 的解析器用它仓库里那份（cp310 只有 1.26.2）。
+                install "spacy==3.8.7"
             }
         }
     }
