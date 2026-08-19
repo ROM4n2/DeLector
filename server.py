@@ -413,7 +413,50 @@ def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
         "cefr_percentages": percentages
     }
 
+def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
+    raw_sents = [s.strip() for s in re.split(r'([.!?]+["\']?\s*)', text) if s.strip() and not re.match(r'^[.!?]+["\']?$', s)]
+    if not raw_sents and text.strip():
+        raw_sents = [text.strip()]
+    sentences = []
+    all_tokens = []
+    global_tok_id = 0
+    for sent_idx, sent_text in enumerate(raw_sents):
+        tokens = []
+        raw_toks = re.findall(r'\w+|[^\w\s]', sent_text, re.UNICODE)
+        for raw_tok in raw_toks:
+            is_punct = bool(re.match(r'^[^\w\s]+$', raw_tok))
+            lemma = raw_tok.lower()
+            dict_entry = lookup_core_dict(raw_tok)
+            pos = dict_entry.get("pos", "PUNCT" if is_punct else ("NOUN" if raw_tok[0].isupper() else "ADV"))
+            gender = dict_entry.get("gender", "")
+            cefr = dict_entry.get("cefr", get_cefr_level(lemma) if not is_punct else "")
+            tok = {
+                "id": global_tok_id,
+                "text": raw_tok,
+                "lemma": lemma,
+                "pos": pos,
+                "gender": gender,
+                "case": "",
+                "cefr_level": cefr,
+                "is_punct": is_punct,
+                "is_space": False
+            }
+            tokens.append(tok)
+            all_tokens.append(tok)
+            global_tok_id += 1
+        sentences.append({
+            "id": sent_idx,
+            "text": sent_text,
+            "tokens": tokens,
+            "topology": {"vorfeld": [], "linke_klammer": [], "mittelfeld": [t["text"] for t in tokens if not t["is_punct"]], "rechte_klammer": [], "nachfeld": []},
+            "clause_tree": {"id": "root", "type": "hauptsatz", "label": "Hauptsatz", "label_zh": "主句核心", "connector": "", "finite_verb": "", "token_ids": list(range(len(tokens))), "formula": "", "children": []}
+        })
+    stats = calculate_cefr_stats(all_tokens)
+    return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
+
 def process_german_text(text: str) -> Dict[str, Any]:
+    if nlp is None:
+        return _process_german_text_pure_python(text)
     doc = nlp(text)
     sentences = []
     all_tokens = []
@@ -1622,6 +1665,37 @@ def get_due_cards():
         }
 
 def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Optional[int] = None) -> Dict[str, Any]:
+    if nlp is None:
+        # Simple pure-Python cloze fallback
+        words = re.findall(r'\w+|[^\w\s]+|\s+', text, re.UNICODE)
+        items = []
+        tokens_output = []
+        blank_counter = 0
+        for w in words:
+            if w.isalpha() and len(w) >= 4 and blank_counter < 5 and blank_counter % 2 == 0:
+                first_letter = w[0]
+                items.append({
+                    "index": blank_counter,
+                    "original": w,
+                    "first_letter": first_letter,
+                    "lemma": w.lower(),
+                    "pos": "NOUN" if w[0].isupper() else "VERB",
+                    "hint": f"首字母: {first_letter}...",
+                    "type": mode,
+                    "sent_idx": 0
+                })
+                tokens_output.append(f"[[BLANK_{blank_counter}]]")
+                blank_counter += 1
+            else:
+                tokens_output.append(w)
+        return {
+            "version": "3.5.0",
+            "mode": mode,
+            "article_id": article_id,
+            "masked_text": "".join(tokens_output),
+            "blanks_count": len(items),
+            "items": items
+        }
     doc = nlp(text)
     items = []
     tokens_output = []

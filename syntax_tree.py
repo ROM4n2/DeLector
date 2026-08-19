@@ -7,8 +7,15 @@ Topologisches Feldermodell (Vorfeld, Linke Satzklammer, Mittelfeld, Rechte Satzk
 Zero external API dependencies.
 """
 from typing import Dict, List, Any, Optional, Union, Tuple, Set
-import spacy
-from spacy.tokens import Doc, Span, Token
+
+try:
+    import spacy
+    from spacy.tokens import Doc, Span, Token
+except ImportError:
+    spacy = None
+    Doc = Any
+    Span = Any
+    Token = Any
 
 # Global cached spaCy German model instance
 _nlp_instance = None
@@ -17,16 +24,14 @@ _nlp_instance = None
 def get_spacy_nlp():
     """Load or return cached spaCy German model with robust fallback."""
     global _nlp_instance
-    if _nlp_instance is None:
+    if _nlp_instance is None and spacy is not None:
         try:
             _nlp_instance = spacy.load("de_core_news_md")
         except Exception:
             try:
                 _nlp_instance = spacy.load("de_core_news_sm")
             except Exception:
-                from spacy.cli import download
-                download("de_core_news_sm")
-                _nlp_instance = spacy.load("de_core_news_sm")
+                _nlp_instance = None
     return _nlp_instance
 
 
@@ -1145,7 +1150,43 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
 # 5. High-Level Convenience API for Full Sentences & Text
 # ==============================================================================
 
-def analyze_syntax_tree(text_or_doc: Union[str, Doc]) -> Dict[str, Any]:
+def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
+    """Pure-Python fallback when spaCy is unavailable (e.g. mobile APK)."""
+    import re
+    sents = [s.strip() for s in re.split(r'([.!?]+["\']?\s*)', text) if s.strip() and not re.match(r'^[.!?]+["\']?$', s)]
+    if not sents and text.strip():
+        sents = [text.strip()]
+    results = []
+    for s_idx, sent_str in enumerate(sents):
+        results.append({
+            "sentence_id": s_idx,
+            "text": sent_str,
+            "clause_tree": {
+                "id": "root",
+                "type": "hauptsatz",
+                "label": "Hauptsatz (主句)",
+                "label_zh": "主句核心",
+                "connector": "",
+                "finite_verb": "",
+                "token_ids": list(range(len(sent_str.split()))),
+                "formula": "[Vorfeld] + [Linke Klammer] + [Mittelfeld] + [Rechte Klammer] + [Nachfeld]",
+                "children": []
+            },
+            "topology": {
+                "vorfeld": [],
+                "linke_klammer": [],
+                "mittelfeld": sent_str.split(),
+                "rechte_klammer": [],
+                "nachfeld": []
+            }
+        })
+    return {
+        "version": "3.5.0",
+        "sentence_count": len(results),
+        "sentences": results
+    }
+
+def analyze_syntax_tree(text_or_doc: Union[str, Any]) -> Dict[str, Any]:
     """
     High-level entrypoint: Analyze all sentences in a text, returning for each sentence:
       - sentence_id
@@ -1157,6 +1198,8 @@ def analyze_syntax_tree(text_or_doc: Union[str, Doc]) -> Dict[str, Any]:
         if not text_or_doc.strip():
             return {"version": "3.5.0", "sentence_count": 0, "sentences": []}
         nlp = get_spacy_nlp()
+        if nlp is None:
+            return _analyze_syntax_tree_pure_python(text_or_doc)
         doc = nlp(text_or_doc)
     else:
         doc = text_or_doc

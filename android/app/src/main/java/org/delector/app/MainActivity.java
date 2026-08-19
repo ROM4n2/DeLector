@@ -151,6 +151,7 @@ public class MainActivity extends AppCompatActivity {
                     py.getModule("start").callAttr("main");
                 } catch (Exception e) {
                     e.printStackTrace();
+                    mainHandler.post(() -> statusTextView.setText("Python 引擎异常: " + e.getMessage()));
                 }
             }).start();
 
@@ -164,12 +165,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void pollServerReadiness() {
-        for (int i = 0; i < 40; i++) {
+        for (int i = 0; i < 60; i++) {
             try {
-                URL url = new URL("http://127.0.0.1:8000/api/articles");
+                URL url = new URL("http://127.0.0.1:8000/api/settings");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(600);
-                conn.setReadTimeout(600);
+                conn.setConnectTimeout(800);
+                conn.setReadTimeout(800);
                 conn.setRequestMethod("GET");
                 int code = conn.getResponseCode();
                 conn.disconnect();
@@ -177,12 +178,12 @@ public class MainActivity extends AppCompatActivity {
                 if (code >= 200 && code < 400) {
                     isServerReady = true;
                     mainHandler.post(() -> {
-                        statusTextView.setText("服务就绪，进入工作台...");
+                        statusTextView.setText("服务已就绪，正在加载工作台...");
                         webView.loadUrl("http://127.0.0.1:8000");
                         splashLayout.postDelayed(() -> {
                             splashLayout.setVisibility(View.GONE);
                             webView.setVisibility(View.VISIBLE);
-                        }, 300);
+                        }, 200);
                     });
                     return;
                 }
@@ -190,17 +191,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             try {
-                Thread.sleep(500);
+                Thread.sleep(600);
             } catch (InterruptedException ignored) {
             }
         }
 
-        // Fallback load attempt
         mainHandler.post(() -> {
-            isServerReady = true;
+            statusTextView.setText("服务启动超时，正在重试连接...");
             webView.loadUrl("http://127.0.0.1:8000");
-            splashLayout.setVisibility(View.GONE);
-            webView.setVisibility(View.VISIBLE);
         });
     }
 
