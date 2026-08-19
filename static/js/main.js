@@ -3,6 +3,7 @@
 
 import { state, api } from './core.js';
 import { ShadowPlayer, playGermanAudio } from './player.js';
+import { Companion } from './companion.js';
 import {
   loadArticles,
   openReader,
@@ -646,7 +647,10 @@ Object.assign(window, {
   handleClozeKey,
 
   // Player
-  ShadowPlayer
+  ShadowPlayer,
+
+  // Companion Mascot System
+  Companion
 });
 
 // ── PWA Service Worker Registration ──────────────────────────────────────────
@@ -664,4 +668,5 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDropzone();
   setupSelectionTooltip();
   ShadowPlayer.init();
+  Companion.init();
 });

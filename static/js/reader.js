@@ -3,6 +3,7 @@
 
 import { state, esc, api, normalizeCefrPct } from './core.js';
 import { ShadowPlayer, playGermanAudio } from './player.js';
+import { Companion } from './companion.js';
 
 let currentArticleNotes = [];
 let readerFontMode = localStorage.getItem('delector_font_mode') || 'sans';
@@ -436,6 +437,7 @@ export async function saveVocab() {
   });
   document.getElementById('save-vocab-btn').textContent = '✓ 已保存';
   refreshCardCounters();
+  Companion.celebrate('card_vocab');
 }
 
 export async function saveGrammar() {
@@ -453,6 +455,7 @@ export async function saveGrammar() {
   });
   document.getElementById('save-grammar-btn').textContent = '✓ 已加入语法卡';
   refreshCardCounters();
+  Companion.celebrate('card_grammar');
 }
 
 export async function refreshCardCounters() {

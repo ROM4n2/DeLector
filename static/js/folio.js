@@ -2,6 +2,7 @@
 'use strict';
 
 import { esc, api } from './core.js';
+import { Companion } from './companion.js';
 
 let currentFolioIndex = 0;
 const FOLIO_SECTIONS = [
@@ -170,6 +171,17 @@ export async function loadProgress() {
     if (stArticles) stArticles.textContent = stats.total_articles || 0;
     if (stAccuracy) stAccuracy.textContent = `${stats.accuracy_pct || 0}%`;
     if (stMinutes) stMinutes.textContent = stats.total_study_minutes || 0;
+
+    // Sync Companion Mascot Studio & check streak milestone
+    Companion.syncStudio();
+    const streak = stats.streak || 0;
+    const lastStreak = parseInt(localStorage.getItem('delector_streak_celebrated') || '0', 10);
+    if (streak >= 3 && streak > lastStreak) {
+      localStorage.setItem('delector_streak_celebrated', streak.toString());
+      setTimeout(() => {
+        Companion.celebrate('streak', { n: streak });
+      }, 800);
+    }
 
     const cefrCounts = stats.cefr_counts || {};
     const totalCards = stats.total_cards || 0;

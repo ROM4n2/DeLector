@@ -3,6 +3,7 @@
 
 import { state, esc, api } from './core.js';
 import { playGermanAudio } from './player.js';
+import { Companion } from './companion.js';
 
 let cardSegment = 'due';     // 'due' | 'pending' | 'mastered'
 let cardViewMode = 'deck';   // 'deck' | 'grid'
@@ -253,6 +254,7 @@ export async function submitCardReview(type, id, grade) {
     showUndoToast(`✓ 已记录记忆评分 (SM-2 排程已更新)`);
     stepDeck(1);
     refreshDueCount();
+    Companion.celebrate(grade >= 3 ? 'review_good' : 'review_hard');
   } catch (e) {
     console.error('Failed to submit review:', e);
   }
@@ -712,6 +714,7 @@ export function finishQuiz() {
     "Schritt für Schritt kommt man ans Ziel. (一步一个脚印，终将抵达终点。)"
   ];
   if (dEnc) dEnc.textContent = mottos[Math.floor(Math.random() * mottos.length)];
+  Companion.celebrate('quiz_done', { pct });
 }
 
 export async function updateAudioCacheInfo() {

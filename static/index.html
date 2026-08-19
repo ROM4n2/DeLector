@@ -10,16 +10,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=3.6.2">
+  <link rel="stylesheet" href="/style.css?v=3.7.0">
 </head>
 <body>
 
   <!-- Top Metadata Ticker Strip (Editorial Live Strip) -->
   <div class="top-ticker topbar">
     <div class="topbar-inner">
-      <span><b>DELECTOR · 2026</b> · Vol. 03 / Issue Nº 06</span>
+      <span><b>DELECTOR · 2026</b> · Vol. 03 / Issue Nº 07</span>
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <span class="right"><span class="pulse"></span>System · v3.6.2 Online</span>
+      <span class="right"><span class="pulse"></span>System · v3.7.0 Online</span>
     </div>
   </div>
 
@@ -262,6 +262,85 @@
         <div class="folio-plate-footer">
           <span class="folio-plate-meta">DEUTSCHSTUDIEN · CONTINUOUS FEED</span>
           <span class="folio-plate-meta">AUTO-SYNCHRONISIERT</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Mascot Studio Exhibition Plate (Atelier Companion Workshop) -->
+    <section id="folio-mascot-section" class="folio-mascot-section">
+      <div id="folio-mascot-card" class="folio-mascot-card dossier-panel">
+        <!-- Four Corner Marks -->
+        <span class="corner-mark tl">+</span>
+        <span class="corner-mark tr">+</span>
+        <span class="corner-mark bl">+</span>
+        <span class="corner-mark br">+</span>
+
+        <div class="mascot-card-inner">
+          <!-- Left: Big Animated Character & Speech Bubble -->
+          <div class="mascot-stage">
+            <div id="mascot-stage-bubble" class="mascot-stage-bubble">
+              <div id="mascot-stage-de" class="mascot-bubble-de">Hallo! Ich bin dein Lernbegleiter.</div>
+              <div id="mascot-stage-zh" class="mascot-bubble-zh">你好！我是你的德语研读伴读伙伴。</div>
+            </div>
+            <div id="mascot-stage-char" class="mascot-stage-char" onclick="window.Companion.onSay()"></div>
+          </div>
+
+          <!-- Right: Studio Customization & Settings Controls -->
+          <div class="mascot-studio-controls">
+            <div class="dossier-panel-head" style="margin-bottom:0.75rem;padding-bottom:0.5rem;">
+              <div class="dossier-panel-title">
+                <span class="dossier-panel-code">§ ATELIER · BEGLEITER · MASCOT WORKSHOP</span>
+                <h3>德语伴读研习工坊</h3>
+              </div>
+              <div class="mascot-status-tag" id="mascot-status-tag">ACTIVE · AKTIV</div>
+            </div>
+
+            <div class="mascot-form-grid">
+              <div class="mascot-form-row">
+                <label class="mascot-label">伴读伙伴选择</label>
+                <div class="mascot-char-selector" id="studio-char-selector">
+                  <button type="button" class="mascot-choice-btn active" data-char="owl" onclick="window.Companion.setCharacter('owl')">🦉 Eule (歌德猫头鹰)</button>
+                  <button type="button" class="mascot-choice-btn" data-char="cat" onclick="window.Companion.setCharacter('cat')">🐱 Katze (学者猫)</button>
+                  <button type="button" class="mascot-choice-btn" data-char="fox" onclick="window.Companion.setCharacter('fox')">🦊 Fuchs (灵动狐)</button>
+                  <button type="button" class="mascot-choice-btn" data-char="robot" onclick="window.Companion.setCharacter('robot')">🤖 Roboter (包豪斯机甲)</button>
+                </div>
+              </div>
+
+              <div class="mascot-form-row">
+                <label class="mascot-label" for="studio-mascot-name">伙伴专属昵称</label>
+                <div class="mascot-input-group">
+                  <input type="text" id="studio-mascot-name" class="mascot-text-input" maxlength="12" placeholder="起个名字 (如: Eule, 小欧, Faust)..." oninput="window.Companion.setName(this.value)">
+                </div>
+              </div>
+
+              <div class="mascot-form-row">
+                <label class="mascot-label">定制羽翼配色</label>
+                <div class="mascot-color-swatches" id="studio-color-swatches">
+                  <button type="button" class="mascot-color-dot" style="background:#6b4f8f;" title="歌德紫" onclick="window.Companion.setColor('#6b4f8f')"></button>
+                  <button type="button" class="mascot-color-dot" style="background:#d9663f;" title="朱砂橘" onclick="window.Companion.setColor('#d9663f')"></button>
+                  <button type="button" class="mascot-color-dot" style="background:#4f8f6b;" title="学者绿" onclick="window.Companion.setColor('#4f8f6b')"></button>
+                  <button type="button" class="mascot-color-dot" style="background:#4a6fa5;" title="包豪斯蓝" onclick="window.Companion.setColor('#4a6fa5')"></button>
+                  <button type="button" class="mascot-color-dot" style="background:#2c2c2c;" title="墨黑" onclick="window.Companion.setColor('#2c2c2c')"></button>
+                  <label class="mascot-color-custom-btn" title="自定义 HEX 配色">
+                    <span>🎨</span>
+                    <input type="color" id="studio-color-picker" style="opacity:0;position:absolute;width:100%;height:100%;cursor:pointer;" onchange="window.Companion.setColor(this.value)">
+                  </label>
+                </div>
+              </div>
+
+              <div class="mascot-form-actions">
+                <button type="button" class="btn btn-secondary" onclick="window.Companion.onSay()">
+                  <span>💬 试听伴读鼓励</span>
+                </button>
+                <button type="button" class="btn btn-ghost" id="studio-sound-btn" onclick="window.Companion.toggleSound()">
+                  <span id="studio-sound-icon">🔊</span> <span id="studio-sound-label">发声已开启</span>
+                </button>
+                <button type="button" class="btn btn-accent" onclick="window.Companion.saveStudioSettings()">
+                  <span>✓ 保存伴读设置</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -845,8 +924,46 @@
     </button>
   </nav>
 
-  <script type="module" src="/js/main.js?v=3.6.2"></script>
+  <!-- ── Global Floating Companion Mascot Widget ─────────────── -->
+  <div id="companion" class="companion" role="status" aria-live="polite">
+    <div id="companion-bubble" class="companion-bubble hidden">
+      <div class="companion-bubble-de" id="companion-de"></div>
+      <div class="companion-bubble-zh" id="companion-zh"></div>
+    </div>
+    <div id="companion-char" class="companion-char" onclick="window.Companion.onClick()"></div>
+    <button id="companion-avatar" class="companion-avatar" aria-label="伴读角色设置与对话" onclick="window.Companion.onClick()">
+      <span id="companion-avatar-icon">🦉</span>
+    </button>
+    <div id="companion-panel" class="companion-panel hidden">
+      <div class="panel-head">
+        <span class="panel-title">伴读角色设置</span>
+        <button class="panel-close" onclick="window.Companion.onClick()">✕</button>
+      </div>
+      <div class="panel-row" id="panel-characters">
+        <button class="panel-char-btn active" data-char="owl" onclick="window.Companion.setCharacter('owl')">🦉</button>
+        <button class="panel-char-btn" data-char="cat" onclick="window.Companion.setCharacter('cat')">🐱</button>
+        <button class="panel-char-btn" data-char="fox" onclick="window.Companion.setCharacter('fox')">🦊</button>
+        <button class="panel-char-btn" data-char="robot" onclick="window.Companion.setCharacter('robot')">🤖</button>
+      </div>
+      <div class="panel-row">
+        <input id="panel-name" type="text" maxlength="12" placeholder="起个名字…" oninput="window.Companion.setName(this.value)">
+      </div>
+      <div class="panel-row" id="panel-colors">
+        <button class="panel-color-dot" style="background:#6b4f8f;" onclick="window.Companion.setColor('#6b4f8f')"></button>
+        <button class="panel-color-dot" style="background:#d9663f;" onclick="window.Companion.setColor('#d9663f')"></button>
+        <button class="panel-color-dot" style="background:#4f8f6b;" onclick="window.Companion.setColor('#4f8f6b')"></button>
+        <button class="panel-color-dot" style="background:#4a6fa5;" onclick="window.Companion.setColor('#4a6fa5')"></button>
+        <input type="color" id="panel-color-custom" class="panel-color-custom" onchange="window.Companion.setColor(this.value)">
+      </div>
+      <div class="panel-row panel-actions">
+        <button id="panel-say" class="btn btn-secondary btn-sm" onclick="window.Companion.onSay()">💬 说句话</button>
+        <button id="panel-sound" class="btn btn-ghost btn-sm" onclick="window.Companion.toggleSound()">🔊</button>
+        <button id="panel-hide" class="btn btn-ghost btn-sm" onclick="window.Companion.toggleEnabled()" title="收起伴读悬浮球">✕</button>
+      </div>
+    </div>
+  </div>
 
+  <script type="module" src="/js/main.js?v=3.7.0"></script>
 
 </body>
 </html>

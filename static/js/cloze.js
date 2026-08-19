@@ -3,6 +3,7 @@
 
 import { state, esc, api } from './core.js';
 import { showUndoToast } from './cards.js';
+import { Companion } from './companion.js';
 
 export async function openClozeModal() {
   if (!state.currentArticle) {
@@ -164,6 +165,7 @@ export async function submitClozeExercise() {
 
     if (evalRes.accuracy_pct >= 80) {
       showUndoToast(`🏆 太棒了！完形实战准确率达成 ${evalRes.accuracy_pct}%！`);
+      Companion.celebrate('cloze_great', { pct: evalRes.accuracy_pct });
     }
   } catch (e) {
     alert(`提交判分失败: ${e.message}`);
