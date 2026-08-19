@@ -1,0 +1,133 @@
+name: Build & Publish DeLector Releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows x64 Portable
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pytest
+          python -m spacy download de_core_news_sm
+
+      - name: Run Tests
+        run: |
+          pytest -v
+
+      - name: Build Windows Portable Release
+        run: |
+          python package_windows.py
+          Compress-Archive -Path 'dist/DeLector-v3.5.0-Windows-x64-Portable' -DestinationPath 'dist/DeLector-v3.5.0-Windows-x64-Portable.zip' -Force
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeLector-Windows-Portable
+          path: dist/DeLector-v3.5.0-Windows-x64-Portable.zip
+
+  build-android:
+    name: Build Android Standalone APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Sync Python Backend & Assets into Android Project
+        run: |
+          mkdir -p android/app/src/main/python
+          cp -r server.py start.py core_dict.py linguistics.py syntax_tree.py android/app/src/main/python/
+          mkdir -p android/app/src/main/assets
+          cp -r static android/app/src/main/assets/
+
+      - name: Build Android APK with Gradle
+        working-directory: ./android
+        run: |
+          gradle wrapper
+          ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug
+
+      - name: Locate and Rename APK
+        run: |
+          mkdir -p dist
+          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} dist/DeLector-v3.5.0-Android.apk \;
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeLector-Android-APK
+          path: dist/DeLector-v3.5.0-Android.apk
+
+  publish-github-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DeLector-Windows-Portable
+          path: dist/
+
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DeLector-Android-APK
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/DeLector-v3.5.0-Windows-x64-Portable.zip
+            dist/DeLector-v3.5.0-Android.apk
+          name: DeLector v${{ github.ref_name }} — 德语学术精读与备考工作台
+          body: |
+            ## 🌟 DeLector v${{ github.ref_name }} 正式发布
+
+            面向德语精读与歌德（Goethe A1–C1）、德福（TestDaF）、DSH 备考者的本地优先学术级伴读工作台。
+
+            ### 📦 下载通道
+            - **Windows 桌面免安装绿色版**：`DeLector-v3.5.0-Windows-x64-Portable.zip`（解压即用，双击 `DeLector.exe` 启动）
+            - **Android 独立单机安装包**：`DeLector-v3.5.0-Android.apk`（嵌入式 Python 运行时，100% 独立离线单机运行）
+
+            ### 🚀 核心特性
+            - 🌳 **德语拓扑五场域 (Felder-Modell) 与 5 大从句树 AST 句法引擎**
+            - ⚡ **556+ 强变化动词三态表 + 复合词智能拆解 + 可分动词框形联动**
+            - 📖 **0ms 歌德核心离线词库 + CEFR 词阶热力谱 + AI 精读便签**
+            - 🎴 **3D 物理翻牌盒 + SM-2 间隔复习 + Anki .apkg 一键导出**
+            - ✍️ **完形填空 & 德福 C-Test 模拟与服务端防作弊判分**
+            - ⚙️ **应用内设置面板**：支持配置 `deepseek-v4-flash` 与毫秒级延迟连通性测试。
+          draft: false
+          prerelease: false

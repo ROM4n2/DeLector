@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.DeLector" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:statusBarColor">#FAF8F5</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">#FAF8F5</item>
+    </style>
+</resources>
