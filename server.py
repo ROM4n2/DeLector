@@ -486,20 +486,25 @@ def is_safe_public_url(url: str) -> bool:
 def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
     title_match = re.search(r'<title>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
     title = html.unescape(title_match.group(1).strip()) if title_match else "Extracted Article"
-    title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche)', title)[0].strip()
+    title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche|Deutschlandfunk)', title)[0].strip()
     
-    cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
+    # Remove script, style, nav, header, footer, etc.
+    cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript|figure)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
     
-    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    # Prefer <article> block if available
+    article_match = re.search(r'<article[^>]*>(.*?)</article>', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    scope_html = article_match.group(1) if article_match else cleaned
+
+    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', scope_html, flags=re.IGNORECASE | re.DOTALL)
     clean_paras = []
     for p in paragraphs:
         txt = re.sub(r'<[^>]+>', '', p)
         txt = html.unescape(txt).strip()
-        if len(txt) > 25 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved"]):
+        if len(txt) > 20 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved", "impressum", "urheberrecht"]):
             clean_paras.append(txt)
             
     if not clean_paras:
-        raw_text = re.sub(r'<[^>]+>', ' ', cleaned)
+        raw_text = re.sub(r'<[^>]+>', ' ', scope_html)
         clean_paras = [html.unescape(line).strip() for line in raw_text.split('\n') if len(line.strip()) > 30]
 
     body_text = "\n\n".join(clean_paras)
@@ -508,6 +513,7 @@ def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
 async def fetch_remote_html(url: str) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
     }
     async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
@@ -538,36 +544,52 @@ async def ingest_from_url(req: IngestUrlReq):
 # --- RSS & News Feeds Integration ---
 PRESET_FEEDS = [
     {
-        "id": "dw_top_thema",
-        "name": "DW 德语学习 · Top-Thema",
-        "level": "B1",
-        "category": "Lernen",
-        "url": "https://rss.dw.com/xml/rss-de-top-thema",
-        "description": "德国之声专为 B1 学习者打造的精选短文与考点"
-    },
-    {
-        "id": "dw_langsam",
-        "name": "DW · 慢速德语新闻",
-        "level": "B2",
-        "category": "Nachrichten",
-        "url": "https://rss.dw.com/xml/rss-de-langsam",
-        "description": "每日慢速发音时事要闻，适合精听磨耳朵"
-    },
-    {
         "id": "tagesschau_news",
-        "name": "Tagesschau · 德国时事快讯",
+        "name": "Tagesschau · 德国权威时事",
         "level": "B2-C1",
         "category": "Aktuell",
         "url": "https://www.tagesschau.de/xml/rss2/",
         "description": "德国第一电视台权威时政要闻"
     },
     {
-        "id": "dlf_kultur",
-        "name": "Deutschlandfunk · 文化与读书",
+        "id": "tagesschau_ausland",
+        "name": "Tagesschau · 国际与环球",
+        "level": "B2-C1",
+        "category": "Ausland",
+        "url": "https://www.tagesschau.de/ausland/index~rss2.xml",
+        "description": "全球时事与地缘观察精读"
+    },
+    {
+        "id": "dw_deutsch",
+        "name": "DW · 德语时事综合",
+        "level": "B1-B2",
+        "category": "Lernen",
+        "url": "https://rss.dw.com/rdf/rss-de-all",
+        "description": "德国之声精选德语新闻文章"
+    },
+    {
+        "id": "dlf_news",
+        "name": "Deutschlandfunk · 每日整点新闻",
+        "level": "B2-C1",
+        "category": "Nachrichten",
+        "url": "https://www.deutschlandfunk.de/nachrichten-100.rss",
+        "description": "标准德语广播权威每日简讯"
+    },
+    {
+        "id": "spiegel_politik",
+        "name": "Spiegel · 政治与深度",
+        "level": "C1",
+        "category": "Politik",
+        "url": "https://www.spiegel.de/politik/index.rss",
+        "description": "明镜周刊深度时政报道与分析"
+    },
+    {
+        "id": "zeit_online",
+        "name": "Zeit Online · 精选社论",
         "level": "C1",
         "category": "Kultur",
-        "url": "https://www.deutschlandfunk.de/kultur-100.rss",
-        "description": "深度社论、文学批评与学术文化随笔"
+        "url": "https://newsfeed.zeit.de/index",
+        "description": "时代周报文化与学术随笔"
     }
 ]
 
@@ -577,40 +599,60 @@ def parse_rss_feed(xml_text: str) -> List[Dict[str, Any]]:
     items = []
     try:
         root = ET.fromstring(xml_text)
-        channel = root.find("channel")
-        if channel is not None:
-            for item in channel.findall("item"):
-                title = item.findtext("title", "").strip()
-                link = item.findtext("link", "").strip()
-                desc = item.findtext("description", "").strip()
-                pub_date = item.findtext("pubDate", "").strip()
+        found_items = [el for el in root.iter() if el.tag.split("}")[-1] == "item"]
+        if found_items:
+            for item in found_items:
+                title = ""
+                link = ""
+                desc = ""
+                pub_date = ""
+                for child in item:
+                    tag = child.tag.split("}")[-1]
+                    if tag == "title" and not title:
+                        title = child.text or ""
+                    elif tag == "link" and not link:
+                        link = child.text or child.get("href", "")
+                    elif tag in ("description", "encoded", "summary") and not desc:
+                        desc = child.text or ""
+                    elif tag in ("pubDate", "date", "updated", "published") and not pub_date:
+                        pub_date = child.text or ""
                 clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
                 if title and link:
                     items.append({
-                        "title": html.unescape(title),
-                        "link": link,
+                        "title": html.unescape(title.strip()),
+                        "link": link.strip(),
                         "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
-                        "pub_date": pub_date
+                        "pub_date": pub_date.strip()
                     })
         else:
-            ns = {"atom": "http://www.w3.org/2005/Atom"}
-            for entry in root.findall("atom:entry", ns) or root.findall("entry"):
-                title = entry.findtext("atom:title", "", ns) or entry.findtext("title", "").strip()
-                link_el = entry.find("atom:link", ns) or entry.find("link")
-                link = link_el.get("href", "") if link_el is not None else ""
-                summary = entry.findtext("atom:summary", "", ns) or entry.findtext("summary", "") or entry.findtext("content", "")
-                pub_date = entry.findtext("atom:updated", "", ns) or entry.findtext("updated", "") or entry.findtext("published", "")
-                clean_summary = html.unescape(re.sub(r"<[^>]+>", "", summary)).strip()
+            found_entries = [el for el in root.iter() if el.tag.split("}")[-1] == "entry"]
+            for entry in found_entries:
+                title = ""
+                link = ""
+                desc = ""
+                pub_date = ""
+                for child in entry:
+                    tag = child.tag.split("}")[-1]
+                    if tag == "title" and not title:
+                        title = child.text or ""
+                    elif tag == "link" and not link:
+                        link = child.get("href", "") or child.text or ""
+                    elif tag in ("summary", "content") and not desc:
+                        desc = child.text or ""
+                    elif tag in ("updated", "published", "date") and not pub_date:
+                        pub_date = child.text or ""
+                clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
                 if title and link:
                     items.append({
-                        "title": html.unescape(title),
-                        "link": link,
-                        "summary": clean_summary[:220] + ("…" if len(clean_summary) > 220 else ""),
-                        "pub_date": pub_date
+                        "title": html.unescape(title.strip()),
+                        "link": link.strip(),
+                        "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
+                        "pub_date": pub_date.strip()
                     })
-    except Exception as e:
+    except Exception:
         pass
     return items
+
 
 @app.get("/api/feed/sources")
 def get_feed_sources():

@@ -628,7 +628,7 @@ def test_feed_sources_endpoint(client):
     assert "sources" in data
     assert len(data["sources"]) >= 4
     ids = [s["id"] for s in data["sources"]]
-    assert "dw_top_thema" in ids
+    assert "dw_deutsch" in ids
     assert "tagesschau_news" in ids
 
 def test_feed_items_parsing_and_endpoint(client, monkeypatch):
@@ -636,11 +636,11 @@ def test_feed_items_parsing_and_endpoint(client, monkeypatch):
     sample_rss_xml = """<?xml version="1.0" encoding="UTF-8"?>
     <rss version="2.0">
       <channel>
-        <title>DW Top-Thema</title>
-        <link>https://www.dw.com</link>
+        <title>Tagesschau</title>
+        <link>https://www.tagesschau.de</link>
         <item>
           <title>Klimaschutz in Deutschland</title>
-          <link>https://www.dw.com/de/klimaschutz-in-deutschland/a-123456</link>
+          <link>https://www.tagesschau.de/inland/klima-100.html</link>
           <description>&lt;p&gt;Deutschland will bis 2045 klimaneutral werden.&lt;/p&gt;</description>
           <pubDate>Wed, 19 Aug 2026 08:00:00 GMT</pubDate>
         </item>
@@ -654,14 +654,42 @@ def test_feed_items_parsing_and_endpoint(client, monkeypatch):
     monkeypatch.setattr(server, "fetch_remote_html", mock_fetch)
     monkeypatch.setattr(server, "is_safe_public_url", lambda u: True)
 
-    res = client.get("/api/feed/items?url=https://rss.dw.com/xml/rss-de-top-thema")
+    res = client.get("/api/feed/items?url=https://www.tagesschau.de/xml/rss2/")
     assert res.status_code == 200
     data = res.json()
     assert data["count"] == 1
     item = data["items"][0]
     assert item["title"] == "Klimaschutz in Deutschland"
     assert "Deutschland will bis 2045" in item["summary"]
-    assert item["link"] == "https://www.dw.com/de/klimaschutz-in-deutschland/a-123456"
+    assert item["link"] == "https://www.tagesschau.de/inland/klima-100.html"
+
+def test_feed_items_rdf_parsing(client, monkeypatch):
+    """Test RDF XML parsing (used by DW and others)."""
+    sample_rdf = """<?xml version="1.0" encoding="UTF-8"?>
+    <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/">
+      <item>
+        <title>Neues Gesetz im Bundestag verabschiedet</title>
+        <link>https://www.dw.com/de/bundestag-gesetz/a-999</link>
+        <description>Der Bundestag hat heute das neue Gesetz beschlossen.</description>
+        <dc:date xmlns:dc="http://purl.org/dc/elements/1.1/">2026-08-19T08:00:00Z</dc:date>
+      </item>
+    </rdf:RDF>"""
+
+    import server
+    async def mock_fetch_rdf(url):
+        return sample_rdf
+
+    monkeypatch.setattr(server, "fetch_remote_html", mock_fetch_rdf)
+    monkeypatch.setattr(server, "is_safe_public_url", lambda u: True)
+
+    res = client.get("/api/feed/items?url=https://rss.dw.com/rdf/rss-de-all")
+
+    assert res.status_code == 200
+    data = res.json()
+    assert data["count"] == 1
+    assert data["items"][0]["title"] == "Neues Gesetz im Bundestag verabschiedet"
+    assert "Bundestag" in data["items"][0]["summary"]
+
 
 
 

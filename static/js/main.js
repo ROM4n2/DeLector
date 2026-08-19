@@ -129,6 +129,7 @@ export async function loadFeedSources() {
 
     bar.innerHTML = cachedFeedSources.map(s => `
       <button class="feed-source-pill ${s.id === (activeFeedId || cachedFeedSources[0].id) ? 'active' : ''}"
+        data-id="${s.id}"
         onclick="window.selectFeedSource('${s.id}')">
         <span>${s.name}</span>
         <span class="feed-lvl-tag">${s.level}</span>
@@ -147,15 +148,15 @@ export async function loadFeedSources() {
 
 export function selectFeedSource(feedId) {
   activeFeedId = feedId;
-  document.querySelectorAll('.feed-source-pill').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.feed-source-pill').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-id') === feedId);
+  });
   const target = cachedFeedSources.find(s => s.id === feedId);
   if (target) {
-    document.querySelectorAll('.feed-source-pill').forEach(b => {
-      if (b.textContent.includes(target.name)) b.classList.add('active');
-    });
     loadFeedItems(target.url);
   }
 }
+
 
 export async function loadFeedItems(url) {
   const container = document.getElementById('feed-items-container');
