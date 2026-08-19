@@ -231,6 +231,37 @@ def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     assert res.headers["content-type"] == "audio/mpeg"
     assert len(res.content) > 10
 
+def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monkeypatch, tmp_path):
+    """安卓 APK 没有 edge_tts wheel → generate_edge_tts_audio 走 edge_tts_mini 客户端。
+
+    模拟 Chaquopy 环境：import edge_tts 抛 ImportError，edge_tts_mini.synthesize 返回假 MP3。
+    """
+    import sys
+    import types
+    import asyncio
+    import server
+
+    # 1. 堵死 edge_tts 导入（模拟安卓）：sys.modules[name]=None 时 import 抛 ImportError
+    monkeypatch.setitem(sys.modules, "edge_tts", None)
+
+    # 2. 用假模块顶替 edge_tts_mini，synthesize 返回假 MP3
+    fake_mini = types.ModuleType("edge_tts_mini")
+    fake_mp3 = b"ID3\x03\x00\x00\x00\x00\x00\x00mock_edge_mini_audio"
+    fake_mini.synthesize = lambda text, voice, rate: fake_mp3
+    monkeypatch.setitem(sys.modules, "edge_tts_mini", fake_mini)
+
+    # 3. 独立缓存目录，避免污染
+    cache_dir = tmp_path / "mini_cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(server, "AUDIO_CACHE_DIR", str(cache_dir))
+
+    path = asyncio.run(server.generate_edge_tts_audio(
+        "Wie geht es dir?", "de-DE-KatjaNeural", "+0%"
+    ))
+    with open(path, "rb") as f:
+        assert f.read() == fake_mp3
+
+
 def test_reading_notes_crud_and_export(client):
     # 1. Ingest article
     res_art = client.post("/api/articles/ingest", json={"title": "Notizen Test", "raw_text": "Berlin ist wunderbar und groß."})

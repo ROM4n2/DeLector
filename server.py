@@ -1518,8 +1518,15 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
         import edge_tts
         communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
         await communicate.save(cache_file)
-        prune_audio_cache()
-        return cache_file
+    except ImportError:
+        # Android/Chaquopy 没有 edge_tts 的 wheel（aiohttp 等依赖缺）→ 用 stdlib 版客户端
+        # （edge_tts_mini 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖）
+        import edge_tts_mini
+        audio_data = await asyncio.to_thread(
+            edge_tts_mini.synthesize, clean_text, voice, rate
+        )
+        with open(cache_file, "wb") as f:
+            f.write(audio_data)
     except Exception as e:
         # Multi-provider pure-Python httpx fallback (accessible in mainland China)
         from urllib.parse import quote
@@ -1541,6 +1548,10 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
             except Exception:
                 continue
         raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
+
+    # 主路径（edge_tts 或 edge_tts_mini）成功：落地缓存后返回
+    prune_audio_cache()
+    return cache_file
 
 @app.post("/api/audio/tts")
 async def get_audio_tts(req: TTSReq):

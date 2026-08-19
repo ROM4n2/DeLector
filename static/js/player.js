@@ -34,7 +34,11 @@ export async function playGermanAudio(text, rate = 0.88) {
     audio.onended = () => URL.revokeObjectURL(url);
     await audio.play();
   } catch {
-    if (!('speechSynthesis' in window)) return;
+    if (!('speechSynthesis' in window)) {
+      const statusEl = document.getElementById('player-status');
+      if (statusEl) statusEl.textContent = '⚠ 语音引擎不可用';
+      return;
+    }
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(clean);
     utt.lang = 'de-DE';
@@ -208,17 +212,29 @@ export const ShadowPlayer = {
   },
 
   fallbackWebSpeech(sent) {
+    // 原生 TTS 再试一次：必须检查返回值，false 就继续走 speechSynthesis，
+    // 不能静默安排"句子结束"计时器（否则播放器无声空转）
     if (window.AndroidNativeTTS && typeof window.AndroidNativeTTS.speak === 'function') {
-      window.AndroidNativeTTS.speak(sent.text.trim(), this.rate);
-      const estDuration = Math.max(1500, sent.text.length * 75);
-      setTimeout(() => {
-        if (!this.isPlaying) return;
-        this.handleSentenceFinished(estDuration);
-      }, estDuration);
-      return;
+      try {
+        const ok = window.AndroidNativeTTS.speak(sent.text.trim(), this.rate);
+        if (ok) {
+          const estDuration = Math.max(1500, sent.text.length * 75);
+          setTimeout(() => {
+            if (!this.isPlaying) return;
+            this.handleSentenceFinished(estDuration);
+          }, estDuration);
+          return;
+        }
+      } catch (e) {
+        console.warn('Native TTS speak error:', e);
+      }
     }
 
-    if (!('speechSynthesis' in window)) return;
+    if (!('speechSynthesis' in window)) {
+      this.pause();
+      this.speakFailed(sent);
+      return;
+    }
     this.isIntentionalCancel = true;
     window.speechSynthesis.cancel();
     this.isIntentionalCancel = false;
@@ -242,11 +258,20 @@ export const ShadowPlayer = {
     utt.onerror = (e) => {
       if (e.error !== 'interrupted' && e.error !== 'canceled' && !this.isIntentionalCancel) {
         this.pause();
+        this.speakFailed(sent);
       }
     };
 
     this.utterance = utt;
     window.speechSynthesis.speak(utt);
+  },
+
+  speakFailed(sent) {
+    // 三层 TTS（原生 / 服务器 / Web Speech）全失败：停下并给出可见提示，绝不静默推进。
+    // 调用方应先 this.pause() 复位播放状态（isPlaying/按钮/高亮/计时器）。
+    console.warn('[ShadowPlayer] 所有 TTS 引擎均不可用:', sent?.text);
+    const el = document.getElementById('player-status');
+    if (el) el.textContent = '⚠ 语音引擎不可用';
   },
 
   seekSentence(idx) {

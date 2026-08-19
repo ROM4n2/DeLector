@@ -42,6 +42,8 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
+import java.util.Set;
+import android.speech.tts.Voice;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
@@ -64,15 +66,33 @@ public class MainActivity extends AppCompatActivity {
         public NativeTTSBridge() {
             tts = new TextToSpeech(getApplicationContext(), status -> {
                 if (status == TextToSpeech.SUCCESS) {
-                    int result = tts.setLanguage(Locale.GERMAN);
-                    if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                        result = tts.setLanguage(Locale.GERMANY);
-                    }
-                    if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
-                        isInitialized = true;
-                    }
+                    isInitialized = trySelectGermanVoice();
                 }
             });
+        }
+
+        /** 挑一个能说德语的 voice：先试德语 Locale，不行就遍历已装语音找德语能力的。
+         *  国内机型常没有 Google TTS 德语 Locale 条目，但引擎可能带德语语音（getVoices() API 21+）。 */
+        private boolean trySelectGermanVoice() {
+            int result = tts.setLanguage(Locale.GERMAN);
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                result = tts.setLanguage(Locale.GERMANY);
+            }
+            if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                return true;
+            }
+            Set<Voice> voices = tts.getVoices();
+            if (voices != null) {
+                for (Voice v : voices) {
+                    Locale loc = v.getLocale();
+                    if (loc != null && "de".equalsIgnoreCase(loc.getLanguage())) {
+                        if (tts.setVoice(v) == TextToSpeech.SUCCESS) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
         @JavascriptInterface
