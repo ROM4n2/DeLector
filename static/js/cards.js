@@ -128,8 +128,29 @@ export function renderDeckStage(vList, gList) {
 
   const ef = card.ease_factor || 2.5;
   const iv = card.interval_days || 1;
-  const nextGood = card.repetition_count === 0 ? 1 : (card.repetition_count === 1 ? 6 : Math.round(iv * ef));
-  const nextEasy = Math.round(nextGood * 1.3);
+  const rep = card.repetition_count || 0;
+
+  let nextAgain = 1;
+  let nextHard = 2;
+  let nextGood = 3;
+  let nextEasy = 4;
+
+  if (rep === 0) {
+    nextAgain = 1;
+    nextHard = 2;
+    nextGood = 3;
+    nextEasy = 4;
+  } else if (rep === 1) {
+    nextAgain = 1;
+    nextHard = 3;
+    nextGood = 6;
+    nextEasy = 8;
+  } else {
+    nextAgain = 1;
+    nextHard = Math.max(iv + 1, Math.round(iv * 1.2));
+    nextGood = Math.max(iv + 1, Math.round(iv * ef));
+    nextEasy = Math.max(iv + 2, Math.round(iv * ef * 1.3));
+  }
 
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
@@ -203,11 +224,11 @@ export function renderDeckStage(vList, gList) {
             <div class="deck-sm2-rating-bar" onclick="event.stopPropagation()">
               <button class="sm2-btn sm2-btn-again" onclick="submitCardReview('${card._type}', ${card.id}, 1)" title="完全忘记，重置为 1 天">
                 <span>1 重来</span>
-                <span class="sm2-int-tag">1天</span>
+                <span class="sm2-int-tag">${nextAgain}天</span>
               </button>
-              <button class="sm2-btn sm2-btn-hard" onclick="submitCardReview('${card._type}', ${card.id}, 2)" title="勉强想起">
+              <button class="sm2-btn sm2-btn-hard" onclick="submitCardReview('${card._type}', ${card.id}, 2)" title="勉强想起，短间隔复习">
                 <span>2 困难</span>
-                <span class="sm2-int-tag">1天</span>
+                <span class="sm2-int-tag">${nextHard}天</span>
               </button>
               <button class="sm2-btn sm2-btn-good" onclick="submitCardReview('${card._type}', ${card.id}, 3)" title="正常回忆，按艾宾浩斯递增">
                 <span>3 良好</span>

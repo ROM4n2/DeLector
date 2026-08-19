@@ -441,13 +441,13 @@ def test_sm2_algorithm_calculation():
     # 1. First time success (Grade 3 - Good)
     rep, interval, ef, due = calculate_sm2(grade=3, rep=0, interval=1, ef=2.5)
     assert rep == 1
-    assert interval == 1
+    assert interval == 3
     assert ef == 2.5
     
     # 2. Second consecutive success (Grade 4 - Easy)
     rep2, interval2, ef2, due2 = calculate_sm2(grade=4, rep=rep, interval=interval, ef=ef)
     assert rep2 == 2
-    assert interval2 == 6
+    assert interval2 == 8
     assert ef2 > 2.5
     
     # 3. Third success

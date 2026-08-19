@@ -1686,7 +1686,7 @@ def restore_database_backup(req: RestoreReq):
 
 def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) -> Tuple[int, int, float, str]:
     """
-    SuperMemo SM-2 algorithm:
+    SuperMemo SM-2 algorithm with progressive interval scheduling:
     grade: 1 (Forgot/Again), 2 (Hard), 3 (Good), 4 (Easy)
     """
     quality_map = {1: 1, 2: 3, 3: 4, 4: 5}
@@ -1697,11 +1697,32 @@ def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) 
         new_interval = 1
     else:
         if rep == 0:
-            new_interval = 1
+            if grade == 4:
+                new_interval = 4
+            elif grade == 3:
+                new_interval = 3
+            elif grade == 2:
+                new_interval = 2
+            else:
+                new_interval = 1
         elif rep == 1:
-            new_interval = 6
+            if grade == 4:
+                new_interval = 8
+            elif grade == 3:
+                new_interval = 6
+            elif grade == 2:
+                new_interval = 3
+            else:
+                new_interval = 1
         else:
-            new_interval = max(1, round(interval * ef))
+            if grade == 4:
+                new_interval = max(interval + 2, round(interval * ef * 1.3))
+            elif grade == 3:
+                new_interval = max(interval + 1, round(interval * ef))
+            elif grade == 2:
+                new_interval = max(interval + 1, round(interval * 1.2))
+            else:
+                new_interval = 1
         new_rep = rep + 1
     
     new_ef = max(1.3, ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)))
