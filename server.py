@@ -187,6 +187,13 @@ def init_db(db_path: Optional[str] = None):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         
         # Migrations for existing databases
         for tbl in ["vocab_cards", "grammar_cards"]:
@@ -211,6 +218,33 @@ def init_db(db_path: Optional[str] = None):
 
     init_progress_db()
     seed_preset_articles(target_path)
+
+def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> str:
+    try:
+        with get_db(db_path) as conn:
+            row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+            if row and row["value"] is not None and row["value"] != "":
+                return row["value"]
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+def set_setting(key: str, value: str, db_path: Optional[str] = None):
+    with get_db(db_path) as conn:
+        conn.execute("""
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+        """, (key, value))
+
+def get_effective_api_key(db_path: Optional[str] = None) -> str:
+    return get_setting("DEEPSEEK_API_KEY", "", db_path=db_path)
+
+def get_effective_api_base_url(db_path: Optional[str] = None) -> str:
+    return get_setting("API_BASE_URL", "https://api.deepseek.com/v1", db_path=db_path)
+
+def get_effective_api_model(db_path: Optional[str] = None) -> str:
+    return get_setting("API_MODEL", "deepseek-chat", db_path=db_path)
 
 PRESET_ARTICLES = [
     {
@@ -767,24 +801,26 @@ SYSTEM_GRAMMAR_PROMPT = """你是一位精通德语欧标（Goethe-Zertifikat A1
 
 @app.post("/api/lookup/grammar")
 async def lookup_grammar(req: GrammarLookupReq):
-    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    key = get_effective_api_key()
     if not key:
         return {
             "grammar_name": f"语法考点辨析 ({req.target_phrase})",
             "cefr_level": "A1",
-            "explanation_zh": "请在 .env 中配置 DEEPSEEK_API_KEY 获取实时歌德大纲 AI 分析。",
+            "explanation_zh": "请在右上角「⚙️ 设置」中配置 API Key 获取实时歌德大纲 AI 分析。",
             "rule_formula": "Grammar Pattern",
             "collocations": [f"{req.target_phrase} (常用释义)"]
         }
 
+    base_url = get_effective_api_base_url().rstrip('/')
+    model = get_effective_api_model()
     user_content = f"句子: \"{req.sentence}\"\n目标词/短语: \"{req.target_phrase}\""
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                "https://api.deepseek.com/chat/completions",
+                f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
-                    "model": "deepseek-chat",
+                    "model": model,
                     "messages": [
                         {"role": "system", "content": SYSTEM_GRAMMAR_PROMPT},
                         {"role": "user", "content": user_content}
@@ -796,7 +832,7 @@ async def lookup_grammar(req: GrammarLookupReq):
                 return {
                     "grammar_name": f"考点辨析 ({req.target_phrase})",
                     "cefr_level": "B1",
-                    "explanation_zh": f"DeepSeek API 响应异常 ({resp.status_code})，请检查 API Key 余额或配置。",
+                    "explanation_zh": f"AI 接口响应异常 ({resp.status_code})，请检查「⚙️ 设置」中的 API Key 余额或网络连接。",
                     "rule_formula": "",
                     "collocations": []
                 }
@@ -842,7 +878,7 @@ async def lookup_vocab(req: VocabLookupReq):
         }
     else:
         # Tier 2: DeepSeek AI contextual lookup if API key is configured
-        key = os.environ.get("DEEPSEEK_API_KEY", "")
+        key = get_effective_api_key()
         if not key:
             res = {
                 "definition_zh": "",
@@ -851,14 +887,16 @@ async def lookup_vocab(req: VocabLookupReq):
                 "source": "none"
             }
         else:
+            base_url = get_effective_api_base_url().rstrip('/')
+            model = get_effective_api_model()
             user_content = f"句子: \"{req.sentence}\"\n目标词汇: \"{req.target_word}\""
             try:
                 async with httpx.AsyncClient(timeout=15) as client:
                     resp = await client.post(
-                        "https://api.deepseek.com/chat/completions",
+                        f"{base_url}/chat/completions",
                         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                         json={
-                            "model": "deepseek-chat",
+                            "model": model,
                             "messages": [
                                 {"role": "system", "content": SYSTEM_VOCAB_PROMPT},
                                 {"role": "user", "content": user_content}
@@ -1281,25 +1319,26 @@ class NoteAssistReq(BaseModel):
 
 @app.post("/api/ai/note-assist")
 async def note_assist(req: NoteAssistReq):
-    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    key = get_effective_api_key()
     if not key:
         import logging
-        logging.warning("[note-assist] DEEPSEEK_API_KEY not set — returning stub response. Add it to .env to enable AI analysis.")
+        logging.warning("[note-assist] API Key not set — returning stub response. Set in Settings.")
         return {
             "summary_zh": f"精读重点：{req.selected_text}",
-            "key_points": ["请在 .env 配置 DEEPSEEK_API_KEY 获取深度 AI 语法与搭配解析。"],
+            "key_points": ["请在右上角「⚙️ 设置」中配置 API Key 获取深度 AI 语法与搭配解析。"],
             "_stub": True
         }
 
-
+    base_url = get_effective_api_base_url().rstrip('/')
+    model = get_effective_api_model()
     user_content = f"整句: \"{req.sentence}\"\n划选部分: \"{req.selected_text}\""
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
-                "https://api.deepseek.com/chat/completions",
+                f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
-                    "model": "deepseek-chat",
+                    "model": model,
                     "messages": [
                         {"role": "system", "content": SYSTEM_NOTE_PROMPT},
                         {"role": "user", "content": user_content}
@@ -1314,6 +1353,75 @@ async def note_assist(req: NoteAssistReq):
             "summary_zh": f"精读重点：{req.selected_text}",
             "key_points": []
         }
+
+# --- Settings & Configuration API ---
+class SettingsUpdate(BaseModel):
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
+    api_model: Optional[str] = None
+    tts_voice: Optional[str] = None
+    tts_rate: Optional[str] = None
+
+@app.get("/api/settings")
+def get_app_settings():
+    key = get_effective_api_key()
+    masked = ""
+    if key:
+        if len(key) > 8:
+            masked = key[:4] + "•" * (len(key) - 8) + key[-4:]
+        else:
+            masked = "••••••••"
+    return {
+        "has_api_key": bool(key),
+        "api_key_masked": masked,
+        "api_base_url": get_effective_api_base_url(),
+        "api_model": get_effective_api_model(),
+        "tts_voice": get_setting("TTS_VOICE", "de-DE-KatjaNeural"),
+        "tts_rate": get_setting("TTS_RATE", "+0%")
+    }
+
+@app.post("/api/settings")
+def update_app_settings(settings: SettingsUpdate):
+    if settings.api_key is not None and settings.api_key.strip() != "":
+        set_setting("DEEPSEEK_API_KEY", settings.api_key.strip())
+    if settings.api_base_url is not None and settings.api_base_url.strip() != "":
+        set_setting("API_BASE_URL", settings.api_base_url.strip())
+    if settings.api_model is not None and settings.api_model.strip() != "":
+        set_setting("API_MODEL", settings.api_model.strip())
+    if settings.tts_voice is not None and settings.tts_voice.strip() != "":
+        set_setting("TTS_VOICE", settings.tts_voice.strip())
+    if settings.tts_rate is not None and settings.tts_rate.strip() != "":
+        set_setting("TTS_RATE", settings.tts_rate.strip())
+    return {"success": True, "message": "偏好与 API 设置已保存！"}
+
+@app.post("/api/settings/test-key")
+async def test_api_key(settings: SettingsUpdate):
+    key = settings.api_key.strip() if (settings.api_key and settings.api_key.strip()) else get_effective_api_key()
+    if not key:
+        return {"success": False, "error": "请先输入 API Key"}
+    base_url = (settings.api_base_url.strip() if settings.api_base_url else get_effective_api_base_url()).rstrip('/')
+    model = settings.api_model.strip() if settings.api_model else get_effective_api_model()
+    
+    import time
+    start_t = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": "Sag 'OK'."}],
+                    "max_tokens": 5
+                }
+            )
+            latency = int((time.time() - start_t) * 1000)
+            if resp.status_code == 200:
+                return {"success": True, "latency_ms": latency, "message": f"连接成功！响应延迟: {latency}ms"}
+            else:
+                return {"success": False, "error": f"连接返回错误代码: {resp.status_code} ({resp.text[:100]})"}
+    except Exception as e:
+        return {"success": False, "error": f"连接失败: {str(e)}"}
 
 # --- Study Guide Export (Markdown) ---
 @app.get("/api/articles/{article_id}/export-guide")

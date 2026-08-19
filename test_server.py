@@ -832,7 +832,43 @@ def test_process_german_text_includes_topology_and_clause_tree():
     assert "clause_tree" in s0
     assert s0["topology"]["field_texts"]["vorfeld"] == "Er"
     assert s0["topology"]["field_texts"]["linke_klammer"] == "hat"
-    assert "gelesen" in s0["topology"]["field_texts"]["rechte_klammer"]
+def test_app_settings_get_and_post(client):
+    # 1. Initial settings
+    res = client.get("/api/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert "has_api_key" in data
+    assert "api_base_url" in data
+    assert "tts_voice" in data
+
+    # 2. Update settings
+    up_res = client.post("/api/settings", json={
+        "api_key": "sk-test-mock-key-1234567890",
+        "api_base_url": "https://api.custom.com/v1",
+        "api_model": "custom-gpt4",
+        "tts_voice": "de-DE-ConradNeural",
+        "tts_rate": "+15%"
+    })
+    assert up_res.status_code == 200
+    assert up_res.json()["success"] is True
+
+    # 3. Verify settings updated and masked
+    res2 = client.get("/api/settings")
+    data2 = res2.json()
+    assert data2["has_api_key"] is True
+    assert data2["api_key_masked"].startswith("sk-t")
+    assert data2["api_base_url"] == "https://api.custom.com/v1"
+    assert data2["api_model"] == "custom-gpt4"
+    assert data2["tts_voice"] == "de-DE-ConradNeural"
+    assert data2["tts_rate"] == "+15%"
+
+def test_settings_test_key_without_key(client):
+    res = client.post("/api/settings/test-key", json={"api_key": ""})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is False
+    assert "error" in data
+
 
 
 

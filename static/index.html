@@ -35,6 +35,7 @@
       </button>
     </div>
     <div class="nav-actions">
+      <button class="btn btn-ghost nav-settings-btn" onclick="openSettingsModal()" title="偏好与 API 设置">⚙️ 设置</button>
       <a href="/api/cards/export/apkg" class="btn btn-dark nav-anki-btn" title="导出为 Anki 牌组 (.apkg)">导出 Anki</a>
     </div>
   </nav>
@@ -508,6 +509,78 @@
         <button id="import-btn" class="btn btn-dark" onclick="submitActiveImport()">开始阅读</button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ── Settings Modal ───────────────────────────────────────── -->
+  <div id="settings-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeSettingsModal()">
+    <div class="modal settings-modal-box">
+      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <span style="font-size:1.125rem;font-weight:700;color:var(--ink);">⚙️ 偏好与 API 设置 (Einstellungen)</span>
+        <button class="drawer-close" onclick="closeSettingsModal()" title="关闭 (Esc)">✕</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🤖 AI 深度剖析服务 (DeepSeek / OpenAI 兼容)</div>
+        <p class="settings-tip" style="font-size:0.75rem;color:var(--pencil);margin:0.25rem 0 0.75rem 0;line-height:1.4;">
+          用于选词语法深度剖析与随笔便签速记。词库、形态学、五场域拓扑、完形 C-Test 等功能 100% 离线，无需 API Key。
+        </p>
+        
+        <div class="modal-field" style="margin-top:0.75rem;">
+          <label class="input-label">API 密钥 (API Key)</label>
+          <div style="display:flex;gap:0.5rem;">
+            <input id="set-api-key" type="password" class="modal-input" placeholder="sk-..." autocomplete="off">
+            <button id="btn-toggle-key-vis" class="btn btn-ghost" onclick="toggleKeyVisibility()" title="显示/隐藏 Key" style="min-width:44px;padding:0 0.5rem;">👁️</button>
+          </div>
+          <span id="set-key-status" style="font-size:0.75rem;color:var(--pencil);margin-top:0.25rem;display:block;"></span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
+          <div class="modal-field">
+            <label class="input-label">接口地址 (Base URL)</label>
+            <input id="set-base-url" type="text" class="modal-input" placeholder="https://api.deepseek.com/v1">
+          </div>
+          <div class="modal-field">
+            <label class="input-label">模型名称 (Model)</label>
+            <input id="set-model-name" type="text" class="modal-input" placeholder="deepseek-chat">
+          </div>
+        </div>
+
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;">
+          <button id="btn-test-key" class="btn btn-ghost" onclick="testApiKeyConnection()">⚡ 测试连通性</button>
+          <span id="test-key-feedback" style="font-size:0.75rem;color:var(--pencil);font-family:var(--mono);"></span>
+        </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:1.25rem 0;">
+
+      <div class="settings-section">
+        <div class="settings-section-title">🔊 德语发音与 TTS 朗读偏好</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
+          <div class="modal-field">
+            <label class="input-label">默认发音人 (Voice)</label>
+            <select id="set-tts-voice" class="modal-input">
+              <option value="de-DE-KatjaNeural">Katja (女声 · 德国之声推荐)</option>
+              <option value="de-DE-ConradNeural">Conrad (男声 · 严谨沉稳)</option>
+              <option value="de-DE-AmalaNeural">Amala (女声 · 自然清晰)</option>
+              <option value="de-DE-KillianNeural">Killian (男声 · 浑厚母语)</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="input-label">朗读语速 (Speed)</label>
+            <select id="set-tts-rate" class="modal-input">
+              <option value="-15%">0.85x 放缓 (影子跟读推荐)</option>
+              <option value="+0%" selected>1.0x 标准语速</option>
+              <option value="+15%">1.15x 挑战语速</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:1.5rem;display:flex;justify-content:flex-end;gap:0.75rem;">
+        <button class="btn btn-ghost" onclick="closeSettingsModal()">取消</button>
+        <button id="btn-save-settings" class="btn btn-dark" onclick="saveAppSettings()">✓ 保存并生效</button>
+      </div>
     </div>
   </div>
 

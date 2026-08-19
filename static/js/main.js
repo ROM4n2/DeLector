@@ -231,12 +231,136 @@ export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
 
 
 export function openModal() {
-  document.getElementById('modal-overlay')?.classList.add('open');
-  switchImportTab('text');
+  document.getElementById('modal-overlay')?.classList.remove('hidden');
+  switchImportTab(currentImportTab || 'text');
 }
 
 export function closeModal() {
-  document.getElementById('modal-overlay')?.classList.remove('open');
+  document.getElementById('modal-overlay')?.classList.add('hidden');
+}
+
+// ── Settings Modal ─────────────────────────────────────────────────────────
+export async function openSettingsModal() {
+  const overlay = document.getElementById('settings-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('hidden');
+  
+  const statusEl = document.getElementById('set-key-status');
+  const feedbackEl = document.getElementById('test-key-feedback');
+  if (feedbackEl) feedbackEl.textContent = '';
+  
+  try {
+    const s = await api('/api/settings');
+    document.getElementById('set-base-url').value = s.api_base_url || 'https://api.deepseek.com/v1';
+    document.getElementById('set-model-name').value = s.api_model || 'deepseek-chat';
+    if (s.tts_voice) document.getElementById('set-tts-voice').value = s.tts_voice;
+    if (s.tts_rate) document.getElementById('set-tts-rate').value = s.tts_rate;
+    
+    if (s.has_api_key) {
+      statusEl.textContent = `✓ 当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`;
+      statusEl.style.color = '#16a34a';
+    } else {
+      statusEl.textContent = '⚠️ 当前未配置 API Key（AI 深度语法剖析需配置）';
+      statusEl.style.color = '#ca8a04';
+    }
+  } catch (err) {
+    console.error('Failed to load settings:', err);
+  }
+}
+
+export function closeSettingsModal() {
+  document.getElementById('settings-overlay')?.classList.add('hidden');
+}
+
+export function toggleKeyVisibility() {
+  const input = document.getElementById('set-api-key');
+  const btn = document.getElementById('btn-toggle-key-vis');
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (btn) btn.textContent = '🔒';
+  } else {
+    input.type = 'password';
+    if (btn) btn.textContent = '👁️';
+  }
+}
+
+export async function testApiKeyConnection() {
+  const btn = document.getElementById('btn-test-key');
+  const feedback = document.getElementById('test-key-feedback');
+  const key = document.getElementById('set-api-key').value.trim();
+  const baseUrl = document.getElementById('set-base-url').value.trim();
+  const model = document.getElementById('set-model-name').value.trim();
+
+  btn.textContent = '⏳ 测试中…';
+  btn.disabled = true;
+  feedback.textContent = '';
+  feedback.style.color = 'var(--pencil)';
+
+  try {
+    const res = await api('/api/settings/test-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: key,
+        api_base_url: baseUrl,
+        api_model: model
+      })
+    });
+    if (res.success) {
+      feedback.textContent = `✓ ${res.message}`;
+      feedback.style.color = '#16a34a';
+    } else {
+      feedback.textContent = `✕ ${res.error}`;
+      feedback.style.color = '#dc2626';
+    }
+  } catch (err) {
+    feedback.textContent = `✕ 请求异常: ${err.message}`;
+    feedback.style.color = '#dc2626';
+  } finally {
+    btn.textContent = '⚡ 测试连通性';
+    btn.disabled = false;
+  }
+}
+
+export async function saveAppSettings() {
+  const btn = document.getElementById('btn-save-settings');
+  const key = document.getElementById('set-api-key').value.trim();
+  const baseUrl = document.getElementById('set-base-url').value.trim();
+  const model = document.getElementById('set-model-name').value.trim();
+  const voice = document.getElementById('set-tts-voice').value;
+  const rate = document.getElementById('set-tts-rate').value;
+
+  btn.textContent = '保存中…';
+  btn.disabled = true;
+
+  try {
+    const body = {
+      api_base_url: baseUrl,
+      api_model: model,
+      tts_voice: voice,
+      tts_rate: rate
+    };
+    if (key) body.api_key = key;
+
+    await api('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (voice && window.ShadowPlayer) {
+      ShadowPlayer.setVoice(voice);
+    }
+
+    alert('✓ 偏好与 API 设置已成功保存并即刻生效！');
+    closeSettingsModal();
+  } catch (err) {
+    alert('保存设置失败: ' + err.message);
+  } finally {
+    btn.textContent = '✓ 保存并生效';
+    btn.disabled = false;
+  }
 }
 
 export async function submitActiveImport() {
@@ -410,6 +534,11 @@ Object.assign(window, {
   show,
   openModal,
   closeModal,
+  openSettingsModal,
+  closeSettingsModal,
+  toggleKeyVisibility,
+  testApiKeyConnection,
+  saveAppSettings,
   switchImportTab,
   submitActiveImport,
   handleFileSelect,
