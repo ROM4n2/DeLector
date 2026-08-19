@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-54%2F54%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-64%2F64%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -23,7 +23,7 @@
 | 平台 | 版本 | 说明 | 下载通道 |
 |---|---|---|---|
 | 🪟 **Windows x64** | `v3.5.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可使用 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
-| 📱 **Android** | `v3.5.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，脱离电脑单机独立运行 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
+| 📱 **Android** | `v3.5.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型（`de_core_news_sm`），单机独立运行；**仅支持 64 位 ARM（arm64-v8a）**，32 位机型与模拟器装不上 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) |
 
 ---
 
@@ -121,7 +121,7 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 | **语音合成** | `Edge-TTS` (Microsoft Neural Voice) | 神经级纯正德语离线本地缓存与 Web Speech 回退 |
 | **前端架构** | `ES Modules / Modern CSS / Vanilla JS` | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染 |
 | **记忆同步** | `genanki` | 离线生成标准 `.apkg` 记忆库 |
-| **自动化测试** | `pytest` + `httpx` | 54 单元与集成测试用例保障 (100% Green) |
+| **自动化测试** | `pytest` + `httpx` | 64 单元与集成测试用例保障 (100% Green) |
 
 ---
 
@@ -133,7 +133,7 @@ DeLector/
 ├── static/                 # 前端纯静态 ES 模块化资源 (Zero-Build ESM)
 │   ├── index.html          # 单页应用骨架 (含 3D 卡盒、句法拓扑与台账)
 │   ├── style.css           # 德式报刊风格与 3D 翻转样式 (90KB+)
-│   └── js/                 # 6 大独立原生 ES 模块
+│   └── js/                 # 7 大独立原生 ES 模块
 │       ├── core.js         # API 请求与全局状态
 │       ├── main.js         # 路由调度、设置弹窗与 RSS 订阅
 │       ├── reader.js       # 文本渲染、五场域拓扑条与 AST 树抽屉
@@ -141,6 +141,7 @@ DeLector/
 │       ├── folio.js        # Leporello 三折页台账与墨线图
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
 │       └── player.js       # 神经影子跟读与 TTS 播放器
+├── .githooks/              # 提交前密钥扫描钩子 (pre-commit)
 ├── linguistics.py          # 556+ 不规则动词三态表与复合词拆解引擎
 ├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词)
 ├── syntax_tree.py          # 拓扑五场域与 AST 从句树句法引擎
@@ -150,7 +151,8 @@ DeLector/
 ├── Dockerfile              # Docker 镜像构建文件
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖清单
-└── test_server.py          # Pytest 自动化测试套件
+├── test_server.py          # Pytest 自动化测试套件 (49 用例)
+└── test_syntax_tree.py     # Pytest 句法引擎测试套件 (15 用例)
 ```
 
 ---

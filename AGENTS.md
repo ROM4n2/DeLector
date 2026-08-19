@@ -2,16 +2,42 @@
 
 > **每次开新 agent 对话时，第一步必须读这个文件。**
 > 这是机器可读的项目快照，用于最短时间内重建完整 context。
+>
+> 维护约定：本文件**只保留一份**内容。历史上曾出现整份文档被追加两遍、
+> 后半段是过时副本的情况，新 agent 读到会拿到自相矛盾的项目认知。
+> 更新时请就地修改，不要在文件末尾追加新版本。
+
+---
+
+## 交接快照
+
+> 更新时间：2026-08-19
+
+| 项 | 值 |
+|---|---|
+| 当前分支 / HEAD | `master`（文档交接提交位于 PR #2 `c3de92f` 之上），工作区干净；**本地领先远端 1 个 commit（未推送）** |
+| 测试 | **64 / 64 全绿**（`test_server.py` 49 + `test_syntax_tree.py` 15） |
+| 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
+| Android APK | **真机验证通过**，spaCy 与德语模型在设备上正常加载（`nlp_engine == "spacy"`） |
+| 对外发布 | **v3.5.0 已发布**（2026-08-19）：[Android APK（58.2 MB）](https://github.com/ROM4n2/DeLector/releases/tag/v3.5.0) + Windows Portable（75.4 MB）。注意：**Release 标题误写成 `DeLector vv3.5.0`**（多一个 v），tag 与资产正常 |
+| 未完成的事 | 见文末「已知问题 / 待办」 |
+
+上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
+并把真正的 spaCy 移植进 APK。**动 Android 相关代码前必须先读下面的「Android 独立单机版」一节**，
+那里的版本互锁与 Chaquopy 行为都是踩过坑换来的，改错任何一项都会静默失效（App 照常能跑，
+只是语法标注悄悄退化）。
 
 ---
 
 ## 项目一句话定位
 
 **DeLector** 是一个德语精读与歌德/德福备考辅助 Web App。
-单文件后端（FastAPI + spaCy NLP + SQLite）+ 单页前端（原生 JS），
+单文件后端（FastAPI + spaCy NLP + SQLite）+ 单页前端（原生 JS ES Modules），
 本机以 `python start.py` 或 `start.bat` 启动，访问 `http://localhost:8000`。
-详见产品特性全览清单：[`FEATURES.md`](file:///D:/Code/DeLector/FEATURES.md)。
+详见产品特性全览清单：[`FEATURES.md`](FEATURES.md)。
 
+三种运行形态共用同一份后端代码：**桌面 Python**、**Windows 绿色便携版**（PyInstaller）、
+**Android 独立单机版**（Chaquopy 把 CPython 嵌进 APK）。
 
 ---
 
@@ -19,16 +45,101 @@
 
 | 层 | 技术 | 关键文件 |
 |---|---|---|
-| 后端 | Python 3.10+, FastAPI, spaCy `de_core_news_md`, genanki | `server.py`, `core_dict.py`, `linguistics.py` (形态学与三态表) |
-| 前端 | 原生 ES Modules（无框架、零构建），PWA | `static/index.html`, `static/js/*.js` (6大模块), `static/style.css` |
+| 后端 | Python 3.10+, FastAPI, spaCy, genanki | `server.py`（1966 行） |
+| 词法/形态学 | 556+ 不规则动词三态表 + 复合词递归拆解 | `linguistics.py`（1236 行） |
+| 离线核心词库 | 歌德 A1–B2，0ms 查词 | `core_dict.py`（516 行），入口 `lookup_core_vocab()` |
+| 拓扑句法 | VF/LK/MF/RK/NF 五场域 + 从句 AST | `syntax_tree.py`（1238 行） |
+| 启动器 | 端口探测、局域网 IP、平台判定 | `start.py`（86 行） |
+| 前端 | 原生 ES Modules（无框架、零构建），PWA | `static/index.html`, `static/js/*.js`（7 个模块）, `static/style.css` |
 | 数据库 | SQLite × 2 | `delector.db`（主库）, `progress.db`（学习进度） |
 | 音频缓存 | 本地 `.cache/audio/` MP3 | Edge Neural TTS (edge-tts) + Web Speech 回退 |
+| 桌面打包 | PyInstaller | `package_windows.py` |
+| 移动打包 | Chaquopy + Gradle | `android/` |
+| CI/CD | GitHub Actions | `.github/workflows/build-release.yml` |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（**35 个测试，100% 通过**） |
+| 测试 | pytest | `test_server.py`（49）, `test_syntax_tree.py`（15） |
+| 提交守卫 | pre-commit 密钥扫描 | `.githooks/pre-commit` |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
 
+---
 
+## NLP 引擎与降级路径（**改标注逻辑前必读**）
+
+后端有两条完全不同的标注路径，**降级是静默的**：
+
+1. **spaCy 路径**（正常）：分词、`doc.sents`、`lemma_`、`pos_`、`morph`（Gender/Case）、
+   依存句法（`dep_`/`head`）。拓扑五场域、从句 AST、可分动词回连**全部依赖依存句法**。
+2. **纯 Python 降级路径**（`_process_german_text_pure_python` 等）：只有正则切句 +
+   `core_dict.py` 反查。**没有依存句法就没有五场域和 AST**，可分动词也回连不上
+   （`steigt ... ein` 会按 `steigen` 判成 B1，而不是 `einsteigen` 的 A1）。
+   也就是说降级路径不只是"精度低"，而是会给出**错误**的语法标注。
+
+判断当前跑的是哪条：`GET /api/settings` 的 `nlp_engine`（`spacy` / `pure_python`）与
+`nlp_engine_detail`，或启动时 stdout 的 `[DeLector] NLP 引擎: ...`（Android 上走 `adb logcat`）。
+
+**模型加载顺序**：`SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")`，
+md 优先（带词向量、标注更准），sm 兜底。自动下载只在**非 Android** 且两个都加载失败时触发，
+且只下 sm（md 约 45MB，首启动拉它太慢）。
+
+`_load_spacy_model()` 有三级回退，缺一不可：`spacy.load(名称)` →
+`importlib.import_module(名称).load()` → 按数据目录绝对路径加载。原因见 Android 一节。
+
+---
+
+## Android 独立单机版（Chaquopy）
+
+**几个版本是互锁的，动任何一个都要同步检查其余**：
+
+| 项 | 值 | 为什么不能随便改 |
+|---|---|---|
+| `python { version "3.10" }` | cp310 | Chaquopy 仓库里 spaCy 原生栈只有 cp310 的 wheel |
+| `minSdk 24` | android_24 | 同上，wheel 的平台标签是 android_24 |
+| `spacy==3.8.7` | 来自 `https://chaquo.com/pypi-13.1/` | Chaquopy 自己的 native 仓库，连带 thinc 8.3.4 / blis 1.2.1 / numpy 1.26.2 / cymem / preshed / srsly / murmurhash |
+| CI 宿主机 spaCy | pin `>=3.8,<3.9` | `de_core_news_sm` 声明 `>=3.8.0,<3.9.0`，宿主机版本漂了会**构建成功但真机加载失败**（CI 里已有 assert 拦） |
+| `abiFilters "arm64-v8a"` | 仅 64 位 ARM | spaCy 原生栈按 ABI 各占 21–29MB；三 ABI 是 106.3MB，只保 arm64 是 56.7MB。放弃 armeabi-v7a 与 x86_64（模拟器装不上） |
+
+**两个 Chaquopy 行为坑（都会导致模型静默加载失败）**：
+
+1. **`spacy.load("名称")` 在 Android 上必然报 `[E050] Can't find model`。**
+   它走 `spacy.util.is_package()`，查的是 `importlib.metadata` 的 `.dist-info`；而 CI 是把模型目录
+   直接 `cp -r` 进 Chaquopy 源码目录的，没有 dist-info。必须退到
+   `importlib.import_module(名称).load()` —— 真机上实际生效的就是这条
+   （`nlp_engine_detail` 会显示 `de_core_news_sm(module.load)`）。
+2. **Chaquopy 默认不把包的数据文件解到文件系统**（APK 内 `assets/chaquopy/build.json` 的
+   `extract_packages` 若为 `[]` 即是），Python 代码直接从 `.imy` 压缩包执行，任何
+   `Path(__file__).parent / "x"` 的 `open()` 都会 `FileNotFoundError`。因此 build.gradle 必须声明：
+
+   ```groovy
+   extractPackages "spacy", "thinc", "de_core_news_sm"
+   ```
+
+   三个都要：`de_core_news_sm`（29 个模型文件）、`spacy`（`default_config.cfg`）、
+   `thinc`（`backends/_custom_kernels.cu`，模块顶层 `read_text()` 且无 try 保护）。
+   各包的 `*.dist-info/entry_points.txt` **不用**列——catalogue 走 `importlib.metadata`，
+   Chaquopy 的 `ChaquopyPathFinder.find_distributions` 能直接读 zip。
+   要查某个新依赖读了哪些数据文件，用 `sys.addaudithook` 拦 `open` 事件实测，别猜。
+
+**其它 Android 约束**：
+
+- **只绑回环**：`start.get_bind_host()` 在 Android 上返回 `127.0.0.1`。桌面端绑 `0.0.0.0`
+  是有意的特性（同 Wi-Fi 设备可访问），但 Android 上绑 `0.0.0.0` 等于把**无鉴权的
+  `POST /api/settings`（可改写 API Key 与 base_url）**暴露给整个局域网。
+- **import 期不得联网**：`spacy.cli.download` 会起 pip 子进程，Chaquopy 里必然失败却会
+  阻塞启动。已用 `is_android()` 门控，并有子进程探针测试守着。
+- **不要在 import 期做可能抛异常的事**：`init_db()` 在 `server.py` 模块顶层就会 seed 预置文章、
+  走到标注路径，所以标注链上任何异常都会让 `from server import app` 失败、服务永远起不来
+  （这正是最初 APK 卡在启动页的原因）。
+- **首次启动慢**：Chaquopy 要把那三个包解到内部存储（约 30MB 写盘），只发生在第一次；
+  启动页轮询上限约 84 秒。应用内部存储占用因此增加约 30MB。
+- **`android/app/src/main/python/` 与 `android/app/src/main/assets/static/` 是 CI 生成的**，
+  不在版本控制里（见 `.gitignore`）。
+- **验证 APK 内容要解 `.imy`**：Python 代码被打进 `assets/chaquopy/app.imy`（自己的 .py + 模型）
+  与 `requirements-<abi>.imy`（原生包），直接在 apk 的 namelist 里 grep `server.py` 会误判成"缺失"。
+  排查 Chaquopy 自身行为时，`bootstrap.imy` 里就是它的 importer 实现，比查文档快也更准。
+- Java 侧（`MainActivity.java`）**本机无法编译验证**（没装 Android SDK），只能靠 CI。
+  失败时 `reportFatal()` 会把错误留在启动页且可选中复制；重载上限 10 次；
+  catch 必须用 `Throwable`（`Python.start()` 抛的是 `UnsatisfiedLinkError`）。
 
 ---
 
@@ -36,7 +147,7 @@
 
 ### `delector.db` — 主库
 
-```
+```sql
 articles        id, title, source_url, raw_text, processed_json, created_at
 vocab_cards     id, article_id, word, lemma, pos, gender, plural, cefr_level,
                 definition_zh, sentence_context, mastered, mastered_at,
@@ -52,7 +163,7 @@ reading_notes   id, article_id, sentence_id, selected_text, color,
 
 ### `progress.db` — 学习进度库
 
-```
+```sql
 study_log       id, event_type, ref_id, note, logged_at
 quiz_log        id, card_id, card_type, mode, correct, attempted_at
 daily_summary   date(PK), cards_added, cards_mastered, articles_read,
@@ -61,44 +172,48 @@ daily_summary   date(PK), cards_added, cards_mastered, articles_read,
 
 ---
 
-## API 路由全览（server.py）
+## API 路由全览（`server.py`，按源码顺序）
 
-```
-POST /api/articles/ingest-url             抓取 URL 并解析德语正文
-POST /api/articles/ingest                 直接提交文本导入
-GET  /api/articles                        列出所有文章
-GET  /api/articles/{id}                   获取单篇文章（含 NLP 分析 JSON）
-POST /api/lookup/grammar                  语法悬停查词
-POST /api/lookup/vocab                    词汇悬停查词
-POST /api/cards/vocab                     添加词汇卡片
-POST /api/cards/grammar                   添加语法卡片
-GET  /api/cards                           列出所有卡片
-GET  /api/cards/due                       获取今日到期卡片（SM-2 排程）
-DELETE /api/cards/{type}/{id}             删除卡片
-PATCH  /api/cards/{type}/{id}/master      标记/取消掌握
-POST /api/cards/{type}/{id}/review        SM-2 间隔复习记录（grade 1-4）
-POST /api/quiz/record                     记录测验结果
-POST /api/progress/log-read               记录阅读事件
-GET  /api/progress/stats                  获取学习统计（用于进度台账）
-GET  /api/cards/export/apkg               导出 Anki APKG
-POST /api/audio/tts                       生成 Edge TTS 音频
-GET  /api/audio/cache                     查看音频缓存
-POST /api/audio/cache/clear               清空音频缓存
-GET  /api/articles/{id}/notes             获取文章笔记
-POST /api/articles/{id}/notes             添加笔记
-DELETE /api/notes/{note_id}               删除笔记
-POST /api/ai/note-assist                  AI 笔记辅助（DeepSeek API）
-GET  /api/articles/{id}/export-guide      导出学习指南 HTML
-GET  /api/backup/export                   导出数据库备份
-POST /api/backup/restore                  恢复数据库备份
-POST /api/articles/{id}/exercise/cloze    生成完形填空题（grammar/vocab/ctest 三模式）
-POST /api/articles/{id}/exercise/cloze    生成完形填空题（grammar/vocab/ctest 三模式）
-POST /api/exercise/cloze/evaluate         服务端判分（答案不在前端 DOM）
-GET  /api/feed/sources                    获取精选德语外刊与学习 RSS 订阅源
-GET  /api/feed/items                      解析指定 RSS/Atom 源最新文章列表
+```text
+POST   /api/articles/ingest-url                 抓取 URL 并解析德语正文
+GET    /api/feed/sources                        精选德语外刊与学习 RSS 订阅源
+GET    /api/feed/items                          解析指定 RSS/Atom 源最新文章列表
+POST   /api/articles/ingest                     直接提交文本导入
+GET    /api/articles                            列出所有文章
+GET    /api/articles/{article_id}               获取单篇文章（含 NLP 分析 JSON）
+POST   /api/lookup/grammar                      语法悬停查词
+POST   /api/lookup/vocab                        词汇悬停查词
+POST   /api/cards/vocab                         添加词汇卡片
+POST   /api/cards/grammar                       添加语法卡片
+GET    /api/cards                               列出所有卡片
+DELETE /api/cards/{card_type}/{card_id}         删除卡片
+PATCH  /api/cards/{card_type}/{card_id}/master  标记/取消掌握
+POST   /api/quiz/record                         记录测验结果
+POST   /api/progress/log-read                   记录阅读事件
+GET    /api/progress/stats                      获取学习统计（用于进度台账）
+GET    /api/cards/export/apkg                   导出 Anki APKG
+POST   /api/audio/tts                           生成 Edge TTS 音频
+GET    /api/audio/cache                         查看音频缓存
+POST   /api/audio/cache/clear                   清空音频缓存
+GET    /api/articles/{article_id}/notes         获取文章笔记
+POST   /api/articles/{article_id}/notes         添加笔记
+DELETE /api/notes/{note_id}                     删除笔记
+POST   /api/ai/note-assist                      AI 笔记辅助（DeepSeek API）
+GET    /api/settings                            读取设置（含 nlp_engine 诊断字段）
+POST   /api/settings                            写入设置（**无鉴权**，故 Android 只绑回环）
+POST   /api/settings/test-key                   连通性与延迟测试
+GET    /api/articles/{article_id}/export-guide  导出学习指南 HTML
+GET    /api/backup/export                       导出数据库备份
+POST   /api/backup/restore                      恢复数据库备份
+POST   /api/cards/{card_type}/{card_id}/review  SM-2 间隔复习记录（grade 1-4）
+GET    /api/cards/due                           获取今日到期卡片（SM-2 排程）
+POST   /api/articles/{article_id}/exercise/cloze 生成完形填空题（grammar/vocab/ctest）
+POST   /api/exercise/cloze/evaluate             服务端判分（答案不在前端 DOM）
+POST   /api/syntax/analyze                      拓扑五场域与从句 AST 分析
 ```
 
-**路由重要约束**：`app.mount("/", StaticFiles(...))` 是 catch-all 路由，**必须放在 server.py 最末尾**，否则所有 API 路由返回 405。
+**路由重要约束**：`app.mount("/", StaticFiles(...))` 是 catch-all 路由，
+**必须放在 `server.py` 最末尾**，否则所有 API 路由返回 405。
 
 ---
 
@@ -106,7 +221,7 @@ GET  /api/feed/items                      解析指定 RSS/Atom 源最新文章�
 
 | 模块 | 关键函数 / 职责 |
 |---|---|
-| `main.js` | 路由调度 `show()`, 导入模态窗, RSS 订阅 `selectFeedSource` / `ingestFeedItem`, 全局热键与 `window` 导出 |
+| `main.js` | 路由调度 `show()`, 导入模态窗, RSS 订阅 `selectFeedSource` / `ingestFeedItem`, 设置弹窗, 全局热键与 `window` 导出 |
 | `core.js` | `api()` 请求封装, `esc()`, `normalizeCefrPct()` 整数归一化, `state` 全局共享状态 |
 | `player.js` | `ShadowPlayer` 影子跟读与控制板, Edge Neural TTS + Web Speech 离线发音回退 |
 | `reader.js` | 文章渲染 `openReader()`, 词法悬停抽屉 `inspect()`, CEFR 热力条与聚焦, 便签增删 `aiNoteAssist()` |
@@ -116,7 +231,7 @@ GET  /api/feed/items                      解析指定 RSS/Atom 源最新文章�
 
 ---
 
-## SuperMemo SM-2 算法（server.py `calculate_sm2`）
+## SuperMemo SM-2 算法（`server.py` `calculate_sm2`）
 
 ```python
 grade:  1=忘记(Forgot)  2=困难(Hard)  3=良好(Good)  4=简单(Easy)
@@ -131,14 +246,63 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 
 ---
 
-## 完形填空引擎（server.py `generate_cloze_exercise`）
+## 完形填空引擎（`server.py` `generate_cloze_exercise`）
 
 - **grammar 模式**：挖 ADP/SCONJ/CCONJ/AUX（被动/虚拟式）/ADJ，每句最多 2 空
 - **vocab 模式**：挖 A2/B1/B2/C1 级 NOUN/VERB，每句最多 2 空
 - **ctest 模式**：从第 2 句起，每隔 1 个词截断后半部分（标准德福 C-Test）
-- 每个 item 包含 `original`、`first_letter`、`hint`（首字母提示文本）、`prefix`/`suffix`（ctest 专用）
-- `masked_text` 中空白格式为 `[[BLANK_N]]`，前端用 `split(/(\\[\\[BLANK_\\d+\\]\\])/)` 解析（**不用 replace**）
-- **答案仅在服务端**，前端 `data-orig` 保留完整原词仅用于前端 hint 展示（已确认不影响安全性，因判分在服务端重新生成）
+- 每个 item 含 `original`、`first_letter`、`hint`、`prefix`/`suffix`（ctest 专用）
+- `masked_text` 中空白格式为 `[[BLANK_N]]`，前端用 `split(/(\[\[BLANK_\d+\]\])/)` 解析（**不用 replace**）
+- **答案仅在服务端**，判分时服务端重新生成
+
+---
+
+## 切句：spaCy 缺席时的唯一实现
+
+`syntax_tree.split_sentences_pure_python()` 是**唯一**的降级切句实现，`server.py` 从这里 import。
+
+历史坑：曾有两份逐字相同的错误实现（`server.py` 与 `syntax_tree.py` 各一份），
+`re.split(r'([.!?]+["\']?)', text)` 的捕获组带尾随空格（`". "`），后续过滤纯标点片段的正则
+匹配不到，于是**每个句号都变成一个独立的"句子"**。要改切句逻辑请只改这一处。
+
+---
+
+## 安全与提交守卫
+
+- **pre-commit 密钥扫描**：`.githooks/pre-commit`。**`core.hooksPath` 是本地配置，不随 clone 生效**，
+  每个克隆都要手动开一次：
+
+  ```bash
+  git config core.hooksPath .githooks
+  ```
+
+  覆盖 8 个 key 家族（OpenAI/Anthropic、AWS、GitHub PAT ×2、Google、Slack、JWT、私钥 PEM）
+  与密钥文件名（`.env`、`*.pem`、`*.secret`、`*credentials*`、`id_rsa*`、`id_ed25519*`；
+  `.example`/`.sample`/`.template` 放过）。扫的是**暂存文件全文**而非 diff 新增行，
+  因为按行 diff 会漏掉"把含密钥的行挪到另一个文件"。
+  误报走行内 `delector:allow-secret` 注释（豁免留在 diff 里可被审阅）；
+  **不要用 `git commit --no-verify` 跳过**。
+- 真实 key 走环境变量或 `.env`（已 gitignore），绝不硬编码。
+- `POST /api/settings` **无鉴权**，能改写 API Key 与 base_url。这是 Android 只绑回环的原因；
+  桌面端绑 `0.0.0.0` 时同一局域网内任何人都能改，动这块要意识到影响面。
+
+---
+
+## 本机开发环境
+
+```text
+启动命令:  python start.py   或   start.bat
+地址:      http://localhost:8000（桌面端同时绑 0.0.0.0，同 Wi-Fi 设备可访问）
+数据库:    D:\Code\DeLector\delector.db（主库）
+           D:\Code\DeLector\progress.db（进度）
+NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
+测试:      pytest            （64 个，全绿）
+静态检查:  python -m pyflakes server.py syntax_tree.py start.py
+```
+
+**Git 推送通道**：这台机器上 HTTPS 连 fetch 都会失败（`schannel: failed to receive handshake`），
+`origin` 已指向 `ssh://git@ssh.github.com:443/ROM4n2/DeLector.git`（22 端口时通时不通，443 稳定）。
+`gh` CLI 走自己的 HTTPS API 认证，不受影响。
 
 ---
 
@@ -146,223 +310,67 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 
 | 版本/提交 | 主要变更 |
 |---|---|
-| v2.1.0 `1b38b16` | 3D 物理翻牌盒 + Leporello 三折台账 + Edge TTS + 20 测试全绿 |
-| v3.0 `0eeee94` | 完形填空引擎（Cloze & C-Test）+ SuperMemo SM-2 间隔复习 + Android PWA |
-| `59f7f51` | **fix**: `deleteCard` 缺少 `async` 导致全局 JS 崩溃（页面白屏） |
-| `3c8023f` | **fix**: 补全 `toggleDeckFlip`、`stepDeck`、`switchFolioPage` 等被覆盖的 handler；缓存版本升至 3.0.2 |
-| `7e98726` | **fix**: 完形填空首字母提示与重做功能；`renderClozeExercise` 改用 split 解析避免 HTML 注入 |
-| `236e2bf` | docs: 创建 AGENTS.md 交接文档 |
-| v3.1.0 `91de593` | **fix**: Leporello 色段精度（整数归一化）+ Android PWA bottom-sheet 触屏体验（backdrop + scroll lock + touch-action）+ `/api/ai/note-assist` 配置诊断（warning log + `_stub` flag） |
-| v3.2.0 `4bbea6c` | **feat & refactor**: 前端原生 ES Modules 模块化拆分（`static/js/*.js`）+ 歌德 A1-B2 离线核心词库（`core_dict.py` 0ms 查词与冠词复数） |
-| v3.3.0 `7009841` | **feat**: 德语外刊与学习源 RSS 一键订阅抓取（DW、Tagesschau、DLF、Spiegel、Zeit） |
-| `296d367` | **fix**: 修正 DLF/DW 新 RSS 源端点，支持 RDF 1.0/Atom/RSS 通用解析与正文提取增强 + 31 测试全绿 |
-| v3.4.0 | **feat**: 德语深度语言学引擎（556+ 不规则动词三态表 + 递归复合词拆解 + spaCy 可分动词框形双向联动高亮）+ 35 测试全绿 |
-| v3.5.0 `0e0d8d8` | **feat**: 德语拓扑五场域与从句树句法引擎（`syntax_tree.py`：VF/LK/MF/RK/NF 拓扑场域切分 + 5 大核心从句 AST 递归树 + 被动/虚拟式框形识别）+ 52 测试全绿 |
-| v3.5.0 (HEAD) | **feat & build**: 全局设置弹窗（`deepseek-v4-flash` + 毫秒级延迟连通测试）+ Windows 便携版 (`package_windows.py`) 与 Android 独立单机版 (`android/`) CI/CD + 54 测试全绿 |
+| v2.1.0 `1b38b16` | 3D 物理翻牌盒 + Leporello 三折台账 + Edge TTS |
+| v3.0 `0eeee94` | 完形填空引擎（Cloze & C-Test）+ SuperMemo SM-2 + Android PWA |
+| `59f7f51` | **fix**: `deleteCard` 缺 `async` 导致全局 JS 崩溃（页面白屏） |
+| `7e98726` | **fix**: 完形填空首字母提示与重做；`renderClozeExercise` 改用 split 解析避免 HTML 注入 |
+| v3.1.0 `91de593` | **fix**: Leporello 色段精度（整数归一化）+ Android PWA bottom-sheet 触屏体验 |
+| v3.2.0 `4bbea6c` | **feat & refactor**: 前端 ES Modules 拆分 + 歌德 A1-B2 离线核心词库 |
+| v3.3.0 `7009841` | **feat**: 德语外刊 RSS 一键订阅（DW、Tagesschau、DLF、Spiegel、Zeit） |
+| v3.4.0 | **feat**: 556+ 不规则动词三态表 + 复合词递归拆解 + 可分动词框形双向高亮 |
+| v3.5.0 `0e0d8d8` | **feat**: 拓扑五场域与从句 AST 引擎（`syntax_tree.py`） |
+| v3.5.0 | **feat & build**: 全局设置弹窗 + Windows 便携版与 Android 独立版 CI/CD |
+| **PR #2 `c3de92f`** | **fix(android)**: 修复启动卡死（降级路径 `NameError`）+ 切句器去重 + Android 错误可见性与重载上限 + Android 只绑回环 + **移植真 spaCy 进 APK**（arm64-only 56.7MB）+ `extractPackages` 与模型三级加载回退 + 模型 md 优先 + **pre-commit 密钥扫描钩子**；真机验证 `nlp_engine == "spacy"` |
+| **v3.5.0 Release `2026-08-19`** | **对外发布**：GitHub Releases 上线 `DeLector-v3.5.0-Android.apk`（58.2 MB，arm64-v8a only）与 `DeLector-v3.5.0-Windows-x64-Portable.zip`（75.4 MB）。标题误写为 `DeLector vv3.5.0`（见待办） |
 
 ---
 
-## 已知 Bug / 待处理事项
+## 已知问题 / 待办
 
 > 更新时间：2026-08-19
 
-- [x] ~~完形实战重做/首字母提示暴露源代码~~ — 已修复：`renderClozeExercise` 改用 DOM split 解析，`revealClozeHints` 按 `data-first-letter` 填充，`resetClozeExercise` 调用重新渲染
-- [x] ~~3D 卡盒与 Leporello 台账无法交互~~ — 已修复：补全所有 handler 并显式挂载到 `window`
-- [x] ~~`deleteCard` 缺 `async` 导致全页面 JS 崩溃~~ — 已修复
-- [x] ~~Leporello 台账第 2/3 页墨线折线图在某些浏览器下可能有精度问题~~ — 已修复：`normalizeCefrPct()` 最大余数法整数归一，`gap:1px` 改为段内 `border-right`，`min-width:1px; flex-shrink:0`
-- [x] ~~应用内配置 API Key~~ — 已实现：全局设置弹窗（`z-index: 99999`）、`deepseek-v4-flash` 直连与毫秒级延迟测试
-- [x] ~~外刊 RSS 历史链接 404 及 DW RDF 格式解析失败~~ — 已修复：更新官方有效 RSS 地址，实现通用 XML 遍历并增强 `<article>` 抽取
-- [x] ~~德语拓扑五场域与从句树句法引擎（`syntax_tree.py`）~~ — 已实现：5 场域精确切分 + 5 大句式 AST 递归树 + 54 测试全绿
-- [x] ~~打包发布（Windows 绿色免安装版 + Android 独立单机 APK）~~ — 已实现：`package_windows.py` 生成 143MB 独立免安装包，GitHub Actions CI/CD 自动化多端流水线已部署
-
----
-
-## 本机开发环境
-
-```
-启动命令:  python start.py   或   start.bat
-地址:      http://localhost:8000
-数据库:    D:\Code\DeLector\delector.db（主库）
-           D:\Code\DeLector\progress.db（进度）
-NLP 模型:  de_core_news_md / de_core_news_sm（已安装，无需联网）
-测试:      pytest -v
-当前测试:  54 / 54 全部通过（100% Green）
-```
-
-
-
-
-
+- [ ] **Release 标题拼写**：v3.5.0 的 Release 名误写成 `DeLector vv3.5.0`（多一个 v），
+      tag 与资产正常。想改标题：
+      `gh release edit v3.5.0 --repo ROM4n2/DeLector --name "DeLector v3.5.0 — 德语学术精读与备考工作台"`
+- [ ] 发布资产未在本机重新下载校验（CI 从 master 构建，理论上与本地验证通过的
+      56.7MB 版本同源；发布资产 58.2MB 差异来自签名/构建类型，未复核）
+- [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
+- [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
+      md 实际加载未在本机跑过
+- [ ] `pyflakes` 在 `test_server.py` 有 3 条陈旧告警（2 个未用导入 + 1 个未用变量），先前就有
+- [ ] Android 侧 Java 代码无法本机编译验证（本机无 Android SDK），只能靠 CI
+- [ ] 首次启动因 `extractPackages` 解包约 30MB 而明显变慢，尚未在真机上实测耗时
+- [x] ~~安卓版启动卡在「正在启动」页并超时~~ — PR #2 已修（根因：降级路径 `NameError`）
+- [x] ~~安卓版语法标注错误（无五场域/AST，可分动词回连失败）~~ — PR #2 已移植真 spaCy，真机验证通过
+- [x] ~~Android 上无鉴权 `POST /api/settings` 暴露给局域网~~ — PR #2 改为只绑 `127.0.0.1`
+- [x] ~~Android 失败不可见 + WebView 无限重载~~ — PR #2 已修
+- [x] ~~仓库无提交前密钥扫描~~ — PR #2 已加 `.githooks/pre-commit`
+- [x] ~~README/Dockerfile 装 md 但代码只加载 sm~~ — PR #2 改为 md 优先、sm 兜底
 
 ---
 
 ## Agent 工作惯例
 
-1. **改 JS 前**：确认任何新增函数都在文件末尾 `window.xxx = xxx` 显式导出；不要用 `innerHTML` 插入含用户数据的原始字符串（用 `esc()` 转义）
-2. **改后端路由前**：查看 `server.py` 顶部 `init_db()` 了解完整 schema；`app.mount` 必须在文件最末尾
-3. **新功能测试**：在 `test_server.py` 补充对应测试用例，`pytest test_server.py -v` 确认全绿
-4. **提交前**：`git diff --stat` 确认范围合理，绝不提交 `.env`、`*.db`；检查 `node -c static/app.js` 语法无误
-5. **大改动后**：更新本文件的「已知 Bug / 待处理事项」和「版本历史」两节
-6. **缓存问题**：改动 CSS/JS 后在 `index.html` 的引用 URL 追加 `?v=X.X.X`，并更新 `sw.js` 的 `CACHE_NAME`
+1. **先验证再断言**：声称"已修复/已完成"前先跑验证并给出证据（复现脚本、测试输出、
+   拆包核对）。本项目的失败模式大量是**静默降级**，"看代码觉得对"经常是错的。
+2. **改 Android 相关代码前**：先读本文件「Android 独立单机版」一节。那里每一条都有代价，
+   `python version` / `minSdk` / spaCy 版本 / `extractPackages` 改错都不会报错，只会静默退化。
+3. **改标注/切句逻辑前**：确认改的是 spaCy 路径还是纯 Python 降级路径，两条都要过。
+   切句只有 `syntax_tree.split_sentences_pure_python()` 一处实现。
+4. **改 JS 前**：新增函数要在文件末尾 `window.xxx = xxx` 显式导出；
+   不要用 `innerHTML` 插入含用户数据的原始字符串（用 `esc()` 转义）；
+   不要把答案或敏感数据写进 `data-*` 或 `localStorage`。
+5. **改后端路由前**：查看 `server.py` 顶部 `init_db()` 了解完整 schema；
+   `app.mount` 必须在文件最末尾；**不要在模块顶层加可能抛异常的逻辑**。
+6. **新功能测试**：在 `test_server.py` / `test_syntax_tree.py` 补测试，`pytest` 全绿。
+   配置类约束也可以写成测试（例：有个测试直接读 `build.gradle` 断言
+   `extractPackages` 列了那三个包）。
+7. **提交前**：`git diff --stat` 确认范围合理；绝不提交 `.env`、`*.db`、APK 等产物；
+   pre-commit 钩子必须启用且不绕过。
+8. **大改动后**：更新本文件的「交接快照」「版本历史」「已知问题 / 待办」三节。
+9. **缓存问题**：改动 CSS/JS 后在 `index.html` 的引用 URL 追加 `?v=X.X.X`，
+   并更新 `sw.js` 的 `CACHE_NAME`。
 
 ---
 
-*此文件由 agent 维护，人工可随时追加注释。*
-
-
-> **每次开新 agent 对话时，第一步必须读这个文件。**
-> 这是机器可读的项目快照，用于最短时间内重建完整 context。
-
----
-
-## 项目一句话定位
-
-**DeLector** 是一个德语精读与歌德/德福备考辅助 Web App。
-单文件后端（FastAPI + spaCy NLP + SQLite）+ 单页前端（原生 JS），
-本机以 `python start.py` 或 `start.bat` 启动，访问 `http://localhost:8000`。
-
----
-
-## 技术栈速览
-
-| 层 | 技术 | 关键文件 |
-|---|---|---|
-| 后端 | Python 3.10+, FastAPI, spaCy `de_core_news_md`, genanki | `server.py` (1425 行) |
-| 前端 | 原生 HTML/CSS/JS（无框架），PWA | `static/index.html`, `static/app.js` (~2313 行), `static/style.css` |
-| 数据库 | SQLite × 2 | `delector.db`（主库）, `progress.db`（学习进度） |
-| 音频缓存 | 本地 `.cache/audio/` MP3 | Edge Neural TTS (edge-tts) |
-| 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（20 个测试） |
-| 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
-
----
-
-## 数据库 Schema（两个库）
-
-### `delector.db` — 主库
-
-```
-articles        id, title, source_url, raw_text, processed_json, created_at
-vocab_cards     id, article_id, word, lemma, pos, gender, plural, cefr_level,
-                definition_zh, sentence_context, mastered, mastered_at,
-                correct_count, wrong_count, due_date, interval_days,
-                ease_factor, repetition_count, created_at
-grammar_cards   id, article_id, sentence_context, grammar_name, cefr_level,
-                explanation_zh, rule_formula, examples_zh, mastered, mastered_at,
-                correct_count, wrong_count, due_date, interval_days,
-                ease_factor, repetition_count, created_at
-reading_notes   id, article_id, sentence_id, selected_text, color,
-                note_content, created_at
-```
-
-### `progress.db` — 学习进度库
-
-```
-study_log       id, event_type, ref_id, note, logged_at
-quiz_log        id, card_id, card_type, mode, correct, attempted_at
-daily_summary   date(PK), cards_added, cards_mastered, articles_read,
-                quiz_sessions, study_minutes
-```
-
----
-
-## API 路由全览（server.py）
-
-```
-POST /api/articles/ingest-url             抓取 URL 并解析德语正文
-POST /api/articles/ingest                 直接提交文本导入
-GET  /api/articles                        列出所有文章
-GET  /api/articles/{id}                   获取单篇文章（含 NLP 分析 JSON）
-POST /api/lookup/grammar                  语法悬停查词
-POST /api/lookup/vocab                    词汇悬停查词
-POST /api/cards/vocab                     添加词汇卡片
-POST /api/cards/grammar                   添加语法卡片
-GET  /api/cards                           列出所有卡片
-DELETE /api/cards/{type}/{id}             删除卡片
-PATCH  /api/cards/{type}/{id}/master      标记/取消掌握
-POST /api/cards/{type}/{id}/review        SM-2 间隔复习记录
-GET  /api/cards/due                       获取今日到期卡片
-POST /api/quiz/record                     记录测验结果
-POST /api/progress/log-read               记录阅读事件
-GET  /api/progress/stats                  获取学习统计（用于进度台账）
-GET  /api/cards/export/apkg               导出 Anki APKG
-POST /api/audio/tts                       生成 Edge TTS 音频
-GET  /api/audio/cache                     查看音频缓存
-POST /api/audio/cache/clear               清空音频缓存
-GET  /api/articles/{id}/notes             获取文章笔记
-POST /api/articles/{id}/notes             添加笔记
-DELETE /api/notes/{note_id}               删除笔记
-POST /api/ai/note-assist                  AI 笔记辅助（DeepSeek API）
-GET  /api/articles/{id}/export-guide      导出学习指南 HTML
-GET  /api/backup/export                   导出数据库备份
-POST /api/backup/restore                  恢复数据库备份
-POST /api/articles/{id}/exercise/cloze    生成完形填空题（grammar/vocab/ctest 三模式）
-POST /api/exercise/cloze/evaluate         服务端判分（答案不在前端 DOM）
-```
-
----
-
-## 前端关键函数（app.js）
-
-| 函数 | 作用 |
-|---|---|
-| `openClozeModal()` | 打开完形填空浮层 |
-| `switchClozeMode(mode)` | 切换 grammar/vocab/ctest 模式，重新请求题目 |
-| `renderClozeExercise(data)` | 渲染填空题 HTML（**不含 data-orig**，答案仅在服务端） |
-| `revealClozeHints()` | 首字母提示：grammar/vocab 填首字母；ctest 只展示 badge hint |
-| `resetClozeExercise()` | 重做：重新渲染，清空得分面板 |
-| `submitClozeExercise()` | 提交判分（POST 到服务端） |
-| `openReader(id)` | 打开文章精读视图 |
-| `inspect(word, sent)` | 词法/语法悬停分析抽屉 |
-| `openQuizOverlay()` | 打开测验浮层 |
-| `loadCards()` | 加载卡片库 |
-| `loadProgress()` | 加载进度台账（Leporello 三折台账） |
-
----
-
-## 版本历史与重要决策
-
-| 版本/提交 | 主要变更 |
-|---|---|
-| v3.0 `0eeee94` | 完形填空引擎（Cloze & C-Test）+ SuperMemo SM-2 间隔复习 + Android PWA |
-| `3c8023f` (HEAD) | 修复 3D 卡盒与 Leporello 台账的交互 handler，缓存版本升至 3.0.2 |
-| 2026-08-19（未提交）| **bug fix**: 删除 `data-orig` 防止 DOM 泄露答案；修复 `revealClozeHints` ctest 分支逻辑错误 |
-
----
-
-## 已知 Bug / 待处理事项
-
-> 更新时间：2026-08-19
-
-- [x] ~~完形实战 `data-orig` 暴露完整答案~~ — 已修复：删除该 DOM 属性，答案仅在服务端保留
-- [x] ~~`revealClozeHints` 中 ctest 首字母提示逻辑错误~~ — 已修复：ctest 只展示 badge hint，不自动填字
-- [ ] `test_server.py` 测试套件尚未覆盖完形填空评分逻辑（cloze evaluate API）— 待补充
-- [ ] Leporello 台账第 2/3 页墨线折线图在某些浏览器下可能有精度问题 — 未验证
-- [ ] `/api/ai/note-assist` 需要 `.env` 中配置 `DEEPSEEK_API_KEY` — 本机已配
-
----
-
-## 本机开发环境
-
-```
-启动命令:  python start.py   或   start.bat
-地址:      http://localhost:8000
-数据库:    D:\Code\DeLector\delector.db（主库）
-           D:\Code\DeLector\progress.db（进度）
-NLP 模型:  de_core_news_md（已安装，无需联网）
-测试:      pytest test_server.py -v
-```
-
----
-
-## Agent 工作惯例
-
-1. **改 JS 前**：确认改动不会将答案或敏感数据写入 DOM 属性（`data-*`）或 `localStorage`
-2. **改后端路由前**：查看 `server.py` 顶部 `init_db()` 和 `init_progress_db()` 了解完整 schema
-3. **新功能测试**：在 `test_server.py` 补充对应测试用例，`pytest test_server.py -v` 确认全绿
-4. **提交前**：`git diff --stat` 确认范围合理，绝不提交 `.env`、`*.db`
-5. **大改动后**：更新本文件的「已知 Bug / 待处理事项」和「版本历史」两节
-
----
-
-*此文件由 agent 维护，人工可随时追加注释。*
+*此文件由 agent 维护，人工可随时追加注释。请保持全文唯一，不要追加重复副本。*

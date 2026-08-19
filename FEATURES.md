@@ -126,8 +126,8 @@
 
 | 平台版本 | 技术方案 | 特性与优势 |
 |---|---|---|
-| **Windows x64 绿色便携版** | PyInstaller 独立编译打包（`DeLector-v3.5.0-Windows-x64-Portable.zip`，143 MB） | 包含 Python 3.11、spaCy 德语模型、FastAPI 与前端资源，双击 `DeLector.exe` 秒级启动，零环境依赖。 |
-| **Android 独立单机版 APK** | Chaquopy 嵌入式 Python 引擎 + 原生 WebView 沉浸容器（`android/`） | 将 Python 后端与 spaCy 离线模型完整内嵌进 APK，脱离电脑 100% 独立离线单机运行。 |
+| **Windows x64 绿色便携版** | PyInstaller 独立编译打包（`DeLector-v3.5.0-Windows-x64-Portable.zip`，75 MB） | 包含 Python 3.11、spaCy 德语模型、FastAPI 与前端资源，双击 `DeLector.exe` 秒级启动，零环境依赖。 |
+| **Android 独立单机版 APK** | Chaquopy 嵌入式 Python 引擎 + 原生 WebView 沉浸容器（`android/`，APK 约 58 MB） | 将 Python 后端与 spaCy 离线模型（`de_core_news_sm`）完整内嵌进 APK，脱离电脑 100% 独立离线单机运行；**仅支持 64 位 ARM（arm64-v8a）**，32 位机型与模拟器装不上。 |
 
 ---
 
