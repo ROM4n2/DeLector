@@ -6,7 +6,7 @@
 
 ---
 
-## 🌟 核心功能全览（当前版本 v3.8.0）
+## 🌟 核心功能全览（当前版本 v3.9.1）
 
 ```
                      ┌─────────────────────────────────────────────────────────┐
@@ -117,9 +117,9 @@
 
 | 平台版本 | 技术方案 | 特性与优势 |
 |---|---|---|
-| **Windows x64 绿色便携版** | PyInstaller 独立编译打包（`DeLector-v3.8.0-Windows-x64-Portable.zip`） | 包含 Python 3.11、spaCy 模型、FastAPI 与前端资源，双击 `DeLector.exe` 秒级启动。 |
-| **macOS 免安装包** | PyInstaller + M系列/Intel 通用支持（`DeLector-v3.8.0-macOS.tar.gz`） | 解压运行 `start` 即可，零环境门槛。 |
-| **Linux x64 便携版** | Ubuntu / Debian / Arch 通用打包（`DeLector-v3.8.0-Linux-x64.tar.gz`） | 解压即用，支持服务器与工作站环境。 |
+| **Windows x64 绿色便携版** | PyInstaller 独立编译打包（`DeLector-v3.9.1-Windows-x64-Portable.zip`） | 包含 Python 3.11、spaCy 模型、FastAPI 与前端资源，双击 `DeLector.exe` 秒级启动。 |
+| **macOS 免安装包** | PyInstaller + M系列/Intel 通用支持（`DeLector-v3.9.1-macOS.tar.gz`） | 解压运行 `start` 即可，零环境门槛。 |
+| **Linux x64 便携版** | Ubuntu / Debian / Arch 通用打包（`DeLector-v3.9.1-Linux-x64.tar.gz`） | 解压即用，支持服务器与工作站环境。 |
 | **Android 独立单机版 APK** | Chaquopy 嵌入式 Python 运行时 + 原生离线 TTS 桥接（`android/`，APK 56.7 MB） | 嵌入式 Python 与 spaCy 离线模型，脱离电脑 100% 独立离线单机运行（arm64-v8a）。 |
 
 ---
@@ -132,7 +132,9 @@
 | **v3.5.2** | 2026-08-19 | Android Native TTS 离线桥接 + 国内免翻墙语音兜底 + 移动端底部 Dock 优化 | 🟢 已发布 |
 | **v3.6.2** | 2026-08-19 | Atelier 呼吸感落地页台账 (Hero 展台 + 双行反向 Marquee + 紧凑双面板) | 🟢 已发布 |
 | **v3.7.1** | 2026-08-19 | 德语伴读宠物（Eule & 伙伴）+ 自定义 SVG 上传消毒 + 4 平台 CI/CD 矩阵 | 🟢 已发布 |
-| **v3.8.0** | 2026-08-19 | 现代 FSRS 认知排程器升级（DSR 状态机原生零依赖数学模型，消解 Ease Hell） | 🟢 已交付 |
+| **v3.8.0** | 2026-08-19 | 现代 FSRS 认知排程器升级（DSR 状态机原生零依赖数学模型，消解 Ease Hell） | 🟢 已发布 |
+| **v3.9.0** | 2026-08-19 | 离线词库 443→4300 词（DeepSeek 批量生成中文释义）+ 查词链 lemma 优先 / 形态学接线 / 现在时反查 / UX 诚实显示 | 🟢 已发布 |
+| **v3.9.1** | 2026-08-19 | 安卓真机修复：TTS 无声（stdlib 版 Edge TTS 客户端）、倍速点不到（三行布局）、抽屉白色遮挡（55vh + 阅读区全宽） | 🟢 已发布 |
 
 ---
 
