@@ -289,7 +289,53 @@ def seed_preset_articles(db_path: Optional[str] = None):
                 ingest_article(art["title"], art["text"], db_path=target)
 
 # --- 2. NLP & CEFR Tagging ---
+import importlib
+from pathlib import Path
 from start import is_android
+
+# md 带词向量、标注更准，是桌面端首选；sm 体积小，Android 包里装的和自动下载兜底都用它。
+# 按顺序取第一个能加载的。
+SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")
+AUTO_DOWNLOAD_MODEL = "de_core_news_sm"
+
+def _load_spacy_model(name: str):
+    """加载指定德语模型，返回 (nlp, 加载方式描述)；全部策略失败则抛 RuntimeError。
+
+    为什么不能只用 spacy.load(name)：它走 spacy.util.is_package()，查的是
+    importlib.metadata 的 .dist-info 元数据。Android 上模型是被直接拷进 Chaquopy
+    的 Python 源码目录的（见 CI 的 sync 步骤），没有 dist-info，于是即便这个包
+    import 得动，也只会报 "[E050] Can't find model"——真机上就是这么退化成纯
+    Python 路径的。所以按名称失败后要退到模块自身的 load()，最后退到数据目录路径。
+    """
+    errors = []
+    try:
+        return spacy.load(name), name
+    except Exception as e:
+        errors.append(f"spacy.load({name!r}) -> {e}")
+
+    try:
+        module = importlib.import_module(name)
+    except Exception as e:
+        errors.append(f"import {name} -> {e}")
+        raise RuntimeError("; ".join(errors))
+
+    try:
+        # 等价于 load_model_from_init_py(module.__file__)，绕开 is_package 检查
+        return module.load(), f"{name}(module.load)"
+    except Exception as e:
+        errors.append(f"{name}.load() -> {e}")
+
+    try:
+        # meta.json 里的版本与实际数据目录名不一致时，上一步会失败，这里直接找目录
+        root = Path(module.__file__).parent
+        data_dirs = sorted(root.glob(f"{name}-*"))
+        if not data_dirs:
+            raise FileNotFoundError(f"{root} 下没有 {name}-* 数据目录")
+        return spacy.load(data_dirs[-1]), f"{name}({data_dirs[-1].name})"
+    except Exception as e:
+        errors.append(f"path load -> {e}")
+
+    raise RuntimeError("; ".join(errors))
 
 nlp = None
 # 记录实际生效的引擎，便于在真机上（adb logcat / GET /api/settings）确认
@@ -298,22 +344,28 @@ NLP_ENGINE = "pure_python"
 NLP_ENGINE_DETAIL = "spaCy 未安装，使用纯 Python 降级路径（无依存句法/格标注）"
 
 if spacy is not None:
-    try:
-        nlp = spacy.load("de_core_news_sm")
-        NLP_ENGINE = "spacy"
-        NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + de_core_news_sm"
-    except Exception as first_error:
+    load_errors = []
+    for candidate in SPACY_MODEL_CANDIDATES:
+        try:
+            nlp, how = _load_spacy_model(candidate)
+            NLP_ENGINE = "spacy"
+            NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}"
+            break
+        except Exception as e:
+            load_errors.append(str(e))
+
+    if nlp is None:
         # 自动下载模型只在桌面端有意义。Android 上 spacy.cli.download 会起 pip
-        # 子进程去拉 15MB 模型：Chaquopy 里必然失败，却会在 import 期阻塞启动。
+        # 子进程去拉模型：Chaquopy 里必然失败，却会在 import 期阻塞启动。
         if is_android():
-            NLP_ENGINE_DETAIL = f"spaCy 已装但模型加载失败，降级为纯 Python：{first_error}"
+            NLP_ENGINE_DETAIL = "spaCy 已装但模型加载失败，降级为纯 Python：" + " | ".join(load_errors)
         else:
             try:
                 from spacy.cli import download
-                download("de_core_news_sm")
-                nlp = spacy.load("de_core_news_sm")
+                download(AUTO_DOWNLOAD_MODEL)
+                nlp, how = _load_spacy_model(AUTO_DOWNLOAD_MODEL)
                 NLP_ENGINE = "spacy"
-                NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + de_core_news_sm（自动下载）"
+                NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}（自动下载）"
             except Exception as e:
                 NLP_ENGINE_DETAIL = f"spaCy 已装但模型不可用，降级为纯 Python：{e}"
 

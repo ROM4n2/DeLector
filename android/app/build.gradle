@@ -23,6 +23,18 @@ android {
 
         python {
             version "3.10"
+
+            // Chaquopy 默认不把任何包的数据文件解到文件系统（构建产物里
+            // build.json 的 extract_packages 为空），Python 代码从 .imy 压缩包里
+            // 直接执行。但这三个包会用 Path(__file__).parent / "xxx" 去 open()
+            // 真实文件，不解包就必然 FileNotFoundError：
+            //   de_core_news_sm  模型 config.cfg / 权重 / attribute_ruler patterns（29 个文件）
+            //   spacy            default_config.cfg、cli/templates/*.yml
+            //   thinc            backends/_custom_kernels.cu（模块顶层 read_text，无保护）
+            // 各包 *.dist-info/entry_points.txt 不用列——catalogue 走
+            // importlib.metadata，Chaquopy 的 ChaquopyPathFinder 能直接从 zip 读。
+            extractPackages "spacy", "thinc", "de_core_news_sm"
+
             pip {
                 install "pydantic<2.0.0"
                 install "fastapi<0.100.0"
