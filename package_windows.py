@@ -87,9 +87,9 @@ def build_windows():
         f.write(readme_content)
     
     print("\n" + "=" * 60)
-    print(f"🎉 绿色便携版打包成功！")
-    print(f"📁 发布包目录: {release_dir}")
-    print(f"🚀 可执行文件: {os.path.join(release_dir, 'DeLector.exe')}")
+    print("[SUCCESS] 绿色便携版打包成功！")
+    print(f"发布包目录: {release_dir}")
+    print(f"可执行程序: {os.path.join(release_dir, 'DeLector.exe')}")
     print("=" * 60)
 
 if __name__ == "__main__":

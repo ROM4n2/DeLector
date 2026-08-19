@@ -8,4 +8,7 @@ __pycache__/
 artifact*.html
 .pytest_cache/
 .cache/
+build/
+dist/
+*.spec
 
