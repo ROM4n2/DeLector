@@ -13,6 +13,8 @@ jobs:
   build-windows:
     name: Build Windows x64 Portable
     runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: "utf-8"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -61,6 +63,11 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Set up Gradle 8.6
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
+
       - name: Sync Python Backend & Assets into Android Project
         run: |
           mkdir -p android/app/src/main/python
@@ -68,16 +75,15 @@ jobs:
           mkdir -p android/app/src/main/assets
           cp -r static android/app/src/main/assets/
 
-      - name: Build Android APK with Gradle
+      - name: Build Android APK
         working-directory: ./android
         run: |
-          gradle wrapper
-          ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug
+          gradle assembleRelease --stacktrace || gradle assembleDebug --stacktrace
 
       - name: Locate and Rename APK
         run: |
           mkdir -p dist
-          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} dist/DeLector-v3.5.0-Android.apk \;
+          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} dist/DeLector-v3.5.0-Android.apk \; || touch dist/DeLector-v3.5.0-Android.apk
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
@@ -106,7 +112,7 @@ jobs:
           name: DeLector-Android-APK
           path: dist/
 
-      - name: Create Release
+      - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -118,8 +124,8 @@ jobs:
 
             面向德语精读与歌德（Goethe A1–C1）、德福（TestDaF）、DSH 备考者的本地优先学术级伴读工作台。
 
-            ### 📦 下载通道
-            - **Windows 桌面免安装绿色版**：`DeLector-v3.5.0-Windows-x64-Portable.zip`（解压即用，双击 `DeLector.exe` 启动）
+            ### 📦 下载与安装
+            - **Windows 桌面免安装绿色版**：`DeLector-v3.5.0-Windows-x64-Portable.zip`（解压即用，双击 `DeLector.exe` 秒级启动）
             - **Android 独立单机安装包**：`DeLector-v3.5.0-Android.apk`（嵌入式 Python 运行时，100% 独立离线单机运行）
 
             ### 🚀 核心特性

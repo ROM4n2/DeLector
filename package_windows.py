@@ -8,9 +8,20 @@ import sys
 import shutil
 import subprocess
 
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 def build_windows():
     print("=" * 60)
-    print("  DeLector v3.5.0 — Windows 绿色便携版打包构建器")
+    print("  DeLector v3.5.0 -- Windows Portable Packager")
     print("=" * 60)
     
     root_dir = os.path.dirname(os.path.abspath(__file__))
