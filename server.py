@@ -17,7 +17,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import httpx
-import spacy
+try:
+    import spacy
+except ImportError:
+    spacy = None
 import genanki
 
 def load_env():
@@ -282,12 +285,17 @@ def seed_preset_articles(db_path: Optional[str] = None):
                 ingest_article(art["title"], art["text"], db_path=target)
 
 # --- 2. NLP & CEFR Tagging ---
-try:
-    nlp = spacy.load("de_core_news_sm")
-except OSError:
-    from spacy.cli import download
-    download("de_core_news_sm")
-    nlp = spacy.load("de_core_news_sm")
+nlp = None
+if spacy is not None:
+    try:
+        nlp = spacy.load("de_core_news_sm")
+    except Exception:
+        try:
+            from spacy.cli import download
+            download("de_core_news_sm")
+            nlp = spacy.load("de_core_news_sm")
+        except Exception:
+            nlp = None
 
 CEFR_DICT = {
     # A1 core

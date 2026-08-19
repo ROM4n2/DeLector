@@ -52,7 +52,16 @@ def main():
     threading.Thread(target=open_browser, args=(port,), daemon=True).start()
     
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
+    from server import app
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, reload=False, log_level="info")
+    server = uvicorn.Server(config)
+    try:
+        # Disable signals in sub-threads (Android Chaquopy)
+        if threading.current_thread() is not threading.main_thread():
+            server.install_signal_handlers = lambda: None
+    except Exception:
+        server.install_signal_handlers = lambda: None
+    server.run()
 
 if __name__ == "__main__":
     main()
