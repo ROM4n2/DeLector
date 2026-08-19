@@ -514,3 +514,13 @@ def get_core_cefr_level(lemma: str) -> Optional[str]:
     if key in CORE_VOCAB_DB:
         return CORE_VOCAB_DB[key][0]
     return None
+
+# ── 合并 AI 批量生成的扩展词库（core_dict_ext.py，见 tools/build_dict.py）────
+# 为什么 import 而非运行时读 JSON：Chaquopy extract_packages 为空，open() 数据
+# 文件会失败；.py 模块按 import 链正常打包（PyInstaller 自动分析，CI 拷贝进
+# android/app/src/main/python）。base 443 冲突时手编词条优先（dict 合并顺序）。
+try:
+    from core_dict_ext import CORE_VOCAB_EXT
+except ImportError:
+    CORE_VOCAB_EXT = {}
+CORE_VOCAB_DB = {**CORE_VOCAB_EXT, **CORE_VOCAB_DB}

@@ -56,6 +56,7 @@ def build_windows():
         "--hidden-import=uvicorn.protocols.websockets.auto",
         "--hidden-import=uvicorn.lifespan",
         "--hidden-import=uvicorn.lifespan.on",
+        "--hidden-import=core_dict_ext",
         "--hidden-import=de_core_news_sm",
         "--hidden-import=spacy.lang.de",
         "--hidden-import=genanki",

@@ -307,13 +307,29 @@ export function inspect(tokenId, sentId) {
   api('/api/lookup/vocab', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ sentence: sent.text, target_word: token.text })
+    // 带上 spaCy 词元：查词链按 lemma 优先，geht→gehen / Häuser→Haus 才能命中
+    body: JSON.stringify({ sentence: sent.text, target_word: token.text, lemma: token.lemma || token.text })
   }).then(res => {
     if (res && state.selectedToken?.text === token.text) {
-      if (res.definition_zh && !document.getElementById('d-def').value) {
-        document.getElementById('d-def').value = res.definition_zh;
+      // 诚实显示释义来源：空释义不再谎称 "AI 已预填"
+      const SRC_LABEL = {
+        local_dict: '⚡ 歌德核心词库 (0ms)',
+        linguistics_ext: '⚡ 本地词库 · 形态学',
+        linguistics: '⚡ 本地词库 · 形态学',
+        ai: 'AI 在线释义',
+        ai_error: '⚠ AI 接口异常，暂无释义',
+        ai_exception: '⚠ AI 接口异常，暂无释义',
+        none: '暂无离线释义'
+      };
+      const dDefEl = document.getElementById('d-def');
+      if (res.definition_zh && !dDefEl.value) {
+        dDefEl.value = res.definition_zh;
       }
-      document.getElementById('d-def-status').textContent = res.source === 'local_dict' ? '⚡ 歌德核心词库 (0ms)' : '✓ AI 已预填';
+      const statusEl = document.getElementById('d-def-status');
+      statusEl.textContent = SRC_LABEL[res.source] || (res.definition_zh ? '本地词库' : '暂无离线释义');
+      if (!res.definition_zh) {
+        dDefEl.placeholder = '该词暂无释义，可手动填写笔记…';
+      }
       if (res.plural) state.selectedToken.plural = res.plural;
       if (res.gender && !genderHtml) {
         const gTag = res.gender === 'Masc' ? '<span class="gender-tag gender-der">der 阳性</span>' :

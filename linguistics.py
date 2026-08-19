@@ -725,6 +725,58 @@ for _form, _inf in _PRESENT_VOWEL_CHANGES.items():
     if _inf in IRREGULAR_VERBS and _form not in _REVERSE_VERB_INDEX:
         _REVERSE_VERB_INDEX[_form] = _inf
 
+# High-frequency present-tense forms for the no-lemma fallback path.
+# 为什么手编而不是规则循环生成：强动词现在时变音（e→i/ie、a→ä）没有完整表，
+# 规则循环会对未列出的变音词生成错误形式（如 vergisst→vergesst 而非 vergessen），
+# 比查不到更糟。主路径是 lemma-first（spaCy 已正确还原）；这张表只兜无 lemma 的
+# 旧客户端/纯 Python 路径，覆盖最高频的助动词/情态动词/常用强动词现在时。
+_AUX_MODAL_PRESENT: Dict[str, str] = {
+    # sein
+    "ist": "sein", "bin": "sein", "bist": "sein", "sind": "sein", "seid": "sein",
+    # haben
+    "hat": "haben", "habe": "haben", "hast": "haben", "haben": "haben", "habt": "haben",
+    # werden
+    "wird": "werden", "werde": "werden", "wirst": "werden", "werdet": "werden",
+    # modals
+    "will": "wollen", "willst": "wollen", "wollt": "wollen",
+    "kann": "können", "kannst": "können", "könnt": "können",
+    "muss": "müssen", "musst": "müssen", "müsst": "müssen",
+    "darf": "dürfen", "darfst": "dürfen", "dürft": "dürfen",
+    "soll": "sollen", "sollst": "sollen", "sollt": "sollen",
+    "mag": "mögen", "magst": "mögen", "mögt": "mögen",
+    # tun
+    "tut": "tun", "tue": "tun", "tust": "tun",
+    # 高频无变音强动词（现在时词干 = 不定式词干）
+    "geht": "gehen", "gehst": "gehen", "gehe": "gehen", "gehen": "gehen",
+    "steht": "stehen", "stehst": "stehen",
+    "trinkt": "trinken", "trinkst": "trinken", "trinke": "trinken",
+    "singt": "singen", "singst": "singen", "singe": "singen",
+    "findet": "finden", "findest": "finden", "finde": "finden",
+    "bleibt": "bleiben", "bleibst": "bleiben", "bleibe": "bleiben",
+    "schreibt": "schreiben", "schreibst": "schreiben", "schreibe": "schreiben",
+    "liest": "lesen",  # 已在 _PRESENT_VOWEL_CHANGES，防御性重复无害
+    "versteht": "verstehen", "verstehst": "verstehen",
+    "beginnt": "beginnen", "beginne": "beginnen",
+    "bringt": "bringen", "bringst": "bringen", "bringe": "bringen",
+    "denkt": "denken", "denkst": "denken",
+    "heißt": "heißen", "heiße": "heißen",
+    "kennt": "kennen", "kennst": "kennen",
+    "kommt": "kommen", "kommst": "kommen", "komme": "kommen",
+    "meint": "meinen", "meinst": "meinen",
+    "nennt": "nennen", "nennst": "nennen",
+    "sagt": "sagen", "sagst": "sagen", "sage": "sagen",
+    "setzt": "setzen", "setze": "setzen",
+    "spielt": "spielen", "spielst": "spielen", "spiele": "spielen",
+    "arbeitet": "arbeiten", "arbeite": "arbeiten",
+    "wohnt": "wohnen", "wohnst": "wohnen", "wohne": "wohnen",
+    "fragt": "fragen", "fragst": "fragen", "frage": "fragen",
+    "antwortet": "antworten", "antworte": "antworten",
+    "macht": "machen", "machst": "machen", "mache": "machen",
+}
+for _form, _inf in _AUX_MODAL_PRESENT.items():
+    if _inf in IRREGULAR_VERBS and _form not in _REVERSE_VERB_INDEX:
+        _REVERSE_VERB_INDEX[_form] = _inf
+
 
 def lookup_irregular_verb(form_or_lemma: str) -> Optional[VerbTrio]:
     """
@@ -1092,6 +1144,28 @@ def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
                 return hit
 
     return None
+
+
+def lookup_linguistics_ext(lemma_or_word: str) -> Optional[Dict[str, Any]]:
+    """查词链第 1.5 层：把 _get_element_info 的元数据包装成 lookup_core_vocab 同形 dict。
+
+    为什么接线：LINGUISTICS_VOCAB_EXT（~200 词元）之前只被复合词拆分器用，
+    主查词链从不查它，等于白存。这里复用 _get_element_info 自带的 ss/ß、变元音
+    复数、名词后缀处理，key 规范化成 {lemma, cefr_level, pos, gender, plural,
+    definition_zh, source}，与 core_dict.lookup_core_vocab 返回形状一致。
+    """
+    info = _get_element_info(lemma_or_word or "")
+    if not info:
+        return None
+    return {
+        "lemma": info.get("lemma", ""),
+        "cefr_level": info.get("cefr", ""),
+        "pos": info.get("pos", ""),
+        "gender": info.get("gender"),
+        "plural": "",
+        "definition_zh": info.get("def_zh", ""),
+        "source": "linguistics_ext",
+    }
 
 
 

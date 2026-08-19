@@ -1113,3 +1113,68 @@ def test_delete_article(client):
     del_non_existent = client.delete("/api/articles/999999")
     assert del_non_existent.status_code == 404
 
+
+# ── 查词链修复测试（lemma-first / EXT 接线 / 诚实 source）────────────────────
+
+def test_lookup_lemma_first(client, monkeypatch):
+    """前端带 lemma → 直接命中核心词库，不触发 AI。"""
+    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    r = client.post("/api/lookup/vocab",
+                    json={"sentence": "Er geht.", "target_word": "geht", "lemma": "gehen"})
+    data = r.json()
+    assert data["source"] == "local_dict"
+    assert "去" in data["definition_zh"]
+
+
+def test_lookup_lemma_absent_present_irregular(client, monkeypatch):
+    """无 lemma 时 geht 靠现在时反查 → stammformen + 三态表释义回填。"""
+    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    r = client.post("/api/lookup/vocab", json={"sentence": "Er geht.", "target_word": "geht"})
+    data = r.json()
+    assert data.get("stammformen", {}).get("infinitiv") == "gehen"
+    assert data["definition_zh"]
+    assert data["source"] == "linguistics"
+
+
+def test_lookup_plural_haeuser(client, monkeypatch):
+    """变元音复数 Häuser + lemma Haus → 核心词库命中。"""
+    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    r = client.post("/api/lookup/vocab",
+                    json={"sentence": "Die Häuser sind alt.", "target_word": "Häuser", "lemma": "Haus"})
+    data = r.json()
+    assert data["source"] == "local_dict"
+    assert "房屋" in data["definition_zh"]
+
+
+def test_lookup_linguistics_ext_tier(client, monkeypatch):
+    """主链查不到时落 EXT（LINGUISTICS_VOCAB_EXT 接线）。"""
+    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    r = client.post("/api/lookup/vocab", json={"sentence": "Klima.", "target_word": "klima"})
+    data = r.json()
+    assert data["source"] == "linguistics_ext"
+    assert "气候" in data["definition_zh"]
+
+
+def test_lookup_no_hit_honest_none(client, monkeypatch):
+    """未知词 + 无 key → source=none 空释义（不再是 AI 已预填谎言）。"""
+    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    r = client.post("/api/lookup/vocab",
+                    json={"sentence": "Xyzzy.", "target_word": "zzzznonsense"})
+    data = r.json()
+    assert data["source"] == "none"
+    assert not data["definition_zh"]
+
+
+def test_lookup_ai_error_backfill_linguistics(client, monkeypatch):
+    """key 假 + httpx 崩 → ai_exception；强动词变位词回填三态表释义。"""
+    monkeypatch.setattr("server.get_effective_api_key", lambda: "sk-bogus")
+
+    class _BoomClient:
+        def post(self, *a, **k):
+            raise RuntimeError("simulated network down")
+
+    monkeypatch.setattr("server.httpx.AsyncClient", lambda *a, **k: _BoomClient())
+    r = client.post("/api/lookup/vocab", json={"sentence": "Er geht.", "target_word": "geht"})
+    data = r.json()
+    assert data["source"] == "linguistics"
+    assert data["definition_zh"]

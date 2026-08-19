@@ -343,6 +343,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v3.7.0 `2026-08-19`** | **feat(companion & mascot)**: 德语伴读宠物（Companion Mascot）「Eule & 伙伴」混合双模系统全量落地：4 款内嵌矢量 SVG 角色（歌德猫头鹰、学者猫、灵动狐、包豪斯机甲）+ 研读工坊台账展台与全局悬浮伴读球双挂载点 + A1–B1 地道鼓励短语库 + 三层 TTS 语音发声与 8s 冷却 + 6 大物理/情绪 Keyframes 动画 + 生词卡/语法卡/SM-2 复习/完形填空/测验全链路事件接线 |
 | **v3.7.1 `2026-08-19`** | **feat(companion & upload)**: 伴读宠物 Phase 2 角色工坊上线：支持用户上传任意自定义 `.svg` 矢量图形（$\le 64\text{KB}$）、严格 DOMParser 递归白名单消毒（过滤 `<script>`、`<foreignObject>`、`on*` 与非法协议）、`localStorage` 持久化注册并在研习工坊及全局浮层无缝切换 |
 | **v3.8.0 `2026-08-19`** | **feat(fsrs & memory)**: 认知自适应记忆排程器升级为 FSRS 引擎：DSR 状态机原生零依赖数学模型（难度 $D$ 均值回归、稳定性 $S$ 幂律增长、可提取性 $R$ 遗忘衰减），消解「沉沦死锁 (Ease Hell)」；API 注入 4 级下一轮间隔预计算字典 `next_intervals`，前端 3D 翻牌盒精准动态绑定并保持向下兼容 |
+| **v3.9.0 `2026-08-19`** | **feat(dict & lookup)**: 离线词库 443→4300 词（`tools/build_dict.py` 用 DeepSeek 对歌德 A1-B2 词表批量生成中文释义，落地 `core_dict_ext.py` Python 模块，Chaquopy/PyInstaller 可直接打包）；查词链修复——前端带 spaCy lemma + 服务端 lemma 优先（`geht→gehen`/`Häuser→Haus` 命中）、接线 `LINGUISTICS_VOCAB_EXT`、现在时强动词反查表（`ist→sein`）、UX 诚实显示（空释义不再谎称"AI 已预填"，标 `暂无离线释义`） |
 
 ---
 
@@ -351,6 +352,9 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 > 更新时间：2026-08-19
 
 - [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
+- [ ] **离线词库尾缺口 ~109 词**（v3.9.0 词库 4301 词，候选源 4377）：B2 源的派生/噪声词
+      （`aufklärungsdrohnen` 等）AI 反复不返回，refill 自动重试过狠会卡住。
+      要补跑 `python tools/build_dict.py --refill --parallel 8`（注意它会覆写 batch_0-4 缓存）
 - [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
 - [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，

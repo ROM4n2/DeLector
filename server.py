@@ -419,7 +419,7 @@ CEFR_DICT = {
 }
 
 from core_dict import lookup_core_vocab, get_core_cefr_level
-from linguistics import lookup_irregular_verb, split_komposita
+from linguistics import lookup_irregular_verb, lookup_linguistics_ext, split_komposita
 from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree, split_sentences_pure_python
 
 def get_cefr_level(lemma: str) -> str:
@@ -996,24 +996,51 @@ SYSTEM_VOCAB_PROMPT = """你是一位精通德汉词典编纂的德语专家。
 class VocabLookupReq(BaseModel):
     sentence: str
     target_word: str
+    lemma: Optional[str] = None  # 前端带上的 spaCy 词元（无 spaCy 时回退 None）
 
 @app.post("/api/lookup/vocab")
 async def lookup_vocab(req: VocabLookupReq):
-    # Tier 1: Local core dictionary hit (0ms zero-latency, 100% offline)
+    # 查词链重排：离线零延迟层在前，AI 垫底。原来只查表面形（token.text），
+    # geht/Häuser/ist 全查不到；现在 lemma 优先（spaCy 入库时已算好 token.lemma）。
     res = {}
-    local_hit = lookup_core_vocab(req.target_word)
-    if local_hit:
-        res = {
-            "definition_zh": local_hit.get("definition_zh", ""),
-            "plural": local_hit.get("plural", ""),
-            "gender": local_hit.get("gender"),
-            "pos": local_hit.get("pos"),
-            "cefr_level": local_hit.get("cefr_level"),
-            "synonyms": [],
-            "source": "local_dict"
-        }
-    else:
-        # Tier 2: DeepSeek AI contextual lookup if API key is configured
+
+    # Tier 1: 核心词库（lemma 优先，表面形兜底）
+    for word in (req.lemma, req.target_word):
+        if not word:
+            continue
+        local_hit = lookup_core_vocab(word)
+        if local_hit:
+            res = {
+                "definition_zh": local_hit.get("definition_zh", ""),
+                "plural": local_hit.get("plural", ""),
+                "gender": local_hit.get("gender"),
+                "pos": local_hit.get("pos"),
+                "cefr_level": local_hit.get("cefr_level"),
+                "synonyms": [],
+                "source": "local_dict"
+            }
+            break
+
+    # Tier 1.5: 形态学扩展词库（LINGUISTICS_VOCAB_EXT，之前主链从不查）
+    if not res:
+        for word in (req.lemma, req.target_word):
+            if not word:
+                continue
+            ext_hit = lookup_linguistics_ext(word)
+            if ext_hit:
+                res = {
+                    "definition_zh": ext_hit.get("definition_zh", ""),
+                    "plural": ext_hit.get("plural", ""),
+                    "gender": ext_hit.get("gender"),
+                    "pos": ext_hit.get("pos"),
+                    "cefr_level": ext_hit.get("cefr_level"),
+                    "synonyms": [],
+                    "source": "linguistics_ext"
+                }
+                break
+
+    # Tier 2: AI 兜底（仅当本地无释义且有 key）
+    if not res.get("definition_zh"):
         key = get_effective_api_key()
         if not key:
             res = {
@@ -1060,8 +1087,8 @@ async def lookup_vocab(req: VocabLookupReq):
                 }
 
     # Morphology & Linguistics Layer:
-    # 1. Irregular / Strong verbs Stammformen
-    stamm = lookup_irregular_verb(req.target_word)
+    # 1. Irregular / Strong verbs Stammformen（始终附；释义只在本地兜底没出时回填）
+    stamm = lookup_irregular_verb(req.lemma or req.target_word)
     if stamm:
         inf = getattr(stamm, "infinitiv", None) or (stamm.get("infinitiv") if hasattr(stamm, "get") else "")
         praet = getattr(stamm, "praeteritum", None) or (stamm.get("praeteritum") if hasattr(stamm, "get") else "")
@@ -1075,9 +1102,10 @@ async def lookup_vocab(req: VocabLookupReq):
             "partizip2": p2,
             "hilfsverb": hilf
         }
+        # 放宽回填：本地/在线都没出释义时，用三态表的释义兜底（不只 "none"）
         if not res.get("definition_zh") and stamm_def:
             res["definition_zh"] = stamm_def
-            if res.get("source") == "none":
+            if res.get("source") in ("none", "ai_error", "ai_exception"):
                 res["source"] = "linguistics"
 
     # 2. Komposita compound word decomposition
@@ -1097,7 +1125,7 @@ async def lookup_vocab(req: VocabLookupReq):
                 sub_defs = [p.get("definition_zh") or p.get("def_zh") for p in parts if (p.get("definition_zh") or p.get("def_zh"))]
                 if sub_defs:
                     res["definition_zh"] = " + ".join(sub_defs)
-                    if res.get("source") == "none":
+                    if res.get("source") in ("none", "ai_error", "ai_exception"):
                         res["source"] = "linguistics"
 
     return res
