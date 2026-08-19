@@ -28,7 +28,14 @@ import {
   playSelectedAudio,
   downloadStudyGuide,
   refreshCardCounters,
-  inspectSubWord
+  inspectSubWord,
+  renderFelderSpectrum,
+  renderDetailedFelderGrid,
+  renderClauseTreeNode,
+  toggleSentenceTopology,
+  openSyntaxDrawerForSentence,
+  highlightClauseTokens,
+  saveClauseAsGrammarCard
 } from './reader.js';
 
 import {
@@ -434,6 +441,13 @@ Object.assign(window, {
   playSelectedAudio,
   downloadStudyGuide,
   inspectSubWord,
+  renderFelderSpectrum,
+  renderDetailedFelderGrid,
+  renderClauseTreeNode,
+  toggleSentenceTopology,
+  openSyntaxDrawerForSentence,
+  highlightClauseTokens,
+  saveClauseAsGrammarCard,
 
   // Cards & Deck
   setCardSegment,

@@ -303,6 +303,7 @@ CEFR_DICT = {
 
 from core_dict import lookup_core_vocab, get_core_cefr_level
 from linguistics import lookup_irregular_verb, split_komposita
+from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree
 
 def get_cefr_level(lemma: str) -> str:
     if not lemma:
@@ -420,11 +421,18 @@ def process_german_text(text: str) -> Dict[str, Any]:
                     sep_cefr = get_cefr_level(sep_lemma)
                     verb_tok["cefr_level"] = sep_cefr
                     prefix_tok["cefr_level"] = sep_cefr
-                    verb_tok["lemma"] = sep_lemma
-
-        sentences.append({"id": sent_idx, "text": sent.text, "tokens": tokens})
+        # Compute topological 5 fields and clause AST tree for each sentence
+        top = analyze_sentence_topology(sent)
+        tree = build_clause_tree(sent)
+        sentences.append({
+            "id": sent_idx,
+            "text": sent.text,
+            "tokens": tokens,
+            "topology": top,
+            "clause_tree": tree
+        })
     stats = calculate_cefr_stats(all_tokens)
-    return {"version": "3.4.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
+    return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
 
 
 
@@ -1668,6 +1676,13 @@ def evaluate_cloze_exercise(req: ClozeEvalReq):
         "accuracy_pct": accuracy_pct,
         "results": results
     }
+
+class SyntaxAnalyzeReq(BaseModel):
+    text: str
+
+@app.post("/api/syntax/analyze")
+def api_syntax_analyze(req: SyntaxAnalyzeReq):
+    return analyze_syntax_tree(req.text)
 
 # Mount Static UI (Catch-all must be at the very end)
 if os.path.exists("static"):

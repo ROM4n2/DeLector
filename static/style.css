@@ -5243,5 +5243,303 @@ body.drawer-open .shadow-player {
   font-size: 0.8125rem;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Satzbau & Topologisches Feldermodell (v3.5.0)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.reader-sent-unit {
+  display: inline;
+  position: relative;
+}
+
+.sent-syntax-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.6875rem;
+  font-family: var(--sans, -apple-system, BlinkMacSystemFont, sans-serif);
+  padding: 1px 5px;
+  margin: 0 3px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: var(--paper-accent, #f8f6f0);
+  color: var(--pencil, #666);
+  cursor: pointer;
+  opacity: 0.45;
+  vertical-align: middle;
+  user-select: none;
+  transition: opacity 0.15s, background-color 0.15s, border-color 0.15s;
+}
+
+.reader-sent-unit:hover .sent-syntax-btn,
+.sent-syntax-btn:hover {
+  opacity: 1;
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+
+/* Inline Collapsible Topology Strip */
+.sentence-topology-strip {
+  display: block;
+  margin: 0.625rem 0 0.875rem 0;
+  padding: 0.625rem 0.875rem;
+  background: rgba(248, 246, 240, 0.95);
+  border: 1px solid var(--border, #e2ded4);
+  border-left: 3px solid var(--accent, #2980b9);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  animation: slideDownTopo 0.2s ease-out;
+}
+
+@keyframes slideDownTopo {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.felder-spectrum-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.feld-pill {
+  flex: 1 1 auto;
+  min-width: 90px;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+}
+
+.feld-pill .feld-tag {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.feld-pill .feld-val {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+
+.feld-pill.feld-vf { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.feld-pill.feld-lk { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 600; }
+.feld-pill.feld-mf { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.feld-pill.feld-rk { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; font-weight: 600; }
+.feld-pill.feld-nf { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+.feld-pill.is-empty { opacity: 0.55; font-style: italic; }
+
+.felder-bar-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
+.btn-open-ast-action {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--accent, #2980b9);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.btn-open-ast-action:hover {
+  text-decoration: underline;
+  background: rgba(41, 128, 185, 0.08);
+}
+
+/* Drawer Syntax Card & Detailed Felder Grid */
+.drawer-syntax-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  background: var(--paper, #fdfbf7);
+  padding: 1.125rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2ded4);
+}
+
+.felder-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.feld-card {
+  padding: 0.5rem 0.625rem;
+  border-radius: 5px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.feld-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.feld-card-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.feld-card-desc {
+  font-size: 0.625rem;
+  opacity: 0.8;
+}
+
+.feld-card-content {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.feld-card-vf { background: #fef9c3; color: #854d0e; border-color: #fef08a; }
+.feld-card-lk { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; font-weight: 600; }
+.feld-card-mf { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.feld-card-rk { background: #faf5ff; color: #6b21a8; border-color: #e9d5ff; font-weight: 600; }
+.feld-card-nf { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+.feld-card.is-empty-card { opacity: 0.5; font-style: italic; }
+
+/* Interactive Clause Tree AST in Drawer */
+.syntax-tree-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.clause-tree-node {
+  position: relative;
+}
+
+.clause-tree-node.depth-1,
+.clause-tree-node.depth-2,
+.clause-tree-node.depth-3 {
+  margin-top: 0.5rem;
+  padding-left: 0.875rem;
+  border-left: 2px dashed #93c5fd;
+}
+
+.clause-node-box {
+  background: #ffffff;
+  border: 1px solid var(--border, #e2ded4);
+  border-radius: 6px;
+  padding: 0.625rem 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.clause-node-box:hover {
+  border-color: var(--accent, #2980b9);
+  box-shadow: 0 2px 8px rgba(41, 128, 185, 0.12);
+  transform: translateY(-1px);
+}
+
+.clause-node-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.clause-type-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink, #1a1a1a);
+}
+
+.clause-pill-tag {
+  font-size: 0.625rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.tag-conn { background: #e0f2fe; color: #0369a1; }
+.tag-verb { background: #f3e8ff; color: #7e22ce; }
+
+.clause-formula {
+  font-size: 0.6875rem;
+}
+
+.clause-formula code {
+  background: var(--paper-accent, #f1f5f9);
+  color: #0284c7;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--mono, monospace);
+}
+
+.clause-quote-text {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.8125rem;
+  color: var(--pencil, #555);
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.clause-node-footer {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
+.btn-clause-pill {
+  font-size: 0.6875rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--paper, #fff);
+  color: var(--ink, #333);
+  cursor: pointer;
+}
+
+.btn-clause-pill:hover {
+  background: var(--paper-accent, #f3f4f6);
+}
+
+.btn-save-anki {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+  font-weight: 600;
+}
+
+.btn-save-anki:hover {
+  background: #dcfce7;
+}
+
+/* Clause Pulse Highlight in Reader */
+.tok.clause-highlight {
+  background-color: #fed7aa !important;
+  color: #7c2d12 !important;
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px #f97316, 0 2px 6px rgba(249, 115, 22, 0.3);
+  font-weight: 600;
+  animation: pulse-clause 1.6s infinite ease-in-out;
+}
+
+@keyframes pulse-clause {
+  0% { box-shadow: 0 0 0 2px #fb923c, 0 0 4px rgba(249, 115, 22, 0.25); }
+  50% { box-shadow: 0 0 0 3px #ea580c, 0 0 10px rgba(234, 88, 12, 0.45); }
+  100% { box-shadow: 0 0 0 2px #fb923c, 0 0 4px rgba(249, 115, 22, 0.25); }
+}
+
+
 
 

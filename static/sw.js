@@ -1,9 +1,9 @@
-const CACHE_NAME = 'delector-static-v3.4.2';
+const CACHE_NAME = 'delector-static-v3.5.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/style.css?v=3.4.2',
-  '/js/main.js?v=3.4.2',
+  '/style.css?v=3.5.0',
+  '/js/main.js?v=3.5.0',
 
   '/js/core.js',
   '/js/player.js',

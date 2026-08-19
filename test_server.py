@@ -807,6 +807,34 @@ def test_vocab_lookup_with_linguistics_stammformen_and_komposita(client):
     assert "komposita" in data_plural_comp
     assert len(data_plural_comp["komposita"]) >= 2
 
+def test_syntax_analyze_endpoint(client):
+    res = client.post("/api/syntax/analyze", json={
+        "text": "Weil das Wetter heute schön ist, geht Maria im Park spazieren."
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["version"] == "3.5.0"
+    assert data["sentence_count"] == 1
+    s0 = data["sentences"][0]
+    assert "topology" in s0
+    assert "clause_tree" in s0
+    assert "vorfeld" in s0["topology"]
+    assert "linke_klammer" in s0["topology"]
+    assert s0["topology"]["field_texts"]["linke_klammer"] == "geht"
+
+def test_process_german_text_includes_topology_and_clause_tree():
+    processed = process_german_text("Er hat das Buch gelesen. Wenn er Zeit hat, kommt er vorbei.")
+    assert processed["version"] == "3.5.0"
+    assert len(processed["sentences"]) == 2
+    
+    s0 = processed["sentences"][0]
+    assert "topology" in s0
+    assert "clause_tree" in s0
+    assert s0["topology"]["field_texts"]["vorfeld"] == "Er"
+    assert s0["topology"]["field_texts"]["linke_klammer"] == "hat"
+    assert "gelesen" in s0["topology"]["field_texts"]["rechte_klammer"]
+
+
 
 
 

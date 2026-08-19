@@ -156,7 +156,8 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 | v3.2.0 `4bbea6c` | **feat & refactor**: 前端原生 ES Modules 模块化拆分（`static/js/*.js`）+ 歌德 A1-B2 离线核心词库（`core_dict.py` 0ms 查词与冠词复数） |
 | v3.3.0 `7009841` | **feat**: 德语外刊与学习源 RSS 一键订阅抓取（DW、Tagesschau、DLF、Spiegel、Zeit） |
 | `296d367` | **fix**: 修正 DLF/DW 新 RSS 源端点，支持 RDF 1.0/Atom/RSS 通用解析与正文提取增强 + 31 测试全绿 |
-| v3.4.0 (HEAD) | **feat**: 德语深度语言学引擎（556+ 不规则动词三态表 + 递归复合词拆解 + spaCy 可分动词框形双向联动高亮）+ 35 测试全绿 |
+| v3.4.0 | **feat**: 德语深度语言学引擎（556+ 不规则动词三态表 + 递归复合词拆解 + spaCy 可分动词框形双向联动高亮）+ 35 测试全绿 |
+| v3.5.0 (HEAD) | **feat**: 德语拓扑五场域与从句树句法引擎（`syntax_tree.py`：VF/LK/MF/RK/NF 拓扑场域切分 + 5 大核心从句 AST 递归树 + 被动/虚拟式框形识别）+ 52 测试全绿 |
 
 ---
 
@@ -171,6 +172,7 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 - [x] ~~`/api/ai/note-assist` 需要 `.env` 中配置 `DEEPSEEK_API_KEY`~~ — 本机已配；未配时后端返回 `_stub:true` + 打印 warning；前端显示状态提示而非污染笔记框
 - [x] ~~安卓 PWA「添加到主屏幕」后侧边抽屉（bottom sheet）触屏体验待实测验证~~ — 已改善：新增半透明 backdrop 点击关闭、`overflow:hidden` 锁定背景滚动、`touch-action:pan-y` + `overscroll-behavior:contain` 防止穿透
 - [x] ~~外刊 RSS 历史链接 404 及 DW RDF 格式解析失败~~ — 已修复：更新官方有效 RSS 地址，实现通用 XML 遍历并增强 `<article>` 抽取
+- [x] ~~德语拓扑五场域与从句树句法引擎（`syntax_tree.py`）~~ — 已实现：5 场域精确切分 + 5 大句式 AST 递归树 + 52 测试全绿
 
 ---
 
@@ -181,9 +183,9 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 地址:      http://localhost:8000
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
-NLP 模型:  de_core_news_md（已安装，无需联网）
-测试:      pytest test_server.py -v
-当前测试:  35 / 35 全部通过（100% Green）
+NLP 模型:  de_core_news_md / de_core_news_sm（已安装，无需联网）
+测试:      pytest -v
+当前测试:  52 / 52 全部通过（100% Green）
 ```
 
 

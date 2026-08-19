@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=3.4.2">
+  <link rel="stylesheet" href="/style.css?v=3.5.0">
 </head>
 <body>
 
@@ -332,6 +332,7 @@
     <div class="drawer-header">
       <div class="drawer-tabs">
         <button id="d-tab-vocab" class="drawer-tab-btn active" onclick="switchDrawerTab('vocab')">📖 词汇考点</button>
+        <button id="d-tab-syntax" class="drawer-tab-btn" onclick="switchDrawerTab('syntax')">🌳 句法拓扑</button>
         <button id="d-tab-note" class="drawer-tab-btn" onclick="switchDrawerTab('note')">📝 随笔便签</button>
         <button id="d-tab-all" class="drawer-tab-btn" onclick="switchDrawerTab('all')">✦ 全部</button>
       </div>
@@ -393,7 +394,39 @@
         </div>
       </div>
 
-      <!-- Section 2: Sticky Reading Notes Section -->
+      <!-- Section 2: Satzbau & Clause Tree Section -->
+      <div id="drawer-syntax-section" class="drawer-syntax-card hidden">
+        <div class="sticky-word-headline">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span style="font-size:0.875rem;font-weight:700;color:var(--ink);">🌳 句法拓扑与从句树 (AST)</span>
+          </div>
+          <span id="syntax-sent-type-badge" class="cefr-badge badge-B1">V2 主句</span>
+        </div>
+
+        <!-- Sentence preview -->
+        <div id="syntax-sent-quote" class="quote-text" style="margin-top:0.5rem;font-size:0.8125rem;color:var(--ink);background:var(--paper-accent);padding:0.5rem 0.75rem;border-radius:6px;line-height:1.5;"></div>
+
+        <!-- Felder Modell Grid -->
+        <div style="margin-top:1rem;">
+          <div style="font-size:0.75rem;font-weight:700;color:var(--pencil);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">德语拓扑五场域 (Felder-Modell)</div>
+          <div id="syntax-felder-grid" class="felder-grid">
+            <!-- Dynamic fields -->
+          </div>
+        </div>
+
+        <!-- Interactive Clause Tree Hierarchy -->
+        <div style="margin-top:1.25rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--pencil);text-transform:uppercase;letter-spacing:0.05em;">主从句分层拓扑树</div>
+            <span style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);">点击节点可高亮</span>
+          </div>
+          <div id="syntax-tree-container" class="syntax-tree-container">
+            <!-- Dynamic Clause Tree Nodes -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Sticky Reading Notes Section -->
       <div id="drawer-note-section" class="sticky-reading-note-card hidden">
         <div class="sticky-word-headline">
           <span style="font-size:0.875rem;font-weight:700;color:var(--ink);">📝 精读随笔便签</span>
@@ -691,7 +724,7 @@
     </button>
   </nav>
 
-  <script type="module" src="/js/main.js?v=3.4.2"></script>
+  <script type="module" src="/js/main.js?v=3.5.0"></script>
 
 
 </body>

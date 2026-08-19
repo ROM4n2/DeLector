@@ -141,11 +141,17 @@ export async function openReader(id) {
   renderReaderHeatbar(state.currentArticle.stats);
   const content = document.getElementById('reader-content');
   
-  let paraTokens = [];
+  let paraElements = [];
+  let currentSentences = [];
+
   state.currentArticle.sentences.forEach(sent => {
+    let hasParaBreak = false;
     const sentTokens = sent.tokens.map(t => {
       if (t.is_space) {
-        if (t.text.includes('\n\n')) return '__PARA__';
+        if (t.text.includes('\n\n')) {
+          hasParaBreak = true;
+          return '';
+        }
         if (t.text.includes('\n')) return '<br>';
         return ' ';
       }
@@ -160,17 +166,27 @@ export async function openReader(id) {
       return `<span id="tok-${t.id}" class="tok ${lvl}${sepClass}"${sepAttr} onclick="inspect(${t.id},${sent.id})">${esc(t.text)}</span>`;
     }).join('');
 
-    paraTokens.push(sentTokens);
+    const topoHtml = renderFelderSpectrum(sent.topology, sent.id);
+    const sentWrapper = `
+      <span class="reader-sent-unit" id="sent-unit-${sent.id}" data-sent-id="${sent.id}">
+        <span class="sent-text-wrap">${sentTokens}</span>
+        <button class="sent-syntax-btn" onclick="event.stopPropagation(); toggleSentenceTopology(${sent.id})" title="展开德语拓扑五场域与从句树 (Satzbau)">🌳 句法</button>
+      </span>
+      <div id="sent-topology-${sent.id}" class="sentence-topology-strip hidden">${topoHtml}</div>
+    `;
+
+    currentSentences.push(sentWrapper);
+    if (hasParaBreak) {
+      paraElements.push(`<p class="reader-p">${currentSentences.join(' ')}</p>`);
+      currentSentences = [];
+    }
   });
 
-  const fullText = paraTokens.join(' ');
-  const splitParas = fullText.split('__PARA__').map(p => p.trim()).filter(Boolean);
-  
-  if (splitParas.length > 0) {
-    content.innerHTML = splitParas.map(p => `<p class="reader-p">${p}</p>`).join('');
-  } else {
-    content.innerHTML = `<p class="reader-p">${fullText}</p>`;
+  if (currentSentences.length > 0) {
+    paraElements.push(`<p class="reader-p">${currentSentences.join(' ')}</p>`);
   }
+
+  content.innerHTML = paraElements.join('');
 
   ShadowPlayer.reset();
   applyTypography();
@@ -340,18 +356,22 @@ export function inspectSubWord(word, defZh, gender) {
 
 // ── Drawer & Tabs ────────────────────────────────────────────────────────────
 export function switchDrawerTab(tab) {
-  const tabVocab = document.getElementById('d-tab-vocab');
-  const tabNote  = document.getElementById('d-tab-note');
-  const tabAll   = document.getElementById('d-tab-all');
-  if (tabVocab) tabVocab.classList.toggle('active', tab === 'vocab');
-  if (tabNote)  tabNote.classList.toggle('active', tab === 'note');
-  if (tabAll)   tabAll.classList.toggle('active', tab === 'all');
+  const tabVocab  = document.getElementById('d-tab-vocab');
+  const tabSyntax = document.getElementById('d-tab-syntax');
+  const tabNote   = document.getElementById('d-tab-note');
+  const tabAll    = document.getElementById('d-tab-all');
+  if (tabVocab)  tabVocab.classList.toggle('active', tab === 'vocab');
+  if (tabSyntax) tabSyntax.classList.toggle('active', tab === 'syntax');
+  if (tabNote)   tabNote.classList.toggle('active', tab === 'note');
+  if (tabAll)    tabAll.classList.toggle('active', tab === 'all');
 
   const vocabWrap = document.getElementById('drawer-vocab-wrap');
+  const syntaxSec = document.getElementById('drawer-syntax-section');
   const noteSec   = document.getElementById('drawer-note-section');
 
-  if (vocabWrap) vocabWrap.classList.toggle('hidden', tab === 'note');
-  if (noteSec)   noteSec.classList.toggle('hidden', tab === 'vocab');
+  if (vocabWrap) vocabWrap.classList.toggle('hidden', tab !== 'vocab' && tab !== 'all');
+  if (syntaxSec) syntaxSec.classList.toggle('hidden', tab !== 'syntax' && tab !== 'all');
+  if (noteSec)   noteSec.classList.toggle('hidden', tab !== 'note' && tab !== 'all');
 
   const bodyEl = document.querySelector('.drawer-body');
   if (bodyEl) bodyEl.scrollTop = 0;
@@ -650,4 +670,173 @@ export function playSelectedAudio() {
 export function downloadStudyGuide() {
   if (!state.currentArticle) return;
   window.location.href = `/api/articles/${state.currentArticle.id}/export-guide`;
+}
+
+// ── Satzbau & Felder-Modell Engine ──────────────────────────────────────────
+
+export function renderFelderSpectrum(topology, sentId) {
+  if (!topology) return '<span style="font-size:0.75rem;color:var(--pencil);">五场域拓扑解析中...</span>';
+  const fields = [
+    { key: 'vorfeld', label: '前场 VF', cls: 'vf', desc: 'Vorfeld' },
+    { key: 'linke_klammer', label: '左框 LK', cls: 'lk', desc: 'Linke Klammer' },
+    { key: 'mittelfeld', label: '中场 MF', cls: 'mf', desc: 'Mittelfeld' },
+    { key: 'rechte_klammer', label: '右框 RK', cls: 'rk', desc: 'Rechte Klammer' },
+    { key: 'nachfeld', label: '后场 NF', cls: 'nf', desc: 'Nachfeld' }
+  ];
+
+  const boxes = fields.map(f => {
+    const toks = topology[f.key] || [];
+    const text = toks.map(t => t.text).join(' ') || '—';
+    const isEmp = toks.length === 0;
+    return `
+      <div class="feld-pill feld-${f.cls}${isEmp ? ' is-empty' : ''}" title="${f.desc}">
+        <span class="feld-tag">${f.label}</span>
+        <span class="feld-val">${esc(text)}</span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="felder-spectrum-bar">
+      ${boxes}
+    </div>
+    <div class="felder-bar-actions">
+      <button class="btn-open-ast-action" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${sentId})">在工作台展开从句拓扑树 AST ➔</button>
+    </div>
+  `;
+}
+
+export function renderDetailedFelderGrid(topology) {
+  if (!topology) return '<div class="empty-state">暂无拓扑场域数据</div>';
+  const fields = [
+    { key: 'vorfeld', name: '前场 (Vorfeld)', desc: '主语 / 状语 / 前置从句', cls: 'vf' },
+    { key: 'linke_klammer', name: '左框 (Linke Klammer)', desc: '主句变位动词 / 从句引导连词', cls: 'lk' },
+    { key: 'mittelfeld', name: '中场 (Mittelfeld)', desc: '核心论元 / 宾语 / 副词状语', cls: 'mf' },
+    { key: 'rechte_klammer', name: '右框 (Rechte Klammer)', desc: '未变位动词 / 分词 / 前缀 / 从句谓语', cls: 'rk' },
+    { key: 'nachfeld', name: '后场 (Nachfeld)', desc: '后置从句 / 比较短语 / 补充成分', cls: 'nf' }
+  ];
+
+  return fields.map(f => {
+    const toks = topology[f.key] || [];
+    const text = toks.map(t => t.text).join(' ') || '（空）';
+    const isEmp = toks.length === 0;
+    return `
+      <div class="feld-card feld-card-${f.cls}${isEmp ? ' is-empty-card' : ''}">
+        <div class="feld-card-header">
+          <span class="feld-card-title">${f.name}</span>
+          <span class="feld-card-desc">${f.desc}</span>
+        </div>
+        <div class="feld-card-content">${esc(text)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+export function renderClauseTreeNode(node, depth = 0, sentId) {
+  if (!node) return '<div class="syntax-empty" style="color:var(--pencil);font-size:0.8125rem;">暂无从句分层</div>';
+  
+  const typeCls = (node.type || 'hauptsatz').toLowerCase();
+  const formulaHtml = node.formula ? `<div class="clause-formula"><code>${esc(node.formula)}</code></div>` : '';
+  const connectorHtml = node.connector ? `<span class="clause-pill-tag tag-conn">引导: <strong>${esc(node.connector)}</strong></span>` : '';
+  const verbHtml = node.finite_verb ? `<span class="clause-pill-tag tag-verb">动词: <strong>${esc(node.finite_verb)}</strong></span>` : '';
+  const tokenIds = node.token_ids || [];
+  const tokenIdsJson = JSON.stringify(tokenIds);
+  
+  const childHtml = (node.children && node.children.length > 0)
+    ? `<div class="clause-children-tree">${node.children.map(c => renderClauseTreeNode(c, depth + 1, sentId)).join('')}</div>`
+    : '';
+
+  const cleanLabel = (node.label || node.type || '句法节点').replace(/'/g, "\\'");
+  const cleanFormula = (node.formula || '').replace(/'/g, "\\'");
+  const cleanText = (node.text || '').replace(/'/g, "\\'");
+
+  return `
+    <div class="clause-tree-node depth-${depth} type-${typeCls}">
+      <div class="clause-node-box" onclick="highlightClauseTokens(${tokenIdsJson})">
+        <div class="clause-node-top">
+          <span class="clause-type-name">${esc(node.label || node.type)}</span>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+            ${connectorHtml}
+            ${verbHtml}
+          </div>
+        </div>
+        ${formulaHtml}
+        <div class="clause-quote-text">„${esc(node.text || '')}“</div>
+        <div class="clause-node-footer">
+          <button class="btn-clause-pill" onclick="event.stopPropagation(); highlightClauseTokens(${tokenIdsJson})">🔍 聚焦高亮</button>
+          <button class="btn-clause-pill btn-save-anki" onclick="event.stopPropagation(); saveClauseAsGrammarCard('${cleanLabel}', '${cleanFormula}', '${cleanText}', ${sentId})">+ 加入语法卡</button>
+        </div>
+      </div>
+      ${childHtml}
+    </div>
+  `;
+}
+
+export function toggleSentenceTopology(sentId) {
+  const el = document.getElementById(`sent-topology-${sentId}`);
+  if (!el) return;
+  const isHidden = el.classList.contains('hidden');
+  document.querySelectorAll('.sentence-topology-strip').forEach(s => s.classList.add('hidden'));
+  if (isHidden) {
+    el.classList.remove('hidden');
+  }
+}
+
+export function openSyntaxDrawerForSentence(sentId) {
+  const sent = state.currentArticle?.sentences?.find(s => s.id === sentId);
+  if (!sent) return;
+  state.selectedSent = sent;
+
+  const quoteEl = document.getElementById('syntax-sent-quote');
+  if (quoteEl) quoteEl.textContent = sent.text;
+
+  const typeBadge = document.getElementById('syntax-sent-type-badge');
+  const tree = sent.clause_tree || {};
+  if (typeBadge) {
+    typeBadge.textContent = tree.label || 'V2 主句';
+  }
+
+  const felderGrid = document.getElementById('syntax-felder-grid');
+  if (felderGrid) {
+    felderGrid.innerHTML = renderDetailedFelderGrid(sent.topology);
+  }
+
+  const treeContainer = document.getElementById('syntax-tree-container');
+  if (treeContainer) {
+    treeContainer.innerHTML = renderClauseTreeNode(sent.clause_tree, 0, sentId);
+  }
+
+  openDrawer('syntax');
+}
+
+export function highlightClauseTokens(tokenIds) {
+  document.querySelectorAll('.tok.clause-highlight').forEach(el => el.classList.remove('clause-highlight'));
+  if (!tokenIds || !tokenIds.length) return;
+  tokenIds.forEach(id => {
+    const el = document.getElementById('tok-' + id);
+    if (el) el.classList.add('clause-highlight');
+  });
+}
+
+export async function saveClauseAsGrammarCard(label, formula, textSnippet, sentId) {
+  const sent = state.currentArticle?.sentences?.find(s => s.id === sentId);
+  if (!sent || !state.currentArticle) return;
+  try {
+    await api('/api/cards/grammar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        article_id: state.currentArticle.id,
+        sentence_context: sent.text,
+        grammar_name: label || '德语从句句法',
+        cefr_level: 'B1',
+        explanation_zh: `【${label}】\n句式公式：${formula || '德语经典拓扑结构'}\n例句分析：${textSnippet}`,
+        rule_formula: formula || 'Satzbau'
+      })
+    });
+    refreshCardCounters();
+    alert(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`);
+  } catch (err) {
+    alert('保存语法卡失败');
+  }
 }
