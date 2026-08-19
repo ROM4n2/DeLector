@@ -253,7 +253,7 @@ export async function openSettingsModal() {
   try {
     const s = await api('/api/settings');
     document.getElementById('set-base-url').value = s.api_base_url || 'https://api.deepseek.com';
-    document.getElementById('set-model-name').value = s.api_model || 'deepseek-chat';
+    document.getElementById('set-model-name').value = s.api_model || 'deepseek-v4-flash';
     if (s.tts_voice) document.getElementById('set-tts-voice').value = s.tts_voice;
     if (s.tts_rate) document.getElementById('set-tts-rate').value = s.tts_rate;
     
