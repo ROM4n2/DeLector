@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# 提交前扫描暂存内容里的密钥。
+#
+# 为什么扫"暂存文件全文"而不只扫 diff 新增行：按行 diff 会漏掉"把含密钥的行
+# 从一个文件挪到另一个文件"这类改动。本仓库历史已确认干净（2026-08-19 全量扫过
+# 可达提交与 git fsck 悬空对象），所以全文扫描不会带出历史遗留的噪声。
+#
+# 启用方式（clone 后必做一次，钩子目录不随 clone 生效）：
+#   git config core.hooksPath .githooks
+#
+# 误报处理：在该行加注释 `delector:allow-secret`，让豁免留在 diff 里可被审阅。
+# 不要用 `git commit --no-verify` 整体跳过。
+#
+# 用 bash 而非 sh：依赖 `read -d ''` 处理含空格的文件名。
+
+set -u
+
+PRAGMA='delector:allow-secret'
+HITS="$(mktemp)"
+trap 'rm -f "$HITS"' EXIT
+
+# 每项为 "名称|正则"。正则是 POSIX ERE（grep -E），\d、\w 之类不可用。
+PATTERNS='OpenAI/Anthropic 风格 key|sk-[A-Za-z0-9]{20,}
+AWS Access Key ID|AKIA[A-Z0-9]{16}
+GitHub PAT (classic)|ghp_[A-Za-z0-9]{36}
+GitHub PAT (fine-grained)|github_pat_[A-Za-z0-9_]{20,}
+Google API Key|AIza[A-Za-z0-9_-]{30,}
+Slack token|xox[baprs]-[A-Za-z0-9-]{10,}
+JWT|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}
+私钥 PEM 块|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+while IFS= read -r -d '' path; do
+    case "$path" in
+        *.example|*.sample|*.template) ;;
+        .env|*/.env|*.secret|*credentials*|*.pem|*.key|*id_rsa*|*id_ed25519*)
+            printf 'NAME\t%s\t密钥文件不应入库\n' "$path" >> "$HITS"
+            ;;
+    esac
+
+    # 文件可能在暂存后被删；取不到内容就跳过
+    content="$(git show ":$path" 2>/dev/null)" || continue
+
+    while IFS='|' read -r label regex; do
+        [ -n "${regex:-}" ] || continue
+        # grep -I 跳过二进制内容；必须用 -e 传正则——PEM 那条以 "-" 开头，
+        # 作为位置参数会被 grep 当成选项，于是私钥永远检不出来。
+        printf '%s' "$content" \
+            | grep -nIE -e "$regex" 2>/dev/null \
+            | grep -v -- "$PRAGMA" \
+            | cut -d: -f1 \
+            | while IFS= read -r lineno; do
+                # 只报位置与类型，不回显密钥本身——钩子输出会进终端记录和 CI 日志
+                printf 'LINE\t%s:%s\t%s\n' "$path" "$lineno" "$label" >> "$HITS"
+              done
+    done <<< "$PATTERNS"
+done < <(git diff --cached --name-only --diff-filter=ACM -z)
+
+if [ -s "$HITS" ]; then
+    printf '\n[pre-commit] 检测到疑似密钥/密钥文件，提交已阻止：\n\n'
+    while IFS=$'\t' read -r _kind where what; do
+        printf '  %-26s %s\n' "$what" "$where"
+    done < "$HITS"
+    cat <<'EOF'
+
+处理方式：
+  1. 密钥走环境变量或已被 .gitignore 忽略的本地配置，不要硬编码；
+  2. 若确认是占位符/测试数据造成的误报，在该行加注释 delector:allow-secret；
+  3. 若密钥已经推送过，删文件或改历史都消不掉——必须立即轮换该密钥。
+
+不要用 git commit --no-verify 跳过本检查。
+EOF
+    exit 1
+fi
+
+exit 0
