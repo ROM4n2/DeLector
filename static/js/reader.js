@@ -175,6 +175,21 @@ export async function openReader(id) {
   ShadowPlayer.reset();
   applyTypography();
   await loadArticleNotes(id);
+
+  // Setup separable verb hover linking
+  content.querySelectorAll('.tok.is-separable').forEach(tokEl => {
+    const partnerId = tokEl.getAttribute('data-sep-partner');
+    if (!partnerId) return;
+    tokEl.addEventListener('mouseenter', () => {
+      document.getElementById(partnerId)?.classList.add('linked-separable');
+    });
+    tokEl.addEventListener('mouseleave', () => {
+      const isSel = tokEl.classList.contains('sel') || document.querySelector('.tok.sel')?.getAttribute('data-sep-partner') === tokEl.id;
+      if (!isSel) {
+        document.getElementById(partnerId)?.classList.remove('linked-separable');
+      }
+    });
+  });
   
   // Dispatch view change
   if (window.show) window.show('reader');
@@ -194,14 +209,14 @@ export function inspect(tokenId, sentId) {
   state.selectedSent  = sent;
   state.grammarData   = null;
 
-  // Highlight separable partner if linked
+  // Highlight separable partner and self if linked
   if (token.separable) {
+    el?.classList.add('linked-separable');
     const partnerId = ('sep_prefix_id' in token.separable) ? token.separable.sep_prefix_id : token.separable.sep_verb_id;
     if (partnerId !== undefined && partnerId !== null) {
       document.getElementById('tok-' + partnerId)?.classList.add('linked-separable');
     }
   }
-
 
   const sentIdx = state.currentArticle.sentences.findIndex(s => s.id === sentId);
   if (sentIdx >= 0) {
@@ -228,10 +243,25 @@ export function inspect(tokenId, sentId) {
     (token.case ? ` · ${esc(token.case)}` : '');
   
   // Clear previous dynamic morphology sections
+  const oldSep = document.getElementById('d-separable-box');
+  if (oldSep) oldSep.remove();
   const oldStamm = document.getElementById('d-stammformen-box');
   if (oldStamm) oldStamm.remove();
   const oldKomposita = document.getElementById('d-komposita-box');
   if (oldKomposita) oldKomposita.remove();
+
+  // Render Separable Banner if applicable
+  if (token.separable && token.separable.sep_lemma) {
+    const metaEl = document.getElementById('d-meta');
+    const sepDiv = document.createElement('div');
+    sepDiv.id = 'd-separable-box';
+    sepDiv.className = 'separable-banner';
+    sepDiv.innerHTML = `
+      <span class="sep-tag">🔗 框形可分动词 (Satzklammer)</span>
+      <span class="sep-formula">合成原形: <strong>${esc(token.separable.sep_lemma)}</strong></span>
+    `;
+    metaEl.parentNode.insertBefore(sepDiv, metaEl.nextSibling);
+  }
 
   document.getElementById('d-def').value = '';
   document.getElementById('d-def-status').textContent = '词库查询中…';
@@ -239,6 +269,7 @@ export function inspect(tokenId, sentId) {
   document.getElementById('save-vocab-btn').textContent = '+ 加入 Anki 词汇卡';
   document.getElementById('grammar-result').classList.add('hidden');
   openDrawer('vocab');
+
 
   api('/api/lookup/vocab', {
     method: 'POST',

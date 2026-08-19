@@ -1266,22 +1266,24 @@ body.focus-mode .tok.focus-active {
 
 }
 
-/* Tap-to-close backdrop (visible only when drawer is open on mobile) */
+/* Tap-to-close backdrop (visible ONLY on mobile bottom-sheet overlay) */
 #drawer-backdrop {
   display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 89; /* just below drawer (z-index: 90) */
-  background: rgba(26, 23, 20, 0.35);
-  backdrop-filter: blur(1px);
-  -webkit-backdrop-filter: blur(1px);
-  cursor: pointer;
-  touch-action: none; /* prevent scroll pass-through while backdrop is active */
+}
+@media (max-width: 640px) {
+  #drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 89; /* just below drawer (z-index: 90) */
+    background: rgba(26, 23, 20, 0.35);
+    cursor: pointer;
+    touch-action: none;
+  }
+  body.drawer-open #drawer-backdrop {
+    display: block;
+  }
 }
 
-body.drawer-open #drawer-backdrop {
-  display: block;
-}
 
 #drawer.open { transform: none; }
 
@@ -5184,20 +5186,62 @@ body.drawer-open .shadow-player {
 /* Linked Separable Verbs Highlights in Reader */
 .tok.is-separable {
   text-decoration-line: underline;
-  text-decoration-style: dotted;
+  text-decoration-style: dashed;
   text-decoration-color: var(--accent, #2980b9);
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
 }
-.tok.linked-separable {
-  background-color: rgba(41, 128, 185, 0.2) !important;
-  color: var(--ink, #111) !important;
-  outline: 1.5px dashed var(--accent, #2980b9);
+.tok.is-separable:hover {
+  background-color: rgba(41, 128, 185, 0.12);
   border-radius: 2px;
-  animation: pulse-linked 1.5s infinite alternate ease-in-out;
+}
+
+/* Active Satzklammer linked pair highlight */
+.tok.linked-separable {
+  background-color: #dbeafe !important;
+  color: #1e3a8a !important;
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px #3b82f6, 0 2px 6px rgba(59, 130, 246, 0.35);
+  font-weight: 600;
+  animation: pulse-linked 1.8s infinite ease-in-out;
 }
 @keyframes pulse-linked {
-  from { background-color: rgba(41, 128, 185, 0.15); }
-  to { background-color: rgba(41, 128, 185, 0.35); }
+  0% { box-shadow: 0 0 0 2px #60a5fa, 0 0 6px rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 0 0 3px #2563eb, 0 0 14px rgba(37, 99, 235, 0.55); }
+  100% { box-shadow: 0 0 0 2px #60a5fa, 0 0 6px rgba(59, 130, 246, 0.3); }
 }
+
+.separable-banner {
+  margin-top: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(41, 128, 185, 0.08);
+  border-left: 3px solid var(--accent, #2980b9);
+  border-radius: 0 4px 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.sep-tag {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--accent, #2980b9);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.sep-formula {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.9375rem;
+  color: var(--ink, #1a1a1a);
+}
+.sep-formula strong {
+  color: var(--accent, #2980b9);
+}
+.sep-formula code {
+  background: rgba(0,0,0,0.05);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--mono, monospace);
+  font-size: 0.8125rem;
+}
+
 
 

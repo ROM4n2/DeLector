@@ -392,9 +392,9 @@ def process_german_text(text: str) -> Dict[str, Any]:
             token_map[t.i] = tok
             all_tokens.append(tok)
 
-        # Detect separable verb prefixes in sentence (compound:prt or svp)
+        # Detect separable verb prefixes in sentence (compound:prt or svp or PTKVZ)
         for t in spacy_tokens:
-            if t.dep_ in ("compound:prt", "svp", "ptkv"):
+            if t.dep_ in ("compound:prt", "svp", "ptkv") or t.tag_ == "PTKVZ":
                 head = t.head
                 if head and head.i in token_map:
                     prefix_str = (t.lemma_ or t.text).lower().strip()
@@ -416,9 +416,16 @@ def process_german_text(text: str) -> Dict[str, Any]:
                         "sep_lemma": sep_lemma
                     }
 
+                    # Re-evaluate CEFR level based on full separable verb (e.g. einsteigen -> A1 instead of steigen -> B1)
+                    sep_cefr = get_cefr_level(sep_lemma)
+                    verb_tok["cefr_level"] = sep_cefr
+                    prefix_tok["cefr_level"] = sep_cefr
+                    verb_tok["lemma"] = sep_lemma
+
         sentences.append({"id": sent_idx, "text": sent.text, "tokens": tokens})
     stats = calculate_cefr_stats(all_tokens)
     return {"version": "3.4.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
+
 
 
 # --- 3. Anki Exporter ---
