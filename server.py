@@ -47,13 +47,17 @@ def load_env():
 
 load_env()
 
-AUDIO_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache", "audio")
-os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
+DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", os.path.dirname(__file__))
+AUDIO_CACHE_DIR = os.path.join(DATA_DIR, ".cache", "audio")
+try:
+    os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
+except Exception:
+    pass
 
-PROGRESS_DB_PATH = os.path.join(os.path.dirname(__file__), "progress.db")
+PROGRESS_DB_PATH = os.path.join(DATA_DIR, "progress.db")
 
 def get_db_path(db_path: Optional[str] = None) -> str:
-    return db_path or os.environ.get("DATABASE_PATH", "delector.db")
+    return db_path or os.environ.get("DATABASE_PATH", os.path.join(DATA_DIR, "delector.db"))
 
 def get_progress_db_path(db_path: Optional[str] = None) -> str:
     return db_path or os.environ.get("PROGRESS_DB_PATH", PROGRESS_DB_PATH)
@@ -1801,5 +1805,17 @@ def api_syntax_analyze(req: SyntaxAnalyzeReq):
     return analyze_syntax_tree(req.text)
 
 # Mount Static UI (Catch-all must be at the very end)
-if os.path.exists("static"):
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+STATIC_DIR = os.environ.get("STATIC_DIR")
+if not STATIC_DIR or not os.path.exists(STATIC_DIR):
+    for candidate in [
+        os.path.join(DATA_DIR, "static"),
+        os.path.join(os.path.dirname(__file__), "static"),
+        os.path.join(os.getcwd(), "static"),
+        "static"
+    ]:
+        if os.path.exists(candidate) and os.path.isdir(candidate):
+            STATIC_DIR = candidate
+            break
+
+if STATIC_DIR and os.path.exists(STATIC_DIR):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
