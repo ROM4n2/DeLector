@@ -50,6 +50,7 @@ jobs:
   build-android:
     name: Build Android Standalone APK
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -92,7 +93,7 @@ jobs:
       - name: Locate and Rename APK
         run: |
           mkdir -p dist
-          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} dist/DeLector-v3.5.0-Android.apk \; || touch dist/DeLector-v3.5.0-Android.apk
+          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} dist/DeLector-v3.5.0-Android.apk \;
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
@@ -104,7 +105,7 @@ jobs:
     name: Publish GitHub Release
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && needs.build-windows.result == 'success' && startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -117,6 +118,7 @@ jobs:
 
       - name: Download Android Artifact
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: DeLector-Android-APK
           path: dist/
@@ -126,7 +128,6 @@ jobs:
         with:
           files: |
             dist/DeLector-v3.5.0-Windows-x64-Portable.zip
-            dist/DeLector-v3.5.0-Android.apk
           name: DeLector v${{ github.ref_name }} — 德语学术精读与备考工作台
           body: |
             ## 🌟 DeLector v${{ github.ref_name }} 正式发布

@@ -22,11 +22,11 @@ android {
         python {
             version "3.10"
             pip {
-                install "fastapi"
+                install "pydantic<2.0.0"
+                install "fastapi<0.100.0"
                 install "uvicorn"
                 install "httpx"
                 install "genanki"
-                install "spacy"
             }
         }
     }
