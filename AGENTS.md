@@ -151,7 +151,8 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 | `236e2bf` | docs: 创建 AGENTS.md 交接文档 |
 | v3.1.0 `91de593` | **fix**: Leporello 色段精度（整数归一化）+ Android PWA bottom-sheet 触屏体验（backdrop + scroll lock + touch-action）+ `/api/ai/note-assist` 配置诊断（warning log + `_stub` flag） |
 | v3.2.0 `4bbea6c` | **feat & refactor**: 前端原生 ES Modules 模块化拆分（`static/js/*.js`）+ 歌德 A1-B2 离线核心词库（`core_dict.py` 0ms 查词与冠词复数） |
-| v3.3.0 (HEAD) | **feat**: 德语外刊与学习源 RSS 一键订阅抓取（DW Top-Thema/慢速德语、Tagesschau、DLF Kultur）+ 30 测试全绿 |
+| v3.3.0 `7009841` | **feat**: 德语外刊与学习源 RSS 一键订阅抓取（DW、Tagesschau、DLF、Spiegel、Zeit） |
+| `296d367` (HEAD) | **fix**: 修正 DLF/DW 新 RSS 源端点，支持 RDF 1.0/Atom/RSS 通用解析与正文提取增强 + 31 测试全绿 |
 
 ---
 
@@ -165,6 +166,7 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
 - [x] ~~Leporello 台账第 2/3 页墨线折线图在某些浏览器下可能有精度问题~~ — 已修复：`normalizeCefrPct()` 最大余数法整数归一，`gap:1px` 改为段内 `border-right`，`min-width:1px; flex-shrink:0`
 - [x] ~~`/api/ai/note-assist` 需要 `.env` 中配置 `DEEPSEEK_API_KEY`~~ — 本机已配；未配时后端返回 `_stub:true` + 打印 warning；前端显示状态提示而非污染笔记框
 - [x] ~~安卓 PWA「添加到主屏幕」后侧边抽屉（bottom sheet）触屏体验待实测验证~~ — 已改善：新增半透明 backdrop 点击关闭、`overflow:hidden` 锁定背景滚动、`touch-action:pan-y` + `overscroll-behavior:contain` 防止穿透
+- [x] ~~外刊 RSS 历史链接 404 及 DW RDF 格式解析失败~~ — 已修复：更新官方有效 RSS 地址，实现通用 XML 遍历并增强 `<article>` 抽取
 
 ---
 
@@ -177,8 +179,9 @@ new_ef = max(1.3, ef + 0.1 - (5-q)*(0.08 + (5-q)*0.02))
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  de_core_news_md（已安装，无需联网）
 测试:      pytest test_server.py -v
-当前测试:  30 / 30 全部通过（100% Green）
+当前测试:  31 / 31 全部通过（100% Green）
 ```
+
 
 
 
