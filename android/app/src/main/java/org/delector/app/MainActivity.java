@@ -9,11 +9,13 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.speech.tts.TextToSpeech;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -36,6 +38,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
@@ -47,6 +50,45 @@ public class MainActivity extends AppCompatActivity {
     private volatile String fatalError = null;
     private int reloadAttempts = 0;
     private long lastBackPressTime = 0;
+    private NativeTTSBridge nativeTTS;
+
+    public class NativeTTSBridge {
+        private TextToSpeech tts;
+        private boolean isInitialized = false;
+
+        public NativeTTSBridge() {
+            tts = new TextToSpeech(MainActivity.this, status -> {
+                if (status == TextToSpeech.SUCCESS) {
+                    int result = tts.setLanguage(Locale.GERMAN);
+                    if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                        isInitialized = true;
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void speak(String text, float rate) {
+            if (tts != null && isInitialized && text != null) {
+                tts.setSpeechRate(rate);
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "delector_speech_" + System.currentTimeMillis());
+            }
+        }
+
+        @JavascriptInterface
+        public void stop() {
+            if (tts != null) {
+                tts.stop();
+            }
+        }
+
+        public void shutdown() {
+            if (tts != null) {
+                tts.stop();
+                tts.shutdown();
+            }
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -60,9 +102,11 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#FAF8F5"));
 
-        // 2. Setup WebView
+        // 2. Setup WebView & Native TTS
         webView = new WebView(this);
         webView.setVisibility(View.GONE);
+        nativeTTS = new NativeTTSBridge();
+        webView.addJavascriptInterface(nativeTTS, "AndroidNativeTTS");
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
@@ -365,5 +409,13 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this, "再按一次退出 DeLector", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (nativeTTS != null) {
+            nativeTTS.shutdown();
+        }
+        super.onDestroy();
     }
 }

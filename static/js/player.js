@@ -6,6 +6,13 @@ import { state } from './core.js';
 export async function playGermanAudio(text, rate = 0.88) {
   if (!text) return;
   const clean = text.trim();
+
+  // 1. Android Native TTS Bridge (Zero-latency offline German TTS)
+  if (window.AndroidNativeTTS && typeof window.AndroidNativeTTS.speak === 'function') {
+    window.AndroidNativeTTS.speak(clean, rate);
+    return;
+  }
+
   const voice = ShadowPlayer.voice || localStorage.getItem('delector_voice') || 'de-DE-KatjaNeural';
   const ratePercent = Math.round((rate - 1.0) * 100);
   const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
@@ -180,6 +187,16 @@ export const ShadowPlayer = {
   },
 
   fallbackWebSpeech(sent) {
+    if (window.AndroidNativeTTS && typeof window.AndroidNativeTTS.speak === 'function') {
+      window.AndroidNativeTTS.speak(sent.text.trim(), this.rate);
+      const estDuration = Math.max(1500, sent.text.length * 75);
+      setTimeout(() => {
+        if (!this.isPlaying) return;
+        this.handleSentenceFinished(estDuration);
+      }, estDuration);
+      return;
+    }
+
     if (!('speechSynthesis' in window)) return;
     this.isIntentionalCancel = true;
     window.speechSynthesis.cancel();

@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 PR #2 修复 + 文档交接 + 工作流 `vv` 修复 + v3.5.0 重发），已推送、与远端对齐，工作区干净 |
+| 当前分支 / HEAD | `master`（含 v3.5.1 安卓体验与音频重构），工作区干净 |
 | 测试 | **64 / 64 全绿**（`test_server.py` 49 + `test_syntax_tree.py` 15） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
-| Android APK | **真机验证通过**，spaCy 与德语模型在设备上正常加载（`nlp_engine == "spacy"`） |
-| 对外发布 | **v3.5.0 已重发并验证**（2026-08-19）：首版内容错误（PR #2 前的旧版），已删除并重建 tag 于 master，CI 重新发布。新资产 APK 56.7 MiB（arm64-v8a only）+ Windows 75.4 MB；拆包确认 `extract_packages=['de_core_news_sm','spacy','thinc']`、模型 `de_core_news_sm-3.8.0` 在 app.imy 内。标题 `DeLector v3.5.0`（`vv` bug 已修） |
+| Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 |
+| 对外发布 | **v3.5.1 发布**（2026-08-19）：修复导入弹窗、台账/卡片响应式、DownloadManager 下载监听、物理返回键拦截、触感震动与 Android Native TTS 音频播放 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -322,6 +322,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | v3.5.0 | **feat & build**: 全局设置弹窗 + Windows 便携版与 Android 独立版 CI/CD |
 | **PR #2 `c3de92f`** | **fix(android)**: 修复启动卡死（降级路径 `NameError`）+ 切句器去重 + Android 错误可见性与重载上限 + Android 只绑回环 + **移植真 spaCy 进 APK**（arm64-only 56.7MB）+ `extractPackages` 与模型三级加载回退 + 模型 md 优先 + **pre-commit 密钥扫描钩子**；真机验证 `nlp_engine == "spacy"` |
 | **v3.5.0 Release `2026-08-19`（重发）** | 首版发布内容是 PR #2 之前的 `4ede08f`（三 ABI、无 spaCy、纯 Python 降级），已**删除重发**：tag 重建于 master，CI 产出 arm64-only 56.7 MiB APK（`extract_packages=['de_core_news_sm','spacy','thinc']` 拆包核对）+ Windows 75.4 MB。工作流 `vv` 命名 bug 已修（`name: DeLector ${{ github.ref_name }}`） |
+| **v3.5.1 Release `2026-08-19`** | **fix(mobile & audio)**: 修复 6 大安卓交互（导入弹窗、台账/卡片响应式、DownloadManager 下载监听、物理返回键拦截、触感震动）+ 引入 Android Native TextToSpeech 原生离线发音桥接 + CI 流水线版本参数化 |
 
 ---
 
@@ -329,10 +330,8 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 
 > 更新时间：2026-08-19
 
-- [ ] **工作流硬编码资产名**：`build-release.yml` 的 Windows zip / APK 文件名与 release
-      `files`/`body` 硬编码了 `v3.5.0`。本次重发恰好也是 v3.5.0 所以没影响；下次升版本
-      （如 v3.6.0）必须参数化成 `${{ github.ref_name }}`，否则资产名/说明会错。
-      `vv` 命名 bug 已修（`name: DeLector ${{ github.ref_name }}`）
+- [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
+- [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
 - [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
       md 实际加载未在本机跑过
