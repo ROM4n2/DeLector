@@ -27,6 +27,10 @@ android {
                 install "uvicorn"
                 install "httpx"
                 install "genanki"
+                // Chaquopy 自己的 native 仓库提供 cp310/android_24 的预编译 wheel，
+                // 会连带拉入 thinc/blis/numpy/cymem/preshed/murmurhash/srsly。
+                // 不额外 pin numpy，让 Chaquopy 的解析器用它仓库里那份（cp310 只有 1.26.2）。
+                install "spacy==3.8.7"
             }
         }
     }

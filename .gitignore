@@ -11,4 +11,7 @@ artifact*.html
 build/
 dist/
 *.spec
+.gradle/
+android/app/src/main/python/
+android/app/src/main/assets/static/
 

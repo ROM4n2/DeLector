@@ -75,8 +75,19 @@ jobs:
 
       - name: Sync Python Backend, Model, and Assets into Android Project
         run: |
-          pip install spacy
+          # APK 里装的是 Chaquopy 预编译的 spacy 3.8.7，宿主机也必须留在 3.8.x，
+          # 否则下载到的模型 compat 区间会漂出 >=3.8.0,<3.9.0，APK 端加载失败。
+          pip install "spacy>=3.8,<3.9"
           python -m spacy download de_core_news_sm
+          python - <<'PY'
+          import spacy
+          APK_SPACY = "3.8.7"
+          compat = spacy.info("de_core_news_sm")["spacy_version"]
+          from spacy.util import is_compatible_version
+          assert is_compatible_version(APK_SPACY, compat), \
+              f"模型要求 spaCy {compat}，与 APK 内的 {APK_SPACY} 不兼容"
+          print(f"模型 compat={compat} 与 APK spaCy {APK_SPACY} 匹配")
+          PY
           mkdir -p android/app/src/main/python
           cp -r server.py start.py core_dict.py linguistics.py syntax_tree.py android/app/src/main/python/
           MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
