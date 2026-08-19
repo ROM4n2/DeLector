@@ -907,6 +907,17 @@ def get_article(article_id: int):
         data.update(pj)
         return data
 
+@app.delete("/api/articles/{article_id}")
+def delete_article(article_id: int):
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM articles WHERE id = ?", (article_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Article not found")
+        conn.execute("DELETE FROM reading_notes WHERE article_id = ?", (article_id,))
+        conn.execute("DELETE FROM articles WHERE id = ?", (article_id,))
+        return {"deleted": True, "article_id": article_id}
+
+
 
 SYSTEM_GRAMMAR_PROMPT = """你是一位精通德语欧标（Goethe-Zertifikat A1-C1）的资深德语教学与考点解析专家。
 用户会提供一个德语完整句子，以及他们点击的目标词汇或短语（用户可能是 A1-A2 零基础/初学者）。

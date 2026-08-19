@@ -112,6 +112,19 @@ export function renderReaderHeatbar(stats) {
 }
 
 // ── Articles ─────────────────────────────────────────────────────────────────
+export async function deleteArticle(id, title) {
+  const name = title || '该文章';
+  if (!confirm(`确定要删除《${name}》及其所有阅读笔记吗？此操作无法撤销。`)) {
+    return;
+  }
+  try {
+    await api('/api/articles/' + id, { method: 'DELETE' });
+    await loadArticles();
+  } catch (err) {
+    alert('删除文章失败: ' + (err.message || err));
+  }
+}
+
 export async function loadArticles() {
   const el = document.getElementById('article-list');
   if (!el) return;
@@ -129,7 +142,10 @@ export async function loadArticles() {
           <div class="article-row-meta">${a.created_at} · ${a.char_count} 字符</div>
           ${renderMiniBar(a.stats)}
         </div>
-        <span class="article-row-arrow">→</span>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
+          <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${a.id}, '${esc(a.title)}')" title="删除文章">🗑</button>
+          <span class="article-row-arrow">→</span>
+        </div>
       </div>`).join('');
   } catch (err) {
     el.innerHTML = '<div class="empty-state">文章列表加载失败</div>';
@@ -843,3 +859,8 @@ export async function saveClauseAsGrammarCard(label, formula, textSnippet, sentI
     alert('保存语法卡失败');
   }
 }
+
+if (typeof window !== 'undefined') {
+  window.deleteArticle = deleteArticle;
+}
+

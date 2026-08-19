@@ -1,11 +1,12 @@
 /* DeLector - Application Main Entry & Router */
 'use strict';
 
-import { state, api } from './core.js';
+import { state, api, esc } from './core.js';
 import { ShadowPlayer, playGermanAudio } from './player.js';
 import { Companion } from './companion.js';
 import {
   loadArticles,
+  deleteArticle,
   openReader,
   inspect,
   toggleCefrFocus,
@@ -81,6 +82,7 @@ import {
 
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
+  if (view === 'articles') view = 'home';
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   const targetView = document.getElementById('view-' + view);
   if (targetView) targetView.classList.add('active');
@@ -577,6 +579,7 @@ Object.assign(window, {
 
   // Reader & Token Inspector
   openReader,
+  deleteArticle,
   inspect,
   toggleCefrFocus,
   clearCefrFocus,

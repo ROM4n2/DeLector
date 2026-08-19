@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v3.7.0 德语伴读宠物「Eule & 伙伴」混合双模系统：4 矢量 SVG 角色、台账工坊展台 + 全局悬浮球、德语地道鼓励库、SM-2/完形/测验/制卡全链路接线），工作区干净 |
+| 当前分支 / HEAD | `master`（含 v3.7.1 伴读宠物 Phase 2：SVG 自定义角色上传、DOMParser 白名单消毒、localStorage 注册与双挂载点全量接线），工作区干净 |
 | 测试 | **64 / 64 全绿**（`test_server.py` 49 + `test_syntax_tree.py` 15） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v3.7.0**（2026-08-19）：德语伴读宠物「Eule & 伙伴」混合双模系统（4 矢量 SVG 角色、台账工坊展台 + 全局右下角悬浮伴读球、德语 A1–B1 鼓励短语库、TTS 语音发声与 8s 冷却、全学习场景事件联动） |
+| 对外发布 | **v3.7.1**（2026-08-19）：伴读宠物 Phase 2（自定义 SVG 角色上传、DOMParser 递归消毒白名单、安全协议过滤、自定义角色持久化注册、研习工坊与全局浮层双入口） |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -329,6 +329,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v3.6.1 `2026-08-19`** | **feat(ui & design-system)**: Phase 2 全局设计系统深度同步升级：文稿库 `.articles-grid` 现代社论卡片质感（`1.5px` 墨线、`3px` 实体物理投影、等宽打字机徽章、经典衬线标题与朱砂珊瑚红悬停交互）+ 包豪斯实体工坊导入弹窗与德语外刊 RSS 展台卡片 + 36px 极薄元数据走字 Ticker + 温润纸感触控底部 Dock |
 | **v3.6.2 `2026-08-19`** | **feat(folio & landing-page)**: 台账（Folio）重塑为 Atelier 呼吸感落地页：0.85:1.15 不对称 Hero 展台、歌德名言、6 核心 Ring Badges 大展盘（带四角标点 `+` 与 ECHTZEIT 脉冲标签）、双行反向 Wire Marquee 动态走字带（上行名言语录，下行实时战报数据）、欧标/走势与错题/勋章双面板紧凑并排网格 |
 | **v3.7.0 `2026-08-19`** | **feat(companion & mascot)**: 德语伴读宠物（Companion Mascot）「Eule & 伙伴」混合双模系统全量落地：4 款内嵌矢量 SVG 角色（歌德猫头鹰、学者猫、灵动狐、包豪斯机甲）+ 研读工坊台账展台与全局悬浮伴读球双挂载点 + A1–B1 地道鼓励短语库 + 三层 TTS 语音发声与 8s 冷却 + 6 大物理/情绪 Keyframes 动画 + 生词卡/语法卡/SM-2 复习/完形填空/测验全链路事件接线 |
+| **v3.7.1 `2026-08-19`** | **feat(companion & upload)**: 伴读宠物 Phase 2 角色工坊上线：支持用户上传任意自定义 `.svg` 矢量图形（$\le 64\text{KB}$）、严格 DOMParser 递归白名单消毒（过滤 `<script>`、`<foreignObject>`、`on*` 与非法协议）、`localStorage` 持久化注册并在研习工坊及全局浮层无缝切换 |
 
 ---
 

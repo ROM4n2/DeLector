@@ -539,7 +539,6 @@ a { color: inherit; text-decoration: none; }
   opacity: 0.35;
   transition: all 0.15s ease;
   flex-shrink: 0;
-  margin-left: 1rem;
 }
 
 .article-row:hover .article-row-arrow {
@@ -547,6 +546,32 @@ a { color: inherit; text-decoration: none; }
   color: var(--accent);
   transform: translateX(4px);
 }
+
+.article-row-del {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--pencil);
+  font-size: 0.95rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.2;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.article-row:hover .article-row-del {
+  opacity: 0.6;
+}
+
+.article-row-del:hover {
+  opacity: 1 !important;
+  color: #dc2626 !important;
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.2);
+  transform: scale(1.1);
+}
+
 
 /* Mini CEFR Bar on Article Rows & Cards */
 
@@ -6157,6 +6182,22 @@ body.drawer-open .shadow-player {
   box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
 }
 
+.mascot-upload-btn {
+  background: var(--paper-deep, #f0ede6);
+  border-style: dashed;
+}
+
+.mascot-upload-btn:hover {
+  background: var(--paper-accent, #ede8df);
+  border-color: var(--accent, #d9663f);
+  color: var(--accent, #d9663f);
+}
+
+.mascot-choice-btn.mascot-custom-btn.active {
+  background: var(--ink, #1a1a1a);
+  color: #f7d070;
+}
+
 .mascot-text-input {
   background: var(--paper, #faf8f5);
   border: 1.5px solid var(--ink, #1a1a1a);
@@ -6245,6 +6286,13 @@ body.drawer-open .shadow-player {
 .companion.is-disabled .companion-avatar {
   display: flex !important;
   opacity: 0.6;
+}
+
+.companion-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
 }
 
 .companion-char {
@@ -6389,6 +6437,21 @@ body.drawer-open .shadow-player {
 .panel-char-btn.active {
   background: var(--ink, #1a1a1a);
   box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+}
+
+.panel-upload-btn {
+  background: var(--paper-deep, #f0ede6);
+  border-style: dashed;
+}
+
+.panel-upload-btn:hover {
+  background: var(--paper-accent, #ede8df);
+  border-color: var(--accent, #d9663f);
+}
+
+.panel-char-btn.mascot-custom-btn.active {
+  background: var(--ink, #1a1a1a);
+  color: #f7d070;
 }
 
 #panel-name {

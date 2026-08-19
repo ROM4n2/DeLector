@@ -268,6 +268,101 @@ export const PHRASES = {
   ]
 };
 
+// ── SVG Sanitizer & Custom Character Processing ────────────────────────────
+export function sanitizeSvg(rawSvg) {
+  if (typeof rawSvg !== 'string' || !rawSvg.trim()) {
+    throw new Error('SVG 内容为空');
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawSvg.trim(), 'image/svg+xml');
+
+  const parserError = doc.querySelector('parsererror');
+  if (parserError) {
+    throw new Error('SVG XML 解析失败: ' + (parserError.textContent?.slice(0, 100) || '格式错误'));
+  }
+
+  const svgEl = doc.querySelector('svg');
+  if (!svgEl) {
+    throw new Error('未找到有效的 <svg> 根节点');
+  }
+
+  const ALLOWED_TAGS = new Set([
+    'svg', 'g', 'circle', 'rect', 'path', 'ellipse', 'line',
+    'polygon', 'polyline', 'text', 'tspan', 'defs',
+    'lineargradient', 'radialgradient', 'stop', 'clippath', 'mask'
+  ]);
+
+  // Recursively sanitize all descendant elements
+  const allElements = Array.from(svgEl.querySelectorAll('*'));
+  for (const el of allElements) {
+    const tag = el.tagName.toLowerCase();
+    if (!ALLOWED_TAGS.has(tag)) {
+      el.remove();
+      continue;
+    }
+
+    // Sanitize attributes
+    const attrs = Array.from(el.attributes);
+    for (const attr of attrs) {
+      const name = attr.name.toLowerCase();
+      const val = attr.value.trim().toLowerCase();
+
+      // Block any event handlers (onclick, onload, onerror, etc.)
+      if (name.startsWith('on')) {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+
+      // Block dangerous protocol schemes or script injections
+      if (val.includes('javascript:') || val.includes('vbscript:') || val.includes('data:text/html') || val.includes('expression(')) {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+
+      // href / xlink:href only permitted if pointing to local SVG IDs (e.g. #gradientId)
+      if (name === 'href' || name === 'xlink:href') {
+        if (!attr.value.trim().startsWith('#')) {
+          el.removeAttribute(attr.name);
+          continue;
+        }
+      }
+
+      // Style attribute check
+      if (name === 'style') {
+        if (/url\s*\(|expression|javascript|@import|-moz-binding/i.test(attr.value)) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    }
+  }
+
+  // Sanitize root svg attributes
+  const rootAttrs = Array.from(svgEl.attributes);
+  for (const attr of rootAttrs) {
+    const name = attr.name.toLowerCase();
+    const val = attr.value.trim().toLowerCase();
+    if (name.startsWith('on') || val.includes('javascript:') || val.includes('vbscript:') || val.includes('data:text/html') || val.includes('expression(')) {
+      svgEl.removeAttribute(attr.name);
+    }
+  }
+
+  // Ensure companion-svg class on root
+  const currentClass = svgEl.getAttribute('class') || '';
+  if (!currentClass.includes('companion-svg')) {
+    svgEl.setAttribute('class', (currentClass + ' companion-svg').trim());
+  }
+
+  // Ensure viewBox
+  if (!svgEl.getAttribute('viewBox')) {
+    const w = parseFloat(svgEl.getAttribute('width')) || 100;
+    const h = parseFloat(svgEl.getAttribute('height')) || 100;
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  }
+
+  return svgEl.outerHTML;
+}
+
 // ── Companion Mascot Singleton Controller ────────────────────────────────────
 export const Companion = {
   charId: 'owl',
@@ -280,7 +375,28 @@ export const Companion = {
   lastSpeechAt: 0,
   lastPhraseKey: '',
 
+  sanitizeSvg,
+
   init() {
+    // 0. Restore custom character SVG from localStorage if present
+    const savedCustomSvg = localStorage.getItem('delector_companion_custom_svg');
+    if (savedCustomSvg) {
+      try {
+        const cleanSvg = sanitizeSvg(savedCustomSvg);
+        this.registerCharacter('custom', {
+          name: '自定义',
+          emoji: '✨',
+          title: '自定义伴读',
+          primary: '#15140f',
+          accent: '#ed6f5c',
+          svg: cleanSvg
+        });
+      } catch (e) {
+        console.warn('[Companion] Failed to restore custom SVG:', e);
+        localStorage.removeItem('delector_companion_custom_svg');
+      }
+    }
+
     // 1. Read persistent settings
     this.charId = localStorage.getItem('delector_companion_char') || 'owl';
     if (!CHARACTERS[this.charId]) this.charId = 'owl';
@@ -311,12 +427,86 @@ export const Companion = {
       name: def.name || id,
       emoji: def.emoji || '✨',
       title: def.title || def.name || id,
-      primary: def.primary || '#6b4f8f',
-      accent: def.accent || '#e8953a',
+      primary: def.primary || '#15140f',
+      accent: def.accent || '#ed6f5c',
       svg: def.svg
     };
+    if (id === 'custom') {
+      const studioCustomBtn = document.getElementById('studio-btn-custom');
+      if (studioCustomBtn) studioCustomBtn.style.display = '';
+      const panelCustomBtn = document.getElementById('panel-btn-custom');
+      if (panelCustomBtn) panelCustomBtn.style.display = '';
+    }
     this.renderAll();
     this.syncStudio();
+  },
+
+  async handleSvgUpload(file) {
+    if (!file) return;
+
+    // 1. Validate file extension / mime type
+    const isSvgExt = file.name && file.name.toLowerCase().endsWith('.svg');
+    const isSvgMime = file.type === 'image/svg+xml' || file.type === '' || file.type === 'text/xml';
+    if (!isSvgExt && !isSvgMime) {
+      if (window.showUndoToast) window.showUndoToast('❌ 仅支持上传 .svg 格式矢量图形文件');
+      return;
+    }
+
+    // 2. Validate file size <= 64KB
+    const MAX_SIZE = 64 * 1024;
+    if (file.size > MAX_SIZE) {
+      if (window.showUndoToast) window.showUndoToast('❌ SVG 文件大小不能超过 64KB');
+      return;
+    }
+
+    try {
+      const rawText = await file.text();
+      const cleanSvg = sanitizeSvg(rawText);
+
+      // 3. Register custom character
+      this.registerCharacter('custom', {
+        name: '自定义',
+        emoji: '✨',
+        title: '自定义伴读',
+        primary: '#15140f',
+        accent: '#ed6f5c',
+        svg: cleanSvg
+      });
+
+      // 4. Save to localStorage and switch
+      localStorage.setItem('delector_companion_custom_svg', cleanSvg);
+      this.setCharacter('custom');
+
+      if (window.showUndoToast) {
+        window.showUndoToast('✓ 自定义伴读角色已导入并生效');
+      }
+      this.triggerEmotion('happy');
+      this.say({
+        de: "Hallo! Ich bin dein individueller Begleiter!",
+        zh: "你好！我是你的专属自定义伴读角色！"
+      });
+    } catch (err) {
+      console.error('[Companion] SVG Upload error:', err);
+      if (window.showUndoToast) {
+        window.showUndoToast('❌ SVG 解析失败: ' + (err.message || '格式损坏'));
+      }
+    }
+  },
+
+  triggerUpload(source = 'studio') {
+    const inputId = source === 'panel' ? 'panel-svg-input' : 'studio-svg-input';
+    const input = document.getElementById(inputId) || document.getElementById('studio-svg-input');
+    if (input) input.click();
+  },
+
+  onFileSelected(event) {
+    const file = event?.target?.files?.[0];
+    if (file) {
+      this.handleSvgUpload(file);
+    }
+    if (event?.target) {
+      event.target.value = '';
+    }
   },
 
   getCurrentCharDef() {
@@ -527,10 +717,19 @@ export const Companion = {
   syncStudio() {
     const charDef = this.getCurrentCharDef();
 
+    // 0. Update custom button visibility
+    const hasCustom = !!CHARACTERS.custom;
+    const studioCustomBtn = document.getElementById('studio-btn-custom');
+    if (studioCustomBtn) {
+      studioCustomBtn.style.display = hasCustom ? '' : 'none';
+    }
+
     // 1. Char Selector Active state
     document.querySelectorAll('.mascot-choice-btn').forEach(btn => {
       const char = btn.getAttribute('data-char');
-      btn.classList.toggle('active', char === this.charId);
+      if (char) {
+        btn.classList.toggle('active', char === this.charId);
+      }
     });
 
     // 2. Input values
@@ -555,10 +754,19 @@ export const Companion = {
   },
 
   syncPanel() {
-    // Sync mini floating panel
+    // 0. Update panel custom button visibility
+    const hasCustom = !!CHARACTERS.custom;
+    const panelCustomBtn = document.getElementById('panel-btn-custom');
+    if (panelCustomBtn) {
+      panelCustomBtn.style.display = hasCustom ? '' : 'none';
+    }
+
+    // 1. Sync mini floating panel buttons
     document.querySelectorAll('.panel-char-btn').forEach(btn => {
       const char = btn.getAttribute('data-char');
-      btn.classList.toggle('active', char === this.charId);
+      if (char) {
+        btn.classList.toggle('active', char === this.charId);
+      }
     });
 
     const panelName = document.getElementById('panel-name');

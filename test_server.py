@@ -1031,3 +1031,47 @@ def test_android_build_extracts_spacy_data_packages():
     declared = extract_lines[0]
     for pkg in ("spacy", "thinc", "de_core_news_sm"):
         assert f'"{pkg}"' in declared, f"{pkg} 的数据文件不会被解包"
+
+def test_delete_article(client):
+    # 1. Ingest article
+    res = client.post("/api/articles/ingest", json={
+        "title": "Article To Delete",
+        "raw_text": "Das ist ein Testtext zum Löschen."
+    })
+    assert res.status_code == 200
+    art_id = res.json()["article_id"]
+
+    # 2. Add reading note to this article
+    n_res = client.post(f"/api/articles/{art_id}/notes", json={
+        "sentence_id": 0,
+        "selected_text": "Testtext",
+        "color": "yellow",
+        "note_content": "随笔要点"
+    })
+    assert n_res.status_code == 200
+
+    # 3. Check note exists
+    notes_res = client.get(f"/api/articles/{art_id}/notes")
+    assert notes_res.status_code == 200
+    assert len(notes_res.json()) == 1
+
+    # 4. Delete article
+    del_res = client.delete(f"/api/articles/{art_id}")
+    assert del_res.status_code == 200
+    del_data = del_res.json()
+    assert del_data["deleted"] is True
+    assert del_data["article_id"] == art_id
+
+    # 5. Article should now be 404
+    get_res = client.get(f"/api/articles/{art_id}")
+    assert get_res.status_code == 404
+
+    # 6. Reading notes should be empty
+    notes_after = client.get(f"/api/articles/{art_id}/notes")
+    assert notes_after.status_code == 200
+    assert len(notes_after.json()) == 0
+
+    # 7. Deleting non-existent article returns 404
+    del_non_existent = client.delete("/api/articles/999999")
+    assert del_non_existent.status_code == 404
+
