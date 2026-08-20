@@ -139,3 +139,23 @@ def test_merge_addition_and_deletion():
     corr2 = "Satz 1."
     assert merge_sentences(orig2, corr2, [True]) == "Satz 1."
     assert merge_sentences(orig2, corr2, [False]) == "Satz 1. Satz 2."
+
+
+def test_diff_consecutive_1to1_sentence_modifications():
+    orig = "Satz 1 gut. Satz 2 alt. Satz 3 alt. Satz 4 alt. Satz 5 alt."
+    corr = "Satz 1 gut. Satz 2 neu. Satz 3 neu. Satz 4 neu. Satz 5 neu."
+    hunks = diff_sentences(orig, corr)
+    assert len(hunks) == 4
+    assert hunks[0]["old"] == ["Satz 2 alt."]
+    assert hunks[0]["new"] == ["Satz 2 neu."]
+    assert hunks[1]["old"] == ["Satz 3 alt."]
+    assert hunks[1]["new"] == ["Satz 3 neu."]
+    assert hunks[2]["old"] == ["Satz 4 alt."]
+    assert hunks[2]["new"] == ["Satz 4 neu."]
+    assert hunks[3]["old"] == ["Satz 5 alt."]
+    assert hunks[3]["new"] == ["Satz 5 neu."]
+
+    # Partial merge
+    merged = merge_sentences(orig, corr, [True, False, True, False])
+    assert merged == "Satz 1 gut. Satz 2 neu. Satz 3 alt. Satz 4 neu. Satz 5 alt."
+
