@@ -1308,3 +1308,34 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
         })
 
     return output
+
+
+# ==============================================================================
+# 4. Präpositionen-Kollokationen（动词/形容词固定介词搭配）
+# ==============================================================================
+# 数据在 prep_dict.py（tools/build_prep.py 生成：人工 seed + AI 长尾）。
+# try/except 照 core_dict.py 对 core_dict_ext 的先例：数据模块缺失时
+# 功能降级为「没有搭配」，不阻断查词链。
+try:
+    from prep_dict import PREP_COLLOCATIONS
+except ImportError:  # pragma: no cover - 只在数据集尚未生成时走到
+    PREP_COLLOCATIONS = {}
+
+
+def lookup_prep_collocations(lemma_or_word: str) -> List[Dict[str, str]]:
+    """查固定介词搭配，返回 [{praeposition, kasus, bedeutung_zh, beispiel}]。
+
+    一个词头可以有多个介词且意思不同（bestehen auf/aus/in），所以返回列表而非
+    单值；没有搭配返回空列表（这是绝大多数词的正常结果，不是错误）。
+
+    反身动词的键不带 sich（freuen），因为 spaCy 的 lemma 就是 freuen；
+    「(sich)」标在中文义里。
+    """
+    key = (lemma_or_word or "").strip().lower()
+    if not key:
+        return []
+    rows = PREP_COLLOCATIONS.get(key)
+    if not rows:
+        return []
+    return [{"praeposition": r[0], "kasus": r[1], "bedeutung_zh": r[2], "beispiel": r[3]}
+            for r in rows]

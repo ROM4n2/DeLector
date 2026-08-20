@@ -48,6 +48,7 @@
 | 后端 | Python 3.10+, FastAPI, spaCy, genanki | `server.py`（1966 行） |
 | 词法/形态学 | 556+ 不规则动词三态表 + 复合词递归拆解 | `linguistics.py`（1236 行） |
 | 离线核心词库 | 歌德 A1–B2，0ms 查词 | `core_dict.py`（516 行），入口 `lookup_core_vocab()` |
+| 介词搭配数据集 | 动词/形容词 + 固定介词 + 格 | `prep_dict.py`（生成物），入口 `lookup_prep_collocations()`，源 `tools/build_prep.py` |
 | 拓扑句法 | VF/LK/MF/RK/NF 五场域 + 从句 AST | `syntax_tree.py`（1238 行） |
 | 启动器 | 端口探测、局域网 IP、平台判定 | `start.py`（86 行） |
 | 前端 | 原生 ES Modules（无框架、零构建），PWA | `static/index.html`, `static/js/*.js`（7 个模块）, `static/style.css` |
@@ -57,7 +58,7 @@
 | 移动打包 | Chaquopy + Gradle | `android/` |
 | CI/CD | GitHub Actions | `.github/workflows/build-release.yml` |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（59）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10） |
+| 测试 | pytest | `test_server.py`（78）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10） |
 | 提交守卫 | pre-commit 密钥扫描 | `.githooks/pre-commit` |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
@@ -182,7 +183,8 @@ POST   /api/articles/ingest                     直接提交文本导入
 GET    /api/articles                            列出所有文章
 GET    /api/articles/{article_id}               获取单篇文章（含 NLP 分析 JSON）
 POST   /api/lookup/grammar                      语法悬停查词
-POST   /api/lookup/vocab                        词汇悬停查词
+POST   /api/lookup/vocab                        词汇悬停查词（形态学四层：stammformen /
+                                                komposita / separable / praepositionen）
 POST   /api/cards/vocab                         添加词汇卡片
 POST   /api/cards/grammar                       添加语法卡片
 GET    /api/cards                               列出所有卡片
@@ -352,9 +354,19 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 
 ## 已知问题 / 待办
 
-> 更新时间：2026-08-19
+> 更新时间：2026-08-20
 
 - [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
+- [ ] **DeepSeek key 全部失效（401）**：`.env` 与 `app_settings` 里的两个 key
+      2026-08-20 实测都返回 401。影响所有 AI 功能（查词在线兜底、语法剖析、笔记辅助）
+      和构建工具。介词搭配数据集因此**只有 47 条人工 seed，AI 长尾（1773 词 / 约 71 次调用）没跑**。
+      换上有效 key 后跑：`python tools/build_prep.py --resume --parallel 6`
+- [ ] **介词搭配数据集覆盖偏薄**（v3.10.0）：47 词条 / 56 条搭配，全部来自
+      `tools/build_prep.py` 的 `SEED_COLLOCATIONS`（人工校验的必考项）。
+      长尾要等 key 修好；seed 是 floor，AI 结果只补 seed 没有的词头，不会覆盖已校验条目。
+- [ ] **`linguistics.py` 有 14 条 pyflakes 重复键告警**（`klima`/`schutz`/`bund` 等在
+      `LINGUISTICS_VOCAB_EXT` 与另一张表里各出现一次，值不同）：先前就有，未在本次改动范围内，
+      但确实意味着有一份定义被静默覆盖，值得单独查一次
 - [ ] **离线词库尾缺口 ~109 词**（v3.9.0 词库 4301 词，候选源 4377）：B2 源的派生/噪声词
       （`aufklärungsdrohnen` 等）AI 反复不返回，refill 自动重试过狠会卡住。
       要补跑 `python tools/build_dict.py --refill --parallel 8`（注意它会覆写 batch_0-4 缓存）

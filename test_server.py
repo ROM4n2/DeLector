@@ -1117,6 +1117,78 @@ def test_vocab_lookup_with_linguistics_stammformen_and_komposita(client):
     assert "komposita" in data_plural_comp
     assert len(data_plural_comp["komposita"]) >= 2
 
+def test_vocab_lookup_returns_prep_collocations(client):
+    """查词响应要带 praepositionen：抽屉的第四个 banner 就靠它。
+
+    bestehen 是这个数据集存在的理由：auf/aus/in 三个介词三个意思，
+    值必须是列表，单值 schema 会静默丢掉两个义项。
+    """
+    res = client.post("/api/lookup/vocab", json={
+        "sentence": "Das Team besteht aus fünf Personen.",
+        "target_word": "besteht", "lemma": "bestehen"
+    })
+    assert res.status_code == 200
+    rows = res.json().get("praepositionen")
+    assert rows, "bestehen 必须有介词搭配"
+    preps = {r["praeposition"] for r in rows}
+    assert {"auf", "aus", "in"} <= preps
+    for r in rows:
+        assert r["kasus"] in ("Akk", "Dat", "Gen")
+        assert r["bedeutung_zh"] and r["beispiel"]
+
+
+def test_vocab_lookup_omits_prep_key_when_no_collocation(client):
+    """没有固定搭配的词不能带空 praepositionen 键——前端按键存在与否决定是否渲染。"""
+    res = client.post("/api/lookup/vocab", json={
+        "sentence": "Das Haus ist groß.", "target_word": "Haus", "lemma": "haus"
+    })
+    assert res.status_code == 200
+    assert "praepositionen" not in res.json()
+
+
+def test_prep_lookup_falls_back_to_surface_form(client):
+    """lemma 缺失时用表面形兜底：前端不总能给出 lemma（点击非动词位置时）。"""
+    res = client.post("/api/lookup/vocab", json={
+        "sentence": "Ich warte auf den Bus.", "target_word": "warten"
+    })
+    assert res.status_code == 200
+    assert res.json()["praepositionen"][0]["praeposition"] == "auf"
+
+
+def test_prep_dataset_integrity():
+    """数据集自检：键小写、值是元组的元组、格合法、例句真的用上了该介词。
+
+    最后一条是本数据集唯一的自动幻觉检测 —— AI 编出 "warten für" 时，
+    例句里往往还是 auf。
+    """
+    from prep_dict import PREP_COLLOCATIONS
+    assert len(PREP_COLLOCATIONS) >= 40
+    for lemma, rows in PREP_COLLOCATIONS.items():
+        assert lemma == lemma.lower(), f"{lemma} 不是小写，查词链会 miss"
+        assert isinstance(rows, tuple) and rows, f"{lemma} 的值必须是非空元组"
+        for row in rows:
+            assert isinstance(row, tuple) and len(row) == 4, f"{lemma}: {row}"
+            prep, kasus, zh, example = row
+            assert kasus in ("Akk", "Dat", "Gen"), f"{lemma}: 非法格 {kasus}"
+            assert zh and example, f"{lemma}: 缺中文义或例句"
+            words = {w.strip(".,!?;:»«\"'").lower() for w in example.split()}
+            assert prep in words, f"{lemma}: 例句没用上 {prep} —— {example}"
+        preps = [r[0] for r in rows]
+        assert len(preps) == len(set(preps)), f"{lemma} 有重复介词 {preps}"
+
+
+def test_prep_dict_registered_in_all_package_targets():
+    """漏注册任一处 = 打包后 ModuleNotFoundError（或安卓上静默没有该功能）。"""
+    root = os.path.dirname(__file__)
+    pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
+    assert "--hidden-import=prep_dict" in pkg
+    wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"),
+              encoding="utf-8").read()
+    assert wf.count("--hidden-import=prep_dict") == 2, "Windows/Linux 两个构建都要"
+    cp_line = [ln for ln in wf.splitlines() if "cp -r server.py" in ln]
+    assert cp_line and "prep_dict.py" in cp_line[0], "安卓 cp 列表漏了 prep_dict.py"
+
+
 def test_syntax_analyze_endpoint(client):
     res = client.post("/api/syntax/analyze", json={
         "text": "Weil das Wetter heute schön ist, geht Maria im Park spazieren."

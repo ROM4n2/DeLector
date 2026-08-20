@@ -183,7 +183,7 @@ DeLector/
 - [x] **v3.8**：FSRS 现代自适应记忆排程器升级（DSR 三维认知模型，消除 Ease Hell，4 级下一轮间隔预计算）
 - [x] **v3.9**：离线词库 443→4300 词（DeepSeek 批量生成中文释义）+ 查词链 lemma 优先 / 形态学接线 / 现在时反查 / UX 诚实显示
 - [x] **v3.9.1**：安卓真机修复——TTS 无声（stdlib 版 Edge TTS 客户端 `edge_tts_mini`）、倍速按钮点不到（移动端三行布局）、单词抽屉白色遮挡（55vh + 阅读区全宽）
-- [ ] **v3.10 (Next)**：智能介词搭配图谱 (Präpositionen-Matrix: 动词/形容词+固定介词格)
+- [ ] **v3.10 (Next)**：固定介词搭配（Verben/Adjektive + Präposition + Kasus）—— 查词抽屉里第四个形态学卡片，每条搭配可单独存成词汇卡；「按介词浏览」的独立矩阵视图留到 v3.11（数据集就位后是零成本增量）
 - [ ] **v4.0**：德语写作与长难句 AI 润色台 (Schreibwerkstatt)
 
 ---
