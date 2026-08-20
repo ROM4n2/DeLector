@@ -10,6 +10,14 @@ let currentAnalysis = null;
 let selectedSpanRef = null;
 let analyzeDebounceTimer = null;
 
+let polishState = {
+  original: '',
+  corrected: '',
+  hunks: [],
+  notes_zh: [],
+  error_count: 0
+};
+
 // ── Error Type Labels & Badges ──────────────────────────────────────────────
 const ERROR_TYPE_LABELS = {
   artikel: '冠词 / 性数格一致',
@@ -20,6 +28,31 @@ const ERROR_TYPE_LABELS = {
 
 function getErrorTypeLabel(type) {
   return ERROR_TYPE_LABELS[type] || '语法考点';
+}
+
+// ── Sidebar Tab Navigation ──────────────────────────────────────────────────
+export function switchWriterPanelTab(tab) {
+  const isDiag = tab === 'diag';
+  const btnDiag = document.getElementById('wtab-btn-diag');
+  const btnVersions = document.getElementById('wtab-btn-versions');
+  const paneDiag = document.getElementById('wpane-diag');
+  const paneVersions = document.getElementById('wpane-versions');
+
+  if (btnDiag) btnDiag.classList.toggle('active', isDiag);
+  if (btnVersions) btnVersions.classList.toggle('active', !isDiag);
+
+  if (paneDiag) {
+    paneDiag.classList.toggle('active', isDiag);
+    paneDiag.classList.toggle('hidden', !isDiag);
+  }
+  if (paneVersions) {
+    paneVersions.classList.toggle('active', !isDiag);
+    paneVersions.classList.toggle('hidden', isDiag);
+  }
+
+  if (!isDiag) {
+    loadEssayVersions();
+  }
 }
 
 // ── Word & Sentence Stats Helper ────────────────────────────────────────────
@@ -102,6 +135,7 @@ export async function openWriterEssay(id) {
     // Reset error detail card
     resetErrorDetailView();
     loadWriterEssays();
+    loadEssayVersions();
   } catch (err) {
     console.error('[Writer] Failed to open essay:', err);
     alert('打开作文失败：' + (err.message || err));
@@ -135,6 +169,11 @@ export function clearWriterForm() {
   const cefrBox = document.getElementById('writer-cefr');
   if (cefrBox) {
     cefrBox.innerHTML = '<div class="writer-cefr-level">CEFR —</div><div class="writer-cefr-desc">输入德语作文以评估词汇难度与错误率</div>';
+  }
+
+  const versionListEl = document.getElementById('writer-version-list');
+  if (versionListEl) {
+    versionListEl.innerHTML = '<div class="writer-empty-tip">暂无版本记录（请先保存或打开作文）</div>';
   }
 
   resetErrorDetailView();
@@ -451,6 +490,7 @@ export async function saveWriterEssay() {
     currentAnalysis = res.analysis_json;
     renderWriterReport(res.analysis_json);
     loadWriterEssays();
+    loadEssayVersions();
 
     if (saveBtn) {
       saveBtn.innerHTML = '✓ 已保存';
@@ -487,7 +527,111 @@ export async function deleteWriterEssay(id, evt) {
   }
 }
 
-// ── DeepSeek AI Polish Entire Essay ─────────────────────────────────────────
+// ── AI Polish Review Modal & Diff Review State Machine ───────────────────────
+export function openPolishOverlay() {
+  const overlay = document.getElementById('polish-overlay');
+  if (overlay) overlay.classList.remove('hidden');
+}
+
+export function closePolishOverlay() {
+  const overlay = document.getElementById('polish-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+export function renderPolishReview() {
+  const total = polishState.hunks ? polishState.hunks.length : 0;
+  const acceptedCount = polishState.hunks ? polishState.hunks.filter(h => h.accepted !== false).length : 0;
+
+  const summaryEl = document.getElementById('polish-hunk-summary');
+  if (summaryEl) {
+    if (total === 0) {
+      summaryEl.textContent = '原文表达流畅，未检测到句式或语法需调整处。';
+    } else {
+      summaryEl.textContent = `共 ${total} 处改动 · 已选定应用 ${acceptedCount}/${total} 处`;
+    }
+  }
+
+  const diffListEl = document.getElementById('polish-diff-list');
+  if (diffListEl) {
+    if (total === 0) {
+      diffListEl.innerHTML = '<div class="writer-empty-tip">未发现明显语法错误或句式改动。</div>';
+    } else {
+      diffListEl.innerHTML = polishState.hunks.map((hunk, idx) => {
+        const isAccepted = hunk.accepted !== false;
+        const oldLines = hunk.old && hunk.old.length
+          ? hunk.old.map(s => `<div class="diff-sent">${esc(s)}</div>`).join('')
+          : '<div class="diff-empty">(无对应原句 / 新增内容)</div>';
+        const newLines = hunk.new && hunk.new.length
+          ? hunk.new.map(s => `<div class="diff-sent">${esc(s)}</div>`).join('')
+          : '<div class="diff-empty">(建议删除此句)</div>';
+        const statusText = isAccepted ? '✓ 已接受润色' : '✕ 保留原文';
+        const statusClass = isAccepted ? 'accepted' : 'rejected';
+        const toggleBtnLabel = isAccepted ? '保留原句' : '接受改动';
+        const toggleBtnClass = isAccepted ? 'btn-ghost' : 'btn-accent';
+
+        return `
+          <div class="diff-hunk ${isAccepted ? 'hunk-accepted' : 'hunk-rejected'}" data-hunk-idx="${idx}">
+            <div class="diff-hunk-header">
+              <div class="diff-hunk-title">
+                <span>改动 #${idx + 1}</span>
+                <span class="hunk-status-tag ${statusClass}">${statusText}</span>
+              </div>
+              <div class="diff-hunk-actions">
+                <button class="btn ${toggleBtnClass} btn-xs" onclick="togglePolishHunk(${idx})">${toggleBtnLabel}</button>
+              </div>
+            </div>
+            <div class="diff-grid">
+              <div class="diff-old">
+                <div class="diff-side-label label-old">原句 (Original)</div>
+                ${oldLines}
+              </div>
+              <div class="diff-new">
+                <div class="diff-side-label label-new">✨ AI 润色 (Korrektur)</div>
+                ${newLines}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  const notesEl = document.getElementById('polish-notes');
+  if (notesEl) {
+    if (polishState.notes_zh && polishState.notes_zh.length > 0) {
+      notesEl.classList.remove('hidden');
+      notesEl.innerHTML = `
+        <div class="sidebar-section-title" style="margin-bottom:0.5rem;">💡 AI 润色解析与语法点评</div>
+        <div class="writer-ai-notes-list">
+          ${polishState.notes_zh.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
+        </div>
+      `;
+    } else {
+      notesEl.classList.add('hidden');
+      notesEl.innerHTML = '';
+    }
+  }
+}
+
+export function togglePolishHunk(idx) {
+  if (!polishState.hunks || !polishState.hunks[idx]) return;
+  polishState.hunks[idx].accepted = !polishState.hunks[idx].accepted;
+  renderPolishReview();
+}
+
+export function acceptAllPolishHunks() {
+  if (!polishState.hunks) return;
+  polishState.hunks.forEach(h => { h.accepted = true; });
+  renderPolishReview();
+}
+
+export function rejectAllPolishHunks() {
+  if (!polishState.hunks) return;
+  polishState.hunks.forEach(h => { h.accepted = false; });
+  renderPolishReview();
+}
+
+// ── DeepSeek AI Polish Entire Essay with Sentence Diff Review ───────────────
 export async function aiPolishEssay() {
   const textArea = document.getElementById('writer-text');
   const text = (textArea?.value || '').trim();
@@ -505,41 +649,196 @@ export async function aiPolishEssay() {
   }
 
   try {
-    const res = await api('/api/writing/ai-polish', {
+    // If no current essay, auto-create draft first
+    if (!currentEssayId) {
+      const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
+      const essayRes = await api('/api/essays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content: text })
+      });
+      currentEssayId = essayRes.id;
+      loadWriterEssays();
+    }
+
+    const res = await api('/api/writing/ai-polish/diff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text })
     });
 
     if (res && res.result) {
-      const { corrected_text, notes_zh } = res.result;
-
-      if (corrected_text && corrected_text !== text) {
-        textArea.value = corrected_text;
-        updateWriterStats(corrected_text);
-        analyzeWriterText(true);
-      }
-
-      const detailEl = document.getElementById('writer-err-detail');
-      if (detailEl && notes_zh && notes_zh.length > 0) {
-        detailEl.innerHTML = `
-          <div class="writer-ai-notes-card">
-            <div class="sidebar-section-title">✨ DeepSeek AI 润色建议与点评</div>
-            <div class="writer-ai-notes-list">
-              ${notes_zh.map(n => `<div class="writer-ai-note-item">💡 ${esc(n)}</div>`).join('')}
-            </div>
-            ${corrected_text && corrected_text !== text ? '<div class="writer-ai-note-tip">✓ 已将润色后的德文更新至编辑框并重新分析。</div>' : ''}
-          </div>
-        `;
-      }
+      const { original, corrected, hunks, notes_zh, error_count } = res.result;
+      polishState = {
+        original: original || text,
+        corrected: corrected || text,
+        hunks: (hunks || []).map(h => ({ ...h, accepted: true })),
+        notes_zh: notes_zh || [],
+        error_count: error_count || 0
+      };
+      openPolishOverlay();
+      renderPolishReview();
     }
   } catch (err) {
-    console.error('[Writer] AI Polish failed:', err);
+    console.error('[Writer] AI Polish Diff failed:', err);
     alert('AI 润色请求失败：' + (err.message || err));
   } finally {
     if (aiBtn) {
       aiBtn.disabled = false;
       aiBtn.innerHTML = origBtnText;
     }
+  }
+}
+
+// ── Apply Selected AI Polish Hunks ──────────────────────────────────────────
+export async function applyPolishChanges() {
+  if (!polishState.hunks) return;
+  const accepted_indices = polishState.hunks
+    .map((h, idx) => (h.accepted !== false ? idx : -1))
+    .filter(idx => idx !== -1);
+
+  const applyBtn = document.getElementById('btn-apply-polish');
+  const origText = applyBtn ? applyBtn.innerHTML : '';
+  if (applyBtn) {
+    applyBtn.disabled = true;
+    applyBtn.innerHTML = '应用中...';
+  }
+
+  try {
+    if (!currentEssayId) {
+      const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
+      const content = polishState.original;
+      const essayRes = await api('/api/essays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content })
+      });
+      currentEssayId = essayRes.id;
+    }
+
+    const res = await api('/api/writing/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        essay_id: currentEssayId,
+        original_text: polishState.original,
+        corrected_text: polishState.corrected,
+        accepted_indices
+      })
+    });
+
+    const textArea = document.getElementById('writer-text');
+    if (textArea) textArea.value = res.content;
+    updateWriterStats(res.content);
+
+    currentAnalysis = res.analysis_json;
+    renderWriterReport(res.analysis_json);
+
+    closePolishOverlay();
+    loadEssayVersions();
+    loadWriterEssays();
+
+    Companion.celebrate('card_grammar');
+  } catch (err) {
+    console.error('[Writer] Apply polish failed:', err);
+    alert('应用润色更改失败：' + (err.message || err));
+  } finally {
+    if (applyBtn) {
+      applyBtn.disabled = false;
+      applyBtn.innerHTML = origText;
+    }
+  }
+}
+
+// ── Essay Version Snapshots Management ──────────────────────────────────────
+export async function loadEssayVersions() {
+  const listEl = document.getElementById('writer-version-list');
+  if (!listEl) return;
+
+  if (!currentEssayId) {
+    listEl.innerHTML = '<div class="writer-empty-tip">请先打开或保存一篇作文以查看版本快照</div>';
+    return;
+  }
+
+  try {
+    const rows = await api(`/api/essays/${currentEssayId}/versions`);
+    if (!rows || rows.length === 0) {
+      listEl.innerHTML = '<div class="writer-empty-tip">暂无快照记录</div>';
+      return;
+    }
+
+    listEl.innerHTML = rows.map(v => {
+      const isCheckpoint = (v.message || '').startsWith('恢复到版本');
+      const errPill = v.error_count > 0
+        ? `<span class="writer-essay-err-pill has-err">⚠️ ${v.error_count} 处疑点</span>`
+        : `<span class="writer-essay-err-pill no-err">✓ 0 错误</span>`;
+      const timeStr = (v.created_at || '').replace('T', ' ').slice(0, 19);
+
+      return `
+        <div class="version-item ${isCheckpoint ? 'version-checkpoint' : ''}">
+          <div class="version-header">
+            <span class="version-id">#v${v.id}</span>
+            ${errPill}
+          </div>
+          <div class="version-msg">${esc(v.message || '快照')}</div>
+          <div class="version-meta">
+            <span class="version-time">${timeStr}</span>
+            <button class="btn btn-ghost btn-xs version-restore-btn" onclick="restoreEssayVersion(${v.id})" title="恢复至此快照">↩ 恢复</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('[Writer] Failed to load essay versions:', err);
+    listEl.innerHTML = '<div class="writer-empty-tip">加载快照历史失败</div>';
+  }
+}
+
+export async function saveEssayVersion() {
+  if (!currentEssayId) {
+    await saveWriterEssay();
+    if (!currentEssayId) return;
+  }
+
+  const msgInput = document.getElementById('writer-version-msg');
+  const msg = (msgInput?.value || '').trim();
+
+  try {
+    await api(`/api/essays/${currentEssayId}/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg || '手动保存' })
+    });
+    if (msgInput) msgInput.value = '';
+    loadEssayVersions();
+  } catch (err) {
+    console.error('[Writer] Save version failed:', err);
+    alert('保存快照失败：' + (err.message || err));
+  }
+}
+
+export async function restoreEssayVersion(versionId) {
+  if (!currentEssayId) return;
+  if (!confirm('确定要恢复到此版本快照吗？当前的未保存修改将自动保存为一个恢复前快照。')) return;
+
+  try {
+    const res = await api(`/api/essays/${currentEssayId}/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version_id: versionId })
+    });
+
+    const textArea = document.getElementById('writer-text');
+    if (textArea) textArea.value = res.content;
+    updateWriterStats(res.content);
+
+    currentAnalysis = res.analysis_json;
+    renderWriterReport(res.analysis_json);
+
+    loadEssayVersions();
+    loadWriterEssays();
+  } catch (err) {
+    console.error('[Writer] Restore version failed:', err);
+    alert('恢复版本失败：' + (err.message || err));
   }
 }

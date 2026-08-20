@@ -11,15 +11,15 @@
 
 ## 交接快照
 
-> 更新时间：2026-08-20
+> 更新时间：2026-08-21
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v3.11.0 德语写作润色台：本地规则引擎 + 错误→Anki 复习卡闭环），工作区干净 |
-| 测试 | **129 / 129 全绿**（`test_server.py` 90 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 9） |
+| 当前分支 / HEAD | `master`（含 v3.12.0 德语写作润色台 IDE 化：AI 逐 hunk 审查 + 类 git 版本快照历史与恢复），工作区干净 |
+| 测试 | **147 / 147 全绿**（`test_server.py` 100 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 9 + `test_essay_diff.py` 8） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v3.11.0**（2026-08-21）：德语写作润色台——本地规则诊断（冠词/格位/介词格，零误报准则）、错误一键存 Anki 复习卡、essays 草稿库、显式 AI 润色全文 |
+| 对外发布 | **v3.12.0**（2026-08-21）：德语写作润色台 IDE 化——句子级 difflib 引擎、AI 润色逐 hunk 并排审查（接受/拒绝）、类 git 快照历史（手动保存 + AI 润色自动快照 + 可逆恢复检查点）、侧栏 Tab 切换 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -371,6 +371,9 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v3.8.0 `2026-08-19`** | **feat(fsrs & memory)**: 认知自适应记忆排程器升级为 FSRS 引擎：DSR 状态机原生零依赖数学模型（难度 $D$ 均值回归、稳定性 $S$ 幂律增长、可提取性 $R$ 遗忘衰减），消解「沉沦死锁 (Ease Hell)」；API 注入 4 级下一轮间隔预计算字典 `next_intervals`，前端 3D 翻牌盒精准动态绑定并保持向下兼容 |
 | **v3.9.0 `2026-08-19`** | **feat(dict & lookup)**: 离线词库 443→4300 词（`tools/build_dict.py` 用 DeepSeek 对歌德 A1-B2 词表批量生成中文释义，落地 `core_dict_ext.py` Python 模块，Chaquopy/PyInstaller 可直接打包）；查词链修复——前端带 spaCy lemma + 服务端 lemma 优先（`geht→gehen`/`Häuser→Haus` 命中）、接线 `LINGUISTICS_VOCAB_EXT`、现在时强动词反查表（`ist→sein`）、UX 诚实显示（空释义不再谎称"AI 已预填"，标 `暂无离线释义`） |
 | **v3.9.1 `2026-08-19`** | **fix(android & mobile)**: 修复三个真机 bug——① **安卓 TTS 无声**：edge-tts 及其依赖无 Android wheel，APK 内 `import edge_tts` 必挂；新增 `edge_tts_mini.py`（纯 stdlib 复刻 Edge TTS WebSocket+Sec-MS-GEC 协议，零依赖，Chaquopy 可用），server 合成链改为 `edge_tts → edge_tts_mini → 有道/百度兜底`；player.js 兜底不再忽略原生 TTS 返回值静默推进，三层全败时显示 `⚠ 语音引擎不可用`；MainActivity 原生 TTS 增加德语 voice 遍历兜底。② **手机端点不到倍速**：播放器原单行 flex 横向溢出把倍速挤出屏外，移动端改三行布局（transport / 声音+模式 / 倍速独占整行均分，全部 ≥40px 触控）。③ **抽屉白色遮挡**：底部 sheet 从 72vh 降到 55vh、移动端复位阅读区全宽（桌面右抽屉收缩规则在手机上算成负值）、backdrop 0.35→0.22。CI cp 列表加入 `edge_tts_mini.py` |
+| **v3.10.0 `2026-08-20`** | **feat(android & data)**: Android 钉死签名 keystore + CI 验签闸（支持升级覆盖）+ 介词搭配数据集 `prep_dict.py` 扩充至 531 词条/660 条搭配 |
+| **v3.11.0 `2026-08-21`** | **feat(writer)**: 德语写作润色台首发：本地规则引擎（冠词/格位一致 + 介词支配格，零误报准则）+ 行内波浪下划线 + 侧栏详解 + 错误一键存 Anki 语法卡 + essays 草稿库 + 显式全文 AI 润色 |
+| **v3.12.0 `2026-08-21`** | **feat(writer & ide)**: 德语写作台 IDE 化：句子级 `essay_diff.py` 引擎 + AI 润色逐 hunk 并排审查（左原句 \| 右改写，单条接受/拒绝与一键全选）+ `essay_versions` 类 git 快照管理（手动保存、AI 润色应用自动快照、可逆恢复检查点 `恢复到版本 N 之前`）+ 侧栏诊断/历史双 Tab 联动 |
 
 ---
 

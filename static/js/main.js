@@ -89,7 +89,17 @@ import {
   saveWriterEssay,
   openWriterEssay,
   deleteWriterEssay,
-  clearWriterForm
+  clearWriterForm,
+  switchWriterPanelTab,
+  openPolishOverlay,
+  closePolishOverlay,
+  togglePolishHunk,
+  acceptAllPolishHunks,
+  rejectAllPolishHunks,
+  applyPolishChanges,
+  saveEssayVersion,
+  restoreEssayVersion,
+  loadEssayVersions
 } from './writer.js';
 
 // ── View Router ─────────────────────────────────────────────────────────────
@@ -673,6 +683,16 @@ Object.assign(window, {
   openWriterEssay,
   deleteWriterEssay,
   clearWriterForm,
+  switchWriterPanelTab,
+  openPolishOverlay,
+  closePolishOverlay,
+  togglePolishHunk,
+  acceptAllPolishHunks,
+  rejectAllPolishHunks,
+  applyPolishChanges,
+  saveEssayVersion,
+  restoreEssayVersion,
+  loadEssayVersions,
 
   // Player
   ShadowPlayer,

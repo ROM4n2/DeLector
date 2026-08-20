@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=3.11.0">
+  <link rel="stylesheet" href="/style.css?v=3.12.0">
 </head>
 <body>
 
@@ -19,7 +19,7 @@
     <div class="topbar-inner">
       <span><b>DELECTOR · 2026</b> · Vol. 03 / Issue Nº 07</span>
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <span class="right"><span class="pulse"></span>System · v3.11.0 Online</span>
+      <span class="right"><span class="pulse"></span>System · v3.12.0 Online</span>
     </div>
   </div>
 
@@ -484,22 +484,54 @@
 
         <!-- Right Area: Sidebar for Diagnostics & Details -->
         <aside id="writer-panel" class="writer-sidebar">
-          <!-- CEFR & Summary Badge Card -->
-          <div class="writer-sidebar-card">
-            <div class="sidebar-section-title">📊 语言水平与质量估测</div>
-            <div id="writer-cefr" class="writer-cefr-box">
-              <div class="writer-cefr-level">CEFR —</div>
-              <div class="writer-cefr-desc">输入德语作文以评估词汇难度与错误率</div>
+          <!-- Tab Navigation -->
+          <div class="writer-panel-tabs">
+            <button id="wtab-btn-diag" class="writer-tab-btn active" onclick="switchWriterPanelTab('diag')">🔍 诊断分析</button>
+            <button id="wtab-btn-versions" class="writer-tab-btn" onclick="switchWriterPanelTab('versions')">📜 版本快照</button>
+          </div>
+
+          <!-- Pane 1: Diagnostics -->
+          <div id="wpane-diag" class="writer-pane active">
+            <!-- CEFR & Summary Badge Card -->
+            <div class="writer-sidebar-card">
+              <div class="sidebar-section-title">📊 语言水平与质量估测</div>
+              <div id="writer-cefr" class="writer-cefr-box">
+                <div class="writer-cefr-level">CEFR —</div>
+                <div class="writer-cefr-desc">输入德语作文以评估词汇难度与错误率</div>
+              </div>
+            </div>
+
+            <!-- Selected Error / Detail Card -->
+            <div class="writer-sidebar-card">
+              <div class="sidebar-section-title">🔍 错误诊断与纠错详解</div>
+              <div id="writer-err-detail" class="writer-err-detail-box">
+                <div class="writer-err-placeholder">
+                  <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
+                  <div>点击左侧文本中的<b>彩色下划线</b>，查看错误成因与修正建议，并一键收录为 Anki 语法卡。</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Selected Error / Detail Card -->
-          <div class="writer-sidebar-card">
-            <div class="sidebar-section-title">🔍 错误诊断与纠错详解</div>
-            <div id="writer-err-detail" class="writer-err-detail-box">
-              <div class="writer-err-placeholder">
-                <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
-                <div>点击左侧文本中的<b>彩色下划线</b>，查看错误成因与修正建议，并一键收录为 Anki 语法卡。</div>
+          <!-- Pane 2: Version History -->
+          <div id="wpane-versions" class="writer-pane hidden">
+            <!-- Manual Snapshot Card -->
+            <div class="writer-sidebar-card">
+              <div class="sidebar-section-title">💾 保存当前快照</div>
+              <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                <input id="writer-version-msg" type="text" class="modal-input" placeholder="快照描述（如：完成引言 / AI 润色后）..." maxlength="50" style="font-size:0.8125rem;padding:0.375rem 0.5rem;">
+                <button class="btn btn-dark btn-sm" onclick="saveEssayVersion()" style="white-space:nowrap;">保存当前快照</button>
+              </div>
+            </div>
+
+            <!-- Version Snapshots List Container -->
+            <div class="writer-sidebar-card" style="margin-top:0.75rem;">
+              <div class="sidebar-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>🕒 快照历史</span>
+                <button class="btn btn-ghost btn-xs" onclick="loadEssayVersions()">刷新</button>
+              </div>
+              <div id="writer-version-list" class="writer-version-list">
+                <div class="writer-empty-tip">暂无版本记录（请先保存或打开作文）</div>
               </div>
             </div>
           </div>
@@ -797,6 +829,39 @@
     </div>
   </div>
 
+  <!-- ── AI Polish Review Overlay ─────────────────────────────── -->
+  <div id="polish-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closePolishOverlay()">
+    <div class="modal polish-modal-box">
+      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <span style="font-size:1.125rem;font-weight:700;color:var(--ink);">✨ AI 润色审查 (AI-Politur Review)</span>
+        <button class="drawer-close" onclick="closePolishOverlay()" title="关闭 (Esc)">✕</button>
+      </div>
+
+      <div class="polish-toolbar">
+        <div id="polish-hunk-summary" class="polish-summary-badge">
+          共 0 处改动 · 默认已全选
+        </div>
+        <div class="polish-quick-actions">
+          <button class="btn btn-ghost btn-xs" onclick="acceptAllPolishHunks()">✓ 全部接受</button>
+          <button class="btn btn-ghost btn-xs" onclick="rejectAllPolishHunks()">✕ 全部拒绝</button>
+        </div>
+      </div>
+
+      <div id="polish-diff-list" class="polish-diff-list">
+        <!-- Dynamic Hunk Diff Blocks -->
+      </div>
+
+      <div id="polish-notes" class="polish-notes-container hidden">
+        <!-- AI Polish Notes -->
+      </div>
+
+      <div class="modal-footer polish-modal-footer">
+        <button class="btn btn-ghost" onclick="closePolishOverlay()">取消</button>
+        <button id="btn-apply-polish" class="btn btn-dark" onclick="applyPolishChanges()">✓ 应用所选更改</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Floating Shadow Reading Player (Root Level) ─────────── -->
   <div id="shadow-player" class="shadow-player hidden">
     <div class="player-left">
@@ -1060,7 +1125,7 @@
     </div>
   </div>
 
-  <script type="module" src="/js/main.js?v=3.11.0"></script>
+  <script type="module" src="/js/main.js?v=3.12.0"></script>
 
 </body>
 </html>
