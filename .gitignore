@@ -30,3 +30,6 @@ tools/raw_prep/
 *.jks.b64
 signing.properties
 keystore.properties
+
+# IDE
+.vscode/
