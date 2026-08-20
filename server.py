@@ -176,6 +176,8 @@ def init_db(db_path: Optional[str] = None):
                 explanation_zh TEXT NOT NULL,
                 rule_formula TEXT,
                 examples_zh TEXT,
+                corrected_form TEXT DEFAULT '',
+                error_type TEXT DEFAULT '',
                 mastered INTEGER DEFAULT 0,
                 mastered_at TIMESTAMP,
                 correct_count INTEGER DEFAULT 0,
@@ -185,6 +187,19 @@ def init_db(db_path: Optional[str] = None):
                 ease_factor REAL DEFAULT 2.5,
                 repetition_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS essays (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                analysis_json TEXT NOT NULL,
+                cefr_level TEXT,
+                error_count INTEGER DEFAULT 0,
+                sentence_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
         conn.execute("""
@@ -226,6 +241,10 @@ def init_db(db_path: Optional[str] = None):
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN ease_factor REAL DEFAULT 2.5")
             if "repetition_count" not in cols:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN repetition_count INTEGER DEFAULT 0")
+            if tbl == "grammar_cards":
+                for col in ("corrected_form", "error_type"):
+                    if col not in cols:
+                        conn.execute(f"ALTER TABLE grammar_cards ADD COLUMN {col} TEXT DEFAULT ''")
 
     init_progress_db()
     seed_preset_articles(target_path)

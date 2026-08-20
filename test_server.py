@@ -56,6 +56,19 @@ def test_cefr_lookup():
     assert get_cefr_level("gehen") == "A1"
     assert get_cefr_level("beeinträchtigen") in ("B2", "C1")
 
+def test_grammar_cards_migration_adds_columns():
+    import sqlite3
+    conn = sqlite3.connect("test_delector.db")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(grammar_cards)")}
+    assert "corrected_form" in cols and "error_type" in cols, f"缺列: {cols}"
+
+def test_essays_table_created():
+    import sqlite3
+    conn = sqlite3.connect("test_delector.db")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(essays)")}
+    assert {"id", "title", "content", "analysis_json",
+            "cefr_level", "error_count", "created_at"} <= cols
+
 def test_seed_preset_articles_with_a1(client, test_db_path):
     init_db(test_db_path)
     
