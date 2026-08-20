@@ -52,7 +52,7 @@ def test_no_spacy_returns_empty():
     r = analyze_essay_text("Ich sehe der Mann.", None)
     assert r["error_count"] == 0
     assert "cefr" in r
-    assert r["version"] == "3.11.0"
+    assert r["version"] == "3.12.0"
     assert r["sentences"] == []
 
 
@@ -71,7 +71,7 @@ def test_decline_determiner_basic():
 def test_multi_sentence_analysis(nlp):
     text = "Ich sehe der Mann. Ich fahre mit dem Auto."
     result = analyze_essay_text(text, nlp)
-    assert result["version"] == "3.11.0"
+    assert result["version"] == "3.12.0"
     assert result["error_count"] == 1
     assert len(result["sentences"]) == 2
     assert len(result["sentences"][0]["spans"]) == 1

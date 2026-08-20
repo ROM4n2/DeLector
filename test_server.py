@@ -184,6 +184,206 @@ def test_ai_polish_diff_mocked(client, monkeypatch):
     assert hunks[1]["accepted"] is True
 
 
+def test_essay_versions_table_and_seed_migration(client, test_db_path):
+    import sqlite3
+    conn = sqlite3.connect(test_db_path)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(essay_versions)")}
+    assert {"id", "essay_id", "content", "analysis_json", "message", "created_at"} <= cols
+
+    indices = [r[1] for r in conn.execute("PRAGMA index_list(essay_versions)")]
+    assert "idx_essay_versions_essay_id" in indices
+
+    # Seed migration test: insert an essay without versions, then re-run init_db
+    conn.execute(
+        "INSERT INTO essays (title, content, analysis_json, cefr_level, error_count) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("Old Essay", "Ich habe ein Hund.", '{"error_count": 1}', "A2", 1)
+    )
+    conn.commit()
+    old_essay_id = conn.execute("SELECT id FROM essays WHERE title = 'Old Essay'").fetchone()[0]
+    conn.close()
+
+    # Re-run init_db
+    init_db(test_db_path)
+
+    conn = sqlite3.connect(test_db_path)
+    versions = conn.execute(
+        "SELECT essay_id, message FROM essay_versions WHERE essay_id = ?",
+        (old_essay_id,)
+    ).fetchall()
+    assert len(versions) == 1
+    assert versions[0][1] == "初始快照"
+
+    # Running init_db again is idempotent (no duplicate seed)
+    init_db(test_db_path)
+    versions_after = conn.execute(
+        "SELECT essay_id, message FROM essay_versions WHERE essay_id = ?",
+        (old_essay_id,)
+    ).fetchall()
+    assert len(versions_after) == 1
+    conn.close()
+
+
+def test_essay_versions_crud_and_restore(client):
+    # 1. Create essay
+    r = client.post("/api/essays", json={"title": "Version Essay", "content": "Ich sehe der Mann."})
+    assert r.status_code == 200
+    eid = r.json()["id"]
+
+    # 2. List versions initially empty
+    v_list = client.get(f"/api/essays/{eid}/versions").json()
+    assert isinstance(v_list, list)
+
+    # 3. Manual save version 1
+    s1 = client.post(f"/api/essays/{eid}/versions", json={"message": "v1手动保存"})
+    assert s1.status_code == 200
+    v1_id = s1.json()["version_id"]
+    assert s1.json()["message"] == "v1手动保存"
+    assert "created_at" in s1.json()
+
+    # Save with default message
+    s_def = client.post(f"/api/essays/{eid}/versions", json={})
+    assert s_def.status_code == 200
+    assert s_def.json()["message"] == "手动保存"
+
+    # 4. List versions (ordered by id DESC)
+    v_list = client.get(f"/api/essays/{eid}/versions").json()
+    assert len(v_list) >= 2
+    assert v_list[0]["id"] == s_def.json()["version_id"]
+    assert v_list[1]["id"] == v1_id
+    assert "error_count" in v_list[0]
+
+    # 5. Non-existent essay 404
+    assert client.get("/api/essays/99999/versions").status_code == 404
+    assert client.post("/api/essays/99999/versions", json={"message": "test"}).status_code == 404
+    assert client.post("/api/essays/99999/restore", json={"version_id": 1}).status_code == 404
+
+    # 6. Non-existent version 404
+    assert client.post(f"/api/essays/{eid}/restore", json={"version_id": 99999}).status_code == 404
+
+    # 7. Update essay content to content B
+    client.put(f"/api/essays/{eid}", json={"content": "Ich sehe den Mann. Er ist nett."})
+
+    # 8. Restore to version 1 (which had "Ich sehe der Mann.")
+    # Content differs, so a checkpoint version is created before restoring
+    res_restore = client.post(f"/api/essays/{eid}/restore", json={"version_id": v1_id})
+    assert res_restore.status_code == 200
+    restore_data = res_restore.json()
+    assert restore_data["content"] == "Ich sehe der Mann."
+    assert restore_data["checkpoint_version_id"] is not None
+
+    # Check versions list: should contain checkpoint "恢复到版本 {v1_id} 之前"
+    v_list2 = client.get(f"/api/essays/{eid}/versions").json()
+    assert any(f"恢复到版本 {v1_id} 之前" in v["message"] for v in v_list2)
+
+    # 9. Restore again when identical: checkpoint is skipped (None)
+    res_restore_again = client.post(f"/api/essays/{eid}/restore", json={"version_id": v1_id})
+    assert res_restore_again.status_code == 200
+    assert res_restore_again.json()["checkpoint_version_id"] is None
+    assert res_restore_again.json()["content"] == "Ich sehe der Mann."
+
+
+def test_writing_apply_partial_and_full_accept(client):
+    orig = "Ich habe ein Hund. Er ist gut."
+    corr = "Ich habe einen Hund. Er ist gut. Ich liebe ihn."
+    # 1. Create essay
+    r = client.post("/api/essays", json={"title": "Diff Apply Essay", "content": orig})
+    assert r.status_code == 200
+    eid = r.json()["id"]
+
+    # 2. Out of bounds index returns 400
+    r_oob = client.post("/api/writing/apply", json={
+        "essay_id": eid,
+        "original_text": orig,
+        "corrected_text": corr,
+        "accepted_indices": [-1]
+    })
+    assert r_oob.status_code == 400
+
+    r_oob2 = client.post("/api/writing/apply", json={
+        "essay_id": eid,
+        "original_text": orig,
+        "corrected_text": corr,
+        "accepted_indices": [99]
+    })
+    assert r_oob2.status_code == 400
+
+    # 3. Non-existent essay returns 404
+    r_404 = client.post("/api/writing/apply", json={
+        "essay_id": 99999,
+        "original_text": orig,
+        "corrected_text": corr,
+        "accepted_indices": [0]
+    })
+    assert r_404.status_code == 404
+
+    # 4. Partial accept (accept hunk 0 out of 2)
+    # Hunk 0: "Ich habe ein Hund." -> "Ich habe einen Hund."
+    # Hunk 1: "" -> "Ich liebe ihn." (rejected)
+    r_apply = client.post("/api/writing/apply", json={
+        "essay_id": eid,
+        "original_text": orig,
+        "corrected_text": corr,
+        "accepted_indices": [0]
+    })
+    assert r_apply.status_code == 200
+    apply_data = r_apply.json()
+    assert apply_data["content"] == "Ich habe einen Hund. Er ist gut."
+    assert apply_data["version_id"] is not None
+    assert "error_count" in apply_data
+
+    # Check essay was updated in DB
+    essay_get = client.get(f"/api/essays/{eid}").json()
+    assert essay_get["content"] == "Ich habe einen Hund. Er ist gut."
+
+    # Check auto-created version
+    v_list = client.get(f"/api/essays/{eid}/versions").json()
+    assert len(v_list) == 1
+    assert v_list[0]["message"] == "AI 润色 · 接受 1/2 处"
+
+    # 5. Full reject (accepted_indices = [])
+    # Content remains unchanged, version_id is None, no new version added
+    r_reject = client.post("/api/writing/apply", json={
+        "essay_id": eid,
+        "original_text": "Ich habe einen Hund. Er ist gut.",
+        "corrected_text": corr,
+        "accepted_indices": []
+    })
+    assert r_reject.status_code == 200
+    reject_data = r_reject.json()
+    assert reject_data["content"] == "Ich habe einen Hund. Er ist gut."
+    assert reject_data["version_id"] is None
+
+    # Version count should still be 1
+    v_list_after = client.get(f"/api/essays/{eid}/versions").json()
+    assert len(v_list_after) == 1
+
+
+def test_delete_essay_cascades_versions(client, test_db_path):
+    import sqlite3
+    r = client.post("/api/essays", json={"title": "Cascade Essay", "content": "Ich trinke Kaffee."})
+    assert r.status_code == 200
+    eid = r.json()["id"]
+
+    # Save 2 versions
+    client.post(f"/api/essays/{eid}/versions", json={"message": "v1"})
+    client.post(f"/api/essays/{eid}/versions", json={"message": "v2"})
+
+    conn = sqlite3.connect(test_db_path)
+    count = conn.execute("SELECT COUNT(*) FROM essay_versions WHERE essay_id = ?", (eid,)).fetchone()[0]
+    assert count == 2
+    conn.close()
+
+    # Delete essay
+    del_r = client.delete(f"/api/essays/{eid}")
+    assert del_r.status_code == 200
+
+    conn = sqlite3.connect(test_db_path)
+    count_after = conn.execute("SELECT COUNT(*) FROM essay_versions WHERE essay_id = ?", (eid,)).fetchone()[0]
+    assert count_after == 0
+    conn.close()
+
+
 def test_seed_preset_articles_with_a1(client, test_db_path):
     init_db(test_db_path)
     

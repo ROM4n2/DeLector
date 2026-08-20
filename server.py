@@ -203,6 +203,19 @@ def init_db(db_path: Optional[str] = None):
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS essay_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                essay_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                analysis_json TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_essay_versions_essay_id ON essay_versions(essay_id, id DESC);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS reading_notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 article_id INTEGER NOT NULL,
@@ -245,6 +258,12 @@ def init_db(db_path: Optional[str] = None):
                 for col in ("corrected_form", "error_type"):
                     if col not in cols:
                         conn.execute(f"ALTER TABLE grammar_cards ADD COLUMN {col} TEXT DEFAULT ''")
+
+        conn.execute("""
+            INSERT INTO essay_versions (essay_id, content, analysis_json, message)
+            SELECT id, content, analysis_json, '初始快照' FROM essays
+            WHERE id NOT IN (SELECT DISTINCT essay_id FROM essay_versions);
+        """)
 
     init_progress_db()
     seed_preset_articles(target_path)
@@ -703,6 +722,18 @@ class WritingCardReq(BaseModel):
 
 class AIPolishReq(BaseModel):
     text: str
+
+class WritingApplyReq(BaseModel):
+    essay_id: int
+    original_text: str
+    corrected_text: str
+    accepted_indices: List[int]
+
+class EssayVersionCreateReq(BaseModel):
+    message: Optional[str] = "手动保存"
+
+class EssayRestoreReq(BaseModel):
+    version_id: int
 
 class GrammarLookupReq(BaseModel):
     sentence: str
@@ -2475,6 +2506,7 @@ def delete_essay(essay_id: int):
         row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
             raise HTTPException(404, "essay not found")
+        conn.execute("DELETE FROM essay_versions WHERE essay_id = ?", (essay_id,))
         conn.execute("DELETE FROM essays WHERE id = ?", (essay_id,))
     return {"status": "ok"}
 
@@ -2574,6 +2606,147 @@ async def api_writing_ai_polish_diff(req: AIPolishReq):
             "error_count": error_count,
         }
     }
+
+
+@app.post("/api/essays/{essay_id}/versions")
+def save_essay_version(essay_id: int, req: EssayVersionCreateReq):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "essay not found")
+        msg = req.message.strip() if (req.message and req.message.strip()) else "手动保存"
+        cur = conn.execute(
+            "INSERT INTO essay_versions (essay_id, content, analysis_json, message) "
+            "VALUES (?, ?, ?, ?)",
+            (essay_id, row["content"], row["analysis_json"], msg)
+        )
+        version_id = cur.lastrowid
+        created_row = conn.execute("SELECT created_at FROM essay_versions WHERE id = ?", (version_id,)).fetchone()
+        created_at = created_row["created_at"] if created_row else datetime.utcnow().isoformat()
+    return {"version_id": version_id, "message": msg, "created_at": created_at}
+
+
+@app.get("/api/essays/{essay_id}/versions")
+def list_essay_versions(essay_id: int):
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "essay not found")
+        rows = conn.execute(
+            "SELECT id, essay_id, content, message, created_at, analysis_json "
+            "FROM essay_versions WHERE essay_id = ? ORDER BY id DESC",
+            (essay_id,)
+        ).fetchall()
+        result = []
+        for r in rows:
+            raw_a = r["analysis_json"]
+            try:
+                a = json.loads(raw_a) if isinstance(raw_a, str) else raw_a
+                err_count = a.get("error_count", 0) if isinstance(a, dict) else 0
+            except Exception:
+                err_count = 0
+            result.append({
+                "id": r["id"],
+                "essay_id": r["essay_id"],
+                "message": r["message"],
+                "created_at": r["created_at"],
+                "error_count": err_count,
+            })
+    return result
+
+
+@app.post("/api/essays/{essay_id}/restore")
+def restore_essay_version(essay_id: int, req: EssayRestoreReq):
+    from writing_rules import analyze_essay_text
+    with get_db() as conn:
+        essay = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
+        if not essay:
+            raise HTTPException(404, "essay not found")
+        version = conn.execute(
+            "SELECT * FROM essay_versions WHERE id = ? AND essay_id = ?",
+            (req.version_id, essay_id)
+        ).fetchone()
+        if not version:
+            raise HTTPException(404, "version not found")
+
+        checkpoint_version_id = None
+        if version["content"] != essay["content"]:
+            cur = conn.execute(
+                "INSERT INTO essay_versions (essay_id, content, analysis_json, message) "
+                "VALUES (?, ?, ?, ?)",
+                (essay_id, essay["content"], essay["analysis_json"], f"恢复到版本 {req.version_id} 之前")
+            )
+            checkpoint_version_id = cur.lastrowid
+            a = analyze_essay_text(version["content"][:5000], _get_writer_nlp())
+            now_str = datetime.utcnow().isoformat()
+            conn.execute(
+                "UPDATE essays SET content = ?, analysis_json = ?, cefr_level = ?, "
+                "error_count = ?, sentence_count = ?, updated_at = ? WHERE id = ?",
+                (version["content"], json.dumps(a, ensure_ascii=False),
+                 a.get("cefr", {}).get("recommended_level"), a["error_count"],
+                 len(a["sentences"]), now_str, essay_id)
+            )
+        else:
+            raw_a = essay["analysis_json"]
+            a = json.loads(raw_a) if isinstance(raw_a, str) else raw_a
+
+    return {
+        "id": essay_id,
+        "content": version["content"],
+        "analysis_json": a,
+        "error_count": a["error_count"],
+        "checkpoint_version_id": checkpoint_version_id,
+    }
+
+
+@app.post("/api/writing/apply")
+def api_writing_apply(req: WritingApplyReq):
+    from essay_diff import diff_sentences, merge_sentences
+    from writing_rules import analyze_essay_text
+
+    hunks = diff_sentences(req.original_text, req.corrected_text)
+    if any(idx < 0 or idx >= len(hunks) for idx in req.accepted_indices):
+        raise HTTPException(400, "accepted_indices 越界")
+
+    accepted = [i in set(req.accepted_indices) for i in range(len(hunks))]
+    merged = merge_sentences(req.original_text, req.corrected_text, accepted)
+
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM essays WHERE id = ?", (req.essay_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "essay not found")
+
+        if req.accepted_indices and merged != row["content"]:
+            a = analyze_essay_text(merged[:5000], _get_writer_nlp())
+            now_str = datetime.utcnow().isoformat()
+            conn.execute(
+                "UPDATE essays SET title = ?, content = ?, analysis_json = ?, "
+                "cefr_level = ?, error_count = ?, sentence_count = ?, updated_at = ? "
+                "WHERE id = ?",
+                (row["title"], merged, json.dumps(a, ensure_ascii=False),
+                 a.get("cefr", {}).get("recommended_level"), a["error_count"],
+                 len(a["sentences"]), now_str, req.essay_id)
+            )
+            msg = f"AI 润色 · 接受 {len(req.accepted_indices)}/{len(hunks)} 处"
+            cur = conn.execute(
+                "INSERT INTO essay_versions (essay_id, content, analysis_json, message) "
+                "VALUES (?, ?, ?, ?)",
+                (req.essay_id, merged, json.dumps(a, ensure_ascii=False), msg)
+            )
+            version_id = cur.lastrowid
+        else:
+            version_id = None
+            raw_analysis = row["analysis_json"]
+            a = json.loads(raw_analysis) if isinstance(raw_analysis, str) else raw_analysis
+            merged = row["content"]
+
+    return {
+        "content": merged,
+        "analysis_json": a,
+        "error_count": a["error_count"],
+        "version_id": version_id,
+    }
+
 
 # Mount Static UI (Catch-all must be at the very end)
 STATIC_DIR = os.environ.get("STATIC_DIR")
