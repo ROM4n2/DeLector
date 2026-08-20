@@ -682,6 +682,27 @@ class GrammarCardReq(BaseModel):
     cefr_level: str
     explanation_zh: str
     rule_formula: Optional[str] = ""
+    corrected_form: Optional[str] = ""
+    error_type: Optional[str] = ""
+
+class WritingAnalyzeReq(BaseModel):
+    text: str
+
+class EssayCreateReq(BaseModel):
+    title: str
+    content: str
+
+class EssayUpdateReq(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+class WritingCardReq(BaseModel):
+    essay_id: int
+    sentence_id: int
+    span_index: int
+
+class AIPolishReq(BaseModel):
+    text: str
 
 class GrammarLookupReq(BaseModel):
     sentence: str
@@ -1282,8 +1303,8 @@ def add_vocab_card(req: VocabCardReq):
 def add_grammar_card(req: GrammarCardReq):
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO grammar_cards (article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula) VALUES (?, ?, ?, ?, ?, ?)",
-            (req.article_id, req.sentence_context, req.grammar_name, req.cefr_level, req.explanation_zh, req.rule_formula)
+            "INSERT INTO grammar_cards (article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula, corrected_form, error_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (req.article_id, req.sentence_context, req.grammar_name, req.cefr_level, req.explanation_zh, req.rule_formula or "", req.corrected_form or "", req.error_type or "")
         )
         card_id = cur.lastrowid
     log_study_event("add_card", card_id, req.grammar_name)
@@ -2357,6 +2378,189 @@ class SyntaxAnalyzeReq(BaseModel):
 @app.post("/api/syntax/analyze")
 def api_syntax_analyze(req: SyntaxAnalyzeReq):
     return analyze_syntax_tree(req.text)
+
+# --- Writing Desk (Schreibwerkstatt) Endpoints ---
+
+SYSTEM_WRITING_POLISH_PROMPT = """你是一位精通德语学术写作与德福/歌德高级写作评分标准的资深德语教学专家。
+请对用户提交的德语作文/文本进行全面的语法纠错、用词地道化润色与结构优化。
+请严格输出如下 JSON 格式：
+{
+  "corrected_text": "润色纠错后的完整德语文本",
+  "notes_zh": [
+    "修改点说明1",
+    "修改点说明2"
+  ],
+  "error_count": 2
+}
+不要输出除 JSON 以外的任何文字。"""
+
+
+def _get_writer_nlp():
+    try:
+        return nlp
+    except Exception:
+        return None
+
+
+@app.post("/api/writing/analyze")
+def api_writing_analyze(req: WritingAnalyzeReq):
+    from writing_rules import analyze_essay_text
+    return analyze_essay_text(req.text[:2000], _get_writer_nlp())
+
+
+@app.post("/api/essays")
+def create_essay(req: EssayCreateReq):
+    from writing_rules import analyze_essay_text
+    a = analyze_essay_text(req.content[:5000], _get_writer_nlp())
+    cefr = a.get("cefr", {}).get("recommended_level")
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO essays (title, content, analysis_json, cefr_level, error_count, sentence_count) VALUES (?, ?, ?, ?, ?, ?)",
+            (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr, a["error_count"], len(a["sentences"]))
+        )
+        eid = cur.lastrowid
+    return {"id": eid, "title": req.title, "analysis_json": a, "error_count": a["error_count"]}
+
+
+@app.get("/api/essays")
+def list_essays():
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, title, cefr_level, error_count, sentence_count, created_at, updated_at FROM essays ORDER BY updated_at DESC, id DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/essays/{essay_id}")
+def get_essay(essay_id: int):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "essay not found")
+    data = dict(row)
+    if isinstance(data.get("analysis_json"), str):
+        try:
+            data["analysis_json"] = json.loads(data["analysis_json"])
+        except Exception:
+            pass
+    return data
+
+
+@app.put("/api/essays/{essay_id}")
+def update_essay(essay_id: int, req: EssayUpdateReq):
+    from writing_rules import analyze_essay_text
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "essay not found")
+        content = req.content if req.content is not None else row["content"]
+        title = req.title if req.title is not None else row["title"]
+        a = analyze_essay_text(content[:5000], _get_writer_nlp())
+        now_str = datetime.utcnow().isoformat()
+        conn.execute(
+            "UPDATE essays SET title = ?, content = ?, analysis_json = ?, "
+            "cefr_level = ?, error_count = ?, sentence_count = ?, updated_at = ? "
+            "WHERE id = ?",
+            (title, content, json.dumps(a, ensure_ascii=False),
+             a.get("cefr", {}).get("recommended_level"), a["error_count"],
+             len(a["sentences"]), now_str, essay_id)
+        )
+    return {"id": essay_id, "title": title, "analysis_json": a, "error_count": a["error_count"]}
+
+
+@app.delete("/api/essays/{essay_id}")
+def delete_essay(essay_id: int):
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "essay not found")
+        conn.execute("DELETE FROM essays WHERE id = ?", (essay_id,))
+    return {"status": "ok"}
+
+
+@app.post("/api/writing/cards")
+def save_writing_card(req: WritingCardReq):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM essays WHERE id = ?", (req.essay_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "essay not found")
+    raw_analysis = row["analysis_json"]
+    a = json.loads(raw_analysis) if isinstance(raw_analysis, str) else raw_analysis
+    sentences = a.get("sentences", [])
+    if req.sentence_id < 0 or req.sentence_id >= len(sentences):
+        raise HTTPException(400, "sentence_id 越界")
+    sent = sentences[req.sentence_id]
+    spans = sent.get("spans", [])
+    if req.span_index < 0 or req.span_index >= len(spans):
+        raise HTTPException(400, "span_index 越界")
+    sp = spans[req.span_index]
+    sentence_text = sent.get("text", "")
+    card = GrammarCardReq(
+        article_id=None,
+        sentence_context=sentence_text,
+        grammar_name=f"写作润色 · {sp['error_type']}",
+        cefr_level=row["cefr_level"] or "B1",
+        explanation_zh=sp["explanation_zh"],
+        rule_formula=sp["corrected_form"],
+        corrected_form=sp["corrected_form"],
+        error_type=sp["error_type"],
+    )
+    return add_grammar_card(card)
+
+
+@app.post("/api/writing/ai-polish")
+async def api_writing_ai_polish(req: AIPolishReq):
+    text = req.text[:2000]
+    key = get_effective_api_key()
+    if not key:
+        import logging
+        logging.warning("[writing/ai-polish] API Key not set — returning stub response.")
+        return {
+            "status": "ok",
+            "result": {
+                "corrected_text": text,
+                "notes_zh": ["请在设置中配置 DeepSeek API Key 后使用 AI 润色功能"],
+                "error_count": 0,
+            }
+        }
+
+    base_url = get_effective_api_base_url().rstrip('/')
+    model = get_effective_api_model()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_WRITING_POLISH_PROMPT},
+                        {"role": "user", "content": f"德语文本:\n{text}"}
+                    ],
+                    "response_format": {"type": "json_object"}
+                }
+            )
+            content = resp.json()["choices"][0]["message"]["content"]
+            parsed = json.loads(content)
+            return {
+                "status": "ok",
+                "result": {
+                    "corrected_text": parsed.get("corrected_text", text),
+                    "notes_zh": parsed.get("notes_zh", []),
+                    "error_count": parsed.get("error_count", len(parsed.get("notes_zh", [])))
+                }
+            }
+    except Exception as e:
+        import logging
+        logging.error(f"[writing/ai-polish] DeepSeek API error: {e}")
+        return {
+            "status": "ok",
+            "result": {
+                "corrected_text": text,
+                "notes_zh": [f"AI 润色请求失败：{str(e)}"],
+                "error_count": 0
+            }
+        }
 
 # Mount Static UI (Catch-all must be at the very end)
 STATIC_DIR = os.environ.get("STATIC_DIR")

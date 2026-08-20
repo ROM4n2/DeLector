@@ -69,6 +69,49 @@ def test_essays_table_created():
     assert {"id", "title", "content", "analysis_json",
             "cefr_level", "error_count", "created_at"} <= cols
 
+def test_writing_analyze_endpoint(client):
+    res = client.post("/api/writing/analyze", json={"text": "Ich sehe der Mann."})
+    assert res.status_code == 200
+    a = res.json()
+    assert "sentences" in a and len(a["sentences"]) > 0 and a["sentences"][0]["spans"]
+
+def test_essays_crud_flow(client):
+    r = client.post("/api/essays", json={"title": "Mein Essay",
+                                         "content": "Ich fahre mit der Auto."})
+    assert r.status_code == 200
+    eid = r.json()["id"]
+    assert r.json()["error_count"] >= 1
+    assert len(client.get("/api/essays").json()) >= 1
+    g = client.get(f"/api/essays/{eid}").json()
+    assert g["analysis_json"]
+    u = client.put(f"/api/essays/{eid}", json={"content": "Ich fahre mit dem Auto."})
+    assert u.status_code == 200
+    assert u.json()["error_count"] == 0
+    assert client.delete(f"/api/essays/{eid}").status_code == 200
+
+def test_writing_card_sugar_endpoint(client):
+    r = client.post("/api/essays", json={"title": "T", "content": "Ich sehe der Mann."})
+    assert r.status_code == 200
+    eid = r.json()["id"]
+    a = r.json()["analysis_json"]
+    span = a["sentences"][0]["spans"][0]
+    res = client.post("/api/writing/cards", json={
+        "essay_id": eid, "sentence_id": 0, "span_index": 0})
+    assert res.status_code == 200
+    cards_data = client.get("/api/cards").json()
+    g_cards = cards_data.get("grammar_cards", [])
+    assert g_cards and g_cards[0].get("corrected_form") == span["corrected_form"]
+    assert g_cards[0].get("error_type") == span["error_type"]
+
+def test_ai_polish_no_key_stub(client, monkeypatch):
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "")
+    res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert data["result"]["error_count"] == 0
+    assert data["result"]["corrected_text"] == "Hallo."
+
 def test_seed_preset_articles_with_a1(client, test_db_path):
     init_db(test_db_path)
     
