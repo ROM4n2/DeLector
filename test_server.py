@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import pytest
 from fastapi.testclient import TestClient
 
@@ -1413,6 +1414,74 @@ def test_android_build_extracts_spacy_data_packages():
     declared = extract_lines[0]
     for pkg in ("spacy", "thinc", "de_core_news_sm"):
         assert f'"{pkg}"' in declared, f"{pkg} 的数据文件不会被解包"
+
+def _read_android_gradle():
+    return open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"),
+                encoding="utf-8").read()
+
+def test_android_version_code_encoding():
+    """versionCode 必须是 major*10000 + minor*100 + patch，且严格大于历史最大值。
+
+    旧编码 major*100 + minor*10 + patch 在 minor 到 10 时溢出撞车
+    （3.10.0 与 4.0.0 都算出 400）。versionCode 撞车 = 新版本无法覆盖安装，
+    所以这条规则交给测试守，而不是靠记忆。
+    """
+    gradle = _read_android_gradle()
+    code = int(re.search(r"versionCode\s+(\d+)", gradle).group(1))
+    name = re.search(r'versionName\s+"([\d.]+)"', gradle).group(1)
+    major, minor, patch = (int(x) for x in name.split("."))
+    assert code == major * 10000 + minor * 100 + patch, \
+        f"versionName {name} 应编码为 {major * 10000 + minor * 100 + patch}，实际 {code}"
+    assert minor < 100 and patch < 100, "minor/patch 各只有两位空间"
+    assert code > 391, "必须大于 v3.9.1 的 391，否则安卓拒绝覆盖安装"
+
+def test_android_signing_config_degrades_without_keystore():
+    """签名配置必须以「keystore 文件存在」为条件，且只读环境变量。
+
+    两条都不能少：
+    - 无条件写 storeFile 会让本地开发和 fork 直接构建失败；
+    - 把口令写进 build.gradle 则是把签名密钥提交进仓库。
+    """
+    gradle = _read_android_gradle()
+    assert "signingConfigs" in gradle, "缺少钉死的签名配置"
+    assert 'file(pinnedKeystore).exists()' in gradle, \
+        "签名配置必须以 keystore 文件真实存在为前提，否则本地/fork 构建会炸"
+    for var in ("DELECTOR_KEYSTORE_PATH", "DELECTOR_KEYSTORE_PASSWORD",
+                "DELECTOR_KEY_ALIAS", "DELECTOR_KEY_PASSWORD"):
+        assert f'System.getenv("{var}")' in gradle, f"{var} 必须从环境变量读"
+    assert "storePassword" in gradle and 'storePassword "' not in gradle, \
+        "口令不得硬编码在 build.gradle 里"
+
+def test_release_workflow_gates_apk_signature():
+    """CI 必须验签，并且只取 debug 变体那一个确定的 APK 路径。
+
+    没有这道闸时的失效模式是静默的：secret 缺失 → gradle 回落到随机 debug
+    keystore → 产出一个看起来正常、装到手机上却签名不一致的 APK。
+    """
+    workflow = open(os.path.join(os.path.dirname(__file__), ".github", "workflows",
+                                 "build-release.yml"), encoding="utf-8").read()
+    assert "keytool -printcert -jarfile" in workflow, "缺少 APK 证书指纹断言"
+    assert "app/build/outputs/apk/debug/app-debug.apk" in workflow, \
+        "APK 路径必须写死到 debug 变体，find *.apk 会随机抓到别的变体"
+    assert 'find android/app/build/outputs/apk/ -name "*.apk"' not in workflow
+    assert "$RUNNER_TEMP/delector-debug.jks" in workflow, \
+        "keystore 必须解到 $RUNNER_TEMP，不能落在工作树里"
+    # 指纹一旦填上就不能再被清空：空值时那道闸退化成 APK↔keystore 自比对，
+    # 拦不住「keystore 被换成另一份合法 keystore」（= 已安装用户永远收不到升级）。
+    expected = re.search(r'EXPECTED_SHA256:\s*"([^"]*)"', workflow).group(1)
+    assert re.fullmatch(r"(?:[0-9A-F]{2}:){31}[0-9A-F]{2}", expected), \
+        f"EXPECTED_SHA256 必须是大写冒号分隔的 32 字节指纹（与 keytool 输出同格式），实际 {expected!r}"
+    assert "android/" not in workflow.split("Decode Pinned Signing Keystore")[1].split("base64 -d")[0], \
+        "解码目标不得指向仓库内路径"
+
+def test_keystore_protected_by_gitignore_and_hook():
+    root = os.path.dirname(__file__)
+    ignore = open(os.path.join(root, ".gitignore"), encoding="utf-8").read()
+    for pat in ("*.jks", "*.keystore", "*.p12", "signing.properties"):
+        assert pat in ignore, f".gitignore 缺 {pat}"
+    hook = open(os.path.join(root, ".githooks", "pre-commit"), encoding="utf-8").read()
+    assert "*.jks" in hook, "pre-commit 的文件名黑名单不覆盖 keystore"
+    assert "feedfeed" in hook, "还需按文件头认 keystore：改后缀就能绕开文件名黑名单"
 
 def test_delete_article(client):
     # 1. Ingest article

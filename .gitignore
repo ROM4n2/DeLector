@@ -20,3 +20,13 @@ android/app/src/main/assets/static/
 # AI 批量生成词库的批次缓存（tools/build_dict.py）
 tools/raw/
 tools/raw_prep/
+
+# 安卓签名材料。丢失 = org.delector.app 这个包名永远无法再推送升级；
+# 泄露 = 任何人都能签出冒充本 App 的更新包。CI 里 keystore 只解到
+# $RUNNER_TEMP，本地请存在仓库之外（这几条是纵深防御的最后一层）。
+*.jks
+*.keystore
+*.p12
+*.jks.b64
+signing.properties
+keystore.properties

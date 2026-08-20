@@ -3,16 +3,43 @@ plugins {
     id 'com.chaquo.python'
 }
 
+// 钉死的签名 keystore。CI 把它从 secret 解到 $RUNNER_TEMP（永不进工作树），
+// 本地开发与 fork 没有这个环境变量，签名配置整段不生效、回落到 AGP 自动生成的
+// debug keystore —— 构建照常能跑。
+// 注意：只有「文件真的存在」才算生效，光有环境变量不算，否则 gradle 会在
+// 签名阶段才炸，错误信息离根因很远。
+def pinnedKeystore = System.getenv("DELECTOR_KEYSTORE_PATH")
+def hasPinnedKeystore = pinnedKeystore != null && !pinnedKeystore.isEmpty() && file(pinnedKeystore).exists()
+
 android {
     namespace 'org.delector.app'
     compileSdk 34
+
+    signingConfigs {
+        debug {
+            // 为什么钉 debug 而不是新开 release 变体：Android 只比较证书是否一致、
+            // 不看构建变体，签名稳定性收益完全等同；而 release 变体会是本项目第一次
+            // 走 R8/proguard，Chaquopy + spaCy 的资源解包从未在该路径验证过，
+            // 失效方式是静默的（App 照常启动，只是语法标注悄悄退化）。
+            if (hasPinnedKeystore) {
+                storeFile file(pinnedKeystore)
+                storePassword System.getenv("DELECTOR_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("DELECTOR_KEY_ALIAS")
+                keyPassword System.getenv("DELECTOR_KEY_PASSWORD")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId "org.delector.app"
         minSdk 24
         targetSdk 34
-        versionCode 391
-        versionName "3.9.1"
+        // versionCode 编码规则：major*10000 + minor*100 + patch。
+        // 旧规则 major*100 + minor*10 + patch 在 minor 到 10 时溢出撞车
+        // （3.10.0 与 4.0.0 都是 400），而 versionCode 必须严格单调递增，
+        // 撞车意味着 4.0.0 无法覆盖安装 3.10.0。
+        versionCode 31000
+        versionName "3.10.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {

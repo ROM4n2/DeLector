@@ -58,7 +58,7 @@
 | 移动打包 | Chaquopy + Gradle | `android/` |
 | CI/CD | GitHub Actions | `.github/workflows/build-release.yml` |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（78）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10） |
+| 测试 | pytest | `test_server.py`（82）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10） |
 | 提交守卫 | pre-commit 密钥扫描 | `.githooks/pre-commit` |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
@@ -135,6 +135,22 @@ md 优先（带词向量、标注更准），sm 兜底。自动下载只在**非
   启动页轮询上限约 84 秒。应用内部存储占用因此增加约 30MB。
 - **`android/app/src/main/python/` 与 `android/app/src/main/assets/static/` 是 CI 生成的**，
   不在版本控制里（见 `.gitignore`）。
+- **签名 keystore 是钉死的，且只从环境变量读**（v3.10.0）：`signingConfigs.debug`
+  在 `DELECTOR_KEYSTORE_PATH` 指向的文件**存在**时生效，否则整段跳过、回落到 AGP
+  自动生成的 debug keystore —— 本地和 fork 照常能构建。CI 从 4 个 secret
+  （`ANDROID_DEBUG_KEYSTORE_B64` / `ANDROID_KEYSTORE_PASSWORD` /
+  `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）解码到 **`$RUNNER_TEMP`**，
+  keystore 永不进入工作树。构建后 `keytool -printcert -jarfile` 比对 APK 与 keystore
+  的证书指纹，不一致就红 —— 这道闸拦的是「secret 缺失 → 静默回落到随机签名 →
+  产出一个看起来正常、装到手机上却签名不一致的 APK」。
+  用 `keytool` 而不是 `apksigner`：本 job 显式装了 JDK 17，`keytool` 路径确定；
+  `apksigner` 属 build-tools，路径含版本号段且不在 PATH 上，AGP 换版本时那道闸会**静默失效**。
+- **versionCode 编码规则：`major*10000 + minor*100 + patch`**（v3.10.0 起）。
+  旧规则 `major*100 + minor*10 + patch` 在 minor 到 10 时溢出撞车（`3.10.0` 与 `4.0.0`
+  都算出 400），而 versionCode 必须严格单调递增，撞车 = 新版本无法覆盖安装。
+  有测试读 `build.gradle` 守这条规则（`test_android_version_code_encoding`）。
+- **keystore 丢失 = `org.delector.app` 这个包名永远无法再推送升级**，只能改包名重来
+  （用户数据全丢）。keystore 与口令必须离线备份在仓库之外的至少两处。
 - **验证 APK 内容要解 `.imy`**：Python 代码被打进 `assets/chaquopy/app.imy`（自己的 .py + 模型）
   与 `requirements-<abi>.imy`（原生包），直接在 apk 的 namelist 里 grep `server.py` 会误判成"缺失"。
   排查 Chaquopy 自身行为时，`bootstrap.imy` 里就是它的 importer 实现，比查文档快也更准。
@@ -313,7 +329,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （89 个，全绿）
+测试:      pytest            （112 个，全绿）
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py
 ```
 
@@ -365,6 +381,21 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       （其中 47 条是人工校验的 `SEED_COLLOCATIONS`，作为 floor 永不被 AI 覆盖）。
       账户充值后跑 `python tools/build_prep.py --resume --parallel 6` 续跑：
       已答词会被预过滤，失败批没写缓存，缓存键是词表内容哈希（不会跨 run 串味）。
+- [ ] **签名迁移只能靠 CI 验证**（v3.10.0）：本机无 Android SDK，`build.gradle` 的
+      `signingConfigs` 与工作流的指纹闸都没有本地执行过。已本地验到的只有：
+      YAML 可解析、pre-commit 对 keystore（含改名成 `.bin` 的真实 PKCS12）实测拦下、
+      4 个 GitHub Secret 已存在。第一次跑 CI 时要盯「Verify APK Signing Certificate」那步。
+- [x] ~~**工作流里 `EXPECTED_SHA256` 仍为空**~~ — 2026-08-20 已填入
+      `9A:8A:6D:…:57:9C`（公开信息）。两道断言都是无条件的：APK↔keystore 自比对拦
+      「secret 缺失 → 回落随机签名」，定值比对拦「keystore 被换成另一份合法 keystore」。
+      有测试断言该值是大写冒号分隔的 32 字节指纹，防止将来被清空导致闸静默退化。
+- [ ] **pre-commit 的 keystore 防护有一处残留缺口**：base64 编码后的 PKCS12
+      若存成不叫 `*.b64` 的纯文本文件，只会被通用规则漏过（JKS/JCEKS 的 base64 magic
+      有专门正则，PKCS12 的 base64 前缀 `MII` 太通用，加了会把公开证书全误拦，
+      而文件名类命中没有 `delector:allow-secret` 豁免路径）。
+- [ ] **旧安装无法升级到 v3.10.0**：v3.9.1 及更早的 APK 是用 CI 每次随机生成的
+      debug keystore 签的，与钉死的证书不一致，必须**卸载重装**（数据全丢，
+      且 v3.9.1 的安卓端备份导出本身是静默无操作，无法自救）。
 - [ ] **`linguistics.py` 有 14 条 pyflakes 重复键告警**（`klima`/`schutz`/`bund` 等在
       `LINGUISTICS_VOCAB_EXT` 与另一张表里各出现一次，值不同）：先前就有，未在本次改动范围内，
       但确实意味着有一份定义被静默覆盖，值得单独查一次
@@ -375,7 +406,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       `edge_tts_mini` 直连 `speech.platform.bing.com`（与桌面端同一服务，本机/用户网络实测可达）。
       真机若连不上该域名（或离线），三层兜底全败时播放器显示 `⚠ 语音引擎不可用`（不再静默）。
       原生 TTS 仅当设备装有德语语音时才可用（国内机型多无 Google TTS 德语数据，已做 voice 遍历兜底）
-- [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
+- [x] ~~**已合并的分支未删**：`fix/android-startup-and-spacy`~~ — 2026-08-20 本地与远端都已删
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
       md 实际加载未在本机跑过
 - [ ] Android 侧 Java 代码无法本机编译验证（本机无 Android SDK），只能靠 CI
