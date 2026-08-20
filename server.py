@@ -4,18 +4,21 @@ import json
 import sqlite3
 import random
 import tempfile
+import shutil
+import secrets
 import re
 import html
 import socket
 import ipaddress
 import asyncio
 import hashlib
+from contextlib import contextmanager
 from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 import httpx
 try:
@@ -1781,22 +1784,166 @@ def export_study_guide(article_id: int):
     )
 
 # --- Backup & Restore Endpoints ---
-@app.get("/api/backup/export")
-def export_database_backup():
-    with get_db() as conn:
-        articles = [dict(r) for r in conn.execute("SELECT * FROM articles").fetchall()]
-        vocab = [dict(r) for r in conn.execute("SELECT * FROM vocab_cards").fetchall()]
-        grammar = [dict(r) for r in conn.execute("SELECT * FROM grammar_cards").fetchall()]
-        notes = [dict(r) for r in conn.execute("SELECT * FROM reading_notes").fetchall()]
-        
+
+BACKUP_FORMAT_VERSION = 2
+
+# app_settings 的**正向**白名单。用白名单而非黑名单：将来新增敏感设置项时，
+# 黑名单会默认泄露，白名单会默认安全。DEEPSEEK_API_KEY 绝不在列 ——
+# 备份 JSON 是用户会分享、上传、丢进网盘的文件。
+BACKUP_SETTINGS_WHITELIST = ("TTS_VOICE", "TTS_RATE", "API_BASE_URL", "API_MODEL")
+
+_SRS_COLUMNS = ("mastered", "mastered_at", "correct_count", "wrong_count",
+                "due_date", "interval_days", "ease_factor", "repetition_count")
+
+# 缺列时回落到与建表 DDL 一致的默认值，这样 v1 备份（或手工编辑过的文件）
+# 也能被读进来而不是炸掉。
+_SRS_DEFAULTS = {"mastered": 0, "mastered_at": None, "correct_count": 0,
+                 "wrong_count": 0, "due_date": None, "interval_days": 1,
+                 "ease_factor": 2.5, "repetition_count": 0}
+
+_BACKUP_TABLES = {
+    "articles": (
+        ("id", "title", "source_url", "raw_text", "processed_json", "created_at"),
+        {"title": "Untitled", "source_url": "", "raw_text": "", "processed_json": "{}"},
+    ),
+    "vocab_cards": (
+        ("id", "article_id", "word", "lemma", "pos", "gender", "plural", "cefr_level",
+         "definition_zh", "sentence_context", "created_at") + _SRS_COLUMNS,
+        dict(_SRS_DEFAULTS, word="", lemma="", pos="", gender="", plural="",
+             cefr_level="A1", definition_zh="", sentence_context=""),
+    ),
+    "grammar_cards": (
+        ("id", "article_id", "sentence_context", "grammar_name", "cefr_level",
+         "explanation_zh", "rule_formula", "examples_zh", "created_at") + _SRS_COLUMNS,
+        dict(_SRS_DEFAULTS, sentence_context="", grammar_name="", cefr_level="A1",
+             explanation_zh="", rule_formula="", examples_zh=""),
+    ),
+    "reading_notes": (
+        ("id", "article_id", "sentence_id", "selected_text", "color", "note_content", "created_at"),
+        {"selected_text": "", "color": "yellow", "note_content": ""},
+    ),
+}
+
+_PROGRESS_TABLES = {
+    "study_log": (
+        ("id", "event_type", "ref_id", "note", "logged_at"),
+        {"event_type": "", "note": ""},
+    ),
+    "quiz_log": (
+        ("id", "card_id", "card_type", "mode", "correct", "attempted_at"),
+        {"card_type": "vocab", "mode": "", "correct": 0},
+    ),
+    "daily_summary": (
+        ("date", "cards_added", "cards_mastered", "articles_read", "quiz_sessions", "study_minutes"),
+        {"cards_added": 0, "cards_mastered": 0, "articles_read": 0,
+         "quiz_sessions": 0, "study_minutes": 0},
+    ),
+}
+
+
+def _require_localhost(request: Request):
+    """备份端点只允许本机访问。
+
+    桌面端有意绑 0.0.0.0（start.py 的 get_bind_host，同 Wi-Fi 的手机/平板可读文章），
+    但「导出整个数据库」和「清空数据库再灌」从来不该被局域网触达 ——
+    后者在改成真覆盖语义后等于「局域网内一个 POST 清空你的数据」。
+    读文章期望被共享，备份不期望，所以闸下在端点粒度而不是改绑定地址。
+    """
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(403, "备份接口仅允许本机访问")
+
+
+def _rows_to_tuples(rows: List[Dict[str, Any]], columns: Tuple[str, ...],
+                    defaults: Dict[str, Any]) -> List[Tuple]:
+    return [tuple(r.get(c, defaults.get(c)) for c in columns) for r in rows]
+
+
+def build_backup_payload() -> Dict[str, Any]:
+    """组装 v2 备份。local_storage 由前端在 /prepare 时填入——后端读不到浏览器存储。"""
+    conn = get_db()
+    try:
+        tables = {name: [dict(r) for r in conn.execute(f"SELECT * FROM {name}").fetchall()]
+                  for name in _BACKUP_TABLES}
+        placeholders = ",".join("?" for _ in BACKUP_SETTINGS_WHITELIST)
+        settings = [dict(r) for r in conn.execute(
+            f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
+            BACKUP_SETTINGS_WHITELIST,
+        ).fetchall()]
+    finally:
+        conn.close()
+
+    pconn = get_progress_db()
+    try:
+        progress = {name: [dict(r) for r in pconn.execute(f"SELECT * FROM {name}").fetchall()]
+                    for name in _PROGRESS_TABLES}
+    finally:
+        pconn.close()
+
     return {
-        "version": 1,
+        "version": BACKUP_FORMAT_VERSION,
         "exported_at": datetime.now().isoformat(),
-        "articles": articles,
-        "vocab_cards": vocab,
-        "grammar_cards": grammar,
-        "reading_notes": notes
+        "app_settings": settings,
+        "local_storage": {},
+        **tables,
+        **progress,
     }
+
+
+@app.get("/api/backup/export")
+def export_database_backup(request: Request):
+    """原始导出端点，保留给脚本/桌面直连使用。
+
+    UI 走 /prepare + /download —— 只有那条路径能带上 localStorage，
+    也只有它在 Android WebView 里真的能下载（blob: 到不了 DownloadListener）。
+    """
+    _require_localhost(request)
+    return build_backup_payload()
+
+
+class PrepareBackupReq(BaseModel):
+    local_storage: Dict[str, Any] = {}
+
+
+# prepare→download 之间的暂存槽。单用户本地服务，一份就够。
+# 不落盘：避免在磁盘留下用户全库的明文副本，也免去一套失效时会静默的清理逻辑。
+# 可接受的失效模式——用户始终不点下载时，一份 JSON 占内存到进程重启。
+_pending_backup: Dict[str, Any] = {"token": None, "payload": None, "filename": None}
+
+
+@app.post("/api/backup/prepare")
+def prepare_backup_download(req: PrepareBackupReq, request: Request):
+    """前端提交 localStorage → 后端合成完整备份 → 返回一次性下载 token。
+
+    为什么要两步：导航只能是 GET，所以 POST 的响应无法触发浏览器下载；
+    而 Android WebView 只在「真 http URL + Content-Disposition」时才走原生下载桥。
+    """
+    _require_localhost(request)
+    payload = build_backup_payload()
+    payload["local_storage"] = req.local_storage or {}
+    token = secrets.token_urlsafe(16)
+    _pending_backup.update(
+        token=token,
+        payload=payload,
+        filename=f"delector_backup_{datetime.now().strftime('%Y-%m-%d')}.json",
+    )
+    return {"token": token, "filename": _pending_backup["filename"]}
+
+
+@app.get("/api/backup/download/{token}")
+def download_prepared_backup(token: str, request: Request):
+    _require_localhost(request)
+    pending = _pending_backup["token"]
+    if not pending or not secrets.compare_digest(token, pending):
+        raise HTTPException(404, "备份链接已失效，请重新导出")
+    payload, filename = _pending_backup["payload"], _pending_backup["filename"]
+    _pending_backup.update(token=None, payload=None, filename=None)  # 单次有效
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
 
 class RestoreReq(BaseModel):
     version: Optional[int] = 1
@@ -1804,30 +1951,97 @@ class RestoreReq(BaseModel):
     vocab_cards: List[Dict[str, Any]] = []
     grammar_cards: List[Dict[str, Any]] = []
     reading_notes: List[Dict[str, Any]] = []
+    # v1 备份没有以下字段，缺省为空即可被读入（向后兼容是硬要求：
+    # 迁移用户手里拿的恰恰是 v3.9.1 导出的 v1 文件）
+    app_settings: List[Dict[str, Any]] = []
+    study_log: List[Dict[str, Any]] = []
+    quiz_log: List[Dict[str, Any]] = []
+    daily_summary: List[Dict[str, Any]] = []
+    local_storage: Dict[str, Any] = {}
+
+
+@contextmanager
+def _db_snapshot_guard():
+    """还原前给两个库做文件级快照，任一步失败就整体拷回。
+
+    delector.db 与 progress.db 是两个**独立** SQLite 文件，无法共处一个事务。
+    还原已改成「清库再灌」，所以清空之后、灌完之前若失败（JSON 损坏、磁盘满、
+    进程被杀），数据就「已删而备份没进去」——把丢复习进度的 bug 换成丢全部数据的 bug。
+    单库事务保护不了跨文件操作，只能在文件层再兜一层。
+    """
+    paths = [p for p in (get_db_path(), get_progress_db_path()) if os.path.exists(p)]
+    tmpdir = tempfile.mkdtemp(prefix="delector_restore_")
+    snapshots: Dict[str, str] = {}
+    try:
+        for p in paths:
+            dst = os.path.join(tmpdir, os.path.basename(p))
+            shutil.copy2(p, dst)
+            snapshots[p] = dst
+        yield
+    except BaseException:
+        # 连 KeyboardInterrupt 也要回滚——半个还原比不还原更糟
+        for original, snapshot in snapshots.items():
+            try:
+                shutil.copy2(snapshot, original)
+            except Exception:
+                pass
+        raise
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _replace_tables(conn, spec: Dict[str, Tuple], payload: Dict[str, List[Dict[str, Any]]]):
+    for name, (columns, defaults) in spec.items():
+        conn.execute(f"DELETE FROM {name}")
+        rows = payload.get(name) or []
+        if not rows:
+            continue
+        placeholders = ",".join("?" for _ in columns)
+        conn.executemany(
+            f"INSERT INTO {name} ({','.join(columns)}) VALUES ({placeholders})",
+            _rows_to_tuples(rows, columns, defaults),
+        )
+
 
 @app.post("/api/backup/restore")
-def restore_database_backup(req: RestoreReq):
-    with get_db() as conn:
-        for a in req.articles:
-            conn.execute(
-                "INSERT OR REPLACE INTO articles (id, title, raw_text, processed_json, source_url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (a.get("id"), a.get("title", "Untitled"), a.get("raw_text", ""), a.get("processed_json", "{}"), a.get("source_url", ""), a.get("created_at"))
-            )
-        for v in req.vocab_cards:
-            conn.execute(
-                "INSERT OR REPLACE INTO vocab_cards (id, article_id, word, lemma, pos, gender, cefr_level, definition_zh, sentence_context, plural, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (v.get("id"), v.get("article_id"), v.get("word", ""), v.get("lemma", ""), v.get("pos", ""), v.get("gender", ""), v.get("cefr_level", "A1"), v.get("definition_zh", ""), v.get("sentence_context", ""), v.get("plural", ""), v.get("created_at"))
-            )
-        for g in req.grammar_cards:
-            conn.execute(
-                "INSERT OR REPLACE INTO grammar_cards (id, article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula, examples_zh, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (g.get("id"), g.get("article_id"), g.get("sentence_context", ""), g.get("grammar_name", ""), g.get("cefr_level", "A1"), g.get("explanation_zh", ""), g.get("rule_formula", ""), g.get("examples_zh", ""), g.get("created_at"))
-            )
-        for n in req.reading_notes:
-            conn.execute(
-                "INSERT OR REPLACE INTO reading_notes (id, article_id, sentence_id, selected_text, color, note_content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (n.get("id"), n.get("article_id"), n.get("sentence_id"), n.get("selected_text", ""), n.get("color", "yellow"), n.get("note_content", ""), n.get("created_at"))
-            )
+def restore_database_backup(req: RestoreReq, request: Request):
+    """真覆盖还原：事务内清库再灌，而非按 id merge。
+
+    为什么不是 merge：merge 需要重新映射 article_id 外键
+    （vocab_cards / grammar_cards / reading_notes 都引用它），是一整套 id
+    重映射逻辑与相应的正确性风险；而「换机/重装后还原」场景的目标库一定是空的，
+    两者行为一致。按钮标签写的是「还原备份」，真覆盖才符合字面语义。
+    """
+    _require_localhost(request)
+    payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+
+    with _db_snapshot_guard():
+        conn = get_db()
+        try:
+            with conn:
+                _replace_tables(conn, _BACKUP_TABLES, payload)
+                # app_settings 的覆盖**只作用于白名单键**：整表 DELETE 会连带
+                # 抹掉 DEEPSEEK_API_KEY（它从不进备份，抹了就再也灌不回来）。
+                conn.executemany(
+                    "DELETE FROM app_settings WHERE key = ?",
+                    [(k,) for k in BACKUP_SETTINGS_WHITELIST],
+                )
+                conn.executemany(
+                    "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+                    [(s["key"], s.get("value"))
+                     for s in (payload.get("app_settings") or [])
+                     if s.get("key") in BACKUP_SETTINGS_WHITELIST],
+                )
+        finally:
+            conn.close()
+
+        pconn = get_progress_db()
+        try:
+            with pconn:
+                _replace_tables(pconn, _PROGRESS_TABLES, payload)
+        finally:
+            pconn.close()
+
     return {"status": "ok", "message": "全量备份恢复成功"}
 
 
