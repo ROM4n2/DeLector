@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.10.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v3.11.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-114%2F114%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-129%2F129%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -22,10 +22,10 @@
 
 | 平台 | 版本 | 说明 | 下载通道 |
 |---|---|---|---|
-| 🪟 **Windows x64** | `v3.10.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.10.0) |
-| 🍎 **macOS** | `v3.10.0` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.10.0) |
-| 🐧 **Linux x64** | `v3.10.0` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.10.0) |
-| 📱 **Android** | `v3.10.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.10.0) |
+| 🪟 **Windows x64** | `v3.11.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.11.0) |
+| 🍎 **macOS** | `v3.11.0` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.11.0) |
+| 🐧 **Linux x64** | `v3.11.0` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.11.0) |
+| 📱 **Android** | `v3.11.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v3.11.0) |
 
 ---
 
@@ -66,6 +66,12 @@
 
 ### ✍️ 8. 歌德完形填空 & 德福 C-Test 实战引擎 (Cloze & C-Test Engine)
 - 提供 **语法考点完形**、**高频词汇完形** 与 **标准德福 C-Test** 三大实战模式，答案仅在服务端保留并防作弊智能判分。
+
+### 🖋️ 9. 德语写作润色台 (Schreibwerkstatt)
+- **本地规则引擎即时诊断**：spaCy 上跑冠词/格位/词尾一致 + 介词支配格检测，行内彩色下划线标出错误，**零误报准则**（宁可漏报不可误报，双侧 morph 必在才报）。
+- **侧栏纠错面板**：点击错误显示错误类型、中文讲解与正确形式（`正: dem Auto`），一键存成 Anki 语法卡 —— **你的错误变成你的复习卡**（FSRS 间隔复习闭环，无人占领的定位）。
+- **CEFR 词汇频率估测** + **essays 作文草稿库**（保存/回访/重分析）。
+- **显式「AI 润色全文」按钮**：DeepSeek 全文改写 + 中文备注（本地规则默认不传文本，隐私可控）。
 
 ---
 
@@ -134,7 +140,7 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 | **语音合成** | `Edge-TTS` (Microsoft Neural Voice) | 神经级纯正德语离线本地缓存与 Web Speech 回退 |
 | **前端架构** | `ES Modules / Modern CSS / Vanilla JS` | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染 |
 | **记忆同步** | `genanki` | 离线生成标准 `.apkg` 记忆库 |
-| **自动化测试** | `pytest` + `httpx` | 114 单元与集成测试用例保障 (100% Green) |
+| **自动化测试** | `pytest` + `httpx` | 129 单元与集成测试用例保障 (100% Green) |
 
 ---
 
@@ -153,12 +159,14 @@ DeLector/
 │       ├── cards.js        # 3D 卡牌翻转盒与 FSRS 自适应记忆排程算法
 │       ├── folio.js        # Leporello 三折页台账与墨线图
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
-│       └── player.js       # 神经影子跟读与 TTS 播放器
+│       ├── player.js       # 神经影子跟读与 TTS 播放器
+│       └── writer.js       # 写作润色台（行内标注 + 侧栏 + AI 润色）
 ├── .githooks/              # 提交前密钥扫描钩子 (pre-commit)
 ├── linguistics.py          # 556+ 不规则动词三态表与复合词拆解引擎
 ├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词)
 ├── core_dict_ext.py        # 4300+ 词库扩展（DeepSeek 批量生成中文释义）
 ├── prep_dict.py            # 固定介词搭配数据集（生成物，源在 tools/build_prep.py）
+├── writing_rules.py        # 写作润色台本地规则引擎（冠词一致 + 介词格，FP 守卫）
 ├── syntax_tree.py          # 拓扑五场域与 AST 从句树句法引擎
 ├── server.py               # FastAPI 后端服务与核心 NLP/API 路由
 ├── start.py                # 跨平台智能启动脚本
@@ -167,10 +175,11 @@ DeLector/
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖清单
 ├── tools/                  # 构建/生成工具（build_prep.py 介词搭配生成器 + 缓存）
-├── test_server.py          # Pytest 自动化测试套件 (84 用例)
+├── test_server.py          # Pytest 自动化测试套件 (90 用例)
 ├── test_syntax_tree.py     # Pytest 句法引擎测试套件 (15 用例)
 ├── test_core_dict_ext.py   # Pytest 词库扩展测试套件 (5 用例)
-└── test_edge_tts_mini.py   # Pytest TTS 兜底测试套件 (10 用例)
+├── test_edge_tts_mini.py   # Pytest TTS 兜底测试套件 (10 用例)
+└── test_writing_rules.py   # Pytest 写作规则引擎测试套件 (9 用例)
 ```
 
 ---
@@ -189,8 +198,9 @@ DeLector/
 - [x] **v3.8**：FSRS 现代自适应记忆排程器升级（DSR 三维认知模型，消除 Ease Hell，4 级下一轮间隔预计算）
 - [x] **v3.9**：离线词库 443→4300 词（DeepSeek 批量生成中文释义）+ 查词链 lemma 优先 / 形态学接线 / 现在时反查 / UX 诚实显示
 - [x] **v3.9.1**：安卓真机修复——TTS 无声（stdlib 版 Edge TTS 客户端 `edge_tts_mini`）、倍速按钮点不到（移动端三行布局）、单词抽屉白色遮挡（55vh + 阅读区全宽）
-- [x] **v3.10**：固定介词搭配（Verben/Adjektive + Präposition + Kasus）——数据集 **531 词条 / 660 条搭配**（AI 批量生成 + 人工 seed 兜底），查词抽屉第四张卡片逐条展示并可直接存成词汇卡；**备份改全量真往返**，堵住三处静默丢数据（含 API Key 被吞）；**安卓签名迁移**——CI 钉死 keystore + keytool 验签闸（显式 v1 签名），versionCode 编码规则修正（`major*10000+minor*100+patch`，修 3.10.0 与 4.0.0 撞车）；「按介词浏览」的独立矩阵视图留到 v3.11（数据集就位后是零成本增量）
-- [ ] **v4.0**：德语写作与长难句 AI 润色台 (Schreibwerkstatt)
+- [x] **v3.10**：固定介词搭配（Verben/Adjektive + Präposition + Kasus）——数据集 **531 词条 / 660 条搭配**（AI 批量生成 + 人工 seed 兜底），查词抽屉第四张卡片逐条展示并可直接存成词汇卡；**备份改全量真往返**，堵住三处静默丢数据（含 API Key 被吞）；**安卓签名迁移**——CI 钉死 keystore + keytool 验签闸（显式 v1 签名），versionCode 编码规则修正（`major*10000+minor*100+patch`，修 3.10.0 与 4.0.0 撞车）
+- [x] **v3.11**：**德语写作润色台 (Schreibwerkstatt)**——本地规则引擎（spaCy 上冠词/格位一致 + 介词支配格，零误报准则），行内下划线 + 侧栏纠错，错误一键存 Anki 语法卡（你的错误变成你的复习卡），essays 作文草稿库，CEFR 词汇估测，显式 AI 润色全文按钮；「按介词浏览」的独立矩阵视图留待后续（数据集已就位，零成本增量）
+- [ ] **v4.0**：德语写作长难句 AI 润色台升级（IDE 式编辑器：波浪线/hover/错误列表面板）
 
 ---
 

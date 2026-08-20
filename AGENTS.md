@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v3.8.0 FSRS 认知自适应记忆排程器升级：DSR 状态机原生零依赖数学模型、`next_intervals` 4级预估字典与前端动态绑定），工作区干净 |
-| 测试 | **114 / 114 全绿**（`test_server.py` 84 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10） |
+| 当前分支 / HEAD | `master`（含 v3.11.0 德语写作润色台：本地规则引擎 + 错误→Anki 复习卡闭环），工作区干净 |
+| 测试 | **129 / 129 全绿**（`test_server.py` 90 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 9） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v3.8.0**（2026-08-19）：FSRS 现代自适应记忆排程器升级（DSR 状态机原生数学模型、消除 Ease Hell、4 级下一轮间隔预计算字典、向下兼容 SM-2 包装） |
+| 对外发布 | **v3.11.0**（2026-08-21）：德语写作润色台——本地规则诊断（冠词/格位/介词格，零误报准则）、错误一键存 Anki 复习卡、essays 草稿库、显式 AI 润色全文 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -49,16 +49,17 @@
 | 词法/形态学 | 556+ 不规则动词三态表 + 复合词递归拆解 | `linguistics.py`（1236 行） |
 | 离线核心词库 | 歌德 A1–B2，0ms 查词 | `core_dict.py`（516 行），入口 `lookup_core_vocab()` |
 | 介词搭配数据集 | 动词/形容词 + 固定介词 + 格 | `prep_dict.py`（生成物），入口 `lookup_prep_collocations()`，源 `tools/build_prep.py` |
+| 写作润色规则引擎 | 冠词/格位一致 + 介词支配格，零误报准则 | `writing_rules.py`，入口 `analyze_essay_text()`（nlp=None 降级零错误），测试 `test_writing_rules.py` |
 | 拓扑句法 | VF/LK/MF/RK/NF 五场域 + 从句 AST | `syntax_tree.py`（1238 行） |
 | 启动器 | 端口探测、局域网 IP、平台判定 | `start.py`（86 行） |
-| 前端 | 原生 ES Modules（无框架、零构建），PWA | `static/index.html`, `static/js/*.js`（7 个模块）, `static/style.css` |
+| 前端 | 原生 ES Modules（无框架、零构建），PWA | `static/index.html`, `static/js/*.js`（8 个模块）, `static/style.css` |
 | 数据库 | SQLite × 2 | `delector.db`（主库）, `progress.db`（学习进度） |
 | 音频缓存 | 本地 `.cache/audio/` MP3 | Edge Neural TTS（桌面 edge-tts；Android 无 wheel 时走 stdlib 版 `edge_tts_mini.py`）+ 有道/百度兜底 |
 | 桌面打包 | PyInstaller | `package_windows.py` |
 | 移动打包 | Chaquopy + Gradle | `android/` |
 | CI/CD | GitHub Actions | `.github/workflows/build-release.yml` |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（84）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10） |
+| 测试 | pytest | `test_server.py`（90）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10）, `test_writing_rules.py`（9） |
 | 提交守卫 | pre-commit 密钥扫描 | `.githooks/pre-commit` |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
@@ -329,7 +330,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （114 个，全绿）
+测试:      pytest            （129 个，全绿）
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py
 ```
 
