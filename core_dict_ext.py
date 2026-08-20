@@ -3237,7 +3237,7 @@ CORE_VOCAB_EXT = {  # 3859 词条 · 来源  · cefr 由 AI 分级
     "rankhilfe": ("B2", "NOUN", "Fem", "-n", "攀爬支架"),
     "ratlosigkeit": ("B2", "NOUN", "Fem", "-", "不知所措"),
     "ratsam": ("B2", "ADJ", "None", "", "明智的"),
-    "ratseln": ("B2", "VERB", "None", "", "猜谜/冥思"),
+    "rätseln": ("B2", "VERB", "None", "", "猜谜/冥思"),
     "realisieren": ("B2", "VERB", "None", "", "实现/认识到"),
     "recherche": ("B2", "NOUN", "Fem", "-n", "调研/研究"),
     "rechfertigen": ("B2", "VERB", "None", "", "辩护/辩解"),

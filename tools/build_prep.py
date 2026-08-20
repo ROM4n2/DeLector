@@ -35,6 +35,15 @@ import httpx
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = REPO_ROOT / "tools" / "raw_prep"
 
+# 输出重定向到文件时 Windows 的 stdout 是 GBK，QA 抽查里的 ✓/✗ 会抛
+# UnicodeEncodeError —— 而它抛在写出 prep_dict.py **之后**，于是
+# 「数据已生成」但唯一的抽查静默没跑，退出码还是 0。errors 兜底不让它再炸。
+# stderr 一起改：中止信息（含中文）走的是 stderr，只修 stdout 的话
+# abort 原因会变成一串乱码，正好在最需要看清原因的时候看不清。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core_dict import CORE_VOCAB_DB  # noqa: E402
@@ -156,6 +165,21 @@ def merge_with_seed(collocations: Dict[str, list]) -> Dict[str, list]:
     return merged
 
 
+def prune_unknown_lemmas(final: Dict[str, list], targets: Dict[str, str]) -> List[str]:
+    """删掉词库里已不存在的词头，返回被删的列表。
+
+    缓存是按**当时**的词库问的。词库后来修了拼写（ratseln → rätseln）之后，
+    旧缓存仍会把错拼的词头带进 prep_dict —— 于是查 rätseln 没有搭配、
+    查 ratseln 有，而两边数据各自都「看起来正常」，没人会发现。
+    seed 是人工维护的，不受词库增删影响，不参与裁剪。
+    """
+    unknown = sorted(w for w in final
+                     if w not in targets and w not in SEED_COLLOCATIONS)
+    for w in unknown:
+        del final[w]
+    return unknown
+
+
 # 介词与冠词的缩合形式（Verschmelzung）。少了这张表，「例句必须含该介词」
 # 这条检查会把**完全正确**的搭配当成幻觉丢掉：
 #   operieren an → "Der Arzt operiert am Herzen."   (an + dem = am)
@@ -242,14 +266,22 @@ def _parse_batch(raw_results: List[dict], requested: List[str],
             continue
         items = entry.get("kollokationen") or []
         rows = []
+        seen_senses = set()
         for item in items:
             err = validate_collocation(item)
             if err:
                 if verbose:
                     print(f"[reject] {lemma}: {err}")
                 continue
-            rows.append([item["praeposition"].strip().lower(), item["kasus"],
-                         item["bedeutung_zh"].strip(), item["beispiel"].strip()])
+            row = [item["praeposition"].strip().lower(), item["kasus"],
+                   item["bedeutung_zh"].strip(), item["beispiel"].strip()]
+            # 同一介词允许有两个义项（ausgeben für 花费 / (sich) 冒充），
+            # 但 AI 偶尔把同一条列两遍，按 (介词, 中文义) 去重。
+            sense = (row[0], row[2])
+            if sense in seen_senses:
+                continue
+            seen_senses.add(sense)
+            rows.append(row)
         if rows:
             found[lemma] = rows
         else:
@@ -290,14 +322,7 @@ async def _generate(words: List[str], args, key: str, base: str,
                 # 于是校验器修好后能免费捡回被误杀的搭配，不用重新付费提问。
                 found, none = _parse_batch(cached["raw"], batch, verbose=False)
             else:
-                # v1 缓存只存了校验后的结果，原始响应已丢。它的 `none` 名单
-                # 不可信（校验器的误杀会被记成「确认没有搭配」），但重问要花钱，
-                # 所以默认沿用、由 --reask-v1 显式重问。
                 found, none = cached.get("collocations", {}), cached.get("none", [])
-                if args.reask_v1:
-                    print(f"  批 {label}: v1 缓存（无原始响应），重问")
-                    found, none = {}, []
-                    cache_path.unlink()
         else:
             found, none = {}, []
         if not found and not none:
@@ -334,17 +359,41 @@ async def _generate(words: List[str], args, key: str, base: str,
     return collocations, answered
 
 
-def load_cache() -> Tuple[Dict[str, list], set]:
-    """读全部缓存 → (搭配表, 已问过的词)。缺失的文件即「还没问过」。"""
+def load_cache(skip_v1: bool = False) -> Tuple[Dict[str, list], set]:
+    """读全部缓存 → (搭配表, 已问过的词)。缺失的文件即「还没问过」。
+
+    存了 `raw` 的缓存**每次重新走校验**：校验器修好后可零成本捡回被误杀的搭配。
+    v1 缓存只存了校验后的结果、原始响应已丢，它的负例名单里混着误杀的词，
+    `skip_v1` 时整批当作「没问过」交给调用方重问。
+    """
     collocations: Dict[str, list] = {}
     answered: set = set()
     for path in sorted(RAW_DIR.glob("batch_*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
-        found = data.get("collocations", {})
+        if "raw" in data:
+            found, none = _parse_batch(data["raw"], data.get("words", []), verbose=False)
+        elif skip_v1:
+            continue
+        else:
+            found, none = data.get("collocations", {}), data.get("none", [])
         collocations.update(found)
         answered.update(found)
-        answered.update(data.get("none", []))
+        answered.update(none)
     return collocations, answered
+
+
+def drop_v1_caches() -> int:
+    """删掉旧格式（无 `raw`）的缓存文件，返回删除数。
+
+    必须真删而不是只跳过：留在盘上的话，下一次不带 --reask-v1 的运行会
+    重新把它们读进来，被误杀的负例又复活，而且与重问后的新缓存重叠。
+    """
+    dropped = 0
+    for path in sorted(RAW_DIR.glob("batch_*.json")):
+        if "raw" not in json.loads(path.read_text(encoding="utf-8")):
+            path.unlink()
+            dropped += 1
+    return dropped
 
 
 # ── 产出模块 ────────────────────────────────────────────────────────────
@@ -405,8 +454,46 @@ def emit_module(collocations: Dict[str, list], answered_count: int) -> Path:
     return out
 
 
+def _report_pruned(unknown: List[str]) -> None:
+    if unknown:
+        print(f"[prune] {len(unknown)} 个词头已不在词库里，从产出中剔除："
+              f"{', '.join(unknown[:10])}{' …' if len(unknown) > 10 else ''}")
+
+
+# 可分前缀：可分动词在主句里前缀会被拆到句尾（abgeben → "gibt … ab"），
+# 拿整个词元去例句里找必然找不到，所以要额外认「前缀单独成词」和「词根」。
+_SEPARABLE_PREFIXES = (
+    "zusammen", "entgegen", "gegenüber", "zurecht", "zurück", "voran", "vorbei",
+    "heraus", "hinaus", "weiter", "hinzu", "durch", "unter", "über", "nach",
+    "statt", "fest", "auf", "aus", "bei", "ein", "mit", "vor", "hin", "her",
+    "weg", "los", "ab", "an", "um", "zu",
+)
+
+
+def _lemma_surface_hints(lemma: str) -> set:
+    """例句里可能出现的词元痕迹（前 3 字母 / 可分前缀 / 去前缀后的词根）。
+
+    只做前缀级的粗匹配，因为德语变位会改词干（sprechen → spricht、
+    helfen → hilft），精确匹配会把正确例句大批误判。
+    """
+    low = lemma.lower()
+    hints = {low[:3]}
+    for prefix in _SEPARABLE_PREFIXES:
+        if low.startswith(prefix) and len(low) > len(prefix) + 2:
+            hints.add(prefix)
+            hints.add(low[len(prefix):len(prefix) + 3])
+            break
+    return hints
+
+
 def qa_spotcheck(collocations: Dict[str, list]) -> None:
-    """定向抽查：这几个词的搭配是德语课本必考项，错了立刻看得出来。"""
+    """抽查产出。
+
+    定向那一档只覆盖 seed（人工校验过、根本不走 AI 校验），所以它 14/14
+    全绿也**什么都没检验**。真正会出错的是 AI 长尾，因此这里额外抽 AI 词条，
+    并报「例句里找不到词元痕迹」的条目 —— 校验器只查介词，不查例句讲的
+    是不是这个词，这是唯一能发现「例句整句跑题」的地方。
+    """
     targeted = {
         "warten": "auf", "bestehen": "auf", "freuen": "auf", "denken": "an",
         "helfen": "bei", "teilnehmen": "an", "gehören": "zu", "stolz": "auf",
@@ -414,7 +501,7 @@ def qa_spotcheck(collocations: Dict[str, list]) -> None:
         "sorgen": "für", "bitten": "um", "sprechen": "über",
     }
     print("\n=== QA 定向抽查 ===")
-    hit = 0
+    hit = ai_covered = 0
     for lemma, expect in targeted.items():
         rows = collocations.get(lemma)
         if not rows:
@@ -423,11 +510,35 @@ def qa_spotcheck(collocations: Dict[str, list]) -> None:
         preps = [r[0] for r in rows]
         ok = expect in preps
         hit += ok
-        origin = "seed" if lemma in SEED_COLLOCATIONS else "AI"
-        print(f"  {lemma:16s} {'✓' if ok else '✗'} [{origin}] {preps} 期望含 {expect}")
+        from_seed = lemma in SEED_COLLOCATIONS
+        ai_covered += not from_seed
+        print(f"  {lemma:16s} {'✓' if ok else '✗'} "
+              f"[{'seed' if from_seed else 'AI'}] {preps} 期望含 {expect}")
         for r in rows:
             print(f"      {r[0]:10s} {r[1]:4s} {r[2]:12s} {r[3]}")
-    print(f"\n定向命中 {hit}/{len(targeted)}")
+    print(f"\n定向命中 {hit}/{len(targeted)}（其中走 AI 的只有 {ai_covered} 个"
+          f"—— 这一档基本只在验 seed，不构成对 AI 输出的检验）")
+
+    ai_lemmas = sorted(w for w in collocations if w not in SEED_COLLOCATIONS)
+    total_rows = sum(len(collocations[w]) for w in ai_lemmas)
+    suspect = [(w, row) for w in ai_lemmas for row in collocations[w]
+               if not _example_mentions_lemma(w, row[3])]
+    print(f"\n=== QA AI 长尾（{len(ai_lemmas)} 词 / {total_rows} 条）===")
+    step = max(1, len(ai_lemmas) // 10)
+    for lemma in ai_lemmas[::step][:10]:
+        for r in collocations[lemma]:
+            print(f"  {lemma:16s} {r[0]:8s} {r[1]:4s} {r[2]:12s} {r[3]}")
+    print(f"\n例句里找不到词元痕迹：{len(suspect)}/{total_rows} 条"
+          "（不变位动词占多数，属预期噪声；拼错的词头会在这里露头）")
+    for lemma, row in suspect[:20]:
+        print(f"  ? {lemma:16s} {row[3]}")
+
+
+def _example_mentions_lemma(lemma: str, example: str) -> bool:
+    low = example.lower()
+    tokens = {w.strip(".,!?;:»«\"'") for w in low.split()}
+    hints = _lemma_surface_hints(lemma)
+    return any(h in low for h in hints) or bool(hints & tokens)
 
 
 def main() -> None:
@@ -456,6 +567,7 @@ def main() -> None:
     if args.reemit:
         collocations, answered = load_cache()
         final = merge_with_seed(collocations)
+        _report_pruned(prune_unknown_lemmas(final, targets))
         guard_regression(final, args.force)
         out = emit_module(final, len(answered | set(SEED_COLLOCATIONS)))
         print(f"[reemit] 缓存里 {len(answered)} 词已问过，其中 {len(collocations)} 词有搭配；"
@@ -474,6 +586,12 @@ def main() -> None:
         words = words[: args.limit]
 
     if args.resume:
+        if args.reask_v1:
+            # 先删旧格式缓存，再算「还剩多少要问」—— 否则那些词会被
+            # load_cache 当成已答过而被过滤掉，--reask-v1 变成一句空话
+            # （实测过：只补了 41 个漏答词，1732 个待重问的词一个没动）。
+            dropped = drop_v1_caches()
+            print(f"--reask-v1：删掉 {dropped} 个旧格式缓存批次，它们将被重问")
         _, already = load_cache()
         before = len(words)
         words = [w for w in words if w not in already]
@@ -494,6 +612,7 @@ def main() -> None:
         raise SystemExit("[abort] 本次全部批次都失败（key 失效？断网？），"
                          "未改动 prep_dict.py。修好后重跑即可（缓存没被污染）")
     final = merge_with_seed(collocations)
+    _report_pruned(prune_unknown_lemmas(final, targets))
     guard_regression(final, args.force)
     out = emit_module(final, len(answered | set(SEED_COLLOCATIONS)))
     rows = sum(len(v) for v in final.values())

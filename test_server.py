@@ -1156,13 +1156,26 @@ def test_prep_lookup_falls_back_to_surface_form(client):
     assert res.json()["praepositionen"][0]["praeposition"] == "auf"
 
 
+def _load_build_prep():
+    """加载生成器模块（tools/ 不是 package，只能按路径加载）。"""
+    import importlib.util
+    path = os.path.join(os.path.dirname(__file__), "tools", "build_prep.py")
+    spec = importlib.util.spec_from_file_location("build_prep_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_prep_dataset_integrity():
     """数据集自检：键小写、值是元组的元组、格合法、例句真的用上了该介词。
 
     最后一条是本数据集唯一的自动幻觉检测 —— AI 编出 "warten für" 时，
-    例句里往往还是 auf。
+    例句里往往还是 auf。判定用生成器的 `_accepted_surface_forms`，**不复制**
+    那张缩合表：两份各自维护的话，一边认 zum 一边不认，正确数据会在这里被
+    判成幻觉（实遇：animieren zu → "zum Nachdenken" 把测试挂掉）。
     """
     from prep_dict import PREP_COLLOCATIONS
+    accepted = _load_build_prep()._accepted_surface_forms
     assert len(PREP_COLLOCATIONS) >= 40
     for lemma, rows in PREP_COLLOCATIONS.items():
         assert lemma == lemma.lower(), f"{lemma} 不是小写，查词链会 miss"
@@ -1173,9 +1186,42 @@ def test_prep_dataset_integrity():
             assert kasus in ("Akk", "Dat", "Gen"), f"{lemma}: 非法格 {kasus}"
             assert zh and example, f"{lemma}: 缺中文义或例句"
             words = {w.strip(".,!?;:»«\"'").lower() for w in example.split()}
-            assert prep in words, f"{lemma}: 例句没用上 {prep} —— {example}"
-        preps = [r[0] for r in rows]
-        assert len(preps) == len(set(preps)), f"{lemma} 有重复介词 {preps}"
+            assert words & accepted(prep), f"{lemma}: 例句没用上 {prep} —— {example}"
+        # 同一介词允许出现两次 —— 靠反身性区分的两个义项就是这样：
+        # ausgeben für 花费 / (sich) 冒充，einfügen in 插入 / (sich) 融入。
+        # 真正要拦的是 AI 把同一条重复两遍，所以按 (介词, 中文义) 判重。
+        senses = {(r[0], r[2]) for r in rows}
+        assert len(senses) == len(rows), f"{lemma} 有完全重复的搭配 {[r[0] for r in rows]}"
+
+
+def test_prep_contractions_cover_all_dative_accusative_pairs():
+    """缩合表漏一个介词 = 那个介词的正确搭配被当幻觉丢进「确认没有搭配」名单。
+
+    这条负例名单会被 --resume 当成已答过而永不重问，缺口从此静默。
+    所以缩合形式必须成表维护，并在这里逐条钉住。
+    """
+    bp = _load_build_prep()
+    for prep, expected in [("an", "am"), ("an", "ans"), ("in", "im"), ("in", "ins"),
+                           ("zu", "zum"), ("zu", "zur"), ("bei", "beim"),
+                           ("von", "vom"), ("auf", "aufs"), ("für", "fürs"),
+                           ("um", "ums"), ("über", "übers")]:
+        forms = bp._accepted_surface_forms(prep)
+        assert prep in forms, f"{prep} 自身必须被接受"
+        assert expected in forms, f"{prep} 缺缩合形式 {expected}"
+
+
+def test_prep_dataset_keys_all_exist_in_dictionary():
+    """prep 词头必须是词库里真有的词，否则查词链永远碰不到它。
+
+    实遇：词库把 rätseln 错拼成 ratseln，缓存照错拼问了 AI，词库修好后
+    prep_dict 仍带着 ratseln —— 查 rätseln 没搭配、查 ratseln 有，两边
+    看起来都正常。生成器的 prune_unknown_lemmas 负责剔除，这里守住结果。
+    """
+    from prep_dict import PREP_COLLOCATIONS
+    from core_dict import CORE_VOCAB_DB
+    seed = set(_load_build_prep().SEED_COLLOCATIONS)
+    orphans = [w for w in PREP_COLLOCATIONS if w not in CORE_VOCAB_DB and w not in seed]
+    assert not orphans, f"这些词头不在词库里: {orphans[:10]}"
 
 
 def test_prep_dict_registered_in_all_package_targets():
