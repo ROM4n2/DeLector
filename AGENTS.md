@@ -174,9 +174,14 @@ vocab_cards     id, article_id, word, lemma, pos, gender, plural, cefr_level,
 grammar_cards   id, article_id, sentence_context, grammar_name, cefr_level,
                 explanation_zh, rule_formula, examples_zh, mastered, mastered_at,
                 correct_count, wrong_count, due_date, interval_days,
-                ease_factor, repetition_count, created_at
+                ease_factor, repetition_count, created_at,
+                corrected_form, error_type      -- v3.11 写作台：修正形式 + 错误分类(artikel/kasus/praeposition/andere)
 reading_notes   id, article_id, sentence_id, selected_text, color,
                 note_content, created_at
+essays          id, title, content, analysis_json, cefr_level,
+                error_count, sentence_count, created_at, updated_at
+                -- v3.11 写作台草稿库；analysis_json = {"version","cefr","error_count",
+                -- "sentences":[{text, spans:[{error_type,corrected_form,explanation_zh,start,end}]}]}
 ```
 
 ### `progress.db` — 学习进度库
