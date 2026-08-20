@@ -405,7 +405,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       `edge_tts_mini` 直连 `speech.platform.bing.com`（与桌面端同一服务，本机/用户网络实测可达）。
       真机若连不上该域名（或离线），三层兜底全败时播放器显示 `⚠ 语音引擎不可用`（不再静默）。
       原生 TTS 仅当设备装有德语语音时才可用（国内机型多无 Google TTS 德语数据，已做 voice 遍历兜底）
-- [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
+- [x] ~~**已合并的分支未删**：`fix/android-startup-and-spacy`~~ — 2026-08-20 本地与远端都已删
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
       md 实际加载未在本机跑过
 - [ ] Android 侧 Java 代码无法本机编译验证（本机无 Android SDK），只能靠 CI
