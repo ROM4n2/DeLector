@@ -267,8 +267,12 @@ jobs:
           # 期望指纹是公开信息（谁都能从已发布 APK 里读出来），明文写在这里即可。
           # 这一道拦的是「keystore 被换成另一份合法 keystore」——
           # 那会让所有已安装用户永远收不到升级，而下面的自比对发现不了。
-          EXPECTED_SHA256: ""
+          # 格式必须与 keytool 输出一致：大写、冒号分隔。
+          EXPECTED_SHA256: "9A:8A:6D:B6:64:CE:A9:40:C9:42:A7:57:5D:AD:0D:01:5D:28:A9:BC:4E:BD:CC:7A:1B:5D:DE:65:06:0A:57:9C"
         run: |
+          # 用 keytool 而非 apksigner：本 job 显式装了 JDK 17，keytool 路径确定；
+          # apksigner 属 build-tools，路径含版本号段且不在 PATH 上，
+          # 将来 AGP 换版本时那道闸会静默失效——静默失效的签名闸比没有闸更糟。
           apk_fp=$(keytool -printcert -jarfile "dist/DeLector-${{ github.ref_name }}-Android.apk" \
                    | awk '/SHA256:/ {print toupper($2); exit}')
           ks_fp=$(keytool -list -v -keystore "$RUNNER_TEMP/delector-debug.jks" \
@@ -280,18 +284,17 @@ jobs:
             echo "::error::读不出证书指纹，签名闸无法判定"
             exit 1
           fi
-          # 用 keytool 而非 apksigner：本 job 显式装了 JDK 17，keytool 路径确定；
-          # apksigner 属 build-tools，路径含版本号段且不在 PATH 上，
-          # 将来 AGP 换版本时那道闸会静默失效——静默失效的签名闸比没有闸更糟。
+          # 两道断言拦的是不同的失效方式，都不能省：
+          # 自比对拦「secret 缺失 → 回落随机 debug 签名」，
+          # 定值比对拦「keystore 被换成另一份合法 keystore」（自比对照样会过）。
           if [ "$apk_fp" != "$ks_fp" ]; then
             echo "::error::APK 未用钉死的 keystore 签名（很可能回落到了随机 debug 签名）"
             exit 1
           fi
-          if [ -n "$EXPECTED_SHA256" ] && [ "$apk_fp" != "$(echo "$EXPECTED_SHA256" | tr 'a-z' 'A-Z')" ]; then
+          if [ "$apk_fp" != "$EXPECTED_SHA256" ]; then
             echo "::error::证书指纹与预期不符，keystore 可能被换了：期望 $EXPECTED_SHA256"
             exit 1
           fi
-          [ -n "$EXPECTED_SHA256" ] || echo "::warning::EXPECTED_SHA256 未填，只做了 APK↔keystore 自比对"
           echo "签名验证通过"
 
       - name: Upload Android Artifact

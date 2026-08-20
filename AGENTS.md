@@ -385,9 +385,10 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       `signingConfigs` 与工作流的指纹闸都没有本地执行过。已本地验到的只有：
       YAML 可解析、pre-commit 对 keystore（含改名成 `.bin` 的真实 PKCS12）实测拦下、
       4 个 GitHub Secret 已存在。第一次跑 CI 时要盯「Verify APK Signing Certificate」那步。
-- [ ] **工作流里 `EXPECTED_SHA256` 仍为空**（v3.10.0）：现在只做 APK↔keystore 自比对，
-      能拦「secret 缺失导致回落随机签名」，但拦不住「keystore 被换成另一份合法 keystore」
-      （那会让所有已安装用户永远收不到升级）。填上公开指纹即补齐，该步会打 warning 提醒。
+- [x] ~~**工作流里 `EXPECTED_SHA256` 仍为空**~~ — 2026-08-20 已填入
+      `9A:8A:6D:…:57:9C`（公开信息）。两道断言都是无条件的：APK↔keystore 自比对拦
+      「secret 缺失 → 回落随机签名」，定值比对拦「keystore 被换成另一份合法 keystore」。
+      有测试断言该值是大写冒号分隔的 32 字节指纹，防止将来被清空导致闸静默退化。
 - [ ] **pre-commit 的 keystore 防护有一处残留缺口**：base64 编码后的 PKCS12
       若存成不叫 `*.b64` 的纯文本文件，只会被通用规则漏过（JKS/JCEKS 的 base64 magic
       有专门正则，PKCS12 的 base64 前缀 `MII` 太通用，加了会把公开证书全误拦，

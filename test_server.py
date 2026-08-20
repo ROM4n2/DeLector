@@ -1466,6 +1466,11 @@ def test_release_workflow_gates_apk_signature():
     assert 'find android/app/build/outputs/apk/ -name "*.apk"' not in workflow
     assert "$RUNNER_TEMP/delector-debug.jks" in workflow, \
         "keystore 必须解到 $RUNNER_TEMP，不能落在工作树里"
+    # 指纹一旦填上就不能再被清空：空值时那道闸退化成 APK↔keystore 自比对，
+    # 拦不住「keystore 被换成另一份合法 keystore」（= 已安装用户永远收不到升级）。
+    expected = re.search(r'EXPECTED_SHA256:\s*"([^"]*)"', workflow).group(1)
+    assert re.fullmatch(r"(?:[0-9A-F]{2}:){31}[0-9A-F]{2}", expected), \
+        f"EXPECTED_SHA256 必须是大写冒号分隔的 32 字节指纹（与 keytool 输出同格式），实际 {expected!r}"
     assert "android/" not in workflow.split("Decode Pinned Signing Keystore")[1].split("base64 -d")[0], \
         "解码目标不得指向仓库内路径"
 
