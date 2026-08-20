@@ -386,10 +386,11 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       单个词元设计，处理不了这些形状；重问只是白花钱。注意连字符键**不都是**坏数据：
       `see-meer` / `see-teich`、`bank-geldinstitut` / `bank-sitzgelegenheit` 是词库
       刻意用来区分同形词的，`fertig-sein` 等 8 条也已拿到搭配 —— 不要一刀切按连字符过滤。
-- [ ] **签名迁移只能靠 CI 验证**（v3.10.0）：本机无 Android SDK，`build.gradle` 的
-      `signingConfigs` 与工作流的指纹闸都没有本地执行过。已本地验到的只有：
-      YAML 可解析、pre-commit 对 keystore（含改名成 `.bin` 的真实 PKCS12）实测拦下、
-      4 个 GitHub Secret 已存在。第一次跑 CI 时要盯「Verify APK Signing Certificate」那步。
+- [x] ~~**签名迁移只能靠 CI 验证**~~ — 2026-08-20 v3.10.0 tag 首跑已在真实 runner 验证：
+      第一次跑死在验签闸 —— 不是签名错，是 `keytool -printcert -jarfile` 只认 v1 签名，
+      而 AGP 在 minSdk≥24 时默认只出 v2/v3，闸读出空指纹分不清「真没签名」和「读不到」。
+      修法：签名配置显式 `v1SigningEnabled true`（build.gradle 有注释，测试钉住）。
+      重跑后闸读到了 APK 与 keystore 两个指纹，均等于期望值，四平台全绿、Release 已发布。
 - [x] ~~**工作流里 `EXPECTED_SHA256` 仍为空**~~ — 2026-08-20 已填入
       `9A:8A:6D:…:57:9C`（公开信息）。两道断言都是无条件的：APK↔keystore 自比对拦
       「secret 缺失 → 回落随机签名」，定值比对拦「keystore 被换成另一份合法 keystore」。
