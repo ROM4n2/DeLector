@@ -80,6 +80,17 @@ import {
   resetClozeExercise,
   submitClozeExercise
 } from './cloze.js';
+import {
+  loadWriterEssays,
+  analyzeWriterText,
+  selectWriterSpan,
+  saveWriterErrorAsCard,
+  aiPolishEssay,
+  saveWriterEssay,
+  openWriterEssay,
+  deleteWriterEssay,
+  clearWriterForm
+} from './writer.js';
 
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
@@ -115,6 +126,7 @@ export function show(view) {
   if (view === 'home')     loadArticles();
   if (view === 'cards')    loadCards();
   if (view === 'progress') loadProgress();
+  if (view === 'writer')   loadWriterEssays();
 }
 
 // ── Import Modal ─────────────────────────────────────────────────────────────
@@ -650,6 +662,17 @@ Object.assign(window, {
   resetClozeExercise,
   submitClozeExercise,
   handleClozeKey,
+
+  // Writer & Schreibwerkstatt
+  loadWriterEssays,
+  analyzeWriterText,
+  selectWriterSpan,
+  saveWriterErrorAsCard,
+  aiPolishEssay,
+  saveWriterEssay,
+  openWriterEssay,
+  deleteWriterEssay,
+  clearWriterForm,
 
   // Player
   ShadowPlayer,

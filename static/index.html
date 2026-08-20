@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=3.10.0">
+  <link rel="stylesheet" href="/style.css?v=3.11.0">
 </head>
 <body>
 
@@ -19,7 +19,7 @@
     <div class="topbar-inner">
       <span><b>DELECTOR · 2026</b> · Vol. 03 / Issue Nº 07</span>
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <span class="right"><span class="pulse"></span>System · v3.8.0 Online</span>
+      <span class="right"><span class="pulse"></span>System · v3.11.0 Online</span>
     </div>
   </div>
 
@@ -37,6 +37,10 @@
       <button id="nav-btn-progress" class="nav-tab" onclick="show('progress')">
         <span class="nav-tab-code">TAGEBUCH</span>
         <span class="nav-tab-label">每日台账</span>
+      </button>
+      <button id="nav-btn-writer" class="nav-tab" onclick="show('writer')">
+        <span class="nav-tab-code">SCHREIBTISCH</span>
+        <span class="nav-tab-label">写作润色</span>
       </button>
       <button id="nav-btn-cards" class="nav-tab" onclick="show('cards')">
         <span class="nav-tab-code">KARTEI</span>
@@ -419,6 +423,89 @@
         <div id="progress-milestones" class="dossier-stamps-grid"></div>
       </div>
     </section>
+  </main>
+
+  <!-- ── View 5: Writing Desk & Polish (Schreibwerkstatt) ──────── -->
+  <main id="view-writer" class="view" style="display:none">
+    <div class="writer-container">
+      <div class="writer-header-bar">
+        <div>
+          <div class="hero-eyebrow" style="margin-bottom:0.25rem;">
+            <span class="dot"></span>
+            <span>SCHREIBWERKSTATT · 德语写作研磨工坊</span>
+          </div>
+          <h2 class="writer-title-heading">德语写作诊断与语法润色</h2>
+        </div>
+        <div class="writer-actions-top">
+          <button class="btn btn-ghost" onclick="clearWriterForm()" title="新建空白作文草稿">＋ 新建草稿</button>
+          <button class="btn btn-ghost" id="writer-ai-btn" onclick="aiPolishEssay()" title="使用 DeepSeek AI 深度润色全文">✨ AI 润色全文</button>
+          <button class="btn btn-secondary" onclick="analyzeWriterText(true)">⚡ 实时诊断</button>
+          <button class="btn btn-dark" id="writer-save-btn" onclick="saveWriterEssay()">💾 保存作文</button>
+        </div>
+      </div>
+
+      <div class="writer-layout">
+        <!-- Left Area: Editor & Highlight Preview & Essay History -->
+        <div class="writer-left">
+          <div class="writer-card-box">
+            <input id="writer-title" class="writer-input-title" placeholder="作文标题（如：Mein Urlaub in Berlin / B1 备考书信）..." maxlength="80" />
+            <textarea id="writer-text" class="writer-textarea" rows="10" placeholder="在此粘贴或书写德语作文（如：Ich fahre mit der Auto.）..." oninput="analyzeWriterText()"></textarea>
+            
+            <div class="writer-toolbar">
+              <div class="writer-word-counter" id="writer-stats-counter">0 词 · 0 句</div>
+              <div class="writer-tools-right">
+                <button class="btn btn-ghost btn-xs" onclick="document.getElementById('writer-text').value='';analyzeWriterText(true);">清空</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Highlighted Render Box -->
+          <div class="writer-card-box" id="writer-render-card" style="margin-top:1.25rem;">
+            <div class="writer-box-label">
+              <span>📖 行内语法诊断视图（点击波浪下划线查看纠错详情）</span>
+              <span id="writer-render-status" class="writer-status-pill">等待输入</span>
+            </div>
+            <div id="writer-render" class="writer-render">
+              <div class="writer-empty-tip">在上方输入德语文本后，系统将在此处以彩色波浪线下划线实时标出冠词、格位与介词错误。</div>
+            </div>
+          </div>
+
+          <!-- History / Saved Essays List -->
+          <div class="writer-card-box" style="margin-top:1.25rem;">
+            <div class="writer-box-label">
+              <span>📚 我的作文草稿库</span>
+              <button class="btn btn-ghost btn-xs" onclick="loadWriterEssays()">刷新</button>
+            </div>
+            <div id="writer-essay-list" class="writer-essay-list">
+              <div class="writer-empty-tip">暂无保存的作文</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Area: Sidebar for Diagnostics & Details -->
+        <aside id="writer-panel" class="writer-sidebar">
+          <!-- CEFR & Summary Badge Card -->
+          <div class="writer-sidebar-card">
+            <div class="sidebar-section-title">📊 语言水平与质量估测</div>
+            <div id="writer-cefr" class="writer-cefr-box">
+              <div class="writer-cefr-level">CEFR —</div>
+              <div class="writer-cefr-desc">输入德语作文以评估词汇难度与错误率</div>
+            </div>
+          </div>
+
+          <!-- Selected Error / Detail Card -->
+          <div class="writer-sidebar-card">
+            <div class="sidebar-section-title">🔍 错误诊断与纠错详解</div>
+            <div id="writer-err-detail" class="writer-err-detail-box">
+              <div class="writer-err-placeholder">
+                <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
+                <div>点击左侧文本中的<b>彩色下划线</b>，查看错误成因与修正建议，并一键收录为 Anki 语法卡。</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
   </main>
 
 
@@ -917,6 +1004,10 @@
       <span class="mob-icon">📊</span>
       <span class="mob-label">台账</span>
     </button>
+    <button class="mobile-nav-btn dock-item" id="mob-btn-writer" onclick="show('writer')">
+      <span class="mob-icon">✍️</span>
+      <span class="mob-label">写作</span>
+    </button>
     <button class="mobile-nav-btn dock-item" id="mob-btn-cards" onclick="show('cards')">
       <span class="mob-icon">🎴</span>
       <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
@@ -969,7 +1060,7 @@
     </div>
   </div>
 
-  <script type="module" src="/js/main.js?v=3.10.0"></script>
+  <script type="module" src="/js/main.js?v=3.11.0"></script>
 
 </body>
 </html>
