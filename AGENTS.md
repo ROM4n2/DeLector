@@ -357,13 +357,14 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 > 更新时间：2026-08-20
 
 - [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
-- [ ] **DeepSeek key 全部失效（401）**：`.env` 与 `app_settings` 里的两个 key
-      2026-08-20 实测都返回 401。影响所有 AI 功能（查词在线兜底、语法剖析、笔记辅助）
-      和构建工具。介词搭配数据集因此**只有 47 条人工 seed，AI 长尾（1773 词 / 约 71 次调用）没跑**。
-      换上有效 key 后跑：`python tools/build_prep.py --resume --parallel 6`
-- [ ] **介词搭配数据集覆盖偏薄**（v3.10.0）：47 词条 / 56 条搭配，全部来自
-      `tools/build_prep.py` 的 `SEED_COLLOCATIONS`（人工校验的必考项）。
-      长尾要等 key 修好；seed 是 floor，AI 结果只补 seed 没有的词头，不会覆盖已校验条目。
+- [ ] **DeepSeek 账户余额耗尽（402 Insufficient Balance）**：2026-08-20 换上的新 key
+      本身有效（不再 401），但账户没余额，所有调用返回 402。影响全部 AI 功能
+      （查词在线兜底、语法剖析、笔记辅助）和构建工具。
+- [ ] **介词搭配数据集只覆盖了一半词表**（v3.10.0）：目标 1773 个动词/形容词里
+      **只问到 926 词（52%）**，批 65–70 在 402 上重试耗尽。当前 285 词条 / 349 条搭配
+      （其中 47 条是人工校验的 `SEED_COLLOCATIONS`，作为 floor 永不被 AI 覆盖）。
+      账户充值后跑 `python tools/build_prep.py --resume --parallel 6` 续跑：
+      已答词会被预过滤，失败批没写缓存，缓存键是词表内容哈希（不会跨 run 串味）。
 - [ ] **`linguistics.py` 有 14 条 pyflakes 重复键告警**（`klima`/`schutz`/`bund` 等在
       `LINGUISTICS_VOCAB_EXT` 与另一张表里各出现一次，值不同）：先前就有，未在本次改动范围内，
       但确实意味着有一份定义被静默覆盖，值得单独查一次

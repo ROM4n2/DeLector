@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -229,6 +230,18 @@ def _parse_batch(raw_results: List[dict], requested: List[str],
     return found, none
 
 
+def _cache_path(batch: List[str]) -> Path:
+    """缓存文件名由**批次内容**决定，不用批次序号。
+
+    序号会撞：`--only a,b` 的第 0 批和全量跑的第 0 批是完全不同的词，
+    文件名却都是 batch_0.json；--resume 会把前者当成后者的答案读进来，
+    真正的第 0 批词从此永远不会被问（build_dict.py 那个坑的同款，
+    只是这次撞的是本工具自己的两次运行）。
+    """
+    digest = hashlib.sha1(",".join(batch).encode("utf-8")).hexdigest()[:12]
+    return RAW_DIR / f"batch_{digest}.json"
+
+
 async def _generate(words: List[str], args, key: str, base: str,
                     model: str) -> Tuple[Dict[str, list], set]:
     """并发跑所有批次，返回 (搭配表, 已问过的词集合)。"""
@@ -241,7 +254,8 @@ async def _generate(words: List[str], args, key: str, base: str,
     async def process(start: int):
         nonlocal done
         batch = words[start : start + args.batch_size]
-        cache_path = RAW_DIR / f"batch_{start // args.batch_size}.json"
+        label = f"{start // args.batch_size}"
+        cache_path = _cache_path(batch)
         if args.resume and cache_path.exists():
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
             found, none = cached.get("collocations", {}), cached.get("none", [])
@@ -253,12 +267,12 @@ async def _generate(words: List[str], args, key: str, base: str,
                         raw = await call_deepseek_batch(batch, key, base, model)
                         break
                     except Exception as e:
-                        print(f"[retry] 批 {start // args.batch_size} 第 {attempt+1} 次失败: {e}")
+                        print(f"[retry] 批 {label} 第 {attempt+1} 次失败: {e}")
                         await asyncio.sleep(2 * (attempt + 1))
             if raw is None:
                 # 失败批次**不写缓存**：写了就等于宣称「这些词都没有搭配」，
                 # 而 --resume 会信它，缺口从此永久静默。
-                print(f"[FAIL] 批 {start // args.batch_size} 重试耗尽，不写缓存（下次 --resume 会重跑）")
+                print(f"[FAIL] 批 {label} 重试耗尽，不写缓存（下次 --resume 会重跑）")
                 done += len(batch)
                 return
             found, none = _parse_batch(raw, batch)
