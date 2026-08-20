@@ -527,6 +527,65 @@ export async function deleteWriterEssay(id, evt) {
   }
 }
 
+// ── Word-level LCS Diff Helper for Agent Review ─────────────────────────────
+function renderWordDiff(oldSent, newSent) {
+  if (!oldSent && !newSent) return { oldHtml: '', newHtml: '' };
+  if (!oldSent) {
+    return {
+      oldHtml: '<div class="diff-empty">(无对应原句 / 新增内容)</div>',
+      newHtml: `<div class="diff-sent diff-ins-block"><span class="diff-prefix">+</span>${esc(newSent)}</div>`
+    };
+  }
+  if (!newSent) {
+    return {
+      oldHtml: `<div class="diff-sent diff-del-block"><span class="diff-prefix">-</span>${esc(oldSent)}</div>`,
+      newHtml: '<div class="diff-empty">(建议删除此句)</div>'
+    };
+  }
+
+  const w1 = oldSent.split(/(\s+|[.,!?;:„"“'«»()—–-])/).filter(Boolean);
+  const w2 = newSent.split(/(\s+|[.,!?;:„"“'«»()—–-])/).filter(Boolean);
+  const n = w1.length;
+  const m = w2.length;
+
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      if (w1[i] === w2[j]) {
+        dp[i + 1][j + 1] = dp[i][j] + 1;
+      } else {
+        dp[i + 1][j + 1] = dp[i][j] > dp[i][j + 1] ? dp[i][j] : dp[i][j + 1];
+      }
+    }
+  }
+
+  let i = n;
+  let j = m;
+  const out1 = [];
+  const out2 = [];
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && w1[i - 1] === w2[j - 1]) {
+      out1.push(esc(w1[i - 1]));
+      out2.push(esc(w2[j - 1]));
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      out2.push(`<mark class="diff-token-ins">${esc(w2[j - 1])}</mark>`);
+      j--;
+    } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) {
+      out1.push(`<mark class="diff-token-del">${esc(w1[i - 1])}</mark>`);
+      i--;
+    }
+  }
+
+  out1.reverse();
+  out2.reverse();
+  return {
+    oldHtml: `<div class="diff-sent"><span class="diff-prefix">-</span>${out1.join('')}</div>`,
+    newHtml: `<div class="diff-sent"><span class="diff-prefix">+</span>${out2.join('')}</div>`
+  };
+}
+
 // ── AI Polish Review Modal & Diff Review State Machine ───────────────────────
 export function openPolishOverlay() {
   const overlay = document.getElementById('polish-overlay');
@@ -538,79 +597,10 @@ export function closePolishOverlay() {
   if (overlay) overlay.classList.add('hidden');
 }
 
-export function renderPolishReview() {
-  const total = polishState.hunks ? polishState.hunks.length : 0;
-  const acceptedCount = polishState.hunks ? polishState.hunks.filter(h => h.accepted !== false).length : 0;
-
-  const summaryEl = document.getElementById('polish-hunk-summary');
-  if (summaryEl) {
-    if (total === 0) {
-      summaryEl.textContent = '原文表达流畅，未检测到句式或语法需调整处。';
-    } else {
-      summaryEl.textContent = `共 ${total} 处改动 · 已选定应用 ${acceptedCount}/${total} 处`;
-    }
-  }
-
-  const diffListEl = document.getElementById('polish-diff-list');
-  if (diffListEl) {
-    if (total === 0) {
-      diffListEl.innerHTML = '<div class="writer-empty-tip">未发现明显语法错误或句式改动。</div>';
-    } else {
-      diffListEl.innerHTML = polishState.hunks.map((hunk, idx) => {
-        const isAccepted = hunk.accepted !== false;
-        const oldLines = hunk.old && hunk.old.length
-          ? hunk.old.map(s => `<div class="diff-sent">${esc(s)}</div>`).join('')
-          : '<div class="diff-empty">(无对应原句 / 新增内容)</div>';
-        const newLines = hunk.new && hunk.new.length
-          ? hunk.new.map(s => `<div class="diff-sent">${esc(s)}</div>`).join('')
-          : '<div class="diff-empty">(建议删除此句)</div>';
-        const statusText = isAccepted ? '✓ 已接受润色' : '✕ 保留原文';
-        const statusClass = isAccepted ? 'accepted' : 'rejected';
-        const toggleBtnLabel = isAccepted ? '保留原句' : '接受改动';
-        const toggleBtnClass = isAccepted ? 'btn-ghost' : 'btn-accent';
-
-        return `
-          <div class="diff-hunk ${isAccepted ? 'hunk-accepted' : 'hunk-rejected'}" data-hunk-idx="${idx}">
-            <div class="diff-hunk-header">
-              <div class="diff-hunk-title">
-                <span>改动 #${idx + 1}</span>
-                <span class="hunk-status-tag ${statusClass}">${statusText}</span>
-              </div>
-              <div class="diff-hunk-actions">
-                <button class="btn ${toggleBtnClass} btn-xs" onclick="togglePolishHunk(${idx})">${toggleBtnLabel}</button>
-              </div>
-            </div>
-            <div class="diff-grid">
-              <div class="diff-old">
-                <div class="diff-side-label label-old">原句 (Original)</div>
-                ${oldLines}
-              </div>
-              <div class="diff-new">
-                <div class="diff-side-label label-new">✨ AI 润色 (Korrektur)</div>
-                ${newLines}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-  }
-
-  const notesEl = document.getElementById('polish-notes');
-  if (notesEl) {
-    if (polishState.notes_zh && polishState.notes_zh.length > 0) {
-      notesEl.classList.remove('hidden');
-      notesEl.innerHTML = `
-        <div class="sidebar-section-title" style="margin-bottom:0.5rem;">💡 AI 润色解析与语法点评</div>
-        <div class="writer-ai-notes-list">
-          ${polishState.notes_zh.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
-        </div>
-      `;
-    } else {
-      notesEl.classList.add('hidden');
-      notesEl.innerHTML = '';
-    }
-  }
+export function setPolishHunk(idx, isAccepted) {
+  if (!polishState.hunks || !polishState.hunks[idx]) return;
+  polishState.hunks[idx].accepted = isAccepted;
+  renderPolishReview();
 }
 
 export function togglePolishHunk(idx) {
@@ -629,6 +619,105 @@ export function rejectAllPolishHunks() {
   if (!polishState.hunks) return;
   polishState.hunks.forEach(h => { h.accepted = false; });
   renderPolishReview();
+}
+
+export function renderPolishReview() {
+  const total = polishState.hunks ? polishState.hunks.length : 0;
+  const acceptedCount = polishState.hunks ? polishState.hunks.filter(h => h.accepted !== false).length : 0;
+
+  const summaryEl = document.getElementById('polish-hunk-summary');
+  if (summaryEl) {
+    if (total === 0) {
+      summaryEl.innerHTML = '<span>✓ 原文表达流畅，未检测到句式或语法需调整处。</span>';
+    } else {
+      summaryEl.innerHTML = `<span>共 <b>${total}</b> 处改动 · 已选定应用 <b>${acceptedCount}/${total}</b> 处</span>`;
+    }
+  }
+
+  const diffListEl = document.getElementById('polish-diff-list');
+  if (diffListEl) {
+    if (total === 0) {
+      diffListEl.innerHTML = '<div class="writer-empty-tip">未发现明显语法错误或句式改动。</div>';
+    } else {
+      diffListEl.innerHTML = polishState.hunks.map((hunk, idx) => {
+        const isAccepted = hunk.accepted !== false;
+        
+        const oldSents = hunk.old || [];
+        const newSents = hunk.new || [];
+        const maxLen = Math.max(oldSents.length, newSents.length);
+        let oldLinesHtml = '';
+        let newLinesHtml = '';
+
+        if (maxLen === 0) {
+          oldLinesHtml = '<div class="diff-empty">(无内容)</div>';
+          newLinesHtml = '<div class="diff-empty">(无内容)</div>';
+        } else {
+          for (let k = 0; k < maxLen; k++) {
+            const oS = oldSents[k] || '';
+            const nS = newSents[k] || '';
+            const diffRes = renderWordDiff(oS, nS);
+            oldLinesHtml += diffRes.oldHtml;
+            newLinesHtml += diffRes.newHtml;
+          }
+        }
+
+        const hunkTypeLabel = oldSents.length > 0 && newSents.length > 0
+          ? '句式与用词润色'
+          : (newSents.length > 0 ? '新增句子' : '删除冗余');
+
+        return `
+          <div class="diff-hunk ${isAccepted ? 'hunk-accepted' : 'hunk-rejected'}" data-hunk-idx="${idx}">
+            <div class="diff-hunk-header">
+              <div class="diff-hunk-title">
+                <span class="diff-hunk-badge">#${idx + 1}</span>
+                <span class="diff-hunk-label">${hunkTypeLabel}</span>
+              </div>
+              <div class="diff-decision-group">
+                <button type="button" class="diff-decision-btn btn-choice-accept ${isAccepted ? 'active' : ''}" onclick="setPolishHunk(${idx}, true)" title="采纳 AI 润色建议">
+                  ✓ 采纳润色
+                </button>
+                <button type="button" class="diff-decision-btn btn-choice-reject ${!isAccepted ? 'active' : ''}" onclick="setPolishHunk(${idx}, false)" title="保留原文字句">
+                  ✕ 保留原句
+                </button>
+              </div>
+            </div>
+            <div class="diff-grid">
+              <div class="diff-side diff-old ${!isAccepted ? 'side-chosen' : 'side-discarded'}" onclick="setPolishHunk(${idx}, false)" title="点击选择保留原句">
+                <div class="diff-side-header">
+                  <span class="diff-side-label label-old">原句 (Original)</span>
+                  ${!isAccepted ? '<span class="diff-chosen-tag">✓ 保留此原句</span>' : ''}
+                </div>
+                <div class="diff-content">${oldLinesHtml}</div>
+              </div>
+              <div class="diff-side diff-new ${isAccepted ? 'side-chosen' : 'side-discarded'}" onclick="setPolishHunk(${idx}, true)" title="点击选择采纳 AI 润色">
+                <div class="diff-side-header">
+                  <span class="diff-side-label label-new">✨ AI 润色 (Korrektur)</span>
+                  ${isAccepted ? '<span class="diff-chosen-tag accept-tag">✓ 采纳此润色</span>' : ''}
+                </div>
+                <div class="diff-content">${newLinesHtml}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  const notesEl = document.getElementById('polish-notes');
+  if (notesEl) {
+    if (polishState.notes_zh && polishState.notes_zh.length > 0) {
+      notesEl.classList.remove('hidden');
+      notesEl.innerHTML = `
+        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">💡 AI 润色解析与语法点评 (${polishState.notes_zh.length} 条)</div>
+        <div class="writer-ai-notes-list">
+          ${polishState.notes_zh.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
+        </div>
+      `;
+    } else {
+      notesEl.classList.add('hidden');
+      notesEl.innerHTML = '';
+    }
+  }
 }
 
 // ── DeepSeek AI Polish Entire Essay with Sentence Diff Review ───────────────

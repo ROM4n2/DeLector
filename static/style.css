@@ -7328,29 +7328,31 @@ body.drawer-open .companion {
 
 /* ── AI Polish Review Modal (v3.12.0) ────────────────────────────────────── */
 .polish-modal-box {
-  max-width: 900px;
+  max-width: 980px;
   width: 95vw;
-  max-height: 90vh;
+  height: 86vh;
+  max-height: 840px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem 1rem;
   background: var(--paper-card);
   border: 2px solid var(--ink);
   box-shadow: 4px 4px 0 var(--ink);
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 .polish-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.65rem 0.85rem;
+  padding: 0.5rem 0.85rem;
   background: var(--paper-tint);
   border-radius: 4px;
   border: 1px solid var(--rule-light);
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   gap: 0.75rem;
+  flex-shrink: 0;
   flex-wrap: wrap;
 }
 
@@ -7374,35 +7376,37 @@ body.drawer-open .companion {
   flex-direction: column;
   gap: 1rem;
   overflow-y: auto;
-  padding-right: 6px;
-  max-height: 50vh;
-  margin-bottom: 1rem;
+  padding: 2px 6px 12px 0;
+  flex: 1 1 auto;
+  min-height: 200px;
+  margin-bottom: 0.5rem;
 }
 
 .diff-hunk {
   border: 1.5px solid var(--rule);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--paper-card);
-  box-shadow: 1px 1px 0 var(--rule);
+  box-shadow: 1px 2px 0 var(--ink);
   transition: all var(--dur-fast) ease;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .diff-hunk.hunk-accepted {
-  border-color: var(--moss);
-  box-shadow: 2px 2px 0 var(--moss);
+  border-color: #2e7d32;
+  box-shadow: 2px 3px 0 rgba(46, 125, 50, 0.4);
 }
 
 .diff-hunk.hunk-rejected {
-  border-color: var(--pencil);
-  opacity: 0.75;
+  border-color: #888;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.15);
 }
 
 .diff-hunk-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0.85rem;
+  padding: 0.45rem 0.85rem;
   background: var(--paper-tint);
   border-bottom: 1px solid var(--rule-light);
 }
@@ -7417,52 +7421,75 @@ body.drawer-open .companion {
   gap: 0.5rem;
 }
 
-.hunk-status-tag {
-  font-size: 0.6875rem;
+.diff-hunk-badge {
+  background: var(--ink);
+  color: var(--paper);
   padding: 1px 6px;
   border-radius: 3px;
+  font-size: 0.7rem;
+}
+
+.diff-hunk-label {
+  color: var(--pencil);
   font-weight: 600;
+}
+
+.diff-decision-group {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px;
+  border-radius: 4px;
+  gap: 2px;
+}
+
+.diff-decision-btn {
+  border: none;
+  background: transparent;
+  padding: 3px 9px;
+  font-size: 0.75rem;
   font-family: var(--mono);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 3px;
+  color: var(--pencil);
+  transition: all var(--dur-fast) ease;
 }
 
-.hunk-status-tag.accepted {
-  background: var(--hl-A2);
-  color: var(--hl-A2-ink);
-  border: 1px solid var(--hl-A2-ink);
+.diff-decision-btn:hover {
+  color: var(--ink);
 }
 
-.hunk-status-tag.rejected {
-  background: var(--paper-tint);
-  color: var(--muted);
-  border: 1px solid var(--rule);
+.diff-decision-btn.btn-choice-accept.active {
+  background: #2e7d32;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-.diff-hunk-actions {
-  display: flex;
-  gap: 0.4rem;
+.diff-decision-btn.btn-choice-reject.active {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .diff-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  cursor: pointer;
 }
 
-.diff-old, .diff-new {
+.diff-side {
   padding: 0.85rem 1rem;
   font-family: var(--serif-body);
-  font-size: 0.95rem;
-  line-height: 1.65;
+  font-size: 1rem;
+  line-height: 1.7;
+  transition: background var(--dur-fast) ease, opacity var(--dur-fast) ease;
 }
 
-.diff-old {
-  background: rgba(237, 111, 92, 0.05);
-  border-right: 1px solid var(--rule-light);
-  color: var(--pencil);
-}
-
-.diff-new {
-  background: rgba(79, 143, 107, 0.06);
-  color: var(--ink);
+.diff-side-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
 .diff-side-label {
@@ -7471,7 +7498,6 @@ body.drawer-open .companion {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 0.4rem;
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -7482,11 +7508,82 @@ body.drawer-open .companion {
 }
 
 .diff-side-label.label-new {
-  color: var(--moss);
+  color: #2e7d32;
+}
+
+.diff-chosen-tag {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--paper-tint);
+  color: var(--pencil);
+  border: 1px solid var(--rule);
+}
+
+.diff-chosen-tag.accept-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-color: #a5d6a7;
+}
+
+.diff-old {
+  border-right: 1px solid var(--rule-light);
+}
+
+.diff-old.side-chosen {
+  background: rgba(21, 20, 15, 0.04);
+  color: var(--ink);
+}
+
+.diff-old.side-discarded {
+  background: rgba(237, 111, 92, 0.03);
+  color: var(--pencil);
+  opacity: 0.7;
+}
+
+.diff-new.side-chosen {
+  background: rgba(79, 143, 107, 0.1);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.diff-new.side-discarded {
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--muted);
+  opacity: 0.5;
+  text-decoration: line-through;
 }
 
 .diff-sent {
   margin-bottom: 0.25rem;
+  word-break: break-word;
+}
+
+.diff-prefix {
+  font-family: var(--mono);
+  font-weight: 700;
+  margin-right: 0.35rem;
+  user-select: none;
+  opacity: 0.6;
+}
+
+.diff-token-del {
+  background: rgba(230, 57, 70, 0.2);
+  color: #900c3f;
+  text-decoration: line-through;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.diff-token-ins {
+  background: rgba(46, 125, 50, 0.22);
+  color: #1b5e20;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 600;
 }
 
 .diff-empty {
@@ -7496,21 +7593,23 @@ body.drawer-open .companion {
 }
 
 .polish-notes-container {
+  flex-shrink: 0;
   background: var(--paper-tint);
   border: 1px solid var(--rule-light);
   border-radius: 4px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  max-height: 140px;
+  padding: 0.5rem 0.75rem;
+  max-height: 110px;
   overflow-y: auto;
+  margin-bottom: 0.5rem;
 }
 
 .polish-modal-footer {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
-  margin-top: 0.5rem;
-  padding-top: 0.85rem;
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--rule-light);
 }
 
