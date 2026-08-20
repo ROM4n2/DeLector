@@ -11,12 +11,12 @@
 
 ## 交接快照
 
-> 更新时间：2026-08-19
+> 更新时间：2026-08-20
 
 | 项 | 值 |
 |---|---|
 | 当前分支 / HEAD | `master`（含 v3.8.0 FSRS 认知自适应记忆排程器升级：DSR 状态机原生零依赖数学模型、`next_intervals` 4级预估字典与前端动态绑定），工作区干净 |
-| 测试 | **67 / 67 全绿**（`test_server.py` 52 + `test_syntax_tree.py` 15） |
+| 测试 | **114 / 114 全绿**（`test_server.py` 84 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
 | 对外发布 | **v3.8.0**（2026-08-19）：FSRS 现代自适应记忆排程器升级（DSR 状态机原生数学模型、消除 Ease Hell、4 级下一轮间隔预计算字典、向下兼容 SM-2 包装） |
@@ -58,7 +58,7 @@
 | 移动打包 | Chaquopy + Gradle | `android/` |
 | CI/CD | GitHub Actions | `.github/workflows/build-release.yml` |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（82）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10） |
+| 测试 | pytest | `test_server.py`（84）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10） |
 | 提交守卫 | pre-commit 密钥扫描 | `.githooks/pre-commit` |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
@@ -329,7 +329,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （112 个，全绿）
+测试:      pytest            （114 个，全绿）
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py
 ```
 
@@ -375,12 +375,17 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 - [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
 - [ ] **DeepSeek 账户余额耗尽（402 Insufficient Balance）**：2026-08-20 换上的新 key
       本身有效（不再 401），但账户没余额，所有调用返回 402。影响全部 AI 功能
-      （查词在线兜底、语法剖析、笔记辅助）和构建工具。
-- [ ] **介词搭配数据集只覆盖了一半词表**（v3.10.0）：目标 1773 个动词/形容词里
-      **只问到 926 词（52%）**，批 65–70 在 402 上重试耗尽。当前 285 词条 / 349 条搭配
-      （其中 47 条是人工校验的 `SEED_COLLOCATIONS`，作为 floor 永不被 AI 覆盖）。
-      账户充值后跑 `python tools/build_prep.py --resume --parallel 6` 续跑：
-      已答词会被预过滤，失败批没写缓存，缓存键是词表内容哈希（不会跨 run 串味）。
+      （查词在线兜底、语法剖析、笔记辅助）和构建工具。**充值后已跑完介词数据集**，
+      其余 AI 功能仍取决于余额。
+- [x] ~~**介词搭配数据集只覆盖了一半词表**~~ — 2026-08-20 已跑完：1773 个动词/形容词
+      问到 1729 词（97.5%），**531 词条 / 660 条搭配**（含 47 条人工 `SEED_COLLOCATIONS`
+      floor）。中途发现第一版校验器把介词与冠词的缩合形式（an+dem=am、in+das=ins）
+      当成幻觉，误杀 12 条正确搭配 —— 已修并重问全部批次，重放 0 误杀。
+- [ ] **45 个词头 AI 始终不作答**（v3.10.0）：`sich-freuen`/`auf-jeden-fall` 这类
+      多词与反身连字符键，以及 `eindeutige`/`hiesigen` 这类形容词屈折形。提示词按
+      单个词元设计，处理不了这些形状；重问只是白花钱。注意连字符键**不都是**坏数据：
+      `see-meer` / `see-teich`、`bank-geldinstitut` / `bank-sitzgelegenheit` 是词库
+      刻意用来区分同形词的，`fertig-sein` 等 8 条也已拿到搭配 —— 不要一刀切按连字符过滤。
 - [ ] **签名迁移只能靠 CI 验证**（v3.10.0）：本机无 Android SDK，`build.gradle` 的
       `signingConfigs` 与工作流的指纹闸都没有本地执行过。已本地验到的只有：
       YAML 可解析、pre-commit 对 keystore（含改名成 `.bin` 的真实 PKCS12）实测拦下、
