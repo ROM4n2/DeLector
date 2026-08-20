@@ -119,9 +119,9 @@
       <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
         <button id="quiz-start-btn" class="btn btn-dark" onclick="openQuizOverlay()" title="开始考验所有待复习卡片">⚔ 开始考验</button>
         <button id="clear-cache-btn" class="btn btn-ghost" onclick="clearAudioCache()" title="查看并清理本地 MP3 语音缓存">🗑️ 缓存 (<span id="cache-size-span">0 MB</span>)</button>
-        <button class="btn btn-ghost" onclick="downloadBackupJson()">导出备份</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('backup-file-input').click()">还原备份</button>
-        <input id="backup-file-input" type="file" accept=".json" style="display:none;" onchange="uploadBackupJson(event)">
+        <button class="btn btn-ghost" onclick="downloadBackupJson()" title="导出全部文章、卡片（含复习进度）、笔记、学习统计与界面设置为 JSON 文件">导出备份</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('backup-file-input').click()" title="⚠ 用备份文件整体替换当前数据——现有文章、卡片与统计会被清空">还原备份</button>
+        <input id="backup-file-input" type="file" accept=".json,application/json" style="display:none;" onchange="uploadBackupJson(event)">
         <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki</a>
       </div>
     </div>
@@ -607,7 +607,7 @@
           <div class="dropzone-icon">📄</div>
           <div class="dropzone-title">点击或拖拽德语文档至此处</div>
           <div class="dropzone-desc">支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）</div>
-          <input id="file-input" type="file" accept=".txt,.md,.text" style="display:none;" onchange="handleFileSelect(event)">
+          <input id="file-input" type="file" accept=".txt,.md,.text,text/plain,text/markdown" style="display:none;" onchange="handleFileSelect(event)">
         </div>
       </div>
 

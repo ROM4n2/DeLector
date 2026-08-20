@@ -203,8 +203,10 @@ GET    /api/settings                            读取设置（含 nlp_engine �
 POST   /api/settings                            写入设置（**无鉴权**，故 Android 只绑回环）
 POST   /api/settings/test-key                   连通性与延迟测试
 GET    /api/articles/{article_id}/export-guide  导出学习指南 HTML
-GET    /api/backup/export                       导出数据库备份
-POST   /api/backup/restore                      恢复数据库备份
+GET    /api/backup/export                       导出数据库备份（v2；仅 127.0.0.1）
+POST   /api/backup/prepare                      提交 localStorage 换一次性下载 token（仅 127.0.0.1）
+GET    /api/backup/download/{token}             attachment 下载（单次有效；Android 唯一可行路径）
+POST   /api/backup/restore                      **整体覆盖**还原，失败按文件快照回滚（仅 127.0.0.1）
 POST   /api/cards/{card_type}/{card_id}/review  FSRS 自适应间隔复习记录（grade 1-4）
 GET    /api/cards/due                           获取今日到期卡片（FSRS 排程）
 POST   /api/articles/{article_id}/exercise/cloze 生成完形填空题（grammar/vocab/ctest）
@@ -361,10 +363,8 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       真机若连不上该域名（或离线），三层兜底全败时播放器显示 `⚠ 语音引擎不可用`（不再静默）。
       原生 TTS 仅当设备装有德语语音时才可用（国内机型多无 Google TTS 德语数据，已做 voice 遍历兜底）
 - [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
-- [ ] **已合并的分支未删**：`fix/android-startup-and-spacy`（本地与远端都还在）
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
       md 实际加载未在本机跑过
-- [ ] `pyflakes` 在 `test_server.py` 有 3 条陈旧告警（2 个未用导入 + 1 个未用变量），先前就有
 - [ ] Android 侧 Java 代码无法本机编译验证（本机无 Android SDK），只能靠 CI
 - [ ] 首次启动因 `extractPackages` 解包约 30MB 而明显变慢，尚未在真机上实测耗时
 - [x] ~~安卓版启动卡在「正在启动」页并超时~~ — PR #2 已修（根因：降级路径 `NameError`）

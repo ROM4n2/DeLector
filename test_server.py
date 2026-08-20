@@ -1,4 +1,5 @@
 import os
+import json
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,10 +8,11 @@ os.environ["DATABASE_PATH"] = "test_delector.db"
 os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
 
 from server import (
-    app, init_db, get_db, get_cefr_level, export_anki_deck,
+    app, init_db, get_db, get_cefr_level,
     SYSTEM_GRAMMAR_PROMPT, process_german_text,
     is_safe_public_url, clean_html_to_article,
-    init_progress_db, get_progress_db,
+    get_progress_db, set_setting,
+    BACKUP_FORMAT_VERSION, BACKUP_SETTINGS_WHITELIST,
 )
 
 @pytest.fixture
@@ -23,7 +25,14 @@ def test_progress_path():
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    # 显式给出本机来源地址：备份端点有「仅 127.0.0.1」闸，
+    # TestClient 默认把 client.host 报成 "testclient"，会被闸拒掉。
+    return TestClient(app, client=("127.0.0.1", 54321))
+
+@pytest.fixture
+def lan_client():
+    """模拟同 Wi-Fi 的另一台设备，用于验证备份端点的局域网闸。"""
+    return TestClient(app, client=("192.168.1.77", 54321))
 
 @pytest.fixture(autouse=True)
 def clean_db():
@@ -218,6 +227,237 @@ def test_backup_export_and_restore_roundtrip(client):
     res_verify = client.get("/api/articles/999")
     assert res_verify.status_code == 200
     assert res_verify.json()["title"] == "Backup Test Article"
+
+
+# ── v3.10.0 备份往返修复的回归测试 ────────────────────────────────────────────
+# 上面那个 roundtrip 测试只断言了文章标题，正是它让「还原丢掉 SRS 状态」
+# 这个数据丢失缺陷一路绿灯。下面把每一处都钉死。
+
+def _vocab_card_with_srs(card_id=501):
+    return {
+        "id": card_id, "article_id": None, "word": "warten", "lemma": "warten",
+        "pos": "VERB", "gender": "None", "plural": "", "cefr_level": "A2",
+        "definition_zh": "等待", "sentence_context": "Ich warte auf dich.",
+        "created_at": "2026-08-01 10:00:00",
+        "mastered": 1, "mastered_at": "2026-08-15 09:00:00",
+        "correct_count": 7, "wrong_count": 2, "due_date": "2026-12-24",
+        "interval_days": 43, "ease_factor": 2.87, "repetition_count": 5,
+    }
+
+
+def test_restore_preserves_srs_state(client):
+    """还原必须带回全部 SM-2/FSRS 字段。
+
+    旧实现的 INSERT 列表不含这 8 列，且用 INSERT OR REPLACE，
+    于是导出的 JSON 明明带着复习历史，还原一圈却全部回落到 schema 默认值。
+    """
+    card = _vocab_card_with_srs()
+    res = client.post("/api/backup/restore", json={"version": 2, "vocab_cards": [card]})
+    assert res.status_code == 200
+
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 501").fetchone())
+    for col in ("mastered", "mastered_at", "correct_count", "wrong_count",
+                "due_date", "interval_days", "ease_factor", "repetition_count"):
+        assert row[col] == card[col], f"{col} 未被还原：{row[col]!r} != {card[col]!r}"
+
+
+def test_export_includes_srs_columns(client):
+    """导出侧同样要断言——否则「导出完整」这个前提哪天悄悄坏掉不会有人知道。"""
+    client.post("/api/backup/restore", json={"version": 2,
+                                            "vocab_cards": [_vocab_card_with_srs()]})
+    data = client.get("/api/backup/export").json()
+    assert data["version"] == BACKUP_FORMAT_VERSION
+    exported = next(c for c in data["vocab_cards"] if c["id"] == 501)
+    assert exported["ease_factor"] == 2.87
+    assert exported["repetition_count"] == 5
+    assert exported["due_date"] == "2026-12-24"
+
+
+def test_progress_db_roundtrips(client):
+    """progress.db 三张表进备份——连胜/测验历史/趋势全靠它。"""
+    payload = {
+        "version": 2,
+        "study_log": [{"id": 1, "event_type": "add_card", "ref_id": 42,
+                       "note": "t", "logged_at": "2026-08-10 08:00:00"}],
+        "quiz_log": [{"id": 1, "card_id": 42, "card_type": "vocab",
+                      "mode": "recall", "correct": 1,
+                      "attempted_at": "2026-08-10 08:05:00"}],
+        "daily_summary": [{"date": "2026-08-10", "cards_added": 3, "cards_mastered": 1,
+                           "articles_read": 2, "quiz_sessions": 1, "study_minutes": 25}],
+    }
+    assert client.post("/api/backup/restore", json=payload).status_code == 200
+
+    with get_progress_db("test_progress.db") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM study_log").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM quiz_log").fetchone()[0] == 1
+        summary = dict(conn.execute("SELECT * FROM daily_summary").fetchone())
+    assert summary["study_minutes"] == 25
+    assert summary["cards_added"] == 3
+
+    exported = client.get("/api/backup/export").json()
+    assert exported["daily_summary"][0]["study_minutes"] == 25
+    assert exported["quiz_log"][0]["mode"] == "recall"
+
+
+def test_export_whitelists_settings_and_never_leaks_api_key(client):
+    """备份 JSON 会被分享/上传——API key 绝不能在里面。"""
+    set_setting("DEEPSEEK_API_KEY", "sk-should-never-be-exported", db_path="test_delector.db")
+    set_setting("TTS_VOICE", "de-DE-ConradNeural", db_path="test_delector.db")
+
+    data = client.get("/api/backup/export").json()
+    keys = {s["key"] for s in data["app_settings"]}
+    assert "TTS_VOICE" in keys
+    assert "DEEPSEEK_API_KEY" not in keys
+    assert "DEEPSEEK_API_KEY" not in set(BACKUP_SETTINGS_WHITELIST)
+    # 整个序列化结果里都不该出现那个值
+    assert "sk-should-never-be-exported" not in json.dumps(data)
+
+
+def test_restore_does_not_wipe_api_key(client):
+    """还原是真覆盖，但覆盖范围必须止于白名单键。
+
+    整表 DELETE app_settings 会连带抹掉 DEEPSEEK_API_KEY——它从不进备份，
+    抹了就再也灌不回来，用户得重新配一遍 key。
+    """
+    set_setting("DEEPSEEK_API_KEY", "sk-must-survive-restore", db_path="test_delector.db")
+    set_setting("TTS_VOICE", "de-DE-KatjaNeural", db_path="test_delector.db")
+
+    res = client.post("/api/backup/restore", json={
+        "version": 2,
+        "app_settings": [{"key": "TTS_VOICE", "value": "de-DE-ConradNeural"}],
+    })
+    assert res.status_code == 200
+
+    with get_db("test_delector.db") as conn:
+        rows = {r["key"]: r["value"] for r in
+                conn.execute("SELECT key, value FROM app_settings").fetchall()}
+    assert rows["DEEPSEEK_API_KEY"] == "sk-must-survive-restore"
+    assert rows["TTS_VOICE"] == "de-DE-ConradNeural"
+
+
+def test_restore_accepts_v1_backup(client):
+    """读 v1 是硬要求：迁移用户手里拿的恰恰是 v3.9.1 导出的 v1 文件。
+
+    v1 没有 app_settings / progress 三表 / local_storage 字段，
+    缺列的 SRS 值回落到建表默认值即可，不能因缺字段而拒收。
+    """
+    v1 = {
+        "version": 1,
+        "articles": [{"id": 77, "title": "V1 Backup", "raw_text": "Alt.",
+                      "processed_json": "{}", "source_url": "",
+                      "created_at": "2026-01-01 00:00:00"}],
+        "vocab_cards": [{"id": 77, "article_id": 77, "word": "alt", "lemma": "alt",
+                         "pos": "ADJ", "gender": "None", "plural": "",
+                         "cefr_level": "A1", "definition_zh": "旧的",
+                         "sentence_context": "Alt.", "created_at": "2026-01-01 00:00:00"}],
+    }
+    assert client.post("/api/backup/restore", json=v1).status_code == 200
+
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 77").fetchone())
+    assert row["definition_zh"] == "旧的"
+    assert row["ease_factor"] == 2.5      # schema 默认值
+    assert row["interval_days"] == 1
+    assert row["mastered"] == 0
+
+
+def test_failed_restore_rolls_back_both_databases():
+    """还原中途失败必须整体回滚，不能留下「已清库而备份没灌进去」的状态。
+
+    两个 db 是独立文件、无法共处一个事务：主库先清空并提交，
+    progress 库随后失败——若无文件级快照，主库数据已经没了。
+    这里用重复的 daily_summary 主键制造 IntegrityError。
+
+    用独立的 client（raise_server_exceptions=False）：默认 TestClient 会把
+    服务端异常原样抛给调用方，拿不到 500 响应。
+    """
+    client = TestClient(app, client=("127.0.0.1", 54321), raise_server_exceptions=False)
+    with get_db("test_delector.db") as conn:
+        before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+    assert before > 0, "预置文章应存在，否则这个测试证明不了什么"
+
+    bad = {
+        "version": 2,
+        "articles": [{"id": 900, "title": "Should Not Survive", "raw_text": "x",
+                      "processed_json": "{}", "source_url": "", "created_at": None}],
+        # 同一个 date 两行 → daily_summary 主键冲突
+        "daily_summary": [{"date": "2026-08-11"}, {"date": "2026-08-11"}],
+    }
+    res = client.post("/api/backup/restore", json=bad)
+    assert res.status_code >= 500
+
+    with get_db("test_delector.db") as conn:
+        after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        leaked = conn.execute("SELECT COUNT(*) FROM articles WHERE id = 900").fetchone()[0]
+    assert after == before, "主库未被回滚：还原失败却把原有文章清掉了"
+    assert leaked == 0, "主库未被回滚：失败的还原却留下了新数据"
+
+
+@pytest.mark.parametrize("method,path", [
+    ("get", "/api/backup/export"),
+    ("post", "/api/backup/prepare"),
+    ("get", "/api/backup/download/sometoken"),
+    ("post", "/api/backup/restore"),
+])
+def test_backup_endpoints_reject_lan_clients(lan_client, method, path):
+    """桌面端有意绑 0.0.0.0，所以备份端点必须自己挡住局域网。
+
+    否则同 Wi-Fi 的任何人都能拖走整库（export），
+    或者——在还原改成真覆盖之后——用一个 POST 清空别人的数据库。
+    """
+    res = getattr(lan_client, method)(path, **({"json": {}} if method == "post" else {}))
+    assert res.status_code == 403
+
+
+def test_prepare_and_download_backup_is_single_use(client):
+    """Android 导出链路：POST 组装（带 localStorage）→ GET 下载（带 attachment 头）。
+
+    为什么不能沿用 blob:：Android WebView 的 DownloadListener 对 blob: URL
+    永不触发，且没有 shouldOverrideUrlLoading 兜底，点击是静默无操作。
+    真 http URL + Content-Disposition 是这个 App 里唯一被证明能下载的路径。
+    """
+    ls = {"delector_voice": "de-DE-ConradNeural",
+          "delector_companion_custom_svg": "<svg/>"}
+    prep = client.post("/api/backup/prepare", json={"local_storage": ls})
+    assert prep.status_code == 200
+    token = prep.json()["token"]
+    assert token and len(token) >= 20
+
+    res = client.get(f"/api/backup/download/{token}")
+    assert res.status_code == 200
+    assert "attachment" in res.headers["content-disposition"]
+    assert ".json" in res.headers["content-disposition"]
+    body = res.json()
+    assert body["version"] == BACKUP_FORMAT_VERSION
+    assert body["local_storage"] == ls          # localStorage 必须原样带上
+    assert "articles" in body and "daily_summary" in body
+
+    # token 单次有效，用后内存槽清空
+    assert client.get(f"/api/backup/download/{token}").status_code == 404
+
+
+def test_download_rejects_unknown_token(client):
+    client.post("/api/backup/prepare", json={"local_storage": {}})
+    assert client.get("/api/backup/download/not-the-right-token").status_code == 404
+
+
+def test_frontend_export_does_not_use_blob_download():
+    """前端导出必须走 prepare→download，不能退回 Blob + <a download>。
+
+    blob: 方案在桌面浏览器上能用、在 Android 上是静默无操作，
+    所以它的回归不会有任何报错——只会让用户以为自己有备份。
+    只能在源码层立个哨兵。
+    """
+    src = open(os.path.join(os.path.dirname(__file__), "static", "js", "cards.js"),
+               encoding="utf-8").read()
+    start = src.index("export async function downloadBackupJson")
+    export_fn = src[start:src.index("export function uploadBackupJson")]
+    assert "/api/backup/prepare" in export_fn
+    assert "/api/backup/download/" in export_fn
+    assert "createObjectURL" not in export_fn, "blob: 下载在 Android 上是静默无操作"
+    assert "local_storage" in export_fn, "localStorage 必须一起导出（字号/语音/宠物 SVG 只在那里）"
+
 
 def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     from unittest.mock import AsyncMock
@@ -554,7 +794,8 @@ def test_due_cards_endpoint(client):
         "word": "lernen", "lemma": "lernen", "pos": "VERB",
         "cefr_level": "A1", "definition_zh": "学习", "sentence_context": "Ich lerne."
     })
-    
+    assert res.status_code == 200   # 建卡失败会让下面的断言变成空转
+
     due_res = client.get("/api/cards/due")
     assert due_res.status_code == 200
     data = due_res.json()

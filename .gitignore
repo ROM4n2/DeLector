@@ -5,6 +5,7 @@ __pycache__/
 *.secret
 *.db
 *.apkg
+*.apk
 artifact*.html
 .pytest_cache/
 .cache/

@@ -767,16 +767,36 @@ export async function clearAudioCache() {
   }
 }
 
+// 备份要带上 localStorage：字号、语音偏好、用户手绘上传的宠物 SVG 只存在这里，
+// 而卸载 App 会连同数据库一起清空它。用前缀扫描而不是显式白名单——
+// 白名单会让将来新增的偏好项静默漏出备份。
+const BACKUP_LS_PREFIX = 'delector_';
+// 瞬态标记：既不导出也不清除，否则还原后会重复弹一次连胜庆祝。
+const BACKUP_LS_TRANSIENT = new Set(['delector_streak_celebrated']);
+
+function backupLocalStorageKeys() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k)) keys.push(k);
+  }
+  return keys;
+}
+
 export async function downloadBackupJson() {
   try {
-    const data = await api('/api/backup/export');
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `delector_backup_${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // 两步走：POST 交出 localStorage 换一个一次性 token，再导航到 GET 下载。
+    // 不能用 Blob + <a download>：Android WebView 的 DownloadListener 对 blob:
+    // URL 永不触发，点击是静默无操作——连 catch 都进不去，用户以为导出成功了。
+    const local_storage = {};
+    backupLocalStorageKeys().forEach(k => { local_storage[k] = localStorage.getItem(k); });
+    const { token } = await api('/api/backup/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ local_storage })
+    });
+    if (!token) throw new Error('备份服务未返回下载凭证');
+    window.location.href = `/api/backup/download/${token}`;
   } catch (e) {
     alert('导出备份失败');
   }
@@ -784,7 +804,9 @@ export async function downloadBackupJson() {
 
 export function uploadBackupJson(e) {
   const file = e.target.files?.[0];
+  e.target.value = '';   // 先清空，否则重选同一个文件不会再触发 change
   if (!file) return;
+  if (!confirm('还原会清空当前全部文章、生词卡、语法卡、笔记与学习统计，用备份文件的内容整体替换。\n\n此操作不可撤销。确定继续吗？')) return;
   const reader = new FileReader();
   reader.onload = async function(evt) {
     try {
@@ -794,12 +816,20 @@ export function uploadBackupJson(e) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      alert('备份还原成功！');
-      loadCards();
+      // localStorage 也用真覆盖语义，和数据库侧保持一致：先清掉现有 delector_*
+      // 再按备份重写。混用两套语义会造出「数据库回到备份时刻、界面偏好却是
+      // 两个时刻的混合」这种没人能复现的状态。
+      backupLocalStorageKeys().forEach(k => localStorage.removeItem(k));
+      Object.entries(payload.local_storage || {}).forEach(([k, v]) => {
+        if (k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k) && v !== null) {
+          localStorage.setItem(k, v);
+        }
+      });
+      alert('备份还原成功！页面即将重新加载以应用还原后的设置。');
+      window.location.reload();
     } catch {
       alert('备份文件格式不正确或还原失败');
     }
   };
   reader.readAsText(file);
-  e.target.value = '';
 }
