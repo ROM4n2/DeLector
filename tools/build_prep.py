@@ -156,6 +156,33 @@ def merge_with_seed(collocations: Dict[str, list]) -> Dict[str, list]:
     return merged
 
 
+# 介词与冠词的缩合形式（Verschmelzung）。少了这张表，「例句必须含该介词」
+# 这条检查会把**完全正确**的搭配当成幻觉丢掉：
+#   operieren an → "Der Arzt operiert am Herzen."   (an + dem = am)
+#   übersetzen in → "Er übersetzt das Buch ins …"   (in + das = ins)
+# 这类误杀比漏检更糟：它悄悄把词写进「确认没有搭配」的负例名单里。
+_PREP_CONTRACTIONS = {
+    "an": ("am", "ans"),
+    "in": ("im", "ins"),
+    "zu": ("zum", "zur"),
+    "bei": ("beim",),
+    "von": ("vom",),
+    "auf": ("aufs",),
+    "für": ("fürs",),
+    "um": ("ums",),
+    "über": ("übers",),
+    "durch": ("durchs",),
+    "vor": ("vors",),
+    "hinter": ("hinters",),
+    "unter": ("unters",),
+}
+
+
+def _accepted_surface_forms(prep: str) -> set:
+    """介词本身 + 它与冠词缩合后的形式。"""
+    return {prep, *_PREP_CONTRACTIONS.get(prep, ())}
+
+
 def validate_collocation(item: dict) -> Optional[str]:
     """返回错误信息（合法返回 None）。
 
@@ -176,7 +203,7 @@ def validate_collocation(item: dict) -> Optional[str]:
     if not 10 <= len(example) <= 120:
         return f"beispiel 长度异常({len(example)}): {example!r}"
     words = {w.strip(".,!?;:»«\"'").lower() for w in example.split()}
-    if prep not in words:
+    if not (words & _accepted_surface_forms(prep)):
         return f"例句未用上介词 {prep!r}: {example!r}"
     return None
 
@@ -258,8 +285,22 @@ async def _generate(words: List[str], args, key: str, base: str,
         cache_path = _cache_path(batch)
         if args.resume and cache_path.exists():
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
-            found, none = cached.get("collocations", {}), cached.get("none", [])
+            if "raw" in cached:
+                # 缓存存的是 AI 原始响应：每次都重新走校验，
+                # 于是校验器修好后能免费捡回被误杀的搭配，不用重新付费提问。
+                found, none = _parse_batch(cached["raw"], batch, verbose=False)
+            else:
+                # v1 缓存只存了校验后的结果，原始响应已丢。它的 `none` 名单
+                # 不可信（校验器的误杀会被记成「确认没有搭配」），但重问要花钱，
+                # 所以默认沿用、由 --reask-v1 显式重问。
+                found, none = cached.get("collocations", {}), cached.get("none", [])
+                if args.reask_v1:
+                    print(f"  批 {label}: v1 缓存（无原始响应），重问")
+                    found, none = {}, []
+                    cache_path.unlink()
         else:
+            found, none = {}, []
+        if not found and not none:
             raw: Optional[List[dict]] = None
             async with sem:
                 for attempt in range(4):
@@ -276,8 +317,12 @@ async def _generate(words: List[str], args, key: str, base: str,
                 done += len(batch)
                 return
             found, none = _parse_batch(raw, batch)
+            # 存**原始响应**而不只是校验后的结果：校验器是会有 bug 的
+            # （第一版把 "operiert am Herzen" 里的 an 判成幻觉），
+            # 而只存结果意味着误杀无法追溯、也无法免费重放。
             cache_path.write_text(json.dumps(
-                {"words": batch, "collocations": found, "none": none},
+                {"words": batch, "raw": raw,
+                 "collocations": found, "none": none},
                 ensure_ascii=False), encoding="utf-8")
         collocations.update(found)
         answered.update(found)
@@ -393,6 +438,9 @@ def main() -> None:
     parser.add_argument("--parallel", type=int, default=1,
                         help="并发路数（建议 4-8；太大会触发 DeepSeek 429）")
     parser.add_argument("--resume", action="store_true", help="断点续跑（读 tools/raw_prep/）")
+    parser.add_argument("--reask-v1", action="store_true",
+                        help="重问 v1 缓存（只存了校验结果、没存原始响应）的批次："
+                             "它们的「没有搭配」名单里混着校验器误杀的词，要花钱重问")
     parser.add_argument("--only", type=str, default="", help="只跑指定词（逗号分隔）")
     parser.add_argument("--reemit", action="store_true", help="纯从缓存重建 prep_dict.py")
     parser.add_argument("--force", action="store_true",
