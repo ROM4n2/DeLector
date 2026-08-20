@@ -422,7 +422,8 @@ CEFR_DICT = {
 }
 
 from core_dict import lookup_core_vocab, get_core_cefr_level
-from linguistics import lookup_irregular_verb, lookup_linguistics_ext, split_komposita
+from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
+                         lookup_prep_collocations)
 from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree, split_sentences_pure_python
 
 def get_cefr_level(lemma: str) -> str:
@@ -1130,6 +1131,14 @@ async def lookup_vocab(req: VocabLookupReq):
                     res["definition_zh"] = " + ".join(sub_defs)
                     if res.get("source") in ("none", "ai_error", "ai_exception"):
                         res["source"] = "linguistics"
+
+    # 3. 固定介词搭配（Verben/Adjektive mit Präpositionen）
+    # 挂在同一个响应里而不是新开端点：抽屉那几个 banner box 的渲染/拆除都假定
+    # 数据来自同一个响应对象，新端点要在前端引入第二个异步状态与竞态处理。
+    praep = (lookup_prep_collocations(req.lemma or "")
+             or lookup_prep_collocations(req.target_word))
+    if praep:
+        res["praepositionen"] = praep
 
     return res
 

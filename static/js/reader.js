@@ -282,6 +282,8 @@ export function inspect(tokenId, sentId) {
   if (oldStamm) oldStamm.remove();
   const oldKomposita = document.getElementById('d-komposita-box');
   if (oldKomposita) oldKomposita.remove();
+  const oldPraep = document.getElementById('d-praep-box');
+  if (oldPraep) oldPraep.remove();
 
   // Render Separable Banner if applicable
   if (token.separable && token.separable.sep_lemma) {
@@ -372,6 +374,33 @@ export function inspect(tokenId, sentId) {
           </div>
         `;
         metaEl.parentNode.insertBefore(kompDiv, metaEl.nextSibling);
+      }
+
+      // Render Präpositionen-Kollokationen（固定介词搭配 + 支配的格）
+      if (res.praepositionen && res.praepositionen.length) {
+        // 存进 state：每条后面的「+」按钮按下标取数据，避免把例句里的引号
+        // 拼进 onclick 属性（komposita 那种传参方式碰上 "…" 就会拼坏）。
+        state.selectedToken.praepositionen = res.praepositionen;
+        const anchor = document.getElementById('d-komposita-box')
+                    || document.getElementById('d-stammformen-box')
+                    || document.getElementById('d-meta');
+        const praepDiv = document.createElement('div');
+        praepDiv.id = 'd-praep-box';
+        praepDiv.className = 'praep-banner';
+        praepDiv.innerHTML = `
+          <div class="praep-title">🧭 固定介词搭配 (Präposition + Kasus):</div>
+          ${res.praepositionen.map((p, i) => `
+            <div class="praep-row">
+              <span class="praep-prep">${esc(p.praeposition)}</span>
+              <span class="praep-kasus">+ ${esc(p.kasus)}</span>
+              <span class="praep-def">${esc(p.bedeutung_zh)}</span>
+              <span class="praep-example">${esc(p.beispiel)}</span>
+              <button class="praep-save" title="把这一条存成词汇卡"
+                      onclick="window.savePrepCollocation(${i}, this)">+</button>
+            </div>
+          `).join('')}
+        `;
+        anchor.parentNode.insertBefore(praepDiv, anchor.nextSibling);
       }
     } else {
       document.getElementById('d-def-status').textContent = '';
@@ -470,6 +499,46 @@ export async function saveVocab() {
   document.getElementById('save-vocab-btn').textContent = '✓ 已保存';
   refreshCardCounters();
   Companion.celebrate('card_vocab');
+}
+
+/** 把抽屉里某一条介词搭配单独存成词汇卡。
+ *
+ * 为什么每条一个按钮：抽屉的 #save-vocab-btn 存的是「被点击的那个词」，
+ * 而 bestehen 有 auf/aus/in 三条意思完全不同的搭配，用户得能只存想背的那条。
+ * 不做「一键全存」——灌进不想背的条目会污染 FSRS 队列，而队列的价值
+ * 恰恰建立在每张卡都是用户主动选的。
+ *
+ * 复用 vocab 卡而不新增 card_type：VocabCardReq 的字段刚好够用，
+ * FSRS 排程与 Anki 导出立刻可用，零 schema 改动。
+ */
+export async function savePrepCollocation(index, btn) {
+  const rows = state.selectedToken && state.selectedToken.praepositionen;
+  if (!rows || !rows[index] || !state.currentArticle) return;
+  const p = rows[index];
+  const lemma = state.selectedToken.lemma || state.selectedToken.text;
+  // 中文义里的「(sich)」是反身标记（数据集的键不带 sich，为了匹配 spaCy lemma），
+  // 存卡时把它还原到词头，卡面才是德语里真正的形态：sich freuen auf
+  const reflexive = p.bedeutung_zh.includes('(sich)');
+  const head = `${reflexive ? 'sich ' : ''}${lemma} ${p.praeposition}`;
+  const def = `${p.bedeutung_zh.replace('(sich)', '').trim()} (+${p.kasus})`;
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/cards/vocab', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        article_id: state.currentArticle.id,
+        word: head, lemma: lemma, pos: state.selectedToken.pos,
+        cefr_level: state.selectedToken.cefr_level || 'B1',
+        definition_zh: def, sentence_context: p.beispiel
+      })
+    });
+    if (btn) btn.textContent = '✓';
+    refreshCardCounters();
+    Companion.celebrate('card_vocab');
+  } catch {
+    if (btn) { btn.disabled = false; btn.textContent = '+'; }
+    alert('保存搭配卡失败');
+  }
 }
 
 export async function saveGrammar() {

@@ -220,6 +220,7 @@ async def _generate_parallel(words: List[str], args, key: str, base: str, model:
             batch_entries = json.loads(cache_path.read_text(encoding="utf-8"))
         else:
             batch_entries = []
+            failed = False
             async with sem:
                 for attempt in range(4):
                     try:
@@ -229,8 +230,12 @@ async def _generate_parallel(words: List[str], args, key: str, base: str, model:
                         print(f"[retry] 批 {batch_index} 第 {attempt+1} 次失败: {e}")
                         await asyncio.sleep(2 * (attempt + 1))
                 else:
+                    failed = True
                     print(f"[FAIL] 批 {batch_index} 重试耗尽，跳过")
-            cache_path.write_text(json.dumps(batch_entries, ensure_ascii=False), encoding="utf-8")
+            # 失败批次不写缓存：空数组会被 --resume 当成「这批已问过、AI 什么都没给」，
+            # 于是缺口永久静默。不写文件才能让下次 --resume 重跑这批。
+            if not failed:
+                cache_path.write_text(json.dumps(batch_entries, ensure_ascii=False), encoding="utf-8")
         for entry in batch_entries:
             # 键统一小写：AI 返回德语名词大写（Kerze），而查词链按小写查（core_dict 全是小写键），
             # 不归一化的话生成词永远查不到（2026-08-19 实测 3862 键里 238 个大写全 miss）

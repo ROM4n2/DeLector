@@ -19,3 +19,4 @@ android/app/src/main/assets/static/
 
 # AI 批量生成词库的批次缓存（tools/build_dict.py）
 tools/raw/
+tools/raw_prep/

@@ -5650,6 +5650,79 @@ body.drawer-open .shadow-player {
   font-size: 0.75rem;
 }
 
+/* Präpositionen-Kollokationen（固定介词搭配；与上面三个 banner 并列） */
+.praep-banner {
+  margin-top: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(41, 128, 185, 0.05);
+  border-left: 3px solid var(--accent, #2980b9);
+  border-radius: 0 4px 4px 0;
+}
+.praep-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--accent, #2980b9);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+.praep-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  border-top: 1px dotted var(--rule, #dcd7cb);
+}
+.praep-row:first-of-type {
+  border-top: none;
+}
+.praep-prep {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--accent, #2980b9);
+}
+.praep-kasus {
+  font-family: var(--mono, monospace);
+  font-size: 0.6875rem;
+  color: var(--cherry, #c0392b);
+  font-weight: 700;
+}
+.praep-def {
+  font-size: 0.8125rem;
+  color: var(--ink, #1a1a1a);
+}
+.praep-example {
+  flex: 1 1 100%;
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--pencil, #7f8c8d);
+}
+.praep-save {
+  margin-left: auto;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0 0.4rem;
+  background: var(--paper-card, #ffffff);
+  border: 1px solid var(--rule, #dcd7cb);
+  border-radius: 3px;
+  color: var(--accent, #2980b9);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.praep-save:hover:not(:disabled) {
+  background: var(--accent, #2980b9);
+  border-color: var(--accent, #2980b9);
+  color: #fff;
+}
+.praep-save:disabled {
+  color: var(--pencil, #7f8c8d);
+  cursor: default;
+}
+
 /* Linked Separable Verbs Highlights in Reader */
 .tok.is-separable {
   text-decoration-line: underline;
