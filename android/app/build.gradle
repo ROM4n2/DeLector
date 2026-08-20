@@ -26,6 +26,12 @@ android {
                 storePassword System.getenv("DELECTOR_KEYSTORE_PASSWORD")
                 keyAlias System.getenv("DELECTOR_KEY_ALIAS")
                 keyPassword System.getenv("DELECTOR_KEY_PASSWORD")
+                // AGP 在 minSdk>=24 时默认只出 v2/v3 签名（藏在 APK Signing Block 里），
+                // 而 CI 验签闸用 keytool -printcert -jarfile 只认 v1（META-INF 的 .RSA）。
+                // 不显式开 v1，闸读出的指纹是空的 —— v3.10.0 首跑实测死在这：
+                // keystore 指纹对得上、APK 指纹却是空，闸分不清「真没签名」和
+                // 「只是读不到」，等于闸失效了一半。
+                v1SigningEnabled true
             }
         }
     }

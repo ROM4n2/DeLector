@@ -1497,6 +1497,12 @@ def test_android_signing_config_degrades_without_keystore():
         assert f'System.getenv("{var}")' in gradle, f"{var} 必须从环境变量读"
     assert "storePassword" in gradle and 'storePassword "' not in gradle, \
         "口令不得硬编码在 build.gradle 里"
+    # keytool -printcert -jarfile 只认 v1 签名，而 AGP 在 minSdk>=24 时默认只出
+    # v2/v3。CI 验签闸靠 keytool 读指纹，没开 v1 的话闸读出来永远是空的——
+    # 实测 v3.10.0 首跑就死在这（keystore 指纹对、APK 指纹空）。删掉这行 =
+    # 闸静默失效，所以交给测试钉住。
+    assert "v1SigningEnabled true" in gradle, \
+        "必须显式开 v1 签名，否则 keytool 读不出 APK 指纹，验签闸退化成摆设"
 
 def test_release_workflow_gates_apk_signature():
     """CI 必须验签，并且只取 debug 变体那一个确定的 APK 路径。
