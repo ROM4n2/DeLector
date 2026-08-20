@@ -112,6 +112,78 @@ def test_ai_polish_no_key_stub(client, monkeypatch):
     assert data["result"]["error_count"] == 0
     assert data["result"]["corrected_text"] == "Hallo."
 
+def test_ai_polish_diff_no_key_stub(client, monkeypatch):
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "")
+    res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund. Er ist gut."})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    result = data["result"]
+    assert result["original"] == "Ich habe ein Hund. Er ist gut."
+    assert result["corrected"] == "Ich habe ein Hund. Er ist gut."
+    assert result["hunks"] == []
+    assert result["error_count"] == 0
+    assert "DeepSeek API Key" in result["notes_zh"][0]
+
+def test_ai_polish_diff_mocked(client, monkeypatch):
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "test-api-key")
+
+    mock_response_payload = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "corrected_text": "Ich habe einen Hund. Er ist gut. Ich liebe ihn.",
+                    "notes_zh": [
+                        "ein -> einen: Akkusativ maskulin",
+                        "Ich liebe ihn: Ergänzung zur Vollständigkeit"
+                    ],
+                    "error_count": 2
+                })
+            }
+        }]
+    }
+
+    class _MockResponse:
+        def json(self):
+            return mock_response_payload
+
+    class _MockAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, *args, **kwargs):
+            return _MockResponse()
+
+    monkeypatch.setattr("server.httpx.AsyncClient", _MockAsyncClient)
+
+    orig_text = "Ich habe ein Hund. Er ist gut."
+    res = client.post("/api/writing/ai-polish/diff", json={"text": orig_text})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    result = data["result"]
+    assert result["original"] == orig_text
+    assert result["corrected"] == "Ich habe einen Hund. Er ist gut. Ich liebe ihn."
+    assert result["error_count"] == 2
+    assert len(result["notes_zh"]) == 2
+
+    hunks = result["hunks"]
+    assert len(hunks) == 2
+    assert hunks[0]["old"] == ["Ich habe ein Hund."]
+    assert hunks[0]["new"] == ["Ich habe einen Hund."]
+    assert hunks[0]["accepted"] is True
+
+    assert hunks[1]["old"] == []
+    assert hunks[1]["new"] == ["Ich liebe ihn."]
+    assert hunks[1]["accepted"] is True
+
+
 def test_seed_preset_articles_with_a1(client, test_db_path):
     init_db(test_db_path)
     

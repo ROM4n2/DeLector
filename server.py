@@ -2383,6 +2383,7 @@ def api_syntax_analyze(req: SyntaxAnalyzeReq):
 
 SYSTEM_WRITING_POLISH_PROMPT = """你是一位精通德语学术写作与德福/歌德高级写作评分标准的资深德语教学专家。
 请对用户提交的德语作文/文本进行全面的语法纠错、用词地道化润色与结构优化。
+请尽量逐句润色，保持句子的结构与出现顺序，不要合并或拆分句子，除非确实必要。
 请严格输出如下 JSON 格式：
 {
   "corrected_text": "润色纠错后的完整德语文本",
@@ -2508,21 +2509,12 @@ def save_writing_card(req: WritingCardReq):
     return add_grammar_card(card)
 
 
-@app.post("/api/writing/ai-polish")
-async def api_writing_ai_polish(req: AIPolishReq):
-    text = req.text[:2000]
+async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
     key = get_effective_api_key()
     if not key:
         import logging
         logging.warning("[writing/ai-polish] API Key not set — returning stub response.")
-        return {
-            "status": "ok",
-            "result": {
-                "corrected_text": text,
-                "notes_zh": ["请在设置中配置 DeepSeek API Key 后使用 AI 润色功能"],
-                "error_count": 0,
-            }
-        }
+        return text, ["请在设置中配置 DeepSeek API Key 后使用 AI 润色功能"], 0
 
     base_url = get_effective_api_base_url().rstrip('/')
     model = get_effective_api_model()
@@ -2542,25 +2534,46 @@ async def api_writing_ai_polish(req: AIPolishReq):
             )
             content = resp.json()["choices"][0]["message"]["content"]
             parsed = json.loads(content)
-            return {
-                "status": "ok",
-                "result": {
-                    "corrected_text": parsed.get("corrected_text", text),
-                    "notes_zh": parsed.get("notes_zh", []),
-                    "error_count": parsed.get("error_count", len(parsed.get("notes_zh", [])))
-                }
-            }
+            corrected_text = parsed.get("corrected_text", text)
+            notes_zh = parsed.get("notes_zh", [])
+            error_count = parsed.get("error_count", len(notes_zh))
+            return corrected_text, notes_zh, error_count
     except Exception as e:
         import logging
         logging.error(f"[writing/ai-polish] DeepSeek API error: {e}")
-        return {
-            "status": "ok",
-            "result": {
-                "corrected_text": text,
-                "notes_zh": [f"AI 润色请求失败：{str(e)}"],
-                "error_count": 0
-            }
+        return text, [f"AI 润色请求失败：{str(e)}"], 0
+
+
+@app.post("/api/writing/ai-polish")
+async def api_writing_ai_polish(req: AIPolishReq):
+    text = req.text[:2000]
+    corrected_text, notes_zh, error_count = await _ai_polish_call(text)
+    return {
+        "status": "ok",
+        "result": {
+            "corrected_text": corrected_text,
+            "notes_zh": notes_zh,
+            "error_count": error_count,
         }
+    }
+
+
+@app.post("/api/writing/ai-polish/diff")
+async def api_writing_ai_polish_diff(req: AIPolishReq):
+    from essay_diff import diff_sentences
+    text = req.text[:2000]
+    corrected_text, notes_zh, error_count = await _ai_polish_call(text)
+    hunks = diff_sentences(text, corrected_text)
+    return {
+        "status": "ok",
+        "result": {
+            "original": text,
+            "corrected": corrected_text,
+            "hunks": hunks,
+            "notes_zh": notes_zh,
+            "error_count": error_count,
+        }
+    }
 
 # Mount Static UI (Catch-all must be at the very end)
 STATIC_DIR = os.environ.get("STATIC_DIR")
