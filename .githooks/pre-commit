@@ -21,6 +21,10 @@ HITS="$(mktemp)"
 trap 'rm -f "$HITS"' EXIT
 
 # 每项为 "名称|正则"。正则是 POSIX ERE（grep -E），\d、\w 之类不可用。
+#
+# keystore 那两条 base64 magic 把首字母写成字符组（`[O]`）或转义（`\+`），
+# 是为了让正则不匹配自己这行 —— 否则本钩子一提交就自我拦截，
+# 而 PATTERNS 在引号内，加不了 delector:allow-secret 豁免注释。
 PATTERNS='OpenAI/Anthropic 风格 key|sk-[A-Za-z0-9]{20,}
 AWS Access Key ID|AKIA[A-Z0-9]{16}
 GitHub PAT (classic)|ghp_[A-Za-z0-9]{36}
@@ -28,13 +32,34 @@ GitHub PAT (fine-grained)|github_pat_[A-Za-z0-9_]{20,}
 Google API Key|AIza[A-Za-z0-9_-]{30,}
 Slack token|xox[baprs]-[A-Za-z0-9-]{10,}
 JWT|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}
-私钥 PEM 块|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+私钥 PEM 块|-----BEGIN [A-Z ]*PRIVATE KEY-----
+Java keystore 的 base64 (JKS)|/u3\+7Q
+Java keystore 的 base64 (JCEKS)|zs7[O]z'
 
 while IFS= read -r -d '' path; do
     case "$path" in
         *.example|*.sample|*.template) ;;
         .env|*/.env|*.secret|*credentials*|*.pem|*.key|*id_rsa*|*id_ed25519*)
             printf 'NAME\t%s\t密钥文件不应入库\n' "$path" >> "$HITS"
+            ;;
+    esac
+
+    # 安卓签名材料单列一条：泄露 = 任何人都能签出冒充本 App 的更新包。
+    case "$path" in
+        *.jks|*.jks.b64|*.keystore|*.p12|*.pfx|signing.properties|*/signing.properties|keystore.properties|*/keystore.properties)
+            printf 'NAME\t%s\t签名 keystore 不应入库\n' "$path" >> "$HITS"
+            ;;
+    esac
+
+    # 按文件头再认一次 keystore：下面的内容扫描用 grep -I 跳过二进制，
+    # 而文件名黑名单改个后缀就能绕开 —— 二者都拦不住 `cp x.jks assets/blob.bin`。
+    # PKCS12 那条不能只认 `3082`（任何 DER 都是），要连上 `020103`
+    # （PKCS12 的 version INTEGER 3），否则公开的 .der 证书会被误拦，
+    # 而文件名类命中没有 delector:allow-secret 豁免路径、只能改名绕开。
+    magic="$(git show ":$path" 2>/dev/null | head -c 7 | od -An -tx1 | tr -d ' \n')"
+    case "$magic" in
+        feedfeed*|cececece*|3082????020103)
+            printf 'NAME\t%s\tkeystore（按文件头认出）不应入库\n' "$path" >> "$HITS"
             ;;
     esac
 
