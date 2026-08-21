@@ -11,7 +11,6 @@ let selectedSpanRef = null;
 let analyzeDebounceTimer = null;
 let isComposing = false;
 let inlayEnabled = true;
-let inlayRafId = null;
 
 let polishState = {
   original: '',
@@ -71,7 +70,13 @@ function updateWriterStats(text) {
 export function editorText() {
   const el = document.getElementById('ide-editor');
   if (!el) return '';
-  return el.innerText.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+  let text = '';
+  let node;
+  while ((node = walker.nextNode())) {
+    text += node.nodeValue;
+  }
+  return text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 export function setEditorText(text) {
@@ -148,11 +153,45 @@ function restoreCaret(rootEl, offset) {
   }
 }
 
-// ── Build Inline Spans with Wavy Underlines ─────────────────────────────────
-export function buildSentenceHighlightedText(text, spans, sentIdx, options = {}) {
+// ── Build Inline Spans with Wavy Underlines & Inline Inlay Hints (v4.1.1) ────
+export function buildSentenceHighlightedText(text, spans = [], hints = [], sentIdx, options = {}) {
   const { clickable = true, useNativeTitle = false } = options;
+
+  // Map hints by end position
+  const hintsByPos = {};
+  if (hints && hints.length > 0) {
+    hints.forEach((h) => {
+      const pos = h.end;
+      if (!hintsByPos[pos]) hintsByPos[pos] = [];
+      hintsByPos[pos].push(h);
+    });
+  }
+
+  function renderHintsAt(pos) {
+    const list = hintsByPos[pos];
+    if (!list || list.length === 0) return '';
+    return list.map((h) => {
+      const label = h.label.includes('[') ? h.label.slice(h.label.indexOf('[')) : h.label;
+      const hintClass = h.type === 'prep_case' ? 'inlay-prep' : 'inlay-np';
+      return `<span class="inlay-hint ${hintClass}" contenteditable="false" data-hint="${esc(label)}" title="${esc(h.label)}"></span>`;
+    }).join('');
+  }
+
   if (!spans || spans.length === 0) {
-    return esc(text);
+    let out = '';
+    let pos = 0;
+    const hintPositions = Object.keys(hintsByPos).map(Number).sort((a, b) => a - b);
+    hintPositions.forEach((p) => {
+      if (p > pos) {
+        out += esc(text.slice(pos, p));
+      }
+      out += renderHintsAt(p);
+      pos = p;
+    });
+    if (pos < text.length) {
+      out += esc(text.slice(pos));
+    }
+    return out;
   }
 
   const sorted = [...spans].sort((x, y) => x.start - y.start);
@@ -160,9 +199,18 @@ export function buildSentenceHighlightedText(text, spans, sentIdx, options = {})
   let pos = 0;
 
   sorted.forEach((sp, spanIdx) => {
-    if (sp.start > pos) {
-      out += esc(text.slice(pos, sp.start));
+    while (pos < sp.start) {
+      const candidates = Object.keys(hintsByPos).map(Number).filter(p => p > pos && p <= sp.start);
+      if (candidates.length > 0) {
+        const nextHint = Math.min(...candidates);
+        out += esc(text.slice(pos, nextHint)) + renderHintsAt(nextHint);
+        pos = nextHint;
+      } else {
+        out += esc(text.slice(pos, sp.start));
+        pos = sp.start;
+      }
     }
+
     const isSelected = selectedSpanRef &&
       selectedSpanRef.sentence_id === sentIdx &&
       selectedSpanRef.span_index === spanIdx;
@@ -171,20 +219,42 @@ export function buildSentenceHighlightedText(text, spans, sentIdx, options = {})
     const clickAttr = clickable ? `onclick="selectWriterSpan(${sentIdx}, ${spanIdx}, event)"` : '';
 
     out += `<mark class="writer-err-underline err-${sp.error_type} ${isSelected ? 'active-span' : ''}" ` +
-      `data-sent="${sentIdx}" data-span="${spanIdx}" ${clickAttr} ${titleAttr}>` +
-      esc(text.slice(sp.start, sp.end)) +
-      `</mark>`;
+      `data-sent="${sentIdx}" data-span="${spanIdx}" ${clickAttr} ${titleAttr}>`;
+
+    let spanPos = sp.start;
+    while (spanPos < sp.end) {
+      const candidates = Object.keys(hintsByPos).map(Number).filter(p => p > spanPos && p < sp.end);
+      if (candidates.length > 0) {
+        const nextHint = Math.min(...candidates);
+        out += esc(text.slice(spanPos, nextHint)) + renderHintsAt(nextHint);
+        spanPos = nextHint;
+      } else {
+        out += esc(text.slice(spanPos, sp.end));
+        spanPos = sp.end;
+      }
+    }
+
+    out += `</mark>`;
+    out += renderHintsAt(sp.end);
     pos = sp.end;
   });
 
-  if (pos < text.length) {
-    out += esc(text.slice(pos));
+  while (pos < text.length) {
+    const candidates = Object.keys(hintsByPos).map(Number).filter(p => p > pos && p <= text.length);
+    if (candidates.length > 0) {
+      const nextHint = Math.min(...candidates);
+      out += esc(text.slice(pos, nextHint)) + renderHintsAt(nextHint);
+      pos = nextHint;
+    } else {
+      out += esc(text.slice(pos));
+      pos = text.length;
+    }
   }
 
   return out;
 }
 
-// ── Inlay Hints Overlay (v4.1.0) ───────────────────────────────────────────
+// ── Inlay Hints Toggle (v4.1.1) ────────────────────────────────────────────
 export function toggleInlayHints() {
   inlayEnabled = !inlayEnabled;
   const btn = document.getElementById('writer-inlay-toggle');
@@ -193,110 +263,10 @@ export function toggleInlayHints() {
     btn.classList.toggle('btn-ghost', inlayEnabled);
     btn.classList.toggle('btn-secondary', !inlayEnabled);
   }
-  const layer = document.getElementById('ide-hint-layer');
-  if (layer) {
-    layer.classList.toggle('hidden', !inlayEnabled);
-  }
-  if (inlayEnabled) {
-    positionInlayHints();
-  } else {
-    clearInlayHints();
-  }
-}
-
-export function clearInlayHints() {
-  const layer = document.getElementById('ide-hint-layer');
-  if (layer) {
-    layer.innerHTML = '';
-  }
-}
-
-function findCharRange(block, start, end) {
-  if (!block) return null;
-  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null, false);
-  let currentOffset = 0;
-  let startContainer = null;
-  let startOffset = 0;
-  let endContainer = null;
-  let endOffset = 0;
-  let node;
-
-  while ((node = walker.nextNode())) {
-    const len = node.nodeValue.length;
-    const nodeStart = currentOffset;
-    const nodeEnd = currentOffset + len;
-
-    if (!startContainer && start >= nodeStart && start <= nodeEnd) {
-      startContainer = node;
-      startOffset = start - nodeStart;
-    }
-    if (!endContainer && end >= nodeStart && end <= nodeEnd) {
-      endContainer = node;
-      endOffset = end - nodeStart;
-    }
-
-    if (startContainer && endContainer) break;
-    currentOffset += len;
-  }
-
-  if (startContainer && endContainer) {
-    try {
-      const range = document.createRange();
-      range.setStart(startContainer, Math.min(startOffset, startContainer.nodeValue.length));
-      range.setEnd(endContainer, Math.min(endOffset, endContainer.nodeValue.length));
-      return range;
-    } catch (e) {
-      return null;
-    }
-  }
-  return null;
-}
-
-export function positionInlayHints() {
-  if (!inlayEnabled || !currentAnalysis || !currentAnalysis.sentences) {
-    clearInlayHints();
-    return;
-  }
-
-  const layer = document.getElementById('ide-hint-layer');
   const editor = document.getElementById('ide-editor');
-  if (!layer || !editor) return;
-
-  const editorRect = editor.getBoundingClientRect();
-  if (editorRect.width === 0 && editorRect.height === 0) {
-    clearInlayHints();
-    return;
+  if (editor) {
+    editor.classList.toggle('hide-inlays', !inlayEnabled);
   }
-
-  let html = '';
-  const GAP = 5;
-
-  currentAnalysis.sentences.forEach((sent, sentIdx) => {
-    if (!sent.hints || sent.hints.length === 0) return;
-    const block = editor.querySelector(`.ide-sent-block[data-sent-idx="${sentIdx}"]`);
-    if (!block) return;
-
-    sent.hints.forEach((h) => {
-      const range = findCharRange(block, h.start, h.end);
-      if (!range) return;
-
-      const rects = range.getClientRects();
-      if (!rects || rects.length === 0) return;
-
-      // 取最底一行 / 最末一个 rect（应对折行情况）
-      const lastRect = rects[rects.length - 1];
-
-      // 使用文档级坐标（相对于 body）
-      const pageX = lastRect.right + window.scrollX + GAP;
-      const pageY = lastRect.top + lastRect.height / 2 + window.scrollY;
-
-      const hintClass = h.type === 'prep_case' ? 'inlay-prep' : 'inlay-np';
-      html += `<span class="inlay-hint ${hintClass}" style="left:${pageX}px;top:${pageY}px;" data-hint-type="${esc(h.type)}">${esc(h.label)}</span>`;
-    });
-  });
-
-  layer.innerHTML = html;
-  layer.classList.remove('hidden');
 }
 
 // ── Render Editor Content & Retain Caret ────────────────────────────────────
@@ -308,14 +278,12 @@ export function renderEditor(text, a, caretOffset) {
 
   if (!text || !text.trim()) {
     editor.innerHTML = '';
-    clearInlayHints();
     updateAnalysisPanels({ cefr: null, error_count: 0, sentences: [] });
     return;
   }
 
   if (!a || !a.sentences || a.sentences.length === 0) {
     editor.textContent = text;
-    clearInlayHints();
     if (caretOffset !== null && caretOffset !== undefined) {
       restoreCaret(editor, caretOffset);
     }
@@ -326,7 +294,7 @@ export function renderEditor(text, a, caretOffset) {
 
   let html = '';
   a.sentences.forEach((s, sentIdx) => {
-    const sentHtml = buildSentenceHighlightedText(s.text, s.spans || [], sentIdx, {
+    const sentHtml = buildSentenceHighlightedText(s.text, s.spans || [], s.hints || [], sentIdx, {
       clickable: true,
       useNativeTitle: false
     });
@@ -334,13 +302,13 @@ export function renderEditor(text, a, caretOffset) {
   });
 
   editor.innerHTML = html;
+  editor.classList.toggle('hide-inlays', !inlayEnabled);
 
   if (caretOffset !== null && caretOffset !== undefined) {
     restoreCaret(editor, caretOffset);
   }
   editor.scrollTop = scrollY;
   updateAnalysisPanels(a);
-  requestAnimationFrame(() => positionInlayHints());
 }
 
 // ── Update Sidebar Analysis Panels & Sentence Navigation ────────────────────
@@ -606,24 +574,6 @@ export function setupEditorListeners() {
       tooltip.classList.add('hidden');
     }
   });
-
-  editor.addEventListener('scroll', () => {
-    if (inlayRafId) cancelAnimationFrame(inlayRafId);
-    inlayRafId = requestAnimationFrame(() => positionInlayHints());
-  }, { passive: true });
-
-  window.addEventListener('resize', () => {
-    if (inlayRafId) cancelAnimationFrame(inlayRafId);
-    inlayRafId = requestAnimationFrame(() => positionInlayHints());
-  }, { passive: true });
-
-  if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(() => {
-      if (inlayRafId) cancelAnimationFrame(inlayRafId);
-      inlayRafId = requestAnimationFrame(() => positionInlayHints());
-    });
-    ro.observe(editor);
-  }
 }
 
 // ── Reset Error Detail Box ──────────────────────────────────────────────────
@@ -723,7 +673,6 @@ export function clearWriterForm() {
   if (titleInput) titleInput.value = '';
   const editor = document.getElementById('ide-editor');
   if (editor) editor.innerHTML = '';
-  clearInlayHints();
 
   updateWriterStats('');
   updateAnalysisPanels({ cefr: null, error_count: 0, sentences: [] });
@@ -1275,7 +1224,7 @@ export async function previewEssayVersion(versionId) {
       const a = v.analysis_json;
       if (a && a.sentences && a.sentences.length > 0) {
         contentEl.innerHTML = a.sentences.map((s, sIdx) => {
-          const sentHtml = buildSentenceHighlightedText(s.text, s.spans || [], sIdx, {
+          const sentHtml = buildSentenceHighlightedText(s.text, s.spans || [], s.hints || [], sIdx, {
             clickable: false,
             useNativeTitle: true
           });

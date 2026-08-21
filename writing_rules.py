@@ -355,7 +355,7 @@ def analyze_essay_text(text: str, nlp: Optional[Any] = None) -> Dict[str, Any]:
 
     cefr = _cefr_basic(text)
     return {
-        "version": "4.1.0",
+        "version": "4.1.1",
         "cefr": cefr,
         "error_count": error_count,
         "sentences": sentences

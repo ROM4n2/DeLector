@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.1.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v4.1.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -22,10 +22,10 @@
 
 | 平台 | 版本 | 说明 | 下载通道 |
 |---|---|---|---|
-| 🪟 **Windows x64** | `v4.1.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.0) |
-| 🍎 **macOS** | `v4.1.0` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.0) |
-| 🐧 **Linux x64** | `v4.1.0` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.0) |
-| 📱 **Android** | `v4.1.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.0) |
+| 🪟 **Windows x64** | `v4.1.1` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.1) |
+| 🍎 **macOS** | `v4.1.1` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.1) |
+| 🐧 **Linux x64** | `v4.1.1` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.1) |
+| 📱 **Android** | `v4.1.1` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.1.1) |
 
 ---
 
@@ -69,7 +69,7 @@
 
 ### 🖋️ 9. 德语内联 IDE 写作工坊 (Schreibwerkstatt)
 - **行内 IDE 编辑器与实时规则诊断**：原生 `contenteditable` 零依赖，TreeWalker 字符偏移光标记忆，输入停顿 400ms 防抖实时重分析；本地规则引擎跑冠词/格位一致 + 介词支配格与动词固定搭配检测，行内彩色波浪线标出错误，**零误报准则**。
-- **Inlay Hints 语法内联提示 (v4.1.0)**：介词旁显示支配格（如 `mit [Dat]` / `in [Dat/Akk]`），名词短语旁显示实际性数格（如 `[Neut·Dat]`）；采用独立装饰覆盖层渲染，`pointer-events: none` 绝不抢光标，工具栏一键开关；与波浪线错误并存呈现「预期 vs 实际」的矛盾教学高光。
+- **VSCode 级真实 Inline Inlay Hints (v4.1.1)**：介词支配格（如 `[Dat]` / `[Dat/Akk]`）与名词短语实际性数格（如 `[Neut·Dat]`）以 CSS `::before` 伪元素内联排版（DOM 无 text node），打字时光标与后续文本自然推开绝不遮挡，TreeWalker 提取纯净正文 0 字符污染，工具栏支持一键即时开关。
 - **悬浮气泡与一键替换修正**：鼠标悬停波浪线弹出诊断气泡；点击错误在侧栏查看成因详解与建议，支持「✨ 一键应用修正」直接替换编辑器内文本。
 - **句子导航索引与 Anki 存卡**：侧栏句子列表点击平滑滚动并高亮闪烁目标句；一键将错误存成 Anki 语法卡 —— **你的错误变成你的复习卡**。
 - **类 Git 完整版本快照管理**：支持手动保存快照与 AI 润色自动快照；提供**只读预览弹窗**（浏览历史不产生多余检查点）、单项快照删除与可逆恢复检查点（`恢复到版本 N 之前`）。
