@@ -108,7 +108,9 @@ import {
   fixSelectedSpan,
   clearEditorText,
   setupEditorListeners,
-  toggleInlayHints
+  toggleInlayHints,
+  openWriterProblem,
+  renderProblemsPanel
 } from './writer.js';
 
 // ── View Router ─────────────────────────────────────────────────────────────
@@ -710,6 +712,8 @@ Object.assign(window, {
   fixSelectedSpan,
   clearEditorText,
   toggleInlayHints,
+  openWriterProblem,
+  renderProblemsPanel,
 
   // Player
   ShadowPlayer,

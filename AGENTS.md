@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v4.1.1 写作台 VSCode 级真实 Inline Inlay Hints 语法内联提示 + IDE 编辑器），工作区干净 |
-| 测试 | **158 / 158 全绿**（`test_server.py` 102 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 17 + `test_essay_diff.py` 8 + `test_fsrs_engine.py` 1） |
+| 当前分支 / HEAD | `master`（含 v4.2.0 写作台 Problems 全篇问题清单面板 + Inline Inlay Hints + IDE 编辑器），工作区干净 |
+| 测试 | **162 / 162 全绿**（`test_server.py` 102 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 21 + `test_essay_diff.py` 8 + `test_fsrs_engine.py` 1） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v4.1.1**（2026-08-21）：德语写作台 VSCode 级真实 Inline Inlay Hints（CSS 伪元素无文本节点内联嵌入 + 自动随文本推移排版不遮挡 + TreeWalker 纯净提词 0 污染 + 全局开关即时响应） |
+| 对外发布 | **v4.2.0**（2026-08-21）：德语写作台 Problems 问题清单面板（全篇错误/提醒清单 + severity 分级 + error 错误优先与双格介词 warning 提醒 + 联动滚动定位/波浪线高亮/一键修正） |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -391,6 +391,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v4.0.0 `2026-08-21`** | **feat(writer & ide)**: 德语写作台内联 IDE 编辑器（contenteditable 零依赖行内实时波浪线诊断 + TreeWalker 光标记忆 + 防抖 400ms 规则诊断 + 悬浮提示气泡 + 一键修正替换 + 句子导航）+ Git 版本管理完善（只读预览不产生检查点 + 版本快照单项删除）+ 动词固定介词搭配规则优先匹配（如 `warten auf + Akk`） |
 | **v4.1.0 `2026-08-21`** | **feat(writer & hints)**: 德语写作台 Inlay Hints 语法内联提示（介词支配格 `mit [Dat]` / `in [Dat/Akk]` + 名词短语实际性数格 `[Neut·Dat]` 独立 `#ide-hint-layer` 覆盖层装饰渲染、`pointer-events: none` 绝不抢光标、工具栏全局开关 `toggleInlayHints()`、与波浪线错误并存呈现矛盾教学高光） |
 | **v4.1.1 `2026-08-21`** | **fix(writer & hints)**: 德语写作台 Inlay Hints 架构升级为 VSCode 级真实 Inline 布局：CSS `::before` 伪元素（DOM 无 text node）+ `contenteditable="false"` 内联排版，打字时后续文本自然平移推开绝不遮挡，TreeWalker 提取纯净正文 0 字符污染，光标自然跃迁 |
+| **v4.2.0 `2026-08-21`** | **feat(writer & problems)**: 德语写作台 Problems 问题清单面板（全篇错误/提醒清单 + severity 分级 + error 错误优先与双格介词 warning 提醒 + 联动滚动定位/波浪线高亮/一键修正） |
 
 ---
 

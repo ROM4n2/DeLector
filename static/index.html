@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=4.1.1">
+  <link rel="stylesheet" href="/style.css?v=4.2.0">
 </head>
 <body>
 
@@ -19,7 +19,7 @@
     <div class="topbar-inner">
       <span><b>DELECTOR · 2026</b> · Vol. 04 / Issue Nº 01</span>
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <span class="right"><span class="pulse"></span>System · v4.1.1 Online</span>
+      <span class="right"><span class="pulse"></span>System · v4.2.0 Online</span>
     </div>
   </div>
 
@@ -481,6 +481,7 @@
           <!-- Tab Navigation -->
           <div class="writer-panel-tabs">
             <button id="wtab-btn-diag" class="writer-tab-btn active" onclick="switchWriterPanelTab('diag')">🔍 诊断分析</button>
+            <button id="wtab-btn-problems" class="writer-tab-btn" onclick="switchWriterPanelTab('problems')">📋 问题清单 <span id="wtab-problems-badge" class="writer-tab-badge hidden">0</span></button>
             <button id="wtab-btn-versions" class="writer-tab-btn" onclick="switchWriterPanelTab('versions')">📜 版本快照</button>
           </div>
 
@@ -511,6 +512,19 @@
               <div class="sidebar-section-title">🧭 句子导航索引</div>
               <div id="writer-sent-nav" class="writer-sent-nav-list">
                 <div class="writer-empty-tip" style="padding:0.5rem 0;">输入文本后生成句子索引</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pane 2: Problems List (v4.2.0) -->
+          <div id="wpane-problems" class="writer-pane hidden">
+            <div class="writer-sidebar-card">
+              <div class="sidebar-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>📋 全篇问题清单</span>
+                <span id="writer-problems-stat" class="writer-problems-stat-pill">0 处问题</span>
+              </div>
+              <div id="writer-problem-list" class="writer-problem-list">
+                <div class="writer-empty-tip">暂无待处理语法问题</div>
               </div>
             </div>
           </div>
@@ -1152,7 +1166,7 @@
     </div>
   </div>
 
-  <script type="module" src="/js/main.js?v=4.1.1"></script>
+  <script type="module" src="/js/main.js?v=4.2.0"></script>
 
 </body>
 </html>

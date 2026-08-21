@@ -7431,6 +7431,134 @@ body.drawer-open .companion {
   display: none !important;
 }
 
+/* ── Problems Panel & Badges (v4.2.0) ─────────────────────────────────────── */
+.writer-tab-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(237, 111, 92, 0.18);
+  color: #8c1e14;
+  margin-left: 0.25rem;
+  font-weight: 600;
+}
+
+.writer-tab-badge.hidden {
+  display: none;
+}
+
+.writer-problems-stat-pill {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(21, 20, 15, 0.05);
+  color: var(--ink-secondary);
+}
+
+.writer-problem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 460px;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+  padding-right: 2px;
+}
+
+.writer-problem-group-header {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.35rem 0.25rem 0.2rem;
+  border-bottom: 1px dashed var(--rule);
+  margin-top: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.writer-problem-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 4px;
+  background: var(--paper);
+  border: 1px solid var(--rule-light);
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+}
+
+.writer-problem-row:hover {
+  background: var(--paper-tint);
+  border-color: var(--ink);
+  transform: translateX(2px);
+}
+
+.writer-problem-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.writer-problem-badge {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.writer-problem-badge.sev-error {
+  background: rgba(237, 111, 92, 0.15);
+  color: #8c1e14;
+  border: 1px solid rgba(237, 111, 92, 0.3);
+}
+
+.writer-problem-badge.sev-warning {
+  background: rgba(217, 119, 28, 0.15);
+  color: #9a5200;
+  border: 1px solid rgba(217, 119, 28, 0.3);
+}
+
+.writer-problem-pos {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.writer-problem-expl {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+.writer-problem-suggest {
+  font-size: 0.75rem;
+  color: #1e703f;
+  font-family: var(--sans);
+}
+
+.writer-problem-preview {
+  font-family: var(--serif-body);
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-top: 0.15rem;
+  border-top: 1px dashed rgba(21, 20, 15, 0.08);
+}
+
 /* ── Version History Snapshot List ────────────────────────────────────────── */
 .writer-version-list {
   display: flex;

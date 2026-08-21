@@ -32,28 +32,25 @@ export function getErrorTypeLabel(type) {
   return ERROR_TYPE_LABELS[type] || '语法考点';
 }
 
-// ── Sidebar Tab Navigation ──────────────────────────────────────────────────
+// ── Sidebar Tab Navigation (v4.2.0) ─────────────────────────────────────────
+const WRITER_TABS = ['diag', 'problems', 'versions'];
+
 export function switchWriterPanelTab(tab) {
-  const isDiag = tab === 'diag';
-  const btnDiag = document.getElementById('wtab-btn-diag');
-  const btnVersions = document.getElementById('wtab-btn-versions');
-  const paneDiag = document.getElementById('wpane-diag');
-  const paneVersions = document.getElementById('wpane-versions');
+  WRITER_TABS.forEach(t => {
+    const btn = document.getElementById(`wtab-btn-${t}`);
+    const pane = document.getElementById(`wpane-${t}`);
+    const isActive = t === tab;
+    if (btn) btn.classList.toggle('active', isActive);
+    if (pane) {
+      pane.classList.toggle('active', isActive);
+      pane.classList.toggle('hidden', !isActive);
+    }
+  });
 
-  if (btnDiag) btnDiag.classList.toggle('active', isDiag);
-  if (btnVersions) btnVersions.classList.toggle('active', !isDiag);
-
-  if (paneDiag) {
-    paneDiag.classList.toggle('active', isDiag);
-    paneDiag.classList.toggle('hidden', !isDiag);
-  }
-  if (paneVersions) {
-    paneVersions.classList.toggle('active', !isDiag);
-    paneVersions.classList.toggle('hidden', isDiag);
-  }
-
-  if (!isDiag) {
+  if (tab === 'versions') {
     loadEssayVersions();
+  } else if (tab === 'problems' && currentAnalysis) {
+    renderProblemsPanel(currentAnalysis);
   }
 }
 
@@ -366,6 +363,131 @@ export function updateAnalysisPanels(a) {
         `;
       }).join('');
     }
+  }
+
+  // 4. Problems List Panel (v4.2.0)
+  renderProblemsPanel(a);
+}
+
+// ── Render Problems Panel (v4.2.0) ─────────────────────────────────────────
+export function renderProblemsPanel(a) {
+  const listEl = document.getElementById('writer-problem-list');
+  const statEl = document.getElementById('writer-problems-stat');
+  const badgeEl = document.getElementById('wtab-problems-badge');
+  if (!listEl) return;
+
+  const errors = [];
+  const warnings = [];
+
+  const sentences = a?.sentences || [];
+  sentences.forEach((s, sentIdx) => {
+    (s.spans || []).forEach((sp, spanIdx) => {
+      errors.push({
+        severity: 'error',
+        error_type: sp.error_type,
+        label: getErrorTypeLabel(sp.error_type),
+        explanation_zh: sp.explanation_zh,
+        corrected_form: sp.corrected_form,
+        sentence_idx: sentIdx,
+        span_idx: spanIdx,
+        sentence_text: s.text,
+        start: sp.start,
+        end: sp.end
+      });
+    });
+
+    (s.warnings || []).forEach((w, warnIdx) => {
+      warnings.push({
+        severity: 'warning',
+        error_type: w.error_type || 'twoway',
+        label: w.label || '注意：双格介词',
+        explanation_zh: w.explanation_zh,
+        sentence_idx: sentIdx,
+        warning_idx: warnIdx,
+        sentence_text: s.text,
+        start: w.start,
+        end: w.end
+      });
+    });
+  });
+
+  const totalCount = errors.length + warnings.length;
+
+  if (badgeEl) {
+    if (totalCount > 0) {
+      badgeEl.textContent = totalCount;
+      badgeEl.classList.remove('hidden');
+    } else {
+      badgeEl.classList.add('hidden');
+    }
+  }
+
+  if (statEl) {
+    if (totalCount === 0) {
+      statEl.textContent = '0 处问题';
+    } else {
+      statEl.textContent = `${errors.length} 错误 · ${warnings.length} 提醒`;
+    }
+  }
+
+  if (totalCount === 0) {
+    listEl.innerHTML = '<div class="writer-empty-tip">✓ 未发现语法疑点或搭配提醒</div>';
+    return;
+  }
+
+  let html = '';
+
+  if (errors.length > 0) {
+    html += `
+      <div class="writer-problem-group-header">
+        <span>❌ 语法疑点 (${errors.length})</span>
+        <span>点击跳转 & 修正</span>
+      </div>
+    `;
+    errors.forEach(p => {
+      html += `
+        <div class="writer-problem-row" onclick="openWriterProblem(${p.sentence_idx}, 'error', ${p.span_idx})">
+          <div class="writer-problem-header">
+            <span class="writer-problem-badge sev-error">${esc(p.label)}</span>
+            <span class="writer-problem-pos">第 ${p.sentence_idx + 1} 句</span>
+          </div>
+          <div class="writer-problem-expl">${esc(p.explanation_zh)}</div>
+          ${p.corrected_form ? `<div class="writer-problem-suggest">推荐修正：<b>${esc(p.corrected_form)}</b></div>` : ''}
+          ${p.sentence_text ? `<div class="writer-problem-preview">${esc(p.sentence_text)}</div>` : ''}
+        </div>
+      `;
+    });
+  }
+
+  if (warnings.length > 0) {
+    html += `
+      <div class="writer-problem-group-header">
+        <span>⚠️ 介词搭配提醒 (${warnings.length})</span>
+        <span>请按动作方向核对</span>
+      </div>
+    `;
+    warnings.forEach(p => {
+      html += `
+        <div class="writer-problem-row" onclick="openWriterProblem(${p.sentence_idx}, 'warning', ${p.warning_idx})">
+          <div class="writer-problem-header">
+            <span class="writer-problem-badge sev-warning">${esc(p.label)}</span>
+            <span class="writer-problem-pos">第 ${p.sentence_idx + 1} 句</span>
+          </div>
+          <div class="writer-problem-expl">${esc(p.explanation_zh)}</div>
+          ${p.sentence_text ? `<div class="writer-problem-preview">${esc(p.sentence_text)}</div>` : ''}
+        </div>
+      `;
+    });
+  }
+
+  listEl.innerHTML = html;
+}
+
+// ── Open Problem from Problems Panel (v4.2.0) ──────────────────────────────
+export function openWriterProblem(sentenceIdx, kind, idx) {
+  jumpToSentence(sentenceIdx);
+  if (kind === 'error') {
+    selectWriterSpan(sentenceIdx, idx, null);
   }
 }
 

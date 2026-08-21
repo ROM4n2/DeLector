@@ -59,8 +59,10 @@ def test_no_determiner_not_flagged(nlp):
 def test_no_spacy_returns_empty():
     r = analyze_essay_text("Ich sehe der Mann.", None)
     assert r["error_count"] == 0
+    assert r["warning_count"] == 0
+    assert r["problem_count"] == 0
     assert "cefr" in r
-    assert r["version"] == "4.1.1"
+    assert r["version"] == "4.2.0"
     assert r["sentences"] == []
 
 
@@ -79,8 +81,10 @@ def test_decline_determiner_basic():
 def test_multi_sentence_analysis(nlp):
     text = "Ich sehe der Mann. Ich fahre mit dem Auto."
     result = analyze_essay_text(text, nlp)
-    assert result["version"] == "4.1.1"
+    assert result["version"] == "4.2.0"
     assert result["error_count"] == 1
+    assert result["warning_count"] == 0
+    assert result["problem_count"] == 1
     assert len(result["sentences"]) == 2
     assert len(result["sentences"][0]["spans"]) == 1
     assert len(result["sentences"][1]["spans"]) == 0
@@ -90,8 +94,10 @@ def test_analyze_essay_pure_python_fallback():
     """nlp=None 降级模式：零误报，只给 CEFR 估分。"""
     text = "Ich lerne Deutsch. Das Buch ist interessant."
     result = analyze_essay_text(text, nlp=None)
-    assert result["version"] == "4.1.1"
+    assert result["version"] == "4.2.0"
     assert result["error_count"] == 0
+    assert result["warning_count"] == 0
+    assert result["problem_count"] == 0
     assert len(result["sentences"]) == 0
     assert result["cefr"]["word_count"] > 0
 
@@ -134,8 +140,46 @@ def test_hints_coexist_with_error_spans(nlp):
 
 def test_hints_key_present(nlp):
     result = analyze_essay_text("Ich sehe den Mann.", nlp)
-    assert set(result.keys()) == {"version", "cefr", "error_count", "sentences"}
+    assert set(result.keys()) == {"version", "cefr", "error_count", "warning_count", "problem_count", "sentences"}
     for sent in result["sentences"]:
         assert "hints" in sent
+        assert "warnings" in sent
+
+
+def test_two_way_prep_emits_warning_not_span(nlp):
+    result = analyze_essay_text("Ich gehe in der Stadt.", nlp)
+    sent = result["sentences"][0]
+    assert sent["spans"] == []
+    assert len(sent["warnings"]) >= 1
+    w = sent["warnings"][0]
+    assert w["severity"] == "warning"
+    assert w["error_type"] == "twoway"
+    assert "注意" in w["label"] and "in" in w["label"]
+    assert "Dat/Akk" in w["explanation_zh"]
+
+
+def test_span_has_severity_error(nlp):
+    result = analyze_essay_text("Ich sehe der Mann.", nlp)
+    sent = result["sentences"][0]
+    assert len(sent["spans"]) == 1
+    assert sent["spans"][0]["severity"] == "error"
+
+
+def test_warning_and_error_counts(nlp):
+    text = "Ich gehe in der Stadt. Ich sehe der Mann."
+    result = analyze_essay_text(text, nlp)
+    assert result["error_count"] == 1
+    assert result["warning_count"] == 1
+    assert result["problem_count"] == 2
+    assert len(result["sentences"]) == 2
+
+
+def test_warning_positions_are_char_offsets(nlp):
+    text = "Wir sitzen an dem Tisch."
+    result = analyze_essay_text(text, nlp)
+    sent = result["sentences"][0]
+    assert len(sent["warnings"]) >= 1
+    w = sent["warnings"][0]
+    assert 0 <= w["start"] < w["end"] <= len(sent["text"])
 
 

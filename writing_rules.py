@@ -199,6 +199,7 @@ def detect_determiner_noun_agreement(tokens: List[Any], base: int) -> List[Dict[
             start = min(tok.idx, head.idx) - base
             end = max(tok.idx + len(tok.text), head.idx + len(head.text)) - base
             spans.append({
+                "severity": "error",
                 "error_type": "artikel",
                 "corrected_form": f"{correct_det} {head.text}",
                 "explanation_zh": f"「{head.text}」是{real_gender}性{expected_case}格，冠词应为「{correct_det}」而非「{tok.text}」。",
@@ -250,6 +251,7 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
             else:
                 expl = f"介宾「{prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」而非「{det.text}」。"
             spans.append({
+                "severity": "error",
                 "error_type": error_type,
                 "corrected_form": f"{form} {obj.text}",
                 "explanation_zh": expl,
@@ -316,6 +318,26 @@ def _collect_np_hints(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
     return hints
 
 
+def _collect_prep_warnings(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
+    """收集双格介词提醒（warning 级：方向不确定，Dat/Akk 皆可）。"""
+    warnings = []
+    for tok in tokens:
+        if tok.pos_ != "ADP":
+            continue
+        expected, source = _prep_expected_case(tok)
+        if source == "twoway":
+            start, end = _tok_off(tok, base)
+            warnings.append({
+                "severity": "warning",
+                "error_type": "twoway",
+                "label": f"注意：{tok.text} [Dat/Akk]",
+                "explanation_zh": f"「{tok.text}」是静动态双格介词：这里 Dat/Akk 皆可，请根据动作方向判断（静态用三格 Dativ，动态用四格 Akkusativ）。",
+                "start": start,
+                "end": end,
+            })
+    return warnings
+
+
 def _cefr_basic(text: str) -> Dict[str, Any]:
     """词汇频率估测（MVP 简化：词数 + 基础说明）。"""
     words = [w for w in (text or "").split() if any(ch.isalpha() for ch in w)]
@@ -330,6 +352,7 @@ def analyze_essay_text(text: str, nlp: Optional[Any] = None) -> Dict[str, Any]:
     """写作润色主分析入口。nlp=None 时优雅降级为零错误 + CEFR 估测。"""
     sentences: List[Dict[str, Any]] = []
     error_count = 0
+    warning_count = 0
 
     if nlp is not None and text and text.strip():
         doc = nlp(text)
@@ -346,17 +369,22 @@ def analyze_essay_text(text: str, nlp: Optional[Any] = None) -> Dict[str, Any]:
                 _collect_prep_hints(toks, base)
                 + _collect_np_hints(toks, base)
             )
+            warnings = _collect_prep_warnings(toks, base)
             sentences.append({
                 "text": sent.text,
                 "spans": spans,
-                "hints": hints
+                "hints": hints,
+                "warnings": warnings,
             })
             error_count += len(spans)
+            warning_count += len(warnings)
 
     cefr = _cefr_basic(text)
     return {
-        "version": "4.1.1",
+        "version": "4.2.0",
         "cefr": cefr,
         "error_count": error_count,
+        "warning_count": warning_count,
+        "problem_count": error_count + warning_count,
         "sentences": sentences
     }
