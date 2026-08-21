@@ -177,22 +177,32 @@ def detect_determiner_noun_agreement(tokens: List[Any], base: int) -> List[Dict[
 
 
 def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
-    """规则 B：固定单格介词 vs 介宾名词短语的实际格。"""
+    """规则 B：固定单格介词 / 动词固定介词搭配 vs 介宾名词短语的实际格。"""
     spans = []
     for tok in tokens:
         if tok.pos_ != "ADP":
             continue
         prep = tok.text.lower()
-        if prep in _TWO_WAY_PREPS:
-            continue
-        expected = _PREP_CASE.get(prep)
-        if expected is None:
+
+        expected = None
+        error_type = "kasus"
+        verb_head = tok.head
+
+        # 1. 优先查动词/形容词固定介词搭配（如 warten auf + Akk, denken an + Akk）
+        if verb_head and verb_head.pos_ in ("VERB", "AUX", "ADJ"):
             from linguistics import lookup_prep_collocations
-            rows = lookup_prep_collocations(tok.head.lemma_)
-            match = next((r for r in rows if r["praeposition"] == prep), None)
+            rows = lookup_prep_collocations(verb_head.lemma_) or lookup_prep_collocations(verb_head.text.lower())
+            match = next((r for r in rows if r.get("praeposition", "").lower() == prep), None)
             if match:
-                expected = _CASE_NORM.get(match["kasus"].lower())
-            else:
+                expected = _CASE_NORM.get(match.get("kasus", "").lower())
+                error_type = "praeposition"
+
+        # 2. 若非固定搭配，查独立单格介词（若为双格介词则跳过）
+        if expected is None:
+            if prep in _TWO_WAY_PREPS:
+                continue
+            expected = _PREP_CASE.get(prep)
+            if expected is None:
                 continue
 
         # 取介宾名词：ADP 的子节点里 dep 是 pobj/op/nk 的 NOUN
@@ -218,10 +228,14 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
         if det.text.lower() != form.lower():
             start = min(det.idx, obj.idx) - base
             end = max(det.idx + len(det.text), obj.idx + len(obj.text)) - base
+            if error_type == "praeposition":
+                expl = f"固定搭配「{verb_head.lemma_} {prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」而非「{det.text}」。"
+            else:
+                expl = f"介宾「{prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」而非「{det.text}」。"
             spans.append({
-                "error_type": "kasus",
+                "error_type": error_type,
                 "corrected_form": f"{form} {obj.text}",
-                "explanation_zh": f"介宾「{prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」。",
+                "explanation_zh": expl,
                 "start": start,
                 "end": end,
             })
@@ -259,7 +273,7 @@ def analyze_essay_text(text: str, nlp: Optional[Any] = None) -> Dict[str, Any]:
 
     cefr = _cefr_basic(text)
     return {
-        "version": "3.12.0",
+        "version": "4.0.0",
         "cefr": cefr,
         "error_count": error_count,
         "sentences": sentences

@@ -100,7 +100,14 @@ import {
   applyPolishChanges,
   saveEssayVersion,
   restoreEssayVersion,
-  loadEssayVersions
+  loadEssayVersions,
+  previewEssayVersion,
+  closeVersionPreview,
+  deleteEssayVersion,
+  jumpToSentence,
+  fixSelectedSpan,
+  clearEditorText,
+  setupEditorListeners
 } from './writer.js';
 
 // ── View Router ─────────────────────────────────────────────────────────────
@@ -137,7 +144,7 @@ export function show(view) {
   if (view === 'home')     loadArticles();
   if (view === 'cards')    loadCards();
   if (view === 'progress') loadProgress();
-  if (view === 'writer')   loadWriterEssays();
+  if (view === 'writer')   { loadWriterEssays(); setupEditorListeners(); }
 }
 
 // ── Import Modal ─────────────────────────────────────────────────────────────
@@ -695,6 +702,12 @@ Object.assign(window, {
   saveEssayVersion,
   restoreEssayVersion,
   loadEssayVersions,
+  previewEssayVersion,
+  closeVersionPreview,
+  deleteEssayVersion,
+  jumpToSentence,
+  fixSelectedSpan,
+  clearEditorText,
 
   // Player
   ShadowPlayer,
@@ -717,6 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
   applyTypography();
   setupDropzone();
   setupSelectionTooltip();
+  setupEditorListeners();
   ShadowPlayer.init();
   Companion.init();
 });

@@ -10,16 +10,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=3.12.0">
+  <link rel="stylesheet" href="/style.css?v=4.0.0">
 </head>
 <body>
 
   <!-- Top Metadata Ticker Strip (Editorial Live Strip) -->
   <div class="top-ticker topbar">
     <div class="topbar-inner">
-      <span><b>DELECTOR · 2026</b> · Vol. 03 / Issue Nº 07</span>
+      <span><b>DELECTOR · 2026</b> · Vol. 04 / Issue Nº 01</span>
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <span class="right"><span class="pulse"></span>System · v3.12.0 Online</span>
+      <span class="right"><span class="pulse"></span>System · v4.0.0 Online</span>
     </div>
   </div>
 
@@ -445,28 +445,21 @@
       </div>
 
       <div class="writer-layout">
-        <!-- Left Area: Editor & Highlight Preview & Essay History -->
+        <!-- Left Area: Inline IDE Editor & Essay History -->
         <div class="writer-left">
           <div class="writer-card-box">
+            <div class="writer-box-label" style="margin-bottom:0.5rem;">
+              <span>✍️ 德语内联智能编辑器</span>
+              <span id="writer-render-status" class="writer-status-pill">等待输入</span>
+            </div>
             <input id="writer-title" class="writer-input-title" placeholder="作文标题（如：Mein Urlaub in Berlin / B1 备考书信）..." maxlength="80" />
-            <textarea id="writer-text" class="writer-textarea" rows="10" placeholder="在此粘贴或书写德语作文（如：Ich fahre mit der Auto.）..." oninput="analyzeWriterText()"></textarea>
+            <div id="ide-editor" class="ide-editor" contenteditable="true" data-placeholder="在此粘贴或直接书写德语作文（如：Ich fahre mit der Auto.）..." oninput="analyzeWriterText()" spellcheck="false"></div>
             
             <div class="writer-toolbar">
               <div class="writer-word-counter" id="writer-stats-counter">0 词 · 0 句</div>
               <div class="writer-tools-right">
-                <button class="btn btn-ghost btn-xs" onclick="document.getElementById('writer-text').value='';analyzeWriterText(true);">清空</button>
+                <button class="btn btn-ghost btn-xs" onclick="clearEditorText()">清空</button>
               </div>
-            </div>
-          </div>
-
-          <!-- Highlighted Render Box -->
-          <div class="writer-card-box" id="writer-render-card" style="margin-top:1.25rem;">
-            <div class="writer-box-label">
-              <span>📖 行内语法诊断视图（点击波浪下划线查看纠错详情）</span>
-              <span id="writer-render-status" class="writer-status-pill">等待输入</span>
-            </div>
-            <div id="writer-render" class="writer-render">
-              <div class="writer-empty-tip">在上方输入德语文本后，系统将在此处以彩色波浪线下划线实时标出冠词、格位与介词错误。</div>
             </div>
           </div>
 
@@ -507,8 +500,16 @@
               <div id="writer-err-detail" class="writer-err-detail-box">
                 <div class="writer-err-placeholder">
                   <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
-                  <div>点击左侧文本中的<b>彩色下划线</b>，查看错误成因与修正建议，并一键收录为 Anki 语法卡。</div>
+                  <div>点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。</div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Sentence Navigation Card -->
+            <div class="writer-sidebar-card">
+              <div class="sidebar-section-title">🧭 句子导航索引</div>
+              <div id="writer-sent-nav" class="writer-sent-nav-list">
+                <div class="writer-empty-tip" style="padding:0.5rem 0;">输入文本后生成句子索引</div>
               </div>
             </div>
           </div>
@@ -862,6 +863,31 @@
     </div>
   </div>
 
+  <!-- Floating Tooltip for Inline IDE Editor Errors (v4.0.0) -->
+  <div id="ide-error-tooltip" class="ide-error-tooltip hidden"></div>
+
+  <!-- Version Snapshot Read-Only Preview Overlay (v4.0.0) -->
+  <div id="version-preview-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeVersionPreview()">
+    <div class="modal version-preview-box">
+      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <span id="version-preview-badge" class="diff-hunk-badge">#v--</span>
+          <h3 id="version-preview-title" style="margin:0;font-size:1.125rem;">快照预览</h3>
+        </div>
+        <button class="drawer-close" onclick="closeVersionPreview()" title="关闭 (Esc)">✕</button>
+      </div>
+      <div class="version-preview-meta-bar">
+        <span id="version-preview-time" style="color:var(--pencil);font-size:0.75rem;font-family:var(--mono);"></span>
+        <span id="version-preview-status" class="writer-status-pill"></span>
+      </div>
+      <div id="version-preview-content" class="version-preview-content"></div>
+      <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;">
+        <button class="btn btn-ghost" onclick="closeVersionPreview()">关闭预览</button>
+        <button id="version-preview-restore-btn" class="btn btn-dark">↩ 恢复到此快照</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Floating Shadow Reading Player (Root Level) ─────────── -->
   <div id="shadow-player" class="shadow-player hidden">
     <div class="player-left">
@@ -1125,7 +1151,7 @@
     </div>
   </div>
 
-  <script type="module" src="/js/main.js?v=3.12.0"></script>
+  <script type="module" src="/js/main.js?v=4.0.0"></script>
 
 </body>
 </html>

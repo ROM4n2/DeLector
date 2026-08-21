@@ -283,6 +283,68 @@ def test_essay_versions_crud_and_restore(client):
     assert res_restore_again.json()["content"] == "Ich sehe der Mann."
 
 
+def test_essay_version_preview_read_only(client):
+    r = client.post("/api/essays", json={"title": "Preview Essay", "content": "Ich gehe in das Kino."})
+    eid = r.json()["id"]
+
+    s1 = client.post(f"/api/essays/{eid}/versions", json={"message": "v1 preview test"})
+    v1_id = s1.json()["version_id"]
+
+    # 404 guards
+    assert client.get(f"/api/essays/99999/versions/{v1_id}").status_code == 404
+    assert client.get(f"/api/essays/{eid}/versions/99999").status_code == 404
+
+    # Preview version
+    pv = client.get(f"/api/essays/{eid}/versions/{v1_id}")
+    assert pv.status_code == 200
+    data = pv.json()
+    assert data["id"] == v1_id
+    assert data["essay_id"] == eid
+    assert data["message"] == "v1 preview test"
+    assert data["content"] == "Ich gehe in das Kino."
+    assert "analysis_json" in data
+    assert "error_count" in data
+
+    # Verify read-only: version count unchanged, essay content unchanged
+    v_list = client.get(f"/api/essays/{eid}/versions").json()
+    assert len(v_list) == 1
+    essay_data = client.get(f"/api/essays/{eid}").json()
+    assert essay_data["content"] == "Ich gehe in das Kino."
+
+
+def test_essay_version_delete(client):
+    r = client.post("/api/essays", json={"title": "Delete Version Essay", "content": "Das ist ein Haus."})
+    eid = r.json()["id"]
+
+    s1 = client.post(f"/api/essays/{eid}/versions", json={"message": "v1 to delete"})
+    v1_id = s1.json()["version_id"]
+    s2 = client.post(f"/api/essays/{eid}/versions", json={"message": "v2 to keep"})
+    v2_id = s2.json()["version_id"]
+
+    # 404 guards
+    assert client.delete(f"/api/essays/99999/versions/{v1_id}").status_code == 404
+    assert client.delete(f"/api/essays/{eid}/versions/99999").status_code == 404
+
+    # Delete v1
+    del_r = client.delete(f"/api/essays/{eid}/versions/{v1_id}")
+    assert del_r.status_code == 200
+    assert del_r.json() == {"status": "ok", "deleted_version_id": v1_id}
+
+    # Verify v1 is gone from list, v2 remains
+    v_list = client.get(f"/api/essays/{eid}/versions").json()
+    v_ids = [v["id"] for v in v_list]
+    assert v1_id not in v_ids
+    assert v2_id in v_ids
+
+    # Repeated delete gives 404
+    assert client.delete(f"/api/essays/{eid}/versions/{v1_id}").status_code == 404
+
+    # Essay content untouched
+    essay_data = client.get(f"/api/essays/{eid}").json()
+    assert essay_data["content"] == "Das ist ein Haus."
+
+
+
 def test_writing_apply_partial_and_full_accept(client):
     orig = "Ich habe ein Hund. Er ist gut."
     corr = "Ich habe einen Hund. Er ist gut. Ich liebe ihn."

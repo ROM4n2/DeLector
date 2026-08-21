@@ -2451,7 +2451,7 @@ def create_essay(req: EssayCreateReq):
             (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr, a["error_count"], len(a["sentences"]))
         )
         eid = cur.lastrowid
-    return {"id": eid, "title": req.title, "analysis_json": a, "error_count": a["error_count"]}
+    return {"id": eid, "title": req.title, "content": req.content, "analysis_json": a, "error_count": a["error_count"]}
 
 
 @app.get("/api/essays")
@@ -2497,7 +2497,7 @@ def update_essay(essay_id: int, req: EssayUpdateReq):
              a.get("cefr", {}).get("recommended_level"), a["error_count"],
              len(a["sentences"]), now_str, essay_id)
         )
-    return {"id": essay_id, "title": title, "analysis_json": a, "error_count": a["error_count"]}
+    return {"id": essay_id, "title": title, "content": content, "analysis_json": a, "error_count": a["error_count"]}
 
 
 @app.delete("/api/essays/{essay_id}")
@@ -2653,6 +2653,56 @@ def list_essay_versions(essay_id: int):
                 "error_count": err_count,
             })
     return result
+
+
+@app.get("/api/essays/{essay_id}/versions/{version_id}")
+def get_essay_version(essay_id: int, version_id: int):
+    with get_db() as conn:
+        essay = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
+        if not essay:
+            raise HTTPException(404, "essay not found")
+        v = conn.execute(
+            "SELECT id, essay_id, content, message, created_at, analysis_json "
+            "FROM essay_versions WHERE id = ? AND essay_id = ?",
+            (version_id, essay_id)
+        ).fetchone()
+        if not v:
+            raise HTTPException(404, "version not found")
+        raw_a = v["analysis_json"]
+        try:
+            a = json.loads(raw_a) if isinstance(raw_a, str) else raw_a
+            err_count = a.get("error_count", 0) if isinstance(a, dict) else 0
+        except Exception:
+            a = None
+            err_count = 0
+    return {
+        "id": v["id"],
+        "essay_id": v["essay_id"],
+        "message": v["message"],
+        "created_at": v["created_at"],
+        "content": v["content"],
+        "analysis_json": a,
+        "error_count": err_count,
+    }
+
+
+@app.delete("/api/essays/{essay_id}/versions/{version_id}")
+def delete_essay_version(essay_id: int, version_id: int):
+    with get_db() as conn:
+        essay = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
+        if not essay:
+            raise HTTPException(404, "essay not found")
+        v = conn.execute(
+            "SELECT id FROM essay_versions WHERE id = ? AND essay_id = ?",
+            (version_id, essay_id)
+        ).fetchone()
+        if not v:
+            raise HTTPException(404, "version not found")
+        conn.execute(
+            "DELETE FROM essay_versions WHERE id = ? AND essay_id = ?",
+            (version_id, essay_id)
+        )
+    return {"status": "ok", "deleted_version_id": version_id}
 
 
 @app.post("/api/essays/{essay_id}/restore")

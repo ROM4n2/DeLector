@@ -9,6 +9,7 @@ let currentEssayId = null;
 let currentAnalysis = null;
 let selectedSpanRef = null;
 let analyzeDebounceTimer = null;
+let isComposing = false;
 
 let polishState = {
   original: '',
@@ -26,7 +27,7 @@ const ERROR_TYPE_LABELS = {
   andere: '语法与拼写规范'
 };
 
-function getErrorTypeLabel(type) {
+export function getErrorTypeLabel(type) {
   return ERROR_TYPE_LABELS[type] || '语法考点';
 }
 
@@ -62,6 +63,442 @@ function updateWriterStats(text) {
   const words = (text || '').trim().split(/\s+/).filter(w => /[a-zA-ZäöüßÄÖÜ]/.test(w));
   const sents = (text || '').split(/[.!?]+/).filter(s => s.trim().length > 0);
   el.textContent = `${words.length} 词 · ${sents.length} 句`;
+}
+
+// ── Text & Editor Helpers (v4.0.0 IDE Inline Editor) ─────────────────────────
+export function editorText() {
+  const el = document.getElementById('ide-editor');
+  if (!el) return '';
+  return el.innerText.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function setEditorText(text) {
+  const el = document.getElementById('ide-editor');
+  if (!el) return;
+  el.textContent = text;
+  updateWriterStats(text);
+}
+
+export function clearEditorText() {
+  const el = document.getElementById('ide-editor');
+  if (el) el.innerHTML = '';
+  clearWriterForm();
+}
+
+// ── Caret Offset Capture & Restoration (TreeWalker) ─────────────────────────
+function captureCaret(rootEl) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!rootEl.contains(range.startContainer)) return null;
+
+  let offset = 0;
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null, false);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node === range.startContainer) {
+      offset += range.startOffset;
+      break;
+    }
+    offset += node.nodeValue.length;
+  }
+  return offset;
+}
+
+function restoreCaret(rootEl, offset) {
+  if (offset === null || offset === undefined) return;
+  const sel = window.getSelection();
+  if (!sel) return;
+
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null, false);
+  let currentOffset = 0;
+  let targetNode = null;
+  let targetOffset = 0;
+  let lastNode = null;
+  let node;
+
+  while ((node = walker.nextNode())) {
+    lastNode = node;
+    const len = node.nodeValue.length;
+    if (currentOffset + len >= offset) {
+      targetNode = node;
+      targetOffset = Math.max(0, offset - currentOffset);
+      break;
+    }
+    currentOffset += len;
+  }
+
+  if (!targetNode && lastNode) {
+    targetNode = lastNode;
+    targetOffset = lastNode.nodeValue.length;
+  }
+
+  if (targetNode) {
+    try {
+      const range = document.createRange();
+      range.setStart(targetNode, Math.min(targetOffset, targetNode.nodeValue.length));
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) {
+      // Safe fallback
+    }
+  }
+}
+
+// ── Build Inline Spans with Wavy Underlines ─────────────────────────────────
+export function buildSentenceHighlightedText(text, spans, sentIdx, options = {}) {
+  const { clickable = true, useNativeTitle = false } = options;
+  if (!spans || spans.length === 0) {
+    return esc(text);
+  }
+
+  const sorted = [...spans].sort((x, y) => x.start - y.start);
+  let out = '';
+  let pos = 0;
+
+  sorted.forEach((sp, spanIdx) => {
+    if (sp.start > pos) {
+      out += esc(text.slice(pos, sp.start));
+    }
+    const isSelected = selectedSpanRef &&
+      selectedSpanRef.sentence_id === sentIdx &&
+      selectedSpanRef.span_index === spanIdx;
+
+    const titleAttr = useNativeTitle ? `title="${esc(sp.explanation_zh)}"` : '';
+    const clickAttr = clickable ? `onclick="selectWriterSpan(${sentIdx}, ${spanIdx}, event)"` : '';
+
+    out += `<mark class="writer-err-underline err-${sp.error_type} ${isSelected ? 'active-span' : ''}" ` +
+      `data-sent="${sentIdx}" data-span="${spanIdx}" ${clickAttr} ${titleAttr}>` +
+      esc(text.slice(sp.start, sp.end)) +
+      `</mark>`;
+    pos = sp.end;
+  });
+
+  if (pos < text.length) {
+    out += esc(text.slice(pos));
+  }
+
+  return out;
+}
+
+// ── Render Editor Content & Retain Caret ────────────────────────────────────
+export function renderEditor(text, a, caretOffset) {
+  const editor = document.getElementById('ide-editor');
+  if (!editor) return;
+
+  const scrollY = editor.scrollTop;
+
+  if (!text || !text.trim()) {
+    editor.innerHTML = '';
+    updateAnalysisPanels({ cefr: null, error_count: 0, sentences: [] });
+    return;
+  }
+
+  if (!a || !a.sentences || a.sentences.length === 0) {
+    editor.textContent = text;
+    if (caretOffset !== null && caretOffset !== undefined) {
+      restoreCaret(editor, caretOffset);
+    }
+    editor.scrollTop = scrollY;
+    updateAnalysisPanels(a || { cefr: null, error_count: 0, sentences: [] });
+    return;
+  }
+
+  let html = '';
+  a.sentences.forEach((s, sentIdx) => {
+    const sentHtml = buildSentenceHighlightedText(s.text, s.spans || [], sentIdx, {
+      clickable: true,
+      useNativeTitle: false
+    });
+    html += `<span class="ide-sent-block" data-sent-idx="${sentIdx}">${sentHtml}</span> `;
+  });
+
+  editor.innerHTML = html;
+
+  if (caretOffset !== null && caretOffset !== undefined) {
+    restoreCaret(editor, caretOffset);
+  }
+  editor.scrollTop = scrollY;
+  updateAnalysisPanels(a);
+}
+
+// ── Update Sidebar Analysis Panels & Sentence Navigation ────────────────────
+export function updateAnalysisPanels(a) {
+  // 1. Status Pill
+  const statusPill = document.getElementById('writer-render-status');
+  if (statusPill) {
+    const errCount = a?.error_count || 0;
+    if (errCount === 0) {
+      statusPill.textContent = '✓ 表达流畅 · 0 处待改';
+      statusPill.className = 'writer-status-pill status-clean';
+    } else {
+      statusPill.textContent = `⚠️ 发现 ${errCount} 处语法疑点`;
+      statusPill.className = 'writer-status-pill status-warn';
+    }
+  }
+
+  // 2. CEFR Widget
+  const cefrBox = document.getElementById('writer-cefr');
+  if (cefrBox) {
+    if (a?.cefr) {
+      const lvl = a.cefr.recommended_level || 'A1';
+      const wordCount = a.cefr.word_count || 0;
+      const sentCount = a.sentences ? a.sentences.length : 0;
+      cefrBox.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem;">
+          <span class="cefr-badge badge-${lvl}" style="font-size:0.9rem;padding:4px 10px;">${lvl} 估测</span>
+          <span style="font-size:0.75rem;color:var(--pencil);font-family:var(--mono);">${wordCount} 词 · ${sentCount} 句</span>
+        </div>
+        <div class="writer-cefr-desc">${esc(a.cefr.note_zh || '基于词汇频率与语法复杂度综合估测')}</div>
+      `;
+    } else {
+      cefrBox.innerHTML = '<div class="writer-cefr-level">CEFR —</div><div class="writer-cefr-desc">输入德语作文以评估词汇难度与错误率</div>';
+    }
+  }
+
+  // 3. Sentence Navigation List
+  const navEl = document.getElementById('writer-sent-nav');
+  if (navEl) {
+    if (!a?.sentences || a.sentences.length === 0) {
+      navEl.innerHTML = '<div class="writer-empty-tip" style="padding:0.5rem 0;">输入文本后生成句子索引</div>';
+    } else {
+      navEl.innerHTML = a.sentences.map((s, idx) => {
+        const errCount = (s.spans || []).length;
+        const badge = errCount > 0
+          ? `<span class="writer-nav-badge has-err">⚠️ ${errCount} 处疑点</span>`
+          : `<span class="writer-nav-badge clean">✓ 正常</span>`;
+        const previewText = s.text.length > 28 ? s.text.slice(0, 28) + '...' : s.text;
+        return `
+          <div class="writer-nav-item" onclick="jumpToSentence(${idx})">
+            <span class="writer-nav-idx">${idx + 1}</span>
+            <span class="writer-nav-snippet" title="${esc(s.text)}">${esc(previewText)}</span>
+            ${badge}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
+// ── Jump to Sentence Block & Flash ──────────────────────────────────────────
+export function jumpToSentence(sentIdx) {
+  const block = document.querySelector(`.ide-sent-block[data-sent-idx="${sentIdx}"]`);
+  if (block) {
+    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    block.classList.remove('ide-sent-flash');
+    void block.offsetWidth; // Trigger reflow
+    block.classList.add('ide-sent-flash');
+    setTimeout(() => block.classList.remove('ide-sent-flash'), 1200);
+  }
+}
+
+// ── Realtime Text Analysis (Debounced) ──────────────────────────────────────
+export function analyzeWriterText(immediate = false) {
+  if (isComposing) return;
+  const text = editorText();
+  updateWriterStats(text);
+
+  if (!text.trim()) {
+    clearWriterForm();
+    return;
+  }
+
+  const editor = document.getElementById('ide-editor');
+  const caretOffset = editor ? captureCaret(editor) : null;
+
+  if (analyzeDebounceTimer) {
+    clearTimeout(analyzeDebounceTimer);
+    analyzeDebounceTimer = null;
+  }
+
+  const performAnalysis = async () => {
+    try {
+      const a = await api('/api/writing/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      currentAnalysis = a;
+      renderEditor(text, a, caretOffset);
+    } catch (err) {
+      console.error('[Writer] Analysis failed:', err);
+    }
+  };
+
+  if (immediate) {
+    performAnalysis();
+  } else {
+    analyzeDebounceTimer = setTimeout(performAnalysis, 400);
+  }
+}
+
+// ── Select Error Span to Display Details in Sidebar ─────────────────────────
+export function selectWriterSpan(arg1, arg2, evt) {
+  if (evt) evt.stopPropagation();
+  if (!currentAnalysis || !currentAnalysis.sentences) return;
+
+  let sentIdx = -1;
+  let spanIdx = -1;
+
+  if (typeof arg1 === 'number' && typeof arg2 === 'number') {
+    if (currentAnalysis.sentences[arg1] &&
+        currentAnalysis.sentences[arg1].spans &&
+        currentAnalysis.sentences[arg1].spans[arg2]) {
+      sentIdx = arg1;
+      spanIdx = arg2;
+    } else {
+      const start = arg1;
+      const end = arg2;
+      for (let sIdx = 0; sIdx < currentAnalysis.sentences.length; sIdx++) {
+        const s = currentAnalysis.sentences[sIdx];
+        for (let spIdx = 0; spIdx < (s.spans || []).length; spIdx++) {
+          const sp = s.spans[spIdx];
+          if (sp.start === start && sp.end === end) {
+            sentIdx = sIdx;
+            spanIdx = spIdx;
+            break;
+          }
+        }
+        if (sentIdx !== -1) break;
+      }
+    }
+  }
+
+  if (sentIdx === -1 || spanIdx === -1) return;
+
+  const s = currentAnalysis.sentences[sentIdx];
+  const sp = s.spans[spanIdx];
+  selectedSpanRef = {
+    essay_id: currentEssayId,
+    sentence_id: sentIdx,
+    span_index: spanIdx,
+    span: sp,
+    sentenceText: s.text
+  };
+
+  // Update active style on marks
+  document.querySelectorAll('.writer-err-underline').forEach(el => {
+    const sAttr = parseInt(el.getAttribute('data-sent'), 10);
+    const spAttr = parseInt(el.getAttribute('data-span'), 10);
+    el.classList.toggle('active-span', sAttr === sentIdx && spAttr === spanIdx);
+  });
+
+  // Render detail in sidebar
+  const detailEl = document.getElementById('writer-err-detail');
+  if (!detailEl) return;
+
+  detailEl.innerHTML = `
+    <div class="writer-err-card err-card-${sp.error_type}">
+      <div class="err-card-header">
+        <span class="err-type-badge err-bg-${sp.error_type}">
+          ${getErrorTypeLabel(sp.error_type)}
+        </span>
+      </div>
+      <div class="err-explanation">
+        ${esc(sp.explanation_zh)}
+      </div>
+      <div class="err-suggest-box">
+        <span class="err-box-title">推荐修正形式：</span>
+        <div class="correction-chip">${esc(sp.corrected_form)}</div>
+      </div>
+      <div class="err-context-box">
+        <span class="err-box-title">完整原句语境：</span>
+        <div class="err-context-text">${esc(s.text)}</div>
+      </div>
+      <div class="err-action-box" style="display:flex;flex-direction:column;gap:0.5rem;">
+        <button class="btn btn-dark btn-block" id="writer-fix-span-btn" onclick="fixSelectedSpan()">
+          ✨ 一键应用修正 (${esc(sp.corrected_form)})
+        </button>
+        <button class="btn btn-secondary btn-block" id="writer-save-card-btn" onclick="saveWriterErrorAsCard()">
+          ＋ 存为 Anki 语法考点卡
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// ── One-Click Correction in Inline IDE Editor (v4.0.0) ──────────────────────
+export function fixSelectedSpan() {
+  if (!selectedSpanRef || !currentAnalysis || !currentAnalysis.sentences) return;
+
+  const { sentence_id, span } = selectedSpanRef;
+  const s = currentAnalysis.sentences[sentence_id];
+  if (!s || !span) return;
+
+  // Replace error segment in the sentence text
+  const before = s.text.slice(0, span.start);
+  const after = s.text.slice(span.end);
+  const fixedSent = before + span.corrected_form + after;
+
+  // Reassemble full text
+  const newSentences = currentAnalysis.sentences.map((sent, idx) => {
+    return idx === sentence_id ? fixedSent : sent.text;
+  });
+  const newFullText = newSentences.join(' ');
+
+  setEditorText(newFullText);
+  selectedSpanRef = null;
+  resetErrorDetailView();
+  analyzeWriterText(true);
+}
+
+// ── Setup Editor Event Listeners & Hover Tooltip ────────────────────────────
+export function setupEditorListeners() {
+  const editor = document.getElementById('ide-editor');
+  if (!editor || editor.__listenersAttached) return;
+  editor.__listenersAttached = true;
+
+  editor.addEventListener('compositionstart', () => { isComposing = true; });
+  editor.addEventListener('compositionend', () => {
+    isComposing = false;
+    analyzeWriterText();
+  });
+
+  const tooltip = document.getElementById('ide-error-tooltip');
+  editor.addEventListener('mouseover', (e) => {
+    const mark = e.target.closest('.writer-err-underline');
+    if (!mark || !tooltip || !currentAnalysis) return;
+    const sentIdx = parseInt(mark.getAttribute('data-sent'), 10);
+    const spanIdx = parseInt(mark.getAttribute('data-span'), 10);
+    const s = currentAnalysis.sentences?.[sentIdx];
+    const sp = s?.spans?.[spanIdx];
+    if (!sp) return;
+
+    tooltip.innerHTML = `
+      <div class="tooltip-header">
+        <span class="err-type-badge err-bg-${sp.error_type}">${getErrorTypeLabel(sp.error_type)}</span>
+      </div>
+      <div class="tooltip-body">${esc(sp.explanation_zh)}</div>
+      <div class="tooltip-suggest">推荐修正：<b>${esc(sp.corrected_form)}</b></div>
+      <div class="tooltip-hint">点击锁定详情或一键修正</div>
+    `;
+
+    const rect = mark.getBoundingClientRect();
+    tooltip.style.top = `${rect.bottom + window.scrollY + 6}px`;
+    tooltip.style.left = `${Math.max(10, Math.min(window.innerWidth - 270, rect.left + window.scrollX))}px`;
+    tooltip.classList.remove('hidden');
+  });
+
+  editor.addEventListener('mouseout', (e) => {
+    const mark = e.target.closest('.writer-err-underline');
+    if (mark && tooltip) {
+      tooltip.classList.add('hidden');
+    }
+  });
+}
+
+// ── Reset Error Detail Box ──────────────────────────────────────────────────
+function resetErrorDetailView() {
+  const detailEl = document.getElementById('writer-err-detail');
+  if (detailEl) {
+    detailEl.innerHTML = `
+      <div class="writer-err-placeholder">
+        <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
+        <div>点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。</div>
+      </div>
+    `;
+  }
 }
 
 // ── Essay Library Loading & Rendering ───────────────────────────────────────
@@ -114,11 +551,8 @@ export async function openWriterEssay(id) {
     selectedSpanRef = null;
 
     const titleInput = document.getElementById('writer-title');
-    const textArea = document.getElementById('writer-text');
     if (titleInput) titleInput.value = essay.title || '';
-    if (textArea) textArea.value = essay.content || '';
-
-    updateWriterStats(essay.content);
+    setEditorText(essay.content || '');
 
     let analysis = essay.analysis_json;
     if (typeof analysis === 'string') {
@@ -127,12 +561,11 @@ export async function openWriterEssay(id) {
 
     if (analysis && analysis.sentences) {
       currentAnalysis = analysis;
-      renderWriterReport(analysis);
+      renderEditor(essay.content || '', analysis);
     } else {
       analyzeWriterText(true);
     }
 
-    // Reset error detail card
     resetErrorDetailView();
     loadWriterEssays();
     loadEssayVersions();
@@ -149,27 +582,12 @@ export function clearWriterForm() {
   selectedSpanRef = null;
 
   const titleInput = document.getElementById('writer-title');
-  const textArea = document.getElementById('writer-text');
   if (titleInput) titleInput.value = '';
-  if (textArea) textArea.value = '';
+  const editor = document.getElementById('ide-editor');
+  if (editor) editor.innerHTML = '';
 
   updateWriterStats('');
-
-  const renderEl = document.getElementById('writer-render');
-  if (renderEl) {
-    renderEl.innerHTML = '<div class="writer-empty-tip">在上方输入德语文本后，系统将在此处以彩色波浪线下划线实时标出冠词、格位与介词错误。</div>';
-  }
-
-  const statusPill = document.getElementById('writer-render-status');
-  if (statusPill) {
-    statusPill.textContent = '等待输入';
-    statusPill.className = 'writer-status-pill';
-  }
-
-  const cefrBox = document.getElementById('writer-cefr');
-  if (cefrBox) {
-    cefrBox.innerHTML = '<div class="writer-cefr-level">CEFR —</div><div class="writer-cefr-desc">输入德语作文以评估词汇难度与错误率</div>';
-  }
+  updateAnalysisPanels({ cefr: null, error_count: 0, sentences: [] });
 
   const versionListEl = document.getElementById('writer-version-list');
   if (versionListEl) {
@@ -178,224 +596,6 @@ export function clearWriterForm() {
 
   resetErrorDetailView();
   loadWriterEssays();
-}
-
-// ── Reset Error Detail Box ──────────────────────────────────────────────────
-function resetErrorDetailView() {
-  const detailEl = document.getElementById('writer-err-detail');
-  if (detailEl) {
-    detailEl.innerHTML = `
-      <div class="writer-err-placeholder">
-        <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
-        <div>点击左侧诊断视图中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并一键收录为 Anki 语法卡。</div>
-      </div>
-    `;
-  }
-}
-
-// ── Realtime Text Analysis ──────────────────────────────────────────────────
-export function analyzeWriterText(immediate = false) {
-  const textInput = document.getElementById('writer-text');
-  if (!textInput) return;
-  const text = textInput.value;
-  updateWriterStats(text);
-
-  if (!text.trim()) {
-    clearWriterForm();
-    return;
-  }
-
-  if (analyzeDebounceTimer) {
-    clearTimeout(analyzeDebounceTimer);
-    analyzeDebounceTimer = null;
-  }
-
-  const performAnalysis = async () => {
-    try {
-      const a = await api('/api/writing/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
-      currentAnalysis = a;
-      renderWriterReport(a);
-    } catch (err) {
-      console.error('[Writer] Analysis failed:', err);
-    }
-  };
-
-  if (immediate) {
-    performAnalysis();
-  } else {
-    analyzeDebounceTimer = setTimeout(performAnalysis, 350);
-  }
-}
-
-// ── Render Analysis & Highlighted Text ──────────────────────────────────────
-function renderWriterReport(a) {
-  // Update status pill
-  const statusPill = document.getElementById('writer-render-status');
-  if (statusPill) {
-    if (a.error_count === 0) {
-      statusPill.textContent = '✓ 表达流畅 · 0 处待改';
-      statusPill.className = 'writer-status-pill status-clean';
-    } else {
-      statusPill.textContent = `⚠️ 发现 ${a.error_count} 处语法疑点`;
-      statusPill.className = 'writer-status-pill status-warn';
-    }
-  }
-
-  // Update CEFR widget
-  const cefrBox = document.getElementById('writer-cefr');
-  if (cefrBox && a.cefr) {
-    const lvl = a.cefr.recommended_level || 'A1';
-    const wordCount = a.cefr.word_count || 0;
-    cefrBox.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem;">
-        <span class="cefr-badge badge-${lvl}" style="font-size:0.9rem;padding:4px 10px;">${lvl} 估测</span>
-        <span style="font-size:0.75rem;color:var(--pencil);font-family:var(--mono);">${wordCount} 词 · ${a.sentences.length} 句</span>
-      </div>
-      <div class="writer-cefr-desc">${esc(a.cefr.note_zh || '基于词汇频率与语法复杂度综合估测')}</div>
-    `;
-  }
-
-  // Render Highlighted HTML
-  const renderEl = document.getElementById('writer-render');
-  if (!renderEl) return;
-
-  if (!a.sentences || a.sentences.length === 0) {
-    renderEl.innerHTML = '<div class="writer-empty-tip">未能识别到有效句子</div>';
-    return;
-  }
-
-  const html = a.sentences.map((s, sentIdx) => {
-    const sentHtml = buildSentenceHighlightedText(s.text, s.spans || [], sentIdx);
-    return `
-      <div class="writer-sent-block" data-sent-idx="${sentIdx}">
-        <span class="writer-sent-num">${sentIdx + 1}</span>
-        <span class="writer-sent-content">${sentHtml}</span>
-      </div>
-    `;
-  }).join('');
-
-  renderEl.innerHTML = html;
-}
-
-// ── Build Inline Spans with Wavy Underlines ─────────────────────────────────
-function buildSentenceHighlightedText(text, spans, sentIdx) {
-  if (!spans || spans.length === 0) {
-    return esc(text);
-  }
-
-  const sorted = [...spans].sort((x, y) => x.start - y.start);
-  let out = '';
-  let pos = 0;
-
-  sorted.forEach((sp, spanIdx) => {
-    if (sp.start > pos) {
-      out += esc(text.slice(pos, sp.start));
-    }
-    const isSelected = selectedSpanRef &&
-      selectedSpanRef.sentence_id === sentIdx &&
-      selectedSpanRef.span_index === spanIdx;
-
-    out += `<mark class="writer-err-underline err-${sp.error_type} ${isSelected ? 'active-span' : ''}" ` +
-      `data-sent="${sentIdx}" data-span="${spanIdx}" ` +
-      `onclick="selectWriterSpan(${sentIdx}, ${spanIdx})" ` +
-      `title="${esc(sp.explanation_zh)}">` +
-      esc(text.slice(sp.start, sp.end)) +
-      `</mark>`;
-    pos = sp.end;
-  });
-
-  if (pos < text.length) {
-    out += esc(text.slice(pos));
-  }
-
-  return out;
-}
-
-// ── Select Error Span to Display Details in Sidebar ─────────────────────────
-export function selectWriterSpan(arg1, arg2) {
-  if (!currentAnalysis || !currentAnalysis.sentences) return;
-
-  let sentIdx = -1;
-  let spanIdx = -1;
-
-  if (typeof arg1 === 'number' && typeof arg2 === 'number') {
-    // Check if passed directly as (sentIdx, spanIdx)
-    if (currentAnalysis.sentences[arg1] &&
-        currentAnalysis.sentences[arg1].spans &&
-        currentAnalysis.sentences[arg1].spans[arg2]) {
-      sentIdx = arg1;
-      spanIdx = arg2;
-    } else {
-      // Fallback matching by character offsets (start, end)
-      const start = arg1;
-      const end = arg2;
-      for (let sIdx = 0; sIdx < currentAnalysis.sentences.length; sIdx++) {
-        const s = currentAnalysis.sentences[sIdx];
-        for (let spIdx = 0; spIdx < (s.spans || []).length; spIdx++) {
-          const sp = s.spans[spIdx];
-          if (sp.start === start && sp.end === end) {
-            sentIdx = sIdx;
-            spanIdx = spIdx;
-            break;
-          }
-        }
-        if (sentIdx !== -1) break;
-      }
-    }
-  }
-
-  if (sentIdx === -1 || spanIdx === -1) return;
-
-  const s = currentAnalysis.sentences[sentIdx];
-  const sp = s.spans[spanIdx];
-  selectedSpanRef = {
-    essay_id: currentEssayId,
-    sentence_id: sentIdx,
-    span_index: spanIdx,
-    span: sp,
-    sentenceText: s.text
-  };
-
-  // Update active style on all marks
-  document.querySelectorAll('.writer-err-underline').forEach(el => {
-    const sAttr = parseInt(el.getAttribute('data-sent'), 10);
-    const spAttr = parseInt(el.getAttribute('data-span'), 10);
-    el.classList.toggle('active-span', sAttr === sentIdx && spAttr === spanIdx);
-  });
-
-  // Render detail in sidebar
-  const detailEl = document.getElementById('writer-err-detail');
-  if (!detailEl) return;
-
-  detailEl.innerHTML = `
-    <div class="writer-err-card err-card-${sp.error_type}">
-      <div class="err-card-header">
-        <span class="err-type-badge err-bg-${sp.error_type}">
-          ${getErrorTypeLabel(sp.error_type)}
-        </span>
-      </div>
-      <div class="err-explanation">
-        ${esc(sp.explanation_zh)}
-      </div>
-      <div class="err-suggest-box">
-        <span class="err-box-title">推荐修正形式：</span>
-        <div class="correction-chip">${esc(sp.corrected_form)}</div>
-      </div>
-      <div class="err-context-box">
-        <span class="err-box-title">完整原句语境：</span>
-        <div class="err-context-text">${esc(s.text)}</div>
-      </div>
-      <div class="err-action-box">
-        <button class="btn btn-accent btn-block" id="writer-save-card-btn" onclick="saveWriterErrorAsCard()">
-          ＋ 一键存为 Anki 语法考点卡
-        </button>
-      </div>
-    </div>
-  `;
 }
 
 // ── Save Error as Anki Grammar Card ─────────────────────────────────────────
@@ -409,10 +609,9 @@ export async function saveWriterErrorAsCard() {
   }
 
   try {
-    // If the essay has not been saved yet, auto-create it first
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
-      const content = document.getElementById('writer-text')?.value.trim() || selectedSpanRef.sentenceText;
+      const content = editorText() || selectedSpanRef.sentenceText;
       const essayRes = await api('/api/essays', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -454,10 +653,9 @@ export async function saveWriterErrorAsCard() {
 // ── Save / Update Essay ─────────────────────────────────────────────────────
 export async function saveWriterEssay() {
   const titleInput = document.getElementById('writer-title');
-  const textArea = document.getElementById('writer-text');
   const saveBtn = document.getElementById('writer-save-btn');
 
-  const content = (textArea?.value || '').trim();
+  const content = editorText();
   if (!content) {
     alert('请输入德语作文内容后再保存。');
     return;
@@ -488,7 +686,8 @@ export async function saveWriterEssay() {
     }
 
     currentAnalysis = res.analysis_json;
-    renderWriterReport(res.analysis_json);
+    const finalContent = res.content || content;
+    renderEditor(finalContent, res.analysis_json);
     loadWriterEssays();
     loadEssayVersions();
 
@@ -722,8 +921,7 @@ export function renderPolishReview() {
 
 // ── DeepSeek AI Polish Entire Essay with Sentence Diff Review ───────────────
 export async function aiPolishEssay() {
-  const textArea = document.getElementById('writer-text');
-  const text = (textArea?.value || '').trim();
+  const text = editorText();
 
   if (!text) {
     alert('请先在上方输入德语作文文本。');
@@ -738,7 +936,6 @@ export async function aiPolishEssay() {
   }
 
   try {
-    // If no current essay, auto-create draft first
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
       const essayRes = await api('/api/essays', {
@@ -816,12 +1013,9 @@ export async function applyPolishChanges() {
       })
     });
 
-    const textArea = document.getElementById('writer-text');
-    if (textArea) textArea.value = res.content;
-    updateWriterStats(res.content);
-
+    setEditorText(res.content);
     currentAnalysis = res.analysis_json;
-    renderWriterReport(res.analysis_json);
+    renderEditor(res.content, res.analysis_json);
 
     closePolishOverlay();
     loadEssayVersions();
@@ -839,7 +1033,7 @@ export async function applyPolishChanges() {
   }
 }
 
-// ── Essay Version Snapshots Management ──────────────────────────────────────
+// ── Essay Version Snapshots Management (v4.0.0) ─────────────────────────────
 export async function loadEssayVersions() {
   const listEl = document.getElementById('writer-version-list');
   if (!listEl) return;
@@ -872,7 +1066,11 @@ export async function loadEssayVersions() {
           <div class="version-msg">${esc(v.message || '快照')}</div>
           <div class="version-meta">
             <span class="version-time">${timeStr}</span>
-            <button class="btn btn-ghost btn-xs version-restore-btn" onclick="restoreEssayVersion(${v.id})" title="恢复至此快照">↩ 恢复</button>
+            <div class="version-actions">
+              <button class="btn btn-ghost btn-xs" onclick="previewEssayVersion(${v.id})" title="查看此快照内容">👁️ 查看</button>
+              <button class="btn btn-ghost btn-xs version-restore-btn" onclick="restoreEssayVersion(${v.id})" title="恢复至此快照">↩ 恢复</button>
+              <button class="btn btn-ghost btn-xs btn-del" onclick="deleteEssayVersion(${v.id})" title="删除此快照">🗑️</button>
+            </div>
           </div>
         </div>
       `;
@@ -906,6 +1104,83 @@ export async function saveEssayVersion() {
   }
 }
 
+export async function previewEssayVersion(versionId) {
+  if (!currentEssayId) return;
+  try {
+    const v = await api(`/api/essays/${currentEssayId}/versions/${versionId}`);
+    const overlay = document.getElementById('version-preview-overlay');
+    if (!overlay) return;
+
+    const badgeEl = document.getElementById('version-preview-badge');
+    const titleEl = document.getElementById('version-preview-title');
+    const timeEl = document.getElementById('version-preview-time');
+    const statusEl = document.getElementById('version-preview-status');
+    const contentEl = document.getElementById('version-preview-content');
+    const restoreBtn = document.getElementById('version-preview-restore-btn');
+
+    if (badgeEl) badgeEl.textContent = `#v${v.id}`;
+    if (titleEl) titleEl.textContent = v.message || '快照预览';
+    if (timeEl) timeEl.textContent = (v.created_at || '').replace('T', ' ').slice(0, 19);
+
+    if (statusEl) {
+      if (v.error_count > 0) {
+        statusEl.textContent = `⚠️ 记录了 ${v.error_count} 处语法疑点`;
+        statusEl.className = 'writer-status-pill status-warn';
+      } else {
+        statusEl.textContent = '✓ 表达流畅 · 0 错误';
+        statusEl.className = 'writer-status-pill status-clean';
+      }
+    }
+
+    if (contentEl) {
+      const a = v.analysis_json;
+      if (a && a.sentences && a.sentences.length > 0) {
+        contentEl.innerHTML = a.sentences.map((s, sIdx) => {
+          const sentHtml = buildSentenceHighlightedText(s.text, s.spans || [], sIdx, {
+            clickable: false,
+            useNativeTitle: true
+          });
+          return `<span class="ide-sent-block">${sentHtml}</span> `;
+        }).join('');
+      } else {
+        contentEl.textContent = v.content || '(空白快照)';
+      }
+    }
+
+    if (restoreBtn) {
+      restoreBtn.onclick = () => {
+        closeVersionPreview();
+        restoreEssayVersion(versionId);
+      };
+    }
+
+    overlay.classList.remove('hidden');
+  } catch (err) {
+    console.error('[Writer] Preview version failed:', err);
+    alert('查看版本快照失败：' + (err.message || err));
+  }
+}
+
+export function closeVersionPreview() {
+  const overlay = document.getElementById('version-preview-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+export async function deleteEssayVersion(versionId) {
+  if (!currentEssayId) return;
+  if (!confirm(`确定要删除版本快照 #v${versionId} 吗？当前作文内容不受影响。`)) return;
+
+  try {
+    await api(`/api/essays/${currentEssayId}/versions/${versionId}`, {
+      method: 'DELETE'
+    });
+    loadEssayVersions();
+  } catch (err) {
+    console.error('[Writer] Delete version failed:', err);
+    alert('删除版本快照失败：' + (err.message || err));
+  }
+}
+
 export async function restoreEssayVersion(versionId) {
   if (!currentEssayId) return;
   if (!confirm('确定要恢复到此版本快照吗？当前的未保存修改将自动保存为一个恢复前快照。')) return;
@@ -917,12 +1192,9 @@ export async function restoreEssayVersion(versionId) {
       body: JSON.stringify({ version_id: versionId })
     });
 
-    const textArea = document.getElementById('writer-text');
-    if (textArea) textArea.value = res.content;
-    updateWriterStats(res.content);
-
+    setEditorText(res.content);
     currentAnalysis = res.analysis_json;
-    renderWriterReport(res.analysis_json);
+    renderEditor(res.content, res.analysis_json);
 
     loadEssayVersions();
     loadWriterEssays();

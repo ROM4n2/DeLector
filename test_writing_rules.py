@@ -44,6 +44,14 @@ def test_two_case_preposition_skipped(nlp):
     assert _spans("Ich gehe in der Stadt.", nlp) == []
 
 
+def test_fixed_verb_prep_collocation(nlp):
+    spans = _spans("Er wartet auf dem Bus.", nlp)
+    assert spans, "Expected fixed preposition error span"
+    assert spans[0]["error_type"] == "praeposition"
+    assert "den Bus" in spans[0]["corrected_form"]
+    assert "warten auf" in spans[0]["explanation_zh"]
+
+
 def test_no_determiner_not_flagged(nlp):
     assert _spans("Ich fahre mit Auto.", nlp) == []
 
@@ -52,7 +60,7 @@ def test_no_spacy_returns_empty():
     r = analyze_essay_text("Ich sehe der Mann.", None)
     assert r["error_count"] == 0
     assert "cefr" in r
-    assert r["version"] == "3.12.0"
+    assert r["version"] == "4.0.0"
     assert r["sentences"] == []
 
 
@@ -71,8 +79,19 @@ def test_decline_determiner_basic():
 def test_multi_sentence_analysis(nlp):
     text = "Ich sehe der Mann. Ich fahre mit dem Auto."
     result = analyze_essay_text(text, nlp)
-    assert result["version"] == "3.12.0"
+    assert result["version"] == "4.0.0"
     assert result["error_count"] == 1
     assert len(result["sentences"]) == 2
     assert len(result["sentences"][0]["spans"]) == 1
     assert len(result["sentences"][1]["spans"]) == 0
+
+
+def test_analyze_essay_pure_python_fallback():
+    """nlp=None 降级模式：零误报，只给 CEFR 估分。"""
+    text = "Ich lerne Deutsch. Das Buch ist interessant."
+    result = analyze_essay_text(text, nlp=None)
+    assert result["version"] == "4.0.0"
+    assert result["error_count"] == 0
+    assert len(result["sentences"]) == 0
+    assert result["cefr"]["word_count"] > 0
+
