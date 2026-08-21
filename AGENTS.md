@@ -236,6 +236,20 @@ GET    /api/cards/due                           获取今日到期卡片（FSRS 
 POST   /api/articles/{article_id}/exercise/cloze 生成完形填空题（grammar/vocab/ctest）
 POST   /api/exercise/cloze/evaluate             服务端判分（答案不在前端 DOM）
 POST   /api/syntax/analyze                      拓扑五场域与从句 AST 分析
+POST   /api/writing/analyze                     写作台文本实时规则诊断（冠词/格位/介词搭配）
+POST   /api/essays                              新建作文草稿
+GET    /api/essays                              获取作文草稿列表
+GET    /api/essays/{essay_id}                   获取指定作文详情与分析
+PUT    /api/essays/{essay_id}                   更新作文内容与重新分析
+DELETE /api/essays/{essay_id}                   删除作文草稿及关联版本快照
+POST   /api/essays/{essay_id}/versions          创建作文版本快照
+GET    /api/essays/{essay_id}/versions          列出作文的所有版本快照
+GET    /api/essays/{essay_id}/versions/{v_id}   只读预览指定快照内容与分析（不写库）
+DELETE /api/essays/{essay_id}/versions/{v_id}   删除指定版本快照（不影响当前草稿）
+POST   /api/essays/{essay_id}/restore           恢复作文至指定快照（自动生成前置检查点）
+POST   /api/writing/cards                       将写作错误一键保存为 Anki 语法卡
+POST   /api/writing/ai-polish/diff              AI 全文润色与逐 hunk 差异对比生成
+POST   /api/writing/apply                       应用所选 AI 润色 hunk 并自动保存版本
 ```
 
 **路由重要约束**：`app.mount("/", StaticFiles(...))` 是 catch-all 路由，
@@ -374,6 +388,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v3.10.0 `2026-08-20`** | **feat(android & data)**: Android 钉死签名 keystore + CI 验签闸（支持升级覆盖）+ 介词搭配数据集 `prep_dict.py` 扩充至 531 词条/660 条搭配 |
 | **v3.11.0 `2026-08-21`** | **feat(writer)**: 德语写作润色台首发：本地规则引擎（冠词/格位一致 + 介词支配格，零误报准则）+ 行内波浪下划线 + 侧栏详解 + 错误一键存 Anki 语法卡 + essays 草稿库 + 显式全文 AI 润色 |
 | **v3.12.0 `2026-08-21`** | **feat(writer & ide)**: 德语写作台 IDE 化：句子级 `essay_diff.py` 引擎 + AI 润色逐 hunk 并排审查（左原句 \| 右改写，单条接受/拒绝与一键全选）+ `essay_versions` 类 git 快照管理（手动保存、AI 润色应用自动快照、可逆恢复检查点 `恢复到版本 N 之前`）+ 侧栏诊断/历史双 Tab 联动 |
+| **v4.0.0 `2026-08-21`** | **feat(writer & ide)**: 德语写作台内联 IDE 编辑器（contenteditable 零依赖行内实时波浪线诊断 + TreeWalker 光标记忆 + 防抖 400ms 规则诊断 + 悬浮提示气泡 + 一键修正替换 + 句子导航）+ Git 版本管理完善（只读预览不产生检查点 + 版本快照单项删除）+ 动词固定介词搭配规则优先匹配（如 `warten auf + Akk`） |
 
 ---
 
