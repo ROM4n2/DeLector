@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v4.0.0 德语写作台内联 IDE 编辑器 + Git 版本管理完善），工作区干净 |
-| 测试 | **152 / 152 全绿**（`test_server.py` 102 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 11 + `test_essay_diff.py` 8 + `test_fsrs_engine.py` 1） |
+| 当前分支 / HEAD | `master`（含 v4.1.0 写作台 Inlay Hints 语法内联提示 + IDE 编辑器），工作区干净 |
+| 测试 | **158 / 158 全绿**（`test_server.py` 102 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 17 + `test_essay_diff.py` 8 + `test_fsrs_engine.py` 1） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v4.0.0**（2026-08-21）：德语写作台内联 IDE 编辑器（contenteditable 零依赖行内实时波浪线诊断 + TreeWalker 光标记忆 + 防抖 400ms 规则诊断 + 悬浮提示气泡 + 一键修正替换 + 句子导航）+ Git 版本管理完善（只读预览不产生检查点 + 版本快照单项删除） |
+| 对外发布 | **v4.1.0**（2026-08-21）：德语写作台 Inlay Hints 语法内联提示（介词支配格 `mit [Dat]` / `[Dat/Akk]` + 名词短语实际格 `[Neut·Dat]` 独立覆盖层装饰、不抢光标、工具栏全局开关、共存波浪线错误） |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -389,6 +389,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v3.11.0 `2026-08-21`** | **feat(writer)**: 德语写作润色台首发：本地规则引擎（冠词/格位一致 + 介词支配格，零误报准则）+ 行内波浪下划线 + 侧栏详解 + 错误一键存 Anki 语法卡 + essays 草稿库 + 显式全文 AI 润色 |
 | **v3.12.0 `2026-08-21`** | **feat(writer & ide)**: 德语写作台 IDE 化：句子级 `essay_diff.py` 引擎 + AI 润色逐 hunk 并排审查（左原句 \| 右改写，单条接受/拒绝与一键全选）+ `essay_versions` 类 git 快照管理（手动保存、AI 润色应用自动快照、可逆恢复检查点 `恢复到版本 N 之前`）+ 侧栏诊断/历史双 Tab 联动 |
 | **v4.0.0 `2026-08-21`** | **feat(writer & ide)**: 德语写作台内联 IDE 编辑器（contenteditable 零依赖行内实时波浪线诊断 + TreeWalker 光标记忆 + 防抖 400ms 规则诊断 + 悬浮提示气泡 + 一键修正替换 + 句子导航）+ Git 版本管理完善（只读预览不产生检查点 + 版本快照单项删除）+ 动词固定介词搭配规则优先匹配（如 `warten auf + Akk`） |
+| **v4.1.0 `2026-08-21`** | **feat(writer & hints)**: 德语写作台 Inlay Hints 语法内联提示（介词支配格 `mit [Dat]` / `in [Dat/Akk]` + 名词短语实际性数格 `[Neut·Dat]` 独立 `#ide-hint-layer` 覆盖层装饰渲染、`pointer-events: none` 绝不抢光标、工具栏全局开关 `toggleInlayHints()`、与波浪线错误并存呈现矛盾教学高光） |
 
 ---
 

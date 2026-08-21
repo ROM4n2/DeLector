@@ -10,6 +10,8 @@ let currentAnalysis = null;
 let selectedSpanRef = null;
 let analyzeDebounceTimer = null;
 let isComposing = false;
+let inlayEnabled = true;
+let inlayRafId = null;
 
 let polishState = {
   original: '',
@@ -182,6 +184,121 @@ export function buildSentenceHighlightedText(text, spans, sentIdx, options = {})
   return out;
 }
 
+// ── Inlay Hints Overlay (v4.1.0) ───────────────────────────────────────────
+export function toggleInlayHints() {
+  inlayEnabled = !inlayEnabled;
+  const btn = document.getElementById('writer-inlay-toggle');
+  if (btn) {
+    btn.textContent = inlayEnabled ? '💡 格提示 ON' : '💡 格提示 OFF';
+    btn.classList.toggle('btn-ghost', inlayEnabled);
+    btn.classList.toggle('btn-secondary', !inlayEnabled);
+  }
+  const layer = document.getElementById('ide-hint-layer');
+  if (layer) {
+    layer.classList.toggle('hidden', !inlayEnabled);
+  }
+  if (inlayEnabled) {
+    positionInlayHints();
+  } else {
+    clearInlayHints();
+  }
+}
+
+export function clearInlayHints() {
+  const layer = document.getElementById('ide-hint-layer');
+  if (layer) {
+    layer.innerHTML = '';
+  }
+}
+
+function findCharRange(block, start, end) {
+  if (!block) return null;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null, false);
+  let currentOffset = 0;
+  let startContainer = null;
+  let startOffset = 0;
+  let endContainer = null;
+  let endOffset = 0;
+  let node;
+
+  while ((node = walker.nextNode())) {
+    const len = node.nodeValue.length;
+    const nodeStart = currentOffset;
+    const nodeEnd = currentOffset + len;
+
+    if (!startContainer && start >= nodeStart && start <= nodeEnd) {
+      startContainer = node;
+      startOffset = start - nodeStart;
+    }
+    if (!endContainer && end >= nodeStart && end <= nodeEnd) {
+      endContainer = node;
+      endOffset = end - nodeStart;
+    }
+
+    if (startContainer && endContainer) break;
+    currentOffset += len;
+  }
+
+  if (startContainer && endContainer) {
+    try {
+      const range = document.createRange();
+      range.setStart(startContainer, Math.min(startOffset, startContainer.nodeValue.length));
+      range.setEnd(endContainer, Math.min(endOffset, endContainer.nodeValue.length));
+      return range;
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function positionInlayHints() {
+  if (!inlayEnabled || !currentAnalysis || !currentAnalysis.sentences) {
+    clearInlayHints();
+    return;
+  }
+
+  const layer = document.getElementById('ide-hint-layer');
+  const editor = document.getElementById('ide-editor');
+  if (!layer || !editor) return;
+
+  const editorRect = editor.getBoundingClientRect();
+  if (editorRect.width === 0 && editorRect.height === 0) {
+    clearInlayHints();
+    return;
+  }
+
+  let html = '';
+  const GAP = 5;
+
+  currentAnalysis.sentences.forEach((sent, sentIdx) => {
+    if (!sent.hints || sent.hints.length === 0) return;
+    const block = editor.querySelector(`.ide-sent-block[data-sent-idx="${sentIdx}"]`);
+    if (!block) return;
+
+    sent.hints.forEach((h) => {
+      const range = findCharRange(block, h.start, h.end);
+      if (!range) return;
+
+      const rects = range.getClientRects();
+      if (!rects || rects.length === 0) return;
+
+      // 取最底一行 / 最末一个 rect（应对折行情况）
+      const lastRect = rects[rects.length - 1];
+
+      // 使用文档级坐标（相对于 body）
+      const pageX = lastRect.right + window.scrollX + GAP;
+      const pageY = lastRect.top + lastRect.height / 2 + window.scrollY;
+
+      const hintClass = h.type === 'prep_case' ? 'inlay-prep' : 'inlay-np';
+      html += `<span class="inlay-hint ${hintClass}" style="left:${pageX}px;top:${pageY}px;" data-hint-type="${esc(h.type)}">${esc(h.label)}</span>`;
+    });
+  });
+
+  layer.innerHTML = html;
+  layer.classList.remove('hidden');
+}
+
 // ── Render Editor Content & Retain Caret ────────────────────────────────────
 export function renderEditor(text, a, caretOffset) {
   const editor = document.getElementById('ide-editor');
@@ -191,12 +308,14 @@ export function renderEditor(text, a, caretOffset) {
 
   if (!text || !text.trim()) {
     editor.innerHTML = '';
+    clearInlayHints();
     updateAnalysisPanels({ cefr: null, error_count: 0, sentences: [] });
     return;
   }
 
   if (!a || !a.sentences || a.sentences.length === 0) {
     editor.textContent = text;
+    clearInlayHints();
     if (caretOffset !== null && caretOffset !== undefined) {
       restoreCaret(editor, caretOffset);
     }
@@ -221,6 +340,7 @@ export function renderEditor(text, a, caretOffset) {
   }
   editor.scrollTop = scrollY;
   updateAnalysisPanels(a);
+  requestAnimationFrame(() => positionInlayHints());
 }
 
 // ── Update Sidebar Analysis Panels & Sentence Navigation ────────────────────
@@ -486,6 +606,24 @@ export function setupEditorListeners() {
       tooltip.classList.add('hidden');
     }
   });
+
+  editor.addEventListener('scroll', () => {
+    if (inlayRafId) cancelAnimationFrame(inlayRafId);
+    inlayRafId = requestAnimationFrame(() => positionInlayHints());
+  }, { passive: true });
+
+  window.addEventListener('resize', () => {
+    if (inlayRafId) cancelAnimationFrame(inlayRafId);
+    inlayRafId = requestAnimationFrame(() => positionInlayHints());
+  }, { passive: true });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => {
+      if (inlayRafId) cancelAnimationFrame(inlayRafId);
+      inlayRafId = requestAnimationFrame(() => positionInlayHints());
+    });
+    ro.observe(editor);
+  }
 }
 
 // ── Reset Error Detail Box ──────────────────────────────────────────────────
@@ -585,6 +723,7 @@ export function clearWriterForm() {
   if (titleInput) titleInput.value = '';
   const editor = document.getElementById('ide-editor');
   if (editor) editor.innerHTML = '';
+  clearInlayHints();
 
   updateWriterStats('');
   updateAnalysisPanels({ cefr: null, error_count: 0, sentences: [] });

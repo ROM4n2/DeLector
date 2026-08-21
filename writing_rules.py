@@ -120,6 +120,38 @@ def _np_det(noun_tok: Any) -> Optional[Any]:
     return None
 
 
+def _prep_expected_case(tok: Any) -> Tuple[Optional[str], str]:
+    """统一判定介词的预期支配格。
+    返回 (expected_case_norm, source)，source 取值：
+    - "collocation": 动词/形容词固定搭配
+    - "twoway": 静动态双格介词 (in, auf...)
+    - "fixed": 固有单格介词 (mit, ohne...)
+    - "none": 未知/无法裁定
+    """
+    prep = tok.text.lower()
+    verb_head = tok.head
+    # 1. 动词/形容词固定搭配优先
+    if verb_head and verb_head.pos_ in ("VERB", "AUX", "ADJ"):
+        from linguistics import lookup_prep_collocations
+        rows = lookup_prep_collocations(verb_head.lemma_) or lookup_prep_collocations(verb_head.text.lower())
+        match = next((r for r in rows if r.get("praeposition", "").lower() == prep), None)
+        if match:
+            c = _CASE_NORM.get(match.get("kasus", "").lower())
+            if c:
+                return c, "collocation"
+
+    # 2. 双格介词判定
+    if prep in _TWO_WAY_PREPS:
+        return "Dat/Akk", "twoway"
+
+    # 3. 固定单格介词判定
+    fixed = _PREP_CASE.get(prep)
+    if fixed:
+        return fixed, "fixed"
+
+    return None, "none"
+
+
 def detect_determiner_noun_agreement(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
     """规则 A：DET 与 head NOUN 的 case/gender 一致。"""
     spans = []
@@ -183,27 +215,12 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
         if tok.pos_ != "ADP":
             continue
         prep = tok.text.lower()
+        expected, source = _prep_expected_case(tok)
+        if source in ("twoway", "none") or expected is None:
+            continue
 
-        expected = None
-        error_type = "kasus"
+        error_type = "praeposition" if source == "collocation" else "kasus"
         verb_head = tok.head
-
-        # 1. 优先查动词/形容词固定介词搭配（如 warten auf + Akk, denken an + Akk）
-        if verb_head and verb_head.pos_ in ("VERB", "AUX", "ADJ"):
-            from linguistics import lookup_prep_collocations
-            rows = lookup_prep_collocations(verb_head.lemma_) or lookup_prep_collocations(verb_head.text.lower())
-            match = next((r for r in rows if r.get("praeposition", "").lower() == prep), None)
-            if match:
-                expected = _CASE_NORM.get(match.get("kasus", "").lower())
-                error_type = "praeposition"
-
-        # 2. 若非固定搭配，查独立单格介词（若为双格介词则跳过）
-        if expected is None:
-            if prep in _TWO_WAY_PREPS:
-                continue
-            expected = _PREP_CASE.get(prep)
-            if expected is None:
-                continue
 
         # 取介宾名词：ADP 的子节点里 dep 是 pobj/op/nk 的 NOUN
         obj = next((c for c in tok.children if c.dep_ in ("pobj", "op", "nk") and c.pos_ == "NOUN"), None)
@@ -228,7 +245,7 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
         if det.text.lower() != form.lower():
             start = min(det.idx, obj.idx) - base
             end = max(det.idx + len(det.text), obj.idx + len(obj.text)) - base
-            if error_type == "praeposition":
+            if error_type == "praeposition" and verb_head:
                 expl = f"固定搭配「{verb_head.lemma_} {prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」而非「{det.text}」。"
             else:
                 expl = f"介宾「{prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」而非「{det.text}」。"
@@ -240,6 +257,63 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
                 "end": end,
             })
     return spans
+
+
+def _collect_prep_hints(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
+    """收集介词支配格内联提示。"""
+    hints = []
+    for tok in tokens:
+        if tok.pos_ != "ADP":
+            continue
+        expected, source = _prep_expected_case(tok)
+        if source == "twoway":
+            label = f"{tok.text} [Dat/Akk]"
+        elif expected:
+            label = f"{tok.text} [{expected}]"
+        else:
+            continue
+        start, end = _tok_off(tok, base)
+        hints.append({
+            "type": "prep_case",
+            "label": label,
+            "start": start,
+            "end": end
+        })
+    return hints
+
+
+def _collect_np_hints(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
+    """收集名词短语实际格与性数内联提示。"""
+    hints = []
+    for tok in tokens:
+        if tok.pos_ != "NOUN":
+            continue
+        det = _np_det(tok)
+
+        # 格判断：名词 morph 优先，det morph 兜底
+        c_raw = _first_morph(tok.morph.get("Case")) or (det and _first_morph(det.morph.get("Case")))
+        c = _CASE_NORM.get(c_raw.lower()) if c_raw else None
+        if not c:
+            continue
+
+        # 性判断：核心词典权威优先 -> 名词 morph -> 冠词 morph
+        dict_info = lookup_core_vocab(tok.lemma_) or lookup_core_vocab(tok.text)
+        g_raw = (dict_info.get("gender") if dict_info else None) or _first_morph(tok.morph.get("Gender")) or (det and _first_morph(det.morph.get("Gender")))
+        g = _GENDER_NORM.get(g_raw.lower()) if g_raw else None
+
+        if g:
+            label = f"[{g}·{c}]"
+        else:
+            label = f"[{c}]"
+
+        start, end = _tok_off(tok, base)
+        hints.append({
+            "type": "np_case",
+            "label": label,
+            "start": start,
+            "end": end
+        })
+    return hints
 
 
 def _cefr_basic(text: str) -> Dict[str, Any]:
@@ -268,12 +342,20 @@ def analyze_essay_text(text: str, nlp: Optional[Any] = None) -> Dict[str, Any]:
                 detect_determiner_noun_agreement(toks, base)
                 + detect_preposition_case(toks, base)
             )
-            sentences.append({"text": sent.text, "spans": spans})
+            hints = (
+                _collect_prep_hints(toks, base)
+                + _collect_np_hints(toks, base)
+            )
+            sentences.append({
+                "text": sent.text,
+                "spans": spans,
+                "hints": hints
+            })
             error_count += len(spans)
 
     cefr = _cefr_basic(text)
     return {
-        "version": "4.0.0",
+        "version": "4.1.0",
         "cefr": cefr,
         "error_count": error_count,
         "sentences": sentences

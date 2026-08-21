@@ -107,7 +107,9 @@ import {
   jumpToSentence,
   fixSelectedSpan,
   clearEditorText,
-  setupEditorListeners
+  setupEditorListeners,
+  toggleInlayHints,
+  positionInlayHints
 } from './writer.js';
 
 // ── View Router ─────────────────────────────────────────────────────────────
@@ -708,6 +710,8 @@ Object.assign(window, {
   jumpToSentence,
   fixSelectedSpan,
   clearEditorText,
+  toggleInlayHints,
+  positionInlayHints,
 
   // Player
   ShadowPlayer,

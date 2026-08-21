@@ -6921,6 +6921,54 @@ body.drawer-open .companion {
   padding-top: 0.25rem;
 }
 
+/* ── Inlay Hints Layer & Badges (v4.1.0) ─────────────────────────────────── */
+.ide-hint-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.ide-hint-layer.hidden {
+  display: none;
+}
+
+.inlay-hint {
+  position: absolute;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  line-height: 1.1;
+  padding: 1px 5px;
+  border-radius: 3px;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  opacity: 0.88;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  animation: fadeInHint 0.15s ease-out;
+}
+
+@keyframes fadeInHint {
+  from { opacity: 0; transform: translateY(-40%); }
+  to { opacity: 0.88; transform: translateY(-50%); }
+}
+
+.inlay-hint.inlay-prep {
+  background: rgba(217, 119, 28, 0.12);
+  color: #9a5200;
+  border: 1px solid rgba(217, 119, 28, 0.28);
+}
+
+.inlay-hint.inlay-np {
+  background: rgba(43, 122, 126, 0.12);
+  color: #175459;
+  border: 1px solid rgba(43, 122, 126, 0.28);
+}
+
 /* Sentence Navigation List in Sidebar */
 .writer-sent-nav-list {
   display: flex;

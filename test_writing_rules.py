@@ -60,7 +60,7 @@ def test_no_spacy_returns_empty():
     r = analyze_essay_text("Ich sehe der Mann.", None)
     assert r["error_count"] == 0
     assert "cefr" in r
-    assert r["version"] == "4.0.0"
+    assert r["version"] == "4.1.0"
     assert r["sentences"] == []
 
 
@@ -79,7 +79,7 @@ def test_decline_determiner_basic():
 def test_multi_sentence_analysis(nlp):
     text = "Ich sehe der Mann. Ich fahre mit dem Auto."
     result = analyze_essay_text(text, nlp)
-    assert result["version"] == "4.0.0"
+    assert result["version"] == "4.1.0"
     assert result["error_count"] == 1
     assert len(result["sentences"]) == 2
     assert len(result["sentences"][0]["spans"]) == 1
@@ -90,8 +90,52 @@ def test_analyze_essay_pure_python_fallback():
     """nlp=None 降级模式：零误报，只给 CEFR 估分。"""
     text = "Ich lerne Deutsch. Das Buch ist interessant."
     result = analyze_essay_text(text, nlp=None)
-    assert result["version"] == "4.0.0"
+    assert result["version"] == "4.1.0"
     assert result["error_count"] == 0
     assert len(result["sentences"]) == 0
     assert result["cefr"]["word_count"] > 0
+
+
+def _hints(text, nlp):
+    result = analyze_essay_text(text, nlp)
+    return [hint for sent in result["sentences"] for hint in sent.get("hints", [])]
+
+
+def test_prep_hint_fixed_case(nlp):
+    hints = _hints("Ich fahre mit der Auto.", nlp)
+    prep_hints = [h for h in hints if h["type"] == "prep_case"]
+    assert any(h["label"] == "mit [Dat]" for h in prep_hints)
+
+
+def test_prep_hint_two_way(nlp):
+    hints = _hints("Ich gehe in der Stadt.", nlp)
+    prep_hints = [h for h in hints if h["type"] == "prep_case"]
+    assert any(h["label"] == "in [Dat/Akk]" for h in prep_hints)
+
+
+def test_prep_hint_verb_collocation(nlp):
+    hints = _hints("Er wartet auf dem Bus.", nlp)
+    prep_hints = [h for h in hints if h["type"] == "prep_case"]
+    assert any(h["label"] == "auf [Akk]" for h in prep_hints)
+
+
+def test_np_hint_gender_case_label(nlp):
+    hints = _hints("Ich fahre mit der Auto.", nlp)
+    np_hints = [h for h in hints if h["type"] == "np_case"]
+    assert any("Neut" in h["label"] for h in np_hints)
+
+
+def test_hints_coexist_with_error_spans(nlp):
+    result = analyze_essay_text("Ich fahre mit der Auto.", nlp)
+    sent = result["sentences"][0]
+    assert len(sent["spans"]) >= 1
+    assert any(h["type"] == "prep_case" for h in sent["hints"])
+
+
+def test_hints_key_present(nlp):
+    result = analyze_essay_text("Ich sehe den Mann.", nlp)
+    assert set(result.keys()) == {"version", "cefr", "error_count", "sentences"}
+    for sent in result["sentences"]:
+        assert "hints" in sent
+
 

@@ -44,8 +44,8 @@ android {
         // 旧规则 major*100 + minor*10 + patch 在 minor 到 10 时溢出撞车
         // （3.10.0 与 4.0.0 都是 400），而 versionCode 必须严格单调递增，
         // 撞车意味着 4.0.0 无法覆盖安装 3.10.0。
-        versionCode 40000
-        versionName "4.0.0"
+        versionCode 40100
+        versionName "4.1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
