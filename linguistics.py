@@ -4,7 +4,6 @@ Goethe A1-C1 Irregular Verbs Stammformen & German Compound Noun (Komposita) Spli
 100% Python standard library, zero external dependencies, O(1) lookup latency.
 """
 from typing import Optional, Dict, Any, List, Tuple
-import re
 
 # Import local Goethe core dictionary for compound base elements & CEFR lookup
 try:
@@ -1049,18 +1048,11 @@ LINGUISTICS_VOCAB_EXT: Dict[str, Tuple[str, str, Optional[str], str]] = {
     "fremd": ("A2", "ADJ", None, "陌生的，外国的"),
 
     # ── Core Compounding Base Roots ──────────────────────────────────────────
-    "klima": ("A2", "NOUN", "Neut", "气候"),
-    "schutz": ("B1", "NOUN", "Masc", "保护，防御"),
     "maßnahme": ("B1", "NOUN", "Fem", "措施，办法"),
     "massnahme": ("B1", "NOUN", "Fem", "措施，办法"),
     "sprach": ("A1", "NOUN", "Fem", "语言"),
-    "bund": ("B1", "NOUN", "Masc", "联邦，同盟"),
-    "regierung": ("B1", "NOUN", "Fem", "政府"),
-    "wachstum": ("B1", "NOUN", "Neut", "增长，发展"),
     "wirtschaft": ("B1", "NOUN", "Fem", "经济，经济学"),
-    "modell": ("A2", "NOUN", "Neut", "模型，模式"),
     "bedingung": ("B1", "NOUN", "Fem", "条件，前提"),
-    "wandel": ("B1", "NOUN", "Masc", "转变，变迁"),
 }
 
 
