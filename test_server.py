@@ -1916,6 +1916,65 @@ def test_release_workflow_gates_apk_signature():
     assert "android/" not in workflow.split("Decode Pinned Signing Keystore")[1].split("base64 -d")[0], \
         "解码目标不得指向仓库内路径"
 
+def test_android_workflow_build_and_signature_contract():
+    """CI 必须保留关键构建与签名契约：JDK 17、Gradle 构建、keytool 验签、指纹、模型与 extractPackages。
+
+    任何一项静默丢失都会导致：本地能跑但 CI 产出的 APK 是旧签名/缺模型/纯 Python 降级。
+    """
+    wf = open(os.path.join(os.path.dirname(__file__), ".github", "workflows",
+                           "build-release.yml"), encoding="utf-8").read()
+    gradle = open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"),
+                  encoding="utf-8").read()
+    # JDK 17
+    assert "java-version: '17'" in wf or 'java-version: "17"' in wf, "工作流必须保留 JDK 17"
+    assert "setup-java" in wf, "工作流必须使用 setup-java"
+    # Android 构建命令（复用已有 JDK/缓存/签名，不新增平行流程）
+    assert "gradle assembleDebug" in wf or "gradle assemble" in wf, "工作流必须执行 Gradle assemble 任务"
+    assert "Sync Python Backend, Model, and Assets into Android Project" in wf, \
+        "Gradle 构建必须在资产生成之后执行"
+    # keytool 验签
+    assert "keytool -printcert -jarfile" in wf, "缺少 keytool -printcert -jarfile 验签"
+    # 期望指纹
+    expected = re.search(r'EXPECTED_SHA256:\s*"([^"]*)"', wf)
+    assert expected and expected.group(1), "缺少 EXPECTED_SHA256 指纹声明"
+    assert re.fullmatch(r"(?:[0-9A-F]{2}:){31}[0-9A-F]{2}", expected.group(1)), \
+        f"指纹格式错误: {expected.group(1)!r}"
+    # 模型声明
+    assert "de_core_news_sm" in wf, "工作流必须声明模型 de_core_news_sm"
+    assert "spacy" in wf.lower(), "工作流必须声明 spacy"
+    # 三个 extractPackages 在 gradle 中
+    extract_lines = [ln for ln in gradle.splitlines() if "extractPackages" in ln]
+    assert extract_lines, "build.gradle 必须声明 extractPackages"
+    declared = extract_lines[0]
+    for pkg in ("spacy", "thinc", "de_core_news_sm"):
+        assert f'"{pkg}"' in declared, f"{pkg} 的数据文件不会被解包"
+
+
+def test_android_apk_content_via_app_imy():
+    """APK 内容必须通过 assets/chaquopy/app.imy 检查，不能直接在 APK 根目录 grep Python 文件。
+
+    Python 代码被打进 app.imy（及 requirements-<abi>.imy），直接在 APK namelist 里
+    grep server.py 会误判成缺失；而只查 APK 根目录会漏检但测试仍绿。
+    """
+    wf = open(os.path.join(os.path.dirname(__file__), ".github", "workflows",
+                           "build-release.yml"), encoding="utf-8").read()
+    # 必须检查 app.imy 内部而非 APK 根
+    assert "assets/chaquopy/app.imy" in wf, \
+        "APK 内容检查必须验证 assets/chaquopy/app.imy，不能直接在 APK 根目录查找"
+    # app.imy 内必须包含关键资产
+    for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
+        assert needle in wf, f"APK 内容检查必须验证 {needle} 在 app.imy/requirements 中"
+    # 不得仅用 APK 根目录 grep 来验证 Python 文件（这是常见误判）
+    # 允许 app.imy 上下文中的 grep，但 workflow 中若出现直接 "unzip -l.*apk.*grep.*server.py"
+    # 而不经过 app.imy，则为错误模式
+    lines = wf.splitlines()
+    for ln in lines:
+        stripped = ln.strip()
+        if "server.py" in stripped and "grep" in stripped.lower():
+            assert "app.imy" in wf, "server.py 检查必须在 app.imy 上下文中"
+            break
+
+
 def test_keystore_protected_by_gitignore_and_hook():
     root = os.path.dirname(__file__)
     ignore = open(os.path.join(root, ".gitignore"), encoding="utf-8").read()

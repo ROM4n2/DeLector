@@ -297,6 +297,58 @@ jobs:
           fi
           echo "签名验证通过"
 
+      - name: Verify APK Contains NLP Assets via app.imy
+        run: |
+          APK="dist/DeLector-${{ github.ref_name }}-Android.apk"
+          test -f "$APK" || { echo "::error::APK not found at $APK"; exit 1; }
+          echo "检查 APK 内部打包产物 (assets/chaquopy/app.imy)..."
+          # APK 内的 Python 代码与模型被打进 app.imy，而非 APK 根目录；
+          # 直接在 APK 根目录 grep server.py 会误判为缺失（静默漏检）。
+          if ! unzip -l "$APK" | grep -q "assets/chaquopy/app.imy"; then
+            echo "::error::APK 缺少 assets/chaquopy/app.imy（Chaquopy 打包容器）"
+            exit 1
+          fi
+          python - <<'PY'
+          import zipfile, io, glob, sys
+          apk_files = glob.glob("dist/DeLector-*-Android.apk")
+          if not apk_files:
+              print("::error::未找到 APK", file=sys.stderr)
+              sys.exit(1)
+          apk = apk_files[0]
+          with zipfile.ZipFile(apk) as z:
+              namelist = z.namelist()
+              assert "assets/chaquopy/app.imy" in namelist, "APK 缺少 assets/chaquopy/app.imy"
+              imy_data = z.read("assets/chaquopy/app.imy")
+              found = set()
+              # app.imy 本身是 zip/pyz 容器，优先按 zip 解开检查
+              try:
+                  with zipfile.ZipFile(io.BytesIO(imy_data)) as imy:
+                      imy_list = imy.namelist()
+                      for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
+                          if any(needle in n for n in imy_list):
+                              found.add(needle)
+                      # 仍未找到的用原始字节兜底（兼容非标准 zip 布局）
+                      for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
+                          if needle not in found and needle.encode() in imy_data:
+                              found.add(needle)
+                      print(f"app.imy 包含 {len(imy_list)} 项")
+              except zipfile.BadZipFile:
+                  for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
+                      if needle.encode() in imy_data:
+                          found.add(needle)
+              missing = [n for n in ("server.py", "de_core_news_sm", "spacy", "thinc") if n not in found]
+              if missing:
+                  print(f"::error::app.imy 缺少: {', '.join(missing)}", file=sys.stderr)
+                  sys.exit(1)
+              # Chaquopy 原生依赖在 requirements-<abi>.imy
+              req_imy = [n for n in namelist if n.startswith("assets/chaquopy/requirements") and n.endswith(".imy")]
+              if not req_imy:
+                  print("::error::APK 缺少 requirements imy（原生依赖容器）", file=sys.stderr)
+                  sys.exit(1)
+              print(f"requirements imy: {req_imy}")
+              print(f"APK NLP 资产验证通过: {', '.join(sorted(found))}")
+          PY
+
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
         with:
