@@ -1955,13 +1955,18 @@ def test_android_apk_content_via_app_imy():
 
     Python 代码被打进 app.imy（及 requirements-<abi>.imy），直接在 APK namelist 里
     grep server.py 会误判成缺失；而只查 APK 根目录会漏检但测试仍绿。
+    v4.4.0 首跑实测：app.imy 只装应用代码 + 拷入的模型目录，pip 依赖（spacy/thinc）
+    在 requirements-<abi>.imy —— 检查必须按容器分工，否则误报缺失。
     """
     wf = open(os.path.join(os.path.dirname(__file__), ".github", "workflows",
                            "build-release.yml"), encoding="utf-8").read()
     # 必须检查 app.imy 内部而非 APK 根
     assert "assets/chaquopy/app.imy" in wf, \
         "APK 内容检查必须验证 assets/chaquopy/app.imy，不能直接在 APK 根目录查找"
-    # app.imy 内必须包含关键资产
+    # 必须检查 requirements imy 容器（spacy/thinc 所在地）
+    assert 'n.startswith("assets/chaquopy/requirements")' in wf, \
+        "APK 内容检查必须遍历 requirements-*.imy（pip 依赖容器）"
+    # app.imy 内必须包含应用代码与模型；requirements 内必须包含 spacy/thinc
     for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
         assert needle in wf, f"APK 内容检查必须验证 {needle} 在 app.imy/requirements 中"
     # 不得仅用 APK 根目录 grep 来验证 Python 文件（这是常见误判）

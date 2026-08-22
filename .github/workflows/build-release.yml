@@ -318,35 +318,43 @@ jobs:
           with zipfile.ZipFile(apk) as z:
               namelist = z.namelist()
               assert "assets/chaquopy/app.imy" in namelist, "APK 缺少 assets/chaquopy/app.imy"
-              imy_data = z.read("assets/chaquopy/app.imy")
-              found = set()
-              # app.imy 本身是 zip/pyz 容器，优先按 zip 解开检查
-              try:
-                  with zipfile.ZipFile(io.BytesIO(imy_data)) as imy:
-                      imy_list = imy.namelist()
-                      for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
-                          if any(needle in n for n in imy_list):
-                              found.add(needle)
-                      # 仍未找到的用原始字节兜底（兼容非标准 zip 布局）
-                      for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
-                          if needle not in found and needle.encode() in imy_data:
-                              found.add(needle)
-                      print(f"app.imy 包含 {len(imy_list)} 项")
-              except zipfile.BadZipFile:
-                  for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
-                      if needle.encode() in imy_data:
+              # app.imy 装应用自身代码 + CI 拷入的模型目录；pip 依赖（spacy/thinc）
+              # 在 requirements-<abi>.imy —— v4.4.0 首跑实测把 spacy/thinc 塞进
+              # app.imy 检查会误报缺失。两个容器各查各的。
+              APP_NEEDLES = ("server.py", "de_core_news_sm")
+              REQ_NEEDLES = ("spacy", "thinc")
+              def find_in(data):
+                  found = set()
+                  try:
+                      with zipfile.ZipFile(io.BytesIO(data)) as inner:
+                          names = inner.namelist()
+                          for needle in APP_NEEDLES + REQ_NEEDLES:
+                              if any(needle in n for n in names):
+                                  found.add(needle)
+                  except zipfile.BadZipFile:
+                      pass
+                  for needle in APP_NEEDLES + REQ_NEEDLES:
+                      if needle not in found and needle.encode() in data:
                           found.add(needle)
-              missing = [n for n in ("server.py", "de_core_news_sm", "spacy", "thinc") if n not in found]
-              if missing:
-                  print(f"::error::app.imy 缺少: {', '.join(missing)}", file=sys.stderr)
-                  sys.exit(1)
-              # Chaquopy 原生依赖在 requirements-<abi>.imy
+                  return found
+              app_found = find_in(z.read("assets/chaquopy/app.imy"))
               req_imy = [n for n in namelist if n.startswith("assets/chaquopy/requirements") and n.endswith(".imy")]
               if not req_imy:
                   print("::error::APK 缺少 requirements imy（原生依赖容器）", file=sys.stderr)
                   sys.exit(1)
+              req_found = set()
+              for rn in req_imy:
+                  req_found |= find_in(z.read(rn))
+              missing_app = [n for n in APP_NEEDLES if n not in app_found]
+              missing_req = [n for n in REQ_NEEDLES if n not in req_found]
+              if missing_app:
+                  print(f"::error::app.imy 缺少: {', '.join(missing_app)}", file=sys.stderr)
+                  sys.exit(1)
+              if missing_req:
+                  print(f"::error::requirements imy 缺少: {', '.join(missing_req)}", file=sys.stderr)
+                  sys.exit(1)
               print(f"requirements imy: {req_imy}")
-              print(f"APK NLP 资产验证通过: {', '.join(sorted(found))}")
+              print(f"APK NLP 资产验证通过: app.imy={sorted(app_found)}, requirements={sorted(req_found)}")
           PY
 
       - name: Upload Android Artifact
