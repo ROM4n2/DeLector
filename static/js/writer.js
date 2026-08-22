@@ -1,3 +1,13 @@
+// Add click handler to sidebar to prevent event bubbling to backdrop
+document.addEventListener('DOMContentLoaded', () => {
+  const sidebar = document.getElementById('writer-panel');
+  if (sidebar) {
+    sidebar.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+});
+
 /* DeLector - Writing Desk (Schreibwerkstatt) & Grammar Polish */
 'use strict';
 
@@ -273,6 +283,10 @@ export function toggleWriterMobilePanel() {
   panel.classList.add('mobile-panel-open');
   sheet.classList.add('open');
   document.body.classList.add('writer-panel-lock');
+  // On mobile, auto-switch to problems tab if analysis exists
+  if (currentAnalysis) {
+    switchWriterPanelTab('problems');
+  }
 }
 
 export function closeWriterMobilePanel() {
@@ -1444,3 +1458,5 @@ export async function restoreEssayVersion(versionId) {
     alert('恢复版本失败：' + (err.message || err));
   }
 }
+
+

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'delector-static-v4.4.2';
+const CACHE_NAME = 'delector-static-v4.4.3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
