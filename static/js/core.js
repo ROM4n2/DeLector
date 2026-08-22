@@ -32,6 +32,16 @@ export function esc(str) {
     .replace(/'/g, '&#39;');
 }
 
+// Escape a value destined for a JS string literal *inside* an HTML attribute
+// (onclick="f(${jsAttr(v)})"). esc() alone is NOT enough there: attribute
+// parsing decodes &#39; back into a live quote BEFORE the JS engine parses,
+// so crafted values can break out of the string. JSON.stringify escapes
+// quotes, backslashes, newlines and control chars; esc() then keeps the
+// surrounding HTML attribute from terminating early. Both layers required.
+export function jsAttr(v) {
+  return esc(JSON.stringify(v == null ? '' : String(v)));
+}
+
 // Largest-remainder method integer normalization for CEFR distribution
 export function normalizeCefrPct(rawPct) {
   if (!rawPct) return {};

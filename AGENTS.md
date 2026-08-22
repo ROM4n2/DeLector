@@ -11,15 +11,15 @@
 
 ## 交接快照
 
-> 更新时间：2026-08-21
+> 更新时间：2026-08-22
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（含 v4.2.0 写作台 Problems 全篇问题清单面板 + Inline Inlay Hints + IDE 编辑器），工作区干净 |
-| 测试 | **162 / 162 全绿**（`test_server.py` 102 + `test_syntax_tree.py` 15 + `test_core_dict_ext.py` 5 + `test_edge_tts_mini.py` 10 + `test_writing_rules.py` 21 + `test_essay_diff.py` 8 + `test_fsrs_engine.py` 1） |
+| 当前分支 / HEAD | `master`（v4.3.0 写作台 Android/移动端适配开发中：Problems bottom-sheet + 触屏纠错 + Inlay Hints 降级），工作区有未提交改动 |
+| 测试 | **166 / 166 全绿**（含 `test_writer_mobile.py` 4 项移动端静态契约测试） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v4.2.0**（2026-08-21）：德语写作台 Problems 问题清单面板（全篇错误/提醒清单 + severity 分级 + error 错误优先与双格介词 warning 提醒 + 联动滚动定位/波浪线高亮/一键修正） |
+| 对外发布 | **v4.3.0（待发布）**：Android/移动端写作台适配（Problems bottom-sheet、触屏错误详情、版本号 40300、Android 默认关闭 Inlay Hints） |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -392,6 +392,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v4.1.0 `2026-08-21`** | **feat(writer & hints)**: 德语写作台 Inlay Hints 语法内联提示（介词支配格 `mit [Dat]` / `in [Dat/Akk]` + 名词短语实际性数格 `[Neut·Dat]` 独立 `#ide-hint-layer` 覆盖层装饰渲染、`pointer-events: none` 绝不抢光标、工具栏全局开关 `toggleInlayHints()`、与波浪线错误并存呈现矛盾教学高光） |
 | **v4.1.1 `2026-08-21`** | **fix(writer & hints)**: 德语写作台 Inlay Hints 架构升级为 VSCode 级真实 Inline 布局：CSS `::before` 伪元素（DOM 无 text node）+ `contenteditable="false"` 内联排版，打字时后续文本自然平移推开绝不遮挡，TreeWalker 提取纯净正文 0 字符污染，光标自然跃迁 |
 | **v4.2.0 `2026-08-21`** | **feat(writer & problems)**: 德语写作台 Problems 问题清单面板（全篇错误/提醒清单 + severity 分级 + error 错误优先与双格介词 warning 提醒 + 联动滚动定位/波浪线高亮/一键修正） |
+| **v4.3.0 `2026-08-22`** | **feat(writer & mobile & security)**: Android/移动端写作台适配（写作主屏、Problems bottom-sheet、触屏错误详情与一键修正、版本/diff 移动回退、Android 默认关闭 Inlay Hints）+ **安全加固**：前端存储型 XSS 全量修复（新增 `core.js#jsAttr`，卡片词/文章标题/RSS 条目等 9 处「esc 进 JS 字符串字面量」注入点全部换核；reader.js 朴素反斜杠转义删除）、SSRF 加固（重定向逐跳请求前校验 + getaddrinfo 全地址族检查）、TTS 长度闸 1000 字符、TTS 端点 HTTPException 不再被吞成 500 |
 
 ---
 

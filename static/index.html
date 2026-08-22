@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css?v=4.2.0">
+  <link rel="stylesheet" href="/style.css?v=4.3.0">
 </head>
 <body>
 
@@ -19,7 +19,7 @@
     <div class="topbar-inner">
       <span><b>DELECTOR · 2026</b> · Vol. 04 / Issue Nº 01</span>
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <span class="right"><span class="pulse"></span>System · v4.2.0 Online</span>
+      <span class="right"><span class="pulse"></span>System · v4.3.0 Online</span>
     </div>
   </div>
 
@@ -440,6 +440,7 @@
           <button class="btn btn-ghost" onclick="clearWriterForm()" title="新建空白作文草稿">＋ 新建草稿</button>
           <button class="btn btn-ghost" id="writer-ai-btn" onclick="aiPolishEssay()" title="使用 DeepSeek AI 深度润色全文">✨ AI 润色全文</button>
           <button class="btn btn-secondary" onclick="analyzeWriterText(true)">⚡ 实时诊断</button>
+          <button class="btn btn-secondary writer-mobile-panel-trigger" id="writer-mobile-panel-trigger" onclick="toggleWriterMobilePanel()">📋 问题与历史</button>
           <button class="btn btn-dark" id="writer-save-btn" onclick="saveWriterEssay()">💾 保存作文</button>
         </div>
       </div>
@@ -555,6 +556,8 @@
       </div>
     </div>
   </main>
+
+  <div id="writer-mobile-panel-sheet" class="writer-mobile-panel-sheet" onclick="closeWriterMobilePanel()"></div>
 
 
   <!-- Drawer backdrop: tap to close on mobile -->
@@ -1166,7 +1169,7 @@
     </div>
   </div>
 
-  <script type="module" src="/js/main.js?v=4.2.0"></script>
+  <script type="module" src="/js/main.js?v=4.3.0"></script>
 
 </body>
 </html>

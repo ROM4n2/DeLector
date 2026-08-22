@@ -2033,3 +2033,184 @@ def test_lookup_ai_error_backfill_linguistics(client, monkeypatch):
     data = r.json()
     assert data["source"] == "linguistics"
     assert data["definition_zh"]
+
+
+# ── 安全加固回归：SSRF 多地址校验 / 重定向逐跳预校验 / TTS 长度闸 ─────────────
+
+def test_is_safe_public_url_rejects_when_any_resolved_ip_is_private(monkeypatch):
+    """域名解析出的每一条地址都必须过闸。
+
+    只查第一条 A 记录的旧写法（gethostbyname）会放过「公网 A 记录掩护下的
+    内网 A/AAAA 记录」组合。monkeypatch 同时钉住新旧两条解析路径：
+    旧实现查 gethostbyname 拿到公网 IP 会误判通过，本测试对它是红的。
+    """
+    import socket as _socket
+
+    public_ip, private_v6 = "93.184.216.34", "fd00::1"
+
+    def fake_getaddrinfo(host, port=None, *args, **kwargs):
+        return [
+            (_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (public_ip, port or 0)),
+            (_socket.AF_INET6, _socket.SOCK_STREAM, 17, "", (private_v6, port or 0)),
+        ]
+
+    monkeypatch.setattr(_socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(_socket, "gethostbyname", lambda host: public_ip)
+
+    assert is_safe_public_url("https://mixed-dns.example/") is False
+
+
+def test_is_safe_public_url_accepts_all_public_resolution(monkeypatch):
+    """全部地址都是公网时照常放行，不能因为加了校验而误杀正常站点。"""
+    import socket as _socket
+
+    def fake_getaddrinfo(host, port=None, *args, **kwargs):
+        return [
+            (_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 0)),
+            (_socket.AF_INET6, _socket.SOCK_STREAM, 17, "", ("2606:2800:220:1:248:1893:25c8:1946", port or 0)),
+        ]
+
+    monkeypatch.setattr(_socket, "getaddrinfo", fake_getaddrinfo)
+
+    assert is_safe_public_url("https://all-public.example/") is True
+
+
+def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
+    """重定向目标必须在请求发出**之前**过 SSRF 闸。
+
+    follow_redirects=True 的旧写法先打请求、后校验最终 URL——重定向到内网时
+    内网服务已经收到 GET（盲 SSRF），哪怕响应随后被丢弃。
+    """
+    import asyncio
+    import ipaddress as _ipaddress
+    import socket as _socket
+
+    import server as server_module
+    from fastapi import HTTPException
+
+    requested = []
+
+    def fake_getaddrinfo(host, port=None, *args, **kwargs):
+        host = host.strip("[]")
+        try:
+            _ipaddress.ip_address(host)  # 字面量 IP 原样返回，让内网判定照常生效
+        except ValueError:
+            return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 0))]
+        return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (host, port or 0))]
+
+    monkeypatch.setattr(_socket, "getaddrinfo", fake_getaddrinfo)
+
+    def fake_gethostbyname(host):
+        # 字面量内网 IP 原样返回，旧实现的最终校验才能识别它；
+        # 其余域名一律解析成公网 IP——否则 .example 真实解析失败会在
+        # 请求发出前就被拒，测试对旧实现假绿。
+        return host if host.startswith("169.254") else "93.184.216.34"
+
+    monkeypatch.setattr(_socket, "gethostbyname", fake_gethostbyname)
+
+    class FakeResp:
+        def __init__(self, status_code, headers=None, text="", url=""):
+            self.status_code = status_code
+            self.headers = headers or {}
+            self.text = text
+            self.url = url
+
+        @property
+        def is_redirect(self):
+            return self.status_code in (301, 302, 303, 307, 308)
+
+    class FakeClient:
+        """按构造参数忠实模拟 httpx 的跟随语义：follow_redirects=True（旧实现）
+        在 get() 内部自动追跳每一跳；False 时原样返回 3xx，由服务端逐跳驱动。"""
+
+        def __init__(self, *args, follow_redirects=False, **kwargs):
+            self.follow_redirects = follow_redirects
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info):
+            return False
+
+        async def get(self, url, headers=None):
+            url = str(url)
+            while True:
+                requested.append(url)
+                if url == "https://public-start.example/article":
+                    if self.follow_redirects:
+                        url = "http://169.254.169.254/latest/meta-data/"
+                        continue
+                    return FakeResp(302, {"location": "http://169.254.169.254/latest/meta-data/"}, url=url)
+                if url.startswith("http://169.254.169.254"):
+                    # 内网目标照常「应答」——旧实现下这个请求已经发生（盲 SSRF）
+                    return FakeResp(200, {}, "fake-internal-body", url=url)
+                return FakeResp(200, {}, "<html>ok</html>", url=url)
+
+    monkeypatch.setattr(server_module.httpx, "AsyncClient", FakeClient)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(server_module.fetch_remote_html("https://public-start.example/article"))
+    assert exc_info.value.status_code == 400
+    assert all("169.254" not in u for u in requested), f"盲 SSRF 发生了: {requested}"
+
+
+def test_fetch_remote_html_still_follows_public_redirects(monkeypatch):
+    """公网站点之间的正常重定向链不受影响——加固不能误杀正常抓取。"""
+    import asyncio
+    import socket as _socket
+
+    import server as server_module
+
+    def fake_getaddrinfo(host, port=None, *args, **kwargs):
+        return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 0))]
+
+    monkeypatch.setattr(_socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(_socket, "gethostbyname", lambda host: "93.184.216.34")
+
+    requested = []
+
+    class FakeResp:
+        def __init__(self, status_code, headers=None, text="", url=""):
+            self.status_code = status_code
+            self.headers = headers or {}
+            self.text = text
+            self.url = url
+
+        @property
+        def is_redirect(self):
+            return self.status_code in (301, 302, 303, 307, 308)
+
+    class FakeClient:
+        """与被拒测试同一套跟随语义：True 时桩内追跳（旧行为），False 时裸 3xx。"""
+
+        def __init__(self, *args, follow_redirects=False, **kwargs):
+            self.follow_redirects = follow_redirects
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info):
+            return False
+
+        async def get(self, url, headers=None):
+            url = str(url)
+            while True:
+                requested.append(url)
+                if url == "https://short.example/x":
+                    if self.follow_redirects:
+                        url = "https://short.example/final"
+                        continue
+                    return FakeResp(302, {"location": "/final"}, url=url)
+                return FakeResp(200, {}, "<html>ok</html>", url=url)
+
+    monkeypatch.setattr(server_module.httpx, "AsyncClient", FakeClient)
+
+    body = asyncio.run(server_module.fetch_remote_html("https://short.example/x"))
+    assert body == "<html>ok</html>"
+    assert len(requested) == 2
+
+
+def test_tts_rejects_oversized_text(client):
+    """朗读接口有长度上限：局域网可达的端点不该被超大文本打满合成与磁盘缓存。"""
+    res = client.post("/api/audio/tts", json={"text": "A" * 1001})
+    assert res.status_code == 400

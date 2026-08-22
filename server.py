@@ -751,13 +751,14 @@ def is_safe_public_url(url: str) -> bool:
         hostname = parsed.hostname
         if not hostname:
             return False
-        if hostname.lower() in ("localhost", "127.0.0.1", "::1"):
+        if hostname.lower().strip(".") == "localhost":
             return False
             
-        ip_str = socket.gethostbyname(hostname)
-        ip_obj = ipaddress.ip_address(ip_str)
-        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_multicast:
-            return False
+        for info in socket.getaddrinfo(hostname, None):
+            ip_obj = ipaddress.ip_address(info[4][0])
+            if (ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local
+                    or ip_obj.is_reserved or ip_obj.is_multicast or ip_obj.is_unspecified):
+                return False
         return True
     except Exception:
         return False
@@ -789,19 +790,36 @@ def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
     body_text = "\n\n".join(clean_paras)
     return title, body_text
 
+
+# 公网站点间的正常跳转链远短于此；超限视为异常抓取直接中止。
+MAX_REDIRECT_HOPS = 5
+
+
 async def fetch_remote_html(url: str) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
     }
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-        resp = await client.get(url, headers=headers)
-        if resp.status_code != 200:
-            raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
-        if not is_safe_public_url(str(resp.url)):
-            raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
-        return resp.text
+    current_url = url
+    # 逐跳手动跟随重定向：每一跳都在**发起请求之前**过 SSRF 闸。
+    # follow_redirects=True 的写法先打请求、后校验最终 URL——重定向到内网时
+    # 内网服务已经收到 GET（盲 SSRF），哪怕响应随后被丢弃。
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+        for _hop in range(MAX_REDIRECT_HOPS + 1):
+            if not is_safe_public_url(current_url):
+                raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
+            resp = await client.get(current_url, headers=headers)
+            if resp.is_redirect:
+                location = resp.headers.get("location")
+                if not location:
+                    raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code}，缺少重定向目标)")
+                current_url = str(httpx.URL(current_url).join(location))
+                continue
+            if resp.status_code != 200:
+                raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
+            return resp.text
+        raise HTTPException(400, "重定向次数过多，已中止抓取")
 
 @app.post("/api/articles/ingest-url")
 async def ingest_from_url(req: IngestUrlReq):
@@ -1586,10 +1604,16 @@ def prune_audio_cache(max_files: int = 300):
             except Exception:
                 pass
 
+# 朗读输入上限：局域网可达端点，防超大文本打满合成队列与磁盘缓存（场景是词/句级）
+MAX_TTS_TEXT_LEN = 1000
+
+
 async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> str:
     clean_text = text.strip()
     if not clean_text:
         raise HTTPException(400, "Text cannot be empty")
+    if len(clean_text) > MAX_TTS_TEXT_LEN:
+        raise HTTPException(400, f"朗读文本过长（最多 {MAX_TTS_TEXT_LEN} 字符）")
         
     cache_key = hashlib.sha256(f"{voice}_{rate}_{clean_text}".encode("utf-8")).hexdigest()
     cache_file = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.mp3")
@@ -1641,6 +1665,8 @@ async def get_audio_tts(req: TTSReq):
     try:
         audio_path = await generate_edge_tts_audio(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
         return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
 

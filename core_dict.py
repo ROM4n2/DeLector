@@ -475,7 +475,7 @@ def lookup_core_vocab(lemma_or_word: str) -> Optional[Dict[str, Any]]:
     if not lemma_or_word:
         return None
     key = lemma_or_word.strip().lower()
-    
+
     # Direct match
     if key in CORE_VOCAB_DB:
         cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[key]
@@ -488,7 +488,7 @@ def lookup_core_vocab(lemma_or_word: str) -> Optional[Dict[str, Any]]:
             "definition_zh": def_zh,
             "source": "local_dict"
         }
-    
+
     # Strip common German verb inflections or noun plurals if lemma is slightly variant
     for ending in ["en", "e", "n", "s"]:
         if key.endswith(ending) and len(key) > len(ending) + 2:

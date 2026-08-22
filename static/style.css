@@ -7377,6 +7377,67 @@ body.drawer-open .companion {
     width: 100%;
     justify-content: flex-start;
   }
+
+  .writer-mobile-panel-trigger {
+    display: inline-flex;
+  }
+
+  .writer-sidebar {
+    position: fixed;
+    z-index: 120;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: calc(4.75rem + env(safe-area-inset-bottom));
+    max-height: min(76vh, 680px);
+    overflow-y: auto;
+    padding: 0.75rem;
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    transform: translateY(calc(100% + 1rem));
+    transition: transform 180ms ease;
+  }
+
+  .writer-sidebar.mobile-panel-open {
+    transform: translateY(0);
+  }
+
+  .writer-panel-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .writer-panel-lock {
+    overflow: hidden;
+  }
+}
+
+.writer-mobile-panel-trigger,
+.writer-mobile-panel-sheet {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .writer-mobile-panel-trigger {
+    display: inline-flex;
+  }
+
+  .writer-mobile-panel-sheet {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    background: rgba(21, 20, 15, 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+
+  .writer-mobile-panel-sheet.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /* ── Writer Sidebar Tabs & Panes (v3.12.0) ─────────────────────────────── */

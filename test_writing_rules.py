@@ -62,7 +62,7 @@ def test_no_spacy_returns_empty():
     assert r["warning_count"] == 0
     assert r["problem_count"] == 0
     assert "cefr" in r
-    assert r["version"] == "4.2.0"
+    assert r["version"] == "4.3.0"
     assert r["sentences"] == []
 
 
@@ -81,7 +81,7 @@ def test_decline_determiner_basic():
 def test_multi_sentence_analysis(nlp):
     text = "Ich sehe der Mann. Ich fahre mit dem Auto."
     result = analyze_essay_text(text, nlp)
-    assert result["version"] == "4.2.0"
+    assert result["version"] == "4.3.0"
     assert result["error_count"] == 1
     assert result["warning_count"] == 0
     assert result["problem_count"] == 1
@@ -94,7 +94,7 @@ def test_analyze_essay_pure_python_fallback():
     """nlp=None 降级模式：零误报，只给 CEFR 估分。"""
     text = "Ich lerne Deutsch. Das Buch ist interessant."
     result = analyze_essay_text(text, nlp=None)
-    assert result["version"] == "4.2.0"
+    assert result["version"] == "4.3.0"
     assert result["error_count"] == 0
     assert result["warning_count"] == 0
     assert result["problem_count"] == 0
@@ -181,5 +181,4 @@ def test_warning_positions_are_char_offsets(nlp):
     assert len(sent["warnings"]) >= 1
     w = sent["warnings"][0]
     assert 0 <= w["start"] < w["end"] <= len(sent["text"])
-
 

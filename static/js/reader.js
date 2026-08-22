@@ -1,7 +1,7 @@
 /* DeLector - Reader View, Token Inspector & Sticky Notes */
 'use strict';
 
-import { state, esc, api, normalizeCefrPct } from './core.js';
+import { state, esc, jsAttr, api, normalizeCefrPct } from './core.js';
 import { ShadowPlayer, playGermanAudio } from './player.js';
 import { Companion } from './companion.js';
 
@@ -143,7 +143,7 @@ export async function loadArticles() {
           ${renderMiniBar(a.stats)}
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
-          <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${a.id}, '${esc(a.title)}')" title="删除文章">🗑</button>
+          <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${a.id}, ${jsAttr(a.title)})" title="删除文章">🗑</button>
           <span class="article-row-arrow">→</span>
         </div>
       </div>`).join('');
@@ -365,7 +365,7 @@ export function inspect(tokenId, sentId) {
           <div class="komposita-title">🧩 复合词结构拆解:</div>
           <div class="komposita-pills-row">
             ${res.komposita.map(k => `
-              <span class="komposita-pill" title="点击查看子词" onclick="window.inspectSubWord('${esc(k.word)}', '${esc(k.def_zh||'')}', '${esc(k.gender||'')}')">
+              <span class="komposita-pill" title="点击查看子词" onclick="window.inspectSubWord(${jsAttr(k.word)}, ${jsAttr(k.def_zh || '')}, ${jsAttr(k.gender || '')})">
                 <span class="k-word">${esc(k.word)}</span>
                 ${k.gender ? `<span class="k-gender">${esc(k.gender)}</span>` : ''}
                 <span class="k-def">${esc(k.def_zh || '')}</span>
@@ -850,9 +850,9 @@ export function renderClauseTreeNode(node, depth = 0, sentId) {
     ? `<div class="clause-children-tree">${node.children.map(c => renderClauseTreeNode(c, depth + 1, sentId)).join('')}</div>`
     : '';
 
-  const cleanLabel = (node.label || node.type || '句法节点').replace(/'/g, "\\'");
-  const cleanFormula = (node.formula || '').replace(/'/g, "\\'");
-  const cleanText = (node.text || '').replace(/'/g, "\\'");
+  const clauseLabel = node.label || node.type || '句法节点';
+  const clauseFormula = node.formula || '';
+  const clauseText = node.text || '';
 
   return `
     <div class="clause-tree-node depth-${depth} type-${typeCls}">
@@ -868,7 +868,7 @@ export function renderClauseTreeNode(node, depth = 0, sentId) {
         <div class="clause-quote-text">„${esc(node.text || '')}“</div>
         <div class="clause-node-footer">
           <button class="btn-clause-pill" onclick="event.stopPropagation(); highlightClauseTokens(${tokenIdsJson})">🔍 聚焦高亮</button>
-          <button class="btn-clause-pill btn-save-anki" onclick="event.stopPropagation(); saveClauseAsGrammarCard('${cleanLabel}', '${cleanFormula}', '${cleanText}', ${sentId})">+ 加入语法卡</button>
+          <button class="btn-clause-pill btn-save-anki" onclick="event.stopPropagation(); saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, ${jsAttr(clauseText)}, ${sentId})">+ 加入语法卡</button>
         </div>
       </div>
       ${childHtml}

@@ -1,7 +1,7 @@
 /* DeLector - Cards Management, 3D Poker Deck & Quiz Engine */
 'use strict';
 
-import { state, esc, api } from './core.js';
+import { state, esc, jsAttr, api } from './core.js';
 import { playGermanAudio } from './player.js';
 import { Companion } from './companion.js';
 
@@ -179,9 +179,9 @@ export function renderDeckStage(vList, gList) {
                 </div>
               </div>
               <div class="card-top-actions">
-                ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio('${esc(card.word)}')" title="朗读单词">🔊</button>` : ''}
+                ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(card.word)})" title="朗读单词">🔊</button>` : ''}
                 <span class="cefr-badge badge-${card.cefr_level || 'A1'}">${card.cefr_level || 'A1'}</span>
-                <button class="card-del-btn" onclick="event.stopPropagation();deleteCard('${card._type}', ${card.id}, '${esc(isVocab ? card.word : card.grammar_name)}')" title="删除此卡片">✕</button>
+                <button class="card-del-btn" onclick="event.stopPropagation();deleteCard(${jsAttr(card._type)}, ${card.id}, ${jsAttr(isVocab ? card.word : card.grammar_name)})" title="删除此卡片">✕</button>
               </div>
             </div>
 
@@ -361,11 +361,11 @@ export function renderCatalogGrid(vList, gList) {
         <div class="memo-card-head">
           <div style="display:flex;align-items:center;gap:0.5rem;">
             <span class="memo-word">${esc(c.word)}</span>
-            <button class="speaker-btn" onclick="playGermanAudio('${esc(c.word)}')" title="朗读单词">🔊</button>
+            <button class="speaker-btn" onclick="playGermanAudio(${jsAttr(c.word)})" title="朗读单词">🔊</button>
           </div>
           <div class="card-top-actions">
             <span class="cefr-badge badge-${c.cefr_level || 'A1'}">${c.cefr_level || 'A1'}</span>
-            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, '${esc(c.word)}')" title="删除此卡片">✕</button>
+            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, ${jsAttr(c.word)})" title="删除此卡片">✕</button>
           </div>
         </div>
         <div class="memo-def">${esc(c.definition_zh)}</div>
@@ -388,7 +388,7 @@ export function renderCatalogGrid(vList, gList) {
           <span class="grammar-memo-name">${esc(c.grammar_name)}</span>
           <div class="card-top-actions">
             <span class="cefr-badge badge-${c.cefr_level || 'A1'}">Goethe ${c.cefr_level || 'A1'}</span>
-            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, '${esc(c.grammar_name)}')" title="删除此考点卡">✕</button>
+            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, ${jsAttr(c.grammar_name)})" title="删除此考点卡">✕</button>
           </div>
         </div>
         ${c.rule_formula ? `<div class="grammar-memo-formula">${esc(c.rule_formula)}</div>` : ''}

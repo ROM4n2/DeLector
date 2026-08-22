@@ -10,7 +10,7 @@ let currentAnalysis = null;
 let selectedSpanRef = null;
 let analyzeDebounceTimer = null;
 let isComposing = false;
-let inlayEnabled = true;
+let inlayEnabled = !/Android/i.test(navigator.userAgent);
 
 let polishState = {
   original: '',
@@ -264,6 +264,23 @@ export function toggleInlayHints() {
   if (editor) {
     editor.classList.toggle('hide-inlays', !inlayEnabled);
   }
+}
+
+export function toggleWriterMobilePanel() {
+  const panel = document.getElementById('writer-panel');
+  const sheet = document.getElementById('writer-mobile-panel-sheet');
+  if (!panel || !sheet) return;
+  panel.classList.add('mobile-panel-open');
+  sheet.classList.add('open');
+  document.body.classList.add('writer-panel-lock');
+}
+
+export function closeWriterMobilePanel() {
+  const panel = document.getElementById('writer-panel');
+  const sheet = document.getElementById('writer-mobile-panel-sheet');
+  if (panel) panel.classList.remove('mobile-panel-open');
+  if (sheet) sheet.classList.remove('open');
+  document.body.classList.remove('writer-panel-lock');
 }
 
 // ── Render Editor Content & Retain Caret ────────────────────────────────────
@@ -649,6 +666,11 @@ export function fixSelectedSpan() {
 
   setEditorText(newFullText);
   selectedSpanRef = null;
+  const tooltip = document.getElementById('ide-error-tooltip');
+  if (tooltip) {
+    tooltip.classList.add('hidden');
+    tooltip.dataset.locked = 'false';
+  }
   resetErrorDetailView();
   analyzeWriterText(true);
 }
@@ -666,8 +688,7 @@ export function setupEditorListeners() {
   });
 
   const tooltip = document.getElementById('ide-error-tooltip');
-  editor.addEventListener('mouseover', (e) => {
-    const mark = e.target.closest('.writer-err-underline');
+  const showTooltip = (mark, locked = false) => {
     if (!mark || !tooltip || !currentAnalysis) return;
     const sentIdx = parseInt(mark.getAttribute('data-sent'), 10);
     const spanIdx = parseInt(mark.getAttribute('data-span'), 10);
@@ -681,18 +702,28 @@ export function setupEditorListeners() {
       </div>
       <div class="tooltip-body">${esc(sp.explanation_zh)}</div>
       <div class="tooltip-suggest">推荐修正：<b>${esc(sp.corrected_form)}</b></div>
-      <div class="tooltip-hint">点击锁定详情或一键修正</div>
+      ${sp.corrected_form ? '<button class="btn btn-dark btn-xs tooltip-fix-btn" onclick="fixSelectedSpan()">应用修正</button>' : ''}
     `;
-
     const rect = mark.getBoundingClientRect();
     tooltip.style.top = `${rect.bottom + window.scrollY + 6}px`;
     tooltip.style.left = `${Math.max(10, Math.min(window.innerWidth - 270, rect.left + window.scrollX))}px`;
+    tooltip.dataset.locked = locked ? 'true' : 'false';
     tooltip.classList.remove('hidden');
+  };
+
+  editor.addEventListener('mouseover', (e) => {
+    const mark = e.target.closest('.writer-err-underline');
+    showTooltip(mark);
+  });
+
+  editor.addEventListener('click', (e) => {
+    const mark = e.target.closest('.writer-err-underline');
+    if (mark) showTooltip(mark, true);
   });
 
   editor.addEventListener('mouseout', (e) => {
     const mark = e.target.closest('.writer-err-underline');
-    if (mark && tooltip) {
+    if (mark && tooltip && tooltip.dataset.locked !== 'true') {
       tooltip.classList.add('hidden');
     }
   });

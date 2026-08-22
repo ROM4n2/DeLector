@@ -1,7 +1,7 @@
 /* DeLector - Application Main Entry & Router */
 'use strict';
 
-import { state, api, esc } from './core.js';
+import { state, api, esc, jsAttr } from './core.js';
 import { ShadowPlayer, playGermanAudio } from './player.js';
 import { Companion } from './companion.js';
 import {
@@ -110,7 +110,9 @@ import {
   setupEditorListeners,
   toggleInlayHints,
   openWriterProblem,
-  renderProblemsPanel
+  renderProblemsPanel,
+  toggleWriterMobilePanel,
+  closeWriterMobilePanel
 } from './writer.js';
 
 // ── View Router ─────────────────────────────────────────────────────────────
@@ -241,7 +243,7 @@ export async function loadFeedItems(url) {
         ${it.summary ? `<div class="feed-item-summary">${esc(it.summary)}</div>` : ''}
         <div class="feed-item-footer">
           <span class="feed-item-origin">QUELLE: ${esc(it.source || sourceName)}</span>
-          <button class="btn-feed-ingest" onclick="window.ingestFeedItem('${encodeURIComponent(it.link)}', '${encodeURIComponent(it.title)}', this)">
+          <button class="btn-feed-ingest" onclick="window.ingestFeedItem(${jsAttr(encodeURIComponent(it.link))}, ${jsAttr(encodeURIComponent(it.title))}, this)">
             📥 导入精读
           </button>
         </div>
@@ -714,6 +716,8 @@ Object.assign(window, {
   toggleInlayHints,
   openWriterProblem,
   renderProblemsPanel,
+  toggleWriterMobilePanel,
+  closeWriterMobilePanel,
 
   // Player
   ShadowPlayer,
