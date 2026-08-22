@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.3.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v4.4.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-162%2F162%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-230%2F230%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -22,10 +22,10 @@
 
 | 平台 | 版本 | 说明 | 下载通道 |
 |---|---|---|---|
-| 🪟 **Windows x64** | `v4.3.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.3.0) |
-| 🍎 **macOS** | `v4.3.0` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.3.0) |
-| 🐧 **Linux x64** | `v4.3.0` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.3.0) |
-| 📱 **Android** | `v4.3.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.3.0) |
+| 🪟 **Windows x64** | `v4.4.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.4.0) |
+| 🍎 **macOS** | `v4.4.0` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.4.0) |
+| 🐧 **Linux x64** | `v4.4.0` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.4.0) |
+| 📱 **Android** | `v4.4.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.4.0) |
 
 ---
 
@@ -144,7 +144,7 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 | **语音合成** | `Edge-TTS` (Microsoft Neural Voice) | 神经级纯正德语离线本地缓存与 Web Speech 回退 |
 | **前端架构** | `ES Modules / Modern CSS / Vanilla JS` | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染 |
 | **记忆同步** | `genanki` | 离线生成标准 `.apkg` 记忆库 |
-| **自动化测试** | `pytest` + `httpx` | 129 单元与集成测试用例保障 (100% Green) |
+| **自动化测试** | `pytest` + `httpx` | 230 单元与集成测试用例保障 (100% Green)，CI 覆盖 md 加载路径与 Android 构建验签 |
 
 ---
 
@@ -156,34 +156,35 @@ DeLector/
 ├── static/                 # 前端纯静态 ES 模块化资源 (Zero-Build ESM)
 │   ├── index.html          # 单页应用骨架 (含 3D 卡盒、句法拓扑与台账)
 │   ├── style.css           # 德式报刊风格与 3D 翻转样式 (90KB+)
-│   └── js/                 # 7 大独立原生 ES 模块
-│       ├── core.js         # API 请求与全局状态
+│   └── js/                 # 8 大独立原生 ES 模块
+│       ├── core.js         # API 请求与全局状态（含 XSS 防护 jsAttr）
 │       ├── main.js         # 路由调度、设置弹窗与 RSS 订阅
 │       ├── reader.js       # 文本渲染、五场域拓扑条与 AST 树抽屉
 │       ├── cards.js        # 3D 卡牌翻转盒与 FSRS 自适应记忆排程算法
 │       ├── folio.js        # Leporello 三折页台账与墨线图
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
 │       ├── player.js       # 神经影子跟读与 TTS 播放器
-│       └── writer.js       # 写作润色台（行内标注 + 侧栏 + AI 润色）
-├── .githooks/              # 提交前密钥扫描钩子 (pre-commit)
+│       └── writer.js       # 写作润色台（行内标注 + Problems + 版本快照）
+├── .githooks/              # 提交前密钥扫描钩子 (pre-commit，含编码 keystore)
 ├── linguistics.py          # 556+ 不规则动词三态表与复合词拆解引擎
-├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词)
-├── core_dict_ext.py        # 4300+ 词库扩展（DeepSeek 批量生成中文释义）
+├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词，4301 词)
+├── core_dict_ext.py        # 3859 词库扩展（DeepSeek 批量生成中文释义，110 词缺口待补）
 ├── prep_dict.py            # 固定介词搭配数据集（生成物，源在 tools/build_prep.py）
-├── writing_rules.py        # 写作润色台本地规则引擎（冠词一致 + 介词格，FP 守卫）
+├── writing_rules.py        # 写作润色台本地规则引擎（冠词一致 + 介词格，零误报，含 Inlay Hints/Problems）
 ├── syntax_tree.py          # 拓扑五场域与 AST 从句树句法引擎
-├── server.py               # FastAPI 后端服务与核心 NLP/API 路由
-├── start.py                # 跨平台智能启动脚本
+├── server.py               # FastAPI 后端服务与核心 NLP/API 路由（敏感设置仅回环可写）
+├── start.py                # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
 ├── package_windows.py      # Windows 绿色免安装便携版打包脚本
 ├── Dockerfile              # Docker 镜像构建文件
 ├── docker-compose.yml      # Docker Compose 编排文件
-├── requirements.txt        # Python 依赖清单
-├── tools/                  # 构建/生成工具（build_prep.py 介词搭配生成器 + 缓存）
-├── test_server.py          # Pytest 自动化测试套件 (90 用例)
+├── requirements.txt        # Python 依赖清单（无新增运行时依赖）
+├── tools/                  # 构建/生成工具（build_dict.py 词库 + build_prep.py 介词 + 缓存）
+├── test_server.py          # Pytest 自动化测试套件（~130 用例，含安全/CI/备份/AI 回归）
 ├── test_syntax_tree.py     # Pytest 句法引擎测试套件 (15 用例)
 ├── test_core_dict_ext.py   # Pytest 词库扩展测试套件 (5 用例)
 ├── test_edge_tts_mini.py   # Pytest TTS 兜底测试套件 (10 用例)
-└── test_writing_rules.py   # Pytest 写作规则引擎测试套件 (9 用例)
+├── test_writing_rules.py   # Pytest 写作规则引擎测试套件 (19 用例，含零误报反例)
+└── test_start.py           # Pytest 启动器测试套件 (4 用例，Android/桌面绑定)
 ```
 
 ---
@@ -204,7 +205,12 @@ DeLector/
 - [x] **v3.9.1**：安卓真机修复——TTS 无声（stdlib 版 Edge TTS 客户端 `edge_tts_mini`）、倍速按钮点不到（移动端三行布局）、单词抽屉白色遮挡（55vh + 阅读区全宽）
 - [x] **v3.10**：固定介词搭配（Verben/Adjektive + Präposition + Kasus）——数据集 **531 词条 / 660 条搭配**（AI 批量生成 + 人工 seed 兜底），查词抽屉第四张卡片逐条展示并可直接存成词汇卡；**备份改全量真往返**，堵住三处静默丢数据（含 API Key 被吞）；**安卓签名迁移**——CI 钉死 keystore + keytool 验签闸（显式 v1 签名），versionCode 编码规则修正（`major*10000+minor*100+patch`，修 3.10.0 与 4.0.0 撞车）
 - [x] **v3.11**：**德语写作润色台 (Schreibwerkstatt)**——本地规则引擎（spaCy 上冠词/格位一致 + 介词支配格，零误报准则），行内下划线 + 侧栏纠错，错误一键存 Anki 语法卡（你的错误变成你的复习卡），essays 作文草稿库，CEFR 词汇估测，显式 AI 润色全文按钮；「按介词浏览」的独立矩阵视图留待后续（数据集已就位，零成本增量）
-- [ ] **v4.0**：德语写作长难句 AI 润色台升级（IDE 式编辑器：波浪线/hover/错误列表面板）
+- [x] **v3.12**：写作台 IDE 化：句子级 diff 引擎 + AI 润色逐 hunk 并排审查 + `essay_versions` 类 git 快照管理 + 侧栏诊断/历史双 Tab 联动
+- [x] **v4.0**：内联 IDE 编辑器（contenteditable + TreeWalker 光标记忆 + 400ms 实时诊断 + 悬浮气泡 + 一键修正 + 句子导航）+ 版本管理完善（只读预览不产生检查点 + 单项删除）+ 动词固定介词优先
+- [x] **v4.1.1**：VSCode 级真实 Inline Inlay Hints（CSS `::before` 伪元素无 text node + 随文本推开 + TreeWalker 纯净正文 0 污染）
+- [x] **v4.2**：Problems 问题清单面板（severity 分级 + 双格介词 warning + 联动定位/高亮/修正）
+- [x] **v4.3**：Android/移动端写作台适配（bottom-sheet、触屏纠错、Android 默认关闭 Inlay Hints）+ **安全加固**：存储型 XSS 全量修复（`jsAttr`）、SSRF 加固、TTS 长度闸
+- [x] **v4.4**：**可靠性与安全收口**——敏感设置/备份仅回环可写（局域网 403）、pre-commit 编码 keystore 拦截、CI 真 Gradle 构建与验签闸、写作零误报加固、备份/AI 失败回归；测试 **230 全绿**，仅 14 条 linguistics 重复键既有告警；词库 110 词缺口盘点（30 缓存待合入，80 需 API，401 暂缓，不伪造）
 
 ---
 

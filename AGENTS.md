@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（v4.3.0 写作台 Android/移动端适配开发中：Problems bottom-sheet + 触屏纠错 + Inlay Hints 降级），工作区有未提交改动 |
-| 测试 | **166 / 166 全绿**（含 `test_writer_mobile.py` 4 项移动端静态契约测试） |
-| 桌面端 | 正常，`python start.py` → `http://localhost:8000` |
+| 当前分支 / HEAD | `master`（v4.4.0 可靠性与安全收口：局域网设置限制 + pre-commit 密钥扫描补齐 + CI 构建闸 + 写作误报收敛 + 备份/AI 失败路径，待发布） |
+| 测试 | **230 / 230 全绿**（含 v4.4 新增安全边界、提交守卫、CI 契约、写作反例、备份/AI 失败回归） |
+| 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v4.3.0（待发布）**：Android/移动端写作台适配（Problems bottom-sheet、触屏错误详情、版本号 40300、Android 默认关闭 Inlay Hints） |
+| 对外发布 | **v4.4.0（待发布）**：可靠性与安全收口（敏感设置仅回环可写、编码 keystore 拦截、Gradle 真构建与验签、写作零误报加固、备份/AI 失败回归，版本号 40400；仅 arm64-v8a，CI 覆盖 md 加载路径） |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -59,10 +59,11 @@
 | 移动打包 | Chaquopy + Gradle | `android/` |
 | CI/CD | GitHub Actions | `.github/workflows/build-release.yml` |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（90）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10）, `test_writing_rules.py`（9） |
-| 提交守卫 | pre-commit 密钥扫描 | `.githooks/pre-commit` |
+| 测试 | pytest | `test_server.py`（~130）, `test_syntax_tree.py`（15）, `test_core_dict_ext.py`（5）, `test_edge_tts_mini.py`（10）, `test_writing_rules.py`（19）, `test_start.py`（4）— 共 230 |
+| 提交守卫 | pre-commit 密钥扫描（文件名+内容+编码 keystore） | `.githooks/pre-commit` |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
+| CI 限制 | 无 Android SDK 时本地不伪称构建通过；CI 负责 Gradle 与验签 | `.github/workflows/build-release.yml` |
 
 ---
 
@@ -331,13 +332,17 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 
   覆盖 8 个 key 家族（OpenAI/Anthropic、AWS、GitHub PAT ×2、Google、Slack、JWT、私钥 PEM）
   与密钥文件名（`.env`、`*.pem`、`*.secret`、`*credentials*`、`id_rsa*`、`id_ed25519*`；
-  `.example`/`.sample`/`.template` 放过）。扫的是**暂存文件全文**而非 diff 新增行，
+  `.example`/`.sample`/`.template` 放过）+ **PKCS12/JKS/JCEKS 编码 keystore 拦截**
+  （文件名 `*.p12/*.pfx/*.jks/*.b64` + 内容中 PKCS12/JKS/JCEKS base64 特征，`.example`/`.sample` 放过）。
+  扫的是**暂存文件全文**而非 diff 新增行，
   因为按行 diff 会漏掉"把含密钥的行挪到另一个文件"。
   误报走行内 `delector:allow-secret` 注释（豁免留在 diff 里可被审阅）；
   **不要用 `git commit --no-verify` 跳过**。
 - 真实 key 走环境变量或 `.env`（已 gitignore），绝不硬编码。
-- `POST /api/settings` **无鉴权**，能改写 API Key 与 base_url。这是 Android 只绑回环的原因；
-  桌面端绑 `0.0.0.0` 时同一局域网内任何人都能改，动这块要意识到影响面。
+- `POST /api/settings` **仅回环可写**（v4.4.0）：`GET /api/settings` 保持可读；敏感字段写入与
+  `POST /api/settings/test-key`、备份相关 ` /api/backup/*` 均要求 `127.0.0.1`/`::1`
+  （含 IPv4-mapped 回环），局域网返回 403。这是 Android 只绑回环的延续；桌面端仍绑 `0.0.0.0`
+  保持同 Wi-Fi 阅读能力，但局域网不得修改敏感设置。
 
 ---
 
@@ -345,11 +350,11 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 
 ```text
 启动命令:  python start.py   或   start.bat
-地址:      http://localhost:8000（桌面端同时绑 0.0.0.0，同 Wi-Fi 设备可访问）
+地址:      http://localhost:8000（桌面端同时绑 0.0.0.0，同 Wi-Fi 设备可访问；敏感设置仅回环可写）
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （129 个，全绿）
+测试:      pytest            （230 个，全绿）
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py
 ```
 
@@ -393,18 +398,16 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v4.1.1 `2026-08-21`** | **fix(writer & hints)**: 德语写作台 Inlay Hints 架构升级为 VSCode 级真实 Inline 布局：CSS `::before` 伪元素（DOM 无 text node）+ `contenteditable="false"` 内联排版，打字时后续文本自然平移推开绝不遮挡，TreeWalker 提取纯净正文 0 字符污染，光标自然跃迁 |
 | **v4.2.0 `2026-08-21`** | **feat(writer & problems)**: 德语写作台 Problems 问题清单面板（全篇错误/提醒清单 + severity 分级 + error 错误优先与双格介词 warning 提醒 + 联动滚动定位/波浪线高亮/一键修正） |
 | **v4.3.0 `2026-08-22`** | **feat(writer & mobile & security)**: Android/移动端写作台适配（写作主屏、Problems bottom-sheet、触屏错误详情与一键修正、版本/diff 移动回退、Android 默认关闭 Inlay Hints）+ **安全加固**：前端存储型 XSS 全量修复（新增 `core.js#jsAttr`，卡片词/文章标题/RSS 条目等 9 处「esc 进 JS 字符串字面量」注入点全部换核；reader.js 朴素反斜杠转义删除）、SSRF 加固（重定向逐跳请求前校验 + getaddrinfo 全地址族检查）、TTS 长度闸 1000 字符、TTS 端点 HTTPException 不再被吞成 500 |
+| **v4.4.0 `2026-08-22`** | **fix(security & reliability)**: 可靠性与安全收口——敏感设置与备份接口仅回环可写（局域网 403，含 IPv4-mapped 回环校验）、pre-commit 编码 keystore 拦截补齐（PKCS12/JKS/JCEKS，文件名+base64 特征，示例不误报）、CI 真 Gradle 构建与 APK 内容/签名双重验签闸（`keytool -printcert -jarfile` + 定值指纹）、写作规则零误报加固（零冠词/双格介词/词典缺性别/spaCy 缺席降级反例全绿）、备份/AI 失败路径回归（非本机备份隔离、Android spaCy 真模型加载契约、AI 402/超时不吞错）；词库缺口盘点 110 词（2 连字符 + 57 长复合词，30 条缓存待合入，80 条 AI 未返回，API 401 暂缓）；测试 230 全绿，仅保留 14 条 linguistics 重复键既有告警 |
 
 ---
 
 ## 已知问题 / 待办
 
-> 更新时间：2026-08-20
+> 更新时间：2026-08-22（v4.4.0 发布打点）
 
 - [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
-- [ ] **DeepSeek 账户余额耗尽（402 Insufficient Balance）**：2026-08-20 换上的新 key
-      本身有效（不再 401），但账户没余额，所有调用返回 402。影响全部 AI 功能
-      （查词在线兜底、语法剖析、笔记辅助）和构建工具。**充值后已跑完介词数据集**，
-      其余 AI 功能仍取决于余额。
+- [ ] **DeepSeek API Key 失效/余额耗尽（401/402）**：2026-08-20 新 key 曾报 402（余额耗尽），2026-08-22 复测 `.env` 与 DB 两处 key 均报 401（`Authentication Fails, api key invalid`）。影响全部 AI 功能（查词在线兜底、语法剖析、笔记辅助）和构建工具。**介词数据集已在充值后跑完（531 词条/660 搭配）**；词库 refill 受阻见下条。
 - [x] ~~**介词搭配数据集只覆盖了一半词表**~~ — 2026-08-20 已跑完：1773 个动词/形容词
       问到 1729 词（97.5%），**531 词条 / 660 条搭配**（含 47 条人工 `SEED_COLLOCATIONS`
       floor）。中途发现第一版校验器把介词与冠词的缩合形式（an+dem=am、in+das=ins）
@@ -423,33 +426,31 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       `9A:8A:6D:…:57:9C`（公开信息）。两道断言都是无条件的：APK↔keystore 自比对拦
       「secret 缺失 → 回落随机签名」，定值比对拦「keystore 被换成另一份合法 keystore」。
       有测试断言该值是大写冒号分隔的 32 字节指纹，防止将来被清空导致闸静默退化。
-- [ ] **pre-commit 的 keystore 防护有一处残留缺口**：base64 编码后的 PKCS12
-      若存成不叫 `*.b64` 的纯文本文件，只会被通用规则漏过（JKS/JCEKS 的 base64 magic
-      有专门正则，PKCS12 的 base64 前缀 `MII` 太通用，加了会把公开证书全误拦，
-      而文件名类命中没有 `delector:allow-secret` 豁免路径）。
+- [x] ~~**pre-commit 的 keystore 防护缺口**~~ — v4.4.0 已补齐 PKCS12/JKS/JCEKS 编码 keystore 拦截（文件名 `*.p12/*.pfx/*.jks/*.b64` + 内容 JKS/JCEKS base64 magic + PKCS12 长串 base64 特征，`.example`/`.sample` 放过，`delector:allow-secret` 可豁免）。
+      残留缺口仅剩：PKCS12 base64 存成不叫 `*.b64` 的纯文本且无 JKS/JCEKS magic 时，前缀 `MII` 太通用无法单独拦截（加了会把公开证书全误拦，见 `test_precommit_allow_sample`）。
 - [ ] **旧安装无法升级到 v3.10.0**：v3.9.1 及更早的 APK 是用 CI 每次随机生成的
       debug keystore 签的，与钉死的证书不一致，必须**卸载重装**（数据全丢，
       且 v3.9.1 的安卓端备份导出本身是静默无操作，无法自救）。
 - [ ] **`linguistics.py` 有 14 条 pyflakes 重复键告警**（`klima`/`schutz`/`bund` 等在
       `LINGUISTICS_VOCAB_EXT` 与另一张表里各出现一次，值不同）：先前就有，未在本次改动范围内，
       但确实意味着有一份定义被静默覆盖，值得单独查一次
-- [ ] **离线词库尾缺口 ~109 词**（v3.9.0 词库 4301 词，候选源 4377）：B2 源的派生/噪声词
-      （`aufklärungsdrohnen` 等）AI 反复不返回，refill 自动重试过狠会卡住。
-      要补跑 `python tools/build_dict.py --refill --parallel 8`（注意它会覆写 batch_0-4 缓存）
+- [ ] **离线词库尾缺口 110 词**（v4.4.0 盘点：词库 4301 词，候选源 4377，剔除 `linguistics` 后净缺口 110）：2 连字符（`ost-west-gefälle`、`ozg-onlinezugangsgesetz`）+ 57 长复合词（>10 字符，如 `aufklärungsdrohnen`/`erkenntnisgewinn`）+ 形容词屈折形（`aufwendige`/`fleischlastige`/`forschende` 等）。
+      其中 30 条在 `tools/raw/batch_*.json` 已有原始响应缓存（待合入 `core_dict_ext.py`，如 `absender`/`dauer`/`drucker`），80 条 AI 从未返回（`abbiegen`/`abdanken`/`abenteuer`/`abfahrt` 等，含 B1/B2 派生词/低频词）。
+      `python tools/build_dict.py --refill --parallel 8` 2026-08-22 复测因 API Key 401 暂缓（`.env` `sk-a1293…99a9` 与 DB `sk-c73dd…e9c6` 均 `invalid_request_error`）；已保留原始响应缓存，校验在读取时执行，不伪造条目，不提交空缓存。详见 v4.4 report。
 - [ ] **安卓 TTS 依赖联网 Edge TTS 服务**（v3.9.1）：APK 内无离线 TTS 引擎，
       `edge_tts_mini` 直连 `speech.platform.bing.com`（与桌面端同一服务，本机/用户网络实测可达）。
       真机若连不上该域名（或离线），三层兜底全败时播放器显示 `⚠ 语音引擎不可用`（不再静默）。
       原生 TTS 仅当设备装有德语语音时才可用（国内机型多无 Google TTS 德语数据，已做 voice 遍历兜底）
 - [x] ~~**已合并的分支未删**：`fix/android-startup-and-spacy`~~ — 2026-08-20 本地与远端都已删
 - [ ] `de_core_news_md` 本机未安装，所以 md 优先这条路径**只验证了回退到 sm 的行为**，
-      md 实际加载未在本机跑过
+      md 实际加载未在本机跑过（CI 覆盖可选加载路径）
 - [ ] Android 侧 Java 代码无法本机编译验证（本机无 Android SDK），只能靠 CI
 - [ ] 首次启动因 `extractPackages` 解包约 30MB 而明显变慢，尚未在真机上实测耗时
 - [x] ~~安卓版启动卡在「正在启动」页并超时~~ — PR #2 已修（根因：降级路径 `NameError`）
 - [x] ~~安卓版语法标注错误（无五场域/AST，可分动词回连失败）~~ — PR #2 已移植真 spaCy，真机验证通过
-- [x] ~~Android 上无鉴权 `POST /api/settings` 暴露给局域网~~ — PR #2 改为只绑 `127.0.0.1`
+- [x] ~~Android 上无鉴权 `POST /api/settings` 暴露给局域网~~ — PR #2 改为只绑 `127.0.0.1`；v4.4.0 进一步收口桌面端：敏感设置与备份接口仅回环可写（`test_settings_from_non_loopback_blocked` 等 230 项全绿）
 - [x] ~~Android 失败不可见 + WebView 无限重载~~ — PR #2 已修
-- [x] ~~仓库无提交前密钥扫描~~ — PR #2 已加 `.githooks/pre-commit`
+- [x] ~~仓库无提交前密钥扫描~~ — PR #2 已加 `.githooks/pre-commit`；v4.4.0 补齐编码 keystore 拦截并加 `test_precommit_*` 契约
 - [x] ~~README/Dockerfile 装 md 但代码只加载 sm~~ — PR #2 改为 md 优先、sm 兜底
 
 ---
