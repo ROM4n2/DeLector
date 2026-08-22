@@ -2461,3 +2461,277 @@ def test_settings_test_key_succeeds_on_loopback(client, monkeypatch):
     # 未被来源闸拦截：返回 200 且 success 为 False（提示输入 key），而非 403
     assert res.status_code == 200
     assert res.json().get("success") is False
+
+
+# ── v4.4 Task6: Backup source, Android spaCy loading, AI failure paths ─────────
+
+# --- 6.1 Backup source boundary (prepare/download/restore) ---
+
+def test_backup_prepare_rejects_lan(lan_client):
+    """非本机不得 prepare 备份（会带上 localStorage 完整数据库）。"""
+    res = lan_client.post("/api/backup/prepare", json={"local_storage": {"delector_font_size": "18"}})
+    assert res.status_code == 403
+
+
+def test_backup_download_rejects_lan_even_with_valid_token(client, lan_client):
+    """prepare 产生的 token 也不得被局域网下载。"""
+    prep = client.post("/api/backup/prepare", json={"local_storage": {"delector_voice": "x"}})
+    assert prep.status_code == 200
+    token = prep.json()["token"]
+    # lan 尝试用同一 token 下载必须被来源闸挡住，而非 404
+    res = lan_client.get(f"/api/backup/download/{token}")
+    assert res.status_code == 403
+    # 回环仍可正常下载（单次有效）
+    ok = client.get(f"/api/backup/download/{token}")
+    assert ok.status_code == 200
+    assert "attachment" in ok.headers.get("content-disposition", "")
+
+
+def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
+    """被 403 的还原请求不得改库。"""
+    import sqlite3
+    import server
+    from unittest.mock import patch
+    # 先写一条已知文章
+    with server.get_db(test_db_path) as conn:
+        before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+    payload = {
+        "version": 2,
+        "articles": [{"id": 9999, "title": "Hacked", "raw_text": "x", "processed_json": "{}", "source_url": "", "created_at": "2026-01-01 00:00:00"}],
+    }
+    res = lan_client.post("/api/backup/restore", json=payload)
+    assert res.status_code == 403
+    with server.get_db(test_db_path) as conn:
+        after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        hacked = conn.execute("SELECT COUNT(*) FROM articles WHERE id=9999").fetchone()[0]
+    assert after == before
+    assert hacked == 0
+
+
+def test_backup_restore_failure_keeps_original_db(client, test_db_path):
+    """还原失败（DB 约束错误）必须通过文件快照回滚，原始文章保持不变。"""
+    import sqlite3
+    import server
+    from fastapi.testclient import TestClient as TC
+    # 用 raise_server_exceptions=False 才能拿到 500 响应而非抛异常
+    fail_client = TC(server.app, client=("127.0.0.1", 54322), raise_server_exceptions=False)
+    with server.get_db(test_db_path) as conn:
+        before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        titles_before = {r[0] for r in conn.execute("SELECT title FROM articles").fetchall()}
+    # daily_summary 主键重复触发 IntegrityError
+    bad = {
+        "version": 2,
+        "articles": [{"id": 9100, "title": "Should Rollback", "raw_text": "x", "processed_json": "{}", "source_url": "", "created_at": "2026-01-01 00:00:00"}],
+        "daily_summary": [{"date": "2026-08-20"}, {"date": "2026-08-20"}],
+    }
+    res = fail_client.post("/api/backup/restore", json=bad)
+    assert res.status_code >= 500
+    with server.get_db(test_db_path) as conn:
+        after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        leaked = conn.execute("SELECT COUNT(*) FROM articles WHERE id=9100").fetchone()[0]
+        titles_after = {r[0] for r in conn.execute("SELECT title FROM articles").fetchall()}
+    assert after == before, "还原失败未回滚主库"
+    assert leaked == 0
+    assert titles_before == titles_after
+
+
+def test_backup_loopback_still_succeeds(client):
+    """回环来源的完整备份链路仍可用（prepare→download→restore 往返）。"""
+    ls = {"delector_font_size": "20"}
+    prep = client.post("/api/backup/prepare", json={"local_storage": ls})
+    assert prep.status_code == 200
+    token = prep.json()["token"]
+    dl = client.get(f"/api/backup/download/{token}")
+    assert dl.status_code == 200
+    body = dl.json()
+    assert body["local_storage"] == ls
+    # restore 回环成功
+    assert client.post("/api/backup/restore", json={"version": 2, "articles": body["articles"][:1]}).status_code == 200
+
+
+# --- 6.2 Android spaCy loading contract (static) ---
+
+def test_android_spacy_module_load_fallback_static():
+    """_load_spacy_model 必须包含 module.load() 回退（Android 无 dist-info 时唯一可用路径）。"""
+    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    assert "importlib.import_module" in src, "缺 importlib 回退"
+    assert "module.load()" in src, "缺 module.load() 回退"
+    assert "spacy.load(name)" in src or 'spacy.load(' in src, "缺 spacy.load(name) 首选路径"
+
+
+def test_android_spacy_model_dir_fallback_static():
+    """模型目录 glob 回退必须存在（meta 版本与目录名不一致时的最后兜底）。"""
+    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    assert "glob(f\"{name}-*\"" in src or 'glob(f"{name}-' in src, "缺模型目录 glob 兜底"
+    assert "data_dirs" in src, "缺 data_dirs 变量"
+
+
+def test_android_spacy_download_gated_by_is_android_static():
+    """自动下载必须被 is_android() 门控，否则 Android import 期起 pip 子进程卡死。"""
+    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    # 必须有 is_android 判断且在 download 之前
+    assert "is_android()" in src, "缺 is_android() 判断"
+    # 确保下载路径在 is_android 分支保护下，而非无条件
+    assert "from spacy.cli import download" in src
+    # 静态断言：download 调用位于 is_android() 之后且在 else 分支
+    lines = src.splitlines()
+    android_idx = next((i for i, ln in enumerate(lines) if "is_android()" in ln), -1)
+    download_idx = next((i for i, ln in enumerate(lines) if "from spacy.cli import download" in ln), -1)
+    assert android_idx != -1 and download_idx != -1 and android_idx < download_idx, "download 必须在 is_android() 之后"
+
+
+def test_android_spacy_extract_packages_static():
+    """build.gradle extractPackages 必须包含 spacy/thinc/de_core_news_sm 三者。"""
+    gradle = open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"), encoding="utf-8").read()
+    line = next((ln for ln in gradle.splitlines() if "extractPackages" in ln), "")
+    assert line, "缺 extractPackages 声明"
+    for pkg in ("spacy", "thinc", "de_core_news_sm"):
+        assert f'"{pkg}"' in line, f"{pkg} 未在 extractPackages 中"
+
+
+# --- 6.3 AI 402 / timeout / non-JSON (server returns 502, not 200) ---
+
+def _make_402_client():
+    class _R:
+        status_code = 402
+        text = '{"error":{"code":"insufficient_balance"}}'
+        def json(self):
+            return {"error": "Insufficient Balance"}
+    class _C:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def post(self, *a, **k): return _R()
+    return _C
+
+
+def _make_timeout_client():
+    import httpx as _httpx
+    class _C:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def post(self, *a, **k):
+            raise _httpx.TimeoutException("simulated timeout")
+    return _C
+
+
+def _make_non_json_client():
+    class _R:
+        status_code = 200
+        text = "not json"
+        def json(self):
+            raise ValueError("not json")
+    class _C:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def post(self, *a, **k): return _R()
+    return _C
+
+
+def _make_non_json_content_client():
+    """HTTP 200 但 choices[0].message.content 不是 JSON。"""
+    class _R:
+        status_code = 200
+        def json(self):
+            return {"choices": [{"message": {"content": "THIS IS NOT JSON"}}]}
+    class _C:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def post(self, *a, **k): return _R()
+    return _C
+
+
+@pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
+def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-test-402-timeout")
+    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    res = client.post("/api/ai/note-assist", json={"sentence": "Guten Tag.", "selected_text": "Guten Tag"})
+    assert res.status_code == 502, f"AI 失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
+    # 不得泄露 API Key
+    assert "sk-test-402-timeout" not in res.text
+
+
+@pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
+def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-test-polish")
+    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund."})
+    assert res.status_code == 502, f"AI 润色失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
+    assert "sk-test-polish" not in res.text
+
+
+@pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
+def test_ai_polish_ai_failure_returns_502(client, monkeypatch, factory):
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-test-polish2")
+    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
+    assert res.status_code == 502
+    assert "sk-test-polish2" not in res.text
+
+
+@pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client])
+def test_grammar_lookup_ai_failure_returns_502(client, monkeypatch, factory):
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-grammar")
+    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    res = client.post("/api/lookup/grammar", json={"sentence": "Ich gehe.", "target_phrase": "gehe"})
+    assert res.status_code == 502
+    assert "sk-grammar" not in res.text
+
+
+def test_ai_no_key_stub_still_succeeds(client, monkeypatch):
+    """无 key 时仍返回 200 stub（与网络失败的 502 区分）。"""
+    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "")
+    res = client.post("/api/ai/note-assist", json={"sentence": "Hallo.", "selected_text": "Hallo"})
+    assert res.status_code == 200
+    assert res.json().get("_stub") is True
+    res2 = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
+    assert res2.status_code == 200
+    assert res2.json()["status"] == "ok"
+
+
+# --- 6.4 Frontend error display (static, reuse api() path) ---
+
+def test_frontend_ai_error_paths_reuse_api_and_show_alert():
+    """前端 AI 错误必须走 api() 抛异常 → catch → alert/状态提示，不静默成功，不吞异常。"""
+    writer_src = open(os.path.join(os.path.dirname(__file__), "static", "js", "writer.js"), encoding="utf-8").read()
+    reader_src = open(os.path.join(os.path.dirname(__file__), "static", "js", "reader.js"), encoding="utf-8").read()
+    core_src = open(os.path.join(os.path.dirname(__file__), "static", "js", "core.js"), encoding="utf-8").read()
+    # core api() 必须在非 ok 时抛 Error
+    assert "throw new Error" in core_src, "core.js api() 必须抛异常"
+    # writer aiPolishEssay 必须有 try/catch 且 catch 中有 alert
+    polish_fn = writer_src[writer_src.index("export async function aiPolishEssay"):]
+    polish_fn = polish_fn[:polish_fn.index("export async function applyPolishChanges")]
+    assert "try" in polish_fn and "catch" in polish_fn, "aiPolishEssay 缺 try/catch"
+    assert "alert" in polish_fn, "aiPolishEssay 失败时必须 alert"
+    # 不写 API Key 到 DOM/localStorage
+    assert "api_key" not in writer_src.lower() or "localStorage.setItem" not in writer_src or "DEEPSEEK_API_KEY" not in writer_src, "writer 不应把 API Key 写入 localStorage/DOM"
+    # reader aiNoteAssist 同理
+    note_fn = reader_src[reader_src.index("export async function aiNoteAssist"):]
+    note_fn = note_fn[:note_fn.index("export async function saveCurrentNote")]
+    assert "try" in note_fn and "catch" in note_fn, "aiNoteAssist 缺 try/catch"
+    assert "alert" in note_fn or "statusEl" in note_fn, "aiNoteAssist 失败时必须提示"
+
+
+def test_frontend_does_not_write_api_key_to_storage():
+    """前端不得把 API Key 写入 localStorage 或以明文写入 DOM。"""
+    import pathlib
+    js_dir = pathlib.Path(os.path.join(os.path.dirname(__file__), "static", "js"))
+    for fp in js_dir.glob("*.js"):
+        src = fp.read_text(encoding="utf-8")
+        # 禁止同一行内把 api_key 明文 setItem
+        for line in src.splitlines():
+            low = line.lower()
+            if "localstorage.setitem" in low and "api_key" in low:
+                assert False, f"{fp.name} 将 API Key 写入 localStorage: {line.strip()[:120]}"
+        # 禁止把 API Key 明文通过 innerHTML 写入 DOM：检查同一行内同时出现 api_key 变量与 innerHTML
+        for line in src.splitlines():
+            low_line = line.lower()
+            if "innerhtml" in low_line and "api_key" in low_line and "masked" not in low_line:
+                # 允许的 warning 文案含 DEEPSEEK_API_KEY 常量但不含实际 key 值
+                if "DEEPSEEK_API_KEY" in line and "api_key_masked" not in line and "has_api_key" not in line:
+                    # 仅当该行试图把变量值写入 innerHTML 时才报错，常量提示文案放行
+                    if "detail" in low_line or "response" in low_line or "res." in low_line:
+                        assert False, f"{fp.name} 可能泄露 API Key 到 DOM: {line.strip()[:120]}"

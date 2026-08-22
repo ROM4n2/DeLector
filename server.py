@@ -1057,24 +1057,24 @@ async def lookup_grammar(req: GrammarLookupReq):
                     "response_format": {"type": "json_object"}
                 }
             )
-            if resp.status_code != 200:
-                return {
-                    "grammar_name": f"考点辨析 ({req.target_phrase})",
-                    "cefr_level": "B1",
-                    "explanation_zh": f"AI 接口响应异常 ({resp.status_code})，请检查「⚙️ 设置」中的 API Key 余额或网络连接。",
-                    "rule_formula": "",
-                    "collocations": []
-                }
-            content = resp.json()["choices"][0]["message"]["content"]
-            return json.loads(content)
-    except Exception as e:
-        return {
-            "grammar_name": f"考点辨析 ({req.target_phrase})",
-            "cefr_level": "B1",
-            "explanation_zh": f"AI 连接超时或异常: {str(e)}",
-            "rule_formula": "",
-            "collocations": []
-        }
+            if getattr(resp, "status_code", 200) != 200:
+                raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
+            try:
+                data = resp.json()
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务返回非 JSON 响应")
+            try:
+                content = data["choices"][0]["message"]["content"]
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务响应格式异常")
+            try:
+                return json.loads(content)
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务返回内容非 JSON")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="AI 服务连接失败")
 
 SYSTEM_VOCAB_PROMPT = """你是一位精通德汉词典编纂的德语专家。
 请根据给定的德语句子上下文和目标词汇，给出该词在当前句中的精准中文简明释义（1-8个字）、复数形式（如果是名词）、常用同义词等。
@@ -1748,7 +1748,6 @@ async def note_assist(req: NoteAssistReq):
 
     base_url = get_effective_api_base_url().rstrip('/')
     model = get_effective_api_model()
-    user_content = f"整句: \"{req.sentence}\"\n划选部分: \"{req.selected_text}\""
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
@@ -1758,18 +1757,29 @@ async def note_assist(req: NoteAssistReq):
                     "model": model,
                     "messages": [
                         {"role": "system", "content": SYSTEM_NOTE_PROMPT},
-                        {"role": "user", "content": user_content}
+                        {"role": "user", "content": f"整句: \"{req.sentence}\"\n划选部分: \"{req.selected_text}\""}
                     ],
                     "response_format": {"type": "json_object"}
                 }
             )
-            content = resp.json()["choices"][0]["message"]["content"]
-            return json.loads(content)
+            if getattr(resp, "status_code", 200) != 200:
+                raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
+            try:
+                data = resp.json()
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务返回非 JSON 响应")
+            try:
+                content = data["choices"][0]["message"]["content"]
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务响应格式异常")
+            try:
+                return json.loads(content)
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务返回内容非 JSON")
+    except HTTPException:
+        raise
     except Exception:
-        return {
-            "summary_zh": f"精读重点：{req.selected_text}",
-            "key_points": []
-        }
+        raise HTTPException(status_code=502, detail="AI 服务连接失败")
 
 # --- Settings & Configuration API ---
 class SettingsUpdate(BaseModel):
@@ -2597,16 +2607,30 @@ async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
                     "response_format": {"type": "json_object"}
                 }
             )
-            content = resp.json()["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
+            if getattr(resp, "status_code", 200) != 200:
+                raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
+            try:
+                data = resp.json()
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务返回非 JSON 响应")
+            try:
+                content = data["choices"][0]["message"]["content"]
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务响应格式异常")
+            try:
+                parsed = json.loads(content)
+            except Exception:
+                raise HTTPException(status_code=502, detail="AI 服务返回内容非 JSON")
             corrected_text = parsed.get("corrected_text", text)
             notes_zh = parsed.get("notes_zh", [])
             error_count = parsed.get("error_count", len(notes_zh))
             return corrected_text, notes_zh, error_count
+    except HTTPException:
+        raise
     except Exception as e:
         import logging
         logging.error(f"[writing/ai-polish] DeepSeek API error: {e}")
-        return text, [f"AI 润色请求失败：{str(e)}"], 0
+        raise HTTPException(status_code=502, detail="AI 服务连接失败")
 
 
 @app.post("/api/writing/ai-polish")
