@@ -3,6 +3,11 @@ plugins {
     id 'com.chaquo.python'
 }
 
+// 版本号只维护一个源头：git tag。CI 从 tag 推导后通过环境变量注入，
+// 本地构建无环境变量时用 fallback 默认值。
+def releaseVersionName = System.getenv("DELECTOR_VERSION_NAME") ?: "4.4.0"
+def releaseVersionCode = (System.getenv("DELECTOR_VERSION_CODE") ?: "40400").toInteger()
+
 // 钉死的签名 keystore。CI 把它从 secret 解到 $RUNNER_TEMP（永不进工作树），
 // 本地开发与 fork 没有这个环境变量，签名配置整段不生效、回落到 AGP 自动生成的
 // debug keystore —— 构建照常能跑。
@@ -44,8 +49,8 @@ android {
         // 旧规则 major*100 + minor*10 + patch 在 minor 到 10 时溢出撞车
         // （3.10.0 与 4.0.0 都是 400），而 versionCode 必须严格单调递增，
         // 撞车意味着 4.0.0 无法覆盖安装 3.10.0。
-        versionCode 40400
-        versionName "4.4.0"
+        versionCode releaseVersionCode
+        versionName releaseVersionName
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {

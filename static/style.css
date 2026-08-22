@@ -7384,7 +7384,7 @@ body.drawer-open .companion {
 
   .writer-sidebar {
     position: fixed;
-    z-index: 120;
+    z-index: 1100;
     left: 0.75rem;
     right: 0.75rem;
     bottom: calc(4.75rem + env(safe-area-inset-bottom));
@@ -7427,7 +7427,7 @@ body.drawer-open .companion {
     display: block;
     position: fixed;
     inset: 0;
-    z-index: 110;
+    z-index: 1050;
     background: rgba(21, 20, 15, 0.28);
     opacity: 0;
     pointer-events: none;

@@ -24,8 +24,10 @@ def test_android_disables_inlay_hints_by_default():
 
 
 def test_static_assets_are_bumped_for_v4_3():
-    assert 'src="/js/main.js?v=4.4.3"' in INDEX
-    assert "delector-static-v4.4.3" in (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
+    assert 'src="/js/main.js?v=4.4.4"' in INDEX
+    assert "delector-static-v4.4.4" in (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
     gradle = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
-    assert 'versionCode 40400' in gradle
-    assert 'versionName "4.4.0"' in gradle
+    assert 'System.getenv("DELECTOR_VERSION_NAME")' in gradle
+    assert 'System.getenv("DELECTOR_VERSION_CODE")' in gradle
+    assert 'versionName releaseVersionName' in gradle
+    assert 'versionCode releaseVersionCode' in gradle

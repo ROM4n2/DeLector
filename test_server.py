@@ -1863,8 +1863,12 @@ def test_android_version_code_encoding():
     所以这条规则交给测试守，而不是靠记忆。
     """
     gradle = _read_android_gradle()
-    code = int(re.search(r"versionCode\s+(\d+)", gradle).group(1))
-    name = re.search(r'versionName\s+"([\d.]+)"', gradle).group(1)
+    # 版本号从环境变量读取，fallback 默认值在变量定义里。测试解析 fallback 值。
+    code_str = re.search(r'System.getenv\("DELECTOR_VERSION_CODE"\) \?: "(\d+)"', gradle)
+    name_str = re.search(r'System.getenv\("DELECTOR_VERSION_NAME"\) \?: "([\d.]+)"', gradle)
+    assert code_str and name_str, "build.gradle 必须保留 DELECTOR_VERSION_* 的 fallback 默认值"
+    code = int(code_str.group(1))
+    name = name_str.group(1)
     major, minor, patch = (int(x) for x in name.split("."))
     assert code == major * 10000 + minor * 100 + patch, \
         f"versionName {name} 应编码为 {major * 10000 + minor * 100 + patch}，实际 {code}"
