@@ -1800,7 +1800,8 @@ def get_app_settings():
     }
 
 @app.post("/api/settings")
-def update_app_settings(settings: SettingsUpdate):
+def update_app_settings(settings: SettingsUpdate, request: Request):
+    _require_localhost(request)
     if settings.api_key is not None and settings.api_key.strip() != "":
         set_setting("DEEPSEEK_API_KEY", settings.api_key.strip())
     if settings.api_base_url is not None and settings.api_base_url.strip() != "":
@@ -1814,7 +1815,8 @@ def update_app_settings(settings: SettingsUpdate):
     return {"success": True, "message": "偏好与 API 设置已保存！"}
 
 @app.post("/api/settings/test-key")
-async def test_api_key(settings: SettingsUpdate):
+async def test_api_key(settings: SettingsUpdate, request: Request):
+    _require_localhost(request)
     key = settings.api_key.strip() if (settings.api_key and settings.api_key.strip()) else get_effective_api_key()
     if not key:
         return {"success": False, "error": "请先输入 API Key"}
@@ -1948,16 +1950,21 @@ _PROGRESS_TABLES = {
 
 
 def _require_localhost(request: Request):
-    """备份端点只允许本机访问。
+    """敏感接口仅允许本机访问。
 
     桌面端有意绑 0.0.0.0（start.py 的 get_bind_host，同 Wi-Fi 的手机/平板可读文章），
-    但「导出整个数据库」和「清空数据库再灌」从来不该被局域网触达 ——
-    后者在改成真覆盖语义后等于「局域网内一个 POST 清空你的数据」。
-    读文章期望被共享，备份不期望，所以闸下在端点粒度而不是改绑定地址。
+    但「导出整个数据库」「清空数据库再灌」和「改写 API Key / base_url」从来不该被局域网触达 ——
+    后者在改成真覆盖语义后等于「局域网内一个 POST 清空你的数据」或「悄悄改写你的模型网关」。
+    读文章期望被共享，备份与设置不期望，所以闸下在端点粒度而不是改绑定地址。
+
+    接受 127.0.0.1、::1、localhost 与等价的 IPv4-mapped 回环 ::ffff:127.0.0.1；
+    无法确认来源（client 为 None 或 host 缺失/空）时拒绝，不默认放行。
     """
-    host = request.client.host if request.client else ""
-    if host not in ("127.0.0.1", "::1", "localhost"):
-        raise HTTPException(403, "备份接口仅允许本机访问")
+    host = ""
+    if request.client is not None:
+        host = getattr(request.client, "host", None) or ""
+    if host not in ("127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"):
+        raise HTTPException(403, "该接口仅允许本机访问")
 
 
 def _rows_to_tuples(rows: List[Dict[str, Any]], columns: Tuple[str, ...],
