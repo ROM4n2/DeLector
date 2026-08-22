@@ -79,6 +79,50 @@ while IFS= read -r -d '' path; do
                 printf 'LINE\t%s:%s\t%s\n' "$path" "$lineno" "$label" >> "$HITS"
               done
     done <<< "$PATTERNS"
+
+    # ── PKCS12 Base64 内容检测（最小充分判定；不靠通用 MII 前缀） ──
+    # 单纯 MII... 太通用（公开证书也是），必须解码后命中 PKCS12 文件头才算。
+    # 复用主链的白名单与行内豁免：.example/.sample/.template 整体跳过，
+    # 含 delector:allow-secret 的行先过滤。
+    case "$path" in
+        *.example|*.sample|*.template) ;;
+        *)
+            filtered_b64="$(printf '%s' "$content" | grep -v -- "$PRAGMA" | tr -d '\r\n\t ' || true)"
+            if printf '%s' "$filtered_b64" | grep -qE 'MII[A-Za-z0-9+/]{200,}' 2>/dev/null; then
+                if printf '%s' "$filtered_b64" | python -c '
+import sys, base64, re
+data = sys.stdin.read()
+for m in re.finditer(r"MII[A-Za-z0-9+/]{200,}={0,2}", data):
+    s = m.group(0)
+    try:
+        padded = s + "=" * (-len(s) % 4)
+        raw = base64.b64decode(padded, validate=False)
+    except Exception:
+        continue
+    if len(raw) >= 7 and raw[0]==0x30 and raw[1]==0x82 and raw[4]==0x02 and raw[5]==0x01 and raw[6]==0x03:
+        sys.exit(0)
+sys.exit(1)
+' 2>/dev/null; then
+                    printf 'LINE\t%s:1\tPKCS12 Base64 内容疑似 keystore（解码后命中 PKCS12 头）\n' "$path" >> "$HITS"
+                elif printf '%s' "$filtered_b64" | python3 -c '
+import sys, base64, re
+data = sys.stdin.read()
+for m in re.finditer(r"MII[A-Za-z0-9+/]{200,}={0,2}", data):
+    s = m.group(0)
+    try:
+        padded = s + "=" * (-len(s) % 4)
+        raw = base64.b64decode(padded, validate=False)
+    except Exception:
+        continue
+    if len(raw) >= 7 and raw[0]==0x30 and raw[1]==0x82 and raw[4]==0x02 and raw[5]==0x01 and raw[6]==0x03:
+        sys.exit(0)
+sys.exit(1)
+' 2>/dev/null; then
+                    printf 'LINE\t%s:1\tPKCS12 Base64 内容疑似 keystore（解码后命中 PKCS12 头）\n' "$path" >> "$HITS"
+                fi
+            fi
+            ;;
+    esac
 done < <(git diff --cached --name-only --diff-filter=ACM -z)
 
 if [ -s "$HITS" ]; then

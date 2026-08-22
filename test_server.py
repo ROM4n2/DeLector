@@ -1924,6 +1924,122 @@ def test_keystore_protected_by_gitignore_and_hook():
     hook = open(os.path.join(root, ".githooks", "pre-commit"), encoding="utf-8").read()
     assert "*.jks" in hook, "pre-commit 的文件名黑名单不覆盖 keystore"
     assert "feedfeed" in hook, "还需按文件头认 keystore：改后缀就能绕开文件名黑名单"
+    # Task3: 编码后的 PKCS12（Base64 存成普通文本）也不能靠改后缀绕开
+    assert "PKCS12 Base64" in hook, "pre-commit 缺少 PKCS12 Base64 内容检测"
+    assert "020103" in hook, "PKCS12 判定必须包含 version 3 头校验（020103），不能只认 3082"
+    # 不能用通用 MII 前缀单独作为 PATTERNS 条目（会把公开证书全误拦）
+    assert "MII[A-Za-z0-9+/]" in hook or "MII" in hook, "应有 MII 长串预筛但必须配合解码校验"
+    # Base64 块必须配合解码校验：hook 里应有 python 解码与 0x30 0x82 校验
+    assert "base64" in hook and "0x30" in hook, "PKCS12 Base64 检测需经 base64 解码后验文件头"
+
+
+def _pkcs12_b64():
+    import base64
+    return base64.b64encode(bytes.fromhex("30820500020103") + b"A" * 1200).decode()
+
+
+def _cert_b64():
+    import base64
+    return base64.b64encode(bytes.fromhex("3082010030820100") + b"B" * 1200).decode()
+
+
+def _run_hook_with_files(tmp_path, files):
+    """在隔离的临时 git 仓库里暂存 files 并运行 pre-commit，返回 (returncode, output)。
+
+    files: dict[str, str|bytes]  path -> content
+    """
+    import subprocess
+    import shutil
+    import tempfile
+    import pathlib
+
+    if shutil.which("bash") is None:
+        pytest.skip("bash 不可用，跳过 hook 行为测试")
+    root = os.path.dirname(__file__)
+    hook_src = os.path.join(root, ".githooks", "pre-commit")
+    hook_content = open(hook_src, encoding="utf-8").read()
+
+    repo = pathlib.Path(tempfile.mkdtemp(dir=str(tmp_path)))
+    subprocess.run(["git", "init"], cwd=str(repo), capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t.t"], cwd=str(repo), capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=str(repo), capture_output=True, check=True)
+    (repo / ".githooks").mkdir()
+    # 用 LF 写入，避免 Windows 写入 CRLF 导致 bash 在 Windows cwd 下报 $'\r' 错误
+    with open(repo / ".githooks" / "pre-commit", "wb") as f:
+        f.write(hook_content.encode("utf-8"))
+    (repo / "README.md").write_text("init", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=str(repo), capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=str(repo), capture_output=True, check=True)
+    for rel, content in files.items():
+        p = repo / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            p.write_bytes(content)
+        else:
+            p.write_text(content, encoding="utf-8")
+        subprocess.run(["git", "add", rel], cwd=str(repo), capture_output=True, check=True)
+    result = subprocess.run(
+        ["bash", ".githooks/pre-commit"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return result.returncode, result.stdout + result.stderr
+
+
+def test_precommit_blocks_pkcs12_base64_in_plain_text(tmp_path):
+    """普通文本里的 PKCS12 Base64 必须被拦截（编码后改后缀绕开的缺口）。"""
+    b64 = _pkcs12_b64()
+    code, out = _run_hook_with_files(tmp_path, {"notes.txt": b64})
+    assert code != 0, f"应拦截 PKCS12 Base64，hook 却放行: {out}"
+    assert "PKCS12" in out
+
+
+def test_precommit_blocks_p12_and_pfx_filenames(tmp_path):
+    """敏感文件名 .p12/.pfx 仍按文件名黑名单拦截。"""
+    for name in ("secret.p12", "secret.pfx"):
+        code, out = _run_hook_with_files(tmp_path, {name: ""})
+        assert code != 0, f"{name} 应被文件名黑名单拦截: {out}"
+
+
+def test_precommit_allows_example_and_sample_exemption(tmp_path):
+    """.example/.sample/.template 白名单内的 PKCS12 不应误拦。"""
+    b64 = _pkcs12_b64()
+    for name in ("secret.txt.example", "secret.txt.sample", "secret.txt.template"):
+        code, out = _run_hook_with_files(tmp_path, {name: b64})
+        assert code == 0, f"{name} 白名单应放行，却被拦: {out}"
+
+
+def test_precommit_allows_public_pem_cert_not_pkcs12(tmp_path):
+    """公开证书的 Base64（同为 MII 开头）不应被 PKCS12 规则误拦。
+
+    证书 Base64 同样以 MII 开头且长度足够，但解码后头不是 3082????020103，
+    必须放行。用非 .pem 文件名避免触发 *.pem 文件名黑名单。
+    """
+    b64 = _cert_b64()
+    content = "public cert:\n" + b64 + "\nend\n"
+    code, out = _run_hook_with_files(tmp_path, {"doc.txt": content})
+    assert code == 0, f"公开证书不应被误拦: {out}"
+
+
+def test_precommit_allow_secret_exempts_pkcs12_line(tmp_path):
+    """行内 delector:allow-secret 豁免应对 PKCS12 Base64 同样生效。"""
+    b64 = _pkcs12_b64()
+    content = b64 + " # delector:allow-secret\n"
+    code, out = _run_hook_with_files(tmp_path, {"notes.txt": content})
+    assert code == 0, f"含 allow-secret 的行应豁免: {out}"
+
+
+def test_precommit_wrapped_pkcs12_still_blocked(tmp_path):
+    """换行包裹的 PKCS12 Base64（每行 64 字符）也应被拦截。"""
+    b64 = _pkcs12_b64()
+    wrapped = "\n".join(b64[i:i+64] for i in range(0, len(b64), 64))
+    code, out = _run_hook_with_files(tmp_path, {"wrapped.txt": wrapped})
+    assert code != 0, f"换行包裹的 PKCS12 仍应拦截: {out}"
+    assert "PKCS12" in out
+
 
 def test_delete_article(client):
     # 1. Ingest article
