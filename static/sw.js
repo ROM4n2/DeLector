@@ -1,9 +1,9 @@
-const CACHE_NAME = 'delector-static-v4.4.1';
+const CACHE_NAME = 'delector-static-v4.4.2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/style.css?v=4.4.1',
-  '/js/main.js?v=4.4.1',
+  '/style.css?v=4.4.2',
+  '/js/main.js?v=4.4.2',
   '/js/core.js',
   '/js/player.js',
   '/js/companion.js',
@@ -11,12 +11,9 @@ const STATIC_ASSETS = [
   '/js/cards.js',
   '/js/folio.js',
   '/js/cloze.js',
-  '/js/writer.js?v=4.4.1',
+  '/js/writer.js?v=4.4.2',
   '/manifest.json'
 ];
-
-
-
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -24,15 +21,23 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
+    (async () => {
+      // Clean old caches
+      const keys = await caches.keys();
+      await Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) return caches.delete(key);
         })
       );
-    })
+      // Claim all clients immediately
+      await self.clients.claim();
+      // Force reload all pages to pick up new assets
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((client) => {
+        client.navigate(client.url);
+      });
+    })()
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
