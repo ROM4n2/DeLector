@@ -27,5 +27,5 @@ def test_static_assets_are_bumped_for_v4_3():
     assert 'src="/js/main.js?v=4.3.0"' in INDEX
     assert "delector-static-v4.3.0" in (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
     gradle = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
-    assert 'versionCode 40300' in gradle
-    assert 'versionName "4.3.0"' in gradle
+    assert 'versionCode 40400' in gradle
+    assert 'versionName "4.4.0"' in gradle
