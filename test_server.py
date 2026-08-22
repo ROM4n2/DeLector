@@ -2214,3 +2214,75 @@ def test_tts_rejects_oversized_text(client):
     """朗读接口有长度上限：局域网可达的端点不该被超大文本打满合成与磁盘缓存。"""
     res = client.post("/api/audio/tts", json={"text": "A" * 1001})
     assert res.status_code == 400
+
+
+# ── v4.4 Task1: Settings localhost-only security boundary (failing before Task2) ──
+
+def test_settings_post_rejects_non_loopback_client(lan_client):
+    """非本机不得修改敏感设置：POST /api/settings 来自局域网必须 403。"""
+    res = lan_client.post("/api/settings", json={"api_key": "sk-should-be-rejected"})
+    assert res.status_code == 403
+
+
+def test_settings_test_key_rejects_non_loopback_client(lan_client):
+    """非本机不得测试连通性：POST /api/settings/test-key 来自局域网必须 403。"""
+    res = lan_client.post("/api/settings/test-key", json={"api_key": "sk-any"})
+    assert res.status_code == 403
+
+
+def test_settings_post_lan_does_not_mutate_sensitive_settings(lan_client, test_db_path):
+    """被 403 时数据库中的敏感设置必须保持不变。"""
+    import sqlite3
+    set_setting("DEEPSEEK_API_KEY", "sk-original-keep", db_path=test_db_path)
+    set_setting("API_BASE_URL", "https://original.example/v1", db_path=test_db_path)
+
+    res = lan_client.post("/api/settings", json={
+        "api_key": "sk-hacked-rejected",
+        "api_base_url": "https://evil.example/v1",
+    })
+    assert res.status_code == 403
+
+    conn = sqlite3.connect(test_db_path)
+    rows = {r[0]: r[1] for r in conn.execute("SELECT key, value FROM app_settings").fetchall()}
+    conn.close()
+    assert rows.get("DEEPSEEK_API_KEY") == "sk-original-keep"
+    assert rows.get("API_BASE_URL") == "https://original.example/v1"
+
+
+def test_settings_test_key_lan_does_not_leak_or_mutate(lan_client, test_db_path):
+    """test-key 被 403 时也不得改库或泄露信息。"""
+    import sqlite3
+    set_setting("DEEPSEEK_API_KEY", "sk-keep-intact", db_path=test_db_path)
+    res = lan_client.post("/api/settings/test-key", json={"api_key": "sk-evil"})
+    assert res.status_code == 403
+    conn = sqlite3.connect(test_db_path)
+    val = conn.execute("SELECT value FROM app_settings WHERE key='DEEPSEEK_API_KEY'").fetchone()
+    conn.close()
+    assert val and val[0] == "sk-keep-intact"
+
+
+def test_settings_post_succeeds_on_loopback(client):
+    """回环来源的合法设置更新仍返回成功；已有 /api/settings 行为保持不变。"""
+    res = client.post("/api/settings", json={
+        "api_key": "sk-loopback-ok-1234567890",
+        "api_base_url": "https://api.loopback.example/v1",
+        "tts_voice": "de-DE-ConradNeural",
+    })
+    assert res.status_code == 200
+    assert res.json().get("success") is True
+
+    # verify persisted and masked correctly
+    get_res = client.get("/api/settings")
+    assert get_res.status_code == 200
+    data = get_res.json()
+    assert data["has_api_key"] is True
+    assert data["api_base_url"] == "https://api.loopback.example/v1"
+    assert data["tts_voice"] == "de-DE-ConradNeural"
+
+
+def test_settings_test_key_succeeds_on_loopback(client, monkeypatch):
+    """回环来源的 test-key 不应被 403 拦截（空 key 时返回 success=False 而非 403）。"""
+    res = client.post("/api/settings/test-key", json={"api_key": ""})
+    # 未被来源闸拦截：返回 200 且 success 为 False（提示输入 key），而非 403
+    assert res.status_code == 200
+    assert res.json().get("success") is False
