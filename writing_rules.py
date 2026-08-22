@@ -12,6 +12,11 @@ _TWO_WAY_PREPS = {
     "in", "an", "auf", "über", "unter", "vor", "hinter", "neben", "zwischen"
 }
 
+# 位置动词 + 双向介词时，习语搭配（如 stehen auf Akk=喜欢）易误伤真实位置 Dat/Akk
+_LOC_VERBS_TWOWAY_COLLISION = {
+    "stehen", "liegen", "sitzen", "hängen", "stellen", "legen", "setzen", "stecken", "bleiben"
+}
+
 # 固定单格介词 → 支配格（事实数据，参考 LanguageTool PrepositionToCases）
 _PREP_CASE = {
     "mit": "Dat", "bei": "Dat", "nach": "Dat", "seit": "Dat",
@@ -130,6 +135,10 @@ def _prep_expected_case(tok: Any) -> Tuple[Optional[str], str]:
     """
     prep = tok.text.lower()
     verb_head = tok.head
+    # 位置动词 + 双向介词时，习语搭配易误伤真实位置 → 优先按双向处理（只给 warning，不报 error）
+    if verb_head and verb_head.lemma_ in _LOC_VERBS_TWOWAY_COLLISION and prep in _TWO_WAY_PREPS:
+        return "Dat/Akk", "twoway"
+
     # 1. 动词/形容词固定搭配优先
     if verb_head and verb_head.pos_ in ("VERB", "AUX", "ADJ"):
         from linguistics import lookup_prep_collocations
@@ -166,6 +175,30 @@ def detect_determiner_noun_agreement(tokens: List[Any], base: int) -> List[Dict[
         # 如果 head 直接受介词支配（如介词短语），交由 detect_preposition_case 统一裁定
         if head.head and head.head.pos_ == "ADP" and head.dep_ in ("nk", "pobj", "op"):
             continue
+
+        # FP 守卫：属格定语间隔（des Mannes Haus）— DET 与 head 间夹有名词时，DET 实际归属中间名词而非 head
+        if abs(tok.i - head.i) > 1:
+            lo = min(tok.i, head.i)
+            hi = max(tok.i, head.i)
+            has_intervening_noun = False
+            for mid in tokens:
+                if lo < mid.i < hi:
+                    # POS 直判 + 词典兜底（Mannes 被误标为 ADJ 但 lemma Mann 仍是 NOUN）
+                    if mid.pos_ in ("NOUN", "PROPN"):
+                        has_intervening_noun = True
+                        break
+                    di = lookup_core_vocab(mid.lemma_) or lookup_core_vocab(mid.text)
+                    if di and di.get("pos") == "NOUN":
+                        has_intervening_noun = True
+                        break
+                    # ADJ 误标但实为名词屈折（如 Mannes）
+                    if mid.pos_ == "ADJ":
+                        di2 = lookup_core_vocab(mid.text)
+                        if di2 and di2.get("pos") == "NOUN":
+                            has_intervening_noun = True
+                            break
+            if has_intervening_noun:
+                continue
 
         dc_raw = _first_morph(tok.morph.get("Case"))
         dg_raw = _first_morph(tok.morph.get("Gender"))
