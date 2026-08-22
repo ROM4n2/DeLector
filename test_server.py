@@ -2016,8 +2016,47 @@ def _run_hook_with_files(tmp_path, files):
     import shutil
     import tempfile
     import pathlib
+    import os
 
-    if shutil.which("bash") is None:
+    def _find_bash():
+        cands = []
+        # where bash 列出所有候选（含 Git Bash 与 WSL bash）
+        try:
+            out = subprocess.run(["where", "bash"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+            for line in out.splitlines():
+                p = line.strip().strip('"')
+                if p and os.path.exists(p):
+                    cands.append(p)
+        except Exception:
+            pass
+        for p in os.environ.get("PATH", "").split(os.pathsep):
+            if not p:
+                continue
+            cand = os.path.join(p.strip('"'), "bash.exe")
+            if os.path.exists(cand) and cand not in cands:
+                cands.append(cand)
+            cand2 = os.path.join(p.strip('"'), "bash")
+            if os.path.exists(cand2) and cand2 not in cands:
+                cands.append(cand2)
+        which = shutil.which("bash")
+        if which and which not in cands:
+            cands.append(which)
+        # 去重保持顺序
+        seen = []
+        for c in cands:
+            if c not in seen:
+                seen.append(c)
+        # 优先 Git Bash，WSL 的 C:\\Windows\\System32\\bash.exe 放最后（无发行版时会直接报错）
+        git_bash = [c for c in seen if "Git" in c]
+        non_wsl = [c for c in seen if "Git" not in c and "System32" not in c.lower() and "system32" not in c]
+        wsl_bash = [c for c in seen if "System32" in c or "system32" in c]
+        for pool in (git_bash, non_wsl, wsl_bash, seen):
+            if pool:
+                return pool[0]
+        return which
+
+    bash_exe = _find_bash()
+    if bash_exe is None or not os.path.exists(bash_exe):
         pytest.skip("bash 不可用，跳过 hook 行为测试")
     root = os.path.dirname(__file__)
     hook_src = os.path.join(root, ".githooks", "pre-commit")
@@ -2043,14 +2082,19 @@ def _run_hook_with_files(tmp_path, files):
             p.write_text(content, encoding="utf-8")
         subprocess.run(["git", "add", rel], cwd=str(repo), capture_output=True, check=True)
     result = subprocess.run(
-        ["bash", ".githooks/pre-commit"],
+        [bash_exe, ".githooks/pre-commit"],
         cwd=str(repo),
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
     )
-    return result.returncode, result.stdout + result.stderr
+    # WSL 的 bash 在无发行版时会输出 "Windows Subsystem for Linux has no installed distributions"
+    # 且以 UTF-16 误判；若命中则视为环境不可用而非钩子逻辑失败
+    combined = result.stdout + result.stderr
+    if "Windows Subsystem for Linux" in combined and "no installed distributions" in combined:
+        pytest.skip("WSL bash 无发行版，跳过 hook 行为测试（应使用 Git Bash）")
+    return result.returncode, combined
 
 
 def test_precommit_blocks_pkcs12_base64_in_plain_text(tmp_path):
