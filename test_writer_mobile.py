@@ -60,6 +60,17 @@ def test_version_is_consistent_across_release_surfaces():
     assert "versionName releaseVersionName" in GRADLE
     assert "versionCode releaseVersionCode" in GRADLE
 
+    # CI 的非 tag 回落路径不许再自存一份版本号。原来它硬编码 4.4.0/40400，
+    # 而 build.gradle 已走到别处 —— 副本漂了不会构建失败，只会产出 versionCode
+    # 偏小、装不上现有设备的 APK（versionCode 必须严格递增）。
+    workflow = (ROOT / ".github" / "workflows" / "build-release.yml").read_text(encoding="utf-8")
+    assert not re.search(r'VER="\d+\.\d+\.\d+"', workflow), (
+        "build-release.yml 又硬编码了版本号，应从 build.gradle 读取"
+    )
+    assert "DELECTOR_VERSION_NAME" in workflow and "android/app/build.gradle" in workflow, (
+        "build-release.yml 的回落路径应解析 build.gradle 的 fallback"
+    )
+
 
 def test_android_reunpacks_static_assets_on_version_change():
     """APK 覆盖安装不清 getFilesDir()，而 copyAssetFile() 见目标已存在就跳过，

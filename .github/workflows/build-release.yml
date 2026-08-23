@@ -232,10 +232,18 @@ jobs:
             CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
             echo "从 tag $TAG 推导版本 $VER (code $CODE)"
           else
-            # workflow_dispatch 或非 tag 触发：回落到 build.gradle 的 fallback 默认值
-            VER="4.4.0"
-            CODE=40400
-            echo "非 tag 触发，使用 fallback 版本 $VER (code $CODE)"
+            # workflow_dispatch 或非 tag 触发：直接读 build.gradle 的 fallback，
+            # 不在这里另存一份副本 —— 原来硬编码的是 4.4.0/40400，而 build.gradle
+            # 早已走到别的版本，副本一定会漂。漂了的后果不是构建失败而是产出一个
+            # versionCode 偏小的 APK：装不上现有设备（versionCode 必须严格递增），
+            # 且 v4.4.5 起的资产解包闸会拿这个错版本号去比标记。
+            VER=$(sed -n 's/.*DELECTOR_VERSION_NAME") *?: *"\([0-9.]*\)".*/\1/p' android/app/build.gradle)
+            CODE=$(sed -n 's/.*DELECTOR_VERSION_CODE") *?: *"\([0-9]*\)".*/\1/p' android/app/build.gradle)
+            if [[ -z "$VER" || -z "$CODE" ]]; then
+              echo "::error::读不出 build.gradle 的 fallback 版本，拒绝构建无版本号的包"
+              exit 1
+            fi
+            echo "非 tag 触发，沿用 build.gradle fallback 版本 $VER (code $CODE)"
           fi
           echo "name=$VER" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
