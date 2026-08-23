@@ -7382,13 +7382,18 @@ body.drawer-open .companion {
     display: inline-flex;
   }
 
+  /* height 而不是 max-height：这个 sheet 锚在底边（bottom + 无 top），
+     高度跟内容走就意味着只能向上长 —— 切 tab、错误卡填内容、问题清单从
+     "暂无"变成 N 条，每一次都把顶边挪到新位置，整个面板在眼前跳。
+     固定成同一个矩形后内容再变也不动，代价是内容少时下方留白，
+     换来的是可预期的几何（标准 bottom sheet 也是固定 detent）。 */
   .writer-sidebar {
     position: fixed;
     z-index: 1100;
     left: 0.75rem;
     right: 0.75rem;
     bottom: calc(4.75rem + env(safe-area-inset-bottom));
-    max-height: min(76vh, 680px);
+    height: min(76vh, 680px);
     overflow-y: auto;
     padding: 0.75rem;
     background: var(--paper);
@@ -7396,6 +7401,16 @@ body.drawer-open .companion {
     box-shadow: 4px 4px 0 var(--ink);
     transform: translateY(calc(100% + 1rem));
     transition: transform 180ms ease;
+  }
+
+  /* 滚动只归 sheet 一个人管。内层列表各自带 max-height + overflow-y 时，
+     它们几乎占满整个可见区域，手指落下去就被内层吃掉，外层没地方可抓，
+     于是 sheet 自己的底部永远滚不到。 */
+  .writer-sent-nav-list,
+  .writer-problem-list,
+  .writer-version-list {
+    max-height: none;
+    overflow-y: visible;
   }
 
   .writer-sidebar.mobile-panel-open {
@@ -7441,8 +7456,12 @@ body.drawer-open .companion {
 }
 
 /* ── Writer Sidebar Tabs & Panes (v3.12.0) ─────────────────────────────── */
+/* flex-shrink: 0 是 sheet 固定高度的前提。父容器高度一确定，flex 子项默认
+   会被压缩到塞得下为止（然后自己的内容再溢出去），结果是内容挤成一团、
+   父容器反而没有可滚动的溢出。钉住不许收缩，溢出才会交给 overflow-y。 */
 .writer-panel-tabs {
   display: flex;
+  flex-shrink: 0;
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
@@ -7485,6 +7504,7 @@ body.drawer-open .companion {
 .writer-pane {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 1.25rem;
 }
 

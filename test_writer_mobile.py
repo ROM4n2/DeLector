@@ -46,6 +46,15 @@ def test_version_is_consistent_across_release_surfaces():
         f"版本不一致：sw.js={sw_match.group(1)} vs build.gradle={gradle_name.group(1)}"
     )
 
+    # index.html 顶栏那句 "System · vX.Y.Z Online" 是用户判断「前端刷新了没有」的
+    # 唯一肉眼指标。v4.4.5 发版时漏 bump 了它，于是修好的升级链路看起来像没生效
+    # —— 缓存闸门是对的，指示灯是坏的，而指示灯说什么用户就信什么。
+    index_label = re.search(r"System · v(\d+\.\d+\.\d+) Online", INDEX)
+    assert index_label, "index.html 顶栏找不到 'System · vX.Y.Z Online' 版本标签"
+    assert index_label.group(1) == gradle_name.group(1), (
+        f"版本不一致：index.html 顶栏={index_label.group(1)} vs build.gradle={gradle_name.group(1)}"
+    )
+
     # versionCode 编码规则 major*10000 + minor*100 + patch，必须与 versionName 对得上。
     # 旧规则 major*100+minor*10+patch 在 3.10.0 与 4.0.0 上撞车过，而 versionCode
     # 撞车意味着新版无法覆盖安装旧版。
@@ -146,3 +155,68 @@ def test_version_row_hover_matches_other_rows():
     assert "cursor: pointer" in version_item
     version_hover = STYLE.split(".version-item:hover {")[1].split("}")[0]
     assert "translateX(2px)" in version_hover
+
+
+def test_mobile_sheet_is_geometrically_stable():
+    """v4.4.5 的 sheet 是 bottom-anchored + 无 top + 只用 max-height，
+    高度跟内容走 —— 切 tab、错误卡填内容、问题清单从空变 N 条时顶边一路跳，
+    整个面板在眼前挪位置，"像收起了一样"。v4.4.6 改用 height 把几何固定成
+    同一矩形：内容多时内部滚动，sheet 自身位置不动。
+    配套：内层列表去掉 max-height / overflow-y，让滚动只归 sheet 管，
+    否则内层（460/320/220px）几乎占满 600px sheet，手指被它吃掉，
+    外层 sheet 永远滚不到底。
+    """
+    # 选那个把 .writer-sidebar 改成 position: fixed 的块（底边 bottom-sheet
+    # 几何在这一块里定义，规则改成 max-height → height 也是这一块）。
+    # 笨办法：找出所有 ".writer-sidebar {" 的位置，挑后面紧跟
+    # "position: fixed" 的那个，然后按括号深度读到匹配的 }。
+    sidebar_idxs = [m.end() for m in re.finditer(r"\.writer-sidebar\s*\{", STYLE)]
+    fixed_idx = next(
+        i for i in sidebar_idxs if "position: fixed" in STYLE[i:i + 300]
+    )
+    depth = 1
+    j = fixed_idx
+    while depth and j < len(STYLE):
+        c = STYLE[j]
+        if c == "{": depth += 1
+        elif c == "}": depth -= 1
+        j += 1
+    sheet = STYLE[fixed_idx:j - 1]
+
+    # j 上面算的是 .writer-sidebar 单个规则的右花括号位置，但移动端
+    # 覆盖（max-height: none 等）是在它之后、同一个 @media 媒体块里。
+    # 把 j 推前到 @media 媒体块的结尾（或者下一个 @media 的开头之前）。
+    next_media = STYLE.find("@media", j)
+    j = next_media if next_media > 0 else len(STYLE)
+    assert "height:" in sheet and "max-height:" not in sheet, (
+        "移动端 sheet 必须用 height 固定几何，不能用 max-height（会跟内容走、整块跳）"
+    )
+    assert "overflow-y: auto" in sheet, "sheet 自身必须能滚动"
+
+    # 内层列表在移动端不能自己再开一个滚动区
+    # 找的是移动端块里"最后一次出现"的选择器 —— CSS 源序决定级联，
+    # base 规则在媒体块之前，移动端覆盖必须出现在媒体块内且靠后。
+    for sel in ("writer-sent-nav-list", "writer-problem-list", "writer-version-list"):
+        needle = sel
+        # 在媒体块（以 j 截断）中找这个选择器最后出现的规则体
+        block = STYLE[STYLE.find("@media (max-width: 860px) {"):j]
+        assert needle in block, f"移动端块里没出现 .{sel} 的覆盖规则"
+        # 抓选择器后第一个 { ... } 块；写死用宽口选择器（base 是 ".X {…}"，
+        # 移动端用 ".X, .Y, .Z {…}" 的并集，needle 后一定是 {）
+        last = block.rfind(needle)
+        brace = block.find("{", last)
+        depth = 1
+        k = brace + 1
+        while depth and k < len(block):
+            if block[k] == "{": depth += 1
+            elif block[k] == "}": depth -= 1
+            k += 1
+        rule = block[brace + 1:k - 1]
+        assert "max-height: none" in rule, (
+            "移动端 ." + sel + " 必须解掉 max-height，否则内层吃滚动"
+        )
+
+    # 关键：移动端 sheet 的 .writer-pane 不能被父容器压扁
+    assert "flex-shrink: 0" in STYLE.split(".writer-pane {")[1].split("}")[0], (
+        "父容器高度固定后，pane 缺 flex-shrink:0 会被压扁、溢出但滚不动"
+    )
