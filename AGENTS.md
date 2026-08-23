@@ -11,15 +11,15 @@
 
 ## 交接快照
 
-> 更新时间：2026-08-22
+> 更新时间：2026-08-23
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（v4.4.0 可靠性与安全收口：局域网设置限制 + pre-commit 密钥扫描补齐 + CI 构建闸 + 写作误报收敛 + 备份/AI 失败路径，待发布） |
-| 测试 | **230 / 230 全绿**（含 v4.4 新增安全边界、提交守卫、CI 契约、写作反例、备份/AI 失败回归） |
+| 当前分支 / HEAD | `master`（v4.4.5 待提交：安卓升级后前端不更新根治 + 写作台三 Tab 交互统一） |
+| 测试 | **238 / 238 全绿**（v4.4.5 新增：前端 no-cache 头、版本号跨落点自洽、安卓版本闸、写作台点击契约） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | **v4.4.0（待发布）**：可靠性与安全收口（敏感设置仅回环可写、编码 keystore 拦截、Gradle 真构建与验签、写作零误报加固、备份/AI 失败回归，版本号 40400；仅 arm64-v8a，CI 覆盖 md 加载路径） |
+| 对外发布 | 已发布至 **v4.4.4**；**v4.4.5 待发布**（版本号 40405，仅 arm64-v8a）。⚠️ **v4.4.5 的安卓改动本机无法编译验证**（无 Android SDK），只能靠 CI 构建 + 真机覆盖安装验收，验收要点见「已知问题 / 待办」 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -399,14 +399,41 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v4.2.0 `2026-08-21`** | **feat(writer & problems)**: 德语写作台 Problems 问题清单面板（全篇错误/提醒清单 + severity 分级 + error 错误优先与双格介词 warning 提醒 + 联动滚动定位/波浪线高亮/一键修正） |
 | **v4.3.0 `2026-08-22`** | **feat(writer & mobile & security)**: Android/移动端写作台适配（写作主屏、Problems bottom-sheet、触屏错误详情与一键修正、版本/diff 移动回退、Android 默认关闭 Inlay Hints）+ **安全加固**：前端存储型 XSS 全量修复（新增 `core.js#jsAttr`，卡片词/文章标题/RSS 条目等 9 处「esc 进 JS 字符串字面量」注入点全部换核；reader.js 朴素反斜杠转义删除）、SSRF 加固（重定向逐跳请求前校验 + getaddrinfo 全地址族检查）、TTS 长度闸 1000 字符、TTS 端点 HTTPException 不再被吞成 500 |
 | **v4.4.0 `2026-08-22`** | **fix(security & reliability)**: 可靠性与安全收口——敏感设置与备份接口仅回环可写（局域网 403，含 IPv4-mapped 回环校验）、pre-commit 编码 keystore 拦截补齐（PKCS12/JKS/JCEKS，文件名+base64 特征，示例不误报）、CI 真 Gradle 构建与 APK 内容/签名双重验签闸（`keytool -printcert -jarfile` + 定值指纹）、写作规则零误报加固（零冠词/双格介词/词典缺性别/spaCy 缺席降级反例全绿）、备份/AI 失败路径回归（非本机备份隔离、Android spaCy 真模型加载契约、AI 402/超时不吞错）；词库缺口盘点 110 词（2 连字符 + 57 长复合词，30 条缓存待合入，80 条 AI 未返回，API 401 暂缓）；测试 230 全绿，仅保留 14 条 linguistics 重复键既有告警 |
+| v4.4.1–v4.4.4 `2026-08-22` | **fix(mobile/sw/android)**: 写作台移动端面板交互（阻止冒泡 + 自动切 Tab）、SW 强制刷新所有页面、版本号自动从 tag 推导、写作台面板被 dock 遮挡（z-index 120→1100） |
+| **v4.4.5 `2026-08-23`** | **fix(android & writer)**: ① **升级后前端不更新**根治：`MainActivity.syncStaticAssets()` 按 `BuildConfig.VERSION_CODE` 与 `filesDir/static.version` 标记比对，不一致就删整个 `static/` 重解包（`copyAssetFile` 见文件已存在即跳过 + 覆盖安装不清 `filesDir` = 旧文件永不被覆盖，而新增文件照常拷入，设备停在**新旧混合**状态；用户此前只能卸载重装）。配套 `server.py` 新增 `add_frontend_no_cache_headers` 中间件发 `Cache-Control: no-cache`（裸 `StaticFiles` 一个缓存头都不发，浏览器走启发式新鲜度），**退役 `?v=` 查询串**（挡不住磁盘旧文件，且从未覆盖 `main.js` 的裸路径 module import），删除 `sw.js` 里从未执行过的 `STATIC_ASSETS` 死清单。② **写作台三 Tab 交互统一**：整行点击 = 定位/预览（版本快照行补齐，删掉 👁️ 查看按钮，行内破坏性按钮 `stopPropagation`），结果落在编辑器的点击自动收起移动端 bottom sheet，`openWriterProblem` 仅 error 分支切到 diag（warning 切过去只会露出陈旧错误卡），`toggleWriterMobilePanel` 真正可开可关且不再覆盖用户选定的 Tab，删除文件头部无效的兄弟节点 `stopPropagation`（顺带恢复 `'use strict'` 为有效指令）。测试 238 全绿 |
 
 ---
 
 ## 已知问题 / 待办
 
-> 更新时间：2026-08-22（v4.4.0 发布打点）
+> 更新时间：2026-08-23（v4.4.5 打点）
 
+- [x] ~~**安卓升级后前端永远是旧的，只有卸载重装才好**~~ — v4.4.5 已修。根因是两件事叠加：
+      `copyAssetFile()` 见目标文件已存在且非空就 `return`（原意是省冷启动 I/O），而
+      **APK 覆盖安装不清空 `getFilesDir()`**（只有卸载才清）。于是旧 HTML/CSS/JS 永不被覆盖，
+      但**新增**文件仍会照常拷入 —— 设备停在「新旧混合」状态，比全旧更难排查，
+      因为版本自洽性没了。`?v=` 查询串对此完全无效（磁盘上那份就是旧的，URL 与内容自洽），
+      而且它连覆盖面都不全（`main.js` 的 module import 全是裸路径）。
+      修法：`syncStaticAssets()` 用 `BuildConfig.VERSION_CODE` 对 `filesDir/static.version`
+      标记做闸门，不一致就删整个 `static/` 重解包；版本一致时保留跳过快路径。
+      **删除范围硬编码在 `filesDir/static` 并二次校验身份** —— 同级躺着 `delector.db`
+      与 `progress.db`，装着用户全部学习数据，删错一级不可恢复。
+      标记只在 `index.html` 确实解包出来后才写（`copyAssetFolder` 把 IOException 咽进
+      `printStackTrace`，返回值不可信），宁可下次启动重试也不把半途失败记成"已最新"。
+      ⚠️ **本机无 Android SDK，Java 改动未经编译**。CI 出包后的真机验收清单：
+      ① 装 v4.4.4 → 覆盖安装 v4.4.5（**不要卸载**）→ 前端应立刻是新的；
+      ② 同时确认文稿/词卡/复习进度**全部存活**（验证删除范围没越界）；
+      ③ `buildFeatures { buildConfig true }` 已显式打开（AGP 8 各版本默认值不同，
+      关掉的话报 `cannot find symbol BuildConfig`，且只在 CI 编译时才炸）。
 - [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
+- [ ] **写作台行的触屏按压反馈缺失**（v4.4.5 遗留）：`.writer-nav-item` / `.writer-problem-row`
+      / `.version-item` 三者都只有 `:hover` 规则、没有 `:active`。触屏上 `:hover` 不触发
+      （或触发后粘住不放），等于点下去没有任何即时反馈 —— 用户报的"点击后行为看不懂"
+      有一部分是这个。三种行加一条共用 `:active` 是下一个杠杆。
+      另：`.writer-sent-nav-list` 是 `max-height: 220px`，三个列表里最矮
+      （问题清单 460px / 版本快照 320px），内容高度变化最明显，也值得拉平。
+      **注意**：诊断分析 pane 的高度会变是结构性的（中间那张错误详情卡在占位符 ↔ 错误卡
+      之间切换），代码里**不存在任何折叠机制**，别去找不存在的 accordion。
 - [ ] **DeepSeek API Key 失效/余额耗尽（401/402）**：2026-08-20 新 key 曾报 402（余额耗尽），2026-08-22 复测 `.env` 与 DB 两处 key 均报 401（`Authentication Fails, api key invalid`）。影响全部 AI 功能（查词在线兜底、语法剖析、笔记辅助）和构建工具。**介词数据集已在充值后跑完（531 词条/660 搭配）**；词库 refill 受阻见下条。
 - [x] ~~**介词搭配数据集只覆盖了一半词表**~~ — 2026-08-20 已跑完：1773 个动词/形容词
       问到 1729 词（97.5%），**531 词条 / 660 条搭配**（含 47 条人工 `SEED_COLLOCATIONS`
@@ -474,8 +501,16 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 7. **提交前**：`git diff --stat` 确认范围合理；绝不提交 `.env`、`*.db`、APK 等产物；
    pre-commit 钩子必须启用且不绕过。
 8. **大改动后**：更新本文件的「交接快照」「版本历史」「已知问题 / 待办」三节。
-9. **缓存问题**：改动 CSS/JS 后在 `index.html` 的引用 URL 追加 `?v=X.X.X`，
-   并更新 `sw.js` 的 `CACHE_NAME`。
+9. **缓存问题**：**不要再用 `?v=X.X.X` 查询串给 CSS/JS 打版本号**（v4.4.5 已退役）。
+   它挡不住真正的问题，还制造了安全感：安卓覆盖安装后磁盘上那份文件本身就是旧的，
+   请求 URL 与响应内容是一对自洽的旧配对；而 `main.js` 的 ES module import 全是裸路径
+   （`./core.js` 等），从来就没被版本串覆盖过。现在两道真闸门是：
+   - **服务端**：`server.py` 的 `add_frontend_no_cache_headers` 给 HTML/JS/CSS 发
+     `Cache-Control: no-cache`（强制回源校验，靠 StaticFiles 已有的 ETag 命中 304；
+     不用 `no-store`，那会禁掉全部缓存并削弱 PWA 离线能力）。
+   - **安卓端**：`MainActivity.syncStaticAssets()` 按 `BuildConfig.VERSION_CODE` 比对
+     `filesDir/static.version` 标记，不一致就删掉整个 `static/` 重解包。
+   改前端只需 bump `sw.js` 的 `CACHE_NAME`（有测试断言它与 `build.gradle` 的 fallback 一致）。
 
 ---
 

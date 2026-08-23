@@ -35,12 +35,14 @@ import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
 import android.speech.tts.Voice;
@@ -206,9 +208,6 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this, "下载异常: " + e.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
-        ws.setAllowContentAccess(true);
-        ws.setMediaPlaybackRequiresUserGesture(false);
-        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -284,7 +283,7 @@ public class MainActivity extends AppCompatActivity {
             // A. Copy assets to internal storage if needed
             File dataDir = getFilesDir();
             File staticDir = new File(dataDir, "static");
-            copyAssetFolder("static", staticDir);
+            syncStaticAssets(dataDir, staticDir);
 
             // B. Start Chaquopy Python runtime
             if (!Python.isStarted()) {
@@ -433,6 +432,96 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * 版本感知解包 (v4.4.5)。
+     *
+     * APK 覆盖安装不清空 getFilesDir()，而 copyAssetFile() 见到目标已存在就跳过，
+     * 于是升级后旧的 HTML/CSS/JS 永远不被覆盖。更麻烦的是新增文件仍会照常拷入，
+     * 设备最终停在"新旧混合"状态——比全旧更难排查，因为版本自洽性没了。
+     * 这也是为什么用户只有卸载重装才能看到新前端：卸载才会清 filesDir。
+     *
+     * 前端的 ?v= 查询串对此无效：磁盘上那份文件本身就是旧的，
+     * 请求 URL 和响应内容是一对自洽的旧配对，浏览器没有任何理由怀疑。
+     *
+     * 用版本标记文件做闸门：versionCode 一致走原来的跳过快路径（冷启动不多做 I/O），
+     * 不一致就把整个 static/ 删掉重解包。
+     */
+    private void syncStaticAssets(File dataDir, File staticDir) {
+        String expected = String.valueOf(BuildConfig.VERSION_CODE);
+        File marker = new File(dataDir, "static.version");
+
+        if (expected.equals(readVersionMarker(marker))) {
+            copyAssetFolder("static", staticDir); // 快路径：只补缺失文件
+            return;
+        }
+
+        // 版本对不上（升级 / 降级 / 标记丢失）→ 整目录重来，不做逐文件比对：
+        // 资产才几 MB，而漏掉一个文件的代价是又一次"卸载重装才好"。
+        deleteStaticDir(dataDir, staticDir);
+        copyAssetFolder("static", staticDir);
+
+        // 只在解包确实产出了入口文件时才写标记。copyAssetFolder 把 IOException
+        // 咽进 printStackTrace，没有返回值可信，所以宁可下次启动重试一遍，
+        // 也不要把一次半途失败的解包记成"已是最新"。
+        if (new File(staticDir, "index.html").exists()) {
+            writeVersionMarker(marker, expected);
+        }
+    }
+
+    private String readVersionMarker(File marker) {
+        if (!marker.isFile()) {
+            return null;
+        }
+        try (InputStream in = new FileInputStream(marker)) {
+            byte[] buf = new byte[32];
+            int len = in.read(buf);
+            if (len <= 0) {
+                return null;
+            }
+            return new String(buf, 0, len, StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null; // 读不出来就当版本不匹配，重解包是安全的那一侧
+        }
+    }
+
+    private void writeVersionMarker(File marker, String versionCode) {
+        try (OutputStream out = new FileOutputStream(marker)) {
+            out.write(versionCode.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 只删 filesDir/static/，别的一律不碰。
+     *
+     * delector.db 和 progress.db 就躺在 filesDir 根目录、与 static/ 平级，
+     * 装着用户全部学习数据（文章、词卡语法卡、笔记、FSRS 进度、统计）。
+     * 删错一级 = 不可恢复地清空这些。所以这里硬编码校验目标身份，
+     * 不接受任何调用方传进来的路径。
+     */
+    private void deleteStaticDir(File dataDir, File staticDir) {
+        if (!staticDir.exists()) {
+            return;
+        }
+        File expected = new File(dataDir, "static");
+        if (!staticDir.getAbsolutePath().equals(expected.getAbsolutePath())) {
+            return; // 身份不符，宁可不清理也不误删
+        }
+        deleteRecursively(staticDir);
+    }
+
+    private static void deleteRecursively(File target) {
+        File[] children = target.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                deleteRecursively(child);
+            }
+        }
+        target.delete();
     }
 
     @Override

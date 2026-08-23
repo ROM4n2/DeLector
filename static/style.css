@@ -7639,12 +7639,14 @@ body.drawer-open .companion {
   border-radius: 4px;
   border: 1px solid var(--rule-light);
   background: var(--paper);
+  cursor: pointer; /* 整行可点 = 预览快照 (v4.4.5) */
   transition: all var(--dur-fast) ease;
 }
 
 .version-item:hover {
   background: var(--paper-tint);
   border-color: var(--ink);
+  transform: translateX(2px); /* 与 .writer-problem-row:hover 保持一致 (v4.4.5) */
 }
 
 .version-item.version-checkpoint {

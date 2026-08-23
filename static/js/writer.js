@@ -1,13 +1,3 @@
-// Add click handler to sidebar to prevent event bubbling to backdrop
-document.addEventListener('DOMContentLoaded', () => {
-  const sidebar = document.getElementById('writer-panel');
-  if (sidebar) {
-    sidebar.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
-  }
-});
-
 /* DeLector - Writing Desk (Schreibwerkstatt) & Grammar Polish */
 'use strict';
 
@@ -276,16 +266,29 @@ export function toggleInlayHints() {
   }
 }
 
+// 移动端面板首次打开时才自动切到「问题清单」——trigger 文案是「📋 问题与历史」，
+// 首屏应兑现这个承诺。之后不再覆盖 tab：用户手动切到 versions，或 openWriterProblem
+// 切到 diag 去展示错误详情（v4.4.5 B2），关闭再打开都应保留那个状态。
+let writerMobilePanelDidAutoSwitch = false;
+
 export function toggleWriterMobilePanel() {
   const panel = document.getElementById('writer-panel');
   const sheet = document.getElementById('writer-mobile-panel-sheet');
   if (!panel || !sheet) return;
+
+  // trigger 按钮常驻可见，面板已开时再点应该收起 (v4.4.5)
+  if (panel.classList.contains('mobile-panel-open')) {
+    closeWriterMobilePanel();
+    return;
+  }
+
   panel.classList.add('mobile-panel-open');
   sheet.classList.add('open');
   document.body.classList.add('writer-panel-lock');
-  // On mobile, auto-switch to problems tab if analysis exists
-  if (currentAnalysis) {
+
+  if (!writerMobilePanelDidAutoSwitch && currentAnalysis) {
     switchWriterPanelTab('problems');
+    writerMobilePanelDidAutoSwitch = true;
   }
 }
 
@@ -518,8 +521,14 @@ export function renderProblemsPanel(a) {
 export function openWriterProblem(sentenceIdx, kind, idx) {
   jumpToSentence(sentenceIdx);
   if (kind === 'error') {
+    // 错误详情卡 #writer-err-detail 在 diag pane 内，必须先切 tab，
+    // 否则 selectWriterSpan 把内容写进 display:none 的面板，用户看不到反馈 (v4.4.5)
+    switchWriterPanelTab('diag');
     selectWriterSpan(sentenceIdx, idx, null);
   }
+  // warning 分支不切 tab：没有详情可渲染，切过去只会露出上一次点击留下的
+  // 陈旧错误卡（resetErrorDetailView 只在换文/应用修改时跑）。
+  // 留在问题清单，用户重新拉起面板时还在原来那份列表上 (v4.4.5)
 }
 
 // ── Jump to Sentence Block & Flash ──────────────────────────────────────────
@@ -532,6 +541,9 @@ export function jumpToSentence(sentIdx) {
     block.classList.add('ide-sent-flash');
     setTimeout(() => block.classList.remove('ide-sent-flash'), 1200);
   }
+  // 跳转结果（编辑器滚动 + 闪烁）发生在 bottom sheet 背后，
+  // 不收起面板等于什么都没发生。桌面端调用只是移除几个不存在的 class，无副作用 (v4.4.5)
+  closeWriterMobilePanel();
 }
 
 // ── Realtime Text Analysis (Debounced) ──────────────────────────────────────
@@ -1313,7 +1325,7 @@ export async function loadEssayVersions() {
       const timeStr = (v.created_at || '').replace('T', ' ').slice(0, 19);
 
       return `
-        <div class="version-item ${isCheckpoint ? 'version-checkpoint' : ''}">
+        <div class="version-item ${isCheckpoint ? 'version-checkpoint' : ''}" onclick="previewEssayVersion(${v.id})" title="点击预览此快照内容">
           <div class="version-header">
             <span class="version-id">#v${v.id}</span>
             ${errPill}
@@ -1321,8 +1333,7 @@ export async function loadEssayVersions() {
           <div class="version-msg">${esc(v.message || '快照')}</div>
           <div class="version-meta">
             <span class="version-time">${timeStr}</span>
-            <div class="version-actions">
-              <button class="btn btn-ghost btn-xs" onclick="previewEssayVersion(${v.id})" title="查看此快照内容">👁️ 查看</button>
+            <div class="version-actions" onclick="event.stopPropagation()">
               <button class="btn btn-ghost btn-xs version-restore-btn" onclick="restoreEssayVersion(${v.id})" title="恢复至此快照">↩ 恢复</button>
               <button class="btn btn-ghost btn-xs btn-del" onclick="deleteEssayVersion(${v.id})" title="删除此快照">🗑️</button>
             </div>
@@ -1458,5 +1469,3 @@ export async function restoreEssayVersion(versionId) {
     alert('恢复版本失败：' + (err.message || err));
   }
 }
-
-

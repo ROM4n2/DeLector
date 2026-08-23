@@ -1,19 +1,11 @@
-const CACHE_NAME = 'delector-static-v4.4.4';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css?v=4.4.4',
-  '/js/main.js?v=4.4.4',
-  '/js/core.js',
-  '/js/player.js',
-  '/js/companion.js',
-  '/js/reader.js',
-  '/js/cards.js',
-  '/js/folio.js',
-  '/js/cloze.js',
-  '/js/writer.js?v=4.4.4',
-  '/manifest.json'
-];
+// 版本号只在这里维护一处，与 android/app/build.gradle 的 fallback 对齐
+// （test_writer_mobile.py 断言两者一致）。CACHE_NAME 一变，activate 就清掉旧缓存。
+const CACHE_NAME = 'delector-static-v4.4.5';
+
+// 这里曾有一份 STATIC_ASSETS 预缓存清单，v4.4.5 删除：install 从来只调 skipWaiting()、
+// 没有 cache.addAll，那份清单一行都没执行过。更糟的是它把带版本查询串的 URL
+// 写成缓存键，而真实请求不带查询串，永远匹配不上——留着只会让人以为预缓存生效了。
+// 实际缓存由下面的 fetch 处理器边走边填。
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

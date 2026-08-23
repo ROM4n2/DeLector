@@ -680,6 +680,38 @@ def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
 app = FastAPI(title="DeLector")
 init_db()
 
+# 前端资源必须每次回源校验：裸 StaticFiles 不发 Cache-Control，浏览器于是走
+# 启发式新鲜度（约 Last-Modified 距今时长的 10%），可能一段时间内直接用本地副本。
+# main.js 的 ES module import 是裸路径（./core.js 等），没有 ?v= 版本号可 bust，
+# 一旦被缓存住就会加载旧代码。
+# 选 no-cache 而不是 no-store：no-cache 仍允许缓存、只是强制回源校验，
+# 配合 StaticFiles 已有的 ETag 能命中 304 Not Modified，几乎不浪费流量；
+# no-store 会禁掉全部缓存，既全量重传也会削弱本项目 PWA 的离线能力。
+FRONTEND_NO_CACHE_SUFFIXES = (".html", ".htm", ".js", ".mjs", ".css")
+FRONTEND_NO_CACHE_TYPES = (
+    "text/html", "text/css",
+    "text/javascript", "application/javascript", "application/ecmascript",
+)
+
+@app.middleware("http")
+async def add_frontend_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    # API 自己决定缓存语义，不由这里代劳；音频（.cache/audio 下的 MP3）也只经
+    # /api/audio/tts 提供，是内容寻址的、可长期缓存，一并放行。
+    if path.startswith("/api/"):
+        return response
+    # 后缀优先：Windows 的 mimetypes 会读注册表，.js 的 content-type 并不总是可靠。
+    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+    is_frontend_asset = (
+        path.lower().endswith(FRONTEND_NO_CACHE_SUFFIXES)
+        or path.endswith("/")  # 目录索引 → index.html（StaticFiles html=True）
+        or content_type in FRONTEND_NO_CACHE_TYPES
+    )
+    if is_frontend_asset:
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 class IngestReq(BaseModel):
     title: Optional[str] = "Untitled"
     raw_text: str

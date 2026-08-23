@@ -2788,3 +2788,24 @@ def test_frontend_does_not_write_api_key_to_storage():
                     # 仅当该行试图把变量值写入 innerHTML 时才报错，常量提示文案放行
                     if "detail" in low_line or "response" in low_line or "res." in low_line:
                         assert False, f"{fp.name} 可能泄露 API Key 到 DOM: {line.strip()[:120]}"
+
+
+def test_frontend_assets_send_no_cache_header(client):
+    """前端资源必须带 Cache-Control: no-cache，API 不能被牵连。
+
+    裸 StaticFiles 不发 Cache-Control，浏览器就按启发式新鲜度用本地副本；
+    main.js 的 ES module import 是裸路径、没有 ?v= 可 bust，一缓存住就是旧代码。
+    用 no-cache（强制回源校验、仍配合 ETag 走 304）而非 no-store（禁掉全部缓存、
+    会削弱 PWA 离线能力）。
+    """
+    for path in ("/", "/index.html", "/style.css", "/sw.js", "/js/main.js", "/js/core.js"):
+        res = client.get(path)
+        assert res.status_code == 200, f"{path} 取不到：{res.status_code}"
+        assert res.headers.get("cache-control") == "no-cache", \
+            f"{path} 缺 no-cache：{res.headers.get('cache-control')!r}"
+
+    # 反向断言：API 有自己的缓存语义，不该被这个 middleware 动
+    api = client.get("/api/articles")
+    assert api.status_code == 200
+    assert "cache-control" not in api.headers, \
+        f"/api/articles 被加上了 Cache-Control：{api.headers.get('cache-control')!r}"
