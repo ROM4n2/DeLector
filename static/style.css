@@ -338,8 +338,6 @@ a { color: inherit; text-decoration: none; }
 
 /* ── View 1: Home Library ─────────────────── */
 
-/* ── View 1: Home Library ─────────────────── */
-
 #view-home {
   max-width: 1080px;
   margin: 0 auto;
@@ -6751,12 +6749,20 @@ body.drawer-open .companion {
   flex-direction: column;
 }
 
+/* max-height 而不是 height：sticky 列必须高度自适应内容，钉死高度会在内容少时
+   撑出一片空白。加帽 + overflow-y 只在内容真的高过视口时才生效 —— 在那之前
+   外观与行为跟没这两行完全一样。
+   没有这个帽子的后果不是"滚动条少一个"：sticky 盒子一旦比视口高，超出的下半截
+   会永远停在视口外，页面滚到底也带不出来（sticky 只在自己的 grid 行内平移）。
+   4.5rem 是吸顶偏移，1rem 留底边间隙。 */
 .writer-sidebar {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   position: sticky;
   top: 4.5rem;
+  max-height: calc(100dvh - 4.5rem - 1rem);
+  overflow-y: auto;
 }
 
 /* Cards & Containers */
@@ -6960,12 +6966,13 @@ body.drawer-open .companion {
 }
 
 /* Sentence Navigation List in Sidebar */
+/* 不加 max-height / overflow-y：滚动归 .writer-sidebar 一个人管。
+   列表自己再开一个滚动区，手指/滚轮落在列表上就被内层吃掉，
+   外层 sidebar 反而没地方可抓、底部滚不到（v4.4.6 移动端踩过一次）。 */
 .writer-sent-nav-list {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-height: 220px;
-  overflow-y: auto;
   margin-top: 0.5rem;
 }
 
@@ -6984,6 +6991,22 @@ body.drawer-open .companion {
 .writer-nav-item:hover {
   background: rgba(21, 20, 15, 0.07);
   border-color: var(--rule);
+}
+
+/* 触屏上 :hover 不触发（或点完粘住不放），只靠 hover 的行等于按下去毫无反馈。
+   :active 在触屏是按下即生效、抬手即消失，是唯一可靠的按压态。
+   只改背景、不加 transform：hover 的 translateX(2px) 留给鼠标，
+   整行 flex 容器做位移会带来 1px 文字抖动，得不偿失。
+   -webkit-tap-highlight-color 清零：否则安卓 WebView 自带的灰块会和
+   自定义按压色叠在一起闪一下。 */
+.writer-nav-item,
+.writer-problem-row,
+.version-item {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.writer-nav-item:active {
+  background: rgba(21, 20, 15, 0.12);
 }
 
 .writer-nav-idx {
@@ -7394,6 +7417,10 @@ body.drawer-open .companion {
     right: 0.75rem;
     bottom: calc(4.75rem + env(safe-area-inset-bottom));
     height: min(76vh, 680px);
+    /* 显式解掉基规则那个 max-height: calc(100dvh …) 帽子。不解也不会出错
+       （有 height 在，几何依然是定值），但留着就意味着读这条规则的人
+       看不出还有另一处在影响高度 —— 每个断点的几何自我描述完整比省一行重要。 */
+    max-height: none;
     overflow-y: auto;
     padding: 0.75rem;
     background: var(--paper);
@@ -7403,24 +7430,8 @@ body.drawer-open .companion {
     transition: transform 180ms ease;
   }
 
-  /* 滚动只归 sheet 一个人管。内层列表各自带 max-height + overflow-y 时，
-     它们几乎占满整个可见区域，手指落下去就被内层吃掉，外层没地方可抓，
-     于是 sheet 自己的底部永远滚不到。 */
-  .writer-sent-nav-list,
-  .writer-problem-list,
-  .writer-version-list {
-    max-height: none;
-    overflow-y: visible;
-  }
-
   .writer-sidebar.mobile-panel-open {
     transform: translateY(0);
-  }
-
-  .writer-panel-tabs {
-    position: sticky;
-    top: 0;
-    z-index: 1;
   }
 
   .writer-panel-lock {
@@ -7459,9 +7470,14 @@ body.drawer-open .companion {
 /* flex-shrink: 0 是 sheet 固定高度的前提。父容器高度一确定，flex 子项默认
    会被压缩到塞得下为止（然后自己的内容再溢出去），结果是内容挤成一团、
    父容器反而没有可滚动的溢出。钉住不许收缩，溢出才会交给 overflow-y。 */
+/* position: sticky 桌面/移动共用：sidebar 自己是滚动容器，tab 条吸在它顶部，
+   切 tab 不必先滚回去找。依赖上面那句不透明的 --paper-card 背景把滚过的内容盖住。 */
 .writer-panel-tabs {
   display: flex;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--paper-card);
   border: 1.5px solid var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
@@ -7535,15 +7551,13 @@ body.drawer-open .companion {
   padding: 2px 8px;
   border-radius: 12px;
   background: rgba(21, 20, 15, 0.05);
-  color: var(--ink-secondary);
+  color: var(--ink-mute);
 }
 
 .writer-problem-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-height: 460px;
-  overflow-y: auto;
   margin-top: 0.5rem;
   padding-right: 2px;
 }
@@ -7579,6 +7593,10 @@ body.drawer-open .companion {
   background: var(--paper-tint);
   border-color: var(--ink);
   transform: translateX(2px);
+}
+
+.writer-problem-row:active {
+  background: var(--paper-deep);
 }
 
 .writer-problem-header {
@@ -7645,8 +7663,6 @@ body.drawer-open .companion {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  max-height: 320px;
-  overflow-y: auto;
   margin-top: 0.5rem;
   padding-right: 2px;
 }
@@ -7672,6 +7688,14 @@ body.drawer-open .companion {
 .version-item.version-checkpoint {
   border-left: 3.5px solid var(--accent);
   background: rgba(217, 102, 63, 0.03);
+}
+
+/* 必须排在 .version-item.version-checkpoint 之后：两者特异性相同（都是两个类的量级，
+   :active 与 .version-checkpoint 等价），同分时后写的赢。写在前面的话 checkpoint 行
+   按下去不会有任何反馈 —— 而 checkpoint 行恰恰是最常被点的那些。
+   代价：checkpoint 行按压瞬间丢掉那层 3% 的薄橙底，换成 paper-deep，可接受。 */
+.version-item:active {
+  background: var(--paper-deep);
 }
 
 .version-header {

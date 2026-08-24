@@ -14,6 +14,31 @@ MAIN_ACTIVITY = (
 ).read_text(encoding="utf-8")
 
 
+def _rule_body(selector_regex, must_contain=None):
+    """按括号深度取出 CSS 规则体。
+
+    不用 split("}")：规则体里可能嵌套（媒体块、@supports），split 会在第一个
+    右花括号处截断，拿到半截规则还看不出错 —— 断言于是在不完整的文本上做，
+    要么假绿要么报得莫名其妙。must_contain 用来在同名选择器的多条规则里
+    挑出想要的那一条（base vs 各断点覆盖）。
+    """
+    for m in re.finditer(selector_regex, STYLE):
+        depth, j = 1, m.end()
+        while depth and j < len(STYLE):
+            if STYLE[j] == "{":
+                depth += 1
+            elif STYLE[j] == "}":
+                depth -= 1
+            j += 1
+        body = STYLE[m.end():j - 1]
+        if must_contain is None or must_contain in body:
+            return body
+    raise AssertionError(
+        f"CSS 里找不到匹配 {selector_regex} 的规则"
+        + (f"（且规则体含 {must_contain!r}）" if must_contain else "")
+    )
+
+
 def test_mobile_writer_has_panel_sheet_controls():
     assert 'id="writer-mobile-panel-trigger"' in INDEX
     assert 'id="writer-mobile-panel-sheet"' in INDEX
@@ -151,9 +176,12 @@ def test_toggle_writer_mobile_panel_actually_toggles():
 
 
 def test_version_row_hover_matches_other_rows():
-    version_item = STYLE.split(".version-item {")[1].split("}")[0]
+    # 用 _rule_body 而不是 split(".version-item {")：并集规则
+    # （.writer-nav-item, .writer-problem-row, .version-item { … }）里也以
+    # ".version-item {" 结尾，且出现得更早，split 会抓错那一条。
+    version_item = _rule_body(r"\.version-item\s*\{", "cursor: pointer")
     assert "cursor: pointer" in version_item
-    version_hover = STYLE.split(".version-item:hover {")[1].split("}")[0]
+    version_hover = _rule_body(r"\.version-item:hover\s*\{")
     assert "translateX(2px)" in version_hover
 
 
@@ -183,40 +211,110 @@ def test_mobile_sheet_is_geometrically_stable():
         j += 1
     sheet = STYLE[fixed_idx:j - 1]
 
-    # j 上面算的是 .writer-sidebar 单个规则的右花括号位置，但移动端
-    # 覆盖（max-height: none 等）是在它之后、同一个 @media 媒体块里。
-    # 把 j 推前到 @media 媒体块的结尾（或者下一个 @media 的开头之前）。
-    next_media = STYLE.find("@media", j)
-    j = next_media if next_media > 0 else len(STYLE)
-    assert "height:" in sheet and "max-height:" not in sheet, (
-        "移动端 sheet 必须用 height 固定几何，不能用 max-height（会跟内容走、整块跳）"
+    assert "height: min(" in sheet, (
+        "移动端 sheet 必须用 height 固定几何，不能让高度跟内容走（会整块跳）"
+    )
+    assert "max-height: none" in sheet, (
+        "sheet 必须显式解掉基规则的 max-height 帽子，让这个断点的几何自我描述完整"
     )
     assert "overflow-y: auto" in sheet, "sheet 自身必须能滚动"
-
-    # 内层列表在移动端不能自己再开一个滚动区
-    # 找的是移动端块里"最后一次出现"的选择器 —— CSS 源序决定级联，
-    # base 规则在媒体块之前，移动端覆盖必须出现在媒体块内且靠后。
-    for sel in ("writer-sent-nav-list", "writer-problem-list", "writer-version-list"):
-        needle = sel
-        # 在媒体块（以 j 截断）中找这个选择器最后出现的规则体
-        block = STYLE[STYLE.find("@media (max-width: 860px) {"):j]
-        assert needle in block, f"移动端块里没出现 .{sel} 的覆盖规则"
-        # 抓选择器后第一个 { ... } 块；写死用宽口选择器（base 是 ".X {…}"，
-        # 移动端用 ".X, .Y, .Z {…}" 的并集，needle 后一定是 {）
-        last = block.rfind(needle)
-        brace = block.find("{", last)
-        depth = 1
-        k = brace + 1
-        while depth and k < len(block):
-            if block[k] == "{": depth += 1
-            elif block[k] == "}": depth -= 1
-            k += 1
-        rule = block[brace + 1:k - 1]
-        assert "max-height: none" in rule, (
-            "移动端 ." + sel + " 必须解掉 max-height，否则内层吃滚动"
-        )
 
     # 关键：移动端 sheet 的 .writer-pane 不能被父容器压扁
     assert "flex-shrink: 0" in STYLE.split(".writer-pane {")[1].split("}")[0], (
         "父容器高度固定后，pane 缺 flex-shrink:0 会被压扁、溢出但滚不动"
+    )
+
+
+def test_desktop_sidebar_is_internally_scrollable_when_tall():
+    """桌面端 .writer-sidebar 是 sticky 列且 align-items: start，高度跟内容走。
+    没有 max-height + overflow-y 时，一旦内容高过视口，超出的下半截就永远停在
+    视口外 —— sticky 只在自己的 grid 行内平移，页面滚到底也带不出来。
+    这是 v4.4.6 移动端修复的同族缺陷（v4.4.7 收口）。
+    """
+    sidebar = _rule_body(r"\.writer-sidebar\s*\{", "position: sticky")
+
+    assert "max-height: calc(100dvh" in sidebar, (
+        "桌面 sidebar 必须有视口相关的 max-height 帽，否则内容高过视口时下半截滚不到"
+    )
+    assert "overflow-y: auto" in sidebar, "加了帽子就必须让 sidebar 自己能滚"
+    assert not re.search(r"(?<!max-)height:", sidebar), (
+        "桌面 sticky 列只能用 max-height；写死 height 会在内容少时撑出一片空白"
+    )
+
+    # tab 条吸在滚动容器顶部，切 tab 不必先滚回去找
+    tabs = _rule_body(r"\.writer-panel-tabs\s*\{", "position: sticky")
+    assert "top: 0" in tabs, "tab 条要吸顶就必须给 top"
+    assert "background:" in tabs, "吸顶的 tab 条需要不透明背景盖住滚过的内容"
+
+    # 滚动只有一个主人：内层三个列表不许再各开一个滚动区
+    for sel in ("writer-sent-nav-list", "writer-problem-list", "writer-version-list"):
+        body = _rule_body(rf"\.{sel}\s*\{{")
+        assert "max-height" not in body, (
+            f".{sel} 不能有 max-height 帽 —— 内层吃掉滚动后外层 sidebar 底部滚不到"
+        )
+        assert "overflow-y" not in body, (
+            f".{sel} 不能自己开滚动区，滚动归 .writer-sidebar 一个人管"
+        )
+
+
+def test_writer_rows_have_active_press_feedback():
+    """三种可点击行在触屏上只有 :hover 等于按下去毫无反馈
+    （:hover 在触屏不触发，或点完粘住不放）。:active 是触屏唯一可靠的按压态。
+    """
+    for sel, expected in (
+        ("writer-nav-item", "rgba("),
+        ("writer-problem-row", "var(--paper-deep)"),
+        ("version-item", "var(--paper-deep)"),
+    ):
+        body = _rule_body(rf"\.{sel}:active\s*\{{")
+        assert "background" in body and expected in body, (
+            f".{sel}:active 必须给出可见的按压背景（期望含 {expected}）"
+        )
+
+    # 安卓 WebView 自带的灰色点击高亮会和自定义按压色叠着闪一下。
+    # 必须钉在这三行的并集规则上：全文搜 "in STYLE" 是不够的 —— 文件里另有
+    # 一处无关规则也清了 tap-highlight，删掉这条并集规则测试照样绿（已实测）。
+    union = _rule_body(
+        r"\.writer-nav-item,\s*\.writer-problem-row,\s*\.version-item\s*\{"
+    )
+    assert "-webkit-tap-highlight-color: transparent" in union, (
+        "三行需要清掉系统点击高亮，否则和自定义 :active 背景叠加"
+    )
+
+    # .version-item:active 与 .version-item.version-checkpoint 特异性相同（同为两个类的量级），
+    # 同分时源序决定胜负。写在 checkpoint 之前的话，checkpoint 行按下去不会有任何反馈 ——
+    # 而那恰恰是最常被点的一批行。
+    assert STYLE.index(".version-item:active") > STYLE.index(
+        ".version-item.version-checkpoint"
+    ), (
+        ".version-item:active 必须排在 .version-item.version-checkpoint 之后，"
+        "否则 checkpoint 行没有按压反馈"
+    )
+
+
+def test_no_undefined_css_variables_in_writer_surfaces():
+    """CSS 变量拼错不会报错，只会让颜色静默回退成继承色 —— 肉眼几乎看不出，
+    但那一处的设计意图就丢了。--ink-secondary 从未在 :root 定义过（v4.4.7 修）。
+
+    这是个棘轮：下面 5 个是本次改动之前就存在的历史欠账（不在 v4.4.7 范围内，
+    留待单独一次修），显式列出来是为了让它们可见 —— 而不是把整条断言删掉、
+    或者塞进一个没人再看的白名单。新增未定义变量会让这个测试变红。
+    """
+    # 声明式匹配不能按行锚定：`--hl-A1: #E3EFFB;  --hl-A1-ink: #1D548C;`
+    # 这样一行两个声明的写法在文件里很常见，^ 锚定只看得见第一个，
+    # 于是把第二个误判成"未定义"（写这个测试时就先踩了一次）。
+    declared = set(re.findall(r"(--[\w-]+)\s*:", STYLE))
+    used = set(re.findall(r"var\(\s*(--[\w-]+)", STYLE))
+
+    KNOWN_LEGACY_UNDEFINED = {
+        "--border", "--font-sans", "--note-blue", "--paper-accent", "--paper-warm",
+    }
+    undefined = used - declared - KNOWN_LEGACY_UNDEFINED
+    assert not undefined, f"用到了未定义的 CSS 变量：{sorted(undefined)}"
+
+    # 欠账修完后要记得把条目从上面删掉，否则这个集合会慢慢变成一张"永久豁免"名单
+    still_missing = KNOWN_LEGACY_UNDEFINED - declared
+    assert still_missing == KNOWN_LEGACY_UNDEFINED, (
+        f"这些历史欠账已经修好了，请从 KNOWN_LEGACY_UNDEFINED 里删掉："
+        f"{sorted(KNOWN_LEGACY_UNDEFINED - still_missing)}"
     )

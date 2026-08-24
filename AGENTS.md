@@ -11,15 +11,15 @@
 
 ## 交接快照
 
-> 更新时间：2026-08-23
+> 更新时间：2026-08-24
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（v4.4.6：修顶栏版本指示灯 + 移动端写作台面板位移/底部滚不到根治） |
-| 测试 | **239 / 239 全绿**（v4.4.6 新增：顶栏版本标签纳入版本自洽断言、移动端 sheet 几何稳定性；v4.4.5 新增：前端 no-cache 头、版本号跨落点自洽、安卓版本闸、写作台点击契约） |
+| 当前分支 / HEAD | `master`（v4.4.7：桌面端写作台侧栏几何收口 + 三行触屏按压反馈） |
+| 测试 | **242 / 242 全绿**（v4.4.7 新增：桌面侧栏内部可滚断言、三行 `:active` 按压契约、未定义 CSS 变量棘轮；v4.4.6 新增：顶栏版本标签纳入版本自洽断言、移动端 sheet 几何稳定性） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | 已发布至 **v4.4.5**；**v4.4.6 待发布**（版本号 40406，仅 arm64-v8a）。**v4.4.5 的安卓升级闸已拆 APK 验证落包**（`assets/static/` 内前端全新、`classes3.dex` 含 `syncStaticAssets` / `static.version`、manifest `versionName=4.4.5`），⚠️ 但 Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收，要点见「已知问题 / 待办」 |
+| 对外发布 | 已发布至 **v4.4.6**（四平台产物齐、CI 验签闸过）；**v4.4.7 待发布**（版本号 40407，仅 arm64-v8a）。⚠️ Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收；**v4.4.6 与 v4.4.7 的真机验收合并做一次**（装 v4.4.6 → 覆盖装 v4.4.7），要点见「已知问题 / 待办」 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -402,12 +402,13 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | v4.4.1–v4.4.4 `2026-08-22` | **fix(mobile/sw/android)**: 写作台移动端面板交互（阻止冒泡 + 自动切 Tab）、SW 强制刷新所有页面、版本号自动从 tag 推导、写作台面板被 dock 遮挡（z-index 120→1100） |
 | **v4.4.5 `2026-08-23`** | **fix(android & writer)**: ① **升级后前端不更新**根治：`MainActivity.syncStaticAssets()` 按 `BuildConfig.VERSION_CODE` 与 `filesDir/static.version` 标记比对，不一致就删整个 `static/` 重解包（`copyAssetFile` 见文件已存在即跳过 + 覆盖安装不清 `filesDir` = 旧文件永不被覆盖，而新增文件照常拷入，设备停在**新旧混合**状态；用户此前只能卸载重装）。配套 `server.py` 新增 `add_frontend_no_cache_headers` 中间件发 `Cache-Control: no-cache`（裸 `StaticFiles` 一个缓存头都不发，浏览器走启发式新鲜度），**退役 `?v=` 查询串**（挡不住磁盘旧文件，且从未覆盖 `main.js` 的裸路径 module import），删除 `sw.js` 里从未执行过的 `STATIC_ASSETS` 死清单。② **写作台三 Tab 交互统一**：整行点击 = 定位/预览（版本快照行补齐，删掉 👁️ 查看按钮，行内破坏性按钮 `stopPropagation`），结果落在编辑器的点击自动收起移动端 bottom sheet，`openWriterProblem` 仅 error 分支切到 diag（warning 切过去只会露出陈旧错误卡），`toggleWriterMobilePanel` 真正可开可关且不再覆盖用户选定的 Tab，删除文件头部无效的兄弟节点 `stopPropagation`（顺带恢复 `'use strict'` 为有效指令）。测试 238 全绿 |
 | **v4.4.6 `2026-08-23`** | **fix(release)**: 顶栏版本指示灯与发布版本对齐。v4.4.5 bump 了 `sw.js` 的 `CACHE_NAME` 和 `build.gradle` 的 fallback，唯独漏了 `index.html` 顶栏 `System · v4.4.4 Online` —— 而它是用户判断「前端刷新了没有」的唯一肉眼指标，于是修好的升级链路被指示灯报成"没生效"，且该现象与"缓存闸失效"无法从外部区分。拆 v4.4.5 的 APK 确认包内 `assets/static/` 全是新前端（`sw.js`=v4.4.5、`writer.js` 含 toggle 修复、`index.html` 无 `?v=`）、`classes3.dex` 含 `syncStaticAssets`/`static.version`、manifest `versionName=4.4.5` —— 打包与代码都对，只有那一句字面量是旧的。`test_version_is_consistent_across_release_surfaces` 新增该标签断言（已用故意改回旧值验证会红），版本号三处落点由测试锁死。② **移动端写作台面板位移 / 底部滚不到**根治：`.writer-sidebar` 在 ≤860px 是 `position: fixed` + `bottom` 锚点 + **只有 `max-height`、没有 `top` 也没有 `height`**，高度跟内容走而盒子锚在底边 = 只能向上长，于是切 tab（诊断 3 卡 ↔ 清单 1 卡 ↔ 快照 2 卡）、点诊断行填错误卡、问题清单从"暂无"变 N 条，每一次都把顶边挪到新位置 —— 三个 Tab 都在眼前跳，用户最早报的"诊断分析点了像收起了"就是跳得最狠的那个。改用 `height: min(76vh, 680px)` 把几何固定成同一矩形（代价：内容少时下方留白，换可预期的几何，标准 bottom sheet 也是固定 detent）。配套两件必需品：内层 `.writer-sent-nav-list` / `.writer-problem-list` / `.writer-version-list` 在移动端 `max-height: none; overflow-y: visible`（原本 220/460/320px 各自开滚动区，几乎占满 600px 的 sheet，手指落下去就被内层吃掉、外层没地方可抓 = 底部永远滚不到），以及 `.writer-pane` 补 `flex-shrink: 0`（父容器高度一确定，flex 子项默认会被压缩到塞得下为止、然后自己的内容再溢出去，结果是内容挤成一团而父容器没有可滚动的溢出 —— 少这一行，固定高度反而让 sheet 更滚不动）。测试 239 全绿 |
+| **v4.4.7 `2026-08-24`** | **fix(writer)**: ① **桌面端侧栏几何收口**（v4.4.6 移动端修复的同族另一半）：`.writer-sidebar` 基规则是 `position: sticky; top: 4.5rem`，在 `align-items: start` 的 grid 列里高度跟内容走，**没有 `max-height` 也没有 `overflow-y`** —— 内容一旦高过视口，超出的下半截就永远停在视口外，因为 sticky 只在自己的 grid 行内平移，页面滚到底也带不出来。补 `max-height: calc(100dvh - 4.5rem - 1rem)` + `overflow-y: auto`（用 `max-height` 而非 `height`：sticky 列必须高度自适应，写死会在内容少时撑出空白），并把内层三个列表的 `max-height`（220/460/320px）+ `overflow-y` **从基规则整体删除** —— 滚动只归 sidebar 一个人管，与移动端同构；随之移动端媒体块里那条 `max-height: none` 并集覆盖成为冗余，一并删掉。`.writer-panel-tabs` 的 `position: sticky; top: 0` 从移动端块**上提到基规则**，桌面/移动共用（滚动容器内 tab 吸顶，切 tab 不必先滚回去）。移动端 sheet 显式补 `max-height: none` 解掉新继承来的基规则帽子 —— 不解也不出错（有 `height` 在，几何仍是定值），但留着就意味着读那条规则的人看不出还有另一处在影响高度。② **三行触屏按压反馈**（v4.4.5 遗留）：`.writer-nav-item` / `.writer-problem-row` / `.version-item` 此前只有 `:hover`，而触屏上 `:hover` 不触发或点完粘住，等于按下去毫无反馈。补 `:active` 背景压暗（problem/version → `--paper-deep`，nav → ink alpha 0.12）+ 并集规则清零 `-webkit-tap-highlight-color`（否则安卓 WebView 自带灰块与自定义按压色叠着闪）。**不加 transform**：hover 的 `translateX(2px)` 留给鼠标，整行 flex 容器做位移会带来 1px 文字抖动。`.version-item:active` **必须排在 `.version-item.version-checkpoint` 之后** —— 两者特异性同为两个类的量级，同分时源序决定胜负，写前面则 checkpoint 行（最常被点的一批）没有任何按压反馈；测试直接断言这个源序。③ 修 `.writer-problems-stat-pill` 的 `color: var(--ink-secondary)` —— 该变量从未在 `:root` 定义过，文字色静默回退，改用 `--ink-mute`；新增未定义 CSS 变量棘轮测试（`KNOWN_LEGACY_UNDEFINED` 显式列出 5 个历史欠账让它们可见，新增的会变红）。④ 顺带把 `test_version_row_hover_matches_other_rows` 从 `split(".version-item {")` 换成按括号深度取规则体的 `_rule_body()` —— 新增的并集规则也以 `.version-item {` 结尾且更靠前，`split` 会抓错规则。**8 条变异全部验证会红**（去掉帽子/改成 height/列表回退自带滚动/tab 取消吸顶/删 `:active`/删 tap-highlight/`:active` 移到 checkpoint 前/变量名改回去）。测试 242 全绿 |
 
 ---
 
 ## 已知问题 / 待办
 
-> 更新时间：2026-08-23（v4.4.6 打点）
+> 更新时间：2026-08-24（v4.4.7 打点）
 
 - [x] ~~**安卓升级后前端永远是旧的，只有卸载重装才好**~~ — v4.4.5 已修。根因是两件事叠加：
       `copyAssetFile()` 见目标文件已存在且非空就 `return`（原意是省冷启动 I/O），而
@@ -427,7 +428,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       `static.version` / `deleteStaticDir`（`minifyEnabled false`，符号未混淆），
       manifest `versionName=4.4.5`，且无 `assets/static/static/` 嵌套。
       打包与代码都对，剩下的只有运行时。真机验收清单：
-      ① 装 v4.4.5 → 覆盖安装 v4.4.6（**不要卸载**）→ 顶栏应显示 `System · v4.4.6 Online`；
+      ① 装 v4.4.6 → 覆盖安装 v4.4.7（**不要卸载**）→ 顶栏应显示 `System · v4.4.7 Online`；
       ② 同时确认文稿/词卡/复习进度**全部存活**（验证删除范围没越界）；
       ③ `buildFeatures { buildConfig true }` 已显式打开（AGP 8 各版本默认值不同，
       关掉的话报 `cannot find symbol BuildConfig`，且只在 CI 编译时才炸）。
@@ -443,14 +444,22 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       三处由 `test_version_is_consistent_across_release_surfaces` 一起断言。
       **发版新增落点时先问一句：它有没有出现在那个测试里。**
 - [x] ~~**工作流硬编码资产名**：已参数化为 `${{ github.ref_name }}`~~
-- [ ] **写作台行的触屏按压反馈缺失**（v4.4.5 遗留）：`.writer-nav-item` / `.writer-problem-row`
-      / `.version-item` 三者都只有 `:hover` 规则、没有 `:active`。触屏上 `:hover` 不触发
-      （或触发后粘住不放），等于点下去没有任何即时反馈 —— 用户报的"点击后行为看不懂"
-      有一部分是这个。三种行加一条共用 `:active` 是下一个杠杆。
+- [x] ~~**写作台行的触屏按压反馈缺失**~~（v4.4.5 遗留）— v4.4.7 已修。`.writer-nav-item` /
+      `.writer-problem-row` / `.version-item` 三者原先只有 `:hover` 规则、没有 `:active`。
+      触屏上 `:hover` 不触发（或触发后粘住不放），等于点下去没有任何即时反馈 —— 用户报的
+      "点击后行为看不懂"有一部分是这个。现补 `:active` 背景压暗 + 并集规则清零
+      `-webkit-tap-highlight-color`，不加 transform（整行位移会有 1px 文字抖动）。
+      **`.version-item:active` 必须写在 `.version-item.version-checkpoint` 之后**：
+      两者特异性相同，同分靠源序，写前面则 checkpoint 行按下去毫无反馈。
       **注意**：诊断分析 pane 的高度会变是结构性的（中间那张错误详情卡在占位符 ↔ 错误卡
       之间切换），代码里**不存在任何折叠机制**，别去找不存在的 accordion。
-      （桌面端 `.writer-sidebar` 仍是 `position: sticky` 且没有 `max-height` / `overflow-y`
-      —— 内容高过视口时下半截滚不到。移动端已在 v4.4.6 修掉，桌面端同族问题待办。）
+- [x] ~~**桌面端写作台侧栏下半截滚不到**~~ — v4.4.7 已修（移动端同族问题 v4.4.6 已修）。
+      `.writer-sidebar` 基规则是 `position: sticky; top: 4.5rem`，处在 `align-items: start`
+      的 grid 列里、高度跟内容走，却**既无 `max-height` 也无 `overflow-y`**。sticky 元素
+      比视口高时，超出部分永远停在视口外 —— sticky 只在自己的 grid 行内平移，页面滚到底
+      也带不出来。修法与移动端同构：加 `max-height: calc(100dvh - 4.5rem - 1rem)` +
+      `overflow-y: auto`，并把内层三个列表的高度帽从基规则删除，**滚动只归 sidebar 一个人管**。
+      用 `max-height` 而不是 `height`：sticky 列必须高度自适应，写死会在内容少时撑出空白。
 - [x] ~~**移动端面板整块位移 / 底部永远滚不到**~~ — v4.4.6 已修。三个缺陷叠在一起：
       ① `.writer-sidebar` 在 ≤860px 是 `position: fixed` + `bottom` 锚点，却**只有
       `max-height`、既没 `top` 也没 `height`** —— 高度跟内容走 + 锚在底边 = 只能向上长，
@@ -467,6 +476,24 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       **教训**：高度和滚动的归属只能有一个主人。外层容器和每个内层列表都想管，
       就会出现"谁都在管、谁都没管好"——而症状（跳动 / 滚不到）看起来像两个
       互不相关的 bug，实际是同一个根因的两面。
+- [ ] **5 个 CSS 变量从未定义**（v4.4.7 盘点，全部是历史欠账）：`--border`、`--font-sans`、
+      `--note-blue`、`--paper-accent`、`--paper-warm`。变量未定义不会报错，只会让那条属性
+      静默回退（颜色变成继承色、字体落到默认栈），肉眼几乎看不出，但设计意图丢了。
+      已确认 `--note-blue` 是真缺口：兄弟 `--note-green/pink/yellow` 都在 `:root` 里，
+      只有 blue 没有，于是 `.memo-card:nth-child(3n)` 拿不到背景色。
+      这 5 个已被 `test_no_undefined_css_variables_in_writer_surfaces` 的
+      `KNOWN_LEGACY_UNDEFINED` 显式列出（**棘轮**：新增未定义变量会让测试变红，
+      修好后要把条目从集合里删掉，否则它会慢慢变成一张永久豁免名单）。
+- [ ] **写作台版本行的按钮尺寸/危险色缺失**（v4.4.7 划出的单独事项）：`.btn-xs` 与
+      `.btn-del` 两个类**在 CSS 里从未定义**，于是版本快照行的「恢复/删除」按钮走 `.btn`
+      的 `min-height: 36px`、在紧凑行里显得过大，且删除按钮没有任何危险色提示。
+      没顺手改是因为按钮配色要和全站危险按钮约定一起定（不能只在写作台拍一个红色），
+      夹在几何修复里会模糊版本边界。
+- [ ] **Grep 工具会把 `/*` 渲染成 `\*`**（v4.4.7 踩坑，工具产物而非代码问题）：
+      用 Grep 读 CSS 注释行时输出形如 `\* 说明文字`，看着像把注释开头写坏了
+      （曾据此误判 style.css:339/341 与 6996 三处"注释畸形会吞掉后续规则"）。
+      用 Read 或 Python 读原始字节确认过：文件里是正确的 `/*`。
+      **结论：怀疑源码有畸形字符时，别用 Grep 输出当证据，去读原始字节。**
 - [ ] **DeepSeek API Key 失效/余额耗尽（401/402）**：2026-08-20 新 key 曾报 402（余额耗尽），2026-08-22 复测 `.env` 与 DB 两处 key 均报 401（`Authentication Fails, api key invalid`）。影响全部 AI 功能（查词在线兜底、语法剖析、笔记辅助）和构建工具。**介词数据集已在充值后跑完（531 词条/660 搭配）**；词库 refill 受阻见下条。
 - [x] ~~**介词搭配数据集只覆盖了一半词表**~~ — 2026-08-20 已跑完：1773 个动词/形容词
       问到 1729 词（97.5%），**531 词条 / 660 条搭配**（含 47 条人工 `SEED_COLLOCATIONS`
