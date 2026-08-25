@@ -11,12 +11,12 @@
 
 ## 交接快照
 
-> 更新时间：2026-08-24
+> 更新时间：2026-08-25
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master`（v4.4.7：桌面端写作台侧栏几何收口 + 三行触屏按压反馈） |
-| 测试 | **242 / 242 全绿**（v4.4.7 新增：桌面侧栏内部可滚断言、三行 `:active` 按压契约、未定义 CSS 变量棘轮；v4.4.6 新增：顶栏版本标签纳入版本自洽断言、移动端 sheet 几何稳定性） |
+| 当前分支 / HEAD | `fix/dict-refill-keymatching`（词头归一化回映射；基线 v4.4.7） |
+| 测试 | **252 / 252 全绿**（2026-08-25 本机实测；新增 `test_dict_pipeline.py` 10 条锁词头归一化契约；v4.4.7 新增：桌面侧栏内部可滚断言、三行 `:active` 按压契约、未定义 CSS 变量棘轮）。⚠️ 其中 `test_url_ingest_endpoint_with_mock` **依赖真实 DNS**，本机开着 Teredo IPv6 时会红（同一份代码时红时绿），见「已知问题」 |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
 | 对外发布 | 已发布至 **v4.4.6**（四平台产物齐、CI 验签闸过）；**v4.4.7 待发布**（版本号 40407，仅 arm64-v8a）。⚠️ Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收；**v4.4.6 与 v4.4.7 的真机验收合并做一次**（装 v4.4.6 → 覆盖装 v4.4.7），要点见「已知问题 / 待办」 |
@@ -354,7 +354,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （230 个，全绿）
+测试:      pytest            （252 个，全绿）
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py
 ```
 
@@ -494,16 +494,27 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       （曾据此误判 style.css:339/341 与 6996 三处"注释畸形会吞掉后续规则"）。
       用 Read 或 Python 读原始字节确认过：文件里是正确的 `/*`。
       **结论：怀疑源码有畸形字符时，别用 Grep 输出当证据，去读原始字节。**
-- [ ] **DeepSeek API Key 失效/余额耗尽（401/402）**：2026-08-20 新 key 曾报 402（余额耗尽），2026-08-22 复测 `.env` 与 DB 两处 key 均报 401（`Authentication Fails, api key invalid`）。影响全部 AI 功能（查词在线兜底、语法剖析、笔记辅助）和构建工具。**介词数据集已在充值后跑完（531 词条/660 搭配）**；词库 refill 受阻见下条。
+- [x] ~~**DeepSeek API Key 失效/余额耗尽（401/402）**~~ — 2026-08-25 用户更新 `.env` 后已复测可用
+      （`deepseek-v4-flash`，单词与批量调用均正常）。历史：2026-08-20 曾报 402（余额耗尽），
+      2026-08-22 `.env` 与 DB 两处 key 均报 401。**注意 `_read_api_config` 是 `.env` 优先、DB 兜底**
+      （`tools/build_dict.py:178`），所以 DB 里残留的旧 key 不会遮蔽 `.env` 的新 key。
+      介词数据集与词库尾缺口都已在本次跑完，见下两条。
 - [x] ~~**介词搭配数据集只覆盖了一半词表**~~ — 2026-08-20 已跑完：1773 个动词/形容词
       问到 1729 词（97.5%），**531 词条 / 660 条搭配**（含 47 条人工 `SEED_COLLOCATIONS`
       floor）。中途发现第一版校验器把介词与冠词的缩合形式（an+dem=am、in+das=ins）
       当成幻觉，误杀 12 条正确搭配 —— 已修并重问全部批次，重放 0 误杀。
-- [ ] **45 个词头 AI 始终不作答**（v3.10.0）：`sich-freuen`/`auf-jeden-fall` 这类
-      多词与反身连字符键，以及 `eindeutige`/`hiesigen` 这类形容词屈折形。提示词按
-      单个词元设计，处理不了这些形状；重问只是白花钱。注意连字符键**不都是**坏数据：
-      `see-meer` / `see-teich`、`bank-geldinstitut` / `bank-sitzgelegenheit` 是词库
-      刻意用来区分同形词的，`fertig-sein` 等 8 条也已拿到搭配 —— 不要一刀切按连字符过滤。
+- [x] ~~**45 个词头 AI 始终不作答**（v3.10.0）~~ — 2026-08-25 已解决，**AI 其实每次都答了**。
+      提示词第 79 行明确要求反身动词「wort 保持不带 sich 的形式」，而 `_parse_batch` 按
+      `lemma not in asked` 把返回值丢掉 —— 自己规定的格式自己不认。`sich-*` 那批 25 词
+      整批落空（缓存里 `collocations` 与 `none` 双空即为铁证）。同类还有形容词屈折被还原
+      （`ungünstigen`→`ungünstig`）。修法正是这条待办自己警告过的方向：**不是按连字符过滤**
+      （`see-meer` / `bank-geldinstitut` 是刻意的同形词区分），而是 `_resolve_requested`
+      把答案改挂回请求键。531 词条/660 搭配 → **552/691**，全部来自缓存，零 API 花费。
+      **刻意不做变音折叠**：第一版加了 ä→a 折叠，多捞回 `ubergreifen ← übergreifen` 一个
+      漏变音符的源词表拼写错误，代价是 `drucken`(印刷)/`drücken`(按压)、`vertraglich`(合同的)/
+      `verträglich`(易相处的) 互相领走对方的搭配。被 QA 的「例句里找不到词元痕迹」露出来后撤销 ——
+      **张冠李戴（错数据当对的写进词库）比漏检和误杀都更糟**。`guard_regression` 正确拦下了
+      随之而来的 555→552 下降，确认后用 `--force` 覆盖。
 - [x] ~~**签名迁移只能靠 CI 验证**~~ — 2026-08-20 v3.10.0 tag 首跑已在真实 runner 验证：
       第一次跑死在验签闸 —— 不是签名错，是 `keytool -printcert -jarfile` 只认 v1 签名，
       而 AGP 在 minSdk≥24 时默认只出 v2/v3，闸读出空指纹分不清「真没签名」和「读不到」。
@@ -521,9 +532,35 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 - [ ] **`linguistics.py` 有 14 条 pyflakes 重复键告警**（`klima`/`schutz`/`bund` 等在
       `LINGUISTICS_VOCAB_EXT` 与另一张表里各出现一次，值不同）：先前就有，未在本次改动范围内，
       但确实意味着有一份定义被静默覆盖，值得单独查一次
-- [ ] **离线词库尾缺口 110 词**（v4.4.0 盘点：词库 4301 词，候选源 4377，剔除 `linguistics` 后净缺口 110）：2 连字符（`ost-west-gefälle`、`ozg-onlinezugangsgesetz`）+ 57 长复合词（>10 字符，如 `aufklärungsdrohnen`/`erkenntnisgewinn`）+ 形容词屈折形（`aufwendige`/`fleischlastige`/`forschende` 等）。
-      其中 30 条在 `tools/raw/batch_*.json` 已有原始响应缓存（待合入 `core_dict_ext.py`，如 `absender`/`dauer`/`drucker`），80 条 AI 从未返回（`abbiegen`/`abdanken`/`abenteuer`/`abfahrt` 等，含 B1/B2 派生词/低频词）。
-      `python tools/build_dict.py --refill --parallel 8` 2026-08-22 复测因 API Key 401 暂缓（`.env` `sk-a1293…99a9` 与 DB `sk-c73dd…e9c6` 均 `invalid_request_error`）；已保留原始响应缓存，校验在读取时执行，不伪造条目，不提交空缓存。详见 v4.4 report。
+- [x] ~~**离线词库尾缺口 110 词**~~ — 2026-08-25 已补齐，**缺口 110 → 0**（词库 4301 → 4411，
+      `core_dict_ext` 3859 → 3969）。盘点数字比 v4.4.0 记录的乐观：实际是 **86 词缓存里早有
+      可用答案**（不是 30），只有 24 词需要真的调 AI（不是 80）。
+      根因与上一条同源：`_generate_parallel` 的单词补轮按 `wort != 请求词` 直接 continue，
+      而单词请求会让模型「纠正」成词元（问 `zustände` 答 `Zustand`、问 `waldbrände` 答
+      `Waldbrand`）。词库是按**表层形**查的，于是任何屈折形都必然连丢 3 轮后被记成
+      「AI 从未返回」。改成改挂回请求键（cefr/pos/gender/plural 属于词元，对其任一屈折形
+      都成立），本次实测触发 13 次 relemma。
+      **9 条「名词缺 plural」没有放宽校验**：1952 个既有名词全都带复数形，放宽会让
+      「补上了」和「补了个残条」看起来一样；它们重问后拿到了真复数形，最终 0 条空复数。
+      顺带修掉一个会烧钱的坑：**refill 的缓存目录原先与整包跑共用** `tools/raw/`，
+      而缓存按批次序号命名 —— refill 的 `batch_0` 与整包跑的 `batch_0` 内容完全不同，
+      共用会覆盖掉整包跑的原始响应（不可重放，只能重新付费问），`--resume` 还会读回
+      一批毫不相干的词。已改用 `tools/raw_refill/`（已加 `.gitignore`）。
+      新增 `test_dict_pipeline.py` 10 条锁住上述契约，全部变异验证过会红（8/8 捕获）。
+- [ ] **`is_safe_public_url` 在有 Teredo IPv6 的机器上拒绝一切外链**（2026-08-25 发现）：
+      `server.py:789` 遍历 `getaddrinfo` 的**全部**结果，任一地址被判私有就整体拒绝。
+      本机 `www.dw.com` 同时解析出 `128.242.245.180`（公网）和 `2001::b92d:7b9`
+      —— 后者属 Teredo 隧道段 `2001::/32`，Python `ipaddress` 判为 `is_private`，于是
+      正常公网站点也进不来。**这是产品 bug，不只是测试问题**：Windows 上开着 Teredo
+      的用户，URL 导入功能对所有站点全废。
+      连带症状：`test_server.py::test_url_ingest_endpoint_with_mock` mock 了
+      `fetch_remote_html` 但没 mock SSRF 闸门，所以它依赖真实 DNS —— 本机随 IPv6 状态
+      时红时绿：Teredo 起着时红（观察到 241+1），Teredo 不在解析路径上时绿
+      （2026-08-25 复测 `www.dw.com` 拿到 `2a03:2880:...` 全球单播，252 全绿）。
+      CI 的 Linux runner 无 Teredo，故一直绿 —— **这个 bug 在 CI 上永远看不见**。
+      修的时候要同时决定两件事：闸门对 Teredo/6to4 过渡段的态度
+      （`2001::/32`、`2002::/16` 嵌的是公网 IPv4，不是内网地址），以及该测试应当 mock
+      掉闸门而不是依赖 DNS。**未修，因为改 SSRF 判定属安全逻辑，需要显式确认。**
 - [ ] **安卓 TTS 依赖联网 Edge TTS 服务**（v3.9.1）：APK 内无离线 TTS 引擎，
       `edge_tts_mini` 直连 `speech.platform.bing.com`（与桌面端同一服务，本机/用户网络实测可达）。
       真机若连不上该域名（或离线），三层兜底全败时播放器显示 `⚠ 语音引擎不可用`（不再静默）。

@@ -34,3 +34,7 @@ keystore.properties
 
 # IDE
 .vscode/
+
+# 子代理的临时 git worktree（Claude Code 自建，内容是本仓库的另一份 checkout）。
+# 不忽略的话，一次 `git add -A` 会把整份副本当普通文件提交进来。
+.claude/worktrees/
