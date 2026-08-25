@@ -523,13 +523,21 @@ def test_full_api_flow(client):
     assert apkg_res.status_code == 200
     assert len(apkg_res.content) > 1000
 
-def test_is_safe_public_url_filters_private_ips():
+def test_is_safe_public_url_filters_private_ips(monkeypatch):
+    # 这几条走字面 IP，不碰 DNS。
     assert is_safe_public_url("http://127.0.0.1:8000/api") is False
     assert is_safe_public_url("http://localhost:3000") is False
     assert is_safe_public_url("http://192.168.1.1/admin") is False
     assert is_safe_public_url("http://10.0.0.5/") is False
     assert is_safe_public_url("http://169.254.169.254/latest/meta-data") is False
     assert is_safe_public_url("ftp://example.com/file") is False
+
+    # 放行那条必须钉住解析结果：真去问 DNS 的话，本机开着 Teredo 隧道时
+    # tagesschau.de 会解析出 2001::/32 里的地址，同一份代码时红时绿。
+    import socket as _socket
+    monkeypatch.setattr(_socket, "getaddrinfo", lambda host, *a, **k: [
+        (_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("23.55.108.51", 443)),
+    ])
     assert is_safe_public_url("https://www.tagesschau.de/inland/test") is True
 
 def test_clean_html_to_article():
@@ -556,7 +564,11 @@ def test_url_ingest_endpoint_with_mock(client, monkeypatch):
     from unittest.mock import AsyncMock
     mock_html = "<html><head><title>Hallo Berlin</title></head><body><p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
     monkeypatch.setattr("server.fetch_remote_html", AsyncMock(return_value=mock_html))
-    
+    # 端点自己也过一次 SSRF 闸（server.py:858），而 fetch 被 mock 掉不代表闸被 mock 掉。
+    # 不钉住这里就等于让这条测试依赖真实 DNS：本机开着 Teredo 时 dw.com 会带出
+    # 2001::/32 的地址，闸门拒绝，测试变成时红时绿；CI 的 Linux runner 无 Teredo 一直绿。
+    monkeypatch.setattr("server.is_safe_public_url", lambda u: True)
+
     res = client.post("/api/articles/ingest-url", json={"url": "https://www.dw.com/de/hallo-berlin/a-123"})
     assert res.status_code == 200
     data = res.json()
@@ -2301,6 +2313,76 @@ def test_is_safe_public_url_accepts_all_public_resolution(monkeypatch):
     monkeypatch.setattr(_socket, "getaddrinfo", fake_getaddrinfo)
 
     assert is_safe_public_url("https://all-public.example/") is True
+
+
+# ── IPv6 过渡格式：判定必须落在「内嵌的目的 IPv4」上，而不是外层包装 ────────────
+
+def _pin_resolution(monkeypatch, addr: str):
+    """把 getaddrinfo 钉成只返回 addr 一条，避免测试依赖真实 DNS。"""
+    import socket as _socket
+    family = _socket.AF_INET6 if ":" in addr else _socket.AF_INET
+    monkeypatch.setattr(_socket, "getaddrinfo", lambda host, *a, **k: [
+        (family, _socket.SOCK_STREAM, 6, "", (addr, 443, 0, 0)),
+    ])
+
+
+@pytest.mark.parametrize("addr, note", [
+    ("2002:c0a8:0101::1", "6to4 内嵌 192.168.1.1"),
+    ("2002:7f00:0001::1", "6to4 内嵌 127.0.0.1"),
+    ("2002:a9fe:a9fe::1", "6to4 内嵌 169.254.169.254 云元数据"),
+    ("2001:0:0:0:0:0:3f57:fefe", "Teredo client 内嵌 192.168.1.1"),
+    ("2001:0:c0a8:101:0:0:4746:748", "Teredo server 内嵌 192.168.1.1"),
+    ("::ffff:127.0.0.1", "IPv4-mapped 回环"),
+    ("::ffff:10.0.0.5", "IPv4-mapped 内网"),
+])
+def test_is_safe_public_url_rejects_ipv4_smuggled_in_ipv6(monkeypatch, addr, note):
+    """内网 IPv4 套进 IPv6 过渡格式后必须照样被拦。
+
+    这是真能打进内网的 SSRF 通道，不是理论风险：6to4 的 `2002:c0a8:0101::1`
+    外层 `is_global` 为真、六个旗标一个不沾，旧写法（只看外层 `is_private` 等）
+    对它一路放行，而内核会把包路由到 192.168.1.1。
+    """
+    _pin_resolution(monkeypatch, addr)
+    assert is_safe_public_url("https://smuggle.example/") is False, note
+
+
+@pytest.mark.parametrize("addr, note", [
+    ("2001::b92d:7b9", "Teredo client 70.210.248.70 公网、server 段全零"),
+    ("2002:8080:8080::1", "6to4 内嵌 128.128.128.128 公网"),
+    ("::ffff:8.8.8.8", "IPv4-mapped 公网"),
+])
+def test_is_safe_public_url_accepts_public_target_behind_ipv6_transition(monkeypatch, addr, note):
+    """过渡格式包着公网地址时必须放行——修误放不能顺手把误拒留下。
+
+    `2001::/32`(Teredo) 落在 ipaddress 的私有段清单 `2001::/23` 里、
+    `::ffff:0:0/96` 被判 `is_reserved`，只看外层旗标会把它们全拒掉：
+    本机 `www.dw.com` 曾解析出 `2001::b92d:7b9`，于是 URL 导入对**所有**站点
+    全废。CI 的 Linux runner 没有 Teredo，这个方向在 CI 上永远看不见。
+    """
+    _pin_resolution(monkeypatch, addr)
+    assert is_safe_public_url("https://transition.example/") is True, note
+
+
+def test_is_safe_public_url_still_rejects_non_teredo_2001_ranges(monkeypatch):
+    """`2001::/23` 里除 Teredo 之外的保留段不能被顺手放开。
+
+    修法是「只对 Teredo/6to4/IPv4-mapped 解包」，不是「把 2001:: 整段当公网」。
+    """
+    for addr in ("2001:db8::1", "2001:2::1", "2001:10::1", "2001:20::1"):
+        _pin_resolution(monkeypatch, addr)
+        assert is_safe_public_url("https://reserved.example/") is False, addr
+
+
+def test_url_ingest_gate_is_pinned_not_dns_dependent():
+    """端点测试不许依赖真实 DNS——本机 IPv6 状态一变就时红时绿。
+
+    `test_url_ingest_endpoint_with_mock` 只 mock 了 `fetch_remote_html`，
+    但端点自己还会调一次 `is_safe_public_url`（server.py:858），闸门没被钉住。
+    """
+    import inspect
+
+    src = inspect.getsource(test_url_ingest_endpoint_with_mock)
+    assert "server.is_safe_public_url" in src, "端点测试必须钉住 SSRF 闸，不能真去问 DNS"
 
 
 def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):

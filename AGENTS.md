@@ -16,7 +16,7 @@
 | 项 | 值 |
 |---|---|
 | 当前分支 / HEAD | `fix/dict-refill-keymatching`（词头归一化回映射；基线 v4.4.7） |
-| 测试 | **252 / 252 全绿**（2026-08-25 本机实测；新增 `test_dict_pipeline.py` 10 条锁词头归一化契约；v4.4.7 新增：桌面侧栏内部可滚断言、三行 `:active` 按压契约、未定义 CSS 变量棘轮）。⚠️ 其中 `test_url_ingest_endpoint_with_mock` **依赖真实 DNS**，本机开着 Teredo IPv6 时会红（同一份代码时红时绿），见「已知问题」 |
+| 测试 | **264 / 264 全绿**（2026-08-25 本机实测，`pyflakes` 干净）。新增：`test_dict_pipeline.py` 10 条锁词头归一化契约、12 条 IPv6 过渡格式 SSRF 断言；**两条依赖真实 DNS 的测试已钉住解析结果**，不再随本机 IPv6 状态时红时绿 |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
 | 对外发布 | 已发布至 **v4.4.6**（四平台产物齐、CI 验签闸过）；**v4.4.7 待发布**（版本号 40407，仅 arm64-v8a）。⚠️ Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收；**v4.4.6 与 v4.4.7 的真机验收合并做一次**（装 v4.4.6 → 覆盖装 v4.4.7），要点见「已知问题 / 待办」 |
@@ -354,7 +354,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （252 个，全绿）
+测试:      pytest            （264 个，全绿）
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py
 ```
 
@@ -547,20 +547,28 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       共用会覆盖掉整包跑的原始响应（不可重放，只能重新付费问），`--resume` 还会读回
       一批毫不相干的词。已改用 `tools/raw_refill/`（已加 `.gitignore`）。
       新增 `test_dict_pipeline.py` 10 条锁住上述契约，全部变异验证过会红（8/8 捕获）。
-- [ ] **`is_safe_public_url` 在有 Teredo IPv6 的机器上拒绝一切外链**（2026-08-25 发现）：
-      `server.py:789` 遍历 `getaddrinfo` 的**全部**结果，任一地址被判私有就整体拒绝。
-      本机 `www.dw.com` 同时解析出 `128.242.245.180`（公网）和 `2001::b92d:7b9`
-      —— 后者属 Teredo 隧道段 `2001::/32`，Python `ipaddress` 判为 `is_private`，于是
-      正常公网站点也进不来。**这是产品 bug，不只是测试问题**：Windows 上开着 Teredo
-      的用户，URL 导入功能对所有站点全废。
-      连带症状：`test_server.py::test_url_ingest_endpoint_with_mock` mock 了
-      `fetch_remote_html` 但没 mock SSRF 闸门，所以它依赖真实 DNS —— 本机随 IPv6 状态
-      时红时绿：Teredo 起着时红（观察到 241+1），Teredo 不在解析路径上时绿
-      （2026-08-25 复测 `www.dw.com` 拿到 `2a03:2880:...` 全球单播，252 全绿）。
-      CI 的 Linux runner 无 Teredo，故一直绿 —— **这个 bug 在 CI 上永远看不见**。
-      修的时候要同时决定两件事：闸门对 Teredo/6to4 过渡段的态度
-      （`2001::/32`、`2002::/16` 嵌的是公网 IPv4，不是内网地址），以及该测试应当 mock
-      掉闸门而不是依赖 DNS。**未修，因为改 SSRF 判定属安全逻辑，需要显式确认。**
+- [x] ~~**`is_safe_public_url` 在有 Teredo IPv6 的机器上拒绝一切外链**~~ — 2026-08-25 已修。
+      查的时候发现问题比报的那个大：闸门拿**外层 IPv6 地址的旗标**判定，而 IPv4-mapped
+      (`::ffff:0:0/96`)、6to4(`2002::/16`)、Teredo(`2001::/32`) 三种过渡格式的真实目的
+      主机是**内嵌的那个 IPv4**，于是两个方向同时错，本机 15 条实测全对过一遍：
+      - **误放（真能打进内网的 SSRF 通道，比报的 bug 更严重）**：`2002:c0a8:0101::1`
+        外层 `is_global` 为真、六个旗标一个不沾，旧写法一路放行，而内核把包路由到
+        `192.168.1.1`；`2002:7f00:0001::1` → `127.0.0.1`、`2002:a9fe:a9fe::1` → 云元数据
+        `169.254.169.254` 同理。**这条在 CI 上也看不见 —— 它需要有人主动构造地址。**
+      - **误拒（报的那个）**：Teredo 落在 ipaddress 的私有段清单 `2001::/23` 里，
+        Windows 上开着 Teredo 隧道的用户 URL 导入对所有站点全废（本机 `www.dw.com`
+        曾解析出 `2001::b92d:7b9`，client 段是公网 `70.210.248.70`）；`::ffff:8.8.8.8`
+        被判 `is_reserved`，同理。
+      修法是 `_resolve_ssrf_targets()` 先把地址归一到「包真正会打到的目的地」再判定，
+      **不是**把 `2001::/32` 整段当公网放过 —— 有测试专门钉住 `2001:db8::/32`、
+      `2001:2::/48`、`2001:10::/28`、`2001:20::/28` 仍被拒。Teredo 只校验 client 段
+      （数据包实际封装去的那个公网 IPv4），server 段仅在非全零时才校验：观测到的真实
+      Teredo 地址 server 段就是全零，把全零当 `is_unspecified` 拒掉等于没修。
+      连带修掉两条**依赖真实 DNS**的测试（`test_url_ingest_endpoint_with_mock` 只 mock 了
+      `fetch_remote_html`，端点自己还会过一次闸；`test_is_safe_public_url_filters_private_ips`
+      的放行断言直接问 tagesschau.de）—— 它们本机随 IPv6 状态时红时绿，CI 的 Linux runner
+      无 Teredo 故一直绿。新增 12 条断言，两个方向的变异（退回旧写法 / 偷懒整段放过
+      `2001::/23`）都验证过会红。
 - [ ] **安卓 TTS 依赖联网 Edge TTS 服务**（v3.9.1）：APK 内无离线 TTS 引擎，
       `edge_tts_mini` 直连 `speech.platform.bing.com`（与桌面端同一服务，本机/用户网络实测可达）。
       真机若连不上该域名（或离线），三层兜底全败时播放器显示 `⚠ 语音引擎不可用`（不再静默）。
