@@ -296,9 +296,10 @@ def test_no_undefined_css_variables_in_writer_surfaces():
     """CSS 变量拼错不会报错，只会让颜色静默回退成继承色 —— 肉眼几乎看不出，
     但那一处的设计意图就丢了。--ink-secondary 从未在 :root 定义过（v4.4.7 修）。
 
-    这是个棘轮：下面 5 个是本次改动之前就存在的历史欠账（不在 v4.4.7 范围内，
-    留待单独一次修），显式列出来是为了让它们可见 —— 而不是把整条断言删掉、
-    或者塞进一个没人再看的白名单。新增未定义变量会让这个测试变红。
+    这是个棘轮：KNOWN_LEGACY_UNDEFINED 现在是空的 —— 原先挂在上面的 5 个历史欠账
+    (--border / --font-sans / --note-blue / --paper-accent / --paper-warm)
+    已在 :root 定义完毕。新增未定义变量会让这个测试变红；确实一时修不了的
+    才临时进这个集合，且下面第二条断言会催着修完就删掉它。
     """
     # 声明式匹配不能按行锚定：`--hl-A1: #E3EFFB;  --hl-A1-ink: #1D548C;`
     # 这样一行两个声明的写法在文件里很常见，^ 锚定只看得见第一个，
@@ -306,9 +307,7 @@ def test_no_undefined_css_variables_in_writer_surfaces():
     declared = set(re.findall(r"(--[\w-]+)\s*:", STYLE))
     used = set(re.findall(r"var\(\s*(--[\w-]+)", STYLE))
 
-    KNOWN_LEGACY_UNDEFINED = {
-        "--border", "--font-sans", "--note-blue", "--paper-accent", "--paper-warm",
-    }
+    KNOWN_LEGACY_UNDEFINED = set()
     undefined = used - declared - KNOWN_LEGACY_UNDEFINED
     assert not undefined, f"用到了未定义的 CSS 变量：{sorted(undefined)}"
 
