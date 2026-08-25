@@ -6,7 +6,13 @@
   /* Surfaces */
   --paper:          #FAF8F5;
   --paper-card:     #FFFFFF;
+  /* 暖白纸面斜坡上的两个中间档：warm 比 paper 只暖一丝（整块 banner 铺底、
+     pill hover），accent 落在 tint 与 deep 之间（按钮 hover / 内嵌代码底色）。
+     两者原先只以内联回退值的形式散落各处，回退值还混进了几个冷灰
+     (#f3f4f6/#f1f5f9) —— 在暖纸调色板里显脏，这里统一钉回暖色轴。 */
+  --paper-warm:     #F7F4EC;
   --paper-tint:     #F2ECE1;
+  --paper-accent:   #EDE7DA;
   --paper-deep:     #E6DDD0;
   --stage:          #181512;
 
@@ -16,6 +22,10 @@
   --muted:          #8C8477;
   --rule:           #D8D0C2;
   --rule-light:     #EBE5DA;
+  /* --border 是 --rule 的语义别名：卡片/按钮 1px 描边全走这一档，
+     与相邻规则里直接引用 --rule 的视觉重量一致（--rule 全文 85 处，
+     --line 只 3 处，前者才是这个粗细的既有 token）。 */
+  --border:         var(--rule);
   --grid-dot:       rgba(21, 20, 15, 0.05);
 
   /* Physical materials */
@@ -57,6 +67,9 @@
   --note-yellow:    #FFFBE6;
   --note-pink:      #FFF0ED;
   --note-green:     #EDF7EC;
+  /* memo 卡片按 nth-child 轮换四种便签底色，蓝色那档一直没定义 ——
+     取与另外三档同等饱和/明度的淡蓝（呼应 --hl-A1 #E3EFFB 的蓝相，再提亮一档）。 */
+  --note-blue:      #ECF3FB;
 
   /* Typography */
   --serif-display:  'Playfair Display', 'Instrument Serif', Georgia, serif;
@@ -66,6 +79,10 @@
   --serif-text:     'DM Serif Text', 'Iowan Old Style', Georgia, serif;
   --sans-tight:     'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --sans:           'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* --font-sans 是 --sans 的别名：mascot 面板三处（含 #panel-name 输入框）
+     用的是这个名字。三处都改成 --sans 也行，但别名让两种叫法都落到同一字体栈，
+     不至于哪天又漏改一处、静默退回 -apple-system 回退栈。 */
+  --font-sans:      var(--sans);
   --mono:           'IBM Plex Mono', 'JetBrains Mono', Consolas, monospace;
   --hand:           'Caveat', 'Patrick Hand', cursive;
 
