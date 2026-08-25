@@ -249,6 +249,40 @@ async def call_deepseek_batch(words: List[str], key: str, base: str, model: str)
     return json.loads(content).get("results", [])
 
 
+_ADJ_INFLECTIONS = ("e", "en", "er", "es", "em")
+
+
+def _resolve_requested(lemma: str, asked: set) -> List[str]:
+    """AI 返回的词头 → 它实际回答的那些请求词。
+
+    为什么需要这层映射：提示词第 79 行明确要求反身动词「wort 保持不带 sich 的形式」，
+    于是问 `sich-freuen` 必然答 `freuen`。原先按 `lemma not in asked` 直接 continue，
+    等于自己规定的返回格式自己不认 —— 45 个词头因此被记成「AI 始终不作答」，
+    实际上每次都答了，答案一直躺在 raw 缓存里（`sich-*` 那批 25 词全军覆没，
+    collocations 与 none 双空）。另一类是形容词屈折被还原成词元：ungünstigen → ungünstig，
+    词元的介词搭配对它的任一屈折形都成立。
+
+    所以修法不是「按连字符过滤掉这些键」（AGENTS.md 已警告连字符键不都是坏数据，
+    see-meer / bank-geldinstitut 是刻意的同形词区分），而是把答案改挂回请求键。
+
+    **刻意不做变音折叠**（ä→a 之类）：那样能多捞回 `ubergreifen ← übergreifen`
+    这一个漏了变音符的源词表拼写错误，代价是把真实最小对立对混为一谈 ——
+    drucken(印刷)/drücken(按压)、vertraglich(合同的)/verträglich(易相处的)
+    会互相领走对方的搭配。误杀只是留个看得见的缺口，张冠李戴却是把错数据
+    当对的写进词库，比漏检和误杀都更糟。宁可让 `ubergreifen` 继续缺着。
+    """
+    hits: List[str] = []
+    for w in asked:
+        if w == lemma:
+            hits.append(w)
+        elif w.startswith("sich-") and w.split("-")[-1] == lemma:
+            # sich-freuen → freuen；sich-über-informieren → informieren
+            hits.append(w)
+        elif w.startswith(lemma) and w[len(lemma):] in _ADJ_INFLECTIONS:
+            hits.append(w)
+    return hits
+
+
 def _parse_batch(raw_results: List[dict], requested: List[str],
                  verbose: bool = True) -> Tuple[Dict[str, list], List[str]]:
     """AI 原始响应 → (有搭配的词, 明确没有搭配的词)。
@@ -262,7 +296,12 @@ def _parse_batch(raw_results: List[dict], requested: List[str],
     none: List[str] = []
     for entry in raw_results:
         lemma = (entry.get("wort") or "").strip().lower()  # 键必须小写，否则查词全 miss
-        if not lemma or lemma not in asked:
+        if not lemma:
+            continue
+        keys = _resolve_requested(lemma, asked)
+        if not keys:
+            if verbose:
+                print(f"[unclaimed] AI 返回 {lemma}，但本批没有能推出它的请求词")
             continue
         items = entry.get("kollokationen") or []
         rows = []
@@ -282,10 +321,11 @@ def _parse_batch(raw_results: List[dict], requested: List[str],
                 continue
             seen_senses.add(sense)
             rows.append(row)
-        if rows:
-            found[lemma] = rows
-        else:
-            none.append(lemma)   # 问过了，答案是「没有固定搭配」
+        for key in keys:
+            if rows:
+                found[key] = rows
+            else:
+                none.append(key)   # 问过了，答案是「没有固定搭配」
     return found, none
 
 

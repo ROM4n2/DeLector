@@ -775,6 +775,50 @@ class IngestUrlReq(BaseModel):
     url: str
     title: Optional[str] = ""
 
+def _resolve_ssrf_targets(ip_obj):
+    """把地址归一到「数据包真正会打到的目的地」，再交给闸门判定。
+
+    IPv4-mapped(`::ffff:0:0/96`)、6to4(`2002::/16`)、Teredo(`2001::/32`) 三种
+    IPv6 地址的真实目的主机是**内嵌的那个 IPv4**，`is_private` / `is_reserved`
+    这些旗标描述的是外层包装。直接拿外层旗标判定会同时犯两个方向的错，
+    两个方向本机都实测过：
+
+    - **误放（真 SSRF 通道）**：`2002:c0a8:0101::1` 外层 `is_global` 为真，
+      而它路由到 `192.168.1.1`；`2002:7f00:0001::1` 路由到 `127.0.0.1`。
+      旧写法对这两个一律放行。
+    - **误拒**：Teredo 落在 ipaddress 的私有段清单 `2001::/23` 里，于是
+      Windows 上开着 Teredo 隧道的用户连正常公网站点都进不来
+      （本机 `www.dw.com` 曾解析出 `2001::b92d:7b9`，URL 导入对所有站点全废）；
+      `::ffff:8.8.8.8` 被判 `is_reserved`，同理。
+
+    Teredo 只校验 client 字段（数据包实际封装去的那个公网 IPv4）；server 字段
+    仅在非全零时才校验 —— 观测到的真实 Teredo 地址 server 段就是全零，
+    把全零当 `is_unspecified` 拒掉等于没修。
+    """
+    mapped = getattr(ip_obj, "ipv4_mapped", None)
+    if mapped is not None:
+        return [mapped]
+    sixtofour = getattr(ip_obj, "sixtofour", None)
+    if sixtofour is not None:
+        return [sixtofour]
+    teredo = getattr(ip_obj, "teredo", None)
+    if teredo is not None:
+        server_ip, client_ip = teredo
+        targets = [client_ip]
+        if not server_ip.is_unspecified:
+            targets.append(server_ip)
+        return targets
+    return [ip_obj]
+
+
+def _is_blocked_addr(ip_obj) -> bool:
+    return any(
+        (t.is_private or t.is_loopback or t.is_link_local
+         or t.is_reserved or t.is_multicast or t.is_unspecified)
+        for t in _resolve_ssrf_targets(ip_obj)
+    )
+
+
 def is_safe_public_url(url: str) -> bool:
     try:
         parsed = urlparse(url)
@@ -785,11 +829,9 @@ def is_safe_public_url(url: str) -> bool:
             return False
         if hostname.lower().strip(".") == "localhost":
             return False
-            
+
         for info in socket.getaddrinfo(hostname, None):
-            ip_obj = ipaddress.ip_address(info[4][0])
-            if (ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local
-                    or ip_obj.is_reserved or ip_obj.is_multicast or ip_obj.is_unspecified):
+            if _is_blocked_addr(ipaddress.ip_address(info[4][0])):
                 return False
         return True
     except Exception:

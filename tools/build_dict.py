@@ -34,6 +34,11 @@ import httpx
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "tools" / "data"
 RAW_DIR = REPO_ROOT / "tools" / "raw"
+# refill 的缓存必须与整包跑分开：缓存文件名按「批次序号」而非词命名，
+# 而 refill 的词表只有几十个词，batch_0 装的是完全不同的词。共用一个目录会
+# (a) 覆盖掉整包跑的 batch_0..N 原始响应（不可重放，只能重新付费问），
+# (b) --resume 时读到上一次整包跑的 batch_0，拿回一批毫不相干的词。
+REFILL_RAW_DIR = REPO_ROOT / "tools" / "raw_refill"
 
 # 从现有词库 import 出已覆盖的词元，构建工具要排除它们（只补缺口）
 sys.path.insert(0, str(REPO_ROOT))
@@ -203,8 +208,12 @@ async def call_deepseek_batch(words: List[str], key: str, base: str, model: str)
     return parsed.get("results", [])
 
 
-async def _generate_parallel(words: List[str], args, key: str, base: str, model: str) -> List[dict]:
-    """并发处理所有批次。复用 tools/raw/ 缓存（断点续跑不重付钱）。"""
+async def _generate_parallel(words: List[str], args, key: str, base: str, model: str,
+                             raw_dir: Path = RAW_DIR) -> List[dict]:
+    """并发处理所有批次。复用 raw_dir 缓存（断点续跑不重付钱）。
+
+    raw_dir 可切换：缓存按批次序号命名，不同词表的 batch_0 内容完全不同，
+    整包跑与 refill 必须各用一个目录，否则互相覆盖原始响应。"""
     sem = asyncio.Semaphore(max(1, args.parallel))
     entries: List[dict] = []
     seen: set = set()
@@ -215,7 +224,7 @@ async def _generate_parallel(words: List[str], args, key: str, base: str, model:
         nonlocal done
         batch = words[start : start + args.batch_size]
         batch_index = start // args.batch_size
-        cache_path = RAW_DIR / f"batch_{batch_index}.json"
+        cache_path = raw_dir / f"batch_{batch_index}.json"
         if args.resume and cache_path.exists():
             batch_entries = json.loads(cache_path.read_text(encoding="utf-8"))
         else:
@@ -267,9 +276,18 @@ async def _generate_parallel(words: List[str], args, key: str, base: str, model:
                 try:
                     async with sem:
                         batch_entries = await call_deepseek_batch([m], key, base, model)
+                    # 单词请求会让模型「纠正」成词元：问 symbole 答 Symbol、问 zustände 答 Zustand、
+                    # 问 eindeutige 答 eindeutig。原先这里按 wort != m 直接 continue，于是任何屈折形
+                    # 都必然连丢 3 轮，最后记成「AI 从未返回」—— 实际上 AI 每次都答了。
+                    # 词库是按表层形查的（core_dict 的键就是用户输入的那个形），所以正确做法是
+                    # 把释义改挂到请求的键上，而不是丢掉：cefr/pos/gender/plural 属于词元，
+                    # 但对该词元的任一屈折形都成立。
                     for entry in batch_entries:
                         if entry.get("wort"):
                             entry["wort"] = entry["wort"].strip().lower()
+                        if len(batch_entries) == 1 and entry["wort"] != m:
+                            print(f"[refill-relemma] {m} ← AI 答的是词元 {entry['wort']}，改挂到请求键")
+                            entry["wort"] = m
                         err = validate_entry(entry)
                         if err or entry["wort"] != m:
                             continue
@@ -413,8 +431,32 @@ def main() -> None:
     if args.refill:
         key, base, model = _read_api_config()
         words = sorted(targets.keys())
-        print(f"[refill] 补生成 {len(words)} 个缺词，并行 {args.parallel}…")
-        entries = asyncio.run(_generate_parallel(words, args, key, base, model))
+
+        # 先从整包跑的原始响应里回收：缺口里很大一部分其实 AI 早就答过了，
+        # 只是当时那一批没并进 core_dict_ext（或被校验拦下后连原始响应一起没人再看）。
+        # 缓存存的是原始响应、校验在读取时做，所以这里重跑校验就能免费捞回来。
+        recovered: List[dict] = []
+        for path in sorted(RAW_DIR.glob("batch_*.json")):
+            try:
+                cached = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as e:
+                print(f"[refill] 跳过坏缓存 {path.name}: {e}")
+                continue
+            for entry in cached:
+                if entry.get("wort"):
+                    entry["wort"] = entry["wort"].strip().lower()
+                if entry.get("wort") in targets and not validate_entry(entry):
+                    recovered.append(entry)
+        recovered_keys = {e["wort"] for e in recovered}
+        todo = [w for w in words if w not in recovered_keys]
+        print(f"[refill] 缺口 {len(words)} 词：缓存免费回收 {len(recovered_keys)}，"
+              f"仍需调 AI {len(todo)}（并行 {args.parallel}）")
+
+        entries = list(recovered)
+        if todo:
+            REFILL_RAW_DIR.mkdir(parents=True, exist_ok=True)
+            entries += asyncio.run(_generate_parallel(todo, args, key, base, model,
+                                                      raw_dir=REFILL_RAW_DIR))
         # 合并现有 core_dict_ext + 新补的词，整体重新 emit（不整包重来，只增缺）
         from core_dict_ext import CORE_VOCAB_EXT as EXISTING
         merged: List[dict] = []
@@ -422,12 +464,18 @@ def main() -> None:
             merged.append({"wort": k, "cefr": t[0], "pos": t[1],
                            "gender": t[2], "plural": t[3] or "", "definition_zh": t[4]})
         seen = {e["wort"] for e in merged}
+        added = 0
         for e in entries:
             if e["wort"] not in seen:
                 merged.append(e)
                 seen.add(e["wort"])
+                added += 1
         out = emit_module(merged, targets)
-        print(f"[refill] 补成 {len(entries)}/{len(words)}，合并后共 {len(merged)} 词，已写出 {out}")
+        still = sorted(set(words) - seen)
+        print(f"[refill] 新增 {added} 词（回收 {len(recovered_keys)} + 新问 {len(todo)}），"
+              f"合并后共 {len(merged)} 词，已写出 {out}")
+        if still:
+            print(f"[refill] 仍缺 {len(still)} 词: {still}")
         return
 
     key, base, model = _read_api_config()

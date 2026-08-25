@@ -20,6 +20,7 @@ android/app/src/main/assets/static/
 # AI 批量生成词库的批次缓存（tools/build_dict.py）
 tools/raw/
 tools/raw_prep/
+tools/raw_refill/
 
 # 安卓签名材料。丢失 = org.delector.app 这个包名永远无法再推送升级；
 # 泄露 = 任何人都能签出冒充本 App 的更新包。CI 里 keystore 只解到
@@ -33,3 +34,7 @@ keystore.properties
 
 # IDE
 .vscode/
+
+# 子代理的临时 git worktree（Claude Code 自建，内容是本仓库的另一份 checkout）。
+# 不忽略的话，一次 `git add -A` 会把整份副本当普通文件提交进来。
+.claude/worktrees/
