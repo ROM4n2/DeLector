@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import ipaddress
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,6 +16,9 @@ from server import (
     get_progress_db, set_setting,
     BACKUP_FORMAT_VERSION, BACKUP_SETTINGS_WHITELIST,
 )
+# 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
+# 钉住的 IPv6 段），必须在上面设好 DATABASE_PATH 之后再 import。
+import server
 
 @pytest.fixture
 def test_db_path():
@@ -2363,14 +2367,81 @@ def test_is_safe_public_url_accepts_public_target_behind_ipv6_transition(monkeyp
     assert is_safe_public_url("https://transition.example/") is True, note
 
 
+_IPV6_SPECIAL_ADDRS = (
+    "2001:db8::1",     # documentation（在 2001::/23 之外）
+    "2001:2::1",       # benchmarking
+    "2001:3::1",       # AMT
+    "2001:4:112::1",   # AS112-v6
+    "2001:10::1",      # ORCHID（已弃用）
+    "2001:20::1",      # ORCHIDv2 —— 3.11.16 上从 ipaddress 的表里掉了出来
+    "2001:30::1",      # Drone Remote ID
+    "100::1",          # discard-only
+    "5f00::1",         # SRv6 SID
+    "64:ff9b:1::1",    # 本地用 IPv4/IPv6 转换
+)
+
+
 def test_is_safe_public_url_still_rejects_non_teredo_2001_ranges(monkeypatch):
     """`2001::/23` 里除 Teredo 之外的保留段不能被顺手放开。
 
     修法是「只对 Teredo/6to4/IPv4-mapped 解包」，不是「把 2001:: 整段当公网」。
     """
-    for addr in ("2001:db8::1", "2001:2::1", "2001:10::1", "2001:20::1"):
+    for addr in _IPV6_SPECIAL_ADDRS:
         _pin_resolution(monkeypatch, addr)
         assert is_safe_public_url("https://reserved.example/") is False, addr
+
+
+def test_ipv6_special_ranges_are_pinned_in_our_own_code():
+    """这些段必须由**我们自己的常量**兜住，不能只靠 `ipaddress` 的私有段表。
+
+    那张表会随 Python 补丁版本变：3.11.8 里有一条粗粒度的 `2001::/23`，把整个
+    IETF Protocol Assignments 块兜住；3.11.16 换成细粒度条目后 `2001:20::/28`
+    (ORCHIDv2) 掉了出来，闸门就此放行。同一份代码、同一个 3.11 大版本，
+    判定结果相反 —— 本机绿而 CI 红，v4.4.8 首次发布就是这么挂的。
+    """
+    import ipaddress as _ip
+    import server as _srv
+
+    for addr in _IPV6_SPECIAL_ADDRS:
+        obj = _ip.ip_address(addr)
+        assert (obj in _srv._IETF_PROTOCOL_ASSIGNMENTS
+                or any(obj in net for net in _srv._IPV6_DENY_PREFIXES)), (
+            f"{addr} 只靠 ipaddress 的表兜着，换个 Python 补丁版本就会漏"
+        )
+
+
+class _FlaglessIPv6(ipaddress.IPv6Address):
+    """把 stdlib 的所有旗标压成假的 IPv6 地址替身。
+
+    要单独验证「我们自己钉的段」在起作用，就必须把 `ipaddress` 那张表的贡献
+    摘干净：真地址在 3.11.8 上会被粗粒度的 `2001::/23` 条目兜住，把
+    `_is_blocked_addr` 里我们的范围检查整段删掉，本机照样全绿 —— v4.4.8
+    第一次发版就是这么被放过去的。
+
+    为什么不改 stdlib 那张表来模拟 CI 的 Python：3.11.8 的 `is_private` 上还挂着
+    `functools.lru_cache`，只要**任何**更早的测试算过同一个地址，结果就被永久缓存，
+    之后改表毫无作用 —— 测试会随执行顺序时红时绿。替身不碰 CPython 内部，
+    换 Python 版本也不会漂。
+    """
+
+    is_private = False
+    is_loopback = False
+    is_link_local = False
+    is_reserved = False
+    is_multicast = False
+    is_unspecified = False
+
+
+def test_is_blocked_addr_relies_on_our_own_pinned_ranges():
+    """旗标全假时仍要拒 —— 拒绝理由只能来自我们钉的段，不能来自 stdlib。"""
+    for addr in _IPV6_SPECIAL_ADDRS:
+        assert server._is_blocked_addr(_FlaglessIPv6(addr)) is True, addr
+
+    # 反向：替身不是「什么都拒」。公网地址、以及 Teredo 包着的公网 IPv4
+    # （已在 `_resolve_ssrf_targets` 里解包成 70.210.248.70）都必须放行。
+    for addr in ("2a03:2880:f11b:83:face:b00c:0:25de", "2606:4700::1111",
+                 "2001::b92d:7b9"):
+        assert server._is_blocked_addr(_FlaglessIPv6(addr)) is False, addr
 
 
 def test_url_ingest_gate_is_pinned_not_dns_dependent():
