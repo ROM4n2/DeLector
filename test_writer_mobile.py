@@ -354,21 +354,145 @@ def test_every_btn_class_in_markup_has_a_css_rule():
     assert not missing, f"这些按钮类在 HTML/JS 里用了但 CSS 里没有规则：{sorted(missing)}"
 
 
-def test_btn_xs_resets_the_base_min_height():
-    """.btn 的 min-height:36px 是 .btn-sm 唯一没覆盖的属性，所以光加 padding
-    和 font-size 是缩不小的 —— 尺寸类必须显式重置 min-height 才真的生效。
+def test_btn_size_modifiers_all_reset_the_base_min_height():
+    """.btn 的 min-height:36px 会一直兜着，所以尺寸类光改 padding 和 font-size
+    是缩不小的 —— 每一档都必须显式 !important 重置 min-height 才真的生效。
 
-    注意 .btn-sm 至今仍没有这个重置（index.html:1167 的 btn-sm 按钮实际还是 36px 高）。
-    那是本次范围外的独立问题，改它会动到既有布局，留待专门一次处理。
+    `.btn-sm` 就是靠反例证明这一点的：它长期只写了 padding/字号，于是 4 处
+    调用点（index.html:542 保存快照、1167-1169 伴读面板三个键）实际全是 36px，
+    名字叫 sm 而尺寸和普通按钮一样，没人发现。
+
+    尺寸阶梯保持 36 → 30 → 26 三档单调递减；30px 取自 index.html:95-97
+    当初手写的 inline `min-height:30px`。
     """
-    body = _rule_body(r"\.btn\s*\{")
-    assert "min-height: 36px" in body, "基规则的 36px 前提变了，本测试的理由需要重写"
+    base = _rule_body(r"\.btn\s*\{")
+    assert "min-height: 36px" in base, "基规则的 36px 前提变了，本测试的理由需要重写"
 
-    xs = _rule_body(r"\.btn-xs\s*\{")
-    assert re.search(r"min-height:\s*26px\s*!important", xs), (
-        ".btn-xs 必须带 !important 重置 min-height——否则它盖不住 .btn 的 36px"
+    heights = {}
+    for name, expected in (("btn-sm", 30), ("btn-xs", 26)):
+        body = _rule_body(rf"\.{name}\s*\{{")
+        m = re.search(r"min-height:\s*(\d+)px\s*!important", body)
+        assert m, f".{name} 必须带 !important 重置 min-height——否则盖不住 .btn 的 36px"
+        heights[name] = int(m.group(1))
+        assert int(m.group(1)) == expected, f".{name} 期望 {expected}px，实际 {m.group(1)}px"
+
+    assert 36 > heights["btn-sm"] > heights["btn-xs"], (
+        f"尺寸阶梯必须单调递减，现在是 36 / {heights['btn-sm']} / {heights['btn-xs']}"
     )
-    assert re.search(r"padding:\s*0\s+0\.5rem\s*!important", xs)
+    assert re.search(r"padding:\s*0\s+0\.5rem\s*!important", _rule_body(r"\.btn-xs\s*\{"))
+
+
+def test_btn_secondary_is_visibly_different_from_btn_ghost():
+    """`.btn-secondary` 与 `.btn-ghost` 同外观 = 把状态指示器做成隐形的。
+
+    两处**只靠这个类的外观**传达状态，没有别的视觉线索：
+
+    - `writer.js:261` 用 ghost ↔ secondary 的互斥切换表示格提示 ON/OFF
+    - `writer.js:905` 用 accent → secondary 表示「已存为 Anki 语法卡」
+
+    v4.4.8 首次补上 `.btn-secondary` 规则时，正是照着 `.btn-ghost` 逐字写的
+    （当时的理由是"目前同外观，将来再分化"）—— 结果格提示按钮按下去只有文字
+    在变，背景边框一动不动。**在此之前反而是能看出区别的**：类没定义，OFF 态
+    回退成裸 .btn，无边框无底色。等于"补上缺失的规则"这个动作本身弄坏了状态显示。
+
+    所以这里断言的不是某个具体配色，而是**两者的声明必须不同**。
+    """
+    def declarations(selector):
+        body = _rule_body(rf"{selector}\s*\{{")
+        return {
+            (m.group(1).strip(), m.group(2).strip())
+            for m in re.finditer(r"([\w-]+)\s*:\s*([^;]+);", body)
+        }
+
+    ghost, secondary = declarations(r"\.btn-ghost"), declarations(r"\.btn-secondary")
+    assert ghost and secondary, "两条规则都得存在，否则下面的比较没有意义"
+    assert ghost != secondary, (
+        "`.btn-secondary` 与 `.btn-ghost` 的声明完全相同，格提示 ON/OFF 与"
+        "「已存为卡片」两处状态切换会变成隐形的（只有文字在变）。"
+        f"当前共同声明：{sorted(ghost)}"
+    )
+
+    # hover 态同样不能塌成一样 —— 否则鼠标一悬停两者又无从区分
+    assert declarations(r"\.btn-ghost:hover") != declarations(r"\.btn-secondary:hover"), (
+        "两者的 :hover 声明也相同，悬停时状态又变回不可区分"
+    )
+
+
+def test_destructive_surfaces_use_the_danger_token():
+    """删除类控件不得写死红色字面量，也不得借用 --cherry。
+
+    迁移前三处删除控件是三种不同的红：`.btn-del` 用 --danger(#B03030)、
+    `.card-del-btn` 用 --cherry(同色但语义是"答错")、`.article-row-del` 用
+    硬编码 #dc2626（**明显更亮的另一种红**）。同一个动作三种红，且其中两处
+    改 token 也带不动。
+
+    --cherry 仍然合法 —— 但只用于答错/错误反馈（cloze.js:40、main.js:205,253
+    的报错文字就该留着用它），不用于破坏性操作。
+    """
+    bare = _style_without_comments()
+
+    for selector in (r"\.btn-del", r"\.btn-del:hover", r"\.card-del-btn:hover",
+                     r"\.article-row-del:hover"):
+        body = _rule_body(rf"{selector}\s*\{{")
+        assert "var(--cherry)" not in body, (
+            f"{selector} 用了 --cherry；破坏性操作应该用 --danger"
+        )
+        assert not re.search(r"#dc2626|#fde8e8|rgba\(220,\s*38,\s*38", body), (
+            f"{selector} 里还有写死的红色字面量，应该走 --danger"
+        )
+
+    # 至少 .btn-del 与 .card-del-btn 要真的引用 token（article-row-del 用
+    # rgba() 调透明度，无法直接套 var()，只断言它不再是另一种红）
+    for selector in (r"\.btn-del", r"\.card-del-btn:hover"):
+        assert "var(--danger)" in _rule_body(rf"{selector}\s*\{{"), \
+            f"{selector} 应该引用 --danger"
+
+    # 删除按钮的红不该再靠 inline style 挂在 HTML 上 —— 那样既绕过 token
+    # 体系又没有 hover 态（index.html:684 的删便签键原先就是这样）
+    for m in re.finditer(r'<button[^>]*style="[^"]*var\(--cherry\)[^"]*"[^>]*>', INDEX):
+        assert "del" not in m.group(0), (
+            f"删除按钮还在用 inline 的 --cherry，应该改挂 .btn-del 类：{m.group(0)[:120]}"
+        )
+
+
+def test_no_rule_is_fully_shadowed_by_btn_xs_important():
+    """`.btn-xs` 三条声明全带 !important，同元素上的伴生类会被整条盖死。
+
+    `.version-restore-btn` 就是这么变成死规则的：它设 font-size / padding /
+    border-radius 三项，而调用点写的是 `btn btn-ghost btn-xs version-restore-btn`
+    —— `.btn-xs` 的 !important 把三项全盖掉，一条声明都没生效。删掉比留着强：
+    留着会让下一个人以为改它有用。
+
+    这里检查所有与 .btn-xs 同时出现在 class 里的伴生类，其声明不能被
+    .btn-xs 的 !important 属性集完全覆盖。
+    """
+    xs_important = {
+        m.group(1)
+        for m in re.finditer(r"([\w-]+)\s*:[^;]*!important\s*;",
+                             _rule_body(r"\.btn-xs\s*\{"))
+    }
+    assert xs_important, ".btn-xs 里没有 !important 声明，本测试的前提变了"
+
+    companions = set()
+    for src in (INDEX, WRITER):
+        for attr in re.findall(r'class="([^"]*)"', src):
+            classes = attr.split()
+            if "btn-xs" in classes:
+                companions.update(c for c in classes
+                                  if c not in {"btn", "btn-xs"} and not c.startswith("btn-"))
+
+    bare = _style_without_comments()
+    for cls in sorted(companions):
+        if not re.search(rf"^\.{re.escape(cls)}\s*\{{", bare, re.M):
+            continue                                  # 没有规则，谈不上被盖
+        props = {
+            m.group(1)
+            for m in re.finditer(r"([\w-]+)\s*:", _rule_body(rf"\.{re.escape(cls)}\s*\{{"))
+        }
+        assert not (props and props <= xs_important), (
+            f".{cls} 的全部声明 {sorted(props)} 都被 .btn-xs 的 !important 盖掉了，"
+            f"整条规则不生效。要么删掉，要么给需要生效的那几项加 !important"
+        )
 
 
 def test_btn_del_uses_the_danger_token_and_outranks_btn_ghost():
