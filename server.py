@@ -811,12 +811,36 @@ def _resolve_ssrf_targets(ip_obj):
     return [ip_obj]
 
 
+# 自己钉住的 IPv6 特殊用途段：**不能把安全边界外包给 `ipaddress` 的私有段表**，
+# 那张表会随 Python 补丁版本变化。3.11.8 里有一条粗粒度的 `2001::/23`，把整个
+# IETF Protocol Assignments 块兜住了；3.11.16 换成细粒度条目后 `2001:20::/28`
+# (ORCHIDv2) 掉了出来，闸门就此放行 —— 同一份代码，同一个 3.11 大版本，
+# 判定结果相反（本机绿、CI 红，正是这条测试抓到的）。
+#
+# `2001::/23` 整块是 IETF 协议保留、永不会分配给网站，所以规则是「落在这块里
+# 就拒，除 Teredo 外」—— Teredo 在上面已经解包成内嵌的目的 IPv4 了。
+# 这样比枚举子段更稳：将来 IANA 往这块里加新用途，无需改代码。
+# 代价是 `2001:3::/32`(AMT)、`2001:4:112::/48`(AS112-v6) 这类 IANA 标为可全球
+# 路由的锚播基础设施段也一并拒掉 —— 对「抓一篇文章」这个用途没有损失，
+# 而 SSRF 闸拿不准时就该往拒绝的方向倒。
+_IETF_PROTOCOL_ASSIGNMENTS = ipaddress.ip_network("2001::/23")
+_IPV6_DENY_PREFIXES = tuple(ipaddress.ip_network(n) for n in (
+    "2001:db8::/32",      # 文档示例段（在 /23 之外，要单列）
+    "100::/64",           # discard-only
+    "5f00::/16",          # SRv6 SID
+    "64:ff9b:1::/48",     # 本地用 IPv4/IPv6 转换
+))
+
+
 def _is_blocked_addr(ip_obj) -> bool:
-    return any(
-        (t.is_private or t.is_loopback or t.is_link_local
-         or t.is_reserved or t.is_multicast or t.is_unspecified)
-        for t in _resolve_ssrf_targets(ip_obj)
-    )
+    for t in _resolve_ssrf_targets(ip_obj):
+        if (t.is_private or t.is_loopback or t.is_link_local
+                or t.is_reserved or t.is_multicast or t.is_unspecified):
+            return True
+        if t.version == 6 and (t in _IETF_PROTOCOL_ASSIGNMENTS
+                               or any(t in net for net in _IPV6_DENY_PREFIXES)):
+            return True
+    return False
 
 
 def is_safe_public_url(url: str) -> bool:
