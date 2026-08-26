@@ -16,7 +16,7 @@
 | 项 | 值 |
 |---|---|
 | 当前分支 / HEAD | `master` @ `b52ef7f`（**v4.4.8 已发布**；PR #8 未定义 CSS 变量、PR #9 词头归一化与 SSRF 闸、PR #11 IPv6 保留段自钉 均已合入） |
-| 测试 | **266 / 266 全绿**（2026-08-26 实测，`pyflakes` 无新增告警）。新增：`test_dict_pipeline.py` 10 条锁词头归一化契约、15 条 IPv6 过渡格式 SSRF 断言；**两条依赖真实 DNS 的测试已钉住解析结果**，不再随本机 IPv6 状态时红时绿。⚠️ **不要用「改 `ipaddress` 私有段表」来模拟另一个 Python 版本**：3.11.8 的 `IPv6Address.is_private` 上挂着 `functools.lru_cache`，任何更早的测试算过同一地址后结果就被永久缓存，改表无效 —— 这样的测试会随执行顺序时红时绿。要单验我们自己钉的段，用 `_FlaglessIPv6`（旗标全假的替身） |
+| 测试 | **270 / 270 全绿**（2026-08-26 实测，`pyflakes` 无新增告警）。新增：`test_dict_pipeline.py` 10 条锁词头归一化契约、15 条 IPv6 过渡格式 SSRF 断言、4 条按钮类契约（每个 `btn-*` 类都必须有规则 / `.btn-xs` 必须重置 `min-height` / `.btn-del` 必须排在 `.btn-ghost` 之后 / 基规则不得重复）；**两条依赖真实 DNS 的测试已钉住解析结果**，不再随本机 IPv6 状态时红时绿。⚠️ **不要用「改 `ipaddress` 私有段表」来模拟另一个 Python 版本**：3.11.8 的 `IPv6Address.is_private` 上挂着 `functools.lru_cache`，任何更早的测试算过同一地址后结果就被永久缓存，改表无效 —— 这样的测试会随执行顺序时红时绿。要单验我们自己钉的段，用 `_FlaglessIPv6`（旗标全假的替身） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
 | 对外发布 | 已发布至 **v4.4.8**（run `32954034145`，五个 job 全绿、四平台产物齐、CI 验签闸过）。⚠️ 首次打 tag（run `32866451079`）Linux x64 job 红、`Publish` 被跳过，挂的是 SSRF 那条新测试自己：它在本机（3.11.8）靠 `ipaddress` 一条粗粒度的 `2001::/23` 私有段条目**巧合**为绿，CI（3.11.16）换成细粒度条目后 `2001:20::/28` 掉了出来 —— **同一份代码、同一个 3.11 大版本，判定相反**。已按「段钉在自己代码里」修掉（PR #11），并删掉旧 tag 在 `b52ef7f` 上重打 v4.4.8。⚠️ Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收；**v4.4.6 / v4.4.7 / v4.4.8 的真机验收合并做一次**（装 v4.4.6 → 覆盖装 v4.4.8，中间不卸载），要点见「已知问题 / 待办」 |
@@ -354,7 +354,7 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （266 个，全绿）
+测试:      pytest            （270 个，全绿）
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py
 ```
 
@@ -530,9 +530,18 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 - [ ] **旧安装无法升级到 v3.10.0**：v3.9.1 及更早的 APK 是用 CI 每次随机生成的
       debug keystore 签的，与钉死的证书不一致，必须**卸载重装**（数据全丢，
       且 v3.9.1 的安卓端备份导出本身是静默无操作，无法自救）。
-- [ ] **`linguistics.py` 有 14 条 pyflakes 重复键告警**（`klima`/`schutz`/`bund` 等在
-      `LINGUISTICS_VOCAB_EXT` 与另一张表里各出现一次，值不同）：先前就有，未在本次改动范围内，
-      但确实意味着有一份定义被静默覆盖，值得单独查一次
+- [x] ~~**`linguistics.py` 有 14 条 pyflakes 重复键告警**~~ — v4.4.1（`bba1b65`，2026-08-22）已清理，
+      `python -m pyflakes linguistics.py` 现在退出码 0。原描述有两处不准，一并更正：
+      重复不是「`LINGUISTICS_VOCAB_EXT` 与另一张表各出现一次」，而是**同一个 dict 字面量内部**
+      两个注释分隔的块各写了一遍（`linguistics.py:851-860` 的主块 与 `:1051` 起的
+      「Core Compounding Base Roots」块）；14 条 = 7 个键 × pyflakes 报两次
+      （`klima`/`schutz`/`wandel`/`wachstum`/`modell`/`bund`/`regierung`）。
+      **这次清理不是纯 lint 修复，改了运行时行为**：Python dict 字面量后写的胜，
+      所以修之前生效的是后一块（释义更简），`bba1b65` 删掉后一块 = 让前一块的
+      完整释义开始生效。多数键只是释义变长，但 `wachstum` 的 CEFR 跟着从 **B1 翻成 B2**，
+      这一处至今没有测试覆盖。
+      告警活到 v4.4.8 才被发现的原因：上文「静态检查」那条命令只扫
+      `server.py syntax_tree.py start.py`，`linguistics.py` 不在里面。
 - [x] ~~**离线词库尾缺口 110 词**~~ — 2026-08-25 已补齐，**缺口 110 → 0**（词库 4301 → 4411，
       `core_dict_ext` 3859 → 3969）。盘点数字比 v4.4.0 记录的乐观：实际是 **86 词缓存里早有
       可用答案**（不是 30），只有 24 词需要真的调 AI（不是 80）。

@@ -41,6 +41,10 @@
   --amber:          #D9771C;
   --amber-soft:     rgba(217, 119, 28, 0.12);
   --cherry:         #B03030;
+  --danger:         #B03030;            /* 与 --cherry 同色但语义分开：
+                                            --cherry  = 答错 / 错误反馈（SRS、quiz、error underline）
+                                            --danger  = 破坏性操作（删/清/还原） */
+  --danger-strong:  #C84444;
   --moss:           #3B6E3F;
   --olive:          #6E7448;
 
@@ -300,6 +304,78 @@ a { color: inherit; text-decoration: none; }
   color: var(--ink);
 
   transform: translateY(-1px);
+
+}
+
+/* 与 .btn-ghost 目前同外观。单独存在是因为 HTML/JS 里已经写了 6 处
+   `btn-secondary` —— 之前没有这条规则，它们静默回退成裸 .btn（36px 高、
+   1rem 内距），比作者想要的次要按钮重得多。有了这条，将来要让 secondary
+   与 ghost 分化只改这里，不用去追那 6 处调用点。 */
+.btn-secondary {
+
+  border: 1.5px solid var(--rule);
+
+  background: var(--paper);
+
+  color: var(--pencil);
+
+}
+
+.btn-secondary:hover {
+
+  border-color: var(--ink);
+
+  color: var(--ink);
+
+  transform: translateY(-1px);
+
+}
+
+/* 尺寸第三档。必须重置 min-height —— .btn 的 36px 是 .btn-sm 唯一没盖住的
+   属性，所以 index.html:95-97,610,678 才不得不各写一遍 inline style。
+   26px 而非 24px：留出 WCAG 2.5.5 的最小可点高度余量。 */
+.btn-xs {
+
+  min-height: 26px !important;
+
+  padding: 0 0.5rem !important;
+
+  font-size: 0.75rem !important;
+
+  border-radius: 4px !important;
+
+}
+
+/* 破坏性操作修饰类（删作文、删快照）。静息态只给字色不给底色 ——
+   删除键在被指向之前不该抢视觉焦点。hover 翻成实底而非 .card-del-btn
+   那种浅底(#fde8e8)：那个是裸 button，这个是 .btn 变体，得跟
+   .btn-ghost:hover 的「加重边框 + 抬 1px」量级对齐才不显得比邻键轻。
+   必须排在 .btn-ghost 之后 —— 两者同为单类选择器，靠源序定胜负。 */
+.btn-del {
+
+  color: var(--danger);
+
+  border-color: rgba(176, 48, 48, 0.35);
+
+}
+
+.btn-del:hover {
+
+  background: var(--danger);
+
+  border-color: var(--danger);
+
+  color: #FEF9EE;
+
+  transform: translateY(-1px);
+
+}
+
+.btn-del:active {
+
+  background: var(--danger-strong);
+
+  transform: translateY(0);
 
 }
 
@@ -3359,34 +3435,6 @@ body.drawer-open .shadow-player {
   justify-content: space-between;
   align-items: center;
   margin-top: 1.75rem;
-}
-
-.deck-btn-nav {
-  background: var(--paper-card);
-  border: 1.5px solid var(--ink);
-  padding: 0.6rem 1.25rem;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--ink);
-  cursor: pointer;
-  box-shadow: 2px 2px 0 var(--ink);
-  transition: all 0.12s ease;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.deck-btn-nav:hover:not(:disabled) {
-  background: var(--paper-deep);
-  transform: translateY(-2px);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-
-.deck-btn-nav:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  box-shadow: none;
 }
 
 .deck-btn-nav {

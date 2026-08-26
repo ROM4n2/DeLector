@@ -317,3 +317,92 @@ def test_no_undefined_css_variables_in_writer_surfaces():
         f"这些历史欠账已经修好了，请从 KNOWN_LEGACY_UNDEFINED 里删掉："
         f"{sorted(KNOWN_LEGACY_UNDEFINED - still_missing)}"
     )
+
+
+def _style_without_comments():
+    """去掉 CSS 注释再找选择器。
+
+    否则注释里提到的 `.btn-xs`、`.btn-del` 会被当成已定义 —— 这个测试本来就是
+    为了抓"类名写了但规则不存在"，而解释性注释恰恰最爱提这些类名，
+    不剥注释等于自己把要抓的东西喂给自己（写下面那条棘轮时就先踩了一次）。
+    """
+    return re.sub(r"/\*.*?\*/", "", STYLE, flags=re.S)
+
+
+def _btn_classes_used_in_markup():
+    used = set()
+    for src in (INDEX, WRITER):
+        for attr in re.findall(r'class="([^"]*)"', src):
+            used.update(t for t in attr.split() if t.startswith("btn"))
+        # writer.js 有几处是运行时挂类，不在 class="" 里
+        for t in re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)", src):
+            if t.startswith("btn"):
+                used.add(t)
+    return used
+
+
+def test_every_btn_class_in_markup_has_a_css_rule():
+    """按钮类名拼错/漏定义不会报错，只会静默回退成裸 .btn。
+
+    v4.4.8 前 .btn-xs / .btn-del / .btn-secondary 三个类在 HTML/JS 里共用了 15 处，
+    但 CSS 里一条规则都没有：那些按钮全都拿着 .btn 的 36px 高和 1rem 内距在渲染，
+    看起来"能用"，所以谁都没发现 —— 于是作者改用 inline style 逐个硬调
+    （index.html:95-97,610,678 就是这么来的）。这条棘轮让下一次漏定义直接变红。
+    """
+    defined = set(re.findall(r"\.(btn[\w-]*)", _style_without_comments()))
+    missing = _btn_classes_used_in_markup() - defined
+    assert not missing, f"这些按钮类在 HTML/JS 里用了但 CSS 里没有规则：{sorted(missing)}"
+
+
+def test_btn_xs_resets_the_base_min_height():
+    """.btn 的 min-height:36px 是 .btn-sm 唯一没覆盖的属性，所以光加 padding
+    和 font-size 是缩不小的 —— 尺寸类必须显式重置 min-height 才真的生效。
+
+    注意 .btn-sm 至今仍没有这个重置（index.html:1167 的 btn-sm 按钮实际还是 36px 高）。
+    那是本次范围外的独立问题，改它会动到既有布局，留待专门一次处理。
+    """
+    body = _rule_body(r"\.btn\s*\{")
+    assert "min-height: 36px" in body, "基规则的 36px 前提变了，本测试的理由需要重写"
+
+    xs = _rule_body(r"\.btn-xs\s*\{")
+    assert re.search(r"min-height:\s*26px\s*!important", xs), (
+        ".btn-xs 必须带 !important 重置 min-height——否则它盖不住 .btn 的 36px"
+    )
+    assert re.search(r"padding:\s*0\s+0\.5rem\s*!important", xs)
+
+
+def test_btn_del_uses_the_danger_token_and_outranks_btn_ghost():
+    """--danger 与 --cherry 目前同色，但语义分开：cherry = 答错反馈（SRS/quiz/
+    错误下划线），danger = 破坏性操作。同色时合并看着更省，可一旦要单独调其中
+    一个（比如把答错色调柔和），共用一个 token 就得先把几十处调用点分类，
+    那时候已经分不清哪处是哪个意思了。
+    """
+    root = _rule_body(r":root\s*\{")
+    assert re.search(r"--danger:\s*#B03030", root)
+    assert re.search(r"--danger-strong:\s*#C84444", root)
+
+    body = _rule_body(r"\.btn-del\s*\{")
+    assert "var(--danger)" in body, ".btn-del 应该用 --danger，不要直接写死色值"
+
+    hover = _rule_body(r"\.btn-del:hover\s*\{")
+    assert "var(--danger)" in hover
+
+    # 调用点写的是 class="btn btn-ghost btn-xs btn-del"：.btn-ghost 和 .btn-del
+    # 都是单类选择器，特异度相同，只有源序能决定谁的 color 生效。
+    bare = _style_without_comments()
+    assert bare.index(".btn-del") > bare.index(".btn-ghost"), (
+        ".btn-del 必须排在 .btn-ghost 之后，否则删除键的红字被 ghost 的字色盖掉"
+    )
+
+
+def test_button_rules_are_not_duplicated():
+    """.deck-btn-nav 曾整块（含 :hover / :disabled）逐字重复两遍。
+
+    完全相同的重复块不会改变渲染，所以永远不会有人因为"看起来不对"而发现它；
+    真正的代价是下一个人只改了其中一份，另一份继续生效，于是"改了没用"。
+    """
+    bare = _style_without_comments()
+    for selector in (".deck-btn-nav", ".btn-secondary", ".btn-xs", ".btn-del"):
+        n = len(re.findall(rf"^{re.escape(selector)}\s*\{{", bare, re.M))
+        assert n == 1, f"{selector} 的基规则出现了 {n} 次，应该只有 1 次"
+
