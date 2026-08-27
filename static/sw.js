@@ -1,6 +1,6 @@
 // 版本号只在这里维护一处，与 android/app/build.gradle 的 fallback 对齐
 // （test_writer_mobile.py 断言两者一致）。CACHE_NAME 一变，activate 就清掉旧缓存。
-const CACHE_NAME = 'delector-static-v4.5.0';
+const CACHE_NAME = 'delector-static-v4.6.0';
 
 // 这里曾有一份 STATIC_ASSETS 预缓存清单，v4.4.5 删除：install 从来只调 skipWaiting()、
 // 没有 cache.addAll，那份清单一行都没执行过。更糟的是它把带版本查询串的 URL
