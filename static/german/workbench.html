@@ -1239,6 +1239,7 @@ function playWord(hw, opts) {
   // 与在线 TTS 共用 _ttsAudio 单实例（playWord 入口已统一 pause/clean）。
   const tryServer = () => new Promise((innerRes) => {
     if (!_ttsServerReachable || !_ttsAudio) {
+      console.warn("[TTS] server skipped: reachable=" + _ttsServerReachable + " audio=" + !!_ttsAudio);
       return innerRes(finalResolve({ ok: false, engine: 'server', error: "no-server" }));
     }
     const ratePercent = Math.round((rate - 1.0) * 100);
@@ -1254,6 +1255,7 @@ function playWord(hw, opts) {
     }, 6000);
     _ttsAudio.onerror = () => {
       if (settled) return; settled = true; clearTimeout(timer);
+      console.warn("[TTS] server audio-error: src=" + _ttsAudio.src);
       innerRes(finalResolve({ ok: false, engine: 'server', error: "audio-error" }));
     };
     _ttsAudio.onplaying = () => {
@@ -1266,8 +1268,9 @@ function playWord(hw, opts) {
     // 同步调用 play()，保留用户手势上下文（与 tryOnline 同一套规避策略）
     const p = _ttsAudio.play();
     if (p && typeof p.then === 'function') {
-      p.catch(() => {
+      p.catch((err) => {
         if (settled) return; settled = true; clearTimeout(timer);
+        console.warn("[TTS] server play-rejected:", err && err.name);
         innerRes(finalResolve({ ok: false, engine: 'server', error: "play-rejected" }));
       });
     }
@@ -1297,7 +1300,14 @@ function playWord(hw, opts) {
       const start = Date.now();
       let settled = false;
       u.onend = () => { if (settled) return; settled = true; innerRes(finalResolve({ ok: true, engine: 'speech', duration: Date.now() - start })); };
-      u.onerror = (ev) => { if (settled) return; settled = true; innerRes(finalResolve({ ok: false, engine: 'speech', error: "utterance-error:" + (ev.error || '') })); };
+      u.onerror = (ev) => {
+        if (settled) return; settled = true;
+        const err = ev.error || '';
+        // interrupted/canceled = 另一次 playWord 的 cancel() 打断了本次，
+        // 是正常的播放切换，不是真正的失败；映射成 superseded 让调用方静默处理。
+        const mapped = (err === 'interrupted' || err === 'canceled') ? 'superseded' : err;
+        innerRes(finalResolve({ ok: false, engine: 'speech', error: "utterance-error:" + mapped }));
+      };
       // 保险：12 秒兜底超时，防止 speech 不回调 onend
       setTimeout(() => { if (!settled) { settled = true; try { speechSynthesis.cancel(); } catch (e) {} innerRes(finalResolve({ ok: true, engine: 'speech', error: "timeout-fallback" })); } }, 12000);
       speechSynthesis.speak(u);
@@ -1612,7 +1622,8 @@ function showCard() {
             cA.classList.add("voice-bad");
             if (r.error === "no-de-voice") toast(deVoiceMissingHint());
             else if (r.error === "speechSynthesis-unavailable") toast("当前浏览器不支持语音播放");
-            else if (r.error === "empty-word" || r.error === "tts-off") { /* 静默 */ }
+            else if (r.error === "empty-word" || r.error === "tts-off"
+                     || r.error === "superseded") { /* 静默：被新播放取代，不是真正的失败 */ }
             else toast("发音失败：" + r.error);
           }
         });
