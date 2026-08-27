@@ -1239,19 +1239,22 @@ function playWord(hw, opts) {
   // 与在线 TTS 共用 _ttsAudio 单实例（playWord 入口已统一 pause/clean）。
   const tryServer = () => new Promise((innerRes) => {
     if (!_ttsServerReachable || !_ttsAudio) {
-      return innerRes({ ok: false, engine: 'server', error: "no-server" });
+      return innerRes(finalResolve({ ok: false, engine: 'server', error: "no-server" }));
     }
     const ratePercent = Math.round((rate - 1.0) * 100);
     const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
     const url = `/api/audio/tts?text=${encodeURIComponent(word)}&rate=${encodeURIComponent(rateStr)}`;
     let settled = false;
     const timer = setTimeout(() => {
-      if (settled) return; settled = true;
-      innerRes({ ok: false, engine: 'server', error: "timeout" });
+      if (settled) return; settled = true; clearTimeout(timer);
+      // 超时即弃：不清 src 的话后台还在拉这份 MP3，加载完成会突然出声，
+      // 打断用户当下的操作（下一次 playWord 之前没有任何东西会停它）。
+      try { _ttsAudio.pause(); _ttsAudio.removeAttribute('src'); _ttsAudio.load(); } catch (e) {}
+      innerRes(finalResolve({ ok: false, engine: 'server', error: "timeout" }));
     }, 6000);
     _ttsAudio.onerror = () => {
       if (settled) return; settled = true; clearTimeout(timer);
-      innerRes({ ok: false, engine: 'server', error: "audio-error" });
+      innerRes(finalResolve({ ok: false, engine: 'server', error: "audio-error" }));
     };
     _ttsAudio.onplaying = () => {
       if (settled) return; settled = true; clearTimeout(timer);
@@ -1265,7 +1268,7 @@ function playWord(hw, opts) {
     if (p && typeof p.then === 'function') {
       p.catch(() => {
         if (settled) return; settled = true; clearTimeout(timer);
-        innerRes({ ok: false, engine: 'server', error: "play-rejected" });
+        innerRes(finalResolve({ ok: false, engine: 'server', error: "play-rejected" }));
       });
     }
   });
@@ -3169,7 +3172,8 @@ window.__wb = { S: S, SEED_WORDS: SEED_WORDS, fsrsReview: fsrsReview,
   try {
     // 嵌入 DeLector iframe 时跳过 PWA：同源 iframe 里 Blob URL SW 注册必然失败
     // （浏览器不允许 blob: 协议注册 SW），且 DeLector 自己的 SW 已管理静态缓存。
-    if (window.frameElement) return;
+    // file:// / content:// 顶层打开时 SW 同样注册不上（blob: 协议限制与 iframe 无关），一并跳过。
+    if (window.frameElement || !location.protocol.startsWith('http')) return;
     // 1. 注入 manifest data URI
     const icon = "data:image/svg+xml;utf8," + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">' +

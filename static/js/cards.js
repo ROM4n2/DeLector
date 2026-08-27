@@ -786,6 +786,7 @@ export async function clearAudioCache() {
 // 而卸载 App 会连同数据库一起清空它。用前缀扫描而不是显式白名单——
 // 白名单会让将来新增的偏好项静默漏出备份。
 const BACKUP_LS_PREFIX = 'delector_';
+const BACKUP_LS_WORKBENCH_PREFIX = 'wb.';
 // 瞬态标记：既不导出也不清除，否则还原后会重复弹一次连胜庆祝。
 const BACKUP_LS_TRANSIENT = new Set(['delector_streak_celebrated']);
 
@@ -793,7 +794,9 @@ function backupLocalStorageKeys() {
   const keys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k)) keys.push(k);
+    if (!k) continue;
+    if (k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k)) keys.push(k);
+    if (k.startsWith(BACKUP_LS_WORKBENCH_PREFIX)) keys.push(k);
   }
   return keys;
 }
@@ -834,11 +837,17 @@ export function uploadBackupJson(e) {
       // localStorage 也用真覆盖语义，和数据库侧保持一致：先清掉现有 delector_*
       // 再按备份重写。混用两套语义会造出「数据库回到备份时刻、界面偏好却是
       // 两个时刻的混合」这种没人能复现的状态。
-      backupLocalStorageKeys().forEach(k => localStorage.removeItem(k));
+      backupLocalStorageKeys().forEach(k => {
+        // workbench 进度是**累加**的，不是权威覆盖：用户可能在本设备上练了
+        // 新的 wb.* 状态，然后才想起还原一份更早的 DeLector 备份。删除备份里
+        // 没有的 wb.* 键会把这台设备上较新的学习进度静默抹掉，所以只清 delector_。
+        if (k.startsWith(BACKUP_LS_PREFIX)) localStorage.removeItem(k);
+      });
       Object.entries(payload.local_storage || {}).forEach(([k, v]) => {
-        if (k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k) && v !== null) {
-          localStorage.setItem(k, v);
-        }
+        if (v === null) return;
+        const isDelector = k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k);
+        const isWorkbench = k.startsWith(BACKUP_LS_WORKBENCH_PREFIX);
+        if (isDelector || isWorkbench) localStorage.setItem(k, v);
       });
       alert('备份还原成功！页面即将重新加载以应用还原后的设置。');
       window.location.reload();

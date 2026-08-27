@@ -3079,3 +3079,8 @@ def test_get_audio_tts_rejects_empty_text(client):
 def test_get_audio_tts_rejects_overlong_text(client):
     r = client.get("/api/audio/tts", params={"text": "x" * 1001})
     assert r.status_code == 400
+
+
+def test_get_audio_tts_rejects_malformed_rate(client):
+    r = client.get("/api/audio/tts", params={"text": "hallo", "rate": "banana"})
+    assert r.status_code == 400

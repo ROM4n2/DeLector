@@ -1794,8 +1794,12 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
     prune_audio_cache()
     return cache_file
 
+_TTS_RATE_RE = re.compile(r"^[+-]\d+%$")
+
 async def _serve_tts(text: str, voice: str, rate: str):
     """POST 与 GET 两个路由共享的 TTS 服务逻辑。"""
+    if not _TTS_RATE_RE.match(rate or ""):
+        raise HTTPException(status_code=400, detail="rate must look like '+0%', '-10%' or '+50%'")
     try:
         audio_path = await generate_edge_tts_audio(text, voice, rate)
         return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")

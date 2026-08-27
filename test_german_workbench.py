@@ -97,3 +97,15 @@ def test_get_audio_tts_route_registered():
     """server.py 有 GET /api/audio/tts 路由（区别于既有 POST 的函数名）。"""
     assert '@app.get("/api/audio/tts")' in _SERVER
     assert "async def audio_tts_get(" in _SERVER
+
+
+def test_backup_covers_workbench_state():
+    """DeLector 备份必须带上 workbench 的 wb.* 键，否则「还原备份」后
+    684 词的进度还留在 localStorage 里，用户以为整体替换了其实没有；
+    跨设备迁移也会静默丢掉全部学习进度。"""
+    from pathlib import Path
+    cards = (Path(__file__).parent / "static" / "js" / "cards.js").read_text(encoding="utf-8")
+    fn = cards.split("function backupLocalStorageKeys")[1].split("function ")[0]
+    has_literal = '"wb."' in fn or "'wb.'" in fn or "'wb." in fn or '"wb.' in fn
+    has_constant = "BACKUP_LS_WORKBENCH_PREFIX" in fn
+    assert has_literal or has_constant, "备份键收集必须含 wb. 前缀"
