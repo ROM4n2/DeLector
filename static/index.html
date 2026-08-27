@@ -48,6 +48,10 @@
         <span class="nav-tab-code">KARTEI</span>
         <span class="nav-tab-label">复习卡片 (<span id="card-count" class="nav-counter">0</span>)</span>
       </button>
+      <button id="nav-btn-german" class="nav-tab" onclick="show('german')">
+        <span class="nav-tab-code">VOKABELN</span>
+        <span class="nav-tab-label">德语背词</span>
+      </button>
     </div>
     <div class="nav-actions">
       <button class="btn btn-ghost nav-settings-btn" onclick="openSettingsModal()" title="偏好与 API 设置">⚙️ 设置</button>
@@ -1122,6 +1126,13 @@
     </div>
   </div>
 
+  <!-- ── View 6: German Vocabulary Workbench (Vokabeltrainer) ──── -->
+  <main id="view-german" class="view">
+    <iframe src="/german/workbench.html" title="德语背词工作台"
+            style="width:100%;border:none;"
+            allow="autoplay"></iframe>
+  </main>
+
   <!-- ── Mobile Android / iOS Bottom Navigation Dock ─────────── -->
   <nav id="mobile-bottom-nav" class="mobile-bottom-nav mobile-dock">
     <button class="mobile-nav-btn dock-item active" id="mob-btn-home" onclick="show('home')">
@@ -1139,6 +1150,10 @@
     <button class="mobile-nav-btn dock-item" id="mob-btn-cards" onclick="show('cards')">
       <span class="mob-icon">🎴</span>
       <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
+    </button>
+    <button class="mobile-nav-btn dock-item" id="mob-btn-german" onclick="show('german')">
+      <span class="mob-icon">📚</span>
+      <span class="mob-label">背词</span>
     </button>
     <button class="mobile-nav-btn dock-item" id="mob-btn-settings" onclick="openSettingsModal()">
       <span class="mob-icon">⚙️</span>
