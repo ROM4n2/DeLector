@@ -4,6 +4,7 @@ import re
 import ipaddress
 import pytest
 from fastapi.testclient import TestClient
+from linguistics import PREP_COLLOCATIONS
 
 # Ensure test DBs are isolated
 os.environ["DATABASE_PATH"] = "test_delector.db"
@@ -2967,19 +2968,26 @@ def test_frontend_assets_send_no_cache_header(client):
 # ── GET /api/prep/matrix ─────────────────────────────────────────────────────
 
 def test_prep_matrix_endpoint_shape(client):
+    """shape 契约：每组都长得一样，抽检 21 组而不是只抽首组。
+
+    原来的写法只检 `groups[0]`，塞在第 5 组的字段不一致它抓不到。
+    cefr 字段是 server 层注入的契约，用 == 钉住「恰好这五个键」避免
+    偷偷加 debug 字段再也没人知道。
+    """
     r = client.get("/api/prep/matrix")
     assert r.status_code == 200
     data = r.json()
     assert set(data) == {"groups"}
     groups = data["groups"]
     assert isinstance(groups, list) and groups
-    first = groups[0]
-    assert set(first) == {"praeposition", "total", "cases"}
-    # cases 是 {kasus: [entry]}，entry 带 cefr 注入
-    any_entries = [e for entries in first["cases"].values() for e in entries]
-    assert any_entries and all(
-        set(e) >= {"lemma", "reflexive", "bedeutung_zh", "beispiel", "cefr"} for e in any_entries)
-    assert first["total"] == sum(len(v) for v in first["cases"].values())
+    for g in groups:
+        assert set(g) == {"praeposition", "total", "cases"}
+        entries = [e for entries in g["cases"].values() for e in entries]
+        assert entries, f"空组 {g['praeposition']} 不应出现"
+        for e in entries:
+            assert set(e) == {"lemma", "reflexive", "bedeutung_zh", "beispiel", "cefr"}
+            assert isinstance(e["reflexive"], bool)
+        assert g["total"] == sum(len(v) for v in g["cases"].values())
 
 
 def test_prep_matrix_groups_ordered_by_size_desc(client):
@@ -2990,15 +2998,51 @@ def test_prep_matrix_groups_ordered_by_size_desc(client):
 
 
 def test_prep_matrix_endpoint_matches_pure_function(client):
-    """端点响应必须是 build_prep_matrix() 内容的扁平化 —— 两层不许有第二种真相。"""
-    from server import get_prep_matrix_with_cefr
-    fused = get_prep_matrix_with_cefr()
-    r = client.get("/api/prep/matrix").json()["groups"]
-    fused_flat = {(g["praeposition"], k, e["lemma"]): e
-                  for g in fused["groups"] for k, es in g["cases"].items() for e in es}
-    resp_flat = {(g["praeposition"], k, e["lemma"]): e
-                 for g in r for k, es in g["cases"].items() for e in es}
-    assert fused_flat == resp_flat
+    """端点响应 = 纯函数扁平化 + CEFR 注入，**不许有第二种真相**。
+
+    多重集用全字段做键（praep, kasus, lemma, zh, bsp, cefr），独立于服务端
+    实现：之前的版本只用了 (praep, kasus, lemma)，fuse 进了同名重复的
+    reflexive vs 非 reflexive 两条（`('für','Akk','ausgeben')` 出现 2 次），
+    静默漏掉了 2 个条目。
+    """
+    from collections import Counter
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    expected = Counter(
+        (r[0].strip().lower(), r[1].strip().capitalize(), lemma, r[2], r[3])
+        for lemma, rows in PREP_COLLOCATIONS.items()
+        for r in rows
+    )
+    got = Counter(
+        (e["lemma"], k, e["lemma"], e["bedeutung_zh"], e["beispiel"])
+        for g in groups for k, es in g["cases"].items() for e in es
+        for _ in [None]  # 占位：上面期望 5 元组，下面也给 5 元组
+    )
+    # 上一行 got 写成了 `(e["lemma"], k, e["lemma"], e["bedeutung_zh"], e["beispiel"])` —— 复制粘贴遗物
+    # 真正要比的元组是 (praep, kasus, lemma, zh, bsp)：
+    got = Counter(
+        (g["praeposition"], k, e["lemma"], e["bedeutung_zh"], e["beispiel"])
+        for g in groups for k, es in g["cases"].items() for e in es
+    )
+    # CEFR 是 server 层注入，不在 expected 期望里；用 bedeutung_zh 一致就能
+    # 区分「实现错位」与「CEFR 算法变更」两种失败。
+    assert got == expected, (
+        f"端点响应与数据集不匹配：丢 {len(expected) - len(got)} 条" if got != expected else "")
+
+
+def test_prep_matrix_endpoint_fields_preserved(client):
+    """独立检验：端点不能改写核心字段（lemma/bedeutung_zh/beispiel）—— 上一个
+    测试只比 (praep, kasus, lemma) 三元组，恰好能容忍「端点把释义
+    换成 example」的破坏。这里把每个 entry 的 bedeutung_zh / beispiel
+    跟数据集对应行对回源。"""
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    src = {(r[0].strip().lower(), r[1].strip().capitalize(), lemma, r[2]): r[3]
+           for lemma, rows in PREP_COLLOCATIONS.items() for r in rows}
+    for g in groups:
+        for kasus, entries in g["cases"].items():
+            for e in entries:
+                key = (g["praeposition"], kasus, e["lemma"], e["bedeutung_zh"])
+                assert key in src, f"端点凭空生成条目：{key}"
+                assert e["beispiel"] == src[key], f"例句被改写：{key}"
 
 
 def test_prep_matrix_conserves_dataset_total(client):

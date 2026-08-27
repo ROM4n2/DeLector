@@ -63,7 +63,8 @@ import {
   uploadBackupJson,
   filterPrepCase,
   searchPrepCollocations,
-  savePrepCardFromMatrix
+  savePrepCardFromMatrix,
+  retryPrepMatrix
 } from './cards.js';
 import {
   switchFolioPage,
@@ -682,6 +683,7 @@ Object.assign(window, {
   filterPrepCase,
   searchPrepCollocations,
   savePrepCardFromMatrix,
+  retryPrepMatrix,
 
   // Atelier Landing Page Folio
   switchFolioPage,
