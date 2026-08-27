@@ -15,7 +15,7 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master` @ `427c2e9`（**v4.4.9 已发布**；PR #8 未定义 CSS 变量、PR #9 词头归一化与 SSRF 闸、PR #11 IPv6 保留段自钉、PR #13 按钮尺寸/危险色 token、PR #14 重复键棘轮、PR #15 btn-secondary 回归修复 + 六项收口、PR #16 移动端 sheet 几何修正 + 返回键 + 按钮外观 均已合入） |
+| 当前分支 / HEAD | `master` @ `9ec03e1`（**v4.4.9 已发布**；PR #8 未定义 CSS 变量、PR #9 词头归一化与 SSRF 闸、PR #11 IPv6 保留段自钉、PR #13 按钮尺寸/危险色 token、PR #14 重复键棘轮、PR #15 btn-secondary 回归修复 + 六项收口、PR #16 移动端 sheet 几何修正 + 返回键 + 按钮外观 均已合入） |
 | 测试 | **280 / 280 全绿**（2026-08-27 实测，`pyflakes` 无新增告警）。新增：`test_dict_pipeline.py` 10 条锁词头归一化契约、15 条 IPv6 过渡格式 SSRF 断言、7 条按钮类契约（每个 `btn-*` 类都必须有规则 / 三档尺寸都必须重置 `min-height` 且阶梯单调 / **`.btn-secondary` 的声明必须与 `.btn-ghost` 不同**（两处状态切换只靠它的外观） / `.btn-del` 必须排在 `.btn-ghost` 之后 / 删除控件不得写死红色或借用 `--cherry` / 与 `.btn-xs` 同用的伴生类不得被它的 `!important` 整条盖死 / 基规则不得重复）、`test_source_hygiene.py` 2 条源码卫生棘轮（全仓库 dict 字面量不得有重复键 / 钉住 `LINGUISTICS_VOCAB_EXT` 去重后实际生效的 CEFR）、5 条写作台移动端 sheet 契约（闭包几何必须完全离屏 / padding-bottom 留 dock 高度 / `show()` 切视图时清 scrim + body lock / writer header 必须有返回键 / 动作/导航按钮不得挂 `.btn-secondary`）；**两条依赖真实 DNS 的测试已钉住解析结果**，不再随本机 IPv6 状态时红时绿。⚠️ **不要用「改 `ipaddress` 私有段表」来模拟另一个 Python 版本**：3.11.8 的 `IPv6Address.is_private` 上挂着 `functools.lru_cache`，任何更早的测试算过同一地址后结果就被永久缓存，改表无效 —— 这样的测试会随执行顺序时红时绿。要单验我们自己钉的段，用 `_FlaglessIPv6`（旗标全假的替身） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
