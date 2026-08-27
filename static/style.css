@@ -307,25 +307,27 @@ a { color: inherit; text-decoration: none; }
 
 }
 
-/* 与 .btn-ghost 目前同外观。单独存在是因为 HTML/JS 里已经写了 6 处
-   `btn-secondary` —— 之前没有这条规则，它们静默回退成裸 .btn（36px 高、
-   1rem 内距），比作者想要的次要按钮重得多。有了这条，将来要让 secondary
-   与 ghost 分化只改这里，不用去追那 6 处调用点。 */
+/* 次要按钮 = 比 .btn-ghost 再退后一层。**必须与 ghost 有可见差异**，不是
+   审美偏好：writer.js:261 用 ghost ↔ secondary 的互斥切换来表示格提示
+   ON/OFF，writer.js:905 用 accent → secondary 表示「已存为卡片」。两处都
+   只靠这个类的外观传达状态 —— 与 ghost 同色就等于把状态指示器做成隐形的
+   （v4.4.8 刚补上这条规则时就是同色，切换只剩文字在变）。
+   浅底 + 淡字 + 虚边读作「关闭 / 已完成」，与 ghost 的实边深字形成层级。 */
 .btn-secondary {
 
-  border: 1.5px solid var(--rule);
+  border: 1.5px solid var(--line-soft);
 
-  background: var(--paper);
+  background: var(--paper-deep);
 
-  color: var(--pencil);
+  color: var(--ink-faint);
 
 }
 
 .btn-secondary:hover {
 
-  border-color: var(--ink);
+  border-color: var(--rule);
 
-  color: var(--ink);
+  color: var(--ink-mute);
 
   transform: translateY(-1px);
 
@@ -657,9 +659,9 @@ a { color: inherit; text-decoration: none; }
 
 .article-row-del:hover {
   opacity: 1 !important;
-  color: #dc2626 !important;
-  background: rgba(220, 38, 38, 0.08);
-  border-color: rgba(220, 38, 38, 0.2);
+  color: var(--danger) !important;
+  background: rgba(176, 48, 48, 0.08);
+  border-color: rgba(176, 48, 48, 0.2);
   transform: scale(1.1);
 }
 
@@ -3511,9 +3513,9 @@ body.drawer-open .shadow-player {
 }
 
 .card-del-btn:hover {
-  background: #fde8e8;
-  color: var(--cherry);
-  border-color: var(--cherry);
+  background: rgba(176, 48, 48, 0.1);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .card-footer-actions {
@@ -6659,7 +6661,13 @@ body.drawer-open .shadow-player {
   border-top: 1px solid var(--rule, #e5e0d8);
 }
 
+/* 尺寸阶梯：.btn 36px → .btn-sm 30px → .btn-xs 26px。
+   30px 不是随手取的：index.html:95-97 三个按钮当初手写的 inline style 就是
+   min-height:30px，那就是作者心里的「小」。这条规则补上后那些 inline 值
+   可以逐步收掉。min-height 必须带 !important —— 只改 padding/字号是缩不小的，
+   .btn 的 36px 会一直兜着（这正是它长期名不副实的原因）。 */
 .btn-sm {
+  min-height: 30px !important;
   padding: 0.25rem 0.5rem !important;
   font-size: 0.75rem !important;
 }
@@ -7807,11 +7815,11 @@ body.drawer-open .companion {
   gap: 0.35rem;
 }
 
-.version-restore-btn {
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  border-radius: 3px;
-}
+/* .version-restore-btn 的规则已删除（v4.4.8 之后）：它只在
+   writer.js:1337 与 `btn btn-ghost btn-xs` 连用，而它设的 font-size /
+   padding / border-radius 三项全部被 .btn-xs 的 !important 盖掉 ——
+   三条声明一条都没生效，是彻底的死规则。几何交给 .btn-xs，与同一行的
+   .btn-del 删除键自然对齐。类名保留在 HTML 里作为语义钩子。 */
 
 /* ── Version Preview Modal (v4.0.0) ───────────────────────────────────────── */
 .version-preview-box {

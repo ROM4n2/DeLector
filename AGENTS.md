@@ -15,8 +15,8 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master` @ `10d7a51`（**v4.4.8 已发布**；PR #8 未定义 CSS 变量、PR #9 词头归一化与 SSRF 闸、PR #11 IPv6 保留段自钉、PR #13 按钮尺寸/危险色 token 均已合入）。⚠️ PR #13 之后的改动**未发版**：`static/style.css` 与测试变了，但版本号、`sw.js` 的 `CACHE_NAME`、APK 都还停在 v4.4.8 —— 下次发版要记得这批 CSS 尚未随任何 tag 出去 |
-| 测试 | **272 / 272 全绿**（2026-08-26 实测，`pyflakes` 无新增告警）。新增：`test_dict_pipeline.py` 10 条锁词头归一化契约、15 条 IPv6 过渡格式 SSRF 断言、4 条按钮类契约（每个 `btn-*` 类都必须有规则 / `.btn-xs` 必须重置 `min-height` / `.btn-del` 必须排在 `.btn-ghost` 之后 / 基规则不得重复）、`test_source_hygiene.py` 2 条源码卫生棘轮（全仓库 dict 字面量不得有重复键 / 钉住 `LINGUISTICS_VOCAB_EXT` 去重后实际生效的 CEFR）；**两条依赖真实 DNS 的测试已钉住解析结果**，不再随本机 IPv6 状态时红时绿。⚠️ **不要用「改 `ipaddress` 私有段表」来模拟另一个 Python 版本**：3.11.8 的 `IPv6Address.is_private` 上挂着 `functools.lru_cache`，任何更早的测试算过同一地址后结果就被永久缓存，改表无效 —— 这样的测试会随执行顺序时红时绿。要单验我们自己钉的段，用 `_FlaglessIPv6`（旗标全假的替身） |
+| 当前分支 / HEAD | `master` @ `cf32602`（**v4.4.8 已发布**；PR #8 未定义 CSS 变量、PR #9 词头归一化与 SSRF 闸、PR #11 IPv6 保留段自钉、PR #13 按钮尺寸/危险色 token、PR #14 重复键棘轮 均已合入）。⚠️ PR #13 起的改动**都未发版**：`static/style.css`、`static/index.html` 与测试都变了（含**按钮实际高度变化** —— `.btn-sm` 四处从 36px 变 30px、`.btn-secondary` 换成暗淡态），但版本号、`sw.js` 的 `CACHE_NAME`、APK 都还停在 v4.4.8。下次发版要记得这批改动尚未随任何 tag 出去，且**按钮几何与配色的变化只能真机/浏览器目视验收**，测试只能保证规则存在、盖不住、不重复 |
+| 测试 | **275 / 275 全绿**（2026-08-26 实测，`pyflakes` 无新增告警）。新增：`test_dict_pipeline.py` 10 条锁词头归一化契约、15 条 IPv6 过渡格式 SSRF 断言、7 条按钮类契约（每个 `btn-*` 类都必须有规则 / 三档尺寸都必须重置 `min-height` 且阶梯单调 / **`.btn-secondary` 的声明必须与 `.btn-ghost` 不同**（两处状态切换只靠它的外观） / `.btn-del` 必须排在 `.btn-ghost` 之后 / 删除控件不得写死红色或借用 `--cherry` / 与 `.btn-xs` 同用的伴生类不得被它的 `!important` 整条盖死 / 基规则不得重复）、`test_source_hygiene.py` 2 条源码卫生棘轮（全仓库 dict 字面量不得有重复键 / 钉住 `LINGUISTICS_VOCAB_EXT` 去重后实际生效的 CEFR）；**两条依赖真实 DNS 的测试已钉住解析结果**，不再随本机 IPv6 状态时红时绿。⚠️ **不要用「改 `ipaddress` 私有段表」来模拟另一个 Python 版本**：3.11.8 的 `IPv6Address.is_private` 上挂着 `functools.lru_cache`，任何更早的测试算过同一地址后结果就被永久缓存，改表无效 —— 这样的测试会随执行顺序时红时绿。要单验我们自己钉的段，用 `_FlaglessIPv6`（旗标全假的替身） |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
 | 对外发布 | 已发布至 **v4.4.8**（run `32954034145`，五个 job 全绿、四平台产物齐、CI 验签闸过）。⚠️ 首次打 tag（run `32866451079`）Linux x64 job 红、`Publish` 被跳过，挂的是 SSRF 那条新测试自己：它在本机（3.11.8）靠 `ipaddress` 一条粗粒度的 `2001::/23` 私有段条目**巧合**为绿，CI（3.11.16）换成细粒度条目后 `2001:20::/28` 掉了出来 —— **同一份代码、同一个 3.11 大版本，判定相反**。已按「段钉在自己代码里」修掉（PR #11），并删掉旧 tag 在 `b52ef7f` 上重打 v4.4.8。⚠️ Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收；**v4.4.6 / v4.4.7 / v4.4.8 的真机验收合并做一次**（装 v4.4.6 → 覆盖装 v4.4.8，中间不卸载），要点见「已知问题 / 待办」 |
@@ -354,8 +354,8 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （272 个，全绿）
-静态检查:  python -m pyflakes server.py syntax_tree.py start.py
+测试:      pytest            （275 个，全绿）
+静态检查:  python -m pyflakes server.py syntax_tree.py start.py linguistics.py
 ```
 
 **Git 推送通道**：这台机器上 HTTPS 连 fetch 都会失败（`schannel: failed to receive handshake`），
@@ -485,11 +485,24 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
       这 5 个已被 `test_no_undefined_css_variables_in_writer_surfaces` 的
       `KNOWN_LEGACY_UNDEFINED` 显式列出（**棘轮**：新增未定义变量会让测试变红，
       修好后要把条目从集合里删掉，否则它会慢慢变成一张永久豁免名单）。
-- [ ] **写作台版本行的按钮尺寸/危险色缺失**（v4.4.7 划出的单独事项）：`.btn-xs` 与
-      `.btn-del` 两个类**在 CSS 里从未定义**，于是版本快照行的「恢复/删除」按钮走 `.btn`
-      的 `min-height: 36px`、在紧凑行里显得过大，且删除按钮没有任何危险色提示。
-      没顺手改是因为按钮配色要和全站危险按钮约定一起定（不能只在写作台拍一个红色），
-      夹在几何修复里会模糊版本边界。
+- [x] ~~**写作台版本行的按钮尺寸/危险色缺失**~~（v4.4.7 划出的单独事项）—— PR #13 补上
+      `.btn-xs` / `.btn-del` / `.btn-secondary` 三条规则与 `--danger` token，
+      本次（PR #15）收尾剩下的六项：`.btn-sm` 补 `min-height: 30px`（尺寸阶梯
+      36 → 30 → 26；30px 取自 `index.html:95-97` 当初手写的 inline 值）、
+      `.card-del-btn` 与 `.article-row-del` 迁到 `--danger`、`index.html:684`
+      删便签键的 inline `color:var(--cherry)` 改挂 `.btn-del`、
+      `AGENTS.md` 静态检查命令补上 `linguistics.py`。
+      ⚠️ **PR #13 自己带进来两个回归，值得记住这个教训**：
+      ① `.btn-secondary` 当时是照着 `.btn-ghost` **逐字**写的（理由是"目前同外观，
+      将来再分化"），可 `writer.js:261` 正是用 ghost ↔ secondary 的互斥切换表示
+      格提示 ON/OFF、`writer.js:905` 用 accent → secondary 表示"已存为卡片" ——
+      同外观等于把状态指示器做成隐形的，按下去只有文字在变。**在补规则之前反而
+      看得出区别**（类没定义，OFF 态回退成裸 `.btn`，无边框无底色），所以"补上缺失的
+      规则"这个动作本身弄坏了状态显示。**给一个没定义的类补规则前，先查它是否被
+      当作状态切换用 —— 回退样式可能正是唯一的状态差异来源。**
+      ② `.btn-xs` 三条声明全带 `!important`，把同元素上 `.version-restore-btn`
+      的 font-size / padding / border-radius 整条盖死，一条声明都没生效。
+      死规则已删（几何交给 `.btn-xs`），并加了棘轮防下次再出现。
 - [ ] **Grep 工具会把 `/*` 渲染成 `\*`**（v4.4.7 踩坑，工具产物而非代码问题）：
       用 Grep 读 CSS 注释行时输出形如 `\* 说明文字`，看着像把注释开头写坏了
       （曾据此误判 style.css:339/341 与 6996 三处"注释畸形会吞掉后续规则"）。
