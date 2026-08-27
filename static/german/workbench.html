@@ -542,6 +542,7 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
         <div class="desc">在线发音音质最佳；离线自动退回浏览器内置语音</div></div>
       <select id="setTtsEngine" style="width:200px">
         <option value="auto">自动（在线优先，失败兜底）</option>
+        <option value="server">DeLector 服务端（局域网内音质最佳）</option>
         <option value="online">仅在线（音质最佳）</option>
         <option value="speech">仅浏览器内置（无网络依赖）</option>
       </select>
@@ -1075,12 +1076,13 @@ function storageUsage() {
 }
 
 /* ======================================================================
- * 单词发音（在线有道 TTS 优先 → Web Speech API 兜底；单实例互斥，防并发）
+ * 单词发音（server TTS（DeLector 服务端）优先 → 在线多源 → Web Speech API 兜底；单实例互斥，防并发）
  * ==================================================================== */
 const _ttsAudio = typeof Audio !== 'undefined' ? new Audio() : null;   // 全局单实例
 let _ttsBusy = false;          // 防止连点重入（内部标志）
 let _ttsGestureUnlocked = false;  // 移动端 autoplay 策略解锁标志：用户手动点一次即 true
 let _ttsVoice = null;          // pickDeVoice 结果缓存（懒加载）
+let _ttsServerReachable = typeof location !== 'undefined' && location.protocol.startsWith('http');
 let _ttsVoicesReady = false;   // speechSynthesis.onvoiceschanged 是否已触发
 
 /** 去除德语定冠词（der/die/das/ein/eine 等）、标点、格后缀，返回核心词：
@@ -1147,14 +1149,14 @@ function deVoiceMissingHint() {
 
 /**
  * 播放单词发音（纯德语原词）。
- * 遵循：在线有道 TTS 优先（engine == 'online' | 'auto'），失败或 engine == 'speech' 走 Web Speech。
+ * 遵循：DeLector 服务端 TTS 优先（http(s) 下 engine == 'auto' 先走 tryServer），失败回落在线多源，再回落 Web Speech。
  * 永远 resolve 结构化对象（不 reject，避免调用方漏 catch 导致 unhandled rejection）。
  * 全局单实例互斥：新一次 playWord 到来，立即打断上一次。
  * 移动端 Chrome NotAllowedError 通过"play() 必须在 click 栈同步调用"规避（调用方保证）。
  *
  * @param {string} hw - 词头（可能含冠词/标点）
- * @param {{engine?:'auto'|'online'|'speech', rate?:number, preferHwOnly?:boolean}} opts
- * @returns {Promise<{ok:boolean, engine:'online'|'speech'|null, error?:string, duration?:number}>}
+ * @param {{engine?:'auto'|'server'|'online'|'speech', rate?:number, preferHwOnly?:boolean}} opts
+ * @returns {Promise<{ok:boolean, engine:'embedded'|'server'|'online'|'speech'|null, error?:string, duration?:number}>}
  */
 function playWord(hw, opts) {
   opts = opts || {};
@@ -1229,6 +1231,44 @@ function playWord(hw, opts) {
       }
     });
   }
+
+  // ---- 优先级 0.5：DeLector 服务端 TTS（GET /api/audio/tts，服务端 edge-tts 生成） ----
+  // 仅 http(s) 协议下可用；file:// / content:// 下 _ttsServerReachable 为 false 直接跳过，
+  // 不等超时。移动浏览器在 file:// 协议下禁 TTS API，而嵌入 DeLector 后本页跑在
+  // http://<desktop-ip>:8000 下，此限制消失 —— 这是集成后移动端能出声的关键路径。
+  // 与在线 TTS 共用 _ttsAudio 单实例（playWord 入口已统一 pause/clean）。
+  const tryServer = () => new Promise((innerRes) => {
+    if (!_ttsServerReachable || !_ttsAudio) {
+      return innerRes({ ok: false, engine: 'server', error: "no-server" });
+    }
+    const ratePercent = Math.round((rate - 1.0) * 100);
+    const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
+    const url = `/api/audio/tts?text=${encodeURIComponent(word)}&rate=${encodeURIComponent(rateStr)}`;
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return; settled = true;
+      innerRes({ ok: false, engine: 'server', error: "timeout" });
+    }, 6000);
+    _ttsAudio.onerror = () => {
+      if (settled) return; settled = true; clearTimeout(timer);
+      innerRes({ ok: false, engine: 'server', error: "audio-error" });
+    };
+    _ttsAudio.onplaying = () => {
+      if (settled) return; settled = true; clearTimeout(timer);
+      innerRes(finalResolve({ ok: true, engine: 'server' }));
+    };
+    // 语速已在服务端烘焙进音频（rate 参数），浏览器侧不再二次变速
+    _ttsAudio.playbackRate = 1.0;
+    _ttsAudio.src = url;
+    // 同步调用 play()，保留用户手势上下文（与 tryOnline 同一套规避策略）
+    const p = _ttsAudio.play();
+    if (p && typeof p.then === 'function') {
+      p.catch(() => {
+        if (settled) return; settled = true; clearTimeout(timer);
+        innerRes({ ok: false, engine: 'server', error: "play-rejected" });
+      });
+    }
+  });
 
   // ---- 分支 A：Web Speech 强制（engine=speech），或 engine=auto 无在线路径 ----
   const trySpeech = (reasonIfFallback) => new Promise((innerRes) => {
@@ -1335,14 +1375,29 @@ function playWord(hw, opts) {
     trySource();
   });
 
-  // ---- 主调用链 ----
+  // ---- 主调用链（server TTS 优先 → 在线 → Web Speech） ----
+  const needServer = engine === 'server' || engine === 'auto';
   const needOnline = engine === 'online' || engine === 'auto';
   const needSpeech = engine === 'speech' || engine === 'auto';
-  if (needOnline) {
+
+  if (needServer) {
+    return tryServer().then((r) => {
+      if (r.ok) return finalResolve(r);
+      if (engine === 'server') return finalResolve(r);
+      // auto：server 失败 → 原有在线链 → Web Speech 兜底
+      if (needOnline) {
+        return tryOnline().then((r2) => {
+          if (r2.ok) return finalResolve(r2);
+          if (!needSpeech) return finalResolve(r2);
+          return trySpeech("online-failed:" + (r2.error || ''));
+        });
+      }
+      return trySpeech("server-failed:" + (r.error || ''));
+    });
+  } else if (needOnline) {
     return tryOnline().then((r) => {
       if (r.ok) return finalResolve(r);
       if (engine === 'online' || !needSpeech) return finalResolve(r);
-      // auto: 在线失败 → 走兜底
       return trySpeech("online-failed:" + (r.error || ''));
     });
   } else {
@@ -2561,7 +2616,7 @@ $("setTtsEngine").addEventListener("change", () => {
   if (!S.settings.tts) S.settings.tts = { engine: "auto", autoPlay: false, rate: 0.9 };
   S.settings.tts.engine = $("setTtsEngine").value;
   saveSettings();
-  toast("发音引擎：" + { auto: "自动", online: "仅在线", speech: "仅浏览器内置" }[S.settings.tts.engine]);
+  toast("发音引擎：" + { auto: "自动", server: "DeLector 服务端", online: "仅在线", speech: "仅浏览器内置" }[S.settings.tts.engine]);
 });
 $("setTtsAuto").addEventListener("change", () => {
   if (!S.settings.tts) S.settings.tts = { engine: "auto", autoPlay: false, rate: 0.9 };
@@ -3112,6 +3167,9 @@ window.__wb = { S: S, SEED_WORDS: SEED_WORDS, fsrsReview: fsrsReview,
  * ==================================================================== */
 (function setupPWA() {
   try {
+    // 嵌入 DeLector iframe 时跳过 PWA：同源 iframe 里 Blob URL SW 注册必然失败
+    // （浏览器不允许 blob: 协议注册 SW），且 DeLector 自己的 SW 已管理静态缓存。
+    if (window.frameElement) return;
     // 1. 注入 manifest data URI
     const icon = "data:image/svg+xml;utf8," + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">' +
