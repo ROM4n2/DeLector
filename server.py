@@ -461,7 +461,7 @@ CEFR_DICT = {
 
 from core_dict import lookup_core_vocab, get_core_cefr_level
 from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
-                         lookup_prep_collocations)
+                         lookup_prep_collocations, build_prep_matrix)
 from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree, split_sentences_pure_python
 
 def get_cefr_level(lemma: str) -> str:
@@ -1328,6 +1328,42 @@ async def lookup_vocab(req: VocabLookupReq):
         res["praepositionen"] = praep
 
     return res
+
+
+# ── Präpositionen-Matrix ─────────────────────────────────────────────────────
+_prep_matrix_response_cache = None
+
+
+def get_prep_matrix_with_cefr():
+    """矩阵响应构建 + CEFR 注入，进程级缓存。
+
+    CEFR 在这一层而不是 linguistics.build_prep_matrix 里注入：
+    get_cefr_level 是 server 的启发式（含长度 fallback），留在这层才能
+    保证「展示标签」变化时不污染纯函数的守恒契约测试。
+    组间顺序同理 —— 「常用者优先」是对用户可见面的要求，属呈现策略。
+    """
+    global _prep_matrix_response_cache
+    if _prep_matrix_response_cache is None:
+        groups = []
+        for praep, by_case in build_prep_matrix().items():
+            entries_by_case = {
+                kasus: [{**e, "cefr": get_cefr_level(e["lemma"])} for e in entries]
+                for kasus, entries in by_case.items()
+            }
+            groups.append({
+                "praeposition": praep,
+                "total": sum(len(v) for v in entries_by_case.values()),
+                "cases": entries_by_case,
+            })
+        # 同总数时按介词字母序兜底，避免 dict 插入序泄漏成不稳定的呈现顺序
+        groups.sort(key=lambda g: (-g["total"], g["praeposition"]))
+        _prep_matrix_response_cache = {"groups": groups}
+    return _prep_matrix_response_cache
+
+
+@app.get("/api/prep/matrix")
+def api_prep_matrix():
+    return get_prep_matrix_with_cefr()
 
 
 # ── FSRS (Free Spaced Repetition Scheduler) DSR Engine ────────────────────────

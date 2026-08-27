@@ -2962,3 +2962,55 @@ def test_frontend_assets_send_no_cache_header(client):
     assert api.status_code == 200
     assert "cache-control" not in api.headers, \
         f"/api/articles 被加上了 Cache-Control：{api.headers.get('cache-control')!r}"
+
+
+# ── GET /api/prep/matrix ─────────────────────────────────────────────────────
+
+def test_prep_matrix_endpoint_shape(client):
+    r = client.get("/api/prep/matrix")
+    assert r.status_code == 200
+    data = r.json()
+    assert set(data) == {"groups"}
+    groups = data["groups"]
+    assert isinstance(groups, list) and groups
+    first = groups[0]
+    assert set(first) == {"praeposition", "total", "cases"}
+    # cases 是 {kasus: [entry]}，entry 带 cefr 注入
+    any_entries = [e for entries in first["cases"].values() for e in entries]
+    assert any_entries and all(
+        set(e) >= {"lemma", "reflexive", "bedeutung_zh", "beispiel", "cefr"} for e in any_entries)
+    assert first["total"] == sum(len(v) for v in first["cases"].values())
+
+
+def test_prep_matrix_groups_ordered_by_size_desc(client):
+    """组间「常用者优先」是本层的呈现契约（纯函数只保证组内 lemma 序）。"""
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    totals = [g["total"] for g in groups]
+    assert totals == sorted(totals, reverse=True), f"组未按搭配总数降序：{totals[:8]}"
+
+
+def test_prep_matrix_endpoint_matches_pure_function(client):
+    """端点响应必须是 build_prep_matrix() 内容的扁平化 —— 两层不许有第二种真相。"""
+    from server import get_prep_matrix_with_cefr
+    fused = get_prep_matrix_with_cefr()
+    r = client.get("/api/prep/matrix").json()["groups"]
+    fused_flat = {(g["praeposition"], k, e["lemma"]): e
+                  for g in fused["groups"] for k, es in g["cases"].items() for e in es}
+    resp_flat = {(g["praeposition"], k, e["lemma"]): e
+                 for g in r for k, es in g["cases"].items() for e in es}
+    assert fused_flat == resp_flat
+
+
+def test_prep_matrix_conserves_dataset_total(client):
+    """端点不许在扁平化时丢词条：总数必须等于纯函数展开的总数。"""
+    from linguistics import build_prep_matrix
+    core_total = sum(len(es) for by_case in build_prep_matrix().values()
+                     for es in by_case.values())
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    assert sum(g["total"] for g in groups) == core_total > 0
+
+
+def test_prep_matrix_endpoint_no_auth_gate(client, lan_client):
+    """介词矩阵是只读静态知识，不该被备份端点那种「仅 127.0.0.1」闸拦住。"""
+    assert client.get("/api/prep/matrix").status_code == 200
+    assert lan_client.get("/api/prep/matrix").status_code == 200
