@@ -8,6 +8,7 @@ WRITER = (ROOT / "static" / "js" / "writer.js").read_text(encoding="utf-8")
 STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
 SW = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 SERVER = (ROOT / "server.py").read_text(encoding="utf-8")
+MAIN_JS = (ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
 GRADLE = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
 MAIN_ACTIVITY = (
     ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app" / "MainActivity.java"
@@ -223,6 +224,151 @@ def test_mobile_sheet_is_geometrically_stable():
     assert "flex-shrink: 0" in STYLE.split(".writer-pane {")[1].split("}")[0], (
         "父容器高度固定后，pane 缺 flex-shrink:0 会被压扁、溢出但滚不动"
     )
+
+
+def _mobile_writer_sidebar_block():
+    """取出 .writer-sidebar 在 @media (max-width: 860px) 内的几何块。
+    与 test_mobile_sheet_is_geometrically_stable 同款选择：多个匹配里挑
+    紧跟 'position: fixed' 的那条（移动 fixed 块），不要桌面基规则。"""
+    idxs = [m.end() for m in re.finditer(r"\.writer-sidebar\s*\{", STYLE)]
+    fixed = next(i for i in idxs if "position: fixed" in STYLE[i:i + 300])
+    depth, j = 1, fixed
+    while depth and j < len(STYLE):
+        c = STYLE[j]
+        if c == "{": depth += 1
+        elif c == "}": depth -= 1
+        j += 1
+    return STYLE[fixed:j - 1]
+
+
+def test_mobile_sheet_closed_state_clears_viewport():
+    """闭包几何必须是「贴底 + 100% 平移」—— 距离等于自身高度才完全离屏。
+
+    旧 bug：bottom: calc(4.75rem + env(safe-area-inset-bottom)) 与
+    transform: translateY(calc(100% + 1rem)) 错开 3.75rem，留 60px 的
+    「tab 条带」在视口里。条带 z-index 1100 整张遮住移动 dock (z 1000)，
+    用户看着 tab 能点（实际能点，panes 在屏外看不到），同时走不出写作台。
+
+    修法：bottom: 0（贴在视口底）+ transform: translateY(100%)，沿用
+    reader drawer（style.css:5275-5296）的「贴底 + 100%」同构模式。
+    """
+    sheet = _mobile_writer_sidebar_block()
+    assert "bottom: 0" in sheet, (
+        "闭包必须贴视口底（bottom: 0）。"
+        "之前的 4.75rem + safe-area 偏移与 100% 平移错开，留了 60px 条带"
+        "挡住移动 dock、tab 看着能点但 panes 在屏外。"
+    )
+    assert "transform: translateY(100%)" in sheet, (
+        "闭包平移距离必须等于自身高度（100%），保证闭包完全离屏。"
+    )
+    assert "translateY(calc(100% + 1rem))" not in sheet, (
+        "旧的「100% + 1rem」错开距离已重新引入 60px 闭包条带，回滚到 bug 状态。"
+    )
+    assert "bottom: calc(4.75rem" not in sheet, (
+        "旧的 4.75rem 偏移已重新引入 60px 闭包条带，回滚到 bug 状态。"
+    )
+
+
+def test_mobile_sheet_pads_above_dock_when_open():
+    """开的面板内部 padding-bottom 必须留出 dock 高度。
+
+    sheet (z 1100) 永远在 dock (z 1000) 之上 —— 这是 z-index 1000→1100
+    的历史决定（v4.4.4 把 sheet 抬过 dock 防被遮）。但 sheet 展开时若
+    不留 padding，dock 整条被压住。开 sheet 期间希望 dock 始终露在
+    sheet 内部的「底部留白」里、滚到底能看见。
+    """
+    sheet = _mobile_writer_sidebar_block()
+    # 找 padding-bottom 那一行
+    pb = re.search(r"padding-bottom:\s*([^;]+);", sheet)
+    assert pb, "sheet 必须显式 padding-bottom 留出 dock 高度，否则展开时 dock 整条被压住"
+    assert "58px" in pb.group(1), (
+        f"padding-bottom 必须含 58px（移动 dock 高度，style.css:5185）；"
+        f"实际拿到：{pb.group(1)!r}"
+    )
+
+
+def test_switch_view_closes_writer_mobile_panel():
+    """show(view) 切视图时必须关掉 writer 的 mobile sheet。
+
+    否则：reader → 硬件返回键 → show('home') 走 #view-writer display:none
+    但 scrim (.writer-mobile-panel-sheet.open) 仍挂着、body.writer-panel-lock
+    没解 —— 用户落在一个半透明、滚不动的 home 上（v4.4.5 的 lock 漏修
+    同族问题）。
+
+    typeof 守卫：closeWriterMobilePanel 来自 ./writer.js 的具名 export，
+    main.js:114-116 注入；模块加载失败时 typeof === 'undefined' 静默跳过。
+    """
+    show_body = MAIN_JS.split("export function show(")[1].split("\nexport ")[0]
+    assert "closeWriterMobilePanel" in show_body, (
+        "show(view) 必须调 closeWriterMobilePanel() 清掉 scrim + body lock + panel class，"
+        "否则切视图时上一视图的 writer mobile sheet 状态会污染下一视图"
+    )
+    # 不在 catch 路径里调用：那等于「失败时清」，正常路径仍污染。必须是无条件。
+    assert "if (typeof closeWriterMobilePanel" in show_body, (
+        "调用必须用 typeof 守卫直接调（不是包在 try/catch 里）——"
+        "包 try/catch 等于把这一行当作「出错时的兜底」而非常规清理。"
+    )
+
+
+def test_writer_has_explicit_back_button():
+    """写作台必须有显式返回键。
+
+    reader 有 `<button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>`
+    （index.html:91），writer 一直没有 —— 用户走写作台后只能依赖移动
+    dock 跳转，dock 在 sheet 开时被 scrim 遮（z 1050 > 1000）。闭包
+    几何修好后 dock 恢复可点，但单独的「← 返回文库」让走写作台这件事
+    变成一眼可识别的动作（与 reader 模式对称）。
+    """
+    # 取 .writer-header-bar 块（id 容器），要求里面至少一个 button 调用 show('home')
+    header_match = re.search(r'<div class="writer-header-bar">(.*?)</div>\s*<div class="writer-layout">', INDEX, re.S)
+    assert header_match, "index.html 找不到 .writer-header-bar 块"
+    header = header_match.group(1)
+    back_buttons = re.findall(r'<button[^>]*onclick="show\(\'home\'\)"', header)
+    assert back_buttons, (
+        "writer header 必须有显式返回文库的按钮（onclick=show('home')），"
+        "与 reader 的「← 返回文库」对称。当前 writer 只能依赖移动 dock 跳转，"
+        "dock 在 sheet 打开时会被 scrim 遮（z 1050 > 1000）。"
+    )
+
+
+def test_no_nav_or_action_button_uses_btn_secondary():
+    """index.html 里 3 个不该是「关/已完成」态的按钮不能再挂 .btn-secondary。
+
+    PR #15 把 .btn-secondary 定义为「淡字 + 虚边 + 浅底」读作「关闭 / 已完成」，
+    注释里写明只用于 ghost ↔ secondary 的互斥切换（writer.js:261 inlay ON/OFF、
+    writer.js:905 已存为 Anki 卡）。8 个 .btn-secondary 调用点里 3 个是动作/导航，
+    误用导致它们看起来像「已关闭 / 不可点」：
+
+    - index.html:184 「📚 文稿研读库」 onclick=show('home')  —— 跳转
+    - index.html:445 「⚡ 实时诊断」 onclick=analyzeWriterText(true)  —— 即时动作
+    - index.html:446 「📋 问题与历史」 唯一打开 mobile panel 的触发器，必须显眼
+
+    保留的合法 .btn-secondary 用途（writer.js:261, 905；index.html:1166）由
+    其余测试钉着。
+    """
+    # 行号在 PR #15 之后已变（加了返回键），按按钮文本+onclick 锁位置而非行号
+    patterns = [
+        ("📚 文稿研读库", "show('home')", "跳转到文库，不是状态"),
+        ("⚡ 实时诊断", "analyzeWriterText(true)", "即时诊断动作，不是状态"),
+        ("📋 问题与历史", "toggleWriterMobilePanel()", "唯一打开 panel 的触发器，必须显眼"),
+    ]
+    for emoji, onclick, why in patterns:
+        # 找最近的 <button ...>...emoji...</button> 块（中间允许 <span> 包裹）
+        block = re.search(
+            rf'<button([^>]*?)>(?:[^<]|<(?!/?button\s*>))*?{re.escape(emoji)}(?:[^<]|<(?!/?button\s*>))*?</button>',
+            INDEX,
+        )
+        assert block, f"index.html 找不到含 {emoji!r} 的 <button> 块"
+        attrs = block.group(1)
+        assert "btn-secondary" not in attrs, (
+            f"{emoji!r} 按钮不应挂 .btn-secondary：{why}。"
+            f"当前 class 含 btn-secondary 会让它渲染为「关/已完成」态"
+            f"（PR #15 把 .btn-secondary 定义为淡字虚边浅底）。"
+        )
+        # 同时确认它有可用的外观类（btn + 至少 btn-ghost 或 btn-dark 或 btn-accent）
+        assert re.search(r"\bbtn-(ghost|dark|accent)\b", attrs), (
+            f"{emoji!r} 按钮缺少可用的 btn-* 外观类（ghost/dark/accent）"
+        )
 
 
 def test_desktop_sidebar_is_internally_scrollable_when_tall():

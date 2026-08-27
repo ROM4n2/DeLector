@@ -139,6 +139,12 @@ export function show(view) {
 
   closeDrawer();
   clearCefrFocus();
+  // 切视图时清掉 writer 的 mobile sheet：否则 v4.4.5 起的 .writer-panel-lock
+  // 与 scrim 仍挂着，从 reader 走硬件返回键到 home 时会落在一个半透明、滚不
+  // 动的屏幕上（writer.js:closeWriterMobilePanel 内部负责 scrim + body lock + panel class 三个清理）。
+  // typeof 守卫：函数来自 ./writer.js 的具名 export，走 main.js:114-116 注入；
+  // 模块加载失败时不挂、不影响其它视图切换。
+  if (typeof closeWriterMobilePanel === 'function') closeWriterMobilePanel();
 
   const player = document.getElementById('shadow-player');
   if (player) {
