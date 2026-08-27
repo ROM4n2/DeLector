@@ -100,9 +100,19 @@ def test_cards_js_has_lazy_fetch_and_local_filter():
 
 
 def test_cards_js_reuses_save_payload_shape():
-    """入卡 payload 的三个关键字段要与 reader.js savePrepCollocation 同构。"""
+    """入卡 payload 必须与 VocabCardReq 逐字段对齐。
+
+    断言范围切到 savePrepCardFromMatrix 函数体内：`definition_zh`/`sentence_context`
+    在 cards.js 的渲染函数里到处都是（deck/memo/quiz 都读这两个字段），
+    对整份文件断言等于永远为真——删掉 payload 里的 definition_zh 也照样绿，
+    变异验证 M4 就是这么活下来的。
+    """
+    body = _CARDS.split("export async function savePrepCardFromMatrix")[1]
+    for field in ("article_id", "word", "lemma", "pos", "gender",
+                  "cefr_level", "definition_zh", "sentence_context"):
+        assert f"{field}:" in body, f"payload 缺字段 {field}（VocabCardReq 要求）"
+    # 反身标记只在词头渲染一次，释义里的 (sich) 要摘掉
     assert "(sich)" in _CARDS
-    assert "sentence_context" in _CARDS and "definition_zh" in _CARDS
 
 
 def test_prep_segment_included_in_segment_switcher():
