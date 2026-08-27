@@ -60,7 +60,11 @@ import {
   submitChoice,
   clearAudioCache,
   downloadBackupJson,
-  uploadBackupJson
+  uploadBackupJson,
+  filterPrepCase,
+  searchPrepCollocations,
+  savePrepCardFromMatrix,
+  retryPrepMatrix
 } from './cards.js';
 import {
   switchFolioPage,
@@ -674,6 +678,12 @@ Object.assign(window, {
   clearAudioCache,
   downloadBackupJson,
   uploadBackupJson,
+
+  // Präpositionen-Matrix（卡盒第四段的行内 onclick / oninput）
+  filterPrepCase,
+  searchPrepCollocations,
+  savePrepCardFromMatrix,
+  retryPrepMatrix,
 
   // Atelier Landing Page Folio
   switchFolioPage,

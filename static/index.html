@@ -21,7 +21,7 @@
       <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
       <!-- 这个字面量是判断「前端到底刷新了没有」的唯一肉眼指标，
            test_writer_mobile.py 断言它与 sw.js / build.gradle 的版本号一致 -->
-      <span class="right"><span class="pulse"></span>System · v4.4.9 Online</span>
+      <span class="right"><span class="pulse"></span>System · v4.5.0 Online</span>
     </div>
   </div>
 
@@ -144,12 +144,28 @@
         <button id="seg-mastered" class="cards-seg-btn" onclick="setCardSegment('mastered')" title="已掌握归档卡片">
           已掌握 <span id="seg-mastered-count" class="seg-count">0</span>
         </button>
+        <!-- 徽标初值是「–」而不是 0：矩阵懒加载，首次进入该段才拉数。
+             写 0 会在没数据的时候撒谎说词库是空的。 -->
+        <button id="seg-prep" class="cards-seg-btn" onclick="setCardSegment('prep')" title="按介词浏览全部固定搭配（Präpositionen-Matrix）">
+          Präpositionen <span id="seg-prep-count" class="seg-count">–</span>
+        </button>
       </div>
 
       <div class="cards-view-toggle">
         <button id="mode-btn-deck" class="cards-mode-btn active" onclick="setCardViewMode('deck')" title="扑克牌叠层翻页模式">🎴 扑克牌盒</button>
         <button id="mode-btn-grid" class="cards-mode-btn" onclick="setCardViewMode('grid')" title="目录全景平铺列表">📑 全景目录</button>
       </div>
+    </div>
+
+    <div id="prep-filter-bar" class="prep-filter-bar hidden">
+      <div class="prep-case-pills">
+        <button class="folio-anchor-pill active" data-kasus="" onclick="filterPrepCase('')">Alle</button>
+        <button class="folio-anchor-pill" data-kasus="Dat" onclick="filterPrepCase('Dat')">Dativ</button>
+        <button class="folio-anchor-pill" data-kasus="Akk" onclick="filterPrepCase('Akk')">Akkusativ</button>
+        <button class="folio-anchor-pill" data-kasus="Gen" onclick="filterPrepCase('Gen')">Genitiv</button>
+      </div>
+      <input type="text" class="modal-input prep-search-input" id="prep-search-input"
+             placeholder="动词 / 形容词 suchen…" oninput="searchPrepCollocations(this.value)">
     </div>
 
     <div id="cards-container"></div>

@@ -4,8 +4,9 @@
 import { state, esc, jsAttr, api } from './core.js';
 import { playGermanAudio } from './player.js';
 import { Companion } from './companion.js';
+import { refreshCardCounters } from './reader.js';
 
-let cardSegment = 'due';     // 'due' | 'pending' | 'mastered'
+let cardSegment = 'due';     // 'due' | 'pending' | 'mastered' | 'prep'
 let cardViewMode = 'deck';   // 'deck' | 'grid'
 let deckIndex = 0;
 let deckFlipped = false;
@@ -17,7 +18,7 @@ export function setCardSegment(seg) {
   cardSegment = seg;
   deckIndex = 0;
   deckFlipped = false;
-  ['due', 'pending', 'mastered'].forEach(s => {
+  ['due', 'pending', 'mastered', 'prep'].forEach(s => {
     const btn = document.getElementById('seg-' + s);
     if (btn) btn.classList.toggle('active', s === seg);
   });
@@ -69,6 +70,20 @@ export async function refreshDueCount() {
 }
 
 export function renderCardsGrid() {
+  // 介词矩阵段跟其余三段的数据源完全无关（不是 cachedCards 的过滤视图），
+  // 所以在算 vList/gList 之前就分流，免得白跑一遍过滤。
+  if (cardSegment === 'prep') {
+    document.getElementById('prep-filter-bar')?.classList.remove('hidden');
+    // 牌盒/目录切换在这一段没有意义：两个模式渲染同一个矩阵，
+    // 点了只是白付一次 691 行重排。
+    document.querySelector('.cards-view-toggle')?.classList.add('hidden');
+    if (_prepMatrixCache) renderPrepMatrix();
+    else loadPrepMatrix().then(renderPrepMatrix);
+    return;
+  }
+  document.getElementById('prep-filter-bar')?.classList.add('hidden');
+  document.querySelector('.cards-view-toggle')?.classList.remove('hidden');
+
   let vList = [];
   let gList = [];
 
@@ -832,4 +847,190 @@ export function uploadBackupJson(e) {
     }
   };
   reader.readAsText(file);
+}
+
+// ── Präpositionen-Matrix（卡盒第四段）─────────────────────────────────────────
+// 整个 552 词 / 691 条的矩阵一次拉完（约 100 KB JSON），之后过滤与搜索全在本地。
+// 为什么不做服务端分页/搜索：数据是静态词库，进程内已缓存，往返一次省下的带宽
+// 换不回每次敲键都打一趟网络的手感。
+let _prepMatrixCache = null;     // {groups: [...]} —— 懒加载一次，会话内存活
+let _prepLoading = null;         // 正在飞的那次请求（并发点击共用，不重复发）
+let _prepCaseFilter = '';        // '' | 'Dat' | 'Akk' | 'Gen'
+let _prepSearchQuery = '';
+let _prepSearchTimer = null;
+// 本次会话已入卡的 lemma|praep|kasus。按钮的 disabled 状态活不过一次重渲染
+// （过滤、搜索、切回本段都会整块重建 innerHTML），只靠它就等于「敲一下键
+// 就能把已存的行变回可点」，于是同一条搭配能无声地重复入卡 ——
+// /api/cards/vocab 是裸 INSERT，word 上也没有 UNIQUE，重复不会被拦。
+const _prepSavedKeys = new Set();
+
+function _prepKey(lemma, praep, kasus) { return `${lemma}|${praep}|${kasus}`; }
+
+export async function loadPrepMatrix() {
+  if (_prepMatrixCache) return _prepMatrixCache;
+  if (_prepLoading) return _prepLoading;   // 并发进入只发一次
+  _prepLoading = (async () => {
+    try {
+      const data = await api('/api/prep/matrix');
+      _prepMatrixCache = data;
+      const total = (data.groups || []).reduce((s, g) => s + g.total, 0);
+      const badge = document.getElementById('seg-prep-count');
+      if (badge) badge.textContent = total;
+      return data;
+    } catch {
+      // 失败**不**落缓存：缓存一个空结构会把一次网络抖动变成整个会话的
+      // 「词库尚未生成」，只有刷新页面才能恢复，而 APK 里 WebView 就是唯一
+      // 客户端，恢复路径等于重启 App。重试风暴由 _prepLoading 挡住。
+      return null;
+    } finally {
+      _prepLoading = null;
+    }
+  })();
+  return _prepLoading;
+}
+
+export function filterPrepCase(kasus) {
+  _prepCaseFilter = kasus;
+  // 按 data-kasus 而不是按下标认高亮：下标写法在有人调整 HTML 里 pill 顺序时
+  // 会静默高亮错的那颗，而这种错没有测试能抓到。
+  document.querySelectorAll('#prep-filter-bar .folio-anchor-pill').forEach(p => {
+    p.classList.toggle('active', (p.dataset.kasus || '') === kasus);
+  });
+  renderPrepMatrix();
+}
+
+export function searchPrepCollocations(q) {
+  // 去抖 150ms：每次击键都要把命中集整块 innerHTML 重写一遍，而单字母查询
+  // 才是常态（'e' 命中 639 / 691 行）。桌面上一次约 45ms，安卓 WebView 单线程
+  // 慢 4–8 倍 → 每键 200–400ms 同步主线程工作，打一个长词就是九连击。
+  clearTimeout(_prepSearchTimer);
+  _prepSearchTimer = setTimeout(() => {
+    _prepSearchQuery = q.trim().toLowerCase();
+    renderPrepMatrix();
+  }, 150);
+}
+
+function renderPrepMatrix() {
+  // 段守卫：loadPrepMatrix().then(renderPrepMatrix) 没有取消机制，用户在 93KB
+  // 响应落地前切走的话，691 行会渲进「今日到期」的容器里，而过滤栏已经隐藏，
+  // 连筛都筛不掉。
+  if (cardSegment !== 'prep') return;
+  const container = document.getElementById('cards-container');
+  if (!container) return;
+  const groups = (_prepMatrixCache && _prepMatrixCache.groups) || [];
+  const q = _prepSearchQuery;
+
+  const matched = groups.map(g => {
+    const cases = {};
+    let total = 0;
+    Object.entries(g.cases).forEach(([kasus, entries]) => {
+      if (_prepCaseFilter && kasus !== _prepCaseFilter) return;
+      // 子串匹配即可覆盖 552 词规模：搜 freuen 命中 freuen auf，
+      // 搜 "sich freuen" 也命中（反身前缀在这里现拼），不必上德语分词。
+      // 两侧都转小写：当前词库全是小写动词/形容词，可一旦将来进了名词搭配
+      // （Angst vor），大写首字母会让搜索静默查不到——误杀比漏检更难发现。
+      const hits = q ? entries.filter(e => prepSearchKey(e).includes(q)) : entries;
+      if (!hits.length) return;      // 空桶不建键，否则 header 会挂一个没有行的格徽标
+      cases[kasus] = hits;
+      total += hits.length;
+    });
+    return { ...g, cases, total };
+  }).filter(g => g.total > 0);
+
+  if (!matched.length) {
+    // 三种空态要说三句不同的话：拉取失败说网络（别把传输故障说成词库缺失，
+    // 那会让人去查数据集）、有过滤条件说没命中、都没有才是词库真空。
+    const failed = !_prepMatrixCache;
+    container.innerHTML = `
+      <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
+        <div style="font-size:2.5rem;margin-bottom:0.5rem;">${failed ? '📡' : '🧭'}</div>
+        <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);">
+          ${failed ? '介词矩阵加载失败' : (q || _prepCaseFilter ? '没有命中的搭配' : '介词搭配库尚未生成')}
+        </div>
+        ${failed ? `<button class="btn btn-ghost btn-sm" style="margin-top:1rem;"
+                            onclick="window.retryPrepMatrix()">重试</button>` : ''}
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = matched.map(g => `
+    <section class="prep-group">
+      <header class="prep-group-head">
+        <span class="prep-group-name">${esc(g.praeposition)}</span>
+        <span class="prep-group-total">${g.total} 条</span>
+        ${Object.keys(g.cases).map(k => `<span class="prep-case-badge">${esc(k)}</span>`).join('')}
+      </header>
+      ${Object.entries(g.cases).map(([kasus, entries]) => entries.map(e => {
+        const saved = _prepSavedKeys.has(_prepKey(e.lemma, g.praeposition, kasus));
+        return `
+        <div class="prep-row">
+          <span class="prep-row-head">
+            ${e.reflexive ? '<i class="prep-refl">sich </i>' : ''}${esc(e.lemma)}<em class="prep-kasus">+${esc(kasus)}</em>
+          </span>
+          <span class="prep-row-def">${esc(prepPlainDef(e))} <span class="prep-cefr">${esc(e.cefr || '')}</span></span>
+          <span class="prep-row-actions">
+            <blockquote class="prep-example">${esc(e.beispiel)}</blockquote>
+            <button class="btn btn-ghost btn-xs prep-save-btn${saved ? ' saved' : ''}"
+                    onclick="window.savePrepCardFromMatrix(this)"${saved ? ' disabled' : ''}
+                    data-word="${esc(e.lemma)}" data-praep="${esc(g.praeposition)}"
+                    data-kasus="${esc(kasus)}" data-refl="${e.reflexive ? 1 : 0}"
+                    data-zh="${esc(prepPlainDef(e))}" data-cefr="${esc(e.cefr || '')}"
+                    data-beispiel="${esc(e.beispiel)}">${saved ? '✓ 已存' : '+ 卡'}</button>
+          </span>
+        </div>`;
+      }).join('')).join('')}
+    </section>`).join('');
+}
+
+/** 搜索用的归一化词头：反身条目连 "sich " 一起进 haystack，这样中德两种
+ *  查法（freuen / sich freuen）都命中。 */
+function prepSearchKey(e) {
+  return `${e.reflexive ? 'sich ' : ''}${e.lemma}`.toLowerCase();
+}
+
+/** 去掉中文义里的 (sich) 反身标记。矩阵已经把 sich 显式渲染在词头上了，
+ *  再让释义尾巴上挂一个 (sich) 是重复噪音（抽屉里没有词头前缀，所以保留）。 */
+function prepPlainDef(e) {
+  return (e.bedeutung_zh || '').replace('(sich)', '').trim();
+}
+
+export async function savePrepCardFromMatrix(btn) {
+  const lemma = btn.dataset.word, praep = btn.dataset.praep, kasus = btn.dataset.kasus;
+  const refl = btn.dataset.refl === '1';
+  const zh = btn.dataset.zh, cefr = btn.dataset.cefr, beispiel = btn.dataset.beispiel;
+  // 与 reader.js savePrepCollocation 相同的 payload 构造。重复而非抽象：
+  // reader 的构造依赖 state.selectedToken 上下文，矩阵的依赖 dataset，
+  // 强行统一要发明第三个适配层。
+  // 卡面是搭配本身（sich freuen auf），格只进释义后缀 (+Akk)——
+  // 把格拼进卡面会得到 "freuen Akk" 这种德语里不存在的形态。
+  const head = `${refl ? 'sich ' : ''}${lemma} ${praep}`;
+  const def = `${zh} (+${kasus})`;
+  btn.disabled = true;
+  try {
+    await api('/api/cards/vocab', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        // article_id 为空：矩阵是脱离文章的词库视图，没有来源文章可挂。
+        // pos 只能留空：prep_dict.py 没有词性列，所以同一条搭配从抽屉入卡
+        // 显示 "freuen · VERB"、从矩阵入卡显示 "freuen · WORT"（cards.js:189
+        // 的 `card.pos || 'WORT'` 兜底）。已知的外观差异，不值得为它现造词性。
+        article_id: null, word: head, lemma: lemma, pos: '', gender: '',
+        cefr_level: cefr || 'B1', definition_zh: def, sentence_context: beispiel || ''
+      })
+    });
+    _prepSavedKeys.add(_prepKey(lemma, praep, kasus));
+    btn.textContent = '✓ 已存';
+    btn.classList.add('saved');
+    refreshCardCounters();
+    Companion.celebrate('card_vocab');
+  } catch {
+    btn.disabled = false;
+    alert('保存搭配卡失败');
+  }
+}
+
+/** 空态里那颗「重试」按钮：清掉失败态重新拉一次。 */
+export async function retryPrepMatrix() {
+  await loadPrepMatrix();
+  renderPrepMatrix();
 }
