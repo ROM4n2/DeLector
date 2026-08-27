@@ -181,7 +181,7 @@
           <button class="btn btn-dark" onclick="openQuizOverlay()" title="启动错题与弱项专项测验">
             <span>⚔ 专项重测 (Quiz)</span>
           </button>
-          <button class="btn btn-secondary" onclick="show('home')" title="进入德语外刊与文稿库">
+          <button class="btn btn-ghost" onclick="show('home')" title="进入德语外刊与文稿库">
             <span>📚 文稿研读库</span>
           </button>
           <div class="folio-anchor-nav">
@@ -431,6 +431,7 @@
   <main id="view-writer" class="view">
     <div class="writer-container">
       <div class="writer-header-bar">
+        <button class="btn btn-ghost" onclick="show('home')" title="返回文稿库">← 返回文库</button>
         <div>
           <div class="hero-eyebrow" style="margin-bottom:0.25rem;">
             <span class="dot"></span>
@@ -441,8 +442,8 @@
         <div class="writer-actions-top">
           <button class="btn btn-ghost" onclick="clearWriterForm()" title="新建空白作文草稿">＋ 新建草稿</button>
           <button class="btn btn-ghost" id="writer-ai-btn" onclick="aiPolishEssay()" title="使用 DeepSeek AI 深度润色全文">✨ AI 润色全文</button>
-          <button class="btn btn-secondary" onclick="analyzeWriterText(true)">⚡ 实时诊断</button>
-          <button class="btn btn-secondary writer-mobile-panel-trigger" id="writer-mobile-panel-trigger" onclick="toggleWriterMobilePanel()">📋 问题与历史</button>
+          <button class="btn btn-ghost" onclick="analyzeWriterText(true)">⚡ 实时诊断</button>
+          <button class="btn btn-ghost writer-mobile-panel-trigger" id="writer-mobile-panel-trigger" onclick="toggleWriterMobilePanel()">📋 问题与历史</button>
           <button class="btn btn-dark" id="writer-save-btn" onclick="saveWriterEssay()">💾 保存作文</button>
         </div>
       </div>

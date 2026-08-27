@@ -7488,7 +7488,7 @@ body.drawer-open .companion {
     z-index: 1100;
     left: 0.75rem;
     right: 0.75rem;
-    bottom: calc(4.75rem + env(safe-area-inset-bottom));
+    bottom: 0;
     height: min(76vh, 680px);
     /* 显式解掉基规则那个 max-height: calc(100dvh …) 帽子。不解也不会出错
        （有 height 在，几何依然是定值），但留着就意味着读这条规则的人
@@ -7496,10 +7496,11 @@ body.drawer-open .companion {
     max-height: none;
     overflow-y: auto;
     padding: 0.75rem;
+    padding-bottom: calc(0.75rem + 58px + env(safe-area-inset-bottom, 0) + 0.5rem);
     background: var(--paper);
     border: 1.5px solid var(--ink);
     box-shadow: 4px 4px 0 var(--ink);
-    transform: translateY(calc(100% + 1rem));
+    transform: translateY(100%);
     transition: transform 180ms ease;
   }
 
