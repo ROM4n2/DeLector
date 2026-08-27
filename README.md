@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-296%2F296%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-298%2F298%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
