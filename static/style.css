@@ -3155,6 +3155,77 @@ body.drawer-open .shadow-player {
   color: var(--paper);
 }
 
+/* ── Präpositionen-Matrix（卡盒第四段）── 组合现成件：
+   pill/filter 复用 .folio-anchor-pill / .modal-input，不再造第二个 pill 形态。
+   显隐走全局 .hidden（上面那条带 !important），所以这里不再写 .prep-filter-bar.hidden
+   —— 那会是一条永远被盖掉的死规则。 */
+.prep-filter-bar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0.75rem 0 0;
+  flex-wrap: wrap;
+}
+.prep-case-pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+/* .folio-anchor-pill 只定义了静息与 hover 态，没有选中态 —— 格过滤器必须能
+   看出「当前选的是哪个格」，所以在这里补一条选中态（与 hover 同色，语义不同）。 */
+.prep-case-pills .folio-anchor-pill.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+.prep-search-input { max-width: 260px; }
+
+.prep-group { margin-top: 1.25rem; }
+.prep-group-head {
+  display: flex; align-items: baseline; gap: 0.625rem;
+  border-bottom: 1.5px solid var(--ink); padding-bottom: 0.35rem; margin-bottom: 0.45rem;
+}
+.prep-group-name {
+  font-family: var(--serif-heading); font-size: 1.25rem; color: var(--ink);
+}
+.prep-group-total { font-family: var(--mono); font-size: 0.6875rem; color: var(--ink-mute); }
+.prep-case-badge {
+  font-family: var(--mono); font-size: 0.625rem; padding: 0.05rem 0.4rem;
+  border: 1px solid var(--rule); color: var(--pencil);
+}
+
+.prep-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) 1fr auto;
+  gap: 0.625rem;
+  padding: 0.5rem 0.375rem;
+  border-bottom: 1px solid var(--rule-light);
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.prep-row:hover { background: var(--paper-deep); }
+.prep-row-head { font-weight: 700; color: var(--ink); }
+.prep-refl { font-style: italic; color: var(--pencil); }
+.prep-kasus { font-style: normal; font-family: var(--mono); font-size: 0.6875rem; color: var(--ink-mute); }
+.prep-row-def { font-size: 0.8125rem; color: var(--pencil); line-height: 1.55; }
+.prep-cefr {
+  font-family: var(--mono); font-size: 0.625rem; padding: 0 0.3rem;
+  border-left: 2px solid var(--accent); margin-left: 0.3rem;
+}
+.prep-row-actions { display: flex; align-items: center; gap: 0.5rem; }
+.prep-example {
+  margin: 0; padding-left: 0.5rem; border-left: 2px solid var(--rule);
+  font-size: 0.75rem; color: var(--ink-mute); font-style: italic;
+  max-width: 340px;
+}
+.prep-save-btn.saved { color: var(--rule); pointer-events: none; }
+
+@media (max-width: 600px) {
+  .prep-row { grid-template-columns: 1fr; gap: 0.25rem; }
+  .prep-row-actions { flex-direction: column-reverse; align-items: flex-start; }
+  .prep-example { max-width: none; }
+  .prep-search-input { max-width: none; flex: 1; }
+}
+
 /* ── Interactive 3D Card Deck (真实 3D 扑克翻牌效果) ────────── */
 .deck-stage {
   max-width: 640px;

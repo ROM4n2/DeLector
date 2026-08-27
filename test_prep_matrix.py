@@ -77,3 +77,35 @@ def test_counts_ratchet_never_shrinks():
 def test_empty_dataset_degrades_to_empty_matrix():
     """prep_dict 缺失时 PREP_COLLOCATIONS 是 {} —— 内核必须返回空结构而非抛异常。"""
     assert build_prep_matrix_core({}) == {}
+
+
+# ── 前端静态契约 ──────────────────────────────────────────────────────────────
+from pathlib import Path
+
+_ROOT = Path(__file__).parent
+_INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+_CARDS = (_ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
+
+
+def test_segment_button_exists_and_wired():
+    seg_html = _INDEX.split('class="cards-seg-bar"')[1].split("</div>")[0]
+    assert 'id="seg-prep"' in seg_html
+    assert "setCardSegment('prep')" in seg_html
+
+
+def test_cards_js_has_lazy_fetch_and_local_filter():
+    assert "/api/prep/matrix" in _CARDS, "cards.js 必须调用新端点"
+    assert "_prepMatrixCache" in _CARDS, "必须有模块级缓存变量（懒加载一次）"
+    assert "/api/cards/vocab" in _CARDS, "行内入卡必须打到既有 vocab 端点"
+
+
+def test_cards_js_reuses_save_payload_shape():
+    """入卡 payload 的三个关键字段要与 reader.js savePrepCollocation 同构。"""
+    assert "(sich)" in _CARDS
+    assert "sentence_context" in _CARDS and "definition_zh" in _CARDS
+
+
+def test_prep_segment_included_in_segment_switcher():
+    """setCardSegment 的 active-class 循环 hardcode 了段 id 数组 —— 漏了 'prep'
+    的话按钮点得动但高亮不跟着走，是最容易漏的一处。"""
+    assert "'prep'" in _CARDS.split("export function setCardSegment")[1][:400]
