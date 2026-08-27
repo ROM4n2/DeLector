@@ -1794,15 +1794,25 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
     prune_audio_cache()
     return cache_file
 
-@app.post("/api/audio/tts")
-async def get_audio_tts(req: TTSReq):
+async def _serve_tts(text: str, voice: str, rate: str):
+    """POST 与 GET 两个路由共享的 TTS 服务逻辑。"""
     try:
-        audio_path = await generate_edge_tts_audio(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
+        audio_path = await generate_edge_tts_audio(text, voice, rate)
         return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
+
+@app.post("/api/audio/tts")
+async def get_audio_tts(req: TTSReq):
+    return await _serve_tts(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
+
+@app.get("/api/audio/tts")
+async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%"):
+    """GET 版 TTS：供 <audio src="/api/audio/tts?text=..."> 直接用。
+    与 POST 共享同一缓存池（cache key 仍为 sha256(f"{voice}_{rate}_{clean_text}")）。"""
+    return await _serve_tts(text, voice, rate)
 
 @app.get("/api/audio/cache")
 def get_audio_cache():
