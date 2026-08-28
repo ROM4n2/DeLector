@@ -3058,3 +3058,29 @@ def test_prep_matrix_endpoint_no_auth_gate(client, lan_client):
     """介词矩阵是只读静态知识，不该被备份端点那种「仅 127.0.0.1」闸拦住。"""
     assert client.get("/api/prep/matrix").status_code == 200
     assert lan_client.get("/api/prep/matrix").status_code == 200
+
+
+# ── GET /api/audio/tts ───────────────────────────────────────────────────────
+
+def test_get_audio_tts_returns_mp3(client):
+    """GET 版 TTS 端点：供 workbench <audio src> 直接用，无需 fetch + blob。"""
+    r = client.get("/api/audio/tts", params={"text": "hallo"})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "audio/mpeg"
+    assert len(r.content) > 0
+    assert 'filename="speech.mp3"' in r.headers.get("content-disposition", "")
+
+
+def test_get_audio_tts_rejects_empty_text(client):
+    r = client.get("/api/audio/tts", params={"text": ""})
+    assert r.status_code == 400
+
+
+def test_get_audio_tts_rejects_overlong_text(client):
+    r = client.get("/api/audio/tts", params={"text": "x" * 1001})
+    assert r.status_code == 400
+
+
+def test_get_audio_tts_rejects_malformed_rate(client):
+    r = client.get("/api/audio/tts", params={"text": "hallo", "rate": "banana"})
+    assert r.status_code == 400
