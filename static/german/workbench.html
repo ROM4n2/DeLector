@@ -632,34 +632,38 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
     </div>
   </div>
 
-  <!-- F5 · LAN 同步（WebRTC P2P，无服务器，SDP 手动复制） -->
+  <!-- F5 · LAN 同步（6 位短码，WebRTC P2P） -->
   <div class="panel" id="lanSyncPanel" style="display:none">
-    <h2>LAN 同步（WebRTC P2P，无服务器）</h2>
+    <h2>LAN 同步（6 位短码，WebRTC P2P）</h2>
     <div class="guide" style="font-size:13px;line-height:1.7">
-      两台设备同 WiFi 直接同步，无需服务器。<br>
-      <b>流程</b>：A 设备生成邀请码 → 复制到 B 设备 → B 生成回执 → 复制回 A → 自动传输 JSON 并合并。
+      两台设备在同一局域网内，通过 6 位短码即可点对点极速同步进度与词库。<br>
+      <b>流程</b>：A 设备生成短码 → B 设备输入该短码并生成回执 → A 设备输入回执短码 → 自动传输并合并。
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
       <label style="font-size:13px"><input type="radio" name="lanRole" value="A" checked> 我是发送方 A</label>
       <label style="font-size:13px"><input type="radio" name="lanRole" value="B"> 我是接收方 B</label>
     </div>
     <div id="lanStepA" style="margin-top:10px">
-      <button class="btn sm ghost" id="btnLanOffer">① 生成邀请码</button>
-      <textarea id="lanOfferOut" readonly style="display:none;width:100%;min-height:80px;font-family:Consolas,monospace;font-size:11px;margin-top:6px;resize:vertical;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px" placeholder="点击按钮后，把邀请码复制给对方"></textarea>
-      <button class="btn sm ghost" id="btnLanCopyOffer" style="display:none;margin-top:4px">复制邀请码</button>
-      <div style="margin-top:10px">
-        <label style="font-size:13px;display:block;margin-bottom:4px">② 粘贴对方的回执：</label>
-        <textarea id="lanAnswerIn" style="width:100%;min-height:80px;font-family:Consolas,monospace;font-size:11px;resize:vertical;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px" placeholder="把 B 设备生成的回执粘贴到这里"></textarea>
+      <button class="btn sm ghost" id="btnLanOffer">① 生成短码</button>
+      <div id="lanOfferDisplay" style="display:none;margin-top:8px;text-align:center">
+        <div style="font-size:2rem;font-family:Consolas,monospace;letter-spacing:0.3em;color:var(--accent);font-weight:700" id="lanOfferCode">—</div>
+        <button class="btn sm ghost" id="btnLanCopyOffer" style="margin-top:4px">复制短码</button>
+      </div>
+      <div style="margin-top:12px">
+        <label style="font-size:13px;display:block;margin-bottom:4px">② 输入对方的短码：</label>
+        <input type="text" id="lanAnswerIn" maxlength="6" style="width:160px;font-size:1.25rem;font-family:Consolas,monospace;letter-spacing:0.2em;text-transform:uppercase;text-align:center" placeholder="XXXXXX">
         <button class="btn sm ghost" id="btnLanAcceptAnswer" style="margin-top:4px">③ 确认连接并发送</button>
       </div>
     </div>
     <div id="lanStepB" style="margin-top:10px;display:none">
-      <label style="font-size:13px;display:block;margin-bottom:4px">① 粘贴对方的邀请码：</label>
-      <textarea id="lanOfferIn" style="width:100%;min-height:80px;font-family:Consolas,monospace;font-size:11px;resize:vertical;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px" placeholder="把 A 设备生成的邀请码粘贴到这里"></textarea>
-      <button class="btn sm ghost" id="btnLanAcceptOffer" style="margin-top:4px">② 生成回执</button>
-      <textarea id="lanAnswerOut" readonly style="display:none;width:100%;min-height:80px;font-family:Consolas,monospace;font-size:11px;margin-top:6px;resize:vertical;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px" placeholder="把回执复制给对方"></textarea>
-      <button class="btn sm ghost" id="btnLanCopyAnswer" style="display:none;margin-top:4px">复制回执</button>
-      <p class="hint" style="margin-top:8px;color:var(--muted)">③ 等待 A 确认连接，传输完成后会自动 toast 提示。</p>
+      <label style="font-size:13px;display:block;margin-bottom:4px">① 输入对方的短码：</label>
+      <input type="text" id="lanOfferIn" maxlength="6" style="width:160px;font-size:1.25rem;font-family:Consolas,monospace;letter-spacing:0.2em;text-transform:uppercase;text-align:center" placeholder="XXXXXX">
+      <button class="btn sm ghost" id="btnLanAcceptOffer" style="margin-top:4px">② 获取邀请并生成回执</button>
+      <div id="lanAnswerDisplay" style="display:none;margin-top:8px;text-align:center">
+        <div style="font-size:2rem;font-family:Consolas,monospace;letter-spacing:0.3em;color:var(--accent);font-weight:700" id="lanAnswerCode">—</div>
+        <button class="btn sm ghost" id="btnLanCopyAnswer" style="margin-top:4px">复制短码</button>
+      </div>
+      <p class="hint" style="margin-top:8px;color:var(--muted)">③ 等待 A 输入你的短码，传输完成后自动完成合并。</p>
     </div>
     <p id="lanStatus" class="hint" style="margin-top:10px;color:var(--muted)"></p>
   </div>
@@ -2659,10 +2663,9 @@ $("setTtsRate").addEventListener("input", () => {
 $("btnRefreshSnapshots").addEventListener("click", () => renderSnapshots());
 
 /* ======================================================================
- * F5 · LAN 同步（WebRTC P2P，无服务器，SDP 手动复制）
- *  A 流程：generateOffer() → 显示 SDP Offer → 等用户粘 Answer → acceptAnswer() → DataChannel open → 发送 JSON
- *  B 流程：acceptOffer(SDP Offer) → 显示 SDP Answer → 等待 DataChannel open → 接收 JSON → applyMerge
- *  RTCPeerConnection 在所有现代浏览器可用；iOS Safari 14+ 需 HTTPS
+ * F5 · LAN 同步（6 位短码，WebRTC P2P）
+ *  A 流程：createOffer() → POST /api/wb/sync/store → 展示 6 位短码 → 等 B 回执 → 输入 B 短码 GET /api/wb/sync/fetch/{code} → setRemoteDescription → DataChannel open → 发送 JSON
+ *  B 流程：输入 A 短码 GET /api/wb/sync/fetch/{code} → setRemoteDescription → createAnswer() → POST /api/wb/sync/store → 展示回执短码 → 等待 DataChannel open → 接收 JSON → applyMerge
  * ==================================================================== */
 let _lanPC = null;       // RTCPeerConnection 实例
 let _lanDC = null;       // DataChannel
@@ -2693,117 +2696,142 @@ document.querySelectorAll('input[name="lanRole"]').forEach(r => {
   });
 });
 
-// A 流程：生成 Offer
+// A 流程：生成 Offer 并获取短码
 $("btnLanOffer").addEventListener("click", async () => {
-  // 防止重复点击重置 PC：若已生成邀请码（have-local-offer）且尚未接受回执，直接复用上次 SDP
-  if (_lanPC && _lanPC.signalingState === "have-local-offer" && _lanPC.localDescription) {
-    const sdp = JSON.stringify(_lanPC.localDescription);
-    $("lanOfferOut").style.display = "block";
-    $("lanOfferOut").value = sdp;
-    $("btnLanCopyOffer").style.display = "inline-block";
-    lanSetStatus("已复用上次邀请码（请勿重复点击，直接复制给 B 设备）");
+  if (_lanPC && _lanPC.signalingState === "have-local-offer" && _lanPC.localDescription && $("lanOfferCode").textContent !== "—") {
+    lanSetStatus("已生成短码，请直接输入对方的短码");
     return;
   }
   if (_lanPC) try { _lanPC.close(); } catch (e) {}
-  _lanPC = new RTCPeerConnection({ iceServers: [] });  // 纯局域网 host 候选，不依赖 STUN/外网
+  _lanPC = new RTCPeerConnection({ iceServers: [] });
   _lanDC = _lanPC.createDataChannel("sync");
-  setupDataChannel(_lanDC, /*isSender=*/true);
+  setupDataChannel(_lanDC, true);
   _lanPC.oniceconnectionstatechange = () => lanSetStatus("ICE: " + _lanPC.iceConnectionState);
   try {
     const offer = await _lanPC.createOffer();
     await _lanPC.setLocalDescription(offer);
-    // 等 ICE 完成（最多 5 秒）
-    await new Promise((resolve) => {
-      let done = false;
-      const t = setTimeout(() => { if (!done) { done = true; resolve(); } }, 5000);
-      _lanPC.onicecandidate = (e) => {
-        if (e.candidate === null) { if (!done) { done = true; clearTimeout(t); resolve(); } }
-      };
+    await new Promise(r => {
+      let d = false;
+      const t = setTimeout(() => { if (!d) { d = true; r(); } }, 5000);
+      _lanPC.onicecandidate = e => { if (!e.candidate && !d) { d = true; clearTimeout(t); r(); } };
     });
-    const sdp = JSON.stringify(_lanPC.localDescription);
-    $("lanOfferOut").style.display = "block";
-    $("lanOfferOut").value = sdp;
-    $("btnLanCopyOffer").style.display = "inline-block";
-    lanSetStatus("邀请码已生成，复制给 B 设备");
+    // 存到服务端，拿到短码
+    const resp = await fetch("/api/wb/sync/store", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sdp: _lanPC.localDescription, role: "offer" })
+    }).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+    $("lanOfferDisplay").style.display = "block";
+    $("lanOfferCode").textContent = resp.code;
+    lanSetStatus("短码已生成，告诉对方输入这个码");
   } catch (e) {
-    lanSetStatus("生成邀请码失败: " + e.message);
+    lanSetStatus("生成失败: " + e.message);
   }
-});
-
-$("btnLanCopyOffer").addEventListener("click", () => {
-  $("lanOfferOut").select();
-  try { document.execCommand("copy"); toast("已复制邀请码"); } catch (e) { toast("复制失败"); }
 });
 
 // A 流程：接受 B 的 Answer
 $("btnLanAcceptAnswer").addEventListener("click", async () => {
-  if (!_lanPC) { lanSetStatus("请先点击①生成邀请码"); return; }
-  // 接受回执要求 PC 处于 have-local-offer（已生成邀请码且未接受过回执）
+  if (!_lanPC) { lanSetStatus("请先点击①生成短码"); return; }
   if (_lanPC.signalingState !== "have-local-offer") {
-    lanSetStatus("邀请码状态异常（当前 " + _lanPC.signalingState + "），请重新点击①生成邀请码后再粘贴回执");
+    lanSetStatus("状态异常（" + _lanPC.signalingState + "），请重新生成短码");
     return;
   }
-  const ans = $("lanAnswerIn").value.trim();
-  if (!ans) { lanSetStatus("请粘贴 B 的回执"); return; }
+  const code = $("lanAnswerIn").value.trim().toUpperCase();
+  if (!code || code.length !== 6) { lanSetStatus("请输入6位短码"); return; }
   try {
-    const desc = JSON.parse(ans);
-    await _lanPC.setRemoteDescription(desc);
-    lanSetStatus("已接受回执，等待 DataChannel 连接…");
+    const resp = await fetch("/api/wb/sync/fetch/" + encodeURIComponent(code)).then(r => {
+      if (!r.ok) throw new Error(r.status === 404 ? "短码无效或已过期" : "HTTP " + r.status);
+      return r.json();
+    });
+    await _lanPC.setRemoteDescription(resp.sdp);
+    lanSetStatus("已连接，等待 DataChannel…");
   } catch (e) {
-    lanSetStatus("回执格式错误: " + e.message + "（请确认复制的是 B 设备的回执）");
+    lanSetStatus("短码无效或已过期: " + e.message);
   }
 });
 
-// B 流程：接受 A 的 Offer，生成 Answer
+// B 流程：接受 A 的 Offer 并生成 Answer
 $("btnLanAcceptOffer").addEventListener("click", async () => {
   if (_lanPC) try { _lanPC.close(); } catch (e) {}
-  _lanPC = new RTCPeerConnection({ iceServers: [] });  // 纯局域网 host 候选，不依赖 STUN/外网
-  _lanPC.ondatachannel = (e) => {
-    _lanDC = e.channel;
-    setupDataChannel(_lanDC, /*isSender=*/false);
-  };
+  _lanPC = new RTCPeerConnection({ iceServers: [] });
+  _lanPC.ondatachannel = e => { _lanDC = e.channel; setupDataChannel(_lanDC, false); };
   _lanPC.oniceconnectionstatechange = () => lanSetStatus("ICE: " + _lanPC.iceConnectionState);
-  const offerStr = $("lanOfferIn").value.trim();
-  if (!offerStr) { lanSetStatus("请粘贴 A 的邀请码"); return; }
+  const code = $("lanOfferIn").value.trim().toUpperCase();
+  if (!code || code.length !== 6) { lanSetStatus("请输入6位短码"); return; }
   try {
-    const offer = JSON.parse(offerStr);
-    await _lanPC.setRemoteDescription(offer);
+    const resp = await fetch("/api/wb/sync/fetch/" + encodeURIComponent(code)).then(r => {
+      if (!r.ok) throw new Error(r.status === 404 ? "短码无效或已过期" : "HTTP " + r.status);
+      return r.json();
+    });
+    await _lanPC.setRemoteDescription(resp.sdp);
     const answer = await _lanPC.createAnswer();
     await _lanPC.setLocalDescription(answer);
-    // 等 ICE 完成
-    await new Promise((resolve) => {
-      let done = false;
-      const t = setTimeout(() => { if (!done) { done = true; resolve(); } }, 5000);
-      _lanPC.onicecandidate = (e) => {
-        if (e.candidate === null) { if (!done) { done = true; clearTimeout(t); resolve(); } }
-      };
+    await new Promise(r => {
+      let d = false;
+      const t = setTimeout(() => { if (!d) { d = true; r(); } }, 5000);
+      _lanPC.onicecandidate = e => { if (!e.candidate && !d) { d = true; clearTimeout(t); r(); } };
     });
-    const sdp = JSON.stringify(_lanPC.localDescription);
-    $("lanAnswerOut").style.display = "block";
-    $("lanAnswerOut").value = sdp;
-    $("btnLanCopyAnswer").style.display = "inline-block";
-    lanSetStatus("回执已生成，复制给 A 设备");
+    // 存 answer 到服务端
+    const ansResp = await fetch("/api/wb/sync/store", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sdp: _lanPC.localDescription, role: "answer" })
+    }).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+    $("lanAnswerDisplay").style.display = "block";
+    $("lanAnswerCode").textContent = ansResp.code;
+    lanSetStatus("回执短码已生成，告诉对方输入这个码");
   } catch (e) {
-    lanSetStatus("邀请码格式错误: " + e.message);
+    lanSetStatus("短码无效或已过期: " + e.message);
   }
 });
 
+// 复制短码
+$("btnLanCopyOffer").addEventListener("click", () => {
+  const code = $("lanOfferCode").textContent.trim();
+  if (!code || code === "—") return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => toast("已复制短码")).catch(() => copyFallback(code));
+  } else {
+    copyFallback(code);
+  }
+});
 $("btnLanCopyAnswer").addEventListener("click", () => {
-  $("lanAnswerOut").select();
-  try { document.execCommand("copy"); toast("已复制回执"); } catch (e) { toast("复制失败"); }
+  const code = $("lanAnswerCode").textContent.trim();
+  if (!code || code === "—") return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => toast("已复制短码")).catch(() => copyFallback(code));
+  } else {
+    copyFallback(code);
+  }
 });
 
-// DataChannel 设置（isSender=true: A 发 JSON 给 B；isSender=false: B 接收并 applyMerge）
-function setupDataChannel(dc, isSender) {
+function copyFallback(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); toast("已复制短码"); }
+  catch (e) { toast("复制失败"); }
+  ta.remove();
+}
+
+// DataChannel 设置（isInitiator=true: A 发 JSON 给 B；isInitiator=false: B 接收并 applyMerge）
+function setupDataChannel(dc, isInitiator) {
   dc.onopen = async () => {
     lanSetStatus("DataChannel 已连接！");
-    if (isSender) {
+    if (isInitiator) {
       // 复用 buildSyncPayload 逻辑（从 btnExportSync 取）
       try {
+        const custom = S.words.filter(w => w.custom);
         const payload = {
-          v: 1, sentAt: Date.now(),
-          cards: S.cards, log: S.log, wrong: S.wrong,
-          words: S.words.filter(w => w.custom),  // 只发自定义词
+          type: "wb-sync", version: 1, exportedAt: Date.now(),
+          cards: S.cards, log: S.log, wrong: S.wrong, customWords: custom,
           settings: S.settings
         };
         dc.send(JSON.stringify(payload));

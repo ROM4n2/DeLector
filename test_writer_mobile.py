@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import re
 from pathlib import Path
 
@@ -575,8 +576,6 @@ def test_destructive_surfaces_use_the_danger_token():
     --cherry 仍然合法 —— 但只用于答错/错误反馈（cloze.js:40、main.js:205,253
     的报错文字就该留着用它），不用于破坏性操作。
     """
-    bare = _style_without_comments()
-
     for selector in (r"\.btn-del", r"\.btn-del:hover", r"\.card-del-btn:hover",
                      r"\.article-row-del:hover"):
         body = _rule_body(rf"{selector}\s*\{{")
@@ -602,7 +601,7 @@ def test_destructive_surfaces_use_the_danger_token():
 
 
 def test_no_rule_is_fully_shadowed_by_btn_xs_important():
-    """`.btn-xs` 三条声明全带 !important，同元素上的伴生类会被整条盖死。
+    """.btn-xs 三条声明全带 !important，同元素上的伴生类会被整条盖死。
 
     `.version-restore-btn` 就是这么变成死规则的：它设 font-size / padding /
     border-radius 三项，而调用点写的是 `btn btn-ghost btn-xs version-restore-btn`
@@ -675,4 +674,3 @@ def test_button_rules_are_not_duplicated():
     for selector in (".deck-btn-nav", ".btn-secondary", ".btn-xs", ".btn-del"):
         n = len(re.findall(rf"^{re.escape(selector)}\s*\{{", bare, re.M))
         assert n == 1, f"{selector} 的基规则出现了 {n} 次，应该只有 1 次"
-

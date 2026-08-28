@@ -1,4 +1,5 @@
 import os
+import time
 import math
 import json
 import tempfile
@@ -2089,6 +2090,45 @@ def api_writing_apply(req: WritingApplyReq):
         "error_count": a["error_count"],
         "version_id": version_id,
     }
+
+
+# --- LAN WebRTC Sync SDP Cache & Endpoints ---
+_sync_sdp_cache: Dict[str, Dict[str, Any]] = {}
+
+
+def _cleanup_sync_cache() -> None:
+    now = time.time()
+    expired = [k for k, v in _sync_sdp_cache.items() if now - v.get("ts", 0) > 300]
+    for k in expired:
+        _sync_sdp_cache.pop(k, None)
+
+
+class SyncStoreReq(BaseModel):
+    sdp: Dict[str, Any]
+    role: str = "offer"
+
+
+@app.post("/api/wb/sync/store")
+def sync_store_sdp(req: SyncStoreReq):
+    _cleanup_sync_cache()
+    alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+    code = "".join(secrets.choice(alphabet) for _ in range(6))
+    _sync_sdp_cache[code] = {
+        "sdp": req.sdp,
+        "ts": time.time(),
+        "role": req.role,
+    }
+    return {"code": code}
+
+
+@app.get("/api/wb/sync/fetch/{code}")
+def sync_fetch_sdp(code: str):
+    _cleanup_sync_cache()
+    key = code.strip().upper()
+    entry = _sync_sdp_cache.pop(key, None)
+    if not entry:
+        raise HTTPException(404, "短码无效或已过期（5 分钟有效）")
+    return {"sdp": entry["sdp"], "role": entry["role"]}
 
 
 # Mount Static UI (Catch-all must be at the very end)

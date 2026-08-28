@@ -3120,3 +3120,48 @@ def test_prep_saved_idempotent(client):
     resp = client.get("/api/prep/saved")
     assert resp.json()["keys"].count("warten|auf|Akk") == 1
 
+
+# ── POST /api/wb/sync/store & GET /api/wb/sync/fetch/{code} ───────────────────
+
+def test_sync_sdp_store_and_fetch(client):
+    """SDP 短码：存入后返回 6 位码，取出内容一致，再次 GET 返回 404（一次性消费）。"""
+    sdp = {"type": "offer", "sdp": "v=0\r\no=- 123456 2 IN IP4 127.0.0.1\r\ns=-\r\n"}
+    resp = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "code" in data
+    code = data["code"]
+    assert len(code) == 6
+    assert code.isalnum()
+
+    # 首次 GET 成功取出
+    fetch_resp = client.get(f"/api/wb/sync/fetch/{code}")
+    assert fetch_resp.status_code == 200
+    fetch_data = fetch_resp.json()
+    assert fetch_data["sdp"] == sdp
+    assert fetch_data["role"] == "offer"
+
+    # 再次 GET 返回 404（已被一次性消费）
+    assert client.get(f"/api/wb/sync/fetch/{code}").status_code == 404
+
+
+def test_sync_sdp_fetch_invalid_code(client):
+    """查询不存在或过期的短码返回 404。"""
+    resp = client.get("/api/wb/sync/fetch/NON999")
+    assert resp.status_code == 404
+
+
+def test_sync_sdp_lan_accessible(lan_client):
+    """局域网设备间同步：端点不应被仅限本地的 _require_localhost 误伤拦截。"""
+    sdp = {"type": "answer", "sdp": "v=0\r\no=- 654321 2 IN IP4 192.168.1.77\r\ns=-\r\n"}
+    resp = lan_client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "answer"})
+    assert resp.status_code == 200
+    code = resp.json()["code"]
+    assert len(code) == 6
+
+    fetch_resp = lan_client.get(f"/api/wb/sync/fetch/{code}")
+    assert fetch_resp.status_code == 200
+    assert fetch_resp.json()["sdp"] == sdp
+    assert fetch_resp.json()["role"] == "answer"
+
+
