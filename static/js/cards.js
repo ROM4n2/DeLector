@@ -182,10 +182,10 @@ export function renderDeckStage(vList, gList) {
         ${total > 1 ? '<div class="deck-card-layer deck-card-layer-2"></div>' : ''}
 
         <!-- 3D Flipping Card Container -->
-        <div class="deck-active-card ${deckFlipped ? 'is-flipped' : ''}" id="deck-active-card" onclick="toggleDeckFlip(event)">
+        <div class="deck-active-card ${deckFlipped ? 'is-flipped' : ''}" id="deck-active-card">
           
           <!-- 🎴 FRONT FACE (正面) -->
-          <div class="deck-card-face card-front">
+          <div class="deck-card-face card-front" onclick="toggleDeckFlip(event)">
             <div class="deck-card-head">
               <div>
                 <div class="deck-word-title">${isVocab ? esc(card.word) : esc(card.grammar_name)}</div>
@@ -240,19 +240,19 @@ export function renderDeckStage(vList, gList) {
 
             <!-- SuperMemo SM-2 Rating Bar on Back -->
             <div class="deck-sm2-rating-bar" onclick="event.stopPropagation()">
-              <button class="sm2-btn sm2-btn-again" onclick="submitCardReview('${card._type}', ${card.id}, 1)" title="完全忘记，重置为 1 天">
+              <button class="sm2-btn sm2-btn-again" onclick="event.stopPropagation();submitCardReview('${card._type}', ${card.id}, 1)" title="完全忘记，重置为 1 天">
                 <span>1 重来</span>
                 <span class="sm2-int-tag">${nextAgain}天</span>
               </button>
-              <button class="sm2-btn sm2-btn-hard" onclick="submitCardReview('${card._type}', ${card.id}, 2)" title="勉强想起，短间隔复习">
+              <button class="sm2-btn sm2-btn-hard" onclick="event.stopPropagation();submitCardReview('${card._type}', ${card.id}, 2)" title="勉强想起，短间隔复习">
                 <span>2 困难</span>
                 <span class="sm2-int-tag">${nextHard}天</span>
               </button>
-              <button class="sm2-btn sm2-btn-good" onclick="submitCardReview('${card._type}', ${card.id}, 3)" title="正常回忆，按艾宾浩斯递增">
+              <button class="sm2-btn sm2-btn-good" onclick="event.stopPropagation();submitCardReview('${card._type}', ${card.id}, 3)" title="正常回忆，按艾宾浩斯递增">
                 <span>3 良好</span>
                 <span class="sm2-int-tag">${nextGood}天</span>
               </button>
-              <button class="sm2-btn sm2-btn-easy" onclick="submitCardReview('${card._type}', ${card.id}, 4)" title="熟练掌握，大幅增加间隔">
+              <button class="sm2-btn sm2-btn-easy" onclick="event.stopPropagation();submitCardReview('${card._type}', ${card.id}, 4)" title="熟练掌握，大幅增加间隔">
                 <span>4 简单</span>
                 <span class="sm2-int-tag">${nextEasy}天</span>
               </button>
