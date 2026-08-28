@@ -20,33 +20,37 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-| 平台 | 版本 | 说明 | 下载通道 |
-|---|---|---|---|
-| 🪟 **Windows x64** | `v4.6.5` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5) |
-| 🍎 **macOS** | `v4.6.5` 免安装包 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5) |
-| 🐧 **Linux x64** | `v4.6.5` 便携版 | 全发行版通用，解压运行 `start` 即可使用 | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5) |
-| 📱 **Android** | `v4.6.5` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5) |
+| 平台               | 版本                | 说明                                                                                                             | 下载通道                                                                                    |
+| ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 🪟 **Windows x64** | `v4.6.5` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5)     |
+| 🍎 **macOS**       | `v4.6.5` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5)  |
+| 🐧 **Linux x64**   | `v4.6.5` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5)  |
+| 📱 **Android**     | `v4.6.5` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5) |
 
 ---
 
 ## 🌟 核心特性 (Features)
 
 ### 🦉 1. 德语伴读宠物（Companion Mascot）「Eule & 伙伴」混合双模系统
+
 - **4 大内置矢量角色 + 自定义 SVG 上传**：猫头鹰 Eule、学者猫 Katze、灵动狐 Fuchs、包豪斯机甲 Roboter，支持上传任意 $\le 64\text{KB}$ 自定义 SVG 矢量角色（内置严格 DOMParser XML 白名单消毒防 XSS）。
 - **3 层离线/在线 TTS 发声**：原生离线发声桥接 + Edge Neural TTS 纯正德语母语发音，8s 防噪音冷却。
 - **研读工坊与全局悬浮双挂载**：在台账首屏 Hero 嵌入研习大工坊，全局各处提供右下角轻量伴读气泡，在生词制卡、语法提炼、FSRS 间隔复习、完形填空 $\ge 80\%$ 与连续打卡时触发实时德语鼓励。
 
 ### 📊 2. Atelier 呼吸感落地页台账 (Continuous Exhibition Folio)
+
 - **0.85:1.15 不对称 Hero 大展台**：融合德式名言箴言卡、6 核心 Ring Badges 环形指标大展盘与四角 `+` 定位标点。
 - **双行反向 Wire Marquee 动态走字带**：硬件加速匀速滚动名家引文与实时战报脉冲，两端带纸面渐变羽化遮罩，悬停平滑暂停。
 - **并排双面板紧凑罗盘**：A1–C1 掌握度阶梯矩阵、30 天墨线留存折线图、重点易错词汇攻坚账本与学术火漆印章展台。
 
 ### 🌳 3. 德语拓扑五场域与 AST 从句树句法引擎 (Topological Felder-Modell & Syntax Tree)
+
 - **经典拓扑五场域色谱条**：精准切分 **前场 (VF)**、**左框 (LK)**、**中场 (MF)**、**右框 (RK)** 与 **后场 (NF)**，点击句末 `🌳 句法` 即可就地平滑展开。
 - **5 大核心从句抽象语法树 (AST)**：自动识别并分类 **状语从句**（原因/让步/条件/时间/目的/结果）、**关系从句**（关系代词/介词+关系词）、**带 zu 不定式**（um/ohne/anstatt...zu）、**被动与虚拟式框形**及 **主句核心干**。
 - **双向联动与一键制卡**：抽屉内点击从句节点即可触发正文脉冲光圈聚焦高亮，支持一键将从句规则公式保存至 Anki 语法卡。
 
 ### ⚡ 4. 深度德语形态学与词法引擎 (Morphology & Lexicon)
+
 - **556+ 强变化动词三态表**：无论是动词变位词干（`ging`）还是过去分词（`genommen`），$O(1)$ 秒级反查原形、过去时、分词与助动词（`haben/ist`）。
 - **复合词递归智能拆解**：自动拆解长复合名词并精准剥离 `-s-`, `-es-`, `-en-`, `-n-`, `-er-`, `-e-` 等连接词素。
 - **框形可分动词双向高亮**：将跨句变位动词与句末前缀（如 `steigt ... ein`）双向绑定并同步微光高亮。
@@ -54,28 +58,32 @@
 - **Präpositionen-Matrix 介词矩阵视图 (v4.5.0)**：把同一份数据集**倒过来**按介词分组浏览（21 组，按搭配数降序）—— 想复习 `auf` 支配的全部搭配时不必逐词查。支持 Dat/Akk/Gen 过滤、即时子串搜索、CEFR 标签，逐条一键入 FSRS 卡盒；数据一次拉完后全本地过滤，切换零延迟。
 
 ### 📰 5. 德语外刊 RSS 一键订阅与文库管理 (Curated RSS & Library)
+
 - 一键解析并抓取 **Tagesschau**、**Deutsche Welle (DW)**、**Deutschlandfunk (DLF)**、**Der Spiegel**、**Die Zeit** 最新德语外刊与原声音频，正文自动去噪清洗入库；支持文章一键安全删除与级联清理。
 
 ### ⚙️ 6. 全局应用内设置面板 (In-App Settings & Connectivity Tester)
+
 - **零代码 Key 配置**：在界面右上角或移动端导航点击 `⚙️ 设置` 即可直接填入 API Key；
 - **现代大模型支持**：默认集成 **`deepseek-v4-flash`**（极速低延迟）与 `https://api.deepseek.com` 官方直连；
 - **毫秒级连通性测试**：一键检测 API 连接状态与响应延迟。
 
 ### 🎴 7. 3D 物理拟真卡盒与 FSRS 现代认知记忆排程 (3D Flashcard Deck & FSRS)
+
 - **3D 拟真物理翻转**：空格键或点击卡片触发 `rotateY(180deg)` 3D 翻牌，支持左右飞牌手势；
 - **FSRS 现代自适应排程**：基于 DSR 三维状态机科学排程，彻底消解「沉沦死锁 (Ease Hell)」，实时预计算 4 级下一轮间隔，支持一键导出标准 Anki `.apkg` 牌组。
 
 ### ✍️ 8. 歌德完形填空 & 德福 C-Test 实战引擎 (Cloze & C-Test Engine)
+
 - 提供 **语法考点完形**、**高频词汇完形** 与 **标准德福 C-Test** 三大实战模式，答案仅在服务端保留并防作弊智能判分。
 
 ### 🖋️ 9. 德语内联 IDE 写作工坊 (Schreibwerkstatt)
+
 - **行内 IDE 编辑器与实时规则诊断**：原生 `contenteditable` 零依赖，TreeWalker 字符偏移光标记忆，输入停顿 400ms 防抖实时重分析；本地规则引擎跑冠词/格位一致 + 介词支配格与动词固定搭配检测，行内彩色波浪线标出错误，**零误报准则**。
 - **VSCode 级真实 Inline Inlay Hints**：介词支配格（如 `[Dat]` / `[Dat/Akk]`）与名词短语实际性数格（如 `[Neut·Dat]`）以 CSS `::before` 伪元素内联排版（DOM 无 text node），打字时光标与后续文本自然推开绝不遮挡，TreeWalker 提取纯净正文 0 字符污染，工具栏支持一键即时开关。
 - **Problems 全篇问题清单面板 (v4.2.0)**：侧栏新增 VSCode 式问题面板，集中汇总全篇 `error`（高置信语法错误）与 `warning`（双格介词方向提醒）；按 severity 分组排列，点击任意问题即刻联动平滑滚动定位、高亮波浪线并呼出纠错建议。
 - **悬浮气泡与一键替换修正**：鼠标悬停波浪线弹出诊断气泡；点击错误在侧栏查看成因详解与建议，支持「✨ 一键应用修正」直接替换编辑器内文本。
 - **句子导航索引与 Anki 存卡**：侧栏句子列表点击平滑滚动并高亮闪烁目标句；一键将错误存成 Anki 语法卡 —— **你的错误变成你的复习卡**。
 - **类 Git 完整版本快照管理**：支持手动保存快照与 AI 润色自动快照；提供**只读预览弹窗**（浏览历史不产生多余检查点）、单项快照删除与可逆恢复检查点（`恢复到版本 N 之前`）。
-- **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
 - **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
 
 ---
@@ -87,7 +95,6 @@
 - **进度纳入备份**：`wb.*` 学习进度键已并入 DeLector 的全量备份/还原链路，跨设备迁移不会静默丢掉背词进度。
 - **类 Git 完整版本快照管理**：支持手动保存快照与 AI 润色自动快照；提供**只读预览弹窗**（浏览历史不产生多余检查点）、单项快照删除与可逆恢复检查点（`恢复到版本 N 之前`）。
 - **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
-- **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
 
 ---
 
@@ -96,24 +103,28 @@
 ### 方式一：本机 Python 运行（推荐）
 
 #### 1. 克隆仓库
+
 ```bash
 git clone https://github.com/your-username/DeLector.git
 cd DeLector
 ```
 
 #### 2. 安装依赖并下载德语 NLP 模型
+
 ```bash
 pip install -r requirements.txt
 python -m spacy download de_core_news_md
 ```
 
 #### 3. 一键启动
+
 ```bash
 # Windows
 start.bat
 # 或通用平台
 python start.py
 ```
+
 > 脚本将自动检测局域网 IP 与空闲端口，秒开默认浏览器访问 `http://localhost:8000`，同 Wi-Fi 局域网下的手机或平板亦可直接扫码/输入 IP 访问。
 
 ---
@@ -125,6 +136,7 @@ python start.py
 ```bash
 docker compose up -d --build
 ```
+
 容器启动后，直接在浏览器中打开 `http://localhost:8000` 即可使用。数据库与缓存将自动持久化至本地宿主机目录。
 
 ---
@@ -146,17 +158,17 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 
 ## 🏗️ 技术栈架构 (Tech Stack)
 
-| 领域 | 核心技术 | 说明 |
-| :--- | :--- | :--- |
-| **后端框架** | `FastAPI` + `Uvicorn` | 异步高性能 REST API |
-| **自然语言处理** | `spaCy` (`de_core_news_md` / `sm`) | 本地高精德语分词、词性标注、形态分析与五场域句法依存 |
-| **形态学引擎** | `linguistics.py` | 556+ 不规则动词三态表 + 复合词动态规划递归拆解 |
-| **拓扑句法树** | `syntax_tree.py` | Vorfeld/LK/MF/RK/NF 五场域切分 + 5 大从句 AST 抽象语法树 |
-| **持久化存储** | `SQLite 3` (`delector.db` + `progress.db`) | 核心文库与时序台账双库解耦存储 |
-| **语音合成** | `Edge-TTS` (Microsoft Neural Voice) | 神经级纯正德语离线本地缓存与 Web Speech 回退 |
-| **前端架构** | `ES Modules / Modern CSS / Vanilla JS` | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染 |
-| **记忆同步** | `genanki` | 离线生成标准 `.apkg` 记忆库 |
-| **自动化测试** | `pytest` + `httpx` | **322** 单元与集成测试用例保障 (100% Green)，CI 覆盖 md 加载路径与 Android 构建验签 |
+| 领域             | 核心技术                                   | 说明                                                                                |
+| :--------------- | :----------------------------------------- | :---------------------------------------------------------------------------------- |
+| **后端框架**     | `FastAPI` + `Uvicorn`                      | 异步高性能 REST API                                                                 |
+| **自然语言处理** | `spaCy` (`de_core_news_md` / `sm`)         | 本地高精德语分词、词性标注、形态分析与五场域句法依存                                |
+| **形态学引擎**   | `linguistics.py`                           | 556+ 不规则动词三态表 + 复合词动态规划递归拆解                                      |
+| **拓扑句法树**   | `syntax_tree.py`                           | Vorfeld/LK/MF/RK/NF 五场域切分 + 5 大从句 AST 抽象语法树                            |
+| **持久化存储**   | `SQLite 3` (`delector.db` + `progress.db`) | 核心文库与时序台账双库解耦存储                                                      |
+| **语音合成**     | `Edge-TTS` (Microsoft Neural Voice)        | 神经级纯正德语离线本地缓存与 Web Speech 回退                                        |
+| **前端架构**     | `ES Modules / Modern CSS / Vanilla JS`     | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染                                      |
+| **记忆同步**     | `genanki`                                  | 离线生成标准 `.apkg` 记忆库                                                         |
+| **自动化测试**   | `pytest` + `httpx`                         | **322** 单元与集成测试用例保障 (100% Green)，CI 覆盖 md 加载路径与 Android 构建验签 |
 
 ---
 
@@ -242,22 +254,13 @@ DeLector/
 - [x] **v4.6.1**：**背词台 TTS 修复：点一下不出声、再点一下读两遍**——两个独立成因叠在一起。① 入口清理在 `removeAttribute('src')` 之后多调了一次 `load()`，这会给 `<audio>` **排一个异步 error 事件**，它在当前同步块跑完后才派发，正好命中同一 tick 里刚装上的 `onerror` —— 首次点击被自己的清理判成失败而静默无声。② `_ttsAudio` 是两条链路共用的**全局单例**，per-attempt 的闭包标志管不住**上一次**尝试的回调：旧 timer 醒来会清掉新播放，旧 `onplaying` 又把新尝试判成已完成 —— 连点于是交叉干扰、重复出声；改为全局递增的 `_ttsAttemptId`，stale handler 自己认出该退出。**教训：共享媒体单例上，per-attempt 的闭包标志不足以做互斥，需要一个全局的 attempt 身份。** 测试 **316 全绿**
 - [x] **v4.6.2**：**卡盒交互修复 + 伴读宠物 + 自测范围**——① 伴读宠物在背词台视图自动隐藏（不盖住设置按钮）；② 自测新增「复习不认识（评过 Again）」范围，`addWrong` 写入 `rv` 标记；③ 卡盒翻转 onclick 从容器移到正面，背面评分按钮加 `stopPropagation`，Android 3D 变换下不再误触翻转；④ `toggleDeckFlip` 加 200ms 防抖，阻断 Android 双击事件抖动导致的「翻了又翻回来」。测试 **316 全绿**
 
-### 🔭 下一步（已评估，尚未开工）
-
-诚实标注状态：以下条目已经做过可行性评估并有参考实现方向，但**都还没动手**，不承诺时间点。
-
-
-### 🔭 下一步（已评估，尚未开工）
-
-诚实标注状态：以下条目已经做过可行性评估并有参考实现方向，但**都还没动手**，不承诺时间点。
-
 - [x] **v4.6.3**：**工作台导出 Android 修复 + 卡盒背面 swipe 拦截**——工作台用 `Blob + URL.createObjectURL + <a download>` 导出备份，但 Android WebView 的 DownloadListener 对 `blob:` URL **永不触发**（无报错，用户以为成功了）。改为走服务端下载通道：`download()` 先 POST 到 `/api/wb/backup/prepare` 换 token，再 `location.href` 到 `/api/wb/backup/download/{token}`（跟主应用备份同款机制），独立打开 HTML 时无 `/api/` 则走 blob 兜底。服务端新增 `/api/wb/backup/prepare` 和 `/api/wb/backup/download/{token}` 两个端点。② **卡盒背面评分按钮被 swipe 吞掉**：`attachDeckSwipeListener` 绑在整个卡片容器上，背面按钮的触摸也被捕获，手指轻抖就超 70px 阈值触发 `stepDeck`。改为 `deckFlipped` 时跳过 `onTouchMove` / `onTouchEnd`。测试 **316 全绿**
 - [x] **v4.6.4**：**介词矩阵已入卡持久化**——新增 `prep_saved` 表（主键 `(lemma, praep, kasus)`）与 `GET/POST /api/prep/saved` 端点，前端 `_prepSavedKeys` 从服务端初始化（不再空 Set 起步），`savePrepCardFromMatrix` 成功后异步写入。备份/恢复带上该表。测试 **319 全绿**
 - [x] **v4.6.5**：**局域网同步 6 位短码**——WebRTC P2P 同步的 SDP 传递从复制粘贴 2-3KB 文本改为 6 位短码：A 存 SDP 到服务端拿到 `K7M2X9` 大字码，B 输入取出 SDP，生成回执后同样拿到短码。`POST /api/wb/sync/store` + `GET /api/wb/sync/fetch/{code}`，内存缓存 5 分钟 TTL，一次性消费。测试 **322 全绿**
 
-- [ ] **局域网多端同步**：背词工作台目前进度存在各设备自己的 localStorage 里，手机和电脑各背一套。方向是 `GET/PUT /api/wb/state` 加三张表做服务端权威状态 + 时间戳合并，同 Wi-Fi 下手机直接连桌面端。已评估可行（后端已绑 `0.0.0.0`、敏感写操作有回环限制可复用），未开工。
-- [ ] **`server.py` 拆分重构**：单文件后端已经长到不利于维护，路由/NLP/持久化混在一起。刻意**没有**在功能开发中途做这件事 —— 大范围搬家与功能变更混在同一批提交里，出问题时无法二分定位。留作独立一轮、以「行为零变化 + 全套测试绿」为验收标准。
-- [ ] **介词矩阵「已入卡」持久化标记**：v4.5.0 首版的存卡状态只活在当次会话里，重进该段按钮回到未存态。需要服务端记录已入卡的 `(lemma, präposition, kasus)` 三元组。
+- [x] **`server.py` 拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
+- [x] **介词矩阵「已入卡」持久化**（v4.6.4）：新增 `prep_saved` 表 + `GET/POST /api/prep/saved`，前端 `_prepSavedKeys` 从服务端初始化，重进矩阵段按钮状态保持。
+- [x] **局域网同步 6 位短码**（v4.6.5）：WebRTC P2P 同步的 SDP 传递从复制粘贴 2-3KB 改为 6 位短码中转（`POST /api/wb/sync/store` + `GET /api/wb/sync/fetch/{code}`），手机上只需输入 6 个字符。
 - [ ] **真机累积验收 v4.4.6 → v4.6.5**：Java 层无法在本机编译（没装 Android SDK），运行时行为只能真机验收；计划一次装 v4.4.6 再覆盖安装最新版（中间不卸载），一并确认升级链路与这几轮的移动端修复。
 
 ---
