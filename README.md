@@ -50,7 +50,8 @@
 - **556+ 强变化动词三态表**：无论是动词变位词干（`ging`）还是过去分词（`genommen`），$O(1)$ 秒级反查原形、过去时、分词与助动词（`haben/ist`）。
 - **复合词递归智能拆解**：自动拆解长复合名词并精准剥离 `-s-`, `-es-`, `-en-`, `-n-`, `-er-`, `-e-` 等连接词素。
 - **框形可分动词双向高亮**：将跨句变位动词与句末前缀（如 `steigt ... ein`）双向绑定并同步微光高亮。
-- **固定介词搭配（Präpositionen）**：动词/形容词 + 固定介词 + 支配的格，**531 词条 / 660 条搭配**（DeepSeek 批量生成 + 人工 seed 兜底），查词抽屉第四张卡片逐条展示并可直接存成词汇卡（`bestehen auf` 坚持 / `aus` 由…组成 / `in` 在于）。
+- **固定介词搭配（Präpositionen）**：动词/形容词 + 固定介词 + 支配的格，**552 词条 / 691 条搭配**（DeepSeek 批量生成 + 人工 seed 兜底），查词抽屉第四张卡片逐条展示并可直接存成词汇卡（`bestehen auf` 坚持 / `aus` 由…组成 / `in` 在于）。
+- **Präpositionen-Matrix 介词矩阵视图 (v4.5.0)**：把同一份数据集**倒过来**按介词分组浏览（21 组，按搭配数降序）—— 想复习 `auf` 支配的全部搭配时不必逐词查。支持 Dat/Akk/Gen 过滤、即时子串搜索、CEFR 标签，逐条一键入 FSRS 卡盒；数据一次拉完后全本地过滤，切换零延迟。
 
 ### 📰 5. 德语外刊 RSS 一键订阅与文库管理 (Curated RSS & Library)
 - 一键解析并抓取 **Tagesschau**、**Deutsche Welle (DW)**、**Deutschlandfunk (DLF)**、**Der Spiegel**、**Die Zeit** 最新德语外刊与原声音频，正文自动去噪清洗入库；支持文章一键安全删除与级联清理。
@@ -73,6 +74,17 @@
 - **Problems 全篇问题清单面板 (v4.2.0)**：侧栏新增 VSCode 式问题面板，集中汇总全篇 `error`（高置信语法错误）与 `warning`（双格介词方向提醒）；按 severity 分组排列，点击任意问题即刻联动平滑滚动定位、高亮波浪线并呼出纠错建议。
 - **悬浮气泡与一键替换修正**：鼠标悬停波浪线弹出诊断气泡；点击错误在侧栏查看成因详解与建议，支持「✨ 一键应用修正」直接替换编辑器内文本。
 - **句子导航索引与 Anki 存卡**：侧栏句子列表点击平滑滚动并高亮闪烁目标句；一键将错误存成 Anki 语法卡 —— **你的错误变成你的复习卡**。
+- **类 Git 完整版本快照管理**：支持手动保存快照与 AI 润色自动快照；提供**只读预览弹窗**（浏览历史不产生多余检查点）、单项快照删除与可逆恢复检查点（`恢复到版本 N 之前`）。
+- **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
+- **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
+
+---
+
+### 📚 10. 德语背词工作台 (Vokabeltrainer, v4.6.0)
+
+- **684 词独立背词台**：FSRS-6 排程 + 卡片复习 + 自测 + 学习统计 + 词库浏览，以 iframe 嵌入主应用（导航栏 `VOKABELN` / 移动端 `📚 背词`）。同源即共享 localStorage 与 `/api/`，零 CORS；同时与主应用的 CSS/JS/DOM 完全隔离。
+- **攻克手机浏览器无声**：单文件 HTML 直接在 iOS/Android 上打开是**放不出声**的，两个根因叠在一起 —— `file://` 协议下 Web Speech 被禁，以及设备根本没装德语语音包。修法是把服务端 `GET /api/audio/tts`（edge-tts 神经语音）设为**最高优先级**音频源，设备本地 TTS 退成兜底，于是有网就一定有正宗德语发音。
+- **进度纳入备份**：`wb.*` 学习进度键已并入 DeLector 的全量备份/还原链路，跨设备迁移不会静默丢掉背词进度。
 - **类 Git 完整版本快照管理**：支持手动保存快照与 AI 润色自动快照；提供**只读预览弹窗**（浏览历史不产生多余检查点）、单项快照删除与可逆恢复检查点（`恢复到版本 N 之前`）。
 - **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
 - **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
@@ -144,7 +156,7 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 | **语音合成** | `Edge-TTS` (Microsoft Neural Voice) | 神经级纯正德语离线本地缓存与 Web Speech 回退 |
 | **前端架构** | `ES Modules / Modern CSS / Vanilla JS` | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染 |
 | **记忆同步** | `genanki` | 离线生成标准 `.apkg` 记忆库 |
-| **自动化测试** | `pytest` + `httpx` | 275 单元与集成测试用例保障 (100% Green)，CI 覆盖 md 加载路径与 Android 构建验签 |
+| **自动化测试** | `pytest` + `httpx` | **316** 单元与集成测试用例保障 (100% Green)，CI 覆盖 md 加载路径与 Android 构建验签 |
 
 ---
 
@@ -155,21 +167,23 @@ DeLector/
 ├── android/                # Android 独立离线单机版工程 (Chaquopy + Gradle)
 ├── static/                 # 前端纯静态 ES 模块化资源 (Zero-Build ESM)
 │   ├── index.html          # 单页应用骨架 (含 3D 卡盒、句法拓扑与台账)
-│   ├── style.css           # 德式报刊风格与 3D 翻转样式 (90KB+)
-│   └── js/                 # 8 大独立原生 ES 模块
+│   ├── german/             # 684 词背词工作台 (workbench.html，iframe 嵌入)
+│   ├── style.css           # 德式报刊风格与 3D 翻转样式 (169KB)
+│   └── js/                 # 9 大独立原生 ES 模块
 │       ├── core.js         # API 请求与全局状态（含 XSS 防护 jsAttr）
 │       ├── main.js         # 路由调度、设置弹窗与 RSS 订阅
 │       ├── reader.js       # 文本渲染、五场域拓扑条与 AST 树抽屉
 │       ├── cards.js        # 3D 卡牌翻转盒与 FSRS 自适应记忆排程算法
 │       ├── folio.js        # Leporello 三折页台账与墨线图
+│       ├── companion.js    # 伴读宠物状态机与自定义 SVG 角色工坊
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
 │       ├── player.js       # 神经影子跟读与 TTS 播放器
 │       └── writer.js       # 写作润色台（行内标注 + Problems + 版本快照）
 ├── .githooks/              # 提交前密钥扫描钩子 (pre-commit，含编码 keystore)
 ├── linguistics.py          # 556+ 不规则动词三态表与复合词拆解引擎
-├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词，4301 词)
-├── core_dict_ext.py        # 3859 词库扩展（DeepSeek 批量生成中文释义，110 词缺口待补）
-├── prep_dict.py            # 固定介词搭配数据集（生成物，源在 tools/build_prep.py）
+├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词，4411 词)
+├── core_dict_ext.py        # 3969 词库扩展（DeepSeek 批量生成中文释义，v4.4.8 起缺口 0）
+├── prep_dict.py            # 固定介词搭配数据集 552 词 / 691 条（生成物，源在 tools/build_prep.py）
 ├── writing_rules.py        # 写作润色台本地规则引擎（冠词一致 + 介词格，零误报，含 Inlay Hints/Problems）
 ├── syntax_tree.py          # 拓扑五场域与 AST 从句树句法引擎
 ├── server.py               # FastAPI 后端服务与核心 NLP/API 路由（敏感设置仅回环可写）
@@ -179,12 +193,19 @@ DeLector/
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖清单（无新增运行时依赖）
 ├── tools/                  # 构建/生成工具（build_dict.py 词库 + build_prep.py 介词 + 缓存）
-├── test_server.py          # Pytest 自动化测试套件（~130 用例，含安全/CI/备份/AI 回归）
-├── test_syntax_tree.py     # Pytest 句法引擎测试套件 (15 用例)
-├── test_core_dict_ext.py   # Pytest 词库扩展测试套件 (5 用例)
-├── test_edge_tts_mini.py   # Pytest TTS 兜底测试套件 (10 用例)
-├── test_writing_rules.py   # Pytest 写作规则引擎测试套件 (19 用例，含零误报反例)
-└── test_start.py           # Pytest 启动器测试套件 (4 用例，Android/桌面绑定)
+├── test_server.py          # 后端与安全/CI/备份/AI 回归 (169 用例)
+├── test_writing_rules.py   # 写作规则引擎，含零误报反例 (31 用例)
+├── test_writer_mobile.py   # 写作台移动端几何与触屏契约 (27 用例)
+├── test_syntax_tree.py     # 拓扑五场域与 AST 从句树 (15 用例)
+├── test_german_workbench.py # 背词工作台音频补丁与接入契约 (14 用例)
+├── test_essay_diff.py      # 句子级 diff 引擎 (13 用例)
+├── test_prep_matrix.py     # 介词矩阵纯函数/前端/端点 (12 用例)
+├── test_dict_pipeline.py   # 词库生成流水线 (10 用例)
+├── test_edge_tts_mini.py   # stdlib 版 TTS 兜底客户端 (10 用例)
+├── test_core_dict_ext.py   # 词库扩展数据契约 (5 用例)
+├── test_frontend_security.py # 前端 XSS 注入点棘轮 (4 用例)
+├── test_start.py           # 启动器 Android/桌面绑定 (4 用例)
+└── test_source_hygiene.py  # 源码卫生（重复键等）棘轮 (2 用例)
 ```
 
 ---
@@ -215,6 +236,19 @@ DeLector/
 - [x] **v4.4.6**：**修顶栏版本指示灯** + **移动端写作台面板位移/底部滚不到根治**——v4.4.5 漏 bump `index.html` 顶栏 `System · vX.Y.Z Online`，使修好的升级链路看起来像没生效（拆 APK 验证：包内 `sw.js`、`writer.js`、去掉 `?v=` 的 `index.html` 全是新的，只有那一句字面量是旧的），版本自洽测试纳入该标签；移动端 `.writer-sidebar` 用 `position: fixed` + `bottom` 锚点却只给 `max-height`、没 `top` 也没 `height`，高度跟内容走而盒子锚在底边只能向上长 —— 切 tab、填错误卡、清单从空变 N 条都把顶边挪到新位置（三个 Tab 都在跳，诊断分析跳得最狠），改用 `height: min(76vh, 680px)` 固定几何；内层三个列表（220/460/320px）原本各自开滚动区在 600px sheet 里几乎占满可见区域、吃掉外层滚动，统一 `max-height: none; overflow-y: visible` 归 sheet 一人管；`.writer-pane` 补 `flex-shrink: 0` 防父容器压扁。测试 **239 全绿**
 - [x] **v4.4.7**：**桌面端侧栏几何收口 + 三行触屏按压反馈**——v4.4.6 移动端修复的同族另一半：`.writer-sidebar` 基规则 `position: sticky; top: 4.5rem` 在 `align-items: start` 的 grid 列里高度跟内容走，既无 `max-height` 也无 `overflow-y`，内容一长就整列溢出、底部永远滚不到；改为内部滚动 + tab 条吸顶。三种可点击行（错误卡/清单项/版本行）补 `:active` 按压反馈——触屏没有 hover，此前按下去毫无回馈。测试 **242 全绿**
 - [x] **v4.4.8**：**离线词库补齐 + SSRF 闸判定修正**——① 两处「AI 始终不作答」其实**AI 每次都答了**：提示词要求反身动词 `wort` 不带 `sich`，匹配器却按 `lemma not in asked` 把返回值丢掉；单词请求会让模型「纠正」成词元（问 `zustände` 答 `Zustand`）而词库按表层形查，于是任何屈折形必然连丢 3 轮。改为把答案回映射到请求键：搭配 **531/660 → 552/691**（零 API 花费），词库尾缺口 **110 → 0**。刻意不做变音折叠——`drucken`/`drücken` 会互相领走搭配，**张冠李戴比漏检更糟**。② SSRF 闸拿**外层 IPv6 旗标**判定，而 IPv4-mapped/6to4/Teredo 的真实目的主机是**内嵌的 IPv4**：`2002:c0a8:0101::1` 外层 `is_global` 为真却路由到 `192.168.1.1`（旧写法一路放行），而 Teredo 落在 `2001::/23` 私有段清单里使开着隧道的 Windows 用户 URL 导入对所有站点全废。③ **首次打 tag 时 CI 红、Release 没发出去**：新加的那条断言在本机靠 `ipaddress` 私有段表一条粗粒度的 `2001::/23` 条目**顺手兜住**才绿，CI 的 Python 换成细粒度条目后 `2001:20::/28` 掉了出来 —— 同一个 3.11 大版本、判定相反。改法是自己钉住那些段，不是删断言。测试 **266 全绿**
+- [x] **v4.4.9**：**按钮 token 体系补全 + 移动端 sheet 闭合态几何修正**——`.btn-xs` / `.btn-del` / `.btn-secondary` 三条规则**从未在 CSS 里定义过**而模板里到处在用，无声降级成裸 `.btn` 尺寸配色（删除类按钮和主按钮长得一样）；补齐并分出 `--danger` token。移动端 sheet 闭合几何 `bottom: 4.75rem` 抬起 76px 而位移只推走「自身高度 + 16px」，**差额 60px 的条带永远留在屏幕内**盖住底部 dock，改为 `bottom: 0` + `translateY(100%)` 与 reader drawer 同构。另加全仓库 dict 字面量重复键棘轮。测试 **280 全绿**
+- [x] **v4.5.0**：**Präpositionen-Matrix 介词矩阵视图**——把 552 词 / 691 条搭配**倒过来**按介词分组（21 组，按搭配数降序），Dat/Akk/Gen 过滤 + 防抖子串搜索 + CEFR 标签 + 逐条一键入卡盒。分层上纯函数内核**不认识 CEFR**（会成循环导入），CEFR 注入与组排序留在服务端。⚠️ 本轮变异验证抓到**三条空转断言**：组内排序断言在数据本身有序时删掉 `sort` 也绿、payload 字段名在别处到处出现、端点测试两端读同一份缓存对象导致比较**恒真** —— 分别改为喂乱序输入 / 切进函数体逐字段断言 / 从数据集直接构造期望多重集。测试 **298 全绿**
+- [x] **v4.6.0**：**德语背词工作台集成 + 手机端无声根治**——684 词单文件工作台（FSRS-6 / 卡片复习 / 自测 / 统计 / 词库）以 iframe 嵌入而非合并代码：同源共享 localStorage 与 `/api/`（零 CORS），同时与主应用 2449 行强耦合全局 JS 完全隔离。**移动端无声的两个根因**：`file://` 下 Web Speech 被协议禁掉 + 设备没装德语语音包；修法是新增 `GET /api/audio/tts`（服务端 edge-tts）并设为最高优先级音频源。⚠️ 两处 CSS 陷阱：`body` 的 `padding-bottom` **不在 `.view` 的 flex 高度链里**，fixed dock 会直接盖住填满视图的 iframe（移动端必须显式扣掉 nav + dock 高度）；裸 `#view-german { display: flex }`（特异性 1,0,0）会压过 `.view { display: none }`（0,1,0），显示规则**必须** `.active` 作用域。备份覆盖 `wb.*` 进度键。测试 **314 全绿**
+- [x] **v4.6.1**：**背词台 TTS 修复：点一下不出声、再点一下读两遍**——两个独立成因叠在一起。① 入口清理在 `removeAttribute('src')` 之后多调了一次 `load()`，这会给 `<audio>` **排一个异步 error 事件**，它在当前同步块跑完后才派发，正好命中同一 tick 里刚装上的 `onerror` —— 首次点击被自己的清理判成失败而静默无声。② `_ttsAudio` 是两条链路共用的**全局单例**，per-attempt 的闭包标志管不住**上一次**尝试的回调：旧 timer 醒来会清掉新播放，旧 `onplaying` 又把新尝试判成已完成 —— 连点于是交叉干扰、重复出声；改为全局递增的 `_ttsAttemptId`，stale handler 自己认出该退出。**教训：共享媒体单例上，per-attempt 的闭包标志不足以做互斥，需要一个全局的 attempt 身份。** 测试 **316 全绿**
+
+### 🔭 下一步（已评估，尚未开工）
+
+诚实标注状态：以下条目已经做过可行性评估并有参考实现方向，但**都还没动手**，不承诺时间点。
+
+- [ ] **局域网多端同步**：背词工作台目前进度存在各设备自己的 localStorage 里，手机和电脑各背一套。方向是 `GET/PUT /api/wb/state` 加三张表做服务端权威状态 + 时间戳合并，同 Wi-Fi 下手机直接连桌面端。已评估可行（后端已绑 `0.0.0.0`、敏感写操作有回环限制可复用），未开工。
+- [ ] **`server.py` 拆分重构**：单文件后端已经长到不利于维护，路由/NLP/持久化混在一起。刻意**没有**在功能开发中途做这件事 —— 大范围搬家与功能变更混在同一批提交里，出问题时无法二分定位。留作独立一轮、以「行为零变化 + 全套测试绿」为验收标准。
+- [ ] **介词矩阵「已入卡」持久化标记**：v4.5.0 首版的存卡状态只活在当次会话里，重进该段按钮回到未存态。需要服务端记录已入卡的 `(lemma, präposition, kasus)` 三元组。
+- [ ] **真机累积验收 v4.4.6 → v4.6.1**：Java 层无法在本机编译（没装 Android SDK），运行时行为只能真机验收；计划一次装 v4.4.6 再覆盖安装最新版（中间不卸载），一并确认升级链路与这几轮的移动端修复。
 
 ---
 
