@@ -141,6 +141,10 @@ export function show(view) {
     bottomNav.classList.toggle('hidden', view === 'reader');
   }
 
+  // German workbench 用 iframe 全屏，伴读宠物会盖住底部按钮（尤其 Android）
+  const compEl = document.getElementById('companion');
+  if (compEl) compEl.classList.toggle('is-disabled', view === 'german');
+
   closeDrawer();
   clearCefrFocus();
   // 切视图时清掉 writer 的 mobile sheet：否则 v4.4.5 起的 .writer-panel-lock
