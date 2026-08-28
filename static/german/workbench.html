@@ -2982,7 +2982,20 @@ function applyTheme() {
 }
 
 /* ---------- 导入 / 导出 ---------- */
-function download(filename, obj) {
+async function download(filename, obj) {
+  // Android WebView 的 DownloadListener 对 blob: URL 永不触发（静默失败，无报错），
+  // 所以嵌入 DeLector iframe 时走服务端下载通道：POST 换 token → GET 触发原生下载。
+  // 独立打开 HTML 时没有 /api/，走 blob 兜底。
+  if (location.protocol.startsWith("http")) {
+    try {
+      const { token } = await fetch("/api/wb/backup/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, payload: obj })
+      }).then(r => r.json());
+      if (token) { location.href = "/api/wb/backup/download/" + token; return; }
+    } catch (e) { /* fallback to blob */ }
+  }
   const blob = new Blob([JSON.stringify(obj)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);

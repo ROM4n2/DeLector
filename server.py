@@ -2216,6 +2216,39 @@ def download_prepared_backup(token: str, request: Request):
     )
 
 
+# ── Workbench backup (同理，Android WebView 对 blob: URL 静默失败) ────────
+
+_pending_wb: Dict[str, Any] = {"token": None, "payload": None, "filename": None}
+
+
+class WbBackupReq(BaseModel):
+    filename: str = "workbench-backup.json"
+    payload: Dict[str, Any] = {}
+
+
+@app.post("/api/wb/backup/prepare")
+def wb_prepare_backup(req: WbBackupReq, request: Request):
+    _require_localhost(request)
+    token = secrets.token_urlsafe(16)
+    _pending_wb.update(token=token, payload=req.payload, filename=req.filename)
+    return {"token": token, "filename": req.filename}
+
+
+@app.get("/api/wb/backup/download/{token}")
+def wb_download_backup(token: str, request: Request):
+    _require_localhost(request)
+    pending = _pending_wb["token"]
+    if not pending or not secrets.compare_digest(token, pending):
+        raise HTTPException(404, "备份链接已失效，请重新导出")
+    payload, filename = _pending_wb["payload"], _pending_wb["filename"]
+    _pending_wb.update(token=None, payload=None, filename=None)
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 class RestoreReq(BaseModel):
     version: Optional[int] = 1
     articles: List[Dict[str, Any]] = []

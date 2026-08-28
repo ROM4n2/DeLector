@@ -344,6 +344,7 @@ function attachDeckSwipeListener() {
 
   const onTouchMove = (e) => {
     if (!isDragging) return;
+    if (deckFlipped) return;  // 背面有评分按钮，不处理滑动
     currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
     const diff = currentX - startX;
     cardEl.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg) ${deckFlipped ? 'rotateY(180deg)' : ''}`;
@@ -352,6 +353,7 @@ function attachDeckSwipeListener() {
   const onTouchEnd = () => {
     if (!isDragging) return;
     isDragging = false;
+    if (deckFlipped) return;  // 背面不触发翻页
     const diff = currentX - startX;
     if (diff < -70) {
       stepDeck(1);
