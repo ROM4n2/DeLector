@@ -74,6 +74,8 @@ from database import (
     _pending_wb,
     _db_snapshot_guard,
     _replace_tables,
+    get_prep_saved,
+    add_prep_saved,
 )
 
 # --- 2. NLP & CEFR Tagging ---
@@ -155,6 +157,8 @@ __all__ = [
     "_pending_wb",
     "_db_snapshot_guard",
     "_replace_tables",
+    "get_prep_saved",
+    "add_prep_saved",
     "_resolve_ssrf_targets",
     "_IETF_PROTOCOL_ASSIGNMENTS",
     "_IPV6_DENY_PREFIXES",
@@ -586,6 +590,26 @@ def get_prep_matrix_with_cefr():
 @app.get("/api/prep/matrix")
 def api_prep_matrix():
     return get_prep_matrix_with_cefr()
+
+
+class PrepSavedReq(BaseModel):
+    lemma: str
+    praep: str
+    kasus: str
+
+
+@app.get("/api/prep/saved")
+def api_prep_saved():
+    """返回当前用户已入卡的搭配 key 列表。"""
+    return {"keys": sorted(get_prep_saved())}
+
+
+@app.post("/api/prep/saved")
+def api_add_prep_saved(req: PrepSavedReq):
+    """记录一条搭配已入卡。"""
+    add_prep_saved(req.lemma, req.praep, req.kasus)
+    return {"status": "ok"}
+
 
 
 # ── FSRS (Free Spaced Repetition Scheduler) DSR Engine ────────────────────────
@@ -1328,6 +1352,7 @@ class RestoreReq(BaseModel):
     vocab_cards: List[Dict[str, Any]] = []
     grammar_cards: List[Dict[str, Any]] = []
     reading_notes: List[Dict[str, Any]] = []
+    prep_saved: List[Dict[str, Any]] = []
     # v1 备份没有以下字段，缺省为空即可被读入（向后兼容是硬要求：
     # 迁移用户手里拿的恰恰是 v3.9.1 导出的 v1 文件）
     app_settings: List[Dict[str, Any]] = []

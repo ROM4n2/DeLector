@@ -15,11 +15,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前分支 / HEAD | `master` @ tag `v4.6.3`（**已发布**；PR #8/#9/#11/#13/#14/#15/#16/#19/#20/#22/#23 详见版本历史）<br>⚠️ 这一行只写 **tag**、不写 commit SHA：写 SHA 必然指向「本次改动之前」的那个 commit，自己就过期，v4.4.9 那轮为此额外开了 PR #18 去修自指 |
-| 测试 | **316 / 316 全绿**（2026-08-28 实测，`pyflakes` 无新增告警）。v4.6.2 316 全绿（纯 UI 修复，无新增测试）。<br>v4.6.1 新增 2 条（`test_german_workbench.py` 12 → 14，均已变异验证）：`test_playword_cleanup_does_not_reload_audio`（切进 playWord 入口的互斥清理块，断言里面**没有** `.load()` —— 先正向断言 `pause()`/`removeAttribute` 在场，否则否定断言会在空切片上恒真）+ `test_every_shared_audio_handler_guards_attempt_id`（枚举 tryServer / tryOnline 两块里每个 `onerror`/`onplaying`/`setTimeout`/`p.catch` 开头 160 字符必须含 `myAttempt !== _ttsAttemptId`，并对每条链路各钉 ≥3 个回调的下界防切片跑偏；**刻意排除 trySpeech** —— 它走 speechSynthesis 不碰 `_ttsAudio`）。三条变异各自变红：重新加回 `load()` / 摘掉 tryServer 四个同形回调里的**任意一个**守卫 / 摘掉 tryOnline `onerror` 的守卫。<br>v4.6.0 的 16 条：`test_german_workbench.py` 12 条（workbench 音频补丁契约：tryServer 先于 tryOnline / GET 查询串 / file:// 跳过 / iframe PWA 守卫 / engine 选项；接入契约：view-german + nav + dock 有序 / CSS 必须 `.active` 作用域 / 移动端高度扣 dock / **备份覆盖 `wb.*` 键** / GET 路由函数名）+ `test_server.py` 4 条（GET /api/audio/tts：200 mp3 + 空文本 400 + 超长 400 + **rate 格式校验 400**）。⚠️ 变异验证又抓到一条空转断言：「CSS 必须 .active 作用域」最初写成对整份文件的模糊匹配，unscope 变异后照样绿，收窄到 desktop 段并排除裸 `#view-german {` 后才红 —— 新增静态断言先自问「回退实现后它真的会红吗」的老规矩。<br>v4.5.0 的教训继续有效：`test_prep_matrix.py` 12 条，两条「对真实数据永远为真」的断言（组内排序 / payload 字段）已改为乱序输入 / 函数体内逐字段断言；**新增静态字符串断言必须先验证「回退实现后它真的会红」**。更早的契约（按钮类 / SSRF / DNS 钉住 / ipaddress lru_cache 陷阱 / `_FlaglessIPv6` 替身）见版本历史各轮记录 |
+| 当前分支 / HEAD | `master` @ tag `v4.6.4`（**已发布**；PR #8/#9/#11/#13/#14/#15/#16/#19/#20/#22/#23 详见版本历史）<br>⚠️ 这一行只写 **tag**、不写 commit SHA：写 SHA 必然指向「本次改动之前」的那个 commit，自己就过期，v4.4.9 那轮为此额外开了 PR #18 去修自指 |
+| 测试 | **319 / 319 全绿**（2026-08-28 实测，`pyflakes` 无新增告警）。v4.6.4 新增 3 条（`test_server.py` 169 → 172）：`test_prep_saved_endpoint_returns_keys`（GET 结构）、`test_prep_saved_post_and_get_roundtrip`（POST+GET 往返与备份导出还原验证）、`test_prep_saved_idempotent`（重复 POST 幂等）。<br>v4.6.2 316 全绿（纯 UI 修复，无新增测试）。<br>v4.6.1 新增 2 条（`test_german_workbench.py` 12 → 14，均已变异验证）：`test_playword_cleanup_does_not_reload_audio`（切进 playWord 入口的互斥清理块，断言里面**没有** `.load()` —— 先正向断言 `pause()`/`removeAttribute` 在场，否则否定断言会在空切片上恒真）+ `test_every_shared_audio_handler_guards_attempt_id`（枚举 tryServer / tryOnline 两块里每个 `onerror`/`onplaying`/`setTimeout`/`p.catch` 开头 160 字符必须含 `myAttempt !== _ttsAttemptId`，并对每条链路各钉 ≥3 个回调的下界防切片跑偏；**刻意排除 trySpeech** —— 它走 speechSynthesis 不碰 `_ttsAudio`）。三条变异各自变红：重新加回 `load()` / 摘掉 tryServer 四个同形回调里的**任意一个**守卫 / 摘掉 tryOnline `onerror` 的守卫。<br>v4.6.0 的 16 条：`test_german_workbench.py` 12 条（workbench 音频补丁契约：tryServer 先于 tryOnline / GET 查询串 / file:// 跳过 / iframe PWA 守卫 / engine 选项；接入契约：view-german + nav + dock 有序 / CSS 必须 `.active` 作用域 / 移动端高度扣 dock / **备份覆盖 `wb.*` 键** / GET 路由函数名）+ `test_server.py` 4 条（GET /api/audio/tts：200 mp3 + 空文本 400 + 超长 400 + **rate 格式校验 400**）。⚠️ 变异验证又抓到一条空转断言：「CSS 必须 .active 作用域」最初写成对整份文件的模糊匹配，unscope 变异后照样绿，收窄到 desktop 段并排除裸 `#view-german {` 后才红 —— 新增静态断言先自问「回退实现后它真的会红吗」的老规矩。<br>v4.5.0 的教训继续有效：`test_prep_matrix.py` 12 条，两条「对真实数据永远为真」的断言（组内排序 / payload 字段）已改为乱序输入 / 函数体内逐字段断言；**新增静态字符串断言必须先验证「回退实现后它真的会红」**。更早的契约（按钮类 / SSRF / DNS 钉住 / ipaddress lru_cache 陷阱 / `_FlaglessIPv6` 替身）见版本历史各轮记录 |
 | 桌面端 | 正常，`python start.py` → `http://localhost:8000`（敏感设置仅回环可写，局域网返回 403） |
 | Android APK | **真机验证通过**，内嵌 spaCy + 德语模型 + Android 原生离线 TextToSpeech 桥接 + 多源在线 TTS 兜底 |
-| 对外发布 | 已发布至 **v4.6.3**（run `33143901212`，五个 job 全绿、四平台产物齐、CI 验签闸过）。上一版 v4.6.2（run `33139243080`），再上一版 v4.6.1（run `33133548196`），再上一版 v4.6.0（run `33129569500`），再上一版 v4.5.0（run `33081222327`），均五个 job 全绿、四平台产物齐。⚠️ v4.4.8 首次打 tag（run `32866451079`）Linux x64 job 红、`Publish` 被跳过，挂的是 SSRF 那条新测试自己：它在本机（3.11.8）靠 `ipaddress` 一条粗粒度的 `2001::/23` 私有段条目**巧合**为绿，CI（3.11.16）换成细粒度条目后 `2001:20::/28` 掉了出来 —— **同一份代码、同一个 3.11 大版本，判定相反**。已按「段钉在自己代码里」修掉（PR #11），并删掉旧 tag 在 `b52ef7f` 上重打 v4.4.8。⚠️ Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收；**v4.4.6 ~ v4.6.3 的真机验收合并做一次**（装 v4.4.6 → 覆盖装 v4.6.3，中间不卸载），要点见「已知问题 / 待办」 |
+| 对外发布 | 已发布至 **v4.6.4**。上一版 v4.6.3（run `33143901212`），再上一版 v4.6.2（run `33139243080`），再上一版 v4.6.1（run `33133548196`），再上一版 v4.6.0（run `33129569500`），再上一版 v4.5.0（run `33081222327`），均五个 job 全绿、四平台产物齐。⚠️ v4.4.8 首次打 tag（run `32866451079`）Linux x64 job 红、`Publish` 被跳过，挂的是 SSRF 那条新测试自己：它在本机（3.11.8）靠 `ipaddress` 一条粗粒度的 `2001::/23` 私有段条目**巧合**为绿，CI（3.11.16）换成细粒度条目后 `2001:20::/28` 掉了出来 —— **同一份代码、同一个 3.11 大版本，判定相反**。已按「段钉在自己代码里」修掉（PR #11），并删掉旧 tag 在 `b52ef7f` 上重打 v4.4.8。⚠️ Java 仍未经本机编译（无 Android SDK），运行时行为只能真机验收；**v4.4.6 ~ v4.6.4 的真机验收合并做一次**（装 v4.4.6 → 覆盖装 v4.6.4，中间不卸载），要点见「已知问题 / 待办」 |
 | 未完成的事 | 见文末「已知问题 / 待办」 |
 
 上一轮工作（PR [#2](https://github.com/ROM4n2/DeLector/pull/2)，5 个 commit）解决了安卓版启动卡死，
@@ -59,7 +59,7 @@
 | 移动打包 | Chaquopy + Gradle | `android/` |
 | CI/CD | GitHub Actions | `.github/workflows/build-release.yml` |
 | 部署 | Docker Compose 可选 | `Dockerfile`, `docker-compose.yml` |
-| 测试 | pytest | `test_server.py`（169）, `test_writing_rules.py`（31）, `test_writer_mobile.py`（27）, `test_syntax_tree.py`（15）, `test_essay_diff.py`（13）, `test_german_workbench.py`（14）, `test_prep_matrix.py`（12）, `test_dict_pipeline.py`（10）, `test_edge_tts_mini.py`（10）, `test_core_dict_ext.py`（5）, `test_frontend_security.py`（4）, `test_start.py`（4）, `test_source_hygiene.py`（2）— 共 **316**（2026-08-28 实测收集数；改这一行时用 `pytest --collect-only` 逐文件核，别照抄） |
+| 测试 | pytest | `test_server.py`（172）, `test_writing_rules.py`（31）, `test_writer_mobile.py`（27）, `test_syntax_tree.py`（15）, `test_essay_diff.py`（13）, `test_german_workbench.py`（14）, `test_prep_matrix.py`（12）, `test_dict_pipeline.py`（10）, `test_edge_tts_mini.py`（10）, `test_core_dict_ext.py`（5）, `test_frontend_security.py`（4）, `test_start.py`（4）, `test_source_hygiene.py`（2）— 共 **319**（2026-08-28 实测收集数；改这一行时用 `pytest --collect-only` 逐文件核，别照抄） |
 | 提交守卫 | pre-commit 密钥扫描（文件名+内容+编码 keystore） | `.githooks/pre-commit` |
 | 环境变量 | `.env`（已 gitignore） | `.env.example` 有字段说明 |
 | PWA | Service Worker + Web Manifest | `static/sw.js`, `static/manifest.json` |
@@ -179,6 +179,8 @@ grammar_cards   id, article_id, sentence_context, grammar_name, cefr_level,
                 corrected_form, error_type      -- v3.11 写作台：修正形式 + 错误分类(artikel/kasus/praeposition/andere)
 reading_notes   id, article_id, sentence_id, selected_text, color,
                 note_content, created_at
+prep_saved      lemma, praep, kasus, saved_at
+                -- v4.6.4 介词矩阵已存搭配持久化；主键 (lemma, praep, kasus)
 essays          id, title, content, analysis_json, cefr_level,
                 error_count, sentence_count, created_at, updated_at
                 -- v3.11 写作台草稿库；analysis_json = {"version","cefr","error_count",
@@ -211,6 +213,8 @@ POST   /api/lookup/vocab                        词汇悬停查词（形态学�
 GET    /api/prep/matrix                          Präpositionen-Matrix：整套介词搭配反转
                                                 索引（linguistics.build_prep_matrix 纯函数 +
                                                  CEFR 注入 + 进程缓存；只读，无鉴权）
+GET    /api/prep/saved                          获取当前用户已入卡的介词搭配 key 列表
+POST   /api/prep/saved                          记录一条搭配已入卡（幂等写入）
 POST   /api/cards/vocab                         添加词汇卡片
 POST   /api/cards/grammar                       添加语法卡片
 GET    /api/cards                               列出所有卡片
@@ -416,6 +420,7 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 | **v4.6.1 `2026-08-28`** | **fix(german & audio)**: 背词台「**点一下不出声，再点一下读两遍**」—— 两个独立成因叠在一起。① `playWord` 入口 cleanup 在 `removeAttribute('src')` 之后多调了一次 `_ttsAudio.load()`，这会给 `<audio>` **排一个异步 `error` 事件**，它在当前同步块跑完后才派发，正好命中同一 tick 里刚装上的 `tryServer.onerror` —— 首次点击的服务端尝试被自己的清理打成 `audio-error` 后静默失败。去掉 `load()`（保留同步的 `pause()` + `removeAttribute`，它们不排事件）。② `_ttsAudio` 是 tryServer / tryOnline 共用的**全局单例**，每次尝试各自的 `settled` 闭包标志管不住**上一次**尝试的回调：旧 timer 醒来会 `pause()` + 清 src 掐掉新播放，旧 `onplaying` 又把新尝试判成已 settled —— 两次点击于是交叉干扰、重复出声。新增全局 `_ttsAttemptId`（`playWord` 每次进来 `++`），两条链路的**每个** timeout / `onerror` / `onplaying` / `p.catch` 开头都加 `if (myAttempt !== _ttsAttemptId) return`。③ tryServer 超时 6s → 3s（桌面 localhost 的 edge-tts 通常 <1s，6s 只是让失败路径多卡 5 秒）。**教训**：共享的媒体单例上，per-attempt 的闭包标志不足以做互斥 —— 需要一个全局递增的 attempt 身份，让 stale handler 自己认出来该退出。发版当时**一条测试都没加**，随后补了 2 条回归（入口清理里不得出现 `.load()` / 两条链路每个异步回调都要有 attempt 守卫），三条变异各自验证会红。测试 **316 全绿** |
 | **v4.6.2 `2026-08-28`** | **fix(deck & quiz & companion)**: ① 伴读宠物在背词台视图自动隐藏（不盖住设置按钮）；② 自测新增「复习不认识（评过 Again）」范围，`addWrong` 写入 `rv` 标记；③ 卡盒翻转 onclick 从容器移到正面，背面评分按钮加 `stopPropagation`，Android 3D 变换下不再误触翻转；④ `toggleDeckFlip` 加 200ms 防抖，阻断 Android 双击事件抖动导致的「翻了又翻回来」。测试 **316 全绿** |
 | **v4.6.3 `2026-08-28`** | **fix(android & deck)**: ① **工作台导出 Android 静默失败**：工作台用 `Blob + URL.createObjectURL + <a download>` 导出备份，但 Android WebView 的 DownloadListener 对 `blob:` URL **永不触发**（无报错，用户以为成功了）。改为走服务端下载通道：`download()` 先 POST 到 `/api/wb/backup/prepare` 换 token，再 `location.href` 到 `/api/wb/backup/download/{token}`（跟主应用备份同款机制），独立打开 HTML 时无 `/api/` 则走 blob 兜底。服务端新增 `/api/wb/backup/prepare` 和 `/api/wb/backup/download/{token}` 两个端点（复用 `_require_localhost` 守卫）。② **卡盒背面评分按钮被 swipe 吞掉**：`attachDeckSwipeListener` 绑在整个卡片容器上，背面按钮的触摸也被捕获，手指轻抖就超 70px 阈值触发 `stepDeck`。改为 `deckFlipped` 时跳过 `onTouchMove` / `onTouchEnd`。测试 **316 全绿** |
+| **v4.6.4 `2026-08-28`** | **feat(dict & sync)**: **介词矩阵「已入卡」状态服务端持久化** —— 新增 `prep_saved` 表与 `GET/POST /api/prep/saved` 接口；前端矩阵载入时异步拉取已入卡集合并在存卡成功后异步写入，重进该段、刷新或导入备份后均保持「✓ 已存」；全量备份与覆盖还原支持 `prep_saved` 表同步。测试 **319 全绿** |
 
 ---
 

@@ -888,6 +888,14 @@ export async function loadPrepMatrix() {
     try {
       const data = await api('/api/prep/matrix');
       _prepMatrixCache = data;
+      // 从服务端加载已入卡状态，替代空 Set
+      try {
+        const savedData = await api('/api/prep/saved');
+        if (savedData && Array.isArray(savedData.keys)) {
+          _prepSavedKeys.clear();
+          savedData.keys.forEach(k => _prepSavedKeys.add(k));
+        }
+      } catch { /* 首次访问无数据，忽略 */ }
       const total = (data.groups || []).reduce((s, g) => s + g.total, 0);
       const badge = document.getElementById('seg-prep-count');
       if (badge) badge.textContent = total;
@@ -1034,6 +1042,12 @@ export async function savePrepCardFromMatrix(btn) {
       })
     });
     _prepSavedKeys.add(_prepKey(lemma, praep, kasus));
+    // 异步写入服务端，不阻塞 UI
+    api('/api/prep/saved', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lemma, praep, kasus })
+    }).catch(() => {});
     btn.textContent = '✓ 已存';
     btn.classList.add('saved');
     refreshCardCounters();

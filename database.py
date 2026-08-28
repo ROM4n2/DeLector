@@ -159,6 +159,15 @@ def init_db(db_path: Optional[str] = None):
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS prep_saved (
+                lemma TEXT NOT NULL,
+                praep TEXT NOT NULL,
+                kasus TEXT NOT NULL,
+                saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (lemma, praep, kasus)
+            );
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS essays (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
@@ -420,6 +429,10 @@ _BACKUP_TABLES = {
         ("id", "article_id", "sentence_id", "selected_text", "color", "note_content", "created_at"),
         {"selected_text": "", "color": "yellow", "note_content": ""},
     ),
+    "prep_saved": (
+        ("lemma", "praep", "kasus", "saved_at"),
+        {"lemma": "", "praep": "", "kasus": "", "saved_at": None},
+    ),
 }
 
 _PROGRESS_TABLES = {
@@ -545,6 +558,22 @@ def _replace_tables(conn, spec: Dict[str, Tuple], payload: Dict[str, List[Dict[s
         )
 
 
+def get_prep_saved(db_path: Optional[str] = None) -> set:
+    """返回所有已入卡的 (lemma, praep, kasus) 三元组 key 集合。"""
+    with get_db(db_path) as conn:
+        rows = conn.execute("SELECT lemma, praep, kasus FROM prep_saved").fetchall()
+        return {f"{r['lemma']}|{r['praep']}|{r['kasus']}" for r in rows}
+
+
+def add_prep_saved(lemma: str, praep: str, kasus: str, db_path: Optional[str] = None):
+    """记录一条搭配已入卡。幂等：重复插入被主键忽略。"""
+    with get_db(db_path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO prep_saved (lemma, praep, kasus) VALUES (?, ?, ?)",
+            (lemma, praep, kasus),
+        )
+
+
 __all__ = [
     "DATA_DIR",
     "AUDIO_CACHE_DIR",
@@ -580,4 +609,6 @@ __all__ = [
     "_pending_wb",
     "_db_snapshot_guard",
     "_replace_tables",
+    "get_prep_saved",
+    "add_prep_saved",
 ]

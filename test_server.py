@@ -2696,9 +2696,7 @@ def test_backup_download_rejects_lan_even_with_valid_token(client, lan_client):
 
 def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
     """被 403 的还原请求不得改库。"""
-    import sqlite3
     import server
-    from unittest.mock import patch
     # 先写一条已知文章
     with server.get_db(test_db_path) as conn:
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
@@ -2717,7 +2715,6 @@ def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
 
 def test_backup_restore_failure_keeps_original_db(client, test_db_path):
     """还原失败（DB 约束错误）必须通过文件快照回滚，原始文章保持不变。"""
-    import sqlite3
     import server
     from fastapi.testclient import TestClient as TC
     # 用 raise_server_exceptions=False 才能拿到 500 响应而非抛异常
@@ -3084,3 +3081,42 @@ def test_get_audio_tts_rejects_overlong_text(client):
 def test_get_audio_tts_rejects_malformed_rate(client):
     r = client.get("/api/audio/tts", params={"text": "hallo", "rate": "banana"})
     assert r.status_code == 400
+
+
+# ── GET/POST /api/prep/saved ──────────────────────────────────────────────────
+
+def test_prep_saved_endpoint_returns_keys(client):
+    """GET /api/prep/saved 返回 {"keys": [...]} 结构。"""
+    resp = client.get("/api/prep/saved")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "keys" in data
+    assert isinstance(data["keys"], list)
+
+
+def test_prep_saved_post_and_get_roundtrip(client):
+    """POST 一条搭配后 GET 能查到，且随备份导出与还原。"""
+    resp = client.post("/api/prep/saved", json={"lemma": "freuen", "praep": "auf", "kasus": "Akk"})
+    assert resp.status_code == 200
+    resp = client.get("/api/prep/saved")
+    data = resp.json()
+    assert "freuen|auf|Akk" in data["keys"]
+
+    # 验证备份导出与还原包含 prep_saved
+    backup = client.get("/api/backup/export").json()
+    assert "prep_saved" in backup
+    assert any(r["lemma"] == "freuen" and r["praep"] == "auf" and r["kasus"] == "Akk" for r in backup["prep_saved"])
+    restore_res = client.post("/api/backup/restore", json=backup)
+    assert restore_res.status_code == 200
+    restored = client.get("/api/prep/saved").json()
+    assert "freuen|auf|Akk" in restored["keys"]
+
+
+
+def test_prep_saved_idempotent(client):
+    """重复 POST 同一条搭配不会出错（主键约束）。"""
+    client.post("/api/prep/saved", json={"lemma": "warten", "praep": "auf", "kasus": "Akk"})
+    client.post("/api/prep/saved", json={"lemma": "warten", "praep": "auf", "kasus": "Akk"})
+    resp = client.get("/api/prep/saved")
+    assert resp.json()["keys"].count("warten|auf|Akk") == 1
+
