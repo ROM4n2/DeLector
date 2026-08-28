@@ -1,31 +1,18 @@
 import os
 import math
 import json
-import sqlite3
-import random
 import tempfile
-import shutil
 import secrets
 import re
-import html
-import socket
-import ipaddress
 import asyncio
 import hashlib
-from contextlib import contextmanager
 from typing import Optional, List, Dict, Any, Tuple
-from urllib.parse import urlparse
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 import httpx
-try:
-    import spacy
-except ImportError:
-    spacy = None
-import genanki
 
 def load_env():
     try:
@@ -51,630 +38,139 @@ def load_env():
 
 load_env()
 
-DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", os.path.dirname(__file__))
-AUDIO_CACHE_DIR = os.path.join(DATA_DIR, ".cache", "audio")
-try:
-    os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
-except Exception:
-    pass
-
-PROGRESS_DB_PATH = os.path.join(DATA_DIR, "progress.db")
-
-def get_db_path(db_path: Optional[str] = None) -> str:
-    return db_path or os.environ.get("DATABASE_PATH", os.path.join(DATA_DIR, "delector.db"))
-
-def get_progress_db_path(db_path: Optional[str] = None) -> str:
-    return db_path or os.environ.get("PROGRESS_DB_PATH", PROGRESS_DB_PATH)
-
-# --- 1. Database Layer (stdlib sqlite3) ---
-def get_db(db_path: Optional[str] = None):
-    conn = sqlite3.connect(get_db_path(db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def get_progress_db(db_path: Optional[str] = None):
-    conn = sqlite3.connect(get_progress_db_path(db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_progress_db(db_path: Optional[str] = None):
-    target_path = get_progress_db_path(db_path)
-    with get_progress_db(target_path) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS study_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_type TEXT NOT NULL,
-                ref_id INTEGER,
-                note TEXT DEFAULT '',
-                logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS quiz_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                card_id INTEGER NOT NULL,
-                card_type TEXT NOT NULL,
-                mode TEXT NOT NULL,
-                correct INTEGER NOT NULL,
-                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS daily_summary (
-                date TEXT PRIMARY KEY,
-                cards_added INTEGER DEFAULT 0,
-                cards_mastered INTEGER DEFAULT 0,
-                articles_read INTEGER DEFAULT 0,
-                quiz_sessions INTEGER DEFAULT 0,
-                study_minutes INTEGER DEFAULT 0
-            );
-        """)
-
-def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "", minutes: int = 0, db_path: Optional[str] = None):
-    try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        with get_progress_db(db_path) as conn:
-            conn.execute(
-                "INSERT INTO study_log (event_type, ref_id, note) VALUES (?, ?, ?)",
-                (event_type, ref_id, note)
-            )
-            conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
-            if event_type == "add_card":
-                conn.execute("UPDATE daily_summary SET cards_added = cards_added + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(1, minutes), today))
-            elif event_type == "master_card":
-                conn.execute("UPDATE daily_summary SET cards_mastered = cards_mastered + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(1, minutes), today))
-            elif event_type == "read_article":
-                conn.execute("UPDATE daily_summary SET articles_read = articles_read + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(3, minutes), today))
-            elif event_type == "quiz_session":
-                conn.execute("UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(2, minutes), today))
-    except Exception as e:
-        print(f"[Warn] Failed to log study event: {e}")
-
-def init_db(db_path: Optional[str] = None):
-    target_path = get_db_path(db_path)
-    with get_db(target_path) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS articles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                source_url TEXT,
-                raw_text TEXT NOT NULL,
-                processed_json TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS vocab_cards (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                article_id INTEGER,
-                word TEXT NOT NULL,
-                lemma TEXT NOT NULL,
-                pos TEXT,
-                gender TEXT,
-                plural TEXT,
-                cefr_level TEXT,
-                definition_zh TEXT NOT NULL,
-                sentence_context TEXT NOT NULL,
-                mastered INTEGER DEFAULT 0,
-                mastered_at TIMESTAMP,
-                correct_count INTEGER DEFAULT 0,
-                wrong_count INTEGER DEFAULT 0,
-                due_date TEXT,
-                interval_days INTEGER DEFAULT 1,
-                ease_factor REAL DEFAULT 2.5,
-                repetition_count INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS grammar_cards (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                article_id INTEGER,
-                sentence_context TEXT NOT NULL,
-                grammar_name TEXT NOT NULL,
-                cefr_level TEXT NOT NULL,
-                explanation_zh TEXT NOT NULL,
-                rule_formula TEXT,
-                examples_zh TEXT,
-                corrected_form TEXT DEFAULT '',
-                error_type TEXT DEFAULT '',
-                mastered INTEGER DEFAULT 0,
-                mastered_at TIMESTAMP,
-                correct_count INTEGER DEFAULT 0,
-                wrong_count INTEGER DEFAULT 0,
-                due_date TEXT,
-                interval_days INTEGER DEFAULT 1,
-                ease_factor REAL DEFAULT 2.5,
-                repetition_count INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS essays (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL,
-                analysis_json TEXT NOT NULL,
-                cefr_level TEXT,
-                error_count INTEGER DEFAULT 0,
-                sentence_count INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS essay_versions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                essay_id INTEGER NOT NULL,
-                content TEXT NOT NULL,
-                analysis_json TEXT NOT NULL,
-                message TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_essay_versions_essay_id ON essay_versions(essay_id, id DESC);
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS reading_notes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                article_id INTEGER NOT NULL,
-                sentence_id INTEGER,
-                selected_text TEXT NOT NULL,
-                color TEXT DEFAULT 'yellow',
-                note_content TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS app_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        
-        # Migrations for existing databases
-        for tbl in ["vocab_cards", "grammar_cards"]:
-            cols = [col[1] for col in conn.execute(f"PRAGMA table_info({tbl})").fetchall()]
-            if "mastered" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN mastered INTEGER DEFAULT 0")
-            if "mastered_at" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN mastered_at TIMESTAMP")
-            if "correct_count" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN correct_count INTEGER DEFAULT 0")
-            if "wrong_count" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN wrong_count INTEGER DEFAULT 0")
-            today_init = datetime.now().strftime('%Y-%m-%d')
-            if "due_date" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN due_date TEXT DEFAULT '{today_init}'")
-            if "interval_days" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN interval_days INTEGER DEFAULT 1")
-            if "ease_factor" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN ease_factor REAL DEFAULT 2.5")
-            if "repetition_count" not in cols:
-                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN repetition_count INTEGER DEFAULT 0")
-            if tbl == "grammar_cards":
-                for col in ("corrected_form", "error_type"):
-                    if col not in cols:
-                        conn.execute(f"ALTER TABLE grammar_cards ADD COLUMN {col} TEXT DEFAULT ''")
-
-        conn.execute("""
-            INSERT INTO essay_versions (essay_id, content, analysis_json, message)
-            SELECT id, content, analysis_json, '初始快照' FROM essays
-            WHERE id NOT IN (SELECT DISTINCT essay_id FROM essay_versions);
-        """)
-
-    init_progress_db()
-    seed_preset_articles(target_path)
-
-def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> str:
-    try:
-        with get_db(db_path) as conn:
-            row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
-            if row and row["value"] is not None and row["value"] != "":
-                return row["value"]
-    except Exception:
-        pass
-    return os.environ.get(key, default)
-
-def set_setting(key: str, value: str, db_path: Optional[str] = None):
-    with get_db(db_path) as conn:
-        conn.execute("""
-            INSERT INTO app_settings (key, value, updated_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-        """, (key, value))
-
-def get_effective_api_key(db_path: Optional[str] = None) -> str:
-    return get_setting("DEEPSEEK_API_KEY", "", db_path=db_path)
-
-def get_effective_api_base_url(db_path: Optional[str] = None) -> str:
-    return get_setting("API_BASE_URL", "https://api.deepseek.com", db_path=db_path)
-
-def get_effective_api_model(db_path: Optional[str] = None) -> str:
-    return get_setting("API_MODEL", "deepseek-v4-flash", db_path=db_path)
-
-PRESET_ARTICLES = [
-    {
-        "title": "【A1 入门篇】Hallo Berlin! Mein erster Tag in Deutschland",
-        "text": "Guten Tag! Ich heiße Lukas und ich komme aus China. Jetzt wohne ich in Berlin und lerne Deutsch an einer Sprachschule. Jeden Morgen trinke ich einen Kaffee, esse ein Brötchen und fahre mit der U-Bahn zum Deutschkurs. Der Unterricht macht viel Spaß. Am Nachmittag gehe ich in den Supermarkt und kaufe frisches Obst und Brot."
-    },
-    {
-        "title": "【A2 进阶篇】Eine Reise nach München: Hotel und Freizeit",
-        "text": "Letztes Wochenende bin ich mit dem Zug nach München gefahren. Ich habe ein kleines Zimmer im Stadtzentrum reserviert. Das Wetter war sehr schön, deshalb habe ich den ganzen Nachmittag im Englischen Garten verbracht. Am Abend habe ich typische bayerische Spezialitäten in einem traditionellen Restaurant probiert."
-    },
-    {
-        "title": "【B1 提升篇】Klimaschutz im Alltag: Was jeder tun kann",
-        "text": "Der Klimawandel ist eine der größten Herausforderungen unserer Zeit. Viele Menschen fragen sich, wie sie im Alltag einen Beitrag zum Umweltschutz leisten können. Experten empfehlen, öfter auf das Fahrrad umzusteigen und Energie im Haushalt zu sparen. Eine bewusste Ernährung mit regionalen Lebensmitteln spielt ebenfalls eine wichtige Rolle."
-    },
-    {
-        "title": "【B2 高级篇】Die Transformation der modernen Arbeitswelt: Homeoffice",
-        "text": "Die fortschreitende Digitalisierung hat die Arbeitsbedingungen grundlegend verändert. Immer mehr Unternehmen stellen ihren Mitarbeitern flexible Arbeitszeitmodelle zur Verfügung. Obwohl das Arbeiten von zu Hause aus die Vereinbarkeit von Beruf und Familie erleichtert, stehen viele Beschäftigte vor der Herausforderung, klare Grenzen zwischen Arbeit und Freizeit zu ziehen."
-    }
-]
-
-def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_url: Optional[str] = None) -> int:
-    processed = process_german_text(text)
-    target_path = get_db_path(db_path)
-    with get_db(target_path) as conn:
-        cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
-                           (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""))
-        return cur.lastrowid
-
-def seed_preset_articles(db_path: Optional[str] = None):
-    target = get_db_path(db_path)
-    with get_db(target) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-        if count == 0:
-            for art in PRESET_ARTICLES:
-                ingest_article(art["title"], art["text"], db_path=target)
+# --- 1. Database & Settings Layer ---
+from database import (
+    DATA_DIR,
+    AUDIO_CACHE_DIR,
+    PROGRESS_DB_PATH,
+    get_db_path,
+    get_progress_db_path,
+    get_db,
+    get_progress_db,
+    init_progress_db,
+    log_study_event,
+    init_db,
+    get_setting,
+    set_setting,
+    get_effective_api_key,
+    get_effective_api_base_url,
+    get_effective_api_model,
+    PRESET_ARTICLES,
+    ingest_article,
+    seed_preset_articles,
+    VOCAB_MODEL,
+    GRAMMAR_MODEL,
+    export_anki_deck,
+    get_cache_info,
+    prune_audio_cache,
+    BACKUP_FORMAT_VERSION,
+    BACKUP_SETTINGS_WHITELIST,
+    _BACKUP_TABLES,
+    _PROGRESS_TABLES,
+    _require_localhost,
+    _rows_to_tuples,
+    build_backup_payload,
+    _pending_backup,
+    _pending_wb,
+    _db_snapshot_guard,
+    _replace_tables,
+)
 
 # --- 2. NLP & CEFR Tagging ---
-import importlib
-from pathlib import Path
-from start import is_android
+from nlp import (
+    spacy,
+    nlp,
+    NLP_ENGINE,
+    NLP_ENGINE_DETAIL,
+    SPACY_MODEL_CANDIDATES,
+    AUTO_DOWNLOAD_MODEL,
+    _load_spacy_model,
+    CEFR_DICT,
+    get_cefr_level,
+    calculate_cefr_stats,
+    _process_german_text_pure_python,
+    process_german_text,
+    SYSTEM_GRAMMAR_PROMPT,
+)
 
-# md 带词向量、标注更准，是桌面端首选；sm 体积小，Android 包里装的和自动下载兜底都用它。
-# 按顺序取第一个能加载的。
-SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")
-AUTO_DOWNLOAD_MODEL = "de_core_news_sm"
+# --- 3. Security, SSRF & Feed Utilities ---
+from security import (
+    _resolve_ssrf_targets,
+    _IETF_PROTOCOL_ASSIGNMENTS,
+    _IPV6_DENY_PREFIXES,
+    _is_blocked_addr,
+    is_safe_public_url,
+    clean_html_to_article,
+    MAX_REDIRECT_HOPS,
+    fetch_remote_html,
+    PRESET_FEEDS,
+    parse_rss_feed,
+)
 
-def _load_spacy_model(name: str):
-    """加载指定德语模型，返回 (nlp, 加载方式描述)；全部策略失败则抛 RuntimeError。
+__all__ = [
+    "spacy",
+    "nlp",
+    "NLP_ENGINE",
+    "NLP_ENGINE_DETAIL",
+    "SPACY_MODEL_CANDIDATES",
+    "AUTO_DOWNLOAD_MODEL",
+    "_load_spacy_model",
+    "CEFR_DICT",
+    "get_cefr_level",
+    "calculate_cefr_stats",
+    "_process_german_text_pure_python",
+    "process_german_text",
+    "SYSTEM_GRAMMAR_PROMPT",
+    "DATA_DIR",
+    "AUDIO_CACHE_DIR",
+    "PROGRESS_DB_PATH",
+    "get_db_path",
+    "get_progress_db_path",
+    "get_db",
+    "get_progress_db",
+    "init_progress_db",
+    "log_study_event",
+    "init_db",
+    "get_setting",
+    "set_setting",
+    "get_effective_api_key",
+    "get_effective_api_base_url",
+    "get_effective_api_model",
+    "PRESET_ARTICLES",
+    "ingest_article",
+    "seed_preset_articles",
+    "VOCAB_MODEL",
+    "GRAMMAR_MODEL",
+    "export_anki_deck",
+    "get_cache_info",
+    "prune_audio_cache",
+    "BACKUP_FORMAT_VERSION",
+    "BACKUP_SETTINGS_WHITELIST",
+    "_BACKUP_TABLES",
+    "_PROGRESS_TABLES",
+    "_require_localhost",
+    "_rows_to_tuples",
+    "build_backup_payload",
+    "_pending_backup",
+    "_pending_wb",
+    "_db_snapshot_guard",
+    "_replace_tables",
+    "_resolve_ssrf_targets",
+    "_IETF_PROTOCOL_ASSIGNMENTS",
+    "_IPV6_DENY_PREFIXES",
+    "_is_blocked_addr",
+    "is_safe_public_url",
+    "clean_html_to_article",
+    "MAX_REDIRECT_HOPS",
+    "fetch_remote_html",
+    "PRESET_FEEDS",
+    "parse_rss_feed",
+]
 
-    为什么不能只用 spacy.load(name)：它走 spacy.util.is_package()，查的是
-    importlib.metadata 的 .dist-info 元数据。Android 上模型是被直接拷进 Chaquopy
-    的 Python 源码目录的（见 CI 的 sync 步骤），没有 dist-info，于是即便这个包
-    import 得动，也只会报 "[E050] Can't find model"——真机上就是这么退化成纯
-    Python 路径的。所以按名称失败后要退到模块自身的 load()，最后退到数据目录路径。
-    """
-    errors = []
-    try:
-        return spacy.load(name), name
-    except Exception as e:
-        errors.append(f"spacy.load({name!r}) -> {e}")
-
-    try:
-        module = importlib.import_module(name)
-    except Exception as e:
-        errors.append(f"import {name} -> {e}")
-        raise RuntimeError("; ".join(errors))
-
-    try:
-        # 等价于 load_model_from_init_py(module.__file__)，绕开 is_package 检查
-        return module.load(), f"{name}(module.load)"
-    except Exception as e:
-        errors.append(f"{name}.load() -> {e}")
-
-    try:
-        # meta.json 里的版本与实际数据目录名不一致时，上一步会失败，这里直接找目录
-        root = Path(module.__file__).parent
-        data_dirs = sorted(root.glob(f"{name}-*"))
-        if not data_dirs:
-            raise FileNotFoundError(f"{root} 下没有 {name}-* 数据目录")
-        return spacy.load(data_dirs[-1]), f"{name}({data_dirs[-1].name})"
-    except Exception as e:
-        errors.append(f"path load -> {e}")
-
-    raise RuntimeError("; ".join(errors))
-
-nlp = None
-# 记录实际生效的引擎，便于在真机上（adb logcat / GET /api/settings）确认
-# 到底是 spaCy 还是纯 Python 降级路径在跑——降级本身是静默的。
-NLP_ENGINE = "pure_python"
-NLP_ENGINE_DETAIL = "spaCy 未安装，使用纯 Python 降级路径（无依存句法/格标注）"
-
-if spacy is not None:
-    load_errors = []
-    for candidate in SPACY_MODEL_CANDIDATES:
-        try:
-            nlp, how = _load_spacy_model(candidate)
-            NLP_ENGINE = "spacy"
-            NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}"
-            break
-        except Exception as e:
-            load_errors.append(str(e))
-
-    if nlp is None:
-        # 自动下载模型只在桌面端有意义。Android 上 spacy.cli.download 会起 pip
-        # 子进程去拉模型：Chaquopy 里必然失败，却会在 import 期阻塞启动。
-        if is_android():
-            NLP_ENGINE_DETAIL = "spaCy 已装但模型加载失败，降级为纯 Python：" + " | ".join(load_errors)
-        else:
-            try:
-                from spacy.cli import download
-                download(AUTO_DOWNLOAD_MODEL)
-                nlp, how = _load_spacy_model(AUTO_DOWNLOAD_MODEL)
-                NLP_ENGINE = "spacy"
-                NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}（自动下载）"
-            except Exception as e:
-                NLP_ENGINE_DETAIL = f"spaCy 已装但模型不可用，降级为纯 Python：{e}"
-
-print(f"[DeLector] NLP 引擎: {NLP_ENGINE} — {NLP_ENGINE_DETAIL}", flush=True)
-
-CEFR_DICT = {
-    # A1 core
-    "ich": "A1", "du": "A1", "er": "A1", "sie": "A1", "es": "A1", "wir": "A1", "ihr": "A1",
-    "mein": "A1", "dein": "A1", "sein": "A1", "haben": "A1", "werden": "A1",
-    "können": "A1", "müssen": "A1", "wollen": "A1", "sollen": "A1", "dürfen": "A1", "möchten": "A1",
-    "lernen": "A1", "arbeiten": "A1", "gut": "A1", "tag": "A1", "gehen": "A1", "nach": "A1",
-    "kommen": "A1", "wohnen": "A1", "heißen": "A1", "hallo": "A1", "deutsch": "A1", "deutschkurs": "A1",
-    "trinken": "A1", "essen": "A1", "kaffee": "A1", "brot": "A1", "brötchen": "A1", "obst": "A1",
-    "kaufen": "A1", "frisch": "A1", "supermarkt": "A1", "unterricht": "A1", "spaß": "A1", "viel": "A1",
-    "morgen": "A1", "nachmittag": "A1", "abend": "A1", "u-bahn": "A1", "bahn": "A1", "kurs": "A1",
-    "jetzt": "A1", "sprachschule": "A1", "schule": "A1", "jeder": "A1", "groß": "A1", "klein": "A1",
-    "neu": "A1", "alt": "A1", "schön": "A1", "eins": "A1", "zwei": "A1", "drei": "A1", "jahr": "A1",
-    "mann": "A1", "frau": "A1", "kind": "A1", "haus": "A1", "stadt": "A1", "zimmer": "A1",
-    "der": "A1", "die": "A1", "das": "A1", "ein": "A1", "eine": "A1", "in": "A1", "an": "A1",
-    "auf": "A1", "aus": "A1", "mit": "A1", "zu": "A1", "zum": "A1", "zur": "A1", "von": "A1",
-    "bei": "A1", "für": "A1", "über": "A1", "unter": "A1", "vor": "A1", "hinter": "A1",
-    "und": "A1", "oder": "A1", "aber": "A1", "denn": "A1", "nicht": "A1", "kein": "A1",
-    "wie": "A1", "was": "A1", "wo": "A1", "woher": "A1", "wohin": "A1", "wann": "A1", "wer": "A1",
-    
-    # A2
-    "erzählen": "A2", "erklären": "A2", "bestehen": "A2", "prüfung": "A2", "beruf": "A2", "reise": "A2",
-    "fahren": "A2", "wochenende": "A2", "zug": "A2", "reservieren": "A2", "stadtzentrum": "A2",
-    "wetter": "A2", "deshalb": "A2", "ganz": "A2", "garten": "A2", "verbringen": "A2",
-    "typisch": "A2", "bayerisch": "A2", "spezialität": "A2", "traditionell": "A2", "restaurant": "A2", "probieren": "A2",
-    "besuchen": "A2", "helfen": "A2", "treffen": "A2", "beginnen": "A2", "verstehen": "A2",
-    
-    # B1
-    "entscheiden": "B1", "entwickeln": "B1", "zusammenhang": "B1", "gesellschaft": "B1", "meinung": "B1",
-    "klimawandel": "B1", "klimaschutz": "B1", "herausforderung": "B1", "beitrag": "B1", "leisten": "B1",
-    "umweltschutz": "B1", "experte": "B1", "empfehlen": "B1", "umsteigen": "B1", "energie": "B1",
-    "haushalt": "B1", "sparen": "B1", "bewusst": "B1", "ernährung": "B1", "regional": "B1",
-    "lebensmittel": "B1", "ebenfalls": "B1", "rolle": "B1", "spielen": "B1", "alltag": "B1",
-    
-    # B2
-    "beeinträchtigen": "B2", "gewährleisten": "B2", "hervorheben": "B2", "voraussetzen": "B2",
-    "digitalisierung": "B2", "transformation": "B2", "arbeitsbedingung": "B2", "grundlegend": "B2",
-    "unternehmen": "B2", "mitarbeiter": "B2", "flexibel": "B2", "arbeitszeitmodell": "B2",
-    "verfügung": "B2", "vereinbarkeit": "B2", "beschäftigte": "B2", "grenze": "B2", "fortschreitend": "B2",
-    "arbeitswelt": "B2", "homeoffice": "B2", "ethisch": "B2", "fragestellung": "B2", "existenziell": "B2",
-    "tragweite": "B2",
-    
-    # C1
-    "implizieren": "C1", "fungieren": "C1", "paradigma": "C1", "unabdingbar": "C1",
-    "differenzieren": "C1", "konstatieren": "C1", "ambivalent": "C1", "sukzessive": "C1"
-}
-
-from core_dict import lookup_core_vocab, get_core_cefr_level
+from core_dict import lookup_core_vocab
 from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
                          lookup_prep_collocations, build_prep_matrix)
-from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree, split_sentences_pure_python
-
-def get_cefr_level(lemma: str) -> str:
-    if not lemma:
-        return "A1"
-    low = lemma.lower().strip()
-    
-    # 1. Exact core dictionary lookup
-    dict_lvl = get_core_cefr_level(low)
-    if dict_lvl:
-        return dict_lvl
-
-    # 2. Hardcoded fallback list
-    if low in CEFR_DICT:
-        return CEFR_DICT[low]
-        
-    # 3. Suffix and length heuristics
-    if any(low.endswith(s) for s in ["ität", "ismus", "schaft", "ung"]):
-        return "B2" if len(low) > 10 else "B1"
-    if len(low) > 11:
-        return "B2"
-    if len(low) > 7:
-        return "B1"
-    if len(low) > 4:
-        return "A2"
-    return "A1"
-
-
-def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
-    counts = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
-    words = [t for t in tokens_list if t.get("cefr_level")]
-    total_words = len(words)
-    
-    for w in words:
-        lvl = w["cefr_level"]
-        if lvl in counts:
-            counts[lvl] += 1
-            
-    percentages = {}
-    for lvl, cnt in counts.items():
-        percentages[lvl] = round((cnt / total_words * 100), 1) if total_words > 0 else 0.0
-        
-    non_a1_count = total_words - counts["A1"]
-    non_a1_ratio = (non_a1_count / total_words) if total_words > 0 else 0.0
-    
-    if non_a1_ratio < 0.15:
-        recommended = "A1"
-    elif non_a1_ratio < 0.30:
-        recommended = "A2"
-    elif non_a1_ratio < 0.50:
-        recommended = "B1"
-    else:
-        recommended = "B2+"
-        
-    est_minutes = max(1, round(total_words / 90))  # 90 words/min 精读标准
-    
-    return {
-        "word_count": total_words,
-        "est_reading_minutes": est_minutes,
-        "recommended_level": recommended,
-        "cefr_counts": counts,
-        "cefr_percentages": percentages
-    }
-
-def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
-    raw_sents = split_sentences_pure_python(text)
-    sentences = []
-    all_tokens = []
-    global_tok_id = 0
-    for sent_idx, sent_text in enumerate(raw_sents):
-        tokens = []
-        raw_toks = re.findall(r'\w+|[^\w\s]', sent_text, re.UNICODE)
-        for raw_tok in raw_toks:
-            is_punct = bool(re.match(r'^[^\w\s]+$', raw_tok))
-            # 无 spacy 时靠核心词库反查词元，命中则用词典词元覆盖朴素小写形
-            dict_entry = lookup_core_vocab(raw_tok) or {}
-            lemma = dict_entry.get("lemma") or raw_tok.lower()
-            pos = dict_entry.get("pos") or ("PUNCT" if is_punct else ("NOUN" if raw_tok[0].isupper() else "ADV"))
-            gender = dict_entry.get("gender", "")
-            cefr = dict_entry.get("cefr_level") or ("" if is_punct else get_cefr_level(lemma))
-            tok = {
-                "id": global_tok_id,
-                "text": raw_tok,
-                "lemma": lemma,
-                "pos": pos,
-                "gender": gender,
-                "case": "",
-                "cefr_level": cefr,
-                "is_punct": is_punct,
-                "is_space": False
-            }
-            tokens.append(tok)
-            all_tokens.append(tok)
-            global_tok_id += 1
-        sentences.append({
-            "id": sent_idx,
-            "text": sent_text,
-            "tokens": tokens,
-            "topology": {"vorfeld": [], "linke_klammer": [], "mittelfeld": [t["text"] for t in tokens if not t["is_punct"]], "rechte_klammer": [], "nachfeld": []},
-            "clause_tree": {"id": "root", "type": "hauptsatz", "label": "Hauptsatz", "label_zh": "主句核心", "connector": "", "finite_verb": "", "token_ids": list(range(len(tokens))), "formula": "", "children": []}
-        })
-    stats = calculate_cefr_stats(all_tokens)
-    return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
-
-def process_german_text(text: str) -> Dict[str, Any]:
-    if nlp is None:
-        return _process_german_text_pure_python(text)
-    doc = nlp(text)
-    sentences = []
-    all_tokens = []
-    for sent_idx, sent in enumerate(doc.sents):
-        tokens = []
-        token_map = {}
-        spacy_tokens = list(sent)
-        for t in spacy_tokens:
-            morph = t.morph.to_dict()
-            is_word = not t.is_punct and not t.is_space
-            tok = {
-                "id": t.i,
-                "text": t.text,
-                "lemma": t.lemma_,
-                "pos": t.pos_,
-                "gender": morph.get("Gender", ""),
-                "case": morph.get("Case", ""),
-                "cefr_level": get_cefr_level(t.lemma_) if is_word else "",
-                "is_punct": t.is_punct,
-                "is_space": t.is_space
-            }
-            tokens.append(tok)
-            token_map[t.i] = tok
-            all_tokens.append(tok)
-
-        # Detect separable verb prefixes in sentence (compound:prt or svp or PTKVZ)
-        for t in spacy_tokens:
-            if t.dep_ in ("compound:prt", "svp", "ptkv") or t.tag_ == "PTKVZ":
-                head = t.head
-                if head and head.i in token_map:
-                    prefix_str = (t.lemma_ or t.text).lower().strip()
-                    verb_lemma = (head.lemma_ or head.text).lower().strip()
-                    if verb_lemma.startswith(prefix_str):
-                        sep_lemma = verb_lemma
-                    else:
-                        sep_lemma = f"{prefix_str}{verb_lemma}"
-                    
-                    verb_tok = token_map[head.i]
-                    prefix_tok = token_map[t.i]
-                    
-                    verb_tok["separable"] = {
-                        "sep_prefix_id": t.i,
-                        "sep_lemma": sep_lemma
-                    }
-                    prefix_tok["separable"] = {
-                        "sep_verb_id": head.i,
-                        "sep_lemma": sep_lemma
-                    }
-
-                    # Re-evaluate CEFR level based on full separable verb (e.g. einsteigen -> A1 instead of steigen -> B1)
-                    sep_cefr = get_cefr_level(sep_lemma)
-                    verb_tok["cefr_level"] = sep_cefr
-                    prefix_tok["cefr_level"] = sep_cefr
-        # Compute topological 5 fields and clause AST tree for each sentence
-        top = analyze_sentence_topology(sent)
-        tree = build_clause_tree(sent)
-        sentences.append({
-            "id": sent_idx,
-            "text": sent.text,
-            "tokens": tokens,
-            "topology": top,
-            "clause_tree": tree
-        })
-    stats = calculate_cefr_stats(all_tokens)
-    return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
-
-
-
-# --- 3. Anki Exporter ---
-VOCAB_MODEL = genanki.Model(
-    1607392319, 'DeLector Vocab',
-    fields=[{'name': 'Front'}, {'name': 'Word'}, {'name': 'Lemma'}, {'name': 'Meta'}, {'name': 'Definition'}],
-    templates=[{
-        'name': 'Card',
-        'qfmt': '<div style="font-family:sans-serif;font-size:20px;padding:20px;">{{Front}}</div>',
-        'afmt': '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;color:#1e293b;"><b>{{Definition}}</b><br><span style="color:#64748b;font-size:14px;">{{Lemma}} ({{Meta}})</span></div>'
-    }]
-)
-
-GRAMMAR_MODEL = genanki.Model(
-    1607392320, 'DeLector Goethe Grammar',
-    fields=[{'name': 'Sentence'}, {'name': 'GrammarName'}, {'name': 'CEFR'}, {'name': 'Explanation'}, {'name': 'Formula'}],
-    templates=[{
-        'name': 'Card',
-        'qfmt': '<div style="font-family:sans-serif;font-size:20px;padding:20px;"><span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:99px;font-size:12px;">Goethe {{CEFR}}</span><br><br>{{Sentence}}</div>',
-        'afmt': '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;"><b>{{GrammarName}}</b><br><code style="background:#f1f5f9;color:#0369a1;padding:4px 8px;">{{Formula}}</code><p style="color:#334155;">{{Explanation}}</p></div>'
-    }]
-)
-
-def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
-    target_path = get_db_path(db_path)
-    with get_db(target_path) as conn:
-        vocab_rows = conn.execute("SELECT * FROM vocab_cards").fetchall()
-        grammar_rows = conn.execute("SELECT * FROM grammar_cards").fetchall()
-
-    deck = genanki.Deck(random.randrange(1 << 30, 1 << 31), "DeLector::Goethe Deck")
-    for r in vocab_rows:
-        styled_front = r["sentence_context"].replace(r["word"], f'<b style="color:#2563eb;">{r["word"]}</b>')
-        meta = f'{r["pos"]} · {r["gender"] or ""} · {r["cefr_level"]}'
-        deck.add_note(genanki.Note(model=VOCAB_MODEL, fields=[styled_front, r["word"], r["lemma"], meta, r["definition_zh"]]))
-
-    for r in grammar_rows:
-        deck.add_note(genanki.Note(model=GRAMMAR_MODEL, fields=[r["sentence_context"], r["grammar_name"], r["cefr_level"], r["explanation_zh"], r["rule_formula"] or ""]))
-
-    genanki.Package(deck).write_to_file(output_path)
-    return output_path
+from syntax_tree import analyze_syntax_tree
 
 # --- 4. FastAPI Application ---
 app = FastAPI(title="DeLector")
@@ -775,150 +271,6 @@ class IngestUrlReq(BaseModel):
     url: str
     title: Optional[str] = ""
 
-def _resolve_ssrf_targets(ip_obj):
-    """把地址归一到「数据包真正会打到的目的地」，再交给闸门判定。
-
-    IPv4-mapped(`::ffff:0:0/96`)、6to4(`2002::/16`)、Teredo(`2001::/32`) 三种
-    IPv6 地址的真实目的主机是**内嵌的那个 IPv4**，`is_private` / `is_reserved`
-    这些旗标描述的是外层包装。直接拿外层旗标判定会同时犯两个方向的错，
-    两个方向本机都实测过：
-
-    - **误放（真 SSRF 通道）**：`2002:c0a8:0101::1` 外层 `is_global` 为真，
-      而它路由到 `192.168.1.1`；`2002:7f00:0001::1` 路由到 `127.0.0.1`。
-      旧写法对这两个一律放行。
-    - **误拒**：Teredo 落在 ipaddress 的私有段清单 `2001::/23` 里，于是
-      Windows 上开着 Teredo 隧道的用户连正常公网站点都进不来
-      （本机 `www.dw.com` 曾解析出 `2001::b92d:7b9`，URL 导入对所有站点全废）；
-      `::ffff:8.8.8.8` 被判 `is_reserved`，同理。
-
-    Teredo 只校验 client 字段（数据包实际封装去的那个公网 IPv4）；server 字段
-    仅在非全零时才校验 —— 观测到的真实 Teredo 地址 server 段就是全零，
-    把全零当 `is_unspecified` 拒掉等于没修。
-    """
-    mapped = getattr(ip_obj, "ipv4_mapped", None)
-    if mapped is not None:
-        return [mapped]
-    sixtofour = getattr(ip_obj, "sixtofour", None)
-    if sixtofour is not None:
-        return [sixtofour]
-    teredo = getattr(ip_obj, "teredo", None)
-    if teredo is not None:
-        server_ip, client_ip = teredo
-        targets = [client_ip]
-        if not server_ip.is_unspecified:
-            targets.append(server_ip)
-        return targets
-    return [ip_obj]
-
-
-# 自己钉住的 IPv6 特殊用途段：**不能把安全边界外包给 `ipaddress` 的私有段表**，
-# 那张表会随 Python 补丁版本变化。3.11.8 里有一条粗粒度的 `2001::/23`，把整个
-# IETF Protocol Assignments 块兜住了；3.11.16 换成细粒度条目后 `2001:20::/28`
-# (ORCHIDv2) 掉了出来，闸门就此放行 —— 同一份代码，同一个 3.11 大版本，
-# 判定结果相反（本机绿、CI 红，正是这条测试抓到的）。
-#
-# `2001::/23` 整块是 IETF 协议保留、永不会分配给网站，所以规则是「落在这块里
-# 就拒，除 Teredo 外」—— Teredo 在上面已经解包成内嵌的目的 IPv4 了。
-# 这样比枚举子段更稳：将来 IANA 往这块里加新用途，无需改代码。
-# 代价是 `2001:3::/32`(AMT)、`2001:4:112::/48`(AS112-v6) 这类 IANA 标为可全球
-# 路由的锚播基础设施段也一并拒掉 —— 对「抓一篇文章」这个用途没有损失，
-# 而 SSRF 闸拿不准时就该往拒绝的方向倒。
-_IETF_PROTOCOL_ASSIGNMENTS = ipaddress.ip_network("2001::/23")
-_IPV6_DENY_PREFIXES = tuple(ipaddress.ip_network(n) for n in (
-    "2001:db8::/32",      # 文档示例段（在 /23 之外，要单列）
-    "100::/64",           # discard-only
-    "5f00::/16",          # SRv6 SID
-    "64:ff9b:1::/48",     # 本地用 IPv4/IPv6 转换
-))
-
-
-def _is_blocked_addr(ip_obj) -> bool:
-    for t in _resolve_ssrf_targets(ip_obj):
-        if (t.is_private or t.is_loopback or t.is_link_local
-                or t.is_reserved or t.is_multicast or t.is_unspecified):
-            return True
-        if t.version == 6 and (t in _IETF_PROTOCOL_ASSIGNMENTS
-                               or any(t in net for net in _IPV6_DENY_PREFIXES)):
-            return True
-    return False
-
-
-def is_safe_public_url(url: str) -> bool:
-    try:
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https"):
-            return False
-        hostname = parsed.hostname
-        if not hostname:
-            return False
-        if hostname.lower().strip(".") == "localhost":
-            return False
-
-        for info in socket.getaddrinfo(hostname, None):
-            if _is_blocked_addr(ipaddress.ip_address(info[4][0])):
-                return False
-        return True
-    except Exception:
-        return False
-
-def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
-    title_match = re.search(r'<title>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
-    title = html.unescape(title_match.group(1).strip()) if title_match else "Extracted Article"
-    title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche|Deutschlandfunk)', title)[0].strip()
-    
-    # Remove script, style, nav, header, footer, etc.
-    cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript|figure)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
-    
-    # Prefer <article> block if available
-    article_match = re.search(r'<article[^>]*>(.*?)</article>', cleaned, flags=re.IGNORECASE | re.DOTALL)
-    scope_html = article_match.group(1) if article_match else cleaned
-
-    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', scope_html, flags=re.IGNORECASE | re.DOTALL)
-    clean_paras = []
-    for p in paragraphs:
-        txt = re.sub(r'<[^>]+>', '', p)
-        txt = html.unescape(txt).strip()
-        if len(txt) > 20 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved", "impressum", "urheberrecht"]):
-            clean_paras.append(txt)
-            
-    if not clean_paras:
-        raw_text = re.sub(r'<[^>]+>', ' ', scope_html)
-        clean_paras = [html.unescape(line).strip() for line in raw_text.split('\n') if len(line.strip()) > 30]
-
-    body_text = "\n\n".join(clean_paras)
-    return title, body_text
-
-
-# 公网站点间的正常跳转链远短于此；超限视为异常抓取直接中止。
-MAX_REDIRECT_HOPS = 5
-
-
-async def fetch_remote_html(url: str) -> str:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
-    }
-    current_url = url
-    # 逐跳手动跟随重定向：每一跳都在**发起请求之前**过 SSRF 闸。
-    # follow_redirects=True 的写法先打请求、后校验最终 URL——重定向到内网时
-    # 内网服务已经收到 GET（盲 SSRF），哪怕响应随后被丢弃。
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
-        for _hop in range(MAX_REDIRECT_HOPS + 1):
-            if not is_safe_public_url(current_url):
-                raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
-            resp = await client.get(current_url, headers=headers)
-            if resp.is_redirect:
-                location = resp.headers.get("location")
-                if not location:
-                    raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code}，缺少重定向目标)")
-                current_url = str(httpx.URL(current_url).join(location))
-                continue
-            if resp.status_code != 200:
-                raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
-            return resp.text
-        raise HTTPException(400, "重定向次数过多，已中止抓取")
-
 @app.post("/api/articles/ingest-url")
 async def ingest_from_url(req: IngestUrlReq):
     if not is_safe_public_url(req.url):
@@ -935,119 +287,6 @@ async def ingest_from_url(req: IngestUrlReq):
         row = conn.execute("SELECT processed_json FROM articles WHERE id = ?", (art_id,)).fetchone()
         pj = json.loads(row["processed_json"]) if row else {}
     return {"article_id": art_id, "title": final_title, "char_count": len(body_text), "stats": pj.get("stats", {})}
-
-# --- RSS & News Feeds Integration ---
-PRESET_FEEDS = [
-    {
-        "id": "tagesschau_news",
-        "name": "Tagesschau · 德国权威时事",
-        "level": "B2-C1",
-        "category": "Aktuell",
-        "url": "https://www.tagesschau.de/xml/rss2/",
-        "description": "德国第一电视台权威时政要闻"
-    },
-    {
-        "id": "tagesschau_ausland",
-        "name": "Tagesschau · 国际与环球",
-        "level": "B2-C1",
-        "category": "Ausland",
-        "url": "https://www.tagesschau.de/ausland/index~rss2.xml",
-        "description": "全球时事与地缘观察精读"
-    },
-    {
-        "id": "dw_deutsch",
-        "name": "DW · 德语时事综合",
-        "level": "B1-B2",
-        "category": "Lernen",
-        "url": "https://rss.dw.com/rdf/rss-de-all",
-        "description": "德国之声精选德语新闻文章"
-    },
-    {
-        "id": "dlf_news",
-        "name": "Deutschlandfunk · 每日整点新闻",
-        "level": "B2-C1",
-        "category": "Nachrichten",
-        "url": "https://www.deutschlandfunk.de/nachrichten-100.rss",
-        "description": "标准德语广播权威每日简讯"
-    },
-    {
-        "id": "spiegel_politik",
-        "name": "Spiegel · 政治与深度",
-        "level": "C1",
-        "category": "Politik",
-        "url": "https://www.spiegel.de/politik/index.rss",
-        "description": "明镜周刊深度时政报道与分析"
-    },
-    {
-        "id": "zeit_online",
-        "name": "Zeit Online · 精选社论",
-        "level": "C1",
-        "category": "Kultur",
-        "url": "https://newsfeed.zeit.de/index",
-        "description": "时代周报文化与学术随笔"
-    }
-]
-
-import xml.etree.ElementTree as ET
-
-def parse_rss_feed(xml_text: str) -> List[Dict[str, Any]]:
-    items = []
-    try:
-        root = ET.fromstring(xml_text)
-        found_items = [el for el in root.iter() if el.tag.split("}")[-1] == "item"]
-        if found_items:
-            for item in found_items:
-                title = ""
-                link = ""
-                desc = ""
-                pub_date = ""
-                for child in item:
-                    tag = child.tag.split("}")[-1]
-                    if tag == "title" and not title:
-                        title = child.text or ""
-                    elif tag == "link" and not link:
-                        link = child.text or child.get("href", "")
-                    elif tag in ("description", "encoded", "summary") and not desc:
-                        desc = child.text or ""
-                    elif tag in ("pubDate", "date", "updated", "published") and not pub_date:
-                        pub_date = child.text or ""
-                clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
-                if title and link:
-                    items.append({
-                        "title": html.unescape(title.strip()),
-                        "link": link.strip(),
-                        "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
-                        "pub_date": pub_date.strip()
-                    })
-        else:
-            found_entries = [el for el in root.iter() if el.tag.split("}")[-1] == "entry"]
-            for entry in found_entries:
-                title = ""
-                link = ""
-                desc = ""
-                pub_date = ""
-                for child in entry:
-                    tag = child.tag.split("}")[-1]
-                    if tag == "title" and not title:
-                        title = child.text or ""
-                    elif tag == "link" and not link:
-                        link = child.get("href", "") or child.text or ""
-                    elif tag in ("summary", "content") and not desc:
-                        desc = child.text or ""
-                    elif tag in ("updated", "published", "date") and not pub_date:
-                        pub_date = child.text or ""
-                clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
-                if title and link:
-                    items.append({
-                        "title": html.unescape(title.strip()),
-                        "link": link.strip(),
-                        "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
-                        "pub_date": pub_date.strip()
-                    })
-    except Exception:
-        pass
-    return items
-
 
 @app.get("/api/feed/sources")
 def get_feed_sources():
@@ -1108,23 +347,6 @@ def delete_article(article_id: int):
         conn.execute("DELETE FROM reading_notes WHERE article_id = ?", (article_id,))
         conn.execute("DELETE FROM articles WHERE id = ?", (article_id,))
         return {"deleted": True, "article_id": article_id}
-
-
-
-SYSTEM_GRAMMAR_PROMPT = """你是一位精通德语欧标（Goethe-Zertifikat A1-C1）的资深德语教学与考点解析专家。
-用户会提供一个德语完整句子，以及他们点击的目标词汇或短语（用户可能是 A1-A2 零基础/初学者）。
-
-请详细分析该词或短语在句中的关键语法考点，特别关照初学者的痛点（如：冠词四格变化、三格动词、动词现在时变位、可分动词前缀、从句动词置后、固定介词搭配）。
-
-以严格的 JSON 格式输出，字段如下：
-{
-  "grammar_name": "考点名称（如：Akkusativ mit bestimmtem Artikel / Trennbare Verben / Nomen-Verb-Verbindung / Präposition mit Dativ）",
-  "cefr_level": "考点对应的欧标等级，只能是 A1/A2/B1/B2/C1 之一",
-  "explanation_zh": "面向初学者的通俗精炼中文解析（1-3句话，解释在句中的语法作用、为什么用这个格/变位，指出考试高频错点）",
-  "rule_formula": "语法规则或公式（如：trinken + Akkusativ: den Kaffee (m.) / fahren mit + Dativ: der U-Bahn (f.)）",
-  "collocations": ["高频用法1", "高频用法2"]
-}
-不要输出除 JSON 以外的任何文字。"""
 
 @app.post("/api/lookup/grammar")
 async def lookup_grammar(req: GrammarLookupReq):
@@ -1707,36 +929,6 @@ class TTSReq(BaseModel):
     voice: Optional[str] = "de-DE-KatjaNeural"
     rate: Optional[str] = "+0%"
 
-def get_cache_info() -> Dict[str, Any]:
-    total_size = 0
-    count = 0
-    if os.path.exists(AUDIO_CACHE_DIR):
-        for fname in os.listdir(AUDIO_CACHE_DIR):
-            fpath = os.path.join(AUDIO_CACHE_DIR, fname)
-            if os.path.isfile(fpath):
-                count += 1
-                total_size += os.path.getsize(fpath)
-    return {
-        "file_count": count,
-        "total_size_mb": round(total_size / (1024 * 1024), 2),
-        "total_size_bytes": total_size
-    }
-
-def prune_audio_cache(max_files: int = 300):
-    if not os.path.exists(AUDIO_CACHE_DIR):
-        return
-    files = []
-    for fname in os.listdir(AUDIO_CACHE_DIR):
-        fpath = os.path.join(AUDIO_CACHE_DIR, fname)
-        if os.path.isfile(fpath):
-            files.append((fpath, os.path.getmtime(fpath)))
-    if len(files) > max_files:
-        files.sort(key=lambda x: x[1])
-        for fpath, _ in files[: len(files) - max_files + 30]:
-            try:
-                os.remove(fpath)
-            except Exception:
-                pass
 
 # 朗读输入上限：局域网可达端点，防超大文本打满合成队列与磁盘缓存（场景是词/句级）
 MAX_TTS_TEXT_LEN = 1000
@@ -1820,11 +1012,11 @@ async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str =
 
 @app.get("/api/audio/cache")
 def get_audio_cache():
-    return get_cache_info()
+    return get_cache_info(AUDIO_CACHE_DIR)
 
 @app.post("/api/audio/cache/clear")
 def clear_audio_cache():
-    info = get_cache_info()
+    info = get_cache_info(AUDIO_CACHE_DIR)
     cleared_count = 0
     if os.path.exists(AUDIO_CACHE_DIR):
         for fname in os.listdir(AUDIO_CACHE_DIR):
@@ -2051,116 +1243,6 @@ def export_study_guide(article_id: int):
 
 # --- Backup & Restore Endpoints ---
 
-BACKUP_FORMAT_VERSION = 2
-
-# app_settings 的**正向**白名单。用白名单而非黑名单：将来新增敏感设置项时，
-# 黑名单会默认泄露，白名单会默认安全。DEEPSEEK_API_KEY 绝不在列 ——
-# 备份 JSON 是用户会分享、上传、丢进网盘的文件。
-BACKUP_SETTINGS_WHITELIST = ("TTS_VOICE", "TTS_RATE", "API_BASE_URL", "API_MODEL")
-
-_SRS_COLUMNS = ("mastered", "mastered_at", "correct_count", "wrong_count",
-                "due_date", "interval_days", "ease_factor", "repetition_count")
-
-# 缺列时回落到与建表 DDL 一致的默认值，这样 v1 备份（或手工编辑过的文件）
-# 也能被读进来而不是炸掉。
-_SRS_DEFAULTS = {"mastered": 0, "mastered_at": None, "correct_count": 0,
-                 "wrong_count": 0, "due_date": None, "interval_days": 1,
-                 "ease_factor": 2.5, "repetition_count": 0}
-
-_BACKUP_TABLES = {
-    "articles": (
-        ("id", "title", "source_url", "raw_text", "processed_json", "created_at"),
-        {"title": "Untitled", "source_url": "", "raw_text": "", "processed_json": "{}"},
-    ),
-    "vocab_cards": (
-        ("id", "article_id", "word", "lemma", "pos", "gender", "plural", "cefr_level",
-         "definition_zh", "sentence_context", "created_at") + _SRS_COLUMNS,
-        dict(_SRS_DEFAULTS, word="", lemma="", pos="", gender="", plural="",
-             cefr_level="A1", definition_zh="", sentence_context=""),
-    ),
-    "grammar_cards": (
-        ("id", "article_id", "sentence_context", "grammar_name", "cefr_level",
-         "explanation_zh", "rule_formula", "examples_zh", "created_at") + _SRS_COLUMNS,
-        dict(_SRS_DEFAULTS, sentence_context="", grammar_name="", cefr_level="A1",
-             explanation_zh="", rule_formula="", examples_zh=""),
-    ),
-    "reading_notes": (
-        ("id", "article_id", "sentence_id", "selected_text", "color", "note_content", "created_at"),
-        {"selected_text": "", "color": "yellow", "note_content": ""},
-    ),
-}
-
-_PROGRESS_TABLES = {
-    "study_log": (
-        ("id", "event_type", "ref_id", "note", "logged_at"),
-        {"event_type": "", "note": ""},
-    ),
-    "quiz_log": (
-        ("id", "card_id", "card_type", "mode", "correct", "attempted_at"),
-        {"card_type": "vocab", "mode": "", "correct": 0},
-    ),
-    "daily_summary": (
-        ("date", "cards_added", "cards_mastered", "articles_read", "quiz_sessions", "study_minutes"),
-        {"cards_added": 0, "cards_mastered": 0, "articles_read": 0,
-         "quiz_sessions": 0, "study_minutes": 0},
-    ),
-}
-
-
-def _require_localhost(request: Request):
-    """敏感接口仅允许本机访问。
-
-    桌面端有意绑 0.0.0.0（start.py 的 get_bind_host，同 Wi-Fi 的手机/平板可读文章），
-    但「导出整个数据库」「清空数据库再灌」和「改写 API Key / base_url」从来不该被局域网触达 ——
-    后者在改成真覆盖语义后等于「局域网内一个 POST 清空你的数据」或「悄悄改写你的模型网关」。
-    读文章期望被共享，备份与设置不期望，所以闸下在端点粒度而不是改绑定地址。
-
-    接受 127.0.0.1、::1、localhost 与等价的 IPv4-mapped 回环 ::ffff:127.0.0.1；
-    无法确认来源（client 为 None 或 host 缺失/空）时拒绝，不默认放行。
-    """
-    host = ""
-    if request.client is not None:
-        host = getattr(request.client, "host", None) or ""
-    if host not in ("127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"):
-        raise HTTPException(403, "该接口仅允许本机访问")
-
-
-def _rows_to_tuples(rows: List[Dict[str, Any]], columns: Tuple[str, ...],
-                    defaults: Dict[str, Any]) -> List[Tuple]:
-    return [tuple(r.get(c, defaults.get(c)) for c in columns) for r in rows]
-
-
-def build_backup_payload() -> Dict[str, Any]:
-    """组装 v2 备份。local_storage 由前端在 /prepare 时填入——后端读不到浏览器存储。"""
-    conn = get_db()
-    try:
-        tables = {name: [dict(r) for r in conn.execute(f"SELECT * FROM {name}").fetchall()]
-                  for name in _BACKUP_TABLES}
-        placeholders = ",".join("?" for _ in BACKUP_SETTINGS_WHITELIST)
-        settings = [dict(r) for r in conn.execute(
-            f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
-            BACKUP_SETTINGS_WHITELIST,
-        ).fetchall()]
-    finally:
-        conn.close()
-
-    pconn = get_progress_db()
-    try:
-        progress = {name: [dict(r) for r in pconn.execute(f"SELECT * FROM {name}").fetchall()]
-                    for name in _PROGRESS_TABLES}
-    finally:
-        pconn.close()
-
-    return {
-        "version": BACKUP_FORMAT_VERSION,
-        "exported_at": datetime.now().isoformat(),
-        "app_settings": settings,
-        "local_storage": {},
-        **tables,
-        **progress,
-    }
-
-
 @app.get("/api/backup/export")
 def export_database_backup(request: Request):
     """原始导出端点，保留给脚本/桌面直连使用。
@@ -2174,12 +1256,6 @@ def export_database_backup(request: Request):
 
 class PrepareBackupReq(BaseModel):
     local_storage: Dict[str, Any] = {}
-
-
-# prepare→download 之间的暂存槽。单用户本地服务，一份就够。
-# 不落盘：避免在磁盘留下用户全库的明文副本，也免去一套失效时会静默的清理逻辑。
-# 可接受的失效模式——用户始终不点下载时，一份 JSON 占内存到进程重启。
-_pending_backup: Dict[str, Any] = {"token": None, "payload": None, "filename": None}
 
 
 @app.post("/api/backup/prepare")
@@ -2217,9 +1293,6 @@ def download_prepared_backup(token: str, request: Request):
 
 
 # ── Workbench backup (同理，Android WebView 对 blob: URL 静默失败) ────────
-
-_pending_wb: Dict[str, Any] = {"token": None, "payload": None, "filename": None}
-
 
 class WbBackupReq(BaseModel):
     filename: str = "workbench-backup.json"
@@ -2262,49 +1335,6 @@ class RestoreReq(BaseModel):
     quiz_log: List[Dict[str, Any]] = []
     daily_summary: List[Dict[str, Any]] = []
     local_storage: Dict[str, Any] = {}
-
-
-@contextmanager
-def _db_snapshot_guard():
-    """还原前给两个库做文件级快照，任一步失败就整体拷回。
-
-    delector.db 与 progress.db 是两个**独立** SQLite 文件，无法共处一个事务。
-    还原已改成「清库再灌」，所以清空之后、灌完之前若失败（JSON 损坏、磁盘满、
-    进程被杀），数据就「已删而备份没进去」——把丢复习进度的 bug 换成丢全部数据的 bug。
-    单库事务保护不了跨文件操作，只能在文件层再兜一层。
-    """
-    paths = [p for p in (get_db_path(), get_progress_db_path()) if os.path.exists(p)]
-    tmpdir = tempfile.mkdtemp(prefix="delector_restore_")
-    snapshots: Dict[str, str] = {}
-    try:
-        for p in paths:
-            dst = os.path.join(tmpdir, os.path.basename(p))
-            shutil.copy2(p, dst)
-            snapshots[p] = dst
-        yield
-    except BaseException:
-        # 连 KeyboardInterrupt 也要回滚——半个还原比不还原更糟
-        for original, snapshot in snapshots.items():
-            try:
-                shutil.copy2(snapshot, original)
-            except Exception:
-                pass
-        raise
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
-
-
-def _replace_tables(conn, spec: Dict[str, Tuple], payload: Dict[str, List[Dict[str, Any]]]):
-    for name, (columns, defaults) in spec.items():
-        conn.execute(f"DELETE FROM {name}")
-        rows = payload.get(name) or []
-        if not rows:
-            continue
-        placeholders = ",".join("?" for _ in columns)
-        conn.executemany(
-            f"INSERT INTO {name} ({','.join(columns)}) VALUES ({placeholders})",
-            _rows_to_tuples(rows, columns, defaults),
-        )
 
 
 @app.post("/api/backup/restore")

@@ -2760,7 +2760,7 @@ def test_backup_loopback_still_succeeds(client):
 
 def test_android_spacy_module_load_fallback_static():
     """_load_spacy_model 必须包含 module.load() 回退（Android 无 dist-info 时唯一可用路径）。"""
-    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
     assert "importlib.import_module" in src, "缺 importlib 回退"
     assert "module.load()" in src, "缺 module.load() 回退"
     assert "spacy.load(name)" in src or 'spacy.load(' in src, "缺 spacy.load(name) 首选路径"
@@ -2768,14 +2768,14 @@ def test_android_spacy_module_load_fallback_static():
 
 def test_android_spacy_model_dir_fallback_static():
     """模型目录 glob 回退必须存在（meta 版本与目录名不一致时的最后兜底）。"""
-    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
     assert "glob(f\"{name}-*\"" in src or 'glob(f"{name}-' in src, "缺模型目录 glob 兜底"
     assert "data_dirs" in src, "缺 data_dirs 变量"
 
 
 def test_android_spacy_download_gated_by_is_android_static():
     """自动下载必须被 is_android() 门控，否则 Android import 期起 pip 子进程卡死。"""
-    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
     # 必须有 is_android 判断且在 download 之前
     assert "is_android()" in src, "缺 is_android() 判断"
     # 确保下载路径在 is_android 分支保护下，而非无条件

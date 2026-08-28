@@ -214,7 +214,7 @@ jobs:
           print(f"模型 compat={compat} 与 APK spaCy {APK_SPACY} 匹配")
           PY
           mkdir -p android/app/src/main/python
-          cp -r server.py start.py core_dict.py core_dict_ext.py prep_dict.py linguistics.py syntax_tree.py edge_tts_mini.py writing_rules.py essay_diff.py android/app/src/main/python/
+          cp -r server.py start.py core_dict.py core_dict_ext.py prep_dict.py linguistics.py syntax_tree.py edge_tts_mini.py writing_rules.py essay_diff.py nlp.py database.py security.py android/app/src/main/python/
           MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
           cp -r "$MODEL_DIR" android/app/src/main/python/de_core_news_sm
           mkdir -p android/app/src/main/assets
