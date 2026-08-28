@@ -13,6 +13,7 @@ let deckFlipped = false;
 let cachedCards = { vocab_cards: [], grammar_cards: [] };
 let cachedDueCards = { due_vocab: [], due_grammar: [], due_count: 0 };
 let undoToastTimer = null;
+let _lastFlipTime = 0;
 
 export function setCardSegment(seg) {
   cardSegment = seg;
@@ -301,6 +302,9 @@ export async function submitCardReview(type, id, grade) {
 
 export function toggleDeckFlip(e) {
   if (e) e.stopPropagation();
+  const now = Date.now();
+  if (now - _lastFlipTime < 200) return;  // 防 Android 双击事件抖动
+  _lastFlipTime = now;
   if (navigator.vibrate) navigator.vibrate(15);
   deckFlipped = !deckFlipped;
   const cardEl = document.getElementById('deck-active-card');
