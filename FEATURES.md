@@ -6,7 +6,7 @@
 
 ---
 
-## 🌟 核心功能全览（当前版本 v4.6.2）
+## 🌟 核心功能全览（当前版本 v4.6.3）
 
 ```
                      ┌─────────────────────────────────────────────────────────┐
@@ -214,6 +214,7 @@
 | **v4.6.0** | **德语背词工作台集成 + 移动端语音修复** | 684 词背词工作台（FSRS-6 / 卡片复习 / 自测 / 统计 / 词库）iframe 嵌入 DeLector；`GET /api/audio/tts` 服务端 edge-tts 成为最高优先级音频源，攻克 iOS/Android 浏览器 file:// 协议禁 TTS 与设备缺德语语音包两大无声根因；备份覆盖 `wb.*` 学习进度键（314 全绿） | 🟢 **已发布** |
 | **v4.6.1** | **背词台 TTS 修复** | 修 v4.6.0 报告的音频 bug：1) `playWord` 入口 cleanup 去掉 `_ttsAudio.load()`，避免 removeAttribute 后排队的异步 error 事件干扰 tryServer 的 onerror；2) 加 `_ttsAttemptId` 全局守卫，stale 的超时/onerror/onplaying handler 检测 ID 不匹配直接 return，不再交叉干扰后续点击；3) tryServer 超时从 6s 降到 3s，桌面 localhost edge-tts 通常 <1s；发版后补 2 条回归测试钉住前两条（入口清理无 `.load()` / 每个共享 `_ttsAudio` 的异步回调都有 attempt 守卫）（316 全绿） | 🟢 **已发布** |
 | **v4.6.2** | **卡盒交互修复 + 伴读宠物 + 自测范围** | 1) 伴读宠物在背词台视图自动隐藏（不盖住设置按钮）；2) 自测新增「复习不认识（评过 Again）」范围，`addWrong` 写入 `rv` 标记；3) 卡盒翻转 onclick 从容器移到正面，背面评分按钮加 `stopPropagation`，Android 3D 变换下不再误触翻转；4) `toggleDeckFlip` 加 200ms 防抖，阻断 Android 双击事件抖动导致的「翻了又翻回来」（316 全绿） | 🟢 **已发布** |
+| **v4.6.3** | **工作台导出修复 + 卡盒 swipe 拦截** | 1) 工作台导出 Android 静默失败（`blob:` URL 在 Android WebView 不触发下载），改为走服务端 `/api/wb/backup/prepare` → `/api/wb/backup/download/{token}` 通道；2) 卡盒背面评分按钮被 swipe 手势吞掉，`deckFlipped` 时跳过 swipe 监听器（316 全绿） | 🟢 **已发布** |
 | **v4.5+** | **歌德 / 德福历年真题语料库预置** | 内置官方样题语料，支持按话题分类一键载入工作台 | ⚪ 筹备中 |
 
 ---
