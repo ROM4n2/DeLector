@@ -109,3 +109,68 @@ def test_backup_covers_workbench_state():
     has_literal = '"wb."' in fn or "'wb.'" in fn or "'wb." in fn or '"wb.' in fn
     has_constant = "BACKUP_LS_WORKBENCH_PREFIX" in fn
     assert has_literal or has_constant, "备份键收集必须含 wb. 前缀"
+
+
+# ── v4.6.1 回归：共享 <audio> 单例上的两个异步陷阱 ─────────────────────
+
+def _playword_cleanup_block():
+    """playWord 入口那段「停掉上一次播放」的互斥清理（到 finalResolve 为止）。"""
+    body = _WORKBENCH.split("function playWord(hw, opts)")[1]
+    return body.split("互斥：立即停掉上一次播放")[1].split("const finalResolve")[0]
+
+
+def _tts_shared_audio_blocks():
+    """共用全局 _ttsAudio 单例的两条链路。**不含 trySpeech** —— 它走
+    speechSynthesis、不碰 _ttsAudio，attempt 守卫对它没有意义。"""
+    server = _WORKBENCH.split("const tryServer")[1].split("const trySpeech")[0]
+    online = _WORKBENCH.split("const tryOnline")[1].split("主调用链（server TTS 优先")[0]
+    assert "_ttsAudio.src =" in server and "_ttsAudio.src =" in online, "切片没落在音频链路上"
+    return {"tryServer": server, "tryOnline": online}
+
+
+def test_playword_cleanup_does_not_reload_audio():
+    """入口清理不得调 load()：removeAttribute('src') 之后再 load() 会给 <audio>
+    **排一个异步 error 事件**，它在当前同步块跑完后才派发，正好命中同一 tick 里
+    刚装上的 tryServer.onerror —— 首次点击于是被自己的清理判成 audio-error 而无声
+    （v4.6.1 修的第一个根因）。pause() / removeAttribute 是同步的，不排事件。"""
+    block = _playword_cleanup_block()
+    # 先确认切到的确实是那段清理（否则下面的否定断言在空串上恒真）
+    assert "_ttsAudio.pause()" in block, "切片没落在入口清理块上"
+    assert "removeAttribute('src')" in block, "切片没落在入口清理块上"
+    assert ".load()" not in block, "入口清理不能调 load()：会排一个异步 error 事件"
+
+
+def test_every_shared_audio_handler_guards_attempt_id():
+    """_ttsAudio 是 tryServer/tryOnline 共用的全局单例，per-attempt 的 settled
+    闭包管不住**上一次**尝试的回调：旧 timer 醒来会 pause() + 清 src 掐掉新播放，
+    旧 onplaying 又把新尝试判成已 settled —— 连点于是交叉干扰、重复出声
+    （v4.6.1 修的第二个根因）。所以每个异步回调开头都必须比对 attempt 身份。"""
+    openers = (
+        "_ttsAudio.onerror = () => {",
+        "_ttsAudio.onplaying = () => {",
+        "setTimeout(() => {",
+        "p.catch((err) => {",
+    )
+    per_chain = {}
+    for chain, src in _tts_shared_audio_blocks().items():
+        found = 0
+        for opener in openers:
+            start = 0
+            while True:
+                i = src.find(opener, start)
+                if i < 0:
+                    break
+                start = i + len(opener)
+                found += 1
+                head = src[start:start + 160]
+                assert "myAttempt !== _ttsAttemptId" in head, (
+                    f"{chain} 里的回调 {opener!r}（块内偏移 {i}）开头缺 attempt 守卫，"
+                    "stale handler 会去动共享的 _ttsAudio"
+                )
+        per_chain[chain] = found
+    # 只钉下界：每条链至少 3 个异步回调（当前 server 4 / online 4）。
+    # 数到 0 说明切片跑偏，否定式的守卫断言就会在空串上恒真。
+    for chain, n in per_chain.items():
+        assert n >= 3, f"{chain} 里只找到 {n} 个异步回调，切片可能跑偏了"
+    # myAttempt 必须在两条链路定义之前就绑定好
+    assert _WORKBENCH.index("const myAttempt = ++_ttsAttemptId") < _WORKBENCH.index("const tryServer")
