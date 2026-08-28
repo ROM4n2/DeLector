@@ -1084,6 +1084,7 @@ let _ttsGestureUnlocked = false;  // 移动端 autoplay 策略解锁标志：用
 let _ttsVoice = null;          // pickDeVoice 结果缓存（懒加载）
 let _ttsServerReachable = typeof location !== 'undefined' && location.protocol.startsWith('http');
 let _ttsVoicesReady = false;   // speechSynthesis.onvoiceschanged 是否已触发
+let _ttsAttemptId = 0;         // 每次 playWord 递增，stale handler 检测到 ID 不匹配直接退出
 
 /** 去除德语定冠词（der/die/das/ein/eine 等）、标点、格后缀，返回核心词：
  *  保留：字母 äöüß (大小写)、空格、连字符-；去掉前导冠词 + 后置逗号/长破折号/数字
@@ -1171,12 +1172,13 @@ function playWord(hw, opts) {
 
   // ---- 互斥：立即停掉上一次播放 ----
   try {
-    if (_ttsAudio) { _ttsAudio.pause(); try { _ttsAudio.removeAttribute('src'); } catch (e) {} _ttsAudio.load(); }
+    if (_ttsAudio) { _ttsAudio.pause(); try { _ttsAudio.removeAttribute('src'); } catch (e) {} }
     if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
   } catch (e) { /* ignore */ }
   _ttsBusy = true;
   // gesture unlock：playWord 被调用即认为是从用户手势栈发起（UI 按钮 click）
   _ttsGestureUnlocked = true;
+  const myAttempt = ++_ttsAttemptId;
 
   const finalResolve = (result) => {
     _ttsBusy = false;
@@ -1247,19 +1249,19 @@ function playWord(hw, opts) {
     const url = `/api/audio/tts?text=${encodeURIComponent(word)}&rate=${encodeURIComponent(rateStr)}`;
     let settled = false;
     const timer = setTimeout(() => {
-      if (settled) return; settled = true; clearTimeout(timer);
+      if (settled || myAttempt !== _ttsAttemptId) return; settled = true; clearTimeout(timer);
       // 超时即弃：不清 src 的话后台还在拉这份 MP3，加载完成会突然出声，
       // 打断用户当下的操作（下一次 playWord 之前没有任何东西会停它）。
-      try { _ttsAudio.pause(); _ttsAudio.removeAttribute('src'); _ttsAudio.load(); } catch (e) {}
+      try { _ttsAudio.pause(); _ttsAudio.removeAttribute('src'); } catch (e) {}
       innerRes(finalResolve({ ok: false, engine: 'server', error: "timeout" }));
-    }, 6000);
+    }, 3000);
     _ttsAudio.onerror = () => {
-      if (settled) return; settled = true; clearTimeout(timer);
+      if (settled || myAttempt !== _ttsAttemptId) return; settled = true; clearTimeout(timer);
       console.warn("[TTS] server audio-error: src=" + _ttsAudio.src);
       innerRes(finalResolve({ ok: false, engine: 'server', error: "audio-error" }));
     };
     _ttsAudio.onplaying = () => {
-      if (settled) return; settled = true; clearTimeout(timer);
+      if (settled || myAttempt !== _ttsAttemptId) return; settled = true; clearTimeout(timer);
       innerRes(finalResolve({ ok: true, engine: 'server' }));
     };
     // 语速已在服务端烘焙进音频（rate 参数），浏览器侧不再二次变速
@@ -1269,7 +1271,7 @@ function playWord(hw, opts) {
     const p = _ttsAudio.play();
     if (p && typeof p.then === 'function') {
       p.catch((err) => {
-        if (settled) return; settled = true; clearTimeout(timer);
+        if (settled || myAttempt !== _ttsAttemptId) return; settled = true; clearTimeout(timer);
         console.warn("[TTS] server play-rejected:", err && err.name);
         innerRes(finalResolve({ ok: false, engine: 'server', error: "play-rejected" }));
       });
@@ -1352,18 +1354,19 @@ function playWord(hw, opts) {
       console.log("[TTS] trying source", sourceIdx, url);
       try {
         _ttsAudio.onerror = () => {
-          // 当前源失败，尝试下一个
+          // 当前源失败，尝试下一个（stale attempt 直接退出）
+          if (myAttempt !== _ttsAttemptId) return;
           sourceIdx++;
           trySource();
         };
         _ttsAudio.onplaying = () => {
-          if (settled) return; settled = true; cleanup();
+          if (settled || myAttempt !== _ttsAttemptId) return; settled = true; cleanup();
           innerRes(finalResolve({ ok: true, engine: 'online' }));
         };
         // 4 秒超时：playing 不触发就换源
         if (tm) clearTimeout(tm);
         tm = setTimeout(() => {
-          if (settled) return;
+          if (settled || myAttempt !== _ttsAttemptId) return;
           sourceIdx++;
           trySource();
         }, 4000);
@@ -1374,7 +1377,7 @@ function playWord(hw, opts) {
         const p = _ttsAudio.play();
         if (p && typeof p.then === 'function') {
           p.catch((err) => {
-            if (settled) return;
+            if (settled || myAttempt !== _ttsAttemptId) return;
             sourceIdx++;
             trySource();
           });
