@@ -143,7 +143,13 @@ export function show(view) {
 
   // German workbench 用 iframe 全屏，伴读宠物会盖住底部按钮（尤其 Android）
   const compEl = document.getElementById('companion');
-  if (compEl) compEl.classList.toggle('is-disabled', view === 'german');
+  if (compEl) {
+    if (view === 'german') {
+      compEl.classList.add('is-disabled');
+    } else if (Companion.enabled) {
+      compEl.classList.remove('is-disabled');
+    }
+  }
 
   closeDrawer();
   clearCefrFocus();
