@@ -1,1209 +1,2624 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>DeLector — 德语欧标沉浸阅读与考点剖析</title>
-  <meta name="description" content="专为德语欧标与歌德证书备考打造的沉浸阅读工作台，支持 CEFR 词汇荧光标注与深度考点解析。">
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#faf8f5">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="DeLector">
-  <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-
-  <!-- Top Metadata Ticker Strip (Editorial Live Strip) -->
-  <div class="top-ticker topbar">
-    <div class="topbar-inner">
-      <span><b>DELECTOR · 2026</b> · Vol. 04 / Issue Nº 01</span>
-      <span class="mid"><span>Filed under <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span></span>
-      <!-- 这个字面量是判断「前端到底刷新了没有」的唯一肉眼指标，
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>DeLector — 德语欧标沉浸阅读与考点剖析</title>
+    <meta
+      name="description"
+      content="专为德语欧标与歌德证书备考打造的沉浸阅读工作台，支持 CEFR 词汇荧光标注与深度考点解析。"
+    />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#faf8f5" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="DeLector" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- Top Metadata Ticker Strip (Editorial Live Strip) -->
+    <div class="top-ticker topbar">
+      <div class="topbar-inner">
+        <span><b>DELECTOR · 2026</b> · Vol. 04 / Issue Nº 01</span>
+        <span class="mid"
+          ><span
+            >Filed under
+            <b class="coral">Goethe · TestDaF · CEFR A1–C1</b></span
+          ></span
+        >
+        <!-- 这个字面量是判断「前端到底刷新了没有」的唯一肉眼指标，
            test_writer_mobile.py 断言它与 sw.js / build.gradle 的版本号一致 -->
-      <span class="right"><span class="pulse"></span>System · v4.6.4 Online</span>
-    </div>
-  </div>
-
-  <!-- Top Navigation (Gutenberg Broadsheet Bar) -->
-  <nav id="nav">
-    <div class="nav-brand" onclick="show('home')">
-      DeLector<span class="brand-dot">.</span>
-      <span class="nav-pin">AKADEMISCHES LESEPULT · B1–C1</span>
-    </div>
-    <div class="nav-links">
-      <button id="nav-btn-home" class="nav-tab active" onclick="show('home')">
-        <span class="nav-tab-code">ARCHIV</span>
-        <span class="nav-tab-label">德语文库</span>
-      </button>
-      <button id="nav-btn-progress" class="nav-tab" onclick="show('progress')">
-        <span class="nav-tab-code">TAGEBUCH</span>
-        <span class="nav-tab-label">每日台账</span>
-      </button>
-      <button id="nav-btn-writer" class="nav-tab" onclick="show('writer')">
-        <span class="nav-tab-code">SCHREIBTISCH</span>
-        <span class="nav-tab-label">写作润色</span>
-      </button>
-      <button id="nav-btn-cards" class="nav-tab" onclick="show('cards')">
-        <span class="nav-tab-code">KARTEI</span>
-        <span class="nav-tab-label">复习卡片 (<span id="card-count" class="nav-counter">0</span>)</span>
-      </button>
-      <button id="nav-btn-german" class="nav-tab" onclick="show('german')">
-        <span class="nav-tab-code">VOKABELN</span>
-        <span class="nav-tab-label">德语背词</span>
-      </button>
-    </div>
-    <div class="nav-actions">
-      <button class="btn btn-ghost nav-settings-btn" onclick="openSettingsModal()" title="偏好与 API 设置">⚙️ 设置</button>
-      <a href="/api/cards/export/apkg" class="btn btn-dark nav-anki-btn" title="导出为 Anki 牌组 (.apkg)">导出 Anki</a>
-    </div>
-  </nav>
-
-  <!-- ── View 1: Home Library ───────────────────────────────── -->
-  <main id="view-home" class="view active">
-    <div class="home-hero">
-      <div class="hero-eyebrow">
-        <span class="dot"></span>
-        <span>CEFR IMMERSIVE WORKSPACE · 歌德备考</span>
-      </div>
-      <h1>德语欧标<br><span class="accent-word">沉浸研读</span>与考点剖析</h1>
-      <p>导入任意德语长文或备考真题，本地智能标注 CEFR 难度色阶（A2-C1），实时剖析歌德核心语法考点并一键沉淀为 Anki 卡片。</p>
-      <div class="home-cta">
-        <button class="btn btn-accent" onclick="openModal()">+ 导入德语文章</button>
+        <span class="right"
+          ><span class="pulse"></span>System · v4.6.4 Online</span
+        >
       </div>
     </div>
 
-    <!-- Highlighter Legend -->
-    <div class="cefr-legend">
-      <strong>欧标色标：</strong>
-      <span class="hl-pill hl-A1">A1 入门基石</span>
-      <span class="hl-pill hl-A2">A2 进阶表达</span>
-      <span class="hl-pill hl-B1">B1 核心词汇</span>
-      <span class="hl-pill hl-B2">B2 高级搭配</span>
-      <span class="hl-pill hl-C1">C1 精通论述</span>
-    </div>
+    <!-- Top Navigation (Gutenberg Broadsheet Bar) -->
+    <nav id="nav">
+      <div class="nav-brand" onclick="show('home')">
+        DeLector<span class="brand-dot">.</span>
+        <span class="nav-pin">AKADEMISCHES LESEPULT · B1–C1</span>
+      </div>
+      <div class="nav-links">
+        <button id="nav-btn-home" class="nav-tab active" onclick="show('home')">
+          <span class="nav-tab-code">ARCHIV</span>
+          <span class="nav-tab-label">德语文库</span>
+        </button>
+        <button
+          id="nav-btn-progress"
+          class="nav-tab"
+          onclick="show('progress')"
+        >
+          <span class="nav-tab-code">TAGEBUCH</span>
+          <span class="nav-tab-label">每日台账</span>
+        </button>
+        <button id="nav-btn-writer" class="nav-tab" onclick="show('writer')">
+          <span class="nav-tab-code">SCHREIBTISCH</span>
+          <span class="nav-tab-label">写作润色</span>
+        </button>
+        <button id="nav-btn-cards" class="nav-tab" onclick="show('cards')">
+          <span class="nav-tab-code">KARTEI</span>
+          <span class="nav-tab-label"
+            >复习卡片 (<span id="card-count" class="nav-counter">0</span>)</span
+          >
+        </button>
+        <button id="nav-btn-german" class="nav-tab" onclick="show('german')">
+          <span class="nav-tab-code">VOKABELN</span>
+          <span class="nav-tab-label">德语背词</span>
+        </button>
+      </div>
+      <div class="nav-actions">
+        <button
+          class="btn btn-ghost nav-settings-btn"
+          onclick="openSettingsModal()"
+          title="偏好与 API 设置"
+        >
+          ⚙️ 设置
+        </button>
+        <a
+          href="/api/cards/export/apkg"
+          class="btn btn-dark nav-anki-btn"
+          title="导出为 Anki 牌组 (.apkg)"
+          >导出 Anki</a
+        >
+      </div>
+    </nav>
 
-    <div class="section-label">
-      <span class="section-title">文稿库 · LIBRARY</span>
-    </div>
-    <div id="article-list"></div>
-  </main>
-
-  <!-- ── View 2: Reader Workspace ───────────────────────────── -->
-  <main id="view-reader" class="view">
-    <div class="reader-topbar">
-      <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
-      <h2 id="reader-title"></h2>
-      <div class="reader-controls">
-        <div id="reader-meta-badge" class="mini-level-badge mini-level-A1">A1 推荐</div>
-        <button id="btn-reader-play" class="btn btn-dark" onclick="ShadowPlayer.toggle()" title="开始/暂停全文影子跟读朗读" style="font-size:0.75rem;min-height:30px;padding:0 0.65rem;">▶ 影子朗读</button>
-        <button class="btn btn-accent" onclick="openClozeModal()" title="为当前文章生成歌德考点完形填空 / C-Test 实战训练" style="font-size:0.75rem;min-height:30px;padding:0 0.65rem;">⚔ 完形实战</button>
-        <button class="btn btn-ghost" onclick="downloadStudyGuide()" title="一键导出全文划线、词汇与考点为 Markdown 精读讲义" style="font-size:0.75rem;min-height:30px;padding:0 0.65rem;">📥 导出讲义</button>
-        <div class="typo-pill">
-          <button id="btn-font-sans" class="typo-btn active" onclick="setFontMode('sans')" title="切换为清爽现代黑体">黑体</button>
-          <button id="btn-font-serif" class="typo-btn" onclick="setFontMode('serif')" title="切换为经典书卷衬线体">衬线</button>
-          <span class="typo-sep"></span>
-          <button class="typo-btn" onclick="adjustFontSize(-1)" title="减小正文字号">A-</button>
-          <button class="typo-btn" onclick="adjustFontSize(1)" title="加大正文字号">A+</button>
+    <!-- ── View 1: Home Library ───────────────────────────────── -->
+    <main id="view-home" class="view active">
+      <div class="home-hero">
+        <div class="hero-eyebrow">
+          <span class="dot"></span>
+          <span>CEFR IMMERSIVE WORKSPACE · 歌德备考</span>
         </div>
-      </div>
-    </div>
-
-    <!-- CEFR Distribution Heatbar & Info -->
-    <div id="reader-heatbar-wrap" class="reader-heatbar-wrap">
-      <div class="heatbar-label">
-        <span>欧标难度分布 · CEFR SPECTRUM</span>
-        <span id="heatbar-time" style="font-family:var(--mono);color:var(--pencil);font-size:0.75rem;"></span>
-      </div>
-      <div id="reader-heatbar" class="reader-heatbar"></div>
-    </div>
-
-    <div id="reader-content" lang="de"></div>
-  </main>
-
-  <!-- ── View 3: Cards & Review Library ─────────────────────── -->
-  <main id="view-cards" class="view">
-    <div class="cards-topbar">
-      <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
-      <h2>卡片库 · KARTEIKARTEN</h2>
-      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-        <button id="quiz-start-btn" class="btn btn-dark" onclick="openQuizOverlay()" title="开始考验所有待复习卡片">⚔ 开始考验</button>
-        <button id="clear-cache-btn" class="btn btn-ghost" onclick="clearAudioCache()" title="查看并清理本地 MP3 语音缓存">🗑️ 缓存 (<span id="cache-size-span">0 MB</span>)</button>
-        <button class="btn btn-ghost" onclick="downloadBackupJson()" title="导出全部文章、卡片（含复习进度）、笔记、学习统计与界面设置为 JSON 文件">导出备份</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('backup-file-input').click()" title="⚠ 用备份文件整体替换当前数据——现有文章、卡片与统计会被清空">还原备份</button>
-        <input id="backup-file-input" type="file" accept=".json,application/json" style="display:none;" onchange="uploadBackupJson(event)">
-        <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki</a>
-      </div>
-    </div>
-
-    <!-- Segment & Mode Switcher Row -->
-    <div class="cards-control-row">
-      <div class="cards-seg-bar">
-        <button id="seg-due" class="cards-seg-btn active" onclick="setCardSegment('due')" title="根据 SuperMemo SM-2 算法今日到期的卡片">
-          今日到期 <span id="seg-due-count" class="seg-count">0</span>
-        </button>
-        <button id="seg-pending" class="cards-seg-btn" onclick="setCardSegment('pending')" title="所有待复习状态的卡片">
-          待复习全量 <span id="seg-pending-count" class="seg-count">0</span>
-        </button>
-        <button id="seg-mastered" class="cards-seg-btn" onclick="setCardSegment('mastered')" title="已掌握归档卡片">
-          已掌握 <span id="seg-mastered-count" class="seg-count">0</span>
-        </button>
-        <!-- 徽标初值是「–」而不是 0：矩阵懒加载，首次进入该段才拉数。
-             写 0 会在没数据的时候撒谎说词库是空的。 -->
-        <button id="seg-prep" class="cards-seg-btn" onclick="setCardSegment('prep')" title="按介词浏览全部固定搭配（Präpositionen-Matrix）">
-          Präpositionen <span id="seg-prep-count" class="seg-count">–</span>
-        </button>
-      </div>
-
-      <div class="cards-view-toggle">
-        <button id="mode-btn-deck" class="cards-mode-btn active" onclick="setCardViewMode('deck')" title="扑克牌叠层翻页模式">🎴 扑克牌盒</button>
-        <button id="mode-btn-grid" class="cards-mode-btn" onclick="setCardViewMode('grid')" title="目录全景平铺列表">📑 全景目录</button>
-      </div>
-    </div>
-
-    <div id="prep-filter-bar" class="prep-filter-bar hidden">
-      <div class="prep-case-pills">
-        <button class="folio-anchor-pill active" data-kasus="" onclick="filterPrepCase('')">Alle</button>
-        <button class="folio-anchor-pill" data-kasus="Dat" onclick="filterPrepCase('Dat')">Dativ</button>
-        <button class="folio-anchor-pill" data-kasus="Akk" onclick="filterPrepCase('Akk')">Akkusativ</button>
-        <button class="folio-anchor-pill" data-kasus="Gen" onclick="filterPrepCase('Gen')">Genitiv</button>
-      </div>
-      <input type="text" class="modal-input prep-search-input" id="prep-search-input"
-             placeholder="动词 / 形容词 suchen…" oninput="searchPrepCollocations(this.value)">
-    </div>
-
-    <div id="cards-container"></div>
-  </main>
-
-  <!-- ── View 4: Atelier Landing Page Folio (Atelier Style Ledger) ─ -->
-  <main id="view-progress" class="view">
-    <!-- Hero Stage: 0.85fr : 1.15fr Asymmetric Grid -->
-    <section id="folio-sec-metrics" class="folio-hero-stage">
-      <!-- Left Column: Editorial Headline, German Motto & Actions -->
-      <div class="folio-hero-copy">
-        <div class="folio-hero-kicker-wrap">
-          <span class="folio-pulse"></span>
-          <span class="folio-kicker">ATELIER FÜR DEUTSCHE PHILOLOGIE · LERNFORTSCHRITT</span>
-        </div>
-        <h1 class="folio-hero-title">
-          Exzellenz durch<br>
-          <em>Tägliche Hingabe.</em><span class="folio-dot">.</span>
+        <h1>
+          德语欧标<br /><span class="accent-word">沉浸研读</span>与考点剖析
         </h1>
-        <p class="folio-hero-lead">
-          每日精读台账 · 记录德语语言之界限与认知之拓展。日积跬步，终至千里。
+        <p>
+          导入任意德语长文或备考真题，本地智能标注 CEFR
+          难度色阶（A2-C1），实时剖析歌德核心语法考点并一键沉淀为 Anki 卡片。
         </p>
-
-        <!-- German Motto / Quote Card (Top Lede) -->
-        <div id="progress-motto" class="dossier-motto-section"></div>
-
-        <!-- Quick Jump & Action Strip -->
-        <div class="folio-hero-actions">
-          <button class="btn btn-dark" onclick="openQuizOverlay()" title="启动错题与弱项专项测验">
-            <span>⚔ 专项重测 (Quiz)</span>
+        <div class="home-cta">
+          <button class="btn btn-accent" onclick="openModal()">
+            + 导入德语文章
           </button>
-          <button class="btn btn-ghost" onclick="show('home')" title="进入德语外刊与文稿库">
-            <span>📚 文稿研读库</span>
+        </div>
+      </div>
+
+      <!-- Highlighter Legend -->
+      <div class="cefr-legend">
+        <strong>欧标色标：</strong>
+        <span class="hl-pill hl-A1">A1 入门基石</span>
+        <span class="hl-pill hl-A2">A2 进阶表达</span>
+        <span class="hl-pill hl-B1">B1 核心词汇</span>
+        <span class="hl-pill hl-B2">B2 高级搭配</span>
+        <span class="hl-pill hl-C1">C1 精通论述</span>
+      </div>
+
+      <div class="section-label">
+        <span class="section-title">文稿库 · LIBRARY</span>
+      </div>
+      <div id="article-list"></div>
+    </main>
+
+    <!-- ── View 2: Reader Workspace ───────────────────────────── -->
+    <main id="view-reader" class="view">
+      <div class="reader-topbar">
+        <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
+        <h2 id="reader-title"></h2>
+        <div class="reader-controls">
+          <div id="reader-meta-badge" class="mini-level-badge mini-level-A1">
+            A1 推荐
+          </div>
+          <button
+            id="btn-reader-play"
+            class="btn btn-dark"
+            onclick="ShadowPlayer.toggle()"
+            title="开始/暂停全文影子跟读朗读"
+            style="font-size: 0.75rem; min-height: 30px; padding: 0 0.65rem"
+          >
+            ▶ 影子朗读
           </button>
-          <div class="folio-anchor-nav">
-            <button class="folio-anchor-pill" onclick="scrollToFolioSection('folio-sec-spectrum')" title="跳转至欧标分布与30天轨迹">
-              § 01 谱系与轨迹 ↓
+          <button
+            class="btn btn-accent"
+            onclick="openClozeModal()"
+            title="为当前文章生成歌德考点完形填空 / C-Test 实战训练"
+            style="font-size: 0.75rem; min-height: 30px; padding: 0 0.65rem"
+          >
+            ⚔ 完形实战
+          </button>
+          <button
+            class="btn btn-ghost"
+            onclick="downloadStudyGuide()"
+            title="一键导出全文划线、词汇与考点为 Markdown 精读讲义"
+            style="font-size: 0.75rem; min-height: 30px; padding: 0 0.65rem"
+          >
+            📥 导出讲义
+          </button>
+          <div class="typo-pill">
+            <button
+              id="btn-font-sans"
+              class="typo-btn active"
+              onclick="setFontMode('sans')"
+              title="切换为清爽现代黑体"
+            >
+              黑体
             </button>
-            <button class="folio-anchor-pill" onclick="scrollToFolioSection('folio-sec-errors')" title="跳转至错题攻坚账本">
-              § 02 错题攻坚 ↓
+            <button
+              id="btn-font-serif"
+              class="typo-btn"
+              onclick="setFontMode('serif')"
+              title="切换为经典书卷衬线体"
+            >
+              衬线
             </button>
-            <button class="folio-anchor-pill" onclick="scrollToFolioSection('folio-sec-milestones')" title="跳转至学术勋章展台">
-              § 03 学术勋章 ↓
+            <span class="typo-sep"></span>
+            <button
+              class="typo-btn"
+              onclick="adjustFontSize(-1)"
+              title="减小正文字号"
+            >
+              A-
+            </button>
+            <button
+              class="typo-btn"
+              onclick="adjustFontSize(1)"
+              title="加大正文字号"
+            >
+              A+
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Right Column: 6 Core Ring Badges Exhibition Plate -->
-      <div class="folio-hero-plate">
-        <!-- Four Corner Marks -->
-        <span class="corner-mark tl">+</span>
-        <span class="corner-mark tr">+</span>
-        <span class="corner-mark bl">+</span>
-        <span class="corner-mark br">+</span>
+      <!-- CEFR Distribution Heatbar & Info -->
+      <div id="reader-heatbar-wrap" class="reader-heatbar-wrap">
+        <div class="heatbar-label">
+          <span>欧标难度分布 · CEFR SPECTRUM</span>
+          <span
+            id="heatbar-time"
+            style="
+              font-family: var(--mono);
+              color: var(--pencil);
+              font-size: 0.75rem;
+            "
+          ></span>
+        </div>
+        <div id="reader-heatbar" class="reader-heatbar"></div>
+      </div>
 
-        <div class="folio-plate-header">
-          <div class="folio-plate-badge">
+      <div id="reader-content" lang="de"></div>
+    </main>
+
+    <!-- ── View 3: Cards & Review Library ─────────────────────── -->
+    <main id="view-cards" class="view">
+      <div class="cards-topbar">
+        <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
+        <h2>卡片库 · KARTEIKARTEN</h2>
+        <div
+          style="
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+          "
+        >
+          <button
+            id="quiz-start-btn"
+            class="btn btn-dark"
+            onclick="openQuizOverlay()"
+            title="开始考验所有待复习卡片"
+          >
+            ⚔ 开始考验
+          </button>
+          <button
+            id="clear-cache-btn"
+            class="btn btn-ghost"
+            onclick="clearAudioCache()"
+            title="查看并清理本地 MP3 语音缓存"
+          >
+            🗑️ 缓存 (<span id="cache-size-span">0 MB</span>)
+          </button>
+          <button
+            class="btn btn-ghost"
+            onclick="downloadBackupJson()"
+            title="导出全部文章、卡片（含复习进度）、笔记、学习统计与界面设置为 JSON 文件"
+          >
+            导出备份
+          </button>
+          <button
+            class="btn btn-ghost"
+            onclick="document.getElementById('backup-file-input').click()"
+            title="⚠ 用备份文件整体替换当前数据——现有文章、卡片与统计会被清空"
+          >
+            还原备份
+          </button>
+          <input
+            id="backup-file-input"
+            type="file"
+            accept=".json,application/json"
+            style="display: none"
+            onchange="uploadBackupJson(event)"
+          />
+          <a href="/api/cards/export/apkg" class="btn btn-dark">导出 Anki</a>
+        </div>
+      </div>
+
+      <!-- Segment & Mode Switcher Row -->
+      <div class="cards-control-row">
+        <div class="cards-seg-bar">
+          <button
+            id="seg-due"
+            class="cards-seg-btn active"
+            onclick="setCardSegment('due')"
+            title="根据 SuperMemo SM-2 算法今日到期的卡片"
+          >
+            今日到期 <span id="seg-due-count" class="seg-count">0</span>
+          </button>
+          <button
+            id="seg-pending"
+            class="cards-seg-btn"
+            onclick="setCardSegment('pending')"
+            title="所有待复习状态的卡片"
+          >
+            待复习全量 <span id="seg-pending-count" class="seg-count">0</span>
+          </button>
+          <button
+            id="seg-mastered"
+            class="cards-seg-btn"
+            onclick="setCardSegment('mastered')"
+            title="已掌握归档卡片"
+          >
+            已掌握 <span id="seg-mastered-count" class="seg-count">0</span>
+          </button>
+          <!-- 徽标初值是「–」而不是 0：矩阵懒加载，首次进入该段才拉数。
+             写 0 会在没数据的时候撒谎说词库是空的。 -->
+          <button
+            id="seg-prep"
+            class="cards-seg-btn"
+            onclick="setCardSegment('prep')"
+            title="按介词浏览全部固定搭配（Präpositionen-Matrix）"
+          >
+            Präpositionen <span id="seg-prep-count" class="seg-count">–</span>
+          </button>
+          <button
+            id="seg-a1"
+            class="cards-seg-btn"
+            onclick="setCardSegment('a1')"
+            title="歌德 A1 (Start Deutsch 1) 官方 650+ 考纲词汇与口语抽卡对练"
+          >
+            🌟 歌德 A1 速通
+            <span id="seg-a1-count" class="seg-count">650+</span>
+          </button>
+        </div>
+
+        <div class="cards-view-toggle">
+          <button
+            id="mode-btn-deck"
+            class="cards-mode-btn active"
+            onclick="setCardViewMode('deck')"
+            title="扑克牌叠层翻页模式"
+          >
+            🎴 扑克牌盒
+          </button>
+          <button
+            id="mode-btn-grid"
+            class="cards-mode-btn"
+            onclick="setCardViewMode('grid')"
+            title="目录全景平铺列表"
+          >
+            📑 全景目录
+          </button>
+        </div>
+      </div>
+
+      <div id="prep-filter-bar" class="prep-filter-bar hidden">
+        <div class="prep-case-pills">
+          <button
+            class="folio-anchor-pill active"
+            data-kasus=""
+            onclick="filterPrepCase('')"
+          >
+            Alle
+          </button>
+          <button
+            class="folio-anchor-pill"
+            data-kasus="Dat"
+            onclick="filterPrepCase('Dat')"
+          >
+            Dativ
+          </button>
+          <button
+            class="folio-anchor-pill"
+            data-kasus="Akk"
+            onclick="filterPrepCase('Akk')"
+          >
+            Akkusativ
+          </button>
+          <button
+            class="folio-anchor-pill"
+            data-kasus="Gen"
+            onclick="filterPrepCase('Gen')"
+          >
+            Genitiv
+          </button>
+        </div>
+        <input
+          type="text"
+          class="modal-input prep-search-input"
+          id="prep-search-input"
+          placeholder="动词 / 形容词 suchen…"
+          oninput="searchPrepCollocations(this.value)"
+        />
+      </div>
+
+      <div id="a1-toolbar" class="a1-toolbar hidden">
+        <div class="a1-mode-tabs">
+          <button
+            id="a1-tab-vocab"
+            class="a1-mode-tab active"
+            onclick="setA1Mode('vocab')"
+          >
+            📖 官方考纲词表 (650+)
+          </button>
+          <button
+            id="a1-tab-teil2"
+            class="a1-mode-tab"
+            onclick="setA1Mode('teil2')"
+          >
+            💬 口语 Teil 2 问答抽卡
+          </button>
+          <button
+            id="a1-tab-teil3"
+            class="a1-mode-tab"
+            onclick="setA1Mode('teil3')"
+          >
+            🙋 口语 Teil 3 物品请求抽卡
+          </button>
+          <a
+            href="/api/a1/export/anki"
+            class="btn btn-ghost btn-xs a1-anki-export-btn"
+            title="一键导出官方歌德 A1 词表到 Anki 牌组"
+            >📥 导出 A1 牌组</a
+          >
+        </div>
+        <div id="a1-topic-pills" class="a1-topic-pills"></div>
+        <div id="a1-search-row" class="a1-search-row">
+          <input
+            type="text"
+            class="modal-input a1-search-input"
+            id="a1-search-input"
+            placeholder="🔍 搜索 A1 单词 / 释义 / 考纲例句 (如: Brot, fahren, 苹果)..."
+            oninput="searchA1Vocab(this.value)"
+          />
+        </div>
+      </div>
+
+      <div id="cards-container"></div>
+    </main>
+
+    <!-- ── View 4: Atelier Landing Page Folio (Atelier Style Ledger) ─ -->
+    <main id="view-progress" class="view">
+      <!-- Hero Stage: 0.85fr : 1.15fr Asymmetric Grid -->
+      <section id="folio-sec-metrics" class="folio-hero-stage">
+        <!-- Left Column: Editorial Headline, German Motto & Actions -->
+        <div class="folio-hero-copy">
+          <div class="folio-hero-kicker-wrap">
             <span class="folio-pulse"></span>
-            <span class="folio-plate-tag">ECHTZEIT-METRIKEN · LIVE</span>
+            <span class="folio-kicker"
+              >ATELIER FÜR DEUTSCHE PHILOLOGIE · LERNFORTSCHRITT</span
+            >
           </div>
-          <span class="folio-plate-coord">[ PLATE Nº 01 / STATISTIK ]</span>
+          <h1 class="folio-hero-title">
+            Exzellenz durch<br />
+            <em>Tägliche Hingabe.</em><span class="folio-dot">.</span>
+          </h1>
+          <p class="folio-hero-lead">
+            每日精读台账 · 记录德语语言之界限与认知之拓展。日积跬步，终至千里。
+          </p>
+
+          <!-- German Motto / Quote Card (Top Lede) -->
+          <div id="progress-motto" class="dossier-motto-section"></div>
+
+          <!-- Quick Jump & Action Strip -->
+          <div class="folio-hero-actions">
+            <button
+              class="btn btn-dark"
+              onclick="openQuizOverlay()"
+              title="启动错题与弱项专项测验"
+            >
+              <span>⚔ 专项重测 (Quiz)</span>
+            </button>
+            <button
+              class="btn btn-ghost"
+              onclick="show('home')"
+              title="进入德语外刊与文稿库"
+            >
+              <span>📚 文稿研读库</span>
+            </button>
+            <div class="folio-anchor-nav">
+              <button
+                class="folio-anchor-pill"
+                onclick="scrollToFolioSection('folio-sec-spectrum')"
+                title="跳转至欧标分布与30天轨迹"
+              >
+                § 01 谱系与轨迹 ↓
+              </button>
+              <button
+                class="folio-anchor-pill"
+                onclick="scrollToFolioSection('folio-sec-errors')"
+                title="跳转至错题攻坚账本"
+              >
+                § 02 错题攻坚 ↓
+              </button>
+              <button
+                class="folio-anchor-pill"
+                onclick="scrollToFolioSection('folio-sec-milestones')"
+                title="跳转至学术勋章展台"
+              >
+                § 03 学术勋章 ↓
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div class="folio-stats-grid">
-          <!-- 1. 连续天数 -->
-          <div class="stat-badge">
-            <div class="stat-ring solid coral" id="stat-streak">0</div>
-            <div class="stat-text">
-              <b>Tage Streak</b>
-              <span id="stat-streak-note">连续研读天数</span>
-            </div>
-          </div>
-          <!-- 2. 掌握词汇 -->
-          <div class="stat-badge">
-            <div class="stat-ring solid" id="stat-mastered-vocab">0</div>
-            <div class="stat-text">
-              <b>Vokabeln</b>
-              <span id="stat-vocab-note">掌握词汇斩获</span>
-            </div>
-          </div>
-          <!-- 3. 掌握语法 -->
-          <div class="stat-badge">
-            <div class="stat-ring dashed" id="stat-mastered-grammar">0</div>
-            <div class="stat-text">
-              <b>Grammatik</b>
-              <span id="stat-grammar-note">核心语法考点</span>
-            </div>
-          </div>
-          <!-- 4. 精读篇数 -->
-          <div class="stat-badge">
-            <div class="stat-ring solid" id="stat-articles">0</div>
-            <div class="stat-text">
-              <b>Artikel</b>
-              <span id="stat-articles-note">精读解析文章</span>
-            </div>
-          </div>
-          <!-- 5. 测验准确率 -->
-          <div class="stat-badge">
-            <div class="stat-ring dashed coral" id="stat-accuracy">0%</div>
-            <div class="stat-text">
-              <b>Genauigkeit</b>
-              <span id="stat-accuracy-note">测验综合正答率</span>
-            </div>
-          </div>
-          <!-- 6. 研读时长 -->
-          <div class="stat-badge">
-            <div class="stat-ring solid" id="stat-minutes">0</div>
-            <div class="stat-text">
-              <b>Minuten</b>
-              <span>累计专注学时</span>
-            </div>
-          </div>
-        </div>
+        <!-- Right Column: 6 Core Ring Badges Exhibition Plate -->
+        <div class="folio-hero-plate">
+          <!-- Four Corner Marks -->
+          <span class="corner-mark tl">+</span>
+          <span class="corner-mark tr">+</span>
+          <span class="corner-mark bl">+</span>
+          <span class="corner-mark br">+</span>
 
-        <div class="folio-plate-footer">
-          <span class="folio-plate-meta">DEUTSCHSTUDIEN · CONTINUOUS FEED</span>
-          <span class="folio-plate-meta">AUTO-SYNCHRONISIERT</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Mascot Studio Exhibition Plate (Atelier Companion Workshop) -->
-    <section id="folio-mascot-section" class="folio-mascot-section">
-      <div id="folio-mascot-card" class="folio-mascot-card dossier-panel">
-        <!-- Four Corner Marks -->
-        <span class="corner-mark tl">+</span>
-        <span class="corner-mark tr">+</span>
-        <span class="corner-mark bl">+</span>
-        <span class="corner-mark br">+</span>
-
-        <div class="mascot-card-inner">
-          <!-- Left: Big Animated Character & Speech Bubble -->
-          <div class="mascot-stage">
-            <div id="mascot-stage-bubble" class="mascot-stage-bubble">
-              <div id="mascot-stage-de" class="mascot-bubble-de">Hallo! Ich bin dein Lernbegleiter.</div>
-              <div id="mascot-stage-zh" class="mascot-bubble-zh">你好！我是你的德语研读伴读伙伴。</div>
+          <div class="folio-plate-header">
+            <div class="folio-plate-badge">
+              <span class="folio-pulse"></span>
+              <span class="folio-plate-tag">ECHTZEIT-METRIKEN · LIVE</span>
             </div>
-            <div id="mascot-stage-char" class="mascot-stage-char" onclick="window.Companion.onSay()"></div>
+            <span class="folio-plate-coord">[ PLATE Nº 01 / STATISTIK ]</span>
           </div>
 
-          <!-- Right: Studio Customization & Settings Controls -->
-          <div class="mascot-studio-controls">
-            <div class="dossier-panel-head" style="margin-bottom:0.75rem;padding-bottom:0.5rem;">
-              <div class="dossier-panel-title">
-                <span class="dossier-panel-code">§ ATELIER · BEGLEITER · MASCOT WORKSHOP</span>
-                <h3>德语伴读研习工坊</h3>
+          <div class="folio-stats-grid">
+            <!-- 1. 连续天数 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid coral" id="stat-streak">0</div>
+              <div class="stat-text">
+                <b>Tage Streak</b>
+                <span id="stat-streak-note">连续研读天数</span>
               </div>
-              <div class="mascot-status-tag" id="mascot-status-tag">ACTIVE · AKTIV</div>
+            </div>
+            <!-- 2. 掌握词汇 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid" id="stat-mastered-vocab">0</div>
+              <div class="stat-text">
+                <b>Vokabeln</b>
+                <span id="stat-vocab-note">掌握词汇斩获</span>
+              </div>
+            </div>
+            <!-- 3. 掌握语法 -->
+            <div class="stat-badge">
+              <div class="stat-ring dashed" id="stat-mastered-grammar">0</div>
+              <div class="stat-text">
+                <b>Grammatik</b>
+                <span id="stat-grammar-note">核心语法考点</span>
+              </div>
+            </div>
+            <!-- 4. 精读篇数 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid" id="stat-articles">0</div>
+              <div class="stat-text">
+                <b>Artikel</b>
+                <span id="stat-articles-note">精读解析文章</span>
+              </div>
+            </div>
+            <!-- 5. 测验准确率 -->
+            <div class="stat-badge">
+              <div class="stat-ring dashed coral" id="stat-accuracy">0%</div>
+              <div class="stat-text">
+                <b>Genauigkeit</b>
+                <span id="stat-accuracy-note">测验综合正答率</span>
+              </div>
+            </div>
+            <!-- 6. 研读时长 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid" id="stat-minutes">0</div>
+              <div class="stat-text">
+                <b>Minuten</b>
+                <span>累计专注学时</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="folio-plate-footer">
+            <span class="folio-plate-meta"
+              >DEUTSCHSTUDIEN · CONTINUOUS FEED</span
+            >
+            <span class="folio-plate-meta">AUTO-SYNCHRONISIERT</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Mascot Studio Exhibition Plate (Atelier Companion Workshop) -->
+      <section id="folio-mascot-section" class="folio-mascot-section">
+        <div id="folio-mascot-card" class="folio-mascot-card dossier-panel">
+          <!-- Four Corner Marks -->
+          <span class="corner-mark tl">+</span>
+          <span class="corner-mark tr">+</span>
+          <span class="corner-mark bl">+</span>
+          <span class="corner-mark br">+</span>
+
+          <div class="mascot-card-inner">
+            <!-- Left: Big Animated Character & Speech Bubble -->
+            <div class="mascot-stage">
+              <div id="mascot-stage-bubble" class="mascot-stage-bubble">
+                <div id="mascot-stage-de" class="mascot-bubble-de">
+                  Hallo! Ich bin dein Lernbegleiter.
+                </div>
+                <div id="mascot-stage-zh" class="mascot-bubble-zh">
+                  你好！我是你的德语研读伴读伙伴。
+                </div>
+              </div>
+              <div
+                id="mascot-stage-char"
+                class="mascot-stage-char"
+                onclick="window.Companion.onSay()"
+              ></div>
             </div>
 
-            <div class="mascot-form-grid">
-              <div class="mascot-form-row">
-                <label class="mascot-label">伴读伙伴选择</label>
-                <div class="mascot-char-selector" id="studio-char-selector">
-                  <button type="button" class="mascot-choice-btn active" data-char="owl" onclick="window.Companion.setCharacter('owl')">🦉 Eule (歌德猫头鹰)</button>
-                  <button type="button" class="mascot-choice-btn" data-char="cat" onclick="window.Companion.setCharacter('cat')">🐱 Katze (学者猫)</button>
-                  <button type="button" class="mascot-choice-btn" data-char="fox" onclick="window.Companion.setCharacter('fox')">🦊 Fuchs (灵动狐)</button>
-                  <button type="button" class="mascot-choice-btn" data-char="robot" onclick="window.Companion.setCharacter('robot')">🤖 Roboter (包豪斯机甲)</button>
-                  <button type="button" class="mascot-choice-btn mascot-custom-btn" id="studio-btn-custom" data-char="custom" style="display:none;" onclick="window.Companion.setCharacter('custom')">✦ 自定义</button>
-                  <button type="button" class="mascot-choice-btn mascot-upload-btn" onclick="window.Companion.triggerUpload('studio')" title="上传自定义 SVG 矢量伴读角色">📁 上传 SVG</button>
-                  <input id="studio-svg-input" type="file" accept=".svg,image/svg+xml" style="display:none;" onchange="window.Companion.onFileSelected(event)">
+            <!-- Right: Studio Customization & Settings Controls -->
+            <div class="mascot-studio-controls">
+              <div
+                class="dossier-panel-head"
+                style="margin-bottom: 0.75rem; padding-bottom: 0.5rem"
+              >
+                <div class="dossier-panel-title">
+                  <span class="dossier-panel-code"
+                    >§ ATELIER · BEGLEITER · MASCOT WORKSHOP</span
+                  >
+                  <h3>德语伴读研习工坊</h3>
+                </div>
+                <div class="mascot-status-tag" id="mascot-status-tag">
+                  ACTIVE · AKTIV
                 </div>
               </div>
 
-              <div class="mascot-form-row">
-                <label class="mascot-label" for="studio-mascot-name">伙伴专属昵称</label>
-                <div class="mascot-input-group">
-                  <input type="text" id="studio-mascot-name" class="mascot-text-input" maxlength="12" placeholder="起个名字 (如: Eule, 小欧, Faust)..." oninput="window.Companion.setName(this.value)">
+              <div class="mascot-form-grid">
+                <div class="mascot-form-row">
+                  <label class="mascot-label">伴读伙伴选择</label>
+                  <div class="mascot-char-selector" id="studio-char-selector">
+                    <button
+                      type="button"
+                      class="mascot-choice-btn active"
+                      data-char="owl"
+                      onclick="window.Companion.setCharacter('owl')"
+                    >
+                      🦉 Eule (歌德猫头鹰)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn"
+                      data-char="cat"
+                      onclick="window.Companion.setCharacter('cat')"
+                    >
+                      🐱 Katze (学者猫)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn"
+                      data-char="fox"
+                      onclick="window.Companion.setCharacter('fox')"
+                    >
+                      🦊 Fuchs (灵动狐)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn"
+                      data-char="robot"
+                      onclick="window.Companion.setCharacter('robot')"
+                    >
+                      🤖 Roboter (包豪斯机甲)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn mascot-custom-btn"
+                      id="studio-btn-custom"
+                      data-char="custom"
+                      style="display: none"
+                      onclick="window.Companion.setCharacter('custom')"
+                    >
+                      ✦ 自定义
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn mascot-upload-btn"
+                      onclick="window.Companion.triggerUpload('studio')"
+                      title="上传自定义 SVG 矢量伴读角色"
+                    >
+                      📁 上传 SVG
+                    </button>
+                    <input
+                      id="studio-svg-input"
+                      type="file"
+                      accept=".svg,image/svg+xml"
+                      style="display: none"
+                      onchange="window.Companion.onFileSelected(event)"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div class="mascot-form-row">
-                <label class="mascot-label">定制羽翼配色</label>
-                <div class="mascot-color-swatches" id="studio-color-swatches">
-                  <button type="button" class="mascot-color-dot" style="background:#6b4f8f;" title="歌德紫" onclick="window.Companion.setColor('#6b4f8f')"></button>
-                  <button type="button" class="mascot-color-dot" style="background:#d9663f;" title="朱砂橘" onclick="window.Companion.setColor('#d9663f')"></button>
-                  <button type="button" class="mascot-color-dot" style="background:#4f8f6b;" title="学者绿" onclick="window.Companion.setColor('#4f8f6b')"></button>
-                  <button type="button" class="mascot-color-dot" style="background:#4a6fa5;" title="包豪斯蓝" onclick="window.Companion.setColor('#4a6fa5')"></button>
-                  <button type="button" class="mascot-color-dot" style="background:#2c2c2c;" title="墨黑" onclick="window.Companion.setColor('#2c2c2c')"></button>
-                  <label class="mascot-color-custom-btn" title="自定义 HEX 配色">
-                    <span>🎨</span>
-                    <input type="color" id="studio-color-picker" style="opacity:0;position:absolute;width:100%;height:100%;cursor:pointer;" onchange="window.Companion.setColor(this.value)">
-                  </label>
+                <div class="mascot-form-row">
+                  <label class="mascot-label" for="studio-mascot-name"
+                    >伙伴专属昵称</label
+                  >
+                  <div class="mascot-input-group">
+                    <input
+                      type="text"
+                      id="studio-mascot-name"
+                      class="mascot-text-input"
+                      maxlength="12"
+                      placeholder="起个名字 (如: Eule, 小欧, Faust)..."
+                      oninput="window.Companion.setName(this.value)"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div class="mascot-form-actions">
-                <button type="button" class="btn btn-secondary" onclick="window.Companion.onSay()">
-                  <span>💬 试听伴读鼓励</span>
-                </button>
-                <button type="button" class="btn btn-ghost" id="studio-sound-btn" onclick="window.Companion.toggleSound()">
-                  <span id="studio-sound-icon">🔊</span> <span id="studio-sound-label">发声已开启</span>
-                </button>
-                <button type="button" class="btn btn-accent" onclick="window.Companion.saveStudioSettings()">
-                  <span>✓ 保存伴读设置</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+                <div class="mascot-form-row">
+                  <label class="mascot-label">定制羽翼配色</label>
+                  <div class="mascot-color-swatches" id="studio-color-swatches">
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #6b4f8f"
+                      title="歌德紫"
+                      onclick="window.Companion.setColor('#6b4f8f')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #d9663f"
+                      title="朱砂橘"
+                      onclick="window.Companion.setColor('#d9663f')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #4f8f6b"
+                      title="学者绿"
+                      onclick="window.Companion.setColor('#4f8f6b')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #4a6fa5"
+                      title="包豪斯蓝"
+                      onclick="window.Companion.setColor('#4a6fa5')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #2c2c2c"
+                      title="墨黑"
+                      onclick="window.Companion.setColor('#2c2c2c')"
+                    ></button>
+                    <label
+                      class="mascot-color-custom-btn"
+                      title="自定义 HEX 配色"
+                    >
+                      <span>🎨</span>
+                      <input
+                        type="color"
+                        id="studio-color-picker"
+                        style="
+                          opacity: 0;
+                          position: absolute;
+                          width: 100%;
+                          height: 100%;
+                          cursor: pointer;
+                        "
+                        onchange="window.Companion.setColor(this.value)"
+                      />
+                    </label>
+                  </div>
+                </div>
 
-    <!-- Dual-Row Reverse Wire Marquee Dynamic Ticker -->
-    <section class="folio-marquee-section">
-      <div class="marquee-row marquee-forward">
-        <div id="marquee-row-top" class="marquee-track"></div>
-      </div>
-      <div class="marquee-row marquee-reverse">
-        <div id="marquee-row-bottom" class="marquee-track"></div>
-      </div>
-    </section>
-
-    <!-- Dual Panel Grids -->
-    <!-- Row 1: CEFR Spectrum & 30-Day Trend Chart -->
-    <section id="folio-sec-spectrum" class="folio-grid-row">
-      <!-- Left Panel: CEFR Spectrum Matrix -->
-      <div class="dossier-panel">
-        <div class="dossier-panel-head">
-          <div class="dossier-panel-title">
-            <span class="dossier-panel-code">§ 01 · SPEKTRUM · CEFR MATRIX</span>
-            <h3>卡片库欧标阶梯分布</h3>
-          </div>
-          <div class="dossier-panel-meta" id="progress-total-cards">GESAMT: 0 KARTEN</div>
-        </div>
-        <div id="progress-cefr-bar" class="reader-heatbar" style="margin-top:0.75rem;"></div>
-        <div id="progress-cefr-ladder" class="folio-cefr-ladder"></div>
-      </div>
-
-      <!-- Right Panel: 30-Day Trend Chart -->
-      <div class="dossier-panel">
-        <div class="dossier-panel-head">
-          <div class="dossier-panel-title">
-            <span class="dossier-panel-code">§ 01 · VERLAUF · 30 TAGE</span>
-            <h3>30 天研读与卡片新增轨迹</h3>
-          </div>
-          <div class="dossier-panel-meta">TÄGLICHE CHRONIK</div>
-        </div>
-        <div class="dossier-chart-container">
-          <svg id="progress-chart-svg" class="dossier-chart-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
-          <div class="dossier-chart-axis">
-            <span id="chart-axis-start">● VOR 30 TAGEN</span>
-            <span id="chart-axis-end">● HEUTE</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Row 2: Error Focus Ledger & Achievements Seals -->
-    <section id="folio-sec-errors" class="folio-grid-row">
-      <!-- Left Panel: Error Focus Ledger -->
-      <div id="progress-errors-wrap" class="dossier-panel">
-        <div class="dossier-panel-head">
-          <div class="dossier-panel-title">
-            <span class="dossier-panel-code">§ 02 · ERROR LEDGER</span>
-            <h3>高频混淆与重点错题攻坚</h3>
-          </div>
-          <button class="btn btn-dark" style="font-size:0.75rem;padding:0.35rem 0.85rem;" onclick="openQuizOverlay()">⚔ 专项重测</button>
-        </div>
-        <div id="progress-errors-list" class="dossier-errors-table"></div>
-      </div>
-
-      <!-- Right Panel: Achievements Seals -->
-      <div id="folio-sec-milestones" class="dossier-panel">
-        <div class="dossier-panel-head">
-          <div class="dossier-panel-title">
-            <span class="dossier-panel-code">§ 03 · SIEGEL &amp; MEILENSTEINE</span>
-            <h3>歌德备考学术成就勋章</h3>
-          </div>
-          <div class="dossier-panel-meta">LEISTUNGSNACHWEIS</div>
-        </div>
-        <div id="progress-milestones" class="dossier-stamps-grid"></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- ── View 5: Writing Desk & Polish (Schreibwerkstatt) ──────── -->
-  <main id="view-writer" class="view">
-    <div class="writer-container">
-      <div class="writer-header-bar">
-        <button class="btn btn-ghost" onclick="show('home')" title="返回文稿库">← 返回文库</button>
-        <div>
-          <div class="hero-eyebrow" style="margin-bottom:0.25rem;">
-            <span class="dot"></span>
-            <span>SCHREIBWERKSTATT · 德语写作研磨工坊</span>
-          </div>
-          <h2 class="writer-title-heading">德语写作诊断与语法润色</h2>
-        </div>
-        <div class="writer-actions-top">
-          <button class="btn btn-ghost" onclick="clearWriterForm()" title="新建空白作文草稿">＋ 新建草稿</button>
-          <button class="btn btn-ghost" id="writer-ai-btn" onclick="aiPolishEssay()" title="使用 DeepSeek AI 深度润色全文">✨ AI 润色全文</button>
-          <button class="btn btn-ghost" onclick="analyzeWriterText(true)">⚡ 实时诊断</button>
-          <button class="btn btn-ghost writer-mobile-panel-trigger" id="writer-mobile-panel-trigger" onclick="toggleWriterMobilePanel()">📋 问题与历史</button>
-          <button class="btn btn-dark" id="writer-save-btn" onclick="saveWriterEssay()">💾 保存作文</button>
-        </div>
-      </div>
-
-      <div class="writer-layout">
-        <!-- Left Area: Inline IDE Editor & Essay History -->
-        <div class="writer-left">
-          <div class="writer-card-box">
-            <div class="writer-box-label" style="margin-bottom:0.5rem;">
-              <span>✍️ 德语内联智能编辑器</span>
-              <span id="writer-render-status" class="writer-status-pill">等待输入</span>
-            </div>
-            <input id="writer-title" class="writer-input-title" placeholder="作文标题（如：Mein Urlaub in Berlin / B1 备考书信）..." maxlength="80" />
-            <div id="ide-editor" class="ide-editor" contenteditable="true" data-placeholder="在此粘贴或直接书写德语作文（如：Ich fahre mit der Auto.）..." oninput="analyzeWriterText()" spellcheck="false"></div>
-            
-            <div class="writer-toolbar">
-              <div class="writer-word-counter" id="writer-stats-counter">0 词 · 0 句</div>
-              <div class="writer-tools-right">
-                <button id="writer-inlay-toggle" class="btn btn-ghost btn-xs" onclick="toggleInlayHints()" title="开启/关闭语法内联提示">💡 格提示 ON</button>
-                <button class="btn btn-ghost btn-xs" onclick="clearEditorText()">清空</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- History / Saved Essays List -->
-          <div class="writer-card-box" style="margin-top:1.25rem;">
-            <div class="writer-box-label">
-              <span>📚 我的作文草稿库</span>
-              <button class="btn btn-ghost btn-xs" onclick="loadWriterEssays()">刷新</button>
-            </div>
-            <div id="writer-essay-list" class="writer-essay-list">
-              <div class="writer-empty-tip">暂无保存的作文</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Area: Sidebar for Diagnostics & Details -->
-        <aside id="writer-panel" class="writer-sidebar">
-          <!-- Tab Navigation -->
-          <div class="writer-panel-tabs">
-            <button id="wtab-btn-diag" class="writer-tab-btn active" onclick="switchWriterPanelTab('diag')">🔍 诊断分析</button>
-            <button id="wtab-btn-problems" class="writer-tab-btn" onclick="switchWriterPanelTab('problems')">📋 问题清单 <span id="wtab-problems-badge" class="writer-tab-badge hidden">0</span></button>
-            <button id="wtab-btn-versions" class="writer-tab-btn" onclick="switchWriterPanelTab('versions')">📜 版本快照</button>
-          </div>
-
-          <!-- Pane 1: Diagnostics -->
-          <div id="wpane-diag" class="writer-pane active">
-            <!-- CEFR & Summary Badge Card -->
-            <div class="writer-sidebar-card">
-              <div class="sidebar-section-title">📊 语言水平与质量估测</div>
-              <div id="writer-cefr" class="writer-cefr-box">
-                <div class="writer-cefr-level">CEFR —</div>
-                <div class="writer-cefr-desc">输入德语作文以评估词汇难度与错误率</div>
-              </div>
-            </div>
-
-            <!-- Selected Error / Detail Card -->
-            <div class="writer-sidebar-card">
-              <div class="sidebar-section-title">🔍 错误诊断与纠错详解</div>
-              <div id="writer-err-detail" class="writer-err-detail-box">
-                <div class="writer-err-placeholder">
-                  <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
-                  <div>点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。</div>
+                <div class="mascot-form-actions">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    onclick="window.Companion.onSay()"
+                  >
+                    <span>💬 试听伴读鼓励</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    id="studio-sound-btn"
+                    onclick="window.Companion.toggleSound()"
+                  >
+                    <span id="studio-sound-icon">🔊</span>
+                    <span id="studio-sound-label">发声已开启</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-accent"
+                    onclick="window.Companion.saveStudioSettings()"
+                  >
+                    <span>✓ 保存伴读设置</span>
+                  </button>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
 
-            <!-- Sentence Navigation Card -->
-            <div class="writer-sidebar-card">
-              <div class="sidebar-section-title">🧭 句子导航索引</div>
-              <div id="writer-sent-nav" class="writer-sent-nav-list">
-                <div class="writer-empty-tip" style="padding:0.5rem 0;">输入文本后生成句子索引</div>
-              </div>
+      <!-- Dual-Row Reverse Wire Marquee Dynamic Ticker -->
+      <section class="folio-marquee-section">
+        <div class="marquee-row marquee-forward">
+          <div id="marquee-row-top" class="marquee-track"></div>
+        </div>
+        <div class="marquee-row marquee-reverse">
+          <div id="marquee-row-bottom" class="marquee-track"></div>
+        </div>
+      </section>
+
+      <!-- Dual Panel Grids -->
+      <!-- Row 1: CEFR Spectrum & 30-Day Trend Chart -->
+      <section id="folio-sec-spectrum" class="folio-grid-row">
+        <!-- Left Panel: CEFR Spectrum Matrix -->
+        <div class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code"
+                >§ 01 · SPEKTRUM · CEFR MATRIX</span
+              >
+              <h3>卡片库欧标阶梯分布</h3>
+            </div>
+            <div class="dossier-panel-meta" id="progress-total-cards">
+              GESAMT: 0 KARTEN
             </div>
           </div>
+          <div
+            id="progress-cefr-bar"
+            class="reader-heatbar"
+            style="margin-top: 0.75rem"
+          ></div>
+          <div id="progress-cefr-ladder" class="folio-cefr-ladder"></div>
+        </div>
 
-          <!-- Pane 2: Problems List (v4.2.0) -->
-          <div id="wpane-problems" class="writer-pane hidden">
-            <div class="writer-sidebar-card">
-              <div class="sidebar-section-title" style="display:flex;justify-content:space-between;align-items:center;">
-                <span>📋 全篇问题清单</span>
-                <span id="writer-problems-stat" class="writer-problems-stat-pill">0 处问题</span>
-              </div>
-              <div id="writer-problem-list" class="writer-problem-list">
-                <div class="writer-empty-tip">暂无待处理语法问题</div>
-              </div>
+        <!-- Right Panel: 30-Day Trend Chart -->
+        <div class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code">§ 01 · VERLAUF · 30 TAGE</span>
+              <h3>30 天研读与卡片新增轨迹</h3>
+            </div>
+            <div class="dossier-panel-meta">TÄGLICHE CHRONIK</div>
+          </div>
+          <div class="dossier-chart-container">
+            <svg
+              id="progress-chart-svg"
+              class="dossier-chart-svg"
+              viewBox="0 0 760 110"
+              preserveAspectRatio="none"
+            ></svg>
+            <div class="dossier-chart-axis">
+              <span id="chart-axis-start">● VOR 30 TAGEN</span>
+              <span id="chart-axis-end">● HEUTE</span>
             </div>
           </div>
+        </div>
+      </section>
 
-          <!-- Pane 2: Version History -->
-          <div id="wpane-versions" class="writer-pane hidden">
-            <!-- Manual Snapshot Card -->
-            <div class="writer-sidebar-card">
-              <div class="sidebar-section-title">💾 保存当前快照</div>
-              <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                <input id="writer-version-msg" type="text" class="modal-input" placeholder="快照描述（如：完成引言 / AI 润色后）..." maxlength="50" style="font-size:0.8125rem;padding:0.375rem 0.5rem;">
-                <button class="btn btn-dark btn-sm" onclick="saveEssayVersion()" style="white-space:nowrap;">保存当前快照</button>
-              </div>
+      <!-- Row 2: Error Focus Ledger & Achievements Seals -->
+      <section id="folio-sec-errors" class="folio-grid-row">
+        <!-- Left Panel: Error Focus Ledger -->
+        <div id="progress-errors-wrap" class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code">§ 02 · ERROR LEDGER</span>
+              <h3>高频混淆与重点错题攻坚</h3>
             </div>
-
-            <!-- Version Snapshots List Container -->
-            <div class="writer-sidebar-card" style="margin-top:0.75rem;">
-              <div class="sidebar-section-title" style="display:flex;justify-content:space-between;align-items:center;">
-                <span>🕒 快照历史</span>
-                <button class="btn btn-ghost btn-xs" onclick="loadEssayVersions()">刷新</button>
-              </div>
-              <div id="writer-version-list" class="writer-version-list">
-                <div class="writer-empty-tip">暂无版本记录（请先保存或打开作文）</div>
-              </div>
-            </div>
+            <button
+              class="btn btn-dark"
+              style="font-size: 0.75rem; padding: 0.35rem 0.85rem"
+              onclick="openQuizOverlay()"
+            >
+              ⚔ 专项重测
+            </button>
           </div>
-        </aside>
-      </div>
-    </div>
-  </main>
+          <div id="progress-errors-list" class="dossier-errors-table"></div>
+        </div>
 
-  <div id="writer-mobile-panel-sheet" class="writer-mobile-panel-sheet" onclick="closeWriterMobilePanel()"></div>
-
-
-  <!-- Drawer backdrop: tap to close on mobile -->
-  <div id="drawer-backdrop" onclick="closeDrawer()"></div>
-
-  <!-- ── Sticky Note Slide-over Drawer ──────────────────────── -->
-  <aside id="drawer">
-    <div class="tape-top"></div>
-    <div class="drawer-header">
-      <div class="drawer-tabs">
-        <button id="d-tab-vocab" class="drawer-tab-btn active" onclick="switchDrawerTab('vocab')">📖 词汇考点</button>
-        <button id="d-tab-syntax" class="drawer-tab-btn" onclick="switchDrawerTab('syntax')">🌳 句法拓扑</button>
-        <button id="d-tab-note" class="drawer-tab-btn" onclick="switchDrawerTab('note')">📝 随笔便签</button>
-        <button id="d-tab-all" class="drawer-tab-btn" onclick="switchDrawerTab('all')">✦ 全部</button>
-      </div>
-      <button class="drawer-close" onclick="closeDrawer()" title="关闭工作台 (Esc)">✕</button>
-    </div>
-
-    <div class="drawer-body">
-      <!-- Section 1: Vocab & Grammar Wrap -->
-      <div id="drawer-vocab-wrap" style="display:flex;flex-direction:column;gap:1.25rem;">
-        <!-- Word Card -->
-        <div class="sticky-word-card">
-          <div class="sticky-word-headline">
-            <div style="display:flex;align-items:center;gap:0.5rem;">
-              <span id="d-word"></span>
-              <button class="speaker-btn" onclick="playGermanAudio(document.getElementById('d-word').textContent)" title="朗读单词">🔊</button>
+        <!-- Right Panel: Achievements Seals -->
+        <div id="folio-sec-milestones" class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code"
+                >§ 03 · SIEGEL &amp; MEILENSTEINE</span
+              >
+              <h3>歌德备考学术成就勋章</h3>
             </div>
-            <span class="cefr-badge" id="d-cefr"></span>
+            <div class="dossier-panel-meta">LEISTUNGSNACHWEIS</div>
           </div>
-          <div id="d-meta"></div>
-          <div style="margin-top:0.875rem;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <label class="input-label" style="margin:0;">中文释义 / 笔记 (选填)</label>
-              <span id="d-def-status" style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);"></span>
-            </div>
-            <input id="d-def" type="text" class="def-input" style="margin-top:0.35rem;" placeholder="中文释义 / 自定义笔记（自动查词或手动填写）">
-          </div>
-          <button id="save-vocab-btn" class="btn btn-dark btn-full" style="margin-top:0.75rem;" onclick="saveVocab()">
-            + 加入 Anki 词汇卡
+          <div id="progress-milestones" class="dossier-stamps-grid"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ── View 5: Writing Desk & Polish (Schreibwerkstatt) ──────── -->
+    <main id="view-writer" class="view">
+      <div class="writer-container">
+        <div class="writer-header-bar">
+          <button
+            class="btn btn-ghost"
+            onclick="show('home')"
+            title="返回文稿库"
+          >
+            ← 返回文库
           </button>
-        </div>
-
-        <!-- Grammar Note Section -->
-        <div class="grammar-note">
-          <div class="grammar-note-head">
-            <span class="grammar-note-title">歌德考点深度剖析</span>
-            <button id="analyze-btn" class="btn btn-accent" style="min-height:30px;padding:0 0.75rem;font-size:0.75rem"
-              onclick="analyzeGrammar()">AI 深度剖析</button>
-          </div>
-          <div id="grammar-result" class="hidden" style="display:flex;flex-direction:column;gap:0.75rem;">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;">
-              <span id="g-name"></span>
-              <span class="cefr-badge" id="g-badge"></span>
+          <div>
+            <div class="hero-eyebrow" style="margin-bottom: 0.25rem">
+              <span class="dot"></span>
+              <span>SCHREIBWERKSTATT · 德语写作研磨工坊</span>
             </div>
-            <div id="g-formula" class="hidden"></div>
-            <div id="g-exp"></div>
-            <button id="save-grammar-btn" class="btn btn-ghost btn-full" onclick="saveGrammar()">
-              + 加入 Anki 语法卡
+            <h2 class="writer-title-heading">德语写作诊断与语法润色</h2>
+          </div>
+          <div class="writer-actions-top">
+            <button
+              class="btn btn-ghost"
+              onclick="clearWriterForm()"
+              title="新建空白作文草稿"
+            >
+              ＋ 新建草稿
+            </button>
+            <button
+              class="btn btn-ghost"
+              id="writer-ai-btn"
+              onclick="aiPolishEssay()"
+              title="使用 DeepSeek AI 深度润色全文"
+            >
+              ✨ AI 润色全文
+            </button>
+            <button class="btn btn-ghost" onclick="analyzeWriterText(true)">
+              ⚡ 实时诊断
+            </button>
+            <button
+              class="btn btn-ghost writer-mobile-panel-trigger"
+              id="writer-mobile-panel-trigger"
+              onclick="toggleWriterMobilePanel()"
+            >
+              📋 问题与历史
+            </button>
+            <button
+              class="btn btn-dark"
+              id="writer-save-btn"
+              onclick="saveWriterEssay()"
+            >
+              💾 保存作文
             </button>
           </div>
         </div>
 
-        <!-- Context Quote -->
-        <div class="context-box">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
-            <span class="input-label" style="margin:0;">原句上下文</span>
-            <button class="speaker-btn-sm" onclick="playGermanAudio(document.getElementById('d-sent').textContent)" title="朗读整句">🔊 朗读原句</button>
-          </div>
-          <div id="d-sent"></div>
-        </div>
-      </div>
+        <div class="writer-layout">
+          <!-- Left Area: Inline IDE Editor & Essay History -->
+          <div class="writer-left">
+            <div class="writer-card-box">
+              <div class="writer-box-label" style="margin-bottom: 0.5rem">
+                <span>✍️ 德语内联智能编辑器</span>
+                <span id="writer-render-status" class="writer-status-pill"
+                  >等待输入</span
+                >
+              </div>
+              <input
+                id="writer-title"
+                class="writer-input-title"
+                placeholder="作文标题（如：Mein Urlaub in Berlin / B1 备考书信）..."
+                maxlength="80"
+              />
+              <div
+                id="ide-editor"
+                class="ide-editor"
+                contenteditable="true"
+                data-placeholder="在此粘贴或直接书写德语作文（如：Ich fahre mit der Auto.）..."
+                oninput="analyzeWriterText()"
+                spellcheck="false"
+              ></div>
 
-      <!-- Section 2: Satzbau & Clause Tree Section -->
-      <div id="drawer-syntax-section" class="drawer-syntax-card hidden">
-        <div class="sticky-word-headline">
-          <div style="display:flex;align-items:center;gap:0.5rem;">
-            <span style="font-size:0.875rem;font-weight:700;color:var(--ink);">🌳 句法拓扑与从句树 (AST)</span>
-          </div>
-          <span id="syntax-sent-type-badge" class="cefr-badge badge-B1">V2 主句</span>
-        </div>
+              <div class="writer-toolbar">
+                <div class="writer-word-counter" id="writer-stats-counter">
+                  0 词 · 0 句
+                </div>
+                <div class="writer-tools-right">
+                  <button
+                    id="writer-inlay-toggle"
+                    class="btn btn-ghost btn-xs"
+                    onclick="toggleInlayHints()"
+                    title="开启/关闭语法内联提示"
+                  >
+                    💡 格提示 ON
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-xs"
+                    onclick="clearEditorText()"
+                  >
+                    清空
+                  </button>
+                </div>
+              </div>
+            </div>
 
-        <!-- Sentence preview -->
-        <div id="syntax-sent-quote" class="quote-text" style="margin-top:0.5rem;font-size:0.8125rem;color:var(--ink);background:var(--paper-accent);padding:0.5rem 0.75rem;border-radius:6px;line-height:1.5;"></div>
-
-        <!-- Felder Modell Grid -->
-        <div style="margin-top:1rem;">
-          <div style="font-size:0.75rem;font-weight:700;color:var(--pencil);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">德语拓扑五场域 (Felder-Modell)</div>
-          <div id="syntax-felder-grid" class="felder-grid">
-            <!-- Dynamic fields -->
-          </div>
-        </div>
-
-        <!-- Interactive Clause Tree Hierarchy -->
-        <div style="margin-top:1.25rem;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-            <div style="font-size:0.75rem;font-weight:700;color:var(--pencil);text-transform:uppercase;letter-spacing:0.05em;">主从句分层拓扑树</div>
-            <span style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);">点击节点可高亮</span>
-          </div>
-          <div id="syntax-tree-container" class="syntax-tree-container">
-            <!-- Dynamic Clause Tree Nodes -->
-          </div>
-        </div>
-      </div>
-
-      <!-- Section 3: Sticky Reading Notes Section -->
-      <div id="drawer-note-section" class="sticky-reading-note-card hidden">
-        <div class="sticky-word-headline">
-          <span style="font-size:0.875rem;font-weight:700;color:var(--ink);">📝 精读随笔便签</span>
-          <span id="note-badge-status" class="cefr-badge badge-A2">便签草稿</span>
-        </div>
-        <div id="note-quote" class="quote-text" style="margin-top:0.5rem;font-style:italic;font-size:0.8125rem;color:var(--pencil);"></div>
-        <div style="margin-top:0.75rem;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <label class="input-label" style="margin:0;">随笔心得 / 搭配拆解</label>
-            <button id="note-ai-btn" class="btn btn-accent" style="min-height:24px;padding:0 0.5rem;font-size:0.6875rem;" onclick="aiNoteAssist()">✨ AI 速记辅助</button>
-          </div>
-          <textarea id="note-text-input" class="note-textarea" rows="3" placeholder="记录句式搭配、长难句拆解或个人心得…"></textarea>
-        </div>
-        <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-          <button id="save-note-btn" class="btn btn-dark" style="flex:1;" onclick="saveCurrentNote()">✓ 保存便签</button>
-          <button id="del-note-btn" class="btn btn-ghost btn-del hidden" onclick="deleteCurrentNote()" title="删除便签">🗑️</button>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ── Import Modal ───────────────────────────────────────── -->
-  <div id="modal-overlay" class="modal-overlay import-overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal import-modal-box">
-      <div class="modal-header import-modal-header">
-        <div class="import-header-title">
-          <span class="import-header-code">[ INGESTION // DOKUMENT ]</span>
-          <h3>导入德语研读文献</h3>
-        </div>
-        <button class="drawer-close" onclick="closeModal()" title="关闭 (Esc)">✕</button>
-      </div>
-
-      <div class="modal-tabs import-tabs">
-        <button id="tab-btn-text" class="modal-tab import-tab active" onclick="switchImportTab('text')">
-          <span>❖ 粘贴长文</span>
-        </button>
-        <button id="tab-btn-url" class="modal-tab import-tab" onclick="switchImportTab('url')">
-          <span>❖ 网页链接 (URL)</span>
-        </button>
-        <button id="tab-btn-file" class="modal-tab import-tab" onclick="switchImportTab('file')">
-          <span>❖ 文档上传</span>
-        </button>
-        <button id="tab-btn-feed" class="modal-tab import-tab" onclick="switchImportTab('feed')">
-          <span>📰 订阅外刊 (RSS)</span>
-        </button>
-      </div>
-
-      <!-- Tab 1: Text -->
-      <div id="import-tab-text" class="tab-content active">
-        <div class="modal-field">
-          <label class="input-label" for="imp-title">文章标题（可选）</label>
-          <input id="imp-title" type="text" class="modal-input" placeholder="输入或自定义标题…">
-        </div>
-        <div class="modal-field">
-          <label class="input-label" for="imp-text">德语长文正文</label>
-          <textarea id="imp-text" class="modal-input modal-textarea" placeholder="粘贴德语课文、新闻或备考长文…"></textarea>
-        </div>
-      </div>
-
-      <!-- Tab 2: URL -->
-      <div id="import-tab-url" class="tab-content">
-        <div class="modal-field">
-          <label class="input-label" for="imp-url-input">德语新闻/文章链接 (URL)</label>
-          <input id="imp-url-input" type="url" class="modal-input" placeholder="https://www.dw.com/de/...">
-        </div>
-        <div class="modal-field">
-          <label class="input-label" for="imp-url-title">自定义标题（可选）</label>
-          <input id="imp-url-title" type="text" class="modal-input" placeholder="自定义标题（默认自动提取并清洗网页标题）">
-        </div>
-        <div class="url-hint-box">
-          <span class="url-hint-icon">✦</span>
-          <span>支持自动提取与正文降噪：DW 德语之声、Spiegel、Tagesschau、DLF、Zeit 等主流德语媒体。</span>
-        </div>
-      </div>
-
-      <!-- Tab 3: File Upload -->
-      <div id="import-tab-file" class="tab-content">
-        <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
-          <div class="dropzone-icon">📄</div>
-          <div class="dropzone-title">点击或拖拽德语文档至此处</div>
-          <div class="dropzone-desc">支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）</div>
-          <input id="file-input" type="file" accept=".txt,.md,.text,text/plain,text/markdown" style="display:none;" onchange="handleFileSelect(event)">
-        </div>
-      </div>
-
-      <!-- Tab 4: RSS News Feeds -->
-      <div id="import-tab-feed" class="tab-content">
-        <div class="feed-sources-bar" id="feed-sources-bar">
-          <!-- Populated by JS -->
-        </div>
-        <div class="feed-items-container" id="feed-items-container">
-          <div class="feed-loading-state">
-            ⏳ 正在获取精选德语外刊与学习源…
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-        <button id="import-btn" class="btn btn-dark" onclick="submitActiveImport()">开始阅读</button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ── Settings Modal ───────────────────────────────────────── -->
-  <div id="settings-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeSettingsModal()">
-    <div class="modal settings-modal-box">
-      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <span style="font-size:1.125rem;font-weight:700;color:var(--ink);">⚙️ 偏好与 API 设置 (Einstellungen)</span>
-        <button class="drawer-close" onclick="closeSettingsModal()" title="关闭 (Esc)">✕</button>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-section-title">🤖 AI 深度剖析服务 (DeepSeek / OpenAI 兼容)</div>
-        <p class="settings-tip" style="font-size:0.75rem;color:var(--pencil);margin:0.25rem 0 0.75rem 0;line-height:1.4;">
-          用于选词语法深度剖析与随笔便签速记。词库、形态学、五场域拓扑、完形 C-Test 等功能 100% 离线，无需 API Key。
-        </p>
-        
-        <div class="modal-field" style="margin-top:0.75rem;">
-          <label class="input-label">API 密钥 (API Key)</label>
-          <div style="display:flex;gap:0.5rem;">
-            <input id="set-api-key" type="password" class="modal-input" placeholder="sk-..." autocomplete="off">
-            <button id="btn-toggle-key-vis" class="btn btn-ghost" onclick="toggleKeyVisibility()" title="显示/隐藏 Key" style="min-width:44px;padding:0 0.5rem;">👁️</button>
-          </div>
-          <span id="set-key-status" style="font-size:0.75rem;color:var(--pencil);margin-top:0.25rem;display:block;"></span>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
-          <div class="modal-field">
-            <label class="input-label">接口地址 (Base URL)</label>
-            <input id="set-base-url" type="text" class="modal-input" placeholder="https://api.deepseek.com">
-            <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">
-              <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-base-url').value='https://api.deepseek.com'">DeepSeek 官方</button>
-              <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-base-url').value='https://api.openai.com/v1'">OpenAI</button>
+            <!-- History / Saved Essays List -->
+            <div class="writer-card-box" style="margin-top: 1.25rem">
+              <div class="writer-box-label">
+                <span>📚 我的作文草稿库</span>
+                <button
+                  class="btn btn-ghost btn-xs"
+                  onclick="loadWriterEssays()"
+                >
+                  刷新
+                </button>
+              </div>
+              <div id="writer-essay-list" class="writer-essay-list">
+                <div class="writer-empty-tip">暂无保存的作文</div>
+              </div>
             </div>
           </div>
-          <div class="modal-field">
-            <label class="input-label">模型名称 (Model)</label>
-            <input id="set-model-name" type="text" class="modal-input" placeholder="deepseek-v4-flash">
-            <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">
-              <button type="button" class="btn-preset-pill" onclick="document.getElementById('set-model-name').value='deepseek-v4-flash'">deepseek-v4-flash (推荐)</button>
+
+          <!-- Right Area: Sidebar for Diagnostics & Details -->
+          <aside id="writer-panel" class="writer-sidebar">
+            <!-- Tab Navigation -->
+            <div class="writer-panel-tabs">
+              <button
+                id="wtab-btn-diag"
+                class="writer-tab-btn active"
+                onclick="switchWriterPanelTab('diag')"
+              >
+                🔍 诊断分析
+              </button>
+              <button
+                id="wtab-btn-problems"
+                class="writer-tab-btn"
+                onclick="switchWriterPanelTab('problems')"
+              >
+                📋 问题清单
+                <span id="wtab-problems-badge" class="writer-tab-badge hidden"
+                  >0</span
+                >
+              </button>
+              <button
+                id="wtab-btn-versions"
+                class="writer-tab-btn"
+                onclick="switchWriterPanelTab('versions')"
+              >
+                📜 版本快照
+              </button>
+            </div>
+
+            <!-- Pane 1: Diagnostics -->
+            <div id="wpane-diag" class="writer-pane active">
+              <!-- CEFR & Summary Badge Card -->
+              <div class="writer-sidebar-card">
+                <div class="sidebar-section-title">📊 语言水平与质量估测</div>
+                <div id="writer-cefr" class="writer-cefr-box">
+                  <div class="writer-cefr-level">CEFR —</div>
+                  <div class="writer-cefr-desc">
+                    输入德语作文以评估词汇难度与错误率
+                  </div>
+                </div>
+              </div>
+
+              <!-- Selected Error / Detail Card -->
+              <div class="writer-sidebar-card">
+                <div class="sidebar-section-title">🔍 错误诊断与纠错详解</div>
+                <div id="writer-err-detail" class="writer-err-detail-box">
+                  <div class="writer-err-placeholder">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem">✍️</div>
+                    <div>
+                      点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sentence Navigation Card -->
+              <div class="writer-sidebar-card">
+                <div class="sidebar-section-title">🧭 句子导航索引</div>
+                <div id="writer-sent-nav" class="writer-sent-nav-list">
+                  <div class="writer-empty-tip" style="padding: 0.5rem 0">
+                    输入文本后生成句子索引
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 2: Problems List (v4.2.0) -->
+            <div id="wpane-problems" class="writer-pane hidden">
+              <div class="writer-sidebar-card">
+                <div
+                  class="sidebar-section-title"
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                  "
+                >
+                  <span>📋 全篇问题清单</span>
+                  <span
+                    id="writer-problems-stat"
+                    class="writer-problems-stat-pill"
+                    >0 处问题</span
+                  >
+                </div>
+                <div id="writer-problem-list" class="writer-problem-list">
+                  <div class="writer-empty-tip">暂无待处理语法问题</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 2: Version History -->
+            <div id="wpane-versions" class="writer-pane hidden">
+              <!-- Manual Snapshot Card -->
+              <div class="writer-sidebar-card">
+                <div class="sidebar-section-title">💾 保存当前快照</div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem">
+                  <input
+                    id="writer-version-msg"
+                    type="text"
+                    class="modal-input"
+                    placeholder="快照描述（如：完成引言 / AI 润色后）..."
+                    maxlength="50"
+                    style="font-size: 0.8125rem; padding: 0.375rem 0.5rem"
+                  />
+                  <button
+                    class="btn btn-dark btn-sm"
+                    onclick="saveEssayVersion()"
+                    style="white-space: nowrap"
+                  >
+                    保存当前快照
+                  </button>
+                </div>
+              </div>
+
+              <!-- Version Snapshots List Container -->
+              <div class="writer-sidebar-card" style="margin-top: 0.75rem">
+                <div
+                  class="sidebar-section-title"
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                  "
+                >
+                  <span>🕒 快照历史</span>
+                  <button
+                    class="btn btn-ghost btn-xs"
+                    onclick="loadEssayVersions()"
+                  >
+                    刷新
+                  </button>
+                </div>
+                <div id="writer-version-list" class="writer-version-list">
+                  <div class="writer-empty-tip">
+                    暂无版本记录（请先保存或打开作文）
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <div
+      id="writer-mobile-panel-sheet"
+      class="writer-mobile-panel-sheet"
+      onclick="closeWriterMobilePanel()"
+    ></div>
+
+    <!-- Drawer backdrop: tap to close on mobile -->
+    <div id="drawer-backdrop" onclick="closeDrawer()"></div>
+
+    <!-- ── Sticky Note Slide-over Drawer ──────────────────────── -->
+    <aside id="drawer">
+      <div class="tape-top"></div>
+      <div class="drawer-header">
+        <div class="drawer-tabs">
+          <button
+            id="d-tab-vocab"
+            class="drawer-tab-btn active"
+            onclick="switchDrawerTab('vocab')"
+          >
+            📖 词汇考点
+          </button>
+          <button
+            id="d-tab-syntax"
+            class="drawer-tab-btn"
+            onclick="switchDrawerTab('syntax')"
+          >
+            🌳 句法拓扑
+          </button>
+          <button
+            id="d-tab-note"
+            class="drawer-tab-btn"
+            onclick="switchDrawerTab('note')"
+          >
+            📝 随笔便签
+          </button>
+          <button
+            id="d-tab-all"
+            class="drawer-tab-btn"
+            onclick="switchDrawerTab('all')"
+          >
+            ✦ 全部
+          </button>
+        </div>
+        <button
+          class="drawer-close"
+          onclick="closeDrawer()"
+          title="关闭工作台 (Esc)"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="drawer-body">
+        <!-- Section 1: Vocab & Grammar Wrap -->
+        <div
+          id="drawer-vocab-wrap"
+          style="display: flex; flex-direction: column; gap: 1.25rem"
+        >
+          <!-- Word Card -->
+          <div class="sticky-word-card">
+            <div class="sticky-word-headline">
+              <div style="display: flex; align-items: center; gap: 0.5rem">
+                <span id="d-word"></span>
+                <button
+                  class="speaker-btn"
+                  onclick="
+                    playGermanAudio(
+                      document.getElementById('d-word').textContent,
+                    )
+                  "
+                  title="朗读单词"
+                >
+                  🔊
+                </button>
+              </div>
+              <span class="cefr-badge" id="d-cefr"></span>
+            </div>
+            <div id="d-meta"></div>
+            <div style="margin-top: 0.875rem">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                "
+              >
+                <label class="input-label" style="margin: 0"
+                  >中文释义 / 笔记 (选填)</label
+                >
+                <span
+                  id="d-def-status"
+                  style="
+                    font-size: 0.6875rem;
+                    color: var(--pencil);
+                    font-family: var(--mono);
+                  "
+                ></span>
+              </div>
+              <input
+                id="d-def"
+                type="text"
+                class="def-input"
+                style="margin-top: 0.35rem"
+                placeholder="中文释义 / 自定义笔记（自动查词或手动填写）"
+              />
+            </div>
+            <button
+              id="save-vocab-btn"
+              class="btn btn-dark btn-full"
+              style="margin-top: 0.75rem"
+              onclick="saveVocab()"
+            >
+              + 加入 Anki 词汇卡
+            </button>
+          </div>
+
+          <!-- Grammar Note Section -->
+          <div class="grammar-note">
+            <div class="grammar-note-head">
+              <span class="grammar-note-title">歌德考点深度剖析</span>
+              <button
+                id="analyze-btn"
+                class="btn btn-accent"
+                style="min-height: 30px; padding: 0 0.75rem; font-size: 0.75rem"
+                onclick="analyzeGrammar()"
+              >
+                AI 深度剖析
+              </button>
+            </div>
+            <div
+              id="grammar-result"
+              class="hidden"
+              style="display: flex; flex-direction: column; gap: 0.75rem"
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: baseline;
+                  justify-content: space-between;
+                "
+              >
+                <span id="g-name"></span>
+                <span class="cefr-badge" id="g-badge"></span>
+              </div>
+              <div id="g-formula" class="hidden"></div>
+              <div id="g-exp"></div>
+              <button
+                id="save-grammar-btn"
+                class="btn btn-ghost btn-full"
+                onclick="saveGrammar()"
+              >
+                + 加入 Anki 语法卡
+              </button>
+            </div>
+          </div>
+
+          <!-- Context Quote -->
+          <div class="context-box">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 0.35rem;
+              "
+            >
+              <span class="input-label" style="margin: 0">原句上下文</span>
+              <button
+                class="speaker-btn-sm"
+                onclick="
+                  playGermanAudio(document.getElementById('d-sent').textContent)
+                "
+                title="朗读整句"
+              >
+                🔊 朗读原句
+              </button>
+            </div>
+            <div id="d-sent"></div>
+          </div>
+        </div>
+
+        <!-- Section 2: Satzbau & Clause Tree Section -->
+        <div id="drawer-syntax-section" class="drawer-syntax-card hidden">
+          <div class="sticky-word-headline">
+            <div style="display: flex; align-items: center; gap: 0.5rem">
+              <span
+                style="font-size: 0.875rem; font-weight: 700; color: var(--ink)"
+                >🌳 句法拓扑与从句树 (AST)</span
+              >
+            </div>
+            <span id="syntax-sent-type-badge" class="cefr-badge badge-B1"
+              >V2 主句</span
+            >
+          </div>
+
+          <!-- Sentence preview -->
+          <div
+            id="syntax-sent-quote"
+            class="quote-text"
+            style="
+              margin-top: 0.5rem;
+              font-size: 0.8125rem;
+              color: var(--ink);
+              background: var(--paper-accent);
+              padding: 0.5rem 0.75rem;
+              border-radius: 6px;
+              line-height: 1.5;
+            "
+          ></div>
+
+          <!-- Felder Modell Grid -->
+          <div style="margin-top: 1rem">
+            <div
+              style="
+                font-size: 0.75rem;
+                font-weight: 700;
+                color: var(--pencil);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: 0.35rem;
+              "
+            >
+              德语拓扑五场域 (Felder-Modell)
+            </div>
+            <div id="syntax-felder-grid" class="felder-grid">
+              <!-- Dynamic fields -->
+            </div>
+          </div>
+
+          <!-- Interactive Clause Tree Hierarchy -->
+          <div style="margin-top: 1.25rem">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 0.5rem;
+              "
+            >
+              <div
+                style="
+                  font-size: 0.75rem;
+                  font-weight: 700;
+                  color: var(--pencil);
+                  text-transform: uppercase;
+                  letter-spacing: 0.05em;
+                "
+              >
+                主从句分层拓扑树
+              </div>
+              <span
+                style="
+                  font-size: 0.6875rem;
+                  color: var(--pencil);
+                  font-family: var(--mono);
+                "
+                >点击节点可高亮</span
+              >
+            </div>
+            <div id="syntax-tree-container" class="syntax-tree-container">
+              <!-- Dynamic Clause Tree Nodes -->
             </div>
           </div>
         </div>
 
-        <div style="margin-top:0.875rem;display:flex;gap:0.5rem;align-items:center;">
-          <button id="btn-test-key" class="btn btn-ghost" onclick="testApiKeyConnection()">⚡ 测试连通性</button>
-          <span id="test-key-feedback" style="font-size:0.75rem;color:var(--pencil);font-family:var(--mono);"></span>
+        <!-- Section 3: Sticky Reading Notes Section -->
+        <div id="drawer-note-section" class="sticky-reading-note-card hidden">
+          <div class="sticky-word-headline">
+            <span
+              style="font-size: 0.875rem; font-weight: 700; color: var(--ink)"
+              >📝 精读随笔便签</span
+            >
+            <span id="note-badge-status" class="cefr-badge badge-A2"
+              >便签草稿</span
+            >
+          </div>
+          <div
+            id="note-quote"
+            class="quote-text"
+            style="
+              margin-top: 0.5rem;
+              font-style: italic;
+              font-size: 0.8125rem;
+              color: var(--pencil);
+            "
+          ></div>
+          <div style="margin-top: 0.75rem">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <label class="input-label" style="margin: 0"
+                >随笔心得 / 搭配拆解</label
+              >
+              <button
+                id="note-ai-btn"
+                class="btn btn-accent"
+                style="
+                  min-height: 24px;
+                  padding: 0 0.5rem;
+                  font-size: 0.6875rem;
+                "
+                onclick="aiNoteAssist()"
+              >
+                ✨ AI 速记辅助
+              </button>
+            </div>
+            <textarea
+              id="note-text-input"
+              class="note-textarea"
+              rows="3"
+              placeholder="记录句式搭配、长难句拆解或个人心得…"
+            ></textarea>
+          </div>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem">
+            <button
+              id="save-note-btn"
+              class="btn btn-dark"
+              style="flex: 1"
+              onclick="saveCurrentNote()"
+            >
+              ✓ 保存便签
+            </button>
+            <button
+              id="del-note-btn"
+              class="btn btn-ghost btn-del hidden"
+              onclick="deleteCurrentNote()"
+              title="删除便签"
+            >
+              🗑️
+            </button>
+          </div>
         </div>
       </div>
+    </aside>
 
-      <hr style="border:none;border-top:1px solid var(--border);margin:1.25rem 0;">
+    <!-- ── Import Modal ───────────────────────────────────────── -->
+    <div
+      id="modal-overlay"
+      class="modal-overlay import-overlay"
+      onclick="if (event.target === this) closeModal();"
+    >
+      <div class="modal import-modal-box">
+        <div class="modal-header import-modal-header">
+          <div class="import-header-title">
+            <span class="import-header-code">[ INGESTION // DOKUMENT ]</span>
+            <h3>导入德语研读文献</h3>
+          </div>
+          <button
+            class="drawer-close"
+            onclick="closeModal()"
+            title="关闭 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
 
-      <div class="settings-section">
-        <div class="settings-section-title">🔊 德语发音与 TTS 朗读偏好</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
+        <div class="modal-tabs import-tabs">
+          <button
+            id="tab-btn-text"
+            class="modal-tab import-tab active"
+            onclick="switchImportTab('text')"
+          >
+            <span>❖ 粘贴长文</span>
+          </button>
+          <button
+            id="tab-btn-url"
+            class="modal-tab import-tab"
+            onclick="switchImportTab('url')"
+          >
+            <span>❖ 网页链接 (URL)</span>
+          </button>
+          <button
+            id="tab-btn-file"
+            class="modal-tab import-tab"
+            onclick="switchImportTab('file')"
+          >
+            <span>❖ 文档上传</span>
+          </button>
+          <button
+            id="tab-btn-feed"
+            class="modal-tab import-tab"
+            onclick="switchImportTab('feed')"
+          >
+            <span>📰 订阅外刊 (RSS)</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: Text -->
+        <div id="import-tab-text" class="tab-content active">
           <div class="modal-field">
-            <label class="input-label">默认发音人 (Voice)</label>
-            <select id="set-tts-voice" class="modal-input">
-              <option value="de-DE-KatjaNeural">Katja (女声 · 德国之声推荐)</option>
-              <option value="de-DE-ConradNeural">Conrad (男声 · 严谨沉稳)</option>
-              <option value="de-DE-AmalaNeural">Amala (女声 · 自然清晰)</option>
-              <option value="de-DE-KillianNeural">Killian (男声 · 浑厚母语)</option>
-            </select>
+            <label class="input-label" for="imp-title">文章标题（可选）</label>
+            <input
+              id="imp-title"
+              type="text"
+              class="modal-input"
+              placeholder="输入或自定义标题…"
+            />
           </div>
           <div class="modal-field">
-            <label class="input-label">朗读语速 (Speed)</label>
-            <select id="set-tts-rate" class="modal-input">
-              <option value="-15%">0.85x 放缓 (影子跟读推荐)</option>
-              <option value="+0%" selected>1.0x 标准语速</option>
-              <option value="+15%">1.15x 挑战语速</option>
-            </select>
+            <label class="input-label" for="imp-text">德语长文正文</label>
+            <textarea
+              id="imp-text"
+              class="modal-input modal-textarea"
+              placeholder="粘贴德语课文、新闻或备考长文…"
+            ></textarea>
           </div>
         </div>
-      </div>
 
-      <div style="margin-top:1.5rem;display:flex;justify-content:flex-end;gap:0.75rem;">
-        <button class="btn btn-ghost" onclick="closeSettingsModal()">取消</button>
-        <button id="btn-save-settings" class="btn btn-dark" onclick="saveAppSettings()">✓ 保存并生效</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── AI Polish Review Overlay ─────────────────────────────── -->
-  <div id="polish-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closePolishOverlay()">
-    <div class="modal polish-modal-box">
-      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-        <span style="font-size:1.125rem;font-weight:700;color:var(--ink);">✨ AI 润色审查 (AI-Politur Review)</span>
-        <button class="drawer-close" onclick="closePolishOverlay()" title="关闭 (Esc)">✕</button>
-      </div>
-
-      <div class="polish-toolbar">
-        <div id="polish-hunk-summary" class="polish-summary-badge">
-          共 0 处改动 · 默认已全选
+        <!-- Tab 2: URL -->
+        <div id="import-tab-url" class="tab-content">
+          <div class="modal-field">
+            <label class="input-label" for="imp-url-input"
+              >德语新闻/文章链接 (URL)</label
+            >
+            <input
+              id="imp-url-input"
+              type="url"
+              class="modal-input"
+              placeholder="https://www.dw.com/de/..."
+            />
+          </div>
+          <div class="modal-field">
+            <label class="input-label" for="imp-url-title"
+              >自定义标题（可选）</label
+            >
+            <input
+              id="imp-url-title"
+              type="text"
+              class="modal-input"
+              placeholder="自定义标题（默认自动提取并清洗网页标题）"
+            />
+          </div>
+          <div class="url-hint-box">
+            <span class="url-hint-icon">✦</span>
+            <span
+              >支持自动提取与正文降噪：DW
+              德语之声、Spiegel、Tagesschau、DLF、Zeit 等主流德语媒体。</span
+            >
+          </div>
         </div>
-        <div class="polish-quick-actions">
-          <button class="btn btn-ghost btn-xs" onclick="acceptAllPolishHunks()">✓ 全部接受</button>
-          <button class="btn btn-ghost btn-xs" onclick="rejectAllPolishHunks()">✕ 全部拒绝</button>
+
+        <!-- Tab 3: File Upload -->
+        <div id="import-tab-file" class="tab-content">
+          <div
+            id="dropzone"
+            class="dropzone"
+            onclick="document.getElementById('file-input').click()"
+          >
+            <div class="dropzone-icon">📄</div>
+            <div class="dropzone-title">点击或拖拽德语文档至此处</div>
+            <div class="dropzone-desc">
+              支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）
+            </div>
+            <input
+              id="file-input"
+              type="file"
+              accept=".txt,.md,.text,text/plain,text/markdown"
+              style="display: none"
+              onchange="handleFileSelect(event)"
+            />
+          </div>
+        </div>
+
+        <!-- Tab 4: RSS News Feeds -->
+        <div id="import-tab-feed" class="tab-content">
+          <div class="feed-sources-bar" id="feed-sources-bar">
+            <!-- Populated by JS -->
+          </div>
+          <div class="feed-items-container" id="feed-items-container">
+            <div class="feed-loading-state">
+              ⏳ 正在获取精选德语外刊与学习源…
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+          <button
+            id="import-btn"
+            class="btn btn-dark"
+            onclick="submitActiveImport()"
+          >
+            开始阅读
+          </button>
         </div>
       </div>
-
-      <div id="polish-diff-list" class="polish-diff-list">
-        <!-- Dynamic Hunk Diff Blocks -->
-      </div>
-
-      <div id="polish-notes" class="polish-notes-container hidden">
-        <!-- AI Polish Notes -->
-      </div>
-
-      <div class="modal-footer polish-modal-footer">
-        <button class="btn btn-ghost" onclick="closePolishOverlay()">取消</button>
-        <button id="btn-apply-polish" class="btn btn-dark" onclick="applyPolishChanges()">✓ 应用所选更改</button>
-      </div>
     </div>
-  </div>
 
-  <!-- Floating Tooltip for Inline IDE Editor Errors (v4.0.0) -->
-  <div id="ide-error-tooltip" class="ide-error-tooltip hidden"></div>
-
-  <!-- Version Snapshot Read-Only Preview Overlay (v4.0.0) -->
-  <div id="version-preview-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeVersionPreview()">
-    <div class="modal version-preview-box">
-      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-        <div style="display:flex;align-items:center;gap:0.5rem;">
-          <span id="version-preview-badge" class="diff-hunk-badge">#v--</span>
-          <h3 id="version-preview-title" style="margin:0;font-size:1.125rem;">快照预览</h3>
+    <!-- ── Settings Modal ───────────────────────────────────────── -->
+    <div
+      id="settings-overlay"
+      class="modal-overlay hidden"
+      onclick="if (event.target === this) closeSettingsModal();"
+    >
+      <div class="modal settings-modal-box">
+        <div
+          class="modal-header"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+          "
+        >
+          <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
+            >⚙️ 偏好与 API 设置 (Einstellungen)</span
+          >
+          <button
+            class="drawer-close"
+            onclick="closeSettingsModal()"
+            title="关闭 (Esc)"
+          >
+            ✕
+          </button>
         </div>
-        <button class="drawer-close" onclick="closeVersionPreview()" title="关闭 (Esc)">✕</button>
-      </div>
-      <div class="version-preview-meta-bar">
-        <span id="version-preview-time" style="color:var(--pencil);font-size:0.75rem;font-family:var(--mono);"></span>
-        <span id="version-preview-status" class="writer-status-pill"></span>
-      </div>
-      <div id="version-preview-content" class="version-preview-content"></div>
-      <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;">
-        <button class="btn btn-ghost" onclick="closeVersionPreview()">关闭预览</button>
-        <button id="version-preview-restore-btn" class="btn btn-dark">↩ 恢复到此快照</button>
+
+        <div class="settings-section">
+          <div class="settings-section-title">
+            🤖 AI 深度剖析服务 (DeepSeek / OpenAI 兼容)
+          </div>
+          <p
+            class="settings-tip"
+            style="
+              font-size: 0.75rem;
+              color: var(--pencil);
+              margin: 0.25rem 0 0.75rem 0;
+              line-height: 1.4;
+            "
+          >
+            用于选词语法深度剖析与随笔便签速记。词库、形态学、五场域拓扑、完形
+            C-Test 等功能 100% 离线，无需 API Key。
+          </p>
+
+          <div class="modal-field" style="margin-top: 0.75rem">
+            <label class="input-label">API 密钥 (API Key)</label>
+            <div style="display: flex; gap: 0.5rem">
+              <input
+                id="set-api-key"
+                type="password"
+                class="modal-input"
+                placeholder="sk-..."
+                autocomplete="off"
+              />
+              <button
+                id="btn-toggle-key-vis"
+                class="btn btn-ghost"
+                onclick="toggleKeyVisibility()"
+                title="显示/隐藏 Key"
+                style="min-width: 44px; padding: 0 0.5rem"
+              >
+                👁️
+              </button>
+            </div>
+            <span
+              id="set-key-status"
+              style="
+                font-size: 0.75rem;
+                color: var(--pencil);
+                margin-top: 0.25rem;
+                display: block;
+              "
+            ></span>
+          </div>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 0.75rem;
+              margin-top: 0.75rem;
+            "
+          >
+            <div class="modal-field">
+              <label class="input-label">接口地址 (Base URL)</label>
+              <input
+                id="set-base-url"
+                type="text"
+                class="modal-input"
+                placeholder="https://api.deepseek.com"
+              />
+              <div
+                style="
+                  display: flex;
+                  gap: 4px;
+                  margin-top: 4px;
+                  flex-wrap: wrap;
+                "
+              >
+                <button
+                  type="button"
+                  class="btn-preset-pill"
+                  onclick="
+                    document.getElementById('set-base-url').value =
+                      'https://api.deepseek.com'
+                  "
+                >
+                  DeepSeek 官方
+                </button>
+                <button
+                  type="button"
+                  class="btn-preset-pill"
+                  onclick="
+                    document.getElementById('set-base-url').value =
+                      'https://api.openai.com/v1'
+                  "
+                >
+                  OpenAI
+                </button>
+              </div>
+            </div>
+            <div class="modal-field">
+              <label class="input-label">模型名称 (Model)</label>
+              <input
+                id="set-model-name"
+                type="text"
+                class="modal-input"
+                placeholder="deepseek-v4-flash"
+              />
+              <div
+                style="
+                  display: flex;
+                  gap: 4px;
+                  margin-top: 4px;
+                  flex-wrap: wrap;
+                "
+              >
+                <button
+                  type="button"
+                  class="btn-preset-pill"
+                  onclick="
+                    document.getElementById('set-model-name').value =
+                      'deepseek-v4-flash'
+                  "
+                >
+                  deepseek-v4-flash (推荐)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style="
+              margin-top: 0.875rem;
+              display: flex;
+              gap: 0.5rem;
+              align-items: center;
+            "
+          >
+            <button
+              id="btn-test-key"
+              class="btn btn-ghost"
+              onclick="testApiKeyConnection()"
+            >
+              ⚡ 测试连通性
+            </button>
+            <span
+              id="test-key-feedback"
+              style="
+                font-size: 0.75rem;
+                color: var(--pencil);
+                font-family: var(--mono);
+              "
+            ></span>
+          </div>
+        </div>
+
+        <hr
+          style="
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 1.25rem 0;
+          "
+        />
+
+        <div class="settings-section">
+          <div class="settings-section-title">🔊 德语发音与 TTS 朗读偏好</div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 0.75rem;
+              margin-top: 0.75rem;
+            "
+          >
+            <div class="modal-field">
+              <label class="input-label">默认发音人 (Voice)</label>
+              <select id="set-tts-voice" class="modal-input">
+                <option value="de-DE-KatjaNeural">
+                  Katja (女声 · 德国之声推荐)
+                </option>
+                <option value="de-DE-ConradNeural">
+                  Conrad (男声 · 严谨沉稳)
+                </option>
+                <option value="de-DE-AmalaNeural">
+                  Amala (女声 · 自然清晰)
+                </option>
+                <option value="de-DE-KillianNeural">
+                  Killian (男声 · 浑厚母语)
+                </option>
+              </select>
+            </div>
+            <div class="modal-field">
+              <label class="input-label">朗读语速 (Speed)</label>
+              <select id="set-tts-rate" class="modal-input">
+                <option value="-15%">0.85x 放缓 (影子跟读推荐)</option>
+                <option value="+0%" selected>1.0x 标准语速</option>
+                <option value="+15%">1.15x 挑战语速</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+          "
+        >
+          <button class="btn btn-ghost" onclick="closeSettingsModal()">
+            取消
+          </button>
+          <button
+            id="btn-save-settings"
+            class="btn btn-dark"
+            onclick="saveAppSettings()"
+          >
+            ✓ 保存并生效
+          </button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- ── Floating Shadow Reading Player (Root Level) ─────────── -->
-  <div id="shadow-player" class="shadow-player hidden">
-    <div class="player-left">
-      <button id="player-prev-btn" class="player-btn" onclick="ShadowPlayer.prev()" title="上一句 (←)">⏮</button>
-      <button id="player-play-btn" class="player-btn player-btn-main" onclick="ShadowPlayer.toggle()" title="播放/暂停 (Space)">▶</button>
-      <button id="player-next-btn" class="player-btn" onclick="ShadowPlayer.next()" title="下一句 (→)">⏭</button>
-      <button id="player-replay-btn" class="player-btn" onclick="ShadowPlayer.replay()" title="重播当前句 (R)">🔁</button>
-      <span id="player-status" class="player-status">句 1 / -</span>
+    <!-- ── AI Polish Review Overlay ─────────────────────────────── -->
+    <div
+      id="polish-overlay"
+      class="modal-overlay hidden"
+      onclick="if (event.target === this) closePolishOverlay();"
+    >
+      <div class="modal polish-modal-box">
+        <div
+          class="modal-header"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+          "
+        >
+          <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
+            >✨ AI 润色审查 (AI-Politur Review)</span
+          >
+          <button
+            class="drawer-close"
+            onclick="closePolishOverlay()"
+            title="关闭 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="polish-toolbar">
+          <div id="polish-hunk-summary" class="polish-summary-badge">
+            共 0 处改动 · 默认已全选
+          </div>
+          <div class="polish-quick-actions">
+            <button
+              class="btn btn-ghost btn-xs"
+              onclick="acceptAllPolishHunks()"
+            >
+              ✓ 全部接受
+            </button>
+            <button
+              class="btn btn-ghost btn-xs"
+              onclick="rejectAllPolishHunks()"
+            >
+              ✕ 全部拒绝
+            </button>
+          </div>
+        </div>
+
+        <div id="polish-diff-list" class="polish-diff-list">
+          <!-- Dynamic Hunk Diff Blocks -->
+        </div>
+
+        <div id="polish-notes" class="polish-notes-container hidden">
+          <!-- AI Polish Notes -->
+        </div>
+
+        <div class="modal-footer polish-modal-footer">
+          <button class="btn btn-ghost" onclick="closePolishOverlay()">
+            取消
+          </button>
+          <button
+            id="btn-apply-polish"
+            class="btn btn-dark"
+            onclick="applyPolishChanges()"
+          >
+            ✓ 应用所选更改
+          </button>
+        </div>
+      </div>
     </div>
 
-    <div class="player-right">
-      <!-- Voice selector -->
-      <div class="voice-pill">
-        <button id="voice-btn-katja" class="voice-btn active" onclick="ShadowPlayer.setVoice('de-DE-KatjaNeural')" title="清脆自然女声 (Katja)"><span class="vb-ico">👩</span><span class="vb-lbl">Katja</span></button>
-        <button id="voice-btn-conrad" class="voice-btn" onclick="ShadowPlayer.setVoice('de-DE-ConradNeural')" title="沉稳磁性男声 (Conrad)"><span class="vb-ico">👨</span><span class="vb-lbl">Conrad</span></button>
-      </div>
+    <!-- Floating Tooltip for Inline IDE Editor Errors (v4.0.0) -->
+    <div id="ide-error-tooltip" class="ide-error-tooltip hidden"></div>
 
-      <div class="player-mode-group">
-        <button class="mode-btn active" data-mode="shadow" onclick="ShadowPlayer.setMode('shadow')" title="智能影子跟读（每句停顿等候跟读）">🎙️ 跟读</button>
-        <button class="mode-btn" data-mode="continuous" onclick="ShadowPlayer.setMode('continuous')" title="全文连续朗读">▶ 连读</button>
-        <button class="mode-btn" data-mode="loop" onclick="ShadowPlayer.setMode('loop')" title="单句循环练习">🔂 单句</button>
-      </div>
-
-      <div class="speed-pill">
-        <button class="speed-step-btn" data-speed="0.6" onclick="ShadowPlayer.setSpeed(0.6)">0.6x</button>
-        <button class="speed-step-btn active" data-speed="0.88" onclick="ShadowPlayer.setSpeed(0.88)">0.8x</button>
-        <button class="speed-step-btn" data-speed="1.0" onclick="ShadowPlayer.setSpeed(1.0)">1.0x</button>
-        <button class="speed-step-btn" data-speed="1.2" onclick="ShadowPlayer.setSpeed(1.2)">1.2x</button>
+    <!-- Version Snapshot Read-Only Preview Overlay (v4.0.0) -->
+    <div
+      id="version-preview-overlay"
+      class="modal-overlay hidden"
+      onclick="if (event.target === this) closeVersionPreview();"
+    >
+      <div class="modal version-preview-box">
+        <div
+          class="modal-header"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 0.5rem">
+            <span id="version-preview-badge" class="diff-hunk-badge">#v--</span>
+            <h3
+              id="version-preview-title"
+              style="margin: 0; font-size: 1.125rem"
+            >
+              快照预览
+            </h3>
+          </div>
+          <button
+            class="drawer-close"
+            onclick="closeVersionPreview()"
+            title="关闭 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="version-preview-meta-bar">
+          <span
+            id="version-preview-time"
+            style="
+              color: var(--pencil);
+              font-size: 0.75rem;
+              font-family: var(--mono);
+            "
+          ></span>
+          <span id="version-preview-status" class="writer-status-pill"></span>
+        </div>
+        <div id="version-preview-content" class="version-preview-content"></div>
+        <div
+          class="modal-footer"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1rem;
+          "
+        >
+          <button class="btn btn-ghost" onclick="closeVersionPreview()">
+            关闭预览
+          </button>
+          <button id="version-preview-restore-btn" class="btn btn-dark">
+            ↩ 恢复到此快照
+          </button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- ── Floating Selection Tooltip (Root Level) ──────────────── -->
-  <div id="selection-tooltip" class="selection-tooltip hidden">
-    <div class="tooltip-colors">
-      <button class="hl-color-btn hl-yellow" onclick="applyHighlight('yellow')" title="黄色荧光笔"></button>
-      <button class="hl-color-btn hl-green" onclick="applyHighlight('green')" title="绿色重点笔"></button>
-      <button class="hl-color-btn hl-pink" onclick="applyHighlight('pink')" title="粉色难点笔"></button>
-    </div>
-    <span class="tooltip-sep"></span>
-    <button class="tooltip-action-btn" onclick="openNoteDrawerFromSelection()">📝 随笔</button>
-    <button class="tooltip-action-btn" onclick="playSelectedAudio()">🔊 朗读</button>
-  </div>
-
-  <!-- ── Quiz Overlay ─────────────────────────────────────────── -->
-  <div id="quiz-overlay" class="quiz-overlay hidden">
-    <!-- Step 1: Mode Selector -->
-    <div id="quiz-step-mode" class="quiz-panel">
-      <div class="quiz-panel-head">
-        <h3>选择考验模式</h3>
-        <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
-      </div>
-      <div class="quiz-mode-grid">
-        <button class="quiz-mode-card" onclick="startQuiz('flashcard')">
-          <div class="quiz-mode-icon">🎴</div>
-          <div class="quiz-mode-title">闪卡自测</div>
-          <div class="quiz-mode-desc">正面看词，翻面对答案</div>
+    <!-- ── Floating Shadow Reading Player (Root Level) ─────────── -->
+    <div id="shadow-player" class="shadow-player hidden">
+      <div class="player-left">
+        <button
+          id="player-prev-btn"
+          class="player-btn"
+          onclick="ShadowPlayer.prev()"
+          title="上一句 (←)"
+        >
+          ⏮
         </button>
-        <button class="quiz-mode-card" onclick="startQuiz('dictation')">
-          <div class="quiz-mode-icon">✍️</div>
-          <div class="quiz-mode-title">默写拼写</div>
-          <div class="quiz-mode-desc">看中文义，手写德语词</div>
+        <button
+          id="player-play-btn"
+          class="player-btn player-btn-main"
+          onclick="ShadowPlayer.toggle()"
+          title="播放/暂停 (Space)"
+        >
+          ▶
         </button>
-        <button class="quiz-mode-card" onclick="startQuiz('choice')">
-          <div class="quiz-mode-icon">🎯</div>
-          <div class="quiz-mode-title">四选一</div>
-          <div class="quiz-mode-desc">从四个选项中选正确释义</div>
+        <button
+          id="player-next-btn"
+          class="player-btn"
+          onclick="ShadowPlayer.next()"
+          title="下一句 (→)"
+        >
+          ⏭
         </button>
+        <button
+          id="player-replay-btn"
+          class="player-btn"
+          onclick="ShadowPlayer.replay()"
+          title="重播当前句 (R)"
+        >
+          🔁
+        </button>
+        <span id="player-status" class="player-status">句 1 / -</span>
       </div>
-      <p class="quiz-meta-note">仅测验词汇卡，错误率高的卡片优先出现</p>
+
+      <div class="player-right">
+        <!-- Voice selector -->
+        <div class="voice-pill">
+          <button
+            id="voice-btn-katja"
+            class="voice-btn active"
+            onclick="ShadowPlayer.setVoice('de-DE-KatjaNeural')"
+            title="清脆自然女声 (Katja)"
+          >
+            <span class="vb-ico">👩</span><span class="vb-lbl">Katja</span>
+          </button>
+          <button
+            id="voice-btn-conrad"
+            class="voice-btn"
+            onclick="ShadowPlayer.setVoice('de-DE-ConradNeural')"
+            title="沉稳磁性男声 (Conrad)"
+          >
+            <span class="vb-ico">👨</span><span class="vb-lbl">Conrad</span>
+          </button>
+        </div>
+
+        <div class="player-mode-group">
+          <button
+            class="mode-btn active"
+            data-mode="shadow"
+            onclick="ShadowPlayer.setMode('shadow')"
+            title="智能影子跟读（每句停顿等候跟读）"
+          >
+            🎙️ 跟读
+          </button>
+          <button
+            class="mode-btn"
+            data-mode="continuous"
+            onclick="ShadowPlayer.setMode('continuous')"
+            title="全文连续朗读"
+          >
+            ▶ 连读
+          </button>
+          <button
+            class="mode-btn"
+            data-mode="loop"
+            onclick="ShadowPlayer.setMode('loop')"
+            title="单句循环练习"
+          >
+            🔂 单句
+          </button>
+        </div>
+
+        <div class="speed-pill">
+          <button
+            class="speed-step-btn"
+            data-speed="0.6"
+            onclick="ShadowPlayer.setSpeed(0.6)"
+          >
+            0.6x
+          </button>
+          <button
+            class="speed-step-btn active"
+            data-speed="0.88"
+            onclick="ShadowPlayer.setSpeed(0.88)"
+          >
+            0.8x
+          </button>
+          <button
+            class="speed-step-btn"
+            data-speed="1.0"
+            onclick="ShadowPlayer.setSpeed(1.0)"
+          >
+            1.0x
+          </button>
+          <button
+            class="speed-step-btn"
+            data-speed="1.2"
+            onclick="ShadowPlayer.setSpeed(1.2)"
+          >
+            1.2x
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- Step 2: Quiz Runner -->
-    <div id="quiz-step-run" class="quiz-panel hidden">
-      <div class="quiz-runner-head">
-        <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
-        <div class="quiz-progress-bar-wrap">
-          <div id="quiz-progress-fill" class="quiz-progress-fill" style="width:0%"></div>
+    <!-- ── Floating Selection Tooltip (Root Level) ──────────────── -->
+    <div id="selection-tooltip" class="selection-tooltip hidden">
+      <div class="tooltip-colors">
+        <button
+          class="hl-color-btn hl-yellow"
+          onclick="applyHighlight('yellow')"
+          title="黄色荧光笔"
+        ></button>
+        <button
+          class="hl-color-btn hl-green"
+          onclick="applyHighlight('green')"
+          title="绿色重点笔"
+        ></button>
+        <button
+          class="hl-color-btn hl-pink"
+          onclick="applyHighlight('pink')"
+          title="粉色难点笔"
+        ></button>
+      </div>
+      <span class="tooltip-sep"></span>
+      <button
+        class="tooltip-action-btn"
+        onclick="openNoteDrawerFromSelection()"
+      >
+        📝 随笔
+      </button>
+      <button class="tooltip-action-btn" onclick="playSelectedAudio()">
+        🔊 朗读
+      </button>
+    </div>
+
+    <!-- ── Quiz Overlay ─────────────────────────────────────────── -->
+    <div id="quiz-overlay" class="quiz-overlay hidden">
+      <!-- Step 1: Mode Selector -->
+      <div id="quiz-step-mode" class="quiz-panel">
+        <div class="quiz-panel-head">
+          <h3>选择考验模式</h3>
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
         </div>
-        <div class="quiz-score-label">
-          <span id="quiz-score-correct">0</span> 正 / <span id="quiz-score-wrong">0</span> 误
-          · <span id="quiz-pos">1</span>/<span id="quiz-total">0</span>
+        <div class="quiz-mode-grid">
+          <button class="quiz-mode-card" onclick="startQuiz('flashcard')">
+            <div class="quiz-mode-icon">🎴</div>
+            <div class="quiz-mode-title">闪卡自测</div>
+            <div class="quiz-mode-desc">正面看词，翻面对答案</div>
+          </button>
+          <button class="quiz-mode-card" onclick="startQuiz('dictation')">
+            <div class="quiz-mode-icon">✍️</div>
+            <div class="quiz-mode-title">默写拼写</div>
+            <div class="quiz-mode-desc">看中文义，手写德语词</div>
+          </button>
+          <button class="quiz-mode-card" onclick="startQuiz('choice')">
+            <div class="quiz-mode-icon">🎯</div>
+            <div class="quiz-mode-title">四选一</div>
+            <div class="quiz-mode-desc">从四个选项中选正确释义</div>
+          </button>
+        </div>
+        <p class="quiz-meta-note">仅测验词汇卡，错误率高的卡片优先出现</p>
+      </div>
+
+      <!-- Step 2: Quiz Runner -->
+      <div id="quiz-step-run" class="quiz-panel hidden">
+        <div class="quiz-runner-head">
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
+          <div class="quiz-progress-bar-wrap">
+            <div
+              id="quiz-progress-fill"
+              class="quiz-progress-fill"
+              style="width: 0%"
+            ></div>
+          </div>
+          <div class="quiz-score-label">
+            <span id="quiz-score-correct">0</span> 正 /
+            <span id="quiz-score-wrong">0</span> 误 ·
+            <span id="quiz-pos">1</span>/<span id="quiz-total">0</span>
+          </div>
+        </div>
+
+        <!-- Flashcard mode -->
+        <div id="quiz-flashcard-wrap" class="quiz-card-wrap hidden">
+          <div
+            id="quiz-flashcard"
+            class="quiz-flashcard"
+            onclick="flipFlashcard()"
+          >
+            <div class="quiz-card-front">
+              <div id="quiz-fc-word" class="quiz-big-word"></div>
+              <div id="quiz-fc-cefr" class="quiz-fc-badge"></div>
+              <div class="quiz-flip-hint">点击翻面</div>
+            </div>
+            <div class="quiz-card-back hidden">
+              <div id="quiz-fc-def" class="quiz-fc-def"></div>
+              <div id="quiz-fc-sent" class="quiz-fc-sent"></div>
+            </div>
+          </div>
+          <div id="quiz-fc-actions" class="quiz-fc-actions hidden">
+            <button
+              class="quiz-result-btn quiz-btn-wrong"
+              onclick="submitFlashcard(false)"
+            >
+              ✗ 不认识
+            </button>
+            <button
+              class="quiz-result-btn quiz-btn-correct"
+              onclick="submitFlashcard(true)"
+            >
+              ✓ 认识了
+            </button>
+          </div>
+        </div>
+
+        <!-- Dictation mode -->
+        <div id="quiz-dictation-wrap" class="quiz-card-wrap hidden">
+          <div class="quiz-dictation-card">
+            <div class="quiz-dict-prompt-label">请用德语拼写：</div>
+            <div id="quiz-dict-def" class="quiz-big-def"></div>
+            <div id="quiz-dict-sent-hint" class="quiz-dict-hint"></div>
+            <div class="quiz-dict-input-row">
+              <input
+                id="quiz-dict-input"
+                class="quiz-dict-input"
+                type="text"
+                placeholder="输入德语单词..."
+                autocomplete="off"
+                autocorrect="off"
+                onkeydown="if (event.key === 'Enter') checkDictation();"
+              />
+              <button class="btn btn-dark" onclick="checkDictation()">
+                确认
+              </button>
+            </div>
+            <div
+              id="quiz-dict-feedback"
+              class="quiz-dict-feedback hidden"
+            ></div>
+            <button
+              id="quiz-dict-next"
+              class="btn btn-ghost btn-full hidden"
+              onclick="advanceQuiz()"
+            >
+              下一题 →
+            </button>
+          </div>
+        </div>
+
+        <!-- Choice mode -->
+        <div id="quiz-choice-wrap" class="quiz-card-wrap hidden">
+          <div class="quiz-choice-card">
+            <div class="quiz-choice-question">
+              以下哪个是 "<span id="quiz-choice-word"></span>" 的释义？
+            </div>
+            <div
+              id="quiz-choice-cefr"
+              class="quiz-fc-badge"
+              style="margin: 0 auto 1rem"
+            ></div>
+            <div id="quiz-choice-options" class="quiz-choice-options"></div>
+          </div>
         </div>
       </div>
 
-      <!-- Flashcard mode -->
-      <div id="quiz-flashcard-wrap" class="quiz-card-wrap hidden">
-        <div id="quiz-flashcard" class="quiz-flashcard" onclick="flipFlashcard()">
-          <div class="quiz-card-front">
-            <div id="quiz-fc-word" class="quiz-big-word"></div>
-            <div id="quiz-fc-cefr" class="quiz-fc-badge"></div>
-            <div class="quiz-flip-hint">点击翻面</div>
+      <!-- Step 3: Completion -->
+      <div id="quiz-step-done" class="quiz-panel hidden">
+        <div id="quiz-confetti" class="quiz-confetti-canvas"></div>
+        <div class="quiz-done-content">
+          <div class="quiz-done-icon">🏆</div>
+          <h3 class="quiz-done-title">考验完成！</h3>
+          <div class="quiz-done-stats">
+            <span id="done-correct">0</span> 正确 /
+            <span id="done-wrong">0</span> 错误
           </div>
-          <div class="quiz-card-back hidden">
-            <div id="quiz-fc-def" class="quiz-fc-def"></div>
-            <div id="quiz-fc-sent" class="quiz-fc-sent"></div>
+          <div id="done-accuracy" class="quiz-done-accuracy"></div>
+          <div id="done-encourage" class="quiz-done-encourage"></div>
+          <div class="quiz-done-actions">
+            <button class="btn btn-ghost" onclick="closeQuizOverlay()">
+              返回卡片库
+            </button>
+            <button class="btn btn-dark" onclick="openQuizOverlay()">
+              再测一遍
+            </button>
           </div>
-        </div>
-        <div id="quiz-fc-actions" class="quiz-fc-actions hidden">
-          <button class="quiz-result-btn quiz-btn-wrong" onclick="submitFlashcard(false)">✗ 不认识</button>
-          <button class="quiz-result-btn quiz-btn-correct" onclick="submitFlashcard(true)">✓ 认识了</button>
-        </div>
-      </div>
-
-      <!-- Dictation mode -->
-      <div id="quiz-dictation-wrap" class="quiz-card-wrap hidden">
-        <div class="quiz-dictation-card">
-          <div class="quiz-dict-prompt-label">请用德语拼写：</div>
-          <div id="quiz-dict-def" class="quiz-big-def"></div>
-          <div id="quiz-dict-sent-hint" class="quiz-dict-hint"></div>
-          <div class="quiz-dict-input-row">
-            <input id="quiz-dict-input" class="quiz-dict-input" type="text"
-              placeholder="输入德语单词..." autocomplete="off" autocorrect="off"
-              onkeydown="if(event.key==='Enter')checkDictation()">
-            <button class="btn btn-dark" onclick="checkDictation()">确认</button>
-          </div>
-          <div id="quiz-dict-feedback" class="quiz-dict-feedback hidden"></div>
-          <button id="quiz-dict-next" class="btn btn-ghost btn-full hidden" onclick="advanceQuiz()">下一题 →</button>
-        </div>
-      </div>
-
-      <!-- Choice mode -->
-      <div id="quiz-choice-wrap" class="quiz-card-wrap hidden">
-        <div class="quiz-choice-card">
-          <div class="quiz-choice-question">以下哪个是 "<span id="quiz-choice-word"></span>" 的释义？</div>
-          <div id="quiz-choice-cefr" class="quiz-fc-badge" style="margin:0 auto 1rem;"></div>
-          <div id="quiz-choice-options" class="quiz-choice-options"></div>
         </div>
       </div>
     </div>
 
-    <!-- Step 3: Completion -->
-    <div id="quiz-step-done" class="quiz-panel hidden">
-      <div id="quiz-confetti" class="quiz-confetti-canvas"></div>
-      <div class="quiz-done-content">
-        <div class="quiz-done-icon">🏆</div>
-        <h3 class="quiz-done-title">考验完成！</h3>
-        <div class="quiz-done-stats">
-          <span id="done-correct">0</span> 正确 / <span id="done-wrong">0</span> 错误
-        </div>
-        <div id="done-accuracy" class="quiz-done-accuracy"></div>
-        <div id="done-encourage" class="quiz-done-encourage"></div>
-        <div class="quiz-done-actions">
-          <button class="btn btn-ghost" onclick="closeQuizOverlay()">返回卡片库</button>
-          <button class="btn btn-dark" onclick="openQuizOverlay()">再测一遍</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Milestone Toast -->
-  <div id="milestone-toast" class="milestone-toast hidden"></div>
+    <!-- Milestone Toast -->
+    <div id="milestone-toast" class="milestone-toast hidden"></div>
 
     <!-- ── Fullscreen Cloze Exercise Modal (Lückentext / C-Test) ── -->
-  <div id="cloze-overlay" class="cloze-overlay hidden">
-    <div class="cloze-modal">
-      <div class="cloze-head">
-        <div>
-          <span class="dossier-kicker">GOETHE LÜCKENTEXT &amp; C-TEST ENGINE</span>
-          <h2 id="cloze-title" style="margin:0;font-family:var(--serif-heading);font-size:1.5rem;color:var(--ink);">完形填空实战训练</h2>
+    <div id="cloze-overlay" class="cloze-overlay hidden">
+      <div class="cloze-modal">
+        <div class="cloze-head">
+          <div>
+            <span class="dossier-kicker"
+              >GOETHE LÜCKENTEXT &amp; C-TEST ENGINE</span
+            >
+            <h2
+              id="cloze-title"
+              style="
+                margin: 0;
+                font-family: var(--serif-heading);
+                font-size: 1.5rem;
+                color: var(--ink);
+              "
+            >
+              完形填空实战训练
+            </h2>
+          </div>
+          <button class="drawer-close" onclick="closeClozeModal()">✕</button>
         </div>
-        <button class="drawer-close" onclick="closeClozeModal()">✕</button>
-      </div>
 
-      <!-- Cloze Mode Switcher -->
-      <div class="cloze-mode-bar">
-        <button id="cloze-mode-btn-grammar" class="cloze-mode-btn active" onclick="switchClozeMode('grammar')">
-          🎯 语法考点挖空 (介词/连词/变位)
-        </button>
-        <button id="cloze-mode-btn-vocab" class="cloze-mode-btn" onclick="switchClozeMode('vocab')">
-          📚 核心生词盲填 (B1/B2 实词)
-        </button>
-        <button id="cloze-mode-btn-ctest" class="cloze-mode-btn" onclick="switchClozeMode('ctest')">
-          ⚡ 经典 C-Test 模式 (词尾截断)
-        </button>
-      </div>
-
-      <!-- Article Cloze Body -->
-      <div id="cloze-body-wrap" class="cloze-body-wrap">
-        <div id="cloze-content" class="cloze-content" lang="de"></div>
-      </div>
-
-      <!-- Score & Actions Bar -->
-      <div class="cloze-footer">
-        <div id="cloze-score-display" class="cloze-score-display hidden">
-          <span class="cloze-score-num" id="cloze-score-text">0 / 0</span>
-          <span class="cloze-score-pct" id="cloze-pct-text">0% 准确率</span>
+        <!-- Cloze Mode Switcher -->
+        <div class="cloze-mode-bar">
+          <button
+            id="cloze-mode-btn-grammar"
+            class="cloze-mode-btn active"
+            onclick="switchClozeMode('grammar')"
+          >
+            🎯 语法考点挖空 (介词/连词/变位)
+          </button>
+          <button
+            id="cloze-mode-btn-vocab"
+            class="cloze-mode-btn"
+            onclick="switchClozeMode('vocab')"
+          >
+            📚 核心生词盲填 (B1/B2 实词)
+          </button>
+          <button
+            id="cloze-mode-btn-ctest"
+            class="cloze-mode-btn"
+            onclick="switchClozeMode('ctest')"
+          >
+            ⚡ 经典 C-Test 模式 (词尾截断)
+          </button>
         </div>
-        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-          <button id="cloze-hint-btn" class="btn btn-ghost" onclick="revealClozeHints()">💡 首字母提示</button>
-          <button id="cloze-reset-btn" class="btn btn-ghost" onclick="resetClozeExercise()">↺ 重做</button>
-          <button id="cloze-submit-btn" class="btn btn-accent" onclick="submitClozeExercise()">✓ 提交判分</button>
+
+        <!-- Article Cloze Body -->
+        <div id="cloze-body-wrap" class="cloze-body-wrap">
+          <div id="cloze-content" class="cloze-content" lang="de"></div>
+        </div>
+
+        <!-- Score & Actions Bar -->
+        <div class="cloze-footer">
+          <div id="cloze-score-display" class="cloze-score-display hidden">
+            <span class="cloze-score-num" id="cloze-score-text">0 / 0</span>
+            <span class="cloze-score-pct" id="cloze-pct-text">0% 准确率</span>
+          </div>
+          <div
+            style="
+              display: flex;
+              gap: 0.5rem;
+              align-items: center;
+              flex-wrap: wrap;
+            "
+          >
+            <button
+              id="cloze-hint-btn"
+              class="btn btn-ghost"
+              onclick="revealClozeHints()"
+            >
+              💡 首字母提示
+            </button>
+            <button
+              id="cloze-reset-btn"
+              class="btn btn-ghost"
+              onclick="resetClozeExercise()"
+            >
+              ↺ 重做
+            </button>
+            <button
+              id="cloze-submit-btn"
+              class="btn btn-accent"
+              onclick="submitClozeExercise()"
+            >
+              ✓ 提交判分
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ── View 6: German Vocabulary Workbench (Vokabeltrainer) ──── -->
-  <main id="view-german" class="view">
-    <iframe src="/german/workbench.html" title="德语背词工作台"
-            style="width:100%;border:none;"
-            allow="autoplay"></iframe>
-  </main>
+    <!-- ── View 6: German Vocabulary Workbench (Vokabeltrainer) ──── -->
+    <main id="view-german" class="view">
+      <iframe
+        src="/german/workbench.html"
+        title="德语背词工作台"
+        style="width: 100%; border: none"
+        allow="autoplay"
+      ></iframe>
+    </main>
 
-  <!-- ── Mobile Android / iOS Bottom Navigation Dock ─────────── -->
-  <nav id="mobile-bottom-nav" class="mobile-bottom-nav mobile-dock">
-    <button class="mobile-nav-btn dock-item active" id="mob-btn-home" onclick="show('home')">
-      <span class="mob-icon">📖</span>
-      <span class="mob-label">文库</span>
-    </button>
-    <button class="mobile-nav-btn dock-item" id="mob-btn-progress" onclick="show('progress')">
-      <span class="mob-icon">📊</span>
-      <span class="mob-label">台账</span>
-    </button>
-    <button class="mobile-nav-btn dock-item" id="mob-btn-writer" onclick="show('writer')">
-      <span class="mob-icon">✍️</span>
-      <span class="mob-label">写作</span>
-    </button>
-    <button class="mobile-nav-btn dock-item" id="mob-btn-cards" onclick="show('cards')">
-      <span class="mob-icon">🎴</span>
-      <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
-    </button>
-    <button class="mobile-nav-btn dock-item" id="mob-btn-german" onclick="show('german')">
-      <span class="mob-icon">📚</span>
-      <span class="mob-label">背词</span>
-    </button>
-    <button class="mobile-nav-btn dock-item" id="mob-btn-settings" onclick="openSettingsModal()">
-      <span class="mob-icon">⚙️</span>
-      <span class="mob-label">设置</span>
-    </button>
-  </nav>
+    <!-- ── Mobile Android / iOS Bottom Navigation Dock ─────────── -->
+    <nav id="mobile-bottom-nav" class="mobile-bottom-nav mobile-dock">
+      <button
+        class="mobile-nav-btn dock-item active"
+        id="mob-btn-home"
+        onclick="show('home')"
+      >
+        <span class="mob-icon">📖</span>
+        <span class="mob-label">文库</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-progress"
+        onclick="show('progress')"
+      >
+        <span class="mob-icon">📊</span>
+        <span class="mob-label">台账</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-writer"
+        onclick="show('writer')"
+      >
+        <span class="mob-icon">✍️</span>
+        <span class="mob-label">写作</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-cards"
+        onclick="show('cards')"
+      >
+        <span class="mob-icon">🎴</span>
+        <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-german"
+        onclick="show('german')"
+      >
+        <span class="mob-icon">📚</span>
+        <span class="mob-label">背词</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-settings"
+        onclick="openSettingsModal()"
+      >
+        <span class="mob-icon">⚙️</span>
+        <span class="mob-label">设置</span>
+      </button>
+    </nav>
 
-  <!-- ── Global Floating Companion Mascot Widget ─────────────── -->
-  <div id="companion" class="companion" role="status" aria-live="polite">
-    <div id="companion-bubble" class="companion-bubble hidden">
-      <div class="companion-bubble-de" id="companion-de"></div>
-      <div class="companion-bubble-zh" id="companion-zh"></div>
+    <!-- ── Global Floating Companion Mascot Widget ─────────────── -->
+    <div id="companion" class="companion" role="status" aria-live="polite">
+      <div id="companion-bubble" class="companion-bubble hidden">
+        <div class="companion-bubble-de" id="companion-de"></div>
+        <div class="companion-bubble-zh" id="companion-zh"></div>
+      </div>
+      <div
+        id="companion-char"
+        class="companion-char"
+        onclick="window.Companion.onClick()"
+      ></div>
+      <button
+        id="companion-avatar"
+        class="companion-avatar"
+        aria-label="伴读角色设置与对话"
+        onclick="window.Companion.onClick()"
+      >
+        <span id="companion-avatar-icon">🦉</span>
+      </button>
+      <div id="companion-panel" class="companion-panel hidden">
+        <div class="panel-head">
+          <span class="panel-title">伴读角色设置</span>
+          <button class="panel-close" onclick="window.Companion.onClick()">
+            ✕
+          </button>
+        </div>
+        <div class="panel-row" id="panel-characters">
+          <button
+            class="panel-char-btn active"
+            data-char="owl"
+            onclick="window.Companion.setCharacter('owl')"
+            title="歌德猫头鹰"
+          >
+            🦉
+          </button>
+          <button
+            class="panel-char-btn"
+            data-char="cat"
+            onclick="window.Companion.setCharacter('cat')"
+            title="学者猫"
+          >
+            🐱
+          </button>
+          <button
+            class="panel-char-btn"
+            data-char="fox"
+            onclick="window.Companion.setCharacter('fox')"
+            title="灵动狐"
+          >
+            🦊
+          </button>
+          <button
+            class="panel-char-btn"
+            data-char="robot"
+            onclick="window.Companion.setCharacter('robot')"
+            title="包豪斯机甲"
+          >
+            🤖
+          </button>
+          <button
+            class="panel-char-btn mascot-custom-btn"
+            id="panel-btn-custom"
+            data-char="custom"
+            style="display: none"
+            onclick="window.Companion.setCharacter('custom')"
+            title="自定义角色"
+          >
+            ✦
+          </button>
+          <button
+            class="panel-char-btn panel-upload-btn"
+            onclick="window.Companion.triggerUpload('panel')"
+            title="上传自定义 SVG 角色"
+          >
+            📁
+          </button>
+          <input
+            id="panel-svg-input"
+            type="file"
+            accept=".svg,image/svg+xml"
+            style="display: none"
+            onchange="window.Companion.onFileSelected(event)"
+          />
+        </div>
+        <div class="panel-row">
+          <input
+            id="panel-name"
+            type="text"
+            maxlength="12"
+            placeholder="起个名字…"
+            oninput="window.Companion.setName(this.value)"
+          />
+        </div>
+        <div class="panel-row" id="panel-colors">
+          <button
+            class="panel-color-dot"
+            style="background: #6b4f8f"
+            onclick="window.Companion.setColor('#6b4f8f')"
+          ></button>
+          <button
+            class="panel-color-dot"
+            style="background: #d9663f"
+            onclick="window.Companion.setColor('#d9663f')"
+          ></button>
+          <button
+            class="panel-color-dot"
+            style="background: #4f8f6b"
+            onclick="window.Companion.setColor('#4f8f6b')"
+          ></button>
+          <button
+            class="panel-color-dot"
+            style="background: #4a6fa5"
+            onclick="window.Companion.setColor('#4a6fa5')"
+          ></button>
+          <input
+            type="color"
+            id="panel-color-custom"
+            class="panel-color-custom"
+            onchange="window.Companion.setColor(this.value)"
+          />
+        </div>
+        <div class="panel-row panel-actions">
+          <button
+            id="panel-say"
+            class="btn btn-secondary btn-sm"
+            onclick="window.Companion.onSay()"
+          >
+            💬 说句话
+          </button>
+          <button
+            id="panel-sound"
+            class="btn btn-ghost btn-sm"
+            onclick="window.Companion.toggleSound()"
+          >
+            🔊
+          </button>
+          <button
+            id="panel-hide"
+            class="btn btn-ghost btn-sm"
+            onclick="window.Companion.toggleEnabled()"
+            title="收起伴读悬浮球"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
     </div>
-    <div id="companion-char" class="companion-char" onclick="window.Companion.onClick()"></div>
-    <button id="companion-avatar" class="companion-avatar" aria-label="伴读角色设置与对话" onclick="window.Companion.onClick()">
-      <span id="companion-avatar-icon">🦉</span>
-    </button>
-    <div id="companion-panel" class="companion-panel hidden">
-      <div class="panel-head">
-        <span class="panel-title">伴读角色设置</span>
-        <button class="panel-close" onclick="window.Companion.onClick()">✕</button>
-      </div>
-      <div class="panel-row" id="panel-characters">
-        <button class="panel-char-btn active" data-char="owl" onclick="window.Companion.setCharacter('owl')" title="歌德猫头鹰">🦉</button>
-        <button class="panel-char-btn" data-char="cat" onclick="window.Companion.setCharacter('cat')" title="学者猫">🐱</button>
-        <button class="panel-char-btn" data-char="fox" onclick="window.Companion.setCharacter('fox')" title="灵动狐">🦊</button>
-        <button class="panel-char-btn" data-char="robot" onclick="window.Companion.setCharacter('robot')" title="包豪斯机甲">🤖</button>
-        <button class="panel-char-btn mascot-custom-btn" id="panel-btn-custom" data-char="custom" style="display:none;" onclick="window.Companion.setCharacter('custom')" title="自定义角色">✦</button>
-        <button class="panel-char-btn panel-upload-btn" onclick="window.Companion.triggerUpload('panel')" title="上传自定义 SVG 角色">📁</button>
-        <input id="panel-svg-input" type="file" accept=".svg,image/svg+xml" style="display:none;" onchange="window.Companion.onFileSelected(event)">
-      </div>
-      <div class="panel-row">
-        <input id="panel-name" type="text" maxlength="12" placeholder="起个名字…" oninput="window.Companion.setName(this.value)">
-      </div>
-      <div class="panel-row" id="panel-colors">
-        <button class="panel-color-dot" style="background:#6b4f8f;" onclick="window.Companion.setColor('#6b4f8f')"></button>
-        <button class="panel-color-dot" style="background:#d9663f;" onclick="window.Companion.setColor('#d9663f')"></button>
-        <button class="panel-color-dot" style="background:#4f8f6b;" onclick="window.Companion.setColor('#4f8f6b')"></button>
-        <button class="panel-color-dot" style="background:#4a6fa5;" onclick="window.Companion.setColor('#4a6fa5')"></button>
-        <input type="color" id="panel-color-custom" class="panel-color-custom" onchange="window.Companion.setColor(this.value)">
-      </div>
-      <div class="panel-row panel-actions">
-        <button id="panel-say" class="btn btn-secondary btn-sm" onclick="window.Companion.onSay()">💬 说句话</button>
-        <button id="panel-sound" class="btn btn-ghost btn-sm" onclick="window.Companion.toggleSound()">🔊</button>
-        <button id="panel-hide" class="btn btn-ghost btn-sm" onclick="window.Companion.toggleEnabled()" title="收起伴读悬浮球">✕</button>
-      </div>
-    </div>
-  </div>
 
-  <script type="module" src="/js/main.js"></script>
-
-</body>
+    <script type="module" src="/js/main.js"></script>
+  </body>
 </html>

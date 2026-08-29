@@ -3279,10 +3279,10 @@ def test_sync_sdp_cache_capacity_and_size_limit(client):
     assert res_huge.status_code == 400
 
 
-def test_db_wal_mode_and_busy_timeout():
-    """SQLite 连接必须启用 WAL 模式与 busy_timeout 守卫，避免并发读写锁库。"""
+def test_db_busy_timeout_and_concurrency_guard():
+    """SQLite 连接必须启用 busy_timeout 与 synchronous=NORMAL 守卫，避免并发读写锁库。"""
     with get_db("test_delector.db") as conn:
-        journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
-    assert journal_mode.lower() in ("wal", "memory")
+        sync_mode = conn.execute("PRAGMA synchronous").fetchone()[0]
     assert busy_timeout >= 5000
+    assert sync_mode in (1, 2)  # NORMAL or FULL

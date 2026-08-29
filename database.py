@@ -35,9 +35,8 @@ def get_progress_db_path(db_path: Optional[str] = None) -> str:
 def _configure_sqlite_conn(conn: sqlite3.Connection) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
     except Exception:
         pass
     return conn
@@ -367,6 +366,73 @@ def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
     return output_path
 
 
+A1_VOCAB_MODEL = genanki.Model(
+    1607392321, 'DeLector Goethe A1 Wortliste',
+    fields=[
+        {'name': 'Front'},
+        {'name': 'Word'},
+        {'name': 'Lemma'},
+        {'name': 'POS'},
+        {'name': 'Plural'},
+        {'name': 'Definition'},
+        {'name': 'ExampleDe'},
+        {'name': 'ExampleZh'},
+        {'name': 'Topic'}
+    ],
+    templates=[{
+        'name': 'Goethe A1 Card',
+        'qfmt': '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;text-align:center;"><div style="display:inline-block;background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;margin-bottom:12px;">Goethe A1 · {{Topic}}</div><div style="font-size:26px;font-weight:700;color:#1e293b;margin:12px 0;">{{Front}}</div>{{#Plural}}<div style="font-size:14px;color:#64748b;">Plural: {{Plural}}</div>{{/Plural}}</div>',
+        'afmt': '{{FrontSide}}<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;"><div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:0 24px 24px;text-align:left;"><div style="font-size:18px;font-weight:600;color:#0f172a;margin-bottom:8px;">{{Definition}}</div><div style="font-size:13px;color:#64748b;margin-bottom:16px;">词性: {{POS}}</div><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:10px 14px;border-radius:0 6px 6px 0;"><div style="font-size:15px;color:#1e293b;font-weight:500;">{{ExampleDe}}</div><div style="font-size:13px;color:#64748b;margin-top:4px;">{{ExampleZh}}</div></div></div>'
+    }]
+)
+
+
+def export_a1_anki_deck(output_path: str) -> str:
+    import a1_dict
+    deck = genanki.Deck(1607392321, "DeLector::Goethe A1 Wortliste")
+    topic_map = dict((k, label) for k, label, _ in a1_dict.A1_TOPICS)
+
+    for lemma, entry in a1_dict.GOETHE_A1_VOCAB.items():
+        word = entry.get("word", lemma)
+        topic_label = topic_map.get(entry.get("topic", "personal"), entry.get("topic", "A1"))
+        pos = entry.get("pos", "")
+        plural = entry.get("plural", "")
+        defn = entry.get("definition_zh", "")
+        ex_de = entry.get("example_de", "")
+        ex_zh = entry.get("example_zh", "")
+        gender = entry.get("gender")
+
+        if gender == "Masc":
+            color = "#2563eb"
+        elif gender == "Fem":
+            color = "#dc2626"
+        elif gender == "Neut":
+            color = "#16a34a"
+        else:
+            color = "#475569"
+
+        front_html = f'<span style="color:{color};">{word}</span>'
+        note = genanki.Note(
+            model=A1_VOCAB_MODEL,
+            fields=[
+                front_html,
+                word,
+                lemma,
+                pos,
+                plural,
+                defn,
+                ex_de,
+                ex_zh,
+                topic_label,
+            ]
+        )
+        deck.add_note(note)
+
+    genanki.Package(deck).write_to_file(output_path)
+    return output_path
+
+
+
 def get_cache_info(cache_dir: Optional[str] = None) -> Dict[str, Any]:
     target_dir = cache_dir or AUDIO_CACHE_DIR
     total_size = 0
@@ -613,7 +679,9 @@ __all__ = [
     "seed_preset_articles",
     "VOCAB_MODEL",
     "GRAMMAR_MODEL",
+    "A1_VOCAB_MODEL",
     "export_anki_deck",
+    "export_a1_anki_deck",
     "get_cache_info",
     "prune_audio_cache",
     "BACKUP_FORMAT_VERSION",

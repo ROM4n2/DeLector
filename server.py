@@ -62,6 +62,7 @@ from database import (
     VOCAB_MODEL,
     GRAMMAR_MODEL,
     export_anki_deck,
+    export_a1_anki_deck,
     get_cache_info,
     prune_audio_cache,
     BACKUP_FORMAT_VERSION,
@@ -948,6 +949,67 @@ def export_apkg():
     path = os.path.join(tmp, "DeLector_Deck.apkg")
     export_anki_deck(path)
     return FileResponse(path, filename="DeLector_Deck.apkg", media_type="application/octet-stream")
+
+
+# --- Goethe-Zertifikat A1 Wortliste & Sprechen Lab ---
+@app.get("/api/a1/topics")
+def get_a1_topics():
+    import a1_dict
+    counts = {}
+    for entry in a1_dict.GOETHE_A1_VOCAB.values():
+        t = entry.get("topic", "phrases")
+        counts[t] = counts.get(t, 0) + 1
+
+    return [
+        {
+            "key": key,
+            "label": label,
+            "keywords": kw,
+            "count": counts.get(key, 0),
+        }
+        for key, label, kw in a1_dict.A1_TOPICS
+    ]
+
+
+@app.get("/api/a1/vocab")
+def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None):
+    import a1_dict
+    res = list(a1_dict.GOETHE_A1_VOCAB.values())
+    if topic:
+        res = [w for w in res if w.get("topic") == topic]
+    if q:
+        query = q.strip().lower()
+        res = [
+            w for w in res
+            if query in w.get("word", "").lower()
+            or query in w.get("lemma", "").lower()
+            or query in w.get("definition_zh", "").lower()
+        ]
+    return res
+
+
+@app.get("/api/a1/sprechen/teil2")
+def get_a1_sprechen_teil2(topic: Optional[str] = None):
+    import a1_dict
+    cards = a1_dict.A1_SPRECHEN_TEIL2
+    if topic:
+        cards = [c for c in cards if c.get("topic_id") == topic]
+    return cards
+
+
+@app.get("/api/a1/sprechen/teil3")
+def get_a1_sprechen_teil3():
+    import a1_dict
+    return a1_dict.A1_SPRECHEN_TEIL3
+
+
+@app.get("/api/a1/export/anki")
+def export_a1_anki():
+    tmp = tempfile.gettempdir()
+    path = os.path.join(tmp, "Goethe_A1_Wortliste.apkg")
+    export_a1_anki_deck(path)
+    return FileResponse(path, filename="Goethe_A1_Wortliste.apkg", media_type="application/octet-stream")
+
 
 # --- Edge Neural TTS Audio Endpoints ---
 class TTSReq(BaseModel):

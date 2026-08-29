@@ -538,17 +538,22 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String jsCheck = "(function() {" +
-                "  var modal = document.querySelector('#modal-overlay.open, #settings-overlay.open, .modal-overlay.open');"
+                "  var modal = document.querySelector('#modal-overlay.open, #settings-overlay.open, .modal-overlay.open, #quiz-overlay:not(.hidden), #cloze-modal:not(.hidden), #polish-overlay:not(.hidden), #version-preview-overlay:not(.hidden)');"
                 +
                 "  if (modal) {" +
                 "    if (window.closeModal) window.closeModal();" +
                 "    if (window.closeSettingsModal) window.closeSettingsModal();" +
+                "    if (window.closeQuizOverlay) window.closeQuizOverlay();" +
+                "    if (window.closeClozeModal) window.closeClozeModal();" +
+                "    if (window.closePolishOverlay) window.closePolishOverlay();" +
+                "    if (window.closeVersionPreview) window.closeVersionPreview();" +
                 "    return 'modal';" +
                 "  }" +
-                "  var drawer = document.querySelector('#drawer.open, #syntax-drawer.open');" +
+                "  var drawer = document.querySelector('#drawer.open, #syntax-drawer.open, #writer-panel.open');" +
                 "  if (drawer) {" +
                 "    if (window.closeDrawer) window.closeDrawer();" +
                 "    if (window.closeSyntaxDrawer) window.closeSyntaxDrawer();" +
+                "    if (window.closeWriterMobilePanel) window.closeWriterMobilePanel();" +
                 "    return 'drawer';" +
                 "  }" +
                 "  var activeView = document.querySelector('.view.active');" +

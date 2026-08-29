@@ -683,4 +683,3 @@ def test_android_back_press_covers_all_overlays():
     assert "closePolishOverlay" in MAIN_ACTIVITY
     assert "closeVersionPreview" in MAIN_ACTIVITY
     assert "closeWriterMobilePanel" in MAIN_ACTIVITY
-
