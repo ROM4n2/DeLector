@@ -35,13 +35,27 @@ let cachedDueCards = { due_vocab: [], due_grammar: [], due_count: 0 };
 let undoToastTimer = null;
 let _lastFlipTime = 0;
 
+// a1_cards.js 是独立模块，读不到本模块作用域。这两个 getter 给它提供
+// 只读访问，避免循环 import 具名 state（renderA1 判定牌盒/目录、
+// loadA1Data 判定已入 FSRS 盒的词元）。与 cards.js 侧调用
+// A1Cards.getA1Mode() 是同一个方向的反向配对。
+export function getCardViewMode() {
+  return cardViewMode;
+}
+
+export function getCachedVocabLemmas() {
+  return new Set(
+    (cachedCards.vocab_cards || []).map(c => (c.lemma || c.word || '').toLowerCase())
+  );
+}
+
 export function setCardSegment(seg) {
   cardSegment = seg;
   deckIndex = 0;
   deckFlipped = false;
-  ['due', 'pending', 'mastered', 'prep', 'a1'].forEach((s) => {
-    const btn = document.getElementById("seg-" + s);
-    if (btn) btn.classList.toggle("active", s === seg);
+  ['due', 'pending', 'mastered', 'prep', 'a1'].forEach(s => {
+    const btn = document.getElementById('seg-' + s);
+    if (btn) btn.classList.toggle('active', s === seg);
   });
   renderCardsGrid();
 }
@@ -102,15 +116,15 @@ export function renderCardsGrid() {
   if (cardSegment === 'a1') {
     document.getElementById('prep-filter-bar')?.classList.add('hidden');
     document.getElementById('a1-toolbar')?.classList.remove('hidden');
-    if (a1Mode === 'vocab') {
+    if (A1Cards.getA1Mode() === 'vocab') {
       document.querySelector('.cards-view-toggle')?.classList.remove('hidden');
     } else {
       document.querySelector('.cards-view-toggle')?.classList.add('hidden');
     }
-    if (!a1VocabCache.length || !a1TopicsCache) {
-      loadA1Data().then(renderA1);
+    if (!A1Cards.isA1DataLoaded()) {
+      A1Cards.loadA1Data().then(A1Cards.renderA1);
     } else {
-      renderA1();
+      A1Cards.renderA1();
     }
     return;
   }
@@ -1210,3 +1224,4 @@ export async function retryPrepMatrix() {
   await loadPrepMatrix();
   renderPrepMatrix();
 }
+
