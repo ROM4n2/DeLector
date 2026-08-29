@@ -223,6 +223,7 @@ class VocabCardReq(BaseModel):
     lemma: str
     pos: Optional[str] = ""
     gender: Optional[str] = ""
+    plural: Optional[str] = ""
     cefr_level: Optional[str] = "A1"
     definition_zh: str
     sentence_context: str
@@ -280,12 +281,12 @@ class IngestUrlReq(BaseModel):
 async def ingest_from_url(req: IngestUrlReq):
     if not is_safe_public_url(req.url):
         raise HTTPException(400, "无效网址或受限制的内部网络地址 (SSRF Protection)")
-    
+
     raw_html = await fetch_remote_html(req.url)
     title, body_text = clean_html_to_article(raw_html)
     if not body_text or len(body_text.strip()) < 30:
         raise HTTPException(400, "未能从该网页提取到有效的德语正文，请尝试直接复制粘贴")
-        
+
     final_title = req.title.strip() if req.title else title
     art_id = await asyncio.to_thread(ingest_article, final_title, body_text, None, req.url)
     with get_db() as conn:
@@ -722,12 +723,12 @@ def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) 
 def add_vocab_card(req: VocabCardReq):
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO vocab_cards (article_id, word, lemma, pos, gender, cefr_level, definition_zh, sentence_context) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (req.article_id, req.word, req.lemma, req.pos, req.gender, req.cefr_level, req.definition_zh, req.sentence_context)
+            "INSERT INTO vocab_cards (article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (req.article_id, req.word, req.lemma, req.pos, req.gender, req.plural or "", req.cefr_level, req.definition_zh, req.sentence_context)
         )
         card_id = cur.lastrowid
     log_study_event("add_card", card_id, req.word)
-    return {"status": "ok", "id": card_id}
+    return {"status": "ok", "id": card_id, "word": req.word, "plural": req.plural or ""}
 
 @app.post("/api/cards/grammar")
 def add_grammar_card(req: GrammarCardReq):
@@ -965,13 +966,13 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
         raise HTTPException(400, "Text cannot be empty")
     if len(clean_text) > MAX_TTS_TEXT_LEN:
         raise HTTPException(400, f"朗读文本过长（最多 {MAX_TTS_TEXT_LEN} 字符）")
-        
+
     cache_key = hashlib.sha256(f"{voice}_{rate}_{clean_text}".encode("utf-8")).hexdigest()
     cache_file = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.mp3")
-    
+
     if os.path.exists(cache_file) and os.path.getsize(cache_file) > 100:
         return cache_file
-        
+
     try:
         import edge_tts
         communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
@@ -1197,7 +1198,7 @@ async def test_api_key(settings: SettingsUpdate, request: Request):
         return {"success": False, "error": "请先输入 API Key"}
     base_url = (settings.api_base_url.strip() if settings.api_base_url else get_effective_api_base_url()).rstrip('/')
     model = settings.api_model.strip() if settings.api_model else get_effective_api_model()
-    
+
     import time
     start_t = time.time()
     try:
@@ -1232,7 +1233,7 @@ def export_study_guide(article_id: int):
 
     md = [f"# {art['title']} — DeLector 精读讲义\n"]
     md.append(f"> 导出日期: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 字符数: {len(art['raw_text'])}\n")
-    
+
     if notes:
         md.append("## 📝 精读随笔与重点批注\n")
         for n in notes:
@@ -1354,6 +1355,8 @@ class RestoreReq(BaseModel):
     grammar_cards: List[Dict[str, Any]] = []
     reading_notes: List[Dict[str, Any]] = []
     prep_saved: List[Dict[str, Any]] = []
+    essays: List[Dict[str, Any]] = []
+    essay_versions: List[Dict[str, Any]] = []
     # v1 备份没有以下字段，缺省为空即可被读入（向后兼容是硬要求：
     # 迁移用户手里拿的恰恰是 v3.9.1 导出的 v1 文件）
     app_settings: List[Dict[str, Any]] = []
@@ -1422,27 +1425,27 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
         row = conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Card {card_id} not found")
-        
+
         rep = row["repetition_count"] if "repetition_count" in row.keys() and row["repetition_count"] is not None else 0
         interval = row["interval_days"] if "interval_days" in row.keys() and row["interval_days"] is not None else 1
         ef = row["ease_factor"] if "ease_factor" in row.keys() and row["ease_factor"] is not None else 2.5
-        
+
         new_rep, new_interval, new_ef, due_date, next_intervals = calculate_fsrs(req.grade, rep, interval, ef)
-        
+
         is_correct = req.grade >= 2
         correct_incr = 1 if is_correct else 0
         wrong_incr = 1 if not is_correct else 0
-        
+
         conn.execute(f"""
-            UPDATE {tbl} 
+            UPDATE {tbl}
             SET repetition_count = ?, interval_days = ?, ease_factor = ?, due_date = ?,
                 correct_count = correct_count + ?, wrong_count = wrong_count + ?
             WHERE id = ?
         """, (new_rep, new_interval, new_ef, due_date, correct_incr, wrong_incr, card_id))
-        
+
         updated = dict(conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone())
         updated["next_intervals"] = next_intervals
-    
+
     with get_progress_db() as pconn:
         pconn.execute(
             "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
@@ -1517,7 +1520,7 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
         for sent_idx, sent in enumerate(doc.sents):
             for token in sent:
                 is_grammar_target = (
-                    token.pos_ in ("ADP", "SCONJ", "CCONJ") or 
+                    token.pos_ in ("ADP", "SCONJ", "CCONJ") or
                     (token.pos_ == "AUX" and token.text.lower() in ("wurde", "worden", "werden", "wäre", "hätte", "könnte", "müsste", "sollte")) or
                     (token.pos_ == "ADJ" and len(token.text) > 3)
                 )
@@ -1624,7 +1627,7 @@ def get_article_cloze_exercise(article_id: int, req: ClozeGenReq):
             raise HTTPException(404, f"Article {article_id} not found")
         raw_text = row["raw_text"]
         title = row["title"]
-    
+
     data = generate_cloze_exercise(raw_text, mode=req.mode or "grammar", article_id=article_id)
     data["article_id"] = article_id
     data["title"] = title
@@ -1642,26 +1645,26 @@ def evaluate_cloze_exercise(req: ClozeEvalReq):
         if not row:
             raise HTTPException(404, f"Article {req.article_id} not found")
         raw_text = row["raw_text"]
-    
+
     exercise = generate_cloze_exercise(raw_text, mode=req.mode, article_id=req.article_id)
     items = exercise["items"]
-    
+
     results = []
     correct_count = 0
     for item in items:
         idx_str = str(item["index"])
         user_ans = req.answers.get(idx_str, "").strip()
         expected = item["original"]
-        
+
         if item.get("type") == "ctest":
             expected_suffix = item.get("suffix", "")
             is_correct = (user_ans.lower() == expected_suffix.lower()) or (user_ans.lower() == expected.lower())
         else:
             is_correct = (user_ans.lower() == expected.lower())
-        
+
         if is_correct:
             correct_count += 1
-        
+
         results.append({
             "index": item["index"],
             "correct": is_correct,
@@ -1670,12 +1673,12 @@ def evaluate_cloze_exercise(req: ClozeEvalReq):
             "hint": item.get("hint", ""),
             "type": item.get("type", "grammar")
         })
-    
+
     total = len(items)
     accuracy_pct = round((correct_count / total * 100)) if total > 0 else 0
-    
+
     log_study_event("quiz_session", req.article_id, f"cloze:{req.mode}:{req.article_id}", minutes=3)
-    
+
     return {
         "score": correct_count,
         "total": total,
@@ -2093,6 +2096,8 @@ def api_writing_apply(req: WritingApplyReq):
 
 
 # --- LAN WebRTC Sync SDP Cache & Endpoints ---
+MAX_SYNC_CACHE_ENTRIES = 50
+MAX_SDP_PAYLOAD_BYTES = 32 * 1024
 _sync_sdp_cache: Dict[str, Dict[str, Any]] = {}
 
 
@@ -2101,6 +2106,10 @@ def _cleanup_sync_cache() -> None:
     expired = [k for k, v in _sync_sdp_cache.items() if now - v.get("ts", 0) > 300]
     for k in expired:
         _sync_sdp_cache.pop(k, None)
+    # FIFO 容量限制：当条目数超标时淘汰最老的条目
+    while len(_sync_sdp_cache) >= MAX_SYNC_CACHE_ENTRIES:
+        oldest_key = min(_sync_sdp_cache.keys(), key=lambda k: _sync_sdp_cache[k].get("ts", 0))
+        _sync_sdp_cache.pop(oldest_key, None)
 
 
 class SyncStoreReq(BaseModel):
@@ -2110,6 +2119,9 @@ class SyncStoreReq(BaseModel):
 
 @app.post("/api/wb/sync/store")
 def sync_store_sdp(req: SyncStoreReq):
+    raw_json = json.dumps(req.sdp)
+    if len(raw_json.encode("utf-8")) > MAX_SDP_PAYLOAD_BYTES:
+        raise HTTPException(400, "SDP payload 超过最大体积限制 (32KB)")
     _cleanup_sync_cache()
     alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
     code = "".join(secrets.choice(alphabet) for _ in range(6))

@@ -73,8 +73,10 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        /** 挑一个能说德语的 voice：先试德语 Locale，不行就遍历已装语音找德语能力的。
-         *  国内机型常没有 Google TTS 德语 Locale 条目，但引擎可能带德语语音（getVoices() API 21+）。 */
+        /**
+         * 挑一个能说德语的 voice：先试德语 Locale，不行就遍历已装语音找德语能力的。
+         * 国内机型常没有 Google TTS 德语 Locale 条目，但引擎可能带德语语音（getVoices() API 21+）。
+         */
         private boolean trySelectGermanVoice() {
             int result = tts.setLanguage(Locale.GERMAN);
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
@@ -101,7 +103,8 @@ public class MainActivity extends AppCompatActivity {
         public boolean speak(String text, float rate) {
             if (tts != null && isInitialized && text != null && !text.trim().isEmpty()) {
                 tts.setSpeechRate(rate);
-                int res = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "delector_speech_" + System.currentTimeMillis());
+                int res = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null,
+                        "delector_speech_" + System.currentTimeMillis());
                 return res == TextToSpeech.SUCCESS;
             }
             return false;
@@ -147,7 +150,8 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
                 if (MainActivity.this.filePathCallback != null) {
                     MainActivity.this.filePathCallback.onReceiveValue(null);
                     MainActivity.this.filePathCallback = null;
@@ -157,8 +161,11 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("*/*");
-                String[] mimetypes = {"text/plain", "text/markdown", "text/*", "image/svg+xml", "image/*", "application/json", "application/octet-stream"};
-                if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null && fileChooserParams.getAcceptTypes().length > 0 && !fileChooserParams.getAcceptTypes()[0].isEmpty()) {
+                String[] mimetypes = { "text/plain", "text/markdown", "text/*", "image/svg+xml", "image/*",
+                        "application/json", "application/octet-stream" };
+                if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null
+                        && fileChooserParams.getAcceptTypes().length > 0
+                        && !fileChooserParams.getAcceptTypes()[0].isEmpty()) {
                     intent.putExtra(Intent.EXTRA_MIME_TYPES, fileChooserParams.getAcceptTypes());
                 } else {
                     intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
@@ -190,7 +197,8 @@ public class MainActivity extends AppCompatActivity {
                 DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
                 String filename = URLUtil.guessFileName(url, contentDisposition, mimetype);
                 if (filename == null || filename.isEmpty() || filename.equals("downloadfile")) {
-                    filename = "DeLector_Export_" + System.currentTimeMillis() + (url.contains("apkg") ? ".apkg" : ".json");
+                    filename = "DeLector_Export_" + System.currentTimeMillis()
+                            + (url.contains("apkg") ? ".apkg" : ".json");
                 }
                 request.setMimeType(mimetype);
                 request.addRequestHeader("User-Agent", userAgent);
@@ -228,8 +236,7 @@ public class MainActivity extends AppCompatActivity {
 
         root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         // 3. Setup Splash / Loading View
         splashLayout = new LinearLayout(this);
@@ -269,8 +276,7 @@ public class MainActivity extends AppCompatActivity {
 
         root.addView(splashLayout, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         setContentView(root);
 
@@ -423,7 +429,7 @@ public class MainActivity extends AppCompatActivity {
             parent.mkdirs();
         }
         try (InputStream in = getAssets().open(srcPath);
-             OutputStream out = new FileOutputStream(dstFile)) {
+                OutputStream out = new FileOutputStream(dstFile)) {
             byte[] buf = new byte[8192];
             int len;
             while ((len = in.read(buf)) > 0) {
@@ -532,7 +538,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String jsCheck = "(function() {" +
-                "  var modal = document.querySelector('#modal-overlay.open, #settings-overlay.open, .modal-overlay.open');" +
+                "  var modal = document.querySelector('#modal-overlay.open, #settings-overlay.open, .modal-overlay.open');"
+                +
                 "  if (modal) {" +
                 "    if (window.closeModal) window.closeModal();" +
                 "    if (window.closeSettingsModal) window.closeSettingsModal();" +
@@ -575,7 +582,7 @@ public class MainActivity extends AppCompatActivity {
                 if (resultCode == RESULT_OK && data != null) {
                     Uri dataUri = data.getData();
                     if (dataUri != null) {
-                        results = new Uri[]{dataUri};
+                        results = new Uri[] { dataUri };
                     }
                 }
                 filePathCallback.onReceiveValue(results);

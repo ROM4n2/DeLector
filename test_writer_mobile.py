@@ -674,3 +674,13 @@ def test_button_rules_are_not_duplicated():
     for selector in (".deck-btn-nav", ".btn-secondary", ".btn-xs", ".btn-del"):
         n = len(re.findall(rf"^{re.escape(selector)}\s*\{{", bare, re.M))
         assert n == 1, f"{selector} 的基规则出现了 {n} 次，应该只有 1 次"
+
+
+def test_android_back_press_covers_all_overlays():
+    """MainActivity.java 的 onBackPressed 必须覆盖所有浮层与抽屉，避免按返回键直接退出 App。"""
+    assert "closeQuizOverlay" in MAIN_ACTIVITY
+    assert "closeClozeModal" in MAIN_ACTIVITY
+    assert "closePolishOverlay" in MAIN_ACTIVITY
+    assert "closeVersionPreview" in MAIN_ACTIVITY
+    assert "closeWriterMobilePanel" in MAIN_ACTIVITY
+

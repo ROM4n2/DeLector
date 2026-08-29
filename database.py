@@ -32,16 +32,26 @@ def get_progress_db_path(db_path: Optional[str] = None) -> str:
     return db_path or os.environ.get("PROGRESS_DB_PATH", PROGRESS_DB_PATH)
 
 
+def _configure_sqlite_conn(conn: sqlite3.Connection) -> sqlite3.Connection:
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+    except Exception:
+        pass
+    return conn
+
+
 def get_db(db_path: Optional[str] = None):
     conn = sqlite3.connect(get_db_path(db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _configure_sqlite_conn(conn)
 
 
 def get_progress_db(db_path: Optional[str] = None):
     conn = sqlite3.connect(get_progress_db_path(db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _configure_sqlite_conn(conn)
+
 
 
 def init_progress_db(db_path: Optional[str] = None):
@@ -211,7 +221,7 @@ def init_db(db_path: Optional[str] = None):
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        
+
         # Migrations for existing databases
         for tbl in ["vocab_cards", "grammar_cards"]:
             cols = [col[1] for col in conn.execute(f"PRAGMA table_info({tbl})").fetchall()]
@@ -421,9 +431,9 @@ _BACKUP_TABLES = {
     ),
     "grammar_cards": (
         ("id", "article_id", "sentence_context", "grammar_name", "cefr_level",
-         "explanation_zh", "rule_formula", "examples_zh", "created_at") + _SRS_COLUMNS,
+         "explanation_zh", "rule_formula", "examples_zh", "corrected_form", "error_type", "created_at") + _SRS_COLUMNS,
         dict(_SRS_DEFAULTS, sentence_context="", grammar_name="", cefr_level="A1",
-             explanation_zh="", rule_formula="", examples_zh=""),
+             explanation_zh="", rule_formula="", examples_zh="", corrected_form="", error_type=""),
     ),
     "reading_notes": (
         ("id", "article_id", "sentence_id", "selected_text", "color", "note_content", "created_at"),
@@ -432,6 +442,14 @@ _BACKUP_TABLES = {
     "prep_saved": (
         ("lemma", "praep", "kasus", "saved_at"),
         {"lemma": "", "praep": "", "kasus": "", "saved_at": None},
+    ),
+    "essays": (
+        ("id", "title", "content", "analysis_json", "cefr_level", "error_count", "sentence_count", "created_at", "updated_at"),
+        {"title": "", "content": "", "analysis_json": "{}", "cefr_level": "A1", "error_count": 0, "sentence_count": 0},
+    ),
+    "essay_versions": (
+        ("id", "essay_id", "content", "analysis_json", "message", "created_at"),
+        {"essay_id": 0, "content": "", "analysis_json": "{}", "message": ""},
     ),
 }
 

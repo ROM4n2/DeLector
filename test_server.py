@@ -453,7 +453,7 @@ def test_delete_essay_cascades_versions(client, test_db_path):
 
 def test_seed_preset_articles_with_a1(client, test_db_path):
     init_db(test_db_path)
-    
+
     with get_db(test_db_path) as conn:
         rows = conn.execute("SELECT title, raw_text FROM articles").fetchall()
         assert len(rows) >= 4
@@ -589,7 +589,7 @@ def test_backup_export_and_restore_roundtrip(client):
     assert "articles" in data
     assert "vocab_cards" in data
     assert "grammar_cards" in data
-    
+
     # 2. Modify or add custom entry
     custom_backup = {
         "version": 1,
@@ -626,11 +626,11 @@ def test_backup_export_and_restore_roundtrip(client):
             "created_at": "2026-08-18 12:00:00"
         }]
     }
-    
+
     # 3. Restore custom backup
     res_restore = client.post("/api/backup/restore", json=custom_backup)
     assert res_restore.status_code == 200
-    
+
     # 4. Verify roundtrip integrity
     res_verify = client.get("/api/articles/999")
     assert res_verify.status_code == 200
@@ -871,9 +871,9 @@ def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     from unittest.mock import AsyncMock
     fake_mp3 = tmp_path / "fake_de.mp3"
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00mock_audio_data")
-    
+
     monkeypatch.setattr("server.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
-    
+
     res = client.post("/api/audio/tts", json={"text": "Hallo Berlin!", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 200
     assert res.headers["content-type"] == "audio/mpeg"
@@ -1414,23 +1414,23 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
 def test_separable_verbs_extraction():
     """Verify spaCy dependency extraction for German separable verbs."""
     from server import process_german_text
-    
+
     text = "Er steigt jeden Morgen in den Zug ein."
     res = process_german_text(text)
     assert res["sentence_count"] >= 1
     sent = res["sentences"][0]
     tokens = sent["tokens"]
-    
+
     verb_tok = next((t for t in tokens if t["text"] == "steigt"), None)
     prefix_tok = next((t for t in tokens if t["text"] == "ein"), None)
-    
+
     assert verb_tok is not None, "Verb token 'steigt' not found"
     assert prefix_tok is not None, "Prefix token 'ein' not found"
-    
+
     assert "separable" in verb_tok, "separable info missing on verb token"
     assert verb_tok["separable"]["sep_prefix_id"] == prefix_tok["id"]
     assert verb_tok["separable"]["sep_lemma"] == "einsteigen"
-    
+
     assert "separable" in prefix_tok, "separable info missing on prefix token"
     assert prefix_tok["separable"]["sep_verb_id"] == verb_tok["id"]
     assert prefix_tok["separable"]["sep_lemma"] == "einsteigen"
@@ -1439,7 +1439,7 @@ def test_separable_verbs_extraction():
 def test_irregular_verb_stammformen_lookup():
     """Verify Goethe irregular/strong verb Stammformen reverse lookup."""
     from linguistics import lookup_irregular_verb
-    
+
     # 1. Base infinitive
     res_gehen = lookup_irregular_verb("gehen")
     assert res_gehen is not None
@@ -1447,16 +1447,16 @@ def test_irregular_verb_stammformen_lookup():
     assert res_gehen["praeteritum"] == "ging"
     assert res_gehen["partizip2"] == "gegangen"
     assert res_gehen["hilfsverb"] == "ist"
-    
+
     # 2. Conjugated / past reverse lookup
     res_ging = lookup_irregular_verb("ging")
     assert res_ging is not None
     assert res_ging["infinitiv"] == "gehen"
-    
+
     res_gegangen = lookup_irregular_verb("gegangen")
     assert res_gegangen is not None
     assert res_gegangen["infinitiv"] == "gehen"
-    
+
     # 3. Separable compound irregular verb
     res_einsteigen = lookup_irregular_verb("einsteigen")
     assert res_einsteigen is not None
@@ -1469,13 +1469,13 @@ def test_irregular_verb_stammformen_lookup():
 def test_komposita_splitting():
     """Verify German compound noun splitting with Fugenelemente."""
     from linguistics import split_komposita
-    
+
     # 1. Two-part compound
     klima_parts = split_komposita("Klimaschutz")
     assert len(klima_parts) == 2
     assert klima_parts[0]["lemma"] == "klima"
     assert klima_parts[1]["lemma"] == "schutz"
-    
+
     # 3. Plural compound noun with linking -s- and plural -en
     klima_massnahmen = split_komposita("Klimaschutzmaßnahmen")
     assert len(klima_massnahmen) >= 2
@@ -1503,7 +1503,7 @@ def test_vocab_lookup_with_linguistics_stammformen_and_komposita(client):
     assert data_verb["stammformen"]["praeteritum"] == "ging"
     assert data_verb["stammformen"]["partizip2"] == "gegangen"
     assert data_verb["stammformen"]["hilfsverb"] == "ist"
-    
+
     # 2. Compound lookup returns komposita
     res_comp = client.post("/api/lookup/vocab", json={
         "sentence": "Klimaschutz ist eine globale Aufgabe.",
@@ -1662,7 +1662,7 @@ def test_process_german_text_includes_topology_and_clause_tree():
     processed = process_german_text("Er hat das Buch gelesen. Wenn er Zeit hat, kommt er vorbei.")
     assert processed["version"] == "3.5.0"
     assert len(processed["sentences"]) == 2
-    
+
     s0 = processed["sentences"][0]
     assert "topology" in s0
     assert "clause_tree" in s0
@@ -3165,3 +3165,124 @@ def test_sync_sdp_lan_accessible(lan_client):
     assert fetch_resp.json()["role"] == "answer"
 
 
+# ── v4.7.0 架构与数据完整性改造 TDD 契约 ───────────────────────────────────────
+
+def test_backup_covers_essays_and_essay_versions_roundtrip(client):
+    """备份导出与还原必须完整包含 essays 和 essay_versions 写作台全量数据。
+
+    未包含 = 用户导出备份换机或重装后，作文草稿与版本演进历史全部静默丢失。
+    """
+    # 1. 创建一篇作文与一个版本
+    res_essay = client.post("/api/essays", json={"title": "Mein Urlaub", "content": "Ich fahre nach Berlin."})
+    assert res_essay.status_code == 200
+    essay_id = res_essay.json()["id"]
+
+    res_ver = client.post(f"/api/essays/{essay_id}/versions", json={"message": "初稿修改", "content": "Ich fahre morgen nach Berlin."})
+    assert res_ver.status_code == 200
+
+    # 2. 导出备份
+    exp = client.get("/api/backup/export").json()
+    assert "essays" in exp, "备份导出必须包含 essays 表"
+    assert "essay_versions" in exp, "备份导出必须包含 essay_versions 表"
+    assert any(e["title"] == "Mein Urlaub" for e in exp["essays"])
+    assert any(v["message"] == "初稿修改" for v in exp["essay_versions"])
+
+    # 3. 清空后还原
+    restore_payload = {
+        "version": 2,
+        "essays": [{
+            "id": 888, "title": "Restored Essay", "content": "Restored content.",
+            "analysis_json": "{}", "cefr_level": "B1", "error_count": 0, "sentence_count": 1,
+            "created_at": "2026-08-29 12:00:00", "updated_at": "2026-08-29 12:00:00"
+        }],
+        "essay_versions": [{
+            "id": 8881, "essay_id": 888, "content": "Restored content v1",
+            "analysis_json": "{}", "message": "Restored version",
+            "created_at": "2026-08-29 12:00:00"
+        }]
+    }
+    res_rest = client.post("/api/backup/restore", json=restore_payload)
+    assert res_rest.status_code == 200
+
+    # 4. 验证还原后可查
+    res_get = client.get("/api/essays/888")
+    assert res_get.status_code == 200
+    assert res_get.json()["title"] == "Restored Essay"
+
+    res_v_get = client.get("/api/essays/888/versions")
+    assert res_v_get.status_code == 200
+    assert len(res_v_get.json()) >= 1
+    assert any(v["message"] == "Restored version" for v in res_v_get.json())
+
+
+def test_backup_grammar_cards_preserves_error_type_and_corrected_form(client):
+    """grammar_cards 备份必须保留 corrected_form 和 error_type 字段。"""
+    payload = {
+        "version": 2,
+        "grammar_cards": [{
+            "id": 777, "article_id": None, "sentence_context": "In dem Buch.",
+            "grammar_name": "Dativ mit Präposition", "cefr_level": "A1",
+            "explanation_zh": "in支配三格", "rule_formula": "in + Dat", "examples_zh": "",
+            "corrected_form": "in dem Buch", "error_type": "kasus",
+            "created_at": "2026-08-29 10:00:00"
+        }]
+    }
+    assert client.post("/api/backup/restore", json=payload).status_code == 200
+
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM grammar_cards WHERE id = 777").fetchone())
+    assert row["corrected_form"] == "in dem Buch"
+    assert row["error_type"] == "kasus"
+
+    exp = client.get("/api/backup/export").json()
+    card = next(c for c in exp["grammar_cards"] if c["id"] == 777)
+    assert card["corrected_form"] == "in dem Buch"
+    assert card["error_type"] == "kasus"
+
+
+def test_vocab_card_accepts_and_saves_plural(client):
+    """POST /api/cards/vocab 必须接收并持久化 plural 字段。"""
+    req_body = {
+        "word": "Buch",
+        "lemma": "Buch",
+        "pos": "NOUN",
+        "gender": "Neut",
+        "plural": "Bücher",
+        "cefr_level": "A1",
+        "definition_zh": "书",
+        "sentence_context": "Das Buch ist gut."
+    }
+    res = client.post("/api/cards/vocab", json=req_body)
+    assert res.status_code == 200
+    card_id = res.json()["id"]
+
+    cards_res = client.get("/api/cards").json()
+    vcard = next(c for c in cards_res["vocab_cards"] if c["id"] == card_id)
+    assert vcard.get("plural") == "Bücher"
+
+
+def test_sync_sdp_cache_capacity_and_size_limit(client):
+    """WebRTC SDP 暂存必须有条目上限（FIFO 淘汰）与体积极限，防止内存无界膨胀。"""
+    from server import _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
+
+    # 1. 超过最大容量时自动剔除老数据
+    for i in range(MAX_SYNC_CACHE_ENTRIES + 10):
+        sdp = {"type": "offer", "sdp": f"mock_sdp_{i}"}
+        res = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"})
+        assert res.status_code == 200
+
+    assert len(_sync_sdp_cache) <= MAX_SYNC_CACHE_ENTRIES
+
+    # 2. 超大 payload 拒绝（400）
+    huge_sdp = {"type": "offer", "sdp": "A" * (65 * 1024)}
+    res_huge = client.post("/api/wb/sync/store", json={"sdp": huge_sdp, "role": "offer"})
+    assert res_huge.status_code == 400
+
+
+def test_db_wal_mode_and_busy_timeout():
+    """SQLite 连接必须启用 WAL 模式与 busy_timeout 守卫，避免并发读写锁库。"""
+    with get_db("test_delector.db") as conn:
+        journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    assert journal_mode.lower() in ("wal", "memory")
+    assert busy_timeout >= 5000
