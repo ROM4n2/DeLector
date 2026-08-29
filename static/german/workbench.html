@@ -1192,13 +1192,16 @@ function playWord(hw, opts) {
   };
 
   // ---- 优先级最高：内嵌 base64 音频词典（零网络、零依赖、Android content:// 兜底） ----
-  if (EMBEDDED_AUDIO && EMBEDDED_AUDIO[word]) {
-    console.log("[TTS] hit embedded audio:", word, "size:", (EMBEDDED_AUDIO[word].length * 0.75) | 0, "bytes");
+  // EMBEDDED_AUDIO 的键全部小写（与 CORE_VOCAB_DB 一致），但 stripDeArticle 保留
+  // 原始大写（Adresse、Bahnhof 等名词首字母不被动）。必须归一到小写才能命中名词。
+  const embeddedKey = word.toLowerCase();
+  if (EMBEDDED_AUDIO && EMBEDDED_AUDIO[embeddedKey]) {
+    console.log("[TTS] hit embedded audio:", word, "size:", (EMBEDDED_AUDIO[embeddedKey].length * 0.75) | 0, "bytes");
     return new Promise((innerRes) => {
       try {
         const audio = _ttsAudio || new Audio();
         // 上一段已 pause/clean，这里直接设 src
-        const url = "data:audio/mpeg;base64," + EMBEDDED_AUDIO[word];
+        const url = "data:audio/mpeg;base64," + EMBEDDED_AUDIO[embeddedKey];
         let settled = false;
         const cleanup = () => {
           audio.removeEventListener("playing", onPlay);

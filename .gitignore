@@ -21,6 +21,7 @@ android/app/src/main/assets/static/
 tools/raw/
 tools/raw_prep/
 tools/raw_refill/
+tools/raw_embedded/
 
 # 安卓签名材料。丢失 = org.delector.app 这个包名永远无法再推送升级；
 # 泄露 = 任何人都能签出冒充本 App 的更新包。CI 里 keystore 只解到

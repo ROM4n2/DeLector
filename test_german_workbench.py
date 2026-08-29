@@ -221,3 +221,65 @@ def test_try_speech_handles_no_voice_explicitly():
     no_voice_pos = block.find("no-de-voice")
     assert voice_check_pos >= 0, "trySpeech 必须有 if (!voice) 守卫"
     assert voice_check_pos < no_voice_pos, "no-de-voice 必须在 if (!voice) 守卫内"
+
+
+# ── v4.6.6 α 契约：EMBEDDED_AUDIO 嵌入音频词表 ─────────────────────────────
+
+def test_embedded_audio_dict_declared_before_playword():
+    """EMBEDDED_AUDIO 字典必须在 playWord 函数之前声明。
+
+    playWord 入口立即检测 EMBEDDED_AUDIO[word]（最高优先级路径），
+    声明在后面会导致 ReferenceError（或静默拿到 undefined 跳过内嵌路径）。
+
+    变异验证：把 const EMBEDDED_AUDIO 移到 function playWord 之后 → 断言红 ✓
+    """
+    ea_pos = _WORKBENCH.index("const EMBEDDED_AUDIO")
+    pw_pos = _WORKBENCH.index("function playWord(")
+    assert ea_pos < pw_pos, (
+        "EMBEDDED_AUDIO 必须声明在 playWord 之前，"
+        "否则 playWord 入口无法访问它"
+    )
+
+
+def test_embedded_audio_lookup_uses_lowercase():
+    """playWord 查 EMBEDDED_AUDIO 时必须做 toLowerCase() 归一。
+
+    CORE_VOCAB_DB 的键全部小写，但 stripDeArticle 保留原始大小写
+    （`die Adresse` → `Adresse` 仍大写）。不归一则名词永远查不到。
+
+    修复：查词前 const embeddedKey = word.toLowerCase()，之后用 embeddedKey 查。
+
+    变异验证：把 word.toLowerCase() 删掉 → 断言红 ✓
+    """
+    # 取 playWord 函数体内、tryServer 定义之前的 EMBEDDED_AUDIO 处理块
+    pw_body = _WORKBENCH.split("function playWord(hw, opts)")[1].split("const tryServer")[0]
+    # 区块必须有 EMBEDDED_AUDIO 查词（否则切片跑偏）
+    assert "EMBEDDED_AUDIO" in pw_body, "切片未落在 playWord 的 EMBEDDED_AUDIO 检测区"
+    # 必须用 toLowerCase() 归一（变量名不限，只要 .toLowerCase() 在查词前）
+    lower_pos = pw_body.find("toLowerCase()")
+    ea_check_pos = pw_body.find("EMBEDDED_AUDIO[")
+    assert lower_pos >= 0, (
+        "EMBEDDED_AUDIO 查词必须做 word.toLowerCase() 归一，"
+        "否则名词（大写首字母）永远查不到嵌入音频。"
+    )
+    assert lower_pos < ea_check_pos, (
+        "toLowerCase() 必须在 EMBEDDED_AUDIO[...] 查词之前（先归一再查）"
+    )
+
+
+def test_embedded_audio_build_script_exists_with_dry_run():
+    """tools/build_embedded_audio.py 必须存在且支持 --dry-run 模式。
+
+    build script 负责批量调用 edge-tts 生成 MP3 并输出 EMBEDDED_AUDIO 片段。
+    --dry-run 模式只列词不调 edge-tts，让 CI 和测试无需联网即可验证脚本可 import。
+
+    （本测试当前应红，是 TDD 红阶段——脚本尚未创建）
+    """
+    from pathlib import Path
+    script = Path(__file__).parent / "tools" / "build_embedded_audio.py"
+    assert script.exists(), (
+        "tools/build_embedded_audio.py 尚未创建。"
+        "该脚本负责批量生成 EMBEDDED_AUDIO 词典片段。"
+    )
+    src = script.read_text(encoding="utf-8")
+    assert "--dry-run" in src, "build script 必须支持 --dry-run（CI/测试无需真调 edge-tts）"
