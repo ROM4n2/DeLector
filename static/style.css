@@ -5777,6 +5777,20 @@ body.drawer-open .shadow-player {
     gap: 0.5rem !important;
   }
 
+  /* 卡片分段栏窄屏适配：本块同时有 `.view { overflow-x: hidden }` 守卫，
+     5 个段按钮在手机上合计超一屏时会被它直接裁掉（最后的「歌德 A1」不可见）。
+     让 seg-bar 自身横向滚动（max-width 约束到容器、overflow-x 滑动可达），
+     按钮收窄内边距让更多 tab 先可见、flex-shrink:0 保持自然宽度不挤扁换行。 */
+  .cards-seg-bar {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .cards-seg-btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.6875rem;
+    flex-shrink: 0;
+  }
+
   /* Global Mobile Overflow Guard */
   body,
   html,

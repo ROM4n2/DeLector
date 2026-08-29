@@ -3,6 +3,7 @@
 Contract and regression tests for Goethe-Zertifikat A1 Wortliste & Sprechen Lab.
 """
 import io
+import re
 import zipfile
 from fastapi.testclient import TestClient
 from server import app
@@ -161,3 +162,67 @@ def test_a1_css_styling_and_tokens():
     assert ".a1-sprechen-card" in css
     assert ".deck-controls-bottom" in css
     assert ".deck-nav-btn" in css
+
+
+def _all_css_blocks(css, selector):
+    """Yield (position, declaration_block) for every occurrence of an exact selector."""
+    blocks = []
+    idx = 0
+    while True:
+        idx = css.find(selector + " {", idx)
+        if idx == -1:
+            idx = css.find(selector + "{", idx)
+        if idx == -1:
+            break
+        start = css.find("{", idx) + 1
+        depth, i = 1, start
+        while i < len(css) and depth:
+            if css[i] == "{":
+                depth += 1
+            elif css[i] == "}":
+                depth -= 1
+            i += 1
+        blocks.append((idx, css[start : i - 1]))
+        idx = i
+    return blocks
+
+
+def test_cards_seg_bar_is_scrollable_on_narrow_screens():
+    """卡片分段栏在窄屏（安卓）必须自身横向滚动，而不是被 .view 裁掉。
+
+    v4.7.1 报告：5 个段按钮合计约 527px，超出 360px 视口后被移动端守卫
+    `.view { overflow-x: hidden }` 裁切，最后的「歌德 A1 速通」tab 永远不可见
+    （只显示到 Präpositionen）。
+
+    修法只落在移动端媒体块（那里才有 .view 的 overflow-x:hidden）：该块里的
+    `.cards-seg-bar` 加 `overflow-x: auto` + `max-width: 100%` 让超出部分可滑动
+    到达，`.cards-seg-btn` 加 `flex-shrink: 0` 保持自然宽度。
+
+    ⚠️ 不能把滚动规则加在基础（非 media）`.cards-seg-bar` 上：桌面内容列约 712px
+    比 seg-bar 自然宽 741px 窄，基础规则加 overflow 会把桌面「歌德 A1」右缘裁掉
+    （1280/1600px 实测回归）。所以本测试同时断言：存在滚动块（移动端修复生效）
+    且基础块没有 overflow-x（桌面保持自然宽度）。
+    """
+    with open("static/style.css", "r", encoding="utf-8") as f:
+        css = f.read()
+
+    seg_bar_blocks = _all_css_blocks(css, ".cards-seg-bar")
+    assert seg_bar_blocks, ".cards-seg-bar 规则块不存在"
+    base_block = seg_bar_blocks[0][1]
+    scroll_blocks = [
+        block for pos, block in seg_bar_blocks
+        if re.search(r"overflow-x\s*:\s*auto", block) and "max-width: 100%" in block
+    ]
+    assert scroll_blocks, (
+        "移动端媒体块里的 .cards-seg-bar 必须 overflow-x:auto + max-width:100%，"
+        "否则超出视口的段标签被 .view 裁掉，「歌德 A1」不可达"
+    )
+    assert not re.search(r"overflow-x\s*:\s*(auto|scroll)", base_block), (
+        "基础 .cards-seg-bar 规则块不能有 overflow-x（桌面内容列比 seg-bar 窄，"
+        "加了会把桌面 A1 tab 右缘裁掉）"
+    )
+
+    seg_btn_blocks = _all_css_blocks(css, ".cards-seg-btn")
+    assert any(
+        re.search(r"flex-shrink\s*:\s*0", block) for _, block in seg_btn_blocks
+    ), ".cards-seg-btn 必须 flex-shrink:0，段标签不压缩换行，由滚动接管"
