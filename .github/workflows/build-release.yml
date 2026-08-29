@@ -3,7 +3,7 @@ name: Build & Publish DeLector Releases
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -22,8 +22,8 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -60,8 +60,8 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -94,6 +94,8 @@ jobs:
             --hidden-import=uvicorn.lifespan.on \
             --hidden-import=core_dict_ext \
             --hidden-import=prep_dict \
+            --hidden-import=a1_dict \
+            --hidden-import=a1_writing_dict \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -122,8 +124,8 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -156,6 +158,8 @@ jobs:
             --hidden-import=uvicorn.lifespan.on \
             --hidden-import=core_dict_ext \
             --hidden-import=prep_dict \
+            --hidden-import=a1_dict \
+            --hidden-import=a1_writing_dict \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -184,8 +188,8 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -193,12 +197,12 @@ jobs:
       - name: Set up Gradle 8.6
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.6'
+          gradle-version: "8.6"
 
       - name: Set up Python for model syncing
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Sync Python Backend, Model, and Assets into Android Project
         run: |

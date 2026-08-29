@@ -24,11 +24,11 @@ def build_windows():
     print("=" * 60)
     print(f"  DeLector {version} -- Windows Portable Packager")
     print("=" * 60)
-    
+
     root_dir = os.path.dirname(os.path.abspath(__file__))
     dist_dir = os.path.join(root_dir, "dist")
     build_dir = os.path.join(root_dir, "build")
-    
+
     # 1. Clean previous build artifacts
     for d in [os.path.join(dist_dir, "DeLector"), build_dir]:
         if os.path.exists(d):
@@ -58,6 +58,8 @@ def build_windows():
         "--hidden-import=uvicorn.lifespan.on",
         "--hidden-import=core_dict_ext",
         "--hidden-import=prep_dict",
+        "--hidden-import=a1_dict",
+        "--hidden-import=a1_writing_dict",
         "--hidden-import=de_core_news_sm",
         "--hidden-import=spacy.lang.de",
         "--hidden-import=genanki",
@@ -67,7 +69,7 @@ def build_windows():
         "--collect-all=spacy",
         os.path.join(root_dir, "start.py")
     ]
-    
+
     print("\n[1/3] 正在编译二进制可执行程序并收集依赖与 spaCy 语言模型...")
     result = subprocess.run(pyinstaller_cmd, cwd=root_dir)
     if result.returncode != 0:
@@ -79,11 +81,11 @@ def build_windows():
     release_dir = os.path.join(dist_dir, release_name)
     if os.path.exists(release_dir):
         shutil.rmtree(release_dir)
-    
+
     built_output = os.path.join(dist_dir, "DeLector")
     if os.path.exists(built_output):
         shutil.move(built_output, release_dir)
-    
+
     # 4. Copy helper files
     readme_content = f"""# DeLector — 德语学术精读与备考工作台 ({version} 绿色便携版)
 
@@ -99,7 +101,7 @@ def build_windows():
 """
     with open(os.path.join(release_dir, "说明_README.txt"), "w", encoding="utf-8") as f:
         f.write(readme_content)
-    
+
     print("\n" + "=" * 60)
     print("[SUCCESS] 绿色便携版打包成功！")
     print(f"发布包目录: {release_dir}")

@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.6.5-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v4.7.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-322%2F322%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-350%2F350%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -22,10 +22,10 @@
 
 | 平台               | 版本                | 说明                                                                                                             | 下载通道                                                                                    |
 | ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v4.6.5` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5)     |
-| 🍎 **macOS**       | `v4.6.5` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5)  |
-| 🐧 **Linux x64**   | `v4.6.5` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5)  |
-| 📱 **Android**     | `v4.6.5` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.6.5) |
+| 🪟 **Windows x64** | `v4.7.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0)     |
+| 🍎 **macOS**       | `v4.7.0` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0)  |
+| 🐧 **Linux x64**   | `v4.7.0` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0)  |
+| 📱 **Android**     | `v4.7.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0) |
 
 ---
 
@@ -257,11 +257,13 @@ DeLector/
 - [x] **v4.6.3**：**工作台导出 Android 修复 + 卡盒背面 swipe 拦截**——工作台用 `Blob + URL.createObjectURL + <a download>` 导出备份，但 Android WebView 的 DownloadListener 对 `blob:` URL **永不触发**（无报错，用户以为成功了）。改为走服务端下载通道：`download()` 先 POST 到 `/api/wb/backup/prepare` 换 token，再 `location.href` 到 `/api/wb/backup/download/{token}`（跟主应用备份同款机制），独立打开 HTML 时无 `/api/` 则走 blob 兜底。服务端新增 `/api/wb/backup/prepare` 和 `/api/wb/backup/download/{token}` 两个端点。② **卡盒背面评分按钮被 swipe 吞掉**：`attachDeckSwipeListener` 绑在整个卡片容器上，背面按钮的触摸也被捕获，手指轻抖就超 70px 阈值触发 `stepDeck`。改为 `deckFlipped` 时跳过 `onTouchMove` / `onTouchEnd`。测试 **316 全绿**
 - [x] **v4.6.4**：**介词矩阵已入卡持久化**——新增 `prep_saved` 表（主键 `(lemma, praep, kasus)`）与 `GET/POST /api/prep/saved` 端点，前端 `_prepSavedKeys` 从服务端初始化（不再空 Set 起步），`savePrepCardFromMatrix` 成功后异步写入。备份/恢复带上该表。测试 **319 全绿**
 - [x] **v4.6.5**：**局域网同步 6 位短码**——WebRTC P2P 同步的 SDP 传递从复制粘贴 2-3KB 文本改为 6 位短码：A 存 SDP 到服务端拿到 `K7M2X9` 大字码，B 输入取出 SDP，生成回执后同样拿到短码。`POST /api/wb/sync/store` + `GET /api/wb/sync/fetch/{code}`，内存缓存 5 分钟 TTL，一次性消费。测试 **322 全绿**
+- [x] **v4.7.0**：**歌德 A1 备考工坊全面落地 (Goethe-Zertifikat A1 Werkstatt)**——702 官方考纲词汇（15 大真实主题、全量地道例句、准确复数、0 模板句）+ 8 套填表真题 (Schreiben Teil 1) + 10 套短电邮工坊 (Schreiben Teil 2 导向点诊断与满分范文) + 口语 Teil 2/3 考场题卡 + 3D 纸牌堆叠控制栏居中与响应式 UI 抛光。测试 **350 全绿**
 
 - [x] **`server.py` 拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 - [x] **介词矩阵「已入卡」持久化**（v4.6.4）：新增 `prep_saved` 表 + `GET/POST /api/prep/saved`，前端 `_prepSavedKeys` 从服务端初始化，重进矩阵段按钮状态保持。
 - [x] **局域网同步 6 位短码**（v4.6.5）：WebRTC P2P 同步的 SDP 传递从复制粘贴 2-3KB 改为 6 位短码中转（`POST /api/wb/sync/store` + `GET /api/wb/sync/fetch/{code}`），手机上只需输入 6 个字符。
-- [ ] **真机累积验收 v4.4.6 → v4.6.5**：Java 层无法在本机编译（没装 Android SDK），运行时行为只能真机验收；计划一次装 v4.4.6 再覆盖安装最新版（中间不卸载），一并确认升级链路与这几轮的移动端修复。
+- [x] **歌德 A1 备考工坊**（v4.7.0）：官方考纲 702 词 + 15 大交际主题 + 8 篇官方填表真题与评分容错 + 10 篇 30 词短电邮写作工坊与 3 大导向点合规诊断 + 口语 Teil 2/3 考场题卡。
+- [ ] **真机累积验收 v4.4.6 → v4.7.0**：Java 层无法在本机编译（没装 Android SDK），运行时行为只能真机验收；计划一次装 v4.4.6 再覆盖安装最新版（中间不卸载），一并确认升级链路与这几轮的移动端修复。
 
 ---
 

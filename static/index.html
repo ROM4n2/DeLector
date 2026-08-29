@@ -32,7 +32,7 @@
         <!-- 这个字面量是判断「前端到底刷新了没有」的唯一肉眼指标，
            test_writer_mobile.py 断言它与 sw.js / build.gradle 的版本号一致 -->
         <span class="right"
-          ><span class="pulse"></span>System · v4.6.4 Online</span
+          ><span class="pulse"></span>System · v4.7.0 Online</span
         >
       </div>
     </div>
@@ -926,195 +926,209 @@
 
         <div class="writer-layout">
           <!-- Writer Modes Bar: Standard Essay vs Goethe A1 Schreiben Lab -->
-          <div class="writer-mode-switcher-bar" style="grid-column: 1 / -1; width: 100%;">
-          <button
-            id="writer-mode-essay"
-            class="writer-mode-tab active"
-            onclick="switchWriterMode('essay')"
+          <div
+            class="writer-mode-switcher-bar"
+            style="grid-column: 1 / -1; width: 100%"
           >
-            ✍️ 自由写作与研磨 (Freies Schreiben)
-          </button>
-          <button
-            id="writer-mode-a1-formular"
-            class="writer-mode-tab"
-            onclick="switchWriterMode('formular')"
-          >
-            📝 歌德 A1 Teil 1 填表专项 (Formular-Training)
-          </button>
-          <button
-            id="writer-mode-a1-email"
-            class="writer-mode-tab"
-            onclick="switchWriterMode('email')"
-          >
-            ✉️ 歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab)
-          </button>
-        </div>
-
-        <!-- ── Goethe A1 Teil 1: Formular-Training Panel ── -->
-        <div id="a1-formular-view" class="a1-schreiben-panel hidden">
-          <div class="a1-workbench-topbar">
-            <div class="a1-selector-group">
-              <label for="a1-formular-select"><b>选择填表真题：</b></label>
-              <select
-                id="a1-formular-select"
-                class="modal-input"
-                onchange="selectA1Formular(this.value)"
-              ></select>
-            </div>
-            <div class="a1-topbar-actions">
-              <button class="btn btn-ghost btn-sm" onclick="prevA1Formular()">
-                ◀ 上一题
-              </button>
-              <button class="btn btn-ghost btn-sm" onclick="randomA1Formular()">
-                🎲 随机练习
-              </button>
-              <button class="btn btn-ghost btn-sm" onclick="nextA1Formular()">
-                下一题 ▶
-              </button>
-            </div>
+            <button
+              id="writer-mode-essay"
+              class="writer-mode-tab active"
+              onclick="switchWriterMode('essay')"
+            >
+              ✍️ 自由写作与研磨 (Freies Schreiben)
+            </button>
+            <button
+              id="writer-mode-a1-formular"
+              class="writer-mode-tab"
+              onclick="switchWriterMode('formular')"
+            >
+              📝 歌德 A1 Teil 1 填表专项 (Formular-Training)
+            </button>
+            <button
+              id="writer-mode-a1-email"
+              class="writer-mode-tab"
+              onclick="switchWriterMode('email')"
+            >
+              ✉️ 歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab)
+            </button>
           </div>
 
-          <div class="a1-formular-layout">
-            <!-- Left: Reading Passage Card -->
-            <div class="a1-passage-card">
-              <div class="a1-card-label">📖 考场情景短文 (Lesetext)</div>
-              <h3 id="a1-form-title" class="a1-form-title"></h3>
-              <p id="a1-form-scenario" class="a1-form-scenario-desc"></p>
-              <div id="a1-form-passage" class="a1-form-passage-box"></div>
-              <div class="a1-exam-tip-box">
-                💡 <b>填表应试技巧</b>：认真阅读短文，区分姓 (Familienname) 与名
-                (Vorname)，注意德语日期格式（日.月）与数字，不确定大小写时建议按原词抄写。
+          <!-- ── Goethe A1 Teil 1: Formular-Training Panel ── -->
+          <div id="a1-formular-view" class="a1-schreiben-panel hidden">
+            <div class="a1-workbench-topbar">
+              <div class="a1-selector-group">
+                <label for="a1-formular-select"><b>选择填表真题：</b></label>
+                <select
+                  id="a1-formular-select"
+                  class="modal-input"
+                  onchange="selectA1Formular(this.value)"
+                ></select>
               </div>
-            </div>
-
-            <!-- Right: Authentic German Formular Table -->
-            <div class="a1-formular-card">
-              <div class="a1-card-label">📝 官方答题表格 (Anmeldeformular)</div>
-              <div id="a1-formular-container" class="a1-formular-table"></div>
-              <div class="a1-formular-actions">
+              <div class="a1-topbar-actions">
+                <button class="btn btn-ghost btn-sm" onclick="prevA1Formular()">
+                  ◀ 上一题
+                </button>
                 <button
-                  class="btn btn-dark"
-                  id="a1-form-check-btn"
-                  onclick="checkA1Formular()"
+                  class="btn btn-ghost btn-sm"
+                  onclick="randomA1Formular()"
                 >
-                  🎯 立即批改 (5 分)
+                  🎲 随机练习
                 </button>
-                <button class="btn btn-ghost" onclick="resetA1Formular()">
-                  🔄 重填
+                <button class="btn btn-ghost btn-sm" onclick="nextA1Formular()">
+                  下一题 ▶
                 </button>
               </div>
-              <div
-                id="a1-formular-feedback"
-                class="a1-formular-feedback-box hidden"
-              ></div>
             </div>
-          </div>
-        </div>
 
-        <!-- ── Goethe A1 Teil 2: 30-Wort E-Mail / Brief Lab Panel ── -->
-        <div id="a1-email-view" class="a1-schreiben-panel hidden">
-          <div class="a1-workbench-topbar">
-            <div class="a1-selector-group">
-              <label for="a1-email-select"><b>选择书信场景：</b></label>
-              <select
-                id="a1-email-select"
-                class="modal-input"
-                onchange="selectA1Email(this.value)"
-              ></select>
-            </div>
-            <div class="a1-topbar-actions">
-              <button class="btn btn-ghost btn-sm" onclick="prevA1Email()">
-                ◀ 上一题
-              </button>
-              <button class="btn btn-ghost btn-sm" onclick="randomA1Email()">
-                🎲 随机场景
-              </button>
-              <button class="btn btn-ghost btn-sm" onclick="nextA1Email()">
-                下一题 ▶
-              </button>
-            </div>
-          </div>
+            <div class="a1-formular-layout">
+              <!-- Left: Reading Passage Card -->
+              <div class="a1-passage-card">
+                <div class="a1-card-label">📖 考场情景短文 (Lesetext)</div>
+                <h3 id="a1-form-title" class="a1-form-title"></h3>
+                <p id="a1-form-scenario" class="a1-form-scenario-desc"></p>
+                <div id="a1-form-passage" class="a1-form-passage-box"></div>
+                <div class="a1-exam-tip-box">
+                  💡 <b>填表应试技巧</b>：认真阅读短文，区分姓 (Familienname)
+                  与名
+                  (Vorname)，注意德语日期格式（日.月）与数字，不确定大小写时建议按原词抄写。
+                </div>
+              </div>
 
-          <div class="a1-email-layout">
-            <!-- Left: Writing Workspace -->
-            <div class="a1-email-editor-card">
-              <div class="a1-prompt-banner">
+              <!-- Right: Authentic German Formular Table -->
+              <div class="a1-formular-card">
                 <div class="a1-card-label">
-                  📋 考场题目要求 (Aufgabenstellung)
+                  📝 官方答题表格 (Anmeldeformular)
                 </div>
-                <div id="a1-email-prompt" class="a1-email-prompt-text"></div>
-                <div class="a1-leitpunkte-box">
-                  <div class="a1-leitpunkte-label">
-                    🎯 必须覆盖的 3 个导向点 (3 Leitpunkte):
-                  </div>
-                  <div
-                    id="a1-email-leitpunkte"
-                    class="a1-leitpunkte-list"
-                  ></div>
-                </div>
-              </div>
-
-              <!-- Live Status Meter -->
-              <div class="a1-email-live-meter">
-                <div class="a1-meter-item">
-                  <span>字数统计：</span>
-                  <b id="a1-email-word-count">0 词</b>
-                  <span id="a1-email-word-badge" class="a1-diag-badge"
-                    >建议 25~35 词</span
+                <div id="a1-formular-container" class="a1-formular-table"></div>
+                <div class="a1-formular-actions">
+                  <button
+                    class="btn btn-dark"
+                    id="a1-form-check-btn"
+                    onclick="checkA1Formular()"
                   >
+                    🎯 立即批改 (5 分)
+                  </button>
+                  <button class="btn btn-ghost" onclick="resetA1Formular()">
+                    🔄 重填
+                  </button>
                 </div>
-                <div class="a1-meter-item">
-                  <span>称呼规范：</span>
-                  <span id="a1-email-greeting-status" class="a1-diag-badge"
-                    >待输入</span
-                  >
-                </div>
-                <div class="a1-meter-item">
-                  <span>结语标点：</span>
-                  <span id="a1-email-valediction-status" class="a1-diag-badge"
-                    >待输入</span
-                  >
-                </div>
+                <div
+                  id="a1-formular-feedback"
+                  class="a1-formular-feedback-box hidden"
+                ></div>
               </div>
-
-              <textarea
-                id="a1-email-input"
-                class="a1-email-textarea"
-                rows="8"
-                placeholder="在此输入您的 30 词德语短电邮...&#10;如：&#10;Liebe Anna,&#10;ich lade dich herzlich zu meiner Party ein...&#10;Viele Grüße&#10;Max"
-                oninput="onA1EmailInput()"
-              ></textarea>
-
-              <div class="a1-email-editor-actions">
-                <button class="btn btn-dark" onclick="diagnoseA1Email()">
-                  ⚡ 智能诊断与判分
-                </button>
-                <button class="btn btn-ghost" onclick="applyA1EmailTemplate()">
-                  📋 套用考场满分模板
-                </button>
-                <button class="btn btn-ghost" onclick="clearA1Email()">
-                  🗑️ 清空
-                </button>
-              </div>
-
-              <div
-                id="a1-email-diag-results"
-                class="a1-email-diag-results hidden"
-              ></div>
-            </div>
-
-            <!-- Right: Model Text & Useful Phrases -->
-            <div class="a1-email-sample-card">
-              <div class="a1-card-label">🌟 官方考纲满分范文 (Musterbrief)</div>
-              <div id="a1-email-sample-box" class="a1-email-sample-box"></div>
-
-              <div class="a1-card-label" style="margin-top: 1rem">
-                💬 本场景高频黄金句型
-              </div>
-              <div id="a1-email-phrases-box" class="a1-phrases-box"></div>
             </div>
           </div>
-        </div>
+
+          <!-- ── Goethe A1 Teil 2: 30-Wort E-Mail / Brief Lab Panel ── -->
+          <div id="a1-email-view" class="a1-schreiben-panel hidden">
+            <div class="a1-workbench-topbar">
+              <div class="a1-selector-group">
+                <label for="a1-email-select"><b>选择书信场景：</b></label>
+                <select
+                  id="a1-email-select"
+                  class="modal-input"
+                  onchange="selectA1Email(this.value)"
+                ></select>
+              </div>
+              <div class="a1-topbar-actions">
+                <button class="btn btn-ghost btn-sm" onclick="prevA1Email()">
+                  ◀ 上一题
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="randomA1Email()">
+                  🎲 随机场景
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="nextA1Email()">
+                  下一题 ▶
+                </button>
+              </div>
+            </div>
+
+            <div class="a1-email-layout">
+              <!-- Left: Writing Workspace -->
+              <div class="a1-email-editor-card">
+                <div class="a1-prompt-banner">
+                  <div class="a1-card-label">
+                    📋 考场题目要求 (Aufgabenstellung)
+                  </div>
+                  <div id="a1-email-prompt" class="a1-email-prompt-text"></div>
+                  <div class="a1-leitpunkte-box">
+                    <div class="a1-leitpunkte-label">
+                      🎯 必须覆盖的 3 个导向点 (3 Leitpunkte):
+                    </div>
+                    <div
+                      id="a1-email-leitpunkte"
+                      class="a1-leitpunkte-list"
+                    ></div>
+                  </div>
+                </div>
+
+                <!-- Live Status Meter -->
+                <div class="a1-email-live-meter">
+                  <div class="a1-meter-item">
+                    <span>字数统计：</span>
+                    <b id="a1-email-word-count">0 词</b>
+                    <span id="a1-email-word-badge" class="a1-diag-badge"
+                      >建议 25~35 词</span
+                    >
+                  </div>
+                  <div class="a1-meter-item">
+                    <span>称呼规范：</span>
+                    <span id="a1-email-greeting-status" class="a1-diag-badge"
+                      >待输入</span
+                    >
+                  </div>
+                  <div class="a1-meter-item">
+                    <span>结语标点：</span>
+                    <span id="a1-email-valediction-status" class="a1-diag-badge"
+                      >待输入</span
+                    >
+                  </div>
+                </div>
+
+                <textarea
+                  id="a1-email-input"
+                  class="a1-email-textarea"
+                  rows="8"
+                  placeholder="在此输入您的 30 词德语短电邮...&#10;如：&#10;Liebe Anna,&#10;ich lade dich herzlich zu meiner Party ein...&#10;Viele Grüße&#10;Max"
+                  oninput="onA1EmailInput()"
+                ></textarea>
+
+                <div class="a1-email-editor-actions">
+                  <button class="btn btn-dark" onclick="diagnoseA1Email()">
+                    ⚡ 智能诊断与判分
+                  </button>
+                  <button
+                    class="btn btn-ghost"
+                    onclick="applyA1EmailTemplate()"
+                  >
+                    📋 套用考场满分模板
+                  </button>
+                  <button class="btn btn-ghost" onclick="clearA1Email()">
+                    🗑️ 清空
+                  </button>
+                </div>
+
+                <div
+                  id="a1-email-diag-results"
+                  class="a1-email-diag-results hidden"
+                ></div>
+              </div>
+
+              <!-- Right: Model Text & Useful Phrases -->
+              <div class="a1-email-sample-card">
+                <div class="a1-card-label">
+                  🌟 官方考纲满分范文 (Musterbrief)
+                </div>
+                <div id="a1-email-sample-box" class="a1-email-sample-box"></div>
+
+                <div class="a1-card-label" style="margin-top: 1rem">
+                  💬 本场景高频黄金句型
+                </div>
+                <div id="a1-email-phrases-box" class="a1-phrases-box"></div>
+              </div>
+            </div>
+          </div>
 
           <!-- Left Area: Inline IDE Editor & Essay History -->
           <div class="writer-left" id="writer-free-left">
