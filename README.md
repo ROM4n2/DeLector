@@ -1,19 +1,19 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.7.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v4.7.2-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-350%2F350%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-353%2F353%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
   <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的下一代学术级伴读与句法剖析系统。</b><br/>
-  融合<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>、<b>内联 IDE 写作工坊</b>与<b>FSRS 现代认知记忆排程</b>。
+  融合<b>歌德 A1 备考工坊</b>、<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>、<b>内联 IDE 写作工坊</b>与<b>FSRS 现代认知记忆排程</b>。
 </p>
 
 ---
@@ -22,10 +22,10 @@
 
 | 平台               | 版本                | 说明                                                                                                             | 下载通道                                                                                    |
 | ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v4.7.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0)     |
-| 🍎 **macOS**       | `v4.7.0` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0)  |
-| 🐧 **Linux x64**   | `v4.7.0` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0)  |
-| 📱 **Android**     | `v4.7.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.0) |
+| 🪟 **Windows x64** | `v4.7.2` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.2)     |
+| 🍎 **macOS**       | `v4.7.2` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.2)  |
+| 🐧 **Linux x64**   | `v4.7.2` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.2)  |
+| 📱 **Android**     | `v4.7.2` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.2) |
 
 ---
 
@@ -95,6 +95,14 @@
 - **进度纳入备份**：`wb.*` 学习进度键已并入 DeLector 的全量备份/还原链路，跨设备迁移不会静默丢掉背词进度。
 - **类 Git 完整版本快照管理**：支持手动保存快照与 AI 润色自动快照；提供**只读预览弹窗**（浏览历史不产生多余检查点）、单项快照删除与可逆恢复检查点（`恢复到版本 N 之前`）。
 - **句子级 AI 润色审查**：DeepSeek 全文句子级 diff 改写，并排逐 hunk 审查采纳/拒绝。
+
+### 🎓 11. 歌德 A1 备考工坊 (Goethe-Zertifikat A1 Werkstatt, v4.7.0)
+
+- **702 官方考纲词汇 (15 大交际主题)**：覆盖歌德官方 15 大真实交际主题（Persönliche Angaben, Essen/Trinken, Einkaufen, Wohnen, Freizeit, Gesundheit, Reisen, Zeit, Arbeit, Schule, Post/Bank/Behörden, Wetter, Urlaub/Feste, Medien, Wichtige Wendungen）；全量替换机械模板句为地道 A1 考纲例句（严格修复 `denn` 零位语序与 `durch/für + Akk.` 格位一致），修复全部德语变音与不规则名词复数。
+- **8 篇官方填表真题 (Schreiben Teil 1)**：语言班/酒店/图书卡/就医等 8 大高频场景，每篇严格 5 空；评卷引擎支持德语日期格式（`15.08.` / `15. August`）与标点大小写容错。
+- **10 篇 30 词短电邮工坊 (Schreiben Teil 2)**：严格 3 个 Leitpunkte 导向要点，实时检测称呼语逗号后首词小写、结语禁逗号、25~35 词区间与导向点覆盖，配套标准满分范文。
+- **口语 Teil 2/3 考场题卡**：34+ 主题抽词问答卡 + 20+ 考场物品与情景请求卡（Imperativ mit Sie / Können Sie bitte… 满分请求与礼貌应答）。
+- **3D 纸牌堆叠词卡与网格双视图**：词卡「牌盒/目录」双模一键切换，逐词一键入 FSRS 复习盒并实时标记「已在复习盒」；安卓卡片段标签栏窄屏下可横向滑动直达（v4.7.2）。
 
 ---
 
@@ -168,7 +176,7 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 | **语音合成**     | `Edge-TTS` (Microsoft Neural Voice)        | 神经级纯正德语离线本地缓存与 Web Speech 回退                                        |
 | **前端架构**     | `ES Modules / Modern CSS / Vanilla JS`     | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染                                      |
 | **记忆同步**     | `genanki`                                  | 离线生成标准 `.apkg` 记忆库                                                         |
-| **自动化测试**   | `pytest` + `httpx`                         | **322** 单元与集成测试用例保障 (100% Green)，CI 覆盖 md 加载路径与 Android 构建验签 |
+| **自动化测试**   | `pytest` + `httpx`                         | **353** 单元与集成测试用例保障 (100% Green)，CI 覆盖 md 加载路径与 Android 构建验签 |
 
 ---
 
@@ -181,23 +189,29 @@ DeLector/
 │   ├── index.html          # 单页应用骨架 (含 3D 卡盒、句法拓扑与台账)
 │   ├── german/             # 684 词背词工作台 (workbench.html，iframe 嵌入)
 │   ├── style.css           # 德式报刊风格与 3D 翻转样式 (169KB)
-│   └── js/                 # 9 大独立原生 ES 模块
+│   └── js/                 # 11 大独立原生 ES 模块
 │       ├── core.js         # API 请求与全局状态（含 XSS 防护 jsAttr）
 │       ├── main.js         # 路由调度、设置弹窗与 RSS 订阅
 │       ├── reader.js       # 文本渲染、五场域拓扑条与 AST 树抽屉
-│       ├── cards.js        # 3D 卡牌翻转盒与 FSRS 自适应记忆排程算法
+│       ├── cards.js        # 3D 卡牌翻转盒与 FSRS 自适应记忆排程算法（调度 A1 卡）
+│       ├── a1_cards.js     # 歌德 A1 词卡/口语卡（702 词 + Teil 2/3 抽卡）
+│       ├── writer.js       # 写作润色台（行内标注 + Problems + 版本快照）
+│       ├── a1_writer.js    # A1 填表真题与 30 词短电邮工坊
 │       ├── folio.js        # Leporello 三折页台账与墨线图
 │       ├── companion.js    # 伴读宠物状态机与自定义 SVG 角色工坊
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
-│       ├── player.js       # 神经影子跟读与 TTS 播放器
-│       └── writer.js       # 写作润色台（行内标注 + Problems + 版本快照）
+│       └── player.js       # 神经影子跟读与 TTS 播放器
 ├── .githooks/              # 提交前密钥扫描钩子 (pre-commit，含编码 keystore)
 ├── linguistics.py          # 556+ 不规则动词三态表与复合词拆解引擎
 ├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词，4411 词)
 ├── core_dict_ext.py        # 3969 词库扩展（DeepSeek 批量生成中文释义，v4.4.8 起缺口 0）
+├── a1_dict.py              # 歌德 A1 官方 702 词 + 口语 Teil 2/3 题卡数据集
+├── a1_writing_dict.py      # A1 填表真题与短电邮题库
 ├── prep_dict.py            # 固定介词搭配数据集 552 词 / 691 条（生成物，源在 tools/build_prep.py）
 ├── writing_rules.py        # 写作润色台本地规则引擎（冠词一致 + 介词格，零误报，含 Inlay Hints/Problems）
 ├── syntax_tree.py          # 拓扑五场域与 AST 从句树句法引擎
+├── routes_a1.py            # A1 考纲路由（词卡/口语/写作/Anki 导出）
+├── routes_sync.py          # WebRTC 局域网 6 位短码同步路由
 ├── server.py               # FastAPI 后端服务与核心 NLP/API 路由（敏感设置仅回环可写）
 ├── start.py                # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
 ├── package_windows.py      # Windows 绿色免安装便携版打包脚本
@@ -205,18 +219,21 @@ DeLector/
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖清单（无新增运行时依赖）
 ├── tools/                  # 构建/生成工具（build_dict.py 词库 + build_prep.py 介词 + 缓存）
-├── test_server.py          # 后端与安全/CI/备份/AI 回归 (169 用例)
+├── test_server.py          # 后端与安全/CI/备份/AI 回归 (180 用例)
 ├── test_writing_rules.py   # 写作规则引擎，含零误报反例 (31 用例)
-├── test_writer_mobile.py   # 写作台移动端几何与触屏契约 (27 用例)
+├── test_writer_mobile.py   # 写作台移动端几何与触屏契约 + 版本一致性 (28 用例)
 ├── test_syntax_tree.py     # 拓扑五场域与 AST 从句树 (15 用例)
-├── test_german_workbench.py # 背词工作台音频补丁与接入契约 (14 用例)
+├── test_german_workbench.py # 背词工作台音频补丁与接入契约 (19 用例)
 ├── test_essay_diff.py      # 句子级 diff 引擎 (13 用例)
 ├── test_prep_matrix.py     # 介词矩阵纯函数/前端/端点 (12 用例)
+├── test_goethe_a1.py       # A1 考纲词库/口语卡/前端契约 + 段标签栏窄屏滚动 (10 用例)
 ├── test_dict_pipeline.py   # 词库生成流水线 (10 用例)
 ├── test_edge_tts_mini.py   # stdlib 版 TTS 兜底客户端 (10 用例)
+├── test_goethe_a1_writing.py # A1 填表与电邮诊断/范文契约 (8 用例)
 ├── test_core_dict_ext.py   # 词库扩展数据契约 (5 用例)
 ├── test_frontend_security.py # 前端 XSS 注入点棘轮 (4 用例)
 ├── test_start.py           # 启动器 Android/桌面绑定 (4 用例)
+├── test_frontend_module_graph.py # 前端 ES module 图解析（具名 import 可达性） (2 用例)
 └── test_source_hygiene.py  # 源码卫生（重复键等）棘轮 (2 用例)
 ```
 
@@ -258,12 +275,14 @@ DeLector/
 - [x] **v4.6.4**：**介词矩阵已入卡持久化**——新增 `prep_saved` 表（主键 `(lemma, praep, kasus)`）与 `GET/POST /api/prep/saved` 端点，前端 `_prepSavedKeys` 从服务端初始化（不再空 Set 起步），`savePrepCardFromMatrix` 成功后异步写入。备份/恢复带上该表。测试 **319 全绿**
 - [x] **v4.6.5**：**局域网同步 6 位短码**——WebRTC P2P 同步的 SDP 传递从复制粘贴 2-3KB 文本改为 6 位短码：A 存 SDP 到服务端拿到 `K7M2X9` 大字码，B 输入取出 SDP，生成回执后同样拿到短码。`POST /api/wb/sync/store` + `GET /api/wb/sync/fetch/{code}`，内存缓存 5 分钟 TTL，一次性消费。测试 **322 全绿**
 - [x] **v4.7.0**：**歌德 A1 备考工坊全面落地 (Goethe-Zertifikat A1 Werkstatt)**——702 官方考纲词汇（15 大真实主题、全量地道例句、准确复数、0 模板句）+ 8 套填表真题 (Schreiben Teil 1) + 10 套短电邮工坊 (Schreiben Teil 2 导向点诊断与满分范文) + 口语 Teil 2/3 考场题卡 + 3D 纸牌堆叠控制栏居中与响应式 UI 抛光。测试 **350 全绿**
+- [x] **v4.7.1**：**修复安卓交互全死回归**——v4.7.0 模块化拆分把 `a1_cards.js`/`a1_writer.js` 以空文件提交，`cards.js`/`writer.js` 具名 import 导致 ES module 链接期 SyntaxError、整个模块图失败（`main.js` 永不求值，全 App 只剩 CSS 点击效果）。复原两空模块 + 补抽取后悬空引用 + 新增 `test_frontend_module_graph.py` 模块图结构性回归测试。测试 **352 全绿**
+- [x] **v4.7.2**：**修复安卓卡片段标签栏被裁切**——5 个段按钮合计约 527px 超出一屏，被 `.view` 的 `overflow-x: hidden` 移动端守卫裁掉，最后的「歌德 A1」tab 不可见；改为移动端媒体块内 `.cards-seg-bar` 自身 `overflow-x: auto` 横滑到达（桌面内容列较窄，滚动规则必须 scoped 到移动端避免裁桌面 A1 右缘）。测试 **353 全绿**
 
 - [x] **`server.py` 拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 - [x] **介词矩阵「已入卡」持久化**（v4.6.4）：新增 `prep_saved` 表 + `GET/POST /api/prep/saved`，前端 `_prepSavedKeys` 从服务端初始化，重进矩阵段按钮状态保持。
 - [x] **局域网同步 6 位短码**（v4.6.5）：WebRTC P2P 同步的 SDP 传递从复制粘贴 2-3KB 改为 6 位短码中转（`POST /api/wb/sync/store` + `GET /api/wb/sync/fetch/{code}`），手机上只需输入 6 个字符。
 - [x] **歌德 A1 备考工坊**（v4.7.0）：官方考纲 702 词 + 15 大交际主题 + 8 篇官方填表真题与评分容错 + 10 篇 30 词短电邮写作工坊与 3 大导向点合规诊断 + 口语 Teil 2/3 考场题卡。
-- [ ] **真机累积验收 v4.4.6 → v4.7.0**：Java 层无法在本机编译（没装 Android SDK），运行时行为只能真机验收；计划一次装 v4.4.6 再覆盖安装最新版（中间不卸载），一并确认升级链路与这几轮的移动端修复。
+- [ ] **真机累积验收 v4.4.6 → v4.7.2**：Java 层无法在本机编译（没装 Android SDK），运行时行为只能真机验收；计划一次装 v4.4.6 再覆盖安装最新版（中间不卸载），一并确认升级链路与这几轮的移动端修复。
 
 ---
 
