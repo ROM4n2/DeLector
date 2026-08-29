@@ -159,3 +159,5 @@ def test_a1_css_styling_and_tokens():
     assert ".a1-card-gender-f" in css
     assert ".a1-card-gender-n" in css
     assert ".a1-sprechen-card" in css
+    assert ".deck-controls-bottom" in css
+    assert ".deck-nav-btn" in css

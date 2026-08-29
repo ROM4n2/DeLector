@@ -3649,6 +3649,78 @@ body.drawer-open .shadow-player {
   box-shadow: none;
 }
 
+/* ── A1 & FSRS Deck Bottom Stepper Controls ────────────────────────────────── */
+.deck-controls-bottom {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 2.25rem;
+  position: relative;
+  z-index: 10;
+}
+
+.deck-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  padding: 0.65rem 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.deck-nav-btn:hover {
+  background: var(--paper-deep);
+  transform: translateY(-2px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.deck-nav-btn:active {
+  transform: translateY(1px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.deck-nav-btn.deck-btn-flip {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  box-shadow: 2px 2px 0 var(--amber);
+  padding: 0.65rem 1.5rem;
+}
+
+.deck-nav-btn.deck-btn-flip:hover {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+@media (max-width: 640px) {
+  .deck-controls-bottom {
+    gap: 0.5rem;
+    margin-top: 1.75rem;
+  }
+
+  .deck-nav-btn {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.75rem;
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 130px;
+  }
+}
+
+
 .deck-flip-prompt {
   font-family: var(--mono);
   font-size: 0.6875rem;
@@ -9262,5 +9334,3 @@ body.drawer-open .companion {
   font-size: 0.825rem;
   color: var(--ink-soft);
 }
-
-
