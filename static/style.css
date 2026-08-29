@@ -41,10 +41,10 @@
   --amber: #d9771c;
   --amber-soft: rgba(217, 119, 28, 0.12);
   --cherry: #b03030;
-  --danger: #b03030; /* 与 --cherry 同色但语义分开：
+  --danger: #B03030; /* 与 --cherry 同色但语义分开：
                                             --cherry  = 答错 / 错误反馈（SRS、quiz、error underline）
                                             --danger  = 破坏性操作（删/清/还原） */
-  --danger-strong: #c84444;
+  --danger-strong: #C84444;
   --moss: #3b6e3f;
   --olive: #6e7448;
 
@@ -8274,9 +8274,7 @@ body.drawer-open .companion {
 .version-item:hover {
   background: var(--paper-tint);
   border-color: var(--ink);
-  transform: translateX(
-    2px
-  ); /* 与 .writer-problem-row:hover 保持一致 (v4.4.5) */
+  transform: translateX(2px); /* 与 .writer-problem-row:hover 保持一致 (v4.4.5) */
 }
 
 .version-item.version-checkpoint {

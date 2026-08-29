@@ -184,7 +184,7 @@ def test_version_row_hover_matches_other_rows():
     version_item = _rule_body(r"\.version-item\s*\{", "cursor: pointer")
     assert "cursor: pointer" in version_item
     version_hover = _rule_body(r"\.version-item:hover\s*\{")
-    assert "translateX(2px)" in version_hover
+    assert re.search(r"transform:\s*translateX\(\s*2px\s*\)", version_hover)
 
 
 def test_mobile_sheet_is_geometrically_stable():
@@ -647,8 +647,8 @@ def test_btn_del_uses_the_danger_token_and_outranks_btn_ghost():
     那时候已经分不清哪处是哪个意思了。
     """
     root = _rule_body(r":root\s*\{")
-    assert re.search(r"--danger:\s*#B03030", root)
-    assert re.search(r"--danger-strong:\s*#C84444", root)
+    assert re.search(r"--danger:\s*#B03030", root, re.I)
+    assert re.search(r"--danger-strong:\s*#C84444", root, re.I)
 
     body = _rule_body(r"\.btn-del\s*\{")
     assert "var(--danger)" in body, ".btn-del 应该用 --danger，不要直接写死色值"

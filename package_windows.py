@@ -60,6 +60,8 @@ def build_windows():
         "--hidden-import=prep_dict",
         "--hidden-import=a1_dict",
         "--hidden-import=a1_writing_dict",
+        "--hidden-import=routes_a1",
+        "--hidden-import=routes_sync",
         "--hidden-import=de_core_news_sm",
         "--hidden-import=spacy.lang.de",
         "--hidden-import=genanki",

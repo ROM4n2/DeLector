@@ -62,7 +62,6 @@ from database import (
     VOCAB_MODEL,
     GRAMMAR_MODEL,
     export_anki_deck,
-    export_a1_anki_deck,
     get_cache_info,
     prune_audio_cache,
     BACKUP_FORMAT_VERSION,
@@ -171,15 +170,21 @@ __all__ = [
     "fetch_remote_html",
     "PRESET_FEEDS",
     "parse_rss_feed",
+    "_sync_sdp_cache",
+    "MAX_SYNC_CACHE_ENTRIES",
 ]
 
 from core_dict import lookup_core_vocab
 from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
                          lookup_prep_collocations, build_prep_matrix)
 from syntax_tree import analyze_syntax_tree
+from routes_a1 import router as a1_router
+from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
 
 # --- 4. FastAPI Application ---
 app = FastAPI(title="DeLector")
+app.include_router(a1_router)
+app.include_router(sync_router)
 init_db()
 
 # 前端资源必须每次回源校验：裸 StaticFiles 不发 Cache-Control，浏览器于是走
@@ -951,129 +956,6 @@ def export_apkg():
     return FileResponse(path, filename="DeLector_Deck.apkg", media_type="application/octet-stream")
 
 
-# --- Goethe-Zertifikat A1 Wortliste & Sprechen Lab ---
-@app.get("/api/a1/topics")
-def get_a1_topics():
-    import a1_dict
-    counts = {}
-    for entry in a1_dict.GOETHE_A1_VOCAB.values():
-        t = entry.get("topic", "phrases")
-        counts[t] = counts.get(t, 0) + 1
-
-    return [
-        {
-            "key": key,
-            "label": label,
-            "keywords": kw,
-            "count": counts.get(key, 0),
-        }
-        for key, label, kw in a1_dict.A1_TOPICS
-    ]
-
-
-@app.get("/api/a1/vocab")
-def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None):
-    import a1_dict
-    res = list(a1_dict.GOETHE_A1_VOCAB.values())
-    if topic:
-        res = [w for w in res if w.get("topic") == topic]
-    if q:
-        query = q.strip().lower()
-        res = [
-            w for w in res
-            if query in w.get("word", "").lower()
-            or query in w.get("lemma", "").lower()
-            or query in w.get("definition_zh", "").lower()
-        ]
-    return res
-
-
-@app.get("/api/a1/sprechen/teil2")
-def get_a1_sprechen_teil2(topic: Optional[str] = None):
-    import a1_dict
-    cards = a1_dict.A1_SPRECHEN_TEIL2
-    if topic:
-        cards = [c for c in cards if c.get("topic_id") == topic]
-    return cards
-
-
-@app.get("/api/a1/sprechen/teil3")
-def get_a1_sprechen_teil3():
-    import a1_dict
-    return a1_dict.A1_SPRECHEN_TEIL3
-
-
-@app.get("/api/a1/export/anki")
-def export_a1_anki():
-    tmp = tempfile.gettempdir()
-    path = os.path.join(tmp, "Goethe_A1_Wortliste.apkg")
-    export_a1_anki_deck(path)
-    return FileResponse(path, filename="Goethe_A1_Wortliste.apkg", media_type="application/octet-stream")
-
-
-# --- Goethe-Zertifikat A1 Schreiben Workshop Endpoints ---
-class A1FormularCheckReq(BaseModel):
-    exercise_id: str
-    answers: Dict[str, str]
-
-
-class A1EmailDiagnoseReq(BaseModel):
-    text: str
-    leitpunkte: Optional[List[str]] = None
-
-
-@app.get("/api/a1/schreiben/teil1")
-def get_a1_schreiben_teil1():
-    import a1_writing_dict
-    return a1_writing_dict.A1_SCHREIBEN_TEIL1
-
-
-@app.post("/api/a1/schreiben/teil1/check")
-def check_a1_schreiben_teil1(req: A1FormularCheckReq):
-    import a1_writing_dict
-    from writing_rules import check_a1_formular_answer
-
-    ex_map = {ex["id"]: ex for ex in a1_writing_dict.A1_SCHREIBEN_TEIL1}
-    ex = ex_map.get(req.exercise_id)
-    if not ex:
-        raise HTTPException(404, "填表题目未找到")
-
-    results = {}
-    score = 0
-    total = len(ex["fields"])
-
-    for fld in ex["fields"]:
-        key = fld["key"]
-        user_val = req.answers.get(key, "")
-        chk = check_a1_formular_answer(user_val, fld["answer"], fld.get("aliases", []))
-        chk["tip"] = fld.get("tip", "")
-        chk["label"] = fld.get("label", "")
-        if chk["correct"]:
-            score += 1
-        results[key] = chk
-
-    return {
-        "exercise_id": req.exercise_id,
-        "score": score,
-        "total": total,
-        "all_correct": score == total,
-        "results": results
-    }
-
-
-@app.get("/api/a1/schreiben/teil2")
-def get_a1_schreiben_teil2():
-    import a1_writing_dict
-    return a1_writing_dict.A1_SCHREIBEN_TEIL2
-
-
-@app.post("/api/a1/schreiben/teil2/diagnose")
-def diagnose_a1_schreiben_teil2(req: A1EmailDiagnoseReq):
-    from writing_rules import analyze_a1_email
-    return analyze_a1_email(req.text[:2000], req.leitpunkte)
-
-
-
 # --- Edge Neural TTS Audio Endpoints ---
 class TTSReq(BaseModel):
     text: str
@@ -1324,7 +1206,6 @@ async def test_api_key(settings: SettingsUpdate, request: Request):
     base_url = (settings.api_base_url.strip() if settings.api_base_url else get_effective_api_base_url()).rstrip('/')
     model = settings.api_model.strip() if settings.api_model else get_effective_api_model()
 
-    import time
     start_t = time.time()
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -2218,54 +2099,6 @@ def api_writing_apply(req: WritingApplyReq):
         "error_count": a["error_count"],
         "version_id": version_id,
     }
-
-
-# --- LAN WebRTC Sync SDP Cache & Endpoints ---
-MAX_SYNC_CACHE_ENTRIES = 50
-MAX_SDP_PAYLOAD_BYTES = 32 * 1024
-_sync_sdp_cache: Dict[str, Dict[str, Any]] = {}
-
-
-def _cleanup_sync_cache() -> None:
-    now = time.time()
-    expired = [k for k, v in _sync_sdp_cache.items() if now - v.get("ts", 0) > 300]
-    for k in expired:
-        _sync_sdp_cache.pop(k, None)
-    # FIFO 容量限制：当条目数超标时淘汰最老的条目
-    while len(_sync_sdp_cache) >= MAX_SYNC_CACHE_ENTRIES:
-        oldest_key = min(_sync_sdp_cache.keys(), key=lambda k: _sync_sdp_cache[k].get("ts", 0))
-        _sync_sdp_cache.pop(oldest_key, None)
-
-
-class SyncStoreReq(BaseModel):
-    sdp: Dict[str, Any]
-    role: str = "offer"
-
-
-@app.post("/api/wb/sync/store")
-def sync_store_sdp(req: SyncStoreReq):
-    raw_json = json.dumps(req.sdp)
-    if len(raw_json.encode("utf-8")) > MAX_SDP_PAYLOAD_BYTES:
-        raise HTTPException(400, "SDP payload 超过最大体积限制 (32KB)")
-    _cleanup_sync_cache()
-    alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-    code = "".join(secrets.choice(alphabet) for _ in range(6))
-    _sync_sdp_cache[code] = {
-        "sdp": req.sdp,
-        "ts": time.time(),
-        "role": req.role,
-    }
-    return {"code": code}
-
-
-@app.get("/api/wb/sync/fetch/{code}")
-def sync_fetch_sdp(code: str):
-    _cleanup_sync_cache()
-    key = code.strip().upper()
-    entry = _sync_sdp_cache.pop(key, None)
-    if not entry:
-        raise HTTPException(404, "短码无效或已过期（5 分钟有效）")
-    return {"sdp": entry["sdp"], "role": entry["role"]}
 
 
 # Mount Static UI (Catch-all must be at the very end)
