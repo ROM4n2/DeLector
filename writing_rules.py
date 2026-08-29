@@ -421,3 +421,204 @@ def analyze_essay_text(text: str, nlp: Optional[Any] = None) -> Dict[str, Any]:
         "problem_count": error_count + warning_count,
         "sentences": sentences
     }
+
+
+# ── Goethe-Zertifikat A1: Schreiben Evaluator & Diagnostician ───────────────
+
+def check_a1_formular_answer(user_val: str, expected_val: str, aliases: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Evaluates a user answer in Goethe A1 Teil 1 (Formular ausfuellen).
+    Case-insensitive, normalizes punctuation, whitespace, and German date formats (e.g. 15.08 vs 15. August).
+    """
+    import re
+
+    def _normalize(s: str) -> str:
+        s = s.strip().lower()
+        s = re.sub(r'[,;.!?/\\-]+', ' ', s)
+        s = re.sub(r'\s+', ' ', s).strip()
+        return s
+
+    norm_user = _normalize(user_val)
+    norm_exp = _normalize(expected_val)
+
+    if not norm_user:
+        return {"correct": False, "expected": expected_val, "user_answer": user_val}
+
+    if norm_user == norm_exp:
+        return {"correct": True, "expected": expected_val, "user_answer": user_val}
+
+    # Check aliases
+    if aliases:
+        for alias in aliases:
+            if norm_user == _normalize(alias):
+                return {"correct": True, "expected": expected_val, "user_answer": user_val}
+
+    # Date normalization: e.g. 15.08. vs 15. August
+    MONTH_MAP = {
+        "01": ["januar", "jan"], "02": ["februar", "feb"], "03": ["märz", "maerz", "mar"],
+        "04": ["april", "apr"], "05": ["mai"], "06": ["juni", "jun"],
+        "07": ["juli", "jul"], "08": ["august", "aug"], "09": ["september", "sep"],
+        "10": ["oktober", "okt"], "11": ["november", "nov"], "12": ["dezember", "dez"]
+    }
+    date_pat = re.compile(r'^(\d{1,2})\s*[\.]?\s*([a-zA-Zäöüß0-9]+)')
+    m_user = date_pat.match(norm_user)
+    m_exp = date_pat.match(norm_exp)
+    if m_user and m_exp:
+        day_u, mon_u = m_user.group(1).lstrip("0"), m_user.group(2).lower()
+        day_e, mon_e = m_exp.group(1).lstrip("0"), m_exp.group(2).lower()
+        if day_u == day_e:
+            # Check month equivalence
+            for num, names in MONTH_MAP.items():
+                all_names = [num, num.lstrip("0")] + names
+                if (mon_u in all_names) and (mon_e in all_names):
+                    return {"correct": True, "expected": expected_val, "user_answer": user_val}
+
+    return {"correct": False, "expected": expected_val, "user_answer": user_val}
+
+
+def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Automated evaluation and diagnostics for Goethe A1 Teil 2 (ca. 30 Woerter E-Mail/Brief).
+    Checks:
+    1. Anrede (Greeting) - presence, capitalization, comma rule.
+    2. Lowercase start of main text after comma greeting.
+    3. Grussformel (Valediction) - presence, comma prohibition (NO comma after Viele Gruesse!).
+    4. Word count recommendation (25-35 words).
+    5. Leitpunkte coverage hints.
+    """
+    import re
+
+    lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
+    words = [w for w in re.findall(r'[a-zA-ZäöüÄÖÜß]+', text)]
+    word_count = len(words)
+
+    suggestions = []
+
+    # 1. Word count rule
+    if word_count < 20:
+        suggestions.append({
+            "rule": "a1_word_count",
+            "level": "warning",
+            "message": f"字数偏短（当前 {word_count} 词）。歌德 A1 考纲要求约 30 词（建议 25~35 词）。"
+        })
+    elif word_count > 45:
+        suggestions.append({
+            "rule": "a1_word_count",
+            "level": "warning",
+            "message": f"字数偏多（当前 {word_count} 词）。A1 简短便条尽量控制在 25~35 词，避免过度拓展产生额外语法错误。"
+        })
+
+    # 2. Greeting check
+    FORMAL_GREETINGS = ["sehr geehrte damen und herren", "sehr geehrte frau", "sehr geehrter herr"]
+    INFORMAL_GREETINGS = ["liebe", "lieber", "hallo", "guten tag", "hi"]
+
+    greeting_line = lines[0] if lines else ""
+    norm_greeting = re.sub(r'[,.!?]', '', greeting_line).strip().lower()
+
+    is_formal = any(norm_greeting.startswith(fg) for fg in FORMAL_GREETINGS)
+    is_informal = any(norm_greeting.startswith(ig) for ig in INFORMAL_GREETINGS)
+    has_valid_greeting = is_formal or is_informal
+
+    has_greeting_comma = greeting_line.endswith(",")
+
+    if not has_valid_greeting:
+        suggestions.append({
+            "rule": "a1_greeting_missing",
+            "level": "error",
+            "message": "缺少德语书信称呼语。非正式信件建议使用 'Liebe/Lieber [名字],' 或 'Hallo [名字],'"
+        })
+    elif not has_greeting_comma:
+        suggestions.append({
+            "rule": "a1_greeting_comma",
+            "level": "warning",
+            "message": "德语称呼语末尾建议加逗号（如 'Liebe Maria,'），以便下一行正文首词小写。"
+        })
+
+    # 3. First word lowercase check after comma greeting
+    first_body_word_case_error = False
+    if has_greeting_comma and len(lines) > 1:
+        first_body_line = lines[1]
+        body_words = re.findall(r'[a-zA-ZäöüÄÖÜß]+', first_body_line)
+        if body_words:
+            first_w = body_words[0]
+            # If capitalized and not 'Ich' or a known capitalized noun/pronoun
+            # In German, if greeting ends with comma, body starts with lowercase ('ich lade dich ein...')
+            if first_w[0].isupper() and first_w not in ["Sie", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer"]:
+                first_body_word_case_error = True
+                suggestions.append({
+                    "rule": "a1_greeting_body_lowercase",
+                    "level": "error",
+                    "message": f"称呼语后加了逗号，正文首词 '{first_w}' 必须小写（应为 '{first_w[0].lower() + first_w[1:]}'）。"
+                })
+
+    # 4. Valediction & Comma prohibition check
+    VALEDICTIONS = [
+        "viele grüße", "herzliche grüße", "liebe grüße", "beste grüße",
+        "mit freundlichen grüßen", "mit besten grüßen", "dein", "deine", "tschüss"
+    ]
+
+    valediction_found = False
+    valediction_line = ""
+    has_valediction_comma_error = False
+
+    for l in reversed(lines):
+        norm_l = re.sub(r'[,.!?]', '', l).strip().lower()
+        if any(norm_l.startswith(v) for v in VALEDICTIONS):
+            valediction_found = True
+            valediction_line = l
+            if l.endswith(","):
+                has_valediction_comma_error = True
+                suggestions.append({
+                    "rule": "a1_valediction_comma",
+                    "level": "error",
+                    "message": "德语书信结语后【严禁】加逗号（如 'Viele Grüße'，后面不可加逗号，与英语不同）。"
+                })
+            break
+
+    if not valediction_found:
+        suggestions.append({
+            "rule": "a1_valediction_missing",
+            "level": "warning",
+            "message": "缺少德语结语（如 'Viele Grüße' 或 'Mit freundlichen Grüßen'）。"
+        })
+
+    # 5. Leitpunkte keyword presence check
+    leitpunkte_results = []
+    if leitpunkte:
+        lower_text = text.lower()
+        for lp in leitpunkte:
+            tokens = [t.lower() for t in re.findall(r'[a-zA-ZäöüÄÖÜß]{3,}', lp)]
+            matched = any(t in lower_text for t in tokens) if tokens else True
+            leitpunkte_results.append({
+                "leitpunkt": lp,
+                "matched": matched
+            })
+
+    if word_count < 20:
+        word_count_status = "too_short"
+    elif word_count <= 40:
+        word_count_status = "optimal"
+    else:
+        word_count_status = "too_long"
+
+    leitpunkte_matches = sum(1 for r in leitpunkte_results if r["matched"])
+
+    return {
+        "word_count": word_count,
+        "word_count_status": word_count_status,
+        "greeting": {
+            "valid": has_valid_greeting,
+            "type": "formal" if is_formal else ("informal" if is_informal else "unknown"),
+            "has_comma": has_greeting_comma
+        },
+        "has_lowercase_start_error": first_body_word_case_error,
+        "valediction": {
+            "valid": valediction_found,
+            "text": valediction_line
+        },
+        "has_valediction_comma_error": has_valediction_comma_error,
+        "leitpunkte_matches": leitpunkte_matches,
+        "leitpunkte_results": leitpunkte_results,
+        "suggestions": suggestions
+    }
+

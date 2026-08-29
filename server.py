@@ -1011,6 +1011,69 @@ def export_a1_anki():
     return FileResponse(path, filename="Goethe_A1_Wortliste.apkg", media_type="application/octet-stream")
 
 
+# --- Goethe-Zertifikat A1 Schreiben Workshop Endpoints ---
+class A1FormularCheckReq(BaseModel):
+    exercise_id: str
+    answers: Dict[str, str]
+
+
+class A1EmailDiagnoseReq(BaseModel):
+    text: str
+    leitpunkte: Optional[List[str]] = None
+
+
+@app.get("/api/a1/schreiben/teil1")
+def get_a1_schreiben_teil1():
+    import a1_writing_dict
+    return a1_writing_dict.A1_SCHREIBEN_TEIL1
+
+
+@app.post("/api/a1/schreiben/teil1/check")
+def check_a1_schreiben_teil1(req: A1FormularCheckReq):
+    import a1_writing_dict
+    from writing_rules import check_a1_formular_answer
+
+    ex_map = {ex["id"]: ex for ex in a1_writing_dict.A1_SCHREIBEN_TEIL1}
+    ex = ex_map.get(req.exercise_id)
+    if not ex:
+        raise HTTPException(404, "填表题目未找到")
+
+    results = {}
+    score = 0
+    total = len(ex["fields"])
+
+    for fld in ex["fields"]:
+        key = fld["key"]
+        user_val = req.answers.get(key, "")
+        chk = check_a1_formular_answer(user_val, fld["answer"], fld.get("aliases", []))
+        chk["tip"] = fld.get("tip", "")
+        chk["label"] = fld.get("label", "")
+        if chk["correct"]:
+            score += 1
+        results[key] = chk
+
+    return {
+        "exercise_id": req.exercise_id,
+        "score": score,
+        "total": total,
+        "all_correct": score == total,
+        "results": results
+    }
+
+
+@app.get("/api/a1/schreiben/teil2")
+def get_a1_schreiben_teil2():
+    import a1_writing_dict
+    return a1_writing_dict.A1_SCHREIBEN_TEIL2
+
+
+@app.post("/api/a1/schreiben/teil2/diagnose")
+def diagnose_a1_schreiben_teil2(req: A1EmailDiagnoseReq):
+    from writing_rules import analyze_a1_email
+    return analyze_a1_email(req.text[:2000], req.leitpunkte)
+
+
+
 # --- Edge Neural TTS Audio Endpoints ---
 class TTSReq(BaseModel):
     text: str

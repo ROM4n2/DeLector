@@ -8844,3 +8844,423 @@ body.drawer-open .companion {
   color: var(--ink-soft);
 }
 
+/* ── Goethe A1 Schreiben Workshop Styles ── */
+.writer-mode-switcher-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule-light);
+}
+
+.writer-mode-tab {
+  padding: 0.45rem 0.95rem;
+  border-radius: 99px;
+  border: 1px solid var(--rule-light);
+  background: var(--paper-card);
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+}
+
+.writer-mode-tab:hover {
+  background: var(--paper-tint);
+  border-color: var(--accent);
+}
+
+.writer-mode-tab.active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  font-weight: 600;
+}
+
+.a1-schreiben-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.a1-workbench-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--paper-card);
+  border: 1px solid var(--rule-light);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+
+.a1-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.a1-topbar-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.a1-formular-layout, .a1-email-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .a1-formular-layout, .a1-email-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.a1-passage-card, .a1-formular-card, .a1-email-editor-card, .a1-email-sample-card {
+  background: var(--paper-card);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1.25rem;
+  box-shadow: 2px 2px 0 var(--ink-faint);
+}
+
+.a1-card-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 0.5rem;
+}
+
+.a1-form-title {
+  font-family: var(--serif-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0.25rem 0 0.5rem;
+}
+
+.a1-form-scenario-desc {
+  font-style: italic;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.75rem;
+}
+
+.a1-form-passage-box {
+  background: var(--paper-tint);
+  border-left: 3.5px solid var(--accent);
+  padding: 0.85rem 1rem;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ink);
+  margin-bottom: 1rem;
+}
+
+.a1-exam-tip-box {
+  background: rgba(217, 119, 28, 0.08);
+  border: 1px dashed var(--amber);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+/* Formular Table & Fields */
+.a1-formular-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 1rem 0;
+}
+
+.a1-formular-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--paper);
+  border: 1px solid var(--rule-light);
+  border-radius: 6px;
+  transition: all var(--dur-fast) ease;
+}
+
+.a1-formular-field-row.is-correct {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.05);
+}
+
+.a1-formular-field-row.is-wrong {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+
+.a1-formular-label {
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.a1-formular-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.a1-formular-input {
+  flex: 1;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.925rem;
+  border: 1px solid var(--rule-light);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.a1-formular-input.input-correct {
+  border-color: #16a34a;
+  color: #15803d;
+  font-weight: 600;
+}
+
+.a1-formular-input.input-wrong {
+  border-color: #dc2626;
+  color: #b91c1c;
+}
+
+.a1-formular-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.a1-score-card {
+  padding: 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.a1-score-card.score-good {
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid #16a34a;
+  color: #15803d;
+}
+
+.a1-score-card.score-need-work {
+  background: rgba(217, 119, 28, 0.1);
+  border: 1px solid var(--amber);
+  color: #b45309;
+}
+
+/* Teil 2: E-Mail & Brief Styles */
+.a1-prompt-banner {
+  background: var(--paper-tint);
+  border: 1px solid var(--rule-light);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.a1-email-prompt-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+}
+
+.a1-leitpunkte-box {
+  background: var(--paper);
+  border: 1px dashed var(--rule);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+
+.a1-leitpunkte-label {
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: var(--ink-mute);
+  margin-bottom: 0.4rem;
+}
+
+.a1-leitpunkte-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.a1-leitpunkt-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  transition: all var(--dur-fast) ease;
+}
+
+.a1-leitpunkt-item.is-covered {
+  background: rgba(22, 163, 74, 0.08);
+  color: #15803d;
+  font-weight: 600;
+}
+
+.a1-email-live-meter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--paper);
+  border: 1px solid var(--rule-light);
+  border-radius: 6px;
+  font-size: 0.825rem;
+}
+
+.a1-meter-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.a1-diag-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  background: var(--paper-tint);
+  color: var(--ink-mute);
+}
+
+.a1-diag-badge.badge-ok {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  font-weight: 600;
+}
+
+.a1-diag-badge.badge-warn {
+  background: rgba(217, 119, 28, 0.12);
+  color: #b45309;
+  font-weight: 600;
+}
+
+.a1-diag-badge.badge-err {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.a1-diag-badge.badge-info {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.a1-email-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  border: 1.5px solid var(--rule);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  resize: vertical;
+  min-height: 140px;
+}
+
+.a1-email-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.a1-email-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.a1-diag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.a1-diag-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.a1-diag-item.diag-error {
+  background: rgba(220, 38, 38, 0.08);
+  border-left: 3px solid #dc2626;
+  color: #991b1b;
+}
+
+.a1-diag-item.diag-warning {
+  background: rgba(217, 119, 28, 0.08);
+  border-left: 3px solid var(--amber);
+  color: #9a3412;
+}
+
+.a1-diag-item.diag-info {
+  background: rgba(37, 99, 235, 0.08);
+  border-left: 3px solid #2563eb;
+  color: #1e40af;
+}
+
+.a1-diag-card.diag-perfect {
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid #16a34a;
+  color: #15803d;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.a1-email-sample-box {
+  background: var(--paper-tint);
+  border: 1px solid var(--rule-light);
+  border-radius: 6px;
+  padding: 1rem;
+  line-height: 1.6;
+}
+
+.a1-musterbrief-de {
+  font-size: 0.95rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.a1-phrases-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.a1-phrase-chip {
+  background: var(--paper);
+  border: 1px solid var(--rule-light);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.825rem;
+  color: var(--ink-soft);
+}
+
+
