@@ -174,3 +174,50 @@ def test_every_shared_audio_handler_guards_attempt_id():
         assert n >= 3, f"{chain} 里只找到 {n} 个异步回调，切片可能跑偏了"
     # myAttempt 必须在两条链路定义之前就绑定好
     assert _WORKBENCH.index("const myAttempt = ++_ttsAttemptId") < _WORKBENCH.index("const tryServer")
+
+
+# ── v4.6.6 β 契约：pickDeVoice 三级优先 + trySpeech 离线兜底 ──────────────
+
+def _pick_de_voice_body():
+    """pickDeVoice 函数体（不含签名行）。"""
+    body = _WORKBENCH.split("function pickDeVoice()")[1].split("\nfunction ")[0]
+    assert "de-DE" in body or "de[-_]DE" in body, "切片没落在 pickDeVoice 里"
+    return body
+
+
+def test_pick_de_voice_has_three_tier_fallback():
+    """pickDeVoice 必须有三级优先：de-DE 原生 → 任何 de 开头 → voices[0] 最终兜底。
+
+    国内 Android 机型多数没有 Google TTS 德语语音包，第三级是离线场景下
+    trySpeech 唯一能出声的路径（用非德语语音念德语词，发音不准但至少有声）。
+    删掉第三级 = 离线无网时静默无声，这条断言会变红。
+
+    变异验证（手工）：把 return voices[0] 改成 return null → 断言红 ✓
+    """
+    body = _pick_de_voice_body()
+    # 第一级：de-DE 区域匹配（用正则）
+    assert "de[-_]DE" in body or "/de[-_]DE/" in body, "第一级：缺 de-DE 原生语音检测"
+    # 第二级：任意 de 开头
+    assert "de[-_]?" in body or "/^de" in body, "第二级：缺 de-* 泛德语检测"
+    # 第三级：voices[0] 最终兜底（国内无德语语音时仍能出声）
+    assert "return voices[0]" in body, (
+        "第三级兜底缺失：无德语语音时 pickDeVoice 会返回 null，"
+        "trySpeech 走 no-de-voice 路径静默无声。"
+        "国内 Android 机型离线场景依赖这条 voices[0] 兜底。"
+    )
+
+
+def test_try_speech_handles_no_voice_explicitly():
+    """trySpeech 在 pickDeVoice 返回 null 时必须走 no-de-voice 显式拒绝，
+    而不是让后续代码对 null 抛 TypeError（静默失败或崩溃）。
+
+    仅在 voices 列表本身为空（voiceschanged 尚未触发）时才会命中这条；
+    只要 voices 非空，pickDeVoice 第三级兜底确保不会返回 null。
+    """
+    block = _WORKBENCH.split("const trySpeech")[1].split("const tryOnline")[0]
+    assert "no-de-voice" in block, "trySpeech 缺少 no-de-voice 显式错误路径"
+    # 确认是在 !voice 检查里返回，而不是直接用 voice 造成 TypeError
+    voice_check_pos = block.find("if (!voice)")
+    no_voice_pos = block.find("no-de-voice")
+    assert voice_check_pos >= 0, "trySpeech 必须有 if (!voice) 守卫"
+    assert voice_check_pos < no_voice_pos, "no-de-voice 必须在 if (!voice) 守卫内"
