@@ -5,8 +5,8 @@ plugins {
 
 // 版本号只维护一个源头：git tag。CI 从 tag 推导后通过环境变量注入，
 // 本地构建无环境变量时用 fallback 默认值。
-def releaseVersionName = System.getenv("DELECTOR_VERSION_NAME") ?: "4.4.8"
-def releaseVersionCode = (System.getenv("DELECTOR_VERSION_CODE") ?: "40408").toInteger()
+def releaseVersionName = System.getenv("DELECTOR_VERSION_NAME") ?: "4.7.3"
+def releaseVersionCode = (System.getenv("DELECTOR_VERSION_CODE") ?: "40703").toInteger()
 
 // 钉死的签名 keystore。CI 把它从 secret 解到 $RUNNER_TEMP（永不进工作树），
 // 本地开发与 fork 没有这个环境变量，签名配置整段不生效、回落到 AGP 自动生成的

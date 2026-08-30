@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import re
 from pathlib import Path
 
@@ -8,6 +9,7 @@ WRITER = (ROOT / "static" / "js" / "writer.js").read_text(encoding="utf-8")
 STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
 SW = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 SERVER = (ROOT / "server.py").read_text(encoding="utf-8")
+MAIN_JS = (ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
 GRADLE = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
 MAIN_ACTIVITY = (
     ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app" / "MainActivity.java"
@@ -122,6 +124,86 @@ def test_android_reunpacks_static_assets_on_version_change():
     assert "getAbsolutePath().equals(expected.getAbsolutePath())" in MAIN_ACTIVITY
 
 
+def _main_activity_code():
+    """剥掉注释后的 MainActivity 源码。
+
+    为什么要剥：说明文字里提到 DownloadManager 是在解释「为什么不用它」，
+    直接对整份文本做 `not in` 断言会把自己的注释判成回归。
+
+    不能用朴素正则 `//\\*.*?\\*/` + `//.*$`：MainActivity 的字符串字面量里
+    就有 `"text/*"` / `"image/*"`，会被误判成块注释开头，一路配到远处真正的
+    `*/` 把中间的真实代码（含 `ExportSaver.start`）整段吞掉。这里用状态机，
+    先跳过字符串/字符字面量再剥 // 与 /* */ 注释。
+    """
+    src = MAIN_ACTIVITY
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        nxt = src[i + 1] if i + 1 < n else ""
+        if c == '"':                      # 字符串字面量：原样保留，内部 /* // 不算注释
+            out.append(c); i += 1
+            while i < n:
+                if src[i] == "\\":
+                    out.append(src[i]); out.append(src[i + 1] if i + 1 < n else ""); i += 2; continue
+                out.append(src[i])
+                if src[i] == '"':
+                    i += 1; break
+                i += 1
+            continue
+        if c == "'":                      # 字符字面量
+            out.append(c); i += 1
+            while i < n:
+                if src[i] == "\\":
+                    out.append(src[i]); out.append(src[i + 1] if i + 1 < n else ""); i += 2; continue
+                out.append(src[i])
+                if src[i] == "'":
+                    i += 1; break
+                i += 1
+            continue
+        if c == "/" and nxt == "/":       # 行注释
+            i += 2
+            while i < n and src[i] != "\n":
+                i += 1
+            continue
+        if c == "/" and nxt == "*":       # 块注释
+            i += 2
+            while i < n and not (src[i] == "*" and i + 1 < n and src[i + 1] == "/"):
+                i += 1
+            i += 2
+            continue
+        out.append(c); i += 1
+    return "".join(out)
+
+
+def test_android_export_does_not_use_download_manager():
+    """Android 16 上 DownloadManager.enqueue() 会同步抛异常，原因只留在 logcat 里。
+
+    导出改为 App 进程内 HTTP 自取 + MediaStore 落盘（v4.7.3）。这条哨兵防的是
+    「改回去」：DownloadManager 在旧设备上一切正常，桌面端与旧安卓的回归测试
+    全绿，只有 Android 15/16 的用户会炸 —— 属于最容易被重新引入的一类回归。
+    """
+    code = _main_activity_code()
+    assert "DownloadManager" not in code, (
+        "MainActivity 又用上了 DownloadManager：它在 Android 16 上会同步抛异常，"
+        "落盘请走 ExportSaver"
+    )
+    assert "ExportSaver.start" in code, "下载回调必须委托给 ExportSaver"
+
+    saver = (
+        ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app"
+        / "ExportSaver.java"
+    ).read_text(encoding="utf-8")
+    # 内容自检：token 失效/过期时服务端返回的是 FastAPI 的错误 JSON
+    #（形如 {"detail": "..."}），不校验就会被毫不知情地存成「备份」且全程无报错。
+    # Java 源码里字符串内的双引号转义为 \"，故匹配转义形式。
+    assert '\\"detail\\"' in saver
+    assert "checkContent" in saver
+    # 顺序：先判定内容、再建 MediaStore 行。反过来的话进程在 IS_PENDING=1 期间
+    # 被杀会留下一个永久不可见、且无 READ 权限根本扫不出来清理的孤儿行。
+    assert "IS_PENDING" in saver
+
+
 def test_frontend_cache_gate_is_server_side():
     """?v= 查询串对 APK 升级无效：磁盘上那份文件本身就是旧的，
     请求 URL 与响应内容是一对自洽的旧配对，浏览器没有理由怀疑。
@@ -182,7 +264,7 @@ def test_version_row_hover_matches_other_rows():
     version_item = _rule_body(r"\.version-item\s*\{", "cursor: pointer")
     assert "cursor: pointer" in version_item
     version_hover = _rule_body(r"\.version-item:hover\s*\{")
-    assert "translateX(2px)" in version_hover
+    assert re.search(r"transform:\s*translateX\(\s*2px\s*\)", version_hover)
 
 
 def test_mobile_sheet_is_geometrically_stable():
@@ -223,6 +305,151 @@ def test_mobile_sheet_is_geometrically_stable():
     assert "flex-shrink: 0" in STYLE.split(".writer-pane {")[1].split("}")[0], (
         "父容器高度固定后，pane 缺 flex-shrink:0 会被压扁、溢出但滚不动"
     )
+
+
+def _mobile_writer_sidebar_block():
+    """取出 .writer-sidebar 在 @media (max-width: 860px) 内的几何块。
+    与 test_mobile_sheet_is_geometrically_stable 同款选择：多个匹配里挑
+    紧跟 'position: fixed' 的那条（移动 fixed 块），不要桌面基规则。"""
+    idxs = [m.end() for m in re.finditer(r"\.writer-sidebar\s*\{", STYLE)]
+    fixed = next(i for i in idxs if "position: fixed" in STYLE[i:i + 300])
+    depth, j = 1, fixed
+    while depth and j < len(STYLE):
+        c = STYLE[j]
+        if c == "{": depth += 1
+        elif c == "}": depth -= 1
+        j += 1
+    return STYLE[fixed:j - 1]
+
+
+def test_mobile_sheet_closed_state_clears_viewport():
+    """闭包几何必须是「贴底 + 100% 平移」—— 距离等于自身高度才完全离屏。
+
+    旧 bug：bottom: calc(4.75rem + env(safe-area-inset-bottom)) 与
+    transform: translateY(calc(100% + 1rem)) 错开 3.75rem，留 60px 的
+    「tab 条带」在视口里。条带 z-index 1100 整张遮住移动 dock (z 1000)，
+    用户看着 tab 能点（实际能点，panes 在屏外看不到），同时走不出写作台。
+
+    修法：bottom: 0（贴在视口底）+ transform: translateY(100%)，沿用
+    reader drawer（style.css:5275-5296）的「贴底 + 100%」同构模式。
+    """
+    sheet = _mobile_writer_sidebar_block()
+    assert "bottom: 0" in sheet, (
+        "闭包必须贴视口底（bottom: 0）。"
+        "之前的 4.75rem + safe-area 偏移与 100% 平移错开，留了 60px 条带"
+        "挡住移动 dock、tab 看着能点但 panes 在屏外。"
+    )
+    assert "transform: translateY(100%)" in sheet, (
+        "闭包平移距离必须等于自身高度（100%），保证闭包完全离屏。"
+    )
+    assert "translateY(calc(100% + 1rem))" not in sheet, (
+        "旧的「100% + 1rem」错开距离已重新引入 60px 闭包条带，回滚到 bug 状态。"
+    )
+    assert "bottom: calc(4.75rem" not in sheet, (
+        "旧的 4.75rem 偏移已重新引入 60px 闭包条带，回滚到 bug 状态。"
+    )
+
+
+def test_mobile_sheet_pads_above_dock_when_open():
+    """开的面板内部 padding-bottom 必须留出 dock 高度。
+
+    sheet (z 1100) 永远在 dock (z 1000) 之上 —— 这是 z-index 1000→1100
+    的历史决定（v4.4.4 把 sheet 抬过 dock 防被遮）。但 sheet 展开时若
+    不留 padding，dock 整条被压住。开 sheet 期间希望 dock 始终露在
+    sheet 内部的「底部留白」里、滚到底能看见。
+    """
+    sheet = _mobile_writer_sidebar_block()
+    # 找 padding-bottom 那一行
+    pb = re.search(r"padding-bottom:\s*([^;]+);", sheet)
+    assert pb, "sheet 必须显式 padding-bottom 留出 dock 高度，否则展开时 dock 整条被压住"
+    assert "58px" in pb.group(1), (
+        f"padding-bottom 必须含 58px（移动 dock 高度，style.css:5185）；"
+        f"实际拿到：{pb.group(1)!r}"
+    )
+
+
+def test_switch_view_closes_writer_mobile_panel():
+    """show(view) 切视图时必须关掉 writer 的 mobile sheet。
+
+    否则：reader → 硬件返回键 → show('home') 走 #view-writer display:none
+    但 scrim (.writer-mobile-panel-sheet.open) 仍挂着、body.writer-panel-lock
+    没解 —— 用户落在一个半透明、滚不动的 home 上（v4.4.5 的 lock 漏修
+    同族问题）。
+
+    typeof 守卫：closeWriterMobilePanel 来自 ./writer.js 的具名 export，
+    main.js:114-116 注入；模块加载失败时 typeof === 'undefined' 静默跳过。
+    """
+    show_body = MAIN_JS.split("export function show(")[1].split("\nexport ")[0]
+    assert "closeWriterMobilePanel" in show_body, (
+        "show(view) 必须调 closeWriterMobilePanel() 清掉 scrim + body lock + panel class，"
+        "否则切视图时上一视图的 writer mobile sheet 状态会污染下一视图"
+    )
+    # 不在 catch 路径里调用：那等于「失败时清」，正常路径仍污染。必须是无条件。
+    assert "if (typeof closeWriterMobilePanel" in show_body, (
+        "调用必须用 typeof 守卫直接调（不是包在 try/catch 里）——"
+        "包 try/catch 等于把这一行当作「出错时的兜底」而非常规清理。"
+    )
+
+
+def test_writer_has_explicit_back_button():
+    """写作台必须有显式返回键。
+
+    reader 有 `<button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>`
+    （index.html:91），writer 一直没有 —— 用户走写作台后只能依赖移动
+    dock 跳转，dock 在 sheet 开时被 scrim 遮（z 1050 > 1000）。闭包
+    几何修好后 dock 恢复可点，但单独的「← 返回文库」让走写作台这件事
+    变成一眼可识别的动作（与 reader 模式对称）。
+    """
+    # 取 .writer-header-bar 块（id 容器），要求里面至少一个 button 调用 show('home')
+    header_match = re.search(r'<div class="writer-header-bar">(.*?)</div>\s*<div class="writer-layout">', INDEX, re.S)
+    assert header_match, "index.html 找不到 .writer-header-bar 块"
+    header = header_match.group(1)
+    back_buttons = re.findall(r'<button[^>]*onclick="show\(\'home\'\)"', header)
+    assert back_buttons, (
+        "writer header 必须有显式返回文库的按钮（onclick=show('home')），"
+        "与 reader 的「← 返回文库」对称。当前 writer 只能依赖移动 dock 跳转，"
+        "dock 在 sheet 打开时会被 scrim 遮（z 1050 > 1000）。"
+    )
+
+
+def test_no_nav_or_action_button_uses_btn_secondary():
+    """index.html 里 3 个不该是「关/已完成」态的按钮不能再挂 .btn-secondary。
+
+    PR #15 把 .btn-secondary 定义为「淡字 + 虚边 + 浅底」读作「关闭 / 已完成」，
+    注释里写明只用于 ghost ↔ secondary 的互斥切换（writer.js:261 inlay ON/OFF、
+    writer.js:905 已存为 Anki 卡）。8 个 .btn-secondary 调用点里 3 个是动作/导航，
+    误用导致它们看起来像「已关闭 / 不可点」：
+
+    - index.html:184 「📚 文稿研读库」 onclick=show('home')  —— 跳转
+    - index.html:445 「⚡ 实时诊断」 onclick=analyzeWriterText(true)  —— 即时动作
+    - index.html:446 「📋 问题与历史」 唯一打开 mobile panel 的触发器，必须显眼
+
+    保留的合法 .btn-secondary 用途（writer.js:261, 905；index.html:1166）由
+    其余测试钉着。
+    """
+    # 行号在 PR #15 之后已变（加了返回键），按按钮文本+onclick 锁位置而非行号
+    patterns = [
+        ("📚 文稿研读库", "show('home')", "跳转到文库，不是状态"),
+        ("⚡ 实时诊断", "analyzeWriterText(true)", "即时诊断动作，不是状态"),
+        ("📋 问题与历史", "toggleWriterMobilePanel()", "唯一打开 panel 的触发器，必须显眼"),
+    ]
+    for emoji, onclick, why in patterns:
+        # 找最近的 <button ...>...emoji...</button> 块（中间允许 <span> 包裹）
+        block = re.search(
+            rf'<button([^>]*?)>(?:[^<]|<(?!/?button\s*>))*?{re.escape(emoji)}(?:[^<]|<(?!/?button\s*>))*?</button>',
+            INDEX,
+        )
+        assert block, f"index.html 找不到含 {emoji!r} 的 <button> 块"
+        attrs = block.group(1)
+        assert "btn-secondary" not in attrs, (
+            f"{emoji!r} 按钮不应挂 .btn-secondary：{why}。"
+            f"当前 class 含 btn-secondary 会让它渲染为「关/已完成」态"
+            f"（PR #15 把 .btn-secondary 定义为淡字虚边浅底）。"
+        )
+        # 同时确认它有可用的外观类（btn + 至少 btn-ghost 或 btn-dark 或 btn-accent）
+        assert re.search(r"\bbtn-(ghost|dark|accent)\b", attrs), (
+            f"{emoji!r} 按钮缺少可用的 btn-* 外观类（ghost/dark/accent）"
+        )
 
 
 def test_desktop_sidebar_is_internally_scrollable_when_tall():
@@ -317,3 +544,222 @@ def test_no_undefined_css_variables_in_writer_surfaces():
         f"这些历史欠账已经修好了，请从 KNOWN_LEGACY_UNDEFINED 里删掉："
         f"{sorted(KNOWN_LEGACY_UNDEFINED - still_missing)}"
     )
+
+
+def _style_without_comments():
+    """去掉 CSS 注释再找选择器。
+
+    否则注释里提到的 `.btn-xs`、`.btn-del` 会被当成已定义 —— 这个测试本来就是
+    为了抓"类名写了但规则不存在"，而解释性注释恰恰最爱提这些类名，
+    不剥注释等于自己把要抓的东西喂给自己（写下面那条棘轮时就先踩了一次）。
+    """
+    return re.sub(r"/\*.*?\*/", "", STYLE, flags=re.S)
+
+
+def _btn_classes_used_in_markup():
+    used = set()
+    for src in (INDEX, WRITER):
+        for attr in re.findall(r'class="([^"]*)"', src):
+            used.update(t for t in attr.split() if t.startswith("btn"))
+        # writer.js 有几处是运行时挂类，不在 class="" 里
+        for t in re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)", src):
+            if t.startswith("btn"):
+                used.add(t)
+    return used
+
+
+def test_every_btn_class_in_markup_has_a_css_rule():
+    """按钮类名拼错/漏定义不会报错，只会静默回退成裸 .btn。
+
+    v4.4.8 前 .btn-xs / .btn-del / .btn-secondary 三个类在 HTML/JS 里共用了 15 处，
+    但 CSS 里一条规则都没有：那些按钮全都拿着 .btn 的 36px 高和 1rem 内距在渲染，
+    看起来"能用"，所以谁都没发现 —— 于是作者改用 inline style 逐个硬调
+    （index.html:95-97,610,678 就是这么来的）。这条棘轮让下一次漏定义直接变红。
+    """
+    defined = set(re.findall(r"\.(btn[\w-]*)", _style_without_comments()))
+    missing = _btn_classes_used_in_markup() - defined
+    assert not missing, f"这些按钮类在 HTML/JS 里用了但 CSS 里没有规则：{sorted(missing)}"
+
+
+def test_btn_size_modifiers_all_reset_the_base_min_height():
+    """.btn 的 min-height:36px 会一直兜着，所以尺寸类光改 padding 和 font-size
+    是缩不小的 —— 每一档都必须显式 !important 重置 min-height 才真的生效。
+
+    `.btn-sm` 就是靠反例证明这一点的：它长期只写了 padding/字号，于是 4 处
+    调用点（index.html:542 保存快照、1167-1169 伴读面板三个键）实际全是 36px，
+    名字叫 sm 而尺寸和普通按钮一样，没人发现。
+
+    尺寸阶梯保持 36 → 30 → 26 三档单调递减；30px 取自 index.html:95-97
+    当初手写的 inline `min-height:30px`。
+    """
+    base = _rule_body(r"\.btn\s*\{")
+    assert "min-height: 36px" in base, "基规则的 36px 前提变了，本测试的理由需要重写"
+
+    heights = {}
+    for name, expected in (("btn-sm", 30), ("btn-xs", 26)):
+        body = _rule_body(rf"\.{name}\s*\{{")
+        m = re.search(r"min-height:\s*(\d+)px\s*!important", body)
+        assert m, f".{name} 必须带 !important 重置 min-height——否则盖不住 .btn 的 36px"
+        heights[name] = int(m.group(1))
+        assert int(m.group(1)) == expected, f".{name} 期望 {expected}px，实际 {m.group(1)}px"
+
+    assert 36 > heights["btn-sm"] > heights["btn-xs"], (
+        f"尺寸阶梯必须单调递减，现在是 36 / {heights['btn-sm']} / {heights['btn-xs']}"
+    )
+    assert re.search(r"padding:\s*0\s+0\.5rem\s*!important", _rule_body(r"\.btn-xs\s*\{"))
+
+
+def test_btn_secondary_is_visibly_different_from_btn_ghost():
+    """`.btn-secondary` 与 `.btn-ghost` 同外观 = 把状态指示器做成隐形的。
+
+    两处**只靠这个类的外观**传达状态，没有别的视觉线索：
+
+    - `writer.js:261` 用 ghost ↔ secondary 的互斥切换表示格提示 ON/OFF
+    - `writer.js:905` 用 accent → secondary 表示「已存为 Anki 语法卡」
+
+    v4.4.8 首次补上 `.btn-secondary` 规则时，正是照着 `.btn-ghost` 逐字写的
+    （当时的理由是"目前同外观，将来再分化"）—— 结果格提示按钮按下去只有文字
+    在变，背景边框一动不动。**在此之前反而是能看出区别的**：类没定义，OFF 态
+    回退成裸 .btn，无边框无底色。等于"补上缺失的规则"这个动作本身弄坏了状态显示。
+
+    所以这里断言的不是某个具体配色，而是**两者的声明必须不同**。
+    """
+    def declarations(selector):
+        body = _rule_body(rf"{selector}\s*\{{")
+        return {
+            (m.group(1).strip(), m.group(2).strip())
+            for m in re.finditer(r"([\w-]+)\s*:\s*([^;]+);", body)
+        }
+
+    ghost, secondary = declarations(r"\.btn-ghost"), declarations(r"\.btn-secondary")
+    assert ghost and secondary, "两条规则都得存在，否则下面的比较没有意义"
+    assert ghost != secondary, (
+        "`.btn-secondary` 与 `.btn-ghost` 的声明完全相同，格提示 ON/OFF 与"
+        "「已存为卡片」两处状态切换会变成隐形的（只有文字在变）。"
+        f"当前共同声明：{sorted(ghost)}"
+    )
+
+    # hover 态同样不能塌成一样 —— 否则鼠标一悬停两者又无从区分
+    assert declarations(r"\.btn-ghost:hover") != declarations(r"\.btn-secondary:hover"), (
+        "两者的 :hover 声明也相同，悬停时状态又变回不可区分"
+    )
+
+
+def test_destructive_surfaces_use_the_danger_token():
+    """删除类控件不得写死红色字面量，也不得借用 --cherry。
+
+    迁移前三处删除控件是三种不同的红：`.btn-del` 用 --danger(#B03030)、
+    `.card-del-btn` 用 --cherry(同色但语义是"答错")、`.article-row-del` 用
+    硬编码 #dc2626（**明显更亮的另一种红**）。同一个动作三种红，且其中两处
+    改 token 也带不动。
+
+    --cherry 仍然合法 —— 但只用于答错/错误反馈（cloze.js:40、main.js:205,253
+    的报错文字就该留着用它），不用于破坏性操作。
+    """
+    for selector in (r"\.btn-del", r"\.btn-del:hover", r"\.card-del-btn:hover",
+                     r"\.article-row-del:hover"):
+        body = _rule_body(rf"{selector}\s*\{{")
+        assert "var(--cherry)" not in body, (
+            f"{selector} 用了 --cherry；破坏性操作应该用 --danger"
+        )
+        assert not re.search(r"#dc2626|#fde8e8|rgba\(220,\s*38,\s*38", body), (
+            f"{selector} 里还有写死的红色字面量，应该走 --danger"
+        )
+
+    # 至少 .btn-del 与 .card-del-btn 要真的引用 token（article-row-del 用
+    # rgba() 调透明度，无法直接套 var()，只断言它不再是另一种红）
+    for selector in (r"\.btn-del", r"\.card-del-btn:hover"):
+        assert "var(--danger)" in _rule_body(rf"{selector}\s*\{{"), \
+            f"{selector} 应该引用 --danger"
+
+    # 删除按钮的红不该再靠 inline style 挂在 HTML 上 —— 那样既绕过 token
+    # 体系又没有 hover 态（index.html:684 的删便签键原先就是这样）
+    for m in re.finditer(r'<button[^>]*style="[^"]*var\(--cherry\)[^"]*"[^>]*>', INDEX):
+        assert "del" not in m.group(0), (
+            f"删除按钮还在用 inline 的 --cherry，应该改挂 .btn-del 类：{m.group(0)[:120]}"
+        )
+
+
+def test_no_rule_is_fully_shadowed_by_btn_xs_important():
+    """.btn-xs 三条声明全带 !important，同元素上的伴生类会被整条盖死。
+
+    `.version-restore-btn` 就是这么变成死规则的：它设 font-size / padding /
+    border-radius 三项，而调用点写的是 `btn btn-ghost btn-xs version-restore-btn`
+    —— `.btn-xs` 的 !important 把三项全盖掉，一条声明都没生效。删掉比留着强：
+    留着会让下一个人以为改它有用。
+
+    这里检查所有与 .btn-xs 同时出现在 class 里的伴生类，其声明不能被
+    .btn-xs 的 !important 属性集完全覆盖。
+    """
+    xs_important = {
+        m.group(1)
+        for m in re.finditer(r"([\w-]+)\s*:[^;]*!important\s*;",
+                             _rule_body(r"\.btn-xs\s*\{"))
+    }
+    assert xs_important, ".btn-xs 里没有 !important 声明，本测试的前提变了"
+
+    companions = set()
+    for src in (INDEX, WRITER):
+        for attr in re.findall(r'class="([^"]*)"', src):
+            classes = attr.split()
+            if "btn-xs" in classes:
+                companions.update(c for c in classes
+                                  if c not in {"btn", "btn-xs"} and not c.startswith("btn-"))
+
+    bare = _style_without_comments()
+    for cls in sorted(companions):
+        if not re.search(rf"^\.{re.escape(cls)}\s*\{{", bare, re.M):
+            continue                                  # 没有规则，谈不上被盖
+        props = {
+            m.group(1)
+            for m in re.finditer(r"([\w-]+)\s*:", _rule_body(rf"\.{re.escape(cls)}\s*\{{"))
+        }
+        assert not (props and props <= xs_important), (
+            f".{cls} 的全部声明 {sorted(props)} 都被 .btn-xs 的 !important 盖掉了，"
+            f"整条规则不生效。要么删掉，要么给需要生效的那几项加 !important"
+        )
+
+
+def test_btn_del_uses_the_danger_token_and_outranks_btn_ghost():
+    """--danger 与 --cherry 目前同色，但语义分开：cherry = 答错反馈（SRS/quiz/
+    错误下划线），danger = 破坏性操作。同色时合并看着更省，可一旦要单独调其中
+    一个（比如把答错色调柔和），共用一个 token 就得先把几十处调用点分类，
+    那时候已经分不清哪处是哪个意思了。
+    """
+    root = _rule_body(r":root\s*\{")
+    assert re.search(r"--danger:\s*#B03030", root, re.I)
+    assert re.search(r"--danger-strong:\s*#C84444", root, re.I)
+
+    body = _rule_body(r"\.btn-del\s*\{")
+    assert "var(--danger)" in body, ".btn-del 应该用 --danger，不要直接写死色值"
+
+    hover = _rule_body(r"\.btn-del:hover\s*\{")
+    assert "var(--danger)" in hover
+
+    # 调用点写的是 class="btn btn-ghost btn-xs btn-del"：.btn-ghost 和 .btn-del
+    # 都是单类选择器，特异度相同，只有源序能决定谁的 color 生效。
+    bare = _style_without_comments()
+    assert bare.index(".btn-del") > bare.index(".btn-ghost"), (
+        ".btn-del 必须排在 .btn-ghost 之后，否则删除键的红字被 ghost 的字色盖掉"
+    )
+
+
+def test_button_rules_are_not_duplicated():
+    """.deck-btn-nav 曾整块（含 :hover / :disabled）逐字重复两遍。
+
+    完全相同的重复块不会改变渲染，所以永远不会有人因为"看起来不对"而发现它；
+    真正的代价是下一个人只改了其中一份，另一份继续生效，于是"改了没用"。
+    """
+    bare = _style_without_comments()
+    for selector in (".deck-btn-nav", ".btn-secondary", ".btn-xs", ".btn-del"):
+        n = len(re.findall(rf"^{re.escape(selector)}\s*\{{", bare, re.M))
+        assert n == 1, f"{selector} 的基规则出现了 {n} 次，应该只有 1 次"
+
+
+def test_android_back_press_covers_all_overlays():
+    """MainActivity.java 的 onBackPressed 必须覆盖所有浮层与抽屉，避免按返回键直接退出 App。"""
+    assert "closeQuizOverlay" in MAIN_ACTIVITY
+    assert "closeClozeModal" in MAIN_ACTIVITY
+    assert "closePolishOverlay" in MAIN_ACTIVITY
+    assert "closeVersionPreview" in MAIN_ACTIVITY
+    assert "closeWriterMobilePanel" in MAIN_ACTIVITY

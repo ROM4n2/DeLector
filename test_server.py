@@ -1,8 +1,11 @@
 import os
 import json
 import re
+import time
+import ipaddress
 import pytest
 from fastapi.testclient import TestClient
+from linguistics import PREP_COLLOCATIONS
 
 # Ensure test DBs are isolated
 os.environ["DATABASE_PATH"] = "test_delector.db"
@@ -15,6 +18,9 @@ from server import (
     get_progress_db, set_setting,
     BACKUP_FORMAT_VERSION, BACKUP_SETTINGS_WHITELIST,
 )
+# 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
+# 钉住的 IPv6 段），必须在上面设好 DATABASE_PATH 之后再 import。
+import server
 
 @pytest.fixture
 def test_db_path():
@@ -448,7 +454,7 @@ def test_delete_essay_cascades_versions(client, test_db_path):
 
 def test_seed_preset_articles_with_a1(client, test_db_path):
     init_db(test_db_path)
-    
+
     with get_db(test_db_path) as conn:
         rows = conn.execute("SELECT title, raw_text FROM articles").fetchall()
         assert len(rows) >= 4
@@ -584,7 +590,7 @@ def test_backup_export_and_restore_roundtrip(client):
     assert "articles" in data
     assert "vocab_cards" in data
     assert "grammar_cards" in data
-    
+
     # 2. Modify or add custom entry
     custom_backup = {
         "version": 1,
@@ -621,11 +627,11 @@ def test_backup_export_and_restore_roundtrip(client):
             "created_at": "2026-08-18 12:00:00"
         }]
     }
-    
+
     # 3. Restore custom backup
     res_restore = client.post("/api/backup/restore", json=custom_backup)
     assert res_restore.status_code == 200
-    
+
     # 4. Verify roundtrip integrity
     res_verify = client.get("/api/articles/999")
     assert res_verify.status_code == 200
@@ -813,12 +819,18 @@ def test_backup_endpoints_reject_lan_clients(lan_client, method, path):
     assert res.status_code == 403
 
 
-def test_prepare_and_download_backup_is_single_use(client):
+def test_prepare_and_download_backup_is_reusable_within_ttl(client):
     """Android 导出链路：POST 组装（带 localStorage）→ GET 下载（带 attachment 头）。
 
     为什么不能沿用 blob:：Android WebView 的 DownloadListener 对 blob: URL
     永不触发，且没有 shouldOverrideUrlLoading 兜底，点击是静默无操作。
     真 http URL + Content-Disposition 是这个 App 里唯一被证明能下载的路径。
+
+    为什么 token 是「TTL 内可重复取」而不是单次有效（v4.7.3 改）：
+    Android 上同一个下载 URL 会被取两次 —— WebView 为了嗅探 Content-Disposition
+    先发一次 GET，App 侧的落盘逻辑再发第二次。单次有效时第一次就烧掉 token，
+    第二次拿到 404，于是把 {"detail": "备份链接已失效"} 当成备份存下来：
+    用户手里是一份假备份，全程无报错，比直接失败更难发现。
     """
     ls = {"delector_voice": "de-DE-ConradNeural",
           "delector_companion_custom_svg": "<svg/>"}
@@ -836,13 +848,66 @@ def test_prepare_and_download_backup_is_single_use(client):
     assert body["local_storage"] == ls          # localStorage 必须原样带上
     assert "articles" in body and "daily_summary" in body
 
-    # token 单次有效，用后内存槽清空
+    # TTL 内第二次必须拿到完全相同的内容 —— 这就是 Android 那条链路的实际形态
+    again = client.get(f"/api/backup/download/{token}")
+    assert again.status_code == 200
+    assert again.text == res.text
+
+
+def test_download_token_expires_after_ttl(client):
+    """TTL 过期后必须拒绝，否则一个 token 就变成永久有效。
+
+    用 410 而不是 404，是为了把它和「token 不对」区分开 —— 两者在用户侧的处置
+    不同（前者重导一次就行，后者说明链接被截断了）。
+    """
+    token = client.post("/api/backup/prepare", json={"local_storage": {}}).json()["token"]
+    assert client.get(f"/api/backup/download/{token}").status_code == 200
+
+    server._pending_backup["expires_at"] = time.time() - 1
+    assert client.get(f"/api/backup/download/{token}").status_code == 410
+    # 过期即清空槽位，重放同一个 token 不该复活
     assert client.get(f"/api/backup/download/{token}").status_code == 404
 
 
 def test_download_rejects_unknown_token(client):
     client.post("/api/backup/prepare", json={"local_storage": {}})
     assert client.get("/api/backup/download/not-the-right-token").status_code == 404
+
+
+def test_backup_download_response_forbids_caching(client):
+    """no-store 是 TTL 改动的配套要求，不是洁癖。
+
+    同一个下载 URL 会被取两次，中间只要有一次拿到 404 错误体，WebView 的 HTTP
+    缓存就可能记住它 —— 第二次连服务端都不问，直接把缓存的错误 JSON 交给落盘
+    逻辑存成「备份」。这是唯一能绕过 Android 侧内容自检的路径。
+    """
+    token = client.post("/api/backup/prepare", json={"local_storage": {}}).json()["token"]
+    res = client.get(f"/api/backup/download/{token}")
+    assert res.status_code == 200
+    assert "no-store" in res.headers["cache-control"]
+    assert 'filename="' in res.headers["content-disposition"], "RFC 6266 要求 filename 加引号"
+
+    wb = client.post("/api/wb/backup/prepare",
+                     json={"payload": {"a": 1}, "filename": "wb-test.json"}).json()
+    res2 = client.get(f"/api/wb/backup/download/{wb['token']}")
+    assert res2.status_code == 200
+    assert "no-store" in res2.headers["cache-control"]
+    assert 'filename="wb-test.json"' in res2.headers["content-disposition"]
+
+
+def test_attachment_headers_are_only_built_by_the_shared_helper():
+    """所有 attachment 响应头必须由 _attachment_headers 统一生成。
+
+    手写一份就漏掉 no-store 或引号：前者造出假备份，后者让 Android 的
+    URLUtil.guessFileName 各版本解析不一致（拿到 token 当文件名）。
+    """
+    src = (os.path.join(os.path.dirname(__file__), "server.py"))
+    with open(src, encoding="utf-8") as f:
+        text = f.read()
+    assert "def _attachment_headers" in text
+    assert text.count("attachment; filename=") == 1, (
+        "server.py 里出现了多份手写的 Content-Disposition，请改用 _attachment_headers"
+    )
 
 
 def test_frontend_export_does_not_use_blob_download():
@@ -866,9 +931,9 @@ def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     from unittest.mock import AsyncMock
     fake_mp3 = tmp_path / "fake_de.mp3"
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00mock_audio_data")
-    
+
     monkeypatch.setattr("server.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
-    
+
     res = client.post("/api/audio/tts", json={"text": "Hallo Berlin!", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 200
     assert res.headers["content-type"] == "audio/mpeg"
@@ -1409,23 +1474,23 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
 def test_separable_verbs_extraction():
     """Verify spaCy dependency extraction for German separable verbs."""
     from server import process_german_text
-    
+
     text = "Er steigt jeden Morgen in den Zug ein."
     res = process_german_text(text)
     assert res["sentence_count"] >= 1
     sent = res["sentences"][0]
     tokens = sent["tokens"]
-    
+
     verb_tok = next((t for t in tokens if t["text"] == "steigt"), None)
     prefix_tok = next((t for t in tokens if t["text"] == "ein"), None)
-    
+
     assert verb_tok is not None, "Verb token 'steigt' not found"
     assert prefix_tok is not None, "Prefix token 'ein' not found"
-    
+
     assert "separable" in verb_tok, "separable info missing on verb token"
     assert verb_tok["separable"]["sep_prefix_id"] == prefix_tok["id"]
     assert verb_tok["separable"]["sep_lemma"] == "einsteigen"
-    
+
     assert "separable" in prefix_tok, "separable info missing on prefix token"
     assert prefix_tok["separable"]["sep_verb_id"] == verb_tok["id"]
     assert prefix_tok["separable"]["sep_lemma"] == "einsteigen"
@@ -1434,7 +1499,7 @@ def test_separable_verbs_extraction():
 def test_irregular_verb_stammformen_lookup():
     """Verify Goethe irregular/strong verb Stammformen reverse lookup."""
     from linguistics import lookup_irregular_verb
-    
+
     # 1. Base infinitive
     res_gehen = lookup_irregular_verb("gehen")
     assert res_gehen is not None
@@ -1442,16 +1507,16 @@ def test_irregular_verb_stammformen_lookup():
     assert res_gehen["praeteritum"] == "ging"
     assert res_gehen["partizip2"] == "gegangen"
     assert res_gehen["hilfsverb"] == "ist"
-    
+
     # 2. Conjugated / past reverse lookup
     res_ging = lookup_irregular_verb("ging")
     assert res_ging is not None
     assert res_ging["infinitiv"] == "gehen"
-    
+
     res_gegangen = lookup_irregular_verb("gegangen")
     assert res_gegangen is not None
     assert res_gegangen["infinitiv"] == "gehen"
-    
+
     # 3. Separable compound irregular verb
     res_einsteigen = lookup_irregular_verb("einsteigen")
     assert res_einsteigen is not None
@@ -1464,13 +1529,13 @@ def test_irregular_verb_stammformen_lookup():
 def test_komposita_splitting():
     """Verify German compound noun splitting with Fugenelemente."""
     from linguistics import split_komposita
-    
+
     # 1. Two-part compound
     klima_parts = split_komposita("Klimaschutz")
     assert len(klima_parts) == 2
     assert klima_parts[0]["lemma"] == "klima"
     assert klima_parts[1]["lemma"] == "schutz"
-    
+
     # 3. Plural compound noun with linking -s- and plural -en
     klima_massnahmen = split_komposita("Klimaschutzmaßnahmen")
     assert len(klima_massnahmen) >= 2
@@ -1498,7 +1563,7 @@ def test_vocab_lookup_with_linguistics_stammformen_and_komposita(client):
     assert data_verb["stammformen"]["praeteritum"] == "ging"
     assert data_verb["stammformen"]["partizip2"] == "gegangen"
     assert data_verb["stammformen"]["hilfsverb"] == "ist"
-    
+
     # 2. Compound lookup returns komposita
     res_comp = client.post("/api/lookup/vocab", json={
         "sentence": "Klimaschutz ist eine globale Aufgabe.",
@@ -1657,7 +1722,7 @@ def test_process_german_text_includes_topology_and_clause_tree():
     processed = process_german_text("Er hat das Buch gelesen. Wenn er Zeit hat, kommt er vorbei.")
     assert processed["version"] == "3.5.0"
     assert len(processed["sentences"]) == 2
-    
+
     s0 = processed["sentences"][0]
     assert "topology" in s0
     assert "clause_tree" in s0
@@ -2363,14 +2428,81 @@ def test_is_safe_public_url_accepts_public_target_behind_ipv6_transition(monkeyp
     assert is_safe_public_url("https://transition.example/") is True, note
 
 
+_IPV6_SPECIAL_ADDRS = (
+    "2001:db8::1",     # documentation（在 2001::/23 之外）
+    "2001:2::1",       # benchmarking
+    "2001:3::1",       # AMT
+    "2001:4:112::1",   # AS112-v6
+    "2001:10::1",      # ORCHID（已弃用）
+    "2001:20::1",      # ORCHIDv2 —— 3.11.16 上从 ipaddress 的表里掉了出来
+    "2001:30::1",      # Drone Remote ID
+    "100::1",          # discard-only
+    "5f00::1",         # SRv6 SID
+    "64:ff9b:1::1",    # 本地用 IPv4/IPv6 转换
+)
+
+
 def test_is_safe_public_url_still_rejects_non_teredo_2001_ranges(monkeypatch):
     """`2001::/23` 里除 Teredo 之外的保留段不能被顺手放开。
 
     修法是「只对 Teredo/6to4/IPv4-mapped 解包」，不是「把 2001:: 整段当公网」。
     """
-    for addr in ("2001:db8::1", "2001:2::1", "2001:10::1", "2001:20::1"):
+    for addr in _IPV6_SPECIAL_ADDRS:
         _pin_resolution(monkeypatch, addr)
         assert is_safe_public_url("https://reserved.example/") is False, addr
+
+
+def test_ipv6_special_ranges_are_pinned_in_our_own_code():
+    """这些段必须由**我们自己的常量**兜住，不能只靠 `ipaddress` 的私有段表。
+
+    那张表会随 Python 补丁版本变：3.11.8 里有一条粗粒度的 `2001::/23`，把整个
+    IETF Protocol Assignments 块兜住；3.11.16 换成细粒度条目后 `2001:20::/28`
+    (ORCHIDv2) 掉了出来，闸门就此放行。同一份代码、同一个 3.11 大版本，
+    判定结果相反 —— 本机绿而 CI 红，v4.4.8 首次发布就是这么挂的。
+    """
+    import ipaddress as _ip
+    import server as _srv
+
+    for addr in _IPV6_SPECIAL_ADDRS:
+        obj = _ip.ip_address(addr)
+        assert (obj in _srv._IETF_PROTOCOL_ASSIGNMENTS
+                or any(obj in net for net in _srv._IPV6_DENY_PREFIXES)), (
+            f"{addr} 只靠 ipaddress 的表兜着，换个 Python 补丁版本就会漏"
+        )
+
+
+class _FlaglessIPv6(ipaddress.IPv6Address):
+    """把 stdlib 的所有旗标压成假的 IPv6 地址替身。
+
+    要单独验证「我们自己钉的段」在起作用，就必须把 `ipaddress` 那张表的贡献
+    摘干净：真地址在 3.11.8 上会被粗粒度的 `2001::/23` 条目兜住，把
+    `_is_blocked_addr` 里我们的范围检查整段删掉，本机照样全绿 —— v4.4.8
+    第一次发版就是这么被放过去的。
+
+    为什么不改 stdlib 那张表来模拟 CI 的 Python：3.11.8 的 `is_private` 上还挂着
+    `functools.lru_cache`，只要**任何**更早的测试算过同一个地址，结果就被永久缓存，
+    之后改表毫无作用 —— 测试会随执行顺序时红时绿。替身不碰 CPython 内部，
+    换 Python 版本也不会漂。
+    """
+
+    is_private = False
+    is_loopback = False
+    is_link_local = False
+    is_reserved = False
+    is_multicast = False
+    is_unspecified = False
+
+
+def test_is_blocked_addr_relies_on_our_own_pinned_ranges():
+    """旗标全假时仍要拒 —— 拒绝理由只能来自我们钉的段，不能来自 stdlib。"""
+    for addr in _IPV6_SPECIAL_ADDRS:
+        assert server._is_blocked_addr(_FlaglessIPv6(addr)) is True, addr
+
+    # 反向：替身不是「什么都拒」。公网地址、以及 Teredo 包着的公网 IPv4
+    # （已在 `_resolve_ssrf_targets` 里解包成 70.210.248.70）都必须放行。
+    for addr in ("2a03:2880:f11b:83:face:b00c:0:25de", "2606:4700::1111",
+                 "2001::b92d:7b9"):
+        assert server._is_blocked_addr(_FlaglessIPv6(addr)) is False, addr
 
 
 def test_url_ingest_gate_is_pinned_not_dns_dependent():
@@ -2624,9 +2756,7 @@ def test_backup_download_rejects_lan_even_with_valid_token(client, lan_client):
 
 def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
     """被 403 的还原请求不得改库。"""
-    import sqlite3
     import server
-    from unittest.mock import patch
     # 先写一条已知文章
     with server.get_db(test_db_path) as conn:
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
@@ -2645,7 +2775,6 @@ def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
 
 def test_backup_restore_failure_keeps_original_db(client, test_db_path):
     """还原失败（DB 约束错误）必须通过文件快照回滚，原始文章保持不变。"""
-    import sqlite3
     import server
     from fastapi.testclient import TestClient as TC
     # 用 raise_server_exceptions=False 才能拿到 500 响应而非抛异常
@@ -2688,7 +2817,7 @@ def test_backup_loopback_still_succeeds(client):
 
 def test_android_spacy_module_load_fallback_static():
     """_load_spacy_model 必须包含 module.load() 回退（Android 无 dist-info 时唯一可用路径）。"""
-    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
     assert "importlib.import_module" in src, "缺 importlib 回退"
     assert "module.load()" in src, "缺 module.load() 回退"
     assert "spacy.load(name)" in src or 'spacy.load(' in src, "缺 spacy.load(name) 首选路径"
@@ -2696,14 +2825,14 @@ def test_android_spacy_module_load_fallback_static():
 
 def test_android_spacy_model_dir_fallback_static():
     """模型目录 glob 回退必须存在（meta 版本与目录名不一致时的最后兜底）。"""
-    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
     assert "glob(f\"{name}-*\"" in src or 'glob(f"{name}-' in src, "缺模型目录 glob 兜底"
     assert "data_dirs" in src, "缺 data_dirs 变量"
 
 
 def test_android_spacy_download_gated_by_is_android_static():
     """自动下载必须被 is_android() 门控，否则 Android import 期起 pip 子进程卡死。"""
-    src = open(os.path.join(os.path.dirname(__file__), "server.py"), encoding="utf-8").read()
+    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
     # 必须有 is_android 判断且在 download 之前
     assert "is_android()" in src, "缺 is_android() 判断"
     # 确保下载路径在 is_android 分支保护下，而非无条件
@@ -2891,3 +3020,329 @@ def test_frontend_assets_send_no_cache_header(client):
     assert api.status_code == 200
     assert "cache-control" not in api.headers, \
         f"/api/articles 被加上了 Cache-Control：{api.headers.get('cache-control')!r}"
+
+
+# ── GET /api/prep/matrix ─────────────────────────────────────────────────────
+
+def test_prep_matrix_endpoint_shape(client):
+    """shape 契约：每组都长得一样，抽检 21 组而不是只抽首组。
+
+    原来的写法只检 `groups[0]`，塞在第 5 组的字段不一致它抓不到。
+    cefr 字段是 server 层注入的契约，用 == 钉住「恰好这五个键」避免
+    偷偷加 debug 字段再也没人知道。
+    """
+    r = client.get("/api/prep/matrix")
+    assert r.status_code == 200
+    data = r.json()
+    assert set(data) == {"groups"}
+    groups = data["groups"]
+    assert isinstance(groups, list) and groups
+    for g in groups:
+        assert set(g) == {"praeposition", "total", "cases"}
+        entries = [e for entries in g["cases"].values() for e in entries]
+        assert entries, f"空组 {g['praeposition']} 不应出现"
+        for e in entries:
+            assert set(e) == {"lemma", "reflexive", "bedeutung_zh", "beispiel", "cefr"}
+            assert isinstance(e["reflexive"], bool)
+        assert g["total"] == sum(len(v) for v in g["cases"].values())
+
+
+def test_prep_matrix_groups_ordered_by_size_desc(client):
+    """组间「常用者优先」是本层的呈现契约（纯函数只保证组内 lemma 序）。"""
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    totals = [g["total"] for g in groups]
+    assert totals == sorted(totals, reverse=True), f"组未按搭配总数降序：{totals[:8]}"
+
+
+def test_prep_matrix_endpoint_matches_pure_function(client):
+    """端点响应 = 纯函数扁平化 + CEFR 注入，**不许有第二种真相**。
+
+    多重集用全字段做键（praep, kasus, lemma, zh, bsp, cefr），独立于服务端
+    实现：之前的版本只用了 (praep, kasus, lemma)，fuse 进了同名重复的
+    reflexive vs 非 reflexive 两条（`('für','Akk','ausgeben')` 出现 2 次），
+    静默漏掉了 2 个条目。
+    """
+    from collections import Counter
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    expected = Counter(
+        (r[0].strip().lower(), r[1].strip().capitalize(), lemma, r[2], r[3])
+        for lemma, rows in PREP_COLLOCATIONS.items()
+        for r in rows
+    )
+    got = Counter(
+        (e["lemma"], k, e["lemma"], e["bedeutung_zh"], e["beispiel"])
+        for g in groups for k, es in g["cases"].items() for e in es
+        for _ in [None]  # 占位：上面期望 5 元组，下面也给 5 元组
+    )
+    # 上一行 got 写成了 `(e["lemma"], k, e["lemma"], e["bedeutung_zh"], e["beispiel"])` —— 复制粘贴遗物
+    # 真正要比的元组是 (praep, kasus, lemma, zh, bsp)：
+    got = Counter(
+        (g["praeposition"], k, e["lemma"], e["bedeutung_zh"], e["beispiel"])
+        for g in groups for k, es in g["cases"].items() for e in es
+    )
+    # CEFR 是 server 层注入，不在 expected 期望里；用 bedeutung_zh 一致就能
+    # 区分「实现错位」与「CEFR 算法变更」两种失败。
+    assert got == expected, (
+        f"端点响应与数据集不匹配：丢 {len(expected) - len(got)} 条" if got != expected else "")
+
+
+def test_prep_matrix_endpoint_fields_preserved(client):
+    """独立检验：端点不能改写核心字段（lemma/bedeutung_zh/beispiel）—— 上一个
+    测试只比 (praep, kasus, lemma) 三元组，恰好能容忍「端点把释义
+    换成 example」的破坏。这里把每个 entry 的 bedeutung_zh / beispiel
+    跟数据集对应行对回源。"""
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    src = {(r[0].strip().lower(), r[1].strip().capitalize(), lemma, r[2]): r[3]
+           for lemma, rows in PREP_COLLOCATIONS.items() for r in rows}
+    for g in groups:
+        for kasus, entries in g["cases"].items():
+            for e in entries:
+                key = (g["praeposition"], kasus, e["lemma"], e["bedeutung_zh"])
+                assert key in src, f"端点凭空生成条目：{key}"
+                assert e["beispiel"] == src[key], f"例句被改写：{key}"
+
+
+def test_prep_matrix_conserves_dataset_total(client):
+    """端点不许在扁平化时丢词条：总数必须等于纯函数展开的总数。"""
+    from linguistics import build_prep_matrix
+    core_total = sum(len(es) for by_case in build_prep_matrix().values()
+                     for es in by_case.values())
+    groups = client.get("/api/prep/matrix").json()["groups"]
+    assert sum(g["total"] for g in groups) == core_total > 0
+
+
+def test_prep_matrix_endpoint_no_auth_gate(client, lan_client):
+    """介词矩阵是只读静态知识，不该被备份端点那种「仅 127.0.0.1」闸拦住。"""
+    assert client.get("/api/prep/matrix").status_code == 200
+    assert lan_client.get("/api/prep/matrix").status_code == 200
+
+
+# ── GET /api/audio/tts ───────────────────────────────────────────────────────
+
+def test_get_audio_tts_returns_mp3(client):
+    """GET 版 TTS 端点：供 workbench <audio src> 直接用，无需 fetch + blob。"""
+    r = client.get("/api/audio/tts", params={"text": "hallo"})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "audio/mpeg"
+    assert len(r.content) > 0
+    assert 'filename="speech.mp3"' in r.headers.get("content-disposition", "")
+
+
+def test_get_audio_tts_rejects_empty_text(client):
+    r = client.get("/api/audio/tts", params={"text": ""})
+    assert r.status_code == 400
+
+
+def test_get_audio_tts_rejects_overlong_text(client):
+    r = client.get("/api/audio/tts", params={"text": "x" * 1001})
+    assert r.status_code == 400
+
+
+def test_get_audio_tts_rejects_malformed_rate(client):
+    r = client.get("/api/audio/tts", params={"text": "hallo", "rate": "banana"})
+    assert r.status_code == 400
+
+
+# ── GET/POST /api/prep/saved ──────────────────────────────────────────────────
+
+def test_prep_saved_endpoint_returns_keys(client):
+    """GET /api/prep/saved 返回 {"keys": [...]} 结构。"""
+    resp = client.get("/api/prep/saved")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "keys" in data
+    assert isinstance(data["keys"], list)
+
+
+def test_prep_saved_post_and_get_roundtrip(client):
+    """POST 一条搭配后 GET 能查到，且随备份导出与还原。"""
+    resp = client.post("/api/prep/saved", json={"lemma": "freuen", "praep": "auf", "kasus": "Akk"})
+    assert resp.status_code == 200
+    resp = client.get("/api/prep/saved")
+    data = resp.json()
+    assert "freuen|auf|Akk" in data["keys"]
+
+    # 验证备份导出与还原包含 prep_saved
+    backup = client.get("/api/backup/export").json()
+    assert "prep_saved" in backup
+    assert any(r["lemma"] == "freuen" and r["praep"] == "auf" and r["kasus"] == "Akk" for r in backup["prep_saved"])
+    restore_res = client.post("/api/backup/restore", json=backup)
+    assert restore_res.status_code == 200
+    restored = client.get("/api/prep/saved").json()
+    assert "freuen|auf|Akk" in restored["keys"]
+
+
+
+def test_prep_saved_idempotent(client):
+    """重复 POST 同一条搭配不会出错（主键约束）。"""
+    client.post("/api/prep/saved", json={"lemma": "warten", "praep": "auf", "kasus": "Akk"})
+    client.post("/api/prep/saved", json={"lemma": "warten", "praep": "auf", "kasus": "Akk"})
+    resp = client.get("/api/prep/saved")
+    assert resp.json()["keys"].count("warten|auf|Akk") == 1
+
+
+# ── POST /api/wb/sync/store & GET /api/wb/sync/fetch/{code} ───────────────────
+
+def test_sync_sdp_store_and_fetch(client):
+    """SDP 短码：存入后返回 6 位码，取出内容一致，再次 GET 返回 404（一次性消费）。"""
+    sdp = {"type": "offer", "sdp": "v=0\r\no=- 123456 2 IN IP4 127.0.0.1\r\ns=-\r\n"}
+    resp = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "code" in data
+    code = data["code"]
+    assert len(code) == 6
+    assert code.isalnum()
+
+    # 首次 GET 成功取出
+    fetch_resp = client.get(f"/api/wb/sync/fetch/{code}")
+    assert fetch_resp.status_code == 200
+    fetch_data = fetch_resp.json()
+    assert fetch_data["sdp"] == sdp
+    assert fetch_data["role"] == "offer"
+
+    # 再次 GET 返回 404（已被一次性消费）
+    assert client.get(f"/api/wb/sync/fetch/{code}").status_code == 404
+
+
+def test_sync_sdp_fetch_invalid_code(client):
+    """查询不存在或过期的短码返回 404。"""
+    resp = client.get("/api/wb/sync/fetch/NON999")
+    assert resp.status_code == 404
+
+
+def test_sync_sdp_lan_accessible(lan_client):
+    """局域网设备间同步：端点不应被仅限本地的 _require_localhost 误伤拦截。"""
+    sdp = {"type": "answer", "sdp": "v=0\r\no=- 654321 2 IN IP4 192.168.1.77\r\ns=-\r\n"}
+    resp = lan_client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "answer"})
+    assert resp.status_code == 200
+    code = resp.json()["code"]
+    assert len(code) == 6
+
+    fetch_resp = lan_client.get(f"/api/wb/sync/fetch/{code}")
+    assert fetch_resp.status_code == 200
+    assert fetch_resp.json()["sdp"] == sdp
+    assert fetch_resp.json()["role"] == "answer"
+
+
+# ── v4.7.0 架构与数据完整性改造 TDD 契约 ───────────────────────────────────────
+
+def test_backup_covers_essays_and_essay_versions_roundtrip(client):
+    """备份导出与还原必须完整包含 essays 和 essay_versions 写作台全量数据。
+
+    未包含 = 用户导出备份换机或重装后，作文草稿与版本演进历史全部静默丢失。
+    """
+    # 1. 创建一篇作文与一个版本
+    res_essay = client.post("/api/essays", json={"title": "Mein Urlaub", "content": "Ich fahre nach Berlin."})
+    assert res_essay.status_code == 200
+    essay_id = res_essay.json()["id"]
+
+    res_ver = client.post(f"/api/essays/{essay_id}/versions", json={"message": "初稿修改", "content": "Ich fahre morgen nach Berlin."})
+    assert res_ver.status_code == 200
+
+    # 2. 导出备份
+    exp = client.get("/api/backup/export").json()
+    assert "essays" in exp, "备份导出必须包含 essays 表"
+    assert "essay_versions" in exp, "备份导出必须包含 essay_versions 表"
+    assert any(e["title"] == "Mein Urlaub" for e in exp["essays"])
+    assert any(v["message"] == "初稿修改" for v in exp["essay_versions"])
+
+    # 3. 清空后还原
+    restore_payload = {
+        "version": 2,
+        "essays": [{
+            "id": 888, "title": "Restored Essay", "content": "Restored content.",
+            "analysis_json": "{}", "cefr_level": "B1", "error_count": 0, "sentence_count": 1,
+            "created_at": "2026-08-29 12:00:00", "updated_at": "2026-08-29 12:00:00"
+        }],
+        "essay_versions": [{
+            "id": 8881, "essay_id": 888, "content": "Restored content v1",
+            "analysis_json": "{}", "message": "Restored version",
+            "created_at": "2026-08-29 12:00:00"
+        }]
+    }
+    res_rest = client.post("/api/backup/restore", json=restore_payload)
+    assert res_rest.status_code == 200
+
+    # 4. 验证还原后可查
+    res_get = client.get("/api/essays/888")
+    assert res_get.status_code == 200
+    assert res_get.json()["title"] == "Restored Essay"
+
+    res_v_get = client.get("/api/essays/888/versions")
+    assert res_v_get.status_code == 200
+    assert len(res_v_get.json()) >= 1
+    assert any(v["message"] == "Restored version" for v in res_v_get.json())
+
+
+def test_backup_grammar_cards_preserves_error_type_and_corrected_form(client):
+    """grammar_cards 备份必须保留 corrected_form 和 error_type 字段。"""
+    payload = {
+        "version": 2,
+        "grammar_cards": [{
+            "id": 777, "article_id": None, "sentence_context": "In dem Buch.",
+            "grammar_name": "Dativ mit Präposition", "cefr_level": "A1",
+            "explanation_zh": "in支配三格", "rule_formula": "in + Dat", "examples_zh": "",
+            "corrected_form": "in dem Buch", "error_type": "kasus",
+            "created_at": "2026-08-29 10:00:00"
+        }]
+    }
+    assert client.post("/api/backup/restore", json=payload).status_code == 200
+
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM grammar_cards WHERE id = 777").fetchone())
+    assert row["corrected_form"] == "in dem Buch"
+    assert row["error_type"] == "kasus"
+
+    exp = client.get("/api/backup/export").json()
+    card = next(c for c in exp["grammar_cards"] if c["id"] == 777)
+    assert card["corrected_form"] == "in dem Buch"
+    assert card["error_type"] == "kasus"
+
+
+def test_vocab_card_accepts_and_saves_plural(client):
+    """POST /api/cards/vocab 必须接收并持久化 plural 字段。"""
+    req_body = {
+        "word": "Buch",
+        "lemma": "Buch",
+        "pos": "NOUN",
+        "gender": "Neut",
+        "plural": "Bücher",
+        "cefr_level": "A1",
+        "definition_zh": "书",
+        "sentence_context": "Das Buch ist gut."
+    }
+    res = client.post("/api/cards/vocab", json=req_body)
+    assert res.status_code == 200
+    card_id = res.json()["id"]
+
+    cards_res = client.get("/api/cards").json()
+    vcard = next(c for c in cards_res["vocab_cards"] if c["id"] == card_id)
+    assert vcard.get("plural") == "Bücher"
+
+
+def test_sync_sdp_cache_capacity_and_size_limit(client):
+    """WebRTC SDP 暂存必须有条目上限（FIFO 淘汰）与体积极限，防止内存无界膨胀。"""
+    from server import _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
+
+    # 1. 超过最大容量时自动剔除老数据
+    for i in range(MAX_SYNC_CACHE_ENTRIES + 10):
+        sdp = {"type": "offer", "sdp": f"mock_sdp_{i}"}
+        res = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"})
+        assert res.status_code == 200
+
+    assert len(_sync_sdp_cache) <= MAX_SYNC_CACHE_ENTRIES
+
+    # 2. 超大 payload 拒绝（400）
+    huge_sdp = {"type": "offer", "sdp": "A" * (65 * 1024)}
+    res_huge = client.post("/api/wb/sync/store", json={"sdp": huge_sdp, "role": "offer"})
+    assert res_huge.status_code == 400
+
+
+def test_db_busy_timeout_and_concurrency_guard():
+    """SQLite 连接必须启用 busy_timeout 与 synchronous=NORMAL 守卫，避免并发读写锁库。"""
+    with get_db("test_delector.db") as conn:
+        busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+        sync_mode = conn.execute("PRAGMA synchronous").fetchone()[0]
+    assert busy_timeout >= 5000
+    assert sync_mode in (1, 2)  # NORMAL or FULL

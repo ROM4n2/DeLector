@@ -1,23 +1,23 @@
 package org.delector.app;
 
 import android.annotation.SuppressLint;
-import android.app.DownloadManager;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
-import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -61,6 +61,65 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> filePathCallback;
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
 
+    /**
+     * 导出结果的出口。回调发生在 ExportSaver 的单线程池上，所以一律 post 回主线程。
+     * 失败时除 Toast 外还写剪贴板：没有 adb logcat 的场合，剪贴板是用户唯一能把
+     * 完整错误转述给开发者的通道（Android 11+ 起第三方文件管理器访问不到
+     * /Android/data/，写诊断日志文件这条路是断的）。
+     */
+    private final ExportSaver.Reporter exportReporter = new ExportSaver.Reporter() {
+        @Override
+        public void onSuccess(String message) {
+            mainHandler.post(() ->
+                    Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
+        }
+
+        @Override
+        public void onFailure(String url, int httpCode, Throwable error) {
+            ExportSaver.logFailure(url, httpCode, error);   // 万一哪天能拿到 logcat，堆栈还在
+            String msg = buildExportErrorMessage(url, httpCode, error);
+            mainHandler.post(() -> {
+                Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show();
+                copyToClipboard(msg);
+            });
+        }
+    };
+
+    /** 四行结构化错误：接口 / HTTP 码 / 异常类名 + 原因，一眼能定位到根因。 */
+    private static String buildExportErrorMessage(String url, int httpCode, Throwable error) {
+        String path = "(未知)";
+        try {
+            String p = Uri.parse(url).getPath();          // 丢掉 host/port
+            if (p != null) {
+                // token 只留前 6 位：既看得出是备份还是 workbench，又不整段泄露
+                path = p.replaceAll("([0-9A-Za-z_-]{6})[0-9A-Za-z_-]{10,}", "$1…");
+            }
+        } catch (Throwable ignored) {
+        }
+        String reason = error.getMessage();
+        if (reason == null) {
+            reason = "";
+        } else if (reason.length() > 120) {
+            reason = reason.substring(0, 120) + "…";
+        }
+        return "下载失败\n"
+                + "接口: " + path + "\n"
+                + "HTTP: " + (httpCode > 0 ? String.valueOf(httpCode) : "无响应") + "\n"
+                + "错误: " + error.getClass().getSimpleName()
+                + (reason.isEmpty() ? "" : " | " + reason);
+    }
+
+    private void copyToClipboard(String text) {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(ClipData.newPlainText("DeLector 下载错误", text));
+            }
+        } catch (Throwable t) {
+            Log.w("DeLector", "剪贴板不可用，错误信息只留在 Toast 里", t);
+        }
+    }
+
     public class NativeTTSBridge {
         private TextToSpeech tts;
         private volatile boolean isInitialized = false;
@@ -73,8 +132,10 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        /** 挑一个能说德语的 voice：先试德语 Locale，不行就遍历已装语音找德语能力的。
-         *  国内机型常没有 Google TTS 德语 Locale 条目，但引擎可能带德语语音（getVoices() API 21+）。 */
+        /**
+         * 挑一个能说德语的 voice：先试德语 Locale，不行就遍历已装语音找德语能力的。
+         * 国内机型常没有 Google TTS 德语 Locale 条目，但引擎可能带德语语音（getVoices() API 21+）。
+         */
         private boolean trySelectGermanVoice() {
             int result = tts.setLanguage(Locale.GERMAN);
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
@@ -101,7 +162,8 @@ public class MainActivity extends AppCompatActivity {
         public boolean speak(String text, float rate) {
             if (tts != null && isInitialized && text != null && !text.trim().isEmpty()) {
                 tts.setSpeechRate(rate);
-                int res = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "delector_speech_" + System.currentTimeMillis());
+                int res = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null,
+                        "delector_speech_" + System.currentTimeMillis());
                 return res == TextToSpeech.SUCCESS;
             }
             return false;
@@ -147,7 +209,8 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
                 if (MainActivity.this.filePathCallback != null) {
                     MainActivity.this.filePathCallback.onReceiveValue(null);
                     MainActivity.this.filePathCallback = null;
@@ -157,8 +220,11 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("*/*");
-                String[] mimetypes = {"text/plain", "text/markdown", "text/*", "image/svg+xml", "image/*", "application/json", "application/octet-stream"};
-                if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null && fileChooserParams.getAcceptTypes().length > 0 && !fileChooserParams.getAcceptTypes()[0].isEmpty()) {
+                String[] mimetypes = { "text/plain", "text/markdown", "text/*", "image/svg+xml", "image/*",
+                        "application/json", "application/octet-stream" };
+                if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null
+                        && fileChooserParams.getAcceptTypes().length > 0
+                        && !fileChooserParams.getAcceptTypes()[0].isEmpty()) {
                     intent.putExtra(Intent.EXTRA_MIME_TYPES, fileChooserParams.getAcceptTypes());
                 } else {
                     intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
@@ -184,30 +250,12 @@ public class MainActivity extends AppCompatActivity {
         ws.setMediaPlaybackRequiresUserGesture(false);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        // Native Download Listener for Anki APKG, Study Guide HTML, JSON Backups
-        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
-            try {
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                String filename = URLUtil.guessFileName(url, contentDisposition, mimetype);
-                if (filename == null || filename.isEmpty() || filename.equals("downloadfile")) {
-                    filename = "DeLector_Export_" + System.currentTimeMillis() + (url.contains("apkg") ? ".apkg" : ".json");
-                }
-                request.setMimeType(mimetype);
-                request.addRequestHeader("User-Agent", userAgent);
-                request.setDescription("DeLector 德语学术导出资产");
-                request.setTitle(filename);
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename);
-
-                DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-                if (dm != null) {
-                    dm.enqueue(request);
-                    Toast.makeText(MainActivity.this, "已保存至系统「下载」目录: " + filename, Toast.LENGTH_LONG).show();
-                }
-            } catch (Exception e) {
-                Toast.makeText(MainActivity.this, "下载异常: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        });
+        // 四个导出入口（备份 JSON / Workbench JSON / Anki .apkg / 学习指南 .md）
+        // 全走这一个回调。落盘交给 ExportSaver：App 进程内自己发 HTTP 请求再写
+        // MediaStore，不再经系统 DownloadManager —— 后者在 Android 16 上会在
+        // enqueue() 直接抛异常，且失败原因只在 logcat 里。
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) ->
+                ExportSaver.start(this, url, userAgent, contentDisposition, mimetype, exportReporter));
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -228,8 +276,7 @@ public class MainActivity extends AppCompatActivity {
 
         root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         // 3. Setup Splash / Loading View
         splashLayout = new LinearLayout(this);
@@ -269,8 +316,7 @@ public class MainActivity extends AppCompatActivity {
 
         root.addView(splashLayout, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         setContentView(root);
 
@@ -423,7 +469,7 @@ public class MainActivity extends AppCompatActivity {
             parent.mkdirs();
         }
         try (InputStream in = getAssets().open(srcPath);
-             OutputStream out = new FileOutputStream(dstFile)) {
+                OutputStream out = new FileOutputStream(dstFile)) {
             byte[] buf = new byte[8192];
             int len;
             while ((len = in.read(buf)) > 0) {
@@ -532,16 +578,22 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String jsCheck = "(function() {" +
-                "  var modal = document.querySelector('#modal-overlay.open, #settings-overlay.open, .modal-overlay.open');" +
+                "  var modal = document.querySelector('#modal-overlay.open, #settings-overlay.open, .modal-overlay.open, #quiz-overlay:not(.hidden), #cloze-modal:not(.hidden), #polish-overlay:not(.hidden), #version-preview-overlay:not(.hidden)');"
+                +
                 "  if (modal) {" +
                 "    if (window.closeModal) window.closeModal();" +
                 "    if (window.closeSettingsModal) window.closeSettingsModal();" +
+                "    if (window.closeQuizOverlay) window.closeQuizOverlay();" +
+                "    if (window.closeClozeModal) window.closeClozeModal();" +
+                "    if (window.closePolishOverlay) window.closePolishOverlay();" +
+                "    if (window.closeVersionPreview) window.closeVersionPreview();" +
                 "    return 'modal';" +
                 "  }" +
-                "  var drawer = document.querySelector('#drawer.open, #syntax-drawer.open');" +
+                "  var drawer = document.querySelector('#drawer.open, #syntax-drawer.open, #writer-panel.open');" +
                 "  if (drawer) {" +
                 "    if (window.closeDrawer) window.closeDrawer();" +
                 "    if (window.closeSyntaxDrawer) window.closeSyntaxDrawer();" +
+                "    if (window.closeWriterMobilePanel) window.closeWriterMobilePanel();" +
                 "    return 'drawer';" +
                 "  }" +
                 "  var activeView = document.querySelector('.view.active');" +
@@ -575,7 +627,7 @@ public class MainActivity extends AppCompatActivity {
                 if (resultCode == RESULT_OK && data != null) {
                     Uri dataUri = data.getData();
                     if (dataUri != null) {
-                        results = new Uri[]{dataUri};
+                        results = new Uri[] { dataUri };
                     }
                 }
                 filePathCallback.onReceiveValue(results);
