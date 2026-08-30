@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.8.1-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v4.8.2-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -22,10 +22,10 @@
 
 | 平台               | 版本                | 说明                                                                                                             | 下载通道                                                                                    |
 | ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v4.8.1` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.1)     |
-| 🍎 **macOS**       | `v4.8.1` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.1)  |
-| 🐧 **Linux x64**   | `v4.8.1` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.1)  |
-| 📱 **Android**     | `v4.8.1` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。<br>**v4.8.1 修复 Android 版 routes_corpus 模块缺失导致引擎启动失败问题。** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.1) |
+| 🪟 **Windows x64** | `v4.8.2` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.2)     |
+| 🍎 **macOS**       | `v4.8.2` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.2)  |
+| 🐧 **Linux x64**   | `v4.8.2` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.2)  |
+| 📱 **Android**     | `v4.8.2` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。<br>**v4.8.1 修复 Android 版 routes_corpus 模块缺失导致引擎启动失败问题；v4.8.2 修复预设文章不 seed 与首次进入服务端初始化阻塞交互无响应问题。** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.2) |
 
 ---
 

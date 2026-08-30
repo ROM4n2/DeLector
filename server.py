@@ -229,6 +229,7 @@ app.include_router(corpus_router)
 app.include_router(hoeren_router)
 app.include_router(lesen_router)
 init_db()
+seed_preset_articles()
 
 # 前端资源必须每次回源校验：裸 StaticFiles 不发 Cache-Control，浏览器于是走
 # 启发式新鲜度（约 Last-Modified 距今时长的 10%），可能一段时间内直接用本地副本。
