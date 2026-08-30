@@ -4,6 +4,29 @@
 import { api, esc } from './core.js';
 import { refreshCardCounters } from './reader.js';
 import { Companion } from './companion.js';
+import * as A1Writer from './a1_writer.js';
+export {
+  switchWriterMode,
+  loadA1WritingData,
+  populateA1Selectors,
+  selectA1Formular,
+  prevA1Formular,
+  nextA1Formular,
+  randomA1Formular,
+  renderA1Formular,
+  checkA1Formular,
+  resetA1Formular,
+  selectA1Email,
+  prevA1Email,
+  nextA1Email,
+  randomA1Email,
+  renderA1Email,
+  onA1EmailInput,
+  diagnoseA1Email,
+  applyA1EmailTemplate,
+  clearA1Email,
+} from './a1_writer.js';
+export * from './a1_writer.js';
 
 let currentEssayId = null;
 let currentAnalysis = null;
@@ -1469,3 +1492,4 @@ export async function restoreEssayVersion(versionId) {
     alert('恢复版本失败：' + (err.message || err));
   }
 }
+

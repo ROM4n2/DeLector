@@ -1,16 +1,11 @@
 """
 Unit Tests for DeLector v3.5.0 German Syntax Tree & Topological Field Engine (syntax_tree.py)
 """
-import pytest
 from syntax_tree import (
     analyze_sentence_topology,
     build_clause_tree,
     analyze_syntax_tree,
     get_spacy_nlp,
-    SUBORDINATING_CONJUNCTIONS,
-    INFINITIVE_CONNECTORS,
-    RELATIVE_PRONOUNS,
-    INTERROGATIVE_WORDS
 )
 
 
@@ -24,7 +19,7 @@ def test_spacy_nlp_loader():
 def test_analyze_sentence_topology_v2_compound():
     sent = "Er hat gestern das spannende Buch mit großer Freude gelesen."
     res = analyze_sentence_topology(sent)
-    
+
     # 1. Check top-level 5 field dictionary keys
     assert "vorfeld" in res
     assert "linke_klammer" in res
@@ -37,7 +32,7 @@ def test_analyze_sentence_topology_v2_compound():
     lk_texts = [t["text"] for t in res["linke_klammer"]]
     mf_texts = [t["text"] for t in res["mittelfeld"]]
     rk_texts = [t["text"] for t in res["rechte_klammer"]]
-    
+
     assert "Er" in vf_texts
     assert "hat" in lk_texts
     assert "gestern" in mf_texts
@@ -55,12 +50,12 @@ def test_analyze_sentence_topology_v2_compound():
 def test_analyze_sentence_topology_v1_separable_particle():
     sent = "Kommst du morgen zur Party mit?"
     res = analyze_sentence_topology(sent)
-    
+
     assert res["sentence_type"] == "V1"
     assert len(res["vorfeld"]) == 0
     lk_texts = [t["text"] for t in res["linke_klammer"]]
     rk_texts = [t["text"] for t in res["rechte_klammer"]]
-    
+
     assert "Kommst" in lk_texts
     assert "mit" in rk_texts
     assert res["field_texts"]["linke_klammer"] == "Kommst"
@@ -70,7 +65,7 @@ def test_analyze_sentence_topology_v1_separable_particle():
 def test_analyze_sentence_topology_v1_imperative():
     sent = "Lies bitte diesen deutschen Text aufmerksam durch!"
     res = analyze_sentence_topology(sent)
-    
+
     assert res["sentence_type"] == "V1"
     assert len(res["vorfeld"]) == 0
     assert "Lies" in res["field_texts"]["linke_klammer"]
@@ -80,7 +75,7 @@ def test_analyze_sentence_topology_v1_imperative():
 def test_analyze_sentence_topology_preposed_subclause():
     sent = "Weil das Wetter heute sehr schön ist, geht Maria im Park spazieren."
     res = analyze_sentence_topology(sent)
-    
+
     assert res["sentence_type"] == "V2"
     assert "Weil das Wetter heute sehr schön ist" in res["field_texts"]["vorfeld"]
     assert res["field_texts"]["linke_klammer"] == "geht"
@@ -91,7 +86,7 @@ def test_analyze_sentence_topology_preposed_subclause():
 def test_analyze_sentence_topology_passive_modal():
     sent = "Die Arbeit muss bis morgen früh erledigt werden."
     res = analyze_sentence_topology(sent)
-    
+
     vf_texts = [t["text"] for t in res["vorfeld"]]
     assert "Arbeit" in vf_texts
     assert res["field_texts"]["linke_klammer"] == "muss"
@@ -102,7 +97,7 @@ def test_analyze_sentence_topology_passive_modal():
 def test_analyze_sentence_topology_extraposed_nachfeld():
     sent = "Er hat gestern das Buch gelesen, das Maria ihm empfohlen hatte."
     res = analyze_sentence_topology(sent)
-    
+
     assert res["field_texts"]["vorfeld"] == "Er"
     assert res["field_texts"]["linke_klammer"] == "hat"
     assert "gelesen" in res["field_texts"]["rechte_klammer"]
@@ -112,15 +107,15 @@ def test_analyze_sentence_topology_extraposed_nachfeld():
 def test_build_clause_tree_konjunktionalsatz_kausal_and_konzessiv():
     sent = "Obwohl er krank war, ist er zur Arbeit gegangen, weil er ein wichtiges Projekt abschließen musste."
     tree = build_clause_tree(sent)
-    
+
     assert tree["type"] == "hauptsatz"
     assert "ist" in tree["finite_verb"] or tree["finite_verb"] == "ist"
     assert len(tree["children"]) >= 2
-    
+
     child_types = [c["type"] for c in tree["children"]]
     child_subtypes = [c["subtype"] for c in tree["children"]]
     child_conns = [c["connector"].lower() for c in tree["children"]]
-    
+
     assert "konjunktionalsatz" in child_types
     assert "konzessiv" in child_subtypes or "obwohl" in child_conns
     assert "kausal" in child_subtypes or "weil" in child_conns
@@ -129,10 +124,10 @@ def test_build_clause_tree_konjunktionalsatz_kausal_and_konzessiv():
 def test_build_clause_tree_relativsatz_and_infinitivgruppe():
     sent = "Der Student, dessen Vater Professor ist, liest ein Buch, um die Prüfung zu bestehen."
     tree = build_clause_tree(sent)
-    
+
     assert tree["type"] == "hauptsatz"
     assert "liest" in tree["finite_verb"]
-    
+
     types = [c["type"] for c in tree["children"]]
     assert "relativsatz" in types
     assert "infinitivgruppe" in types
@@ -170,14 +165,14 @@ def test_build_clause_tree_passiv_and_konjunktiv_features():
 def test_build_clause_tree_nested_clauses_hierarchy():
     sent = "Er weiß genau, dass Maria glaubt, dass Deutsch eine schöne Sprache ist."
     tree = build_clause_tree(sent)
-    
+
     assert tree["type"] == "hauptsatz"
     assert len(tree["children"]) >= 1
-    
+
     level2 = tree["children"][0]
     assert level2["type"] == "konjunktionalsatz"
     assert level2["connector"].lower() == "dass"
-    
+
     # Check 3rd level nested subclause
     assert len(level2["children"]) >= 1
     level3 = level2["children"][0]
@@ -221,11 +216,11 @@ def test_build_clause_tree_indirect_question():
 def test_analyze_syntax_tree_full_text():
     text = "Er lernt fleißig Deutsch. Weil er in München studieren will, besucht er einen Intensivkurs."
     res = analyze_syntax_tree(text)
-    
+
     assert res["version"] == "3.5.0"
     assert res["sentence_count"] == 2
     assert len(res["sentences"]) == 2
-    
+
     s1 = res["sentences"][0]
     assert s1["sentence_id"] == 0
     assert "clause_tree" in s1

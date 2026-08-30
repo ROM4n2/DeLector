@@ -1331,3 +1331,49 @@ def lookup_prep_collocations(lemma_or_word: str) -> List[Dict[str, str]]:
         return []
     return [{"praeposition": r[0], "kasus": r[1], "bedeutung_zh": r[2], "beispiel": r[3]}
             for r in rows]
+
+
+# ==============================================================================
+# 5. Präpositionen-Matrix（按介词反转的浏览索引）
+# ==============================================================================
+def build_prep_matrix_core(collocations):
+    """build_prep_matrix 的无状态内核：接受任意 {lemma: ((praep, kasus, zh, bsp), ...)}。
+
+    单独拆出来是为了让「空表降级」「排序」「守恒」这些行为可以在不 monkeypatch
+    模块全局的情况下直接测（见 test_prep_matrix.py）。
+    """
+    matrix = {}
+    for lemma, rows in collocations.items():
+        for praep, kasus, bedeutung, beispiel in rows:
+            # capitalize 而非 upper：数据集写的是 Dat/Akk/Gen，格名会直接进 URL
+            # 和响应键，upper 会把它改写成 DAT 破坏调用方的字面查找。capitalize
+            # 对数据集自身拼写幂等，同时把 AI 长尾可能漏出的 dat/DAT 并回同一个桶。
+            matrix.setdefault(praep.strip().lower(), {}).setdefault(
+                kasus.strip().capitalize(), []).append({
+                    "lemma": lemma,
+                    "reflexive": "(sich)" in bedeutung,
+                    "bedeutung_zh": bedeutung,
+                    "beispiel": beispiel,
+                })
+    for praep in matrix:
+        for kasus in matrix[praep]:
+            matrix[praep][kasus].sort(key=lambda e: e["lemma"])
+    return matrix
+
+
+_prep_matrix_cache = None
+
+
+def build_prep_matrix():
+    """把 PREP_COLLOCATIONS 反转成 {praeposition: {kasus: [entry]}}。
+
+    entry 含 reflexive 标记但不含 cefr —— CEFR 由 server 层注入
+    （get_cefr_level 在 server.py，linguistics 反向依赖它会造成循环 import）。
+    组间顺序同理属呈现策略，由 server 层排；这里只保证组内 lemma 字母序。
+
+    结果进程内缓存一次：数据集运行期不变，反转结果也不该变。
+    """
+    global _prep_matrix_cache
+    if _prep_matrix_cache is None:
+        _prep_matrix_cache = build_prep_matrix_core(PREP_COLLOCATIONS)
+    return _prep_matrix_cache
