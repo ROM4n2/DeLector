@@ -141,6 +141,7 @@ import {
   onA1EmailInput,
   diagnoseA1Email,
   applyA1EmailTemplate,
+  clearA1Email,
 } from "./writer.js";
 import * as A1Hoeren from "./a1_hoeren.js";
 import * as A1Lesen from "./a1_lesen.js";
