@@ -1,19 +1,19 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.7.3-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v4.8.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-353%2F353%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-367%2F367%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
   <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的下一代学术级伴读与句法剖析系统。</b><br/>
-  融合<b>歌德 A1 备考工坊</b>、<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>、<b>内联 IDE 写作工坊</b>与<b>FSRS 现代认知记忆排程</b>。
+  融合<b>歌德 A1 全真听说读写考场工坊</b>、<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>、<b>内联 IDE 写作工坊</b>与<b>FSRS 现代认知记忆排程</b>。
 </p>
 
 ---
@@ -22,10 +22,10 @@
 
 | 平台               | 版本                | 说明                                                                                                             | 下载通道                                                                                    |
 | ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v4.7.3` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.3)     |
-| 🍎 **macOS**       | `v4.7.3` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.3)  |
-| 🐧 **Linux x64**   | `v4.7.3` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.3)  |
-| 📱 **Android**     | `v4.7.3` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.7.3) |
+| 🪟 **Windows x64** | `v4.8.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                     | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.0)     |
+| 🍎 **macOS**       | `v4.8.0` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.0)  |
+| 🐧 **Linux x64**   | `v4.8.0` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                          | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.0)  |
+| 📱 **Android**     | `v4.8.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v4.8.0) |
 
 ---
 
@@ -278,6 +278,7 @@ DeLector/
 - [x] **v4.7.1**：**修复安卓交互全死回归**——v4.7.0 模块化拆分把 `a1_cards.js`/`a1_writer.js` 以空文件提交，`cards.js`/`writer.js` 具名 import 导致 ES module 链接期 SyntaxError、整个模块图失败（`main.js` 永不求值，全 App 只剩 CSS 点击效果）。复原两空模块 + 补抽取后悬空引用 + 新增 `test_frontend_module_graph.py` 模块图结构性回归测试。测试 **352 全绿**
 - [x] **v4.7.2**：**修复安卓卡片段标签栏被裁切**——5 个段按钮合计约 527px 超出一屏，被 `.view` 的 `overflow-x: hidden` 移动端守卫裁掉，最后的「歌德 A1」tab 不可见；改为移动端媒体块内 `.cards-seg-bar` 自身 `overflow-x: auto` 横滑到达（桌面内容列较窄，滚动规则必须 scoped 到移动端避免裁桌面 A1 右缘）。测试 **353 全绿**
 - [x] **v4.7.3**：**修复 Android 16 导出下载失败**——`DownloadManager.enqueue()` 在 Android 16 上同步抛异常被 catch 吞成 Toast；且备份 token 原为「单次有效」，WebView 嗅探 Content-Disposition 的预取 GET 会烧掉 token，第二次 GET 拿到 404 错误 JSON 被静默存成「备份」。修法：弃用 DownloadManager，新增 `ExportSaver.java`（HttpURLConnection 自取 + MediaStore.Downloads 零权限落盘 + `{"detail"` 错误体内容自检）；后端 token 改为 10 分钟 TTL 内可重复取（`_issue_pending`/`_take_pending`），四个下载端点统一走 `_attachment()` 助手（Content-Disposition + no-store）。另含 pre-commit 密钥扫描性能优化。测试 **359 全绿**
+- [x] **v4.8.0**：**歌德 A1 听力与阅读全真考场工坊 (Goethe A1 Hörverstehen & Lesen)**——① **听力考场工坊 (Hörverstehen)**：5 套官方标准试卷 (75 题) 覆盖日常对话 (Teil 1, 放2遍)、公共广播 (Teil 2, 仅1遍)、电话留言 (Teil 3, 放2遍)；考场流程状态机、25.0 换算得分评级、双语 Transkript 复盘与考点生词一键入盒；② **阅读实战工坊 (Lesen)**：6 套官方全真试卷 (90 题) 覆盖便条邮件 (Teil 1, R/F)、网页广告双选比对 (Teil 2, A/B)、公共标牌告示 (Teil 3, R/F)；25 分钟全真倒计时与答题卡全景矩阵；③ **模块化与可靠性加固**：新增 `a1_hoeren_dict.py`, `a1_lesen_dict.py`, `routes_a1_hoeren.py`, `routes_a1_lesen.py`, `a1_hoeren.js`, `a1_lesen.js`；会话令牌守卫消除异步竞态，`a1_hoeren_records`/`a1_lesen_records` 数据表与备份自动联动。测试 **367 全绿**
 
 - [x] **`server.py` 拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 - [x] **介词矩阵「已入卡」持久化**（v4.6.4）：新增 `prep_saved` 表 + `GET/POST /api/prep/saved`，前端 `_prepSavedKeys` 从服务端初始化，重进矩阵段按钮状态保持。
