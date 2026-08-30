@@ -3,7 +3,7 @@ name: Build & Publish DeLector Releases
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -22,8 +22,8 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -60,8 +60,8 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -94,6 +94,10 @@ jobs:
             --hidden-import=uvicorn.lifespan.on \
             --hidden-import=core_dict_ext \
             --hidden-import=prep_dict \
+            --hidden-import=a1_dict \
+            --hidden-import=a1_writing_dict \
+            --hidden-import=routes_a1 \
+            --hidden-import=routes_sync \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -122,8 +126,8 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -156,6 +160,10 @@ jobs:
             --hidden-import=uvicorn.lifespan.on \
             --hidden-import=core_dict_ext \
             --hidden-import=prep_dict \
+            --hidden-import=a1_dict \
+            --hidden-import=a1_writing_dict \
+            --hidden-import=routes_a1 \
+            --hidden-import=routes_sync \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -184,8 +192,8 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -193,12 +201,12 @@ jobs:
       - name: Set up Gradle 8.6
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.6'
+          gradle-version: "8.6"
 
       - name: Set up Python for model syncing
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Sync Python Backend, Model, and Assets into Android Project
         run: |
@@ -214,7 +222,7 @@ jobs:
           print(f"模型 compat={compat} 与 APK spaCy {APK_SPACY} 匹配")
           PY
           mkdir -p android/app/src/main/python
-          cp -r server.py start.py core_dict.py core_dict_ext.py prep_dict.py linguistics.py syntax_tree.py edge_tts_mini.py writing_rules.py essay_diff.py android/app/src/main/python/
+          cp -r server.py start.py core_dict.py core_dict_ext.py prep_dict.py linguistics.py syntax_tree.py edge_tts_mini.py writing_rules.py essay_diff.py nlp.py database.py security.py routes_a1.py routes_sync.py a1_dict.py a1_writing_dict.py android/app/src/main/python/
           MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
           cp -r "$MODEL_DIR" android/app/src/main/python/de_core_news_sm
           mkdir -p android/app/src/main/assets
@@ -451,7 +459,7 @@ jobs:
             - 🌳 **德语拓扑五场域 (Felder-Modell) 与 5 大从句树 AST 句法引擎**
             - ⚡ **556+ 强变化动词三态表 + 复合词智能拆解 + 可分动词框形联动**
             - 📖 **0ms 歌德核心离线词库 + CEFR 词阶热力谱 + AI 精读便签**
-            - 🎴 **3D 物理翻牌盒 + SM-2 间隔复习 + Anki .apkg 一键导出**
+            - 🎴 **3D 物理翻牌盒 + FSRS 现代认知记忆排程 + Anki .apkg 一键导出**
             - ✍️ **完形填空 & 德福 C-Test 模拟与服务端防作弊判分**
             - 📰 **德语外刊 RSS 一键订阅与文稿库极速管理（支持一键删除）**
           draft: false
