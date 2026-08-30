@@ -383,21 +383,35 @@
             class="a1-mode-tab active"
             onclick="setA1Mode('vocab')"
           >
-            📖 官方考纲词表 (650+)
+            📖 官方考纲词表 (700+)
+          </button>
+          <button
+            id="a1-tab-hoeren"
+            class="a1-mode-tab"
+            onclick="setA1Mode('hoeren')"
+          >
+            🎧 听力全真模考 (15题×5套)
+          </button>
+          <button
+            id="a1-tab-lesen"
+            class="a1-mode-tab"
+            onclick="setA1Mode('lesen')"
+          >
+            📖 实用阅读工坊 (15题×6套)
           </button>
           <button
             id="a1-tab-teil2"
             class="a1-mode-tab"
             onclick="setA1Mode('teil2')"
           >
-            💬 口语 Teil 2 问答抽卡
+            💬 口语 Teil 2 问答
           </button>
           <button
             id="a1-tab-teil3"
             class="a1-mode-tab"
             onclick="setA1Mode('teil3')"
           >
-            🙋 口语 Teil 3 物品请求抽卡
+            🙋 口语 Teil 3 请求
           </button>
           <a
             href="/api/a1/export/anki"
@@ -419,6 +433,8 @@
       </div>
 
       <div id="cards-container"></div>
+      <div id="a1-hoeren-container" class="a1-hoeren-container hidden"></div>
+      <div id="a1-lesen-container" class="a1-lesen-container hidden"></div>
     </main>
 
     <!-- ── View 4: Atelier Landing Page Folio (Atelier Style Ledger) ─ -->

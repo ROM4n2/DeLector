@@ -217,11 +217,17 @@ from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_ko
 from syntax_tree import analyze_syntax_tree
 from routes_a1 import router as a1_router
 from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
+from routes_corpus import router as corpus_router
+from routes_a1_hoeren import hoeren_router
+from routes_a1_lesen import lesen_router
 
 # --- 4. FastAPI Application ---
 app = FastAPI(title="DeLector")
 app.include_router(a1_router)
 app.include_router(sync_router)
+app.include_router(corpus_router)
+app.include_router(hoeren_router)
+app.include_router(lesen_router)
 init_db()
 
 # 前端资源必须每次回源校验：裸 StaticFiles 不发 Cache-Control，浏览器于是走

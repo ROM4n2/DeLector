@@ -172,11 +172,11 @@ def test_every_named_import_resolves_to_a_real_export():
 
 def test_a1_modules_are_not_empty():
     """The exact v4.7.0 regression: 0-byte modules with exports expected."""
-    for name in ("a1_cards.js", "a1_writer.js"):
+    for name in ("a1_cards.js", "a1_writer.js", "a1_hoeren.js", "a1_lesen.js"):
         path = JS_DIR / name
         assert path.exists(), f"{name} is missing"
         src = path.read_text(encoding="utf-8")
-        assert len(src.strip()) > 0, f"{name} is empty — cards.js/writer.js import from it"
+        assert len(src.strip()) > 0, f"{name} is empty"
         assert _parse_own_exports(src) or _parse_named_reexports(src), (
-            f"{name} exports nothing, yet cards.js/writer.js named-import from it"
+            f"{name} exports nothing"
         )

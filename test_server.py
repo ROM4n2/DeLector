@@ -3346,3 +3346,49 @@ def test_db_busy_timeout_and_concurrency_guard():
         sync_mode = conn.execute("PRAGMA synchronous").fetchone()[0]
     assert busy_timeout >= 5000
     assert sync_mode in (1, 2)  # NORMAL or FULL
+
+
+def test_a1_hoeren_routes(client):
+    """验证 A1 听力工坊相关 REST API 路由与判分持久化。"""
+    res_list = client.get("/api/a1/hoeren/sets")
+    assert res_list.status_code == 200
+    assert len(res_list.json()["sets"]) == 5
+
+    res_set = client.get("/api/a1/hoeren/set/1")
+    assert res_set.status_code == 200
+    assert res_set.json()["set_id"] == 1
+
+    grade_res = client.post("/api/a1/hoeren/grade", json={
+        "set_id": 1,
+        "duration_seconds": 600,
+        "answers": {"a1_h_01_t1_q01": "B"}
+    })
+    assert grade_res.status_code == 200
+    assert "score_official" in grade_res.json()
+
+    hist_res = client.get("/api/a1/hoeren/history")
+    assert hist_res.status_code == 200
+    assert len(hist_res.json()["history"]) >= 1
+
+
+def test_a1_lesen_routes(client):
+    """验证 A1 阅读工坊相关 REST API 路由与判分持久化。"""
+    res_list = client.get("/api/a1/lesen/sets")
+    assert res_list.status_code == 200
+    assert len(res_list.json()["sets"]) == 6
+
+    res_set = client.get("/api/a1/lesen/set/1")
+    assert res_set.status_code == 200
+    assert res_set.json()["set_id"] == 1
+
+    grade_res = client.post("/api/a1/lesen/grade", json={
+        "set_id": 1,
+        "duration_seconds": 750,
+        "answers": {"a1_l_01_t1_q01": "R"}
+    })
+    assert grade_res.status_code == 200
+    assert "score_official" in grade_res.json()
+
+    hist_res = client.get("/api/a1/lesen/history")
+    assert hist_res.status_code == 200
+    assert len(hist_res.json()["history"]) >= 1

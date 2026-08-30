@@ -6,4 +6,4 @@
 - **精准规则检索**：`python d:\Obsidian\Coding\scripts\search-vault.py "<报错/模式关键词>"`
 - **主动体检与待办挖掘**：`python d:\Obsidian\Coding\scripts\vault-proactive-scan.py`
 - **全库健康体检**：`python d:\Obsidian\Coding\scripts\vault-health-check.py`
-- **发现新踩坑自动沉淀**：写草稿至 `d:\Obsidian\Coding\08-Inbox\YYYY-MM-DD-{topic}.md`
+- **发现新踩坑自动沉淀**：写草稿至 `d:\Obsidian\Coding\99-Inbox\YYYY-MM-DD-{topic}.md`

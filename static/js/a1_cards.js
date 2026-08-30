@@ -1,16 +1,18 @@
 /* DeLector - Goethe-Zertifikat A1 Wortliste & Sprechen Module */
-'use strict';
+"use strict";
 
-import { state, api, esc, jsAttr } from './core.js';
-import { playGermanAudio } from './player.js';
-import { refreshCardCounters } from './reader.js';
-import { Companion } from './companion.js';
-import { getCardViewMode, getCachedVocabLemmas } from './cards.js';
+import { state, api, esc, jsAttr } from "./core.js";
+import { playGermanAudio } from "./player.js";
+import { refreshCardCounters } from "./reader.js";
+import { Companion } from "./companion.js";
+import { getCardViewMode, getCachedVocabLemmas } from "./cards.js";
+import { initA1Hoeren } from "./a1_hoeren.js";
+import { initA1Lesen } from "./a1_lesen.js";
 
 // ── Goethe A1 Wortliste & Sprechen State ─────────────────────────────────────
-export let a1Mode = 'vocab'; // 'vocab' | 'teil2' | 'teil3'
-export let a1CurrentTopic = '';
-export let a1SearchQuery = '';
+export let a1Mode = "vocab"; // 'vocab' | 'teil2' | 'teil3' | 'hoeren' | 'lesen'
+export let a1CurrentTopic = "";
+export let a1SearchQuery = "";
 export let a1TopicsCache = null;
 export let a1VocabCache = [];
 export let a1Teil2Cache = [];
@@ -19,18 +21,22 @@ export let a1CardIndex = 0;
 export let a1CardFlipped = false;
 export let _a1SavedLemmas = new Set();
 
-export function getA1Mode() { return a1Mode; }
-export function isA1DataLoaded() { return !!(a1VocabCache.length && a1TopicsCache); }
+export function getA1Mode() {
+  return a1Mode;
+}
+export function isA1DataLoaded() {
+  return !!(a1VocabCache.length && a1TopicsCache);
+}
 
 // ── Goethe-Zertifikat A1 Wortliste & Sprechen Lab ────────────────────────────
 
 export async function loadA1Data() {
   try {
     const [topics, vocab, teil2, teil3] = await Promise.all([
-      api('/api/a1/topics'),
-      api('/api/a1/vocab'),
-      api('/api/a1/sprechen/teil2'),
-      api('/api/a1/sprechen/teil3'),
+      api("/api/a1/topics"),
+      api("/api/a1/vocab"),
+      api("/api/a1/sprechen/teil2"),
+      api("/api/a1/sprechen/teil3"),
     ]);
     a1TopicsCache = topics || [];
     a1VocabCache = vocab || [];
@@ -41,23 +47,23 @@ export async function loadA1Data() {
 
     renderA1TopicPills();
   } catch (e) {
-    console.error('Failed to load A1 data', e);
+    console.error("Failed to load A1 data", e);
   }
 }
 
 export function renderA1TopicPills() {
-  const container = document.getElementById('a1-topic-pills');
+  const container = document.getElementById("a1-topic-pills");
   if (!container || !a1TopicsCache) return;
 
   const totalCount = a1VocabCache.length || 702;
   let html = `
-    <button class="a1-pill ${a1CurrentTopic === '' ? 'active' : ''}" onclick="filterA1Topic('')">
+    <button class="a1-pill ${a1CurrentTopic === "" ? "active" : ""}" onclick="filterA1Topic('')">
       🌟 全部主题 <span class="a1-pill-count">${totalCount}</span>
     </button>
   `;
 
   for (const t of a1TopicsCache) {
-    const isActive = a1CurrentTopic === t.key ? 'active' : '';
+    const isActive = a1CurrentTopic === t.key ? "active" : "";
     html += `
       <button class="a1-pill ${isActive}" onclick="filterA1Topic(${jsAttr(t.key)})" title="${esc(t.keywords)}">
         ${esc(t.label)} <span class="a1-pill-count">${t.count}</span>
@@ -72,27 +78,57 @@ export function setA1Mode(mode) {
   a1CardIndex = 0;
   a1CardFlipped = false;
 
-  ['vocab', 'teil2', 'teil3'].forEach(m => {
+  ["vocab", "teil2", "teil3", "hoeren", "lesen"].forEach((m) => {
     const btn = document.getElementById(`a1-tab-${m}`);
-    if (btn) btn.classList.toggle('active', m === mode);
+    if (btn) btn.classList.toggle("active", m === mode);
   });
 
-  const searchRow = document.getElementById('a1-search-row');
-  const pillsRow = document.getElementById('a1-topic-pills');
-  const viewToggle = document.querySelector('.cards-view-toggle');
+  const searchRow = document.getElementById("a1-search-row");
+  const pillsRow = document.getElementById("a1-topic-pills");
+  const viewToggle = document.querySelector(".cards-view-toggle");
+  const cardsContainer = document.getElementById("cards-container");
+  const hoerenContainer = document.getElementById("a1-hoeren-container");
+  const lesenContainer = document.getElementById("a1-lesen-container");
 
-  if (mode === 'vocab') {
-    searchRow?.classList.remove('hidden');
-    pillsRow?.classList.remove('hidden');
-    viewToggle?.classList.remove('hidden');
-  } else if (mode === 'teil2') {
-    searchRow?.classList.add('hidden');
-    pillsRow?.classList.remove('hidden');
-    viewToggle?.classList.add('hidden');
+  if (mode === "hoeren") {
+    searchRow?.classList.add("hidden");
+    pillsRow?.classList.add("hidden");
+    viewToggle?.classList.add("hidden");
+    cardsContainer?.classList.add("hidden");
+    lesenContainer?.classList.add("hidden");
+    hoerenContainer?.classList.remove("hidden");
+    initA1Hoeren();
+    return;
+  }
+
+  if (mode === "lesen") {
+    searchRow?.classList.add("hidden");
+    pillsRow?.classList.add("hidden");
+    viewToggle?.classList.add("hidden");
+    cardsContainer?.classList.add("hidden");
+    hoerenContainer?.classList.add("hidden");
+    lesenContainer?.classList.remove("hidden");
+    initA1Lesen();
+    return;
+  }
+
+  // Vocab / Sprechen modes
+  hoerenContainer?.classList.add("hidden");
+  lesenContainer?.classList.add("hidden");
+  cardsContainer?.classList.remove("hidden");
+
+  if (mode === "vocab") {
+    searchRow?.classList.remove("hidden");
+    pillsRow?.classList.remove("hidden");
+    viewToggle?.classList.remove("hidden");
+  } else if (mode === "teil2") {
+    searchRow?.classList.add("hidden");
+    pillsRow?.classList.remove("hidden");
+    viewToggle?.classList.add("hidden");
   } else {
-    searchRow?.classList.add('hidden');
-    pillsRow?.classList.add('hidden');
-    viewToggle?.classList.add('hidden');
+    searchRow?.classList.add("hidden");
+    pillsRow?.classList.add("hidden");
+    viewToggle?.classList.add("hidden");
   }
 
   renderA1();
@@ -107,7 +143,7 @@ export function filterA1Topic(topicKey) {
 }
 
 export function searchA1Vocab(q) {
-  a1SearchQuery = (q || '').trim().toLowerCase();
+  a1SearchQuery = (q || "").trim().toLowerCase();
   a1CardIndex = 0;
   a1CardFlipped = false;
   renderA1();
@@ -115,9 +151,9 @@ export function searchA1Vocab(q) {
 
 export function flipA1Card() {
   a1CardFlipped = !a1CardFlipped;
-  const card = document.getElementById('a1-active-card');
+  const card = document.getElementById("a1-active-card");
   if (card) {
-    card.classList.toggle('is-flipped', a1CardFlipped);
+    card.classList.toggle("is-flipped", a1CardFlipped);
   }
 }
 
@@ -140,20 +176,22 @@ export function randomA1Card() {
 }
 
 export function getA1CurrentList() {
-  if (a1Mode === 'vocab') {
+  if (a1Mode === "vocab") {
     let list = a1VocabCache || [];
-    if (a1CurrentTopic) list = list.filter(w => w.topic === a1CurrentTopic);
+    if (a1CurrentTopic) list = list.filter((w) => w.topic === a1CurrentTopic);
     if (a1SearchQuery) {
-      list = list.filter(w =>
-        (w.word || '').toLowerCase().includes(a1SearchQuery) ||
-        (w.lemma || '').toLowerCase().includes(a1SearchQuery) ||
-        (w.definition_zh || '').toLowerCase().includes(a1SearchQuery)
+      list = list.filter(
+        (w) =>
+          (w.word || "").toLowerCase().includes(a1SearchQuery) ||
+          (w.lemma || "").toLowerCase().includes(a1SearchQuery) ||
+          (w.definition_zh || "").toLowerCase().includes(a1SearchQuery),
       );
     }
     return list;
-  } else if (a1Mode === 'teil2') {
+  } else if (a1Mode === "teil2") {
     let list = a1Teil2Cache || [];
-    if (a1CurrentTopic) list = list.filter(c => c.topic_id === a1CurrentTopic);
+    if (a1CurrentTopic)
+      list = list.filter((c) => c.topic_id === a1CurrentTopic);
     return list;
   } else {
     return a1Teil3Cache || [];
@@ -161,16 +199,16 @@ export function getA1CurrentList() {
 }
 
 export function renderA1() {
-  const container = document.getElementById('cards-container');
+  const container = document.getElementById("cards-container");
   if (!container) return;
 
-  if (a1Mode === 'vocab') {
-    if (getCardViewMode() === 'deck') {
+  if (a1Mode === "vocab") {
+    if (getCardViewMode() === "deck") {
       renderA1PokerCard();
     } else {
       renderA1GridView();
     }
-  } else if (a1Mode === 'teil2') {
+  } else if (a1Mode === "teil2") {
     renderA1Teil2Deck();
   } else {
     renderA1Teil3Deck();
@@ -178,7 +216,7 @@ export function renderA1() {
 }
 
 export function renderA1PokerCard() {
-  const container = document.getElementById('cards-container');
+  const container = document.getElementById("cards-container");
   if (!container) return;
 
   const list = getA1CurrentList();
@@ -195,21 +233,23 @@ export function renderA1PokerCard() {
 
   const cur = list[a1CardIndex % list.length];
   const total = list.length;
-  const isSaved = _a1SavedLemmas.has((cur.lemma || cur.word || '').toLowerCase());
+  const isSaved = _a1SavedLemmas.has(
+    (cur.lemma || cur.word || "").toLowerCase(),
+  );
 
-  let genderCls = 'gender-other';
-  let genderTag = '';
-  if (cur.gender === 'Masc') {
-    genderCls = 'a1-card-gender-m';
+  let genderCls = "gender-other";
+  let genderTag = "";
+  if (cur.gender === "Masc") {
+    genderCls = "a1-card-gender-m";
     genderTag = '<span class="gender-pill der">der · 阳性</span>';
-  } else if (cur.gender === 'Fem') {
-    genderCls = 'a1-card-gender-f';
+  } else if (cur.gender === "Fem") {
+    genderCls = "a1-card-gender-f";
     genderTag = '<span class="gender-pill die">die · 阴性</span>';
-  } else if (cur.gender === 'Neut') {
-    genderCls = 'a1-card-gender-n';
+  } else if (cur.gender === "Neut") {
+    genderCls = "a1-card-gender-n";
     genderTag = '<span class="gender-pill das">das · 中性</span>';
-  } else if (cur.gender === 'Plur') {
-    genderCls = 'a1-card-gender-f';
+  } else if (cur.gender === "Plur") {
+    genderCls = "a1-card-gender-f";
     genderTag = '<span class="gender-pill die">die · 复数</span>';
   }
 
@@ -221,17 +261,17 @@ export function renderA1PokerCard() {
       </div>
 
       <div class="deck-stack-wrap">
-        ${total > 2 ? '<div class="deck-card-layer deck-card-layer-3"></div>' : ''}
-        ${total > 1 ? '<div class="deck-card-layer deck-card-layer-2"></div>' : ''}
+        ${total > 2 ? '<div class="deck-card-layer deck-card-layer-3"></div>' : ""}
+        ${total > 1 ? '<div class="deck-card-layer deck-card-layer-2"></div>' : ""}
 
-        <div class="deck-active-card ${genderCls} ${a1CardFlipped ? 'is-flipped' : ''}" id="a1-active-card">
+        <div class="deck-active-card ${genderCls} ${a1CardFlipped ? "is-flipped" : ""}" id="a1-active-card">
           <!-- 正面 FRONT -->
           <div class="deck-card-face card-front" onclick="flipA1Card()">
             <div class="deck-card-head">
               <div>
                 <div class="deck-word-title">${esc(cur.word)}</div>
                 <div class="deck-meta-lemma">
-                  ${esc(cur.lemma)} · ${esc(cur.pos || 'WORT')} ${cur.plural ? '· Pl: ' + esc(cur.plural) : ''}
+                  ${esc(cur.lemma)} · ${esc(cur.pos || "WORT")} ${cur.plural ? "· Pl: " + esc(cur.plural) : ""}
                 </div>
               </div>
               <div class="card-top-actions">
@@ -249,9 +289,9 @@ export function renderA1PokerCard() {
             </div>
 
             <div class="deck-card-foot" style="justify-content:flex-end;" onclick="event.stopPropagation()">
-              <button class="btn ${isSaved ? 'btn-ghost saved' : 'btn-accent'} btn-xs"
-                      onclick="saveA1WordToDeck(${jsAttr(cur.lemma)}, ${jsAttr(cur.word)}, ${jsAttr(cur.pos || '')}, ${jsAttr(cur.gender || '')}, ${jsAttr(cur.plural || '')}, ${jsAttr(cur.definition_zh || '')}, ${jsAttr(cur.example_de || '')}, ${jsAttr(cur.example_zh || '')}, this)">
-                ${isSaved ? '✓ 已在复习盒' : '+ 加入 FSRS 盒'}
+              <button class="btn ${isSaved ? "btn-ghost saved" : "btn-accent"} btn-xs"
+                      onclick="saveA1WordToDeck(${jsAttr(cur.lemma)}, ${jsAttr(cur.word)}, ${jsAttr(cur.pos || "")}, ${jsAttr(cur.gender || "")}, ${jsAttr(cur.plural || "")}, ${jsAttr(cur.definition_zh || "")}, ${jsAttr(cur.example_de || "")}, ${jsAttr(cur.example_zh || "")}, this)">
+                ${isSaved ? "✓ 已在复习盒" : "+ 加入 FSRS 盒"}
               </button>
             </div>
           </div>
@@ -281,9 +321,9 @@ export function renderA1PokerCard() {
 
             <div class="deck-card-foot" style="justify-content:space-between;" onclick="event.stopPropagation()">
               <button class="btn btn-ghost btn-xs" onclick="flipA1Card()">↩ 返回正面</button>
-              <button class="btn ${isSaved ? 'btn-ghost saved' : 'btn-accent'} btn-xs"
-                      onclick="saveA1WordToDeck(${jsAttr(cur.lemma)}, ${jsAttr(cur.word)}, ${jsAttr(cur.pos || '')}, ${jsAttr(cur.gender || '')}, ${jsAttr(cur.plural || '')}, ${jsAttr(cur.definition_zh || '')}, ${jsAttr(cur.example_de || '')}, ${jsAttr(cur.example_zh || '')}, this)">
-                ${isSaved ? '✓ 已在复习盒' : '+ 加入 FSRS 盒'}
+              <button class="btn ${isSaved ? "btn-ghost saved" : "btn-accent"} btn-xs"
+                      onclick="saveA1WordToDeck(${jsAttr(cur.lemma)}, ${jsAttr(cur.word)}, ${jsAttr(cur.pos || "")}, ${jsAttr(cur.gender || "")}, ${jsAttr(cur.plural || "")}, ${jsAttr(cur.definition_zh || "")}, ${jsAttr(cur.example_de || "")}, ${jsAttr(cur.example_zh || "")}, this)">
+                ${isSaved ? "✓ 已在复习盒" : "+ 加入 FSRS 盒"}
               </button>
             </div>
           </div>
@@ -301,7 +341,7 @@ export function renderA1PokerCard() {
 }
 
 export function renderA1GridView() {
-  const container = document.getElementById('cards-container');
+  const container = document.getElementById("cards-container");
   if (!container) return;
 
   const list = getA1CurrentList();
@@ -315,13 +355,13 @@ export function renderA1GridView() {
     return;
   }
 
-  let cardsHtml = '';
+  let cardsHtml = "";
   for (const w of list) {
-    const isSaved = _a1SavedLemmas.has((w.lemma || w.word || '').toLowerCase());
-    let genderStrip = '';
-    if (w.gender === 'Masc') genderStrip = 'gender-masc-strip';
-    else if (w.gender === 'Fem') genderStrip = 'gender-fem-strip';
-    else if (w.gender === 'Neut') genderStrip = 'gender-neut-strip';
+    const isSaved = _a1SavedLemmas.has((w.lemma || w.word || "").toLowerCase());
+    let genderStrip = "";
+    if (w.gender === "Masc") genderStrip = "gender-masc-strip";
+    else if (w.gender === "Fem") genderStrip = "gender-fem-strip";
+    else if (w.gender === "Neut") genderStrip = "gender-neut-strip";
 
     cardsHtml += `
       <div class="card-item card-vocab a1-grid-card ${genderStrip}">
@@ -332,16 +372,16 @@ export function renderA1GridView() {
             <span class="cefr-badge badge-A1">A1</span>
           </div>
         </div>
-        <div class="card-lemma-row">${esc(w.lemma)} · ${esc(w.pos || '')} ${w.plural ? '· Pl: ' + esc(w.plural) : ''}</div>
+        <div class="card-lemma-row">${esc(w.lemma)} · ${esc(w.pos || "")} ${w.plural ? "· Pl: " + esc(w.plural) : ""}</div>
         <div class="card-def">${esc(w.definition_zh)}</div>
         <div class="card-context" style="margin-top:0.5rem;font-size:0.85rem;">
           <div style="color:var(--ink);">${esc(w.example_de)}</div>
           <div style="color:var(--ink-mute);font-size:0.775rem;">${esc(w.example_zh)}</div>
         </div>
         <div class="card-actions" style="margin-top:0.75rem;justify-content:flex-end;">
-          <button class="btn ${isSaved ? 'btn-ghost saved' : 'btn-accent'} btn-xs"
-                  onclick="saveA1WordToDeck(${jsAttr(w.lemma)}, ${jsAttr(w.word)}, ${jsAttr(w.pos || '')}, ${jsAttr(w.gender || '')}, ${jsAttr(w.plural || '')}, ${jsAttr(w.definition_zh || '')}, ${jsAttr(w.example_de || '')}, ${jsAttr(w.example_zh || '')}, this)">
-            ${isSaved ? '✓ 已在复习盒' : '+ 加入 FSRS 盒'}
+          <button class="btn ${isSaved ? "btn-ghost saved" : "btn-accent"} btn-xs"
+                  onclick="saveA1WordToDeck(${jsAttr(w.lemma)}, ${jsAttr(w.word)}, ${jsAttr(w.pos || "")}, ${jsAttr(w.gender || "")}, ${jsAttr(w.plural || "")}, ${jsAttr(w.definition_zh || "")}, ${jsAttr(w.example_de || "")}, ${jsAttr(w.example_zh || "")}, this)">
+            ${isSaved ? "✓ 已在复习盒" : "+ 加入 FSRS 盒"}
           </button>
         </div>
       </div>
@@ -357,7 +397,7 @@ export function renderA1GridView() {
 }
 
 export function renderA1Teil2Deck() {
-  const container = document.getElementById('cards-container');
+  const container = document.getElementById("cards-container");
   if (!container) return;
 
   const list = getA1CurrentList();
@@ -366,11 +406,11 @@ export function renderA1Teil2Deck() {
   const cur = list[a1CardIndex % list.length];
   const total = list.length;
 
-  let promptsHtml = '';
-  for (const p of (cur.prompts || [])) {
+  let promptsHtml = "";
+  for (const p of cur.prompts || []) {
     promptsHtml += `
       <div class="a1-prompt-box">
-        <div class="a1-prompt-badge ${p.type === 'W-Frage' ? 'badge-w' : 'badge-jn'}">${esc(p.type)}</div>
+        <div class="a1-prompt-badge ${p.type === "W-Frage" ? "badge-w" : "badge-jn"}">${esc(p.type)}</div>
         <div class="a1-prompt-q">
           <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(p.q)})" title="朗读提问">🔊</button>
           <b>问：</b>${esc(p.q)}
@@ -391,7 +431,7 @@ export function renderA1Teil2Deck() {
       </div>
 
       <div class="deck-stack-wrap">
-        <div class="deck-active-card a1-sprechen-card ${a1CardFlipped ? 'is-flipped' : ''}" id="a1-active-card">
+        <div class="deck-active-card a1-sprechen-card ${a1CardFlipped ? "is-flipped" : ""}" id="a1-active-card">
           <!-- 正面 FRONT (考场抽题卡) -->
           <div class="deck-card-face card-front" onclick="flipA1Card()">
             <div class="deck-card-head">
@@ -440,7 +480,7 @@ export function renderA1Teil2Deck() {
 }
 
 export function renderA1Teil3Deck() {
-  const container = document.getElementById('cards-container');
+  const container = document.getElementById("cards-container");
   if (!container) return;
 
   const list = getA1CurrentList();
@@ -449,11 +489,11 @@ export function renderA1Teil3Deck() {
   const cur = list[a1CardIndex % list.length];
   const total = list.length;
 
-  let reqsHtml = '';
-  for (const r of (cur.requests || [])) {
+  let reqsHtml = "";
+  for (const r of cur.requests || []) {
     reqsHtml += `
       <div class="a1-prompt-box">
-        <div class="a1-prompt-badge badge-w">${esc(r.style || 'Bitte')}</div>
+        <div class="a1-prompt-badge badge-w">${esc(r.style || "Bitte")}</div>
         <div class="a1-prompt-q">
           <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(r.utterance)})" title="朗读请求">🔊</button>
           <b>提出请求：</b>${esc(r.utterance)}
@@ -474,7 +514,7 @@ export function renderA1Teil3Deck() {
       </div>
 
       <div class="deck-stack-wrap">
-        <div class="deck-active-card a1-sprechen-card ${a1CardFlipped ? 'is-flipped' : ''}" id="a1-active-card">
+        <div class="deck-active-card a1-sprechen-card ${a1CardFlipped ? "is-flipped" : ""}" id="a1-active-card">
           <!-- 正面 FRONT (物品图标与情景) -->
           <div class="deck-card-face card-front" onclick="flipA1Card()">
             <div class="deck-card-head">
@@ -520,37 +560,46 @@ export function renderA1Teil3Deck() {
   `;
 }
 
-export async function saveA1WordToDeck(lemma, word, pos, gender, plural, defn, exampleDe, exampleZh, btn) {
+export async function saveA1WordToDeck(
+  lemma,
+  word,
+  pos,
+  gender,
+  plural,
+  defn,
+  exampleDe,
+  exampleZh,
+  btn,
+) {
   if (btn) btn.disabled = true;
   try {
-    await api('/api/cards/vocab', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await api("/api/cards/vocab", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         article_id: null,
         word: word || lemma,
         lemma: lemma,
-        pos: pos || 'WORT',
-        gender: gender || '',
-        plural: plural || '',
-        cefr_level: 'A1',
-        definition_zh: defn || '',
-        sentence_context: exampleDe || '',
+        pos: pos || "WORT",
+        gender: gender || "",
+        plural: plural || "",
+        cefr_level: "A1",
+        definition_zh: defn || "",
+        sentence_context: exampleDe || "",
       }),
     });
     _a1SavedLemmas.add((lemma || word).toLowerCase());
     if (btn) {
-      btn.textContent = '✓ 已在复习盒';
-      btn.classList.add('saved');
+      btn.textContent = "✓ 已在复习盒";
+      btn.classList.add("saved");
     }
     refreshCardCounters();
-    Companion.celebrate('card_vocab');
+    Companion.celebrate("card_vocab");
   } catch (e) {
     if (btn) btn.disabled = false;
-    alert('保存词汇卡失败');
+    alert("保存词汇卡失败");
   }
 }
 
 export const saveA1VocabCard = saveA1WordToDeck;
 export const playA1Audio = playGermanAudio;
-

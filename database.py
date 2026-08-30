@@ -49,15 +49,22 @@ def get_db(db_path: Optional[str] = None):
     return _configure_sqlite_conn(conn)
 
 
-def get_progress_db(db_path: Optional[str] = None):
-    conn = sqlite3.connect(get_progress_db_path(db_path))
-    return _configure_sqlite_conn(conn)
+_INITIALIZED_PROGRESS_DBS = set()
 
+
+def get_progress_db(db_path: Optional[str] = None):
+    target_path = get_progress_db_path(db_path)
+    if target_path not in _INITIALIZED_PROGRESS_DBS:
+        init_progress_db(target_path)
+    conn = sqlite3.connect(target_path)
+    return _configure_sqlite_conn(conn)
 
 
 def init_progress_db(db_path: Optional[str] = None):
     target_path = get_progress_db_path(db_path)
-    with get_progress_db(target_path) as conn:
+    conn = sqlite3.connect(target_path)
+    _configure_sqlite_conn(conn)
+    with conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS study_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,6 +94,33 @@ def init_progress_db(db_path: Optional[str] = None):
                 study_minutes INTEGER DEFAULT 0
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS a1_hoeren_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                set_id INTEGER NOT NULL,
+                score_raw INTEGER NOT NULL,
+                score_official REAL NOT NULL,
+                total_questions INTEGER NOT NULL,
+                duration_seconds INTEGER NOT NULL,
+                answers_json TEXT NOT NULL,
+                wrong_questions_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS a1_lesen_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                set_id INTEGER NOT NULL,
+                score_raw INTEGER NOT NULL,
+                score_official REAL NOT NULL,
+                total_questions INTEGER NOT NULL,
+                duration_seconds INTEGER NOT NULL,
+                answers_json TEXT NOT NULL,
+                wrong_questions_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+    _INITIALIZED_PROGRESS_DBS.add(target_path)
 
 
 def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "", minutes: int = 0, db_path: Optional[str] = None):
@@ -535,6 +569,14 @@ _PROGRESS_TABLES = {
         {"cards_added": 0, "cards_mastered": 0, "articles_read": 0,
          "quiz_sessions": 0, "study_minutes": 0},
     ),
+    "a1_hoeren_records": (
+        ("id", "set_id", "score_raw", "score_official", "total_questions", "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
+        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15, "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+    ),
+    "a1_lesen_records": (
+        ("id", "set_id", "score_raw", "score_official", "total_questions", "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
+        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15, "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+    ),
 }
 
 
@@ -693,6 +735,58 @@ def add_prep_saved(lemma: str, praep: str, kasus: str, db_path: Optional[str] = 
         )
 
 
+def record_a1_hoeren_trial(set_id: int, score_raw: int, score_official: float,
+                           total_questions: int, duration_seconds: int,
+                           answers_json: str, wrong_questions_json: str,
+                           db_path: Optional[str] = None) -> int:
+    """持久化一次 A1 听力模考记录"""
+    with get_progress_db(db_path) as conn:
+        cur = conn.execute("""
+            INSERT INTO a1_hoeren_records (
+                set_id, score_raw, score_official, total_questions,
+                duration_seconds, answers_json, wrong_questions_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (set_id, score_raw, score_official, total_questions,
+              duration_seconds, answers_json, wrong_questions_json))
+        log_study_event("a1_hoeren", ref_id=cur.lastrowid, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
+        return cur.lastrowid
+
+
+def get_a1_hoeren_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """查询 A1 听力模考历史记录"""
+    with get_progress_db(db_path) as conn:
+        rows = conn.execute("""
+            SELECT * FROM a1_hoeren_records ORDER BY id DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def record_a1_lesen_trial(set_id: int, score_raw: int, score_official: float,
+                          total_questions: int, duration_seconds: int,
+                          answers_json: str, wrong_questions_json: str,
+                          db_path: Optional[str] = None) -> int:
+    """持久化一次 A1 阅读模考记录"""
+    with get_progress_db(db_path) as conn:
+        cur = conn.execute("""
+            INSERT INTO a1_lesen_records (
+                set_id, score_raw, score_official, total_questions,
+                duration_seconds, answers_json, wrong_questions_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (set_id, score_raw, score_official, total_questions,
+              duration_seconds, answers_json, wrong_questions_json))
+        log_study_event("a1_lesen", ref_id=cur.lastrowid, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
+        return cur.lastrowid
+
+
+def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """查询 A1 阅读模考历史记录"""
+    with get_progress_db(db_path) as conn:
+        rows = conn.execute("""
+            SELECT * FROM a1_lesen_records ORDER BY id DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
 __all__ = [
     "DATA_DIR",
     "AUDIO_CACHE_DIR",
@@ -735,4 +829,8 @@ __all__ = [
     "_replace_tables",
     "get_prep_saved",
     "add_prep_saved",
+    "record_a1_hoeren_trial",
+    "get_a1_hoeren_history",
+    "record_a1_lesen_trial",
+    "get_a1_lesen_history",
 ]
