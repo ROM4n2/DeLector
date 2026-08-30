@@ -6,8 +6,8 @@ import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";
 import { getCardViewMode, getCachedVocabLemmas } from "./cards.js";
-import { initA1Hoeren } from "./a1_hoeren.js";
-import { initA1Lesen } from "./a1_lesen.js";
+import { initA1Hoeren, stopHoerenExam } from "./a1_hoeren.js";
+import { initA1Lesen, stopLesenExam } from "./a1_lesen.js";
 
 // ── Goethe A1 Wortliste & Sprechen State ─────────────────────────────────────
 export let a1Mode = "vocab"; // 'vocab' | 'teil2' | 'teil3' | 'hoeren' | 'lesen'
@@ -74,6 +74,8 @@ export function renderA1TopicPills() {
 }
 
 export function setA1Mode(mode) {
+  stopHoerenExam();
+  stopLesenExam();
   a1Mode = mode;
   a1CardIndex = 0;
   a1CardFlipped = false;

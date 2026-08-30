@@ -1511,8 +1511,7 @@ def get_hoeren_set_by_id(set_id: int, sanitize: bool = True) -> Optional[Dict[st
                 "question_de": q["question_de"],
                 "options": q["options"],
                 "repeat_count": q["repeat_count"],
-                "audio_text_de": q["audio_text_de"],
-                "key_vocabulary": q.get("key_vocabulary", [])
+                "audio_text_de": q["audio_text_de"]
             }
             clean_questions.append(clean_q)
         sanitized_parts[part_name] = clean_questions

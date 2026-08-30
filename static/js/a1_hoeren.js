@@ -3,6 +3,8 @@
 
 import { api, esc } from "./core.js";
 import { playGermanAudio } from "./player.js";
+import { refreshCardCounters } from "./reader.js";
+import { Companion } from "./companion.js";
 
 export let hoerenSets = [];
 export let currentSetId = 1;
@@ -15,6 +17,7 @@ let _examTimer = null;
 let _examStartTime = 0;
 let _lastGradedResult = null;
 let _audioElement = null;
+let _currentSessionToken = 0;
 
 export async function initA1Hoeren() {
   const container = document.getElementById("a1-hoeren-container");
@@ -69,16 +72,21 @@ export function renderHoerenHeader() {
   `;
 }
 
-export async function selectHoerenSet(setId) {
-  currentSetId = setId;
-  examPhase = "idle";
-  userAnswers = {};
-  currentQuestionIndex = 0;
-  _lastGradedResult = null;
+export function stopHoerenExam() {
+  _currentSessionToken++;
   if (_examTimer) {
     clearInterval(_examTimer);
     _examTimer = null;
   }
+  examPhase = "idle";
+}
+
+export async function selectHoerenSet(setId) {
+  stopHoerenExam();
+  currentSetId = setId;
+  userAnswers = {};
+  currentQuestionIndex = 0;
+  _lastGradedResult = null;
 
   renderHoerenHeader();
 
@@ -283,6 +291,8 @@ export async function startHoerenExam() {
     if (!confirm("考试正在进行中，是否重新开始？")) return;
   }
 
+  stopHoerenExam();
+  const myToken = _currentSessionToken;
   examPhase = "reading";
   currentQuestionIndex = 0;
   _examStartTime = Date.now();
@@ -293,10 +303,12 @@ export async function startHoerenExam() {
     startBtn.disabled = true;
   }
 
-  runExamQuestionStep(0);
+  runExamQuestionStep(0, myToken);
 }
 
-async function runExamQuestionStep(qIndex) {
+async function runExamQuestionStep(qIndex, myToken) {
+  if (myToken !== _currentSessionToken) return;
+
   const allQ = getAllQuestions();
   if (qIndex >= allQ.length) {
     finishExamCountdown();
@@ -311,26 +323,31 @@ async function runExamQuestionStep(qIndex) {
   // 1. 读题时间 (5s)
   setPhaseInfo("读题时间 (Lesen)", 5);
   await waitSeconds(5);
+  if (myToken !== _currentSessionToken) return;
 
   // 2. 第一遍朗读
   setPhaseInfo(`第 1 遍播放 (${q.repeat_count === 1 ? "仅1遍" : "共2遍"})`, 0);
-  await playAudioPromise(q.audio_text_de);
+  await playAudioPromise(q.audio_text_de, myToken);
+  if (myToken !== _currentSessionToken) return;
 
   // 3. 若为重复 2 遍题型，停顿 4 秒后放第二遍
   if (q.repeat_count === 2) {
     setPhaseInfo("思考停顿...", 4);
     await waitSeconds(4);
+    if (myToken !== _currentSessionToken) return;
 
     setPhaseInfo("第 2 遍播放", 0);
-    await playAudioPromise(q.audio_text_de);
+    await playAudioPromise(q.audio_text_de, myToken);
+    if (myToken !== _currentSessionToken) return;
   }
 
   // 4. 答题停顿时间 (8s)
   setPhaseInfo("请作答 (Antworten)", 8);
   await waitSeconds(8);
+  if (myToken !== _currentSessionToken) return;
 
   // 进入下一题
-  runExamQuestionStep(qIndex + 1);
+  runExamQuestionStep(qIndex + 1, myToken);
 }
 
 function setPhaseInfo(label, sec) {
@@ -366,17 +383,21 @@ function waitSeconds(sec) {
   return new Promise((resolve) => setTimeout(resolve, sec * 1000));
 }
 
-function playAudioPromise(text) {
+function playAudioPromise(text, myToken) {
   return new Promise((resolve) => {
+    if (myToken !== _currentSessionToken) {
+      resolve();
+      return;
+    }
     try {
       playGermanAudio(text);
       // 根据字数估算朗读时长 (德语大约每秒 3.2 个音节或 2.2 个词)
       const words = text.split(/\s+/).length;
       const estimatedSec = Math.max(3, Math.ceil(words / 2.2) + 2);
-      setTimeout(resolve, estimatedSec * 1000);
+      setTimeout(() => resolve(), estimatedSec * 1000);
     } catch (e) {
       console.warn("Audio play failed, fallback next", e);
-      setTimeout(resolve, 3000);
+      setTimeout(() => resolve(), 3000);
     }
   });
 }
@@ -466,7 +487,7 @@ function renderGradedResults(graded) {
       const vocabChips = (d.key_vocabulary || [])
         .map(
           (v) => `
-        <span class="a1-vocab-chip" onclick="A1Hoeren.saveVocabChip('${esc(v.word)}', '${esc(v.meaning)}')">
+        <span class="a1-vocab-chip" onclick="A1Hoeren.saveVocabChip('${esc(v.word)}', '${esc(v.meaning)}', this)">
           <strong>${esc(v.word)}</strong> ${v.plural ? `(${esc(v.plural)})` : ""}: ${esc(v.meaning)} ➕
         </span>
       `,
@@ -514,24 +535,40 @@ function renderGradedResults(graded) {
   }
 }
 
-export function saveVocabChip(word, meaning) {
-  // 快速添加词汇到背词卡
-  api("/api/cards/vocab", {
-    method: "POST",
-    body: JSON.stringify({
-      word: word,
-      lemma: word.replace(/^(der|die|das)\s+/i, ""),
-      pos: "NOUN",
-      definition_zh: meaning,
-      sentence_context: `Goethe A1 听力高频考点词: ${word} (${meaning})`,
-    }),
-  })
-    .then(() => {
-      alert(`✅ 已成功将「${word}」收录进复习卡盒！`);
-    })
-    .catch((e) => {
-      alert(`收录失败: ${e.message}`);
+export async function saveVocabChip(word, meaning, el) {
+  if (el) {
+    el.style.pointerEvents = "none";
+    el.classList.add("saving");
+  }
+  try {
+    await api("/api/cards/vocab", {
+      method: "POST",
+      body: JSON.stringify({
+        article_id: null,
+        word: word,
+        lemma: word.replace(/^(der|die|das)\s+/i, ""),
+        pos: "NOUN",
+        gender: "",
+        plural: "",
+        cefr_level: "A1",
+        definition_zh: meaning,
+        sentence_context: `Goethe A1 听力考点词: ${word} (${meaning})`,
+      }),
     });
+    if (el) {
+      el.innerHTML = `<strong>${esc(word)}</strong>: ${esc(meaning)} ✓ 已收录`;
+      el.classList.remove("saving");
+      el.classList.add("saved");
+    }
+    refreshCardCounters();
+    Companion.celebrate("card_vocab");
+  } catch (e) {
+    if (el) {
+      el.style.pointerEvents = "auto";
+      el.classList.remove("saving");
+    }
+    alert(`收录失败: ${e.message}`);
+  }
 }
 
 // 挂载全局对象供 HTML onclick 唤起
@@ -543,6 +580,7 @@ window.A1Hoeren = {
   jumpToQuestion,
   playSingleAudio,
   startHoerenExam,
+  stopHoerenExam,
   submitHoerenExam,
   saveVocabChip,
 };

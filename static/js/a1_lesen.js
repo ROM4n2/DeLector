@@ -64,12 +64,19 @@ export function renderLesenHeader() {
   `;
 }
 
+export function stopLesenExam() {
+  if (_examTimer) {
+    clearInterval(_examTimer);
+    _examTimer = null;
+  }
+}
+
 export async function selectLesenSet(setId) {
+  stopLesenExam();
   currentSetId = setId;
   userAnswers = {};
   _examStartTime = Date.now();
   _timerRemainingSec = 25 * 60;
-  if (_examTimer) clearInterval(_examTimer);
 
   renderLesenHeader();
   startLesenTimer();
@@ -481,5 +488,6 @@ window.A1Lesen = {
   renderLesenQuestions,
   selectOption,
   jumpToQuestion,
+  stopLesenExam,
   submitLesenExam,
 };
