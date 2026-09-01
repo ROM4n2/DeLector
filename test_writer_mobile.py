@@ -11,6 +11,7 @@ SW = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 SERVER = (ROOT / "server.py").read_text(encoding="utf-8")
 MAIN_JS = (ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
 GRADLE = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
+README = (ROOT / "README.md").read_text(encoding="utf-8")
 MAIN_ACTIVITY = (
     ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app" / "MainActivity.java"
 ).read_text(encoding="utf-8")
@@ -106,6 +107,46 @@ def test_version_is_consistent_across_release_surfaces():
     assert "DELECTOR_VERSION_NAME" in workflow and "android/app/build.gradle" in workflow, (
         "build-release.yml 的回落路径应解析 build.gradle 的 fallback"
     )
+
+
+def test_readme_download_table_points_at_current_version():
+    """README 的下载表与 Release badge 必须跟 build.gradle 的版本走。
+
+    版本三处代码落点（index.html / sw.js / build.gradle）由上一条测试钉死，漏
+    bump 会红；README 的四行下载表却没人守 —— v4.9.0 发版时 badge、词量、用例数、
+    路线图都同步了，偏偏四行下载链接还指向 v4.8.3，用户从 README 点下载会拿到
+    上一版。这类漏发不会让任何东西报错，只会静默发错包，所以必须变成红灯。
+
+    断言「与 build.gradle 相等」而不是写死字面量：写死的每次 bump 都要改测试，
+    而改测试的人迟早只改测试、不查它守的东西是否还成立。
+    """
+    gradle_name = re.search(r'DELECTOR_VERSION_NAME"\)\s*\?:\s*"(\d+\.\d+\.\d+)"', GRADLE)
+    assert gradle_name, "build.gradle 里找不到 DELECTOR_VERSION_NAME 的 fallback"
+    version = gradle_name.group(1)
+
+    badge = re.search(r"badge/Release-v(\d+\.\d+\.\d+)-", README)
+    assert badge, "README 顶部找不到 Release badge"
+    assert badge.group(1) == version, (
+        f"版本不一致：README badge={badge.group(1)} vs build.gradle={version}"
+    )
+
+    # 逐行取下载表：每行同时含「版本单元格」与「releases/tag 链接」，两者都要对。
+    # 只断言「没有旧版本链接」是不够的 —— 表整个被删掉也能过。
+    rows = [ln for ln in README.splitlines() if "releases/tag/v" in ln and ln.startswith("|")]
+    assert len(rows) == 4, (
+        "下载表应为 4 行（Windows / macOS / Linux / Android），实际 %d 行；"
+        "增删平台时请同步这里，别把断言改成 >= 0" % len(rows)
+    )
+    for row in rows:
+        cell = re.search(r"`v(\d+\.\d+\.\d+)`", row)
+        assert cell, "下载表某行缺少 `vX.Y.Z` 版本单元格：%s" % row[:60]
+        assert cell.group(1) == version, (
+            f"下载表版本单元格={cell.group(1)} vs build.gradle={version}：{row[:60]}"
+        )
+        link = re.search(r"releases/tag/v(\d+\.\d+\.\d+)", row)
+        assert link.group(1) == version, (
+            f"下载链接={link.group(1)} vs build.gradle={version}：{row[:60]}"
+        )
 
 
 def test_android_reunpacks_static_assets_on_version_change():

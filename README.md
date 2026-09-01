@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-409%2F409%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-410%2F410%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -249,7 +249,7 @@ DeLector/
 ├── tools/                  # 构建/生成工具（build_dict.py 词库 + build_prep.py 介词 + 缓存）
 ├── test_server.py          # 后端与安全/CI/备份/AI 回归 (180 用例)
 ├── test_writing_rules.py   # 写作规则引擎，含零误报反例 (31 用例)
-├── test_writer_mobile.py   # 写作台移动端几何与触屏契约 + 版本一致性 (28 用例)
+├── test_writer_mobile.py   # 写作台移动端几何与触屏契约 + 版本/README 发布面一致性 (29 用例)
 ├── test_syntax_tree.py     # 拓扑五场域与 AST 从句树 (15 用例)
 ├── test_german_workbench.py # 背词工作台音频补丁/核心词模式/导入去重契约 (55 用例)
 ├── test_essay_diff.py      # 句子级 diff 引擎 (13 用例)
