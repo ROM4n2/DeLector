@@ -460,10 +460,6 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
     <div class="toolbar">
       <input type="search" id="wSearch" placeholder="搜索单词或释义…">
       <select id="wLetter"><option value="">全部字母</option></select>
-      <select id="wScope">
-        <option value="all">全部词</option>
-        <option value="core">⭐ 核心词</option>
-      </select>
       <select id="wTag"><option value="">全部标签</option></select>
       <select id="wDiff">
         <option value="">全部难度</option>
@@ -2575,37 +2571,30 @@ function renderWords() {
   }).join("") || "<tr><td colspan='6' style='text-align:center;color:var(--muted);padding:24px'>没有匹配的单词</td></tr>";
 }
 
-["wSearch", "wLetter", "wTag", "wDiff", "wState", "wScope"].forEach(id => {
+["wSearch", "wLetter", "wTag", "wDiff", "wState"].forEach(id => {
   const el = $(id);
   el.addEventListener("input", () => {
-    const prevScope = wordFilters.scope;
     wordFilters.q = $("wSearch").value.trim();
     wordFilters.letter = $("wLetter").value;
     wordFilters.tag = $("wTag").value;
     wordFilters.diff = $("wDiff").value;
     wordFilters.state = $("wState").value;
-    wordFilters.scope = $("wScope").value;
     renderWords();
-    if (wordFilters.scope !== prevScope) { syncScopeControls(); refilterReviewQueueForScope(); renderHeaderBadge(); }
   });
 });
 
-/* scope 目前有两个控件：顶栏常驻分段控件 #scopeSeg 与词库工具栏的 #wScope。
- * 任何一处改了 wordFilters.scope 都必须调这里，把状态刷到另一处 ——
- * 漏同步就会出现「顶栏显示核心、词库下拉显示全部」。
- * 两处都做存在性判空：ADR-0002 Task 2 会删掉 #wScope，届时不该留下悬空引用炸掉整段 handler。 */
+/* scope 只有顶栏常驻分段控件 #scopeSeg 一个控件（ADR-0002 Task 2 删掉了词库工具栏里
+ * 那个下拉：同一状态两个写入口就得双向同步，漏一处就「顶栏核心 / 词库全部」对不上）。
+ * 本函数的职责就一件事：把当前 wordFilters.scope 刷成控件的 .active 态。
+ * 将来若再加第二个控件，在此扩一处即可，写入点那边不用改。
+ * #scopeSeg 写死在同文件 markup 里，故与同文件 $("wBody") 等处一样直取不判空。 */
 function syncScopeControls() {
-  const seg = $("scopeSeg");
-  if (seg) {
-    seg.querySelectorAll("button[data-scope]").forEach(b => {
-      b.classList.toggle("active", b.dataset.scope === wordFilters.scope);
-    });
-  }
-  const sel = $("wScope");
-  if (sel && sel.value !== wordFilters.scope) sel.value = wordFilters.scope;
+  $("scopeSeg").querySelectorAll("button[data-scope]").forEach(b => {
+    b.classList.toggle("active", b.dataset.scope === wordFilters.scope);
+  });
 }
 
-/* 顶栏切模式：复用词库 select 的同一条链路。
+/* 顶栏切模式：wordFilters.scope 的唯一写入口。
  * 禁止 buildReviewQueue() —— 它 revIdx = 0 且重洗牌，复习到一半切模式会被弹回第一张。 */
 $("scopeSeg").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-scope]");

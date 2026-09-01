@@ -620,16 +620,30 @@ def _words_filter_listener():
     return m.group(0)
 
 
-def test_core_scope_toggle_in_words_toolbar():
-    """词库视图 toolbar 里有 scope 切换控件 #wScope，两档：全部 / 核心。
+def test_scope_control_is_globally_single():
+    """scope 切换控件全局只有一个，就是顶栏的 #scopeSeg。
 
-    变异验证：删掉控件 → 存在性断言红；只留一个 option → value 断言红。
+    迁移自 test_core_scope_toggle_in_words_toolbar（原来钉词库 toolbar 里那个
+    scope 下拉 select）。ADR-0002 Task 2 把那个 select 删了：同一状态两个
+    写入口就得双向同步，漏一处就出现「顶栏显示核心、词库下拉显示全部」。
+    与 Task 1 的 test_scope_segment_has_both_modes **不重复**：那条只证明顶栏里
+    有两档按钮，别处再冒出第二个控件它照样绿；这条钉的是 DOM 侧的**唯一性**。
+    变异验证（已实跑）：把 scope 下拉 select 加回词库 toolbar → 第一条红。
     """
     tb = _words_toolbar()
-    assert 'id="wScope"' in tb, "词库视图 toolbar 缺少核心词模式切换控件 #wScope"
-    sel = tb.split('id="wScope"')[1].split("</select>")[0]
-    assert 'value="all"' in sel, "#wScope 缺少「全部词」档（value=all）"
-    assert 'value="core"' in sel, "#wScope 缺少「核心词」档（value=core）"
+    assert not re.search(r"scope", tb, re.I), (
+        "词库 toolbar 里不许再有 scope 控件 —— scope 是全局模式，唯一入口在顶栏 #scopeSeg"
+    )
+    assert len(re.findall(r'id="scopeSeg"', _WORKBENCH)) == 1, (
+        "#scopeSeg 必须全文件只出现一次（多个同 id 容器 = 多个写入口）"
+    )
+    hdr = _header_top()
+    assert len(re.findall(r'data-scope="', _WORKBENCH)) == 2, (
+        "全文件的 data-scope 档位按钮必须恰好两个（all / core）"
+    )
+    assert len(re.findall(r'data-scope="', hdr)) == 2, (
+        "两个档位按钮必须都在顶栏切片里（在别处 = 又多了一个控件）"
+    )
 
 
 def test_core_scope_filter_in_words_view():
@@ -659,20 +673,48 @@ def test_core_scope_filter_in_words_view():
     assert "return false" in line, "core 档下非核心词必须 return false（真过滤掉）"
 
 
-def test_core_scope_listener_wired():
-    """#wScope 进事件绑定数组，change 时写回 wordFilters.scope 并重渲染。
+_SCOPE_WRITE = r"wordFilters\.scope\s*=[^=]"
 
-    本仓库教训（悬空标识符/未接线）：控件加了但没绑 listener，
-    页面看着正常、点了没反应。这条断言就是钉接线。
-    变异验证：数组里删掉 "wScope" → 第一条红；handler 里不写回 scope → 第二条红。
+
+def _scope_write_sites():
+    """所有写 wordFilters.scope 的位置（赋值，不含 `===` / `!==` 比较）。
+
+    返回 [(行号, 从赋值处到所在顶层块结尾的代码), ...]。
+    切到「第 0 列的 `}`」为止 —— 只有同一个块里、赋值**之后**的代码才算
+    「这次切模式做了什么」，写在别的函数里的调用不算数。
     """
-    blk = _words_filter_listener()
-    ids = blk.split("]")[0]
-    assert '"wScope"' in ids, '"wScope" 必须加入词表 filter 控件的事件绑定数组'
-    assert re.search(r'wordFilters\.scope\s*=\s*\$\(\s*"wScope"\s*\)\.value', blk), (
-        "change handler 必须把 #wScope 的值写回 wordFilters.scope"
+    sites = []
+    for m in re.finditer(_SCOPE_WRITE, _WORKBENCH):
+        end = _WORKBENCH.index("\n}", m.end())
+        sites.append((_WORKBENCH[: m.start()].count("\n") + 1, _WORKBENCH[m.end() : end]))
+    return sites
+
+
+def test_scope_has_single_write_site():
+    """wordFilters.scope 全文件只有一个写入点，且它在顶栏 #scopeSeg 的 click handler 里。
+
+    迁移自 test_core_scope_listener_wired（原来钉词库 scope 下拉进词表 filter
+    绑定数组、并在那个 handler 里写回 scope）。ADR-0002 Task 2 的产出就是「单一写入口」，
+    所以断言从「第二个入口存在」翻转成「第二个入口不存在」。
+    与 Task 1 的 test_scope_segment_click_reuses_refilter_chain **不重复**：那条只问
+    顶栏 handler 里**有没有**一处赋值，别处再加第二个写入点它照样绿；这条数的是
+    全文件命中数，多一处就红。
+    变异验证（已实跑）：删掉顶栏 handler 里 `wordFilters.scope = next;` → 命中数 0，红。
+    """
+    sites = _scope_write_sites()
+    assert len(sites) == 1, (
+        "wordFilters.scope 的写入点必须全局唯一（顶栏 #scopeSeg），实际 %d 处：行 %r"
+        % (len(sites), [ln for ln, _ in sites])
     )
-    assert "renderWords()" in blk, "handler 必须重新渲染词表"
+    fn = _scope_seg_click_handler()
+    assert re.search(_SCOPE_WRITE, fn), (
+        "唯一的 scope 写入点必须落在顶栏 #scopeSeg 的 click handler 里"
+    )
+    blk = _words_filter_listener()
+    assert not re.search(_SCOPE_WRITE, blk), (
+        "词表 filter 控件的 handler 不许再写 wordFilters.scope（scope 已收敛到顶栏）"
+    )
+    assert "renderWords()" in blk, "词表 filter handler 仍必须重新渲染词表"
 
 
 # --------------------------------------------------------------------------
@@ -851,16 +893,25 @@ def test_core_scope_midreview_switch_filters_only_upcoming():
     assert "renderReview()" in fn, "重过滤后必须刷新复习视图"
 
 
-def test_core_scope_midreview_switch_wired():
-    """#wScope 的 change handler 必须调用队列重过滤。
+def test_scope_switch_refilters_review_queue():
+    """凡是写 wordFilters.scope 的地方，同块内**随后**都必须调 refilterReviewQueueForScope()。
 
-    本仓库教训（控件加了没接线）：过滤函数写了但没人调，复习队列照旧。
-    变异验证：handler 里删掉调用 → 断言红。
+    迁移自 test_core_scope_midreview_switch_wired（原来钉词库 scope 下拉的 change handler）。
+    守的不变式一字未改：切模式必须同步复习队列，否则切到核心词后队列里还留着
+    非核心词，用户以为切了其实没切。
+    与 Task 1 的 test_scope_segment_click_reuses_refilter_chain **不重复**：那条只问
+    顶栏 handler 里出不出现这个调用，先后顺序不管、将来新开的写入点也不管；这条
+    遍历**每一个**写入点，且切片从赋值处起算 —— 调用写在赋值**之前**（用旧 scope
+    过滤，等于永远慢一拍）同样红。
+    变异验证（已实跑）：删掉顶栏 handler 里的 refilterReviewQueueForScope() → 红。
     """
-    blk = _words_filter_listener()
-    assert "refilterReviewQueueForScope()" in blk, (
-        "#wScope change handler 必须调用 refilterReviewQueueForScope() 同步复习队列"
-    )
+    sites = _scope_write_sites()
+    assert sites, "全文件找不到 wordFilters.scope 的写入点，无从检查队列同步"
+    for line, seg in sites:
+        assert "refilterReviewQueueForScope()" in seg, (
+            "行 %d 写了 wordFilters.scope 却没在其后调 refilterReviewQueueForScope()"
+            "，复习队列不会跟着切模式" % line
+        )
 
 
 # --------------------------------------------------------------------------
@@ -948,20 +999,38 @@ def test_core_scope_aware_header_badge():
 
 
 def test_header_badge_refreshed_on_scope_switch():
-    """切 scope 后必须重算徽标，且只在 scope 真变了的分支里重算。
+    """徽标重算与 scope 写入点绑定：写入点之后必须调 renderHeaderBadge()，别处不许调。
 
-    本仓库教训（控件加了没接线）：徽标变成 scope 感知的了但没人重新调用，
-    切到核心词后顶栏还挂着全局的待学数。放进 `scope !== prev` 分支是为了
-    不让搜索框每敲一个字母都重算徽标。
-    变异验证：删掉调用 → 断言红；把调用挪到分支外 → 断言红。
+    守的不变式没变，且是**两侧**的：
+      正向 —— 徽标口径随 scope 变（核心模式下待学数只该数核心词），切了模式不重算，
+              顶栏就还挂着上一个模式的数；
+      反向 —— 迁移前的旧版本把调用限制在 `scope !== prevScope` 分支里，理由是
+              「不让搜索框每敲一个字母都重算徽标」。renderHeaderBadge() 每次全扫
+              S.cards + S.words，挂到 input 事件上是真的性能退化。迁移后这一侧必须
+              显式补回来（就是最后那条 not-in 断言），否则丢的是「不按键重算」这半个。
+    **重定向说明**：这条原先钉的是词表 filter handler 里的 `scope !== prevScope`
+    分支。Task 2 删掉了那个 handler 的 scope 赋值，该分支随即恒为 false ——
+    测试仍会绿，但守的是一段不可达代码，属于假信心。故改为与
+    test_scope_switch_refilters_review_queue 同构地遍历每一个 scope 写入点。
+    与 Task 1 的 test_scope_segment_click_reuses_refilter_chain 的关系：那条**同样**
+    断言了顶栏 handler 内有 renderHeaderBadge()，在**当前唯一的那个写入点**上二者重叠。
+    但不是冗余——那条钉的是「#scopeSeg 这一个 handler 的完整链路」，本条钉的是
+    「**任何** scope 写入点都必须重算徽标」：将来新增第二个写入点（比如设置页再加一个
+    模式开关）而忘了调 renderHeaderBadge()，那条照绿，本条红。
+    变异验证（已实跑）：删掉顶栏 handler 里的 renderHeaderBadge() → 第一条红；
+    注意同一发变异下 Task 1 那条也红（二者在这个写入点上重叠），不是只打红本条。
+    往词表 filter listener 里无条件加 renderHeaderBadge() → 第二条红。
     """
-    blk = _words_filter_listener()
-    m = re.search(
-        r"if\s*\(\s*wordFilters\.scope\s*!==\s*[A-Za-z_$][\w$]*\s*\)\s*\{[^{}]*\}", blk
-    )
-    assert m, "找不到「scope 真的变了」的分支（应为 if (wordFilters.scope !== prevScope) { ... }）"
-    assert "renderHeaderBadge()" in m.group(0), (
-        "scope 变更分支里必须调用 renderHeaderBadge()（徽标口径随 scope 变）"
+    sites = _scope_write_sites()
+    assert sites, "全文件找不到 wordFilters.scope 的写入点，无从检查徽标重算"
+    for line, seg in sites:
+        assert "renderHeaderBadge()" in seg, (
+            "行 %d 写了 wordFilters.scope 却没在其后调 renderHeaderBadge()"
+            "，顶栏徽标会停在上一个模式的口径" % line
+        )
+    assert "renderHeaderBadge()" not in _words_filter_listener(), (
+        "词表 filter listener 不许调 renderHeaderBadge() —— 它每次全扫 S.cards + S.words，"
+        "挂在搜索框上等于每敲一个字母全扫一遍；scope 已经不在这个 listener 里变了"
     )
 
 
@@ -1014,7 +1083,7 @@ def _badge_text_assign():
 def test_scope_segment_control_in_header():
     """顶栏 flex 行里常驻 scope 分段控件 #scopeSeg。
 
-    ADR-0002 §3.1：模式状态必须时刻可见（D1）。藏在词库工具栏里的 #wScope
+    ADR-0002 §3.1：模式状态必须时刻可见（D1）。原先藏在词库工具栏里的那个下拉
     在复习视图看不见也够不着，队列变短时用户分不清是「学完了」还是「切了范围」。
     变异验证：把 <div id="scopeSeg"> 移出顶栏 / 删掉 → 断言红。
     """
