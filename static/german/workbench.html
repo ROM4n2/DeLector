@@ -59,6 +59,17 @@ header.top .sub{color:var(--muted);font-size:12.5px}
   padding:3px 12px;font-size:12.5px;font-weight:600;
 }
 .badge.hot{background:var(--again-soft);color:var(--again)}
+/* 顶栏 scope 分段控件：与 .badge 同高同圆角，塞进 header.top 同一 flex 行 */
+.seg{
+  display:inline-flex;gap:2px;background:var(--accent-soft);
+  border-radius:999px;padding:2px;flex-shrink:0;
+}
+.seg button{
+  padding:3px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
+  color:var(--accent);white-space:nowrap;transition:background .15s,color .15s;
+}
+.seg button.active{background:var(--accent);color:#fff}
+.seg button:not(.active):hover{background:var(--panel)}
 nav.tabs{
   display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius);padding:5px;box-shadow:var(--shadow);margin-bottom:16px;
@@ -276,6 +287,10 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 <header class="top">
   <div style="flex:1">
     <h1>单词记忆工作台 <span class="sub">德语 A1 · SD1 Wortliste</span></h1>
+  </div>
+  <div class="seg" id="scopeSeg">
+    <button type="button" data-scope="all" class="active">全部</button>
+    <button type="button" data-scope="core">⭐ 核心</button>
   </div>
   <span class="badge" id="dueBadge">—</span>
 </header>
@@ -2571,8 +2586,37 @@ function renderWords() {
     wordFilters.state = $("wState").value;
     wordFilters.scope = $("wScope").value;
     renderWords();
-    if (wordFilters.scope !== prevScope) { refilterReviewQueueForScope(); renderHeaderBadge(); }
+    if (wordFilters.scope !== prevScope) { syncScopeControls(); refilterReviewQueueForScope(); renderHeaderBadge(); }
   });
+});
+
+/* scope 目前有两个控件：顶栏常驻分段控件 #scopeSeg 与词库工具栏的 #wScope。
+ * 任何一处改了 wordFilters.scope 都必须调这里，把状态刷到另一处 ——
+ * 漏同步就会出现「顶栏显示核心、词库下拉显示全部」。
+ * 两处都做存在性判空：ADR-0002 Task 2 会删掉 #wScope，届时不该留下悬空引用炸掉整段 handler。 */
+function syncScopeControls() {
+  const seg = $("scopeSeg");
+  if (seg) {
+    seg.querySelectorAll("button[data-scope]").forEach(b => {
+      b.classList.toggle("active", b.dataset.scope === wordFilters.scope);
+    });
+  }
+  const sel = $("wScope");
+  if (sel && sel.value !== wordFilters.scope) sel.value = wordFilters.scope;
+}
+
+/* 顶栏切模式：复用词库 select 的同一条链路。
+ * 禁止 buildReviewQueue() —— 它 revIdx = 0 且重洗牌，复习到一半切模式会被弹回第一张。 */
+$("scopeSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-scope]");
+  if (!b) return;
+  const next = b.dataset.scope;
+  if (next === wordFilters.scope) return;
+  wordFilters.scope = next;
+  syncScopeControls();
+  refilterReviewQueueForScope();
+  renderWords();
+  renderHeaderBadge();
 });
 $("wBody").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-act]");
@@ -3356,7 +3400,12 @@ function renderHeaderBadge() {
   nw = Math.max(0, S.settings.dailyNew - ((t && t.nw) || 0));
   const pending = due + Math.min(nw, S.words.filter(w => !S.cards[w.id] && inScopeWord(w)).length);
   const b = $("dueBadge");
-  b.textContent = pending > 0 ? "今日待学 " + pending : "今日已完成 ✓";
+  /* 模式与待学数一体呈现：队列变短时用户要能分辨是「学完了」还是「切了范围」。
+   * 待学 / 已完成两个分支都带前缀 —— 只给待学分支加的话，核心模式刷完后模式状态凭空消失。 */
+  const scopeLabel = wordFilters.scope === "core" ? "⭐核心" : "全部";
+  b.textContent = pending > 0
+    ? scopeLabel + " · 今日待学 " + pending
+    : scopeLabel + " · 今日已完成 ✓";
   b.classList.toggle("hot", pending > 0);
 }
 
@@ -3401,6 +3450,7 @@ if (migrateSeedIdAliases()) { saveWords(); saveCards(); saveLog(); saveWrong(); 
 if (backfillCoreWords()) saveWords();
 applyTheme();
 fsrsSelfTest();
+syncScopeControls();
 renderHeaderBadge();
 renderReview();
 

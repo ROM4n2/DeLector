@@ -965,6 +965,137 @@ def test_header_badge_refreshed_on_scope_switch():
     )
 
 
+# --------------------------------------------------------------------------
+# ADR-0002 Task 1 · 顶栏 scope 分段控件 + 徽标模式前缀
+# --------------------------------------------------------------------------
+
+def _header_top():
+    """`<header class="top"> … </header>` 整段（顶栏那一行 flex 容器）。
+
+    必须切片再断言 —— `id="scopeSeg"` 写在文件任何角落，整文件搜索都为真，
+    只有钉进顶栏切片才能证明「常驻可见、不藏在词库视图里」。
+    """
+    opens = re.findall(r'<header class="top">', _WORKBENCH)
+    assert len(opens) == 1, (
+        '<header class="top"> 出现 %d 次，切片不具区分度' % len(opens)
+    )
+    m = re.search(r'<header class="top">.*?</header>', _WORKBENCH, re.S)
+    assert m, '找不到 <header class="top"> 顶栏'
+    blk = m.group(0)
+    assert 'id="dueBadge"' in blk, "切片没落在顶栏上（缺 #dueBadge）"
+    return blk
+
+
+def _scope_seg_click_handler():
+    """顶栏分段控件 click handler 的整段（到第 0 列的 `});` 为止）。"""
+    hits = re.findall(
+        r'\$\(\s*"scopeSeg"\s*\)\.addEventListener\(\s*"click".*?\n\}\);',
+        _WORKBENCH,
+        re.S,
+    )
+    assert hits, "找不到 #scopeSeg 的 click 事件绑定（控件加了没接线）"
+    assert len(hits) == 1, (
+        "#scopeSeg 的 click 绑定有 %d 处，断言不具区分度" % len(hits)
+    )
+    return hits[0]
+
+
+def _badge_text_assign():
+    """renderHeaderBadge 里 `b.textContent = …;` 整条赋值（允许跨行）。"""
+    body = _fn_body("renderHeaderBadge")
+    hits = len(re.findall(r"\btextContent\s*=", body))
+    assert hits == 1, (
+        "renderHeaderBadge 里 textContent 赋值有 %d 处，断言不具区分度" % hits
+    )
+    at = body.index("b.textContent")
+    return body[at:body.index(";", at) + 1]
+
+
+def test_scope_segment_control_in_header():
+    """顶栏 flex 行里常驻 scope 分段控件 #scopeSeg。
+
+    ADR-0002 §3.1：模式状态必须时刻可见（D1）。藏在词库工具栏里的 #wScope
+    在复习视图看不见也够不着，队列变短时用户分不清是「学完了」还是「切了范围」。
+    变异验证：把 <div id="scopeSeg"> 移出顶栏 / 删掉 → 断言红。
+    """
+    hdr = _header_top()
+    assert 'id="scopeSeg"' in hdr, (
+        '<header class="top"> 里缺少常驻 scope 分段控件 #scopeSeg'
+    )
+
+
+def test_scope_segment_has_both_modes():
+    """#scopeSeg 里恰好两个 button，data-scope 依次覆盖 all / core。
+
+    变异验证：删掉任一 data-scope 属性 → 断言红（实际值变成单元素列表）。
+    """
+    hdr = _header_top()
+    assert 'id="scopeSeg"' in hdr, "顶栏里没有 #scopeSeg，无从检查档位"
+    seg = hdr.split('id="scopeSeg"')[1].split("</div>")[0]
+    assert len(re.findall(r"<button", seg)) == 2, (
+        "#scopeSeg 必须恰好两个档位按钮"
+    )
+    scopes = re.findall(r'<button[^>]*\bdata-scope="([a-z]+)"', seg)
+    assert scopes == ["all", "core"], (
+        "#scopeSeg 两个 button 的 data-scope 必须依次为 all / core，实际 %r" % (scopes,)
+    )
+
+
+def test_scope_segment_click_reuses_refilter_chain():
+    """顶栏切模式复用既有链路，禁止整队重建。
+
+    buildReviewQueue() 会 `revIdx = 0` 并重新洗牌 —— 复习到一半切模式会被弹回
+    第一张卡且顺序全变，比不生效更糟（ADR-0002 D5）。只能走
+    refilterReviewQueueForScope() 的尾部手术。
+    变异验证（已实跑）：把 refilterReviewQueueForScope() 换成 buildReviewQueue()
+              → 本测试红（pytest 停在「必须调 refilter」这条；同一变异下
+              「禁止 buildReviewQueue」经单独求值同样为假，两条都有判别力）。
+    """
+    fn = _scope_seg_click_handler()
+    assert re.search(r"wordFilters\.scope\s*=[^=]", fn), (
+        "handler 必须把点中的档位写回 wordFilters.scope"
+    )
+    assert "refilterReviewQueueForScope()" in fn, (
+        "handler 必须调 refilterReviewQueueForScope() 同步复习队列尾部"
+    )
+    assert "buildReviewQueue(" not in fn, (
+        "handler 禁止调 buildReviewQueue()（revIdx 归零会把用户弹回第一张卡）"
+    )
+    assert "renderWords()" in fn, "handler 必须重渲染词表"
+    assert "renderHeaderBadge()" in fn, "handler 必须重算顶栏徽标"
+    assert "syncScopeControls()" in fn, (
+        "handler 必须调 syncScopeControls() 把新档位同步到另一处控件"
+    )
+
+
+def test_header_badge_carries_scope_mode():
+    """徽标同时承载模式与待学数：`⭐核心 · 今日待学 12` / `全部 · 今日已完成 ✓`。
+
+    pending>0 与「已完成」**两个分支都要带**前缀 —— 只给待学分支加的话，
+    核心模式刷完后徽标又变回无模式的「今日已完成 ✓」，模式状态凭空消失。
+    变异验证：任一分支去掉前缀变量 → 对应分支断言红；
+              前缀写死成常量（不读 wordFilters.scope）→ 派生断言红。
+    """
+    body = _fn_body("renderHeaderBadge")
+    label = _sole_line(body, "⭐核心", "模式前缀")
+    assert re.search(_SCOPE_IS_CORE, label), (
+        "模式前缀必须由 wordFilters.scope === 'core' 派生，不能写死"
+    )
+    assert "全部" in label, "模式前缀缺少「全部」档文案"
+    m = re.match(r"\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", label)
+    assert m, "模式前缀应赋给一个局部变量，供徽标两个分支复用"
+    var = m.group(1)
+
+    assign = _badge_text_assign()
+    arms = assign.partition("?")[2]
+    pending_arm, sep, done_arm = arms.partition(":")
+    assert sep, "徽标文案应为 `pending > 0 ? … : …` 两个分支"
+    assert "今日待学" in pending_arm, "三元第一分支应是「今日待学」"
+    assert "今日已完成" in done_arm, "三元第二分支应是「今日已完成」"
+    assert var in pending_arm, "「今日待学」分支缺少模式前缀 %s" % var
+    assert var in done_arm, "「今日已完成」分支缺少模式前缀 %s" % var
+
+
 def test_core_progress_kpi_in_stats():
     """统计页 KPI 区必须有一格动态算出的核心词进度（已学 / 核心词总数）。
 
