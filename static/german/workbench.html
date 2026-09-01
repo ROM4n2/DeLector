@@ -1700,7 +1700,18 @@ $("tabs").addEventListener("click", (e) => {
 let revQueue = [];      // 词 id 队列：到期卡（按 due 升序）+ 今日新词
 let revIdx = 0, flipped = false, ratedCount = 0, queueDay = null;
 
+/* 手动追加（extraNewWords）的超配额新词 id：renormalizeQueueTail 裁剪时豁免它们。
+ * 内存态，与 revQueue 同生命周期：revQueue 不持久化、刷新即重建，且
+ * buildReviewQueue() 整队重建时本集合一并清空（见其函数体首行），故无需持久化。
+ * 声明必须排在 buildReviewQueue 之前 —— const 有 TDZ，声明在使用之后的话，
+ * 将来有人把 buildReviewQueue() 挪到模块顶层更早处调用就会抛 ReferenceError。 */
+const manualExtraIds = new Set();
+
 function buildReviewQueue() {
+  /* 整队重建 = 旧队列作废，手动追加的豁免登记跟着作废。不清的话：标签页跨夜不关，
+   * 昨天手动追加、今天仍未学的词一旦被排进新队列就仍被当 pinned，
+   * 逃过 dailyNew 调低时的裁剪（docs/plans/workbench-scope-control-and-live-settings.md · Task 6）。 */
+  manualExtraIds.clear();
   const now = Date.now(), eod = endToday();
   /* 手动标「已稳固」的卡不参与排期 */
   const dueIds = Object.keys(S.cards)
@@ -1740,7 +1751,6 @@ function refilterReviewQueueForScope() {
  * today.nw 只计已评新词，队列中未评新词不计入，故重算不重复扣减配额。
  * revIdx >= revQueue.length（今日刷完）时 slice(0, revIdx+1) 即整队、tail 为空，
  * 补进来的词正好落在 revIdx 位置 —— 不需要特判。 */
-const manualExtraIds = new Set();  // 内存态，与 revQueue 同生命周期：revQueue 本就不持久化、刷新即重建，故豁免登记无需持久化。
 function renormalizeQueueTail() {
   const head = revQueue.slice(0, revIdx + 1);
   const tail = revQueue.slice(revIdx + 1);
@@ -2640,7 +2650,13 @@ function syncScopeControls() {
 }
 
 /* 顶栏切模式：wordFilters.scope 的唯一写入口。
- * 禁止 buildReviewQueue() —— 它 revIdx = 0 且重洗牌，复习到一半切模式会被弹回第一张。 */
+ * 禁止 buildReviewQueue() —— 它 revIdx = 0 且重洗牌，复习到一半切模式会被弹回第一张。
+ * 完成态（revIdx >= revQueue.length）是例外，且已裁决为无害：
+ * refilterReviewQueueForScope() 结尾的 renderReview() 此时会间接走到 buildReviewQueue()，
+ * 但那一刻新词配额已被 today.nw 吃光、到期卡的 due 已被 doRate 推到未来，
+ * 重建只能产出空队列 → renderReview() 立刻落回完成屏，不补齐、不弹卡、不抹 ratedCount。
+ * 依据与探针：docs/plans/workbench-scope-control-and-live-settings.md · Task 6
+ * （tools/wb_queue_probe.mjs 的 finishedStateScopeSwitch.reachableFinished 场景钉住了这组数字）。 */
 $("scopeSeg").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-scope]");
   if (!b) return;

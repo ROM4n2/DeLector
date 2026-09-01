@@ -150,7 +150,7 @@
 > 2. 跑测试确认 RED。
 > 3. 最小实现（GREEN）。
 > 4. 变异验证：去掉搜索前提（还原成无条件 scope 过滤）→ 必须红。
-> 5. 这条**行为**（核心模式下搜 `Absender` 能出结果）静态正则证明不了，留给 Task 6 的动态探针覆盖，本任务在测试 docstring 里注明该分工。
+> 5. 这条**行为**（核心模式下搜 `anbieten` 这类**真·非核心词**能出结果；别用 `Absender`，它在 `CORE_WORD_SEED_IDS` 里）静态正则证明不了，留给 Task 6 的动态探针覆盖，本任务在测试 docstring 里注明该分工。
 > Return: 测试证据 + 变异红证据 + `git diff --stat`。"
 
 **Step Breakdown**
@@ -289,9 +289,9 @@ function renormalizeQueueTail() {
 > 1. `liveDailyNew`：队列**未刷完**时把 dailyNew 15→30，尾部未学新词数变为 `30 - 今日已评新词数`；`revIdx` / 已评部分**逐字节不变**。再 30→5，尾部裁到 5，仍不动已评部分。
 > 2. `extraExempt`：先 `extraNewWords()` 追加 20 个超配额词，再把 dailyNew 调低，**那 20 个一个都不能少**。
 > 3. `scopeNoTopUp`：切到 core 后队列只过滤不补齐 —— 断言尾部新词数 **小于** 配额允许值（这是 ADR 3.6 刻意保留的不对称，探针要把它钉住，防止后人"顺手统一"）。
-> 4. `searchBypass`：core 模式下用非核心词（如 `Absender`）走 `renderWords` 过滤谓词，命中数 > 0；清空搜索后同一个词命中数为 0。
+> 4. `searchBypass`：core 模式下用非核心词（如 `anbieten` / a1-0016）走 `renderWords` 过滤谓词，命中数 > 0；清空搜索后同一个词命中数为 0。**注意别拿 `Absender`（a1-0007）当例子 —— 它其实在 `CORE_WORD_SEED_IDS` 里，用它这条场景恒真。**
 > 5. 幂等：连调两次 `renormalizeQueueTail()`，第二次队列快照逐字节不变。
-> 6. `finishedStateScopeSwitch`（**Task 1 复核新发现，必须覆盖**）：`refilterReviewQueueForScope()` 结尾有 `if (curView === "review") renderReview();`，而 `renderReview()` 的门是 `if (queueDay !== today || revIdx >= revQueue.length) buildReviewQueue()`。Task 1 之前 `#wScope` 在词库视图、`curView` 永远不是 `"review"`，这条分支是**死代码**；顶栏控件让它第一次活了。后果：**今日队列刷完后切模式会走 `buildReviewQueue()` 补满配额，直接违反 ADR 3.6「切范围不补齐」**。探针要构造 `revIdx >= revQueue.length` 的完成态、切 scope、观测尾部新词数。先**如实报告**观测到的实际行为与配额值，**不要**自行决定怎么改——是收紧（完成态也不补）还是承认例外（并改掉 `workbench.html` 里那句写死「禁止 buildReviewQueue()」的绝对化注释），由编排者裁决。
+> 6. `finishedStateScopeSwitch`（**Task 1 复核新发现，必须覆盖**）：`refilterReviewQueueForScope()` 结尾有 `if (curView === "review") renderReview();`，而 `renderReview()` 的门是 `if (queueDay !== today || revIdx >= revQueue.length) buildReviewQueue()`。Task 1 之前 `#wScope` 在词库视图、`curView` 永远不是 `"review"`，这条分支是**死代码**；顶栏控件让它第一次活了。探针要构造 `revIdx >= revQueue.length` 的完成态、切 scope、观测尾部新词数，并**如实报告**观测到的实际行为与配额值。构造完成态时**必须用真实可达的状态**（新词评满 → `today.nw = dailyNew` 配额归零；到期卡评过 → `due` 推到未来），别把 `revIdx = revQueue.length` 直接写死了事 —— 那种合成态自相矛盾（`todayNw: 0` 与 `ratedCount: 23` 互斥、到期卡 `due` 还停在过去），报出来的数字不代表线上行为。
 > TDD Steps:
 > 1. 先写调用探针的 pytest 测试（RED，探针不存在）。
 > 2. 实现探针（GREEN）。
@@ -305,6 +305,27 @@ function renormalizeQueueTail() {
 - [ ] Step 3: 实现 5 组行为场景
 - [ ] Step 4: 逐条变异验证（≥5 发）
 - [ ] Step 5: `node --check` + 原子提交
+
+**场景 6 裁决记录（2026-09-01）**
+
+结论：**完成态切模式确实会走 `buildReviewQueue()`，但重建无害，实现不改**，只补注释与探针场景。
+
+- 交付初版用的是**合成**完成态（`revIdx = revQueue.length` 直接写死，从没调过 `doRate`）。该 fixture 真实不可达：① `todayNw: 0` 与 `ratedCount: 23` 互斥 —— 真评掉那 15 张新词，`today.nw` 必然是 15；② 8 张到期卡的 `due` 还停在过去，重建时又被当到期卡捡回来。它报出的 `revIdx 23→0 / tailNew 0→15 / toppedUpToQuota: true` **不代表线上行为**，不可被引用为「完成态切模式会补满配额」的证据。
+- 真实可达完成态（新词评满 `today.nw = dailyNew`、到期卡 `due` 推到未来）实测：
+
+  ```
+  quota:  0
+  before: { revIdx: 8, queueLen: 8, ratedCount: 8 }
+  after:  { revIdx: 0, queueLen: 0, ratedCount: 8, newInQueue: 0 }
+  rebuilt: true, buildCalls: 1
+  ```
+
+  即：重建发生，但配额已耗尽、到期卡已推进 ⇒ 产出**空队列** ⇒ `renderReview()` 的 `revIdx >= revQueue.length` 分支直接渲染完成屏「本轮完成：共评价 8 张卡片」。没有补齐、没有弹回第一张、`ratedCount` 没被抹 —— 无用户可见危害，ADR 3.6「切范围不补齐」在完成态的落点依然成立。
+- 落地：探针 `finishedStateScopeSwitch` 下新增 `reachableFinished` 子场景（合成那组保留，仅用于守与裁决无关的不变式，并在探针注释里标注其数字不可外读）；`workbench.html` 里 `#scopeSeg` handler 上方那条「禁止 `buildReviewQueue()`」注释补一句完成态例外说明。**一行实现代码未动。**
+
+**附带修复（同批）**
+
+- `manualExtraIds` 的注释写着「与 revQueue 同生命周期」，但它只增不减而 `revQueue` 会被 `buildReviewQueue()` 整队重建。可达后果：标签页跨夜不关，昨天手动追加、今天仍未学的词若又被排进新队列就会被当 pinned，逃过 `dailyNew` 调低时的裁剪。处置：在 `buildReviewQueue()` 体首加 `manualExtraIds.clear();`（并把 `const manualExtraIds` 上移到 `buildReviewQueue` 之前，规避 TDZ），让注释成为事实。覆盖：静态 `test_build_review_queue_clears_manual_exemptions` + 探针 `rebuildClearsExemptions` 场景。
 
 ---
 

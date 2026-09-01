@@ -1863,7 +1863,7 @@ def test_words_search_bypasses_core_scope_filter():
     守着（Task 1 迁移前就有的旧覆盖，两发变异都实跑过：删 includes / 把 return false
     改成 return true 都红在那一条）。别的 commit 动到这条 if，它会先红。
 
-    分工：本条只守「谓词没被改坏」。行为级覆盖（core 模式搜 `Absender` 真能命中、
+    分工：本条只守「谓词没被改坏」。行为级覆盖（core 模式搜 `anbieten` 真能命中、
     清空搜索后同一个词命中数为 0）静态正则证明不了，由计划文档 Task 6 的
     tools/wb_queue_probe.mjs 承担；可执行谓词的构造入口见本文件末
     `render_words_predicate()`。
@@ -2070,7 +2070,7 @@ def test_out_of_scope_class_wired_on_word_row():
 #
 # 计划文档：docs/plans/workbench-scope-control-and-live-settings.md · Task 6
 # 本文件上面那三条 Task 3 静态断言只能证明「谓词长这样」，证明不了
-# 「core 模式下搜 Absender 真能命中、清空搜索后同一个词命中数为 0」。
+# 「core 模式下搜 anbieten 真能命中、清空搜索后同一个词命中数为 0」。
 # 行为级覆盖由计划文档 Task 6 的 tools/wb_queue_probe.mjs（searchBypass 场景）承担，
 # 下面这两个 helper 就是给它（以及驱动它的 pytest）用的入口：
 #   render_words_predicate_source() → 真实谓词的 JS 源码，可直接丢进 node:vm
@@ -2135,10 +2135,10 @@ def render_words_predicate(scope="all", q="", cards=None, **filters):
       **filters→ 覆盖 letter / tag / diff / state，默认全空（不筛）
 
     用法（Task 6 探针 / 本地复核）：
-        hit = render_words_predicate(scope="core", q="absender")
-        assert hit({"id": "x", "hw": "Absender", "gloss": "寄件人", "tags": []}) is True
+        hit = render_words_predicate(scope="core", q="anbieten")
+        assert hit({"id": "x", "hw": "anbieten", "gloss": "提供", "tags": []}) is True
         miss = render_words_predicate(scope="core", q="")
-        assert miss({"id": "x", "hw": "Absender", "gloss": "寄件人", "tags": []}) is False
+        assert miss({"id": "x", "hw": "anbieten", "gloss": "提供", "tags": []}) is False
 
     返回的 callable 带两个属性便于探针复核：
       `.js_source` 完整 node 脚本、`.predicate_source` 仅谓词那段真源码。
@@ -2201,7 +2201,8 @@ def _run_node_predicate(js, words):
 # --------------------------------------------------------------------------
 # 落地依据：docs/plans/workbench-scope-control-and-live-settings.md · Task 4
 # 本任务只守结构契约；「改数量后队列真的变了」等行为级覆盖由 Task 6 的
-# tools/wb_queue_probe.mjs 通过 review_queue_state_source() 提供的构造块承担。
+# tools/wb_queue_probe.mjs 承担 —— 它自带 Node 侧的括号配对切片器，
+# 从 workbench.html 现切函数体，不依赖本文件提供任何构造块。
 
 
 def _renormalize_queue_tail_body():
@@ -2430,60 +2431,270 @@ def test_extra_new_words_registers_manual_exemption_uncommented():
     )
 
 
-# --------------------------------------------------------------------------
-# Task 6 留账：可执行的 review 队列状态构造块
-# --------------------------------------------------------------------------
-# 计划文档：docs/plans/workbench-scope-control-and-live-settings.md · Task 4 / Task 6
-# 行为级覆盖（改数量后队列真的变了、手动追加豁免不被裁、切范围不补齐）
-# 由 Task 6 的 tools/wb_queue_probe.mjs 承担。
-# 这里提供从 workbench.html 真实源码切片出的构造块，供探针 eval 后重建状态。
+def test_build_review_queue_clears_manual_exemptions():
+    """整队重建必须清空 manualExtraIds —— 否则豁免登记只增不减，跨天漏裁。
 
+    落地依据：`docs/plans/workbench-scope-control-and-live-settings.md` · Task 6。
+    `manualExtraIds` 的注释写着「与 revQueue 同生命周期」，但 revQueue 会被
+    `buildReviewQueue()` 整队重建（跨天 rollover、完成态重建都会走到），
+    而豁免集原先只 add 不 clear。可达后果：标签页跨夜不关，昨天手动追加的词
+    今天若仍未学、又被排进新队列，就会被当 pinned，逃过 dailyNew 调低时的裁剪。
+    处置是在 buildReviewQueue 体内清空豁免集，让那句注释成为事实。
 
-def review_queue_state_source():
-    """返回能在 node:vm 里重建 review 队列核心状态的 JS 源码字符串。
-
-    包含：S / wordFilters / revQueue / revIdx / queueDay / ratedCount / curView、
-    以及 buildReviewQueue / refilterReviewQueueForScope / renormalizeQueueTail /
-    extraNewWords / injectWrongWords / logToday / inScopeWord / shuffle / wordById /
-    todayStr / endToday / clamp / FSRS 常量 / saveCards / saveLog / saveSettings 等依赖。
-    全部从 workbench.html 切真实源码，没有任何一份重抄实现。
+    断言锚在 **buildReviewQueue 函数体切片内**：整文件搜 `manualExtraIds.clear`
+    还会命中探针 fixture 之类的地方，且挡不住 clear() 被挪到别的函数里 ——
+    挪走之后跨天那条路径照样漏裁，测试却照样绿。
+    行为面（手动追加 → 触发重建 → 豁免集真的为空 → 再调低配额那些词真被裁）
+    由 tools/wb_queue_probe.mjs 的 rebuildClearsExemptions 场景承担。
+    变异验证（已实跑）：删掉 buildReviewQueue 里的 clear() → 本条红。
     """
-    def cut(name, body=None):
-        if body is None:
-            body = _fn_body(name)
-        return "function %s(%s {%s\n}" % (
-            name,
-            _WORKBENCH.split("function " + name + "(")[1].split(")")[0] + ")",
-            body.split("{", 1)[1].rsplit("\n}", 1)[0],
+    body = _fn_body("buildReviewQueue")
+    code = _strip_js_comments(body)
+    hits = len(re.findall(r"manualExtraIds\.clear\(\s*\)", code))
+    assert hits == 1, (
+        "buildReviewQueue 体内必须恰好有一处 manualExtraIds.clear()（且不能是注释行），"
+        "实际 %d 处。缺失则豁免集跨重建残留，昨天手动追加的词今天逃过配额裁剪" % hits
+    )
+    assert code.index("manualExtraIds.clear") < code.index("revQueue ="), (
+        "清空必须发生在 revQueue 被整队覆盖之前 —— 放在后面读起来像是给新队列做的登记"
+    )
+
+
+# --------------------------------------------------------------------------
+# Task 6 · 行为级动态探针 tools/wb_queue_probe.mjs
+# --------------------------------------------------------------------------
+# 计划文档：docs/plans/workbench-scope-control-and-live-settings.md · Task 6
+# 上面 Task 3/4/5 的静态断言只能证明「代码长这样」。「dailyNew 15→30 后尾部
+# 真的从 10 个新词变成 25 个」「手动追加的 20 个一个都没被裁掉」「切 core 只过滤
+# 不补齐」这些行为，正则一条都证明不了。
+# 探针把 workbench.html 里的 **真实函数体** 按括号配对切出来丢进 node:vm 真跑，
+# 探针里没有任何一份重抄的实现（重抄的话实现回退了探针照样绿）。
+
+
+def _run_queue_probe():
+    """跑 tools/wb_queue_probe.mjs --json，返回解析后的 dict。"""
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_queue_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_queue_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    return json.loads(res.stdout)
+
+
+def test_review_queue_behaves_under_node():
+    """动态探针：真实队列函数在 node:vm 里跑七组行为场景。
+
+    覆盖（每条都是静态正则证明不了的）：
+      1. liveDailyNew  —— 队列未刷完时改 dailyNew，尾部新词数 = dailyNew - today.nw，
+                          revIdx 之前的已评部分逐字节不变
+      2. extraExempt   —— extraNewWords() 追加的词在配额调低后一个都不少
+      3. scopeNoTopUp  —— 切 core 只过滤不补齐（ADR 3.6 刻意的不对称）
+      4. searchBypass  —— core 模式下搜非核心词能命中，清空搜索后同一个词命中数为 0
+      5. idempotency   —— 连调两次 renormalizeQueueTail() 队列逐字节不变
+      6. finishedStateScopeSwitch —— 完成态切模式的实际行为（见下方注释）
+      7. rebuildClearsExemptions  —— 整队重建清空手动追加豁免集（见下方注释）
+
+    切片护栏在探针里：renormalizeQueueTail 必须含 manualExtraIds、
+    refilterReviewQueueForScope 必须不含 renormalizeQueueTail，切歪直接抛错退出码非 0。
+
+    变异验证（**已实跑**，逐发致红，cp 备份 + cp 还原 + md5 校验，共 11 发）：
+      ① 删 renormalizeQueueTail 的补齐分支      → raised.tailNew 25→10
+      ② extraNewWords 追加但不登记豁免          → extraRegistered 20→0
+      ③ refilterReviewQueueForScope 内联补齐    → scopeNoTopUp.tailNewAfter 7→15
+      ④ renderWords 谓词去掉 `!q` 搜索前提      → probeWordHitWithSearch True→False
+      ⑤ 重算时 shuffle 保留段                   → idempotency.{seed,shuffle}.stable True→False
+      ⑥ refilter 去掉 `curView === "review"` 门 → 控制组 rebuilt False→True
+      ⑦ pinned 过滤器恒假（保留 token 绕护栏）  → pinnedSurvived 20→0
+      ⑧ refilter 里加 renormalizeQueueTail()    → 切片护栏抛错、探针退出码非 0
+      ⑨ 重算末尾塞 `revIdx = 0`                 → headStableBytes True→False
+      ⑩ buildReviewQueue 配额不减 today.nw      → reachableFinished.after.newInQueue 0→15
+      ⑪ 删 buildReviewQueue 的 manualExtraIds.clear() → exemptAfterRebuild 0→20
+    """
+    out = _run_queue_probe()
+
+    # 切片确实发生了（探针被改成内联重抄实现的话这里就空了）
+    for name in ("buildReviewQueue", "refilterReviewQueueForScope",
+                 "renormalizeQueueTail", "extraNewWords", "renderReview",
+                 "renderWordsPredicate"):
+        assert out["slices"].get(name, 0) > 60, (
+            "切片 %s 缺失或过短：%r" % (name, out["slices"].get(name))
         )
 
-    # 需要注入 vm 的源码块
-    pieces = [
-        _js_line(r"^const pad2 = .*$", "pad2"),
-        _js_line(r"^function todayStr\(.*$", "todayStr"),
-        _js_line(r"^function endToday\(\).*$", "endToday"),
-        _js_line(r"^function shuffle\(a\).*$", "shuffle"),
-        _js_line(r"^function clamp\(v, lo, hi\).*$", "clamp"),
-    ]
-    # FSRS 常量
-    pieces.append(_js_line(r"^const FSRS_W = .*$", "FSRS_W"))
-    pieces.append("const DECAY = -FSRS_W[20];")
-    pieces.append("const FACTOR = Math.exp(Math.log(0.9) / DECAY) - 1;")
-    pieces.append(_js_line(r"^const S_MIN = .*$", "S_MIN/S_MAX"))
-    # S / wordFilters / 队列状态
-    pieces.append("""
-const S = { words: [], cards: {}, log: {}, wrong: {}, settings: { retention: 0.9, dailyNew: 15, newOrder: \"shuffle\" } };
-const wordFilters = { q: \"\", letter: \"\", tag: \"\", diff: \"\", state: \"\", scope: \"all\" };
-let revQueue = [], revIdx = 0, ratedCount = 0, queueDay = null, flipped = false, curView = \"review\";
-""")
-    # helper / 队列函数
-    pieces.append(_js_line(r"^function wordById\(id\).*$", "wordById"))
-    pieces.append(_js_line(r"^function inScopeWord\(w\).*$", "inScopeWord"))
-    pieces.append(_js_line(r"^function logToday\(\).*$", "logToday"))
-    pieces.append("function saveCards() {}\nfunction saveLog() {}\nfunction saveSettings() {}\nfunction toast() {}")
-    pieces.append(cut("buildReviewQueue"))
-    pieces.append(cut("injectWrongWords"))
-    pieces.append(cut("refilterReviewQueueForScope"))
-    pieces.append(cut("renormalizeQueueTail"))
-    pieces.append(cut("extraNewWords"))
-    return "\n".join(pieces)
+    # 1) liveDailyNew：改数量真的动了尾部，且不动已评部分
+    live = out["liveDailyNew"]
+    for phase in ("raised", "lowered", "floored"):
+        st = live[phase]
+        assert st["tailNew"] == st["expectTailNew"], (
+            "dailyNew=%d 时尾部新词应为 %d（= max(0, dailyNew - today.nw %d)），实际 %d"
+            % (st["dailyNew"], st["expectTailNew"], live["todayNw"], st["tailNew"])
+        )
+    assert live["raised"]["tailNew"] > live["initial"]["tailNew"], (
+        "调高 dailyNew 必须真的补词：%d → %d"
+        % (live["initial"]["tailNew"], live["raised"]["tailNew"])
+    )
+    assert live["lowered"]["tailNew"] < live["raised"]["tailNew"], "调低 dailyNew 必须真的裁词"
+    assert live["headStableBytes"] is True, "revIdx 之前的已评部分必须逐字节不变"
+    assert live["revIdxStable"] is True, "renormalizeQueueTail 不得改写 revIdx"
+    assert live["ratedCountStable"] is True, "renormalizeQueueTail 不得改写 ratedCount"
+    assert live["queueDayStable"] is True, "renormalizeQueueTail 不得改写 queueDay"
+    assert live["dueKeptInTail"] == live["dueInTailBefore"], (
+        "到期卡不受配额管，重算不得裁掉：%d → %d"
+        % (live["dueInTailBefore"], live["dueKeptInTail"])
+    )
+    assert live["loweredIsPrefixOfRaised"] is True, "调低应从尾部裁，不得重洗已排好的新词"
+
+    # 2) extraExempt：手动追加的词豁免裁剪
+    ex = out["extraExempt"]
+    assert ex["extraAppended"] == 20, (
+        "extraNewWords() 应往队列追加 20 个新词，实际 %d" % ex["extraAppended"]
+    )
+    assert ex["extraRegistered"] == 20, (
+        "追加的 20 个词必须全部登记进 manualExtraIds 豁免集，实际登记 %d"
+        % ex["extraRegistered"]
+    )
+    assert ex["quotaAfter"] == 0, "本场景故意把配额压到 0，实际 %d" % ex["quotaAfter"]
+    assert ex["pinnedSurvived"] == ex["extraAppended"], (
+        "手动追加的 %d 个词必须一个都不少，实际存活 %d"
+        % (ex["extraAppended"], ex["pinnedSurvived"])
+    )
+    assert ex["normalNewAfter"] == 0, (
+        "配额 0 时常规新词必须被裁光（否则豁免逻辑把普通词也放过了），实际 %d"
+        % ex["normalNewAfter"]
+    )
+
+    # 3) scopeNoTopUp：切范围只过滤、不补齐
+    sc = out["scopeNoTopUp"]
+    assert sc["tailNewAfter"] < sc["quota"], (
+        "切 core 后尾部新词数必须小于配额（ADR 3.6：收窄意图 ≠ 数量意图），"
+        "实际 %d / 配额 %d —— 有人给切范围顺手加了补齐" % (sc["tailNewAfter"], sc["quota"])
+    )
+    assert sc["tailNewAfter"] < sc["tailNewBefore"], (
+        "切 core 必须真的滤掉非核心新词：%d → %d" % (sc["tailNewBefore"], sc["tailNewAfter"])
+    )
+    assert sc["nonCoreLeftInTail"] == 0, "切 core 后尾部不得残留非核心词"
+    assert sc["revIdxStable"] is True, "切范围不得改写 revIdx（会弹回第一张）"
+
+    # 4) searchBypass：core 模式下搜索旁路 scope
+    sb = out["searchBypass"]
+    assert sb["probeWord"]["core"] is False, "探针词必须是非核心词，否则这条场景恒真"
+    assert sb["probeWordHitWithSearch"] is True, (
+        "core 模式下搜「%s」必须命中（搜索旁路 scope）" % sb["probeWord"]["hw"]
+    )
+    assert sb["probeWordHitWithoutSearch"] is False, (
+        "清空搜索后「%s」必须落回 scope 过滤外" % sb["probeWord"]["hw"]
+    )
+    assert sb["nonCoreHitsWithSearch"] > 0, "core 模式带搜索时命中集里必须有非核心词"
+    assert sb["nonCoreHitsWithoutSearch"] == 0, "core 模式清空搜索后非核心词命中数必须为 0"
+
+    # 5) 幂等：连调两次不动队列
+    idem = out["idempotency"]
+    for mode in ("seed", "shuffle"):
+        assert idem[mode]["stable"] is True, (
+            "newOrder=%s 时 renormalizeQueueTail 不幂等：%s"
+            % (mode, idem[mode]["diff"])
+        )
+
+    # 6) finishedStateScopeSwitch —— 完成态（revIdx >= revQueue.length）切 scope。
+    #    **已裁决**（计划文档 Task 6 场景 6）：确实会重建，但重建无害，实现不改。
+    #
+    #    机制：refilterReviewQueueForScope() 结尾那句 `if (curView === "review")
+    #    renderReview();` 在 Task 1 顶栏控件落地前是死代码，现在活了，而
+    #    renderReview() 的门是 `revIdx >= revQueue.length → buildReviewQueue()`。
+    #
+    #    裁决依据是 `reachableFinished` 那组数字（见下）：真实可达的完成态里
+    #    新词配额已被 today.nw 吃光、到期卡的 due 已被 doRate 推到未来，
+    #    于是 buildReviewQueue() 产出的是**空队列** —— renderReview() 紧接着
+    #    落进 `revIdx >= revQueue.length` 分支渲染完成屏「本轮完成：共评价 N 张」。
+    #    没有补齐、没有弹回第一张、ratedCount 没被抹，无用户可见危害。
+    #
+    #    `fin` 本体那组（合成 fixture）的数字**不可**被当作线上行为读 ——
+    #    探针注释里写明了它自相矛盾在哪。这里只拿它守与裁决无关的不变式：
+    #      ① 非 review 视图切 scope 绝不重建（那道门根本没被推开）；
+    #      ② 未评尾部不得残留非核心词；
+    #      ③ ratedCount 不被抹掉；
+    #      ④ 重建与否必须自洽（重建 ⇒ revIdx 归零）。
+    fin = out["finishedStateScopeSwitch"]
+    ctrl = fin["controlNonReviewView"]
+    assert ctrl["rebuilt"] is False, "curView 不是 review 时切 scope 不该触发重建"
+    assert ctrl["after"]["revIdx"] == ctrl["before"]["revIdx"], (
+        "非 review 视图切 scope 不得改写 revIdx：%d → %d"
+        % (ctrl["before"]["revIdx"], ctrl["after"]["revIdx"])
+    )
+    assert ctrl["after"]["queueLen"] == ctrl["before"]["queueLen"], (
+        "完成态尾部为空，非 review 视图切 scope 队列长度不该变"
+    )
+    for who, snap in (("review 视图", fin), ("非 review 视图", ctrl)):
+        assert snap["after"]["tailNonCore"] == 0, (
+            "%s：完成态切 core 后未评尾部不得残留非核心词，实际 %d 个"
+            % (who, snap["after"]["tailNonCore"])
+        )
+        assert snap["after"]["ratedCount"] == snap["before"]["ratedCount"], (
+            "%s：切 scope 不得清空 ratedCount（本轮统计会被抹掉）" % who
+        )
+        # 重建与否必须自洽：重建 ⇒ revIdx 归零；不重建 ⇒ revIdx 原地
+        if snap["rebuilt"]:
+            assert snap["after"]["revIdx"] == 0, "既然走了 buildReviewQueue()，revIdx 必然归零"
+        else:
+            assert snap["after"]["revIdx"] == snap["before"]["revIdx"]
+
+    # 6b) reachableFinished —— **真实可达**的完成态（新词评满 today.nw = dailyNew、
+    #     到期卡 due 被推到未来），这组数字才是线上行为，裁决就是照它做的。
+    reach = fin["reachableFinished"]
+    assert reach["quota"] == 0, (
+        "本子场景的前提是配额已耗尽（today.nw == dailyNew），实际配额 %d —— "
+        "fixture 不再可达，下面三条断言的含义也就变了" % reach["quota"]
+    )
+    assert reach["before"]["queueLen"] > 0 and reach["before"]["ratedCount"] > 0, (
+        "前置态必须是「有队列且评完了」，实际 %r" % (reach["before"],)
+    )
+    assert reach["rebuilt"] is True, (
+        "已裁决的行为就是「完成态切模式确实会走 buildReviewQueue()」——"
+        "若这里变 False，说明有人改了 refilter/renderReview 的门，裁决记录需重跑"
+    )
+    assert reach["after"]["queueLen"] == 0, (
+        "配额耗尽 + 到期卡已推进 ⇒ 重建只能产出空队列（→ 完成屏），实际 %d 张。"
+        "非 0 意味着重建真给用户塞了新卡，那才是 ADR 3.6 被违反" % reach["after"]["queueLen"]
+    )
+    assert reach["after"]["newInQueue"] == 0, (
+        "完成态重建**不得**补进任何新词（ADR 3.6「切范围不补齐」在完成态的落点），"
+        "实际补进 %d 个" % reach["after"]["newInQueue"]
+    )
+    assert reach["after"]["ratedCount"] == reach["before"]["ratedCount"], (
+        "完成屏的「共评价 N 张」不得被重建抹掉：%d → %d"
+        % (reach["before"]["ratedCount"], reach["after"]["ratedCount"])
+    )
+
+    # 7) rebuildClearsExemptions —— 整队重建清空 manualExtraIds。
+    #    豁免集只增不减 + revQueue 会被整队重建 = 昨天手动追加、今天仍未学的词
+    #    被当 pinned，逃过 dailyNew 调低时的裁剪（标签页跨夜不关即可复现）。
+    #    这里走真实路径：extraNewWords() 追加并登记 → queueDay 拨回昨天 →
+    #    renderReview() 推开 rollover 那道门 → buildReviewQueue() 整队重建。
+    rc = out["rebuildClearsExemptions"]
+    assert rc["registeredBeforeRebuild"] == 20, (
+        "前置态必须真有 20 个登记在案的豁免 id，实际 %d —— 否则下面恒真"
+        % rc["registeredBeforeRebuild"]
+    )
+    assert rc["rebuilt"] is True, "跨天 rollover 必须触发整队重建，否则本场景没测到东西"
+    assert rc["staleExemptInQueue"] > 0, (
+        "重建后的队列里必须真的含有那 20 个曾被登记豁免的 id（探针把 dailyNew 拉到 40 "
+        "就是为了这个）—— 否则「漏裁」无从发生，下面 newInQueueAfterTrim == 0 恒真、是死测"
+    )
+    assert rc["exemptAfterRebuild"] == 0, (
+        "buildReviewQueue() 整队重建后 manualExtraIds 必须为空，实际残留 %d 个 —— "
+        "这些 id 会在下次调低 dailyNew 时逃过裁剪" % rc["exemptAfterRebuild"]
+    )
+    assert rc["quotaAfterTrim"] == 0, (
+        "本场景故意把配额压到 0，实际 %d" % rc["quotaAfterTrim"]
+    )
+    assert rc["newInQueueAfterTrim"] == 0, (
+        "配额 0 且豁免集已清空 ⇒ 重建后的队列里一个新词都不该留下，实际 %d 个"
+        % rc["newInQueueAfterTrim"]
+    )
