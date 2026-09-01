@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.8.3-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v4.9.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-373%2F373%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-409%2F409%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -109,7 +109,8 @@
 
 ### 📚 10. 德语背词工作台 (Vokabeltrainer, v4.6.0)
 
-* **684 词独立背词台**：FSRS-6 排程 + 卡片复习 + 自测 + 学习统计 + 词库浏览，以 iframe 嵌入主应用（导航栏 `VOKABELN` / 移动端 `📚 背词`）。同源即共享 localStorage 与 `/api/`，零 CORS；同时与主应用的 CSS/JS/DOM 完全隔离。
+* **704 词独立背词台**（682 歌德 A1 种子词 + 22 核心补充词）：FSRS-6 排程 + 卡片复习 + 自测 + 学习统计 + 词库浏览，以 iframe 嵌入主应用（导航栏 `VOKABELN` / 移动端 `📚 背词`）。同源即共享 localStorage 与 `/api/`，零 CORS；同时与主应用的 CSS/JS/DOM 完全隔离。
+* **核心词模式（235 词 / 704 词一键切换）**：备考时间紧时只刷核心子集，顶部分段控件切换范围。核心标记打在既有词条上（不复制词表），每日新词额度全局共享，复习途中切换只静默过滤当前位置之后的队列 —— 已产生的 FSRS 进度一条不丢。
 
 * **攻克手机浏览器无声**：单文件 HTML 直接在 iOS/Android 上打开是**放不出声**的，两个根因叠在一起 —— `file://` 协议下 Web Speech 被禁，以及设备根本没装德语语音包。修法是把服务端 `GET /api/audio/tts`（edge-tts 神经语音）设为**最高优先级**音频源，设备本地 TTS 退成兜底，于是有网就一定有正宗德语发音。
 
@@ -214,7 +215,7 @@ DeLector/
 ├── android/                # Android 独立离线单机版工程 (Chaquopy + Gradle)
 ├── static/                 # 前端纯静态 ES 模块化资源 (Zero-Build ESM)
 │   ├── index.html          # 单页应用骨架 (含 3D 卡盒、句法拓扑与台账)
-│   ├── german/             # 684 词背词工作台 (workbench.html，iframe 嵌入)
+│   ├── german/             # 704 词背词工作台 (workbench.html，iframe 嵌入)
 │   ├── style.css           # 德式报刊风格与 3D 翻转样式 (169KB)
 │   └── js/                 # 11 大独立原生 ES 模块
 │       ├── core.js         # API 请求与全局状态（含 XSS 防护 jsAttr）
@@ -250,7 +251,7 @@ DeLector/
 ├── test_writing_rules.py   # 写作规则引擎，含零误报反例 (31 用例)
 ├── test_writer_mobile.py   # 写作台移动端几何与触屏契约 + 版本一致性 (28 用例)
 ├── test_syntax_tree.py     # 拓扑五场域与 AST 从句树 (15 用例)
-├── test_german_workbench.py # 背词工作台音频补丁与接入契约 (19 用例)
+├── test_german_workbench.py # 背词工作台音频补丁/核心词模式/导入去重契约 (55 用例)
 ├── test_essay_diff.py      # 句子级 diff 引擎 (13 用例)
 ├── test_prep_matrix.py     # 介词矩阵纯函数/前端/端点 (12 用例)
 ├── test_goethe_a1.py       # A1 考纲词库/口语卡/前端契约 + 段标签栏窄屏滚动 (10 用例)
@@ -347,6 +348,8 @@ DeLector/
 * [x] **v4.8.2**：**修复 Android 预设文章为空 + 首次进入交互无响应**——`server.py` 只建表未调 `seed_preset_articles()`，全新装无预设文章；且 seed 的 spaCy 冷启动阻塞在请求链上造成「前端版本号已显但交互无响应」感知。将 seed 移到应用构造阶段立即执行（count>0 不重复）。
 
 * [x] **v4.8.3**：**修复安卓交互全死回归（`main.js`** **窗口回调未定义）**——`main.js` 底部 `Object.assign(window,{…})` 引用 `clearA1Email` 此名却已从 `from "./writer.js"` import 列表悄然删除，模块求值时抛 `ReferenceError`，整个回调挂载中断（无 handler 接线、仅 CSS 点击效果），页面照常渲染但点击无反应。`test_frontend_module_graph.py` 原先只验证「已 import 的名字能解析」，对这种「用了但没 import」的裸标识符看不见 —— 新增 `test_window_hook_exposer_identifiers_are_bound` 静态解析 `Object.assign` 块每个裸标识符、`test_writer_a1_email_functions_present_in_main_imports` 钉住 A1 helper 全量 import。测试 **373 全绿**
+
+* [x] **v4.9.0**：**背词台核心词模式 + 导入按词头去重**——① **核心词模式**：235 词核心子集与 704 词全量一键切换，核心标记打在既有词条上而非复制词表（复制会分叉出两套 FSRS 卡），每日新词额度全局共享，复习途中切换只静默过滤**当前位置之后**的队列；老设备走幂等回填补 tag 并注入缺失核心新词，`S.cards`/`S.log`/`S.wrong` 一律不碰。② **导入去重**：`applyMerge` 原先只按 id 合并，同一个词在别的设备上是自定义词、在本机是内建核心词时会并排塞进词表 —— 两张独立 FSRS 卡、复习队列里同一个词出现两次；补归一词头二级索引。归一刻意**保留大小写、不带 pos**：德语里大小写承载语义，`sie`（她/他们）与 `Sie`（您）只差首字母且同为 Pron，`toLowerCase` 会把敬称并掉。③ 下架 `a1-0544`/`a1-0545` 两条既有重复种子词（684 → 682），配幂等 `migrateSeedIdAliases()` 把被删 id 下的进度搬到留存 id（两边都有按 reps、reps 相同按 due 取多者），零进度丢失、零孤儿卡。④ 新增动态探针 `tools/wb_merge_probe.mjs`，把真实 `normHw`/`applyMerge`/迁移函数从 `workbench.html` 切片出来在 `node:vm` 里真跑、用真实词库连导两次证明二次导入是 no-op —— **静态正则只能证明「代码长这样」，证明不了「二次导入是 no-op」**；探针对切片有护栏断言（切歪即抛错而非静默假绿），`added`/`merged` 从 `applyMerge` 真实吐出的 toast 解析而非自己算，否则 `merged+added==incoming` 会退化成恒真。本轮六发变异全部致红。测试 **409 全绿**
 
 * [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 
