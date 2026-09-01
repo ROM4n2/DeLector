@@ -2852,7 +2852,10 @@ $("setDailyNew").addEventListener("change", () => {
 $("setNewOrder").addEventListener("change", () => {
   S.settings.newOrder = $("setNewOrder").value;
   saveSettings();
-  toast(S.settings.newOrder === "shuffle" ? "新词顺序：乱序（次日队列生效）" : "新词顺序：按词表（次日队列生效）");
+  /* 即时生效：renormalizeQueueTail 的补词分支按新 newOrder 取词。
+   * 只重算 revIdx 之后的补入量，已在队列中的词不重排 —— 故文案说"今后追加的词"。 */
+  renormalizeQueueTail();
+  toast(S.settings.newOrder === "shuffle" ? "新词顺序：乱序（影响今后追加的词）" : "新词顺序：按词表（影响今后追加的词）");
 });
 
 /* ---------- 学习计划向导 ---------- */

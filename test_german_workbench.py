@@ -2334,6 +2334,61 @@ def test_refilter_review_queue_does_not_renormalize():
     )
 
 
+# --------------------------------------------------------------------------
+# Task 5 · newOrder 即时生效 + 文案更正
+# --------------------------------------------------------------------------
+# 落地依据：docs/plans/workbench-scope-control-and-live-settings.md · Task 5
+# 只影响今后追加的词：renormalizeQueueTail 的补词分支已读 S.settings.newOrder，
+# 挂上它即可；已在队列中的词不重排（重排会打乱当前位置，违反 ADR-0002 D5）。
+
+
+def _set_new_order_handler():
+    """setNewOrder 的 change handler 整段（到第 0 列 `});` 为止）。"""
+    hits = re.findall(
+        r'\$\(\s*"setNewOrder"\s*\)\.addEventListener\(\s*"change".*?\n\}\);',
+        _WORKBENCH,
+        re.S,
+    )
+    assert hits, "找不到 #setNewOrder 的 change 事件绑定"
+    assert len(hits) == 1, "#setNewOrder 的 change 绑定有 %d 处，断言不具区分度" % len(hits)
+    return hits[0]
+
+
+def test_set_new_order_renormalizes_queue_tail():
+    """#setNewOrder 改动后必须调 renormalizeQueueTail()，让新顺序即时作用于后续补词。
+
+    Task 4 让 dailyNew 即时生效后，同一设置面板里 newOrder 仍只影响次日队列 ——
+    同一面板两种脾气。renormalizeQueueTail 的补词分支已读 S.settings.newOrder，
+    挂上即可；它只动 revIdx 之后的尾部，不重排已在队列中的词。
+    变异验证（将实跑）：只删 handler 里的 renormalizeQueueTail() → 本条红。
+    """
+    fn = _set_new_order_handler()
+    assert "renormalizeQueueTail()" in fn, (
+        "#setNewOrder handler 必须调 renormalizeQueueTail()（否则改顺序要等次日）"
+    )
+    # 不得自带排序逻辑：顺序只能由 renormalizeQueueTail 里那一句 newOrder 判断决定
+    assert "shuffle(" not in fn and ".sort(" not in fn, (
+        "#setNewOrder handler 禁止自写排序/洗牌（会重排已在队列中的词）"
+    )
+
+
+def test_new_order_toast_no_longer_promises_next_day():
+    """旧文案「次日队列生效」必须从整个文件里消失。
+
+    实现已即时生效而 toast 仍承诺次日，用户读到的是旧承诺 —— 比不改更糟。
+    新文案须点明作用域是「影响今后追加的词」（已在队列中的词不重排）。
+    变异验证（将实跑）：把文案改回「次日队列生效」→ 本条红。
+    """
+    assert "次日队列生效" not in _WORKBENCH, (
+        "文件里仍残留旧文案「次日队列生效」，与即时生效的实现自相矛盾"
+    )
+    fn = _set_new_order_handler()
+    assert "影响今后追加的词" in fn, (
+        "#setNewOrder 的 toast 必须说明作用域为「影响今后追加的词」"
+    )
+    assert "乱序" in fn and "按词表" in fn, "toast 必须区分乱序 / 按词表两种取值"
+
+
 def _strip_js_comments(src):
     """去掉 JS 里的块注释与行注释，只留可执行代码。
 
