@@ -46,3 +46,6 @@ keystore.properties
 # 临时调试脚本与开发沙盒（Scratchpad & Agent Caches）
 scratch/
 .workbuddy/
+
+# vault-exec 执行状态机（会话态，不入库）
+.vault-exec-ledger.json
