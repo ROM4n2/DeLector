@@ -2194,3 +2194,241 @@ def _run_node_predicate(js, words):
         return json.loads(res.stdout)
     finally:
         os.unlink(path)
+
+
+# --------------------------------------------------------------------------
+# Task 4 · dailyNew 即时生效（含手动追加豁免）
+# --------------------------------------------------------------------------
+# 落地依据：docs/plans/workbench-scope-control-and-live-settings.md · Task 4
+# 本任务只守结构契约；「改数量后队列真的变了」等行为级覆盖由 Task 6 的
+# tools/wb_queue_probe.mjs 通过 review_queue_state_source() 提供的构造块承担。
+
+
+def _renormalize_queue_tail_body():
+    """renormalizeQueueTail 的函数体（第 0 列 `}` 边界）。"""
+    assert "function renormalizeQueueTail(" in _WORKBENCH, "缺少 renormalizeQueueTail 定义"
+    body = _WORKBENCH.split("function renormalizeQueueTail(")[1].split("\nfunction ")[0]
+    return body
+
+
+def _set_daily_new_handler():
+    """setDailyNew 的 change handler 整段（到第 0 列 `});` 为止）。"""
+    hits = re.findall(
+        r'\$\(\s*"setDailyNew"\s*\)\.addEventListener\(\s*"change".*?\n\}\);',
+        _WORKBENCH,
+        re.S,
+    )
+    assert hits, "找不到 #setDailyNew 的 change 事件绑定"
+    assert len(hits) == 1, "#setDailyNew 的 change 绑定有 %d 处，断言不具区分度" % len(hits)
+    return hits[0]
+
+
+def _btn_apply_plan_handler():
+    """btnApplyPlan 的 click handler 整段（到第 0 列 `});` 为止）。"""
+    hits = re.findall(
+        r'\$\(\s*"btnApplyPlan"\s*\)\.addEventListener\(\s*"click".*?\n\}\);',
+        _WORKBENCH,
+        re.S,
+    )
+    assert hits, "找不到 #btnApplyPlan 的 click 事件绑定"
+    assert len(hits) == 1, "#btnApplyPlan 的 click 绑定有 %d 处，断言不具区分度" % len(hits)
+    return hits[0]
+
+
+def test_renormalize_queue_tail_exists_without_rebuilding():
+    """renormalizeQueueTail 存在且函数体内禁止调 buildReviewQueue()。
+
+    调用 buildReviewQueue 会重置 revIdx 并重新洗牌，复习到一半改设置会被弹回
+    第一张卡，比不生效更糟（ADR-0002 D5）。
+    变异验证（将实跑）：函数体里加 buildReviewQueue() → 本条红。
+    """
+    body = _renormalize_queue_tail_body()
+    assert "revQueue.slice" in body, "切片没落在 renormalizeQueueTail 上"
+    assert "buildReviewQueue(" not in body, (
+        "renormalizeQueueTail 禁止调 buildReviewQueue()（会重置 revIdx 并重洗牌）"
+    )
+
+
+def test_renormalize_queue_tail_preserves_rev_idx():
+    """revIdx 在 renormalizeQueueTail 函数体内只被读、不被赋值。
+
+    只动 revIdx 之后的尾部，已评价历史与当前卡位置一律保留。
+    变异验证（将实跑）：函数体里加 `revIdx = 0` → 本条红。
+    """
+    body = _renormalize_queue_tail_body()
+    # 读：slice(0, revIdx + 1) / slice(revIdx + 1)
+    assert re.search(r"revQueue\.slice\(\s*0\s*,\s*revIdx\s*\+\s*1\s*\)", body), (
+        "保留段必须是 revQueue.slice(0, revIdx + 1)"
+    )
+    assert re.search(r"revQueue\.slice\(\s*revIdx\s*\+\s*1\s*\)", body), (
+        "尾段必须是 revQueue.slice(revIdx + 1)"
+    )
+    # 禁止写 revIdx
+    assert not re.search(r"\brevIdx\s*=[^=]", body), (
+        "renormalizeQueueTail 禁止改写 revIdx"
+    )
+    for var in ("ratedCount", "queueDay"):
+        assert not re.search(r"\b" + var + r"\s*=[^=]", body), (
+            "renormalizeQueueTail 禁止改写 %s" % var
+        )
+
+
+def test_renormalize_queue_tail_quota_matches_build_review_queue():
+    """renormalizeQueueTail 的配额口径必须与 buildReviewQueue 严格一致。
+
+    必须是 `Math.max(0, S.settings.dailyNew - (logToday().nw || 0))`，
+    只写 dailyNew 不减已评 nw 会重复扣减、导致实际灌入量少于设置值。
+    变异验证（将实跑）：配额改成 dailyNew 不减 nw → 本条红。
+    """
+    body = _renormalize_queue_tail_body()
+    quota_lines = [ln for ln in body.splitlines() if "dailyNew" in ln]
+    assert quota_lines, "renormalizeQueueTail 里找不到 dailyNew 配额计算"
+    assert len(quota_lines) == 1, (
+        "dailyNew 配额行必须唯一，实际 %d 处" % len(quota_lines)
+    )
+    line = quota_lines[0]
+    assert "Math.max(0," in line and "dailyNew" in line, (
+        "配额必须用 Math.max(0, ...) 包裹 dailyNew"
+    )
+    assert "logToday().nw" in line or re.search(r"today\.nw\b", line), (
+        "配额必须减去今日已评新词数 nw"
+    )
+
+
+def test_set_daily_new_renormalizes_and_refreshes_badge():
+    """#setDailyNew 改动后必须调 renormalizeQueueTail() 与 renderHeaderBadge()。
+
+    原 handler 只存设置 + renderPlan + toast，从不碰 revQueue；改数量后队列
+    在没刷完时毫无反应，刷完时突然生效，同一操作两种结果。
+    变异验证（将实跑）：只删 handler 里的 renormalizeQueueTail() → 本条红、
+    btnApplyPlan 那条仍绿。
+    """
+    fn = _set_daily_new_handler()
+    assert "renormalizeQueueTail()" in fn, "#setDailyNew handler 必须调 renormalizeQueueTail()"
+    assert "renderHeaderBadge()" in fn, "#setDailyNew handler 必须调 renderHeaderBadge()"
+
+
+def test_btn_apply_plan_renormalizes_and_refreshes_badge():
+    """#btnApplyPlan 应用建议值后必须调 renormalizeQueueTail() 与 renderHeaderBadge()。
+
+    与 setDailyNew 是两个独立写入点；必须分别验证，否则只挂一处会让
+    "函数存在" 类断言恒真。
+    变异验证（将实跑）：只删 handler 里的 renormalizeQueueTail() → 本条红、
+    setDailyNew 那条仍绿。
+    """
+    fn = _btn_apply_plan_handler()
+    assert "renormalizeQueueTail()" in fn, "#btnApplyPlan handler 必须调 renormalizeQueueTail()"
+    assert "renderHeaderBadge()" in fn, "#btnApplyPlan handler 必须调 renderHeaderBadge()"
+
+
+def test_refilter_review_queue_does_not_renormalize():
+    """切范围只过滤不调 renormalizeQueueTail() —— ADR 3.6 刻意的不对称。
+
+    收窄意图 ≠ 数量意图；如果顺手统一，核心模式切到全部会立刻补齐非核心新词，
+    污染当前复习意图。
+    变异验证（将实跑）：refilterReviewQueueForScope 里加 renormalizeQueueTail() → 本条红。
+    """
+    fn = _scope_refilter_body()
+    assert "renormalizeQueueTail(" not in fn, (
+        "refilterReviewQueueForScope 禁止调 renormalizeQueueTail()（切范围不补齐）"
+    )
+
+
+def _strip_js_comments(src):
+    """去掉 JS 里的块注释与行注释，只留可执行代码。
+
+    仅用于函数体级别的小片段：不做字符串/正则字面量感知，
+    调用方需确认目标片段里没有含 `//` 的字符串（extraNewWords 满足）。
+    """
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    return "\n".join(line.split("//")[0] for line in src.splitlines())
+
+
+def test_extra_new_words_registers_manual_exemption_uncommented():
+    """extraNewWords 必须真正执行 manualExtraIds.add(id)，不能是注释掉的死行。
+
+    豁免登记被注释掉时本测试必须红 —— 这不是假想：本次交付后该行确实
+    被改成 `// ids.forEach(id => manualExtraIds.add(id));`，
+    结果 renormalizeQueueTail 里 pinned = newInTail.filter(id => manualExtraIds.has(id))
+    恒为空，手动追加的词在调低 dailyNew 时被裁掉，ADR §3.4 的手动追加豁免
+    变成死代码，而当时没有任何测试发现。
+    因此断言必须落在「去注释后的代码」上：
+    朴素的 "manualExtraIds.add" in body 在被注释掉时照样绿，是死测。
+    变异验证（将实跑）：把该行注释回去 → 本条红。
+    """
+    body = _extra_new_words_body()
+    # 区分度：该调用在 extraNewWords 体内、乃至全文件都只有 1 处
+    assert len(re.findall(r"manualExtraIds\.add", body)) == 1, (
+        "extraNewWords 里 manualExtraIds.add 出现 %d 次，断言不具区分度"
+        % len(re.findall(r"manualExtraIds\.add", body))
+    )
+
+    code = _strip_js_comments(body)
+    assert re.search(r"ids\.forEach\(\s*id\s*=>\s*manualExtraIds\.add\(id\)\s*\)", code), (
+        "extraNewWords 必须把追加的 id 登记进 manualExtraIds（且不能是注释行）；"
+        "缺失则 renormalizeQueueTail 的 pinned 恒空，手动追加的词会被配额裁掉"
+    )
+    # 登记必须发生在把 ids 并进队列之前/同一批，否则 concat 后再登记也行，
+    # 但顺序颠倒会让人误以为 pinned 依赖 revQueue 内容 —— 这里锁住实际写法
+    assert code.index("manualExtraIds.add") < code.index("revQueue.concat(ids)"), (
+        "豁免登记应在 revQueue.concat(ids) 之前完成"
+    )
+
+
+# --------------------------------------------------------------------------
+# Task 6 留账：可执行的 review 队列状态构造块
+# --------------------------------------------------------------------------
+# 计划文档：docs/plans/workbench-scope-control-and-live-settings.md · Task 4 / Task 6
+# 行为级覆盖（改数量后队列真的变了、手动追加豁免不被裁、切范围不补齐）
+# 由 Task 6 的 tools/wb_queue_probe.mjs 承担。
+# 这里提供从 workbench.html 真实源码切片出的构造块，供探针 eval 后重建状态。
+
+
+def review_queue_state_source():
+    """返回能在 node:vm 里重建 review 队列核心状态的 JS 源码字符串。
+
+    包含：S / wordFilters / revQueue / revIdx / queueDay / ratedCount / curView、
+    以及 buildReviewQueue / refilterReviewQueueForScope / renormalizeQueueTail /
+    extraNewWords / injectWrongWords / logToday / inScopeWord / shuffle / wordById /
+    todayStr / endToday / clamp / FSRS 常量 / saveCards / saveLog / saveSettings 等依赖。
+    全部从 workbench.html 切真实源码，没有任何一份重抄实现。
+    """
+    def cut(name, body=None):
+        if body is None:
+            body = _fn_body(name)
+        return "function %s(%s {%s\n}" % (
+            name,
+            _WORKBENCH.split("function " + name + "(")[1].split(")")[0] + ")",
+            body.split("{", 1)[1].rsplit("\n}", 1)[0],
+        )
+
+    # 需要注入 vm 的源码块
+    pieces = [
+        _js_line(r"^const pad2 = .*$", "pad2"),
+        _js_line(r"^function todayStr\(.*$", "todayStr"),
+        _js_line(r"^function endToday\(\).*$", "endToday"),
+        _js_line(r"^function shuffle\(a\).*$", "shuffle"),
+        _js_line(r"^function clamp\(v, lo, hi\).*$", "clamp"),
+    ]
+    # FSRS 常量
+    pieces.append(_js_line(r"^const FSRS_W = .*$", "FSRS_W"))
+    pieces.append("const DECAY = -FSRS_W[20];")
+    pieces.append("const FACTOR = Math.exp(Math.log(0.9) / DECAY) - 1;")
+    pieces.append(_js_line(r"^const S_MIN = .*$", "S_MIN/S_MAX"))
+    # S / wordFilters / 队列状态
+    pieces.append("""
+const S = { words: [], cards: {}, log: {}, wrong: {}, settings: { retention: 0.9, dailyNew: 15, newOrder: \"shuffle\" } };
+const wordFilters = { q: \"\", letter: \"\", tag: \"\", diff: \"\", state: \"\", scope: \"all\" };
+let revQueue = [], revIdx = 0, ratedCount = 0, queueDay = null, flipped = false, curView = \"review\";
+""")
+    # helper / 队列函数
+    pieces.append(_js_line(r"^function wordById\(id\).*$", "wordById"))
+    pieces.append(_js_line(r"^function inScopeWord\(w\).*$", "inScopeWord"))
+    pieces.append(_js_line(r"^function logToday\(\).*$", "logToday"))
+    pieces.append("function saveCards() {}\nfunction saveLog() {}\nfunction saveSettings() {}\nfunction toast() {}")
+    pieces.append(cut("buildReviewQueue"))
+    pieces.append(cut("injectWrongWords"))
+    pieces.append(cut("refilterReviewQueueForScope"))
+    pieces.append(cut("renormalizeQueueTail"))
+    pieces.append(cut("extraNewWords"))
+    return "\n".join(pieces)

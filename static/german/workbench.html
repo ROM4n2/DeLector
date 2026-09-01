@@ -1736,6 +1736,30 @@ function refilterReviewQueueForScope() {
   if (curView === "review") renderReview();
 }
 
+/* 尾部重算：只动 revIdx 之后的未评部分，已复习的一律不动、位置不丢。
+ * today.nw 只计已评新词，队列中未评新词不计入，故重算不重复扣减配额。
+ * revIdx >= revQueue.length（今日刷完）时 slice(0, revIdx+1) 即整队、tail 为空，
+ * 补进来的词正好落在 revIdx 位置 —— 不需要特判。 */
+const manualExtraIds = new Set();  // 内存态，与 revQueue 同生命周期：revQueue 本就不持久化、刷新即重建，故豁免登记无需持久化。
+function renormalizeQueueTail() {
+  const head = revQueue.slice(0, revIdx + 1);
+  const tail = revQueue.slice(revIdx + 1);
+  const keptDue = tail.filter(id => S.cards[id]);              // 到期卡不受配额管
+  const newInTail = tail.filter(id => !S.cards[id]);
+  const pinned = newInTail.filter(id => manualExtraIds.has(id)); // 手动追加豁免
+  const normal = newInTail.filter(id => !manualExtraIds.has(id));
+  const quota = Math.max(0, S.settings.dailyNew - (logToday().nw || 0));
+  let next = normal.slice(0, quota);                            // 调低则裁
+  if (next.length < quota) {                                    // 调高则补
+    const inQ = new Set(revQueue);
+    let pool = S.words.filter(w => !S.cards[w.id] && !inQ.has(w.id) && inScopeWord(w)).map(w => w.id);
+    if (S.settings.newOrder !== "seed") pool = shuffle(pool);
+    next = next.concat(pool.slice(0, quota - next.length));
+  }
+  revQueue = head.concat(keptDue, next, pinned);
+  if (curView === "review") renderReview();
+}
+
 /* F4 · 错题本智能推送：根据 wrong.n（错次）+ 最近 due 时间，挑 N 个高错题词插到队列头 */
 function injectWrongWords(n) {
   if (!S.wrong || !revQueue) return;
@@ -1883,6 +1907,7 @@ function extraNewWords() {
   const ordered = S.settings.newOrder === "seed" ? pool : shuffle(pool);
   const ids = ordered.slice(0, 20).map(w => w.id);
   if (!ids.length) { toast("没有未学的新词了 🎉"); return; }
+  ids.forEach(id => manualExtraIds.add(id));
   revQueue = revQueue.concat(ids);
   toast("已追加 " + ids.length + " 个新词（计入今日配额）");
   renderReview();
@@ -2820,6 +2845,8 @@ $("setDailyNew").addEventListener("change", () => {
   $("setDailyNew").value = v;
   S.settings.dailyNew = v; saveSettings();
   renderPlan();
+  renormalizeQueueTail();
+  renderHeaderBadge();
   toast("每日新词上限：" + v);
 });
 $("setNewOrder").addEventListener("change", () => {
@@ -2863,6 +2890,8 @@ $("btnApplyPlan").addEventListener("click", () => {
   if (!p || p.remaining === 0) return;
   S.settings.dailyNew = clamp(p.daily, 1, 200);
   saveSettings(); renderSettings();
+  renormalizeQueueTail();
+  renderHeaderBadge();
   toast("每日新词上限已设为 " + S.settings.dailyNew);
 });
 $("btnTheme").addEventListener("click", () => {
