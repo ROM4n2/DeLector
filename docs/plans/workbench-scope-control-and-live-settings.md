@@ -291,6 +291,7 @@ function renormalizeQueueTail() {
 > 3. `scopeNoTopUp`：切到 core 后队列只过滤不补齐 —— 断言尾部新词数 **小于** 配额允许值（这是 ADR 3.6 刻意保留的不对称，探针要把它钉住，防止后人"顺手统一"）。
 > 4. `searchBypass`：core 模式下用非核心词（如 `Absender`）走 `renderWords` 过滤谓词，命中数 > 0；清空搜索后同一个词命中数为 0。
 > 5. 幂等：连调两次 `renormalizeQueueTail()`，第二次队列快照逐字节不变。
+> 6. `finishedStateScopeSwitch`（**Task 1 复核新发现，必须覆盖**）：`refilterReviewQueueForScope()` 结尾有 `if (curView === "review") renderReview();`，而 `renderReview()` 的门是 `if (queueDay !== today || revIdx >= revQueue.length) buildReviewQueue()`。Task 1 之前 `#wScope` 在词库视图、`curView` 永远不是 `"review"`，这条分支是**死代码**；顶栏控件让它第一次活了。后果：**今日队列刷完后切模式会走 `buildReviewQueue()` 补满配额，直接违反 ADR 3.6「切范围不补齐」**。探针要构造 `revIdx >= revQueue.length` 的完成态、切 scope、观测尾部新词数。先**如实报告**观测到的实际行为与配额值，**不要**自行决定怎么改——是收紧（完成态也不补）还是承认例外（并改掉 `workbench.html` 里那句写死「禁止 buildReviewQueue()」的绝对化注释），由编排者裁决。
 > TDD Steps:
 > 1. 先写调用探针的 pytest 测试（RED，探针不存在）。
 > 2. 实现探针（GREEN）。
