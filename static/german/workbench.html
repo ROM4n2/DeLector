@@ -211,6 +211,15 @@ button.st-chip:hover{filter:brightness(0.92)}
 .row-ops{white-space:nowrap}
 .row-ops button{color:var(--muted);font-size:12.5px;padding:3px 7px;border-radius:6px}
 .row-ops button:hover{background:var(--accent-soft);color:var(--accent)}
+/* 搜索旁路 scope 命中的「不在当前模式内」的词行
+ * （docs/plans/workbench-scope-control-and-live-settings.md · Task 3）：
+ * 整行淡化 + 词头后跟一枚淡色小标。颜色一律复用既有 token，不新造。 */
+tr.out-of-scope td{opacity:.6}
+tr.out-of-scope .hw::after{
+  content:"非本模式";display:inline-block;vertical-align:middle;margin-left:6px;
+  background:var(--line);color:var(--muted);border-radius:5px;padding:1px 6px;
+  font-size:10.5px;font-weight:400;
+}
 
 /* ================= 设置视图 ================= */
 .set-row{display:flex;justify-content:space-between;align-items:center;gap:14px;
@@ -2541,7 +2550,12 @@ function renderWords() {
     if (q && !(w.hw.toLowerCase().includes(q) || (w.gloss || "").toLowerCase().includes(q))) return false;
     if (wordFilters.letter && (w.letter || "").charAt(0).toUpperCase() !== wordFilters.letter) return false;
     if (wordFilters.tag && !(w.tags || []).includes(wordFilters.tag)) return false;
-    if (wordFilters.scope === "core" && !(w.tags || []).includes("core")) return false;
+    /* `!q`：搜索框非空时旁路 scope，搜索 = 全库查询，浏览才受模式限制
+     * （docs/plans/workbench-scope-control-and-live-settings.md · Task 3）。
+     * 否则核心模式下查非核心词只能去顶栏切到全部，而切模式会立刻把非核心新词补进队列
+     * 尾部，中途评一张就落卡、计入 today.nw、吃掉核心配额：查个单词却动了复习进度。
+     * 旁路进来的非核心行由下面行模板挂 .out-of-scope 标出，不是静默混进来。 */
+    if (wordFilters.scope === "core" && !q && !(w.tags || []).includes("core")) return false;
     const c = S.cards[w.id];
     if (wordFilters.diff === "none" && c && c.reps > 0) return false;
     if (wordFilters.diff === "easy" && !(c && c.reps > 0 && c.d < 4)) return false;
@@ -2557,7 +2571,13 @@ function renderWords() {
   $("wCount").textContent = "共 " + rows.length + " / " + S.words.length + " 个单词";
   $("wBody").innerHTML = rows.map(w => {
     const st = wordState(w);
-    return "<tr><td><span class='hw'>" + esc(w.hw) + "</span>" +
+    /* 搜索旁路 scope 进来的非核心词
+     * （docs/plans/workbench-scope-control-and-live-settings.md · Task 3）：
+     * 判定复用唯一 truth source inScopeWord(w)，别在这里重抄一份 core tag 判定。
+     * 搜索为空时谓词已把它们滤掉，这里天然不会命中，故不必再判 q。
+     * **极性别反**：class 挂在 inScopeWord(w) 为**假**的那一侧。反过来会把核心词标成
+     * 「非本模式」、非核心词标成正常 —— 用户读到的是反话，比不加标签更糟。 */
+    return "<tr" + (inScopeWord(w) ? "" : " class='out-of-scope'") + "><td><span class='hw'>" + esc(w.hw) + "</span>" +
       (w.ipa ? "<br><span class='ipa'>" + esc(w.ipa) + "</span>" : "") + "</td>" +
       "<td>" + esc(w.pos || "—") + "</td>" +
       "<td class='gloss-cell'>" + esc(w.gloss || "—") + "</td>" +

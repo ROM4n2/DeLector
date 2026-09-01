@@ -1772,3 +1772,425 @@ def test_merge_and_alias_migration_behave_under_node():
     assert mig["secondRunChanged"] is False, "二次迁移必须返回 false（幂等）"
     assert mig["snapshotStable"] is True, "二次迁移不得改动任何数据（幂等）"
     assert mig["orphanCards"] == 0, "迁移后不得留下 wordById 查不到的孤儿卡"
+
+
+# --------------------------------------------------------------------------
+# Task 3 · 核心词模式下搜索旁路 scope
+# --------------------------------------------------------------------------
+# 落地依据（仓内）：docs/plans/workbench-scope-control-and-live-settings.md · Task 3
+# 搜索框非空 = 全库查询（不受核心词模式限制），浏览才受模式限制；非核心命中行打
+# 淡色小标。改动只有三处：renderWords 过滤谓词一行 + 一处行 className + 一条 CSS。
+# 不新增状态变量、不碰 revQueue、不改 wordFilters.scope 本身。
+
+OUT_OF_SCOPE_CLASS = "out-of-scope"
+
+
+def _style_block():
+    """workbench.html 里唯一的 <style> 块内容。"""
+    blocks = re.findall(r"<style>(.*?)</style>", _WORKBENCH, re.S)
+    assert len(blocks) == 1, "预期唯一一个 <style> 块，实际 %d 个" % len(blocks)
+    return blocks[0]
+
+
+def _css_rules_matching(sel_needle):
+    """<style> 里选择器含 sel_needle 的规则，返回 [(选择器, 声明块), ...]。
+
+    必须切到每条规则**自己的**声明块 —— 整 CSS 搜 `opacity` 有 10 多处命中
+    （.btn:disabled / #toast / .audio-btn / @keyframes ...），那样的断言恒真。
+    """
+    return [
+        (m.group(1).strip(), m.group(2))
+        for m in re.finditer(r"([^{}]*)\{([^{}]*)\}", _style_block())
+        if sel_needle in m.group(1)
+    ]
+
+
+def _render_words_body():
+    """renderWords() 的函数体（第 0 列 `}` 作边界）。"""
+    return _fn_body("renderWords")
+
+
+def _words_row_template():
+    """renderWords 里 `$("wBody").innerHTML = rows.map(...)` 起的行模板块。
+
+    切在计数赋值之后 —— 谓词里的东西不算「渲染出来的行长什么样」。
+    """
+    body = _render_words_body()
+    at = body.index('$("wBody").innerHTML')
+    return body[at:]
+
+
+def _words_row_open_tag():
+    """行模板里**第一个** `"<tr` 起到 `><td` 为止的开标签表达式。
+
+    `"<tr` 在行模板里出现两次：真数据行 + 「没有匹配的单词」空态兜底行。
+    只取第一处（真数据行）—— 把标记挂到空态行上是没有意义的实现。
+    """
+    m = re.search(r'"<tr.*?><td', _words_row_template(), re.S)
+    assert m, "renderWords 行模板里找不到 <tr> 开标签表达式"
+    return m.group(0)
+
+
+def _flatten_parens(line):
+    """`if (...)` 条件里剥掉所有括号分组后剩下的**顶层**运算符串。
+
+    直接在整行上搜 `||` 会被 `(w.tags || [])` 这种子表达式命中（恒假的断言），
+    所以先按括号配平切出条件、再反复剥掉最内层分组，只留顶层。
+    """
+    cond = _slice_balanced(line, 0, "(", ")")[1:-1]
+    while True:
+        nxt = re.sub(r"\([^()]*\)", "", cond)
+        if nxt == cond:
+            return cond
+        cond = nxt
+
+
+def test_words_search_bypasses_core_scope_filter():
+    """核心模式下搜索框非空时，renderWords 谓词不再应用 scope 过滤。
+
+    落地依据：`docs/plans/workbench-scope-control-and-live-settings.md` · Task 3。
+    Task 2 删掉词库那个 scope 下拉后，要查非核心词只剩「顶栏切到全部 → 查 → 切回」，
+    而切到全部会立刻把非核心新词补进队列尾部，中途评一张就落卡、计入 today.nw、
+    吃掉核心配额 —— 只是查个单词却动了复习进度（「浏览行为不得污染复习进度」）。
+    故 scope 条件加「搜索为空」前提：`scope === "core" && !q && !core tag`。
+
+    断言锚在过滤谓词切片内**唯一**一条 scope 行上（`_sole_line` 命中多行即失败）：
+    整文件搜 `!q` 会命中 renderWords 之外的地方，不具判别力。
+
+    **不在本条覆盖范围**（故意不加，避免重复覆盖放大将来 refactor 阻力）：
+    同一条 if 的另两个不变式 —— core tag 用 `(w.tags || []).includes("core")` 判定、
+    命中动作是 `return false`（真过滤掉）—— 由 `test_core_scope_filter_in_words_view`
+    守着（Task 1 迁移前就有的旧覆盖，两发变异都实跑过：删 includes / 把 return false
+    改成 return true 都红在那一条）。别的 commit 动到这条 if，它会先红。
+
+    分工：本条只守「谓词没被改坏」。行为级覆盖（core 模式搜 `Absender` 真能命中、
+    清空搜索后同一个词命中数为 0）静态正则证明不了，由计划文档 Task 6 的
+    tools/wb_queue_probe.mjs 承担；可执行谓词的构造入口见本文件末
+    `render_words_predicate()`。
+
+    ── 已知可达路径，**本任务未修复**（留给下一轮 ADR / 后续项）────────────────
+    搜索旁路把非核心词行摆到了核心模式的词表里，于是这些行上的状态控件第一次可达，
+    而它们会把非核心 id 推进核心模式的复习队列：
+      - `setWordState(id, "learn")` 的 else 分支 `revQueue.push(id)`
+        （workbench.html:2520）**无 scope 门**；
+      - 两个入口都能到：词表行内状态芯片 `data-act='state'` → `cycleWordState`
+        （:2527），以及编辑对话框 `#fState` → `setWordState(editingId, st)`（:2717）；
+      - 一旦该 id 被评，`doRate` 的 `t.rv++; if (isNew) t.nw++;`（:1854）同样无 scope 门，
+        `today.nw` 会涨 —— 这正是「浏览行为不得污染复习进度」关心的事，
+        **不是**「不写 nw 所以无害」（本报告初版的判断是错的，此处更正）。
+    本任务硬约束是「过滤链一行 + CSS + 一处 row className，不碰 revQueue」，
+    故只在此登记、不动那两条链。
+    ─────────────────────────────────────────────────────────────────────
+
+    变异验证（已实跑）：从 scope 行删掉 `&& !q` → 本条红。
+    """
+    pred = _words_filter_predicate()
+    line = _sole_line(pred, "wordFilters.scope", "renderWords 过滤谓词")
+    assert re.search(_SCOPE_IS_CORE, line), "scope 行必须判定 wordFilters.scope === 'core'"
+
+    gate = r"(?:&&\s*!\s*q\b)|(?:!\s*q\s*&&)"
+    hits = len(re.findall(gate, line))
+    assert hits == 1, (
+        "scope 行必须恰好带一个「搜索为空」前提 `&& !q`，实际 %d 处：%s"
+        % (hits, line.strip())
+    )
+    assert "||" not in _flatten_parens(line), (
+        "scope 条件的顶层必须是纯 && 串联 —— 掺 `||` 会让搜索前提失效：%s" % line.strip()
+    )
+
+    qdecl = _sole_line(_render_words_body(), "const q =", "renderWords")
+    assert re.search(r"wordFilters\.q\b", qdecl), (
+        "谓词判空的 q 必须来自 wordFilters.q（控件 handler 已 .trim()，判空以 trim 后为准）：%s"
+        % qdecl.strip()
+    )
+
+
+def test_out_of_scope_row_has_dim_style():
+    """`.out-of-scope` —— 标记「搜索旁路进来、不在当前模式内」那一行的 CSS 类。
+
+    类名由本任务新起（计划文档 Task 3），由 renderWords 行模板条件挂载。
+    计划要求非核心命中行加**淡色小标**让用户看得出这条不在当前模式内，
+    且复用既有 CSS token、不新造颜色。故钉两件事：
+      - 有一条 .out-of-scope 规则把行淡化（opacity）；
+      - 有一条 .out-of-scope 伪元素规则用 content: 生成小标，颜色取自 var(--...)。
+    断言切到每条规则**自己的**声明块 —— 整 CSS 搜 `opacity` 十多处命中，恒真。
+    变异验证（已实跑）：删掉 <style> 里 .out-of-scope 两条规则 → 本条红。
+    """
+    rules = _css_rules_matching("." + OUT_OF_SCOPE_CLASS)
+    assert rules, (
+        "<style> 里缺少 .%s 规则 —— 行标记没有任何视觉效果，用户看不出这条不在模式内"
+        % OUT_OF_SCOPE_CLASS
+    )
+
+    dim = [d for _, d in rules if "opacity" in d]
+    assert dim, (
+        "需要一条 .%s 规则淡化该行（opacity），实际规则：%r" % (OUT_OF_SCOPE_CLASS, rules)
+    )
+
+    tag = [(s, d) for s, d in rules if "content:" in d]
+    assert tag, (
+        "需要一条 .%s 规则生成淡色小标（content:），实际规则：%r"
+        % (OUT_OF_SCOPE_CLASS, rules)
+    )
+    assert all("::after" in s or "::before" in s for s, _ in tag), (
+        "小标走伪元素（::before / ::after）—— 别往行模板里再插一段 markup，"
+        "实际选择器：%r" % [s for s, _ in tag]
+    )
+    assert re.search(r"var\(--", tag[0][1]), (
+        "小标颜色必须复用既有 CSS token var(--...)，不许新造颜色：%s" % tag[0][1]
+    )
+
+
+def _top_level_marks(text, chars):
+    """text 里处于**顶层**（不在括号内、不在字符串内）的 chars 字符，返回 [(字符, 下标), ...]。
+
+    行模板那个三元表达式里 `?` `:` 都只在顶层出现一次，但分支里有
+    `" class='out-of-scope'"` —— 双引号串里的单引号是字面量，
+    朴素的引号扫描会在这里错位，所以按当前 quote 字符配对。
+    """
+    out, depth, quote, esc = [], 0, None, False
+    for i, ch in enumerate(text):
+        if quote:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == quote:
+                quote = None
+            continue
+        if ch in "\"'`":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and ch in chars:
+            out.append((ch, i))
+    return out
+
+
+def _out_of_scope_ternary():
+    """挂 .out-of-scope 的那个三元表达式，切成 (条件, 真分支, 假分支)。
+
+    按括号配平切出包住 class 的那组 `( ... )`，再按**顶层** `?` / `:` 切三段。
+    极性是本任务唯一的用户可见信号，只有切到分支这一级才能钉住它的方向。
+    """
+    tag = _words_row_open_tag()
+    at = tag.index(OUT_OF_SCOPE_CLASS)
+    # 由内向外找包住 class 的那组括号 —— 最近的一个 `(` 是 inScopeWord( 的，不是三元的
+    expr = None
+    for m in reversed([m for m in re.finditer(r"\(", tag[:at])]):
+        cand = _slice_balanced(tag, m.start(), "(", ")")
+        if OUT_OF_SCOPE_CLASS in cand:
+            expr = cand
+            break
+    assert expr, (
+        "%s 不在任何一组括号里 —— 无法判定极性，请写成 `(cond ? a : b)`：%s"
+        % (OUT_OF_SCOPE_CLASS, tag)
+    )
+    inner = expr[1:-1]
+    marks = _top_level_marks(inner, "?:")
+    assert [c for c, _ in marks] == ["?", ":"], (
+        "挂 class 必须是一个顶层三元 `cond ? a : b`（才能判定极性），实际顶层运算符 %r：%s"
+        % ([c for c, _ in marks], inner)
+    )
+    q_at, c_at = marks[0][1], marks[1][1]
+    return inner[:q_at], inner[q_at + 1:c_at], inner[c_at + 1:]
+
+
+def test_out_of_scope_class_wired_on_word_row():
+    """renderWords 行模板按 scope 给非核心词行挂 .out-of-scope，且**极性正确**。
+
+    haystack 是从函数体切出的行模板与其中第一个 `"<tr` 开标签表达式 ——
+    整文件搜类名会连 <style> 里的规则一起命中，恒真。
+
+    三层：
+      1. 类名在行模板里恰好挂一处（挂多处 = 删掉一处也照样绿）；
+      2. 挂在数据行 `<tr>` 开标签上，且由 scope 判定把门（复用唯一 truth source
+         inScopeWord(w)，或就地做等价的 `scope === "core"` + core tag 判定）——
+         无条件挂等于把整张表都标成「不在模式内」；
+      3. **极性**：class 必须落在 inScopeWord(w) 为 falsy 的那一侧。
+
+    第 3 层是本条的重点。极性是本任务**唯一**的用户可见视觉信号，方向反了就把核心词
+    标成「非本模式」、把旁路进来的非核心词标成正常 —— 用户读到的是**反话**，
+    比压根不加标签更糟（不加标签只是缺信息，反了是给假信息）。
+    而且这一层静态断言无可替代：Task 6 的 `render_words_predicate_source()` 切的是
+    `S.words.filter(…)` 谓词，**根本不执行行模板**，探针救不了这条。
+    故断言切到三元的三段（条件 / 真分支 / 假分支）分别判，不只看"class 出现过、
+    inScopeWord 出现过"——那样把两个分支对调仍然全绿（本条的初版就是这个洞）。
+
+    变异验证（已实跑）：
+      - 删掉 <tr> 开标签里的 class 挂载 → 第 1 层红；
+      - class 无条件挂（去掉三元）→ 第 2 层红；
+      - 两个分支对调（`inScopeWord(w) ? " class='out-of-scope'" : ""`）→ 第 3 层红。
+    """
+    tpl = _words_row_template()
+    hits = len(re.findall(re.escape(OUT_OF_SCOPE_CLASS), tpl))
+    assert hits == 1, (
+        "行模板里 %s 必须恰好挂一处，实际 %d 处（挂多处 = 删掉一处也照样绿）"
+        % (OUT_OF_SCOPE_CLASS, hits)
+    )
+
+    open_tag = _words_row_open_tag()
+    assert OUT_OF_SCOPE_CLASS in open_tag, (
+        "class 必须挂在数据行的 <tr> 开标签上，实际开标签：%s" % open_tag
+    )
+    assert _is_scope_gated(open_tag, _scope_gate_names(_render_words_body())), (
+        "挂 class 必须由 scope 判定把门（inScopeWord(w) 或等价 core 判定）：%s" % open_tag
+    )
+
+    cond, when_true, when_false = _out_of_scope_ternary()
+    bangs = len(re.match(r"^\s*(!*)", cond).group(1))
+    assert bangs <= 1, (
+        "三元条件别写多重取反，读者数不清极性、断言也判不了方向：%s" % cond.strip()
+    )
+    in_true = OUT_OF_SCOPE_CLASS in when_true
+    in_false = OUT_OF_SCOPE_CLASS in when_false
+    assert in_true != in_false, (
+        "class 只能出现在三元的**一个**分支里，实际 真=%r 假=%r" % (when_true, when_false)
+    )
+    if bangs:                      # 条件写成 !inScopeWord(w) → class 在真分支
+        assert in_true, (
+            "条件取反（!inScopeWord）时 class 必须在**真**分支，实际挂在假分支：%s ? %s : %s"
+            % (cond.strip(), when_true.strip(), when_false.strip())
+        )
+    else:                          # 条件写成 inScopeWord(w) → class 在假分支
+        assert in_false, (
+            "极性反了：inScopeWord(w) 为**真**代表这条词在当前模式内，不该标"
+            "「非本模式」。class 必须挂在假分支。实际：%s ? %s : %s"
+            % (cond.strip(), when_true.strip(), when_false.strip())
+        )
+    other = when_true if in_false else when_false
+    assert re.fullmatch(r"""\s*(""|'')\s*""", other), (
+        "在模式内的那一侧必须是空串（不加任何标记），实际：%r" % other
+    )
+
+
+# ── Task 6 留账：可执行的 renderWords 过滤谓词 ──────────────────────────────
+#
+# 计划文档：docs/plans/workbench-scope-control-and-live-settings.md · Task 6
+# 本文件上面那三条 Task 3 静态断言只能证明「谓词长这样」，证明不了
+# 「core 模式下搜 Absender 真能命中、清空搜索后同一个词命中数为 0」。
+# 行为级覆盖由计划文档 Task 6 的 tools/wb_queue_probe.mjs（searchBypass 场景）承担，
+# 下面这两个 helper 就是给它（以及驱动它的 pytest）用的入口：
+#   render_words_predicate_source() → 真实谓词的 JS 源码，可直接丢进 node:vm
+#   render_words_predicate(...)     → Callable[[dict], bool]，在 node 里真跑那段源码
+# 谓词、`const q = ...`、wordState / endToday / fmtMD / pad2 **全部从
+# workbench.html 切真源码**，这里没有任何一份重抄的实现 —— 重抄的话实现回退了
+# 探针照样绿（本仓库 static-string-assertion-dead-test 教训）。
+#
+# 注意边界：本 helper 切的是 `S.words.filter(…)` 谓词，**不执行行模板** ——
+# .out-of-scope 的挂载与极性它证明不了，那一层由
+# test_out_of_scope_class_wired_on_word_row 的三元分支断言守。
+
+def _js_line(pattern, what):
+    """按单行正则从 workbench.html 切一段顶层声明的真实源码（不跨行）。"""
+    m = re.search(pattern, _WORKBENCH, re.M)
+    assert m, "workbench.html 里切不到 %s" % what
+    return m.group(0)
+
+
+def _render_words_probe_prelude():
+    """谓词在 node 里跑起来所需的**真实**依赖源码：pad2 / endToday / fmtMD / wordState。
+
+    一律切源码而不写桩 —— wordState 的 new/due/solid 分档直接决定
+    wordFilters.state 那几条过滤，写个桩就等于把被测逻辑换掉了。
+    """
+    parts = [
+        _js_line(r"^const pad2 = .*$", "pad2"),
+        _js_line(r"^function endToday\(\).*$", "endToday"),
+        _js_line(r"^function fmtMD\(.*$", "fmtMD"),
+    ]
+    m = re.search(r"function wordState\(w\)\s*\{.*?\n\}", _WORKBENCH, re.S)
+    assert m, "workbench.html 里切不到 wordState"
+    parts.append(m.group(0))
+    return "\n".join(parts)
+
+
+def render_words_predicate_source():
+    """renderWords 里 `S.words.filter(` 的真实谓词源码（`w => { ... }`，括号配平）。
+
+    切片护栏：切歪就直接抛，不许静默假绿（切到别的 filter、切少了几条过滤，
+    都会让 Task 6 探针在一个残缺谓词上得出「行为正确」的结论）。
+    """
+    body = _render_words_body()
+    at = body.index("S.words.filter(")
+    src = _slice_balanced(body, at, "(", ")")[1:-1].strip()
+    assert src.startswith("w =>"), "切出来的不是 renderWords 的过滤谓词：%r" % src[:60]
+    for guard in ("wordFilters.scope", "wordFilters.tag", "wordFilters.state", "wordState("):
+        assert guard in src, "切片护栏：谓词里必须含 `%s`，切歪了" % guard
+    return src
+
+
+def render_words_predicate(scope="all", q="", cards=None, **filters):
+    """构造一个在 node 里真跑 workbench.html 源码的 renderWords 过滤器。
+
+    返回 `Callable[[dict], bool]` —— 传一个词对象（`{id, hw, gloss, tags, letter, pos}`），
+    返回它在给定筛选状态下**是否出现在词表里**。
+
+    参数就是 renderWords 的输入状态：
+      scope    → wordFilters.scope（"all" / "core"）
+      q        → 搜索框内容；与控件 handler 一致，此处按**已 trim** 处理
+      cards    → S.cards，形如 {word_id: {reps, s, d, due, manual}}；默认空（全是生词）
+      **filters→ 覆盖 letter / tag / diff / state，默认全空（不筛）
+
+    用法（Task 6 探针 / 本地复核）：
+        hit = render_words_predicate(scope="core", q="absender")
+        assert hit({"id": "x", "hw": "Absender", "gloss": "寄件人", "tags": []}) is True
+        miss = render_words_predicate(scope="core", q="")
+        assert miss({"id": "x", "hw": "Absender", "gloss": "寄件人", "tags": []}) is False
+
+    返回的 callable 带两个属性便于探针复核：
+      `.js_source` 完整 node 脚本、`.predicate_source` 仅谓词那段真源码。
+
+    实现说明：每次调用 fork 一次 node（探针量级够用，别拿它扫全词库）。
+    node 不在 PATH 上时直接抛 RuntimeError —— 调用方按既有惯例
+    （test_merge_and_alias_migration_behave_under_node）自己 shutil.which 后 skip。
+    """
+    import shutil
+    if not shutil.which("node"):
+        raise RuntimeError("node 不在 PATH 上，无法执行 renderWords 谓词")
+
+    state = {"q": q, "letter": "", "tag": "", "diff": "", "state": "", "scope": scope}
+    unknown = set(filters) - set(state)
+    assert not unknown, "wordFilters 没有这些字段：%r" % sorted(unknown)
+    state.update(filters)
+
+    pred_src = render_words_predicate_source()
+    js = "\n".join([
+        'import fs from "node:fs";',
+        "const wordFilters = %s;" % json.dumps(state, ensure_ascii=False),
+        "const S = { words: [], cards: %s };" % json.dumps(cards or {}, ensure_ascii=False),
+        _render_words_probe_prelude(),
+        _sole_line(_render_words_body(), "const q =", "renderWords").strip(),
+        "const pred = %s;" % pred_src,
+        'const words = JSON.parse(fs.readFileSync(0, "utf8"));',
+        "process.stdout.write(JSON.stringify(words.map(w => pred(w) === true)));",
+    ])
+
+    def hit(word):
+        return _run_node_predicate(js, [word])[0]
+
+    hit.js_source = js
+    hit.predicate_source = pred_src
+    return hit
+
+
+def _run_node_predicate(js, words):
+    """把脚本写进临时 .mjs 跑一遍，词表走 stdin（argv 传德语变音字符在 Windows 上不可靠）。"""
+    import os
+    import subprocess
+    import tempfile
+    fd, path = tempfile.mkstemp(suffix=".mjs")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(js)
+        res = subprocess.run(
+            ["node", path],
+            input=json.dumps(words, ensure_ascii=False),
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        assert res.returncode == 0, "谓词执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+        return json.loads(res.stdout)
+    finally:
+        os.unlink(path)
