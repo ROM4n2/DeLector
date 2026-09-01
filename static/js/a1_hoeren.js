@@ -1,7 +1,7 @@
 /* DeLector - Goethe-Zertifikat A1 Hörverstehen (Listening) Studio */
 "use strict";
 
-import { api, esc } from "./core.js";
+import { api, esc, jsAttr } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";
@@ -96,9 +96,12 @@ export async function selectHoerenSet(setId) {
   stage.innerHTML = '<div class="p-6 text-pencil">正在载入试卷内容...</div>';
 
   try {
-    currentSetData = await api(`/api/a1/hoeren/set/${setId}`);
+    const data = await api(`/api/a1/hoeren/set/${setId}`);
+    if (setId !== currentSetId) return;
+    currentSetData = data;
     renderHoerenQuestions();
   } catch (e) {
+    if (setId !== currentSetId) return;
     console.error("Failed to load set", e);
     stage.innerHTML = `<div class="p-6 text-red">⚠️ 试卷载入失败: ${esc(e.message)}</div>`;
   }
@@ -160,7 +163,7 @@ export function renderHoerenQuestions() {
               .map(
                 (q, idx) => `
               <button id="hoeren-nav-btn-${q.id}" class="hoeren-matrix-cell"
-                      onclick="A1Hoeren.jumpToQuestion('${q.id}')">
+                      onclick="A1Hoeren.jumpToQuestion(${jsAttr(q.id)})">
                 ${idx + 1}
               </button>
             `,
@@ -205,9 +208,9 @@ function renderAllQuestionCards(allQ) {
         const isSelected = userAnswers[q.id] === opt.key;
         return `
         <label class="a1-option-label ${isSelected ? "selected" : ""}"
-               onclick="A1Hoeren.selectOption('${q.id}', '${opt.key}')">
-          <input type="radio" name="opt_${q.id}" value="${opt.key}" ${isSelected ? "checked" : ""} />
-          <span class="a1-opt-key">${opt.key}</span>
+               onclick="A1Hoeren.selectOption(${jsAttr(q.id)}, ${jsAttr(opt.key)})">
+          <input type="radio" name="opt_${q.id}" value="${esc(opt.key)}" ${isSelected ? "checked" : ""} />
+          <span class="a1-opt-key">${esc(opt.key)}</span>
           <span class="a1-opt-text">${esc(opt.text)}</span>
         </label>
       `;
@@ -215,11 +218,11 @@ function renderAllQuestionCards(allQ) {
       .join("");
 
     html += `
-      <div class="a1-hoeren-q-card" id="q-card-${q.id}" data-qid="${q.id}">
+      <div class="a1-hoeren-q-card" id="q-card-${q.id}" data-qid="${esc(q.id)}">
         <div class="a1-q-header">
           <span class="a1-q-num">Frage ${idx + 1}</span>
           <span class="a1-q-repeat">🔁 播放 ${q.repeat_count} 遍</span>
-          <button class="btn btn-ghost btn-xs audio-play-btn" onclick="A1Hoeren.playSingleAudio('${q.id}')" title="单独朗读本题听力">
+          <button class="btn btn-ghost btn-xs audio-play-btn" onclick="A1Hoeren.playSingleAudio(${jsAttr(q.id)})" title="单独朗读本题听力">
             🔊 听力试听
           </button>
         </div>
@@ -487,7 +490,7 @@ function renderGradedResults(graded) {
       const vocabChips = (d.key_vocabulary || [])
         .map(
           (v) => `
-        <span class="a1-vocab-chip" onclick="A1Hoeren.saveVocabChip('${esc(v.word)}', '${esc(v.meaning)}', this)">
+        <span class="a1-vocab-chip" onclick="A1Hoeren.saveVocabChip(${jsAttr(v.word)}, ${jsAttr(v.meaning)}, this)">
           <strong>${esc(v.word)}</strong> ${v.plural ? `(${esc(v.plural)})` : ""}: ${esc(v.meaning)} ➕
         </span>
       `,

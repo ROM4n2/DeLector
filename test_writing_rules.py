@@ -285,3 +285,66 @@ def test_contraction_prep_not_flagged(nlp):
     for text in ["Am Morgen trinke ich Kaffee.", "Im Haus ist es warm.", "Beim Arzt warte ich."]:
         assert _spans(text, nlp) == []
 
+
+def test_decline_determiner_euer_and_eur():
+    """euer / eur 物主代词屈折与元音省略（eure, eurem, euren, eures, eurer）。"""
+    assert decline_determiner("euer", "Masc", "Sing", "Nom") == "euer"
+    assert decline_determiner("euer", "Masc", "Sing", "Akk") == "euren"
+    assert decline_determiner("euer", "Masc", "Sing", "Dat") == "eurem"
+    assert decline_determiner("euer", "Fem", "Sing", "Nom") == "eure"
+    assert decline_determiner("euer", "Fem", "Sing", "Dat") == "eurer"
+    assert decline_determiner("euer", "Neut", "Sing", "Nom") == "euer"
+    assert decline_determiner("euer", "Neut", "Sing", "Akk") == "euer"
+    assert decline_determiner("euer", "Neut", "Sing", "Dat") == "eurem"
+    assert decline_determiner("euer", "Neut", "Sing", "Gen") == "eures"
+    assert decline_determiner("euer", "Masc", "Plur", "Nom") == "eure"
+    assert decline_determiner("euer", "Masc", "Plur", "Dat") == "euren"
+
+    # eur lemma
+    assert decline_determiner("eur", "Fem", "Sing", "Akk") == "eure"
+    assert decline_determiner("eur", "Masc", "Sing", "Dat") == "eurem"
+
+
+def test_prep_entlang_positional_case(nlp):
+    """entlang 介词/后置词按位置支配不同格：前置=属格 (Genitiv)，后置=宾格 (Akkusativ)。"""
+    # 1. 前置正确（属格）
+    assert _spans("Er geht entlang des Weges.", nlp) == []
+    # 2. 前置错误（与与格混淆）
+    spans_pre_err = _spans("Er geht entlang dem Weg.", nlp)
+    assert any(s["error_type"] == "kasus" and "des" in s["corrected_form"] for s in spans_pre_err)
+
+    # 3. 后置正确（宾格）
+    assert _spans("Er geht den Weg entlang.", nlp) == []
+    # 4. 后置错误（与格 dem Weg entlang 报错应为 den Weg）
+    spans_post_err = _spans("Er geht dem Weg entlang.", nlp)
+    assert any("den" in s["corrected_form"] for s in spans_post_err)
+
+
+def test_analyze_a1_email_capitalized_noun_exemption_and_expanded_valedictions():
+    """A1 邮件诊断：正文首词大写名词/专有名词免检，并扩充常用结语表。"""
+    from writing_rules import analyze_a1_email
+
+    # 1. 专有名词/名词（Montag, Berlin）在称呼语逗号后允许大写
+    text1 = "Liebe Maria,\nMontag habe ich Zeit für Deutschkurs.\nViele Grüße\nHans"
+    diag1 = analyze_a1_email(text1)
+    rule_names1 = [s["rule"] for s in diag1["suggestions"]]
+    assert "a1_greeting_body_lowercase" not in rule_names1
+
+    text2 = "Lieber Tom,\nBerlin ist eine wunderbare Stadt.\nBis bald\nAnna"
+    diag2 = analyze_a1_email(text2)
+    rule_names2 = [s["rule"] for s in diag2["suggestions"]]
+    assert "a1_greeting_body_lowercase" not in rule_names2
+    assert "a1_valediction_missing" not in rule_names2
+
+    # 2. 普通动词/代词大写依然报错
+    text3 = "Liebe Maria,\nIch komme morgen.\nAlles Gute\nHans"
+    diag3 = analyze_a1_email(text3)
+    rule_names3 = [s["rule"] for s in diag3["suggestions"]]
+    assert "a1_greeting_body_lowercase" in rule_names3
+
+    # 3. 扩充的结语都能被识别（auf wiedersehen, schöne grüße, alles gute, alles liebe, herzlichen dank）
+    for v in ["Auf Wiedersehen", "Schöne Grüße", "Alles Gute", "Alles Liebe", "Herzlichen Dank"]:
+        email = f"Hallo Peter,\nich lade dich ein.\n{v}\nMax"
+        diag = analyze_a1_email(email)
+        rules = [s["rule"] for s in diag["suggestions"]]
+        assert "a1_valediction_missing" not in rules, f"{v} 应被识别为有效结语"

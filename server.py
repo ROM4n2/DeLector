@@ -108,6 +108,7 @@ from security import (
     is_safe_public_url,
     clean_html_to_article,
     MAX_REDIRECT_HOPS,
+    MAX_HTML_BYTES,
     fetch_remote_html,
     PRESET_FEEDS,
     parse_rss_feed,
@@ -204,6 +205,7 @@ __all__ = [
     "is_safe_public_url",
     "clean_html_to_article",
     "MAX_REDIRECT_HOPS",
+    "MAX_HTML_BYTES",
     "fetch_remote_html",
     "PRESET_FEEDS",
     "parse_rss_feed",
@@ -387,15 +389,19 @@ def get_article(article_id: int):
         if not row:
             raise HTTPException(404, "Article not found")
         data = dict(row)
-        pj = json.loads(data["processed_json"])
-        if "stats" not in pj or pj.get("version") != "3.4.0":
-            pj = process_german_text(data["raw_text"])
+        try:
+            pj = json.loads(data.get("processed_json") or "{}")
+        except Exception:
+            pj = {}
+        if not isinstance(pj, dict) or "stats" not in pj or pj.get("version") != "3.4.0":
+            pj = process_german_text(data.get("raw_text") or "")
             conn.execute("UPDATE articles SET processed_json = ? WHERE id = ?", (json.dumps(pj, ensure_ascii=False), article_id))
         data.update(pj)
         return data
 
 @app.delete("/api/articles/{article_id}")
-def delete_article(article_id: int):
+def delete_article(article_id: int, request: Request):
+    _require_localhost(request)
     with get_db() as conn:
         row = conn.execute("SELECT id FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not row:
@@ -811,7 +817,8 @@ def get_cards():
 # --- Phase A: Delete & Master ---
 
 @app.delete("/api/cards/{card_type}/{card_id}")
-def delete_card(card_type: str, card_id: int):
+def delete_card(card_type: str, card_id: int, request: Request):
+    _require_localhost(request)
     if card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
@@ -1030,18 +1037,19 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
         return cache_file
 
     try:
-        import edge_tts
-        communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
-        await communicate.save(cache_file)
-    except ImportError:
-        # Android/Chaquopy 没有 edge_tts 的 wheel（aiohttp 等依赖缺）→ 用 stdlib 版客户端
-        # （edge_tts_mini 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖）
-        import edge_tts_mini
-        audio_data = await asyncio.to_thread(
-            edge_tts_mini.synthesize, clean_text, voice, rate
-        )
-        with open(cache_file, "wb") as f:
-            f.write(audio_data)
+        try:
+            import edge_tts
+            communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
+            await communicate.save(cache_file)
+        except ImportError:
+            # Android/Chaquopy 没有 edge_tts 的 wheel（aiohttp 等依赖缺）→ 用 stdlib 版客户端
+            # （edge_tts_mini 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖）
+            import edge_tts_mini
+            audio_data = await asyncio.to_thread(
+                edge_tts_mini.synthesize, clean_text, voice, rate
+            )
+            with open(cache_file, "wb") as f:
+                f.write(audio_data)
     except Exception as e:
         # Multi-provider pure-Python httpx fallback (accessible in mainland China)
         from urllib.parse import quote
@@ -1097,7 +1105,8 @@ def get_audio_cache():
     return get_cache_info(AUDIO_CACHE_DIR)
 
 @app.post("/api/audio/cache/clear")
-def clear_audio_cache():
+def clear_audio_cache(request: Request):
+    _require_localhost(request)
     info = get_cache_info(AUDIO_CACHE_DIR)
     cleared_count = 0
     if os.path.exists(AUDIO_CACHE_DIR):
@@ -1414,6 +1423,8 @@ class RestoreReq(BaseModel):
     study_log: List[Dict[str, Any]] = []
     quiz_log: List[Dict[str, Any]] = []
     daily_summary: List[Dict[str, Any]] = []
+    a1_hoeren_records: List[Dict[str, Any]] = []
+    a1_lesen_records: List[Dict[str, Any]] = []
     local_storage: Dict[str, Any] = {}
 
 
@@ -1481,7 +1492,19 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
         interval = row["interval_days"] if "interval_days" in row.keys() and row["interval_days"] is not None else 1
         ef = row["ease_factor"] if "ease_factor" in row.keys() and row["ease_factor"] is not None else 2.5
 
-        new_rep, new_interval, new_ef, due_date, next_intervals = calculate_fsrs(req.grade, rep, interval, ef)
+        elapsed = None
+        if "due_date" in row.keys() and row["due_date"]:
+            try:
+                due_dt = datetime.strptime(str(row["due_date"])[:10], "%Y-%m-%d")
+                sched_dt = due_dt - timedelta(days=interval)
+                today_dt = datetime.now()
+                elapsed = max(1, (today_dt - sched_dt).days)
+            except Exception:
+                elapsed = None
+
+        new_rep, new_interval, new_ef, due_date, next_intervals = calculate_fsrs(
+            req.grade, rep, interval, ef, elapsed_days=elapsed
+        )
 
         is_correct = req.grade >= 2
         correct_incr = 1 if is_correct else 0
@@ -1835,7 +1858,8 @@ def update_essay(essay_id: int, req: EssayUpdateReq):
 
 
 @app.delete("/api/essays/{essay_id}")
-def delete_essay(essay_id: int):
+def delete_essay(essay_id: int, request: Request):
+    _require_localhost(request)
     with get_db() as conn:
         row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
@@ -1852,25 +1876,34 @@ def save_writing_card(req: WritingCardReq):
     if not row:
         raise HTTPException(404, "essay not found")
     raw_analysis = row["analysis_json"]
-    a = json.loads(raw_analysis) if isinstance(raw_analysis, str) else raw_analysis
+    try:
+        a = json.loads(raw_analysis) if isinstance(raw_analysis, str) else raw_analysis
+    except Exception:
+        a = {}
+    if not isinstance(a, dict):
+        a = {}
     sentences = a.get("sentences", [])
-    if req.sentence_id < 0 or req.sentence_id >= len(sentences):
+    if not isinstance(sentences, list) or req.sentence_id < 0 or req.sentence_id >= len(sentences):
         raise HTTPException(400, "sentence_id 越界")
     sent = sentences[req.sentence_id]
+    if not isinstance(sent, dict):
+        raise HTTPException(400, "sentence_id 越界")
     spans = sent.get("spans", [])
-    if req.span_index < 0 or req.span_index >= len(spans):
+    if not isinstance(spans, list) or req.span_index < 0 or req.span_index >= len(spans):
         raise HTTPException(400, "span_index 越界")
     sp = spans[req.span_index]
+    if not isinstance(sp, dict):
+        raise HTTPException(400, "span_index 越界")
     sentence_text = sent.get("text", "")
     card = GrammarCardReq(
         article_id=None,
         sentence_context=sentence_text,
-        grammar_name=f"写作润色 · {sp['error_type']}",
+        grammar_name=f"写作润色 · {sp.get('error_type', '')}",
         cefr_level=row["cefr_level"] or "B1",
-        explanation_zh=sp["explanation_zh"],
-        rule_formula=sp["corrected_form"],
-        corrected_form=sp["corrected_form"],
-        error_type=sp["error_type"],
+        explanation_zh=sp.get("explanation_zh", ""),
+        rule_formula=sp.get("corrected_form", ""),
+        corrected_form=sp.get("corrected_form", ""),
+        error_type=sp.get("error_type", ""),
     )
     return add_grammar_card(card)
 
@@ -2035,7 +2068,8 @@ def get_essay_version(essay_id: int, version_id: int):
 
 
 @app.delete("/api/essays/{essay_id}/versions/{version_id}")
-def delete_essay_version(essay_id: int, version_id: int):
+def delete_essay_version(essay_id: int, version_id: int, request: Request):
+    _require_localhost(request)
     with get_db() as conn:
         essay = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:

@@ -67,10 +67,16 @@ def get_a1_sprechen_teil3():
 
 @router.get("/export/anki")
 def export_a1_anki():
+    from server import _attachment_headers
     tmp = tempfile.gettempdir()
     path = os.path.join(tmp, "Goethe_A1_Wortliste.apkg")
     export_a1_anki_deck(path)
-    return FileResponse(path, filename="Goethe_A1_Wortliste.apkg", media_type="application/octet-stream")
+    return FileResponse(
+        path,
+        filename="Goethe_A1_Wortliste.apkg",
+        media_type="application/octet-stream",
+        headers=_attachment_headers("Goethe_A1_Wortliste.apkg"),
+    )
 
 
 # --- Goethe-Zertifikat A1 Schreiben Workshop Endpoints ---

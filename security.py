@@ -84,6 +84,8 @@ def is_safe_public_url(url: str) -> bool:
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
             return False
+        if parsed.port not in (None, 80, 443, 8080, 8443):
+            return False
         hostname = parsed.hostname
         if not hostname:
             return False
@@ -102,10 +104,10 @@ def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
     title_match = re.search(r'<title>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
     title = html.unescape(title_match.group(1).strip()) if title_match else "Extracted Article"
     title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche|Deutschlandfunk)', title)[0].strip()
-    
+
     # Remove script, style, nav, header, footer, etc.
     cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript|figure)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
-    
+
     # Prefer <article> block if available
     article_match = re.search(r'<article[^>]*>(.*?)</article>', cleaned, flags=re.IGNORECASE | re.DOTALL)
     scope_html = article_match.group(1) if article_match else cleaned
@@ -117,7 +119,7 @@ def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
         txt = html.unescape(txt).strip()
         if len(txt) > 20 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved", "impressum", "urheberrecht"]):
             clean_paras.append(txt)
-            
+
     if not clean_paras:
         raw_text = re.sub(r'<[^>]+>', ' ', scope_html)
         clean_paras = [html.unescape(line).strip() for line in raw_text.split('\n') if len(line.strip()) > 30]
@@ -128,6 +130,7 @@ def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
 
 # 公网站点间的正常跳转链远短于此；超限视为异常抓取直接中止。
 MAX_REDIRECT_HOPS = 5
+MAX_HTML_BYTES = 2 * 1024 * 1024  # 2MB
 
 
 async def fetch_remote_html(url: str) -> str:
@@ -144,16 +147,62 @@ async def fetch_remote_html(url: str) -> str:
         for _hop in range(MAX_REDIRECT_HOPS + 1):
             if not is_safe_public_url(current_url):
                 raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
-            resp = await client.get(current_url, headers=headers)
-            if resp.is_redirect:
-                location = resp.headers.get("location")
-                if not location:
-                    raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code}，缺少重定向目标)")
-                current_url = str(httpx.URL(current_url).join(location))
-                continue
-            if resp.status_code != 200:
-                raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
-            return resp.text
+
+            # 使用 streaming 抓取，防止超大响应体耗尽内存
+            if hasattr(client, "stream"):
+                async with client.stream("GET", current_url, headers=headers) as resp:
+                    if resp.is_redirect:
+                        location = resp.headers.get("location")
+                        if not location:
+                            raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code}，缺少重定向目标)")
+                        current_url = str(httpx.URL(current_url).join(location))
+                        continue
+                    if resp.status_code != 200:
+                        raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
+
+                    content_length = resp.headers.get("content-length")
+                    if content_length and content_length.isdigit():
+                        if int(content_length) > MAX_HTML_BYTES:
+                            raise HTTPException(400, "网页体积超限，已中止抓取")
+
+                    chunks = []
+                    total = 0
+                    if hasattr(resp, "aiter_bytes"):
+                        async for chunk in resp.aiter_bytes():
+                            total += len(chunk)
+                            if total > MAX_HTML_BYTES:
+                                raise HTTPException(400, "网页体积超限，已中止抓取")
+                            chunks.append(chunk)
+                        raw_bytes = b"".join(chunks)
+                        encoding = getattr(resp, "encoding", None) or "utf-8"
+                        try:
+                            return raw_bytes.decode(encoding, errors="replace")
+                        except Exception:
+                            return raw_bytes.decode("utf-8", errors="replace")
+                    else:
+                        text = getattr(resp, "text", "")
+                        if len(text.encode("utf-8")) > MAX_HTML_BYTES:
+                            raise HTTPException(400, "网页体积超限，已中止抓取")
+                        return text
+            else:
+                resp = await client.get(current_url, headers=headers)
+                if resp.is_redirect:
+                    location = resp.headers.get("location")
+                    if not location:
+                        raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code}，缺少重定向目标)")
+                    current_url = str(httpx.URL(current_url).join(location))
+                    continue
+                if resp.status_code != 200:
+                    raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
+                content_length = resp.headers.get("content-length")
+                if content_length and content_length.isdigit():
+                    if int(content_length) > MAX_HTML_BYTES:
+                        raise HTTPException(400, "网页体积超限，已中止抓取")
+                text = resp.text
+                if len(text.encode("utf-8")) > MAX_HTML_BYTES:
+                    raise HTTPException(400, "网页体积超限，已中止抓取")
+                return text
+
         raise HTTPException(400, "重定向次数过多，已中止抓取")
 
 
@@ -277,6 +326,7 @@ __all__ = [
     "is_safe_public_url",
     "clean_html_to_article",
     "MAX_REDIRECT_HOPS",
+    "MAX_HTML_BYTES",
     "fetch_remote_html",
     "PRESET_FEEDS",
     "parse_rss_feed",

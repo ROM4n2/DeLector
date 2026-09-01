@@ -3392,3 +3392,272 @@ def test_a1_lesen_routes(client):
     hist_res = client.get("/api/a1/lesen/history")
     assert hist_res.status_code == 200
     assert len(hist_res.json()["history"]) >= 1
+
+
+# ── Task 1 Hardening & Regression Test Suite ──────────────────────────────────
+
+def test_task1_restore_req_includes_a1_records(client):
+    """RestoreReq 正确支持 a1_hoeren_records 与 a1_lesen_records 还原。"""
+    payload = {
+        "version": 2,
+        "a1_hoeren_records": [{
+            "id": 101,
+            "set_id": 1,
+            "score_raw": 14,
+            "score_official": 23.3,
+            "total_questions": 15,
+            "duration_seconds": 580,
+            "answers_json": "{\"q1\": \"A\"}",
+            "wrong_questions_json": "[]",
+            "created_at": "2026-09-01T12:00:00"
+        }],
+        "a1_lesen_records": [{
+            "id": 201,
+            "set_id": 2,
+            "score_raw": 13,
+            "score_official": 21.7,
+            "total_questions": 15,
+            "duration_seconds": 650,
+            "answers_json": "{\"q1\": \"B\"}",
+            "wrong_questions_json": "[]",
+            "created_at": "2026-09-01T12:00:00"
+        }]
+    }
+    res = client.post("/api/backup/restore", json=payload)
+    assert res.status_code == 200
+
+    with get_progress_db() as pconn:
+        h = pconn.execute("SELECT * FROM a1_hoeren_records WHERE id = 101").fetchone()
+        l = pconn.execute("SELECT * FROM a1_lesen_records WHERE id = 201").fetchone()
+    assert h is not None and h["score_raw"] == 14
+    assert l is not None and l["score_raw"] == 13
+
+
+def test_task1_review_card_computes_elapsed_days(client):
+    """review_card_sm2 从 due_date 计算真实的 elapsed_days。"""
+    from datetime import datetime, timedelta
+    ten_days_ago = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
+    with get_db() as conn:
+        cur = conn.execute("""
+            INSERT INTO vocab_cards (word, lemma, pos, cefr_level, definition_zh, sentence_context, interval_days, ease_factor, repetition_count, due_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("TestWord", "TestWord", "NOUN", "A1", "测试词义", "Context sentence", 3, 2.5, 2, ten_days_ago))
+        card_id = cur.lastrowid
+
+    # 逾期 10 天复习，elapsed_days 应 > interval_days (3)
+    res = client.post(f"/api/cards/vocab/{card_id}/review", json={"grade": 3})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["interval_days"] > 3
+
+
+def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
+    """当 edge_tts 缺失且 edge_tts_mini 抛异常时，平滑降级到备选引擎。"""
+    import sys
+    import asyncio
+    from unittest.mock import AsyncMock
+    import server as server_module
+
+    # 模拟 edge_tts 缺失
+    monkeypatch.setitem(sys.modules, "edge_tts", None)
+
+    # 模拟 edge_tts_mini 失败
+    class FakeMini:
+        @staticmethod
+        def synthesize(*args, **kwargs):
+            raise RuntimeError("Mini TTS simulated error")
+
+    monkeypatch.setitem(sys.modules, "edge_tts_mini", FakeMini)
+
+    # 模拟有道兜底响应
+    class MockHttpxResp:
+        status_code = 200
+        content = b"ID3" + b"\x00" * 300  # 合法音频 mock 数据
+
+    class MockAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def get(self, url, *args, **kwargs):
+            return MockHttpxResp()
+
+    monkeypatch.setattr(server_module.httpx, "AsyncClient", MockAsyncClient)
+
+    audio_file = asyncio.run(server_module.generate_edge_tts_audio("Guten Morgen", voice="de-DE-KatjaNeural"))
+    assert os.path.exists(audio_file)
+    assert os.path.getsize(audio_file) > 200
+
+
+def test_task1_localhost_protection_on_destructive_endpoints(client, lan_client):
+    """验证 delete_article, delete_card, clear_audio_cache, delete_essay, delete_essay_version 的局域网拦截。"""
+    # 1. 局域网访问一律 403
+    assert lan_client.delete("/api/articles/999").status_code == 403
+    assert lan_client.delete("/api/cards/vocab/999").status_code == 403
+    assert lan_client.post("/api/audio/cache/clear").status_code == 403
+    assert lan_client.delete("/api/essays/999").status_code == 403
+    assert lan_client.delete("/api/essays/999/versions/999").status_code == 403
+
+    # 2. 本机访问正常通过拦截（业务 404 或 200）
+    assert client.delete("/api/articles/999").status_code == 404
+    assert client.delete("/api/cards/vocab/999").status_code == 404
+    assert client.post("/api/audio/cache/clear").status_code == 200
+    assert client.delete("/api/essays/999").status_code == 404
+    assert client.delete("/api/essays/999/versions/999").status_code == 404
+
+
+def test_task1_get_article_corrupted_json(client):
+    """get_article 面对损坏的 processed_json 能够平滑重新分析，不产生 500。"""
+    with get_db() as conn:
+        cur = conn.execute("""
+            INSERT INTO articles (title, raw_text, processed_json)
+            VALUES (?, ?, ?)
+        """, ("Corrupted Test", "Das ist ein Test.", "{invalid json broken syntax"))
+        art_id = cur.lastrowid
+
+    res = client.get(f"/api/articles/{art_id}")
+    assert res.status_code == 200
+    data = res.json()
+    assert "stats" in data
+    assert data["sentence_count"] >= 1
+
+
+def test_task1_create_writing_card_bounds_check(client):
+    """save_writing_card 对越界的 sentence_id / span_index 进行防御性校验，返回 400 而非 500。"""
+    with get_db() as conn:
+        cur = conn.execute("""
+            INSERT INTO essays (title, content, analysis_json, cefr_level, error_count, sentence_count)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, ("Essay", "Content", json.dumps({"sentences": [{"text": "Hallo", "spans": []}]}), "A1", 0, 1))
+        essay_id = cur.lastrowid
+
+    # 越界 sentence_id
+    res1 = client.post("/api/writing/cards", json={
+        "essay_id": essay_id,
+        "sentence_id": 99,
+        "span_index": 0
+    })
+    assert res1.status_code == 400
+
+    # 越界 span_index
+    res2 = client.post("/api/writing/cards", json={
+        "essay_id": essay_id,
+        "sentence_id": 0,
+        "span_index": 99
+    })
+    assert res2.status_code == 400
+
+
+def test_task1_is_safe_public_url_port_validation(monkeypatch):
+    """is_safe_public_url 仅允许白名单端口 (80, 443, 8080, 8443, None)。"""
+    import socket as _socket
+    monkeypatch.setattr(_socket, "getaddrinfo", lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
+
+    # 允许的端口
+    assert is_safe_public_url("https://example.com") is True
+    assert is_safe_public_url("http://example.com:80") is True
+    assert is_safe_public_url("https://example.com:443") is True
+    assert is_safe_public_url("http://example.com:8080/rss") is True
+    assert is_safe_public_url("https://example.com:8443/feed") is True
+
+    # 危险端口必须拒绝
+    assert is_safe_public_url("http://example.com:22") is False
+    assert is_safe_public_url("http://example.com:25") is False
+    assert is_safe_public_url("http://example.com:3306") is False
+    assert is_safe_public_url("http://example.com:6379") is False
+    assert is_safe_public_url("http://example.com:27017") is False
+
+
+def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
+    """fetch_remote_html 拦截 Content-Length > 2MB 或流式传输体积超过 2MB 的响应。"""
+    import asyncio
+    import socket as _socket
+    from fastapi import HTTPException
+    import server as server_module
+
+    monkeypatch.setattr(_socket, "getaddrinfo", lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
+
+    class BigContentLengthResp:
+        status_code = 200
+        headers = {"content-length": str(3 * 1024 * 1024)}  # 3MB
+        is_redirect = False
+        async def aiter_bytes(self):
+            yield b"small"
+
+    class BigStreamResp:
+        status_code = 200
+        headers = {}
+        is_redirect = False
+        async def aiter_bytes(self):
+            # 产生超过 2MB 的 chunk
+            for _ in range(5):
+                yield b"A" * (600 * 1024)
+
+    class StreamMockClient:
+        def __init__(self, mode="header"):
+            self.mode = mode
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        from contextlib import asynccontextmanager
+        @asynccontextmanager
+        async def stream(self, method, url, headers=None):
+            if self.mode == "header":
+                yield BigContentLengthResp()
+            else:
+                yield BigStreamResp()
+
+    # 1. 响应头 Content-Length 超过 2MB
+    monkeypatch.setattr(server_module.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("header"))
+    with pytest.raises(HTTPException) as exc1:
+        asyncio.run(server_module.fetch_remote_html("https://example.com/big-header"))
+    assert exc1.value.status_code == 400
+    assert "体积超限" in exc1.value.detail
+
+    # 2. 实际传输流数据超过 2MB
+    monkeypatch.setattr(server_module.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("stream"))
+    with pytest.raises(HTTPException) as exc2:
+        asyncio.run(server_module.fetch_remote_html("https://example.com/big-stream"))
+    assert exc2.value.status_code == 400
+    assert "体积超限" in exc2.value.detail
+
+
+def test_task1_a1_anki_export_has_attachment_headers(client):
+    """A1 Anki 导出接口携带符合规范的 _attachment_headers (含 no-store 与 UTF-8 编码文件名)。"""
+    res = client.get("/api/a1/export/anki")
+    assert res.status_code == 200
+    cd = res.headers.get("content-disposition", "")
+    assert 'filename="Goethe_A1_Wortliste.apkg"' in cd
+    assert "no-store" in res.headers.get("cache-control", "")
+
+
+def test_task1_sync_router_thread_safety(client):
+    """WebRTC 同步路由器具备 _sync_lock 保护，能正常存取。"""
+    import routes_sync
+    assert hasattr(routes_sync, "_sync_lock")
+
+    store_res = client.post("/api/wb/sync/store", json={"sdp": {"type": "offer", "sdp": "v=0..."}, "role": "offer"})
+    assert store_res.status_code == 200
+    code = store_res.json()["code"]
+
+    fetch_res = client.get(f"/api/wb/sync/fetch/{code}")
+    assert fetch_res.status_code == 200
+    assert fetch_res.json()["role"] == "offer"
+
+
+def test_task1_corpus_dict_registered_in_all_packaging_targets():
+    """corpus_dict 完整注册在 package_windows.py, CI workflow 以及 DeLector.spec 中。"""
+    root = os.path.dirname(__file__)
+    pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
+    assert "--hidden-import=corpus_dict" in pkg
+    assert "--hidden-import=core_dict" in pkg
+
+    wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
+    assert wf.count("--hidden-import=corpus_dict") == 2, "Linux & macOS 两个构建都要"
+
+    spec = open(os.path.join(root, "DeLector.spec"), encoding="utf-8").read()
+    assert "'corpus_dict'" in spec
+    assert "'routes_corpus'" in spec

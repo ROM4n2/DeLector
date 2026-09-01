@@ -707,17 +707,20 @@ for _inf, (_praet, _p2, _hilf, _def) in IRREGULAR_VERBS.items():
         _parts = _praet_low.split()
         if len(_parts) == 2:
             _verb_pt, _pfx_pt = _parts[0], _parts[1]
-            _REVERSE_VERB_INDEX[f"{_pfx_pt}{_verb_pt}"] = _inf
+            _unified_stem = f"{_pfx_pt}{_verb_pt}"
+            _REVERSE_VERB_INDEX[_unified_stem] = _inf
+            for _end in ["st", "en", "t", "e", "est", "et"]:
+                _REVERSE_VERB_INDEX[f"{_unified_stem}{_end}"] = _inf
+    else:
+        # Index common past tense inflection endings (-st, -en, -t, -e)
+        # e.g., gingst, gingen, gingt; sahen, saht, sahst; lasen, last
+        _praet_stem = _praet_low
+        for _end in ["st", "en", "t", "e", "est", "et"]:
+            _REVERSE_VERB_INDEX[f"{_praet_stem}{_end}"] = _inf
 
     # Index Partizip II (e.g. 'gegangen', 'aufgestanden')
     _p2_low = _p2.lower()
     _REVERSE_VERB_INDEX[_p2_low] = _inf
-
-    # Index common past tense inflection endings (-st, -en, -t, -e)
-    # e.g., gingst, gingen, gingt; sahen, saht, sahst; lasen, last
-    _praet_stem = _praet.split()[0].lower()
-    for _end in ["st", "en", "t", "e", "est", "et"]:
-        _REVERSE_VERB_INDEX[f"{_praet_stem}{_end}"] = _inf
 
 # Merge present vowel change stems
 for _form, _inf in _PRESENT_VOWEL_CHANGES.items():
@@ -787,9 +790,9 @@ def lookup_irregular_verb(form_or_lemma: str) -> Optional[VerbTrio]:
     """
     if not form_or_lemma:
         return None
-    
+
     clean = form_or_lemma.strip().lower()
-    
+
     # 1. Direct O(1) lookup in reverse index
     if clean in _REVERSE_VERB_INDEX:
         inf = _REVERSE_VERB_INDEX[clean]
@@ -1167,13 +1170,13 @@ def lookup_linguistics_ext(lemma_or_word: str) -> Optional[Dict[str, Any]]:
 # ==============================================================================
 
 # Valid German linking morphemes (Fugenelemente)
-_FUGEN_ELEMENTS = ["", "s", "es", "en", "n", "er", "e"]
+_FUGEN_ELEMENTS = ["", "s", "es", "en", "n", "er", "e", "-"]
 
 
 def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
     """
     Recursively decomposes German compound nouns into constituent base morphemes.
-    
+
     Rules & Constraints:
     - Minimum total word length >= 7.
     - Accurately identifies and strips Fugenelemente (-s-, -es-, -en-, -n-, -er-, -e-).
@@ -1184,12 +1187,12 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
     """
     if not word or not isinstance(word, str):
         return []
-    
+
     clean_word = word.strip()
     # German compounds to split should be at least 7 chars
     if len(clean_word) < 7:
         return []
-    
+
     # Normalize to lowercase for segmentation
     norm_word = clean_word.lower()
 
@@ -1199,7 +1202,7 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
         """Find all valid segmentations of target into list of (part_slice, fuge, info)."""
         if target in memo:
             return memo[target]
-        
+
         results = []
         n = len(target)
 
@@ -1209,12 +1212,12 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
             info = _get_element_info(prefix)
             if not info:
                 continue
-            
+
             # Terminal condition: whole remainder is a single valid word
             if i == n:
                 results.append([(prefix, "", info)])
                 continue
-            
+
             # Non-terminal: test each Fugenelement
             remainder = target[i:]
             for fuge in _FUGEN_ELEMENTS:
@@ -1223,7 +1226,7 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
                 rem_after_fuge = remainder[len(fuge):]
                 if len(rem_after_fuge) < min_part_len:
                     continue
-                
+
                 sub_partitions = _find_partitions(rem_after_fuge)
                 for sp in sub_partitions:
                     results.append([(prefix, fuge, info)] + sp)
@@ -1234,23 +1237,23 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
     all_partitions = _find_partitions(norm_word)
     # Filter only multi-part segmentations (>= 2 parts)
     valid_compounds = [p for p in all_partitions if len(p) >= 2]
-    
+
     if not valid_compounds:
         return []
 
     # Scoring algorithm to pick the most natural German morphological decomposition
     def _score_partition(partition: List[Tuple[str, str, Dict[str, Any]]]) -> float:
         score = 100.0
-        
+
         # Reward solid morpheme decomposition (len >= 4)
         all_len_ok = all(len(p[0]) >= 4 for p in partition)
         if all_len_ok and len(partition) >= 2:
             score += 30.0
-            
+
         # Penalize spurious tiny fragments (< 4 chars unless common like alt, rot, neu)
         short_count = sum(1 for p in partition if len(p[0]) < 4)
         score -= short_count * 25.0
-        
+
         # Last element (Grundwort / Head Noun) must preferably be a NOUN
         last_info = partition[-1][2]
         if last_info.get("pos") == "NOUN":
@@ -1288,10 +1291,10 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
         end_pos = curr_idx + len(part_slice)
         orig_slice = clean_word[start_pos:end_pos]
         curr_idx = end_pos + len(fuge)
-        
+
         # Display title-cased for German noun parts
         display_word = orig_slice.capitalize() if info.get("pos") == "NOUN" else orig_slice
-        
+
         output.append({
             "word": display_word,
             "lemma": info["lemma"],

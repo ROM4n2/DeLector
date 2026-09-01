@@ -16,6 +16,8 @@ CORE = (ROOT / "static" / "js" / "core.js").read_text(encoding="utf-8")
 CARDS = (ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
 READER = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")
 MAIN = (ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
+HOEREN = (ROOT / "static" / "js" / "a1_hoeren.js").read_text(encoding="utf-8")
+LESEN = (ROOT / "static" / "js" / "a1_lesen.js").read_text(encoding="utf-8")
 
 
 def test_core_exports_jsattr_helper():
@@ -44,3 +46,19 @@ def test_main_js_feed_ingest_quotes_are_entity_safe():
     # encodeURIComponent 不转义 '（保留字符 !'()*-._~），必须再套 jsAttr
     assert ("window.ingestFeedItem(${jsAttr(encodeURIComponent(it.link))}, "
             "${jsAttr(encodeURIComponent(it.title))}, this)") in MAIN
+    assert "window.selectFeedSource(${jsAttr(s.id)})" in MAIN
+
+
+def test_a1_hoeren_js_uses_jsattr_for_dynamic_values():
+    assert "'${esc(v.word)}'" not in HOEREN
+    assert "'${esc(v.meaning)}'" not in HOEREN
+    assert "saveVocabChip(${jsAttr(v.word)}, ${jsAttr(v.meaning)}, this)" in HOEREN
+    assert "jumpToQuestion(${jsAttr(q.id)})" in HOEREN
+    assert "selectOption(${jsAttr(q.id)}, ${jsAttr(opt.key)})" in HOEREN
+    assert "playSingleAudio(${jsAttr(q.id)})" in HOEREN
+
+
+def test_a1_lesen_js_uses_jsattr_for_dynamic_values():
+    assert "jumpToQuestion(${jsAttr(q.id)})" in LESEN
+    assert "selectOption(${jsAttr(q.id)}," in LESEN
+    assert "'${q.id}'" not in LESEN

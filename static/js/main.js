@@ -193,6 +193,12 @@ export function show(view) {
   // 模块加载失败时不挂、不影响其它视图切换。
   if (typeof closeWriterMobilePanel === "function") closeWriterMobilePanel();
 
+  if (view !== "cards") {
+    if (typeof A1Hoeren?.stopHoerenExam === "function")
+      A1Hoeren.stopHoerenExam();
+    if (typeof A1Lesen?.stopLesenExam === "function") A1Lesen.stopLesenExam();
+  }
+
   const player = document.getElementById("shadow-player");
   if (player) {
     player.classList.toggle("hidden", view !== "reader");
@@ -252,8 +258,8 @@ export async function loadFeedSources() {
       .map(
         (s, idx) => `
       <button class="feed-source-pill ${s.id === (activeFeedId || cachedFeedSources[0].id) ? "active" : ""}"
-        data-id="${s.id}"
-        onclick="window.selectFeedSource('${s.id}')">
+        data-id="${esc(s.id)}"
+        onclick="window.selectFeedSource(${jsAttr(s.id)})">
         <span class="feed-source-idx">${String(idx + 1).padStart(2, "0")}.</span>
         <span class="feed-source-name">${esc(s.name)}</span>
         <span class="feed-lvl-tag">${esc(s.level)}</span>
@@ -879,6 +885,10 @@ Object.assign(window, {
 
   // Companion Mascot System
   Companion,
+
+  // Goethe A1 Exam Engines
+  A1Hoeren,
+  A1Lesen,
 });
 
 // ── PWA Service Worker Registration ──────────────────────────────────────────

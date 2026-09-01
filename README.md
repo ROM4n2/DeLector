@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.0.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.0.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-428%2F428%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-451%2F451%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -22,10 +22,10 @@
 
 | 平台               | 版本                | 说明                                                                                                                                                                                                                                | 下载通道                                                                                    |
 | ------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.0.0` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.0)     |
-| 🍎 **macOS**       | `v5.0.0` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.0)  |
-| 🐧 **Linux x64**   | `v5.0.0` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.0)  |
-| 📱 **Android**     | `v5.0.0` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.0) |
+| 🪟 **Windows x64** | `v5.0.1` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1)     |
+| 🍎 **macOS**       | `v5.0.1` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1)  |
+| 🐧 **Linux x64**   | `v5.0.1` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1)  |
+| 📱 **Android**     | `v5.0.1` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1) |
 
 ---
 
@@ -357,6 +357,8 @@ DeLector/
 - [x] **v4.9.0**：**背词台核心词模式 + 导入按词头去重**——① **核心词模式**：235 词核心子集与 704 词全量一键切换，核心标记打在既有词条上而非复制词表（复制会分叉出两套 FSRS 卡），每日新词额度全局共享，复习途中切换只静默过滤**当前位置之后**的队列；老设备走幂等回填补 tag 并注入缺失核心新词，`S.cards`/`S.log`/`S.wrong` 一律不碰。② **导入去重**：`applyMerge` 原先只按 id 合并，同一个词在别的设备上是自定义词、在本机是内建核心词时会并排塞进词表 —— 两张独立 FSRS 卡、复习队列里同一个词出现两次；补归一词头二级索引。归一刻意**保留大小写、不带 pos**：德语里大小写承载语义，`sie`（她/他们）与 `Sie`（您）只差首字母且同为 Pron，`toLowerCase` 会把敬称并掉。③ 下架 `a1-0544`/`a1-0545` 两条既有重复种子词（684 → 682），配幂等 `migrateSeedIdAliases()` 把被删 id 下的进度搬到留存 id（两边都有按 reps、reps 相同按 due 取多者），零进度丢失、零孤儿卡。④ 新增动态探针 `tools/wb_merge_probe.mjs`，把真实 `normHw`/`applyMerge`/迁移函数从 `workbench.html` 切片出来在 `node:vm` 里真跑、用真实词库连导两次证明二次导入是 no-op —— **静态正则只能证明「代码长这样」，证明不了「二次导入是 no-op」**；探针对切片有护栏断言（切歪即抛错而非静默假绿），`added`/`merged` 从 `applyMerge` 真实吐出的 toast 解析而非自己算，否则 `merged+added==incoming` 会退化成恒真。本轮六发变异全部致红。测试 **409 全绿**
 
 - [x] **v5.0.0**：**核心词模式切换前置 + 设置即时生效**——工作台顶栏新增紧凑分段控件（`核心` / `全部`），scope 从词库视图的 `<select>` 迁移至 review 视图唯一写入口；搜索框旁路 scope（核心模式下搜非核心词能命中）；`renormalizeQueueTail()` 实现 dailyNew / newOrder 设置即时生效（手动追加的词豁免裁剪）；`buildReviewQueue()` 体首 `manualExtraIds.clear()` 确保豁免集跨重建不残留。测试 **428 全绿**
+
+- [x] **v5.0.1**：**多领域专家缺陷修复与安全加固 (Multi-Expert Audit Hardening)**——① **存储与 FSRS**：补全 `RestoreReq` A1 听力/阅读还原字段（彻底根治还原清空 A1 历史），`review_card_sm2` 动态计算 `elapsed_days` 激活 FSRS 幂律遗忘曲线；② **安全与可靠性**：桌面端所有破坏性 DELETE 接口加 `_require_localhost` 回环鉴权，`security.py` 增加 2MB 流式体积拦截与合法端口限制，修复安卓 Edge TTS stdlib 异常降级链；③ **语言学与句法**：修复过去时动词反查碰撞（`standen` 准确反查 `stehen`，`gingen` 反查 `gehen`），句法拓扑识别介词从句后场边界，`writing_rules.py` 修复 `euer`/`eur` 屈折脱落与 `entlang` 前后置格位；④ **前端加固**：`a1_hoeren` 词汇卡全面改用 `jsAttr()` 杜绝单引号 XSS，`main.js` 显式导出 A1 命名空间并绑定切页停止模考。测试 **451 全绿**
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 

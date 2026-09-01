@@ -193,8 +193,6 @@ def test_a1_modules_are_not_empty():
 # resolves each bare identifier used in any `Object.assign(window, {…})`
 # exposer block against the bindings the module actually has.
 
-import ast as _ast  # noqa: E402  (used only for reference; we use regex below)
-
 
 def _parse_star_namespace_imports(src):
     """{namespace_name: source_module} for `import * as NS from …`."""
@@ -354,3 +352,18 @@ def test_writer_a1_email_functions_present_in_main_imports():
             f"main.js uses '{name}' but does not import it from './writer.js'; "
             f"this caused the v4.8.2 ReferenceError → dead Android UI"
         )
+
+
+def test_a1_engines_present_in_main_window_exposer():
+    """main.js must explicitly attach A1Hoeren and A1Lesen to window."""
+    main_src = (JS_DIR / "main.js").read_text(encoding="utf-8")
+    star_imports = _parse_star_namespace_imports(main_src)
+    assert "A1Hoeren" in star_imports
+    assert "A1Lesen" in star_imports
+    blocks = _exposer_blocks(main_src)
+    assert blocks, "main.js has no window hook-exposer block"
+    exposer_idents = set()
+    for block in blocks:
+        exposer_idents.update(_exposer_block_identifiers(block))
+    assert "A1Hoeren" in exposer_idents
+    assert "A1Lesen" in exposer_idents

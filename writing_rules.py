@@ -82,7 +82,7 @@ def decline_determiner(lemma: str, gender: Optional[str], number: Optional[str],
     # kein 与物主代词
     stems = {
         "kein": "kein", "mein": "mein", "dein": "dein",
-        "sein": "sein", "ihr": "ihr", "unser": "unser", "euer": "euer"
+        "sein": "sein", "ihr": "ihr", "unser": "unser", "euer": "euer", "eur": "euer"
     }
     base_stem = None
     for k, v in stems.items():
@@ -92,7 +92,10 @@ def decline_determiner(lemma: str, gender: Optional[str], number: Optional[str],
     if base_stem:
         if num == "Plur":
             endings = {"Nom": "e", "Akk": "e", "Dat": "en", "Gen": "er"}
-            return base_stem + endings[c]
+            end = endings[c]
+            if base_stem == "euer":
+                return "eur" + end if end else "euer"
+            return base_stem + end
         if not g:
             return None
         endings = {
@@ -100,7 +103,10 @@ def decline_determiner(lemma: str, gender: Optional[str], number: Optional[str],
             "Fem":  {"Nom": "e", "Akk": "e", "Dat": "er", "Gen": "er"},
             "Neut": {"Nom": "", "Akk": "", "Dat": "em", "Gen": "es"},
         }
-        return base_stem + endings[g][c]
+        end = endings[g][c]
+        if base_stem == "euer":
+            return "eur" + end if end else "euer"
+        return base_stem + end
 
     return None
 
@@ -112,7 +118,7 @@ def _tok_off(tok: Any, base: int) -> Tuple[int, int]:
 
 def _np_det(noun_tok: Any) -> Optional[Any]:
     """返回名词的限定词子节点（dep 为 det/nk/pnc），没有返回 None。"""
-    known_det_lemmas = {"der", "die", "das", "ein", "kein", "mein", "dein", "sein", "ihr", "unser", "euer"}
+    known_det_lemmas = {"der", "die", "das", "ein", "kein", "mein", "dein", "sein", "ihr", "unser", "euer", "eur"}
     known_det_texts = {
         "der", "die", "das", "den", "dem", "des",
         "ein", "eine", "einen", "einem", "einer", "eines",
@@ -153,7 +159,17 @@ def _prep_expected_case(tok: Any) -> Tuple[Optional[str], str]:
     if prep in _TWO_WAY_PREPS:
         return "Dat/Akk", "twoway"
 
-    # 3. 固定单格介词判定
+    # 3. entlang: 依位置决定支配格（前置=Genitiv，后置=Akkusativ）
+    if prep == "entlang":
+        obj = next((c for c in tok.children if c.dep_ in ("pobj", "op", "nk") and c.pos_ == "NOUN"), None)
+        if obj:
+            return ("Gen", "fixed") if tok.i < obj.i else ("Akk", "fixed")
+        if verb_head and verb_head.pos_ in ("VERB", "AUX"):
+            if any(c.pos_ == "NOUN" and c.i < tok.i for c in verb_head.children):
+                return "Akk", "fixed"
+        return "Akk", "fixed"
+
+    # 4. 固定单格介词判定
     fixed = _PREP_CASE.get(prep)
     if fixed:
         return fixed, "fixed"
@@ -258,6 +274,14 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
 
         # 取介宾名词：ADP 的子节点里 dep 是 pobj/op/nk 的 NOUN
         obj = next((c for c in tok.children if c.dep_ in ("pobj", "op", "nk") and c.pos_ == "NOUN"), None)
+        if obj is None and prep == "entlang":
+            if verb_head and verb_head.pos_ in ("VERB", "AUX"):
+                obj = next((c for c in verb_head.children if c.pos_ == "NOUN" and c.i < tok.i), None)
+            if obj is None:
+                for prev in reversed(tokens[:tok.i]):
+                    if prev.pos_ == "NOUN":
+                        obj = prev
+                        break
         if obj is None:
             continue
         det = _np_det(obj)
@@ -541,9 +565,20 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
         body_words = re.findall(r'[a-zA-ZäöüÄÖÜß]+', first_body_line)
         if body_words:
             first_w = body_words[0]
-            # If capitalized and not 'Ich' or a known capitalized noun/pronoun
             # In German, if greeting ends with comma, body starts with lowercase ('ich lade dich ein...')
-            if first_w[0].isupper() and first_w not in ["Sie", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer"]:
+            # Exempt: polite pronouns (Sie, Ihr), capitalized nouns, proper nouns (Montag, Berlin...)
+            is_polite = first_w in ["Sie", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer"]
+            vocab_info = lookup_core_vocab(first_w) or lookup_core_vocab(first_w.lower())
+            is_noun = bool(vocab_info and vocab_info.get("pos") in ("NOUN", "PROPN"))
+            KNOWN_PROPER_NOUNS = {
+                "montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag", "sonntag",
+                "berlin", "münchen", "hamburg", "köln", "frankfurt", "deutschland", "österreich", "schweiz",
+                "januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember"
+            }
+            if first_w.lower() in KNOWN_PROPER_NOUNS:
+                is_noun = True
+
+            if first_w[0].isupper() and not is_polite and not is_noun:
                 first_body_word_case_error = True
                 suggestions.append({
                     "rule": "a1_greeting_body_lowercase",
@@ -553,8 +588,9 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
 
     # 4. Valediction & Comma prohibition check
     VALEDICTIONS = [
-        "viele grüße", "herzliche grüße", "liebe grüße", "beste grüße",
-        "mit freundlichen grüßen", "mit besten grüßen", "dein", "deine", "tschüss"
+        "viele grüße", "herzliche grüße", "liebe grüße", "beste grüße", "schöne grüße",
+        "mit freundlichen grüßen", "mit besten grüßen", "bis bald", "auf wiedersehen",
+        "alles gute", "alles liebe", "herzlichen dank", "dein", "deine", "tschüss"
     ]
 
     valediction_found = False
@@ -621,4 +657,3 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
         "leitpunkte_results": leitpunkte_results,
         "suggestions": suggestions
     }
-

@@ -1,7 +1,7 @@
 /* DeLector - Goethe-Zertifikat A1 Lesen (Reading) Studio */
 "use strict";
 
-import { api, esc } from "./core.js";
+import { api, esc, jsAttr } from "./core.js";
 
 export let lesenSets = [];
 export let currentSetId = 1;
@@ -87,9 +87,12 @@ export async function selectLesenSet(setId) {
   stage.innerHTML = '<div class="p-6 text-pencil">正在载入阅读试卷...</div>';
 
   try {
-    currentSetData = await api(`/api/a1/lesen/set/${setId}`);
+    const data = await api(`/api/a1/lesen/set/${setId}`);
+    if (setId !== currentSetId) return;
+    currentSetData = data;
     renderLesenQuestions();
   } catch (e) {
+    if (setId !== currentSetId) return;
     console.error("Failed to load lesen set", e);
     stage.innerHTML = `<div class="p-6 text-red">⚠️ 试卷载入失败: ${esc(e.message)}</div>`;
   }
@@ -165,7 +168,7 @@ export function renderLesenQuestions() {
               .map(
                 (q, idx) => `
               <button id="lesen-nav-btn-${q.id}" class="hoeren-matrix-cell"
-                      onclick="A1Lesen.jumpToQuestion('${q.id}')">
+                      onclick="A1Lesen.jumpToQuestion(${jsAttr(q.id)})">
                 ${idx + 1}
               </button>
             `,
@@ -213,12 +216,12 @@ function renderAllLesenCards(parts) {
             <strong>陈述:</strong> ${esc(q.statement_de)} <span class="text-pencil">(${esc(q.statement_zh)})</span>
           </div>
           <div class="a1-q-options">
-            <label class="a1-option-label ${isR ? "selected" : ""}" onclick="A1Lesen.selectOption('${q.id}', 'R')">
+            <label class="a1-option-label ${isR ? "selected" : ""}" onclick="A1Lesen.selectOption(${jsAttr(q.id)}, ${jsAttr("R")})">
               <input type="radio" name="opt_${q.id}" value="R" ${isR ? "checked" : ""} />
               <span class="a1-opt-key">R</span>
               <span class="a1-opt-text">Richtig (正确)</span>
             </label>
-            <label class="a1-option-label ${isF ? "selected" : ""}" onclick="A1Lesen.selectOption('${q.id}', 'F')">
+            <label class="a1-option-label ${isF ? "selected" : ""}" onclick="A1Lesen.selectOption(${jsAttr(q.id)}, ${jsAttr("F")})">
               <input type="radio" name="opt_${q.id}" value="F" ${isF ? "checked" : ""} />
               <span class="a1-opt-key">F</span>
               <span class="a1-opt-text">Falsch (错误)</span>
@@ -253,7 +256,7 @@ function renderAllLesenCards(parts) {
             <strong>🎯 用户需求:</strong> ${esc(q.user_need_zh)}
           </div>
           <div class="a1-lesen-dual-web">
-            <div class="a1-web-card ${isA ? "selected-web" : ""}" onclick="A1Lesen.selectOption('${q.id}', 'A')">
+            <div class="a1-web-card ${isA ? "selected-web" : ""}" onclick="A1Lesen.selectOption(${jsAttr(q.id)}, ${jsAttr("A")})">
               <div class="web-card-header">
                 <span class="web-tag">网站 A</span>
                 <span class="web-url">${esc(q.ad_a.title)}</span>
@@ -261,7 +264,7 @@ function renderAllLesenCards(parts) {
               <div class="web-card-body">${esc(q.ad_a.text_de)}</div>
               <button class="btn btn-sm ${isA ? "btn-accent" : "btn-ghost"} web-select-btn">选择网站 A</button>
             </div>
-            <div class="a1-web-card ${isB ? "selected-web" : ""}" onclick="A1Lesen.selectOption('${q.id}', 'B')">
+            <div class="a1-web-card ${isB ? "selected-web" : ""}" onclick="A1Lesen.selectOption(${jsAttr(q.id)}, ${jsAttr("B")})">
               <div class="web-card-header">
                 <span class="web-tag">网站 B</span>
                 <span class="web-url">${esc(q.ad_b.title)}</span>
@@ -303,12 +306,12 @@ function renderAllLesenCards(parts) {
             <strong>陈述:</strong> ${esc(q.statement_de)} <span class="text-pencil">(${esc(q.statement_zh)})</span>
           </div>
           <div class="a1-q-options">
-            <label class="a1-option-label ${isR ? "selected" : ""}" onclick="A1Lesen.selectOption('${q.id}', 'R')">
+            <label class="a1-option-label ${isR ? "selected" : ""}" onclick="A1Lesen.selectOption(${jsAttr(q.id)}, ${jsAttr("R")})">
               <input type="radio" name="opt_${q.id}" value="R" ${isR ? "checked" : ""} />
               <span class="a1-opt-key">R</span>
               <span class="a1-opt-text">Richtig (正确)</span>
             </label>
-            <label class="a1-option-label ${isF ? "selected" : ""}" onclick="A1Lesen.selectOption('${q.id}', 'F')">
+            <label class="a1-option-label ${isF ? "selected" : ""}" onclick="A1Lesen.selectOption(${jsAttr(q.id)}, ${jsAttr("F")})">
               <input type="radio" name="opt_${q.id}" value="F" ${isF ? "checked" : ""} />
               <span class="a1-opt-key">F</span>
               <span class="a1-opt-text">Falsch (错误)</span>

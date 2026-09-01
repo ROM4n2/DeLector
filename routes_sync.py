@@ -6,6 +6,7 @@ from typing import Dict, Any
 import json
 import secrets
 import time
+import threading
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/api/wb/sync", tags=["WebRTC Sync"])
 MAX_SYNC_CACHE_ENTRIES = 50
 MAX_SDP_PAYLOAD_BYTES = 32 * 1024
 _sync_sdp_cache: Dict[str, Dict[str, Any]] = {}
+_sync_lock = threading.Lock()
 
 
 def _cleanup_sync_cache() -> None:
@@ -37,22 +39,24 @@ def sync_store_sdp(req: SyncStoreReq):
     raw_json = json.dumps(req.sdp)
     if len(raw_json.encode("utf-8")) > MAX_SDP_PAYLOAD_BYTES:
         raise HTTPException(400, "SDP payload 超过最大体积限制 (32KB)")
-    _cleanup_sync_cache()
     alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
     code = "".join(secrets.choice(alphabet) for _ in range(6))
-    _sync_sdp_cache[code] = {
-        "sdp": req.sdp,
-        "ts": time.time(),
-        "role": req.role,
-    }
+    with _sync_lock:
+        _cleanup_sync_cache()
+        _sync_sdp_cache[code] = {
+            "sdp": req.sdp,
+            "ts": time.time(),
+            "role": req.role,
+        }
     return {"code": code}
 
 
 @router.get("/fetch/{code}")
 def sync_fetch_sdp(code: str):
-    _cleanup_sync_cache()
     key = code.strip().upper()
-    entry = _sync_sdp_cache.pop(key, None)
+    with _sync_lock:
+        _cleanup_sync_cache()
+        entry = _sync_sdp_cache.pop(key, None)
     if not entry:
         raise HTTPException(404, "短码无效或已过期（5 分钟有效）")
     return {"sdp": entry["sdp"], "role": entry["role"]}

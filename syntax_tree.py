@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 DeLector - German Syntax Tree & Topological Field Engine (v3.5.0)
 Topologisches Feldermodell (Vorfeld, Linke Satzklammer, Mittelfeld, Rechte Satzklammer, Nachfeld)
@@ -433,10 +434,15 @@ def analyze_sentence_topology(
     # Check for infinitive with zu
     zu_tokens = [t for t in tokens if t.tag_ == "PTKZU" or t.dep_ == "pm" or t.text.lower() == "zu"]
     inf_verbs = [t for t in tokens if t.tag_ in ("VVINF", "VAINF", "VMINF") or (t.pos_ in ("VERB", "AUX") and "Inf" in t.morph.get("VerbForm", []))]
-    
+    has_finite_verb = any(
+        t.tag_ in ("VVFIN", "VAFIN", "VMFIN")
+        or (t.pos_ in ("VERB", "AUX") and "Fin" in t.morph.get("VerbForm", []))
+        for t in tokens
+    )
+
     if (zu_tokens and inf_verbs) or any(t.tag_ == "VVIZU" for t in tokens):
-        # Only set is_infinitiv if the entire span is the infinitive clause
-        if clause_type in ("infinitivgruppe", "infinitiv") or not has_main_finite_verb:
+        # Only set is_infinitiv if explicit or if the span has no finite verbs
+        if clause_type in ("infinitivgruppe", "infinitiv") or not has_finite_verb:
             is_infinitiv = True
             first_word = non_punct_tokens[0].text.lower() if non_punct_tokens else ""
             if first_word in INFINITIVE_CONNECTORS:
@@ -501,7 +507,7 @@ def analyze_sentence_topology(
             if t.tag_ in ("PTKZU", "VVINF", "VAINF", "VMINF", "VVIZU") or t.dep_ == "pm" or t.text.lower() == "zu"
         ]
         rk_candidates = sorted(rk_candidates, key=lambda x: x.i)
-        
+
         if rk_candidates:
             rk_first_id = rk_candidates[0].i
             rk_last_id = rk_candidates[-1].i
@@ -632,7 +638,22 @@ def analyze_sentence_topology(
                 continue
             if t.text == "," and idx + 1 < len(tokens):
                 next_tok = tokens[idx + 1]
-                if next_tok.tag_ in ("KOUS", "KOUI", "PRELS", "PRELAT") or next_tok.text.lower() in SUBORDINATING_CONJUNCTIONS or next_tok.text.lower() in RELATIVE_PRONOUNS or next_tok.text.lower() == "um":
+                next_lower = next_tok.text.lower()
+                is_extraposed = False
+                if (
+                    next_tok.tag_ in ("KOUS", "KOUI", "PRELS", "PRELAT", "PWAV", "PWS")
+                    or next_lower in SUBORDINATING_CONJUNCTIONS
+                    or next_lower in RELATIVE_PRONOUNS
+                    or next_lower in INFINITIVE_CONNECTORS
+                    or next_lower in INTERROGATIVE_WORDS
+                ):
+                    is_extraposed = True
+                elif (next_tok.pos_ == "ADP" or next_tok.tag_ in ("APPR", "APPRART")) and idx + 2 < len(tokens):
+                    tok2 = tokens[idx + 2]
+                    if tok2.tag_ in ("PRELS", "PRELAT") or tok2.text.lower() in RELATIVE_PRONOUNS:
+                        is_extraposed = True
+
+                if is_extraposed:
                     extraposed_start_id = t.i
                     break
 
@@ -816,10 +837,10 @@ def _classify_single_clause(
     has_werden = any(t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden") for t in tokens)
     has_sein = any(t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren") for t in tokens)
     has_modal = any(t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in tokens)
-    
+
     subj_tokens = [t for t in tokens if t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", [])]
     is_subjunctive = len(subj_tokens) > 0
-    
+
     is_passive = (has_werden and has_participle) or (has_modal and has_participle and has_werden)
     is_zustandspassiv = has_sein and has_participle and not is_passive
 
@@ -1100,7 +1121,7 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
 
     # 2. Compute token spans and subtrees for each clause head
     clause_spans: List[Tuple[Token, str, List[Token]]] = []
-    
+
     for head, ctype in clause_heads:
         subtree_tokens = sorted(list(head.subtree), key=lambda x: x.i)
         min_i = subtree_tokens[0].i
@@ -1132,7 +1153,7 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
             child_ids = set(child.token_ids)
             if cand_ids.issubset(child_ids):
                 return attach_to_tree(child, candidate)
-        
+
         parent_ids = set(parent.token_ids)
         if cand_ids.issubset(parent_ids) or candidate.head_token in parent.tokens:
             parent.children.append(candidate)
@@ -1152,21 +1173,32 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
 # ==============================================================================
 
 def split_sentences_pure_python(text: str) -> List[str]:
-    """spaCy 缺席时替代 doc.sents：按句末标点切句，并把标点保留在句尾。
+    """spaCy 缺席时替代 doc.sents：保护缩写和日期后按句末标点切句，并把标点保留在句尾。"""
+    if not text or not text.strip():
+        return []
 
-    旧实现用 re.split 的捕获组后再过滤纯标点片段，但捕获组带着尾随空格
-    （". "），过滤正则匹配不到，于是每个句号都会变成一个独立的"句子"。
-    """
-    parts = re.split(r'([.!?]+["\']?)', text)
+    protected = text
+    # 1. Protect dates: dd.mm.yyyy or d.m.yyyy or dd.mm.
+    protected = re.sub(r'\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b', r'\1__DOT__\2__DOT__\3', protected)
+    protected = re.sub(r'\b(\d{1,2})\.(\d{1,2})\.', r'\1__DOT__\2__DOT__', protected)
+
+    # 2. Protect multi-dot abbreviations (e.g. z.B., d.h., u.a., e.V.)
+    protected = re.sub(r'\b([a-zA-ZäöüÄÖÜß])\.\s*([a-zA-ZäöüÄÖÜß])\.', lambda m: m.group(0).replace('.', '__DOT__'), protected)
+
+    # 3. Protect common word abbreviations (ca., Dr., Prof., usw., bzw., etc., Nr., Hr., Fr., vgl., inkl., evtl.)
+    _ABBR_PATTERN = r'\b(ca|usw|bzw|etc|dr|prof|nr|hr|fr|vgl|inkl|evtl|std|abs|art|bd|bsp|dipl|ing|jun|sen|str|tab|tel|univ|vol)\.'
+    protected = re.sub(_ABBR_PATTERN, r'\g<1>__DOT__', protected, flags=re.IGNORECASE)
+
+    parts = re.split(r'([.!?]+["\']?)', protected)
     sents = []
     for i in range(0, len(parts), 2):
         body = parts[i]
         tail = parts[i + 1] if i + 1 < len(parts) else ""
         sent = (body + tail).strip()
         if sent:
-            sents.append(sent)
+            sents.append(sent.replace('__DOT__', '.'))
     if not sents and text.strip():
-        sents = [text.strip()]
+        sents = [text.strip().replace('__DOT__', '.')]
     return sents
 
 def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
@@ -1174,6 +1206,8 @@ def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
     sents = split_sentences_pure_python(text)
     results = []
     for s_idx, sent_str in enumerate(sents):
+        words = sent_str.split()
+        mf_tokens = [{"text": w, "id": i} for i, w in enumerate(words)]
         results.append({
             "sentence_id": s_idx,
             "text": sent_str,
@@ -1184,16 +1218,26 @@ def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
                 "label_zh": "主句核心",
                 "connector": "",
                 "finite_verb": "",
-                "token_ids": list(range(len(sent_str.split()))),
+                "token_ids": list(range(len(words))),
                 "formula": "[Vorfeld] + [Linke Klammer] + [Mittelfeld] + [Rechte Klammer] + [Nachfeld]",
                 "children": []
             },
             "topology": {
                 "vorfeld": [],
                 "linke_klammer": [],
-                "mittelfeld": sent_str.split(),
+                "mittelfeld": mf_tokens,
                 "rechte_klammer": [],
-                "nachfeld": []
+                "nachfeld": [],
+                "field_texts": {
+                    "vorfeld": "",
+                    "linke_klammer": "",
+                    "mittelfeld": sent_str,
+                    "rechte_klammer": "",
+                    "nachfeld": ""
+                },
+                "sentence_type": "V2",
+                "bracket_structure": "Einfacher Satz",
+                "clause_type": "hauptsatz"
             }
         })
     return {
