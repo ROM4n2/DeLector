@@ -54,7 +54,7 @@ def test_engine_select_has_server_option():
 
 
 def test_workbench_data_intact():
-    """搬运完整性：684 词种子数据与 playWord 主函数还在。"""
+    """搬运完整性：682 词种子数据与 playWord 主函数还在。"""
     assert "const SEED_WORDS" in _WORKBENCH
     assert "function playWord" in _WORKBENCH
 
@@ -103,7 +103,7 @@ def test_get_audio_tts_route_registered():
 
 def test_backup_covers_workbench_state():
     """DeLector 备份必须带上 workbench 的 wb.* 键，否则「还原备份」后
-    684 词的进度还留在 localStorage 里，用户以为整体替换了其实没有；
+    682 词的进度还留在 localStorage 里，用户以为整体替换了其实没有；
     跨设备迁移也会静默丢掉全部学习进度。"""
     from pathlib import Path
     cards = (Path(__file__).parent / "static" / "js" / "cards.js").read_text(encoding="utf-8")
@@ -513,7 +513,7 @@ def test_core_backfill_defined_outside_loadAll():
 def test_core_backfill_retags_only_missing_core_seed_tags():
     """对已有 S.words 幂等补 core tag：只处理 SEED 核心词，且仅当尚未带 core 时才 push。
 
-    老用户 S.words 里 684 词可能全未打 tag；二次运行若不加 guard 会重复 push。
+    老用户 S.words 里 682 词可能全未打 tag；二次运行若不加 guard 会重复 push。
     变异验证：把 !w.tags.includes('core') guard 删掉 → 本断言红；
               把判定集合换成 CORE_CUSTOM_WORDS → 第一条断言红。
     """
@@ -1221,3 +1221,354 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
     assert not re.search(_CORE_TAG_CHECK, merge), (
         "applyMerge 不应自己处理 core tag（种子词不走 merge，自定义词的 tags 随字段自然合并）"
     )
+
+
+# --------------------------------------------------------------------------
+# Task 8 · applyMerge 按归一词头去重 + 重复种子词下架的 id 归并
+# --------------------------------------------------------------------------
+
+def _normhw_body():
+    """normHw 函数体（定义到下一个顶层 function 为止）。"""
+    assert "function normHw(" in _WORKBENCH, "缺少 normHw 归一函数"
+    return _WORKBENCH.split("function normHw(")[1].split("\nfunction ")[0]
+
+
+def _apply_merge_body():
+    """applyMerge 函数体（到 btnResetProgress 绑定为止，与 Task 5 断言同切法）。"""
+    assert "function applyMerge(data)" in _WORKBENCH, "缺少 applyMerge 定义"
+    return _WORKBENCH.split("function applyMerge(data)")[1].split('$("btnResetProgress")')[0]
+
+
+def _apply_merge_words_block():
+    """applyMerge 里处理单词表的那一段（`const inWords` → `if (data.settings)`）。
+
+    切这么窄是为了把断言钉在真正的合并循环里：写在循环之后再「事后去重」
+    的实现不会出现在这个切片内。
+    """
+    body = _apply_merge_body()
+    assert "const inWords" in body, "applyMerge 里找不到单词合并段"
+    block = body.split("const inWords")[1].split("if (data.settings)")[0]
+    assert "byId" in block, "切片没落在单词合并段上"
+    return block
+
+
+def _seed_words():
+    """SEED_WORDS 常量的实际内容（真解析，不做模糊字符串匹配）。"""
+    at = _WORKBENCH.index("const SEED_WORDS")
+    return json.loads(_slice_balanced(_WORKBENCH, at, "[", "]"))
+
+
+def _norm_hw_py(hw):
+    """normHw 的 Python 等价物 —— 去定冠词 + trim，**不小写**。"""
+    return re.sub(r"^(der|die|das)\s+", "", str(hw or "").strip()).strip()
+
+
+def _alias_migration_body():
+    """migrateSeedIdAliases 函数体（定义到下一个顶层 function 为止）。"""
+    assert "function migrateSeedIdAliases(" in _WORKBENCH, "缺少 migrateSeedIdAliases 定义"
+    return _WORKBENCH.split("function migrateSeedIdAliases(")[1].split("\nfunction ")[0]
+
+
+def test_merge_normhw_preserves_case_and_strips_article():
+    """normHw 只去定冠词 + trim；**绝不小写**，也不折入 pos。
+
+    德语首字母大写是语义的：a1-0551 `sie`（她/他们）与 a1-0552 `Sie`（您，敬称）
+    只差大小写且 pos 都是 Pron，小写折叠会把敬称并进第三人称 —— 数据丢失。
+    essen / das Essen、leben / das Leben 同理靠大小写区分，因此 key 里也不需要 pos
+    （导入词库有 7 个词 pos 与种子词不一致，带 pos 反而会漏过去重）。
+
+    变异验证（已实跑确认红）：
+      - 在 normHw 里加 .toLowerCase() → 第 2 条断言红，且 node 探针的 sie/Sie 分离断言红；
+      - 删掉 replace(/^(der|die|das)\\s+/) → 第 1 条断言红。
+    """
+    body = _normhw_body()
+    strip = re.findall(r"\.replace\(\s*/\^\(der\|die\|das\)\\s\+/\s*,", body)
+    assert len(strip) == 1, (
+        "normHw 必须且只能有一处去定冠词的 replace(/^(der|die|das)\\s+/, ...)，实际 %d 处" % len(strip)
+    )
+    assert "toLowerCase" not in body, "normHw 不得小写化（会把 sie/Sie、essen/Essen 合并成一条）"
+    assert "toUpperCase" not in body, "normHw 不得大写化"
+    assert ".pos" not in body, "normHw 不得把 pos 折进 key（导入库 pos 与种子词不一致会漏过去重）"
+    assert len(re.findall(r"\.trim\(\)", body)) == 2, (
+        "normHw 必须在去冠词前后各 trim 一次（`  der  Wohnort ` 这类脏数据）"
+    )
+
+
+def test_merge_dedups_by_normalized_headword():
+    """applyMerge 必须建归一词头二级索引，并在 id 未命中时回退查它。
+
+    没有这一步，把 delector_custom_words.json 再导一次就会把 u-008 `der Wohnort`
+    并排塞在内建 core-001 `der Wohnort` 旁边：两条同词记录、两张独立 FSRS 卡、
+    复习队列里同一个词出现两次。
+
+    变异验证（已实跑确认红）：
+      - 把 `sameId || (k ? byHw.get(k) : null)` 改回 `byId.get(w.id)` → fallback 断言红，
+        且 node 探针二次导入不再是 no-op；
+      - 删掉 push 之后的 byHw.set → byHw.set 计数断言红（同一次导入里的同词头会重复追加）。
+    """
+    block = _apply_merge_words_block()
+
+    pre = block.split("for (const w of inWords)")[0]
+    assert "for (const w of S.words)" in pre, "二级索引必须在合并循环之前用 S.words 建好"
+    assert "byHw.set(" in pre, "合并循环之前必须真的往 byHw 里塞条目"
+
+    assert re.search(r"const\s+sameId\s*=\s*byId\.get\(\s*w\.id\s*\)", block), (
+        "必须先按 id 查（id 命中是最强的同一性证据）"
+    )
+    fallback = re.findall(
+        r"sameId\s*\|\|\s*\(\s*k\s*\?\s*byHw\.get\(\s*k\s*\)\s*:\s*null\s*\)", block
+    )
+    assert len(fallback) == 1, (
+        "id 未命中时必须回退查归一词头索引，且只有一处这样的回退，实际 %d 处" % len(fallback)
+    )
+
+    sets = re.findall(r"byHw\.set\(", block)
+    assert len(sets) == 2, (
+        "byHw.set 应恰好两处（建索引一次 + push 新词后回填一次），实际 %d 处；"
+        "少了回填，同一次导入里的两个同词头会各自 push" % len(sets)
+    )
+    assert "normHw(w.hw)" in block, "索引 key 必须由 normHw 生成"
+
+
+def test_merge_headword_hit_keeps_local_identity_fields():
+    """跨 id 的同词头命中时，id / tags / custom 必须留在本机，只让内容按 up 取新。
+
+    导入库里 237 个词的 up 全是 1788164859221（远大于种子词的 0），
+    裸 Object.assign(cur, w) 会：
+      1. 把 cur.id 改写成 u-XXX → S.cards[原 id] 当场变孤儿卡，FSRS 进度丢失；
+      2. 把 tags 抹成 [] → 实测 148 条命中全部落在核心词上，核心模式当场空一半；
+      3. 把 custom 改成 true → 126 个种子词开始混进 wb-sync 导出，每轮同步越滚越大。
+    id 命中（sameId 为真）时不做保护 —— 那是同一条记录，tags 本就该按 up 取新
+    （见 test_core_sync_export_import_round_trips_custom_core_tags）。
+
+    变异验证（已实跑确认红）：把 `if (own) Object.assign(cur, own)` 删掉 →
+    顺序断言红，且 node 探针的 core tag 存活数从 148 掉到 0。
+    """
+    block = _apply_merge_words_block()
+    own = re.search(r"const\s+own\s*=\s*sameId\s*\?\s*null\s*:\s*\{([^}]*)\}", block)
+    assert own, "跨 id 命中时必须先扣下本机身份字段（sameId ? null : {...}）"
+    kept = own.group(1)
+    for field in ("id: cur.id", "tags: cur.tags", "custom: cur.custom"):
+        assert field in kept, "本机身份字段必须含 %s" % field
+
+    assigns = re.findall(r"Object\.assign\(cur, w\)", block)
+    assert len(assigns) == 1, "内容覆盖只应有一处 Object.assign(cur, w)，实际 %d 处" % len(assigns)
+    restore = re.findall(r"if \(own\) Object\.assign\(cur, own\)", block)
+    assert len(restore) == 1, "身份字段回填只应有一处，实际 %d 处" % len(restore)
+    assert block.index("Object.assign(cur, w)") < block.index("if (own) Object.assign(cur, own)"), (
+        "身份字段必须在内容覆盖之后回填，否则照样被冲掉"
+    )
+
+    recency = re.findall(r"\(w\.up \|\| 0\) > \(cur\.up \|\| 0\)", block)
+    assert len(recency) == 1, "取新规则仍必须是 (w.up || 0) > (cur.up || 0)，不得改动"
+
+
+def test_merge_toast_reports_added_and_merged_counts():
+    """合并完成提示不得只报总词数 —— 现在有词是「合并掉」而不是「追加」的。
+
+    只报 S.words.length 会让用户以为 237 个词都进来了；实测其中 148 个被并进已有词条。
+
+    变异验证（已实跑确认红）：把 toast 改回只拼 S.words.length → added/merged 断言红。
+    """
+    body = _apply_merge_body()
+    toasts = re.findall(r'toast\("合并导入完成：[^;]*\);', body)
+    assert len(toasts) == 1, "合并完成提示应恰好一处，实际 %d 处" % len(toasts)
+    line = toasts[0]
+    assert "added" in line and "merged" in line, (
+        "提示必须同时报「新增」与「合并」两个计数，否则误导用户"
+    )
+    assert "S.words.length" in line, "提示仍应给出合并后的总词数"
+
+    block = _apply_merge_words_block()
+    assert len(re.findall(r"\badded\+\+", block)) == 1, "added 只应在 push 分支自增一次"
+    assert len(re.findall(r"\bmerged\+\+", block)) == 1, "merged 只应在命中分支自增一次"
+
+
+def test_seed_words_have_682_unique_entries():
+    """SEED_WORDS 下架两条重复词后为 682 条，且 (hw,pos,gloss) 与归一词头都不再撞。
+
+    a1-0544/a1-0545 与 a1-0034/a1-0052 的 hw+pos+gloss 逐字相同（教材第 10 页与
+    第 23 页重复收录），是先于本任务就存在的数据缺陷。归一词头唯一是 applyMerge
+    二级索引成立的前提 —— 有重复时索引只能保留一条，另一条永远合不进去。
+
+    变异验证（已实跑确认红）：把 a1-0544 塞回 SEED_WORDS → 682 断言与
+    「(hw,pos,gloss) 无重复」「归一词头无碰撞」三条同时红。
+    """
+    from collections import Counter
+    seeds = _seed_words()
+    assert len(seeds) == 682, "SEED_WORDS 应为 682 条，实际 %d" % len(seeds)
+
+    ids = [w["id"] for w in seeds]
+    assert len(set(ids)) == 682, "SEED_WORDS 有重复 id"
+    for gone in ("a1-0544", "a1-0545"):
+        assert gone not in set(ids), "%s 是重复条目，必须已下架" % gone
+    for kept in ("a1-0034", "a1-0052"):
+        assert kept in set(ids), "%s 是保留的那一条，不得误删" % kept
+
+    triples = Counter((w["hw"], w.get("pos", ""), w.get("gloss", "")) for w in seeds)
+    dup_triples = sorted(k for k, v in triples.items() if v > 1)
+    assert not dup_triples, "SEED_WORDS 仍有 hw/pos/gloss 完全相同的重复词：%s" % dup_triples
+
+    norms = Counter(_norm_hw_py(w["hw"]) for w in seeds)
+    dup_norms = sorted(k for k, v in norms.items() if v > 1)
+    assert not dup_norms, "SEED_WORDS 归一词头碰撞（applyMerge 二级索引会漏词）：%s" % dup_norms
+
+
+def test_seed_words_removal_does_not_touch_core_id_set():
+    """下架的两个 id 都不在 CORE_WORD_SEED_IDS 里，「恰好 213」的断言不受影响。"""
+    ids = set(_core_seed_ids())
+    for gone in ("a1-0544", "a1-0545"):
+        assert gone not in ids, "%s 若在核心集里，下架会把核心词数打成 212" % gone
+    assert len(ids) == 213, "核心词 id 数必须仍是 213"
+
+
+def test_seed_id_aliases_map_removed_ids_to_kept_ones():
+    """SEED_ID_ALIASES 精确映射「已下架 id → 保留 id」，两侧都对得上 SEED_WORDS。
+
+    变异验证（已实跑确认红）：把 value 写成一个不存在的 id → 「新 id 必须仍在」断言红；
+    把 key 写成一个仍在表里的 id → 「旧 id 必须已下架」断言红。
+    """
+    assert "const SEED_ID_ALIASES" in _WORKBENCH, "缺少 SEED_ID_ALIASES 常量"
+    at = _WORKBENCH.index("const SEED_ID_ALIASES")
+    aliases = json.loads(_slice_balanced(_WORKBENCH, at, "{", "}"))
+    assert aliases == {"a1-0544": "a1-0034", "a1-0545": "a1-0052"}, (
+        "别名表与本次下架的两条重复词不一致：%s" % aliases
+    )
+    seed_ids = {w["id"] for w in _seed_words()}
+    for old, new in aliases.items():
+        assert old not in seed_ids, "%s 仍在 SEED_WORDS 里，不该出现在别名表左侧" % old
+        assert new in seed_ids, "%s 不在 SEED_WORDS 里，别名会把进度搬到另一张孤儿卡上" % new
+
+
+def test_alias_migration_moves_every_store_and_drops_stale_words():
+    """migrateSeedIdAliases 必须扫 cards/log/wrong 三个库 + 清掉残留的 S.words 条目。
+
+    老用户 localStorage 里可能已有 a1-0544 的 FSRS 进度；只删词不迁进度，
+    S.cards["a1-0544"] 就成了 wordById() 查不到的孤儿卡 —— 违反 ADR 的首要约束
+    「进度一致性 MUST，FSRS 进度零丢失」。
+
+    变异验证（已实跑确认红）：
+      - 删掉 move(S.wrong, ...) 那一行 → 三库计数断言红；
+      - 把 delete 挪进 if 里（只在覆盖时删）→ node 探针的幂等断言红。
+    """
+    body = _alias_migration_body()
+    for store in ("S.cards", "S.log", "S.wrong"):
+        calls = re.findall(r"move\(\s*%s\s*," % re.escape(store), body)
+        assert len(calls) == 1, (
+            "%s 应恰好被 move 一次，实际 %d 次" % (store, len(calls))
+        )
+    deletes = re.findall(r"delete store\[oldId\]", body)
+    assert len(deletes) == 1, "旧 key 删除应恰好一处（幂等性的唯一来源），实际 %d 处" % len(deletes)
+    assert "wins(old, store[newId])" in body, "两边都有记录时必须走 wins 比较，不能无脑覆盖"
+    assert re.search(r"\(a\.reps \|\| 0\) > \(b\.reps \|\| 0\)", body), (
+        "卡片取舍必须先比 reps（复习次数）"
+    )
+    assert re.search(r"\(a\.due \|\| 0\) > \(b\.due \|\| 0\)", body), (
+        "reps 相同再比 due（间隔更长 = 记得更牢）"
+    )
+    stale = re.findall(
+        r"S\.words\.filter\(w => !Object\.prototype\.hasOwnProperty\.call\(SEED_ID_ALIASES, w\.id\)\)",
+        body,
+    )
+    assert len(stale) == 1, (
+        "必须把仍带已下架 id 的 S.words 条目剔掉（老 localStorage 词表里还留着），实际 %d 处" % len(stale)
+    )
+    assert re.search(r"\breturn\s+changed\s*;", body), (
+        "必须沿用 backfillCoreWords 的 return changed 契约，仅在真变更时落盘"
+    )
+
+
+def test_alias_migration_runs_before_backfill_at_both_startup_sites():
+    """同步启动与 idbHydrate 后的重载分支都必须先跑迁移、再跑 backfill。
+
+    只挂在同步启动处的话，IDB 里更新的旧词表会在 hydrate 后重新灌回孤儿卡。
+    顺序也不能反 —— backfill 会遍历 S.words，迁移得先把已下架条目清掉。
+
+    变异验证（已实跑确认红）：把 updated 分支里的迁移调用删掉 → 计数断言 2 变 1 红。
+    """
+    call = "if (migrateSeedIdAliases()) { saveWords(); saveCards(); saveLog(); saveWrong(); }"
+    backfill = "if (backfillCoreWords()) saveWords();"
+
+    startup = _WORKBENCH.split("loadAll();")[1].split("(async () => {")[0]
+    assert call in startup, "同步启动路径缺少 id 归并迁移"
+    assert startup.index(call) < startup.index(backfill), "迁移必须在 backfill 之前"
+
+    async_block = _WORKBENCH.split("(async () => {")[1].split("})();")[0]
+    updated = async_block.split("if (updated) {")[1].split("console.log")[0]
+    assert "loadAll();" in updated, "切片没落在 hydration 后的更新分支上"
+    assert call in updated, "IDB 更新后重新 loadAll 也必须跑一次幂等迁移"
+    assert updated.index(call) < updated.index(backfill), "迁移必须在 backfill 之前"
+
+    assert _WORKBENCH.count(call) == 2, (
+        "迁移调用应恰好两处（同步启动 + hydrate 重载），实际 %d 处" % _WORKBENCH.count(call)
+    )
+
+
+def test_merge_and_alias_migration_behave_under_node():
+    """动态探针：把真实 normHw / applyMerge / migrateSeedIdAliases 抽出来在 node 里真跑。
+
+    静态正则只能证明「代码长这样」，证明不了「二次导入是 no-op」。
+    tools/wb_merge_probe.mjs 用真实 d:/Ran/Goethe_A1/delector_custom_words.json
+    连导两次，并对迁移做三组进度取舍 + 幂等复跑。
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_merge_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_merge_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)
+
+    # 1) 双次导入：第二次是纯 no-op
+    imp = out["doubleImport"]
+    if imp.get("skipped"):
+        import pytest
+        pytest.skip("源词库不存在：%s" % imp.get("reason"))
+    assert imp["afterFirst"] == imp["afterSecond"], (
+        "二次导入必须是 no-op，实际 %d → %d" % (imp["afterFirst"], imp["afterSecond"])
+    )
+    assert imp["dupNormHwAfterFirst"] == 0, (
+        "首次导入后就不该有归一词头重复：%s" % imp["dupSamples"]
+    )
+    assert imp["dupNormHwAfterSecond"] == 0, "二次导入后出现重复词头：%s" % imp["dupSamples"]
+    assert imp["merged"] > 0 and imp["added"] > 0, "命中/新增计数不该有一边为 0"
+    assert imp["merged"] + imp["added"] == imp["incoming"], "命中 + 新增必须等于导入词数"
+    assert imp["coreTaggedAfterSecond"] >= imp["coreTaggedBefore"], (
+        "导入不得抹掉 core tag：%d → %d"
+        % (imp["coreTaggedBefore"], imp["coreTaggedAfterSecond"])
+    )
+    assert imp["idsChanged"] == 0, "合并不得改写已有词的 id（会造孤儿卡）"
+    assert imp["seedTurnedCustom"] == 0, "合并不得把种子词标成 custom（会混进同步导出）"
+
+    # 2) 大小写敏感：sie/Sie、essen/Essen、leben/Leben 保持两条
+    case = out["caseSensitivity"]
+    assert case["normHwSie"] == "Sie" and case["normHwsie"] == "sie", (
+        "normHw 把大小写吃掉了：%s" % case
+    )
+    for pair in ("sie|Sie", "essen|Essen", "leben|Leben"):
+        assert case["pairs"][pair] == 2, (
+            "%s 必须保持两条独立词条，实际 %d 条" % (pair, case["pairs"][pair])
+        )
+
+    # 3) 别名迁移：搬进度、按 reps/due 取多者、幂等、不留孤儿卡
+    mig = out["aliasMigration"]
+    assert mig["movedWhenTargetEmpty"] == {"reps": 5, "due": 200}, (
+        "目标位为空时应整条搬过去，实际 %s" % mig["movedWhenTargetEmpty"]
+    )
+    assert mig["keptHigherReps"] == 7, "两边都有时应保留 reps 更大的一条"
+    assert mig["keptHigherRepsReversed"] == 9, "反向摆放也必须保留 reps 更大的一条"
+    assert mig["keptLaterDueOnRepsTie"] == 999, "reps 相同应保留 due 更晚的一条"
+    assert mig["wrongKeptHigherN"] == 4, "错题本应保留错得更多的一条"
+    assert mig["oldKeysLeft"] == 0, "旧 id 必须被删干净"
+    assert mig["staleWordsLeft"] == 0, "S.words 里不得残留已下架 id 的词条"
+    assert mig["firstRunChanged"] is True, "首次迁移必须返回 changed = true"
+    assert mig["secondRunChanged"] is False, "二次迁移必须返回 false（幂等）"
+    assert mig["snapshotStable"] is True, "二次迁移不得改动任何数据（幂等）"
+    assert mig["orphanCards"] == 0, "迁移后不得留下 wordById 查不到的孤儿卡"
