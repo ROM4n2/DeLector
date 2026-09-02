@@ -3703,3 +3703,45 @@ def test_wb_state_roundtrip():
 def test_wb_state_empty_returns_empty_dict():
     """空 DB（从未写入）get_wb_state 返回 {}，不抛异常。"""
     assert server.get_wb_state() == {}
+
+
+def test_wb_state_sync_key_local_only(client, lan_client):
+    """同步 key 仅本机能取（GET /api/wb/state/key 走 _require_localhost）。"""
+    r = client.get("/api/wb/state/key")
+    assert r.status_code == 200
+    key = r.json()["key"]
+    assert isinstance(key, str) and len(key) == 32
+    assert re.fullmatch(r"[0-9a-f]{32}", key), "key 应为 32 位 hex"
+    # 同一把 key 幂等：再取一次不变（已持久化，重启后仍一致）
+    assert client.get("/api/wb/state/key").json()["key"] == key
+    # 局域网设备不可取 key
+    assert lan_client.get("/api/wb/state/key").status_code == 403
+
+
+def test_wb_state_put_requires_key(client):
+    """PUT /api/wb/state 必须带对 X-WB-Key，否则 403。"""
+    assert client.put("/api/wb/state", json={"payload": {"cards": {}}}).status_code == 403
+    wrong = client.put("/api/wb/state", json={"payload": {"cards": {}}},
+                       headers={"X-WB-Key": "0" * 32})
+    assert wrong.status_code == 403
+
+    key = client.get("/api/wb/state/key").json()["key"]
+    payload = {"words": [{"id": "x"}], "cards": {"c1": {"reps": 1, "last": 9}},
+               "log": {}, "wrong": {}, "settings": {}}
+    r = client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is True and body.get("updated_at")
+    assert client.get("/api/wb/state").json() == payload
+
+
+def test_wb_state_cross_device_write(client, lan_client):
+    """局域网另一设备带对 key 也能写入，且本机可回读（需求核心）。"""
+    key = client.get("/api/wb/state/key").json()["key"]
+    payload = {"cards": {"c2": {"s": 6, "due": 0, "last": 123}}, "words": []}
+    r = lan_client.put("/api/wb/state", json={"payload": payload},
+                       headers={"X-WB-Key": key})
+    assert r.status_code == 200
+    assert client.get("/api/wb/state").json() == payload
+    # 不带 key 的局域网设备仍只能读不能写
+    assert lan_client.put("/api/wb/state", json={"payload": payload}).status_code == 403

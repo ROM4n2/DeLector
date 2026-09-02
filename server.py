@@ -55,6 +55,7 @@ from database import (
     set_setting,
     get_wb_state,
     save_wb_state,
+    get_wb_sync_key,
     get_effective_api_key,
     get_effective_api_base_url,
     get_effective_api_model,
@@ -173,6 +174,7 @@ __all__ = [
     "set_setting",
     "get_wb_state",
     "save_wb_state",
+    "get_wb_sync_key",
     "get_effective_api_key",
     "get_effective_api_base_url",
     "get_effective_api_model",
@@ -1410,6 +1412,36 @@ def wb_download_backup(token: str, request: Request):
         media_type="application/json",
         headers=_attachment_headers(filename),
     )
+
+
+# ── Workbench 进度 server 镜像同步（wb_state）─────────────────────────────
+#
+# GET /api/wb/state      读镜像。放行局域网：手机/平板拉取不需 key——
+#                        「只有能 push 的客户端才需要密钥」是够用的信任模型。
+# PUT /api/wb/state      写镜像。须带 X-WB-Key（32 位 hex），否则 403。
+# GET /api/wb/state/key  取 key。仅本机 127.0.0.1（_require_localhost）。
+
+class WbStateReq(BaseModel):
+    payload: Dict[str, Any] = {}
+
+
+@app.get("/api/wb/state")
+def wb_get_state():
+    return get_wb_state()
+
+
+@app.put("/api/wb/state")
+def wb_put_state(req: WbStateReq, request: Request):
+    if request.headers.get("X-WB-Key", "") != get_wb_sync_key():
+        raise HTTPException(403, "invalid X-WB-Key")
+    updated_at = save_wb_state(req.payload or {})
+    return {"ok": True, "updated_at": updated_at}
+
+
+@app.get("/api/wb/state/key")
+def wb_get_state_key(request: Request):
+    _require_localhost(request)
+    return {"key": get_wb_sync_key()}
 
 
 class RestoreReq(BaseModel):

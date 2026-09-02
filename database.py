@@ -354,8 +354,8 @@ def get_wb_state(db_path: Optional[str] = None) -> dict:
         return {}
 
 
-def save_wb_state(payload: dict, db_path: Optional[str] = None):
-    """单行 upsert workbench 背词进度镜像（id 恒为 1）。"""
+def save_wb_state(payload: dict, db_path: Optional[str] = None) -> str:
+    """单行 upsert workbench 背词进度镜像（id 恒为 1），返回本次写入的 updated_at。"""
     updated_at = datetime.now().isoformat()
     text = json.dumps(payload, ensure_ascii=False)
     conn = get_db(db_path)
@@ -370,6 +370,20 @@ def save_wb_state(payload: dict, db_path: Optional[str] = None):
             """, (text, updated_at))
     finally:
         _close_db_conn(conn)
+    return updated_at
+
+
+def get_wb_sync_key(db_path: Optional[str] = None) -> str:
+    """workbench server 同步密钥：读 app_settings，缺则生成 32 位 hex 并持久化。
+
+    独立于 DEEPSEEK_API_KEY；单用户自用，明文 header 传输即够。
+    幂等：同一库重复调用返回同一把 key（手机从电脑拿一次就能长期用）。
+    """
+    key = get_setting("wb_sync_key", "", db_path=db_path)
+    if not key:
+        key = secrets.token_hex(16)
+        set_setting("wb_sync_key", key, db_path=db_path)
+    return key
 
 
 def get_effective_api_key(db_path: Optional[str] = None) -> str:
@@ -866,6 +880,7 @@ __all__ = [
     "set_setting",
     "get_wb_state",
     "save_wb_state",
+    "get_wb_sync_key",
     "get_effective_api_key",
     "get_effective_api_base_url",
     "get_effective_api_model",
