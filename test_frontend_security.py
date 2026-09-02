@@ -37,7 +37,7 @@ def test_reader_js_no_esc_inside_js_string_literals():
     assert "'${esc(k.word)}'" not in READER
     # 朴素反斜杠转义可被 \'; 序列绕过（\\' 解析为字面反斜杠 + 存活引号），必须移除
     assert ".replace(/'/g" not in READER
-    assert "deleteArticle(${a.id}, ${jsAttr(a.title)})" in READER
+    assert "deleteArticle(${Number(a.id)}, ${jsAttr(a.title)})" in READER
     assert "inspectSubWord(${jsAttr(k.word)}" in READER
     assert "saveClauseAsGrammarCard(${jsAttr(clauseLabel)}" in READER
 
@@ -62,3 +62,45 @@ def test_a1_lesen_js_uses_jsattr_for_dynamic_values():
     assert "jumpToQuestion(${jsAttr(q.id)})" in LESEN
     assert "selectOption(${jsAttr(q.id)}," in LESEN
     assert "'${q.id}'" not in LESEN
+
+
+def test_reader_js_xss_sinks_are_neutralised():
+    """reader.js 内嵌模板的 XSS sink 全部经 Number() / safeCefr / esc() 消毒。
+
+    正向锚点锁住修复后的模板形式；反向锚点锁住危险的原始插值形式。
+    替换 esc/Number 为 passthrough → 反向锚点复现 → 测试红。
+    替换回归（git revert static/js/reader.js 的修改）→ 正向锚点消失 → 测试红。
+    """
+    # renderMiniBar: recommended_level 白名单收敛 + est_reading_minutes Number 强制
+    assert "safeCefr(stats.recommended_level)" in READER
+    assert "Number(stats.est_reading_minutes)" in READER
+    # 反向：旧的 raw interpolation 不能存在
+    assert 'stats.recommended_level || "A1"' not in READER
+
+    # loadArticles: a.id → Number, created_at → esc
+    assert "openReader(${Number(a.id)})" in READER
+    assert "deleteArticle(${Number(a.id)}" in READER
+    assert "${esc(a.created_at)}" in READER
+
+    # token span: t.id → Number, sent.id → Number
+    assert 'id="tok-${Number(t.id)}"' in READER
+    assert 'onclick="inspect(${Number(t.id)},${Number(sent.id)})"' in READER
+
+    # sent wrapper: sent.id → Number
+    assert 'data-sent-id="${Number(sent.id)}"' in READER
+    assert "toggleSentenceTopology(${Number(sent.id)})" in READER
+    assert 'id="sent-topology-${Number(sent.id)}"' in READER
+
+    # heatbar: cnt → Number
+    assert "Number(counts[lvl])" in READER
+
+    # renderFelderSpectrum: sentId → Number
+    assert "openSyntaxDrawerForSentence(${Number(sentId)})" in READER
+
+    # clause tree: typeCls strip + tokenIds sanitized + sentId → Number
+    assert '.replace(/[^a-z0-9_-]/g, "")' in READER
+    assert ".map(Number).filter(Number.isFinite)" in READER
+    assert "saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, ${jsAttr(clauseText)}, ${Number(sentId)})" in READER
+
+    # renderReaderHeatbar badge: safeCefr
+    assert 'safeCefr(stats.recommended_level)' in READER

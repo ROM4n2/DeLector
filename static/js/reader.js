@@ -5,6 +5,18 @@ import { state, esc, jsAttr, api, normalizeCefrPct } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 
+// ── XSS Sink-Side Defences ────────────────────────────────────────────────────
+// crafted backup (/api/backup/restore 直灌 processed_json) 让 stats / tokens /
+// clause_tree 可携带任意字符串；以下模板全部经 innerHTML 落 DOM。
+// 数值位：模板期 Number() 收敛为 number literal（NaN 也安全——不会引号或尖括号），
+// 比 jsAttr 更好：jsAttr 会把 number 变 string "5"，破坏 inspect() 里的 === 查找。
+// CEFR 档位：白名单收敛（CSS class / 文本都由此拼出）。
+// token_ids 数组：先收敛为纯数字 JSON（无双引号），再拼 onclick。
+const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1"];
+const safeCefr = (v) => (CEFR_LEVELS.includes(v) ? v : "A1");
+const safeTokens = (ids) =>
+  JSON.stringify((ids || []).map(Number).filter(Number.isFinite));
+
 let currentArticleNotes = [];
 let readerFontMode = localStorage.getItem("delector_font_mode") || "sans";
 let readerFontSize =
@@ -85,14 +97,14 @@ export function renderMiniBar(stats) {
     )
     .join("");
 
-  const rec = stats.recommended_level || "A1";
+  const rec = safeCefr(stats.recommended_level);
   const recClass = rec.startsWith("B2") ? "mini-level-B2" : `mini-level-${rec}`;
 
   return `
     <div class="mini-bar-wrap">
       <span class="mini-level-badge ${recClass}">${rec} 推荐</span>
       <div class="mini-cefr-bar">${segs}</div>
-      <span style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);">约 ${stats.est_reading_minutes || 1} 分钟</span>
+      <span style="font-size:0.6875rem;color:var(--pencil);font-family:var(--mono);">约 ${Number(stats.est_reading_minutes) || 1} 分钟</span>
     </div>
   `;
 }
@@ -104,7 +116,7 @@ export function renderReaderHeatbar(stats) {
   const segs = ["A1", "A2", "B1", "B2", "C1"]
     .map((lvl) => {
       if (!p[lvl] || p[lvl] <= 0) return "";
-      const cnt = counts[lvl] || 0;
+      const cnt = Number(counts[lvl]) || 0;
       return `<div class="heatbar-seg ${lvl}" style="width:${p[lvl]}%" onclick="toggleCefrFocus('${lvl}')" title="点击聚焦 ${lvl} 级别生词 (${cnt} 词)">${lvl} ${p[lvl]}%</div>`;
     })
     .join("");
@@ -115,7 +127,7 @@ export function renderReaderHeatbar(stats) {
   if (timeEl)
     timeEl.textContent = `预计精读 ${stats.est_reading_minutes || 1} 分钟 · 共 ${stats.word_count || 0} 词`;
 
-  const rec = stats.recommended_level || "A1";
+  const rec = safeCefr(stats.recommended_level);
   const badge = document.getElementById("reader-meta-badge");
   if (badge) {
     badge.textContent = `${rec} 建议`;
@@ -151,14 +163,14 @@ export async function loadArticles() {
     el.innerHTML = data
       .map(
         (a) => `
-      <div class="article-row" onclick="openReader(${a.id})">
+      <div class="article-row" onclick="openReader(${Number(a.id)})">
         <div>
           <div class="article-row-title">${esc(a.title)}</div>
-          <div class="article-row-meta">${a.created_at} · ${a.char_count} 字符</div>
+          <div class="article-row-meta">${esc(a.created_at)} · ${a.char_count} 字符</div>
           ${renderMiniBar(a.stats)}
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
-          <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${a.id}, ${jsAttr(a.title)})" title="删除文章">🗑</button>
+          <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${Number(a.id)}, ${jsAttr(a.title)})" title="删除文章">🗑</button>
           <span class="article-row-arrow">→</span>
         </div>
       </div>`,
@@ -202,20 +214,20 @@ export async function openReader(id) {
         }
         const sepAttr =
           sepPartnerId !== null && sepPartnerId !== undefined
-            ? ` data-sep-partner="tok-${sepPartnerId}"`
+            ? ` data-sep-partner="tok-${Number(sepPartnerId)}"`
             : "";
         const sepClass = t.separable ? " is-separable" : "";
-        return `<span id="tok-${t.id}" class="tok ${lvl}${sepClass}"${sepAttr} onclick="inspect(${t.id},${sent.id})">${esc(t.text)}</span>`;
+        return `<span id="tok-${Number(t.id)}" class="tok ${lvl}${sepClass}"${sepAttr} onclick="inspect(${Number(t.id)},${Number(sent.id)})">${esc(t.text)}</span>`;
       })
       .join("");
 
     const topoHtml = renderFelderSpectrum(sent.topology, sent.id);
     const sentWrapper = `
-      <span class="reader-sent-unit" id="sent-unit-${sent.id}" data-sent-id="${sent.id}">
+      <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
-        <button class="sent-syntax-btn" onclick="event.stopPropagation(); toggleSentenceTopology(${sent.id})" title="展开德语拓扑五场域与从句树 (Satzbau)">🌳 句法</button>
+        <button class="sent-syntax-btn" onclick="event.stopPropagation(); toggleSentenceTopology(${Number(sent.id)})" title="展开德语拓扑五场域与从句树 (Satzbau)">🌳 句法</button>
       </span>
-      <div id="sent-topology-${sent.id}" class="sentence-topology-strip hidden">${topoHtml}</div>
+      <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;
 
     currentSentences.push(sentWrapper);
@@ -967,7 +979,7 @@ export function renderFelderSpectrum(topology, sentId) {
       ${boxes}
     </div>
     <div class="felder-bar-actions">
-      <button class="btn-open-ast-action" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${sentId})">在工作台展开从句拓扑树 AST ➔</button>
+      <button class="btn-open-ast-action" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sentId)})">在工作台展开从句拓扑树 AST ➔</button>
     </div>
   `;
 }
@@ -1031,7 +1043,7 @@ export function renderClauseTreeNode(node, depth = 0, sentId) {
   if (!node)
     return '<div class="syntax-empty" style="color:var(--pencil);font-size:0.8125rem;">暂无从句分层</div>';
 
-  const typeCls = (node.type || "hauptsatz").toLowerCase();
+  const typeCls = String(node.type || "hauptsatz").toLowerCase().replace(/[^a-z0-9_-]/g, "");
   const formulaHtml = node.formula
     ? `<div class="clause-formula"><code>${esc(node.formula)}</code></div>`
     : "";
@@ -1041,7 +1053,7 @@ export function renderClauseTreeNode(node, depth = 0, sentId) {
   const verbHtml = node.finite_verb
     ? `<span class="clause-pill-tag tag-verb">动词: <strong>${esc(node.finite_verb)}</strong></span>`
     : "";
-  const tokenIds = node.token_ids || [];
+  const tokenIds = (node.token_ids || []).map(Number).filter(Number.isFinite);
   const tokenIdsJson = JSON.stringify(tokenIds);
 
   const childHtml =
@@ -1067,7 +1079,7 @@ export function renderClauseTreeNode(node, depth = 0, sentId) {
         <div class="clause-quote-text">„${esc(node.text || "")}“</div>
         <div class="clause-node-footer">
           <button class="btn-clause-pill" onclick="event.stopPropagation(); highlightClauseTokens(${tokenIdsJson})">🔍 聚焦高亮</button>
-          <button class="btn-clause-pill btn-save-anki" onclick="event.stopPropagation(); saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, ${jsAttr(clauseText)}, ${sentId})">+ 加入语法卡</button>
+          <button class="btn-clause-pill btn-save-anki" onclick="event.stopPropagation(); saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, ${jsAttr(clauseText)}, ${Number(sentId)})">+ 加入语法卡</button>
         </div>
       </div>
       ${childHtml}

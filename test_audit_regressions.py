@@ -90,42 +90,39 @@ def test_security_port_restrictions():
 
 
 def test_a1_grade_populates_study_log():
-    """record_a1_hoeren_trial must write to study_log (not deadlock inside its own transaction)."""
+    """record_a1_*_trial must write to study_log AND daily_summary counters."""
     import os, sqlite3, time
-    from database import record_a1_hoeren_trial, init_progress_db
+    from database import record_a1_hoeren_trial, record_a1_lesen_trial, init_progress_db
     tmp = "test_a1_study_log.db"
-    # clean up any leftover from a prior interrupted run
     for suffix in ("", "-wal", "-shm"):
         p = tmp + suffix
         if os.path.exists(p):
-            try:
-                os.remove(p)
-            except PermissionError:
-                pass
+            try: os.remove(p)
+            except PermissionError: pass
     try:
         init_progress_db(tmp)
-        rec_id = record_a1_hoeren_trial(
+        h_id = record_a1_hoeren_trial(
             set_id=1, score_raw=20, score_official=16.0,
             total_questions=25, duration_seconds=600,
-            answers_json="{}", wrong_questions_json="[]",
-            db_path=tmp,
-        )
-        assert rec_id is not None
-        # open a fresh connection, read, then close — so file handles release before cleanup
+            answers_json="{}", wrong_questions_json="[]", db_path=tmp)
+        l_id = record_a1_lesen_trial(
+            set_id=1, score_raw=22, score_official=17.6,
+            total_questions=25, duration_seconds=480,
+            answers_json="{}", wrong_questions_json="[]", db_path=tmp)
+        assert h_id is not None and l_id is not None
         c = sqlite3.connect(tmp)
         try:
-            study_rows = c.execute("SELECT * FROM study_log WHERE event_type = 'a1_hoeren'").fetchall()
-            assert len(study_rows) == 1, f"study_log should have 1 a1_hoeren row, got {len(study_rows)}"
-            daily = c.execute("SELECT date FROM daily_summary").fetchone()
-            assert daily is not None, "daily_summary should have a row after A1 grade (INSERT OR IGNORE fires regardless of event_type)"
+            assert len(c.execute("SELECT 1 FROM study_log WHERE event_type='a1_hoeren'").fetchall()) == 1
+            assert len(c.execute("SELECT 1 FROM study_log WHERE event_type='a1_lesen'").fetchall()) == 1
+            qs, mins = c.execute("SELECT quiz_sessions, study_minutes FROM daily_summary").fetchone()
+            assert qs >= 2, f"quiz_sessions >= 2 after two exams, got {qs}"
+            assert mins >= 2, f"study_minutes >= 2 after two exams, got {mins}"
         finally:
             c.close()
-        time.sleep(0.1)  # let SQLite release file handles on Windows
+        time.sleep(0.1)
     finally:
         for suffix in ("", "-wal", "-shm"):
             p = tmp + suffix
             if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except PermissionError:
-                    pass
+                try: os.remove(p)
+                except PermissionError: pass

@@ -140,6 +140,8 @@ def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "
                 conn.execute("UPDATE daily_summary SET articles_read = articles_read + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(3, minutes), today))
             elif event_type == "quiz_session":
                 conn.execute("UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(2, minutes), today))
+            elif event_type in ("a1_hoeren", "a1_lesen"):
+                conn.execute("UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(2, minutes), today))
     except Exception as e:
         print(f"[Warn] Failed to log study event: {e}")
 
