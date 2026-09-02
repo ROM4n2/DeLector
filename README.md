@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.0.1-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.0.2-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -22,10 +22,10 @@
 
 | 平台               | 版本                | 说明                                                                                                                                                                                                                                | 下载通道                                                                                    |
 | ------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.0.1` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1)     |
-| 🍎 **macOS**       | `v5.0.1` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1)  |
-| 🐧 **Linux x64**   | `v5.0.1` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1)  |
-| 📱 **Android**     | `v5.0.1` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.1) |
+| 🪟 **Windows x64** | `v5.0.2` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2)     |
+| 🍎 **macOS**       | `v5.0.2` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2)  |
+| 🐧 **Linux x64**   | `v5.0.2` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2)  |
+| 📱 **Android**     | `v5.0.2` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2) |
 
 ---
 
@@ -359,6 +359,8 @@ DeLector/
 - [x] **v5.0.0**：**核心词模式切换前置 + 设置即时生效**——工作台顶栏新增紧凑分段控件（`核心` / `全部`），scope 从词库视图的 `<select>` 迁移至 review 视图唯一写入口；搜索框旁路 scope（核心模式下搜非核心词能命中）；`renormalizeQueueTail()` 实现 dailyNew / newOrder 设置即时生效（手动追加的词豁免裁剪）；`buildReviewQueue()` 体首 `manualExtraIds.clear()` 确保豁免集跨重建不残留。测试 **428 全绿**
 
 - [x] **v5.0.1**：**多领域专家缺陷修复与安全加固 (Multi-Expert Audit Hardening)**——① **存储与 FSRS**：补全 `RestoreReq` A1 听力/阅读还原字段（彻底根治还原清空 A1 历史），`review_card_sm2` 动态计算 `elapsed_days` 激活 FSRS 幂律遗忘曲线；② **安全与可靠性**：桌面端所有破坏性 DELETE 接口加 `_require_localhost` 回环鉴权，`security.py` 增加 2MB 流式体积拦截与合法端口限制，修复安卓 Edge TTS stdlib 异常降级链；③ **语言学与句法**：修复过去时动词反查碰撞（`standen` 准确反查 `stehen`，`gingen` 反查 `gehen`），句法拓扑识别介词从句后场边界，`writing_rules.py` 修复 `euer`/`eur` 屈折脱落与 `entlang` 前后置格位；④ **前端加固**：`a1_hoeren` 词汇卡全面改用 `jsAttr()` 杜绝单引号 XSS，`main.js` 显式导出 A1 命名空间并绑定切页停止模考。测试 **452 全绿**
+
+- [x] **v5.0.2**：**审计修复与 XSS 消毒 (Post-Audit Fix)**——① **reader.js XSS sink 全消毒**：14 处 raw interpolation 改用 `Number()` / `safeCefr()` / `esc()` / regex strip / `safeTokens()`，彻底关闭通过 backup/restore 导入 crafted processed_json 后在 localhost origin 触发的 DOM XSS；② **A1 模考统计修复**：`log_study_event` 补充 `a1_hoeren` / `a1_lesen` 分支，模考次数与学习时长正确计入 `daily_summary`；③ **德语动词反查修复**：过去时词干拼后缀前先剥 `-e`（`wusste → wusst + en = wussten`），修复弱变化/混合变化动词复数形式索引遗漏；④ **DeLector.spec 测试改进**：CI 干净 checkout 下显式 `pytest.skip` 替代静默跳过。测试 **453 全绿**
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 
