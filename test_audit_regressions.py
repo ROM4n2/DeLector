@@ -87,3 +87,45 @@ def test_security_port_restrictions():
     assert is_safe_public_url("http://example.com:22/feed.xml") is False
     assert is_safe_public_url("http://example.com:3306/feed.xml") is False
     assert is_safe_public_url("http://example.com:6379/feed.xml") is False
+
+
+def test_a1_grade_populates_study_log():
+    """record_a1_hoeren_trial must write to study_log (not deadlock inside its own transaction)."""
+    import os, sqlite3, time
+    from database import record_a1_hoeren_trial, init_progress_db
+    tmp = "test_a1_study_log.db"
+    # clean up any leftover from a prior interrupted run
+    for suffix in ("", "-wal", "-shm"):
+        p = tmp + suffix
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except PermissionError:
+                pass
+    try:
+        init_progress_db(tmp)
+        rec_id = record_a1_hoeren_trial(
+            set_id=1, score_raw=20, score_official=16.0,
+            total_questions=25, duration_seconds=600,
+            answers_json="{}", wrong_questions_json="[]",
+            db_path=tmp,
+        )
+        assert rec_id is not None
+        # open a fresh connection, read, then close — so file handles release before cleanup
+        c = sqlite3.connect(tmp)
+        try:
+            study_rows = c.execute("SELECT * FROM study_log WHERE event_type = 'a1_hoeren'").fetchall()
+            assert len(study_rows) == 1, f"study_log should have 1 a1_hoeren row, got {len(study_rows)}"
+            daily = c.execute("SELECT date FROM daily_summary").fetchone()
+            assert daily is not None, "daily_summary should have a row after A1 grade (INSERT OR IGNORE fires regardless of event_type)"
+        finally:
+            c.close()
+        time.sleep(0.1)  # let SQLite release file handles on Windows
+    finally:
+        for suffix in ("", "-wal", "-shm"):
+            p = tmp + suffix
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except PermissionError:
+                    pass

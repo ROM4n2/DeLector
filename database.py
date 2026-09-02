@@ -748,8 +748,11 @@ def record_a1_hoeren_trial(set_id: int, score_raw: int, score_official: float,
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (set_id, score_raw, score_official, total_questions,
               duration_seconds, answers_json, wrong_questions_json))
-        log_study_event("a1_hoeren", ref_id=cur.lastrowid, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
-        return cur.lastrowid
+        record_id = cur.lastrowid
+    # log_study_event opens its own connection — must be OUTSIDE the with block
+    # to avoid SQLITE_BUSY from nested locks on progress.db.
+    log_study_event("a1_hoeren", ref_id=record_id, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
+    return record_id
 
 
 def get_a1_hoeren_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -774,8 +777,9 @@ def record_a1_lesen_trial(set_id: int, score_raw: int, score_official: float,
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (set_id, score_raw, score_official, total_questions,
               duration_seconds, answers_json, wrong_questions_json))
-        log_study_event("a1_lesen", ref_id=cur.lastrowid, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
-        return cur.lastrowid
+        record_id = cur.lastrowid
+    log_study_event("a1_lesen", ref_id=record_id, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
+    return record_id
 
 
 def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
