@@ -3658,8 +3658,12 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
     assert wf.count("--hidden-import=corpus_dict") == 2, "Linux & macOS 两个构建都要"
 
+    # DeLector.spec 是本地 PyInstaller 产物：.gitignore 的 `*.spec` 把它排除，且 CI 里
+    # pytest 跑在 package_windows.py / PyInstaller 之前，干净 checkout 下必然不存在。
+    # 用显式 skip 而非静默 if，避免 CI 输出里看起来"通过了"其实一条都没断言。
     spec_path = os.path.join(root, "DeLector.spec")
-    if os.path.exists(spec_path):
-        spec = open(spec_path, encoding="utf-8").read()
-        assert "'corpus_dict'" in spec
-        assert "'routes_corpus'" in spec
+    if not os.path.exists(spec_path):
+        pytest.skip("DeLector.spec 未生成（本地构建产物，非 canonical）——跳过 spec 断言")
+    spec = open(spec_path, encoding="utf-8").read()
+    assert "'corpus_dict'" in spec
+    assert "'routes_corpus'" in spec

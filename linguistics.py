@@ -714,7 +714,9 @@ for _inf, (_praet, _p2, _hilf, _def) in IRREGULAR_VERBS.items():
     else:
         # Index common past tense inflection endings (-st, -en, -t, -e)
         # e.g., gingst, gingen, gingt; sahen, saht, sahst; lasen, last
-        _praet_stem = _praet_low
+        # 德语词法：-te 结尾的过去时词干须先剥 -e 再拼后缀
+        # （wusste → wusst + en = wussten，不是 wussteen）
+        _praet_stem = _praet_low[:-1] if _praet_low.endswith("e") else _praet_low
         for _end in ["st", "en", "t", "e", "est", "et"]:
             _REVERSE_VERB_INDEX[f"{_praet_stem}{_end}"] = _inf
 
