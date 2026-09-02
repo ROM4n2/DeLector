@@ -3745,3 +3745,22 @@ def test_wb_state_cross_device_write(client, lan_client):
     assert client.get("/api/wb/state").json() == payload
     # 不带 key 的局域网设备仍只能读不能写
     assert lan_client.put("/api/wb/state", json={"payload": payload}).status_code == 403
+
+
+def test_wb_state_survives_reinit(client):
+    """真文件落盘锁定：save_wb_state → init_db 重开同一库文件 → 数据仍在。
+
+    clean_db 是「每次测试前删库重建」，单靠它证明不了落盘。这里在同一个
+    测试内显式重开 DB：等价于 server 重启后 /api/wb/state 仍能回读，
+    wb_state 行只存在内存里的话这一步必然读到 {}。
+    """
+    payload = {"cards": {"c9": {"reps": 3, "last": 42}}, "words": [{"id": "u-9"}]}
+    server.save_wb_state(payload)
+    init_db("test_delector.db")
+    assert server.get_wb_state() == payload
+    # 经 HTTP 也读得到同一份（重开后的文件）
+    key = client.get("/api/wb/state/key").json()["key"]
+    r = client.put("/api/wb/state", json={"payload": {"words": []}},
+                   headers={"X-WB-Key": key})
+    assert r.status_code == 200
+    assert client.get("/api/wb/state").json() == {"words": []}
