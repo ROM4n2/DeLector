@@ -3017,14 +3017,14 @@ $("btnLanAcceptAnswer").addEventListener("click", async () => {
   const code = $("lanAnswerIn").value.trim().toUpperCase();
   if (!code || code.length !== 6) { lanSetStatus("请输入6位短码"); return; }
   try {
-    const resp = await fetch("/api/wb/sync/fetch/" + encodeURIComponent(code)).then(r => {
+    const resp = await fetch("/api/wb/sync/fetch/" + encodeURIComponent(code), { cache: "no-store" }).then(r => {
       if (!r.ok) throw new Error(r.status === 404 ? "短码无效或已过期" : "HTTP " + r.status);
       return r.json();
     });
     await _lanPC.setRemoteDescription(resp.sdp);
     lanSetStatus("已连接，等待 DataChannel…");
   } catch (e) {
-    lanSetStatus("短码无效或已过期: " + e.message);
+    lanSetStatus("短码无效或已过期。若输入正确仍失败，很可能是两台设备没有连接到同一台 DeLector 服务端：请确认电脑端 http://<电脑IP>:8000 能被手机浏览器打开；局域网连不上的话，用 `adb reverse tcp:8000 tcp:8000` 后手机访问 http://127.0.0.1:8000");
   }
 });
 
@@ -3037,7 +3037,7 @@ $("btnLanAcceptOffer").addEventListener("click", async () => {
   const code = $("lanOfferIn").value.trim().toUpperCase();
   if (!code || code.length !== 6) { lanSetStatus("请输入6位短码"); return; }
   try {
-    const resp = await fetch("/api/wb/sync/fetch/" + encodeURIComponent(code)).then(r => {
+    const resp = await fetch("/api/wb/sync/fetch/" + encodeURIComponent(code), { cache: "no-store" }).then(r => {
       if (!r.ok) throw new Error(r.status === 404 ? "短码无效或已过期" : "HTTP " + r.status);
       return r.json();
     });
@@ -3061,7 +3061,7 @@ $("btnLanAcceptOffer").addEventListener("click", async () => {
     $("lanAnswerCode").textContent = ansResp.code;
     lanSetStatus("回执短码已生成，告诉对方输入这个码");
   } catch (e) {
-    lanSetStatus("短码无效或已过期: " + e.message);
+    lanSetStatus("短码无效或已过期。若输入正确仍失败，很可能是两台设备没有连接到同一台 DeLector 服务端：请确认电脑端 http://<电脑IP>:8000 能被手机浏览器打开；局域网连不上的话，用 `adb reverse tcp:8000 tcp:8000` 后手机访问 http://127.0.0.1:8000");
   }
 });
 

@@ -3211,6 +3211,19 @@ def test_sync_sdp_fetch_invalid_code(client):
     assert resp.status_code == 404
 
 
+def test_sync_info_endpoint(client):
+    """实例指纹端点：返回 instance_id + started_at，供前端判断两端是否同一实例。"""
+    resp = client.get("/api/wb/sync/info")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "instance_id" in data and len(data["instance_id"]) == 12
+    assert "started_at" in data and isinstance(data["started_at"], (int, float))
+    assert data["ttl_seconds"] == 300
+    # 同一进程内两次调用应返回同一实例 ID（短码 cache 是本进程模块级单例）
+    resp2 = client.get("/api/wb/sync/info")
+    assert resp2.json()["instance_id"] == data["instance_id"]
+
+
 def test_sync_sdp_lan_accessible(lan_client):
     """局域网设备间同步：端点不应被仅限本地的 _require_localhost 误伤拦截。"""
     sdp = {"type": "answer", "sdp": "v=0\r\no=- 654321 2 IN IP4 192.168.1.77\r\ns=-\r\n"}

@@ -3,6 +3,7 @@ DeLector - WebRTC LAN Sync Router
 Handles short-lived in-memory SDP exchange for zero-copy-paste P2P progress sync.
 """
 from typing import Dict, Any
+import uuid
 import json
 import secrets
 import time
@@ -16,6 +17,12 @@ MAX_SYNC_CACHE_ENTRIES = 50
 MAX_SDP_PAYLOAD_BYTES = 32 * 1024
 _sync_sdp_cache: Dict[str, Dict[str, Any]] = {}
 _sync_lock = threading.Lock()
+
+# 本进程实例指纹：短码只存于「生成它的那个 server 进程」内存。前端用它判断
+# 两端是否连到同一实例——跨实例时 B fetch 必然 404「断码无效」，有了它才能
+# 给出可行动指引而不是笼统的「无效码」。
+_SYNC_INSTANCE_ID = uuid.uuid4().hex[:12]
+_SYNC_STARTED_AT = time.time()
 
 
 def _cleanup_sync_cache() -> None:
@@ -32,6 +39,16 @@ def _cleanup_sync_cache() -> None:
 class SyncStoreReq(BaseModel):
     sdp: Dict[str, Any]
     role: str = "offer"
+
+
+@router.get("/info")
+def sync_instance_info():
+    """返回本进程实例指纹，供前端判断两端是否连同一台 DeLector 服务端。"""
+    return {
+        "instance_id": _SYNC_INSTANCE_ID,
+        "started_at": _SYNC_STARTED_AT,
+        "ttl_seconds": 300,
+    }
 
 
 @router.post("/store")
