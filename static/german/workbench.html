@@ -1046,11 +1046,95 @@ function migrateSeedIdAliases() {
   if (kept.length !== S.words.length) { S.words = kept; changed = true; }
   return changed;
 }
-function saveWords() { localStorage.setItem(K.words, JSON.stringify(S.words)); idbPut("words", S.words); }
-function saveCards() { localStorage.setItem(K.cards, JSON.stringify(S.cards)); idbPut("cards", S.cards); }
-function saveLog() { localStorage.setItem(K.log, JSON.stringify(S.log)); idbPut("log", S.log); }
-function saveWrong() { localStorage.setItem(K.wrong, JSON.stringify(S.wrong)); idbPut("wrong", S.wrong); }
-function saveSettings() { localStorage.setItem(K.set, JSON.stringify(S.settings)); idbPut("settings", S.settings); }
+function saveWords() { localStorage.setItem(K.words, JSON.stringify(S.words)); idbPut("words", S.words); wbsync.push(); }
+function saveCards() { localStorage.setItem(K.cards, JSON.stringify(S.cards)); idbPut("cards", S.cards); wbsync.push(); }
+function saveLog() { localStorage.setItem(K.log, JSON.stringify(S.log)); idbPut("log", S.log); wbsync.push(); }
+function saveWrong() { localStorage.setItem(K.wrong, JSON.stringify(S.wrong)); idbPut("wrong", S.wrong); wbsync.push(); }
+function saveSettings() { localStorage.setItem(K.set, JSON.stringify(S.settings)); idbPut("settings", S.settings); wbsync.push(); }
+
+/* ======================================================================
+ * F3 · 背词进度 server 镜像同步（wbsync）
+ *  - 本地为准（local-first）：localStorage/IDB 的键永不因同步被删改，
+ *    远端只是「最近一台设备推上来的全量镜像」。
+ *  - 存储层 5 个 saveXxx() 末尾都挂 wbsync.push()：本地一落盘 → 800ms 防抖
+ *    → PUT /api/wb/state（带 X-WB-Key）。
+ *  - 启动（IDB hydrate 完成后）+ 每 5s 轮询 GET /api/wb/state，与本地做
+ *    stable-diff：真有差异才 applyMerge（复用合并导入算法），无差异不碰 UI。
+ *  - key 只在本机可取（/api/wb/state/key 有 127.0.0.1 闸）；file:// / 离线 /
+ *    未启动 server 一律静默禁用，数据仍只落本地，功能不受影响。
+ * ==================================================================== */
+const wbsync = (() => {
+  const ENDPOINT = "/api/wb/state";
+  const PUSH_DEBOUNCE_MS = 800;   // 复习连击时合并推送，省请求
+  const POLL_MS = 5000;
+  let _key = null;                // 同步 key（本机取一次）
+  let _enabled = false;
+  let _pushTimer = null;
+  let _pollTimer = null;
+  let _busy = false;
+
+  /* 稳定字符串化：对象键字典序、数组保序。同一份语义内容在不同设备上
+   * JSON 键插入顺序可能不同，直接 JSON.stringify 会假 diff → 反复空合并
+   * → toast + showView("review") 打断当前视图。 */
+  function stable(o) {
+    return JSON.stringify(o, (k, v) => {
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        return Object.keys(v).sort().reduce((acc, kk) => { acc[kk] = v[kk]; return acc; }, {});
+      }
+      return v;
+    });
+  }
+  function snapshot() {
+    return { words: S.words, cards: S.cards, log: S.log, wrong: S.wrong, settings: S.settings };
+  }
+  function pushNow() {
+    if (!_enabled || !_key) return;
+    fetch(ENDPOINT, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-WB-Key": _key },
+      body: JSON.stringify(snapshot()),
+    }).catch(() => { /* server 不可达：本地数据已安全，静默 */ });
+  }
+  function push() {
+    if (!_enabled || !_key) return;
+    clearTimeout(_pushTimer);
+    _pushTimer = setTimeout(pushNow, PUSH_DEBOUNCE_MS);
+  }
+  async function pull() {
+    if (!_enabled || !_key || _busy) return;
+    _busy = true;
+    try {
+      const r = await fetch(ENDPOINT);
+      if (!r.ok) return;
+      const remote = await r.json();
+      if (!remote || typeof remote !== "object") return;
+      if (Object.keys(remote).length === 0) { pushNow(); return; }  // server 空 → 拿本机当种子
+      if (stable(remote) === stable(snapshot())) return;            // 无实质差异，跳过
+      applyMerge(remote);                                           // 复用合并导入算法
+      renderReview();
+      renderHeaderBadge();
+    } catch (e) { /* 离线/未启动 server：静默 */ }
+    finally { _busy = false; }
+  }
+  async function boot() {
+    try {
+      const kr = await fetch(ENDPOINT + "/key");
+      if (!kr.ok) return;
+      _key = (await kr.json()).key;
+      _enabled = true;
+      await pull();                       // 启动即拉一次（含种子推送）
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) pushNow();   // 切走前推一把
+        else pull();                      // 回前台拉最新
+      });
+      window.addEventListener("beforeunload", () => pushNow());
+      _pollTimer = setInterval(pull, POLL_MS);
+    } catch (e) { /* 取不到 key（非本机 / 离线 / file://）：静默禁用 */ }
+  }
+  function init() { boot(); }
+  return { init: init, push: push, pushNow: pushNow, pull: pull,
+    enabled: () => _enabled, snapshot: snapshot };
+})();
 
 /* ======================================================================
  * F2 · IndexedDB 迁移 + 自动备份（双写期：localStorage + IDB 并行写）
@@ -3539,6 +3623,9 @@ renderReview();
       localStorage.setItem("wb.lastSnapDay", todayStr());
     }, 6 * 60 * 60 * 1000);
   } catch (e) { console.warn("[F2] startup idb failed:", e); }
+  /* F3 · IDB hydrate 已尽力完成、S 是最终本地态，此时才启动 server 镜像同步；
+   * 早于这一步会拿到被 idbHydrate 覆盖前的旧 S。 */
+  wbsync.init();
 })();
 
 /* 调试/自检出口（控制台可用 __wb.S 查看状态，方便排查） */
@@ -3549,6 +3636,7 @@ window.__wb = { S: S, SEED_WORDS: SEED_WORDS, fsrsReview: fsrsReview,
   g2pDe: g2pDe,
   predictCurve: predictCurve, letterHeatmap: letterHeatmap, topHardest: topHardest,
   injectWrongWords: injectWrongWords,
+  wbsync: wbsync,
   version: "1.3.0", algo: "FSRS-6" };
 
 /* ======================================================================

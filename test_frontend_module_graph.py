@@ -367,3 +367,68 @@ def test_a1_engines_present_in_main_window_exposer():
         exposer_idents.update(_exposer_block_identifiers(block))
     assert "A1Hoeren" in exposer_idents
     assert "A1Lesen" in exposer_idents
+
+
+# ── Workbench 进度 server 镜像同步（wbsync）─────────────────────────────────
+# 契约（docs/plans/workbench-progress-server-sync.md Task 3）：
+#  1. 5 个 saveXxx() 定义行都挂 `wbsync.push()` —— 本地一落盘就往 server 推；
+#  2. `wbsync.init()` 只在启动块 async IIFE（IDB hydrate 完成）之后才被调用；
+#  3. 有 轮询(pull/setInterval) / 切走(pushNow) / visibilitychange 三条路径；
+#  4. 用到 X-WB-Key + /api/wb/state，且 __wb 调试出口暴露 wbsync。
+# 全部走「定位行号 + 子串」而非「全文含某串」，避免死断言。
+
+def _workbench_lines():
+    path = Path("static/german/workbench.html")
+    assert path.exists(), "workbench.html 缺失"
+    return path.read_text(encoding="utf-8").splitlines()
+
+
+def _line_no(lines, fragment, start=0):
+    for i in range(start, len(lines)):
+        if fragment in lines[i]:
+            return i
+    raise AssertionError(f"workbench.html 缺含 {fragment!r} 的行")
+
+
+def test_workbench_wbsync_save_hooks_on_each_store():
+    lines = _workbench_lines()
+    for fn in ("saveWords", "saveCards", "saveLog", "saveWrong", "saveSettings"):
+        i = _line_no(lines, f"function {fn}() {{")
+        assert "wbsync.push()" in lines[i], (
+            f"{fn}() 定义行未挂 wbsync.push()（保存后不推 server）"
+        )
+
+
+def test_workbench_wbsync_init_after_idb_hydrate_block():
+    lines = _workbench_lines()
+    i_async = _line_no(lines, "(async () => {")
+    assert i_async > _line_no(lines, "loadAll();"), (
+        "启动块必须是 loadAll() → async IIFE 的顺序"
+    )
+    i_init = _line_no(lines, "wbsync.init();", start=i_async)
+    assert i_init > i_async, (
+        "wbsync.init() 必须先于 async IIFE（IDB hydrate）执行会丢数据："
+        "IDB 数据可能晚到并覆盖 S"
+    )
+
+
+def test_workbench_wbsync_trigger_paths_present():
+    lines = _workbench_lines()
+    src = "\n".join(lines)
+    # 模块头、端点与鉴权头
+    assert "const wbsync = " in src
+    assert "X-WB-Key" in src
+    assert '"/api/wb/state"' in src or "'/api/wb/state'" in src
+    # visibilitychange：回前台拉 / 离开前推
+    vis = _line_no(lines, "visibilitychange")
+    assert vis > 0
+    # 轮询路径
+    assert "setInterval" in src
+    # __wb 调试出口暴露 wbsync（对象字面量跨多行，扫到块结束 "};"）
+    i_debug = _line_no(lines, "window.__wb")
+    j = i_debug
+    while j < len(lines) and not lines[j].rstrip().endswith("};"):
+        j += 1
+    assert any("wbsync:" in l for l in lines[i_debug:j + 1]), (
+        "__wb 调试出口未暴露 wbsync"
+    )
