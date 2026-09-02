@@ -2698,3 +2698,69 @@ def test_review_queue_behaves_under_node():
         "配额 0 且豁免集已清空 ⇒ 重建后的队列里一个新词都不该留下，实际 %d 个"
         % rc["newInQueueAfterTrim"]
     )
+
+
+# --------------------------------------------------------------------------
+# Workbench 进度 server 镜像同步 · PUT body 契约（2026-09-02 事故回归）
+# --------------------------------------------------------------------------
+# 事故：pushNow() 发的是 `JSON.stringify(snapshot())` 裸快照，而 /api/wb/state 的
+# 服务端契约是 `{"payload": {...}}`（WbStateReq.payload，见 server.py 第 1424 行）。
+# 于是 payload 取不到 → wb_state 永远存 {}、GET 永远空 → 跨设备进度永远合并不进来，
+# 用户看到的症状就是「工作台看不到词汇进度」。
+#
+# 当时的 wbsync「存在性」测试只断言了字符串在不在，契约断裂它一条都抓不到 ——
+# 静态断言死测（本仓库教训，见 tools/wb_merge_probe.mjs 注释）。所以这里像 merge /
+# queue 探针一样，把 workbench.html 里 **真实 wbsync 源码** 切进 node:vm、桩掉 fetch
+# 抓它实际发出的请求体来钉契约 —— 探针里没有一份重抄的实现。
+#
+# 变异验证（改坏实现必红）：
+#   把 workbench.html 里 body 退回 `JSON.stringify(snapshot())` → 探针
+#   put.topKeys 变成 [] → 本测试红；包回 `{ payload: snapshot() }` → 绿。
+
+
+def test_wbsync_put_body_wraps_payload():
+    """动态探针：wbsync 的 PUT body 必须带 payload 层，对齐服务端 WbStateReq 契约。
+
+    覆盖（静态正则证明不了的）：
+      - PUT /api/wb/state 的请求体顶层必须是单键 payload —— 裸快照会被服务端
+        解析成空 payload（WbStateReq 默认值），进度镜像永远存 {}；
+      - payload 必须含 words/cards/log/wrong/settings 五存储键（snapshot() 全量镜像）；
+      - payload.words 必须带上沙箱种子词（证明 snapshot 引用的是真 S，不是空壳）；
+      - PUT 必须带 X-WB-Key 鉴权头。
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_sync_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_sync_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)
+
+    # boot() 流程：先在本机取 key，再 GET 镜像，server 空时用本机快照做种子 PUT
+    methods = [(r["method"], r["url"]) for r in out["requests"]]
+    assert methods == [
+        ("GET", "/api/wb/state/key"),
+        ("GET", "/api/wb/state"),
+        ("PUT", "/api/wb/state"),
+    ], "boot 请求序列变了：%r" % (methods,)
+
+    put = out["put"]
+    assert put["topKeys"] == ["payload"], (
+        "PUT body 顶层必须是单键 payload（服务端 WbStateReq 契约）。"
+        "如果这里变成 []，说明有人把 body 退回裸快照 JSON.stringify(snapshot()) —— "
+        "wb_state 会永远存 {}，跨设备进度合并不进来。实际：%r" % (put["topKeys"],)
+    )
+    for k in ("words", "cards", "log", "wrong", "settings"):
+        assert k in put["payloadKeys"], "payload 缺存储键 %s：%r" % (k, put["payloadKeys"])
+    assert put["payloadHasSeed"] is True, (
+        "payload.words 没带上沙箱种子词 probe-sync-1 —— snapshot() 没引用真 S，"
+        "这台镜像只是空壳，拉过去等于什么都没同步"
+    )
+    assert any(r["hasKeyHeader"] for r in out["requests"]), "PUT 没带 X-WB-Key 鉴权头"

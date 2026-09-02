@@ -1089,10 +1089,12 @@ const wbsync = (() => {
   }
   function pushNow() {
     if (!_enabled || !_key) return;
+    // 服务端契约是 {"payload": {...}}（WbStateReq），裸快照会被解析成空 payload，
+    // wb_state 永远存 {}、GET 永远空 → 进度合并不进来（2026-09-02 线上事故根因）。
     fetch(ENDPOINT, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-WB-Key": _key },
-      body: JSON.stringify(snapshot()),
+      body: JSON.stringify({ payload: snapshot() }),
     }).catch(() => { /* server 不可达：本地数据已安全，静默 */ });
   }
   function push() {
