@@ -1104,7 +1104,7 @@ const wbsync = (() => {
     if (!_enabled || !_key || _busy) return;
     _busy = true;
     try {
-      const r = await fetch(ENDPOINT);
+      const r = await fetch(ENDPOINT, { cache: "no-store" });
       if (!r.ok) return;
       const remote = await r.json();
       if (!remote || typeof remote !== "object") return;
@@ -1118,7 +1118,7 @@ const wbsync = (() => {
   }
   async function boot() {
     try {
-      const kr = await fetch(ENDPOINT + "/key");
+      const kr = await fetch(ENDPOINT + "/key", { cache: "no-store" });
       if (!kr.ok) return;
       _key = (await kr.json()).key;
       _enabled = true;
