@@ -2,6 +2,7 @@ import os
 import json
 import re
 import time
+import gc
 import ipaddress
 import pytest
 from fastapi.testclient import TestClient
@@ -43,6 +44,11 @@ def lan_client():
 
 @pytest.fixture(autouse=True)
 def clean_db():
+    # sqlite3.Connection 与内部 statement 互为引用环：`with get_db(...)` 只提交
+    # 事务不 close，文件句柄要等循环 GC 才释放。Windows 上句柄未释放时 os.remove
+    # 抛 PermissionError（被吞），旧 DB 带着上一测试的数据残留下来 → 隔离失效。
+    # 删除前先 gc.collect()，把上一测试遗留的连接环清掉，删除才确定成功。
+    gc.collect()
     for f in ("test_delector.db", "test_progress.db"):
         if os.path.exists(f):
             try:
@@ -51,6 +57,7 @@ def clean_db():
                 pass
     init_db("test_delector.db")
     yield
+    gc.collect()
     for f in ("test_delector.db", "test_progress.db"):
         if os.path.exists(f):
             try:
@@ -3680,3 +3687,19 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
     spec = open(spec_path, encoding="utf-8").read()
     assert "'corpus_dict'" in spec
     assert "'routes_corpus'" in spec
+
+
+# ── Workbench 进度 server 同步（docs/plans/workbench-progress-server-sync.md）──
+
+def test_wb_state_roundtrip():
+    """save_wb_state → get_wb_state 回读一致，且可覆盖写入。"""
+    assert server.get_wb_state() == {}
+    server.save_wb_state({"words": []})
+    assert server.get_wb_state() == {"words": []}
+    server.save_wb_state({"words": [1]})
+    assert server.get_wb_state() == {"words": [1]}
+
+
+def test_wb_state_empty_returns_empty_dict():
+    """空 DB（从未写入）get_wb_state 返回 {}，不抛异常。"""
+    assert server.get_wb_state() == {}

@@ -258,6 +258,15 @@ def init_db(db_path: Optional[str] = None):
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        # Workbench 背词进度 server 镜像：单行表，payload 存整份
+        # {words, cards, log, wrong, settings} JSON。单用户无账号，行 id 钉死 1。
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS wb_state (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                payload TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        """)
 
         # Migrations for existing databases
         for tbl in ["vocab_cards", "grammar_cards"]:
@@ -312,6 +321,55 @@ def set_setting(key: str, value: str, db_path: Optional[str] = None):
             VALUES (?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
         """, (key, value))
+
+
+def _close_db_conn(conn):
+    """确定性关闭 get_db 打开的连接。
+
+    `with get_db(...)` 只提交/回滚事务并不会 close：sqlite3.Connection 会因内部
+    statement 缓存形成引用环，文件句柄要等循环 GC 才释放。Windows 上 clean_db
+    的 os.remove 靠 busy 重试可绕过，但正确做法是主动 close，不依赖 GC 时机。
+    """
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def get_wb_state(db_path: Optional[str] = None) -> dict:
+    """读 workbench 背词进度 server 镜像；无记录或解析失败一律返回 {}。"""
+    conn = get_db(db_path)
+    try:
+        row = conn.execute(
+            "SELECT payload FROM wb_state WHERE id = 1"
+        ).fetchone()
+    finally:
+        _close_db_conn(conn)
+    if not row:
+        return {}
+    try:
+        data = json.loads(row["payload"])
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_wb_state(payload: dict, db_path: Optional[str] = None):
+    """单行 upsert workbench 背词进度镜像（id 恒为 1）。"""
+    updated_at = datetime.now().isoformat()
+    text = json.dumps(payload, ensure_ascii=False)
+    conn = get_db(db_path)
+    try:
+        with conn:
+            conn.execute("""
+                INSERT INTO wb_state (id, payload, updated_at)
+                VALUES (1, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    payload = excluded.payload,
+                    updated_at = excluded.updated_at
+            """, (text, updated_at))
+    finally:
+        _close_db_conn(conn)
 
 
 def get_effective_api_key(db_path: Optional[str] = None) -> str:
@@ -806,6 +864,8 @@ __all__ = [
     "init_db",
     "get_setting",
     "set_setting",
+    "get_wb_state",
+    "save_wb_state",
     "get_effective_api_key",
     "get_effective_api_base_url",
     "get_effective_api_model",
