@@ -396,6 +396,23 @@ def test_grade_ai_and_success_alerts_use_notify():
         assert needed in Path(path).read_text(encoding="utf-8"), f"{path} 写路径 alert 被误删: {needed}"
 
 
+def test_workbench_legacy_lan_panel_disabled():
+    """旧「6 位短码」手动 P2P 面板已停用：lanDetect 启动即整体禁用按钮。
+
+    /api/wb/sync/store|fetch 已强制配对密钥 X-WB-Key（M1-2），旧面板请求不带 key
+    必 403——防将来有人「复活」按钮却忘端点鉴权，用户点了静默失败。"""
+    from pathlib import Path
+    html = Path("static/german/workbench.html").read_text(encoding="utf-8")
+    assert "function lanDisableLegacyPanel()" in html, "停用 helper 缺失"
+    assert "lanDisableLegacyPanel();" in html, "helper 未被调用"
+    # 面板说明停用原因并引导到镜像同步
+    assert "手动短码 P2P 已停用" in html
+    assert "镜像自动同步" in html
+    for btn in ("btnLanOffer", "btnLanAcceptAnswer", "btnLanAcceptOffer",
+                "btnLanCopyOffer", "btnLanCopyAnswer"):
+        assert f'"{btn}"' in html, f"按钮 {btn} 未纳入停用清单"
+
+
 # ── M3-2/3/4: 陈旧响应守卫 + blob URL 撤销 + PWA 温和更新 ────────────────────
 
 def test_reader_writer_cards_stale_guards():

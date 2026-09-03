@@ -659,9 +659,10 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
   <!-- F5 · LAN 同步（6 位短码，WebRTC P2P） -->
   <div class="panel" id="lanSyncPanel" style="display:none">
     <h2>LAN 同步（6 位短码，WebRTC P2P）</h2>
-    <div class="guide" style="font-size:13px;line-height:1.7">
-      两台设备在同一局域网内，通过 6 位短码即可点对点极速同步进度与词库。<br>
-      <b>流程</b>：A 设备生成短码 → B 设备输入该短码并生成回执 → A 设备输入回执短码 → 自动传输并合并。
+    <div class="guide" style="font-size:13px;line-height:1.7;color:#b8860b">
+      ⚠ 手动短码 P2P 已停用：服务端已启用配对密钥鉴权（X-WB-Key），短码端点不再对未配对请求开放。<br>
+      进度同步请使用下方「镜像自动同步（配对密钥 · 后台静默）」——配对一次后自动后台对账，无需手动传码。
+      <b>下方短码按钮为旧版遗留（保留仅为兼容旧书签/指引），点击不再生效。</b>
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
       <label style="font-size:13px"><input type="radio" name="lanRole" value="A" checked> 我是发送方 A</label>
@@ -3303,17 +3304,23 @@ let _lanRole = "A";
 
 function lanSetStatus(msg) { $("lanStatus").textContent = msg; }
 
+// 手动短码 P2P 自 M1-2 起停用：/api/wb/sync/store|fetch 已强制配对密钥 X-WB-Key，
+// 而本旧面板请求不带 key → 点击必 403。面板保留仅供旧书签/指引，按钮整体禁用。
+function lanDisableLegacyPanel() {
+  ["btnLanOffer", "btnLanAcceptAnswer", "btnLanAcceptOffer", "btnLanCopyOffer", "btnLanCopyAnswer"].forEach(id => {
+    const el = $(id); if (el) { el.disabled = true; el.style.opacity = 0.5; }
+  });
+}
+
 // 启动时检测 WebRTC 可用性
 function lanDetect() {
   if (typeof RTCPeerConnection === "undefined") return;
   $("lanSyncPanel").style.display = "block";
-  // file:// 协议下 WebRTC 被浏览器安全策略完全禁止，ICE 必失败
+  lanDisableLegacyPanel();
   if (location.protocol === "file:") {
-    lanSetStatus("⚠️ file:// 下 WebRTC 不可用。请改用 http:// 访问：电脑跑 python -m http.server 8000，然后浏览器打开 http://localhost:8000/workbench.html，另一设备打开 http://<电脑IP>:8000/workbench.html");
-    // 禁用所有 LAN 同步按钮，避免无效操作
-    ["btnLanOffer", "btnLanAcceptAnswer", "btnLanAcceptOffer", "btnLanCopyOffer", "btnLanCopyAnswer"].forEach(id => {
-      const el = $(id); if (el) { el.disabled = true; el.style.opacity = 0.5; }
-    });
+    lanSetStatus("⚠️ file:// 下 WebRTC 不可用。请改用 http:// 访问，再使用下方「镜像自动同步（配对密钥）」配对同步。");
+  } else {
+    lanSetStatus("⚠ 手动短码模式已停用（短码端点现要求配对密钥）。请使用下方「镜像自动同步」：保存配对后自动后台对账。");
   }
 }
 
