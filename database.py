@@ -397,6 +397,16 @@ def regenerate_wb_sync_key(db_path: Optional[str] = None) -> str:
     return key
 
 
+def verify_wb_key(provided: Optional[str], expected: Optional[str]) -> bool:
+    """X-WB-Key 恒定时间校验统一入口。
+
+    `secrets.compare_digest` 是恒定时间比较（长度与内容不产生可观测时序差），
+    直接 `!=` 会让 key 校验成为时序侧信道。所有使用 X-WB-Key 鉴权的位置
+    （wb state PUT / sync 信令 / rtc 信令）都必须走这里，禁止再写裸 `!=`。
+    """
+    return secrets.compare_digest(str(provided or ""), str(expected or ""))
+
+
 def get_effective_api_key(db_path: Optional[str] = None) -> str:
     return get_setting("DEEPSEEK_API_KEY", "", db_path=db_path)
 

@@ -11,7 +11,7 @@ import threading
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from database import get_wb_sync_key
+from database import get_wb_sync_key, verify_wb_key
 
 router = APIRouter(prefix="/api/wb/sync", tags=["WebRTC Sync"])
 
@@ -33,7 +33,7 @@ def _verify_wb_key(request: Request) -> None:
     信令要在 LAN 上中继 SDP，不能套 _require_localhost（那样手机永远进不来），
     改为沿用 PUT /api/wb/state 的「凭 key 说话」模型。
     """
-    if request.headers.get("X-WB-Key", "") != get_wb_sync_key():
+    if not verify_wb_key(request.headers.get("X-WB-Key"), get_wb_sync_key()):
         raise HTTPException(403, "invalid X-WB-Key")
 
 

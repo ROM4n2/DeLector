@@ -19,6 +19,7 @@ from database import (  # noqa: E402
     BACKUP_SETTINGS_WHITELIST,
     BACKUP_SETTINGS_EXPORT_WHITELIST,
     BACKUP_SETTINGS_IMPORT_WHITELIST,
+    verify_wb_key,
 )
 
 
@@ -90,3 +91,37 @@ def test_backup_whitelist_split_semantics():
     assert "API_BASE_URL" in BACKUP_SETTINGS_EXPORT_WHITELIST
     assert "API_MODEL" in BACKUP_SETTINGS_EXPORT_WHITELIST
     assert BACKUP_SETTINGS_IMPORT_WHITELIST == ("TTS_VOICE", "TTS_RATE")
+
+
+# ── M1-2: X-WB-Key 恒定时间比较 ────────────────────────────────────────────
+
+def test_verify_wb_key_uses_compare_digest(monkeypatch):
+    """X-WB-Key 校验必须走 secrets.compare_digest（恒定时间），不能回退成 `!=`。"""
+    calls = []
+
+    def fake_compare(a, b):
+        calls.append((a, b))
+        return a == b
+
+    monkeypatch.setattr("database.secrets.compare_digest", fake_compare)
+    assert verify_wb_key("deadbeef", "deadbeef") is True
+    assert calls, "verify_wb_key 未调用 compare_digest"
+    assert verify_wb_key("deadbeef", "cafebabe") is False
+
+
+def test_wb_state_put_requires_valid_key(client):
+    """PUT /api/wb/state 正确 key 放行、错误 key 403。key 走本机端点获取。"""
+    key_res = client.get("/api/wb/state/key")
+    assert key_res.status_code == 200
+    real_key = key_res.json()["key"]
+
+    ok = client.put("/api/wb/state", json={"payload": {"k": "v"}},
+                    headers={"X-WB-Key": real_key})
+    assert ok.status_code == 200
+
+    bad = client.put("/api/wb/state", json={"payload": {"k": "v"}},
+                     headers={"X-WB-Key": "00000000000000000000000000000000"})
+    assert bad.status_code == 403
+
+    none = client.put("/api/wb/state", json={"payload": {"k": "v"}})
+    assert none.status_code == 403

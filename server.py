@@ -58,6 +58,7 @@ from database import (
     get_wb_state,
     save_wb_state,
     get_wb_sync_key,
+    verify_wb_key,
     regenerate_wb_sync_key,
     get_effective_api_key,
     get_effective_api_base_url,
@@ -1439,7 +1440,7 @@ def wb_get_state():
 
 @app.put("/api/wb/state")
 def wb_put_state(req: WbStateReq, request: Request):
-    if request.headers.get("X-WB-Key", "") != get_wb_sync_key():
+    if not verify_wb_key(request.headers.get("X-WB-Key"), get_wb_sync_key()):
         raise HTTPException(403, "invalid X-WB-Key")
     updated_at = save_wb_state(req.payload or {})
     return {"ok": True, "updated_at": updated_at}
