@@ -8,8 +8,10 @@ import json
 import secrets
 import time
 import threading
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+
+from database import get_wb_sync_key
 
 router = APIRouter(prefix="/api/wb/sync", tags=["WebRTC Sync"])
 
@@ -23,6 +25,16 @@ _sync_lock = threading.Lock()
 # 给出可行动指引而不是笼统的「无效码」。
 _SYNC_INSTANCE_ID = uuid.uuid4().hex[:12]
 _SYNC_STARTED_AT = time.time()
+
+
+def _verify_wb_key(request: Request) -> None:
+    """信令端点鉴权：X-WB-Key 须与本机同步密钥一致，否则 403。
+
+    信令要在 LAN 上中继 SDP，不能套 _require_localhost（那样手机永远进不来），
+    改为沿用 PUT /api/wb/state 的「凭 key 说话」模型。
+    """
+    if request.headers.get("X-WB-Key", "") != get_wb_sync_key():
+        raise HTTPException(403, "invalid X-WB-Key")
 
 
 def _cleanup_sync_cache() -> None:
@@ -52,7 +64,8 @@ def sync_instance_info():
 
 
 @router.post("/store")
-def sync_store_sdp(req: SyncStoreReq):
+def sync_store_sdp(req: SyncStoreReq, request: Request):
+    _verify_wb_key(request)
     raw_json = json.dumps(req.sdp)
     if len(raw_json.encode("utf-8")) > MAX_SDP_PAYLOAD_BYTES:
         raise HTTPException(400, "SDP payload 超过最大体积限制 (32KB)")
@@ -69,7 +82,8 @@ def sync_store_sdp(req: SyncStoreReq):
 
 
 @router.get("/fetch/{code}")
-def sync_fetch_sdp(code: str):
+def sync_fetch_sdp(code: str, request: Request):
+    _verify_wb_key(request)
     key = code.strip().upper()
     with _sync_lock:
         _cleanup_sync_cache()

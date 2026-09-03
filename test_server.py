@@ -3192,8 +3192,10 @@ def test_prep_saved_idempotent(client):
 
 def test_sync_sdp_store_and_fetch(client):
     """SDP 短码：存入后返回 6 位码，取出内容一致，再次 GET 返回 404（一次性消费）。"""
+    key = client.get("/api/wb/state/key").json()["key"]
     sdp = {"type": "offer", "sdp": "v=0\r\no=- 123456 2 IN IP4 127.0.0.1\r\ns=-\r\n"}
-    resp = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"})
+    resp = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"},
+                       headers={"X-WB-Key": key})
     assert resp.status_code == 200
     data = resp.json()
     assert "code" in data
@@ -3202,19 +3204,21 @@ def test_sync_sdp_store_and_fetch(client):
     assert code.isalnum()
 
     # 首次 GET 成功取出
-    fetch_resp = client.get(f"/api/wb/sync/fetch/{code}")
+    fetch_resp = client.get(f"/api/wb/sync/fetch/{code}", headers={"X-WB-Key": key})
     assert fetch_resp.status_code == 200
     fetch_data = fetch_resp.json()
     assert fetch_data["sdp"] == sdp
     assert fetch_data["role"] == "offer"
 
     # 再次 GET 返回 404（已被一次性消费）
-    assert client.get(f"/api/wb/sync/fetch/{code}").status_code == 404
+    assert client.get(f"/api/wb/sync/fetch/{code}",
+                      headers={"X-WB-Key": key}).status_code == 404
 
 
 def test_sync_sdp_fetch_invalid_code(client):
-    """查询不存在或过期的短码返回 404。"""
-    resp = client.get("/api/wb/sync/fetch/NON999")
+    """查询不存在或过期的短码返回 404（带对 key 才走到这一步）。"""
+    key = client.get("/api/wb/state/key").json()["key"]
+    resp = client.get("/api/wb/sync/fetch/NON999", headers={"X-WB-Key": key})
     assert resp.status_code == 404
 
 
@@ -3231,18 +3235,66 @@ def test_sync_info_endpoint(client):
     assert resp2.json()["instance_id"] == data["instance_id"]
 
 
-def test_sync_sdp_lan_accessible(lan_client):
-    """局域网设备间同步：端点不应被仅限本地的 _require_localhost 误伤拦截。"""
+def test_sync_sdp_lan_accessible(client, lan_client):
+    """局域网设备间同步：端点不应被仅限本地的 _require_localhost 误伤拦截。
+
+    注意 key 只能从本机端点取（lan 取 key 是 403），拿到后 lan 侧凭 key 读写——
+    这正是「凭 key 说话」而非「凭来源 IP 说话」的模型。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
     sdp = {"type": "answer", "sdp": "v=0\r\no=- 654321 2 IN IP4 192.168.1.77\r\ns=-\r\n"}
-    resp = lan_client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "answer"})
+    resp = lan_client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "answer"},
+                           headers={"X-WB-Key": key})
     assert resp.status_code == 200
     code = resp.json()["code"]
     assert len(code) == 6
 
-    fetch_resp = lan_client.get(f"/api/wb/sync/fetch/{code}")
+    fetch_resp = lan_client.get(f"/api/wb/sync/fetch/{code}", headers={"X-WB-Key": key})
     assert fetch_resp.status_code == 200
     assert fetch_resp.json()["sdp"] == sdp
     assert fetch_resp.json()["role"] == "answer"
+
+
+def test_sync_store_requires_key(client):
+    """信令 store 须带 X-WB-Key：缺 key / 错 key 均 403（SDP 要在 LAN 上中继，不能裸奔）。"""
+    sdp = {"type": "offer", "sdp": "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\ns=-\r\n"}
+    assert client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"}).status_code == 403
+    wrong = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"},
+                        headers={"X-WB-Key": "0" * 32})
+    assert wrong.status_code == 403
+
+
+def test_sync_fetch_requires_key(client):
+    """信令 fetch 同样须带 key：否则任何人都能截获/消费对端的 SDP 短码。"""
+    key = client.get("/api/wb/state/key").json()["key"]
+    sdp = {"type": "answer", "sdp": "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=-\r\n"}
+    code = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "answer"},
+                       headers={"X-WB-Key": key}).json()["code"]
+
+    assert client.get(f"/api/wb/sync/fetch/{code}").status_code == 403
+    assert client.get(f"/api/wb/sync/fetch/{code}",
+                      headers={"X-WB-Key": "0" * 32}).status_code == 403
+    # 403 不得有副作用：短码没被上述失败请求消费掉，带对 key 仍能取到
+    ok = client.get(f"/api/wb/sync/fetch/{code}", headers={"X-WB-Key": key})
+    assert ok.status_code == 200
+    assert ok.json()["sdp"] == sdp
+
+
+def test_sync_store_preflight_allows_post_and_key(lan_client):
+    """store 是 POST 且带 X-WB-Key → 预检必须放行 POST 方法与自定义头。
+
+    Allow-Methods 缺 POST 会让跨域浏览器在预检阶段就被拒，信令永远发不出去。
+    """
+    origin = "http://127.0.0.1:8000"
+    r = lan_client.options("/api/wb/sync/store", headers={
+        "Origin": origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type, x-wb-key",
+    })
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == origin
+    assert "POST" in r.headers.get("access-control-allow-methods", "")
+    assert "X-WB-Key" in r.headers.get("access-control-allow-headers", "")
 
 
 # ── v4.7.0 架构与数据完整性改造 TDD 契约 ───────────────────────────────────────
@@ -3345,17 +3397,21 @@ def test_sync_sdp_cache_capacity_and_size_limit(client):
     """WebRTC SDP 暂存必须有条目上限（FIFO 淘汰）与体积极限，防止内存无界膨胀。"""
     from server import _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
 
+    key = client.get("/api/wb/state/key").json()["key"]
+
     # 1. 超过最大容量时自动剔除老数据
     for i in range(MAX_SYNC_CACHE_ENTRIES + 10):
         sdp = {"type": "offer", "sdp": f"mock_sdp_{i}"}
-        res = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"})
+        res = client.post("/api/wb/sync/store", json={"sdp": sdp, "role": "offer"},
+                          headers={"X-WB-Key": key})
         assert res.status_code == 200
 
     assert len(_sync_sdp_cache) <= MAX_SYNC_CACHE_ENTRIES
 
-    # 2. 超大 payload 拒绝（400）
+    # 2. 超大 payload 拒绝（400）——鉴权在前，带对 key 才会走到体积检查
     huge_sdp = {"type": "offer", "sdp": "A" * (65 * 1024)}
-    res_huge = client.post("/api/wb/sync/store", json={"sdp": huge_sdp, "role": "offer"})
+    res_huge = client.post("/api/wb/sync/store", json={"sdp": huge_sdp, "role": "offer"},
+                           headers={"X-WB-Key": key})
     assert res_huge.status_code == 400
 
 
@@ -3659,11 +3715,13 @@ def test_task1_sync_router_thread_safety(client):
     import routes_sync
     assert hasattr(routes_sync, "_sync_lock")
 
-    store_res = client.post("/api/wb/sync/store", json={"sdp": {"type": "offer", "sdp": "v=0..."}, "role": "offer"})
+    key = client.get("/api/wb/state/key").json()["key"]
+    store_res = client.post("/api/wb/sync/store", json={"sdp": {"type": "offer", "sdp": "v=0..."}, "role": "offer"},
+                            headers={"X-WB-Key": key})
     assert store_res.status_code == 200
     code = store_res.json()["code"]
 
-    fetch_res = client.get(f"/api/wb/sync/fetch/{code}")
+    fetch_res = client.get(f"/api/wb/sync/fetch/{code}", headers={"X-WB-Key": key})
     assert fetch_res.status_code == 200
     assert fetch_res.json()["role"] == "offer"
 

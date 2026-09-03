@@ -1482,6 +1482,8 @@ def wb_lan_info():
 _WB_CORS_EXACT_PATHS = {"/api/wb/state", "/api/wb/state/key"}
 _WB_CORS_PREFIX = "/api/wb/sync/"
 _WB_CORS_ALLOW_HEADERS = "Content-Type, X-WB-Key"
+# store / rtc 信令是 POST：缺 POST 会让跨域浏览器在预检阶段就被拒（回归）。
+_WB_CORS_ALLOW_METHODS = "GET, PUT, POST, OPTIONS"
 
 
 def _is_private_origin(origin: str) -> bool:
@@ -1517,7 +1519,7 @@ async def _wb_sync_cors(request: Request, call_next):
             return Response(status_code=403)
         return Response(status_code=200, headers={
             "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+            "Access-Control-Allow-Methods": _WB_CORS_ALLOW_METHODS,
             "Access-Control-Allow-Headers": _WB_CORS_ALLOW_HEADERS,
             "Access-Control-Max-Age": "600",
         })
