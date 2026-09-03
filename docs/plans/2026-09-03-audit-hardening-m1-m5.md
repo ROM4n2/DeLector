@@ -1,7 +1,7 @@
 # DeLector 全仓库审计修复实施计划（M1–M5）
 
 > **Goal**: 修复 2026-09-03 vault-team 全仓库审计（多域并行只读侦察）产出的 P1/P2 问题：安全止血 → 数据库索引与连接 → 前端竞态与 UX → NLP 热路径 → 测试与健壮性收口。M1 安全优先，其余按里程碑顺序推进，每个 Task 原子提交。
-> **Status (2026-09-03 收口)**: M1（1-5）、M2（1-4）、M3（1-4）、M4-1、M4-2、M5-1、M5-2、M5-4 ✅；M4-3 按计划跳过（带证）；M5-3 部分完成（3/5：计时器防叠 / pull 退避 / rtc 瞬态不累计；LAN 按钮 disabled 与 alert 收敛 ≤5 未做）。执行明细、决策与验证证据见 `docs/plans/2026-09-03-audit-hardening-m1-m5-ledger.md`。
+> **Status (2026-09-03 收口)**: M1（1-5）、M2（1-4）、M3（1-4）、M4-1、M4-2、M5-1、M5-2、M5-3（全项）、M5-4 ✅；M4-3 评审确认跳过（原假设不成立，见 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md`）。执行明细、决策与验证证据见 `docs/plans/2026-09-03-audit-hardening-m1-m5-ledger.md`。
 > **Tech Stack**: Python 3.10+ / FastAPI / sqlite3 / 原生 ES Modules（零构建）/ node:vm 探针
 > **Spec Reference**: 2026-09-03 vault-team 审计合成报告（会话内交付）；既有 stage-a/b 文档 `docs/plans/2026-09-03-lan-silent-sync-stage-a(-ledger).md`、`-stage-b(-ledger).md`；ADR-0004（stage-b，proposed）
 > **Global Constraints**:

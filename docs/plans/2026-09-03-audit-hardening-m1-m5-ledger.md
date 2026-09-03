@@ -30,10 +30,10 @@
 | M3 | M3-4 PWA 温和更新 | ✅ | 去掉 `client.navigate` 硬刷；广播 `postMessage` + 页面提示「点击刷新」 |
 | M4 NLP 热路径 | M4-1 常量/正则提升 | ✅ | writing_rules（4 冠词表、A1 判题词表/日期正则、email 词表）、linguistics（复数表/前缀）、nlp（CEFR 后缀元组）、syntax_tree `_ABBR_PATTERN`（补遗 commit `187ae15`）。纯规则模块整跑绿 |
 | M4 | M4-2 缓存纯函数 | ✅ | `split_komposita` JSON 背衬 lru（`_split_komposita_json_cached`，返回全新对象防共享变异）+ `lookup_core_vocab` 命中共享条目（`_core_entry_cached`，调用方逐点审计仅读）。RED→GREEN：`test_lookup_core_vocab_hit_shared_no_news` / `test_split_komposita_cached_fresh_equal_results` / `test_m4_hot_path_lru_caches_structural` |
-| M4 | M4-3 从句拓扑去重 | ⏭️ 跳过（计划允许，理由见下） | 见「决策记录」 |
+| M4 | M4-3 从句拓扑去重 | ⏭️ 跳过（评审确认，非「没空做」） | 组合路径每句仅一次 spaCy 解析、从句级调用走 clause_tokens 纯 Python 分支，原假设不成立；去重需切分+分配深度耦合重写且无 golden 快照。见 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md` |
 | M5 收口 | M5-1 6 模块临时库隔离 | ✅ | goethe_a1/lesen/hoeren/writing、corpus、audit_regressions 顶部设 `DATABASE_PATH` + module 级清理 fixture；隔离库名进 gitignore（`*.db*`）；37 passed |
 | M5 | M5-2 解析护栏 + 相对路径 | ✅ | `_top_fn_segment` helper 收敛 11 处 `split(声明)[1].split("\nfunction ")[0]`；改名标记变异演练显式红（DRILL OK）；writing 测试改 `Path(__file__)` 相对读文件 |
-| M5 | M5-3 前端 P2 收口 | 🔶 部分完成（见下） | a1_lesen 计时器防叠 / pull 指数退避（5s→30s cap）/ rtc `disconnected` 瞬态不累计失败 三项已落地 + 结构护栏测试；LAN 按钮在途 disabled 与 ~30 处 `alert(` 批量收敛**未做** |
+| M5 | M5-3 前端 P2 收口 | ✅ 全项完成 | 计时器防叠 / pull 指数退避（5s→30s cap）/ rtc `disconnected` 不累计（`96b19d8`）；旧短码 LAN 面板停用标注+按钮整体禁用（`61391b1`，端点 M1-2 起强制 X-WB-Key、面板不带 key 必 403）；AI 判分/成功提示类残余 alert→notify、写路径保留并加双面护栏（`c492f43`） |
 | M5 | M5-4 server `__all__` 收口 | ✅ | 剔除 `spacy/SPACY_MODEL_CANDIDATES/AUTO_DOWNLOAD_MODEL/_load_spacy_model/calculate_cefr_stats/_process_german_text_pure_python`（server 内无消费者，逐 token grep 核过）；保留 `nlp/NLP_ENGINE/NLP_ENGINE_DETAIL/SYSTEM_GRAMMAR_PROMPT`（有真实消费）。pyflakes 0 告警 + import 冒烟绿 |
 
 ## 本会话新增测试（test_audit_hardening.py）
@@ -43,21 +43,29 @@
 
 ## 决策记录
 
-1. **M4-3 跳过（高风险，计划允许带证跳过）**：`build_clause_tree` 每从句重算 `analyze_sentence_topology`
-   的行为依赖整句 spaCy doc + 子句边界的局部修正，去重需先固化全量 golden 再做行为 diff，
-   是 M4 中最敏感改动。按计划「若评估为不可安全去重，记录结论并跳过」处理：
-   本批次优先落地了零风险的 M4-1/M4-2（常量提升 + 纯函数缓存，已覆盖读路径主开销中的
-   大部分每次调用重建成本），M4-3 留待独立评审批次（需求：golden 快照 + 逐步下传 token 预处理）。
-2. **M5-3 只完成了计划内的 5 项中的 3 项**：
+1. **M4-3 跳过（已评审确认，非「没空做」）**：原假设「每从句重算整句 topology（可能二次
+   spaCy）」在生产读路径不成立——`process_german_text`/`_analyze_syntax_tree_doc` 均以
+   `doc.sents` 的 Span 传入，spaCy 每句恰一次；从句级 `analyze_sentence_topology`
+   （syntax_tree.py:1143）走 `clause_tokens` 分支纯 Python 字段分配。残余可去重面
+   是每从句 O(子句长) 常数扫描，去重需把依赖整句依赖树的子句切分与按 `clause_type`
+   覆盖分配的五字段算法深度耦合重写，无 golden 快照时行为回归面不可控。替代的零风险
+   优化已同批落地（M4-1 常量/正则提升、M4-2 split_komposita/lookup_core_vocab 缓存）。
+   详见 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md`。
+2. **M5-3 全项完成**（原只完成 3/5）：
    - ✅ `a1_lesen.startLesenTimer` 开头 `clearInterval`（防叠）；
-   - ✅ `pull()` 失败指数退避（保留 `_busy`/防抖结构不动，用跳 tick 实现 5s→30s cap）；
-   - ✅ `rtcOnStateChange` 仅 `failed/closed` 计入 `_rtcFails`（`disconnected` 视瞬态不累计，避免误降级）；
-   - ⏳ LAN 同步按钮在途 disabled（`workbench.html` 旧版 btnLanOffer/btnLanAcceptAnswer 已属被
-     Stage B `wbsync.rtc` 取代的旧面板，需要先确认当前活跃入口再改，避免改错面板）；
-   - ⏳ `alert(` → `notify()` 批量收敛（当前 static/js + html 残留 **36 处**，目标 ≤5）：
-     涉及 12 个模块，且 reader/writer 的若干 `alert` 文案/结构被 `test_writer_mobile.py`
-     等字符串契约钉住，需逐点换 + 同步测试特征串 —— 适合独立批次完成，不宜在收尾仓促批量。
-   承诺的目标测试（wbsync node 探针 + `startLesenTimer` 结构断言）已由新增护栏测试部分覆盖。
+   - ✅ `pull()` 失败指数退避（保留 `_busy`/防抖结构不动，5s→30s cap）；
+   - ✅ `rtcOnStateChange` 仅 `failed/closed` 计入 `_rtcFails`（`disconnected` 视瞬态）；
+   - ✅ **旧 6 位短码 LAN 面板停用**（`61391b1`）：M1-2 起 `/api/wb/sync/store|fetch`
+     强制 X-WB-Key，旧面板请求不带 key → 必 403，属死 UI。处置：`lanDisableLegacyPanel()`
+     启动即整体禁用按钮 + 面板说明改为停用原因并引导到「镜像自动同步」；面板代码保留
+     供回滚。新护栏 `test_workbench_legacy_lan_panel_disabled` 防复活忘鉴权。
+   - ✅ **alert→notify 收敛**（`c492f43`）：按 M3-1 固化规则「读/抓取/AI/后台路径错误与
+     轻量成功走 notify，写路径/输入校验保留 alert」逐点分类。本轮转 notify 8 处：
+     AI/判分失败（reader 语法剖析、a1_lesen/a1_hoeren/a1_writer/cloze 判分）+
+     成功/轻量提示（main 设置保存成功、cards 缓存空/清理成功）；写失败/输入校验/
+     「成功+紧随 reload」28 处保留。静态残留 alert 36→28（余者全部落保留区）。
+     新护栏 `test_grade_ai_and_success_alerts_use_notify` 双面断言（notify 白名单 +
+     写路径保留点）防回潮。
 
 ## 验证证据（本会话尾段）
 
@@ -66,12 +74,16 @@
 - workbench/写作：`test_german_workbench.py test_goethe_a1_writing.py` = **87 passed**（`_top_fn_segment` 变异演练 RED OK）
 - 前端：`test_frontend_module_graph / test_frontend_security / test_writer_mobile` = **45 passed**
 - M5-1 六模块 = **37 passed**；M5-4 import 冒烟 + `test_audit_regressions + test_goethe_a1_lesen` = **11 passed**
+- M5-3 收尾：alert/notify 定向 **3 passed**；`test_frontend_module_graph + test_writer_mobile
+  + test_frontend_security + test_german_workbench` = **124 passed**；LAN 面板护栏 **1 passed**
+  （workbench 全量 79 passed 单独验证）
 - `pyflakes` 0 告警（server/linguistics/core_dict/nlp/syntax_tree）
 - 本会话 commit：`187ae15`（M4-1 补遗）→ `4d7c1f6`（M4-2）→ `ac08fa3`（M5-1）→
-  `635f5db`（M5-2）→ `96b19d8`（M5-3 前端三项）→ `9fea63e`（M5-4）
+  `635f5db`（M5-2）→ `96b19d8`（M5-3 前端三项）→ `9fea63e`（M5-4）→ `c492f43`
+  （M5-3 alert 收敛）→ `61391b1`（M5-3 LAN 面板停用）
 
 ## 未完成 / 建议后续
 
-1. M5-3 剩余两项（LAN 按钮 disabled 定位活跃入口后改；alert 收敛 ≤5 —— 建议立独立 Task）。
-2. M4-3 如需做：golden 快照 → 尝试去重 → 行为 diff 全绿才提交（plan 已允许独立评审）。
-3. 全量回归建议在可整跑环境执行一次（本环境因 safe-delete 守卫只做了定向子集）。
+1. 全量回归建议在可整跑环境执行一次（本环境因 safe-delete 守卫只做了定向子集，
+   M1–M5 各定向子集均已绿）。M4-3 若未来仍要推进：先固化全量 golden 快照再谈行为 diff
+   （评审文档第 4 节已列前置条件）。
