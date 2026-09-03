@@ -59,6 +59,96 @@ def clean_db():
                 pass
 
 
+# ── M2-2: progress stats 单次扫描语义锁定（重构后仍必须成立）────────────────
+
+def _insert_study_log(date_iso: str, minutes: int = 10):
+    conn = sqlite3.connect("test_audit_progress.db")
+    try:
+        conn.execute(
+            "INSERT INTO study_log (event_type, logged_at) VALUES (?, ?)",
+            ("master_card", f"{date_iso} 10:00:00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_streak_semantics_preserved(client):
+    """打卡语义必须原样保留：today 无记录 → 0（即使昨天连续）；today 有 →
+    从 today 回溯连续天数；断档之外的历史不再延长。"""
+    from datetime import datetime, timedelta
+    today = datetime.now().date()
+    _insert_study_log((today - timedelta(days=1)).isoformat())
+    _insert_study_log((today - timedelta(days=2)).isoformat())
+    assert client.get("/api/progress/stats").json()["streak"] == 0
+
+    _insert_study_log(today.isoformat())
+    assert client.get("/api/progress/stats").json()["streak"] == 3
+
+    # 断档（-3 缺失）之前的历史天不向后延长
+    _insert_study_log((today - timedelta(days=4)).isoformat())
+    assert client.get("/api/progress/stats").json()["streak"] == 3
+
+
+def test_trend_keeps_zero_shape_for_missing_days(client):
+    """30 天趋势补零形状不变：只有实际存在的天带真实值，缺的天是精确的零形状。"""
+    from datetime import datetime, timedelta
+    today = datetime.now().date()
+    present = (today - timedelta(days=5)).isoformat()
+    conn = sqlite3.connect("test_audit_progress.db")
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO daily_summary "
+            "(date, cards_added, cards_mastered, articles_read, quiz_sessions, study_minutes) "
+            "VALUES (?, 3, 2, 1, 4, 25)",
+            (present,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    data = client.get("/api/progress/stats").json()
+    trend = data["trend"]
+    assert len(trend) == 30
+    zero_shape = {"date", "cards_added", "cards_mastered", "articles_read",
+                  "quiz_sessions", "study_minutes"}
+    for entry in trend:
+        assert set(entry.keys()) == zero_shape, "trend 项字段漂移"
+        if entry["date"] == present:
+            assert (entry["cards_added"], entry["study_minutes"]) == (3, 25)
+        else:
+            assert entry["cards_added"] == 0 and entry["study_minutes"] == 0
+
+
+def test_stats_condition_aggregates_match_single_values(client):
+    """主库统计由多次 COUNT 改为条件聚合后，产出必须与既有语义一致：
+    empty 库 0；造 1 mastered + 1 due 后 total/mastered/accuracy 成立。"""
+    empty = client.get("/api/progress/stats").json()
+    assert empty["total_cards"] == empty["total_mastered"]  # 空库相等（都为 0）
+    assert empty["accuracy_pct"] in (0, 0.0)
+
+    client.post("/api/cards/vocab", json={
+        "word": "sprechen", "lemma": "sprechen", "pos": "VERB", "cefr_level": "B1",
+        "definition_zh": "说", "sentence_context": "Ich spreche Deutsch.",
+    })
+    client.post("/api/cards/vocab", json={
+        "word": "lesen", "lemma": "lesen", "pos": "VERB", "cefr_level": "A2",
+        "definition_zh": "读", "sentence_context": "Er liest ein Buch.",
+    })
+    # 标记 mastered 会记录 correct_count 递增 → accuracy 有值
+    r = client.post("/api/cards/vocab", json={
+        "word": "hallo", "lemma": "hallo", "pos": "INTJ", "cefr_level": "A1",
+        "definition_zh": "你好", "sentence_context": "Hallo!",
+    })
+    client.patch(f"/api/cards/vocab/{r.json()['id']}/master", json={"mastered": True})
+
+    stats = client.get("/api/progress/stats").json()
+    assert stats["total_cards"] >= 3
+    assert stats["total_mastered"] >= 1
+    assert stats["cefr_counts"]["B1"] >= 1 and stats["cefr_counts"]["A2"] >= 1
+    assert stats["total_vocab"] == stats["total_cards"]
+
+
 # ── M2-1: SRS / 关联 / 日志查询索引 ─────────────────────────────────────────
 
 def _created_index_columns(db_path: str, table: str):

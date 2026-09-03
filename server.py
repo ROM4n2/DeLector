@@ -916,22 +916,25 @@ def get_progress_stats():
     from datetime import timedelta
     # --- main db ---
     with get_db() as conn:
-        total_vocab   = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
-        total_grammar = conn.execute("SELECT COUNT(*) FROM grammar_cards").fetchone()[0]
-        mastered_vocab   = conn.execute("SELECT COUNT(*) FROM vocab_cards WHERE mastered=1").fetchone()[0]
-        mastered_grammar = conn.execute("SELECT COUNT(*) FROM grammar_cards WHERE mastered=1").fetchone()[0]
+        # 单扫条件聚合：COUNT + SUM(条件) 一次出总量与已掌握，替代 4 次全表 COUNT
+        vc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM vocab_cards").fetchone()
+        gc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM grammar_cards").fetchone()
+        total_vocab = vc["total"]
+        total_grammar = gc["total"]
+        mastered_vocab = vc["mastered"] or 0
+        mastered_grammar = gc["mastered"] or 0
         total_articles = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
 
-        # CEFR breakdown (both tables combined)
+        # CEFR breakdown (both tables combined)：UNION ALL 聚合，一次遍历两表
         cefr_counts: Dict[str, int] = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
-        for row in conn.execute("SELECT cefr_level, COUNT(*) as cnt FROM vocab_cards GROUP BY cefr_level"):
-            lvl = row["cefr_level"] or "A1"
-            if lvl in cefr_counts:
-                cefr_counts[lvl] += row["cnt"]
-        for row in conn.execute("SELECT cefr_level, COUNT(*) as cnt FROM grammar_cards GROUP BY cefr_level"):
-            lvl = row["cefr_level"] or "A1"
-            if lvl in cefr_counts:
-                cefr_counts[lvl] += row["cnt"]
+        for row in conn.execute(
+            "SELECT COALESCE(cefr_level, 'A1') AS lvl, COUNT(*) AS cnt FROM ("
+            "  SELECT cefr_level FROM vocab_cards"
+            "  UNION ALL SELECT cefr_level FROM grammar_cards"
+            ") GROUP BY lvl"
+        ):
+            if row["lvl"] in cefr_counts:
+                cefr_counts[row["lvl"]] += row["cnt"]
 
         # Quiz accuracy from card tables
         vc_row = conn.execute("SELECT SUM(correct_count) as c, SUM(wrong_count) as w FROM vocab_cards").fetchone()
@@ -951,30 +954,36 @@ def get_progress_stats():
 
     # --- progress db ---
     with get_progress_db() as conn:
-        # 30-day daily trend
+        # 30-day daily trend：一次范围查 + Python 补零（替代 30 次单日往返）
         today = datetime.now().date()
+        first_day = (today - timedelta(days=29)).isoformat()
+        summary_rows = conn.execute(
+            "SELECT * FROM daily_summary WHERE date BETWEEN ? AND ?",
+            (first_day, today.isoformat()),
+        ).fetchall()
+        by_date = {r["date"]: dict(r) for r in summary_rows}
         trend = []
         for i in range(29, -1, -1):
             d = (today - timedelta(days=i)).isoformat()
-            row = conn.execute("SELECT * FROM daily_summary WHERE date = ?", (d,)).fetchone()
-            if row:
-                trend.append(dict(row))
+            if d in by_date:
+                trend.append(by_date[d])
             else:
                 trend.append({"date": d, "cards_added": 0, "cards_mastered": 0,
                                "articles_read": 0, "quiz_sessions": 0, "study_minutes": 0})
 
-        # Streak calculation
+        # Streak：1 次 DISTINCT 范围查 + Python 回溯（替代 365 次单日查询）。
+        # 语义保持现状：today 无记录即 0；有则从 today 起回溯连续天数。
+        active_days = {
+            r[0] for r in conn.execute(
+                "SELECT DISTINCT substr(logged_at, 1, 10) FROM study_log WHERE logged_at >= ?",
+                ((today - timedelta(days=365)).isoformat(),),
+            )
+        }
         streak = 0
         check_date = today
-        # treat today as active if it has any study_log entries
-        for _ in range(365):
-            ds = check_date.isoformat()
-            entry = conn.execute("SELECT 1 FROM study_log WHERE date(logged_at)=? LIMIT 1", (ds,)).fetchone()
-            if entry:
-                streak += 1
-                check_date = check_date - timedelta(days=1)
-            else:
-                break
+        while check_date.isoformat() in active_days:
+            streak += 1
+            check_date = check_date - timedelta(days=1)
 
         total_quiz_sessions = conn.execute("SELECT SUM(quiz_sessions) FROM daily_summary").fetchone()[0] or 0
         total_study_minutes = conn.execute("SELECT SUM(study_minutes) FROM daily_summary").fetchone()[0] or 0
