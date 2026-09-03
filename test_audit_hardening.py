@@ -94,6 +94,50 @@ def test_backup_whitelist_split_semantics():
     assert BACKUP_SETTINGS_IMPORT_WHITELIST == ("TTS_VOICE", "TTS_RATE")
 
 
+# ── M1-5: Anki 导出 HTML 转义 ───────────────────────────────────────────────
+
+def test_vocab_anki_note_escapes_user_html():
+    """用户词/句子可注入 HTML：导出到 .apkg 的字段必须先转义，
+    否则 Anki 打开牌组时 `<img onerror>` 这类标签会执行。"""
+    from database import _vocab_anki_note, _grammar_anki_note
+    row = {
+        "word": '<img src=x onerror=alert(1)>', "lemma": "x", "pos": "NOUN",
+        "gender": None, "cefr_level": "B1",
+        "definition_zh": "<script>alert(2)</script>",
+        "sentence_context": 'Das <img src=x onerror=alert(1)> ist gefährlich <script>x</script>.',
+    }
+    note = _vocab_anki_note(row)
+    blob = "\n".join(note.fields)
+    assert "<img" not in blob and "<script" not in blob
+    assert "&lt;img" in blob and "&lt;script" in blob
+
+
+def test_vocab_anki_note_keeps_highlight_feature():
+    """转义不能破坏原有的词高亮功能。"""
+    from database import _vocab_anki_note
+    row = {
+        "word": "Mann", "lemma": "Mann", "pos": "NOUN", "gender": "Masc",
+        "cefr_level": "A1", "definition_zh": "男人",
+        "sentence_context": "Der Mann liest ein Buch.",
+    }
+    note = _vocab_anki_note(row)
+    assert '<b style="color:#2563eb;">Mann</b>' in note.fields[0]
+
+
+def test_grammar_anki_note_escapes_user_html():
+    from database import _grammar_anki_note
+    row = {
+        "sentence_context": "<img src=x onerror=alert(1)>",
+        "grammar_name": "Akkusativ", "cefr_level": "A2",
+        "explanation_zh": "<script>alert(2)</script>",
+        "rule_formula": "N+V+Akk",
+    }
+    note = _grammar_anki_note(row)
+    blob = "\n".join(note.fields)
+    assert "<img" not in blob and "<script" not in blob
+    assert "&lt;img" in blob and "&lt;script" in blob
+
+
 # ── M1-4: TTS 收敛（voice 白名单 / 错误文案 / 输入上限）──────────────────────
 
 def test_tts_rejects_unknown_voice_before_synthesis(client, monkeypatch):

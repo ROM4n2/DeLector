@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from fastapi import HTTPException, Request
 import genanki
+import html as _html
 
 from nlp import process_german_text
 
@@ -478,6 +479,35 @@ GRAMMAR_MODEL = genanki.Model(
 )
 
 
+def _anki_esc(value) -> str:
+    """用户/可编辑数据进 Anki HTML 字段前一律转义。
+
+    genanki 不自动转义，裸标签（如 `<img onerror>`）在 Anki 打开牌组时会执行，
+    是存储型 XSS。quote=True 一并转义引号，防 attribute 注入。
+    """
+    return _html.escape(str(value or ""), quote=True)
+
+
+def _vocab_anki_note(r) -> genanki.Note:
+    """构造词汇卡 note：先转义再高亮替换，顺序不可颠倒（先转义否则破坏 <b> 结构）。"""
+    word = _anki_esc(r["word"])
+    sentence = _anki_esc(r["sentence_context"])
+    styled_front = sentence.replace(word, f'<b style="color:#2563eb;">{word}</b>')
+    meta = f'{_anki_esc(r["pos"])} · {_anki_esc(r["gender"] or "")} · {_anki_esc(r["cefr_level"])}'
+    return genanki.Note(model=VOCAB_MODEL, fields=[
+        styled_front, word, _anki_esc(r["lemma"]), meta, _anki_esc(r["definition_zh"]),
+    ])
+
+
+def _grammar_anki_note(r) -> genanki.Note:
+    """构造语法卡 note：五个模板字段全部来自句库/卡片数据，逐字段转义。"""
+    return genanki.Note(model=GRAMMAR_MODEL, fields=[
+        _anki_esc(r["sentence_context"]), _anki_esc(r["grammar_name"]),
+        _anki_esc(r["cefr_level"]), _anki_esc(r["explanation_zh"]),
+        _anki_esc(r["rule_formula"] or ""),
+    ])
+
+
 def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
     target_path = get_db_path(db_path)
     with get_db(target_path) as conn:
@@ -486,12 +516,9 @@ def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
 
     deck = genanki.Deck(random.randrange(1 << 30, 1 << 31), "DeLector::Goethe Deck")
     for r in vocab_rows:
-        styled_front = r["sentence_context"].replace(r["word"], f'<b style="color:#2563eb;">{r["word"]}</b>')
-        meta = f'{r["pos"]} · {r["gender"] or ""} · {r["cefr_level"]}'
-        deck.add_note(genanki.Note(model=VOCAB_MODEL, fields=[styled_front, r["word"], r["lemma"], meta, r["definition_zh"]]))
-
+        deck.add_note(_vocab_anki_note(r))
     for r in grammar_rows:
-        deck.add_note(genanki.Note(model=GRAMMAR_MODEL, fields=[r["sentence_context"], r["grammar_name"], r["cefr_level"], r["explanation_zh"], r["rule_formula"] or ""]))
+        deck.add_note(_grammar_anki_note(r))
 
     genanki.Package(deck).write_to_file(output_path)
     return output_path
@@ -542,19 +569,20 @@ def export_a1_anki_deck(output_path: str) -> str:
         else:
             color = "#475569"
 
-        front_html = f'<span style="color:{color};">{word}</span>'
+        word_esc = _anki_esc(word)
+        front_html = f'<span style="color:{color};">{word_esc}</span>'
         note = genanki.Note(
             model=A1_VOCAB_MODEL,
             fields=[
                 front_html,
-                word,
-                lemma,
-                pos,
-                plural,
-                defn,
-                ex_de,
-                ex_zh,
-                topic_label,
+                word_esc,
+                _anki_esc(lemma),
+                _anki_esc(pos),
+                _anki_esc(plural),
+                _anki_esc(defn),
+                _anki_esc(ex_de),
+                _anki_esc(ex_zh),
+                _anki_esc(topic_label),
             ]
         )
         deck.add_note(note)
