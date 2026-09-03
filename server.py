@@ -58,6 +58,7 @@ from database import (
     get_wb_state,
     save_wb_state,
     get_wb_sync_key,
+    regenerate_wb_sync_key,
     get_effective_api_key,
     get_effective_api_base_url,
     get_effective_api_model,
@@ -177,6 +178,7 @@ __all__ = [
     "get_wb_state",
     "save_wb_state",
     "get_wb_sync_key",
+    "regenerate_wb_sync_key",
     "get_effective_api_key",
     "get_effective_api_base_url",
     "get_effective_api_model",
@@ -1444,6 +1446,13 @@ def wb_put_state(req: WbStateReq, request: Request):
 def wb_get_state_key(request: Request):
     _require_localhost(request)
     return {"key": get_wb_sync_key()}
+
+
+@app.post("/api/wb/state/key")
+def wb_regenerate_state_key(request: Request):
+    """重新生成同步密钥（= 撤销配对）：旧 key 立即失效。仅本机可调。"""
+    _require_localhost(request)
+    return {"key": regenerate_wb_sync_key()}
 
 
 @app.get("/api/wb/lan-info")

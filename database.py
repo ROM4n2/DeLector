@@ -386,6 +386,17 @@ def get_wb_sync_key(db_path: Optional[str] = None) -> str:
     return key
 
 
+def regenerate_wb_sync_key(db_path: Optional[str] = None) -> str:
+    """作废旧同步密钥并生成新的一把（= 撤销配对）：旧 key 立即失效。
+
+    持久凭证敢长期有效的前提是「随时能一键作废」：泄露或换设备时重新生成，
+    所有仍持旧 key 的端立即 403，必须重新配对。
+    """
+    key = secrets.token_hex(16)
+    set_setting("wb_sync_key", key, db_path=db_path)
+    return key
+
+
 def get_effective_api_key(db_path: Optional[str] = None) -> str:
     return get_setting("DEEPSEEK_API_KEY", "", db_path=db_path)
 

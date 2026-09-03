@@ -3776,6 +3776,34 @@ def test_wb_state_sync_key_local_only(client, lan_client):
     assert lan_client.get("/api/wb/state/key").status_code == 403
 
 
+def test_wb_state_key_regenerate_requires_localhost(lan_client):
+    """重新生成同步密钥是高危操作：仅本机可调（局域网设备不得重置别人的凭证）。"""
+    assert lan_client.post("/api/wb/state/key").status_code == 403
+
+
+def test_wb_state_key_regenerate_invalidates_old_key(client):
+    """撤销配对 = 重新生成密钥：旧 key 立即失效、新 key 可用，否则撤销形同虚设。
+
+    这是「持久凭证」敢长期有效的前提：一旦泄露或换设备，用户必须能一键作废。
+    """
+    old = client.get("/api/wb/state/key").json()["key"]
+    r = client.post("/api/wb/state/key")
+    assert r.status_code == 200
+    new = r.json()["key"]
+    assert new != old
+    assert re.fullmatch(r"[0-9a-f]{32}", new), "新 key 仍是 32 位 hex"
+
+    payload = {"cards": {"c3": {"reps": 1}}, "words": []}
+    # 旧 key 立即失效
+    assert client.put("/api/wb/state", json={"payload": payload},
+                      headers={"X-WB-Key": old}).status_code == 403
+    # 新 key 可用，且 GET /key 回读一致
+    assert client.get("/api/wb/state/key").json()["key"] == new
+    ok = client.put("/api/wb/state", json={"payload": payload},
+                    headers={"X-WB-Key": new})
+    assert ok.status_code == 200
+
+
 def test_wb_state_put_requires_key(client):
     """PUT /api/wb/state 必须带对 X-WB-Key，否则 403。"""
     assert client.put("/api/wb/state", json={"payload": {"cards": {}}}).status_code == 403
