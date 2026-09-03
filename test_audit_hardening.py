@@ -353,6 +353,43 @@ def test_read_path_alerts_use_hosted_notify():
     assert "alert('请输入德语作文内容后再保存。')" in w, "写路径输入校验被误删"
 
 
+# ── M3-2/3/4: 陈旧响应守卫 + blob URL 撤销 + PWA 温和更新 ────────────────────
+
+def test_reader_writer_cards_stale_guards():
+    """异步回包落地前必须做「请求身份」判定，防陈旧响应覆盖用户新动作。"""
+    from pathlib import Path
+    r = Path("static/js/reader.js").read_text(encoding="utf-8")
+    assert "_readerOpenToken" in r and "token !== _readerOpenToken" in r
+    w = Path("static/js/writer.js").read_text(encoding="utf-8")
+    assert "_analyzeToken" in w and "token !== _analyzeToken" in w
+    c = Path("static/js/cards.js").read_text(encoding="utf-8")
+    assert 'cardSegment !== "prep"' in c, "prep 矩阵渲染守卫缺失"
+
+
+def test_player_blob_url_revoked_on_all_exits():
+    """blob URL 不能只等 onended 撤销：暂停/切句/兜底路径统一 revoke；
+    播放请求用单调令牌判陈旧，防错句覆盖。"""
+    from pathlib import Path
+    p = Path("static/js/player.js").read_text(encoding="utf-8")
+    assert "URL.revokeObjectURL" in p
+    assert p.count("this._revokeCurrent()") >= 4, "统一撤销出口过少（只 onended 撤销=防回退）"
+    assert "_curUrl" in p
+    assert "_reqToken" in p
+
+
+def test_sw_pwa_update_is_gentle_not_force_reload():
+    """PWA 版本更新不得无条件 client.navigate 全窗硬刷（会丢未保存状态）；
+    改为 claim + postMessage 提示，由用户决定刷新。"""
+    from pathlib import Path
+    sw = Path("static/sw.js").read_text(encoding="utf-8")
+    assert "client.navigate(" not in sw
+    assert "clients.claim()" in sw
+    assert "delector-update" in sw
+    main_js = Path("static/js/main.js").read_text(encoding="utf-8")
+    assert "delector-update" in main_js, "主脚本缺少更新提示监听"
+    assert "location.reload()" in main_js, "刷新动作应留待用户触发"
+
+
 # ── M1-1: 还原备份不导入 API_BASE_URL / API_MODEL ──────────────────────────
 
 def test_restore_does_not_import_api_base_url_or_model(client):

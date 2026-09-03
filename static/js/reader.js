@@ -181,11 +181,17 @@ export async function loadArticles() {
   }
 }
 
+// 陈旧响应守卫：用户在文章间快速切换时，较早的慢响应不得覆盖后打开的文章。
+let _readerOpenToken = 0;
+
 export async function openReader(id) {
-  state.currentArticle = await api("/api/articles/" + id);
-  document.getElementById("reader-title").textContent =
-    state.currentArticle.title;
-  renderReaderHeatbar(state.currentArticle.stats);
+  const token = ++_readerOpenToken;
+  const a = await api("/api/articles/" + id);
+  if (!a || a.id !== Number(id)) return;
+  if (token !== _readerOpenToken) return; // 期间用户已打开另一篇，丢弃本次
+  state.currentArticle = a;
+  document.getElementById("reader-title").textContent = a.title;
+  renderReaderHeatbar(a.stats);
   const content = document.getElementById("reader-content");
 
   let paraElements = [];

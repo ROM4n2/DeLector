@@ -32,6 +32,7 @@ let currentEssayId = null;
 let currentAnalysis = null;
 let selectedSpanRef = null;
 let analyzeDebounceTimer = null;
+let _analyzeToken = 0; // 陈旧响应守卫（见 analyzeEssayText 内 token 比较）
 let isComposing = false;
 let inlayEnabled = !/Android/i.test(navigator.userAgent);
 
@@ -588,6 +589,8 @@ export function analyzeWriterText(immediate = false) {
     analyzeDebounceTimer = null;
   }
 
+  // 陈旧响应守卫：分析带防抖，旧请求慢返回时用户可能已再次触发 → 丢弃旧结果
+  const token = ++_analyzeToken;
   const performAnalysis = async () => {
     try {
       const a = await api('/api/writing/analyze', {
@@ -595,6 +598,7 @@ export function analyzeWriterText(immediate = false) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
       });
+      if (token !== _analyzeToken) return; // 已有更新的分析请求，本次作废
       currentAnalysis = a;
       renderEditor(text, a, caretOffset);
     } catch (err) {
