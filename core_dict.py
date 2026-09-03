@@ -4,6 +4,7 @@ High-frequency German-Chinese dictionary with accurate lemma, POS, gender (der/d
 plural endings, CEFR level, and concise Chinese definitions.
 O(1) memory lookup for zero-latency token inspection and CEFR difficulty tagging.
 """
+import functools
 from typing import Optional, Dict, Any
 
 # Structure: lemma -> (cefr, pos, gender, plural, definition_zh)
@@ -470,6 +471,27 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "manifest": ("C1", "ADJ", None, None, "显而易见的，明白的"),
 }
 
+def _build_core_vocab_entry(base_key: str) -> Dict[str, Any]:
+    """无状态构造条目（M4-2 拆出，供 lru 包装复用）。"""
+    cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[base_key]
+    return {
+        "lemma": base_key,
+        "cefr_level": cefr,
+        "pos": pos,
+        "gender": gender,
+        "plural": plural or "",
+        "definition_zh": def_zh,
+        "source": "local_dict"
+    }
+
+
+@functools.lru_cache(maxsize=1024)
+def _core_entry_cached(base_key: str) -> Dict[str, Any]:
+    """命中条目的进程级共享缓存：同一个 DB 基准 lemma 只构造一次 dict。
+    调用方均为只读消费（逐点 grep 审计过），复用安全且热路径免每次新建。"""
+    return _build_core_vocab_entry(base_key)
+
+
 def lookup_core_vocab(lemma_or_word: str) -> Optional[Dict[str, Any]]:
     """O(1) memory lookup for Goethe core vocabulary."""
     if not lemma_or_word:
@@ -478,32 +500,14 @@ def lookup_core_vocab(lemma_or_word: str) -> Optional[Dict[str, Any]]:
 
     # Direct match
     if key in CORE_VOCAB_DB:
-        cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[key]
-        return {
-            "lemma": key,
-            "cefr_level": cefr,
-            "pos": pos,
-            "gender": gender,
-            "plural": plural or "",
-            "definition_zh": def_zh,
-            "source": "local_dict"
-        }
+        return _core_entry_cached(key)
 
     # Strip common German verb inflections or noun plurals if lemma is slightly variant
     for ending in ["en", "e", "n", "s"]:
         if key.endswith(ending) and len(key) > len(ending) + 2:
             base = key[:-len(ending)]
             if base in CORE_VOCAB_DB:
-                cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[base]
-                return {
-                    "lemma": base,
-                    "cefr_level": cefr,
-                    "pos": pos,
-                    "gender": gender,
-                    "plural": plural or "",
-                    "definition_zh": def_zh,
-                    "source": "local_dict"
-                }
+                return _core_entry_cached(base)
     return None
 
 def get_core_cefr_level(lemma: str) -> Optional[str]:

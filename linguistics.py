@@ -3,6 +3,8 @@ DeLector - German Morphology & Linguistics Core Engine (v3.4.0)
 Goethe A1-C1 Irregular Verbs Stammformen & German Compound Noun (Komposita) Splitter.
 100% Python standard library, zero external dependencies, O(1) lookup latency.
 """
+import functools
+import json
 from typing import Optional, Dict, Any, List, Tuple
 
 # Import local Goethe core dictionary for compound base elements & CEFR lookup
@@ -1182,7 +1184,7 @@ def lookup_linguistics_ext(lemma_or_word: str) -> Optional[Dict[str, Any]]:
 _FUGEN_ELEMENTS = ["", "s", "es", "en", "n", "er", "e", "-"]
 
 
-def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
+def _split_komposita_impl(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
     """
     Recursively decomposes German compound nouns into constituent base morphemes.
 
@@ -1312,6 +1314,24 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
         })
 
     return output
+
+
+# ── 复合词拆解缓存（M4-2）──────────────────────────────────────────────────────
+# 递归拆词是纯函数且热路径高频：内层 lru 缓存 JSON 字符串（不可变），
+# 外层每次 json.loads 出全新 list/dict —— 免重复递归又不共享可变对象。
+@functools.lru_cache(maxsize=2048)
+def _split_komposita_json_cached(clean_word: str, min_part_len: int) -> str:
+    return json.dumps(_split_komposita_impl(clean_word, min_part_len), ensure_ascii=False)
+
+
+def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
+    """对外同签名：复合词拆解结果按 (word, min_part_len) 走 JSON 背衬缓存。"""
+    if not word or not isinstance(word, str):
+        return []
+    clean_word = word.strip()
+    if len(clean_word) < 7:
+        return []
+    return json.loads(_split_komposita_json_cached(clean_word, min_part_len))
 
 
 # ==============================================================================

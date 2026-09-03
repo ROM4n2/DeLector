@@ -560,3 +560,43 @@ def test_wb_state_put_requires_valid_key(client):
 
     none = client.put("/api/wb/state", json={"payload": {"k": "v"}})
     assert none.status_code == 403
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# M4-2: NLP 热路径缓存（split_komposita / lookup_core_vocab）
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_lookup_core_vocab_hit_shared_no_news():
+    """M4-2: 核心词库命中返回共享缓存条目（同 lemma 两次调用同一对象），
+    变体/复数兜底路径命中同一 base 条目；字段与旧实现一致。"""
+    import core_dict
+    a = core_dict.lookup_core_vocab("Herausforderung")
+    b = core_dict.lookup_core_vocab("Herausforderung")
+    assert a is not None
+    assert a is b, "同 lemma 命中应共享缓存条目，避免每次新建 dict"
+    assert a["lemma"] == "herausforderung"
+    c = core_dict.lookup_core_vocab("herausforderungen")
+    assert c is not None and c is a and c["lemma"] == "herausforderung"
+    assert a["source"] == "local_dict" and a["cefr_level"] == "B1"
+
+
+def test_split_komposita_cached_fresh_equal_results():
+    """M4-2: 复合词拆解同词两次结果语义一致但对象互不相同（JSON 背衬防共享变异），
+    min_part_len 参数化仍然生效。"""
+    from linguistics import split_komposita
+    w1 = split_komposita("Klimaschutzmaßnahmen")
+    w2 = split_komposita("Klimaschutzmaßnahmen")
+    assert len(w1) >= 2
+    assert w1 == w2
+    assert w1 is not w2
+    deep = split_komposita("Klimaschutzmaßnahmen", min_part_len=5)
+    assert isinstance(deep, list)
+
+
+def test_m4_hot_path_lru_caches_structural():
+    """M4-2 结构护栏：两处热路径底层实现必须挂 lru_cache（防回退成每次重算/新建）。"""
+    import inspect
+    import core_dict, linguistics
+    assert "lru_cache" in inspect.getsource(core_dict._core_entry_cached)
+    assert "lru_cache" in inspect.getsource(linguistics._split_komposita_json_cached)
+    assert inspect.getsource(linguistics.split_komposita).count("json.loads") >= 1
