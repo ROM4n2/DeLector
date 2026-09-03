@@ -59,6 +59,48 @@ def clean_db():
                 pass
 
 
+# ── M2-3: list_articles 只读减载 + review 去回查 ────────────────────────────
+
+def test_list_articles_readonly_no_stats_recompute(client, monkeypatch):
+    """文章列表是只读路径：stats 缺失的行不得在列表期间做逐行 NLP 重算 + UPDATE
+    （N+1 副作用），返回空 stats 即可；惰性迁移只留在单篇 GET。"""
+    import json as _json
+    conn = sqlite3.connect("test_audit_delector.db")
+    try:
+        conn.execute(
+            "INSERT INTO articles (title, raw_text, processed_json) VALUES (?, ?, ?)",
+            ("NoStats", "Hallo Welt. Der Mann liest.", _json.dumps(
+                {"version": "3.4.0", "sentences": []}, ensure_ascii=False)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    calls = []
+
+    def spy(raw_text):
+        calls.append(raw_text)
+        return {"stats": {"sentences": 99}}
+
+    monkeypatch.setattr("server.process_german_text", spy)
+    data = client.get("/api/articles").json()
+    assert calls == [], "list_articles 不应触发 stats 重算"
+    row = next(x for x in data if x["title"] == "NoStats")
+    assert row["stats"] == {}
+
+
+def test_review_has_no_post_update_requery():
+    """复习接口一次 SELECT 拿行 + UPDATE 即返回：不得再回查整行
+    （UPDATE 后所有列都是内存已算值，回查纯浪费）。"""
+    from pathlib import Path
+    src = Path("server.py").read_text(encoding="utf-8")
+    start = src.index("def review_card_sm2(")
+    end = src.index('@app.get("/api/cards/due")')
+    body = src[start:end]
+    # 初始取卡 SELECT 恰 1 次；出现第 2 次 = UPDATE 后整行回查
+    assert body.count("SELECT * FROM") == 1, "review 存在 UPDATE 后整行回查"
+
+
 # ── M2-2: progress stats 单次扫描语义锁定（重构后仍必须成立）────────────────
 
 def _insert_study_log(date_iso: str, minutes: int = 10):

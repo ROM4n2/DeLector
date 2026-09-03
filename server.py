@@ -381,17 +381,22 @@ def ingest(req: IngestReq):
 
 @app.get("/api/articles")
 def list_articles():
+    # 只读列表路径：不再对 stats 缺失行做逐行 NLP 重算 + UPDATE（N+1 写副作用）。
+    # 惰性迁移唯一保留在单篇 GET /api/articles/{id}。
     with get_db() as conn:
-        rows = conn.execute("SELECT id, title, created_at, length(raw_text) as char_count, raw_text, processed_json FROM articles ORDER BY id DESC").fetchall()
+        rows = conn.execute(
+            "SELECT id, title, created_at, length(raw_text) as char_count, processed_json "
+            "FROM articles ORDER BY id DESC"
+        ).fetchall()
         result = []
         for r in rows:
             d = {"id": r["id"], "title": r["title"], "created_at": r["created_at"], "char_count": r["char_count"]}
             try:
                 pj = json.loads(r["processed_json"])
-                if "stats" not in pj:
-                    pj = process_german_text(r["raw_text"])
-                    conn.execute("UPDATE articles SET processed_json = ? WHERE id = ?", (json.dumps(pj, ensure_ascii=False), r["id"]))
-                d["stats"] = pj.get("stats", {})
+                if not isinstance(pj, dict):
+                    d["stats"] = {}
+                else:
+                    d["stats"] = pj.get("stats", {})
             except Exception:
                 d["stats"] = {}
             result.append(d)
@@ -1683,7 +1688,16 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
             WHERE id = ?
         """, (new_rep, new_interval, new_ef, due_date, correct_incr, wrong_incr, card_id))
 
-        updated = dict(conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone())
+        # UPDATE 后所有被改列都是内存里已算好的值：直接拼回响应，免整行回查
+        updated = dict(row)
+        updated.update({
+            "repetition_count": new_rep,
+            "interval_days": new_interval,
+            "ease_factor": new_ef,
+            "due_date": due_date,
+            "correct_count": (row["correct_count"] or 0) + correct_incr,
+            "wrong_count": (row["wrong_count"] or 0) + wrong_incr,
+        })
         updated["next_intervals"] = next_intervals
 
     with get_progress_db() as pconn:
