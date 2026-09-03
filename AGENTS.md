@@ -40,7 +40,7 @@
 
 | 层               | 技术                                                       | 关键文件                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 后端             | Python 3.10+, FastAPI, spaCy, genanki                      | `server.py`（挂载路由与静态资源）, `routes_a1.py`（A1 考纲路由）, `routes_sync.py`（WebRTC 同步路由）                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 后端             | Python 3.10+, FastAPI, spaCy, genanki                      | `server.py`（挂载路由与静态资源）, `routes_a1.py`（A1 考纲路由）, `routes_sync.py`（WebRTC 同步路由）, `routes_rtc.py`（WebRTC 信令中继）                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | 词法/形态学      | 556+ 不规则动词三态表 + 复合词递归拆解                     | `linguistics.py`（1236 行）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 离线核心词库     | 歌德 A1–B2，0ms 查词                                       | `core_dict.py`（516 行），`a1_dict.py`（A1 702 词与口语卡），`a1_writing_dict.py`（A1 写作题库）                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 介词搭配数据集   | 动词/形容词 + 固定介词 + 格                                | `prep_dict.py`（生成物），入口 `lookup_prep_collocations()`，源 `tools/build_prep.py`                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -256,11 +256,14 @@ POST   /api/essays/{essay_id}/restore           恢复作文至指定快照（�
 POST   /api/writing/cards                       将写作错误一键保存为 Anki 语法卡
 POST   /api/writing/ai-polish/diff              AI 全文润色与逐 hunk 差异对比生成
 POST   /api/writing/apply                       应用所选 AI 润色 hunk 并自动保存版本
-POST   /api/wb/sync/store                       背词工作台：暂存 WebRTC SDP 并生成 6 位短码
-GET    /api/wb/sync/fetch/{code}                背词工作台：凭 6 位短码获取 SDP（一次性消费，5分钟有效）
+POST   /api/wb/sync/store                       背词工作台：暂存 WebRTC SDP 并生成 6 位短码（须 X-WB-Key）
+GET    /api/wb/sync/fetch/{code}                背词工作台：凭 6 位短码获取 SDP（一次性消费，5分钟有效；须 X-WB-Key）
 GET    /api/wb/state                            wb 镜像读：对局域网开放（拉取免 key）；回环/私有 Origin 反射 ACAO
 PUT    /api/wb/state                            wb 镜像写：须 X-WB-Key（32 位 hex，存 app_settings，不进 Git），错/缺 403
 GET    /api/wb/state/key                        取配对密钥：仅本机 127.0.0.1（_require_localhost），幂等
+POST   /api/wb/state/key                        重新生成配对密钥（= 撤销配对）：旧 key 立即 403；仅本机
+POST   /api/wb/rtc/signal                       WebRTC 信令中继：按配对密钥建邮箱，投递 SDP/ICE（须 X-WB-Key）
+GET    /api/wb/rtc/signal                       拉取对端信令：?client=<本端id>&after=<游标>，只回「别人发的」
 GET    /api/wb/lan-info                         {hostname, port, lan_ip, instance_id}：配对 UI 提示填 IP（局域网可读）
 ```
 
@@ -298,6 +301,27 @@ GET    /api/wb/lan-info                         {hostname, port, lan_ip, instanc
 - 前端：`wbsync.pair.set/clear/info` + 配对面板宿主/远端二态渲染。设计与验证详见
   `docs/specs/2026-09-03-lan-silent-sync-design.md`（§6 Stage A 已勾选）与
   `docs/plans/2026-09-03-lan-silent-sync-stage-a(-ledger).md`。
+
+## 局域网静默同步 Stage B（自动化 WebRTC · 2026-09-03 落地）
+
+在 Stage A「配对一次 + HTTP 轮询」之上，用 WebRTC DataChannel 达成「加密 + 真无感」：
+
+- **信令鉴权**：`/api/wb/sync/store` 与 `/fetch/{code}` 补 `X-WB-Key`（SDP 要在 LAN 上中继，
+  不能用 `_require_localhost`，否则手机永远进不来）；`/info` 保持开放。CORS 预检放行方法补 `POST`
+  （原先只有 `GET, PUT, OPTIONS`，跨域浏览器会在预检阶段被拒、信令永远发不出去）。
+- **持久配对凭证 + 撤销**：`POST /api/wb/state/key` 重新生成密钥（仅本机）→ 旧 key 立即 403。
+  前端 `wbsync.pair.revoke()` 撤销后**必须换用服务端下发的新 key**：否则主机会被自己作废的 key
+  卡死（`pushNow` 开头 `if (!_key) return` 短路，连本机都推不动）。
+- **信令中继** `routes_rtc.py`：`POST/GET /api/wb/rtc/signal`，邮箱 id 取配对密钥的 sha256 摘要
+  （不用短码、也不留密钥明文）；带 `sender` 隔离回声、带 `after` 游标防重放。
+- **前端** `wbsync.rtc`：角色由「是否已配对」决定（已配对侧发 offer、宿主侧应答，免协商、不打架）；
+  信封沿用 HTTP PUT 的 `{payload:...}` 形状——两种通道一套契约，少一处不一致的余地；
+  收到信封一律 `applyMerge(payload,{silent:true})`。
+- **重连与兜底**：`connectionState` 失败/断开 → 去抖重建；连续失败超上限即降级，
+  Stage A 的 HTTP 轮询始终在线兜底（保证「至少可达」）。
+- 详见 `docs/plans/2026-09-03-lan-silent-sync-stage-b(-ledger).md` 与 ADR-0004
+  （`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0004-lan-sync-webrtc-stage-b.md`）。
+  **真机验证**：桌面↔桌面浏览器可验；Android APP 须等下次发版（旧版 APK 未内嵌 Stage A+B 代码）。
 
 ---
 

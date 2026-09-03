@@ -181,7 +181,7 @@ SyncEnvelope = {
 ## 6. 实施分期（落地顺序）
 
 1. **Stage A（MVP）**：配对密钥生成/存储 + `X-WB-Key` 鉴权改造 `PUT /api/wb/state` 与信令端点 + 桌面 CORS + `lan-info` 端点 + 手机浏览器/APP 原生层轮询。验证「静默双向」。 **[x] 已落地 2026-09-03**（范围按实施计划微调：`PUT` 改 `X-WB-Key`、`GET` 仍局域网开放；`GET /api/wb/state/key` 保留 `_require_localhost` 本机快捷；CORS 覆盖 `/api/wb/state`、`/api/wb/state/key`、`/api/wb/sync/*`；配对 UI 宿主/远端二态）。信令端点的 `X-WB-Key` 鉴权归入 Stage B 一并落地。
-2. **Stage B（目标）**：在 A 的配对之上自动化 WebRTC（缓存凭证、自动建连/重连、DataChannel 收发信封）。达成「加密 + 静默 + 含 APP」。
+2. **Stage B（目标）**：在 A 的配对之上自动化 WebRTC（缓存凭证、自动建连/重连、DataChannel 收发信封）。达成「加密 + 静默 + 含 APP」。 **[x] 已落地 2026-09-03**（`docs/plans/2026-09-03-lan-silent-sync-stage-b(-ledger).md`，ADR-0004 见 `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0004-lan-sync-webrtc-stage-b.md`）。实现要点：信令端点补 `X-WB-Key` 且预检补 `POST`；`POST /api/wb/state/key` 撤销配对；`routes_rtc.py` 按配对密钥摘要建信令邮箱（`sender` 隔离回声 + `after` 游标）；前端 `wbsync.rtc` 建 DataChannel 并静默合并，断线去抖重建、失败降级 HTTP 轮询。**范围偏差**：撤销用 `regenerate_wb_sync_key()` 取代原计划的 `set_wb_sync_key(new_key)`（无调用方需设任意值，且避免给 `server.py` 引入 `secrets` 导入）。**真机**：桌面↔桌面可验；APP 项待下次发版。
 3. 每 Stage 独立 TDD（RED→GREEN→commit），不跨 Stage 合并。
 
 ---
