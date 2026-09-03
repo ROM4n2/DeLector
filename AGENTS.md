@@ -11,11 +11,11 @@
 
 ### 交接快照
 
-> 更新时间：2026-09-02
+> 更新时间：2026-09-03
 
 | 项              | 值                                                                                                                                                                                                                                                                                                 |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 当前分支 / HEAD | `master` @ tag `v5.0.2`（v5.0.2 审计修复：reader.js 14 处 XSS sink 消毒、A1 模考 daily_summary 统计修复、德语弱变化动词复数索引修复、DeLector.spec 测试显式化）。 |
+| 当前分支 / HEAD | `master`（tag `v5.0.2` 审计修复：reader.js 14 处 XSS sink 消毒、A1 模考 daily_summary 统计修复、德语弱变化动词复数索引修复、DeLector.spec 测试显式化；其后追加局域网静默同步 Stage A：镜像配对 + wb CORS，见文末「局域网静默同步」节与 `docs/plans/2026-09-03-lan-silent-sync-stage-a-ledger.md`）。 |
 | 测试            | **453 / 453 专项测试全绿**（2026-09-02 实测，`pyflakes` 0 告警）。                                                                                                                                                                                                                                 |
 | 桌面端          | 正常，`python start.py` → `http://localhost:8000`（敏感设置与删除操作仅回环可写，局域网返回 403）                                                                                                                                                                                                  |
 | Android APK     | **v5.0.2** 版本号同步（versionName 5.0.2, versionCode 50002），CI 从 git tag 自动推导。                                                                                                                                                           |
@@ -258,6 +258,10 @@ POST   /api/writing/ai-polish/diff              AI 全文润色与逐 hunk 差�
 POST   /api/writing/apply                       应用所选 AI 润色 hunk 并自动保存版本
 POST   /api/wb/sync/store                       背词工作台：暂存 WebRTC SDP 并生成 6 位短码
 GET    /api/wb/sync/fetch/{code}                背词工作台：凭 6 位短码获取 SDP（一次性消费，5分钟有效）
+GET    /api/wb/state                            wb 镜像读：对局域网开放（拉取免 key）；回环/私有 Origin 反射 ACAO
+PUT    /api/wb/state                            wb 镜像写：须 X-WB-Key（32 位 hex，存 app_settings，不进 Git），错/缺 403
+GET    /api/wb/state/key                        取配对密钥：仅本机 127.0.0.1（_require_localhost），幂等
+GET    /api/wb/lan-info                         {hostname, port, lan_ip, instance_id}：配对 UI 提示填 IP（局域网可读）
 ```
 
 **路由重要约束**：`app.mount("/", StaticFiles(...))` 是 catch-all 路由，
@@ -277,6 +281,23 @@ GET    /api/wb/sync/fetch/{code}                背词工作台：凭 6 位短�
 | `cards.js`     | 3D 拟真卡片翻转盒 `renderDeckStage()`, FSRS 认知间隔复习 `submitCardReview()`, Quiz 测验引擎                      |
 | `folio.js`     | Leporello 三折页台账 `loadProgress()`, 30 天留存墨线折线图, 歌德箴言轮播                                          |
 | `cloze.js`     | 完形填空 & 德福 C-Test 考试 `openClozeModal()`, 首字母提示 `revealClozeHints()`, 服务端判分                       |
+
+---
+
+## 局域网静默同步（镜像配对 · Stage A）
+
+- 目标：手机浏览器 / Android APP 访问桌面 `http://<桌面IP>:8000`，在背词工作台「设置 → LAN
+  同步 → 镜像配对」输入一次 `host + 32 位密钥`，之后 wbsync 每 5s 带 `X-WB-Key` 静默
+  `GET`/`PUT /api/wb/state` 双向对账：远端拉取免 key、推送必须 key，`applyMerge(...,{silent:true})`
+  静默合并（不弹 toast、不打断视图）。
+- 配对密钥 `secrets.token_hex(32)` 持久化在 `app_settings`（`get_wb_sync_key`），**不进 Git**；
+  仅本机端点 `GET /api/wb/state/key`（`_require_localhost`）可取。清除配对后：远端推送 403、只读拉取不破。
+- wb 端点 CORS 中间件（`_wb_sync_cors`）：只对「回环 / 私有网段」Origin 反射
+  `Access-Control-Allow-Origin` 并放行 `OPTIONS` 预检；公共 Origin 预检显式 403、普通请求
+  不加 ACAO（浏览器按跨域失败拦截）；无 Origin 头的本机/同源/存量流量行为零变化。
+- 前端：`wbsync.pair.set/clear/info` + 配对面板宿主/远端二态渲染。设计与验证详见
+  `docs/specs/2026-09-03-lan-silent-sync-design.md`（§6 Stage A 已勾选）与
+  `docs/plans/2026-09-03-lan-silent-sync-stage-a(-ledger).md`。
 
 ---
 
