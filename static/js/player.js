@@ -37,8 +37,13 @@ export async function playGermanAudio(text, rate = 0.88) {
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.onended = () => URL.revokeObjectURL(url);
-    await audio.play();
+    const revokeUrl = () => URL.revokeObjectURL(url);
+    audio.onended = revokeUrl;
+    audio.onerror = revokeUrl; // 失败/解码错误同样撤销，防泄漏
+    await audio.play().catch((err) => {
+      revokeUrl();
+      throw err;
+    });
   } catch {
     if (!("speechSynthesis" in window)) {
       const statusEl = document.getElementById("player-status");
@@ -74,6 +79,8 @@ export const ShadowPlayer = {
   pauseTimer: null,
   utterance: null,
   isIntentionalCancel: false,
+  _curUrl: null, // 当前 blob object URL：切句/暂停/兜底出口统一撤销，不只等 onended
+  _reqToken: 0, // 播放请求令牌：陈旧慢响应不得覆盖新句
 
   init() {
     this.audioEl = new Audio();
@@ -129,6 +136,7 @@ export const ShadowPlayer = {
 
   pause() {
     this.isPlaying = false;
+    this._reqToken++; // 使在途 TTS 响应全部失效
     if (this.pauseTimer) {
       clearTimeout(this.pauseTimer);
       this.pauseTimer = null;
@@ -136,6 +144,7 @@ export const ShadowPlayer = {
     if (this.audioEl) {
       this.audioEl.pause();
     }
+    this._revokeCurrent();
     if ("speechSynthesis" in window) {
       this.isIntentionalCancel = true;
       window.speechSynthesis.cancel();
@@ -148,6 +157,13 @@ export const ShadowPlayer = {
   toggle() {
     if (this.isPlaying) this.pause();
     else this.play();
+  },
+
+  _revokeCurrent() {
+    if (this._curUrl) {
+      URL.revokeObjectURL(this._curUrl);
+      this._curUrl = null;
+    }
   },
 
   speakCurrentSentence() {
@@ -171,6 +187,7 @@ export const ShadowPlayer = {
 
     if (this.audioEl) {
       this.audioEl.pause();
+      this._revokeCurrent(); // 切句前释放上一句 blob
       this.audioEl.removeAttribute("src");
     }
 
@@ -197,6 +214,7 @@ export const ShadowPlayer = {
     const ratePercent = Math.round((this.rate - 1.0) * 100);
     const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
 
+    const myToken = ++this._reqToken;
     fetch("/api/audio/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -211,25 +229,32 @@ export const ShadowPlayer = {
         return resp.blob();
       })
       .then((blob) => {
-        if (!this.isPlaying) return;
+        if (this._reqToken !== myToken || !this.isPlaying) return; // 陈旧响应丢弃
         const audioUrl = URL.createObjectURL(blob);
+        this._revokeCurrent(); // 上一句 blob 此刻仍未播完也释放
+        this._curUrl = audioUrl;
         this.audioEl.src = audioUrl;
         const startTime = Date.now();
 
         this.audioEl.onended = () => {
-          URL.revokeObjectURL(audioUrl);
+          this._revokeCurrent();
           if (!this.isPlaying) return;
           const duration = Date.now() - startTime;
           this.handleSentenceFinished(duration);
         };
 
         this.audioEl.onerror = () => {
+          this._revokeCurrent();
           this.fallbackWebSpeech(sent);
         };
 
-        this.audioEl.play().catch(() => this.fallbackWebSpeech(sent));
+        this.audioEl.play().catch(() => {
+          this._revokeCurrent();
+          this.fallbackWebSpeech(sent);
+        });
       })
       .catch(() => {
+        this._revokeCurrent();
         this.fallbackWebSpeech(sent);
       });
   },
