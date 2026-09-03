@@ -7,6 +7,7 @@ import re
 import asyncio
 import hashlib
 import ipaddress
+import socket
 from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import quote, urlparse
 from datetime import datetime, timedelta
@@ -225,7 +226,7 @@ from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_ko
                          lookup_prep_collocations, build_prep_matrix)
 from syntax_tree import analyze_syntax_tree
 from routes_a1 import router as a1_router
-from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
+from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES, _SYNC_INSTANCE_ID
 from routes_corpus import router as corpus_router
 from routes_a1_hoeren import hoeren_router
 from routes_a1_lesen import lesen_router
@@ -1443,6 +1444,34 @@ def wb_put_state(req: WbStateReq, request: Request):
 def wb_get_state_key(request: Request):
     _require_localhost(request)
     return {"key": get_wb_sync_key()}
+
+
+@app.get("/api/wb/lan-info")
+def wb_lan_info():
+    """局域网可读主机信息：配对 UI 提示「把 IP 填进手机」用。不含任何机密。
+
+    lan_ip 是尽力而为的探测（本机多网卡时取第一个私有 IPv4），探测不到返回空串，
+    UI 应退化为手填地址。instance_id 与 /api/wb/sync/info 同源，用于识别是否同一实例。
+    """
+    lan_ip = ""
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            try:
+                addr = ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            if addr.is_private and not addr.is_loopback:
+                lan_ip = ip
+                break
+    except Exception:
+        lan_ip = ""
+    return {
+        "hostname": socket.gethostname(),
+        "port": 8000,
+        "lan_ip": lan_ip,
+        "instance_id": _SYNC_INSTANCE_ID,
+    }
 
 
 # ── 局域网 CORS（Stage A：配对后手机 APP WebView 跨域访问需 ACAO 反射）────

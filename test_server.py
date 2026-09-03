@@ -3829,3 +3829,24 @@ def test_wb_state_no_origin_header_unchanged(client):
     r = client.get("/api/wb/state")
     assert r.status_code == 200
     assert "access-control-allow-origin" not in r.headers
+
+
+# ── GET /api/wb/lan-info（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 2）──
+
+def test_wb_lan_info_open_to_lan(lan_client):
+    """局域网设备可读主机信息（供配对 UI 提示填 IP）；不含密钥等机密。"""
+    r = lan_client.get("/api/wb/lan-info")
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("port") == 8000
+    assert body.get("hostname")
+    assert body.get("instance_id")
+    # 决不允许混入同步密钥/秘密
+    assert "key" not in body and "secret" not in body
+
+
+def test_wb_lan_info_does_not_leak_sync_key(lan_client, client):
+    """lan-info 响应文本不含 X-WB-Key 值；同步 key 仍只经本机端点取。"""
+    r = lan_client.get("/api/wb/lan-info")
+    assert "X-WB-Key" not in r.text
+    assert client.get("/api/wb/state/key").status_code == 200
