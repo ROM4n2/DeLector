@@ -3808,12 +3808,17 @@ def test_wb_state_put_preflight_loopback_allows_methods_and_key(lan_client):
 
 
 def test_wb_state_put_preflight_public_origin_not_allowed(lan_client):
-    """公网 Origin 的预检不放行：不给 ACAO，浏览器按跨域失败处理。"""
+    """公网 Origin 的预检不放行：显式 403 且不给 ACAO，浏览器按跨域失败处理。
+
+    任务书契约是「公共 Origin 预检 403」，不是「无路由落 405」：
+    405 靠没有 ACAO 兜底，语义含糊；403 才是明确的拒绝。
+    """
     r = lan_client.options("/api/wb/state", headers={
         "Origin": "https://evil.example",
         "Access-Control-Request-Method": "PUT",
     })
-    assert r.status_code != 200 or "access-control-allow-origin" not in r.headers
+    assert r.status_code == 403
+    assert "access-control-allow-origin" not in r.headers
 
 
 def test_wb_sync_signaling_cors_loopback(lan_client):

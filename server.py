@@ -1508,15 +1508,21 @@ async def _wb_sync_cors(request: Request, call_next):
     path = request.url.path
     origin = request.headers.get("Origin", "")
     is_wb_path = path in _WB_CORS_EXACT_PATHS or path.startswith(_WB_CORS_PREFIX)
-    if not is_wb_path or not _is_private_origin(origin):
-        return await call_next(request)
-    if request.method == "OPTIONS":  # 浏览器预检：直接放行，不落入业务路由
+    if not is_wb_path or not origin:
+        return await call_next(request)  # 非 wb 路径 / 无 Origin（本机/同源/存量用例）：行为零变化
+    if request.method == "OPTIONS":
+        # 浏览器预检：私有/回环 Origin 短路放行（不落入业务路由）；
+        # 公共 Origin 显式 403 且不给 ACAO，浏览器判跨域失败（回归：此前漏到 405）。
+        if not _is_private_origin(origin):
+            return Response(status_code=403)
         return Response(status_code=200, headers={
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
             "Access-Control-Allow-Headers": _WB_CORS_ALLOW_HEADERS,
             "Access-Control-Max-Age": "600",
         })
+    if not _is_private_origin(origin):
+        return await call_next(request)  # 公共 Origin：原样转发，不注入 ACAO
     response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Vary"] = "Origin"
