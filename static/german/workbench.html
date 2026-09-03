@@ -1164,6 +1164,126 @@ const wbsync = (() => {
     _key = newKey;
     return newKey;
   }
+
+  /* ── Stage B M3：WebRTC DataChannel ──────────────────────────────────────
+   * 信令走 /api/wb/rtc/signal（routes_rtc，按配对密钥建邮箱），两端靠同一把 key
+   * 互相发现。角色由「是否已配对」决定：已配对到远端的一侧发起 offer，宿主侧应答
+   * —— 不必额外协商，也不会两边同时 offer 打架。
+   * 信封沿用 HTTP PUT 的 {payload:{...}} 形状：两种通道共一套契约，少一处不一致。 */
+  const RTC_ENDPOINT = "/api/wb/rtc/signal";
+  const RTC_CHANNEL = "wb-sync";
+  const RTC_POLL_MS = 2000;
+  let _rtc = null;            // RTCPeerConnection
+  let _chan = null;           // DataChannel
+  let _rtcId = null;          // 本端会话 id（信令 sender；只用 [0-9a-z-]，查询串免转义）
+  let _rtcCursor = 0;         // 信令游标：只处理游标之后的消息，避免重放整个握手
+  let _rtcPoll = null;
+  let _rtcAnswered = false;
+
+  function rtcSupported() {
+    return typeof RTCPeerConnection !== "undefined";
+  }
+  function rtcId() {
+    if (!_rtcId) _rtcId = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 10);
+    return _rtcId;
+  }
+  function remoteRtcEndpoint() {
+    return _pair && _pair.host ? "http://" + _pair.host + RTC_ENDPOINT : RTC_ENDPOINT;
+  }
+  async function rtcPost(type, payload) {
+    try {
+      await fetch(remoteRtcEndpoint(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-WB-Key": _key },
+        body: JSON.stringify({ client: rtcId(), type: type, payload: payload }),
+        cache: "no-store",
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  function rtcSendEnvelope(env) {
+    if (_chan && _chan.send) _chan.send(JSON.stringify(env));
+  }
+  function rtcOnOpen() {
+    rtcSendEnvelope({ payload: snapshot() });
+  }
+  function rtcOnMessage(ev) {
+    let env = null;
+    try { env = JSON.parse(ev.data); } catch (e) { return; }
+    if (!env || !env.payload) return;
+    applyMerge(env.payload, { silent: true });   // 后台同步：静默合并，不弹窗、不切视图
+    renderReview();
+    renderHeaderBadge();
+  }
+  function rtcOnIce(ev) {
+    if (!ev || !ev.candidate) return;
+    rtcPost("candidate", ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate);
+  }
+  async function rtcHandle(m) {
+    if (!_rtc) return;
+    if (m.type === "offer") {
+      if (_rtcAnswered) return;
+      await _rtc.setRemoteDescription(m.payload);
+      const answer = await _rtc.createAnswer();
+      await _rtc.setLocalDescription(answer);
+      _rtcAnswered = true;
+      await rtcPost("answer", answer);
+      return;
+    }
+    if (m.type === "answer") {
+      if (_rtcAnswered) return;
+      await _rtc.setRemoteDescription(m.payload);
+      _rtcAnswered = true;
+      return;
+    }
+    if (m.type === "candidate" && _rtc.addIceCandidate) {
+      await _rtc.addIceCandidate(m.payload);
+    }
+  }
+  async function rtcPoll() {
+    if (!_key) return;
+    let res = null;
+    try {
+      res = await fetch(remoteRtcEndpoint() + "?client=" + rtcId() + "&after=" + _rtcCursor,
+                        { headers: { "X-WB-Key": _key }, cache: "no-store" });
+    } catch (e) { return; }
+    if (!res || !res.ok) return;
+    let data = null;
+    try { data = await res.json(); } catch (e) { return; }
+    _rtcCursor = data.now || _rtcCursor;
+    const msgs = data.messages || [];
+    for (let i = 0; i < msgs.length; i++) await rtcHandle(msgs[i]);
+  }
+  function rtcStartPoll() {
+    if (_rtcPoll) clearInterval(_rtcPoll);
+    _rtcPoll = setInterval(rtcPoll, RTC_POLL_MS);
+  }
+  async function rtcConnect() {
+    if (!rtcSupported() || !_key || _rtc) return false;
+    _rtcAnswered = false;
+    _rtc = new RTCPeerConnection({ iceServers: [] });   // 纯局域网：不需要 STUN
+    _chan = _rtc.createDataChannel(RTC_CHANNEL);
+    _chan.onopen = rtcOnOpen;
+    _chan.onmessage = rtcOnMessage;
+    _rtc.onicecandidate = rtcOnIce;
+    if (_pair) {                       // 已配对到远端的一侧发起握手
+      const offer = await _rtc.createOffer();
+      await _rtc.setLocalDescription(offer);
+      await rtcPost("offer", offer);
+    }
+    rtcStartPoll();
+    await rtcPoll();                   // 建连阶段先拉一次，尽快收下对端的 answer
+    return true;
+  }
+  function rtcClose() {
+    if (_rtcPoll) { clearInterval(_rtcPoll); _rtcPoll = null; }
+    if (_chan && _chan.close) _chan.close();
+    if (_rtc && _rtc.close) _rtc.close();
+    _chan = null;
+    _rtc = null;
+    _rtcAnswered = false;
+  }
+
   function pushNow() {
     if (!_enabled || !_key) return;
     // 服务端契约是 {"payload": {...}}（WbStateReq），裸快照会被解析成空 payload，
@@ -1228,7 +1348,8 @@ const wbsync = (() => {
   return { init: init, push: push, pushNow: pushNow, pull: pull,
     enabled: () => _enabled, snapshot: snapshot,
     pairInfo: pairInfo,
-    pair: { set: setPair, clear: clearPair, info: pairInfo, revoke: revokePair } };
+    pair: { set: setPair, clear: clearPair, info: pairInfo, revoke: revokePair },
+    rtc: { connect: rtcConnect, supported: rtcSupported, send: rtcSendEnvelope, close: rtcClose } };
 })();
 
 /* ======================================================================
