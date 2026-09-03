@@ -3,8 +3,11 @@
 Contract and regression tests for Goethe-Zertifikat A1 Wortliste & Sprechen Lab.
 """
 import io
+import os
+import pytest
 import re
 import zipfile
+os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1.db")
 from fastapi.testclient import TestClient
 from server import app
 import a1_dict
@@ -226,3 +229,16 @@ def test_cards_seg_bar_is_scrollable_on_narrow_screens():
     assert any(
         re.search(r"flex-shrink\s*:\s*0", block) for _, block in seg_btn_blocks
     ), ".cards-seg-btn 必须 flex-shrink:0，段标签不压缩换行，由滚动接管"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _m5_isolated_db_teardown():
+    """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
+    yield
+    import gc, os as _os
+    gc.collect()
+    for _suffix in ("", "-journal", "-wal", "-shm"):
+        try:
+            _os.remove("test_delector_goethe_a1.db" + _suffix)
+        except OSError:
+            pass

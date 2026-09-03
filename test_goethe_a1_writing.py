@@ -3,6 +3,9 @@
 Contract and regression tests for Goethe-Zertifikat A1 Schreiben Workshop.
 Teil 1 (Formular-Training) + Teil 2 (30-Wort E-Mail & Brief Lab).
 """
+import os
+import pytest
+os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
 from server import app
 import a1_writing_dict
@@ -208,3 +211,16 @@ def test_a1_writing_frontend_html_and_css():
 
     assert ".a1-formular-table" in css or ".a1-formular-card" in css
     assert ".a1-leitpunkte-box" in css or ".a1-leitpunkt-item" in css
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _m5_isolated_db_teardown():
+    """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
+    yield
+    import gc, os as _os
+    gc.collect()
+    for _suffix in ("", "-journal", "-wal", "-shm"):
+        try:
+            _os.remove("test_delector_goethe_a1_writing.db" + _suffix)
+        except OSError:
+            pass

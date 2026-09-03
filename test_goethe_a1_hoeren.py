@@ -1,4 +1,6 @@
+import os
 import pytest
+os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_hoeren.db")
 from starlette.testclient import TestClient
 from server import app
 from a1_hoeren_dict import (
@@ -149,3 +151,16 @@ def test_hoeren_api_endpoints():
     r_hist = client.get("/api/a1/hoeren/history")
     assert r_hist.status_code == 200
     assert isinstance(r_hist.json().get("history", []), list)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _m5_isolated_db_teardown():
+    """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
+    yield
+    import gc, os as _os
+    gc.collect()
+    for _suffix in ("", "-journal", "-wal", "-shm"):
+        try:
+            _os.remove("test_delector_goethe_a1_hoeren.db" + _suffix)
+        except OSError:
+            pass

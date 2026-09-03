@@ -10,7 +10,9 @@ Locks in fixes for:
 6. euer/eur inflection with vowel elision
 7. Security URL port restriction & 2MB stream limit
 """
+import os
 import pytest
+os.environ.setdefault("DATABASE_PATH", "test_delector_audit_regressions.db")
 from server import RestoreReq
 from linguistics import lookup_irregular_verb, split_komposita
 from syntax_tree import analyze_sentence_topology
@@ -126,3 +128,16 @@ def test_a1_grade_populates_study_log():
             if os.path.exists(p):
                 try: os.remove(p)
                 except PermissionError: pass
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _m5_isolated_db_teardown():
+    """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
+    yield
+    import gc, os as _os
+    gc.collect()
+    for _suffix in ("", "-journal", "-wal", "-shm"):
+        try:
+            _os.remove("test_delector_audit_regressions.db" + _suffix)
+        except OSError:
+            pass

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """官方真题语料库单元与契约测试 (Corpus Engine Test Suite)"""
+import os
 import pytest
+os.environ.setdefault("DATABASE_PATH", "test_delector_corpus.db")
 from starlette.testclient import TestClient
 
 
@@ -115,3 +117,16 @@ def test_corpus_api_endpoints():
     # 4. 404 测试
     resp_404 = client.get("/api/corpus/invalid_non_existent")
     assert resp_404.status_code == 404
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _m5_isolated_db_teardown():
+    """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
+    yield
+    import gc, os as _os
+    gc.collect()
+    for _suffix in ("", "-journal", "-wal", "-shm"):
+        try:
+            _os.remove("test_delector_corpus.db" + _suffix)
+        except OSError:
+            pass
