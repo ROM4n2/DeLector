@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import httpx
 
 def load_env():
@@ -281,7 +281,8 @@ async def add_frontend_no_cache_headers(request: Request, call_next):
 
 class IngestReq(BaseModel):
     title: Optional[str] = "Untitled"
-    raw_text: str
+    # 局域网可达 + spaCy 全文重算，必须有上限（防超大文本打满 NLP 与磁盘）
+    raw_text: str = Field(..., max_length=100_000)
 
 class VocabCardReq(BaseModel):
     article_id: Optional[int] = None
@@ -1064,7 +1065,7 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
             )
             with open(cache_file, "wb") as f:
                 f.write(audio_data)
-    except Exception as e:
+    except Exception:
         # Multi-provider pure-Python httpx fallback (accessible in mainland China)
         from urllib.parse import quote
         q = quote(clean_text[:250])
@@ -1084,25 +1085,39 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
                         return cache_file
             except Exception:
                 continue
-        raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
+        # 兜底全部失败：固定文案上屏，内部异常只留服务端日志
+        import logging
+        logging.getLogger("delector").warning("TTS all providers failed", exc_info=True)
+        raise HTTPException(500, "语音合成失败，请稍后重试")
 
     # 主路径（edge_tts 或 edge_tts_mini）成功：落地缓存后返回
     prune_audio_cache()
     return cache_file
 
 _TTS_RATE_RE = re.compile(r"^[+-]\d+%$")
+# 发音人白名单：与设置面板 / 朗读器可选项一一对应。voice 直接喂给后端 TTS 客户端，
+# 任意串不得到达合成层（既挡非法输入，也让新语言/新名字的接入必须走 UI 白名单）。
+_TTS_VOICE_WHITELIST = frozenset({
+    "de-DE-KatjaNeural", "de-DE-ConradNeural",
+    "de-DE-AmalaNeural", "de-DE-KillianNeural",
+})
 
 async def _serve_tts(text: str, voice: str, rate: str):
     """POST 与 GET 两个路由共享的 TTS 服务逻辑。"""
     if not _TTS_RATE_RE.match(rate or ""):
         raise HTTPException(status_code=400, detail="rate must look like '+0%', '-10%' or '+50%'")
+    if (voice or "") not in _TTS_VOICE_WHITELIST:
+        raise HTTPException(status_code=400, detail="unsupported voice")
     try:
         audio_path = await generate_edge_tts_audio(text, voice, rate)
         return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(500, f"TTS synthesis failed: {str(e)}")
+    except Exception:
+        # 细节只进服务端日志：内部路径/第三方异常对 LAN 客户端无意义且是信息泄露
+        import logging
+        logging.getLogger("delector").exception("TTS synthesis failed")
+        raise HTTPException(500, "语音合成失败，请稍后重试")
 
 @app.post("/api/audio/tts")
 async def get_audio_tts(req: TTSReq):
@@ -1141,9 +1156,9 @@ def clear_audio_cache(request: Request):
 # --- Reading Notes & AI Assist Endpoints ---
 class ReadingNoteReq(BaseModel):
     sentence_id: Optional[int] = None
-    selected_text: str
+    selected_text: str = Field(..., max_length=20_000)
     color: Optional[str] = "yellow"
-    note_content: Optional[str] = ""
+    note_content: Optional[str] = Field(default="", max_length=20_000)
 
 @app.get("/api/articles/{article_id}/notes")
 def list_article_notes(article_id: int):
@@ -1179,8 +1194,8 @@ SYSTEM_NOTE_PROMPT = """你是一位精通德语阅读与考点剖析的资深�
 不要输出除 JSON 以外的任何文字。"""
 
 class NoteAssistReq(BaseModel):
-    sentence: str
-    selected_text: str
+    sentence: str = Field(..., max_length=20_000)
+    selected_text: str = Field(..., max_length=20_000)
 
 @app.post("/api/ai/note-assist")
 async def note_assist(req: NoteAssistReq):
@@ -1205,7 +1220,8 @@ async def note_assist(req: NoteAssistReq):
                     "model": model,
                     "messages": [
                         {"role": "system", "content": SYSTEM_NOTE_PROMPT},
-                        {"role": "user", "content": f"整句: \"{req.sentence}\"\n划选部分: \"{req.selected_text}\""}
+                        # 截断后再送 LLM：与 writing/analyze 一致，控制请求成本
+                        {"role": "user", "content": f"整句: \"{req.sentence[:2000]}\"\n划选部分: \"{req.selected_text[:2000]}\""}
                     ],
                     "response_format": {"type": "json_object"}
                 }

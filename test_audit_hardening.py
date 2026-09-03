@@ -13,6 +13,7 @@ os.environ["DATABASE_PATH"] = "test_audit_delector.db"
 os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"
 
 from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
 
 from server import app, get_setting, set_setting  # noqa: E402
 from database import (  # noqa: E402
@@ -91,6 +92,48 @@ def test_backup_whitelist_split_semantics():
     assert "API_BASE_URL" in BACKUP_SETTINGS_EXPORT_WHITELIST
     assert "API_MODEL" in BACKUP_SETTINGS_EXPORT_WHITELIST
     assert BACKUP_SETTINGS_IMPORT_WHITELIST == ("TTS_VOICE", "TTS_RATE")
+
+
+# ── M1-4: TTS 收敛（voice 白名单 / 错误文案 / 输入上限）──────────────────────
+
+def test_tts_rejects_unknown_voice_before_synthesis(client, monkeypatch):
+    """voice 必须在命中合成器之前被白名单拦下（400），任意串不得透传后端。"""
+    calls = []
+
+    async def fake_gen(text, voice, rate):
+        calls.append(voice)
+        raise HTTPException(500, "should-not-be-reached")
+
+    monkeypatch.setattr("server.generate_edge_tts_audio", fake_gen)
+    res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "evil-voice"})
+    assert res.status_code == 400
+    assert calls == []
+
+
+def test_tts_unexpected_error_hides_internal_detail(client, monkeypatch):
+    """非 HTTP 异常不得把内部栈/路径透传给 LAN 客户端；文案固定，细节仅服务端日志。"""
+    async def fake_gen(text, voice, rate):
+        raise RuntimeError("C:\\secret\\inner\\path boom")
+
+    monkeypatch.setattr("server.generate_edge_tts_audio", fake_gen)
+    res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "de-DE-KatjaNeural"})
+    assert res.status_code == 500
+    detail = res.text
+    assert "secret" not in detail
+    assert "inner" not in detail
+
+
+def test_note_and_noteassist_length_limits(client):
+    """阅读批注与 AI 随笔请求设输入上限：超长直接 422，而不是吞进库/送 LLM。"""
+    r = client.post("/api/articles/ingest", json={"title": "Len", "raw_text": "Der Mann liest."})
+    art_id = r.json()["article_id"]
+
+    long = "x" * 30000
+    n = client.post(f"/api/articles/{art_id}/notes", json={"selected_text": long})
+    assert n.status_code == 422
+
+    a = client.post("/api/ai/note-assist", json={"sentence": long, "selected_text": "liest"})
+    assert a.status_code == 422
 
 
 # ── M1-2: X-WB-Key 恒定时间比较 ────────────────────────────────────────────
