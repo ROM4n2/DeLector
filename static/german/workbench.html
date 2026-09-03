@@ -1173,12 +1173,17 @@ const wbsync = (() => {
   const RTC_ENDPOINT = "/api/wb/rtc/signal";
   const RTC_CHANNEL = "wb-sync";
   const RTC_POLL_MS = 2000;
+  const RTC_RETRY_MS = 3000;   // 断线重建去抖：ICE 抖动时别一秒建好几次
+  const RTC_MAX_FAILS = 3;     // 连续失败上限：到点降级到 Stage A 的 HTTP 轮询
   let _rtc = null;            // RTCPeerConnection
   let _chan = null;           // DataChannel
   let _rtcId = null;          // 本端会话 id（信令 sender；只用 [0-9a-z-]，查询串免转义）
   let _rtcCursor = 0;         // 信令游标：只处理游标之后的消息，避免重放整个握手
   let _rtcPoll = null;
   let _rtcAnswered = false;
+  let _rtcFails = 0;          // 连续失败次数：到上限就降级，不无限重试
+  let _rtcDegraded = false;   // 已降级：WebRTC 不再重试，交给 Stage A HTTP 轮询兜底
+  let _rtcRetryTimer = null;
 
   function rtcSupported() {
     return typeof RTCPeerConnection !== "undefined";
@@ -1259,13 +1264,15 @@ const wbsync = (() => {
     _rtcPoll = setInterval(rtcPoll, RTC_POLL_MS);
   }
   async function rtcConnect() {
-    if (!rtcSupported() || !_key || _rtc) return false;
+    if (!rtcSupported() || !_key) return false;
+    if (_rtc) return true;                              // 已建连：幂等
     _rtcAnswered = false;
     _rtc = new RTCPeerConnection({ iceServers: [] });   // 纯局域网：不需要 STUN
     _chan = _rtc.createDataChannel(RTC_CHANNEL);
     _chan.onopen = rtcOnOpen;
     _chan.onmessage = rtcOnMessage;
     _rtc.onicecandidate = rtcOnIce;
+    _rtc.onconnectionstatechange = rtcOnStateChange;
     if (_pair) {                       // 已配对到远端的一侧发起握手
       const offer = await _rtc.createOffer();
       await _rtc.setLocalDescription(offer);
@@ -1282,6 +1289,37 @@ const wbsync = (() => {
     _chan = null;
     _rtc = null;
     _rtcAnswered = false;
+  }
+  function rtcOnStateChange() {
+    if (!_rtc) return;
+    const st = _rtc.connectionState || _rtc.iceConnectionState || "";
+    if (st === "connected" || st === "completed") { _rtcFails = 0; return; }
+    if (st !== "failed" && st !== "closed" && st !== "disconnected") return;
+    rtcScheduleRetry();
+  }
+  function rtcScheduleRetry() {
+    if (_rtcDegraded || _rtcRetryTimer) return;   // 去抖：一次断线只排一次重建
+    _rtcFails += 1;
+    if (_rtcFails > RTC_MAX_FAILS) {              // 到上限：降级并停手，别空转打服务端
+      _rtcDegraded = true;
+      rtcClose();
+      return;
+    }
+    _rtcRetryTimer = setTimeout(function () {
+      _rtcRetryTimer = null;
+      rtcClose();
+      rtcConnect();
+    }, RTC_RETRY_MS);
+  }
+  function rtcDegraded() {
+    return _rtcDegraded;
+  }
+  /* 编排入口：优先 WebRTC；不可用/建不起来就降级，Stage A 的 HTTP 轮询照常兜底。 */
+  async function autoSync() {
+    if (!rtcSupported()) { _rtcDegraded = true; return false; }
+    const ok = await rtcConnect();
+    if (!ok) { _rtcDegraded = true; return false; }
+    return true;
   }
 
   function pushNow() {
@@ -1343,13 +1381,16 @@ const wbsync = (() => {
       window.addEventListener("beforeunload", () => pushNow());
       _pollTimer = setInterval(pull, POLL_MS);
     } catch (e) { /* 拉取失败：静默 */ }
+    // HTTP 轮询已在上面跑起来（兜底），再试着升级到 WebRTC；失败自动降级回轮询。
+    try { await autoSync(); } catch (e) { _rtcDegraded = true; }
   }
   function init() { boot(); }
   return { init: init, push: push, pushNow: pushNow, pull: pull,
     enabled: () => _enabled, snapshot: snapshot,
-    pairInfo: pairInfo,
+    pairInfo: pairInfo, autoSync: autoSync,
     pair: { set: setPair, clear: clearPair, info: pairInfo, revoke: revokePair },
-    rtc: { connect: rtcConnect, supported: rtcSupported, send: rtcSendEnvelope, close: rtcClose } };
+    rtc: { connect: rtcConnect, supported: rtcSupported, send: rtcSendEnvelope, close: rtcClose,
+           degraded: rtcDegraded } };
 })();
 
 /* ======================================================================
