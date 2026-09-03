@@ -6,8 +6,9 @@ import tempfile
 import re
 import asyncio
 import hashlib
+import ipaddress
 from typing import Optional, List, Dict, Any, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -1442,6 +1443,55 @@ def wb_put_state(req: WbStateReq, request: Request):
 def wb_get_state_key(request: Request):
     _require_localhost(request)
     return {"key": get_wb_sync_key()}
+
+
+# ── 局域网 CORS（Stage A：配对后手机 APP WebView 跨域访问需 ACAO 反射）────
+# 只对「回环 / 私有网段」Origin 反射；公网 Origin 不加头 → 浏览器同源策略仍会
+# 拦下响应，恶意网页读不到 wb 镜像。无 Origin 头的流量（本机/同源/存量用例）
+# 不经由这里，行为零变化（lan_client 若不带 Origin 也不受影响）。
+
+_WB_CORS_EXACT_PATHS = {"/api/wb/state", "/api/wb/state/key"}
+_WB_CORS_PREFIX = "/api/wb/sync/"
+_WB_CORS_ALLOW_HEADERS = "Content-Type, X-WB-Key"
+
+
+def _is_private_origin(origin: str) -> bool:
+    """Origin 头的 host 属回环 / 私有网段才返回 True（否则不反射 ACAO）。"""
+    if not origin:
+        return False
+    try:
+        host = (urlparse(origin).hostname or "").lower()
+    except Exception:
+        return False
+    if not host:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return addr.is_loopback or addr.is_private
+
+
+@app.middleware("http")
+async def _wb_sync_cors(request: Request, call_next):
+    path = request.url.path
+    origin = request.headers.get("Origin", "")
+    is_wb_path = path in _WB_CORS_EXACT_PATHS or path.startswith(_WB_CORS_PREFIX)
+    if not is_wb_path or not _is_private_origin(origin):
+        return await call_next(request)
+    if request.method == "OPTIONS":  # 浏览器预检：直接放行，不落入业务路由
+        return Response(status_code=200, headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+            "Access-Control-Allow-Headers": _WB_CORS_ALLOW_HEADERS,
+            "Access-Control-Max-Age": "600",
+        })
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Vary"] = "Origin"
+    return response
 
 
 class RestoreReq(BaseModel):
