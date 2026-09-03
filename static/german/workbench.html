@@ -690,6 +690,31 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
       <p class="hint" style="margin-top:8px;color:var(--muted)">③ 等待 A 输入你的短码，传输完成后自动完成合并。</p>
     </div>
     <p id="lanStatus" class="hint" style="margin-top:10px;color:var(--muted)"></p>
+    <div style="border-top:1px dashed #ccc;margin-top:14px;padding-top:12px">
+      <h3 style="margin:0 0 6px;font-size:14px">镜像自动同步（配对密钥 · 后台静默）</h3>
+      <p class="hint" style="margin:0 0 10px;color:var(--muted);font-size:12.5px;line-height:1.7">
+        上面的短码同步需要两台设备都在线、手动传；这里的镜像同步只需配对一次，
+        之后本页进度每 5 秒自动与配对设备后台对账（静默，不弹窗）。桌面端打开本页会显示
+        「同步密钥 + 电脑局域网地址」，把这两项告诉手机；手机在下方填入保存即可。
+      </p>
+      <div id="wbPairHostState" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:13px">本机同步密钥：</span>
+          <code id="wbHostKey" style="padding:2px 8px;background:rgba(0,0,0,.06);border-radius:6px;font-size:13px;word-break:break-all">—</code>
+          <button class="btn sm ghost" id="btnPairCopyKey" type="button">复制密钥</button>
+        </div>
+        <p class="hint" id="wbHostHint" style="margin:8px 0 0;color:var(--muted)"></p>
+      </div>
+      <div id="wbPairRemoteState" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="wbPairHostIn" type="text" placeholder="电脑局域网地址，如 192.168.1.103:8000" style="flex:2 1 220px;min-width:180px">
+          <input id="wbPairKeyIn" type="text" placeholder="粘贴电脑端显示的同步密钥" style="flex:3 1 260px;min-width:200px">
+          <button class="btn sm" id="btnPairSave" type="button">保存配对</button>
+          <button class="btn sm ghost" id="btnPairClear" type="button">清除配对</button>
+        </div>
+        <p class="hint" id="wbPairStatus" style="margin:8px 0 0;color:var(--muted)"></p>
+      </div>
+    </div>
   </div>
 
   <div class="panel">
@@ -3233,6 +3258,113 @@ function copyFallback(text) {
   ta.remove();
 }
 
+/* ==== 镜像配对 UI（Stage A Task 4） ==== */
+function wbPairStatusMsg(msg) {
+  const el = $("wbPairStatus");
+  if (el) el.textContent = msg;
+}
+
+// 试连远端（GET 镜像端点局域网免 key）；不可达时返回 false，不抛
+async function wbPairPingRemote(host) {
+  try {
+    let ctrl = null, timer = null;
+    if (typeof AbortController !== "undefined") {
+      ctrl = new AbortController();
+      timer = setTimeout(() => ctrl.abort(), 2500);
+    }
+    const r = await fetch("http://" + host + "/api/wb/state",
+      { cache: "no-store", signal: ctrl ? ctrl.signal : undefined });
+    if (timer) clearTimeout(timer);
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+function wbPairCopyKey() {
+  const v = $("wbHostKey").textContent;
+  if (!v || v === "—") return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(v).then(() => toast("已复制同步密钥")).catch(() => copyFallback(v));
+  } else {
+    copyFallback(v);
+  }
+}
+
+function wbPairSavePair() {
+  const host = $("wbPairHostIn").value.trim().replace(/^https?:\/\//, "");
+  const key = $("wbPairKeyIn").value.trim();
+  if (!host || !key) { wbPairStatusMsg("请填写电脑局域网地址与同步密钥"); return; }
+  if (!wbsync.pair.set(host, key)) { wbPairStatusMsg("保存失败：地址或密钥为空"); return; }
+  wbPairStatusMsg("配对已保存，正在确认电脑在线…");
+  wbPairPingRemote(host).then(ok => {
+    if (ok) {
+      wbPairStatusMsg("配对成功：电脑在线，已开始每 5 秒后台静默对账");
+      toast("配对成功，自动同步已开始");
+      wbsync.pull();
+      wbsync.pushNow();
+    } else {
+      wbPairStatusMsg("配对已保存，但暂连不上 http://" + host + " —— 电脑未开机、地址不对或不在同一局域网；电脑上线后会自动恢复同步");
+      toast("配对已保存，电脑暂不在线");
+    }
+  });
+}
+
+function wbPairClearPair() {
+  if (!wbsync.pair.info()) { wbPairStatusMsg("当前没有配对，无需清除"); return; }
+  wbsync.pair.clear();
+  $("wbPairHostIn").value = "";
+  $("wbPairKeyIn").value = "";
+  wbPairStatusMsg("已清除配对：本设备不再向远端推送；若本机也有 server 则照常本机同步。");
+  toast("已清除配对");
+}
+
+// 宿主态：展示本机局域网地址，方便用户抄给手机
+async function wbPairLoadLanInfo() {
+  const el = $("wbHostHint");
+  el.textContent = "正在检测本机局域网地址…";
+  try {
+    const r = await fetch("/api/wb/lan-info", { cache: "no-store" });
+    if (!r.ok) {
+      el.textContent = "（本机接口暂不可用；请让手机用 http://<电脑IP>:8000 打开本页配对）";
+      return;
+    }
+    const info = await r.json();
+    const addr = info.lan_ip ? "http://" + info.lan_ip + ":" + info.port : null;
+    el.textContent = addr
+      ? "把上面的密钥连同地址 " + addr + " 填到手机「保存配对」栏（仅同一局域网有效）。"
+      : "把上面的密钥连同电脑局域网 IP 与 :8000 端口填到手机「保存配对」栏。";
+  } catch (e) {
+    el.textContent = "（局域网地址检测失败；可手动把 http://<电脑IP>:8000 填入手机配对栏）";
+  }
+}
+
+/* 宿主 vs 远端二态渲染：本机能取到 /api/wb/state/key → 宿主（给手机展示密钥+地址）；
+ * 取不到（手机浏览器 / Android APP 自己的 localhost server）→ 远端（填 host+key 配对）。 */
+async function initLanPairPanel() {
+  $("btnPairSave").addEventListener("click", wbPairSavePair);
+  $("btnPairClear").addEventListener("click", wbPairClearPair);
+  $("btnPairCopyKey").addEventListener("click", wbPairCopyKey);
+  const pair = wbsync.pair.info();
+  let hostKey = null;
+  try {
+    const kr = await fetch("/api/wb/state/key", { cache: "no-store" });
+    if (kr.ok) hostKey = (await kr.json()).key || null;
+  } catch (e) { hostKey = null; }
+  const isHost = !!hostKey;
+  $("wbPairHostState").style.display = isHost ? "" : "none";
+  $("wbPairRemoteState").style.display = isHost ? "none" : "";
+  if (isHost) {
+    $("wbHostKey").textContent = hostKey;
+    wbPairLoadLanInfo();
+  } else {
+    $("wbPairHostIn").value = pair ? pair.host : "";
+    $("wbPairKeyIn").value = pair ? pair.key : "";
+    wbPairStatusMsg(pair
+      ? "已配对 " + pair.host + "：每 5 秒后台静默对账一次，无需再操作。"
+      : "把电脑端（本工作台设置页）显示的「局域网地址 + 同步密钥」填上，点保存配对即可。");
+  }
+}
+/* ==== 镜像配对 UI 结束 ==== */
+
 // DataChannel 设置（isInitiator=true: A 发 JSON 给 B；isInitiator=false: B 接收并 applyMerge）
 function setupDataChannel(dc, isInitiator) {
   dc.onopen = async () => {
@@ -3682,6 +3814,7 @@ renderReview();
   /* F3 · IDB hydrate 已尽力完成、S 是最终本地态，此时才启动 server 镜像同步；
    * 早于这一步会拿到被 idbHydrate 覆盖前的旧 S。 */
   wbsync.init();
+  initLanPairPanel();
 })();
 
 /* 调试/自检出口（控制台可用 __wb.S 查看状态，方便排查） */

@@ -2880,3 +2880,43 @@ def test_wbsync_background_pull_is_silent():
     assert out["explicitToastTotal"] > 0, (
         "显式合并导入（WebRTC / 文件导入）应保留反馈通知，但实际没弹（改过头了）"
     )
+
+
+# --------------------------------------------------------------------------
+# Stage A · 局域网镜像配对面板（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 4）
+# --------------------------------------------------------------------------
+
+def test_lan_pair_panel_section_inside_sync_panel():
+    """LAN 同步面板（#lanSyncPanel）内嵌「镜像配对」小节（Stage A Task 4）。
+
+    配对 UI（宿主态显示 / 远端态 host+key 输入 + 保存/清除 + 状态行）必须落在
+    lanSyncPanel 面板内（lanStatus 行之后、</section> 之前），而不是散落在文件
+    其他地方——确保用户在「设置 → LAN 同步」里能看到这个小节。
+    """
+    block = _WORKBENCH.split('id="lanStatus"')[1].split("</section>")[0]
+    for pid in ("wbPairHostState", "wbPairRemoteState", "wbPairHostIn",
+                "wbPairKeyIn", "btnPairSave", "btnPairClear", "wbPairStatus"):
+        assert f'id="{pid}"' in block, (
+            f"LAN 同步面板缺 id={pid}（镜像配对小节没放进 lanSyncPanel 内）"
+        )
+
+
+def test_lan_pair_panel_wiring_starts_after_wbsync_boot():
+    """配对 UI 的 JS 接线：initLanPairPanel() 具名函数存在，且在 wbsync.init() 之后调用。
+
+    配对面板要读 wbsync.pair 状态、用 /api/wb/state/key 判断「宿主 vs 远端」，
+    启动太早（wbsync 还没 boot）会拿到空状态；因此必须晚于启动块里的 wbsync.init()。
+    """
+    assert "function initLanPairPanel(" in _WORKBENCH, "缺少 initLanPairPanel 具名函数"
+    i_async = _WORKBENCH.index("(async () => {")  # F2/F3 启动块
+    i_init = _WORKBENCH.index("wbsync.init();")
+    i_pair = _WORKBENCH.index("initLanPairPanel();")
+    assert i_init > i_async and i_pair > i_init, (
+        "initLanPairPanel() 调用必须晚于 wbsync.init()（wbsync boot 之后才渲染配对面板）"
+    )
+    # 保存/清除/读取必须走 wbsync.pair API（只直接写 localStorage 会让 wbsync 内部 _pair 失同步）
+    # 用配对 UI 代码块的起止注释锚定位（比「下一个 function」边界稳）
+    ui_block = _WORKBENCH.split("镜像配对 UI（Stage A Task 4）")[1].split("镜像配对 UI 结束")[0]
+    assert "wbsync.pair.info(" in ui_block, "配对面板必须读 wbsync.pair.info() 回填"
+    assert "wbsync.pair.set(" in ui_block, "保存必须调 wbsync.pair.set（只写 localStorage 配对不生效）"
+    assert "wbsync.pair.clear(" in ui_block, "清除必须调 wbsync.pair.clear"
