@@ -50,6 +50,8 @@ from database import (
     get_progress_db_path,
     get_db,
     get_progress_db,
+    db_conn,
+    db_progress_conn,
     init_progress_db,
     log_study_event,
     init_db,
@@ -356,7 +358,7 @@ async def ingest_from_url(req: IngestUrlReq):
 
     final_title = req.title.strip() if req.title else title
     art_id = await asyncio.to_thread(ingest_article, final_title, body_text, None, req.url)
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT processed_json FROM articles WHERE id = ?", (art_id,)).fetchone()
         pj = json.loads(row["processed_json"]) if row else {}
     return {"article_id": art_id, "title": final_title, "char_count": len(body_text), "stats": pj.get("stats", {})}
@@ -383,7 +385,7 @@ def ingest(req: IngestReq):
 def list_articles():
     # 只读列表路径：不再对 stats 缺失行做逐行 NLP 重算 + UPDATE（N+1 写副作用）。
     # 惰性迁移唯一保留在单篇 GET /api/articles/{id}。
-    with get_db() as conn:
+    with db_conn() as conn:
         rows = conn.execute(
             "SELECT id, title, created_at, length(raw_text) as char_count, processed_json "
             "FROM articles ORDER BY id DESC"
@@ -404,7 +406,7 @@ def list_articles():
 
 @app.get("/api/articles/{article_id}")
 def get_article(article_id: int):
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Article not found")
@@ -422,7 +424,7 @@ def get_article(article_id: int):
 @app.delete("/api/articles/{article_id}")
 def delete_article(article_id: int, request: Request):
     _require_localhost(request)
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT id FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Article not found")
@@ -797,7 +799,7 @@ def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) 
 
 @app.post("/api/cards/vocab")
 def add_vocab_card(req: VocabCardReq):
-    with get_db() as conn:
+    with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO vocab_cards (article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (req.article_id, req.word, req.lemma, req.pos, req.gender, req.plural or "", req.cefr_level, req.definition_zh, req.sentence_context)
@@ -808,7 +810,7 @@ def add_vocab_card(req: VocabCardReq):
 
 @app.post("/api/cards/grammar")
 def add_grammar_card(req: GrammarCardReq):
-    with get_db() as conn:
+    with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO grammar_cards (article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula, corrected_form, error_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (req.article_id, req.sentence_context, req.grammar_name, req.cefr_level, req.explanation_zh, req.rule_formula or "", req.corrected_form or "", req.error_type or "")
@@ -819,7 +821,7 @@ def add_grammar_card(req: GrammarCardReq):
 
 @app.get("/api/cards")
 def get_cards():
-    with get_db() as conn:
+    with db_conn() as conn:
         v = [dict(r) for r in conn.execute(
             "SELECT * FROM vocab_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
         ).fetchall()]
@@ -842,7 +844,7 @@ def delete_card(card_type: str, card_id: int, request: Request):
     if card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Card {card_id} not found")
@@ -859,7 +861,7 @@ def toggle_master(card_type: str, card_id: int, req: MasterReq):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
     now_ts = datetime.now().isoformat() if req.mastered else None
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Card {card_id} not found")
@@ -884,7 +886,7 @@ def record_quiz(req: QuizRecordReq):
     if req.card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if req.card_type == "vocab" else "grammar_cards"
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (req.card_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Card {req.card_id} not found")
@@ -892,7 +894,7 @@ def record_quiz(req: QuizRecordReq):
             conn.execute(f"UPDATE {tbl} SET correct_count = correct_count + 1 WHERE id = ?", (req.card_id,))
         else:
             conn.execute(f"UPDATE {tbl} SET wrong_count = wrong_count + 1 WHERE id = ?", (req.card_id,))
-    with get_progress_db() as conn:
+    with db_progress_conn() as conn:
         conn.execute(
             "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
             (req.card_id, req.card_type, req.mode, 1 if req.correct else 0)
@@ -920,7 +922,7 @@ def log_article_read(req: ReadLogReq):
 def get_progress_stats():
     from datetime import timedelta
     # --- main db ---
-    with get_db() as conn:
+    with db_conn() as conn:
         # 单扫条件聚合：COUNT + SUM(条件) 一次出总量与已掌握，替代 4 次全表 COUNT
         vc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM vocab_cards").fetchone()
         gc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM grammar_cards").fetchone()
@@ -958,7 +960,7 @@ def get_progress_stats():
             top_errors.append(dict(row))
 
     # --- progress db ---
-    with get_progress_db() as conn:
+    with db_progress_conn() as conn:
         # 30-day daily trend：一次范围查 + Python 补零（替代 30 次单日往返）
         today = datetime.now().date()
         first_day = (today - timedelta(days=29)).isoformat()
@@ -1176,13 +1178,13 @@ class ReadingNoteReq(BaseModel):
 
 @app.get("/api/articles/{article_id}/notes")
 def list_article_notes(article_id: int):
-    with get_db() as conn:
+    with db_conn() as conn:
         rows = conn.execute("SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
         return [dict(r) for r in rows]
 
 @app.post("/api/articles/{article_id}/notes")
 def create_article_note(article_id: int, req: ReadingNoteReq):
-    with get_db() as conn:
+    with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO reading_notes (article_id, sentence_id, selected_text, color, note_content) VALUES (?, ?, ?, ?, ?)",
             (article_id, req.sentence_id, req.selected_text, req.color or "yellow", req.note_content or "")
@@ -1194,7 +1196,7 @@ def delete_article_note(note_id: int, request: Request):
     # 删除批注同本机写闸约定：与 delete_article / delete_card / delete_essay 一致，
     # 防局域网设备任意删用户精读批注。
     _require_localhost(request)
-    with get_db() as conn:
+    with db_conn() as conn:
         conn.execute("DELETE FROM reading_notes WHERE id = ?", (note_id,))
         return {"status": "ok"}
 
@@ -1334,7 +1336,7 @@ async def test_api_key(settings: SettingsUpdate, request: Request):
 # --- Study Guide Export (Markdown) ---
 @app.get("/api/articles/{article_id}/export-guide")
 def export_study_guide(article_id: int):
-    with get_db() as conn:
+    with db_conn() as conn:
         art = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not art:
             raise HTTPException(404, "Article not found")
@@ -1654,7 +1656,7 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
     if card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Card {card_id} not found")
@@ -1700,7 +1702,7 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
         })
         updated["next_intervals"] = next_intervals
 
-    with get_progress_db() as pconn:
+    with db_progress_conn() as pconn:
         pconn.execute(
             "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
             (card_id, card_type, "fsrs_review", 1 if is_correct else 0)
@@ -1711,7 +1713,7 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
 @app.get("/api/cards/due")
 def get_due_cards():
     today = datetime.now().strftime('%Y-%m-%d')
-    with get_db() as conn:
+    with db_conn() as conn:
         v = [dict(r) for r in conn.execute(
             "SELECT * FROM vocab_cards WHERE mastered = 0 AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
             (today,)
@@ -1875,7 +1877,7 @@ class ClozeGenReq(BaseModel):
 
 @app.post("/api/articles/{article_id}/exercise/cloze")
 def get_article_cloze_exercise(article_id: int, req: ClozeGenReq):
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Article {article_id} not found")
@@ -1894,7 +1896,7 @@ class ClozeEvalReq(BaseModel):
 
 @app.post("/api/exercise/cloze/evaluate")
 def evaluate_cloze_exercise(req: ClozeEvalReq):
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (req.article_id,)).fetchone()
         if not row:
             raise HTTPException(404, f"Article {req.article_id} not found")
@@ -1982,7 +1984,7 @@ def create_essay(req: EssayCreateReq):
     from writing_rules import analyze_essay_text
     a = analyze_essay_text(req.content[:5000], _get_writer_nlp())
     cefr = a.get("cefr", {}).get("recommended_level")
-    with get_db() as conn:
+    with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO essays (title, content, analysis_json, cefr_level, error_count, sentence_count) VALUES (?, ?, ?, ?, ?, ?)",
             (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr, a["error_count"], len(a["sentences"]))
@@ -1993,7 +1995,7 @@ def create_essay(req: EssayCreateReq):
 
 @app.get("/api/essays")
 def list_essays():
-    with get_db() as conn:
+    with db_conn() as conn:
         rows = conn.execute(
             "SELECT id, title, cefr_level, error_count, sentence_count, created_at, updated_at FROM essays ORDER BY updated_at DESC, id DESC"
         ).fetchall()
@@ -2002,7 +2004,7 @@ def list_essays():
 
 @app.get("/api/essays/{essay_id}")
 def get_essay(essay_id: int):
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
     if not row:
         raise HTTPException(404, "essay not found")
@@ -2018,7 +2020,7 @@ def get_essay(essay_id: int):
 @app.put("/api/essays/{essay_id}")
 def update_essay(essay_id: int, req: EssayUpdateReq):
     from writing_rules import analyze_essay_text
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
             raise HTTPException(404, "essay not found")
@@ -2040,7 +2042,7 @@ def update_essay(essay_id: int, req: EssayUpdateReq):
 @app.delete("/api/essays/{essay_id}")
 def delete_essay(essay_id: int, request: Request):
     _require_localhost(request)
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
             raise HTTPException(404, "essay not found")
@@ -2051,7 +2053,7 @@ def delete_essay(essay_id: int, request: Request):
 
 @app.post("/api/writing/cards")
 def save_writing_card(req: WritingCardReq):
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (req.essay_id,)).fetchone()
     if not row:
         raise HTTPException(404, "essay not found")
@@ -2171,7 +2173,7 @@ async def api_writing_ai_polish_diff(req: AIPolishReq):
 
 @app.post("/api/essays/{essay_id}/versions")
 def save_essay_version(essay_id: int, req: EssayVersionCreateReq):
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
             raise HTTPException(404, "essay not found")
@@ -2189,7 +2191,7 @@ def save_essay_version(essay_id: int, req: EssayVersionCreateReq):
 
 @app.get("/api/essays/{essay_id}/versions")
 def list_essay_versions(essay_id: int):
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
             raise HTTPException(404, "essay not found")
@@ -2218,7 +2220,7 @@ def list_essay_versions(essay_id: int):
 
 @app.get("/api/essays/{essay_id}/versions/{version_id}")
 def get_essay_version(essay_id: int, version_id: int):
-    with get_db() as conn:
+    with db_conn() as conn:
         essay = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:
             raise HTTPException(404, "essay not found")
@@ -2250,7 +2252,7 @@ def get_essay_version(essay_id: int, version_id: int):
 @app.delete("/api/essays/{essay_id}/versions/{version_id}")
 def delete_essay_version(essay_id: int, version_id: int, request: Request):
     _require_localhost(request)
-    with get_db() as conn:
+    with db_conn() as conn:
         essay = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:
             raise HTTPException(404, "essay not found")
@@ -2270,7 +2272,7 @@ def delete_essay_version(essay_id: int, version_id: int, request: Request):
 @app.post("/api/essays/{essay_id}/restore")
 def restore_essay_version(essay_id: int, req: EssayRestoreReq):
     from writing_rules import analyze_essay_text
-    with get_db() as conn:
+    with db_conn() as conn:
         essay = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:
             raise HTTPException(404, "essay not found")
@@ -2323,7 +2325,7 @@ def api_writing_apply(req: WritingApplyReq):
     accepted = [i in set(req.accepted_indices) for i in range(len(hunks))]
     merged = merge_sentences(req.original_text, req.corrected_text, accepted)
 
-    with get_db() as conn:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (req.essay_id,)).fetchone()
         if not row:
             raise HTTPException(404, "essay not found")

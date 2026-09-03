@@ -105,6 +105,43 @@ def test_database_layer_connections_closed_deterministically(monkeypatch):
         f"泄漏 {state['opened'] - state['closed']} 个连接"
 
 
+def test_server_endpoints_close_every_connection(client, monkeypatch):
+    """server 路由每个请求打开的主/进度库连接都必须 one-open-one-close，
+    覆盖跨双库的代表性端点（读、写、复习、统计、wb 镜像）。"""
+    import database as db
+    state = {"opened": 0, "closed": 0}
+
+    orig_connect = db.sqlite3.connect
+    orig_close_conn = db._close_db_conn
+
+    def spy_connect(path, *args, **kwargs):
+        state["opened"] += 1
+        return orig_connect(path, *args, **kwargs)
+
+    def spy_close_conn(conn):
+        state["closed"] += 1
+        return orig_close_conn(conn)
+
+    monkeypatch.setattr(db.sqlite3, "connect", spy_connect)
+    monkeypatch.setattr(db, "_close_db_conn", spy_close_conn)
+
+    assert client.get("/api/articles").status_code == 200
+    assert client.get("/api/wb/state").status_code == 200
+    assert client.get("/api/progress/stats").status_code == 200
+    c = client.post("/api/cards/vocab", json={
+        "word": "probe", "lemma": "probe", "pos": "NOUN", "cefr_level": "A1",
+        "definition_zh": "探针", "sentence_context": "Ein Probe wort.",
+    })
+    card_id = c.json()["id"]
+    assert client.post(f"/api/cards/vocab/{card_id}/review", json={"grade": 3}).status_code == 200
+    assert client.get("/api/cards/due").status_code == 200
+    assert client.get("/api/prep/saved").status_code == 200
+
+    assert state["opened"] > 0
+    assert state["opened"] == state["closed"], \
+        f"server 端点泄漏 {state['opened'] - state['closed']} 个连接"
+
+
 # ── M2-3: list_articles 只读减载 + review 去回查 ────────────────────────────
 
 def test_list_articles_readonly_no_stats_recompute(client, monkeypatch):
