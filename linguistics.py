@@ -782,6 +782,16 @@ for _form, _inf in _AUX_MODAL_PRESENT.items():
         _REVERSE_VERB_INDEX[_form] = _inf
 
 
+# 可分动词前缀：查词热路径，模块级常量免每次重建列表（lookup_irregular_verb 用）
+_SEPARABLE_PREFIXES = (
+    "ab", "an", "auf", "aus", "bei", "dar", "durch", "ein", "ent", "er",
+    "fort", "ge", "her", "heraus", "herein", "hin", "hinaus", "hinein",
+    "hinter", "mit", "nach", "nieder", "über", "um", "unter", "ver",
+    "voll", "vor", "voran", "vorbei", "weg", "weiter", "wieder", "zer",
+    "zu", "zurück", "zusammen"
+)
+
+
 def lookup_irregular_verb(form_or_lemma: str) -> Optional[VerbTrio]:
     """
     O(1) Bidirectional lookup for Goethe strong/irregular verbs.
@@ -815,14 +825,7 @@ def lookup_irregular_verb(form_or_lemma: str) -> Optional[VerbTrio]:
             return VerbTrio(praet, p2, hilf, def_zh, infinitiv=inf)
 
     # 4. Handle prefixed compounds for derived verbs (e.g. 'vorangehen', 'hinausfahren')
-    prefixes = [
-        "ab", "an", "auf", "aus", "bei", "dar", "durch", "ein", "ent", "er",
-        "fort", "ge", "her", "heraus", "herein", "hin", "hinaus", "hinein",
-        "hinter", "mit", "nach", "nieder", "über", "um", "unter", "ver",
-        "voll", "vor", "voran", "vorbei", "weg", "weiter", "wieder", "zer",
-        "zu", "zurück", "zusammen"
-    ]
-    for pfx in prefixes:
+    for pfx in _SEPARABLE_PREFIXES:
         if clean.startswith(pfx) and len(clean) > len(pfx) + 2:
             sub = clean[len(pfx):]
             if sub in _REVERSE_VERB_INDEX:
@@ -1062,6 +1065,30 @@ LINGUISTICS_VOCAB_EXT: Dict[str, Tuple[str, str, Optional[str], str]] = {
 
 
 
+# 不规则复数还原表 + 常规复数词尾顺序（_get_element_info 每查词重建太浪费）
+_PLURAL_STEM_MAP = {
+    "wörter": "wort", "worte": "wort",
+    "bücher": "buch",
+    "männer": "mann",
+    "frauen": "frau",
+    "kinder": "kind",
+    "häuser": "haus",
+    "städte": "stadt",
+    "länder": "land",
+    "bäume": "baum",
+    "tage": "tag",
+    "bilder": "bild",
+    "ärzte": "arzt",
+    "züge": "zug",
+    "hände": "hand",
+    "mütter": "mutter",
+    "väter": "vater",
+    "brüder": "bruder",
+    "töchter": "tochter"
+}
+_PLURAL_SUFFIX_ORDER = ("en", "n", "e", "er", "s")
+
+
 def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
     """Retrieve morphology metadata from CORE_VOCAB_DB or LINGUISTICS_VOCAB_EXT."""
     k = token_lower.strip().lower()
@@ -1107,33 +1134,13 @@ def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
             return hit
 
     # 3. Known irregular plural stems
-    plural_stems = {
-        "wörter": "wort", "worte": "wort",
-        "bücher": "buch",
-        "männer": "mann",
-        "frauen": "frau",
-        "kinder": "kind",
-        "häuser": "haus",
-        "städte": "stadt",
-        "länder": "land",
-        "bäume": "baum",
-        "tage": "tag",
-        "bilder": "bild",
-        "ärzte": "arzt",
-        "züge": "zug",
-        "hände": "hand",
-        "mütter": "mutter",
-        "väter": "vater",
-        "brüder": "bruder",
-        "töchter": "tochter"
-    }
-    if k in plural_stems:
-        hit = _direct_lookup(plural_stems[k])
+    if k in _PLURAL_STEM_MAP:
+        hit = _direct_lookup(_PLURAL_STEM_MAP[k])
         if hit:
             return hit
 
     # 4. Standard German plural endings (-en, -n, -e, -er, -s)
-    for suf in ["en", "n", "e", "er", "s"]:
+    for suf in _PLURAL_SUFFIX_ORDER:
         if k.endswith(suf) and len(k) > len(suf) + 2:
             stem = k[:-len(suf)]
             hit = _direct_lookup(stem) or _direct_lookup(stem.replace("ss", "ß"))

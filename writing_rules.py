@@ -4,6 +4,7 @@
 只报高置信错误（宁可漏报不可误报）。nlp=None 时优雅返回零错误 + CEFR。
 spaCy 模型由调用方注入（server 传 Android 安全加载的 nlp；测试直传 spacy.load）。
 """
+import re
 from typing import Any, Dict, List, Optional, Tuple
 from core_dict import lookup_core_vocab
 
@@ -27,6 +28,50 @@ _PREP_CASE = {
 
 _CASE_NORM = {
     "nom": "Nom", "akk": "Akk", "acc": "Akk", "dat": "Dat", "gen": "Gen"
+}
+
+# ── decline_determiner 查表（函数随句调用，常量一次性构造，避免每句重建 dict）──
+_DEF_BY_GENDER = {
+    "Masc": {"Nom": "der", "Akk": "den", "Dat": "dem", "Gen": "des"},
+    "Fem":  {"Nom": "die", "Akk": "die", "Dat": "der", "Gen": "der"},
+    "Neut": {"Nom": "das", "Akk": "das", "Dat": "dem", "Gen": "des"},
+}
+_INDEF_BY_GENDER = {
+    "Masc": {"Nom": "ein", "Akk": "einen", "Dat": "einem", "Gen": "eines"},
+    "Fem":  {"Nom": "eine", "Akk": "eine", "Dat": "einer", "Gen": "einer"},
+    "Neut": {"Nom": "ein", "Akk": "ein", "Dat": "einem", "Gen": "eines"},
+}
+_OWNER_STEMS = {
+    "kein": "kein", "mein": "mein", "dein": "dein",
+    "sein": "sein", "ihr": "ihr", "unser": "unser", "euer": "euer", "eur": "euer"
+}
+_PLUR_ENDING_BY_CASE = {"Nom": "e", "Akk": "e", "Dat": "en", "Gen": "er"}
+_SING_ENDING_BY_GENDER_CASE = {
+    "Masc": {"Nom": "", "Akk": "en", "Dat": "em", "Gen": "es"},
+    "Fem":  {"Nom": "e", "Akk": "e", "Dat": "er", "Gen": "er"},
+    "Neut": {"Nom": "", "Akk": "", "Dat": "em", "Gen": "es"},
+}
+
+# ── A1 日期归一（表单判题）与书信词表（email 判题）—— 每判一次都重建的常量 ──
+_A1_MONTH_MAP = {
+    "01": ["januar", "jan"], "02": ["februar", "feb"], "03": ["märz", "maerz", "mar"],
+    "04": ["april", "apr"], "05": ["mai"], "06": ["juni", "jun"],
+    "07": ["juli", "jul"], "08": ["august", "aug"], "09": ["september", "sep"],
+    "10": ["oktober", "okt"], "11": ["november", "nov"], "12": ["dezember", "dez"]
+}
+_A1_DATE_PAT = re.compile(r'^(\d{1,2})\s*[\.]?\s*([a-zA-Zäöüß0-9]+)')
+_A1_FORMAL_GREETINGS = ["sehr geehrte damen und herren", "sehr geehrte frau", "sehr geehrter herr"]
+_A1_INFORMAL_GREETINGS = ["liebe", "lieber", "hallo", "guten tag", "hi"]
+_A1_VALEDICTIONS = [
+    "viele grüße", "herzliche grüße", "liebe grüße", "beste grüße", "schöne grüße",
+    "mit freundlichen grüßen", "mit besten grüßen", "bis bald", "auf wiedersehen",
+    "alles gute", "alles liebe", "herzlichen dank", "dein", "deine", "tschüss"
+]
+_A1_POLITE_PRONOUNS = {"Sie", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer"}
+_A1_PROPER_NOUNS = {
+    "montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag", "sonntag",
+    "berlin", "münchen", "hamburg", "köln", "frankfurt", "deutschland", "österreich", "schweiz",
+    "januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember"
 }
 
 _GENDER_NORM = {
@@ -61,49 +106,29 @@ def decline_determiner(lemma: str, gender: Optional[str], number: Optional[str],
             return {"Nom": "die", "Akk": "die", "Dat": "den", "Gen": "der"}[c]
         if not g:
             return None
-        table = {
-            "Masc": {"Nom": "der", "Akk": "den", "Dat": "dem", "Gen": "des"},
-            "Fem":  {"Nom": "die", "Akk": "die", "Dat": "der", "Gen": "der"},
-            "Neut": {"Nom": "das", "Akk": "das", "Dat": "dem", "Gen": "des"},
-        }
-        return table[g][c]
+        return _DEF_BY_GENDER[g][c]
 
     # 不定冠词（无复数）
     if lem in ("ein", "eine", "einen", "einem", "einer", "eines"):
         if num == "Plur" or not g:
             return None
-        table = {
-            "Masc": {"Nom": "ein", "Akk": "einen", "Dat": "einem", "Gen": "eines"},
-            "Fem":  {"Nom": "eine", "Akk": "eine", "Dat": "einer", "Gen": "einer"},
-            "Neut": {"Nom": "ein", "Akk": "ein", "Dat": "einem", "Gen": "eines"},
-        }
-        return table[g][c]
+        return _INDEF_BY_GENDER[g][c]
 
     # kein 与物主代词
-    stems = {
-        "kein": "kein", "mein": "mein", "dein": "dein",
-        "sein": "sein", "ihr": "ihr", "unser": "unser", "euer": "euer", "eur": "euer"
-    }
     base_stem = None
-    for k, v in stems.items():
+    for k, v in _OWNER_STEMS.items():
         if lem == k or lem.startswith(k):
             base_stem = v
             break
     if base_stem:
         if num == "Plur":
-            endings = {"Nom": "e", "Akk": "e", "Dat": "en", "Gen": "er"}
-            end = endings[c]
+            end = _PLUR_ENDING_BY_CASE[c]
             if base_stem == "euer":
                 return "eur" + end if end else "euer"
             return base_stem + end
         if not g:
             return None
-        endings = {
-            "Masc": {"Nom": "", "Akk": "en", "Dat": "em", "Gen": "es"},
-            "Fem":  {"Nom": "e", "Akk": "e", "Dat": "er", "Gen": "er"},
-            "Neut": {"Nom": "", "Akk": "", "Dat": "em", "Gen": "es"},
-        }
-        end = endings[g][c]
+        end = _SING_ENDING_BY_GENDER_CASE[g][c]
         if base_stem == "euer":
             return "eur" + end if end else "euer"
         return base_stem + end
@@ -454,8 +479,6 @@ def check_a1_formular_answer(user_val: str, expected_val: str, aliases: Optional
     Evaluates a user answer in Goethe A1 Teil 1 (Formular ausfuellen).
     Case-insensitive, normalizes punctuation, whitespace, and German date formats (e.g. 15.08 vs 15. August).
     """
-    import re
-
     def _normalize(s: str) -> str:
         s = s.strip().lower()
         s = re.sub(r'[,;.!?/\\-]+', ' ', s)
@@ -478,21 +501,14 @@ def check_a1_formular_answer(user_val: str, expected_val: str, aliases: Optional
                 return {"correct": True, "expected": expected_val, "user_answer": user_val}
 
     # Date normalization: e.g. 15.08. vs 15. August
-    MONTH_MAP = {
-        "01": ["januar", "jan"], "02": ["februar", "feb"], "03": ["märz", "maerz", "mar"],
-        "04": ["april", "apr"], "05": ["mai"], "06": ["juni", "jun"],
-        "07": ["juli", "jul"], "08": ["august", "aug"], "09": ["september", "sep"],
-        "10": ["oktober", "okt"], "11": ["november", "nov"], "12": ["dezember", "dez"]
-    }
-    date_pat = re.compile(r'^(\d{1,2})\s*[\.]?\s*([a-zA-Zäöüß0-9]+)')
-    m_user = date_pat.match(norm_user)
-    m_exp = date_pat.match(norm_exp)
+    m_user = _A1_DATE_PAT.match(norm_user)
+    m_exp = _A1_DATE_PAT.match(norm_exp)
     if m_user and m_exp:
         day_u, mon_u = m_user.group(1).lstrip("0"), m_user.group(2).lower()
         day_e, mon_e = m_exp.group(1).lstrip("0"), m_exp.group(2).lower()
         if day_u == day_e:
             # Check month equivalence
-            for num, names in MONTH_MAP.items():
+            for num, names in _A1_MONTH_MAP.items():
                 all_names = [num, num.lstrip("0")] + names
                 if (mon_u in all_names) and (mon_e in all_names):
                     return {"correct": True, "expected": expected_val, "user_answer": user_val}
@@ -510,8 +526,6 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
     4. Word count recommendation (25-35 words).
     5. Leitpunkte coverage hints.
     """
-    import re
-
     lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
     words = [w for w in re.findall(r'[a-zA-ZäöüÄÖÜß]+', text)]
     word_count = len(words)
@@ -533,14 +547,11 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
         })
 
     # 2. Greeting check
-    FORMAL_GREETINGS = ["sehr geehrte damen und herren", "sehr geehrte frau", "sehr geehrter herr"]
-    INFORMAL_GREETINGS = ["liebe", "lieber", "hallo", "guten tag", "hi"]
-
     greeting_line = lines[0] if lines else ""
     norm_greeting = re.sub(r'[,.!?]', '', greeting_line).strip().lower()
 
-    is_formal = any(norm_greeting.startswith(fg) for fg in FORMAL_GREETINGS)
-    is_informal = any(norm_greeting.startswith(ig) for ig in INFORMAL_GREETINGS)
+    is_formal = any(norm_greeting.startswith(fg) for fg in _A1_FORMAL_GREETINGS)
+    is_informal = any(norm_greeting.startswith(ig) for ig in _A1_INFORMAL_GREETINGS)
     has_valid_greeting = is_formal or is_informal
 
     has_greeting_comma = greeting_line.endswith(",")
@@ -567,15 +578,10 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
             first_w = body_words[0]
             # In German, if greeting ends with comma, body starts with lowercase ('ich lade dich ein...')
             # Exempt: polite pronouns (Sie, Ihr), capitalized nouns, proper nouns (Montag, Berlin...)
-            is_polite = first_w in ["Sie", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer"]
+            is_polite = first_w in _A1_POLITE_PRONOUNS
             vocab_info = lookup_core_vocab(first_w) or lookup_core_vocab(first_w.lower())
             is_noun = bool(vocab_info and vocab_info.get("pos") in ("NOUN", "PROPN"))
-            KNOWN_PROPER_NOUNS = {
-                "montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag", "sonntag",
-                "berlin", "münchen", "hamburg", "köln", "frankfurt", "deutschland", "österreich", "schweiz",
-                "januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember"
-            }
-            if first_w.lower() in KNOWN_PROPER_NOUNS:
+            if first_w.lower() in _A1_PROPER_NOUNS:
                 is_noun = True
 
             if first_w[0].isupper() and not is_polite and not is_noun:
@@ -587,19 +593,13 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
                 })
 
     # 4. Valediction & Comma prohibition check
-    VALEDICTIONS = [
-        "viele grüße", "herzliche grüße", "liebe grüße", "beste grüße", "schöne grüße",
-        "mit freundlichen grüßen", "mit besten grüßen", "bis bald", "auf wiedersehen",
-        "alles gute", "alles liebe", "herzlichen dank", "dein", "deine", "tschüss"
-    ]
-
     valediction_found = False
     valediction_line = ""
     has_valediction_comma_error = False
 
     for l in reversed(lines):
         norm_l = re.sub(r'[,.!?]', '', l).strip().lower()
-        if any(norm_l.startswith(v) for v in VALEDICTIONS):
+        if any(norm_l.startswith(v) for v in _A1_VALEDICTIONS):
             valediction_found = True
             valediction_line = l
             if l.endswith(","):

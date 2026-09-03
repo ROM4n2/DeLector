@@ -142,11 +142,15 @@ CEFR_DICT = {
 }
 
 
+# 词尾启发式（get_cefr_level 每词调用，常量化免重建元组）
+_CEFR_B2_SUFFIX_HINTS = ("ität", "ismus", "schaft", "ung")
+
+
 def get_cefr_level(lemma: str) -> str:
     if not lemma:
         return "A1"
     low = lemma.lower().strip()
-    
+
     # 1. Exact core dictionary lookup
     dict_lvl = get_core_cefr_level(low)
     if dict_lvl:
@@ -155,9 +159,9 @@ def get_cefr_level(lemma: str) -> str:
     # 2. Hardcoded fallback list
     if low in CEFR_DICT:
         return CEFR_DICT[low]
-        
+
     # 3. Suffix and length heuristics
-    if any(low.endswith(s) for s in ["ität", "ismus", "schaft", "ung"]):
+    if any(low.endswith(s) for s in _CEFR_B2_SUFFIX_HINTS):
         return "B2" if len(low) > 10 else "B1"
     if len(low) > 11:
         return "B2"
