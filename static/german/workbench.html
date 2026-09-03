@@ -702,6 +702,7 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
           <span style="font-size:13px">本机同步密钥：</span>
           <code id="wbHostKey" style="padding:2px 8px;background:rgba(0,0,0,.06);border-radius:6px;font-size:13px;word-break:break-all">—</code>
           <button class="btn sm ghost" id="btnPairCopyKey" type="button">复制密钥</button>
+          <button class="btn sm ghost" id="btnPairRevoke" type="button">撤销配对</button>
         </div>
         <p class="hint" id="wbHostHint" style="margin:8px 0 0;color:var(--muted)"></p>
       </div>
@@ -1146,6 +1147,23 @@ const wbsync = (() => {
   function pairInfo() {
     return _pair ? { host: _pair.host, key: _pair.key, ts: _pair.ts } : null;
   }
+  /* 撤销配对（Stage B M2）：让「本页所在这台机器」重新生成同步密钥，旧 key 立即 403。
+   * POST /api/wb/state/key 有 _require_localhost 闸，手机上调必然 403 —— 手机侧要解除
+   * 配对走 pair.clear()，不能用 revoke。
+   * 成功返回新 key（本机改用它继续推送，否则会被自己作废的 key 卡死），失败返回 null。 */
+  async function revokePair() {
+    let res = null;
+    try {
+      res = await fetch(ENDPOINT + "/key", { method: "POST", cache: "no-store" });
+    } catch (e) { return null; }
+    if (!res || !res.ok) return null;
+    let newKey = null;
+    try { newKey = ((await res.json()) || {}).key || null; } catch (e) { return null; }
+    clearPair();
+    if (!newKey) return null;
+    _key = newKey;
+    return newKey;
+  }
   function pushNow() {
     if (!_enabled || !_key) return;
     // 服务端契约是 {"payload": {...}}（WbStateReq），裸快照会被解析成空 payload，
@@ -1210,7 +1228,7 @@ const wbsync = (() => {
   return { init: init, push: push, pushNow: pushNow, pull: pull,
     enabled: () => _enabled, snapshot: snapshot,
     pairInfo: pairInfo,
-    pair: { set: setPair, clear: clearPair, info: pairInfo } };
+    pair: { set: setPair, clear: clearPair, info: pairInfo, revoke: revokePair } };
 })();
 
 /* ======================================================================
@@ -3317,6 +3335,22 @@ function wbPairClearPair() {
   toast("已清除配对");
 }
 
+// 宿主面板的提示行（#wbHostHint）；远端面板的提示行走 wbPairStatusMsg
+function wbPairHostHintMsg(msg) {
+  const el = $("wbHostHint");
+  if (el) el.textContent = msg;
+}
+
+/* 撤销配对（Stage B M2）：重新生成本机同步密钥 → 所有已配对设备立即失效。
+ * 只有运行 DeLector 服务端的这台机器能撤销（端点有 _require_localhost 闸）。 */
+async function wbPairRevoke() {
+  const newKey = await wbsync.pair.revoke();
+  if (!newKey) { wbPairHostHintMsg("撤销失败：只有运行 DeLector 服务端的这台机器可以撤销配对"); return; }
+  $("wbHostKey").textContent = newKey;
+  wbPairHostHintMsg("已撤销配对：旧密钥立即失效，手机/平板需用上面的新密钥重新配对。");
+  toast("已撤销配对，旧密钥已失效");
+}
+
 // 宿主态：展示本机局域网地址，方便用户抄给手机
 async function wbPairLoadLanInfo() {
   const el = $("wbHostHint");
@@ -3343,6 +3377,7 @@ async function initLanPairPanel() {
   $("btnPairSave").addEventListener("click", wbPairSavePair);
   $("btnPairClear").addEventListener("click", wbPairClearPair);
   $("btnPairCopyKey").addEventListener("click", wbPairCopyKey);
+  $("btnPairRevoke").addEventListener("click", wbPairRevoke);
   const pair = wbsync.pair.info();
   let hostKey = null;
   try {
