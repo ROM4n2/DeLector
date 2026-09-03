@@ -2764,3 +2764,42 @@ def test_wbsync_put_body_wraps_payload():
         "这台镜像只是空壳，拉过去等于什么都没同步"
     )
     assert any(r["hasKeyHeader"] for r in out["requests"]), "PUT 没带 X-WB-Key 鉴权头"
+
+
+def test_wbsync_phone_pulls_without_key():
+    """动态探针：手机（远端 IP 拿不到 key）仍能自动拉取服务端镜像进度。
+
+    2026-09-03 事故：wbsync 把「拉取镜像」也锁在「先拿到 key」之上，而 GET
+    /api/wb/state/key 是 _require_localhost（仅本机），手机是远端 IP → 永远 403 →
+    _enabled=false → pull()（GET 镜像，服务端本就开放给局域网、无需 key）永不触发 →
+    手机永远看不到背词进度。这与 server.py:1419「手机/平板拉取不需 key」矛盾。
+
+    覆盖（静态正则证明不了的）：
+      - 手机（/key 返回 403）boot 后仍会发出 GET /api/wb/state，把镜像拉下来
+      - 镜像里的 cards 进度被真实 applyMerge 接收（进度进得来）
+      - 该 GET 不带 X-WB-Key（拉取无需鉴权）
+    变异验证（改坏实现必红）：把 pull 守卫退回 `!_enabled || !_key`、或把 boot 在
+    /key 失败时 return → 探针不再发出 GET → 本测试红。
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_phone_pull_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_phone_pull_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)
+
+    assert out["gotPull"] is True, "手机（key=403）没有去拉 /api/wb/state 镜像 —— 进度进不来"
+    pulls = [r for r in out["requests"] if r["method"] == "GET" and r["url"] == "/api/wb/state"]
+    assert pulls, "没有任何一条 GET /api/wb/state 拉取请求"
+    assert not any(r["hasKeyHeader"] for r in pulls), "拉取镜像不应带 X-WB-Key（GET 对局域网开放）"
+    assert "c1" in out["mergedCardIds"], (
+        "拉到的镜像里 cards 进度没被 applyMerge 接收：%r" % (out["mergedCardIds"],)
+    )

@@ -1103,7 +1103,10 @@ const wbsync = (() => {
     _pushTimer = setTimeout(pushNow, PUSH_DEBOUNCE_MS);
   }
   async function pull() {
-    if (!_enabled || !_key || _busy) return;
+    // GET /api/wb/state 对局域网开放、无需 key（server.py:1419）——只有推送才要 key。
+    // 拿不到 key（手机/平板是远端 IP，/key 被 _require_localhost 限制返回 403）也照常拉取，
+    // 否则跨设备进度永远合不进来（2026-09-03 事故：手机看不到背词进度）。
+    if (!_enabled || _busy) return;
     _busy = true;
     try {
       const r = await fetch(ENDPOINT, { cache: "no-store" });
@@ -1119,19 +1122,23 @@ const wbsync = (() => {
     finally { _busy = false; }
   }
   async function boot() {
+    // 拉取（GET /api/wb/state）对局域网开放、无需 key；只有「推送」才需要 key。
+    // 因此即便拿不到 key（手机/平板是远端 IP，/key 被 _require_localhost 限制返回 403），
+    // 也照常启用拉取，让跨设备进度能自动合进来（2026-09-03 手机看不到背词进度根因）。
     try {
       const kr = await fetch(ENDPOINT + "/key", { cache: "no-store" });
-      if (!kr.ok) return;
-      _key = (await kr.json()).key;
-      _enabled = true;
-      await pull();                       // 启动即拉一次（含种子推送）
+      if (kr.ok) _key = (await kr.json()).key;   // 拿到则同时启用推送，拿不到则仅拉取模式
+    } catch (e) { /* 离线 / file://：跳过 key，进入仅拉取模式 */ }
+    _enabled = true;
+    try {
+      await pull();                       // 启动即拉一次（远端无 key 时不推送种子）
       document.addEventListener("visibilitychange", () => {
-        if (document.hidden) pushNow();   // 切走前推一把
+        if (document.hidden) pushNow();   // 切走前推一把（有 key 才生效）
         else pull();                      // 回前台拉最新
       });
       window.addEventListener("beforeunload", () => pushNow());
       _pollTimer = setInterval(pull, POLL_MS);
-    } catch (e) { /* 取不到 key（非本机 / 离线 / file://）：静默禁用 */ }
+    } catch (e) { /* 拉取失败：静默 */ }
   }
   function init() { boot(); }
   return { init: init, push: push, pushNow: pushNow, pull: pull,
