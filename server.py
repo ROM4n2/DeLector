@@ -229,6 +229,7 @@ from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_ko
 from syntax_tree import analyze_syntax_tree
 from routes_a1 import router as a1_router
 from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES, _SYNC_INSTANCE_ID
+from routes_rtc import router as rtc_router
 from routes_corpus import router as corpus_router
 from routes_a1_hoeren import hoeren_router
 from routes_a1_lesen import lesen_router
@@ -237,6 +238,7 @@ from routes_a1_lesen import lesen_router
 app = FastAPI(title="DeLector")
 app.include_router(a1_router)
 app.include_router(sync_router)
+app.include_router(rtc_router)
 app.include_router(corpus_router)
 app.include_router(hoeren_router)
 app.include_router(lesen_router)
@@ -1489,7 +1491,7 @@ def wb_lan_info():
 # 不经由这里，行为零变化（lan_client 若不带 Origin 也不受影响）。
 
 _WB_CORS_EXACT_PATHS = {"/api/wb/state", "/api/wb/state/key"}
-_WB_CORS_PREFIX = "/api/wb/sync/"
+_WB_CORS_PREFIXES = ("/api/wb/sync/", "/api/wb/rtc/")
 _WB_CORS_ALLOW_HEADERS = "Content-Type, X-WB-Key"
 # store / rtc 信令是 POST：缺 POST 会让跨域浏览器在预检阶段就被拒（回归）。
 _WB_CORS_ALLOW_METHODS = "GET, PUT, POST, OPTIONS"
@@ -1518,7 +1520,7 @@ def _is_private_origin(origin: str) -> bool:
 async def _wb_sync_cors(request: Request, call_next):
     path = request.url.path
     origin = request.headers.get("Origin", "")
-    is_wb_path = path in _WB_CORS_EXACT_PATHS or path.startswith(_WB_CORS_PREFIX)
+    is_wb_path = path in _WB_CORS_EXACT_PATHS or path.startswith(_WB_CORS_PREFIXES)
     if not is_wb_path or not origin:
         return await call_next(request)  # 非 wb 路径 / 无 Origin（本机/同源/存量用例）：行为零变化
     if request.method == "OPTIONS":

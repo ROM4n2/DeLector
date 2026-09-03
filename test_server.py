@@ -3297,6 +3297,79 @@ def test_sync_store_preflight_allows_post_and_key(lan_client):
     assert "X-WB-Key" in r.headers.get("access-control-allow-headers", "")
 
 
+# ── WebRTC 信令中继 /api/wb/rtc/signal（Stage B M3）────────────────────────────
+
+def test_rtc_signal_requires_key(client):
+    """信令中继须带 X-WB-Key：缺 key / 错 key 都 403。
+
+    SDP/ICE 在 LAN 上裸奔等于把会话描述直接递给同网段的任何人。
+    """
+    body = {"client": "A", "type": "offer", "payload": {"sdp": "v=0"}}
+    assert client.post("/api/wb/rtc/signal", json=body).status_code == 403
+    assert client.post("/api/wb/rtc/signal", json=body,
+                       headers={"X-WB-Key": "0" * 32}).status_code == 403
+    assert client.get("/api/wb/rtc/signal").status_code == 403
+    assert client.get("/api/wb/rtc/signal",
+                      headers={"X-WB-Key": "0" * 32}).status_code == 403
+
+
+def test_rtc_signal_roundtrip(client):
+    """两端靠同一把配对密钥中继 offer/answer，且各自只收到对端的消息。"""
+    key = client.get("/api/wb/state/key").json()["key"]
+    r = client.post("/api/wb/rtc/signal", json={"client": "A", "type": "offer",
+                                                "payload": {"sdp": "v=0 offer"}},
+                    headers={"X-WB-Key": key})
+    assert r.status_code == 200
+
+    # B 拉得到 A 的 offer
+    got = client.get("/api/wb/rtc/signal?client=B", headers={"X-WB-Key": key})
+    assert got.status_code == 200
+    msgs = got.json()["messages"]
+    assert [m for m in msgs if m["type"] == "offer"], f"B 没收到 offer：{msgs}"
+    assert msgs[-1]["payload"] == {"sdp": "v=0 offer"}
+
+    # A 不该看到自己发的：否则两端会把自己的 offer 当新 offer 反复建连
+    mine = client.get("/api/wb/rtc/signal?client=A", headers={"X-WB-Key": key})
+    assert all(m.get("sender") != "A" for m in mine.json()["messages"]), \
+        f"发信端收到了自己的信令：{mine.json()['messages']}"
+
+    # B 回 answer，A 能收到
+    assert client.post("/api/wb/rtc/signal", json={"client": "B", "type": "answer",
+                                                   "payload": {"sdp": "v=0 answer"}},
+                       headers={"X-WB-Key": key}).status_code == 200
+    types = [m["type"] for m in
+             client.get("/api/wb/rtc/signal?client=A", headers={"X-WB-Key": key}).json()["messages"]]
+    assert "answer" in types, f"A 没收到 answer：{types}"
+
+
+def test_rtc_signal_cursor_filters_consumed(client):
+    """after 游标：已消费的信令不再重复投递（否则每轮轮询都重放整个建连过程）。"""
+    key = client.get("/api/wb/state/key").json()["key"]
+    assert client.post("/api/wb/rtc/signal", json={"client": "A", "type": "candidate",
+                                                   "payload": {"c": "1"}},
+                       headers={"X-WB-Key": key}).status_code == 200
+    first = client.get("/api/wb/rtc/signal?client=B", headers={"X-WB-Key": key}).json()
+    assert first["messages"], "B 首轮应收到 candidate"
+    cursor = first["now"]
+    second = client.get(f"/api/wb/rtc/signal?client=B&after={cursor}",
+                        headers={"X-WB-Key": key}).json()
+    assert second["messages"] == [], f"游标之后不该再重复投递：{second['messages']}"
+
+
+def test_rtc_signal_cors_preflight_allows_post(lan_client):
+    """新前缀 /api/wb/rtc/ 也要过 CORS 预检（APP WebView 是跨域发信令的）。"""
+    origin = "http://127.0.0.1:8000"
+    r = lan_client.options("/api/wb/rtc/signal", headers={
+        "Origin": origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type, x-wb-key",
+    })
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == origin
+    assert "POST" in r.headers.get("access-control-allow-methods", "")
+    assert "X-WB-Key" in r.headers.get("access-control-allow-headers", "")
+
+
 # ── v4.7.0 架构与数据完整性改造 TDD 契约 ───────────────────────────────────────
 
 def test_backup_covers_essays_and_essay_versions_roundtrip(client):
