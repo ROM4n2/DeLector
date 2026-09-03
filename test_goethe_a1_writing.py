@@ -4,6 +4,7 @@ Contract and regression tests for Goethe-Zertifikat A1 Schreiben Workshop.
 Teil 1 (Formular-Training) + Teil 2 (30-Wort E-Mail & Brief Lab).
 """
 import os
+from pathlib import Path
 import pytest
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
@@ -198,16 +199,15 @@ def test_api_a1_schreiben_teil2_endpoints():
 
 def test_a1_writing_frontend_html_and_css():
     """验证 static/index.html 与 static/style.css 中 A1 写作工坊 DOM 与样式契约。"""
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        html = f.read()
+    root = Path(__file__).resolve().parent
+    html = (root / "static" / "index.html").read_text(encoding="utf-8")
 
     assert 'id="writer-mode-a1-formular"' in html
     assert 'id="writer-mode-a1-email"' in html
     assert 'id="a1-formular-view"' in html
     assert 'id="a1-email-view"' in html
 
-    with open("static/style.css", "r", encoding="utf-8") as f:
-        css = f.read()
+    css = (root / "static" / "style.css").read_text(encoding="utf-8")
 
     assert ".a1-formular-table" in css or ".a1-formular-card" in css
     assert ".a1-leitpunkte-box" in css or ".a1-leitpunkt-item" in css

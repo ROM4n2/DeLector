@@ -182,7 +182,7 @@ def test_every_shared_audio_handler_guards_attempt_id():
 
 def _pick_de_voice_body():
     """pickDeVoice 函数体（不含签名行）。"""
-    body = _WORKBENCH.split("function pickDeVoice()")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function pickDeVoice()")
     assert "de-DE" in body or "de[-_]DE" in body, "切片没落在 pickDeVoice 里"
     return body
 
@@ -417,7 +417,7 @@ def test_core_custom_words_headwords_match_source_export():
 
 def _load_all_body():
     """loadAll 函数体（到下一个顶层 function 为止）。"""
-    body = _WORKBENCH.split("function loadAll()")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function loadAll()")
     assert "SEED_WORDS.map(" in body, "切片没落在 loadAll 上（找不到种子建表）"
     return body
 
@@ -492,7 +492,7 @@ def test_core_custom_words_injected_during_seed_init():
 def _backfill_function_body():
     """backfillCoreWords 函数体（定义到下一个顶层 function 为止）。"""
     assert "function backfillCoreWords(" in _WORKBENCH, "缺少 backfillCoreWords 函数定义"
-    body = _WORKBENCH.split("function backfillCoreWords(")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function backfillCoreWords(")
     return body
 
 
@@ -606,7 +606,7 @@ def _words_filter_predicate():
     只认谓词体内的 scope 检查 —— 写在 filter 之后再 slice/标记颜色的实现
     不会让 #wCount 与表格行数变化，切片里看不到就红。
     """
-    body = _WORKBENCH.split("function renderWords()")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function renderWords()")
     assert "S.words.filter(" in body, "renderWords 里找不到词表过滤"
     pred = body.split("S.words.filter(")[1].split('$("wCount")')[0]
     assert "wordFilters.tag" in pred, "切片没落在 renderWords 的过滤谓词上"
@@ -742,7 +742,7 @@ def _build_review_queue_body():
     只认函数体内的 scope 过滤 —— 建完队列再在别处裁剪的实现，
     「上一张」回看历史和 queueInfoText 计数都会错，切片里看不到就红。
     """
-    body = _WORKBENCH.split("function buildReviewQueue()")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function buildReviewQueue()")
     assert "revQueue = dueIds.concat(newIds)" in body, "切片没落在 buildReviewQueue 上"
     return body
 
@@ -926,6 +926,21 @@ def _fn_body(name):
     m = re.search(r"function %s\(\)\s*\{.*?\n\}" % re.escape(name), _WORKBENCH, re.S)
     assert m, "找不到函数 %s()" % name
     return m.group(0)
+
+
+def _top_fn_segment(decl):
+    """`decl`（函数声明头）之后、下一个顶层 `function` 之前的切片。
+
+    M5-2：语义等同旧写法 `_WORKBENCH.split(decl)[1].split("\\nfunction ")[0]`，
+    但加两道显式护栏——声明必须存在、其后必须有下一个 function；
+    标记被改名/漂移时直接红（旧写法会静默切歪成整文件或别处）。
+    """
+    seg_start = _WORKBENCH.find(decl)
+    assert seg_start != -1, "找不到函数声明: %s" % decl
+    seg_start += len(decl)
+    nxt = _WORKBENCH.find("\nfunction ", seg_start)
+    assert nxt != -1, "%s 之后找不到下一个顶层 function（声明顺序漂移）" % decl
+    return _WORKBENCH[seg_start:nxt]
 
 
 def _sole_line(body, needle, what):
@@ -1247,21 +1262,21 @@ def _quiz_pool_body():
 
 def _inject_wrong_words_body():
     """injectWrongWords 函数体。"""
-    body = _WORKBENCH.split("function injectWrongWords(")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function injectWrongWords(")
     assert "revQueue.unshift" in body, "切片没落在 injectWrongWords 上"
     return body
 
 
 def _extra_practice_body():
     """extraPractice 函数体。"""
-    body = _WORKBENCH.split("function extraPractice()")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function extraPractice()")
     assert "S.words.filter(" in body, "切片没落在 extraPractice 上"
     return body
 
 
 def _extra_new_words_body():
     """extraNewWords 函数体。"""
-    body = _WORKBENCH.split("function extraNewWords()")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function extraNewWords()")
     assert "S.words.filter(" in body, "切片没落在 extraNewWords 上"
     return body
 
@@ -1430,7 +1445,7 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
 def _normhw_body():
     """normHw 函数体（定义到下一个顶层 function 为止）。"""
     assert "function normHw(" in _WORKBENCH, "缺少 normHw 归一函数"
-    return _WORKBENCH.split("function normHw(")[1].split("\nfunction ")[0]
+    return _top_fn_segment("function normHw(")
 
 
 def _apply_merge_body():
@@ -1466,7 +1481,7 @@ def _norm_hw_py(hw):
 def _alias_migration_body():
     """migrateSeedIdAliases 函数体（定义到下一个顶层 function 为止）。"""
     assert "function migrateSeedIdAliases(" in _WORKBENCH, "缺少 migrateSeedIdAliases 定义"
-    return _WORKBENCH.split("function migrateSeedIdAliases(")[1].split("\nfunction ")[0]
+    return _top_fn_segment("function migrateSeedIdAliases(")
 
 
 def test_merge_normhw_preserves_case_and_strips_article():
@@ -2208,7 +2223,7 @@ def _run_node_predicate(js, words):
 def _renormalize_queue_tail_body():
     """renormalizeQueueTail 的函数体（第 0 列 `}` 边界）。"""
     assert "function renormalizeQueueTail(" in _WORKBENCH, "缺少 renormalizeQueueTail 定义"
-    body = _WORKBENCH.split("function renormalizeQueueTail(")[1].split("\nfunction ")[0]
+    body = _top_fn_segment("function renormalizeQueueTail(")
     return body
 
 
