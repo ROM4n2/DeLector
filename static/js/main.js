@@ -896,6 +896,18 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
+  // 温和更新（M3-4）：新 SW activate 后不硬刷窗口，广播“新版本就绪”，
+  // 由用户点击通知带才 location.reload —— 避免打断正在进行的写作/复习状态。
+  navigator.serviceWorker.addEventListener("message", (ev) => {
+    if (ev.data && ev.data.type === "delector-update") {
+      notify("新版本已就绪 — 点击此处刷新应用", { kind: "info", sticky: true });
+      const nEl = document.getElementById("wb-notify");
+      if (nEl) {
+        nEl.style.cursor = "pointer";
+        nEl.onclick = () => location.reload();
+      }
+    }
+  });
 }
 
 // ── Application Initialization ───────────────────────────────────────────────

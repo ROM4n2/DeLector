@@ -23,11 +23,10 @@ self.addEventListener("activate", (event) => {
       );
       // Claim all clients immediately
       await self.clients.claim();
-      // Force reload all pages to pick up new assets
-      const clients = await self.clients.matchAll({ type: "window" });
-      clients.forEach((client) => {
-        client.navigate(client.url);
-      });
+      // 温和更新：不无条件 client.navigate 全窗硬刷（会丢未保存状态），
+      // 只广播“新版本已就绪”，由页面侧提示用户自行刷新。
+      const wins = await self.clients.matchAll({ type: "window" });
+      wins.forEach((win) => win.postMessage({ type: "delector-update" }));
     })(),
   );
 });

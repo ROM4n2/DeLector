@@ -9952,8 +9952,8 @@ body.drawer-open .companion {
   opacity: 0;
   pointer-events: none;
   transition:
-    opacity var(--dur, 180ms) ease,
-    transform var(--dur, 180ms) ease;
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .wb-notify.show {
