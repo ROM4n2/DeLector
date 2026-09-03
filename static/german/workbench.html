@@ -953,7 +953,7 @@ function confirmDlg(text) {
  * 存储层（localStorage，键前缀 wb.，带版本）
  * ==================================================================== */
 const K = { words: "wb.words.v1", cards: "wb.cards.v1", log: "wb.log.v1",
-            wrong: "wb.wrong.v1", set: "wb.settings.v1" };
+            wrong: "wb.wrong.v1", set: "wb.settings.v1", pair: "wb.pair.v1" };
 const DEFAULT_SETTINGS = { retention: 0.9, dailyNew: 15, newOrder: "shuffle", planDate: "", theme: "light",
   tts: { engine: "auto", autoPlay: false, rate: 0.9 } };
 
@@ -1072,6 +1072,7 @@ const wbsync = (() => {
   let _pushTimer = null;
   let _pollTimer = null;
   let _busy = false;
+  let _pair = null;               // 配对远端 {host, key}，Stage A（见 K.pair）
 
   /* 稳定字符串化：对象键字典序、数组保序。同一份语义内容在不同设备上
    * JSON 键插入顺序可能不同，直接 JSON.stringify 会假 diff → 反复空合并
@@ -1087,11 +1088,44 @@ const wbsync = (() => {
   function snapshot() {
     return { words: S.words, cards: S.cards, log: S.log, wrong: S.wrong, settings: S.settings };
   }
+  /* Stage A 配对远端：localStorage 存 {host, key}。命中后推/拉都指向
+   * http://<host>/api/wb/state（host 可含端口），不再依赖本机 /key。
+   * 读失败（file:// 无 localStorage / 解析坏 / 字段缺失）一律当未配对，静默。 */
+  function loadPair() {
+    try {
+      const raw = localStorage.getItem(K.pair);
+      if (raw) {
+        _pair = JSON.parse(raw);
+        if (!_pair || !_pair.host || !_pair.key) _pair = null;
+      }
+    } catch (e) { _pair = null; }
+  }
+  function remoteEndpoint() {
+    return _pair && _pair.host ? "http://" + _pair.host + ENDPOINT : ENDPOINT;
+  }
+  function setPair(host, key) {
+    host = String(host || "").trim();
+    key = String(key || "").trim();
+    if (!host || !key) return false;
+    _pair = { host: host, key: key, ts: Date.now() };
+    try { localStorage.setItem(K.pair, JSON.stringify(_pair)); } catch (e) { /* 存不下就本次内存有效 */ }
+    _enabled = true;
+    _key = key;
+    return true;
+  }
+  function clearPair() {
+    _pair = null;
+    _key = null;
+    try { localStorage.removeItem(K.pair); } catch (e) {}
+  }
+  function pairInfo() {
+    return _pair ? { host: _pair.host, key: _pair.key, ts: _pair.ts } : null;
+  }
   function pushNow() {
     if (!_enabled || !_key) return;
     // 服务端契约是 {"payload": {...}}（WbStateReq），裸快照会被解析成空 payload，
     // wb_state 永远存 {}、GET 永远空 → 进度合并不进来（2026-09-02 线上事故根因）。
-    fetch(ENDPOINT, {
+    fetch(remoteEndpoint(), {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-WB-Key": _key },
       body: JSON.stringify({ payload: snapshot() }),
@@ -1109,7 +1143,7 @@ const wbsync = (() => {
     if (!_enabled || _busy) return;
     _busy = true;
     try {
-      const r = await fetch(ENDPOINT, { cache: "no-store" });
+      const r = await fetch(remoteEndpoint(), { cache: "no-store" });
       if (!r.ok) return;
       const remote = await r.json();
       if (!remote || typeof remote !== "object") return;
@@ -1122,13 +1156,20 @@ const wbsync = (() => {
     finally { _busy = false; }
   }
   async function boot() {
-    // 拉取（GET /api/wb/state）对局域网开放、无需 key；只有「推送」才需要 key。
-    // 因此即便拿不到 key（手机/平板是远端 IP，/key 被 _require_localhost 限制返回 403），
-    // 也照常启用拉取，让跨设备进度能自动合进来（2026-09-03 手机看不到背词进度根因）。
-    try {
-      const kr = await fetch(ENDPOINT + "/key", { cache: "no-store" });
-      if (kr.ok) _key = (await kr.json()).key;   // 拿到则同时启用推送，拿不到则仅拉取模式
-    } catch (e) { /* 离线 / file://：跳过 key，进入仅拉取模式 */ }
+    // 配对远端（Stage A）：localStorage 有 wb.pair.v1 就直接用它的 host+key，
+    // 推/拉都走 http://<host>/api/wb/state，不再取本机 /key。
+    loadPair();
+    if (_pair) {
+      _key = _pair.key;
+    } else {
+      // 拉取（GET /api/wb/state）对局域网开放、无需 key；只有「推送」才需要 key。
+      // 因此即便拿不到 key（手机/平板是远端 IP，/key 被 _require_localhost 限制返回 403），
+      // 也照常启用拉取，让跨设备进度能自动合进来（2026-09-03 手机看不到背词进度根因）。
+      try {
+        const kr = await fetch(ENDPOINT + "/key", { cache: "no-store" });
+        if (kr.ok) _key = (await kr.json()).key;   // 拿到则同时启用推送，拿不到则仅拉取模式
+      } catch (e) { /* 离线 / file://：跳过 key，进入仅拉取模式 */ }
+    }
     _enabled = true;
     try {
       await pull();                       // 启动即拉一次（远端无 key 时不推送种子）
@@ -1142,7 +1183,9 @@ const wbsync = (() => {
   }
   function init() { boot(); }
   return { init: init, push: push, pushNow: pushNow, pull: pull,
-    enabled: () => _enabled, snapshot: snapshot };
+    enabled: () => _enabled, snapshot: snapshot,
+    pairInfo: pairInfo,
+    pair: { set: setPair, clear: clearPair, info: pairInfo } };
 })();
 
 /* ======================================================================

@@ -2805,6 +2805,41 @@ def test_wbsync_phone_pulls_without_key():
     )
 
 
+def test_wbsync_paired_push_goes_remote_absolute():
+    """动态探针：配对远端（localStorage wb.pair.v1）后 wbsync 对远端绝对地址静默双向同步。
+
+    Stage A（2026-09-03，docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 3）：
+    Android APP 页面 origin 是它自己的 127.0.0.1:8000；配对后 push/pull 必须打到
+    http://<配对 host>/api/wb/state —— 否则相对路径会打到手机自己的本地 server，进度永不同步。
+
+    覆盖（静态正则证明不了的）：
+      - 配对后不再请求本机 /api/wb/state/key（已持配对 key）
+      - boot 的 pull 走绝对远端地址 GET；pushNow 的 PUT 走同一绝对地址
+      - PUT 带 X-WB-Key == 配对 key
+      - 远端拉到的进度确实送进 applyMerge
+    变异验证（改坏实现必红）：把 pushNow/pull 端点退回相对 /api/wb/state → PUT 变相对 → 探针红。
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_pair_push_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_pair_push_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)
+
+    assert out["askedLocalKey"] is False, "配对后不应再请求本机 /api/wb/state/key"
+    assert out["gotRemotePull"] is True, "配对后没有向远端绝对地址 GET 拉镜像"
+    assert out["putHasPairKey"] is True, "PUT 没带配对 key（X-WB-Key）"
+    assert "c1" in out["mergedCardIds"], "远端拉到的进度没进 applyMerge：%r" % (out["mergedCardIds"],)
+
+
 def test_wbsync_background_pull_is_silent():
     """动态探针：wbsync 后台 5s 轮询 pull 必须静默（不弹「合并导入完成」通知、不切视图）。
 
