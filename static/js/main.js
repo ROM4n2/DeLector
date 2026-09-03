@@ -1,7 +1,7 @@
 /* DeLector - Application Main Entry & Router */
 "use strict";
 
-import { state, api, esc, jsAttr } from "./core.js";
+import { state, api, esc, jsAttr, notify } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import {
@@ -354,7 +354,7 @@ export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
     closeModal();
     openReader(data.article_id);
   } catch (e) {
-    alert(`导入外刊失败: ${e.message}`);
+    notify(`导入外刊失败: ${e.message}`, { kind: 'error' });
     if (btn) {
       btn.disabled = false;
       btn.textContent = "📥 导入精读";
@@ -542,7 +542,7 @@ export async function submitActiveImport() {
       if (titleInput) titleInput.value = "";
       openReader(data.article_id);
     } catch (e) {
-      alert("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入");
+      notify("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入", { kind: 'error' });
     } finally {
       btn.textContent = "开始阅读";
       btn.disabled = false;

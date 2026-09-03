@@ -1,7 +1,7 @@
 /* DeLector - Reader View, Token Inspector & Sticky Notes */
 "use strict";
 
-import { state, esc, jsAttr, api, normalizeCefrPct } from "./core.js";
+import { state, esc, jsAttr, api, normalizeCefrPct, notify } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 
@@ -145,7 +145,7 @@ export async function deleteArticle(id, title) {
     await api("/api/articles/" + id, { method: "DELETE" });
     await loadArticles();
   } catch (err) {
-    alert("删除文章失败: " + (err.message || err));
+    notify("删除文章失败: " + (err.message || err), { kind: 'error' });
   }
 }
 
@@ -885,7 +885,7 @@ export async function aiNoteAssist() {
     }
     document.getElementById("note-text-input").value = summary;
   } catch {
-    alert("AI 速记解析失败，请检查网络配置");
+    notify("AI 速记解析失败，请检查网络配置", { kind: 'error' });
   } finally {
     btn.textContent = "✨ AI 速记辅助";
     btn.disabled = false;
@@ -1159,7 +1159,7 @@ export async function saveClauseAsGrammarCard(
       }),
     });
     refreshCardCounters();
-    alert(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`);
+    notify(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`, { kind: 'success' });
   } catch (err) {
     alert("保存语法卡失败");
   }

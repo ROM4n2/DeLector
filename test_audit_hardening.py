@@ -311,6 +311,48 @@ def test_progress_db_log_indexes():
     assert any(c == ("logged_at",) for c in study.values())
 
 
+# ── M3-1: 前端 hosted notify / api 超时 ──────────────────────────────────────
+
+def test_core_js_exposes_notify_and_api_timeout():
+    """core.js 提供非阻断 notify 与带 AbortController 超时的 api()；
+    index.html 预置宿主通知节点。"""
+    from pathlib import Path
+    src = Path("static/js/core.js").read_text(encoding="utf-8")
+    assert "export function notify(" in src
+    assert "export const DEFAULT_TIMEOUT_MS" in src
+    assert "AbortController" in src
+    assert "wb-notify" in src
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert 'id="wb-notify"' in html
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    assert ".wb-notify" in css
+
+
+def test_read_path_alerts_use_hosted_notify():
+    """读/抓取/AI/后台路径的错误与轻量成功改走 notify 通知带（写路径/输入校验保留 alert）。"""
+    from pathlib import Path
+    checks = [
+        ("static/js/reader.js", 'alert("删除文章失败: ', 'notify("删除文章失败: '),
+        ("static/js/reader.js", 'alert("AI 速记解析失败，请检查网络配置")',
+         'notify("AI 速记解析失败，请检查网络配置"'),
+        ("static/js/reader.js", 'alert(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`);',
+         'notify(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`'),
+        ("static/js/writer.js", "alert('打开作文失败：'", "notify('打开作文失败：'"),
+        ("static/js/writer.js", "alert('AI 润色请求失败：'", "notify('AI 润色请求失败：'"),
+        ("static/js/writer.js", "alert('查看版本快照失败：'", "notify('查看版本快照失败：'"),
+        ("static/js/main.js", "alert(`导入外刊失败: ${e.message}`)",
+         "notify(`导入外刊失败: ${e.message}`"),
+        ("static/js/main.js", 'alert("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入")',
+         'notify("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入"'),
+    ]
+    for path, banned, required in checks:
+        src = Path(path).read_text(encoding="utf-8")
+        assert banned not in src, f"{path} 仍用 alert: {banned}"
+        assert required in src, f"{path} 缺少 notify 版本"
+    w = Path("static/js/writer.js").read_text(encoding="utf-8")
+    assert "alert('请输入德语作文内容后再保存。')" in w, "写路径输入校验被误删"
+
+
 # ── M1-1: 还原备份不导入 API_BASE_URL / API_MODEL ──────────────────────────
 
 def test_restore_does_not_import_api_base_url_or_model(client):

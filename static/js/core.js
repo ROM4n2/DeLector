@@ -71,17 +71,53 @@ export function normalizeCefrPct(rawPct) {
   return out;
 }
 
+// ── Hosted Toasts (非阻断通知带) ──────────────────────────────────────────────
+// 读/渲染/AI 等路径的错误只应 toast，不阻断式 alert()。
+let _notifyTimer = null;
+
+export function notify(message, { kind = 'info', ttl = 2600, sticky = false } = {}) {
+  let el = document.getElementById('wb-notify');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'wb-notify';
+    el.className = 'wb-notify';
+    el.setAttribute('role', 'status');
+    (document.body || document.documentElement).appendChild(el);
+  }
+  el.textContent = message;
+  el.dataset.kind = kind;
+  el.classList.add('show');
+  if (_notifyTimer) clearTimeout(_notifyTimer);
+  if (!sticky) _notifyTimer = setTimeout(() => el.classList.remove('show'), ttl);
+}
+
 // ── API Fetch Wrapper ────────────────────────────────────────────────────────
+export const DEFAULT_TIMEOUT_MS = 25000;
+
 export async function api(url, opts = {}) {
+  // 默认 25s 超时；调用方可 opts.timeout 覆盖。与外部 signal 合并：任一先触发即中止。
+  const { timeout = DEFAULT_TIMEOUT_MS, signal, ...rest } = opts;
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
+  const onUserAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onUserAbort, { once: true });
+  }
   try {
-    const res = await fetch(url, opts);
+    const res = await fetch(url, { ...rest, signal: controller.signal });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(errData.detail || `HTTP Error ${res.status}`);
     }
     return await res.json();
   } catch (err) {
-    console.error(`[API Error] ${url}:`, err);
-    throw err;
+    const e = timedOut ? new Error(`请求超时（${Math.round(timeout / 1000)}s），请检查网络`) : err;
+    console.error(`[API Error] ${url}:`, e);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onUserAbort);
   }
 }

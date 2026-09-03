@@ -1,7 +1,7 @@
 /* DeLector - Writing Desk (Schreibwerkstatt) & Grammar Polish */
 'use strict';
 
-import { api, esc } from './core.js';
+import { api, esc, notify } from './core.js';
 import { refreshCardCounters } from './reader.js';
 import { Companion } from './companion.js';
 import * as A1Writer from './a1_writer.js';
@@ -861,7 +861,7 @@ export async function openWriterEssay(id) {
     loadEssayVersions();
   } catch (err) {
     console.error('[Writer] Failed to open essay:', err);
-    alert('打开作文失败：' + (err.message || err));
+    notify('打开作文失败：' + (err.message || err), { kind: 'error' });
   }
 }
 
@@ -1257,7 +1257,7 @@ export async function aiPolishEssay() {
     }
   } catch (err) {
     console.error('[Writer] AI Polish Diff failed:', err);
-    alert('AI 润色请求失败：' + (err.message || err));
+    notify('AI 润色请求失败：' + (err.message || err), { kind: 'error' });
   } finally {
     if (aiBtn) {
       aiBtn.disabled = false;
@@ -1446,7 +1446,7 @@ export async function previewEssayVersion(versionId) {
     overlay.classList.remove('hidden');
   } catch (err) {
     console.error('[Writer] Preview version failed:', err);
-    alert('查看版本快照失败：' + (err.message || err));
+    notify('查看版本快照失败：' + (err.message || err), { kind: 'error' });
   }
 }
 
