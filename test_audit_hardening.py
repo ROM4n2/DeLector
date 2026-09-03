@@ -7,6 +7,7 @@
 """
 import os
 import gc
+import sqlite3
 import pytest
 
 os.environ["DATABASE_PATH"] = "test_audit_delector.db"
@@ -56,6 +57,43 @@ def clean_db():
                 os.remove(f)
             except OSError:
                 pass
+
+
+# ── M2-1: SRS / 关联 / 日志查询索引 ─────────────────────────────────────────
+
+def _created_index_columns(db_path: str, table: str):
+    """返回 {index_name: (columns…)}，只统计显式 CREATE INDEX（origin='c'）。"""
+    conn = sqlite3.connect(db_path)
+    try:
+        result = {}
+        for _, name, _, origin, _ in conn.execute(f"PRAGMA index_list('{table}')").fetchall():
+            if origin == "c":
+                result[name] = tuple(
+                    row[2] for row in conn.execute(f"PRAGMA index_xinfo('{name}')").fetchall() if row[2]
+                )
+        return result
+    finally:
+        conn.close()
+
+
+def test_main_db_reading_path_indexes():
+    """复习到期队列与文章维度查询在长库上不得全表扫：主库需有 SRS+article 索引。"""
+    vocab = _created_index_columns("test_audit_delector.db", "vocab_cards")
+    assert any(c == ("mastered", "due_date") for c in vocab.values())
+    assert any(c == ("article_id",) for c in vocab.values())
+    grammar = _created_index_columns("test_audit_delector.db", "grammar_cards")
+    assert any(c == ("mastered", "due_date") for c in grammar.values())
+    assert any(c == ("article_id",) for c in grammar.values())
+    notes = _created_index_columns("test_audit_delector.db", "reading_notes")
+    assert any(c == ("article_id",) for c in notes.values())
+
+
+def test_progress_db_log_indexes():
+    """进度库按卡/按日期的聚合与去重须有索引，避免每次统计全表扫。"""
+    quiz = _created_index_columns("test_audit_progress.db", "quiz_log")
+    assert any(c == ("card_id",) for c in quiz.values())
+    study = _created_index_columns("test_audit_progress.db", "study_log")
+    assert any(c == ("logged_at",) for c in study.values())
 
 
 # ── M1-1: 还原备份不导入 API_BASE_URL / API_MODEL ──────────────────────────

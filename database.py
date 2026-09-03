@@ -121,6 +121,9 @@ def init_progress_db(db_path: Optional[str] = None):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        # 按卡汇总（成绩页/复习统计）与按日聚合（趋势/打卡）的查询索引
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_quiz_card ON quiz_log(card_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_study_logged ON study_log(logged_at)")
     _INITIALIZED_PROGRESS_DBS.add(target_path)
 
 
@@ -268,6 +271,14 @@ def init_db(db_path: Optional[str] = None):
                 updated_at TEXT NOT NULL
             );
         """)
+
+        # 读路径查询索引（幂等，旧库启动自动补）：SRS 到期队列 + 文章维度
+        # 过滤/级联。缺失时「到期复习」「某文相关卡」「删文连带」在长库全表扫。
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_srs ON vocab_cards(mastered, due_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_srs ON grammar_cards(mastered, due_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_article ON vocab_cards(article_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_article ON grammar_cards(article_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_article ON reading_notes(article_id)")
 
         # Migrations for existing databases
         for tbl in ["vocab_cards", "grammar_cards"]:
