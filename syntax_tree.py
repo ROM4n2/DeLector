@@ -1172,6 +1172,10 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
 # 5. High-Level Convenience API for Full Sentences & Text
 # ==============================================================================
 
+# 常见缩写保护（每句切分调用重建的正则字符串 → 模块级常量，热路径免重建）
+_ABBR_PATTERN = r'\b(ca|usw|bzw|etc|dr|prof|nr|hr|fr|vgl|inkl|evtl|std|abs|art|bd|bsp|dipl|ing|jun|sen|str|tab|tel|univ|vol)\.'
+
+
 def split_sentences_pure_python(text: str) -> List[str]:
     """spaCy 缺席时替代 doc.sents：保护缩写和日期后按句末标点切句，并把标点保留在句尾。"""
     if not text or not text.strip():
@@ -1186,7 +1190,6 @@ def split_sentences_pure_python(text: str) -> List[str]:
     protected = re.sub(r'\b([a-zA-ZäöüÄÖÜß])\.\s*([a-zA-ZäöüÄÖÜß])\.', lambda m: m.group(0).replace('.', '__DOT__'), protected)
 
     # 3. Protect common word abbreviations (ca., Dr., Prof., usw., bzw., etc., Nr., Hr., Fr., vgl., inkl., evtl.)
-    _ABBR_PATTERN = r'\b(ca|usw|bzw|etc|dr|prof|nr|hr|fr|vgl|inkl|evtl|std|abs|art|bd|bsp|dipl|ing|jun|sen|str|tab|tel|univ|vol)\.'
     protected = re.sub(_ABBR_PATTERN, r'\g<1>__DOT__', protected, flags=re.IGNORECASE)
 
     parts = re.split(r'([.!?]+["\']?)', protected)
