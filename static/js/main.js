@@ -502,7 +502,7 @@ export async function saveAppSettings() {
       ShadowPlayer.setVoice(voice);
     }
 
-    alert("✓ 偏好与 API 设置已成功保存并即刻生效！");
+    notify("✓ 偏好与 API 设置已成功保存并即刻生效！", { kind: 'success' });
     closeSettingsModal();
   } catch (err) {
     alert("保存设置失败: " + err.message);

@@ -575,7 +575,7 @@ export async function analyzeGrammar() {
       "cefr-badge grammar-cefr-badge badge-" + lvl;
     document.getElementById("grammar-result").classList.remove("hidden");
   } catch {
-    alert("语法解析失败，请检查 API Key");
+    notify("语法解析失败，请检查 API Key", { kind: 'error' });
   } finally {
     btn.textContent = "AI 深度剖析";
     btn.disabled = false;

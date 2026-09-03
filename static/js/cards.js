@@ -1,7 +1,7 @@
 /* DeLector - Cards Management, 3D Poker Deck & Quiz Engine */
 "use strict";
 
-import { state, esc, jsAttr, api } from "./core.js";
+import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
@@ -881,7 +881,7 @@ export async function clearAudioCache() {
   try {
     const info = await api("/api/audio/cache");
     if (!info.file_count) {
-      alert("当前本地语音缓存已是空的（0 MB）。");
+      notify("当前本地语音缓存已是空的（0 MB）。", { kind: 'info' });
       return;
     }
     if (
@@ -892,8 +892,9 @@ export async function clearAudioCache() {
       return;
     }
     const res = await api("/api/audio/cache/clear", { method: "POST" });
-    alert(
+    notify(
       `✓ 已清理 ${res.cleared_count || 0} 个缓存音频，释放 ${res.freed_mb || 0} MB 磁盘空间！`,
+      { kind: 'success' },
     );
     updateAudioCacheInfo();
   } catch {

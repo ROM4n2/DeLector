@@ -353,6 +353,49 @@ def test_read_path_alerts_use_hosted_notify():
     assert "alert('请输入德语作文内容后再保存。')" in w, "写路径输入校验被误删"
 
 
+def test_grade_ai_and_success_alerts_use_notify():
+    """AI 判分失败、成功/轻量信息类残余 alert 已收敛为 notify；
+    写路径失败/输入校验类保留 alert（阻断式有据），防两边回潮。"""
+    from pathlib import Path
+
+    converged = [
+        # AI/判分路径失败
+        ("static/js/reader.js", 'alert("语法解析失败，请检查 API Key")',
+         'notify("语法解析失败，请检查 API Key",'),
+        ("static/js/a1_lesen.js", 'alert("提交阅读判分失败: " + e.message)',
+         'notify("提交阅读判分失败: " + e.message,'),
+        ("static/js/a1_hoeren.js", 'alert("提交判分失败: " + e.message)',
+         'notify("提交判分失败: " + e.message,'),
+        ("static/js/a1_writer.js", "alert('判分失败：' + (err.message || err))",
+         "notify('判分失败：' + (err.message || err),"),
+        ("static/js/cloze.js", "alert(`提交判分失败: ${e.message}`)",
+         "notify(`提交判分失败: ${e.message}`,"),
+        # 成功/轻量信息路径
+        ("static/js/main.js", 'alert("✓ 偏好与 API 设置已成功保存并即刻生效！")',
+         'notify("✓ 偏好与 API 设置已成功保存并即刻生效！",'),
+        ("static/js/cards.js", 'alert("当前本地语音缓存已是空的（0 MB）。")',
+         'notify("当前本地语音缓存已是空的（0 MB）。",'),
+        ("static/js/cards.js", "alert(\n      `✓ 已清理 ",
+         "notify(\n      `✓ 已清理 "),
+    ]
+    for path, banned, required in converged:
+        src = Path(path).read_text(encoding="utf-8")
+        assert banned not in src, f"{path} 仍用 alert: {banned}"
+        assert required in src, f"{path} 缺少 notify 版本"
+
+    # 写路径/输入校验/「成功但紧随 reload」保留阻断式 alert 的代表点（防误删）
+    keep = [
+        ("static/js/cards.js", 'alert("备份还原成功！页面即将重新加载以应用还原后的设置。")'),  # reload 前必须可见
+        ("static/js/cards.js", 'alert("保存搭配卡失败")'),
+        ("static/js/a1_hoeren.js", "alert(`收录失败: ${e.message}`)"),
+        ("static/js/main.js", 'alert("请输入德语文本")'),
+        ("static/js/cloze.js", "alert('请先在文库中选择并打开一篇文章！')"),
+        ("static/js/reader.js", "alert(`保存生词卡失败: ${e.message}`)"),
+    ]
+    for path, needed in keep:
+        assert needed in Path(path).read_text(encoding="utf-8"), f"{path} 写路径 alert 被误删: {needed}"
+
+
 # ── M3-2/3/4: 陈旧响应守卫 + blob URL 撤销 + PWA 温和更新 ────────────────────
 
 def test_reader_writer_cards_stale_guards():

@@ -1,7 +1,7 @@
 /* DeLector - Goethe-Zertifikat A1 Schreiben Workshop Module */
 'use strict';
 
-import { api, esc } from './core.js';
+import { api, esc, notify } from './core.js';
 import { Companion } from './companion.js';
 
 // ── Goethe A1 Schreiben Workshop Logic ───────────────────────────────────────
@@ -246,7 +246,7 @@ export async function checkA1Formular() {
     }
   } catch (err) {
     console.error('[Writer] Check formular failed:', err);
-    alert('判分失败：' + (err.message || err));
+    notify('判分失败：' + (err.message || err), { kind: 'error' });
   }
 }
 

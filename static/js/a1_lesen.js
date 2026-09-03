@@ -1,7 +1,7 @@
 /* DeLector - Goethe-Zertifikat A1 Lesen (Reading) Studio */
 "use strict";
 
-import { api, esc, jsAttr } from "./core.js";
+import { api, esc, jsAttr, notify } from "./core.js";
 
 export let lesenSets = [];
 export let currentSetId = 1;
@@ -421,7 +421,7 @@ export async function submitLesenExam() {
 
     renderLesenGradedResults(graded);
   } catch (e) {
-    alert("提交阅读判分失败: " + e.message);
+    notify("提交阅读判分失败: " + e.message, { kind: 'error' });
   }
 }
 

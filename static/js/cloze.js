@@ -1,7 +1,7 @@
 /* DeLector - Goethe Cloze & C-Test Examination Engine */
 'use strict';
 
-import { state, esc, api } from './core.js';
+import { state, esc, api, notify } from './core.js';
 import { showUndoToast } from './cards.js';
 import { Companion } from './companion.js';
 
@@ -168,6 +168,6 @@ export async function submitClozeExercise() {
       Companion.celebrate('cloze_great', { pct: evalRes.accuracy_pct });
     }
   } catch (e) {
-    alert(`提交判分失败: ${e.message}`);
+    notify(`提交判分失败: ${e.message}`, { kind: 'error' });
   }
 }

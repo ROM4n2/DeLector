@@ -1,7 +1,7 @@
 /* DeLector - Goethe-Zertifikat A1 Hörverstehen (Listening) Studio */
 "use strict";
 
-import { api, esc, jsAttr } from "./core.js";
+import { api, esc, jsAttr, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";
@@ -451,7 +451,7 @@ export async function submitHoerenExam() {
     _lastGradedResult = graded;
     renderGradedResults(graded);
   } catch (e) {
-    alert("提交判分失败: " + e.message);
+    notify("提交判分失败: " + e.message, { kind: 'error' });
   }
 }
 
