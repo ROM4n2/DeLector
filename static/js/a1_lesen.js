@@ -99,6 +99,7 @@ export async function selectLesenSet(setId) {
 }
 
 function startLesenTimer() {
+  if (_examTimer) clearInterval(_examTimer);   // 防双击/重开试卷叠计时器
   const badge = document.getElementById("lesen-timer-badge");
   _examTimer = setInterval(() => {
     _timerRemainingSec--;

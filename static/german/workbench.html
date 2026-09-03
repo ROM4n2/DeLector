@@ -1184,6 +1184,8 @@ const wbsync = (() => {
   let _rtcFails = 0;          // 连续失败次数：到上限就降级，不无限重试
   let _rtcDegraded = false;   // 已降级：WebRTC 不再重试，交给 Stage A HTTP 轮询兜底
   let _rtcRetryTimer = null;
+  let _pullFails = 0;    // HTTP pull 连续失败：指数退避（5s→30s cap），别热循环打 server
+  let _pullSkip = 0;     // 退避中跳过的轮询 tick 数
 
   function rtcSupported() {
     return typeof RTCPeerConnection !== "undefined";
@@ -1295,11 +1297,12 @@ const wbsync = (() => {
     const st = _rtc.connectionState || _rtc.iceConnectionState || "";
     if (st === "connected" || st === "completed") { _rtcFails = 0; return; }
     if (st !== "failed" && st !== "closed" && st !== "disconnected") return;
-    rtcScheduleRetry();
+    // disconnected 是瞬态（如信号弱/ICE 重协商），不累计失败次数，避免误降级
+    rtcScheduleRetry(st === "disconnected");
   }
-  function rtcScheduleRetry() {
+  function rtcScheduleRetry(skipCount) {
     if (_rtcDegraded || _rtcRetryTimer) return;   // 去抖：一次断线只排一次重建
-    _rtcFails += 1;
+    if (!skipCount) _rtcFails += 1;
     if (_rtcFails > RTC_MAX_FAILS) {              // 到上限：降级并停手，别空转打服务端
       _rtcDegraded = true;
       rtcClose();
@@ -1342,19 +1345,29 @@ const wbsync = (() => {
     // 拿不到 key（手机/平板是远端 IP，/key 被 _require_localhost 限制返回 403）也照常拉取，
     // 否则跨设备进度永远合不进来（2026-09-03 事故：手机看不到背词进度）。
     if (!_enabled || _busy) return;
+    if (_pullSkip > 0) { _pullSkip -= 1; return; }   // 失败退避中：本 tick 不发请求
     _busy = true;
+    let failed = false;
     try {
       const r = await fetch(remoteEndpoint(), { cache: "no-store" });
-      if (!r.ok) return;
+      if (!r.ok) { failed = true; return; }
       const remote = await r.json();
-      if (!remote || typeof remote !== "object") return;
+      if (!remote || typeof remote !== "object") { failed = true; return; }
       if (Object.keys(remote).length === 0) { pushNow(); return; }  // server 空 → 拿本机当种子
       if (stable(remote) === stable(snapshot())) return;            // 无实质差异，跳过
       applyMerge(remote, { silent: true });                         // 复用合并导入算法（后台轮询静默）
       renderReview();
       renderHeaderBadge();
-    } catch (e) { /* 离线/未启动 server：静默 */ }
-    finally { _busy = false; }
+    } catch (e) { failed = true; }   // 离线/未启动 server：静默，但计入退避
+    finally {
+      _busy = false;
+      if (failed) {                    // 指数退避：跳过 1,2,4,6… 个 tick（≈5s→30s cap）
+        _pullFails += 1;
+        _pullSkip = Math.min(2 ** (_pullFails - 1), 6);
+      } else if (_pullFails) {
+        _pullFails = 0;
+      }
+    }
   }
   async function boot() {
     // 配对远端（Stage A）：localStorage 有 wb.pair.v1 就直接用它的 host+key，

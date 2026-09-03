@@ -600,3 +600,19 @@ def test_m4_hot_path_lru_caches_structural():
     assert "lru_cache" in inspect.getsource(core_dict._core_entry_cached)
     assert "lru_cache" in inspect.getsource(linguistics._split_komposita_json_cached)
     assert inspect.getsource(linguistics.split_komposita).count("json.loads") >= 1
+
+
+def test_m53_front_p2_debounce_and_pull_backoff_structural():
+    """M5-3: a1_lesen 计时器防叠；wbsync pull 失败指数退避 + rtc 瞬态不计失败。
+    纯结构护栏：实现被回退即红。"""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent
+    a1_lesen = (root / "static" / "js" / "a1_lesen.js").read_text(encoding="utf-8")
+    wb = (root / "static" / "german" / "workbench.html").read_text(encoding="utf-8")
+
+    assert "if (_examTimer) clearInterval(_examTimer)" in a1_lesen, "计时器必须防叠"
+    assert "_pullFails" in wb and "_pullSkip" in wb, "pull 需指数退避状态"
+    assert "_pullSkip = Math.min(2 ** (_pullFails - 1), 6)" in wb, "退避需 5s→30s 上限"
+    seg = wb.split("function rtcOnStateChange()")[1].split("function rtcScheduleRetry")[0]
+    assert 'rtcScheduleRetry(st === "disconnected")' in seg, "disconnected 瞬态不得累计失败"
+    assert "function rtcScheduleRetry(skipCount)" in wb, "退避计数需可跳过参数"
