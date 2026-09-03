@@ -72,6 +72,7 @@ from database import (
     prune_audio_cache,
     BACKUP_FORMAT_VERSION,
     BACKUP_SETTINGS_WHITELIST,
+    BACKUP_SETTINGS_IMPORT_WHITELIST,
     _BACKUP_TABLES,
     _PROGRESS_TABLES,
     _require_localhost,
@@ -1579,17 +1580,19 @@ def restore_database_backup(req: RestoreReq, request: Request):
         try:
             with conn:
                 _replace_tables(conn, _BACKUP_TABLES, payload)
-                # app_settings 的覆盖**只作用于白名单键**：整表 DELETE 会连带
-                # 抹掉 DEEPSEEK_API_KEY（它从不进备份，抹了就再也灌不回来）。
+                # app_settings 的覆盖**只作用于可导入白名单键**：整表 DELETE 会连带
+                # 抹掉 DEEPSEEK_API_KEY（它从不进备份，抹了就再也灌不回来）；
+                # API_BASE_URL/API_MODEL 也不导入——恶意备份可把它们指向攻击者服务器，
+                # 使下一次 AI 调用把真实 DEEPSEEK_API_KEY 发过去（密钥外泄）。
                 conn.executemany(
                     "DELETE FROM app_settings WHERE key = ?",
-                    [(k,) for k in BACKUP_SETTINGS_WHITELIST],
+                    [(k,) for k in BACKUP_SETTINGS_IMPORT_WHITELIST],
                 )
                 conn.executemany(
                     "INSERT INTO app_settings (key, value) VALUES (?, ?)",
                     [(s["key"], s.get("value"))
                      for s in (payload.get("app_settings") or [])
-                     if s.get("key") in BACKUP_SETTINGS_WHITELIST],
+                     if s.get("key") in BACKUP_SETTINGS_IMPORT_WHITELIST],
                 )
         finally:
             conn.close()

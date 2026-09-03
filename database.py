@@ -594,7 +594,16 @@ BACKUP_FORMAT_VERSION = 2
 # app_settings 的**正向**白名单。用白名单而非黑名单：将来新增敏感设置项时，
 # 黑名单会默认泄露，白名单会默认安全。DEEPSEEK_API_KEY 绝不在列 ——
 # 备份 JSON 是用户会分享、上传、丢进网盘的文件。
+#
+# 导出/还原白名单刻意**拆成两份**：
+# - 导出（BACKUP_SETTINGS_WHITELIST / BACKUP_SETTINGS_EXPORT_WHITELIST）保留
+#   API_BASE_URL/API_MODEL —— 它们不是机密，导出带上是正常的设备间配置迁移。
+# - 还原（BACKUP_SETTINGS_IMPORT_WHITELIST）**只允许 TTS_***：API_BASE_URL 若从
+#   恶意备份导入，会把库里真实 DEEPSEEK_API_KEY 的下一次 AI 调用（带 Bearer 头）
+#   指向攻击者服务器 → 密钥外泄。还原时这两项一律保留本机现值。
 BACKUP_SETTINGS_WHITELIST = ("TTS_VOICE", "TTS_RATE", "API_BASE_URL", "API_MODEL")
+BACKUP_SETTINGS_EXPORT_WHITELIST = BACKUP_SETTINGS_WHITELIST
+BACKUP_SETTINGS_IMPORT_WHITELIST = ("TTS_VOICE", "TTS_RATE")
 
 _SRS_COLUMNS = ("mastered", "mastered_at", "correct_count", "wrong_count",
                 "due_date", "interval_days", "ease_factor", "repetition_count")
