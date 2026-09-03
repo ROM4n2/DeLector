@@ -1435,8 +1435,8 @@ def _normhw_body():
 
 def _apply_merge_body():
     """applyMerge 函数体（到 btnResetProgress 绑定为止，与 Task 5 断言同切法）。"""
-    assert "function applyMerge(data)" in _WORKBENCH, "缺少 applyMerge 定义"
-    return _WORKBENCH.split("function applyMerge(data)")[1].split('$("btnResetProgress")')[0]
+    assert "function applyMerge(data, opts)" in _WORKBENCH, "缺少 applyMerge 定义"
+    return _WORKBENCH.split("function applyMerge(data, opts)")[1].split('$("btnResetProgress")')[0]
 
 
 def _apply_merge_words_block():
@@ -2802,4 +2802,46 @@ def test_wbsync_phone_pulls_without_key():
     assert not any(r["hasKeyHeader"] for r in pulls), "拉取镜像不应带 X-WB-Key（GET 对局域网开放）"
     assert "c1" in out["mergedCardIds"], (
         "拉到的镜像里 cards 进度没被 applyMerge 接收：%r" % (out["mergedCardIds"],)
+    )
+
+
+def test_wbsync_background_pull_is_silent():
+    """动态探针：wbsync 后台 5s 轮询 pull 必须静默（不弹「合并导入完成」通知、不切视图）。
+
+    2026-09-03 跟进事故：手机能拉到镜像后，背词时每 5s 轮询都弹「合并导入完成」通知、
+    还把视图踢到 review，很烦。根因：pull() 发现本机与镜像有差异就调 applyMerge，而
+    applyMerge 末尾无条件 toast + showView("review")。后台轮询是镜像同步，不是「导入完成」，
+    不该有阻断式弹窗（也违背前端规范 FRONTEND-DESIGN-PATTERNS：阻断式弹窗应改走字通知带）。
+
+    覆盖（静态正则证明不了的）：
+      - 模拟手机（/key=403）且本机进度与镜像持续不同，跑 boot + 两次手动 pull（模拟轮询）
+      - 后台 pull 触发 toast 次数 == 0、切视图次数 == 0
+      - 显式 applyMerge（WebRTC / 文件导入）仍弹通知（explicitToastTotal > 0）
+    变异验证（改坏实现必红）：把 pull 的 applyMerge(remote, {silent:true}) 退回 applyMerge(remote)
+    （并去掉 applyMerge 里的 if(!silent) 守卫）→ 后台 pull 重新弹通知 → 本测试红。
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_phone_pull_silent_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_phone_pull_silent_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)
+
+    assert out["pullToastCount"] == 0, (
+        "后台 pull 不应弹『合并导入完成』通知（每 5s 轮询都弹很烦人），实际弹了 %d 次"
+        % out["pullToastCount"]
+    )
+    assert out["pullViewSwitches"] == 0, (
+        "后台 pull 不应把用户视图踢到 review，实际切了 %d 次" % out["pullViewSwitches"]
+    )
+    assert out["explicitToastTotal"] > 0, (
+        "显式合并导入（WebRTC / 文件导入）应保留反馈通知，但实际没弹（改过头了）"
     )

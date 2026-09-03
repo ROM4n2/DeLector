@@ -1115,7 +1115,7 @@ const wbsync = (() => {
       if (!remote || typeof remote !== "object") return;
       if (Object.keys(remote).length === 0) { pushNow(); return; }  // server 空 → 拿本机当种子
       if (stable(remote) === stable(snapshot())) return;            // 无实质差异，跳过
-      applyMerge(remote);                                           // 复用合并导入算法
+      applyMerge(remote, { silent: true });                         // 复用合并导入算法（后台轮询静默）
       renderReview();
       renderHeaderBadge();
     } catch (e) { /* 离线/未启动 server：静默 */ }
@@ -3456,7 +3456,9 @@ function applyOverwrite(data) {
 function normHw(hw) {
   return String(hw || "").trim().replace(/^(der|die|das)\s+/, "").trim();
 }
-function applyMerge(data) {
+function applyMerge(data, opts) {
+  opts = opts || {};
+  const silent = !!opts.silent;   // 后台轮询合并（wbsync.pull）静默：不弹通知、不切视图
   /* 卡片：按最近复习时间取新 */
   const inCards = data.cards || {};
   for (const id in inCards) {
@@ -3517,8 +3519,10 @@ function applyMerge(data) {
   if (data.settings) { S.settings = Object.assign(S.settings, data.settings); saveSettings(); applyTheme(); }
   saveWords(); saveCards(); saveLog(); saveWrong();
   renderHeaderBadge();
-  toast("合并导入完成：新增 " + added + " 词、合并 " + merged + " 词，共 " + S.words.length + " 个单词");
-  showView("review");
+  if (!silent) {
+    toast("合并导入完成：新增 " + added + " 词、合并 " + merged + " 词，共 " + S.words.length + " 个单词");
+    showView("review");
+  }
 }
 $("btnResetProgress").addEventListener("click", async () => {
   if (await confirmDlg("重置全部学习进度（卡片状态、日志、错题本）？词库内容保留。")) {
