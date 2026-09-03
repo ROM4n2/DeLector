@@ -93,18 +93,15 @@ from database import (
 )
 
 # --- 2. NLP & CEFR Tagging ---
+# 只透传 server 内真实消费的符号；无消费者的再导出（spacy、SPACY_MODEL_CANDIDATES、
+# AUTO_DOWNLOAD_MODEL、_load_spacy_model、calculate_cefr_stats、
+# _process_german_text_pure_python 等）已从 import/__all__ 剔除（M5-4）。
 from nlp import (
-    spacy,
     nlp,
     NLP_ENGINE,
     NLP_ENGINE_DETAIL,
-    SPACY_MODEL_CANDIDATES,
-    AUTO_DOWNLOAD_MODEL,
-    _load_spacy_model,
     CEFR_DICT,
     get_cefr_level,
-    calculate_cefr_stats,
-    _process_german_text_pure_python,
     process_german_text,
     SYSTEM_GRAMMAR_PROMPT,
 )
@@ -154,17 +151,11 @@ def _attachment_headers(filename: str) -> Dict[str, str]:
 
 
 __all__ = [
-    "spacy",
     "nlp",
     "NLP_ENGINE",
     "NLP_ENGINE_DETAIL",
-    "SPACY_MODEL_CANDIDATES",
-    "AUTO_DOWNLOAD_MODEL",
-    "_load_spacy_model",
     "CEFR_DICT",
     "get_cefr_level",
-    "calculate_cefr_stats",
-    "_process_german_text_pure_python",
     "process_german_text",
     "SYSTEM_GRAMMAR_PROMPT",
     "DATA_DIR",
