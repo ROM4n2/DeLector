@@ -59,6 +59,52 @@ def clean_db():
                 pass
 
 
+# ── M2-4: 连接确定性关闭（open/close 对账探针）──────────────────────────────
+
+def _make_conn_spy(monkeypatch):
+    """计数式对账探针：所有 sqlite3.connect 都从 database.sqlite3.connect 打开
+    （含 get_db/get_progress_db 与 init 原始 connect），所有意图性关闭都汇聚到
+    database._close_db_conn。sqlite3.Connection.close 是只读属性，不能逐个包实例，
+    故以「open 总数 == close 调用总数」做泄漏判定。"""
+    import database as db
+    state = {"opened": 0, "closed": 0}
+
+    orig_connect = db.sqlite3.connect
+    orig_close_conn = db._close_db_conn
+
+    def spy_connect(path, *args, **kwargs):
+        state["opened"] += 1
+        return orig_connect(path, *args, **kwargs)
+
+    def spy_close_conn(conn):
+        state["closed"] += 1
+        return orig_close_conn(conn)
+
+    monkeypatch.setattr(db.sqlite3, "connect", spy_connect)
+    monkeypatch.setattr(db, "_close_db_conn", spy_close_conn)
+    return state
+
+
+def test_database_layer_connections_closed_deterministically(monkeypatch):
+    """database 层每个业务函数「一次连接一次 close」——不能只 commit 不 close、
+    等循环 GC 才释放 Windows 句柄。"""
+    import database as db
+    state = _make_conn_spy(monkeypatch)
+    assert state["opened"] == 0 and state["closed"] == 0
+
+    db.set_setting("PROBE_KEY", "v", db_path="test_audit_delector.db")
+    db.get_setting("PROBE_KEY", db_path="test_audit_delector.db")
+    db.add_prep_saved("lesen", "mit", "Dat", db_path="test_audit_delector.db")
+    db.get_prep_saved(db_path="test_audit_delector.db")
+    db.record_a1_hoeren_trial(1, 5, 5.0, 25, 60, "[]", "[]", db_path="test_audit_progress.db")
+    db.record_a1_lesen_trial(1, 5, 5.0, 25, 60, "[]", "[]", db_path="test_audit_progress.db")
+    db.log_study_event("quiz_session", db_path="test_audit_progress.db")
+
+    assert state["opened"] > 0, "探针必须捕获到连接"
+    assert state["opened"] == state["closed"], \
+        f"泄漏 {state['opened'] - state['closed']} 个连接"
+
+
 # ── M2-3: list_articles 只读减载 + review 去回查 ────────────────────────────
 
 def test_list_articles_readonly_no_stats_recompute(client, monkeypatch):

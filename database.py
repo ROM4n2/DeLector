@@ -65,8 +65,9 @@ def init_progress_db(db_path: Optional[str] = None):
     target_path = get_progress_db_path(db_path)
     conn = sqlite3.connect(target_path)
     _configure_sqlite_conn(conn)
-    with conn:
-        conn.execute("""
+    try:
+        # executescript 支持多语句 DDL（conn.execute 只允许单语句）
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS study_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_type TEXT NOT NULL,
@@ -74,8 +75,6 @@ def init_progress_db(db_path: Optional[str] = None):
                 note TEXT DEFAULT '',
                 logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        """)
-        conn.execute("""
             CREATE TABLE IF NOT EXISTS quiz_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 card_id INTEGER NOT NULL,
@@ -84,8 +83,6 @@ def init_progress_db(db_path: Optional[str] = None):
                 correct INTEGER NOT NULL,
                 attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        """)
-        conn.execute("""
             CREATE TABLE IF NOT EXISTS daily_summary (
                 date TEXT PRIMARY KEY,
                 cards_added INTEGER DEFAULT 0,
@@ -94,8 +91,6 @@ def init_progress_db(db_path: Optional[str] = None):
                 quiz_sessions INTEGER DEFAULT 0,
                 study_minutes INTEGER DEFAULT 0
             );
-        """)
-        conn.execute("""
             CREATE TABLE IF NOT EXISTS a1_hoeren_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 set_id INTEGER NOT NULL,
@@ -107,8 +102,6 @@ def init_progress_db(db_path: Optional[str] = None):
                 wrong_questions_json TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        """)
-        conn.execute("""
             CREATE TABLE IF NOT EXISTS a1_lesen_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 set_id INTEGER NOT NULL,
@@ -120,17 +113,19 @@ def init_progress_db(db_path: Optional[str] = None):
                 wrong_questions_json TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE INDEX IF NOT EXISTS idx_quiz_card ON quiz_log(card_id);
+            CREATE INDEX IF NOT EXISTS idx_study_logged ON study_log(logged_at);
         """)
-        # 按卡汇总（成绩页/复习统计）与按日聚合（趋势/打卡）的查询索引
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_quiz_card ON quiz_log(card_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_study_logged ON study_log(logged_at)")
+    finally:
+        # init 阶段不能用 db_progress_conn（会递归回自身自动建表），此处确定关闭
+        _close_db_conn(conn)
     _INITIALIZED_PROGRESS_DBS.add(target_path)
 
 
 def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "", minutes: int = 0, db_path: Optional[str] = None):
     try:
         today = datetime.now().strftime("%Y-%m-%d")
-        with get_progress_db(db_path) as conn:
+        with db_progress_conn(db_path) as conn:
             conn.execute(
                 "INSERT INTO study_log (event_type, ref_id, note) VALUES (?, ?, ?)",
                 (event_type, ref_id, note)
@@ -152,7 +147,7 @@ def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "
 
 def init_db(db_path: Optional[str] = None):
     target_path = get_db_path(db_path)
-    with get_db(target_path) as conn:
+    with db_conn(target_path) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -317,7 +312,7 @@ def init_db(db_path: Optional[str] = None):
 
 def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> str:
     try:
-        with get_db(db_path) as conn:
+        with db_conn(db_path) as conn:
             row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             if row and row["value"] is not None and row["value"] != "":
                 return row["value"]
@@ -327,7 +322,7 @@ def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> s
 
 
 def set_setting(key: str, value: str, db_path: Optional[str] = None):
-    with get_db(db_path) as conn:
+    with db_conn(db_path) as conn:
         conn.execute("""
             INSERT INTO app_settings (key, value, updated_at)
             VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -338,14 +333,47 @@ def set_setting(key: str, value: str, db_path: Optional[str] = None):
 def _close_db_conn(conn):
     """确定性关闭 get_db 打开的连接。
 
-    `with get_db(...)` 只提交/回滚事务并不会 close：sqlite3.Connection 会因内部
-    statement 缓存形成引用环，文件句柄要等循环 GC 才释放。Windows 上 clean_db
-    的 os.remove 靠 busy 重试可绕过，但正确做法是主动 close，不依赖 GC 时机。
+    裸 `with conn`（sqlite3.Connection 自带的上下文管理）只提交/回滚事务并不会
+    close：sqlite3.Connection 会因内部 statement 缓存形成引用环，文件句柄要等
+    循环 GC 才释放。Windows 上 clean_db 的 os.remove 靠 busy 重试可绕过，但正确
+    做法是主动 close，不依赖 GC 时机——`db_conn`/`db_progress_conn` 已经做了。
     """
     try:
         conn.close()
     except Exception:
         pass
+
+
+@contextmanager
+def db_conn(db_path: Optional[str] = None):
+    """`with db_conn(...) as conn:` —— 语义与旧 `with get_db(...) as conn:` 等价
+    （成功 commit / 异常 rollback），但 finally 确定性 close，不再依赖循环 GC。
+    """
+    conn = get_db(db_path)
+    try:
+        yield conn
+    except BaseException:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
+    finally:
+        _close_db_conn(conn)
+
+
+@contextmanager
+def db_progress_conn(db_path: Optional[str] = None):
+    """同 db_conn，面向 progress 库。注意 init_progress_db 内部不得使用本函数。"""
+    conn = get_progress_db(db_path)
+    try:
+        yield conn
+    except BaseException:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
+    finally:
+        _close_db_conn(conn)
 
 
 def get_wb_state(db_path: Optional[str] = None) -> dict:
@@ -454,7 +482,7 @@ PRESET_ARTICLES = [
 def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_url: Optional[str] = None) -> int:
     processed = process_german_text(text)
     target_path = get_db_path(db_path)
-    with get_db(target_path) as conn:
+    with db_conn(target_path) as conn:
         cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
                            (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""))
         return cur.lastrowid
@@ -462,7 +490,7 @@ def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_
 
 def seed_preset_articles(db_path: Optional[str] = None):
     target = get_db_path(db_path)
-    with get_db(target) as conn:
+    with db_conn(target) as conn:
         count = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         if count == 0:
             for art in PRESET_ARTICLES:
@@ -521,7 +549,7 @@ def _grammar_anki_note(r) -> genanki.Note:
 
 def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
     target_path = get_db_path(db_path)
-    with get_db(target_path) as conn:
+    with db_conn(target_path) as conn:
         vocab_rows = conn.execute("SELECT * FROM vocab_cards").fetchall()
         grammar_rows = conn.execute("SELECT * FROM grammar_cards").fetchall()
 
@@ -864,14 +892,14 @@ def _replace_tables(conn, spec: Dict[str, Tuple], payload: Dict[str, List[Dict[s
 
 def get_prep_saved(db_path: Optional[str] = None) -> set:
     """返回所有已入卡的 (lemma, praep, kasus) 三元组 key 集合。"""
-    with get_db(db_path) as conn:
+    with db_conn(db_path) as conn:
         rows = conn.execute("SELECT lemma, praep, kasus FROM prep_saved").fetchall()
         return {f"{r['lemma']}|{r['praep']}|{r['kasus']}" for r in rows}
 
 
 def add_prep_saved(lemma: str, praep: str, kasus: str, db_path: Optional[str] = None):
     """记录一条搭配已入卡。幂等：重复插入被主键忽略。"""
-    with get_db(db_path) as conn:
+    with db_conn(db_path) as conn:
         conn.execute(
             "INSERT OR IGNORE INTO prep_saved (lemma, praep, kasus) VALUES (?, ?, ?)",
             (lemma, praep, kasus),
@@ -883,7 +911,7 @@ def record_a1_hoeren_trial(set_id: int, score_raw: int, score_official: float,
                            answers_json: str, wrong_questions_json: str,
                            db_path: Optional[str] = None) -> int:
     """持久化一次 A1 听力模考记录"""
-    with get_progress_db(db_path) as conn:
+    with db_progress_conn(db_path) as conn:
         cur = conn.execute("""
             INSERT INTO a1_hoeren_records (
                 set_id, score_raw, score_official, total_questions,
@@ -900,7 +928,7 @@ def record_a1_hoeren_trial(set_id: int, score_raw: int, score_official: float,
 
 def get_a1_hoeren_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """查询 A1 听力模考历史记录"""
-    with get_progress_db(db_path) as conn:
+    with db_progress_conn(db_path) as conn:
         rows = conn.execute("""
             SELECT * FROM a1_hoeren_records ORDER BY id DESC LIMIT ?
         """, (limit,)).fetchall()
@@ -912,7 +940,7 @@ def record_a1_lesen_trial(set_id: int, score_raw: int, score_official: float,
                           answers_json: str, wrong_questions_json: str,
                           db_path: Optional[str] = None) -> int:
     """持久化一次 A1 阅读模考记录"""
-    with get_progress_db(db_path) as conn:
+    with db_progress_conn(db_path) as conn:
         cur = conn.execute("""
             INSERT INTO a1_lesen_records (
                 set_id, score_raw, score_official, total_questions,
@@ -927,7 +955,7 @@ def record_a1_lesen_trial(set_id: int, score_raw: int, score_official: float,
 
 def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """查询 A1 阅读模考历史记录"""
-    with get_progress_db(db_path) as conn:
+    with db_progress_conn(db_path) as conn:
         rows = conn.execute("""
             SELECT * FROM a1_lesen_records ORDER BY id DESC LIMIT ?
         """, (limit,)).fetchall()
