@@ -1161,7 +1161,10 @@ def create_article_note(article_id: int, req: ReadingNoteReq):
         return {"id": cur.lastrowid, "status": "ok"}
 
 @app.delete("/api/notes/{note_id}")
-def delete_article_note(note_id: int):
+def delete_article_note(note_id: int, request: Request):
+    # 删除批注同本机写闸约定：与 delete_article / delete_card / delete_essay 一致，
+    # 防局域网设备任意删用户精读批注。
+    _require_localhost(request)
     with get_db() as conn:
         conn.execute("DELETE FROM reading_notes WHERE id = ?", (note_id,))
         return {"status": "ok"}

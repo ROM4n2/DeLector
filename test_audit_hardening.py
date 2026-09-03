@@ -109,6 +109,22 @@ def test_verify_wb_key_uses_compare_digest(monkeypatch):
     assert verify_wb_key("deadbeef", "cafebabe") is False
 
 
+def test_delete_note_rejects_lan(client, lan_client):
+    """批注删除须与本机写操作同闸：LAN 端删除 403，本机删除 200。"""
+    r = client.post("/api/articles/ingest", json={"title": "Note Gate", "raw_text": "Der Mann liest ein Buch."})
+    assert r.status_code == 200
+    art_id = r.json()["article_id"]
+    n = client.post(f"/api/articles/{art_id}/notes", json={"selected_text": "liest"})
+    assert n.status_code == 200
+    note_id = n.json()["id"]
+
+    assert lan_client.delete(f"/api/notes/{note_id}").status_code == 403
+    assert client.delete(f"/api/notes/{note_id}").status_code == 200
+
+    notes = client.get(f"/api/articles/{art_id}/notes").json()
+    assert all(x["id"] != note_id for x in notes)
+
+
 def test_wb_state_put_requires_valid_key(client):
     """PUT /api/wb/state 正确 key 放行、错误 key 403。key 走本机端点获取。"""
     key_res = client.get("/api/wb/state/key")
