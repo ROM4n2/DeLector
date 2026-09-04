@@ -60,6 +60,10 @@
           <span class="nav-tab-code">SCHREIBTISCH</span>
           <span class="nav-tab-label">写作润色</span>
         </button>
+        <button id="nav-btn-exam" class="nav-tab" onclick="show('exam')">
+          <span class="nav-tab-code">PRÜFUNG</span>
+          <span class="nav-tab-label">备考</span>
+        </button>
         <button id="nav-btn-cards" class="nav-tab" onclick="show('cards')">
           <span class="nav-tab-code">KARTEI</span>
           <span class="nav-tab-label"
@@ -305,15 +309,6 @@
           >
             Präpositionen <span id="seg-prep-count" class="seg-count">–</span>
           </button>
-          <button
-            id="seg-a1"
-            class="cards-seg-btn"
-            onclick="setCardSegment('a1')"
-            title="歌德 A1 (Start Deutsch 1) 官方 650+ 考纲词汇与口语抽卡对练"
-          >
-            🌟 歌德 A1 速通
-            <span id="seg-a1-count" class="seg-count">650+</span>
-          </button>
         </div>
 
         <div class="cards-view-toggle">
@@ -376,65 +371,7 @@
         />
       </div>
 
-      <div id="a1-toolbar" class="a1-toolbar hidden">
-        <div class="a1-mode-tabs">
-          <button
-            id="a1-tab-vocab"
-            class="a1-mode-tab active"
-            onclick="setA1Mode('vocab')"
-          >
-            📖 官方考纲词表 (700+)
-          </button>
-          <button
-            id="a1-tab-hoeren"
-            class="a1-mode-tab"
-            onclick="setA1Mode('hoeren')"
-          >
-            🎧 听力全真模考 (15题×5套)
-          </button>
-          <button
-            id="a1-tab-lesen"
-            class="a1-mode-tab"
-            onclick="setA1Mode('lesen')"
-          >
-            📖 实用阅读工坊 (15题×6套)
-          </button>
-          <button
-            id="a1-tab-teil2"
-            class="a1-mode-tab"
-            onclick="setA1Mode('teil2')"
-          >
-            💬 口语 Teil 2 问答
-          </button>
-          <button
-            id="a1-tab-teil3"
-            class="a1-mode-tab"
-            onclick="setA1Mode('teil3')"
-          >
-            🙋 口语 Teil 3 请求
-          </button>
-          <a
-            href="/api/a1/export/anki"
-            class="btn btn-ghost btn-xs a1-anki-export-btn"
-            title="一键导出官方歌德 A1 词表到 Anki 牌组"
-            >📥 导出 A1 牌组</a
-          >
-        </div>
-        <div id="a1-topic-pills" class="a1-topic-pills"></div>
-        <div id="a1-search-row" class="a1-search-row">
-          <input
-            type="text"
-            class="modal-input a1-search-input"
-            id="a1-search-input"
-            placeholder="🔍 搜索 A1 单词 / 释义 / 考纲例句 (如: Brot, fahren, 苹果)..."
-            oninput="searchA1Vocab(this.value)"
-          />
-        </div>
-      </div>
-
       <div id="cards-container"></div>
-      <div id="a1-hoeren-container" class="a1-hoeren-container hidden"></div>
-      <div id="a1-lesen-container" class="a1-lesen-container hidden"></div>
     </main>
 
     <!-- ── View 4: Atelier Landing Page Folio (Atelier Style Ledger) ─ -->
@@ -953,197 +890,6 @@
             >
               ✍️ 自由写作与研磨 (Freies Schreiben)
             </button>
-            <button
-              id="writer-mode-a1-formular"
-              class="writer-mode-tab"
-              onclick="switchWriterMode('formular')"
-            >
-              📝 歌德 A1 Teil 1 填表专项 (Formular-Training)
-            </button>
-            <button
-              id="writer-mode-a1-email"
-              class="writer-mode-tab"
-              onclick="switchWriterMode('email')"
-            >
-              ✉️ 歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab)
-            </button>
-          </div>
-
-          <!-- ── Goethe A1 Teil 1: Formular-Training Panel ── -->
-          <div id="a1-formular-view" class="a1-schreiben-panel hidden">
-            <div class="a1-workbench-topbar">
-              <div class="a1-selector-group">
-                <label for="a1-formular-select"><b>选择填表真题：</b></label>
-                <select
-                  id="a1-formular-select"
-                  class="modal-input"
-                  onchange="selectA1Formular(this.value)"
-                ></select>
-              </div>
-              <div class="a1-topbar-actions">
-                <button class="btn btn-ghost btn-sm" onclick="prevA1Formular()">
-                  ◀ 上一题
-                </button>
-                <button
-                  class="btn btn-ghost btn-sm"
-                  onclick="randomA1Formular()"
-                >
-                  🎲 随机练习
-                </button>
-                <button class="btn btn-ghost btn-sm" onclick="nextA1Formular()">
-                  下一题 ▶
-                </button>
-              </div>
-            </div>
-
-            <div class="a1-formular-layout">
-              <!-- Left: Reading Passage Card -->
-              <div class="a1-passage-card">
-                <div class="a1-card-label">📖 考场情景短文 (Lesetext)</div>
-                <h3 id="a1-form-title" class="a1-form-title"></h3>
-                <p id="a1-form-scenario" class="a1-form-scenario-desc"></p>
-                <div id="a1-form-passage" class="a1-form-passage-box"></div>
-                <div class="a1-exam-tip-box">
-                  💡 <b>填表应试技巧</b>：认真阅读短文，区分姓 (Familienname)
-                  与名
-                  (Vorname)，注意德语日期格式（日.月）与数字，不确定大小写时建议按原词抄写。
-                </div>
-              </div>
-
-              <!-- Right: Authentic German Formular Table -->
-              <div class="a1-formular-card">
-                <div class="a1-card-label">
-                  📝 官方答题表格 (Anmeldeformular)
-                </div>
-                <div id="a1-formular-container" class="a1-formular-table"></div>
-                <div class="a1-formular-actions">
-                  <button
-                    class="btn btn-dark"
-                    id="a1-form-check-btn"
-                    onclick="checkA1Formular()"
-                  >
-                    🎯 立即批改 (5 分)
-                  </button>
-                  <button class="btn btn-ghost" onclick="resetA1Formular()">
-                    🔄 重填
-                  </button>
-                </div>
-                <div
-                  id="a1-formular-feedback"
-                  class="a1-formular-feedback-box hidden"
-                ></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Goethe A1 Teil 2: 30-Wort E-Mail / Brief Lab Panel ── -->
-          <div id="a1-email-view" class="a1-schreiben-panel hidden">
-            <div class="a1-workbench-topbar">
-              <div class="a1-selector-group">
-                <label for="a1-email-select"><b>选择书信场景：</b></label>
-                <select
-                  id="a1-email-select"
-                  class="modal-input"
-                  onchange="selectA1Email(this.value)"
-                ></select>
-              </div>
-              <div class="a1-topbar-actions">
-                <button class="btn btn-ghost btn-sm" onclick="prevA1Email()">
-                  ◀ 上一题
-                </button>
-                <button class="btn btn-ghost btn-sm" onclick="randomA1Email()">
-                  🎲 随机场景
-                </button>
-                <button class="btn btn-ghost btn-sm" onclick="nextA1Email()">
-                  下一题 ▶
-                </button>
-              </div>
-            </div>
-
-            <div class="a1-email-layout">
-              <!-- Left: Writing Workspace -->
-              <div class="a1-email-editor-card">
-                <div class="a1-prompt-banner">
-                  <div class="a1-card-label">
-                    📋 考场题目要求 (Aufgabenstellung)
-                  </div>
-                  <div id="a1-email-prompt" class="a1-email-prompt-text"></div>
-                  <div class="a1-leitpunkte-box">
-                    <div class="a1-leitpunkte-label">
-                      🎯 必须覆盖的 3 个导向点 (3 Leitpunkte):
-                    </div>
-                    <div
-                      id="a1-email-leitpunkte"
-                      class="a1-leitpunkte-list"
-                    ></div>
-                  </div>
-                </div>
-
-                <!-- Live Status Meter -->
-                <div class="a1-email-live-meter">
-                  <div class="a1-meter-item">
-                    <span>字数统计：</span>
-                    <b id="a1-email-word-count">0 词</b>
-                    <span id="a1-email-word-badge" class="a1-diag-badge"
-                      >建议 25~35 词</span
-                    >
-                  </div>
-                  <div class="a1-meter-item">
-                    <span>称呼规范：</span>
-                    <span id="a1-email-greeting-status" class="a1-diag-badge"
-                      >待输入</span
-                    >
-                  </div>
-                  <div class="a1-meter-item">
-                    <span>结语标点：</span>
-                    <span id="a1-email-valediction-status" class="a1-diag-badge"
-                      >待输入</span
-                    >
-                  </div>
-                </div>
-
-                <textarea
-                  id="a1-email-input"
-                  class="a1-email-textarea"
-                  rows="8"
-                  placeholder="在此输入您的 30 词德语短电邮...&#10;如：&#10;Liebe Anna,&#10;ich lade dich herzlich zu meiner Party ein...&#10;Viele Grüße&#10;Max"
-                  oninput="onA1EmailInput()"
-                ></textarea>
-
-                <div class="a1-email-editor-actions">
-                  <button class="btn btn-dark" onclick="diagnoseA1Email()">
-                    ⚡ 智能诊断与判分
-                  </button>
-                  <button
-                    class="btn btn-ghost"
-                    onclick="applyA1EmailTemplate()"
-                  >
-                    📋 套用考场满分模板
-                  </button>
-                  <button class="btn btn-ghost" onclick="clearA1Email()">
-                    🗑️ 清空
-                  </button>
-                </div>
-
-                <div
-                  id="a1-email-diag-results"
-                  class="a1-email-diag-results hidden"
-                ></div>
-              </div>
-
-              <!-- Right: Model Text & Useful Phrases -->
-              <div class="a1-email-sample-card">
-                <div class="a1-card-label">
-                  🌟 官方考纲满分范文 (Musterbrief)
-                </div>
-                <div id="a1-email-sample-box" class="a1-email-sample-box"></div>
-
-                <div class="a1-card-label" style="margin-top: 1rem">
-                  💬 本场景高频黄金句型
-                </div>
-                <div id="a1-email-phrases-box" class="a1-phrases-box"></div>
-              </div>
-            </div>
           </div>
 
           <!-- Left Area: Inline IDE Editor & Essay History -->
@@ -2633,6 +2379,304 @@
       </div>
     </div>
 
+    <!-- ── View 7: Exam Domain (Prüfungsbereich) ────────────────── -->
+    <main id="view-exam" class="view">
+      <div class="exam-container">
+        <div class="exam-topbar">
+          <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
+          <h2>备考 · PRÜFUNGSDOMÄNE</h2>
+        </div>
+        <div id="exam-level-tabs" class="exam-level-tabs">
+          <button id="exam-level-a1" class="exam-level-tab active">A1</button>
+        </div>
+        <div id="exam-module-grid" class="exam-module-grid">
+          <button id="exam-card-writing" class="exam-module-card active" onclick="setExamModule('writing')">📝 写作专项 (Schreiben)</button>
+          <button id="exam-card-hoeren" class="exam-module-card" onclick="setExamModule('hoeren')">🎧 听力模考 (Hörverstehen)</button>
+          <button id="exam-card-lesen" class="exam-module-card" onclick="setExamModule('lesen')">📖 阅读工坊 (Leseverstehen)</button>
+          <button id="exam-card-sprechen" class="exam-module-card" onclick="setExamModule('sprechen')">💬 口语问答 (Sprechen)</button>
+          <button id="exam-card-vocab" class="exam-module-card" onclick="setExamModule('vocab')">📖 官方考纲词表 (Wortliste)</button>
+        </div>
+
+        <!-- ── 模块面板：exam-card-* 页签点击 setExamModule() 点亮对应面板 ── -->
+        <section id="exam-writing" class="exam-module-panel">
+          <div class="exam-panel-tabs">
+            <button
+              id="exam-tab-formular"
+              class="exam-panel-tab active"
+              onclick="setExamWritingTab('formular')"
+            >
+              📝 歌德 A1 Teil 1 填表专项 (Formular-Training)
+            </button>
+            <button
+              id="exam-tab-email"
+              class="exam-panel-tab"
+              onclick="setExamWritingTab('email')"
+            >
+              ✉️ 歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab)
+            </button>
+          </div>
+
+          <!-- ── Goethe A1 Teil 1: Formular-Training Panel ── -->
+            <div id="a1-formular-view" class="a1-schreiben-panel hidden">
+              <div class="a1-workbench-topbar">
+                <div class="a1-selector-group">
+                  <label for="a1-formular-select"><b>选择填表真题：</b></label>
+                  <select
+                    id="a1-formular-select"
+                    class="modal-input"
+                    onchange="selectA1Formular(this.value)"
+                  ></select>
+                </div>
+                <div class="a1-topbar-actions">
+                  <button class="btn btn-ghost btn-sm" onclick="prevA1Formular()">
+                    ◀ 上一题
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    onclick="randomA1Formular()"
+                  >
+                    🎲 随机练习
+                  </button>
+                  <button class="btn btn-ghost btn-sm" onclick="nextA1Formular()">
+                    下一题 ▶
+                  </button>
+                </div>
+              </div>
+
+              <div class="a1-formular-layout">
+                <!-- Left: Reading Passage Card -->
+                <div class="a1-passage-card">
+                  <div class="a1-card-label">📖 考场情景短文 (Lesetext)</div>
+                  <h3 id="a1-form-title" class="a1-form-title"></h3>
+                  <p id="a1-form-scenario" class="a1-form-scenario-desc"></p>
+                  <div id="a1-form-passage" class="a1-form-passage-box"></div>
+                  <div class="a1-exam-tip-box">
+                    💡 <b>填表应试技巧</b>：认真阅读短文，区分姓 (Familienname)
+                    与名
+                    (Vorname)，注意德语日期格式（日.月）与数字，不确定大小写时建议按原词抄写。
+                  </div>
+                </div>
+
+                <!-- Right: Authentic German Formular Table -->
+                <div class="a1-formular-card">
+                  <div class="a1-card-label">
+                    📝 官方答题表格 (Anmeldeformular)
+                  </div>
+                  <div id="a1-formular-container" class="a1-formular-table"></div>
+                  <div class="a1-formular-actions">
+                    <button
+                      class="btn btn-dark"
+                      id="a1-form-check-btn"
+                      onclick="checkA1Formular()"
+                    >
+                      🎯 立即批改 (5 分)
+                    </button>
+                    <button class="btn btn-ghost" onclick="resetA1Formular()">
+                      🔄 重填
+                    </button>
+                  </div>
+                  <div
+                    id="a1-formular-feedback"
+                    class="a1-formular-feedback-box hidden"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+          <!-- ── Goethe A1 Teil 2: 30-Wort E-Mail / Brief Lab Panel ── -->
+            <div id="a1-email-view" class="a1-schreiben-panel hidden">
+              <div class="a1-workbench-topbar">
+                <div class="a1-selector-group">
+                  <label for="a1-email-select"><b>选择书信场景：</b></label>
+                  <select
+                    id="a1-email-select"
+                    class="modal-input"
+                    onchange="selectA1Email(this.value)"
+                  ></select>
+                </div>
+                <div class="a1-topbar-actions">
+                  <button class="btn btn-ghost btn-sm" onclick="prevA1Email()">
+                    ◀ 上一题
+                  </button>
+                  <button class="btn btn-ghost btn-sm" onclick="randomA1Email()">
+                    🎲 随机场景
+                  </button>
+                  <button class="btn btn-ghost btn-sm" onclick="nextA1Email()">
+                    下一题 ▶
+                  </button>
+                </div>
+              </div>
+
+              <div class="a1-email-layout">
+                <!-- Left: Writing Workspace -->
+                <div class="a1-email-editor-card">
+                  <div class="a1-prompt-banner">
+                    <div class="a1-card-label">
+                      📋 考场题目要求 (Aufgabenstellung)
+                    </div>
+                    <div id="a1-email-prompt" class="a1-email-prompt-text"></div>
+                    <div class="a1-leitpunkte-box">
+                      <div class="a1-leitpunkte-label">
+                        🎯 必须覆盖的 3 个导向点 (3 Leitpunkte):
+                      </div>
+                      <div
+                        id="a1-email-leitpunkte"
+                        class="a1-leitpunkte-list"
+                      ></div>
+                    </div>
+                  </div>
+
+                  <!-- Live Status Meter -->
+                  <div class="a1-email-live-meter">
+                    <div class="a1-meter-item">
+                      <span>字数统计：</span>
+                      <b id="a1-email-word-count">0 词</b>
+                      <span id="a1-email-word-badge" class="a1-diag-badge"
+                        >建议 25~35 词</span
+                      >
+                    </div>
+                    <div class="a1-meter-item">
+                      <span>称呼规范：</span>
+                      <span id="a1-email-greeting-status" class="a1-diag-badge"
+                        >待输入</span
+                      >
+                    </div>
+                    <div class="a1-meter-item">
+                      <span>结语标点：</span>
+                      <span id="a1-email-valediction-status" class="a1-diag-badge"
+                        >待输入</span
+                      >
+                    </div>
+                  </div>
+
+                  <textarea
+                    id="a1-email-input"
+                    class="a1-email-textarea"
+                    rows="8"
+                    placeholder="在此输入您的 30 词德语短电邮...&#10;如：&#10;Liebe Anna,&#10;ich lade dich herzlich zu meiner Party ein...&#10;Viele Grüße&#10;Max"
+                    oninput="onA1EmailInput()"
+                  ></textarea>
+
+                  <div class="a1-email-editor-actions">
+                    <button class="btn btn-dark" onclick="diagnoseA1Email()">
+                      ⚡ 智能诊断与判分
+                    </button>
+                    <button
+                      class="btn btn-ghost"
+                      onclick="applyA1EmailTemplate()"
+                    >
+                      📋 套用考场满分模板
+                    </button>
+                    <button class="btn btn-ghost" onclick="clearA1Email()">
+                      🗑️ 清空
+                    </button>
+                  </div>
+
+                  <div
+                    id="a1-email-diag-results"
+                    class="a1-email-diag-results hidden"
+                  ></div>
+                </div>
+
+                <!-- Right: Model Text & Useful Phrases -->
+                <div class="a1-email-sample-card">
+                  <div class="a1-card-label">
+                    🌟 官方考纲满分范文 (Musterbrief)
+                  </div>
+                  <div id="a1-email-sample-box" class="a1-email-sample-box"></div>
+
+                  <div class="a1-card-label" style="margin-top: 1rem">
+                    💬 本场景高频黄金句型
+                  </div>
+                  <div id="a1-email-phrases-box" class="a1-phrases-box"></div>
+                </div>
+              </div>
+            </div>
+        </section>
+
+        <section id="exam-cards-family" class="exam-module-panel hidden">
+          <div id="a1-toolbar" class="a1-toolbar hidden">
+              <div class="a1-mode-tabs">
+                <button
+                  id="a1-tab-vocab"
+                  class="a1-mode-tab active"
+                  onclick="setA1Mode('vocab')"
+                >
+                  📖 官方考纲词表 (700+)
+                </button>
+                <button
+                  id="a1-tab-hoeren"
+                  class="a1-mode-tab"
+                  onclick="setA1Mode('hoeren')"
+                >
+                  🎧 听力全真模考 (15题×5套)
+                </button>
+                <button
+                  id="a1-tab-lesen"
+                  class="a1-mode-tab"
+                  onclick="setA1Mode('lesen')"
+                >
+                  📖 实用阅读工坊 (15题×6套)
+                </button>
+                <button
+                  id="a1-tab-teil2"
+                  class="a1-mode-tab"
+                  onclick="setA1Mode('teil2')"
+                >
+                  💬 口语 Teil 2 问答
+                </button>
+                <button
+                  id="a1-tab-teil3"
+                  class="a1-mode-tab"
+                  onclick="setA1Mode('teil3')"
+                >
+                  🙋 口语 Teil 3 请求
+                </button>
+                <a
+                  href="/api/a1/export/anki"
+                  class="btn btn-ghost btn-xs a1-anki-export-btn"
+                  title="一键导出官方歌德 A1 词表到 Anki 牌组"
+                  >📥 导出 A1 牌组</a
+                >
+              </div>
+              <div id="a1-topic-pills" class="a1-topic-pills"></div>
+              <div id="a1-search-row" class="a1-search-row">
+                <input
+                  type="text"
+                  class="modal-input a1-search-input"
+                  id="a1-search-input"
+                  placeholder="🔍 搜索 A1 单词 / 释义 / 考纲例句 (如: Brot, fahren, 苹果)..."
+                  oninput="searchA1Vocab(this.value)"
+                />
+              </div>
+            </div>
+
+          <div class="cards-view-toggle" id="exam-cards-view-toggle">
+            <button
+              id="exam-mode-btn-deck"
+              class="cards-mode-btn active"
+              onclick="setA1CardViewMode('deck')"
+              title="扑克牌叠层翻页模式"
+            >
+              🎴 扑克牌盒
+            </button>
+            <button
+              id="exam-mode-btn-grid"
+              class="cards-mode-btn"
+              onclick="setA1CardViewMode('grid')"
+              title="目录全景平铺列表"
+            >
+              📑 全景目录
+            </button>
+          </div>
+
+          <div id="exam-cards-container"></div>
+          <div id="a1-hoeren-container" class="a1-hoeren-container hidden"></div>
+          <div id="a1-lesen-container" class="a1-lesen-container hidden"></div>
+        </section>
+      </div>
+    </main>
+
     <!-- ── View 6: German Vocabulary Workbench (Vokabeltrainer) ──── -->
     <main id="view-german" class="view">
       <iframe
@@ -2668,6 +2712,14 @@
       >
         <span class="mob-icon">✍️</span>
         <span class="mob-label">写作</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-exam"
+        onclick="show('exam')"
+      >
+        <span class="mob-icon">🎯</span>
+        <span class="mob-label">备考</span>
       </button>
       <button
         class="mobile-nav-btn dock-item"

@@ -5,7 +5,7 @@ import { state, api, esc, jsAttr } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";
-import { getCardViewMode, getCachedVocabLemmas } from "./cards.js";
+import { getCachedVocabLemmas } from "./cards.js";
 import { initA1Hoeren, stopHoerenExam } from "./a1_hoeren.js";
 import { initA1Lesen, stopLesenExam } from "./a1_lesen.js";
 
@@ -29,6 +29,27 @@ export function isA1DataLoaded() {
 }
 
 // ── Goethe-Zertifikat A1 Wortliste & Sprechen Lab ────────────────────────────
+// ADR-0005 Task 2：A1 词表/口语面板宿主已迁到 view-exam，渲染目标统一为
+// 备考域容器 #exam-cards-container（主站 #cards-container 只归复习卡盒）。
+const a1CardsHost = () => document.getElementById("exam-cards-container");
+
+// 牌盒/目录视图模式。主站 cards.js 的同款状态对 A1 不再生效（两个视图
+// 各自独立），本模块自管一份，toggle 按钮也在备考域容器内
+// （#exam-cards-view-toggle 里的 exam-mode-btn-*）。cards.js 的
+// getCardViewMode 桩仍在（探针 vm 注入 & 潜在旧调用兜底），但本模块
+// 的判定只看自己的 a1ViewMode。
+let a1ViewMode = "deck";
+
+export function setA1CardViewMode(mode) {
+  a1ViewMode = mode;
+  document
+    .getElementById("exam-mode-btn-deck")
+    ?.classList.toggle("active", mode === "deck");
+  document
+    .getElementById("exam-mode-btn-grid")
+    ?.classList.toggle("active", mode === "grid");
+  renderA1();
+}
 
 export async function loadA1Data() {
   try {
@@ -87,8 +108,8 @@ export function setA1Mode(mode) {
 
   const searchRow = document.getElementById("a1-search-row");
   const pillsRow = document.getElementById("a1-topic-pills");
-  const viewToggle = document.querySelector(".cards-view-toggle");
-  const cardsContainer = document.getElementById("cards-container");
+  const viewToggle = document.getElementById("exam-cards-view-toggle");
+  const cardsContainer = a1CardsHost();
   const hoerenContainer = document.getElementById("a1-hoeren-container");
   const lesenContainer = document.getElementById("a1-lesen-container");
 
@@ -131,6 +152,19 @@ export function setA1Mode(mode) {
     searchRow?.classList.add("hidden");
     pillsRow?.classList.add("hidden");
     viewToggle?.classList.add("hidden");
+  }
+
+  // 题库懒加载：原 cards.js 'a1' 段的「未加载先 fetch 再渲染」链路随分流段
+  // 一起迁走。备考域入口 setExamModule → setA1Mode，这里补上同语义守卫，
+  // 否则首次进入 vocab/口语会拿空缓存渲染成「未找到考纲词汇」空态。
+  if (!isA1DataLoaded()) {
+    loadA1Data()
+      .then(() => {
+        // 守卫：等待期间用户可能已切到 hoeren/lesen（它们不走本渲染路径）。
+        if (a1Mode === "vocab" || a1Mode === "teil2" || a1Mode === "teil3") renderA1();
+      })
+      .catch(() => {});
+    return;
   }
 
   renderA1();
@@ -201,11 +235,11 @@ export function getA1CurrentList() {
 }
 
 export function renderA1() {
-  const container = document.getElementById("cards-container");
+  const container = a1CardsHost();
   if (!container) return;
 
   if (a1Mode === "vocab") {
-    if (getCardViewMode() === "deck") {
+    if (a1ViewMode === "deck") {
       renderA1PokerCard();
     } else {
       renderA1GridView();
@@ -218,7 +252,7 @@ export function renderA1() {
 }
 
 export function renderA1PokerCard() {
-  const container = document.getElementById("cards-container");
+  const container = a1CardsHost();
   if (!container) return;
 
   const list = getA1CurrentList();
@@ -343,7 +377,7 @@ export function renderA1PokerCard() {
 }
 
 export function renderA1GridView() {
-  const container = document.getElementById("cards-container");
+  const container = a1CardsHost();
   if (!container) return;
 
   const list = getA1CurrentList();
@@ -399,7 +433,7 @@ export function renderA1GridView() {
 }
 
 export function renderA1Teil2Deck() {
-  const container = document.getElementById("cards-container");
+  const container = a1CardsHost();
   if (!container) return;
 
   const list = getA1CurrentList();
@@ -482,7 +516,7 @@ export function renderA1Teil2Deck() {
 }
 
 export function renderA1Teil3Deck() {
-  const container = document.getElementById("cards-container");
+  const container = a1CardsHost();
   if (!container) return;
 
   const list = getA1CurrentList();

@@ -48,6 +48,13 @@ def clean_db():
     # 事务不 close，文件句柄要等循环 GC 才释放。Windows 上句柄未释放时 os.remove
     # 抛 PermissionError（被吞），旧 DB 带着上一测试的数据残留下来 → 隔离失效。
     # 删除前先 gc.collect()，把上一测试遗留的连接环清掉，删除才确定成功。
+    # 前后双钉 env：database.get_db_path() 每次调用都读 os.environ（不是 import
+    # 时冻结），全量 pytest 时更晚收集的文件（test_audit_hardening.py 等）在
+    # 模块顶层改写 DATABASE_PATH，收集顺序若让本文件先 import、用例后执行，
+    # 默认路径就会命中未建表的别家库 → 「no such table」成片假失败。
+    saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
+    os.environ["DATABASE_PATH"] = "test_delector.db"
+    os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
     gc.collect()
     for f in ("test_delector.db", "test_progress.db"):
         if os.path.exists(f):
@@ -64,6 +71,11 @@ def clean_db():
                 os.remove(f)
             except OSError:
                 pass
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
 
 def test_cefr_lookup():
     assert get_cefr_level("gehen") == "A1"
@@ -1790,9 +1802,9 @@ def test_pure_python_pipeline_without_spacy():
     这条分支曾因调用不存在的 lookup_core_dict 而在 import server 时就 NameError，
     导致安卓端 uvicorn 永远起不来、启动页一直卡住。
     """
-    import server
+    import nlp
 
-    result = server._process_german_text_pure_python(
+    result = nlp._process_german_text_pure_python(
         "Der Hund schläft. Ich habe ein Buch gelesen!"
     )
 
@@ -1882,11 +1894,11 @@ def test_android_never_downloads_model_at_import():
 
 def test_spacy_model_candidates_prefer_md():
     """README 与 Dockerfile 都装 md（带词向量、标注更准），sm 只是兜底。"""
-    import server
+    import nlp
 
-    assert server.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
+    assert nlp.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
     # 自动下载走小模型：md 约 45MB，首启动拉它太慢
-    assert server.AUTO_DOWNLOAD_MODEL == "de_core_news_sm"
+    assert nlp.AUTO_DOWNLOAD_MODEL == "de_core_news_sm"
 
 def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     """spacy.load(名称) 查的是 .dist-info；Android 上模型是直接拷进源码目录的。
@@ -1896,27 +1908,27 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     """
     import sys
     import types
-    import server
+    import nlp
 
     sentinel = object()
     fake = types.ModuleType("de_fake_news_sm")
     fake.load = lambda **kw: sentinel
     monkeypatch.setitem(sys.modules, "de_fake_news_sm", fake)
-    monkeypatch.setattr(server.spacy, "load", lambda *a, **k:
+    monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k:
                         (_ for _ in ()).throw(OSError("[E050] Can't find model")))
 
-    nlp, how = server._load_spacy_model("de_fake_news_sm")
-    assert nlp is sentinel
+    model, how = nlp._load_spacy_model("de_fake_news_sm")
+    assert model is sentinel
     assert "module.load" in how
 
 def test_load_spacy_model_reports_every_failed_strategy(monkeypatch):
     """全部失败时错误信息要带上每条策略的原因，否则真机上无从判断卡在哪。"""
-    import server
+    import nlp
 
-    monkeypatch.setattr(server.spacy, "load", lambda *a, **k:
+    monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k:
                         (_ for _ in ()).throw(OSError("no dist-info")))
     with pytest.raises(RuntimeError) as excinfo:
-        server._load_spacy_model("de_definitely_not_installed")
+        nlp._load_spacy_model("de_definitely_not_installed")
     message = str(excinfo.value)
     assert "spacy.load" in message
     assert "import de_definitely_not_installed" in message

@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-453%2F453%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-559%2F559%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -135,6 +135,13 @@
 - **3D 纸牌堆叠词卡与网格双视图**：词卡「牌盒/目录」双模一键切换，逐词一键入 FSRS 复习盒并实时标记「已在复习盒」；安卓卡片段标签栏窄屏下可横向滑动直达（v4.7.2）。
 
 - **学习设置即时生效（含队列行为探针）**：每日新词上限、新词排序、学习范围三组设置在工作台顶栏分段控件一键切换，无需刷新页面；尾部队列同步重算、手动追加的词豁免裁剪。v5.0.0 新增 node:vm 动态探针验证真实队列行为。
+
+### 🎯 12. 备考域重布局与等级可扩展 (ADR-0005 首刀, v5.2.0)
+
+- **独立「备考」域**：主导航新增 `PRÜFUNG` 顶层入口（桌面 + 移动 dock），A1 写作/听力/阅读/口语/词表五模块从工具视图收拢入域；「写作润色」回归纯 essay、「复习卡片」回归纯复习，考纲素材不再混入工具容器。
+- **exam catalog 目录化**：`/api/exams/catalog` 由 `exam_catalog.py` 代码注册目录单源提供等级→模块导航；等级页签与模块卡片数据驱动，加 A2/B1 = 插一行注册数据，无需改 HTML/JS（问卷库不入 SQLite，YAGNI）。
+- **成绩表泛化**：`exam_trials(level,module,…)` 泛化成续表 + 幂等迁移 A1 存量（行数对账 `>=` 防透传模式重迁），旧 `a1_hoeren_records`/`a1_lesen_records` 保留兼容期，备份/还原接线完整。
+- **行为级 DOM 探针**：`tools/ia_dom_mount_probe.mjs` 以 node:vm 真跑迁移后的挂载链，断言五面板落位 view-exam、window 挂载可达、渲染目标不回退主站容器；实现回退必红。
 
 ---
 
@@ -365,6 +372,8 @@ DeLector/
 - [x] **v5.0.2**：**审计修复与 XSS 消毒 (Post-Audit Fix)**——① **reader.js XSS sink 全消毒**：14 处 raw interpolation 改用 `Number()` / `safeCefr()` / `esc()` / regex strip / `safeTokens()`，彻底关闭通过 backup/restore 导入 crafted processed_json 后在 localhost origin 触发的 DOM XSS；② **A1 模考统计修复**：`log_study_event` 补充 `a1_hoeren` / `a1_lesen` 分支，模考次数与学习时长正确计入 `daily_summary`；③ **德语动词反查修复**：过去时词干拼后缀前先剥 `-e`（`wusste → wusst + en = wussten`），修复弱变化/混合变化动词复数形式索引遗漏；④ **DeLector.spec 测试改进**：CI 干净 checkout 下显式 `pytest.skip` 替代静默跳过。测试 **453 全绿**
 
 - [x] **v5.1.0**：**局域网随时静默同步 Stage B（WebRTC 自动化）**——① 信令端点补 `X-WB-Key` 鉴权并修 POST 预检放行；② **持久配对凭证 + 一键撤销**（撤销即换新 key，替代每会话短码）；③ WebRTC 信令中继 `/api/wb/rtc/signal`（按配对密钥建邮箱、sender 过滤防重放）；④ 前端 `wbsync.rtc` 建连与 DataChannel **静默同步**（信封与 HTTP PUT 同构）；⑤ 断线自动重连 + HTTP 轮询兜底降级（连续失败停手保可达）。Stage A HTTP 轮询保留为兜底。全量 pytest **487 全绿**；9 wbsync 探针 + 40 定向测试无回归。
+
+- [x] **v5.2.0**：**备考域重布局 + 等级可扩展（ADR-0005 Phase 1）**——① **主导航加「备考 (Prüfung)」顶层域**：A1 写作/听力/阅读/口语/词表五模块从「写作润色」「复习卡片」工具容器迁入独立备考域，工具视图回归纯工具语义（写作=纯 essay、卡片=纯复习）；② **exam catalog 目录化**：`/api/exams/catalog` 代码注册目录单源，等级页签与模块卡片数据驱动，加 A2/B1 = 插一行数据（问卷库不入库，YAGNI）；③ **成绩表泛化**：`exam_trials(level,module,…)` 表 + 幂等迁移 A1 存量（旧 `a1_hoeren_records`/`a1_lesen_records` 保留兼容），备份/还原接线收编；④ **导航单源静态入口 + 备考域骨架**、`tools/ia_dom_mount_probe.mjs` 行为级 DOM 探针（node:vm 真跑，回退必红）。测试 **559 全绿**。
 
 - [x] **v5.1.1**：**审计修复收口 + 性能与稳定性 (M1–M5 + M4)**——① **审计修复（M1–M5）**：旧 6 位短码 LAN 面板停用标注并整体禁用（端点已强制配对密钥，死 UI 明示）；AI 判分/成功提示类残余 `alert` 收敛为 notify（写路径保留 + 双面黑白名单护栏）；wb pull 指数退避、RTC 瞬态不累计、阅读计时器防叠；② **性能（M4）**：查词/判题热路径常量模块级提升、复合词拆解与核心词查表缓存、句切分缩写保护正则提升；③ **稳定性**：PWA 版本更新改温和提示不硬刷窗口、TTS blob URL 统一撤销 + 播放请求令牌防错句覆盖、Reader 陈旧响应守卫、AI 请求输入上限与 TTS voice 白名单；④ **安全补漏**：批注删除纳入本机写闸、X-WB-Key 统一 `secrets.compare_digest` 消除时序侧信道、还原不导入 API 配置防 Key 外泄、Anki 导出 HTML 转义防存储型 XSS；⑤ 测试库隔离与断言护栏补齐。**本版同时回补 v5.0.2 → v5.1.1 的版本面同步**（sw.js 缓存键 / index.html 顶栏 / build.gradle / README / AGENTS）。
 

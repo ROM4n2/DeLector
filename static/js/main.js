@@ -75,6 +75,7 @@ import {
   saveA1WordToDeck,
   renderA1PokerCard,
   playA1Audio,
+  setA1CardViewMode,
 } from "./cards.js";
 import {
   switchFolioPage,
@@ -128,6 +129,7 @@ import {
   toggleWriterMobilePanel,
   closeWriterMobilePanel,
   switchWriterMode,
+  setExamWritingTab,
   selectA1Formular,
   prevA1Formular,
   nextA1Formular,
@@ -193,7 +195,7 @@ export function show(view) {
   // 模块加载失败时不挂、不影响其它视图切换。
   if (typeof closeWriterMobilePanel === "function") closeWriterMobilePanel();
 
-  if (view !== "cards") {
+  if (view !== "exam") {
     if (typeof A1Hoeren?.stopHoerenExam === "function")
       A1Hoeren.stopHoerenExam();
     if (typeof A1Lesen?.stopLesenExam === "function") A1Lesen.stopLesenExam();
@@ -207,11 +209,124 @@ export function show(view) {
 
   if (view === "home") loadArticles();
   if (view === "cards") loadCards();
+  // 备考域入口（ADR-0005 Task 2）：A1 五模块宿主在 view-exam。徽标计数与
+  // 复习盒缓存复用 loadCards（幂等 fetch，cards.js 与 a1_cards.js 都消费它）。
+  if (view === "exam") {
+    loadCards();
+    setExamModule();
+    lazyInitExamCatalog();
+  }
   if (view === "progress") loadProgress();
   if (view === "writer") {
     loadWriterEssays();
     setupEditorListeners();
   }
+}
+
+// ── Exam Domain Module Tabs (ADR-0005 Task 2) ───────────────────────────────
+// exam-card-* 五个页签 ⇄ 两个面板 section 的显隐路由。写在 main.js：
+// 它同时需要 setA1Mode（cards.js 链）与 setExamWritingTab（writer.js 链），
+// a1_cards.js / a1_writer.js 互不 import， mediator 只能住根模块。
+let _examModule = "writing";
+
+export function setExamModule(mod) {
+  // 无参调用（show('exam') 进场）= 回到上次停留的模块；显式点击才换模块。
+  if (mod) _examModule = mod;
+
+  const writingPanel = document.getElementById("exam-writing");
+  const familyPanel = document.getElementById("exam-cards-family");
+  const isWriting = _examModule === "writing";
+  if (writingPanel) writingPanel.classList.toggle("hidden", !isWriting);
+  if (familyPanel) familyPanel.classList.toggle("hidden", isWriting);
+
+  [
+    ["writing", "exam-card-writing"],
+    ["hoeren", "exam-card-hoeren"],
+    ["lesen", "exam-card-lesen"],
+    ["sprechen", "exam-card-sprechen"],
+    ["vocab", "exam-card-vocab"],
+  ].forEach(([m, btnId]) => {
+    document
+      .getElementById(btnId)
+      ?.classList.toggle("active", m === _examModule);
+  });
+
+  if (_examModule === "hoeren" || _examModule === "lesen") {
+    setA1Mode(_examModule);
+  } else if (_examModule === "sprechen") {
+    setA1Mode("teil2");
+  } else if (_examModule === "vocab") {
+    setA1Mode("vocab");
+  } else if (isWriting) {
+    setExamWritingTab("formular");
+  }
+}
+
+// ── Exam Catalog (ADR-0005 Task 3) ──────────────────────────────────────────
+// GET /api/exams/catalog（exam_catalog.py 代码注册目录，单源）→ 数据补强
+// 备考域导航：模块卡片标题回写成目录原文 + count 徽标 + 题量字样。只做
+// 数据补强/未来新增等级页签，**不重写** setExamModule 的面板路由接线
+// （onclick 与卡片 id 静态接线保持 Task 2 现状）。
+// 失败回退：fetch 失败/非 200 → 静态占位原样保留（console.debug 即可，
+// 不弹错——导航数据是锦上添花，不该打断备考动线）。
+let _examCatalogDone = false;
+
+async function initExamCatalog() {
+  if (_examCatalogDone) return;
+  _examCatalogDone = true;
+  let catalog;
+  try {
+    catalog = await api("/api/exams/catalog");
+  } catch (e) {
+    console.debug("[ExamCatalog] catalog 不可用，保留静态占位:", e);
+    _examCatalogDone = false; // 下次进备考域重试一次
+    return;
+  }
+  const levels = (catalog && catalog.levels) || [];
+  const a1 = levels.find((lv) => lv.id === "A1");
+  if (!a1 || !Array.isArray(a1.modules)) return;
+
+  // 模块卡片补强：标题回写 + count 徽标（卡片 id/onclick 静态接线不动，
+  // 目录若删了某模块，本地卡片原样保留——回退语义，不做删卡）。
+  a1.modules.forEach((m) => {
+    const card = document.getElementById("exam-card-" + m.id);
+    if (!card) return;
+    if (m.title) card.textContent = m.title;
+    if (m.count > 0) {
+      const badge = document.createElement("span");
+      badge.className = "exam-module-count";
+      badge.textContent = m.count >= 1000
+        ? (m.count / 1000).toFixed(1).replace(/\.0$/, "") + "k"
+        : String(m.count);
+      card.appendChild(badge);
+    }
+  });
+
+  // 等级页签：静态占位已有 A1；目录里超出静态占位的等级（未来 A2 = 插
+  // 一行注册）在这里追加成页签。目录缺失的静态页签不动（回退语义）。
+  // 新增页签目前没有面板接线（setExamModule mediator 只认识 A1 模块 id），
+  // 必须显式标注「待接入」而非静默挂着当死按钮（v5.1.0 前科纪律）：
+  // no-op onclick + title 提示 + aria-disabled。
+  const tabs = document.getElementById("exam-level-tabs");
+  if (!tabs) return;
+  levels.forEach((lv) => {
+    if (!lv.id) return;
+    const key = lv.id.toLowerCase();
+    if (document.getElementById("exam-level-" + key)) return;
+    const btn = document.createElement("button");
+    btn.id = "exam-level-" + key;
+    btn.className = "exam-level-tab";
+    btn.textContent = lv.title || lv.id;
+    btn.title = "该等级模块待接入";
+    btn.setAttribute("aria-disabled", "true");
+    btn.onclick = () => {}; // no-op：防静默死按钮，待该等级模块接线后替换
+    tabs.appendChild(btn);
+  });
+}
+
+// show('exam') 惰性触发一次（已初始化则跳过）。
+function lazyInitExamCatalog() {
+  initExamCatalog().catch(() => {});
 }
 
 // ── Import Modal ─────────────────────────────────────────────────────────────
@@ -779,6 +894,7 @@ Object.assign(window, {
   // Cards & Deck
   setCardSegment,
   setCardViewMode,
+  setA1CardViewMode,
   loadCards,
   toggleDeckFlip,
   stepDeck,
@@ -865,6 +981,8 @@ Object.assign(window, {
   toggleWriterMobilePanel,
   closeWriterMobilePanel,
   switchWriterMode,
+  setExamModule,
+  setExamWritingTab,
   selectA1Formular,
   prevA1Formular,
   nextA1Formular,

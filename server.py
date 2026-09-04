@@ -88,6 +88,7 @@ from database import (
     _take_pending,
     _db_snapshot_guard,
     _replace_tables,
+    migrate_a1_records_to_exam_trials,
     get_prep_saved,
     add_prep_saved,
 )
@@ -199,6 +200,7 @@ __all__ = [
     "_take_pending",
     "_db_snapshot_guard",
     "_replace_tables",
+    "migrate_a1_records_to_exam_trials",
     "get_prep_saved",
     "add_prep_saved",
     "_resolve_ssrf_targets",
@@ -228,6 +230,7 @@ from routes_rtc import router as rtc_router
 from routes_corpus import router as corpus_router
 from routes_a1_hoeren import hoeren_router
 from routes_a1_lesen import lesen_router
+from routes_exam import router as exam_router
 
 # --- 4. FastAPI Application ---
 app = FastAPI(title="DeLector")
@@ -237,6 +240,7 @@ app.include_router(rtc_router)
 app.include_router(corpus_router)
 app.include_router(hoeren_router)
 app.include_router(lesen_router)
+app.include_router(exam_router)
 init_db()
 seed_preset_articles()
 
@@ -1587,6 +1591,8 @@ class RestoreReq(BaseModel):
     daily_summary: List[Dict[str, Any]] = []
     a1_hoeren_records: List[Dict[str, Any]] = []
     a1_lesen_records: List[Dict[str, Any]] = []
+    # v5.2 泛化成绩表；v1/v5.1 备份没有此字段，缺省为空（向后兼容同上）
+    exam_trials: List[Dict[str, Any]] = []
     local_storage: Dict[str, Any] = {}
 
 
@@ -1630,6 +1636,12 @@ def restore_database_backup(req: RestoreReq, request: Request):
                 _replace_tables(pconn, _PROGRESS_TABLES, payload)
         finally:
             pconn.close()
+
+        # v5.1 及更早的备份里 A1 成绩只存在旧表（exam_trials 尚未存在）；
+        # 透传读路径已切到泛化表，还原后必须把旧表行迁过来，否则历史"看着
+        # 还原成功却读不出来"。迁移按行数对账幂等：v2 备份（两表行数已齐）
+        # 到这里就是零写入 no-op。
+        migrate_a1_records_to_exam_trials()
 
     return {"status": "ok", "message": "全量备份恢复成功"}
 

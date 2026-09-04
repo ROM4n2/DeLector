@@ -121,11 +121,16 @@ def test_a1_anki_export_endpoint():
 
 
 def test_a1_frontend_html_structure():
-    """验证 static/index.html 中 A1 考纲速通分段与工具栏 DOM 结构。"""
+    """验证 static/index.html 中 A1 考纲速通分段与工具栏 DOM 结构。
+
+    ADR-0005 Task 2 起备考域接管 A1 入口：seg-a1 分段按钮删除
+    （替代入口 = view-exam 的 exam-card-vocab），工具栏 id 不变、
+    原样迁入 view-exam。
+    """
     with open("static/index.html", "r", encoding="utf-8") as f:
         html = f.read()
 
-    assert 'id="seg-a1"' in html
+    assert 'id="exam-card-vocab"' in html  # A1 考纲入口现在在备考域
     assert 'id="a1-toolbar"' in html
     assert 'id="a1-topic-pills"' in html
     assert 'id="a1-tab-vocab"' in html

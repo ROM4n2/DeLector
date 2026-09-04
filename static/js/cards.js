@@ -5,7 +5,6 @@ import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
-import * as A1Cards from "./a1_cards.js";
 export {
   setA1Mode,
   filterA1Topic,
@@ -36,9 +35,10 @@ let undoToastTimer = null;
 let _lastFlipTime = 0;
 
 // a1_cards.js 是独立模块，读不到本模块作用域。这两个 getter 给它提供
-// 只读访问，避免循环 import 具名 state（renderA1 判定牌盒/目录、
-// loadA1Data 判定已入 FSRS 盒的词元）。与 cards.js 侧调用
-// A1Cards.getA1Mode() 是同一个方向的反向配对。
+// 只读访问，避免循环 import 具名 state（getCachedVocabLemmas 判定已入
+// FSRS 盒的词元）。A1 的牌盒/目录判定已由 a1_cards.js 自管的
+// a1ViewMode 接管（ADR-0005 Task 2），getCardViewMode 不再被它消费，
+// 仅保留给主站 toggle 状态查询。
 export function getCardViewMode() {
   return cardViewMode;
 }
@@ -53,7 +53,7 @@ export function setCardSegment(seg) {
   cardSegment = seg;
   deckIndex = 0;
   deckFlipped = false;
-  ['due', 'pending', 'mastered', 'prep', 'a1'].forEach(s => {
+  ['due', 'pending', 'mastered', 'prep'].forEach(s => {
     const btn = document.getElementById('seg-' + s);
     if (btn) btn.classList.toggle('active', s === seg);
   });
@@ -113,22 +113,10 @@ export async function refreshDueCount() {
 }
 
 export function renderCardsGrid() {
-  if (cardSegment === 'a1') {
-    document.getElementById('prep-filter-bar')?.classList.add('hidden');
-    document.getElementById('a1-toolbar')?.classList.remove('hidden');
-    if (A1Cards.getA1Mode() === 'vocab') {
-      document.querySelector('.cards-view-toggle')?.classList.remove('hidden');
-    } else {
-      document.querySelector('.cards-view-toggle')?.classList.add('hidden');
-    }
-    if (!A1Cards.isA1DataLoaded()) {
-      A1Cards.loadA1Data().then(A1Cards.renderA1);
-    } else {
-      A1Cards.renderA1();
-    }
-    return;
-  }
-  document.getElementById('a1-toolbar')?.classList.add('hidden');
+  // ADR-0005 Task 2：'a1' 段已从卡盒移除 —— A1 词表/口语/听力/阅读整体迁到
+  // 备考域（view-exam + a1_cards.js 自管渲染，入口 exam-card-* 页签）。
+  // seg-a1 按钮同步删除，本函数不再认识 'a1' 这个段。
+  document.getElementById('prep-filter-bar')?.classList.add('hidden');
 
   // 介词矩阵段跟其余三段的数据源完全无关（不是 cachedCards 的过滤视图），
   // 所以在算 vList/gList 之前就分流，免得白跑一遍过滤。
