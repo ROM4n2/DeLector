@@ -1790,9 +1790,9 @@ def test_pure_python_pipeline_without_spacy():
     这条分支曾因调用不存在的 lookup_core_dict 而在 import server 时就 NameError，
     导致安卓端 uvicorn 永远起不来、启动页一直卡住。
     """
-    import server
+    import nlp
 
-    result = server._process_german_text_pure_python(
+    result = nlp._process_german_text_pure_python(
         "Der Hund schläft. Ich habe ein Buch gelesen!"
     )
 
@@ -1882,11 +1882,11 @@ def test_android_never_downloads_model_at_import():
 
 def test_spacy_model_candidates_prefer_md():
     """README 与 Dockerfile 都装 md（带词向量、标注更准），sm 只是兜底。"""
-    import server
+    import nlp
 
-    assert server.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
+    assert nlp.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
     # 自动下载走小模型：md 约 45MB，首启动拉它太慢
-    assert server.AUTO_DOWNLOAD_MODEL == "de_core_news_sm"
+    assert nlp.AUTO_DOWNLOAD_MODEL == "de_core_news_sm"
 
 def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     """spacy.load(名称) 查的是 .dist-info；Android 上模型是直接拷进源码目录的。
@@ -1896,27 +1896,27 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     """
     import sys
     import types
-    import server
+    import nlp
 
     sentinel = object()
     fake = types.ModuleType("de_fake_news_sm")
     fake.load = lambda **kw: sentinel
     monkeypatch.setitem(sys.modules, "de_fake_news_sm", fake)
-    monkeypatch.setattr(server.spacy, "load", lambda *a, **k:
+    monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k:
                         (_ for _ in ()).throw(OSError("[E050] Can't find model")))
 
-    nlp, how = server._load_spacy_model("de_fake_news_sm")
-    assert nlp is sentinel
+    model, how = nlp._load_spacy_model("de_fake_news_sm")
+    assert model is sentinel
     assert "module.load" in how
 
 def test_load_spacy_model_reports_every_failed_strategy(monkeypatch):
     """全部失败时错误信息要带上每条策略的原因，否则真机上无从判断卡在哪。"""
-    import server
+    import nlp
 
-    monkeypatch.setattr(server.spacy, "load", lambda *a, **k:
+    monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k:
                         (_ for _ in ()).throw(OSError("no dist-info")))
     with pytest.raises(RuntimeError) as excinfo:
-        server._load_spacy_model("de_definitely_not_installed")
+        nlp._load_spacy_model("de_definitely_not_installed")
     message = str(excinfo.value)
     assert "spacy.load" in message
     assert "import de_definitely_not_installed" in message

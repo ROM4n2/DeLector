@@ -39,6 +39,16 @@ def lan_client():
 
 @pytest.fixture(autouse=True)
 def clean_db():
+    # database.get_db_path() 每次调用都读 os.environ（不是 import 时冻结）。
+    # 全量 pytest 时更晚收集的 test_server.py 会在模块顶层把 DATABASE_PATH
+    # 改写成本文件，导致本文件用例的默认路径命中未建表的 test_delector.db。
+    # 故每个用例前后都钉住自己的 env，不能只靠模块顶层那一次赋值。
+    saved = {
+        key: os.environ.get(key)
+        for key in ("DATABASE_PATH", "PROGRESS_DB_PATH")
+    }
+    os.environ["DATABASE_PATH"] = "test_audit_delector.db"
+    os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"
     gc.collect()
     for f in ("test_audit_delector.db", "test_audit_progress.db"):
         if os.path.exists(f):
@@ -57,6 +67,11 @@ def clean_db():
                 os.remove(f)
             except OSError:
                 pass
+    for key, val in saved.items():
+        if val is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = val
 
 
 # ── M2-4: 连接确定性关闭（open/close 对账探针）──────────────────────────────
