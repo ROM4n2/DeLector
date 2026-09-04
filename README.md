@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.1.1-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.2.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -20,14 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ⚠️ **v5.1.1（tag 已推送）为源码版**；Windows/macOS/Linux 便携包与 Android APK 仍在本机打包流程中，打包完成即补资产至对应 GitHub Release，可先下载 v5.0.2 既有安装包使用。
+> ⚠️ **v5.2.0（tag 已推送）为源码版**；Windows/macOS/Linux 便携包与 Android APK 仍在本机打包流程中，打包完成即补资产至对应 GitHub Release，可先下载 v5.0.2 既有安装包使用。
 
 | 平台               | 版本                | 说明                                                                                                                                                                                                                                | 下载通道                                                                                    |
 | ------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.1.1` 源码版·打包中 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开（v5.1.1 安装包待打包）                                                                                                                                                 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1)     |
-| 🍎 **macOS**       | `v5.1.1` 源码版·打包中 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器（v5.1.1 安装包待打包）                                                                                                                                                            | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1)  |
-| 🐧 **Linux x64**   | `v5.1.1` 源码版·打包中 | 全发行版通用，解压运行 `start` 即可使用（v5.1.1 安装包待打包）                                                                                                                                                                      | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1)  |
-| 📱 **Android**     | `v5.1.1` 源码版·打包中 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（v5.1.1 APK 待打包；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1) |
+| 🪟 **Windows x64** | `v5.2.0` 源码版·打包中 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开（v5.2.0 安装包待打包）                                                                                                                                                 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0)     |
+| 🍎 **macOS**       | `v5.2.0` 源码版·打包中 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器（v5.2.0 安装包待打包）                                                                                                                                                            | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0)  |
+| 🐧 **Linux x64**   | `v5.2.0` 源码版·打包中 | 全发行版通用，解压运行 `start` 即可使用（v5.2.0 安装包待打包）                                                                                                                                                                      | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0)  |
+| 📱 **Android**     | `v5.2.0` 源码版·打包中 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（v5.2.0 APK 待打包；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0) |
 
 ---
 
