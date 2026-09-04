@@ -67,10 +67,15 @@
 
 ## Task 3: exam catalog 目录化
 
-- [ ] Step 1: test_exam_catalog.py RED（含 A2 扩展点变异）
-- [ ] Step 2: exam_catalog.py + routes_exam.py + include GREEN
-- [ ] Step 3: 前端页签/卡片 catalog 渲染（静态回退）
-- [ ] Step 4: 旧端点回归 + commit
+- [x] Step 1: test_exam_catalog.py RED（6 用例 collection error 必红；含 A2 扩展点变异 + count 防御）
+- [x] Step 2: exam_catalog.py + routes_exam.py + include GREEN（count 数据推导 18/5/6/54/702）
+- [x] Step 3: 前端 initExamCatalog 数据驱动（失败静态回退 + 幂等守卫 + show('exam') 惰性；新页签「待接入」标注防死按钮）
+- [x] Step 4: 旧端点回归 6 passed + 定向 37 passed + commit `9ec0355`
+
+**偏差注记**：
+- panel 实测只有两个 section：exam-writing + exam-cards-family（听力/阅读/口语/词表共用宿主由 setA1Mode 切换）——catalog panel 字段按实测写，测试钉「panel 必须真实存在于 DOM」。
+- 初轮评审 REVISE 两处已修：_safe_count 静默吞异常→logger.warning + caplog 钉死；_LEVEL_ORDER 死代码删。
+- 评审 nit（已接线）：非静态新等级页签 no-op + aria-disabled + title「待接入」（v5.1.0 死按钮纪律）。
 
 ## Task 4: exam_trials 泛化表
 
