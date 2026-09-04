@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.0.2-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.1.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -20,12 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
+> ⚠️ **v5.1.1（tag 已推送）为源码版**；Windows/macOS/Linux 便携包与 Android APK 仍在本机打包流程中，打包完成即补资产至对应 GitHub Release，可先下载 v5.0.2 既有安装包使用。
+
 | 平台               | 版本                | 说明                                                                                                                                                                                                                                | 下载通道                                                                                    |
 | ------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.0.2` 绿色便携版 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2)     |
-| 🍎 **macOS**       | `v5.0.2` 免安装包   | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2)  |
-| 🐧 **Linux x64**   | `v5.0.2` 便携版     | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2)  |
-| 📱 **Android**     | `v5.0.2` 独立单机版 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。** | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.0.2) |
+| 🪟 **Windows x64** | `v5.1.1` 源码版·打包中 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开（v5.1.1 安装包待打包）                                                                                                                                                 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1)     |
+| 🍎 **macOS**       | `v5.1.1` 源码版·打包中 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器（v5.1.1 安装包待打包）                                                                                                                                                            | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1)  |
+| 🐧 **Linux x64**   | `v5.1.1` 源码版·打包中 | 全发行版通用，解压运行 `start` 即可使用（v5.1.1 安装包待打包）                                                                                                                                                                      | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1)  |
+| 📱 **Android**     | `v5.1.1` 源码版·打包中 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（v5.1.1 APK 待打包；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.1.1) |
 
 ---
 
@@ -361,6 +363,10 @@ DeLector/
 - [x] **v5.0.1**：**多领域专家缺陷修复与安全加固 (Multi-Expert Audit Hardening)**——① **存储与 FSRS**：补全 `RestoreReq` A1 听力/阅读还原字段（彻底根治还原清空 A1 历史），`review_card_sm2` 动态计算 `elapsed_days` 激活 FSRS 幂律遗忘曲线；② **安全与可靠性**：桌面端所有破坏性 DELETE 接口加 `_require_localhost` 回环鉴权，`security.py` 增加 2MB 流式体积拦截与合法端口限制，修复安卓 Edge TTS stdlib 异常降级链；③ **语言学与句法**：修复过去时动词反查碰撞（`standen` 准确反查 `stehen`，`gingen` 反查 `gehen`），句法拓扑识别介词从句后场边界，`writing_rules.py` 修复 `euer`/`eur` 屈折脱落与 `entlang` 前后置格位；④ **前端加固**：`a1_hoeren` 词汇卡全面改用 `jsAttr()` 杜绝单引号 XSS，`main.js` 显式导出 A1 命名空间并绑定切页停止模考。测试 **452 全绿**
 
 - [x] **v5.0.2**：**审计修复与 XSS 消毒 (Post-Audit Fix)**——① **reader.js XSS sink 全消毒**：14 处 raw interpolation 改用 `Number()` / `safeCefr()` / `esc()` / regex strip / `safeTokens()`，彻底关闭通过 backup/restore 导入 crafted processed_json 后在 localhost origin 触发的 DOM XSS；② **A1 模考统计修复**：`log_study_event` 补充 `a1_hoeren` / `a1_lesen` 分支，模考次数与学习时长正确计入 `daily_summary`；③ **德语动词反查修复**：过去时词干拼后缀前先剥 `-e`（`wusste → wusst + en = wussten`），修复弱变化/混合变化动词复数形式索引遗漏；④ **DeLector.spec 测试改进**：CI 干净 checkout 下显式 `pytest.skip` 替代静默跳过。测试 **453 全绿**
+
+- [x] **v5.1.0**：**局域网随时静默同步 Stage B（WebRTC 自动化）**——① 信令端点补 `X-WB-Key` 鉴权并修 POST 预检放行；② **持久配对凭证 + 一键撤销**（撤销即换新 key，替代每会话短码）；③ WebRTC 信令中继 `/api/wb/rtc/signal`（按配对密钥建邮箱、sender 过滤防重放）；④ 前端 `wbsync.rtc` 建连与 DataChannel **静默同步**（信封与 HTTP PUT 同构）；⑤ 断线自动重连 + HTTP 轮询兜底降级（连续失败停手保可达）。Stage A HTTP 轮询保留为兜底。全量 pytest **487 全绿**；9 wbsync 探针 + 40 定向测试无回归。
+
+- [x] **v5.1.1**：**审计修复收口 + 性能与稳定性 (M1–M5 + M4)**——① **审计修复（M1–M5）**：旧 6 位短码 LAN 面板停用标注并整体禁用（端点已强制配对密钥，死 UI 明示）；AI 判分/成功提示类残余 `alert` 收敛为 notify（写路径保留 + 双面黑白名单护栏）；wb pull 指数退避、RTC 瞬态不累计、阅读计时器防叠；② **性能（M4）**：查词/判题热路径常量模块级提升、复合词拆解与核心词查表缓存、句切分缩写保护正则提升；③ **稳定性**：PWA 版本更新改温和提示不硬刷窗口、TTS blob URL 统一撤销 + 播放请求令牌防错句覆盖、Reader 陈旧响应守卫、AI 请求输入上限与 TTS voice 白名单；④ **安全补漏**：批注删除纳入本机写闸、X-WB-Key 统一 `secrets.compare_digest` 消除时序侧信道、还原不导入 API 配置防 Key 外泄、Anki 导出 HTML 转义防存储型 XSS；⑤ 测试库隔离与断言护栏补齐。**本版同时回补 v5.0.2 → v5.1.1 的版本面同步**（sw.js 缓存键 / index.html 顶栏 / build.gradle / README / AGENTS）。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 
