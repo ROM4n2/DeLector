@@ -60,6 +60,10 @@
           <span class="nav-tab-code">SCHREIBTISCH</span>
           <span class="nav-tab-label">写作润色</span>
         </button>
+        <button id="nav-btn-exam" class="nav-tab" onclick="show('exam')">
+          <span class="nav-tab-code">PRÜFUNG</span>
+          <span class="nav-tab-label">备考</span>
+        </button>
         <button id="nav-btn-cards" class="nav-tab" onclick="show('cards')">
           <span class="nav-tab-code">KARTEI</span>
           <span class="nav-tab-label"
@@ -2633,6 +2637,26 @@
       </div>
     </div>
 
+    <!-- ── View 7: Exam Domain (Prüfungsbereich) ────────────────── -->
+    <main id="view-exam" class="view">
+      <div class="exam-container">
+        <div class="exam-topbar">
+          <button class="btn btn-ghost" onclick="show('home')">← 返回文库</button>
+          <h2>备考 · PRÜFUNGSDOMÄNE</h2>
+        </div>
+        <div id="exam-level-tabs" class="exam-level-tabs">
+          <button id="exam-level-a1" class="exam-level-tab active">A1</button>
+        </div>
+        <div id="exam-module-grid" class="exam-module-grid">
+          <button id="exam-card-writing" class="exam-module-card">📝 写作专项 (Schreiben)</button>
+          <button id="exam-card-hoeren" class="exam-module-card">🎧 听力模考 (Hörverstehen)</button>
+          <button id="exam-card-lesen" class="exam-module-card">📖 阅读工坊 (Leseverstehen)</button>
+          <button id="exam-card-sprechen" class="exam-module-card">💬 口语问答 (Sprechen)</button>
+          <button id="exam-card-vocab" class="exam-module-card">📖 官方考纲词表 (Wortliste)</button>
+        </div>
+      </div>
+    </main>
+
     <!-- ── View 6: German Vocabulary Workbench (Vokabeltrainer) ──── -->
     <main id="view-german" class="view">
       <iframe
@@ -2668,6 +2692,14 @@
       >
         <span class="mob-icon">✍️</span>
         <span class="mob-label">写作</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-exam"
+        onclick="show('exam')"
+      >
+        <span class="mob-icon">🎯</span>
+        <span class="mob-label">备考</span>
       </button>
       <button
         class="mobile-nav-btn dock-item"
