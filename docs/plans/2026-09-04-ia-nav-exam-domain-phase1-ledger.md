@@ -46,10 +46,10 @@
 
 ## Task 1: 备考域骨架 + 静态导航入口
 
-- [ ] Step 1: RED 测试（exam 入口五断言）
-- [ ] Step 2: index.html 静态双端按钮 + view-exam 壳
-- [ ] Step 3: GREEN + 定向回归
-- [ ] Step 4: 原子 commit
+- [x] Step 1: RED 测试（test_exam_domain.py 11 条，RED 证据 FFFFFFFFFFF）
+- [x] Step 2: index.html 静态双端按钮 + view-exam 壳（纯插入 +110 行）
+- [x] Step 3: GREEN + 定向回归 128 passed（基线 117 + 新增 11）
+- [x] Step 4: 原子 commit `692e8ea`（评审 PASS：纯插入零删除/断言防恒真切片/配平验证）
 
 ## Task 2: A1 五模块迁入备考域
 
