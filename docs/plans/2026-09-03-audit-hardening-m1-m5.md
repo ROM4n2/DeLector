@@ -368,10 +368,10 @@ def db_conn(db_path=None):
 > RED：为每个改动函数写「代表性输入 → 期望输出」抽样快照（从既有 `test_writing_rules.py`/`test_syntax_tree.py` 抽取典型 case 固化），保证提升后行为不变。GREEN：批量提升。之后全量跑 `test_writing_rules.py`、`test_syntax_tree.py`、`test_prep_matrix.py` 等纯规则模块（这些不 import server，可整文件跑）。
 
 **Step Breakdown:**
-- [ ] 抽样快照 RED
-- [ ] 批量提升
-- [ ] 纯规则模块整文件全绿
-- [ ] `git commit -m "perf(nlp): 每次调用重建的词形表/正则提升为模块级常量"`
+- [x] 抽样快照 RED（`test_audit_hardening.py` 语义探针）
+- [x] 批量提升（4 文件常量/正则/`import re` 模块级）
+- [x] 纯规则模块整文件全绿
+- [x] commit `0f29978` + 补遗 `187ae15`（`perf(nlp): 查词/判题热路径常量提升…`）
 
 **Verification:** 整文件跑 `test_writing_rules.py test_syntax_tree.py test_prep_matrix.py test_dict_pipeline.py`。
 
@@ -391,10 +391,10 @@ def db_conn(db_path=None):
 > RED：抽样等价 + 命中计数（调用两次同词断言缓存命中避免重算）。GREEN：实现。lru_cache 返回值是 `list` 时包一层 `tuple` 返回或内部 `_split_komposita_cached` + 外层转 list（保持类型）。
 
 **Step Breakdown:**
-- [ ] RED 抽样等价 + 缓存命中
-- [ ] 实现（确认调用方只读后上共享）
-- [ ] 跑 `test_server.py -k lookup|komposita`、纯词法模块整跑
-- [ ] `git commit -m "perf(nlp): 复合词拆解与核心词查表加缓存"`
+- [x] RED 抽样等价 + 缓存命中（`test_lookup_core_vocab_hit_shared_no_news` / `test_split_komposita_cached_fresh_equal_results` / `test_m4_hot_path_lru_caches_structural`）
+- [x] 实现（调用方逐点审计仅读后上共享/背衬缓存，返回全新对象防变异）
+- [x] 跑 `test_server.py -k lookup|komposita`、纯词法模块整跑全绿
+- [x] commit `4d7c1f6`（`perf(nlp): 复合词拆解与核心词查表加缓存`）
 
 **Verification:** 定向 pytest。
 
@@ -411,10 +411,10 @@ def db_conn(db_path=None):
 > 先做**契约快照**：对 test_syntax_tree / test_server 中所有 topology/语法树断言固化为 golden（现有测试已较全）。重构时保持函数签名稳定、内部把 tokens 预处理（`non_punct_tokens`/`zu_tokens`/verb 组）只算一次传入。若中途发现子句边界依赖每次重扫的行为（如局部修正），**立即停下报告**，不要强行去重——收益是读路径主开销，但正确性优先。若评估为「不可安全去重」，把结论与证据写进 commit message 并跳过本 task（标记 skipped + 理由）。
 
 **Step Breakdown:**
-- [ ] golden 快照确认覆盖充分
-- [ ] 尝试去重；行为 diff 全绿才提交
-- [ ] `git commit -m "perf(nlp): 从句 AST 复用整句拓扑，去除每从句重扫"`（或 `fix(nlp): 保留每从句重扫（理由见 message）`）
-- [ ] 若跳过：在 ledger 记录决策与证据
+- [x] golden 快照：评审判定不必做——组合路径 `process_german_text` 每句仅一次 spaCy（Span 入参），原「每从句二次解析」假设不成立
+- [x] 尝试去重：评审维持跳过（子句切分依赖整句依赖树、按 `clause_type` 覆盖分配，去重需深度耦合重写且无 golden 时回归不可控）
+- [x] 结论与证据写入 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md`（不提交代码改动）
+- [x] 在 ledger 记录决策与证据（2026-09-03 收口，commit `f51636b`）
 
 **Verification:** `test_syntax_tree.py` 整跑 + `test_server.py -k 'syntax or analyze'` + `test_german_workbench.py -k 语法`。
 
