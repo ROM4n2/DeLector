@@ -113,6 +113,19 @@ def init_progress_db(db_path: Optional[str] = None):
                 wrong_questions_json TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS exam_trials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                level TEXT NOT NULL,
+                module TEXT NOT NULL,
+                set_id INTEGER NOT NULL,
+                score_raw INTEGER NOT NULL,
+                score_official REAL NOT NULL,
+                total_questions INTEGER NOT NULL,
+                duration_seconds INTEGER NOT NULL,
+                answers_json TEXT NOT NULL,
+                wrong_questions_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE INDEX IF NOT EXISTS idx_quiz_card ON quiz_log(card_id);
             CREATE INDEX IF NOT EXISTS idx_study_logged ON study_log(logged_at);
         """)
@@ -120,6 +133,8 @@ def init_progress_db(db_path: Optional[str] = None):
         # init 阶段不能用 db_progress_conn（会递归回自身自动建表），此处确定关闭
         _close_db_conn(conn)
     _INITIALIZED_PROGRESS_DBS.add(target_path)
+    # 泛化成绩表上线即迁移存量 A1 行；函数自身行数对账幂等，重复调用无害
+    migrate_a1_records_to_exam_trials(db_path=target_path)
 
 
 def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "", minutes: int = 0, db_path: Optional[str] = None):
@@ -748,6 +763,10 @@ _PROGRESS_TABLES = {
         ("id", "set_id", "score_raw", "score_official", "total_questions", "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
         {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15, "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
     ),
+    "exam_trials": (
+        ("id", "level", "module", "set_id", "score_raw", "score_official", "total_questions", "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
+        {"level": "A1", "module": "hoeren", "set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15, "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+    ),
 }
 
 
@@ -906,60 +925,136 @@ def add_prep_saved(lemma: str, praep: str, kasus: str, db_path: Optional[str] = 
         )
 
 
-def record_a1_hoeren_trial(set_id: int, score_raw: int, score_official: float,
-                           total_questions: int, duration_seconds: int,
-                           answers_json: str, wrong_questions_json: str,
-                           db_path: Optional[str] = None) -> int:
-    """持久化一次 A1 听力模考记录"""
+def record_exam_trial(level: str, module: str, set_id: int, score_raw: int,
+                      score_official: float, total_questions: int,
+                      duration_seconds: int, answers_json: str,
+                      wrong_questions_json: str,
+                      db_path: Optional[str] = None) -> int:
+    """写入一次泛化模考成绩（exam_trials：level × module 维度）。
+
+    与旧 A1 专用表不同，同一张表承载所有等级/模块（A1 听力、A1 阅读，
+    未来 A2…），备份/restore 也在同一张表上通用。
+    """
     with db_progress_conn(db_path) as conn:
         cur = conn.execute("""
-            INSERT INTO a1_hoeren_records (
-                set_id, score_raw, score_official, total_questions,
-                duration_seconds, answers_json, wrong_questions_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (set_id, score_raw, score_official, total_questions,
+            INSERT INTO exam_trials (
+                level, module, set_id, score_raw, score_official,
+                total_questions, duration_seconds, answers_json, wrong_questions_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (level, module, set_id, score_raw, score_official, total_questions,
               duration_seconds, answers_json, wrong_questions_json))
         record_id = cur.lastrowid
     # log_study_event opens its own connection — must be OUTSIDE the with block
     # to avoid SQLITE_BUSY from nested locks on progress.db.
-    log_study_event("a1_hoeren", ref_id=record_id, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
+    # A1 双模块沿用旧 event_type（test_a1_grade_populates_study_log 契约）；
+    # 其余组合的 daily_summary 映射留待 Phase 2 端点切换时扩展。
+    if level == "A1":
+        event_type = "a1_hoeren" if module == "hoeren" else "a1_lesen"
+    else:
+        event_type = f"{level.lower()}_{module}"
+    log_study_event(event_type, ref_id=record_id,
+                    note=f"Set {set_id}: {score_official}/25.0",
+                    minutes=max(1, duration_seconds // 60), db_path=db_path)
     return record_id
 
 
-def get_a1_hoeren_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """查询 A1 听力模考历史记录"""
+def get_exam_history(level: str, module: str, limit: int = 50,
+                     db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """查询泛化模考历史；返回结构与旧 get_a1_*_history 逐字段等价。
+
+    显式投影 9 个旧列而非 SELECT *：表里多出的 level/module 是存储维度，
+    不是 API 字段——透传契约下调用方（routes_a1_*）不应看到它们。
+    """
     with db_progress_conn(db_path) as conn:
         rows = conn.execute("""
-            SELECT * FROM a1_hoeren_records ORDER BY id DESC LIMIT ?
-        """, (limit,)).fetchall()
+            SELECT id, set_id, score_raw, score_official, total_questions,
+                   duration_seconds, answers_json, wrong_questions_json, created_at
+            FROM exam_trials
+            WHERE level = ? AND module = ?
+            ORDER BY id DESC LIMIT ?
+        """, (level, module, limit)).fetchall()
         return [dict(r) for r in rows]
+
+
+def migrate_a1_records_to_exam_trials(db_path: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    """把 a1_hoeren_records / a1_lesen_records 存量行迁入 exam_trials(level='A1')。
+
+    幂等策略是**行数对账**：对每个 module，若 exam_trials 里该 (level='A1',
+    module) 的行数 **≥** 旧表行数则整个跳过——重复执行零副作用。
+
+    为什么用 ≥ 而不是 ==：旧表在迁移后冻结（透传模式只写 exam_trials），
+    legacy_count 恒定，而 exam_trials 随每次新成绩提交单调增。若用 ==，
+    「迁移后又做了一次新成绩」再重启时 general=legacy+1 ≠ legacy 会误判为
+    「未迁移」，把旧表整行再插一遍 → 重复。≥ 在「旧表冻结 + 新表单调增」下
+    天然满足：一次迁入后 general ≥ legacy 恒成立，永不再迁。
+
+    原子性：db_progress_conn 单事务，迁移中途异常整体回滚，不会留下半迁状
+    态；重跑从 0 迁，无剩余行。故 ≥ 对「迁移中断」也安全。
+
+    旧表本身保留不删，读历史兼容期后由 Phase 2 退役。
+
+    Returns: {"hoeren": {"migrated": n, "skipped": bool}, "lesen": {...}}
+    """
+    report: Dict[str, Dict[str, Any]] = {}
+    sources = {
+        "hoeren": "a1_hoeren_records",
+        "lesen": "a1_lesen_records",
+    }
+    with db_progress_conn(db_path) as conn:
+        for module, table in sources.items():
+            legacy_count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            general_count = conn.execute(
+                "SELECT COUNT(*) FROM exam_trials WHERE level = ? AND module = ?",
+                ("A1", module)).fetchone()[0]
+            if general_count >= legacy_count:
+                report[module] = {"migrated": 0, "skipped": True}
+                continue
+            conn.execute(f"""
+                INSERT INTO exam_trials (
+                    level, module, set_id, score_raw, score_official,
+                    total_questions, duration_seconds, answers_json,
+                    wrong_questions_json, created_at
+                )
+                SELECT 'A1', ?, set_id, score_raw, score_official, total_questions,
+                       duration_seconds, answers_json, wrong_questions_json, created_at
+                FROM {table}
+            """, (module,))
+            report[module] = {"migrated": legacy_count, "skipped": False}
+    return report
+
+
+def record_a1_hoeren_trial(set_id: int, score_raw: int, score_official: float,
+                           total_questions: int, duration_seconds: int,
+                           answers_json: str, wrong_questions_json: str,
+                           db_path: Optional[str] = None) -> int:
+    """持久化一次 A1 听力模考记录
+
+    透传泛化实现（exam_trials level='A1' module='hoeren'）：签名与返回
+    结构不变，调用方零改动；旧行由 migrate_a1_records_to_exam_trials 迁入。
+    """
+    return record_exam_trial("A1", "hoeren", set_id, score_raw, score_official,
+                             total_questions, duration_seconds, answers_json,
+                             wrong_questions_json, db_path=db_path)
+
+
+def get_a1_hoeren_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """查询 A1 听力模考历史记录（透传泛化实现，返回结构不变）"""
+    return get_exam_history("A1", "hoeren", limit=limit, db_path=db_path)
 
 
 def record_a1_lesen_trial(set_id: int, score_raw: int, score_official: float,
                           total_questions: int, duration_seconds: int,
                           answers_json: str, wrong_questions_json: str,
                           db_path: Optional[str] = None) -> int:
-    """持久化一次 A1 阅读模考记录"""
-    with db_progress_conn(db_path) as conn:
-        cur = conn.execute("""
-            INSERT INTO a1_lesen_records (
-                set_id, score_raw, score_official, total_questions,
-                duration_seconds, answers_json, wrong_questions_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (set_id, score_raw, score_official, total_questions,
-              duration_seconds, answers_json, wrong_questions_json))
-        record_id = cur.lastrowid
-    log_study_event("a1_lesen", ref_id=record_id, note=f"Set {set_id}: {score_official}/25.0", minutes=max(1, duration_seconds // 60), db_path=db_path)
-    return record_id
+    """持久化一次 A1 阅读模考记录（透传泛化实现，签名与返回结构不变）"""
+    return record_exam_trial("A1", "lesen", set_id, score_raw, score_official,
+                             total_questions, duration_seconds, answers_json,
+                             wrong_questions_json, db_path=db_path)
 
 
 def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """查询 A1 阅读模考历史记录"""
-    with db_progress_conn(db_path) as conn:
-        rows = conn.execute("""
-            SELECT * FROM a1_lesen_records ORDER BY id DESC LIMIT ?
-        """, (limit,)).fetchall()
-        return [dict(r) for r in rows]
+    """查询 A1 阅读模考历史记录（透传泛化实现，返回结构不变）"""
+    return get_exam_history("A1", "lesen", limit=limit, db_path=db_path)
 
 
 __all__ = [
@@ -1011,4 +1106,7 @@ __all__ = [
     "get_a1_hoeren_history",
     "record_a1_lesen_trial",
     "get_a1_lesen_history",
+    "record_exam_trial",
+    "get_exam_history",
+    "migrate_a1_records_to_exam_trials",
 ]

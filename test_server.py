@@ -48,6 +48,13 @@ def clean_db():
     # 事务不 close，文件句柄要等循环 GC 才释放。Windows 上句柄未释放时 os.remove
     # 抛 PermissionError（被吞），旧 DB 带着上一测试的数据残留下来 → 隔离失效。
     # 删除前先 gc.collect()，把上一测试遗留的连接环清掉，删除才确定成功。
+    # 前后双钉 env：database.get_db_path() 每次调用都读 os.environ（不是 import
+    # 时冻结），全量 pytest 时更晚收集的文件（test_audit_hardening.py 等）在
+    # 模块顶层改写 DATABASE_PATH，收集顺序若让本文件先 import、用例后执行，
+    # 默认路径就会命中未建表的别家库 → 「no such table」成片假失败。
+    saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
+    os.environ["DATABASE_PATH"] = "test_delector.db"
+    os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
     gc.collect()
     for f in ("test_delector.db", "test_progress.db"):
         if os.path.exists(f):
@@ -64,6 +71,11 @@ def clean_db():
                 os.remove(f)
             except OSError:
                 pass
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
 
 def test_cefr_lookup():
     assert get_cefr_level("gehen") == "A1"
