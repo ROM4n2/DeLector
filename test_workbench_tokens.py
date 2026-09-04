@@ -133,3 +133,47 @@ def test_workbench_editorial_navigation_contract():
         "nav.tabs button.active 不得使用实心背景 background:var(--accent)"
 
 
+def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
+    """验证 Zettelkasten 实体学术卡片箱与矿物植物印章式评分座契约。"""
+    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
+    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+
+    # 1. .face background 必须使用 var(--panel)
+    face_match = re.search(r'(?<![.\w])\.face\s*\{([^}]+)\}', content)
+    assert face_match, "workbench.html 必须包含 .face 样式规则"
+    face_css = face_match.group(1)
+    assert "background:var(--panel)" in face_css or "background: var(--panel)" in face_css or \
+           re.search(r'background\s*:\s*var\(--panel', face_css), \
+        ".face 必须使用 background: var(--panel)"
+
+    # 2. .face .hw 必须使用 var(--serif
+    hw_match = re.search(r'\.face\s+\.hw\s*\{([^}]+)\}', content)
+    assert hw_match, "workbench.html 必须包含 .face .hw 样式规则"
+    hw_css = hw_match.group(1)
+    assert re.search(r'font-family\s*:\s*var\(--serif', hw_css), \
+        ".face .hw 必须使用 var(--serif, ...)"
+
+    # 3. .rate-btn 基础与状态样式断言：消除实心大白字 color: #fff
+    rate_match = re.search(r'(?<![.\w])\.rate-btn\s*\{([^}]+)\}', content)
+    assert rate_match, "workbench.html 必须包含 .rate-btn 基础样式规则"
+    rate_css = rate_match.group(1)
+    assert "color:#fff" not in rate_css and "color: #fff" not in rate_css and "color:#ffffff" not in rate_css.lower(), \
+        ".rate-btn 基础样式不得使用实心白字 color: #fff"
+
+    # 4. .rate-btn[data-g="3"] 必须使用 var(--good-soft 且不得包含 color: #fff
+    btn3_match = re.search(r'\.rate-btn\[data-g=["\']3["\']\]\s*\{([^}]+)\}', content)
+    assert btn3_match, "workbench.html 必须包含 .rate-btn[data-g='3'] 样式规则"
+    btn3_css = btn3_match.group(1)
+    assert "var(--good-soft" in btn3_css, ".rate-btn[data-g='3'] 必须使用 var(--good-soft"
+    assert "color:#fff" not in btn3_css and "color: #fff" not in btn3_css, \
+        ".rate-btn[data-g='3'] 不得使用实心白字 color: #fff"
+
+    # 5. .rate-btn[data-g="1"] 必须使用 var(--again-soft 且不得包含 color: #fff
+    btn1_match = re.search(r'\.rate-btn\[data-g=["\']1["\']\]\s*\{([^}]+)\}', content)
+    assert btn1_match, "workbench.html 必须包含 .rate-btn[data-g='1'] 样式规则"
+    btn1_css = btn1_match.group(1)
+    assert "var(--again-soft" in btn1_css, ".rate-btn[data-g='1'] 必须使用 var(--again-soft"
+    assert "color:#fff" not in btn1_css and "color: #fff" not in btn1_css, \
+        ".rate-btn[data-g='1'] 不得使用实心白字 color: #fff"
+
+
