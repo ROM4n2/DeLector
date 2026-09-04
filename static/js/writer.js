@@ -6,6 +6,7 @@ import { refreshCardCounters } from './reader.js';
 import { Companion } from './companion.js';
 import * as A1Writer from './a1_writer.js';
 export {
+  setExamWritingTab,
   switchWriterMode,
   loadA1WritingData,
   populateA1Selectors,

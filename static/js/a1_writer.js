@@ -6,41 +6,34 @@ import { Companion } from './companion.js';
 
 // ── Goethe A1 Schreiben Workshop Logic ───────────────────────────────────────
 
-let a1WritingMode = 'essay';
 let a1Teil1List = [];
 let a1Teil2List = [];
 let currentA1Teil1Idx = 0;
 let currentA1Teil2Idx = 0;
 let a1EmailDebounceTimer = null;
 
-export function switchWriterMode(mode) {
-  a1WritingMode = mode;
-
-  ['essay', 'formular', 'email'].forEach((m) => {
-    const btn = document.getElementById(
-      `writer-mode-${m === 'essay' ? 'essay' : 'a1-' + m}`
-    );
-    if (btn) btn.classList.toggle('active', m === mode);
+// ADR-0005 Task 2：writer 视图回归纯 essay 工具，A1 写作面板宿主改为
+// view-exam 的 exam-writing 面板。本模块只保留「exam 写作页签切换」语义：
+// formular/email 二选一显隐 + 懒加载题库。view-writer 的 switchWriterMode
+// 只剩 essay 单按钮（见下），不再认识 formular/email。
+export function setExamWritingTab(tab) {
+  ['formular', 'email'].forEach((m) => {
+    const btn = document.getElementById(`exam-tab-${m}`);
+    if (btn) btn.classList.toggle('active', m === tab);
   });
 
-  const freeLeft = document.getElementById('writer-free-left');
-  const panel = document.getElementById('writer-panel');
   const formularView = document.getElementById('a1-formular-view');
   const emailView = document.getElementById('a1-email-view');
+  if (formularView) formularView.classList.toggle('hidden', tab !== 'formular');
+  if (emailView) emailView.classList.toggle('hidden', tab !== 'email');
 
-  if (freeLeft) freeLeft.classList.toggle('hidden', mode !== 'essay');
-  if (panel) panel.classList.toggle('hidden', mode !== 'essay');
-  if (formularView)
-    formularView.classList.toggle('hidden', mode !== 'formular');
-  if (emailView) emailView.classList.toggle('hidden', mode !== 'email');
-
-  if (mode === 'formular') {
+  if (tab === 'formular') {
     if (!a1Teil1List.length) {
       loadA1WritingData().then(() => renderA1Formular());
     } else {
       renderA1Formular();
     }
-  } else if (mode === 'email') {
+  } else if (tab === 'email') {
     if (!a1Teil2List.length) {
       loadA1WritingData().then(() => renderA1Email());
     } else {
@@ -48,6 +41,11 @@ export function switchWriterMode(mode) {
     }
   }
 }
+
+// view-writer 的唯一模式：纯 essay。按钮条只剩 essay 单按钮（HTML 默认
+// active），无模式可切。函数与 onclick 保留（防止引用悬空 → v4.8.2
+// 悬空标识符教训），行为等价 no-op；A1 分支已移交 setExamWritingTab。
+export function switchWriterMode() {}
 
 export async function loadA1WritingData() {
   try {

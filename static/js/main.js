@@ -75,6 +75,7 @@ import {
   saveA1WordToDeck,
   renderA1PokerCard,
   playA1Audio,
+  setA1CardViewMode,
 } from "./cards.js";
 import {
   switchFolioPage,
@@ -128,6 +129,7 @@ import {
   toggleWriterMobilePanel,
   closeWriterMobilePanel,
   switchWriterMode,
+  setExamWritingTab,
   selectA1Formular,
   prevA1Formular,
   nextA1Formular,
@@ -193,7 +195,7 @@ export function show(view) {
   // 模块加载失败时不挂、不影响其它视图切换。
   if (typeof closeWriterMobilePanel === "function") closeWriterMobilePanel();
 
-  if (view !== "cards") {
+  if (view !== "exam") {
     if (typeof A1Hoeren?.stopHoerenExam === "function")
       A1Hoeren.stopHoerenExam();
     if (typeof A1Lesen?.stopLesenExam === "function") A1Lesen.stopLesenExam();
@@ -207,10 +209,55 @@ export function show(view) {
 
   if (view === "home") loadArticles();
   if (view === "cards") loadCards();
+  // 备考域入口（ADR-0005 Task 2）：A1 五模块宿主在 view-exam。徽标计数与
+  // 复习盒缓存复用 loadCards（幂等 fetch，cards.js 与 a1_cards.js 都消费它）。
+  if (view === "exam") {
+    loadCards();
+    setExamModule();
+  }
   if (view === "progress") loadProgress();
   if (view === "writer") {
     loadWriterEssays();
     setupEditorListeners();
+  }
+}
+
+// ── Exam Domain Module Tabs (ADR-0005 Task 2) ───────────────────────────────
+// exam-card-* 五个页签 ⇄ 两个面板 section 的显隐路由。写在 main.js：
+// 它同时需要 setA1Mode（cards.js 链）与 setExamWritingTab（writer.js 链），
+// a1_cards.js / a1_writer.js 互不 import， mediator 只能住根模块。
+let _examModule = "writing";
+
+export function setExamModule(mod) {
+  // 无参调用（show('exam') 进场）= 回到上次停留的模块；显式点击才换模块。
+  if (mod) _examModule = mod;
+
+  const writingPanel = document.getElementById("exam-writing");
+  const familyPanel = document.getElementById("exam-cards-family");
+  const isWriting = _examModule === "writing";
+  if (writingPanel) writingPanel.classList.toggle("hidden", !isWriting);
+  if (familyPanel) familyPanel.classList.toggle("hidden", isWriting);
+
+  [
+    ["writing", "exam-card-writing"],
+    ["hoeren", "exam-card-hoeren"],
+    ["lesen", "exam-card-lesen"],
+    ["sprechen", "exam-card-sprechen"],
+    ["vocab", "exam-card-vocab"],
+  ].forEach(([m, btnId]) => {
+    document
+      .getElementById(btnId)
+      ?.classList.toggle("active", m === _examModule);
+  });
+
+  if (_examModule === "hoeren" || _examModule === "lesen") {
+    setA1Mode(_examModule);
+  } else if (_examModule === "sprechen") {
+    setA1Mode("teil2");
+  } else if (_examModule === "vocab") {
+    setA1Mode("vocab");
+  } else if (isWriting) {
+    setExamWritingTab("formular");
   }
 }
 
@@ -779,6 +826,7 @@ Object.assign(window, {
   // Cards & Deck
   setCardSegment,
   setCardViewMode,
+  setA1CardViewMode,
   loadCards,
   toggleDeckFlip,
   stepDeck,
@@ -865,6 +913,8 @@ Object.assign(window, {
   toggleWriterMobilePanel,
   closeWriterMobilePanel,
   switchWriterMode,
+  setExamModule,
+  setExamWritingTab,
   selectA1Formular,
   prevA1Formular,
   nextA1Formular,
