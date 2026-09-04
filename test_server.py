@@ -4086,3 +4086,77 @@ def test_wb_lan_info_does_not_leak_sync_key(lan_client, client):
     r = lan_client.get("/api/wb/lan-info")
     assert "X-WB-Key" not in r.text
     assert client.get("/api/wb/state/key").status_code == 200
+
+
+# ── GET /api/cards/vocab（Task 3: CEFR 考纲词库数据契约端点）──
+
+def test_get_vocab_by_cefr_level(client):
+    """验证 GET /api/cards/vocab 端点契约（A1 核心/全量/精读生词与分级词库）。"""
+    # 1. 默认参数：cefr=A1, scope=core
+    r1 = client.get("/api/cards/vocab")
+    assert r1.status_code == 200
+    data1 = r1.json()
+    assert data1["cefr"] == "A1"
+    assert data1["scope"] == "core"
+    assert "total" in data1
+    assert "words" in data1
+    assert isinstance(data1["words"], list)
+    assert data1["total"] == len(data1["words"])
+    assert data1["total"] in (213, 235)
+    first = data1["words"][0]
+    for key in ("id", "hw", "pos", "de", "zh", "core", "cefr"):
+        assert key in first, f"缺少字段: {key}"
+    assert first["core"] is True
+    assert first["cefr"] == "A1"
+
+    # 2. A1 全量：scope=all，词数应 >= 600
+    r2 = client.get("/api/cards/vocab?cefr=A1&scope=all")
+    assert r2.status_code == 200
+    data2 = r2.json()
+    assert data2["cefr"] == "A1"
+    assert data2["scope"] == "all"
+    assert data2["total"] >= 600
+    assert len(data2["words"]) == data2["total"]
+
+    # 3. 精读生词：scope=reader，从 vocab_cards 读取卡片
+    post_res = client.post("/api/cards/vocab", json={
+        "article_id": 1,
+        "word": "Haus",
+        "lemma": "Haus",
+        "pos": "NOUN",
+        "gender": "Neut",
+        "plural": "-..er",
+        "cefr_level": "A1",
+        "definition_zh": "房子",
+        "sentence_context": "Das Haus ist groß."
+    })
+    assert post_res.status_code == 200
+    card_id = post_res.json()["id"]
+
+    r3 = client.get("/api/cards/vocab?scope=reader")
+    assert r3.status_code == 200
+    data3 = r3.json()
+    assert data3["scope"] == "reader"
+    assert data3["total"] >= 1
+    match = [w for w in data3["words"] if w["id"] == f"card-{card_id}"]
+    assert len(match) == 1
+    reader_word = match[0]
+    assert reader_word["hw"] == "Haus"
+    assert reader_word["pos"] == "NOUN"
+    assert reader_word["de"] == "Das Haus ist groß."
+    assert reader_word["zh"] == "房子"
+    assert reader_word["core"] is False
+    assert reader_word["cefr"] == "A1"
+
+    # 4. 其他级别分级词库回退（如 A2 / B1）
+    r4 = client.get("/api/cards/vocab?cefr=A2&scope=core")
+    assert r4.status_code == 200
+    data4 = r4.json()
+    assert data4["cefr"] == "A2"
+    assert data4["total"] > 0
+    assert all(w["cefr"] == "A2" for w in data4["words"])
+
+    # 5. 非法 scope 拒绝 400
+    r5 = client.get("/api/cards/vocab?scope=unknown_scope")
+    assert r5.status_code == 400
+

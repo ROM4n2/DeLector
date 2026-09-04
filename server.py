@@ -91,6 +91,7 @@ from database import (
     migrate_a1_records_to_exam_trials,
     get_prep_saved,
     add_prep_saved,
+    get_vocab_by_cefr,
 )
 
 # --- 2. NLP & CEFR Tagging ---
@@ -830,6 +831,14 @@ def get_cards():
                 card.get("ease_factor") or 2.5
             )
         return {"vocab_cards": v, "grammar_cards": g}
+
+@app.get("/api/cards/vocab")
+def get_cards_vocab(cefr: str = "A1", scope: str = "core"):
+    scope_norm = (scope or "core").lower().strip()
+    if scope_norm not in ("core", "all", "reader"):
+        raise HTTPException(400, "scope must be 'core', 'all', or 'reader'")
+    return get_vocab_by_cefr(cefr=cefr, scope=scope_norm)
+
 
 # --- Phase A: Delete & Master ---
 

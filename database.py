@@ -8,6 +8,7 @@ import tempfile
 import random
 import secrets
 import time
+import re
 from contextlib import contextmanager
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
@@ -1057,6 +1058,180 @@ def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List
     return get_exam_history("A1", "lesen", limit=limit, db_path=db_path)
 
 
+_A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
+
+
+def _load_a1_workbench_words() -> List[Dict[str, Any]]:
+    """加载并缓存 A1 词库（优先解析 workbench.html 保证与工作台 100% 同步，回退 a1_dict）。"""
+    global _A1_WORKBENCH_WORDS_CACHE
+    if _A1_WORKBENCH_WORDS_CACHE is not None:
+        return _A1_WORKBENCH_WORDS_CACHE
+
+    words: List[Dict[str, Any]] = []
+    workbench_paths = [
+        os.path.join(os.path.dirname(__file__), "static", "german", "workbench.html"),
+        os.path.join(DATA_DIR, "static", "german", "workbench.html"),
+    ]
+    loaded = False
+    for wp in workbench_paths:
+        if os.path.exists(wp):
+            try:
+                with open(wp, "r", encoding="utf-8") as f:
+                    txt = f.read()
+                m_seed = re.search(r'const\s+SEED_WORDS\s*=\s*(\[.*?\]);\s*\n', txt, re.DOTALL)
+                m_custom = re.search(r'const\s+CORE_CUSTOM_WORDS\s*=\s*(\[.*?\]);', txt, re.DOTALL)
+                m_ids = re.search(r'const\s+CORE_WORD_SEED_IDS\s*=\s*new Set\((\[.*?\])\);', txt, re.DOTALL)
+                if m_seed and m_custom and m_ids:
+                    seeds = json.loads(m_seed.group(1))
+                    custom = json.loads(m_custom.group(1))
+                    core_ids = set(json.loads(m_ids.group(1)))
+
+                    for w in seeds:
+                        wid = w.get("id", "")
+                        is_core = wid in core_ids
+                        de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
+                        zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
+                        words.append({
+                            "id": wid,
+                            "hw": w.get("hw", ""),
+                            "pos": w.get("pos", ""),
+                            "de": de,
+                            "zh": zh,
+                            "core": is_core,
+                            "cefr": "A1",
+                        })
+
+                    for w in custom:
+                        wid = w.get("id", "")
+                        de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
+                        zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
+                        words.append({
+                            "id": wid,
+                            "hw": w.get("hw", ""),
+                            "pos": w.get("pos", ""),
+                            "de": de,
+                            "zh": zh,
+                            "core": True,
+                            "cefr": "A1",
+                        })
+                    loaded = True
+                    break
+            except Exception:
+                pass
+
+    if not loaded:
+        try:
+            from a1_dict import GOETHE_A1_VOCAB
+            idx = 1
+            for k, v in GOETHE_A1_VOCAB.items():
+                words.append({
+                    "id": f"a1-{idx:04d}",
+                    "hw": v.get("word", k),
+                    "pos": v.get("pos", ""),
+                    "de": v.get("example_de", ""),
+                    "zh": v.get("definition_zh", ""),
+                    "core": True,
+                    "cefr": "A1",
+                })
+                idx += 1
+        except Exception:
+            pass
+
+    _A1_WORKBENCH_WORDS_CACHE = words
+    return words
+
+
+def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[str] = None) -> Dict[str, Any]:
+    """按 CEFR 等级与核心范围获取词汇（供工作台与外部组件拉取）。"""
+    cefr_norm = (cefr or "A1").strip().upper()
+    scope_norm = (scope or "core").strip().lower()
+
+    if scope_norm not in ("core", "all", "reader"):
+        raise ValueError(f"Invalid scope: {scope}. Must be 'core', 'all', or 'reader'")
+
+    if scope_norm == "reader":
+        target_path = get_db_path(db_path)
+        with db_conn(target_path) as conn:
+            rows = conn.execute("SELECT * FROM vocab_cards ORDER BY id ASC").fetchall()
+        words = []
+        for r in rows:
+            words.append({
+                "id": f"card-{r['id']}",
+                "hw": r["word"],
+                "pos": r["pos"] or "",
+                "de": r["sentence_context"] or "",
+                "zh": r["definition_zh"] or "",
+                "core": False,
+                "cefr": r["cefr_level"] or "A1",
+            })
+        return {
+            "cefr": cefr_norm,
+            "scope": scope_norm,
+            "total": len(words),
+            "words": words,
+        }
+
+    if cefr_norm == "A1":
+        a1_words = _load_a1_workbench_words()
+        if scope_norm == "core":
+            filtered = [w for w in a1_words if w.get("core")]
+        else:
+            filtered = a1_words
+        return {
+            "cefr": cefr_norm,
+            "scope": scope_norm,
+            "total": len(filtered),
+            "words": filtered,
+        }
+
+    # 其他级别 (A2, B1, B2, C1, ALL): 回退到 core_dict.CORE_VOCAB_DB
+    try:
+        from core_dict import CORE_VOCAB_DB
+    except ImportError:
+        CORE_VOCAB_DB = {}
+
+    words = []
+    if cefr_norm == "ALL":
+        a1_words = _load_a1_workbench_words()
+        if scope_norm == "core":
+            words.extend([w for w in a1_words if w.get("core")])
+        else:
+            words.extend(a1_words)
+
+        for lemma, val in CORE_VOCAB_DB.items():
+            lvl = val[0]
+            if lvl.upper() != "A1":
+                words.append({
+                    "id": f"{lvl.lower()}-{lemma}",
+                    "hw": lemma,
+                    "pos": val[1] or "",
+                    "de": "",
+                    "zh": val[4] if len(val) > 4 else "",
+                    "core": True,
+                    "cefr": lvl.upper(),
+                })
+    else:
+        for lemma, val in CORE_VOCAB_DB.items():
+            lvl = val[0]
+            if lvl.upper() == cefr_norm:
+                words.append({
+                    "id": f"{lvl.lower()}-{lemma}",
+                    "hw": lemma,
+                    "pos": val[1] or "",
+                    "de": "",
+                    "zh": val[4] if len(val) > 4 else "",
+                    "core": True,
+                    "cefr": lvl.upper(),
+                })
+
+    return {
+        "cefr": cefr_norm,
+        "scope": scope_norm,
+        "total": len(words),
+        "words": words,
+    }
+
+
 __all__ = [
     "DATA_DIR",
     "AUDIO_CACHE_DIR",
@@ -1109,4 +1284,5 @@ __all__ = [
     "record_exam_trial",
     "get_exam_history",
     "migrate_a1_records_to_exam_trials",
+    "get_vocab_by_cefr",
 ]
