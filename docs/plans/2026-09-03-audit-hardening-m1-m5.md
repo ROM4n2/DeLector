@@ -436,10 +436,10 @@ def db_conn(db_path=None):
 > RED：临时把 DATABASE_PATH 指到只读副本路径跑一个用例 → 观察失败（证明污染路径）；更稳的做法是直接断言这些模块 import 后 `get_db_path()` 不含 `DATA_DIR/delector.db`。GREEN：顶部设 env + autouse clean fixture。跑五个 goethe + corpus + audit 全绿，并确认真实 `delector.db` mtime 未变。
 
 **Step Breakdown:**
-- [ ] 断言式 RED（隔离缺失即失败）
-- [ ] 各文件加 env + 清理 fixture
-- [ ] 定向全绿 + 真实库 mtime 校验
-- [ ] `git commit -m "test: 补齐 6 个测试模块的临时库隔离，不再污染真实数据"`
+- [x] 断言式 RED（隔离缺失即失败）
+- [x] 各文件加 env（import server 前 setdefault）+ 清理 fixture
+- [x] 定向全绿 37 + 真实库 mtime 未变
+- [x] commit `ac08fa3`（`test: 补齐 6 个测试模块的临时库隔离…`）
 
 **Verification:** 定向 pytest + mtime 证据。
 
@@ -457,9 +457,9 @@ def db_conn(db_path=None):
 > 逐个把裸 split 换成括号配平切片（`_slice_balanced` 会自动抛错而非静默切歪），`[:400]` 移除或改为断言函数体结束标记。每替换一处跑 `test_german_workbench.py -q` 一次确认绿。RED 概念：若标记被改动，护栏会**显式失败**而不是假绿——本任务验证方式即「替换后全量仍绿 + 故意改一个标记确认会红」的变异演练（完成后还原）。
 
 **Step Breakdown:**
-- [ ] 变异演练确认护栏有效（临时改标记→红→还原）
-- [ ] 批量替换裸 split + 相对路径
-- [ ] 全绿；`git commit -m "test: workbench/写作测试解析改括号配平护栏，消除假绿切片"`
+- [x] 变异演练确认护栏有效（改名标记临时改 → 显式红 → 还原，DRILL OK）
+- [x] 批量替换裸 split（`_top_fn_segment` 收敛 11 处）+ 写作测试相对路径化
+- [x] 全绿；commit `635f5db`（`test: workbench 函数体切片改护栏 helper…`）
 
 **Verification:** `python -m pytest test_german_workbench.py test_goethe_a1_writing.py -q`。
 
@@ -478,9 +478,9 @@ def db_conn(db_path=None):
 > 每项小而独立：① pull 失败指数退避（保 `_busy`/防抖不动）；② rtcOnStateChange 分类计数；③ 双按钮 disabled；④ a1_lesen 防抖；⑤ alert 收敛。凡动 workbench.html，改后必须跑 `test_german_workbench.py -q`（字符串标记敏感）。alert 收敛目标：`static/js` 内 `alert(` 残留 ≤ 5（结构断言防回潮）。
 
 **Step Breakdown:**
-- [ ] 逐项实现（每项跑对应定向测试）
-- [ ] wbsync node 探针全绿；alert 余量断言
-- [ ] `git commit -m "fix(ui): 同步退避/防降级/按钮防双击/计时器防叠，alert 批量收敛"`
+- [x] 逐项实现：① pull 指数退避（5s→30s cap，保 `_busy` 结构）② rtc `disconnected` 瞬态不计失败 ③ `startLesenTimer` 防叠 ④ alert 分类收敛（AI/判分/成功提示→notify，写路径保留）→ `96b19d8` + `c492f43`
+- [x] 旧短码 LAN 面板**停用标注+整体禁用**（替代原「在途 disabled」：面板经核查为死 UI，`/api/wb/sync` 已强制 X-WB-Key 而面板不带 key，点击必 403）→ `61391b1`
+- [x] 护栏：wbsync 探针全绿 + `test_grade_ai_and_success_alerts_use_notify`（双面黑白名单断言，替代原「alert ≤5 计数」）+ `test_workbench_legacy_lan_panel_disabled`
 
 **Verification:** `test_german_workbench.py -k 'wbsync or wb_rtc or lan' -q` + alert 计数断言。
 
@@ -493,9 +493,9 @@ def db_conn(db_path=None):
 **Interfaces:** 移除无消费者的公共再导出。grep `from server import` 全仓确认无引用后删；保留任何测试实际引用的名字。
 
 **Step Breakdown:**
-- [ ] grep 引用清单
-- [ ] 删透传 + 全量 import server 的测试定向跑
-- [ ] `git commit -m "refactor(server): __all__ 收口，剔除无消费者的 nlp 透传符号"`
+- [x] grep 引用清单（逐 token 核 `from server import` 全仓）
+- [x] 删透传（6 符号） + import server 模块定向跑 + pyflakes 0 + import 冒烟
+- [x] commit `9fea63e`（`refactor(server): __all__ 收口…`）
 
 **Verification:** 定向 pytest（所有 `import server` 的模块）。
 
