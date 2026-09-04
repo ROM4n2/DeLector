@@ -12,8 +12,8 @@
 
 | 任务序号 | 任务描述 | 责任角色 | 状态 | 关联提交 | 验证结果 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Task 1** | 建立实施计划执行台账与回归基线 | Guard | 完成 | `4ec0734` | pytest 全量 565 passed (112.00s) + Node.js 探针 10/10 全绿（含 13/13 切片护栏） |
-| **Task 2** | 全局字体族体系与画布排版规范化 | Frontend TDD Builder | 待开始 | - | 待执行（消除硬编码中文字体与 Georgia，引入 tokens.css） |
+| **Task 1** | 建立实施计划执行台账与回归基线 | Guard | 完成 | `03b9cb1` | pytest 全量 565 passed (112.00s) + Node.js 探针 10/10 全绿（含 13/13 切片护栏） |
+| **Task 2** | 全局字体族体系与画布排版规范化 | Frontend TDD Builder | 完成 | 待提交 | `test_workbench_editorial_typography_contract` + 84 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
 | **Task 3** | 心流优先轻量化出版物导航与顶栏重塑 | Frontend TDD Builder | 待开始 | - | 待执行（出版物下划线导航，顶栏精细收敛） |
 | **Task 4** | Zettelkasten 实体学术卡片箱与矿物印章评分座重塑 | Frontend TDD Builder | 待开始 | - | 待执行（纯白纸张层叠、40px 衬线词头、浅柔印章评分底座） |
 | **Task 5** | 自测题与词库辅助视图 Editorial 风格细化 | Frontend TDD Builder | 待开始 | - | 待执行（自测选项卡、拼写输入框、KPI 与词库表墨水化） |

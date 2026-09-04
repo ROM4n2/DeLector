@@ -75,3 +75,28 @@ def test_workbench_scope_selector_modes():
     assert 'data-scope="all"' in seg, '#scopeSeg 必须包含 data-scope="all"'
     assert 'data-scope="reader"' in seg, '#scopeSeg 必须包含 data-scope="reader"'
 
+
+def test_workbench_editorial_typography_contract():
+    """验证 workbench.html 遵循全局字体体系与 960px 画布排版规范。"""
+    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
+    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+
+    # 1. body 必须使用 var(--sans, ...)
+    body_match = re.search(r'(?<![,\w])body\s*\{([^}]+)\}', content)
+    assert body_match, "workbench.html 必须包含 body 样式声明"
+    body_css = body_match.group(1)
+    assert re.search(r'font-family\s*:\s*var\(--sans', body_css), \
+        "body 必须使用 var(--sans, ...)"
+
+    # 2. font-family 声明中不得硬编码 "Microsoft YaHei" 或 "Segoe UI"
+    assert not re.search(r'font-family\s*:\s*[^;}]*(?:Microsoft YaHei|Segoe UI)', content, re.IGNORECASE), \
+        "workbench.html 不得在 font-family 声明中硬编码 'Microsoft YaHei' 或 'Segoe UI'"
+
+    # 3. .wrap 画布排版：max-width 应为 960px（或 var(--wrap-max, 960px)），而非旧的 1060px
+    wrap_match = re.search(r'\.wrap\s*\{([^}]+)\}', content)
+    assert wrap_match, "workbench.html 必须包含 .wrap 样式规则"
+    wrap_css = wrap_match.group(1)
+    assert "1060px" not in wrap_css, ".wrap 不应再使用旧的 max-width: 1060px"
+    assert re.search(r'max-width\s*:\s*(?:var\(--wrap-max,\s*960px\)|960px)', wrap_css), \
+        ".wrap 必须使用 max-width: 960px 或 var(--wrap-max, 960px)"
+
