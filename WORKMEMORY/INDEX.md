@@ -27,5 +27,5 @@
 
 | 日期 | 主题 | vault 归属 |
 | --- | --- | --- |
+| 2026-09-04 | 跨端 Python 打包孤岛治理：Chaquopy 与 PyInstaller 模块同步与 CI 自动守卫机制 | `vault://99-Inbox/2026-09-04-跨端-python-打包孤岛治理：chaquopy-与-pyinstaller-模块同步与-ci-自动守卫机制.md` |
 
-（初始为空；`/vault-save` 沉淀后回写此表，vault 侧引用用 `vault://` 前缀）
