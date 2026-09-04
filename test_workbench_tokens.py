@@ -100,3 +100,36 @@ def test_workbench_editorial_typography_contract():
     assert re.search(r'max-width\s*:\s*(?:var\(--wrap-max,\s*960px\)|960px)', wrap_css), \
         ".wrap 必须使用 max-width: 960px 或 var(--wrap-max, 960px)"
 
+
+def test_workbench_editorial_navigation_contract():
+    """验证 workbench.html 的出版物风格轻量化导航与顶栏重塑契约。"""
+    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
+    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+
+    # 1. header.top h1 必须使用衬线字体 var(--serif, ...)
+    h1_match = re.search(r'header\.top\s+h1\s*\{([^}]+)\}', content)
+    assert h1_match, "必须包含 header.top h1 样式声明"
+    h1_css = h1_match.group(1)
+    assert re.search(r'font-family\s*:\s*var\(--serif', h1_css), \
+        "header.top h1 必须使用 var(--serif, ...)"
+
+    # 2. nav.tabs 不得使用旧版厚重卡片容器样式（border-radius:var(--radius) 或 box-shadow:var(--shadow)）
+    tabs_match = re.search(r'(?<![.\w])nav\.tabs\s*\{([^}]+)\}', content)
+    assert tabs_match, "必须包含 nav.tabs 样式声明"
+    tabs_css = tabs_match.group(1)
+    assert "border-radius:var(--radius)" not in tabs_css and "border-radius: var(--radius)" not in tabs_css, \
+        "nav.tabs 不得使用厚重卡片圆角 border-radius:var(--radius)"
+    assert "box-shadow:var(--shadow)" not in tabs_css and "box-shadow: var(--shadow)" not in tabs_css, \
+        "nav.tabs 不得使用厚重投影 box-shadow:var(--shadow)"
+
+    # 3. nav.tabs button.active 必须使用下划线 border-bottom 与 var(--accent)，且不可使用实心背景 background:var(--accent)
+    active_match = re.search(r'nav\.tabs\s+button\.active\s*\{([^}]+)\}', content)
+    assert active_match, "必须包含 nav.tabs button.active 样式声明"
+    active_css = active_match.group(1)
+    assert re.search(r'border-bottom\s*:\s*2px\s+solid\s+var\(--accent\)', active_css) or \
+           ("border-bottom" in active_css and "var(--accent)" in active_css), \
+        "nav.tabs button.active 必须使用 border-bottom: 2px solid var(--accent)"
+    assert "background:var(--accent)" not in active_css and "background: var(--accent)" not in active_css, \
+        "nav.tabs button.active 不得使用实心背景 background:var(--accent)"
+
+

@@ -76,8 +76,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 .wrap{max-width:960px;margin:0 auto;padding:20px 16px;}
 header.top{
   display:flex;align-items:center;gap:14px;padding:14px 4px 10px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line-soft, rgba(21, 20, 15, 0.08));margin-bottom:12px;
 }
-header.top h1{font-size:21px;letter-spacing:.5px}
+header.top h1{font-size:22px;letter-spacing:.3px;font-family:var(--serif, "Playfair Display", Georgia, serif);font-weight:700}
 header.top .sub{color:var(--muted);font-size:12.5px}
 .badge{
   background:var(--accent-soft);color:var(--accent);border-radius:999px;
@@ -86,26 +87,32 @@ header.top .sub{color:var(--muted);font-size:12.5px}
 .badge.hot{background:var(--again-soft);color:var(--again)}
 /* 顶栏 scope 分段控件：与 .badge 同高同圆角，塞进 header.top 同一 flex 行 */
 .seg{
-  display:inline-flex;gap:2px;background:var(--accent-soft);
-  border-radius:999px;padding:2px;flex-shrink:0;
+  display:inline-flex;gap:2px;background:var(--paper-tint, #f2ece1);
+  border:1px solid var(--line);border-radius:999px;padding:2px;flex-shrink:0;
 }
 .seg button{
-  padding:3px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
-  color:var(--accent);white-space:nowrap;transition:background .15s,color .15s;
+  padding:3px 12px;border-radius:999px;font-size:12px;font-weight:600;
+  color:var(--muted);white-space:nowrap;transition:all .15s;background:transparent;
 }
-.seg button.active{background:var(--accent);color:#fff}
-.seg button:not(.active):hover{background:var(--panel)}
+.seg button.active{background:var(--paper-card, #ffffff);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.seg button:not(.active):hover{color:var(--text)}
 nav.tabs{
-  display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
-  border-radius:var(--radius);padding:5px;box-shadow:var(--shadow);margin-bottom:16px;
-  position:sticky;top:8px;z-index:50;overflow-x:auto;
+  display:flex;gap:8px;background:var(--bg);border:none;
+  border-bottom:1px solid var(--line);border-radius:0;padding:0 0 2px;
+  box-shadow:none;margin-bottom:20px;position:sticky;top:0;z-index:50;
+  overflow-x:auto;
 }
 nav.tabs button{
-  flex:1;padding:9px 6px;border-radius:9px;font-size:14.5px;font-weight:600;
-  color:var(--muted);white-space:nowrap;transition:background .15s,color .15s;
+  flex:none;padding:10px 16px;border-radius:0;font-size:14px;font-weight:600;
+  color:var(--muted);white-space:nowrap;background:transparent;
+  border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;
 }
-nav.tabs button.active{background:var(--accent);color:#fff}
-nav.tabs button:not(.active):hover{background:var(--accent-soft);color:var(--accent)}
+nav.tabs button.active{
+  background:transparent;color:var(--accent);border-bottom:2px solid var(--accent);
+}
+nav.tabs button:not(.active):hover{
+  background:transparent;color:var(--text);
+}
 .view{display:none;animation:fadeIn .25s ease}
 .view.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -116,7 +123,7 @@ nav.tabs button:not(.active):hover{background:var(--accent-soft);color:var(--acc
 
 /* ================= 复习视图 ================= */
 .rev-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.progress{flex:1;min-width:180px;height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+.progress{flex:1;min-width:180px;height:4px;background:var(--line-soft, rgba(21, 20, 15, 0.08));border-radius:99px;overflow:hidden}
 .progress>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}
 .rev-stage{display:flex;align-items:center;gap:10px}
 .arrow{
