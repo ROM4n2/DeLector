@@ -19,13 +19,13 @@
 
 ## 当前状态（2026-09-04 快照）
 
-- 分支 `master`，最近版本线 v5.1.0（LAN 静默同步 Stage B WebRTC）→ v5.1.1（bugfix 收口）。
-- **进行中主线：ADR-0005 备考域骨架**——「场景工具 + 独立备考域」两带导航重构，
-  备考域骨架与导航入口已落地（commit 692e8ea + Task 1 ledger 回填 d68a834），
-  工作树有 `static/index.html` 与 `static/js/` 多文件未提交改动。
-- 下一步（ADR-0005 待办清单）：A1 四功能迁入备考域、exam catalog 种子、
-  路由参数化 `/api/exams/{level}/{module}`、组件提取刀、共享 token 抽取。
-- 测试基线：v5.1.0 全量 487 全绿；提交守卫 pre-commit 密钥扫描启用。
+- 分支 `master`（HEAD: `ab41273`，版本面 `v5.2.0`）。
+- **重大里程碑：ADR-0005 备考域 Phase 1 全量落地（PR #25 已合入 master，台账 6/6 全绿）**：
+  - 「场景工具 + 独立备考域」双带架构落地，A1 听说读写各模块迁入 `view-exam` 独立域。
+  - 考纲目录 `exam_catalog.py` 种子化与 `/api/exams/catalog` 路由上线。
+  - 泛化模考成绩表 `exam_trials` 上线并幂等迁移历史记录。
+- 测试基线：**v5.2.0 全量 559 全绿**（实测 113.7s），10/10 `tools/*.mjs` 探针全绿；pre-commit 密钥守卫有效，工作区干净。
+- 下一步待办：Android APK 打包验证与 GitHub Releases 资产发布、更高等级（B1/TestDaF）考场数据扩充。
 
 ## 本项目高频坑（详见 AGENTS.md 对应节）
 

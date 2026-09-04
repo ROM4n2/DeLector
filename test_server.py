@@ -3832,6 +3832,66 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
     assert "'routes_corpus'" in spec
 
 
+def test_all_backend_modules_registered_in_all_packaging_targets():
+    """所有路由与核心词典模块必须完整注册在 package_windows.py、CI workflow 以及 Android 拷贝清单中。
+
+    防范 regression：
+    - v4.8.1：routes_corpus.py 遗漏导致 Android APK 崩溃
+    - v5.2.0：routes_rtc.py, routes_exam.py, exam_catalog.py 遗漏导致 Chaquopy 启动报
+      ModuleNotFoundError: No module named 'routes_rtc'
+    """
+    root = os.path.dirname(__file__)
+    pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
+    wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
+
+    required_modules = [
+        "core_dict",
+        "core_dict_ext",
+        "prep_dict",
+        "a1_dict",
+        "a1_writing_dict",
+        "a1_hoeren_dict",
+        "a1_lesen_dict",
+        "corpus_dict",
+        "routes_a1",
+        "routes_a1_hoeren",
+        "routes_a1_lesen",
+        "routes_corpus",
+        "routes_sync",
+        "routes_rtc",
+        "routes_exam",
+        "exam_catalog",
+    ]
+
+    for mod in required_modules:
+        # 1. Windows PyInstaller
+        assert f"--hidden-import={mod}" in pkg, f"{mod} 未在 package_windows.py 的 --hidden-import 中注册"
+        # 2. Linux & macOS CI PyInstaller
+        assert wf.count(f"--hidden-import={mod}") >= 2, f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 (count={wf.count(f'--hidden-import={mod}')})"
+        # 3. Android Chaquopy 拷贝清单
+        assert f"{mod}.py" in wf, f"{mod}.py 未在 build-release.yml 的 Android cp 拷贝清单中"
+
+    critical_apk_needles = [
+        "server.py",
+        "de_core_news_sm",
+        "routes_corpus.py",
+        "routes_a1_hoeren.py",
+        "routes_a1_lesen.py",
+        "routes_rtc.py",
+        "routes_exam.py",
+        "exam_catalog.py",
+    ]
+    for needle in critical_apk_needles:
+        assert f'"{needle}"' in wf, f"{needle} 未在 build-release.yml 的 APP_NEEDLES 验包探针中"
+
+    spec_path = os.path.join(root, "DeLector.spec")
+    if os.path.exists(spec_path):
+        spec = open(spec_path, encoding="utf-8").read()
+        for mod in required_modules:
+            assert f"'{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
+
+
+
 # ── Workbench 进度 server 同步（docs/plans/workbench-progress-server-sync.md）──
 
 def test_wb_state_roundtrip():

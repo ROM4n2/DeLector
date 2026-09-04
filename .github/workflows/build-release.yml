@@ -105,6 +105,9 @@ jobs:
             --hidden-import=routes_a1_lesen \
             --hidden-import=routes_corpus \
             --hidden-import=routes_sync \
+            --hidden-import=routes_rtc \
+            --hidden-import=routes_exam \
+            --hidden-import=exam_catalog \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -178,6 +181,9 @@ jobs:
             --hidden-import=routes_a1_lesen \
             --hidden-import=routes_corpus \
             --hidden-import=routes_sync \
+            --hidden-import=routes_rtc \
+            --hidden-import=routes_exam \
+            --hidden-import=exam_catalog \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -236,7 +242,7 @@ jobs:
           print(f"模型 compat={compat} 与 APK spaCy {APK_SPACY} 匹配")
           PY
           mkdir -p android/app/src/main/python
-          cp -r server.py start.py core_dict.py core_dict_ext.py prep_dict.py linguistics.py syntax_tree.py edge_tts_mini.py writing_rules.py essay_diff.py nlp.py database.py security.py routes_a1.py routes_sync.py routes_corpus.py routes_a1_hoeren.py routes_a1_lesen.py corpus_dict.py a1_dict.py a1_writing_dict.py a1_hoeren_dict.py a1_lesen_dict.py android/app/src/main/python/
+          cp -r server.py start.py core_dict.py core_dict_ext.py prep_dict.py linguistics.py syntax_tree.py edge_tts_mini.py writing_rules.py essay_diff.py nlp.py database.py security.py routes_a1.py routes_sync.py routes_corpus.py routes_a1_hoeren.py routes_a1_lesen.py routes_rtc.py routes_exam.py exam_catalog.py corpus_dict.py a1_dict.py a1_writing_dict.py a1_hoeren_dict.py a1_lesen_dict.py android/app/src/main/python/
           MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
           cp -r "$MODEL_DIR" android/app/src/main/python/de_core_news_sm
           mkdir -p android/app/src/main/assets
@@ -373,7 +379,7 @@ jobs:
               # app.imy 装应用自身代码 + CI 拷入的模型目录；pip 依赖（spacy/thinc）
               # 在 requirements-<abi>.imy —— v4.4.0 首跑实测把 spacy/thinc 塞进
               # app.imy 检查会误报缺失。两个容器各查各的。
-              APP_NEEDLES = ("server.py", "de_core_news_sm", "routes_corpus.py", "routes_a1_hoeren.py", "routes_a1_lesen.py", "corpus_dict.py", "a1_hoeren_dict.py", "a1_lesen_dict.py")
+              APP_NEEDLES = ("server.py", "de_core_news_sm", "routes_corpus.py", "routes_a1_hoeren.py", "routes_a1_lesen.py", "routes_rtc.py", "routes_exam.py", "exam_catalog.py", "corpus_dict.py", "a1_hoeren_dict.py", "a1_lesen_dict.py")
               REQ_NEEDLES = ("spacy", "thinc")
               def find_in(data):
                   found = set()

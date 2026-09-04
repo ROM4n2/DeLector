@@ -19,3 +19,34 @@ Caps: filesystem-read, filesystem-write, shell-exec
 避免多 agent 同时跑测试基线互相干扰。本任务仅完成 WORK_START 与侦察
 （未跑测试、未写 OVERVIEW），PROJECT_OVERVIEW.md 仍为模板骨架。
 后续 onboard 由用户另行安排（建议等空闲 agent 会话结束后做）。
+
+### 2026-09-04 19:50 | gemini-3-8-flash__antigravity | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：/vault-onboard 接管 DeLector——全量测试基线验证、架构与符号拓扑映射、红线与坑项提取，生成 .agent-context.md 并同步 PROJECT_OVERVIEW.md。
+不做范围：业务功能改动、重构、依赖升级。
+
+### 2026-09-04 19:52 | gemini-3-8-flash__antigravity | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+/vault-onboard 任务完成：
+1. 测试基线验证：pytest 全量 559 全绿（559 passed, 0 failed in 113.70s）；tools/*.mjs 10/10 探针全绿。
+2. 架构映射：梳理 9 个 routes 路由、spaCy/NLP 降级链路、拓扑句法 AST、双 SQLite 库 schema 与前端 10+ ES 模块。
+3. 产出与回写：更新根目录 .agent-context.md，同步 WORKMEMORY/PROJECT_OVERVIEW.md（标记 ADR-0005 落地完成与 v5.2.0 发布态）。
+4. 验证检查：工作区干净，无临时产物残留，未修改业务代码。
+
+### 2026-09-04 19:53 | gemini-3-8-flash__antigravity | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：/vault-debug 调查并修复 Android Chaquopy 启动异常 ModuleNotFoundError: No module named 'routes_rtc'。
+不做范围：无关功能扩展与重构。
+
+### 2026-09-04 19:58 | gemini-3-8-flash__antigravity | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+/vault-debug 任务完成：
+1. 根因确诊：Android APK 构建工作流（.github/workflows/build-release.yml）在将后端源码拷贝至 android/app/src/main/python/ 时，漏拷 routes_rtc.py、routes_exam.py 与 exam_catalog.py。同时 package_windows.py、Linux/macOS 构建配置与 APK 验包探针（APP_NEEDLES）亦漏配。
+2. 修复落地：
+   - package_windows.py 补齐 routes_rtc / routes_exam / exam_catalog 的 hidden-import
+   - build-release.yml Linux 与 macOS 构建段补齐对应 hidden-import
+   - build-release.yml Android cp 源码清单补入 routes_rtc.py routes_exam.py exam_catalog.py
+   - build-release.yml APP_NEEDLES 探针同步追加验证
+   - DeLector.spec 同步补齐
+3. 自动化防护：新增 test_server.py::test_all_backend_modules_registered_in_all_packaging_targets，永久守卫所有 16 个路由与词典模块在全打包目标的闭环注册。
+4. 验证结果：测试通过，已锁定回归。
