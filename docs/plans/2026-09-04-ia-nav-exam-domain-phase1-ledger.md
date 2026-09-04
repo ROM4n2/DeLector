@@ -53,11 +53,17 @@
 
 ## Task 2: A1 五模块迁入备考域
 
-- [ ] Step 1: 探针 ia_dom_mount_probe.mjs（RED 必红）
-- [ ] Step 2: index.html 原子搬移（上表边界）
-- [ ] Step 3: js 引用修改 + GREEN
-- [ ] Step 4: 测试同步（上表失效项）+ 全量探针回归
-- [ ] Step 5: 原子 commit
+- [x] Step 1: 探针 ia_dom_mount_probe.mjs（RED 证据：exit 1 共 48 条问题 + pytest 9 failed）
+- [x] Step 2: index.html 原子搬移（ledger 边界表；id 唯一性 7 关键 id 各恰 1 次）
+- [x] Step 3: js 引用修改 + GREEN（a1CardsHost/setExamWritingTab/setExamModule/懒加载守卫；探针 4 场景绿）
+- [x] Step 4: 测试同步（seg-a1→exam-card-vocab、writer-mode-a1-*→exam-tab-*）+ 全量探针 10/10 绿 + 537 passed
+- [x] Step 5: 原子 commit `db80212`（评审 PASS：悬空标识符 165 handler 交叉核对/变异两向验证/no-op 防悬空）
+
+**偏差注记**：
+- 新增 main.js `setExamModule` mediator（页签⇄面板路由住根模块，因 a1_cards/a1_writer 互不 import）——计划未预见，评审认可。
+- a1_cards.js 自管 view toggle（`a1ViewMode` + `setA1CardViewMode`）而非复用主站 setCardViewMode（避免双 toggle querySelector 冲突）——按计划「择简」授权。
+- writer.js/cards.js 间 `export *` 转发链保留，cards.js 删自身 A1Cards import（转发达成后属死 import）。
+- 评审 nit（不阻塞）：test_exam_domain.py:43 TOOL_VIEW_FORBIDDEN 死常量；探针 JSON 部分键为自报常量非测量值（真门禁在 problems[]）。
 
 ## Task 3: exam catalog 目录化
 
