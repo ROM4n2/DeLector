@@ -64,3 +64,14 @@ def test_workbench_html_imports_tokens_and_maps_editorial_vars():
     assert "--good: var(--moss" in root_block or "--good:var(--moss" in root_block, "--good 应映射到 var(--moss"
     assert "--again: var(--cherry" in root_block or "--again:var(--cherry" in root_block, "--again 应映射到 var(--cherry"
 
+
+def test_workbench_scope_selector_modes():
+    """#scopeSeg 必须覆盖 data-scope="core"、"all" 与 "reader" 三档。"""
+    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
+    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+    assert 'id="scopeSeg"' in content, "workbench.html 必须包含 #scopeSeg"
+    seg = content.split('id="scopeSeg"')[1].split("</div>")[0]
+    assert 'data-scope="core"' in seg, '#scopeSeg 必须包含 data-scope="core"'
+    assert 'data-scope="all"' in seg, '#scopeSeg 必须包含 data-scope="all"'
+    assert 'data-scope="reader"' in seg, '#scopeSeg 必须包含 data-scope="reader"'
+
