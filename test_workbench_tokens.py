@@ -177,3 +177,32 @@ def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
         ".rate-btn[data-g='1'] 不得使用实心白字 color: #fff"
 
 
+def test_workbench_editorial_secondary_views_contract():
+    """验证自测题与词库辅助视图 Editorial 风格细化契约。"""
+    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
+    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+
+    # 1. 断言 .qword, .spell-input, .kpi .v, table.wtab .hw 使用 var(--serif 而非 raw Georgia,serif
+    for selector_re in (
+        r'\.qword\s*\{([^}]+)\}',
+        r'\.spell-input\s*\{([^}]+)\}',
+        r'\.kpi\s+\.v\s*\{([^}]+)\}',
+        r'table\.wtab\s+\.hw\s*\{([^}]+)\}',
+    ):
+        m = re.search(selector_re, content)
+        assert m, f"找不到选择器样式：{selector_re}"
+        rule_css = m.group(1)
+        assert "Georgia,serif" not in rule_css, f"{selector_re} 不得硬编码 Georgia,serif"
+        assert "var(--serif" in rule_css, f"{selector_re} 必须使用 var(--serif, ...)"
+
+    # 2. 断言 table.wtab .ipa 使用 var(--mono
+    ipa_m = re.search(r'table\.wtab\s+\.ipa\s*\{([^}]+)\}', content)
+    assert ipa_m, "找不到 table.wtab .ipa 样式规则"
+    ipa_css = ipa_m.group(1)
+    assert "var(--mono" in ipa_css, "table.wtab .ipa 必须使用 var(--mono, ...)"
+
+    # 3. 断言 .qopt 具有 8px 圆角
+    qopt_m = re.search(r'(?<![.\w])\.qopt\s*\{([^}]+)\}', content)
+    assert qopt_m, "找不到 .qopt 基础样式规则"
+    qopt_css = qopt_m.group(1)
+    assert re.search(r'border-radius\s*:\s*8px', qopt_css), ".qopt 必须包含 border-radius: 8px"

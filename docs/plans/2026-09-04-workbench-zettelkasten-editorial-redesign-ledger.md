@@ -15,8 +15,8 @@
 | **Task 1** | 建立实施计划执行台账与回归基线 | Guard | 完成 | `03b9cb1` | pytest 全量 565 passed (112.00s) + Node.js 探针 10/10 全绿（含 13/13 切片护栏） |
 | **Task 2** | 全局字体族体系与画布排版规范化 | Frontend TDD Builder | 完成 | `96a68c7` | `test_workbench_editorial_typography_contract` + 84 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
 | **Task 3** | 心流优先轻量化出版物导航与顶栏重塑 | Frontend TDD Builder | 完成 | `54df538` | `test_workbench_editorial_navigation_contract` + 85 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
-| **Task 4** | Zettelkasten 实体学术卡片箱与矿物印章评分座重塑 | Frontend TDD Builder | 完成 | 待提交 | `test_workbench_zettelkasten_card_and_stamp_buttons_contract` + 86 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
-| **Task 5** | 自测题与词库辅助视图 Editorial 风格细化 | Frontend TDD Builder | 待开始 | - | 待执行（自测选项卡、拼写输入框、KPI 与词库表墨水化） |
+| **Task 4** | Zettelkasten 实体学术卡片箱与矿物印章评分座重塑 | Frontend TDD Builder | 完成 | `41cafbd` | `test_workbench_zettelkasten_card_and_stamp_buttons_contract` + 86 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
+| **Task 5** | 自测题与词库辅助视图 Editorial 风格细化 | Frontend TDD Builder | 完成 | 待提交 | `test_workbench_editorial_secondary_views_contract` + 87 pytest 全绿 + 13/13 探针切片全绿 + 10/10 探针全绿 + Reviewer PASS |
 | **Task 6** | 全量回归闭环、Ledger 收口与交付报告 | Guard | 待开始 | - | 待执行（全量回归全绿、工作记忆同步） |
 
 ---
@@ -24,12 +24,14 @@
 ## 回归基线证据记录 (Baseline Verification Evidence)
 
 ### 1. pytest 全量测试回归基线
+
 - **执行命令**：`pytest -q`
 - **执行耗时**：`112.00s (0:01:51)`
 - **执行结果**：`565 passed, 1 warning in 112.00s`
 - **结论**：后端与工作台核心契约测试 100% 全绿，无历史遗留失败。
 
 ### 2. Node.js 行为级探针回归基线
+
 - **执行命令**：`Get-ChildItem tools/*.mjs | ForEach-Object { node $_.FullName }`
 - **执行结果**：10/10 探针全部 PASS：
   1. `ia_dom_mount_probe.mjs` - PASS

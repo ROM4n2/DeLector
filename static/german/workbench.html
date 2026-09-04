@@ -176,21 +176,21 @@ code,kbd{font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
 
 /* ================= 自测视图 ================= */
 .qopt{
-  display:block;width:100%;text-align:left;padding:13px 16px;margin-bottom:9px;
-  border:1.5px solid var(--line);border-radius:11px;font-size:15px;background:var(--panel);
-  transition:all .12s;
+  display:block;width:100%;text-align:left;padding:12px 16px;margin-bottom:8px;
+  border:1px solid var(--line);border-radius:8px;font-size:14.5px;background:var(--panel);
+  transition:all .12s;color:var(--text);cursor:pointer;
 }
-.qopt:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
+.qopt:hover:not(:disabled){border-color:var(--ink);background:var(--paper-tint, #f2ece1)}
 .qopt:disabled{cursor:default}
 .qopt.ok{border-color:var(--good);background:var(--good-soft);color:var(--good);font-weight:700}
 .qopt.bad{border-color:var(--again);background:var(--again-soft);color:var(--again)}
 .qnum{color:var(--muted);font-size:13px;margin-bottom:8px}
-.qword{font-size:30px;font-weight:700;text-align:center;margin:14px 0 20px;font-family:Georgia,serif}
-.qword small{display:block;font-size:15px;color:var(--muted);font-weight:400;margin-top:4px;font-family:Georgia,serif}
+.qword{font-size:30px;font-weight:700;text-align:center;margin:14px 0 20px;font-family:var(--serif, "Playfair Display", Georgia, serif)}
+.qword small{display:block;font-size:15px;color:var(--muted);font-weight:400;margin-top:4px;font-family:var(--sans)}
 .fb{padding:12px 16px;border-radius:10px;margin:14px 0;font-size:14.5px}
 .fb.ok{background:var(--good-soft);color:var(--good)}
 .fb.bad{background:var(--again-soft);color:var(--again)}
-.spell-input{width:100%;font-size:19px;padding:12px 16px;text-align:center;font-family:Georgia,serif}
+.spell-input{width:100%;font-size:19px;padding:12px 16px;text-align:center;font-family:var(--serif, "Playfair Display", Georgia, serif);border:1px solid var(--line);border-radius:8px}
 .mode-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .mode-card{
   flex:1;min-width:220px;border:2px solid var(--line);border-radius:12px;padding:16px;
@@ -205,13 +205,13 @@ code,kbd{font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
 
 /* ================= 统计视图 ================= */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  padding:14px 16px;box-shadow:var(--shadow)}
-.kpi .v{font-size:26px;font-weight:800;font-family:Georgia,serif}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;box-shadow:0 1px 3px rgba(21, 20, 15, 0.04)}
+.kpi .v{font-size:26px;font-weight:700;font-family:var(--serif, "Playfair Display", Georgia, serif)}
 .kpi .l{font-size:12.5px;color:var(--muted);margin-top:2px}
 .kpi.hl .v{color:var(--accent)}
 .letter-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
-.letter-row .lt{width:22px;font-weight:800;font-family:Georgia,serif;text-align:center}
+.letter-row .lt{width:22px;font-weight:800;font-family:var(--serif, "Playfair Display", Georgia, serif);text-align:center}
 .letter-row .bar{flex:1;height:14px;border-radius:99px;overflow:hidden;display:flex;background:var(--line)}
 .letter-row .bar i{display:block;height:100%}
 .letter-row .pct{width:86px;text-align:right;font-size:12px;color:var(--muted);font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
@@ -224,13 +224,14 @@ svg text{font-family:var(--sans, "Inter", -apple-system, BlinkMacSystemFont, san
 .toolbar input[type="search"]{flex:1;min-width:150px}
 table.wtab{width:100%;border-collapse:collapse;font-size:13.5px}
 table.wtab th{
-  text-align:left;padding:9px 8px;color:var(--muted);font-size:12.5px;
-  border-bottom:2px solid var(--line);position:sticky;top:0;background:var(--panel);white-space:nowrap;
+  text-align:left;padding:10px 8px;color:var(--muted);font-size:12px;font-weight:600;
+  border-bottom:1px solid var(--text);position:sticky;top:0;background:var(--panel);white-space:nowrap;
+  letter-spacing:.02em;text-transform:uppercase;
 }
-table.wtab td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-table.wtab tr:hover td{background:var(--accent-soft)}
-table.wtab .hw{font-weight:700;font-family:Georgia,serif;font-size:14.5px}
-table.wtab .ipa{color:var(--muted);font-size:12px;font-family:Georgia,serif}
+table.wtab td{padding:10px 8px;border-bottom:1px solid var(--line-soft, rgba(21, 20, 15, 0.08));vertical-align:top}
+table.wtab tr:hover td{background:var(--paper-tint, #f2ece1)}
+table.wtab .hw{font-weight:700;font-family:var(--serif, "Playfair Display", Georgia, serif);color:var(--text);font-size:14.5px}
+table.wtab .ipa{color:var(--muted);font-size:12px;font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
 table.wtab .gloss-cell{max-width:230px}
 .tag-chip{
   display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:5px;
@@ -2577,7 +2578,7 @@ function quizFinish() {
       quiz.wrong.map(id => {
         const w = wordById(id); if (!w) return "";
         return "<div style='padding:6px 0;border-bottom:1px dashed var(--line)'>" +
-          "<b style='font-family:Georgia,serif'>" + esc(w.hw) + "</b>" +
+          "<b style='font-family:var(--serif, \"Playfair Display\", Georgia, serif)'>" + esc(w.hw) + "</b>" +
           (w.ipa ? " <span class='hint'>" + esc(w.ipa) + "</span>" : "") +
           " — " + esc(w.gloss) + "</div>";
       }).join("");
