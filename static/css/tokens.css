@@ -1,0 +1,88 @@
+/* ── DeLector Design System — Shared Core Tokens ── */
+
+:root {
+  /* Surfaces */
+  --paper: #faf8f5;
+  --paper-card: #ffffff;
+  --paper-warm: #f7f4ec;
+  --paper-tint: #f2ece1;
+  --paper-accent: #ede7da;
+  --paper-deep: #e6ddd0;
+  --stage: #181512;
+
+  /* Inks & Rules */
+  --ink: #15140f;
+  --pencil: #5c554b;
+  --muted: #8c8477;
+  --rule: #d8d0c2;
+  --rule-light: #ebe5da;
+  --border: var(--rule);
+  --grid-dot: rgba(21, 20, 15, 0.05);
+
+  /* Physical materials */
+  --tape: rgba(43, 38, 32, 0.12);
+  --tape-border: rgba(26, 23, 20, 0.18);
+
+  /* Cognitive & Accent Colors */
+  --coral: #ed6f5c;
+  --coral-soft: #f08e7c;
+  --accent: #c14a2b;
+  --accent-hover: #a83b1f;
+  --mustard: #e9b94a;
+  --amber: #d9771c;
+  --amber-soft: rgba(217, 119, 28, 0.12);
+  --cherry: #b03030;
+  --danger: #b03030;
+  --danger-strong: #c84444;
+  --moss: #3b6e3f;
+  --olive: #6e7448;
+
+  /* Editorial Ink & Line Tokens */
+  --ink-soft: #2a2620;
+  --ink-mute: #5a5448;
+  --ink-faint: #8b8676;
+  --line: rgba(21, 20, 15, 0.16);
+  --line-soft: rgba(21, 20, 15, 0.08);
+  --line-faint: rgba(21, 20, 15, 0.05);
+
+  /* CEFR Pastel Highlighters */
+  --hl-A1: #e3effb;
+  --hl-A1-ink: #1d548c;
+  --hl-A2: #d6eccf;
+  --hl-A2-ink: #20662a;
+  --hl-B1: #fde9bd;
+  --hl-B1-ink: #825c00;
+  --hl-B2: #fde0d7;
+  --hl-B2-ink: #91261b;
+  --hl-C1: #efe2fa;
+  --hl-C1-ink: #522485;
+
+  /* Sticky Notes */
+  --note-yellow: #fffbe6;
+  --note-pink: #fff0ed;
+  --note-green: #edf7ec;
+  --note-blue: #ecf3fb;
+
+  /* Typography */
+  --serif-display: "Playfair Display", "Instrument Serif", Georgia, serif;
+  --serif-heading: "Playfair Display", "Instrument Serif", Georgia, serif;
+  --serif-body: "DM Serif Text", "Iowan Old Style", Georgia, serif;
+  --serif: "Playfair Display", "Instrument Serif", Georgia, serif;
+  --serif-text: "DM Serif Text", "Iowan Old Style", Georgia, serif;
+  --sans-tight: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: var(--sans);
+  --mono: "IBM Plex Mono", "JetBrains Mono", Consolas, monospace;
+  --hand: "Caveat", "Patrick Hand", cursive;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 4px rgba(21, 20, 15, 0.06);
+  --shadow-card: 0 14px 28px -12px rgba(21, 20, 15, 0.12);
+  --shadow-hard: 3px 3px 0 var(--ink);
+
+  /* Motion */
+  --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 180ms;
+  --dur-mid: 360ms;
+  --dur-slow: 900ms;
+}
