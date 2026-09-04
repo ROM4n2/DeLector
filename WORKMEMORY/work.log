@@ -1,0 +1,21 @@
+# DeLector work.log（HOT 层，append-only）
+# Schema 见 PROTOCOL.md §2；轮转规则见 §5
+
+### 2026-09-04 15:10 | claude-sonnet-4-6__claude-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+WORKMEMORY 协议 bootstrap 完成：PROTOCOL/INDEX/PROJECT_OVERVIEW 三件套落盘，
+项目级 anchor（CLAUDE.md/AGENTS.md/GEMINI.md）注入。此前跨 agent 状态靠
+AGENTS.md 交接快照 + HANDOFF.md 单文件承载，自本日起改走本协议（两者并存，
+AGENTS.md 保持机器可读快照定位不变）。
+
+### 2026-09-04 17:55 | claude-sonnet-4-6__claude-code | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：/vault-onboard 接管 DeLector——跑测试基线、映射架构、蒸馏
+PROJECT_OVERVIEW.md（vault-bootstrap Phase 3.5 遗留步骤）。
+
+### 2026-09-04 18:20 | claude-sonnet-4-6__claude-code | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+/vault-onboard 任务中止（用户裁定）：DeLector 当前有其他 agent 在运行，
+避免多 agent 同时跑测试基线互相干扰。本任务仅完成 WORK_START 与侦察
+（未跑测试、未写 OVERVIEW），PROJECT_OVERVIEW.md 仍为模板骨架。
+后续 onboard 由用户另行安排（建议等空闲 agent 会话结束后做）。

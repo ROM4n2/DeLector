@@ -1,5 +1,16 @@
 __pycache__/
 *.pyc
+
+# 敏感配置与密钥（通用基线，与 bootstrap.ps1 $requiredIgnores 同步）
+config.yaml
+config.yml
+config.local.yaml
+.env.*
+*.pem
+*.key
+*.local.json
+credentials.json
+
 .env
 *.env
 *.secret
@@ -52,3 +63,5 @@ scratch/
 
 # CodeBuddy 代理数据目录（记忆/会话态，不入库）
 .codebuddy/
+
+# WORKMEMORY/ 是跨 agent 共享工作记忆，MUST 入库随 git 同步（PROTOCOL §7），勿加入忽略规则。
