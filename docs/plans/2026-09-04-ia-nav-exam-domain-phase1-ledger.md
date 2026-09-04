@@ -94,8 +94,23 @@
 
 ## Task 5: 收口
 
-- [ ] Step 1: 全量回归差异表
-- [ ] Step 2: ledger 回填
-- [ ] Step 3: push
-- [ ] Step 4: PR
-- [ ] Step 5: docs commit
+- [x] Step 1: 全量回归差异表——基线 518 → 559 passed（+41）；前端定向 128 → 176；10/10 tools/*.mjs 探针全绿
+- [x] Step 2: ledger 回填 + README 同步（commit `7a4c658`）
+- [x] Step 3: push（SSH 443 通道）
+- [x] Step 4: PR（标题 `feat(ia): 备考域重布局 + catalog/成绩第一刀`）
+- [x] Step 5: docs commit
+
+### 全量回归差异表（对比 Task 0 基线）
+
+| 套件 | 基线 (Task 0) | 收口 (Task 5) | Δ |
+|---|---|---|---|
+| 全量 pytest | 518 passed | 559 passed | +41 |
+| 前端定向（german_workbench+goethe_a1*+prep_matrix+frontend_module_graph+exam_domain+writer_mobile） | 117 | 176 | +59 |
+| tools/*.mjs 探针 | 9 绿 | 10/10 绿 | +1（ia_dom_mount_probe） |
+
+新增测试：test_exam_domain.py 11+8、test_exam_catalog.py 6、test_exam_trials.py 11；全部针对本 Phase 新增/迁移行为。
+
+### 收口说明
+- 分支 `feat/ia-nav-exam-domain` 共 10 个 commit（2ae2bc2 → 7a4c658）。
+- README 同步 v5.2.0（badge 559、特性区新增备考域/目录/泛化成绩表、路线图 v5.2.0 条目）。
+- 工作区残留 .gitignore/.gitignore.md/AGENTS.md/CLAUDE.md/WORKMEMORY/GEMINI.md 为**并行会话注入**（非本任务产物），未纳入本分支 commit。
