@@ -19,13 +19,19 @@
 
 ## 当前状态（2026-09-04 快照）
 
-- 分支 `master`（HEAD: `ab41273`，版本面 `v5.2.0`）。
-- **重大里程碑：ADR-0005 备考域 Phase 1 全量落地（PR #25 已合入 master，台账 6/6 全绿）**：
-  - 「场景工具 + 独立备考域」双带架构落地，A1 听说读写各模块迁入 `view-exam` 独立域。
-  - 考纲目录 `exam_catalog.py` 种子化与 `/api/exams/catalog` 路由上线。
-  - 泛化模考成绩表 `exam_trials` 上线并幂等迁移历史记录。
-- 测试基线：**v5.2.0 全量 559 全绿**（实测 113.7s），10/10 `tools/*.mjs` 探针全绿；pre-commit 密钥守卫有效，工作区干净。
-- 下一步待办：Android APK 打包验证与 GitHub Releases 资产发布、更高等级（B1/TestDaF）考场数据扩充。
+- 分支 `master`（HEAD: 路线 B 落地）。
+- **重大里程碑**：
+  1. **ADR-0005 备考域 Phase 1 全量落地（PR #25 已合入 master）**：
+     - 「场景工具 + 独立备考域」双带架构落地，A1 听说读写各模块迁入 `view-exam` 独立域。
+     - 考纲目录 `exam_catalog.py` 种子化与 `/api/exams/catalog` 路由上线。
+     - 泛化模考成绩表 `exam_trials` 上线并幂等迁移历史记录。
+  2. **路线 B 落地：背词工作台视觉 Token 归一与考纲词表契约（台账 6/6 全绿）**：
+     - Academic Modern Editorial 共享 Token 层抽离（`static/css/tokens.css`）。
+     - 背词工作台（`workbench.html`）全面移植暖纸墨水 Editorial 配色与排印，暗色模式暖调化。
+     - 考纲与生词只读契约端点 `GET /api/cards/vocab` 上线并具备内存级解析缓存。
+     - 工作台顶栏扩展「⭐ A1 核心 / A1 全量 / 精读生词」三档位，保持 13 条切片护栏 100% 零漂移。
+- 测试基线：**全量 565 全绿**（116.45s，基线 559 -> 565 +6），10/10 `tools/*.mjs` 探针全绿；pre-commit 密钥守卫有效，工作区干净。
+- 下一步待办：路线 C（24 维语法雷达与精读长难句 AST 闭环）。
 
 ## 本项目高频坑（详见 AGENTS.md 对应节）
 
