@@ -10,14 +10,14 @@
 
 ## 任务执行清单
 
-| 任务序号 | 任务描述 | 责任角色 | 状态 | 关联提交 | 验证结果 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Task 1** | 建立实施计划执行台账与回归基线 | Guard | 完成 | `03b9cb1` | pytest 全量 565 passed (112.00s) + Node.js 探针 10/10 全绿（含 13/13 切片护栏） |
-| **Task 2** | 全局字体族体系与画布排版规范化 | Frontend TDD Builder | 完成 | `96a68c7` | `test_workbench_editorial_typography_contract` + 84 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
-| **Task 3** | 心流优先轻量化出版物导航与顶栏重塑 | Frontend TDD Builder | 完成 | `54df538` | `test_workbench_editorial_navigation_contract` + 85 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
-| **Task 4** | Zettelkasten 实体学术卡片箱与矿物印章评分座重塑 | Frontend TDD Builder | 完成 | `41cafbd` | `test_workbench_zettelkasten_card_and_stamp_buttons_contract` + 86 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS |
-| **Task 5** | 自测题与词库辅助视图 Editorial 风格细化 | Frontend TDD Builder | 完成 | 待提交 | `test_workbench_editorial_secondary_views_contract` + 87 pytest 全绿 + 13/13 探针切片全绿 + 10/10 探针全绿 + Reviewer PASS |
-| **Task 6** | 全量回归闭环、Ledger 收口与交付报告 | Guard | 待开始 | - | 待执行（全量回归全绿、工作记忆同步） |
+| 任务序号   | 任务描述                                        | 责任角色             | 状态 | 关联提交  | 验证结果                                                                                                                   |
+| :--------- | :---------------------------------------------- | :------------------- | :--- | :-------- | :------------------------------------------------------------------------------------------------------------------------- |
+| **Task 1** | 建立实施计划执行台账与回归基线                  | Guard                | 完成 | `03b9cb1` | pytest 全量 565 passed (112.00s) + Node.js 探针 10/10 全绿（含 13/13 切片护栏）                                            |
+| **Task 2** | 全局字体族体系与画布排版规范化                  | Frontend TDD Builder | 完成 | `96a68c7` | `test_workbench_editorial_typography_contract` + 84 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS                       |
+| **Task 3** | 心流优先轻量化出版物导航与顶栏重塑              | Frontend TDD Builder | 完成 | `54df538` | `test_workbench_editorial_navigation_contract` + 85 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS                       |
+| **Task 4** | Zettelkasten 实体学术卡片箱与矿物印章评分座重塑 | Frontend TDD Builder | 完成 | `41cafbd` | `test_workbench_zettelkasten_card_and_stamp_buttons_contract` + 86 pytest 全绿 + 13/13 探针切片全绿 + Reviewer PASS        |
+| **Task 5** | 自测题与词库辅助视图 Editorial 风格细化         | Frontend TDD Builder | 完成 | `f612a08` | `test_workbench_editorial_secondary_views_contract` + 87 pytest 全绿 + 13/13 探针切片全绿 + 10/10 探针全绿 + Reviewer PASS |
+| **Task 6** | 全量回归闭环、Ledger 收口与交付报告             | Guard                | 完成 | `f75c262` | pytest 全量 569 passed (116.99s) + Node.js 探针 10/10 全绿（含 13/13 切片护栏 100% 保护）                                  |
 
 ---
 
@@ -45,6 +45,38 @@
   9. `wb_rtc_reconnect_probe.mjs` - PASS
   10. `wb_sync_probe.mjs` - PASS
 - **结论**：动态状态机行为与离线切片契约完整保持。
+
+---
+
+## 实施后全量回归证据记录 (Post-Implementation Verification Evidence)
+
+### 1. pytest 全量回归结果
+
+- **执行命令**：`pytest -q`
+- **执行耗时**：`116.99s (0:01:56)`
+- **执行结果**：`569 passed, 1 warning in 116.99s`
+- **增量分析**：基线 565 passed -> 569 passed (+4 新增视觉/排印/印章/自测视图契约测试，0 失败，0 破坏)。
+  - `test_workbench_editorial_typography_contract` (Task 2)
+  - `test_workbench_editorial_navigation_contract` (Task 3)
+  - `test_workbench_zettelkasten_card_and_stamp_buttons_contract` (Task 4)
+  - `test_workbench_editorial_secondary_views_contract` (Task 5)
+- **结论**：全站后端服务、路由契约、打包守卫与前端/工作台测试套件 100% 全绿。
+
+### 2. Node.js 行为级探针最终全量回归
+
+- **执行命令**：`Get-ChildItem tools/*.mjs | ForEach-Object { node $_.FullName }`
+- **执行结果**：10/10 探针全部通过（全部 exit code 0，含 13/13 处切片护栏 100% 保护）：
+  1. `ia_dom_mount_probe.mjs` - PASS (A1 五模块在 view-exam 挂载，旧工具视图删净，渲染目标指向备考域容器)
+  2. `wb_merge_probe.mjs` - PASS (多设备进度合并与别名迁移幂等稳定)
+  3. `wb_pair_persist_probe.mjs` - PASS (配对凭证持久化与一键撤销)
+  4. `wb_pair_push_probe.mjs` - PASS (静默双向同步 GET 拉取 + PUT 推送)
+  5. `wb_phone_pull_probe.mjs` - PASS (手机端静默镜像拉取与合并)
+  6. `wb_phone_pull_silent_probe.mjs` - PASS (后台 pull 静默合并，显式导入弹通知)
+  7. `wb_queue_probe.mjs` - PASS (13/13 处代码切片护栏通过，7 组动态状态机场景全部验证通过)
+  8. `wb_rtc_connect_probe.mjs` - PASS (WebRTC DataChannel 收发信封与静默合并)
+  9. `wb_rtc_reconnect_probe.mjs` - PASS (断线自动重建，上限降级与 HTTP 兜底)
+  10. `wb_sync_probe.mjs` - PASS (PUT body 带 payload 包装与服务端契约一致)
+- **结论**：动态状态机行为与离线切片契约完整保持，13 条切片护栏零漂移。
 
 ---
 

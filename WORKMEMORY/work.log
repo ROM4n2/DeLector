@@ -90,3 +90,18 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 考纲词库契约端点扩展：新增 GET /api/cards/vocab?cefr={level}&scope={core|all|reader} 端点及 database.py 查询与内存缓存机制，平滑对接 A1 核心/全量及精读生词。
 4. 工作台范围选择器对接：顶栏分段控件更新为「⭐ A1 核心 / A1 全量 / 精读生词」，inScopeWord 严格遵从 wordFilters.scope 单一真实源并保障切片护栏正则兼容性，支持离线静默降级与 HTTP 精读生词增量同步。
 5. 全量回归证据：全量 pytest 565 全绿（无回归，基线 559 -> 565），10/10 Node.js 行为探针（含 13/13 条切片护栏）100% 全绿。
+
+### 2026-09-04 21:29 | gemini-3-8-flash__antigravity | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：执行 ADR-0006 实施计划——背词工作台实体学术卡片箱 (Zettelkasten) 与心流优先重塑（Task 1 至 Task 6）。
+不做范围：破坏 iframe 边界、合并 workbench 到主站 SPA、破坏 13 条探针切片护栏、更改交互 DOM ID。
+
+### 2026-09-04 21:58 | gemini-3-8-flash__antigravity | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+ADR-0006（背词工作台实体学术卡片箱与心流优先重塑）实施完毕（Task 1 至 Task 6 全闭环）：
+1. 字体与画布排版规范化：清除硬编码中文字体与 Georgia，全量接入 --sans/--serif/--mono，画布收敛为 960px 实体期刊规格。
+2. 导航与顶栏心流优先：重塑出版物下划线轻量 Tab 导航与聚焦顶栏，剥离厚重大阴影与大圆角容器。
+3. Zettelkasten 实体卡片：纯白纸张层叠翻转抽认卡、40px 衬线词头与典雅排印。
+4. 矿物植物印章评分座：浅柔彩调底座 + 键盘快捷键角标，彻底淘汰纯红绿黄粗厚色块。
+5. 辅助视图 Editorial 风格细化：自测题选项、拼写输入框、KPI 统计与词库浏览表墨水化装订。
+6. 回归证据闭环：全量 pytest 569 全绿（116.99s，基线 565 -> 569 +4，零失败），10/10 Node.js 动态行为探针全绿（含 13/13 切片护栏 100% 保护通过）。
