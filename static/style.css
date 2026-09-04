@@ -3248,6 +3248,19 @@ body.drawer-open .shadow-player {
   transform: translateY(-2px);
 }
 
+.exam-module-count {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper-deep);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--ink);
+  vertical-align: middle;
+}
+
 .cards-view-toggle {
   display: inline-flex;
   border: 1.5px solid var(--ink);

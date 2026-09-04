@@ -228,6 +228,7 @@ from routes_rtc import router as rtc_router
 from routes_corpus import router as corpus_router
 from routes_a1_hoeren import hoeren_router
 from routes_a1_lesen import lesen_router
+from routes_exam import router as exam_router
 
 # --- 4. FastAPI Application ---
 app = FastAPI(title="DeLector")
@@ -237,6 +238,7 @@ app.include_router(rtc_router)
 app.include_router(corpus_router)
 app.include_router(hoeren_router)
 app.include_router(lesen_router)
+app.include_router(exam_router)
 init_db()
 seed_preset_articles()
 

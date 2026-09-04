@@ -266,3 +266,73 @@ def test_exam_module_mount_probe():
     )
     assert out["dynamic"]["vocabDeckTarget"] == "exam-cards-container"
     assert out["dynamic"]["vocabGridTarget"] == "exam-cards-container"
+
+
+# ── Task 3：exam catalog 目录化（前端数据补强接线） ─────────────────────────
+
+def test_exam_catalog_fetch_wired_in_main_js():
+    """initExamCatalog 接线：fetch /api/exams/catalog + 失败回退 + 惰性触发。
+
+    切函数体级断言（static-string-assertion-dead-test 教训）：三要素必须
+    落在 initExamCatalog 自己的函数体切片里，写进别的函数不算。
+    """
+    m = re.search(r"(?:async\s+)?function\s+initExamCatalog\s*\(", _MAIN_JS)
+    assert m, "main.js 缺少 initExamCatalog()（Task 3 catalog 数据补强入口）"
+    body = _MAIN_JS[m.end():_MAIN_JS.index("\nfunction ", m.end())]
+    assert '"/api/exams/catalog"' in body, (
+        "initExamCatalog 必须调用 api('/api/exams/catalog')"
+    )
+    assert "catch" in body and "console.debug" in body, (
+        "initExamCatalog 必须有失败回退分支（静默 console.debug，不弹错）"
+    )
+    assert "_examCatalogDone" in body, (
+        "initExamCatalog 必须有已初始化守卫（惰性触发一次）"
+    )
+
+
+def test_exam_catalog_lazy_trigger_on_show_exam():
+    """show('exam') 分支必须惰性触发 catalog 初始化。"""
+    body = _MAIN_JS.split("export function show(")[1].split("\nexport ")[0]
+    assert "lazyInitExamCatalog" in body, (
+        "show() 的 view === 'exam' 分支缺 lazyInitExamCatalog()（catalog 不会自动加载）"
+    )
+
+
+def test_exam_catalog_does_not_rewrite_panel_routing():
+    """catalog 渲染只做数据补强，不得改写 setExamModule 的面板路由接线。
+
+    静态接线（面板 section id + exam-card-* onclick）是 Task 2 契约，
+    catalog 数据驱动不得重挂/替换面板跳转机制。
+    """
+    body = _MAIN_JS.split("export function setExamModule(")[1].split("\nexport ")[0]
+    for frag in (
+        '"exam-writing"', '"exam-cards-family"', "setA1Mode", "setExamWritingTab",
+    ):
+        assert frag in body, "setExamModule mediator 被改动（缺 %s）" % frag
+
+
+def test_exam_catalog_count_badge_css_exists():
+    """style.css 有 .exam-module-count 徽标规则（切到声明块本身）。"""
+    m = re.search(r"\.exam-module-count\s*\{([^{}]*)\}", _CSS)
+    assert m, "style.css 缺少 .exam-module-count 徽标规则"
+
+
+def test_exam_catalog_new_level_tabs_not_dead_buttons():
+    """catalog 追加的非静态页签必须有接线或显式禁用标注（v5.1.0 死按钮前科）。
+
+    新增等级面板尚未接入 setExamModule mediator，故契约 = no-op onclick
+    （占位接线）+ title「待接入」提示 + aria-disabled 标注，缺一即红。
+    切 initExamCatalog 等级页签分支的函数体级断言。
+    """
+    m = re.search(r"(?:async\s+)?function\s+initExamCatalog\s*\(", _MAIN_JS)
+    assert m, "main.js 缺少 initExamCatalog()"
+    body = _MAIN_JS[m.end():_MAIN_JS.index("\nfunction ", m.end())]
+    assert 'btn.title = "该等级模块待接入"' in body, (
+        "新增等级页签缺 title 待接入提示（静默死按钮纪律违规）"
+    )
+    assert 'aria-disabled' in body, (
+        "新增等级页签缺 aria-disabled 禁用标注"
+    )
+    assert "btn.onclick" in body, (
+        "新增等级页签缺 onclick 占位（no-op 接线，待该等级模块接入后替换）"
+    )
