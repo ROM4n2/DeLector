@@ -79,10 +79,18 @@
 
 ## Task 4: exam_trials 泛化表
 
-- [ ] Step 1: test_exam_trials.py RED（幂等/透传/备份往返）
-- [ ] Step 2: 表 + 函数 + 迁移 + _PROGRESS_TABLES + RestoreReq GREEN
-- [ ] Step 3: routes_a1_hoeren/lesen 回归
-- [ ] Step 4: commit
+- [x] Step 1: test_exam_trials.py RED（9 failed：AttributeError/OperationalError，符合预期）
+- [x] Step 2: 表 + 函数 + 迁移 + _PROGRESS_TABLES + RestoreReq GREEN
+- [x] Step 3: routes_a1_hoeren/lesen 回归 + 迁移幂等验证
+- [x] Step 4: commit `af93df0`
+
+**评审期间发现并修复真缺陷（MUST 级）**：
+- migrate 幂等谓词原 `==`，透传后旧表冻结+新表随成绩单调增，「迁移后又做一次成绩再重启」场景 general=legacy+1 误判未迁移→整表重插（真实时序复现 count 3→5）。改为 `>=`，新增 test_migrate_after_new_grade_does_not_duplicate 钉死。db_progress_conn 单事务保证半迁回滚。
+
+**偏差注记**：
+- 首个评审子代理因 429 截断；编排者亲自复现缺陷后补派聚焦评审确认修复与无遗漏（PASS）。
+- server.py 加 restore 后迁移调用（v5.1 备份无 exam_trials 键时历史仍可见）——计划未列，属必要补漏。
+- test_server.py clean_db env 双钉修复（收集顺序健壮性），与 Task 0 test_audit_hardening 修复同源模式。
 
 ## Task 5: 收口
 
