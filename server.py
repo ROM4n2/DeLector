@@ -42,7 +42,7 @@ def load_env():
 load_env()
 
 # --- 1. Database & Settings Layer ---
-from database import (
+from delector.database import (
     DATA_DIR,
     AUDIO_CACHE_DIR,
     PROGRESS_DB_PATH,

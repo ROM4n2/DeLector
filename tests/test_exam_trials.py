@@ -24,7 +24,7 @@ os.environ["PROGRESS_DB_PATH"] = "test_exam_trials_progress.db"
 from fastapi.testclient import TestClient  # noqa: E402
 
 from server import app, init_db, get_progress_db  # noqa: E402
-import database  # noqa: E402
+from delector import database  # noqa: E402
 
 _DB = "test_exam_trials_delector.db"
 _PDB = "test_exam_trials_progress.db"
@@ -249,7 +249,7 @@ def test_migrate_after_new_grade_does_not_duplicate():
 def test_backup_payload_contains_exam_trials():
     database.record_exam_trial(
         "A1", "hoeren", db_path=_PDB, **_HOEREN_FIELDS)
-    from database import build_backup_payload
+    from delector.database import build_backup_payload
     payload = build_backup_payload()
     assert "exam_trials" in payload
     assert len(payload["exam_trials"]) == 1

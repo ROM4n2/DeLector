@@ -96,7 +96,7 @@ def check_data_and_backup():
     scan_section("2. 数据架构与备份自洽性 (Data Architecture & Backup Integrity)")
     
     try:
-        from database import _BACKUP_TABLES, init_db
+        from delector.database import _BACKUP_TABLES, init_db
         
         # 探测实际数据库 DDL 表与列（使用专属临时库并在作用域外安全关闭）
         test_db = ROOT / ".cache" / f"temp_scan_db_{os.getpid()}.sqlite"
@@ -151,7 +151,7 @@ def check_db_concurrency():
     scan_section("3. 数据库并发与锁防护 (Database Concurrency & Locking)")
     
     try:
-        from database import get_db
+        from delector.database import get_db
         with get_db() as conn:
             jmode = conn.execute("PRAGMA journal_mode").fetchone()[0]
             btimeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]

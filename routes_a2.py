@@ -5,7 +5,7 @@ Endpoints for A2 Wortliste (974 vocab).
 """
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter
-from database import get_vocab_by_cefr
+from delector.database import get_vocab_by_cefr
 
 router = APIRouter(prefix="/api/a2", tags=["Goethe A2"])
 

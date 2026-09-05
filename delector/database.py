@@ -18,7 +18,13 @@ import html as _html
 
 from delector.nlp import process_german_text
 
-DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", os.path.dirname(__file__))
+# 这里的 os.path.dirname(__file__) 指的是**本包目录**，不是仓库根 —— 本模块已经
+# 搬进 delector/ 了。delector.db / progress.db 都挂在 DATA_DIR 下面，指错一级
+# 就等于让它们换个地方重建：桌面端没有 DELECTOR_DATA_DIR 兜底（Android 由
+# MainActivity 注入），用户看到的效果是"升级之后数据全没了"，而本地测试照样全绿。
+# 所以显式回指一级。这条语义由 tests/test_backend_package_layout.py 钉住，别改回去。
+_PKG_DIR = os.path.dirname(__file__)
+DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", os.path.dirname(_PKG_DIR))
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, ".cache", "audio")
 try:
     os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
@@ -1079,7 +1085,7 @@ def _load_a1_workbench_words() -> List[Dict[str, Any]]:
 
     words: List[Dict[str, Any]] = []
     workbench_paths = [
-        os.path.join(os.path.dirname(__file__), "static", "german", "workbench.html"),
+        os.path.join(DATA_DIR, "static", "german", "workbench.html"),
         os.path.join(DATA_DIR, "static", "german", "workbench.html"),
     ]
     loaded = False

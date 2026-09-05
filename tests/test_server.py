@@ -4183,7 +4183,7 @@ def test_get_vocab_by_cefr_level(client):
 
 
 def test_corpus_syntax_stats_db_contract(tmp_path):
-    from database import init_progress_db, upsert_corpus_syntax_stats, get_all_corpus_syntax_stats
+    from delector.database import init_progress_db, upsert_corpus_syntax_stats, get_all_corpus_syntax_stats
     test_db = tmp_path / "test_syntax_progress.db"
     init_progress_db(db_path=str(test_db))
 

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from delector import a1_dict
 from delector import a1_writing_dict
-from database import export_a1_anki_deck
+from delector.database import export_a1_anki_deck
 from delector.writing_rules import check_a1_formular_answer, analyze_a1_email
 
 router = APIRouter(prefix="/api/a1", tags=["Goethe A1"])

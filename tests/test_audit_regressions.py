@@ -94,7 +94,7 @@ def test_security_port_restrictions():
 def test_a1_grade_populates_study_log():
     """record_a1_*_trial must write to study_log AND daily_summary counters."""
     import os, sqlite3, time
-    from database import record_a1_hoeren_trial, record_a1_lesen_trial, init_progress_db
+    from delector.database import record_a1_hoeren_trial, record_a1_lesen_trial, init_progress_db
     tmp = "test_a1_study_log.db"
     for suffix in ("", "-wal", "-shm"):
         p = tmp + suffix

@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 os.environ.setdefault("DATABASE_PATH", "test_pkg_layout_delector.db")
 os.environ.setdefault("PROGRESS_DB_PATH", "test_pkg_layout_progress.db")
 
-from database import DATA_DIR  # noqa: E402
+from delector.database import DATA_DIR  # noqa: E402
 from server import STATIC_DIR  # noqa: E402
 
 

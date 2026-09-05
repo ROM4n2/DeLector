@@ -12,7 +12,7 @@ from delector.a1_lesen_dict import (
     get_lesen_set_by_id,
     grade_lesen_answers
 )
-from database import (
+from delector.database import (
     record_a1_lesen_trial,
     get_a1_lesen_history
 )
