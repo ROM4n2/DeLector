@@ -485,7 +485,10 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 
 ## 已知问题 / 待办
 
-> 更新时间：2026-08-30（v4.8.3 已发布）
+> 更新时间：2026-09-05（v5.3.0 已发布）
+
+- [ ] **v5.3.0 已打 tag 并 push（bump commit `9341b43`）**：Windows/macOS/Linux 便携包与 Android APK 待打包、GitHub Release 资产待补录（README 下载表已标注「源码版·打包中」）。
+- [ ] **新功能候选（PROJECT_OVERVIEW 2026-09-05 快照）**：多模态听力微训 或 语料长难句强化 立项。
 
 - [x] ~~**Android 16 上「导出全量备份 .json」等四个下载入口报「下载异常」**~~ — v4.7.3 已修复并发布。
       根因：WebView 的 `setDownloadListener` 回调里用 `DownloadManager` + `setDestinationInExternalPublicDir`
