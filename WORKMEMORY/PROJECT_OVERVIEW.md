@@ -11,7 +11,7 @@
 
 ## 必读锚点（按需深入）
 
-- `AGENTS.md`（项目根）：agent 入门快照——WORKMEMORY 约定、交接快照、文档路由、红线速查、Agent 工作惯例、开放待办（2026-09-05 瘦身，229KB → 11.5KB）。架构细节在 `docs/agents/architecture.md`，安全/本机环境在 `docs/agents/ops.md`，版本历史在 README Roadmap。
+- `AGENTS.md`（项目根）：**纯路由入口**（2026-09-05 二轮瘦身，~30 行）——只有 WORKMEMORY 约定与文档路由。架构在 `docs/agents/architecture.md`，安全/环境/工作惯例在 `docs/agents/ops.md`，版本历史在 README Roadmap。状态、红线、待办都在本文件，勿往 AGENTS 回填。
 - `FEATURES.md`：产品特性全览。
 - `docs/specs/`、`docs/plans/`：设计与实施计划（含 ledger）。
 - ADR 存于 vault：`vault://08-Projects/DeLector/01-ADR/`（0001 工作台核心词 / 0002 scope 控制 / 0004 LAN 同步 Stage B / 0005 导航重布局与多等级可扩展，未提交状态）。
@@ -47,14 +47,22 @@
      - 背词工作台（`workbench.html`）顶栏扩展第 4 档位「📘 A2 词库」，异步按需同步服务端 A2 词条并持久化到本地进度，13/13 处切片护栏 100% 绝对保护通过。
      - 备考域（`view-exam`）激活 A2 考纲选项卡，`a1_cards.js` 扩展支持 A2 考纲词卡（3D 扑克翻转、例句发音、网格模式、搜索过滤与加入复习盒）。
 - 测试基线：**全量 582 全绿**（137.53s，基线 574 -> 582 +8），10/10 `tools/*.mjs` 探针全绿（含 13/13 处切片护栏 100% 保护）；pre-commit 密钥守卫有效，工作区干净。
-- 下一步待办：多模态听力微训或语料长难句强化。
+- 发布面：正式版 **v5.3.0**（源码版）；Android versionName 5.3.0 / versionCode 50300（CI 从 tag 推导）；桌面端正常，`python start.py` → `http://localhost:8000`。
+- **开放待办**：① v5.3.0 打包资产——Windows/macOS/Linux 便携包与 Android APK 待打包、GitHub Release 资产待补录（README 下载表已标注「源码版·打包中」）；② 新功能候选：多模态听力微训 / 语料长难句强化立项。
 
-## 本项目高频坑（详见 `docs/agents/architecture.md` 与 AGENTS.md 红线速查）
+## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 
 1. NLP 降级路径**静默**切到纯 Python 时语法标注会**给错**（不是精度低，是错）——改标注逻辑前看 `nlp_engine` 字段。
-2. Android 侧 spaCy 模型加载有三级回退 + `extractPackages` 三包缺一不可；`spacy.load("名称")` 在 Android 上必炸。
-3. `app.mount("/", StaticFiles(...))` 必须是 `server.py` 最后一个路由，否则全 API 405。
+2. `app.mount("/", StaticFiles(...))` 必须是 `server.py` 最后一个路由，否则全 API 405。
+3. Android 五项互锁（py3.10 / minSdk24 / spacy3.8.7 / CI spaCy pin / arm64-only）动一个查全部；`spacy.load("名称")` 在 Android 必炸，要用 `importlib.import_module(名称).load()`；`extractPackages` 三包缺一不可。
 4. versionCode 编码 `major*10000+minor*100+patch`，有测试守卫；keystore 只从环境变量读，丢失即包名报废。
+5. 发版先跑「版本面五件套」（sw.js / index.html / build.gradle / README / 本文件当前状态），`test_writer_mobile.py` 两条测试锁死；tag 必须打在含 bump 的 commit 上。
+6. `?v=` 查询串已退役：缓存闸 = 服务端 `Cache-Control: no-cache` + 安卓 `static.version` 重解包。
+7. 敏感设置与删除操作仅 127.0.0.1 可写（`_require_localhost`），局域网 403；新端点遵守该闸。
+8. pre-commit 密钥扫描必须启用，禁 `--no-verify`。
+9. import 期不得联网、不得抛异常（Android 启动卡死的历史根因）。
+10. 切句只有 `syntax_tree.split_sentences_pure_python()` 一处实现，别造第二份。
+11. 跨边界契约（前端 body ↔ 后端模型）必须行为探针验证，字符串存在断言是死测（2026-09-02 事故）。
 
 ## 工作方式
 
