@@ -10062,3 +10062,27 @@ body.drawer-open .companion {
   background: #1b7f4d;
   border-color: #1b7f4d;
 }
+
+/* ── Grammatik-Radar (路线 C) ── */
+.grammar-radar-panel summary::-webkit-details-marker {
+  color: var(--muted);
+}
+.grammar-radar-panel[open] summary {
+  margin-bottom: 0.5rem;
+}
+.radar-legend {
+  font-family: var(--mono, monospace);
+  font-size: 0.725rem;
+  line-height: 1.4;
+  color: var(--pencil);
+}
+.radar-axis {
+  stroke: var(--line, rgba(21, 20, 15, 0.16));
+  stroke-width: 1;
+}
+.radar-label {
+  font-family: var(--mono, monospace);
+  font-size: 0.65rem;
+  fill: var(--pencil, #5c554b);
+}
+

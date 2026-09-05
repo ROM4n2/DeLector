@@ -1147,6 +1147,12 @@ export function openSyntaxDrawerForSentence(sentId) {
     treeContainer.innerHTML = renderClauseTreeNode(sent.clause_tree, 0, sentId);
   }
 
+  // Grammatik-Radar (路线 C): 计算文章句法统计并联动异步持久化与渲染
+  if (state.currentArticle?.sentences && state.currentArticle?.id) {
+    const stats = computeArticleSyntaxStats(state.currentArticle.sentences);
+    saveAndRenderSyntaxRadar(state.currentArticle.id, stats);
+  }
+
   openDrawer("syntax");
 }
 
@@ -1252,6 +1258,141 @@ export function computeArticleSyntaxStats(sentences) {
   };
 }
 
+export function renderRadarSvg(current, historical) {
+  const cur = current || {};
+  const hist = historical || null;
+
+  const cx = 110;
+  const cy = 110;
+  const radius = 75;
+  const labelRadius = 92;
+
+  // 4 dimensions:
+  // 1. 嵌套深度: normalize min 1.0, max 4.0 -> clamp [0, 1]
+  // 2. 被动率: max 0.5 -> clamp [0, 1]
+  // 3. Konj.II率: max 0.5 -> clamp [0, 1]
+  // 4. VL句式: max 0.6 -> clamp [0, 1]
+  const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+
+  const normDepth = (d) => clamp01(((Number(d) || 1.0) - 1.0) / 3.0);
+  const normPassive = (p) => clamp01((Number(p) || 0) / 0.5);
+  const normKonj = (k) => clamp01((Number(k) || 0) / 0.5);
+  const normVl = (v) => clamp01((Number(v) || 0) / 0.6);
+
+  // Angles: North, East, South, West: -PI/2, 0, PI/2, PI
+  const angles = [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
+
+  // Grid lines: 3 concentric circles or polygons at r = 25, 50, 75
+  const gridRadii = [25, 50, 75];
+  let gridSvg = "";
+  for (const r of gridRadii) {
+    const gridPoints = angles.map((ang) => {
+      const x = cx + r * Math.cos(ang);
+      const y = cy + r * Math.sin(ang);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    gridSvg += `<polygon points="${gridPoints}" fill="none" stroke="var(--line-soft, #d8d0c2)" stroke-width="1" stroke-dasharray="2,2"/>`;
+  }
+
+  // 4 radial axis lines from center to outer web
+  let axisSvg = "";
+  for (const ang of angles) {
+    const x2 = cx + radius * Math.cos(ang);
+    const y2 = cy + radius * Math.sin(ang);
+    axisSvg += `<line class="radar-axis" x1="${cx}" y1="${cy}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="var(--line, rgba(21,20,15,0.16))" stroke-width="1"/>`;
+  }
+
+  // 4 labels placed outside axes at r = 92
+  const labels = [
+    { text: `深度 (${(cur.avg_clause_depth || 0).toFixed(1)})`, anchor: "middle", baseline: "baseline" },
+    { text: `被动 (${Math.round((cur.passive_rate || 0) * 100)}%)`, anchor: "start", baseline: "middle" },
+    { text: `Konj (${Math.round((cur.konjunktiv_rate || 0) * 100)}%)`, anchor: "middle", baseline: "hanging" },
+    { text: `VL (${Math.round((cur.vl_rate || 0) * 100)}%)`, anchor: "end", baseline: "middle" },
+  ];
+
+  let labelSvg = "";
+  for (let i = 0; i < angles.length; i++) {
+    const ang = angles[i];
+    const lx = cx + labelRadius * Math.cos(ang);
+    const ly = cy + labelRadius * Math.sin(ang);
+    const item = labels[i];
+    labelSvg += `<text class="radar-label" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${item.anchor}" dominant-baseline="${item.baseline}">${esc(item.text)}</text>`;
+  }
+
+  // Helper to compute points from data
+  function computePoints(data) {
+    const vals = [
+      normDepth(data.avg_clause_depth),
+      normPassive(data.passive_rate),
+      normKonj(data.konjunktiv_rate),
+      normVl(data.vl_rate),
+    ];
+    return vals.map((norm, i) => {
+      const r = norm * radius;
+      const x = cx + r * Math.cos(angles[i]);
+      const y = cy + r * Math.sin(angles[i]);
+      return { x, y };
+    });
+  }
+
+  // Historical polygon
+  let histSvg = "";
+  if (hist && (hist.total_articles || 0) > 0) {
+    const histPts = computePoints(hist);
+    const histPtsStr = histPts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    histSvg = `<polygon points="${histPtsStr}" stroke="var(--muted, #8c8477)" stroke-dasharray="3,3" fill="none" stroke-width="1.5"/>`;
+  }
+
+  // Current polygon and vertices
+  const curPts = computePoints(cur);
+  const curPtsStr = curPts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const curPoly = `<polygon points="${curPtsStr}" stroke="var(--accent, #c14a2b)" stroke-width="2" fill="var(--accent, #c14a2b)" fill-opacity="0.25"/>`;
+
+  let curVertices = "";
+  for (const pt of curPts) {
+    curVertices += `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3" fill="var(--accent, #c14a2b)"/>`;
+  }
+
+  return `${gridSvg}${axisSvg}${histSvg}${curPoly}${curVertices}${labelSvg}`;
+}
+
+export async function saveAndRenderSyntaxRadar(articleId, stats) {
+  if (!articleId || !stats) return;
+  const svgEl = document.getElementById("grammar-radar-svg");
+  const legendEl = document.getElementById("grammar-radar-stats");
+  if (!svgEl) return;
+
+  // 1. Fire-and-forget background save
+  api("/api/syntax/stats", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ article_id: Number(articleId), stats }),
+  }).catch(() => {});
+
+  // 2. Fetch corpus historical stats
+  let hist = null;
+  try {
+    hist = await api("/api/syntax/stats");
+  } catch (e) {
+    hist = null;
+  }
+
+  // 3. Render SVG
+  svgEl.innerHTML = renderRadarSvg(stats, hist);
+
+  // 4. Update legend
+  if (legendEl) {
+    const artCount = hist?.total_articles || 0;
+    legendEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--accent);margin-right:4px;border-radius:2px;opacity:0.6;"></span>当前文献 (句数: ${Number(stats.sent_count || 0)})</span>
+        <span>${artCount > 0 ? `<span style="display:inline-block;width:10px;border-top:2px dashed var(--muted);margin-right:4px;vertical-align:middle;"></span>语料均值 (${Number(artCount)}篇)` : ''}</span>
+      </div>
+    `;
+  }
+}
+
 if (typeof window !== "undefined") {
   window.deleteArticle = deleteArticle;
 }
+

@@ -64,3 +64,88 @@ def test_reader_compute_article_syntax_stats_and_hover_binding():
         "sentWrapper in renderArticle must no longer contain the old .sent-syntax-btn button"
     )
 
+
+def test_render_radar_svg_and_radar_panel_integration():
+    reader_js = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")
+    style_css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+
+    # 1. Assert renderRadarSvg and saveAndRenderSyntaxRadar are exported
+    assert "export function renderRadarSvg(" in reader_js, (
+        "renderRadarSvg must be exported from static/js/reader.js"
+    )
+    assert "export async function saveAndRenderSyntaxRadar(" in reader_js, (
+        "saveAndRenderSyntaxRadar must be exported from static/js/reader.js"
+    )
+
+    # 2. Assert openSyntaxDrawerForSentence calls saveAndRenderSyntaxRadar
+    open_syntax_drawer_start = reader_js.find("export function openSyntaxDrawerForSentence(")
+    assert open_syntax_drawer_start != -1, "openSyntaxDrawerForSentence must exist"
+    open_syntax_drawer_end = reader_js.find("export function ", open_syntax_drawer_start + 30)
+    if open_syntax_drawer_end == -1:
+        open_syntax_drawer_end = len(reader_js)
+    open_syntax_fn_body = reader_js[open_syntax_drawer_start:open_syntax_drawer_end]
+    assert "saveAndRenderSyntaxRadar(" in open_syntax_fn_body, (
+        "openSyntaxDrawerForSentence must invoke saveAndRenderSyntaxRadar"
+    )
+
+    # 3. Assert CSS styles for radar panel, legend, and labels
+    assert ".radar-legend" in style_css, ".radar-legend must be present in static/style.css"
+    assert "#grammar-radar-panel" in style_css or ".grammar-radar-panel" in style_css, (
+        "#grammar-radar-panel or .grammar-radar-panel must be present in static/style.css"
+    )
+    assert ".radar-label" in style_css or ".radar-axis" in style_css or "radar" in style_css, (
+        "Radar styles must be present in static/style.css"
+    )
+
+    # 4. Test renderRadarSvg with Node.js execution
+    import subprocess
+    import json
+
+    # Extract renderRadarSvg and a mock esc function to run in pure Node.js
+    radar_fn_start = reader_js.find("export function renderRadarSvg(")
+    assert radar_fn_start != -1, "renderRadarSvg definition must exist"
+    radar_fn_end = reader_js.find("export async function saveAndRenderSyntaxRadar(", radar_fn_start)
+    assert radar_fn_end != -1, "saveAndRenderSyntaxRadar must follow renderRadarSvg"
+    radar_fn_code = reader_js[radar_fn_start:radar_fn_end].replace("export function renderRadarSvg", "function renderRadarSvg")
+
+    test_js = f"""
+    const esc = (s) => String(s);
+    {radar_fn_code}
+    const current = {{
+      avg_clause_depth: 2.5,
+      passive_rate: 0.2,
+      konjunktiv_rate: 0.1,
+      vl_rate: 0.3,
+      sent_count: 10
+    }};
+    const historical = {{
+      avg_clause_depth: 2.0,
+      passive_rate: 0.15,
+      konjunktiv_rate: 0.05,
+      vl_rate: 0.25,
+      total_articles: 5
+    }};
+    const svg = renderRadarSvg(current, historical);
+    console.log(JSON.stringify(svg));
+    """
+    res = subprocess.run(
+        ["node", "--input-type=module"],
+        input=test_js,
+        capture_output=True,
+        text=True,
+        encoding="utf-8"
+    )
+    assert res.returncode == 0, f"Node execution failed: {res.stderr}"
+    svg_output = json.loads(res.stdout.strip())
+
+    # Verify that the generated SVG contains polygon, labels for 4 axes, current & historical polygons
+    assert "<polygon" in svg_output, "SVG must contain <polygon>"
+    assert "深度" in svg_output or "avg_clause_depth" in svg_output, "SVG must contain 深度 axis label"
+    assert "被动" in svg_output or "passive" in svg_output, "SVG must contain 被动 axis label"
+    assert "Konj" in svg_output or "konjunktiv" in svg_output, "SVG must contain Konj axis label"
+    assert "VL" in svg_output, "SVG must contain VL axis label"
+    # Should contain current polygon with accent and historical with muted/dashed
+    assert "var(--accent" in svg_output or "#c14a2b" in svg_output, "SVG must style current polygon with accent"
+    assert "stroke-dasharray" in svg_output, "SVG must contain dashed stroke for historical polygon"
+
+
