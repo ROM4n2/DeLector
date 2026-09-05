@@ -9,8 +9,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-import a1_dict
-import a1_writing_dict
+from delector import a1_dict
+from delector import a1_writing_dict
 from database import export_a1_anki_deck
 from writing_rules import check_a1_formular_answer, analyze_a1_email
 

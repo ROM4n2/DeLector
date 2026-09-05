@@ -644,7 +644,7 @@ def test_wb_state_put_requires_valid_key(client):
 def test_lookup_core_vocab_hit_shared_no_news():
     """M4-2: 核心词库命中返回共享缓存条目（同 lemma 两次调用同一对象），
     变体/复数兜底路径命中同一 base 条目；字段与旧实现一致。"""
-    import core_dict
+    from delector import core_dict
     a = core_dict.lookup_core_vocab("Herausforderung")
     b = core_dict.lookup_core_vocab("Herausforderung")
     assert a is not None
@@ -671,7 +671,8 @@ def test_split_komposita_cached_fresh_equal_results():
 def test_m4_hot_path_lru_caches_structural():
     """M4-2 结构护栏：两处热路径底层实现必须挂 lru_cache（防回退成每次重算/新建）。"""
     import inspect
-    import core_dict, linguistics
+    from delector import core_dict
+    import linguistics
     assert "lru_cache" in inspect.getsource(core_dict._core_entry_cached)
     assert "lru_cache" in inspect.getsource(linguistics._split_komposita_json_cached)
     assert inspect.getsource(linguistics.split_komposita).count("json.loads") >= 1

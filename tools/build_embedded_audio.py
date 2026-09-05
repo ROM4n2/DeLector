@@ -36,7 +36,7 @@ TTS_VOICE = "de-DE-KatjaNeural"
 
 def _get_ordered_words(top: int) -> list:
     sys.path.insert(0, str(ROOT))
-    from core_dict import CORE_VOCAB_DB
+    from delector.core_dict import CORE_VOCAB_DB
 
     SKIP_POS = {"PREP", "CONJ", "ART", "PRON", "PART", "INT", "NUM", "INTERJ"}
     words = []

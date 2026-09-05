@@ -46,7 +46,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from core_dict import CORE_VOCAB_DB  # noqa: E402
+from delector.core_dict import CORE_VOCAB_DB  # noqa: E402
 from build_dict import _read_api_config  # noqa: E402  复用 .env 优先的配置解析
 
 # ── 目标词筛选 ──────────────────────────────────────────────────────────

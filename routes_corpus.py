@@ -5,7 +5,7 @@ DeLector - 官方真题语料库路由 (Official Exam Reading Corpus Router)
 """
 from typing import Optional
 from fastapi import APIRouter, HTTPException
-import corpus_dict
+from delector import corpus_dict
 
 router = APIRouter(prefix="/api/corpus", tags=["Corpus"])
 

@@ -1391,7 +1391,7 @@ def test_cloze_evaluation_ctest(client):
 
 def test_core_dict_and_offline_vocab_lookup(client):
     """Test offline Goethe core vocabulary lookup and CEFR tagging."""
-    from core_dict import lookup_core_vocab, get_core_cefr_level
+    from delector.core_dict import lookup_core_vocab, get_core_cefr_level
 
     # Direct core_dict module tests
     hit = lookup_core_vocab("Herausforderung")
@@ -1665,7 +1665,7 @@ def test_prep_dataset_integrity():
     那张缩合表：两份各自维护的话，一边认 zum 一边不认，正确数据会在这里被
     判成幻觉（实遇：animieren zu → "zum Nachdenken" 把测试挂掉）。
     """
-    from prep_dict import PREP_COLLOCATIONS
+    from delector.prep_dict import PREP_COLLOCATIONS
     accepted = _load_build_prep()._accepted_surface_forms
     assert len(PREP_COLLOCATIONS) >= 40
     for lemma, rows in PREP_COLLOCATIONS.items():
@@ -1708,8 +1708,8 @@ def test_prep_dataset_keys_all_exist_in_dictionary():
     prep_dict 仍带着 ratseln —— 查 rätseln 没搭配、查 ratseln 有，两边
     看起来都正常。生成器的 prune_unknown_lemmas 负责剔除，这里守住结果。
     """
-    from prep_dict import PREP_COLLOCATIONS
-    from core_dict import CORE_VOCAB_DB
+    from delector.prep_dict import PREP_COLLOCATIONS
+    from delector.core_dict import CORE_VOCAB_DB
     seed = set(_load_build_prep().SEED_COLLOCATIONS)
     orphans = [w for w in PREP_COLLOCATIONS if w not in CORE_VOCAB_DB and w not in seed]
     assert not orphans, f"这些词头不在词库里: {orphans[:10]}"

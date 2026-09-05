@@ -225,7 +225,7 @@ __all__ = [
     "MAX_SYNC_CACHE_ENTRIES",
 ]
 
-from core_dict import lookup_core_vocab
+from delector.core_dict import lookup_core_vocab
 from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
                          lookup_prep_collocations, build_prep_matrix)
 from syntax_tree import analyze_syntax_tree

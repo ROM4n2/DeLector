@@ -42,7 +42,7 @@ REFILL_RAW_DIR = REPO_ROOT / "tools" / "raw_refill"
 
 # 从现有词库 import 出已覆盖的词元，构建工具要排除它们（只补缺口）
 sys.path.insert(0, str(REPO_ROOT))
-from core_dict import CORE_VOCAB_DB  # noqa: E402
+from delector.core_dict import CORE_VOCAB_DB  # noqa: E402
 from linguistics import LINGUISTICS_VOCAB_EXT  # noqa: E402
 
 # ── 词表源定义 ──────────────────────────────────────────────────────────
@@ -458,7 +458,7 @@ def main() -> None:
             entries += asyncio.run(_generate_parallel(todo, args, key, base, model,
                                                       raw_dir=REFILL_RAW_DIR))
         # 合并现有 core_dict_ext + 新补的词，整体重新 emit（不整包重来，只增缺）
-        from core_dict_ext import CORE_VOCAB_EXT as EXISTING
+        from delector.core_dict_ext import CORE_VOCAB_EXT as EXISTING
         merged: List[dict] = []
         for k, t in EXISTING.items():
             merged.append({"wort": k, "cefr": t[0], "pos": t[1],
@@ -500,7 +500,7 @@ def main() -> None:
     # smoke：合并后能查到
     sys.path.insert(0, str(REPO_ROOT))
     import importlib
-    import core_dict
+    from delector import core_dict
     importlib.reload(core_dict)
     for w in ("gehen", "haus", "trinken", "klimaschutz"):
         print(f"smoke lookup_core_vocab({w!r}) ->", bool(core_dict.lookup_core_vocab(w)))

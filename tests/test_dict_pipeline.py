@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "too
 
 import build_dict  # noqa: E402
 import build_prep  # noqa: E402
-from prep_dict import PREP_COLLOCATIONS  # noqa: E402
-from core_dict import CORE_VOCAB_DB  # noqa: E402
+from delector.prep_dict import PREP_COLLOCATIONS  # noqa: E402
+from delector.core_dict import CORE_VOCAB_DB  # noqa: E402
 
 
 # ── 搭配流水线：词头归一化回映射 ─────────────────────────────────────────

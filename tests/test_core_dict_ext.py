@@ -5,7 +5,7 @@ import os
 os.environ.setdefault("DATABASE_PATH", "test_delector.db")
 os.environ.setdefault("PROGRESS_DB_PATH", "test_progress.db")
 
-from core_dict import CORE_VOCAB_DB  # noqa: E402
+from delector.core_dict import CORE_VOCAB_DB  # noqa: E402
 from linguistics import lookup_irregular_verb, lookup_linguistics_ext  # noqa: E402
 
 
