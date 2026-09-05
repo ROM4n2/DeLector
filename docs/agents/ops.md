@@ -39,6 +39,8 @@
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
 测试:      pytest            （582 个，全绿）
+行为探针:  node tools/<name>.mjs（10 个，发布闸要求 10/10 全绿，含 wb_queue_probe 13/13 切片护栏）
+打包:      python package_windows.py（Windows 便携版）；Android: cd android && ./gradlew assembleDebug
 静态检查:  python -m pyflakes server.py syntax_tree.py start.py linguistics.py
 ```
 
