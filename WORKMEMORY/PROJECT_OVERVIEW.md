@@ -11,7 +11,7 @@
 
 ## 必读锚点（按需深入）
 
-- `AGENTS.md`（项目根）：机器可读项目快照——技术栈表、NLP 降级路径警告、Android 互锁版本表、API 路由全览、数据库 schema。**读头部 30 行起步**，全文很长。
+- `AGENTS.md`（项目根）：agent 入门快照——WORKMEMORY 约定、交接快照、文档路由、红线速查、Agent 工作惯例、开放待办（2026-09-05 瘦身，229KB → 11.5KB）。架构细节在 `docs/agents/architecture.md`，安全/本机环境在 `docs/agents/ops.md`，版本历史在 README Roadmap。
 - `FEATURES.md`：产品特性全览。
 - `docs/specs/`、`docs/plans/`：设计与实施计划（含 ledger）。
 - ADR 存于 vault：`vault://08-Projects/DeLector/01-ADR/`（0001 工作台核心词 / 0002 scope 控制 / 0004 LAN 同步 Stage B / 0005 导航重布局与多等级可扩展，未提交状态）。
@@ -49,7 +49,7 @@
 - 测试基线：**全量 582 全绿**（137.53s，基线 574 -> 582 +8），10/10 `tools/*.mjs` 探针全绿（含 13/13 处切片护栏 100% 保护）；pre-commit 密钥守卫有效，工作区干净。
 - 下一步待办：多模态听力微训或语料长难句强化。
 
-## 本项目高频坑（详见 AGENTS.md 对应节）
+## 本项目高频坑（详见 `docs/agents/architecture.md` 与 AGENTS.md 红线速查）
 
 1. NLP 降级路径**静默**切到纯 Python 时语法标注会**给错**（不是精度低，是错）——改标注逻辑前看 `nlp_engine` 字段。
 2. Android 侧 spaCy 模型加载有三级回退 + `extractPackages` 三包缺一不可；`spacy.load("名称")` 在 Android 上必炸。
