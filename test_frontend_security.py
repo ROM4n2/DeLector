@@ -90,6 +90,7 @@ def test_reader_js_xss_sinks_are_neutralised():
     assert 'id="sent-unit-${Number(sent.id)}"' in READER
     assert 'data-sent-id="${Number(sent.id)}"' in READER
     assert 'id="sent-topology-${Number(sent.id)}"' in READER
+    assert 'openSyntaxDrawerForSentence(${Number(sent.id)})' in READER
 
     # heatbar: cnt → Number
     assert "Number(counts[lvl])" in READER

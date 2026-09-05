@@ -18,7 +18,6 @@ const safeTokens = (ids) =>
   JSON.stringify((ids || []).map(Number).filter(Number.isFinite));
 
 let currentArticleNotes = [];
-let _syntaxHoverTimer = null;
 let readerFontMode = localStorage.getItem("delector_font_mode") || "sans";
 let readerFontSize =
   parseInt(localStorage.getItem("delector_font_size"), 10) || 18;
@@ -232,6 +231,7 @@ export async function openReader(id) {
     const sentWrapper = `
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
+        <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">🌳 句法</button>
       </span>
       <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;
@@ -271,24 +271,6 @@ export async function openReader(id) {
         document
           .getElementById(partnerId)
           ?.classList.remove("linked-separable");
-      }
-    });
-  });
-
-  // Setup sentence hover for syntax drawer
-  content.querySelectorAll(".reader-sent-unit").forEach((unitEl) => {
-    const sentId = Number(unitEl.getAttribute("data-sent-id"));
-    if (!sentId && sentId !== 0) return;
-    unitEl.addEventListener("mouseenter", () => {
-      if (_syntaxHoverTimer) clearTimeout(_syntaxHoverTimer);
-      _syntaxHoverTimer = setTimeout(() => {
-        openSyntaxDrawerForSentence(sentId);
-      }, 600);
-    });
-    unitEl.addEventListener("mouseleave", () => {
-      if (_syntaxHoverTimer) {
-        clearTimeout(_syntaxHoverTimer);
-        _syntaxHoverTimer = null;
       }
     });
   });

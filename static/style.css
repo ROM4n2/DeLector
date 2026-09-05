@@ -10086,3 +10086,35 @@ body.drawer-open .companion {
   fill: var(--pencil, #5c554b);
 }
 
+/* ── 句法行内幽灵微胶囊 (ADR-0007) ── */
+.sent-syntax-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.65rem;
+  font-family: var(--sans, sans-serif);
+  padding: 1px 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--rule-light, #ebe5da);
+  background: var(--paper-warm, #f7f4ec);
+  color: var(--pencil, #5c554b);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  vertical-align: middle;
+  user-select: none;
+  transition: opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s, border-color 0.15s, color 0.15s;
+}
+.reader-sent-unit:hover .sent-syntax-btn {
+  opacity: 0.75;
+  pointer-events: auto;
+}
+.sent-syntax-btn:hover {
+  opacity: 1;
+  background: var(--paper-card, #ffffff);
+  color: var(--accent, #c14a2b);
+  border-color: var(--accent, #c14a2b);
+  box-shadow: 0 1px 4px rgba(21, 20, 15, 0.08);
+}
+
