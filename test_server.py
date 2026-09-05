@@ -4241,3 +4241,41 @@ def test_corpus_syntax_stats_db_contract(tmp_path):
     assert stats2["avg_vl_rate"] == 0.3
 
 
+def test_syntax_stats_endpoints(client):
+    # 1. 验证 POST /api/syntax/stats
+    payload = {
+        "article_id": 999,
+        "stats": {
+            "sent_count": 12,
+            "avg_clause_depth": 2.4,
+            "passive_rate": 0.25,
+            "konjunktiv_rate": 0.15,
+            "vl_rate": 0.35,
+        }
+    }
+    resp = client.post("/api/syntax/stats", json=payload)
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+    # 2. 验证 GET /api/syntax/stats 返回全量聚合统计
+    get_resp = client.get("/api/syntax/stats")
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    for key in (
+        "total_articles",
+        "avg_sent_count",
+        "avg_clause_depth",
+        "avg_passive_rate",
+        "avg_konjunktiv_rate",
+        "avg_vl_rate",
+    ):
+        assert key in data
+    assert data["total_articles"] >= 1
+    assert data["avg_sent_count"] == 12.0
+    assert data["avg_clause_depth"] == 2.4
+    assert data["avg_passive_rate"] == 0.25
+    assert data["avg_konjunktiv_rate"] == 0.15
+    assert data["avg_vl_rate"] == 0.35
+
+
+

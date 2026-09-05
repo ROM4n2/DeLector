@@ -11,7 +11,7 @@ import socket
 from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import quote, urlparse
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
@@ -92,6 +92,8 @@ from database import (
     get_prep_saved,
     add_prep_saved,
     get_vocab_by_cefr,
+    upsert_corpus_syntax_stats,
+    get_all_corpus_syntax_stats,
 )
 
 # --- 2. NLP & CEFR Tagging ---
@@ -204,6 +206,8 @@ __all__ = [
     "migrate_a1_records_to_exam_trials",
     "get_prep_saved",
     "add_prep_saved",
+    "upsert_corpus_syntax_stats",
+    "get_all_corpus_syntax_stats",
     "_resolve_ssrf_targets",
     "_IETF_PROTOCOL_ASSIGNMENTS",
     "_IPV6_DENY_PREFIXES",
@@ -2372,6 +2376,23 @@ def api_writing_apply(req: WritingApplyReq):
         "error_count": a["error_count"],
         "version_id": version_id,
     }
+
+
+# --- Syntax Radar Corpus Stats ---
+class SyntaxStatsReq(BaseModel):
+    article_id: int
+    stats: Dict[str, Any]
+
+
+@app.post("/api/syntax/stats")
+async def api_syntax_stats_save(req: SyntaxStatsReq, background_tasks: BackgroundTasks):
+    background_tasks.add_task(upsert_corpus_syntax_stats, req.article_id, req.stats)
+    return {"ok": True}
+
+
+@app.get("/api/syntax/stats")
+def api_syntax_stats_get():
+    return get_all_corpus_syntax_stats()
 
 
 # Mount Static UI (Catch-all must be at the very end)

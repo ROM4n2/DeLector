@@ -11,8 +11,8 @@
 
 | 任务序号 | 任务描述 | 责任角色 | 状态 | 关联提交 | 验证结果 |
 |:---|:---|:---|:---|:---|:---|
-| **Task 1** | DB schema: `corpus_syntax_stats` 表 + `upsert_corpus_syntax_stats` + `get_all_corpus_syntax_stats` | Backend TDD Builder | 进行中 | 待提交 | 待验证 |
-| **Task 2** | 后端路由: `POST /api/syntax/stats` + `GET /api/syntax/stats` | Backend TDD Builder | 待开始 | 待提交 | 待验证 |
+| **Task 1** | DB schema: `corpus_syntax_stats` 表 + `upsert_corpus_syntax_stats` + `get_all_corpus_syntax_stats` | Backend TDD Builder | 已完成 | 本地工作树 | test_corpus_syntax_stats_db_contract PASS |
+| **Task 2** | 后端路由: `POST /api/syntax/stats` + `GET /api/syntax/stats` | Backend TDD Builder | 已完成 | 本地工作树 | test_syntax_stats_endpoints PASS |
 | **Task 3** | `index.html`: 清理 `sent-syntax-btn` + 新增 `#grammar-radar-panel` | Frontend TDD Builder | 待开始 | 待提交 | 待验证 |
 | **Task 4** | `reader.js`: hover debounce 600ms + `computeArticleSyntaxStats` | Frontend TDD Builder | 待开始 | 待提交 | 待验证 |
 | **Task 5** | `reader.js` & `style.css`: `renderRadarSvg` + `saveAndRenderSyntaxRadar` + radar 样式 | Frontend TDD Builder | 待开始 | 待提交 | 待验证 |
