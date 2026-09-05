@@ -258,25 +258,29 @@ DeLector/
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖清单（无新增运行时依赖）
 ├── tools/                  # 构建/生成工具（build_dict.py 词库 + build_prep.py 介词 + 缓存）
-├── test_server.py          # 后端与安全/CI/备份/AI 回归 (185 用例)
-├── test_writing_rules.py   # 写作规则引擎，含零误报反例 (31 用例)
-├── test_writer_mobile.py   # 写作台移动端几何与触屏契约 + 版本/README 发布面一致性 (30 用例)
-├── test_syntax_tree.py     # 拓扑五场域与 AST 从句树 (15 用例)
-├── test_german_workbench.py # 背词工作台音频补丁/核心词模式/导入去重契约 (73 用例)
-├── test_essay_diff.py      # 句子级 diff 引擎 (13 用例)
-├── test_prep_matrix.py     # 介词矩阵纯函数/前端/端点 (12 用例)
-├── test_goethe_a1.py       # A1 考纲词库/口语卡/前端契约 + 段标签栏窄屏滚动 (10 用例)
-├── test_goethe_a1_hoeren.py # A1 听力考试真题模拟 + 评分 (4 用例)
-├── test_goethe_a1_lesen.py  # A1 阅读考试真题模拟 + 评分 (4 用例)
-├── test_corpus.py           # 语料库 A1-B2/TestDaF 阅读管线端点 (4 用例)
-├── test_dict_pipeline.py   # 词库生成流水线 (10 用例)
-├── test_edge_tts_mini.py   # stdlib 版 TTS 兜底客户端 (10 用例)
-├── test_goethe_a1_writing.py # A1 填表与电邮诊断/范文契约 (8 用例)
-├── test_core_dict_ext.py   # 词库扩展数据契约 (5 用例)
-├── test_frontend_security.py # 前端 XSS 注入点棘轮 (4 用例)
-├── test_start.py           # 启动器 Android/桌面绑定 (4 用例)
-├── test_frontend_module_graph.py # 前端 ES module 图解析（具名 import 可达性） (4 用例)
-└── test_source_hygiene.py  # 源码卫生（重复键等）棘轮 (2 用例)
+├── conftest.py             # 把仓库根插进 sys.path（pytest 不像 python -m pytest 那样加 CWD）
+├── tests/                  # 27 个测试模块 + 1 个迁移哨兵（用例数见各条注释）
+│   ├── test_server.py      # 后端与安全/CI/备份/AI 回归 (185 用例)
+│   ├── test_writing_rules.py # 写作规则引擎，含零误报反例 (31 用例)
+│   ├── test_writer_mobile.py # 写作台移动端几何与触屏契约 + 版本/README 发布面一致性 (30 用例)
+│   ├── test_syntax_tree.py # 拓扑五场域与 AST 从句树 (15 用例)
+│   ├── test_german_workbench.py # 背词工作台音频补丁/核心词模式/导入去重契约 (73 用例)
+│   ├── test_essay_diff.py  # 句子级 diff 引擎 (13 用例)
+│   ├── test_prep_matrix.py # 介词矩阵纯函数/前端/端点 (12 用例)
+│   ├── test_goethe_a1.py   # A1 考纲词库/口语卡/前端契约 + 段标签栏窄屏滚动 (10 用例)
+│   ├── test_goethe_a1_hoeren.py # A1 听力考试真题模拟 + 评分 (4 用例)
+│   ├── test_goethe_a1_lesen.py  # A1 阅读考试真题模拟 + 评分 (4 用例)
+│   ├── test_corpus.py      # 语料库 A1-B2/TestDaF 阅读管线端点 (4 用例)
+│   ├── test_dict_pipeline.py # 词库生成流水线 (10 用例)
+│   ├── test_edge_tts_mini.py # stdlib 版 TTS 兜底客户端 (10 用例)
+│   ├── test_goethe_a1_writing.py # A1 填表与电邮诊断/范文契约 (8 用例)
+│   ├── test_core_dict_ext.py # 词库扩展数据契约 (5 用例)
+│   ├── test_frontend_security.py # 前端 XSS 注入点棘轮 (4 用例)
+│   ├── test_start.py       # 启动器 Android/桌面绑定 (4 用例)
+│   ├── test_frontend_module_graph.py # 前端 ES module 图解析（具名 import 可达性） (4 用例)
+│   ├── test_source_hygiene.py # 源码卫生（重复键等）棘轮 (2 用例)
+│   ├── test_import_root_modules.py # 迁移哨兵：钉住 tests/ 能 import 根扁平模块
+│   └── …（考纲域 exam_*、审计加固 audit_*、设计令牌 workbench_tokens、语法雷达 grammatik_radar、A2 词表 a2_vocab_data）
 ```
 
 ---
