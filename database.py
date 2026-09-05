@@ -1068,6 +1068,7 @@ def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List
 
 
 _A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
+_A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None
 
 
 def _load_a1_workbench_words() -> List[Dict[str, Any]]:
@@ -1150,6 +1151,65 @@ def _load_a1_workbench_words() -> List[Dict[str, Any]]:
     return words
 
 
+GENDER_ARTICLE_MAP: Dict[str, str] = {
+    "Masc": "der",
+    "Fem": "die",
+    "Neut": "das",
+}
+
+
+def format_vocab_headword(lemma: str, pos: str, gender: Optional[str] = None) -> str:
+    """对德语词条进行规范化展示格式拼装。
+    名词首字母大写并前缀定冠词 (如 'das Abenteuer')；动词/形容词等保持小写。
+    """
+    if not lemma:
+        return ""
+    pos_upper = (pos or "").upper()
+    if pos_upper == "NOUN" and gender in GENDER_ARTICLE_MAP:
+        art = GENDER_ARTICLE_MAP[gender]
+        cap_lemma = lemma[0].upper() + lemma[1:] if len(lemma) > 1 else lemma.upper()
+        return f"{art} {cap_lemma}"
+    elif pos_upper == "NOUN":
+        return lemma[0].upper() + lemma[1:] if len(lemma) > 1 else lemma.upper()
+    return lemma.lower()
+
+
+def _load_a2_vocab_words() -> List[Dict[str, Any]]:
+    """加载并缓存 A2 词库（从 core_dict 提取并应用规范化格式）。"""
+    global _A2_VOCAB_CACHE
+    if _A2_VOCAB_CACHE is not None:
+        return _A2_VOCAB_CACHE
+
+    try:
+        from core_dict import CORE_VOCAB_DB
+    except ImportError:
+        CORE_VOCAB_DB = {}
+
+    words: List[Dict[str, Any]] = []
+    for lemma, val in CORE_VOCAB_DB.items():
+        lvl = val[0]
+        if lvl.upper() == "A2":
+            pos = val[1] or ""
+            gender = val[2] if len(val) > 2 and val[2] != "None" else None
+            plural = val[3] if len(val) > 3 and val[3] != "None" else ""
+            zh = val[4] if len(val) > 4 else ""
+            hw = format_vocab_headword(lemma, pos, gender)
+            words.append({
+                "id": f"a2-{lemma.lower()}",
+                "hw": hw,
+                "pos": pos,
+                "gender": gender,
+                "plural": plural,
+                "de": "",
+                "zh": zh,
+                "core": True,
+                "cefr": "A2",
+            })
+
+    _A2_VOCAB_CACHE = words
+    return words
+
+
 def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[str] = None) -> Dict[str, Any]:
     """按 CEFR 等级与核心范围获取词汇（供工作台与外部组件拉取）。"""
     cefr_norm = (cefr or "A1").strip().upper()
@@ -1193,7 +1253,16 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
             "words": filtered,
         }
 
-    # 其他级别 (A2, B1, B2, C1, ALL): 回退到 core_dict.CORE_VOCAB_DB
+    if cefr_norm == "A2":
+        a2_words = _load_a2_vocab_words()
+        return {
+            "cefr": "A2",
+            "scope": scope_norm,
+            "total": len(a2_words),
+            "words": a2_words,
+        }
+
+    # 其他级别 (B1, B2, C1, ALL): 回退到 core_dict.CORE_VOCAB_DB
     try:
         from core_dict import CORE_VOCAB_DB
     except ImportError:
@@ -1207,15 +1276,24 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
         else:
             words.extend(a1_words)
 
+        words.extend(_load_a2_vocab_words())
+
         for lemma, val in CORE_VOCAB_DB.items():
             lvl = val[0]
-            if lvl.upper() != "A1":
+            if lvl.upper() not in ("A1", "A2"):
+                pos = val[1] or ""
+                gender = val[2] if len(val) > 2 and val[2] != "None" else None
+                plural = val[3] if len(val) > 3 and val[3] != "None" else ""
+                zh = val[4] if len(val) > 4 else ""
+                hw = format_vocab_headword(lemma, pos, gender)
                 words.append({
-                    "id": f"{lvl.lower()}-{lemma}",
-                    "hw": lemma,
-                    "pos": val[1] or "",
+                    "id": f"{lvl.lower()}-{lemma.lower()}",
+                    "hw": hw,
+                    "pos": pos,
+                    "gender": gender,
+                    "plural": plural,
                     "de": "",
-                    "zh": val[4] if len(val) > 4 else "",
+                    "zh": zh,
                     "core": True,
                     "cefr": lvl.upper(),
                 })
@@ -1223,12 +1301,19 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
         for lemma, val in CORE_VOCAB_DB.items():
             lvl = val[0]
             if lvl.upper() == cefr_norm:
+                pos = val[1] or ""
+                gender = val[2] if len(val) > 2 and val[2] != "None" else None
+                plural = val[3] if len(val) > 3 and val[3] != "None" else ""
+                zh = val[4] if len(val) > 4 else ""
+                hw = format_vocab_headword(lemma, pos, gender)
                 words.append({
-                    "id": f"{lvl.lower()}-{lemma}",
-                    "hw": lemma,
-                    "pos": val[1] or "",
+                    "id": f"{lvl.lower()}-{lemma.lower()}",
+                    "hw": hw,
+                    "pos": pos,
+                    "gender": gender,
+                    "plural": plural,
                     "de": "",
-                    "zh": val[4] if len(val) > 4 else "",
+                    "zh": zh,
                     "core": True,
                     "cefr": lvl.upper(),
                 })
