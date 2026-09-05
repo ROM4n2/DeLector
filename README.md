@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.2.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.3.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-559%2F559%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-582%2F582%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -20,14 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ⚠️ **v5.2.0（tag 已推送）为源码版**；Windows/macOS/Linux 便携包与 Android APK 仍在本机打包流程中，打包完成即补资产至对应 GitHub Release，可先下载 v5.0.2 既有安装包使用。
+> ⚠️ **v5.3.0（tag 已推送）为源码版**；Windows/macOS/Linux 便携包与 Android APK 仍在本机打包流程中，打包完成即补资产至对应 GitHub Release，可先下载 v5.0.2 既有安装包使用。
 
 | 平台               | 版本                | 说明                                                                                                                                                                                                                                | 下载通道                                                                                    |
 | ------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.2.0` 源码版·打包中 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开（v5.2.0 安装包待打包）                                                                                                                                                 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0)     |
-| 🍎 **macOS**       | `v5.2.0` 源码版·打包中 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器（v5.2.0 安装包待打包）                                                                                                                                                            | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0)  |
-| 🐧 **Linux x64**   | `v5.2.0` 源码版·打包中 | 全发行版通用，解压运行 `start` 即可使用（v5.2.0 安装包待打包）                                                                                                                                                                      | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0)  |
-| 📱 **Android**     | `v5.2.0` 源码版·打包中 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（v5.2.0 APK 待打包；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.2.0) |
+| 🪟 **Windows x64** | `v5.3.0` 源码版·打包中 | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开（v5.3.0 安装包待打包）                                                                                                                                                 | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.3.0)     |
+| 🍎 **macOS**       | `v5.3.0` 源码版·打包中 | 解压运行 `start` 脚本，全自动启动服务与默认浏览器（v5.3.0 安装包待打包）                                                                                                                                                            | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.3.0)  |
+| 🐧 **Linux x64**   | `v5.3.0` 源码版·打包中 | 全发行版通用，解压运行 `start` 即可使用（v5.3.0 安装包待打包）                                                                                                                                                                      | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.3.0)  |
+| 📱 **Android**     | `v5.3.0` 源码版·打包中 | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（v5.3.0 APK 待打包；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.3.0) |
 
 ---
 
@@ -376,6 +376,8 @@ DeLector/
 - [x] **v5.2.0**：**备考域重布局 + 等级可扩展（ADR-0005 Phase 1）**——① **主导航加「备考 (Prüfung)」顶层域**：A1 写作/听力/阅读/口语/词表五模块从「写作润色」「复习卡片」工具容器迁入独立备考域，工具视图回归纯工具语义（写作=纯 essay、卡片=纯复习）；② **exam catalog 目录化**：`/api/exams/catalog` 代码注册目录单源，等级页签与模块卡片数据驱动，加 A2/B1 = 插一行数据（问卷库不入库，YAGNI）；③ **成绩表泛化**：`exam_trials(level,module,…)` 表 + 幂等迁移 A1 存量（旧 `a1_hoeren_records`/`a1_lesen_records` 保留兼容），备份/还原接线收编；④ **导航单源静态入口 + 备考域骨架**、`tools/ia_dom_mount_probe.mjs` 行为级 DOM 探针（node:vm 真跑，回退必红）。测试 **559 全绿**。
 
 - [x] **v5.1.1**：**审计修复收口 + 性能与稳定性 (M1–M5 + M4)**——① **审计修复（M1–M5）**：旧 6 位短码 LAN 面板停用标注并整体禁用（端点已强制配对密钥，死 UI 明示）；AI 判分/成功提示类残余 `alert` 收敛为 notify（写路径保留 + 双面黑白名单护栏）；wb pull 指数退避、RTC 瞬态不累计、阅读计时器防叠；② **性能（M4）**：查词/判题热路径常量模块级提升、复合词拆解与核心词查表缓存、句切分缩写保护正则提升；③ **稳定性**：PWA 版本更新改温和提示不硬刷窗口、TTS blob URL 统一撤销 + 播放请求令牌防错句覆盖、Reader 陈旧响应守卫、AI 请求输入上限与 TTS voice 白名单；④ **安全补漏**：批注删除纳入本机写闸、X-WB-Key 统一 `secrets.compare_digest` 消除时序侧信道、还原不导入 API 配置防 Key 外泄、Anki 导出 HTML 转义防存储型 XSS；⑤ 测试库隔离与断言护栏补齐。**本版同时回补 v5.0.2 → v5.1.1 的版本面同步**（sw.js 缓存键 / index.html 顶栏 / build.gradle / README / AGENTS）。
+
+- [x] **v5.3.0**：**背词工作台全域 Editorial 重塑 + 精读语法雷达 + A2 词汇全域贯通**——① **共享设计系统 Token 层抽离**（`static/css/tokens.css`）并全量接入背词工作台：统一 Academic Modern Editorial 暖纸墨水调色板、`--serif/--sans/--mono` 字体族与 960px 实体期刊画布，彻底消除硬编码中文字体与 Georgia；考纲词表只读契约 `GET /api/cards/vocab` 上线（CEFR/范围过滤 + 内存解析缓存），工作台顶栏扩展 3 档「⭐ A1 核心 / A1 全量 / 精读生词」范围选择；② **ADR-0006 背词工作台 Zettelkasten 实体学术卡箱与心流优先重塑**：出版物下划线轻量 Tab 导航与聚焦顶栏、剥离厚重阴影与大圆角容器、纯白学术抽认卡纸张层叠翻转（40px 衬线词头）、矿物植物印章式四级柔色评分座（键盘快捷键角标），自测题选项/拼写输入框/KPI 统计/词库浏览表全量 Editorial 化；③ **Grammatik-Radar 精读语法雷达（ADR-0007）**：消除 600ms hover 被动弹出，改行内幽灵微胶囊（Quiet Ghost Pill）显式点击触发句法抽屉（零心流打扰、保护查词抽屉状态）；语料语法 6 维指标（从句复合度/五场域展开率/句框跨度比/关系从句率/虚拟语气率/被动被动态率）落盘 `corpus_syntax_stats` 表 + `POST/GET /api/syntax/stats` 端点，句法抽屉内嵌零外部依赖 SVG 蛛网雷达图对比「本文维度 vs 语料平均基准」；④ **A2 词汇与全域背词系统扩展**：歌德 A2 **974 词全量规范化**（`format_vocab_headword` 精确拼装 497 名词定冠词如 `das Abenteuer` 并首字母大写，动词/形容词保持小写），`GET /api/a2/vocab` + `exam_catalog` 注册 A2 词表模块（动态推导 974 题量，打包 hidden-import 守卫），工作台顶栏第 4 档「📘 A2 词库」异步按需同步持久化，备考域激活 A2 考纲 Tab（3D 扑克翻转/例句发音/网格模式/搜索过滤/加入复习盒）。测试 **582 全绿**（基线 559 → 582）；10/10 Node.js 行为探针全绿（含 13/13 切片护栏 100% 保护）。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 
