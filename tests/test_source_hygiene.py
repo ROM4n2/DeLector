@@ -14,7 +14,7 @@ import ast
 from collections import Counter
 from pathlib import Path
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 
 # 不扫的目录：第三方代码与构建产物里的重复键不是我们能修的
 _SKIP_DIRS = {
