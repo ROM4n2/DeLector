@@ -11,7 +11,7 @@ import sys
 os.environ.setdefault("DATABASE_PATH", "test_delector.db")
 os.environ.setdefault("PROGRESS_DB_PATH", "test_progress.db")
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "tools"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "tools"))
 
 import build_dict  # noqa: E402
 import build_prep  # noqa: E402

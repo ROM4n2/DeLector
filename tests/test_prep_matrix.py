@@ -119,7 +119,7 @@ def test_empty_dataset_degrades_to_empty_matrix():
 # ── 前端静态契约 ──────────────────────────────────────────────────────────────
 from pathlib import Path
 
-_ROOT = Path(__file__).parent
+_ROOT = Path(__file__).parent.parent
 _INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 _CARDS = (_ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
 

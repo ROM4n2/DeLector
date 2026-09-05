@@ -21,7 +21,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-_ROOT = Path(__file__).parent
+_ROOT = Path(__file__).parent.parent
 _INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 _CSS = (_ROOT / "static" / "style.css").read_text(encoding="utf-8")
 _MAIN_JS = (_ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")

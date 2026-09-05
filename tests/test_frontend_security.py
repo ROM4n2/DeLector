@@ -11,7 +11,7 @@ esc 层防止属性本身提前终止，两层缺一不可。
 
 from pathlib import Path
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 CORE = (ROOT / "static" / "js" / "core.js").read_text(encoding="utf-8")
 CARDS = (ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
 READER = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")

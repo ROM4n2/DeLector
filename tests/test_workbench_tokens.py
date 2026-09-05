@@ -3,7 +3,7 @@
 import os
 import re
 
-ROOT = os.path.dirname(__file__)
+ROOT = os.path.dirname(os.path.dirname(__file__))
 TOKENS_CSS_PATH = os.path.join(ROOT, "static", "css", "tokens.css")
 STYLE_CSS_PATH = os.path.join(ROOT, "static", "style.css")
 WORKBENCH_HTML_PATH = os.path.join(ROOT, "static", "german", "workbench.html")

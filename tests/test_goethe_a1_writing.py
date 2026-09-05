@@ -203,7 +203,7 @@ def test_a1_writing_frontend_html_and_css():
     ADR-0005 Task 2 起写作工坊迁入备考域：writer-mode-a1-* 按钮删除，
     页签改名 exam-tab-*（宿主 view-exam）；面板 id 不变、原样搬移。
     """
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parent.parent
     html = (root / "static" / "index.html").read_text(encoding="utf-8")
 
     assert 'id="exam-tab-formular"' in html

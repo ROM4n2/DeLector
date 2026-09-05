@@ -29,7 +29,7 @@ import a1_hoeren_dict  # noqa: E402
 import a1_lesen_dict  # noqa: E402
 import a1_writing_dict  # noqa: E402
 
-_ROOT = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 with open(os.path.join(_ROOT, "static", "index.html"), encoding="utf-8") as _f:
     _INDEX = _f.read()
 

@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 WRITER = (ROOT / "static" / "js" / "writer.js").read_text(encoding="utf-8")
 STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")

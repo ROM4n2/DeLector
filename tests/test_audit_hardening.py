@@ -681,7 +681,7 @@ def test_m53_front_p2_debounce_and_pull_backoff_structural():
     """M5-3: a1_lesen 计时器防叠；wbsync pull 失败指数退避 + rtc 瞬态不计失败。
     纯结构护栏：实现被回退即红。"""
     from pathlib import Path
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parent.parent
     a1_lesen = (root / "static" / "js" / "a1_lesen.js").read_text(encoding="utf-8")
     wb = (root / "static" / "german" / "workbench.html").read_text(encoding="utf-8")
 
