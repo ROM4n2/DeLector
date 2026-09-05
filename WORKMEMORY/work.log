@@ -120,3 +120,18 @@ Caps: filesystem-read, filesystem-write, shell-exec
 4. 前端交互与指标统计：reader.js 实现 600ms hover 防抖静默展开句法抽屉，computeArticleSyntaxStats 客户端计算 6 维指标，通过 test_reader_compute_article_syntax_stats_and_hover_binding。
 5. 蜘蛛图与样式装订：轻量零外部依赖 renderRadarSvg 绘制本文 vs 语料基线蛛网图，Editorial 配色与 tooltip，通过 test_render_radar_svg_and_radar_panel_integration。
 6. 回归证据闭环：全量 pytest 574 passed (109.26s，基线 569 -> 574 +5)，10/10 Node.js 动态行为探针（含 13/13 处切片护栏）全绿通过。
+
+### 2026-09-05 16:38 | gemini-3-8-flash__antigravity | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：执行 A2 词汇与全域背词系统扩展实施计划（方案 B：全域贯通，Task 1 至 Task 5）。
+不做范围：改动 spaCy 核心分词标注管线、破坏 workbench.html 13 处切片护栏、引入外部网络 AI 依赖。
+
+### 2026-09-05 17:35 | gemini-3-8-flash__antigravity | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：A2 词汇与全域背词系统扩展（方案 B：全域贯通）Task 1 至 Task 5 全量完成。
+1. 数据层：database.py 新增 format_vocab_headword、GENDER_ARTICLE_MAP 与 get_vocab_by_cefr("A2")，974 个词条中 497 个名词准确拼装定冠词（如 das Abenteuer）且首字母大写，动词/形容词保持小写（test_a2_vocab_data.py 4 passed）。
+2. 服务端与考纲：创建 routes_a2.py 并提供 GET /api/a2/vocab，并在 exam_catalog.py 中注册 A2 词表模块，题量动态推导为 974；登记 package_windows.py 的 --hidden-import 守卫（test_server.py 1 passed, test_exam_catalog.py 1 passed）。
+3. 背词工作台：workbench.html 扩展第 4 档位「📘 A2 词库」，集成 syncA2CardsFromServer 异步拉取与持久化；wb_queue_probe.mjs 13/13 处切片护栏 100% 保护通过（test_workbench_tokens.py + test_german_workbench.py 88 passed）。
+4. 备考域卡盒：main.js 激活 A2 等级 Tab，a1_cards.js 扩展 setExamVocabLevel("A2")，支持 A2 考纲词卡 3D 翻转、例句发音、网格模式、搜索过滤与加入复习盒（test_exam_domain.py 2 passed）。
+5. 回归与打包守卫：全量 pytest 582 passed (137.53s，基线 574 -> 582 +8)，10/10 Node.js 动态行为探针全绿，打包注册守卫通过。
+产出文档：docs/plans/2026-09-05-a2-vocab-expansion-ledger.md

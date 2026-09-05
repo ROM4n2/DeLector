@@ -3,7 +3,7 @@
 > **Goal**: 全栈落地 A2 词汇支持（方案 B：全域贯通），在背词工作台实现 4 档范围切换并保护 13 处切片护栏，在服务端提供规范化名词冠词拼装与 A2 端点，在备考域激活 A2 考纲词表模块。
 > **Tech Stack**: Python 3.10+ (FastAPI + SQLite), 原生 ES Modules JS (无框架), HTML5/CSS3
 > **Spec Reference**: [`docs/specs/2026-09-05-a2-vocab-expansion-design.md`](file:///d:/Code/DeLector/docs/specs/2026-09-05-a2-vocab-expansion-design.md)
-> **Global Constraints**: 
+> **Global Constraints**:
 > 1. Conventional Commits, 严禁 `--no-verify`。
 > 2. 基线测试全绿（当前基线 574 项全绿，10/10 Node.js 探针全绿）。
 > 3. `tools/wb_queue_probe.mjs` 13/13 处切片护栏 100% 绝对保护（不得改动 `inScopeWord` 的 `wordFilters.scope === "core"` 核心真值源特征）。
