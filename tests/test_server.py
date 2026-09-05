@@ -23,6 +23,11 @@ from server import (
 # 钉住的 IPv6 段），必须在上面设好 DATABASE_PATH 之后再 import。
 import server
 
+# 本文件搬进 tests/ 之后比仓库根深一层：凡读仓库资源（server.py / static / tools /
+# android / .github / .githooks / nlp.py / package_windows.py）一律经 ROOT。
+# 别再写 os.path.dirname(__file__) —— 那会指到 tests/，测试会去 tests/server.py 找文件。
+ROOT = os.path.dirname(os.path.dirname(__file__))
+
 @pytest.fixture
 def test_db_path():
     return "test_delector.db"
@@ -920,7 +925,7 @@ def test_attachment_headers_are_only_built_by_the_shared_helper():
     手写一份就漏掉 no-store 或引号：前者造出假备份，后者让 Android 的
     URLUtil.guessFileName 各版本解析不一致（拿到 token 当文件名）。
     """
-    src = (os.path.join(os.path.dirname(__file__), "server.py"))
+    src = (os.path.join(ROOT, "server.py"))
     with open(src, encoding="utf-8") as f:
         text = f.read()
     assert "def _attachment_headers" in text
@@ -936,7 +941,7 @@ def test_frontend_export_does_not_use_blob_download():
     所以它的回归不会有任何报错——只会让用户以为自己有备份。
     只能在源码层立个哨兵。
     """
-    src = open(os.path.join(os.path.dirname(__file__), "static", "js", "cards.js"),
+    src = open(os.path.join(ROOT, "static", "js", "cards.js"),
                encoding="utf-8").read()
     start = src.index("export async function downloadBackupJson")
     export_fn = src[start:src.index("export function uploadBackupJson")]
@@ -1645,7 +1650,7 @@ def test_prep_lookup_falls_back_to_surface_form(client):
 def _load_build_prep():
     """加载生成器模块（tools/ 不是 package，只能按路径加载）。"""
     import importlib.util
-    path = os.path.join(os.path.dirname(__file__), "tools", "build_prep.py")
+    path = os.path.join(ROOT, "tools", "build_prep.py")
     spec = importlib.util.spec_from_file_location("build_prep_under_test", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -1712,7 +1717,7 @@ def test_prep_dataset_keys_all_exist_in_dictionary():
 
 def test_prep_dict_registered_in_all_package_targets():
     """漏注册任一处 = 打包后 ModuleNotFoundError（或安卓上静默没有该功能）。"""
-    root = os.path.dirname(__file__)
+    root = ROOT
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
     assert "--hidden-import=prep_dict" in pkg
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"),
@@ -1939,7 +1944,7 @@ def test_android_build_extracts_spacy_data_packages():
     这三个包都用 Path(__file__).parent 去 open() 真实文件，漏掉任何一个，
     真机上 spaCy 就会静默退回纯 Python 路径。
     """
-    gradle = open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"),
+    gradle = open(os.path.join(ROOT, "android", "app", "build.gradle"),
                   encoding="utf-8").read()
     extract_lines = [ln for ln in gradle.splitlines() if "extractPackages" in ln]
     assert extract_lines, "build.gradle 必须声明 extractPackages"
@@ -1948,7 +1953,7 @@ def test_android_build_extracts_spacy_data_packages():
         assert f'"{pkg}"' in declared, f"{pkg} 的数据文件不会被解包"
 
 def _read_android_gradle():
-    return open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"),
+    return open(os.path.join(ROOT, "android", "app", "build.gradle"),
                 encoding="utf-8").read()
 
 def test_android_version_code_encoding():
@@ -2000,7 +2005,7 @@ def test_release_workflow_gates_apk_signature():
     没有这道闸时的失效模式是静默的：secret 缺失 → gradle 回落到随机 debug
     keystore → 产出一个看起来正常、装到手机上却签名不一致的 APK。
     """
-    workflow = open(os.path.join(os.path.dirname(__file__), ".github", "workflows",
+    workflow = open(os.path.join(ROOT, ".github", "workflows",
                                  "build-release.yml"), encoding="utf-8").read()
     assert "keytool -printcert -jarfile" in workflow, "缺少 APK 证书指纹断言"
     assert "app/build/outputs/apk/debug/app-debug.apk" in workflow, \
@@ -2021,9 +2026,9 @@ def test_android_workflow_build_and_signature_contract():
 
     任何一项静默丢失都会导致：本地能跑但 CI 产出的 APK 是旧签名/缺模型/纯 Python 降级。
     """
-    wf = open(os.path.join(os.path.dirname(__file__), ".github", "workflows",
+    wf = open(os.path.join(ROOT, ".github", "workflows",
                            "build-release.yml"), encoding="utf-8").read()
-    gradle = open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"),
+    gradle = open(os.path.join(ROOT, "android", "app", "build.gradle"),
                   encoding="utf-8").read()
     # JDK 17
     assert "java-version: '17'" in wf or 'java-version: "17"' in wf, "工作流必须保留 JDK 17"
@@ -2058,7 +2063,7 @@ def test_android_apk_content_via_app_imy():
     v4.4.0 首跑实测：app.imy 只装应用代码 + 拷入的模型目录，pip 依赖（spacy/thinc）
     在 requirements-<abi>.imy —— 检查必须按容器分工，否则误报缺失。
     """
-    wf = open(os.path.join(os.path.dirname(__file__), ".github", "workflows",
+    wf = open(os.path.join(ROOT, ".github", "workflows",
                            "build-release.yml"), encoding="utf-8").read()
     # 必须检查 app.imy 内部而非 APK 根
     assert "assets/chaquopy/app.imy" in wf, \
@@ -2081,7 +2086,7 @@ def test_android_apk_content_via_app_imy():
 
 
 def test_keystore_protected_by_gitignore_and_hook():
-    root = os.path.dirname(__file__)
+    root = ROOT
     ignore = open(os.path.join(root, ".gitignore"), encoding="utf-8").read()
     for pat in ("*.jks", "*.keystore", "*.p12", "signing.properties"):
         assert pat in ignore, f".gitignore 缺 {pat}"
@@ -2168,7 +2173,7 @@ def _run_hook_with_files(tmp_path, files):
     bash_exe = _find_bash()
     if bash_exe is None or not os.path.exists(bash_exe):
         pytest.skip("bash 不可用，跳过 hook 行为测试")
-    root = os.path.dirname(__file__)
+    root = ROOT
     hook_src = os.path.join(root, ".githooks", "pre-commit")
     hook_content = open(hook_src, encoding="utf-8").read()
 
@@ -2852,7 +2857,7 @@ def test_backup_loopback_still_succeeds(client):
 
 def test_android_spacy_module_load_fallback_static():
     """_load_spacy_model 必须包含 module.load() 回退（Android 无 dist-info 时唯一可用路径）。"""
-    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "nlp.py"), encoding="utf-8").read()
     assert "importlib.import_module" in src, "缺 importlib 回退"
     assert "module.load()" in src, "缺 module.load() 回退"
     assert "spacy.load(name)" in src or 'spacy.load(' in src, "缺 spacy.load(name) 首选路径"
@@ -2860,14 +2865,14 @@ def test_android_spacy_module_load_fallback_static():
 
 def test_android_spacy_model_dir_fallback_static():
     """模型目录 glob 回退必须存在（meta 版本与目录名不一致时的最后兜底）。"""
-    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "nlp.py"), encoding="utf-8").read()
     assert "glob(f\"{name}-*\"" in src or 'glob(f"{name}-' in src, "缺模型目录 glob 兜底"
     assert "data_dirs" in src, "缺 data_dirs 变量"
 
 
 def test_android_spacy_download_gated_by_is_android_static():
     """自动下载必须被 is_android() 门控，否则 Android import 期起 pip 子进程卡死。"""
-    src = open(os.path.join(os.path.dirname(__file__), "nlp.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "nlp.py"), encoding="utf-8").read()
     # 必须有 is_android 判断且在 download 之前
     assert "is_android()" in src, "缺 is_android() 判断"
     # 确保下载路径在 is_android 分支保护下，而非无条件
@@ -2881,7 +2886,7 @@ def test_android_spacy_download_gated_by_is_android_static():
 
 def test_android_spacy_extract_packages_static():
     """build.gradle extractPackages 必须包含 spacy/thinc/de_core_news_sm 三者。"""
-    gradle = open(os.path.join(os.path.dirname(__file__), "android", "app", "build.gradle"), encoding="utf-8").read()
+    gradle = open(os.path.join(ROOT, "android", "app", "build.gradle"), encoding="utf-8").read()
     line = next((ln for ln in gradle.splitlines() if "extractPackages" in ln), "")
     assert line, "缺 extractPackages 声明"
     for pkg in ("spacy", "thinc", "de_core_news_sm"):
@@ -2995,9 +3000,9 @@ def test_ai_no_key_stub_still_succeeds(client, monkeypatch):
 
 def test_frontend_ai_error_paths_reuse_api_and_show_alert():
     """前端 AI 错误必须走 api() 抛异常 → catch → alert/状态提示，不静默成功，不吞异常。"""
-    writer_src = open(os.path.join(os.path.dirname(__file__), "static", "js", "writer.js"), encoding="utf-8").read()
-    reader_src = open(os.path.join(os.path.dirname(__file__), "static", "js", "reader.js"), encoding="utf-8").read()
-    core_src = open(os.path.join(os.path.dirname(__file__), "static", "js", "core.js"), encoding="utf-8").read()
+    writer_src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
+    reader_src = open(os.path.join(ROOT, "static", "js", "reader.js"), encoding="utf-8").read()
+    core_src = open(os.path.join(ROOT, "static", "js", "core.js"), encoding="utf-8").read()
     # core api() 必须在非 ok 时抛 Error
     assert "throw new Error" in core_src, "core.js api() 必须抛异常"
     # writer aiPolishEssay 必须有 try/catch 且 catch 中有 alert
@@ -3017,7 +3022,7 @@ def test_frontend_ai_error_paths_reuse_api_and_show_alert():
 def test_frontend_does_not_write_api_key_to_storage():
     """前端不得把 API Key 写入 localStorage 或以明文写入 DOM。"""
     import pathlib
-    js_dir = pathlib.Path(os.path.join(os.path.dirname(__file__), "static", "js"))
+    js_dir = pathlib.Path(os.path.join(ROOT, "static", "js"))
     for fp in js_dir.glob("*.js"):
         src = fp.read_text(encoding="utf-8")
         # 禁止同一行内把 api_key 明文 setItem
@@ -3829,7 +3834,7 @@ def test_task1_sync_router_thread_safety(client):
 
 def test_task1_corpus_dict_registered_in_all_packaging_targets():
     """corpus_dict 完整注册在 package_windows.py, CI workflow 以及 DeLector.spec 中。"""
-    root = os.path.dirname(__file__)
+    root = ROOT
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
     assert "--hidden-import=corpus_dict" in pkg
     assert "--hidden-import=core_dict" in pkg
@@ -3856,7 +3861,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     - v5.2.0：routes_rtc.py, routes_exam.py, exam_catalog.py 遗漏导致 Chaquopy 启动报
       ModuleNotFoundError: No module named 'routes_rtc'
     """
-    root = os.path.dirname(__file__)
+    root = ROOT
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
 
