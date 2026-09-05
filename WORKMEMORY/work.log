@@ -105,3 +105,18 @@ ADR-0006（背词工作台实体学术卡片箱与心流优先重塑）实施完
 4. 矿物植物印章评分座：浅柔彩调底座 + 键盘快捷键角标，彻底淘汰纯红绿黄粗厚色块。
 5. 辅助视图 Editorial 风格细化：自测题选项、拼写输入框、KPI 统计与词库浏览表墨水化装订。
 6. 回归证据闭环：全量 pytest 569 全绿（116.99s，基线 565 -> 569 +4，零失败），10/10 Node.js 动态行为探针全绿（含 13/13 切片护栏 100% 保护通过）。
+
+### 2026-09-05 15:20 | gemini-3-8-flash__antigravity | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：执行路线 C 实施计划——Grammatik-Radar: 精读语法雷达（五场域/从句树 Hover 触发 + 语料语法统计落盘 + 蜘蛛图雷达）。
+不做范围：破坏 iframe 边界与现有 reader 交互协议、改动分词与 NLP 标注管线算法、修改无关业务端点。
+
+### 2026-09-05 15:56 | gemini-3-8-flash__antigravity | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+路线 C（Grammatik-Radar: 精读语法雷达）实施完毕（Task 1 至 Task 6 全闭环）：
+1. 数据库与契约扩展：corpus_syntax_stats 表 + upsert_corpus_syntax_stats + get_all_corpus_syntax_stats，通过 test_corpus_syntax_stats_db_contract。
+2. 后端语法雷达端点：POST /api/syntax/stats 与 GET /api/syntax/stats 支持语料语法统计聚合与缓存，通过 test_syntax_stats_endpoints。
+3. 界面优化与组件挂载：清除行内「拓扑句法」按钮，句法抽屉追加 #grammar-radar-panel 折叠雷达面板，通过 test_radar_panel_present_in_syntax_drawer。
+4. 前端交互与指标统计：reader.js 实现 600ms hover 防抖静默展开句法抽屉，computeArticleSyntaxStats 客户端计算 6 维指标，通过 test_reader_compute_article_syntax_stats_and_hover_binding。
+5. 蜘蛛图与样式装订：轻量零外部依赖 renderRadarSvg 绘制本文 vs 语料基线蛛网图，Editorial 配色与 tooltip，通过 test_render_radar_svg_and_radar_panel_integration。
+6. 回归证据闭环：全量 pytest 574 passed (109.26s，基线 569 -> 574 +5)，10/10 Node.js 动态行为探针（含 13/13 处切片护栏）全绿通过。
