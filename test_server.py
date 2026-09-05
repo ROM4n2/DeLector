@@ -2120,6 +2120,16 @@ def _run_hook_with_files(tmp_path, files):
 
     def _find_bash():
         cands = []
+        for git_cmd in ("git.exe", "git"):
+            gw = shutil.which(git_cmd)
+            if gw:
+                git_root = os.path.dirname(os.path.dirname(gw))
+                for b in [
+                    os.path.join(git_root, "bin", "bash.exe"),
+                    os.path.join(git_root, "usr", "bin", "bash.exe"),
+                ]:
+                    if os.path.exists(b) and b not in cands:
+                        cands.append(b)
         # where bash 列出所有候选（含 Git Bash 与 WSL bash）
         try:
             out = subprocess.run(["where", "bash"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
@@ -2190,10 +2200,16 @@ def _run_hook_with_files(tmp_path, files):
         errors="replace",
     )
     # WSL 的 bash 在无发行版时会输出 "Windows Subsystem for Linux has no installed distributions"
-    # 且以 UTF-16 误判；若命中则视为环境不可用而非钩子逻辑失败
+    # 或错误码 0x80070422，且可能以 UTF-16 输出导致乱码；若命中则视为环境不可用而非钩子逻辑失败
     combined = result.stdout + result.stderr
-    if "Windows Subsystem for Linux" in combined and "no installed distributions" in combined:
-        pytest.skip("WSL bash 无发行版，跳过 hook 行为测试（应使用 Git Bash）")
+    combined_clean = combined.replace("\x00", "")
+    if (
+        ("Windows Subsystem for Linux" in combined_clean and "no installed distributions" in combined_clean)
+        or "0x80070422" in combined_clean
+        or "0x8007" in combined_clean
+        or ("WSL" in combined_clean and result.returncode != 0 and "PKCS12" not in combined_clean)
+    ):
+        pytest.skip("WSL bash 无法运行或无可用发行版，跳过 hook 行为测试（应使用 Git Bash）")
     return result.returncode, combined
 
 
