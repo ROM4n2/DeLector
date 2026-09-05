@@ -20,6 +20,39 @@ export let a1Teil3Cache = [];
 export let a1CardIndex = 0;
 export let a1CardFlipped = false;
 export let _a1SavedLemmas = new Set();
+export let _examVocabLevel = "A1";
+export let _a2VocabCache = null;
+let _a2VocabLoadingPromise = null;
+
+export async function setExamVocabLevel(level) {
+  _examVocabLevel = (level || "A1").toUpperCase();
+  a1CardIndex = 0;
+  a1CardFlipped = false;
+  if (_examVocabLevel === "A2") {
+    if (!_a2VocabCache) {
+      if (!_a2VocabLoadingPromise) {
+        _a2VocabLoadingPromise = api("/api/a2/vocab")
+          .then((res) => {
+            _a2VocabCache = res || [];
+            _a2VocabLoadingPromise = null;
+            return _a2VocabCache;
+          })
+          .catch((e) => {
+            console.error("Failed to load A2 vocab", e);
+            _a2VocabCache = [];
+            _a2VocabLoadingPromise = null;
+            return [];
+          });
+      }
+      await _a2VocabLoadingPromise;
+    }
+    renderA1TopicPills();
+    renderA1();
+  } else {
+    renderA1TopicPills();
+    renderA1();
+  }
+}
 
 export function getA1Mode() {
   return a1Mode;
@@ -74,7 +107,19 @@ export async function loadA1Data() {
 
 export function renderA1TopicPills() {
   const container = document.getElementById("a1-topic-pills");
-  if (!container || !a1TopicsCache) return;
+  if (!container) return;
+
+  if (_examVocabLevel === "A2") {
+    const totalCount = _a2VocabCache ? _a2VocabCache.length : 974;
+    container.innerHTML = `
+      <button class="a1-pill active" onclick="filterA1Topic('')">
+        🌟 全部 A2 考纲词汇 <span class="a1-pill-count">${totalCount}</span>
+      </button>
+    `;
+    return;
+  }
+
+  if (!a1TopicsCache) return;
 
   const totalCount = a1VocabCache.length || 702;
   let html = `
@@ -157,11 +202,22 @@ export function setA1Mode(mode) {
   // 题库懒加载：原 cards.js 'a1' 段的「未加载先 fetch 再渲染」链路随分流段
   // 一起迁走。备考域入口 setExamModule → setA1Mode，这里补上同语义守卫，
   // 否则首次进入 vocab/口语会拿空缓存渲染成「未找到考纲词汇」空态。
+  if (mode === "vocab" && _examVocabLevel === "A2") {
+    if (!_a2VocabCache) {
+      setExamVocabLevel("A2").catch(() => {});
+      return;
+    }
+    renderA1TopicPills();
+    renderA1();
+    return;
+  }
+
   if (!isA1DataLoaded()) {
     loadA1Data()
       .then(() => {
         // 守卫：等待期间用户可能已切到 hoeren/lesen（它们不走本渲染路径）。
-        if (a1Mode === "vocab" || a1Mode === "teil2" || a1Mode === "teil3") renderA1();
+        if (a1Mode === "vocab" || a1Mode === "teil2" || a1Mode === "teil3")
+          renderA1();
       })
       .catch(() => {});
     return;
@@ -213,6 +269,18 @@ export function randomA1Card() {
 
 export function getA1CurrentList() {
   if (a1Mode === "vocab") {
+    if (_examVocabLevel === "A2") {
+      let list = _a2VocabCache || [];
+      if (a1SearchQuery) {
+        list = list.filter(
+          (w) =>
+            (w.word || "").toLowerCase().includes(a1SearchQuery) ||
+            (w.lemma || "").toLowerCase().includes(a1SearchQuery) ||
+            (w.definition_zh || "").toLowerCase().includes(a1SearchQuery),
+        );
+      }
+      return list;
+    }
     let list = a1VocabCache || [];
     if (a1CurrentTopic) list = list.filter((w) => w.topic === a1CurrentTopic);
     if (a1SearchQuery) {
@@ -260,7 +328,7 @@ export function renderA1PokerCard() {
     container.innerHTML = `
       <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
         <div style="font-size:2.5rem;margin-bottom:0.5rem;">🔍</div>
-        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);">未找到匹配的 A1 考纲词汇</div>
+        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);">未找到匹配的 ${_examVocabLevel || "A1"} 考纲词汇</div>
         <p style="color:var(--ink-mute);font-size:0.875rem;margin-top:0.5rem;">尝试清空搜索框或切换主题分类</p>
       </div>
     `;
@@ -292,7 +360,7 @@ export function renderA1PokerCard() {
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
       <div class="deck-meta-bar">
-        <span>🌟 歌德 A1 官方考纲词卡 · POKER FLIP</span>
+        <span>🌟 歌德 ${_examVocabLevel || "A1"} 官方考纲词卡 · POKER FLIP</span>
         <span class="deck-counter-badge">WORT ${a1CardIndex + 1} / ${total}</span>
       </div>
 
@@ -312,7 +380,7 @@ export function renderA1PokerCard() {
               </div>
               <div class="card-top-actions">
                 <button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(cur.word)})" title="朗读德语">🔊</button>
-                <span class="cefr-badge badge-A1">Goethe A1</span>
+                <span class="cefr-badge badge-${_examVocabLevel || "A1"}">Goethe ${_examVocabLevel || "A1"}</span>
               </div>
             </div>
 
@@ -338,7 +406,7 @@ export function renderA1PokerCard() {
               <div class="deck-back-lemma">${esc(cur.word)}</div>
               <div class="card-top-actions">
                 <button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(cur.example_de)})" title="朗读官方例句">🔊</button>
-                <span class="cefr-badge badge-A1">Goethe A1</span>
+                <span class="cefr-badge badge-${_examVocabLevel || "A1"}">Goethe ${_examVocabLevel || "A1"}</span>
               </div>
             </div>
 
@@ -349,7 +417,7 @@ export function renderA1PokerCard() {
               </div>
 
               <div class="deck-example-block" style="margin-top:0.75rem;">
-                <div class="deck-def-label">GOETHE A1 STANDARD-BEISPIEL · 官方考纲例句</div>
+                <div class="deck-def-label">GOETHE ${_examVocabLevel || "A1"} STANDARD-BEISPIEL · 官方考纲例句</div>
                 <div class="deck-example-de" style="font-size:0.95rem;font-weight:500;color:var(--ink);">${esc(cur.example_de)}</div>
                 <div class="deck-example-zh" style="font-size:0.85rem;color:var(--ink-mute);margin-top:0.25rem;">${esc(cur.example_zh)}</div>
               </div>
@@ -385,7 +453,7 @@ export function renderA1GridView() {
     container.innerHTML = `
       <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
         <div style="font-size:2.5rem;margin-bottom:0.5rem;">🔍</div>
-        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);">未找到匹配的 A1 考纲词汇</div>
+        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);">未找到匹配的 ${_examVocabLevel || "A1"} 考纲词汇</div>
       </div>
     `;
     return;
@@ -405,7 +473,7 @@ export function renderA1GridView() {
           <div class="card-title">${esc(w.word)}</div>
           <div class="card-meta">
             <button class="speaker-btn" onclick="playGermanAudio(${jsAttr(w.word)})" title="朗读">🔊</button>
-            <span class="cefr-badge badge-A1">A1</span>
+            <span class="cefr-badge badge-${_examVocabLevel || "A1"}">${_examVocabLevel || "A1"}</span>
           </div>
         </div>
         <div class="card-lemma-row">${esc(w.lemma)} · ${esc(w.pos || "")} ${w.plural ? "· Pl: " + esc(w.plural) : ""}</div>
@@ -426,7 +494,7 @@ export function renderA1GridView() {
 
   container.innerHTML = `
     <div class="cards-grid-summary" style="margin: 0.75rem 0; font-size:0.875rem; color:var(--ink-mute);">
-      共筛选出 <b>${list.length}</b> 个歌德 A1 官方考纲词汇
+      共筛选出 <b>${list.length}</b> 个歌德 ${_examVocabLevel || "A1"} 官方考纲词汇
     </div>
     <div class="cards-grid">${cardsHtml}</div>
   `;
@@ -619,7 +687,7 @@ export async function saveA1WordToDeck(
         pos: pos || "WORT",
         gender: gender || "",
         plural: plural || "",
-        cefr_level: "A1",
+        cefr_level: _examVocabLevel || "A1",
         definition_zh: defn || "",
         sentence_context: exampleDe || "",
       }),

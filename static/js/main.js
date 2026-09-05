@@ -76,6 +76,7 @@ import {
   renderA1PokerCard,
   playA1Audio,
   setA1CardViewMode,
+  setExamVocabLevel,
 } from "./cards.js";
 import {
   switchFolioPage,
@@ -228,6 +229,27 @@ export function show(view) {
 // 它同时需要 setA1Mode（cards.js 链）与 setExamWritingTab（writer.js 链），
 // a1_cards.js / a1_writer.js 互不 import， mediator 只能住根模块。
 let _examModule = "writing";
+let _currentExamLevel = "A1";
+
+export function setExamLevel(level) {
+  _currentExamLevel = (level || "A1").toUpperCase();
+  ["a1", "a2"].forEach((lv) => {
+    document
+      .getElementById("exam-level-" + lv)
+      ?.classList.toggle("active", lv === _currentExamLevel.toLowerCase());
+  });
+  if (_currentExamLevel === "A2") {
+    const badge = document.querySelector("#exam-card-vocab .exam-module-count");
+    if (badge) badge.textContent = "974";
+    setExamVocabLevel("A2");
+    setExamModule("vocab");
+  } else {
+    const badge = document.querySelector("#exam-card-vocab .exam-module-count");
+    if (badge) badge.textContent = "702";
+    setExamVocabLevel("A1");
+    setExamModule(_examModule || "writing");
+  }
+}
 
 export function setExamModule(mod) {
   // 无参调用（show('exam') 进场）= 回到上次停留的模块；显式点击才换模块。
@@ -295,9 +317,10 @@ async function initExamCatalog() {
     if (m.count > 0) {
       const badge = document.createElement("span");
       badge.className = "exam-module-count";
-      badge.textContent = m.count >= 1000
-        ? (m.count / 1000).toFixed(1).replace(/\.0$/, "") + "k"
-        : String(m.count);
+      badge.textContent =
+        m.count >= 1000
+          ? (m.count / 1000).toFixed(1).replace(/\.0$/, "") + "k"
+          : String(m.count);
       card.appendChild(badge);
     }
   });
@@ -309,6 +332,10 @@ async function initExamCatalog() {
   // no-op onclick + title 提示 + aria-disabled。
   const tabs = document.getElementById("exam-level-tabs");
   if (!tabs) return;
+  const a1Btn = document.getElementById("exam-level-a1");
+  if (a1Btn) {
+    a1Btn.onclick = () => setExamLevel("A1");
+  }
   levels.forEach((lv) => {
     if (!lv.id) return;
     const key = lv.id.toLowerCase();
@@ -317,9 +344,14 @@ async function initExamCatalog() {
     btn.id = "exam-level-" + key;
     btn.className = "exam-level-tab";
     btn.textContent = lv.title || lv.id;
-    btn.title = "该等级模块待接入";
-    btn.setAttribute("aria-disabled", "true");
-    btn.onclick = () => {}; // no-op：防静默死按钮，待该等级模块接线后替换
+    if (key === "a2") {
+      btn.title = "歌德 A2 备考工坊（已激活官方考纲词表）";
+      btn.onclick = () => setExamLevel("A2");
+    } else {
+      btn.title = "该等级模块待接入";
+      btn.setAttribute("aria-disabled", "true");
+      btn.onclick = () => {}; // no-op：防静默死按钮，待该等级模块接线后替换
+    }
     tabs.appendChild(btn);
   });
 }
@@ -469,7 +501,7 @@ export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
     closeModal();
     openReader(data.article_id);
   } catch (e) {
-    notify(`导入外刊失败: ${e.message}`, { kind: 'error' });
+    notify(`导入外刊失败: ${e.message}`, { kind: "error" });
     if (btn) {
       btn.disabled = false;
       btn.textContent = "📥 导入精读";
@@ -617,7 +649,7 @@ export async function saveAppSettings() {
       ShadowPlayer.setVoice(voice);
     }
 
-    notify("✓ 偏好与 API 设置已成功保存并即刻生效！", { kind: 'success' });
+    notify("✓ 偏好与 API 设置已成功保存并即刻生效！", { kind: "success" });
     closeSettingsModal();
   } catch (err) {
     alert("保存设置失败: " + err.message);
@@ -657,7 +689,9 @@ export async function submitActiveImport() {
       if (titleInput) titleInput.value = "";
       openReader(data.article_id);
     } catch (e) {
-      notify("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入", { kind: 'error' });
+      notify("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入", {
+        kind: "error",
+      });
     } finally {
       btn.textContent = "开始阅读";
       btn.disabled = false;
@@ -930,6 +964,7 @@ Object.assign(window, {
   saveA1WordToDeck,
   renderA1PokerCard,
   playA1Audio,
+  setExamVocabLevel,
 
   // Atelier Landing Page Folio
   switchFolioPage,
@@ -981,6 +1016,7 @@ Object.assign(window, {
   toggleWriterMobilePanel,
   closeWriterMobilePanel,
   switchWriterMode,
+  setExamLevel,
   setExamModule,
   setExamWritingTab,
   selectA1Formular,

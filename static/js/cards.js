@@ -22,6 +22,7 @@ export {
   playA1Audio,
   loadA1Data,
   renderA1TopicPills,
+  setExamVocabLevel,
 } from "./a1_cards.js";
 export * from "./a1_cards.js";
 
@@ -1213,4 +1214,3 @@ export async function retryPrepMatrix() {
   await loadPrepMatrix();
   renderPrepMatrix();
 }
-

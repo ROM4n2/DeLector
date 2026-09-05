@@ -336,3 +336,60 @@ def test_exam_catalog_new_level_tabs_not_dead_buttons():
     assert "btn.onclick" in body, (
         "新增等级页签缺 onclick 占位（no-op 接线，待该等级模块接入后替换）"
     )
+
+
+def test_exam_catalog_activates_a2_tab_interactivity():
+    """Task 4: initExamCatalog 激活 A2 等级页签交互，且 main.js 导出并绑定 setExamLevel。"""
+    main_js = (_ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
+    m = re.search(r"(?:async\s+)?function\s+initExamCatalog\s*\(", main_js)
+    assert m, "main.js 缺少 initExamCatalog()"
+    body = main_js[m.end():main_js.index("\nfunction ", m.end())]
+    assert (
+        'setExamLevel("A2")' in body
+        or "setExamLevel(lv.id)" in body
+        or "setExamLevel('A2')" in body
+    ), "initExamCatalog 必须将 A2 等级页签连接至 setExamLevel"
+    assert "export function setExamLevel(" in main_js, "main.js 必须导出 setExamLevel"
+    assert "setExamLevel" in main_js.split("Object.assign(window, {")[1].split("});")[0], (
+        "window 必须绑定 setExamLevel"
+    )
+
+
+def test_a1_cards_supports_a2_vocab_level():
+    """Task 4: a1_cards.js 与 cards.js 导出 setExamVocabLevel，且调用 /api/a2/vocab。"""
+    a1_js = (_ROOT / "static" / "js" / "a1_cards.js").read_text(encoding="utf-8")
+    cards_js = (_ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
+    assert (
+        "export function setExamVocabLevel(" in a1_js
+        or "export async function setExamVocabLevel(" in a1_js
+    ), "a1_cards.js 必须导出 setExamVocabLevel"
+    assert "setExamVocabLevel" in cards_js, "cards.js 必须重导出 setExamVocabLevel"
+    assert '"/api/a2/vocab"' in a1_js or "'/api/a2/vocab'" in a1_js, (
+        "a1_cards.js 必须包含 /api/a2/vocab 端点调用"
+    )
+
+    # 抽取 renderA1PokerCard 与 renderA1GridView 函数体，断言 badge-A1 不与动态 badge-${_examVocabLevel 并存
+    poker_body = a1_js.split("export function renderA1PokerCard(")[1].split("export function renderA1GridView(")[0]
+    assert "badge-A1" not in poker_body, (
+        "renderA1PokerCard 不得残留静态 badge-A1 徽标（与动态 badge-${_examVocabLevel 并存）"
+    )
+    assert "badge-${_examVocabLevel" in poker_body, (
+        "renderA1PokerCard 必须使用动态 badge-${_examVocabLevel 徽标"
+    )
+
+    grid_body = a1_js.split("export function renderA1GridView(")[1].split("export function renderA1Teil2Deck(")[0]
+    assert "badge-A1" not in grid_body, (
+        "renderA1GridView 不得残留静态 badge-A1 徽标（与动态 badge-${_examVocabLevel 并存）"
+    )
+    assert "badge-${_examVocabLevel" in grid_body, (
+        "renderA1GridView 必须使用动态 badge-${_examVocabLevel 徽标"
+    )
+
+    # 抽取 saveA1WordToDeck 函数体，断言 cefr_level 字段无重复定义
+    save_body = a1_js.split("export async function saveA1WordToDeck(")[1].split("export const saveA1VocabCard")[0]
+    assert save_body.count("cefr_level:") == 1, (
+        "saveA1WordToDeck 中 cefr_level 字段定义重复（必须恰好出现 1 次）"
+    )
+    assert 'cefr_level: _examVocabLevel || "A1"' in save_body, (
+        "saveA1WordToDeck 必须使用动态 _examVocabLevel || 'A1'"
+    )
