@@ -100,7 +100,7 @@ from database import (
 # 只透传 server 内真实消费的符号；无消费者的再导出（spacy、SPACY_MODEL_CANDIDATES、
 # AUTO_DOWNLOAD_MODEL、_load_spacy_model、calculate_cefr_stats、
 # _process_german_text_pure_python 等）已从 import/__all__ 剔除（M5-4）。
-from nlp import (
+from delector.nlp import (
     nlp,
     NLP_ENGINE,
     NLP_ENGINE_DETAIL,
@@ -111,7 +111,7 @@ from nlp import (
 )
 
 # --- 3. Security, SSRF & Feed Utilities ---
-from security import (
+from delector.security import (
     _resolve_ssrf_targets,
     _IETF_PROTOCOL_ASSIGNMENTS,
     _IPV6_DENY_PREFIXES,
@@ -226,9 +226,9 @@ __all__ = [
 ]
 
 from delector.core_dict import lookup_core_vocab
-from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
+from delector.linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
                          lookup_prep_collocations, build_prep_matrix)
-from syntax_tree import analyze_syntax_tree
+from delector.syntax_tree import analyze_syntax_tree
 from routes_a1 import router as a1_router
 from routes_a2 import router as a2_router
 from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES, _SYNC_INSTANCE_ID
@@ -1085,7 +1085,7 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
         except ImportError:
             # Android/Chaquopy 没有 edge_tts 的 wheel（aiohttp 等依赖缺）→ 用 stdlib 版客户端
             # （edge_tts_mini 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖）
-            import edge_tts_mini
+            from delector import edge_tts_mini
             audio_data = await asyncio.to_thread(
                 edge_tts_mini.synthesize, clean_text, voice, rate
             )
@@ -1993,13 +1993,13 @@ def _get_writer_nlp():
 
 @app.post("/api/writing/analyze")
 def api_writing_analyze(req: WritingAnalyzeReq):
-    from writing_rules import analyze_essay_text
+    from delector.writing_rules import analyze_essay_text
     return analyze_essay_text(req.text[:2000], _get_writer_nlp())
 
 
 @app.post("/api/essays")
 def create_essay(req: EssayCreateReq):
-    from writing_rules import analyze_essay_text
+    from delector.writing_rules import analyze_essay_text
     a = analyze_essay_text(req.content[:5000], _get_writer_nlp())
     cefr = a.get("cefr", {}).get("recommended_level")
     with db_conn() as conn:
@@ -2037,7 +2037,7 @@ def get_essay(essay_id: int):
 
 @app.put("/api/essays/{essay_id}")
 def update_essay(essay_id: int, req: EssayUpdateReq):
-    from writing_rules import analyze_essay_text
+    from delector.writing_rules import analyze_essay_text
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
@@ -2173,7 +2173,7 @@ async def api_writing_ai_polish(req: AIPolishReq):
 
 @app.post("/api/writing/ai-polish/diff")
 async def api_writing_ai_polish_diff(req: AIPolishReq):
-    from essay_diff import diff_sentences
+    from delector.essay_diff import diff_sentences
     text = req.text[:2000]
     corrected_text, notes_zh, error_count = await _ai_polish_call(text)
     hunks = diff_sentences(text, corrected_text)
@@ -2289,7 +2289,7 @@ def delete_essay_version(essay_id: int, version_id: int, request: Request):
 
 @app.post("/api/essays/{essay_id}/restore")
 def restore_essay_version(essay_id: int, req: EssayRestoreReq):
-    from writing_rules import analyze_essay_text
+    from delector.writing_rules import analyze_essay_text
     with db_conn() as conn:
         essay = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:
@@ -2333,8 +2333,8 @@ def restore_essay_version(essay_id: int, req: EssayRestoreReq):
 
 @app.post("/api/writing/apply")
 def api_writing_apply(req: WritingApplyReq):
-    from essay_diff import diff_sentences, merge_sentences
-    from writing_rules import analyze_essay_text
+    from delector.essay_diff import diff_sentences, merge_sentences
+    from delector.writing_rules import analyze_essay_text
 
     hunks = diff_sentences(req.original_text, req.corrected_text)
     if any(idx < 0 or idx >= len(hunks) for idx in req.accepted_indices):

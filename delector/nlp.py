@@ -12,7 +12,7 @@ except ImportError:
 
 from start import is_android
 from delector.core_dict import lookup_core_vocab, get_core_cefr_level
-from syntax_tree import (analyze_sentence_topology, build_clause_tree,
+from delector.syntax_tree import (analyze_sentence_topology, build_clause_tree,
                          split_sentences_pure_python)
 
 # md 带词向量、标注更准，是桌面端首选；sm 体积小，Android 包里装的和自动下载兜底都用它。

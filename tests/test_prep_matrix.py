@@ -8,7 +8,7 @@
 3. 排序契约 —— 同组内 lemma 字母序。组间顺序属呈现策略，由 server 层负责，
    这里不断言（避免两层各有一套真相）。
 """
-from linguistics import build_prep_matrix, build_prep_matrix_core, PREP_COLLOCATIONS
+from delector.linguistics import build_prep_matrix, build_prep_matrix_core, PREP_COLLOCATIONS
 
 
 def test_matrix_total_conservation():

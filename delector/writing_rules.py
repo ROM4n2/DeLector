@@ -172,7 +172,7 @@ def _prep_expected_case(tok: Any) -> Tuple[Optional[str], str]:
 
     # 1. 动词/形容词固定搭配优先
     if verb_head and verb_head.pos_ in ("VERB", "AUX", "ADJ"):
-        from linguistics import lookup_prep_collocations
+        from delector.linguistics import lookup_prep_collocations
         rows = lookup_prep_collocations(verb_head.lemma_) or lookup_prep_collocations(verb_head.text.lower())
         match = next((r for r in rows if r.get("praeposition", "").lower() == prep), None)
         if match:

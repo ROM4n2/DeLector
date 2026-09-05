@@ -2,7 +2,7 @@
 """Unit tests for writing_rules.py local rule engine."""
 import pytest
 import spacy
-from writing_rules import analyze_essay_text, decline_determiner
+from delector.writing_rules import analyze_essay_text, decline_determiner
 
 
 @pytest.fixture(scope="module")
@@ -322,7 +322,7 @@ def test_prep_entlang_positional_case(nlp):
 
 def test_analyze_a1_email_capitalized_noun_exemption_and_expanded_valedictions():
     """A1 邮件诊断：正文首词大写名词/专有名词免检，并扩充常用结语表。"""
-    from writing_rules import analyze_a1_email
+    from delector.writing_rules import analyze_a1_email
 
     # 1. 专有名词/名词（Montag, Berlin）在称呼语逗号后允许大写
     text1 = "Liebe Maria,\nMontag habe ich Zeit für Deutschkurs.\nViele Grüße\nHans"

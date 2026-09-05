@@ -6,7 +6,7 @@ import gc
 import ipaddress
 import pytest
 from fastapi.testclient import TestClient
-from linguistics import PREP_COLLOCATIONS
+from delector.linguistics import PREP_COLLOCATIONS
 
 # Ensure test DBs are isolated
 os.environ["DATABASE_PATH"] = "test_delector.db"
@@ -1522,7 +1522,7 @@ def test_separable_verbs_extraction():
 
 def test_irregular_verb_stammformen_lookup():
     """Verify Goethe irregular/strong verb Stammformen reverse lookup."""
-    from linguistics import lookup_irregular_verb
+    from delector.linguistics import lookup_irregular_verb
 
     # 1. Base infinitive
     res_gehen = lookup_irregular_verb("gehen")
@@ -1552,7 +1552,7 @@ def test_irregular_verb_stammformen_lookup():
 
 def test_komposita_splitting():
     """Verify German compound noun splitting with Fugenelemente."""
-    from linguistics import split_komposita
+    from delector.linguistics import split_komposita
 
     # 1. Two-part compound
     klima_parts = split_komposita("Klimaschutz")
@@ -1807,7 +1807,7 @@ def test_pure_python_pipeline_without_spacy():
     这条分支曾因调用不存在的 lookup_core_dict 而在 import server 时就 NameError，
     导致安卓端 uvicorn 永远起不来、启动页一直卡住。
     """
-    import nlp
+    from delector import nlp
 
     result = nlp._process_german_text_pure_python(
         "Der Hund schläft. Ich habe ein Buch gelesen!"
@@ -1834,7 +1834,7 @@ def test_module_import_survives_without_spacy(monkeypatch):
 
 def test_syntax_tree_pure_python_sentence_split():
     """syntax_tree 的降级分支曾有和 server 完全相同的切句 bug：句号被切成独立句子。"""
-    from syntax_tree import _analyze_syntax_tree_pure_python, split_sentences_pure_python
+    from delector.syntax_tree import _analyze_syntax_tree_pure_python, split_sentences_pure_python
 
     assert split_sentences_pure_python("Der Hund schläft. Ich lese!") == [
         "Der Hund schläft.",
@@ -1899,7 +1899,7 @@ def test_android_never_downloads_model_at_import():
 
 def test_spacy_model_candidates_prefer_md():
     """README 与 Dockerfile 都装 md（带词向量、标注更准），sm 只是兜底。"""
-    import nlp
+    from delector import nlp
 
     assert nlp.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
     # 自动下载走小模型：md 约 45MB，首启动拉它太慢
@@ -1913,7 +1913,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     """
     import sys
     import types
-    import nlp
+    from delector import nlp
 
     sentinel = object()
     fake = types.ModuleType("de_fake_news_sm")
@@ -1928,7 +1928,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
 
 def test_load_spacy_model_reports_every_failed_strategy(monkeypatch):
     """全部失败时错误信息要带上每条策略的原因，否则真机上无从判断卡在哪。"""
-    import nlp
+    from delector import nlp
 
     monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k:
                         (_ for _ in ()).throw(OSError("no dist-info")))
@@ -3144,7 +3144,7 @@ def test_prep_matrix_endpoint_fields_preserved(client):
 
 def test_prep_matrix_conserves_dataset_total(client):
     """端点不许在扁平化时丢词条：总数必须等于纯函数展开的总数。"""
-    from linguistics import build_prep_matrix
+    from delector.linguistics import build_prep_matrix
     core_total = sum(len(es) for by_case in build_prep_matrix().values()
                      for es in by_case.values())
     groups = client.get("/api/prep/matrix").json()["groups"]

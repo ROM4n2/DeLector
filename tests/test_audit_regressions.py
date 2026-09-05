@@ -14,10 +14,10 @@ import os
 import pytest
 os.environ.setdefault("DATABASE_PATH", "test_delector_audit_regressions.db")
 from server import RestoreReq
-from linguistics import lookup_irregular_verb, split_komposita
-from syntax_tree import analyze_sentence_topology
-from writing_rules import decline_determiner
-from security import is_safe_public_url
+from delector.linguistics import lookup_irregular_verb, split_komposita
+from delector.syntax_tree import analyze_sentence_topology
+from delector.writing_rules import decline_determiner
+from delector.security import is_safe_public_url
 
 
 def test_restore_req_includes_a1_records():

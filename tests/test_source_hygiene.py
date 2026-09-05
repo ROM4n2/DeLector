@@ -92,7 +92,7 @@ def test_linguistics_vocab_ext_dedup_kept_the_fuller_glosses():
     这里钉的是 CEFR 和词性/词性属性，不钉释义文字（释义还会正常润色，
     钉了只会变成每次改文案都要来改测试的噪音）。
     """
-    from linguistics import LINGUISTICS_VOCAB_EXT as EXT
+    from delector.linguistics import LINGUISTICS_VOCAB_EXT as EXT
 
     expected = {
         "klima":     ("A2", "NOUN", "Neut"),

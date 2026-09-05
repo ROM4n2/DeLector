@@ -5,7 +5,7 @@ DeLector - Sentence-level Diff & Merge Engine for Writing Desk (v3.12.0)
 import difflib
 from typing import Any, Dict, List
 
-from syntax_tree import split_sentences_pure_python
+from delector.syntax_tree import split_sentences_pure_python
 
 
 def split_sentences(text: str) -> List[str]:

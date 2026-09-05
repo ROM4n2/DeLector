@@ -2,7 +2,7 @@
 """edge_tts_mini（stdlib 版 Edge TTS 客户端）的纯函数测试：不联网、确定性。"""
 import re
 
-import edge_tts_mini as m
+from delector import edge_tts_mini as m
 
 
 def test_sec_ms_gec_format():

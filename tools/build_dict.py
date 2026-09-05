@@ -43,7 +43,7 @@ REFILL_RAW_DIR = REPO_ROOT / "tools" / "raw_refill"
 # 从现有词库 import 出已覆盖的词元，构建工具要排除它们（只补缺口）
 sys.path.insert(0, str(REPO_ROOT))
 from delector.core_dict import CORE_VOCAB_DB  # noqa: E402
-from linguistics import LINGUISTICS_VOCAB_EXT  # noqa: E402
+from delector.linguistics import LINGUISTICS_VOCAB_EXT  # noqa: E402
 
 # ── 词表源定义 ──────────────────────────────────────────────────────────
 SOURCE_FILES = {

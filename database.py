@@ -16,7 +16,7 @@ from fastapi import HTTPException, Request
 import genanki
 import html as _html
 
-from nlp import process_german_text
+from delector.nlp import process_german_text
 
 DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", os.path.dirname(__file__))
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, ".cache", "audio")

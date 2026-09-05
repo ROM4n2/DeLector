@@ -1,7 +1,7 @@
 """
 Tests for sentence-level diff and merge engine (essay_diff.py).
 """
-from essay_diff import (
+from delector.essay_diff import (
     split_sentences,
     join_sentences,
     diff_sentences,
