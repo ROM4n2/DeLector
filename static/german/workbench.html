@@ -337,6 +337,7 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
   <div class="seg" id="scopeSeg">
     <button type="button" data-scope="core" class="active">⭐ A1 核心</button>
     <button type="button" data-scope="all">A1 全量</button>
+    <button type="button" data-scope="a2">📘 A2 词库</button>
     <button type="button" data-scope="reader">精读生词</button>
   </div>
   <span class="badge" id="dueBadge">—</span>
@@ -1611,7 +1612,7 @@ function wordById(id) { return S.words.find(w => w.id === id) || null; }
 function cardOf(id) { return S.cards[id] || null; }
 /* 核心词模式判定helper：全局唯一 truth source 是 wordFilters.scope === "core" */
 function inScopeWord(w) {
-  return !w || (wordFilters.scope === "core" ? (w.tags || []).includes("core") : (wordFilters.scope === "reader" ? !!(w.custom || (w.tags || []).includes("reader") || String(w.id || "").startsWith("card-")) : wordFilters.scope !== "core"));
+  return !w || (wordFilters.scope === "core" ? (w.tags || []).includes("core") : (wordFilters.scope === "reader" ? !!(w.custom || (w.tags || []).includes("reader") || String(w.id || "").startsWith("card-")) : (wordFilters.scope === "a2" ? (w.cefr === "A2" || (w.tags || []).includes("a2") || String(w.id || "").startsWith("a2-")) : (wordFilters.scope === "all" ? !(w.cefr === "A2" || (w.tags || []).includes("a2") || String(w.id || "").startsWith("a2-") || (w.custom && (w.tags || []).includes("reader"))) : wordFilters.scope !== "core"))));
 }
 function logToday() {
   const k = todayStr();
@@ -3084,6 +3085,48 @@ async function syncReaderCardsFromServer() {
   }
 }
 
+async function syncA2CardsFromServer() {
+  if (typeof location === "undefined" || !location.protocol.startsWith("http")) return;
+  if (wordFilters.scope !== "a2") return;
+  try {
+    const res = await fetch("/api/a2/vocab");
+    if (!res.ok) return;
+    const words = await res.json();
+    if (!Array.isArray(words) || !words.length) return;
+    const existingIds = new Set(S.words.map(w => w.id));
+    let changed = false;
+    for (const rw of words) {
+      const wid = rw.id || ("a2-" + (rw.lemma || rw.word || ""));
+      if (!existingIds.has(wid)) {
+        S.words.push({
+          id: wid,
+          hw: rw.word || rw.hw || "",
+          pos: rw.pos || "",
+          gloss: rw.zh || rw.definition_zh || "",
+          ipa: rw.ipa || "",
+          ex: rw.de ? [rw.de] : (rw.example_de ? [rw.example_de] : []),
+          letter: (rw.lemma && rw.lemma[0] ? rw.lemma[0] : (rw.hw && rw.hw[0] ? rw.hw[0] : "?")).toUpperCase(),
+          page: 0,
+          tags: ["a2"],
+          cefr: "A2",
+          custom: false,
+          up: Date.now()
+        });
+        existingIds.add(wid);
+        changed = true;
+      }
+    }
+    if (changed) {
+      saveWords();
+      renderWords();
+      refilterReviewQueueForScope();
+      renderHeaderBadge();
+    }
+  } catch (e) {
+    /* 离线或服务端不可用时静默兜底 */
+  }
+}
+
 /* 顶栏切模式：wordFilters.scope 的唯一写入口。
  * 禁止 buildReviewQueue() —— 它 revIdx = 0 且重洗牌，复习到一半切模式会被弹回第一张。
  * 完成态（revIdx >= revQueue.length）是例外，且已裁决为无害：
@@ -3103,6 +3146,7 @@ $("scopeSeg").addEventListener("click", (e) => {
   renderWords();
   renderHeaderBadge();
   if (next === "reader") syncReaderCardsFromServer();
+  if (next === "a2") syncA2CardsFromServer();
 });
 $("wBody").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-act]");
@@ -4029,7 +4073,7 @@ function renderHeaderBadge() {
   const b = $("dueBadge");
   /* 模式与待学数一体呈现：队列变短时用户要能分辨是「学完了」还是「切了范围」。
    * 待学 / 已完成两个分支都带前缀 —— 只给待学分支加的话，核心模式刷完后模式状态凭空消失。 */
-  const scopeLabel = wordFilters.scope === "core" ? "⭐核心" : (wordFilters.scope === "reader" ? "生词" : "全部");
+  const scopeLabel = wordFilters.scope === "core" ? "⭐核心" : (wordFilters.scope === "reader" ? "生词" : (wordFilters.scope === "a2" ? "📘A2" : "全部"));
   b.textContent = pending > 0
     ? scopeLabel + " · 今日待学 " + pending
     : scopeLabel + " · 今日已完成 ✓";

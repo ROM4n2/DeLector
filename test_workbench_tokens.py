@@ -66,14 +66,25 @@ def test_workbench_html_imports_tokens_and_maps_editorial_vars():
 
 
 def test_workbench_scope_selector_modes():
-    """#scopeSeg 必须覆盖 data-scope="core"、"all" 与 "reader" 三档。"""
+    """#scopeSeg 必须覆盖 data-scope="core"、"all"、"a2" 与 "reader" 四档。"""
     assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
     assert 'id="scopeSeg"' in content, "workbench.html 必须包含 #scopeSeg"
     seg = content.split('id="scopeSeg"')[1].split("</div>")[0]
     assert 'data-scope="core"' in seg, '#scopeSeg 必须包含 data-scope="core"'
     assert 'data-scope="all"' in seg, '#scopeSeg 必须包含 data-scope="all"'
+    assert 'data-scope="a2"' in seg, '#scopeSeg 必须包含 data-scope="a2"'
     assert 'data-scope="reader"' in seg, '#scopeSeg 必须包含 data-scope="reader"'
+
+
+def test_workbench_scope_selector_has_a2_option():
+    """#scopeSeg 必须扩充至 4 档，支持 A2 范围判定与服务端同步函数。"""
+    assert os.path.exists(WORKBENCH_HTML_PATH)
+    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+    assert "syncA2CardsFromServer" in content, "必须定义 syncA2CardsFromServer"
+    in_scope_block = content.split("function inScopeWord")[1].split("function logToday")[0]
+    assert 'wordFilters.scope === "a2"' in in_scope_block or 'wordFilters.scope === \'a2\'' in in_scope_block, \
+        "inScopeWord 必须显式处理 a2 scope"
 
 
 def test_workbench_editorial_typography_contract():

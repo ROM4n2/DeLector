@@ -638,11 +638,11 @@ def test_scope_control_is_globally_single():
         "#scopeSeg 必须全文件只出现一次（多个同 id 容器 = 多个写入口）"
     )
     hdr = _header_top()
-    assert len(re.findall(r'data-scope="', _WORKBENCH)) == 3, (
-        "全文件的 data-scope 档位按钮必须恰好三个（core / all / reader）"
+    assert len(re.findall(r'data-scope="', _WORKBENCH)) == 4, (
+        "全文件的 data-scope 档位按钮必须恰好四个（core / all / a2 / reader）"
     )
-    assert len(re.findall(r'data-scope="', hdr)) == 3, (
-        "三个档位按钮必须都在顶栏切片里（在别处 = 又多了一个控件）"
+    assert len(re.findall(r'data-scope="', hdr)) == 4, (
+        "四个档位按钮必须都在顶栏切片里（在别处 = 又多了一个控件）"
     )
 
 
@@ -1112,9 +1112,9 @@ def test_scope_segment_has_both_modes():
     hdr = _header_top()
     assert 'id="scopeSeg"' in hdr, "顶栏里没有 #scopeSeg，无从检查档位"
     seg = hdr.split('id="scopeSeg"')[1].split("</div>")[0]
-    scopes = re.findall(r'<button[^>]*\bdata-scope="([a-z]+)"', seg)
-    assert "core" in scopes and "all" in scopes, (
-        "#scopeSeg 必须覆盖 core / all 模式，实际 %r" % (scopes,)
+    scopes = re.findall(r'<button[^>]*\bdata-scope="([a-z0-9]+)"', seg)
+    assert {"core", "all", "a2", "reader"} <= set(scopes), (
+        "#scopeSeg 必须覆盖 core / all / a2 / reader 模式，实际 %r" % (scopes,)
     )
 
 
