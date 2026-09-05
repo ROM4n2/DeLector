@@ -18,6 +18,7 @@ import a1_dict
 import a1_hoeren_dict
 import a1_lesen_dict
 import a1_writing_dict
+from database import get_vocab_by_cefr
 
 logger = logging.getLogger("delector")
 
@@ -63,6 +64,17 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_dict.GOETHE_A1_VOCAB),
+            },
+        },
+    },
+    "A2": {
+        "title": "A2",
+        "modules": {
+            "vocab": {
+                "title": "📖 官方考纲词表 (Wortliste)",
+                "panel": "exam-cards-family",
+                "api_prefix": "/api/a2",
+                "count_fn": lambda: len(get_vocab_by_cefr("A2")["words"]),
             },
         },
     },

@@ -4278,4 +4278,27 @@ def test_syntax_stats_endpoints(client):
     assert data["avg_vl_rate"] == 0.35
 
 
+def test_get_a2_vocab_endpoint(client):
+    """验证 GET /api/a2/vocab 返回 974 个 A2 词条，结构完整且支持搜索。"""
+    res = client.get("/api/a2/vocab")
+    assert res.status_code == 200
+    words = res.json()
+    assert len(words) == 974
+    # 抽查关键字段与格式
+    w0 = words[0]
+    for key in ("id", "word", "hw", "lemma", "pos", "zh", "cefr"):
+        assert key in w0
+        assert w0[key]
+    assert w0["cefr"] == "A2"
 
+    # 抽查名词包含冠词
+    abenteuer = next((w for w in words if "Abenteuer" in w["word"]), None)
+    assert abenteuer is not None
+    assert abenteuer["word"] == "das Abenteuer"
+    assert abenteuer["pos"] == "NOUN"
+
+    # 抽查搜索过滤
+    search_res = client.get("/api/a2/vocab?q=Abenteuer")
+    assert search_res.status_code == 200
+    s_words = search_res.json()
+    assert any("Abenteuer" in w["word"] for w in s_words)

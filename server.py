@@ -230,6 +230,7 @@ from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_ko
                          lookup_prep_collocations, build_prep_matrix)
 from syntax_tree import analyze_syntax_tree
 from routes_a1 import router as a1_router
+from routes_a2 import router as a2_router
 from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES, _SYNC_INSTANCE_ID
 from routes_rtc import router as rtc_router
 from routes_corpus import router as corpus_router
@@ -240,6 +241,7 @@ from routes_exam import router as exam_router
 # --- 4. FastAPI Application ---
 app = FastAPI(title="DeLector")
 app.include_router(a1_router)
+app.include_router(a2_router)
 app.include_router(sync_router)
 app.include_router(rtc_router)
 app.include_router(corpus_router)

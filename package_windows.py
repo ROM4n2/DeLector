@@ -65,6 +65,7 @@ def build_windows():
         "--hidden-import=a1_lesen_dict",
         "--hidden-import=corpus_dict",
         "--hidden-import=routes_a1",
+        "--hidden-import=routes_a2",
         "--hidden-import=routes_a1_hoeren",
         "--hidden-import=routes_a1_lesen",
         "--hidden-import=routes_corpus",

@@ -76,13 +76,14 @@ def clean_db():
 # ── RED 1：端点契约（形状 + 数据推导 count + panel 指向真实 DOM） ────────────
 
 def test_catalog_endpoint_contract(client):
-    """/api/exams/catalog 返回 A1 五模块，count 与数据模块常量实测长度一致。"""
+    """/api/exams/catalog 返回 A1 与 A2 模块，count 与数据模块常量实测长度一致。"""
     res = client.get("/api/exams/catalog")
     assert res.status_code == 200
     levels = res.json()["levels"]
-    assert [lv["id"] for lv in levels] == ["A1"]
+    assert [lv["id"] for lv in levels] == ["A1", "A2"]
 
-    mods = {m["id"]: m for m in levels[0]["modules"]}
+    a1 = next(lv for lv in levels if lv["id"] == "A1")
+    mods = {m["id"]: m for m in a1["modules"]}
     assert {"writing", "hoeren", "lesen", "sprechen", "vocab"} <= set(mods)
     for m in mods.values():
         assert m["title"], "模块 %s 缺 title" % m["id"]
@@ -101,6 +102,13 @@ def test_catalog_endpoint_contract(client):
     )
     assert mods["vocab"]["count"] == len(a1_dict.GOETHE_A1_VOCAB)
 
+    # A2 考纲模块验证
+    a2 = next(lv for lv in levels if lv["id"] == "A2")
+    a2_mods = {m["id"]: m for m in a2["modules"]}
+    assert "vocab" in a2_mods
+    assert a2_mods["vocab"]["count"] == 974
+    assert a2_mods["vocab"]["api_prefix"] == "/api/a2"
+
 
 def test_catalog_panels_point_at_real_dom(client):
     """panel 字段语义 = 该模块对应的面板容器 id，必须真实存在于 index.html。"""
@@ -118,22 +126,22 @@ def test_catalog_panels_point_at_real_dom(client):
 def test_catalog_extension_point_adding_level(monkeypatch, client):
     """EXAM_CATALOG 追加一个等级 key，catalog 立即多一级且结构同构。
 
-    这是「未来加 A2 = 在 exam_catalog.py 插一行注册」的变异证明：
+    这是「未来加 B1 = 在 exam_catalog.py 插一行注册」的变异证明：
     - 有 count_fn 的模块 → count 正常推导；
     - 无 count_fn 的模块（数据模块还没接上）→ 结构一致、count 记 0、不崩。
     """
     patched = dict(exam_catalog.EXAM_CATALOG)
-    patched["A2"] = {
-        "title": "A2",
+    patched["B1"] = {
+        "title": "B1",
         "modules": {
             "hoeren": {
-                "title": "听力 (A2)",
+                "title": "听力 (B1)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/exams",
                 "count_fn": lambda: 7,
             },
             "lesen": {
-                "title": "阅读 (A2)",
+                "title": "阅读 (B1)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/exams",
             },
@@ -144,14 +152,14 @@ def test_catalog_extension_point_adding_level(monkeypatch, client):
     res = client.get("/api/exams/catalog")
     assert res.status_code == 200
     levels = {lv["id"]: lv for lv in res.json()["levels"]}
-    assert set(levels) == {"A1", "A2"}, "插一行的 A2 必须原样出现在 catalog 里"
+    assert set(levels) == {"A1", "A2", "B1"}, "插一行的 B1 必须原样出现在 catalog 里"
 
-    a2 = {m["id"]: m for m in levels["A2"]["modules"]}
-    assert a2["hoeren"]["count"] == 7
-    assert set(a2["lesen"].keys()) == set(a2["hoeren"].keys()), (
+    b1 = {m["id"]: m for m in levels["B1"]["modules"]}
+    assert b1["hoeren"]["count"] == 7
+    assert set(b1["lesen"].keys()) == set(b1["hoeren"].keys()), (
         "缺 count_fn 的模块也必须输出同构结构（id/title/panel/api_prefix/count）"
     )
-    assert a2["lesen"]["count"] == 0
+    assert b1["lesen"]["count"] == 0
 
 
 # ── 防御：count_fn 抛错（数据模块重命名）不拖垮端点 ─────────────────────────
