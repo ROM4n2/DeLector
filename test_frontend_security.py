@@ -87,8 +87,8 @@ def test_reader_js_xss_sinks_are_neutralised():
     assert 'onclick="inspect(${Number(t.id)},${Number(sent.id)})"' in READER
 
     # sent wrapper: sent.id → Number
+    assert 'id="sent-unit-${Number(sent.id)}"' in READER
     assert 'data-sent-id="${Number(sent.id)}"' in READER
-    assert "toggleSentenceTopology(${Number(sent.id)})" in READER
     assert 'id="sent-topology-${Number(sent.id)}"' in READER
 
     # heatbar: cnt → Number

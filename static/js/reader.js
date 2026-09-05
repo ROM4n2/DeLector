@@ -18,6 +18,7 @@ const safeTokens = (ids) =>
   JSON.stringify((ids || []).map(Number).filter(Number.isFinite));
 
 let currentArticleNotes = [];
+let _syntaxHoverTimer = null;
 let readerFontMode = localStorage.getItem("delector_font_mode") || "sans";
 let readerFontSize =
   parseInt(localStorage.getItem("delector_font_size"), 10) || 18;
@@ -231,7 +232,6 @@ export async function openReader(id) {
     const sentWrapper = `
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
-        <button class="sent-syntax-btn" onclick="event.stopPropagation(); toggleSentenceTopology(${Number(sent.id)})" title="展开德语拓扑五场域与从句树 (Satzbau)">🌳 句法</button>
       </span>
       <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;
@@ -271,6 +271,24 @@ export async function openReader(id) {
         document
           .getElementById(partnerId)
           ?.classList.remove("linked-separable");
+      }
+    });
+  });
+
+  // Setup sentence hover for syntax drawer
+  content.querySelectorAll(".reader-sent-unit").forEach((unitEl) => {
+    const sentId = Number(unitEl.getAttribute("data-sent-id"));
+    if (!sentId && sentId !== 0) return;
+    unitEl.addEventListener("mouseenter", () => {
+      if (_syntaxHoverTimer) clearTimeout(_syntaxHoverTimer);
+      _syntaxHoverTimer = setTimeout(() => {
+        openSyntaxDrawerForSentence(sentId);
+      }, 600);
+    });
+    unitEl.addEventListener("mouseleave", () => {
+      if (_syntaxHoverTimer) {
+        clearTimeout(_syntaxHoverTimer);
+        _syntaxHoverTimer = null;
       }
     });
   });
@@ -1169,6 +1187,69 @@ export async function saveClauseAsGrammarCard(
   } catch (err) {
     alert("保存语法卡失败");
   }
+}
+
+export function computeArticleSyntaxStats(sentences) {
+  if (!Array.isArray(sentences) || sentences.length === 0) {
+    return {
+      sent_count: 0,
+      avg_clause_depth: 0.0,
+      passive_rate: 0.0,
+      konjunktiv_rate: 0.0,
+      vl_rate: 0.0,
+    };
+  }
+  let totalDepth = 0;
+  let passiveCount = 0;
+  let konjCount = 0;
+  let vlCount = 0;
+
+  function getTreeDepth(node) {
+    if (!node) return 0;
+    if (!node.children || node.children.length === 0) return 1;
+    let maxChild = 0;
+    for (const child of node.children) {
+      const d = getTreeDepth(child);
+      if (d > maxChild) maxChild = d;
+    }
+    return 1 + maxChild;
+  }
+
+  function checkTreeFeatures(node) {
+    let hasPassive = !!(node?.features?.is_passive);
+    let hasKonj = !!(node?.features?.is_subjunctive);
+    if (node?.children) {
+      for (const child of node.children) {
+        const sub = checkTreeFeatures(child);
+        if (sub.hasPassive) hasPassive = true;
+        if (sub.hasKonj) hasKonj = true;
+      }
+    }
+    return { hasPassive, hasKonj };
+  }
+
+  const total = sentences.length;
+  for (const sent of sentences) {
+    if (sent.clause_tree) {
+      totalDepth += getTreeDepth(sent.clause_tree);
+      const feats = checkTreeFeatures(sent.clause_tree);
+      if (feats.hasPassive) passiveCount++;
+      if (feats.hasKonj) konjCount++;
+    } else {
+      totalDepth += 1;
+    }
+    if (sent.topology?.sentence_type === "VL") {
+      vlCount++;
+    }
+  }
+
+  return {
+    sent_count: total,
+    avg_clause_depth: Number((totalDepth / total).toFixed(2)),
+    passive_rate: Number((passiveCount / total).toFixed(4)),
+    konjunktiv_rate: Number((konjCount / total).toFixed(4)),
+    vl_rate: Number((vlCount / total).toFixed(4)),
+  };
 }
 
 if (typeof window !== "undefined") {

@@ -38,3 +38,29 @@ def test_radar_panel_present_in_syntax_drawer():
 
     assert '<svg id="grammar-radar-svg"' in radar_panel_html, "<svg id=\"grammar-radar-svg\"> must exist within #grammar-radar-panel"
     assert '<div id="grammar-radar-stats"' in radar_panel_html, "<div id=\"grammar-radar-stats\"> must exist within #grammar-radar-panel"
+
+
+def test_reader_compute_article_syntax_stats_and_hover_binding():
+    reader_js = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")
+
+    # 1. Assert computeArticleSyntaxStats is exported and defined
+    assert "export function computeArticleSyntaxStats(" in reader_js, (
+        "computeArticleSyntaxStats must be exported in static/js/reader.js"
+    )
+
+    # 2. Assert _syntaxHoverTimer debounce logic is implemented
+    assert "_syntaxHoverTimer" in reader_js, (
+        "_syntaxHoverTimer must be defined in static/js/reader.js"
+    )
+    assert "openSyntaxDrawerForSentence(sentId)" in reader_js, (
+        "Hover debounce must invoke openSyntaxDrawerForSentence(sentId)"
+    )
+    assert ".reader-sent-unit" in reader_js, (
+        "Hover listener must attach to .reader-sent-unit elements"
+    )
+
+    # 3. Assert sentWrapper in renderArticle no longer contains the old <button class="sent-syntax-btn"
+    assert '<button class="sent-syntax-btn"' not in reader_js, (
+        "sentWrapper in renderArticle must no longer contain the old .sent-syntax-btn button"
+    )
+
