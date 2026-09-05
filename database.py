@@ -127,6 +127,15 @@ def init_progress_db(db_path: Optional[str] = None):
                 wrong_questions_json TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS corpus_syntax_stats (
+                article_id         INTEGER PRIMARY KEY,
+                sent_count         INTEGER NOT NULL DEFAULT 0,
+                avg_clause_depth   REAL NOT NULL DEFAULT 0.0,
+                passive_rate       REAL NOT NULL DEFAULT 0.0,
+                konjunktiv_rate    REAL NOT NULL DEFAULT 0.0,
+                vl_rate            REAL NOT NULL DEFAULT 0.0,
+                analyzed_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE INDEX IF NOT EXISTS idx_quiz_card ON quiz_log(card_id);
             CREATE INDEX IF NOT EXISTS idx_study_logged ON study_log(logged_at);
         """)
@@ -1232,6 +1241,65 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
     }
 
 
+def upsert_corpus_syntax_stats(article_id: int, stats: Dict[str, Any], db_path: Optional[str] = None) -> bool:
+    """插入或更新单篇文献的 24 维句法雷达聚合统计数据。"""
+    try:
+        sent_count = int(stats.get("sent_count", 0))
+        avg_clause_depth = float(stats.get("avg_clause_depth", 0.0))
+        passive_rate = float(stats.get("passive_rate", 0.0))
+        konjunktiv_rate = float(stats.get("konjunktiv_rate", 0.0))
+        vl_rate = float(stats.get("vl_rate", 0.0))
+        with db_progress_conn(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO corpus_syntax_stats (
+                    article_id, sent_count, avg_clause_depth, passive_rate, konjunktiv_rate, vl_rate, analyzed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(article_id) DO UPDATE SET
+                    sent_count=excluded.sent_count,
+                    avg_clause_depth=excluded.avg_clause_depth,
+                    passive_rate=excluded.passive_rate,
+                    konjunktiv_rate=excluded.konjunktiv_rate,
+                    vl_rate=excluded.vl_rate,
+                    analyzed_at=CURRENT_TIMESTAMP
+                """,
+                (article_id, sent_count, avg_clause_depth, passive_rate, konjunktiv_rate, vl_rate)
+            )
+        return True
+    except Exception as e:
+        print(f"[Warn] Failed to upsert corpus syntax stats: {e}")
+        return False
+
+
+def get_all_corpus_syntax_stats(db_path: Optional[str] = None) -> Dict[str, Any]:
+    """查询全量文献的句法雷达统计均值。"""
+    try:
+        with db_progress_conn(db_path) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), AVG(sent_count), AVG(avg_clause_depth), AVG(passive_rate), AVG(konjunktiv_rate), AVG(vl_rate) FROM corpus_syntax_stats"
+            ).fetchone()
+            if row:
+                count, avg_sc, avg_cd, avg_pr, avg_kr, avg_vr = row
+                return {
+                    "total_articles": count or 0,
+                    "avg_sent_count": round(float(avg_sc or 0.0), 2),
+                    "avg_clause_depth": round(float(avg_cd or 0.0), 2),
+                    "avg_passive_rate": round(float(avg_pr or 0.0), 4),
+                    "avg_konjunktiv_rate": round(float(avg_kr or 0.0), 4),
+                    "avg_vl_rate": round(float(avg_vr or 0.0), 4),
+                }
+    except Exception as e:
+        print(f"[Warn] Failed to get all corpus syntax stats: {e}")
+    return {
+        "total_articles": 0,
+        "avg_sent_count": 0.0,
+        "avg_clause_depth": 0.0,
+        "avg_passive_rate": 0.0,
+        "avg_konjunktiv_rate": 0.0,
+        "avg_vl_rate": 0.0,
+    }
+
+
 __all__ = [
     "DATA_DIR",
     "AUDIO_CACHE_DIR",
@@ -1285,4 +1353,6 @@ __all__ = [
     "get_exam_history",
     "migrate_a1_records_to_exam_trials",
     "get_vocab_by_cefr",
+    "upsert_corpus_syntax_stats",
+    "get_all_corpus_syntax_stats",
 ]

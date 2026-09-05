@@ -4176,3 +4176,68 @@ def test_get_vocab_by_cefr_level(client):
     r5 = client.get("/api/cards/vocab?scope=unknown_scope")
     assert r5.status_code == 400
 
+
+def test_corpus_syntax_stats_db_contract(tmp_path):
+    from database import init_progress_db, upsert_corpus_syntax_stats, get_all_corpus_syntax_stats
+    test_db = tmp_path / "test_syntax_progress.db"
+    init_progress_db(db_path=str(test_db))
+
+    # 1. 验证空库默认统计值
+    empty_stats = get_all_corpus_syntax_stats(db_path=str(test_db))
+    assert empty_stats["total_articles"] == 0
+    assert empty_stats["avg_sent_count"] == 0.0
+    assert empty_stats["avg_clause_depth"] == 0.0
+    assert empty_stats["avg_passive_rate"] == 0.0
+    assert empty_stats["avg_konjunktiv_rate"] == 0.0
+    assert empty_stats["avg_vl_rate"] == 0.0
+
+    # 2. 插入第一篇文献句法统计
+    art1_stats = {
+        "sent_count": 10,
+        "avg_clause_depth": 1.8,
+        "passive_rate": 0.2,
+        "konjunktiv_rate": 0.1,
+        "vl_rate": 0.3,
+    }
+    success = upsert_corpus_syntax_stats(1, art1_stats, db_path=str(test_db))
+    assert success is True
+
+    # 3. 验证单篇统计均值
+    stats1 = get_all_corpus_syntax_stats(db_path=str(test_db))
+    assert stats1["total_articles"] == 1
+    assert stats1["avg_sent_count"] == 10.0
+    assert stats1["avg_clause_depth"] == 1.8
+    assert stats1["avg_passive_rate"] == 0.2
+    assert stats1["avg_konjunktiv_rate"] == 0.1
+    assert stats1["avg_vl_rate"] == 0.3
+
+    # 4. 更新第 1 篇文献数据（ON CONFLICT 覆盖）
+    art1_updated = {
+        "sent_count": 20,
+        "avg_clause_depth": 2.0,
+        "passive_rate": 0.1,
+        "konjunktiv_rate": 0.2,
+        "vl_rate": 0.4,
+    }
+    assert upsert_corpus_syntax_stats(1, art1_updated, db_path=str(test_db)) is True
+
+    # 5. 插入第 2 篇文献
+    art2_stats = {
+        "sent_count": 10,
+        "avg_clause_depth": 1.0,
+        "passive_rate": 0.3,
+        "konjunktiv_rate": 0.0,
+        "vl_rate": 0.2,
+    }
+    assert upsert_corpus_syntax_stats(2, art2_stats, db_path=str(test_db)) is True
+
+    # 6. 验证多篇覆盖与均值计算准确性
+    stats2 = get_all_corpus_syntax_stats(db_path=str(test_db))
+    assert stats2["total_articles"] == 2
+    assert stats2["avg_sent_count"] == 15.0
+    assert stats2["avg_clause_depth"] == 1.5
+    assert stats2["avg_passive_rate"] == 0.2
+    assert stats2["avg_konjunktiv_rate"] == 0.1
+    assert stats2["avg_vl_rate"] == 0.3
+
+
