@@ -143,3 +143,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 打包联动（含两处既有缺陷）：yml Linux/macOS 区段 hidden-import 加前缀并补漏 routes_a2（Windows 有、CI 漏，server.py:233 静态 import → 旧打包必 ModuleNotFoundError）；Android v5.3.0 拷贝清单漏 routes_a2.py → 改 cp -r start.py + cp -r delector 整目录拷贝，消灭逐个清单维护面；Windows spec APP_NEEDLES 验包探针改包路径并补 routes_a2.py。
 4. 文档同步：README 目录树收成 delector/ 条目、功能表两格加前缀；architecture.md 技术栈后端行标注收包；PROJECT_OVERVIEW 更正 conftest 表述 + Phase 2 注记。
 遗留：旧 DeLector.spec 系 9/4 打包遗留（未跟踪，已删），重打包会生成新格式。提交：C1=1c82266 server 迁移+回退链、C2=f33962e? 测试适配、C3=…（详见 git log）。
+
+### 2026-09-06 | codebuddy__auto | WORK_END（收尾补录）
+全量回归暴露 2 failed 已修复（5984b68）：① 3 处残留旧路径 `delector.server.py`
+（writer_mobile:11 / german_workbench:21 / audit:194，9/4 收包中间态产物）；② tts 降级测试
+只顶 sys.modules["delector.edge_tts_mini"]，先例测试触发真延迟导入后包对象缓存真模块属性
+→ `from X import Y` 命中包属性绕开 sys.modules → 读到真 MP3 头。修复：setattr 包属性双保险。
+证据：583 passed 基线（194.41s）+ 2 修复定向 2 passed；修复后全量进度区 49%→100% 无 F/E
+（统计行被 safe-delete 守卫吞行，838>750，精确统计需换轮次）。
+准确 commit 序列：546c6a0/1d05ac9/e05d22b/3e9cb9e/1c82266（refactor 收包）→ dc8bd32（test 适配）
+→ f33962e（打包联动 + 补漏 routes_a2）→ fb891bf（文档）→ 5984b68（修复）。工作区干净。
