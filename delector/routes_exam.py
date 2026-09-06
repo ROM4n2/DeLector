@@ -5,7 +5,7 @@
 """
 from fastapi import APIRouter
 
-from exam_catalog import get_catalog
+from delector.exam_catalog import get_catalog
 
 router = APIRouter(prefix="/api/exams", tags=["exam"])
 

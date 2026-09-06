@@ -3818,7 +3818,7 @@ def test_task1_a1_anki_export_has_attachment_headers(client):
 
 def test_task1_sync_router_thread_safety(client):
     """WebRTC 同步路由器具备 _sync_lock 保护，能正常存取。"""
-    import routes_sync
+    from delector import routes_sync
     assert hasattr(routes_sync, "_sync_lock")
 
     key = client.get("/api/wb/state/key").json()["key"]

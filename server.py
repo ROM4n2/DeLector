@@ -229,14 +229,14 @@ from delector.core_dict import lookup_core_vocab
 from delector.linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
                          lookup_prep_collocations, build_prep_matrix)
 from delector.syntax_tree import analyze_syntax_tree
-from routes_a1 import router as a1_router
-from routes_a2 import router as a2_router
-from routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES, _SYNC_INSTANCE_ID
-from routes_rtc import router as rtc_router
-from routes_corpus import router as corpus_router
-from routes_a1_hoeren import hoeren_router
-from routes_a1_lesen import lesen_router
-from routes_exam import router as exam_router
+from delector.routes_a1 import router as a1_router
+from delector.routes_a2 import router as a2_router
+from delector.routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES, _SYNC_INSTANCE_ID
+from delector.routes_rtc import router as rtc_router
+from delector.routes_corpus import router as corpus_router
+from delector.routes_a1_hoeren import hoeren_router
+from delector.routes_a1_lesen import lesen_router
+from delector.routes_exam import router as exam_router
 
 # --- 4. FastAPI Application ---
 app = FastAPI(title="DeLector")
