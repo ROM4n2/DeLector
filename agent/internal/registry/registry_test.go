@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -94,7 +95,7 @@ func TestRun_Dispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(echo): %v", err)
 	}
-	if !slices.Equal(mapKeys(gotPayload), mapKeys(payload)) {
+	if !slices.Equal(slices.Sorted(maps.Keys(gotPayload)), slices.Sorted(maps.Keys(payload))) {
 		t.Errorf("payload 未原样透传: got %v want %v", gotPayload, payload)
 	}
 	if gotPayload["q"] != "x" {
@@ -182,14 +183,4 @@ func TestDefaultRegistry_WrapsRunTool(t *testing.T) {
 			t.Errorf("工具 %s 应恰好分发到 /api/tools/%s 一次，实际调用分布: %v", name, name, called)
 		}
 	}
-}
-
-// mapKeys 返回 map 的键切片（测试辅助，供逐键比较）。
-func mapKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
 }

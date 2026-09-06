@@ -24,6 +24,10 @@ var ErrUnknownTool = errors.New("unknown tool")
 type ToolFunc func(ctx context.Context, payload map[string]any) (map[string]any, error)
 
 // Registry 是工具名 → ToolFunc 的注册表。零值不可用，经 NewRegistry 构造。
+//
+// 并发语义：Register 非并发安全，仅限构造期串行调用；DefaultRegistry
+// 构造后只读使用（构造期串行 mustRegister）。构造完成后 List/Has/Run
+// 只读内部 map，可安全并发调用。
 type Registry struct {
 	tools map[string]ToolFunc
 }
