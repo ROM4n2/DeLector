@@ -67,7 +67,7 @@ def get_a1_sprechen_teil3():
 
 @router.get("/export/anki")
 def export_a1_anki():
-    from .utils import _attachment_headers
+    from delector.utils import _attachment_headers
     tmp = tempfile.gettempdir()
     path = os.path.join(tmp, "Goethe_A1_Wortliste.apkg")
     export_a1_anki_deck(path)

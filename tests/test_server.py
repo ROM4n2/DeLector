@@ -3840,7 +3840,7 @@ def test_task1_a1_anki_export_has_attachment_headers(client):
 
 def test_task1_sync_router_thread_safety(client):
     """WebRTC 同步路由器具备 _sync_lock 保护，能正常存取。"""
-    from delector import routes_sync
+    from delector.routes import sync as routes_sync
     assert hasattr(routes_sync, "_sync_lock")
 
     key = client.get("/api/wb/state/key").json()["key"]
@@ -3872,7 +3872,7 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
         pytest.skip("DeLector.spec 未生成（本地构建产物，非 canonical）——跳过 spec 断言")
     spec = open(spec_path, encoding="utf-8").read()
     assert "'delector.data.corpus_dict'" in spec
-    assert "'delector.routes_corpus'" in spec
+    assert "'delector.routes.corpus'" in spec
 
 
 def test_all_backend_modules_registered_in_all_packaging_targets():
@@ -3887,26 +3887,28 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
 
-    # Phase 1 Task 2：8 个纯数据词典已收进 deletor.data/ 子包，打包 hidden-import 同步为 deletor.data.<mod>
+    # Phase 1 Task 2：8 个纯数据词典已收进 delector.data/ 子包
     data_dict_modules = {
         "core_dict", "core_dict_ext", "prep_dict", "a1_dict",
         "a1_writing_dict", "a1_hoeren_dict", "a1_lesen_dict", "corpus_dict",
     }
-    route_modules = [
-        "routes_a1",
-        "routes_a2",
-        "routes_a1_hoeren",
-        "routes_a1_lesen",
-        "routes_corpus",
-        "routes_sync",
-        "routes_rtc",
-        "routes_exam",
-        "exam_catalog",
-    ]
-    required_modules = sorted(data_dict_modules) + route_modules
+    # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
+    # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =
+    # 打包后 ModuleNotFoundError，而本地 pytest 全绿，只能靠这条断言挡住。
+    route_modules = {
+        "a1", "a2", "a1_hoeren", "a1_lesen",
+        "corpus", "sync", "rtc", "exam",
+    }
+    # 尚未归入子包、仍留在 delector/ 包根的模块
+    top_level_modules = {"exam_catalog"}
+    required_modules = sorted(data_dict_modules | route_modules | top_level_modules)
 
     def _mod_prefix(mod: str) -> str:
-        return "delector.data." if mod in data_dict_modules else "delector."
+        if mod in data_dict_modules:
+            return "delector.data."
+        if mod in route_modules:
+            return "delector.routes."
+        return "delector."
 
     for mod in required_modules:
         hidden = f"--hidden-import={_mod_prefix(mod)}{mod}"
@@ -3922,13 +3924,13 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     critical_apk_needles = [
         "delector/server.py",
         "de_core_news_sm",
-        "delector/routes_corpus.py",
-        "delector/routes_a1_hoeren.py",
-        "delector/routes_a1_lesen.py",
-        "delector/routes_rtc.py",
-        "delector/routes_exam.py",
+        "delector/routes/corpus.py",
+        "delector/routes/a1_hoeren.py",
+        "delector/routes/a1_lesen.py",
+        "delector/routes/rtc.py",
+        "delector/routes/exam.py",
         "delector/exam_catalog.py",
-        "delector/routes_a2.py",
+        "delector/routes/a2.py",
     ]
     for needle in critical_apk_needles:
         assert f'"{needle}"' in wf, f"{needle} 未在 build-release.yml 的 APP_NEEDLES 验包探针中"

@@ -2,7 +2,7 @@
 """共享小工具：平台探测 + 附件下载响应头。
 
 本模块零包内依赖（只吃标准库），供任意层引用，用于打破
-`nlp → start`、`routes_a1 → server` 的反向/跨边界 import（ADR-0008 Phase 1 Task 1）。
+`nlp → start`、`routes/a1 → server` 的反向/跨边界 import（ADR-0008 Phase 1 Task 1）。
 """
 import os
 import sys

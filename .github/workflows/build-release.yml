@@ -100,14 +100,14 @@ jobs:
             --hidden-import=delector.data.a1_hoeren_dict \
             --hidden-import=delector.data.a1_lesen_dict \
             --hidden-import=delector.data.corpus_dict \
-            --hidden-import=delector.routes_a1 \
-            --hidden-import=delector.routes_a2 \
-            --hidden-import=delector.routes_a1_hoeren \
-            --hidden-import=delector.routes_a1_lesen \
-            --hidden-import=delector.routes_corpus \
-            --hidden-import=delector.routes_sync \
-            --hidden-import=delector.routes_rtc \
-            --hidden-import=delector.routes_exam \
+            --hidden-import=delector.routes.a1 \
+            --hidden-import=delector.routes.a2 \
+            --hidden-import=delector.routes.a1_hoeren \
+            --hidden-import=delector.routes.a1_lesen \
+            --hidden-import=delector.routes.corpus \
+            --hidden-import=delector.routes.sync \
+            --hidden-import=delector.routes.rtc \
+            --hidden-import=delector.routes.exam \
             --hidden-import=delector.exam_catalog \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
@@ -177,14 +177,14 @@ jobs:
             --hidden-import=delector.data.a1_hoeren_dict \
             --hidden-import=delector.data.a1_lesen_dict \
             --hidden-import=delector.data.corpus_dict \
-            --hidden-import=delector.routes_a1 \
-            --hidden-import=delector.routes_a2 \
-            --hidden-import=delector.routes_a1_hoeren \
-            --hidden-import=delector.routes_a1_lesen \
-            --hidden-import=delector.routes_corpus \
-            --hidden-import=delector.routes_sync \
-            --hidden-import=delector.routes_rtc \
-            --hidden-import=delector.routes_exam \
+            --hidden-import=delector.routes.a1 \
+            --hidden-import=delector.routes.a2 \
+            --hidden-import=delector.routes.a1_hoeren \
+            --hidden-import=delector.routes.a1_lesen \
+            --hidden-import=delector.routes.corpus \
+            --hidden-import=delector.routes.sync \
+            --hidden-import=delector.routes.rtc \
+            --hidden-import=delector.routes.exam \
             --hidden-import=delector.exam_catalog \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
@@ -246,8 +246,8 @@ jobs:
           mkdir -p android/app/src/main/python
           cp -r start.py android/app/src/main/python/
           # Phase 2 收包后整目录拷入：逐个 cp 扁平 .py 的清单已失效（且曾漏掉
-          # routes_a2.py，server.py:233 静态 import 它 —— v5.3.0 的 APK 大概率
-          # 根本没有这个模块）。delector/ 整目录携带全部 26 个业务模块。
+          # delector/routes/a2.py（server 静态 import 它）—— v5.3.0 的 APK 大概率
+          # 根本没有这个模块。delector/ 整目录携带全部业务模块。
           cp -r delector android/app/src/main/python/
           MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
           cp -r "$MODEL_DIR" android/app/src/main/python/de_core_news_sm
@@ -385,7 +385,7 @@ jobs:
               # app.imy 装应用自身代码 + CI 拷入的模型目录；pip 依赖（spacy/thinc）
               # 在 requirements-<abi>.imy —— v4.4.0 首跑实测把 spacy/thinc 塞进
               # app.imy 检查会误报缺失。两个容器各查各的。
-              APP_NEEDLES = ("delector/server.py", "de_core_news_sm", "delector/routes_corpus.py", "delector/routes_a1_hoeren.py", "delector/routes_a1_lesen.py", "delector/routes_rtc.py", "delector/routes_exam.py", "delector/exam_catalog.py", "delector/corpus_dict.py", "delector/a1_hoeren_dict.py", "delector/a1_lesen_dict.py", "delector/routes_a2.py")
+              APP_NEEDLES = ("delector/server.py", "de_core_news_sm", "delector/routes/corpus.py", "delector/routes/a1_hoeren.py", "delector/routes/a1_lesen.py", "delector/routes/rtc.py", "delector/routes/exam.py", "delector/exam_catalog.py", "delector/data/corpus_dict.py", "delector/data/a1_hoeren_dict.py", "delector/data/a1_lesen_dict.py", "delector/routes/a2.py")
               REQ_NEEDLES = ("spacy", "thinc")
               def find_in(data):
                   found = set()
