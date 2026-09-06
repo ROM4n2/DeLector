@@ -136,22 +136,9 @@ from delector.security import (
 # 2) filename 加引号 + filename*：老写法是裸的 `filename=xxx.json`。RFC 6266
 #    要求加引号，且非 ASCII 名必须走 filename*=UTF-8''percent-encoded。
 #    Android 的 URLUtil.guessFileName 对无引号值的解析各版本不一致。
-_NO_STORE_HEADERS = {
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0",
-}
-
-
-def _attachment_headers(filename: str) -> Dict[str, str]:
-    """生成 Content-Disposition: attachment 的完整响应头（含 no-store）。"""
-    safe = (filename or "delector_export").replace('"', "")
-    quoted = safe.replace("\\", "\\\\").replace('"', '\\"')
-    headers = dict(_NO_STORE_HEADERS)
-    headers["Content-Disposition"] = (
-        f'attachment; filename="{quoted}"; filename*=UTF-8\'\'{quote(safe)}'
-    )
-    return headers
+# 实现已随 Phase 1 Task 1 迁至 utils.py；此处 import 使模块内既有调用点与
+# `delector.server._attachment_headers` 兼容引用继续可用（re-export 兼容层）。
+from .utils import _attachment_headers, _NO_STORE_HEADERS
 
 
 __all__ = [

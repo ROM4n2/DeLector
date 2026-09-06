@@ -920,17 +920,30 @@ def test_backup_download_response_forbids_caching(client):
 
 
 def test_attachment_headers_are_only_built_by_the_shared_helper():
-    """所有 attachment 响应头必须由 _attachment_headers 统一生成。
+    """所有 attachment 响应头必须由 utils._attachment_headers 统一生成。
 
-    手写一份就漏掉 no-store 或引号：前者造出假备份，后者让 Android 的
-    URLUtil.guessFileName 各版本解析不一致（拿到 token 当文件名）。
+    Phase 1 Task 1 把 helper 从 server.py 抽到 utils.py（打破 routes_a1 → server
+    反依赖）后，本守卫随之迁移到包级扫描：手写一份就漏掉 no-store 或引号——
+    前者造出假备份，后者让 Android 的 URLUtil.guessFileName 各版本解析不一致
+    （拿到 token 当文件名）。
     """
-    src = (os.path.join(ROOT, "delector", "server.py"))
-    with open(src, encoding="utf-8") as f:
-        text = f.read()
-    assert "def _attachment_headers" in text
-    assert text.count("attachment; filename=") == 1, (
-        "delector/server.py 里出现了多份手写的 Content-Disposition，请改用 _attachment_headers"
+    pkg = os.path.join(ROOT, "delector")
+    utils_src = open(os.path.join(pkg, "utils.py"), encoding="utf-8").read()
+    assert "def _attachment_headers" in utils_src, "utils._attachment_headers 定义缺失"
+    offenders = []
+    for _root, _dirs, files in os.walk(pkg):
+        for name in files:
+            if not name.endswith(".py") or name == "utils.py":
+                continue
+            path = os.path.join(_root, name)
+            src = open(path, encoding="utf-8").read()
+            if "attachment; filename=" in src:
+                offenders.append(name)
+    assert not offenders, (
+        f"{offenders} 手写了 Content-Disposition，请改用 utils._attachment_headers"
+    )
+    assert utils_src.count("attachment; filename=") == 1, (
+        "utils.py 里出现了多份手写的 Content-Disposition"
     )
 
 
