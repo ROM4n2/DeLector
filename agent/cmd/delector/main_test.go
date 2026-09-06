@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 )
@@ -39,5 +38,4 @@ func TestRunCommandNotImplemented(t *testing.T) {
 	if !strings.Contains(err.Error(), "not implemented") {
 		t.Errorf("run 占位错误信息应包含 %q，实际错误: %v", "not implemented", err)
 	}
-	_ = errors.Is // 占位引用，保持 import 对齐未来错误判定（errors.Is(err, context.DeadlineExceeded)）
 }
