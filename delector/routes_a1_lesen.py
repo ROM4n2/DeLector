@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import json
 
-from delector.a1_lesen_dict import (
+from delector.data.a1_lesen_dict import (
     get_lesen_set_list,
     get_lesen_set_by_id,
     grade_lesen_answers

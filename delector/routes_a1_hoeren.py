@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import json
 
-from delector.a1_hoeren_dict import (
+from delector.data.a1_hoeren_dict import (
     get_hoeren_set_list,
     get_hoeren_set_by_id,
     grade_hoeren_answers

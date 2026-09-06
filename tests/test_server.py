@@ -1412,7 +1412,7 @@ def test_cloze_evaluation_ctest(client):
 
 def test_core_dict_and_offline_vocab_lookup(client):
     """Test offline Goethe core vocabulary lookup and CEFR tagging."""
-    from delector.core_dict import lookup_core_vocab, get_core_cefr_level
+    from delector.data.core_dict import lookup_core_vocab, get_core_cefr_level
 
     # Direct core_dict module tests
     hit = lookup_core_vocab("Herausforderung")
@@ -1686,7 +1686,7 @@ def test_prep_dataset_integrity():
     那张缩合表：两份各自维护的话，一边认 zum 一边不认，正确数据会在这里被
     判成幻觉（实遇：animieren zu → "zum Nachdenken" 把测试挂掉）。
     """
-    from delector.prep_dict import PREP_COLLOCATIONS
+    from delector.data.prep_dict import PREP_COLLOCATIONS
     accepted = _load_build_prep()._accepted_surface_forms
     assert len(PREP_COLLOCATIONS) >= 40
     for lemma, rows in PREP_COLLOCATIONS.items():
@@ -1729,8 +1729,8 @@ def test_prep_dataset_keys_all_exist_in_dictionary():
     prep_dict 仍带着 ratseln —— 查 rätseln 没搭配、查 ratseln 有，两边
     看起来都正常。生成器的 prune_unknown_lemmas 负责剔除，这里守住结果。
     """
-    from delector.prep_dict import PREP_COLLOCATIONS
-    from delector.core_dict import CORE_VOCAB_DB
+    from delector.data.prep_dict import PREP_COLLOCATIONS
+    from delector.data.core_dict import CORE_VOCAB_DB
     seed = set(_load_build_prep().SEED_COLLOCATIONS)
     orphans = [w for w in PREP_COLLOCATIONS if w not in CORE_VOCAB_DB and w not in seed]
     assert not orphans, f"这些词头不在词库里: {orphans[:10]}"
@@ -1740,10 +1740,10 @@ def test_prep_dict_registered_in_all_package_targets():
     """漏注册任一处 = 打包后 ModuleNotFoundError（或安卓上静默没有该功能）。"""
     root = ROOT
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
-    assert "--hidden-import=delector.prep_dict" in pkg
+    assert "--hidden-import=delector.data.prep_dict" in pkg
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"),
               encoding="utf-8").read()
-    assert wf.count("--hidden-import=delector.prep_dict") == 2, "Windows/Linux 两个构建都要"
+    assert wf.count("--hidden-import=delector.data.prep_dict") == 2, "Windows/Linux 两个构建都要"
     cp_lines = [ln for ln in wf.splitlines() if "android/app/src/main/python/" in ln]
     assert any("cp -r start.py" in ln for ln in cp_lines), "安卓缺 start.py 拷贝"
     assert any("cp -r delector" in ln for ln in cp_lines), "安卓应整目录拷入 delector/（prep_dict.py 在包内）"
@@ -3858,11 +3858,11 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
     """corpus_dict 完整注册在 package_windows.py, CI workflow 以及 DeLector.spec 中。"""
     root = ROOT
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
-    assert "--hidden-import=delector.corpus_dict" in pkg
-    assert "--hidden-import=delector.core_dict" in pkg
+    assert "--hidden-import=delector.data.corpus_dict" in pkg
+    assert "--hidden-import=delector.data.core_dict" in pkg
 
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
-    assert wf.count("--hidden-import=delector.corpus_dict") == 2, "Linux & macOS 两个构建都要"
+    assert wf.count("--hidden-import=delector.data.corpus_dict") == 2, "Linux & macOS 两个构建都要"
 
     # DeLector.spec 是本地 PyInstaller 产物：.gitignore 的 `*.spec` 把它排除，且 CI 里
     # pytest 跑在 package_windows.py / PyInstaller 之前，干净 checkout 下必然不存在。
@@ -3871,7 +3871,7 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
     if not os.path.exists(spec_path):
         pytest.skip("DeLector.spec 未生成（本地构建产物，非 canonical）——跳过 spec 断言")
     spec = open(spec_path, encoding="utf-8").read()
-    assert "'delector.corpus_dict'" in spec
+    assert "'delector.data.corpus_dict'" in spec
     assert "'delector.routes_corpus'" in spec
 
 

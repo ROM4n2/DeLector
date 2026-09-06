@@ -6,7 +6,7 @@ spaCy 模型由调用方注入（server 传 Android 安全加载的 nlp；测试
 """
 import re
 from typing import Any, Dict, List, Optional, Tuple
-from delector.core_dict import lookup_core_vocab
+from delector.data.core_dict import lookup_core_vocab
 
 # 双格介词整组跳过（静动态依语境决定，纯规则极易误报）
 _TWO_WAY_PREPS = {

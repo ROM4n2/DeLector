@@ -24,10 +24,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from delector.server import app  # noqa: E402
 from delector import exam_catalog  # noqa: E402
-from delector import a1_dict  # noqa: E402
-from delector import a1_hoeren_dict  # noqa: E402
-from delector import a1_lesen_dict  # noqa: E402
-from delector import a1_writing_dict  # noqa: E402
+from delector.data import a1_dict  # noqa: E402
+from delector.data import a1_hoeren_dict  # noqa: E402
+from delector.data import a1_lesen_dict  # noqa: E402
+from delector.data import a1_writing_dict  # noqa: E402
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 with open(os.path.join(_ROOT, "static", "index.html"), encoding="utf-8") as _f:

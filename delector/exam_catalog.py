@@ -14,10 +14,10 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
-from delector import a1_dict
-from delector import a1_hoeren_dict
-from delector import a1_lesen_dict
-from delector import a1_writing_dict
+from delector.data import a1_dict
+from delector.data import a1_hoeren_dict
+from delector.data import a1_lesen_dict
+from delector.data import a1_writing_dict
 from delector.database import get_vocab_by_cefr
 
 logger = logging.getLogger("delector")

@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 # Import local Goethe core dictionary for compound base elements & CEFR lookup
 try:
-    from delector.core_dict import CORE_VOCAB_DB, lookup_core_vocab
+    from delector.data.core_dict import CORE_VOCAB_DB, lookup_core_vocab
 except ImportError:
     CORE_VOCAB_DB = {}
     lookup_core_vocab = lambda w: None
@@ -1341,7 +1341,7 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
 # try/except 照 core_dict.py 对 core_dict_ext 的先例：数据模块缺失时
 # 功能降级为「没有搭配」，不阻断查词链。
 try:
-    from delector.prep_dict import PREP_COLLOCATIONS
+    from delector.data.prep_dict import PREP_COLLOCATIONS
 except ImportError:  # pragma: no cover - 只在数据集尚未生成时走到
     PREP_COLLOCATIONS = {}
 

@@ -524,7 +524,7 @@ def get_core_cefr_level(lemma: str) -> Optional[str]:
 # 文件会失败；.py 模块按 import 链正常打包（PyInstaller 自动分析，CI 拷贝进
 # android/app/src/main/python）。base 443 冲突时手编词条优先（dict 合并顺序）。
 try:
-    from delector.core_dict_ext import CORE_VOCAB_EXT
+    from delector.data.core_dict_ext import CORE_VOCAB_EXT
 except ImportError:
     CORE_VOCAB_EXT = {}
 CORE_VOCAB_DB = {**CORE_VOCAB_EXT, **CORE_VOCAB_DB}

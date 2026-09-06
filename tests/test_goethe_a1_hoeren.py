@@ -3,7 +3,7 @@ import pytest
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_hoeren.db")
 from starlette.testclient import TestClient
 from delector.server import app
-from delector.a1_hoeren_dict import (
+from delector.data.a1_hoeren_dict import (
     A1_HOEREN_SETS,
     get_hoeren_set_list,
     get_hoeren_set_by_id,

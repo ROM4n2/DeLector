@@ -616,7 +616,7 @@ A1_VOCAB_MODEL = genanki.Model(
 
 
 def export_a1_anki_deck(output_path: str) -> str:
-    from delector import a1_dict
+    from delector.data import a1_dict
     deck = genanki.Deck(1607392321, "DeLector::Goethe A1 Wortliste")
     topic_map = dict((k, label) for k, label, _ in a1_dict.A1_TOPICS)
 
@@ -1137,7 +1137,7 @@ def _load_a1_workbench_words() -> List[Dict[str, Any]]:
 
     if not loaded:
         try:
-            from delector.a1_dict import GOETHE_A1_VOCAB
+            from delector.data.a1_dict import GOETHE_A1_VOCAB
             idx = 1
             for k, v in GOETHE_A1_VOCAB.items():
                 words.append({
@@ -1187,7 +1187,7 @@ def _load_a2_vocab_words() -> List[Dict[str, Any]]:
         return _A2_VOCAB_CACHE
 
     try:
-        from delector.core_dict import CORE_VOCAB_DB
+        from delector.data.core_dict import CORE_VOCAB_DB
     except ImportError:
         CORE_VOCAB_DB = {}
 
@@ -1270,7 +1270,7 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
 
     # 其他级别 (B1, B2, C1, ALL): 回退到 core_dict.CORE_VOCAB_DB
     try:
-        from delector.core_dict import CORE_VOCAB_DB
+        from delector.data.core_dict import CORE_VOCAB_DB
     except ImportError:
         CORE_VOCAB_DB = {}
 

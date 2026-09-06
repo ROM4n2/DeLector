@@ -234,11 +234,11 @@ def check_nlp_and_linguistics():
         assert doc["stats"]["word_count"] > 0
         record_pass("NLP", f"文本分析流水线就绪，提取 {doc['stats']['word_count']} 词，评级 {doc['stats']['recommended_level']}")
         
-        from delector.core_dict import CORE_VOCAB_DB
+        from delector.data.core_dict import CORE_VOCAB_DB
         assert len(CORE_VOCAB_DB) >= 4000
         record_pass("NLP", f"离线核心词库加载正常 (共 {len(CORE_VOCAB_DB)} 词条，0ms 响应)")
         
-        from delector.prep_dict import PREP_COLLOCATIONS
+        from delector.data.prep_dict import PREP_COLLOCATIONS
         assert len(PREP_COLLOCATIONS) >= 500
         record_pass("NLP", f"介词搭配数据库加载正常 (共 {len(PREP_COLLOCATIONS)} 词头搭配)")
         
