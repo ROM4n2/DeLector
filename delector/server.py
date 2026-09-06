@@ -100,7 +100,7 @@ from delector.database import (
 # 只透传 server 内真实消费的符号；无消费者的再导出（spacy、SPACY_MODEL_CANDIDATES、
 # AUTO_DOWNLOAD_MODEL、_load_spacy_model、calculate_cefr_stats、
 # _process_german_text_pure_python 等）已从 import/__all__ 剔除（M5-4）。
-from delector.nlp import (
+from delector.nlp_engine.processor import (
     nlp,
     NLP_ENGINE,
     NLP_ENGINE_DETAIL,
@@ -213,9 +213,9 @@ __all__ = [
 ]
 
 from delector.data.core_dict import lookup_core_vocab
-from delector.linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
+from delector.nlp_engine.linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
                          lookup_prep_collocations, build_prep_matrix)
-from delector.syntax_tree import analyze_syntax_tree
+from delector.nlp_engine.syntax_tree import analyze_syntax_tree
 from delector.routes_a1 import router as a1_router
 from delector.routes_a2 import router as a2_router
 from delector.routes_sync import router as sync_router, _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES, _SYNC_INSTANCE_ID

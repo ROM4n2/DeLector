@@ -225,7 +225,7 @@ def check_nlp_and_linguistics():
     scan_section("5. NLP 引擎与降级路径 (NLP & Linguistics Pipelines)")
     
     try:
-        from delector.nlp import NLP_ENGINE, NLP_ENGINE_DETAIL, process_german_text
+        from delector.nlp_engine.processor import NLP_ENGINE, NLP_ENGINE_DETAIL, process_german_text
         record_pass("NLP", f"当前生效引擎: {NLP_ENGINE} ({NLP_ENGINE_DETAIL})")
         
         sample = "Guten Tag! Ich fahre nach Berlin."

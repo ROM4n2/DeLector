@@ -16,7 +16,7 @@ from fastapi import HTTPException, Request
 import genanki
 import html as _html
 
-from delector.nlp import process_german_text
+from delector.nlp_engine.processor import process_german_text
 
 # 这里的 os.path.dirname(__file__) 指的是**本包目录**，不是仓库根 —— 本模块已经
 # 搬进 delector/ 了。delector.db / progress.db 都挂在 DATA_DIR 下面，指错一级

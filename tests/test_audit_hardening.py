@@ -658,7 +658,7 @@ def test_lookup_core_vocab_hit_shared_no_news():
 def test_split_komposita_cached_fresh_equal_results():
     """M4-2: 复合词拆解同词两次结果语义一致但对象互不相同（JSON 背衬防共享变异），
     min_part_len 参数化仍然生效。"""
-    from delector.linguistics import split_komposita
+    from delector.nlp_engine.linguistics import split_komposita
     w1 = split_komposita("Klimaschutzmaßnahmen")
     w2 = split_komposita("Klimaschutzmaßnahmen")
     assert len(w1) >= 2
@@ -672,7 +672,7 @@ def test_m4_hot_path_lru_caches_structural():
     """M4-2 结构护栏：两处热路径底层实现必须挂 lru_cache（防回退成每次重算/新建）。"""
     import inspect
     from delector.data import core_dict
-    from delector import linguistics
+    from delector.nlp_engine import linguistics
     assert "lru_cache" in inspect.getsource(core_dict._core_entry_cached)
     assert "lru_cache" in inspect.getsource(linguistics._split_komposita_json_cached)
     assert inspect.getsource(linguistics.split_komposita).count("json.loads") >= 1

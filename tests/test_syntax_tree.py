@@ -1,7 +1,7 @@
 """
 Unit Tests for DeLector v3.5.0 German Syntax Tree & Topological Field Engine (syntax_tree.py)
 """
-from delector.syntax_tree import (
+from delector.nlp_engine.syntax_tree import (
     analyze_sentence_topology,
     build_clause_tree,
     analyze_syntax_tree,

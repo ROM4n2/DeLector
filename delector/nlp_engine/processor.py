@@ -10,8 +10,8 @@ try:
 except ImportError:
     spacy = None
 
-from .utils import is_android
-from .data.core_dict import lookup_core_vocab, get_core_cefr_level
+from delector.utils import is_android
+from delector.data.core_dict import lookup_core_vocab, get_core_cefr_level
 from .syntax_tree import (analyze_sentence_topology, build_clause_tree,
                          split_sentences_pure_python)
 
