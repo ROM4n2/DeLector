@@ -7,14 +7,21 @@
 
 TOOL_REGISTRY：tool 名 → run 协程，routes/tools.py 据此分发。
 """
-from delector.tools import analyze, exercise, export, ingest, tts_tool
+from delector.tools import analyze, export, ingest, tts_tool, writing_check
 
 TOOL_REGISTRY = {
     "ingest": ingest.run,
     "analyze": analyze.run,
-    "exercise": exercise.run,
+    "writing_check": writing_check.run,
     "export": export.run,
     "tts": tts_tool.run,
 }
 
-__all__ = ["TOOL_REGISTRY", "analyze", "exercise", "export", "ingest", "tts_tool"]
+__all__ = [
+    "TOOL_REGISTRY",
+    "analyze",
+    "export",
+    "ingest",
+    "tts_tool",
+    "writing_check",
+]

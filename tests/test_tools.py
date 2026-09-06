@@ -8,6 +8,7 @@ Go Agent（Phase 2）经此 HTTP 契约调用 Python 业务能力。覆盖：
 import asyncio
 import base64
 
+import pytest
 from fastapi.testclient import TestClient
 
 from delector.server import app
@@ -37,9 +38,9 @@ def test_analyze_tool_via_http():
     assert isinstance(resp.json(), dict)
 
 
-def test_exercise_tool_via_http():
+def test_writing_check_tool_via_http():
     resp = client.post(
-        "/api/tools/exercise",
+        "/api/tools/writing_check",
         json={"payload": {"text": "Lieber Herr Müller, ich schreibe Ihnen ..."}},
     )
     assert resp.status_code == 200
@@ -105,6 +106,13 @@ def test_tts_run(monkeypatch):
     assert out["voice"] == "v" and out["rate"] == "r"
 
 
+def test_export_run_requires_output_path():
+    from delector.tools.export import run
+
+    with pytest.raises(ValueError, match="output_path"):
+        asyncio.run(run({}))
+
+
 def test_export_run(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "delector.tools.export.export_anki_deck",
@@ -112,7 +120,7 @@ def test_export_run(monkeypatch, tmp_path):
     )
     from delector.tools.export import run
 
-    out = asyncio.run(run({}))
+    out = asyncio.run(run({"output_path": str(tmp_path / "y.apkg")}))
     assert out["path"].endswith("y.apkg")
 
 
@@ -123,8 +131,8 @@ def test_analyze_run_local():
     assert isinstance(out, dict)
 
 
-def test_exercise_run_local():
-    from delector.tools.exercise import run
+def test_writing_check_run_local():
+    from delector.tools.writing_check import run
 
     out = asyncio.run(run({"text": "Lieber Herr Müller, ..."}))
     assert isinstance(out, dict)
