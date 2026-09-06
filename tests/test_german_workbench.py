@@ -19,6 +19,9 @@ _WORKBENCH = (_ROOT / "static" / "german" / "workbench.html").read_text(encoding
 _INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 _CSS = (_ROOT / "static" / "style.css").read_text(encoding="utf-8")
 _SERVER = (_ROOT / "delector" / "server.py").read_text(encoding="utf-8")
+# Phase 1 Task 4：通用 handler 从 server.py 搬进 delector/routes/main.py，
+# 装饰器随之从 @app.* 变 @router.*。钉端点存在性的断言要跟着改读新文件。
+_MAIN_ROUTES = (_ROOT / "delector" / "routes" / "main.py").read_text(encoding="utf-8")
 
 
 def test_workbench_has_server_tts_priority():
@@ -96,9 +99,9 @@ def test_mobile_dock_offset_for_german_view():
 
 
 def test_get_audio_tts_route_registered():
-    """delector/server.py 有 GET /api/audio/tts 路由（区别于既有 POST 的函数名）。"""
-    assert '@app.get("/api/audio/tts")' in _SERVER
-    assert "async def audio_tts_get(" in _SERVER
+    """delector/routes/main.py 有 GET /api/audio/tts 路由（区别于既有 POST 的函数名）。"""
+    assert '@router.get("/api/audio/tts")' in _MAIN_ROUTES
+    assert "async def audio_tts_get(" in _MAIN_ROUTES
 
 
 def test_backup_covers_workbench_state():

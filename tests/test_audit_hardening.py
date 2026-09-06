@@ -180,7 +180,7 @@ def test_list_articles_readonly_no_stats_recompute(client, monkeypatch):
         calls.append(raw_text)
         return {"stats": {"sentences": 99}}
 
-    monkeypatch.setattr("delector.server.process_german_text", spy)
+    monkeypatch.setattr("delector.routes.main.process_german_text", spy)
     data = client.get("/api/articles").json()
     assert calls == [], "list_articles 不应触发 stats 重算"
     row = next(x for x in data if x["title"] == "NoStats")
@@ -191,9 +191,10 @@ def test_review_has_no_post_update_requery():
     """复习接口一次 SELECT 拿行 + UPDATE 即返回：不得再回查整行
     （UPDATE 后所有列都是内存已算值，回查纯浪费）。"""
     from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "delector" / "server.py").read_text(encoding="utf-8")
+    # Phase 1 Task 4：handler 已从 server.py 搬到 delector/routes/main.py
+    src = (Path(__file__).resolve().parent.parent / "delector" / "routes" / "main.py").read_text(encoding="utf-8")
     start = src.index("def review_card_sm2(")
-    end = src.index('@app.get("/api/cards/due")')
+    end = src.index('@router.get("/api/cards/due")')
     body = src[start:end]
     # 初始取卡 SELECT 恰 1 次；出现第 2 次 = UPDATE 后整行回查
     assert body.count("SELECT * FROM") == 1, "review 存在 UPDATE 后整行回查"
@@ -555,7 +556,7 @@ def test_tts_rejects_unknown_voice_before_synthesis(client, monkeypatch):
         calls.append(voice)
         raise HTTPException(500, "should-not-be-reached")
 
-    monkeypatch.setattr("delector.server.generate_edge_tts_audio", fake_gen)
+    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", fake_gen)
     res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "evil-voice"})
     assert res.status_code == 400
     assert calls == []
@@ -566,7 +567,7 @@ def test_tts_unexpected_error_hides_internal_detail(client, monkeypatch):
     async def fake_gen(text, voice, rate):
         raise RuntimeError("C:\\secret\\inner\\path boom")
 
-    monkeypatch.setattr("delector.server.generate_edge_tts_audio", fake_gen)
+    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", fake_gen)
     res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 500
     detail = res.text

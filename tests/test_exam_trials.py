@@ -259,7 +259,7 @@ def test_backup_payload_contains_exam_trials():
 
 
 def test_restore_exam_trials_roundtrip(client):
-    from delector.server import RestoreReq
+    from delector.routes.main import RestoreReq
     assert "exam_trials" in RestoreReq.model_fields
 
     row = dict(_HOEREN_FIELDS)

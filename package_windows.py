@@ -72,6 +72,7 @@ def build_windows():
         "--hidden-import=delector.routes.sync",
         "--hidden-import=delector.routes.rtc",
         "--hidden-import=delector.routes.exam",
+        "--hidden-import=delector.routes.main",
         "--hidden-import=delector.exam_catalog",
         "--hidden-import=de_core_news_sm",
         "--hidden-import=spacy.lang.de",

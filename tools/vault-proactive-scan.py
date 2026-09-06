@@ -137,7 +137,7 @@ def check_data_and_backup():
                     record_pass("DATA", f"表 [{tbl}] 完整纳入备份体系 ({len(spec_cols)} 列: {', '.join(_BACKUP_TABLES[tbl][0][:4])}...)")
                     
         # 2.2 VocabCardReq 的 plural 字段与入库
-        from delector.server import VocabCardReq
+        from delector.routes.main import VocabCardReq
         req_fields = VocabCardReq.model_fields if hasattr(VocabCardReq, "model_fields") else VocabCardReq.__fields__
         if "plural" in req_fields:
             record_pass("DATA", "VocabCardReq 模型正确声明并支持 plural 字段持久化")

@@ -134,7 +134,7 @@ def test_writing_card_sugar_endpoint(client):
     assert g_cards[0].get("error_type") == span["error_type"]
 
 def test_ai_polish_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 200
     data = res.json()
@@ -143,7 +143,7 @@ def test_ai_polish_no_key_stub(client, monkeypatch):
     assert data["result"]["corrected_text"] == "Hallo."
 
 def test_ai_polish_diff_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund. Er ist gut."})
     assert res.status_code == 200
     data = res.json()
@@ -156,7 +156,7 @@ def test_ai_polish_diff_no_key_stub(client, monkeypatch):
     assert "DeepSeek API Key" in result["notes_zh"][0]
 
 def test_ai_polish_diff_mocked(client, monkeypatch):
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "test-api-key")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "test-api-key")
 
     mock_response_payload = {
         "choices": [{
@@ -190,7 +190,7 @@ def test_ai_polish_diff_mocked(client, monkeypatch):
         async def post(self, *args, **kwargs):
             return _MockResponse()
 
-    monkeypatch.setattr("delector.server.httpx.AsyncClient", _MockAsyncClient)
+    monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", _MockAsyncClient)
 
     orig_text = "Ich habe ein Hund. Er ist gut."
     res = client.post("/api/writing/ai-polish/diff", json={"text": orig_text})
@@ -593,11 +593,11 @@ def test_clean_html_to_article():
 def test_url_ingest_endpoint_with_mock(client, monkeypatch):
     from unittest.mock import AsyncMock
     mock_html = "<html><head><title>Hallo Berlin</title></head><body><p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
-    monkeypatch.setattr("delector.server.fetch_remote_html", AsyncMock(return_value=mock_html))
+    monkeypatch.setattr("delector.routes.main.fetch_remote_html", AsyncMock(return_value=mock_html))
     # 端点自己也过一次 SSRF 闸（server.py:858），而 fetch 被 mock 掉不代表闸被 mock 掉。
     # 不钉住这里就等于让这条测试依赖真实 DNS：本机开着 Teredo 时 dw.com 会带出
     # 2001::/32 的地址，闸门拒绝，测试变成时红时绿；CI 的 Linux runner 无 Teredo 一直绿。
-    monkeypatch.setattr("delector.server.is_safe_public_url", lambda u: True)
+    monkeypatch.setattr("delector.routes.main.is_safe_public_url", lambda u: True)
 
     res = client.post("/api/articles/ingest-url", json={"url": "https://www.dw.com/de/hallo-berlin/a-123"})
     assert res.status_code == 200
@@ -969,7 +969,7 @@ def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     fake_mp3 = tmp_path / "fake_de.mp3"
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00mock_audio_data")
 
-    monkeypatch.setattr("delector.server.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
+    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
 
     res = client.post("/api/audio/tts", json={"text": "Hallo Berlin!", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 200
@@ -984,7 +984,7 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     import sys
     import types
     import asyncio
-    from delector import server
+    from delector.routes import main as routes_main
 
     # 1. 堵死 edge_tts 导入（模拟安卓）：sys.modules[name]=None 时 import 抛 ImportError
     monkeypatch.setitem(sys.modules, "edge_tts", None)
@@ -1006,9 +1006,9 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     # 3. 独立缓存目录，避免污染
     cache_dir = tmp_path / "mini_cache"
     cache_dir.mkdir()
-    monkeypatch.setattr(server, "AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr(routes_main, "AUDIO_CACHE_DIR", str(cache_dir))
 
-    path = asyncio.run(server.generate_edge_tts_audio(
+    path = asyncio.run(routes_main.generate_edge_tts_audio(
         "Wie geht es dir?", "de-DE-KatjaNeural", "+0%"
     ))
     with open(path, "rb") as f:
@@ -1057,7 +1057,7 @@ def test_audio_cache_stats_and_clear(client, monkeypatch, tmp_path):
     (cache_dir / "sample1.mp3").write_bytes(b"x" * 1024 * 50) # 50 KB
     (cache_dir / "sample2.mp3").write_bytes(b"x" * 1024 * 50) # 50 KB
 
-    monkeypatch.setattr("delector.server.AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
 
     # 1. Get cache stats
     res_stats = client.get("/api/audio/cache")
@@ -1220,7 +1220,7 @@ def test_progress_stats_after_adding_cards(client):
 
 def test_fsrs_algorithm_calculation():
     """Verify modern FSRS DSR calculation mathematics and gradients."""
-    from delector.server import calculate_fsrs, get_fsrs_next_intervals
+    from delector.routes.main import calculate_fsrs, get_fsrs_next_intervals
 
     # 1. Initial review gradients for all 4 grades
     intervals_init = get_fsrs_next_intervals(rep=0, interval=1, ef=2.5)
@@ -1257,7 +1257,7 @@ def test_fsrs_algorithm_calculation():
 
 def test_sm2_backward_compatibility():
     """Verify legacy calculate_sm2 wrapper returns 4-tuple and works seamlessly."""
-    from delector.server import calculate_sm2
+    from delector.routes.main import calculate_sm2
     rep, interval, ef, due = calculate_sm2(grade=3, rep=0, interval=1, ef=2.5)
     assert rep == 1
     assert interval == 4
@@ -1470,12 +1470,12 @@ def test_feed_items_parsing_and_endpoint(client, monkeypatch):
       </channel>
     </rss>"""
 
-    from delector import server
+    from delector.routes import main as routes_main
     async def mock_fetch(url):
         return sample_rss_xml
 
-    monkeypatch.setattr(server, "fetch_remote_html", mock_fetch)
-    monkeypatch.setattr(server, "is_safe_public_url", lambda u: True)
+    monkeypatch.setattr(routes_main, "fetch_remote_html", mock_fetch)
+    monkeypatch.setattr(routes_main, "is_safe_public_url", lambda u: True)
 
     res = client.get("/api/feed/items?url=https://www.tagesschau.de/xml/rss2/")
     assert res.status_code == 200
@@ -1498,12 +1498,12 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
       </item>
     </rdf:RDF>"""
 
-    from delector import server
+    from delector.routes import main as routes_main
     async def mock_fetch_rdf(url):
         return sample_rdf
 
-    monkeypatch.setattr(server, "fetch_remote_html", mock_fetch_rdf)
-    monkeypatch.setattr(server, "is_safe_public_url", lambda u: True)
+    monkeypatch.setattr(routes_main, "fetch_remote_html", mock_fetch_rdf)
+    monkeypatch.setattr(routes_main, "is_safe_public_url", lambda u: True)
 
     res = client.get("/api/feed/items?url=https://rss.dw.com/rdf/rss-de-all")
 
@@ -2340,7 +2340,7 @@ def test_delete_article(client):
 
 def test_lookup_lemma_first(client, monkeypatch):
     """前端带 lemma → 直接命中核心词库，不触发 AI。"""
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab",
                     json={"sentence": "Er geht.", "target_word": "geht", "lemma": "gehen"})
     data = r.json()
@@ -2350,7 +2350,7 @@ def test_lookup_lemma_first(client, monkeypatch):
 
 def test_lookup_lemma_absent_present_irregular(client, monkeypatch):
     """无 lemma 时 geht 靠现在时反查 → stammformen + 三态表释义回填。"""
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab", json={"sentence": "Er geht.", "target_word": "geht"})
     data = r.json()
     assert data.get("stammformen", {}).get("infinitiv") == "gehen"
@@ -2360,7 +2360,7 @@ def test_lookup_lemma_absent_present_irregular(client, monkeypatch):
 
 def test_lookup_plural_haeuser(client, monkeypatch):
     """变元音复数 Häuser + lemma Haus → 核心词库命中。"""
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab",
                     json={"sentence": "Die Häuser sind alt.", "target_word": "Häuser", "lemma": "Haus"})
     data = r.json()
@@ -2370,7 +2370,7 @@ def test_lookup_plural_haeuser(client, monkeypatch):
 
 def test_lookup_linguistics_ext_tier(client, monkeypatch):
     """主链查不到时落 EXT（LINGUISTICS_VOCAB_EXT 接线）。"""
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab", json={"sentence": "Klima.", "target_word": "klima"})
     data = r.json()
     assert data["source"] == "linguistics_ext"
@@ -2379,7 +2379,7 @@ def test_lookup_linguistics_ext_tier(client, monkeypatch):
 
 def test_lookup_no_hit_honest_none(client, monkeypatch):
     """未知词 + 无 key → source=none 空释义（不再是 AI 已预填谎言）。"""
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab",
                     json={"sentence": "Xyzzy.", "target_word": "zzzznonsense"})
     data = r.json()
@@ -2389,13 +2389,13 @@ def test_lookup_no_hit_honest_none(client, monkeypatch):
 
 def test_lookup_ai_error_backfill_linguistics(client, monkeypatch):
     """key 假 + httpx 崩 → ai_exception；强动词变位词回填三态表释义。"""
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "sk-bogus")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "sk-bogus")
 
     class _BoomClient:
         def post(self, *a, **k):
             raise RuntimeError("simulated network down")
 
-    monkeypatch.setattr("delector.server.httpx.AsyncClient", lambda *a, **k: _BoomClient())
+    monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", lambda *a, **k: _BoomClient())
     r = client.post("/api/lookup/vocab", json={"sentence": "Er geht.", "target_word": "geht"})
     data = r.json()
     assert data["source"] == "linguistics"
@@ -2576,7 +2576,7 @@ def test_url_ingest_gate_is_pinned_not_dns_dependent():
     import inspect
 
     src = inspect.getsource(test_url_ingest_endpoint_with_mock)
-    assert "delector.server.is_safe_public_url" in src, "端点测试必须钉住 SSRF 闸，不能真去问 DNS"
+    assert "delector.routes.main.is_safe_public_url" in src, "端点测试必须钉住 SSRF 闸，不能真去问 DNS"
 
 
 def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
@@ -2589,7 +2589,7 @@ def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
     import ipaddress as _ipaddress
     import socket as _socket
 
-    from delector import server as server_module
+    from delector import security
     from fastapi import HTTPException
 
     requested = []
@@ -2650,10 +2650,10 @@ def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
                     return FakeResp(200, {}, "fake-internal-body", url=url)
                 return FakeResp(200, {}, "<html>ok</html>", url=url)
 
-    monkeypatch.setattr(server_module.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(security.httpx, "AsyncClient", FakeClient)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(server_module.fetch_remote_html("https://public-start.example/article"))
+        asyncio.run(security.fetch_remote_html("https://public-start.example/article"))
     assert exc_info.value.status_code == 400
     assert all("169.254" not in u for u in requested), f"盲 SSRF 发生了: {requested}"
 
@@ -2663,7 +2663,7 @@ def test_fetch_remote_html_still_follows_public_redirects(monkeypatch):
     import asyncio
     import socket as _socket
 
-    from delector import server as server_module
+    from delector import security
 
     def fake_getaddrinfo(host, port=None, *args, **kwargs):
         return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 0))]
@@ -2707,9 +2707,9 @@ def test_fetch_remote_html_still_follows_public_redirects(monkeypatch):
                     return FakeResp(302, {"location": "/final"}, url=url)
                 return FakeResp(200, {}, "<html>ok</html>", url=url)
 
-    monkeypatch.setattr(server_module.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(security.httpx, "AsyncClient", FakeClient)
 
-    body = asyncio.run(server_module.fetch_remote_html("https://short.example/x"))
+    body = asyncio.run(security.fetch_remote_html("https://short.example/x"))
     assert body == "<html>ok</html>"
     assert len(requested) == 2
 
@@ -2972,8 +2972,8 @@ def _make_non_json_content_client():
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-test-402-timeout")
-    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-402-timeout")
+    monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
     res = client.post("/api/ai/note-assist", json={"sentence": "Guten Tag.", "selected_text": "Guten Tag"})
     assert res.status_code == 502, f"AI 失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
     # 不得泄露 API Key
@@ -2982,8 +2982,8 @@ def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-test-polish")
-    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-polish")
+    monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
     res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund."})
     assert res.status_code == 502, f"AI 润色失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
     assert "sk-test-polish" not in res.text
@@ -2991,8 +2991,8 @@ def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_ai_polish_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-test-polish2")
-    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-polish2")
+    monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 502
     assert "sk-test-polish2" not in res.text
@@ -3000,8 +3000,8 @@ def test_ai_polish_ai_failure_returns_502(client, monkeypatch, factory):
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client])
 def test_grammar_lookup_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-grammar")
-    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-grammar")
+    monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
     res = client.post("/api/lookup/grammar", json={"sentence": "Ich gehe.", "target_phrase": "gehe"})
     assert res.status_code == 502
     assert "sk-grammar" not in res.text
@@ -3009,7 +3009,7 @@ def test_grammar_lookup_ai_failure_returns_502(client, monkeypatch, factory):
 
 def test_ai_no_key_stub_still_succeeds(client, monkeypatch):
     """无 key 时仍返回 200 stub（与网络失败的 502 区分）。"""
-    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/ai/note-assist", json={"sentence": "Hallo.", "selected_text": "Hallo"})
     assert res.status_code == 200
     assert res.json().get("_stub") is True
@@ -3660,7 +3660,7 @@ def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
     import sys
     import asyncio
     from unittest.mock import AsyncMock
-    from delector import server as server_module
+    from delector.routes import main as routes_main
 
     # 模拟 edge_tts 缺失
     monkeypatch.setitem(sys.modules, "edge_tts", None)
@@ -3688,9 +3688,9 @@ def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
         async def get(self, url, *args, **kwargs):
             return MockHttpxResp()
 
-    monkeypatch.setattr(server_module.httpx, "AsyncClient", MockAsyncClient)
+    monkeypatch.setattr(routes_main.httpx, "AsyncClient", MockAsyncClient)
 
-    audio_file = asyncio.run(server_module.generate_edge_tts_audio("Guten Morgen", voice="de-DE-KatjaNeural"))
+    audio_file = asyncio.run(routes_main.generate_edge_tts_audio("Guten Morgen", voice="de-DE-KatjaNeural"))
     assert os.path.exists(audio_file)
     assert os.path.getsize(audio_file) > 200
 
@@ -3779,7 +3779,7 @@ def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
     import asyncio
     import socket as _socket
     from fastapi import HTTPException
-    from delector import server as server_module
+    from delector.routes import main as routes_main
 
     monkeypatch.setattr(_socket, "getaddrinfo", lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
 
@@ -3815,16 +3815,16 @@ def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
                 yield BigStreamResp()
 
     # 1. 响应头 Content-Length 超过 2MB
-    monkeypatch.setattr(server_module.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("header"))
+    monkeypatch.setattr(routes_main.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("header"))
     with pytest.raises(HTTPException) as exc1:
-        asyncio.run(server_module.fetch_remote_html("https://example.com/big-header"))
+        asyncio.run(routes_main.fetch_remote_html("https://example.com/big-header"))
     assert exc1.value.status_code == 400
     assert "体积超限" in exc1.value.detail
 
     # 2. 实际传输流数据超过 2MB
-    monkeypatch.setattr(server_module.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("stream"))
+    monkeypatch.setattr(routes_main.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("stream"))
     with pytest.raises(HTTPException) as exc2:
-        asyncio.run(server_module.fetch_remote_html("https://example.com/big-stream"))
+        asyncio.run(routes_main.fetch_remote_html("https://example.com/big-stream"))
     assert exc2.value.status_code == 400
     assert "体积超限" in exc2.value.detail
 
@@ -3897,7 +3897,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     # 打包后 ModuleNotFoundError，而本地 pytest 全绿，只能靠这条断言挡住。
     route_modules = {
         "a1", "a2", "a1_hoeren", "a1_lesen",
-        "corpus", "sync", "rtc", "exam",
+        "corpus", "sync", "rtc", "exam", "main",
     }
     # 尚未归入子包、仍留在 delector/ 包根的模块
     top_level_modules = {"exam_catalog"}
@@ -3940,6 +3940,45 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         spec = open(spec_path, encoding="utf-8").read()
         for mod in required_modules:
             assert f"'{_mod_prefix(mod)}{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
+
+
+def test_register_routes_covers_every_module_in_routes_package():
+    """`delector/routes/` 下每个模块定义的路由都必须真的挂进 app。
+
+    防范的正是本仓库踩过的那类事故：路由模块存在、也被 server 静态 import，
+    但没人 include_router —— 端点静默 404 或打包后 ModuleNotFoundError，
+    而"模块文件在"这种断言全绿。这里比对的是**端点函数对象**而非路径字符串：
+    router 上的 path 不含 prefix，字符串比不出来。
+    """
+    import importlib
+    import pkgutil
+
+    from fastapi import APIRouter, FastAPI
+
+    import delector.routes as routes_pkg
+    from delector.routes import register_routes
+
+    probe = FastAPI()
+    register_routes(probe)
+    registered = {r.endpoint for r in probe.routes if hasattr(r, "endpoint")}
+
+    missing = []
+    covered_modules = []
+    for mod_info in pkgutil.iter_modules(routes_pkg.__path__):
+        mod = importlib.import_module(f"delector.routes.{mod_info.name}")
+        routers = [v for v in vars(mod).values() if isinstance(v, APIRouter)]
+        assert routers, (
+            f"delector/routes/{mod_info.name}.py 里没有 APIRouter —— "
+            "不是路由模块就别放 routes/ 包里"
+        )
+        covered_modules.append(mod_info.name)
+        for router in routers:
+            for route in router.routes:
+                if route.endpoint not in registered:
+                    missing.append(f"{mod_info.name}:{route.path}")
+
+    assert "main" in covered_modules, "routes/main.py（通用 handler）没被扫描到"
+    assert not missing, f"这些路由定义了却没挂进 app（漏 include_router）: {missing}"
 
 
 

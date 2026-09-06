@@ -23,6 +23,10 @@ from delector.routes import (
     rtc,
     sync,
 )
+# main 放最后：它承载从 server.py 搬来的通用 handler，搬迁前这些路由是**在
+# include_router 之后**才注册到 app 上的。FastAPI 按注册顺序匹配，把它提前会让
+# 同前缀的分域路由被通用 handler 抢先命中。
+from delector.routes import main
 from delector.routes.sync import (
     MAX_SYNC_CACHE_ENTRIES,
     _SYNC_INSTANCE_ID,
@@ -38,6 +42,7 @@ __all__ = [
     "exam",
     "rtc",
     "sync",
+    "main",
     "MAX_SYNC_CACHE_ENTRIES",
     "_SYNC_INSTANCE_ID",
     "_sync_sdp_cache",
@@ -48,8 +53,10 @@ __all__ = [
 def register_routes(app: FastAPI) -> None:
     """按既有顺序挂载全部分域路由。
 
-    顺序不是随意的：`/api/a1/hoeren` 与 `/api/a1/lesen` 挂在 `/api/a1` 之后，
-    先挂载的路由先匹配；改动顺序可能让同前缀路径命中到别的 handler。
+    顺序不是随意的：FastAPI 按注册顺序匹配。
+    - `/api/a1/hoeren`、`/api/a1/lesen` 挂在 `/api/a1` 之后；
+    - `main.router` 必须最后 —— 搬迁前这些 handler 是在 include_router 之后才
+      注册到 app 上的，提前注册会让它们抢先命中分域路由的同前缀路径。
     """
     app.include_router(a1.router)
     app.include_router(a2.router)
@@ -59,3 +66,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(a1_hoeren.hoeren_router)
     app.include_router(a1_lesen.lesen_router)
     app.include_router(exam.router)
+    app.include_router(main.router)

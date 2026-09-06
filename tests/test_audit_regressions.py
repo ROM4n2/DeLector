@@ -13,7 +13,7 @@ Locks in fixes for:
 import os
 import pytest
 os.environ.setdefault("DATABASE_PATH", "test_delector_audit_regressions.db")
-from delector.server import RestoreReq
+from delector.routes.main import RestoreReq
 from delector.nlp_engine.linguistics import lookup_irregular_verb, split_komposita
 from delector.nlp_engine.syntax_tree import analyze_sentence_topology
 from delector.writing_rules import decline_determiner
