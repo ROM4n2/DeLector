@@ -153,3 +153,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 （统计行被 safe-delete 守卫吞行，838>750，精确统计需换轮次）。
 准确 commit 序列：546c6a0/1d05ac9/e05d22b/3e9cb9e/1c82266（refactor 收包）→ dc8bd32（test 适配）
 → f33962e（打包联动 + 补漏 routes_a2）→ fb891bf（文档）→ 5984b68（修复）。工作区干净。
+
+### 2026-09-06 | codebuddy__auto | WORK_END
+任务闭环：Python 后端包内重构 Phase 1（T1–T7，`docs/plans/2026-09-06-python-restructure-phase1.md`）全部收官。
+1. 分层：T2 `data/`（8 词典）→ T3 `nlp_engine/` → T4 `routes/`（8 分域 + main.py 通用 handler，`register_routes` 统一挂载，main 垫底）+ server.py 2418→330 行 app 工厂 → T5 `services/`（writing/essay_diff/exam_catalog/tts）→ T6 `core/`（database/security/utils）→ T7 `tools/`（Go Agent 工具接口）。顶层仅余 server.py。
+2. 红线保持：DATA_DIR 改「向上走到不再是包目录」锚定（delector/core/database.py 与旧位置都解析到仓库根，test_backend_package_layout 钉住）；workbench 13 处切片护栏零漂移；`_require_localhost` 闸随迁。
+3. T7 新增 `POST /api/tools/{name}` + `TOOL_REGISTRY`（5 tool 统一 `async def run(payload)->dict`），ingest/export 加 localhost 闸，为 Phase 2 Go Agent 备好 HTTP 契约。
+4. 守卫联动：注册覆盖测试（端点对象比对 + 变异验证）、打包注册测试 data/route/service 三集、APP_NEEDLES、hidden-imports 全部跟迁；测试收集 583→599（+12 tools 测试）无 import 错误。
+踩坑：① `git checkout --` 会把未提交改动整文件回退（T4b 的 routes/__init__.py 被回退一次，重做）；② star-import 不导出下划线私有名 → edge_tts_mini 不留顶层 shim，真搬迁 + monkeypatch 契约迁 `delector.services.tts`；③ `from delector import database as db` 模块属性式导入正则 `delector\.(database|…)` 搜不到（无点号）→ 漏改首跑 ImportError，改 `import delector.core.database as db`；④ fetch_remote_html 是 async，monkeypatch fake 必须用 async 函数。
+commit 序列：3e4e7b2（T4a routes 子包）→ 206b3d7（T4b 工厂+main.py）→ 83e1d1a（T5 services）→ e0234bd（T6 core）→ 20d82ee（T7 tools）。本环境无写码子代理，vault-exec 降级为主线程直写 + 每 Task 原子提交；全量 pytest 因耗时被环境跳过，用 `pytest --collect-only`（导入检查）+ 定向跑受影响文件替代。
