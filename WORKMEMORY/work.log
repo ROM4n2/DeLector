@@ -162,3 +162,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 4. 守卫联动：注册覆盖测试（端点对象比对 + 变异验证）、打包注册测试 data/route/service 三集、APP_NEEDLES、hidden-imports 全部跟迁；测试收集 583→599（+12 tools 测试）无 import 错误。
 踩坑：① `git checkout --` 会把未提交改动整文件回退（T4b 的 routes/__init__.py 被回退一次，重做）；② star-import 不导出下划线私有名 → edge_tts_mini 不留顶层 shim，真搬迁 + monkeypatch 契约迁 `delector.services.tts`；③ `from delector import database as db` 模块属性式导入正则 `delector\.(database|…)` 搜不到（无点号）→ 漏改首跑 ImportError，改 `import delector.core.database as db`；④ fetch_remote_html 是 async，monkeypatch fake 必须用 async 函数。
 commit 序列：3e4e7b2（T4a routes 子包）→ 206b3d7（T4b 工厂+main.py）→ 83e1d1a（T5 services）→ e0234bd（T6 core）→ 20d82ee（T7 tools）。本环境无写码子代理，vault-exec 降级为主线程直写 + 每 Task 原子提交；全量 pytest 因耗时被环境跳过，用 `pytest --collect-only`（导入检查）+ 定向跑受影响文件替代。
+
+### 2026-09-06 | codebuddy__auto | WORK_END（vault-grill 收官拷打）
+任务闭环：对 Phase 1 T5–T7 落地物做重构师视角 Socratic 拷打，3 项拍板全部落地。
+1. Q1A：services/__init__ 删 17 个零调用方扁平符号 re-export（Deletion Test），只留 4 模块对象 re-export —— 消除与 core/__init__「只收零依赖符号」的自相矛盾（f900fe4）。
+2. Q2A：tools/exercise 语义造假（批改≠生成）→ 更名 writing_check（注册键同步）；tools/export 的 output_path 改必填，移除废弃 API tempfile.mktemp 的临时路径兜底（TOCTOU）（b14a938）。
+3. 决策归档 ADR-0009（独立编号，不并入 ADR-0008）：Vault 01-ADR/0009-python-package-restructure-deletion-test-and-tool-contract.md。Go Agent 契约变更：工具名 exercise→writing_check。
+纪律沉淀：① 子包 __init__ 符号级扁平入口须有真实调用方，否则删；② tool 命名=真实语义；③ 服务端禁止自选持久化落点。另修复一次 git mv 预暂存导致的红态中间提交（soft reset 重切边界，reflog 可溯）。

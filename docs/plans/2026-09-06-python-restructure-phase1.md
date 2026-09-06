@@ -333,6 +333,12 @@ Layer 6:           server → 全部（上帝文件，2418 行）
 3. **打包注册**：`routes.tools` 加入打包守卫 `route_modules` 集，`package_windows.py` 与 `build-release.yml`（Linux+macOS 两处）补 `--hidden-import=delector.routes.tools`；`delector.tools` 由 routes 静态导入自动发现，无需逐 tool 列。
 4. **`routes/__init__.py` 注册序**：`tools.router` 放 `main.router` 之后 —— /api/tools 是独立前缀，不与分域冲突，放最后只是维持"通用 handler 垫底"的注册序纪律。
 
+**vault-grill 追加决策（2026-09-06，ADR-0009）**：收官后以重构师视角拷打 T5–T7，三项拍板并落地：
+1. **Q1A**：`services/__init__` 删除 17 个零调用方的符号级扁平 re-export（Deletion Test），只 re-export 4 个模块对象，消除与 core/__init__ 纪律的自相矛盾（commit `f900fe4`）。
+2. **Q2A**：`tools/exercise` 语义造假（批改≠生成）→ 更名 `writing_check`，注册键同步；`tools/export` 的 `output_path` 改必填，移除废弃 API `tempfile.mktemp`（TOCTOU 竞态）的临时路径兜底（commit `b14a938`）。
+3. **ADR 独立编号 0009**，不并入 ADR-0008（运行时架构 ≠ 重构纪律/契约语义），归档于 Vault `08-Projects/DeLector/01-ADR/0009-python-package-restructure-deletion-test-and-tool-contract.md`。
+4. 契约变更：Go Agent 工具名 `exercise` → `writing_check`（Phase 2 未启动，无兼容成本）。
+
 ---
 
 ## 重构后的目标结构

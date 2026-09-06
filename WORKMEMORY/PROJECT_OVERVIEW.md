@@ -19,8 +19,8 @@
 
 ## 当前状态（2026-09-06 快照）
 
-- 分支 `master`（HEAD=`20d82ee`，**tag `v5.3.0` 已 push**；其后 Phase 1 重构 5 commits 未 push：`3e4e7b2`/`206b3d7`/`83e1d1a`/`e0234bd`/`20d82ee`）。
-- **Python 后端包内重构 Phase 1 全量完成（2026-09-06，T1–T7）**：目录分层落地 `data/`（8 词典）→ `nlp_engine/` → `core/`（database/security/utils；DATA_DIR 用「向上走到不再是包目录」锚定仓库根）→ `services/`（writing/essay_diff/exam_catalog/tts）→ `tools/`（Go Agent 工具接口：`TOOL_REGISTRY` + `POST /api/tools/{name}`，ingest/export 加 localhost 闸）→ `routes/`（8 分域 + `main.py` + `tools.py`，`register_routes(app)` 统一挂载）；顶层仅余 `server.py` app 工厂（`create_app()`，330 行）。测试收集 583→599（含 12 个新 tools 测试）无 import 错误；打包注册守卫同步 data/route/service 三集 + APP_NEEDLES。计划与逐 Task 偏差记录：`docs/plans/2026-09-06-python-restructure-phase1.md`；下一步 Phase 2（Go Agent Runtime，ADR-0008 草案在 `docs/specs/`）。
+- 分支 `master`（HEAD=`b14a938`，**tag `v5.3.0` 已 push**；其后 Phase 1 重构 + vault-grill 修正共 8 commits 未 push）。
+- **Python 后端包内重构 Phase 1 全量完成（2026-09-06，T1–T7）**：目录分层落地 `data/`（8 词典）→ `nlp_engine/` → `core/`（database/security/utils；DATA_DIR 用「向上走到不再是包目录」锚定仓库根）→ `services/`（writing/essay_diff/exam_catalog/tts）→ `tools/`（Go Agent 工具接口：`TOOL_REGISTRY` + `POST /api/tools/{name}`，ingest/export 加 localhost 闸）→ `routes/`（8 分域 + `main.py` + `tools.py`，`register_routes(app)` 统一挂载）；顶层仅余 `server.py` app 工厂（`create_app()`，330 行）。测试收集 583→599（含 12 个新 tools 测试）无 import 错误；打包注册守卫同步 data/route/service 三集 + APP_NEEDLES。计划与逐 Task 偏差记录：`docs/plans/2026-09-06-python-restructure-phase1.md`；收官后经 vault-grill 拷打落地两处精简修正（services 扁平 re-export 删除、tools/exercise→writing_check + export 路径必填），决策归档 **ADR-0009**（Vault `01-ADR/0009-python-package-restructure-deletion-test-and-tool-contract.md`，独立于 ADR-0008）。下一步 Phase 2（Go Agent Runtime，ADR-0008 草案在 `docs/specs/`）。
 - **重大里程碑**：
   1. **ADR-0005 备考域 Phase 1 全量落地（PR #25 已合入 master）**：
      - 「场景工具 + 独立备考域」双带架构落地，A1 听说读写各模块迁入 `view-exam` 独立域。
