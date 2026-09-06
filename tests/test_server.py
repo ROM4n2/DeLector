@@ -3887,15 +3887,12 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
 
-    required_modules = [
-        "core_dict",
-        "core_dict_ext",
-        "prep_dict",
-        "a1_dict",
-        "a1_writing_dict",
-        "a1_hoeren_dict",
-        "a1_lesen_dict",
-        "corpus_dict",
+    # Phase 1 Task 2：8 个纯数据词典已收进 deletor.data/ 子包，打包 hidden-import 同步为 deletor.data.<mod>
+    data_dict_modules = {
+        "core_dict", "core_dict_ext", "prep_dict", "a1_dict",
+        "a1_writing_dict", "a1_hoeren_dict", "a1_lesen_dict", "corpus_dict",
+    }
+    route_modules = [
         "routes_a1",
         "routes_a2",
         "routes_a1_hoeren",
@@ -3906,12 +3903,17 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "routes_exam",
         "exam_catalog",
     ]
+    required_modules = sorted(data_dict_modules) + route_modules
+
+    def _mod_prefix(mod: str) -> str:
+        return "delector.data." if mod in data_dict_modules else "delector."
 
     for mod in required_modules:
+        hidden = f"--hidden-import={_mod_prefix(mod)}{mod}"
         # 1. Windows PyInstaller
-        assert f"--hidden-import=delector.{mod}" in pkg, f"{mod} 未在 package_windows.py 的 --hidden-import 中注册"
+        assert hidden in pkg, f"{mod} 未在 package_windows.py 的 --hidden-import 中注册"
         # 2. Linux & macOS CI PyInstaller
-        assert wf.count(f"--hidden-import=delector.{mod}") >= 2, f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 (count={wf.count(f'--hidden-import=delector.{mod}')})"
+        assert wf.count(hidden) >= 2, f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 (count={wf.count(hidden)})"
     # 3. Android Chaquopy：Phase 2 后整目录拷入。再逐个 cp 扁平 .py 会漏模块 ——
     #    v5.3.0 实际漏过 routes_a2.py（server.py:233 静态 import 它），整目录拷贝修掉它。
     assert "cp -r start.py" in wf, "Android 应单独拷贝入口 start.py"
@@ -3935,7 +3937,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     if os.path.exists(spec_path):
         spec = open(spec_path, encoding="utf-8").read()
         for mod in required_modules:
-            assert f"'delector.{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
+            assert f"'{_mod_prefix(mod)}{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
 
 
 
