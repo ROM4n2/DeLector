@@ -12,6 +12,19 @@ import (
 	"time"
 )
 
+// ---- 哨兵错误 ----
+//
+// 启动/崩溃重启失败必须可经 errors.Is 区分语义，杜绝把"已停止 / ctx 取消"
+// 与真实"配额耗尽"混报（崩溃恢复与 Stop 竞态时的误报源）。禁字符串比较。
+var (
+	// ErrSupervisorStopped：Supervisor 已被 Stop（或正在停止），据此中止/
+	// 拒绝启动重试。errors.Is(err, ErrSupervisorStopped) 判定。
+	ErrSupervisorStopped = errors.New("pythonsvc: supervisor stopped")
+	// ErrBudgetExhausted：连续 MaxRestarts 次真实启动/探针失败后配额耗尽。
+	// 仅"配额耗尽"路径包装此哨兵；调用方可 errors.Is 判定并取其文案。
+	ErrBudgetExhausted = errors.New("pythonsvc: restart budget exhausted")
+)
+
 // ---- 默认配置常量 ----
 
 // defaultPythonCmd 为 agent 托管 Python 实例的默认启动命令：开发态即真实
@@ -108,6 +121,22 @@ type procHandle struct {
 // 句柄。只此一处 seam，防过度抽象。
 type startFunc func(ctx context.Context) (wait func() error, cancel func(), err error)
 
+// newProcHandle 构造 procHandle 并为 wait 建立幂等闸：sync.Once 保证即使
+// 多个 goroutine 并发调用 p.wait()（Stop 的 awaitExit 与 supervise 的驻留
+// wait 会指向同一 exec.Cmd），也仅触发一次真正底层 Wait——对同一
+// exec.Cmd 并发 Wait 在 Unix 下为未指定行为。各调用方共享同一份 waitErr。
+func newProcHandle(wait func() error, cancel func()) *procHandle {
+	var once sync.Once
+	var waitErr error
+	return &procHandle{
+		wait: func() error {
+			once.Do(func() { waitErr = wait() })
+			return waitErr
+		},
+		cancel: cancel,
+	}
+}
+
 // probeHTTP 健康探针专用 HTTP client：无自身超时，探针生命周期完全由
 // probeUntil 的窗口 ctx 约束（全局约束：出站请求必须 NewRequestWithContext）。
 var probeHTTP = &http.Client{}
@@ -202,6 +231,11 @@ func (s *Supervisor) supervise(ctx context.Context, p *procHandle) {
 		}
 		next, err := s.startWithRetry(ctx)
 		if err != nil {
+			// Stop 或调用方 ctx 取消与崩溃恢复竞态：startWithRetry 会以哨兵/
+			// ctx 取消语义返回，属正常收场，非配额耗尽，静默返回不上报（防误报）。
+			if errors.Is(err, ErrSupervisorStopped) || errors.Is(err, context.Canceled) {
+				return
+			}
 			s.report(fmt.Errorf("pythonsvc: 托管进程意外退出（wait: %v）且重启配额耗尽: %w", waitErr, err))
 			return
 		}
@@ -216,15 +250,24 @@ func (s *Supervisor) supervise(ctx context.Context, p *procHandle) {
 // startWithRetry 单轮"启动+探针"重试循环：恰好 MaxRestarts 次尝试，相邻
 // 尝试间等待 backoff(tries)。任一次探针通过即成功返回；全部失败返回包装
 // 最后一次错误的最终错误。
+//
+// 失败语义可区分（禁字符串比较）：
+//   - 已 Stop：返回哨兵 ErrSupervisorStopped（中止启动重试）。
+//   - 调用方 ctx 取消：返回 ctx.Err() 链（errors.Is(context.Canceled) 判定）。
+//   - 其余（真实启动/探针连败耗尽配额）：最终错误包 ErrBudgetExhausted 哨兵。
 func (s *Supervisor) startWithRetry(ctx context.Context) (*procHandle, error) {
 	var lastErr error
 	for tries := 0; tries < s.cfg.MaxRestarts; tries++ {
 		if s.isStopped() {
-			return nil, errors.New("pythonsvc: supervisor 已停止，中止启动重试")
+			return nil, fmt.Errorf("%w: 中止启动重试", ErrSupervisorStopped)
 		}
 		p, err := s.tryLaunch(ctx)
 		if err == nil {
 			return p, nil
+		}
+		// 启动/探针因 ctx 取消而中止属正常收场，非配额耗尽，直接上抛其语义。
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			return nil, fmt.Errorf("%w: 启动托管进程", ctx.Err())
 		}
 		lastErr = err
 		if tries+1 < s.cfg.MaxRestarts {
@@ -233,7 +276,8 @@ func (s *Supervisor) startWithRetry(ctx context.Context) (*procHandle, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("pythonsvc: 连续 %d 次启动托管进程失败: %w", s.cfg.MaxRestarts, lastErr)
+	return nil, fmt.Errorf("%w: 连续 %d 次启动托管进程失败: %w",
+		ErrBudgetExhausted, s.cfg.MaxRestarts, lastErr)
 }
 
 // sleepBackoff 等待第 attempt 次失败的退避时长；调用方 ctx 取消时提前返回。
@@ -255,7 +299,7 @@ func (s *Supervisor) tryLaunch(ctx context.Context) (*procHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pythonsvc: 启动 python 进程: %w", err)
 	}
-	p := &procHandle{wait: wait, cancel: cancel}
+	p := newProcHandle(wait, cancel)
 	if perr := s.probeUntil(ctx); perr != nil {
 		s.terminate(p)
 		return nil, perr
