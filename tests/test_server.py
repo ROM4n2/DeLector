@@ -989,19 +989,19 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     # 1. 堵死 edge_tts 导入（模拟安卓）：sys.modules[name]=None 时 import 抛 ImportError
     monkeypatch.setitem(sys.modules, "edge_tts", None)
 
-    # 2. 用假模块顶替 edge_tts_mini，synthesize 返回假 MP3
-    fake_mini = types.ModuleType("edge_tts_mini")
+    # 2. 用假模块顶替 services.tts，synthesize 返回假 MP3
+    fake_mini = types.ModuleType("delector.services.tts")
     fake_mp3 = b"ID3\x03\x00\x00\x00\x00\x00\x00mock_edge_mini_audio"
     fake_mini.synthesize = lambda text, voice, rate: fake_mp3
-    # server.py 延迟导入写的是 `from delector import edge_tts_mini`，
-    # 找的是 sys.modules["delector.edge_tts_mini"] —— 顶替顶层键 "edge_tts_mini"
-    # 对包内模块无效（包化后模块全名变了），顶替会拿到真模块去合成真 MP3。
-    monkeypatch.setitem(sys.modules, "delector.edge_tts_mini", fake_mini)
-    # 双保险：前面若已有测试触发过真 edge_tts_mini 的延迟导入，包对象上会缓存
-    # 真模块属性，`from delector import X` 命中包属性而不查 sys.modules。
+    # routes/main.py 的 generate_edge_tts_audio 延迟导入写的是
+    # `from delector.services import tts as edge_tts_mini`，找的是
+    # sys.modules["delector.services.tts"] —— 顶替该键生效。
+    monkeypatch.setitem(sys.modules, "delector.services.tts", fake_mini)
+    # 双保险：前面若已有测试触发过真 tts 的延迟导入，包对象上会缓存
+    # 真模块属性，`from delector.services import tts` 命中包属性而不查 sys.modules。
     # 顶替包属性，消除「单独跑绿、整批红」的顺序依赖。
-    import delector
-    monkeypatch.setattr(delector, "edge_tts_mini", fake_mini, raising=False)
+    import delector.services
+    monkeypatch.setattr(delector.services, "tts", fake_mini, raising=False)
 
     # 3. 独立缓存目录，避免污染
     cache_dir = tmp_path / "mini_cache"
@@ -3665,13 +3665,13 @@ def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
     # 模拟 edge_tts 缺失
     monkeypatch.setitem(sys.modules, "edge_tts", None)
 
-    # 模拟 edge_tts_mini 失败
+    # 模拟 edge_tts_mini（services.tts）失败
     class FakeMini:
         @staticmethod
         def synthesize(*args, **kwargs):
             raise RuntimeError("Mini TTS simulated error")
 
-    monkeypatch.setitem(sys.modules, "delector.edge_tts_mini", FakeMini)
+    monkeypatch.setitem(sys.modules, "delector.services.tts", FakeMini)
 
     # 模拟有道兜底响应
     class MockHttpxResp:
@@ -3899,15 +3899,19 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "a1", "a2", "a1_hoeren", "a1_lesen",
         "corpus", "sync", "rtc", "exam", "main",
     }
-    # 尚未归入子包、仍留在 delector/ 包根的模块
-    top_level_modules = {"exam_catalog"}
-    required_modules = sorted(data_dict_modules | route_modules | top_level_modules)
+    # Phase 1 Task 5：4 个服务模块收进 delector.services/ 子包（edge_tts_mini →
+    # services.tts，monkeypatch 契约同步迁到 delector.services.tts，不再有顶层 shim）
+    service_modules = {"writing", "essay_diff", "exam_catalog", "tts"}
+    top_level_modules = set()
+    required_modules = sorted(data_dict_modules | route_modules | service_modules | top_level_modules)
 
     def _mod_prefix(mod: str) -> str:
         if mod in data_dict_modules:
             return "delector.data."
         if mod in route_modules:
             return "delector.routes."
+        if mod in service_modules:
+            return "delector.services."
         return "delector."
 
     for mod in required_modules:
@@ -3929,7 +3933,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "delector/routes/a1_lesen.py",
         "delector/routes/rtc.py",
         "delector/routes/exam.py",
-        "delector/exam_catalog.py",
+        "delector/services/exam_catalog.py",
         "delector/routes/a2.py",
     ]
     for needle in critical_apk_needles:

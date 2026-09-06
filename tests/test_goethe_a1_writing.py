@@ -10,7 +10,7 @@ os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
 from delector.server import app
 from delector.data import a1_writing_dict
-from delector.writing_rules import analyze_a1_email, check_a1_formular_answer
+from delector.services.writing import analyze_a1_email, check_a1_formular_answer
 
 
 def test_a1_writing_dict_dataset_integrity():

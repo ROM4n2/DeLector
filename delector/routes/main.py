@@ -906,8 +906,8 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
             await communicate.save(cache_file)
         except ImportError:
             # Android/Chaquopy 没有 edge_tts 的 wheel（aiohttp 等依赖缺）→ 用 stdlib 版客户端
-            # （edge_tts_mini 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖）
-            from delector import edge_tts_mini
+            # （services.tts 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖；原名 edge_tts_mini）
+            from delector.services import tts as edge_tts_mini
             audio_data = await asyncio.to_thread(
                 edge_tts_mini.synthesize, clean_text, voice, rate
             )
@@ -1758,13 +1758,13 @@ def _get_writer_nlp():
 
 @router.post("/api/writing/analyze")
 def api_writing_analyze(req: WritingAnalyzeReq):
-    from delector.writing_rules import analyze_essay_text
+    from delector.services.writing import analyze_essay_text
     return analyze_essay_text(req.text[:2000], _get_writer_nlp())
 
 
 @router.post("/api/essays")
 def create_essay(req: EssayCreateReq):
-    from delector.writing_rules import analyze_essay_text
+    from delector.services.writing import analyze_essay_text
     a = analyze_essay_text(req.content[:5000], _get_writer_nlp())
     cefr = a.get("cefr", {}).get("recommended_level")
     with db_conn() as conn:
@@ -1802,7 +1802,7 @@ def get_essay(essay_id: int):
 
 @router.put("/api/essays/{essay_id}")
 def update_essay(essay_id: int, req: EssayUpdateReq):
-    from delector.writing_rules import analyze_essay_text
+    from delector.services.writing import analyze_essay_text
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
@@ -1938,7 +1938,7 @@ async def api_writing_ai_polish(req: AIPolishReq):
 
 @router.post("/api/writing/ai-polish/diff")
 async def api_writing_ai_polish_diff(req: AIPolishReq):
-    from delector.essay_diff import diff_sentences
+    from delector.services.essay_diff import diff_sentences
     text = req.text[:2000]
     corrected_text, notes_zh, error_count = await _ai_polish_call(text)
     hunks = diff_sentences(text, corrected_text)
@@ -2054,7 +2054,7 @@ def delete_essay_version(essay_id: int, version_id: int, request: Request):
 
 @router.post("/api/essays/{essay_id}/restore")
 def restore_essay_version(essay_id: int, req: EssayRestoreReq):
-    from delector.writing_rules import analyze_essay_text
+    from delector.services.writing import analyze_essay_text
     with db_conn() as conn:
         essay = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:
@@ -2098,8 +2098,8 @@ def restore_essay_version(essay_id: int, req: EssayRestoreReq):
 
 @router.post("/api/writing/apply")
 def api_writing_apply(req: WritingApplyReq):
-    from delector.essay_diff import diff_sentences, merge_sentences
-    from delector.writing_rules import analyze_essay_text
+    from delector.services.essay_diff import diff_sentences, merge_sentences
+    from delector.services.writing import analyze_essay_text
 
     hunks = diff_sentences(req.original_text, req.corrected_text)
     if any(idx < 0 or idx >= len(hunks) for idx in req.accepted_indices):

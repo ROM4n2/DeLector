@@ -249,7 +249,7 @@ def check_hygiene_and_tests():
     scan_section("6. 代码卫生与测试套件执行 (Code Hygiene & Pytest Suite)")
     
     try:
-        res = subprocess.run([sys.executable, "-m", "pyflakes", "delector/server.py", "delector/database.py", "delector/nlp.py", "delector/linguistics.py", "delector/syntax_tree.py", "delector/writing_rules.py"], capture_output=True, text=True, cwd=str(ROOT))
+        res = subprocess.run([sys.executable, "-m", "pyflakes", "delector/server.py", "delector/database.py", "delector/nlp.py", "delector/linguistics.py", "delector/syntax_tree.py", "delector/services/writing.py"], capture_output=True, text=True, cwd=str(ROOT))
         if res.returncode == 0 and not res.stdout.strip():
             record_pass("TEST", "核心 Python 源码 Pyflakes 静态检查 0 告警")
         else:

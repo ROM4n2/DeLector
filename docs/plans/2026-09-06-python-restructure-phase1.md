@@ -236,11 +236,18 @@ Layer 6:           server → 全部（上帝文件，2418 行）
 > 5. Git commit: `refactor: move service layer into delector/services/`"
 
 **Step Breakdown:**
-- [ ] Step 1: Create services sub-package
-- [ ] Step 2: Move/rename 4 service files
-- [ ] Step 3: Update consumer imports
-- [ ] Step 4: Run full test suite — 582 全绿
-- [ ] Step 5: Git atomic commit
+- [x] Step 1: Create services sub-package
+- [x] Step 2: Move/rename 4 service files
+- [x] Step 3: Update consumer imports
+- [x] Step 4: Run full test suite — 586 passed / 1 skipped（收集 587，与基线一致）
+- [x] Step 5: Git atomic commit
+
+**Status（2026-09-06 完成）：** 4 个服务模块收进 `delector/services/`：`writing_rules.py→writing.py`、`essay_diff.py`→`essay_diff.py`、`exam_catalog.py`→`exam_catalog.py`、`edge_tts_mini.py`→`tts.py`。`services/__init__.py` 显式 `__all__` re-export 公共符号。全量测试收集 587（586 运行 + 1 因缺 `DeLector.spec` 跳过）无 import 错误。
+
+**偏差 / 决策：**
+1. **edge_tts_mini 不保留顶层 shim**：原想留 `delector/edge_tts_mini.py` 桥接 shim 兼容 `from delector import edge_tts_mini`，但 star-import 不导出下划线私有名（`test_edge_tts_mini` 用 `m._sec_ms_gec` 等），且 pyflakes 对 `import *` 报 "unable to detect undefined names"。改为真搬迁：`main.py` 改 `from delector.services import tts as edge_tts_mini`，两个 monkeypatch 降级链测试改打 `sys.modules["delector.services.tts"]` + `delector.services.tts` 属性，`test_edge_tts_mini` 改 `from delector.services import tts as m`。
+2. **打包清单同步**：`package_windows.py` / `build-release.yml` 的 `--hidden-import` 与 `APP_NEEDLES` 把 `exam_catalog` 改到 `delector.services.*`（`delector/exam_catalog.py`→`delector/services/exam_catalog.py`）；新增 `delector.services.writing/essay_diff/exam_catalog/tts`。`test_all_backend_modules_registered_in_all_packaging_targets` 新增 `service_modules` 集 + `top_level_modules` 清空（无顶层残留）。
+3. **未动逻辑**：纯搬迁，handler/引擎主体逐字移动；`services/__init__.py` 的扁平 re-export 仅为便利入口，消费方直连子模块。
 
 ---
 

@@ -23,7 +23,7 @@ os.environ["PROGRESS_DB_PATH"] = "test_catalog_progress.db"
 from fastapi.testclient import TestClient  # noqa: E402
 
 from delector.server import app  # noqa: E402
-from delector import exam_catalog  # noqa: E402
+from delector.services import exam_catalog  # noqa: E402
 from delector.data import a1_dict  # noqa: E402
 from delector.data import a1_hoeren_dict  # noqa: E402
 from delector.data import a1_lesen_dict  # noqa: E402

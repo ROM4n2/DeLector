@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from delector.data import a1_dict
 from delector.data import a1_writing_dict
 from delector.database import export_a1_anki_deck
-from delector.writing_rules import check_a1_formular_answer, analyze_a1_email
+from delector.services.writing import check_a1_formular_answer, analyze_a1_email
 
 router = APIRouter(prefix="/api/a1", tags=["Goethe A1"])
 

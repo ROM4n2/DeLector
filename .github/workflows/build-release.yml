@@ -109,7 +109,10 @@ jobs:
             --hidden-import=delector.routes.rtc \
             --hidden-import=delector.routes.exam \
             --hidden-import=delector.routes.main \
-            --hidden-import=delector.exam_catalog \
+            --hidden-import=delector.services.writing \
+            --hidden-import=delector.services.essay_diff \
+            --hidden-import=delector.services.exam_catalog \
+            --hidden-import=delector.services.tts \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -187,7 +190,10 @@ jobs:
             --hidden-import=delector.routes.rtc \
             --hidden-import=delector.routes.exam \
             --hidden-import=delector.routes.main \
-            --hidden-import=delector.exam_catalog \
+            --hidden-import=delector.services.writing \
+            --hidden-import=delector.services.essay_diff \
+            --hidden-import=delector.services.exam_catalog \
+            --hidden-import=delector.services.tts \
             --hidden-import=de_core_news_sm \
             --hidden-import=spacy.lang.de \
             --hidden-import=genanki \
@@ -387,7 +393,7 @@ jobs:
               # app.imy 装应用自身代码 + CI 拷入的模型目录；pip 依赖（spacy/thinc）
               # 在 requirements-<abi>.imy —— v4.4.0 首跑实测把 spacy/thinc 塞进
               # app.imy 检查会误报缺失。两个容器各查各的。
-              APP_NEEDLES = ("delector/server.py", "de_core_news_sm", "delector/routes/corpus.py", "delector/routes/a1_hoeren.py", "delector/routes/a1_lesen.py", "delector/routes/rtc.py", "delector/routes/exam.py", "delector/exam_catalog.py", "delector/data/corpus_dict.py", "delector/data/a1_hoeren_dict.py", "delector/data/a1_lesen_dict.py", "delector/routes/a2.py")
+              APP_NEEDLES = ("delector/server.py", "de_core_news_sm", "delector/routes/corpus.py", "delector/routes/a1_hoeren.py", "delector/routes/a1_lesen.py", "delector/routes/rtc.py", "delector/routes/exam.py", "delector/services/exam_catalog.py", "delector/data/corpus_dict.py", "delector/data/a1_hoeren_dict.py", "delector/data/a1_lesen_dict.py", "delector/routes/a2.py")
               REQ_NEEDLES = ("spacy", "thinc")
               def find_in(data):
                   found = set()
