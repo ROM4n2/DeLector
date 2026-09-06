@@ -15,6 +15,32 @@
 
 ---
 
+## 执行状态（2026-09-07 收官，vault-exec maker-checker 全流程）
+
+**8/8 完成**，每 Task 均走 CPE 实现 → CRV 只读验收 → 主线程核销 UNVERIFIED 项 + 原子提交推送：
+
+| Task | commit | CRV 裁定 |
+|---|---|---|
+| T1 脚手架+契约钉板 | `596dfb5` | APPROVED |
+| T2 pythonsvc client | `3066d40` | APPROVED |
+| T3 Tool Registry | `a37bc1e` | APPROVED |
+| T4 DAG Scheduler | `513eb55` | APPROVED（并发四条泄露路径逐一排除，cap-1 errCh 非阻塞发送） |
+| T5 Supervisor | `1e2163a` | APPROVED |
+| T6 LLM 客户端 | `ef3e6d2` | APPROVED（CRV 对锁版 SDK v1.42.0 逐字段核验） |
+| T7 集成测试 | `b93baf0` | APPROVED（真实 uvicorn+spaCy 双 200） |
+| T8 文档收尾 | 本档 | — |
+
+**偏差与口径统一（正式记录）：**
+1. **类型命名**：registry 的 `ToolFunc` 取代计划 Interfaces 字面 `type Tool`（与 dag.StepFunc 命名惯例一致）；Task 8 据此回填计划 Interfaces。
+2. **拓扑口径统一（ADR-0008 / 计划 / 测试三方）**：Python 实况 5 工具无 cefr 对应物，`analyze` 内部承担 nlp+cefr 能力；ADR-0008 工具清单已于 T1 修订为 5 工具、DAG 示例的 `cefr` 标注「Phase 2b 独立工具」；Example 钉板用 4 层拓扑。**三方口径收敛为：cefr 属 Phase 2b 未来独立 tool，当前 analyze≈nlp 含 CEFR 标注。**
+3. **supervisor 关闭语义**：win32 无 SIGTERM，`cmd.Cancel=Kill` 为最接近语义；Phase 2b 用 build tag 在 Unix 发 SIGTERM（记录于 T5）。
+4. **ProbeTimeout 实测**：默认 2s 对 spaCy 冷启动偏紧，集成测试用 30s；若桌面端复用 supervisor，建议默认上调至 ≥10s。
+5. **依赖**：唯一新增 `github.com/sashabaranov/go-openai v1.42.0`（cobra 为 T1 既有）；go mod tidy 已规整直接依赖块。
+6. **黄牌债务全部核销**：T1/T2 并入后续 step0；T4 Example 拓扑口径见 2；T5 并发双 Wait / 竞态误报已在 T7 step0 修复；T6 go mod tidy 已执行。
+7. **环境**：执行机 Go 1.26.5；`go test -count=1 -race ./...`（五包）与 `go test -tags integration`（真实 Python 链路）均为最终门禁，Python 基线 599+1 不受影响。
+
+---
+
 ## 架构与文件边界
 
 ```

@@ -169,3 +169,9 @@ commit 序列：3e4e7b2（T4a routes 子包）→ 206b3d7（T4b 工厂+main.py�
 2. Q2A：tools/exercise 语义造假（批改≠生成）→ 更名 writing_check（注册键同步）；tools/export 的 output_path 改必填，移除废弃 API tempfile.mktemp 的临时路径兜底（TOCTOU）（b14a938）。
 3. 决策归档 ADR-0009（独立编号，不并入 ADR-0008）：Vault 01-ADR/0009-python-package-restructure-deletion-test-and-tool-contract.md。Go Agent 契约变更：工具名 exercise→writing_check。
 纪律沉淀：① 子包 __init__ 符号级扁平入口须有真实调用方，否则删；② tool 命名=真实语义；③ 服务端禁止自选持久化落点。另修复一次 git mv 预暂存导致的红态中间提交（soft reset 重切边界，reflog 可溯）。
+
+### 2026-09-07 | codebuddy__auto | WORK_END
+任务闭环：Phase 2a Go Agent Runtime（docs/plans/2026-09-06-go-agent-runtime-phase2a.md）8/8 完成，maker-checker 流水线全绿。
+commit 序列（均推送）：T1 596dfb5（脚手架+ADR-0008 契约钉板）→ T2 3066d40（pythonsvc client）→ T3 a37bc1e（registry+golden 哨兵）→ T4 513eb55（自研 DAG 调度器）→ T5 1e2163a（supervisor）→ T6 ef3e6d2（llm/go-openai v1.42.0）→ T7 b93baf0（真实 uvicorn 集成 e2e + supervisor step0 修复）。
+关键产出：agent/ Go module（cmd/delector cobra + internal/{pythonsvc,registry,dag,llm}）；Go 1.26.5；`go test -race` 五包全绿；`go test -tags integration` 真实 Python 链路双 200（writing_check/analyze，spaCy de_core_news_sm）。
+纪律与踩坑（供后续 Phase 2b）：① maker-checker 轮换 8 次全绿，CRV 对锁版 SDK/真源逐字段比对价值高；② 集成测试 ctx 一旦「return 即 cancel」会把 python 子进程立刻强杀（exec.CommandContext），必须 Background + t.Cleanup(Stop)；③ uvicorn 以 agent/ 为 cwd 时需 PYTHONPATH 上溯求根；④ ProbeTimeout 默认 2s 对 spaCy 冷启动偏紧，桌面复用建议 ≥10s；⑤ 拓扑口径统一：cefr 属 Phase 2b 独立 tool，当前 analyze 内部承担 nlp+CEFR。T8 文档收尾同步 README 目录树（后端子包形态 + agent/）+ 计划状态块 + PROJECT_OVERVIEW。

@@ -223,6 +223,7 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 
 ```
 DeLector/
+├── agent/                  # Phase 2 Go Agent Runtime：cobra CLI + 自研 DAG + 5 工具注册 + Python supervisor + DeepSeek 客户端（module github.com/ROM4n2/DeLector/agent）
 ├── android/                # Android 独立离线单机版工程 (Chaquopy + Gradle)
 ├── static/                 # 前端纯静态 ES 模块化资源 (Zero-Build ESM)
 │   ├── index.html          # 单页应用骨架 (含 3D 卡盒、句法拓扑与台账)
@@ -241,29 +242,15 @@ DeLector/
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
 │       └── player.js       # 神经影子跟读与 TTS 播放器
 ├── .githooks/              # 提交前密钥扫描钩子 (pre-commit，含编码 keystore)
-├── delector/               # 后端包：26 个业务模块平铺（Phase 2 收包，只加包层级不改文件名）
-│   ├── server.py           # FastAPI 后端服务与核心 NLP/API 路由（敏感设置仅回环可写）
-│   ├── database.py         # SQLite 数据层（DATA_DIR 默认显式回指仓库根，别改回 dirname(__file__)）
-│   ├── nlp.py              # spaCy NLP/CEFR/文本分析 + 纯 Python 回退
-│   ├── security.py         # SSRF/URL 安全
-│   ├── linguistics.py      # 556+ 不规则动词三态表与复合词拆解引擎
-│   ├── core_dict.py        # 歌德 A1-B2 离线核心词库 (0ms 查词，4411 词)
-│   ├── core_dict_ext.py    # 3969 词库扩展（DeepSeek 批量生成中文释义）
-│   ├── a1_dict.py          # 歌德 A1 官方 702 词 + 口语 Teil 2/3 题卡数据集
-│   ├── a1_writing_dict.py  # A1 填表真题与短电邮题库
-│   ├── a1_hoeren_dict.py   # A1 听力真题数据集
-│   ├── a1_lesen_dict.py    # A1 阅读真题数据集
-│   ├── prep_dict.py        # 固定介词搭配数据集 552 词 / 691 条（生成物，源在 tools/build_prep.py）
-│   ├── writing_rules.py    # 写作润色台本地规则引擎（冠词一致 + 介词格，零误报）
-│   ├── syntax_tree.py      # 拓扑五场域与 AST 从句树句法引擎
-│   ├── essay_diff.py       # 句子级 diff 引擎
-│   ├── edge_tts_mini.py    # 零依赖 stdlib TTS 客户端（Android 无 wheel 时回退）
-│   ├── exam_catalog.py     # 考纲词表与题量注册（A1/A2，动态推导）
-│   ├── routes_a1.py        # A1 考纲路由（词卡/口语/写作/Anki 导出）
-│   ├── routes_a2.py / routes_a1_hoeren.py / routes_a1_lesen.py / routes_exam.py
-│   ├── routes_sync.py      # WebRTC 局域网 6 位短码同步路由
-│   ├── routes_corpus.py    # 语料库 A1-B2/TestDaF 阅读管线
-│   └── routes_rtc.py       # WebRTC 信令中继
+├── delector/               # 后端包（Phase 1 目录分层重构后：顶层仅 server.py app 工厂 + 子包）
+│   ├── server.py           # FastAPI app 工厂 create_app()（~330 行）+ re-export 门面
+│   ├── core/               # 基础设施：database(SQLite，DATA_DIR 锚定仓库根) / security(SSRF) / utils
+│   ├── data/               # 8 个纯数据词典模块（core_dict/a1_dict/a1_lesen_dict/…）
+│   ├── nlp_engine/         # spaCy 处理器 / 拓扑句法树 / 语言学引擎（德语 NLP 核心竞争力）
+│   ├── services/           # writing_rules / essay_diff / exam_catalog / stdlib TTS
+│   ├── routes/             # 8 分域路由 + main(通用 handler) + tools(Agent 工具端点)
+│   ├── tools/              # Agent 工具接口（5 tool：ingest/analyze/writing_check/export/tts）
+│   └── __init__.py
 ├── start.py                # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
 ├── package_windows.py      # Windows 绿色免安装便携版打包脚本
 ├── Dockerfile              # Docker 镜像构建文件
