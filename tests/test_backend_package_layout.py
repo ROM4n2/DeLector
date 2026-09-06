@@ -28,7 +28,7 @@ os.environ.setdefault("DATABASE_PATH", "test_pkg_layout_delector.db")
 os.environ.setdefault("PROGRESS_DB_PATH", "test_pkg_layout_progress.db")
 
 from delector.database import DATA_DIR  # noqa: E402
-from server import STATIC_DIR  # noqa: E402
+from delector.server import STATIC_DIR  # noqa: E402
 
 
 def test_data_dir_defaults_to_repo_root_not_package_dir():

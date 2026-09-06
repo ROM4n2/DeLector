@@ -86,7 +86,7 @@ def check_security():
             record_issue("SEC", f"{f}:{l} 疑似存在硬编码密钥 ({k})", "立即轮换密钥并移入 .env / app_settings")
 
     try:
-        from server import _require_localhost
+        from delector.server import _require_localhost
         assert callable(_require_localhost)
         record_pass("SEC", "敏感接口回环隔离守卫 _require_localhost 正常运转")
     except Exception as e:
@@ -137,7 +137,7 @@ def check_data_and_backup():
                     record_pass("DATA", f"表 [{tbl}] 完整纳入备份体系 ({len(spec_cols)} 列: {', '.join(_BACKUP_TABLES[tbl][0][:4])}...)")
                     
         # 2.2 VocabCardReq 的 plural 字段与入库
-        from server import VocabCardReq
+        from delector.server import VocabCardReq
         req_fields = VocabCardReq.model_fields if hasattr(VocabCardReq, "model_fields") else VocabCardReq.__fields__
         if "plural" in req_fields:
             record_pass("DATA", "VocabCardReq 模型正确声明并支持 plural 字段持久化")
@@ -215,7 +215,7 @@ def check_frontend_consistency():
         record_warn("FE", f"版本号检查跳过: {e}")
 
     try:
-        from server import FRONTEND_NO_CACHE_SUFFIXES
+        from delector.server import FRONTEND_NO_CACHE_SUFFIXES
         if ".js" in FRONTEND_NO_CACHE_SUFFIXES and ".html" in FRONTEND_NO_CACHE_SUFFIXES:
             record_pass("FE", "服务端已配置中间件对静态前端发送 Cache-Control: no-cache")
     except Exception as e:
@@ -249,7 +249,7 @@ def check_hygiene_and_tests():
     scan_section("6. 代码卫生与测试套件执行 (Code Hygiene & Pytest Suite)")
     
     try:
-        res = subprocess.run([sys.executable, "-m", "pyflakes", "server.py", "database.py", "nlp.py", "linguistics.py", "syntax_tree.py", "writing_rules.py"], capture_output=True, text=True, cwd=str(ROOT))
+        res = subprocess.run([sys.executable, "-m", "pyflakes", "delector/server.py", "delector/database.py", "delector/nlp.py", "delector/linguistics.py", "delector/syntax_tree.py", "delector/writing_rules.py"], capture_output=True, text=True, cwd=str(ROOT))
         if res.returncode == 0 and not res.stdout.strip():
             record_pass("TEST", "核心 Python 源码 Pyflakes 静态检查 0 告警")
         else:

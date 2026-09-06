@@ -22,7 +22,7 @@ os.environ["PROGRESS_DB_PATH"] = "test_catalog_progress.db"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from server import app  # noqa: E402
+from delector.server import app  # noqa: E402
 from delector import exam_catalog  # noqa: E402
 from delector import a1_dict  # noqa: E402
 from delector import a1_hoeren_dict  # noqa: E402
@@ -55,7 +55,7 @@ def clean_db():
                 os.remove(f)
             except OSError:
                 pass
-    from server import init_db, init_progress_db
+    from delector.server import init_db, init_progress_db
     init_db("test_catalog.db")
     init_progress_db("test_catalog_progress.db")
     yield

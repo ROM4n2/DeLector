@@ -9,7 +9,7 @@ import re
 import zipfile
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1.db")
 from fastapi.testclient import TestClient
-from server import app
+from delector.server import app
 from delector import a1_dict
 
 client = TestClient(app, client=("127.0.0.1", 54321))

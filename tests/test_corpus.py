@@ -87,7 +87,7 @@ def test_get_corpus_filter_helpers():
 
 def test_corpus_api_endpoints():
     """验证 GET /api/corpus/list 与 GET /api/corpus/{id} 契约。"""
-    from server import app
+    from delector.server import app
     client = TestClient(app)
 
     # 1. 列表端点

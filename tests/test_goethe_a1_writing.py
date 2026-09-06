@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
-from server import app
+from delector.server import app
 from delector import a1_writing_dict
 from delector.writing_rules import analyze_a1_email, check_a1_formular_answer
 

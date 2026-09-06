@@ -16,7 +16,7 @@ os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"
 from fastapi.testclient import TestClient  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
-from server import app, get_setting, set_setting  # noqa: E402
+from delector.server import app, get_setting, set_setting  # noqa: E402
 from delector.database import (  # noqa: E402
     BACKUP_SETTINGS_WHITELIST,
     BACKUP_SETTINGS_EXPORT_WHITELIST,
@@ -56,7 +56,7 @@ def clean_db():
                 os.remove(f)
             except OSError:
                 pass
-    from server import init_db, init_progress_db
+    from delector.server import init_db, init_progress_db
     init_db("test_audit_delector.db")
     init_progress_db("test_audit_progress.db")
     yield
@@ -180,7 +180,7 @@ def test_list_articles_readonly_no_stats_recompute(client, monkeypatch):
         calls.append(raw_text)
         return {"stats": {"sentences": 99}}
 
-    monkeypatch.setattr("server.process_german_text", spy)
+    monkeypatch.setattr("delector.server.process_german_text", spy)
     data = client.get("/api/articles").json()
     assert calls == [], "list_articles 不应触发 stats 重算"
     row = next(x for x in data if x["title"] == "NoStats")
@@ -191,7 +191,7 @@ def test_review_has_no_post_update_requery():
     """复习接口一次 SELECT 拿行 + UPDATE 即返回：不得再回查整行
     （UPDATE 后所有列都是内存已算值，回查纯浪费）。"""
     from pathlib import Path
-    src = Path("server.py").read_text(encoding="utf-8")
+    src = Path("delector.server.py").read_text(encoding="utf-8")
     start = src.index("def review_card_sm2(")
     end = src.index('@app.get("/api/cards/due")')
     body = src[start:end]
@@ -555,7 +555,7 @@ def test_tts_rejects_unknown_voice_before_synthesis(client, monkeypatch):
         calls.append(voice)
         raise HTTPException(500, "should-not-be-reached")
 
-    monkeypatch.setattr("server.generate_edge_tts_audio", fake_gen)
+    monkeypatch.setattr("delector.server.generate_edge_tts_audio", fake_gen)
     res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "evil-voice"})
     assert res.status_code == 400
     assert calls == []
@@ -566,7 +566,7 @@ def test_tts_unexpected_error_hides_internal_detail(client, monkeypatch):
     async def fake_gen(text, voice, rate):
         raise RuntimeError("C:\\secret\\inner\\path boom")
 
-    monkeypatch.setattr("server.generate_edge_tts_audio", fake_gen)
+    monkeypatch.setattr("delector.server.generate_edge_tts_audio", fake_gen)
     res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 500
     detail = res.text

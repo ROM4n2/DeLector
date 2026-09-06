@@ -12,7 +12,7 @@ from delector.linguistics import PREP_COLLOCATIONS
 os.environ["DATABASE_PATH"] = "test_delector.db"
 os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
 
-from server import (
+from delector.server import (
     app, init_db, get_db, get_cefr_level,
     SYSTEM_GRAMMAR_PROMPT, process_german_text,
     is_safe_public_url, clean_html_to_article,
@@ -21,7 +21,7 @@ from server import (
 )
 # 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
 # 钉住的 IPv6 段），必须在上面设好 DATABASE_PATH 之后再 import。
-import server
+from delector import server
 
 # 本文件搬进 tests/ 之后比仓库根深一层：凡读仓库资源（server.py / static / tools /
 # android / .github / .githooks / nlp.py / package_windows.py）一律经 ROOT。
@@ -134,7 +134,7 @@ def test_writing_card_sugar_endpoint(client):
     assert g_cards[0].get("error_type") == span["error_type"]
 
 def test_ai_polish_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 200
     data = res.json()
@@ -143,7 +143,7 @@ def test_ai_polish_no_key_stub(client, monkeypatch):
     assert data["result"]["corrected_text"] == "Hallo."
 
 def test_ai_polish_diff_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund. Er ist gut."})
     assert res.status_code == 200
     data = res.json()
@@ -156,7 +156,7 @@ def test_ai_polish_diff_no_key_stub(client, monkeypatch):
     assert "DeepSeek API Key" in result["notes_zh"][0]
 
 def test_ai_polish_diff_mocked(client, monkeypatch):
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "test-api-key")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "test-api-key")
 
     mock_response_payload = {
         "choices": [{
@@ -190,7 +190,7 @@ def test_ai_polish_diff_mocked(client, monkeypatch):
         async def post(self, *args, **kwargs):
             return _MockResponse()
 
-    monkeypatch.setattr("server.httpx.AsyncClient", _MockAsyncClient)
+    monkeypatch.setattr("delector.server.httpx.AsyncClient", _MockAsyncClient)
 
     orig_text = "Ich habe ein Hund. Er ist gut."
     res = client.post("/api/writing/ai-polish/diff", json={"text": orig_text})
@@ -593,11 +593,11 @@ def test_clean_html_to_article():
 def test_url_ingest_endpoint_with_mock(client, monkeypatch):
     from unittest.mock import AsyncMock
     mock_html = "<html><head><title>Hallo Berlin</title></head><body><p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
-    monkeypatch.setattr("server.fetch_remote_html", AsyncMock(return_value=mock_html))
+    monkeypatch.setattr("delector.server.fetch_remote_html", AsyncMock(return_value=mock_html))
     # 端点自己也过一次 SSRF 闸（server.py:858），而 fetch 被 mock 掉不代表闸被 mock 掉。
     # 不钉住这里就等于让这条测试依赖真实 DNS：本机开着 Teredo 时 dw.com 会带出
     # 2001::/32 的地址，闸门拒绝，测试变成时红时绿；CI 的 Linux runner 无 Teredo 一直绿。
-    monkeypatch.setattr("server.is_safe_public_url", lambda u: True)
+    monkeypatch.setattr("delector.server.is_safe_public_url", lambda u: True)
 
     res = client.post("/api/articles/ingest-url", json={"url": "https://www.dw.com/de/hallo-berlin/a-123"})
     assert res.status_code == 200
@@ -925,12 +925,12 @@ def test_attachment_headers_are_only_built_by_the_shared_helper():
     手写一份就漏掉 no-store 或引号：前者造出假备份，后者让 Android 的
     URLUtil.guessFileName 各版本解析不一致（拿到 token 当文件名）。
     """
-    src = (os.path.join(ROOT, "server.py"))
+    src = (os.path.join(ROOT, "delector", "server.py"))
     with open(src, encoding="utf-8") as f:
         text = f.read()
     assert "def _attachment_headers" in text
     assert text.count("attachment; filename=") == 1, (
-        "server.py 里出现了多份手写的 Content-Disposition，请改用 _attachment_headers"
+        "delector/server.py 里出现了多份手写的 Content-Disposition，请改用 _attachment_headers"
     )
 
 
@@ -956,7 +956,7 @@ def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     fake_mp3 = tmp_path / "fake_de.mp3"
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00mock_audio_data")
 
-    monkeypatch.setattr("server.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
+    monkeypatch.setattr("delector.server.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
 
     res = client.post("/api/audio/tts", json={"text": "Hallo Berlin!", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 200
@@ -971,7 +971,7 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     import sys
     import types
     import asyncio
-    import server
+    from delector import server
 
     # 1. 堵死 edge_tts 导入（模拟安卓）：sys.modules[name]=None 时 import 抛 ImportError
     monkeypatch.setitem(sys.modules, "edge_tts", None)
@@ -980,7 +980,10 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     fake_mini = types.ModuleType("edge_tts_mini")
     fake_mp3 = b"ID3\x03\x00\x00\x00\x00\x00\x00mock_edge_mini_audio"
     fake_mini.synthesize = lambda text, voice, rate: fake_mp3
-    monkeypatch.setitem(sys.modules, "edge_tts_mini", fake_mini)
+    # server.py:1088 延迟导入写的是 `from delector import edge_tts_mini`，
+    # 找的是 sys.modules["delector.edge_tts_mini"] —— 顶替顶层键 "edge_tts_mini"
+    # 对包内模块无效（包化后模块全名变了），顶替会拿到真模块去合成真 MP3。
+    monkeypatch.setitem(sys.modules, "delector.edge_tts_mini", fake_mini)
 
     # 3. 独立缓存目录，避免污染
     cache_dir = tmp_path / "mini_cache"
@@ -1036,7 +1039,7 @@ def test_audio_cache_stats_and_clear(client, monkeypatch, tmp_path):
     (cache_dir / "sample1.mp3").write_bytes(b"x" * 1024 * 50) # 50 KB
     (cache_dir / "sample2.mp3").write_bytes(b"x" * 1024 * 50) # 50 KB
 
-    monkeypatch.setattr("server.AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr("delector.server.AUDIO_CACHE_DIR", str(cache_dir))
 
     # 1. Get cache stats
     res_stats = client.get("/api/audio/cache")
@@ -1199,7 +1202,7 @@ def test_progress_stats_after_adding_cards(client):
 
 def test_fsrs_algorithm_calculation():
     """Verify modern FSRS DSR calculation mathematics and gradients."""
-    from server import calculate_fsrs, get_fsrs_next_intervals
+    from delector.server import calculate_fsrs, get_fsrs_next_intervals
 
     # 1. Initial review gradients for all 4 grades
     intervals_init = get_fsrs_next_intervals(rep=0, interval=1, ef=2.5)
@@ -1236,7 +1239,7 @@ def test_fsrs_algorithm_calculation():
 
 def test_sm2_backward_compatibility():
     """Verify legacy calculate_sm2 wrapper returns 4-tuple and works seamlessly."""
-    from server import calculate_sm2
+    from delector.server import calculate_sm2
     rep, interval, ef, due = calculate_sm2(grade=3, rep=0, interval=1, ef=2.5)
     assert rep == 1
     assert interval == 4
@@ -1449,7 +1452,7 @@ def test_feed_items_parsing_and_endpoint(client, monkeypatch):
       </channel>
     </rss>"""
 
-    import server
+    from delector import server
     async def mock_fetch(url):
         return sample_rss_xml
 
@@ -1477,7 +1480,7 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
       </item>
     </rdf:RDF>"""
 
-    import server
+    from delector import server
     async def mock_fetch_rdf(url):
         return sample_rdf
 
@@ -1497,7 +1500,7 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
 
 def test_separable_verbs_extraction():
     """Verify spaCy dependency extraction for German separable verbs."""
-    from server import process_german_text
+    from delector.server import process_german_text
 
     text = "Er steigt jeden Morgen in den Zug ein."
     res = process_german_text(text)
@@ -1719,12 +1722,13 @@ def test_prep_dict_registered_in_all_package_targets():
     """漏注册任一处 = 打包后 ModuleNotFoundError（或安卓上静默没有该功能）。"""
     root = ROOT
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
-    assert "--hidden-import=prep_dict" in pkg
+    assert "--hidden-import=delector.prep_dict" in pkg
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"),
               encoding="utf-8").read()
-    assert wf.count("--hidden-import=prep_dict") == 2, "Windows/Linux 两个构建都要"
-    cp_line = [ln for ln in wf.splitlines() if "cp -r server.py" in ln]
-    assert cp_line and "prep_dict.py" in cp_line[0], "安卓 cp 列表漏了 prep_dict.py"
+    assert wf.count("--hidden-import=delector.prep_dict") == 2, "Windows/Linux 两个构建都要"
+    cp_lines = [ln for ln in wf.splitlines() if "android/app/src/main/python/" in ln]
+    assert any("cp -r start.py" in ln for ln in cp_lines), "安卓缺 start.py 拷贝"
+    assert any("cp -r delector" in ln for ln in cp_lines), "安卓应整目录拷入 delector/（prep_dict.py 在包内）"
 
 
 def test_syntax_analyze_endpoint(client):
@@ -1825,7 +1829,7 @@ def test_pure_python_pipeline_without_spacy():
 
 def test_module_import_survives_without_spacy(monkeypatch):
     """server 的 import 期副作用（init_db → seed_preset_articles）不能依赖 spacy。"""
-    import server
+    from delector import server
 
     monkeypatch.setattr(server, "nlp", None)
     seeded = server.process_german_text(server.PRESET_ARTICLES[0]["text"])
@@ -1856,7 +1860,7 @@ def test_bind_host_is_loopback_only_on_android(monkeypatch):
 
 def test_settings_reports_nlp_engine(client):
     """降级是静默的，所以引擎状态必须能从 API 读到（真机上唯一的可验证途径）。"""
-    import server
+    from delector import server
 
     res = client.get("/api/settings")
     assert res.status_code == 200
@@ -1887,7 +1891,7 @@ def test_android_never_downloads_model_at_import():
         "import spacy.cli\n"
         "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
         "sys.path.insert(0, os.getcwd())\n"
-        "import server\n"
+        "from delector import server\n"
         "print('ENGINE=' + server.NLP_ENGINE)\n"
     )
     env = {**os.environ, "ANDROID_ROOT": "/system", "PYTHONIOENCODING": "utf-8"}
@@ -2072,7 +2076,7 @@ def test_android_apk_content_via_app_imy():
     assert 'n.startswith("assets/chaquopy/requirements")' in wf, \
         "APK 内容检查必须遍历 requirements-*.imy（pip 依赖容器）"
     # app.imy 内必须包含应用代码与模型；requirements 内必须包含 spacy/thinc
-    for needle in ("server.py", "de_core_news_sm", "spacy", "thinc"):
+    for needle in ("delector/server.py", "de_core_news_sm", "spacy", "thinc"):
         assert needle in wf, f"APK 内容检查必须验证 {needle} 在 app.imy/requirements 中"
     # 不得仅用 APK 根目录 grep 来验证 Python 文件（这是常见误判）
     # 允许 app.imy 上下文中的 grep，但 workflow 中若出现直接 "unzip -l.*apk.*grep.*server.py"
@@ -2080,8 +2084,8 @@ def test_android_apk_content_via_app_imy():
     lines = wf.splitlines()
     for ln in lines:
         stripped = ln.strip()
-        if "server.py" in stripped and "grep" in stripped.lower():
-            assert "app.imy" in wf, "server.py 检查必须在 app.imy 上下文中"
+        if "delector/server.py" in stripped and "grep" in stripped.lower():
+            assert "app.imy" in wf, "delector/server.py 检查必须在 app.imy 上下文中"
             break
 
 
@@ -2318,7 +2322,7 @@ def test_delete_article(client):
 
 def test_lookup_lemma_first(client, monkeypatch):
     """前端带 lemma → 直接命中核心词库，不触发 AI。"""
-    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab",
                     json={"sentence": "Er geht.", "target_word": "geht", "lemma": "gehen"})
     data = r.json()
@@ -2328,7 +2332,7 @@ def test_lookup_lemma_first(client, monkeypatch):
 
 def test_lookup_lemma_absent_present_irregular(client, monkeypatch):
     """无 lemma 时 geht 靠现在时反查 → stammformen + 三态表释义回填。"""
-    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab", json={"sentence": "Er geht.", "target_word": "geht"})
     data = r.json()
     assert data.get("stammformen", {}).get("infinitiv") == "gehen"
@@ -2338,7 +2342,7 @@ def test_lookup_lemma_absent_present_irregular(client, monkeypatch):
 
 def test_lookup_plural_haeuser(client, monkeypatch):
     """变元音复数 Häuser + lemma Haus → 核心词库命中。"""
-    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab",
                     json={"sentence": "Die Häuser sind alt.", "target_word": "Häuser", "lemma": "Haus"})
     data = r.json()
@@ -2348,7 +2352,7 @@ def test_lookup_plural_haeuser(client, monkeypatch):
 
 def test_lookup_linguistics_ext_tier(client, monkeypatch):
     """主链查不到时落 EXT（LINGUISTICS_VOCAB_EXT 接线）。"""
-    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab", json={"sentence": "Klima.", "target_word": "klima"})
     data = r.json()
     assert data["source"] == "linguistics_ext"
@@ -2357,7 +2361,7 @@ def test_lookup_linguistics_ext_tier(client, monkeypatch):
 
 def test_lookup_no_hit_honest_none(client, monkeypatch):
     """未知词 + 无 key → source=none 空释义（不再是 AI 已预填谎言）。"""
-    monkeypatch.setattr("server.get_effective_api_key", lambda: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "")
     r = client.post("/api/lookup/vocab",
                     json={"sentence": "Xyzzy.", "target_word": "zzzznonsense"})
     data = r.json()
@@ -2367,13 +2371,13 @@ def test_lookup_no_hit_honest_none(client, monkeypatch):
 
 def test_lookup_ai_error_backfill_linguistics(client, monkeypatch):
     """key 假 + httpx 崩 → ai_exception；强动词变位词回填三态表释义。"""
-    monkeypatch.setattr("server.get_effective_api_key", lambda: "sk-bogus")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda: "sk-bogus")
 
     class _BoomClient:
         def post(self, *a, **k):
             raise RuntimeError("simulated network down")
 
-    monkeypatch.setattr("server.httpx.AsyncClient", lambda *a, **k: _BoomClient())
+    monkeypatch.setattr("delector.server.httpx.AsyncClient", lambda *a, **k: _BoomClient())
     r = client.post("/api/lookup/vocab", json={"sentence": "Er geht.", "target_word": "geht"})
     data = r.json()
     assert data["source"] == "linguistics"
@@ -2501,7 +2505,7 @@ def test_ipv6_special_ranges_are_pinned_in_our_own_code():
     判定结果相反 —— 本机绿而 CI 红，v4.4.8 首次发布就是这么挂的。
     """
     import ipaddress as _ip
-    import server as _srv
+    from delector import server as _srv
 
     for addr in _IPV6_SPECIAL_ADDRS:
         obj = _ip.ip_address(addr)
@@ -2554,7 +2558,7 @@ def test_url_ingest_gate_is_pinned_not_dns_dependent():
     import inspect
 
     src = inspect.getsource(test_url_ingest_endpoint_with_mock)
-    assert "server.is_safe_public_url" in src, "端点测试必须钉住 SSRF 闸，不能真去问 DNS"
+    assert "delector.server.is_safe_public_url" in src, "端点测试必须钉住 SSRF 闸，不能真去问 DNS"
 
 
 def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
@@ -2567,7 +2571,7 @@ def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
     import ipaddress as _ipaddress
     import socket as _socket
 
-    import server as server_module
+    from delector import server as server_module
     from fastapi import HTTPException
 
     requested = []
@@ -2641,7 +2645,7 @@ def test_fetch_remote_html_still_follows_public_redirects(monkeypatch):
     import asyncio
     import socket as _socket
 
-    import server as server_module
+    from delector import server as server_module
 
     def fake_getaddrinfo(host, port=None, *args, **kwargs):
         return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 0))]
@@ -2796,7 +2800,7 @@ def test_backup_download_rejects_lan_even_with_valid_token(client, lan_client):
 
 def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
     """被 403 的还原请求不得改库。"""
-    import server
+    from delector import server
     # 先写一条已知文章
     with server.get_db(test_db_path) as conn:
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
@@ -2815,7 +2819,7 @@ def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
 
 def test_backup_restore_failure_keeps_original_db(client, test_db_path):
     """还原失败（DB 约束错误）必须通过文件快照回滚，原始文章保持不变。"""
-    import server
+    from delector import server
     from fastapi.testclient import TestClient as TC
     # 用 raise_server_exceptions=False 才能拿到 500 响应而非抛异常
     fail_client = TC(server.app, client=("127.0.0.1", 54322), raise_server_exceptions=False)
@@ -2857,7 +2861,7 @@ def test_backup_loopback_still_succeeds(client):
 
 def test_android_spacy_module_load_fallback_static():
     """_load_spacy_model 必须包含 module.load() 回退（Android 无 dist-info 时唯一可用路径）。"""
-    src = open(os.path.join(ROOT, "nlp.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "delector", "nlp.py"), encoding="utf-8").read()
     assert "importlib.import_module" in src, "缺 importlib 回退"
     assert "module.load()" in src, "缺 module.load() 回退"
     assert "spacy.load(name)" in src or 'spacy.load(' in src, "缺 spacy.load(name) 首选路径"
@@ -2865,14 +2869,14 @@ def test_android_spacy_module_load_fallback_static():
 
 def test_android_spacy_model_dir_fallback_static():
     """模型目录 glob 回退必须存在（meta 版本与目录名不一致时的最后兜底）。"""
-    src = open(os.path.join(ROOT, "nlp.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "delector", "nlp.py"), encoding="utf-8").read()
     assert "glob(f\"{name}-*\"" in src or 'glob(f"{name}-' in src, "缺模型目录 glob 兜底"
     assert "data_dirs" in src, "缺 data_dirs 变量"
 
 
 def test_android_spacy_download_gated_by_is_android_static():
     """自动下载必须被 is_android() 门控，否则 Android import 期起 pip 子进程卡死。"""
-    src = open(os.path.join(ROOT, "nlp.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "delector", "nlp.py"), encoding="utf-8").read()
     # 必须有 is_android 判断且在 download 之前
     assert "is_android()" in src, "缺 is_android() 判断"
     # 确保下载路径在 is_android 分支保护下，而非无条件
@@ -2950,8 +2954,8 @@ def _make_non_json_content_client():
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-test-402-timeout")
-    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-test-402-timeout")
+    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
     res = client.post("/api/ai/note-assist", json={"sentence": "Guten Tag.", "selected_text": "Guten Tag"})
     assert res.status_code == 502, f"AI 失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
     # 不得泄露 API Key
@@ -2960,8 +2964,8 @@ def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-test-polish")
-    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-test-polish")
+    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
     res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund."})
     assert res.status_code == 502, f"AI 润色失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
     assert "sk-test-polish" not in res.text
@@ -2969,8 +2973,8 @@ def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_ai_polish_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-test-polish2")
-    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-test-polish2")
+    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 502
     assert "sk-test-polish2" not in res.text
@@ -2978,8 +2982,8 @@ def test_ai_polish_ai_failure_returns_502(client, monkeypatch, factory):
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client])
 def test_grammar_lookup_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "sk-grammar")
-    monkeypatch.setattr("server.httpx.AsyncClient", factory())
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "sk-grammar")
+    monkeypatch.setattr("delector.server.httpx.AsyncClient", factory())
     res = client.post("/api/lookup/grammar", json={"sentence": "Ich gehe.", "target_phrase": "gehe"})
     assert res.status_code == 502
     assert "sk-grammar" not in res.text
@@ -2987,7 +2991,7 @@ def test_grammar_lookup_ai_failure_returns_502(client, monkeypatch, factory):
 
 def test_ai_no_key_stub_still_succeeds(client, monkeypatch):
     """无 key 时仍返回 200 stub（与网络失败的 502 区分）。"""
-    monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.server.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/ai/note-assist", json={"sentence": "Hallo.", "selected_text": "Hallo"})
     assert res.status_code == 200
     assert res.json().get("_stub") is True
@@ -3501,7 +3505,7 @@ def test_vocab_card_accepts_and_saves_plural(client):
 
 def test_sync_sdp_cache_capacity_and_size_limit(client):
     """WebRTC SDP 暂存必须有条目上限（FIFO 淘汰）与体积极限，防止内存无界膨胀。"""
-    from server import _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
+    from delector.server import _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
 
     key = client.get("/api/wb/state/key").json()["key"]
 
@@ -3638,7 +3642,7 @@ def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
     import sys
     import asyncio
     from unittest.mock import AsyncMock
-    import server as server_module
+    from delector import server as server_module
 
     # 模拟 edge_tts 缺失
     monkeypatch.setitem(sys.modules, "edge_tts", None)
@@ -3649,7 +3653,7 @@ def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
         def synthesize(*args, **kwargs):
             raise RuntimeError("Mini TTS simulated error")
 
-    monkeypatch.setitem(sys.modules, "edge_tts_mini", FakeMini)
+    monkeypatch.setitem(sys.modules, "delector.edge_tts_mini", FakeMini)
 
     # 模拟有道兜底响应
     class MockHttpxResp:
@@ -3757,7 +3761,7 @@ def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
     import asyncio
     import socket as _socket
     from fastapi import HTTPException
-    import server as server_module
+    from delector import server as server_module
 
     monkeypatch.setattr(_socket, "getaddrinfo", lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
 
@@ -3836,11 +3840,11 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
     """corpus_dict 完整注册在 package_windows.py, CI workflow 以及 DeLector.spec 中。"""
     root = ROOT
     pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
-    assert "--hidden-import=corpus_dict" in pkg
-    assert "--hidden-import=core_dict" in pkg
+    assert "--hidden-import=delector.corpus_dict" in pkg
+    assert "--hidden-import=delector.core_dict" in pkg
 
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
-    assert wf.count("--hidden-import=corpus_dict") == 2, "Linux & macOS 两个构建都要"
+    assert wf.count("--hidden-import=delector.corpus_dict") == 2, "Linux & macOS 两个构建都要"
 
     # DeLector.spec 是本地 PyInstaller 产物：.gitignore 的 `*.spec` 把它排除，且 CI 里
     # pytest 跑在 package_windows.py / PyInstaller 之前，干净 checkout 下必然不存在。
@@ -3849,8 +3853,8 @@ def test_task1_corpus_dict_registered_in_all_packaging_targets():
     if not os.path.exists(spec_path):
         pytest.skip("DeLector.spec 未生成（本地构建产物，非 canonical）——跳过 spec 断言")
     spec = open(spec_path, encoding="utf-8").read()
-    assert "'corpus_dict'" in spec
-    assert "'routes_corpus'" in spec
+    assert "'delector.corpus_dict'" in spec
+    assert "'delector.routes_corpus'" in spec
 
 
 def test_all_backend_modules_registered_in_all_packaging_targets():
@@ -3875,6 +3879,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "a1_lesen_dict",
         "corpus_dict",
         "routes_a1",
+        "routes_a2",
         "routes_a1_hoeren",
         "routes_a1_lesen",
         "routes_corpus",
@@ -3886,21 +3891,24 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
 
     for mod in required_modules:
         # 1. Windows PyInstaller
-        assert f"--hidden-import={mod}" in pkg, f"{mod} 未在 package_windows.py 的 --hidden-import 中注册"
+        assert f"--hidden-import=delector.{mod}" in pkg, f"{mod} 未在 package_windows.py 的 --hidden-import 中注册"
         # 2. Linux & macOS CI PyInstaller
-        assert wf.count(f"--hidden-import={mod}") >= 2, f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 (count={wf.count(f'--hidden-import={mod}')})"
-        # 3. Android Chaquopy 拷贝清单
-        assert f"{mod}.py" in wf, f"{mod}.py 未在 build-release.yml 的 Android cp 拷贝清单中"
+        assert wf.count(f"--hidden-import=delector.{mod}") >= 2, f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 (count={wf.count(f'--hidden-import=delector.{mod}')})"
+    # 3. Android Chaquopy：Phase 2 后整目录拷入。再逐个 cp 扁平 .py 会漏模块 ——
+    #    v5.3.0 实际漏过 routes_a2.py（server.py:233 静态 import 它），整目录拷贝修掉它。
+    assert "cp -r start.py" in wf, "Android 应单独拷贝入口 start.py"
+    assert "cp -r delector" in wf, "Android 应整目录拷入 delector/（覆盖全部 26 个业务模块）"
 
     critical_apk_needles = [
-        "server.py",
+        "delector/server.py",
         "de_core_news_sm",
-        "routes_corpus.py",
-        "routes_a1_hoeren.py",
-        "routes_a1_lesen.py",
-        "routes_rtc.py",
-        "routes_exam.py",
-        "exam_catalog.py",
+        "delector/routes_corpus.py",
+        "delector/routes_a1_hoeren.py",
+        "delector/routes_a1_lesen.py",
+        "delector/routes_rtc.py",
+        "delector/routes_exam.py",
+        "delector/exam_catalog.py",
+        "delector/routes_a2.py",
     ]
     for needle in critical_apk_needles:
         assert f'"{needle}"' in wf, f"{needle} 未在 build-release.yml 的 APP_NEEDLES 验包探针中"
@@ -3909,7 +3917,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     if os.path.exists(spec_path):
         spec = open(spec_path, encoding="utf-8").read()
         for mod in required_modules:
-            assert f"'{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
+            assert f"'delector.{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
 
 
 

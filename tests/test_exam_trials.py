@@ -23,7 +23,7 @@ os.environ["PROGRESS_DB_PATH"] = "test_exam_trials_progress.db"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from server import app, init_db, get_progress_db  # noqa: E402
+from delector.server import app, init_db, get_progress_db  # noqa: E402
 from delector import database  # noqa: E402
 
 _DB = "test_exam_trials_delector.db"
@@ -259,7 +259,7 @@ def test_backup_payload_contains_exam_trials():
 
 
 def test_restore_exam_trials_roundtrip(client):
-    from server import RestoreReq
+    from delector.server import RestoreReq
     assert "exam_trials" in RestoreReq.model_fields
 
     row = dict(_HOEREN_FIELDS)
