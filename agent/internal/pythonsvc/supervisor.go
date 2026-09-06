@@ -38,10 +38,15 @@ var defaultPythonCmd = []string{
 const (
 	defaultHealthURL     = "http://127.0.0.1:8001/api/tools/"
 	defaultProbeInterval = 1 * time.Second
-	defaultProbeTimeout  = 2 * time.Second
 	defaultMaxRestarts   = 5
 	defaultStopTimeout   = 5 * time.Second
 )
+
+// DefaultProbeTimeout 探针窗口默认值：10s（Phase2b T1 由 2s 上调）。
+// 依据 spaCy 冷启动实测：模型首次加载耗时可秒级到十秒级，2s 窗口稳定
+// 误判启动失败；2a 集成测试（integration_test.go probeTimeout）已放宽
+// 至 30s，默认值取折中 10s，兼顾误判率与失败反馈速度。
+const DefaultProbeTimeout = 10 * time.Second
 
 // backoff 退避基数与封顶：500ms × 2^attempt，封顶 8s。
 const (
@@ -60,8 +65,9 @@ type SupervisorConfig struct {
 	ExtraEnv []string
 	// ProbeInterval 探针轮询间隔，默认 1s。
 	ProbeInterval time.Duration
-	// ProbeTimeout 单次"启动→健康"探测窗口总时长，默认 2s；窗口耗尽视为
-	// 本次启动失败（错误链可 errors.Is 判定 context.DeadlineExceeded）。
+	// ProbeTimeout 单次"启动→健康"探测窗口总时长，默认 DefaultProbeTimeout
+	// （10s，Phase2b T1 上调，依据 spaCy 冷启动实测）；窗口耗尽视为本次
+	// 启动失败（错误链可 errors.Is 判定 context.DeadlineExceeded）。
 	ProbeTimeout time.Duration
 	// MaxRestarts 启动/崩溃重启的总尝试配额，默认 5；耗尽返回最终错误。
 	MaxRestarts int
@@ -82,7 +88,7 @@ func (cfg SupervisorConfig) withDefaults() SupervisorConfig {
 		cfg.ProbeInterval = defaultProbeInterval
 	}
 	if cfg.ProbeTimeout <= 0 {
-		cfg.ProbeTimeout = defaultProbeTimeout
+		cfg.ProbeTimeout = DefaultProbeTimeout
 	}
 	if cfg.MaxRestarts <= 0 {
 		cfg.MaxRestarts = defaultMaxRestarts
@@ -109,23 +115,26 @@ func backoff(attempt int) time.Duration {
 // ---- 进程句柄与启动 seam ----
 
 // procHandle 抽象一次已启动的进程：wait 阻塞至进程退出；cancel 触发优雅
-// 终止（真实实现为 exec.CommandContext 取消钩子，即 Windows 上的 SIGTERM
-// 等价物）。二者均应幂等。
+// 终止（真实实现为 exec.CommandContext 取消钩子：unix 发 SIGTERM、
+// windows Kill——Phase2b T1 平台分治）；kill 强杀兜底（unix 上进程无视
+// SIGTERM 时由 awaitExit 超时分支调用的 Kill，windows 同为 Kill），对已
+// 退出进程允许返回无害错误（调用方一律丢弃返回值）。wait/cancel 均应幂等。
 type procHandle struct {
 	wait   func() error
 	cancel func()
+	kill   func() error
 }
 
 // startFunc 是 Supervisor 唯一的进程启动 seam：签名刻意极薄（ctx 进、
-// wait/cancel/err 出），生产实现包装 exec.CommandContext，测试桩注入假
-// 句柄。只此一处 seam，防过度抽象。
-type startFunc func(ctx context.Context) (wait func() error, cancel func(), err error)
+// wait/cancel/kill/err 出），生产实现包装 exec.CommandContext，测试桩注入
+// 假句柄。只此一处 seam，防过度抽象。
+type startFunc func(ctx context.Context) (wait func() error, cancel func(), kill func() error, err error)
 
 // newProcHandle 构造 procHandle 并为 wait 建立幂等闸：sync.Once 保证即使
 // 多个 goroutine 并发调用 p.wait()（Stop 的 awaitExit 与 supervise 的驻留
 // wait 会指向同一 exec.Cmd），也仅触发一次真正底层 Wait——对同一
 // exec.Cmd 并发 Wait 在 Unix 下为未指定行为。各调用方共享同一份 waitErr。
-func newProcHandle(wait func() error, cancel func()) *procHandle {
+func newProcHandle(wait func() error, cancel func(), kill func() error) *procHandle {
 	var once sync.Once
 	var waitErr error
 	return &procHandle{
@@ -134,6 +143,7 @@ func newProcHandle(wait func() error, cancel func()) *procHandle {
 			return waitErr
 		},
 		cancel: cancel,
+		kill:   kill,
 	}
 }
 
@@ -160,7 +170,7 @@ func NewSupervisor(cfg SupervisorConfig) *Supervisor {
 	cfg = cfg.withDefaults()
 	return &Supervisor{
 		cfg: cfg,
-		startProc: func(ctx context.Context) (func() error, func(), error) {
+		startProc: func(ctx context.Context) (func() error, func(), func() error, error) {
 			return realStartProc(ctx, cfg)
 		},
 		failC: make(chan error, 1),
@@ -203,9 +213,12 @@ func (s *Supervisor) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop 优雅关闭托管进程：先 cancel（SIGTERM 等价物）再限时等待 wait 返回；
-// 超时进入强杀分支再次 cancel（真实进程由 cmd.WaitDelay 兜底保证最终收尾，
-// 防 Windows 句柄挂死）。幂等；Stop 后 Supervisor 不可再 Start。
+// Stop 优雅关闭托管进程：先 cancel（unix 发 SIGTERM / windows Kill，
+// Phase2b T1 平台分治）再限时等待 wait 返回；超时进入强杀分支调 killProc
+// 强杀（unix 两段式闭环：SIGTERM → 等 StopTimeout → Kill，进程无视
+// SIGTERM 时不再无限等待）。幂等；Stop 后 Supervisor 不可再 Start。
+// 注：cmd.WaitDelay 强杀兜底仅在 ctx 取消路径成立（CommandContext 机制）；
+// 手动 cancel 路径不取消 ctx，其强杀兜底由超时分支的 killProc 承担。
 func (s *Supervisor) Stop() {
 	s.mu.Lock()
 	s.stopped = true
@@ -295,11 +308,11 @@ func (s *Supervisor) sleepBackoff(ctx context.Context, attempt int) error {
 // tryLaunch 启动一次进程并阻塞探测健康；探针失败时终止本次进程再返回
 // 错误，防僵尸进程与句柄泄漏。
 func (s *Supervisor) tryLaunch(ctx context.Context) (*procHandle, error) {
-	wait, cancel, err := s.startProc(ctx)
+	wait, cancel, kill, err := s.startProc(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("pythonsvc: 启动 python 进程: %w", err)
 	}
-	p := newProcHandle(wait, cancel)
+	p := newProcHandle(wait, cancel, kill)
 	if perr := s.probeUntil(ctx); perr != nil {
 		s.terminate(p)
 		return nil, perr
@@ -355,23 +368,26 @@ func (s *Supervisor) probeOnce(ctx context.Context) error {
 	return nil
 }
 
-// terminate 终止一次启动产生的进程：cancel（SIGTERM 等价物）后限时等待
-// wait 返回；超时走强杀分支（真实进程由 cmd.WaitDelay 兜底保证收尾），
-// 绝不让启动/关闭路径无限阻塞。
+// terminate 终止一次启动产生的进程：cancel（unix SIGTERM / windows Kill，
+// 平台分治见 terminateProc）后限时等待 wait 返回；超时走强杀分支调
+// killProc（真实进程 Kill 收尾；cmd.WaitDelay 兜底仅在 ctx 取消路径成立，
+// 见 Stop 注），绝不让启动/关闭路径无限阻塞。
 func (s *Supervisor) terminate(p *procHandle) {
 	p.cancel()
 	s.awaitExit(p)
 }
 
-// awaitExit 限时等待进程句柄收尾：超时则强杀（cancel 幂等再触发）后等待
-// 最终返回——真实进程的 WaitDelay 保证 wait 有限时间内返回。
+// awaitExit 限时等待进程句柄收尾：超时则调 killProc 强杀后等待最终返回
+// ——真实进程被 Kill 后 wait 有限时间内返回（unix：SIGTERM 未生效时的
+// 两段式强杀兜底 SIGTERM → StopTimeout → Kill；windows：与 cancel 同为
+// Kill，二次 Kill 无害）。
 func (s *Supervisor) awaitExit(p *procHandle) {
 	done := make(chan error, 1)
 	go func() { done <- p.wait() }()
 	select {
 	case <-done:
 	case <-time.After(s.cfg.StopTimeout):
-		p.cancel()
+		_ = p.kill()
 		<-done
 	}
 }
@@ -407,18 +423,21 @@ func (s *Supervisor) setProc(p *procHandle) {
 
 // realStartProc 生产启动实现：exec.CommandContext 托管 Python 常驻进程。
 // ExtraEnv 以 KEY=VALUE 追加到父进程环境（注入临时 DATABASE_PATH /
-// DELECTOR_DATA_DIR 的通道，绝不触碰用户库）。cmd.Cancel 即 SIGTERM 等价物
-// （Windows 无 SIGTERM，Kill 为最接近语义）；cmd.WaitDelay 保证 cancel 后
-// 最多 StopTimeout 内强杀收尾，防 Windows 句柄挂死（Go 1.20+ 机制）。
-func realStartProc(ctx context.Context, cfg SupervisorConfig) (func() error, func(), error) {
+// DELECTOR_DATA_DIR 的通道，绝不触碰用户库）。
+// 关闭语义平台分治（Phase2b T1）：cmd.Cancel 统一入口 terminateProc——
+// unix 发 SIGTERM 优雅关闭（发送失败回退 Kill），windows 保持 Kill；
+// cmd.WaitDelay 保证 ctx 取消路径最多 StopTimeout 内强杀收尾（Go 1.20+
+// 机制，两平台不动）；手动 cancel 路径（Stop/terminate 不取消 ctx，
+// WaitDelay 不介入）的超时强杀兜底由 awaitExit 调 killProc 承担。
+func realStartProc(ctx context.Context, cfg SupervisorConfig) (func() error, func(), func() error, error) {
 	cmd := exec.CommandContext(ctx, cfg.PythonCmd[0], cfg.PythonCmd[1:]...)
 	cmd.Env = append(os.Environ(), cfg.ExtraEnv...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.WaitDelay = cfg.StopTimeout
-	cmd.Cancel = func() error { return cmd.Process.Kill() }
+	cmd.Cancel = func() error { return terminateProc(cmd) }
 	if err := cmd.Start(); err != nil {
-		return nil, nil, fmt.Errorf("pythonsvc: exec %v: %w", cfg.PythonCmd, err)
+		return nil, nil, nil, fmt.Errorf("pythonsvc: exec %v: %w", cfg.PythonCmd, err)
 	}
-	return cmd.Wait, func() { _ = cmd.Cancel() }, nil
+	return cmd.Wait, func() { _ = cmd.Cancel() }, func() error { return killProc(cmd) }, nil
 }

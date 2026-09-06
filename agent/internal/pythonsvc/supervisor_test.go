@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,11 +33,13 @@ func (p *probeStub) serve() *httptest.Server {
 }
 
 // startScript 描述第 i 次 startProc 桩调用的行为：err 非 nil 表示直接
-// 启动失败；否则返回 wait/cancel 句柄。onCall 为可选的第 n 次调用副作用。
+// 启动失败；否则返回 wait/cancel/kill 句柄（kill 缺省为无害空实现，仅
+// 显式验证强杀分支的用例才注入计数桩）。onCall 为可选的第 n 次调用副作用。
 type startScript struct {
 	err    error
 	wait   func() error
 	cancel func()
+	kill   func() error
 	onCall func(n int32)
 }
 
@@ -49,7 +52,7 @@ func newStubSupervisor(cfg SupervisorConfig, script []startScript, calls *int32)
 		cfg:   cfg,
 		failC: make(chan error, 1),
 	}
-	s.startProc = func(_ context.Context) (func() error, func(), error) {
+	s.startProc = func(_ context.Context) (func() error, func(), func() error, error) {
 		n := atomic.AddInt32(calls, 1)
 		i := int(n) - 1
 		if i >= len(script) {
@@ -60,9 +63,13 @@ func newStubSupervisor(cfg SupervisorConfig, script []startScript, calls *int32)
 			sc.onCall(n)
 		}
 		if sc.err != nil {
-			return nil, nil, sc.err
+			return nil, nil, nil, sc.err
 		}
-		return sc.wait, sc.cancel, nil
+		kill := sc.kill
+		if kill == nil {
+			kill = func() error { return nil }
+		}
+		return sc.wait, sc.cancel, kill, nil
 	}
 	return s
 }
@@ -192,15 +199,17 @@ func TestSupervisorRestartBudget(t *testing.T) {
 }
 
 // TestSupervisorStop Stop 语义（全桩化，不依赖真实进程）：
-// 优雅路径 cancel 恰一次且限时等待 wait 收尾；wait 超时路径走强杀分支
-// 再次 cancel（真实进程由 cmd.WaitDelay 兜底）。
+// 优雅路径 cancel 恰一次且限时等待 wait 收尾、不触发强杀；wait 超时路径
+// 走强杀分支调 killProc 恰一次（unix 两段式 SIGTERM→StopTimeout→Kill 的
+// 回归钉子；cmd.WaitDelay 兜底仅在 ctx 取消路径成立，手动 cancel 路径
+// 由本分支承担）。
 func TestSupervisorStop(t *testing.T) {
-	t.Run("优雅关闭: cancel 恰一次，wait 正常收尾", func(t *testing.T) {
+	t.Run("优雅关闭: cancel 恰一次，wait 正常收尾，不触发强杀", func(t *testing.T) {
 		stub := &probeStub{}
 		srv := stub.serve()
 		defer srv.Close()
 
-		var calls, cancels int32
+		var calls, cancels, kills int32
 		released := make(chan struct{})
 		s := newStubSupervisor(fastCfg(srv.URL), []startScript{{
 			wait: func() error { <-released; return nil },
@@ -209,6 +218,7 @@ func TestSupervisorStop(t *testing.T) {
 					close(released)
 				}
 			},
+			kill: func() error { atomic.AddInt32(&kills, 1); return nil },
 		}}, &calls)
 
 		if err := s.Start(context.Background()); err != nil {
@@ -218,32 +228,46 @@ func TestSupervisorStop(t *testing.T) {
 		if got := atomic.LoadInt32(&cancels); got != 1 {
 			t.Errorf("优雅关闭应恰好 cancel 一次，实际 %d 次", got)
 		}
+		if got := atomic.LoadInt32(&kills); got != 0 {
+			t.Errorf("优雅关闭不应触发强杀分支（killProc），实际 %d 次", got)
+		}
 	})
 
-	t.Run("wait 超时: 强杀分支再次 cancel", func(t *testing.T) {
+	t.Run("wait 超时: 强杀分支调 killProc（cancel 恰一次 + kill 恰一次）", func(t *testing.T) {
 		stub := &probeStub{}
 		srv := stub.serve()
 		defer srv.Close()
 
 		cfg := fastCfg(srv.URL)
 		cfg.StopTimeout = 50 * time.Millisecond // 短超时驱动强杀分支，禁长 sleep
-		var calls, cancels int32
+		var calls, cancels, kills int32
 		s := newStubSupervisor(cfg, []startScript{{
 			wait: func() error {
-				for atomic.LoadInt32(&cancels) < 2 {
+				// 模拟进程无视优雅 cancel，仅在强杀（killProc）后收尾；
+				// 带期限轮询，回归（超时分支不再调 killProc）时测试限时
+				// 失败而非挂死。
+				deadline := time.Now().Add(2 * time.Second)
+				for atomic.LoadInt32(&kills) < 1 {
+					if time.Now().After(deadline) {
+						return errors.New("stub: 强杀分支未在期限内调 killProc")
+					}
 					time.Sleep(time.Millisecond)
 				}
 				return nil
 			},
 			cancel: func() { atomic.AddInt32(&cancels, 1) },
+			kill:   func() error { atomic.AddInt32(&kills, 1); return nil },
 		}}, &calls)
 
 		if err := s.Start(context.Background()); err != nil {
 			t.Fatalf("Start 应成功: %v", err)
 		}
 		s.Stop()
-		if got := atomic.LoadInt32(&cancels); got != 2 {
-			t.Errorf("超时强杀路径应 cancel 两次（优雅+强杀），实际 %d 次", got)
+		if got := atomic.LoadInt32(&cancels); got != 1 {
+			t.Errorf("超时强杀路径应优雅 cancel 恰一次，实际 %d 次", got)
+		}
+		if got := atomic.LoadInt32(&kills); got != 1 {
+			t.Errorf("超时强杀路径应调 killProc 恰一次（unix 两段式 SIGTERM→StopTimeout→Kill 的强杀兜底），实际 %d 次", got)
 		}
 	})
 }
@@ -327,5 +351,97 @@ func TestSupervisorCrashExhausted(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("崩溃重启配额耗尽后未上报 Failures()")
+	}
+}
+
+// ---- Phase2b T1：supervisor 递延项（探针默认窗口 + 关闭语义平台分治）----
+
+// TestDefaultProbeTimeout 钉住探针窗口默认值 10s（Phase2b T1 由 2s 上调）：
+// 依据 spaCy 冷启动实测——模型首次加载耗时可秒级到十秒级，2s 窗口稳定
+// 误判启动失败；2a 集成测试（integration_test.go）已放宽至 30s，默认值
+// 取折中 10s，兼顾误判率与失败反馈速度。
+func TestDefaultProbeTimeout(t *testing.T) {
+	if DefaultProbeTimeout != 10*time.Second {
+		t.Fatalf("DefaultProbeTimeout = %v，期望 10s（spaCy 冷启动实测，2a 集成测试放宽 30s，折中取 10s）",
+			DefaultProbeTimeout)
+	}
+}
+
+// TestTerminateProcPlatformBranch 平台关闭行为断言（经 startProc 生产
+// seam realStartProc 验证终止接线与收尾时限；直接启 ping.exe 本体而非
+// cmd /c 包装，Kill 即杀本体，不留 30s 孤儿 ping.exe 进程树）：
+//
+//   - windows：cancel 触发 Kill 分支（阶段一），kill 闭包触发 killProc
+//     强杀分支（阶段二，awaitExit 超时分支同款接线）；真子进程均限时收尾
+//     （Kill 是 TerminateProcess 而非信号，不违反"单测不发真信号"边界，
+//     本机可验证）。
+//
+//   - unix：SIGTERM 真信号不在单测断言——验证边界：unix 分支的编译正确性
+//     由 GOOS=linux/darwin 交叉编译保证（build tag 文件接线与签名），
+//     真信号语义（SIGTERM 优雅退出、StopTimeout 后 killProc 强杀两段式
+//     闭环）由 CI unix runner 与 -tags integration 冒烟覆盖。
+//
+// 禁长 sleep：存活确认与收尾等待均用短窗口限时断言。
+func TestTerminateProcPlatformBranch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("unix SIGTERM 真信号不在单测断言（验证边界：GOOS=linux/darwin 交叉编译 + CI unix runner 保证，见测试注释）")
+	}
+
+	cfg := SupervisorConfig{
+		PythonCmd:   []string{"ping", "-n", "30", "127.0.0.1"}, // 长跑轻量子进程（直启本体）
+		StopTimeout: 300 * time.Millisecond,
+	}.withDefaults()
+
+	// 阶段一：统一入口接线——cmd.Cancel → terminateProc → windows Kill 分支。
+	wait, cancel, kill, err := realStartProc(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("realStartProc 应成功启动长跑子进程: %v", err)
+	}
+	defer func() { _ = kill() }() // 兜底防孤儿（正常路径进程已被杀，重复 Kill 无害）
+
+	done := make(chan error, 1)
+	go func() { done <- wait() }()
+	select {
+	case <-done:
+		t.Fatal("cancel 前 wait 不应返回：ping 30s 长跑子进程应仍存活")
+	case <-time.After(200 * time.Millisecond):
+		// 进程存活确认完毕，进入终止验证。
+	}
+
+	cancel() // 统一入口接线：cmd.Cancel → terminateProc → windows Kill 分支
+	select {
+	case <-done:
+		// Kill 生效：wait 限时返回（进程被 TerminateProcess，wait 返回
+		// ExitError 属预期，不校验具体错误值）。
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancel 后 wait 未限时收尾：windows Kill 分支未生效")
+	}
+
+	// 阶段二：强杀兜底接线 killProc（awaitExit 超时分支同款接线）。unix
+	// 两段式 SIGTERM→StopTimeout→Kill 在本机不可真跑，Windows 侧 Kill 即
+	// 强杀、接线语义一致——实进程直接调 kill 闭包，断言强杀限时收尾。
+	wait2, _, kill2, err := realStartProc(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("realStartProc 第二阶段应成功启动长跑子进程: %v", err)
+	}
+	defer func() { _ = kill2() }()
+
+	done2 := make(chan error, 1)
+	go func() { done2 <- wait2() }()
+	select {
+	case <-done2:
+		t.Fatal("kill 前 wait 不应返回：ping 30s 长跑子进程应仍存活")
+	case <-time.After(200 * time.Millisecond):
+		// 进程存活确认完毕，进入强杀验证。
+	}
+
+	if err := kill2(); err != nil {
+		t.Fatalf("killProc 强杀存活进程应成功: %v", err)
+	}
+	select {
+	case <-done2:
+		// 强杀生效：wait 限时返回（ExitError 属预期，不校验具体错误值）。
+	case <-time.After(2 * time.Second):
+		t.Fatal("kill 后 wait 未限时收尾：killProc 强杀分支未生效")
 	}
 }
