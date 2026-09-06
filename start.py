@@ -71,7 +71,7 @@ def main():
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
 
     import uvicorn
-    from server import app
+    from delector.server import app
     config = uvicorn.Config(app, host=host, port=port, reload=False, log_level="info")
     server = uvicorn.Server(config)
     try:

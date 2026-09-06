@@ -2402,7 +2402,11 @@ STATIC_DIR = os.environ.get("STATIC_DIR")
 if not STATIC_DIR or not os.path.exists(STATIC_DIR):
     for candidate in [
         os.path.join(DATA_DIR, "static"),
-        os.path.join(os.path.dirname(__file__), "static"),
+        # 本模块在 delector/ 包内：dirname(__file__) 是包目录不是仓库根。
+        # 回指一级才等价于打包前"仓库根/static"。首个候选 DATA_DIR/static
+        # 在桌面（_internal/static）与 Android（filesDir/static）上通常已命中，
+        # 这一级是 DATA_DIR 被外部改走时的兜底，别删。
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "static"),
         os.path.join(os.getcwd(), "static"),
         "static"
     ]:
