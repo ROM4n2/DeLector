@@ -928,7 +928,14 @@ def test_attachment_headers_are_only_built_by_the_shared_helper():
     （拿到 token 当文件名）。
     """
     pkg = os.path.join(ROOT, "delector")
-    utils_src = open(os.path.join(pkg, "utils.py"), encoding="utf-8").read()
+    # T6 后 helper 本体在 delector/core/utils.py（按文件名匹配，包内不重名）
+    utils_path = None
+    for _root, _dirs, files in os.walk(pkg):
+        if "utils.py" in files:
+            utils_path = os.path.join(_root, "utils.py")
+            break
+    assert utils_path, "delector 包内找不到 utils.py"
+    utils_src = open(utils_path, encoding="utf-8").read()
     assert "def _attachment_headers" in utils_src, "utils._attachment_headers 定义缺失"
     offenders = []
     for _root, _dirs, files in os.walk(pkg):
