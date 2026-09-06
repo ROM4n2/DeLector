@@ -14,44 +14,10 @@ monkeypatch 打在 `sys.modules["delector.services.tts"]` + `delector.services.t
 
 纪律：
 - 模块内一律 `from delector.services.X import Y` 绝对导入，不用相对导入。
-- 本文件显式 `__all__`，不外泄子模块内部 `_` 符号。
-- 消费方尽量直连子模块（如 `from delector.services.writing import analyze_essay_text`），
-  此处的扁平 re-export 仅作便利入口。
+- 本文件**只 re-export 4 个模块对象，不做符号级扁平入口**——全部消费方直连子模块
+  （如 `from delector.services.writing import analyze_essay_text`），17 个扁平符号
+  re-export 因零调用方被删除（vault-grill ADR-0009 Q1A，Deletion Test）。
 """
 from delector.services import essay_diff, exam_catalog, tts, writing
-from delector.services.essay_diff import (
-    diff_sentences,
-    join_sentences,
-    merge_sentences,
-    split_sentences,
-)
-from delector.services.exam_catalog import EXAM_CATALOG, get_catalog
-from delector.services.tts import synthesize
-from delector.services.writing import (
-    analyze_a1_email,
-    analyze_essay_text,
-    check_a1_formular_answer,
-    decline_determiner,
-    detect_determiner_noun_agreement,
-    detect_preposition_case,
-)
 
-__all__ = [
-    "essay_diff",
-    "exam_catalog",
-    "tts",
-    "writing",
-    "diff_sentences",
-    "join_sentences",
-    "merge_sentences",
-    "split_sentences",
-    "EXAM_CATALOG",
-    "get_catalog",
-    "synthesize",
-    "analyze_a1_email",
-    "analyze_essay_text",
-    "check_a1_formular_answer",
-    "decline_determiner",
-    "detect_determiner_noun_agreement",
-    "detect_preposition_case",
-]
+__all__ = ["essay_diff", "exam_catalog", "tts", "writing"]
