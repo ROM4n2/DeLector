@@ -22,6 +22,7 @@ from delector.routes import (
     exam,
     rtc,
     sync,
+    tools,
 )
 # main 放最后：它承载从 server.py 搬来的通用 handler，搬迁前这些路由是**在
 # include_router 之后**才注册到 app 上的。FastAPI 按注册顺序匹配，把它提前会让
@@ -43,6 +44,7 @@ __all__ = [
     "rtc",
     "sync",
     "main",
+    "tools",
     "MAX_SYNC_CACHE_ENTRIES",
     "_SYNC_INSTANCE_ID",
     "_sync_sdp_cache",
@@ -67,3 +69,6 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(a1_lesen.lesen_router)
     app.include_router(exam.router)
     app.include_router(main.router)
+    # tools 在 main 之后：/api/tools/{name} 是独立前缀，不与任何分域路由冲突；
+    # 放最后只是保持"通用 handler 永远垫底"的注册序纪律。
+    app.include_router(tools.router)

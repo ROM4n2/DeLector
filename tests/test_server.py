@@ -3897,7 +3897,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     # 打包后 ModuleNotFoundError，而本地 pytest 全绿，只能靠这条断言挡住。
     route_modules = {
         "a1", "a2", "a1_hoeren", "a1_lesen",
-        "corpus", "sync", "rtc", "exam", "main",
+        "corpus", "sync", "rtc", "exam", "main", "tools",
     }
     # Phase 1 Task 5：4 个服务模块收进 delector.services/ 子包（edge_tts_mini →
     # services.tts，monkeypatch 契约同步迁到 delector.services.tts，不再有顶层 shim）

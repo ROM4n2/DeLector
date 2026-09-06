@@ -317,13 +317,21 @@ Layer 6:           server → 全部（上帝文件，2418 行）
 > 7. Git commit: `feat: add delector/tools/ interface layer for Go Agent integration`"
 
 **Step Breakdown:**
-- [ ] Step 1: Create tools sub-package with TOOL_REGISTRY
-- [ ] Step 2: Implement 5 tool wrappers
-- [ ] Step 3: Add HTTP routes for tools
-- [ ] Step 4: Register tools routes
-- [ ] Step 5: Write tool endpoint tests
-- [ ] Step 6: Run full test suite
-- [ ] Step 7: Git atomic commit
+- [x] Step 1: Create tools sub-package with TOOL_REGISTRY
+- [x] Step 2: Implement 5 tool wrappers
+- [x] Step 3: Add HTTP routes for tools
+- [x] Step 4: Register tools routes
+- [x] Step 5: Write tool endpoint tests（12 个新测试）
+- [x] Step 6: Run full test suite — 收集 599（587 + 12 新增）无 import 错误；守卫全绿
+- [x] Step 7: Git atomic commit
+
+**Status（2026-09-06 完成，Phase 1 全部收官）：** `delector/tools/` 落地 5 个统一签名 tool（`async def run(payload: dict) -> dict`）+ `TOOL_REGISTRY`；`routes/tools.py` 提供 `GET /api/tools/`（列目录）与 `POST /api/tools/{name}`（分发，`_require_localhost` 闸），注册在 `main.router` 之后（/api/tools 独立前缀，不与分域冲突）。测试 12 个新增（收集 587→599）。
+
+**偏差 / 决策：**
+1. **tool 端点加 `_require_localhost` 闸**：ingest 拉外网（SSRF 面）、export 读库，按项目"敏感/可写仅 127.0.0.1"惯例限本机；Go Agent 与 Web 同机跑，localhost 可达。Phase 2 需跨机再放宽。
+2. **测试脱敏纪律**：ingest 的 `fetch_remote_html` 是 `async def`，monkeypatch fake 必须是 async 函数（写同步 lambda 会让 `await` 一个 str 报 TypeError）；tts 的 `synthesize` 会真连 Microsoft WSS，同样 monkeypatch；export 的 `export_anki_deck` 依赖 db+genanki，monkeypatch；analyze/exercise 用真实本地逻辑（spacy/纯函数，无网络）。
+3. **打包注册**：`routes.tools` 加入打包守卫 `route_modules` 集，`package_windows.py` 与 `build-release.yml`（Linux+macOS 两处）补 `--hidden-import=delector.routes.tools`；`delector.tools` 由 routes 静态导入自动发现，无需逐 tool 列。
+4. **`routes/__init__.py` 注册序**：`tools.router` 放 `main.router` 之后 —— /api/tools 是独立前缀，不与分域冲突，放最后只是维持"通用 handler 垫底"的注册序纪律。
 
 ---
 

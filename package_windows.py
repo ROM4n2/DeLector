@@ -73,6 +73,7 @@ def build_windows():
         "--hidden-import=delector.routes.rtc",
         "--hidden-import=delector.routes.exam",
         "--hidden-import=delector.routes.main",
+        "--hidden-import=delector.routes.tools",
         "--hidden-import=delector.services.writing",
         "--hidden-import=delector.services.essay_diff",
         "--hidden-import=delector.services.exam_catalog",
