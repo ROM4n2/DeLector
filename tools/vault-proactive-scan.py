@@ -96,7 +96,7 @@ def check_data_and_backup():
     scan_section("2. 数据架构与备份自洽性 (Data Architecture & Backup Integrity)")
     
     try:
-        from delector.database import _BACKUP_TABLES, init_db
+        from delector.core.database import _BACKUP_TABLES, init_db
         
         # 探测实际数据库 DDL 表与列（使用专属临时库并在作用域外安全关闭）
         test_db = ROOT / ".cache" / f"temp_scan_db_{os.getpid()}.sqlite"
@@ -151,7 +151,7 @@ def check_db_concurrency():
     scan_section("3. 数据库并发与锁防护 (Database Concurrency & Locking)")
     
     try:
-        from delector.database import get_db
+        from delector.core.database import get_db
         with get_db() as conn:
             jmode = conn.execute("PRAGMA journal_mode").fetchone()[0]
             btimeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
@@ -249,7 +249,7 @@ def check_hygiene_and_tests():
     scan_section("6. 代码卫生与测试套件执行 (Code Hygiene & Pytest Suite)")
     
     try:
-        res = subprocess.run([sys.executable, "-m", "pyflakes", "delector/server.py", "delector/database.py", "delector/nlp.py", "delector/linguistics.py", "delector/syntax_tree.py", "delector/services/writing.py"], capture_output=True, text=True, cwd=str(ROOT))
+        res = subprocess.run([sys.executable, "-m", "pyflakes", "delector/server.py", "delector/core/database.py", "delector/nlp.py", "delector/linguistics.py", "delector/syntax_tree.py", "delector/services/writing.py"], capture_output=True, text=True, cwd=str(ROOT))
         if res.returncode == 0 and not res.stdout.strip():
             record_pass("TEST", "核心 Python 源码 Pyflakes 静态检查 0 告警")
         else:

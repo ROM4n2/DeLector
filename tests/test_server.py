@@ -2589,7 +2589,7 @@ def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
     import ipaddress as _ipaddress
     import socket as _socket
 
-    from delector import security
+    import delector.core.security as security
     from fastapi import HTTPException
 
     requested = []
@@ -2663,7 +2663,7 @@ def test_fetch_remote_html_still_follows_public_redirects(monkeypatch):
     import asyncio
     import socket as _socket
 
-    from delector import security
+    import delector.core.security as security
 
     def fake_getaddrinfo(host, port=None, *args, **kwargs):
         return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 0))]
@@ -4256,7 +4256,7 @@ def test_get_vocab_by_cefr_level(client):
 
 
 def test_corpus_syntax_stats_db_contract(tmp_path):
-    from delector.database import init_progress_db, upsert_corpus_syntax_stats, get_all_corpus_syntax_stats
+    from delector.core.database import init_progress_db, upsert_corpus_syntax_stats, get_all_corpus_syntax_stats
     test_db = tmp_path / "test_syntax_progress.db"
     init_progress_db(db_path=str(test_db))
 

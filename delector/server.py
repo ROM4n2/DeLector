@@ -31,7 +31,7 @@ def load_env():
 load_env()
 
 # --- 1. Database & Settings Layer ---
-from delector.database import (
+from delector.core.database import (
     DATA_DIR,
     AUDIO_CACHE_DIR,
     PROGRESS_DB_PATH,
@@ -92,7 +92,7 @@ from delector.nlp_engine.processor import (
 )
 
 # --- 3. Security, SSRF & Feed Utilities（同上，纯 re-export）---
-from delector.security import (
+from delector.core.security import (
     _resolve_ssrf_targets,
     _IETF_PROTOCOL_ASSIGNMENTS,
     _IPV6_DENY_PREFIXES,
@@ -109,7 +109,7 @@ from delector.security import (
 # ── 附件下载响应头 ────────────────────────────────────────────────────────────
 # 实现在 delector/utils.py（Phase 1 Task 1 抽走，用于打破 routes/a1 → server 的
 # 反向依赖）。此处 import 仅为保留 `delector.server._attachment_headers` 既有引用面。
-from .utils import _attachment_headers, _NO_STORE_HEADERS
+from delector.core.utils import _attachment_headers, _NO_STORE_HEADERS
 
 __all__ = [
     "nlp",

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from delector.data import a1_dict
 from delector.data import a1_writing_dict
-from delector.database import export_a1_anki_deck
+from delector.core.database import export_a1_anki_deck
 from delector.services.writing import check_a1_formular_answer, analyze_a1_email
 
 router = APIRouter(prefix="/api/a1", tags=["Goethe A1"])
@@ -67,7 +67,7 @@ def get_a1_sprechen_teil3():
 
 @router.get("/export/anki")
 def export_a1_anki():
-    from delector.utils import _attachment_headers
+    from delector.core.utils import _attachment_headers
     tmp = tempfile.gettempdir()
     path = os.path.join(tmp, "Goethe_A1_Wortliste.apkg")
     export_a1_anki_deck(path)

@@ -17,7 +17,7 @@ from delector.routes.main import RestoreReq
 from delector.nlp_engine.linguistics import lookup_irregular_verb, split_komposita
 from delector.nlp_engine.syntax_tree import analyze_sentence_topology
 from delector.services.writing import decline_determiner
-from delector.security import is_safe_public_url
+from delector.core.security import is_safe_public_url
 
 
 def test_restore_req_includes_a1_records():
@@ -94,7 +94,7 @@ def test_security_port_restrictions():
 def test_a1_grade_populates_study_log():
     """record_a1_*_trial must write to study_log AND daily_summary counters."""
     import os, sqlite3, time
-    from delector.database import record_a1_hoeren_trial, record_a1_lesen_trial, init_progress_db
+    from delector.core.database import record_a1_hoeren_trial, record_a1_lesen_trial, init_progress_db
     tmp = "test_a1_study_log.db"
     for suffix in ("", "-wal", "-shm"):
         p = tmp + suffix

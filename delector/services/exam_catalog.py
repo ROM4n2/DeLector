@@ -18,7 +18,7 @@ from delector.data import a1_dict
 from delector.data import a1_hoeren_dict
 from delector.data import a1_lesen_dict
 from delector.data import a1_writing_dict
-from delector.database import get_vocab_by_cefr
+from delector.core.database import get_vocab_by_cefr
 
 logger = logging.getLogger("delector")
 

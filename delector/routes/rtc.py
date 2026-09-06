@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from delector.database import get_wb_sync_key, verify_wb_key
+from delector.core.database import get_wb_sync_key, verify_wb_key
 
 router = APIRouter(prefix="/api/wb/rtc", tags=["WebRTC Sync"])
 

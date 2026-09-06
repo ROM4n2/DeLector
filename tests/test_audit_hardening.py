@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
 from delector.server import app, get_setting, set_setting  # noqa: E402
-from delector.database import (  # noqa: E402
+from delector.core.database import (  # noqa: E402
     BACKUP_SETTINGS_WHITELIST,
     BACKUP_SETTINGS_EXPORT_WHITELIST,
     BACKUP_SETTINGS_IMPORT_WHITELIST,
@@ -81,7 +81,7 @@ def _make_conn_spy(monkeypatch):
     （含 get_db/get_progress_db 与 init 原始 connect），所有意图性关闭都汇聚到
     database._close_db_conn。sqlite3.Connection.close 是只读属性，不能逐个包实例，
     故以「open 总数 == close 调用总数」做泄漏判定。"""
-    from delector import database as db
+    import delector.core.database as db
     state = {"opened": 0, "closed": 0}
 
     orig_connect = db.sqlite3.connect
@@ -103,7 +103,7 @@ def _make_conn_spy(monkeypatch):
 def test_database_layer_connections_closed_deterministically(monkeypatch):
     """database 层每个业务函数「一次连接一次 close」——不能只 commit 不 close、
     等循环 GC 才释放 Windows 句柄。"""
-    from delector import database as db
+    import delector.core.database as db
     state = _make_conn_spy(monkeypatch)
     assert state["opened"] == 0 and state["closed"] == 0
 
@@ -123,7 +123,7 @@ def test_database_layer_connections_closed_deterministically(monkeypatch):
 def test_server_endpoints_close_every_connection(client, monkeypatch):
     """server 路由每个请求打开的主/进度库连接都必须 one-open-one-close，
     覆盖跨双库的代表性端点（读、写、复习、统计、wb 镜像）。"""
-    from delector import database as db
+    import delector.core.database as db
     state = {"opened": 0, "closed": 0}
 
     orig_connect = db.sqlite3.connect
@@ -507,7 +507,7 @@ def test_backup_whitelist_split_semantics():
 def test_vocab_anki_note_escapes_user_html():
     """用户词/句子可注入 HTML：导出到 .apkg 的字段必须先转义，
     否则 Anki 打开牌组时 `<img onerror>` 这类标签会执行。"""
-    from delector.database import _vocab_anki_note, _grammar_anki_note
+    from delector.core.database import _vocab_anki_note, _grammar_anki_note
     row = {
         "word": '<img src=x onerror=alert(1)>', "lemma": "x", "pos": "NOUN",
         "gender": None, "cefr_level": "B1",
@@ -522,7 +522,7 @@ def test_vocab_anki_note_escapes_user_html():
 
 def test_vocab_anki_note_keeps_highlight_feature():
     """转义不能破坏原有的词高亮功能。"""
-    from delector.database import _vocab_anki_note
+    from delector.core.database import _vocab_anki_note
     row = {
         "word": "Mann", "lemma": "Mann", "pos": "NOUN", "gender": "Masc",
         "cefr_level": "A1", "definition_zh": "男人",
@@ -533,7 +533,7 @@ def test_vocab_anki_note_keeps_highlight_feature():
 
 
 def test_grammar_anki_note_escapes_user_html():
-    from delector.database import _grammar_anki_note
+    from delector.core.database import _grammar_anki_note
     row = {
         "sentence_context": "<img src=x onerror=alert(1)>",
         "grammar_name": "Akkusativ", "cefr_level": "A2",
@@ -598,7 +598,7 @@ def test_verify_wb_key_uses_compare_digest(monkeypatch):
         calls.append((a, b))
         return a == b
 
-    monkeypatch.setattr("delector.database.secrets.compare_digest", fake_compare)
+    monkeypatch.setattr("delector.core.database.secrets.compare_digest", fake_compare)
     assert verify_wb_key("deadbeef", "deadbeef") is True
     assert calls, "verify_wb_key 未调用 compare_digest"
     assert verify_wb_key("deadbeef", "cafebabe") is False

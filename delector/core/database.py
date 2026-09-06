@@ -18,13 +18,18 @@ import html as _html
 
 from delector.nlp_engine.processor import process_german_text
 
-# 这里的 os.path.dirname(__file__) 指的是**本包目录**，不是仓库根 —— 本模块已经
-# 搬进 delector/ 了。delector.db / progress.db 都挂在 DATA_DIR 下面，指错一级
-# 就等于让它们换个地方重建：桌面端没有 DELECTOR_DATA_DIR 兜底（Android 由
-# MainActivity 注入），用户看到的效果是"升级之后数据全没了"，而本地测试照样全绿。
-# 所以显式回指一级。这条语义由 tests/test_backend_package_layout.py 钉住，别改回去。
+# 本文件现在位于 delector/core/database.py（Phase 1 Task 6 搬入 core/）。DATA_DIR
+# 必须指向**仓库根**（delector/ 的父目录），不能落到 delector/ 包目录。用「向上走到
+# 不再是 Python 包目录（无 __init__.py）」的方式求仓库根，避免硬编码 dirname 层数 ——
+# 下次再搬也不会静默指错。delector.db / progress.db 都挂在它下面，指错一级 = 换个地方
+# 重建：桌面端没有 DELECTOR_DATA_DIR 兜底（Android 由 MainActivity 注入），用户看到
+# "升级之后数据全没了"，本地测试照样全绿。这条语义由
+# tests/test_backend_package_layout.py 钉住，别改回去。
 _PKG_DIR = os.path.dirname(__file__)
-DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", os.path.dirname(_PKG_DIR))
+_REPO_ROOT = _PKG_DIR
+while os.path.exists(os.path.join(_REPO_ROOT, "__init__.py")):
+    _REPO_ROOT = os.path.dirname(_REPO_ROOT)
+DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", _REPO_ROOT)
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, ".cache", "audio")
 try:
     os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)

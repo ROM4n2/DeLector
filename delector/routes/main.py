@@ -11,7 +11,7 @@ TTS 生成、完形填空生成器、备份还原……全挤在一个模块里�
    语义改动应该在搬迁之后单独提交，否则"逻辑改坏了"和"搬错了"混在一起没法查。
 2. 模块内仍用 `from delector.X import Y` 的绝对导入。**不要用相对导入**——
    `routes/a1.py` 搬迁时 `from .utils import _attachment_headers` 就从
-   `delector.utils` 悄悄改指到不存在的 `delector.routes.utils`，只在真跑到那个
+   `delector.core.utils` 悄悄改指到不存在的 `delector.routes.utils`，只在真跑到那个
    端点时才 ModuleNotFoundError（本地测试曾因此红过一次）。
 3. `delector.server` 不再 re-export 这些 handler 层符号；需要单测算法的测试
    直接从 `delector.routes.main` 取。monkeypatch 也必须打在**调用方模块**上，
@@ -35,7 +35,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from delector.database import (
+from delector.core.database import (
     AUDIO_CACHE_DIR,
     get_db,
     get_progress_db,
@@ -85,7 +85,7 @@ from delector.nlp_engine.processor import (
     SYSTEM_GRAMMAR_PROMPT,
 )
 
-from delector.security import (
+from delector.core.security import (
     is_safe_public_url,
     clean_html_to_article,
     fetch_remote_html,
@@ -94,7 +94,7 @@ from delector.security import (
 )
 
 from delector.data.core_dict import lookup_core_vocab
-from delector.utils import _attachment_headers
+from delector.core.utils import _attachment_headers
 from delector.nlp_engine.linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
                          lookup_prep_collocations, build_prep_matrix)
 from delector.nlp_engine.syntax_tree import analyze_syntax_tree

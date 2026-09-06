@@ -272,11 +272,21 @@ Layer 6:           server → 全部（上帝文件，2418 行）
 > 5. Git commit: `refactor: move infrastructure into delector/core/`"
 
 **Step Breakdown:**
-- [ ] Step 1: Create core sub-package
-- [ ] Step 2: Move 3 infrastructure files
-- [ ] Step 3: Update consumer imports
-- [ ] Step 4: Run full test suite — 582 全绿
-- [ ] Step 5: Git atomic commit
+- [x] Step 1: Create core sub-package
+- [x] Step 2: Move 3 infrastructure files
+- [x] Step 3: Update consumer imports
+- [x] Step 4: Run full test suite — 收集 587 无 import 错误（定向跑 test_audit_hardening/layout/import_root/exam_trials/SSRF 全绿）
+- [x] Step 5: Git atomic commit
+
+**Status（2026-09-06 完成）：** 3 个基础设施模块收进 `delector/core/`：`database.py→core/database.py`、`security.py→core/security.py`、`utils.py→core/utils.py`。`core/__init__.py` 只 re-export 轻量 `utils` 符号（故意不 import `database`/`security`，避免无关导入触发 spacy 加载）；`database`/`security` 走 `from delector.core.database import X` 子模块路径。顶层仅剩 `server.py`（app 工厂）。
+
+**偏差 / 决策：**
+1. **DATA_DIR 用「向上走到不再是包目录」的锚定**：原 `dirname(dirname(__file__))` 硬编码层数，搬进 `core/` 后层数变了会静默指到 `delector/` 而非仓库根（正是 `test_backend_package_layout` 要防的"数据搬家"）。改为 `while os.path.exists(join(cur,"__init__.py")): cur=dirname(cur)`，`delector/core/database.py` 与 `delector/database.py` 两种位置都解析到仓库根。workbench.html 路径基于 DATA_DIR（非 `__file__`），一并正确。
+2. **模块属性式导入改用 `import delector.core.X as Y`**：`from delector import database as db` / `from delector import security` 这类正则 `delector\.(database|security|utils)` 搜不到（无点号），漏改首跑报 ImportError。改 `import delector.core.database as db` / `import delector.core.security as security`，不依赖 core/__init__ 暴露模块属性（保住 utils 轻量化）。`test_audit_hardening:601` 的 monkeypatch 目标串 `"delector.database.secrets.compare_digest"` → `"delector.core.database.secrets.compare_digest"`。
+3. **server.py 相对导入改绝对**：`from .utils import _attachment_headers` → `from delector.core.utils import ...`（打破跨子包相对导入坑）。
+4. **打包清单未动**：core 模块由 server 静态 `from delector.core.database import` 触发 PyInstaller 自动发现，且打包注册守卫只校验 data/route/service 集；未新增 hidden-import（与 T2/T3 不同，彼时因延迟/动态导入需显式补）。
+
+---
 
 ---
 
