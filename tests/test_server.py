@@ -980,10 +980,15 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     fake_mini = types.ModuleType("edge_tts_mini")
     fake_mp3 = b"ID3\x03\x00\x00\x00\x00\x00\x00mock_edge_mini_audio"
     fake_mini.synthesize = lambda text, voice, rate: fake_mp3
-    # server.py:1088 延迟导入写的是 `from delector import edge_tts_mini`，
+    # server.py 延迟导入写的是 `from delector import edge_tts_mini`，
     # 找的是 sys.modules["delector.edge_tts_mini"] —— 顶替顶层键 "edge_tts_mini"
     # 对包内模块无效（包化后模块全名变了），顶替会拿到真模块去合成真 MP3。
     monkeypatch.setitem(sys.modules, "delector.edge_tts_mini", fake_mini)
+    # 双保险：前面若已有测试触发过真 edge_tts_mini 的延迟导入，包对象上会缓存
+    # 真模块属性，`from delector import X` 命中包属性而不查 sys.modules。
+    # 顶替包属性，消除「单独跑绿、整批红」的顺序依赖。
+    import delector
+    monkeypatch.setattr(delector, "edge_tts_mini", fake_mini, raising=False)
 
     # 3. 独立缓存目录，避免污染
     cache_dir = tmp_path / "mini_cache"

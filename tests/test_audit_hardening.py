@@ -191,7 +191,7 @@ def test_review_has_no_post_update_requery():
     """复习接口一次 SELECT 拿行 + UPDATE 即返回：不得再回查整行
     （UPDATE 后所有列都是内存已算值，回查纯浪费）。"""
     from pathlib import Path
-    src = Path("delector.server.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parent.parent / "delector" / "server.py").read_text(encoding="utf-8")
     start = src.index("def review_card_sm2(")
     end = src.index('@app.get("/api/cards/due")')
     body = src[start:end]

@@ -18,7 +18,7 @@ _ROOT = Path(__file__).parent.parent
 _WORKBENCH = (_ROOT / "static" / "german" / "workbench.html").read_text(encoding="utf-8")
 _INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 _CSS = (_ROOT / "static" / "style.css").read_text(encoding="utf-8")
-_SERVER = (_ROOT / "delector.server.py").read_text(encoding="utf-8")
+_SERVER = (_ROOT / "delector" / "server.py").read_text(encoding="utf-8")
 
 
 def test_workbench_has_server_tts_priority():
@@ -96,7 +96,7 @@ def test_mobile_dock_offset_for_german_view():
 
 
 def test_get_audio_tts_route_registered():
-    """delector.server.py 有 GET /api/audio/tts 路由（区别于既有 POST 的函数名）。"""
+    """delector/server.py 有 GET /api/audio/tts 路由（区别于既有 POST 的函数名）。"""
     assert '@app.get("/api/audio/tts")' in _SERVER
     assert "async def audio_tts_get(" in _SERVER
 
