@@ -47,7 +47,8 @@
      - 背词工作台（`workbench.html`）顶栏扩展第 4 档位「📘 A2 词库」，异步按需同步服务端 A2 词条并持久化到本地进度，13/13 处切片护栏 100% 绝对保护通过。
      - 备考域（`view-exam`）激活 A2 考纲选项卡，`a1_cards.js` 扩展支持 A2 考纲词卡（3D 扑克翻转、例句发音、网格模式、搜索过滤与加入复习盒）。
 - 测试基线：**全量 582 全绿**（137.53s，基线 574 -> 582 +8），10/10 `tools/*.mjs` 探针全绿（含 13/13 处切片护栏 100% 保护）；pre-commit 密钥守卫有效，工作区干净。
-- **测试位置（2026-09-05 起）**：27 个测试模块全部在 `tests/`，根目录 `conftest.py` 负责把仓库根插进 sys.path —— `pytest` 不像 `python -m pytest` 那样加 CWD，没有它 `tests/` 下 `import server` 会集体 ModuleNotFoundError。跑法不变：仓库根 `pytest -v`。
+- **测试位置（2026-09-05 起，09-06 更新）**：27 个测试模块全部在 `tests/`，根目录 `conftest.py` 负责把仓库根插进 sys.path —— `pytest` 不像 `python -m pytest` 那样把当前工作目录加进 sys.path；Phase 2 收包后 tests 统一 `from delector import …`，而 `import delector` 同样依赖根在 sys.path，**所以这个 conftest 长期需要、不能删**（文件内注释已更正）。跑法不变：仓库根 `pytest -v`。
+- **Phase 2 后端收包（2026-09-06 完成）**：26 个业务模块收进 `delector/` 包（只加包层级、不改文件名），tests 统一改 `from delector import …`；根目录只剩 `start.py` / `package_windows.py` / `conftest.py`。打包面联动：Windows `package_windows.py` hiddenimports 加 `delector.` 前缀、CI Linux/macOS 同步加前缀并**补漏 routes_a2**、Android 改整目录拷贝（消灭逐个清单漏文件的维护面）、Windows spec 探针改包路径。v5.3.0 发版面不受影响，未到 release 刷新时机。
 - 发布面：正式版 **v5.3.0**（源码版）；Android versionName 5.3.0 / versionCode 50300（CI 从 tag 推导）；桌面端正常，`python start.py` → `http://localhost:8000`。
 - **开放待办**：① v5.3.0 打包资产——Windows/macOS/Linux 便携包与 Android APK 待打包、GitHub Release 资产待补录（README 下载表已标注「源码版·打包中」）；② 新功能候选：多模态听力微训 / 语料长难句强化立项。
 

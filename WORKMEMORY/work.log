@@ -135,3 +135,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 4. 备考域卡盒：main.js 激活 A2 等级 Tab，a1_cards.js 扩展 setExamVocabLevel("A2")，支持 A2 考纲词卡 3D 翻转、例句发音、网格模式、搜索过滤与加入复习盒（test_exam_domain.py 2 passed）。
 5. 回归与打包守卫：全量 pytest 582 passed (137.53s，基线 574 -> 582 +8)，10/10 Node.js 动态行为探针全绿，打包注册守卫通过。
 产出文档：docs/plans/2026-09-05-a2-vocab-expansion-ledger.md
+
+### 2026-09-06 | codebuddy__auto | WORK_END
+任务闭环：Phase 2 后端收包（26 业务模块进 delector/ 包）+ 全链路回归 + 三端打包联动 + 文档同步。
+1. 迁移：server/database/nlp/security + linguistics/core_dict/core_dict_ext/a1_dict/a1_writing_dict/a1_hoeren_dict/a1_lesen_dict/prep_dict/writing_rules/syntax_tree/essay_diff/edge_tts_mini/exam_catalog + routes_a1/routes_a2/routes_a1_hoeren/routes_a1_lesen/routes_exam/routes_sync/routes_corpus/routes_rtc 收进 delector/。database.py 数据目录显式回指仓库根（dont revert to dirname(__file__)）；start.py/package_windows.py 运行在根，App.DATA_DIR=根目录。conftest.py 注释更正：收包后 import delector 仍依赖根在 sys.path → conftest 长期保留。
+2. 测试：tests/ 全部改 from delector import …；新增 tests/test_import_root_modules.py 迁移哨兵；打包注册断言（prep_dict/corpus_dict/all_backend）用 importlib.util.find_spec 解析 spec 源码，钉住 pyinstaller hiddenimports 与 CI 字符串。test_server.py 225 passed 1 skipped。
+3. 打包联动（含两处既有缺陷）：yml Linux/macOS 区段 hidden-import 加前缀并补漏 routes_a2（Windows 有、CI 漏，server.py:233 静态 import → 旧打包必 ModuleNotFoundError）；Android v5.3.0 拷贝清单漏 routes_a2.py → 改 cp -r start.py + cp -r delector 整目录拷贝，消灭逐个清单维护面；Windows spec APP_NEEDLES 验包探针改包路径并补 routes_a2.py。
+4. 文档同步：README 目录树收成 delector/ 条目、功能表两格加前缀；architecture.md 技术栈后端行标注收包；PROJECT_OVERVIEW 更正 conftest 表述 + Phase 2 注记。
+遗留：旧 DeLector.spec 系 9/4 打包遗留（未跟踪，已删），重打包会生成新格式。提交：C1=1c82266 server 迁移+回退链、C2=f33962e? 测试适配、C3=…（详见 git log）。

@@ -209,8 +209,8 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 | :--------------- | :----------------------------------------- | :---------------------------------------------------------------------------------- |
 | **后端框架**     | `FastAPI` + `Uvicorn`                      | 异步高性能 REST API                                                                 |
 | **自然语言处理** | `spaCy` (`de_core_news_md` / `sm`)         | 本地高精德语分词、词性标注、形态分析与五场域句法依存                                |
-| **形态学引擎**   | `linguistics.py`                           | 556+ 不规则动词三态表 + 复合词动态规划递归拆解                                      |
-| **拓扑句法树**   | `syntax_tree.py`                           | Vorfeld/LK/MF/RK/NF 五场域切分 + 5 大从句 AST 抽象语法树                            |
+| **形态学引擎**   | `delector/linguistics.py`                           | 556+ 不规则动词三态表 + 复合词动态规划递归拆解                                      |
+| **拓扑句法树**   | `delector/syntax_tree.py`                           | Vorfeld/LK/MF/RK/NF 五场域切分 + 5 大从句 AST 抽象语法树                            |
 | **持久化存储**   | `SQLite 3` (`delector.db` + `progress.db`) | 核心文库与时序台账双库解耦存储                                                      |
 | **语音合成**     | `Edge-TTS` (Microsoft Neural Voice)        | 神经级纯正德语离线本地缓存与 Web Speech 回退                                        |
 | **前端架构**     | `ES Modules / Modern CSS / Vanilla JS`     | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染                                      |
@@ -241,17 +241,29 @@ DeLector/
 │       ├── cloze.js        # 完形填空 & 德福 C-Test 考试
 │       └── player.js       # 神经影子跟读与 TTS 播放器
 ├── .githooks/              # 提交前密钥扫描钩子 (pre-commit，含编码 keystore)
-├── linguistics.py          # 556+ 不规则动词三态表与复合词拆解引擎
-├── core_dict.py            # 歌德 A1-B2 离线核心词库 (0ms 查词，4411 词)
-├── core_dict_ext.py        # 3969 词库扩展（DeepSeek 批量生成中文释义，v4.4.8 起缺口 0）
-├── a1_dict.py              # 歌德 A1 官方 702 词 + 口语 Teil 2/3 题卡数据集
-├── a1_writing_dict.py      # A1 填表真题与短电邮题库
-├── prep_dict.py            # 固定介词搭配数据集 552 词 / 691 条（生成物，源在 tools/build_prep.py）
-├── writing_rules.py        # 写作润色台本地规则引擎（冠词一致 + 介词格，零误报，含 Inlay Hints/Problems）
-├── syntax_tree.py          # 拓扑五场域与 AST 从句树句法引擎
-├── routes_a1.py            # A1 考纲路由（词卡/口语/写作/Anki 导出）
-├── routes_sync.py          # WebRTC 局域网 6 位短码同步路由
-├── server.py               # FastAPI 后端服务与核心 NLP/API 路由（敏感设置仅回环可写）
+├── delector/               # 后端包：26 个业务模块平铺（Phase 2 收包，只加包层级不改文件名）
+│   ├── server.py           # FastAPI 后端服务与核心 NLP/API 路由（敏感设置仅回环可写）
+│   ├── database.py         # SQLite 数据层（DATA_DIR 默认显式回指仓库根，别改回 dirname(__file__)）
+│   ├── nlp.py              # spaCy NLP/CEFR/文本分析 + 纯 Python 回退
+│   ├── security.py         # SSRF/URL 安全
+│   ├── linguistics.py      # 556+ 不规则动词三态表与复合词拆解引擎
+│   ├── core_dict.py        # 歌德 A1-B2 离线核心词库 (0ms 查词，4411 词)
+│   ├── core_dict_ext.py    # 3969 词库扩展（DeepSeek 批量生成中文释义）
+│   ├── a1_dict.py          # 歌德 A1 官方 702 词 + 口语 Teil 2/3 题卡数据集
+│   ├── a1_writing_dict.py  # A1 填表真题与短电邮题库
+│   ├── a1_hoeren_dict.py   # A1 听力真题数据集
+│   ├── a1_lesen_dict.py    # A1 阅读真题数据集
+│   ├── prep_dict.py        # 固定介词搭配数据集 552 词 / 691 条（生成物，源在 tools/build_prep.py）
+│   ├── writing_rules.py    # 写作润色台本地规则引擎（冠词一致 + 介词格，零误报）
+│   ├── syntax_tree.py      # 拓扑五场域与 AST 从句树句法引擎
+│   ├── essay_diff.py       # 句子级 diff 引擎
+│   ├── edge_tts_mini.py    # 零依赖 stdlib TTS 客户端（Android 无 wheel 时回退）
+│   ├── exam_catalog.py     # 考纲词表与题量注册（A1/A2，动态推导）
+│   ├── routes_a1.py        # A1 考纲路由（词卡/口语/写作/Anki 导出）
+│   ├── routes_a2.py / routes_a1_hoeren.py / routes_a1_lesen.py / routes_exam.py
+│   ├── routes_sync.py      # WebRTC 局域网 6 位短码同步路由
+│   ├── routes_corpus.py    # 语料库 A1-B2/TestDaF 阅读管线
+│   └── routes_rtc.py       # WebRTC 信令中继
 ├── start.py                # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
 ├── package_windows.py      # Windows 绿色免安装便携版打包脚本
 ├── Dockerfile              # Docker 镜像构建文件
