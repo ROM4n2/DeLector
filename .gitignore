@@ -65,3 +65,5 @@ scratch/
 .codebuddy/
 
 # WORKMEMORY/ 是跨 agent 共享工作记忆，MUST 入库随 git 同步（PROTOCOL §7），勿加入忽略规则。
+agent/delector.exe
+agent/coverage*

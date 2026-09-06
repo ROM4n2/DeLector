@@ -90,8 +90,7 @@ Go 编译为单二进制 CLI/桌面应用，内嵌 Agent DAG 编排逻辑，通�
 │                    │  │                     │  │ │
 │                    │  │  - ingest (HTTP→Py) │  │ │
 │                    │  │  - analyze (sub)    │  │ │
-│                    │  │  - exercise (HTTP)  │  │ │
-│                    │  │  - review (FSRS)    │  │ │
+│                    │  │  - writing_check    │  │ │
 │                    │  │  - export (genanki) │  │ │
 │                    │  │  - tts (edge-tts)   │  │ │
 │                    │  └────────┬────────────┘  │ │
@@ -116,6 +115,8 @@ Go 编译为单二进制 CLI/桌面应用，内嵌 Agent DAG 编排逻辑，通�
 └─────────────────────────────────────┘
 ```
 
+> **工具清单注记（2026-09-06）**：Tool Registry 与 Python 侧 `delector/tools/__init__.py` 的 `TOOL_REGISTRY` 对齐，共 5 个工具：`ingest / analyze / writing_check / export / tts`。`exercise` 已更名 `writing_check`（见 ADR-0009）；原 `review` 工具 Python 侧尚不存在，Phase 2b+ 待 Python 侧新增工具后接入。
+
 ### 关键技术选型
 
 | 组件                   | 选型                                             | 理由                                                        |
@@ -137,12 +138,13 @@ dag := NewDAG("article-analysis")
 dag.AddStep("ingest", ingestTool)        // RSS/文本 → 原文
 dag.AddStep("nlp", nlpTool)              // spaCy 分析（依赖 ingest）
 dag.AddStep("cefr", cefrTool)            // CEFR 标注（依赖 nlp）
-dag.AddStep("exercise", exerciseTool)     // 练习生成（依赖 cefr）
+// 注：CEFR 标注暂由 Python analyze 工具内部承担，独立 cefr 工具属 Phase 2b。
+dag.AddStep("writing_check", writingCheckTool) // 练习生成（依赖 cefr）
 dag.AddStep("tts", ttsTool)              // TTS 朗读（依赖 ingest，可与 nlp 并行）
-dag.AddStep("export", ankiExportTool)     // Anki 导出（依赖 exercise）
+dag.AddStep("export", ankiExportTool)     // Anki 导出（依赖 writing_check）
 
 // Go runtime 自动并行无依赖步骤：
-// ingest → [nlp, tts] 并行 → cefr → exercise → export
+// ingest → [nlp, tts] 并行 → cefr → writing_check → export
 result, err := dag.Run(ctx, article)
 ```
 
