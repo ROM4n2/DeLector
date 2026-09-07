@@ -212,3 +212,120 @@ export function annotateWithDeck(deck, annotateResp) {
     },
   };
 }
+
+/* ======================================================================
+ * A6 进卡纯函数（Node 可测性硬约束同上：零 import / 不碰浏览器全局）。
+ *
+ * 只操作 deck 对象 {words, cards} —— localStorage 写回 / PUT /api/wb/state
+ * 镜像同步由调用方（encounter.js 页面侧）完成，这里保持纯净。
+ *
+ * ⚠ 语义真相（与背词工作台 static/german/workbench.html 对齐，RED-1）：
+ *   工作台真实队列语义是——一个词处于「新/待排」iff **cards 里没有它的条目**
+ *   （!S.cards[w.id]，workbench ~2122 newIds 池 & ~2310 手动 new）；due 词要求
+ *   reps>0（~2114）；工作台自己的「置为 new」就是 delete S.cards[id]（~2938）；
+ *   真卡存的是数值毫秒 due（~2043）。若进卡时写一张 reps:0 / due=ISO 的 starter 卡，
+ *   会让该词对两个池都不可见 → 永不排期 → 核心承诺被破坏。
+ *
+ *   因此 A6 进卡 = **只写词（word），绝不写卡（card）**：让新增自定义词天然满足
+ *   !S.cards[w.id]「新词」语义，进入工作台可见词表、可被复习。
+ *
+ *   自定义词 add 形状（btnWordSave, ~line 3246）：
+ *     { id:"u-"+now.toString(36), hw, pos, gloss, ipa, ex, letter,
+ *       page:0, tags:[...], custom:true, up:now }   // up = 真实毫秒
+ *   FSRS 卡（fsrsReview, ~line 2023/2043）：{s,d,due,last,reps,lapses}
+ *   —— 卡仅由工作台自己写/删，A6 不做卡。
+ *
+ * 说明：
+ *   - id 前缀 'u-' + genId 与 workbench 一致（'u-' + Date.now().toString(36)），
+ *     跨页同源自定义词按 id/hw 去重不打架。
+ *   - genId 参数可传函数（默认 Date.now().toString(36)）也可直接传字符串后缀，
+ *     便于测试确定性注入；nowMs 显式注入 up（真实毫秒，默认 Date.now()），
+ *     绝不靠解析 id 后缀还原 up。
+ * ==================================================================== */
+
+/** 内部：解析 genId（函数→调用取串 / 字符串→直接用 / 缺省→fallbackMs 的 base36）。 */
+function _genIdSuffix(genId, fallbackMs) {
+  if (typeof genId === "function") {
+    const v = genId();
+    return v == null ? fallbackMs.toString(36) : String(v);
+  }
+  if (genId != null) return String(genId);
+  return fallbackMs.toString(36);
+}
+
+/** 内部：词表分段首字母（与 workbench letterOf 口径一致：剥括号+剥冠词/小品词）。 */
+function _letterOf(hw) {
+  const s = String(hw || "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(
+      /^(der|die|das|ein|eine|einen|dem|den|sich|zu|an|auf|aus|bei|ein|für|mit|nach|von|vor|zu)\s+/i,
+      "",
+    )
+    .trim();
+  const ch = s.charAt(0) || "";
+  return ch.toUpperCase();
+}
+
+/**
+ * makeWordObject(lemma, gloss, pos, genId, nowMs) -> 自定义 word 对象
+ * 字段与 workbench 自定义词逐项对齐（含 custom:true）。lemma 即 hw。
+ * up 直接取 nowMs（真实毫秒；缺省 Date.now()）——**绝不**从 id 后缀解析。
+ */
+export function makeWordObject(lemma, gloss, pos, genId, nowMs) {
+  const now = nowMs != null && !Number.isNaN(Number(nowMs)) ? Number(nowMs) : Date.now();
+  const suffix = _genIdSuffix(genId, now);
+  const hw = String(lemma == null ? "" : lemma);
+  return {
+    id: "u-" + suffix,
+    hw: hw,
+    pos: String(pos == null ? "" : pos),
+    gloss: String(gloss == null ? "" : gloss),
+    ipa: "",
+    ex: [],
+    letter: _letterOf(hw),
+    page: 0,
+    tags: [],
+    custom: true,
+    up: now,
+  };
+}
+
+/**
+ * addCardToDeck(deck, lemma, {gloss,pos,genId,nowMs}) -> {deck, added, reason}
+ *
+ * 语义（word-only，绝不写卡——对齐工作台 !S.cards[w.id]「新词」真值）：
+ *   added=true  reason='added'     词不存在 → 只追加 1 个自定义 word，**不建 card**
+ *   added=false reason='exists'    词已在 deck.words（尚无 learned 卡）→ 不重复
+ *   added=false reason='learned'   词已在 deck.words 且 cards[id].reps>0 → 不动
+ *
+ * cards 永不新增键；返回时 cards 保持原 deck.cards 原样（坏 deck 按空 {} 兜底）。
+ * 幂等：同一 lemma（hw 忽略大小写）二次调用绝不重复追加。坏/残缺 deck 安全降级为空。
+ */
+export function addCardToDeck(deck, lemma, opts) {
+  const o = opts && typeof opts === "object" ? opts : {};
+  const words = Array.isArray(deck && deck.words) ? deck.words.slice() : [];
+  const cards =
+    deck && deck.cards && typeof deck.cards === "object" && !Array.isArray(deck.cards)
+      ? deck.cards
+      : {};
+  const hw = String(lemma == null ? "" : lemma);
+  const lower = hw.toLowerCase();
+
+  for (const w of words) {
+    if (!w || w.hw == null) continue;
+    if (String(w.hw).toLowerCase() === lower) {
+      const card = cards[String(w.id)];
+      const reason = card && typeof card === "object" && Number(card.reps) > 0
+        ? "learned"
+        : "exists";
+      return { deck: { words: words, cards: cards }, added: false, reason: reason };
+    }
+  }
+
+  const nowMs = o.nowMs != null && !Number.isNaN(Number(o.nowMs)) ? Number(o.nowMs) : Date.now();
+  const word = makeWordObject(hw, o.gloss, o.pos, o.genId, nowMs);
+  words.push(word);
+  // 只写词、不建卡：让 !S.cards[w.id]「新词」语义保持（RED-1 修复）。
+
+  return { deck: { words: words, cards: cards }, added: true, reason: "added" };
+}
