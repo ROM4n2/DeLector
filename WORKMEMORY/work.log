@@ -175,3 +175,9 @@ commit 序列：3e4e7b2（T4a routes 子包）→ 206b3d7（T4b 工厂+main.py�
 commit 序列（均推送）：T1 596dfb5（脚手架+ADR-0008 契约钉板）→ T2 3066d40（pythonsvc client）→ T3 a37bc1e（registry+golden 哨兵）→ T4 513eb55（自研 DAG 调度器）→ T5 1e2163a（supervisor）→ T6 ef3e6d2（llm/go-openai v1.42.0）→ T7 b93baf0（真实 uvicorn 集成 e2e + supervisor step0 修复）。
 关键产出：agent/ Go module（cmd/delector cobra + internal/{pythonsvc,registry,dag,llm}）；Go 1.26.5；`go test -race` 五包全绿；`go test -tags integration` 真实 Python 链路双 200（writing_check/analyze，spaCy de_core_news_sm）。
 纪律与踩坑（供后续 Phase 2b）：① maker-checker 轮换 8 次全绿，CRV 对锁版 SDK/真源逐字段比对价值高；② 集成测试 ctx 一旦「return 即 cancel」会把 python 子进程立刻强杀（exec.CommandContext），必须 Background + t.Cleanup(Stop)；③ uvicorn 以 agent/ 为 cwd 时需 PYTHONPATH 上溯求根；④ ProbeTimeout 默认 2s 对 spaCy 冷启动偏紧，桌面复用建议 ≥10s；⑤ 拓扑口径统一：cefr 属 Phase 2b 独立 tool，当前 analyze 内部承担 nlp+CEFR。T8 文档收尾同步 README 目录树（后端子包形态 + agent/）+ 计划状态块 + PROJECT_OVERVIEW。
+
+### 2026-09-07 | codebuddy__auto | WORK_END
+任务闭环：Phase 2b Agent 分发形态（docs/plans/2026-09-06-go-agent-runtime-phase2b.md）5/5 完成，maker-checker 流水线全绿（T5 文档域编排者直接收尾）。
+commit 序列（均推送）：T1 35417a8（supervisor Unix SIGTERM build tag + ProbeTimeout 10s）→ T2 8b5d329（delector run 真组装 + article-analysis 预设）→ T3 67d15df（package_agent.py 绿色便携包 + run wiring）→ T4 64c7cea（build-agent.yml 三平台 CI）。
+关键产出：`delector run` 常驻 Python NLP 服务（supervisor→registry→DAG→ctx 取消优雅退出，procCtx 解耦子进程）；产物 `delector-agent/{delector,python,delector-src}`（venv + de_core_news_sm，压缩 ~65MB），按 os.Executable 解析包内 venv python/PYTHONPATH/DataDir；三平台 CI 出 artifact（零密钥、不挂 publish，预览通道）。
+纪律与踩坑（供后续 Phase 3/2c）：① Go 进程管理坑二连——exec.CommandContext 的 ctx 提前 cancel 强杀子进程（T2 修）+ cmd.Cancel 字段手动调用不武装 WaitDelay 强杀计时器（T1 RED 闭环：awaitExit 超时分支改调 killProc SIGKILL）；② 打包产物 dist/ 必须 .gitignore 覆盖（285MB 绝不可入库）；③ venv 解释器 Windows 在 Scripts/python.exe（非顶层），解析需双路回退；④ -ldflags -X 只能注入 var 不能注入 const（version const→var）；⑤ 发布面零交集：agent 包为新增独立 artifact，PyInstaller 四端 + publish 链未动，替换桌面版决策留 Phase 3（需先数据收集：用户更想要单二进制还是保留现有 Web 版）。

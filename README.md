@@ -223,7 +223,7 @@ OpenAI/AWS/GitHub/Google/Slack token、JWT 与私钥 PEM 块，以及 `.env`、`
 
 ```
 DeLector/
-├── agent/                  # Phase 2 Go Agent Runtime：cobra CLI + 自研 DAG + 5 工具注册 + Python supervisor + DeepSeek 客户端（module github.com/ROM4n2/DeLector/agent）
+├── agent/                  # Phase 2 Go Agent Runtime：cobra CLI + 自研 DAG + 5 工具注册 + Python supervisor + DeepSeek 客户端（module github.com/ROM4n2/DeLector/agent；含 venv×Go 单二进制绿色便携包打包，预览通道）
 ├── android/                # Android 独立离线单机版工程 (Chaquopy + Gradle)
 ├── static/                 # 前端纯静态 ES 模块化资源 (Zero-Build ESM)
 │   ├── index.html          # 单页应用骨架 (含 3D 卡盒、句法拓扑与台账)
@@ -389,6 +389,8 @@ DeLector/
 - [x] **局域网同步 6 位短码**（v4.6.5）：WebRTC P2P 同步的 SDP 传递从复制粘贴 2-3KB 改为 6 位短码中转（`POST /api/wb/sync/store` + `GET /api/wb/sync/fetch/{code}`），手机上只需输入 6 个字符。
 
 - [x] **歌德 A1 备考工坊**（v4.7.0）：官方考纲 702 词 + 15 大交际主题 + 8 篇官方填表真题与评分容错 + 10 篇 30 词短电邮写作工坊与 3 大导向点合规诊断 + 口语 Teil 2/3 考场题卡。
+
+- [x] **Phase 2b（2026-09）：Go Agent Runtime 绿色便携包**——`delector run` 起 Python NLP 服务（supervisor 退避重启 + 健康探针 + Unix SIGTERM 优雅关闭 / Windows Kill）；自研 goroutine/channel DAG 调度 article-analysis 预设（4 层口径 ingest→[analyze,tts]→writing_check→export）；5 工具注册（golden 防漂移）；go-openai DeepSeek 客户端。**分发形态**：Go 单二进制 × Python venv 跨平台便携包（`agent/scripts/package_agent.py`，产物 `delector-agent/{delector,python,delector-src}`，压缩 ~65MB），三平台 CI `build-agent.yml` 自动出 artifact（**预览通道**，不打 tag 不发布；替换桌面版决策留 Phase 3）。Go 1.26.5；`go test -race ./...` 与 `go test -tags integration` 真实 uvicorn→spaCy 全链路为门禁。
 
 ---
 

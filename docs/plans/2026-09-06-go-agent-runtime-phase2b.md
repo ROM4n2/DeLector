@@ -14,6 +14,29 @@
 
 ---
 
+## 执行状态（2026-09-07 收官，vault-exec maker-checker 全流程）
+
+**5/5 完成**（T5 为文档域，编排者直接收尾），每 Task 走 CPE 实现 → CRV 只读验收 → 主线程核销 UNVERIFIED 项 + 原子提交推送：
+
+| Task | commit | CRV 裁定 |
+|---|---|---|
+| T1 supervisor 递延项 | `35417a8` | APPROVED（经一轮 REWORK：cmd.Cancel 手动调用不武装 WaitDelay 的 RED 由 killProc 两段式闭环，零黄） |
+| T2 delector run 组装 | `8b5d329` | APPROVED（经一轮 REWORK：procCtx 解耦 3 黄闭环，零卡） |
+| T3 打包脚本 | `67d15df` | APPROVED（1 黄闭环：version const→var 注入生效） |
+| T4 三平台 CI | `64c7cea` | APPROVED（1 黄闭环：get_version 匹配 var version/const defaultVersion） |
+| T5 文档收尾 | 本档 | — |
+
+**偏差与口径统一（正式记录）：**
+1. **Windows venv 解释器路径**：计划 Global Constraints 文字写 `<exeDir>/python/python.exe`，标准 `python -m venv` 实际落在 `<exeDir>/python/Scripts/python.exe`（unix 为 `python/bin/python` 与计划一致）；resolvePythonCmd 双路回退，本机冒烟证实包内 venv 被用。
+2. **产物体积**：未压缩 285MB（压缩 65.5MB），高于 ~50MB 预期——自包含 venv（完整 Python + spaCy/thinc 生态 + de_core_news_sm 模型）所致；计划已注明 spaCy 模型较大可接受。
+3. **CI 矩阵实现**：单 `build-agent` job + `matrix.os` 三平台并行（比三并列 job DRY）；artifact 名运行时读实际压缩包基名派生，天然含真实 os+arch（mac 默认 amd64）。
+4. **2a 承接闭环**：T1 兑现状态块 #3（Unix SIGTERM build tag）、#4（ProbeTimeout 默认 10s）；T2 presets 用 4 层口径（cefr 不独立成层）与 ADR-0008 修订版收敛。
+5. **黄牌债务全部核销**：T1 RED（1 张）→ REWORK 闭环；T2 3 黄、T3 1 黄、T4 1 黄均并入各自 Task 收口，零 backlog。
+6. **环境**：Go 1.26.5；`-race` 六包全绿；`go test -tags integration` 真实 uvicorn→spaCy 全链路（T2 TestRunEndToEnd 3.53s、T3 产物冒烟 200+包内 venv+优雅退出）；dist/ 由 .gitignore 覆盖不入库。
+7. **发布面零交集**：agent 包为新增独立 artifact（预览通道），PyInstaller 四端 + publish 链未动；2b 不打 tag 不发布，替换决策留 Phase 3。
+
+---
+
 ## 架构与文件边界
 
 ```
