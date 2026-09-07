@@ -35,6 +35,15 @@ type Options struct {
 	// DataDir 数据目录：注入子进程 DATABASE_PATH / DELECTOR_DATA_DIR，
 	// 绝不触碰用户库。空串时跳过注入（测试 / 无状态场景）。
 	DataDir string
+	// PythonCmd 包内 venv python 解释器绝对路径（Phase 2b T3 绿色便携包
+	// 自包含 python）。空串时 supervisorConfig 回退 "python"（系统解释器，
+	// dev 模式零改动）。仅作 argv[0]，完整 uvicorn 命令由 supervisorConfig 拼。
+	PythonCmd string
+	// PythonSrcDir 包内 python 源根（<exeDir>/delector-src：含 delector 包 +
+	// static + start.py）；非空时经 PYTHONPATH 注入，使 uvicorn 可 import
+	// delector.server:app。空串时 pythonEnv 回退到仓库根（2a T7 runtime.Caller
+	// 上溯），dev 模式零改动。
+	PythonSrcDir string
 	// PythonExtraEnv 追加到托管 Python 子进程环境的 KEY=VALUE；用于透传
 	// 凭证（如 DEEPSEEK_API_KEY）。DataDir 注入与 PYTHONIOENCODING /
 	// PYTHONPATH 由 Run 自动补，勿在此重复。
@@ -116,9 +125,14 @@ func supervisorConfig(opts Options) pythonsvc.SupervisorConfig {
 	if port == 0 {
 		port = defaultPort
 	}
+	// pythonExe：包内 venv python 绝对路径，空串回退系统 "python"（dev）。
+	pythonExe := opts.PythonCmd
+	if pythonExe == "" {
+		pythonExe = "python"
+	}
 	return pythonsvc.SupervisorConfig{
 		PythonCmd: []string{
-			"python", "-m", "uvicorn", "delector.server:app",
+			pythonExe, "-m", "uvicorn", "delector.server:app",
 			"--host", "127.0.0.1", "--port", strconv.Itoa(port),
 		},
 		HealthURL: healthURLForPort(port),
@@ -137,7 +151,12 @@ func pythonEnv(opts Options) []string {
 		)
 	}
 	env = append(env, "PYTHONIOENCODING=utf-8")
-	if root := repoRoot(); root != "" {
+	if src := opts.PythonSrcDir; src != "" {
+		// 包内源根（<exeDir>/delector-src）：优先注入，使 venv python 可
+		// import delector 包（Phase 2b T3 绿色便携包）。
+		env = append(env, "PYTHONPATH="+src)
+	} else if root := repoRoot(); root != "" {
+		// dev 模式兜底：仓库根上溯（2a T7 同款）。
 		env = append(env, "PYTHONPATH="+root)
 	}
 	return env

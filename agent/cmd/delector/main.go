@@ -12,14 +12,21 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/ROM4n2/DeLector/agent/internal/app"
 	"github.com/spf13/cobra"
 )
 
-// version 为语义化版本号；输出与测试引用同一常量，防止契约漂移。
-const version = "0.1.0"
+// defaultVersion 为语义化版本号默认常量；打包脚本可用
+// -X main.version=... 覆盖下面的 version 变量。
+const defaultVersion = "0.1.0"
+
+// version 为语义化版本号；未注入时回落到 defaultVersion，注入后由
+// -X main.version 覆盖（见打包脚本）。输出与测试引用同一变量，防止契约漂移。
+var version = defaultVersion
 
 func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -51,9 +58,23 @@ func newRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "起 Python 托管进程并暴露 article-analysis DAG 工具链（常驻至 Ctrl+C）",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			exe := exeDir()
+			// DataDir 默认包目录（绿色便携包自包含数据；dev 模式未给
+			// --data-dir 时也落到打包目录，绝不碰用户库）。
+			dataDirResolved := dataDir
+			if dataDirResolved == "" {
+				dataDirResolved = exe
+			}
+			// 包内 venv python / 源根解析；dev 模式缺目录则回退系统 python
+			// 与仓库根（2a T7 上溯），零改动。
+			pythonExe := resolvePythonCmd(exe)
+			srcDir := resolvePythonSrcDir(exe)
+			cmd.Printf("[delector] python=%s src=%s data=%s\n", pythonExe, srcDir, dataDirResolved)
 			opts := app.Options{
 				Port:           port,
-				DataDir:        dataDir,
+				DataDir:        dataDirResolved,
+				PythonCmd:      pythonExe,
+				PythonSrcDir:   srcDir,
 				PythonExtraEnv: extraEnvFromOS(),
 			}
 			// SIGINT/SIGTERM → ctx 取消 → supervisor 优雅退出（见 app.Run）。
@@ -75,6 +96,61 @@ func extraEnvFromOS() []string {
 		return []string{"DEEPSEEK_API_KEY=" + v}
 	}
 	return nil
+}
+
+// exeDir 返回当前可执行文件所在目录。绿色便携包下它就是 delector-agent/，
+// 包内 python/（venv）、delector-src/（源根）、data（默认库目录）都相对它
+// 解析；dev 模式取不到时回退 "."，不影响系统 python + 仓库根兜底。
+func exeDir() string {
+	if exe, err := os.Executable(); err == nil {
+		if d := filepath.Dir(exe); d != "" {
+			return d
+		}
+	}
+	return "."
+}
+
+// resolvePythonCmd 解析包内 venv python 解释器：若 <exeDir>/python 目录存在
+// 则取其中解释器，否则回退 "python"（系统解释器，dev 模式）。产制品必须走
+// 包内 venv，不依赖系统 python（Phase 2b T3）。
+//
+// venv 解释器位置因 OS 而异：unix 为 python/bin/python；Windows 标准
+// `python -m venv` 落在 python/Scripts/python.exe（Global Constraints 文字写
+// 的 python/python.exe 仅当包被重排为嵌入式布局时才成立），故 Windows 优先
+// 取计划所述顶层 python.exe，缺则回退 Scripts/python.exe，确保产制品总能用
+// 包内 venv。
+func resolvePythonCmd(exe string) string {
+	pyDir := filepath.Join(exe, "python")
+	if st, err := os.Stat(pyDir); err != nil || !st.IsDir() {
+		return "python"
+	}
+	var candidates []string
+	if runtime.GOOS == "windows" {
+		candidates = []string{
+			filepath.Join(pyDir, "python.exe"),
+			filepath.Join(pyDir, "Scripts", "python.exe"),
+		}
+	} else {
+		candidates = []string{filepath.Join(pyDir, "bin", "python")}
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return "python"
+}
+
+// resolvePythonSrcDir 解析包内 python 源根：若 <exeDir>/delector-src 目录存在
+// 则用之（含 delector 包 + static + start.py），经 PYTHONPATH 注入使 uvicorn
+// 可 import delector.server:app；否则返回空串，由 app.Run 回退仓库根（2a T7
+// 上溯），dev 模式零改动。
+func resolvePythonSrcDir(exe string) string {
+	src := filepath.Join(exe, "delector-src")
+	if st, err := os.Stat(src); err == nil && st.IsDir() {
+		return src
+	}
+	return ""
 }
 
 var rootCmd = newRootCmd()
