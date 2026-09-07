@@ -70,8 +70,10 @@ type Pack struct {
 //   - schema 必须固定为 encounter-pack/v1；
 //   - pack_id 必填且非空白；
 //   - article.title / article.raw_text 必填且非空白（article 为强类型恒存在）；
-//   - estimated_cefr 归一（trim+upper）后须落 A1|A2|B1 白名单；空值按 python
-//     语义默认 A2（不 over-constrain）。
+//   - estimated_cefr：只有**原本为空/缺失**的值才按 python 语义默认 A2；
+//     一个非空但 trim 后为空白（如 "  "）的值是**非法**的（镜像 python 端
+//     400——空白值既非白名单也不应被静默当作 A2）。非空白值 trim+upper 后
+//     须落 A1|A2|B1 白名单。
 //
 // 不做估计等级之外的过度约束（analysis/glosses 允许空——与 python 落库一致）。
 func (p *Pack) Validate() error {
@@ -87,13 +89,13 @@ func (p *Pack) Validate() error {
 	if strings.TrimSpace(p.Article.RawText) == "" {
 		return fmt.Errorf("job: pack.article.raw_text 必填且不能为空")
 	}
-	// estimated_cefr：镜像 python 路由，空值默认 A2；否则 trim+upper 后须在白名单。
-	norm := strings.ToUpper(strings.TrimSpace(p.EstimatedCEFR))
-	if norm == "" {
-		norm = "A2"
-	}
-	if !allowedCEFR[norm] {
-		return fmt.Errorf("job: pack.estimated_cefr 仅支持 A1/A2/B1，收到 %q", p.EstimatedCEFR)
+	// estimated_cefr：空/缺失（p.EstimatedCEFR==""）→ 默认 A2；否则视为显式值，
+	// trim+upper 后须在白名单（非空白但 trim 为空的空白串因此被拒）。
+	if p.EstimatedCEFR != "" {
+		norm := strings.ToUpper(strings.TrimSpace(p.EstimatedCEFR))
+		if !allowedCEFR[norm] {
+			return fmt.Errorf("job: pack.estimated_cefr 仅支持 A1/A2/B1，收到 %q", p.EstimatedCEFR)
+		}
 	}
 	return nil
 }

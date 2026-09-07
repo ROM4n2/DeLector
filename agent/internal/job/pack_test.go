@@ -170,3 +170,16 @@ func TestPack_Validate_EstimatedCEFRWhitelist(t *testing.T) {
 		}
 	}
 }
+
+// TestPack_Validate_EstimatedCEFRWhitespaceOnlyRejected 钉住 B3 reviewer YELLOW
+// 收敛：非空但 trim 后为纯空白（如 "  "）的 estimated_cefr 是**非法**的——
+// python 端会 400，Go 不可静默落成默认 A2。只有原本为空的串才默认 A2。
+func TestPack_Validate_EstimatedCEFRWhitespaceOnlyRejected(t *testing.T) {
+	for _, v := range []string{"  ", "\t", "\n", " \t\n "} {
+		p := validPack()
+		p.EstimatedCEFR = v
+		if err := p.Validate(); err == nil {
+			t.Errorf("estimated_cefr=%q（纯空白但非空）应被拒，而非默认 A2", v)
+		}
+	}
+}
