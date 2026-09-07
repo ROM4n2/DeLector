@@ -25,6 +25,7 @@ from delector.core.database import (
     import_encounter_pack,
     list_encounter_texts,
 )
+from delector.nlp_engine import process_german_text
 
 router = APIRouter(prefix="/api/encounter", tags=["Encounter"])
 
@@ -118,6 +119,44 @@ def api_get_text(text_id: int) -> dict:
         "source": row["source"],
         "content": row["content"],
         "pack_json": row["pack_json"],
+    }
+
+
+def _annotate_tokens(sent_payload: dict) -> list:
+    """把 process_german_text 产出的单句 tokens 映射成 annotate 需要的
+    {text, lemma, pos}（标点也保留，前端自行过滤）；跳过纯空白伪 token。"""
+    out = []
+    for tok in sent_payload.get("tokens", []):
+        if tok.get("is_space"):
+            continue
+        out.append({"text": tok["text"], "lemma": tok["lemma"], "pos": tok["pos"]})
+    return out
+
+
+@router.get("/texts/{text_id:int}/annotate")
+def api_annotate_text(text_id: int) -> dict:
+    """逐句逐 token 注解（lemma + 粗粒度 POS），前端据此做已背词匹配。
+
+    读取 encounter_texts 正文，跑 spaCy（P0 直跑、禁缓存）。sentence idx 0-based
+    顺序；total_tokens = 各句 token 数之和。文本缺失 404。
+
+    零漂移保证：复用 process_german_text 产出的 tokens（已含 text/lemma/pos），
+    只做映射、不改其返回结构 —— analyze 契约不受影响（test_tools.py 钉住）。
+    """
+    row = get_encounter_text(text_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"短文未找到: {text_id}")
+
+    parsed = process_german_text(row["content"] or "")
+    sentences = [
+        {"idx": s["id"], "tokens": _annotate_tokens(s)}
+        for s in parsed["sentences"]
+    ]
+    total_tokens = sum(len(s["tokens"]) for s in sentences)
+    return {
+        "text_id": text_id,
+        "total_tokens": total_tokens,
+        "sentences": sentences,
     }
 
 
