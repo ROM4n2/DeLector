@@ -82,12 +82,12 @@ func (r *Registry) Run(ctx context.Context, name string, payload map[string]any)
 }
 
 // defaultTools 与 Python 侧 delector/tools/__init__.py 的 TOOL_REGISTRY
-// 实况对齐（5 工具；ADR-0009 后 exercise 已更名 writing_check）。
-// 新增/更名工具必须同步 ADR-0008 工具表与 registry_test.go 的
+// 实况对齐（6 工具；ADR-0009 后 exercise 已更名 writing_check；B1 新增
+// vocab_stats）。新增/更名工具必须同步 ADR-0008 工具表与 registry_test.go 的
 // TestDefaultRegistry_Golden 防漂移哨兵。
-var defaultTools = [...]string{"ingest", "analyze", "writing_check", "export", "tts"}
+var defaultTools = [...]string{"ingest", "analyze", "writing_check", "export", "tts", "vocab_stats"}
 
-// DefaultRegistry 构造预注册 5 个默认工具的 Registry：每个工具都是
+// DefaultRegistry 构造预注册 6 个默认工具的 Registry：每个工具都是
 // c.RunTool 的薄包装（闭包固定工具名）。预注册名是包级常量，重名只可能
 // 是编程错误，故经 mustRegister 构造期快速失败。
 func DefaultRegistry(c *pythonsvc.Client) *Registry {

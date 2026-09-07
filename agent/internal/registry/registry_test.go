@@ -144,20 +144,20 @@ func TestHas(t *testing.T) {
 
 // TestDefaultRegistry_Golden 防漂移哨兵：DefaultRegistry 的 List() 必须恰为
 // Python 侧 delector/tools/__init__.py 的 TOOL_REGISTRY 实况
-// （ingest / analyze / writing_check / export / tts；ADR-0009 后
-// exercise 已更名 writing_check）。任何一侧工具清单变更，必须同步
-// ADR-0008 工具表与本测试。
+// （ingest / analyze / writing_check / export / tts / vocab_stats；ADR-0009 后
+// exercise 已更名 writing_check，B1 新增 vocab_stats）。任何一侧工具清单变更，
+// 必须同步 ADR-0008 工具表与本测试。
 func TestDefaultRegistry_Golden(t *testing.T) {
 	// 不经网络：仅构造 Client（baseURL 指向不可达回环，无请求发出）。
 	c := pythonsvc.NewClient("http://127.0.0.1:1", nil)
 	got := DefaultRegistry(c).List()
-	want := []string{"analyze", "export", "ingest", "tts", "writing_check"}
+	want := []string{"analyze", "export", "ingest", "tts", "vocab_stats", "writing_check"}
 	if !slices.Equal(got, want) {
 		t.Errorf("DefaultRegistry().List() = %v，期望与 delector/tools/__init__.py TOOL_REGISTRY 对齐的 %v", got, want)
 	}
 }
 
-// TestDefaultRegistry_WrapsRunTool 钉住：DefaultRegistry 的 5 个工具均为
+// TestDefaultRegistry_WrapsRunTool 钉住：DefaultRegistry 的 6 个工具均为
 // c.RunTool 的薄包装（闭包固定 name，各自分发到正确的 /api/tools/{name}），
 // 全程走 httptest 本地桩，不触真实 Python 实例。
 func TestDefaultRegistry_WrapsRunTool(t *testing.T) {
