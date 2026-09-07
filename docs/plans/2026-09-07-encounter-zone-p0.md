@@ -210,6 +210,37 @@ POST /api/encounter/texts  (_require_localhost) → 手工加文本 {title,level
 ---
 
 ## Sub-Plan A 验收（交 B 前）
-- [ ] `pytest -v` 全绿（599+1 零回退，净增 encounter 测试）
-- [ ] 手工/TestClient 冒烟：加文本 → 列表 → 详情 → annotate → 高亮 → 进卡 → wb_state 镜像更新
-- [ ] `POST /api/encounter/import-pack`（schema `encounter-pack/v1`）可用（B 门禁前置依赖已就绪）
+
+> 收官勾绿见文末「执行状态（Sub-Plan A 收官）」。master 全门禁（含 Go DAG job#1 import-pack 真链路 + 双端手工）仍留 Sub-Plan B。
+
+- [x] `pytest -v` 全绿（实际 **673 全绿 + 1 skipped**，零回退，净增 encounter 测试）
+- [x] 手工/TestClient 冒烟：加文本 → 列表 → 详情 → annotate → 高亮 → 进卡 → wb_state 镜像更新（API 侧 7/7 PASS；前端高亮/进卡/wb 镜像由 A5/A6 探针 + 双端手工清单覆盖，双端手工仍列 Sub-Plan B 门禁）
+- [x] `POST /api/encounter/import-pack`（schema `encounter-pack/v1`）可用（B 门禁前置依赖已就绪；真链路对接 Go DAG job#1 留 Sub-Plan B）
+
+---
+
+## 执行状态（Sub-Plan A 收官）
+
+> 追加于 A7（2026-09-07）。Sub-Plan A 六任务（A1–A6）已在分支 `feature/encounter-job1`
+> 落地并经各自 CRV（Code Review Verdict）通过后提交；A7 收尾任务将验收门 A 侧勾绿。
+
+**逐任务提交哈希：**
+
+| Task | 提交 | 说明 |
+| --- | --- | --- |
+| A1 | `d5c1155` | `encounter_texts` 存储层 + CRUD + import 幂等（8 测试，CRV APPROVED） |
+| A2 | `fd4378f` | `/api/encounter` 路由 + import-pack 契约（26 测试，CRV APPROVED） |
+| A3 | `602ed21` | `/api/encounter/texts/{id}/annotate` 逐词注解（5 测试，CRV APPROVED；Y1 见偏差） |
+| A4 | `9956cf4` | 遇见区 SPA 骨架 + encounter.js + 入口卡（7 探针测试，CRV APPROVED；Y2 见偏差） |
+| A5 | `71d3d0e` | deck 桥已背词高亮 + 覆盖统计（11 测试，CRV APPROVED） |
+| A6 | `3b4242e` | 释义弹层一键进卡（仅入词不建卡）+ 会话小复习（17 测试，CRV APPROVED 含 REWORK 闭环） |
+
+**Reviewer 判定：** A1–A6 均 CRV APPROVED；A7 收尾将 A3/A4 两个 reviewer yellow（Y1/Y2）闭环（见偏差记录）。
+
+**偏差记录：**
+
+- **A3 Y1（此处闭环）**：`tests/test_encounter_annotate.py` 的德语真实词形用例 `geht`→`gehen`（依赖 spaCy 德模真实还原）原无降级保护——德模缺席时处理器静默降级纯 Python，`geht` lemma 退化成 `geht`，用例会误报。A7 已加守卫：镜像 `test_writing_rules.py` 对 `de_core_news_sm` 缺席 `pytest.skip` 的纪律，改为断言 processor 的 `NLP_ENGINE == "spacy"` 且 `nlp` 非空，否则 `pytest.mark.skipif` 干净跳过；未改任何断言。
+- **A4 Y2（此处闭环）**：`#view-encounter` 内联 `<style>`（A4–A6 期间累加的视图/按钮/弹层/小复习/已背词高亮 `.enc-*`/`.encounter-*` 规则）内联在前端 HTML 里不利维护。A7 已整体迁入 `static/style.css` 尾部单段 `/* 遇见区 encounter (P0) */` 注释区块并删除 index.html 内联块；**未改任何 id/class/HTML 结构**（`#view-encounter`/`#enc-popover`/`#enc-review`/`#enc-coverage`/`.enc-tok`/`.enc-known` 等探针锚点原样保留）。
+- **A6 REWORK RED-1（根因）**：一键进卡初版写 `cards` 带 `reps:0` 会造成「新词 reps=0 却已被预建卡」，与背词工作台队列语义相悖（工作台只把 `reps:0` 视为未背、卡不该提前出现）。根因即**卡（card）与工作台队列语义不一致**。修正后语义：**仅入词不建卡**——新词只追加到 word 存储（`reps` 由工作台真正背出后才置 >0），首次开工作台才进新词池/复习队列。见 A6 提交 `3b4242e`。
+
+**Sub-Plan A 验收门 A 侧：** 全绿勾选见上（import-pack/annotate/冒烟 API 侧 done；master 全门禁含 Go DAG job#1 import-pack 真链路与双端手工清单留 Sub-Plan B）。

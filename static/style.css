@@ -10118,3 +10118,301 @@ body.drawer-open .companion {
   box-shadow: 0 1px 4px rgba(21, 20, 15, 0.08);
 }
 
+
+/* ── 遇见区 encounter (P0)：自 index.html #view-encounter 内联 <style> 迁入 ──
+   视图/按钮/弹层/小复习/已背词高亮（A4–A6），逻辑归属见 static/js/encounter.js。 */
+
+.encounter-entry-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0.5rem;
+  padding: 0.9rem 1.1rem;
+  border: 1.5px solid var(--rule, #ccc);
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(255, 249, 235, 0.9), rgba(240, 248, 240, 0.9));
+  box-shadow: 3px 4px 0 rgba(26, 23, 20, 0.08);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.encounter-entry-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 3px 6px 0 rgba(26, 23, 20, 0.14);
+}
+.encounter-entry-emoji { font-size: 1.4rem; }
+.encounter-entry-title {
+  font-family: var(--serif, Georgia, serif);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink, #1a1714);
+}
+.encounter-entry-sub {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  color: var(--ink-mute, #6b6258);
+  margin-left: auto;
+}
+.encounter-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--ink, #1a1714);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.encounter-topbar h2 {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ink, #1a1714);
+}
+.encounter-subhead {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  color: var(--ink-mute, #6b6258);
+  letter-spacing: 0.02em;
+}
+.encounter-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.encounter-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1.5px solid var(--rule, #ccc);
+  border-radius: 9px;
+  background: var(--paper, #fff);
+  cursor: pointer;
+  box-shadow: 2px 3px 0 rgba(26, 23, 20, 0.06);
+  transition: transform 0.12s;
+}
+.encounter-card:hover { transform: translateY(-1px); }
+.encounter-card-title {
+  font-family: var(--serif, Georgia, serif);
+  font-weight: 700;
+  color: var(--ink, #1a1714);
+}
+.encounter-card-meta {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  color: var(--ink-mute, #6b6258);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.encounter-badge {
+  font-family: var(--mono, monospace);
+  font-size: 0.68rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.encounter-badge.A1 { color: #16a34a; }
+.encounter-badge.A2 { color: #ca8a04; }
+.encounter-badge.B1 { color: #dc2626; }
+.encounter-reader {
+  border: 1.5px solid var(--rule, #ccc);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 1.25rem;
+  background: var(--paper, #fff);
+}
+.encounter-reader-head { margin-bottom: 1rem; }
+.encounter-reader-head h3 {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 1.4rem;
+  color: var(--ink, #1a1714);
+  margin: 0.25rem 0;
+}
+.encounter-reader-source {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  color: var(--ink-mute, #6b6258);
+}
+.encounter-body p {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 1.05rem;
+  line-height: 1.9;
+  color: var(--ink, #1a1714);
+  margin: 0 0 1rem;
+}
+.encounter-add-form {
+  display: none;
+  flex-direction: column;
+  gap: 0.65rem;
+  border: 1.5px solid var(--rule, #ccc);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-top: 1rem;
+  background: var(--paper-accent, #fbf7f0);
+}
+.encounter-add-form.open { display: flex; }
+.encounter-add-form label {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  color: var(--ink-mute, #6b6258);
+}
+.encounter-add-form input,
+.encounter-add-form select,
+.encounter-add-form textarea {
+  width: 100%;
+  font-family: var(--sans, sans-serif);
+  font-size: 0.9rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--rule, #ccc);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink, #1a1714);
+}
+.encounter-form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.encounter-form-row > div { flex: 1 1 140px; }
+.encounter-form-error {
+  font-family: var(--mono, monospace);
+  font-size: 0.78rem;
+  color: var(--danger, #dc2626);
+  display: none;
+}
+.encounter-form-error.show { display: block; }
+.encounter-empty {
+  font-family: var(--mono, monospace);
+  font-size: 0.8rem;
+  color: var(--ink-mute, #6b6258);
+  padding: 1.25rem;
+  text-align: center;
+  border: 1px dashed var(--rule, #ccc);
+  border-radius: 9px;
+}
+/* A5：已背词逐 token 高亮 + 覆盖统计行 */
+.enc-tok { border-radius: 3px; padding: 0 0.5px; }
+.enc-tok.enc-known {
+  background: rgba(34, 197, 94, 0.16);
+  box-shadow: inset 0 -1.5px 0 rgba(34, 197, 94, 0.45);
+  border-radius: 3px;
+  cursor: default;
+}
+.enc-coverage {
+  font-family: var(--mono, monospace);
+  font-size: 0.78rem;
+  color: var(--ink-mute, #6b6258);
+  border: 1px dashed var(--rule, #ccc);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  margin-top: 1rem;
+}
+/* A6：未知生词可点（enc-unk）——点开释义弹层 */
+.enc-tok.enc-unk {
+  cursor: pointer;
+  border-bottom: 1px dotted rgba(220, 38, 38, 0.5);
+}
+.enc-tok.enc-unk:hover { background: rgba(220, 38, 38, 0.08); }
+/* A6：#enc-popover 点词释义弹层（fixed 定位在点词附近，复用既有视觉变量） */
+.enc-popover {
+  display: none;
+  position: fixed;
+  z-index: 1200;
+  width: 280px;
+  max-width: min(88vw, 320px);
+  border: 1.5px solid var(--rule, #ccc);
+  border-radius: 10px;
+  background: var(--paper, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 0.7rem 0.85rem;
+  font-family: var(--sans, sans-serif);
+}
+.enc-popover.open { display: block; }
+.enc-pop-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+.enc-pop-head strong {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 1.15rem;
+  color: var(--ink, #1a1714);
+}
+.enc-pop-pos {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  color: var(--ink-mute, #6b6258);
+}
+.enc-pop-close {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-mute, #6b6258);
+}
+.enc-pop-gloss {
+  font-size: 0.92rem;
+  color: var(--ink, #1a1714);
+  min-height: 1.2em;
+  margin-bottom: 0.5rem;
+  word-break: break-word;
+}
+.enc-pop-gloss.enc-pop-loading,
+.enc-pop-gloss.enc-pop-none {
+  color: var(--ink-mute, #6b6258);
+  font-family: var(--mono, monospace);
+  font-size: 0.78rem;
+}
+.enc-pop-add { width: 100%; }
+.enc-pop-status { font-size: 0.78rem; margin-top: 0.4rem; min-height: 1em; }
+.enc-pop-status.ok { color: #16a34a; }
+.enc-pop-status.err { color: var(--danger, #dc2626); }
+/* A6：#enc-review 读完小复习（会话刚加入词）+ 小开关 */
+.enc-review-toggle {
+  display: block;
+  margin-top: 1rem;
+  font-family: var(--mono, monospace);
+  font-size: 0.78rem;
+}
+.enc-review {
+  border: 1.5px dashed var(--rule, #ccc);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-top: 1rem;
+  background: var(--paper-accent, #fbf7f0);
+}
+.enc-review-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.enc-review-head h4 {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 1.05rem;
+  color: var(--ink, #1a1714);
+  margin: 0;
+}
+.enc-review-collapse {
+  margin-left: auto;
+  border: 1px solid var(--rule, #ccc);
+  background: var(--paper, #fff);
+  border-radius: 6px;
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.enc-review-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.enc-rev-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--rule, #ccc);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--paper, #fff);
+  font-size: 0.92rem;
+}
+.enc-rev-front { font-weight: 600; color: var(--ink, #1a1714); }
+.enc-rev-gloss { color: var(--ink-mute, #6b6258); }
+.enc-rev-speak {
+  margin-left: auto;
+  border: 1px solid var(--rule, #ccc);
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px 8px;
+}
+.enc-review-note {
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  color: var(--ink-mute, #6b6258);
+  margin-top: 0.4rem;
+}

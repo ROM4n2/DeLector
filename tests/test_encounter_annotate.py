@@ -30,6 +30,24 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from delector.server import app  # noqa: E402
 from delector.core import database  # noqa: E402
+from delector.nlp_engine import processor as _enc_nlp  # noqa: E402
+
+
+def _de_spacy_model_loaded() -> bool:
+    """annotate 跑 process_german_text → processor 模块级 nlp（spaCy 德模）。
+
+    'geht'→'gehen' 是 spaCy 真实词形还原，德模缺席时处理器静默降级纯 Python
+    （lemma 退化成 'geht'）。这里钉的是「真模型是否生效」，与 test_writing_rules.py
+    对 de_core_news_sm 缺席就 pytest.skip 的纪律一致：模型不在就干净跳过，
+    不让真实词形用例在降级路径上误报绿/红。
+    """
+    return _enc_nlp.NLP_ENGINE == "spacy" and _enc_nlp.nlp is not None
+
+
+_SKIP_NO_DE_MODEL = pytest.mark.skipif(
+    not _de_spacy_model_loaded(),
+    reason="spaCy 德语模型（de_core_news_sm/md）不可用，跳过真实词形还原用例",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -102,6 +120,7 @@ def test_annotate_returns_expected_shape(local_client):
 
 # ── 德语真实词形：geht → gehen（de_core_news_sm 真 lemma） ───────────────────
 
+@_SKIP_NO_DE_MODEL
 def test_annotate_german_lemma_gehen(local_client):
     """含 'geht' 的句子必须产出 lemma=='gehen'（spaCy 真实词形还原）。"""
     text_id = _create_text(local_client, content="Er geht heute nach Hause.")

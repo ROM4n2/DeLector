@@ -53,7 +53,19 @@
 - **测试位置（2026-09-05 起，09-06 更新）**：27 个测试模块全部在 `tests/`，根目录 `conftest.py` 负责把仓库根插进 sys.path —— `pytest` 不像 `python -m pytest` 那样把当前工作目录加进 sys.path；Phase 2 收包后 tests 统一 `from delector import …`，而 `import delector` 同样依赖根在 sys.path，**所以这个 conftest 长期需要、不能删**（文件内注释已更正）。跑法不变：仓库根 `pytest -v`。
 - **Phase 2 后端收包（2026-09-06 完成）**：26 个业务模块收进 `delector/` 包（只加包层级、不改文件名），tests 统一改 `from delector import …`；根目录只剩 `start.py` / `package_windows.py` / `conftest.py`。打包面联动：Windows `package_windows.py` hiddenimports 加 `delector.` 前缀、CI Linux/macOS 同步加前缀并**补漏 routes_a2**、Android 改整目录拷贝（消灭逐个清单漏文件的维护面）、Windows spec 探针改包路径。v5.3.0 发版面不受影响，未到 release 刷新时机。
 - 发布面：正式版 **v5.3.0**（源码版）；Android versionName 5.3.0 / versionCode 50300（CI 从 tag 推导）；桌面端正常，`python start.py` → `http://localhost:8000`。
-- **开放待办**：① v5.3.0 打包资产——Windows/macOS/Linux 便携包与 Android APK 待打包、GitHub Release 资产待补录（README 下载表已标注「源码版·打包中」）；② 新功能候选：多模态听力微训 / 语料长难句强化立项。
+- **遇见区 P0（Sub-Plan A，2026-09-07 收官，分支 `feature/encounter-job1`）**：手选分级短篇 → 阅读视图按本机背词工作台 deck 把**已背词高亮** + 覆盖统计 → 生词点选看本地词典释义 → 一键进卡（写回 deck + wb 同步）→ 读完会话小复习。落地：`encounter_texts` 库（与 `articles` 同库同批）+ `/api/encounter{list,detail,add,annotate,import-pack}`（`encounter-pack/v1` 契约跨 A/B 共用，import 幂等）+ SPA `view-encounter`（`encounter.js` / `deck-bridge.js`，高亮/释义/进卡/小复习）。测试基线 **673 全绿 + 1 skipped**（净增 encounter 各层测试，模块图/切片/register 守卫全过），API TestClient 冒烟 7/7 PASS。完整执行状态与偏差见 `docs/plans/2026-09-07-encounter-zone-p0.md`「执行状态（Sub-Plan A 收官）」；master 门禁（含 Go DAG job#1 import-pack 真链路）留 Sub-Plan B。
+- **开放待办**：① v5.3.0 打包资产——Windows/macOS/Linux 便携包与 Android APK 待打包、GitHub Release 资产待补录（README 下载表已标注「源码版·打包中」）；② 新功能候选：多模态听力微训 / 语料长难句强化立项；③ 遇见区 Sub-Plan B——把 A2 import-pack 接到 Go DAG job#1 真链路并过 master 全门禁。
+
+### 遇见区 P0 双端手工冒烟清单（Sub-Plan A 收官）
+
+桌面源码实例与 Android Chaquopy 实例各跑一遍（A7 验收）：
+
+1. 背词工作台至少背 **≥3 词**，使其 `reps > 0`（进复习队列的前提）。
+2. 遇见区加一篇短文（标题/等级/来源/正文）。
+3. 打开短文详情，断言**已背词被高亮**、覆盖统计覆盖数 **> 0**。
+4. 点一个未知词，断言弹层出现**本地词典释义**。
+5. 点「加入卡片」，断言词写入 deck 存储、触发本机 wb 同步镜像。
+6. 重开背词工作台，断言新词出现在**新词池/复习队列**。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 
