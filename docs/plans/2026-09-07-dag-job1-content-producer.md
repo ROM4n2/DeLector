@@ -279,7 +279,53 @@ func RunEncounterPack(ctx context.Context, t *registry.Registry, g GlossLLM, cfg
 ---
 
 ## Sub-Plan B 验收（Master 门禁 B 侧）
-- [ ] `go test -count=1 -race ./...`（agent/ 全包）绿
-- [ ] `go test -tags integration` 真链路绿（6 工具 + import-pack 命中）
-- [ ] Python 全量 `pytest -v` 零回退（含 vocab_stats 新测试净增）
-- [ ] `delector job run encounter-pack --dry-run` 与真实 run 在作者桌面各冒烟一档（LLM stub/真实各记）
+- [x] `go test -count=1 -race ./...`（agent/ 全包）绿（2026-09-07 收官复跑，见文末状态块）
+- [x] `go test -tags integration` 真链路绿（6 工具 + import-pack 命中，`TestEncounterRealChain` PASS）
+- [x] Python 全量 `pytest -v` 零回退（**686 passed + 1 skipped**，vocab_stats 新测试净增）
+- [x] `delector job run encounter-pack --dry-run` 与真实 run 各冒烟一档（stub LLM 记录，见文末状态块第 3 条）
+
+---
+
+## 执行状态（Sub-Plan B 收官）
+
+> 追加于 B9（2026-09-07）。Sub-Plan B 八任务（B1–B8）已在分支 `feature/encounter-job1`
+> 落地并经各自 CRV（Code Review Verdict）通过后提交；B9 收尾任务将验收门 B 侧勾绿、
+> 复跑全量门禁、补偏差记录与状态文档。真实 DeepSeek 冒烟档因桌面无 key 记为
+> PENDING-作者（stub 档已记录，见下）。
+
+**逐任务提交哈希：**
+
+| Task | 提交 | 说明 |
+| --- | --- | --- |
+| B1 | `a1e4245` | `vocab_stats` 第 6 号 leaf 工具 + 三处清单同步（12 测试，全量 686+1，CRV APPROVED；黄注释闭，A2 词源偏差正当，见偏差 a） |
+| B2 | `2e00f4c` | corpus 语料扫描（递归/过滤/去重/限量/排序，8 测试 -race，CRV APPROVED） |
+| B3 | `3dd4177` | `internal/job` Pack schema（encounter-pack/v1 tag 对齐 A2）+ TokenBudget 护栏（13 测试 -race，CRV APPROVED；黄 1 枚已由 B5 闭，见偏差 b） |
+| B4 | `39558ff` | gloss 步骤（GlossLLM+prompt+容错 JSON 解析，20 用例 -race，CRV APPROVED） |
+| B5 | `9ddeb4b` | encounter-pack DAG 预设（analyze→vocab_stats→gloss→export 原子落盘）+ 闭 B3 黄（CRV APPROVED；2 黄记账，见偏差 b） |
+| B6 | `6c3e392` | runner 调度（worker-pool 并发/共享预算/退避投递/fail 隔离，7 测试 -race，CRV APPROVED；黄 YAGNI 见偏差 e） |
+| B7 | `77ce8d4` | cobra `job run encounter-pack` + run/job 共享 supervisor helper（CRV APPROVED；零卡；导出 helper 超出 Files 见偏差 c） |
+| B8 | `13d8535` | integration 真链路门禁 + 修复 deliver 投递信封 `{pack}`（集成红卡闭环，`TestEncounterRealChain` PASS，CRV APPROVED；缺陷信封见偏差 d） |
+
+**Reviewer 判定：** B1–B8 均 CRV APPROVED；各 reviewer yellow（黄）均已闭环或在偏差中记账，
+无遗留红卡。
+
+**偏差记录：**
+
+- **（a）B1 —— A2 词集取用偏差（正当）**：计划契约本拟以「装饰 hw（含定冠词如 `das Abenteuer`）」匹配已知词，但 vocab_stats 的 `tokens` 来自 spaCy analyze，`lemma` 已还原成无装饰的原形（`Abenteuer`）。为对齐 A2 词集又避免键不匹配，B1 用 A2 `exam_catalog` 词条的**同源常量 `lemma-key`**（去装饰、无定冠词）构建 known 集合——与 A1/A2 词表口径一致且不内嵌新词表，语义正当（deviation approved by CRV）。
+- **（b）B3 黄修复并入 B5**：B3 `pack.go` 的某条 reviewer 黄色改进点（细节入 B3 commit）未在 B3 原地闭环，B5 落地时一并修入（见 B5 提交说明「+ 闭 B3 黄」）；B5 另带 2 条记账黄（差异收口、字段注释），在 B5 CRV 已 approved 记账。
+- **（c）B7 超出计划 Files**：B7 为让 `run`/`job` 复用 supervisor 启动路径（python resolve / srcDir / extraEnv / baseURLForPort）而不复制粘贴长逻辑，从 `cmd/delector/main.go` 抽出 **+2 个导出 helper**（授权单源共享），超出计划 Task B7 列出的 Files。属既有事实提示的「抽公共函数供 run/job 共用」执行，非架构新增，CRV approved。
+- **（d）B8 —— 集成门禁抓出 B6-A2 投递信封缺陷（红卡闭环）**：B6 runner 投递 `POST /api/encounter/import-pack` 时最初以**裸 `Pack` JSON 作为 body** 直接 POST，而 A2 契约（`ImportPackRequest.pack`）要求请求体为 `{pack: <Pack>}` 信封——真链路因此 422（`Field required`，loc=[body,pack]）。集成红卡在 B8 抓出；B8 修复 runner `deliverPack` 先经 `envelopePack` 包裹（`json.RawMessage` 原封嵌入，pack 内部字段零重编码）再 POST，并强化 `TestRunner_DeliverBackoff` 断言外层含 `pack` 键且内层解析后 `schema == encounter-pack/v1`，`TestEncounterRealChain` 全链路 200 闭环。此为「非集成单测（httptest 自身定义期望）恒绿、真契约在集成层才暴露」的经典教训，已固化为集成门禁资产。
+- **（e）envelopePack 未显式 `json.Valid`（黄，上游保证）**：投递信封解析处未对收到的 body 显式跑 `json.Valid`，依赖 Go `json.Unmarshal` 天然校验 + 上游（A2 import-pack / 本仓 runner 落盘）均为本仓合法 JSON。YAGNI 记账，不额外加层。
+
+**Sub-Plan B 验收门 B 侧（2026-09-07 B9 收官复跑）：**
+
+1. `go test -count=1 -race ./...`（agent/ 全包）**绿**——gofmt `-l` 空 + `go vet ./...` 空 + 全包 `-race` PASS。
+2. `go test -count=1 -tags integration ./...` **绿**——`TestEncounterRealChain` PASS（`tools=[analyze export ingest tts vocab_stats writing_check] packs=2 texts=[im_supermarkt mein_tag]`，import-pack 200）。
+3. Python 全量 `pytest -q`（仓库根）**686 passed + 1 skipped** 零回退（B1 前基线 = Sub-Plan A 收官 673+1；B1 起 vocab_stats 新测试净增 → B9 终值 686+1）。
+4. 冒烟（stub 档，见下第 3 条 dry-run + 真实 run）。
+
+**Sub-Plan B 收官冒烟记录：**
+
+- **CLI wiring（dry-run）**：`go run ./cmd/delector job run encounter-pack --corpus <tmp2篇A1> --out <tmp>/out --dry-run` → 自动 supervisor 起 python、列出预排 `packs=2 failed=0`、退出码 **0**（confirm 接线与 dry-run 清单语义）。
+- **CLI 真实 run（stub LLM）**：同一 2 篇 fixture，`--deliver-url "" --llm-base-url http://127.0.0.1:18999`（本地 stub DeepSeek 桩，回吐固定 GlossResult JSON）→ supervisor python 真跑 `analyze`/`vocab_stats`、stub gloss、export 原子落盘 → `packs=2 failed=0`、退出码 **0**，产出 `supermarkt-2c6a3304.pack.json` 与 `mein-tag-c282b89f.pack.json`（`encounter-pack/v1` schema 可回读、`Validate()` 过）。
+- **PENDING-作者（真实 LLM 档）**：桌面无 `DEEPSEEK_API_KEY`（已确认缺席），未做真实 gloss。作者桌面配 key 后按 Task B9 交付物真跑 2 篇 fixture 并记录 token 消耗即可补齐；验收门经 stub 档满足（Master 计划允许「stub 记录一档」）。

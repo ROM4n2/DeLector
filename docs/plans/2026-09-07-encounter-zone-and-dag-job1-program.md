@@ -32,4 +32,22 @@
 
 ## 执行状态
 
-> 待 /vault-exec 执行（Sub-Plan A → B）。完成后回填：A/B 各 Task commit + CRV 裁定 + 偏差记录，并同步更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 与 README 路线图。
+> 回填于两子计划收官（Sub-Plan A = A7 于 `2026-09-07`；Sub-Plan B = B9 于 `2026-09-07`）。
+> 均已各自 CRV APPROVED 后原子提交；A/B 偏差与验收门勾选详见两子计划文末执行状态块。
+
+**Sub-Plan A（遇见区 P0）**：提交区间 `d5c1155..2d78c09`（A1–A6 + A7 收官），全 CRV APPROVED，
+偏差（skip 守卫 / CSS 迁移 / A6 REWORK）已闭环；验收门 A 侧全绿（import-pack/annotate/API 冒烟 done）。
+
+**Sub-Plan B（Go DAG job#1）**：提交区间 `a1e4245..13d8535`（B1–B8 + B9 收官），全 CRV APPROVED，
+偏差 5 条记账（a 词源常量 lemma-key / b B3 黄并入 B5 / c B7 导出 helper / d B8 投递信封红卡修复 /
+e envelopePack 未显式 json.Valid）；验收门 B 侧全绿（race / integration 真链路 / pytest 686+1 / 冒烟）。
+
+**验收门状态（Master 门 4 条）：**
+
+- [x] Python `pytest -v` 全绿（**686 passed + 1 skipped**，599+1 基线零回退，新增测试净增）
+- [x] `cd agent && gofmt -l .`（空）+ `go vet ./...` + `go test -count=1 -race ./...` 全绿
+- [x] `go test -tags integration`：真 DAG → 真 Python 工具（vocab_stats）→ LLM(stub) → cardpack 文件 → POST import-pack → GET /api/encounter/texts 命中，全链路 200（`TestEncounterRealChain` PASS）
+- [ ] 遇见区 P0 手选短文在「桌面源码实例 + Android Chaquopy 实例」双端手工可用（Android 手工清单见 A Task 7）——**PENDING-作者**（需作者在双端手工跑 A7 清单；仓库可跑门禁为 stub/集成形态，真实双端不在 CI）
+- [ ] 真实 DeepSeek 冒烟档——**PENDING-作者**（桌面无 `DEEPSEEK_API_KEY`；作者配 key 后真跑 gloss 并记录 token 消耗，计划允许无 key 时以 stub 记一档）
+
+状态同步：`WORKMEMORY/PROJECT_OVERVIEW.md` 当前状态已更新（agent 从壳变首个真执行 job#1）；README 路线图已加 Sub-Plan B 完成行。
