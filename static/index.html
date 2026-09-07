@@ -127,6 +127,220 @@
         <span class="section-title">文稿库 · LIBRARY</span>
       </div>
       <div id="article-list"></div>
+
+      <div class="encounter-entry-card" onclick="show('encounter')" role="button" tabindex="0">
+        <span class="encounter-entry-emoji">🌱</span>
+        <span class="encounter-entry-title">遇见区 i+1 短文</span>
+        <span class="encounter-entry-sub">手选分级德语短篇 · Begegnungszone</span>
+      </div>
+    </main>
+
+    <!-- ── View: 遇见区 · Encounter Zone (P0) ───────────────────── -->
+    <main id="view-encounter" class="view">
+      <style>
+        .encounter-entry-card {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin: 1.5rem 0 0.5rem;
+          padding: 0.9rem 1.1rem;
+          border: 1.5px solid var(--rule, #ccc);
+          border-radius: 10px;
+          background: linear-gradient(90deg, rgba(255, 249, 235, 0.9), rgba(240, 248, 240, 0.9));
+          box-shadow: 3px 4px 0 rgba(26, 23, 20, 0.08);
+          cursor: pointer;
+          transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .encounter-entry-card:hover {
+          transform: translateY(-1px);
+          box-shadow: 3px 6px 0 rgba(26, 23, 20, 0.14);
+        }
+        .encounter-entry-emoji { font-size: 1.4rem; }
+        .encounter-entry-title {
+          font-family: var(--serif, Georgia, serif);
+          font-weight: 700;
+          font-size: 1.05rem;
+          color: var(--ink, #1a1714);
+        }
+        .encounter-entry-sub {
+          font-family: var(--mono, monospace);
+          font-size: 0.72rem;
+          color: var(--ink-mute, #6b6258);
+          margin-left: auto;
+        }
+        .encounter-topbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 1.75rem;
+          padding-bottom: 1rem;
+          border-bottom: 2px solid var(--ink, #1a1714);
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+        .encounter-topbar h2 {
+          font-family: var(--serif, Georgia, serif);
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: var(--ink, #1a1714);
+        }
+        .encounter-subhead {
+          font-family: var(--mono, monospace);
+          font-size: 0.72rem;
+          color: var(--ink-mute, #6b6258);
+          letter-spacing: 0.02em;
+        }
+        .encounter-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .encounter-card {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.85rem 1rem;
+          border: 1.5px solid var(--rule, #ccc);
+          border-radius: 9px;
+          background: var(--paper, #fff);
+          cursor: pointer;
+          box-shadow: 2px 3px 0 rgba(26, 23, 20, 0.06);
+          transition: transform 0.12s;
+        }
+        .encounter-card:hover { transform: translateY(-1px); }
+        .encounter-card-title {
+          font-family: var(--serif, Georgia, serif);
+          font-weight: 700;
+          color: var(--ink, #1a1714);
+        }
+        .encounter-card-meta {
+          font-family: var(--mono, monospace);
+          font-size: 0.72rem;
+          color: var(--ink-mute, #6b6258);
+          margin-left: auto;
+          white-space: nowrap;
+        }
+        .encounter-badge {
+          font-family: var(--mono, monospace);
+          font-size: 0.68rem;
+          padding: 1px 7px;
+          border-radius: 999px;
+          border: 1px solid currentColor;
+        }
+        .encounter-badge.A1 { color: #16a34a; }
+        .encounter-badge.A2 { color: #ca8a04; }
+        .encounter-badge.B1 { color: #dc2626; }
+        .encounter-reader {
+          border: 1.5px solid var(--rule, #ccc);
+          border-radius: 10px;
+          padding: 1.25rem 1.5rem;
+          margin-top: 1.25rem;
+          background: var(--paper, #fff);
+        }
+        .encounter-reader-head { margin-bottom: 1rem; }
+        .encounter-reader-head h3 {
+          font-family: var(--serif, Georgia, serif);
+          font-size: 1.4rem;
+          color: var(--ink, #1a1714);
+          margin: 0.25rem 0;
+        }
+        .encounter-reader-source {
+          font-family: var(--mono, monospace);
+          font-size: 0.72rem;
+          color: var(--ink-mute, #6b6258);
+        }
+        .encounter-body p {
+          font-family: var(--serif, Georgia, serif);
+          font-size: 1.05rem;
+          line-height: 1.9;
+          color: var(--ink, #1a1714);
+          margin: 0 0 1rem;
+        }
+        .encounter-add-form {
+          display: none;
+          flex-direction: column;
+          gap: 0.65rem;
+          border: 1.5px solid var(--rule, #ccc);
+          border-radius: 10px;
+          padding: 1rem 1.25rem;
+          margin-top: 1rem;
+          background: var(--paper-accent, #fbf7f0);
+        }
+        .encounter-add-form.open { display: flex; }
+        .encounter-add-form label {
+          font-family: var(--mono, monospace);
+          font-size: 0.72rem;
+          color: var(--ink-mute, #6b6258);
+        }
+        .encounter-add-form input,
+        .encounter-add-form select,
+        .encounter-add-form textarea {
+          width: 100%;
+          font-family: var(--sans, sans-serif);
+          font-size: 0.9rem;
+          padding: 0.4rem 0.55rem;
+          border: 1px solid var(--rule, #ccc);
+          border-radius: 6px;
+          background: #fff;
+          color: var(--ink, #1a1714);
+        }
+        .encounter-form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .encounter-form-row > div { flex: 1 1 140px; }
+        .encounter-form-error {
+          font-family: var(--mono, monospace);
+          font-size: 0.78rem;
+          color: var(--danger, #dc2626);
+          display: none;
+        }
+        .encounter-form-error.show { display: block; }
+        .encounter-empty {
+          font-family: var(--mono, monospace);
+          font-size: 0.8rem;
+          color: var(--ink-mute, #6b6258);
+          padding: 1.25rem;
+          text-align: center;
+          border: 1px dashed var(--rule, #ccc);
+          border-radius: 9px;
+        }
+      </style>
+      <div class="encounter-topbar">
+        <div>
+          <h2>遇见区 · Begegnungszone</h2>
+          <div class="encounter-subhead">i+1 Lesen · 手选分级短篇，读完进词卡</div>
+        </div>
+        <button id="encounter-add-toggle" class="btn btn-accent" onclick="encounterToggleAddForm()">
+          ＋ 加文本
+        </button>
+      </div>
+
+      <div id="encounter-add-form" class="encounter-add-form">
+        <div class="encounter-form-row">
+          <div>
+            <label for="enc-f-title">标题 *</label>
+            <input id="enc-f-title" type="text" placeholder="短篇标题" />
+          </div>
+          <div>
+            <label for="enc-f-level">等级</label>
+            <select id="enc-f-level">
+              <option value="A1">A1</option>
+              <option value="A2" selected>A2</option>
+              <option value="B1">B1</option>
+            </select>
+          </div>
+          <div>
+            <label for="enc-f-source">来源</label>
+            <input id="enc-f-source" type="text" placeholder="出处（可选）" />
+          </div>
+        </div>
+        <div>
+          <label for="enc-f-content">正文 *（段落间空一行 \n\n）</label>
+          <textarea id="enc-f-content" rows="6" placeholder="在此粘贴德语短文正文"></textarea>
+        </div>
+        <div class="encounter-form-row">
+          <button class="btn btn-dark" onclick="encounterSubmitAdd()">保存并加入列表</button>
+          <button class="btn btn-ghost" onclick="encounterCancelAdd()">取消</button>
+        </div>
+        <div id="enc-add-error" class="encounter-form-error"></div>
+      </div>
+
+      <div id="encounter-text-list" class="encounter-list"></div>
+      <div id="encounter-reader" class="encounter-reader" style="display:none"></div>
     </main>
 
     <!-- ── View 2: Reader Workspace ───────────────────────────── -->

@@ -148,6 +148,14 @@ import {
 } from "./writer.js";
 import * as A1Hoeren from "./a1_hoeren.js";
 import * as A1Lesen from "./a1_lesen.js";
+import {
+  showView,
+  openText,
+  backToList,
+  toggleAddForm,
+  cancelAdd,
+  submitAddText,
+} from "./encounter.js";
 
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
@@ -222,6 +230,7 @@ export function show(view) {
     loadWriterEssays();
     setupEditorListeners();
   }
+  if (view === "encounter") showView();
 }
 
 // ── Exam Domain Module Tabs (ADR-0005 Task 2) ───────────────────────────────
@@ -1039,6 +1048,13 @@ Object.assign(window, {
 
   // Companion Mascot System
   Companion,
+
+  // Encounter Zone (遇见区) view hooks (inline onclick handlers in index.html)
+  encounterOpenText: openText,
+  encounterBackToList: backToList,
+  encounterToggleAddForm: toggleAddForm,
+  encounterCancelAdd: cancelAdd,
+  encounterSubmitAdd: submitAddText,
 
   // Goethe A1 Exam Engines
   A1Hoeren,
