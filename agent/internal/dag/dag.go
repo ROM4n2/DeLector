@@ -7,8 +7,9 @@
 // 超时错误经 %w 包装，调用方以 errors.Is(err, context.DeadlineExceeded)
 // 判定（禁字符串比较）。
 //
-// 依赖方向：dag 位于 registry 之下（cmd → registry → dag → pythonsvc/llm），
-// 本包不 import 它们，由调用方在组装层把 ToolFunc 适配为 StepFunc。
+// 依赖方向：dag 位于 registry 之下（cmd → registry → dag → pythonsvc/llm）。
+// 本包作为消费侧 import registry（见 presets.go：ArticleAnalysisDAG 工厂），
+// registry 不反向 import dag（无环）；调用方在组装层把 ToolFunc 适配为 StepFunc。
 package dag
 
 import (

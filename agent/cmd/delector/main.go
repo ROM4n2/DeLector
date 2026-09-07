@@ -1,24 +1,25 @@
 // Command delector 是 DeLector 的 Go Agent Runtime CLI 入口。
 //
-// Phase 2a Task 1 仅钉住脚手架契约：
+// 子命令：
 //   - delector version  → 输出 "delector <semver>"
-//   - delector run      → 占位，待 DAG scheduler（Task 4）接入后实现
+//   - delector run      → 起 Python 托管进程 + 挂工具 registry + 暴露
+//     article-analysis DAG 预设，常驻至 SIGINT/SIGTERM（Phase 2b T2 真实现）。
 //
 // 架构见 docs/specs/2026-09-06-adr-0008-go-agent-runtime-architecture.md。
 package main
 
 import (
-	"errors"
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/ROM4n2/DeLector/agent/internal/app"
 	"github.com/spf13/cobra"
 )
 
 // version 为语义化版本号；输出与测试引用同一常量，防止契约漂移。
 const version = "0.1.0"
-
-// errNotImplemented 是 run 子命令的占位哨兵错误。
-var errNotImplemented = errors.New("run: not implemented")
 
 func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -40,16 +41,40 @@ func newVersionCmd() *cobra.Command {
 	}
 }
 
-// newRunCmd 注册 run 子命令占位。
-// TODO(phase2a-task4): 接入 DAG scheduler 后实现 --dag <name> 执行链路。
+// newRunCmd 注册 run 子命令（Phase 2b T2 真实现）：起 Python 托管进程 +
+// 挂工具 registry + 暴露 article-analysis DAG 预设，常驻至 Ctrl+C。
+// 支持 --port / --data-dir flag。
 func newRunCmd() *cobra.Command {
-	return &cobra.Command{
+	var port int
+	var dataDir string
+	cmd := &cobra.Command{
 		Use:   "run",
-		Short: "执行一条预定义 DAG 工具链（尚未实现）",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return errNotImplemented
+		Short: "起 Python 托管进程并暴露 article-analysis DAG 工具链（常驻至 Ctrl+C）",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			opts := app.Options{
+				Port:           port,
+				DataDir:        dataDir,
+				PythonExtraEnv: extraEnvFromOS(),
+			}
+			// SIGINT/SIGTERM → ctx 取消 → supervisor 优雅退出（见 app.Run）。
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return app.Run(ctx, opts)
 		},
 	}
+	cmd.Flags().IntVar(&port, "port", 8001, "托管 Python 实例监听端口（默认 8001）")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "数据目录（注入 DATABASE_PATH / DELECTOR_DATA_DIR，空串跳过）")
+	return cmd
+}
+
+// extraEnvFromOS 透传凭证类环境变量到托管 Python 子进程（仅环境变量，
+// 绝不内嵌 key）。当前仅 DEEPSEEK_API_KEY；缺失则返回 nil（Run 自动补
+// PYTHONIOENCODING / PYTHONPATH）。
+func extraEnvFromOS() []string {
+	if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" {
+		return []string{"DEEPSEEK_API_KEY=" + v}
+	}
+	return nil
 }
 
 var rootCmd = newRootCmd()

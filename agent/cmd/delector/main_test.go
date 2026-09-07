@@ -27,15 +27,17 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
-// TestRunCommandNotImplemented 钉住 run 子命令占位契约：
-// 本 Task（Phase 2a Task 1）只注册占位，调用必须返回 not implemented 错误。
-func TestRunCommandNotImplemented(t *testing.T) {
-	rootCmd.SetArgs([]string{"run"})
+// TestRunCommandStartupValidation 断言 run 启动失败路径（参数校验）：
+// Phase 2b T2 后 run 已真实现；非法 --port 在装配前被 validateOpts 拒绝，
+// 必须返回错误且不含「not implemented」占位哨兵。此测试不触网（失败发生在
+// 起 Python 之前），保证常规 `go test ./...` 快速且确定性绿。
+func TestRunCommandStartupValidation(t *testing.T) {
+	rootCmd.SetArgs([]string{"run", "--port", "70000"})
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Fatal("run 子命令为占位实现，执行应当返回错误")
+		t.Fatal("run 子命令对非法 --port 应返回启动失败错误")
 	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Errorf("run 占位错误信息应包含 %q，实际错误: %v", "not implemented", err)
+	if strings.Contains(err.Error(), "not implemented") {
+		t.Errorf("run 已实现，不应再返回 not implemented，实际错误: %v", err)
 	}
 }
