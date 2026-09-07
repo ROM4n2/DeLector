@@ -236,11 +236,11 @@ func TestRunner_FailIsolation(t *testing.T) {
 	}
 }
 
-// ---- 4) 投递：body schema + 429 重试成功 + 500 耗尽重试 ---------------------------
+// ---- 4) 投递：body envelope schema + 429 重试成功 + 500 耗尽重试 ------------------
 
 // TestRunner_DeliverBackoff 断言投递语义（httptest 桩）：
-//   - 每成功 pack 都被 POST /api/encounter/import-pack，body 解析为 Pack 且
-//     schema == encounter-pack/v1；
+//   - 每成功 pack 都被 POST /api/encounter/import-pack，body 为 {"pack": <pack>}
+//     信封：外层含 pack 键，且内层 pack 解析后 schema == encounter-pack/v1；
 //   - retry 篇：服务端先回 429、429 再 200 → 经 2 次重试成功，留 Packs；
 //   - alwaysfail 篇：服务端恒 500 → 恰 1 初始 + 3 重试 = 4 次请求后记入 Failed；
 //   - 幂等/多请求计数断言。
@@ -262,9 +262,22 @@ func TestRunner_DeliverBackoff(t *testing.T) {
 			t.Errorf("投递路径应为 %q，实得 %q", deliverEndpoint, r.URL.Path)
 		}
 		body, _ := io.ReadAll(r.Body)
+		var env struct {
+			Pack json.RawMessage `json:"pack"`
+		}
+		if err := json.Unmarshal(body, &env); err != nil {
+			t.Errorf("投递 body 外层应含 pack 信封键，解析失败: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(env.Pack) == 0 {
+			t.Errorf("投递 body 外层应含非空 pack 键")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		var p Pack
-		if err := json.Unmarshal(body, &p); err != nil {
-			t.Errorf("投递 body 应可解析为 Pack: %v", err)
+		if err := json.Unmarshal(env.Pack, &p); err != nil {
+			t.Errorf("投递 body 内层 pack 应可解析为 Pack: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

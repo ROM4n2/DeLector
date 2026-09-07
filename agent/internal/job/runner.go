@@ -17,6 +17,7 @@ package job
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -205,7 +206,22 @@ outer:
 
 // ---- 投递 ----------------------------------------------------------------------
 
+// envelopePack 把 pack 的原始 JSON 包成 A2 Python 端点期望的请求体形状
+// {"pack": <packJSON>}（FastAPI ImportPackRequest.pack）。pack 内部字段与 schema
+// 原样保留（经 json.RawMessage 原封嵌入，不做重编/丢键）；同时校验 packJSON 是合法
+// JSON，否则报错。
+func envelopePack(packJSON []byte) ([]byte, error) {
+	var env struct {
+		Pack json.RawMessage `json:"pack"`
+	}
+	env.Pack = packJSON
+	return json.Marshal(&env)
+}
+
 // deliverPack 把已成功落盘的 pack 文件 POST 到 {DeliverURL}/api/encounter/import-pack。
+//
+// body 契约：A2 Python 端点期望请求体形状 {"pack": <packJSON>}（ImportPackRequest
+// 字段 pack），故先经 envelopePack 包裹再 POST；pack 内部 schema/字段不变。
 //
 // 重试语义（钉死）：1 次初始 + 至多 deliverRetries(3) 次退避重试；每次请求带
 // deliverTimeout(5s) 超时（经 NewRequestWithContext）。429、5xx、与瞬时网络错误
@@ -215,6 +231,11 @@ func deliverPack(ctx context.Context, baseURL, packPath string) error {
 	data, err := os.ReadFile(packPath)
 	if err != nil {
 		return fmt.Errorf("读取 pack %s: %w", packPath, err)
+	}
+	// A2 端点期望 {"pack": {...}} 信封；pack 内部结构原样保留。
+	body, err := envelopePack(data)
+	if err != nil {
+		return fmt.Errorf("包裹 pack 请求体: %w", err)
 	}
 	url := baseURL + deliverEndpoint
 
@@ -232,7 +253,7 @@ func deliverPack(ctx context.Context, baseURL, packPath string) error {
 			timer.Stop()
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			return fmt.Errorf("构建投递请求: %w", err)
 		}
