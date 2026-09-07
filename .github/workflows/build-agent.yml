@@ -1,0 +1,77 @@
+name: Build Agent Artifacts
+
+# 独立 workflow：仅 tag v* 与手动触发；2b 只出 artifact，不挂 build-release.yml 的
+# 发布 job（不发布 release）。本文件不含任何密钥引用，upload-artifact 使用默认
+# GITHUB_TOKEN 权限即可。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-agent:
+    name: Build Agent (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 三平台并行；任一失败不影响其余（artifact 各自独立）。
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: "go"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Derive version from tag
+        id: version
+        shell: bash
+        run: |
+          # tag 触发（refs/tags/vX.Y.Z）→ 去掉 v 前缀作为版本；
+          # workflow_dispatch / 分支触发 → 留空，交由 package_agent.py 回退读 main.go。
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package agent
+        env:
+          PYTHONIOENCODING: "utf-8"
+        run: python agent/scripts/package_agent.py --version "${{ steps.version.outputs.value }}"
+
+      - name: Determine artifact name
+        id: meta
+        shell: bash
+        run: |
+          # 产物名 DeLector-Agent-<ver>-<os>-<arch>.(zip|tar.gz)，直接以其基名作
+          # artifact 名，天然含真实 os+arch（mac 为 arm64，自动吻合 runner）。
+          f=$(ls dist/agent/DeLector-Agent-* | head -n1)
+          base=$(basename "$f")
+          if [[ "$base" == *.tar.gz ]]; then
+            name="${base%.tar.gz}"
+          else
+            name="${base%.zip}"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}
+          path: dist/agent/DeLector-Agent-*
+          if-no-files-found: error

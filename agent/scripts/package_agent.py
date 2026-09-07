@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -87,15 +88,23 @@ def detect_platform():
 def get_version(override):
     if override:
         return override
-    # 解析 main.go 的 `const version = "x.y.z"`（与 ldflags -X main.version 同源）。
+    # 解析 main.go 的版本声明（与 ldflags -X main.version 同源）。
+    # 兼容多种声明风格（任一命中字符串字面量即取用）：
+    #   const version = "x.y.z"
+    #   const defaultVersion = "x.y.z"
+    #   var version = defaultVersion   （无字面量，跳过并继续，由 defaultVersion 行兜底）
+    # 仅当声明行含字符串字面量 "x.y.z" 时取用，避免误命中标识符引用。
     try:
         with open(MAIN_GO, encoding="utf-8") as f:
             for line in f.read().splitlines():
                 s = line.strip()
-                if s.startswith("const version"):
-                    eq = s.split("=", 1)[1].strip().strip('"')
-                    if eq:
-                        return eq
+                if not (s.startswith("var version") or
+                        s.startswith("const version") or
+                        s.startswith("const defaultVersion")):
+                    continue
+                m = re.search(r'"([^"]*)"', s)
+                if m:
+                    return m.group(1)
     except Exception as e:  # noqa: BLE001
         log("[Warn] 解析 version 失败: %s" % e)
     return "0.1.0"
