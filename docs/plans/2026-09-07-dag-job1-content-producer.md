@@ -290,8 +290,8 @@ func RunEncounterPack(ctx context.Context, t *registry.Registry, g GlossLLM, cfg
 
 > 追加于 B9（2026-09-07）。Sub-Plan B 八任务（B1–B8）已在分支 `feature/encounter-job1`
 > 落地并经各自 CRV（Code Review Verdict）通过后提交；B9 收尾任务将验收门 B 侧勾绿、
-> 复跑全量门禁、补偏差记录与状态文档。真实 DeepSeek 冒烟档因桌面无 key 记为
-> PENDING-作者（stub 档已记录，见下）。
+> 复跑全量门禁、补偏差记录与状态文档。真实 DeepSeek 冒烟档已于 **2026-09-08**
+> 由作者在桌面真跑补齐（token 消耗 **1,253**），见文末「真实 LLM 档」记录。
 
 **逐任务提交哈希：**
 
@@ -322,10 +322,10 @@ func RunEncounterPack(ctx context.Context, t *registry.Registry, g GlossLLM, cfg
 1. `go test -count=1 -race ./...`（agent/ 全包）**绿**——gofmt `-l` 空 + `go vet ./...` 空 + 全包 `-race` PASS。
 2. `go test -count=1 -tags integration ./...` **绿**——`TestEncounterRealChain` PASS（`tools=[analyze export ingest tts vocab_stats writing_check] packs=2 texts=[im_supermarkt mein_tag]`，import-pack 200）。
 3. Python 全量 `pytest -q`（仓库根）**686 passed + 1 skipped** 零回退（B1 前基线 = Sub-Plan A 收官 673+1；B1 起 vocab_stats 新测试净增 → B9 终值 686+1）。
-4. 冒烟（stub 档，见下第 3 条 dry-run + 真实 run）。
+4. 冒烟（stub 档，见下第 3 条 dry-run + 真实 run）；真实 LLM 档于 2026-09-08 补齐（见下）。
 
 **Sub-Plan B 收官冒烟记录：**
 
 - **CLI wiring（dry-run）**：`go run ./cmd/delector job run encounter-pack --corpus <tmp2篇A1> --out <tmp>/out --dry-run` → 自动 supervisor 起 python、列出预排 `packs=2 failed=0`、退出码 **0**（confirm 接线与 dry-run 清单语义）。
 - **CLI 真实 run（stub LLM）**：同一 2 篇 fixture，`--deliver-url "" --llm-base-url http://127.0.0.1:18999`（本地 stub DeepSeek 桩，回吐固定 GlossResult JSON）→ supervisor python 真跑 `analyze`/`vocab_stats`、stub gloss、export 原子落盘 → `packs=2 failed=0`、退出码 **0**，产出 `supermarkt-2c6a3304.pack.json` 与 `mein-tag-c282b89f.pack.json`（`encounter-pack/v1` schema 可回读、`Validate()` 过）。
-- **PENDING-作者（真实 LLM 档）**：桌面无 `DEEPSEEK_API_KEY`（已确认缺席），未做真实 gloss。作者桌面配 key 后按 Task B9 交付物真跑 2 篇 fixture 并记录 token 消耗即可补齐；验收门经 stub 档满足（Master 计划允许「stub 记录一档」）。
+- **真实 LLM 档（2026-09-08 补齐，作者桌面）**：桌面已配 `DEEPSEEK_API_KEY`（经 `agent/.env` 加载——2026-09-08 增量：Go 启动时 `loadDotEnv()` 读取 cwd `.env`，并用 `agent/scripts/verify_encounter.ps1` 一键验证）。真跑 2 篇 A1 fixture → `packs=2 failed=0`、退出码 **0**，产出 `a1-1-2410f335.pack.json`（`estimated_cefr=A2`、`glosses=9`、`char_count=102`、`known_rate=0.36`）与 `a1-2-8fc4008d.pack.json`（`estimated_cefr=A1`、`glosses=8`、`char_count=96`、`known_rate=0.32`）；两包均按 `encounter-pack/v1` 逐字段校验 PASS（schema / pack_id / article.title·raw_text / estimated_cefr∈{A1,A2,B1}）。**token 消耗：1,253**（DeepSeek 平台「用量」页读数）。至此 Master 验收门仅余第 4 条的双端手工冒烟（A7 清单）。
