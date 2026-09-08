@@ -1,10 +1,17 @@
 import os
 import ipaddress
+import mimetypes
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+
+# Windows 的 mimetypes 读注册表，.woff2 未必登记 → 静态资源落到
+# application/octet-stream。字体经 @font-face 加载（不查严格 MIME），多数浏览器
+# 照常显示，但个别 WebView 会拒收 —— 自托管字体后这里显式补登记，保证 font/woff2。
+mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("font/woff", ".woff")
 
 def load_env():
     try:
