@@ -45,6 +45,52 @@ func TestTokenBudget_ExceedsCap(t *testing.T) {
 	}
 }
 
+// TestTokenBudget_Release_ReturnsUnused 评审 ③：Reserve 成功但未消耗的预留可
+// Release 退回（对应 gloss 调用失败/取消后释放预算），后续 Reserve 不受影响。
+func TestTokenBudget_Release_ReturnsUnused(t *testing.T) {
+	b := NewTokenBudget(100)
+	if err := b.Reserve(40); err != nil {
+		t.Fatalf("Reserve(40): %v", err)
+	}
+	if err := b.Reserve(30); err != nil {
+		t.Fatalf("Reserve(30): %v", err)
+	}
+	if got := b.Used(); got != 70 {
+		t.Fatalf("预留后 Used 应 70，实得 %d", got)
+	}
+	// 30 预留实际未消耗 → 退回，70-30=40。
+	b.Release(30)
+	if got := b.Used(); got != 40 {
+		t.Fatalf("Release(30) 后 Used 应回 40，实得 %d", got)
+	}
+	// 退回额度重新可用：40+60=100 恰达 cap 应成功。
+	if err := b.Reserve(60); err != nil {
+		t.Fatalf("Release 后应能重新 Reserve(60)（40+60≤100）：%v", err)
+	}
+}
+
+// TestTokenBudget_Release_ClampsAtZero 评审 ③：Release 超过当前 used 时
+// clamp 到 0（绝不把 used 打成负）；est<=0 的 Release 是无操作。
+func TestTokenBudget_Release_ClampsAtZero(t *testing.T) {
+	b := NewTokenBudget(100)
+	if err := b.Reserve(10); err != nil {
+		t.Fatalf("Reserve(10): %v", err)
+	}
+	b.Release(999) // 超过已预留 → clamp 到 0
+	if got := b.Used(); got != 0 {
+		t.Fatalf("Release 超量后 Used 应 clamp 到 0，实得 %d", got)
+	}
+	b.Release(-5) // est<=0：无操作
+	b.Release(0)
+	if got := b.Used(); got != 0 {
+		t.Fatalf("负/零 est 的 Release 应无操作，实得 %d", got)
+	}
+	// clamp 后预算完全恢复：cap 内重新可全部用掉。
+	if err := b.Reserve(100); err != nil {
+		t.Fatalf("clamp 后预算应恢复：%v", err)
+	}
+}
+
 func TestTokenBudget_CapZeroUnlimited(t *testing.T) {
 	b := NewTokenBudget(0) // cap 0 = 无限
 	for _, est := range []int{1 << 20, 1 << 20, 1 << 20} {

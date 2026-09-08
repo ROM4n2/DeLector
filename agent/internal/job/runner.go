@@ -37,22 +37,43 @@ import (
 //
 //	Concurrency<=0 → 1（串行，最保守、结果确定）
 //	BudgetTokens<=0 → defaultBudgetTokens（100_000）
-//	MaxArticles<=0 → 不限（透传 corpus.Options）
-//	DryRun → 仅回传清单不执行
-//	DeliverURL 空 → 不做投递
+//	MaxArticles<=0  → 不限（透传 corpus.Options）
+//	MaxFileBytes<=0 → 不限（透传 corpus.Options）
+//	Timeout<=0      → defaultEncounterTimeout（2h，墙钟护栏；评审 ⑥）
+//	DryRun          → 仅回传清单不执行
+//	DeliverURL 空   → 不做投递
 type RunConfig struct {
-	CorpusDir    string // 语料根目录（必填；B2 ScanDir）
-	OutDir       string // pack 落盘目录（必填；export 步骤自动建）
-	Concurrency  int    // 并发 worker 上限（默认 1）
-	MaxArticles  int    // 语料限量（默认不限）
-	BudgetTokens int    // 共享 token 预算（默认 100_000）
-	DryRun       bool   // 仅回传清单，不扫描执行
-	DeliverURL   string // 非空时对成功 pack POST /api/encounter/import-pack
+	CorpusDir    string        // 语料根目录（必填；B2 ScanDir）
+	OutDir       string        // pack 落盘目录（必填；export 步骤自动建）
+	Concurrency  int           // 并发 worker 上限（默认 1）
+	MaxArticles  int           // 语料限量（默认不限）
+	MaxFileBytes int64         // 语料单文件大小上限字节（默认不限；评审 ④ 护栏）
+	BudgetTokens int           // 共享 token 预算（默认 100_000）
+	Timeout      time.Duration // 整次 run 墙钟上限（默认 2h；评审 ⑥）
+	DryRun       bool          // 仅回传清单，不扫描执行
+	DeliverURL   string        // 非空时对成功 pack POST /api/encounter/import-pack
 }
 
 // defaultBudgetTokens 是 BudgetTokens<=0 时的兜底（与 B7 命令行 --budget-tokens
 // 默认 100_000 对齐）。DeepSeek 真调用防失控护栏：一次 job 总 token 消耗上限。
 const defaultBudgetTokens = 100_000
+
+// defaultEncounterTimeout 是 Timeout<=0 时的兜底墙钟上限（评审 ⑥）：此前
+// RunEncounterPack 只尊重调用方 ctx——若无外层超时/取消（真实 CLI 场景），
+// 一次 job 可无限期挂着；默认 2h 把「真跑没设限」的意外卡死变成可回收。
+const defaultEncounterTimeout = 2 * time.Hour
+
+// resolveEncounterTimeout 归一化 cfg.Timeout：<0/0 归默认 2h；>0 原样采用。
+// （允许 CLI 显式传短时长覆盖；不开放"不限"，护栏语义优先。）
+func resolveEncounterTimeout(t time.Duration) time.Duration {
+	if t < 0 {
+		t = 0
+	}
+	if t == 0 {
+		return defaultEncounterTimeout
+	}
+	return t
+}
 
 // Result 是一次 RunEncounterPack 的聚合结果。
 //
@@ -115,8 +136,16 @@ func RunEncounterPack(ctx context.Context, t *registry.Registry, g GlossLLM, cfg
 		budgetCap = defaultBudgetTokens
 	}
 
-	// B2 语料扫描：去重/过滤/限量/排序由 corpus 负责。
-	articles, err := corpus.ScanDir(ctx, cfg.CorpusDir, corpus.Options{MaxArticles: cfg.MaxArticles})
+	// 墙钟护栏（评审 ⑥）：调用方 ctx 之上叠加默认 2h（或显式 cfg.Timeout）。
+	// WithTimeout 对已取消 ctx 幂等——既有的 ctx 取消测试语义不受影响。
+	ctx, cancel := context.WithTimeout(ctx, resolveEncounterTimeout(cfg.Timeout))
+	defer cancel()
+
+	// B2 语料扫描：去重/过滤/限量/排序由 corpus 负责；MaxFileBytes 是 ④ 单文件护栏。
+	articles, err := corpus.ScanDir(ctx, cfg.CorpusDir, corpus.Options{
+		MaxArticles:  cfg.MaxArticles,
+		MaxFileBytes: cfg.MaxFileBytes,
+	})
 	if err != nil {
 		return Result{}, fmt.Errorf("job: 扫描语料目录 %q: %w", cfg.CorpusDir, err)
 	}

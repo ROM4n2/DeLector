@@ -48,3 +48,23 @@ func (b *TokenBudget) Used() int {
 	defer b.mu.Unlock()
 	return b.used
 }
+
+// Release 把一次已预留但实际未消耗的额度退回（如 LLM 调用失败/被取消后
+// Reserve 的估算没真正烧掉）。语义（vault-team 评审 ③）：
+//   - est<=0 忽略；
+//   - 退回以 used 为下界 clamp 到 0，绝不把 used 打成负数；
+//   - 并发安全（与 Reserve 同一把锁，无 lost update）。
+//
+// 调用方在「Reserve 成功后、对应 LLM 调用失败返回」的路径上负责 Release，
+// 保证连续失败的文章不会把共享预算烧光（~50 篇失败即耗完 100k 的问题）。
+func (b *TokenBudget) Release(est int) {
+	if est <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.used -= est
+	if b.used < 0 {
+		b.used = 0
+	}
+}

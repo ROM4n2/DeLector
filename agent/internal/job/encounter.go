@@ -119,17 +119,23 @@ func BuildEncounterDAG(d EncounterDeps) (*dag.DAG, error) {
 			return nil, err
 		}
 		// 预算护栏：以实际入 prompt 的抽样文本估 token，超限即本步失败（不吞错）。
+		// 评审 ③：Reserve 成功后若 LLM 调用失败/被取消，这次预留没有真正消耗
+		// token，必须 Release 退回——否则连续失败的文章会逐步烧光共享预算。
 		sampled := SampleText(req.Text)
-		if err := d.Budget.Reserve(EstimateTokens(sampled)); err != nil {
+		est := EstimateTokens(sampled)
+		if err := d.Budget.Reserve(est); err != nil {
 			return nil, err
 		}
 		system, user := BuildGlossPrompt(req)
 		raw, err := d.Gloss.Complete(ctx, system, user)
 		if err != nil {
+			d.Budget.Release(est)
 			return nil, err
 		}
 		res, err := ParseGlossLLMOutput(raw)
 		if err != nil {
+			// LLM 返回已到但解析失败：按未消耗退回（解析不产生 token）。
+			d.Budget.Release(est)
 			return nil, err
 		}
 		return map[string]any{"result": res}, nil
