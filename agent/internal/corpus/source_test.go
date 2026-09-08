@@ -228,6 +228,42 @@ func TestScanDir_CustomExtensions(t *testing.T) {
 	}
 }
 
+// TestScanDir_MaxFileBytes_SkipsOversized 评审 ④：MaxFileBytes>0 时单文件超限
+// 在登记候选阶段即被排除（不读不进内存）；大小恰等于护栏的文件应保留。
+func TestScanDir_MaxFileBytes_SkipsOversized(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "big.txt", strings.Repeat("x", 4096))
+	writeFile(t, root, "small.txt", "tiny body")
+	writeFile(t, root, "boundary.txt", strings.Repeat("y", 1024))
+	arts, err := ScanDir(context.Background(), root, Options{MaxFileBytes: 1024})
+	if err != nil {
+		t.Fatalf("ScanDir: %v", err)
+	}
+	if len(arts) != 2 {
+		t.Fatalf("超限文件应被排除：期望 2 篇（small+boundary），实得 %d：%v", len(arts), pathStrings(arts))
+	}
+	for _, a := range arts {
+		if strings.HasSuffix(a.Path, "big.txt") {
+			t.Errorf("big.txt（4096>1024）不应进入结果：%v", pathStrings(arts))
+		}
+	}
+}
+
+// TestScanDir_MaxFileBytesZeroUnlimited MaxFileBytes<=0 表示不限（0 与负值）。
+func TestScanDir_MaxFileBytesZeroUnlimited(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "big.txt", strings.Repeat("x", 3000))
+	for _, capB := range []int64{0, -5} {
+		arts, err := ScanDir(context.Background(), root, Options{MaxFileBytes: capB})
+		if err != nil {
+			t.Fatalf("ScanDir(MaxFileBytes=%d): %v", capB, err)
+		}
+		if len(arts) != 1 {
+			t.Fatalf("MaxFileBytes=%d 应不限（含大文件），期望 1 篇，实得 %d", capB, len(arts))
+		}
+	}
+}
+
 func TestScanDir_ContextCancel(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a.txt", "body a")
