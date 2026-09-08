@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="德语工作台">
 <meta name="description" content="单文件零依赖德语 A1 单词记忆工作台，FSRS-6 调度，离线可用">
+<link rel="stylesheet" href="../css/fonts.css">
 <link rel="stylesheet" href="../css/tokens.css">
 <style>
 /* ================= 主题变量 ================= */
@@ -276,7 +277,7 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 .modal-mask.open{display:flex}
 .modal{
   background:var(--panel);border-radius:14px;box-shadow:0 12px 44px rgba(0,0,0,.25);
-  width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:22px;
+  width:100%;max-width:560px;max-height:88vh;box-sizing:border-box;overflow:auto;padding:22px;
   animation:pop .18s ease;
 }
 @keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
@@ -288,6 +289,9 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 .ex-row input{flex:1;min-width:0}
 .ex-row .rm{color:var(--again);font-size:16px;padding:0 8px}
 .modal .ops{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+#wordModal .modal{display:flex;flex-direction:column;overflow:hidden}
+#wordModal .modal .fgrid{overflow-y:auto;min-height:0;padding-right:2px}
+#wordModal .modal .ops{flex:none;background:var(--panel);padding-top:12px;padding-bottom:env(safe-area-inset-bottom)}
 #toast{
   position:fixed;left:50%;bottom:78px;transform:translateX(-50%) translateY(20px);
   background:var(--text);color:var(--bg);padding:10px 22px;border-radius:99px;
@@ -2944,8 +2948,18 @@ function setWordState(id, st) {
     const i = revQueue.indexOf(id);
     if (i >= 0 && i >= revIdx) revQueue.splice(i, 1);   // 从今日未学部分移除
   } else if (st === "learn") {
-    if (S.cards[id]) delete S.cards[id].manual;
-    else {
+    /* 未学 → 已学习：必须真正建一张 FSRS 卡，只 push revQueue 是不够的。
+     * 旧实现在无卡时（S.cards[id] 不存在）只把 id 推入内存队列 —— 不落盘、
+     * 不建卡，于是 wordStateKey 仍判 "new"：状态芯片点了没反应，下次点击
+     * 又落回同一分支，**永远卡在「未学」**，只有「稳固 → 未学」那条路看得见
+     * 效果 —— 用户侧表现为「只能清空进度、不能标记为已学」（#workbench-bug）。
+     * 现在走 fsrsReview 建一张首评 Good 的真卡（reps=1，按调度排期），
+     * 与正常复习产出的卡同形。 */
+    const existing = S.cards[id];
+    if (existing && existing.reps > 0) {
+      delete existing.manual;               // 已有卡：只需解除「手动稳固」
+    } else {
+      S.cards[id] = fsrsReview(null, 3, Date.now(), S.settings.retention);
       if (queueDay !== todayStr()) { buildReviewQueue(); queueDay = todayStr(); }
       if (!revQueue.includes(id)) revQueue.push(id);
     }
