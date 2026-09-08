@@ -2944,8 +2944,18 @@ function setWordState(id, st) {
     const i = revQueue.indexOf(id);
     if (i >= 0 && i >= revIdx) revQueue.splice(i, 1);   // 从今日未学部分移除
   } else if (st === "learn") {
-    if (S.cards[id]) delete S.cards[id].manual;
-    else {
+    /* 未学 → 已学习：必须真正建一张 FSRS 卡，只 push revQueue 是不够的。
+     * 旧实现在无卡时（S.cards[id] 不存在）只把 id 推入内存队列 —— 不落盘、
+     * 不建卡，于是 wordStateKey 仍判 "new"：状态芯片点了没反应，下次点击
+     * 又落回同一分支，**永远卡在「未学」**，只有「稳固 → 未学」那条路看得见
+     * 效果 —— 用户侧表现为「只能清空进度、不能标记为已学」（#workbench-bug）。
+     * 现在走 fsrsReview 建一张首评 Good 的真卡（reps=1，按调度排期），
+     * 与正常复习产出的卡同形。 */
+    const existing = S.cards[id];
+    if (existing && existing.reps > 0) {
+      delete existing.manual;               // 已有卡：只需解除「手动稳固」
+    } else {
+      S.cards[id] = fsrsReview(null, 3, Date.now(), S.settings.retention);
       if (queueDay !== todayStr()) { buildReviewQueue(); queueDay = todayStr(); }
       if (!revQueue.includes(id)) revQueue.push(id);
     }
