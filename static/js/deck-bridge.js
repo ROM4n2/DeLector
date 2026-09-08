@@ -14,7 +14,10 @@
  *   + `wb.cards.v1`（按 String(word.id) 键控的对象，元素含 reps/…）。
  *   「已学习(learned)」= 存在 word 且 cards[String(word.id)].reps > 0。
  *   （workbench 的"手动稳固"也会置 reps≥1，reps>0 已覆盖，无需单独处理 manual 标记。）
- *   known(lemma) = lower(lemma) ∈ { lower(hw) : word 且 cards[id].reps>0 }。
+ *   known(lemma) = lower(lemma) ∈ { lower(stripGermanArticle(hw)) : word 且 cards[id].reps>0 }。
+ *   词头归一先剥德语冠词（die Abfahrt → abfahrt）：背词工作台的 NOUN 词头常带
+ *   der/die/das/ein…，而 annotate 的 lemma 是原形（无冠词）——若整串比对，名词
+ *   永远不命中「已背词」高亮（vault-team 评审 ⑤）。
  *
  * 暴露的纯函数（全部可被 Node 测）：
  *   loadDeck(storage)            -> {words, cards}
@@ -56,6 +59,27 @@ function isLemmaCandidate(tok) {
   // 覆盖拉丁扩展（ä/ö/ü/ß）、拉丁扩展附加等常见德语字素。
   if (!/[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/.test(text)) return false;
   return true;
+}
+
+/**
+ * stripGermanArticle(hw) -> string：去德语冠词/格后缀/标点，返回核心词。
+ *
+ * 与 static/german/workbench.html:1654 的 stripDeArticle **逐规则同源**（零 import
+ * 硬约束下不允许互相 import，只能复制；两处必须保持一致，改动需同步）。
+ * 规则：剥前导定/不定冠词（der|die|das|ein*|den|dem|des…）、逗号/格后缀、
+ * 长破折号尾部、非字母字符（保留 äöüß 空格连字符撇号）。空输入返回空串。
+ */
+function stripGermanArticle(hw) {
+  if (!hw) return "";
+  let s = String(hw).trim();
+  // 1) 去掉开头的冠词：冠词是 2~4 个字母 + 空格，独立词
+  s = s.replace(/^(der|die|das|ein|eine|eines|einer|einem|einen|den|dem|des|der|die|das)\s+/i, "");
+  // 2) 去掉后面的格后缀（逗号分隔、长破折号、数字、圆点）
+  s = s.replace(/[,，·\.].*$/, "");
+  s = s.replace(/\s*[–—-]+\s*[^\s]*$/u, "");
+  // 3) 只保留合法字母集合 + 空格 + 连字符
+  s = s.replace(/[^A-Za-zÄÖÜäöüß\s\-']/g, "");
+  return s.trim();
 }
 
 /**
@@ -117,8 +141,9 @@ export function mergeServerDeck(deck, payload) {
 }
 
 /**
- * buildKnownSet(deck) -> Set<lower hw>
- * 仅收录"已学习"词（word 存在且 cards[String(id)].reps>0），hw 归一为小写。
+ * buildKnownSet(deck) -> Set<lower stripGermanArticle(hw)>
+ * 仅收录"已学习"词（word 存在且 cards[String(id)].reps>0）；词头先剥冠词再小写
+ * （"die Abfahrt" → "abfahrt"），使 annotate 的 lemma 原形（无冠词）可命中名词。
  */
 export function buildKnownSet(deck) {
   const known = new Set();
@@ -130,7 +155,7 @@ export function buildKnownSet(deck) {
     if (!w || w.id == null || w.hw == null) continue;
     const card = cards[String(w.id)];
     if (card && typeof card === "object" && Number(card.reps) > 0) {
-      known.add(String(w.hw).toLowerCase());
+      known.add(stripGermanArticle(String(w.hw)).toLowerCase());
     }
   }
   return known;

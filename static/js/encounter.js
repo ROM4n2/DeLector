@@ -173,8 +173,10 @@ export function renderTextList(texts) {
   const el = listEl();
   if (!el) return;
   if (!texts.length) {
+    // ⑦ 修复：POST /texts 是 _require_localhost 本机闸，手机/局域网端点击只会 403。
+    // 空态文案不再把手机用户往死路引导，注明「添加仅限运行服务的电脑本机」。
     el.innerHTML =
-      '<div class="encounter-empty">遇见区暂无短篇 —— 点右上「＋ 加文本」添加一篇。</div>';
+      '<div class="encounter-empty">遇见区暂无短篇 —— 可在电脑本机点右上「＋ 加文本」添加（手机/平板端只能阅读与背词）。</div>';
     return;
   }
   el.innerHTML = texts
@@ -377,7 +379,12 @@ export async function submitAddText() {
     cancelAdd();
     backToList();
   } catch (e) {
-    err.textContent = `添加失败：${e.message || "未知错误"}`;
+    // ⑦ 修复：POST /texts 仅在电脑本机放行（_require_localhost）；手机/局域网端
+    // 点添加会得到 403「该接口仅允许本机访问」。把死路翻译成人话，别让用户以为坏了。
+    const msg = (e && e.message) || "";
+    err.textContent = msg.indexOf("仅允许本机") >= 0
+      ? "新增短篇仅限运行本服务的电脑本机操作（手机/平板端只能阅读与背词）"
+      : `添加失败：${msg || "未知错误"}`;
     err.classList.add("show");
   }
 }
@@ -557,6 +564,65 @@ async function lookupGloss(pending) {
   if (addBtn) addBtn.disabled = false;
 }
 
+/* ======================================================================
+ * ① 修复：进卡「双写」本地持久层 —— localStorage + IndexedDB（vault-team 评审 ①）。
+ *
+ * 背景：workbench（背词工作台）自 F2 起已把万词库持久化到 IndexedDB（db "wb"，
+ * store words/cards/log/wrong/settings/snapshots，单条 key "main"），启动时经
+ * idbHydrate 把 IDB 覆盖回 localStorage。本页（encounter）之前进卡只写
+ * localStorage——若该 origin 的 localStorage 先被清空/换机恢复，或先跑 workbench
+ * 的 idbHydrate（IDB 旧字符串 ≠ localStorage 新串时整键覆盖），新词就丢了。
+ *
+ * 契约（与 static/german/workbench.html F2 逐字段一致，改须同步）：
+ *   库名/版本/store 名/snapshots keyPath 完全一致；words store 单条
+ *   {key:"main", value:<word 数组>}。
+ *
+ * IDB 不可用（私隐模式/低版本）时静默降级为 localStorage-only（返回 false），
+ * 绝不抛异常 —— 本页所有写路径都已保证 localStorage 先行成功。
+ * ==================================================================== */
+const ENC_IDB_STORES = ["words", "cards", "log", "wrong", "settings", "snapshots"];
+let _encIdb = null;        // IDBDatabase 实例
+let _encIdbReady = false;
+let _encIdbFailed = false;
+
+function encIdbOpen() {
+  return new Promise((resolve) => {
+    if (_encIdbReady && _encIdb) return resolve(_encIdb);
+    if (_encIdbFailed) return resolve(null);
+    if (typeof indexedDB === "undefined") { _encIdbFailed = true; return resolve(null); }
+    try {
+      const req = indexedDB.open("wb", 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        for (const s of ENC_IDB_STORES) {
+          if (!db.objectStoreNames.contains(s)) {
+            db.createObjectStore(
+              s,
+              s === "snapshots" ? { keyPath: "ts", autoIncrement: true } : { keyPath: "key" },
+            );
+          }
+        }
+      };
+      req.onsuccess = (e) => { _encIdb = e.target.result; _encIdbReady = true; resolve(_encIdb); };
+      req.onerror = () => { _encIdbFailed = true; resolve(null); };
+    } catch (e) { _encIdbFailed = true; resolve(null); }
+  });
+}
+
+/** 把整份 words 数组写入 IDB words store（key "main"）。失败静默返回 false。 */
+async function encIdbWriteWords(words) {
+  const db = await encIdbOpen();
+  if (!db) return false;
+  try {
+    return await new Promise((resolve) => {
+      const tx = db.transaction("words", "readwrite");
+      tx.objectStore("words").put({ key: "main", value: words });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (e) { return false; }
+}
+
 // 读 wb.pair.v1（配对远端 {host,key}）—— 与 workbench 的 loadPair 同键。
 function readWbPair(storage) {
   try {
@@ -645,6 +711,10 @@ async function handleAddCard() {
         }
         return;
       }
+      // ① 修复：双写 IndexedDB（与 workbench F2 同库同 key "main"）——手机/离线
+      // 场景下 localStorage 清空或 idbHydrate 覆盖后新词仍可从 IDB 找回。
+      // IDB 失败只静默降级（localStorage 已成功），绝不影响下面的镜像同步与反馈。
+      await encIdbWriteWords(res.deck.words);
       // 写 deck 成功即触发镜像同步（best-effort，成败不影响本地落卡）。
       await mirrorPushWb(storage, res.deck);
       _sessionAdded.push({ hw: p.lemma, gloss: p.gloss, pos: p.pos, surface: p.surface });

@@ -183,6 +183,41 @@ def test_build_known_set_reps_gate_and_case_normalization(bridge):
     assert out["probeHits"] == [True, True, True, False, True]
 
 
+def test_build_known_set_strips_german_articles(bridge):
+    """评审 ⑤：deck 词头带定/不定冠词（背词工作台 NOUN 拼装 der/die/das…
+    如 "die Abfahrt"）时，known 集存剥冠词后的核心词——annotate 的 lemma 原形
+    （无冠词，如 "abfahrt"）才能命中。纯 lower 整串比对会让名词永远高亮不了。
+    """
+    deck = {
+        "words": [
+            {"id": "w1", "hw": "die Abfahrt"},    # learned（带定冠词 NOUN）
+            {"id": "w2", "hw": "der Bahnhof."},   # learned（冠词 + 句点尾巴）
+            {"id": "w3", "hw": "ein Auto"},       # learned（不定冠词）
+            {"id": "w4", "hw": "Haus"},           # learned（本来就无冠词）
+            {"id": "w5", "hw": "das nicht"},      # unlearned（reps=0，不参与）
+        ],
+        "cards": {
+            "w1": {"reps": 1},
+            "w2": {"reps": 2},
+            "w3": {"reps": 1},
+            "w4": {"reps": 3},
+            "w5": {"reps": 0},
+        },
+    }
+    out = _run_node(
+        {
+            "op": "buildKnownSet",
+            "deck": deck,
+            "probe": ["Abfahrt", "abfahrt", "ABFAHRT", "bahnhof", "Auto", "Haus"],
+        },
+        bridge,
+    )
+    # 去冠词/清标点后的小写核心词集合
+    assert out["known"] == ["abfahrt", "auto", "bahnhof", "haus"]
+    # probeHits：核心词（任意大小写）命中冠词词头；"Haus" 本就无冠词仍命中
+    assert out["probeHits"] == [True, True, True, True, True, True]
+
+
 # ── annotateWithDeck：known flags + stats 精确值 ────────────────────────────
 
 def test_annotate_with_deck_marks_known_and_exact_coverage(bridge):
@@ -232,6 +267,46 @@ def test_annotate_with_deck_marks_known_and_exact_coverage(bridge):
     assert stats["known_rate"] == 0.43  # 3/7 四舍五入两位
     # unknown_top：punct 不参与；候选 = haus ×2
     assert stats["unknown_top"] == [{"lemma": "haus", "count": 2}]
+
+
+def test_annotate_with_deck_noun_hw_with_article_is_known(bridge):
+    """评审 ⑤ 行为钉死：deck 已背名词头带冠词（die Abfahrt），annotate 的
+    lemma 原形（abfahrt）必须算 known——这是「已背 A1/A2 名词在文章里高亮」
+    的前提；不带冠词的生词 haus 仍 unknown 进 unknown_top。
+    """
+    deck = {
+        "words": [
+            {"id": "w6", "hw": "die Abfahrt"},  # learned 名词（背词台拼装冠词）
+            {"id": "w7", "hw": "Haus"},         # learned 名词（无冠词词头）
+        ],
+        "cards": {"w6": {"reps": 1}, "w7": {"reps": 3}},
+    }
+    annotate = {
+        "text_id": 2,
+        "total_tokens": 2,
+        "sentences": [
+            {
+                "idx": 0,
+                "tokens": [
+                    {"text": "Abfahrt", "lemma": "abfahrt", "pos": "NOUN"},  # known（剥冠词命中）
+                    {"text": "Haus", "lemma": "haus", "pos": "NOUN"},        # known（无冠词词头）
+                ],
+            },
+            {
+                "idx": 1,
+                "tokens": [
+                    {"text": "Auto", "lemma": "auto", "pos": "NOUN"},        # unknown → 候选
+                ],
+            },
+        ],
+    }
+    out = _run_node({"op": "annotateWithDeck", "deck": deck, "annotate": annotate}, bridge)
+    s0 = out["sentences"][0]["tokens"]
+    assert [t["known"] for t in s0] == [True, True]
+    assert out["sentences"][1]["tokens"][0]["known"] is False
+    stats = out["stats"]
+    assert stats["known_tokens"] == 2
+    assert stats["unknown_top"] == [{"lemma": "auto", "count": 1}]
 
 
 def test_annotate_with_deck_empty_known_set_rank_and_cap(bridge):
@@ -336,6 +411,27 @@ def test_encounter_js_consumes_annotate_endpoint():
     """encounter.js 必须消费 annotate 端点（Promise.all 拉注解数据）。"""
     assert "/annotate" in ENCOUNTER_JS
     assert "Promise.all" in ENCOUNTER_JS
+
+
+def test_encounter_js_idb_double_write_on_add_card():
+    """评审 ① 静态探针：进卡成功路径必须双写 IndexedDB（与 workbench F2 同库
+    db "wb"、store words、单条 key "main"），否则手机/离线清 localStorage 后
+    新词会丢。encIdbWriteWords 调用出现在 setItem 之后（写成功才双写）。
+    """
+    assert "encIdbWriteWords" in ENCOUNTER_JS
+    assert 'indexedDB.open("wb", 1)' in ENCOUNTER_JS
+    assert '"words"' in ENCOUNTER_JS
+    assert "{ key: \"main\", value: words }" in ENCOUNTER_JS
+
+
+def test_encounter_js_403_adding_hint_in_human_words():
+    """评审 ⑦ 静态探针：POST /texts 仅本机放行（_require_localhost），手机/
+    局域网端点添加会 403。UI 需把人话提示做进两处：提交失败的 catch 文案 +
+    空列表引导，别让用户以为功能坏了。
+    """
+    assert "仅允许本机" in ENCOUNTER_JS
+    assert "新增短篇仅限运行本服务的电脑本机操作" in ENCOUNTER_JS
+    assert "电脑本机点右上" in ENCOUNTER_JS
 
 
 # ── deck-bridge.js 源码卫生（node 可测性硬约束）────────────────────────────
