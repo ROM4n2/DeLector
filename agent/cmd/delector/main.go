@@ -9,11 +9,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/ROM4n2/DeLector/agent/internal/app"
@@ -155,7 +157,37 @@ func resolvePythonSrcDir(exe string) string {
 
 var rootCmd = newRootCmd()
 
+// loadDotEnv 启动时把 cwd 的 .env（若存在）逐行加载进进程环境，便于本地便捷
+// 配置凭证（如 DEEPSEEK_API_KEY）。手写、零依赖；已存在于进程环境的同名变量不
+// 覆盖（shell 显式注入优先）。仅读取，绝不把 key 写回磁盘或日志。
+func loadDotEnv() {
+	f, err := os.Open(".env")
+	if err != nil {
+		return // 无 .env 则跳过
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		k := strings.TrimSpace(line[:eq])
+		v := strings.TrimSpace(line[eq+1:])
+		v = strings.Trim(v, `"'`)
+		if k == "" || os.Getenv(k) != "" {
+			continue // 不覆盖已存在
+		}
+		_ = os.Setenv(k, v)
+	}
+}
+
 func main() {
+	loadDotEnv() // 先于命令执行，让 .env 中的凭证对 job/run 可见
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
