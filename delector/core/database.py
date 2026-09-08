@@ -855,6 +855,13 @@ _BACKUP_TABLES = {
         ("id", "essay_id", "content", "analysis_json", "message", "created_at"),
         {"essay_id": 0, "content": "", "analysis_json": "{}", "message": ""},
     ),
+    # 遇见区短文（Task A1 起入同库）；pack_json 存整份 encounter-pack/v1 元数据。
+    # 备份/还原缺失该表会让换机还原后遇见区全丢（vault-team 评审 ②）。
+    "encounter_texts": (
+        ("id", "pack_id", "title", "level", "source", "content", "pack_json", "created_at"),
+        {"pack_id": None, "title": "", "level": "A2", "source": "",
+         "content": "", "pack_json": None},
+    ),
 }
 
 _PROGRESS_TABLES = {
