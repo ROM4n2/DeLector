@@ -20,7 +20,7 @@
   --text: var(--ink, #15140f);
   --muted: var(--pencil, #5c554b);
   --line: var(--rule, #d8d0c2);
-  --accent: var(--accent, #c14a2b);
+  --accent: #c14a2b;
   --accent-soft: var(--paper-tint, #f2ece1);
   --accent2: var(--coral, #ed6f5c);
   --good: var(--moss, #3b6e3f);
@@ -277,7 +277,7 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 .modal-mask.open{display:flex}
 .modal{
   background:var(--panel);border-radius:14px;box-shadow:0 12px 44px rgba(0,0,0,.25);
-  width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:22px;
+  width:100%;max-width:560px;max-height:88vh;box-sizing:border-box;overflow:auto;padding:22px;
   animation:pop .18s ease;
 }
 @keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
@@ -289,6 +289,9 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 .ex-row input{flex:1;min-width:0}
 .ex-row .rm{color:var(--again);font-size:16px;padding:0 8px}
 .modal .ops{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+#wordModal .modal{display:flex;flex-direction:column;overflow:hidden}
+#wordModal .modal .fgrid{overflow-y:auto;min-height:0;padding-right:2px}
+#wordModal .modal .ops{flex:none;background:var(--panel);padding-top:12px;padding-bottom:env(safe-area-inset-bottom)}
 #toast{
   position:fixed;left:50%;bottom:78px;transform:translateX(-50%) translateY(20px);
   background:var(--text);color:var(--bg);padding:10px 22px;border-radius:99px;
