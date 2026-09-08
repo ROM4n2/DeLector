@@ -35,6 +35,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/ROM4n2/DeLector/agent/internal/app"
 	"github.com/ROM4n2/DeLector/agent/internal/job"
@@ -52,6 +53,12 @@ const (
 	defaultEncounterConcurrency = 4
 	// defaultEncounterBudget 默认共享 token 预算（DeepSeek 真调用防失控护栏）。
 	defaultEncounterBudget = 100_000
+	// defaultEncounterMaxArticles 默认语料限量护栏（评审 ⑥）：默认不扫空整个
+	// 目录——限量在 corpus 读取前截断，控时间/预算/落盘规模；0 才表示不限。
+	defaultEncounterMaxArticles = 200
+	// defaultEncounterMaxFileBytes 默认单文件大小护栏（评审 ④/⑥）：超限语料
+	// 文件直接跳过，防单篇巨文拖垮内存/超时；0 才表示不限。
+	defaultEncounterMaxFileBytes = 1 << 20 // 1 MiB
 	// defaultDeliverURL 默认 import-pack 投递端点根（用户直接起的 8000 实例）。
 	defaultDeliverURL = "http://127.0.0.1:8000"
 )
@@ -73,15 +80,17 @@ func newJobCmd() *cobra.Command {
 
 // encounterOptions 承载 encounter-pack 子命令一次运行的 flag 值。
 type encounterOptions struct {
-	corpus       string // 语料根目录（必填）
-	out          string // pack 落盘目录（必填）
-	concurrency  int    // 并发 worker 上限
-	maxArticles  int    // 语料限量（0=不限）
-	budgetTokens int    // 共享 token 预算
-	dryRun       bool   // 仅回传清单不执行
-	pythonURL    string // 空=自动 supervisor 起 python 于 8001；非空直连
-	deliverURL   string // 非空时对成功 pack POST import-pack
-	llmBaseURL   string // 空=DeepSeek 官方；测试/桩用
+	corpus       string        // 语料根目录（必填）
+	out          string        // pack 落盘目录（必填）
+	concurrency  int           // 并发 worker 上限
+	maxArticles  int           // 语料限量（0=不限；默认 200 护栏）
+	maxFileBytes int64         // 语料单文件大小上限字节（0=不限；默认 1MiB）
+	budgetTokens int           // 共享 token 预算
+	timeout      time.Duration // job 墙钟上限（0=job 内置默认 2h）
+	dryRun       bool          // 仅回传清单不执行
+	pythonURL    string        // 空=自动 supervisor 起 python 于 8001；非空直连
+	deliverURL   string        // 非空时对成功 pack POST import-pack
+	llmBaseURL   string        // 空=DeepSeek 官方；测试/桩用
 }
 
 // newRunEncounterCmd 注册 `delector job run encounter-pack` 子命令。
@@ -127,8 +136,10 @@ POST /api/encounter/import-pack。
 	fl.StringVar(&o.corpus, "corpus", "", "语料根目录（必填；扫描 .txt/.md）")
 	fl.StringVar(&o.out, "out", "", "pack 落盘目录（必填；自动创建）")
 	fl.IntVar(&o.concurrency, "concurrency", defaultEncounterConcurrency, "并发 worker 上限（默认 4）")
-	fl.IntVar(&o.maxArticles, "max-articles", 0, "语料限量（默认 0=不限）")
+	fl.IntVar(&o.maxArticles, "max-articles", defaultEncounterMaxArticles, "语料限量（默认 200=护栏，读取前截断；0=不限）")
+	fl.Int64Var(&o.maxFileBytes, "max-file-bytes", defaultEncounterMaxFileBytes, "语料单文件大小上限字节（默认 1048576=1MiB 护栏；超限文件跳过；0=不限）")
 	fl.IntVar(&o.budgetTokens, "budget-tokens", defaultEncounterBudget, "共享 token 预算上限（默认 100_000）")
+	fl.DurationVar(&o.timeout, "timeout", 0, "job 墙钟超时（默认 0=内置 2h 护栏；显式传如 30m/1h30m 覆盖）")
 	fl.BoolVar(&o.dryRun, "dry-run", false, "仅回传预排语料清单，不执行分析/落盘/投递")
 	fl.StringVar(&o.pythonURL, "python-url", "", "Python NLP 服务地址；空=自动 supervisor 起于 127.0.0.1:8001，非空则直连")
 	fl.StringVar(&o.deliverURL, "deliver-url", defaultDeliverURL, "投递 import-pack 的根地址（空则跳过投递）")
@@ -212,7 +223,9 @@ func runEncounterJob(ctx context.Context, o encounterOptions) (job.Result, error
 		OutDir:       o.out,
 		Concurrency:  o.concurrency,
 		MaxArticles:  o.maxArticles,
+		MaxFileBytes: o.maxFileBytes,
 		BudgetTokens: o.budgetTokens,
+		Timeout:      o.timeout,
 		DryRun:       o.dryRun,
 		DeliverURL:   o.deliverURL,
 	}

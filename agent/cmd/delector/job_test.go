@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -84,8 +85,10 @@ func TestRunEncounter_FlagDefaults(t *testing.T) {
 		want string
 	}{
 		{"concurrency", "4"},
-		{"max-articles", "0"},
+		{"max-articles", "200"},
+		{"max-file-bytes", "1048576"},
 		{"budget-tokens", "100000"},
+		{"timeout", "0s"},
 		{"dry-run", "false"},
 		{"python-url", ""},
 		{"deliver-url", "http://127.0.0.1:8000"},
@@ -110,6 +113,7 @@ func TestRunEncounter_FlagCustomValues(t *testing.T) {
 	if err := runCmd.ParseFlags([]string{
 		"--corpus", "c", "--out", "o",
 		"--concurrency", "8", "--max-articles", "3", "--budget-tokens", "999",
+		"--max-file-bytes", "2048", "--timeout", "1h30m0s",
 		"--dry-run",
 		"--python-url", "http://x:9", "--deliver-url", "http://d", "--llm-base-url", "http://l",
 	}); err != nil {
@@ -138,6 +142,14 @@ func TestRunEncounter_FlagCustomValues(t *testing.T) {
 		if got != want {
 			t.Errorf("--%s = %d，期望 %d", name, got, want)
 		}
+	}
+	maxFileBytes, _ := fl.GetInt64("max-file-bytes")
+	if maxFileBytes != 2048 {
+		t.Errorf("--max-file-bytes = %d，期望 2048", maxFileBytes)
+	}
+	timeout, _ := fl.GetDuration("timeout")
+	if timeout != 90*time.Minute {
+		t.Errorf("--timeout = %s，期望 1h30m0s", timeout)
 	}
 	dry, _ := fl.GetBool("dry-run")
 	if !dry {
@@ -183,7 +195,8 @@ func TestRunEncounter_HelpContainsFlags(t *testing.T) {
 	// cobra help 走 stdout（rootCmd.Out）。
 	for _, frag := range []string{
 		"encounter-pack", "corpus", "out",
-		"concurrency", "max-articles", "budget-tokens", "dry-run",
+		"concurrency", "max-articles", "max-file-bytes",
+		"budget-tokens", "timeout", "dry-run",
 		"python-url", "deliver-url", "llm-base-url",
 	} {
 		if !strings.Contains(got, frag) {
