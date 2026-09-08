@@ -170,6 +170,9 @@ commit 序列：3e4e7b2（T4a routes 子包）→ 206b3d7（T4b 工厂+main.py�
 3. 决策归档 ADR-0009（独立编号，不并入 ADR-0008）：Vault 01-ADR/0009-python-package-restructure-deletion-test-and-tool-contract.md。Go Agent 契约变更：工具名 exercise→writing_check。
 纪律沉淀：① 子包 __init__ 符号级扁平入口须有真实调用方，否则删；② tool 命名=真实语义；③ 服务端禁止自选持久化落点。另修复一次 git mv 预暂存导致的红态中间提交（soft reset 重切边界，reflog 可溯）。
 
+### 2026-09-08 | github-copilot | WORK_END
+修复背词工作台单词编辑弹窗保存按钮被长表单挤出可视区域的问题：仅让 `#wordModal .fgrid` 独立滚动，并固定 `.ops` 操作区。前端模块图与安全守卫 15 项通过，浏览器实测保存按钮可见。
+
 ### 2026-09-07 | codebuddy__auto | WORK_END
 任务闭环：Phase 2a Go Agent Runtime（docs/plans/2026-09-06-go-agent-runtime-phase2a.md）8/8 完成，maker-checker 流水线全绿。
 commit 序列（均推送）：T1 596dfb5（脚手架+ADR-0008 契约钉板）→ T2 3066d40（pythonsvc client）→ T3 a37bc1e（registry+golden 哨兵）→ T4 513eb55（自研 DAG 调度器）→ T5 1e2163a（supervisor）→ T6 ef3e6d2（llm/go-openai v1.42.0）→ T7 b93baf0（真实 uvicorn 集成 e2e + supervisor step0 修复）。
