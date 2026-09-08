@@ -1811,7 +1811,13 @@ def test_app_settings_get_and_post(client):
     assert data2["tts_voice"] == "de-DE-ConradNeural"
     assert data2["tts_rate"] == "+15%"
 
-def test_settings_test_key_without_key(client):
+def test_settings_test_key_without_key(client, monkeypatch):
+    # 密闭性：本机 .env 若配了真实 DEEPSEEK_API_KEY，会被 load_env() 灌进
+    # app_settings，端点于是拿到真 key 去打真实 DeepSeek（既烧 token，又让
+    # 「无 key 应失败」的断言从红翻绿）。这里强制 effective key 为空。
+    monkeypatch.setattr(
+        "delector.routes.main.get_effective_api_key", lambda *a, **k: ""
+    )
     res = client.post("/api/settings/test-key", json={"api_key": ""})
     assert res.status_code == 200
     data = res.json()
@@ -2793,6 +2799,10 @@ def test_settings_post_succeeds_on_loopback(client):
 
 def test_settings_test_key_succeeds_on_loopback(client, monkeypatch):
     """回环来源的 test-key 不应被 403 拦截（空 key 时返回 success=False 而非 403）。"""
+    # 同上：切断本机 .env 真 key，避免真实外呼（密闭性 + 不烧 token）。
+    monkeypatch.setattr(
+        "delector.routes.main.get_effective_api_key", lambda *a, **k: ""
+    )
     res = client.post("/api/settings/test-key", json={"api_key": ""})
     # 未被来源闸拦截：返回 200 且 success 为 False（提示输入 key），而非 403
     assert res.status_code == 200
