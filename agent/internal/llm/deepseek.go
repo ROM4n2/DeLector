@@ -28,6 +28,11 @@ const (
 	// defaultTimeout 兜底单次补全调用的 HTTP 总超时；调用方仍应以更小粒度
 	// 用 ctx 控制单次请求。零值 http.Client.Timeout 语义为无限制，故必设。
 	defaultTimeout = 120 * time.Second
+	// llmRetries 是初始请求失败后针对可重试状态（429/5xx）的退避重试次数
+	// （评审 ⑧，镜像 runner.deliverRetries 语义）：每调用 = 1 次初始 +
+	// 至多 llmRetries 次重试 = 至多 4 次请求。其余错误（4xx 非 429、ctx
+	// 取消/超时）不重试，原样返回。
+	llmRetries = 3
 )
 
 // ErrMissingAPIKey 哨兵错误：DEEPSEEK_API_KEY 环境变量未配置。
@@ -86,8 +91,41 @@ func WithTemperature(t float32) Option {
 	return func(r *req) { r.temperature = &t }
 }
 
+// llmBackoffDefault 是 LLM 调用退避纯函数，镜像 runner 的 deliverBackoff 风格：
+// 500ms 基数 × 2^attempt，封顶 8s；attempt>4 直接封顶（防移位溢出）。
+func llmBackoffDefault(attempt int) time.Duration {
+	const base = 500 * time.Millisecond
+	const cap = 8 * time.Second
+	switch {
+	case attempt < 0:
+		attempt = 0
+	case attempt > 4:
+		return cap
+	}
+	return base << attempt
+}
+
+// llmBackoff 是退避 seam（测试可缩短以免长 sleep）；默认即纯函数。
+var llmBackoff = llmBackoffDefault
+
+// isRetryableStatus 报告错误是否为可重试的 API 状态（429 限流 / 5xx 服务端
+// 抖动——评审 ⑧）。非 go-openai APIError（网络错误/ctx 取消/超时等）一律
+// 视为不可重试：网络层错误不重试是刻意取舍——4xx 类凭据/参数错误重试只会
+// 重复失败，ctx 取消/超时重试反而拖长超时窗口。
+func isRetryableStatus(err error) bool {
+	var apiErr *openai.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.HTTPStatusCode == http.StatusTooManyRequests ||
+		apiErr.HTTPStatusCode >= 500
+}
+
 // Complete 组装 chat/completions：system 提示（若非空）以 system 角色置于首位，
 // user 输入以 user 角色紧随其后；返回 assistant 首条消息内容。
+//
+// 重试语义（评审 ⑧）：429/5xx 时按 llmBackoff 退避重试，至多 1+llmRetries 次
+// 请求；其它错误（4xx 非 429、ctx 取消/超时）立即返回不重试。
 //
 // 超时纪律：出站请求由入参 ctx 驱动，调用方可用 context.WithTimeout/WithCancel
 // 控制单次调用；底层错误链经 %w 保留，可 errors.Is(err, context.DeadlineExceeded)
@@ -118,12 +156,33 @@ func (c *Client) Complete(ctx context.Context, system, user string, opts ...Opti
 		cr.Temperature = *r.temperature
 	}
 
-	resp, err := c.openAI.CreateChatCompletion(ctx, cr)
-	if err != nil {
-		return "", fmt.Errorf("llm: chat completion failed: %w", err)
+	var lastErr error
+	for attempt := 0; attempt <= llmRetries; attempt++ {
+		if attempt > 0 {
+			// 相邻尝试间按 llmBackoff(attempt-1) 退避（ctx 可中断）。
+			timer := time.NewTimer(llmBackoff(attempt - 1))
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return "", ctx.Err() // 退避中被取消：返回 ctx 错误（errors.Is 可判）
+			}
+			timer.Stop()
+		}
+
+		resp, err := c.openAI.CreateChatCompletion(ctx, cr)
+		if err != nil {
+			lastErr = err
+			if !isRetryableStatus(err) || attempt == llmRetries {
+				return "", fmt.Errorf("llm: chat completion failed: %w", lastErr)
+			}
+			continue // 429/5xx → 退避重试
+		}
+		if len(resp.Choices) == 0 {
+			return "", errors.New("llm: chat completion returned no choices")
+		}
+		return resp.Choices[0].Message.Content, nil
 	}
-	if len(resp.Choices) == 0 {
-		return "", errors.New("llm: chat completion returned no choices")
-	}
-	return resp.Choices[0].Message.Content, nil
+	// 不可达（循环内必返回），仅防静态分析缺 return。
+	return "", fmt.Errorf("llm: chat completion failed: %w", lastErr)
 }
