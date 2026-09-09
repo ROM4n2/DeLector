@@ -1,0 +1,19 @@
+# 统一 Go 文件行尾：blob 一律 LF，Windows checkout 也保持 LF。
+# 背景（2026-09-09）：core.autocrlf 把 checkout 转成 CRLF，导致本地 `gofmt -l`
+# 对全部 Go 文件报假阳性（曾误判"11 个 pre-existing 不洁文件"；经 `git show HEAD:x | gofmt -d`
+# 验证 blob 层面零问题）。锁定 eol=lf 后本地与 CI（ubuntu）口径一致，gofmt 门禁可信。
+*.go text eol=lf
+
+# Windows 批处理必须 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 明确的二进制（防 text=auto 误判）
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.db binary
+*.apk binary
+*.apkg binary
+*.jks binary
+*.keystore binary
