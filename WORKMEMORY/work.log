@@ -195,3 +195,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 5. ⑦ POST /texts 仅本机闸的人话：提交失败文案+空列表引导（仅允许本机/电脑本机点右上）。
 验证：go vet 四包 0；go test 与 -race（cmd/corpus/llm/job）全绿；pytest 受影响模块全绿（server+audit_hardening 全量、encounter 系全量、新增变异测试）；gofmt 本次改动文件 0 diff。
 遗留：仓库 11 个 pre-existing 非 gofmt-clean Go 文件与本次无关；cmd job 测试 pflag Duration 默认值显示 0s 修正断言。
+
+### 2026-09-09 | codebuddy__auto | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：CI Hardening 计划（docs/plans/2026-09-09-ci-hardening.md）T1–T6 全绿，分支 feature/ci-hardening。
+1. T1 tests/test_ci_hardening.py 三支守卫先 RED（ci.yml/dependabot 契约钉死，反冻结集合断言，ad78b79）。
+2. T2 偏差修正：gofmt 清账经 git show HEAD:x | gofmt -d 证伪——所谓 11 个不洁文件全是 autocrlf CRLF 假阳性，blob 本就 clean；根因修复 .gitattributes 锁 *.go eol=lf + 工作树重刷，gofmt -l 归零（7c246f6）。
+3. T3/T4 ci.yml（PR/push master 门禁：pytest 全量 + gofmt/vet/-race，ubuntu 单平台，concurrency 取消组，setup-go cache: true 引 99-Inbox 教训）+ dependabot 三生态周更（4044819/392ee24）。
+4. T5 PR（强制门禁证据区）/ISSUE 模板（41de3b9）；T6 全量门禁 pytest 694 passed + 1 skipped + OVERVIEW/计划状态回填。
+验证：守卫 3 passed（RED→GREEN 留痕）；go vet 0 / gofmt 空 / -race 全绿。
+遗留：Ruff/Mypy 递延另立计划；A7 双端手工冒烟待作者执行。
