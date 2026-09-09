@@ -8,6 +8,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "语义化版本 X.Y.Z（留空回退 main.go 常量）"
+        required: false
+        default: ""
 
 jobs:
   build-agent:
@@ -29,7 +34,11 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.26"
-          cache: "go"
+          # setup-go 的 cache 是 boolean（写法区别于 setup-node 的包管理器名）；
+          # GitHub runner 输入校验严格化后，"go" 会被拒：Input does not meet
+          # YAML 1.2 "Core Schema" specification: cache。
+          cache: true
+          cache-dependency-path: agent/go.mod
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,9 +50,12 @@ jobs:
         id: version
         shell: bash
         run: |
-          # tag 触发（refs/tags/vX.Y.Z）→ 去掉 v 前缀作为版本；
-          # workflow_dispatch / 分支触发 → 留空，交由 package_agent.py 回退读 main.go。
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          # 优先级：workflow_dispatch 手工注入 > tag（refs/tags/vX.Y.Z 去前缀）>
+          # 留空交由 package_agent.py 回退读 main.go。dispatch 注入用于 CI 修复后
+          # 补跑 tag 构建（tag 已指向不含修复的 commit，避免重打已发布的 tag）。
+          if [[ -n "${{ inputs.version }}" ]]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
             echo "value=" >> "$GITHUB_OUTPUT"
