@@ -1,0 +1,42 @@
+# =============================================================================
+# Dependabot 依赖治理：pip / github-actions / gomod 三生态周更
+# =============================================================================
+#
+# 组合拳（99-Inbox 两篇教训：tag 发版三重陷阱 / fastapi-starlette 无上界
+# 依赖漂移）：dependabot 负责把依赖升级**前置暴露**为 PR，升级安全性由
+# ci.yml 兜底——每个升级 PR 都会自动触发 CI 全量门禁（pytest + gofmt /
+# vet / -race），不绿不合并，依赖漂移不攒到发版日。
+#
+#   - pip            ：Python 后端依赖（fastapi/starlette 已 pin，其余靠周更盯防）
+#   - github-actions ：workflow 自身（actions/* 版本漂移）
+#   - gomod          ：agent/ 的 Go 模块依赖（与 build-agent.yml 的构建面同源）
+#
+# 格式说明：序列符 `-` 独立成行（YAML 等价写法），使 `package-ecosystem:`
+# 键位于行首——tests/test_ci_hardening.py 的守卫断言按行解析
+# `startswith("package-ecosystem:")`，`- ` 前缀会导致解析失明。
+# =============================================================================
+version: 2
+updates:
+  -
+    package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    reviewers: [ROM4n2]
+
+  -
+    package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    reviewers: [ROM4n2]
+
+  -
+    package-ecosystem: "gomod"
+    directory: "/agent"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    reviewers: [ROM4n2]
