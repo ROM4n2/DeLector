@@ -169,6 +169,23 @@ func baseURLForPort(port int) string {
 	return fmt.Sprintf("http://127.0.0.1:%d", port)
 }
 
+// BaseURLForPort 返回给定端口（0=默认 8001）的托管 Python 服务根地址。
+// 导出供 `delector job`（B7）等需在 spawn 后直连注册表/客户端而 `delector run`
+// 已在内部使用的调用方复用，避免复制粘贴端口→URL 映射（单一事实源）。
+func BaseURLForPort(port int) string { return baseURLForPort(port) }
+
+// NewSupervisor 由 Options 构造托管 Python supervisor 的生产实现（未启动），
+// 复用 app 为 `delector run` 装配的同一套 supervisor 配置（supervisorConfig：
+// uvicorn 命令 / HealthURL / DataDir + PYTHONPATH 环境注入），返回
+// *pythonsvc.Supervisor 供调用方自主管理生命周期（Start/Stop）。
+//
+// 用途：`delector job`（B7）在 --python-url 为空时需仿 run 起托管 Python 于
+// 8001、跑完任务后再主动 Stop——app.Run 是常驻 serve 语义（等 ctx.Done），无法
+// 复用于"spawn→执行→停止"的一次性任务，故经此导出同一 supervisor 装配。
+func NewSupervisor(opts Options) *pythonsvc.Supervisor {
+	return pythonsvc.NewSupervisor(supervisorConfig(opts))
+}
+
 func healthURLForPort(port int) string {
 	return baseURLForPort(port) + "/api/tools/"
 }

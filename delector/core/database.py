@@ -302,6 +302,23 @@ def init_db(db_path: Optional[str] = None):
                 updated_at TEXT NOT NULL
             );
         """)
+        # 遇见区 i+1 手选分级短文本（阅读域，与 articles 同库同批次）。pack_id 为
+        # job#1 import-pack 的来源标识（手工文本为 NULL）；pack_json 存整份
+        # encounter-pack/v1 元数据。level 规一（A1/A2/B1 白名单）由 A2 的
+        # validate_pack 负责，此处只存输入原值。
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS encounter_texts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pack_id TEXT UNIQUE,
+                title TEXT NOT NULL,
+                level TEXT NOT NULL DEFAULT 'A2',
+                source TEXT DEFAULT '',
+                content TEXT NOT NULL,
+                pack_json TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_encounter_level ON encounter_texts(level)")
 
         # 读路径查询索引（幂等，旧库启动自动补）：SRS 到期队列 + 文章维度
         # 过滤/级联。缺失时「到期复习」「某文相关卡」「删文连带」在长库全表扫。
@@ -447,6 +464,84 @@ def save_wb_state(payload: dict, db_path: Optional[str] = None) -> str:
     finally:
         _close_db_conn(conn)
     return updated_at
+
+
+def list_encounter_texts(level: Optional[str] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """遇见区短文列表：可选按建议阅读等级过滤，行按 id 倒序（新→旧）。"""
+    target_path = get_db_path(db_path)
+    with db_conn(target_path) as conn:
+        if level is not None:
+            rows = conn.execute(
+                "SELECT * FROM encounter_texts WHERE level = ? ORDER BY id DESC",
+                (level,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM encounter_texts ORDER BY id DESC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_encounter_text(text_id: int, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """按 id 取单篇短文；不存在返回 None。"""
+    target_path = get_db_path(db_path)
+    with db_conn(target_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM encounter_texts WHERE id = ?", (text_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def create_encounter_text(title: str, level: str, source: str, content: str,
+                          pack_id: Optional[str] = None, pack_json: Optional[str] = None,
+                          db_path: Optional[str] = None) -> int:
+    """手工/导入新增一篇短文，返回新行自增 id。"""
+    target_path = get_db_path(db_path)
+    with db_conn(target_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO encounter_texts (title, level, source, content, pack_id, pack_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (title or "", level or "A2", source or "", content or "",
+             pack_id, pack_json),
+        )
+        return cur.lastrowid
+
+
+def import_encounter_pack(pack: dict, db_path: Optional[str] = None) -> int:
+    """把 job#1 encounter-pack/v1 整包落库为一行短文；幂等。
+
+    契约：pack_id 已存在时直接返回既有行的 id（不新增）。缺必需键
+    （schema / pack_id / article{title, raw_text}）抛 ValueError。level 不做
+    规一（A2 的 validate_pack 负责），本函数只存包中原值（缺省 'A2'）。
+    """
+    if not isinstance(pack, dict):
+        raise ValueError("import_encounter_pack: pack 必须是 dict")
+    article = pack.get("article")
+    missing = [k for k in ("schema", "pack_id") if not pack.get(k)]
+    if article is None or not isinstance(article, dict):
+        missing.append("article")
+    if missing:
+        raise ValueError(
+            "import_encounter_pack: 缺少必需键 " + ", ".join(sorted(set(missing)))
+        )
+    if not article.get("title") or not article.get("raw_text"):
+        raise ValueError("import_encounter_pack: article 需含 title 与 raw_text")
+
+    target_path = get_db_path(db_path)
+    pack_id = pack["pack_id"]
+    with db_conn(target_path) as conn:
+        existing = conn.execute(
+            "SELECT id FROM encounter_texts WHERE pack_id = ?", (pack_id,)
+        ).fetchone()
+        if existing:
+            return existing["id"]
+        cur = conn.execute(
+            "INSERT INTO encounter_texts (pack_id, title, level, content, pack_json) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (pack_id, article["title"], pack.get("estimated_cefr") or "A2",
+             article["raw_text"], json.dumps(pack, ensure_ascii=False)),
+        )
+        return cur.lastrowid
 
 
 def get_wb_sync_key(db_path: Optional[str] = None) -> str:
@@ -759,6 +854,13 @@ _BACKUP_TABLES = {
     "essay_versions": (
         ("id", "essay_id", "content", "analysis_json", "message", "created_at"),
         {"essay_id": 0, "content": "", "analysis_json": "{}", "message": ""},
+    ),
+    # 遇见区短文（Task A1 起入同库）；pack_json 存整份 encounter-pack/v1 元数据。
+    # 备份/还原缺失该表会让换机还原后遇见区全丢（vault-team 评审 ②）。
+    "encounter_texts": (
+        ("id", "pack_id", "title", "level", "source", "content", "pack_json", "created_at"),
+        {"pack_id": None, "title": "", "level": "A2", "source": "",
+         "content": "", "pack_json": None},
     ),
 }
 
@@ -1412,6 +1514,10 @@ __all__ = [
     "get_wb_state",
     "save_wb_state",
     "get_wb_sync_key",
+    "list_encounter_texts",
+    "get_encounter_text",
+    "create_encounter_text",
+    "import_encounter_pack",
     "get_effective_api_key",
     "get_effective_api_base_url",
     "get_effective_api_model",

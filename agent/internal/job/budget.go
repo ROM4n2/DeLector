@@ -1,0 +1,70 @@
+package job
+
+import (
+	"errors"
+	"sync"
+)
+
+// ErrBudgetExceeded 表示一次 Reserve 会把 TokenBudget 的已用额度推出 cap 上限。
+// 通过 errors.Is 判定，供调用方（如 runner 预算耗尽降级）识别。
+var ErrBudgetExceeded = errors.New("job: token budget exceeded")
+
+// TokenBudget 是对 DeepSeek 真调用 token 消耗的成本护栏：多个并发步骤共享
+// 同一实例，Reserve 在并发下原子递增。cap<=0 表示不设上限（无限）。
+type TokenBudget struct {
+	mu   sync.Mutex
+	cap  int
+	used int
+}
+
+// NewTokenBudget 构造预算上限为 cap 的 TokenBudget。cap<=0 表示无限额度。
+func NewTokenBudget(cap int) *TokenBudget {
+	return &TokenBudget{cap: cap}
+}
+
+// Reserve 预留 est 个 token（est 由调用方按文本长度估算）。语义：
+//   - est<0 视为非法，返回错误且不影响 used；
+//   - cap>0 且 used+est>cap 时返回 ErrBudgetExceeded，used 不变；
+//   - cap<=0 视为无限，总接受；
+//   - 成功时 used 原子 +est。
+//
+// 并发安全：同一实例可被多个 goroutine 同时 Reserve。
+func (b *TokenBudget) Reserve(est int) error {
+	if est < 0 {
+		return errors.New("job: token budget reserve est 不能为负")
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.cap > 0 && b.used+est > b.cap {
+		return ErrBudgetExceeded
+	}
+	b.used += est
+	return nil
+}
+
+// Used 返回当前已预留 token 数。并发安全。
+func (b *TokenBudget) Used() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.used
+}
+
+// Release 把一次已预留但实际未消耗的额度退回（如 LLM 调用失败/被取消后
+// Reserve 的估算没真正烧掉）。语义（vault-team 评审 ③）：
+//   - est<=0 忽略；
+//   - 退回以 used 为下界 clamp 到 0，绝不把 used 打成负数；
+//   - 并发安全（与 Reserve 同一把锁，无 lost update）。
+//
+// 调用方在「Reserve 成功后、对应 LLM 调用失败返回」的路径上负责 Release，
+// 保证连续失败的文章不会把共享预算烧光（~50 篇失败即耗完 100k 的问题）。
+func (b *TokenBudget) Release(est int) {
+	if est <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.used -= est
+	if b.used < 0 {
+		b.used = 0
+	}
+}

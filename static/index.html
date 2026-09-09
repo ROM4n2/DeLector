@@ -127,6 +127,68 @@
         <span class="section-title">文稿库 · LIBRARY</span>
       </div>
       <div id="article-list"></div>
+
+      <div class="encounter-entry-card" onclick="show('encounter')" role="button" tabindex="0">
+        <span class="encounter-entry-emoji">🌱</span>
+        <span class="encounter-entry-title">遇见区 i+1 短文</span>
+        <span class="encounter-entry-sub">手选分级德语短篇 · Begegnungszone</span>
+      </div>
+    </main>
+
+    <!-- ── View: 遇见区 · Encounter Zone (P0) ───────────────────── -->
+    <main id="view-encounter" class="view">
+      <div class="encounter-topbar">
+        <div>
+          <h2>遇见区 · Begegnungszone</h2>
+          <div class="encounter-subhead">i+1 Lesen · 手选分级短篇，读完进词卡</div>
+        </div>
+        <button id="encounter-add-toggle" class="btn btn-accent" onclick="encounterToggleAddForm()">
+          ＋ 加文本
+        </button>
+      </div>
+
+      <div id="encounter-add-form" class="encounter-add-form">
+        <div class="encounter-form-row">
+          <div>
+            <label for="enc-f-title">标题 *</label>
+            <input id="enc-f-title" type="text" placeholder="短篇标题" />
+          </div>
+          <div>
+            <label for="enc-f-level">等级</label>
+            <select id="enc-f-level">
+              <option value="A1">A1</option>
+              <option value="A2" selected>A2</option>
+              <option value="B1">B1</option>
+            </select>
+          </div>
+          <div>
+            <label for="enc-f-source">来源</label>
+            <input id="enc-f-source" type="text" placeholder="出处（可选）" />
+          </div>
+        </div>
+        <div>
+          <label for="enc-f-content">正文 *（段落间空一行 \n\n）</label>
+          <textarea id="enc-f-content" rows="6" placeholder="在此粘贴德语短文正文"></textarea>
+        </div>
+        <div class="encounter-form-row">
+          <button class="btn btn-dark" onclick="encounterSubmitAdd()">保存并加入列表</button>
+          <button class="btn btn-ghost" onclick="encounterCancelAdd()">取消</button>
+        </div>
+        <div id="enc-add-error" class="encounter-form-error"></div>
+      </div>
+
+      <div id="encounter-text-list" class="encounter-list"></div>
+      <div id="enc-coverage" class="enc-coverage" aria-live="polite" style="display:none"></div>
+      <div id="encounter-reader" class="encounter-reader" style="display:none"></div>
+
+      <!-- A6：点词释义弹层（fixed 定位，打开时加 .open） -->
+      <div id="enc-popover" class="enc-popover" role="dialog" aria-label="生词释义"></div>
+
+      <!-- A6：读完会话小复习（本次阅读刚加入的词）+ 小开关 -->
+      <button id="enc-review-toggle" class="enc-review-toggle btn btn-ghost btn-sm" style="display:none">
+        小复习
+      </button>
+      <div id="enc-review" class="enc-review" style="display:none" aria-live="polite"></div>
     </main>
 
     <!-- ── View 2: Reader Workspace ───────────────────────────── -->

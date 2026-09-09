@@ -116,6 +116,8 @@ Go 编译为单二进制 CLI/桌面应用，内嵌 Agent DAG 编排逻辑，通�
 ```
 
 > **工具清单注记（2026-09-06）**：Tool Registry 与 Python 侧 `delector/tools/__init__.py` 的 `TOOL_REGISTRY` 对齐，共 5 个工具：`ingest / analyze / writing_check / export / tts`。`exercise` 已更名 `writing_check`（见 ADR-0009）；原 `review` 工具 Python 侧尚不存在，Phase 2b+ 待 Python 侧新增工具后接入。
+>
+> **工具清单注记更新（2026-09-07，Sub-Plan B）**：Python 侧新增第 6 号 leaf tool **`vocab_stats`**（语料已知/未知词覆盖统计，见 ADR-0009 工具契约与 Sub-Plan B 计划）。三处同步完成：`delector/tools/__init__.py` TOOL_REGISTRY、Python `tests/test_tools.py` 清单断言（5→6）、Go `agent/internal/registry/registry.go` `defaultTools` golden（5→6）。当前 Go Tool Registry 与 Python 实存工具对齐为 6 工具：`ingest / analyze / writing_check / export / tts / vocab_stats`。
 
 ### 关键技术选型
 

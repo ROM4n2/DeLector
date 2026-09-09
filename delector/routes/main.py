@@ -1373,6 +1373,8 @@ class RestoreReq(BaseModel):
     a1_lesen_records: List[Dict[str, Any]] = []
     # v5.2 泛化成绩表；v1/v5.1 备份没有此字段，缺省为空（向后兼容同上）
     exam_trials: List[Dict[str, Any]] = []
+    # 遇见区短文表；加入备份/还原（缺省为空以兼容 v1/v5.1/v5.2 旧备份）
+    encounter_texts: List[Dict[str, Any]] = []
     local_storage: Dict[str, Any] = {}
 
 

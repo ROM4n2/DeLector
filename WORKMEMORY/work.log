@@ -184,3 +184,14 @@ commit 序列（均推送）：T1 596dfb5（脚手架+ADR-0008 契约钉板）�
 commit 序列（均推送）：T1 35417a8（supervisor Unix SIGTERM build tag + ProbeTimeout 10s）→ T2 8b5d329（delector run 真组装 + article-analysis 预设）→ T3 67d15df（package_agent.py 绿色便携包 + run wiring）→ T4 64c7cea（build-agent.yml 三平台 CI）。
 关键产出：`delector run` 常驻 Python NLP 服务（supervisor→registry→DAG→ctx 取消优雅退出，procCtx 解耦子进程）；产物 `delector-agent/{delector,python,delector-src}`（venv + de_core_news_sm，压缩 ~65MB），按 os.Executable 解析包内 venv python/PYTHONPATH/DataDir；三平台 CI 出 artifact（零密钥、不挂 publish，预览通道）。
 纪律与踩坑（供后续 Phase 3/2c）：① Go 进程管理坑二连——exec.CommandContext 的 ctx 提前 cancel 强杀子进程（T2 修）+ cmd.Cancel 字段手动调用不武装 WaitDelay 强杀计时器（T1 RED 闭环：awaitExit 超时分支改调 killProc SIGKILL）；② 打包产物 dist/ 必须 .gitignore 覆盖（285MB 绝不可入库）；③ venv 解释器 Windows 在 Scripts/python.exe（非顶层），解析需双路回退；④ -ldflags -X 只能注入 var 不能注入 const（version const→var）；⑤ 发布面零交集：agent 包为新增独立 artifact，PyInstaller 四端 + publish 链未动，替换桌面版决策留 Phase 3（需先数据收集：用户更想要单二进制还是保留现有 Web 版）。
+
+### 2026-09-08 | codebuddy__auto | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：feature/encounter-job1 上 vault-team 评审 8 条发现全部修复（改动与新增测试均在工作树，未 commit，等用户拍板单笔 or 按域拆分）。
+1. ① 进卡双写 IDB：encounter.js 保存路径调 encIdbWriteWords（IndexedDB db"wb"/store"words"/单键"main"，与 workbench F2 同库同构），手机/离线清 localStorage 新词不丢。
+2. ② database.py _BACKUP_TABLES 升格为列规格 dict（补 encounter_texts）：export 按列 SELECT、restore 按列 INSERT（缺键回退 DEFAULT）+还原前清该表行。
+3. ③ budget.go 增 Release()，encounter.go Reserve 失败路径 Release；④ corpus source.go ScanDir 改两阶段有界扫描（WalkDir 记账+超 max-file-bytes 不读入+上限裁决 → 二次仅读入选），--max-articles 读取前裁决；⑤ deck-bridge.js knownSet 复用 workbench stripGermanArticle 语义剥冠词（die Abfahrt→abfahrt），键=lemma 小写。
+4. ⑥ runner RunConfig.Timeout 默认 2h，超时 sink 错误+abort；job.go 默认护栏 --max-articles 200 --max-file-bytes 1MB --timeout 2h（0=关/无限）；⑧ llm Complete 429/5xx 重试退避（200ms×2→1.6s）。
+5. ⑦ POST /texts 仅本机闸的人话：提交失败文案+空列表引导（仅允许本机/电脑本机点右上）。
+验证：go vet 四包 0；go test 与 -race（cmd/corpus/llm/job）全绿；pytest 受影响模块全绿（server+audit_hardening 全量、encounter 系全量、新增变异测试）；gofmt 本次改动文件 0 diff。
+遗留：仓库 11 个 pre-existing 非 gofmt-clean Go 文件与本次无关；cmd job 测试 pflag Duration 默认值显示 0s 修正断言。

@@ -7,7 +7,14 @@
 
 TOOL_REGISTRY：tool 名 → run 协程，routes/tools.py 据此分发。
 """
-from delector.tools import analyze, export, ingest, tts_tool, writing_check
+from delector.tools import (
+    analyze,
+    export,
+    ingest,
+    tts_tool,
+    vocab_stats,
+    writing_check,
+)
 
 TOOL_REGISTRY = {
     "ingest": ingest.run,
@@ -15,6 +22,7 @@ TOOL_REGISTRY = {
     "writing_check": writing_check.run,
     "export": export.run,
     "tts": tts_tool.run,
+    "vocab_stats": vocab_stats.run,
 }
 
 __all__ = [
@@ -23,5 +31,6 @@ __all__ = [
     "export",
     "ingest",
     "tts_tool",
+    "vocab_stats",
     "writing_check",
 ]

@@ -10119,3 +10119,462 @@ body.drawer-open .companion {
   box-shadow: 0 1px 4px rgba(21, 20, 15, 0.08);
 }
 
+
+/* ── 遇见区 encounter (P0)：自 index.html #view-encounter 内联 <style> 迁入 ──
+   视图/按钮/弹层/小复习/已背词高亮（A4–A6），逻辑归属见 static/js/encounter.js。
+   2026-09-08 视觉重做：Academic Modern Editorial（规范见 Vault
+   01-Rules/FRONTEND-DESIGN-PATTERNS）—— 纸张底 + 1.5px 印刷墨线 + 实体硬投影 +
+   社论台账列表 + 荧光笔高亮 + 和纸便签弹层；去掉原先的渐变与通用圆角。 */
+
+/* 局部字体栈：线上 webfont（Google Fonts）在国内网络 / 离线 WebView 常加载失败，
+   这里把回退链钉到各端本机已有的优质衬线 / 等宽，断网也不塌回系统默认体。 */
+#view-encounter,
+.encounter-entry-card {
+  --enc-display: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Noto Serif", serif;
+  --enc-body: "DM Serif Text", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Noto Serif", serif;
+  --enc-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+}
+
+/* ── 入口卡（德语文库首页）────────────────────────────────────────────── */
+.encounter-entry-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0 0.9rem;
+  margin: 1.5rem 0 0.5rem;
+  padding: 1rem 1.15rem;
+  border: 1.5px solid var(--ink, #15140f);
+  border-radius: 3px;
+  background: var(--paper-card, #fff);
+  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.15);
+  cursor: pointer;
+  transition: transform var(--dur-fast, 180ms) var(--ease-editorial, ease),
+    box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
+}
+.encounter-entry-card:hover,
+.encounter-entry-card:focus-visible {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 rgba(21, 20, 15, 0.18);
+}
+.encounter-entry-emoji { font-size: 1.15rem; line-height: 1; filter: saturate(0.9); }
+.encounter-entry-title {
+  font-family: var(--enc-display);
+  font-weight: 700;
+  font-size: 1.12rem;
+  letter-spacing: 0.01em;
+  color: var(--ink, #15140f);
+}
+/* 珊瑚色短墨线：与刊头「小字号 + 大留白」的社论节奏呼应 */
+.encounter-entry-title::after {
+  content: "";
+  display: block;
+  width: 2.2rem;
+  height: 2px;
+  margin-top: 0.3rem;
+  background: var(--coral, #ed6f5c);
+}
+.encounter-entry-sub {
+  font-family: var(--enc-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8b8676);
+  text-align: right;
+}
+
+/* ── 区头：刊头式标题 + 墨线分隔 ──────────────────────────────────────── */
+.encounter-topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.7rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1.5px solid var(--ink, #15140f);
+}
+.encounter-topbar h2 {
+  font-family: var(--enc-display);
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--ink, #15140f);
+}
+.encounter-subhead {
+  font-family: var(--enc-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8b8676);
+  margin-top: 0.3rem;
+}
+#encounter-add-toggle {
+  font-family: var(--enc-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 1rem;
+  border: 1.5px solid var(--ink, #15140f);
+  border-radius: 3px;
+  background: var(--coral, #ed6f5c);
+  color: #fff;
+  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.18);
+  transition: transform var(--dur-fast, 180ms) var(--ease-editorial, ease),
+    box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
+}
+#encounter-add-toggle:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 rgba(21, 20, 15, 0.22); }
+
+/* ── 台账列表：CEFR 印章 + 衬线标题 + 等宽元数据，行间只用一条细墨线 ──── */
+.encounter-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rule, #d8d0c2);
+}
+.encounter-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 0.35rem 0.9rem;
+  padding: 0.85rem 0.5rem;
+  border-bottom: 1px solid var(--rule, #d8d0c2);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--dur-fast, 180ms) var(--ease-editorial, ease);
+}
+.encounter-card:hover { background: var(--paper-tint, #f2ece1); }
+.encounter-card:hover .encounter-card-title { color: var(--accent, #c14a2b); }
+.encounter-badge {
+  font-family: var(--enc-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+.encounter-badge.A1 { color: var(--hl-A1-ink, #1d548c); background: var(--hl-A1, #e3effb); }
+.encounter-badge.A2 { color: var(--hl-A2-ink, #20662a); background: var(--hl-A2, #d6eccf); }
+.encounter-badge.B1 { color: var(--hl-B1-ink, #825c00); background: var(--hl-B1, #fde9bd); }
+.encounter-card-title {
+  font-family: var(--enc-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  line-height: 1.35;
+  color: var(--ink, #15140f);
+  transition: color var(--dur-fast, 180ms) var(--ease-editorial, ease);
+}
+.encounter-card-meta {
+  font-family: var(--enc-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint, #8b8676);
+  white-space: nowrap;
+}
+
+/* ── 阅读页：一张印出来的纸（1.5px 墨线 + 硬投影 + 首字下沉）──────────── */
+.encounter-reader {
+  border: 1.5px solid var(--ink, #15140f);
+  border-radius: 3px;
+  background: var(--paper-card, #fff);
+  box-shadow: 4px 4px 0 rgba(21, 20, 15, 0.15);
+  padding: 1.75rem 2rem 2.25rem;
+  margin-top: 1.5rem;
+}
+.encounter-reader-head {
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--rule, #d8d0c2);
+}
+.encounter-reader-head h3 {
+  font-family: var(--enc-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink, #15140f);
+  margin: 0.5rem 0 0.35rem;
+}
+.encounter-reader-source {
+  font-family: var(--enc-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8b8676);
+}
+.encounter-body { max-width: 62ch; }
+.encounter-body p {
+  font-family: var(--enc-body);
+  font-size: 1.16rem;
+  line-height: 1.95;
+  color: var(--ink-soft, #2a2620);
+  margin: 0 0 1.2rem;
+}
+/* 签名元素：首段首字下沉（朱砂珊瑚红）。注：逐 token 注解模式（A5）渲染的是
+   span 流、无 <p>，故下沉只在纯段落回退渲染下生效。 */
+.encounter-body p:first-of-type::first-letter {
+  float: left;
+  font-family: var(--enc-display);
+  font-size: 3.2rem;
+  line-height: 0.82;
+  font-weight: 700;
+  padding: 0.06em 0.1em 0 0;
+  color: var(--coral, #ed6f5c);
+}
+
+/* ── 加文本：内嵌抽屉（纸色底 + 顶部粗墨线），不是浮空方块 ───────────── */
+.encounter-add-form {
+  display: none;
+  flex-direction: column;
+  gap: 0.8rem;
+  border: 1.5px solid var(--ink, #15140f);
+  border-top-width: 4px;
+  border-radius: 3px;
+  padding: 1.25rem 1.35rem;
+  margin-top: 1rem;
+  background: var(--paper-tint, #f2ece1);
+  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.12);
+}
+.encounter-add-form.open { display: flex; }
+.encounter-add-form label {
+  display: block;
+  font-family: var(--enc-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute, #5a5448);
+  margin-bottom: 0.3rem;
+}
+.encounter-add-form input,
+.encounter-add-form select,
+.encounter-add-form textarea {
+  width: 100%;
+  font-family: var(--enc-body);
+  font-size: 0.98rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--rule, #d8d0c2);
+  border-radius: 2px;
+  background: var(--paper-card, #fff);
+  color: var(--ink, #15140f);
+}
+.encounter-add-form input:focus,
+.encounter-add-form select:focus,
+.encounter-add-form textarea:focus {
+  outline: none;
+  border-color: var(--coral, #ed6f5c);
+  box-shadow: 2px 2px 0 rgba(21, 20, 15, 0.1);
+}
+.encounter-add-form textarea { line-height: 1.7; resize: vertical; }
+.encounter-form-row { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+.encounter-form-row > div { flex: 1 1 140px; }
+.encounter-form-error {
+  font-family: var(--enc-mono);
+  font-size: 0.74rem;
+  color: var(--danger, #b03030);
+  display: none;
+}
+.encounter-form-error.show { display: block; }
+.encounter-empty {
+  font-family: var(--enc-mono);
+  font-size: 0.78rem;
+  color: var(--ink-mute, #5a5448);
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  border: 1px dashed var(--rule, #d8d0c2);
+  border-radius: 3px;
+  background: var(--paper-card, #fff);
+}
+
+/* ── 已背词 / 生词：荧光笔与铅笔点线 ─────────────────────────────────── */
+.enc-tok { border-radius: 2px; }
+.enc-tok.enc-known {
+  /* 荧光笔：芥末黄扫过 + 橄榄绿下标 —— 「这个词你已经背过」 */
+  background: rgba(233, 185, 74, 0.22);
+  box-shadow: inset 0 -2px 0 rgba(110, 116, 72, 0.55);
+  cursor: default;
+}
+.enc-tok.enc-unk {
+  cursor: pointer;
+  border-bottom: 1px dotted rgba(176, 48, 48, 0.55);
+}
+.enc-tok.enc-unk:hover {
+  background: rgba(237, 111, 92, 0.16);
+  border-bottom-style: solid;
+}
+
+/* ── 覆盖统计：等宽数据走字条 + 芥末黄进度墨线（本区签名件）─────────── */
+.enc-coverage {
+  font-family: var(--enc-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute, #5a5448);
+  border: 1px solid var(--rule, #d8d0c2);
+  border-left: 3px solid var(--mustard, #e9b94a);
+  border-radius: 2px;
+  padding: 0.55rem 0.8rem;
+  margin-top: 1.1rem;
+  background: var(--paper-card, #fff);
+}
+
+/* ── 点词释义：和纸便签（sticky note），不是圆角浮层 ─────────────────── */
+.enc-popover {
+  display: none;
+  position: fixed;
+  z-index: 1200;
+  width: 280px;
+  max-width: min(88vw, 320px);
+  border: 1.5px solid var(--ink, #15140f);
+  border-radius: 2px;
+  background: var(--note-yellow, #fffbe6);
+  box-shadow: 4px 4px 0 rgba(21, 20, 15, 0.2);
+  padding: 0.85rem 0.95rem 0.95rem;
+  font-family: var(--enc-mono);
+  transform: rotate(-0.6deg);
+  animation: enc-note-in var(--dur-fast, 180ms) var(--ease-editorial, ease);
+}
+@keyframes enc-note-in {
+  from { opacity: 0; transform: rotate(-0.6deg) translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: rotate(-0.6deg) translateY(0) scale(1); }
+}
+.enc-popover.open { display: block; }
+.enc-pop-head { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
+.enc-pop-head strong {
+  font-family: var(--enc-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink, #15140f);
+}
+.enc-pop-pos {
+  font-family: var(--enc-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8b8676);
+}
+.enc-pop-close {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-mute, #5a5448);
+}
+.enc-pop-gloss {
+  font-family: var(--enc-body);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--accent, #c14a2b);
+  min-height: 1.2em;
+  margin-bottom: 0.6rem;
+  word-break: break-word;
+}
+.enc-pop-gloss.enc-pop-loading,
+.enc-pop-gloss.enc-pop-none {
+  font-family: var(--enc-mono);
+  font-size: 0.76rem;
+  color: var(--ink-mute, #5a5448);
+}
+.enc-pop-add {
+  width: 100%;
+  font-family: var(--enc-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.45rem 0.8rem;
+  border: 1.5px solid var(--ink, #15140f);
+  border-radius: 2px;
+  background: var(--coral, #ed6f5c);
+  color: #fff;
+  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.18);
+  cursor: pointer;
+}
+.enc-pop-status { font-family: var(--enc-mono); font-size: 0.72rem; margin-top: 0.45rem; min-height: 1em; }
+.enc-pop-status.ok { color: var(--moss, #3b6e3f); }
+.enc-pop-status.err { color: var(--danger, #b03030); }
+
+/* ── 读完小复习：便签纸抽屉 ──────────────────────────────────────────── */
+.enc-review-toggle {
+  display: block;
+  margin-top: 1.1rem;
+  font-family: var(--enc-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+.enc-review {
+  border: 1.5px solid var(--ink, #15140f);
+  border-radius: 2px;
+  padding: 1rem 1.1rem;
+  margin-top: 0.75rem;
+  background: var(--note-green, #edf7ec);
+  box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.12);
+}
+.enc-review-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+.enc-review-head h4 {
+  font-family: var(--enc-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink, #15140f);
+  margin: 0;
+}
+.enc-review-collapse {
+  margin-left: auto;
+  border: 1px solid var(--rule, #d8d0c2);
+  border-radius: 2px;
+  background: var(--paper-card, #fff);
+  font-family: var(--enc-mono);
+  font-size: 0.68rem;
+  cursor: pointer;
+  padding: 0.15rem 0.45rem;
+}
+.enc-review-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.enc-rev-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--rule, #d8d0c2);
+  border-radius: 2px;
+  background: var(--paper-card, #fff);
+  font-size: 0.94rem;
+  cursor: pointer;
+  transition: border-color var(--dur-fast, 180ms) var(--ease-editorial, ease);
+}
+.enc-rev-row:hover { border-color: var(--ink, #15140f); }
+.enc-rev-front { font-family: var(--enc-body); font-weight: 700; color: var(--ink, #15140f); }
+.enc-rev-gloss { font-family: var(--enc-mono); font-size: 0.78rem; color: var(--ink-mute, #5a5448); }
+.enc-rev-speak {
+  margin-left: auto;
+  border: 1px solid var(--rule, #d8d0c2);
+  border-radius: 2px;
+  background: var(--paper-card, #fff);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px 8px;
+}
+.enc-review-note {
+  font-family: var(--enc-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint, #8b8676);
+  margin-top: 0.5rem;
+}
+
+/* 无障碍：尊重系统的降低动效设置 */
+@media (prefers-reduced-motion: reduce) {
+  .encounter-entry-card,
+  #encounter-add-toggle,
+  .enc-rev-row { transition: none; }
+  .enc-popover { animation: none; transform: none; }
+  .encounter-entry-card:hover,
+  .encounter-entry-card:focus-visible,
+  #encounter-add-toggle:hover { transform: none; }
+}
+/* 窄屏：阅读页收边距，列表元数据换行到标题下方 */
+@media (max-width: 640px) {
+  .encounter-reader { padding: 1.25rem 1.1rem 1.5rem; }
+  .encounter-body p { font-size: 1.08rem; }
+  .encounter-entry-card { grid-template-columns: auto 1fr; }
+  .encounter-entry-sub { grid-column: 2; text-align: left; }
+  .encounter-card { grid-template-columns: auto 1fr; }
+  .encounter-card-meta { grid-column: 2; white-space: normal; }
+}

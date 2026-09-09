@@ -662,6 +662,46 @@ def test_backup_export_and_restore_roundtrip(client):
     assert res_verify.json()["title"] == "Backup Test Article"
 
 
+def test_backup_restore_covers_encounter_texts(client):
+    """vault-team 评审 ②：备份/还原必须覆盖遇见区短文表（encounter_texts）——
+    缺失时"看着还原成功"，换机后遇见区却全空。
+
+    变异探针：造一篇 → 导出（含 encounter_texts）→ 把目标库该表删空（模拟
+    还原前数据丢失）→ 全量 restore → 遇见区文本必须回来。
+    """
+    import sqlite3
+
+    # 1) 造一篇（走本机闸 POST /api/encounter/texts）。
+    r = client.post("/api/encounter/texts", json={
+        "title": "Mein erstes U-Bahn-Abenteuer",
+        "level": "A2",
+        "source": "手工",
+        "content": "Ich fahre zum ersten Mal mit der U-Bahn.",
+    })
+    assert r.status_code == 201, r.text
+    tid = r.json()["id"]
+
+    # 2) 导出应含 encounter_texts 且带着这篇。
+    res = client.get("/api/backup/export")
+    assert res.status_code == 200
+    data = res.json()
+    assert "encounter_texts" in data
+    assert any(x.get("id") == tid for x in data["encounter_texts"])
+
+    # 3) 目标库删光该表行（模拟还原前数据丢失/被清）。
+    conn = sqlite3.connect("test_delector.db")
+    conn.execute("DELETE FROM encounter_texts")
+    conn.commit()
+    conn.close()
+    assert client.get("/api/encounter/texts").json()["texts"] == []
+
+    # 4) 全量还原 → 遇见区文本回来。
+    rr = client.post("/api/backup/restore", json=data)
+    assert rr.status_code == 200, rr.text
+    titles = [t["title"] for t in client.get("/api/encounter/texts").json()["texts"]]
+    assert any("U-Bahn" in t for t in titles), f"还原后遇见区应恢复短文，实际: {titles}"
+
+
 # ── v3.10.0 备份往返修复的回归测试 ────────────────────────────────────────────
 # 上面那个 roundtrip 测试只断言了文章标题，正是它让「还原丢掉 SRS 状态」
 # 这个数据丢失缺陷一路绿灯。下面把每一处都钉死。
@@ -1811,7 +1851,13 @@ def test_app_settings_get_and_post(client):
     assert data2["tts_voice"] == "de-DE-ConradNeural"
     assert data2["tts_rate"] == "+15%"
 
-def test_settings_test_key_without_key(client):
+def test_settings_test_key_without_key(client, monkeypatch):
+    # 密闭性：本机 .env 若配了真实 DEEPSEEK_API_KEY，会被 load_env() 灌进
+    # app_settings，端点于是拿到真 key 去打真实 DeepSeek（既烧 token，又让
+    # 「无 key 应失败」的断言从红翻绿）。这里强制 effective key 为空。
+    monkeypatch.setattr(
+        "delector.routes.main.get_effective_api_key", lambda *a, **k: ""
+    )
     res = client.post("/api/settings/test-key", json={"api_key": ""})
     assert res.status_code == 200
     data = res.json()
@@ -2793,6 +2839,10 @@ def test_settings_post_succeeds_on_loopback(client):
 
 def test_settings_test_key_succeeds_on_loopback(client, monkeypatch):
     """回环来源的 test-key 不应被 403 拦截（空 key 时返回 success=False 而非 403）。"""
+    # 同上：切断本机 .env 真 key，避免真实外呼（密闭性 + 不烧 token）。
+    monkeypatch.setattr(
+        "delector.routes.main.get_effective_api_key", lambda *a, **k: ""
+    )
     res = client.post("/api/settings/test-key", json={"api_key": ""})
     # 未被来源闸拦截：返回 200 且 success 为 False（提示输入 key），而非 403
     assert res.status_code == 200

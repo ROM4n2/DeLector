@@ -392,6 +392,10 @@ DeLector/
 
 - [x] **Phase 2b（2026-09）：Go Agent Runtime 绿色便携包**——`delector run` 起 Python NLP 服务（supervisor 退避重启 + 健康探针 + Unix SIGTERM 优雅关闭 / Windows Kill）；自研 goroutine/channel DAG 调度 article-analysis 预设（4 层口径 ingest→[analyze,tts]→writing_check→export）；5 工具注册（golden 防漂移）；go-openai DeepSeek 客户端。**分发形态**：Go 单二进制 × Python venv 跨平台便携包（`agent/scripts/package_agent.py`，产物 `delector-agent/{delector,python,delector-src}`，压缩 ~65MB），三平台 CI `build-agent.yml` 自动出 artifact（**预览通道**，不打 tag 不发布；替换桌面版决策留 Phase 3）。Go 1.26.5；`go test -race ./...` 与 `go test -tags integration` 真实 uvicorn→spaCy 全链路为门禁。
 
+- [x] **遇见区 P0 · Sub-Plan A（2026-09-07，分支 `feature/encounter-job1`，A1–A7 `d5c1155..2d78c09`）**：手选分级短篇 → 阅读视图按本机 deck 把**已背词高亮** + 覆盖统计 → 生词点选本地词典释义 → 一键进卡（写回 deck + wb 同步）→ 读完会话小复习。落地：`encounter_texts` 库 + `/api/encounter{list,detail,add,annotate,import-pack}`（`encounter-pack/v1` 契约，import 幂等）+ `view-encounter` SPA（`encounter.js`/`deck-bridge.js`）。测试基线 **673 全绿 + 1 skipped**。master 门禁（含 Go DAG job#1 import-pack 真链路）留 Sub-Plan B。
+
+- [x] **Go DAG job#1 真执行 · Sub-Plan B（2026-09-07，分支 `feature/encounter-job1`，B1–B8 `a1e4245..13d8535`）**：agent 从「只装配」变**首个真执行 job**——`delector job run encounter-pack` 扫本地语料 → 去重/限量/并发逐篇 DAG（analyze→vocab_stats→DeepSeek gloss→export_pack）→ 可选投递 `POST /api/encounter/import-pack`。落地：`internal/corpus` / `internal/job`（Pack schema、TokenBudget、gloss、DAG、runner）/ cobra 接线 / `-tags integration` 真链路门禁（`TestEncounterRealChain` PASS）。Go registry + Python 工具清单升至 **6 工具**（新增 `vocab_stats`）。Python 全量 **686 passed + 1 skipped** 零回退；`go test -race ./...` 与 `-tags integration` 全绿；CLI dry-run + 真实 run（stub LLM）冒烟退出 0。真实 DeepSeek 冒烟档 PENDING-作者（桌面无 key）。
+
 ---
 
 ## 📄 许可证 (License)

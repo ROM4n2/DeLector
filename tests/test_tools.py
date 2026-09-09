@@ -2,7 +2,7 @@
 """T7：delector/tools/ 接口层 + POST /api/tools/{name} 端点。
 
 Go Agent（Phase 2）经此 HTTP 契约调用 Python 业务能力。覆盖：
-- 路由分发（列表 / 未知 tool 404 / 5 个 tool 端点可达）
+- 路由分发（列表 / 未知 tool 404 / 6 个 tool 端点可达）
 - 每个 tool.run 的薄包装语义（网络/外网依赖一律 monkeypatch 脱敏）
 """
 import asyncio
@@ -18,10 +18,11 @@ client = TestClient(app, client=("127.0.0.1", 54321))
 
 
 # ---------- 路由分发 ----------
-def test_list_tools_exposes_all_five():
+def test_list_tools_exposes_all_six():
     resp = client.get("/api/tools/")
     assert resp.status_code == 200
     assert set(resp.json()["tools"]) == set(TOOL_REGISTRY.keys())
+    assert "vocab_stats" in TOOL_REGISTRY
 
 
 def test_unknown_tool_returns_404():
@@ -80,6 +81,26 @@ def test_export_tool_via_http(monkeypatch, tmp_path):
     )
     assert resp.status_code == 200
     assert resp.json()["path"].endswith("x.apkg")
+
+
+def test_vocab_stats_tool_via_http():
+    resp = client.post(
+        "/api/tools/vocab_stats",
+        json={
+            "payload": {
+                "tokens": [{"text": "geht", "lemma": "gehen", "pos": "VERB"}],
+                "levels": ["A1"],
+            }
+        },
+    )
+    assert resp.status_code == 200
+    assert set(resp.json().keys()) == {
+        "tokens_total",
+        "known_count",
+        "known_rate",
+        "unknown_ranked",
+        "level_hint",
+    }
 
 
 # ---------- tool.run 单元（网络/外网依赖脱敏） ----------
