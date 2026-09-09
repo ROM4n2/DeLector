@@ -1,0 +1,90 @@
+# =============================================================================
+# CI 门禁 workflow：PR / push(master) 即跑全量测试与 Go 三门禁
+# =============================================================================
+#
+# 门禁范围（为何只 ubuntu 单平台）：
+#   本 workflow 的职责是"改动是否可用"（质量闸），不是"产物能否打包"。
+#   Windows/macOS 构建矩阵留给 tag 触发的 build-release.yml，PR 反馈时长
+#   预期 < 8min（pytest ~3-6min + Go 门禁 ~1min）。
+#
+# 与既有 workflow 的分工：
+#   - ci.yml（本文件）  ：pull_request / push(master) / 手动触发 → pytest 全量
+#     + gofmt / vet / -race 三门禁（质量闸，改动合入 master 前必须绿）；
+#   - build-release.yml：仅 tag v* 触发 → 三平台打包 + Android APK + 发布（打包面）；
+#   - build-agent.yml  ：仅 tag v* 触发 → agent 三平台 artifact（分发面）。
+#
+# cache 写法教训（99-Inbox：GitHub Actions tag 发版三重陷阱）：
+#   setup-go@v5 的 cache 参数是 boolean，MUST 写 `cache: true` 并配
+#   cache-dependency-path: agent/go.mod；误写成字符串型 "go" 会被 runner
+#   直接拒绝（Input does not meet YAML 1.2 "Core Schema" specification）。
+#   setup-python 的 cache 才是字符串（"pip"），两者不要混淆。
+# =============================================================================
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# 同分支新 push 取消仍在跑的旧 CI：省 runner 分钟数、反馈更快
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Tests & Go Gates (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 不装 pyinstaller——那是打包面（build-release.yml 的职责）
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+
+      # 测试需要德语 spaCy 模型，与 build-release.yml 同源
+      - name: Download spaCy German model
+        run: python -m spacy download de_core_news_sm
+
+      # 全量门禁：Python 测试套件一个不漏
+      - name: Run full pytest suite
+        run: pytest -q
+
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          # cache 是 boolean（区别于 setup-python 的字符串 "pip"）；
+          # 误写成字符串 "go" 会被 runner 直接拒绝——99-Inbox 真实事故，勿改。
+          cache: true
+          cache-dependency-path: agent/go.mod
+
+      # 格式门禁：gofmt -l 有输出即失败（Task 2 清账后应恒为空）
+      - name: Go format gate (gofmt)
+        shell: bash
+        run: |
+          cd agent
+          echo "gofmt -l 输出（空即通过）："
+          gofmt -l .
+          test -z "$(gofmt -l .)"
+
+      # 静态检查门禁
+      - name: Go vet gate
+        shell: bash
+        run: cd agent && go vet ./...
+
+      # 测试门禁（含竞态检测）
+      - name: Go test gate (race detector)
+        shell: bash
+        run: cd agent && go test -race ./...
