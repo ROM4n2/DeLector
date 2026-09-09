@@ -45,7 +45,7 @@ jobs:
           }
 
       - name: Upload Windows Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DeLector-Windows-Portable
           path: dist/DeLector-*.zip
@@ -127,7 +127,7 @@ jobs:
           tar -czf dist/DeLector-${{ github.ref_name }}-Linux-x64.tar.gz -C dist DeLector-${{ github.ref_name }}-Linux-x64
 
       - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DeLector-Linux-Portable
           path: dist/DeLector-*-Linux-x64.tar.gz
@@ -209,7 +209,7 @@ jobs:
           tar -czf dist/DeLector-${{ github.ref_name }}-macOS.tar.gz -C dist DeLector-${{ github.ref_name }}-macOS
 
       - name: Upload macOS Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DeLector-macOS-Portable
           path: dist/DeLector-*-macOS.tar.gz
@@ -432,7 +432,7 @@ jobs:
           PY
 
       - name: Upload Android Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DeLector-Android-APK
           path: dist/DeLector-*-Android.apk
