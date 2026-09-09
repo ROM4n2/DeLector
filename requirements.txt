@@ -6,7 +6,7 @@
 fastapi==0.136.3
 starlette==1.6.0
 uvicorn>=0.52.4
-spacy>=3.7.4
+spacy>=3.8.16
 httpx>=0.28.1
 genanki>=0.13.1
 pytest>=8.0.0
