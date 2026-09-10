@@ -50,25 +50,24 @@
      - 服务端提供 `GET /api/a2/vocab` 端点并在 `exam_catalog.py` 中注册 A2 考纲词表模块（动态推导 974 题量），通过 PyInstaller 打包注册守卫。
      - 背词工作台（`workbench.html`）顶栏扩展第 4 档位「📘 A2 词库」，异步按需同步服务端 A2 词条并持久化到本地进度，13/13 处切片护栏 100% 绝对保护通过。
      - 备考域（`view-exam`）激活 A2 考纲选项卡，`a1_cards.js` 扩展支持 A2 考纲词卡（3D 扑克翻转、例句发音、网格模式、搜索过滤与加入复习盒）。
-- 测试基线：**全量 694 passed + 1 skipped**（含 CI 守卫 3 支等新测试），10/10 `tools/*.mjs` 探针全绿；Go 门禁 `go vet` + `gofmt -l`（空）+ `go test -race ./...` 全绿；pre-commit 密钥守卫有效，工作区干净。
+- 测试基线：**全量 716 collected / 715 passed + 1 skipped**（含 CI 守卫 3 支、A7 服务端 E2E 6 支、客户端行为探针 5 支、seed 契约 11 支），10/10 `tools/*.mjs` 探针全绿；Go 门禁 `go vet` + `gofmt -l`（空）+ `go test -race ./...`（8 包）全绿；pre-commit 密钥守卫有效，工作区干净。
 - **测试位置（2026-09-05 起，09-06 更新）**：27 个测试模块全部在 `tests/`，根目录 `conftest.py` 负责把仓库根插进 sys.path —— `pytest` 不像 `python -m pytest` 那样把当前工作目录加进 sys.path；Phase 2 收包后 tests 统一 `from delector import …`，而 `import delector` 同样依赖根在 sys.path，**所以这个 conftest 长期需要、不能删**（文件内注释已更正）。跑法不变：仓库根 `pytest -v`。
 - **Phase 2 后端收包（2026-09-06 完成）**：26 个业务模块收进 `delector/` 包（只加包层级、不改文件名），tests 统一改 `from delector import …`；根目录只剩 `start.py` / `package_windows.py` / `conftest.py`。打包面联动：Windows `package_windows.py` hiddenimports 加 `delector.` 前缀、CI Linux/macOS 同步加前缀并**补漏 routes_a2**、Android 改整目录拷贝（消灭逐个清单漏文件的维护面）、Windows spec 探针改包路径。v5.3.0 发版面不受影响，未到 release 刷新时机。
 - 发布面：正式版 **v5.4.0**（源码版）；Android versionName 5.4.0 / versionCode 50400（CI 从 tag 推导）；桌面端正常，`python start.py` → `http://localhost:8000`。
 - **遇见区 P0（Sub-Plan A，2026-09-07 收官，分支 `feature/encounter-job1`）**：手选分级短篇 → 阅读视图按本机背词工作台 deck 把**已背词高亮** + 覆盖统计 → 生词点选看本地词典释义 → 一键进卡（写回 deck + wb 同步）→ 读完会话小复习。落地：`encounter_texts` 库（与 `articles` 同库同批）+ `/api/encounter{list,detail,add,annotate,import-pack}`（`encounter-pack/v1` 契约跨 A/B 共用，import 幂等）+ SPA `view-encounter`（`encounter.js` / `deck-bridge.js`，高亮/释义/进卡/小复习）。测试基线 **673 全绿 + 1 skipped**（净增 encounter 各层测试，模块图/切片/register 守卫全过），API TestClient 冒烟 7/7 PASS。完整执行状态与偏差见 `docs/plans/2026-09-07-encounter-zone-p0.md`「执行状态（Sub-Plan A 收官）」；master 门禁（含 Go DAG job#1 import-pack 真链路）留 Sub-Plan B。
 - **Sub-Plan B · Go DAG job#1 真执行（2026-09-07 收官，分支 `feature/encounter-job1`）**：agent 从「只装配不执行」变**首个真执行 job#1 落地**——`delector job run encounter-pack` 扫描本地语料 → 去重/限量/并发逐篇 DAG（analyze→vocab_stats→gloss(DeepSeek)→export）→ 可选投递 `POST /api/encounter/import-pack`。落地：`internal/corpus`（B2）、`internal/job`（B3 pack schema+预算 / B4 gloss / B5 encounter DAG / B6 runner 并发预算退避）/ B7 cobra 接线（registry **6 工具**含 `vocab_stats`、Python 侧同）+ B8 `-tags integration` 真链路门禁（`TestEncounterRealChain` PASS：真 python 工具 + stub LLM + import-pack + texts 命中）。测试：agent/ `-race` 全绿、`-tags integration` 全绿；Python 全量 **686 passed + 1 skipped** 零回退。冒烟：CLI dry-run、stub LLM 真实 run 均 `packs=2 failed=0` 退出 0；**真实 DeepSeek 档 2026-09-08 已补齐**（2 篇 fixture → `packs=2 failed=0`，cefr=A2/A1、glosses=9/8、known_rate=0.36/0.32，**token 消耗 1,253**）。完整状态与偏差（5 条）见 `docs/plans/2026-09-07-dag-job1-content-producer.md`「执行状态（Sub-Plan B 收官）」。
 - **CI Hardening 落地（2026-09-09，分支 `feature/ci-hardening`）**：① `ci.yml` PR/push(master) 门禁（pytest 全量 + gofmt/vet/-race，ubuntu 单平台 <8min，concurrency 取消组）；② `.gitattributes` 锁 `*.go eol=lf`——查明"11 个 gofmt 不洁文件"系 autocrlf 假阳性（`git show HEAD:x | gofmt -d` 验证 blob 本就 clean），本地与 CI 口径统一；③ dependabot 三生态周更（pip/github-actions/gomod，升级 PR 由 ci.yml 兜底，配合 fastapi/starlette pin 形成依赖治理组合拳）；④ PR（强制门禁证据区）/ISSUE 模板。守卫测试 `tests/test_ci_hardening.py` 钉契约（反冻结集合断言）。**已知边界**：Ruff/Mypy 静态工具链递延（存量告警未清，另立计划）。计划：`docs/plans/2026-09-09-ci-hardening.md`。
-- **开放待办**：① ~~v5.4.0 打包资产补录~~——已完成（2026-09-09 tag 构建自动挂载四平台资产，Release 已设 Latest）；~~工程化护栏缺口~~——已完成（ci.yml PR 门禁 + dependabot，见 CI Hardening 条目）；② 遇见区 A7 双端手工冒烟清单（桌面源码实例 + Android 各跑一遍）补齐 Master 最后一条 PENDING-作者 验收门（真 LLM 冒烟已完成 token 1,253）；③ 新功能候选：多模态听力微训 / 语料长难句强化立项（建议等 A7 试用反馈后拍板）；④ Ruff/Mypy 静态工具链清账（CI Hardening 已知边界，另立计划）。
+- **内容供给侧（2026-09-10，分支 `feature/encounter-content-supply`）**：把「遇见区能读但没得读」补上——① **A7 验收自动化**（替代双端手工六步，见下节）；② **预置分级短文**：`tools/build_encounter_seed.py` 离线读 `delector/data/corpus_dict.py::OFFICIAL_CORPUS` → spaCy 分词 + `delector/tools/vocab_stats` 同源分析 → `encounter-pack/v1`，产物 `delector/data/encounter_seed_dict.py`（**纯数据**，第 9 个 data dict；A1×2 / A2×2，零 LLM 零网络，两次生成字节一致）；`database.seed_preset_encounter_texts`（**空库守卫 + 逐包 `pack_id` 幂等 + 逐包异常隔离**）由 `create_app()` 在 `seed_preset_articles()` 之后调用 → 新装/空库首启即 4 篇可读，且**不动用户已有内容**；打包面三处注册同步（8→9）+ 守卫钉死。**不做（scope 控制）**：桌面→手机 WiFi 推送（复用 ADR-0004，记为下一阶段）、手机端自助产内容；预置包 `glosses` 留空（释义走 `/api/lookup/vocab` 本地词典）。
+- **开放待办**：① ~~v5.4.0 打包资产补录~~ / ~~工程化护栏缺口~~（ci.yml + dependabot）/ ~~A7 双端手工冒烟~~（已由自动化 E2E + 行为探针替代，见下节）——均已完成；② **真实用户试用（当前最高价值动作）**：手机端开箱即有 4 篇 A1/A2 分级短文可读——让真实用户读几篇，收三问反馈（分级是否合适 / 已背词高亮与一键进卡是否顺手 / 本地词典释义够不够用），用反馈决定下一步；③ 新功能候选：多模态听力微训 / 语料长难句强化（等试用反馈拍板）；④ 下一阶段候选：桌面→手机 WiFi 推送（复用 ADR-0004 配对与 `X-WB-Key` 推送闸）+ 预置包用真实 LLM gloss 富化（注意 `import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行，需换 `pack_id` 或清表重导）；⑤ Ruff/Mypy 静态工具链清账（CI Hardening 已知边界，另立计划）。
 
-### 遇见区 P0 双端手工冒烟清单（Sub-Plan A 收官）
+### 遇见区 A7 验收：自动化等价物（2026-09-10 替换双端手工冒烟）
 
-桌面源码实例与 Android Chaquopy 实例各跑一遍（A7 验收）：
+原「双端手工冒烟六步」已退役——人肉清单易腐化且不进 CI。现由自动化接管（手工清单原文可追溯 git 历史）：
 
-1. 背词工作台至少背 **≥3 词**，使其 `reps > 0`（进复习队列的前提）。
-2. 遇见区加一篇短文（标题/等级/来源/正文）。
-3. 打开短文详情，断言**已背词被高亮**、覆盖统计覆盖数 **> 0**。
-4. 点一个未知词，断言弹层出现**本地词典释义**。
-5. 点「加入卡片」，断言词写入 deck 存储、触发本机 wb 同步镜像。
-6. 重开背词工作台，断言新词出现在**新词池/复习队列**。
+- **服务端全链路 E2E**：`tests/test_encounter_journey_e2e.py`（6 用例）——deck 镜像写入（≥3 `reps>0`）/ 加短文 201+列表 / annotate 已知-未知**双向**断言 / 本地词典离线取义（AI tier 打桩抛错）/ 进卡后镜像回读（word-only）/ 无 key PUT 403 闸不退化。
+- **客户端行为探针**：`tests/test_encounter_journey_probe.py`（5 用例）——用**真实 annotate JSON** 驱动逐字节拷贝的 `deck-bridge.mjs`（node 直跑真源码）：`known_tokens`/`known_rate` 双向断言、`unknown_top` 排除已背词、进卡 word-only 形状、`DECK_KEYS` 常量钉死（防键名漂移）。
+- **残余风险（自动化覆盖不到，发版后一次性真机点检）**：Android Chaquopy 实例的 WebView/IndexedDB 真实行为、双端 LAN 镜像拉取展示——PR CI 跑 ubuntu 且无真机。
+- **测试隔离纪律（2026-09-10 踩坑）**：`delector/server.py:339` 有模块级单例 `app = create_app()`，收集期按当时 env 建库并被多模块共用；**新测试不得删库文件、env 必须用 `setdefault`**（直接赋值会把 env 抢走并令其它模块 app 指向本测试的库，删库即打爆它们 → `no such table`）。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 

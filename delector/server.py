@@ -61,6 +61,7 @@ from delector.core.database import (
     PRESET_ARTICLES,
     ingest_article,
     seed_preset_articles,
+    seed_preset_encounter_texts,
     VOCAB_MODEL,
     GRAMMAR_MODEL,
     export_anki_deck,
@@ -148,6 +149,7 @@ __all__ = [
     "PRESET_ARTICLES",
     "ingest_article",
     "seed_preset_articles",
+    "seed_preset_encounter_texts",
     "VOCAB_MODEL",
     "GRAMMAR_MODEL",
     "export_anki_deck",
@@ -323,6 +325,10 @@ def create_app() -> FastAPI:
     register_routes(app)
     init_db()
     seed_preset_articles()
+    # 遇见区预置短文：产品默认内容，属装配期供给而非 schema 事务，故放在这里而非
+    # init_db()。空库守卫 + 逐包 pack_id 幂等（见 database.seed_preset_encounter_texts）：
+    # 既有契约测试把「空库 = 空列表」钉成遇见区空态语义，若塞进 init_db 会集体变红。
+    seed_preset_encounter_texts()
     if STATIC_DIR and os.path.exists(STATIC_DIR):
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
     return app
