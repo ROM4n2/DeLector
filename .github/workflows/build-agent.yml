@@ -82,7 +82,7 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.meta.outputs.name }}
           path: dist/agent/DeLector-Agent-*
