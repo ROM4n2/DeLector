@@ -3945,9 +3945,12 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
 
     # Phase 1 Task 2：8 个纯数据词典已收进 delector.data/ 子包
+    # T5：encounter_seed_dict 为第 9 个纯数据模块（被 database.py 延迟导入），
+    # 逐条钉死进打包面，否则打包后运行期 ModuleNotFoundError 而本地全绿。
     data_dict_modules = {
         "core_dict", "core_dict_ext", "prep_dict", "a1_dict",
         "a1_writing_dict", "a1_hoeren_dict", "a1_lesen_dict", "corpus_dict",
+        "encounter_seed_dict",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =

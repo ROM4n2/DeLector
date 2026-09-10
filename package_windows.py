@@ -64,6 +64,7 @@ def build_windows():
         "--hidden-import=delector.data.a1_hoeren_dict",
         "--hidden-import=delector.data.a1_lesen_dict",
         "--hidden-import=delector.data.corpus_dict",
+        "--hidden-import=delector.data.encounter_seed_dict",
         "--hidden-import=delector.routes.a1",
         "--hidden-import=delector.routes.a2",
         "--hidden-import=delector.routes.a1_hoeren",
