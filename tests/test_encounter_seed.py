@@ -173,6 +173,7 @@ def test_build_script_deterministic(tmp_path):
             [sys.executable, _BUILD_SCRIPT, "--out", str(out),
              "--created-at", "2026-09-10"],
             cwd=_REPO_ROOT, env=env, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
         )
         if proc.returncode != 0:
             pytest.skip(f"脚本退出码 {proc.returncode}（环境缺失）：{proc.stderr[-200:]}")

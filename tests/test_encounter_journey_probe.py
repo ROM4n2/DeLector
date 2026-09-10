@@ -38,8 +38,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 # env 双钉必须在 import app 之前（沿用 T1：database.get_db_path() 每次调用读 os.environ）。
-os.environ["DATABASE_PATH"] = "test_delector.db"
-os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
+# setdefault 而非直接赋值：`delector/server.py:339` 的模块级单例 `app = create_app()` 在
+# 收集期首次 import 时按此 env 建库并被其它模块共用；抢占 env 会让它们的 app 指向本测试的库。
+os.environ.setdefault("DATABASE_PATH", "test_delector.db")
+os.environ.setdefault("PROGRESS_DB_PATH", "test_progress.db")
 
 from delector.server import create_app, init_db  # noqa: E402
 
@@ -128,34 +130,23 @@ def _run_node(ctx, bridge):
     return json.loads(res.stdout)
 
 
-# ── 服务端夹具（沿用 T1）：tmp 双库 + 本机来源 TestClient ─────────────────────
+# ── 服务端夹具（沿用 T1）：清表不删库 + 本机来源 TestClient ───────────────────
 @pytest.fixture(autouse=True)
 def clean_db():
-    """每次测试前后删库重建 + gc.collect（Windows 句柄纪律，见 test_server.py）。"""
-    saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
-    os.environ["DATABASE_PATH"] = "test_delector.db"
-    os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
-    gc.collect()
-    for f in ("test_delector.db", "test_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
-    init_db("test_delector.db")
+    """每例只**清空本测试涉及的表**；绝不删库文件（Windows 句柄纪律 + 单例 app 共享）。
+
+    与 test_encounter_journey_e2e.py 同一理由：`delector/server.py:339` 的模块级
+    单例 app 被多个测试模块共用，删库文件会让它们 no such table。
+    """
+    from delector.core.database import db_conn, get_db_path
+
+    db = get_db_path()
+    init_db(db)  # 幂等建表：修补干净环境或前序测试留下的缺表
+    with db_conn(db) as conn:
+        conn.execute("DELETE FROM encounter_texts")
+        conn.execute("DELETE FROM wb_state")
     yield
     gc.collect()
-    for f in ("test_delector.db", "test_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
-    for k, v in saved.items():
-        if v is None:
-            os.environ.pop(k, None)
-        else:
-            os.environ[k] = v
 
 
 @pytest.fixture

@@ -33,8 +33,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 # env 双钉必须在 import app 之前：database.get_db_path() 每次调用读 os.environ。
-os.environ["DATABASE_PATH"] = "test_delector.db"
-os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
+# 用 setdefault 而非直接赋值：`delector/server.py:339` 有模块级单例 `app = create_app()`，
+# 收集期首次 import 时即按此 env 建库并被其它测试模块（如 test_goethe_a1_*，同样用
+# setdefault）共用；直接赋值会把 env 抢成自己的名字，令它们的 app 单例指向本测试的库。
+os.environ.setdefault("DATABASE_PATH", "test_delector.db")
+os.environ.setdefault("PROGRESS_DB_PATH", "test_progress.db")
 
 from delector.server import create_app, init_db  # noqa: E402
 
@@ -89,31 +92,22 @@ def _is_known(known_set: set, lemma: str) -> bool:
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    """每次测试前后删库重建 + gc.collect（Windows 句柄纪律，见 test_server.py）。"""
-    saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
-    os.environ["DATABASE_PATH"] = "test_delector.db"
-    os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
-    gc.collect()
-    for f in ("test_delector.db", "test_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
-    init_db("test_delector.db")
+    """每例只**清空本测试涉及的表**；绝不删库文件（Windows 句柄纪律 + 单例 app 共享）。
+
+    为何不删文件：`delector/server.py:339` 有模块级单例 `app = create_app()`，收集期
+    按当时 env 建库，且被其它测试模块（如 test_goethe_a1_* 的 `from delector.server
+    import app`）共用。删掉库文件会让它们的 app 指向一个不存在的库 —— 下次写入即
+    `no such table`（2026-09-10 全量跑实测踩到：test_goethe_a1_lesen/hoeren 两条红）。
+    """
+    from delector.core.database import db_conn, get_db_path
+
+    db = get_db_path()
+    init_db(db)  # 幂等建表：修补干净环境或前序测试留下的缺表
+    with db_conn(db) as conn:
+        conn.execute("DELETE FROM encounter_texts")
+        conn.execute("DELETE FROM wb_state")
     yield
     gc.collect()
-    for f in ("test_delector.db", "test_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
-    for k, v in saved.items():
-        if v is None:
-            os.environ.pop(k, None)
-        else:
-            os.environ[k] = v
 
 
 @pytest.fixture
