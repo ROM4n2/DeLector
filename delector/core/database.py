@@ -9,6 +9,7 @@ import random
 import secrets
 import time
 import re
+import logging
 from contextlib import contextmanager
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
@@ -626,6 +627,59 @@ def seed_preset_articles(db_path: Optional[str] = None):
         if count == 0:
             for art in PRESET_ARTICLES:
                 ingest_article(art["title"], art["text"], db_path=target)
+
+
+def seed_preset_encounter_texts(db_path: Optional[str] = None) -> int:
+    """把预置遇见区卡包（encounter-pack/v1）灌入空库；返回本次实际导入的行数。
+
+    幂等与守卫（三重，缺一不可）
+    ---------------------------
+    1. **空库守卫**：先数 `encounter_texts` 行数，`count == 0` 才导入；非空库直接
+       返回 0，**绝不动用户已有内容**（预置内容只是「首次启动的默认供给」，不是
+       每次启动都要补齐的资材）。
+    2. **逐包幂等**：逐包走既有 `import_encounter_pack`（按 `pack_id` 去重），
+       不自己写 INSERT —— 即便守卫被绕过，第二次调用也不会插入重复行。
+    3. **逐包异常隔离**：单包导入失败不得让整个启动崩（离线数据损坏/约束冲突
+       时仍要起得来）。失败包记录到日志并计入 `failed`，**绝不静默吞掉**导致
+       数据半残而无从观测：有失败即 `logging.error` 汇总，返回值 = 成功导入行数
+       （失败数与包总数可从日志与「返回值 < 包数」推知）。
+
+    为何不进 `init_db()`
+    -------------------
+    既有契约测试（`tests/test_encounter_routes.py::test_get_list_empty` 等 6 条）
+    把「空库 = 空列表」钉成遇见区的**空态语义**；测试夹具调用 `init_db()` 建库，
+    若 seed 塞进 `init_db`，这些用例会集体由「空」变「含 4 篇」而变红，语义被
+    削弱为「包含」。预置内容属**产品默认内容**而非 schema 事务，schema 建表
+    （`init_db`）与默认内容供给（`create_app`）必须分权：由唯一的生产装配入口
+    `create_app()` 在 `seed_preset_articles()` 之后调用本函数。
+    """
+    # 延迟导入：数据模块只应在真正 seed 时被拉起（导入期零副作用，项目红线 9）。
+    from delector.data.encounter_seed_dict import PRESET_ENCOUNTER_PACKS
+
+    target = get_db_path(db_path)
+    with db_conn(target) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM encounter_texts").fetchone()[0]
+    if count != 0:
+        return 0
+
+    imported = 0
+    failed = 0
+    for pack in PRESET_ENCOUNTER_PACKS:
+        try:
+            import_encounter_pack(pack, db_path=target)
+            imported += 1
+        except Exception as exc:  # noqa: BLE001 —— 单包失败不得崩启动
+            failed += 1
+            logging.error(
+                "seed_preset_encounter_texts: 预置包导入失败 pack_id=%r: %r",
+                (pack or {}).get("pack_id"), exc,
+            )
+    if failed:
+        logging.error(
+            "seed_preset_encounter_texts: %d/%d 预置包导入失败（成功 %d）",
+            failed, len(PRESET_ENCOUNTER_PACKS), imported,
+        )
+    return imported
 
 
 VOCAB_MODEL = genanki.Model(
@@ -1524,6 +1578,7 @@ __all__ = [
     "PRESET_ARTICLES",
     "ingest_article",
     "seed_preset_articles",
+    "seed_preset_encounter_texts",
     "VOCAB_MODEL",
     "GRAMMAR_MODEL",
     "A1_VOCAB_MODEL",
