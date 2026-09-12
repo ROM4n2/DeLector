@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.4.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.5.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek--v4--flash-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-686%2F687%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-715%2F716%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -20,14 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ✅ **v5.4.0 四平台安装/便携包已由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.4.0-*`）。
+> ✅ **v5.5.0 四平台安装/便携包由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.5.0-*`）。**本版首次内置 4 篇 A1/A2 分级短文——Android 端覆盖安装后打开「遇见区」即可直接阅读。**
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.4.0` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.4.0)     |
-| 🍎 **macOS**       | `v5.4.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.4.0)  |
-| 🐧 **Linux x64**   | `v5.4.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.4.0)  |
-| 📱 **Android**     | `v5.4.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.4.0) |
+| 🪟 **Windows x64** | `v5.5.0` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.5.0)     |
+| 🍎 **macOS**       | `v5.5.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.5.0)  |
+| 🐧 **Linux x64**   | `v5.5.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.5.0)  |
+| 📱 **Android**     | `v5.5.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.5.0) |
 
 ---
 
@@ -381,6 +381,8 @@ DeLector/
 - [x] **v5.1.1**：**审计修复收口 + 性能与稳定性 (M1–M5 + M4)**——① **审计修复（M1–M5）**：旧 6 位短码 LAN 面板停用标注并整体禁用（端点已强制配对密钥，死 UI 明示）；AI 判分/成功提示类残余 `alert` 收敛为 notify（写路径保留 + 双面黑白名单护栏）；wb pull 指数退避、RTC 瞬态不累计、阅读计时器防叠；② **性能（M4）**：查词/判题热路径常量模块级提升、复合词拆解与核心词查表缓存、句切分缩写保护正则提升；③ **稳定性**：PWA 版本更新改温和提示不硬刷窗口、TTS blob URL 统一撤销 + 播放请求令牌防错句覆盖、Reader 陈旧响应守卫、AI 请求输入上限与 TTS voice 白名单；④ **安全补漏**：批注删除纳入本机写闸、X-WB-Key 统一 `secrets.compare_digest` 消除时序侧信道、还原不导入 API 配置防 Key 外泄、Anki 导出 HTML 转义防存储型 XSS；⑤ 测试库隔离与断言护栏补齐。**本版同时回补 v5.0.2 → v5.1.1 的版本面同步**（sw.js 缓存键 / index.html 顶栏 / build.gradle / README / AGENTS）。
 
 - [x] **v5.3.0**：**背词工作台全域 Editorial 重塑 + 精读语法雷达 + A2 词汇全域贯通**——① **共享设计系统 Token 层抽离**（`static/css/tokens.css`）并全量接入背词工作台：统一 Academic Modern Editorial 暖纸墨水调色板、`--serif/--sans/--mono` 字体族与 960px 实体期刊画布，彻底消除硬编码中文字体与 Georgia；考纲词表只读契约 `GET /api/cards/vocab` 上线（CEFR/范围过滤 + 内存解析缓存），工作台顶栏扩展 3 档「⭐ A1 核心 / A1 全量 / 精读生词」范围选择；② **ADR-0006 背词工作台 Zettelkasten 实体学术卡箱与心流优先重塑**：出版物下划线轻量 Tab 导航与聚焦顶栏、剥离厚重阴影与大圆角容器、纯白学术抽认卡纸张层叠翻转（40px 衬线词头）、矿物植物印章式四级柔色评分座（键盘快捷键角标），自测题选项/拼写输入框/KPI 统计/词库浏览表全量 Editorial 化；③ **Grammatik-Radar 精读语法雷达（ADR-0007）**：消除 600ms hover 被动弹出，改行内幽灵微胶囊（Quiet Ghost Pill）显式点击触发句法抽屉（零心流打扰、保护查词抽屉状态）；语料语法 6 维指标（从句复合度/五场域展开率/句框跨度比/关系从句率/虚拟语气率/被动被动态率）落盘 `corpus_syntax_stats` 表 + `POST/GET /api/syntax/stats` 端点，句法抽屉内嵌零外部依赖 SVG 蛛网雷达图对比「本文维度 vs 语料平均基准」；④ **A2 词汇与全域背词系统扩展**：歌德 A2 **974 词全量规范化**（`format_vocab_headword` 精确拼装 497 名词定冠词如 `das Abenteuer` 并首字母大写，动词/形容词保持小写），`GET /api/a2/vocab` + `exam_catalog` 注册 A2 词表模块（动态推导 974 题量，打包 hidden-import 守卫），工作台顶栏第 4 档「📘 A2 词库」异步按需同步持久化，备考域激活 A2 考纲 Tab（3D 扑克翻转/例句发音/网格模式/搜索过滤/加入复习盒）。测试 **582 全绿**（基线 559 → 582）；10/10 Node.js 行为探针全绿（含 13/13 切片护栏 100% 保护）。
+
+- [x] **v5.5.0**：**内容供给侧 —— 遇见区开箱即读 + A7 验收自动化**（PR #39，2026-09-10）——① **A7 双端手工冒烟退役**，改由自动化接管：`tests/test_encounter_journey_e2e.py`（6 用例：deck 镜像 / 加短文 / annotate 已知-未知**双向**断言 / 本地词典离线取义（AI tier 打桩抛错）/ 进卡后镜像回读 / 无 key PUT 403）+ `tests/test_encounter_journey_probe.py`（5 用例：**真实 annotate JSON** 驱动逐字节拷贝的 `deck-bridge.mjs`，钉高亮 / 覆盖 / `unknown_top` 排除已背词 / word-only 进卡 / `DECK_KEYS` 常量），真机部分记为发版后一次性点检；② **预置分级短文**：`tools/build_encounter_seed.py` 离线读 `OFFICIAL_CORPUS` → spaCy 分词 + `vocab_stats` 同源分析 → `encounter-pack/v1`，产物 `delector/data/encounter_seed_dict.py`（纯数据第 9 个 data dict，**4 篇 A1×2/A2×2**，零 LLM 零网络，两次生成字节一致）；③ **启动即 seed**：`seed_preset_encounter_texts`（空库守卫 + `pack_id` 幂等 + 逐包异常隔离）由 `create_app()` 在 `seed_preset_articles` 之后调用（**不进 `init_db`**，守住「空库=空列表」6 条既有契约）→ 新装/空库首启即可读，用户已有内容不被动；④ 打包面三处注册同步（data dict 8→9）+ 守卫逐条钉死；⑤ 同期基建：PR CI 门禁 `ci.yml` + dependabot 三生态周更 + `.gitattributes` 锁 `*.go eol=lf`（查明「11 个 gofmt 不洁文件」系 autocrlf 假阳性）。测试基线 **715 passed + 1 skipped**；PR CI（ubuntu，含 node 探针）1m53s 绿。
 
 - [x] **v5.4.0**：**遇见区 i+1 阅读桥 + Go DAG job#1 内容生产引擎（ADR-0010，PR #25–#27）**——① **遇见区 P0（A1–A7）**：`encounter_texts` 存储 + `/api/encounter` 路由与 `import-pack` 契约（`encounter-pack/v1`，幂等）+ 逐词注解 + `view-encounter` SPA + deck 桥已背词高亮（剥冠词 lemma 判定）+ 生词一键进卡（IndexedDB `wb/words` 双写）+ 会话小复习；② **Go DAG job#1 真执行（B1–B9）**：`delector job run encounter-pack` 本地语料→分级卡包——corpus 两阶段有界扫描（`--max-articles/--max-file-bytes` 护栏）、Pack schema + TokenBudget（含 Release）、DeepSeek gloss（429/5xx 退避）、worker-pool runner（共享预算 + 墙钟 2h 兜底）、cobra CLI 默认护栏，工具注册升至 **6**（新增 `vocab_stats`），`-tags integration` 真链路 `TestEncounterRealChain` PASS；③ **vault-team 评审 8 条修复**：备份/还原纳入 `encounter_texts`、进卡 IDB 双写、403 人话提示等；④ 同期合入 PR #25 备考域独立域迁移（ADR-0005）与 PR #26 自托管字体/弹窗修复。测试基线 **686 passed + 1 skipped**；Go `go test -race ./...` 与 `-tags integration` 全绿。
 
