@@ -216,3 +216,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 踩坑（已修）：全量首跑 2 红 no such table: exam_trials —— server.py:339 模块级单例 app 收集期按 env 建库被多模块共用，新测试直接赋值 env + 删库文件把它删掉；修法 env 改 setdefault + fixture 只清表不删库。
 门禁：pytest 716 collected / 715 passed + 1 skipped；go vet 0 / gofmt 空 / go test -race 8 包全 ok。
 遗留：桌面→手机 WiFi 推送（ADR-0004 复用）与预置包 gloss 富化记为下一阶段；Android 真机点检待发版后一次性执行。
+
+### 2026-09-12 | codebuddy__auto | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：v5.5.0 发版（内容供给侧 + A7 自动化送达到用户）。
+1. 版本面五件套 bump：sw.js CACHE_NAME / index.html 顶栏 / build.gradle fallback(5.5.0/50500) / README（badge + 下载表四行 + Roadmap 新条目 + Tests 715/716）/ OVERVIEW 状态节（ad5fe37，tag v5.5.0 打在该 commit 上）。
+2. CI 三链路全绿：Build & Publish Releases 5m17s（Release v5.5.0 已建并设 Latest，四平台资产齐：Windows-x64-Portable.zip / macOS.tar.gz / Linux-x64.tar.gz / Android.apk）；Build Agent Artifacts 1m36s（DeLector-Agent-5.5.0-{windows-amd64,linux-amd64,darwin-arm64}）；CI (master push) 1m57s。
+3. **风险点验证通过**：本次是 dependabot 的 actions 大版本升级（checkout v7 / upload-artifact v7 / download-artifact v8 / setup-android v4）首次在 tag 构建面真跑——三链路全绿，无 regression。
+4. 守护测试 test_writer_mobile 30 passed（含版本一致性两条）。
+遗留：Android 真机点检（覆盖安装后遇见区应见 4 篇预置短文）待作者执行——这是本轮唯一未自动化的验收点。
