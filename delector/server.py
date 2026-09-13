@@ -1,6 +1,6 @@
-import os
 import ipaddress
 import mimetypes
+import os
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
@@ -37,8 +37,11 @@ def load_env():
 
 load_env()
 
+# 分节 import 顺序是刻意设计：env 必须先经 load_env() 载入，之后才 import 依赖
+# env 的 database / nlp_engine / security / utils（红线 9 生态）。改动顺序会破坏
+# 测试隔离与 Android 启动，故整段禁用 E402（import 不在文件顶部）与 I001（导入排序）。
 # --- 1. Database & Settings Layer ---
-from delector.core.database import (
+from delector.core.database import (  # noqa: E402, I001
     DATA_DIR,
     AUDIO_CACHE_DIR,
     PROGRESS_DB_PATH,
@@ -89,7 +92,7 @@ from delector.core.database import (
 )
 
 # --- 2. NLP & CEFR Tagging（re-export：handler 搬走后 server 自身不再消费）---
-from delector.nlp_engine.processor import (
+from delector.nlp_engine.processor import (  # noqa: E402
     nlp,
     NLP_ENGINE,
     NLP_ENGINE_DETAIL,
@@ -100,7 +103,7 @@ from delector.nlp_engine.processor import (
 )
 
 # --- 3. Security, SSRF & Feed Utilities（同上，纯 re-export）---
-from delector.core.security import (
+from delector.core.security import (  # noqa: E402
     _resolve_ssrf_targets,
     _IETF_PROTOCOL_ASSIGNMENTS,
     _IPV6_DENY_PREFIXES,
@@ -117,7 +120,7 @@ from delector.core.security import (
 # ── 附件下载响应头 ────────────────────────────────────────────────────────────
 # 实现在 delector/utils.py（Phase 1 Task 1 抽走，用于打破 routes/a1 → server 的
 # 反向依赖）。此处 import 仅为保留 `delector.server._attachment_headers` 既有引用面。
-from delector.core.utils import _attachment_headers, _NO_STORE_HEADERS
+from delector.core.utils import _attachment_headers, _NO_STORE_HEADERS  # noqa: E402
 
 __all__ = [
     "nlp",
@@ -194,7 +197,7 @@ __all__ = [
 # --- 4. 路由层 ---
 # 注册入口只有 register_routes 一个：新增/搬迁路由模块只改 delector/routes/__init__.py，
 # 本文件不应当再出现 include_router。
-from delector.routes import MAX_SYNC_CACHE_ENTRIES, _sync_sdp_cache, register_routes
+from delector.routes import MAX_SYNC_CACHE_ENTRIES, _sync_sdp_cache, register_routes  # noqa: E402
 
 # --- 5. 中间件：前端资源 no-cache ---
 # 前端资源必须每次回源校验：裸 StaticFiles 不发 Cache-Control，浏览器于是走
