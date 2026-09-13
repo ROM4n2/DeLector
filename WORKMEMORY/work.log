@@ -255,3 +255,24 @@ Caps: filesystem-read, filesystem-write, shell-exec
 4. T4 收官：ops.md 新增「内容分发：桌面 → 手机（WiFi 拉取）」节 + 顺手修正过时的测试数/静态检查命令（pyflakes 手工命令由 ruff 门禁取代）；OVERVIEW/work.log 回填。
 门禁：全量 **751 passed + 1 skipped**（719 + 32 新用例，0 FAILED）；ruff check . 零告警；Go 三门禁不受影响。
 遗留：作者手工冒烟（桌面跑 job#1 --deliver-to 本机 → 手机「从电脑导入」填桌面 IP → 选包）待执行；预置包 gloss 富化仍为后续项。
+
+### 2026-09-13 23:35 | deepseek-v4-flash__trae-code | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：新功能候选方案（多模态听力微训 / 语料长难句强化）——接手后首个任务，先出方案不写码。
+前提：vault-onboard 完成，基线 pytest 753 passed + 1 skipped 实测通过；交接状态读自 .codebuddy/memory/MEMORY.md + PROJECT_OVERVIEW。
+不做范围：不实现功能代码、不发版、不建分支；方案产出后由作者拍板选型。
+
+### 2026-09-13 23:50 | deepseek-v4-flash__trae-code | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+新功能候选选型：先 A 多模态听力微训、后 B 语料长难句强化。
+why：真实用户（安卓背 A1/A2 词）读不了文章，听力是歌德 A1 四科刚需且 TTS/player/a1_hoeren/encounter 材料复用面最大；B 属阅读桥上的下一站，等用户开始读短文后价值最大化。
+下一步：vault-spark 细化 A 规格 → vault-plan 出实施计划。
+
+### 2026-09-14 00:10 | deepseek-v4-flash__trae-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+新功能候选 A（听力微训工坊）方案阶段完成，待作者审计划后执行：
+- 选型：C 统一引擎 + 三模式（精听/影子跟读 L、听写诊断 D、听力填空 C）全含
+- 关键发现：v4.8.0 听写工坊设计（LCS 逐字归因 Umlaut/Case/Inflection/Missing）有 spec 无实现（plan 全 - [ ] 未执行）——本功能复活该设计；essay_diff.py 句子级 LCS + writer.js 词级 LCS DP 为算法底座
+- 产物：docs/specs/2026-09-13-listening-micro-training-design.md（已批准）+ docs/plans/2026-09-13-listen-micro-training.md（待审）
+- 计划：4 阶段 6 Task TDD，分支 feature/listen-micro-training，vault-exec maker-checker 派发
+- 待办：作者审计划 → vault-exec 初始化 ledger 执行
