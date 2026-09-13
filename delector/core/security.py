@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """SSRF 判定与 IP 过滤、网页正文提取与安全抓取、RSS 订阅解析。"""
-import re
 import html
-import socket
 import ipaddress
+import re
+import socket
 import xml.etree.ElementTree as ET
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
-from typing import List, Dict, Any, Tuple
-from fastapi import HTTPException
+
 import httpx
+from fastapi import HTTPException
 
 
 def _resolve_ssrf_targets(ip_obj):
@@ -103,10 +104,15 @@ def is_safe_public_url(url: str) -> bool:
 def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
     title_match = re.search(r'<title>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
     title = html.unescape(title_match.group(1).strip()) if title_match else "Extracted Article"
-    title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche|Deutschlandfunk)', title)[0].strip()
+    title = re.split(
+        r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche|Deutschlandfunk)', title
+    )[0].strip()
 
     # Remove script, style, nav, header, footer, etc.
-    cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript|figure)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(
+        r'<(script|style|nav|header|footer|svg|aside|form|button|noscript|figure)[^>]*>.*?</\1>',
+        '', raw_html, flags=re.IGNORECASE | re.DOTALL,
+    )
 
     # Prefer <article> block if available
     article_match = re.search(r'<article[^>]*>(.*?)</article>', cleaned, flags=re.IGNORECASE | re.DOTALL)
@@ -117,7 +123,11 @@ def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
     for p in paragraphs:
         txt = re.sub(r'<[^>]+>', '', p)
         txt = html.unescape(txt).strip()
-        if len(txt) > 20 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved", "impressum", "urheberrecht"]):
+        if len(txt) > 20 and not any(
+            k in txt.lower()
+            for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved",
+                      "impressum", "urheberrecht"]
+        ):
             clean_paras.append(txt)
 
     if not clean_paras:
@@ -135,7 +145,10 @@ MAX_HTML_BYTES = 2 * 1024 * 1024  # 2MB
 
 async def fetch_remote_html(url: str) -> str:
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
     }

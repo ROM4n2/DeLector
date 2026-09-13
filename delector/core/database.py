@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
 """数据库连接、初始化、CRUD、配置存储、音频缓存管理与备份还原底层。"""
-import os
-import json
-import sqlite3
-import shutil
-import tempfile
-import random
-import secrets
-import time
-import re
-import logging
-from contextlib import contextmanager
-from typing import Optional, List, Dict, Any, Tuple
-from datetime import datetime
-from fastapi import HTTPException, Request
-import genanki
 import html as _html
+import json
+import logging
+import os
+import random
+import re
+import secrets
+import shutil
+import sqlite3
+import tempfile
+import time
+from contextlib import contextmanager
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+import genanki
+from fastapi import HTTPException, Request
 
 from delector.nlp_engine.processor import process_german_text
 
@@ -159,7 +160,10 @@ def init_progress_db(db_path: Optional[str] = None):
     migrate_a1_records_to_exam_trials(db_path=target_path)
 
 
-def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "", minutes: int = 0, db_path: Optional[str] = None):
+def log_study_event(
+    event_type: str, ref_id: Optional[int] = None, note: str = "",
+    minutes: int = 0, db_path: Optional[str] = None,
+):
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         with db_progress_conn(db_path) as conn:
@@ -169,15 +173,35 @@ def log_study_event(event_type: str, ref_id: Optional[int] = None, note: str = "
             )
             conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
             if event_type == "add_card":
-                conn.execute("UPDATE daily_summary SET cards_added = cards_added + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(1, minutes), today))
+                conn.execute(
+                    "UPDATE daily_summary SET cards_added = cards_added + 1, "
+                    "study_minutes = study_minutes + ? WHERE date = ?",
+                    (max(1, minutes), today),
+                )
             elif event_type == "master_card":
-                conn.execute("UPDATE daily_summary SET cards_mastered = cards_mastered + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(1, minutes), today))
+                conn.execute(
+                    "UPDATE daily_summary SET cards_mastered = cards_mastered + 1, "
+                    "study_minutes = study_minutes + ? WHERE date = ?",
+                    (max(1, minutes), today),
+                )
             elif event_type == "read_article":
-                conn.execute("UPDATE daily_summary SET articles_read = articles_read + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(3, minutes), today))
+                conn.execute(
+                    "UPDATE daily_summary SET articles_read = articles_read + 1, "
+                    "study_minutes = study_minutes + ? WHERE date = ?",
+                    (max(3, minutes), today),
+                )
             elif event_type == "quiz_session":
-                conn.execute("UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(2, minutes), today))
+                conn.execute(
+                    "UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, "
+                    "study_minutes = study_minutes + ? WHERE date = ?",
+                    (max(2, minutes), today),
+                )
             elif event_type in ("a1_hoeren", "a1_lesen"):
-                conn.execute("UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + ? WHERE date = ?", (max(2, minutes), today))
+                conn.execute(
+                    "UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, "
+                    "study_minutes = study_minutes + ? WHERE date = ?",
+                    (max(2, minutes), today),
+                )
     except Exception as e:
         print(f"[Warn] Failed to log study event: {e}")
 
@@ -594,19 +618,40 @@ def get_effective_api_model(db_path: Optional[str] = None) -> str:
 PRESET_ARTICLES = [
     {
         "title": "【A1 入门篇】Hallo Berlin! Mein erster Tag in Deutschland",
-        "text": "Guten Tag! Ich heiße Lukas und ich komme aus China. Jetzt wohne ich in Berlin und lerne Deutsch an einer Sprachschule. Jeden Morgen trinke ich einen Kaffee, esse ein Brötchen und fahre mit der U-Bahn zum Deutschkurs. Der Unterricht macht viel Spaß. Am Nachmittag gehe ich in den Supermarkt und kaufe frisches Obst und Brot."
+        "text": (
+            "Guten Tag! Ich heiße Lukas und ich komme aus China. Jetzt wohne ich in Berlin und lerne "
+            "Deutsch an einer Sprachschule. Jeden Morgen trinke ich einen Kaffee, esse ein Brötchen "
+            "und fahre mit der U-Bahn zum Deutschkurs. Der Unterricht macht viel Spaß. Am Nachmittag "
+            "gehe ich in den Supermarkt und kaufe frisches Obst und Brot."
+        )
     },
     {
         "title": "【A2 进阶篇】Eine Reise nach München: Hotel und Freizeit",
-        "text": "Letztes Wochenende bin ich mit dem Zug nach München gefahren. Ich habe ein kleines Zimmer im Stadtzentrum reserviert. Das Wetter war sehr schön, deshalb habe ich den ganzen Nachmittag im Englischen Garten verbracht. Am Abend habe ich typische bayerische Spezialitäten in einem traditionellen Restaurant probiert."
+        "text": (
+            "Letztes Wochenende bin ich mit dem Zug nach München gefahren. Ich habe ein kleines "
+            "Zimmer im Stadtzentrum reserviert. Das Wetter war sehr schön, deshalb habe ich den "
+            "ganzen Nachmittag im Englischen Garten verbracht. Am Abend habe ich typische bayerische "
+            "Spezialitäten in einem traditionellen Restaurant probiert."
+        )
     },
     {
         "title": "【B1 提升篇】Klimaschutz im Alltag: Was jeder tun kann",
-        "text": "Der Klimawandel ist eine der größten Herausforderungen unserer Zeit. Viele Menschen fragen sich, wie sie im Alltag einen Beitrag zum Umweltschutz leisten können. Experten empfehlen, öfter auf das Fahrrad umzusteigen und Energie im Haushalt zu sparen. Eine bewusste Ernährung mit regionalen Lebensmitteln spielt ebenfalls eine wichtige Rolle."
+        "text": (
+            "Der Klimawandel ist eine der größten Herausforderungen unserer Zeit. Viele Menschen "
+            "fragen sich, wie sie im Alltag einen Beitrag zum Umweltschutz leisten können. Experten "
+            "empfehlen, öfter auf das Fahrrad umzusteigen und Energie im Haushalt zu sparen. Eine "
+            "bewusste Ernährung mit regionalen Lebensmitteln spielt ebenfalls eine wichtige Rolle."
+        )
     },
     {
         "title": "【B2 高级篇】Die Transformation der modernen Arbeitswelt: Homeoffice",
-        "text": "Die fortschreitende Digitalisierung hat die Arbeitsbedingungen grundlegend verändert. Immer mehr Unternehmen stellen ihren Mitarbeitern flexible Arbeitszeitmodelle zur Verfügung. Obwohl das Arbeiten von zu Hause aus die Vereinbarkeit von Beruf und Familie erleichtert, stehen viele Beschäftigte vor der Herausforderung, klare Grenzen zwischen Arbeit und Freizeit zu ziehen."
+        "text": (
+            "Die fortschreitende Digitalisierung hat die Arbeitsbedingungen grundlegend verändert. "
+            "Immer mehr Unternehmen stellen ihren Mitarbeitern flexible Arbeitszeitmodelle zur "
+            "Verfügung. Obwohl das Arbeiten von zu Hause aus die Vereinbarkeit von Beruf und Familie "
+            "erleichtert, stehen viele Beschäftigte vor der Herausforderung, klare Grenzen zwischen "
+            "Arbeit und Freizeit zu ziehen."
+        )
     }
 ]
 
@@ -688,17 +733,32 @@ VOCAB_MODEL = genanki.Model(
     templates=[{
         'name': 'Card',
         'qfmt': '<div style="font-family:sans-serif;font-size:20px;padding:20px;">{{Front}}</div>',
-        'afmt': '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;color:#1e293b;"><b>{{Definition}}</b><br><span style="color:#64748b;font-size:14px;">{{Lemma}} ({{Meta}})</span></div>'
+        'afmt': (
+            '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;'
+            'color:#1e293b;"><b>{{Definition}}</b><br><span style="color:#64748b;font-size:14px;">'
+            '{{Lemma}} ({{Meta}})</span></div>'
+        )
     }]
 )
 
 GRAMMAR_MODEL = genanki.Model(
     1607392320, 'DeLector Goethe Grammar',
-    fields=[{'name': 'Sentence'}, {'name': 'GrammarName'}, {'name': 'CEFR'}, {'name': 'Explanation'}, {'name': 'Formula'}],
+    fields=[
+        {'name': 'Sentence'}, {'name': 'GrammarName'}, {'name': 'CEFR'},
+        {'name': 'Explanation'}, {'name': 'Formula'},
+    ],
     templates=[{
         'name': 'Card',
-        'qfmt': '<div style="font-family:sans-serif;font-size:20px;padding:20px;"><span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:99px;font-size:12px;">Goethe {{CEFR}}</span><br><br>{{Sentence}}</div>',
-        'afmt': '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;"><b>{{GrammarName}}</b><br><code style="background:#f1f5f9;color:#0369a1;padding:4px 8px;">{{Formula}}</code><p style="color:#334155;">{{Explanation}}</p></div>'
+        'qfmt': (
+            '<div style="font-family:sans-serif;font-size:20px;padding:20px;">'
+            '<span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:99px;'
+            'font-size:12px;">Goethe {{CEFR}}</span><br><br>{{Sentence}}</div>'
+        ),
+        'afmt': (
+            '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;">'
+            '<b>{{GrammarName}}</b><br><code style="background:#f1f5f9;color:#0369a1;'
+            'padding:4px 8px;">{{Formula}}</code><p style="color:#334155;">{{Explanation}}</p></div>'
+        )
     }]
 )
 
@@ -763,8 +823,24 @@ A1_VOCAB_MODEL = genanki.Model(
     ],
     templates=[{
         'name': 'Goethe A1 Card',
-        'qfmt': '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;text-align:center;"><div style="display:inline-block;background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;margin-bottom:12px;">Goethe A1 · {{Topic}}</div><div style="font-size:26px;font-weight:700;color:#1e293b;margin:12px 0;">{{Front}}</div>{{#Plural}}<div style="font-size:14px;color:#64748b;">Plural: {{Plural}}</div>{{/Plural}}</div>',
-        'afmt': '{{FrontSide}}<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;"><div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:0 24px 24px;text-align:left;"><div style="font-size:18px;font-weight:600;color:#0f172a;margin-bottom:8px;">{{Definition}}</div><div style="font-size:13px;color:#64748b;margin-bottom:16px;">词性: {{POS}}</div><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:10px 14px;border-radius:0 6px 6px 0;"><div style="font-size:15px;color:#1e293b;font-weight:500;">{{ExampleDe}}</div><div style="font-size:13px;color:#64748b;margin-top:4px;">{{ExampleZh}}</div></div></div>'
+        'qfmt': (
+            '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;'
+            'text-align:center;"><div style="display:inline-block;background:#e0e7ff;color:#3730a3;'
+            'padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;margin-bottom:12px;">'
+            'Goethe A1 · {{Topic}}</div><div style="font-size:26px;font-weight:700;color:#1e293b;'
+            'margin:12px 0;">{{Front}}</div>{{#Plural}}<div style="font-size:14px;color:#64748b;">'
+            'Plural: {{Plural}}</div>{{/Plural}}</div>'
+        ),
+        'afmt': (
+            '{{FrontSide}}<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;">'
+            '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;'
+            'padding:0 24px 24px;text-align:left;"><div style="font-size:18px;font-weight:600;'
+            'color:#0f172a;margin-bottom:8px;">{{Definition}}</div><div style="font-size:13px;'
+            'color:#64748b;margin-bottom:16px;">词性: {{POS}}</div><div style="background:#f8fafc;'
+            'border-left:3px solid #6366f1;padding:10px 14px;border-radius:0 6px 6px 0;">'
+            '<div style="font-size:15px;color:#1e293b;font-weight:500;">{{ExampleDe}}</div>'
+            '<div style="font-size:13px;color:#64748b;margin-top:4px;">{{ExampleZh}}</div></div></div>'
+        )
     }]
 )
 
@@ -902,8 +978,10 @@ _BACKUP_TABLES = {
         {"lemma": "", "praep": "", "kasus": "", "saved_at": None},
     ),
     "essays": (
-        ("id", "title", "content", "analysis_json", "cefr_level", "error_count", "sentence_count", "created_at", "updated_at"),
-        {"title": "", "content": "", "analysis_json": "{}", "cefr_level": "A1", "error_count": 0, "sentence_count": 0},
+        ("id", "title", "content", "analysis_json", "cefr_level", "error_count",
+         "sentence_count", "created_at", "updated_at"),
+        {"title": "", "content": "", "analysis_json": "{}", "cefr_level": "A1",
+         "error_count": 0, "sentence_count": 0},
     ),
     "essay_versions": (
         ("id", "essay_id", "content", "analysis_json", "message", "created_at"),
@@ -933,16 +1011,24 @@ _PROGRESS_TABLES = {
          "quiz_sessions": 0, "study_minutes": 0},
     ),
     "a1_hoeren_records": (
-        ("id", "set_id", "score_raw", "score_official", "total_questions", "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
-        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15, "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+        ("id", "set_id", "score_raw", "score_official", "total_questions",
+         "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
+        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15,
+         "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
     ),
     "a1_lesen_records": (
-        ("id", "set_id", "score_raw", "score_official", "total_questions", "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
-        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15, "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+        ("id", "set_id", "score_raw", "score_official", "total_questions",
+         "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
+        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15,
+         "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
     ),
     "exam_trials": (
-        ("id", "level", "module", "set_id", "score_raw", "score_official", "total_questions", "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
-        {"level": "A1", "module": "hoeren", "set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15, "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+        ("id", "level", "module", "set_id", "score_raw", "score_official",
+         "total_questions", "duration_seconds", "answers_json",
+         "wrong_questions_json", "created_at"),
+        {"level": "A1", "module": "hoeren", "set_id": 1, "score_raw": 0,
+         "score_official": 0.0, "total_questions": 15, "duration_seconds": 0,
+         "answers_json": "{}", "wrong_questions_json": "[]"},
     ),
 }
 
@@ -1528,7 +1614,8 @@ def get_all_corpus_syntax_stats(db_path: Optional[str] = None) -> Dict[str, Any]
     try:
         with db_progress_conn(db_path) as conn:
             row = conn.execute(
-                "SELECT COUNT(*), AVG(sent_count), AVG(avg_clause_depth), AVG(passive_rate), AVG(konjunktiv_rate), AVG(vl_rate) FROM corpus_syntax_stats"
+                "SELECT COUNT(*), AVG(sent_count), AVG(avg_clause_depth), AVG(passive_rate), "
+                "AVG(konjunktiv_rate), AVG(vl_rate) FROM corpus_syntax_stats"
             ).fetchone()
             if row:
                 count, avg_sc, avg_cd, avg_pr, avg_kr, avg_vr = row
