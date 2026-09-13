@@ -30,6 +30,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -207,7 +208,7 @@ def test_make_word_object_letter_strips_articles(bridge):
 def test_add_card_is_word_only_no_card_created(bridge):
     """RED-1：首次添加 added=true，deck.words +1；cards 不加任何键（无新词条目）。"""
     now = 1757212800000
-    base = {"words": [], "cards": {}}
+    base: dict[str, Any] = {"words": [], "cards": {}}
     r1 = _run_node(
         {
             "op": "addCardToDeck",
@@ -262,7 +263,7 @@ def test_add_card_preserves_existing_cards_untouched(bridge):
 def test_add_card_duplicate_lemma_exists_no_repeat(bridge):
     """二次同 lemma（大小写无关）→ added=false reason='exists'，不重复追加。"""
     now = 1757212800000
-    base = {"words": [], "cards": {}}
+    base: dict[str, Any] = {"words": [], "cards": {}}
     r1 = _run_node(
         {
             "op": "addCardToDeck",

@@ -29,9 +29,14 @@ def test_base_handcurated_wins_on_conflict():
 
 def test_irregular_present_index():
     """现在时高频形式能反查不定式（_AUX_MODAL_PRESENT 拓宽）。"""
-    assert lookup_irregular_verb("ist").infinitiv == "sein"
-    assert lookup_irregular_verb("geht").infinitiv == "gehen"
-    assert lookup_irregular_verb("tut").infinitiv == "tun"
+    ist = lookup_irregular_verb("ist")
+    geht = lookup_irregular_verb("geht")
+    tut = lookup_irregular_verb("tut")
+    # 返回 Optional：这三个形式被测代码必须能反查到，None 即测试失败
+    assert ist is not None and geht is not None and tut is not None
+    assert ist.infinitiv == "sein"
+    assert geht.infinitiv == "gehen"
+    assert tut.infinitiv == "tun"
 
 
 def test_linguistics_ext_lookup():

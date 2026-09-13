@@ -25,10 +25,12 @@ from delector.services.writing import decline_determiner
 
 def test_restore_req_includes_a1_records():
     req = RestoreReq(
-        cards=[],
+        # 字段名以 RestoreReq 的实际声明为准。曾误写 cards / study_logs / quiz_logs：
+        # pydantic 默认忽略未知字段，错名不报错，只会让测试参数名不实（mypy 抓到）。
+        vocab_cards=[],
         articles=[],
-        study_logs=[],
-        quiz_logs=[],
+        study_log=[],
+        quiz_log=[],
         a1_hoeren_records=[{"set_id": "set1", "score": 25.0}],
         a1_lesen_records=[{"set_id": "set2", "score": 24.0}],
     )

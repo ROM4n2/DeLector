@@ -7,6 +7,7 @@ import io
 import os
 import re
 import zipfile
+from typing import Any
 
 import pytest
 
@@ -38,7 +39,10 @@ def test_a1_dict_dataset_structure():
 
     # 3. 口语 Teil 2 主题抽词卡 (30+)
     assert len(a1_dict.A1_SPRECHEN_TEIL2) >= 30
-    for card in a1_dict.A1_SPRECHEN_TEIL2:
+    # 数据实为 dict[str, Any]（嵌套 dict/list）；中间列表注解纠正 mypy 对嵌套字面量的
+    # 过窄 join（裸注解循环变量会被赋值来源类型重新收窄覆盖，故借道 list 变量）
+    cards_teil2: list[dict[str, Any]] = a1_dict.A1_SPRECHEN_TEIL2
+    for card in cards_teil2:
         assert card.get("topic_id")
         assert card.get("keyword")
         assert len(card.get("prompts", [])) >= 1
@@ -47,7 +51,8 @@ def test_a1_dict_dataset_structure():
 
     # 4. 口语 Teil 3 情景图标请求卡 (20+)
     assert len(a1_dict.A1_SPRECHEN_TEIL3) >= 20
-    for card in a1_dict.A1_SPRECHEN_TEIL3:
+    cards_teil3: list[dict[str, Any]] = a1_dict.A1_SPRECHEN_TEIL3
+    for card in cards_teil3:
         assert card.get("icon")
         assert card.get("keyword")
         assert card.get("situation")

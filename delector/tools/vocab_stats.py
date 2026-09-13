@@ -132,8 +132,8 @@ async def run(payload: dict) -> dict:
     unknown_count = tokens_total - known_count
 
     # 频降序 + lemma 升序（稳定），封顶 _UNKNOWN_CAP。
-    unknown_ranked = sorted(unknown_freq.items(), key=lambda kv: (-kv[1], kv[0]))[:_UNKNOWN_CAP]
-    unknown_ranked = [{"lemma": lemma, "count": cnt} for lemma, cnt in unknown_ranked]
+    ranked_pairs = sorted(unknown_freq.items(), key=lambda kv: (-kv[1], kv[0]))[:_UNKNOWN_CAP]
+    unknown_ranked = [{"lemma": lemma, "count": cnt} for lemma, cnt in ranked_pairs]
 
     # --- level_hint 启发式 ---
     if tokens_total == 0:

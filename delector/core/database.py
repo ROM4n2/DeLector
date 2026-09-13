@@ -65,7 +65,7 @@ def get_db(db_path: Optional[str] = None):
     return _configure_sqlite_conn(conn)
 
 
-_INITIALIZED_PROGRESS_DBS = set()
+_INITIALIZED_PROGRESS_DBS: set = set()
 
 
 def get_progress_db(db_path: Optional[str] = None):
@@ -554,6 +554,10 @@ def import_encounter_pack(pack: dict, db_path: Optional[str] = None) -> int:
         missing.append("article")
     if missing:
         raise ValueError("import_encounter_pack: 缺少必需键 " + ", ".join(sorted(set(missing))))
+    # 类型收窄（运行时恒真）：上面的守卫已保证 article 是 dict —— None/非 dict 都会被计入
+    # missing 并由此抛错。用 assert 而非重构报错分支，是为了保持「多键缺失合并成一条
+    # 错误信息」的既有语义。
+    assert isinstance(article, dict)
     if not article.get("title") or not article.get("raw_text"):
         raise ValueError("import_encounter_pack: article 需含 title 与 raw_text")
 

@@ -401,11 +401,12 @@ def qa_spotcheck(entries: List[dict]) -> None:
         seen.add(e["wort"])
     print("\n=== QA 抽查（定向 10）===")
     for w in targeted:
-        e = next((x for x in entries if x["wort"] == w), None)
-        if e:
+        candidates = [x for x in entries if x["wort"] == w]
+        found = candidates[0] if candidates else None
+        if found:
             print(
-                f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} "
-                f"{e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}"
+                f"  {found['wort']:20s} {found['cefr']} {found['pos']:5s} "
+                f"{found.get('gender') or '-':5s} {found.get('plural') or '-':4s} {found['definition_zh']}"
             )
             seen.add(w)
     print(f"\n覆盖定向 {len([w for w in targeted if w in seen])}/{len(targeted)}")
@@ -507,10 +508,10 @@ def main() -> None:
             )
         seen = {e["wort"] for e in merged}
         added = 0
-        for e in entries:
-            if e["wort"] not in seen:
-                merged.append(e)
-                seen.add(e["wort"])
+        for entry in entries:
+            if entry["wort"] not in seen:
+                merged.append(entry)
+                seen.add(entry["wort"])
                 added += 1
         out = emit_module(merged, targets)
         still = sorted(set(words) - seen)
@@ -534,10 +535,10 @@ def main() -> None:
     entries = asyncio.run(_generate_parallel(words, args, key, base, model))
 
     # 与现有词库合并后总体覆盖统计（生成词去重后）
-    merged = dict(CORE_VOCAB_DB)
-    for e in entries:
-        merged.setdefault(e["wort"], None)
-    print(f"\n生成有效 {len(entries)} 词，合并后总词元 {len(merged)}")
+    merged_names: Dict[str, tuple] = dict(CORE_VOCAB_DB)
+    for entry in entries:
+        merged_names.setdefault(entry["wort"], ())
+    print(f"\n生成有效 {len(entries)} 词，合并后总词元 {len(merged_names)}")
 
     out = emit_module(entries, targets)
     print(f"已写出: {out} ({out.stat().st_size / 1024:.0f} KB)")

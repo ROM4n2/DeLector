@@ -16,6 +16,7 @@ gc.collect() 后删库（Windows 句柄释放纪律）。
 
 import gc
 import os
+from typing import Any
 
 import pytest
 
@@ -31,7 +32,9 @@ _DB = "test_exam_trials_delector.db"
 _PDB = "test_exam_trials_progress.db"
 _DB_FILES = (_DB, _PDB)
 
-_HOEREN_FIELDS = {
+# 测试构造数据（值类型异构：int/float/str）：注解 Any 使 **展开/取值对静态检查静默，
+# 运行期字段类型仍由被测函数签名校验兜底
+_HOEREN_FIELDS: dict[str, Any] = {
     "set_id": 3,
     "score_raw": 18,
     "score_official": 20.5,

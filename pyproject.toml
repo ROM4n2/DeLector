@@ -1,0 +1,42 @@
+# [tool.mypy] —— Mypy 类型检查配置（2026-09-13 引入；计划：docs/plans/2026-09-13-mypy-cleanup.md）
+#
+# 为什么放 pyproject.toml 而不是 mypy.ini（本地踩坑实测）：
+#   mypy 读取 .ini 时不指定编码，Python 的 configparser 退回 locale 默认编码 ——
+#   在中文 Windows 上是 GBK，于是「含中文注释的 mypy.ini」直接崩：
+#     UnicodeDecodeError: 'gbk' codec can't decode byte 0x88 ...
+#   TOML 规范强制 UTF-8，pyproject.toml 因此可以安全承载中文注释（本仓库的惯例）。
+#   mypy 配置查找顺序：mypy.ini → .mypy.ini → pyproject.toml → setup.cfg。
+#
+# 定位：Mypy 是**开发期工具**，不进 requirements.txt（Android 打包面只装运行时依赖，
+# 类型检查器混入只会增大体积与漂移面）；CI 在 ci.yml 内单独 pip install。
+#
+# 档位决策（实测三档，全仓 98 源文件）：
+#   默认（不检查未注解函数体）  54 errors —— 太松：未注解函数体完全不检查，抓不到什么
+#   本档（适度严格）           139 errors —— 采用：检查未注解函数体（能抓真实 bug）+ 4 个高价值 flag
+#   --strict                  预计 600+ —— 递延另立：主体是 no-untyped-def（要为约 200 处函数补注解）
+# 对比：Ruff 清账起点 2265 个告警，Mypy 仅 139 —— 本轮反而更轻。
+
+[tool.mypy]
+python_version = "3.11"
+
+# spaCy 等第三方无类型 stub；不忽略缺失导入会产生大量噪音 import 错误
+ignore_missing_imports = true
+
+# 关键开关：默认档不检查未注解函数体（mypy 只给一条 note）。打开它才真正覆盖
+# 「没有注解的函数内部」——这也是选本档而非默认档的理由。
+check_untyped_defs = true
+
+# 隐式 Optional 已随 PEP 484 演进被弃用；显式 Optional[X] 更易读
+no_implicit_optional = true
+
+# 自净机制：多余的 `# type: ignore` 也会报错 → 防止清账退化成「到处 ignore」的掩耳盗铃。
+# 配套硬纪律（见计划）：每处豁免必须带错误码 + 理由注释，禁止裸 ignore。
+warn_unused_ignores = true
+
+warn_redundant_casts = true
+
+# Chaquopy 侧是仓库代码的拷贝（不重复检查）；scratch/ 与 tools/raw* 是 .gitignore 的本地物
+exclude = '(\.venv|dist|build|android|scratch|tools/raw)'
+
+# 显式声明检查面：本地裸跑 `python -m mypy` 即与 CI 同口径，避免漏参导致口径漂移
+files = ["delector", "tests", "tools", "conftest.py", "start.py", "package_windows.py"]

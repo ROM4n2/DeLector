@@ -10,6 +10,12 @@ import sys
 import threading
 import time
 import webbrowser
+from contextlib import nullcontext
+
+
+def _noop_signal_context(*_args, **_kwargs):
+    """空 context manager：替代 uvicorn 的 capture_signals（Android 子线程禁信号用）。"""
+    return nullcontext()
 
 
 def is_port_in_use(port: int) -> bool:
@@ -84,11 +90,15 @@ def main():
     config = uvicorn.Config(app, host=host, port=port, reload=False, log_level="info")
     server = uvicorn.Server(config)
     try:
-        # Disable signals in sub-threads (Android Chaquopy)
+        # 禁用信号处理：Android Chaquopy 在子线程里跑 server，而 signal.signal 只允许
+        # 在 Python 主线程调用。注意 uvicorn 的 API 随版本迁移（0.52 起只有
+        # capture_signals，install_signal_handlers 已不存在）——两代都覆盖，
+        # 否则「防护」会静默失效成一条没人调用的实例属性（mypy 抓到这个失效）。
         if threading.current_thread() is not threading.main_thread():
-            server.install_signal_handlers = lambda: None
+            server.install_signal_handlers = lambda: None  # type: ignore[attr-defined]  # 旧 uvicorn API
+            server.capture_signals = _noop_signal_context  # type: ignore[method-assign]  # 新 uvicorn API
     except Exception:
-        server.install_signal_handlers = lambda: None
+        pass
     server.run()
 
 

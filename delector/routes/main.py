@@ -460,7 +460,7 @@ async def lookup_vocab(req: VocabLookupReq):
                     if (p.get("definition_zh") or p.get("def_zh"))
                 ]
                 if sub_defs:
-                    res["definition_zh"] = " + ".join(sub_defs)
+                    res["definition_zh"] = " + ".join(str(d) for d in sub_defs)
                     if res.get("source") in ("none", "ai_error", "ai_exception"):
                         res["source"] = "linguistics"
 
@@ -1475,7 +1475,7 @@ def wb_lan_info():
             except ValueError:
                 continue
             if addr.is_private and not addr.is_loopback:
-                lan_ip = ip
+                lan_ip = str(ip)
                 break
     except Exception:
         lan_ip = ""

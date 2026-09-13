@@ -9,7 +9,8 @@ from typing import Any, Dict
 try:
     import spacy
 except ImportError:
-    spacy = None
+    # spaCy 缺失时的运行时降级占位（红线 1：降级路径是有意设计）——带理由豁免。
+    spacy = None  # type: ignore[assignment]
 
 from delector.core.utils import is_android
 from delector.data.core_dict import get_core_cefr_level, lookup_core_vocab
@@ -51,7 +52,12 @@ def _load_spacy_model(name: str):
 
     try:
         # meta.json 里的版本与实际数据目录名不一致时，上一步会失败，这里直接找目录
-        root = Path(module.__file__).parent
+        module_file = module.__file__
+        if not module_file:
+            # __file__ 缺失时原实现在 Path(None) 处抛 TypeError 被外层 except 吞掉，
+            # 错误信息含混；这里显式抛出同类失败（同样被外层捕获并记入 errors）。
+            raise FileNotFoundError(f"{name} 模块没有 __file__，无法定位数据目录")
+        root = Path(module_file).parent
         data_dirs = sorted(root.glob(f"{name}-*"))
         if not data_dirs:
             raise FileNotFoundError(f"{root} 下没有 {name}-* 数据目录")

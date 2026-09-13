@@ -63,6 +63,17 @@ jobs:
       - name: Ruff lint gate
         run: ruff check .
 
+      # Mypy 类型门禁（2026-09-13 mypy-cleanup）。开发期工具：CI 内单独安装，
+      # **不进 requirements.txt**（Android 运行时纯净）。档位：适度严格档
+      # （check_untyped_defs 等，见 pyproject.toml [tool.mypy] 的档位决策注释）——
+      # 不用 --strict（约 600 处 no-untyped-def，待渐进补注解后另立）。
+      # 裸跑 `mypy` 即用配置的 files 口径（delector/tests/tools/根脚本），与本地一致。
+      - name: Install Mypy
+        run: pip install mypy
+
+      - name: Mypy type gate
+        run: mypy
+
       # 测试需要德语 spaCy 模型，与 build-release.yml 同源
       - name: Download spaCy German model
         run: python -m spacy download de_core_news_sm

@@ -25,6 +25,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -315,7 +316,7 @@ def test_annotate_with_deck_noun_hw_with_article_is_known(bridge):
 
 def test_annotate_with_deck_empty_known_set_rank_and_cap(bridge):
     """空 deck（无已背词）：rate=0、unknown_top 按频率/先现排序、cap=10、punct/数字排除。"""
-    deck = {"words": [], "cards": {}}
+    deck: dict[str, Any] = {"words": [], "cards": {}}
     annotate = {
         "text_id": 9,
         "total_tokens": 17,

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -46,7 +47,9 @@ def _draw_default_icon(size: int) -> Image.Image:
         fill=(26, 23, 20, 255),  # #1a1714
     )
     # 找衬线字体：优先系统可用，退到默认
-    font = None
+    # 注解取 Any：types-Pillow 里 FreeTypeFont 与 ImageFont 的继承关系与实际不符
+    # （truetype 返回 FreeTypeFont、load_default 返回 ImageFont，stub 判二者不可互换）
+    font: Any = None
     for path in ("C:/Windows/Fonts/timesbd.ttf", "C:/Windows/Fonts/georgiab.ttf", "C:/Windows/Fonts/arial.ttf"):
         p = Path(path)
         if p.exists():
@@ -86,7 +89,8 @@ def main() -> None:
 
     for density, px in DENSITIES.items():
         if source_img is not None:
-            icon = _center_square(source_img).resize((px, px), Image.LANCZOS)
+            # Pillow ≥ 9.1 把重采样常量移到 Image.Resampling（顶层别名已废弃，stub 只认新路径）
+            icon = _center_square(source_img).resize((px, px), Image.Resampling.LANCZOS)
         else:
             icon = _draw_default_icon(px)
         out_dir = RES_DIR / f"mipmap-{density}"
