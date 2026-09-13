@@ -25,6 +25,7 @@ RED-1 语义真相（与工作台队列真值对齐）：
 
 运行（仓库根）：export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_encounter_addcard.py -v
 """
+
 import json
 import shutil
 import subprocess
@@ -44,7 +45,10 @@ import fs from "node:fs";
 const ctx = JSON.parse(fs.readFileSync(0, "utf8"));
 const DB = await import("./deck-bridge.mjs");
 const out = {};
-function noThrow(fn) { try { return { ok: true, v: fn() }; } catch (e) { return { ok: false, err: String(e && e.message || e) }; } }
+function noThrow(fn) {
+  try { return { ok: true, v: fn() }; }
+  catch (e) { return { ok: false, err: String(e && e.message || e) }; }
+}
 if (ctx.op === "makeWordObject") {
   out.word = DB.makeWordObject(ctx.lemma, ctx.gloss, ctx.pos, ctx.genId,
                                ctx.nowMs != null ? ctx.nowMs : undefined);
@@ -142,14 +146,12 @@ def test_make_word_object_matches_workbench_custom_shape(bridge):
     """makeWordObject 产出与 workbench 自定义词一致的字段集（id='u-'+genId，up=nowMs）。"""
     now = 1757212800000
     out = _run_node(
-        {"op": "makeWordObject", "lemma": "gehen", "gloss": "去；走", "pos": "VERB",
-         "genId": "zzz", "nowMs": now},
+        {"op": "makeWordObject", "lemma": "gehen", "gloss": "去；走", "pos": "VERB", "genId": "zzz", "nowMs": now},
         bridge,
     )
     w = out["word"]
     # 字段集合与 workbench 自定义词一致
-    assert set(w.keys()) >= {"id", "hw", "pos", "gloss", "ipa", "ex", "letter",
-                             "page", "tags", "custom", "up"}
+    assert set(w.keys()) >= {"id", "hw", "pos", "gloss", "ipa", "ex", "letter", "page", "tags", "custom", "up"}
     assert w["id"] == "u-zzz"
     assert w["hw"] == "gehen"
     assert w["pos"] == "VERB"
@@ -167,8 +169,7 @@ def test_make_word_object_matches_workbench_custom_shape(bridge):
 def test_make_word_object_default_up_is_real_now_ms(bridge):
     """不传 nowMs 时 up=Date.now()（真实毫秒，非由 id 后缀反解）。"""
     out = _run_node(
-        {"op": "makeWordObject", "lemma": "laufen", "gloss": "跑", "pos": "V",
-         "genId": None, "nowMs": None},
+        {"op": "makeWordObject", "lemma": "laufen", "gloss": "跑", "pos": "V", "genId": None, "nowMs": None},
         bridge,
     )
     w = out["word"]
@@ -179,13 +180,11 @@ def test_make_word_object_default_up_is_real_now_ms(bridge):
 def test_make_word_object_up_does_not_derive_from_genid_suffix(bridge):
     """YELLOW-3：up 不随 genId 后缀变化——同 genId、不同 nowMs → up=各自 nowMs。"""
     a = _run_node(
-        {"op": "makeWordObject", "lemma": "sitzen", "gloss": "坐", "pos": "V",
-         "genId": "abc", "nowMs": 1000},
+        {"op": "makeWordObject", "lemma": "sitzen", "gloss": "坐", "pos": "V", "genId": "abc", "nowMs": 1000},
         bridge,
     )["word"]
     b = _run_node(
-        {"op": "makeWordObject", "lemma": "sitzen", "gloss": "坐", "pos": "V",
-         "genId": "abc", "nowMs": 9999999999000},
+        {"op": "makeWordObject", "lemma": "sitzen", "gloss": "坐", "pos": "V", "genId": "abc", "nowMs": 9999999999000},
         bridge,
     )["word"]
     # 同 genId → id 相同（u-abc），但 up 严格等于各自注入的 nowMs
@@ -197,8 +196,7 @@ def test_make_word_object_up_does_not_derive_from_genid_suffix(bridge):
 def test_make_word_object_letter_strips_articles(bridge):
     """letterOf 语义：冠词打头时归到实体首字母（与 workbench letterOf 一致）。"""
     out = _run_node(
-        {"op": "makeWordObject", "lemma": "das Haus", "gloss": "房子", "pos": "n.",
-         "genId": "q9", "nowMs": 1},
+        {"op": "makeWordObject", "lemma": "das Haus", "gloss": "房子", "pos": "n.", "genId": "q9", "nowMs": 1},
         bridge,
     )
     assert out["word"]["hw"] == "das Haus"
@@ -211,8 +209,15 @@ def test_add_card_is_word_only_no_card_created(bridge):
     now = 1757212800000
     base = {"words": [], "cards": {}}
     r1 = _run_node(
-        {"op": "addCardToDeck", "deck": base, "lemma": "gehen", "gloss": "走",
-         "pos": "V", "genId": "aaa", "nowMs": now},
+        {
+            "op": "addCardToDeck",
+            "deck": base,
+            "lemma": "gehen",
+            "gloss": "走",
+            "pos": "V",
+            "genId": "aaa",
+            "nowMs": now,
+        },
         bridge,
     )
     assert r1["result"]["added"] is True
@@ -234,8 +239,15 @@ def test_add_card_preserves_existing_cards_untouched(bridge):
         "cards": {"w9": {"reps": 2, "due": 1757000000000}},
     }
     out = _run_node(
-        {"op": "addCardToDeck", "deck": deck, "lemma": "Auto", "gloss": "汽车",
-         "pos": "n.", "genId": "k1", "nowMs": 1757212800000},
+        {
+            "op": "addCardToDeck",
+            "deck": deck,
+            "lemma": "Auto",
+            "gloss": "汽车",
+            "pos": "n.",
+            "genId": "k1",
+            "nowMs": 1757212800000,
+        },
         bridge,
     )
     assert out["result"]["added"] is True
@@ -252,14 +264,20 @@ def test_add_card_duplicate_lemma_exists_no_repeat(bridge):
     now = 1757212800000
     base = {"words": [], "cards": {}}
     r1 = _run_node(
-        {"op": "addCardToDeck", "deck": base, "lemma": "gehen", "gloss": "走",
-         "pos": "V", "genId": "aaa", "nowMs": now},
+        {
+            "op": "addCardToDeck",
+            "deck": base,
+            "lemma": "gehen",
+            "gloss": "走",
+            "pos": "V",
+            "genId": "aaa",
+            "nowMs": now,
+        },
         bridge,
     )
     d1 = r1["result"]["deck"]
     r2 = _run_node(
-        {"op": "addCardToDeck", "deck": d1, "lemma": "Gehen", "gloss": "走",
-         "pos": "V", "genId": "bbb", "nowMs": now},
+        {"op": "addCardToDeck", "deck": d1, "lemma": "Gehen", "gloss": "走", "pos": "V", "genId": "bbb", "nowMs": now},
         bridge,
     )
     assert r2["result"]["added"] is False
@@ -276,8 +294,15 @@ def test_add_card_learned_word_not_added(bridge):
         "cards": {"w9": {"reps": 2}},
     }
     out = _run_node(
-        {"op": "addCardToDeck", "deck": deck, "lemma": "haus", "gloss": "房子",
-         "pos": "n.", "genId": "x1", "nowMs": 1757212800000},
+        {
+            "op": "addCardToDeck",
+            "deck": deck,
+            "lemma": "haus",
+            "gloss": "房子",
+            "pos": "n.",
+            "genId": "x1",
+            "nowMs": 1757212800000,
+        },
         bridge,
     )
     assert out["result"]["added"] is False
@@ -288,9 +313,15 @@ def test_add_card_learned_word_not_added(bridge):
 
 def test_add_card_genid_and_nowms_injection_deterministic(bridge):
     """同注入 genId/nowMs → 二次调用产生逐字段一致的 word（无时间随机性）。"""
-    ctx = {"op": "addCardToDeck", "deck": {"words": [], "cards": {}},
-           "lemma": "schön", "gloss": "漂亮", "pos": "ADJ",
-           "genId": "f00", "nowMs": 1757212800000}
+    ctx = {
+        "op": "addCardToDeck",
+        "deck": {"words": [], "cards": {}},
+        "lemma": "schön",
+        "gloss": "漂亮",
+        "pos": "ADJ",
+        "genId": "f00",
+        "nowMs": 1757212800000,
+    }
     a = _run_node(ctx, bridge)
     b = _run_node(ctx, bridge)
     assert a["result"]["added"] is True
@@ -302,8 +333,15 @@ def test_add_card_corrupt_deck_safe(bridge):
     """deck 形状残缺（非数组/缺键）→ 安全按空处理并添加 word，不抛异常。"""
     for bad in (None, {"words": None, "cards": None}, "garbage", {}):
         out = _run_node(
-            {"op": "addCardToDeck", "deck": bad, "lemma": "Auto", "gloss": "汽车",
-             "pos": "n.", "genId": "ok", "nowMs": 1757212800000},
+            {
+                "op": "addCardToDeck",
+                "deck": bad,
+                "lemma": "Auto",
+                "gloss": "汽车",
+                "pos": "n.",
+                "genId": "ok",
+                "nowMs": 1757212800000,
+            },
             bridge,
         )
         assert out["result"]["added"] is True, "corrupt deck must degrade to empty-add"
@@ -344,9 +382,7 @@ def test_encounter_js_writes_deck_and_mirror_sync():
 
 def test_encounter_js_does_not_write_cards_on_add():
     """RED-1：encounter.js 进卡路径只 setItem words，不 setItem cards。"""
-    assert "DECK_KEYS.cards" not in ENCOUNTER_JS, (
-        "进卡不再写 wb.cards.v1（RED-1：卡由工作台写/删）"
-    )
+    assert "DECK_KEYS.cards" not in ENCOUNTER_JS, "进卡不再写 wb.cards.v1（RED-1：卡由工作台写/删）"
 
 
 def test_encounter_js_has_session_review_and_tts():

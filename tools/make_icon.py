@@ -13,6 +13,7 @@
 否则 CI 构建直接失败。占位图标 = 与 PWA manifest 一致的 "De" 字标（深底赭红）。
 换图标 = 放一张图 → 重跑本脚本 → 触发 CI 重打包。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -41,12 +42,12 @@ def _draw_default_icon(size: int) -> Image.Image:
     # 深底圆角矩形（含轻微内边距，留出圆角外的透明区）
     d.rounded_rectangle(
         [int(size * 0.04), int(size * 0.04), int(size * 0.96), int(size * 0.96)],
-        radius=radius, fill=(26, 23, 20, 255),  # #1a1714
+        radius=radius,
+        fill=(26, 23, 20, 255),  # #1a1714
     )
     # 找衬线字体：优先系统可用，退到默认
     font = None
-    for path in ("C:/Windows/Fonts/timesbd.ttf", "C:/Windows/Fonts/georgiab.ttf",
-                 "C:/Windows/Fonts/arial.ttf"):
+    for path in ("C:/Windows/Fonts/timesbd.ttf", "C:/Windows/Fonts/georgiab.ttf", "C:/Windows/Fonts/arial.ttf"):
         p = Path(path)
         if p.exists():
             font = ImageFont.truetype(str(p), int(size * 0.5))
@@ -56,8 +57,7 @@ def _draw_default_icon(size: int) -> Image.Image:
     text = "De"
     bbox = d.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    d.text(((size - tw) / 2 - bbox[0], (size - th) / 2 - bbox[1]),
-           text, font=font, fill=(200, 75, 49, 255))  # #c84b31
+    d.text(((size - tw) / 2 - bbox[0], (size - th) / 2 - bbox[1]), text, font=font, fill=(200, 75, 49, 255))  # #c84b31
     return img
 
 
@@ -72,8 +72,9 @@ def _center_square(img: Image.Image) -> Image.Image:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="生成 Android 启动器图标（ic_launcher）")
-    parser.add_argument("--source", type=str, default="",
-                        help="用户图片路径（PNG/JPG/SVG 由 Pillow 支持；无则生成默认 De 字标）")
+    parser.add_argument(
+        "--source", type=str, default="", help="用户图片路径（PNG/JPG/SVG 由 Pillow 支持；无则生成默认 De 字标）"
+    )
     args = parser.parse_args()
 
     source_img: Image.Image | None = None

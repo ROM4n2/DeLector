@@ -3,6 +3,7 @@
 纯只读端点：无写操作、无 _require_localhost 闸。旧 /api/a1/* 取题端点
 **不迁移不改动**，本 router 只挂目录发现。
 """
+
 from fastapi import APIRouter
 
 from delector.services.exam_catalog import get_catalog

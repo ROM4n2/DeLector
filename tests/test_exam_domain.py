@@ -15,6 +15,7 @@ Task 2 起备考域接管 A1 五模块：写作(formular/email)/听力/阅读/�
 断言切到各自按钮/容器的**自身标签**内，不做整文件级别的模糊匹配
 （本仓库 static-string-assertion-dead-test 教训）。
 """
+
 import json
 import re
 import shutil
@@ -56,6 +57,7 @@ def _button_block(id_attr):
 
 # ── 桌面 nav + 移动 dock 的静态备考入口 ─────────────────────────────────────
 
+
 def test_desktop_nav_has_static_exam_button():
     """桌面 nav 有 nav-btn-exam，且 onclick 指向 show('exam')。"""
     blk = _button_block("nav-btn-exam")
@@ -80,10 +82,11 @@ def test_mobile_dock_exam_button_ordered():
 
 # ── view-exam 容器壳 ────────────────────────────────────────────────────────
 
+
 def test_view_exam_shell_exists():
     """有 <main id="view-exam" class="view"> 壳（main.js show() 按惯例点亮）。"""
     m = re.search(r'<main\b[^>]*\bid="view-exam"[^>]*>', _INDEX)
-    assert m, "index.html 缺少 <main id=\"view-exam\"> 壳"
+    assert m, 'index.html 缺少 <main id="view-exam"> 壳'
     blk = m.group(0)
     assert "view" in blk.split("class=")[1], "view-exam 的 class 必须含 view（否则 show() 管不到它）"
 
@@ -114,7 +117,7 @@ def test_exam_module_cards_inside_module_grid():
     不属于骨架本 Task 的产出（grid 选择器也管不到）。"""
     grid_at = _INDEX.index('id="exam-module-grid"')
     # 容器内 = 自 grid 开标签起、到 grid 的闭合 </div> 止（骨架无嵌套 div，取第一个闭合即容器自身）
-    blk = _INDEX[grid_at:_INDEX.index("</div>", grid_at)]
+    blk = _INDEX[grid_at : _INDEX.index("</div>", grid_at)]
     for attr in EXAM_MODULE_IDS:
         assert 'id="%s"' % attr in blk, "模块卡片 %s 必须写在 exam-module-grid 内" % attr
 
@@ -133,12 +136,11 @@ def test_exam_module_cards_wired_to_panels():
         ("exam-card-vocab", "'vocab'"),
     ):
         blk = _button_block(attr)
-        assert "setExamModule(%s)" % target in blk, (
-            "模块卡片 %s 的 onclick 必须含 setExamModule(%s)" % (attr, target)
-        )
+        assert "setExamModule(%s)" % target in blk, "模块卡片 %s 的 onclick 必须含 setExamModule(%s)" % (attr, target)
 
 
 # ── style.css 最小样式 ──────────────────────────────────────────────────────
+
 
 def test_exam_css_rules_exist():
     """style.css 有 .exam-level-tab 与 .exam-module-card 规则（切到规则自己的声明块）。"""
@@ -160,17 +162,18 @@ def test_exam_css_grid_uses_auto_fill():
 
 # ── Task 2：A1 五模块迁入备考域（面板容器 + 工具视图删净 + 探针） ────────────
 
+
 def _view_slice(id_attr):
     """<main> 不嵌套：视图切片 = 自带 id 的 <main 开标签到下一个 </main>。"""
     at = _INDEX.index('id="%s"' % id_attr)
     open_at = _INDEX.rindex("<main", 0, at)
-    return _INDEX[open_at:_INDEX.index("</main>", at)]
+    return _INDEX[open_at : _INDEX.index("</main>", at)]
 
 
 def _section_slice(id_attr):
     at = _INDEX.index('id="%s"' % id_attr)
     open_at = _INDEX.rindex("<section", 0, at)
-    return _INDEX[open_at:_INDEX.index("</section>", at)]
+    return _INDEX[open_at : _INDEX.index("</section>", at)]
 
 
 def test_exam_panel_containers_exist():
@@ -195,9 +198,13 @@ def test_exam_cards_family_panel_holds_a1_modules():
     """exam-cards-family 面板内必须有词表工具栏 + 备考域渲染容器 + 听读容器。"""
     blk = _section_slice("exam-cards-family")
     for attr in (
-        "a1-toolbar", "a1-topic-pills", "a1-search-row",
-        "exam-cards-container", "exam-cards-view-toggle",
-        "a1-hoeren-container", "a1-lesen-container",
+        "a1-toolbar",
+        "a1-topic-pills",
+        "a1-search-row",
+        "exam-cards-container",
+        "exam-cards-view-toggle",
+        "a1-hoeren-container",
+        "a1-lesen-container",
     ):
         assert 'id="%s"' % attr in blk, "exam-cards-family 缺少 id=%r" % attr
 
@@ -209,21 +216,32 @@ def test_tool_views_no_longer_host_a1():
     页面照常渲染但交互全死（v4.8.2 同族症状）。"""
     writer_blk = _view_slice("view-writer")
     cards_blk = _view_slice("view-cards")
-    for attr in ("a1-formular-view", "a1-email-view", "writer-mode-a1-formular",
-                 "writer-mode-a1-email", "a1-formular-select", "a1-email-input"):
+    for attr in (
+        "a1-formular-view",
+        "a1-email-view",
+        "writer-mode-a1-formular",
+        "writer-mode-a1-email",
+        "a1-formular-select",
+        "a1-email-input",
+    ):
         assert attr not in writer_blk, "view-writer 仍残留 A1 写作 id=%r" % attr
     assert 'id="writer-mode-essay"' in writer_blk, "view-writer 保留了纯 essay 单按钮条"
-    for attr in ("a1-toolbar", "a1-hoeren-container", "a1-lesen-container",
-                 "seg-a1", "a1-tab-vocab", "a1-topic-pills"):
+    for attr in ("a1-toolbar", "a1-hoeren-container", "a1-lesen-container", "seg-a1", "a1-tab-vocab", "a1-topic-pills"):
         assert attr not in cards_blk, "view-cards 仍残留 A1 id=%r" % attr
 
 
 def test_moved_a1_ids_are_unique_in_index_html():
     """id 唯一性铁律：每个被搬移的 id 全文件恰好 1 次。"""
     for attr in (
-        "a1-formular-view", "a1-email-view", "a1-toolbar", "a1-topic-pills",
-        "a1-search-row", "exam-cards-container", "a1-hoeren-container",
-        "a1-lesen-container", "writer-mode-essay",
+        "a1-formular-view",
+        "a1-email-view",
+        "a1-toolbar",
+        "a1-topic-pills",
+        "a1-search-row",
+        "exam-cards-container",
+        "a1-hoeren-container",
+        "a1-lesen-container",
+        "writer-mode-essay",
     ):
         n = _INDEX.count('id="%s"' % attr)
         assert n == 1, 'id="%s" 全文件出现 %d 次（必须恰好 1 次，双现 = 挂载歧义）' % (attr, n)
@@ -235,9 +253,7 @@ def test_moved_a1_ids_are_unique_in_index_html():
 def test_main_js_show_routes_exam_domain():
     """show() 的备考域路由：离开 exam 停考计时器、进入 exam 渲染模块。"""
     body = _MAIN_JS.split("export function show(")[1].split("\nexport ")[0]
-    assert 'if (view !== "exam")' in body, (
-        'show() 缺 if (view !== "exam") 守卫 —— 离开备考域不停听力/阅读考试计时器'
-    )
+    assert 'if (view !== "exam")' in body, 'show() 缺 if (view !== "exam") 守卫 —— 离开备考域不停听力/阅读考试计时器'
     assert 'if (view !== "cards")' not in body, (
         'show() 仍用 view !== "cards" 守卫停考计时器（备考域宿主已改 view-exam）'
     )
@@ -250,25 +266,28 @@ def test_exam_module_mount_probe():
     """动态探针：view-exam 挂载 + 渲染目标回退必红（node:vm 真跑 a1_cards.js）。"""
     if not shutil.which("node"):
         import pytest
+
         pytest.skip("node 不在 PATH 上，跳过动态探针")
     probe = _ROOT / "tools" / "ia_dom_mount_probe.mjs"
     assert probe.exists(), "缺少 tools/ia_dom_mount_probe.mjs 动态探针"
     res = subprocess.run(
         ["node", str(probe), "--json"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_ROOT),
     )
     assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
     out = json.loads(res.stdout)
     assert out["ok"] is True
-    assert out["dynamic"]["mainCardsContainerUntouched"], (
-        "探针动态场景：renderA1 不得把词卡写进主站 #cards-container"
-    )
+    assert out["dynamic"]["mainCardsContainerUntouched"], "探针动态场景：renderA1 不得把词卡写进主站 #cards-container"
     assert out["dynamic"]["vocabDeckTarget"] == "exam-cards-container"
     assert out["dynamic"]["vocabGridTarget"] == "exam-cards-container"
 
 
 # ── Task 3：exam catalog 目录化（前端数据补强接线） ─────────────────────────
+
 
 def test_exam_catalog_fetch_wired_in_main_js():
     """initExamCatalog 接线：fetch /api/exams/catalog + 失败回退 + 惰性触发。
@@ -278,16 +297,12 @@ def test_exam_catalog_fetch_wired_in_main_js():
     """
     m = re.search(r"(?:async\s+)?function\s+initExamCatalog\s*\(", _MAIN_JS)
     assert m, "main.js 缺少 initExamCatalog()（Task 3 catalog 数据补强入口）"
-    body = _MAIN_JS[m.end():_MAIN_JS.index("\nfunction ", m.end())]
-    assert '"/api/exams/catalog"' in body, (
-        "initExamCatalog 必须调用 api('/api/exams/catalog')"
-    )
+    body = _MAIN_JS[m.end() : _MAIN_JS.index("\nfunction ", m.end())]
+    assert '"/api/exams/catalog"' in body, "initExamCatalog 必须调用 api('/api/exams/catalog')"
     assert "catch" in body and "console.debug" in body, (
         "initExamCatalog 必须有失败回退分支（静默 console.debug，不弹错）"
     )
-    assert "_examCatalogDone" in body, (
-        "initExamCatalog 必须有已初始化守卫（惰性触发一次）"
-    )
+    assert "_examCatalogDone" in body, "initExamCatalog 必须有已初始化守卫（惰性触发一次）"
 
 
 def test_exam_catalog_lazy_trigger_on_show_exam():
@@ -306,7 +321,10 @@ def test_exam_catalog_does_not_rewrite_panel_routing():
     """
     body = _MAIN_JS.split("export function setExamModule(")[1].split("\nexport ")[0]
     for frag in (
-        '"exam-writing"', '"exam-cards-family"', "setA1Mode", "setExamWritingTab",
+        '"exam-writing"',
+        '"exam-cards-family"',
+        "setA1Mode",
+        "setExamWritingTab",
     ):
         assert frag in body, "setExamModule mediator 被改动（缺 %s）" % frag
 
@@ -326,16 +344,10 @@ def test_exam_catalog_new_level_tabs_not_dead_buttons():
     """
     m = re.search(r"(?:async\s+)?function\s+initExamCatalog\s*\(", _MAIN_JS)
     assert m, "main.js 缺少 initExamCatalog()"
-    body = _MAIN_JS[m.end():_MAIN_JS.index("\nfunction ", m.end())]
-    assert 'btn.title = "该等级模块待接入"' in body, (
-        "新增等级页签缺 title 待接入提示（静默死按钮纪律违规）"
-    )
-    assert 'aria-disabled' in body, (
-        "新增等级页签缺 aria-disabled 禁用标注"
-    )
-    assert "btn.onclick" in body, (
-        "新增等级页签缺 onclick 占位（no-op 接线，待该等级模块接入后替换）"
-    )
+    body = _MAIN_JS[m.end() : _MAIN_JS.index("\nfunction ", m.end())]
+    assert 'btn.title = "该等级模块待接入"' in body, "新增等级页签缺 title 待接入提示（静默死按钮纪律违规）"
+    assert "aria-disabled" in body, "新增等级页签缺 aria-disabled 禁用标注"
+    assert "btn.onclick" in body, "新增等级页签缺 onclick 占位（no-op 接线，待该等级模块接入后替换）"
 
 
 def test_exam_catalog_activates_a2_tab_interactivity():
@@ -343,53 +355,38 @@ def test_exam_catalog_activates_a2_tab_interactivity():
     main_js = (_ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
     m = re.search(r"(?:async\s+)?function\s+initExamCatalog\s*\(", main_js)
     assert m, "main.js 缺少 initExamCatalog()"
-    body = main_js[m.end():main_js.index("\nfunction ", m.end())]
-    assert (
-        'setExamLevel("A2")' in body
-        or "setExamLevel(lv.id)" in body
-        or "setExamLevel('A2')" in body
-    ), "initExamCatalog 必须将 A2 等级页签连接至 setExamLevel"
-    assert "export function setExamLevel(" in main_js, "main.js 必须导出 setExamLevel"
-    assert "setExamLevel" in main_js.split("Object.assign(window, {")[1].split("});")[0], (
-        "window 必须绑定 setExamLevel"
+    body = main_js[m.end() : main_js.index("\nfunction ", m.end())]
+    assert 'setExamLevel("A2")' in body or "setExamLevel(lv.id)" in body or "setExamLevel('A2')" in body, (
+        "initExamCatalog 必须将 A2 等级页签连接至 setExamLevel"
     )
+    assert "export function setExamLevel(" in main_js, "main.js 必须导出 setExamLevel"
+    assert "setExamLevel" in main_js.split("Object.assign(window, {")[1].split("});")[0], "window 必须绑定 setExamLevel"
 
 
 def test_a1_cards_supports_a2_vocab_level():
     """Task 4: a1_cards.js 与 cards.js 导出 setExamVocabLevel，且调用 /api/a2/vocab。"""
     a1_js = (_ROOT / "static" / "js" / "a1_cards.js").read_text(encoding="utf-8")
     cards_js = (_ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
-    assert (
-        "export function setExamVocabLevel(" in a1_js
-        or "export async function setExamVocabLevel(" in a1_js
-    ), "a1_cards.js 必须导出 setExamVocabLevel"
-    assert "setExamVocabLevel" in cards_js, "cards.js 必须重导出 setExamVocabLevel"
-    assert '"/api/a2/vocab"' in a1_js or "'/api/a2/vocab'" in a1_js, (
-        "a1_cards.js 必须包含 /api/a2/vocab 端点调用"
+    assert "export function setExamVocabLevel(" in a1_js or "export async function setExamVocabLevel(" in a1_js, (
+        "a1_cards.js 必须导出 setExamVocabLevel"
     )
+    assert "setExamVocabLevel" in cards_js, "cards.js 必须重导出 setExamVocabLevel"
+    assert '"/api/a2/vocab"' in a1_js or "'/api/a2/vocab'" in a1_js, "a1_cards.js 必须包含 /api/a2/vocab 端点调用"
 
     # 抽取 renderA1PokerCard 与 renderA1GridView 函数体，断言 badge-A1 不与动态 badge-${_examVocabLevel 并存
     poker_body = a1_js.split("export function renderA1PokerCard(")[1].split("export function renderA1GridView(")[0]
     assert "badge-A1" not in poker_body, (
         "renderA1PokerCard 不得残留静态 badge-A1 徽标（与动态 badge-${_examVocabLevel 并存）"
     )
-    assert "badge-${_examVocabLevel" in poker_body, (
-        "renderA1PokerCard 必须使用动态 badge-${_examVocabLevel 徽标"
-    )
+    assert "badge-${_examVocabLevel" in poker_body, "renderA1PokerCard 必须使用动态 badge-${_examVocabLevel 徽标"
 
     grid_body = a1_js.split("export function renderA1GridView(")[1].split("export function renderA1Teil2Deck(")[0]
     assert "badge-A1" not in grid_body, (
         "renderA1GridView 不得残留静态 badge-A1 徽标（与动态 badge-${_examVocabLevel 并存）"
     )
-    assert "badge-${_examVocabLevel" in grid_body, (
-        "renderA1GridView 必须使用动态 badge-${_examVocabLevel 徽标"
-    )
+    assert "badge-${_examVocabLevel" in grid_body, "renderA1GridView 必须使用动态 badge-${_examVocabLevel 徽标"
 
     # 抽取 saveA1WordToDeck 函数体，断言 cefr_level 字段无重复定义
     save_body = a1_js.split("export async function saveA1WordToDeck(")[1].split("export const saveA1VocabCard")[0]
-    assert save_body.count("cefr_level:") == 1, (
-        "saveA1WordToDeck 中 cefr_level 字段定义重复（必须恰好出现 1 次）"
-    )
-    assert 'cefr_level: _examVocabLevel || "A1"' in save_body, (
-        "saveA1WordToDeck 必须使用动态 _examVocabLevel || 'A1'"
-    )
+    assert save_body.count("cefr_level:") == 1, "saveA1WordToDeck 中 cefr_level 字段定义重复（必须恰好出现 1 次）"
+    assert 'cefr_level: _examVocabLevel || "A1"' in save_body, "saveA1WordToDeck 必须使用动态 _examVocabLevel || 'A1'"

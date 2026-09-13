@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """背词工作台与主站共享设计 Token 测试。"""
+
 import os
 import re
 
@@ -39,8 +40,9 @@ def test_tokens_css_exists_and_contains_core_tokens():
 def test_style_css_imports_tokens_css():
     assert os.path.exists(STYLE_CSS_PATH)
     content = open(STYLE_CSS_PATH, encoding="utf-8").read()
-    assert re.search(r'@import\s+(?:url\()?["\'](?:css/)?tokens\.css["\']\)?', content), \
+    assert re.search(r'@import\s+(?:url\()?["\'](?:css/)?tokens\.css["\']\)?', content), (
         "static/style.css 必须引入 tokens.css"
+    )
 
 
 def test_workbench_html_imports_tokens_and_maps_editorial_vars():
@@ -48,21 +50,25 @@ def test_workbench_html_imports_tokens_and_maps_editorial_vars():
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
 
     # 1. 检查 tokens.css 引入
-    assert '<link rel="stylesheet" href="../css/tokens.css">' in content or \
-           re.search(r'<link\s+rel=["\']stylesheet["\']\s+href=["\']\.\./css/tokens\.css["\']', content), \
-           "workbench.html 必须在 head 中引入 ../css/tokens.css"
+    assert '<link rel="stylesheet" href="../css/tokens.css">' in content or re.search(
+        r'<link\s+rel=["\']stylesheet["\']\s+href=["\']\.\./css/tokens\.css["\']', content
+    ), "workbench.html 必须在 head 中引入 ../css/tokens.css"
 
     # 2. 检查 :root 映射
-    root_match = re.search(r':root\s*\{([^}]+)\}', content)
+    root_match = re.search(r":root\s*\{([^}]+)\}", content)
     assert root_match, "workbench.html 必须包含 :root 样式声明"
     root_block = root_match.group(1)
 
     assert "--bg: var(--paper" in root_block or "--bg:var(--paper" in root_block, "--bg 应映射到 var(--paper"
     assert "--text: var(--ink" in root_block or "--text:var(--ink" in root_block, "--text 应映射到 var(--ink"
     assert "--line: var(--rule" in root_block or "--line:var(--rule" in root_block, "--line 应映射到 var(--rule"
-    assert "--accent: var(--accent" in root_block or "--accent:var(--accent" in root_block, "--accent 应映射到 var(--accent"
+    assert "--accent: var(--accent" in root_block or "--accent:var(--accent" in root_block, (
+        "--accent 应映射到 var(--accent"
+    )
     assert "--good: var(--moss" in root_block or "--good:var(--moss" in root_block, "--good 应映射到 var(--moss"
-    assert "--again: var(--cherry" in root_block or "--again:var(--cherry" in root_block, "--again 应映射到 var(--cherry"
+    assert "--again: var(--cherry" in root_block or "--again:var(--cherry" in root_block, (
+        "--again 应映射到 var(--cherry"
+    )
 
 
 def test_workbench_scope_selector_modes():
@@ -83,8 +89,9 @@ def test_workbench_scope_selector_has_a2_option():
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
     assert "syncA2CardsFromServer" in content, "必须定义 syncA2CardsFromServer"
     in_scope_block = content.split("function inScopeWord")[1].split("function logToday")[0]
-    assert 'wordFilters.scope === "a2"' in in_scope_block or 'wordFilters.scope === \'a2\'' in in_scope_block, \
+    assert 'wordFilters.scope === "a2"' in in_scope_block or "wordFilters.scope === 'a2'" in in_scope_block, (
         "inScopeWord 必须显式处理 a2 scope"
+    )
 
 
 def test_workbench_editorial_typography_contract():
@@ -93,23 +100,24 @@ def test_workbench_editorial_typography_contract():
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
 
     # 1. body 必须使用 var(--sans, ...)
-    body_match = re.search(r'(?<![,\w])body\s*\{([^}]+)\}', content)
+    body_match = re.search(r"(?<![,\w])body\s*\{([^}]+)\}", content)
     assert body_match, "workbench.html 必须包含 body 样式声明"
     body_css = body_match.group(1)
-    assert re.search(r'font-family\s*:\s*var\(--sans', body_css), \
-        "body 必须使用 var(--sans, ...)"
+    assert re.search(r"font-family\s*:\s*var\(--sans", body_css), "body 必须使用 var(--sans, ...)"
 
     # 2. font-family 声明中不得硬编码 "Microsoft YaHei" 或 "Segoe UI"
-    assert not re.search(r'font-family\s*:\s*[^;}]*(?:Microsoft YaHei|Segoe UI)', content, re.IGNORECASE), \
+    assert not re.search(r"font-family\s*:\s*[^;}]*(?:Microsoft YaHei|Segoe UI)", content, re.IGNORECASE), (
         "workbench.html 不得在 font-family 声明中硬编码 'Microsoft YaHei' 或 'Segoe UI'"
+    )
 
     # 3. .wrap 画布排版：max-width 应为 960px（或 var(--wrap-max, 960px)），而非旧的 1060px
-    wrap_match = re.search(r'\.wrap\s*\{([^}]+)\}', content)
+    wrap_match = re.search(r"\.wrap\s*\{([^}]+)\}", content)
     assert wrap_match, "workbench.html 必须包含 .wrap 样式规则"
     wrap_css = wrap_match.group(1)
     assert "1060px" not in wrap_css, ".wrap 不应再使用旧的 max-width: 1060px"
-    assert re.search(r'max-width\s*:\s*(?:var\(--wrap-max,\s*960px\)|960px)', wrap_css), \
+    assert re.search(r"max-width\s*:\s*(?:var\(--wrap-max,\s*960px\)|960px)", wrap_css), (
         ".wrap 必须使用 max-width: 960px 或 var(--wrap-max, 960px)"
+    )
 
 
 def test_workbench_editorial_navigation_contract():
@@ -118,30 +126,32 @@ def test_workbench_editorial_navigation_contract():
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
 
     # 1. header.top h1 必须使用衬线字体 var(--serif, ...)
-    h1_match = re.search(r'header\.top\s+h1\s*\{([^}]+)\}', content)
+    h1_match = re.search(r"header\.top\s+h1\s*\{([^}]+)\}", content)
     assert h1_match, "必须包含 header.top h1 样式声明"
     h1_css = h1_match.group(1)
-    assert re.search(r'font-family\s*:\s*var\(--serif', h1_css), \
-        "header.top h1 必须使用 var(--serif, ...)"
+    assert re.search(r"font-family\s*:\s*var\(--serif", h1_css), "header.top h1 必须使用 var(--serif, ...)"
 
     # 2. nav.tabs 不得使用旧版厚重卡片容器样式（border-radius:var(--radius) 或 box-shadow:var(--shadow)）
-    tabs_match = re.search(r'(?<![.\w])nav\.tabs\s*\{([^}]+)\}', content)
+    tabs_match = re.search(r"(?<![.\w])nav\.tabs\s*\{([^}]+)\}", content)
     assert tabs_match, "必须包含 nav.tabs 样式声明"
     tabs_css = tabs_match.group(1)
-    assert "border-radius:var(--radius)" not in tabs_css and "border-radius: var(--radius)" not in tabs_css, \
+    assert "border-radius:var(--radius)" not in tabs_css and "border-radius: var(--radius)" not in tabs_css, (
         "nav.tabs 不得使用厚重卡片圆角 border-radius:var(--radius)"
-    assert "box-shadow:var(--shadow)" not in tabs_css and "box-shadow: var(--shadow)" not in tabs_css, \
+    )
+    assert "box-shadow:var(--shadow)" not in tabs_css and "box-shadow: var(--shadow)" not in tabs_css, (
         "nav.tabs 不得使用厚重投影 box-shadow:var(--shadow)"
+    )
 
-    # 3. nav.tabs button.active 必须使用下划线 border-bottom 与 var(--accent)，且不可使用实心背景 background:var(--accent)
-    active_match = re.search(r'nav\.tabs\s+button\.active\s*\{([^}]+)\}', content)
+    # 3. nav.tabs button.active 必须用下划线 border-bottom 与 var(--accent)，不得用实心背景
+    active_match = re.search(r"nav\.tabs\s+button\.active\s*\{([^}]+)\}", content)
     assert active_match, "必须包含 nav.tabs button.active 样式声明"
     active_css = active_match.group(1)
-    assert re.search(r'border-bottom\s*:\s*2px\s+solid\s+var\(--accent\)', active_css) or \
-           ("border-bottom" in active_css and "var(--accent)" in active_css), \
-        "nav.tabs button.active 必须使用 border-bottom: 2px solid var(--accent)"
-    assert "background:var(--accent)" not in active_css and "background: var(--accent)" not in active_css, \
+    assert re.search(r"border-bottom\s*:\s*2px\s+solid\s+var\(--accent\)", active_css) or (
+        "border-bottom" in active_css and "var(--accent)" in active_css
+    ), "nav.tabs button.active 必须使用 border-bottom: 2px solid var(--accent)"
+    assert "background:var(--accent)" not in active_css and "background: var(--accent)" not in active_css, (
         "nav.tabs button.active 不得使用实心背景 background:var(--accent)"
+    )
 
 
 def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
@@ -150,42 +160,46 @@ def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
 
     # 1. .face background 必须使用 var(--panel)
-    face_match = re.search(r'(?<![.\w])\.face\s*\{([^}]+)\}', content)
+    face_match = re.search(r"(?<![.\w])\.face\s*\{([^}]+)\}", content)
     assert face_match, "workbench.html 必须包含 .face 样式规则"
     face_css = face_match.group(1)
-    assert "background:var(--panel)" in face_css or "background: var(--panel)" in face_css or \
-           re.search(r'background\s*:\s*var\(--panel', face_css), \
-        ".face 必须使用 background: var(--panel)"
+    assert (
+        "background:var(--panel)" in face_css
+        or "background: var(--panel)" in face_css
+        or re.search(r"background\s*:\s*var\(--panel", face_css)
+    ), ".face 必须使用 background: var(--panel)"
 
     # 2. .face .hw 必须使用 var(--serif
-    hw_match = re.search(r'\.face\s+\.hw\s*\{([^}]+)\}', content)
+    hw_match = re.search(r"\.face\s+\.hw\s*\{([^}]+)\}", content)
     assert hw_match, "workbench.html 必须包含 .face .hw 样式规则"
     hw_css = hw_match.group(1)
-    assert re.search(r'font-family\s*:\s*var\(--serif', hw_css), \
-        ".face .hw 必须使用 var(--serif, ...)"
+    assert re.search(r"font-family\s*:\s*var\(--serif", hw_css), ".face .hw 必须使用 var(--serif, ...)"
 
     # 3. .rate-btn 基础与状态样式断言：消除实心大白字 color: #fff
-    rate_match = re.search(r'(?<![.\w])\.rate-btn\s*\{([^}]+)\}', content)
+    rate_match = re.search(r"(?<![.\w])\.rate-btn\s*\{([^}]+)\}", content)
     assert rate_match, "workbench.html 必须包含 .rate-btn 基础样式规则"
     rate_css = rate_match.group(1)
-    assert "color:#fff" not in rate_css and "color: #fff" not in rate_css and "color:#ffffff" not in rate_css.lower(), \
+    assert "color:#fff" not in rate_css and "color: #fff" not in rate_css and "color:#ffffff" not in rate_css.lower(), (
         ".rate-btn 基础样式不得使用实心白字 color: #fff"
+    )
 
     # 4. .rate-btn[data-g="3"] 必须使用 var(--good-soft 且不得包含 color: #fff
     btn3_match = re.search(r'\.rate-btn\[data-g=["\']3["\']\]\s*\{([^}]+)\}', content)
     assert btn3_match, "workbench.html 必须包含 .rate-btn[data-g='3'] 样式规则"
     btn3_css = btn3_match.group(1)
     assert "var(--good-soft" in btn3_css, ".rate-btn[data-g='3'] 必须使用 var(--good-soft"
-    assert "color:#fff" not in btn3_css and "color: #fff" not in btn3_css, \
+    assert "color:#fff" not in btn3_css and "color: #fff" not in btn3_css, (
         ".rate-btn[data-g='3'] 不得使用实心白字 color: #fff"
+    )
 
     # 5. .rate-btn[data-g="1"] 必须使用 var(--again-soft 且不得包含 color: #fff
     btn1_match = re.search(r'\.rate-btn\[data-g=["\']1["\']\]\s*\{([^}]+)\}', content)
     assert btn1_match, "workbench.html 必须包含 .rate-btn[data-g='1'] 样式规则"
     btn1_css = btn1_match.group(1)
     assert "var(--again-soft" in btn1_css, ".rate-btn[data-g='1'] 必须使用 var(--again-soft"
-    assert "color:#fff" not in btn1_css and "color: #fff" not in btn1_css, \
+    assert "color:#fff" not in btn1_css and "color: #fff" not in btn1_css, (
         ".rate-btn[data-g='1'] 不得使用实心白字 color: #fff"
+    )
 
 
 def test_workbench_editorial_secondary_views_contract():
@@ -195,10 +209,10 @@ def test_workbench_editorial_secondary_views_contract():
 
     # 1. 断言 .qword, .spell-input, .kpi .v, table.wtab .hw 使用 var(--serif 而非 raw Georgia,serif
     for selector_re in (
-        r'\.qword\s*\{([^}]+)\}',
-        r'\.spell-input\s*\{([^}]+)\}',
-        r'\.kpi\s+\.v\s*\{([^}]+)\}',
-        r'table\.wtab\s+\.hw\s*\{([^}]+)\}',
+        r"\.qword\s*\{([^}]+)\}",
+        r"\.spell-input\s*\{([^}]+)\}",
+        r"\.kpi\s+\.v\s*\{([^}]+)\}",
+        r"table\.wtab\s+\.hw\s*\{([^}]+)\}",
     ):
         m = re.search(selector_re, content)
         assert m, f"找不到选择器样式：{selector_re}"
@@ -207,13 +221,13 @@ def test_workbench_editorial_secondary_views_contract():
         assert "var(--serif" in rule_css, f"{selector_re} 必须使用 var(--serif, ...)"
 
     # 2. 断言 table.wtab .ipa 使用 var(--mono
-    ipa_m = re.search(r'table\.wtab\s+\.ipa\s*\{([^}]+)\}', content)
+    ipa_m = re.search(r"table\.wtab\s+\.ipa\s*\{([^}]+)\}", content)
     assert ipa_m, "找不到 table.wtab .ipa 样式规则"
     ipa_css = ipa_m.group(1)
     assert "var(--mono" in ipa_css, "table.wtab .ipa 必须使用 var(--mono, ...)"
 
     # 3. 断言 .qopt 具有 8px 圆角
-    qopt_m = re.search(r'(?<![.\w])\.qopt\s*\{([^}]+)\}', content)
+    qopt_m = re.search(r"(?<![.\w])\.qopt\s*\{([^}]+)\}", content)
     assert qopt_m, "找不到 .qopt 基础样式规则"
     qopt_css = qopt_m.group(1)
-    assert re.search(r'border-radius\s*:\s*8px', qopt_css), ".qopt 必须包含 border-radius: 8px"
+    assert re.search(r"border-radius\s*:\s*8px", qopt_css), ".qopt 必须包含 border-radius: 8px"

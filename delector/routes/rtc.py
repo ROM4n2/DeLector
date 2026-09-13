@@ -7,6 +7,7 @@ DeLector - WebRTC LAN 信令中继（Stage B M3）
 
 邮箱 id 取密钥的 sha256 摘要而非密钥原文：没必要让密钥在内存结构里再多留一份明文。
 """
+
 import hashlib
 import json
 import threading

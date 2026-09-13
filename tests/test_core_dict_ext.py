@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """扩词库与查词链修复的测试：core_dict 合并 / 现在时反查 / EXT 接线。"""
+
 import os
 
 os.environ.setdefault("DATABASE_PATH", "test_delector.db")

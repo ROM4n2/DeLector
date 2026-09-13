@@ -37,16 +37,27 @@
 import re
 from typing import Dict, Any
 from core_dict import lookup_core_vocab, get_core_cefr_level
-from linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
-                         lookup_prep_collocations, build_prep_matrix)
-from syntax_tree import (analyze_sentence_topology, build_clause_tree,
-                         analyze_syntax_tree, split_sentences_pure_python)
+from linguistics import (
+    lookup_irregular_verb,
+    lookup_linguistics_ext,
+    split_komposita,
+    lookup_prep_collocations,
+    build_prep_matrix,
+)
+from syntax_tree import analyze_sentence_topology, build_clause_tree, analyze_syntax_tree, split_sentences_pure_python
 ```
 
 导出（`server.py` 通过 `from nlp import ...` 拿到）：
 ```python
-nlp, NLP_ENGINE, NLP_ENGINE_DETAIL,
-get_cefr_level, calculate_cefr_stats,
+(
+    nlp,
+    NLP_ENGINE,
+    NLP_ENGINE_DETAIL,
+)
+(
+    get_cefr_level,
+    calculate_cefr_stats,
+)
 process_german_text, SYSTEM_GRAMMAR_PROMPT
 ```
 

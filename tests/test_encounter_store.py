@@ -12,9 +12,11 @@
 db_path，测试一律喂 **tmp_path 一次性 SQLite 文件**（含 progress 库），绝不触
 及真实 delector.db / progress.db。Windows 句柄释放：删文件前 gc.collect()。
 """
-import os
+
 import gc
 import json
+import os
+
 import pytest
 
 import delector.core.database as database  # noqa: E402
@@ -61,12 +63,14 @@ def clean_db(tmp_path):
 
 # ── (a) list 空库 ────────────────────────────────────────────────────────────
 
+
 def test_list_empty(clean_db):
     rows = database.list_encounter_texts(db_path=clean_db["db"])
     assert rows == []
 
 
 # ── (b) create → get 回读（列默认值）─────────────────────────────────────────
+
 
 def test_create_then_get_returns_row(clean_db):
     tid = database.create_encounter_text(
@@ -98,6 +102,7 @@ def test_get_missing_returns_none(clean_db):
 
 # ── (c) level 过滤 ───────────────────────────────────────────────────────────
 
+
 def test_list_level_filter(clean_db):
     database.create_encounter_text("t1", "A1", "", "c1", db_path=clean_db["db"])
     database.create_encounter_text("t2", "A2", "", "c2", db_path=clean_db["db"])
@@ -111,6 +116,7 @@ def test_list_level_filter(clean_db):
 
 # ── (d) list 排序 newest first ───────────────────────────────────────────────
 
+
 def test_list_orders_newest_first(clean_db):
     ids = [
         database.create_encounter_text("first", "A1", "", "c", db_path=clean_db["db"]),
@@ -123,6 +129,7 @@ def test_list_orders_newest_first(clean_db):
 
 
 # ── (e) import_encounter_pack 落行 ───────────────────────────────────────────
+
 
 def test_import_pack_inserts_row(clean_db):
     pack = {
@@ -153,6 +160,7 @@ def test_import_pack_inserts_row(clean_db):
 
 # ── (f) import 幂等：同 pack_id 两次 → 同 id、仅一行 ────────────────────────
 
+
 def test_import_pack_idempotent(clean_db):
     pack = {
         "schema": "encounter-pack/v1",
@@ -171,6 +179,7 @@ def test_import_pack_idempotent(clean_db):
 
 
 # ── (g) import 缺必需键 → ValueError ─────────────────────────────────────────
+
 
 def test_import_pack_missing_keys_raises_valueerror(clean_db):
     # 缺 schema

@@ -6,6 +6,7 @@ Builder script to generate `a1_dict.py` from Goethe-Zertifikat A1 vocabulary sta
 
 def main():
     from delector.data import a1_dict
+
     assert len(a1_dict.A1_TOPICS) == 15
     assert len(a1_dict.GOETHE_A1_VOCAB) >= 600
     assert len(a1_dict.A1_SPRECHEN_TEIL2) >= 30

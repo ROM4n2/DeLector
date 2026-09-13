@@ -17,6 +17,7 @@ analyze/既有 NLP 契约零漂移保证：annotate 不改动 process_german_tex
 只把它产出的 tokens（已含 text/lemma/pos）映射成新 shape，因此 test_tools.py 跑过
 即证明 analyze 契约无漂移。
 """
+
 import gc
 import os
 
@@ -28,9 +29,9 @@ os.environ.setdefault("PROGRESS_DB_PATH", "test_encounter_annotate_progress.db")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from delector.server import app  # noqa: E402
 from delector.core import database  # noqa: E402
 from delector.nlp_engine import processor as _enc_nlp  # noqa: E402
+from delector.server import app  # noqa: E402
 
 
 def _de_spacy_model_loaded() -> bool:
@@ -102,6 +103,7 @@ def _create_text(client, content="Das ist ein Test.", title="t"):
 
 # ── 响应结构 ────────────────────────────────────────────────────────────────
 
+
 def test_annotate_returns_expected_shape(local_client):
     """200：text_id/total_tokens/sentences 结构齐全，token 均带 text/lemma/pos 三键。"""
     text_id = _create_text(local_client, content="Die Katze schläft.")
@@ -120,23 +122,20 @@ def test_annotate_returns_expected_shape(local_client):
 
 # ── 德语真实词形：geht → gehen（de_core_news_sm 真 lemma） ───────────────────
 
+
 @_SKIP_NO_DE_MODEL
 def test_annotate_german_lemma_gehen(local_client):
     """含 'geht' 的句子必须产出 lemma=='gehen'（spaCy 真实词形还原）。"""
     text_id = _create_text(local_client, content="Er geht heute nach Hause.")
     resp = local_client.get(f"/api/encounter/texts/{text_id}/annotate")
     assert resp.status_code == 200
-    lemmas = [
-        tok["lemma"]
-        for s in resp.json()["sentences"]
-        for tok in s["tokens"]
-        if tok["text"] == "geht"
-    ]
+    lemmas = [tok["lemma"] for s in resp.json()["sentences"] for tok in s["tokens"] if tok["text"] == "geht"]
     assert lemmas, "'geht' 应出现在 token 流中"
     assert lemmas[0] == "gehen"
 
 
 # ── 句索引 0-based 顺序 + total_tokens == 各句 token 数之和 ────────────────
+
 
 def test_annotate_sentence_indices_and_total(local_client):
     """多句：idx 0-based 顺序，total_tokens == 各句 token 数之和。"""
@@ -161,6 +160,7 @@ def test_annotate_punctuation_included(local_client):
 
 
 # ── 404 ─────────────────────────────────────────────────────────────────────
+
 
 def test_annotate_missing_text_404(local_client):
     """不存在的 text_id → 404 中文 detail。"""

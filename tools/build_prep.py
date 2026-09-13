@@ -20,6 +20,7 @@
   python tools/build_prep.py --reemit               # 纯从缓存重建 prep_dict.py
   python tools/build_prep.py --only bestehen,warten # 试点几个词
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,8 +47,9 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from delector.data.core_dict import CORE_VOCAB_DB  # noqa: E402
 from build_dict import _read_api_config  # noqa: E402  复用 .env 优先的配置解析
+
+from delector.data.core_dict import CORE_VOCAB_DB  # noqa: E402
 
 # ── 目标词筛选 ──────────────────────────────────────────────────────────
 TARGET_POS = ("VERB", "ADJ")
@@ -55,8 +57,7 @@ TARGET_POS = ("VERB", "ADJ")
 
 def collect_targets() -> Dict[str, str]:
     """从现有词库取 VERB/ADJ → {lemma: pos}。键已是小写（core_dict 全小写）。"""
-    return {lemma: entry[1] for lemma, entry in CORE_VOCAB_DB.items()
-            if entry[1] in TARGET_POS}
+    return {lemma: entry[1] for lemma, entry in CORE_VOCAB_DB.items() if entry[1] in TARGET_POS}
 
 
 # ── AI 生成 ─────────────────────────────────────────────────────────────
@@ -85,11 +86,45 @@ SYSTEM_PROMPT = """你是德语语法专家，专精 Verben/Adjektive mit Präpo
 # 介词白名单：AI 会把 "damit"/"dass" 之类的连词或副词当介词返回。
 # 白名单是唯一能自动挡住这类幻觉的手段（没有任何权威表可以对照校验）。
 _VALID_PREPS = {
-    "an", "auf", "aus", "bei", "bis", "durch", "für", "gegen", "gegenüber",
-    "hinter", "in", "mit", "nach", "neben", "ohne", "seit", "über", "um",
-    "unter", "von", "vor", "zu", "zwischen", "wegen", "trotz", "statt",
-    "anstatt", "außer", "dank", "laut", "während", "innerhalb", "entlang",
-    "ab", "als", "nächst", "vom", "zum", "zur",
+    "an",
+    "auf",
+    "aus",
+    "bei",
+    "bis",
+    "durch",
+    "für",
+    "gegen",
+    "gegenüber",
+    "hinter",
+    "in",
+    "mit",
+    "nach",
+    "neben",
+    "ohne",
+    "seit",
+    "über",
+    "um",
+    "unter",
+    "von",
+    "vor",
+    "zu",
+    "zwischen",
+    "wegen",
+    "trotz",
+    "statt",
+    "anstatt",
+    "außer",
+    "dank",
+    "laut",
+    "während",
+    "innerhalb",
+    "entlang",
+    "ab",
+    "als",
+    "nächst",
+    "vom",
+    "zum",
+    "zur",
 }
 _VALID_CASES = {"Akk", "Dat", "Gen"}
 
@@ -107,24 +142,32 @@ SEED_COLLOCATIONS: Dict[str, list] = {
     "ärgern": [["über", "Akk", "(sich)为…生气", "Er ärgert sich über den Fehler."]],
     "bekannt": [["für", "Akk", "因…闻名", "Die Stadt ist für ihre Architektur bekannt."]],
     "beschäftigen": [["mit", "Dat", "(sich)从事/研究", "Ich beschäftige mich mit deutscher Literatur."]],
-    "bestehen": [["auf", "Dat", "坚持", "Er besteht auf seiner Meinung."],
-                 ["aus", "Dat", "由…组成", "Das Team besteht aus fünf Personen."],
-                 ["in", "Dat", "在于", "Die Aufgabe besteht in der Analyse der Daten."]],
+    "bestehen": [
+        ["auf", "Dat", "坚持", "Er besteht auf seiner Meinung."],
+        ["aus", "Dat", "由…组成", "Das Team besteht aus fünf Personen."],
+        ["in", "Dat", "在于", "Die Aufgabe besteht in der Analyse der Daten."],
+    ],
     "beteiligen": [["an", "Dat", "(sich)参与", "Er beteiligt sich an der Diskussion."]],
-    "bewerben": [["um", "Akk", "(sich)申请职位", "Er bewirbt sich um die Stelle."],
-                 ["bei", "Dat", "(sich)向…求职", "Sie bewirbt sich bei einer Bank."]],
+    "bewerben": [
+        ["um", "Akk", "(sich)申请职位", "Er bewirbt sich um die Stelle."],
+        ["bei", "Dat", "(sich)向…求职", "Sie bewirbt sich bei einer Bank."],
+    ],
     "bereit": [["zu", "Dat", "愿意", "Er ist zu einem Kompromiss bereit."]],
     "bitten": [["um", "Akk", "请求", "Er bittet mich um Hilfe."]],
     "böse": [["auf", "Akk", "生气", "Sie ist böse auf ihn."]],
     "dankbar": [["für", "Akk", "感激", "Ich bin dir für deine Hilfe dankbar."]],
     "denken": [["an", "Akk", "想到", "Ich denke oft an meine Familie."]],
     "einverstanden": [["mit", "Dat", "同意", "Ich bin mit dem Plan einverstanden."]],
-    "entschuldigen": [["für", "Akk", "(sich)为…道歉", "Ich entschuldige mich für die Verspätung."],
-                      ["bei", "Dat", "(sich)向…道歉", "Er entschuldigt sich bei seinem Chef."]],
+    "entschuldigen": [
+        ["für", "Akk", "(sich)为…道歉", "Ich entschuldige mich für die Verspätung."],
+        ["bei", "Dat", "(sich)向…道歉", "Er entschuldigt sich bei seinem Chef."],
+    ],
     "erinnern": [["an", "Akk", "(sich)记得", "Ich erinnere mich an den Tag."]],
     "fähig": [["zu", "Dat", "有能力", "Er ist zu großen Leistungen fähig."]],
-    "freuen": [["auf", "Akk", "(sich)期待", "Ich freue mich auf die Ferien."],
-               ["über", "Akk", "(sich)为…高兴", "Sie freut sich über das Geschenk."]],
+    "freuen": [
+        ["auf", "Akk", "(sich)期待", "Ich freue mich auf die Ferien."],
+        ["über", "Akk", "(sich)为…高兴", "Sie freut sich über das Geschenk."],
+    ],
     "gehören": [["zu", "Dat", "属于", "Dieses Buch gehört zu meiner Sammlung."]],
     "glauben": [["an", "Akk", "相信", "Sie glaubt an den Erfolg."]],
     "gratulieren": [["zu", "Dat", "祝贺", "Wir gratulieren ihr zu ihrem Erfolg."]],
@@ -133,16 +176,22 @@ SEED_COLLOCATIONS: Dict[str, list] = {
     "hoffen": [["auf", "Akk", "希望", "Wir hoffen auf besseres Wetter."]],
     "interessieren": [["für", "Akk", "(sich)对…感兴趣", "Er interessiert sich für Politik."]],
     "kümmern": [["um", "Akk", "(sich)照顾", "Sie kümmert sich um die Kinder."]],
-    "leiden": [["an", "Dat", "患（病）", "Er leidet an einer Allergie."],
-               ["unter", "Dat", "受…之苦", "Sie leidet unter dem Lärm."]],
+    "leiden": [
+        ["an", "Dat", "患（病）", "Er leidet an einer Allergie."],
+        ["unter", "Dat", "受…之苦", "Sie leidet unter dem Lärm."],
+    ],
     "neugierig": [["auf", "Akk", "好奇", "Ich bin neugierig auf das Ergebnis."]],
     "rechnen": [["mit", "Dat", "预计", "Wir rechnen mit Regen."]],
     "schützen": [["vor", "Dat", "保护免受", "Die Creme schützt vor der Sonne."]],
-    "sorgen": [["für", "Akk", "照料/负责", "Sie sorgt für ihre kranke Mutter."],
-               ["um", "Akk", "(sich)担心", "Ich sorge mich um dich."]],
-    "sprechen": [["über", "Akk", "谈论", "Wir sprechen über die Prüfung."],
-                 ["mit", "Dat", "与…交谈", "Ich spreche mit dem Lehrer."],
-                 ["von", "Dat", "提到", "Sie spricht oft von ihrer Reise."]],
+    "sorgen": [
+        ["für", "Akk", "照料/负责", "Sie sorgt für ihre kranke Mutter."],
+        ["um", "Akk", "(sich)担心", "Ich sorge mich um dich."],
+    ],
+    "sprechen": [
+        ["über", "Akk", "谈论", "Wir sprechen über die Prüfung."],
+        ["mit", "Dat", "与…交谈", "Ich spreche mit dem Lehrer."],
+        ["von", "Dat", "提到", "Sie spricht oft von ihrer Reise."],
+    ],
     "stolz": [["auf", "Akk", "为…自豪", "Die Eltern sind stolz auf ihre Tochter."]],
     "teilnehmen": [["an", "Dat", "参加", "Sie nimmt an der Konferenz teil."]],
     "träumen": [["von", "Dat", "梦想", "Sie träumt von einer Weltreise."]],
@@ -173,8 +222,7 @@ def prune_unknown_lemmas(final: Dict[str, list], targets: Dict[str, str]) -> Lis
     查 ratseln 有，而两边数据各自都「看起来正常」，没人会发现。
     seed 是人工维护的，不受词库增删影响，不参与裁剪。
     """
-    unknown = sorted(w for w in final
-                     if w not in targets and w not in SEED_COLLOCATIONS)
+    unknown = sorted(w for w in final if w not in targets and w not in SEED_COLLOCATIONS)
     for w in unknown:
         del final[w]
     return unknown
@@ -278,13 +326,14 @@ def _resolve_requested(lemma: str, asked: set) -> List[str]:
         elif w.startswith("sich-") and w.split("-")[-1] == lemma:
             # sich-freuen → freuen；sich-über-informieren → informieren
             hits.append(w)
-        elif w.startswith(lemma) and w[len(lemma):] in _ADJ_INFLECTIONS:
+        elif w.startswith(lemma) and w[len(lemma) :] in _ADJ_INFLECTIONS:
             hits.append(w)
     return hits
 
 
-def _parse_batch(raw_results: List[dict], requested: List[str],
-                 verbose: bool = True) -> Tuple[Dict[str, list], List[str]]:
+def _parse_batch(
+    raw_results: List[dict], requested: List[str], verbose: bool = True
+) -> Tuple[Dict[str, list], List[str]]:
     """AI 原始响应 → (有搭配的词, 明确没有搭配的词)。
 
     这两者必须分开编码：**「本批失败」和「这些词确实没有搭配」不是一回事**。
@@ -312,8 +361,12 @@ def _parse_batch(raw_results: List[dict], requested: List[str],
                 if verbose:
                     print(f"[reject] {lemma}: {err}")
                 continue
-            row = [item["praeposition"].strip().lower(), item["kasus"],
-                   item["bedeutung_zh"].strip(), item["beispiel"].strip()]
+            row = [
+                item["praeposition"].strip().lower(),
+                item["kasus"],
+                item["bedeutung_zh"].strip(),
+                item["beispiel"].strip(),
+            ]
             # 同一介词允许有两个义项（ausgeben für 花费 / (sich) 冒充），
             # 但 AI 偶尔把同一条列两遍，按 (介词, 中文义) 去重。
             sense = (row[0], row[2])
@@ -325,7 +378,7 @@ def _parse_batch(raw_results: List[dict], requested: List[str],
             if rows:
                 found[key] = rows
             else:
-                none.append(key)   # 问过了，答案是「没有固定搭配」
+                none.append(key)  # 问过了，答案是「没有固定搭配」
     return found, none
 
 
@@ -341,8 +394,7 @@ def _cache_path(batch: List[str]) -> Path:
     return RAW_DIR / f"batch_{digest}.json"
 
 
-async def _generate(words: List[str], args, key: str, base: str,
-                    model: str) -> Tuple[Dict[str, list], set]:
+async def _generate(words: List[str], args, key: str, base: str, model: str) -> Tuple[Dict[str, list], set]:
     """并发跑所有批次，返回 (搭配表, 已问过的词集合)。"""
     sem = asyncio.Semaphore(max(1, args.parallel))
     collocations: Dict[str, list] = {}
@@ -373,7 +425,7 @@ async def _generate(words: List[str], args, key: str, base: str,
                         raw = await call_deepseek_batch(batch, key, base, model)
                         break
                     except Exception as e:
-                        print(f"[retry] 批 {label} 第 {attempt+1} 次失败: {e}")
+                        print(f"[retry] 批 {label} 第 {attempt + 1} 次失败: {e}")
                         await asyncio.sleep(2 * (attempt + 1))
             if raw is None:
                 # 失败批次**不写缓存**：写了就等于宣称「这些词都没有搭配」，
@@ -385,10 +437,10 @@ async def _generate(words: List[str], args, key: str, base: str,
             # 存**原始响应**而不只是校验后的结果：校验器是会有 bug 的
             # （第一版把 "operiert am Herzen" 里的 an 判成幻觉），
             # 而只存结果意味着误杀无法追溯、也无法免费重放。
-            cache_path.write_text(json.dumps(
-                {"words": batch, "raw": raw,
-                 "collocations": found, "none": none},
-                ensure_ascii=False), encoding="utf-8")
+            cache_path.write_text(
+                json.dumps({"words": batch, "raw": raw, "collocations": found, "none": none}, ensure_ascii=False),
+                encoding="utf-8",
+            )
         collocations.update(found)
         answered.update(found)
         answered.update(none)
@@ -448,6 +500,7 @@ def guard_regression(final: Dict[str, list], force: bool) -> None:
         return
     try:
         import importlib
+
         sys.path.insert(0, str(REPO_ROOT))
         old = importlib.import_module("prep_dict").PREP_COLLOCATIONS
     except Exception:
@@ -455,7 +508,8 @@ def guard_regression(final: Dict[str, list], force: bool) -> None:
     if len(final) < len(old):
         raise SystemExit(
             f"[abort] 新结果 {len(final)} 词条少于现有 {len(old)} 词条，"
-            "疑似部分批次失败。先 --resume 补齐，或确认要覆盖请加 --force")
+            "疑似部分批次失败。先 --resume 补齐，或确认要覆盖请加 --force"
+        )
 
 
 def emit_module(collocations: Dict[str, list], answered_count: int) -> Path:
@@ -481,12 +535,12 @@ def emit_module(collocations: Dict[str, list], answered_count: int) -> Path:
     for lemma in sorted(collocations):
         rows = collocations[lemma]
         rendered = ", ".join(
-            "({}, {}, {}, {})".format(*(json.dumps(c, ensure_ascii=False) for c in row))
-            for row in rows)
+            "({}, {}, {}, {})".format(*(json.dumps(c, ensure_ascii=False) for c in row)) for row in rows
+        )
         # 单元素元组要留逗号，否则退化成普通括号
         if len(rows) == 1:
             rendered += ","
-        lines.append(f'    {json.dumps(lemma, ensure_ascii=False)}: ({rendered}),')
+        lines.append(f"    {json.dumps(lemma, ensure_ascii=False)}: ({rendered}),")
     lines.append("}")
     lines.append("")
     out = REPO_ROOT / "prep_dict.py"
@@ -496,17 +550,46 @@ def emit_module(collocations: Dict[str, list], answered_count: int) -> Path:
 
 def _report_pruned(unknown: List[str]) -> None:
     if unknown:
-        print(f"[prune] {len(unknown)} 个词头已不在词库里，从产出中剔除："
-              f"{', '.join(unknown[:10])}{' …' if len(unknown) > 10 else ''}")
+        print(
+            f"[prune] {len(unknown)} 个词头已不在词库里，从产出中剔除："
+            f"{', '.join(unknown[:10])}{' …' if len(unknown) > 10 else ''}"
+        )
 
 
 # 可分前缀：可分动词在主句里前缀会被拆到句尾（abgeben → "gibt … ab"），
 # 拿整个词元去例句里找必然找不到，所以要额外认「前缀单独成词」和「词根」。
 _SEPARABLE_PREFIXES = (
-    "zusammen", "entgegen", "gegenüber", "zurecht", "zurück", "voran", "vorbei",
-    "heraus", "hinaus", "weiter", "hinzu", "durch", "unter", "über", "nach",
-    "statt", "fest", "auf", "aus", "bei", "ein", "mit", "vor", "hin", "her",
-    "weg", "los", "ab", "an", "um", "zu",
+    "zusammen",
+    "entgegen",
+    "gegenüber",
+    "zurecht",
+    "zurück",
+    "voran",
+    "vorbei",
+    "heraus",
+    "hinaus",
+    "weiter",
+    "hinzu",
+    "durch",
+    "unter",
+    "über",
+    "nach",
+    "statt",
+    "fest",
+    "auf",
+    "aus",
+    "bei",
+    "ein",
+    "mit",
+    "vor",
+    "hin",
+    "her",
+    "weg",
+    "los",
+    "ab",
+    "an",
+    "um",
+    "zu",
 )
 
 
@@ -521,7 +604,7 @@ def _lemma_surface_hints(lemma: str) -> set:
     for prefix in _SEPARABLE_PREFIXES:
         if low.startswith(prefix) and len(low) > len(prefix) + 2:
             hints.add(prefix)
-            hints.add(low[len(prefix):len(prefix) + 3])
+            hints.add(low[len(prefix) : len(prefix) + 3])
             break
     return hints
 
@@ -535,10 +618,20 @@ def qa_spotcheck(collocations: Dict[str, list]) -> None:
     是不是这个词，这是唯一能发现「例句整句跑题」的地方。
     """
     targeted = {
-        "warten": "auf", "bestehen": "auf", "freuen": "auf", "denken": "an",
-        "helfen": "bei", "teilnehmen": "an", "gehören": "zu", "stolz": "auf",
-        "zufrieden": "mit", "abhängig": "von", "interessieren": "für",
-        "sorgen": "für", "bitten": "um", "sprechen": "über",
+        "warten": "auf",
+        "bestehen": "auf",
+        "freuen": "auf",
+        "denken": "an",
+        "helfen": "bei",
+        "teilnehmen": "an",
+        "gehören": "zu",
+        "stolz": "auf",
+        "zufrieden": "mit",
+        "abhängig": "von",
+        "interessieren": "für",
+        "sorgen": "für",
+        "bitten": "um",
+        "sprechen": "über",
     }
     print("\n=== QA 定向抽查 ===")
     hit = ai_covered = 0
@@ -552,24 +645,26 @@ def qa_spotcheck(collocations: Dict[str, list]) -> None:
         hit += ok
         from_seed = lemma in SEED_COLLOCATIONS
         ai_covered += not from_seed
-        print(f"  {lemma:16s} {'✓' if ok else '✗'} "
-              f"[{'seed' if from_seed else 'AI'}] {preps} 期望含 {expect}")
+        print(f"  {lemma:16s} {'✓' if ok else '✗'} [{'seed' if from_seed else 'AI'}] {preps} 期望含 {expect}")
         for r in rows:
             print(f"      {r[0]:10s} {r[1]:4s} {r[2]:12s} {r[3]}")
-    print(f"\n定向命中 {hit}/{len(targeted)}（其中走 AI 的只有 {ai_covered} 个"
-          f"—— 这一档基本只在验 seed，不构成对 AI 输出的检验）")
+    print(
+        f"\n定向命中 {hit}/{len(targeted)}（其中走 AI 的只有 {ai_covered} 个"
+        f"—— 这一档基本只在验 seed，不构成对 AI 输出的检验）"
+    )
 
     ai_lemmas = sorted(w for w in collocations if w not in SEED_COLLOCATIONS)
     total_rows = sum(len(collocations[w]) for w in ai_lemmas)
-    suspect = [(w, row) for w in ai_lemmas for row in collocations[w]
-               if not _example_mentions_lemma(w, row[3])]
+    suspect = [(w, row) for w in ai_lemmas for row in collocations[w] if not _example_mentions_lemma(w, row[3])]
     print(f"\n=== QA AI 长尾（{len(ai_lemmas)} 词 / {total_rows} 条）===")
     step = max(1, len(ai_lemmas) // 10)
     for lemma in ai_lemmas[::step][:10]:
         for r in collocations[lemma]:
             print(f"  {lemma:16s} {r[0]:8s} {r[1]:4s} {r[2]:12s} {r[3]}")
-    print(f"\n例句里找不到词元痕迹：{len(suspect)}/{total_rows} 条"
-          "（不变位动词占多数，属预期噪声；拼错的词头会在这里露头）")
+    print(
+        f"\n例句里找不到词元痕迹：{len(suspect)}/{total_rows} 条"
+        "（不变位动词占多数，属预期噪声；拼错的词头会在这里露头）"
+    )
     for lemma, row in suspect[:20]:
         print(f"  ? {lemma:16s} {row[3]}")
 
@@ -586,23 +681,26 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="只看目标规模，不调 AI")
     parser.add_argument("--limit", type=int, default=0, help="目标词上限（0=全部）")
     parser.add_argument("--batch-size", type=int, default=25, help="每批词数")
-    parser.add_argument("--parallel", type=int, default=1,
-                        help="并发路数（建议 4-8；太大会触发 DeepSeek 429）")
+    parser.add_argument("--parallel", type=int, default=1, help="并发路数（建议 4-8；太大会触发 DeepSeek 429）")
     parser.add_argument("--resume", action="store_true", help="断点续跑（读 tools/raw_prep/）")
-    parser.add_argument("--reask-v1", action="store_true",
-                        help="重问 v1 缓存（只存了校验结果、没存原始响应）的批次："
-                             "它们的「没有搭配」名单里混着校验器误杀的词，要花钱重问")
+    parser.add_argument(
+        "--reask-v1",
+        action="store_true",
+        help="重问 v1 缓存（只存了校验结果、没存原始响应）的批次："
+        "它们的「没有搭配」名单里混着校验器误杀的词，要花钱重问",
+    )
     parser.add_argument("--only", type=str, default="", help="只跑指定词（逗号分隔）")
     parser.add_argument("--reemit", action="store_true", help="纯从缓存重建 prep_dict.py")
-    parser.add_argument("--force", action="store_true",
-                        help="允许写出比现有更少（含 0）词条的模块，用于确认要清空时")
+    parser.add_argument("--force", action="store_true", help="允许写出比现有更少（含 0）词条的模块，用于确认要清空时")
     args = parser.parse_args()
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     targets = collect_targets()
-    print(f"词库 VERB+ADJ 共 {len(targets)} 词"
-          f"（VERB {sum(1 for p in targets.values() if p == 'VERB')} /"
-          f" ADJ {sum(1 for p in targets.values() if p == 'ADJ')}）")
+    print(
+        f"词库 VERB+ADJ 共 {len(targets)} 词"
+        f"（VERB {sum(1 for p in targets.values() if p == 'VERB')} /"
+        f" ADJ {sum(1 for p in targets.values() if p == 'ADJ')}）"
+    )
 
     if args.reemit:
         collocations, answered = load_cache()
@@ -610,8 +708,10 @@ def main() -> None:
         _report_pruned(prune_unknown_lemmas(final, targets))
         guard_regression(final, args.force)
         out = emit_module(final, len(answered | set(SEED_COLLOCATIONS)))
-        print(f"[reemit] 缓存里 {len(answered)} 词已问过，其中 {len(collocations)} 词有搭配；"
-              f"并入人工 seed {len(SEED_COLLOCATIONS)} 词 → 共 {len(final)} 词条")
+        print(
+            f"[reemit] 缓存里 {len(answered)} 词已问过，其中 {len(collocations)} 词有搭配；"
+            f"并入人工 seed {len(SEED_COLLOCATIONS)} 词 → 共 {len(final)} 词条"
+        )
         print(f"[reemit] 已写出 {out} ({out.stat().st_size / 1024:.0f} KB)")
         print(f"[reemit] 词库里仍未问过 {len(set(targets) - answered)} 词")
         qa_spotcheck(final)
@@ -637,8 +737,10 @@ def main() -> None:
         words = [w for w in words if w not in already]
         print(f"--resume：缓存已覆盖 {before - len(words)} 词，还剩 {len(words)} 词要问")
 
-    print(f"待生成 {len(words)} 词，batch={args.batch_size}，并行={args.parallel}，"
-          f"约 {max(1, (len(words) + args.batch_size - 1) // args.batch_size)} 次调用")
+    print(
+        f"待生成 {len(words)} 词，batch={args.batch_size}，并行={args.parallel}，"
+        f"约 {max(1, (len(words) + args.batch_size - 1) // args.batch_size)} 次调用"
+    )
     if args.dry_run:
         print("=== dry-run 结束（未调 AI）===")
         return
@@ -649,15 +751,18 @@ def main() -> None:
     # 从缓存整体重建：--resume 时新旧批次都要进最终模块
     collocations, answered = load_cache()
     if words and not answered and not args.force:
-        raise SystemExit("[abort] 本次全部批次都失败（key 失效？断网？），"
-                         "未改动 prep_dict.py。修好后重跑即可（缓存没被污染）")
+        raise SystemExit(
+            "[abort] 本次全部批次都失败（key 失效？断网？），未改动 prep_dict.py。修好后重跑即可（缓存没被污染）"
+        )
     final = merge_with_seed(collocations)
     _report_pruned(prune_unknown_lemmas(final, targets))
     guard_regression(final, args.force)
     out = emit_module(final, len(answered | set(SEED_COLLOCATIONS)))
     rows = sum(len(v) for v in final.values())
-    print(f"\n共 {len(answered)} 词已问过，AI 给出 {len(collocations)} 词有搭配；"
-          f"并入 seed 后 {len(final)} 词条 / {rows} 条搭配")
+    print(
+        f"\n共 {len(answered)} 词已问过，AI 给出 {len(collocations)} 词有搭配；"
+        f"并入 seed 后 {len(final)} 词条 / {rows} 条搭配"
+    )
     print(f"已写出 {out} ({out.stat().st_size / 1024:.0f} KB)")
     qa_spotcheck(final)
 

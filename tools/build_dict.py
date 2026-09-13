@@ -18,6 +18,7 @@ CI 把 .py 拷进 android/app/src/main/python）。本工具只在 dev/CI 跑，
   python tools/build_dict.py --resume             # 断点续跑（读 tools/raw/ 缓存）
   python tools/build_dict.py --only geht,Häuser   # 只生成指定词（试点/补缺）
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,9 +48,9 @@ from delector.nlp_engine.linguistics import LINGUISTICS_VOCAB_EXT  # noqa: E402
 
 # ── 词表源定义 ──────────────────────────────────────────────────────────
 SOURCE_FILES = {
-    "b1": DATA_DIR / "b1_sorted.txt",   # 2833 行原始表面形（含变位/冠词/复数）
-    "a2": DATA_DIR / "a2_words.txt",    # 1215 词元（langfield 仓库 .md 文件名）
-    "b2": DATA_DIR / "b2_all.csv",      # 1924 行 German,English（德国词在第 0 列）
+    "b1": DATA_DIR / "b1_sorted.txt",  # 2833 行原始表面形（含变位/冠词/复数）
+    "a2": DATA_DIR / "a2_words.txt",  # 1215 词元（langfield 仓库 .md 文件名）
+    "b2": DATA_DIR / "b2_all.csv",  # 1924 行 German,English（德国词在第 0 列）
 }
 
 # ── 规范化规则 ──────────────────────────────────────────────────────────
@@ -77,7 +78,7 @@ def _normalize_b1_line(line: str) -> Optional[str]:
     lower = head.lower()
     for art in _ARTICLES:
         if lower.startswith(art):
-            head = head[len(art):].strip()
+            head = head[len(art) :].strip()
             lower = head.lower()
             break
     # 丢弃带空格的多词短语（abgesehen davon）
@@ -118,9 +119,13 @@ def collect_candidates() -> Dict[str, str]:
             continue
         with open(path, encoding="utf-8") as f:
             for line in f:
-                lemma = (_normalize_b1_line(line) if key == "b1"
-                         else _normalize_a2(line) if key == "a2"
-                         else _normalize_b2(line))
+                lemma = (
+                    _normalize_b1_line(line)
+                    if key == "b1"
+                    else _normalize_a2(line)
+                    if key == "a2"
+                    else _normalize_b2(line)
+                )
                 if lemma:
                     candidates.setdefault(lemma, key)
     return candidates
@@ -128,13 +133,13 @@ def collect_candidates() -> Dict[str, str]:
 
 def exclude_existing(candidates: Dict[str, str]) -> Dict[str, str]:
     """剔除已在现有词库的词元（只补缺口）。"""
-    existing = set(CORE_VOCAB_DB.keys()) | set(
-        k.lower() for k in LINGUISTICS_VOCAB_EXT.keys())
+    existing = set(CORE_VOCAB_DB.keys()) | set(k.lower() for k in LINGUISTICS_VOCAB_EXT.keys())
     return {k: v for k, v in candidates.items() if k not in existing}
 
 
 # ── DeepSeek 批量生成 ───────────────────────────────────────────────────
-SYSTEM_PROMPT = """你是一位德语-中文词典编纂专家。我会给你一个德语单词的 JSON 数组。
+SYSTEM_PROMPT = (
+    """你是一位德语-中文词典编纂专家。我会给你一个德语单词的 JSON 数组。
 请为每个词返回严格 JSON（不要其它文字）：
 
 {"results":[{"wort":"gehen","cefr":"A1","pos":"VERB","gender":null,"plural":null,"definition_zh":"去，走"}]}
@@ -142,9 +147,11 @@ SYSTEM_PROMPT = """你是一位德语-中文词典编纂专家。我会给你一
 字段规则：
 - cefr ∈ {A1,A2,B1,B2,C1}，按歌德欧标难度判断
 - pos ∈ {NOUN,VERB,ADJ,ADV,PRON,PREP,CONJ,INTERJ,NUM}
-- 名词必须给 gender(Masc/Fem/Neut) 和 plural（如 "-e"、"-en"、"-..er"、不可数"-"，拿不准给 null）；非名词 gender/plural 一律 null
+- 名词必须给 gender(Masc/Fem/Neut) 和 plural（如 "-e"、"-en"、"-..er"、不可数"-"，拿不准给 null）；"""
+    """非名词 gender/plural 一律 null
 - definition_zh：1-12 字简明中文释义，多义项用 "/" 分隔
 - 只输出 JSON，不要任何解释"""
+)
 
 
 def _read_db_setting(key: str, default: str = "") -> str:
@@ -155,10 +162,10 @@ def _read_db_setting(key: str, default: str = "") -> str:
     不 import server.py 避免触发模块顶层 init_db 的副作用。"""
     try:
         import sqlite3
+
         db_path = REPO_ROOT / "delector.db"
         with sqlite3.connect(db_path) as conn:
-            row = conn.execute(
-                "SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+            row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             if row and row[0]:
                 return row[0]
     except Exception:
@@ -181,8 +188,16 @@ def _read_api_config() -> Tuple[str, str, str]:
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip().strip('"').strip("'")
     key = os.environ.get("DEEPSEEK_API_KEY") or env.get("DEEPSEEK_API_KEY") or _read_db_setting("DEEPSEEK_API_KEY", "")
-    base = os.environ.get("DEEPSEEK_API_BASE_URL") or env.get("DEEPSEEK_API_BASE_URL") or _read_db_setting("API_BASE_URL", "https://api.deepseek.com")
-    model = os.environ.get("DEEPSEEK_API_MODEL") or env.get("DEEPSEEK_API_MODEL") or _read_db_setting("API_MODEL", "deepseek-v4-flash")
+    base = (
+        os.environ.get("DEEPSEEK_API_BASE_URL")
+        or env.get("DEEPSEEK_API_BASE_URL")
+        or _read_db_setting("API_BASE_URL", "https://api.deepseek.com")
+    )
+    model = (
+        os.environ.get("DEEPSEEK_API_MODEL")
+        or env.get("DEEPSEEK_API_MODEL")
+        or _read_db_setting("API_MODEL", "deepseek-v4-flash")
+    )
     if not key:
         raise SystemExit("未找到 DEEPSEEK_API_KEY（.env / 环境变量 / DB），无法生成释义")
     return key, base, model
@@ -208,8 +223,9 @@ async def call_deepseek_batch(words: List[str], key: str, base: str, model: str)
     return parsed.get("results", [])
 
 
-async def _generate_parallel(words: List[str], args, key: str, base: str, model: str,
-                             raw_dir: Path = RAW_DIR) -> List[dict]:
+async def _generate_parallel(
+    words: List[str], args, key: str, base: str, model: str, raw_dir: Path = RAW_DIR
+) -> List[dict]:
     """并发处理所有批次。复用 raw_dir 缓存（断点续跑不重付钱）。
 
     raw_dir 可切换：缓存按批次序号命名，不同词表的 batch_0 内容完全不同，
@@ -236,7 +252,7 @@ async def _generate_parallel(words: List[str], args, key: str, base: str, model:
                         batch_entries = await call_deepseek_batch(batch, key, base, model)
                         break
                     except Exception as e:
-                        print(f"[retry] 批 {batch_index} 第 {attempt+1} 次失败: {e}")
+                        print(f"[retry] 批 {batch_index} 第 {attempt + 1} 次失败: {e}")
                         await asyncio.sleep(2 * (attempt + 1))
                 else:
                     failed = True
@@ -296,7 +312,7 @@ async def _generate_parallel(words: List[str], args, key: str, base: str, model:
                             seen.add(entry["wort"])
                     break
                 except Exception as e:
-                    print(f"[refill-retry] {m} 第 {attempt+1} 次失败: {e}")
+                    print(f"[refill-retry] {m} 第 {attempt + 1} 次失败: {e}")
                     await asyncio.sleep(2 * (attempt + 1))
         else:
             print(f"[refill] 第 {pass_no} 轮后仍有 {len(sorted(set(words) - seen))} 个缺词（AI 拒绝/一直失败）")
@@ -361,19 +377,36 @@ def emit_module(entries: List[dict], sources: Dict[str, str]) -> Path:
 def qa_spotcheck(entries: List[dict]) -> None:
     """QA 抽查：30 随机 + 10 定向。"""
     import random
+
     picked = random.sample(entries, min(30, len(entries)))
-    targeted = ["gehen", "häuser", "ist", "trinke", "besser", "klimaschutz",
-                "umwelt", "abenteuer", "abbiegen", "abschließen"]
+    targeted = [
+        "gehen",
+        "häuser",
+        "ist",
+        "trinke",
+        "besser",
+        "klimaschutz",
+        "umwelt",
+        "abenteuer",
+        "abbiegen",
+        "abschließen",
+    ]
     seen = set()
     print("\n=== QA 抽查（随机 30）===")
     for e in picked:
-        print(f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} {e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}")
+        print(
+            f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} "
+            f"{e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}"
+        )
         seen.add(e["wort"])
     print("\n=== QA 抽查（定向 10）===")
     for w in targeted:
         e = next((x for x in entries if x["wort"] == w), None)
         if e:
-            print(f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} {e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}")
+            print(
+                f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} "
+                f"{e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}"
+            )
             seen.add(w)
     print(f"\n覆盖定向 {len([w for w in targeted if w in seen])}/{len(targeted)}")
 
@@ -385,12 +418,15 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=25, help="每批调用词数")
     parser.add_argument("--resume", action="store_true", help="断点续跑（读 tools/raw/ 缓存）")
     parser.add_argument("--only", type=str, default="", help="只生成指定词（逗号分隔），试点用")
-    parser.add_argument("--parallel", type=int, default=1,
-                        help="并发路数（纯 I/O 任务，建议 4-8；太大可能触发 DeepSeek 429 限流）")
-    parser.add_argument("--reemit", action="store_true",
-                        help="纯从 tools/raw/ 缓存重建 core_dict_ext.py（键小写归一化），不调 AI")
-    parser.add_argument("--refill", action="store_true",
-                        help="只补生成仍缺的词（合并进现有 core_dict_ext.py，不整包重来）")
+    parser.add_argument(
+        "--parallel", type=int, default=1, help="并发路数（纯 I/O 任务，建议 4-8；太大可能触发 DeepSeek 429 限流）"
+    )
+    parser.add_argument(
+        "--reemit", action="store_true", help="纯从 tools/raw/ 缓存重建 core_dict_ext.py（键小写归一化），不调 AI"
+    )
+    parser.add_argument(
+        "--refill", action="store_true", help="只补生成仍缺的词（合并进现有 core_dict_ext.py，不整包重来）"
+    )
     args = parser.parse_args()
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -398,7 +434,10 @@ def main() -> None:
     candidates = collect_candidates()
     print(f"候选（未去重）: {len(candidates)} 词")
     targets = exclude_existing(candidates)
-    print(f"剔除已有词库后待生成: {len(targets)} 词（现有 core_dict={len(CORE_VOCAB_DB)}, EXT={len(LINGUISTICS_VOCAB_EXT)}）")
+    print(
+        f"剔除已有词库后待生成: {len(targets)} 词"
+        f"（现有 core_dict={len(CORE_VOCAB_DB)}, EXT={len(LINGUISTICS_VOCAB_EXT)}）"
+    )
 
     if args.only:
         only = {w.strip().lower() for w in args.only.split(",") if w.strip()}
@@ -449,20 +488,23 @@ def main() -> None:
                     recovered.append(entry)
         recovered_keys = {e["wort"] for e in recovered}
         todo = [w for w in words if w not in recovered_keys]
-        print(f"[refill] 缺口 {len(words)} 词：缓存免费回收 {len(recovered_keys)}，"
-              f"仍需调 AI {len(todo)}（并行 {args.parallel}）")
+        print(
+            f"[refill] 缺口 {len(words)} 词：缓存免费回收 {len(recovered_keys)}，"
+            f"仍需调 AI {len(todo)}（并行 {args.parallel}）"
+        )
 
         entries = list(recovered)
         if todo:
             REFILL_RAW_DIR.mkdir(parents=True, exist_ok=True)
-            entries += asyncio.run(_generate_parallel(todo, args, key, base, model,
-                                                      raw_dir=REFILL_RAW_DIR))
+            entries += asyncio.run(_generate_parallel(todo, args, key, base, model, raw_dir=REFILL_RAW_DIR))
         # 合并现有 core_dict_ext + 新补的词，整体重新 emit（不整包重来，只增缺）
         from delector.data.core_dict_ext import CORE_VOCAB_EXT as EXISTING
+
         merged: List[dict] = []
         for k, t in EXISTING.items():
-            merged.append({"wort": k, "cefr": t[0], "pos": t[1],
-                           "gender": t[2], "plural": t[3] or "", "definition_zh": t[4]})
+            merged.append(
+                {"wort": k, "cefr": t[0], "pos": t[1], "gender": t[2], "plural": t[3] or "", "definition_zh": t[4]}
+            )
         seen = {e["wort"] for e in merged}
         added = 0
         for e in entries:
@@ -472,8 +514,10 @@ def main() -> None:
                 added += 1
         out = emit_module(merged, targets)
         still = sorted(set(words) - seen)
-        print(f"[refill] 新增 {added} 词（回收 {len(recovered_keys)} + 新问 {len(todo)}），"
-              f"合并后共 {len(merged)} 词，已写出 {out}")
+        print(
+            f"[refill] 新增 {added} 词（回收 {len(recovered_keys)} + 新问 {len(todo)}），"
+            f"合并后共 {len(merged)} 词，已写出 {out}"
+        )
         if still:
             print(f"[refill] 仍缺 {len(still)} 词: {still}")
         return
@@ -482,8 +526,10 @@ def main() -> None:
     words = list(targets.keys())
     if args.limit:
         words = words[: args.limit]
-    print(f"开始生成 {len(words)} 词，batch={args.batch_size}，并行={args.parallel}，"
-          f"约 {max(1, len(words)//args.batch_size)} 次调用")
+    print(
+        f"开始生成 {len(words)} 词，batch={args.batch_size}，并行={args.parallel}，"
+        f"约 {max(1, len(words) // args.batch_size)} 次调用"
+    )
 
     entries = asyncio.run(_generate_parallel(words, args, key, base, model))
 
@@ -500,7 +546,9 @@ def main() -> None:
     # smoke：合并后能查到
     sys.path.insert(0, str(REPO_ROOT))
     import importlib
+
     from delector.data import core_dict
+
     importlib.reload(core_dict)
     for w in ("gehen", "haus", "trinken", "klimaschutz"):
         print(f"smoke lookup_core_vocab({w!r}) ->", bool(core_dict.lookup_core_vocab(w)))

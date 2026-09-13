@@ -3,16 +3,19 @@
 DeLector - Cross-Platform Instant Launcher
 Auto-detects port availability, LAN IP, and launches default browser.
 """
+
 import os
-import sys
 import socket
-import webbrowser
+import sys
 import threading
 import time
+import webbrowser
+
 
 def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(('127.0.0.1', port)) == 0
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
 
 def get_local_ip() -> str:
     try:
@@ -24,9 +27,11 @@ def get_local_ip() -> str:
     except Exception:
         return "127.0.0.1"
 
+
 def is_android() -> bool:
     """是否跑在 Chaquopy/Android 运行时里。"""
     return hasattr(sys, "getandroidapilevel") or "ANDROID_ROOT" in os.environ
+
 
 def get_bind_host() -> str:
     """桌面端绑 0.0.0.0 是有意的特性（同 Wi-Fi 的手机/平板可访问）。
@@ -36,6 +41,7 @@ def get_bind_host() -> str:
     """
     return "127.0.0.1" if is_android() else "0.0.0.0"
 
+
 def open_browser(port: int):
     time.sleep(1.2)
     # Support Android Termux termux-open-url fallback
@@ -43,6 +49,7 @@ def open_browser(port: int):
         os.system(f"termux-open-url http://localhost:{port}")
     else:
         webbrowser.open(f"http://127.0.0.1:{port}")
+
 
 def main():
     port = 8000
@@ -71,7 +78,9 @@ def main():
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
 
     import uvicorn
+
     from delector.server import app
+
     config = uvicorn.Config(app, host=host, port=port, reload=False, log_level="info")
     server = uvicorn.Server(config)
     try:
@@ -81,6 +90,7 @@ def main():
     except Exception:
         server.install_signal_handlers = lambda: None
     server.run()
+
 
 if __name__ == "__main__":
     main()

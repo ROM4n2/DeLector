@@ -26,6 +26,7 @@
 
 运行（仓库根）：export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_encounter_journey_e2e.py -v
 """
+
 import gc
 import os
 
@@ -67,7 +68,7 @@ def _strip_german_article(hw: str) -> str:
     low = s.lower()
     for art in ("der ", "die ", "das "):
         if low.startswith(art):
-            return s[len(art):]
+            return s[len(art) :]
     return s
 
 
@@ -120,8 +121,7 @@ def client():
 def _put_deck(client, payload: dict):
     """取 key 后带 X-WB-Key 写入 deck 镜像，返回 PUT 响应。"""
     key = client.get("/api/wb/state/key").json()["key"]
-    return client.put("/api/wb/state", json={"payload": payload},
-                      headers={"X-WB-Key": key})
+    return client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
 
 
 # ── 用例 1：deck 镜像写入（A7 第①步）────────────────────────────────────────
@@ -134,8 +134,7 @@ def test_1_deck_mirror_write_with_three_reps_positive(client):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["ok"] is True
-    assert isinstance(body["updated_at"], str) and body["updated_at"], \
-        "PUT 应返回非空 updated_at 时间戳"
+    assert isinstance(body["updated_at"], str) and body["updated_at"], "PUT 应返回非空 updated_at 时间戳"
 
     got = client.get("/api/wb/state")
     assert got.status_code == 200
@@ -145,12 +144,15 @@ def test_1_deck_mirror_write_with_three_reps_positive(client):
 # ── 用例 2：加短文（A7 第②步）──────────────────────────────────────────────
 def test_2_add_article_and_visible_in_list(client):
     """POST 建德语短文断言 201 与返回 id；GET 列表可见该 id。"""
-    res = client.post("/api/encounter/texts", json={
-        "title": "Der unverzagte Mann",
-        "level": "A2",
-        "source": "e2e",
-        "content": ARTICLE,
-    })
+    res = client.post(
+        "/api/encounter/texts",
+        json={
+            "title": "Der unverzagte Mann",
+            "level": "A2",
+            "source": "e2e",
+            "content": ARTICLE,
+        },
+    )
     assert res.status_code == 201, res.text
     body = res.json()
     assert isinstance(body["id"], int) and body["id"] > 0
@@ -169,9 +171,14 @@ def test_2_add_article_and_visible_in_list(client):
 # ── 用例 3：逐词注解 + known/unknown 双向断言（A7 第③步）──────────────────
 def test_3_annotate_has_known_and_unknown_tokens(client):
     """annotate 结构完整、total_tokens>0，且已知/未知两面**都确定非空**。"""
-    create = client.post("/api/encounter/texts", json={
-        "title": "Annotate Me", "level": "A2", "content": ARTICLE,
-    })
+    create = client.post(
+        "/api/encounter/texts",
+        json={
+            "title": "Annotate Me",
+            "level": "A2",
+            "content": ARTICLE,
+        },
+    )
     text_id = create.json()["id"]
 
     res = client.get(f"/api/encounter/texts/{text_id}/annotate")
@@ -179,8 +186,7 @@ def test_3_annotate_has_known_and_unknown_tokens(client):
     data = res.json()
     assert data["text_id"] == text_id
     assert data["total_tokens"] > 0, "正文非空，token 总数必须 >0"
-    assert isinstance(data["sentences"], list) and data["sentences"], \
-        "至少应解析出一句"
+    assert isinstance(data["sentences"], list) and data["sentences"], "至少应解析出一句"
 
     # 结构断言：每句有 idx 与 tokens；每个 token 有 text/lemma/pos 三字段。
     for sent in data["sentences"]:
@@ -189,13 +195,11 @@ def test_3_annotate_has_known_and_unknown_tokens(client):
             assert set(("text", "lemma", "pos")).issubset(tok.keys())
 
     total_tokens = sum(len(s["tokens"]) for s in data["sentences"])
-    assert data["total_tokens"] == total_tokens, \
-        "total_tokens 必须等于各句 token 数之和"
+    assert data["total_tokens"] == total_tokens, "total_tokens 必须等于各句 token 数之和"
 
     # 服务端等价「已背词高亮」：用 deck 的 knownSet 对 annotate 的 lemma 做匹配。
     known_set = _build_known_set(DECK_PAYLOAD)
-    assert "mann" in known_set and "gehen" in known_set, \
-        "夹具前提：Mann / gehen 是已背词（reps>0）"
+    assert "mann" in known_set and "gehen" in known_set, "夹具前提：Mann / gehen 是已背词（reps>0）"
 
     known_lemmas, unknown_lemmas = [], []
     for sent in data["sentences"]:
@@ -205,15 +209,17 @@ def test_3_annotate_has_known_and_unknown_tokens(client):
                 continue
             (known_lemmas if _is_known(known_set, lemma) else unknown_lemmas).append(lemma)
 
-    assert "mann" in [l.lower() for l in known_lemmas], \
+    assert "mann" in [lem.lower() for lem in known_lemmas], (
         "正文里的已背词 Mann 必须被 annotate 出对应 lemma 并匹配为 known"
-    assert "gehen" in [l.lower() for l in known_lemmas], \
+    )
+    assert "gehen" in [lem.lower() for lem in known_lemmas], (
         "正文里的已背词 gehen 必须被 annotate 出对应 lemma 并匹配为 known"
+    )
     # 未背词：schule（不在 deck）必须出现在 unknown 一侧。
-    assert any(l.lower() == "schule" for l in unknown_lemmas), \
+    assert any(lem.lower() == "schule" for lem in unknown_lemmas), (
         "正文里的未背词 Schule 必须落在 unknown 一侧（known/unknown 双向非空）"
-    assert any(l.lower() == "unverzagt" for l in unknown_lemmas), \
-        "正文里的生词 unverzagt 必须落在 unknown 一侧"
+    )
+    assert any(lem.lower() == "unverzagt" for lem in unknown_lemmas), "正文里的生词 unverzagt 必须落在 unknown 一侧"
 
 
 # ── 用例 4：本地词典释义，纯离线（A7 第④步，红线 9）──────────────────────
@@ -229,9 +235,7 @@ def test_4_local_dict_lookup_is_offline(client, monkeypatch):
     assert not _is_known(known_set, "schule"), "前提：schule 不在已背词集合里"
 
     # 迫使 AI 兜底 tier「有条件触发」：给一个伪 key。
-    monkeypatch.setattr(
-        "delector.routes.main.get_effective_api_key", lambda *a, **k: "test-fake-key"
-    )
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "test-fake-key")
 
     # 网络出口一律惊雷：本地命中则永不触达。
     class _BoomClient:
@@ -240,13 +244,17 @@ def test_4_local_dict_lookup_is_offline(client, monkeypatch):
 
     monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", _BoomClient)
 
-    res = client.post("/api/lookup/vocab", json={
-        "sentence": ARTICLE, "target_word": "Schule", "lemma": "schule",
-    })
+    res = client.post(
+        "/api/lookup/vocab",
+        json={
+            "sentence": ARTICLE,
+            "target_word": "Schule",
+            "lemma": "schule",
+        },
+    )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["source"] == "local_dict", \
-        "应命中本地词典分支（source=local_dict），而非 none/ai"
+    assert body["source"] == "local_dict", "应命中本地词典分支（source=local_dict），而非 none/ai"
     assert body["definition_zh"], "本地词典分支必须给出非空中文释义"
     assert "学校" in body["definition_zh"], "Schule 的本地释义应含「学校」"
     assert body["pos"] == "NOUN", "本地词典分支应带具体词性"
@@ -279,8 +287,7 @@ def test_5_add_card_then_mirror_readback(client):
     hws = {w["hw"] for w in payload["words"]}
     assert "unverzagt" in hws, "进卡的新词应出现在回读的 payload.words 中"
     # 新词不建卡：cards 里不得出现它的 id（否则对新词池/复习队列都不可见）。
-    assert "u-unverzagt" not in payload["cards"], \
-        "word-only 进卡语义：新词不应在 cards 里建卡"
+    assert "u-unverzagt" not in payload["cards"], "word-only 进卡语义：新词不应在 cards 里建卡"
 
 
 # ── 用例 6：安全回归——不带 key 的 PUT 被拒（闸不退化）─────────────────────
@@ -297,7 +304,6 @@ def test_6_put_without_key_is_rejected(client):
     assert got.json() == DECK_PAYLOAD, "被拒的写入不得污染镜像"
 
     # 错误 key 同样被拒（不只是「缺 header」这条分支）。
-    bad = client.put("/api/wb/state", json={"payload": {"words": []}},
-                     headers={"X-WB-Key": "0" * 32})
+    bad = client.put("/api/wb/state", json={"payload": {"words": []}}, headers={"X-WB-Key": "0" * 32})
     assert bad.status_code == 403, f"错误 key 写入应被拒，实际 {bad.status_code}"
     assert client.get("/api/wb/state").json() == DECK_PAYLOAD

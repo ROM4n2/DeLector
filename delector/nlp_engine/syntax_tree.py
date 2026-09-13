@@ -7,8 +7,9 @@ Topologisches Feldermodell (Vorfeld, Linke Satzklammer, Mittelfeld, Rechte Satzk
 100% Offline, Pure Python stdlib + spaCy NLP.
 Zero external API dependencies.
 """
+
 import re
-from typing import Dict, List, Any, Optional, Union, Tuple, Set
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
     import spacy
@@ -48,178 +49,178 @@ SUBORDINATING_CONJUNCTIONS: Dict[str, Dict[str, str]] = {
         "subtype": "kausal",
         "label_de": "Kausalsatz (weil)",
         "label_zh": "原因状语从句 (weil)",
-        "question": "Warum? Weshalb? Aus welchem Grund?"
+        "question": "Warum? Weshalb? Aus welchem Grund?",
     },
     "da": {
         "subtype": "kausal",
         "label_de": "Kausalsatz (da)",
         "label_zh": "原因状语从句 (da - 既成事实)",
-        "question": "Da / Weil?"
+        "question": "Da / Weil?",
     },
     # ── Konzessiv (Concession) ────────────────────────────────────────────────
     "obwohl": {
         "subtype": "konzessiv",
         "label_de": "Konzessivsatz (obwohl)",
         "label_zh": "让步状语从句 (obwohl)",
-        "question": "Trotz welcher Umstände?"
+        "question": "Trotz welcher Umstände?",
     },
     "obgleich": {
         "subtype": "konzessiv",
         "label_de": "Konzessivsatz (obgleich)",
         "label_zh": "让步状语从句 (obgleich)",
-        "question": "Trotz welcher Umstände?"
+        "question": "Trotz welcher Umstände?",
     },
     "obschon": {
         "subtype": "konzessiv",
         "label_de": "Konzessivsatz (obschon)",
         "label_zh": "让步状语从句 (obschon)",
-        "question": "Trotz welcher Umstände?"
+        "question": "Trotz welcher Umstände?",
     },
     "wenngleich": {
         "subtype": "konzessiv",
         "label_de": "Konzessivsatz (wenngleich)",
         "label_zh": "让步状语从句 (wenngleich)",
-        "question": "Trotz welcher Umstände?"
+        "question": "Trotz welcher Umstände?",
     },
     "obzwar": {
         "subtype": "konzessiv",
         "label_de": "Konzessivsatz (obzwar)",
         "label_zh": "让步状语从句 (obzwar)",
-        "question": "Trotz welcher Umstände?"
+        "question": "Trotz welcher Umstände?",
     },
     # ── Konditional (Condition) ───────────────────────────────────────────────
     "wenn": {
         "subtype": "konditional",
         "label_de": "Konditionalsatz (wenn)",
         "label_zh": "条件状语从句 (wenn)",
-        "question": "Unter welcher Bedingung? Wann?"
+        "question": "Unter welcher Bedingung? Wann?",
     },
     "falls": {
         "subtype": "konditional",
         "label_de": "Konditionalsatz (falls)",
         "label_zh": "条件状语从句 (falls - 假定)",
-        "question": "Falls / Wenn?"
+        "question": "Falls / Wenn?",
     },
     "sofern": {
         "subtype": "konditional",
         "label_de": "Konditionalsatz (sofern)",
         "label_zh": "条件状语从句 (sofern - 只要/倘若)",
-        "question": "Inwiefern? Unter welcher Bedingung?"
+        "question": "Inwiefern? Unter welcher Bedingung?",
     },
     # ── Temporal (Time) ───────────────────────────────────────────────────────
     "als": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (als - Vergangenheit)",
         "label_zh": "时间状语从句 (als - 过去单次)",
-        "question": "Wann? Zu welchem Zeitpunkt?"
+        "question": "Wann? Zu welchem Zeitpunkt?",
     },
     "während": {
         "subtype": "temporal",
         "label_de": "Temporalsatz / Adversativsatz (während)",
         "label_zh": "时间/对比状语从句 (während - 当...之时/而)",
-        "question": "Wann? Während welchen Zeitraums?"
+        "question": "Wann? Während welchen Zeitraums?",
     },
     "nachdem": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (nachdem - Vorzeitigkeit)",
         "label_zh": "时间状语从句 (nachdem - 先时性)",
-        "question": "Nach welchem Ereignis?"
+        "question": "Nach welchem Ereignis?",
     },
     "bevor": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (bevor - Nachzeitigkeit)",
         "label_zh": "时间状语从句 (bevor - 在...之前)",
-        "question": "Vor welchem Ereignis?"
+        "question": "Vor welchem Ereignis?",
     },
     "ehe": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (ehe)",
         "label_zh": "时间状语从句 (ehe - 在...之前)",
-        "question": "Ehe / Bevor?"
+        "question": "Ehe / Bevor?",
     },
     "seit": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (seit)",
         "label_zh": "时间状语从句 (seit - 自从)",
-        "question": "Seit wann?"
+        "question": "Seit wann?",
     },
     "seitdem": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (seitdem)",
         "label_zh": "时间状语从句 (seitdem - 自从)",
-        "question": "Seit wann?"
+        "question": "Seit wann?",
     },
     "bis": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (bis)",
         "label_zh": "时间状语从句 (bis - 直到)",
-        "question": "Bis wann?"
+        "question": "Bis wann?",
     },
     "sobald": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (sobald)",
         "label_zh": "时间状语从句 (sobald - 一旦/一...就)",
-        "question": "Ab wann?"
+        "question": "Ab wann?",
     },
     "solange": {
         "subtype": "temporal",
         "label_de": "Temporalsatz (solange)",
         "label_zh": "时间状语从句 (solange - 只要...一直)",
-        "question": "Wie lange?"
+        "question": "Wie lange?",
     },
     # ── Final (Purpose) ───────────────────────────────────────────────────────
     "damit": {
         "subtype": "final",
         "label_de": "Finalsatz (damit)",
         "label_zh": "目的状语从句 (damit - 为了)",
-        "question": "Wozu? Zu welchem Zweck?"
+        "question": "Wozu? Zu welchem Zweck?",
     },
     # ── Konsekutiv (Consecutive / Result) ─────────────────────────────────────
     "sodass": {
         "subtype": "konsekutiv",
         "label_de": "Konsekutivsatz (sodass)",
         "label_zh": "结果状语从句 (sodass - 以至于)",
-        "question": "Mit welcher Folge?"
+        "question": "Mit welcher Folge?",
     },
     # ── Modal & Instrumental ──────────────────────────────────────────────────
     "indem": {
         "subtype": "modal",
         "label_de": "Modalsatz (indem - Instrumental)",
         "label_zh": "方式/手段状语从句 (indem - 通过/借由)",
-        "question": "Wie? Auf welche Weise? Wodurch?"
+        "question": "Wie? Auf welche Weise? Wodurch?",
     },
     # ── Adversativ ────────────────────────────────────────────────────────────
     "wohingegen": {
         "subtype": "adversativ",
         "label_de": "Adversativsatz (wohingegen)",
         "label_zh": "对立/对比从句 (wohingegen - 反之)",
-        "question": "Im Gegensatz wozu?"
+        "question": "Im Gegensatz wozu?",
     },
     "wogegen": {
         "subtype": "adversativ",
         "label_de": "Adversativsatz (wogegen)",
         "label_zh": "对立从句 (wogegen - 而相比之下)",
-        "question": "Wogegen?"
+        "question": "Wogegen?",
     },
     # ── Inhaltssätze (Noun Clauses) ───────────────────────────────────────────
     "dass": {
         "subtype": "inhalt_dass",
         "label_de": "Objekt-/Subjektsatz (dass)",
         "label_zh": "dass-名词从句 (宾语/主语从句)",
-        "question": "Was?"
+        "question": "Was?",
     },
     "ob": {
         "subtype": "inhalt_ob",
         "label_de": "Indirekter Fragesatz (ob)",
         "label_zh": "ob-间接是否疑问从句",
-        "question": "Ob (Ja/Nein)?"
+        "question": "Ob (Ja/Nein)?",
     },
     "wie": {
         "subtype": "modal",
         "label_de": "Modalsatz / Vergleichssatz (wie)",
         "label_zh": "方式/比较从句 (wie)",
-        "question": "Wie?"
-    }
+        "question": "Wie?",
+    },
 }
 
 # Infinitive Connectors (KOUI)
@@ -228,95 +229,269 @@ INFINITIVE_CONNECTORS: Dict[str, Dict[str, str]] = {
         "subtype": "infinitiv_um_zu",
         "label_de": "Infinitivgruppe (um...zu)",
         "label_zh": "um...zu 目的不定式从属短语 (Final)",
-        "formula": "[LK: um] + [MF: ...] + [RK: zu + Infinitiv]"
+        "formula": "[LK: um] + [MF: ...] + [RK: zu + Infinitiv]",
     },
     "ohne": {
         "subtype": "infinitiv_ohne_zu",
         "label_de": "Infinitivgruppe (ohne...zu)",
         "label_zh": "ohne...zu 否定方式不定式从属短语 (Modal)",
-        "formula": "[LK: ohne] + [MF: ...] + [RK: zu + Infinitiv]"
+        "formula": "[LK: ohne] + [MF: ...] + [RK: zu + Infinitiv]",
     },
     "anstatt": {
         "subtype": "infinitiv_anstatt_zu",
         "label_de": "Infinitivgruppe (anstatt...zu)",
         "label_zh": "anstatt...zu 替代对立不定式从属短语 (Adversativ)",
-        "formula": "[LK: anstatt] + [MF: ...] + [RK: zu + Infinitiv]"
+        "formula": "[LK: anstatt] + [MF: ...] + [RK: zu + Infinitiv]",
     },
     "statt": {
         "subtype": "infinitiv_anstatt_zu",
         "label_de": "Infinitivgruppe (statt...zu)",
         "label_zh": "statt...zu 替代不定式从属短语 (Adversativ)",
-        "formula": "[LK: statt] + [MF: ...] + [RK: zu + Infinitiv]"
-    }
+        "formula": "[LK: statt] + [MF: ...] + [RK: zu + Infinitiv]",
+    },
 }
 
 # Relative Pronouns & Relative Adverbs
 RELATIVE_PRONOUNS: Set[str] = {
-    "der", "die", "das", "dem", "den", "des",
-    "dessen", "deren", "derer", "denen",
-    "welcher", "welche", "welches", "welchem", "welchen",
-    "wer", "was",
-    "woran", "worauf", "wovon", "womit", "worüber", "wodurch",
-    "wobei", "wozu", "wofür", "wohin", "woher", "wo"
+    "der",
+    "die",
+    "das",
+    "dem",
+    "den",
+    "des",
+    "dessen",
+    "deren",
+    "derer",
+    "denen",
+    "welcher",
+    "welche",
+    "welches",
+    "welchem",
+    "welchen",
+    "wer",
+    "was",
+    "woran",
+    "worauf",
+    "wovon",
+    "womit",
+    "worüber",
+    "wodurch",
+    "wobei",
+    "wozu",
+    "wofür",
+    "wohin",
+    "woher",
+    "wo",
 }
 
 # Interrogative Words (W-Fragewörter für indirekte Fragesätze)
 INTERROGATIVE_WORDS: Set[str] = {
-    "wer", "wen", "wem", "wessen", "was",
-    "wo", "wohin", "woher", "wann", "warum",
-    "weshalb", "wieso", "weswegen", "wie",
-    "welcher", "welche", "welches", "welchem", "welchen"
+    "wer",
+    "wen",
+    "wem",
+    "wessen",
+    "was",
+    "wo",
+    "wohin",
+    "woher",
+    "wann",
+    "warum",
+    "weshalb",
+    "wieso",
+    "weswegen",
+    "wie",
+    "welcher",
+    "welche",
+    "welches",
+    "welchem",
+    "welchen",
 }
 
 # Coordinating Conjunctions (KON / Position 0)
-COORDINATING_CONJUNCTIONS: Set[str] = {
-    "und", "aber", "oder", "denn", "sondern", "doch", "allein"
-}
+COORDINATING_CONJUNCTIONS: Set[str] = {"und", "aber", "oder", "denn", "sondern", "doch", "allein"}
 
 # Common German Finite Modal & Auxiliary Verb Forms
 FINITE_MODAL_AND_AUX_FORMS: Set[str] = {
     # Modal verbs
-    "muss", "musst", "müssen", "müsst", "musste", "musstest", "mussten", "musstet",
-    "kann", "kannst", "können", "könnt", "konnte", "konntest", "konnten", "konntet",
-    "will", "willst", "wollen", "wollt", "wollte", "wolltest", "wollten", "wolltet",
-    "soll", "sollst", "sollen", "sollt", "sollte", "solltest", "sollten", "solltet",
-    "darf", "darfst", "dürfen", "dürft", "durfte", "durftest", "durften", "durftet",
-    "mag", "magst", "mögen", "mögt", "mochte", "mochtest", "mochten", "mochtet",
-    "möchte", "möchtest", "möchten", "möchtet",
+    "muss",
+    "musst",
+    "müssen",
+    "müsst",
+    "musste",
+    "musstest",
+    "mussten",
+    "musstet",
+    "kann",
+    "kannst",
+    "können",
+    "könnt",
+    "konnte",
+    "konntest",
+    "konnten",
+    "konntet",
+    "will",
+    "willst",
+    "wollen",
+    "wollt",
+    "wollte",
+    "wolltest",
+    "wollten",
+    "wolltet",
+    "soll",
+    "sollst",
+    "sollen",
+    "sollt",
+    "sollte",
+    "solltest",
+    "sollten",
+    "solltet",
+    "darf",
+    "darfst",
+    "dürfen",
+    "dürft",
+    "durfte",
+    "durftest",
+    "durften",
+    "durftet",
+    "mag",
+    "magst",
+    "mögen",
+    "mögt",
+    "mochte",
+    "mochtest",
+    "mochten",
+    "mochtet",
+    "möchte",
+    "möchtest",
+    "möchten",
+    "möchtet",
     # Auxiliaries
-    "hat", "habe", "hast", "haben", "habt", "hatte", "hattest", "hatten", "hattet",
-    "ist", "bin", "bist", "sind", "seid", "war", "warst", "waren", "wart",
-    "wird", "werde", "wirst", "werden", "werdet", "wurde", "wurdest", "wurden", "wurdet"
+    "hat",
+    "habe",
+    "hast",
+    "haben",
+    "habt",
+    "hatte",
+    "hattest",
+    "hatten",
+    "hattet",
+    "ist",
+    "bin",
+    "bist",
+    "sind",
+    "seid",
+    "war",
+    "warst",
+    "waren",
+    "wart",
+    "wird",
+    "werde",
+    "wirst",
+    "werden",
+    "werdet",
+    "wurde",
+    "wurdest",
+    "wurden",
+    "wurdet",
 }
 
 # Subjunctive Verb Stems & Auxiliary Forms (Konjunktiv II / I)
 SUBJUNCTIVE_FORMS: Set[str] = {
     # Konjunktiv II Hilfsverben & Modalverben
-    "hätte", "hättest", "hätten", "hättet",
-    "wäre", "wärest", "wären", "wäret",
-    "würde", "würdest", "würden", "würdet",
-    "könnte", "könntest", "könnten", "könntet",
-    "müsste", "müsstest", "müssten", "müsstet",
-    "sollte", "solltest", "sollten", "solltet",
-    "dürfte", "dürftest", "dürften", "dürftet",
-    "wollte", "wolltest", "wollten", "wolltet",
-    "möchte", "möchtest", "möchten", "möchtet",
+    "hätte",
+    "hättest",
+    "hätten",
+    "hättet",
+    "wäre",
+    "wärest",
+    "wären",
+    "wäret",
+    "würde",
+    "würdest",
+    "würden",
+    "würdet",
+    "könnte",
+    "könntest",
+    "könnten",
+    "könntet",
+    "müsste",
+    "müsstest",
+    "müssten",
+    "müsstet",
+    "sollte",
+    "solltest",
+    "sollten",
+    "solltet",
+    "dürfte",
+    "dürftest",
+    "dürften",
+    "dürftet",
+    "wollte",
+    "wolltest",
+    "wollten",
+    "wolltet",
+    "möchte",
+    "möchtest",
+    "möchten",
+    "möchtet",
     # Strong Verbs Konjunktiv II
-    "käme", "kämen", "ginge", "gingen", "wüsste", "wüssten",
-    "fände", "fänden", "bliebe", "blieben", "gäbe", "gäben",
-    "ließe", "ließen", "schriebe", "schrieben", "nähme", "nähmen",
-    "sähe", "sähen", "stände", "stünde", "ständen", "stünden",
-    "täte", "täten", "brächte", "brächten", "dächte", "dächten",
+    "käme",
+    "kämen",
+    "ginge",
+    "gingen",
+    "wüsste",
+    "wüssten",
+    "fände",
+    "fänden",
+    "bliebe",
+    "blieben",
+    "gäbe",
+    "gäben",
+    "ließe",
+    "ließen",
+    "schriebe",
+    "schrieben",
+    "nähme",
+    "nähmen",
+    "sähe",
+    "sähen",
+    "stände",
+    "stünde",
+    "ständen",
+    "stünden",
+    "täte",
+    "täten",
+    "brächte",
+    "brächten",
+    "dächte",
+    "dächten",
     # Konjunktiv I
-    "sei", "seien", "seiet", "habe", "haben", "werde", "werden",
-    "könne", "können", "müsse", "müssen", "wisse", "wissen",
-    "gehe", "gehen", "komme", "kommen", "bleibe", "bleiben"
+    "sei",
+    "seien",
+    "seiet",
+    "habe",
+    "haben",
+    "werde",
+    "werden",
+    "könne",
+    "können",
+    "müsse",
+    "müssen",
+    "wisse",
+    "wissen",
+    "gehe",
+    "gehen",
+    "komme",
+    "kommen",
+    "bleibe",
+    "bleiben",
 }
 
 
 # ==============================================================================
 # 2. Token Formatting Helper
 # ==============================================================================
+
 
 def format_token_dict(tok: Token) -> Dict[str, Any]:
     """Convert a spaCy Token into a clean, serializable dictionary."""
@@ -338,7 +513,7 @@ def format_token_dict(tok: Token) -> Dict[str, Any]:
         "mood": morph_dict.get("Mood", ""),
         "verb_form": morph_dict.get("VerbForm", ""),
         "is_punct": tok.is_punct,
-        "is_space": tok.is_space
+        "is_space": tok.is_space,
     }
 
 
@@ -352,7 +527,7 @@ def _empty_topology() -> Dict[str, Any]:
         "field_texts": {"vorfeld": "", "linke_klammer": "", "mittelfeld": "", "rechte_klammer": "", "nachfeld": ""},
         "sentence_type": "unknown",
         "bracket_structure": "keine",
-        "clause_type": "unknown"
+        "clause_type": "unknown",
     }
 
 
@@ -360,10 +535,9 @@ def _empty_topology() -> Dict[str, Any]:
 # 3. Topological Five Fields Algorithm (Das topologische Feldermodell)
 # ==============================================================================
 
+
 def analyze_sentence_topology(
-    doc_or_sent: Union[Doc, Span, str],
-    clause_tokens: Optional[List[Token]] = None,
-    clause_type: str = "auto"
+    doc_or_sent: Union[Doc, Span, str], clause_tokens: Optional[List[Token]] = None, clause_type: str = "auto"
 ) -> Dict[str, Any]:
     """
     Accurately segment a German sentence or clause into the 5 classic topological fields:
@@ -421,7 +595,11 @@ def analyze_sentence_topology(
     for idx, t in enumerate(tokens):
         if t.text == "," and idx + 1 < len(tokens):
             next_tok = tokens[idx + 1]
-            if next_tok.pos_ in ("VERB", "AUX") or next_tok.tag_ in ("VVFIN", "VAFIN", "VMFIN") or next_tok.text.lower() in FINITE_MODAL_AND_AUX_FORMS:
+            if (
+                next_tok.pos_ in ("VERB", "AUX")
+                or next_tok.tag_ in ("VVFIN", "VAFIN", "VMFIN")
+                or next_tok.text.lower() in FINITE_MODAL_AND_AUX_FORMS
+            ):
                 has_main_finite_verb = True
                 main_fin_candidate = next_tok
                 break
@@ -433,10 +611,13 @@ def analyze_sentence_topology(
 
     # Check for infinitive with zu
     zu_tokens = [t for t in tokens if t.tag_ == "PTKZU" or t.dep_ == "pm" or t.text.lower() == "zu"]
-    inf_verbs = [t for t in tokens if t.tag_ in ("VVINF", "VAINF", "VMINF") or (t.pos_ in ("VERB", "AUX") and "Inf" in t.morph.get("VerbForm", []))]
+    inf_verbs = [
+        t
+        for t in tokens
+        if t.tag_ in ("VVINF", "VAINF", "VMINF") or (t.pos_ in ("VERB", "AUX") and "Inf" in t.morph.get("VerbForm", []))
+    ]
     has_finite_verb = any(
-        t.tag_ in ("VVFIN", "VAFIN", "VMFIN")
-        or (t.pos_ in ("VERB", "AUX") and "Fin" in t.morph.get("VerbForm", []))
+        t.tag_ in ("VVFIN", "VAFIN", "VMFIN") or (t.pos_ in ("VERB", "AUX") and "Fin" in t.morph.get("VerbForm", []))
         for t in tokens
     )
 
@@ -503,7 +684,8 @@ def analyze_sentence_topology(
         lk_tokens = connector_tokens
 
         rk_candidates = [
-            t for t in tokens
+            t
+            for t in tokens
             if t.tag_ in ("PTKZU", "VVINF", "VAINF", "VMINF", "VVIZU") or t.dep_ == "pm" or t.text.lower() == "zu"
         ]
         rk_candidates = sorted(rk_candidates, key=lambda x: x.i)
@@ -511,7 +693,11 @@ def analyze_sentence_topology(
         if rk_candidates:
             rk_first_id = rk_candidates[0].i
             rk_last_id = rk_candidates[-1].i
-            rk_tokens = [t for t in tokens if rk_first_id <= t.i <= rk_last_id and (t in rk_candidates or t.pos_ in ("VERB", "AUX", "PART"))]
+            rk_tokens = [
+                t
+                for t in tokens
+                if rk_first_id <= t.i <= rk_last_id and (t in rk_candidates or t.pos_ in ("VERB", "AUX", "PART"))
+            ]
         else:
             rk_tokens = []
 
@@ -542,8 +728,7 @@ def analyze_sentence_topology(
             lk_tokens = [non_punct_tokens[0]] if non_punct_tokens else []
 
         all_verbs_in_clause = [
-            t for t in tokens
-            if t.pos_ in ("VERB", "AUX") or t.tag_ in ("PTKVZ", "PTKZU") or t.dep_ in ("svp", "pm")
+            t for t in tokens if t.pos_ in ("VERB", "AUX") or t.tag_ in ("PTKVZ", "PTKZU") or t.dep_ in ("svp", "pm")
         ]
         if all_verbs_in_clause:
             last_verb = all_verbs_in_clause[-1]
@@ -667,8 +852,15 @@ def analyze_sentence_topology(
                     continue
                 if t.tag_ == "PTKVZ" or t.dep_ in ("svp", "compound:prt"):
                     rk_elements.append(t)
-                elif t.tag_ in ("VVPP", "VAPP", "VVINF", "VAINF", "VMINF") or (t.pos_ in ("VERB", "AUX") and t.i > fin_verb.i):
-                    if t.dep_ in ("oc", "ROOT", "mo") or t.head == fin_verb or t.head.head == fin_verb or t == fin_verb.head:
+                elif t.tag_ in ("VVPP", "VAPP", "VVINF", "VAINF", "VMINF") or (
+                    t.pos_ in ("VERB", "AUX") and t.i > fin_verb.i
+                ):
+                    if (
+                        t.dep_ in ("oc", "ROOT", "mo")
+                        or t.head == fin_verb
+                        or t.head.head == fin_verb
+                        or t == fin_verb.head
+                    ):
                         rk_elements.append(t)
 
         rk_tokens = sorted(rk_elements, key=lambda x: x.i)
@@ -714,15 +906,25 @@ def analyze_sentence_topology(
         "linke_klammer": to_text(lk_tokens),
         "mittelfeld": to_text(mf_tokens),
         "rechte_klammer": to_text(rk_tokens),
-        "nachfeld": to_text(nf_tokens)
+        "nachfeld": to_text(nf_tokens),
     }
 
     has_participle = any(t.tag_ in ("VVPP", "VAPP") for t in (lk_tokens + rk_tokens + mf_tokens))
-    has_werden = any(t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden") for t in (lk_tokens + rk_tokens))
-    has_sein = any(t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren") for t in (lk_tokens + rk_tokens))
-    has_modal = any(t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in (lk_tokens + rk_tokens))
+    has_werden = any(
+        t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden")
+        for t in (lk_tokens + rk_tokens)
+    )
+    has_sein = any(
+        t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren")
+        for t in (lk_tokens + rk_tokens)
+    )
+    has_modal = any(
+        t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in (lk_tokens + rk_tokens)
+    )
     has_sep_pfx = any(t.tag_ == "PTKVZ" for t in rk_tokens)
-    has_subjunctive = any(t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", []) for t in (lk_tokens + rk_tokens))
+    has_subjunctive = any(
+        t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", []) for t in (lk_tokens + rk_tokens)
+    )
 
     if has_werden and has_participle:
         bracket_desc = "Passiv-Klammer (Vorgangspassiv)"
@@ -732,7 +934,10 @@ def analyze_sentence_topology(
         bracket_desc = "Passiv-Klammer (Zustandspassiv / Perfekt)"
     elif has_subjunctive:
         bracket_desc = "Konjunktiv-Klammer (Irrealis / Höflichkeit)"
-    elif has_modal and (has_participle or any(t.tag_ in ("VVINF", "VAINF") or t.text.lower() in ("werden", "sein", "haben") for t in rk_tokens)):
+    elif has_modal and (
+        has_participle
+        or any(t.tag_ in ("VVINF", "VAINF") or t.text.lower() in ("werden", "sein", "haben") for t in rk_tokens)
+    ):
         bracket_desc = "Modalverb-Klammer"
     elif has_sep_pfx:
         bracket_desc = "Trennbare-Verb-Klammer (Präfix im RK)"
@@ -756,7 +961,7 @@ def analyze_sentence_topology(
         "field_texts": field_texts,
         "sentence_type": sentence_type,
         "bracket_structure": bracket_desc,
-        "clause_type": clause_type
+        "clause_type": clause_type,
     }
 
 
@@ -764,8 +969,10 @@ def analyze_sentence_topology(
 # 4. Clause Classifier & Abstract Syntax Tree (AST) Engine
 # ==============================================================================
 
+
 class ClauseNode:
     """Represents a single clause node in the syntactic AST."""
+
     def __init__(
         self,
         node_id: str,
@@ -779,7 +986,7 @@ class ClauseNode:
         features: Dict[str, Any],
         token_ids: List[int],
         tokens: List[Token],
-        head_token: Optional[Token] = None
+        head_token: Optional[Token] = None,
     ):
         self.id = node_id
         self.type = clause_type
@@ -813,16 +1020,11 @@ class ClauseNode:
             "token_ids": self.token_ids,
             "text": clause_text,
             "topology": self.topology,
-            "children": [child.to_dict() for child in self.children]
+            "children": [child.to_dict() for child in self.children],
         }
 
 
-def _classify_single_clause(
-    tokens: List[Token],
-    head: Token,
-    node_id: str,
-    is_root: bool = False
-) -> ClauseNode:
+def _classify_single_clause(tokens: List[Token], head: Token, node_id: str, is_root: bool = False) -> ClauseNode:
     """Classify a set of tokens and its verbal head into one of the 5 Goethe/TestDaF clause types."""
     non_punct = [t for t in tokens if not t.is_punct and not t.is_space]
     first_tok = non_punct[0] if non_punct else (tokens[0] if tokens else None)
@@ -834,8 +1036,13 @@ def _classify_single_clause(
 
     # Check passive / subjunctive / tense / mood
     has_participle = any(t.tag_ in ("VVPP", "VAPP") for t in tokens)
-    has_werden = any(t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden") for t in tokens)
-    has_sein = any(t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren") for t in tokens)
+    has_werden = any(
+        t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden")
+        for t in tokens
+    )
+    has_sein = any(
+        t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren") for t in tokens
+    )
     has_modal = any(t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in tokens)
 
     subj_tokens = [t for t in tokens if t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", [])]
@@ -869,7 +1076,7 @@ def _classify_single_clause(
         "voice": voice,
         "mood": mood,
         "tense": tense,
-        "has_modal": has_modal
+        "has_modal": has_modal,
     }
 
     # --------------------------------------------------------------------------
@@ -877,12 +1084,15 @@ def _classify_single_clause(
     # --------------------------------------------------------------------------
     if not is_root and ((has_zu and is_inf_verb) or first_word_lower in INFINITIVE_CONNECTORS):
         connector_str = first_word_lower if first_word_lower in INFINITIVE_CONNECTORS else ""
-        meta = INFINITIVE_CONNECTORS.get(connector_str, {
-            "subtype": "infinitiv_zu",
-            "label_de": "Infinitivgruppe (zu + Inf.)",
-            "label_zh": "zu-不定式从属短语",
-            "formula": "[MF] + [RK: zu + Infinitiv]"
-        })
+        meta = INFINITIVE_CONNECTORS.get(
+            connector_str,
+            {
+                "subtype": "infinitiv_zu",
+                "label_de": "Infinitivgruppe (zu + Inf.)",
+                "label_zh": "zu-不定式从属短语",
+                "formula": "[MF] + [RK: zu + Infinitiv]",
+            },
+        )
         bracket_str = f"Infinitiv-Klammer ({connector_str + '...zu' if connector_str else 'zu + Inf.'})"
         return ClauseNode(
             node_id=node_id,
@@ -896,18 +1106,32 @@ def _classify_single_clause(
             features=features,
             token_ids=[t.i for t in tokens],
             tokens=tokens,
-            head_token=head
+            head_token=head,
         )
 
     # --------------------------------------------------------------------------
     # 2. RELATIVSATZ
     # --------------------------------------------------------------------------
     # Note: Check if connector is an indirect question word first
-    is_question_word = first_word_lower in INTERROGATIVE_WORDS and first_word_lower not in ("der", "die", "das", "welcher", "welche", "welches")
-    rel_pron_toks = [t for t in tokens if t.tag_ in ("PRELS", "PRELAT") or (t.text.lower() in RELATIVE_PRONOUNS and t.dep_ in ("sb", "oa", "da", "og", "nk", "rc", "ag"))]
+    is_question_word = first_word_lower in INTERROGATIVE_WORDS and first_word_lower not in (
+        "der",
+        "die",
+        "das",
+        "welcher",
+        "welche",
+        "welches",
+    )
+    rel_pron_toks = [
+        t
+        for t in tokens
+        if t.tag_ in ("PRELS", "PRELAT")
+        or (t.text.lower() in RELATIVE_PRONOUNS and t.dep_ in ("sb", "oa", "da", "og", "nk", "rc", "ag"))
+    ]
     is_relativsatz = not is_root and not is_question_word and (head.dep_ in ("rc", "re") or len(rel_pron_toks) > 0)
 
-    if is_relativsatz and not (first_word_lower in SUBORDINATING_CONJUNCTIONS and first_word_lower not in ("das", "die", "der")):
+    if is_relativsatz and not (
+        first_word_lower in SUBORDINATING_CONJUNCTIONS and first_word_lower not in ("das", "die", "der")
+    ):
         connector_str = ""
         if rel_pron_toks:
             rel_t = rel_pron_toks[0]
@@ -937,24 +1161,31 @@ def _classify_single_clause(
             features=features,
             token_ids=[t.i for t in tokens],
             tokens=tokens,
-            head_token=head
+            head_token=head,
         )
 
     # --------------------------------------------------------------------------
     # 3. KONJUNKTIONALSATZ / ADVERBIALSATZ / DASS-OB SATZ / INDIREKTER FRAGESATZ
     # --------------------------------------------------------------------------
     conj_toks = [t for t in non_punct[:3] if t.text.lower() in SUBORDINATING_CONJUNCTIONS or t.tag_ in ("KOUS", "KOUI")]
-    is_interrogative_sub = (first_word_lower in INTERROGATIVE_WORDS and not is_root)
+    is_interrogative_sub = first_word_lower in INTERROGATIVE_WORDS and not is_root
 
-    if not is_root and (conj_toks or is_interrogative_sub or (head.dep_ in ("mo", "oc", "cp", "rc") and first_word_lower in SUBORDINATING_CONJUNCTIONS)):
+    if not is_root and (
+        conj_toks
+        or is_interrogative_sub
+        or (head.dep_ in ("mo", "oc", "cp", "rc") and first_word_lower in SUBORDINATING_CONJUNCTIONS)
+    ):
         if conj_toks:
             conj_word = conj_toks[0].text.lower()
-            meta = SUBORDINATING_CONJUNCTIONS.get(conj_word, {
-                "subtype": "konjunktional",
-                "label_de": f"Konjunktionalsatz ({conj_word})",
-                "label_zh": "从属连词从句",
-                "question": ""
-            })
+            meta = SUBORDINATING_CONJUNCTIONS.get(
+                conj_word,
+                {
+                    "subtype": "konjunktional",
+                    "label_de": f"Konjunktionalsatz ({conj_word})",
+                    "label_zh": "从属连词从句",
+                    "question": "",
+                },
+            )
             connector_str = conj_toks[0].text
         else:
             conj_word = first_word_lower
@@ -962,7 +1193,7 @@ def _classify_single_clause(
                 "subtype": "indirekter_fragesatz",
                 "label_de": f"Indirekter Fragesatz ({conj_word})",
                 "label_zh": "间接疑问从句",
-                "question": "W-Frage"
+                "question": "W-Frage",
             }
             connector_str = first_tok.text if first_tok else ""
 
@@ -985,7 +1216,7 @@ def _classify_single_clause(
             features=features,
             token_ids=[t.i for t in tokens],
             tokens=tokens,
-            head_token=head
+            head_token=head,
         )
 
     # --------------------------------------------------------------------------
@@ -1029,7 +1260,7 @@ def _classify_single_clause(
         features=features,
         token_ids=[t.i for t in tokens],
         tokens=tokens,
-        head_token=head
+        head_token=head,
     )
 
 
@@ -1109,7 +1340,10 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
             continue
 
         # 3. Finite Subordinate Conjunctional / Adverbial Clause
-        has_conj_child = any(c.tag_ in ("KOUS", "KOUI") or c.dep_ == "cp" or c.text.lower() in SUBORDINATING_CONJUNCTIONS for c in t.children)
+        has_conj_child = any(
+            c.tag_ in ("KOUS", "KOUI") or c.dep_ == "cp" or c.text.lower() in SUBORDINATING_CONJUNCTIONS
+            for c in t.children
+        )
         if is_finite and (t.dep_ in ("mo", "oc", "oa", "sb", "cp") or has_conj_child):
             clause_heads.append((t, "subordinate"))
             continue
@@ -1138,7 +1372,7 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
     # 3. Create ClauseNode instances
     clause_nodes: List[ClauseNode] = []
     for idx, (head, ctype, tokens) in enumerate(clause_spans):
-        is_root = (ctype in ("root", "coord_root"))
+        is_root = ctype in ("root", "coord_root")
         node = _classify_single_clause(tokens, head, f"clause_{idx}", is_root=is_root)
         node.topology = analyze_sentence_topology(sent, clause_tokens=tokens, clause_type=node.type)
         clause_nodes.append(node)
@@ -1173,7 +1407,10 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
 # ==============================================================================
 
 # 常见缩写保护（每句切分调用重建的正则字符串 → 模块级常量，热路径免重建）
-_ABBR_PATTERN = r'\b(ca|usw|bzw|etc|dr|prof|nr|hr|fr|vgl|inkl|evtl|std|abs|art|bd|bsp|dipl|ing|jun|sen|str|tab|tel|univ|vol)\.'
+_ABBR_PATTERN = (
+    r"\b(ca|usw|bzw|etc|dr|prof|nr|hr|fr|vgl|inkl|evtl|std|abs|art|bd|bsp|"
+    r"dipl|ing|jun|sen|str|tab|tel|univ|vol)\."
+)
 
 
 def split_sentences_pure_python(text: str) -> List[str]:
@@ -1183,14 +1420,18 @@ def split_sentences_pure_python(text: str) -> List[str]:
 
     protected = text
     # 1. Protect dates: dd.mm.yyyy or d.m.yyyy or dd.mm.
-    protected = re.sub(r'\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b', r'\1__DOT__\2__DOT__\3', protected)
-    protected = re.sub(r'\b(\d{1,2})\.(\d{1,2})\.', r'\1__DOT__\2__DOT__', protected)
+    protected = re.sub(r"\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b", r"\1__DOT__\2__DOT__\3", protected)
+    protected = re.sub(r"\b(\d{1,2})\.(\d{1,2})\.", r"\1__DOT__\2__DOT__", protected)
 
     # 2. Protect multi-dot abbreviations (e.g. z.B., d.h., u.a., e.V.)
-    protected = re.sub(r'\b([a-zA-ZäöüÄÖÜß])\.\s*([a-zA-ZäöüÄÖÜß])\.', lambda m: m.group(0).replace('.', '__DOT__'), protected)
+    protected = re.sub(
+        r"\b([a-zA-ZäöüÄÖÜß])\.\s*([a-zA-ZäöüÄÖÜß])\.",
+        lambda m: m.group(0).replace(".", "__DOT__"),
+        protected,
+    )
 
     # 3. Protect common word abbreviations (ca., Dr., Prof., usw., bzw., etc., Nr., Hr., Fr., vgl., inkl., evtl.)
-    protected = re.sub(_ABBR_PATTERN, r'\g<1>__DOT__', protected, flags=re.IGNORECASE)
+    protected = re.sub(_ABBR_PATTERN, r"\g<1>__DOT__", protected, flags=re.IGNORECASE)
 
     parts = re.split(r'([.!?]+["\']?)', protected)
     sents = []
@@ -1199,10 +1440,11 @@ def split_sentences_pure_python(text: str) -> List[str]:
         tail = parts[i + 1] if i + 1 < len(parts) else ""
         sent = (body + tail).strip()
         if sent:
-            sents.append(sent.replace('__DOT__', '.'))
+            sents.append(sent.replace("__DOT__", "."))
     if not sents and text.strip():
-        sents = [text.strip().replace('__DOT__', '.')]
+        sents = [text.strip().replace("__DOT__", ".")]
     return sents
+
 
 def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
     """Pure-Python fallback when spaCy is unavailable (e.g. mobile APK)."""
@@ -1211,43 +1453,42 @@ def _analyze_syntax_tree_pure_python(text: str) -> Dict[str, Any]:
     for s_idx, sent_str in enumerate(sents):
         words = sent_str.split()
         mf_tokens = [{"text": w, "id": i} for i, w in enumerate(words)]
-        results.append({
-            "sentence_id": s_idx,
-            "text": sent_str,
-            "clause_tree": {
-                "id": "root",
-                "type": "hauptsatz",
-                "label": "Hauptsatz (主句)",
-                "label_zh": "主句核心",
-                "connector": "",
-                "finite_verb": "",
-                "token_ids": list(range(len(words))),
-                "formula": "[Vorfeld] + [Linke Klammer] + [Mittelfeld] + [Rechte Klammer] + [Nachfeld]",
-                "children": []
-            },
-            "topology": {
-                "vorfeld": [],
-                "linke_klammer": [],
-                "mittelfeld": mf_tokens,
-                "rechte_klammer": [],
-                "nachfeld": [],
-                "field_texts": {
-                    "vorfeld": "",
-                    "linke_klammer": "",
-                    "mittelfeld": sent_str,
-                    "rechte_klammer": "",
-                    "nachfeld": ""
+        results.append(
+            {
+                "sentence_id": s_idx,
+                "text": sent_str,
+                "clause_tree": {
+                    "id": "root",
+                    "type": "hauptsatz",
+                    "label": "Hauptsatz (主句)",
+                    "label_zh": "主句核心",
+                    "connector": "",
+                    "finite_verb": "",
+                    "token_ids": list(range(len(words))),
+                    "formula": "[Vorfeld] + [Linke Klammer] + [Mittelfeld] + [Rechte Klammer] + [Nachfeld]",
+                    "children": [],
                 },
-                "sentence_type": "V2",
-                "bracket_structure": "Einfacher Satz",
-                "clause_type": "hauptsatz"
+                "topology": {
+                    "vorfeld": [],
+                    "linke_klammer": [],
+                    "mittelfeld": mf_tokens,
+                    "rechte_klammer": [],
+                    "nachfeld": [],
+                    "field_texts": {
+                        "vorfeld": "",
+                        "linke_klammer": "",
+                        "mittelfeld": sent_str,
+                        "rechte_klammer": "",
+                        "nachfeld": "",
+                    },
+                    "sentence_type": "V2",
+                    "bracket_structure": "Einfacher Satz",
+                    "clause_type": "hauptsatz",
+                },
             }
-        })
-    return {
-        "version": "3.5.0",
-        "sentence_count": len(results),
-        "sentences": results
-    }
+        )
+    return {"version": "3.5.0", "sentence_count": len(results), "sentences": results}
+
 
 def analyze_syntax_tree(text_or_doc: Union[str, Any]) -> Dict[str, Any]:
     """
@@ -1271,15 +1512,6 @@ def analyze_syntax_tree(text_or_doc: Union[str, Any]) -> Dict[str, Any]:
     for s_idx, sent in enumerate(doc.sents):
         tree = build_clause_tree(sent)
         topology = analyze_sentence_topology(sent)
-        results.append({
-            "sentence_id": s_idx,
-            "text": sent.text,
-            "clause_tree": tree,
-            "topology": topology
-        })
+        results.append({"sentence_id": s_idx, "text": sent.text, "clause_tree": tree, "topology": topology})
 
-    return {
-        "version": "3.5.0",
-        "sentence_count": len(results),
-        "sentences": results
-    }
+    return {"version": "3.5.0", "sentence_count": len(results), "sentences": results}

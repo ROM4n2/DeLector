@@ -52,16 +52,18 @@
 ```python
 def test_grammar_cards_migration_adds_columns():
     import sqlite3
+
     conn = sqlite3.connect("test_delector.db")
     cols = {r[1] for r in conn.execute("PRAGMA table_info(grammar_cards)")}
     assert "corrected_form" in cols and "error_type" in cols, f"缺列: {cols}"
 
+
 def test_essays_table_created():
     import sqlite3
+
     conn = sqlite3.connect("test_delector.db")
     cols = {r[1] for r in conn.execute("PRAGMA table_info(essays)")}
-    assert {"id", "title", "content", "analysis_json",
-            "cefr_level", "error_count", "created_at"} <= cols
+    assert {"id", "title", "content", "analysis_json", "cefr_level", "error_count", "created_at"} <= cols
 ```
 
 - [x] **Step 2: 跑测试确认失败**
@@ -123,10 +125,25 @@ git commit -m "feat(writer): essays 表 + grammar_cards 加 corrected_form/error
 - Consumes: `linguistics.lookup_prep_collocations`（linguistics.py:1325，返回 `[{praeposition,kasus,...}]`）、`core_dict.lookup_core_vocab`（可选 gender 兜底）、`server.calculate_cefr_stats`（server.py:455，测试里直接复用或传入 tokens）。
 - Produces: `analyze_essay_text(text, nlp=None) -> dict`，shape：
 ```python
-{"version": "3.11.0", "cefr": {...}, "error_count": 3,
- "sentences": [{"text": "...", "spans": [
-    {"error_type": "artikel"|"kasus"|"praeposition"|"andere",
-     "corrected_form": str, "explanation_zh": str, "start": int, "end": int}]}]}
+{
+    "version": "3.11.0",
+    "cefr": {...},
+    "error_count": 3,
+    "sentences": [
+        {
+            "text": "...",
+            "spans": [
+                {
+                    "error_type": "artikel" | "kasus" | "praeposition" | "andere",
+                    "corrected_form": str,
+                    "explanation_zh": str,
+                    "start": int,
+                    "end": int,
+                }
+            ],
+        }
+    ],
+}
 ```
 `start/end` 为**句内相对字符 offset**。
 
@@ -138,6 +155,7 @@ import spacy
 import pytest
 from writing_rules import analyze_essay_text
 
+
 @pytest.fixture(scope="module")
 def nlp():
     try:
@@ -145,30 +163,38 @@ def nlp():
     except OSError:
         pytest.skip("de_core_news_sm 未安装")
 
+
 def _spans(text, nlp):
     return [s for s in analyze_essay_text(text, nlp)["sentences"] for s in s["spans"]]
+
 
 def test_agreement_wrong_case(nlp):
     spans = _spans("Ich sehe der Mann.", nlp)
     assert spans and spans[0]["error_type"] == "artikel"
     assert "den Mann" in spans[0]["corrected_form"]
 
+
 def test_agreement_correct_sentence_clean(nlp):
     assert _spans("Ich sehe den Mann.", nlp) == []
+
 
 def test_prep_governed_case_dativ(nlp):
     spans = _spans("Ich fahre mit der Auto.", nlp)
     assert spans and spans[0]["error_type"] == "kasus"
     assert "dem Auto" in spans[0]["corrected_form"]
 
+
 def test_prep_one_case_correct_clean(nlp):
     assert _spans("Ich fahre mit dem Auto.", nlp) == []
+
 
 def test_two_case_preposition_skipped(nlp):
     assert _spans("Ich gehe in der Stadt.", nlp) == []
 
+
 def test_no_determiner_not_flagged(nlp):
     assert _spans("Ich fahre mit Auto.", nlp) == []
+
 
 def test_no_spacy_returns_empty():
     r = analyze_essay_text("Ich sehe der Mann.", None)
@@ -191,31 +217,52 @@ Expected: FAIL（`ModuleNotFoundError: writing_rules`）
 只报高置信错误（宁可漏报不可误报）。nlp=None 时优雅返回零错误 + CEFR。
 spaCy 模型由调用方注入（server 传 Android 安全加载的 nlp；测试直传 spacy.load）。
 """
+
 import hashlib
 
-_TWO_WAY_PREPS = {"in", "an", "auf", "über", "unter", "vor", "hinter",
-                  "neben", "zwischen"}
+_TWO_WAY_PREPS = {"in", "an", "auf", "über", "unter", "vor", "hinter", "neben", "zwischen"}
 # 固定单格介词 → 支配格（事实数据，参考 LanguageTool PrepositionToCases）
 _PREP_CASE = {
-    "mit": "Dat", "bei": "Dat", "nach": "Dat", "seit": "Dat",
-    "aus": "Dat", "von": "Dat", "zu": "Dat", "gegenüber": "Dat", "entlang": "Akk",
-    "ohne": "Akk", "für": "Akk", "gegen": "Akk", "durch": "Akk", "um": "Akk",
-    "wegen": "Gen", "trotz": "Gen", "während": "Gen",
+    "mit": "Dat",
+    "bei": "Dat",
+    "nach": "Dat",
+    "seit": "Dat",
+    "aus": "Dat",
+    "von": "Dat",
+    "zu": "Dat",
+    "gegenüber": "Dat",
+    "entlang": "Akk",
+    "ohne": "Akk",
+    "für": "Akk",
+    "gegen": "Akk",
+    "durch": "Akk",
+    "um": "Akk",
+    "wegen": "Gen",
+    "trotz": "Gen",
+    "während": "Gen",
 }
 # 冠词变格表：(lemma → gender → case → 表面形式)
 _DECLINE = {
-    "der": {"Masc": {"Nom": "der", "Akk": "den", "Dat": "dem", "Gen": "des"},
-            "Fem":  {"Nom": "die", "Akk": "die", "Dat": "der", "Gen": "der"},
-            "Neut": {"Nom": "das", "Akk": "das", "Dat": "dem", "Gen": "des"}},
-    "die": {"Masc": {"Nom": "der", "Akk": "die", "Dat": "der", "Gen": "der"},
-            "Fem":  {"Nom": "die", "Akk": "die", "Dat": "der", "Gen": "der"},
-            "Neut": {"Nom": "das", "Akk": "die", "Dat": "der", "Gen": "der"}},
-    "das": {"Masc": {"Nom": "der", "Akk": "das", "Dat": "dem", "Gen": "des"},
-            "Fem":  {"Nom": "die", "Akk": "das", "Dat": "der", "Gen": "der"},
-            "Neut": {"Nom": "das", "Akk": "das", "Dat": "dem", "Gen": "des"}},
-    "ein": {"Masc": {"Nom": "ein", "Akk": "einen", "Dat": "einem", "Gen": "eines"},
-            "Fem":  {"Nom": "eine", "Akk": "eine", "Dat": "einer", "Gen": "einer"},
-            "Neut": {"Nom": "ein", "Akk": "ein", "Dat": "einem", "Gen": "eines"}},
+    "der": {
+        "Masc": {"Nom": "der", "Akk": "den", "Dat": "dem", "Gen": "des"},
+        "Fem": {"Nom": "die", "Akk": "die", "Dat": "der", "Gen": "der"},
+        "Neut": {"Nom": "das", "Akk": "das", "Dat": "dem", "Gen": "des"},
+    },
+    "die": {
+        "Masc": {"Nom": "der", "Akk": "die", "Dat": "der", "Gen": "der"},
+        "Fem": {"Nom": "die", "Akk": "die", "Dat": "der", "Gen": "der"},
+        "Neut": {"Nom": "das", "Akk": "die", "Dat": "der", "Gen": "der"},
+    },
+    "das": {
+        "Masc": {"Nom": "der", "Akk": "das", "Dat": "dem", "Gen": "des"},
+        "Fem": {"Nom": "die", "Akk": "das", "Dat": "der", "Gen": "der"},
+        "Neut": {"Nom": "das", "Akk": "das", "Dat": "dem", "Gen": "des"},
+    },
+    "ein": {
+        "Masc": {"Nom": "ein", "Akk": "einen", "Dat": "einem", "Gen": "eines"},
+        "Fem": {"Nom": "eine", "Akk": "eine", "Dat": "einer", "Gen": "einer"},
+        "Neut": {"Nom": "ein", "Akk": "ein", "Dat": "einem", "Gen": "eines"},
+    },
 }
 _DET_LEMMAS = {"der", "die", "das", "ein", "eine", "einen", "einem", "einer", "eines"}
 
@@ -259,12 +306,15 @@ def detect_determiner_noun_agreement(tokens, base):
             if not form:
                 continue
             start, end = _tok_off(head, base)
-            spans.append({
-                "error_type": "artikel",
-                "corrected_form": f"{form} {head.text}",
-                "explanation_zh": f"「{head.text}」是{ng or dg}性{nc}格，冠词应为「{form}」而非「{tok.text}」。",
-                "start": start, "end": end,
-            })
+            spans.append(
+                {
+                    "error_type": "artikel",
+                    "corrected_form": f"{form} {head.text}",
+                    "explanation_zh": f"「{head.text}」是{ng or dg}性{nc}格，冠词应为「{form}」而非「{tok.text}」。",
+                    "start": start,
+                    "end": end,
+                }
+            )
     return spans
 
 
@@ -280,6 +330,7 @@ def detect_preposition_case(tokens, base):
         expected = _PREP_CASE.get(prep)
         if expected is None:
             from linguistics import lookup_prep_collocations
+
             rows = lookup_prep_collocations(tok.head.lemma_)
             match = next((r for r in rows if r["praeposition"] == prep), None)
             if match:
@@ -300,18 +351,22 @@ def detect_preposition_case(tokens, base):
         det = _np_det(obj)
         if det is None:
             continue
-        form = decline_determiner(det.lemma_, obj.morph.get("Gender") or det.morph.get("Gender"),
-                                  obj.morph.get("Number") or "Sing", expected)
+        form = decline_determiner(
+            det.lemma_, obj.morph.get("Gender") or det.morph.get("Gender"), obj.morph.get("Number") or "Sing", expected
+        )
         if form is None:
             continue
         start, end = _tok_off(det, base) if det.i < obj.i else _tok_off(obj, base)
         end = max(_tok_off(det, base)[1], _tok_off(obj, base)[1])
-        spans.append({
-            "error_type": "kasus",
-            "corrected_form": f"{form} {obj.text}",
-            "explanation_zh": f"介宾「{prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」。",
-            "start": start, "end": end,
-        })
+        spans.append(
+            {
+                "error_type": "kasus",
+                "corrected_form": f"{form} {obj.text}",
+                "explanation_zh": f"介宾「{prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」。",
+                "start": start,
+                "end": end,
+            }
+        )
     return spans
 
 
@@ -324,20 +379,17 @@ def analyze_essay_text(text, nlp=None):
         for sent in doc.sents:
             toks = list(sent)
             base = toks[0].idx
-            spans = (detect_determiner_noun_agreement(toks, base)
-                     + detect_preposition_case(toks, base))
+            spans = detect_determiner_noun_agreement(toks, base) + detect_preposition_case(toks, base)
             sentences.append({"text": sent.text, "spans": spans})
             error_count += len(spans)
     cefr = _cefr_basic(text)
-    return {"version": "3.11.0", "cefr": cefr, "error_count": error_count,
-            "sentences": sentences}
+    return {"version": "3.11.0", "cefr": cefr, "error_count": error_count, "sentences": sentences}
 
 
 def _cefr_basic(text):
     """词汇频率估测（MVP 简化：词数 + 平均长度启发）。完整版复用 calculate_cefr_stats。"""
     words = [w for w in text.split() if any(ch.isalpha() for ch in w)]
-    return {"word_count": len(words), "recommended_level": "A1",
-            "note_zh": "词汇频率估测，非写作能力分"}
+    return {"word_count": len(words), "recommended_level": "A1", "note_zh": "词汇频率估测，非写作能力分"}
 ```
 > 注：MVP 的 CEFR 用简化的 `_cefr_basic` 占位（词数 + 固定 A1）。接入真实 `calculate_cefr_stats` 放 Task 3（server 侧已有 token 列表时更准）。
 
@@ -379,9 +431,9 @@ def test_writing_analyze_endpoint(client):
     a = res.json()
     assert "sentences" in a and a["sentences"][0]["spans"]
 
+
 def test_essays_crud_flow(client):
-    r = client.post("/api/essays", json={"title": "Mein Essay",
-                                         "content": "Ich fahre mit der Auto."})
+    r = client.post("/api/essays", json={"title": "Mein Essay", "content": "Ich fahre mit der Auto."})
     assert r.status_code == 200
     eid = r.json()["id"]
     assert r.json()["error_count"] >= 1
@@ -392,18 +444,19 @@ def test_essays_crud_flow(client):
     assert u.json()["error_count"] == 0
     assert client.delete(f"/api/essays/{eid}").status_code == 200
 
+
 def test_writing_card_sugar_endpoint(client):
     r = client.post("/api/essays", json={"title": "T", "content": "Ich sehe der Mann."})
     eid = r.json()["id"]
     a = r.json()["analysis_json"]
     sent, span = a["sentences"][0], a["sentences"][0]["spans"][0]
     # span 挂 essay 行里，先通过 analyze 的 shape 取 sentence_id/span_index
-    res = client.post("/api/writing/cards", json={
-        "essay_id": eid, "sentence_id": 0, "span_index": 0})
+    res = client.post("/api/writing/cards", json={"essay_id": eid, "sentence_id": 0, "span_index": 0})
     assert res.status_code == 200
     card = client.get("/api/cards/grammar").json()
     assert card and card[0].get("corrected_form") == span["corrected_form"]
     assert card[0].get("error_type") == span["error_type"]
+
 
 def test_ai_polish_no_key_stub(client, monkeypatch):
     monkeypatch.setattr("server.get_effective_api_key", lambda *a, **k: "")
@@ -425,18 +478,22 @@ Expected: FAIL（`/api/writing/analyze` 404）
 class WritingAnalyzeReq(BaseModel):
     text: str
 
+
 class EssayCreateReq(BaseModel):
     title: str
     content: str
+
 
 class EssayUpdateReq(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
 
+
 class WritingCardReq(BaseModel):
     essay_id: int
     sentence_id: int
     span_index: int
+
 
 class AIPolishReq(BaseModel):
     text: str
@@ -452,37 +509,42 @@ class AIPolishReq(BaseModel):
 ```python
 def _get_writer_nlp():
     try:
-        return server_nlp()          # server.py 里已有的惰性加载 nlp
+        return server_nlp()  # server.py 里已有的惰性加载 nlp
     except Exception:
         return None
+
 
 @app.post("/api/writing/analyze")
 async def api_writing_analyze(req: WritingAnalyzeReq):
     from writing_rules import analyze_essay_text
+
     return analyze_essay_text(req.text[:2000], _get_writer_nlp())
+
 
 @app.post("/api/essays")
 def create_essay(req: EssayCreateReq):
     from writing_rules import analyze_essay_text
+
     a = analyze_essay_text(req.content[:5000], _get_writer_nlp())
     cefr = a["cefr"].get("recommended_level")
     with get_db() as conn:
         cur = conn.execute(
             "INSERT INTO essays (title, content, analysis_json, cefr_level,"
             " error_count, sentence_count) VALUES (?,?,?,?,?,?)",
-            (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr,
-             a["error_count"], len(a["sentences"])))
+            (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr, a["error_count"], len(a["sentences"])),
+        )
         eid = cur.lastrowid
-    return {"id": eid, "title": req.title, "analysis_json": a,
-            "error_count": a["error_count"]}
+    return {"id": eid, "title": req.title, "analysis_json": a, "error_count": a["error_count"]}
+
 
 @app.get("/api/essays")
 def list_essays():
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, title, cefr_level, error_count, sentence_count,"
-            " updated_at FROM essays ORDER BY updated_at DESC").fetchall()
+            "SELECT id, title, cefr_level, error_count, sentence_count, updated_at FROM essays ORDER BY updated_at DESC"
+        ).fetchall()
     return [dict(r) for r in rows]
+
 
 @app.get("/api/essays/{essay_id}")
 def get_essay(essay_id: int):
@@ -492,9 +554,11 @@ def get_essay(essay_id: int):
         raise HTTPException(404, "essay not found")
     return dict(row)
 
+
 @app.put("/api/essays/{essay_id}")
 def update_essay(essay_id: int, req: EssayUpdateReq):
     from writing_rules import analyze_essay_text
+
     with get_db() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id=?", (essay_id,)).fetchone()
         if not row:
@@ -506,16 +570,26 @@ def update_essay(essay_id: int, req: EssayUpdateReq):
             "UPDATE essays SET title=?, content=?, analysis_json=?,"
             " cefr_level=?, error_count=?, sentence_count=?, updated_at=?"
             " WHERE id=?",
-            (title, content, json.dumps(a, ensure_ascii=False),
-             a["cefr"].get("recommended_level"), a["error_count"],
-             len(a["sentences"]), datetime.utcnow().isoformat(), essay_id))
+            (
+                title,
+                content,
+                json.dumps(a, ensure_ascii=False),
+                a["cefr"].get("recommended_level"),
+                a["error_count"],
+                len(a["sentences"]),
+                datetime.utcnow().isoformat(),
+                essay_id,
+            ),
+        )
     return {"id": essay_id, "analysis_json": a, "error_count": a["error_count"]}
+
 
 @app.delete("/api/essays/{essay_id}")
 def delete_essay(essay_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM essays WHERE id=?", (essay_id,))
     return {"status": "ok"}
+
 
 @app.post("/api/writing/cards")
 def save_writing_card(req: WritingCardReq):

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Unit tests for writing_rules.py local rule engine."""
+
 import pytest
 import spacy
+
 from delector.services.writing import analyze_essay_text, decline_determiner
 
 
@@ -184,6 +186,7 @@ def test_warning_positions_are_char_offsets(nlp):
 
 
 # ── Task 5: 反例测试（零冠词 / 固定搭配 / 双向介词 / 缺失词典性别 / 合法组合） ──
+
 
 def test_zero_article_nouns_not_flagged(nlp):
     """零冠词名词不应被误报（常见且通常正确）。"""

@@ -18,6 +18,7 @@
 - 更新提示必须是**可点**的（其承载元素不得落在 pointer-events:none 的规则下）；
 - 更新提示必须有**关闭/移除**路径（不能既 sticky 又无退路）。
 """
+
 import re
 from pathlib import Path
 
@@ -28,9 +29,7 @@ STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
 
 def _css_rule_block(css: str, selector: str) -> str:
     """取出 selector 的首个规则块（选择器须精确匹配，避免 .wb-notify 命中 .wb-notify.show）。"""
-    pattern = re.compile(
-        r"(?:^|\})\s*" + re.escape(selector) + r"\s*\{([^}]*)\}", re.MULTILINE
-    )
+    pattern = re.compile(r"(?:^|\})\s*" + re.escape(selector) + r"\s*\{([^}]*)\}", re.MULTILINE)
     m = pattern.search(css)
     return m.group(1) if m else ""
 
@@ -67,9 +66,7 @@ def test_update_notice_is_pointer_reachable():
     # 该元素的基础类：优先 HTML 静态 class，其次 JS className 赋值
     base_class = None
     idx_html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    html_m = re.search(
-        r"id=[\"']" + re.escape(el_id) + r"[\"'][^>]*class=[\"']([^\"']+)[\"']", idx_html
-    )
+    html_m = re.search(r"id=[\"']" + re.escape(el_id) + r"[\"'][^>]*class=[\"']([^\"']+)[\"']", idx_html)
     if html_m:
         base_class = html_m.group(1).split()[0]
 
@@ -100,11 +97,6 @@ def test_update_notice_has_dismiss_path():
     idx = MAIN_JS.find("delector-update")
     assert idx != -1, "main.js 缺少 delector-update 监听"
     # 取监听块之后的一段代码（到下一个顶层事件注册或文件末），在其内找关闭动作
-    tail = MAIN_JS[idx: idx + 3000]
-    has_dismiss = any(
-        token in tail
-        for token in (".remove()", "display = \"none\"", "display = 'none'", "hidden = true")
-    )
-    assert has_dismiss, (
-        "更新提示没有关闭/移除路径（既 sticky 又无退路 → 常驻遮挡，2026-09-13 报障症状）"
-    )
+    tail = MAIN_JS[idx : idx + 3000]
+    has_dismiss = any(token in tail for token in (".remove()", 'display = "none"', "display = 'none'", "hidden = true"))
+    assert has_dismiss, "更新提示没有关闭/移除路径（既 sticky 又无退路 → 常驻遮挡，2026-09-13 报障症状）"

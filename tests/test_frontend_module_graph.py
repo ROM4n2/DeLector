@@ -25,17 +25,15 @@ def _norm(module_ref):
     """Normalize a module reference ('./core.js' / 'core.js') to a bare filename."""
     return module_ref.lstrip("./").split("/")[-1]
 
+
 # ── Parsers (tuned to this codebase's syntax; see git history for forms) ─────
+
 
 def _parse_own_exports(src):
     """Names directly exported by the module itself."""
     names = set()
-    names.update(
-        re.findall(r"\bexport\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)", src)
-    )
-    names.update(
-        re.findall(r"\bexport\s+(?:let|const|var|class)\s+([A-Za-z_$][\w$]*)", src)
-    )
+    names.update(re.findall(r"\bexport\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)", src))
+    names.update(re.findall(r"\bexport\s+(?:let|const|var|class)\s+([A-Za-z_$][\w$]*)", src))
     # export { a, b, c }  WITHOUT `from` → module's own exported bindings
     for m in re.finditer(r"\bexport\s*\{([^}]*)\}\s*(?!from\b)", src, re.S):
         for item in m.group(1).split(","):
@@ -46,11 +44,9 @@ def _parse_own_exports(src):
 
 
 def _parse_named_reexports(src):
-    """{exported_name: (source_module, original_name)} for `export {…} from`. """
+    """{exported_name: (source_module, original_name)} for `export {…} from`."""
     result = {}
-    for m in re.finditer(
-        r"\bexport\s*\{([^}]*)\}\s*from\s*['\"]([^'\"]+)['\"]", src, re.S
-    ):
+    for m in re.finditer(r"\bexport\s*\{([^}]*)\}\s*from\s*['\"]([^'\"]+)['\"]", src, re.S):
         mod = m.group(2)
         for item in m.group(1).split(","):
             item = item.strip()
@@ -70,11 +66,9 @@ def _parse_star_reexports(src):
 
 
 def _parse_named_imports(src):
-    """[(imported_name, source_module)] for `import {…} from`. """
+    """[(imported_name, source_module)] for `import {…} from`."""
     result = []
-    for m in re.finditer(
-        r"\bimport\s*\{([^}]*)\}\s*from\s*['\"]([^'\"]+)['\"]", src, re.S
-    ):
+    for m in re.finditer(r"\bimport\s*\{([^}]*)\}\s*from\s*['\"]([^'\"]+)['\"]", src, re.S):
         mod = m.group(2)
         for item in m.group(1).split(","):
             item = item.strip()
@@ -90,6 +84,7 @@ def _parse_star_imports(src):
 
 
 # ── Module index & export resolution ─────────────────────────────────────────
+
 
 def _load_modules():
     modules = {}
@@ -127,6 +122,7 @@ def _exports_name(modules, module, name, seen=None):
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 
+
 def _graph_violations():
     modules = _load_modules()
     violations = []
@@ -136,9 +132,7 @@ def _graph_violations():
             if src_mod not in modules:
                 violations.append(f"{name} imports {imported} from missing file {src_mod}")
             elif not _exports_name(modules, src_mod, imported):
-                violations.append(
-                    f"{name} imports '{imported}' from {src_mod}, which does not export it"
-                )
+                violations.append(f"{name} imports '{imported}' from {src_mod}, which does not export it")
         for mod in _parse_star_imports(info["src"]):
             mod = _norm(mod)
             if mod not in modules:
@@ -146,14 +140,9 @@ def _graph_violations():
         for alias, (src_mod, orig) in info["named_reexports"].items():
             src_mod = _norm(src_mod)
             if src_mod not in modules:
-                violations.append(
-                    f"{name} re-exports {alias} from missing file {src_mod}"
-                )
+                violations.append(f"{name} re-exports {alias} from missing file {src_mod}")
             elif not _exports_name(modules, src_mod, orig):
-                violations.append(
-                    f"{name} re-exports {alias} (as {orig}) from {src_mod}, "
-                    f"which does not export it"
-                )
+                violations.append(f"{name} re-exports {alias} (as {orig}) from {src_mod}, which does not export it")
         for mod in info["star"]:
             mod = _norm(mod)
             if mod not in modules:
@@ -165,8 +154,7 @@ def test_every_named_import_resolves_to_a_real_export():
     violations = _graph_violations()
     assert not violations, (
         "Frontend ES module graph has unresolved imports (link-time SyntaxError "
-        "that would kill the whole module graph on Android WebView):\n"
-        + "\n".join("  - " + v for v in violations)
+        "that would kill the whole module graph on Android WebView):\n" + "\n".join("  - " + v for v in violations)
     )
 
 
@@ -177,9 +165,7 @@ def test_a1_modules_are_not_empty():
         assert path.exists(), f"{name} is missing"
         src = path.read_text(encoding="utf-8")
         assert len(src.strip()) > 0, f"{name} is empty"
-        assert _parse_own_exports(src) or _parse_named_reexports(src), (
-            f"{name} exports nothing"
-        )
+        assert _parse_own_exports(src) or _parse_named_reexports(src), f"{name} exports nothing"
 
 
 # ── v4.8.2 guard: dangling bare identifier in a hook-exposer block ────────────
@@ -208,19 +194,13 @@ def _module_local_bindings(src):
     """Names bound at top level of `src` (imports + own declarations)."""
     bound = set()
     # named imports: `import { a, b as c } from …`
-    bound.update(_parse_named_imports(src) and [
-        item[0] for item in _parse_named_imports(src)
-    ])
+    bound.update(_parse_named_imports(src) and [item[0] for item in _parse_named_imports(src)])
     # star-namespace imports: `import * as NS from …` → binds NS
     bound.update(_parse_star_namespace_imports(src).keys())
     # default import
-    bound.update(
-        re.findall(r"\bimport\s+([A-Za-z_$][\w$]*)\s*,?[^;]*\bfrom\b", src)
-    )
+    bound.update(re.findall(r"\bimport\s+([A-Za-z_$][\w$]*)\s*,?[^;]*\bfrom\b", src))
     # own top-level declarations
-    bound.update(
-        re.findall(r"\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", src)
-    )
+    bound.update(re.findall(r"\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", src))
     return bound
 
 
@@ -237,13 +217,9 @@ def _exposer_block_identifiers(src):
     """
     used = set()
     # Shorthand property `name,` — the value is an unqualified identifier.
-    used.update(
-        re.findall(r"^\s*([A-Za-z_$][\w$]*)\s*,\s*$", src, re.M)
-    )
+    used.update(re.findall(r"^\s*([A-Za-z_$][\w$]*)\s*,\s*$", src, re.M))
     # Property `alias: name` → resolve `name` (the value side).
-    used.update(
-        re.findall(r"^\s*[A-Za-z_$][\w$]*\s*:\s*([A-Za-z_$][\w$]*)\s*,?\s*$", src, re.M)
-    )
+    used.update(re.findall(r"^\s*[A-Za-z_$][\w$]*\s*:\s*([A-Za-z_$][\w$]*)\s*,?\s*$", src, re.M))
     return used
 
 
@@ -291,22 +267,48 @@ def _dangling_exposer_violations():
         # also bind the module's own exported names (function decls are already
         # in `bound`; exported consts are too) — add re-exported aliases resolved
         # through the graph, so re-exported calls still resolve.
-        exported_names = modules.get(js.name, {}).get(
-            "own", set()
-        ) | set(modules.get(js.name, {}).get("named_reexports", {}).keys())
+        exported_names = modules.get(js.name, {}).get("own", set()) | set(
+            modules.get(js.name, {}).get("named_reexports", {}).keys()
+        )
         for block in blocks:
             for ident in _exposer_block_identifiers(block):
                 if ident in bound or ident in exported_names:
                     continue
                 # allowance: namespaced/global `window.X`, `Companion`, `ShadowPlayer`
                 if ident in {
-                    "window", "document", "console", "navigator", "localStorage",
-                    "fetch", "alert", "confirm", "setTimeout", "clearTimeout",
-                    "setInterval", "clearInterval", "encodeURIComponent",
-                    "decodeURIComponent", "JSON", "Math", "Date", "Promise",
-                    "Object", "Array", "String", "Number", "Boolean", "Error",
-                    "URL", "FileReader", "WebSocket", "Image", "Audio",
-                    "Blob", "File", "TextEncoder", "TextDecoder",
+                    "window",
+                    "document",
+                    "console",
+                    "navigator",
+                    "localStorage",
+                    "fetch",
+                    "alert",
+                    "confirm",
+                    "setTimeout",
+                    "clearTimeout",
+                    "setInterval",
+                    "clearInterval",
+                    "encodeURIComponent",
+                    "decodeURIComponent",
+                    "JSON",
+                    "Math",
+                    "Date",
+                    "Promise",
+                    "Object",
+                    "Array",
+                    "String",
+                    "Number",
+                    "Boolean",
+                    "Error",
+                    "URL",
+                    "FileReader",
+                    "WebSocket",
+                    "Image",
+                    "Audio",
+                    "Blob",
+                    "File",
+                    "TextEncoder",
+                    "TextDecoder",
                 }:
                     continue
                 violations.append(
@@ -344,9 +346,14 @@ def test_writer_a1_email_functions_present_in_main_imports():
     main_src = (JS_DIR / "main.js").read_text(encoding="utf-8")
     imported = {i[0] for i in _parse_named_imports(main_src)}
     for name in (
-        "selectA1Formular", "checkA1Formular", "resetA1Formular",
-        "selectA1Email", "onA1EmailInput", "diagnoseA1Email",
-        "applyA1EmailTemplate", "clearA1Email",
+        "selectA1Formular",
+        "checkA1Formular",
+        "resetA1Formular",
+        "selectA1Email",
+        "onA1EmailInput",
+        "diagnoseA1Email",
+        "applyA1EmailTemplate",
+        "clearA1Email",
     ):
         assert name in imported, (
             f"main.js uses '{name}' but does not import it from './writer.js'; "
@@ -377,6 +384,7 @@ def test_a1_engines_present_in_main_window_exposer():
 #  4. 用到 X-WB-Key + /api/wb/state，且 __wb 调试出口暴露 wbsync。
 # 全部走「定位行号 + 子串」而非「全文含某串」，避免死断言。
 
+
 def _workbench_lines():
     path = Path("static/german/workbench.html")
     assert path.exists(), "workbench.html 缺失"
@@ -394,22 +402,15 @@ def test_workbench_wbsync_save_hooks_on_each_store():
     lines = _workbench_lines()
     for fn in ("saveWords", "saveCards", "saveLog", "saveWrong", "saveSettings"):
         i = _line_no(lines, f"function {fn}() {{")
-        assert "wbsync.push()" in lines[i], (
-            f"{fn}() 定义行未挂 wbsync.push()（保存后不推 server）"
-        )
+        assert "wbsync.push()" in lines[i], f"{fn}() 定义行未挂 wbsync.push()（保存后不推 server）"
 
 
 def test_workbench_wbsync_init_after_idb_hydrate_block():
     lines = _workbench_lines()
     i_async = _line_no(lines, "(async () => {")
-    assert i_async > _line_no(lines, "loadAll();"), (
-        "启动块必须是 loadAll() → async IIFE 的顺序"
-    )
+    assert i_async > _line_no(lines, "loadAll();"), "启动块必须是 loadAll() → async IIFE 的顺序"
     i_init = _line_no(lines, "wbsync.init();", start=i_async)
-    assert i_init > i_async, (
-        "wbsync.init() 必须先于 async IIFE（IDB hydrate）执行会丢数据："
-        "IDB 数据可能晚到并覆盖 S"
-    )
+    assert i_init > i_async, "wbsync.init() 必须先于 async IIFE（IDB hydrate）执行会丢数据：IDB 数据可能晚到并覆盖 S"
 
 
 def test_workbench_wbsync_trigger_paths_present():
@@ -429,6 +430,4 @@ def test_workbench_wbsync_trigger_paths_present():
     j = i_debug
     while j < len(lines) and not lines[j].rstrip().endswith("};"):
         j += 1
-    assert any("wbsync:" in l for l in lines[i_debug:j + 1]), (
-        "__wb 调试出口未暴露 wbsync"
-    )
+    assert any("wbsync:" in ln for ln in lines[i_debug : j + 1]), "__wb 调试出口未暴露 wbsync"

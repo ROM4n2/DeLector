@@ -92,10 +92,12 @@ class SyntaxStatsReq(BaseModel):
     article_id: int
     stats: dict  # {sent_count, avg_clause_depth, passive_rate, konjunktiv_rate, vl_rate}
 
+
 @app.post("/api/syntax/stats")
 async def api_syntax_stats_save(req: SyntaxStatsReq, background_tasks: BackgroundTasks):
     background_tasks.add_task(upsert_corpus_syntax_stats, req.article_id, req.stats)
     return {"ok": True}
+
 
 @app.get("/api/syntax/stats")
 def api_syntax_stats_get():

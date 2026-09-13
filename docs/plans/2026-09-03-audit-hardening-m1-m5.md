@@ -239,11 +239,14 @@ def db_conn(db_path=None):
     try:
         yield conn
     except BaseException:
-        conn.rollback(); raise
+        conn.rollback()
+        raise
     else:
         conn.commit()
     finally:
         _close_db_conn(conn)
+
+
 # 及 db_progress_conn(...) 同构
 ```
 - 语义：`with db_conn() as conn:` 行为 == `with get_db() as conn:`（成功 commit、异常 rollback）+ finally 确定性 close。**单文件 step 内逐段替换并同步跑受影响的用例**；先替 database.py（commit 1），再替 server.py（commit 2）。

@@ -70,6 +70,7 @@ import secrets as _secrets  # 已有 import secrets
 # WebRTC SDP 临时缓存（5 分钟 TTL，内存级，不同步落盘）
 _sync_sdp_cache: Dict[str, Dict[str, Any]] = {}  # code → {sdp, ts}
 
+
 def _cleanup_sync_cache():
     """清理过期的 SDP 缓存条目。"""
     now = __import__("time").time()
@@ -83,7 +84,8 @@ def _cleanup_sync_cache():
 ```python
 class SyncStoreReq(BaseModel):
     sdp: Dict[str, Any]  # RTCSessionDescription 的 dict 形式
-    role: str = "offer"   # "offer" | "answer"
+    role: str = "offer"  # "offer" | "answer"
+
 
 @app.post("/api/wb/sync/store")
 def sync_store_sdp(req: SyncStoreReq):

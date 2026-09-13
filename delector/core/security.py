@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """SSRF 判定与 IP 过滤、网页正文提取与安全抓取、RSS 订阅解析。"""
-import re
+
 import html
-import socket
 import ipaddress
+import re
+import socket
 import xml.etree.ElementTree as ET
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
-from typing import List, Dict, Any, Tuple
-from fastapi import HTTPException
+
 import httpx
+from fastapi import HTTPException
 
 
 def _resolve_ssrf_targets(ip_obj):
@@ -60,21 +62,22 @@ def _resolve_ssrf_targets(ip_obj):
 # 路由的锚播基础设施段也一并拒掉 —— 对「抓一篇文章」这个用途没有损失，
 # 而 SSRF 闸拿不准时就该往拒绝的方向倒。
 _IETF_PROTOCOL_ASSIGNMENTS = ipaddress.ip_network("2001::/23")
-_IPV6_DENY_PREFIXES = tuple(ipaddress.ip_network(n) for n in (
-    "2001:db8::/32",      # 文档示例段（在 /23 之外，要单列）
-    "100::/64",           # discard-only
-    "5f00::/16",          # SRv6 SID
-    "64:ff9b:1::/48",     # 本地用 IPv4/IPv6 转换
-))
+_IPV6_DENY_PREFIXES = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "2001:db8::/32",  # 文档示例段（在 /23 之外，要单列）
+        "100::/64",  # discard-only
+        "5f00::/16",  # SRv6 SID
+        "64:ff9b:1::/48",  # 本地用 IPv4/IPv6 转换
+    )
+)
 
 
 def _is_blocked_addr(ip_obj) -> bool:
     for t in _resolve_ssrf_targets(ip_obj):
-        if (t.is_private or t.is_loopback or t.is_link_local
-                or t.is_reserved or t.is_multicast or t.is_unspecified):
+        if t.is_private or t.is_loopback or t.is_link_local or t.is_reserved or t.is_multicast or t.is_unspecified:
             return True
-        if t.version == 6 and (t in _IETF_PROTOCOL_ASSIGNMENTS
-                               or any(t in net for net in _IPV6_DENY_PREFIXES)):
+        if t.version == 6 and (t in _IETF_PROTOCOL_ASSIGNMENTS or any(t in net for net in _IPV6_DENY_PREFIXES)):
             return True
     return False
 
@@ -101,28 +104,46 @@ def is_safe_public_url(url: str) -> bool:
 
 
 def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
-    title_match = re.search(r'<title>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
+    title_match = re.search(r"<title>(.*?)</title>", raw_html, re.IGNORECASE | re.DOTALL)
     title = html.unescape(title_match.group(1).strip()) if title_match else "Extracted Article"
-    title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche|Deutschlandfunk)', title)[0].strip()
+    title = re.split(
+        r"[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche|Deutschlandfunk)", title
+    )[0].strip()
 
     # Remove script, style, nav, header, footer, etc.
-    cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript|figure)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(
+        r"<(script|style|nav|header|footer|svg|aside|form|button|noscript|figure)[^>]*>.*?</\1>",
+        "",
+        raw_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
 
     # Prefer <article> block if available
-    article_match = re.search(r'<article[^>]*>(.*?)</article>', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    article_match = re.search(r"<article[^>]*>(.*?)</article>", cleaned, flags=re.IGNORECASE | re.DOTALL)
     scope_html = article_match.group(1) if article_match else cleaned
 
-    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', scope_html, flags=re.IGNORECASE | re.DOTALL)
+    paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", scope_html, flags=re.IGNORECASE | re.DOTALL)
     clean_paras = []
     for p in paragraphs:
-        txt = re.sub(r'<[^>]+>', '', p)
+        txt = re.sub(r"<[^>]+>", "", p)
         txt = html.unescape(txt).strip()
-        if len(txt) > 20 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved", "impressum", "urheberrecht"]):
+        if len(txt) > 20 and not any(
+            k in txt.lower()
+            for k in [
+                "cookie",
+                "datenschutz",
+                "abonnieren",
+                "newsletter",
+                "all rights reserved",
+                "impressum",
+                "urheberrecht",
+            ]
+        ):
             clean_paras.append(txt)
 
     if not clean_paras:
-        raw_text = re.sub(r'<[^>]+>', ' ', scope_html)
-        clean_paras = [html.unescape(line).strip() for line in raw_text.split('\n') if len(line.strip()) > 30]
+        raw_text = re.sub(r"<[^>]+>", " ", scope_html)
+        clean_paras = [html.unescape(line).strip() for line in raw_text.split("\n") if len(line.strip()) > 30]
 
     body_text = "\n\n".join(clean_paras)
     return title, body_text
@@ -135,9 +156,12 @@ MAX_HTML_BYTES = 2 * 1024 * 1024  # 2MB
 
 async def fetch_remote_html(url: str) -> str:
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
     }
     current_url = url
     # 逐跳手动跟随重定向：每一跳都在**发起请求之前**过 SSRF 闸。
@@ -214,7 +238,7 @@ PRESET_FEEDS = [
         "level": "B2-C1",
         "category": "Aktuell",
         "url": "https://www.tagesschau.de/xml/rss2/",
-        "description": "德国第一电视台权威时政要闻"
+        "description": "德国第一电视台权威时政要闻",
     },
     {
         "id": "tagesschau_ausland",
@@ -222,7 +246,7 @@ PRESET_FEEDS = [
         "level": "B2-C1",
         "category": "Ausland",
         "url": "https://www.tagesschau.de/ausland/index~rss2.xml",
-        "description": "全球时事与地缘观察精读"
+        "description": "全球时事与地缘观察精读",
     },
     {
         "id": "dw_deutsch",
@@ -230,7 +254,7 @@ PRESET_FEEDS = [
         "level": "B1-B2",
         "category": "Lernen",
         "url": "https://rss.dw.com/rdf/rss-de-all",
-        "description": "德国之声精选德语新闻文章"
+        "description": "德国之声精选德语新闻文章",
     },
     {
         "id": "dlf_news",
@@ -238,7 +262,7 @@ PRESET_FEEDS = [
         "level": "B2-C1",
         "category": "Nachrichten",
         "url": "https://www.deutschlandfunk.de/nachrichten-100.rss",
-        "description": "标准德语广播权威每日简讯"
+        "description": "标准德语广播权威每日简讯",
     },
     {
         "id": "spiegel_politik",
@@ -246,7 +270,7 @@ PRESET_FEEDS = [
         "level": "C1",
         "category": "Politik",
         "url": "https://www.spiegel.de/politik/index.rss",
-        "description": "明镜周刊深度时政报道与分析"
+        "description": "明镜周刊深度时政报道与分析",
     },
     {
         "id": "zeit_online",
@@ -254,8 +278,8 @@ PRESET_FEEDS = [
         "level": "C1",
         "category": "Kultur",
         "url": "https://newsfeed.zeit.de/index",
-        "description": "时代周报文化与学术随笔"
-    }
+        "description": "时代周报文化与学术随笔",
+    },
 ]
 
 
@@ -282,12 +306,14 @@ def parse_rss_feed(xml_text: str) -> List[Dict[str, Any]]:
                         pub_date = child.text or ""
                 clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
                 if title and link:
-                    items.append({
-                        "title": html.unescape(title.strip()),
-                        "link": link.strip(),
-                        "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
-                        "pub_date": pub_date.strip()
-                    })
+                    items.append(
+                        {
+                            "title": html.unescape(title.strip()),
+                            "link": link.strip(),
+                            "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
+                            "pub_date": pub_date.strip(),
+                        }
+                    )
         else:
             found_entries = [el for el in root.iter() if el.tag.split("}")[-1] == "entry"]
             for entry in found_entries:
@@ -307,12 +333,14 @@ def parse_rss_feed(xml_text: str) -> List[Dict[str, Any]]:
                         pub_date = child.text or ""
                 clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
                 if title and link:
-                    items.append({
-                        "title": html.unescape(title.strip()),
-                        "link": link.strip(),
-                        "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
-                        "pub_date": pub_date.strip()
-                    })
+                    items.append(
+                        {
+                            "title": html.unescape(title.strip()),
+                            "link": link.strip(),
+                            "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
+                            "pub_date": pub_date.strip(),
+                        }
+                    )
     except Exception:
         pass
     return items

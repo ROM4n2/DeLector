@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """edge_tts_mini（stdlib 版 Edge TTS 客户端）的纯函数测试：不联网、确定性。"""
+
 import re
 
 from delector.services import tts as m
@@ -35,7 +36,7 @@ def test_connect_id_unique_and_dashless():
 
 def test_split_text_respects_byte_limit():
     """长文本按 4096 字节切块，块间不拆词、不产生坏 UTF-8。"""
-    text = (" ".join(["Hallo", "ich", "lerne", "Deutsch", "jeden", "Tag"]) * 200)
+    text = " ".join(["Hallo", "ich", "lerne", "Deutsch", "jeden", "Tag"]) * 200
     chunks = list(m._split_text(text))
     assert len(chunks) > 1
     for c in chunks:

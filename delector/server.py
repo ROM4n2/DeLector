@@ -1,6 +1,6 @@
-import os
 import ipaddress
 import mimetypes
+import os
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
@@ -13,9 +13,11 @@ from fastapi.staticfiles import StaticFiles
 mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("font/woff", ".woff")
 
+
 def load_env():
     try:
         import dotenv
+
         dotenv.load_dotenv(override=True)
     except Exception:
         pass
@@ -35,10 +37,14 @@ def load_env():
             except Exception:
                 pass
 
+
 load_env()
 
+# 分节 import 顺序是刻意设计：env 必须先经 load_env() 载入，之后才 import 依赖
+# env 的 database / nlp_engine / security / utils（红线 9 生态）。改动顺序会破坏
+# 测试隔离与 Android 启动，故整段禁用 E402（import 不在文件顶部）与 I001（导入排序）。
 # --- 1. Database & Settings Layer ---
-from delector.core.database import (
+from delector.core.database import (  # noqa: E402, I001
     DATA_DIR,
     AUDIO_CACHE_DIR,
     PROGRESS_DB_PATH,
@@ -89,7 +95,7 @@ from delector.core.database import (
 )
 
 # --- 2. NLP & CEFR Tagging（re-export：handler 搬走后 server 自身不再消费）---
-from delector.nlp_engine.processor import (
+from delector.nlp_engine.processor import (  # noqa: E402
     nlp,
     NLP_ENGINE,
     NLP_ENGINE_DETAIL,
@@ -100,7 +106,7 @@ from delector.nlp_engine.processor import (
 )
 
 # --- 3. Security, SSRF & Feed Utilities（同上，纯 re-export）---
-from delector.core.security import (
+from delector.core.security import (  # noqa: E402
     _resolve_ssrf_targets,
     _IETF_PROTOCOL_ASSIGNMENTS,
     _IPV6_DENY_PREFIXES,
@@ -117,7 +123,7 @@ from delector.core.security import (
 # ── 附件下载响应头 ────────────────────────────────────────────────────────────
 # 实现在 delector/utils.py（Phase 1 Task 1 抽走，用于打破 routes/a1 → server 的
 # 反向依赖）。此处 import 仅为保留 `delector.server._attachment_headers` 既有引用面。
-from delector.core.utils import _attachment_headers, _NO_STORE_HEADERS
+from delector.core.utils import _attachment_headers, _NO_STORE_HEADERS  # noqa: E402
 
 __all__ = [
     "nlp",
@@ -194,7 +200,7 @@ __all__ = [
 # --- 4. 路由层 ---
 # 注册入口只有 register_routes 一个：新增/搬迁路由模块只改 delector/routes/__init__.py，
 # 本文件不应当再出现 include_router。
-from delector.routes import MAX_SYNC_CACHE_ENTRIES, _sync_sdp_cache, register_routes
+from delector.routes import MAX_SYNC_CACHE_ENTRIES, _sync_sdp_cache, register_routes  # noqa: E402
 
 # --- 5. 中间件：前端资源 no-cache ---
 # 前端资源必须每次回源校验：裸 StaticFiles 不发 Cache-Control，浏览器于是走
@@ -206,9 +212,13 @@ from delector.routes import MAX_SYNC_CACHE_ENTRIES, _sync_sdp_cache, register_ro
 # no-store 会禁掉全部缓存，既全量重传也会削弱本项目 PWA 的离线能力。
 FRONTEND_NO_CACHE_SUFFIXES = (".html", ".htm", ".js", ".mjs", ".css")
 FRONTEND_NO_CACHE_TYPES = (
-    "text/html", "text/css",
-    "text/javascript", "application/javascript", "application/ecmascript",
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "application/javascript",
+    "application/ecmascript",
 )
+
 
 # 注册走 create_app() 里的 app.middleware("http")(...)：app 是工厂产物，模块级没有
 # 可装饰的对象。
@@ -275,12 +285,15 @@ async def _wb_sync_cors(request: Request, call_next):
         # 公共 Origin 显式 403 且不给 ACAO，浏览器判跨域失败（回归：此前漏到 405）。
         if not _is_private_origin(origin):
             return Response(status_code=403)
-        return Response(status_code=200, headers={
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": _WB_CORS_ALLOW_METHODS,
-            "Access-Control-Allow-Headers": _WB_CORS_ALLOW_HEADERS,
-            "Access-Control-Max-Age": "600",
-        })
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": _WB_CORS_ALLOW_METHODS,
+                "Access-Control-Allow-Headers": _WB_CORS_ALLOW_HEADERS,
+                "Access-Control-Max-Age": "600",
+            },
+        )
     if not _is_private_origin(origin):
         return await call_next(request)  # 公共 Origin：原样转发，不注入 ACAO
     response = await call_next(request)
@@ -300,7 +313,7 @@ if not STATIC_DIR or not os.path.exists(STATIC_DIR):
         # 这一级是 DATA_DIR 被外部改走时的兜底，别删。
         os.path.join(os.path.dirname(os.path.dirname(__file__)), "static"),
         os.path.join(os.getcwd(), "static"),
-        "static"
+        "static",
     ]:
         if os.path.exists(candidate) and os.path.isdir(candidate):
             STATIC_DIR = candidate

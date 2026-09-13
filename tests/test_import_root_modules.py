@@ -14,7 +14,7 @@
 
 
 def test_tests_dir_can_import_root_flat_modules():
-    from delector import server
     import delector.core.database  # noqa: F401  — 证明不止 server 一个模块可见（已收进 delector.core 子包）
+    from delector import server
 
     assert hasattr(server, "app"), "import 到的 server 没暴露 app（可能 import 到同名假模块）"

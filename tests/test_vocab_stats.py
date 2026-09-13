@@ -7,6 +7,7 @@ delector.services.exam_catalog 口径所引用的数据源（A1 = GOETHE_A1_VOCA
 lemma 字段；A2 = core_dict A2 条目 lemma），**不内嵌新词表**——故测试用真实
 A1/A2 词断言 known/unknown 判定（非死测试）。
 """
+
 import asyncio
 
 import pytest
@@ -46,9 +47,7 @@ def test_a2_word_only_known_when_level_contains_a2():
     # "abbiegen" 是 core_dict A2 真实词条 lemma
     lev_a1 = asyncio.run(run(_payload(_tokens([("abbiegen", 1)]), levels=["A1"])))
     assert lev_a1["known_count"] == 0
-    lev_both = asyncio.run(
-        run(_payload(_tokens([("abbiegen", 1)]), levels=["A1", "A2"]))
-    )
+    lev_both = asyncio.run(run(_payload(_tokens([("abbiegen", 1)]), levels=["A1", "A2"])))
     assert lev_both["known_count"] == 1
 
 

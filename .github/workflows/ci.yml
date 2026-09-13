@@ -53,6 +53,16 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      # Ruff 静态门禁（2026-09-13 ruff-cleanup）。
+      # ruff 是开发期工具：CI 内单独安装，**不进 requirements.txt**（混入运行时依赖
+      # 会增大 Android 打包面体积与漂移面）。放在 spaCy 模型下载与全量测试之前——
+      # lint 是秒级检查，先失败先反馈，省下长测试的等待。
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Ruff lint gate
+        run: ruff check .
+
       # 测试需要德语 spaCy 模型，与 build-release.yml 同源
       - name: Download spaCy German model
         run: python -m spacy download de_core_news_sm

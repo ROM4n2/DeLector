@@ -84,6 +84,7 @@ GENDER_ARTICLE_MAP = {
     "Neut": "das",
 }
 
+
 def format_vocab_headword(lemma: str, pos: str, gender: Optional[str]) -> str:
     """对德语词条进行规范化展示格式拼装。
     名词必须首字母大写并前缀定冠词 (如 'das Abenteuer')；动词/形容词保持小写。
@@ -158,7 +159,7 @@ function inScopeWord(w) {
 在 `exam_catalog.py` 中正式注册 A2 等级条目：
 ```python
 EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
-    "A1": { ... },
+    "A1": {...},
     "A2": {
         "title": "A2",
         "modules": {

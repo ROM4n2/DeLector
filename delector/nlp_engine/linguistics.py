@@ -3,16 +3,19 @@ DeLector - German Morphology & Linguistics Core Engine (v3.4.0)
 Goethe A1-C1 Irregular Verbs Stammformen & German Compound Noun (Komposita) Splitter.
 100% Python standard library, zero external dependencies, O(1) lookup latency.
 """
+
 import functools
 import json
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Import local Goethe core dictionary for compound base elements & CEFR lookup
 try:
     from delector.data.core_dict import CORE_VOCAB_DB, lookup_core_vocab
 except ImportError:
     CORE_VOCAB_DB = {}
-    lookup_core_vocab = lambda w: None
+
+    def lookup_core_vocab(w):
+        return None
 
 
 # ==============================================================================
@@ -31,7 +34,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "sollen": ("sollte", "gesollt", "hat", "应当，应该(情态动词)"),
     "mögen": ("mochte", "gemocht", "hat", "喜欢，可能(情态动词)"),
     "wissen": ("wusste", "gewusst", "hat", "知道，了解，晓得"),
-
     # ── Mixed Verbs (Gemischte Verben) ────────────────────────────────────────
     "brennen": ("brannte", "gebrannt", "hat", "燃烧，灼痛"),
     "verbrennen": ("verbrannte", "verbrannt", "hat", "烧毁，烧伤"),
@@ -61,7 +63,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "überdenken": ("überdachte", "überdacht", "hat", "重新考虑，反思"),
     "bedenken": ("bedachte", "bedacht", "hat", "考虑，顾及"),
     "ausdenken": ("dachte aus", "ausgedacht", "hat", "想出，虚构(sich)"),
-
     # ── Ablautreihe 1: ei -> i -> i / ei -> ie -> ie ──────────────────────────
     "beißen": ("biss", "gebissen", "hat", "咬，叮"),
     "bleiben": ("blieb", "geblieben", "ist", "停留，保持，留下"),
@@ -158,7 +159,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "ausweichen": ("wich aus", "ausgewichen", "ist", "避开，回避(Dativ)"),
     "abweichen": ("wich ab", "abgewichen", "ist", "偏离，不同于(von)"),
     "verzeihen": ("verzieh", "verziehen", "hat", "原谅，宽恕(Dativ)"),
-
     # ── Ablautreihe 2: ie -> o -> o / e -> o -> o / ü/au -> o -> o ─────────────
     "biegen": ("bog", "gebogen", "hat/ist", "使弯曲；拐弯"),
     "abbiegen": ("bog ab", "abgebogen", "ist", "拐弯，转弯"),
@@ -230,7 +230,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "betrügen": ("betrog", "betrogen", "hat", "欺骗，作弊，背叛"),
     "saugen": ("sog", "gesogen", "hat", "吸，吸收，吸尘"),
     "saufen": ("soff", "gesoffen", "hat", "痛饮，暴饮(动物饮水)"),
-
     # ── Ablautreihe 3: i -> a -> u / i -> a -> o ───────────────────────────────
     "binden": ("band", "gebunden", "hat", "绑，系，结合，束缚"),
     "anbinden": ("band an", "angebunden", "hat", "拴住，系上"),
@@ -286,7 +285,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "spinnen": ("spann", "gesponnen", "hat", "纺纱；胡思乱想"),
     "sinnen": ("sann", "gesonnen", "hat", "沉思，图谋"),
     "besinnen": ("besann", "besonnen", "hat", "回忆，反省(sich auf)"),
-
     # ── Ablautreihe 4: e -> a -> o ─────────────────────────────────────────────
     "befehlen": ("befahl", "befohlen", "hat", "命令，指示"),
     "empfehlen": ("empfahl", "empfohlen", "hat", "推荐，建议"),
@@ -363,7 +361,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "gelten": ("galt", "gegolten", "hat", "有效，适用，被视为(als)"),
     "bergen": ("barg", "geborgen", "hat", "打捞，抢救，蕴含"),
     "verbergen": ("verbarg", "verborgen", "hat", "隐藏，隐瞒"),
-
     # ── Ablautreihe 5: e -> a -> e ─────────────────────────────────────────────
     "essen": ("aß", "gegessen", "hat", "吃"),
     "aufessen": ("aß auf", "aufgegessen", "hat", "吃光，吃完"),
@@ -421,7 +418,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "anliegen": ("lag an", "angelegen", "hat", "紧贴；靠着；关乎"),
     "unterliegen": ("unterlag", "unterlegen", "ist", "屈服于；遭受；受制于(Dativ)"),
     "vorliegen": ("lag vor", "vorgelegen", "hat", "摆在面前，存在，有"),
-
     # ── Ablautreihe 6: a -> u -> a ─────────────────────────────────────────────
     "backen": ("buk", "gebacken", "hat", "烘焙，烤"),
     "fahren": ("fuhr", "gefahren", "ist/hat", "驾驶，乘车，行驶"),
@@ -465,7 +461,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "hinauswachsen": ("wuchs hinaus", "hinausgewachsen", "ist", "超出，超越(über)"),
     "waschen": ("wusch", "gewaschen", "hat", "洗，洗涤"),
     "abwaschen": ("wusch ab", "abgewaschen", "hat", "洗掉，洗餐具"),
-
     # ── Ablautreihe 7: a/au/o/u/ei -> ie/i -> a/au/o/u/ei ─────────────────────
     "blasen": ("blies", "geblasen", "hat", "吹，吹奏，刮风"),
     "aufblasen": ("blies auf", "aufgeblasen", "hat", "充气，吹大"),
@@ -541,7 +536,6 @@ IRREGULAR_VERBS: Dict[str, Tuple[str, str, str, str]] = {
     "anstoßen": ("stieß an", "angestoßen", "hat", "碰杯；触碰；推动"),
     "ausstoßen": ("stieß aus", "ausgestoßen", "hat", "排放，吐出；驱逐"),
     "zusammenstoßen": ("stieß zusammen", "zusammengestoßen", "ist", "相撞，冲突"),
-
     # ── Others & High Frequency ───────────────────────────────────────────────
     "gehen": ("ging", "gegangen", "ist", "走，去；进行"),
     "abgehen": ("ging ab", "abgegangen", "ist", "离去，离开；脱落"),
@@ -605,11 +599,13 @@ IRREGULAR_VERBS_DB = IRREGULAR_VERBS
 # Verb Trio Data Class & O(1) Bidirectional Index
 # ==============================================================================
 
+
 class VerbTrio(tuple):
     """
     Structured 4-tuple (Präteritum, Partizip II, Hilfsverb, Definition_zh)
     with named attribute access, dict indexing ('praeteritum', 'infinitiv'), and dictionary serialization.
     """
+
     def __new__(cls, praeteritum: str, partizip2: str, hilfsverb: str, definition_zh: str, infinitiv: str = ""):
         obj = super(VerbTrio, cls).__new__(cls, (praeteritum, partizip2, hilfsverb, definition_zh))
         obj.infinitiv = infinitiv
@@ -650,7 +646,10 @@ class VerbTrio(tuple):
         }
 
     def __repr__(self) -> str:
-        return f"<VerbTrio {self.infinitiv}: {self.praeteritum} - {self.hilfsverb} {self.partizip2} ({self.definition_zh})>"
+        return (
+            f"<VerbTrio {self.infinitiv}: {self.praeteritum} - {self.hilfsverb} "
+            f"{self.partizip2} ({self.definition_zh})>"
+        )
 
 
 # Build bidirectional reverse lookup index mapping any surface form -> base infinitiv
@@ -658,43 +657,69 @@ _REVERSE_VERB_INDEX: Dict[str, str] = {}
 
 # Common 3rd person singular present vowel-change stems
 _PRESENT_VOWEL_CHANGES: Dict[str, str] = {
-    "sieht": "sehen", "siehst": "sehen",
+    "sieht": "sehen",
+    "siehst": "sehen",
     "liest": "lesen",
-    "gibt": "geben", "gibst": "geben",
-    "nimmt": "nehmen", "nimmst": "nehmen",
-    "spricht": "sprechen", "sprichst": "sprechen",
-    "bricht": "brechen", "brichst": "brechen",
-    "trifft": "treffen", "triffst": "treffen",
-    "hilft": "helfen", "hilfst": "helfen",
-    "stirbt": "sterben", "stirbst": "sterben",
-    "wirft": "werfen", "wirfst": "werfen",
-    "gilt": "gelten", "giltst": "gelten",
-    "stiehlt": "stehlen", "stiehlst": "stehlen",
-    "empfiehlt": "empfehlen", "empfiehlst": "empfehlen",
-    "befiehlt": "befehlen", "befiehlst": "befehlen",
+    "gibt": "geben",
+    "gibst": "geben",
+    "nimmt": "nehmen",
+    "nimmst": "nehmen",
+    "spricht": "sprechen",
+    "sprichst": "sprechen",
+    "bricht": "brechen",
+    "brichst": "brechen",
+    "trifft": "treffen",
+    "triffst": "treffen",
+    "hilft": "helfen",
+    "hilfst": "helfen",
+    "stirbt": "sterben",
+    "stirbst": "sterben",
+    "wirft": "werfen",
+    "wirfst": "werfen",
+    "gilt": "gelten",
+    "giltst": "gelten",
+    "stiehlt": "stehlen",
+    "stiehlst": "stehlen",
+    "empfiehlt": "empfehlen",
+    "empfiehlst": "empfehlen",
+    "befiehlt": "befehlen",
+    "befiehlst": "befehlen",
     "geschieht": "geschehen",
     "isst": "essen",
     "frisst": "fressen",
     "misst": "messen",
-    "fährt": "fahren", "fährst": "fahren",
-    "schläft": "schlafen", "schläfst": "schlafen",
-    "fällt": "fallen", "fällst": "fallen",
-    "läuft": "laufen", "läufst": "laufen",
+    "fährt": "fahren",
+    "fährst": "fahren",
+    "schläft": "schlafen",
+    "schläfst": "schlafen",
+    "fällt": "fallen",
+    "fällst": "fallen",
+    "läuft": "laufen",
+    "läufst": "laufen",
     "wächst": "wachsen",
-    "wäscht": "waschen", "wäschst": "waschen",
-    "trägt": "tragen", "trägst": "tragen",
-    "schlägt": "schlagen", "schlägst": "schlagen",
+    "wäscht": "waschen",
+    "wäschst": "waschen",
+    "trägt": "tragen",
+    "trägst": "tragen",
+    "schlägt": "schlagen",
+    "schlägst": "schlagen",
     "lässt": "lassen",
-    "brät": "braten", "brätst": "braten",
-    "rät": "raten", "rätst": "raten",
+    "brät": "braten",
+    "brätst": "braten",
+    "rät": "raten",
+    "rätst": "raten",
     "bläst": "blasen",
     "stößt": "stoßen",
-    "lädt": "laden", "lädst": "laden",
+    "lädt": "laden",
+    "lädst": "laden",
     "schafft": "schaffen",
-    "hält": "halten", "hältst": "halten",
-    "fängt": "fangen", "fängst": "fangen",
+    "hält": "halten",
+    "hältst": "halten",
+    "fängt": "fangen",
+    "fängst": "fangen",
     "hängt": "hängen",
-    "weiß": "wissen", "weißt": "wissen",
+    "weiß": "wissen",
+    "weißt": "wissen",
 }
 
 for _inf, (_praet, _p2, _hilf, _def) in IRREGULAR_VERBS.items():
@@ -738,46 +763,109 @@ for _form, _inf in _PRESENT_VOWEL_CHANGES.items():
 # 旧客户端/纯 Python 路径，覆盖最高频的助动词/情态动词/常用强动词现在时。
 _AUX_MODAL_PRESENT: Dict[str, str] = {
     # sein
-    "ist": "sein", "bin": "sein", "bist": "sein", "sind": "sein", "seid": "sein",
+    "ist": "sein",
+    "bin": "sein",
+    "bist": "sein",
+    "sind": "sein",
+    "seid": "sein",
     # haben
-    "hat": "haben", "habe": "haben", "hast": "haben", "haben": "haben", "habt": "haben",
+    "hat": "haben",
+    "habe": "haben",
+    "hast": "haben",
+    "haben": "haben",
+    "habt": "haben",
     # werden
-    "wird": "werden", "werde": "werden", "wirst": "werden", "werdet": "werden",
+    "wird": "werden",
+    "werde": "werden",
+    "wirst": "werden",
+    "werdet": "werden",
     # modals
-    "will": "wollen", "willst": "wollen", "wollt": "wollen",
-    "kann": "können", "kannst": "können", "könnt": "können",
-    "muss": "müssen", "musst": "müssen", "müsst": "müssen",
-    "darf": "dürfen", "darfst": "dürfen", "dürft": "dürfen",
-    "soll": "sollen", "sollst": "sollen", "sollt": "sollen",
-    "mag": "mögen", "magst": "mögen", "mögt": "mögen",
+    "will": "wollen",
+    "willst": "wollen",
+    "wollt": "wollen",
+    "kann": "können",
+    "kannst": "können",
+    "könnt": "können",
+    "muss": "müssen",
+    "musst": "müssen",
+    "müsst": "müssen",
+    "darf": "dürfen",
+    "darfst": "dürfen",
+    "dürft": "dürfen",
+    "soll": "sollen",
+    "sollst": "sollen",
+    "sollt": "sollen",
+    "mag": "mögen",
+    "magst": "mögen",
+    "mögt": "mögen",
     # tun
-    "tut": "tun", "tue": "tun", "tust": "tun",
+    "tut": "tun",
+    "tue": "tun",
+    "tust": "tun",
     # 高频无变音强动词（现在时词干 = 不定式词干）
-    "geht": "gehen", "gehst": "gehen", "gehe": "gehen", "gehen": "gehen",
-    "steht": "stehen", "stehst": "stehen",
-    "trinkt": "trinken", "trinkst": "trinken", "trinke": "trinken",
-    "singt": "singen", "singst": "singen", "singe": "singen",
-    "findet": "finden", "findest": "finden", "finde": "finden",
-    "bleibt": "bleiben", "bleibst": "bleiben", "bleibe": "bleiben",
-    "schreibt": "schreiben", "schreibst": "schreiben", "schreibe": "schreiben",
+    "geht": "gehen",
+    "gehst": "gehen",
+    "gehe": "gehen",
+    "gehen": "gehen",
+    "steht": "stehen",
+    "stehst": "stehen",
+    "trinkt": "trinken",
+    "trinkst": "trinken",
+    "trinke": "trinken",
+    "singt": "singen",
+    "singst": "singen",
+    "singe": "singen",
+    "findet": "finden",
+    "findest": "finden",
+    "finde": "finden",
+    "bleibt": "bleiben",
+    "bleibst": "bleiben",
+    "bleibe": "bleiben",
+    "schreibt": "schreiben",
+    "schreibst": "schreiben",
+    "schreibe": "schreiben",
     "liest": "lesen",  # 已在 _PRESENT_VOWEL_CHANGES，防御性重复无害
-    "versteht": "verstehen", "verstehst": "verstehen",
-    "beginnt": "beginnen", "beginne": "beginnen",
-    "bringt": "bringen", "bringst": "bringen", "bringe": "bringen",
-    "denkt": "denken", "denkst": "denken",
-    "heißt": "heißen", "heiße": "heißen",
-    "kennt": "kennen", "kennst": "kennen",
-    "kommt": "kommen", "kommst": "kommen", "komme": "kommen",
-    "meint": "meinen", "meinst": "meinen",
-    "nennt": "nennen", "nennst": "nennen",
-    "sagt": "sagen", "sagst": "sagen", "sage": "sagen",
-    "setzt": "setzen", "setze": "setzen",
-    "spielt": "spielen", "spielst": "spielen", "spiele": "spielen",
-    "arbeitet": "arbeiten", "arbeite": "arbeiten",
-    "wohnt": "wohnen", "wohnst": "wohnen", "wohne": "wohnen",
-    "fragt": "fragen", "fragst": "fragen", "frage": "fragen",
-    "antwortet": "antworten", "antworte": "antworten",
-    "macht": "machen", "machst": "machen", "mache": "machen",
+    "versteht": "verstehen",
+    "verstehst": "verstehen",
+    "beginnt": "beginnen",
+    "beginne": "beginnen",
+    "bringt": "bringen",
+    "bringst": "bringen",
+    "bringe": "bringen",
+    "denkt": "denken",
+    "denkst": "denken",
+    "heißt": "heißen",
+    "heiße": "heißen",
+    "kennt": "kennen",
+    "kennst": "kennen",
+    "kommt": "kommen",
+    "kommst": "kommen",
+    "komme": "kommen",
+    "meint": "meinen",
+    "meinst": "meinen",
+    "nennt": "nennen",
+    "nennst": "nennen",
+    "sagt": "sagen",
+    "sagst": "sagen",
+    "sage": "sagen",
+    "setzt": "setzen",
+    "setze": "setzen",
+    "spielt": "spielen",
+    "spielst": "spielen",
+    "spiele": "spielen",
+    "arbeitet": "arbeiten",
+    "arbeite": "arbeiten",
+    "wohnt": "wohnen",
+    "wohnst": "wohnen",
+    "wohne": "wohnen",
+    "fragt": "fragen",
+    "fragst": "fragen",
+    "frage": "fragen",
+    "antwortet": "antworten",
+    "antworte": "antworten",
+    "macht": "machen",
+    "machst": "machen",
+    "mache": "machen",
 }
 for _form, _inf in _AUX_MODAL_PRESENT.items():
     if _inf in IRREGULAR_VERBS and _form not in _REVERSE_VERB_INDEX:
@@ -786,11 +874,43 @@ for _form, _inf in _AUX_MODAL_PRESENT.items():
 
 # 可分动词前缀：查词热路径，模块级常量免每次重建列表（lookup_irregular_verb 用）
 _SEPARABLE_PREFIXES = (
-    "ab", "an", "auf", "aus", "bei", "dar", "durch", "ein", "ent", "er",
-    "fort", "ge", "her", "heraus", "herein", "hin", "hinaus", "hinein",
-    "hinter", "mit", "nach", "nieder", "über", "um", "unter", "ver",
-    "voll", "vor", "voran", "vorbei", "weg", "weiter", "wieder", "zer",
-    "zu", "zurück", "zusammen"
+    "ab",
+    "an",
+    "auf",
+    "aus",
+    "bei",
+    "dar",
+    "durch",
+    "ein",
+    "ent",
+    "er",
+    "fort",
+    "ge",
+    "her",
+    "heraus",
+    "herein",
+    "hin",
+    "hinaus",
+    "hinein",
+    "hinter",
+    "mit",
+    "nach",
+    "nieder",
+    "über",
+    "um",
+    "unter",
+    "ver",
+    "voll",
+    "vor",
+    "voran",
+    "vorbei",
+    "weg",
+    "weiter",
+    "wieder",
+    "zer",
+    "zu",
+    "zurück",
+    "zusammen",
 )
 
 
@@ -829,7 +949,7 @@ def lookup_irregular_verb(form_or_lemma: str) -> Optional[VerbTrio]:
     # 4. Handle prefixed compounds for derived verbs (e.g. 'vorangehen', 'hinausfahren')
     for pfx in _SEPARABLE_PREFIXES:
         if clean.startswith(pfx) and len(clean) > len(pfx) + 2:
-            sub = clean[len(pfx):]
+            sub = clean[len(pfx) :]
             if sub in _REVERSE_VERB_INDEX:
                 base_inf = _REVERSE_VERB_INDEX[sub]
                 if base_inf in IRREGULAR_VERBS:
@@ -1014,7 +1134,6 @@ LINGUISTICS_VOCAB_EXT: Dict[str, Tuple[str, str, Optional[str], str]] = {
     "kontrolle": ("A2", "NOUN", "Fem", "检查，控制"),
     "vorsorge": ("B1", "NOUN", "Fem", "预防，防范措施"),
     "versicherung": ("A2", "NOUN", "Fem", "保险，保证"),
-
     # ── Verb Stems used as First Elements in Compounds ───────────────────────
     "wohn": ("A1", "VERB", None, "居住，住宿"),
     "fahr": ("A1", "VERB", None, "驾驶，行驶，乘车"),
@@ -1033,7 +1152,6 @@ LINGUISTICS_VOCAB_EXT: Dict[str, Tuple[str, str, Optional[str], str]] = {
     "rechen": ("A2", "VERB", None, "计算，运算"),
     "such": ("A1", "VERB", None, "寻找，搜寻"),
     "prüf": ("A2", "VERB", None, "检查，测试"),
-
     # ── Adjective Stems used as First Elements in Compounds ───────────────────
     "hoch": ("A1", "ADJ", None, "高的，高级的"),
     "groß": ("A1", "ADJ", None, "大的，宏大的"),
@@ -1056,7 +1174,6 @@ LINGUISTICS_VOCAB_EXT: Dict[str, Tuple[str, str, Optional[str], str]] = {
     "schwer": ("A1", "ADJ", None, "重的，难的"),
     "eigen": ("B1", "ADJ", None, "自己的，特有的"),
     "fremd": ("A2", "ADJ", None, "陌生的，外国的"),
-
     # ── Core Compounding Base Roots ──────────────────────────────────────────
     "maßnahme": ("B1", "NOUN", "Fem", "措施，办法"),
     "massnahme": ("B1", "NOUN", "Fem", "措施，办法"),
@@ -1066,10 +1183,10 @@ LINGUISTICS_VOCAB_EXT: Dict[str, Tuple[str, str, Optional[str], str]] = {
 }
 
 
-
 # 不规则复数还原表 + 常规复数词尾顺序（_get_element_info 每查词重建太浪费）
 _PLURAL_STEM_MAP = {
-    "wörter": "wort", "worte": "wort",
+    "wörter": "wort",
+    "worte": "wort",
     "bücher": "buch",
     "männer": "mann",
     "frauen": "frau",
@@ -1086,7 +1203,7 @@ _PLURAL_STEM_MAP = {
     "mütter": "mutter",
     "väter": "vater",
     "brüder": "bruder",
-    "töchter": "tochter"
+    "töchter": "tochter",
 }
 _PLURAL_SUFFIX_ORDER = ("en", "n", "e", "er", "s")
 
@@ -1100,14 +1217,7 @@ def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
     def _direct_lookup(term: str) -> Optional[Dict[str, Any]]:
         if term in CORE_VOCAB_DB:
             cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[term]
-            return {
-                "lemma": term,
-                "pos": pos,
-                "gender": gender,
-                "def_zh": def_zh,
-                "cefr": cefr,
-                "source": "core_dict"
-            }
+            return {"lemma": term, "pos": pos, "gender": gender, "def_zh": def_zh, "cefr": cefr, "source": "core_dict"}
         if term in LINGUISTICS_VOCAB_EXT:
             cefr, pos, gender, def_zh = LINGUISTICS_VOCAB_EXT[term]
             return {
@@ -1116,7 +1226,7 @@ def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
                 "gender": gender,
                 "def_zh": def_zh,
                 "cefr": cefr,
-                "source": "linguistics_ext"
+                "source": "linguistics_ext",
             }
         return None
 
@@ -1144,7 +1254,7 @@ def _get_element_info(token_lower: str) -> Optional[Dict[str, Any]]:
     # 4. Standard German plural endings (-en, -n, -e, -er, -s)
     for suf in _PLURAL_SUFFIX_ORDER:
         if k.endswith(suf) and len(k) > len(suf) + 2:
-            stem = k[:-len(suf)]
+            stem = k[: -len(suf)]
             hit = _direct_lookup(stem) or _direct_lookup(stem.replace("ss", "ß"))
             if hit and hit.get("pos") == "NOUN":
                 return hit
@@ -1172,8 +1282,6 @@ def lookup_linguistics_ext(lemma_or_word: str) -> Optional[Dict[str, Any]]:
         "definition_zh": info.get("def_zh", ""),
         "source": "linguistics_ext",
     }
-
-
 
 
 # ==============================================================================
@@ -1234,7 +1342,7 @@ def _split_komposita_impl(word: str, min_part_len: int = 3) -> List[Dict[str, An
             for fuge in _FUGEN_ELEMENTS:
                 if fuge and not remainder.startswith(fuge):
                     continue
-                rem_after_fuge = remainder[len(fuge):]
+                rem_after_fuge = remainder[len(fuge) :]
                 if len(rem_after_fuge) < min_part_len:
                     continue
 
@@ -1290,7 +1398,6 @@ def _split_komposita_impl(word: str, min_part_len: int = 3) -> List[Dict[str, An
 
         return score
 
-
     best_partition = max(valid_compounds, key=_score_partition)
 
     # Format output list according to specification
@@ -1306,12 +1413,14 @@ def _split_komposita_impl(word: str, min_part_len: int = 3) -> List[Dict[str, An
         # Display title-cased for German noun parts
         display_word = orig_slice.capitalize() if info.get("pos") == "NOUN" else orig_slice
 
-        output.append({
-            "word": display_word,
-            "lemma": info["lemma"],
-            "gender": info.get("gender"),
-            "def_zh": info.get("def_zh", "")
-        })
+        output.append(
+            {
+                "word": display_word,
+                "lemma": info["lemma"],
+                "gender": info.get("gender"),
+                "def_zh": info.get("def_zh", ""),
+            }
+        )
 
     return output
 
@@ -1361,8 +1470,7 @@ def lookup_prep_collocations(lemma_or_word: str) -> List[Dict[str, str]]:
     rows = PREP_COLLOCATIONS.get(key)
     if not rows:
         return []
-    return [{"praeposition": r[0], "kasus": r[1], "bedeutung_zh": r[2], "beispiel": r[3]}
-            for r in rows]
+    return [{"praeposition": r[0], "kasus": r[1], "bedeutung_zh": r[2], "beispiel": r[3]} for r in rows]
 
 
 # ==============================================================================
@@ -1380,13 +1488,14 @@ def build_prep_matrix_core(collocations):
             # capitalize 而非 upper：数据集写的是 Dat/Akk/Gen，格名会直接进 URL
             # 和响应键，upper 会把它改写成 DAT 破坏调用方的字面查找。capitalize
             # 对数据集自身拼写幂等，同时把 AI 长尾可能漏出的 dat/DAT 并回同一个桶。
-            matrix.setdefault(praep.strip().lower(), {}).setdefault(
-                kasus.strip().capitalize(), []).append({
+            matrix.setdefault(praep.strip().lower(), {}).setdefault(kasus.strip().capitalize(), []).append(
+                {
                     "lemma": lemma,
                     "reflexive": "(sich)" in bedeutung,
                     "bedeutung_zh": bedeutung,
                     "beispiel": beispiel,
-                })
+                }
+            )
     for praep in matrix:
         for kasus in matrix[praep]:
             matrix[praep][kasus].sort(key=lambda e: e["lemma"])

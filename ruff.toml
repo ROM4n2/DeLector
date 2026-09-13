@@ -1,0 +1,43 @@
+# Ruff 配置（2026-09-13 引入；计划：docs/plans/2026-09-13-ruff-cleanup.md）
+#
+# 定位：补齐 CI Hardening 显式登记的已知边界（此前仓库零 lint/type 配置）。
+# Ruff 是**开发期工具**：不进 requirements.txt（Android 打包面按 requirements 装运行时
+# 依赖，lint 工具混入徒增 APK 体积与漂移面），CI 在 ci.yml 内单独 pip install。
+#
+# 规则集与行宽的决策依据（存量基线 `ruff check --select E,F,I --statistics .`）：
+#   - 共 2265 告警，其中 E501（行超长）占 2113（93%）
+#   - 行宽分布：P50=43 / P90=74 / P95=86 / P99=139
+#   - >120 列的 553 行中，429 行（78%）集中在 delector/data/ 的纯数据字典
+#     （a1_hoeren_dict 146 / prep_dict 112 / a1_lesen_dict 77 / corpus_dict 59 …）
+#   → 结论：line-length 取 120（业务代码保持有意义的约束），
+#     对 data/ 的纯数据字面量豁免 E501（单行即一条数据，拆行伤可读性与 diff 稳定性），
+#     其余告警真清（不为行长改一堆代码，也不让豁免无限扩大）。
+#
+# 起步规则集为 E（pycodestyle errors）/ F（pyflakes）/ I（isort）；
+# W/UP/B 等扩展集待后续按需另立（避免一次清账爆炸）。
+
+line-length = 120
+target-version = "py311"
+
+exclude = [
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "android",          # Chaquopy 侧是仓库代码的拷贝，不重复 lint
+    "__pycache__",
+    ".pytest_cache",
+    "scratch",          # 调试沙盒（.gitignore）
+    "tools/raw",        # AI 批量生成词库的批次缓存（.gitignore）
+    "tools/raw_prep",
+    "tools/raw_refill",
+    "tools/raw_embedded",
+]
+
+[lint]
+select = ["E", "F", "I"]
+
+[lint.per-file-ignores]
+# 纯数据字典（含生成的 encounter_seed_dict.py）：单行即一条数据。
+# 这是唯一的 E501 豁免面——新增数据文件无需额外登记（按目录生效）。
+"delector/data/*.py" = ["E501"]

@@ -2,20 +2,14 @@
 DeLector - Goethe A1 Hörverstehen (Listening) API Routes
 """
 
+import json
 from typing import Dict
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import json
 
-from delector.data.a1_hoeren_dict import (
-    get_hoeren_set_list,
-    get_hoeren_set_by_id,
-    grade_hoeren_answers
-)
-from delector.core.database import (
-    record_a1_hoeren_trial,
-    get_a1_hoeren_history
-)
+from delector.core.database import get_a1_hoeren_history, record_a1_hoeren_trial
+from delector.data.a1_hoeren_dict import get_hoeren_set_by_id, get_hoeren_set_list, grade_hoeren_answers
 
 hoeren_router = APIRouter(prefix="/api/a1/hoeren", tags=["a1_hoeren"])
 
@@ -56,7 +50,7 @@ def api_grade_hoeren(req: HoerenGradeRequest):
             total_questions=graded["total_questions"],
             duration_seconds=req.duration_seconds,
             answers_json=json.dumps(req.answers, ensure_ascii=False),
-            wrong_questions_json=json.dumps(graded["wrong_questions"], ensure_ascii=False)
+            wrong_questions_json=json.dumps(graded["wrong_questions"], ensure_ascii=False),
         )
     except Exception as e:
         print(f"[Warn] Failed to record a1 hoeren trial: {e}")

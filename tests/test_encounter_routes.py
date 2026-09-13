@@ -14,9 +14,11 @@ DATABASE_PATH/PROGRESS_DB_PATH 钉到 tmp_path throwaway 文件并 init_db；Win
 句柄释放：删文件前 gc.collect()。TestClient 本机闸：client=("127.0.0.1",..) 放行，
 默认 host("testclient") 命中 _require_localhost → 403。
 """
+
 import gc
 import json
 import os
+
 import pytest
 
 # 先钉 env 再 import server（模块级 create_app 的 init_db 有副作用）
@@ -25,9 +27,9 @@ os.environ.setdefault("PROGRESS_DB_PATH", "test_encounter_routes_progress.db")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from delector.server import app  # noqa: E402
 from delector.core import database  # noqa: E402
 from delector.routes import encounter as encounter_mod  # noqa: E402
+from delector.server import app  # noqa: E402
 
 CARD_PACK_SCHEMA = "encounter-pack/v1"
 
@@ -98,6 +100,7 @@ def _fixture_pack(pack_id="t1", cefr="a2"):
 
 # ── 注册守卫：encounter 路由真的挂进 app ─────────────────────────────────────
 
+
 def test_encounter_module_has_router_and_registered(local_client):
     """encounter 模块定义 APIRouter 且端点可达（register 守卫在 test_server 钉全量）。"""
     assert isinstance(encounter_mod.router, __import__("fastapi").APIRouter)
@@ -108,15 +111,19 @@ def test_encounter_module_has_router_and_registered(local_client):
 
 # ── validate_pack 纯函数 ────────────────────────────────────────────────────
 
+
 def test_validate_pack_accepts_valid_pack():
     encounter_mod.validate_pack(_fixture_pack())
 
 
-@pytest.mark.parametrize("mutator", [
-    lambda p: p.update(schema="wrong"),
-    lambda p: p.update(schema=""),
-    lambda p: p.pop("schema", None),
-])
+@pytest.mark.parametrize(
+    "mutator",
+    [
+        lambda p: p.update(schema="wrong"),
+        lambda p: p.update(schema=""),
+        lambda p: p.pop("schema", None),
+    ],
+)
 def test_validate_pack_rejects_bad_schema(mutator):
     p = _fixture_pack()
     mutator(p)
@@ -160,6 +167,7 @@ def test_validate_pack_rejects_blank_article_fields(field):
 
 # ── GET 列表 / 详情 / 404 ──────────────────────────────────────────────────
 
+
 def test_get_list_empty(local_client):
     resp = local_client.get("/api/encounter/texts")
     assert resp.status_code == 200
@@ -169,8 +177,7 @@ def test_get_list_empty(local_client):
 def test_get_list_shows_created_row_with_word_count(local_client):
     created = local_client.post(
         "/api/encounter/texts",
-        json={"title": "Hallo", "level": "A2", "source": "manual",
-              "content": "Guten Tag\n\nIch heiße Lukas."},
+        json={"title": "Hallo", "level": "A2", "source": "manual", "content": "Guten Tag\n\nIch heiße Lukas."},
     )
     assert created.status_code == 201
     created_id = created.json()["id"]
@@ -220,6 +227,7 @@ def test_get_detail_missing_returns_404(local_client):
 
 # ── POST 手工加文本 ────────────────────────────────────────────────────────
 
+
 def test_post_create_level_normalized_upper(local_client):
     resp = local_client.post(
         "/api/encounter/texts",
@@ -242,10 +250,13 @@ def test_post_create_invalid_level_400(local_client):
     assert "detail" in resp.json()
 
 
-@pytest.mark.parametrize("payload", [
-    {"title": "", "level": "A2", "content": "abc"},          # title 空
-    {"title": "x", "level": "A2", "content": ""},            # content 空
-])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"title": "", "level": "A2", "content": "abc"},  # title 空
+        {"title": "x", "level": "A2", "content": ""},  # content 空
+    ],
+)
 def test_post_create_blank_fields_rejected(local_client, payload):
     resp = local_client.post("/api/encounter/texts", json=payload)
     # min_length=1 → Pydantic 422（缺/空标量 string 校验失败）
@@ -261,6 +272,7 @@ def test_post_create_localhost_gate_denies_lan(lan_client):
 
 
 # ── import-pack ────────────────────────────────────────────────────────────
+
 
 def test_import_pack_happy_path_normalizes_level(local_client):
     resp = local_client.post("/api/encounter/import-pack", json={"pack": _fixture_pack()})

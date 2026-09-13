@@ -1,14 +1,12 @@
 import os
+
 import pytest
+
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_lesen.db")
 from starlette.testclient import TestClient
+
+from delector.data.a1_lesen_dict import A1_LESEN_SETS, get_lesen_set_by_id, grade_lesen_answers
 from delector.server import app
-from delector.data.a1_lesen_dict import (
-    A1_LESEN_SETS,
-    get_lesen_set_list,
-    get_lesen_set_by_id,
-    grade_lesen_answers
-)
 
 client = TestClient(app)
 
@@ -119,11 +117,7 @@ def test_lesen_api_endpoints():
     assert "answer_key" not in s_data["parts"]["teil_1"][0]
 
     # 3. 判分端点
-    grade_payload = {
-        "set_id": 1,
-        "duration_seconds": 900,
-        "answers": {"a1_l_01_t1_q01": "R"}
-    }
+    grade_payload = {"set_id": 1, "duration_seconds": 900, "answers": {"a1_l_01_t1_q01": "R"}}
     r_grade = client.post("/api/a1/lesen/grade", json=grade_payload)
     assert r_grade.status_code == 200
     grade_res = r_grade.json()
@@ -141,7 +135,9 @@ def test_lesen_api_endpoints():
 def _m5_isolated_db_teardown():
     """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
     yield
-    import gc, os as _os
+    import gc
+    import os as _os
+
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

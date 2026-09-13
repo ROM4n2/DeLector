@@ -27,9 +27,10 @@ T1 覆盖服务端可观测段（①-⑥ 的服务端等价物）。本文件覆
 运行（仓库根）：export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_encounter_journey_probe.py -v
 node 缺失时整文件显式 skip（显式理由），既不让 CI 因缺 node 变红，也不静默假绿。
 """
+
+import gc
 import json
 import os
-import gc
 import shutil
 import subprocess
 from pathlib import Path
@@ -165,9 +166,14 @@ pytestmark = pytest.mark.skipif(
 
 def _real_annotate(client):
     """真实走服务端：建短文 → 取 annotate 真实响应 JSON（不手写假 JSON）。"""
-    create = client.post("/api/encounter/texts", json={
-        "title": "Probe Article", "level": "A2", "content": ARTICLE,
-    })
+    create = client.post(
+        "/api/encounter/texts",
+        json={
+            "title": "Probe Article",
+            "level": "A2",
+            "content": ARTICLE,
+        },
+    )
     assert create.status_code == 201, create.text
     text_id = create.json()["id"]
     res = client.get(f"/api/encounter/texts/{text_id}/annotate")
@@ -199,8 +205,9 @@ def test_known_highlight_real_annotate(client, bridge):
     assert "gehen" in known_lemmas, "已背词 gehen 的 token 必须 known=True"
     # 对照：正文里的未背词 Schule 不得被标 known。
     schule_toks = [t for t in tokens if str(t.get("lemma")).lower() == "schule"]
-    assert schule_toks and all(t["known"] is False for t in schule_toks), \
+    assert schule_toks and all(t["known"] is False for t in schule_toks), (
         "未背词 Schule 必须 known=False（高亮不是「凡词皆亮」）"
+    )
 
 
 # ── 断言组 2：覆盖统计（A7 第③步「覆盖数>0」的等价物）──────────────────────
@@ -232,8 +239,7 @@ def test_unknown_top_excludes_known_lemmas(client, bridge):
     unknown_lemmas = {e["lemma"] for e in out["stats"]["unknown_top"]}
     # 已背词（strip 冠词后小写）不得出现在生词推送里。
     for learned in ("mann", "gehen", "wasser"):
-        assert learned not in unknown_lemmas, \
-            "语义错误：已背词 %r 不得出现在 unknown_top" % learned
+        assert learned not in unknown_lemmas, "语义错误：已背词 %r 不得出现在 unknown_top" % learned
     # 对照：真正未背的 schule 应当被推为生词候选之一。
     assert "schule" in unknown_lemmas, "未背词 Schule 应出现在 unknown_top"
 
@@ -243,17 +249,21 @@ def test_add_card_shape_word_only(client, bridge):
     """addCardToDeck 后 words +1、cards 不新增键，且新词按源码字段写入。"""
     # 用真实 annotate 响应确认「进卡的目标词」确实在正文里（端到端语义连续）。
     annotate = _real_annotate(client)
-    body_lemmas = {
-        str(t["lemma"]).lower()
-        for s in annotate["sentences"] for t in s["tokens"]
-    }
+    body_lemmas = {str(t["lemma"]).lower() for s in annotate["sentences"] for t in s["tokens"]}
     assert "unverzagt" in body_lemmas, "进卡探针的目标词应在正文里（端到端语义连续）"
 
     words_before = len(DECK_PAYLOAD["words"])
     cards_before = dict(DECK_PAYLOAD["cards"])
     out = _run_node(
-        {"op": "addCardToDeck", "deck": DECK_PAYLOAD, "lemma": "unverzagt",
-         "gloss": "毫不畏惧地", "pos": "ADV", "genId": "uv1", "nowMs": 1757212800000},
+        {
+            "op": "addCardToDeck",
+            "deck": DECK_PAYLOAD,
+            "lemma": "unverzagt",
+            "gloss": "毫不畏惧地",
+            "pos": "ADV",
+            "genId": "uv1",
+            "nowMs": 1757212800000,
+        },
         bridge,
     )
     r = out["result"]

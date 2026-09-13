@@ -41,12 +41,13 @@
 ```python
 def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     from unittest.mock import AsyncMock
+
     # Mock audio file generation
     fake_mp3 = tmp_path / "fake_de.mp3"
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00mock_audio_data")
-    
+
     monkeypatch.setattr("server.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
-    
+
     res = client.post("/api/audio/tts", json={"text": "Hallo Berlin!", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 200
     assert res.headers["content-type"] == "audio/mpeg"
@@ -69,27 +70,31 @@ from fastapi.responses import FileResponse
 AUDIO_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache", "audio")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 
+
 class TTSReq(BaseModel):
     text: str
     voice: Optional[str] = "de-DE-KatjaNeural"
     rate: Optional[str] = "+0%"
 
+
 async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> str:
     clean_text = text.strip()
     if not clean_text:
         raise HTTPException(400, "Text cannot be empty")
-        
+
     # Generate unique cache key based on text, voice and speed
     cache_key = hashlib.sha256(f"{voice}_{rate}_{clean_text}".encode("utf-8")).hexdigest()
     cache_file = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.mp3")
-    
+
     if os.path.exists(cache_file) and os.path.getsize(cache_file) > 100:
         return cache_file
-        
+
     import edge_tts
+
     communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
     await communicate.save(cache_file)
     return cache_file
+
 
 @app.post("/api/audio/tts")
 async def get_audio_tts(req: TTSReq):
@@ -400,18 +405,22 @@ def export_study_guide(article_id: int):
         art = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not art:
             raise HTTPException(404, "Article not found")
-        notes = conn.execute("SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+        notes = conn.execute(
+            "SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)
+        ).fetchall()
         vocab = conn.execute("SELECT * FROM vocab_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
-        grammar = conn.execute("SELECT * FROM grammar_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+        grammar = conn.execute(
+            "SELECT * FROM grammar_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)
+        ).fetchall()
 
     md = [f"# {art['title']} — DeLector 精读讲义\n"]
     md.append(f"> 导出日期: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 字符数: {len(art['raw_text'])}\n")
-    
+
     if notes:
         md.append("## 📝 精读随笔与重点批注\n")
         for n in notes:
             md.append(f"- **高亮原句**: *{n['selected_text']}*")
-            if n['note_content']:
+            if n["note_content"]:
                 md.append(f"  - 💡 **随笔笔记**: {n['note_content']}")
         md.append("")
 
@@ -420,20 +429,26 @@ def export_study_guide(article_id: int):
         md.append("| 单词 | 原型 | 词性 | CEFR | 中文释义 | 原文语境 |")
         md.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
         for v in vocab:
-            md.append(f"| **{v['word']}** | {v['lemma']} | {v['pos']} | {v['cefr_level']} | {v['definition_zh']} | *{v['sentence_context']}* |")
+            md.append(
+                f"| **{v['word']}** | {v['lemma']} | {v['pos']} | {v['cefr_level']} | {v['definition_zh']} | *{v['sentence_context']}* |"
+            )
         md.append("")
 
     if grammar:
         md.append("## 🎓 歌德考点深度解析\n")
         for g in grammar:
             md.append(f"### ✦ {g['grammar_name']} ({g['cefr_level']})")
-            if g['rule_formula']:
+            if g["rule_formula"]:
                 md.append(f"- **语法公式**: `{g['rule_formula']}`")
             md.append(f"- **解析**: {g['explanation_zh']}")
             md.append(f"- **例句**: *{g['sentence_context']}*\n")
 
     content = "\n".join(md)
-    return Response(content=content, media_type="text/markdown; charset=utf-8", headers={"Content-Disposition": f"attachment; filename=study_guide_{article_id}.md"})
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=study_guide_{article_id}.md"},
+    )
 ```
 
 - [ ] **Step 2: Update Backup Export/Restore in `server.py` to include `reading_notes`**

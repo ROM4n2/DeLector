@@ -10,14 +10,17 @@ Locks in fixes for:
 6. euer/eur inflection with vowel elision
 7. Security URL port restriction & 2MB stream limit
 """
+
 import os
+
 import pytest
+
 os.environ.setdefault("DATABASE_PATH", "test_delector_audit_regressions.db")
-from delector.routes.main import RestoreReq
+from delector.core.security import is_safe_public_url
 from delector.nlp_engine.linguistics import lookup_irregular_verb, split_komposita
 from delector.nlp_engine.syntax_tree import analyze_sentence_topology
+from delector.routes.main import RestoreReq
 from delector.services.writing import decline_determiner
-from delector.core.security import is_safe_public_url
 
 
 def test_restore_req_includes_a1_records():
@@ -93,24 +96,42 @@ def test_security_port_restrictions():
 
 def test_a1_grade_populates_study_log():
     """record_a1_*_trial must write to study_log AND daily_summary counters."""
-    import os, sqlite3, time
-    from delector.core.database import record_a1_hoeren_trial, record_a1_lesen_trial, init_progress_db
+    import os
+    import sqlite3
+    import time
+
+    from delector.core.database import init_progress_db, record_a1_hoeren_trial, record_a1_lesen_trial
+
     tmp = "test_a1_study_log.db"
     for suffix in ("", "-wal", "-shm"):
         p = tmp + suffix
         if os.path.exists(p):
-            try: os.remove(p)
-            except PermissionError: pass
+            try:
+                os.remove(p)
+            except PermissionError:
+                pass
     try:
         init_progress_db(tmp)
         h_id = record_a1_hoeren_trial(
-            set_id=1, score_raw=20, score_official=16.0,
-            total_questions=25, duration_seconds=600,
-            answers_json="{}", wrong_questions_json="[]", db_path=tmp)
+            set_id=1,
+            score_raw=20,
+            score_official=16.0,
+            total_questions=25,
+            duration_seconds=600,
+            answers_json="{}",
+            wrong_questions_json="[]",
+            db_path=tmp,
+        )
         l_id = record_a1_lesen_trial(
-            set_id=1, score_raw=22, score_official=17.6,
-            total_questions=25, duration_seconds=480,
-            answers_json="{}", wrong_questions_json="[]", db_path=tmp)
+            set_id=1,
+            score_raw=22,
+            score_official=17.6,
+            total_questions=25,
+            duration_seconds=480,
+            answers_json="{}",
+            wrong_questions_json="[]",
+            db_path=tmp,
+        )
         assert h_id is not None and l_id is not None
         c = sqlite3.connect(tmp)
         try:
@@ -126,15 +147,19 @@ def test_a1_grade_populates_study_log():
         for suffix in ("", "-wal", "-shm"):
             p = tmp + suffix
             if os.path.exists(p):
-                try: os.remove(p)
-                except PermissionError: pass
+                try:
+                    os.remove(p)
+                except PermissionError:
+                    pass
 
 
 @pytest.fixture(autouse=True, scope="module")
 def _m5_isolated_db_teardown():
     """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
     yield
-    import gc, os as _os
+    import gc
+    import os as _os
+
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

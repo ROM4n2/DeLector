@@ -25,6 +25,7 @@
 冒烟（--smoke）：起 delector(.exe) run → 轮询 GET /api/tools/ 断言 200 →
 Ctrl+C 优雅退出 → 校验进程用的是包内 venv python 且无孤儿。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,10 +55,10 @@ if hasattr(sys.stderr, "reconfigure"):
         pass
 
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))   # .../agent/scripts
-AGENT_DIR = os.path.dirname(SCRIPT_DIR)                   # .../agent
-REPO_ROOT = os.path.dirname(AGENT_DIR)                    # 仓库根
-DIST_DIR = os.path.join(REPO_ROOT, "dist", "agent")       # 产物/压缩包暂存
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))  # .../agent/scripts
+AGENT_DIR = os.path.dirname(SCRIPT_DIR)  # .../agent
+REPO_ROOT = os.path.dirname(AGENT_DIR)  # 仓库根
+DIST_DIR = os.path.join(REPO_ROOT, "dist", "agent")  # 产物/压缩包暂存
 MAIN_GO = os.path.join(AGENT_DIR, "cmd", "delector", "main.go")
 
 
@@ -68,20 +69,16 @@ def log(msg: str) -> None:
 def run(cmd, cwd=None, env=None, check=True):
     """执行子命令，实时透传输出；失败按 check 退出。"""
     log("+ " + " ".join(str(c) for c in cmd))
-    r = subprocess.run(cmd, cwd=cwd, env=env,
-                       stdout=sys.stdout, stderr=sys.stderr)
+    r = subprocess.run(cmd, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
     if check and r.returncode != 0:
-        sys.exit("[Error] 命令失败 (exit=%d): %s" %
-                 (r.returncode, " ".join(str(c) for c in cmd)))
+        sys.exit("[Error] 命令失败 (exit=%d): %s" % (r.returncode, " ".join(str(c) for c in cmd)))
     return r
 
 
 def detect_platform():
-    goos = {"win32": "windows", "linux": "linux",
-            "darwin": "darwin"}.get(sys.platform, "windows")
+    goos = {"win32": "windows", "linux": "linux", "darwin": "darwin"}.get(sys.platform, "windows")
     m = platform.machine().lower()
-    goarch = {"amd64": "amd64", "x86_64": "amd64",
-              "arm64": "arm64", "aarch64": "arm64"}.get(m, "amd64")
+    goarch = {"amd64": "amd64", "x86_64": "amd64", "arm64": "arm64", "aarch64": "arm64"}.get(m, "amd64")
     return goos, goarch
 
 
@@ -98,9 +95,9 @@ def get_version(override):
         with open(MAIN_GO, encoding="utf-8") as f:
             for line in f.read().splitlines():
                 s = line.strip()
-                if not (s.startswith("var version") or
-                        s.startswith("const version") or
-                        s.startswith("const defaultVersion")):
+                if not (
+                    s.startswith("var version") or s.startswith("const version") or s.startswith("const defaultVersion")
+                ):
                     continue
                 m = re.search(r'"([^"]*)"', s)
                 if m:
@@ -126,12 +123,12 @@ def build_binary(pkg_dir, goos, goarch, version):
     env["GOARCH"] = goarch
     env["CGO_ENABLED"] = "0"
     ldflags = "-s -w -X main.version=%s" % version
-    run([find_go(), "build", "-trimpath", "-ldflags", ldflags,
-         "-o", bin_path, "./cmd/delector"], cwd=AGENT_DIR, env=env)
+    run(
+        [find_go(), "build", "-trimpath", "-ldflags", ldflags, "-o", bin_path, "./cmd/delector"], cwd=AGENT_DIR, env=env
+    )
     if not os.path.exists(bin_path):
         sys.exit("[Error] 构建产物缺失: %s" % bin_path)
-    log("[build] 二进制: %s (%d bytes)" %
-        (bin_path, os.path.getsize(bin_path)))
+    log("[build] 二进制: %s (%d bytes)" % (bin_path, os.path.getsize(bin_path)))
     return bin_path
 
 
@@ -144,15 +141,16 @@ def create_venv(pkg_dir, goos, skip_venv):
             shutil.rmtree(venv_dir)
         run([sys.executable, "-m", "venv", venv_dir])
     # 标准 venv 布局：Windows 解释器在 Scripts/，unix 在 bin/。
-    venv_py = (os.path.join(venv_dir, "Scripts", "python.exe") if goos == "windows"
-               else os.path.join(venv_dir, "bin", "python"))
+    venv_py = (
+        os.path.join(venv_dir, "Scripts", "python.exe")
+        if goos == "windows"
+        else os.path.join(venv_dir, "bin", "python")
+    )
     if not os.path.exists(venv_py):
         sys.exit("[Error] venv python 缺失: %s" % venv_py)
     # 升级打包器，再装运行时依赖 + 德语小模型（sm，md 优先但首启动太慢）。
-    run([venv_py, "-m", "pip", "install", "--upgrade",
-         "pip", "setuptools", "wheel"])
-    run([venv_py, "-m", "pip", "install", "-r",
-         os.path.join(REPO_ROOT, "requirements.txt")])
+    run([venv_py, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
+    run([venv_py, "-m", "pip", "install", "-r", os.path.join(REPO_ROOT, "requirements.txt")])
     run([venv_py, "-m", "spacy", "download", "de_core_news_sm"])
     return venv_dir, venv_py
 
@@ -169,14 +167,10 @@ def copy_src(pkg_dir):
         shutil.rmtree(src_dir)
     os.makedirs(src_dir, exist_ok=True)
     # 排除字节码缓存与版本控制目录，保持源根干净、体积可控。
-    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo",
-                                    ".git", ".github")
-    _copytree(os.path.join(REPO_ROOT, "delector"),
-              os.path.join(src_dir, "delector"), ignore)
-    _copytree(os.path.join(REPO_ROOT, "static"),
-              os.path.join(src_dir, "static"), ignore)
-    shutil.copy2(os.path.join(REPO_ROOT, "start.py"),
-                 os.path.join(src_dir, "start.py"))
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", ".git", ".github")
+    _copytree(os.path.join(REPO_ROOT, "delector"), os.path.join(src_dir, "delector"), ignore)
+    _copytree(os.path.join(REPO_ROOT, "static"), os.path.join(src_dir, "static"), ignore)
+    shutil.copy2(os.path.join(REPO_ROOT, "start.py"), os.path.join(src_dir, "start.py"))
     log("[src] 源根: %s（delector/ + static/ + start.py）" % src_dir)
     return src_dir
 
@@ -247,12 +241,12 @@ def package_archive(pkg_dir, version, goos, goarch, no_zip):
         with tarfile.open(arc_path, "w:gz") as t:
             t.add(pkg_dir, arcname="delector-agent", filter=_filter)
     size = os.path.getsize(arc_path)
-    log("[pkg] 压缩包: %s (%d bytes ≈ %.1f MB)" %
-        (arc_path, size, size / 1024.0 / 1024.0))
+    log("[pkg] 压缩包: %s (%d bytes ≈ %.1f MB)" % (arc_path, size, size / 1024.0 / 1024.0))
     return arc_path
 
 
 # ----------------------------- 冒烟验证 -----------------------------
+
 
 def _http_ok(url, timeout=3.0):
     try:
@@ -287,11 +281,10 @@ def _orphan_python(pkg_dir, goos):
     found = []
     if goos == "windows":
         try:
-            ps = ("Get-CimInstance Win32_Process -Filter \"Name='python.exe'\""
-                  " | ForEach-Object { $_.ExecutablePath }")
+            ps = "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | ForEach-Object { $_.ExecutablePath }"
             out = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps],
-                capture_output=True, text=True, timeout=15).stdout
+                ["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=15
+            ).stdout
             for line in out.splitlines():
                 p = line.strip().replace("\\", "/").lower()
                 if p.startswith(venv_prefix) and p.endswith("python.exe"):
@@ -300,9 +293,7 @@ def _orphan_python(pkg_dir, goos):
             log("[smoke] 孤儿进程探测失败（powershell）: %s" % e)
     else:
         try:
-            out = subprocess.run(["pgrep", "-f", venv_prefix],
-                                 capture_output=True, text=True,
-                                 timeout=15).stdout
+            out = subprocess.run(["pgrep", "-f", venv_prefix], capture_output=True, text=True, timeout=15).stdout
             if out.strip():
                 found.append(out.strip())
         except Exception:  # noqa: BLE001
@@ -322,10 +313,15 @@ def smoke(pkg_dir, goos, port=8001):
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     # 显式 utf-8 + replace：uvicorn 日志可能含非本机 locale 字节，避免读取
     # 线程因 gbk 等默认编码解码失败而崩（曾导致冒烟 reader 线程异常）。
-    proc = subprocess.Popen([bin_path, "run", "--port", str(port)],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            encoding="utf-8", errors="replace", bufsize=1,
-                            **kwargs)
+    proc = subprocess.Popen(
+        [bin_path, "run", "--port", str(port)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+        **kwargs,
+    )
 
     captured = []
 
@@ -366,7 +362,7 @@ def smoke(pkg_dir, goos, port=8001):
         proc.wait(timeout=5)
 
     venv_py = _venv_python_path(pkg_dir, goos).replace("\\", "/")
-    used = any(venv_py in (l or "").replace("\\", "/") for l in captured)
+    used = any(venv_py in (ln or "").replace("\\", "/") for ln in captured)
     if not used:
         # 进程树回退校验：确有 venv python 在跑（诊断日志缺失时）。
         orphans_running = _orphan_python(pkg_dir, goos)
@@ -379,24 +375,20 @@ def smoke(pkg_dir, goos, port=8001):
     # 退出后不应残留 venv python 孤儿进程。
     orphans = _orphan_python(pkg_dir, goos)
     if orphans:
-        sys.exit("[smoke] 检测到 venv python 孤儿进程（Ctrl+C 未干净退出）: %s"
-                 % orphans)
+        sys.exit("[smoke] 检测到 venv python 孤儿进程（Ctrl+C 未干净退出）: %s" % orphans)
     log("[smoke] 无孤儿进程 ✓")
     log("[smoke] PASS")
 
 
 # ----------------------------- 主流程 -----------------------------
 
+
 def main():
     ap = argparse.ArgumentParser(description="DeLector Agent 绿色便携包打包")
-    ap.add_argument("--smoke", action="store_true",
-                    help="打包后启动 delector run 并断言 /api/tools/ 200")
-    ap.add_argument("--no-zip", action="store_true",
-                    help="不压缩，仅产出 delector-agent/ 目录")
-    ap.add_argument("--version", default=None,
-                    help="覆盖版本号（默认解析 main.go const version）")
-    ap.add_argument("--skip-venv", action="store_true",
-                    help="复用已有 python/ venv，跳过重建（加速迭代）")
+    ap.add_argument("--smoke", action="store_true", help="打包后启动 delector run 并断言 /api/tools/ 200")
+    ap.add_argument("--no-zip", action="store_true", help="不压缩，仅产出 delector-agent/ 目录")
+    ap.add_argument("--version", default=None, help="覆盖版本号（默认解析 main.go const version）")
+    ap.add_argument("--skip-venv", action="store_true", help="复用已有 python/ venv，跳过重建（加速迭代）")
     args = ap.parse_args()
 
     goos, goarch = detect_platform()
@@ -411,8 +403,7 @@ def main():
         shutil.rmtree(pkg_dir)
     os.makedirs(pkg_dir, exist_ok=True)
     for fn in os.listdir(DIST_DIR):
-        if fn.startswith("DeLector-Agent-") and (
-                fn.endswith(".zip") or fn.endswith(".tar.gz")):
+        if fn.startswith("DeLector-Agent-") and (fn.endswith(".zip") or fn.endswith(".tar.gz")):
             os.remove(os.path.join(DIST_DIR, fn))
 
     # 1) Go 二进制
@@ -433,11 +424,9 @@ def main():
             total += os.path.getsize(os.path.join(root, fn))
     log("-" * 60)
     log("产物目录: %s" % pkg_dir)
-    log("产物体积: %.1f MB（含 venv + de_core_news_sm 模型）" %
-        (total / 1024.0 / 1024.0))
+    log("产物体积: %.1f MB（含 venv + de_core_news_sm 模型）" % (total / 1024.0 / 1024.0))
     if arc:
-        log("压缩包:   %s (%.1f MB)" %
-            (arc, os.path.getsize(arc) / 1024.0 / 1024.0))
+        log("压缩包:   %s (%.1f MB)" % (arc, os.path.getsize(arc) / 1024.0 / 1024.0))
     log("-" * 60)
 
     if args.smoke:
