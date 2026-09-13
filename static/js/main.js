@@ -159,6 +159,7 @@ import {
   cancelPull,
   connectDesktop,
 } from "./encounter.js";
+import * as ListenLab from "./listen-lab.js";
 
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
@@ -211,6 +212,8 @@ export function show(view) {
     if (typeof A1Hoeren?.stopHoerenExam === "function")
       A1Hoeren.stopHoerenExam();
     if (typeof A1Lesen?.stopLesenExam === "function") A1Lesen.stopLesenExam();
+    // 听力微训工坊：离开备考域停掉播放队列（幂等，模块未初始化也安全）
+    ListenLab.stopListenLab();
   }
 
   const player = document.getElementById("shadow-player");
@@ -269,9 +272,15 @@ export function setExamModule(mod) {
 
   const writingPanel = document.getElementById("exam-writing");
   const familyPanel = document.getElementById("exam-cards-family");
+  const listenPanel = document.getElementById("exam-listen");
   const isWriting = _examModule === "writing";
   if (writingPanel) writingPanel.classList.toggle("hidden", !isWriting);
-  if (familyPanel) familyPanel.classList.toggle("hidden", isWriting);
+  if (familyPanel)
+    familyPanel.classList.toggle(
+      "hidden",
+      isWriting || _examModule === "listen",
+    );
+  if (listenPanel) listenPanel.classList.toggle("hidden", _examModule !== "listen");
 
   [
     ["writing", "exam-card-writing"],
@@ -279,6 +288,7 @@ export function setExamModule(mod) {
     ["lesen", "exam-card-lesen"],
     ["sprechen", "exam-card-sprechen"],
     ["vocab", "exam-card-vocab"],
+    ["listen", "exam-card-listen"],
   ].forEach(([m, btnId]) => {
     document
       .getElementById(btnId)
@@ -291,6 +301,9 @@ export function setExamModule(mod) {
     setA1Mode("teil2");
   } else if (_examModule === "vocab") {
     setA1Mode("vocab");
+  } else if (_examModule === "listen") {
+    // 听力微训工坊：进入时幂等初始化（样式/材料缓存/会话现场恢复）
+    ListenLab.enterListenLab().catch(() => {});
   } else if (isWriting) {
     setExamWritingTab("formular");
   }
@@ -1065,6 +1078,9 @@ Object.assign(window, {
   // Goethe A1 Exam Engines
   A1Hoeren,
   A1Lesen,
+
+  // Listening Micro-Training Lab（听力微训工坊 · ListenLab 命名空间接线）
+  ListenLab,
 });
 
 // ── PWA Service Worker Registration ──────────────────────────────────────────
