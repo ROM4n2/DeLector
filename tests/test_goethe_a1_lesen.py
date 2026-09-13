@@ -69,12 +69,16 @@ def test_lesen_sanitization():
         assert "reading_text_de" in q
 
     raw_set = get_lesen_set_by_id(1, sanitize=False)
+    # id=1 的固定题库必然存在（clean_set 同源已验证非 None）
+    assert raw_set is not None
     assert "answer_key" in raw_set["parts"]["teil_1"][0]
 
 
 def test_lesen_grading_algorithm():
     """验证阅读 25 分制评分与等级评定算法"""
     raw_set = get_lesen_set_by_id(1, sanitize=False)
+    # id=1 的固定题库必然存在
+    assert raw_set is not None
     perfect_answers = {}
     for part in ("teil_1", "teil_2", "teil_3"):
         for q in raw_set["parts"][part]:

@@ -42,7 +42,10 @@ def test_corpus_entry_schema_and_hygiene():
 
         content = item.get("content", "").strip()
         assert len(content) > 60, f"语料 {cid} 正文过短（{len(content)} 字符）"
-        assert item.get("word_count") > 20, f"语料 {cid} 词数无效"
+        # 守卫化：.get() 的 None 分支与 20 比较会 TypeError；字段缺失/非 int 仍须失败，
+        # 只是改报 AssertionError（测试意图不变）
+        word_count = item.get("word_count")
+        assert isinstance(word_count, int) and word_count > 20, f"语料 {cid} 词数无效"
 
         lexemes = item.get("key_lexemes", [])
         assert isinstance(lexemes, list) and len(lexemes) >= 2, f"语料 {cid} 重点考点词至少 2 个"

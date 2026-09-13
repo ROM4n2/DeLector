@@ -16,6 +16,7 @@ db_path，测试一律喂 **tmp_path 一次性 SQLite 文件**（含 progress �
 import gc
 import json
 import os
+from typing import Any
 
 import pytest
 
@@ -148,6 +149,8 @@ def test_import_pack_inserts_row(clean_db):
     assert isinstance(tid, int) and tid > 0
 
     row = database.get_encounter_text(tid, db_path=clean_db["db"])
+    # 上一行刚 import 成功（tid > 0），该行必然存在
+    assert row is not None
     assert row["title"] == "Ein Tag im Park"
     assert row["content"] == "Es war einmal ein sonniger Tag."
     assert row["pack_id"] == "job1-cardpack-0001"
@@ -206,6 +209,7 @@ def test_import_pack_missing_keys_raises_valueerror(clean_db):
             {"schema": "encounter-pack/v1", "pack_id": "z", "article": {"title": "t"}},
             db_path=clean_db["db"],
         )
-    # 非 dict
+    # 非 dict（刻意传坏输入，运行期才校验；注解 Any 让静态检查放行）
+    bad_pack: Any = ["not", "a", "dict"]
     with pytest.raises(ValueError):
-        database.import_encounter_pack(["not", "a", "dict"], db_path=clean_db["db"])
+        database.import_encounter_pack(bad_pack, db_path=clean_db["db"])

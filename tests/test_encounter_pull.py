@@ -226,7 +226,7 @@ def test_shelf_get_unknown_pack_404(shelf):
 def test_phone_pull_pack_proxies_shelf_listing(shelf, phone, monkeypatch):
     """pack_id 省略 → 手机出站取桌面货架清单并原样返回。"""
     _seed_shelf(shelf, [_fixture_pack("shelf-1"), _fixture_pack("shelf-2", title="Zweite")])
-    urls = []
+    urls: list[str] = []
     _patch_outbound_to_shelf(monkeypatch, shelf, recorder=urls)
 
     res = phone.post("/api/encounter/pull-pack", json={"desktop_base": "http://192.168.1.5:8000"})
@@ -243,7 +243,7 @@ def test_phone_pull_pack_imports_and_is_idempotent(shelf, phone, monkeypatch):
     """带 pack_id → 落库到手机库；重复拉取返回同一 id 且行数不增。"""
     src_text = "Es war einmal ein sonniger Tag im Park."
     _seed_shelf(shelf, [_fixture_pack("shelf-1", raw_text=src_text)])
-    urls = []
+    urls: list[str] = []
     _patch_outbound_to_shelf(monkeypatch, shelf, recorder=urls)
 
     base = "http://192.168.1.5:8000/"

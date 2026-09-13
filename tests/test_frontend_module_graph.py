@@ -192,7 +192,7 @@ def _parse_star_namespace_imports(src):
 
 def _module_local_bindings(src):
     """Names bound at top level of `src` (imports + own declarations)."""
-    bound = set()
+    bound: set[str] = set()
     # named imports: `import { a, b as c } from …`
     bound.update(_parse_named_imports(src) and [item[0] for item in _parse_named_imports(src)])
     # star-namespace imports: `import * as NS from …` → binds NS

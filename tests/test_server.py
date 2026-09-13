@@ -1152,7 +1152,7 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     # 2. 用假模块顶替 services.tts，synthesize 返回假 MP3
     fake_mini = types.ModuleType("delector.services.tts")
     fake_mp3 = b"ID3\x03\x00\x00\x00\x00\x00\x00mock_edge_mini_audio"
-    fake_mini.synthesize = lambda text, voice, rate: fake_mp3
+    fake_mini.synthesize = lambda text, voice, rate: fake_mp3  # type: ignore[attr-defined]  # 构造假模块顶替 sys.modules，刻意在 ModuleType 上动态挂属性
     # routes/main.py 的 generate_edge_tts_audio 延迟导入写的是
     # `from delector.services import tts as edge_tts_mini`，找的是
     # sys.modules["delector.services.tts"] —— 顶替该键生效。
@@ -1913,6 +1913,8 @@ def _load_build_prep():
 
     path = os.path.join(ROOT, "tools", "build_prep.py")
     spec = importlib.util.spec_from_file_location("build_prep_under_test", path)
+    # 仓库内固定路径的真实文件，spec 与 loader 必然能生成（None 仅是 API 签名的防御面）
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -2200,7 +2202,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
 
     sentinel = object()
     fake = types.ModuleType("de_fake_news_sm")
-    fake.load = lambda **kw: sentinel
+    fake.load = lambda **kw: sentinel  # type: ignore[attr-defined]  # 构造假模块顶替 sys.modules，刻意在 ModuleType 上动态挂属性
     monkeypatch.setitem(sys.modules, "de_fake_news_sm", fake)
     monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k: (_ for _ in ()).throw(OSError("[E050] Can't find model")))
 
@@ -2298,7 +2300,9 @@ def test_release_workflow_gates_apk_signature():
     assert "$RUNNER_TEMP/delector-debug.jks" in workflow, "keystore 必须解到 $RUNNER_TEMP，不能落在工作树里"
     # 指纹一旦填上就不能再被清空：空值时那道闸退化成 APK↔keystore 自比对，
     # 拦不住「keystore 被换成另一份合法 keystore」（= 已安装用户永远收不到升级）。
-    expected = re.search(r'EXPECTED_SHA256:\s*"([^"]*)"', workflow).group(1)
+    m_sha = re.search(r'EXPECTED_SHA256:\s*"([^"]*)"', workflow)
+    assert m_sha, "缺少 EXPECTED_SHA256 指纹声明"
+    expected = m_sha.group(1)
     assert re.fullmatch(r"(?:[0-9A-F]{2}:){31}[0-9A-F]{2}", expected), (
         f"EXPECTED_SHA256 必须是大写冒号分隔的 32 字节指纹（与 keytool 输出同格式），实际 {expected!r}"
     )
@@ -4230,7 +4234,8 @@ def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
         async def __aexit__(self, *args):
             pass
 
-        from contextlib import asynccontextmanager
+        # 刻意的类体内局部导入：装饰器只被本 mock 类的 stream 用到
+        from contextlib import asynccontextmanager  # type: ignore[misc]
 
         @asynccontextmanager
         async def stream(self, method, url, headers=None):
@@ -4348,7 +4353,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     # Phase 1 Task 5：4 个服务模块收进 delector.services/ 子包（edge_tts_mini →
     # services.tts，monkeypatch 契约同步迁到 delector.services.tts，不再有顶层 shim）
     service_modules = {"writing", "essay_diff", "exam_catalog", "tts"}
-    top_level_modules = set()
+    top_level_modules: set[str] = set()
     required_modules = sorted(data_dict_modules | route_modules | service_modules | top_level_modules)
 
     def _mod_prefix(mod: str) -> str:
@@ -4423,8 +4428,10 @@ def test_register_routes_covers_every_module_in_routes_package():
         covered_modules.append(mod_info.name)
         for router in routers:
             for route in router.routes:
-                if route.endpoint not in registered:
-                    missing.append(f"{mod_info.name}:{route.path}")
+                # router.routes 静态标为 BaseRoute，但经装饰器注册的路由运行时必是
+                # APIRoute（endpoint/path 是其专有属性），属刻意的动态面访问
+                if route.endpoint not in registered:  # type: ignore[attr-defined]  # BaseRoute 静态无 endpoint，运行时必为 APIRoute（见上注释）
+                    missing.append(f"{mod_info.name}:{route.path}")  # type: ignore[attr-defined]  # 同上：APIRoute 专有属性
 
     assert "main" in covered_modules, "routes/main.py（通用 handler）没被扫描到"
     assert not missing, f"这些路由定义了却没挂进 app（漏 include_router）: {missing}"

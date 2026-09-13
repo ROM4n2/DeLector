@@ -136,6 +136,7 @@ def test_readme_download_table_points_at_current_version():
         assert cell, "下载表某行缺少 `vX.Y.Z` 版本单元格：%s" % row[:60]
         assert cell.group(1) == version, f"下载表版本单元格={cell.group(1)} vs build.gradle={version}：{row[:60]}"
         link = re.search(r"releases/tag/v(\d+\.\d+\.\d+)", row)
+        assert link, "下载表某行缺少 releases/tag 链接：%s" % row[:60]
         assert link.group(1) == version, f"下载链接={link.group(1)} vs build.gradle={version}：{row[:60]}"
 
 
@@ -556,7 +557,7 @@ def test_no_undefined_css_variables_in_writer_surfaces():
     declared = set(re.findall(r"(--[\w-]+)\s*:", STYLE))
     used = set(re.findall(r"var\(\s*(--[\w-]+)", STYLE))
 
-    KNOWN_LEGACY_UNDEFINED = set()
+    KNOWN_LEGACY_UNDEFINED: set[str] = set()
     undefined = used - declared - KNOWN_LEGACY_UNDEFINED
     assert not undefined, f"用到了未定义的 CSS 变量：{sorted(undefined)}"
 
@@ -578,7 +579,7 @@ def _style_without_comments():
 
 
 def _btn_classes_used_in_markup():
-    used = set()
+    used: set[str] = set()
     for src in (INDEX, WRITER):
         for attr in re.findall(r'class="([^"]*)"', src):
             used.update(t for t in attr.split() if t.startswith("btn"))
@@ -707,7 +708,7 @@ def test_no_rule_is_fully_shadowed_by_btn_xs_important():
     xs_important = {m.group(1) for m in re.finditer(r"([\w-]+)\s*:[^;]*!important\s*;", _rule_body(r"\.btn-xs\s*\{"))}
     assert xs_important, ".btn-xs 里没有 !important 声明，本测试的前提变了"
 
-    companions = set()
+    companions: set[str] = set()
     for src in (INDEX, WRITER):
         for attr in re.findall(r'class="([^"]*)"', src):
             classes = attr.split()

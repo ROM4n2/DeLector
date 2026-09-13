@@ -731,7 +731,9 @@ def _split_top_level_commas(text):
     `Math.max(0, dailyNew - nw)`、`S.cards[id]`、`wordFilters.scope === "core"`
     里的逗号都不是声明分隔符。只在深度 0 且不在引号里时切。
     """
-    parts, buf, depth, quote, esc = [], [], 0, None, False
+    parts: list[str] = []
+    buf: list[str] = []
+    depth, quote, esc = 0, None, False
     for ch in text:
         if quote:  # 引号内：只找收尾引号，其余字符原样收
             buf.append(ch)
@@ -1906,7 +1908,10 @@ def test_out_of_scope_class_wired_on_word_row():
     )
 
     cond, when_true, when_false = _out_of_scope_ternary()
-    bangs = len(re.match(r"^\s*(!*)", cond).group(1))
+    # `^\s*(!*)` 对任何字符串（含空串）都匹配成功，match 不可能是 None
+    m_bangs = re.match(r"^\s*(!*)", cond)
+    assert m_bangs is not None
+    bangs = len(m_bangs.group(1))
     assert bangs <= 1, "三元条件别写多重取反，读者数不清极性、断言也判不了方向：%s" % cond.strip()
     in_true = OUT_OF_SCOPE_CLASS in when_true
     in_false = OUT_OF_SCOPE_CLASS in when_false
@@ -2036,8 +2041,8 @@ def render_words_predicate(scope="all", q="", cards=None, **filters):
     def hit(word):
         return _run_node_predicate(js, [word])[0]
 
-    hit.js_source = js
-    hit.predicate_source = pred_src
+    hit.js_source = js  # type: ignore[attr-defined]  # 刻意在闭包上挂元数据，供断言方读脚本源码，不值得为此引入 Protocol
+    hit.predicate_source = pred_src  # type: ignore[attr-defined]  # 同上：函数对象动态属性
     return hit
 
 

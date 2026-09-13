@@ -29,6 +29,7 @@
 
 import gc
 import os
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -59,7 +60,8 @@ _DECK_CARDS = {
     "u-gehen": {"reps": 3, "lapses": 1},
     "u-wasser": {"reps": 2, "lapses": 0},
 }
-DECK_PAYLOAD = {"words": _DECK_WORDS, "cards": _DECK_CARDS}
+# 注解 Any：words/cards 两值 join 成过窄的 Collection[Collection[str]]，令 .items() 静态报错
+DECK_PAYLOAD: dict[str, Any] = {"words": _DECK_WORDS, "cards": _DECK_CARDS}
 
 
 def _strip_german_article(hw: str) -> str:
@@ -201,7 +203,8 @@ def test_3_annotate_has_known_and_unknown_tokens(client):
     known_set = _build_known_set(DECK_PAYLOAD)
     assert "mann" in known_set and "gehen" in known_set, "夹具前提：Mann / gehen 是已背词（reps>0）"
 
-    known_lemmas, unknown_lemmas = [], []
+    known_lemmas: list[str] = []
+    unknown_lemmas: list[str] = []
     for sent in data["sentences"]:
         for tok in sent["tokens"]:
             lemma = tok["lemma"]

@@ -34,6 +34,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -55,7 +56,8 @@ ARTICLE = "Der Mann geht unverzagt in die Schule."
 
 # deck 形状与真实 deck 逐字段同源（words:[{id,hw,pos,gloss,...}]；cards:{id:{reps,...}}）。
 # ≥3 个 reps>0 词 —— 满足 A7 第①步「背 ≥3 词」。
-DECK_PAYLOAD = {
+# 注解 Any：嵌套异构字面量会被 join 成过窄的 Collection[Collection[str]]，语义失真
+DECK_PAYLOAD: dict[str, Any] = {
     "words": [
         {"id": "u-mann", "hw": "Mann", "pos": "NOUN", "gloss": "男人"},
         {"id": "u-gehen", "hw": "gehen", "pos": "VERB", "gloss": "走，去"},
