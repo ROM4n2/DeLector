@@ -6,6 +6,7 @@ spaCy 模型由调用方注入（server 传 Android 安全加载的 nlp；测试
 """
 import re
 from typing import Any, Dict, List, Optional, Tuple
+
 from delector.data.core_dict import lookup_core_vocab
 
 # 双格介词整组跳过（静动态依语境决定，纯规则极易误报）
@@ -71,7 +72,8 @@ _A1_POLITE_PRONOUNS = {"Sie", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihrer"}
 _A1_PROPER_NOUNS = {
     "montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag", "sonntag",
     "berlin", "münchen", "hamburg", "köln", "frankfurt", "deutschland", "österreich", "schweiz",
-    "januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember"
+    "januar", "februar", "märz", "april", "mai", "juni", "juli", "august",
+    "september", "oktober", "november", "dezember",
 }
 
 _GENDER_NORM = {
@@ -276,7 +278,10 @@ def detect_determiner_noun_agreement(tokens: List[Any], base: int) -> List[Dict[
                 "severity": "error",
                 "error_type": "artikel",
                 "corrected_form": f"{correct_det} {head.text}",
-                "explanation_zh": f"「{head.text}」是{real_gender}性{expected_case}格，冠词应为「{correct_det}」而非「{tok.text}」。",
+                "explanation_zh": (
+                    f"「{head.text}」是{real_gender}性{expected_case}格，冠词应为"
+                    f"「{correct_det}」而非「{tok.text}」。"
+                ),
                 "start": start,
                 "end": end,
             })
@@ -315,7 +320,11 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
             continue
 
         dict_info = lookup_core_vocab(obj.lemma_) or lookup_core_vocab(obj.text)
-        real_gender = (dict_info.get("gender") if dict_info else None) or _first_morph(obj.morph.get("Gender")) or _first_morph(det.morph.get("Gender"))
+        real_gender = (
+            (dict_info.get("gender") if dict_info else None)
+            or _first_morph(obj.morph.get("Gender"))
+            or _first_morph(det.morph.get("Gender"))
+        )
         if not real_gender:
             continue
 
@@ -329,7 +338,10 @@ def detect_preposition_case(tokens: List[Any], base: int) -> List[Dict[str, Any]
             start = min(det.idx, obj.idx) - base
             end = max(det.idx + len(det.text), obj.idx + len(obj.text)) - base
             if error_type == "praeposition" and verb_head:
-                expl = f"固定搭配「{verb_head.lemma_} {prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」而非「{det.text}」。"
+                expl = (
+                    f"固定搭配「{verb_head.lemma_} {prep}」要求{expected}格，名词「{obj.text}」前应为"
+                    f"「{form}」而非「{det.text}」。"
+                )
             else:
                 expl = f"介宾「{prep}」要求{expected}格，名词「{obj.text}」前应为「{form}」而非「{det.text}」。"
             spans.append({
@@ -382,7 +394,11 @@ def _collect_np_hints(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
 
         # 性判断：核心词典权威优先 -> 名词 morph -> 冠词 morph
         dict_info = lookup_core_vocab(tok.lemma_) or lookup_core_vocab(tok.text)
-        g_raw = (dict_info.get("gender") if dict_info else None) or _first_morph(tok.morph.get("Gender")) or (det and _first_morph(det.morph.get("Gender")))
+        g_raw = (
+            (dict_info.get("gender") if dict_info else None)
+            or _first_morph(tok.morph.get("Gender"))
+            or (det and _first_morph(det.morph.get("Gender")))
+        )
         g = _GENDER_NORM.get(g_raw.lower()) if g_raw else None
 
         if g:
@@ -413,7 +429,10 @@ def _collect_prep_warnings(tokens: List[Any], base: int) -> List[Dict[str, Any]]
                 "severity": "warning",
                 "error_type": "twoway",
                 "label": f"注意：{tok.text} [Dat/Akk]",
-                "explanation_zh": f"「{tok.text}」是静动态双格介词：这里 Dat/Akk 皆可，请根据动作方向判断（静态用三格 Dativ，动态用四格 Akkusativ）。",
+                "explanation_zh": (
+                    f"「{tok.text}」是静动态双格介词：这里 Dat/Akk 皆可，请根据动作方向判断"
+                    f"（静态用三格 Dativ，动态用四格 Akkusativ）。"
+                ),
                 "start": start,
                 "end": end,
             })
@@ -526,7 +545,7 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
     4. Word count recommendation (25-35 words).
     5. Leitpunkte coverage hints.
     """
-    lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
+    lines = [ln.strip() for ln in text.strip().split("\n") if ln.strip()]
     words = [w for w in re.findall(r'[a-zA-ZäöüÄÖÜß]+', text)]
     word_count = len(words)
 
@@ -543,7 +562,10 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
         suggestions.append({
             "rule": "a1_word_count",
             "level": "warning",
-            "message": f"字数偏多（当前 {word_count} 词）。A1 简短便条尽量控制在 25~35 词，避免过度拓展产生额外语法错误。"
+            "message": (
+                f"字数偏多（当前 {word_count} 词）。A1 简短便条尽量控制在 25~35 词，"
+                f"避免过度拓展产生额外语法错误。"
+            )
         })
 
     # 2. Greeting check
@@ -589,7 +611,10 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
                 suggestions.append({
                     "rule": "a1_greeting_body_lowercase",
                     "level": "error",
-                    "message": f"称呼语后加了逗号，正文首词 '{first_w}' 必须小写（应为 '{first_w[0].lower() + first_w[1:]}'）。"
+                    "message": (
+                        f"称呼语后加了逗号，正文首词 '{first_w}' 必须小写"
+                        f"（应为 '{first_w[0].lower() + first_w[1:]}'）。"
+                    )
                 })
 
     # 4. Valediction & Comma prohibition check
@@ -597,12 +622,12 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
     valediction_line = ""
     has_valediction_comma_error = False
 
-    for l in reversed(lines):
-        norm_l = re.sub(r'[,.!?]', '', l).strip().lower()
-        if any(norm_l.startswith(v) for v in _A1_VALEDICTIONS):
+    for ln in reversed(lines):
+        norm_ln = re.sub(r'[,.!?]', '', ln).strip().lower()
+        if any(norm_ln.startswith(v) for v in _A1_VALEDICTIONS):
             valediction_found = True
-            valediction_line = l
-            if l.endswith(","):
+            valediction_line = ln
+            if ln.endswith(","):
                 has_valediction_comma_error = True
                 suggestions.append({
                     "rule": "a1_valediction_comma",
