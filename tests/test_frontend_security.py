@@ -44,8 +44,9 @@ def test_reader_js_no_esc_inside_js_string_literals():
 
 def test_main_js_feed_ingest_quotes_are_entity_safe():
     # encodeURIComponent 不转义 '（保留字符 !'()*-._~），必须再套 jsAttr
-    assert ("window.ingestFeedItem(${jsAttr(encodeURIComponent(it.link))}, "
-            "${jsAttr(encodeURIComponent(it.title))}, this)") in MAIN
+    assert (
+        "window.ingestFeedItem(${jsAttr(encodeURIComponent(it.link))}, ${jsAttr(encodeURIComponent(it.title))}, this)"
+    ) in MAIN
     assert "window.selectFeedSource(${jsAttr(s.id)})" in MAIN
 
 
@@ -90,7 +91,7 @@ def test_reader_js_xss_sinks_are_neutralised():
     assert 'id="sent-unit-${Number(sent.id)}"' in READER
     assert 'data-sent-id="${Number(sent.id)}"' in READER
     assert 'id="sent-topology-${Number(sent.id)}"' in READER
-    assert 'openSyntaxDrawerForSentence(${Number(sent.id)})' in READER
+    assert "openSyntaxDrawerForSentence(${Number(sent.id)})" in READER
 
     # heatbar: cnt → Number
     assert "Number(counts[lvl])" in READER
@@ -107,4 +108,4 @@ def test_reader_js_xss_sinks_are_neutralised():
     ) in READER
 
     # renderReaderHeatbar badge: safeCefr
-    assert 'safeCefr(stats.recommended_level)' in READER
+    assert "safeCefr(stats.recommended_level)" in READER

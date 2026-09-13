@@ -2,6 +2,7 @@
 DeLector - Sentence-level Diff & Merge Engine for Writing Desk (v3.12.0)
 100% pure Python stdlib (difflib) + syntax_tree.split_sentences_pure_python.
 """
+
 import difflib
 from typing import Any, Dict, List
 
@@ -43,7 +44,7 @@ def _decompose_opcodes(sents_orig: List[str], sents_corr: List[str]):
                 else:
                     for k in range(min_len - 1):
                         yield "replace", [old_sents[k]], [new_sents[k]]
-                    yield "replace", old_sents[min_len - 1:], new_sents[min_len - 1:]
+                    yield "replace", old_sents[min_len - 1 :], new_sents[min_len - 1 :]
         elif tag == "insert":
             for s in sents_corr[j1:j2]:
                 yield "insert", [], [s]
@@ -63,11 +64,13 @@ def diff_sentences(original: str, corrected: str) -> List[Dict[str, Any]]:
     hunks: List[Dict[str, Any]] = []
     for tag, old_chunk, new_chunk in _decompose_opcodes(sents_orig, sents_corr):
         if tag != "equal":
-            hunks.append({
-                "old": old_chunk,
-                "new": new_chunk,
-                "accepted": True,
-            })
+            hunks.append(
+                {
+                    "old": old_chunk,
+                    "new": new_chunk,
+                    "accepted": True,
+                }
+            )
     return hunks
 
 
@@ -88,4 +91,3 @@ def merge_sentences(original: str, corrected: str, accepted: List[bool]) -> str:
                 out.extend(old_chunk)
             h_idx += 1
     return join_sentences(out)
-

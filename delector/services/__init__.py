@@ -18,6 +18,7 @@ monkeypatch 打在 `sys.modules["delector.services.tts"]` + `delector.services.t
   （如 `from delector.services.writing import analyze_essay_text`），17 个扁平符号
   re-export 因零调用方被删除（vault-grill ADR-0009 Q1A，Deletion Test）。
 """
+
 from delector.services import essay_diff, exam_catalog, tts, writing
 
 __all__ = ["essay_diff", "exam_catalog", "tts", "writing"]

@@ -7,6 +7,7 @@
 保持原文件名（只加 `data/` 层级不改名），消费方统一改指
 `from .data.<name> import …` 或 `from .data import <name>`（属性访问不变）。
 """
+
 __all__ = [
     "a1_dict",
     "a1_hoeren_dict",

@@ -20,6 +20,7 @@ level_hint 启发式（契约）：unknown_rate = 未知 token / tokens_total，
 空 tokens 边界：tokens_total=0 时 unknown_rate 定义作 0.0 → level_hint "A1"
 （无信息输入按最乐观定级，避免除零）。
 """
+
 from typing import Any, Dict, List
 
 # 允许作为 known 基准的考纲等级（与 exam_catalog 实存词表对应）。
@@ -47,11 +48,7 @@ def _load_a2_lemmas() -> frozenset:
     """
     from delector.data.core_dict import CORE_VOCAB_DB
 
-    lemmas = {
-        lemma.strip().lower()
-        for lemma, val in CORE_VOCAB_DB.items()
-        if str(val[0]).upper() == "A2"
-    }
+    lemmas = {lemma.strip().lower() for lemma, val in CORE_VOCAB_DB.items() if str(val[0]).upper() == "A2"}
     return frozenset(lemmas)
 
 
@@ -135,9 +132,7 @@ async def run(payload: dict) -> dict:
     unknown_count = tokens_total - known_count
 
     # 频降序 + lemma 升序（稳定），封顶 _UNKNOWN_CAP。
-    unknown_ranked = sorted(
-        unknown_freq.items(), key=lambda kv: (-kv[1], kv[0])
-    )[:_UNKNOWN_CAP]
+    unknown_ranked = sorted(unknown_freq.items(), key=lambda kv: (-kv[1], kv[0]))[:_UNKNOWN_CAP]
     unknown_ranked = [{"lemma": lemma, "count": cnt} for lemma, cnt in unknown_ranked]
 
     # --- level_hint 启发式 ---

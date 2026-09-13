@@ -4,6 +4,7 @@
 本模块零包内依赖（只吃标准库），供任意层引用，用于打破
 `nlp → start`、`routes/a1 → server` 的反向/跨边界 import（ADR-0008 Phase 1 Task 1）。
 """
+
 import os
 import sys
 from typing import Dict
@@ -40,7 +41,5 @@ def _attachment_headers(filename: str) -> Dict[str, str]:
     safe = (filename or "delector_export").replace('"', "")
     quoted = safe.replace("\\", "\\\\").replace('"', '\\"')
     headers = dict(_NO_STORE_HEADERS)
-    headers["Content-Disposition"] = (
-        f'attachment; filename="{quoted}"; filename*=UTF-8\'\'{quote(safe)}'
-    )
+    headers["Content-Disposition"] = f"attachment; filename=\"{quoted}\"; filename*=UTF-8''{quote(safe)}"
     return headers

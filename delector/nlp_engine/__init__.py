@@ -5,6 +5,7 @@
 （nlp.py 因与子包职责重复改名 processor.py）。对外稳定接口在此 re-export，
 Go Agent 工具层与外部消费者一律从 deletor.nlp_engine 取，不直接依赖子模块名。
 """
+
 from .linguistics import (  # noqa: F401
     build_prep_matrix,
     build_prep_matrix_core,

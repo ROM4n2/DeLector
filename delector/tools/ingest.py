@@ -4,6 +4,7 @@
 Phase 2 Go Agent 拿到文章 URL 后，经此 tool 拉取 HTML（落库由 server 既有 ingest
 流程负责；本 tool 只负责"取"，返回原文 HTML 供下游处理）。
 """
+
 from delector.core.security import fetch_remote_html
 
 

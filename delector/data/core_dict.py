@@ -4,6 +4,7 @@ High-frequency German-Chinese dictionary with accurate lemma, POS, gender (der/d
 plural endings, CEFR level, and concise Chinese definitions.
 O(1) memory lookup for zero-latency token inspection and CEFR difficulty tagging.
 """
+
 import functools
 from typing import Any, Dict, Optional
 
@@ -91,7 +92,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "arzt": ("A1", "NOUN", "Masc", "-..e", "医生，男大夫"),
     "ärztin": ("A1", "NOUN", "Fem", "-nen", "女医生"),
     "spaß": ("A1", "NOUN", "Masc", "-..e", "乐趣，玩笑，愉快"),
-
     # ── A1 Core Verbs ──────────────────────────────────────────────────────────
     "sein": ("A1", "VERB", None, None, "是，存在，处于"),
     "haben": ("A1", "VERB", None, None, "有，拥有"),
@@ -142,7 +142,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "wissen": ("A1", "VERB", None, None, "知道，知晓"),
     "kennen": ("A1", "VERB", None, None, "认识，了解，熟悉"),
     "verstehen": ("A1", "VERB", None, None, "理解，明白，懂"),
-
     # ── A1 Core Adjectives & Others ────────────────────────────────────────────
     "gut": ("A1", "ADJ", None, None, "好的，良好的"),
     "schlecht": ("A1", "ADJ", None, None, "坏的，糟糕的"),
@@ -174,7 +173,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "langweilig": ("A1", "ADJ", None, None, "无聊的，枯燥的"),
     "fertig": ("A1", "ADJ", None, None, "完成的，准备好的"),
     "offen": ("A1", "ADJ", None, None, "开着的，坦率的，公开的"),
-
     # ── A2 Nouns & Verbs ───────────────────────────────────────────────────────
     "wochenende": ("A2", "NOUN", "Neut", "-n", "周末"),
     "urlaub": ("A2", "NOUN", "Masc", "-e", "假期，休假"),
@@ -231,7 +229,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "kino": ("A2", "NOUN", "Neut", "-s", "电影院"),
     "theater": ("A2", "NOUN", "Neut", "-", "剧院，戏剧"),
     "museum": ("A2", "NOUN", "Neut", "Museen", "博物馆"),
-
     "erzählen": ("A2", "VERB", None, None, "讲述，叙述，告诉"),
     "erklären": ("A2", "VERB", None, None, "解释，说明，阐明"),
     "beschreiben": ("A2", "VERB", None, None, "描述，描绘"),
@@ -267,7 +264,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "glauben": ("A2", "VERB", None, None, "相信，认为，信仰"),
     "denken": ("A2", "VERB", None, None, "思考，想，认为"),
     "meinen": ("A2", "VERB", None, None, "认为，意思是，指"),
-
     # ── B1 Core Goethe Vocabulary ──────────────────────────────────────────────
     "klimawandel": ("B1", "NOUN", "Masc", "-", "气候变化"),
     "klimaschutz": ("B1", "NOUN", "Masc", "-", "气候保护"),
@@ -326,7 +322,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "internet": ("B1", "NOUN", "Neut", "-", "互联网，网络"),
     "netzwerk": ("B1", "NOUN", "Neut", "-e", "网络，人脉网"),
     "technologie": ("B1", "NOUN", "Fem", "-n", "技术，工艺"),
-
     "entscheiden": ("B1", "VERB", None, None, "决定，判决"),
     "beschließen": ("B1", "VERB", None, None, "决议，决定，结束"),
     "entwickeln": ("B1", "VERB", None, None, "发展，研发，培养"),
@@ -361,7 +356,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "erinnern": ("B1", "VERB", None, None, "提醒，使想起，回忆(sich an A.)"),
     "vergessen": ("B1", "VERB", None, None, "遗忘，忘记"),
     "gewöhnen": ("B1", "VERB", None, None, "使习惯于(sich an A. gewöhnen)"),
-
     # ── B2 Advanced Academic & Professional ────────────────────────────────────
     "digitalisierung": ("B2", "NOUN", "Fem", "-", "数字化，数字化转型"),
     "transformation": ("B2", "NOUN", "Fem", "-en", "转型，变革，转变"),
@@ -406,7 +400,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "prozess": ("B2", "NOUN", "Masc", "-e", "过程，进程，诉讼"),
     "struktur": ("B2", "NOUN", "Fem", "-en", "结构，构造，架构"),
     "funktion": ("B2", "NOUN", "Fem", "-en", "功能，职责，作用"),
-
     "beeinträchtigen": ("B2", "VERB", None, None, "损害，负面影响，妨碍"),
     "gewährleisten": ("B2", "VERB", None, None, "确保，保证，担保"),
     "hervorheben": ("B2", "VERB", None, None, "强调，突出，指出"),
@@ -436,7 +429,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "beitragen": ("B2", "VERB", None, None, "为...做出贡献(zu D. beitragen)"),
     "verfügen": ("B2", "VERB", None, None, "拥有，支配(über A. verfügen)"),
     "basieren": ("B2", "VERB", None, None, "基于，建立在...基础之上(auf D.)"),
-
     "grundlegend": ("B2", "ADJ", None, None, "根本性的，基础的，彻底的"),
     "wesentlich": ("B2", "ADJ", None, None, "本质的，主要的，关键的"),
     "flexibel": ("B2", "ADJ", None, None, "灵活的，有弹性的"),
@@ -452,7 +444,6 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "potenziell": ("B2", "ADJ", None, None, "潜在的，可能的"),
     "kontrovers": ("B2", "ADJ", None, None, "有争议的，引发分歧的"),
     "eindeutig": ("B2", "ADJ", None, None, "明确的，毋庸置疑的"),
-
     # ── C1 Academic & High Register ───────────────────────────────────────────
     "fungieren": ("C1", "VERB", None, None, "充当，担任，发挥...作用(als)"),
     "implizieren": ("C1", "VERB", None, None, "意味着，暗指，包含"),
@@ -471,6 +462,7 @@ CORE_VOCAB_DB: Dict[str, tuple] = {
     "manifest": ("C1", "ADJ", None, None, "显而易见的，明白的"),
 }
 
+
 def _build_core_vocab_entry(base_key: str) -> Dict[str, Any]:
     """无状态构造条目（M4-2 拆出，供 lru 包装复用）。"""
     cefr, pos, gender, plural, def_zh = CORE_VOCAB_DB[base_key]
@@ -481,7 +473,7 @@ def _build_core_vocab_entry(base_key: str) -> Dict[str, Any]:
         "gender": gender,
         "plural": plural or "",
         "definition_zh": def_zh,
-        "source": "local_dict"
+        "source": "local_dict",
     }
 
 
@@ -505,10 +497,11 @@ def lookup_core_vocab(lemma_or_word: str) -> Optional[Dict[str, Any]]:
     # Strip common German verb inflections or noun plurals if lemma is slightly variant
     for ending in ["en", "e", "n", "s"]:
         if key.endswith(ending) and len(key) > len(ending) + 2:
-            base = key[:-len(ending)]
+            base = key[: -len(ending)]
             if base in CORE_VOCAB_DB:
                 return _core_entry_cached(base)
     return None
+
 
 def get_core_cefr_level(lemma: str) -> Optional[str]:
     """Get exact CEFR level if in core dictionary."""
@@ -518,6 +511,7 @@ def get_core_cefr_level(lemma: str) -> Optional[str]:
     if key in CORE_VOCAB_DB:
         return CORE_VOCAB_DB[key][0]
     return None
+
 
 # ── 合并 AI 批量生成的扩展词库（core_dict_ext.py，见 tools/build_dict.py）────
 # 为什么 import 而非运行时读 JSON：Chaquopy extract_packages 为空，open() 数据

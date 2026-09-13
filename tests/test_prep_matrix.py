@@ -8,16 +8,13 @@
 3. 排序契约 —— 同组内 lemma 字母序。组间顺序属呈现策略，由 server 层负责，
    这里不断言（避免两层各有一套真相）。
 """
+
 from delector.nlp_engine.linguistics import PREP_COLLOCATIONS, build_prep_matrix, build_prep_matrix_core
 
 
 def test_matrix_total_conservation():
     matrix = build_prep_matrix()
-    total_in_matrix = sum(
-        len(entries)
-        for by_case in matrix.values()
-        for entries in by_case.values()
-    )
+    total_in_matrix = sum(len(entries) for by_case in matrix.values() for entries in by_case.values())
     total_in_dict = sum(len(rows) for rows in PREP_COLLOCATIONS.values())
     assert total_in_matrix == total_in_dict > 0
 
@@ -59,10 +56,8 @@ def test_reflexive_flag_matches_dataset_marker():
     换成 startswith 只静默错这 12 条。
     """
     matrix = build_prep_matrix()
-    flagged = sum(e["reflexive"] for by_case in matrix.values()
-                  for es in by_case.values() for e in es)
-    expected = sum(1 for rows in PREP_COLLOCATIONS.values()
-                   for r in rows if "(sich)" in r[2])
+    flagged = sum(e["reflexive"] for by_case in matrix.values() for es in by_case.values() for e in es)
+    expected = sum(1 for rows in PREP_COLLOCATIONS.values() for r in rows if "(sich)" in r[2])
     assert flagged == expected > 0, f"reflexive 标记数 {flagged} != 数据集 (sich) 数 {expected}"
     # 位置钉子：标记不在句首的那一类必须也认出来
     tail_marked = build_prep_matrix_core({"einschalten": (("in", "Akk", "介入 (sich)", "x"),)})
@@ -145,8 +140,7 @@ def test_cards_js_reuses_save_payload_shape():
     变异验证 M4 就是这么活下来的。
     """
     body = _CARDS.split("export async function savePrepCardFromMatrix")[1]
-    for field in ("article_id", "word", "lemma", "pos", "gender",
-                  "cefr_level", "definition_zh", "sentence_context"):
+    for field in ("article_id", "word", "lemma", "pos", "gender", "cefr_level", "definition_zh", "sentence_context"):
         assert f"{field}:" in body, f"payload 缺字段 {field}（VocabCardReq 要求）"
     # 反身标记只在词头渲染一次，释义里的 (sich) 要摘掉
     assert "(sich)" in _CARDS

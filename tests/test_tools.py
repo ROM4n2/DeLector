@@ -5,6 +5,7 @@ Go Agent（Phase 2）经此 HTTP 契约调用 Python 业务能力。覆盖：
 - 路由分发（列表 / 未知 tool 404 / 6 个 tool 端点可达）
 - 每个 tool.run 的薄包装语义（网络/外网依赖一律 monkeypatch 脱敏）
 """
+
 import asyncio
 import base64
 
@@ -63,9 +64,7 @@ def test_ingest_tool_via_http(monkeypatch):
         return "<html>hi</html>"
 
     monkeypatch.setattr("delector.tools.ingest.fetch_remote_html", fake_fetch)
-    resp = client.post(
-        "/api/tools/ingest", json={"payload": {"url": "http://example.com/a"}}
-    )
+    resp = client.post("/api/tools/ingest", json={"payload": {"url": "http://example.com/a"}})
     assert resp.status_code == 200
     assert resp.json()["html"] == "<html>hi</html>"
 

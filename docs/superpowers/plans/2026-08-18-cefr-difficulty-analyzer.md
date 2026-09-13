@@ -34,9 +34,9 @@
   {
       "word_count": int,
       "est_reading_minutes": int,
-      "recommended_level": str, # "A1", "A2", "B1", "B2+"
-      "cefr_counts": Dict[str, int], # {"A1": 35, "A2": 10, "B1": 5, "B2": 2, "C1": 0}
-      "cefr_percentages": Dict[str, float] # {"A1": 67.3, "A2": 19.2, "B1": 9.6, "B2": 3.8, "C1": 0.0}
+      "recommended_level": str,  # "A1", "A2", "B1", "B2+"
+      "cefr_counts": Dict[str, int],  # {"A1": 35, "A2": 10, "B1": 5, "B2": 2, "C1": 0}
+      "cefr_percentages": Dict[str, float],  # {"A1": 67.3, "A2": 19.2, "B1": 9.6, "B2": 3.8, "C1": 0.0}
   }
   ```
 - Ensures: `/api/articles` 列表接口返回 `stats` 供首页文库展示。
@@ -77,19 +77,19 @@ def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
     counts = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
     words = [t for t in tokens_list if t["cefr_level"]]
     total_words = len(words)
-    
+
     for w in words:
         lvl = w["cefr_level"]
         if lvl in counts:
             counts[lvl] += 1
-            
+
     percentages = {}
     for lvl, cnt in counts.items():
         percentages[lvl] = round((cnt / total_words * 100), 1) if total_words > 0 else 0.0
-        
+
     non_a1_count = total_words - counts["A1"]
     non_a1_ratio = (non_a1_count / total_words) if total_words > 0 else 0.0
-    
+
     if non_a1_ratio < 0.15:
         recommended = "A1"
     elif non_a1_ratio < 0.30:
@@ -98,15 +98,15 @@ def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
         recommended = "B1"
     else:
         recommended = "B2+"
-        
-    est_minutes = max(1, round(total_words / 90)) # 90 words/min 精读标准
-    
+
+    est_minutes = max(1, round(total_words / 90))  # 90 words/min 精读标准
+
     return {
         "word_count": total_words,
         "est_reading_minutes": est_minutes,
         "recommended_level": recommended,
         "cefr_counts": counts,
-        "cefr_percentages": percentages
+        "cefr_percentages": percentages,
     }
 ```
 

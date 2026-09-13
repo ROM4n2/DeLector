@@ -5,6 +5,7 @@
 会执行 init_db() + seed_preset_articles()，落到真实库会造成数据污染。
 本模块自用独立的临时库文件名，避免与 test_server.py 的 test_delector.db 冲突。
 """
+
 import gc
 import os
 import sqlite3
@@ -44,10 +45,7 @@ def clean_db():
     # 全量 pytest 时更晚收集的 test_server.py 会在模块顶层把 DATABASE_PATH
     # 改写成本文件，导致本文件用例的默认路径命中未建表的 test_delector.db。
     # 故每个用例前后都钉住自己的 env，不能只靠模块顶层那一次赋值。
-    saved = {
-        key: os.environ.get(key)
-        for key in ("DATABASE_PATH", "PROGRESS_DB_PATH")
-    }
+    saved = {key: os.environ.get(key) for key in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
     os.environ["DATABASE_PATH"] = "test_audit_delector.db"
     os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"
     gc.collect()
@@ -58,6 +56,7 @@ def clean_db():
             except OSError:
                 pass
     from delector.server import init_db, init_progress_db
+
     init_db("test_audit_delector.db")
     init_progress_db("test_audit_progress.db")
     yield
@@ -77,12 +76,14 @@ def clean_db():
 
 # ── M2-4: 连接确定性关闭（open/close 对账探针）──────────────────────────────
 
+
 def _make_conn_spy(monkeypatch):
     """计数式对账探针：所有 sqlite3.connect 都从 database.sqlite3.connect 打开
     （含 get_db/get_progress_db 与 init 原始 connect），所有意图性关闭都汇聚到
     database._close_db_conn。sqlite3.Connection.close 是只读属性，不能逐个包实例，
     故以「open 总数 == close 调用总数」做泄漏判定。"""
     import delector.core.database as db
+
     state = {"opened": 0, "closed": 0}
 
     orig_connect = db.sqlite3.connect
@@ -105,6 +106,7 @@ def test_database_layer_connections_closed_deterministically(monkeypatch):
     """database 层每个业务函数「一次连接一次 close」——不能只 commit 不 close、
     等循环 GC 才释放 Windows 句柄。"""
     import delector.core.database as db
+
     state = _make_conn_spy(monkeypatch)
     assert state["opened"] == 0 and state["closed"] == 0
 
@@ -117,14 +119,14 @@ def test_database_layer_connections_closed_deterministically(monkeypatch):
     db.log_study_event("quiz_session", db_path="test_audit_progress.db")
 
     assert state["opened"] > 0, "探针必须捕获到连接"
-    assert state["opened"] == state["closed"], \
-        f"泄漏 {state['opened'] - state['closed']} 个连接"
+    assert state["opened"] == state["closed"], f"泄漏 {state['opened'] - state['closed']} 个连接"
 
 
 def test_server_endpoints_close_every_connection(client, monkeypatch):
     """server 路由每个请求打开的主/进度库连接都必须 one-open-one-close，
     覆盖跨双库的代表性端点（读、写、复习、统计、wb 镜像）。"""
     import delector.core.database as db
+
     state = {"opened": 0, "closed": 0}
 
     orig_connect = db.sqlite3.connect
@@ -144,32 +146,43 @@ def test_server_endpoints_close_every_connection(client, monkeypatch):
     assert client.get("/api/articles").status_code == 200
     assert client.get("/api/wb/state").status_code == 200
     assert client.get("/api/progress/stats").status_code == 200
-    c = client.post("/api/cards/vocab", json={
-        "word": "probe", "lemma": "probe", "pos": "NOUN", "cefr_level": "A1",
-        "definition_zh": "探针", "sentence_context": "Ein Probe wort.",
-    })
+    c = client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "probe",
+            "lemma": "probe",
+            "pos": "NOUN",
+            "cefr_level": "A1",
+            "definition_zh": "探针",
+            "sentence_context": "Ein Probe wort.",
+        },
+    )
     card_id = c.json()["id"]
     assert client.post(f"/api/cards/vocab/{card_id}/review", json={"grade": 3}).status_code == 200
     assert client.get("/api/cards/due").status_code == 200
     assert client.get("/api/prep/saved").status_code == 200
 
     assert state["opened"] > 0
-    assert state["opened"] == state["closed"], \
-        f"server 端点泄漏 {state['opened'] - state['closed']} 个连接"
+    assert state["opened"] == state["closed"], f"server 端点泄漏 {state['opened'] - state['closed']} 个连接"
 
 
 # ── M2-3: list_articles 只读减载 + review 去回查 ────────────────────────────
+
 
 def test_list_articles_readonly_no_stats_recompute(client, monkeypatch):
     """文章列表是只读路径：stats 缺失的行不得在列表期间做逐行 NLP 重算 + UPDATE
     （N+1 副作用），返回空 stats 即可；惰性迁移只留在单篇 GET。"""
     import json as _json
+
     conn = sqlite3.connect("test_audit_delector.db")
     try:
         conn.execute(
             "INSERT INTO articles (title, raw_text, processed_json) VALUES (?, ?, ?)",
-            ("NoStats", "Hallo Welt. Der Mann liest.", _json.dumps(
-                {"version": "3.4.0", "sentences": []}, ensure_ascii=False)),
+            (
+                "NoStats",
+                "Hallo Welt. Der Mann liest.",
+                _json.dumps({"version": "3.4.0", "sentences": []}, ensure_ascii=False),
+            ),
         )
         conn.commit()
     finally:
@@ -192,6 +205,7 @@ def test_review_has_no_post_update_requery():
     """复习接口一次 SELECT 拿行 + UPDATE 即返回：不得再回查整行
     （UPDATE 后所有列都是内存已算值，回查纯浪费）。"""
     from pathlib import Path
+
     # Phase 1 Task 4：handler 已从 server.py 搬到 delector/routes/main.py
     src = (Path(__file__).resolve().parent.parent / "delector" / "routes" / "main.py").read_text(encoding="utf-8")
     start = src.index("def review_card_sm2(")
@@ -202,6 +216,7 @@ def test_review_has_no_post_update_requery():
 
 
 # ── M2-2: progress stats 单次扫描语义锁定（重构后仍必须成立）────────────────
+
 
 def _insert_study_log(date_iso: str, minutes: int = 10):
     conn = sqlite3.connect("test_audit_progress.db")
@@ -219,6 +234,7 @@ def test_streak_semantics_preserved(client):
     """打卡语义必须原样保留：today 无记录 → 0（即使昨天连续）；today 有 →
     从 today 回溯连续天数；断档之外的历史不再延长。"""
     from datetime import datetime, timedelta
+
     today = datetime.now().date()
     _insert_study_log((today - timedelta(days=1)).isoformat())
     _insert_study_log((today - timedelta(days=2)).isoformat())
@@ -235,6 +251,7 @@ def test_streak_semantics_preserved(client):
 def test_trend_keeps_zero_shape_for_missing_days(client):
     """30 天趋势补零形状不变：只有实际存在的天带真实值，缺的天是精确的零形状。"""
     from datetime import datetime, timedelta
+
     today = datetime.now().date()
     present = (today - timedelta(days=5)).isoformat()
     conn = sqlite3.connect("test_audit_progress.db")
@@ -252,8 +269,7 @@ def test_trend_keeps_zero_shape_for_missing_days(client):
     data = client.get("/api/progress/stats").json()
     trend = data["trend"]
     assert len(trend) == 30
-    zero_shape = {"date", "cards_added", "cards_mastered", "articles_read",
-                  "quiz_sessions", "study_minutes"}
+    zero_shape = {"date", "cards_added", "cards_mastered", "articles_read", "quiz_sessions", "study_minutes"}
     for entry in trend:
         assert set(entry.keys()) == zero_shape, "trend 项字段漂移"
         if entry["date"] == present:
@@ -269,19 +285,40 @@ def test_stats_condition_aggregates_match_single_values(client):
     assert empty["total_cards"] == empty["total_mastered"]  # 空库相等（都为 0）
     assert empty["accuracy_pct"] in (0, 0.0)
 
-    client.post("/api/cards/vocab", json={
-        "word": "sprechen", "lemma": "sprechen", "pos": "VERB", "cefr_level": "B1",
-        "definition_zh": "说", "sentence_context": "Ich spreche Deutsch.",
-    })
-    client.post("/api/cards/vocab", json={
-        "word": "lesen", "lemma": "lesen", "pos": "VERB", "cefr_level": "A2",
-        "definition_zh": "读", "sentence_context": "Er liest ein Buch.",
-    })
+    client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "sprechen",
+            "lemma": "sprechen",
+            "pos": "VERB",
+            "cefr_level": "B1",
+            "definition_zh": "说",
+            "sentence_context": "Ich spreche Deutsch.",
+        },
+    )
+    client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "lesen",
+            "lemma": "lesen",
+            "pos": "VERB",
+            "cefr_level": "A2",
+            "definition_zh": "读",
+            "sentence_context": "Er liest ein Buch.",
+        },
+    )
     # 标记 mastered 会记录 correct_count 递增 → accuracy 有值
-    r = client.post("/api/cards/vocab", json={
-        "word": "hallo", "lemma": "hallo", "pos": "INTJ", "cefr_level": "A1",
-        "definition_zh": "你好", "sentence_context": "Hallo!",
-    })
+    r = client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "hallo",
+            "lemma": "hallo",
+            "pos": "INTJ",
+            "cefr_level": "A1",
+            "definition_zh": "你好",
+            "sentence_context": "Hallo!",
+        },
+    )
     client.patch(f"/api/cards/vocab/{r.json()['id']}/master", json={"mastered": True})
 
     stats = client.get("/api/progress/stats").json()
@@ -292,6 +329,7 @@ def test_stats_condition_aggregates_match_single_values(client):
 
 
 # ── M2-1: SRS / 关联 / 日志查询索引 ─────────────────────────────────────────
+
 
 def _created_index_columns(db_path: str, table: str):
     """返回 {index_name: (columns…)}，只统计显式 CREATE INDEX（origin='c'）。"""
@@ -330,10 +368,12 @@ def test_progress_db_log_indexes():
 
 # ── M3-1: 前端 hosted notify / api 超时 ──────────────────────────────────────
 
+
 def test_core_js_exposes_notify_and_api_timeout():
     """core.js 提供非阻断 notify 与带 AbortController 超时的 api()；
     index.html 预置宿主通知节点。"""
     from pathlib import Path
+
     src = Path("static/js/core.js").read_text(encoding="utf-8")
     assert "export function notify(" in src
     assert "export const DEFAULT_TIMEOUT_MS" in src
@@ -348,19 +388,24 @@ def test_core_js_exposes_notify_and_api_timeout():
 def test_read_path_alerts_use_hosted_notify():
     """读/抓取/AI/后台路径的错误与轻量成功改走 notify 通知带（写路径/输入校验保留 alert）。"""
     from pathlib import Path
+
     checks = [
         ("static/js/reader.js", 'alert("删除文章失败: ', 'notify("删除文章失败: '),
-        ("static/js/reader.js", 'alert("AI 速记解析失败，请检查网络配置")',
-         'notify("AI 速记解析失败，请检查网络配置"'),
-        ("static/js/reader.js", 'alert(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`);',
-         'notify(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`'),
+        ("static/js/reader.js", 'alert("AI 速记解析失败，请检查网络配置")', 'notify("AI 速记解析失败，请检查网络配置"'),
+        (
+            "static/js/reader.js",
+            "alert(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`);",
+            "notify(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`",
+        ),
         ("static/js/writer.js", "alert('打开作文失败：'", "notify('打开作文失败：'"),
         ("static/js/writer.js", "alert('AI 润色请求失败：'", "notify('AI 润色请求失败：'"),
         ("static/js/writer.js", "alert('查看版本快照失败：'", "notify('查看版本快照失败：'"),
-        ("static/js/main.js", "alert(`导入外刊失败: ${e.message}`)",
-         "notify(`导入外刊失败: ${e.message}`"),
-        ("static/js/main.js", 'alert("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入")',
-         'notify("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入"'),
+        ("static/js/main.js", "alert(`导入外刊失败: ${e.message}`)", "notify(`导入外刊失败: ${e.message}`"),
+        (
+            "static/js/main.js",
+            'alert("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入")',
+            'notify("抓取失败，请检查网址是否为公开德语网页，或直接复制文本导入"',
+        ),
     ]
     for path, banned, required in checks:
         src = Path(path).read_text(encoding="utf-8")
@@ -377,23 +422,31 @@ def test_grade_ai_and_success_alerts_use_notify():
 
     converged = [
         # AI/判分路径失败
-        ("static/js/reader.js", 'alert("语法解析失败，请检查 API Key")',
-         'notify("语法解析失败，请检查 API Key",'),
-        ("static/js/a1_lesen.js", 'alert("提交阅读判分失败: " + e.message)',
-         'notify("提交阅读判分失败: " + e.message,'),
-        ("static/js/a1_hoeren.js", 'alert("提交判分失败: " + e.message)',
-         'notify("提交判分失败: " + e.message,'),
-        ("static/js/a1_writer.js", "alert('判分失败：' + (err.message || err))",
-         "notify('判分失败：' + (err.message || err),"),
-        ("static/js/cloze.js", "alert(`提交判分失败: ${e.message}`)",
-         "notify(`提交判分失败: ${e.message}`,"),
+        ("static/js/reader.js", 'alert("语法解析失败，请检查 API Key")', 'notify("语法解析失败，请检查 API Key",'),
+        (
+            "static/js/a1_lesen.js",
+            'alert("提交阅读判分失败: " + e.message)',
+            'notify("提交阅读判分失败: " + e.message,',
+        ),
+        ("static/js/a1_hoeren.js", 'alert("提交判分失败: " + e.message)', 'notify("提交判分失败: " + e.message,'),
+        (
+            "static/js/a1_writer.js",
+            "alert('判分失败：' + (err.message || err))",
+            "notify('判分失败：' + (err.message || err),",
+        ),
+        ("static/js/cloze.js", "alert(`提交判分失败: ${e.message}`)", "notify(`提交判分失败: ${e.message}`,"),
         # 成功/轻量信息路径
-        ("static/js/main.js", 'alert("✓ 偏好与 API 设置已成功保存并即刻生效！")',
-         'notify("✓ 偏好与 API 设置已成功保存并即刻生效！",'),
-        ("static/js/cards.js", 'alert("当前本地语音缓存已是空的（0 MB）。")',
-         'notify("当前本地语音缓存已是空的（0 MB）。",'),
-        ("static/js/cards.js", "alert(\n      `✓ 已清理 ",
-         "notify(\n      `✓ 已清理 "),
+        (
+            "static/js/main.js",
+            'alert("✓ 偏好与 API 设置已成功保存并即刻生效！")',
+            'notify("✓ 偏好与 API 设置已成功保存并即刻生效！",',
+        ),
+        (
+            "static/js/cards.js",
+            'alert("当前本地语音缓存已是空的（0 MB）。")',
+            'notify("当前本地语音缓存已是空的（0 MB）。",',
+        ),
+        ("static/js/cards.js", "alert(\n      `✓ 已清理 ", "notify(\n      `✓ 已清理 "),
     ]
     for path, banned, required in converged:
         src = Path(path).read_text(encoding="utf-8")
@@ -419,22 +472,24 @@ def test_workbench_legacy_lan_panel_disabled():
     /api/wb/sync/store|fetch 已强制配对密钥 X-WB-Key（M1-2），旧面板请求不带 key
     必 403——防将来有人「复活」按钮却忘端点鉴权，用户点了静默失败。"""
     from pathlib import Path
+
     html = Path("static/german/workbench.html").read_text(encoding="utf-8")
     assert "function lanDisableLegacyPanel()" in html, "停用 helper 缺失"
     assert "lanDisableLegacyPanel();" in html, "helper 未被调用"
     # 面板说明停用原因并引导到镜像同步
     assert "手动短码 P2P 已停用" in html
     assert "镜像自动同步" in html
-    for btn in ("btnLanOffer", "btnLanAcceptAnswer", "btnLanAcceptOffer",
-                "btnLanCopyOffer", "btnLanCopyAnswer"):
+    for btn in ("btnLanOffer", "btnLanAcceptAnswer", "btnLanAcceptOffer", "btnLanCopyOffer", "btnLanCopyAnswer"):
         assert f'"{btn}"' in html, f"按钮 {btn} 未纳入停用清单"
 
 
 # ── M3-2/3/4: 陈旧响应守卫 + blob URL 撤销 + PWA 温和更新 ────────────────────
 
+
 def test_reader_writer_cards_stale_guards():
     """异步回包落地前必须做「请求身份」判定，防陈旧响应覆盖用户新动作。"""
     from pathlib import Path
+
     r = Path("static/js/reader.js").read_text(encoding="utf-8")
     assert "_readerOpenToken" in r and "token !== _readerOpenToken" in r
     w = Path("static/js/writer.js").read_text(encoding="utf-8")
@@ -447,6 +502,7 @@ def test_player_blob_url_revoked_on_all_exits():
     """blob URL 不能只等 onended 撤销：暂停/切句/兜底路径统一 revoke；
     播放请求用单调令牌判陈旧，防错句覆盖。"""
     from pathlib import Path
+
     p = Path("static/js/player.js").read_text(encoding="utf-8")
     assert "URL.revokeObjectURL" in p
     assert p.count("this._revokeCurrent()") >= 4, "统一撤销出口过少（只 onended 撤销=防回退）"
@@ -458,6 +514,7 @@ def test_sw_pwa_update_is_gentle_not_force_reload():
     """PWA 版本更新不得无条件 client.navigate 全窗硬刷（会丢未保存状态）；
     改为 claim + postMessage 提示，由用户决定刷新。"""
     from pathlib import Path
+
     sw = Path("static/sw.js").read_text(encoding="utf-8")
     assert "client.navigate(" not in sw
     assert "clients.claim()" in sw
@@ -469,6 +526,7 @@ def test_sw_pwa_update_is_gentle_not_force_reload():
 
 # ── M1-1: 还原备份不导入 API_BASE_URL / API_MODEL ──────────────────────────
 
+
 def test_restore_does_not_import_api_base_url_or_model(client):
     """恶意备份可把 API_BASE_URL 指向攻击者服务器，让下一次 AI 调用把真实
     DEEPSEEK_API_KEY 发过去。还原必须只导入可信设置键（TTS_*），不碰
@@ -478,14 +536,17 @@ def test_restore_does_not_import_api_base_url_or_model(client):
     set_setting("API_MODEL", "keep-model", db_path="test_audit_delector.db")
     set_setting("TTS_VOICE", "de-DE-KatjaNeural", db_path="test_audit_delector.db")
 
-    res = client.post("/api/backup/restore", json={
-        "version": 2,
-        "app_settings": [
-            {"key": "API_BASE_URL", "value": "http://evil.example"},
-            {"key": "API_MODEL", "value": "evil-model"},
-            {"key": "TTS_VOICE", "value": "de-DE-ConradNeural"},
-        ],
-    })
+    res = client.post(
+        "/api/backup/restore",
+        json={
+            "version": 2,
+            "app_settings": [
+                {"key": "API_BASE_URL", "value": "http://evil.example"},
+                {"key": "API_MODEL", "value": "evil-model"},
+                {"key": "TTS_VOICE", "value": "de-DE-ConradNeural"},
+            ],
+        },
+    )
     assert res.status_code == 200
 
     assert get_setting("DEEPSEEK_API_KEY", db_path="test_audit_delector.db") == "sk-must-survive"
@@ -505,15 +566,20 @@ def test_backup_whitelist_split_semantics():
 
 # ── M1-5: Anki 导出 HTML 转义 ───────────────────────────────────────────────
 
+
 def test_vocab_anki_note_escapes_user_html():
     """用户词/句子可注入 HTML：导出到 .apkg 的字段必须先转义，
     否则 Anki 打开牌组时 `<img onerror>` 这类标签会执行。"""
     from delector.core.database import _vocab_anki_note
+
     row = {
-        "word": '<img src=x onerror=alert(1)>', "lemma": "x", "pos": "NOUN",
-        "gender": None, "cefr_level": "B1",
+        "word": "<img src=x onerror=alert(1)>",
+        "lemma": "x",
+        "pos": "NOUN",
+        "gender": None,
+        "cefr_level": "B1",
         "definition_zh": "<script>alert(2)</script>",
-        "sentence_context": 'Das <img src=x onerror=alert(1)> ist gefährlich <script>x</script>.',
+        "sentence_context": "Das <img src=x onerror=alert(1)> ist gefährlich <script>x</script>.",
     }
     note = _vocab_anki_note(row)
     blob = "\n".join(note.fields)
@@ -524,9 +590,14 @@ def test_vocab_anki_note_escapes_user_html():
 def test_vocab_anki_note_keeps_highlight_feature():
     """转义不能破坏原有的词高亮功能。"""
     from delector.core.database import _vocab_anki_note
+
     row = {
-        "word": "Mann", "lemma": "Mann", "pos": "NOUN", "gender": "Masc",
-        "cefr_level": "A1", "definition_zh": "男人",
+        "word": "Mann",
+        "lemma": "Mann",
+        "pos": "NOUN",
+        "gender": "Masc",
+        "cefr_level": "A1",
+        "definition_zh": "男人",
         "sentence_context": "Der Mann liest ein Buch.",
     }
     note = _vocab_anki_note(row)
@@ -535,9 +606,11 @@ def test_vocab_anki_note_keeps_highlight_feature():
 
 def test_grammar_anki_note_escapes_user_html():
     from delector.core.database import _grammar_anki_note
+
     row = {
         "sentence_context": "<img src=x onerror=alert(1)>",
-        "grammar_name": "Akkusativ", "cefr_level": "A2",
+        "grammar_name": "Akkusativ",
+        "cefr_level": "A2",
         "explanation_zh": "<script>alert(2)</script>",
         "rule_formula": "N+V+Akk",
     }
@@ -548,6 +621,7 @@ def test_grammar_anki_note_escapes_user_html():
 
 
 # ── M1-4: TTS 收敛（voice 白名单 / 错误文案 / 输入上限）──────────────────────
+
 
 def test_tts_rejects_unknown_voice_before_synthesis(client, monkeypatch):
     """voice 必须在命中合成器之前被白名单拦下（400），任意串不得透传后端。"""
@@ -565,6 +639,7 @@ def test_tts_rejects_unknown_voice_before_synthesis(client, monkeypatch):
 
 def test_tts_unexpected_error_hides_internal_detail(client, monkeypatch):
     """非 HTTP 异常不得把内部栈/路径透传给 LAN 客户端；文案固定，细节仅服务端日志。"""
+
     async def fake_gen(text, voice, rate):
         raise RuntimeError("C:\\secret\\inner\\path boom")
 
@@ -590,6 +665,7 @@ def test_note_and_noteassist_length_limits(client):
 
 
 # ── M1-2: X-WB-Key 恒定时间比较 ────────────────────────────────────────────
+
 
 def test_verify_wb_key_uses_compare_digest(monkeypatch):
     """X-WB-Key 校验必须走 secrets.compare_digest（恒定时间），不能回退成 `!=`。"""
@@ -627,12 +703,12 @@ def test_wb_state_put_requires_valid_key(client):
     assert key_res.status_code == 200
     real_key = key_res.json()["key"]
 
-    ok = client.put("/api/wb/state", json={"payload": {"k": "v"}},
-                    headers={"X-WB-Key": real_key})
+    ok = client.put("/api/wb/state", json={"payload": {"k": "v"}}, headers={"X-WB-Key": real_key})
     assert ok.status_code == 200
 
-    bad = client.put("/api/wb/state", json={"payload": {"k": "v"}},
-                     headers={"X-WB-Key": "00000000000000000000000000000000"})
+    bad = client.put(
+        "/api/wb/state", json={"payload": {"k": "v"}}, headers={"X-WB-Key": "00000000000000000000000000000000"}
+    )
     assert bad.status_code == 403
 
     none = client.put("/api/wb/state", json={"payload": {"k": "v"}})
@@ -643,10 +719,12 @@ def test_wb_state_put_requires_valid_key(client):
 # M4-2: NLP 热路径缓存（split_komposita / lookup_core_vocab）
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_lookup_core_vocab_hit_shared_no_news():
     """M4-2: 核心词库命中返回共享缓存条目（同 lemma 两次调用同一对象），
     变体/复数兜底路径命中同一 base 条目；字段与旧实现一致。"""
     from delector.data import core_dict
+
     a = core_dict.lookup_core_vocab("Herausforderung")
     b = core_dict.lookup_core_vocab("Herausforderung")
     assert a is not None
@@ -661,6 +739,7 @@ def test_split_komposita_cached_fresh_equal_results():
     """M4-2: 复合词拆解同词两次结果语义一致但对象互不相同（JSON 背衬防共享变异），
     min_part_len 参数化仍然生效。"""
     from delector.nlp_engine.linguistics import split_komposita
+
     w1 = split_komposita("Klimaschutzmaßnahmen")
     w2 = split_komposita("Klimaschutzmaßnahmen")
     assert len(w1) >= 2
@@ -676,6 +755,7 @@ def test_m4_hot_path_lru_caches_structural():
 
     from delector.data import core_dict
     from delector.nlp_engine import linguistics
+
     assert "lru_cache" in inspect.getsource(core_dict._core_entry_cached)
     assert "lru_cache" in inspect.getsource(linguistics._split_komposita_json_cached)
     assert inspect.getsource(linguistics.split_komposita).count("json.loads") >= 1
@@ -685,6 +765,7 @@ def test_m53_front_p2_debounce_and_pull_backoff_structural():
     """M5-3: a1_lesen 计时器防叠；wbsync pull 失败指数退避 + rtc 瞬态不计失败。
     纯结构护栏：实现被回退即红。"""
     from pathlib import Path
+
     root = Path(__file__).resolve().parent.parent
     a1_lesen = (root / "static" / "js" / "a1_lesen.js").read_text(encoding="utf-8")
     wb = (root / "static" / "german" / "workbench.html").read_text(encoding="utf-8")

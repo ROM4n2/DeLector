@@ -13,9 +13,11 @@ from fastapi.staticfiles import StaticFiles
 mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("font/woff", ".woff")
 
+
 def load_env():
     try:
         import dotenv
+
         dotenv.load_dotenv(override=True)
     except Exception:
         pass
@@ -34,6 +36,7 @@ def load_env():
                                 os.environ[k] = v
             except Exception:
                 pass
+
 
 load_env()
 
@@ -209,9 +212,13 @@ from delector.routes import MAX_SYNC_CACHE_ENTRIES, _sync_sdp_cache, register_ro
 # no-store 会禁掉全部缓存，既全量重传也会削弱本项目 PWA 的离线能力。
 FRONTEND_NO_CACHE_SUFFIXES = (".html", ".htm", ".js", ".mjs", ".css")
 FRONTEND_NO_CACHE_TYPES = (
-    "text/html", "text/css",
-    "text/javascript", "application/javascript", "application/ecmascript",
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "application/javascript",
+    "application/ecmascript",
 )
+
 
 # 注册走 create_app() 里的 app.middleware("http")(...)：app 是工厂产物，模块级没有
 # 可装饰的对象。
@@ -278,12 +285,15 @@ async def _wb_sync_cors(request: Request, call_next):
         # 公共 Origin 显式 403 且不给 ACAO，浏览器判跨域失败（回归：此前漏到 405）。
         if not _is_private_origin(origin):
             return Response(status_code=403)
-        return Response(status_code=200, headers={
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": _WB_CORS_ALLOW_METHODS,
-            "Access-Control-Allow-Headers": _WB_CORS_ALLOW_HEADERS,
-            "Access-Control-Max-Age": "600",
-        })
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": _WB_CORS_ALLOW_METHODS,
+                "Access-Control-Allow-Headers": _WB_CORS_ALLOW_HEADERS,
+                "Access-Control-Max-Age": "600",
+            },
+        )
     if not _is_private_origin(origin):
         return await call_next(request)  # 公共 Origin：原样转发，不注入 ACAO
     response = await call_next(request)
@@ -303,7 +313,7 @@ if not STATIC_DIR or not os.path.exists(STATIC_DIR):
         # 这一级是 DATA_DIR 被外部改走时的兜底，别删。
         os.path.join(os.path.dirname(os.path.dirname(__file__)), "static"),
         os.path.join(os.getcwd(), "static"),
-        "static"
+        "static",
     ]:
         if os.path.exists(candidate) and os.path.isdir(candidate):
             STATIC_DIR = candidate

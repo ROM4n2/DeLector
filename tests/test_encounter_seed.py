@@ -18,6 +18,7 @@
 --------------------------------
 每条用例都断言**具体值**，禁止"不抛异常即过"。变异自检见文件末 _MUTATION_TABLE。
 """
+
 import ast
 import gc
 import os
@@ -108,11 +109,9 @@ def test_packs_article_text_is_german_prose():
         assert isinstance(raw, str)
         assert len(raw) > 100, f"{pack['pack_id']} 正文过短（{len(raw)}）"
         # 德语特征：含德语变音/ß，且含常见德语功能词（避免英文/空串混入）。
-        assert ("ä" in raw or "ö" in raw or "ü" in raw or "ß" in raw), \
-            f"{pack['pack_id']} 未见德语变音符号，疑非德语正文"
+        assert "ä" in raw or "ö" in raw or "ü" in raw or "ß" in raw, f"{pack['pack_id']} 未见德语变音符号，疑非德语正文"
         lowered = raw.lower()
-        assert any(w in lowered for w in ("der", "die", "das", "und", "ich")), \
-            f"{pack['pack_id']} 未见常见德语功能词"
+        assert any(w in lowered for w in ("der", "die", "das", "und", "ich")), f"{pack['pack_id']} 未见常见德语功能词"
 
 
 def test_packs_glosses_empty():
@@ -139,8 +138,11 @@ def test_seed_skips_nonempty_db(tmp_path):
     """非空库（已有 1 篇手工文本）→ seeder 返回 0、总行数仍 1、预置未注入。"""
     db_path = str(tmp_path / "encounter_seed.db")
     database.create_encounter_text(
-        title="手工短文", level="A2", source="manual",
-        content="Das ist mein eigener Text.", db_path=db_path,
+        title="手工短文",
+        level="A2",
+        source="manual",
+        content="Das ist mein eigener Text.",
+        db_path=db_path,
     )
     assert _count_encounter_rows(db_path) == 1
 
@@ -170,10 +172,13 @@ def test_build_script_deterministic(tmp_path):
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     for out in (out_a, out_b):
         proc = subprocess.run(
-            [sys.executable, _BUILD_SCRIPT, "--out", str(out),
-             "--created-at", "2026-09-10"],
-            cwd=_REPO_ROOT, env=env, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
+            [sys.executable, _BUILD_SCRIPT, "--out", str(out), "--created-at", "2026-09-10"],
+            cwd=_REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if proc.returncode != 0:
             pytest.skip(f"脚本退出码 {proc.returncode}（环境缺失）：{proc.stderr[-200:]}")
@@ -211,8 +216,7 @@ def test_create_app_calls_seed_encounter_texts():
             elif isinstance(func, ast.Attribute):
                 called.add(func.attr)
 
-    assert "seed_preset_encounter_texts" in called, \
-        "create_app 函数体内未见 seed_preset_encounter_texts 调用"
+    assert "seed_preset_encounter_texts" in called, "create_app 函数体内未见 seed_preset_encounter_texts 调用"
 
 
 def test_create_app_seed_order_after_articles():
@@ -220,14 +224,13 @@ def test_create_app_seed_order_after_articles():
     src = open(_SERVER_SRC, encoding="utf-8").read()
     tree = ast.parse(src)
     create_app = next(
-        n for n in ast.walk(tree)
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "create_app"
+        n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "create_app"
     )
+
     # 用行号定位两条调用的先后（函数体内唯一出现）。
     def _first_call_lineno(name):
         for child in ast.walk(create_app):
-            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) \
-                    and child.func.id == name:
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == name:
                 return child.lineno
         return None
 
@@ -238,7 +241,8 @@ def test_create_app_seed_order_after_articles():
 
 
 # ── 变异自检推演表（断言纪律 PYTHON-STANDARDS §8.2 要求）──────────────────────
-_MUTATION_TABLE = textwrap.dedent("""
+_MUTATION_TABLE = textwrap.dedent(
+    """
 | 变异 | 预期变红的用例 | 说明 |
 | --- | --- | --- |
 | 去掉 seed_preset_encounter_texts 的 `count == 0` 守卫 | test_seed_skips_nonempty_db | 非空库会批量注入预置，"""
@@ -253,4 +257,5 @@ _MUTATION_TABLE = textwrap.dedent("""
     """test_packs_article_text_is_german_prose | validate_pack 抛 ValueError / 空正文 → red |
 | 两包复用同一 pack_id | test_packs_pack_id_globally_unique | 去重集合比长度短 → red |
 | 把正文换成英文 | test_packs_article_text_is_german_prose | 无变音/无德语功能词 → red |
-""")
+"""
+)

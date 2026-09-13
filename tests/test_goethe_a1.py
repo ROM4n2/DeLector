@@ -2,6 +2,7 @@
 """
 Contract and regression tests for Goethe-Zertifikat A1 Wortliste & Sprechen Lab.
 """
+
 import io
 import os
 import re
@@ -221,7 +222,8 @@ def test_cards_seg_bar_is_scrollable_on_narrow_screens():
     assert seg_bar_blocks, ".cards-seg-bar 规则块不存在"
     base_block = seg_bar_blocks[0][1]
     scroll_blocks = [
-        block for pos, block in seg_bar_blocks
+        block
+        for pos, block in seg_bar_blocks
         if re.search(r"overflow-x\s*:\s*auto", block) and "max-width: 100%" in block
     ]
     assert scroll_blocks, (
@@ -229,14 +231,13 @@ def test_cards_seg_bar_is_scrollable_on_narrow_screens():
         "否则超出视口的段标签被 .view 裁掉，「歌德 A1」不可达"
     )
     assert not re.search(r"overflow-x\s*:\s*(auto|scroll)", base_block), (
-        "基础 .cards-seg-bar 规则块不能有 overflow-x（桌面内容列比 seg-bar 窄，"
-        "加了会把桌面 A1 tab 右缘裁掉）"
+        "基础 .cards-seg-bar 规则块不能有 overflow-x（桌面内容列比 seg-bar 窄，加了会把桌面 A1 tab 右缘裁掉）"
     )
 
     seg_btn_blocks = _all_css_blocks(css, ".cards-seg-btn")
-    assert any(
-        re.search(r"flex-shrink\s*:\s*0", block) for _, block in seg_btn_blocks
-    ), ".cards-seg-btn 必须 flex-shrink:0，段标签不压缩换行，由滚动接管"
+    assert any(re.search(r"flex-shrink\s*:\s*0", block) for _, block in seg_btn_blocks), (
+        ".cards-seg-btn 必须 flex-shrink:0，段标签不压缩换行，由滚动接管"
+    )
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -245,6 +246,7 @@ def _m5_isolated_db_teardown():
     yield
     import gc
     import os as _os
+
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

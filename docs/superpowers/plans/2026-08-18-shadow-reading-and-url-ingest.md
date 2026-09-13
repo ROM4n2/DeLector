@@ -44,6 +44,7 @@
 import pytest
 from server import is_safe_public_url, clean_html_to_article
 
+
 def test_is_safe_public_url_filters_private_ips():
     assert is_safe_public_url("http://127.0.0.1:8000/api") is False
     assert is_safe_public_url("http://localhost:3000") is False
@@ -53,6 +54,7 @@ def test_is_safe_public_url_filters_private_ips():
     assert is_safe_public_url("http://[::1]/") is False
     assert is_safe_public_url("ftp://example.com/file") is False
     assert is_safe_public_url("https://www.tagesschau.de/inland/test") is True
+
 
 def test_clean_html_to_article():
     mock_html = """
@@ -74,13 +76,15 @@ def test_clean_html_to_article():
     assert "Temperaturen in den Alpen" in body
     assert "Copyright" not in body
 
+
 def test_url_ingest_endpoint_with_mock(client, monkeypatch):
     from unittest.mock import AsyncMock
+
     mock_html = "<html><head><title>Hallo Berlin</title></head><body><p>Ich lebe seit zwei Jahren in Berlin und lerne Deutsch.</p></body></html>"
-    
+
     # Mock httpx fetch
     monkeypatch.setattr("server.fetch_remote_html", AsyncMock(return_value=mock_html))
-    
+
     res = client.post("/api/articles/ingest-url", json={"url": "https://www.dw.com/de/hallo-berlin/a-123"})
     assert res.status_code == 200
     data = res.json()
@@ -105,6 +109,7 @@ import socket
 import ipaddress
 from urllib.parse import urlparse
 
+
 def is_safe_public_url(url: str) -> bool:
     try:
         parsed = urlparse(url)
@@ -115,7 +120,7 @@ def is_safe_public_url(url: str) -> bool:
             return False
         if hostname.lower() in ("localhost", "127.0.0.1", "::1"):
             return False
-            
+
         # Resolve hostname IP to check against private/loopback ranges
         ip_str = socket.gethostbyname(hostname)
         ip_obj = ipaddress.ip_address(ip_str)
@@ -125,35 +130,44 @@ def is_safe_public_url(url: str) -> bool:
     except Exception:
         return False
 
+
 def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
     # 1. 提取 <title> 并清洗后缀
-    title_match = re.search(r'<title>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
+    title_match = re.search(r"<title>(.*?)</title>", raw_html, re.IGNORECASE | re.DOTALL)
     title = html.unescape(title_match.group(1).strip()) if title_match else "Extracted Article"
-    title = re.split(r'[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche)', title)[0].strip()
-    
+    title = re.split(r"[-|–]\s*(?:DER SPIEGEL|DW|Tagesschau|ZEIT ONLINE|ZDF|FAZ|SZ|Süddeutsche)", title)[0].strip()
+
     # 2. 移除干扰标签
-    cleaned = re.sub(r'<(script|style|nav|header|footer|svg|aside|form|button|noscript)[^>]*>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
-    
+    cleaned = re.sub(
+        r"<(script|style|nav|header|footer|svg|aside|form|button|noscript)[^>]*>.*?</\1>",
+        "",
+        raw_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
     # 3. 提取所有有效段落
-    paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", cleaned, flags=re.IGNORECASE | re.DOTALL)
     clean_paras = []
     for p in paragraphs:
-        txt = re.sub(r'<[^>]+>', '', p)
+        txt = re.sub(r"<[^>]+>", "", p)
         txt = html.unescape(txt).strip()
-        if len(txt) > 25 and not any(k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved"]):
+        if len(txt) > 25 and not any(
+            k in txt.lower() for k in ["cookie", "datenschutz", "abonnieren", "newsletter", "all rights reserved"]
+        ):
             clean_paras.append(txt)
-            
+
     if not clean_paras:
-        raw_text = re.sub(r'<[^>]+>', ' ', cleaned)
-        clean_paras = [html.unescape(line).strip() for line in raw_text.split('\n') if len(line.strip()) > 30]
+        raw_text = re.sub(r"<[^>]+>", " ", cleaned)
+        clean_paras = [html.unescape(line).strip() for line in raw_text.split("\n") if len(line.strip()) > 30]
 
     body_text = "\n\n".join(clean_paras)
     return title, body_text
 
+
 async def fetch_remote_html(url: str) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
     }
     async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
         resp = await client.get(url, headers=headers)
@@ -164,20 +178,22 @@ async def fetch_remote_html(url: str) -> str:
             raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
         return resp.text
 
+
 class IngestUrlReq(BaseModel):
     url: str
     title: Optional[str] = ""
+
 
 @app.post("/api/articles/ingest-url")
 async def ingest_from_url(req: IngestUrlReq):
     if not is_safe_public_url(req.url):
         raise HTTPException(400, "无效网址或受限制的内部网络地址 (SSRF Protection)")
-    
+
     raw_html = await fetch_remote_html(req.url)
     title, body_text = clean_html_to_article(raw_html)
     if not body_text or len(body_text.strip()) < 30:
         raise HTTPException(400, "未能从该网页提取到有效的德语正文，请尝试直接复制粘贴")
-        
+
     final_title = req.title.strip() if req.title else title
     # 在非事件循环线程中执行 NLP 分词与入库
     art_id = await asyncio.to_thread(ingest_article, final_title, body_text, None, req.url)
@@ -193,8 +209,10 @@ def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_
     processed = process_german_text(text)
     target = get_db_path(db_path)
     with get_db(target) as conn:
-        cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
-                           (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""))
+        cur = conn.execute(
+            "INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
+            (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""),
+        )
         return cur.lastrowid
 ```
 
@@ -878,48 +896,54 @@ def test_backup_export_and_restore_roundtrip(client):
     assert "articles" in data
     assert "vocab_cards" in data
     assert "grammar_cards" in data
-    
+
     # 2. Modify or add custom entry
     custom_backup = {
         "version": 1,
-        "articles": [{
-            "id": 999,
-            "title": "Backup Test Article",
-            "raw_text": "Ein Test für Backup.",
-            "processed_json": "{}",
-            "source_url": "https://example.com/backup",
-            "created_at": "2026-08-18 12:00:00"
-        }],
-        "vocab_cards": [{
-            "id": 999,
-            "article_id": 999,
-            "word": "Test",
-            "lemma": "Test",
-            "pos": "NOUN",
-            "gender": "Masc",
-            "cefr_level": "A1",
-            "definition_zh": "测试",
-            "sentence_context": "Ein Test.",
-            "plural": "Tests",
-            "created_at": "2026-08-18 12:00:00"
-        }],
-        "grammar_cards": [{
-            "id": 999,
-            "article_id": 999,
-            "sentence_context": "Ein Test.",
-            "grammar_name": "Nomen",
-            "cefr_level": "A1",
-            "explanation_zh": "名词",
-            "rule_formula": "Pattern",
-            "examples_zh": "例子",
-            "created_at": "2026-08-18 12:00:00"
-        }]
+        "articles": [
+            {
+                "id": 999,
+                "title": "Backup Test Article",
+                "raw_text": "Ein Test für Backup.",
+                "processed_json": "{}",
+                "source_url": "https://example.com/backup",
+                "created_at": "2026-08-18 12:00:00",
+            }
+        ],
+        "vocab_cards": [
+            {
+                "id": 999,
+                "article_id": 999,
+                "word": "Test",
+                "lemma": "Test",
+                "pos": "NOUN",
+                "gender": "Masc",
+                "cefr_level": "A1",
+                "definition_zh": "测试",
+                "sentence_context": "Ein Test.",
+                "plural": "Tests",
+                "created_at": "2026-08-18 12:00:00",
+            }
+        ],
+        "grammar_cards": [
+            {
+                "id": 999,
+                "article_id": 999,
+                "sentence_context": "Ein Test.",
+                "grammar_name": "Nomen",
+                "cefr_level": "A1",
+                "explanation_zh": "名词",
+                "rule_formula": "Pattern",
+                "examples_zh": "例子",
+                "created_at": "2026-08-18 12:00:00",
+            }
+        ],
     }
-    
+
     # 3. Restore custom backup
     res_restore = client.post("/api/backup/restore", json=custom_backup)
     assert res_restore.status_code == 200
-    
+
     # 4. Verify roundtrip integrity
     res_verify = client.get("/api/articles/999")
     assert res_verify.status_code == 200
@@ -935,20 +959,22 @@ def export_database_backup():
         articles = [dict(r) for r in conn.execute("SELECT * FROM articles").fetchall()]
         vocab = [dict(r) for r in conn.execute("SELECT * FROM vocab_cards").fetchall()]
         grammar = [dict(r) for r in conn.execute("SELECT * FROM grammar_cards").fetchall()]
-        
+
     return {
         "version": 1,
         "exported_at": datetime.now().isoformat(),
         "articles": articles,
         "vocab_cards": vocab,
-        "grammar_cards": grammar
+        "grammar_cards": grammar,
     }
+
 
 class RestoreReq(BaseModel):
     version: Optional[int] = 1
     articles: List[Dict[str, Any]] = []
     vocab_cards: List[Dict[str, Any]] = []
     grammar_cards: List[Dict[str, Any]] = []
+
 
 @app.post("/api/backup/restore")
 def restore_database_backup(req: RestoreReq):
@@ -957,17 +983,46 @@ def restore_database_backup(req: RestoreReq):
         for a in req.articles:
             conn.execute(
                 "INSERT OR REPLACE INTO articles (id, title, raw_text, processed_json, source_url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (a.get("id"), a.get("title", "Untitled"), a.get("raw_text", ""), a.get("processed_json", "{}"), a.get("source_url", ""), a.get("created_at"))
+                (
+                    a.get("id"),
+                    a.get("title", "Untitled"),
+                    a.get("raw_text", ""),
+                    a.get("processed_json", "{}"),
+                    a.get("source_url", ""),
+                    a.get("created_at"),
+                ),
             )
         for v in req.vocab_cards:
             conn.execute(
                 "INSERT OR REPLACE INTO vocab_cards (id, article_id, word, lemma, pos, gender, cefr_level, definition_zh, sentence_context, plural, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (v.get("id"), v.get("article_id"), v.get("word", ""), v.get("lemma", ""), v.get("pos", ""), v.get("gender", ""), v.get("cefr_level", "A1"), v.get("definition_zh", ""), v.get("sentence_context", ""), v.get("plural", ""), v.get("created_at"))
+                (
+                    v.get("id"),
+                    v.get("article_id"),
+                    v.get("word", ""),
+                    v.get("lemma", ""),
+                    v.get("pos", ""),
+                    v.get("gender", ""),
+                    v.get("cefr_level", "A1"),
+                    v.get("definition_zh", ""),
+                    v.get("sentence_context", ""),
+                    v.get("plural", ""),
+                    v.get("created_at"),
+                ),
             )
         for g in req.grammar_cards:
             conn.execute(
                 "INSERT OR REPLACE INTO grammar_cards (id, article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula, examples_zh, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (g.get("id"), g.get("article_id"), g.get("sentence_context", ""), g.get("grammar_name", ""), g.get("cefr_level", "A1"), g.get("explanation_zh", ""), g.get("rule_formula", ""), g.get("examples_zh", ""), g.get("created_at"))
+                (
+                    g.get("id"),
+                    g.get("article_id"),
+                    g.get("sentence_context", ""),
+                    g.get("grammar_name", ""),
+                    g.get("cefr_level", "A1"),
+                    g.get("explanation_zh", ""),
+                    g.get("rule_formula", ""),
+                    g.get("examples_zh", ""),
+                    g.get("created_at"),
+                ),
             )
     return {"status": "ok", "message": "全量备份恢复成功"}
 ```
@@ -1054,6 +1109,7 @@ git commit -m "feat(sync): add robust database backup export and restore with UI
 DeLector - Cross-Platform Instant Launcher
 Auto-detects port availability, LAN IP, and launches default browser.
 """
+
 import os
 import sys
 import socket
@@ -1061,9 +1117,11 @@ import webbrowser
 import threading
 import time
 
+
 def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(('127.0.0.1', port)) == 0
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
 
 def get_local_ip() -> str:
     try:
@@ -1075,6 +1133,7 @@ def get_local_ip() -> str:
     except Exception:
         return "127.0.0.1"
 
+
 def open_browser(port: int):
     time.sleep(1.2)
     # Support Android Termux termux-open-url fallback
@@ -1082,6 +1141,7 @@ def open_browser(port: int):
         os.system(f"termux-open-url http://localhost:{port}")
     else:
         webbrowser.open(f"http://127.0.0.1:{port}")
+
 
 def main():
     port = 8000
@@ -1101,9 +1161,11 @@ def main():
     print("  按 Ctrl+C 停止服务\n")
 
     threading.Thread(target=open_browser, args=(port,), daemon=True).start()
-    
+
     import uvicorn
+
     uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
+
 
 if __name__ == "__main__":
     main()

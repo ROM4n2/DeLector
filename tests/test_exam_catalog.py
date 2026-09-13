@@ -13,6 +13,7 @@
 env 再 import server（server 模块顶层有 init_db() 副作用），clean_db
 autouse 前后双钉 env + gc.collect() 后删库（Windows 句柄释放纪律）。
 """
+
 import gc
 import os
 
@@ -59,6 +60,7 @@ def clean_db():
             except OSError:
                 pass
     from delector.server import init_db, init_progress_db
+
     init_db("test_catalog.db")
     init_progress_db("test_catalog_progress.db")
     yield
@@ -78,6 +80,7 @@ def clean_db():
 
 # ── RED 1：端点契约（形状 + 数据推导 count + panel 指向真实 DOM） ────────────
 
+
 def test_catalog_endpoint_contract(client):
     """/api/exams/catalog 返回 A1 与 A2 模块，count 与数据模块常量实测长度一致。"""
     res = client.get("/api/exams/catalog")
@@ -95,14 +98,11 @@ def test_catalog_endpoint_contract(client):
 
     # count 是数据推导不是硬编码：必须等于数据模块常量的实测长度。
     assert mods["writing"]["count"] == (
-        len(a1_writing_dict.A1_SCHREIBEN_TEIL1_EXERCISES)
-        + len(a1_writing_dict.A1_SCHREIBEN_TEIL2_PROMPTS)
+        len(a1_writing_dict.A1_SCHREIBEN_TEIL1_EXERCISES) + len(a1_writing_dict.A1_SCHREIBEN_TEIL2_PROMPTS)
     )
     assert mods["hoeren"]["count"] == len(a1_hoeren_dict.A1_HOEREN_SETS)
     assert mods["lesen"]["count"] == len(a1_lesen_dict.A1_LESEN_SETS)
-    assert mods["sprechen"]["count"] == (
-        len(a1_dict.A1_SPRECHEN_TEIL2) + len(a1_dict.A1_SPRECHEN_TEIL3)
-    )
+    assert mods["sprechen"]["count"] == (len(a1_dict.A1_SPRECHEN_TEIL2) + len(a1_dict.A1_SPRECHEN_TEIL3))
     assert mods["vocab"]["count"] == len(a1_dict.GOETHE_A1_VOCAB)
 
     # A2 考纲模块验证
@@ -119,12 +119,12 @@ def test_catalog_panels_point_at_real_dom(client):
     for lv in res.json()["levels"]:
         for m in lv["modules"]:
             assert 'id="%s"' % m["panel"] in _INDEX, (
-                "模块 %s 的 panel=%r 在 index.html 里不存在（指向幻影容器 = 前端拿到死引用）"
-                % (m["id"], m["panel"])
+                "模块 %s 的 panel=%r 在 index.html 里不存在（指向幻影容器 = 前端拿到死引用）" % (m["id"], m["panel"])
             )
 
 
 # ── RED 2：扩展点变异断言 —— 加级 = 插一行 ───────────────────────────────────
+
 
 def test_catalog_extension_point_adding_level(monkeypatch, client):
     """EXAM_CATALOG 追加一个等级 key，catalog 立即多一级且结构同构。
@@ -167,6 +167,7 @@ def test_catalog_extension_point_adding_level(monkeypatch, client):
 
 # ── 防御：count_fn 抛错（数据模块重命名）不拖垮端点 ─────────────────────────
 
+
 def _boom():
     raise RuntimeError("data module renamed — catalog must survive")
 
@@ -181,6 +182,7 @@ def test_catalog_survives_broken_count_fn(monkeypatch, client, caplog):
 
     # 零静默吞异常铁律：count 记 0 的同时必须 logger.warning 留痕。
     import logging
+
     with caplog.at_level(logging.WARNING, logger="delector"):
         res = client.get("/api/exams/catalog")
     assert res.status_code == 200, "单个模块 count 推导失败不得 500 整个 catalog"
@@ -197,6 +199,7 @@ def test_catalog_survives_broken_count_fn(monkeypatch, client, caplog):
 
 # ── RED 3：路由已注册 ────────────────────────────────────────────────────────
 
+
 def test_catalog_route_registered(client):
     """/api/exams/catalog 必须挂在 app 上（openapi 枚举可查）。"""
     paths = client.get("/openapi.json").json()["paths"]
@@ -204,6 +207,7 @@ def test_catalog_route_registered(client):
 
 
 # ── RED 4：旧 /api/a1 契约回归锚 —— catalog 上线不动旧端点 ───────────────────
+
 
 def test_legacy_a1_endpoints_smoke(client):
     """catalog 只做导航发现：既有取题端点全部照常 200。"""

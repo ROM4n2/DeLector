@@ -5,6 +5,7 @@
 vault-grill ADR-0009 Q2A 纠正）。Phase 2 若出现真正的练习生成需求，另立新 tool，
 不在本模块上长。
 """
+
 from delector.services.writing import analyze_a1_email
 
 

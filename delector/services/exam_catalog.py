@@ -11,6 +11,7 @@
 - **旧 /api/a1/* 端点不迁移**：catalog 只做导航发现（api_prefix 指向
   既有取题端点前缀），panel 指向 index.html 里的面板容器 id。
 """
+
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
@@ -32,8 +33,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
                 "panel": "exam-writing",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: (
-                    len(a1_writing_dict.A1_SCHREIBEN_TEIL1_EXERCISES)
-                    + len(a1_writing_dict.A1_SCHREIBEN_TEIL2_PROMPTS)
+                    len(a1_writing_dict.A1_SCHREIBEN_TEIL1_EXERCISES) + len(a1_writing_dict.A1_SCHREIBEN_TEIL2_PROMPTS)
                 ),
             },
             "hoeren": {
@@ -52,9 +52,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
                 "title": "💬 口语问答 (Sprechen)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
-                "count_fn": lambda: (
-                    len(a1_dict.A1_SPRECHEN_TEIL2) + len(a1_dict.A1_SPRECHEN_TEIL3)
-                ),
+                "count_fn": lambda: len(a1_dict.A1_SPRECHEN_TEIL2) + len(a1_dict.A1_SPRECHEN_TEIL3),
             },
             "vocab": {
                 "title": "📖 官方考纲词表 (Wortliste)",

@@ -18,6 +18,7 @@ base64 编码后写出 workbench.html 的 EMBEDDED_AUDIO 替换片段。
   - workbench.html 的查词路径已归一为 word.toLowerCase()
   - tools/raw_embedded/ 已加 .gitignore，缓存不提交
 """
+
 import argparse
 import asyncio
 import base64
@@ -96,7 +97,7 @@ async def _main_async(args: argparse.Namespace) -> None:
 
     if args.dry_run:
         for i, w in enumerate(words):
-            print(f"  {i+1:>4}. {w}")
+            print(f"  {i + 1:>4}. {w}")
         print(f"\n共 {len(words)} 词（--dry-run，未生成音频）", file=sys.stderr)
         return
 
@@ -106,9 +107,9 @@ async def _main_async(args: argparse.Namespace) -> None:
         data = await _generate_one(word, out_path)
         if data:
             audio_dict[word] = base64.b64encode(data).decode("ascii")
-            print(f"  [{i+1}/{len(words)}] {word}: {len(data)} bytes", file=sys.stderr)
+            print(f"  [{i + 1}/{len(words)}] {word}: {len(data)} bytes", file=sys.stderr)
         else:
-            print(f"  [{i+1}/{len(words)}] {word}: 跳过", file=sys.stderr)
+            print(f"  [{i + 1}/{len(words)}] {word}: 跳过", file=sys.stderr)
 
     if args.patch:
         _patch_workbench(audio_dict)
@@ -121,14 +122,10 @@ async def _main_async(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="预生成 EMBEDDED_AUDIO 嵌入音频词表")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="仅列词，不调用 edge-tts（CI/测试无需联网）")
-    parser.add_argument("--top", type=int, default=300, metavar="N",
-                        help="取 CEFR A1→B2 顺序前 N 词（默认 300）")
-    parser.add_argument("--patch", action="store_true",
-                        help="直接原地更新 workbench.html 的 EMBEDDED_AUDIO 声明")
-    parser.add_argument("--out", metavar="FILE",
-                        help="输出 JS 片段到文件（不指定则写 stdout）")
+    parser.add_argument("--dry-run", action="store_true", help="仅列词，不调用 edge-tts（CI/测试无需联网）")
+    parser.add_argument("--top", type=int, default=300, metavar="N", help="取 CEFR A1→B2 顺序前 N 词（默认 300）")
+    parser.add_argument("--patch", action="store_true", help="直接原地更新 workbench.html 的 EMBEDDED_AUDIO 声明")
+    parser.add_argument("--out", metavar="FILE", help="输出 JS 片段到文件（不指定则写 stdout）")
     args = parser.parse_args()
     asyncio.run(_main_async(args))
 

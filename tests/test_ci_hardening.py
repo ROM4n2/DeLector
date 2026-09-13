@@ -16,6 +16,7 @@
 （`'pytest' in text` 风格），**禁止 == 全文比对**——护栏要挡住契约倒退，
 但不能冻结文件内容、阻挡正常演进。
 """
+
 from pathlib import Path
 
 import pytest
@@ -55,11 +56,7 @@ def test_ci_workflow_has_core_gates():
         ("cancel-in-progress", "缺 cancel-in-progress：旧提交的 CI 不会取消，反馈变慢"),
         ("setup-go@v5", "缺 actions/setup-go@v5：Go 工具链没安装，Go 门禁无法执行"),
     ]
-    missing = [
-        f"未找到 {needle!r}（{why}）"
-        for needle, why in required_gates
-        if needle not in text
-    ]
+    missing = [f"未找到 {needle!r}（{why}）" for needle, why in required_gates if needle not in text]
     assert not missing, f"{CI_WORKFLOW} 缺少关键门禁要素：\n" + "\n".join(missing)
 
 
@@ -72,8 +69,7 @@ def test_ci_setup_go_cache_is_boolean():
     text = _read_guard_file(CI_WORKFLOW)
 
     assert "cache: true" in text, (
-        f"{CI_WORKFLOW} 的 setup-go 步骤缺少 `cache: true`："
-        "不显式开启会退回默认行为并拖慢 Go 构建。"
+        f"{CI_WORKFLOW} 的 setup-go 步骤缺少 `cache: true`：不显式开启会退回默认行为并拖慢 Go 构建。"
     )
     # 不做"排除所有带引号 cache"的宽泛断言：setup-python 合法地用 cache: "pip"，
     # 只钉 setup-go 这一具体陷阱
@@ -89,16 +85,14 @@ def test_dependabot_covers_active_ecosystems():
     """dependabot 必须覆盖 pip / github-actions / gomod 三生态，且周更。"""
     text = _read_guard_file(DEPENDABOT)
 
-    assert "version: 2" in text, (
-        f"{DEPENDABOT} 缺少 `version: 2`：这是 dependabot 配置的必填版本头。"
-    )
+    assert "version: 2" in text, f"{DEPENDABOT} 缺少 `version: 2`：这是 dependabot 配置的必填版本头。"
 
     # 不引入 pyyaml：按行解析 package-ecosystem 的取值（容忍引号与行尾注释）
     ecosystems = set()
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("package-ecosystem:"):
-            value = stripped.split(":", 1)[1].split("#", 1)[0].strip().strip('"\'')
+            value = stripped.split(":", 1)[1].split("#", 1)[0].strip().strip("\"'")
             ecosystems.add(value)
     required_ecosystems = {"pip", "github-actions", "gomod"}
     missing_ecosystems = required_ecosystems - ecosystems
@@ -114,8 +108,7 @@ def test_dependabot_covers_active_ecosystems():
         1
         for line in text.splitlines()
         if line.strip().startswith("interval:")
-        and line.strip().split(":", 1)[1].split("#", 1)[0].strip().strip('"\'')
-        == "weekly"
+        and line.strip().split(":", 1)[1].split("#", 1)[0].strip().strip("\"'") == "weekly"
     )
     assert weekly_count >= 3, (
         f"{DEPENDABOT} 中 schedule.interval 为 weekly 的条目只有 "

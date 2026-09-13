@@ -1,6 +1,7 @@
 """
 Tests for sentence-level diff and merge engine (essay_diff.py).
 """
+
 from delector.services.essay_diff import (
     diff_sentences,
     join_sentences,
@@ -10,16 +11,16 @@ from delector.services.essay_diff import (
 
 
 def test_split_and_join_preserves_punctuation():
-    text = "Hallo Welt! Wie geht es dir? Ich lerne Deutsch. „Das ist super!\""
+    text = 'Hallo Welt! Wie geht es dir? Ich lerne Deutsch. „Das ist super!"'
     sents = split_sentences(text)
     assert sents == [
         "Hallo Welt!",
         "Wie geht es dir?",
         "Ich lerne Deutsch.",
-        "„Das ist super!\"",
+        '„Das ist super!"',
     ]
     rejoined = join_sentences(sents)
-    assert rejoined == "Hallo Welt! Wie geht es dir? Ich lerne Deutsch. „Das ist super!\""
+    assert rejoined == 'Hallo Welt! Wie geht es dir? Ich lerne Deutsch. „Das ist super!"'
 
 
 def test_split_empty_and_whitespace():
@@ -158,4 +159,3 @@ def test_diff_consecutive_1to1_sentence_modifications():
     # Partial merge
     merged = merge_sentences(orig, corr, [True, False, True, False])
     assert merged == "Satz 1 gut. Satz 2 neu. Satz 3 alt. Satz 4 neu. Satz 5 alt."
-

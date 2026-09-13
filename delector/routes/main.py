@@ -17,6 +17,7 @@ TTS 生成、完形填空生成器、备份还原……全挤在一个模块里�
    直接从 `delector.routes.main` 取。monkeypatch 也必须打在**调用方模块**上，
    打在旧的 `delector.server.*` 上不再生效（那是搬迁期最容易静默失效的一类）。
 """
+
 import asyncio
 import hashlib
 import ipaddress
@@ -113,6 +114,7 @@ class IngestReq(BaseModel):
     # 局域网可达 + spaCy 全文重算，必须有上限（防超大文本打满 NLP 与磁盘）
     raw_text: str = Field(..., max_length=100_000)
 
+
 class VocabCardReq(BaseModel):
     article_id: Optional[int] = None
     word: str
@@ -124,6 +126,7 @@ class VocabCardReq(BaseModel):
     definition_zh: str
     sentence_context: str
 
+
 class GrammarCardReq(BaseModel):
     article_id: Optional[int] = None
     sentence_context: str
@@ -134,24 +137,30 @@ class GrammarCardReq(BaseModel):
     corrected_form: Optional[str] = ""
     error_type: Optional[str] = ""
 
+
 class WritingAnalyzeReq(BaseModel):
     text: str
+
 
 class EssayCreateReq(BaseModel):
     title: str
     content: str
 
+
 class EssayUpdateReq(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+
 
 class WritingCardReq(BaseModel):
     essay_id: int
     sentence_id: int
     span_index: int
 
+
 class AIPolishReq(BaseModel):
     text: str
+
 
 class WritingApplyReq(BaseModel):
     essay_id: int
@@ -159,19 +168,24 @@ class WritingApplyReq(BaseModel):
     corrected_text: str
     accepted_indices: List[int]
 
+
 class EssayVersionCreateReq(BaseModel):
     message: Optional[str] = "手动保存"
 
+
 class EssayRestoreReq(BaseModel):
     version_id: int
+
 
 class GrammarLookupReq(BaseModel):
     sentence: str
     target_phrase: str
 
+
 class IngestUrlReq(BaseModel):
     url: str
     title: Optional[str] = ""
+
 
 @router.post("/api/articles/ingest-url")
 async def ingest_from_url(req: IngestUrlReq):
@@ -190,9 +204,11 @@ async def ingest_from_url(req: IngestUrlReq):
         pj = json.loads(row["processed_json"]) if row else {}
     return {"article_id": art_id, "title": final_title, "char_count": len(body_text), "stats": pj.get("stats", {})}
 
+
 @router.get("/api/feed/sources")
 def get_feed_sources():
     return {"sources": PRESET_FEEDS}
+
 
 @router.get("/api/feed/items")
 async def get_feed_items(url: str):
@@ -201,6 +217,7 @@ async def get_feed_items(url: str):
     raw_xml = await fetch_remote_html(url)
     items = parse_rss_feed(raw_xml)
     return {"url": url, "count": len(items), "items": items}
+
 
 @router.post("/api/articles/ingest")
 def ingest(req: IngestReq):
@@ -231,6 +248,7 @@ def list_articles():
             result.append(d)
         return result
 
+
 @router.get("/api/articles/{article_id}")
 def get_article(article_id: int):
     with db_conn() as conn:
@@ -251,6 +269,7 @@ def get_article(article_id: int):
         data.update(pj)
         return data
 
+
 @router.delete("/api/articles/{article_id}")
 def delete_article(article_id: int, request: Request):
     _require_localhost(request)
@@ -262,6 +281,7 @@ def delete_article(article_id: int, request: Request):
         conn.execute("DELETE FROM articles WHERE id = ?", (article_id,))
         return {"deleted": True, "article_id": article_id}
 
+
 @router.post("/api/lookup/grammar")
 async def lookup_grammar(req: GrammarLookupReq):
     key = get_effective_api_key()
@@ -271,12 +291,12 @@ async def lookup_grammar(req: GrammarLookupReq):
             "cefr_level": "A1",
             "explanation_zh": "请在右上角「⚙️ 设置」中配置 API Key 获取实时歌德大纲 AI 分析。",
             "rule_formula": "Grammar Pattern",
-            "collocations": [f"{req.target_phrase} (常用释义)"]
+            "collocations": [f"{req.target_phrase} (常用释义)"],
         }
 
-    base_url = get_effective_api_base_url().rstrip('/')
+    base_url = get_effective_api_base_url().rstrip("/")
     model = get_effective_api_model()
-    user_content = f"句子: \"{req.sentence}\"\n目标词/短语: \"{req.target_phrase}\""
+    user_content = f'句子: "{req.sentence}"\n目标词/短语: "{req.target_phrase}"'
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -286,10 +306,10 @@ async def lookup_grammar(req: GrammarLookupReq):
                     "model": model,
                     "messages": [
                         {"role": "system", "content": SYSTEM_GRAMMAR_PROMPT},
-                        {"role": "user", "content": user_content}
+                        {"role": "user", "content": user_content},
                     ],
-                    "response_format": {"type": "json_object"}
-                }
+                    "response_format": {"type": "json_object"},
+                },
             )
             if getattr(resp, "status_code", 200) != 200:
                 raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
@@ -310,6 +330,7 @@ async def lookup_grammar(req: GrammarLookupReq):
     except Exception:
         raise HTTPException(status_code=502, detail="AI 服务连接失败")
 
+
 SYSTEM_VOCAB_PROMPT = """你是一位精通德汉词典编纂的德语专家。
 请根据给定的德语句子上下文和目标词汇，给出该词在当前句中的精准中文简明释义（1-8个字）、复数形式（如果是名词）、常用同义词等。
 以严格的 JSON 格式输出：
@@ -320,10 +341,12 @@ SYSTEM_VOCAB_PROMPT = """你是一位精通德汉词典编纂的德语专家。
 }
 不要输出除 JSON 以外的任何文字。"""
 
+
 class VocabLookupReq(BaseModel):
     sentence: str
     target_word: str
     lemma: Optional[str] = None  # 前端带上的 spaCy 词元（无 spaCy 时回退 None）
+
 
 @router.post("/api/lookup/vocab")
 async def lookup_vocab(req: VocabLookupReq):
@@ -344,7 +367,7 @@ async def lookup_vocab(req: VocabLookupReq):
                 "pos": local_hit.get("pos"),
                 "cefr_level": local_hit.get("cefr_level"),
                 "synonyms": [],
-                "source": "local_dict"
+                "source": "local_dict",
             }
             break
 
@@ -362,7 +385,7 @@ async def lookup_vocab(req: VocabLookupReq):
                     "pos": ext_hit.get("pos"),
                     "cefr_level": ext_hit.get("cefr_level"),
                     "synonyms": [],
-                    "source": "linguistics_ext"
+                    "source": "linguistics_ext",
                 }
                 break
 
@@ -370,16 +393,11 @@ async def lookup_vocab(req: VocabLookupReq):
     if not res.get("definition_zh"):
         key = get_effective_api_key()
         if not key:
-            res = {
-                "definition_zh": "",
-                "plural": "",
-                "synonyms": [],
-                "source": "none"
-            }
+            res = {"definition_zh": "", "plural": "", "synonyms": [], "source": "none"}
         else:
-            base_url = get_effective_api_base_url().rstrip('/')
+            base_url = get_effective_api_base_url().rstrip("/")
             model = get_effective_api_model()
-            user_content = f"句子: \"{req.sentence}\"\n目标词汇: \"{req.target_word}\""
+            user_content = f'句子: "{req.sentence}"\n目标词汇: "{req.target_word}"'
             try:
                 async with httpx.AsyncClient(timeout=15) as client:
                     resp = await client.post(
@@ -389,29 +407,19 @@ async def lookup_vocab(req: VocabLookupReq):
                             "model": model,
                             "messages": [
                                 {"role": "system", "content": SYSTEM_VOCAB_PROMPT},
-                                {"role": "user", "content": user_content}
+                                {"role": "user", "content": user_content},
                             ],
-                            "response_format": {"type": "json_object"}
-                        }
+                            "response_format": {"type": "json_object"},
+                        },
                     )
                     if resp.status_code != 200:
-                        res = {
-                            "definition_zh": "",
-                            "plural": "",
-                            "synonyms": [],
-                            "source": "ai_error"
-                        }
+                        res = {"definition_zh": "", "plural": "", "synonyms": [], "source": "ai_error"}
                     else:
                         content = resp.json()["choices"][0]["message"]["content"]
                         res = json.loads(content)
                         res["source"] = "ai"
             except Exception:
-                res = {
-                    "definition_zh": "",
-                    "plural": "",
-                    "synonyms": [],
-                    "source": "ai_exception"
-                }
+                res = {"definition_zh": "", "plural": "", "synonyms": [], "source": "ai_exception"}
 
     # Morphology & Linguistics Layer:
     # 1. Irregular / Strong verbs Stammformen（始终附；释义只在本地兜底没出时回填）
@@ -425,12 +433,7 @@ async def lookup_vocab(req: VocabLookupReq):
             stamm.get("definition_zh") if hasattr(stamm, "get") else ""
         )
 
-        res["stammformen"] = {
-            "infinitiv": inf,
-            "praeteritum": praet,
-            "partizip2": p2,
-            "hilfsverb": hilf
-        }
+        res["stammformen"] = {"infinitiv": inf, "praeteritum": praet, "partizip2": p2, "hilfsverb": hilf}
         # 放宽回填：本地/在线都没出释义时，用三态表的释义兜底（不只 "none"）
         if not res.get("definition_zh") and stamm_def:
             res["definition_zh"] = stamm_def
@@ -464,8 +467,7 @@ async def lookup_vocab(req: VocabLookupReq):
     # 3. 固定介词搭配（Verben/Adjektive mit Präpositionen）
     # 挂在同一个响应里而不是新开端点：抽屉那几个 banner box 的渲染/拆除都假定
     # 数据来自同一个响应对象，新端点要在前端引入第二个异步状态与竞态处理。
-    praep = (lookup_prep_collocations(req.lemma or "")
-             or lookup_prep_collocations(req.target_word))
+    praep = lookup_prep_collocations(req.lemma or "") or lookup_prep_collocations(req.target_word)
     if praep:
         res["praepositionen"] = praep
 
@@ -492,11 +494,13 @@ def get_prep_matrix_with_cefr():
                 kasus: [{**e, "cefr": get_cefr_level(e["lemma"])} for e in entries]
                 for kasus, entries in by_case.items()
             }
-            groups.append({
-                "praeposition": praep,
-                "total": sum(len(v) for v in entries_by_case.values()),
-                "cases": entries_by_case,
-            })
+            groups.append(
+                {
+                    "praeposition": praep,
+                    "total": sum(len(v) for v in entries_by_case.values()),
+                    "cases": entries_by_case,
+                }
+            )
         # 同总数时按介词字母序兜底，避免 dict 插入序泄漏成不稳定的呈现顺序
         groups.sort(key=lambda g: (-g["total"], g["praeposition"]))
         _prep_matrix_response_cache = {"groups": groups}
@@ -527,8 +531,8 @@ def api_add_prep_saved(req: PrepSavedReq):
     return {"status": "ok"}
 
 
-
 # ── FSRS (Free Spaced Repetition Scheduler) DSR Engine ────────────────────────
+
 
 def _calc_fsrs_step(
     grade: int,
@@ -536,7 +540,7 @@ def _calc_fsrs_step(
     interval: int = 1,
     ef: float = 2.5,
     elapsed_days: Optional[int] = None,
-    target_retention: float = 0.90
+    target_retention: float = 0.90,
 ) -> Tuple[int, int, float, str]:
     """
     Core single-step FSRS mathematical state transition based on DSR model:
@@ -570,13 +574,13 @@ def _calc_fsrs_step(
         if grade == 1:
             # Lapse / Forgot
             new_rep = 0
-            s_prime = max(0.4, min(s, 0.6 * (d_prime ** -0.3) * ((s + 1.0) ** 0.4)))
+            s_prime = max(0.4, min(s, 0.6 * (d_prime**-0.3) * ((s + 1.0) ** 0.4)))
         else:
             # Successful recall
             new_rep = rep + 1
             penalty_map = {2: 0.6, 3: 1.0, 4: 1.4}
             penalty = penalty_map.get(grade, 1.0)
-            factor = math.exp(1.0) * (11.0 - d_prime) * (s ** -0.2) * (math.exp((1.0 - r) * 0.9) - 1.0) * penalty
+            factor = math.exp(1.0) * (11.0 - d_prime) * (s**-0.2) * (math.exp((1.0 - r) * 0.9) - 1.0) * penalty
             s_prime = max(0.4, s * (1.0 + factor))
 
     # Calculate scheduled interval based on target retention
@@ -587,24 +591,17 @@ def _calc_fsrs_step(
 
     new_interval = max(1, int(round(scheduled_days + 1e-9)))
     new_ef = round(d_prime, 2)
-    due_date = (datetime.now() + timedelta(days=new_interval)).strftime('%Y-%m-%d')
+    due_date = (datetime.now() + timedelta(days=new_interval)).strftime("%Y-%m-%d")
     return new_rep, new_interval, new_ef, due_date
 
 
 def get_fsrs_next_intervals(
-    rep: int = 0,
-    interval: int = 1,
-    ef: float = 2.5,
-    elapsed_days: Optional[int] = None,
-    target_retention: float = 0.90
+    rep: int = 0, interval: int = 1, ef: float = 2.5, elapsed_days: Optional[int] = None, target_retention: float = 0.90
 ) -> Dict[int, int]:
     """
     Precalculate scheduled intervals for all 4 rating grades (1: Again, 2: Hard, 3: Good, 4: Easy).
     """
-    return {
-        g: _calc_fsrs_step(g, rep, interval, ef, elapsed_days, target_retention)[1]
-        for g in (1, 2, 3, 4)
-    }
+    return {g: _calc_fsrs_step(g, rep, interval, ef, elapsed_days, target_retention)[1] for g in (1, 2, 3, 4)}
 
 
 def calculate_fsrs(
@@ -613,7 +610,7 @@ def calculate_fsrs(
     interval: int = 1,
     ef: float = 2.5,
     elapsed_days: Optional[int] = None,
-    target_retention: float = 0.90
+    target_retention: float = 0.90,
 ) -> Tuple[int, int, float, str, Dict[int, int]]:
     """
     Calculate next FSRS schedule state.
@@ -641,13 +638,21 @@ def add_vocab_card(req: VocabCardReq):
             "(article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                req.article_id, req.word, req.lemma, req.pos, req.gender, req.plural or "",
-                req.cefr_level, req.definition_zh, req.sentence_context,
+                req.article_id,
+                req.word,
+                req.lemma,
+                req.pos,
+                req.gender,
+                req.plural or "",
+                req.cefr_level,
+                req.definition_zh,
+                req.sentence_context,
             ),
         )
         card_id = cur.lastrowid
     log_study_event("add_card", card_id, req.word)
     return {"status": "ok", "id": card_id, "word": req.word, "plural": req.plural or ""}
+
 
 @router.post("/api/cards/grammar")
 def add_grammar_card(req: GrammarCardReq):
@@ -658,8 +663,13 @@ def add_grammar_card(req: GrammarCardReq):
             "rule_formula, corrected_form, error_type) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                req.article_id, req.sentence_context, req.grammar_name, req.cefr_level,
-                req.explanation_zh, req.rule_formula or "", req.corrected_form or "",
+                req.article_id,
+                req.sentence_context,
+                req.grammar_name,
+                req.cefr_level,
+                req.explanation_zh,
+                req.rule_formula or "",
+                req.corrected_form or "",
                 req.error_type or "",
             ),
         )
@@ -667,22 +677,28 @@ def add_grammar_card(req: GrammarCardReq):
     log_study_event("add_card", card_id, req.grammar_name)
     return {"status": "ok", "id": card_id}
 
+
 @router.get("/api/cards")
 def get_cards():
     with db_conn() as conn:
-        v = [dict(r) for r in conn.execute(
-            "SELECT * FROM vocab_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
-        ).fetchall()]
-        g = [dict(r) for r in conn.execute(
-            "SELECT * FROM grammar_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
-        ).fetchall()]
+        v = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM vocab_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
+            ).fetchall()
+        ]
+        g = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM grammar_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
+            ).fetchall()
+        ]
         for card in v + g:
             card["next_intervals"] = get_fsrs_next_intervals(
-                card.get("repetition_count") or 0,
-                card.get("interval_days") or 1,
-                card.get("ease_factor") or 2.5
+                card.get("repetition_count") or 0, card.get("interval_days") or 1, card.get("ease_factor") or 2.5
             )
         return {"vocab_cards": v, "grammar_cards": g}
+
 
 @router.get("/api/cards/vocab")
 def get_cards_vocab(cefr: str = "A1", scope: str = "core"):
@@ -693,6 +709,7 @@ def get_cards_vocab(cefr: str = "A1", scope: str = "core"):
 
 
 # --- Phase A: Delete & Master ---
+
 
 @router.delete("/api/cards/{card_type}/{card_id}")
 def delete_card(card_type: str, card_id: int, request: Request):
@@ -708,8 +725,10 @@ def delete_card(card_type: str, card_id: int, request: Request):
     log_study_event("delete_card", card_id, f"{card_type}:{card_id}")
     return {"status": "ok", "deleted_id": card_id, "card_type": card_type}
 
+
 class MasterReq(BaseModel):
     mastered: bool
+
 
 @router.patch("/api/cards/{card_type}/{card_id}/master")
 def toggle_master(card_type: str, card_id: int, req: MasterReq):
@@ -722,20 +741,22 @@ def toggle_master(card_type: str, card_id: int, req: MasterReq):
         if not row:
             raise HTTPException(404, f"Card {card_id} not found")
         conn.execute(
-            f"UPDATE {tbl} SET mastered = ?, mastered_at = ? WHERE id = ?",
-            (1 if req.mastered else 0, now_ts, card_id)
+            f"UPDATE {tbl} SET mastered = ?, mastered_at = ? WHERE id = ?", (1 if req.mastered else 0, now_ts, card_id)
         )
     if req.mastered:
         log_study_event("master_card", card_id, f"{card_type}:{card_id}")
     return {"status": "ok", "id": card_id, "mastered": req.mastered}
 
+
 # --- Phase B: Quiz Record ---
+
 
 class QuizRecordReq(BaseModel):
     card_id: int
     card_type: str  # 'vocab' | 'grammar'
-    mode: str       # 'flashcard' | 'dictation' | 'choice'
+    mode: str  # 'flashcard' | 'dictation' | 'choice'
     correct: bool
+
 
 @router.post("/api/quiz/record")
 def record_quiz(req: QuizRecordReq):
@@ -753,31 +774,36 @@ def record_quiz(req: QuizRecordReq):
     with db_progress_conn() as conn:
         conn.execute(
             "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
-            (req.card_id, req.card_type, req.mode, 1 if req.correct else 0)
+            (req.card_id, req.card_type, req.mode, 1 if req.correct else 0),
         )
         today = datetime.now().strftime("%Y-%m-%d")
         conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
         conn.execute(
             "UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, "
             "study_minutes = study_minutes + 1 WHERE date = ?",
-            (today,)
+            (today,),
         )
     return {"status": "ok"}
 
+
 # --- Phase C: Progress Stats ---
+
 
 class ReadLogReq(BaseModel):
     article_id: int
     title: Optional[str] = ""
+
 
 @router.post("/api/progress/log-read")
 def log_article_read(req: ReadLogReq):
     log_study_event("read_article", req.article_id, req.title or "", minutes=8)
     return {"status": "ok"}
 
+
 @router.get("/api/progress/stats")
 def get_progress_stats():
     from datetime import timedelta
+
     # --- main db ---
     with db_conn() as conn:
         # 单扫条件聚合：COUNT + SUM(条件) 一次出总量与已掌握，替代 4 次全表 COUNT
@@ -804,7 +830,7 @@ def get_progress_stats():
         vc_row = conn.execute("SELECT SUM(correct_count) as c, SUM(wrong_count) as w FROM vocab_cards").fetchone()
         gc_row = conn.execute("SELECT SUM(correct_count) as c, SUM(wrong_count) as w FROM grammar_cards").fetchone()
         total_correct = (vc_row["c"] or 0) + (gc_row["c"] or 0)
-        total_wrong   = (vc_row["w"] or 0) + (gc_row["w"] or 0)
+        total_wrong = (vc_row["w"] or 0) + (gc_row["w"] or 0)
         total_attempts = total_correct + total_wrong
         accuracy_pct = round(total_correct / total_attempts * 100, 1) if total_attempts > 0 else 0.0
 
@@ -832,13 +858,22 @@ def get_progress_stats():
             if d in by_date:
                 trend.append(by_date[d])
             else:
-                trend.append({"date": d, "cards_added": 0, "cards_mastered": 0,
-                               "articles_read": 0, "quiz_sessions": 0, "study_minutes": 0})
+                trend.append(
+                    {
+                        "date": d,
+                        "cards_added": 0,
+                        "cards_mastered": 0,
+                        "articles_read": 0,
+                        "quiz_sessions": 0,
+                        "study_minutes": 0,
+                    }
+                )
 
         # Streak：1 次 DISTINCT 范围查 + Python 回溯（替代 365 次单日查询）。
         # 语义保持现状：today 无记录即 0；有则从 today 起回溯连续天数。
         active_days = {
-            r[0] for r in conn.execute(
+            r[0]
+            for r in conn.execute(
                 "SELECT DISTINCT substr(logged_at, 1, 10) FROM study_log WHERE logged_at >= ?",
                 ((today - timedelta(days=365)).isoformat(),),
             )
@@ -852,49 +887,77 @@ def get_progress_stats():
         total_quiz_sessions = conn.execute("SELECT SUM(quiz_sessions) FROM daily_summary").fetchone()[0] or 0
         total_study_minutes = conn.execute("SELECT SUM(study_minutes) FROM daily_summary").fetchone()[0] or 0
 
-    total_cards    = total_vocab + total_grammar
+    total_cards = total_vocab + total_grammar
     total_mastered = mastered_vocab + mastered_grammar
 
     # Milestones
     milestones = [
-        {"id": "first_card", "title": "初临纸页",
-         "desc": "制作了第一张卡片", "icon": "🌱", "unlocked": total_cards >= 1},
-        {"id": "first_article", "title": "开卷有益",
-         "desc": "研读了第一篇德语文章", "icon": "📖", "unlocked": total_articles >= 1},
-        {"id": "master_10", "title": "小试牛刀",
-         "desc": "斩获 10 张已掌握卡片", "icon": "⚔️", "unlocked": total_mastered >= 10},
-        {"id": "master_50", "title": "千锤百炼",
-         "desc": "斩获 50 张已掌握卡片", "icon": "🛡️", "unlocked": total_mastered >= 50},
-        {"id": "master_100", "title": "百词斩将",
-         "desc": "斩获 100 张已掌握卡片", "icon": "🏆", "unlocked": total_mastered >= 100},
-        {"id": "master_200", "title": "词海无涯",
-         "desc": "斩获 200 张已掌握卡片", "icon": "👑", "unlocked": total_mastered >= 200},
-        {"id": "streak_3", "title": "三日不绝",
-         "desc": "连续打卡 3 天", "icon": "🔥", "unlocked": streak >= 3},
-        {"id": "streak_7", "title": "一周常胜",
-         "desc": "连续打卡 7 天", "icon": "⚡", "unlocked": streak >= 7},
-        {"id": "streak_30", "title": "月光苦读者",
-         "desc": "连续打卡 30 天", "icon": "🌙", "unlocked": streak >= 30},
+        {
+            "id": "first_card",
+            "title": "初临纸页",
+            "desc": "制作了第一张卡片",
+            "icon": "🌱",
+            "unlocked": total_cards >= 1,
+        },
+        {
+            "id": "first_article",
+            "title": "开卷有益",
+            "desc": "研读了第一篇德语文章",
+            "icon": "📖",
+            "unlocked": total_articles >= 1,
+        },
+        {
+            "id": "master_10",
+            "title": "小试牛刀",
+            "desc": "斩获 10 张已掌握卡片",
+            "icon": "⚔️",
+            "unlocked": total_mastered >= 10,
+        },
+        {
+            "id": "master_50",
+            "title": "千锤百炼",
+            "desc": "斩获 50 张已掌握卡片",
+            "icon": "🛡️",
+            "unlocked": total_mastered >= 50,
+        },
+        {
+            "id": "master_100",
+            "title": "百词斩将",
+            "desc": "斩获 100 张已掌握卡片",
+            "icon": "🏆",
+            "unlocked": total_mastered >= 100,
+        },
+        {
+            "id": "master_200",
+            "title": "词海无涯",
+            "desc": "斩获 200 张已掌握卡片",
+            "icon": "👑",
+            "unlocked": total_mastered >= 200,
+        },
+        {"id": "streak_3", "title": "三日不绝", "desc": "连续打卡 3 天", "icon": "🔥", "unlocked": streak >= 3},
+        {"id": "streak_7", "title": "一周常胜", "desc": "连续打卡 7 天", "icon": "⚡", "unlocked": streak >= 7},
+        {"id": "streak_30", "title": "月光苦读者", "desc": "连续打卡 30 天", "icon": "🌙", "unlocked": streak >= 30},
     ]
 
     return {
-        "total_cards":    total_cards,
-        "total_vocab":    total_vocab,
-        "total_grammar":  total_grammar,
+        "total_cards": total_cards,
+        "total_vocab": total_vocab,
+        "total_grammar": total_grammar,
         "total_mastered": total_mastered,
-        "mastered_vocab":   mastered_vocab,
+        "mastered_vocab": mastered_vocab,
         "mastered_grammar": mastered_grammar,
         "total_articles": total_articles,
-        "streak":         streak,
+        "streak": streak,
         "total_quiz_sessions": total_quiz_sessions,
         "total_study_minutes": total_study_minutes,
         "total_attempts": total_attempts,
-        "accuracy_pct":   accuracy_pct,
-        "cefr_counts":    cefr_counts,
-        "top_errors":     top_errors,
-        "trend":          trend,
-        "milestones":     milestones,
+        "accuracy_pct": accuracy_pct,
+        "cefr_counts": cefr_counts,
+        "top_errors": top_errors,
+        "trend": trend,
+        "milestones": milestones,
     }
+
 
 @router.get("/api/cards/export/apkg")
 def export_apkg():
@@ -936,25 +999,26 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
     try:
         try:
             import edge_tts
+
             communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
             await communicate.save(cache_file)
         except ImportError:
             # Android/Chaquopy 没有 edge_tts 的 wheel（aiohttp 等依赖缺）→ 用 stdlib 版客户端
             # （services.tts 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖；原名 edge_tts_mini）
             from delector.services import tts as edge_tts_mini
-            audio_data = await asyncio.to_thread(
-                edge_tts_mini.synthesize, clean_text, voice, rate
-            )
+
+            audio_data = await asyncio.to_thread(edge_tts_mini.synthesize, clean_text, voice, rate)
             with open(cache_file, "wb") as f:
                 f.write(audio_data)
     except Exception:
         # Multi-provider pure-Python httpx fallback (accessible in mainland China)
         from urllib.parse import quote
+
         q = quote(clean_text[:250])
         candidate_urls = [
             f"https://dict.youdao.com/dictvoice?audio={q}&le=de",
             f"https://fanyi.baidu.com/gettts?lan=de&text={q}&spd=3&source=web",
-            f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=de&client=tw-ob"
+            f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=de&client=tw-ob",
         ]
         for tts_url in candidate_urls:
             try:
@@ -971,6 +1035,7 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
                 continue
         # 兜底全部失败：固定文案上屏，内部异常只留服务端日志
         import logging
+
         logging.getLogger("delector").warning("TTS all providers failed", exc_info=True)
         raise HTTPException(500, "语音合成失败，请稍后重试")
 
@@ -978,13 +1043,19 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
     prune_audio_cache()
     return cache_file
 
+
 _TTS_RATE_RE = re.compile(r"^[+-]\d+%$")
 # 发音人白名单：与设置面板 / 朗读器可选项一一对应。voice 直接喂给后端 TTS 客户端，
 # 任意串不得到达合成层（既挡非法输入，也让新语言/新名字的接入必须走 UI 白名单）。
-_TTS_VOICE_WHITELIST = frozenset({
-    "de-DE-KatjaNeural", "de-DE-ConradNeural",
-    "de-DE-AmalaNeural", "de-DE-KillianNeural",
-})
+_TTS_VOICE_WHITELIST = frozenset(
+    {
+        "de-DE-KatjaNeural",
+        "de-DE-ConradNeural",
+        "de-DE-AmalaNeural",
+        "de-DE-KillianNeural",
+    }
+)
+
 
 async def _serve_tts(text: str, voice: str, rate: str):
     """POST 与 GET 两个路由共享的 TTS 服务逻辑。"""
@@ -1000,12 +1071,15 @@ async def _serve_tts(text: str, voice: str, rate: str):
     except Exception:
         # 细节只进服务端日志：内部路径/第三方异常对 LAN 客户端无意义且是信息泄露
         import logging
+
         logging.getLogger("delector").exception("TTS synthesis failed")
         raise HTTPException(500, "语音合成失败，请稍后重试")
+
 
 @router.post("/api/audio/tts")
 async def get_audio_tts(req: TTSReq):
     return await _serve_tts(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
+
 
 @router.get("/api/audio/tts")
 async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%"):
@@ -1013,9 +1087,11 @@ async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str =
     与 POST 共享同一缓存池（cache key 仍为 sha256(f"{voice}_{rate}_{clean_text}")）。"""
     return await _serve_tts(text, voice, rate)
 
+
 @router.get("/api/audio/cache")
 def get_audio_cache():
     return get_cache_info(AUDIO_CACHE_DIR)
+
 
 @router.post("/api/audio/cache/clear")
 def clear_audio_cache(request: Request):
@@ -1031,11 +1107,8 @@ def clear_audio_cache(request: Request):
                     cleared_count += 1
             except Exception:
                 pass
-    return {
-        "status": "ok",
-        "cleared_count": cleared_count,
-        "freed_mb": info["total_size_mb"]
-    }
+    return {"status": "ok", "cleared_count": cleared_count, "freed_mb": info["total_size_mb"]}
+
 
 # --- Reading Notes & AI Assist Endpoints ---
 class ReadingNoteReq(BaseModel):
@@ -1043,6 +1116,7 @@ class ReadingNoteReq(BaseModel):
     selected_text: str = Field(..., max_length=20_000)
     color: Optional[str] = "yellow"
     note_content: Optional[str] = Field(default="", max_length=20_000)
+
 
 @router.get("/api/articles/{article_id}/notes")
 def list_article_notes(article_id: int):
@@ -1052,16 +1126,17 @@ def list_article_notes(article_id: int):
         ).fetchall()
         return [dict(r) for r in rows]
 
+
 @router.post("/api/articles/{article_id}/notes")
 def create_article_note(article_id: int, req: ReadingNoteReq):
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO reading_notes "
             "(article_id, sentence_id, selected_text, color, note_content) VALUES (?, ?, ?, ?, ?)",
-            (article_id, req.sentence_id, req.selected_text, req.color or "yellow",
-             req.note_content or "")
+            (article_id, req.sentence_id, req.selected_text, req.color or "yellow", req.note_content or ""),
         )
         return {"id": cur.lastrowid, "status": "ok"}
+
 
 @router.delete("/api/notes/{note_id}")
 def delete_article_note(note_id: int, request: Request):
@@ -1072,6 +1147,7 @@ def delete_article_note(note_id: int, request: Request):
         conn.execute("DELETE FROM reading_notes WHERE id = ?", (note_id,))
         return {"status": "ok"}
 
+
 SYSTEM_NOTE_PROMPT = """你是一位精通德语阅读与考点剖析的资深私教。
 请根据学习者给出的德语句子和选中的文本，为学习者生成一份简洁精准的中文精读随笔备忘要点（包括句法结构简析、高频固定搭配及地道中文翻译）。
 以严格的 JSON 格式输出：
@@ -1081,23 +1157,26 @@ SYSTEM_NOTE_PROMPT = """你是一位精通德语阅读与考点剖析的资深�
 }
 不要输出除 JSON 以外的任何文字。"""
 
+
 class NoteAssistReq(BaseModel):
     sentence: str = Field(..., max_length=20_000)
     selected_text: str = Field(..., max_length=20_000)
+
 
 @router.post("/api/ai/note-assist")
 async def note_assist(req: NoteAssistReq):
     key = get_effective_api_key()
     if not key:
         import logging
+
         logging.warning("[note-assist] API Key not set — returning stub response. Set in Settings.")
         return {
             "summary_zh": f"精读重点：{req.selected_text}",
             "key_points": ["请在右上角「⚙️ 设置」中配置 API Key 获取深度 AI 语法与搭配解析。"],
-            "_stub": True
+            "_stub": True,
         }
 
-    base_url = get_effective_api_base_url().rstrip('/')
+    base_url = get_effective_api_base_url().rstrip("/")
     model = get_effective_api_model()
     try:
         async with httpx.AsyncClient(timeout=20) as client:
@@ -1111,14 +1190,11 @@ async def note_assist(req: NoteAssistReq):
                         # 截断后再送 LLM：与 writing/analyze 一致，控制请求成本
                         {
                             "role": "user",
-                            "content": (
-                                f"整句: \"{req.sentence[:2000]}\"\n"
-                                f"划选部分: \"{req.selected_text[:2000]}\""
-                            ),
-                        }
+                            "content": (f'整句: "{req.sentence[:2000]}"\n划选部分: "{req.selected_text[:2000]}"'),
+                        },
                     ],
-                    "response_format": {"type": "json_object"}
-                }
+                    "response_format": {"type": "json_object"},
+                },
             )
             if getattr(resp, "status_code", 200) != 200:
                 raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
@@ -1139,6 +1215,7 @@ async def note_assist(req: NoteAssistReq):
     except Exception:
         raise HTTPException(status_code=502, detail="AI 服务连接失败")
 
+
 # --- Settings & Configuration API ---
 class SettingsUpdate(BaseModel):
     api_key: Optional[str] = None
@@ -1146,6 +1223,7 @@ class SettingsUpdate(BaseModel):
     api_model: Optional[str] = None
     tts_voice: Optional[str] = None
     tts_rate: Optional[str] = None
+
 
 @router.get("/api/settings")
 def get_app_settings():
@@ -1164,8 +1242,9 @@ def get_app_settings():
         "tts_voice": get_setting("TTS_VOICE", "de-DE-KatjaNeural"),
         "tts_rate": get_setting("TTS_RATE", "+0%"),
         "nlp_engine": NLP_ENGINE,
-        "nlp_engine_detail": NLP_ENGINE_DETAIL
+        "nlp_engine_detail": NLP_ENGINE_DETAIL,
     }
+
 
 @router.post("/api/settings")
 def update_app_settings(settings: SettingsUpdate, request: Request):
@@ -1182,13 +1261,14 @@ def update_app_settings(settings: SettingsUpdate, request: Request):
         set_setting("TTS_RATE", settings.tts_rate.strip())
     return {"success": True, "message": "偏好与 API 设置已保存！"}
 
+
 @router.post("/api/settings/test-key")
 async def test_api_key(settings: SettingsUpdate, request: Request):
     _require_localhost(request)
     key = settings.api_key.strip() if (settings.api_key and settings.api_key.strip()) else get_effective_api_key()
     if not key:
         return {"success": False, "error": "请先输入 API Key"}
-    base_url = (settings.api_base_url.strip() if settings.api_base_url else get_effective_api_base_url()).rstrip('/')
+    base_url = (settings.api_base_url.strip() if settings.api_base_url else get_effective_api_base_url()).rstrip("/")
     model = settings.api_model.strip() if settings.api_model else get_effective_api_model()
 
     start_t = time.time()
@@ -1197,11 +1277,7 @@ async def test_api_key(settings: SettingsUpdate, request: Request):
             resp = await client.post(
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": "Sag 'OK'."}],
-                    "max_tokens": 5
-                }
+                json={"model": model, "messages": [{"role": "user", "content": "Sag 'OK'."}], "max_tokens": 5},
             )
             latency = int((time.time() - start_t) * 1000)
             if resp.status_code == 200:
@@ -1210,6 +1286,7 @@ async def test_api_key(settings: SettingsUpdate, request: Request):
                 return {"success": False, "error": f"连接返回错误代码: {resp.status_code} ({resp.text[:100]})"}
     except Exception as e:
         return {"success": False, "error": f"连接失败: {str(e)}"}
+
 
 # --- Study Guide Export (Markdown) ---
 @router.get("/api/articles/{article_id}/export-guide")
@@ -1221,9 +1298,7 @@ def export_study_guide(article_id: int):
         notes = conn.execute(
             "SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)
         ).fetchall()
-        vocab = conn.execute(
-            "SELECT * FROM vocab_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)
-        ).fetchall()
+        vocab = conn.execute("SELECT * FROM vocab_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
         grammar = conn.execute(
             "SELECT * FROM grammar_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)
         ).fetchall()
@@ -1235,7 +1310,7 @@ def export_study_guide(article_id: int):
         md.append("## 📝 精读随笔与重点批注\n")
         for n in notes:
             md.append(f"- **高亮原句**: *{n['selected_text']}*")
-            if n['note_content']:
+            if n["note_content"]:
                 md.append(f"  - 💡 **随笔笔记**: {n['note_content']}")
         md.append("")
 
@@ -1254,20 +1329,23 @@ def export_study_guide(article_id: int):
         md.append("## 🎓 歌德考点深度解析\n")
         for g in grammar:
             md.append(f"### ✦ {g['grammar_name']} ({g['cefr_level']})")
-            if g['rule_formula']:
+            if g["rule_formula"]:
                 md.append(f"- **语法公式**: `{g['rule_formula']}`")
             md.append(f"- **解析**: {g['explanation_zh']}")
             md.append(f"- **例句**: *{g['sentence_context']}*\n")
 
     content = "\n".join(md)
     from fastapi.responses import Response
+
     return Response(
         content=content,
         media_type="text/markdown; charset=utf-8",
         headers=_attachment_headers(f"study_guide_{article_id}.md"),
     )
 
+
 # --- Backup & Restore Endpoints ---
+
 
 @router.get("/api/backup/export")
 def export_database_backup(request: Request):
@@ -1303,8 +1381,7 @@ def prepare_backup_download(req: PrepareBackupReq, request: Request):
         payload,
         f"delector_backup_{datetime.now().strftime('%Y-%m-%d')}.json",
     )
-    return {"token": token, "filename": _pending_backup["filename"],
-            "expires_in": BACKUP_TOKEN_TTL_SEC}
+    return {"token": token, "filename": _pending_backup["filename"], "expires_in": BACKUP_TOKEN_TTL_SEC}
 
 
 @router.get("/api/backup/download/{token}")
@@ -1320,6 +1397,7 @@ def download_prepared_backup(token: str, request: Request):
 
 # ── Workbench backup (同理，Android WebView 对 blob: URL 静默失败) ────────
 
+
 class WbBackupReq(BaseModel):
     filename: str = "workbench-backup.json"
     payload: Dict[str, Any] = {}
@@ -1329,8 +1407,7 @@ class WbBackupReq(BaseModel):
 def wb_prepare_backup(req: WbBackupReq, request: Request):
     _require_localhost(request)
     token = _issue_pending(_pending_wb, req.payload, req.filename)
-    return {"token": token, "filename": req.filename,
-            "expires_in": BACKUP_TOKEN_TTL_SEC}
+    return {"token": token, "filename": req.filename, "expires_in": BACKUP_TOKEN_TTL_SEC}
 
 
 @router.get("/api/wb/backup/download/{token}")
@@ -1350,6 +1427,7 @@ def wb_download_backup(token: str, request: Request):
 #                        「只有能 push 的客户端才需要密钥」是够用的信任模型。
 # PUT /api/wb/state      写镜像。须带 X-WB-Key（32 位 hex），否则 403。
 # GET /api/wb/state/key  取 key。仅本机 127.0.0.1（_require_localhost）。
+
 
 class WbStateReq(BaseModel):
     payload: Dict[str, Any] = {}
@@ -1460,9 +1538,11 @@ def restore_database_backup(req: RestoreReq, request: Request):
                 )
                 conn.executemany(
                     "INSERT INTO app_settings (key, value) VALUES (?, ?)",
-                    [(s["key"], s.get("value"))
-                     for s in (payload.get("app_settings") or [])
-                     if s.get("key") in BACKUP_SETTINGS_IMPORT_WHITELIST],
+                    [
+                        (s["key"], s.get("value"))
+                        for s in (payload.get("app_settings") or [])
+                        if s.get("key") in BACKUP_SETTINGS_IMPORT_WHITELIST
+                    ],
                 )
         finally:
             conn.close()
@@ -1483,13 +1563,13 @@ def restore_database_backup(req: RestoreReq, request: Request):
     return {"status": "ok", "message": "全量备份恢复成功"}
 
 
-
-
 # ── v3.0 / v3.8: FSRS Spaced Repetition Review & Cloze Exercise Engine ────────
+
 
 class CardReviewReq(BaseModel):
     grade: int  # 1: Forgot, 2: Hard, 3: Good, 4: Easy
     card_type: Optional[str] = None
+
 
 @router.post("/api/cards/{card_type}/{card_id}/review")
 def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
@@ -1523,80 +1603,88 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
         correct_incr = 1 if is_correct else 0
         wrong_incr = 1 if not is_correct else 0
 
-        conn.execute(f"""
+        conn.execute(
+            f"""
             UPDATE {tbl}
             SET repetition_count = ?, interval_days = ?, ease_factor = ?, due_date = ?,
                 correct_count = correct_count + ?, wrong_count = wrong_count + ?
             WHERE id = ?
-        """, (new_rep, new_interval, new_ef, due_date, correct_incr, wrong_incr, card_id))
+        """,
+            (new_rep, new_interval, new_ef, due_date, correct_incr, wrong_incr, card_id),
+        )
 
         # UPDATE 后所有被改列都是内存里已算好的值：直接拼回响应，免整行回查
         updated = dict(row)
-        updated.update({
-            "repetition_count": new_rep,
-            "interval_days": new_interval,
-            "ease_factor": new_ef,
-            "due_date": due_date,
-            "correct_count": (row["correct_count"] or 0) + correct_incr,
-            "wrong_count": (row["wrong_count"] or 0) + wrong_incr,
-        })
+        updated.update(
+            {
+                "repetition_count": new_rep,
+                "interval_days": new_interval,
+                "ease_factor": new_ef,
+                "due_date": due_date,
+                "correct_count": (row["correct_count"] or 0) + correct_incr,
+                "wrong_count": (row["wrong_count"] or 0) + wrong_incr,
+            }
+        )
         updated["next_intervals"] = next_intervals
 
     with db_progress_conn() as pconn:
         pconn.execute(
             "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
-            (card_id, card_type, "fsrs_review", 1 if is_correct else 0)
+            (card_id, card_type, "fsrs_review", 1 if is_correct else 0),
         )
     log_study_event("quiz_session", card_id, f"fsrs:{card_type}:{card_id}")
     return updated
 
+
 @router.get("/api/cards/due")
 def get_due_cards():
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now().strftime("%Y-%m-%d")
     with db_conn() as conn:
-        v = [dict(r) for r in conn.execute(
-            "SELECT * FROM vocab_cards WHERE mastered = 0 "
-            "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
-            (today,)
-        ).fetchall()]
-        g = [dict(r) for r in conn.execute(
-            "SELECT * FROM grammar_cards WHERE mastered = 0 "
-            "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
-            (today,)
-        ).fetchall()]
+        v = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM vocab_cards WHERE mastered = 0 "
+                "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+                (today,),
+            ).fetchall()
+        ]
+        g = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM grammar_cards WHERE mastered = 0 "
+                "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+                (today,),
+            ).fetchall()
+        ]
         for card in v + g:
             card["next_intervals"] = get_fsrs_next_intervals(
-                card.get("repetition_count") or 0,
-                card.get("interval_days") or 1,
-                card.get("ease_factor") or 2.5
+                card.get("repetition_count") or 0, card.get("interval_days") or 1, card.get("ease_factor") or 2.5
             )
-        return {
-            "due_vocab": v,
-            "due_grammar": g,
-            "due_count": len(v) + len(g),
-            "today": today
-        }
+        return {"due_vocab": v, "due_grammar": g, "due_count": len(v) + len(g), "today": today}
+
 
 def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Optional[int] = None) -> Dict[str, Any]:
     if nlp is None:
         # Simple pure-Python cloze fallback
-        words = re.findall(r'\w+|[^\w\s]+|\s+', text, re.UNICODE)
+        words = re.findall(r"\w+|[^\w\s]+|\s+", text, re.UNICODE)
         items = []
         tokens_output = []
         blank_counter = 0
         for w in words:
             if w.isalpha() and len(w) >= 4 and blank_counter < 5 and blank_counter % 2 == 0:
                 first_letter = w[0]
-                items.append({
-                    "index": blank_counter,
-                    "original": w,
-                    "first_letter": first_letter,
-                    "lemma": w.lower(),
-                    "pos": "NOUN" if w[0].isupper() else "VERB",
-                    "hint": f"首字母: {first_letter}...",
-                    "type": mode,
-                    "sent_idx": 0
-                })
+                items.append(
+                    {
+                        "index": blank_counter,
+                        "original": w,
+                        "first_letter": first_letter,
+                        "lemma": w.lower(),
+                        "pos": "NOUN" if w[0].isupper() else "VERB",
+                        "hint": f"首字母: {first_letter}...",
+                        "type": mode,
+                        "sent_idx": 0,
+                    }
+                )
                 tokens_output.append(f"[[BLANK_{blank_counter}]]")
                 blank_counter += 1
             else:
@@ -1607,7 +1695,7 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
             "article_id": article_id,
             "masked_text": "".join(tokens_output),
             "blanks_count": len(items),
-            "items": items
+            "items": items,
         }
     doc = nlp(text)
     items = []
@@ -1621,24 +1709,26 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
                     token.pos_ in ("ADP", "SCONJ", "CCONJ")
                     or (
                         token.pos_ == "AUX"
-                        and token.text.lower() in ("wurde", "worden", "werden", "wäre", "hätte",
-                                                   "könnte", "müsste", "sollte")
+                        and token.text.lower()
+                        in ("wurde", "worden", "werden", "wäre", "hätte", "könnte", "müsste", "sollte")
                     )
                     or (token.pos_ == "ADJ" and len(token.text) > 3)
                 )
                 sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
                 if is_grammar_target and len(sent_blanks) < 2 and len(token.text) >= 2:
                     first_letter = token.text[0]
-                    items.append({
-                        "index": blank_counter,
-                        "original": token.text,
-                        "first_letter": first_letter,
-                        "lemma": token.lemma_,
-                        "pos": token.pos_,
-                        "hint": f"首字母: {first_letter}...",
-                        "type": "grammar",
-                        "sent_idx": sent_idx
-                    })
+                    items.append(
+                        {
+                            "index": blank_counter,
+                            "original": token.text,
+                            "first_letter": first_letter,
+                            "lemma": token.lemma_,
+                            "pos": token.pos_,
+                            "hint": f"首字母: {first_letter}...",
+                            "type": "grammar",
+                            "sent_idx": sent_idx,
+                        }
+                    )
                     tokens_output.append(f"[[BLANK_{blank_counter}]]{token.whitespace_}")
                     blank_counter += 1
                 else:
@@ -1649,23 +1739,23 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
             for token in sent:
                 lvl = get_cefr_level(token.lemma_)
                 is_vocab_target = (
-                    token.pos_ in ("NOUN", "VERB")
-                    and lvl in ("A2", "B1", "B2", "C1")
-                    and len(token.text) >= 3
+                    token.pos_ in ("NOUN", "VERB") and lvl in ("A2", "B1", "B2", "C1") and len(token.text) >= 3
                 )
                 sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
                 if is_vocab_target and len(sent_blanks) < 2:
                     first_letter = token.text[0]
-                    items.append({
-                        "index": blank_counter,
-                        "original": token.text,
-                        "first_letter": first_letter,
-                        "lemma": token.lemma_,
-                        "pos": token.pos_,
-                        "hint": f"首字母: {first_letter}... ({token.lemma_})",
-                        "type": "vocab",
-                        "sent_idx": sent_idx
-                    })
+                    items.append(
+                        {
+                            "index": blank_counter,
+                            "original": token.text,
+                            "first_letter": first_letter,
+                            "lemma": token.lemma_,
+                            "pos": token.pos_,
+                            "hint": f"首字母: {first_letter}... ({token.lemma_})",
+                            "type": "vocab",
+                            "sent_idx": sent_idx,
+                        }
+                    )
                     tokens_output.append(f"[[BLANK_{blank_counter}]]{token.whitespace_}")
                     blank_counter += 1
                 else:
@@ -1681,16 +1771,18 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
                         cut_len = (len(token.text) + 1) // 2
                         prefix = token.text[:cut_len]
                         suffix = token.text[cut_len:]
-                        items.append({
-                            "index": blank_counter,
-                            "original": token.text,
-                            "prefix": prefix,
-                            "suffix": suffix,
-                            "first_letter": prefix,
-                            "hint": f"词首: {prefix}...",
-                            "type": "ctest",
-                            "sent_idx": sent_idx
-                        })
+                        items.append(
+                            {
+                                "index": blank_counter,
+                                "original": token.text,
+                                "prefix": prefix,
+                                "suffix": suffix,
+                                "first_letter": prefix,
+                                "hint": f"词首: {prefix}...",
+                                "type": "ctest",
+                                "sent_idx": sent_idx,
+                            }
+                        )
                         tokens_output.append(f"{prefix}[[BLANK_{blank_counter}]]{token.whitespace_}")
                         blank_counter += 1
                         continue
@@ -1700,30 +1792,29 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
         for token in doc:
             if token.is_alpha and len(token.text) >= 4 and blank_counter < 3:
                 first_letter = token.text[0]
-                items.append({
-                    "index": blank_counter,
-                    "original": token.text,
-                    "first_letter": first_letter,
-                    "lemma": token.lemma_,
-                    "hint": f"首字母: {first_letter}...",
-                    "type": mode,
-                    "sent_idx": 0
-                })
+                items.append(
+                    {
+                        "index": blank_counter,
+                        "original": token.text,
+                        "first_letter": first_letter,
+                        "lemma": token.lemma_,
+                        "hint": f"首字母: {first_letter}...",
+                        "type": mode,
+                        "sent_idx": 0,
+                    }
+                )
                 tokens_output.append(f"[[BLANK_{blank_counter}]]{token.whitespace_}")
                 blank_counter += 1
             else:
                 tokens_output.append(token.text_with_ws)
 
     masked_text = "".join(tokens_output)
-    return {
-        "mode": mode,
-        "items": items,
-        "total_blanks": len(items),
-        "masked_text": masked_text
-    }
+    return {"mode": mode, "items": items, "total_blanks": len(items), "masked_text": masked_text}
+
 
 class ClozeGenReq(BaseModel):
     mode: Optional[str] = "grammar"
+
 
 @router.post("/api/articles/{article_id}/exercise/cloze")
 def get_article_cloze_exercise(article_id: int, req: ClozeGenReq):
@@ -1739,10 +1830,12 @@ def get_article_cloze_exercise(article_id: int, req: ClozeGenReq):
     data["title"] = title
     return data
 
+
 class ClozeEvalReq(BaseModel):
     article_id: int
     mode: str
     answers: Dict[str, str]
+
 
 @router.post("/api/exercise/cloze/evaluate")
 def evaluate_cloze_exercise(req: ClozeEvalReq):
@@ -1766,38 +1859,38 @@ def evaluate_cloze_exercise(req: ClozeEvalReq):
             expected_suffix = item.get("suffix", "")
             is_correct = (user_ans.lower() == expected_suffix.lower()) or (user_ans.lower() == expected.lower())
         else:
-            is_correct = (user_ans.lower() == expected.lower())
+            is_correct = user_ans.lower() == expected.lower()
 
         if is_correct:
             correct_count += 1
 
-        results.append({
-            "index": item["index"],
-            "correct": is_correct,
-            "user_answer": user_ans,
-            "expected": expected,
-            "hint": item.get("hint", ""),
-            "type": item.get("type", "grammar")
-        })
+        results.append(
+            {
+                "index": item["index"],
+                "correct": is_correct,
+                "user_answer": user_ans,
+                "expected": expected,
+                "hint": item.get("hint", ""),
+                "type": item.get("type", "grammar"),
+            }
+        )
 
     total = len(items)
     accuracy_pct = round((correct_count / total * 100)) if total > 0 else 0
 
     log_study_event("quiz_session", req.article_id, f"cloze:{req.mode}:{req.article_id}", minutes=3)
 
-    return {
-        "score": correct_count,
-        "total": total,
-        "accuracy_pct": accuracy_pct,
-        "results": results
-    }
+    return {"score": correct_count, "total": total, "accuracy_pct": accuracy_pct, "results": results}
+
 
 class SyntaxAnalyzeReq(BaseModel):
     text: str
 
+
 @router.post("/api/syntax/analyze")
 def api_syntax_analyze(req: SyntaxAnalyzeReq):
     return analyze_syntax_tree(req.text)
+
 
 # --- Writing Desk (Schreibwerkstatt) Endpoints ---
 
@@ -1826,12 +1919,14 @@ def _get_writer_nlp():
 @router.post("/api/writing/analyze")
 def api_writing_analyze(req: WritingAnalyzeReq):
     from delector.services.writing import analyze_essay_text
+
     return analyze_essay_text(req.text[:2000], _get_writer_nlp())
 
 
 @router.post("/api/essays")
 def create_essay(req: EssayCreateReq):
     from delector.services.writing import analyze_essay_text
+
     a = analyze_essay_text(req.content[:5000], _get_writer_nlp())
     cefr = a.get("cefr", {}).get("recommended_level")
     with db_conn() as conn:
@@ -1839,13 +1934,15 @@ def create_essay(req: EssayCreateReq):
             "INSERT INTO essays "
             "(title, content, analysis_json, cefr_level, error_count, sentence_count) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr,
-             a["error_count"], len(a["sentences"]))
+            (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr, a["error_count"], len(a["sentences"])),
         )
         eid = cur.lastrowid
     return {
-        "id": eid, "title": req.title, "content": req.content,
-        "analysis_json": a, "error_count": a["error_count"],
+        "id": eid,
+        "title": req.title,
+        "content": req.content,
+        "analysis_json": a,
+        "error_count": a["error_count"],
     }
 
 
@@ -1877,6 +1974,7 @@ def get_essay(essay_id: int):
 @router.put("/api/essays/{essay_id}")
 def update_essay(essay_id: int, req: EssayUpdateReq):
     from delector.services.writing import analyze_essay_text
+
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
@@ -1889,9 +1987,16 @@ def update_essay(essay_id: int, req: EssayUpdateReq):
             "UPDATE essays SET title = ?, content = ?, analysis_json = ?, "
             "cefr_level = ?, error_count = ?, sentence_count = ?, updated_at = ? "
             "WHERE id = ?",
-            (title, content, json.dumps(a, ensure_ascii=False),
-             a.get("cefr", {}).get("recommended_level"), a["error_count"],
-             len(a["sentences"]), now_str, essay_id)
+            (
+                title,
+                content,
+                json.dumps(a, ensure_ascii=False),
+                a.get("cefr", {}).get("recommended_level"),
+                a["error_count"],
+                len(a["sentences"]),
+                now_str,
+                essay_id,
+            ),
         )
     return {"id": essay_id, "title": title, "content": content, "analysis_json": a, "error_count": a["error_count"]}
 
@@ -1951,10 +2056,11 @@ async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
     key = get_effective_api_key()
     if not key:
         import logging
+
         logging.warning("[writing/ai-polish] API Key not set — returning stub response.")
         return text, ["请在设置中配置 DeepSeek API Key 后使用 AI 润色功能"], 0
 
-    base_url = get_effective_api_base_url().rstrip('/')
+    base_url = get_effective_api_base_url().rstrip("/")
     model = get_effective_api_model()
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -1965,10 +2071,10 @@ async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
                     "model": model,
                     "messages": [
                         {"role": "system", "content": SYSTEM_WRITING_POLISH_PROMPT},
-                        {"role": "user", "content": f"德语文本:\n{text}"}
+                        {"role": "user", "content": f"德语文本:\n{text}"},
                     ],
-                    "response_format": {"type": "json_object"}
-                }
+                    "response_format": {"type": "json_object"},
+                },
             )
             if getattr(resp, "status_code", 200) != 200:
                 raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
@@ -1992,6 +2098,7 @@ async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
         raise
     except Exception as e:
         import logging
+
         logging.error(f"[writing/ai-polish] DeepSeek API error: {e}")
         raise HTTPException(status_code=502, detail="AI 服务连接失败")
 
@@ -2006,13 +2113,14 @@ async def api_writing_ai_polish(req: AIPolishReq):
             "corrected_text": corrected_text,
             "notes_zh": notes_zh,
             "error_count": error_count,
-        }
+        },
     }
 
 
 @router.post("/api/writing/ai-polish/diff")
 async def api_writing_ai_polish_diff(req: AIPolishReq):
     from delector.services.essay_diff import diff_sentences
+
     text = req.text[:2000]
     corrected_text, notes_zh, error_count = await _ai_polish_call(text)
     hunks = diff_sentences(text, corrected_text)
@@ -2024,7 +2132,7 @@ async def api_writing_ai_polish_diff(req: AIPolishReq):
             "hunks": hunks,
             "notes_zh": notes_zh,
             "error_count": error_count,
-        }
+        },
     }
 
 
@@ -2036,9 +2144,8 @@ def save_essay_version(essay_id: int, req: EssayVersionCreateReq):
             raise HTTPException(404, "essay not found")
         msg = req.message.strip() if (req.message and req.message.strip()) else "手动保存"
         cur = conn.execute(
-            "INSERT INTO essay_versions (essay_id, content, analysis_json, message) "
-            "VALUES (?, ?, ?, ?)",
-            (essay_id, row["content"], row["analysis_json"], msg)
+            "INSERT INTO essay_versions (essay_id, content, analysis_json, message) VALUES (?, ?, ?, ?)",
+            (essay_id, row["content"], row["analysis_json"], msg),
         )
         version_id = cur.lastrowid
         created_row = conn.execute("SELECT created_at FROM essay_versions WHERE id = ?", (version_id,)).fetchone()
@@ -2055,7 +2162,7 @@ def list_essay_versions(essay_id: int):
         rows = conn.execute(
             "SELECT id, essay_id, content, message, created_at, analysis_json "
             "FROM essay_versions WHERE essay_id = ? ORDER BY id DESC",
-            (essay_id,)
+            (essay_id,),
         ).fetchall()
         result = []
         for r in rows:
@@ -2065,13 +2172,15 @@ def list_essay_versions(essay_id: int):
                 err_count = a.get("error_count", 0) if isinstance(a, dict) else 0
             except Exception:
                 err_count = 0
-            result.append({
-                "id": r["id"],
-                "essay_id": r["essay_id"],
-                "message": r["message"],
-                "created_at": r["created_at"],
-                "error_count": err_count,
-            })
+            result.append(
+                {
+                    "id": r["id"],
+                    "essay_id": r["essay_id"],
+                    "message": r["message"],
+                    "created_at": r["created_at"],
+                    "error_count": err_count,
+                }
+            )
     return result
 
 
@@ -2084,7 +2193,7 @@ def get_essay_version(essay_id: int, version_id: int):
         v = conn.execute(
             "SELECT id, essay_id, content, message, created_at, analysis_json "
             "FROM essay_versions WHERE id = ? AND essay_id = ?",
-            (version_id, essay_id)
+            (version_id, essay_id),
         ).fetchone()
         if not v:
             raise HTTPException(404, "version not found")
@@ -2114,28 +2223,24 @@ def delete_essay_version(essay_id: int, version_id: int, request: Request):
         if not essay:
             raise HTTPException(404, "essay not found")
         v = conn.execute(
-            "SELECT id FROM essay_versions WHERE id = ? AND essay_id = ?",
-            (version_id, essay_id)
+            "SELECT id FROM essay_versions WHERE id = ? AND essay_id = ?", (version_id, essay_id)
         ).fetchone()
         if not v:
             raise HTTPException(404, "version not found")
-        conn.execute(
-            "DELETE FROM essay_versions WHERE id = ? AND essay_id = ?",
-            (version_id, essay_id)
-        )
+        conn.execute("DELETE FROM essay_versions WHERE id = ? AND essay_id = ?", (version_id, essay_id))
     return {"status": "ok", "deleted_version_id": version_id}
 
 
 @router.post("/api/essays/{essay_id}/restore")
 def restore_essay_version(essay_id: int, req: EssayRestoreReq):
     from delector.services.writing import analyze_essay_text
+
     with db_conn() as conn:
         essay = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:
             raise HTTPException(404, "essay not found")
         version = conn.execute(
-            "SELECT * FROM essay_versions WHERE id = ? AND essay_id = ?",
-            (req.version_id, essay_id)
+            "SELECT * FROM essay_versions WHERE id = ? AND essay_id = ?", (req.version_id, essay_id)
         ).fetchone()
         if not version:
             raise HTTPException(404, "version not found")
@@ -2143,9 +2248,8 @@ def restore_essay_version(essay_id: int, req: EssayRestoreReq):
         checkpoint_version_id = None
         if version["content"] != essay["content"]:
             cur = conn.execute(
-                "INSERT INTO essay_versions (essay_id, content, analysis_json, message) "
-                "VALUES (?, ?, ?, ?)",
-                (essay_id, essay["content"], essay["analysis_json"], f"恢复到版本 {req.version_id} 之前")
+                "INSERT INTO essay_versions (essay_id, content, analysis_json, message) VALUES (?, ?, ?, ?)",
+                (essay_id, essay["content"], essay["analysis_json"], f"恢复到版本 {req.version_id} 之前"),
             )
             checkpoint_version_id = cur.lastrowid
             a = analyze_essay_text(version["content"][:5000], _get_writer_nlp())
@@ -2153,9 +2257,15 @@ def restore_essay_version(essay_id: int, req: EssayRestoreReq):
             conn.execute(
                 "UPDATE essays SET content = ?, analysis_json = ?, cefr_level = ?, "
                 "error_count = ?, sentence_count = ?, updated_at = ? WHERE id = ?",
-                (version["content"], json.dumps(a, ensure_ascii=False),
-                 a.get("cefr", {}).get("recommended_level"), a["error_count"],
-                 len(a["sentences"]), now_str, essay_id)
+                (
+                    version["content"],
+                    json.dumps(a, ensure_ascii=False),
+                    a.get("cefr", {}).get("recommended_level"),
+                    a["error_count"],
+                    len(a["sentences"]),
+                    now_str,
+                    essay_id,
+                ),
             )
         else:
             raw_a = essay["analysis_json"]
@@ -2194,15 +2304,21 @@ def api_writing_apply(req: WritingApplyReq):
                 "UPDATE essays SET title = ?, content = ?, analysis_json = ?, "
                 "cefr_level = ?, error_count = ?, sentence_count = ?, updated_at = ? "
                 "WHERE id = ?",
-                (row["title"], merged, json.dumps(a, ensure_ascii=False),
-                 a.get("cefr", {}).get("recommended_level"), a["error_count"],
-                 len(a["sentences"]), now_str, req.essay_id)
+                (
+                    row["title"],
+                    merged,
+                    json.dumps(a, ensure_ascii=False),
+                    a.get("cefr", {}).get("recommended_level"),
+                    a["error_count"],
+                    len(a["sentences"]),
+                    now_str,
+                    req.essay_id,
+                ),
             )
             msg = f"AI 润色 · 接受 {len(req.accepted_indices)}/{len(hunks)} 处"
             cur = conn.execute(
-                "INSERT INTO essay_versions (essay_id, content, analysis_json, message) "
-                "VALUES (?, ?, ?, ?)",
-                (req.essay_id, merged, json.dumps(a, ensure_ascii=False), msg)
+                "INSERT INTO essay_versions (essay_id, content, analysis_json, message) VALUES (?, ?, ?, ?)",
+                (req.essay_id, merged, json.dumps(a, ensure_ascii=False), msg),
             )
             version_id = cur.lastrowid
         else:

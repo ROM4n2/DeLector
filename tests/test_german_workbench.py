@@ -10,6 +10,7 @@
 本仓库教训：静态断言必须能被「回退实现」打破 —— 每条断言都切成
 尽可能窄的作用域（函数体内/块内），不做整文件级别的模糊匹配。
 """
+
 import json
 import re
 from pathlib import Path
@@ -117,6 +118,7 @@ def test_backup_covers_workbench_state():
 
 # ── v4.6.1 回归：共享 <audio> 单例上的两个异步陷阱 ─────────────────────
 
+
 def _playword_cleanup_block():
     """playWord 入口那段「停掉上一次播放」的互斥清理（到 finalResolve 为止）。"""
     body = _WORKBENCH.split("function playWord(hw, opts)")[1]
@@ -166,7 +168,7 @@ def test_every_shared_audio_handler_guards_attempt_id():
                     break
                 start = i + len(opener)
                 found += 1
-                head = src[start:start + 160]
+                head = src[start : start + 160]
                 assert "myAttempt !== _ttsAttemptId" in head, (
                     f"{chain} 里的回调 {opener!r}（块内偏移 {i}）开头缺 attempt 守卫，"
                     "stale handler 会去动共享的 _ttsAudio"
@@ -181,6 +183,7 @@ def test_every_shared_audio_handler_guards_attempt_id():
 
 
 # ── v4.6.6 β 契约：pickDeVoice 三级优先 + trySpeech 离线兜底 ──────────────
+
 
 def _pick_de_voice_body():
     """pickDeVoice 函数体（不含签名行）。"""
@@ -229,6 +232,7 @@ def test_try_speech_handles_no_voice_explicitly():
 
 # ── v4.6.6 α 契约：EMBEDDED_AUDIO 嵌入音频词表 ─────────────────────────────
 
+
 def test_embedded_audio_dict_declared_before_playword():
     """EMBEDDED_AUDIO 字典必须在 playWord 函数之前声明。
 
@@ -239,10 +243,7 @@ def test_embedded_audio_dict_declared_before_playword():
     """
     ea_pos = _WORKBENCH.index("const EMBEDDED_AUDIO")
     pw_pos = _WORKBENCH.index("function playWord(")
-    assert ea_pos < pw_pos, (
-        "EMBEDDED_AUDIO 必须声明在 playWord 之前，"
-        "否则 playWord 入口无法访问它"
-    )
+    assert ea_pos < pw_pos, "EMBEDDED_AUDIO 必须声明在 playWord 之前，否则 playWord 入口无法访问它"
 
 
 def test_embedded_audio_lookup_uses_lowercase():
@@ -263,12 +264,9 @@ def test_embedded_audio_lookup_uses_lowercase():
     lower_pos = pw_body.find("toLowerCase()")
     ea_check_pos = pw_body.find("EMBEDDED_AUDIO[")
     assert lower_pos >= 0, (
-        "EMBEDDED_AUDIO 查词必须做 word.toLowerCase() 归一，"
-        "否则名词（大写首字母）永远查不到嵌入音频。"
+        "EMBEDDED_AUDIO 查词必须做 word.toLowerCase() 归一，否则名词（大写首字母）永远查不到嵌入音频。"
     )
-    assert lower_pos < ea_check_pos, (
-        "toLowerCase() 必须在 EMBEDDED_AUDIO[...] 查词之前（先归一再查）"
-    )
+    assert lower_pos < ea_check_pos, "toLowerCase() 必须在 EMBEDDED_AUDIO[...] 查词之前（先归一再查）"
 
 
 def test_embedded_audio_build_script_exists_with_dry_run():
@@ -280,15 +278,13 @@ def test_embedded_audio_build_script_exists_with_dry_run():
     （本测试当前应红，是 TDD 红阶段——脚本尚未创建）
     """
     script = _ROOT / "tools" / "build_embedded_audio.py"
-    assert script.exists(), (
-        "tools/build_embedded_audio.py 尚未创建。"
-        "该脚本负责批量生成 EMBEDDED_AUDIO 词典片段。"
-    )
+    assert script.exists(), "tools/build_embedded_audio.py 尚未创建。该脚本负责批量生成 EMBEDDED_AUDIO 词典片段。"
     src = script.read_text(encoding="utf-8")
     assert "--dry-run" in src, "build script 必须支持 --dry-run（CI/测试无需真调 edge-tts）"
 
 
 # ── 核心词模式契约：CORE_WORD_SEED_IDS / CORE_CUSTOM_WORDS（Task 0） ───────
+
 
 def _slice_balanced(text, start_idx, open_ch, close_ch):
     """从 start_idx 起找第一个 open_ch，返回到其配对 close_ch 的闭合切片。
@@ -304,7 +300,7 @@ def _slice_balanced(text, start_idx, open_ch, close_ch):
         elif text[i] == close_ch:
             depth -= 1
             if depth == 0:
-                return text[begin:i + 1]
+                return text[begin : i + 1]
     raise AssertionError("括号未闭合：%s ... %s" % (open_ch, close_ch))
 
 
@@ -312,7 +308,7 @@ def _core_seed_ids():
     decl = "const CORE_WORD_SEED_IDS"
     assert decl in _WORKBENCH, "workbench.html 缺少 CORE_WORD_SEED_IDS 常量"
     at = _WORKBENCH.index(decl)
-    head = _WORKBENCH[at:at + 120]
+    head = _WORKBENCH[at : at + 120]
     assert "new Set(" in head, "CORE_WORD_SEED_IDS 必须是 new Set([...])（O(1) 查表）"
     return json.loads(_slice_balanced(_WORKBENCH, at, "[", "]"))
 
@@ -327,12 +323,8 @@ def _core_custom_words():
 def test_core_words_constants_declared_before_seed():
     """两个核心词常量必须声明在 SEED_WORDS 之前（初始化时按序可见）。"""
     seed_at = _WORKBENCH.index("const SEED_WORDS")
-    assert _WORKBENCH.index("const CORE_WORD_SEED_IDS") < seed_at, (
-        "CORE_WORD_SEED_IDS 必须声明在 const SEED_WORDS 之前"
-    )
-    assert _WORKBENCH.index("const CORE_CUSTOM_WORDS") < seed_at, (
-        "CORE_CUSTOM_WORDS 必须声明在 const SEED_WORDS 之前"
-    )
+    assert _WORKBENCH.index("const CORE_WORD_SEED_IDS") < seed_at, "CORE_WORD_SEED_IDS 必须声明在 const SEED_WORDS 之前"
+    assert _WORKBENCH.index("const CORE_CUSTOM_WORDS") < seed_at, "CORE_CUSTOM_WORDS 必须声明在 const SEED_WORDS 之前"
 
 
 def test_core_word_seed_ids_are_213_real_seed_ids():
@@ -380,13 +372,13 @@ def test_core_custom_words_are_22_wellformed_new_words():
         assert w["page"] == 0, "%s 的 page 必须为 0（非教材页）" % wid
         assert isinstance(w["ex"], list) and w["ex"], "%s 必须有至少一条例句" % wid
         for ex in w["ex"]:
-            assert ex.get("de", "").strip() and ex.get("zh", "").strip(), (
-                "%s 的例句必须 de/zh 齐全" % wid
-            )
+            assert ex.get("de", "").strip() and ex.get("zh", "").strip(), "%s 的例句必须 de/zh 齐全" % wid
         # letter = 去冠词后首字母大写
         bare = re.sub(r"^(der|die|das)\s+", "", w["hw"])
-        assert w["letter"] == bare[0].upper(), (
-            "%s 的 letter 应为去冠词后首字母 %s，实际 %s" % (wid, bare[0].upper(), w["letter"])
+        assert w["letter"] == bare[0].upper(), "%s 的 letter 应为去冠词后首字母 %s，实际 %s" % (
+            wid,
+            bare[0].upper(),
+            w["letter"],
         )
 
     # 明确排除的两个词不得出现
@@ -403,6 +395,7 @@ def test_core_custom_words_headwords_match_source_export():
     src = Path("d:/Ran/Goethe_A1/delector_custom_words.json")
     if not src.exists():
         import pytest
+
         pytest.skip("源词库 %s 不存在，跳过对源校验" % src)
     raw = json.loads(src.read_text(encoding="utf-8"))
     by_hw = {w["hw"]: w for w in raw.get("customWords", [])}
@@ -415,6 +408,7 @@ def test_core_custom_words_headwords_match_source_export():
 
 
 # ── 核心词模式契约：初始化打 core tag + 新词注入（Task 1） ─────────────────
+
 
 def _load_all_body():
     """loadAll 函数体（到下一个顶层 function 为止）。"""
@@ -449,12 +443,8 @@ def test_core_tag_applied_during_seed_init():
     assert re.search(r"tags:\s*CORE_WORD_SEED_IDS\.has\(w\.id\)\s*\?", block), (
         "种子词的 tags 必须按 CORE_WORD_SEED_IDS.has(w.id) 判定"
     )
-    assert re.search(r"\?\s*\[\s*['\"]core['\"]\s*\]", block), (
-        "命中核心词 id 时 tags 必须是 ['core']"
-    )
-    assert not re.search(r"tags:\s*\[\s*\]", block), (
-        "种子词 tags 不得无条件置空（无条件 tags: [] 会抹掉核心词身份）"
-    )
+    assert re.search(r"\?\s*\[\s*['\"]core['\"]\s*\]", block), "命中核心词 id 时 tags 必须是 ['core']"
+    assert not re.search(r"tags:\s*\[\s*\]", block), "种子词 tags 不得无条件置空（无条件 tags: [] 会抹掉核心词身份）"
 
 
 def test_core_custom_words_injected_during_seed_init():
@@ -469,16 +459,12 @@ def test_core_custom_words_injected_during_seed_init():
               复制一份 push → 断言 3 红。
     """
     block = _seed_init_block()
-    assert "CORE_CUSTOM_WORDS" in block, (
-        "核心新词必须在种子建表分支内注入 S.words（写在分支外会每次加载重复追加）"
-    )
+    assert "CORE_CUSTOM_WORDS" in block, "核心新词必须在种子建表分支内注入 S.words（写在分支外会每次加载重复追加）"
     assert block.index("SEED_WORDS.map(") < block.index("CORE_CUSTOM_WORDS"), (
         "核心新词必须在 SEED_WORDS.map 建表之后追加"
     )
-    assert _load_all_body().count("CORE_CUSTOM_WORDS") == 1, (
-        "loadAll 里只能注入一次 CORE_CUSTOM_WORDS"
-    )
-    push = block[block.index("CORE_CUSTOM_WORDS"):]
+    assert _load_all_body().count("CORE_CUSTOM_WORDS") == 1, "loadAll 里只能注入一次 CORE_CUSTOM_WORDS"
+    push = block[block.index("CORE_CUSTOM_WORDS") :]
     assert re.search(r"S\.words\.push\(|S\.words\s*=\s*S\.words\.concat\(", block), (
         "核心新词必须真的进 S.words（push / concat）"
     )
@@ -489,6 +475,7 @@ def test_core_custom_words_injected_during_seed_init():
 
 
 # ── 核心词模式契约：已有用户数据幂等补 core tag + 缺失核心新词注入（Task 7） ─
+
 
 def _backfill_function_body():
     """backfillCoreWords 函数体（定义到下一个顶层 function 为止）。"""
@@ -505,9 +492,7 @@ def test_core_backfill_defined_outside_loadAll():
     变异验证：把函数整个挪进 loadAll 末尾 → 本断言红，且上述计数断言也红。
     """
     load_all_body = _load_all_body()
-    assert "backfillCoreWords" not in load_all_body, (
-        "backfillCoreWords 不得定义在 loadAll 函数体内"
-    )
+    assert "backfillCoreWords" not in load_all_body, "backfillCoreWords 不得定义在 loadAll 函数体内"
     assert "function backfillCoreWords(" in _WORKBENCH, "缺少 backfillCoreWords 函数定义"
 
 
@@ -519,9 +504,7 @@ def test_core_backfill_retags_only_missing_core_seed_tags():
               把判定集合换成 CORE_CUSTOM_WORDS → 第一条断言红。
     """
     body = _backfill_function_body()
-    assert "CORE_WORD_SEED_IDS.has(w.id)" in body, (
-        "必须按 CORE_WORD_SEED_IDS.has(w.id) 判定哪些种子词需要 core tag"
-    )
+    assert "CORE_WORD_SEED_IDS.has(w.id)" in body, "必须按 CORE_WORD_SEED_IDS.has(w.id) 判定哪些种子词需要 core tag"
     guard = re.search(r"if\s*\(\s*!w\.tags\.includes\(\s*['\"]core['\"]\s*\)\s*\)", body)
     assert guard, "必须检查 core tag 不存在才添加，否则二次运行会重复 push 丧失幂等性"
     push = body.index('w.tags.push("core")')
@@ -562,9 +545,7 @@ def test_core_backfill_writes_only_when_changed():
               调用处改成裸 backfillCoreWords(); saveWords(); → 第二条断言红。
     """
     body = _backfill_function_body()
-    assert re.search(r"\breturn\s+changed\s*;", body), (
-        "backfillCoreWords 必须返回 changed 布尔值"
-    )
+    assert re.search(r"\breturn\s+changed\s*;", body), "backfillCoreWords 必须返回 changed 布尔值"
     # 同步启动路径
     startup = _WORKBENCH.split("loadAll();")[1].split("(async () => {")[0]
     assert "if (backfillCoreWords()) saveWords();" in startup, (
@@ -582,12 +563,11 @@ def test_core_backfill_runs_after_idb_hydration():
     async_block = _WORKBENCH.split("(async () => {")[1].split("})();")[0]
     updated_branch = async_block.split("if (updated) {")[1].split("console.log")[0]
     assert "loadAll();" in updated_branch, "切片没落在 hydration 后的更新分支上"
-    assert "if (backfillCoreWords()) saveWords();" in updated_branch, (
-        "IDB 更新后重新 loadAll 必须接幂等 backfill"
-    )
+    assert "if (backfillCoreWords()) saveWords();" in updated_branch, "IDB 更新后重新 loadAll 必须接幂等 backfill"
 
 
 # ── 核心词模式契约：词表视图 scope 过滤（Task 2） ───────────────────────────
+
 
 def _words_toolbar():
     """词库视图 toolbar 区段（`#view-words` 开头 → `#wCount` 提示行为止）。
@@ -642,9 +622,7 @@ def test_scope_control_is_globally_single():
     assert len(re.findall(r'data-scope="', _WORKBENCH)) == 4, (
         "全文件的 data-scope 档位按钮必须恰好四个（core / all / a2 / reader）"
     )
-    assert len(re.findall(r'data-scope="', hdr)) == 4, (
-        "四个档位按钮必须都在顶栏切片里（在别处 = 又多了一个控件）"
-    )
+    assert len(re.findall(r'data-scope="', hdr)) == 4, "四个档位按钮必须都在顶栏切片里（在别处 = 又多了一个控件）"
 
 
 def test_core_scope_filter_in_words_view():
@@ -703,14 +681,12 @@ def test_scope_has_single_write_site():
     变异验证（已实跑）：删掉顶栏 handler 里 `wordFilters.scope = next;` → 命中数 0，红。
     """
     sites = _scope_write_sites()
-    assert len(sites) == 1, (
-        "wordFilters.scope 的写入点必须全局唯一（顶栏 #scopeSeg），实际 %d 处：行 %r"
-        % (len(sites), [ln for ln, _ in sites])
+    assert len(sites) == 1, "wordFilters.scope 的写入点必须全局唯一（顶栏 #scopeSeg），实际 %d 处：行 %r" % (
+        len(sites),
+        [ln for ln, _ in sites],
     )
     fn = _scope_seg_click_handler()
-    assert re.search(_SCOPE_WRITE, fn), (
-        "唯一的 scope 写入点必须落在顶栏 #scopeSeg 的 click handler 里"
-    )
+    assert re.search(_SCOPE_WRITE, fn), "唯一的 scope 写入点必须落在顶栏 #scopeSeg 的 click handler 里"
     blk = _words_filter_listener()
     assert not re.search(_SCOPE_WRITE, blk), (
         "词表 filter 控件的 handler 不许再写 wordFilters.scope（scope 已收敛到顶栏）"
@@ -723,13 +699,13 @@ def test_scope_has_single_write_site():
 # --------------------------------------------------------------------------
 _CORE_TAG_CHECK = r'includes\(\s*["\']core["\']\s*\)'
 _SCOPE_IS_CORE = r'wordFilters\.scope\s*===\s*["\']core["\']'
-_INSCOPE_WORD_CALL = r'\binScopeWord\s*\('
+_INSCOPE_WORD_CALL = r"\binScopeWord\s*\("
 
 
 def _inscope_helper_definition():
     """全局 helper inScopeWord 的定义体。"""
     m = re.search(
-        r'function\s+inScopeWord\s*\(\s*w\s*\)\s*\{.*?\n\}',
+        r"function\s+inScopeWord\s*\(\s*w\s*\)\s*\{.*?\n\}",
         _WORKBENCH,
         re.S,
     )
@@ -757,7 +733,7 @@ def _split_top_level_commas(text):
     """
     parts, buf, depth, quote, esc = [], [], 0, None, False
     for ch in text:
-        if quote:                      # 引号内：只找收尾引号，其余字符原样收
+        if quote:  # 引号内：只找收尾引号，其余字符原样收
             buf.append(ch)
             if esc:
                 esc = False
@@ -828,12 +804,8 @@ def test_core_scope_in_review_queue():
               把 inScopeWord 内部改成无条件 true → helper 定义断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), (
-        "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    )
-    assert re.search(_CORE_TAG_CHECK, helper), (
-        "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
-    )
+    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
+    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
 
     body = _build_review_queue_body()
     assert re.search(_INSCOPE_WORD_CALL, body), (
@@ -874,23 +846,16 @@ def test_core_scope_midreview_switch_filters_only_upcoming():
     """
     fn = _scope_refilter_body()
     assert re.search(r"revQueue\.slice\(\s*revIdx\s*\+\s*1\s*\)", fn), (
-        "待复习尾段必须整段取自 revQueue.slice(revIdx + 1) 再过滤"
-        "（从 0 起裁会把已复习过的卡重新塞回队列）"
+        "待复习尾段必须整段取自 revQueue.slice(revIdx + 1) 再过滤（从 0 起裁会把已复习过的卡重新塞回队列）"
     )
     assert re.search(r"revQueue\.slice\(\s*0\s*,\s*revIdx\s*\+\s*1\s*\)", fn), (
         "revIdx 及之前是已评价历史，必须整段 revQueue.slice(0, revIdx + 1) 原样保留"
     )
     assert _is_scope_gated(fn, set()), "重过滤必须按 scope/core 判定要不要剔除"
-    assert "buildReviewQueue(" not in fn, (
-        "重过滤不能重建队列（重建会重置 revIdx 并丢掉本轮历史）"
-    )
+    assert "buildReviewQueue(" not in fn, "重过滤不能重建队列（重建会重置 revIdx 并丢掉本轮历史）"
     for var in ("revIdx", "ratedCount", "queueDay"):
-        assert not re.search(r"\b" + var + r"\s*=[^=]", fn), (
-            f"重过滤禁止改写 {var}（进度与队列日必须保持不变）"
-        )
-    assert re.search(r'curView\s*===\s*["\']review["\']', fn), (
-        "只有当前在复习视图时才需要重渲染卡面"
-    )
+        assert not re.search(r"\b" + var + r"\s*=[^=]", fn), f"重过滤禁止改写 {var}（进度与队列日必须保持不变）"
+    assert re.search(r'curView\s*===\s*["\']review["\']', fn), "只有当前在复习视图时才需要重渲染卡面"
     assert "renderReview()" in fn, "重过滤后必须刷新复习视图"
 
 
@@ -910,14 +875,14 @@ def test_scope_switch_refilters_review_queue():
     assert sites, "全文件找不到 wordFilters.scope 的写入点，无从检查队列同步"
     for line, seg in sites:
         assert "refilterReviewQueueForScope()" in seg, (
-            "行 %d 写了 wordFilters.scope 却没在其后调 refilterReviewQueueForScope()"
-            "，复习队列不会跟着切模式" % line
+            "行 %d 写了 wordFilters.scope 却没在其后调 refilterReviewQueueForScope()，复习队列不会跟着切模式" % line
         )
 
 
 # --------------------------------------------------------------------------
 # Task 4 · 统计与徽章的核心词模式适配
 # --------------------------------------------------------------------------
+
 
 def _fn_body(name):
     """顶层无参函数的函数体（切到第 0 列的 `}` 为止）。
@@ -952,9 +917,7 @@ def _sole_line(body, needle, what):
     """
     lines = [ln for ln in body.splitlines() if needle in ln]
     assert lines, "%s：找不到含 `%s` 的行" % (what, needle)
-    assert len(lines) == 1, (
-        "%s：含 `%s` 的行有 %d 处，断言不具区分度" % (what, needle, len(lines))
-    )
+    assert len(lines) == 1, "%s：含 `%s` 的行有 %d 处，断言不具区分度" % (what, needle, len(lines))
     return lines[0]
 
 
@@ -962,7 +925,7 @@ def _kpi_row_assign():
     """renderStats 里 `$("kpiRow").innerHTML = ...;` 整条赋值（可跨行）。"""
     body = _fn_body("renderStats")
     at = body.index('$("kpiRow").innerHTML')
-    return body[at:body.index(";", at)]
+    return body[at : body.index(";", at)]
 
 
 def _kpi_call(assign, label):
@@ -986,12 +949,8 @@ def test_core_scope_aware_header_badge():
               inScopeWord 内部改成无条件 true → helper 定义断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), (
-        "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    )
-    assert re.search(_CORE_TAG_CHECK, helper), (
-        "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
-    )
+    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
+    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
 
     body = _fn_body("renderHeaderBadge")
     assert re.search(_INSCOPE_WORD_CALL, body), (
@@ -1001,17 +960,13 @@ def test_core_scope_aware_header_badge():
     assert "wordById(" in body, "renderHeaderBadge 必须保留词存在性守卫（孤儿卡不计数）"
 
     due = _sole_line(body, "due++", "到期计数")
-    assert _is_scope_gated(due, gates), (
-        "到期计数没有 scope 判定（核心模式下会多算非核心到期卡）"
-    )
+    assert _is_scope_gated(due, gates), "到期计数没有 scope 判定（核心模式下会多算非核心到期卡）"
     for guard in ("c.reps > 0", "!c.manual", "c.due <= eod"):
         assert guard in due, "到期计数丢了原有守卫 %s" % guard
 
     new_line = _sole_line(body, "S.words.filter(", "新词余量计数")
     assert "!S.cards[w.id]" in new_line, "新词余量必须只数没有 FSRS 记录的词"
-    assert _is_scope_gated(new_line, gates), (
-        "新词余量没有 scope 判定（核心模式下会多算非核心新词）"
-    )
+    assert _is_scope_gated(new_line, gates), "新词余量没有 scope 判定（核心模式下会多算非核心新词）"
 
 
 def test_header_badge_refreshed_on_scope_switch():
@@ -1041,8 +996,7 @@ def test_header_badge_refreshed_on_scope_switch():
     assert sites, "全文件找不到 wordFilters.scope 的写入点，无从检查徽标重算"
     for line, seg in sites:
         assert "renderHeaderBadge()" in seg, (
-            "行 %d 写了 wordFilters.scope 却没在其后调 renderHeaderBadge()"
-            "，顶栏徽标会停在上一个模式的口径" % line
+            "行 %d 写了 wordFilters.scope 却没在其后调 renderHeaderBadge()，顶栏徽标会停在上一个模式的口径" % line
         )
     assert "renderHeaderBadge()" not in _words_filter_listener(), (
         "词表 filter listener 不许调 renderHeaderBadge() —— 它每次全扫 S.cards + S.words，"
@@ -1054,6 +1008,7 @@ def test_header_badge_refreshed_on_scope_switch():
 # ADR-0002 Task 1 · 顶栏 scope 分段控件 + 徽标模式前缀
 # --------------------------------------------------------------------------
 
+
 def _header_top():
     """`<header class="top"> … </header>` 整段（顶栏那一行 flex 容器）。
 
@@ -1061,9 +1016,7 @@ def _header_top():
     只有钉进顶栏切片才能证明「常驻可见、不藏在词库视图里」。
     """
     opens = re.findall(r'<header class="top">', _WORKBENCH)
-    assert len(opens) == 1, (
-        '<header class="top"> 出现 %d 次，切片不具区分度' % len(opens)
-    )
+    assert len(opens) == 1, '<header class="top"> 出现 %d 次，切片不具区分度' % len(opens)
     m = re.search(r'<header class="top">.*?</header>', _WORKBENCH, re.S)
     assert m, '找不到 <header class="top"> 顶栏'
     blk = m.group(0)
@@ -1079,9 +1032,7 @@ def _scope_seg_click_handler():
         re.S,
     )
     assert hits, "找不到 #scopeSeg 的 click 事件绑定（控件加了没接线）"
-    assert len(hits) == 1, (
-        "#scopeSeg 的 click 绑定有 %d 处，断言不具区分度" % len(hits)
-    )
+    assert len(hits) == 1, "#scopeSeg 的 click 绑定有 %d 处，断言不具区分度" % len(hits)
     return hits[0]
 
 
@@ -1089,11 +1040,9 @@ def _badge_text_assign():
     """renderHeaderBadge 里 `b.textContent = …;` 整条赋值（允许跨行）。"""
     body = _fn_body("renderHeaderBadge")
     hits = len(re.findall(r"\btextContent\s*=", body))
-    assert hits == 1, (
-        "renderHeaderBadge 里 textContent 赋值有 %d 处，断言不具区分度" % hits
-    )
+    assert hits == 1, "renderHeaderBadge 里 textContent 赋值有 %d 处，断言不具区分度" % hits
     at = body.index("b.textContent")
-    return body[at:body.index(";", at) + 1]
+    return body[at : body.index(";", at) + 1]
 
 
 def test_scope_segment_control_in_header():
@@ -1104,9 +1053,7 @@ def test_scope_segment_control_in_header():
     变异验证：把 <div id="scopeSeg"> 移出顶栏 / 删掉 → 断言红。
     """
     hdr = _header_top()
-    assert 'id="scopeSeg"' in hdr, (
-        '<header class="top"> 里缺少常驻 scope 分段控件 #scopeSeg'
-    )
+    assert 'id="scopeSeg"' in hdr, '<header class="top"> 里缺少常驻 scope 分段控件 #scopeSeg'
 
 
 def test_scope_segment_has_both_modes():
@@ -1130,20 +1077,12 @@ def test_scope_segment_click_reuses_refilter_chain():
               「禁止 buildReviewQueue」经单独求值同样为假，两条都有判别力）。
     """
     fn = _scope_seg_click_handler()
-    assert re.search(r"wordFilters\.scope\s*=[^=]", fn), (
-        "handler 必须把点中的档位写回 wordFilters.scope"
-    )
-    assert "refilterReviewQueueForScope()" in fn, (
-        "handler 必须调 refilterReviewQueueForScope() 同步复习队列尾部"
-    )
-    assert "buildReviewQueue(" not in fn, (
-        "handler 禁止调 buildReviewQueue()（revIdx 归零会把用户弹回第一张卡）"
-    )
+    assert re.search(r"wordFilters\.scope\s*=[^=]", fn), "handler 必须把点中的档位写回 wordFilters.scope"
+    assert "refilterReviewQueueForScope()" in fn, "handler 必须调 refilterReviewQueueForScope() 同步复习队列尾部"
+    assert "buildReviewQueue(" not in fn, "handler 禁止调 buildReviewQueue()（revIdx 归零会把用户弹回第一张卡）"
     assert "renderWords()" in fn, "handler 必须重渲染词表"
     assert "renderHeaderBadge()" in fn, "handler 必须重算顶栏徽标"
-    assert "syncScopeControls()" in fn, (
-        "handler 必须调 syncScopeControls() 把新档位同步到另一处控件"
-    )
+    assert "syncScopeControls()" in fn, "handler 必须调 syncScopeControls() 把新档位同步到另一处控件"
 
 
 def test_header_badge_carries_scope_mode():
@@ -1156,9 +1095,7 @@ def test_header_badge_carries_scope_mode():
     """
     body = _fn_body("renderHeaderBadge")
     label = _sole_line(body, "⭐核心", "模式前缀")
-    assert re.search(_SCOPE_IS_CORE, label), (
-        "模式前缀必须由 wordFilters.scope === 'core' 派生，不能写死"
-    )
+    assert re.search(_SCOPE_IS_CORE, label), "模式前缀必须由 wordFilters.scope === 'core' 派生，不能写死"
     assert "全部" in label, "模式前缀缺少「全部」档文案"
     m = re.match(r"\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", label)
     assert m, "模式前缀应赋给一个局部变量，供徽标两个分支复用"
@@ -1191,16 +1128,13 @@ def test_core_progress_kpi_in_stats():
     core_name = m.group(1)
 
     m2 = re.search(
-        r"(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*"
-        + re.escape(core_name) + r"\.filter\(([^;]*?)\)\.length\s*;",
+        r"(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*" + re.escape(core_name) + r"\.filter\(([^;]*?)\)\.length\s*;",
         body,
     )
     assert m2, "renderStats 必须从核心词集合里数出已学数（%s.filter(...).length）" % core_name
     learned_name, pred = m2.group(1), m2.group(2)
     assert "S.cards[w.id]" in pred, "核心词已学数必须查 S.cards（有 FSRS 记录才算学过）"
-    assert re.search(r"reps\s*>\s*0", pred), (
-        "核心词已学数必须判 reps > 0（建了卡但一次没评价不算已学）"
-    )
+    assert re.search(r"reps\s*>\s*0", pred), "核心词已学数必须判 reps > 0（建了卡但一次没评价不算已学）"
 
     call = _kpi_call(_kpi_row_assign(), "核心词进度")
     assert re.search(r"\b" + re.escape(learned_name) + r"\b", call), (
@@ -1209,9 +1143,7 @@ def test_core_progress_kpi_in_stats():
     assert re.search(r"\b" + re.escape(core_name) + r"\.length\b", call), (
         "核心词进度 KPI 的分母必须是 %s.length（现数，不得硬编码）" % core_name
     )
-    assert not re.search(r"\d{3}", call), (
-        "核心词进度 KPI 不得出现硬编码词数（235/213 之类）"
-    )
+    assert not re.search(r"\d{3}", call), "核心词进度 KPI 不得出现硬编码词数（235/213 之类）"
 
 
 def test_stats_totals_and_heatmap_stay_global():
@@ -1238,14 +1170,13 @@ def test_stats_totals_and_heatmap_stay_global():
 
     letters = body.split("const letters = {}")[1].split("const Ls =")[0]
     assert "S.words" in letters, "切片没落在「各字母掌握度」统计上"
-    assert not re.search(_CORE_TAG_CHECK, letters), (
-        "各字母掌握度必须保持全局，不得按 core tag 过滤"
-    )
+    assert not re.search(_CORE_TAG_CHECK, letters), "各字母掌握度必须保持全局，不得按 core tag 过滤"
 
 
 # --------------------------------------------------------------------------
 # Task 5 · 错题/测试/额外练习的核心词模式过滤 + 导入导出兼容性
 # --------------------------------------------------------------------------
+
 
 def _quiz_pool_body():
     """quizPool 函数体（到 startQuiz 之前）。"""
@@ -1284,26 +1215,18 @@ def test_core_scope_quiz_pool_filtered():
     变异验证：任一分支去掉 inScopeWord → 对应断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), (
-        "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    )
-    assert re.search(_CORE_TAG_CHECK, helper), (
-        "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
-    )
+    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
+    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
 
     body = _quiz_pool_body()
-    assert re.search(_INSCOPE_WORD_CALL, body), (
-        "quizPool 必须调用 inScopeWord 进行 scope 过滤"
-    )
+    assert re.search(_INSCOPE_WORD_CALL, body), "quizPool 必须调用 inScopeWord 进行 scope 过滤"
 
     # forgotten 分支
     forgotten = body.split('if (p === "forgotten")')[1].split('if (p === "wrong")')[0]
     assert "wordById(id)" in forgotten, "forgotten 分支应保留 wordById(id) 守卫"
     # 候选错题过滤段 & 无数据 fallback 段都要过滤
     forgotten_candidate = forgotten.split("const ids")[1].split("return ids.length")[0]
-    assert _is_scope_gated(forgotten_candidate, set()), (
-        "forgotten 候选错题过滤没有 scope 判定"
-    )
+    assert _is_scope_gated(forgotten_candidate, set()), "forgotten 候选错题过滤没有 scope 判定"
     forgotten_fallback = forgotten.split("return ids.length")[1]
     assert _is_scope_gated(forgotten_fallback, set()), (
         "forgotten 无数据 fallback 没有 scope 判定（核心模式会从整副牌抽题）"
@@ -1313,27 +1236,19 @@ def test_core_scope_quiz_pool_filtered():
     wrong = body.split('if (p === "wrong")')[1].split('if (p === "weak")')[0]
     assert "wordById(id)" in wrong, "wrong 分支应保留 wordById(id) 守卫"
     wrong_candidate = wrong.split("const ids")[1].split("return ids.length")[0]
-    assert _is_scope_gated(wrong_candidate, set()), (
-        "wrong 候选错题过滤没有 scope 判定"
-    )
+    assert _is_scope_gated(wrong_candidate, set()), "wrong 候选错题过滤没有 scope 判定"
     wrong_fallback = wrong.split("return ids.length")[1]
-    assert _is_scope_gated(wrong_fallback, set()), (
-        "wrong 无数据 fallback 没有 scope 判定（核心模式会从整副牌抽题）"
-    )
+    assert _is_scope_gated(wrong_fallback, set()), "wrong 无数据 fallback 没有 scope 判定（核心模式会从整副牌抽题）"
 
     # weak 分支：到它自己的 }).map(w => w.id); 为止
     weak = body.split('if (p === "weak")')[1].split("}).map(w => w.id);")[0]
     assert "S.words.filter(" in weak, "切片没落在 weak 分支上"
-    assert _is_scope_gated(weak, set()), (
-        "weak 分支没有 scope 判定（核心模式下会混入非核心弱词）"
-    )
+    assert _is_scope_gated(weak, set()), "weak 分支没有 scope 判定（核心模式下会混入非核心弱词）"
 
     # 默认全池分支（最后一个 return）
     last_return = body.rsplit("return", 1)[1]
     assert "S.words.filter(" in last_return, "切片没落在默认全池分支上"
-    assert _is_scope_gated(last_return, set()), (
-        "默认全池分支没有 scope 判定（核心模式下会从整副牌抽题）"
-    )
+    assert _is_scope_gated(last_return, set()), "默认全池分支没有 scope 判定（核心模式下会从整副牌抽题）"
 
 
 def test_core_scope_inject_wrong_words_filtered():
@@ -1345,22 +1260,14 @@ def test_core_scope_inject_wrong_words_filtered():
     变异验证：filter 里去掉 inScopeWord → 断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), (
-        "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    )
-    assert re.search(_CORE_TAG_CHECK, helper), (
-        "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
-    )
+    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
+    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
 
     body = _inject_wrong_words_body()
-    assert re.search(_INSCOPE_WORD_CALL, body), (
-        "injectWrongWords 必须调用 inScopeWord 进行 scope 过滤"
-    )
+    assert re.search(_INSCOPE_WORD_CALL, body), "injectWrongWords 必须调用 inScopeWord 进行 scope 过滤"
 
     candidates = body.split("Object.entries(S.wrong)")[1].split(".slice(0, n)")[0]
-    assert _is_scope_gated(candidates, set()), (
-        "candidates 筛选里没有 scope 判定（核心模式会 unshift 非核心错题到队头）"
-    )
+    assert _is_scope_gated(candidates, set()), "candidates 筛选里没有 scope 判定（核心模式会 unshift 非核心错题到队头）"
 
 
 def test_core_scope_extra_practice_and_new_filtered():
@@ -1371,35 +1278,25 @@ def test_core_scope_extra_practice_and_new_filtered():
     变异验证：任一路去掉 inScopeWord → 对应断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), (
-        "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    )
-    assert re.search(_CORE_TAG_CHECK, helper), (
-        "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
-    )
+    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
+    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
 
     practice = _extra_practice_body()
     new_words = _extra_new_words_body()
 
     for name, body in (("extraPractice", practice), ("extraNewWords", new_words)):
-        assert re.search(_INSCOPE_WORD_CALL, body), (
-            "%s 必须调用 inScopeWord 进行 scope 过滤" % name
-        )
+        assert re.search(_INSCOPE_WORD_CALL, body), "%s 必须调用 inScopeWord 进行 scope 过滤" % name
 
     # extraPractice：从已学且不在队列中的词里筛选
     p_pool = practice.split("S.words.filter(")[1].split(").slice(0, 20)")[0]
     assert "S.cards[w.id]" in p_pool, "extraPractice 池必须只取已有卡片的词"
     assert "reps > 0" in p_pool, "extraPractice 池必须只取已评价过的词"
-    assert _is_scope_gated(p_pool, set()), (
-        "extraPractice 池没有 scope 判定（核心模式会追加非核心已学词）"
-    )
+    assert _is_scope_gated(p_pool, set()), "extraPractice 池没有 scope 判定（核心模式会追加非核心已学词）"
 
     # extraNewWords：从未学且不在队列中的词里筛选
     n_pool = new_words.split("S.words.filter(")[1].split("const ordered")[0]
     assert "!S.cards[w.id]" in n_pool, "extraNewWords 池必须只取未学新词"
-    assert _is_scope_gated(n_pool, set()), (
-        "extraNewWords 池没有 scope 判定（核心模式会追加非核心新词）"
-    )
+    assert _is_scope_gated(n_pool, set()), "extraNewWords 池没有 scope 判定（核心模式会追加非核心新词）"
 
 
 def test_core_sync_export_import_round_trips_custom_core_tags():
@@ -1411,21 +1308,15 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
       3. 种子词不走 merge，因此其 core tag 始终由本机常量决定。
     本测试只验证源码中这三处行为存在，不跑真导入导出。
     """
-    export_block = _WORKBENCH.split('$("btnExportSync").addEventListener')[1].split("});\n$(\"fileImport\")")[0]
-    assert "S.words.filter(w => w.custom)" in export_block, (
-        "同步导出必须只取 custom: true 的词"
-    )
-    assert "customWords: custom" in export_block, (
-        "同步导出对象必须带 customWords 字段"
-    )
+    export_block = _WORKBENCH.split('$("btnExportSync").addEventListener')[1].split('});\n$("fileImport")')[0]
+    assert "S.words.filter(w => w.custom)" in export_block, "同步导出必须只取 custom: true 的词"
+    assert "customWords: custom" in export_block, "同步导出对象必须带 customWords 字段"
 
-    merge = _WORKBENCH.split("function applyMerge(")[1].split("$(\"btnResetProgress\")")[0]
+    merge = _WORKBENCH.split("function applyMerge(")[1].split('$("btnResetProgress")')[0]
     assert "Object.assign(cur, w)" in merge, (
         "applyMerge 必须用 Object.assign 覆盖旧自定义词，确保 tags（含 core）被更新"
     )
-    assert "S.words.push(w)" in merge, (
-        "applyMerge 必须把新自定义词追加到 S.words"
-    )
+    assert "S.words.push(w)" in merge, "applyMerge 必须把新自定义词追加到 S.words"
     # 确认没有「同步时给 seed 词打 core tag」的奇异逻辑
     assert not re.search(_CORE_TAG_CHECK, merge), (
         "applyMerge 不应自己处理 core tag（种子词不走 merge，自定义词的 tags 随字段自然合并）"
@@ -1435,6 +1326,7 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
 # --------------------------------------------------------------------------
 # Task 8 · applyMerge 按归一词头去重 + 重复种子词下架的 id 归并
 # --------------------------------------------------------------------------
+
 
 def _normhw_body():
     """normHw 函数体（定义到下一个顶层 function 为止）。"""
@@ -1492,8 +1384,8 @@ def test_merge_normhw_preserves_case_and_strips_article():
     """
     body = _normhw_body()
     strip = re.findall(r"\.replace\(\s*/\^\(der\|die\|das\)\\s\+/\s*,", body)
-    assert len(strip) == 1, (
-        "normHw 必须且只能有一处去定冠词的 replace(/^(der|die|das)\\s+/, ...)，实际 %d 处" % len(strip)
+    assert len(strip) == 1, "normHw 必须且只能有一处去定冠词的 replace(/^(der|die|das)\\s+/, ...)，实际 %d 处" % len(
+        strip
     )
     assert "toLowerCase" not in body, "normHw 不得小写化（会把 sie/Sie、essen/Essen 合并成一条）"
     assert "toUpperCase" not in body, "normHw 不得大写化"
@@ -1524,12 +1416,8 @@ def test_merge_dedups_by_normalized_headword():
     assert re.search(r"const\s+sameId\s*=\s*byId\.get\(\s*w\.id\s*\)", block), (
         "必须先按 id 查（id 命中是最强的同一性证据）"
     )
-    fallback = re.findall(
-        r"sameId\s*\|\|\s*\(\s*k\s*\?\s*byHw\.get\(\s*k\s*\)\s*:\s*null\s*\)", block
-    )
-    assert len(fallback) == 1, (
-        "id 未命中时必须回退查归一词头索引，且只有一处这样的回退，实际 %d 处" % len(fallback)
-    )
+    fallback = re.findall(r"sameId\s*\|\|\s*\(\s*k\s*\?\s*byHw\.get\(\s*k\s*\)\s*:\s*null\s*\)", block)
+    assert len(fallback) == 1, "id 未命中时必须回退查归一词头索引，且只有一处这样的回退，实际 %d 处" % len(fallback)
 
     sets = re.findall(r"byHw\.set\(", block)
     assert len(sets) == 2, (
@@ -1583,9 +1471,7 @@ def test_merge_toast_reports_added_and_merged_counts():
     toasts = re.findall(r'toast\("合并导入完成：[^;]*\);', body)
     assert len(toasts) == 1, "合并完成提示应恰好一处，实际 %d 处" % len(toasts)
     line = toasts[0]
-    assert "added" in line and "merged" in line, (
-        "提示必须同时报「新增」与「合并」两个计数，否则误导用户"
-    )
+    assert "added" in line and "merged" in line, "提示必须同时报「新增」与「合并」两个计数，否则误导用户"
     assert "S.words.length" in line, "提示仍应给出合并后的总词数"
 
     block = _apply_merge_words_block()
@@ -1604,6 +1490,7 @@ def test_seed_words_have_682_unique_entries():
     「(hw,pos,gloss) 无重复」「归一词头无碰撞」三条同时红。
     """
     from collections import Counter
+
     seeds = _seed_words()
     assert len(seeds) == 682, "SEED_WORDS 应为 682 条，实际 %d" % len(seeds)
 
@@ -1640,9 +1527,7 @@ def test_seed_id_aliases_map_removed_ids_to_kept_ones():
     assert "const SEED_ID_ALIASES" in _WORKBENCH, "缺少 SEED_ID_ALIASES 常量"
     at = _WORKBENCH.index("const SEED_ID_ALIASES")
     aliases = json.loads(_slice_balanced(_WORKBENCH, at, "{", "}"))
-    assert aliases == {"a1-0544": "a1-0034", "a1-0545": "a1-0052"}, (
-        "别名表与本次下架的两条重复词不一致：%s" % aliases
-    )
+    assert aliases == {"a1-0544": "a1-0034", "a1-0545": "a1-0052"}, "别名表与本次下架的两条重复词不一致：%s" % aliases
     seed_ids = {w["id"] for w in _seed_words()}
     for old, new in aliases.items():
         assert old not in seed_ids, "%s 仍在 SEED_WORDS 里，不该出现在别名表左侧" % old
@@ -1663,24 +1548,18 @@ def test_alias_migration_moves_every_store_and_drops_stale_words():
     body = _alias_migration_body()
     for store in ("S.cards", "S.log", "S.wrong"):
         calls = re.findall(r"move\(\s*%s\s*," % re.escape(store), body)
-        assert len(calls) == 1, (
-            "%s 应恰好被 move 一次，实际 %d 次" % (store, len(calls))
-        )
+        assert len(calls) == 1, "%s 应恰好被 move 一次，实际 %d 次" % (store, len(calls))
     deletes = re.findall(r"delete store\[oldId\]", body)
     assert len(deletes) == 1, "旧 key 删除应恰好一处（幂等性的唯一来源），实际 %d 处" % len(deletes)
     assert "wins(old, store[newId])" in body, "两边都有记录时必须走 wins 比较，不能无脑覆盖"
-    assert re.search(r"\(a\.reps \|\| 0\) > \(b\.reps \|\| 0\)", body), (
-        "卡片取舍必须先比 reps（复习次数）"
-    )
-    assert re.search(r"\(a\.due \|\| 0\) > \(b\.due \|\| 0\)", body), (
-        "reps 相同再比 due（间隔更长 = 记得更牢）"
-    )
+    assert re.search(r"\(a\.reps \|\| 0\) > \(b\.reps \|\| 0\)", body), "卡片取舍必须先比 reps（复习次数）"
+    assert re.search(r"\(a\.due \|\| 0\) > \(b\.due \|\| 0\)", body), "reps 相同再比 due（间隔更长 = 记得更牢）"
     stale = re.findall(
         r"S\.words\.filter\(w => !Object\.prototype\.hasOwnProperty\.call\(SEED_ID_ALIASES, w\.id\)\)",
         body,
     )
-    assert len(stale) == 1, (
-        "必须把仍带已下架 id 的 S.words 条目剔掉（老 localStorage 词表里还留着），实际 %d 处" % len(stale)
+    assert len(stale) == 1, "必须把仍带已下架 id 的 S.words 条目剔掉（老 localStorage 词表里还留着），实际 %d 处" % len(
+        stale
     )
     assert re.search(r"\breturn\s+changed\s*;", body), (
         "必须沿用 backfillCoreWords 的 return changed 契约，仅在真变更时落盘"
@@ -1708,8 +1587,8 @@ def test_alias_migration_runs_before_backfill_at_both_startup_sites():
     assert call in updated, "IDB 更新后重新 loadAll 也必须跑一次幂等迁移"
     assert updated.index(call) < updated.index(backfill), "迁移必须在 backfill 之前"
 
-    assert _WORKBENCH.count(call) == 2, (
-        "迁移调用应恰好两处（同步启动 + hydrate 重载），实际 %d 处" % _WORKBENCH.count(call)
+    assert _WORKBENCH.count(call) == 2, "迁移调用应恰好两处（同步启动 + hydrate 重载），实际 %d 处" % _WORKBENCH.count(
+        call
     )
 
 
@@ -1722,14 +1601,19 @@ def test_merge_and_alias_migration_behave_under_node():
     """
     import shutil
     import subprocess
+
     if not shutil.which("node"):
         import pytest
+
         pytest.skip("node 不在 PATH 上，跳过动态探针")
     probe = _ROOT / "tools" / "wb_merge_probe.mjs"
     assert probe.exists(), "缺少 tools/wb_merge_probe.mjs 动态探针"
     res = subprocess.run(
         ["node", str(probe), "--json"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_ROOT),
     )
     assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
@@ -1739,32 +1623,28 @@ def test_merge_and_alias_migration_behave_under_node():
     imp = out["doubleImport"]
     if imp.get("skipped"):
         import pytest
+
         pytest.skip("源词库不存在：%s" % imp.get("reason"))
-    assert imp["afterFirst"] == imp["afterSecond"], (
-        "二次导入必须是 no-op，实际 %d → %d" % (imp["afterFirst"], imp["afterSecond"])
+    assert imp["afterFirst"] == imp["afterSecond"], "二次导入必须是 no-op，实际 %d → %d" % (
+        imp["afterFirst"],
+        imp["afterSecond"],
     )
-    assert imp["dupNormHwAfterFirst"] == 0, (
-        "首次导入后就不该有归一词头重复：%s" % imp["dupSamples"]
-    )
+    assert imp["dupNormHwAfterFirst"] == 0, "首次导入后就不该有归一词头重复：%s" % imp["dupSamples"]
     assert imp["dupNormHwAfterSecond"] == 0, "二次导入后出现重复词头：%s" % imp["dupSamples"]
     assert imp["merged"] > 0 and imp["added"] > 0, "命中/新增计数不该有一边为 0"
     assert imp["merged"] + imp["added"] == imp["incoming"], "命中 + 新增必须等于导入词数"
-    assert imp["coreTaggedAfterSecond"] >= imp["coreTaggedBefore"], (
-        "导入不得抹掉 core tag：%d → %d"
-        % (imp["coreTaggedBefore"], imp["coreTaggedAfterSecond"])
+    assert imp["coreTaggedAfterSecond"] >= imp["coreTaggedBefore"], "导入不得抹掉 core tag：%d → %d" % (
+        imp["coreTaggedBefore"],
+        imp["coreTaggedAfterSecond"],
     )
     assert imp["idsChanged"] == 0, "合并不得改写已有词的 id（会造孤儿卡）"
     assert imp["seedTurnedCustom"] == 0, "合并不得把种子词标成 custom（会混进同步导出）"
 
     # 2) 大小写敏感：sie/Sie、essen/Essen、leben/Leben 保持两条
     case = out["caseSensitivity"]
-    assert case["normHwSie"] == "Sie" and case["normHwsie"] == "sie", (
-        "normHw 把大小写吃掉了：%s" % case
-    )
+    assert case["normHwSie"] == "Sie" and case["normHwsie"] == "sie", "normHw 把大小写吃掉了：%s" % case
     for pair in ("sie|Sie", "essen|Essen", "leben|Leben"):
-        assert case["pairs"][pair] == 2, (
-            "%s 必须保持两条独立词条，实际 %d 条" % (pair, case["pairs"][pair])
-        )
+        assert case["pairs"][pair] == 2, "%s 必须保持两条独立词条，实际 %d 条" % (pair, case["pairs"][pair])
 
     # 3) 别名迁移：搬进度、按 reps/due 取多者、幂等、不留孤儿卡
     mig = out["aliasMigration"]
@@ -1899,18 +1779,14 @@ def test_words_search_bypasses_core_scope_filter():
 
     gate = r"(?:&&\s*!\s*q\b)|(?:!\s*q\s*&&)"
     hits = len(re.findall(gate, line))
-    assert hits == 1, (
-        "scope 行必须恰好带一个「搜索为空」前提 `&& !q`，实际 %d 处：%s"
-        % (hits, line.strip())
-    )
+    assert hits == 1, "scope 行必须恰好带一个「搜索为空」前提 `&& !q`，实际 %d 处：%s" % (hits, line.strip())
     assert "||" not in _flatten_parens(line), (
         "scope 条件的顶层必须是纯 && 串联 —— 掺 `||` 会让搜索前提失效：%s" % line.strip()
     )
 
     qdecl = _sole_line(_render_words_body(), "const q =", "renderWords")
     assert re.search(r"wordFilters\.q\b", qdecl), (
-        "谓词判空的 q 必须来自 wordFilters.q（控件 handler 已 .trim()，判空以 trim 后为准）：%s"
-        % qdecl.strip()
+        "谓词判空的 q 必须来自 wordFilters.q（控件 handler 已 .trim()，判空以 trim 后为准）：%s" % qdecl.strip()
     )
 
 
@@ -1926,28 +1802,17 @@ def test_out_of_scope_row_has_dim_style():
     变异验证（已实跑）：删掉 <style> 里 .out-of-scope 两条规则 → 本条红。
     """
     rules = _css_rules_matching("." + OUT_OF_SCOPE_CLASS)
-    assert rules, (
-        "<style> 里缺少 .%s 规则 —— 行标记没有任何视觉效果，用户看不出这条不在模式内"
-        % OUT_OF_SCOPE_CLASS
-    )
+    assert rules, "<style> 里缺少 .%s 规则 —— 行标记没有任何视觉效果，用户看不出这条不在模式内" % OUT_OF_SCOPE_CLASS
 
     dim = [d for _, d in rules if "opacity" in d]
-    assert dim, (
-        "需要一条 .%s 规则淡化该行（opacity），实际规则：%r" % (OUT_OF_SCOPE_CLASS, rules)
-    )
+    assert dim, "需要一条 .%s 规则淡化该行（opacity），实际规则：%r" % (OUT_OF_SCOPE_CLASS, rules)
 
     tag = [(s, d) for s, d in rules if "content:" in d]
-    assert tag, (
-        "需要一条 .%s 规则生成淡色小标（content:），实际规则：%r"
-        % (OUT_OF_SCOPE_CLASS, rules)
-    )
+    assert tag, "需要一条 .%s 规则生成淡色小标（content:），实际规则：%r" % (OUT_OF_SCOPE_CLASS, rules)
     assert all("::after" in s or "::before" in s for s, _ in tag), (
-        "小标走伪元素（::before / ::after）—— 别往行模板里再插一段 markup，"
-        "实际选择器：%r" % [s for s, _ in tag]
+        "小标走伪元素（::before / ::after）—— 别往行模板里再插一段 markup，实际选择器：%r" % [s for s, _ in tag]
     )
-    assert re.search(r"var\(--", tag[0][1]), (
-        "小标颜色必须复用既有 CSS token var(--...)，不许新造颜色：%s" % tag[0][1]
-    )
+    assert re.search(r"var\(--", tag[0][1]), "小标颜色必须复用既有 CSS token var(--...)，不许新造颜色：%s" % tag[0][1]
 
 
 def _top_level_marks(text, chars):
@@ -1993,10 +1858,7 @@ def _out_of_scope_ternary():
         if OUT_OF_SCOPE_CLASS in cand:
             expr = cand
             break
-    assert expr, (
-        "%s 不在任何一组括号里 —— 无法判定极性，请写成 `(cond ? a : b)`：%s"
-        % (OUT_OF_SCOPE_CLASS, tag)
-    )
+    assert expr, "%s 不在任何一组括号里 —— 无法判定极性，请写成 `(cond ? a : b)`：%s" % (OUT_OF_SCOPE_CLASS, tag)
     inner = expr[1:-1]
     marks = _top_level_marks(inner, "?:")
     assert [c for c, _ in marks] == ["?", ":"], (
@@ -2004,7 +1866,7 @@ def _out_of_scope_ternary():
         % ([c for c, _ in marks], inner)
     )
     q_at, c_at = marks[0][1], marks[1][1]
-    return inner[:q_at], inner[q_at + 1:c_at], inner[c_at + 1:]
+    return inner[:q_at], inner[q_at + 1 : c_at], inner[c_at + 1 :]
 
 
 def test_out_of_scope_class_wired_on_word_row():
@@ -2035,44 +1897,34 @@ def test_out_of_scope_class_wired_on_word_row():
     """
     tpl = _words_row_template()
     hits = len(re.findall(re.escape(OUT_OF_SCOPE_CLASS), tpl))
-    assert hits == 1, (
-        "行模板里 %s 必须恰好挂一处，实际 %d 处（挂多处 = 删掉一处也照样绿）"
-        % (OUT_OF_SCOPE_CLASS, hits)
-    )
+    assert hits == 1, "行模板里 %s 必须恰好挂一处，实际 %d 处（挂多处 = 删掉一处也照样绿）" % (OUT_OF_SCOPE_CLASS, hits)
 
     open_tag = _words_row_open_tag()
-    assert OUT_OF_SCOPE_CLASS in open_tag, (
-        "class 必须挂在数据行的 <tr> 开标签上，实际开标签：%s" % open_tag
-    )
+    assert OUT_OF_SCOPE_CLASS in open_tag, "class 必须挂在数据行的 <tr> 开标签上，实际开标签：%s" % open_tag
     assert _is_scope_gated(open_tag, _scope_gate_names(_render_words_body())), (
         "挂 class 必须由 scope 判定把门（inScopeWord(w) 或等价 core 判定）：%s" % open_tag
     )
 
     cond, when_true, when_false = _out_of_scope_ternary()
     bangs = len(re.match(r"^\s*(!*)", cond).group(1))
-    assert bangs <= 1, (
-        "三元条件别写多重取反，读者数不清极性、断言也判不了方向：%s" % cond.strip()
-    )
+    assert bangs <= 1, "三元条件别写多重取反，读者数不清极性、断言也判不了方向：%s" % cond.strip()
     in_true = OUT_OF_SCOPE_CLASS in when_true
     in_false = OUT_OF_SCOPE_CLASS in when_false
-    assert in_true != in_false, (
-        "class 只能出现在三元的**一个**分支里，实际 真=%r 假=%r" % (when_true, when_false)
-    )
-    if bangs:                      # 条件写成 !inScopeWord(w) → class 在真分支
-        assert in_true, (
-            "条件取反（!inScopeWord）时 class 必须在**真**分支，实际挂在假分支：%s ? %s : %s"
-            % (cond.strip(), when_true.strip(), when_false.strip())
+    assert in_true != in_false, "class 只能出现在三元的**一个**分支里，实际 真=%r 假=%r" % (when_true, when_false)
+    if bangs:  # 条件写成 !inScopeWord(w) → class 在真分支
+        assert in_true, "条件取反（!inScopeWord）时 class 必须在**真**分支，实际挂在假分支：%s ? %s : %s" % (
+            cond.strip(),
+            when_true.strip(),
+            when_false.strip(),
         )
-    else:                          # 条件写成 inScopeWord(w) → class 在假分支
+    else:  # 条件写成 inScopeWord(w) → class 在假分支
         assert in_false, (
             "极性反了：inScopeWord(w) 为**真**代表这条词在当前模式内，不该标"
             "「非本模式」。class 必须挂在假分支。实际：%s ? %s : %s"
             % (cond.strip(), when_true.strip(), when_false.strip())
         )
     other = when_true if in_false else when_false
-    assert re.fullmatch(r"""\s*(""|'')\s*""", other), (
-        "在模式内的那一侧必须是空串（不加任何标记），实际：%r" % other
-    )
+    assert re.fullmatch(r"""\s*(""|'')\s*""", other), "在模式内的那一侧必须是空串（不加任何标记），实际：%r" % other
 
 
 # ── Task 6 留账：可执行的 renderWords 过滤谓词 ──────────────────────────────
@@ -2091,6 +1943,7 @@ def test_out_of_scope_class_wired_on_word_row():
 # 注意边界：本 helper 切的是 `S.words.filter(…)` 谓词，**不执行行模板** ——
 # .out-of-scope 的挂载与极性它证明不了，那一层由
 # test_out_of_scope_class_wired_on_word_row 的三元分支断言守。
+
 
 def _js_line(pattern, what):
     """按单行正则从 workbench.html 切一段顶层声明的真实源码（不跨行）。"""
@@ -2157,6 +2010,7 @@ def render_words_predicate(scope="all", q="", cards=None, **filters):
     （test_merge_and_alias_migration_behave_under_node）自己 shutil.which 后 skip。
     """
     import shutil
+
     if not shutil.which("node"):
         raise RuntimeError("node 不在 PATH 上，无法执行 renderWords 谓词")
 
@@ -2166,16 +2020,18 @@ def render_words_predicate(scope="all", q="", cards=None, **filters):
     state.update(filters)
 
     pred_src = render_words_predicate_source()
-    js = "\n".join([
-        'import fs from "node:fs";',
-        "const wordFilters = %s;" % json.dumps(state, ensure_ascii=False),
-        "const S = { words: [], cards: %s };" % json.dumps(cards or {}, ensure_ascii=False),
-        _render_words_probe_prelude(),
-        _sole_line(_render_words_body(), "const q =", "renderWords").strip(),
-        "const pred = %s;" % pred_src,
-        'const words = JSON.parse(fs.readFileSync(0, "utf8"));',
-        "process.stdout.write(JSON.stringify(words.map(w => pred(w) === true)));",
-    ])
+    js = "\n".join(
+        [
+            'import fs from "node:fs";',
+            "const wordFilters = %s;" % json.dumps(state, ensure_ascii=False),
+            "const S = { words: [], cards: %s };" % json.dumps(cards or {}, ensure_ascii=False),
+            _render_words_probe_prelude(),
+            _sole_line(_render_words_body(), "const q =", "renderWords").strip(),
+            "const pred = %s;" % pred_src,
+            'const words = JSON.parse(fs.readFileSync(0, "utf8"));',
+            "process.stdout.write(JSON.stringify(words.map(w => pred(w) === true)));",
+        ]
+    )
 
     def hit(word):
         return _run_node_predicate(js, [word])[0]
@@ -2190,6 +2046,7 @@ def _run_node_predicate(js, words):
     import os
     import subprocess
     import tempfile
+
     fd, path = tempfile.mkstemp(suffix=".mjs")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -2197,7 +2054,10 @@ def _run_node_predicate(js, words):
         res = subprocess.run(
             ["node", path],
             input=json.dumps(words, ensure_ascii=False),
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert res.returncode == 0, "谓词执行失败：\n%s\n%s" % (res.stdout, res.stderr)
         return json.loads(res.stdout)
@@ -2254,9 +2114,7 @@ def test_renormalize_queue_tail_exists_without_rebuilding():
     """
     body = _renormalize_queue_tail_body()
     assert "revQueue.slice" in body, "切片没落在 renormalizeQueueTail 上"
-    assert "buildReviewQueue(" not in body, (
-        "renormalizeQueueTail 禁止调 buildReviewQueue()（会重置 revIdx 并重洗牌）"
-    )
+    assert "buildReviewQueue(" not in body, "renormalizeQueueTail 禁止调 buildReviewQueue()（会重置 revIdx 并重洗牌）"
 
 
 def test_renormalize_queue_tail_preserves_rev_idx():
@@ -2270,17 +2128,11 @@ def test_renormalize_queue_tail_preserves_rev_idx():
     assert re.search(r"revQueue\.slice\(\s*0\s*,\s*revIdx\s*\+\s*1\s*\)", body), (
         "保留段必须是 revQueue.slice(0, revIdx + 1)"
     )
-    assert re.search(r"revQueue\.slice\(\s*revIdx\s*\+\s*1\s*\)", body), (
-        "尾段必须是 revQueue.slice(revIdx + 1)"
-    )
+    assert re.search(r"revQueue\.slice\(\s*revIdx\s*\+\s*1\s*\)", body), "尾段必须是 revQueue.slice(revIdx + 1)"
     # 禁止写 revIdx
-    assert not re.search(r"\brevIdx\s*=[^=]", body), (
-        "renormalizeQueueTail 禁止改写 revIdx"
-    )
+    assert not re.search(r"\brevIdx\s*=[^=]", body), "renormalizeQueueTail 禁止改写 revIdx"
     for var in ("ratedCount", "queueDay"):
-        assert not re.search(r"\b" + var + r"\s*=[^=]", body), (
-            "renormalizeQueueTail 禁止改写 %s" % var
-        )
+        assert not re.search(r"\b" + var + r"\s*=[^=]", body), "renormalizeQueueTail 禁止改写 %s" % var
 
 
 def test_renormalize_queue_tail_quota_matches_build_review_queue():
@@ -2293,16 +2145,10 @@ def test_renormalize_queue_tail_quota_matches_build_review_queue():
     body = _renormalize_queue_tail_body()
     quota_lines = [ln for ln in body.splitlines() if "dailyNew" in ln]
     assert quota_lines, "renormalizeQueueTail 里找不到 dailyNew 配额计算"
-    assert len(quota_lines) == 1, (
-        "dailyNew 配额行必须唯一，实际 %d 处" % len(quota_lines)
-    )
+    assert len(quota_lines) == 1, "dailyNew 配额行必须唯一，实际 %d 处" % len(quota_lines)
     line = quota_lines[0]
-    assert "Math.max(0," in line and "dailyNew" in line, (
-        "配额必须用 Math.max(0, ...) 包裹 dailyNew"
-    )
-    assert "logToday().nw" in line or re.search(r"today\.nw\b", line), (
-        "配额必须减去今日已评新词数 nw"
-    )
+    assert "Math.max(0," in line and "dailyNew" in line, "配额必须用 Math.max(0, ...) 包裹 dailyNew"
+    assert "logToday().nw" in line or re.search(r"today\.nw\b", line), "配额必须减去今日已评新词数 nw"
 
 
 def test_set_daily_new_renormalizes_and_refreshes_badge():
@@ -2373,13 +2219,9 @@ def test_set_new_order_renormalizes_queue_tail():
     变异验证（将实跑）：只删 handler 里的 renormalizeQueueTail() → 本条红。
     """
     fn = _set_new_order_handler()
-    assert "renormalizeQueueTail()" in fn, (
-        "#setNewOrder handler 必须调 renormalizeQueueTail()（否则改顺序要等次日）"
-    )
+    assert "renormalizeQueueTail()" in fn, "#setNewOrder handler 必须调 renormalizeQueueTail()（否则改顺序要等次日）"
     # 不得自带排序逻辑：顺序只能由 renormalizeQueueTail 里那一句 newOrder 判断决定
-    assert "shuffle(" not in fn and ".sort(" not in fn, (
-        "#setNewOrder handler 禁止自写排序/洗牌（会重排已在队列中的词）"
-    )
+    assert "shuffle(" not in fn and ".sort(" not in fn, "#setNewOrder handler 禁止自写排序/洗牌（会重排已在队列中的词）"
 
 
 def test_new_order_toast_no_longer_promises_next_day():
@@ -2389,13 +2231,9 @@ def test_new_order_toast_no_longer_promises_next_day():
     新文案须点明作用域是「影响今后追加的词」（已在队列中的词不重排）。
     变异验证（将实跑）：把文案改回「次日队列生效」→ 本条红。
     """
-    assert "次日队列生效" not in _WORKBENCH, (
-        "文件里仍残留旧文案「次日队列生效」，与即时生效的实现自相矛盾"
-    )
+    assert "次日队列生效" not in _WORKBENCH, "文件里仍残留旧文案「次日队列生效」，与即时生效的实现自相矛盾"
     fn = _set_new_order_handler()
-    assert "影响今后追加的词" in fn, (
-        "#setNewOrder 的 toast 必须说明作用域为「影响今后追加的词」"
-    )
+    assert "影响今后追加的词" in fn, "#setNewOrder 的 toast 必须说明作用域为「影响今后追加的词」"
     assert "乱序" in fn and "按词表" in fn, "toast 必须区分乱序 / 按词表两种取值"
 
 
@@ -2424,8 +2262,7 @@ def test_extra_new_words_registers_manual_exemption_uncommented():
     body = _extra_new_words_body()
     # 区分度：该调用在 extraNewWords 体内、乃至全文件都只有 1 处
     assert len(re.findall(r"manualExtraIds\.add", body)) == 1, (
-        "extraNewWords 里 manualExtraIds.add 出现 %d 次，断言不具区分度"
-        % len(re.findall(r"manualExtraIds\.add", body))
+        "extraNewWords 里 manualExtraIds.add 出现 %d 次，断言不具区分度" % len(re.findall(r"manualExtraIds\.add", body))
     )
 
     code = _strip_js_comments(body)
@@ -2484,14 +2321,19 @@ def _run_queue_probe():
     """跑 tools/wb_queue_probe.mjs --json，返回解析后的 dict。"""
     import shutil
     import subprocess
+
     if not shutil.which("node"):
         import pytest
+
         pytest.skip("node 不在 PATH 上，跳过动态探针")
     probe = _ROOT / "tools" / "wb_queue_probe.mjs"
     assert probe.exists(), "缺少 tools/wb_queue_probe.mjs 动态探针"
     res = subprocess.run(
         ["node", str(probe), "--json"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_ROOT),
     )
     assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
@@ -2530,12 +2372,15 @@ def test_review_queue_behaves_under_node():
     out = _run_queue_probe()
 
     # 切片确实发生了（探针被改成内联重抄实现的话这里就空了）
-    for name in ("buildReviewQueue", "refilterReviewQueueForScope",
-                 "renormalizeQueueTail", "extraNewWords", "renderReview",
-                 "renderWordsPredicate"):
-        assert out["slices"].get(name, 0) > 60, (
-            "切片 %s 缺失或过短：%r" % (name, out["slices"].get(name))
-        )
+    for name in (
+        "buildReviewQueue",
+        "refilterReviewQueueForScope",
+        "renormalizeQueueTail",
+        "extraNewWords",
+        "renderReview",
+        "renderWordsPredicate",
+    ):
+        assert out["slices"].get(name, 0) > 60, "切片 %s 缺失或过短：%r" % (name, out["slices"].get(name))
 
     # 1) liveDailyNew：改数量真的动了尾部，且不动已评部分
     live = out["liveDailyNew"]
@@ -2545,38 +2390,34 @@ def test_review_queue_behaves_under_node():
             "dailyNew=%d 时尾部新词应为 %d（= max(0, dailyNew - today.nw %d)），实际 %d"
             % (st["dailyNew"], st["expectTailNew"], live["todayNw"], st["tailNew"])
         )
-    assert live["raised"]["tailNew"] > live["initial"]["tailNew"], (
-        "调高 dailyNew 必须真的补词：%d → %d"
-        % (live["initial"]["tailNew"], live["raised"]["tailNew"])
+    assert live["raised"]["tailNew"] > live["initial"]["tailNew"], "调高 dailyNew 必须真的补词：%d → %d" % (
+        live["initial"]["tailNew"],
+        live["raised"]["tailNew"],
     )
     assert live["lowered"]["tailNew"] < live["raised"]["tailNew"], "调低 dailyNew 必须真的裁词"
     assert live["headStableBytes"] is True, "revIdx 之前的已评部分必须逐字节不变"
     assert live["revIdxStable"] is True, "renormalizeQueueTail 不得改写 revIdx"
     assert live["ratedCountStable"] is True, "renormalizeQueueTail 不得改写 ratedCount"
     assert live["queueDayStable"] is True, "renormalizeQueueTail 不得改写 queueDay"
-    assert live["dueKeptInTail"] == live["dueInTailBefore"], (
-        "到期卡不受配额管，重算不得裁掉：%d → %d"
-        % (live["dueInTailBefore"], live["dueKeptInTail"])
+    assert live["dueKeptInTail"] == live["dueInTailBefore"], "到期卡不受配额管，重算不得裁掉：%d → %d" % (
+        live["dueInTailBefore"],
+        live["dueKeptInTail"],
     )
     assert live["loweredIsPrefixOfRaised"] is True, "调低应从尾部裁，不得重洗已排好的新词"
 
     # 2) extraExempt：手动追加的词豁免裁剪
     ex = out["extraExempt"]
-    assert ex["extraAppended"] == 20, (
-        "extraNewWords() 应往队列追加 20 个新词，实际 %d" % ex["extraAppended"]
-    )
+    assert ex["extraAppended"] == 20, "extraNewWords() 应往队列追加 20 个新词，实际 %d" % ex["extraAppended"]
     assert ex["extraRegistered"] == 20, (
-        "追加的 20 个词必须全部登记进 manualExtraIds 豁免集，实际登记 %d"
-        % ex["extraRegistered"]
+        "追加的 20 个词必须全部登记进 manualExtraIds 豁免集，实际登记 %d" % ex["extraRegistered"]
     )
     assert ex["quotaAfter"] == 0, "本场景故意把配额压到 0，实际 %d" % ex["quotaAfter"]
-    assert ex["pinnedSurvived"] == ex["extraAppended"], (
-        "手动追加的 %d 个词必须一个都不少，实际存活 %d"
-        % (ex["extraAppended"], ex["pinnedSurvived"])
+    assert ex["pinnedSurvived"] == ex["extraAppended"], "手动追加的 %d 个词必须一个都不少，实际存活 %d" % (
+        ex["extraAppended"],
+        ex["pinnedSurvived"],
     )
     assert ex["normalNewAfter"] == 0, (
-        "配额 0 时常规新词必须被裁光（否则豁免逻辑把普通词也放过了），实际 %d"
-        % ex["normalNewAfter"]
+        "配额 0 时常规新词必须被裁光（否则豁免逻辑把普通词也放过了），实际 %d" % ex["normalNewAfter"]
     )
 
     # 3) scopeNoTopUp：切范围只过滤、不补齐
@@ -2585,8 +2426,9 @@ def test_review_queue_behaves_under_node():
         "切 core 后尾部新词数必须小于配额（ADR 3.6：收窄意图 ≠ 数量意图），"
         "实际 %d / 配额 %d —— 有人给切范围顺手加了补齐" % (sc["tailNewAfter"], sc["quota"])
     )
-    assert sc["tailNewAfter"] < sc["tailNewBefore"], (
-        "切 core 必须真的滤掉非核心新词：%d → %d" % (sc["tailNewBefore"], sc["tailNewAfter"])
+    assert sc["tailNewAfter"] < sc["tailNewBefore"], "切 core 必须真的滤掉非核心新词：%d → %d" % (
+        sc["tailNewBefore"],
+        sc["tailNewAfter"],
     )
     assert sc["nonCoreLeftInTail"] == 0, "切 core 后尾部不得残留非核心词"
     assert sc["revIdxStable"] is True, "切范围不得改写 revIdx（会弹回第一张）"
@@ -2594,21 +2436,17 @@ def test_review_queue_behaves_under_node():
     # 4) searchBypass：core 模式下搜索旁路 scope
     sb = out["searchBypass"]
     assert sb["probeWord"]["core"] is False, "探针词必须是非核心词，否则这条场景恒真"
-    assert sb["probeWordHitWithSearch"] is True, (
-        "core 模式下搜「%s」必须命中（搜索旁路 scope）" % sb["probeWord"]["hw"]
-    )
-    assert sb["probeWordHitWithoutSearch"] is False, (
-        "清空搜索后「%s」必须落回 scope 过滤外" % sb["probeWord"]["hw"]
-    )
+    assert sb["probeWordHitWithSearch"] is True, "core 模式下搜「%s」必须命中（搜索旁路 scope）" % sb["probeWord"]["hw"]
+    assert sb["probeWordHitWithoutSearch"] is False, "清空搜索后「%s」必须落回 scope 过滤外" % sb["probeWord"]["hw"]
     assert sb["nonCoreHitsWithSearch"] > 0, "core 模式带搜索时命中集里必须有非核心词"
     assert sb["nonCoreHitsWithoutSearch"] == 0, "core 模式清空搜索后非核心词命中数必须为 0"
 
     # 5) 幂等：连调两次不动队列
     idem = out["idempotency"]
     for mode in ("seed", "shuffle"):
-        assert idem[mode]["stable"] is True, (
-            "newOrder=%s 时 renormalizeQueueTail 不幂等：%s"
-            % (mode, idem[mode]["diff"])
+        assert idem[mode]["stable"] is True, "newOrder=%s 时 renormalizeQueueTail 不幂等：%s" % (
+            mode,
+            idem[mode]["diff"],
         )
 
     # 6) finishedStateScopeSwitch —— 完成态（revIdx >= revQueue.length）切 scope。
@@ -2633,17 +2471,17 @@ def test_review_queue_behaves_under_node():
     fin = out["finishedStateScopeSwitch"]
     ctrl = fin["controlNonReviewView"]
     assert ctrl["rebuilt"] is False, "curView 不是 review 时切 scope 不该触发重建"
-    assert ctrl["after"]["revIdx"] == ctrl["before"]["revIdx"], (
-        "非 review 视图切 scope 不得改写 revIdx：%d → %d"
-        % (ctrl["before"]["revIdx"], ctrl["after"]["revIdx"])
+    assert ctrl["after"]["revIdx"] == ctrl["before"]["revIdx"], "非 review 视图切 scope 不得改写 revIdx：%d → %d" % (
+        ctrl["before"]["revIdx"],
+        ctrl["after"]["revIdx"],
     )
     assert ctrl["after"]["queueLen"] == ctrl["before"]["queueLen"], (
         "完成态尾部为空，非 review 视图切 scope 队列长度不该变"
     )
     for who, snap in (("review 视图", fin), ("非 review 视图", ctrl)):
-        assert snap["after"]["tailNonCore"] == 0, (
-            "%s：完成态切 core 后未评尾部不得残留非核心词，实际 %d 个"
-            % (who, snap["after"]["tailNonCore"])
+        assert snap["after"]["tailNonCore"] == 0, "%s：完成态切 core 后未评尾部不得残留非核心词，实际 %d 个" % (
+            who,
+            snap["after"]["tailNonCore"],
         )
         assert snap["after"]["ratedCount"] == snap["before"]["ratedCount"], (
             "%s：切 scope 不得清空 ratedCount（本轮统计会被抹掉）" % who
@@ -2677,8 +2515,7 @@ def test_review_queue_behaves_under_node():
         "实际补进 %d 个" % reach["after"]["newInQueue"]
     )
     assert reach["after"]["ratedCount"] == reach["before"]["ratedCount"], (
-        "完成屏的「共评价 N 张」不得被重建抹掉：%d → %d"
-        % (reach["before"]["ratedCount"], reach["after"]["ratedCount"])
+        "完成屏的「共评价 N 张」不得被重建抹掉：%d → %d" % (reach["before"]["ratedCount"], reach["after"]["ratedCount"])
     )
 
     # 7) rebuildClearsExemptions —— 整队重建清空 manualExtraIds。
@@ -2688,8 +2525,7 @@ def test_review_queue_behaves_under_node():
     #    renderReview() 推开 rollover 那道门 → buildReviewQueue() 整队重建。
     rc = out["rebuildClearsExemptions"]
     assert rc["registeredBeforeRebuild"] == 20, (
-        "前置态必须真有 20 个登记在案的豁免 id，实际 %d —— 否则下面恒真"
-        % rc["registeredBeforeRebuild"]
+        "前置态必须真有 20 个登记在案的豁免 id，实际 %d —— 否则下面恒真" % rc["registeredBeforeRebuild"]
     )
     assert rc["rebuilt"] is True, "跨天 rollover 必须触发整队重建，否则本场景没测到东西"
     assert rc["staleExemptInQueue"] > 0, (
@@ -2700,12 +2536,9 @@ def test_review_queue_behaves_under_node():
         "buildReviewQueue() 整队重建后 manualExtraIds 必须为空，实际残留 %d 个 —— "
         "这些 id 会在下次调低 dailyNew 时逃过裁剪" % rc["exemptAfterRebuild"]
     )
-    assert rc["quotaAfterTrim"] == 0, (
-        "本场景故意把配额压到 0，实际 %d" % rc["quotaAfterTrim"]
-    )
+    assert rc["quotaAfterTrim"] == 0, "本场景故意把配额压到 0，实际 %d" % rc["quotaAfterTrim"]
     assert rc["newInQueueAfterTrim"] == 0, (
-        "配额 0 且豁免集已清空 ⇒ 重建后的队列里一个新词都不该留下，实际 %d 个"
-        % rc["newInQueueAfterTrim"]
+        "配额 0 且豁免集已清空 ⇒ 重建后的队列里一个新词都不该留下，实际 %d 个" % rc["newInQueueAfterTrim"]
     )
 
 
@@ -2739,14 +2572,19 @@ def test_wbsync_put_body_wraps_payload():
     """
     import shutil
     import subprocess
+
     if not shutil.which("node"):
         import pytest
+
         pytest.skip("node 不在 PATH 上，跳过动态探针")
     probe = _ROOT / "tools" / "wb_sync_probe.mjs"
     assert probe.exists(), "缺少 tools/wb_sync_probe.mjs 动态探针"
     res = subprocess.run(
         ["node", str(probe), "--json"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_ROOT),
     )
     assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
@@ -2769,8 +2607,7 @@ def test_wbsync_put_body_wraps_payload():
     for k in ("words", "cards", "log", "wrong", "settings"):
         assert k in put["payloadKeys"], "payload 缺存储键 %s：%r" % (k, put["payloadKeys"])
     assert put["payloadHasSeed"] is True, (
-        "payload.words 没带上沙箱种子词 probe-sync-1 —— snapshot() 没引用真 S，"
-        "这台镜像只是空壳，拉过去等于什么都没同步"
+        "payload.words 没带上沙箱种子词 probe-sync-1 —— snapshot() 没引用真 S，这台镜像只是空壳，拉过去等于什么都没同步"
     )
     assert any(r["hasKeyHeader"] for r in out["requests"]), "PUT 没带 X-WB-Key 鉴权头"
 
@@ -2792,14 +2629,19 @@ def test_wbsync_phone_pulls_without_key():
     """
     import shutil
     import subprocess
+
     if not shutil.which("node"):
         import pytest
+
         pytest.skip("node 不在 PATH 上，跳过动态探针")
     probe = _ROOT / "tools" / "wb_phone_pull_probe.mjs"
     assert probe.exists(), "缺少 tools/wb_phone_pull_probe.mjs 动态探针"
     res = subprocess.run(
         ["node", str(probe), "--json"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_ROOT),
     )
     assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
@@ -2809,9 +2651,7 @@ def test_wbsync_phone_pulls_without_key():
     pulls = [r for r in out["requests"] if r["method"] == "GET" and r["url"] == "/api/wb/state"]
     assert pulls, "没有任何一条 GET /api/wb/state 拉取请求"
     assert not any(r["hasKeyHeader"] for r in pulls), "拉取镜像不应带 X-WB-Key（GET 对局域网开放）"
-    assert "c1" in out["mergedCardIds"], (
-        "拉到的镜像里 cards 进度没被 applyMerge 接收：%r" % (out["mergedCardIds"],)
-    )
+    assert "c1" in out["mergedCardIds"], "拉到的镜像里 cards 进度没被 applyMerge 接收：%r" % (out["mergedCardIds"],)
 
 
 def test_wbsync_paired_push_goes_remote_absolute():
@@ -2830,14 +2670,19 @@ def test_wbsync_paired_push_goes_remote_absolute():
     """
     import shutil
     import subprocess
+
     if not shutil.which("node"):
         import pytest
+
         pytest.skip("node 不在 PATH 上，跳过动态探针")
     probe = _ROOT / "tools" / "wb_pair_push_probe.mjs"
     assert probe.exists(), "缺少 tools/wb_pair_push_probe.mjs 动态探针"
     res = subprocess.run(
         ["node", str(probe), "--json"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_ROOT),
     )
     assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
@@ -2866,34 +2711,35 @@ def test_wbsync_background_pull_is_silent():
     """
     import shutil
     import subprocess
+
     if not shutil.which("node"):
         import pytest
+
         pytest.skip("node 不在 PATH 上，跳过动态探针")
     probe = _ROOT / "tools" / "wb_phone_pull_silent_probe.mjs"
     assert probe.exists(), "缺少 tools/wb_phone_pull_silent_probe.mjs 动态探针"
     res = subprocess.run(
         ["node", str(probe), "--json"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_ROOT),
     )
     assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
     out = json.loads(res.stdout)
 
     assert out["pullToastCount"] == 0, (
-        "后台 pull 不应弹『合并导入完成』通知（每 5s 轮询都弹很烦人），实际弹了 %d 次"
-        % out["pullToastCount"]
+        "后台 pull 不应弹『合并导入完成』通知（每 5s 轮询都弹很烦人），实际弹了 %d 次" % out["pullToastCount"]
     )
-    assert out["pullViewSwitches"] == 0, (
-        "后台 pull 不应把用户视图踢到 review，实际切了 %d 次" % out["pullViewSwitches"]
-    )
-    assert out["explicitToastTotal"] > 0, (
-        "显式合并导入（WebRTC / 文件导入）应保留反馈通知，但实际没弹（改过头了）"
-    )
+    assert out["pullViewSwitches"] == 0, "后台 pull 不应把用户视图踢到 review，实际切了 %d 次" % out["pullViewSwitches"]
+    assert out["explicitToastTotal"] > 0, "显式合并导入（WebRTC / 文件导入）应保留反馈通知，但实际没弹（改过头了）"
 
 
 # --------------------------------------------------------------------------
 # Stage A · 局域网镜像配对面板（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 4）
 # --------------------------------------------------------------------------
+
 
 def test_lan_pair_panel_section_inside_sync_panel():
     """LAN 同步面板（#lanSyncPanel）内嵌「镜像配对」小节（Stage A Task 4）。
@@ -2903,11 +2749,16 @@ def test_lan_pair_panel_section_inside_sync_panel():
     其他地方——确保用户在「设置 → LAN 同步」里能看到这个小节。
     """
     block = _WORKBENCH.split('id="lanStatus"')[1].split("</section>")[0]
-    for pid in ("wbPairHostState", "wbPairRemoteState", "wbPairHostIn",
-                "wbPairKeyIn", "btnPairSave", "btnPairClear", "wbPairStatus"):
-        assert f'id="{pid}"' in block, (
-            f"LAN 同步面板缺 id={pid}（镜像配对小节没放进 lanSyncPanel 内）"
-        )
+    for pid in (
+        "wbPairHostState",
+        "wbPairRemoteState",
+        "wbPairHostIn",
+        "wbPairKeyIn",
+        "btnPairSave",
+        "btnPairClear",
+        "wbPairStatus",
+    ):
+        assert f'id="{pid}"' in block, f"LAN 同步面板缺 id={pid}（镜像配对小节没放进 lanSyncPanel 内）"
 
 
 def test_lan_pair_panel_wiring_starts_after_wbsync_boot():

@@ -13,6 +13,7 @@
 - 消费方一律 `from delector.core.X import Y` 绝对导入，不用相对导入。
 - 模块内也用绝对导入（见 routes/main.py docstring 的踩坑记录）。
 """
+
 from delector.core.utils import (
     _NO_STORE_HEADERS,
     _attachment_headers,

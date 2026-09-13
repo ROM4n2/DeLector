@@ -2,6 +2,7 @@
 DeLector - Goethe-Zertifikat A1 Workshop Router
 Endpoints for A1 Wortliste (702 vocab), Sprechen (Teil 2 & Teil 3), and Schreiben (Teil 1 Formular & Teil 2 E-Mail).
 """
+
 import os
 import tempfile
 from typing import Dict, List, Optional
@@ -44,7 +45,8 @@ def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None):
     if q:
         query = q.strip().lower()
         res = [
-            w for w in res
+            w
+            for w in res
             if query in w.get("word", "").lower()
             or query in w.get("lemma", "").lower()
             or query in w.get("definition_zh", "").lower()
@@ -68,6 +70,7 @@ def get_a1_sprechen_teil3():
 @router.get("/export/anki")
 def export_a1_anki():
     from delector.core.utils import _attachment_headers
+
     tmp = tempfile.gettempdir()
     path = os.path.join(tmp, "Goethe_A1_Wortliste.apkg")
     export_a1_anki_deck(path)
@@ -121,7 +124,7 @@ def check_a1_schreiben_teil1(req: A1FormularCheckReq):
         "score": score,
         "total": total,
         "all_correct": score == total,
-        "results": results
+        "results": results,
     }
 
 

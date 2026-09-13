@@ -16,6 +16,7 @@
 这两条断言在迁移**之前**就该是绿的，迁移过程中任何一步改错会立刻变红，
 把"数据搬家"这种最坏的失败挡在 CI 里，而不是等到用户升级才发现。
 """
+
 import os
 from pathlib import Path
 
@@ -55,12 +56,8 @@ def test_static_dir_resolves_to_repo_root_static():
 
     assert STATIC_DIR, "server 没能解析出静态目录（回退链全落空）"
     resolved = Path(STATIC_DIR).resolve()
-    assert resolved == REPO_ROOT / "static", (
-        f"STATIC_DIR 指向 {resolved}，期望 {REPO_ROOT / 'static'}。"
-    )
-    assert (resolved / "index.html").exists(), (
-        f"{resolved} 里没有 index.html —— 静态资源挂载错了，全站会 404。"
-    )
+    assert resolved == REPO_ROOT / "static", f"STATIC_DIR 指向 {resolved}，期望 {REPO_ROOT / 'static'}。"
+    assert (resolved / "index.html").exists(), f"{resolved} 里没有 index.html —— 静态资源挂载错了，全站会 404。"
 
 
 def test_no_static_dir_inside_backend_package():
@@ -70,6 +67,5 @@ def test_no_static_dir_inside_backend_package():
         pytest.skip("delector/ 包还没建立（Task 1 之前）")
 
     assert not (pkg / "static").exists(), (
-        f"{pkg / 'static'} 不该存在：静态资源留在仓库根的 static/，由 server 的"
-        "回退链去解析，不要跟着模块进包。"
+        f"{pkg / 'static'} 不该存在：静态资源留在仓库根的 static/，由 server 的回退链去解析，不要跟着模块进包。"
     )

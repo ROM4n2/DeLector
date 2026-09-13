@@ -3,6 +3,7 @@
 DeLector - 官方真题语料库路由 (Official Exam Reading Corpus Router)
 提供涵盖 Goethe A1-B2 及 TestDaF 权威样题的目录查询与正文解析端点。
 """
+
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException

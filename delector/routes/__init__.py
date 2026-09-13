@@ -11,6 +11,7 @@
 re-export 契约（测试 `test_server.py` 直接 `from delector.server import
 _sync_sdp_cache`）——测试钉的是"缓存与容量上限"，不是模块路径，这里保持可达。
 """
+
 from fastapi import FastAPI
 
 # main 放最后：它承载从 server.py 搬来的通用 handler，搬迁前这些路由是**在

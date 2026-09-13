@@ -133,11 +133,7 @@ def test_hoeren_api_endpoints():
     assert "answer_key" not in s_data["parts"]["teil_1"][0]
 
     # 3. 判分端点
-    grade_payload = {
-        "set_id": 1,
-        "duration_seconds": 780,
-        "answers": {"a1_h_01_t1_q01": "B"}
-    }
+    grade_payload = {"set_id": 1, "duration_seconds": 780, "answers": {"a1_h_01_t1_q01": "B"}}
     r_grade = client.post("/api/a1/hoeren/grade", json=grade_payload)
     assert r_grade.status_code == 200
     grade_res = r_grade.json()
@@ -157,6 +153,7 @@ def _m5_isolated_db_teardown():
     yield
     import gc
     import os as _os
+
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

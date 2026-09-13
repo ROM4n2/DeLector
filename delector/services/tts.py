@@ -11,6 +11,7 @@ Chaquopy 索引里也没有，APK 内 `import edge_tts` 必然失败。桌面端
   3. 先发 speech.config 文本帧，再发 SSML 文本帧
   4. 收二进制音频帧（Path: audio, Content-Type: audio/mpeg），到 turn.end 结束
 """
+
 from __future__ import annotations
 
 import base64
@@ -25,10 +26,7 @@ from xml.sax.saxutils import escape
 # 与 edge_tts.constants 保持一致（上游若更换令牌需同步）
 TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
 WSS_HOST = "speech.platform.bing.com"
-WSS_PATH = (
-    "/consumer/speech/synthesize/readaloud/edge/v1"
-    f"?TrustedClientToken={TRUSTED_CLIENT_TOKEN}"
-)
+WSS_PATH = f"/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken={TRUSTED_CLIENT_TOKEN}"
 CHROMIUM_VERSION = "143.0.3650.75"
 SEC_MS_GEC_VERSION = f"1-{CHROMIUM_VERSION}"
 WIN_EPOCH = 11644473600  # Unix epoch → Windows file time epoch 的秒偏移
@@ -89,7 +87,8 @@ def _mkssml(text: str, voice: str, rate: str) -> str:
 
 def _speech_config() -> str:
     return (
-        "X-Timestamp:" + time.strftime("%a %b %d %Y %H:%M:%S GMT+0000 (Coordinated Universal Time)", time.gmtime())
+        "X-Timestamp:"
+        + time.strftime("%a %b %d %Y %H:%M:%S GMT+0000 (Coordinated Universal Time)", time.gmtime())
         + "\r\nContent-Type:application/json; charset=utf-8\r\n"
         "Path:speech.config\r\n\r\n"
         '{"context":{"synthesis":{"audio":{"metadataoptions":{'
@@ -296,9 +295,9 @@ def synthesize(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -
                         hlen = int.from_bytes(payload[:2], "big")
                         if hlen > len(payload):
                             continue
-                        headers = _parse_headers(payload[2:2 + hlen])
+                        headers = _parse_headers(payload[2 : 2 + hlen])
                         if headers.get(b"path") == b"audio" and headers.get(b"content-type") == b"audio/mpeg":
-                            audio += payload[2 + hlen:]
+                            audio += payload[2 + hlen :]
             if not audio:
                 raise RuntimeError("no audio received")
             return bytes(audio)

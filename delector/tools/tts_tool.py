@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """TTS tool：薄包装 services.tts.synthesize（标准库版 Edge TTS 客户端）。"""
+
 import base64
 
 from delector.services.tts import synthesize

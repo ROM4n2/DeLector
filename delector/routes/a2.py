@@ -3,6 +3,7 @@
 DeLector - Goethe-Zertifikat A2 Workshop Router
 Endpoints for A2 Wortliste (974 vocab).
 """
+
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
@@ -41,7 +42,8 @@ def get_a2_vocab(topic: Optional[str] = None, q: Optional[str] = None) -> List[D
     if q:
         query = q.strip().lower()
         res = [
-            w for w in res
+            w
+            for w in res
             if query in w.get("word", "").lower()
             or query in w.get("lemma", "").lower()
             or query in w.get("definition_zh", "").lower()

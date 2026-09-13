@@ -20,6 +20,7 @@ Node 可测性硬约束（Plan Task A5）：
 
 运行（仓库根）：export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_encounter_deck_bridge.py -v
 """
+
 import json
 import shutil
 import subprocess
@@ -105,6 +106,7 @@ def _run_node(ctx, bridge):
 
 # ── 逐字节 verbatim 保证 ────────────────────────────────────────────────────
 
+
 def test_verbatim_source_is_byte_copy_of_real_file(bridge):
     """deck-bridge.mjs 是 static/js/deck-bridge.js 的逐字节复制。"""
     assert bridge.read_bytes() == DECK_BRIDGE_SRC.read_bytes()
@@ -112,11 +114,12 @@ def test_verbatim_source_is_byte_copy_of_real_file(bridge):
 
 # ── loadDeck ────────────────────────────────────────────────────────────────
 
+
 def test_load_deck_parses_realish_json_with_number_and_string_ids(bridge):
     """loadDeck 能解析含数字/字符串 word.id 的真实形状 JSON。"""
     words = [
-        {"id": 5, "hw": "Haus"},           # 数字 id
-        {"id": "a1-0001", "hw": "gehen"},   # 字符串 id
+        {"id": 5, "hw": "Haus"},  # 数字 id
+        {"id": "a1-0001", "hw": "gehen"},  # 字符串 id
     ]
     cards = {"5": {"reps": 2}, "a1-0001": {"reps": 0}}
     store = {
@@ -151,6 +154,7 @@ def test_load_deck_corrupt_json_returns_empty_no_throw(bridge):
 
 # ── buildKnownSet：reps>0 learned / reps=0 unlearned / 缺卡 unlearned ───────
 
+
 def test_build_known_set_reps_gate_and_case_normalization(bridge):
     """known 词 = word 存在且 cards[id].reps>0；reps=0 或缺卡不算；hw 小写归一。"""
     deck = {
@@ -162,10 +166,10 @@ def test_build_known_set_reps_gate_and_case_normalization(bridge):
             {"id": "w5", "hw": "Ball"},
         ],
         "cards": {
-            "w1": {"reps": 3},   # learned
-            "w2": {"reps": 1},   # learned → lower "haus"
-            "w3": {"reps": 1},   # learned → lower "schön"（元音变音归一）
-            "w4": {"reps": 0},   # unlearned（reps=0）
+            "w1": {"reps": 3},  # learned
+            "w2": {"reps": 1},  # learned → lower "haus"
+            "w3": {"reps": 1},  # learned → lower "schön"（元音变音归一）
+            "w4": {"reps": 0},  # unlearned（reps=0）
             # w5 缺卡 → unlearned
         },
     }
@@ -189,11 +193,11 @@ def test_build_known_set_strips_german_articles(bridge):
     """
     deck = {
         "words": [
-            {"id": "w1", "hw": "die Abfahrt"},    # learned（带定冠词 NOUN）
-            {"id": "w2", "hw": "der Bahnhof."},   # learned（冠词 + 句点尾巴）
-            {"id": "w3", "hw": "ein Auto"},       # learned（不定冠词）
-            {"id": "w4", "hw": "Haus"},           # learned（本来就无冠词）
-            {"id": "w5", "hw": "das nicht"},      # unlearned（reps=0，不参与）
+            {"id": "w1", "hw": "die Abfahrt"},  # learned（带定冠词 NOUN）
+            {"id": "w2", "hw": "der Bahnhof."},  # learned（冠词 + 句点尾巴）
+            {"id": "w3", "hw": "ein Auto"},  # learned（不定冠词）
+            {"id": "w4", "hw": "Haus"},  # learned（本来就无冠词）
+            {"id": "w5", "hw": "das nicht"},  # unlearned（reps=0，不参与）
         ],
         "cards": {
             "w1": {"reps": 1},
@@ -219,6 +223,7 @@ def test_build_known_set_strips_german_articles(bridge):
 
 # ── annotateWithDeck：known flags + stats 精确值 ────────────────────────────
 
+
 def test_annotate_with_deck_marks_known_and_exact_coverage(bridge):
     """mini annotate：known 标记正确，total/known/rate 精确，unknown_top 排序正确。"""
     deck = {
@@ -236,17 +241,17 @@ def test_annotate_with_deck_marks_known_and_exact_coverage(bridge):
                 "idx": 0,
                 "tokens": [
                     {"text": "Geht", "lemma": "gehen", "pos": "VERB"},  # known
-                    {"text": "schön", "lemma": "schön", "pos": "ADJ"},    # known
-                    {"text": "Haus", "lemma": "haus", "pos": "NOUN"},     # unknown
-                    {"text": ",", "lemma": ",", "pos": "PUNCT"},          # known=false（punct）
-                    {"text": "!", "lemma": "!", "pos": "PUNCT"},          # known=false（punct）
+                    {"text": "schön", "lemma": "schön", "pos": "ADJ"},  # known
+                    {"text": "Haus", "lemma": "haus", "pos": "NOUN"},  # unknown
+                    {"text": ",", "lemma": ",", "pos": "PUNCT"},  # known=false（punct）
+                    {"text": "!", "lemma": "!", "pos": "PUNCT"},  # known=false（punct）
                 ],
             },
             {
                 "idx": 1,
                 "tokens": [
-                    {"text": "Haus", "lemma": "haus", "pos": "NOUN"},     # unknown ×2
-                    {"text": "gehen", "lemma": "gehen", "pos": "VERB"},   # known
+                    {"text": "Haus", "lemma": "haus", "pos": "NOUN"},  # unknown ×2
+                    {"text": "gehen", "lemma": "gehen", "pos": "VERB"},  # known
                 ],
             },
         ],
@@ -276,7 +281,7 @@ def test_annotate_with_deck_noun_hw_with_article_is_known(bridge):
     deck = {
         "words": [
             {"id": "w6", "hw": "die Abfahrt"},  # learned 名词（背词台拼装冠词）
-            {"id": "w7", "hw": "Haus"},         # learned 名词（无冠词词头）
+            {"id": "w7", "hw": "Haus"},  # learned 名词（无冠词词头）
         ],
         "cards": {"w6": {"reps": 1}, "w7": {"reps": 3}},
     }
@@ -288,13 +293,13 @@ def test_annotate_with_deck_noun_hw_with_article_is_known(bridge):
                 "idx": 0,
                 "tokens": [
                     {"text": "Abfahrt", "lemma": "abfahrt", "pos": "NOUN"},  # known（剥冠词命中）
-                    {"text": "Haus", "lemma": "haus", "pos": "NOUN"},        # known（无冠词词头）
+                    {"text": "Haus", "lemma": "haus", "pos": "NOUN"},  # known（无冠词词头）
                 ],
             },
             {
                 "idx": 1,
                 "tokens": [
-                    {"text": "Auto", "lemma": "auto", "pos": "NOUN"},        # unknown → 候选
+                    {"text": "Auto", "lemma": "auto", "pos": "NOUN"},  # unknown → 候选
                 ],
             },
         ],
@@ -362,6 +367,7 @@ def test_annotate_with_deck_empty_known_set_rank_and_cap(bridge):
 
 # ── mergeServerDeck：本地为准 ───────────────────────────────────────────────
 
+
 def test_merge_server_deck_adds_server_only_and_keeps_local(bridge):
     """mergeServerDeck：server-only 词补进；本地已存在词/卡冲突保留本地。"""
     deck = {
@@ -375,8 +381,8 @@ def test_merge_server_deck_adds_server_only_and_keeps_local(bridge):
             {"id": "w3", "hw": "Auto"},
         ],
         "cards": {
-            "w1": {"reps": 9, "src": "server"},   # 冲突 → 保留本地
-            "w2": {"reps": 1},                     # 无本地 → 补进
+            "w1": {"reps": 9, "src": "server"},  # 冲突 → 保留本地
+            "w2": {"reps": 1},  # 无本地 → 补进
         },
     }
     out = _run_node({"op": "mergeServerDeck", "deck": deck, "server": server}, bridge)
@@ -393,6 +399,7 @@ def test_merge_server_deck_adds_server_only_and_keeps_local(bridge):
 
 
 # ── 前端接线静态探针 ───────────────────────────────────────────────────────
+
 
 def test_index_has_coverage_container():
     """index.html 必须含 #enc-coverage 覆盖统计容器（静态存在，encounter.js 往里面写）。"""
@@ -420,7 +427,7 @@ def test_encounter_js_idb_double_write_on_add_card():
     assert "encIdbWriteWords" in ENCOUNTER_JS
     assert 'indexedDB.open("wb", 1)' in ENCOUNTER_JS
     assert '"words"' in ENCOUNTER_JS
-    assert "{ key: \"main\", value: words }" in ENCOUNTER_JS
+    assert '{ key: "main", value: words }' in ENCOUNTER_JS
 
 
 def test_encounter_js_403_adding_hint_in_human_words():
@@ -434,6 +441,7 @@ def test_encounter_js_403_adding_hint_in_human_words():
 
 
 # ── deck-bridge.js 源码卫生（node 可测性硬约束）────────────────────────────
+
 
 def _strip_js_comments(src):
     """把 // 与 /* */ 注释剥掉，便于只对"真实代码"做卫生断言（注释不影响 Node 解析）。"""
@@ -464,6 +472,4 @@ def test_deck_bridge_source_is_esm_clean():
     for glob in ("localStorage", "window.", "document."):
         assert glob not in src, "deck-bridge.js 不得引用浏览器全局：%r" % glob
     for fn in ("loadDeck", "mergeServerDeck", "buildKnownSet", "isKnown", "annotateWithDeck"):
-        assert ("export function " + fn) in src or ("export const " + fn) in src, (
-            "deck-bridge.js 缺导出 %r" % fn
-        )
+        assert ("export function " + fn) in src or ("export const " + fn) in src, "deck-bridge.js 缺导出 %r" % fn

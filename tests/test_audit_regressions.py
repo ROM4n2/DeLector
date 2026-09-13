@@ -10,6 +10,7 @@ Locks in fixes for:
 6. euer/eur inflection with vowel elision
 7. Security URL port restriction & 2MB stream limit
 """
+
 import os
 
 import pytest
@@ -100,6 +101,7 @@ def test_a1_grade_populates_study_log():
     import time
 
     from delector.core.database import init_progress_db, record_a1_hoeren_trial, record_a1_lesen_trial
+
     tmp = "test_a1_study_log.db"
     for suffix in ("", "-wal", "-shm"):
         p = tmp + suffix
@@ -111,13 +113,25 @@ def test_a1_grade_populates_study_log():
     try:
         init_progress_db(tmp)
         h_id = record_a1_hoeren_trial(
-            set_id=1, score_raw=20, score_official=16.0,
-            total_questions=25, duration_seconds=600,
-            answers_json="{}", wrong_questions_json="[]", db_path=tmp)
+            set_id=1,
+            score_raw=20,
+            score_official=16.0,
+            total_questions=25,
+            duration_seconds=600,
+            answers_json="{}",
+            wrong_questions_json="[]",
+            db_path=tmp,
+        )
         l_id = record_a1_lesen_trial(
-            set_id=1, score_raw=22, score_official=17.6,
-            total_questions=25, duration_seconds=480,
-            answers_json="{}", wrong_questions_json="[]", db_path=tmp)
+            set_id=1,
+            score_raw=22,
+            score_official=17.6,
+            total_questions=25,
+            duration_seconds=480,
+            answers_json="{}",
+            wrong_questions_json="[]",
+            db_path=tmp,
+        )
         assert h_id is not None and l_id is not None
         c = sqlite3.connect(tmp)
         try:
@@ -145,6 +159,7 @@ def _m5_isolated_db_teardown():
     yield
     import gc
     import os as _os
+
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

@@ -3,6 +3,7 @@
 
 提供涵盖 A1–B2 及 TestDaF 权威阅读真题篇章，结构化包含考点词、语法焦点与阅读理解验证题。
 """
+
 from typing import Any, Dict, List, Optional
 
 OFFICIAL_CORPUS: List[Dict[str, Any]] = [
@@ -28,15 +29,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
                 "question": "Wann findet der Wochenmarkt statt?",
                 "options": ["A. Jeden Samstag", "B. Jeden Sonntag", "C. Jeden Werktag"],
                 "answer_idx": 0,
-                "explanation_zh": "第一句明确指出集市在每个周六（Jeden Samstag）举行。"
+                "explanation_zh": "第一句明确指出集市在每个周六（Jeden Samstag）举行。",
             },
             {
                 "question": "Was kauft Frau Müller heute?",
                 "options": ["A. Brot und Käse", "B. Äpfel und Tomaten", "C. Nur Fleisch"],
                 "answer_idx": 1,
-                "explanation_zh": "第三句指出 Frau Müller 购买了苹果和番茄（zwei Kilo Äpfel und ein Pfund Tomaten）。"
-            }
-        ]
+                "explanation_zh": "第三句指出 Frau Müller 购买了苹果和番茄（zwei Kilo Äpfel und ein Pfund Tomaten）。",
+            },
+        ],
     },
     {
         "id": "goethe_a1_campus_02",
@@ -60,9 +61,9 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
                 "question": "Um wie viel Uhr beginnt der Unterricht?",
                 "options": ["A. Um 17:00 Uhr", "B. Um 18:00 Uhr", "C. Um 19:30 Uhr"],
                 "answer_idx": 1,
-                "explanation_zh": "文中说明上课时间为每周二、周四 18:00（um achtzehn Uhr）。"
+                "explanation_zh": "文中说明上课时间为每周二、周四 18:00（um achtzehn Uhr）。",
             }
-        ]
+        ],
     },
     {
         "id": "goethe_a2_alltag_03",
@@ -85,11 +86,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Worum bittet der Gastgeber die Gäste?",
-                "options": ["A. Fleisch und Getränke zu kaufen", "B. Einen Salat oder Nachtisch mitzubringen", "C. Pünktlich um 18:00 Uhr da zu sein"],
+                "options": [
+                    "A. Fleisch und Getränke zu kaufen",
+                    "B. Einen Salat oder Nachtisch mitzubringen",
+                    "C. Pünktlich um 18:00 Uhr da zu sein",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "文中明确写道：'wenn jeder von euch einen kleinen Salat oder ein Dessert mitbringen könnte'."
+                "explanation_zh": "文中明确写道：'wenn jeder von euch einen kleinen Salat oder ein Dessert mitbringen könnte'.",
             }
-        ]
+        ],
     },
     {
         "id": "goethe_a2_kultur_04",
@@ -111,11 +116,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Warum besuchten sie das Deutsche Museum?",
-                "options": ["A. Weil es geregnet hat", "B. Weil sie sich für Technik und Wissenschaft interessieren", "C. Weil das Rathaus geschlossen war"],
+                "options": [
+                    "A. Weil es geregnet hat",
+                    "B. Weil sie sich für Technik und Wissenschaft interessieren",
+                    "C. Weil das Rathaus geschlossen war",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "倒数第二句明确给出理由：'weil uns Technik und Wissenschaft sehr interessieren'."
+                "explanation_zh": "倒数第二句明确给出理由：'weil uns Technik und Wissenschaft sehr interessieren'.",
             }
-        ]
+        ],
     },
     {
         "id": "goethe_b1_campus_05",
@@ -125,7 +134,13 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "source_exam": "Goethe-Zertifikat B1 Lesen Teil 2",
         "word_count": 185,
         "summary_zh": "探讨大学生宿舍合租生活的优势与挑战，涉及社交、租金与私人空间管理。",
-        "key_lexemes": ["das Studentenwohnheim", "die Wohngemeinschaft", "die Privatsphäre", "die Nebenkosten", "vereinbaren"],
+        "key_lexemes": [
+            "das Studentenwohnheim",
+            "die Wohngemeinschaft",
+            "die Privatsphäre",
+            "die Nebenkosten",
+            "vereinbaren",
+        ],
         "grammar_focus": ["Nebensatz_obwohl_weil", "Adjektivdeklination", "Passiv_Präsens"],
         "content": (
             "Für viele Studienanfänger in Deutschland ist das Studentenwohnheim die erste Wahl. "
@@ -138,11 +153,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Welcher Hauptvorteil des Studentenwohnheims wird im Text hervorgehoben?",
-                "options": ["A. Man hat immer ein eigenes Badezimmer", "B. Die Warmmiete ist günstig und beinhaltet Nebenkosten", "C. Es gibt keine Putzregeln"],
+                "options": [
+                    "A. Man hat immer ein eigenes Badezimmer",
+                    "B. Die Warmmiete ist günstig und beinhaltet Nebenkosten",
+                    "C. Es gibt keine Putzregeln",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "第二句明确指出：'Der entscheidende Vorteil liegt in der günstigen Warmmiete, da Strom, Heizung und Internet bereits im Preis enthalten sind'."
+                "explanation_zh": "第二句明确指出：'Der entscheidende Vorteil liegt in der günstigen Warmmiete, da Strom, Heizung und Internet bereits im Preis enthalten sind'.",
             }
-        ]
+        ],
     },
     {
         "id": "goethe_b1_beruf_06",
@@ -152,7 +171,13 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "source_exam": "Goethe-Zertifikat B1 Lesen Teil 1",
         "word_count": 192,
         "summary_zh": "讨论居家办公与弹性工作制对职场人士工作生活平衡（Work-Life-Balance）的影响。",
-        "key_lexemes": ["das Homeoffice", "die Arbeitszeit", "die Selbstdisziplin", "das Zeitmanagement", "der Arbeitsplatz"],
+        "key_lexemes": [
+            "das Homeoffice",
+            "die Arbeitszeit",
+            "die Selbstdisziplin",
+            "das Zeitmanagement",
+            "der Arbeitsplatz",
+        ],
         "grammar_focus": ["Infinitiv_mit_zu", "Modalverben_müssen_können", "Wechselpräpositionen"],
         "content": (
             "Das Arbeiten von zu Hause aus hat in den vergangenen Jahren stark an Bedeutung gewonnen. "
@@ -165,11 +190,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Welches Problem kann bei der Heimarbeit auftreten?",
-                "options": ["A. Man darf keine Pausen machen", "B. Es fällt schwer, Arbeit und Freizeit sauber zu trennen", "C. Das Gehalt wird automatisch gekürzt"],
+                "options": [
+                    "A. Man darf keine Pausen machen",
+                    "B. Es fällt schwer, Arbeit und Freizeit sauber zu trennen",
+                    "C. Das Gehalt wird automatisch gekürzt",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "文中指出：'Es fällt manchen Beschäftigten schwer, nach Feierabend abzuschalten und Berufliches von Privatem klar zu trennen'."
+                "explanation_zh": "文中指出：'Es fällt manchen Beschäftigten schwer, nach Feierabend abzuschalten und Berufliches von Privatem klar zu trennen'.",
             }
-        ]
+        ],
     },
     {
         "id": "goethe_b1_kultur_07",
@@ -191,11 +220,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Was zeichnet das duale Ausbildungssystem besonders aus?",
-                "options": ["A. Reine Universitätstheorie ohne Betriebe", "B. Die Kombination aus Berufsschultheorie und betrieblicher Praxis", "C. Die Ausbildung ist immer unbezahlt"],
+                "options": [
+                    "A. Reine Universitätstheorie ohne Betriebe",
+                    "B. Die Kombination aus Berufsschultheorie und betrieblicher Praxis",
+                    "C. Die Ausbildung ist immer unbezahlt",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "第二句明确概括：'Auszubildende lernen dabei sowohl die theoretischen Grundlagen in der Berufsschule als auch die praktische Arbeit direkt im Betrieb'."
+                "explanation_zh": "第二句明确概括：'Auszubildende lernen dabei sowohl die theoretischen Grundlagen in der Berufsschule als auch die praktische Arbeit direkt im Betrieb'.",
             }
-        ]
+        ],
     },
     {
         "id": "goethe_b2_technik_08",
@@ -205,7 +238,13 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "source_exam": "Goethe-Zertifikat B2 Lesen Teil 1",
         "word_count": 240,
         "summary_zh": "分析人工智能与深度学习在医学影像诊断中的前沿应用、伦理责任与人机协同未来。",
-        "key_lexemes": ["die Diagnostik", "der Algorithmus", "die Früherkennung", "die Fehlerquote", "die Verantwortung"],
+        "key_lexemes": [
+            "die Diagnostik",
+            "der Algorithmus",
+            "die Früherkennung",
+            "die Fehlerquote",
+            "die Verantwortung",
+        ],
         "grammar_focus": ["Passiv_Ersatzformen_lassen", "Partizipialattribute", "Konjunktiv_2_Passiv"],
         "content": (
             "Der Einsatz von Algorithmen des maschinellen Lernens revolutioniert gegenwärtig die medizinische Bildgebung und Frühdiagnostik. "
@@ -217,11 +256,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Welche Rolle soll Künstliche Intelligenz laut Experten in der Medizin einnehmen?",
-                "options": ["A. Vollständiger Ersatz des medizinischen Personals", "B. Entlastendes Assistenzsystem unter ärztlicher Endverantwortung", "C. Reine Verwaltungssoftware ohne Bildanalyse"],
+                "options": [
+                    "A. Vollständiger Ersatz des medizinischen Personals",
+                    "B. Entlastendes Assistenzsystem unter ärztlicher Endverantwortung",
+                    "C. Reine Verwaltungssoftware ohne Bildanalyse",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "第四、五句指出：'Algorithmen die ärztliche Expertise keineswegs ersetzen, sondern vielmehr als entlastendes Assistenzsystem fungieren sollen. Die letztendliche Verantwortung verbleibt beim Mediziner'."
+                "explanation_zh": "第四、五句指出：'Algorithmen die ärztliche Expertise keineswegs ersetzen, sondern vielmehr als entlastendes Assistenzsystem fungieren sollen. Die letztendliche Verantwortung verbleibt beim Mediziner'.",
             }
-        ]
+        ],
     },
     {
         "id": "goethe_b2_umwelt_09",
@@ -231,7 +274,13 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "source_exam": "Goethe-Zertifikat B2 Lesen Teil 2",
         "word_count": 235,
         "summary_zh": "探讨德国能源转型目标，风能、光伏与电网储能设施扩建所面临的技术与社会挑战。",
-        "key_lexemes": ["die Energiewende", "erneuerbare Energien", "die Photovoltaik", "das Stromnetz", "der Klimaschutz"],
+        "key_lexemes": [
+            "die Energiewende",
+            "erneuerbare Energien",
+            "die Photovoltaik",
+            "das Stromnetz",
+            "der Klimaschutz",
+        ],
         "grammar_focus": ["Genitiv_Attribute", "Zustandspassiv", "Konzessivsätze_obgleich"],
         "content": (
             "Die Umstellung der nationalen Energieversorgung auf erneuerbare Quellen bildet das Herzstück der deutschen Klimaschutzstrategie. "
@@ -242,11 +291,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Warum ist der Ausbau des Übertragungsnetzes von Nord nach Süd so entscheidend?",
-                "options": ["A. Um den im Norden erzeugten Windstrom in den industriereichen Süden zu transportieren", "B. Weil der Süden keine Solarenergie nutzen kann", "C. Um Strom ausschließlich ins Ausland zu verkaufen"],
+                "options": [
+                    "A. Um den im Norden erzeugten Windstrom in den industriereichen Süden zu transportieren",
+                    "B. Weil der Süden keine Solarenergie nutzen kann",
+                    "C. Um Strom ausschließlich ins Ausland zu verkaufen",
+                ],
                 "answer_idx": 0,
-                "explanation_zh": "结合德国地理与风电布局背景，文中指出将北部风电经高压网输送至全国是实现 80% 绿色电力的关键前提。"
+                "explanation_zh": "结合德国地理与风电布局背景，文中指出将北部风电经高压网输送至全国是实现 80% 绿色电力的关键前提。",
             }
-        ]
+        ],
     },
     {
         "id": "testdaf_wissenschaft_10",
@@ -256,7 +309,13 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "source_exam": "TestDaF Leseverstehen Text 1",
         "word_count": 268,
         "summary_zh": "微塑料在海洋生态系统中的富集机制、食物链传导以及对海洋生物生理机能的影响。",
-        "key_lexemes": ["das Mikroplastik", "das Ökosystem", "die Nahrungskette", "die Partikel", "die Schadstoffbelastung"],
+        "key_lexemes": [
+            "das Mikroplastik",
+            "das Ökosystem",
+            "die Nahrungskette",
+            "die Partikel",
+            "die Schadstoffbelastung",
+        ],
         "grammar_focus": ["Erweiterte_Partizipien", "Substantivierte_Verben", "Passiv_mit_sein_zu"],
         "content": (
             "Die weltweite Kontamination der Meere durch mikroskopisch kleine Kunststoffpartikel, sogenanntes Mikroplastik, stellt eine erhebliche Bedrohung für marine Organismen dar. "
@@ -268,11 +327,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Wie entsteht das meiste Mikroplastik im Meer?",
-                "options": ["A. Es wird gezielt als Düngemittel ins Meer geschüttet", "B. Durch Zersetzung größerer Plastikteile unter UV-Licht und Wellenschlag", "C. Durch die Ausscheidungen mariner Lebewesen"],
+                "options": [
+                    "A. Es wird gezielt als Düngemittel ins Meer geschüttet",
+                    "B. Durch Zersetzung größerer Plastikteile unter UV-Licht und Wellenschlag",
+                    "C. Durch die Ausscheidungen mariner Lebewesen",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "第二句明确指出：'entstehen vorwiegend durch die Zersetzung größerer Plastikabfälle infolge von UV-Strahlung und Wellenbewegung'."
+                "explanation_zh": "第二句明确指出：'entstehen vorwiegend durch die Zersetzung größerer Plastikabfälle infolge von UV-Strahlung und Wellenbewegung'.",
             }
-        ]
+        ],
     },
     {
         "id": "testdaf_campus_11",
@@ -282,7 +345,13 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "source_exam": "TestDaF Leseverstehen Text 2",
         "word_count": 256,
         "summary_zh": "分析德国高校国际化战略、跨文化交流、全英语授课硕士项目与科研竞争力提升。",
-        "key_lexemes": ["die Internationalisierung", "der Studiengang", "die Sprachbarriere", "die Hochschullandschaft", "der Austausch"],
+        "key_lexemes": [
+            "die Internationalisierung",
+            "der Studiengang",
+            "die Sprachbarriere",
+            "die Hochschullandschaft",
+            "der Austausch",
+        ],
         "grammar_focus": ["Relativsatz_Genitiv", "N-Deklination", "Konjunktiv_1_indirekte_Rede"],
         "content": (
             "Deutsche Hochschulen erfreuen sich bei ausländischen Studierenden und Nachwuchswissenschaftlern weltweit wachsender Beliebtheit. "
@@ -293,11 +362,15 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Warum ist das Erlernen der deutschen Sprache trotz englischer Studiengänge wichtig?",
-                "options": ["A. Nur damit darf man die Universitätsbibliothek betreten", "B. Für die soziale Integration und den späteren Berufseinstieg in Deutschland", "C. Englisch ist an deutschen Universitäten offiziell verboten"],
+                "options": [
+                    "A. Nur damit darf man die Universitätsbibliothek betreten",
+                    "B. Für die soziale Integration und den späteren Berufseinstieg in Deutschland",
+                    "C. Englisch ist an deutschen Universitäten offiziell verboten",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "最后一句指出：'das frühzeitige Erlernen der deutschen Sprache für eine nachhaltige soziale Integration und den späteren Einstieg in den Arbeitsmarkt von entscheidender Bedeutung bleibt'."
+                "explanation_zh": "最后一句指出：'das frühzeitige Erlernen der deutschen Sprache für eine nachhaltige soziale Integration und den späteren Einstieg in den Arbeitsmarkt von entscheidender Bedeutung bleibt'.",
             }
-        ]
+        ],
     },
     {
         "id": "testdaf_wissenschaft_12",
@@ -307,7 +380,13 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "source_exam": "TestDaF Leseverstehen Text 3",
         "word_count": 275,
         "summary_zh": "介绍仿生学（Bionik）如何将自然界生物进化出的精妙结构（如荷叶效应、鲨鱼皮）转化为前沿工程技术。",
-        "key_lexemes": ["die Bionik", "die Evolution", "der Lotuseffekt", "die Selbstreinigung", "der Strömungswiderstand"],
+        "key_lexemes": [
+            "die Bionik",
+            "die Evolution",
+            "der Lotuseffekt",
+            "die Selbstreinigung",
+            "der Strömungswiderstand",
+        ],
         "grammar_focus": ["Passiv_Ersatzform_man", "Vergleichssätze_je_desto", "Konditionalsatz_ohne_wenn"],
         "content": (
             "Die Bionik verbindet Biologie und Technik mit dem Ziel, von der Natur entwickelte Prinzipien auf ingenieurwissenschaftliche Fragestellungen zu übertragen. "
@@ -319,12 +398,16 @@ OFFICIAL_CORPUS: List[Dict[str, Any]] = [
         "reading_questions": [
             {
                 "question": "Worauf basiert der selbstreinigende Lotuseffekt?",
-                "options": ["A. Auf einer speziellen chemischen Seife, die die Pflanze absondert", "B. Auf einer mikroskopischen Oberflächenstruktur, an der Wasser und Schmutz abperlen", "C. Auf elektrischer Ladung der Blätter"],
+                "options": [
+                    "A. Auf einer speziellen chemischen Seife, die die Pflanze absondert",
+                    "B. Auf einer mikroskopischen Oberflächenstruktur, an der Wasser und Schmutz abperlen",
+                    "C. Auf elektrischer Ladung der Blätter",
+                ],
                 "answer_idx": 1,
-                "explanation_zh": "第三句说明：'Die mikroskopische Oberflächenstruktur der Lotusblume sorgt dafür, dass Wassertropfen abperlen und Schmutzpartikel rückstandslos mitreißen'."
+                "explanation_zh": "第三句说明：'Die mikroskopische Oberflächenstruktur der Lotusblume sorgt dafür, dass Wassertropfen abperlen und Schmutzpartikel rückstandslos mitreißen'.",
             }
-        ]
-    }
+        ],
+    },
 ]
 
 
@@ -346,7 +429,7 @@ def get_corpus_list(cefr: Optional[str] = None, category: Optional[str] = None) 
             "summary_zh": item["summary_zh"],
             "key_lexemes": item["key_lexemes"],
             "grammar_focus": item.get("grammar_focus", []),
-            "question_count": len(item.get("reading_questions", []))
+            "question_count": len(item.get("reading_questions", [])),
         }
         results.append(meta)
     return results

@@ -3,6 +3,7 @@
 Contract and regression tests for Goethe-Zertifikat A1 Schreiben Workshop.
 Teil 1 (Formular-Training) + Teil 2 (30-Wort E-Mail & Brief Lab).
 """
+
 import os
 from pathlib import Path
 
@@ -82,12 +83,7 @@ def test_a1_email_analyzer_greeting_and_lowercase_start():
     assert report_good["has_valediction_comma_error"] is False
 
     # 错误写法：称呼后逗号，但正文首字母大写
-    bad_start_email = (
-        "Liebe Maria,\n"
-        "Ich lade dich zu meiner Party ein.\n"
-        "Viele Grüße\n"
-        "Anna"
-    )
+    bad_start_email = "Liebe Maria,\nIch lade dich zu meiner Party ein.\nViele Grüße\nAnna"
     report_bad_start = analyze_a1_email(bad_start_email, [])
     assert report_bad_start["has_lowercase_start_error"] is True
 
@@ -95,12 +91,7 @@ def test_a1_email_analyzer_greeting_and_lowercase_start():
 def test_a1_email_analyzer_valediction_and_comma_rule():
     """验证德语书信结尾祝福不得带逗号（德语与英语习惯不同）。"""
     # 德语书信结尾带逗号错误
-    bad_comma_email = (
-        "Lieber Max,\n"
-        "wie geht es dir? Ich komme morgen um 15 Uhr.\n"
-        "Viele Grüße,\n"
-        "Thomas"
-    )
+    bad_comma_email = "Lieber Max,\nwie geht es dir? Ich komme morgen um 15 Uhr.\nViele Grüße,\nThomas"
     report = analyze_a1_email(bad_comma_email, [])
     assert report["has_valediction_comma_error"] is True
     assert report["valediction"]["valid"] is True
@@ -133,10 +124,7 @@ def test_a1_email_analyzer_word_count_and_leitpunkte():
         "Mit freundlichen Grüßen\n"
         "Li Wei"
     )
-    rep_perfect = analyze_a1_email(
-        perfect_text,
-        ["nicht kommen", "warum / krank", "Hausaufgaben"]
-    )
+    rep_perfect = analyze_a1_email(perfect_text, ["nicht kommen", "warum / krank", "Hausaufgaben"])
     assert 25 <= rep_perfect["word_count"] <= 40
     assert rep_perfect["word_count_status"] == "optimal"
     assert rep_perfect["leitpunkte_matches"] >= 2
@@ -155,12 +143,7 @@ def test_api_a1_schreiben_teil1_endpoints():
     first_ex = data[0]
 
     # POST 提交判分
-    payload = {
-        "exercise_id": first_ex["id"],
-        "answers": {
-            fld["key"]: fld["answer"] for fld in first_ex["fields"]
-        }
-    }
+    payload = {"exercise_id": first_ex["id"], "answers": {fld["key"]: fld["answer"] for fld in first_ex["fields"]}}
     check_res = client.post("/api/a1/schreiben/teil1/check", json=payload)
     assert check_res.status_code == 200
     check_data = check_res.json()
@@ -189,7 +172,7 @@ def test_api_a1_schreiben_teil2_endpoints():
             "Herzliche Grüße\n"
             "Lin"
         ),
-        "leitpunkte": ["Bedanken", "Zusagen", "Was mitbringen"]
+        "leitpunkte": ["Bedanken", "Zusagen", "Was mitbringen"],
     }
     diag_res = client.post("/api/a1/schreiben/teil2/diagnose", json=payload)
     assert diag_res.status_code == 200
@@ -226,6 +209,7 @@ def _m5_isolated_db_teardown():
     yield
     import gc
     import os as _os
+
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

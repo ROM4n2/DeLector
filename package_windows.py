@@ -3,21 +3,23 @@
 DeLector - Windows Portable Packager
 Builds a standalone, zero-dependency Windows portable distribution.
 """
+
 import os
 import shutil
 import subprocess
 import sys
 
-if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
     try:
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+
 
 def build_windows():
     version = os.environ.get("GITHUB_REF_NAME", "v3.8.0")
@@ -39,7 +41,9 @@ def build_windows():
 
     # 2. Build PyInstaller command
     pyinstaller_cmd = [
-        sys.executable, "-m", "PyInstaller",
+        sys.executable,
+        "-m",
+        "PyInstaller",
         "--name=DeLector",
         "--onedir",
         "--noconfirm",
@@ -86,7 +90,7 @@ def build_windows():
         "--hidden-import=httpx",
         "--collect-all=de_core_news_sm",
         "--collect-all=spacy",
-        os.path.join(root_dir, "start.py")
+        os.path.join(root_dir, "start.py"),
     ]
 
     print("\n[1/3] 正在编译二进制可执行程序并收集依赖与 spaCy 语言模型...")
@@ -126,6 +130,7 @@ def build_windows():
     print(f"发布包目录: {release_dir}")
     print(f"可执行程序: {os.path.join(release_dir, 'DeLector.exe')}")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     build_windows()

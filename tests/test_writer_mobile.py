@@ -32,12 +32,11 @@ def _rule_body(selector_regex, must_contain=None):
             elif STYLE[j] == "}":
                 depth -= 1
             j += 1
-        body = STYLE[m.end():j - 1]
+        body = STYLE[m.end() : j - 1]
         if must_contain is None or must_contain in body:
             return body
     raise AssertionError(
-        f"CSS 里找不到匹配 {selector_regex} 的规则"
-        + (f"（且规则体含 {must_contain!r}）" if must_contain else "")
+        f"CSS 里找不到匹配 {selector_regex} 的规则" + (f"（且规则体含 {must_contain!r}）" if must_contain else "")
     )
 
 
@@ -100,9 +99,7 @@ def test_version_is_consistent_across_release_surfaces():
     # 而 build.gradle 已走到别处 —— 副本漂了不会构建失败，只会产出 versionCode
     # 偏小、装不上现有设备的 APK（versionCode 必须严格递增）。
     workflow = (ROOT / ".github" / "workflows" / "build-release.yml").read_text(encoding="utf-8")
-    assert not re.search(r'VER="\d+\.\d+\.\d+"', workflow), (
-        "build-release.yml 又硬编码了版本号，应从 build.gradle 读取"
-    )
+    assert not re.search(r'VER="\d+\.\d+\.\d+"', workflow), "build-release.yml 又硬编码了版本号，应从 build.gradle 读取"
     assert "DELECTOR_VERSION_NAME" in workflow and "android/app/build.gradle" in workflow, (
         "build-release.yml 的回落路径应解析 build.gradle 的 fallback"
     )
@@ -125,9 +122,7 @@ def test_readme_download_table_points_at_current_version():
 
     badge = re.search(r"badge/Release-v(\d+\.\d+\.\d+)-", README)
     assert badge, "README 顶部找不到 Release badge"
-    assert badge.group(1) == version, (
-        f"版本不一致：README badge={badge.group(1)} vs build.gradle={version}"
-    )
+    assert badge.group(1) == version, f"版本不一致：README badge={badge.group(1)} vs build.gradle={version}"
 
     # 逐行取下载表：每行同时含「版本单元格」与「releases/tag 链接」，两者都要对。
     # 只断言「没有旧版本链接」是不够的 —— 表整个被删掉也能过。
@@ -139,13 +134,9 @@ def test_readme_download_table_points_at_current_version():
     for row in rows:
         cell = re.search(r"`v(\d+\.\d+\.\d+)`", row)
         assert cell, "下载表某行缺少 `vX.Y.Z` 版本单元格：%s" % row[:60]
-        assert cell.group(1) == version, (
-            f"下载表版本单元格={cell.group(1)} vs build.gradle={version}：{row[:60]}"
-        )
+        assert cell.group(1) == version, f"下载表版本单元格={cell.group(1)} vs build.gradle={version}：{row[:60]}"
         link = re.search(r"releases/tag/v(\d+\.\d+\.\d+)", row)
-        assert link.group(1) == version, (
-            f"下载链接={link.group(1)} vs build.gradle={version}：{row[:60]}"
-        )
+        assert link.group(1) == version, f"下载链接={link.group(1)} vs build.gradle={version}：{row[:60]}"
 
 
 def test_android_reunpacks_static_assets_on_version_change():
@@ -181,7 +172,7 @@ def _main_activity_code():
     while i < n:
         c = src[i]
         nxt = src[i + 1] if i + 1 < n else ""
-        if c == '"':                      # 字符串字面量：原样保留，内部 /* // 不算注释
+        if c == '"':  # 字符串字面量：原样保留，内部 /* // 不算注释
             out.append(c)
             i += 1
             while i < n:
@@ -196,7 +187,7 @@ def _main_activity_code():
                     break
                 i += 1
             continue
-        if c == "'":                      # 字符字面量
+        if c == "'":  # 字符字面量
             out.append(c)
             i += 1
             while i < n:
@@ -211,12 +202,12 @@ def _main_activity_code():
                     break
                 i += 1
             continue
-        if c == "/" and nxt == "/":       # 行注释
+        if c == "/" and nxt == "/":  # 行注释
             i += 2
             while i < n and src[i] != "\n":
                 i += 1
             continue
-        if c == "/" and nxt == "*":       # 块注释
+        if c == "/" and nxt == "*":  # 块注释
             i += 2
             while i < n and not (src[i] == "*" and i + 1 < n and src[i + 1] == "/"):
                 i += 1
@@ -236,17 +227,15 @@ def test_android_export_does_not_use_download_manager():
     """
     code = _main_activity_code()
     assert "DownloadManager" not in code, (
-        "MainActivity 又用上了 DownloadManager：它在 Android 16 上会同步抛异常，"
-        "落盘请走 ExportSaver"
+        "MainActivity 又用上了 DownloadManager：它在 Android 16 上会同步抛异常，落盘请走 ExportSaver"
     )
     assert "ExportSaver.start" in code, "下载回调必须委托给 ExportSaver"
 
     saver = (
-        ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app"
-        / "ExportSaver.java"
+        ROOT / "android" / "app" / "src" / "main" / "java" / "org" / "delector" / "app" / "ExportSaver.java"
     ).read_text(encoding="utf-8")
     # 内容自检：token 失效/过期时服务端返回的是 FastAPI 的错误 JSON
-    #（形如 {"detail": "..."}），不校验就会被毫不知情地存成「备份」且全程无报错。
+    # （形如 {"detail": "..."}），不校验就会被毫不知情地存成「备份」且全程无报错。
     # Java 源码里字符串内的双引号转义为 \"，故匹配转义形式。
     assert '\\"detail\\"' in saver
     assert "checkContent" in saver
@@ -332,9 +321,7 @@ def test_mobile_sheet_is_geometrically_stable():
     # 笨办法：找出所有 ".writer-sidebar {" 的位置，挑后面紧跟
     # "position: fixed" 的那个，然后按括号深度读到匹配的 }。
     sidebar_idxs = [m.end() for m in re.finditer(r"\.writer-sidebar\s*\{", STYLE)]
-    fixed_idx = next(
-        i for i in sidebar_idxs if "position: fixed" in STYLE[i:i + 300]
-    )
+    fixed_idx = next(i for i in sidebar_idxs if "position: fixed" in STYLE[i : i + 300])
     depth = 1
     j = fixed_idx
     while depth and j < len(STYLE):
@@ -344,14 +331,10 @@ def test_mobile_sheet_is_geometrically_stable():
         elif c == "}":
             depth -= 1
         j += 1
-    sheet = STYLE[fixed_idx:j - 1]
+    sheet = STYLE[fixed_idx : j - 1]
 
-    assert "height: min(" in sheet, (
-        "移动端 sheet 必须用 height 固定几何，不能让高度跟内容走（会整块跳）"
-    )
-    assert "max-height: none" in sheet, (
-        "sheet 必须显式解掉基规则的 max-height 帽子，让这个断点的几何自我描述完整"
-    )
+    assert "height: min(" in sheet, "移动端 sheet 必须用 height 固定几何，不能让高度跟内容走（会整块跳）"
+    assert "max-height: none" in sheet, "sheet 必须显式解掉基规则的 max-height 帽子，让这个断点的几何自我描述完整"
     assert "overflow-y: auto" in sheet, "sheet 自身必须能滚动"
 
     # 关键：移动端 sheet 的 .writer-pane 不能被父容器压扁
@@ -365,7 +348,7 @@ def _mobile_writer_sidebar_block():
     与 test_mobile_sheet_is_geometrically_stable 同款选择：多个匹配里挑
     紧跟 'position: fixed' 的那条（移动 fixed 块），不要桌面基规则。"""
     idxs = [m.end() for m in re.finditer(r"\.writer-sidebar\s*\{", STYLE)]
-    fixed = next(i for i in idxs if "position: fixed" in STYLE[i:i + 300])
+    fixed = next(i for i in idxs if "position: fixed" in STYLE[i : i + 300])
     depth, j = 1, fixed
     while depth and j < len(STYLE):
         c = STYLE[j]
@@ -374,7 +357,7 @@ def _mobile_writer_sidebar_block():
         elif c == "}":
             depth -= 1
         j += 1
-    return STYLE[fixed:j - 1]
+    return STYLE[fixed : j - 1]
 
 
 def test_mobile_sheet_closed_state_clears_viewport():
@@ -394,15 +377,11 @@ def test_mobile_sheet_closed_state_clears_viewport():
         "之前的 4.75rem + safe-area 偏移与 100% 平移错开，留了 60px 条带"
         "挡住移动 dock、tab 看着能点但 panes 在屏外。"
     )
-    assert "transform: translateY(100%)" in sheet, (
-        "闭包平移距离必须等于自身高度（100%），保证闭包完全离屏。"
-    )
+    assert "transform: translateY(100%)" in sheet, "闭包平移距离必须等于自身高度（100%），保证闭包完全离屏。"
     assert "translateY(calc(100% + 1rem))" not in sheet, (
         "旧的「100% + 1rem」错开距离已重新引入 60px 闭包条带，回滚到 bug 状态。"
     )
-    assert "bottom: calc(4.75rem" not in sheet, (
-        "旧的 4.75rem 偏移已重新引入 60px 闭包条带，回滚到 bug 状态。"
-    )
+    assert "bottom: calc(4.75rem" not in sheet, "旧的 4.75rem 偏移已重新引入 60px 闭包条带，回滚到 bug 状态。"
 
 
 def test_mobile_sheet_pads_above_dock_when_open():
@@ -418,8 +397,7 @@ def test_mobile_sheet_pads_above_dock_when_open():
     pb = re.search(r"padding-bottom:\s*([^;]+);", sheet)
     assert pb, "sheet 必须显式 padding-bottom 留出 dock 高度，否则展开时 dock 整条被压住"
     assert "58px" in pb.group(1), (
-        f"padding-bottom 必须含 58px（移动 dock 高度，style.css:5185）；"
-        f"实际拿到：{pb.group(1)!r}"
+        f"padding-bottom 必须含 58px（移动 dock 高度，style.css:5185）；实际拿到：{pb.group(1)!r}"
     )
 
 
@@ -491,7 +469,7 @@ def test_no_nav_or_action_button_uses_btn_secondary():
     for emoji, onclick, why in patterns:
         # 找最近的 <button ...>...emoji...</button> 块（中间允许 <span> 包裹）
         block = re.search(
-            rf'<button([^>]*?)>(?:[^<]|<(?!/?button\s*>))*?{re.escape(emoji)}(?:[^<]|<(?!/?button\s*>))*?</button>',
+            rf"<button([^>]*?)>(?:[^<]|<(?!/?button\s*>))*?{re.escape(emoji)}(?:[^<]|<(?!/?button\s*>))*?</button>",
             INDEX,
         )
         assert block, f"index.html 找不到含 {emoji!r} 的 <button> 块"
@@ -531,12 +509,8 @@ def test_desktop_sidebar_is_internally_scrollable_when_tall():
     # 滚动只有一个主人：内层三个列表不许再各开一个滚动区
     for sel in ("writer-sent-nav-list", "writer-problem-list", "writer-version-list"):
         body = _rule_body(rf"\.{sel}\s*\{{")
-        assert "max-height" not in body, (
-            f".{sel} 不能有 max-height 帽 —— 内层吃掉滚动后外层 sidebar 底部滚不到"
-        )
-        assert "overflow-y" not in body, (
-            f".{sel} 不能自己开滚动区，滚动归 .writer-sidebar 一个人管"
-        )
+        assert "max-height" not in body, f".{sel} 不能有 max-height 帽 —— 内层吃掉滚动后外层 sidebar 底部滚不到"
+        assert "overflow-y" not in body, f".{sel} 不能自己开滚动区，滚动归 .writer-sidebar 一个人管"
 
 
 def test_writer_rows_have_active_press_feedback():
@@ -549,16 +523,12 @@ def test_writer_rows_have_active_press_feedback():
         ("version-item", "var(--paper-deep)"),
     ):
         body = _rule_body(rf"\.{sel}:active\s*\{{")
-        assert "background" in body and expected in body, (
-            f".{sel}:active 必须给出可见的按压背景（期望含 {expected}）"
-        )
+        assert "background" in body and expected in body, f".{sel}:active 必须给出可见的按压背景（期望含 {expected}）"
 
     # 安卓 WebView 自带的灰色点击高亮会和自定义按压色叠着闪一下。
     # 必须钉在这三行的并集规则上：全文搜 "in STYLE" 是不够的 —— 文件里另有
     # 一处无关规则也清了 tap-highlight，删掉这条并集规则测试照样绿（已实测）。
-    union = _rule_body(
-        r"\.writer-nav-item,\s*\.writer-problem-row,\s*\.version-item\s*\{"
-    )
+    union = _rule_body(r"\.writer-nav-item,\s*\.writer-problem-row,\s*\.version-item\s*\{")
     assert "-webkit-tap-highlight-color: transparent" in union, (
         "三行需要清掉系统点击高亮，否则和自定义 :active 背景叠加"
     )
@@ -566,11 +536,8 @@ def test_writer_rows_have_active_press_feedback():
     # .version-item:active 与 .version-item.version-checkpoint 特异性相同（同为两个类的量级），
     # 同分时源序决定胜负。写在 checkpoint 之前的话，checkpoint 行按下去不会有任何反馈 ——
     # 而那恰恰是最常被点的一批行。
-    assert STYLE.index(".version-item:active") > STYLE.index(
-        ".version-item.version-checkpoint"
-    ), (
-        ".version-item:active 必须排在 .version-item.version-checkpoint 之后，"
-        "否则 checkpoint 行没有按压反馈"
+    assert STYLE.index(".version-item:active") > STYLE.index(".version-item.version-checkpoint"), (
+        ".version-item:active 必须排在 .version-item.version-checkpoint 之后，否则 checkpoint 行没有按压反馈"
     )
 
 
@@ -596,8 +563,7 @@ def test_no_undefined_css_variables_in_writer_surfaces():
     # 欠账修完后要记得把条目从上面删掉，否则这个集合会慢慢变成一张"永久豁免"名单
     still_missing = KNOWN_LEGACY_UNDEFINED - declared
     assert still_missing == KNOWN_LEGACY_UNDEFINED, (
-        f"这些历史欠账已经修好了，请从 KNOWN_LEGACY_UNDEFINED 里删掉："
-        f"{sorted(KNOWN_LEGACY_UNDEFINED - still_missing)}"
+        f"这些历史欠账已经修好了，请从 KNOWN_LEGACY_UNDEFINED 里删掉：{sorted(KNOWN_LEGACY_UNDEFINED - still_missing)}"
     )
 
 
@@ -679,12 +645,10 @@ def test_btn_secondary_is_visibly_different_from_btn_ghost():
 
     所以这里断言的不是某个具体配色，而是**两者的声明必须不同**。
     """
+
     def declarations(selector):
         body = _rule_body(rf"{selector}\s*\{{")
-        return {
-            (m.group(1).strip(), m.group(2).strip())
-            for m in re.finditer(r"([\w-]+)\s*:\s*([^;]+);", body)
-        }
+        return {(m.group(1).strip(), m.group(2).strip()) for m in re.finditer(r"([\w-]+)\s*:\s*([^;]+);", body)}
 
     ghost, secondary = declarations(r"\.btn-ghost"), declarations(r"\.btn-secondary")
     assert ghost and secondary, "两条规则都得存在，否则下面的比较没有意义"
@@ -711,12 +675,9 @@ def test_destructive_surfaces_use_the_danger_token():
     --cherry 仍然合法 —— 但只用于答错/错误反馈（cloze.js:40、main.js:205,253
     的报错文字就该留着用它），不用于破坏性操作。
     """
-    for selector in (r"\.btn-del", r"\.btn-del:hover", r"\.card-del-btn:hover",
-                     r"\.article-row-del:hover"):
+    for selector in (r"\.btn-del", r"\.btn-del:hover", r"\.card-del-btn:hover", r"\.article-row-del:hover"):
         body = _rule_body(rf"{selector}\s*\{{")
-        assert "var(--cherry)" not in body, (
-            f"{selector} 用了 --cherry；破坏性操作应该用 --danger"
-        )
+        assert "var(--cherry)" not in body, f"{selector} 用了 --cherry；破坏性操作应该用 --danger"
         assert not re.search(r"#dc2626|#fde8e8|rgba\(220,\s*38,\s*38", body), (
             f"{selector} 里还有写死的红色字面量，应该走 --danger"
         )
@@ -724,15 +685,12 @@ def test_destructive_surfaces_use_the_danger_token():
     # 至少 .btn-del 与 .card-del-btn 要真的引用 token（article-row-del 用
     # rgba() 调透明度，无法直接套 var()，只断言它不再是另一种红）
     for selector in (r"\.btn-del", r"\.card-del-btn:hover"):
-        assert "var(--danger)" in _rule_body(rf"{selector}\s*\{{"), \
-            f"{selector} 应该引用 --danger"
+        assert "var(--danger)" in _rule_body(rf"{selector}\s*\{{"), f"{selector} 应该引用 --danger"
 
     # 删除按钮的红不该再靠 inline style 挂在 HTML 上 —— 那样既绕过 token
     # 体系又没有 hover 态（index.html:684 的删便签键原先就是这样）
     for m in re.finditer(r'<button[^>]*style="[^"]*var\(--cherry\)[^"]*"[^>]*>', INDEX):
-        assert "del" not in m.group(0), (
-            f"删除按钮还在用 inline 的 --cherry，应该改挂 .btn-del 类：{m.group(0)[:120]}"
-        )
+        assert "del" not in m.group(0), f"删除按钮还在用 inline 的 --cherry，应该改挂 .btn-del 类：{m.group(0)[:120]}"
 
 
 def test_no_rule_is_fully_shadowed_by_btn_xs_important():
@@ -746,11 +704,7 @@ def test_no_rule_is_fully_shadowed_by_btn_xs_important():
     这里检查所有与 .btn-xs 同时出现在 class 里的伴生类，其声明不能被
     .btn-xs 的 !important 属性集完全覆盖。
     """
-    xs_important = {
-        m.group(1)
-        for m in re.finditer(r"([\w-]+)\s*:[^;]*!important\s*;",
-                             _rule_body(r"\.btn-xs\s*\{"))
-    }
+    xs_important = {m.group(1) for m in re.finditer(r"([\w-]+)\s*:[^;]*!important\s*;", _rule_body(r"\.btn-xs\s*\{"))}
     assert xs_important, ".btn-xs 里没有 !important 声明，本测试的前提变了"
 
     companions = set()
@@ -758,17 +712,13 @@ def test_no_rule_is_fully_shadowed_by_btn_xs_important():
         for attr in re.findall(r'class="([^"]*)"', src):
             classes = attr.split()
             if "btn-xs" in classes:
-                companions.update(c for c in classes
-                                  if c not in {"btn", "btn-xs"} and not c.startswith("btn-"))
+                companions.update(c for c in classes if c not in {"btn", "btn-xs"} and not c.startswith("btn-"))
 
     bare = _style_without_comments()
     for cls in sorted(companions):
         if not re.search(rf"^\.{re.escape(cls)}\s*\{{", bare, re.M):
-            continue                                  # 没有规则，谈不上被盖
-        props = {
-            m.group(1)
-            for m in re.finditer(r"([\w-]+)\s*:", _rule_body(rf"\.{re.escape(cls)}\s*\{{"))
-        }
+            continue  # 没有规则，谈不上被盖
+        props = {m.group(1) for m in re.finditer(r"([\w-]+)\s*:", _rule_body(rf"\.{re.escape(cls)}\s*\{{"))}
         assert not (props and props <= xs_important), (
             f".{cls} 的全部声明 {sorted(props)} 都被 .btn-xs 的 !important 盖掉了，"
             f"整条规则不生效。要么删掉，要么给需要生效的那几项加 !important"

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """数据库连接、初始化、CRUD、配置存储、音频缓存管理与备份还原底层。"""
+
 import html as _html
 import json
 import logging
@@ -161,15 +162,17 @@ def init_progress_db(db_path: Optional[str] = None):
 
 
 def log_study_event(
-    event_type: str, ref_id: Optional[int] = None, note: str = "",
-    minutes: int = 0, db_path: Optional[str] = None,
+    event_type: str,
+    ref_id: Optional[int] = None,
+    note: str = "",
+    minutes: int = 0,
+    db_path: Optional[str] = None,
 ):
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         with db_progress_conn(db_path) as conn:
             conn.execute(
-                "INSERT INTO study_log (event_type, ref_id, note) VALUES (?, ?, ?)",
-                (event_type, ref_id, note)
+                "INSERT INTO study_log (event_type, ref_id, note) VALUES (?, ?, ?)", (event_type, ref_id, note)
             )
             conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
             if event_type == "add_card":
@@ -364,7 +367,7 @@ def init_db(db_path: Optional[str] = None):
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN correct_count INTEGER DEFAULT 0")
             if "wrong_count" not in cols:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN wrong_count INTEGER DEFAULT 0")
-            today_init = datetime.now().strftime('%Y-%m-%d')
+            today_init = datetime.now().strftime("%Y-%m-%d")
             if "due_date" not in cols:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN due_date TEXT DEFAULT '{today_init}'")
             if "interval_days" not in cols:
@@ -401,11 +404,14 @@ def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> s
 
 def set_setting(key: str, value: str, db_path: Optional[str] = None):
     with db_conn(db_path) as conn:
-        conn.execute("""
+        conn.execute(
+            """
             INSERT INTO app_settings (key, value, updated_at)
             VALUES (?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-        """, (key, value))
+        """,
+            (key, value),
+        )
 
 
 def _close_db_conn(conn):
@@ -458,9 +464,7 @@ def get_wb_state(db_path: Optional[str] = None) -> dict:
     """读 workbench 背词进度 server 镜像；无记录或解析失败一律返回 {}。"""
     conn = get_db(db_path)
     try:
-        row = conn.execute(
-            "SELECT payload FROM wb_state WHERE id = 1"
-        ).fetchone()
+        row = conn.execute("SELECT payload FROM wb_state WHERE id = 1").fetchone()
     finally:
         _close_db_conn(conn)
     if not row:
@@ -479,13 +483,16 @@ def save_wb_state(payload: dict, db_path: Optional[str] = None) -> str:
     conn = get_db(db_path)
     try:
         with conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO wb_state (id, payload, updated_at)
                 VALUES (1, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     payload = excluded.payload,
                     updated_at = excluded.updated_at
-            """, (text, updated_at))
+            """,
+                (text, updated_at),
+            )
     finally:
         _close_db_conn(conn)
     return updated_at
@@ -501,9 +508,7 @@ def list_encounter_texts(level: Optional[str] = None, db_path: Optional[str] = N
                 (level,),
             ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT * FROM encounter_texts ORDER BY id DESC"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM encounter_texts ORDER BY id DESC").fetchall()
         return [dict(r) for r in rows]
 
 
@@ -511,23 +516,25 @@ def get_encounter_text(text_id: int, db_path: Optional[str] = None) -> Optional[
     """按 id 取单篇短文；不存在返回 None。"""
     target_path = get_db_path(db_path)
     with db_conn(target_path) as conn:
-        row = conn.execute(
-            "SELECT * FROM encounter_texts WHERE id = ?", (text_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM encounter_texts WHERE id = ?", (text_id,)).fetchone()
         return dict(row) if row else None
 
 
-def create_encounter_text(title: str, level: str, source: str, content: str,
-                          pack_id: Optional[str] = None, pack_json: Optional[str] = None,
-                          db_path: Optional[str] = None) -> int:
+def create_encounter_text(
+    title: str,
+    level: str,
+    source: str,
+    content: str,
+    pack_id: Optional[str] = None,
+    pack_json: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> int:
     """手工/导入新增一篇短文，返回新行自增 id。"""
     target_path = get_db_path(db_path)
     with db_conn(target_path) as conn:
         cur = conn.execute(
-            "INSERT INTO encounter_texts (title, level, source, content, pack_id, pack_json) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (title or "", level or "A2", source or "", content or "",
-             pack_id, pack_json),
+            "INSERT INTO encounter_texts (title, level, source, content, pack_id, pack_json) VALUES (?, ?, ?, ?, ?, ?)",
+            (title or "", level or "A2", source or "", content or "", pack_id, pack_json),
         )
         return cur.lastrowid
 
@@ -546,25 +553,25 @@ def import_encounter_pack(pack: dict, db_path: Optional[str] = None) -> int:
     if article is None or not isinstance(article, dict):
         missing.append("article")
     if missing:
-        raise ValueError(
-            "import_encounter_pack: 缺少必需键 " + ", ".join(sorted(set(missing)))
-        )
+        raise ValueError("import_encounter_pack: 缺少必需键 " + ", ".join(sorted(set(missing))))
     if not article.get("title") or not article.get("raw_text"):
         raise ValueError("import_encounter_pack: article 需含 title 与 raw_text")
 
     target_path = get_db_path(db_path)
     pack_id = pack["pack_id"]
     with db_conn(target_path) as conn:
-        existing = conn.execute(
-            "SELECT id FROM encounter_texts WHERE pack_id = ?", (pack_id,)
-        ).fetchone()
+        existing = conn.execute("SELECT id FROM encounter_texts WHERE pack_id = ?", (pack_id,)).fetchone()
         if existing:
             return existing["id"]
         cur = conn.execute(
-            "INSERT INTO encounter_texts (pack_id, title, level, content, pack_json) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (pack_id, article["title"], pack.get("estimated_cefr") or "A2",
-             article["raw_text"], json.dumps(pack, ensure_ascii=False)),
+            "INSERT INTO encounter_texts (pack_id, title, level, content, pack_json) VALUES (?, ?, ?, ?, ?)",
+            (
+                pack_id,
+                article["title"],
+                pack.get("estimated_cefr") or "A2",
+                article["raw_text"],
+                json.dumps(pack, ensure_ascii=False),
+            ),
         )
         return cur.lastrowid
 
@@ -623,7 +630,7 @@ PRESET_ARTICLES = [
             "Deutsch an einer Sprachschule. Jeden Morgen trinke ich einen Kaffee, esse ein Brötchen "
             "und fahre mit der U-Bahn zum Deutschkurs. Der Unterricht macht viel Spaß. Am Nachmittag "
             "gehe ich in den Supermarkt und kaufe frisches Obst und Brot."
-        )
+        ),
     },
     {
         "title": "【A2 进阶篇】Eine Reise nach München: Hotel und Freizeit",
@@ -632,7 +639,7 @@ PRESET_ARTICLES = [
             "Zimmer im Stadtzentrum reserviert. Das Wetter war sehr schön, deshalb habe ich den "
             "ganzen Nachmittag im Englischen Garten verbracht. Am Abend habe ich typische bayerische "
             "Spezialitäten in einem traditionellen Restaurant probiert."
-        )
+        ),
     },
     {
         "title": "【B1 提升篇】Klimaschutz im Alltag: Was jeder tun kann",
@@ -641,7 +648,7 @@ PRESET_ARTICLES = [
             "fragen sich, wie sie im Alltag einen Beitrag zum Umweltschutz leisten können. Experten "
             "empfehlen, öfter auf das Fahrrad umzusteigen und Energie im Haushalt zu sparen. Eine "
             "bewusste Ernährung mit regionalen Lebensmitteln spielt ebenfalls eine wichtige Rolle."
-        )
+        ),
     },
     {
         "title": "【B2 高级篇】Die Transformation der modernen Arbeitswelt: Homeoffice",
@@ -651,8 +658,8 @@ PRESET_ARTICLES = [
             "Verfügung. Obwohl das Arbeiten von zu Hause aus die Vereinbarkeit von Beruf und Familie "
             "erleichtert, stehen viele Beschäftigte vor der Herausforderung, klare Grenzen zwischen "
             "Arbeit und Freizeit zu ziehen."
-        )
-    }
+        ),
+    },
 ]
 
 
@@ -660,8 +667,10 @@ def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_
     processed = process_german_text(text)
     target_path = get_db_path(db_path)
     with db_conn(target_path) as conn:
-        cur = conn.execute("INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
-                           (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""))
+        cur = conn.execute(
+            "INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
+            (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""),
+        )
         return cur.lastrowid
 
 
@@ -717,49 +726,61 @@ def seed_preset_encounter_texts(db_path: Optional[str] = None) -> int:
             failed += 1
             logging.error(
                 "seed_preset_encounter_texts: 预置包导入失败 pack_id=%r: %r",
-                (pack or {}).get("pack_id"), exc,
+                (pack or {}).get("pack_id"),
+                exc,
             )
     if failed:
         logging.error(
             "seed_preset_encounter_texts: %d/%d 预置包导入失败（成功 %d）",
-            failed, len(PRESET_ENCOUNTER_PACKS), imported,
+            failed,
+            len(PRESET_ENCOUNTER_PACKS),
+            imported,
         )
     return imported
 
 
 VOCAB_MODEL = genanki.Model(
-    1607392319, 'DeLector Vocab',
-    fields=[{'name': 'Front'}, {'name': 'Word'}, {'name': 'Lemma'}, {'name': 'Meta'}, {'name': 'Definition'}],
-    templates=[{
-        'name': 'Card',
-        'qfmt': '<div style="font-family:sans-serif;font-size:20px;padding:20px;">{{Front}}</div>',
-        'afmt': (
-            '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;'
-            'color:#1e293b;"><b>{{Definition}}</b><br><span style="color:#64748b;font-size:14px;">'
-            '{{Lemma}} ({{Meta}})</span></div>'
-        )
-    }]
+    1607392319,
+    "DeLector Vocab",
+    fields=[{"name": "Front"}, {"name": "Word"}, {"name": "Lemma"}, {"name": "Meta"}, {"name": "Definition"}],
+    templates=[
+        {
+            "name": "Card",
+            "qfmt": '<div style="font-family:sans-serif;font-size:20px;padding:20px;">{{Front}}</div>',
+            "afmt": (
+                '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;'
+                'color:#1e293b;"><b>{{Definition}}</b><br><span style="color:#64748b;font-size:14px;">'
+                "{{Lemma}} ({{Meta}})</span></div>"
+            ),
+        }
+    ],
 )
 
 GRAMMAR_MODEL = genanki.Model(
-    1607392320, 'DeLector Goethe Grammar',
+    1607392320,
+    "DeLector Goethe Grammar",
     fields=[
-        {'name': 'Sentence'}, {'name': 'GrammarName'}, {'name': 'CEFR'},
-        {'name': 'Explanation'}, {'name': 'Formula'},
+        {"name": "Sentence"},
+        {"name": "GrammarName"},
+        {"name": "CEFR"},
+        {"name": "Explanation"},
+        {"name": "Formula"},
     ],
-    templates=[{
-        'name': 'Card',
-        'qfmt': (
-            '<div style="font-family:sans-serif;font-size:20px;padding:20px;">'
-            '<span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:99px;'
-            'font-size:12px;">Goethe {{CEFR}}</span><br><br>{{Sentence}}</div>'
-        ),
-        'afmt': (
-            '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;">'
-            '<b>{{GrammarName}}</b><br><code style="background:#f1f5f9;color:#0369a1;'
-            'padding:4px 8px;">{{Formula}}</code><p style="color:#334155;">{{Explanation}}</p></div>'
-        )
-    }]
+    templates=[
+        {
+            "name": "Card",
+            "qfmt": (
+                '<div style="font-family:sans-serif;font-size:20px;padding:20px;">'
+                '<span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:99px;'
+                'font-size:12px;">Goethe {{CEFR}}</span><br><br>{{Sentence}}</div>'
+            ),
+            "afmt": (
+                '{{FrontSide}}<hr><div style="font-family:sans-serif;font-size:18px;padding:20px;">'
+                '<b>{{GrammarName}}</b><br><code style="background:#f1f5f9;color:#0369a1;'
+                'padding:4px 8px;">{{Formula}}</code><p style="color:#334155;">{{Explanation}}</p></div>'
+            ),
+        }
+    ],
 )
 
 
@@ -777,19 +798,31 @@ def _vocab_anki_note(r) -> genanki.Note:
     word = _anki_esc(r["word"])
     sentence = _anki_esc(r["sentence_context"])
     styled_front = sentence.replace(word, f'<b style="color:#2563eb;">{word}</b>')
-    meta = f'{_anki_esc(r["pos"])} · {_anki_esc(r["gender"] or "")} · {_anki_esc(r["cefr_level"])}'
-    return genanki.Note(model=VOCAB_MODEL, fields=[
-        styled_front, word, _anki_esc(r["lemma"]), meta, _anki_esc(r["definition_zh"]),
-    ])
+    meta = f"{_anki_esc(r['pos'])} · {_anki_esc(r['gender'] or '')} · {_anki_esc(r['cefr_level'])}"
+    return genanki.Note(
+        model=VOCAB_MODEL,
+        fields=[
+            styled_front,
+            word,
+            _anki_esc(r["lemma"]),
+            meta,
+            _anki_esc(r["definition_zh"]),
+        ],
+    )
 
 
 def _grammar_anki_note(r) -> genanki.Note:
     """构造语法卡 note：五个模板字段全部来自句库/卡片数据，逐字段转义。"""
-    return genanki.Note(model=GRAMMAR_MODEL, fields=[
-        _anki_esc(r["sentence_context"]), _anki_esc(r["grammar_name"]),
-        _anki_esc(r["cefr_level"]), _anki_esc(r["explanation_zh"]),
-        _anki_esc(r["rule_formula"] or ""),
-    ])
+    return genanki.Note(
+        model=GRAMMAR_MODEL,
+        fields=[
+            _anki_esc(r["sentence_context"]),
+            _anki_esc(r["grammar_name"]),
+            _anki_esc(r["cefr_level"]),
+            _anki_esc(r["explanation_zh"]),
+            _anki_esc(r["rule_formula"] or ""),
+        ],
+    )
 
 
 def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
@@ -809,44 +842,48 @@ def export_anki_deck(output_path: str, db_path: Optional[str] = None) -> str:
 
 
 A1_VOCAB_MODEL = genanki.Model(
-    1607392321, 'DeLector Goethe A1 Wortliste',
+    1607392321,
+    "DeLector Goethe A1 Wortliste",
     fields=[
-        {'name': 'Front'},
-        {'name': 'Word'},
-        {'name': 'Lemma'},
-        {'name': 'POS'},
-        {'name': 'Plural'},
-        {'name': 'Definition'},
-        {'name': 'ExampleDe'},
-        {'name': 'ExampleZh'},
-        {'name': 'Topic'}
+        {"name": "Front"},
+        {"name": "Word"},
+        {"name": "Lemma"},
+        {"name": "POS"},
+        {"name": "Plural"},
+        {"name": "Definition"},
+        {"name": "ExampleDe"},
+        {"name": "ExampleZh"},
+        {"name": "Topic"},
     ],
-    templates=[{
-        'name': 'Goethe A1 Card',
-        'qfmt': (
-            '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;'
-            'text-align:center;"><div style="display:inline-block;background:#e0e7ff;color:#3730a3;'
-            'padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;margin-bottom:12px;">'
-            'Goethe A1 · {{Topic}}</div><div style="font-size:26px;font-weight:700;color:#1e293b;'
-            'margin:12px 0;">{{Front}}</div>{{#Plural}}<div style="font-size:14px;color:#64748b;">'
-            'Plural: {{Plural}}</div>{{/Plural}}</div>'
-        ),
-        'afmt': (
-            '{{FrontSide}}<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;">'
-            '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;'
-            'padding:0 24px 24px;text-align:left;"><div style="font-size:18px;font-weight:600;'
-            'color:#0f172a;margin-bottom:8px;">{{Definition}}</div><div style="font-size:13px;'
-            'color:#64748b;margin-bottom:16px;">词性: {{POS}}</div><div style="background:#f8fafc;'
-            'border-left:3px solid #6366f1;padding:10px 14px;border-radius:0 6px 6px 0;">'
-            '<div style="font-size:15px;color:#1e293b;font-weight:500;">{{ExampleDe}}</div>'
-            '<div style="font-size:13px;color:#64748b;margin-top:4px;">{{ExampleZh}}</div></div></div>'
-        )
-    }]
+    templates=[
+        {
+            "name": "Goethe A1 Card",
+            "qfmt": (
+                '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;'
+                'text-align:center;"><div style="display:inline-block;background:#e0e7ff;color:#3730a3;'
+                'padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;margin-bottom:12px;">'
+                'Goethe A1 · {{Topic}}</div><div style="font-size:26px;font-weight:700;color:#1e293b;'
+                'margin:12px 0;">{{Front}}</div>{{#Plural}}<div style="font-size:14px;color:#64748b;">'
+                "Plural: {{Plural}}</div>{{/Plural}}</div>"
+            ),
+            "afmt": (
+                '{{FrontSide}}<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;">'
+                '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;'
+                'padding:0 24px 24px;text-align:left;"><div style="font-size:18px;font-weight:600;'
+                'color:#0f172a;margin-bottom:8px;">{{Definition}}</div><div style="font-size:13px;'
+                'color:#64748b;margin-bottom:16px;">词性: {{POS}}</div><div style="background:#f8fafc;'
+                'border-left:3px solid #6366f1;padding:10px 14px;border-radius:0 6px 6px 0;">'
+                '<div style="font-size:15px;color:#1e293b;font-weight:500;">{{ExampleDe}}</div>'
+                '<div style="font-size:13px;color:#64748b;margin-top:4px;">{{ExampleZh}}</div></div></div>'
+            ),
+        }
+    ],
 )
 
 
 def export_a1_anki_deck(output_path: str) -> str:
     from delector.data import a1_dict
+
     deck = genanki.Deck(1607392321, "DeLector::Goethe A1 Wortliste")
     topic_map = dict((k, label) for k, label, _ in a1_dict.A1_TOPICS)
 
@@ -883,13 +920,12 @@ def export_a1_anki_deck(output_path: str) -> str:
                 _anki_esc(ex_de),
                 _anki_esc(ex_zh),
                 _anki_esc(topic_label),
-            ]
+            ],
         )
         deck.add_note(note)
 
     genanki.Package(deck).write_to_file(output_path)
     return output_path
-
 
 
 def get_cache_info(cache_dir: Optional[str] = None) -> Dict[str, Any]:
@@ -902,11 +938,7 @@ def get_cache_info(cache_dir: Optional[str] = None) -> Dict[str, Any]:
             if os.path.isfile(fpath):
                 count += 1
                 total_size += os.path.getsize(fpath)
-    return {
-        "file_count": count,
-        "total_size_mb": round(total_size / (1024 * 1024), 2),
-        "total_size_bytes": total_size
-    }
+    return {"file_count": count, "total_size_mb": round(total_size / (1024 * 1024), 2), "total_size_bytes": total_size}
 
 
 def prune_audio_cache(max_files: int = 300, cache_dir: Optional[str] = None):
@@ -943,14 +975,29 @@ BACKUP_SETTINGS_WHITELIST = ("TTS_VOICE", "TTS_RATE", "API_BASE_URL", "API_MODEL
 BACKUP_SETTINGS_EXPORT_WHITELIST = BACKUP_SETTINGS_WHITELIST
 BACKUP_SETTINGS_IMPORT_WHITELIST = ("TTS_VOICE", "TTS_RATE")
 
-_SRS_COLUMNS = ("mastered", "mastered_at", "correct_count", "wrong_count",
-                "due_date", "interval_days", "ease_factor", "repetition_count")
+_SRS_COLUMNS = (
+    "mastered",
+    "mastered_at",
+    "correct_count",
+    "wrong_count",
+    "due_date",
+    "interval_days",
+    "ease_factor",
+    "repetition_count",
+)
 
 # 缺列时回落到与建表 DDL 一致的默认值，这样 v1 备份（或手工编辑过的文件）
 # 也能被读进来而不是炸掉。
-_SRS_DEFAULTS = {"mastered": 0, "mastered_at": None, "correct_count": 0,
-                 "wrong_count": 0, "due_date": None, "interval_days": 1,
-                 "ease_factor": 2.5, "repetition_count": 0}
+_SRS_DEFAULTS = {
+    "mastered": 0,
+    "mastered_at": None,
+    "correct_count": 0,
+    "wrong_count": 0,
+    "due_date": None,
+    "interval_days": 1,
+    "ease_factor": 2.5,
+    "repetition_count": 0,
+}
 
 _BACKUP_TABLES = {
     "articles": (
@@ -958,16 +1005,58 @@ _BACKUP_TABLES = {
         {"title": "Untitled", "source_url": "", "raw_text": "", "processed_json": "{}"},
     ),
     "vocab_cards": (
-        ("id", "article_id", "word", "lemma", "pos", "gender", "plural", "cefr_level",
-         "definition_zh", "sentence_context", "created_at") + _SRS_COLUMNS,
-        dict(_SRS_DEFAULTS, word="", lemma="", pos="", gender="", plural="",
-             cefr_level="A1", definition_zh="", sentence_context=""),
+        (
+            "id",
+            "article_id",
+            "word",
+            "lemma",
+            "pos",
+            "gender",
+            "plural",
+            "cefr_level",
+            "definition_zh",
+            "sentence_context",
+            "created_at",
+        )
+        + _SRS_COLUMNS,
+        dict(
+            _SRS_DEFAULTS,
+            word="",
+            lemma="",
+            pos="",
+            gender="",
+            plural="",
+            cefr_level="A1",
+            definition_zh="",
+            sentence_context="",
+        ),
     ),
     "grammar_cards": (
-        ("id", "article_id", "sentence_context", "grammar_name", "cefr_level",
-         "explanation_zh", "rule_formula", "examples_zh", "corrected_form", "error_type", "created_at") + _SRS_COLUMNS,
-        dict(_SRS_DEFAULTS, sentence_context="", grammar_name="", cefr_level="A1",
-             explanation_zh="", rule_formula="", examples_zh="", corrected_form="", error_type=""),
+        (
+            "id",
+            "article_id",
+            "sentence_context",
+            "grammar_name",
+            "cefr_level",
+            "explanation_zh",
+            "rule_formula",
+            "examples_zh",
+            "corrected_form",
+            "error_type",
+            "created_at",
+        )
+        + _SRS_COLUMNS,
+        dict(
+            _SRS_DEFAULTS,
+            sentence_context="",
+            grammar_name="",
+            cefr_level="A1",
+            explanation_zh="",
+            rule_formula="",
+            examples_zh="",
+            corrected_form="",
+            error_type="",
+        ),
     ),
     "reading_notes": (
         ("id", "article_id", "sentence_id", "selected_text", "color", "note_content", "created_at"),
@@ -978,10 +1067,18 @@ _BACKUP_TABLES = {
         {"lemma": "", "praep": "", "kasus": "", "saved_at": None},
     ),
     "essays": (
-        ("id", "title", "content", "analysis_json", "cefr_level", "error_count",
-         "sentence_count", "created_at", "updated_at"),
-        {"title": "", "content": "", "analysis_json": "{}", "cefr_level": "A1",
-         "error_count": 0, "sentence_count": 0},
+        (
+            "id",
+            "title",
+            "content",
+            "analysis_json",
+            "cefr_level",
+            "error_count",
+            "sentence_count",
+            "created_at",
+            "updated_at",
+        ),
+        {"title": "", "content": "", "analysis_json": "{}", "cefr_level": "A1", "error_count": 0, "sentence_count": 0},
     ),
     "essay_versions": (
         ("id", "essay_id", "content", "analysis_json", "message", "created_at"),
@@ -991,8 +1088,7 @@ _BACKUP_TABLES = {
     # 备份/还原缺失该表会让换机还原后遇见区全丢（vault-team 评审 ②）。
     "encounter_texts": (
         ("id", "pack_id", "title", "level", "source", "content", "pack_json", "created_at"),
-        {"pack_id": None, "title": "", "level": "A2", "source": "",
-         "content": "", "pack_json": None},
+        {"pack_id": None, "title": "", "level": "A2", "source": "", "content": "", "pack_json": None},
     ),
 }
 
@@ -1007,28 +1103,77 @@ _PROGRESS_TABLES = {
     ),
     "daily_summary": (
         ("date", "cards_added", "cards_mastered", "articles_read", "quiz_sessions", "study_minutes"),
-        {"cards_added": 0, "cards_mastered": 0, "articles_read": 0,
-         "quiz_sessions": 0, "study_minutes": 0},
+        {"cards_added": 0, "cards_mastered": 0, "articles_read": 0, "quiz_sessions": 0, "study_minutes": 0},
     ),
     "a1_hoeren_records": (
-        ("id", "set_id", "score_raw", "score_official", "total_questions",
-         "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
-        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15,
-         "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+        (
+            "id",
+            "set_id",
+            "score_raw",
+            "score_official",
+            "total_questions",
+            "duration_seconds",
+            "answers_json",
+            "wrong_questions_json",
+            "created_at",
+        ),
+        {
+            "set_id": 1,
+            "score_raw": 0,
+            "score_official": 0.0,
+            "total_questions": 15,
+            "duration_seconds": 0,
+            "answers_json": "{}",
+            "wrong_questions_json": "[]",
+        },
     ),
     "a1_lesen_records": (
-        ("id", "set_id", "score_raw", "score_official", "total_questions",
-         "duration_seconds", "answers_json", "wrong_questions_json", "created_at"),
-        {"set_id": 1, "score_raw": 0, "score_official": 0.0, "total_questions": 15,
-         "duration_seconds": 0, "answers_json": "{}", "wrong_questions_json": "[]"},
+        (
+            "id",
+            "set_id",
+            "score_raw",
+            "score_official",
+            "total_questions",
+            "duration_seconds",
+            "answers_json",
+            "wrong_questions_json",
+            "created_at",
+        ),
+        {
+            "set_id": 1,
+            "score_raw": 0,
+            "score_official": 0.0,
+            "total_questions": 15,
+            "duration_seconds": 0,
+            "answers_json": "{}",
+            "wrong_questions_json": "[]",
+        },
     ),
     "exam_trials": (
-        ("id", "level", "module", "set_id", "score_raw", "score_official",
-         "total_questions", "duration_seconds", "answers_json",
-         "wrong_questions_json", "created_at"),
-        {"level": "A1", "module": "hoeren", "set_id": 1, "score_raw": 0,
-         "score_official": 0.0, "total_questions": 15, "duration_seconds": 0,
-         "answers_json": "{}", "wrong_questions_json": "[]"},
+        (
+            "id",
+            "level",
+            "module",
+            "set_id",
+            "score_raw",
+            "score_official",
+            "total_questions",
+            "duration_seconds",
+            "answers_json",
+            "wrong_questions_json",
+            "created_at",
+        ),
+        {
+            "level": "A1",
+            "module": "hoeren",
+            "set_id": 1,
+            "score_raw": 0,
+            "score_official": 0.0,
+            "total_questions": 15,
+            "duration_seconds": 0,
+            "answers_json": "{}",
+            "wrong_questions_json": "[]",
+        },
     ),
 }
 
@@ -1051,8 +1196,7 @@ def _require_localhost(request: Request):
         raise HTTPException(403, "该接口仅允许本机访问")
 
 
-def _rows_to_tuples(rows: List[Dict[str, Any]], columns: Tuple[str, ...],
-                    defaults: Dict[str, Any]) -> List[Tuple]:
+def _rows_to_tuples(rows: List[Dict[str, Any]], columns: Tuple[str, ...], defaults: Dict[str, Any]) -> List[Tuple]:
     return [tuple(r.get(c, defaults.get(c)) for c in columns) for r in rows]
 
 
@@ -1060,20 +1204,23 @@ def build_backup_payload() -> Dict[str, Any]:
     """组装 v2 备份。local_storage 由前端在 /prepare 时填入——后端读不到浏览器存储。"""
     conn = get_db()
     try:
-        tables = {name: [dict(r) for r in conn.execute(f"SELECT * FROM {name}").fetchall()]
-                  for name in _BACKUP_TABLES}
+        tables = {name: [dict(r) for r in conn.execute(f"SELECT * FROM {name}").fetchall()] for name in _BACKUP_TABLES}
         placeholders = ",".join("?" for _ in BACKUP_SETTINGS_WHITELIST)
-        settings = [dict(r) for r in conn.execute(
-            f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
-            BACKUP_SETTINGS_WHITELIST,
-        ).fetchall()]
+        settings = [
+            dict(r)
+            for r in conn.execute(
+                f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
+                BACKUP_SETTINGS_WHITELIST,
+            ).fetchall()
+        ]
     finally:
         conn.close()
 
     pconn = get_progress_db()
     try:
-        progress = {name: [dict(r) for r in pconn.execute(f"SELECT * FROM {name}").fetchall()]
-                    for name in _PROGRESS_TABLES}
+        progress = {
+            name: [dict(r) for r in pconn.execute(f"SELECT * FROM {name}").fetchall()] for name in _PROGRESS_TABLES
+        }
     finally:
         pconn.close()
 
@@ -1188,24 +1335,43 @@ def add_prep_saved(lemma: str, praep: str, kasus: str, db_path: Optional[str] = 
         )
 
 
-def record_exam_trial(level: str, module: str, set_id: int, score_raw: int,
-                      score_official: float, total_questions: int,
-                      duration_seconds: int, answers_json: str,
-                      wrong_questions_json: str,
-                      db_path: Optional[str] = None) -> int:
+def record_exam_trial(
+    level: str,
+    module: str,
+    set_id: int,
+    score_raw: int,
+    score_official: float,
+    total_questions: int,
+    duration_seconds: int,
+    answers_json: str,
+    wrong_questions_json: str,
+    db_path: Optional[str] = None,
+) -> int:
     """写入一次泛化模考成绩（exam_trials：level × module 维度）。
 
     与旧 A1 专用表不同，同一张表承载所有等级/模块（A1 听力、A1 阅读，
     未来 A2…），备份/restore 也在同一张表上通用。
     """
     with db_progress_conn(db_path) as conn:
-        cur = conn.execute("""
+        cur = conn.execute(
+            """
             INSERT INTO exam_trials (
                 level, module, set_id, score_raw, score_official,
                 total_questions, duration_seconds, answers_json, wrong_questions_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (level, module, set_id, score_raw, score_official, total_questions,
-              duration_seconds, answers_json, wrong_questions_json))
+        """,
+            (
+                level,
+                module,
+                set_id,
+                score_raw,
+                score_official,
+                total_questions,
+                duration_seconds,
+                answers_json,
+                wrong_questions_json,
+            ),
+        )
         record_id = cur.lastrowid
     # log_study_event opens its own connection — must be OUTSIDE the with block
     # to avoid SQLITE_BUSY from nested locks on progress.db.
@@ -1215,27 +1381,33 @@ def record_exam_trial(level: str, module: str, set_id: int, score_raw: int,
         event_type = "a1_hoeren" if module == "hoeren" else "a1_lesen"
     else:
         event_type = f"{level.lower()}_{module}"
-    log_study_event(event_type, ref_id=record_id,
-                    note=f"Set {set_id}: {score_official}/25.0",
-                    minutes=max(1, duration_seconds // 60), db_path=db_path)
+    log_study_event(
+        event_type,
+        ref_id=record_id,
+        note=f"Set {set_id}: {score_official}/25.0",
+        minutes=max(1, duration_seconds // 60),
+        db_path=db_path,
+    )
     return record_id
 
 
-def get_exam_history(level: str, module: str, limit: int = 50,
-                     db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_exam_history(level: str, module: str, limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """查询泛化模考历史；返回结构与旧 get_a1_*_history 逐字段等价。
 
     显式投影 9 个旧列而非 SELECT *：表里多出的 level/module 是存储维度，
     不是 API 字段——透传契约下调用方（routes_a1_*）不应看到它们。
     """
     with db_progress_conn(db_path) as conn:
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT id, set_id, score_raw, score_official, total_questions,
                    duration_seconds, answers_json, wrong_questions_json, created_at
             FROM exam_trials
             WHERE level = ? AND module = ?
             ORDER BY id DESC LIMIT ?
-        """, (level, module, limit)).fetchall()
+        """,
+            (level, module, limit),
+        ).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -1267,12 +1439,13 @@ def migrate_a1_records_to_exam_trials(db_path: Optional[str] = None) -> Dict[str
         for module, table in sources.items():
             legacy_count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             general_count = conn.execute(
-                "SELECT COUNT(*) FROM exam_trials WHERE level = ? AND module = ?",
-                ("A1", module)).fetchone()[0]
+                "SELECT COUNT(*) FROM exam_trials WHERE level = ? AND module = ?", ("A1", module)
+            ).fetchone()[0]
             if general_count >= legacy_count:
                 report[module] = {"migrated": 0, "skipped": True}
                 continue
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 INSERT INTO exam_trials (
                     level, module, set_id, score_raw, score_official,
                     total_questions, duration_seconds, answers_json,
@@ -1281,23 +1454,40 @@ def migrate_a1_records_to_exam_trials(db_path: Optional[str] = None) -> Dict[str
                 SELECT 'A1', ?, set_id, score_raw, score_official, total_questions,
                        duration_seconds, answers_json, wrong_questions_json, created_at
                 FROM {table}
-            """, (module,))
+            """,
+                (module,),
+            )
             report[module] = {"migrated": legacy_count, "skipped": False}
     return report
 
 
-def record_a1_hoeren_trial(set_id: int, score_raw: int, score_official: float,
-                           total_questions: int, duration_seconds: int,
-                           answers_json: str, wrong_questions_json: str,
-                           db_path: Optional[str] = None) -> int:
+def record_a1_hoeren_trial(
+    set_id: int,
+    score_raw: int,
+    score_official: float,
+    total_questions: int,
+    duration_seconds: int,
+    answers_json: str,
+    wrong_questions_json: str,
+    db_path: Optional[str] = None,
+) -> int:
     """持久化一次 A1 听力模考记录
 
     透传泛化实现（exam_trials level='A1' module='hoeren'）：签名与返回
     结构不变，调用方零改动；旧行由 migrate_a1_records_to_exam_trials 迁入。
     """
-    return record_exam_trial("A1", "hoeren", set_id, score_raw, score_official,
-                             total_questions, duration_seconds, answers_json,
-                             wrong_questions_json, db_path=db_path)
+    return record_exam_trial(
+        "A1",
+        "hoeren",
+        set_id,
+        score_raw,
+        score_official,
+        total_questions,
+        duration_seconds,
+        answers_json,
+        wrong_questions_json,
+        db_path=db_path,
+    )
 
 
 def get_a1_hoeren_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1305,14 +1495,29 @@ def get_a1_hoeren_history(limit: int = 50, db_path: Optional[str] = None) -> Lis
     return get_exam_history("A1", "hoeren", limit=limit, db_path=db_path)
 
 
-def record_a1_lesen_trial(set_id: int, score_raw: int, score_official: float,
-                          total_questions: int, duration_seconds: int,
-                          answers_json: str, wrong_questions_json: str,
-                          db_path: Optional[str] = None) -> int:
+def record_a1_lesen_trial(
+    set_id: int,
+    score_raw: int,
+    score_official: float,
+    total_questions: int,
+    duration_seconds: int,
+    answers_json: str,
+    wrong_questions_json: str,
+    db_path: Optional[str] = None,
+) -> int:
     """持久化一次 A1 阅读模考记录（透传泛化实现，签名与返回结构不变）"""
-    return record_exam_trial("A1", "lesen", set_id, score_raw, score_official,
-                             total_questions, duration_seconds, answers_json,
-                             wrong_questions_json, db_path=db_path)
+    return record_exam_trial(
+        "A1",
+        "lesen",
+        set_id,
+        score_raw,
+        score_official,
+        total_questions,
+        duration_seconds,
+        answers_json,
+        wrong_questions_json,
+        db_path=db_path,
+    )
 
 
 def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1341,9 +1546,9 @@ def _load_a1_workbench_words() -> List[Dict[str, Any]]:
             try:
                 with open(wp, "r", encoding="utf-8") as f:
                     txt = f.read()
-                m_seed = re.search(r'const\s+SEED_WORDS\s*=\s*(\[.*?\]);\s*\n', txt, re.DOTALL)
-                m_custom = re.search(r'const\s+CORE_CUSTOM_WORDS\s*=\s*(\[.*?\]);', txt, re.DOTALL)
-                m_ids = re.search(r'const\s+CORE_WORD_SEED_IDS\s*=\s*new Set\((\[.*?\])\);', txt, re.DOTALL)
+                m_seed = re.search(r"const\s+SEED_WORDS\s*=\s*(\[.*?\]);\s*\n", txt, re.DOTALL)
+                m_custom = re.search(r"const\s+CORE_CUSTOM_WORDS\s*=\s*(\[.*?\]);", txt, re.DOTALL)
+                m_ids = re.search(r"const\s+CORE_WORD_SEED_IDS\s*=\s*new Set\((\[.*?\])\);", txt, re.DOTALL)
                 if m_seed and m_custom and m_ids:
                     seeds = json.loads(m_seed.group(1))
                     custom = json.loads(m_custom.group(1))
@@ -1354,29 +1559,33 @@ def _load_a1_workbench_words() -> List[Dict[str, Any]]:
                         is_core = wid in core_ids
                         de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
                         zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
-                        words.append({
-                            "id": wid,
-                            "hw": w.get("hw", ""),
-                            "pos": w.get("pos", ""),
-                            "de": de,
-                            "zh": zh,
-                            "core": is_core,
-                            "cefr": "A1",
-                        })
+                        words.append(
+                            {
+                                "id": wid,
+                                "hw": w.get("hw", ""),
+                                "pos": w.get("pos", ""),
+                                "de": de,
+                                "zh": zh,
+                                "core": is_core,
+                                "cefr": "A1",
+                            }
+                        )
 
                     for w in custom:
                         wid = w.get("id", "")
                         de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
                         zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
-                        words.append({
-                            "id": wid,
-                            "hw": w.get("hw", ""),
-                            "pos": w.get("pos", ""),
-                            "de": de,
-                            "zh": zh,
-                            "core": True,
-                            "cefr": "A1",
-                        })
+                        words.append(
+                            {
+                                "id": wid,
+                                "hw": w.get("hw", ""),
+                                "pos": w.get("pos", ""),
+                                "de": de,
+                                "zh": zh,
+                                "core": True,
+                                "cefr": "A1",
+                            }
+                        )
                     loaded = True
                     break
             except Exception:
@@ -1385,17 +1594,20 @@ def _load_a1_workbench_words() -> List[Dict[str, Any]]:
     if not loaded:
         try:
             from delector.data.a1_dict import GOETHE_A1_VOCAB
+
             idx = 1
             for k, v in GOETHE_A1_VOCAB.items():
-                words.append({
-                    "id": f"a1-{idx:04d}",
-                    "hw": v.get("word", k),
-                    "pos": v.get("pos", ""),
-                    "de": v.get("example_de", ""),
-                    "zh": v.get("definition_zh", ""),
-                    "core": True,
-                    "cefr": "A1",
-                })
+                words.append(
+                    {
+                        "id": f"a1-{idx:04d}",
+                        "hw": v.get("word", k),
+                        "pos": v.get("pos", ""),
+                        "de": v.get("example_de", ""),
+                        "zh": v.get("definition_zh", ""),
+                        "core": True,
+                        "cefr": "A1",
+                    }
+                )
                 idx += 1
         except Exception:
             pass
@@ -1447,17 +1659,19 @@ def _load_a2_vocab_words() -> List[Dict[str, Any]]:
             plural = val[3] if len(val) > 3 and val[3] != "None" else ""
             zh = val[4] if len(val) > 4 else ""
             hw = format_vocab_headword(lemma, pos, gender)
-            words.append({
-                "id": f"a2-{lemma.lower()}",
-                "hw": hw,
-                "pos": pos,
-                "gender": gender,
-                "plural": plural,
-                "de": "",
-                "zh": zh,
-                "core": True,
-                "cefr": "A2",
-            })
+            words.append(
+                {
+                    "id": f"a2-{lemma.lower()}",
+                    "hw": hw,
+                    "pos": pos,
+                    "gender": gender,
+                    "plural": plural,
+                    "de": "",
+                    "zh": zh,
+                    "core": True,
+                    "cefr": "A2",
+                }
+            )
 
     _A2_VOCAB_CACHE = words
     return words
@@ -1477,15 +1691,17 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
             rows = conn.execute("SELECT * FROM vocab_cards ORDER BY id ASC").fetchall()
         words = []
         for r in rows:
-            words.append({
-                "id": f"card-{r['id']}",
-                "hw": r["word"],
-                "pos": r["pos"] or "",
-                "de": r["sentence_context"] or "",
-                "zh": r["definition_zh"] or "",
-                "core": False,
-                "cefr": r["cefr_level"] or "A1",
-            })
+            words.append(
+                {
+                    "id": f"card-{r['id']}",
+                    "hw": r["word"],
+                    "pos": r["pos"] or "",
+                    "de": r["sentence_context"] or "",
+                    "zh": r["definition_zh"] or "",
+                    "core": False,
+                    "cefr": r["cefr_level"] or "A1",
+                }
+            )
         return {
             "cefr": cefr_norm,
             "scope": scope_norm,
@@ -1539,17 +1755,19 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
                 plural = val[3] if len(val) > 3 and val[3] != "None" else ""
                 zh = val[4] if len(val) > 4 else ""
                 hw = format_vocab_headword(lemma, pos, gender)
-                words.append({
-                    "id": f"{lvl.lower()}-{lemma.lower()}",
-                    "hw": hw,
-                    "pos": pos,
-                    "gender": gender,
-                    "plural": plural,
-                    "de": "",
-                    "zh": zh,
-                    "core": True,
-                    "cefr": lvl.upper(),
-                })
+                words.append(
+                    {
+                        "id": f"{lvl.lower()}-{lemma.lower()}",
+                        "hw": hw,
+                        "pos": pos,
+                        "gender": gender,
+                        "plural": plural,
+                        "de": "",
+                        "zh": zh,
+                        "core": True,
+                        "cefr": lvl.upper(),
+                    }
+                )
     else:
         for lemma, val in CORE_VOCAB_DB.items():
             lvl = val[0]
@@ -1559,17 +1777,19 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
                 plural = val[3] if len(val) > 3 and val[3] != "None" else ""
                 zh = val[4] if len(val) > 4 else ""
                 hw = format_vocab_headword(lemma, pos, gender)
-                words.append({
-                    "id": f"{lvl.lower()}-{lemma.lower()}",
-                    "hw": hw,
-                    "pos": pos,
-                    "gender": gender,
-                    "plural": plural,
-                    "de": "",
-                    "zh": zh,
-                    "core": True,
-                    "cefr": lvl.upper(),
-                })
+                words.append(
+                    {
+                        "id": f"{lvl.lower()}-{lemma.lower()}",
+                        "hw": hw,
+                        "pos": pos,
+                        "gender": gender,
+                        "plural": plural,
+                        "de": "",
+                        "zh": zh,
+                        "core": True,
+                        "cefr": lvl.upper(),
+                    }
+                )
 
     return {
         "cefr": cefr_norm,
@@ -1601,7 +1821,7 @@ def upsert_corpus_syntax_stats(article_id: int, stats: Dict[str, Any], db_path: 
                     vl_rate=excluded.vl_rate,
                     analyzed_at=CURRENT_TIMESTAMP
                 """,
-                (article_id, sent_count, avg_clause_depth, passive_rate, konjunktiv_rate, vl_rate)
+                (article_id, sent_count, avg_clause_depth, passive_rate, konjunktiv_rate, vl_rate),
             )
         return True
     except Exception as e:

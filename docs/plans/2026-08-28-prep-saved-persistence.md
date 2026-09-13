@@ -111,6 +111,7 @@ python -m pytest -q test_server.py -k "prep" 2>&1 | tail -5
 def api_prep_saved():
     """返回当前用户已入卡的搭配 key 列表。"""
     from database import get_prep_saved
+
     return {"keys": sorted(get_prep_saved())}
 ```
 
@@ -122,9 +123,11 @@ class PrepSavedReq(BaseModel):
     praep: str
     kasus: str
 
+
 @app.post("/api/prep/saved")
 def api_add_prep_saved(req: PrepSavedReq):
     from database import add_prep_saved
+
     add_prep_saved(req.lemma, req.praep, req.kasus)
     return {"status": "ok"}
 ```
@@ -209,11 +212,11 @@ python -m pytest -q
 在 restore 的 `_replace_tables` 调用或单独处理里，恢复 `prep_saved` 表：
 
 ```python
-    if "prep_saved" in data:
-        conn.executemany(
-            "INSERT OR IGNORE INTO prep_saved (lemma, praep, kasus, saved_at) VALUES (?, ?, ?, ?)",
-            [(r["lemma"], r["praep"], r["kasus"], r.get("saved_at")) for r in data["prep_saved"]]
-        )
+if "prep_saved" in data:
+    conn.executemany(
+        "INSERT OR IGNORE INTO prep_saved (lemma, praep, kasus, saved_at) VALUES (?, ?, ?, ?)",
+        [(r["lemma"], r["praep"], r["kasus"], r.get("saved_at")) for r in data["prep_saved"]],
+    )
 ```
 
 - [ ] **Step 3: 全量测试**

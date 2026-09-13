@@ -50,7 +50,7 @@ def api_grade_hoeren(req: HoerenGradeRequest):
             total_questions=graded["total_questions"],
             duration_seconds=req.duration_seconds,
             answers_json=json.dumps(req.answers, ensure_ascii=False),
-            wrong_questions_json=json.dumps(graded["wrong_questions"], ensure_ascii=False)
+            wrong_questions_json=json.dumps(graded["wrong_questions"], ensure_ascii=False),
         )
     except Exception as e:
         print(f"[Warn] Failed to record a1 hoeren trial: {e}")

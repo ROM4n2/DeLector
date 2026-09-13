@@ -3,6 +3,7 @@
 DeLector - A2 词汇数据契约与规范化格式测试。
 验证 A2 词库从 core_dict 提取、名词定冠词 (der/die/das) 拼装与首字母大写、动词/形容词小写保持。
 """
+
 from delector.core.database import format_vocab_headword, get_vocab_by_cefr
 
 

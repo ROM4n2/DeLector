@@ -10,6 +10,7 @@
 用 ast 而不是调 pyflakes 子进程：零外部依赖、不受 CI 是否装了 pyflakes 影响，
 而且能自己决定扫哪些目录、报出行号。
 """
+
 import ast
 from collections import Counter
 from pathlib import Path
@@ -18,8 +19,17 @@ ROOT = Path(__file__).parent.parent
 
 # 不扫的目录：第三方代码与构建产物里的重复键不是我们能修的
 _SKIP_DIRS = {
-    ".git", ".venv", "venv", "env", "__pycache__", "node_modules",
-    "build", "dist", ".pytest_cache", ".mypy_cache", ".claude",
+    ".git",
+    ".venv",
+    "venv",
+    "env",
+    "__pycache__",
+    "node_modules",
+    "build",
+    "dist",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".claude",
 }
 
 
@@ -33,7 +43,7 @@ def _duplicate_keys(path):
     """返回 [(行号, 键, 次数, 值是否全都相同), ...]。"""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except SyntaxError as exc:                       # 语法坏了是另一回事，交给别的测试报
+    except SyntaxError as exc:  # 语法坏了是另一回事，交给别的测试报
         raise AssertionError(f"{path} 解析失败：{exc}") from exc
 
     found = []
@@ -43,9 +53,9 @@ def _duplicate_keys(path):
         # key 为 None 表示 `**other` 展开；计算出来的键（f-string、变量）
         # 静态看不出重不重，一律跳过 —— 这个棘轮只管字面量常量键。
         literal = [
-            (k.value, v) for k, v in zip(node.keys, node.values)
-            if isinstance(k, ast.Constant) and isinstance(k.value, (str, int))
-            and not isinstance(k.value, bool)
+            (k.value, v)
+            for k, v in zip(node.keys, node.values)
+            if isinstance(k, ast.Constant) and isinstance(k.value, (str, int)) and not isinstance(k.value, bool)
         ]
         counts = Counter(k for k, _ in literal)
         for key, n in counts.items():
@@ -76,10 +86,7 @@ def test_no_duplicate_keys_in_any_dict_literal():
             kind = "值相同" if same_value else "值不同，后写的胜"
             offenders.append(f"  {rel}:{lineno} 键 {key!r} 出现 {n} 次（{kind}）")
 
-    assert not offenders, (
-        "dict 字面量里有重复的键，后写的会静默覆盖前面的定义：\n"
-        + "\n".join(offenders)
-    )
+    assert not offenders, "dict 字面量里有重复的键，后写的会静默覆盖前面的定义：\n" + "\n".join(offenders)
 
 
 def test_linguistics_vocab_ext_dedup_kept_the_fuller_glosses():
@@ -95,12 +102,12 @@ def test_linguistics_vocab_ext_dedup_kept_the_fuller_glosses():
     from delector.nlp_engine.linguistics import LINGUISTICS_VOCAB_EXT as EXT
 
     expected = {
-        "klima":     ("A2", "NOUN", "Neut"),
-        "schutz":    ("B1", "NOUN", "Masc"),
-        "wandel":    ("B1", "NOUN", "Masc"),
-        "wachstum":  ("B2", "NOUN", "Neut"),   # ← v4.4.1 起从 B1 变成 B2
-        "modell":    ("A2", "NOUN", "Neut"),
-        "bund":      ("B1", "NOUN", "Masc"),
+        "klima": ("A2", "NOUN", "Neut"),
+        "schutz": ("B1", "NOUN", "Masc"),
+        "wandel": ("B1", "NOUN", "Masc"),
+        "wachstum": ("B2", "NOUN", "Neut"),  # ← v4.4.1 起从 B1 变成 B2
+        "modell": ("A2", "NOUN", "Neut"),
+        "bund": ("B1", "NOUN", "Masc"),
         "regierung": ("B1", "NOUN", "Fem"),
     }
     for word, (cefr, pos, gender) in expected.items():

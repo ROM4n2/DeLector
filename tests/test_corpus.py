@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """官方真题语料库单元与契约测试 (Corpus Engine Test Suite)"""
+
 import os
 
 import pytest
@@ -90,6 +91,7 @@ def test_get_corpus_filter_helpers():
 def test_corpus_api_endpoints():
     """验证 GET /api/corpus/list 与 GET /api/corpus/{id} 契约。"""
     from delector.server import app
+
     client = TestClient(app)
 
     # 1. 列表端点
@@ -127,6 +129,7 @@ def _m5_isolated_db_teardown():
     yield
     import gc
     import os as _os
+
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

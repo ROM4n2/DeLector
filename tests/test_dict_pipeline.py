@@ -5,6 +5,7 @@
 它的症状是静默的：缺口被记成「AI 始终不作答」，重问只是白花钱，
 而正确答案一直躺在 raw 缓存里。没有测试兜底的话改回去不会有任何报错。
 """
+
 import os
 import sys
 
@@ -21,6 +22,7 @@ from delector.data.prep_dict import PREP_COLLOCATIONS  # noqa: E402
 
 # ── 搭配流水线：词头归一化回映射 ─────────────────────────────────────────
 
+
 def test_reflexive_answer_maps_back_to_requested_key():
     """提示词要求反身动词答不带 sich 的形式，所以问 sich-freuen 必然答 freuen。
 
@@ -29,8 +31,7 @@ def test_reflexive_answer_maps_back_to_requested_key():
     """
     assert build_prep._resolve_requested("freuen", {"sich-freuen"}) == ["sich-freuen"]
     # sich-<介词>-<动词> 这种三段键同样要能推回去
-    assert build_prep._resolve_requested(
-        "informieren", {"sich-über-informieren"}) == ["sich-über-informieren"]
+    assert build_prep._resolve_requested("informieren", {"sich-über-informieren"}) == ["sich-über-informieren"]
 
 
 def test_adjective_inflection_maps_back_to_requested_key():
@@ -82,6 +83,7 @@ def test_misattributed_collocations_absent_from_prep_dict():
 
 # ── 词库流水线：缓存隔离与尾缺口 ─────────────────────────────────────────
 
+
 def test_refill_cache_dir_is_isolated_from_full_run():
     """缓存文件按批次序号命名，refill 的 batch_0 与整包跑的 batch_0 内容完全不同。
 
@@ -94,6 +96,7 @@ def test_refill_cache_dir_is_isolated_from_full_run():
 def test_generate_parallel_accepts_cache_dir():
     """_generate_parallel 必须能被指定缓存目录，否则隔离无从实现。"""
     import inspect
+
     assert "raw_dir" in inspect.signature(build_dict._generate_parallel).parameters
 
 
@@ -115,6 +118,5 @@ def test_nouns_always_carry_plural():
     校验器拒收 plural 为 null 的名词，这条不变量在整个 ext 上成立；
     放宽它会让「补上了」和「补了个残条」看起来一样。
     """
-    bad = [w for w, t in CORE_VOCAB_DB.items()
-           if t[1] == "NOUN" and not t[3]]
+    bad = [w for w, t in CORE_VOCAB_DB.items() if t[1] == "NOUN" and not t[3]]
     assert not bad, f"这些名词缺复数形: {bad[:20]}"

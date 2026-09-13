@@ -39,6 +39,7 @@
 
 禁止手工改 `delector/data/encounter_seed_dict.py` 的内容 —— 要改就重跑本脚本。
 """
+
 import argparse
 import asyncio
 import datetime
@@ -197,9 +198,7 @@ def _require_spacy_model() -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="从 OFFICIAL_CORPUS 离线生成 encounter-pack/v1 预置包模块。"
-    )
+    parser = argparse.ArgumentParser(description="从 OFFICIAL_CORPUS 离线生成 encounter-pack/v1 预置包模块。")
     parser.add_argument("--out", default=_DEFAULT_OUT, help="产物路径")
     parser.add_argument("--levels", default=_DEFAULT_LEVELS, help="参与分级（逗号分隔，默认 A1,A2）")
     parser.add_argument(

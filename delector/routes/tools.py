@@ -6,6 +6,7 @@
 敏感/可写端点（ingest 拉外网、export 读库）按项目惯例限 127.0.0.1 本机 ——
 Go Agent 与 Web 同机跑，localhost 可达。Phase 2 若需跨机再放宽闸。
 """
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 

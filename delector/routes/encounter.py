@@ -12,6 +12,7 @@ pack_id 已存在时幂等返回既有行 id（不新增），因此同一包重
 
 word_count = 简单空白分词计数（服务端 cheap 计算），不做 spaCy。
 """
+
 import copy
 from typing import Optional
 
@@ -72,9 +73,7 @@ def validate_pack(pack) -> None:
     if not isinstance(pack, dict):
         raise ValueError("pack 必须是 dict")
     if pack.get("schema") != CARD_PACK_SCHEMA:
-        raise ValueError(
-            f"pack.schema 必须为 {CARD_PACK_SCHEMA!r}，收到: {pack.get('schema')!r}"
-        )
+        raise ValueError(f"pack.schema 必须为 {CARD_PACK_SCHEMA!r}，收到: {pack.get('schema')!r}")
     pack_id = pack.get("pack_id")
     if not pack_id or not str(pack_id).strip():
         raise ValueError("pack.pack_id 必填且不能为空")
@@ -148,10 +147,7 @@ def api_annotate_text(text_id: int) -> dict:
         raise HTTPException(status_code=404, detail=f"短文未找到: {text_id}")
 
     parsed = process_german_text(row["content"] or "")
-    sentences = [
-        {"idx": s["id"], "tokens": _annotate_tokens(s)}
-        for s in parsed["sentences"]
-    ]
+    sentences = [{"idx": s["id"], "tokens": _annotate_tokens(s)} for s in parsed["sentences"]]
     total_tokens = sum(len(s["tokens"]) for s in sentences)
     return {
         "text_id": text_id,
