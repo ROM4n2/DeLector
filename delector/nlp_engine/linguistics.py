@@ -5,14 +5,16 @@ Goethe A1-C1 Irregular Verbs Stammformen & German Compound Noun (Komposita) Spli
 """
 import functools
 import json
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Import local Goethe core dictionary for compound base elements & CEFR lookup
 try:
     from delector.data.core_dict import CORE_VOCAB_DB, lookup_core_vocab
 except ImportError:
     CORE_VOCAB_DB = {}
-    lookup_core_vocab = lambda w: None
+
+    def lookup_core_vocab(w):
+        return None
 
 
 # ==============================================================================
@@ -650,7 +652,10 @@ class VerbTrio(tuple):
         }
 
     def __repr__(self) -> str:
-        return f"<VerbTrio {self.infinitiv}: {self.praeteritum} - {self.hilfsverb} {self.partizip2} ({self.definition_zh})>"
+        return (
+            f"<VerbTrio {self.infinitiv}: {self.praeteritum} - {self.hilfsverb} "
+            f"{self.partizip2} ({self.definition_zh})>"
+        )
 
 
 # Build bidirectional reverse lookup index mapping any surface form -> base infinitiv

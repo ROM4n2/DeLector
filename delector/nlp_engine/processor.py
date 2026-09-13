@@ -3,7 +3,7 @@
 import importlib
 import re
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 try:
     import spacy
@@ -11,9 +11,9 @@ except ImportError:
     spacy = None
 
 from delector.core.utils import is_android
-from delector.data.core_dict import lookup_core_vocab, get_core_cefr_level
-from .syntax_tree import (analyze_sentence_topology, build_clause_tree,
-                         split_sentences_pure_python)
+from delector.data.core_dict import get_core_cefr_level, lookup_core_vocab
+
+from .syntax_tree import analyze_sentence_topology, build_clause_tree, split_sentences_pure_python
 
 # md 带词向量、标注更准，是桌面端首选；sm 体积小，Android 包里装的和自动下载兜底都用它。
 # 按顺序取第一个能加载的。
@@ -118,7 +118,8 @@ CEFR_DICT = {
     "erzählen": "A2", "erklären": "A2", "bestehen": "A2", "prüfung": "A2", "beruf": "A2", "reise": "A2",
     "fahren": "A2", "wochenende": "A2", "zug": "A2", "reservieren": "A2", "stadtzentrum": "A2",
     "wetter": "A2", "deshalb": "A2", "ganz": "A2", "garten": "A2", "verbringen": "A2",
-    "typisch": "A2", "bayerisch": "A2", "spezialität": "A2", "traditionell": "A2", "restaurant": "A2", "probieren": "A2",
+    "typisch": "A2", "bayerisch": "A2", "spezialität": "A2", "traditionell": "A2",
+    "restaurant": "A2", "probieren": "A2",
     "besuchen": "A2", "helfen": "A2", "treffen": "A2", "beginnen": "A2", "verstehen": "A2",
     
     # B1
@@ -243,8 +244,16 @@ def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
             "id": sent_idx,
             "text": sent_text,
             "tokens": tokens,
-            "topology": {"vorfeld": [], "linke_klammer": [], "mittelfeld": [t["text"] for t in tokens if not t["is_punct"]], "rechte_klammer": [], "nachfeld": []},
-            "clause_tree": {"id": "root", "type": "hauptsatz", "label": "Hauptsatz", "label_zh": "主句核心", "connector": "", "finite_verb": "", "token_ids": list(range(len(tokens))), "formula": "", "children": []}
+            "topology": {
+                "vorfeld": [], "linke_klammer": [],
+                "mittelfeld": [t["text"] for t in tokens if not t["is_punct"]],
+                "rechte_klammer": [], "nachfeld": [],
+            },
+            "clause_tree": {
+                "id": "root", "type": "hauptsatz", "label": "Hauptsatz", "label_zh": "主句核心",
+                "connector": "", "finite_verb": "", "token_ids": list(range(len(tokens))),
+                "formula": "", "children": [],
+            }
         })
     stats = calculate_cefr_stats(all_tokens)
     return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
@@ -302,7 +311,8 @@ def process_german_text(text: str) -> Dict[str, Any]:
                         "sep_lemma": sep_lemma
                     }
 
-                    # Re-evaluate CEFR level based on full separable verb (e.g. einsteigen -> A1 instead of steigen -> B1)
+                    # Re-evaluate CEFR level based on full separable verb
+                    # (e.g. einsteigen -> A1 instead of steigen -> B1)
                     sep_cefr = get_cefr_level(sep_lemma)
                     verb_tok["cefr_level"] = sep_cefr
                     prefix_tok["cefr_level"] = sep_cefr
@@ -320,17 +330,19 @@ def process_german_text(text: str) -> Dict[str, Any]:
     return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
 
 
-SYSTEM_GRAMMAR_PROMPT = """你是一位精通德语欧标（Goethe-Zertifikat A1-C1）的资深德语教学与考点解析专家。
+SYSTEM_GRAMMAR_PROMPT = ("""你是一位精通德语欧标（Goethe-Zertifikat A1-C1）的资深德语教学与考点解析专家。
 用户会提供一个德语完整句子，以及他们点击的目标词汇或短语（用户可能是 A1-A2 零基础/初学者）。
 
 请详细分析该词或短语在句中的关键语法考点，特别关照初学者的痛点（如：冠词四格变化、三格动词、动词现在时变位、可分动词前缀、从句动词置后、固定介词搭配）。
 
 以严格的 JSON 格式输出，字段如下：
 {
-  "grammar_name": "考点名称（如：Akkusativ mit bestimmtem Artikel / Trennbare Verben / Nomen-Verb-Verbindung / Präposition mit Dativ）",
+  "grammar_name": "考点名称（如：Akkusativ mit bestimmtem Artikel / Trennbare Verben / """
+    """Nomen-Verb-Verbindung / Präposition mit Dativ）",
   "cefr_level": "考点对应的欧标等级，只能是 A1/A2/B1/B2/C1 之一",
-  "explanation_zh": "面向初学者的通俗精炼中文解析（1-3句话，解释在句中的语法作用、为什么用这个格/变位，指出考试高频错点）",
+  "explanation_zh": "面向初学者的通俗精炼中文解析（1-3句话，解释在句中的语法作用、为什么用这个格/变位，"""
+    """指出考试高频错点）",
   "rule_formula": "语法规则或公式（如：trinken + Akkusativ: den Kaffee (m.) / fahren mit + Dativ: der U-Bahn (f.)）",
   "collocations": ["高频用法1", "高频用法2"]
 }
-不要输出除 JSON 以外的任何文字。"""
+不要输出除 JSON 以外的任何文字。""")

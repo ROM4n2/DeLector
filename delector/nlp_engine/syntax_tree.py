@@ -8,7 +8,7 @@ Topologisches Feldermodell (Vorfeld, Linke Satzklammer, Mittelfeld, Rechte Satzk
 Zero external API dependencies.
 """
 import re
-from typing import Dict, List, Any, Optional, Union, Tuple, Set
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
     import spacy
@@ -421,7 +421,11 @@ def analyze_sentence_topology(
     for idx, t in enumerate(tokens):
         if t.text == "," and idx + 1 < len(tokens):
             next_tok = tokens[idx + 1]
-            if next_tok.pos_ in ("VERB", "AUX") or next_tok.tag_ in ("VVFIN", "VAFIN", "VMFIN") or next_tok.text.lower() in FINITE_MODAL_AND_AUX_FORMS:
+            if (
+                next_tok.pos_ in ("VERB", "AUX")
+                or next_tok.tag_ in ("VVFIN", "VAFIN", "VMFIN")
+                or next_tok.text.lower() in FINITE_MODAL_AND_AUX_FORMS
+            ):
                 has_main_finite_verb = True
                 main_fin_candidate = next_tok
                 break
@@ -433,7 +437,11 @@ def analyze_sentence_topology(
 
     # Check for infinitive with zu
     zu_tokens = [t for t in tokens if t.tag_ == "PTKZU" or t.dep_ == "pm" or t.text.lower() == "zu"]
-    inf_verbs = [t for t in tokens if t.tag_ in ("VVINF", "VAINF", "VMINF") or (t.pos_ in ("VERB", "AUX") and "Inf" in t.morph.get("VerbForm", []))]
+    inf_verbs = [
+        t for t in tokens
+        if t.tag_ in ("VVINF", "VAINF", "VMINF")
+        or (t.pos_ in ("VERB", "AUX") and "Inf" in t.morph.get("VerbForm", []))
+    ]
     has_finite_verb = any(
         t.tag_ in ("VVFIN", "VAFIN", "VMFIN")
         or (t.pos_ in ("VERB", "AUX") and "Fin" in t.morph.get("VerbForm", []))
@@ -511,7 +519,11 @@ def analyze_sentence_topology(
         if rk_candidates:
             rk_first_id = rk_candidates[0].i
             rk_last_id = rk_candidates[-1].i
-            rk_tokens = [t for t in tokens if rk_first_id <= t.i <= rk_last_id and (t in rk_candidates or t.pos_ in ("VERB", "AUX", "PART"))]
+            rk_tokens = [
+                t for t in tokens
+                if rk_first_id <= t.i <= rk_last_id
+                and (t in rk_candidates or t.pos_ in ("VERB", "AUX", "PART"))
+            ]
         else:
             rk_tokens = []
 
@@ -667,8 +679,16 @@ def analyze_sentence_topology(
                     continue
                 if t.tag_ == "PTKVZ" or t.dep_ in ("svp", "compound:prt"):
                     rk_elements.append(t)
-                elif t.tag_ in ("VVPP", "VAPP", "VVINF", "VAINF", "VMINF") or (t.pos_ in ("VERB", "AUX") and t.i > fin_verb.i):
-                    if t.dep_ in ("oc", "ROOT", "mo") or t.head == fin_verb or t.head.head == fin_verb or t == fin_verb.head:
+                elif (
+                    t.tag_ in ("VVPP", "VAPP", "VVINF", "VAINF", "VMINF")
+                    or (t.pos_ in ("VERB", "AUX") and t.i > fin_verb.i)
+                ):
+                    if (
+                        t.dep_ in ("oc", "ROOT", "mo")
+                        or t.head == fin_verb
+                        or t.head.head == fin_verb
+                        or t == fin_verb.head
+                    ):
                         rk_elements.append(t)
 
         rk_tokens = sorted(rk_elements, key=lambda x: x.i)
@@ -718,11 +738,26 @@ def analyze_sentence_topology(
     }
 
     has_participle = any(t.tag_ in ("VVPP", "VAPP") for t in (lk_tokens + rk_tokens + mf_tokens))
-    has_werden = any(t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden") for t in (lk_tokens + rk_tokens))
-    has_sein = any(t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren") for t in (lk_tokens + rk_tokens))
-    has_modal = any(t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in (lk_tokens + rk_tokens))
+    has_werden = any(
+        t.lemma_.lower() in ("werden", "wurde")
+        or t.text.lower() in ("wurde", "wurden", "wird", "werden")
+        for t in (lk_tokens + rk_tokens)
+    )
+    has_sein = any(
+        t.lemma_.lower() in ("sein", "war")
+        or t.text.lower() in ("ist", "sind", "war", "waren")
+        for t in (lk_tokens + rk_tokens)
+    )
+    has_modal = any(
+        t.tag_ in ("VMFIN", "VMINF")
+        or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS
+        for t in (lk_tokens + rk_tokens)
+    )
     has_sep_pfx = any(t.tag_ == "PTKVZ" for t in rk_tokens)
-    has_subjunctive = any(t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", []) for t in (lk_tokens + rk_tokens))
+    has_subjunctive = any(
+        t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", [])
+        for t in (lk_tokens + rk_tokens)
+    )
 
     if has_werden and has_participle:
         bracket_desc = "Passiv-Klammer (Vorgangspassiv)"
@@ -732,7 +767,13 @@ def analyze_sentence_topology(
         bracket_desc = "Passiv-Klammer (Zustandspassiv / Perfekt)"
     elif has_subjunctive:
         bracket_desc = "Konjunktiv-Klammer (Irrealis / Höflichkeit)"
-    elif has_modal and (has_participle or any(t.tag_ in ("VVINF", "VAINF") or t.text.lower() in ("werden", "sein", "haben") for t in rk_tokens)):
+    elif has_modal and (
+        has_participle
+        or any(
+            t.tag_ in ("VVINF", "VAINF") or t.text.lower() in ("werden", "sein", "haben")
+            for t in rk_tokens
+        )
+    ):
         bracket_desc = "Modalverb-Klammer"
     elif has_sep_pfx:
         bracket_desc = "Trennbare-Verb-Klammer (Präfix im RK)"
@@ -834,9 +875,21 @@ def _classify_single_clause(
 
     # Check passive / subjunctive / tense / mood
     has_participle = any(t.tag_ in ("VVPP", "VAPP") for t in tokens)
-    has_werden = any(t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden") for t in tokens)
-    has_sein = any(t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren") for t in tokens)
-    has_modal = any(t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in tokens)
+    has_werden = any(
+        t.lemma_.lower() in ("werden", "wurde")
+        or t.text.lower() in ("wurde", "wurden", "wird", "werden")
+        for t in tokens
+    )
+    has_sein = any(
+        t.lemma_.lower() in ("sein", "war")
+        or t.text.lower() in ("ist", "sind", "war", "waren")
+        for t in tokens
+    )
+    has_modal = any(
+        t.tag_ in ("VMFIN", "VMINF")
+        or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS
+        for t in tokens
+    )
 
     subj_tokens = [t for t in tokens if t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", [])]
     is_subjunctive = len(subj_tokens) > 0
@@ -903,11 +956,20 @@ def _classify_single_clause(
     # 2. RELATIVSATZ
     # --------------------------------------------------------------------------
     # Note: Check if connector is an indirect question word first
-    is_question_word = first_word_lower in INTERROGATIVE_WORDS and first_word_lower not in ("der", "die", "das", "welcher", "welche", "welches")
-    rel_pron_toks = [t for t in tokens if t.tag_ in ("PRELS", "PRELAT") or (t.text.lower() in RELATIVE_PRONOUNS and t.dep_ in ("sb", "oa", "da", "og", "nk", "rc", "ag"))]
+    is_question_word = (
+        first_word_lower in INTERROGATIVE_WORDS
+        and first_word_lower not in ("der", "die", "das", "welcher", "welche", "welches")
+    )
+    rel_pron_toks = [
+        t for t in tokens
+        if t.tag_ in ("PRELS", "PRELAT")
+        or (t.text.lower() in RELATIVE_PRONOUNS and t.dep_ in ("sb", "oa", "da", "og", "nk", "rc", "ag"))
+    ]
     is_relativsatz = not is_root and not is_question_word and (head.dep_ in ("rc", "re") or len(rel_pron_toks) > 0)
 
-    if is_relativsatz and not (first_word_lower in SUBORDINATING_CONJUNCTIONS and first_word_lower not in ("das", "die", "der")):
+    if is_relativsatz and not (
+        first_word_lower in SUBORDINATING_CONJUNCTIONS and first_word_lower not in ("das", "die", "der")
+    ):
         connector_str = ""
         if rel_pron_toks:
             rel_t = rel_pron_toks[0]
@@ -943,10 +1005,17 @@ def _classify_single_clause(
     # --------------------------------------------------------------------------
     # 3. KONJUNKTIONALSATZ / ADVERBIALSATZ / DASS-OB SATZ / INDIREKTER FRAGESATZ
     # --------------------------------------------------------------------------
-    conj_toks = [t for t in non_punct[:3] if t.text.lower() in SUBORDINATING_CONJUNCTIONS or t.tag_ in ("KOUS", "KOUI")]
+    conj_toks = [
+        t for t in non_punct[:3]
+        if t.text.lower() in SUBORDINATING_CONJUNCTIONS or t.tag_ in ("KOUS", "KOUI")
+    ]
     is_interrogative_sub = (first_word_lower in INTERROGATIVE_WORDS and not is_root)
 
-    if not is_root and (conj_toks or is_interrogative_sub or (head.dep_ in ("mo", "oc", "cp", "rc") and first_word_lower in SUBORDINATING_CONJUNCTIONS)):
+    if not is_root and (
+        conj_toks
+        or is_interrogative_sub
+        or (head.dep_ in ("mo", "oc", "cp", "rc") and first_word_lower in SUBORDINATING_CONJUNCTIONS)
+    ):
         if conj_toks:
             conj_word = conj_toks[0].text.lower()
             meta = SUBORDINATING_CONJUNCTIONS.get(conj_word, {
@@ -1109,7 +1178,12 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
             continue
 
         # 3. Finite Subordinate Conjunctional / Adverbial Clause
-        has_conj_child = any(c.tag_ in ("KOUS", "KOUI") or c.dep_ == "cp" or c.text.lower() in SUBORDINATING_CONJUNCTIONS for c in t.children)
+        has_conj_child = any(
+            c.tag_ in ("KOUS", "KOUI")
+            or c.dep_ == "cp"
+            or c.text.lower() in SUBORDINATING_CONJUNCTIONS
+            for c in t.children
+        )
         if is_finite and (t.dep_ in ("mo", "oc", "oa", "sb", "cp") or has_conj_child):
             clause_heads.append((t, "subordinate"))
             continue
@@ -1173,7 +1247,10 @@ def build_clause_tree(doc_or_sent: Union[Doc, Span, str]) -> Dict[str, Any]:
 # ==============================================================================
 
 # 常见缩写保护（每句切分调用重建的正则字符串 → 模块级常量，热路径免重建）
-_ABBR_PATTERN = r'\b(ca|usw|bzw|etc|dr|prof|nr|hr|fr|vgl|inkl|evtl|std|abs|art|bd|bsp|dipl|ing|jun|sen|str|tab|tel|univ|vol)\.'
+_ABBR_PATTERN = (
+    r'\b(ca|usw|bzw|etc|dr|prof|nr|hr|fr|vgl|inkl|evtl|std|abs|art|bd|bsp|'
+    r'dipl|ing|jun|sen|str|tab|tel|univ|vol)\.'
+)
 
 
 def split_sentences_pure_python(text: str) -> List[str]:
@@ -1187,7 +1264,11 @@ def split_sentences_pure_python(text: str) -> List[str]:
     protected = re.sub(r'\b(\d{1,2})\.(\d{1,2})\.', r'\1__DOT__\2__DOT__', protected)
 
     # 2. Protect multi-dot abbreviations (e.g. z.B., d.h., u.a., e.V.)
-    protected = re.sub(r'\b([a-zA-ZäöüÄÖÜß])\.\s*([a-zA-ZäöüÄÖÜß])\.', lambda m: m.group(0).replace('.', '__DOT__'), protected)
+    protected = re.sub(
+        r'\b([a-zA-ZäöüÄÖÜß])\.\s*([a-zA-ZäöüÄÖÜß])\.',
+        lambda m: m.group(0).replace('.', '__DOT__'),
+        protected,
+    )
 
     # 3. Protect common word abbreviations (ca., Dr., Prof., usw., bzw., etc., Nr., Hr., Fr., vgl., inkl., evtl.)
     protected = re.sub(_ABBR_PATTERN, r'\g<1>__DOT__', protected, flags=re.IGNORECASE)
