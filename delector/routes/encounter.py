@@ -17,7 +17,7 @@ word_count = 简单空白分词计数（服务端 cheap 计算），不做 spaCy
 
 import copy
 import json
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -295,7 +295,7 @@ def _normalize_desktop_base(raw: str) -> str:
     return base
 
 
-def _shelf_get(url: str) -> object:
+def _shelf_get(url: str) -> Any:
     """出站 GET 桌面货架：非 2xx / 连接失败 / 超时 → 502 人话；JSON 解析失败 → 502。"""
     try:
         resp = httpx.get(url, timeout=_PULL_TIMEOUT)

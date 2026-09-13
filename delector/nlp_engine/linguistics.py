@@ -14,7 +14,12 @@ try:
 except ImportError:
     CORE_VOCAB_DB = {}
 
-    def lookup_core_vocab(w):
+    def lookup_core_vocab(lemma_or_word: str) -> Optional[Dict[str, Any]]:
+        """降级占位：core_dict 不可用时恒返回 None（红线 1 的降级路径）。
+
+        签名必须与真版（data/core_dict.py）完全一致——mypy 会校验条件定义的两份
+        变体签名相同，签名漂移即是缺陷。
+        """
         return None
 
 
@@ -605,6 +610,14 @@ class VerbTrio(tuple):
     Structured 4-tuple (Präteritum, Partizip II, Hilfsverb, Definition_zh)
     with named attribute access, dict indexing ('praeteritum', 'infinitiv'), and dictionary serialization.
     """
+
+    # 属性在 __new__ 里动态挂载（tuple 子类的老式写法）；mypy 需要类级注解才认识它们。
+    # 纯注解、运行时零影响；不改成 NamedTuple 是为了不触碰既有构造/索引/序列化行为。
+    infinitiv: str
+    praeteritum: str
+    partizip2: str
+    hilfsverb: str
+    definition_zh: str
 
     def __new__(cls, praeteritum: str, partizip2: str, hilfsverb: str, definition_zh: str, infinitiv: str = ""):
         obj = super(VerbTrio, cls).__new__(cls, (praeteritum, partizip2, hilfsverb, definition_zh))
@@ -1482,7 +1495,7 @@ def build_prep_matrix_core(collocations):
     单独拆出来是为了让「空表降级」「排序」「守恒」这些行为可以在不 monkeypatch
     模块全局的情况下直接测（见 test_prep_matrix.py）。
     """
-    matrix = {}
+    matrix: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     for lemma, rows in collocations.items():
         for praep, kasus, bedeutung, beispiel in rows:
             # capitalize 而非 upper：数据集写的是 Dat/Akk/Gen，格名会直接进 URL

@@ -299,7 +299,7 @@ def parse_rss_feed(xml_text: str) -> List[Dict[str, Any]]:
                     if tag == "title" and not title:
                         title = child.text or ""
                     elif tag == "link" and not link:
-                        link = child.text or child.get("href", "")
+                        link = child.text or child.get("href") or ""
                     elif tag in ("description", "encoded", "summary") and not desc:
                         desc = child.text or ""
                     elif tag in ("pubDate", "date", "updated", "published") and not pub_date:

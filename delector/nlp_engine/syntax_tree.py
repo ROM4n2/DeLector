@@ -15,10 +15,12 @@ try:
     import spacy
     from spacy.tokens import Doc, Span, Token
 except ImportError:
-    spacy = None
-    Doc = Any
-    Span = Any
-    Token = Any
+    # spaCy 缺失时的**运行时降级占位**（红线 1：NLP 降级路径是有意设计）。
+    # 把类型名绑定成 Any 会被 mypy 判为「给类型赋值」——带理由豁免，勿改成别的形态。
+    spacy = None  # type: ignore[assignment]
+    Doc = Any  # type: ignore[misc, assignment]
+    Span = Any  # type: ignore[misc, assignment]
+    Token = Any  # type: ignore[misc, assignment]
 
 # Global cached spaCy German model instance
 _nlp_instance = None
@@ -893,7 +895,7 @@ def analyze_sentence_topology(
     def to_text(toks: List[Token]) -> str:
         if not toks:
             return ""
-        res = []
+        res: List[str] = []
         for t in toks:
             if t.is_punct and t.text in (",", ".", "!", "?", ";", ":") and res:
                 res[-1] = res[-1] + t.text
@@ -1064,7 +1066,7 @@ def _classify_single_clause(tokens: List[Token], head: Token, node_id: str, is_r
         else:
             mood = "Konjunktiv II"
 
-    tense = head.morph.get("Tense", ["Präsens"])[0] if head.morph.get("Tense") else "Präsens"
+    tense = head.morph.get("Tense", ["Präsens"])[0] if head.morph.get("Tense", []) else "Präsens"
     if tense == "Pres":
         tense = "Präsens"
     elif tense == "Past":
@@ -1253,8 +1255,8 @@ def _classify_single_clause(tokens: List[Token], head: Token, node_id: str, is_r
         clause_type="hauptsatz",
         label=label,
         subtype=subtype,
-        connector=first_tok.text if is_coord else "",
-        finite_verb=head.text,
+        connector=first_tok.text if (is_coord and first_tok) else "",
+        finite_verb=head.text if head else "",
         formula=formula,
         bracket_structure=bracket_str,
         features=features,

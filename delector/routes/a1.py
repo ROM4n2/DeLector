@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/a1", tags=["Goethe A1"])
 # --- Goethe-Zertifikat A1 Wortliste & Sprechen Lab ---
 @router.get("/topics")
 def get_a1_topics():
-    counts = {}
+    counts: dict = {}
     for entry in a1_dict.GOETHE_A1_VOCAB.values():
         t = entry.get("topic", "phrases")
         counts[t] = counts.get(t, 0) + 1
