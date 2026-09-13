@@ -165,3 +165,57 @@ def test_ruff_config_locks_core_rules_and_stays_out_of_runtime_deps():
         "requirements.txt 不得包含 ruff：它是开发期工具，混入运行时依赖会增大"
         "Android 打包面体积与依赖漂移面（ci.yml 内单独 pip install 即可）"
     )
+
+
+# ── Mypy 类型门禁（2026-09-13 mypy-cleanup）────────────────────────────────────
+# 背景：仓库此前零类型检查配置。本轮以「适度严格档」清账全仓 138 → 0（check_untyped_defs
+# 等四开关，见 pyproject.toml [tool.mypy] 的档位决策注释）；--strict（约 600 处
+# no-untyped-def）递延另立。
+
+MYPY_CONFIG = REPO_ROOT / "pyproject.toml"
+
+
+def test_ci_workflow_has_mypy_gate():
+    """ci.yml 必须把 Mypy 类型检查接进 PR/push 门禁（否则类型债静默回潮）。"""
+    text = _read_guard_file(CI_WORKFLOW)
+
+    required_gates = [
+        (
+            "pip install mypy",
+            "缺 mypy 安装步骤：CI 里装不上 mypy（开发期工具，不进 requirements.txt，CI 内单独装）",
+        ),
+        (
+            "mypy",
+            "缺 mypy 调用：Python 类型检查门禁没接上，types/ 清账成果会静默回潮",
+        ),
+    ]
+    missing = [f"未找到 {needle!r}（{why}）" for needle, why in required_gates if needle not in text]
+    assert not missing, f"{CI_WORKFLOW} 缺少 Mypy 门禁要素：\n" + "\n".join(missing)
+
+
+def test_mypy_config_locks_adoption_flags_and_stays_out_of_runtime_deps():
+    """[tool.mypy] 必须锁住档位关键项；mypy 不得混入运行时依赖。"""
+    text = _read_guard_file(MYPY_CONFIG)
+
+    assert "[tool.mypy]" in text, f"{MYPY_CONFIG} 缺 [tool.mypy] 配置表"
+
+    # 档位关键项逐条钉死（AUTOMATION-GOTCHAS §5：逐条钉死，不做冻结集合断言）
+    required_flags = [
+        ("check_untyped_defs = true", "未注解函数体检查是本档位的核心价值（默认档完全不查）"),
+        ("no_implicit_optional = true", "隐式 Optional 已被 PEP 484 演进弃用"),
+        ("warn_unused_ignores = true", "自净机制：多余的 type: ignore 会被报错，防清账退化成到处 ignore"),
+        ("warn_redundant_casts = true", "冗余 cast 会掩盖真实类型错误"),
+        ("ignore_missing_imports = true", "spaCy 等第三方无 stub，不忽略则噪音 import 错误淹没真实问题"),
+    ]
+    missing = [
+        f"缺 {needle!r}（{why}）"
+        for needle, why in required_flags
+        if needle not in text.replace(" ", " ")
+    ]
+    assert not missing, f"{MYPY_CONFIG} 的 [tool.mypy] 档位被削弱：\n" + "\n".join(missing)
+
+    req = _read_guard_file(REQUIREMENTS)
+    assert "mypy" not in req, (
+        "requirements.txt 不得包含 mypy：它是开发期工具，混入运行时依赖会增大"
+        "Android 打包面体积与依赖漂移面（ci.yml 内单独 pip install 即可）"
+    )
