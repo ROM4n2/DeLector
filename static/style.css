@@ -10064,6 +10064,52 @@ body.drawer-open .companion {
   border-color: #1b7f4d;
 }
 
+/* ── PWA 更新条（2026-09-13）：独立于 toast，可点且可关 ──────────────────────
+   为什么独立：更新提示需要用户交互（刷新/稍后），而 .wb-notify 带
+   pointer-events:none（toast 不拦截下层点击）。曾把刷新动作绑在 toast 上
+   → 点击物理不可达（用户报障「点了没用」），故此条必须自带
+   pointer-events:auto。 */
+#wb-update-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 88px;
+  transform: translateX(-50%);
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: min(92vw, 560px);
+  padding: 0.55rem 0.9rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--paper);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+
+#wb-update-bar .wb-update-text {
+  white-space: nowrap;
+}
+
+#wb-update-bar .wb-update-refresh,
+#wb-update-bar .wb-update-later {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--paper);
+  background: transparent;
+  color: var(--paper);
+}
+
+#wb-update-bar .wb-update-refresh {
+  background: var(--paper);
+  color: var(--ink);
+}
+
 /* ── Grammatik-Radar (路线 C) ── */
 .grammar-radar-panel summary::-webkit-details-marker {
   color: var(--muted);
