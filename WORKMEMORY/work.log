@@ -245,3 +245,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 5. T6 收官：计划文档 + OVERVIEW 状态回填（CI Hardening 已知边界勾销 Ruff，Mypy 递延）。
 门禁：ruff check . 零告警（2265→0）；全量 pytest 0 FAILED（基线 717+1 → 719+1）；Go 三门禁不受影响。
 遗留：Mypy 严格模式递延另立计划；ruff format 未纳入 CI（只 gate check）。
+
+### 2026-09-13 | codebuddy__auto | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：WiFi 内容分发（docs/plans/2026-09-13-wifi-content-pull.md，分支 feature/wifi-content-pull）T1–T4 完成。
+1. **架构定调（关键）**：目标原是"桌面推手机"，侦查发现 start.py:36-42 中 Android 实例**有意绑 127.0.0.1**（绑 0.0.0.0 会把无鉴权 POST /api/settings 暴露局域网）→ 推送方向物理不可达；桌面绑 0.0.0.0 天然是货架 → 反转为**手机拉取**，与既有"拉取免 key、推送要 key"纪律同构。
+2. T1 桌面货架只读端点（GET /api/encounter/packs 清单 + /packs/{pack_id} 完整 v1；不挂本机闸、绝不提供写操作、不泄露 pack_json/正文、手工短文不进清单）；T2 手机 POST /api/encounter/pull-pack（挂 _require_localhost，出站 5s 超时 → validate_pack → import_encounter_pack 幂等）；15 用例（双 TestClient + monkeypatch 出站转真实 shelf 路径）（ffe7088）。
+3. T3 前端「📥 从电脑导入」：新增零依赖纯逻辑模块 static/js/encounter-pull.js（地址归一/记忆/映射）+ encounter.js 编排 + main.js 全局映射 + index.html 面板；前端只调本机相对路径（同源零跨域，探针含反例钉防直连桌面）；17 探针用例（1fef173）。
+4. T4 收官：ops.md 新增「内容分发：桌面 → 手机（WiFi 拉取）」节 + 顺手修正过时的测试数/静态检查命令（pyflakes 手工命令由 ruff 门禁取代）；OVERVIEW/work.log 回填。
+门禁：全量 **751 passed + 1 skipped**（719 + 32 新用例，0 FAILED）；ruff check . 零告警；Go 三门禁不受影响。
+遗留：作者手工冒烟（桌面跑 job#1 --deliver-to 本机 → 手机「从电脑导入」填桌面 IP → 选包）待执行；预置包 gloss 富化仍为后续项。
