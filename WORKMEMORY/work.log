@@ -225,3 +225,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. **风险点验证通过**：本次是 dependabot 的 actions 大版本升级（checkout v7 / upload-artifact v7 / download-artifact v8 / setup-android v4）首次在 tag 构建面真跑——三链路全绿，无 regression。
 4. 守护测试 test_writer_mobile 30 passed（含版本一致性两条）。
 遗留：Android 真机点检（覆盖安装后遇见区应见 4 篇预置短文）待作者执行——这是本轮唯一未自动化的验收点。
+
+### 2026-09-13 | codebuddy__auto | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：v5.5.1 patch 发版（PWA 更新提示修复送达到用户手机）。
+1. 起因：用户报障「新版本已就绪点击重新加载没有用且一直站着」→ vault-debug 四步定位双根因（刷新动作绑在 pointer-events:none 的 .wb-notify 上 = 死绑定；sticky 且无关闭入口 = 常驻遮挡），PR #40 修复并合并（master=b693ce1）。
+2. **关键判断**：Android 是独立实例且 static 打包在 APK 内 → 前端修复不覆盖安装到不了用户手机，故必须发 patch。
+3. 版本面五件套 bump（de19515，tag v5.5.1 打在该 commit 上）：sw.js / index.html / build.gradle(5.5.1/50501) / README（badge + 下载表 + Roadmap 新条目 + Tests 717/718）/ OVERVIEW。
+4. 三链路全绿：Build & Publish（Release v5.5.1 = Latest，四平台资产齐）· Build Agent（DeLector-Agent-5.5.1-{windows,linux,darwin}）· CI(master)。守护测试 test_writer_mobile 30 passed。
+遗留：Android 真机点检（覆盖安装 v5.5.1 后：更新提示应可点可关 + 遇见区应见 4 篇预置短文）待作者执行。
