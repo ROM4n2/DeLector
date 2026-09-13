@@ -1066,18 +1066,38 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
-  // 温和更新（M3-4）：新 SW activate 后不硬刷窗口，广播“新版本就绪”，
-  // 由用户点击通知带才 location.reload —— 避免打断正在进行的写作/复习状态。
+  // 温和更新（M3-4）：新 SW activate 后不硬刷窗口，提示用户自行刷新，
+  // 避免打断正在进行的写作/复习状态。
+  //
+  // 2026-09-13 修复（用户报障「点不动 + 一直站着」）：
+  //   原实现把刷新动作绑在 `#wb-notify` 上，而 `.wb-notify` 基础规则带
+  //   `pointer-events: none`（toast 的正确设计——不拦截下层点击）→ 点击物理上
+  //   永远到不了该元素，onclick 是死绑定；且用 sticky 提示、没有关闭入口 →
+  //   常驻遮挡界面。
+  //   现改为**独立的可交互更新条**：自身 pointer-events:auto，并给用户
+  //   「立即刷新」与「稍后」两条明确出路。
   navigator.serviceWorker.addEventListener("message", (ev) => {
-    if (ev.data && ev.data.type === "delector-update") {
-      notify("新版本已就绪 — 点击此处刷新应用", { kind: "info", sticky: true });
-      const nEl = document.getElementById("wb-notify");
-      if (nEl) {
-        nEl.style.cursor = "pointer";
-        nEl.onclick = () => location.reload();
-      }
-    }
+    if (ev.data && ev.data.type === "delector-update") showUpdateBar();
   });
+}
+
+// 更新提示条：独立元素（不复用 toast 的非阻断语义），可点、可关。
+function showUpdateBar() {
+  let bar = document.getElementById("wb-update-bar");
+  if (bar) return bar; // 已在提示中，避免重复插入
+
+  bar = document.createElement("div");
+  bar.id = "wb-update-bar";
+  bar.setAttribute("role", "status");
+  bar.innerHTML =
+    '<span class="wb-update-text">新版本已就绪</span>' +
+    '<button type="button" class="wb-update-refresh">立即刷新</button>' +
+    '<button type="button" class="wb-update-later" aria-label="稍后再说">稍后</button>';
+  (document.body || document.documentElement).appendChild(bar);
+
+  bar.querySelector(".wb-update-refresh").addEventListener("click", () => location.reload());
+  bar.querySelector(".wb-update-later").addEventListener("click", () => bar.remove());
+  return bar;
 }
 
 // ── Application Initialization ───────────────────────────────────────────────
