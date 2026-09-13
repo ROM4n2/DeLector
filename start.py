@@ -4,11 +4,12 @@ DeLector - Cross-Platform Instant Launcher
 Auto-detects port availability, LAN IP, and launches default browser.
 """
 import os
-import sys
 import socket
-import webbrowser
+import sys
 import threading
 import time
+import webbrowser
+
 
 def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -71,6 +72,7 @@ def main():
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
 
     import uvicorn
+
     from delector.server import app
     config = uvicorn.Config(app, host=host, port=port, reload=False, log_level="info")
     server = uvicorn.Server(config)

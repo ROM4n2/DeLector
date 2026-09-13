@@ -4,9 +4,9 @@ DeLector - Windows Portable Packager
 Builds a standalone, zero-dependency Windows portable distribution.
 """
 import os
-import sys
 import shutil
 import subprocess
+import sys
 
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     try:
