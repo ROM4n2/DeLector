@@ -3,8 +3,10 @@
 DeLector - Goethe-Zertifikat A2 Workshop Router
 Endpoints for A2 Wortliste (974 vocab).
 """
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter
+
 from delector.core.database import get_vocab_by_cefr
 
 router = APIRouter(prefix="/api/a2", tags=["Goethe A2"])

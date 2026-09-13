@@ -2,20 +2,14 @@
 DeLector - Goethe A1 Lesen (Reading) API Routes
 """
 
+import json
 from typing import Dict
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import json
 
-from delector.data.a1_lesen_dict import (
-    get_lesen_set_list,
-    get_lesen_set_by_id,
-    grade_lesen_answers
-)
-from delector.core.database import (
-    record_a1_lesen_trial,
-    get_a1_lesen_history
-)
+from delector.core.database import get_a1_lesen_history, record_a1_lesen_trial
+from delector.data.a1_lesen_dict import get_lesen_set_by_id, get_lesen_set_list, grade_lesen_answers
 
 lesen_router = APIRouter(prefix="/api/a1/lesen", tags=["a1_lesen"])
 

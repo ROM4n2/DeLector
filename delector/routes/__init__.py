@@ -13,6 +13,9 @@ _sync_sdp_cache`）——测试钉的是"缓存与容量上限"，不是模块�
 """
 from fastapi import FastAPI
 
+# main 放最后：它承载从 server.py 搬来的通用 handler，搬迁前这些路由是**在
+# include_router 之后**才注册到 app 上的。FastAPI 按注册顺序匹配，把它提前会让
+# 同前缀的分域路由被通用 handler 抢先命中。
 from delector.routes import (
     a1,
     a1_hoeren,
@@ -21,17 +24,14 @@ from delector.routes import (
     corpus,
     encounter,
     exam,
+    main,
     rtc,
     sync,
     tools,
 )
-# main 放最后：它承载从 server.py 搬来的通用 handler，搬迁前这些路由是**在
-# include_router 之后**才注册到 app 上的。FastAPI 按注册顺序匹配，把它提前会让
-# 同前缀的分域路由被通用 handler 抢先命中。
-from delector.routes import main
 from delector.routes.sync import (
-    MAX_SYNC_CACHE_ENTRIES,
     _SYNC_INSTANCE_ID,
+    MAX_SYNC_CACHE_ENTRIES,
     _sync_sdp_cache,
 )
 

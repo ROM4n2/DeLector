@@ -36,68 +36,71 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from delector.core.database import (
-    AUDIO_CACHE_DIR,
-    get_db,
-    get_progress_db,
-    db_conn,
-    db_progress_conn,
-    log_study_event,
-    get_setting,
-    set_setting,
-    get_wb_state,
-    save_wb_state,
-    get_wb_sync_key,
-    verify_wb_key,
-    regenerate_wb_sync_key,
-    get_effective_api_key,
-    get_effective_api_base_url,
-    get_effective_api_model,
-    ingest_article,
-    export_anki_deck,
-    get_cache_info,
-    prune_audio_cache,
-    BACKUP_SETTINGS_IMPORT_WHITELIST,
     _BACKUP_TABLES,
     _PROGRESS_TABLES,
-    _require_localhost,
-    build_backup_payload,
+    AUDIO_CACHE_DIR,
+    BACKUP_SETTINGS_IMPORT_WHITELIST,
+    BACKUP_TOKEN_TTL_SEC,
+    _db_snapshot_guard,
+    _issue_pending,
     _pending_backup,
     _pending_wb,
-    BACKUP_TOKEN_TTL_SEC,
-    _issue_pending,
-    _take_pending,
-    _db_snapshot_guard,
     _replace_tables,
-    migrate_a1_records_to_exam_trials,
-    get_prep_saved,
+    _require_localhost,
+    _take_pending,
     add_prep_saved,
-    get_vocab_by_cefr,
-    upsert_corpus_syntax_stats,
+    build_backup_payload,
+    db_conn,
+    db_progress_conn,
+    export_anki_deck,
     get_all_corpus_syntax_stats,
+    get_cache_info,
+    get_db,
+    get_effective_api_base_url,
+    get_effective_api_key,
+    get_effective_api_model,
+    get_prep_saved,
+    get_progress_db,
+    get_setting,
+    get_vocab_by_cefr,
+    get_wb_state,
+    get_wb_sync_key,
+    ingest_article,
+    log_study_event,
+    migrate_a1_records_to_exam_trials,
+    prune_audio_cache,
+    regenerate_wb_sync_key,
+    save_wb_state,
+    set_setting,
+    upsert_corpus_syntax_stats,
+    verify_wb_key,
 )
-
-from delector.nlp_engine.processor import (
-    nlp,
-    NLP_ENGINE,
-    NLP_ENGINE_DETAIL,
-    get_cefr_level,
-    process_german_text,
-    SYSTEM_GRAMMAR_PROMPT,
-)
-
 from delector.core.security import (
-    is_safe_public_url,
+    PRESET_FEEDS,
     clean_html_to_article,
     fetch_remote_html,
-    PRESET_FEEDS,
+    is_safe_public_url,
     parse_rss_feed,
 )
-
-from delector.data.core_dict import lookup_core_vocab
 from delector.core.utils import _attachment_headers
-from delector.nlp_engine.linguistics import (lookup_irregular_verb, lookup_linguistics_ext, split_komposita,
-                         lookup_prep_collocations, build_prep_matrix)
+from delector.data.core_dict import lookup_core_vocab
+from delector.nlp_engine.linguistics import (
+    build_prep_matrix,
+    lookup_irregular_verb,
+    lookup_linguistics_ext,
+    lookup_prep_collocations,
+    split_komposita,
+)
+from delector.nlp_engine.processor import (
+    NLP_ENGINE,
+    NLP_ENGINE_DETAIL,
+    SYSTEM_GRAMMAR_PROMPT,
+    get_cefr_level,
+    nlp,
+    process_german_text,
+)
 from delector.nlp_engine.syntax_tree import analyze_syntax_tree
+
 # 直接指到子模块而非 `from delector.routes import …`：本模块由 routes/__init__.py 导入，
 # 走包子属性会撞上半初始化状态。
 from delector.routes.sync import _SYNC_INSTANCE_ID
@@ -241,7 +244,10 @@ def get_article(article_id: int):
             pj = {}
         if not isinstance(pj, dict) or "stats" not in pj or pj.get("version") != "3.4.0":
             pj = process_german_text(data.get("raw_text") or "")
-            conn.execute("UPDATE articles SET processed_json = ? WHERE id = ?", (json.dumps(pj, ensure_ascii=False), article_id))
+            conn.execute(
+                "UPDATE articles SET processed_json = ? WHERE id = ?",
+                (json.dumps(pj, ensure_ascii=False), article_id),
+            )
         data.update(pj)
         return data
 
@@ -415,7 +421,9 @@ async def lookup_vocab(req: VocabLookupReq):
         praet = getattr(stamm, "praeteritum", None) or (stamm.get("praeteritum") if hasattr(stamm, "get") else "")
         p2 = getattr(stamm, "partizip2", None) or (stamm.get("partizip2") if hasattr(stamm, "get") else "")
         hilf = getattr(stamm, "hilfsverb", None) or (stamm.get("hilfsverb") if hasattr(stamm, "get") else "")
-        stamm_def = getattr(stamm, "definition_zh", None) or (stamm.get("definition_zh") if hasattr(stamm, "get") else "")
+        stamm_def = getattr(stamm, "definition_zh", None) or (
+            stamm.get("definition_zh") if hasattr(stamm, "get") else ""
+        )
 
         res["stammformen"] = {
             "infinitiv": inf,
@@ -443,7 +451,11 @@ async def lookup_vocab(req: VocabLookupReq):
                     p_copy["def_zh"] = p_copy["definition_zh"]
                 res["komposita"].append(p_copy)
             if not res.get("definition_zh"):
-                sub_defs = [p.get("definition_zh") or p.get("def_zh") for p in parts if (p.get("definition_zh") or p.get("def_zh"))]
+                sub_defs = [
+                    p.get("definition_zh") or p.get("def_zh")
+                    for p in parts
+                    if (p.get("definition_zh") or p.get("def_zh"))
+                ]
                 if sub_defs:
                     res["definition_zh"] = " + ".join(sub_defs)
                     if res.get("source") in ("none", "ai_error", "ai_exception"):
@@ -625,8 +637,13 @@ def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) 
 def add_vocab_card(req: VocabCardReq):
     with db_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO vocab_cards (article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (req.article_id, req.word, req.lemma, req.pos, req.gender, req.plural or "", req.cefr_level, req.definition_zh, req.sentence_context)
+            "INSERT INTO vocab_cards "
+            "(article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                req.article_id, req.word, req.lemma, req.pos, req.gender, req.plural or "",
+                req.cefr_level, req.definition_zh, req.sentence_context,
+            ),
         )
         card_id = cur.lastrowid
     log_study_event("add_card", card_id, req.word)
@@ -636,8 +653,15 @@ def add_vocab_card(req: VocabCardReq):
 def add_grammar_card(req: GrammarCardReq):
     with db_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO grammar_cards (article_id, sentence_context, grammar_name, cefr_level, explanation_zh, rule_formula, corrected_form, error_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (req.article_id, req.sentence_context, req.grammar_name, req.cefr_level, req.explanation_zh, req.rule_formula or "", req.corrected_form or "", req.error_type or "")
+            "INSERT INTO grammar_cards "
+            "(article_id, sentence_context, grammar_name, cefr_level, explanation_zh, "
+            "rule_formula, corrected_form, error_type) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                req.article_id, req.sentence_context, req.grammar_name, req.cefr_level,
+                req.explanation_zh, req.rule_formula or "", req.corrected_form or "",
+                req.error_type or "",
+            ),
         )
         card_id = cur.lastrowid
     log_study_event("add_card", card_id, req.grammar_name)
@@ -734,7 +758,8 @@ def record_quiz(req: QuizRecordReq):
         today = datetime.now().strftime("%Y-%m-%d")
         conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
         conn.execute(
-            "UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, study_minutes = study_minutes + 1 WHERE date = ?",
+            "UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, "
+            "study_minutes = study_minutes + 1 WHERE date = ?",
             (today,)
         )
     return {"status": "ok"}
@@ -832,15 +857,24 @@ def get_progress_stats():
 
     # Milestones
     milestones = [
-        {"id": "first_card",     "title": "初临纸页",   "desc": "制作了第一张卡片",       "icon": "🌱", "unlocked": total_cards >= 1},
-        {"id": "first_article",  "title": "开卷有益",   "desc": "研读了第一篇德语文章",   "icon": "📖", "unlocked": total_articles >= 1},
-        {"id": "master_10",      "title": "小试牛刀",   "desc": "斩获 10 张已掌握卡片",   "icon": "⚔️", "unlocked": total_mastered >= 10},
-        {"id": "master_50",      "title": "千锤百炼",   "desc": "斩获 50 张已掌握卡片",   "icon": "🛡️", "unlocked": total_mastered >= 50},
-        {"id": "master_100",     "title": "百词斩将",   "desc": "斩获 100 张已掌握卡片",  "icon": "🏆", "unlocked": total_mastered >= 100},
-        {"id": "master_200",     "title": "词海无涯",   "desc": "斩获 200 张已掌握卡片",  "icon": "👑", "unlocked": total_mastered >= 200},
-        {"id": "streak_3",       "title": "三日不绝",   "desc": "连续打卡 3 天",          "icon": "🔥", "unlocked": streak >= 3},
-        {"id": "streak_7",       "title": "一周常胜",   "desc": "连续打卡 7 天",          "icon": "⚡", "unlocked": streak >= 7},
-        {"id": "streak_30",      "title": "月光苦读者", "desc": "连续打卡 30 天",         "icon": "🌙", "unlocked": streak >= 30},
+        {"id": "first_card", "title": "初临纸页",
+         "desc": "制作了第一张卡片", "icon": "🌱", "unlocked": total_cards >= 1},
+        {"id": "first_article", "title": "开卷有益",
+         "desc": "研读了第一篇德语文章", "icon": "📖", "unlocked": total_articles >= 1},
+        {"id": "master_10", "title": "小试牛刀",
+         "desc": "斩获 10 张已掌握卡片", "icon": "⚔️", "unlocked": total_mastered >= 10},
+        {"id": "master_50", "title": "千锤百炼",
+         "desc": "斩获 50 张已掌握卡片", "icon": "🛡️", "unlocked": total_mastered >= 50},
+        {"id": "master_100", "title": "百词斩将",
+         "desc": "斩获 100 张已掌握卡片", "icon": "🏆", "unlocked": total_mastered >= 100},
+        {"id": "master_200", "title": "词海无涯",
+         "desc": "斩获 200 张已掌握卡片", "icon": "👑", "unlocked": total_mastered >= 200},
+        {"id": "streak_3", "title": "三日不绝",
+         "desc": "连续打卡 3 天", "icon": "🔥", "unlocked": streak >= 3},
+        {"id": "streak_7", "title": "一周常胜",
+         "desc": "连续打卡 7 天", "icon": "⚡", "unlocked": streak >= 7},
+        {"id": "streak_30", "title": "月光苦读者",
+         "desc": "连续打卡 30 天", "icon": "🌙", "unlocked": streak >= 30},
     ]
 
     return {
@@ -925,7 +959,9 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
         for tts_url in candidate_urls:
             try:
                 async with httpx.AsyncClient(timeout=6.0) as client:
-                    resp = await client.get(tts_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                    resp = await client.get(
+                        tts_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                    )
                     if resp.status_code == 200 and len(resp.content) > 200:
                         with open(cache_file, "wb") as f:
                             f.write(resp.content)
@@ -1011,15 +1047,19 @@ class ReadingNoteReq(BaseModel):
 @router.get("/api/articles/{article_id}/notes")
 def list_article_notes(article_id: int):
     with db_conn() as conn:
-        rows = conn.execute("SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+        rows = conn.execute(
+            "SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)
+        ).fetchall()
         return [dict(r) for r in rows]
 
 @router.post("/api/articles/{article_id}/notes")
 def create_article_note(article_id: int, req: ReadingNoteReq):
     with db_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO reading_notes (article_id, sentence_id, selected_text, color, note_content) VALUES (?, ?, ?, ?, ?)",
-            (article_id, req.sentence_id, req.selected_text, req.color or "yellow", req.note_content or "")
+            "INSERT INTO reading_notes "
+            "(article_id, sentence_id, selected_text, color, note_content) VALUES (?, ?, ?, ?, ?)",
+            (article_id, req.sentence_id, req.selected_text, req.color or "yellow",
+             req.note_content or "")
         )
         return {"id": cur.lastrowid, "status": "ok"}
 
@@ -1069,7 +1109,13 @@ async def note_assist(req: NoteAssistReq):
                     "messages": [
                         {"role": "system", "content": SYSTEM_NOTE_PROMPT},
                         # 截断后再送 LLM：与 writing/analyze 一致，控制请求成本
-                        {"role": "user", "content": f"整句: \"{req.sentence[:2000]}\"\n划选部分: \"{req.selected_text[:2000]}\""}
+                        {
+                            "role": "user",
+                            "content": (
+                                f"整句: \"{req.sentence[:2000]}\"\n"
+                                f"划选部分: \"{req.selected_text[:2000]}\""
+                            ),
+                        }
                     ],
                     "response_format": {"type": "json_object"}
                 }
@@ -1172,9 +1218,15 @@ def export_study_guide(article_id: int):
         art = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not art:
             raise HTTPException(404, "Article not found")
-        notes = conn.execute("SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
-        vocab = conn.execute("SELECT * FROM vocab_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
-        grammar = conn.execute("SELECT * FROM grammar_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)).fetchall()
+        notes = conn.execute(
+            "SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)
+        ).fetchall()
+        vocab = conn.execute(
+            "SELECT * FROM vocab_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)
+        ).fetchall()
+        grammar = conn.execute(
+            "SELECT * FROM grammar_cards WHERE article_id = ? ORDER BY id ASC", (article_id,)
+        ).fetchall()
 
     md = [f"# {art['title']} — DeLector 精读讲义\n"]
     md.append(f"> 导出日期: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 字符数: {len(art['raw_text'])}\n")
@@ -1192,7 +1244,10 @@ def export_study_guide(article_id: int):
         md.append("| 单词 | 原型 | 词性 | CEFR | 中文释义 | 原文语境 |")
         md.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
         for v in vocab:
-            md.append(f"| **{v['word']}** | {v['lemma']} | {v['pos']} | {v['cefr_level']} | {v['definition_zh']} | *{v['sentence_context']}* |")
+            md.append(
+                f"| **{v['word']}** | {v['lemma']} | {v['pos']} | {v['cefr_level']} | "
+                f"{v['definition_zh']} | *{v['sentence_context']}* |"
+            )
         md.append("")
 
     if grammar:
@@ -1500,11 +1555,13 @@ def get_due_cards():
     today = datetime.now().strftime('%Y-%m-%d')
     with db_conn() as conn:
         v = [dict(r) for r in conn.execute(
-            "SELECT * FROM vocab_cards WHERE mastered = 0 AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+            "SELECT * FROM vocab_cards WHERE mastered = 0 "
+            "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
             (today,)
         ).fetchall()]
         g = [dict(r) for r in conn.execute(
-            "SELECT * FROM grammar_cards WHERE mastered = 0 AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+            "SELECT * FROM grammar_cards WHERE mastered = 0 "
+            "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
             (today,)
         ).fetchall()]
         for card in v + g:
@@ -1561,9 +1618,13 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
         for sent_idx, sent in enumerate(doc.sents):
             for token in sent:
                 is_grammar_target = (
-                    token.pos_ in ("ADP", "SCONJ", "CCONJ") or
-                    (token.pos_ == "AUX" and token.text.lower() in ("wurde", "worden", "werden", "wäre", "hätte", "könnte", "müsste", "sollte")) or
-                    (token.pos_ == "ADJ" and len(token.text) > 3)
+                    token.pos_ in ("ADP", "SCONJ", "CCONJ")
+                    or (
+                        token.pos_ == "AUX"
+                        and token.text.lower() in ("wurde", "worden", "werden", "wäre", "hätte",
+                                                   "könnte", "müsste", "sollte")
+                    )
+                    or (token.pos_ == "ADJ" and len(token.text) > 3)
                 )
                 sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
                 if is_grammar_target and len(sent_blanks) < 2 and len(token.text) >= 2:
@@ -1587,7 +1648,11 @@ def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Option
         for sent_idx, sent in enumerate(doc.sents):
             for token in sent:
                 lvl = get_cefr_level(token.lemma_)
-                is_vocab_target = token.pos_ in ("NOUN", "VERB") and lvl in ("A2", "B1", "B2", "C1") and len(token.text) >= 3
+                is_vocab_target = (
+                    token.pos_ in ("NOUN", "VERB")
+                    and lvl in ("A2", "B1", "B2", "C1")
+                    and len(token.text) >= 3
+                )
                 sent_blanks = [it for it in items if it.get("sent_idx") == sent_idx]
                 if is_vocab_target and len(sent_blanks) < 2:
                     first_letter = token.text[0]
@@ -1771,18 +1836,25 @@ def create_essay(req: EssayCreateReq):
     cefr = a.get("cefr", {}).get("recommended_level")
     with db_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO essays (title, content, analysis_json, cefr_level, error_count, sentence_count) VALUES (?, ?, ?, ?, ?, ?)",
-            (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr, a["error_count"], len(a["sentences"]))
+            "INSERT INTO essays "
+            "(title, content, analysis_json, cefr_level, error_count, sentence_count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (req.title, req.content, json.dumps(a, ensure_ascii=False), cefr,
+             a["error_count"], len(a["sentences"]))
         )
         eid = cur.lastrowid
-    return {"id": eid, "title": req.title, "content": req.content, "analysis_json": a, "error_count": a["error_count"]}
+    return {
+        "id": eid, "title": req.title, "content": req.content,
+        "analysis_json": a, "error_count": a["error_count"],
+    }
 
 
 @router.get("/api/essays")
 def list_essays():
     with db_conn() as conn:
         rows = conn.execute(
-            "SELECT id, title, cefr_level, error_count, sentence_count, created_at, updated_at FROM essays ORDER BY updated_at DESC, id DESC"
+            "SELECT id, title, cefr_level, error_count, sentence_count, created_at, updated_at "
+            "FROM essays ORDER BY updated_at DESC, id DESC"
         ).fetchall()
     return [dict(r) for r in rows]
 

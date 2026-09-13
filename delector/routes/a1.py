@@ -2,17 +2,17 @@
 DeLector - Goethe-Zertifikat A1 Workshop Router
 Endpoints for A1 Wortliste (702 vocab), Sprechen (Teil 2 & Teil 3), and Schreiben (Teil 1 Formular & Teil 2 E-Mail).
 """
-from typing import Optional, List, Dict
 import os
 import tempfile
+from typing import Dict, List, Optional
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from delector.data import a1_dict
-from delector.data import a1_writing_dict
 from delector.core.database import export_a1_anki_deck
-from delector.services.writing import check_a1_formular_answer, analyze_a1_email
+from delector.data import a1_dict, a1_writing_dict
+from delector.services.writing import analyze_a1_email, check_a1_formular_answer
 
 router = APIRouter(prefix="/api/a1", tags=["Goethe A1"])
 

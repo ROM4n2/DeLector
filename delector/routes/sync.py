@@ -2,12 +2,13 @@
 DeLector - WebRTC LAN Sync Router
 Handles short-lived in-memory SDP exchange for zero-copy-paste P2P progress sync.
 """
-from typing import Dict, Any
-import uuid
 import json
 import secrets
-import time
 import threading
+import time
+import uuid
+from typing import Any, Dict
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
