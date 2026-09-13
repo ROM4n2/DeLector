@@ -366,7 +366,7 @@ def smoke(pkg_dir, goos, port=8001):
         proc.wait(timeout=5)
 
     venv_py = _venv_python_path(pkg_dir, goos).replace("\\", "/")
-    used = any(venv_py in (l or "").replace("\\", "/") for l in captured)
+    used = any(venv_py in (ln or "").replace("\\", "/") for ln in captured)
     if not used:
         # 进程树回退校验：确有 venv python 在跑（诊断日志缺失时）。
         orphans_running = _orphan_python(pkg_dir, goos)
