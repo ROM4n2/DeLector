@@ -134,7 +134,8 @@ def exclude_existing(candidates: Dict[str, str]) -> Dict[str, str]:
 
 
 # ── DeepSeek 批量生成 ───────────────────────────────────────────────────
-SYSTEM_PROMPT = """你是一位德语-中文词典编纂专家。我会给你一个德语单词的 JSON 数组。
+SYSTEM_PROMPT = (
+    """你是一位德语-中文词典编纂专家。我会给你一个德语单词的 JSON 数组。
 请为每个词返回严格 JSON（不要其它文字）：
 
 {"results":[{"wort":"gehen","cefr":"A1","pos":"VERB","gender":null,"plural":null,"definition_zh":"去，走"}]}
@@ -142,9 +143,11 @@ SYSTEM_PROMPT = """你是一位德语-中文词典编纂专家。我会给你一
 字段规则：
 - cefr ∈ {A1,A2,B1,B2,C1}，按歌德欧标难度判断
 - pos ∈ {NOUN,VERB,ADJ,ADV,PRON,PREP,CONJ,INTERJ,NUM}
-- 名词必须给 gender(Masc/Fem/Neut) 和 plural（如 "-e"、"-en"、"-..er"、不可数"-"，拿不准给 null）；非名词 gender/plural 一律 null
+- 名词必须给 gender(Masc/Fem/Neut) 和 plural（如 "-e"、"-en"、"-..er"、不可数"-"，拿不准给 null）；"""
+    """非名词 gender/plural 一律 null
 - definition_zh：1-12 字简明中文释义，多义项用 "/" 分隔
 - 只输出 JSON，不要任何解释"""
+)
 
 
 def _read_db_setting(key: str, default: str = "") -> str:
@@ -180,9 +183,21 @@ def _read_api_config() -> Tuple[str, str, str]:
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip().strip('"').strip("'")
-    key = os.environ.get("DEEPSEEK_API_KEY") or env.get("DEEPSEEK_API_KEY") or _read_db_setting("DEEPSEEK_API_KEY", "")
-    base = os.environ.get("DEEPSEEK_API_BASE_URL") or env.get("DEEPSEEK_API_BASE_URL") or _read_db_setting("API_BASE_URL", "https://api.deepseek.com")
-    model = os.environ.get("DEEPSEEK_API_MODEL") or env.get("DEEPSEEK_API_MODEL") or _read_db_setting("API_MODEL", "deepseek-v4-flash")
+    key = (
+        os.environ.get("DEEPSEEK_API_KEY")
+        or env.get("DEEPSEEK_API_KEY")
+        or _read_db_setting("DEEPSEEK_API_KEY", "")
+    )
+    base = (
+        os.environ.get("DEEPSEEK_API_BASE_URL")
+        or env.get("DEEPSEEK_API_BASE_URL")
+        or _read_db_setting("API_BASE_URL", "https://api.deepseek.com")
+    )
+    model = (
+        os.environ.get("DEEPSEEK_API_MODEL")
+        or env.get("DEEPSEEK_API_MODEL")
+        or _read_db_setting("API_MODEL", "deepseek-v4-flash")
+    )
     if not key:
         raise SystemExit("未找到 DEEPSEEK_API_KEY（.env / 环境变量 / DB），无法生成释义")
     return key, base, model
@@ -367,13 +382,19 @@ def qa_spotcheck(entries: List[dict]) -> None:
     seen = set()
     print("\n=== QA 抽查（随机 30）===")
     for e in picked:
-        print(f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} {e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}")
+        print(
+            f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} "
+            f"{e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}"
+        )
         seen.add(e["wort"])
     print("\n=== QA 抽查（定向 10）===")
     for w in targeted:
         e = next((x for x in entries if x["wort"] == w), None)
         if e:
-            print(f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} {e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}")
+            print(
+                f"  {e['wort']:20s} {e['cefr']} {e['pos']:5s} "
+                f"{e.get('gender') or '-':5s} {e.get('plural') or '-':4s} {e['definition_zh']}"
+            )
             seen.add(w)
     print(f"\n覆盖定向 {len([w for w in targeted if w in seen])}/{len(targeted)}")
 
@@ -398,7 +419,10 @@ def main() -> None:
     candidates = collect_candidates()
     print(f"候选（未去重）: {len(candidates)} 词")
     targets = exclude_existing(candidates)
-    print(f"剔除已有词库后待生成: {len(targets)} 词（现有 core_dict={len(CORE_VOCAB_DB)}, EXT={len(LINGUISTICS_VOCAB_EXT)}）")
+    print(
+        f"剔除已有词库后待生成: {len(targets)} 词"
+        f"（现有 core_dict={len(CORE_VOCAB_DB)}, EXT={len(LINGUISTICS_VOCAB_EXT)}）"
+    )
 
     if args.only:
         only = {w.strip().lower() for w in args.only.split(",") if w.strip()}
@@ -500,6 +524,7 @@ def main() -> None:
     # smoke：合并后能查到
     sys.path.insert(0, str(REPO_ROOT))
     import importlib
+
     from delector.data import core_dict
     importlib.reload(core_dict)
     for w in ("gehen", "haus", "trinken", "klimaschutz"):

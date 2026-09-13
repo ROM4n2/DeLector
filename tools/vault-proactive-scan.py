@@ -2,20 +2,23 @@
 """
 vault-proactive-scan.py — DeLector 360° 全方位技术债与架构健康主动扫描器
 """
+import ast
 import os
 import re
-import sys
-import ast
-import json
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
         stream.reconfigure(encoding="utf-8", errors="replace")
 
-ROOT = Path(__file__).resolve().parent.parent if Path(__file__).parent.name == "tools" else Path(__file__).resolve().parent
+ROOT = (
+    Path(__file__).resolve().parent.parent
+    if Path(__file__).parent.name == "tools"
+    else Path(__file__).resolve().parent
+)
 sys.path.insert(0, str(ROOT))
 
 class Colors:
@@ -60,9 +63,15 @@ def check_security():
     if hook_path.exists():
         record_pass("SEC", "本地 pre-commit 密钥拦截钩子存在并就绪")
     else:
-        record_issue("SEC", "缺少 .githooks/pre-commit 密钥拦截钩子", "从模板创建并配置 git config core.hooksPath .githooks")
+        record_issue(
+            "SEC", "缺少 .githooks/pre-commit 密钥拦截钩子",
+            "从模板创建并配置 git config core.hooksPath .githooks")
 
-    KEY_REGEX = re.compile(r'(sk-[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|AIza[A-Za-z0-9_-]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)')
+    KEY_REGEX = re.compile(
+        r'(sk-[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16}|ghp_[A-Za-z0-9]{36}'
+        r'|github_pat_[A-Za-z0-9_]{20,}|AIza[A-Za-z0-9_-]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}'
+        r'|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
+        r'|-----BEGIN [A-Z ]*PRIVATE KEY-----)')
     found_keys = []
     for ext in (".py", ".js", ".html", ".css", ".json", ".xml", ".md"):
         for p in ROOT.rglob(f"*{ext}"):
@@ -82,8 +91,8 @@ def check_security():
     if not found_keys:
         record_pass("SEC", "全仓库源码无任何硬编码 API Key / Token / 私钥")
     else:
-        for f, l, k in found_keys:
-            record_issue("SEC", f"{f}:{l} 疑似存在硬编码密钥 ({k})", "立即轮换密钥并移入 .env / app_settings")
+        for f, ln, k in found_keys:
+            record_issue("SEC", f"{f}:{ln} 疑似存在硬编码密钥 ({k})", "立即轮换密钥并移入 .env / app_settings")
 
     try:
         from delector.server import _require_localhost
@@ -126,15 +135,22 @@ def check_data_and_backup():
         core_tables = [t for t in all_tables if t not in ("app_settings", "study_log", "quiz_log", "daily_summary")]
         for tbl in core_tables:
             if tbl not in _BACKUP_TABLES:
-                record_issue("DATA", f"数据库核心表 [{tbl}] 未在 _BACKUP_TABLES 中注册！", f"将 {tbl} 及其列规范加入 database.py 的 _BACKUP_TABLES")
+                record_issue(
+                    "DATA", f"数据库核心表 [{tbl}] 未在 _BACKUP_TABLES 中注册！",
+                    f"将 {tbl} 及其列规范加入 database.py 的 _BACKUP_TABLES")
             else:
                 spec_cols = set(_BACKUP_TABLES[tbl][0])
                 db_cols = set(table_cols[tbl])
                 missing_in_backup = db_cols - spec_cols
                 if missing_in_backup:
-                    record_issue("DATA", f"表 [{tbl}] 在 _BACKUP_TABLES 规范中遗漏字段: {missing_in_backup}", f"在 _BACKUP_TABLES['{tbl}'] 中补齐缺失列")
+                    record_issue(
+                        "DATA", f"表 [{tbl}] 在 _BACKUP_TABLES 规范中遗漏字段: {missing_in_backup}",
+                        f"在 _BACKUP_TABLES['{tbl}'] 中补齐缺失列")
                 else:
-                    record_pass("DATA", f"表 [{tbl}] 完整纳入备份体系 ({len(spec_cols)} 列: {', '.join(_BACKUP_TABLES[tbl][0][:4])}...)")
+                    record_pass(
+                        "DATA",
+                        f"表 [{tbl}] 完整纳入备份体系 ({len(spec_cols)} 列: "
+                        f"{', '.join(_BACKUP_TABLES[tbl][0][:4])}...)")
                     
         # 2.2 VocabCardReq 的 plural 字段与入库
         from delector.routes.main import VocabCardReq
@@ -142,7 +158,9 @@ def check_data_and_backup():
         if "plural" in req_fields:
             record_pass("DATA", "VocabCardReq 模型正确声明并支持 plural 字段持久化")
         else:
-            record_issue("DATA", "VocabCardReq 遗漏 plural 字段，导致生词卡复数无法入库", "在 VocabCardReq 中增加 plural: Optional[str] = ''")
+            record_issue(
+                "DATA", "VocabCardReq 遗漏 plural 字段，导致生词卡复数无法入库",
+                "在 VocabCardReq 中增加 plural: Optional[str] = ''")
             
     except Exception as e:
         record_issue("DATA", f"数据架构扫描异常: {e}")
@@ -159,7 +177,9 @@ def check_db_concurrency():
         if jmode.lower() in ("wal", "memory"):
             record_pass("DB", f"主库启用了 WAL 高并发模式 (journal_mode={jmode})")
         else:
-            record_issue("DB", f"主库使用 {jmode} 模式而非 WAL 模式，高并发读写可能锁库", "在连接配置中执行 PRAGMA journal_mode=WAL")
+            record_issue(
+                "DB", f"主库使用 {jmode} 模式而非 WAL 模式，高并发读写可能锁库",
+                "在连接配置中执行 PRAGMA journal_mode=WAL")
             
         if btimeout >= 5000:
             record_pass("DB", f"主库设置了 busy_timeout={btimeout}ms 锁等待守卫")
@@ -196,15 +216,18 @@ def check_frontend_consistency():
     try:
         idx = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         m = re.search(r'System · (v[\d\.]+) Online', idx)
-        if m: versions['index.html'] = m.group(1)
+        if m:
+            versions['index.html'] = m.group(1)
         
         sw = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
         m = re.search(r'delector-static-(v[\d\.]+)', sw)
-        if m: versions['sw.js'] = m.group(1)
+        if m:
+            versions['sw.js'] = m.group(1)
         
         gr = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
         m = re.search(r'DELECTOR_VERSION_NAME\s*,\s*\"([\d\.]+)\"', gr)
-        if m: versions['build.gradle'] = 'v' + m.group(1)
+        if m:
+            versions['build.gradle'] = 'v' + m.group(1)
         
         unique_vers = set(versions.values())
         if len(unique_vers) == 1:
@@ -232,7 +255,10 @@ def check_nlp_and_linguistics():
         doc = process_german_text(sample)
         assert len(doc["sentences"]) >= 1
         assert doc["stats"]["word_count"] > 0
-        record_pass("NLP", f"文本分析流水线就绪，提取 {doc['stats']['word_count']} 词，评级 {doc['stats']['recommended_level']}")
+        record_pass(
+            "NLP",
+            f"文本分析流水线就绪，提取 {doc['stats']['word_count']} 词，"
+            f"评级 {doc['stats']['recommended_level']}")
         
         from delector.data.core_dict import CORE_VOCAB_DB
         assert len(CORE_VOCAB_DB) >= 4000
@@ -249,7 +275,11 @@ def check_hygiene_and_tests():
     scan_section("6. 代码卫生与测试套件执行 (Code Hygiene & Pytest Suite)")
     
     try:
-        res = subprocess.run([sys.executable, "-m", "pyflakes", "delector/server.py", "delector/core/database.py", "delector/nlp.py", "delector/linguistics.py", "delector/syntax_tree.py", "delector/services/writing.py"], capture_output=True, text=True, cwd=str(ROOT))
+        res = subprocess.run(
+            [sys.executable, "-m", "pyflakes", "delector/server.py", "delector/core/database.py",
+             "delector/nlp.py", "delector/linguistics.py", "delector/syntax_tree.py",
+             "delector/services/writing.py"],
+            capture_output=True, text=True, cwd=str(ROOT))
         if res.returncode == 0 and not res.stdout.strip():
             record_pass("TEST", "核心 Python 源码 Pyflakes 静态检查 0 告警")
         else:
@@ -258,7 +288,9 @@ def check_hygiene_and_tests():
         record_warn("TEST", f"Pyflakes 执行失败: {e}")
 
     try:
-        res = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q"], capture_output=True, text=True, cwd=str(ROOT))
+        res = subprocess.run(
+            [sys.executable, "-m", "pytest", "--collect-only", "-q"],
+            capture_output=True, text=True, cwd=str(ROOT))
         m = re.search(r'(\d+)\s+tests?\s+collected', res.stdout)
         if m:
             record_pass("TEST", f"Pytest 契约测试用例完整可用，共收集 {m.group(1)} 条测试")
@@ -294,7 +326,9 @@ def main():
                 print(f"     {Colors.CYAN}↳ 修复建议: {fix}{Colors.END}")
         sys.exit(1)
     else:
-        print(f"\n{Colors.BOLD}{Colors.GREEN}恭喜！全部 6 大维度 15 项审计指标 100% 达成高质量标准，零架构缺陷。{Colors.END}")
+        print(
+            f"\n{Colors.BOLD}{Colors.GREEN}恭喜！全部 6 大维度 15 项审计指标 "
+            f"100% 达成高质量标准，零架构缺陷。{Colors.END}")
         sys.exit(0)
 
 if __name__ == '__main__':
