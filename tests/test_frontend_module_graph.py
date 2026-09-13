@@ -431,3 +431,94 @@ def test_workbench_wbsync_trigger_paths_present():
     while j < len(lines) and not lines[j].rstrip().endswith("};"):
         j += 1
     assert any("wbsync:" in ln for ln in lines[i_debug : j + 1]), "__wb 调试出口未暴露 wbsync"
+
+
+# ── 听力微训工坊（listen-lab.js）：非孤岛、无循环依赖、导出齐全 ────────────────
+# Task 5（红线 11 契约探针配套）：listen-lab.js 由 main.js `import * as ListenLab`
+# 命名空间接线（main.js:162）。若它变成孤岛（没人 import）、或与其它模块成环
+# （求值序不确定 → 断裂传播到整个 ES 模块图），模块图守卫必须红。
+# 注意：listen-lab 的 named import（core.js 的 api/esc/notify、player.js 的
+# playGermanAudio）已由上方 test_every_named_import_resolves_to_a_real_export
+# 自动覆盖（_load_modules 全量扫 static/js/*.js）。
+
+# main.js 通过 `import * as ListenLab` 消费的全部导出名（也是行为探针的驱动面）
+LISTEN_LAB_EXPORTS = (
+    "enterListenLab",
+    "stopListenLab",
+    "setListenLevel",
+    "selectListenMaterial",
+    "setListenMode",
+    "listenPlayToggle",
+    "listenNext",
+    "listenPrev",
+    "listenReplay",
+    "listenJump",
+    "listenSetSpeed",
+    "listenSetFlow",
+    "listenSkip",
+    "listenSubmitDictation",
+    "listenSubmitCloze",
+    "listenRestart",
+    "listenExit",
+)
+
+
+def _import_edges(modules):
+    """{module: {站内被 import 的模块}} —— named import + star import 的边。"""
+    edges = {}
+    for name, info in modules.items():
+        targets = set()
+        for _, src_mod in _parse_named_imports(info["src"]):
+            t = _norm(src_mod)
+            if t in modules:
+                targets.add(t)
+        for mod in _parse_star_imports(info["src"]):
+            t = _norm(mod)
+            if t in modules:
+                targets.add(t)
+        edges[name] = targets
+    return edges
+
+
+def _cycles_through(modules, target):
+    """DFS：找所有从 target 出发能回到 target 的环（target 必在环上）。"""
+    edges = _import_edges(modules)
+    found = []
+
+    def dfs(node, path, seen):
+        if found:
+            return
+        for nxt in edges.get(node, ()):
+            if nxt == target:
+                found.append(path + [nxt])
+                return
+            if nxt in seen:
+                continue
+            dfs(nxt, path + [nxt], seen | {nxt})
+
+    dfs(target, [target], {target})
+    return found
+
+
+def test_listen_lab_not_an_island():
+    """listen-lab.js 必须存在、非空、且被 main.js import（孤岛 = 前端接线静默失效）。"""
+    path = JS_DIR / "listen-lab.js"
+    assert path.exists(), "listen-lab.js 缺失"
+    src = path.read_text(encoding="utf-8")
+    assert len(src.strip()) > 0, "listen-lab.js 为空（同 v4.7.0 a1_cards 空文件回归）"
+    main_src = (JS_DIR / "main.js").read_text(encoding="utf-8")
+    assert "listen-lab.js" in main_src, "listen-lab.js 是孤岛：main.js 未 import 它"
+
+
+def test_listen_lab_exports_complete():
+    """main.js `import * as ListenLab` 依赖的全部导出名必须在 listen-lab.js 里。"""
+    modules = _load_modules()
+    own = modules["listen-lab.js"]["own"]
+    for name in LISTEN_LAB_EXPORTS:
+        assert name in own, f"listen-lab.js 缺导出 {name}"
+
+
+def test_listen_lab_no_circular_dependency():
+    """listen-lab.js 不得出现在任何 import 环上（环破坏 ES 模块求值序）。"""
+    cycles = _cycles_through(_load_modules(), "listen-lab.js")
+    assert not cycles, f"listen-lab.js 存在循环依赖：{cycles}"
