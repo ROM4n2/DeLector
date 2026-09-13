@@ -189,3 +189,39 @@ def test_cloze_skips_function_words():
 def test_cloze_no_candidate_returns_none():
     """全功能词/无候选（无大写非句首词、无动词特征词）→ None。"""
     assert make_cloze("Ich und du sind hier", "A1") is None
+
+
+# ── Task 2 验收黄卡回归（最短词长守卫 vs 真词尾屈折）────────────────────
+
+
+def test_short_ist_is_not_inflected():
+    """黄卡回归：'ist'→'is' 是最短词长守卫漏网形态，应归 missing/extra 而非 inflection。"""
+    diag = diagnose_diktat("Er ist Lehrer", "Er is Lehrer")
+    assert [t.token for t in diag.tokens] == ["Er", "ist", "is", "Lehrer"]
+    assert [t.status for t in diag.tokens] == ["correct", "missing", "extra", "correct"]
+    assert all(t.status != "inflection" for t in diag.tokens)
+    assert diag.correct == 2
+
+
+def test_short_es_e_not_inflected():
+    """黄卡回归：'es'→'e'（-s 尾）是最短词长守卫漏网形态，应归 missing/extra 而非 inflection。"""
+    diag = diagnose_diktat("es regnet", "e regnet")
+    assert [t.token for t in diag.tokens] == ["es", "e", "regnet"]
+    assert [t.status for t in diag.tokens] == ["missing", "extra", "correct"]
+    assert all(t.status != "inflection" for t in diag.tokens)
+
+
+def test_noun_name_namen_is_inflection():
+    """黄卡回归：'Name'→'Namen'（-e→-en）是真正的词尾屈折，应归 inflection。"""
+    diag = diagnose_diktat("Der Name ist lang", "Der Namen ist lang")
+    assert [t.token for t in diag.tokens] == ["Der", "Name", "ist", "lang"]
+    assert diag.tokens[1].status == "inflection"
+    assert diag.tokens[1].hint == "词尾"
+
+
+def test_noun_herr_herren_is_inflection():
+    """黄卡回归：'Herr'→'Herren'（-∅→-en）是真正的词尾屈折，应归 inflection。"""
+    diag = diagnose_diktat("Der Herr kommt", "Der Herren kommt")
+    assert [t.token for t in diag.tokens] == ["Der", "Herr", "kommt"]
+    assert diag.tokens[1].status == "inflection"
+    assert diag.tokens[1].hint == "词尾"
