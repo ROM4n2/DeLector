@@ -6,7 +6,7 @@ Teil 2: 5 questions (Zwei Web-Anzeigen/Angebote im Vergleich · A / B)
 Teil 3: 5 questions (Schilder & Aushänge im Alltag · Richtig/Falsch)
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6 Full A1 Reading Exam Sets (Modellsatz 01 - 06)

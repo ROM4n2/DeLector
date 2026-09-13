@@ -5,7 +5,7 @@ plural endings, CEFR level, and concise Chinese definitions.
 O(1) memory lookup for zero-latency token inspection and CEFR difficulty tagging.
 """
 import functools
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 # Structure: lemma -> (cefr, pos, gender, plural, definition_zh)
 CORE_VOCAB_DB: Dict[str, tuple] = {

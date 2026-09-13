@@ -6,7 +6,7 @@ Contains:
 2. Teil 2 (Kurze E-Mail / Brief schreiben): 10 exam scenario prompts with Leitpunkte, sample emails, and useful phrases.
 """
 
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 # ── Teil 1: Formular-Training (Anmeldeformular) ────────────────────────────────
 

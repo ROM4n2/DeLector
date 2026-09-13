@@ -3,7 +3,7 @@
 
 提供涵盖 A1–B2 及 TestDaF 权威阅读真题篇章，结构化包含考点词、语法焦点与阅读理解验证题。
 """
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
 
 OFFICIAL_CORPUS: List[Dict[str, Any]] = [
     {

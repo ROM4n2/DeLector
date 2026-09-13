@@ -6,7 +6,7 @@ Teil 2: 4 questions (Richtig/Falsch, repeated 1 time)
 Teil 3: 5 questions (A/B/C, repeated 2 times)
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5 Full A1 Listening Exam Sets (Modellsatz 01 - 05)
