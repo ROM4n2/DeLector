@@ -115,3 +115,53 @@ def test_dependabot_covers_active_ecosystems():
         f"{weekly_count} 个：三个生态（pip / github-actions / gomod）"
         "都应各配置一条周更调度。"
     )
+
+
+# ── Ruff 静态门禁（2026-09-13 ruff-cleanup）────────────────────────────────────
+# 背景：仓库此前零 lint 配置（CI Hardening 显式登记的已知边界）。本轮清账
+# 2265→0 告警并接进 CI；下面两条把"门禁在"与"配置没被削弱"钉死。
+
+RUFF_CONFIG = REPO_ROOT / "ruff.toml"
+REQUIREMENTS = REPO_ROOT / "requirements.txt"
+
+
+def test_ci_workflow_has_ruff_gate():
+    """ci.yml 必须把 Ruff lint 接进 PR/push 门禁（否则清账成果会回潮）。"""
+    text = _read_guard_file(CI_WORKFLOW)
+
+    required_gates = [
+        (
+            "pip install ruff",
+            "缺 ruff 安装步骤：CI 里装不上 ruff，门禁无法执行"
+            "（ruff 是开发期工具，不进 requirements.txt，须在 CI 内单独装）",
+        ),
+        (
+            "ruff check",
+            "缺 ruff check：Python lint 门禁没接上，delector/tests 的清账成果会静默回潮",
+        ),
+    ]
+    missing = [f"未找到 {needle!r}（{why}）" for needle, why in required_gates if needle not in text]
+    assert not missing, f"{CI_WORKFLOW} 缺少 Ruff 门禁要素：\n" + "\n".join(missing)
+
+
+def test_ruff_config_locks_core_rules_and_stays_out_of_runtime_deps():
+    """ruff.toml 必须存在且规则集/豁免面未被削弱；ruff 不得混入运行时依赖。"""
+    text = _read_guard_file(RUFF_CONFIG)
+
+    assert "line-length" in text, (
+        "ruff.toml 缺 line-length：行宽约束丢失（2026-09-13 基线按存量分布定为 120）"
+    )
+    # 起步规则集逐条钉死（AUTOMATION-GOTCHAS §5：新增项逐条钉死，不做冻结集合断言）
+    for rule in ('"E"', '"F"', '"I"'):
+        assert rule in text, f"ruff.toml 的 select 缺 {rule}：起步规则集被削弱"
+
+    assert '"delector/data/*.py"' in text, (
+        "ruff.toml 缺 delector/data/*.py 的 E501 豁免声明："
+        "数据字典的长行（单行一条数据）会重新变成告警噪音，而拆行会伤害 diff 稳定性"
+    )
+
+    req = _read_guard_file(REQUIREMENTS)
+    assert "ruff" not in req, (
+        "requirements.txt 不得包含 ruff：它是开发期工具，混入运行时依赖会增大"
+        "Android 打包面体积与依赖漂移面（ci.yml 内单独 pip install 即可）"
+    )
