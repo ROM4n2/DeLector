@@ -32,9 +32,9 @@ class Colors:
     BOLD = "\033[1m"
 
 
-issues = []
-warnings = []
-passes = []
+issues: list = []
+warnings: list = []
+passes: list = []
 
 
 def record_pass(category, desc):
@@ -173,7 +173,9 @@ def check_data_and_backup():
         # 2.2 VocabCardReq 的 plural 字段与入库
         from delector.routes.main import VocabCardReq
 
-        req_fields = VocabCardReq.model_fields if hasattr(VocabCardReq, "model_fields") else VocabCardReq.__fields__
+        # pydantic v2 用 model_fields、v1 用 __fields__；getattr 形式对两代都安全，
+        # 且避免 mypy 把 __fields__ 当作可调用类属性（types-pydantic 的标注差异）。
+        req_fields = getattr(VocabCardReq, "model_fields", None) or getattr(VocabCardReq, "__fields__", {})
         if "plural" in req_fields:
             record_pass("DATA", "VocabCardReq 模型正确声明并支持 plural 字段持久化")
         else:
