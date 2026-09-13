@@ -145,6 +145,33 @@
         <button id="encounter-add-toggle" class="btn btn-accent" onclick="encounterToggleAddForm()">
           ＋ 加文本
         </button>
+        <button id="encounter-pull-toggle" class="btn btn-accent" onclick="encounterTogglePullPanel()">
+          📥 从电脑导入
+        </button>
+      </div>
+
+      <!-- 从电脑导入：轻量面板（地址记忆 + 货架列表），复用加文本表单的类名/排版 -->
+      <div id="encounter-pull-panel" class="encounter-add-form">
+        <div class="encounter-form-row">
+          <div>
+            <label for="enc-pull-base">电脑地址</label>
+            <input
+              id="enc-pull-base"
+              type="text"
+              placeholder="http://192.168.1.5:8000"
+              autocomplete="off"
+            />
+            <div class="enc-pull-hint">
+              在电脑端 DeLector 的「背词同步」面板可查看本机 IP 地址。
+            </div>
+          </div>
+          <div class="enc-pull-actions">
+            <button id="enc-pull-connect" class="btn btn-dark" type="button">连接电脑</button>
+            <button class="btn btn-ghost" type="button" onclick="encounterCancelPull()">取消</button>
+          </div>
+        </div>
+        <div id="encounter-pull-list" class="encounter-list enc-pull-list"></div>
+        <div id="enc-pull-error" class="encounter-form-error"></div>
       </div>
 
       <div id="encounter-add-form" class="encounter-add-form">

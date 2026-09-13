@@ -155,6 +155,9 @@ import {
   toggleAddForm,
   cancelAdd,
   submitAddText,
+  togglePullPanel,
+  cancelPull,
+  connectDesktop,
 } from "./encounter.js";
 
 // ── View Router ─────────────────────────────────────────────────────────────
@@ -1055,6 +1058,9 @@ Object.assign(window, {
   encounterToggleAddForm: toggleAddForm,
   encounterCancelAdd: cancelAdd,
   encounterSubmitAdd: submitAddText,
+  encounterTogglePullPanel: togglePullPanel,
+  encounterCancelPull: cancelPull,
+  encounterConnectDesktop: connectDesktop,
 
   // Goethe A1 Exam Engines
   A1Hoeren,

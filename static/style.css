@@ -10413,6 +10413,25 @@ body.drawer-open .companion {
 .encounter-add-form textarea { line-height: 1.7; resize: vertical; }
 .encounter-form-row { display: flex; gap: 0.8rem; flex-wrap: wrap; }
 .encounter-form-row > div { flex: 1 1 140px; }
+
+/* ── 从电脑导入：引导小字 + 操作组 + 货架列表（复用加文本表单排版）────────── */
+.enc-pull-hint {
+  font-family: var(--enc-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint, #8b8676);
+  margin-top: 0.35rem;
+}
+.enc-pull-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+.enc-pull-list { margin-top: 0.6rem; }
+.enc-pull-row { grid-template-columns: auto 1fr auto auto; }
+.enc-pull-import { cursor: pointer; }
+.enc-pull-import:disabled { opacity: 0.55; cursor: default; }
 .encounter-form-error {
   font-family: var(--enc-mono);
   font-size: 0.74rem;

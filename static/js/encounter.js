@@ -20,6 +20,14 @@ import {
   addCardToDeck,
   DECK_KEYS,
 } from "./deck-bridge.js";
+import {
+  PULL_ENDPOINT,
+  normalizeDesktopBase,
+  readDesktopBase,
+  writeDesktopBase,
+  mapPackRows,
+  pullPackRequest,
+} from "./encounter-pull.js";
 
 // ── Internal routing state ──────────────────────────────────────────────────
 // The view has two sub-states: the curated list (default) and the detail reader.
@@ -388,6 +396,209 @@ export async function submitAddText() {
     err.classList.add("show");
   }
 }
+
+/* ======================================================================
+ * 从电脑导入（WiFi 内容分发）：「遇见区」拉取桌面货架卡包
+ *
+ * 架构（ADR-0004 拉取免 key / Plan 全局约束）：Android 实例绑回环，桌面绑
+ * 0.0.0.0 天然是货架。手机前端**只**调本机 /api/encounter/pull-pack（同源零跨域），
+ * 由手机服务端出站 GET 桌面货架（出站不受监听绑定限制）。前端**绝不**把
+ * desktop_base 拼进 fetch()/api() 直连桌面 —— 那是跨域且违背架构（红线）。
+ *
+ * 流程：入口 → 轻量面板（地址输入，localStorage 记忆）→ 连接电脑 → 列表 →
+ * 某包「导入」→ 刷新遇见区列表 → 关闭面板。地址归一/记忆/数据映射的纯逻辑在
+ * ./encounter-pull.js（Node 可测）。
+ * ==================================================================== */
+
+function pullPanelEl() {
+  return document.getElementById("encounter-pull-panel");
+}
+function pullListEl() {
+  return document.getElementById("encounter-pull-list");
+}
+function pullErrorEl() {
+  return document.getElementById("enc-pull-error");
+}
+
+/** 本机 localStorage（不可用时 null，记忆读写降级为 no-op）。 */
+function encStorage() {
+  return typeof window !== "undefined" && window.localStorage
+    ? window.localStorage
+    : null;
+}
+
+/** 面板内小错误行：显示人话错误（后端 detail 或前端校验提示）。 */
+function showPullError(msg) {
+  const err = pullErrorEl();
+  if (!err) return;
+  err.textContent = msg || "";
+  err.classList.add("show");
+}
+
+function clearPullError() {
+  const err = pullErrorEl();
+  if (!err) return;
+  err.classList.remove("show");
+  err.textContent = "";
+}
+
+/** 打开/关闭「从电脑导入」面板；打开时回填记忆地址。 */
+export function togglePullPanel() {
+  const panel = pullPanelEl();
+  if (!panel) return;
+  const opening = !panel.classList.contains("open");
+  panel.classList.toggle("open", opening);
+  if (opening) {
+    clearPullError();
+    const input = document.getElementById("enc-pull-base");
+    if (input && !input.value) input.value = readDesktopBase(encStorage());
+    const list = pullListEl();
+    if (list) list.innerHTML = "";
+  }
+}
+
+export function cancelPull() {
+  const panel = pullPanelEl();
+  if (panel) panel.classList.remove("open");
+  clearPullError();
+  const list = pullListEl();
+  if (list) list.innerHTML = "";
+}
+
+/**
+ * 「连接电脑」：把归一后的地址交给本机服务端代理拉取货架清单（本机同源调用）。
+ * 成功后渲染包列表；失败把人话 detail 直接提示（后端已中文人话化）。
+ */
+export async function connectDesktop() {
+  const input = document.getElementById("enc-pull-base");
+  const btn = document.getElementById("enc-pull-connect");
+  const list = pullListEl();
+  if (!list) return;
+  clearPullError();
+
+  let base;
+  try {
+    base = normalizeDesktopBase(input ? input.value : "");
+  } catch (e) {
+    showPullError(e.message || "地址格式不正确");
+    return;
+  }
+  // 记忆归一后的地址，下次自动回填。
+  writeDesktopBase(encStorage(), base);
+
+  if (btn) btn.disabled = true;
+  list.innerHTML = '<div class="encounter-empty">正在连接电脑…</div>';
+  try {
+    // ✅ 只调本机相对路径；desktop_base 作为 body 字段交由服务端出站（零跨域）。
+    const res = await api(PULL_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pullPackRequest(base, null)),
+    });
+    renderPullPacks(mapPackRows(res && res.packs), base);
+  } catch (e) {
+    list.innerHTML = "";
+    showPullError((e && e.message) || "连接失败");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/** 渲染货架包列表（标题 + 等级 + 词数 + 「导入」）；空货架给人话提示。 */
+function renderPullPacks(rows, base) {
+  const list = pullListEl();
+  if (!list) return;
+  if (!rows.length) {
+    list.innerHTML =
+      '<div class="encounter-empty">电脑上还没有可导入的卡包。</div>';
+    return;
+  }
+  list.innerHTML = rows
+    .map(
+      (r) => `
+      <div class="encounter-card enc-pull-row">
+        <span class="encounter-badge ${esc(r.level)}">${esc(r.level)}</span>
+        <span class="encounter-card-title">${esc(r.title)}</span>
+        <span class="encounter-card-meta">${r.word_count} 词</span>
+        <button class="btn btn-dark btn-sm enc-pull-import" data-pack-id="${esc(
+          r.pack_id,
+        )}" data-pack-title="${esc(r.title)}">导入</button>
+      </div>
+    `,
+    )
+    .join("");
+  list.setAttribute("data-desktop-base", base);
+}
+
+/**
+ * 导入某包：POST 本机 pull-pack（带 pack_id）→ 幂等落库 → notify + 刷新列表 +
+ * 关面板。按钮在请求中禁用防重复点击。
+ */
+async function importPack(packId, packTitle, btn) {
+  const base = (pullListEl() && pullListEl().getAttribute("data-desktop-base")) || "";
+  if (!base) {
+    showPullError("请先连接电脑");
+    return;
+  }
+  clearPullError();
+  const originalText = btn ? btn.textContent : "导入";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "导入中…";
+  }
+  try {
+    await api(PULL_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pullPackRequest(base, packId)),
+    });
+    notify(`已导入：${packTitle}`, { kind: "success" });
+    cancelPull();
+    await refreshList();
+  } catch (e) {
+    showPullError((e && e.message) || "导入失败");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
+/** 刷新遇见区列表（复用 fetchTexts/renderTextList；失败静默）。 */
+async function refreshList() {
+  try {
+    renderTextList(await fetchTexts());
+  } catch (e) {
+    /* 刷新失败不打断：面板已关，用户可手动重进遇见区。 */
+  }
+}
+
+/** 全局点击代理：面板内「连接/导入」按钮（面板打开时绑一次）。 */
+let _pullBound = false;
+function ensurePullBound() {
+  if (_pullBound) return;
+  _pullBound = true;
+  document.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (t.closest && t.closest("#enc-pull-connect")) {
+      ev.preventDefault();
+      connectDesktop();
+      return;
+    }
+    const imp = t.closest ? t.closest(".enc-pull-import") : null;
+    if (imp) {
+      ev.preventDefault();
+      importPack(
+        imp.getAttribute("data-pack-id") || "",
+        imp.getAttribute("data-pack-title") || "",
+        imp,
+      );
+    }
+  });
+}
+
+// showView() 进场时保证面板交互已绑（面板 DOM 常驻 index.html）。
+ensurePullBound();
 
 /* ======================================================================
  * A6：点词释义弹层 → 一键进卡 → 读完会话小复习
