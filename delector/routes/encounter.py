@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """`/api/encounter/*` 路由（遇见区 i+1 Task A2）。
 
-提供四类能力：
+提供三类能力：
 - GET 列表 / 详情（读 encounter_texts，word_count 由服务端按空白分词算，跑不上 spaCy）
 - POST 手工加文本（限本机）：title/level/source/content → 201
 - POST import-pack（限本机）：把 job#1 的 encounter-pack/v1 整包落库成一篇短文
+- GET packs / packs/{pack_id}（**局域网只读**）：桌面货架，供手机端出站拉取
+- POST pull-pack（限本机）：手机端出站拉取桌面货架并幂等落库
 
 跨边界契约 `encounter-pack/v1` 定在本模块（`CARD_PACK_SCHEMA` + `validate_pack`）：
 A/B 两端共同遵守这份 schema 定义。import 落库复用一个跨任务约定的语义：本机
@@ -14,8 +16,10 @@ word_count = 简单空白分词计数（服务端 cheap 计算），不做 spaCy
 """
 
 import copy
+import json
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -46,6 +50,13 @@ class CreateTextRequest(BaseModel):
 
 class ImportPackRequest(BaseModel):
     pack: dict
+
+
+class PullPackRequest(BaseModel):
+    """手机端出站拉取桌面货架的入参。"""
+
+    desktop_base: str = Field(min_length=1)
+    pack_id: Optional[str] = None
 
 
 def _normalize_level(raw: str, field_name: str = "level") -> str:
@@ -194,3 +205,141 @@ def api_import_pack(req: ImportPackRequest) -> dict:
     normalized_pack["estimated_cefr"] = normalized_level
     new_id = import_encounter_pack(normalized_pack)
     return {"id": new_id, "imported": True}
+
+
+# ── 桌面货架（局域网只读）────────────────────────────────────────────────────
+# 安全边界（不可推翻）：这两个端点**不挂** _require_localhost —— 它们是局域网内
+# 只读的内容数据，与既有 `GET /api/wb/state`（拉取免 key）同级。手机端要能读到桌面
+# 的卡包，前提就是桌面货架对局域网开放。
+# 反向约束：这里**绝不提供任何写操作**。局域网内的任何设备都不能通过货架改动桌面
+# 数据——写路径仍然只存在于 import-pack / texts（均挂本机闸）。若将来要加写能力，
+# 必须走 X-WB-Key 式的 key 闸，而不是直接放开。
+#
+# 手工短文（pack_json 为空）不进清单：货架的唯一用途是「把 job#1 产的 encounter-pack/v1
+# 搬到手机」，不是通用短文导出；手工短文没有 pack_id、搬过去也无法幂等去重。
+
+
+def _shelf_entry(row: dict) -> Optional[dict]:
+    """把一行 encounter_texts 压缩成货架清单项；非真 pack 行返回 None（不进清单）。
+
+    只暴露跨机搬运必需的元数据（pack_id/title/level/word_count），**绝不返回
+    pack_json 原文、content 正文或任何其它列**。
+    """
+    pack_json = row.get("pack_json")
+    if not pack_json:
+        return None
+    try:
+        pack = json.loads(pack_json)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(pack, dict) or not pack.get("pack_id"):
+        return None
+    return {
+        "pack_id": pack["pack_id"],
+        "title": row["title"],
+        "level": row["level"],
+        "word_count": _count_words(row["content"] or ""),
+    }
+
+
+@router.get("/packs")
+def api_list_packs() -> dict:
+    """桌面货架清单（**局域网只读**，不挂本机闸）。
+
+    返回 {"packs": [{pack_id, title, level, word_count}, ...]}。只列真正的
+    encounter-pack/v1 落库行（pack_json 可解析且含 pack_id），手工短文跳过；
+    空货架返回空清单。**不含 pack_json / raw_text 等原文**（防泄）。
+    """
+    entries = []
+    for row in list_encounter_texts():
+        entry = _shelf_entry(row)
+        if entry is not None:
+            entries.append(entry)
+    return {"packs": entries}
+
+
+@router.get("/packs/{pack_id}")
+def api_get_pack(pack_id: str) -> dict:
+    """取货架上单个完整 encounter-pack/v1（**局域网只读**，不挂本机闸）。
+
+    从任意 pack_json 可解析且 pack_id 匹配的行反序列化返回；未知 pack_id → 404。
+    """
+    for row in list_encounter_texts():
+        raw = row.get("pack_json")
+        if not raw:
+            continue
+        try:
+            pack = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(pack, dict) and pack.get("pack_id") == pack_id:
+            return pack
+    raise HTTPException(status_code=404, detail=f"货架上没有这个卡包: {pack_id}")
+
+
+# ── 手机端出站拉取（本机闸 + 出站）───────────────────────────────────────────
+# 方向：手机服务端**出站** GET 桌面货架（Android 实例绑回环，出站不受监听限制），
+# 前端只调本机 /api/encounter/pull-pack —— 同源零跨域。
+_PULL_TIMEOUT = 5.0
+_PULL_FAIL_HINT = "连不上电脑端（检查电脑是否开着 DeLector、手机与电脑是否同一 WiFi、或退出防火墙拦截）"
+
+
+def _normalize_desktop_base(raw: str) -> str:
+    """校验并规一 desktop_base：必须 http(s):// 前缀、非空、去尾斜杠；否则 400。"""
+    base = (raw or "").strip().rstrip("/")
+    if not base.startswith(("http://", "https://")) or base in ("http://", "https://"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"desktop_base 需为 http:// 或 https:// 开头的地址，收到: {raw!r}",
+        )
+    return base
+
+
+def _shelf_get(url: str) -> object:
+    """出站 GET 桌面货架：非 2xx / 连接失败 / 超时 → 502 人话；JSON 解析失败 → 502。"""
+    try:
+        resp = httpx.get(url, timeout=_PULL_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT) from exc
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT)
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT) from exc
+
+
+@router.post("/pull-pack", dependencies=[Depends(_require_localhost)])
+def api_pull_pack(req: PullPackRequest) -> dict:
+    """手机端出站拉取桌面货架（**挂本机闸**：写路径只允许本机触发）。
+
+    - pack_id 为空 → 代理桌面货架清单（出站 GET {desktop_base}/api/encounter/packs），
+      把 {"packs": [...]} 原样返回，前端因此零跨域。
+    - pack_id 非空 → 出站取整包 → validate_pack → 规一 estimated_cefr（与 import-pack
+      同语义）→ import_encounter_pack 幂等落库 → {"id", "imported": True, "pack_id"}。
+      同一 pack_id 重复拉取返回同一 id、行数不增（幂等由存储层保证）。
+
+    出站失败（连接错误/超时/非 2xx/JSON 解析失败）→ 502 中文人话；
+    pack 结构非法 → 400。
+    """
+    base = _normalize_desktop_base(req.desktop_base)
+
+    if not req.pack_id:
+        listing = _shelf_get(f"{base}/api/encounter/packs")
+        if not isinstance(listing, dict) or not isinstance(listing.get("packs"), list):
+            raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT)
+        return {"packs": listing["packs"]}
+
+    pack = _shelf_get(f"{base}/api/encounter/packs/{req.pack_id}")
+    try:
+        validate_pack(pack)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    raw_level = str(pack.get("estimated_cefr") or "A2").strip()
+    normalized_level = _normalize_level(raw_level, field_name="estimated_cefr")
+
+    normalized_pack = copy.deepcopy(pack)
+    normalized_pack["estimated_cefr"] = normalized_level
+    new_id = import_encounter_pack(normalized_pack)
+    return {"id": new_id, "imported": True, "pack_id": normalized_pack["pack_id"]}

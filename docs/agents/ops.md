@@ -38,15 +38,37 @@
 数据库:    D:\Code\DeLector\delector.db（主库）
            D:\Code\DeLector\progress.db（进度）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （582 个，全绿）
+测试:      pytest            （719 passed + 1 skipped，全绿）
 行为探针:  node tools/<name>.mjs（10 个，发布闸要求 10/10 全绿，含 wb_queue_probe 13/13 切片护栏）
 打包:      python package_windows.py（Windows 便携版）；Android: cd android && ./gradlew assembleDebug
-静态检查:  python -m pyflakes server.py syntax_tree.py start.py linguistics.py
+静态检查:  ruff check .       （全仓零告警门禁，CI 的 ci.yml 已接入；旧的手工 pyflakes 命令已退役）
 ```
 
 **Git 推送通道**：这台机器上 HTTPS 连 fetch 都会失败（`schannel: failed to receive handshake`），
 `origin` 已指向 `ssh://git@ssh.github.com:443/ROM4n2/DeLector.git`（22 端口时通时不通，443 稳定）。
 `gh` CLI 走自己的 HTTPS API 认证，不受影响。
+
+---
+
+## 内容分发：桌面 → 手机（WiFi 拉取）
+
+遇见区的卡包分发是**手机拉取**模型，**不是桌面推送**。原因：`start.py` 中 Android 实例有意绑
+`127.0.0.1`（绑 `0.0.0.0` 会把无鉴权的 `POST /api/settings` 暴露给局域网），所以手机不可被外部
+访问；而桌面绑 `0.0.0.0`，天然是局域网里的「货架」。
+
+流程（同一 WiFi 下）：
+1. **桌面产包并落本机**：`delector job run encounter-pack --corpus-dir <语料目录> --deliver-to http://127.0.0.1:8000`
+   （`--deliver-to` 走既有 `POST /api/encounter/import-pack`，按 `pack_id` 幂等；重复投递不产生重复行）
+2. **拿桌面地址**：`GET /api/wb/lan-info`（返回本机私有 IPv4），或看背词同步面板展示的地址
+3. **手机导入**：遇见区 → 「📥 从电脑导入」→ 填 `http://<桌面IP>:8000` → 连接电脑 → 选包导入
+   （地址记忆在 `localStorage` 键 `enc.desktop.v1`，下次自动回填）
+
+安全边界（MUST，勿"顺手放开"）：
+- 桌面货架 `GET /api/encounter/packs` / `GET /api/encounter/packs/{pack_id}` **只读、局域网开放**
+  （与 `GET /api/wb/state` 同级的"拉取免 key"纪律），**绝不提供写操作**；列表响应只含
+  `pack_id/title/level/word_count`，不含 `pack_json`/正文。
+- 手机写路径一律挂 `_require_localhost`（`POST /api/encounter/pull-pack` 亦然）；**出站由手机服务端完成**，
+  前端只调本机相对路径（同源零跨域）——探针里有反例钉，禁止前端拼 `desktop_base` 直连桌面。
 
 ---
 
