@@ -5,7 +5,7 @@ Tests for the dictation diagnosis engine (delector/services/listen.py).
 七类归因各一例 + 标点剥离 / 空输入 / 分数计算，status 与 hint 均钉死。
 """
 
-from delector.services.listen import diagnose_diktat
+from delector.services.listen import diagnose_diktat, make_cloze
 
 
 def test_diagnose_all_correct():
@@ -43,6 +43,26 @@ def test_diagnose_umlaut_wins_over_case():
     diag = diagnose_diktat("Müde", "mude")
     assert diag.tokens[0].status == "umlaut"
     assert diag.tokens[0].hint == "变音：ü→u"
+
+
+def test_umlaut_not_case_only_diff():
+    """大小写守卫：纯大小写差但含变音字符的词归 case 而非 umlaut。"""
+    diag = diagnose_diktat("Übung", "ÜBUNG")
+    assert diag.tokens[0].status == "case"
+    assert diag.tokens[0].hint == "大小写"
+    diag2 = diagnose_diktat("Müde", "MÜDE")
+    assert diag2.tokens[0].status == "case"
+    assert diag2.tokens[0].hint == "大小写"
+
+
+def test_short_function_words_not_inflected():
+    """最短词长守卫：'es'→'e' 不再误判为词尾屈折，应归 missing/extra。"""
+    diag = diagnose_diktat("Es regnet", "E regnet")
+    statuses = [t.status for t in diag.tokens]
+    assert "inflection" not in statuses
+    assert any(t.token == "Es" and t.status == "missing" for t in diag.tokens)
+    assert any(t.token == "E" and t.status == "extra" for t in diag.tokens)
+    assert diag.correct == 1
 
 
 def test_diagnose_case():
@@ -128,3 +148,44 @@ def test_empty_inputs_score_zero():
     assert [t.status for t in diag2.tokens] == ["missing", "missing"]
     assert diag2.total == 2
     assert diag2.score == 0.0
+
+
+def test_cloze_short_sentence_returns_none():
+    """短句（<5 词）不挖空：3 词、4 词均返回 None。"""
+    assert make_cloze("Ich gehe nach", "A1") is None
+    assert make_cloze("Ich gehe nach Hause", "A1") is None
+
+
+def test_cloze_blanks_noun():
+    """名词句挖名词：非句首大写词 Hund 被挖，四字段钉死。"""
+    item = make_cloze("Der Hund schläft heute gern", "A1")
+    assert item is not None
+    assert item.text_with_blanks == "Der ___ schläft heute gern"
+    assert item.answer == "Hund"
+    assert item.source == "Der Hund schläft heute gern"
+    assert item.blank_index == 1
+
+
+def test_cloze_blanks_verb():
+    """动词句挖动词：无名词候选时挖 -e 结尾非功能词 gehe。"""
+    item = make_cloze("Ich gehe morgen sehr früh", "A1")
+    assert item is not None
+    assert item.text_with_blanks == "Ich ___ morgen sehr früh"
+    assert item.answer == "gehe"
+    assert item.source == "Ich gehe morgen sehr früh"
+    assert item.blank_index == 1
+
+
+def test_cloze_skips_function_words():
+    """功能词不被挖：und/ich 排除，挖名词 Anna。"""
+    item = make_cloze("Ich und Anna spielen morgen hier", "A1")
+    assert item is not None
+    assert item.answer == "Anna"
+    assert item.blank_index == 2
+    assert item.text_with_blanks == "Ich und ___ spielen morgen hier"
+    assert item.source == "Ich und Anna spielen morgen hier"
+
+
+def test_cloze_no_candidate_returns_none():
+    """全功能词/无候选（无大写非句首词、无动词特征词）→ None。"""
+    assert make_cloze("Ich und du sind hier", "A1") is None

@@ -23,6 +23,25 @@ _UMLAUT_CHARS = frozenset(_UMLAUT_REPL)
 # 常见屈折尾（-en/-e/-er/-es/-n/-s），用于词尾差判定
 _INFLECTION_ENDINGS = ("en", "e", "er", "es", "n", "s")
 
+# 功能词停用表（听力填空挖空时排除的候选；小写形式，可扩展）
+_FUNCTION_WORDS = frozenset({
+    # 冠词
+    "der", "die", "das", "dem", "den", "des",
+    "ein", "eine", "einen", "einem", "einer", "eines",
+    # 代词
+    "ich", "du", "er", "sie", "es", "wir", "ihr", "man",
+    "mein", "dein", "sein", "mich", "dich", "mir", "dir", "uns", "euch",
+    # 高频 be/have（功能化）
+    "ist", "sind", "war", "waren", "bin", "bist", "hat", "haben", "hast",
+    # 连词 / 疑问词
+    "und", "oder", "aber", "wie", "was", "wann", "wo", "wer", "wen", "wem",
+    "als", "dass", "denn",
+    # 介词 / 副词 / 其它
+    "zu", "zum", "zur", "mit", "auf", "an", "im", "in", "aus", "bei", "nach",
+    "von", "vom", "für", "über", "um", "nicht", "ja", "nein", "so", "da",
+    "hier", "sehr", "auch", "noch", "schon",
+})
+
 
 class TokenResult(BaseModel):
     """单个词的诊断结果：原始词形 + 归因状态 + 人话提示。"""
@@ -41,6 +60,15 @@ class ListenDiagnosis(BaseModel):
     correct: int
     total: int
     score: float
+
+
+class ClozeItem(BaseModel):
+    """听力填空挖空结果：挖空后的句子 + 答案 + 原文 + 被挖词位。"""
+
+    text_with_blanks: str
+    answer: str
+    source: str
+    blank_index: int
 
 
 class _Word(NamedTuple):
@@ -62,9 +90,15 @@ def _umlaut_norm(s: str) -> str:
 
 
 def _is_umlaut(core_a: str, core_b: str) -> bool:
-    """是否仅变音差：规范形一致，且至少一方含变音字符（排除纯大小写差）。"""
-    return _umlaut_norm(core_a) == _umlaut_norm(core_b) and any(
-        ch in core_a.lower() + core_b.lower() for ch in _UMLAUT_CHARS
+    """是否仅变音差：规范形一致、且至少一方含变音字符、且非纯大小写差。
+
+    `core_a.lower() != core_b.lower()` 排除纯大小写差（如 Übung/ÜBUNG 应归 case，
+    避免含变音字符的词被大小写差误归 umlaut）。
+    """
+    return (
+        core_a.lower() != core_b.lower()
+        and _umlaut_norm(core_a) == _umlaut_norm(core_b)
+        and any(ch in core_a.lower() + core_b.lower() for ch in _UMLAUT_CHARS)
     )
 
 
@@ -84,7 +118,12 @@ def _cut_ending(word: str, end: str) -> str | None:
 
 
 def _same_stem(core_a: str, core_b: str) -> bool:
-    """词干相同判定：一方去掉一个常见屈折尾后与另一方（小写）一致。"""
+    """词干相同判定：一方去掉一个常见屈折尾后与另一方（小写）一致。
+
+    最短词长 <3 直接不判屈折（如 es/e、es/s 之类功能词短词，避免 -s/-e 尾误判）。
+    """
+    if min(len(core_a), len(core_b)) < 3:
+        return False
     low_a = core_a.lower()
     low_b = core_b.lower()
     return any(
@@ -180,4 +219,43 @@ def diagnose_diktat(expected: str, actual: str) -> ListenDiagnosis:
         correct=correct,
         total=total,
         score=score,
+    )
+
+
+def _is_noun_candidate(words: list[_Word], idx: int) -> bool:
+    """名词候选：非句首、首字符大写、且非功能词（德语名词首字母大写）。"""
+    if idx == 0:
+        return False
+    core = words[idx].core
+    return core[:1].isupper() and core.lower() not in _FUNCTION_WORDS
+
+
+def _is_verb_candidate(words: list[_Word], idx: int) -> bool:
+    """动词候选：词长 ≥3、常见动词词尾 -en/-n/-e、且非功能词（启发式，无 POS 依赖）。"""
+    core = words[idx].core.lower()
+    return len(core) >= 3 and core.endswith(("en", "n", "e")) and core not in _FUNCTION_WORDS
+
+
+def make_cloze(sentence: str, level: str) -> ClozeItem | None:
+    """听力填空挖空：名词优先、动词次之的启发式，每次只挖 1 个空。
+
+    - 句子按空白分词后 <5 词，或无可挖候选（全功能词/全句首大写词）→ None
+    - text_with_blanks 以 ___ 占位（前后保持单空格），answer 保留原词大小写/变音，
+      blank_index 为被挖词在原句的词位（0 起），source 为原句原文
+    - level 预留参数：当前 A1/A2 同策略，仅留扩展口
+    """
+    words = _tokenize(sentence)
+    if len(words) < 5:
+        return None
+    pick = next((i for i, _ in enumerate(words) if _is_noun_candidate(words, i)), None)
+    if pick is None:
+        pick = next((i for i, _ in enumerate(words) if _is_verb_candidate(words, i)), None)
+    if pick is None:
+        return None
+    blanks = ["___" if i == pick else w.raw for i, w in enumerate(words)]
+    return ClozeItem(
+        text_with_blanks=" ".join(blanks),
+        answer=words[pick].core,
+        source=sentence,
+        blank_index=pick,
     )
