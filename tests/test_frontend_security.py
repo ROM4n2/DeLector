@@ -101,7 +101,10 @@ def test_reader_js_xss_sinks_are_neutralised():
     # clause tree: typeCls strip + tokenIds sanitized + sentId → Number
     assert '.replace(/[^a-z0-9_-]/g, "")' in READER
     assert ".map(Number).filter(Number.isFinite)" in READER
-    assert "saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, ${jsAttr(clauseText)}, ${Number(sentId)})" in READER
+    assert (
+        "saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, "
+        "${jsAttr(clauseText)}, ${Number(sentId)})"
+    ) in READER
 
     # renderReaderHeatbar badge: safeCefr
     assert 'safeCefr(stats.recommended_level)' in READER

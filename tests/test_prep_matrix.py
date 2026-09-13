@@ -8,7 +8,7 @@
 3. 排序契约 —— 同组内 lemma 字母序。组间顺序属呈现策略，由 server 层负责，
    这里不断言（避免两层各有一套真相）。
 """
-from delector.nlp_engine.linguistics import build_prep_matrix, build_prep_matrix_core, PREP_COLLOCATIONS
+from delector.nlp_engine.linguistics import PREP_COLLOCATIONS, build_prep_matrix, build_prep_matrix_core
 
 
 def test_matrix_total_conservation():
@@ -117,7 +117,7 @@ def test_empty_dataset_degrades_to_empty_matrix():
 
 
 # ── 前端静态契约 ──────────────────────────────────────────────────────────────
-from pathlib import Path
+from pathlib import Path  # noqa: E402  (刻意置于契约区块，勿重排以免破坏上方测试隔离)
 
 _ROOT = Path(__file__).parent.parent
 _INDEX = (_ROOT / "static" / "index.html").read_text(encoding="utf-8")

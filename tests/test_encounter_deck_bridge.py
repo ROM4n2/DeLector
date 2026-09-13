@@ -20,7 +20,6 @@ Node 可测性硬约束（Plan Task A5）：
 
 运行（仓库根）：export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_encounter_deck_bridge.py -v
 """
-import gc
 import json
 import shutil
 import subprocess
@@ -438,7 +437,6 @@ def test_encounter_js_403_adding_hint_in_human_words():
 
 def _strip_js_comments(src):
     """把 // 与 /* */ 注释剥掉，便于只对"真实代码"做卫生断言（注释不影响 Node 解析）。"""
-    import re as _re
     out = []
     i = 0
     n = len(src)

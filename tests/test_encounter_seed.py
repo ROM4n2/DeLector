@@ -241,11 +241,16 @@ def test_create_app_seed_order_after_articles():
 _MUTATION_TABLE = textwrap.dedent("""
 | 变异 | 预期变红的用例 | 说明 |
 | --- | --- | --- |
-| 去掉 seed_preset_encounter_texts 的 `count == 0` 守卫 | test_seed_skips_nonempty_db | 非空库会批量注入预置，imported 变 4 且行数变 5 → 断言 red |
-| seeder 不用 import_encounter_pack 的 pack_id 幂等（改裸 INSERT） | test_seed_idempotent | 二次调用不会被空库守卫拦（或拦截失效）时重复插入 → 行数 8，second 非 0 → red |
-| 去掉 create_app 里的 seeder 调用 | test_create_app_calls_seed_encounter_texts / test_create_app_seed_order_after_articles | AST 找不到调用 → red |
+| 去掉 seed_preset_encounter_texts 的 `count == 0` 守卫 | test_seed_skips_nonempty_db | 非空库会批量注入预置，"""
+    """imported 变 4 且行数变 5 → 断言 red |
+| seeder 不用 import_encounter_pack 的 pack_id 幂等（改裸 INSERT） | test_seed_idempotent | """
+    """二次调用不会被空库守卫拦（或拦截失效）时重复插入 → """
+    """行数 8，second 非 0 → red |
+| 去掉 create_app 里的 seeder 调用 | test_create_app_calls_seed_encounter_texts / """
+    """test_create_app_seed_order_after_articles | AST 找不到调用 → red |
 | 把 seeder 调用移到 seed_preset_articles 之前 | test_create_app_seed_order_after_articles | enc 行号 < art 行号 → red |
-| 改坏某包包结构（删 article.raw_text） | test_packs_pass_validate_pack / test_packs_article_text_is_german_prose | validate_pack 抛 ValueError / 空正文 → red |
+| 改坏某包包结构（删 article.raw_text） | test_packs_pass_validate_pack / """
+    """test_packs_article_text_is_german_prose | validate_pack 抛 ValueError / 空正文 → red |
 | 两包复用同一 pack_id | test_packs_pack_id_globally_unique | 去重集合比长度短 → red |
 | 把正文换成英文 | test_packs_article_text_is_german_prose | 无变音/无德语功能词 → red |
 """)

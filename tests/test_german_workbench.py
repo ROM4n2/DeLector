@@ -108,7 +108,6 @@ def test_backup_covers_workbench_state():
     """DeLector 备份必须带上 workbench 的 wb.* 键，否则「还原备份」后
     682 词的进度还留在 localStorage 里，用户以为整体替换了其实没有；
     跨设备迁移也会静默丢掉全部学习进度。"""
-    from pathlib import Path
     cards = (_ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
     fn = cards.split("function backupLocalStorageKeys")[1].split("function ")[0]
     has_literal = '"wb."' in fn or "'wb.'" in fn or "'wb." in fn or '"wb.' in fn
@@ -280,7 +279,6 @@ def test_embedded_audio_build_script_exists_with_dry_run():
 
     （本测试当前应红，是 TDD 红阶段——脚本尚未创建）
     """
-    from pathlib import Path
     script = _ROOT / "tools" / "build_embedded_audio.py"
     assert script.exists(), (
         "tools/build_embedded_audio.py 尚未创建。"

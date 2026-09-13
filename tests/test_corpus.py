@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """官方真题语料库单元与契约测试 (Corpus Engine Test Suite)"""
 import os
+
 import pytest
+
 os.environ.setdefault("DATABASE_PATH", "test_delector_corpus.db")
 from starlette.testclient import TestClient
 
 
 def test_corpus_collection_volume_and_coverage():
     """验证语料库包含 12 篇权威篇章，覆盖 A1~B2/TestDaF 以及 4 大主题分类。"""
-    from delector.data.corpus_dict import OFFICIAL_CORPUS, get_corpus_list, get_corpus_by_id
+    from delector.data.corpus_dict import OFFICIAL_CORPUS
 
     assert len(OFFICIAL_CORPUS) >= 12, f"语料库篇章数不足 12 篇，当前为 {len(OFFICIAL_CORPUS)}"
 
@@ -57,7 +59,7 @@ def test_corpus_entry_schema_and_hygiene():
 
 def test_get_corpus_filter_helpers():
     """验证按 CEFR 和 Category 过滤查询助手。"""
-    from delector.data.corpus_dict import get_corpus_list, get_corpus_by_id
+    from delector.data.corpus_dict import get_corpus_by_id, get_corpus_list
 
     # 查全部（只返回目录元数据，不含完整 content）
     all_list = get_corpus_list()
@@ -123,7 +125,8 @@ def test_corpus_api_endpoints():
 def _m5_isolated_db_teardown():
     """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
     yield
-    import gc, os as _os
+    import gc
+    import os as _os
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:

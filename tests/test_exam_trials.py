@@ -13,9 +13,9 @@
 server（顶层 init_db() 副作用），clean_db autouse 前后双钉 env +
 gc.collect() 后删库（Windows 句柄释放纪律）。
 """
-import json
-import os
 import gc
+import os
+
 import pytest
 
 os.environ["DATABASE_PATH"] = "test_exam_trials_delector.db"
@@ -23,8 +23,8 @@ os.environ["PROGRESS_DB_PATH"] = "test_exam_trials_progress.db"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from delector.server import app, init_db, get_progress_db  # noqa: E402
 import delector.core.database as database  # noqa: E402
+from delector.server import app, get_progress_db, init_db  # noqa: E402
 
 _DB = "test_exam_trials_delector.db"
 _PDB = "test_exam_trials_progress.db"

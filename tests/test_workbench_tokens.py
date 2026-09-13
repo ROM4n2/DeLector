@@ -60,9 +60,13 @@ def test_workbench_html_imports_tokens_and_maps_editorial_vars():
     assert "--bg: var(--paper" in root_block or "--bg:var(--paper" in root_block, "--bg 应映射到 var(--paper"
     assert "--text: var(--ink" in root_block or "--text:var(--ink" in root_block, "--text 应映射到 var(--ink"
     assert "--line: var(--rule" in root_block or "--line:var(--rule" in root_block, "--line 应映射到 var(--rule"
-    assert "--accent: var(--accent" in root_block or "--accent:var(--accent" in root_block, "--accent 应映射到 var(--accent"
+    assert (
+        "--accent: var(--accent" in root_block or "--accent:var(--accent" in root_block
+    ), "--accent 应映射到 var(--accent"
     assert "--good: var(--moss" in root_block or "--good:var(--moss" in root_block, "--good 应映射到 var(--moss"
-    assert "--again: var(--cherry" in root_block or "--again:var(--cherry" in root_block, "--again 应映射到 var(--cherry"
+    assert (
+        "--again: var(--cherry" in root_block or "--again:var(--cherry" in root_block
+    ), "--again 应映射到 var(--cherry"
 
 
 def test_workbench_scope_selector_modes():
@@ -133,7 +137,7 @@ def test_workbench_editorial_navigation_contract():
     assert "box-shadow:var(--shadow)" not in tabs_css and "box-shadow: var(--shadow)" not in tabs_css, \
         "nav.tabs 不得使用厚重投影 box-shadow:var(--shadow)"
 
-    # 3. nav.tabs button.active 必须使用下划线 border-bottom 与 var(--accent)，且不可使用实心背景 background:var(--accent)
+    # 3. nav.tabs button.active 必须用下划线 border-bottom 与 var(--accent)，不得用实心背景
     active_match = re.search(r'nav\.tabs\s+button\.active\s*\{([^}]+)\}', content)
     assert active_match, "必须包含 nav.tabs button.active 样式声明"
     active_css = active_match.group(1)

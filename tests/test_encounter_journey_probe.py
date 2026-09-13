@@ -27,9 +27,9 @@ T1 覆盖服务端可观测段（①-⑥ 的服务端等价物）。本文件覆
 运行（仓库根）：export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_encounter_journey_probe.py -v
 node 缺失时整文件显式 skip（显式理由），既不让 CI 因缺 node 变红，也不静默假绿。
 """
+import gc
 import json
 import os
-import gc
 import shutil
 import subprocess
 from pathlib import Path

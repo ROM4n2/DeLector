@@ -1,27 +1,36 @@
-import os
-import json
-import re
-import time
 import gc
 import ipaddress
+import json
+import os
+import re
+import time
+
 import pytest
 from fastapi.testclient import TestClient
+
 from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
 
 # Ensure test DBs are isolated
 os.environ["DATABASE_PATH"] = "test_delector.db"
 os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
 
-from delector.server import (
-    app, init_db, get_db, get_cefr_level,
-    SYSTEM_GRAMMAR_PROMPT, process_german_text,
-    is_safe_public_url, clean_html_to_article,
-    get_progress_db, set_setting,
-    BACKUP_FORMAT_VERSION, BACKUP_SETTINGS_WHITELIST,
-)
 # 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
 # 钉住的 IPv6 段），必须在上面设好 DATABASE_PATH 之后再 import。
 from delector import server
+from delector.server import (
+    BACKUP_FORMAT_VERSION,
+    BACKUP_SETTINGS_WHITELIST,
+    SYSTEM_GRAMMAR_PROMPT,
+    app,
+    clean_html_to_article,
+    get_cefr_level,
+    get_db,
+    get_progress_db,
+    init_db,
+    is_safe_public_url,
+    process_german_text,
+    set_setting,
+)
 
 # 本文件搬进 tests/ 之后比仓库根深一层：凡读仓库资源（server.py / static / tools /
 # android / .github / .githooks / nlp.py / package_windows.py）一律经 ROOT。
@@ -592,7 +601,10 @@ def test_clean_html_to_article():
 
 def test_url_ingest_endpoint_with_mock(client, monkeypatch):
     from unittest.mock import AsyncMock
-    mock_html = "<html><head><title>Hallo Berlin</title></head><body><p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
+    mock_html = (
+        "<html><head><title>Hallo Berlin</title></head><body>"
+        "<p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
+    )
     monkeypatch.setattr("delector.routes.main.fetch_remote_html", AsyncMock(return_value=mock_html))
     # 端点自己也过一次 SSRF 闸（server.py:858），而 fetch 被 mock 掉不代表闸被 mock 掉。
     # 不钉住这里就等于让这条测试依赖真实 DNS：本机开着 Teredo 时 dw.com 会带出
@@ -1028,9 +1040,10 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
 
     模拟 Chaquopy 环境：import edge_tts 抛 ImportError，edge_tts_mini.synthesize 返回假 MP3。
     """
+    import asyncio
     import sys
     import types
-    import asyncio
+
     from delector.routes import main as routes_main
 
     # 1. 堵死 edge_tts 导入（模拟安卓）：sys.modules[name]=None 时 import 抛 ImportError
@@ -1064,7 +1077,9 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
 
 def test_reading_notes_crud_and_export(client):
     # 1. Ingest article
-    res_art = client.post("/api/articles/ingest", json={"title": "Notizen Test", "raw_text": "Berlin ist wunderbar und groß."})
+    res_art = client.post(
+        "/api/articles/ingest",
+        json={"title": "Notizen Test", "raw_text": "Berlin ist wunderbar und groß."})
     art_id = res_art.json()["article_id"]
 
     # 2. Create reading note
@@ -1459,7 +1474,7 @@ def test_cloze_evaluation_ctest(client):
 
 def test_core_dict_and_offline_vocab_lookup(client):
     """Test offline Goethe core vocabulary lookup and CEFR tagging."""
-    from delector.data.core_dict import lookup_core_vocab, get_core_cefr_level
+    from delector.data.core_dict import get_core_cefr_level, lookup_core_vocab
 
     # Direct core_dict module tests
     hit = lookup_core_vocab("Herausforderung")
@@ -1776,8 +1791,8 @@ def test_prep_dataset_keys_all_exist_in_dictionary():
     prep_dict 仍带着 ratseln —— 查 rätseln 没搭配、查 ratseln 有，两边
     看起来都正常。生成器的 prune_unknown_lemmas 负责剔除，这里守住结果。
     """
-    from delector.data.prep_dict import PREP_COLLOCATIONS
     from delector.data.core_dict import CORE_VOCAB_DB
+    from delector.data.prep_dict import PREP_COLLOCATIONS
     seed = set(_load_build_prep().SEED_COLLOCATIONS)
     orphans = [w for w in PREP_COLLOCATIONS if w not in CORE_VOCAB_DB and w not in seed]
     assert not orphans, f"这些词头不在词库里: {orphans[:10]}"
@@ -1946,9 +1961,9 @@ def test_android_never_downloads_model_at_import():
     Chaquopy 里必然失败，但会在 import server 期间阻塞启动——正是把 APK
     卡在启动页的那类故障。装上 spaCy 后这段原本的死代码变成了活路径。
     """
+    import os
     import subprocess
     import sys
-    import os
 
     probe = (
         "import spacy, sys, os\n"
@@ -1988,6 +2003,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     """
     import sys
     import types
+
     from delector.nlp_engine import processor as nlp
 
     sentinel = object()
@@ -2192,11 +2208,11 @@ def _run_hook_with_files(tmp_path, files):
 
     files: dict[str, str|bytes]  path -> content
     """
-    import subprocess
-    import shutil
-    import tempfile
-    import pathlib
     import os
+    import pathlib
+    import shutil
+    import subprocess
+    import tempfile
 
     def _find_bash():
         cands = []
@@ -2212,7 +2228,9 @@ def _run_hook_with_files(tmp_path, files):
                         cands.append(b)
         # where bash 列出所有候选（含 Git Bash 与 WSL bash）
         try:
-            out = subprocess.run(["where", "bash"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+            out = subprocess.run(
+                ["where", "bash"], capture_output=True, text=True,
+                encoding="utf-8", errors="replace").stdout
             for line in out.splitlines():
                 p = line.strip().strip('"')
                 if p and os.path.exists(p):
@@ -2576,6 +2594,7 @@ def test_ipv6_special_ranges_are_pinned_in_our_own_code():
     判定结果相反 —— 本机绿而 CI 红，v4.4.8 首次发布就是这么挂的。
     """
     import ipaddress as _ip
+
     from delector import server as _srv
 
     for addr in _IPV6_SPECIAL_ADDRS:
@@ -2642,8 +2661,9 @@ def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):
     import ipaddress as _ipaddress
     import socket as _socket
 
-    import delector.core.security as security
     from fastapi import HTTPException
+
+    import delector.core.security as security
 
     requested = []
 
@@ -2881,7 +2901,9 @@ def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
     payload = {
         "version": 2,
-        "articles": [{"id": 9999, "title": "Hacked", "raw_text": "x", "processed_json": "{}", "source_url": "", "created_at": "2026-01-01 00:00:00"}],
+        "articles": [{
+            "id": 9999, "title": "Hacked", "raw_text": "x", "processed_json": "{}",
+            "source_url": "", "created_at": "2026-01-01 00:00:00"}],
     }
     res = lan_client.post("/api/backup/restore", json=payload)
     assert res.status_code == 403
@@ -2894,8 +2916,9 @@ def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
 
 def test_backup_restore_failure_keeps_original_db(client, test_db_path):
     """还原失败（DB 约束错误）必须通过文件快照回滚，原始文章保持不变。"""
-    from delector import server
     from fastapi.testclient import TestClient as TC
+
+    from delector import server
     # 用 raise_server_exceptions=False 才能拿到 500 响应而非抛异常
     fail_client = TC(server.app, client=("127.0.0.1", 54322), raise_server_exceptions=False)
     with server.get_db(test_db_path) as conn:
@@ -2904,7 +2927,9 @@ def test_backup_restore_failure_keeps_original_db(client, test_db_path):
     # daily_summary 主键重复触发 IntegrityError
     bad = {
         "version": 2,
-        "articles": [{"id": 9100, "title": "Should Rollback", "raw_text": "x", "processed_json": "{}", "source_url": "", "created_at": "2026-01-01 00:00:00"}],
+        "articles": [{
+            "id": 9100, "title": "Should Rollback", "raw_text": "x", "processed_json": "{}",
+            "source_url": "", "created_at": "2026-01-01 00:00:00"}],
         "daily_summary": [{"date": "2026-08-20"}, {"date": "2026-08-20"}],
     }
     res = fail_client.post("/api/backup/restore", json=bad)
@@ -3027,7 +3052,8 @@ def _make_non_json_content_client():
     return _C
 
 
-@pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
+@pytest.mark.parametrize("factory", [
+    _make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
     monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-402-timeout")
     monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
@@ -3037,7 +3063,8 @@ def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
     assert "sk-test-402-timeout" not in res.text
 
 
-@pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
+@pytest.mark.parametrize("factory", [
+    _make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
     monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-polish")
     monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
@@ -3046,7 +3073,8 @@ def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
     assert "sk-test-polish" not in res.text
 
 
-@pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
+@pytest.mark.parametrize("factory", [
+    _make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client])
 def test_ai_polish_ai_failure_returns_502(client, monkeypatch, factory):
     monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-polish2")
     monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
@@ -3090,7 +3118,11 @@ def test_frontend_ai_error_paths_reuse_api_and_show_alert():
     assert "try" in polish_fn and "catch" in polish_fn, "aiPolishEssay 缺 try/catch"
     assert "alert" in polish_fn, "aiPolishEssay 失败时必须 alert"
     # 不写 API Key 到 DOM/localStorage
-    assert "api_key" not in writer_src.lower() or "localStorage.setItem" not in writer_src or "DEEPSEEK_API_KEY" not in writer_src, "writer 不应把 API Key 写入 localStorage/DOM"
+    assert (
+        "api_key" not in writer_src.lower()
+        or "localStorage.setItem" not in writer_src
+        or "DEEPSEEK_API_KEY" not in writer_src
+    ), "writer 不应把 API Key 写入 localStorage/DOM"
     # reader aiNoteAssist 同理
     note_fn = reader_src[reader_src.index("export async function aiNoteAssist"):]
     note_fn = note_fn[:note_fn.index("export async function saveCurrentNote")]
@@ -3490,11 +3522,15 @@ def test_backup_covers_essays_and_essay_versions_roundtrip(client):
     未包含 = 用户导出备份换机或重装后，作文草稿与版本演进历史全部静默丢失。
     """
     # 1. 创建一篇作文与一个版本
-    res_essay = client.post("/api/essays", json={"title": "Mein Urlaub", "content": "Ich fahre nach Berlin."})
+    res_essay = client.post(
+        "/api/essays",
+        json={"title": "Mein Urlaub", "content": "Ich fahre nach Berlin."})
     assert res_essay.status_code == 200
     essay_id = res_essay.json()["id"]
 
-    res_ver = client.post(f"/api/essays/{essay_id}/versions", json={"message": "初稿修改", "content": "Ich fahre morgen nach Berlin."})
+    res_ver = client.post(
+        f"/api/essays/{essay_id}/versions",
+        json={"message": "初稿修改", "content": "Ich fahre morgen nach Berlin."})
     assert res_ver.status_code == 200
 
     # 2. 导出备份
@@ -3580,7 +3616,7 @@ def test_vocab_card_accepts_and_saves_plural(client):
 
 def test_sync_sdp_cache_capacity_and_size_limit(client):
     """WebRTC SDP 暂存必须有条目上限（FIFO 淘汰）与体积极限，防止内存无界膨胀。"""
-    from delector.server import _sync_sdp_cache, MAX_SYNC_CACHE_ENTRIES
+    from delector.server import MAX_SYNC_CACHE_ENTRIES, _sync_sdp_cache
 
     key = client.get("/api/wb/state/key").json()["key"]
 
@@ -3689,9 +3725,9 @@ def test_task1_restore_req_includes_a1_records(client):
 
     with get_progress_db() as pconn:
         h = pconn.execute("SELECT * FROM a1_hoeren_records WHERE id = 101").fetchone()
-        l = pconn.execute("SELECT * FROM a1_lesen_records WHERE id = 201").fetchone()
+        lr = pconn.execute("SELECT * FROM a1_lesen_records WHERE id = 201").fetchone()
     assert h is not None and h["score_raw"] == 14
-    assert l is not None and l["score_raw"] == 13
+    assert lr is not None and lr["score_raw"] == 13
 
 
 def test_task1_review_card_computes_elapsed_days(client):
@@ -3700,7 +3736,8 @@ def test_task1_review_card_computes_elapsed_days(client):
     ten_days_ago = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
     with get_db() as conn:
         cur = conn.execute("""
-            INSERT INTO vocab_cards (word, lemma, pos, cefr_level, definition_zh, sentence_context, interval_days, ease_factor, repetition_count, due_date)
+            INSERT INTO vocab_cards (word, lemma, pos, cefr_level, definition_zh, sentence_context,
+                interval_days, ease_factor, repetition_count, due_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, ("TestWord", "TestWord", "NOUN", "A1", "测试词义", "Context sentence", 3, 2.5, 2, ten_days_ago))
         card_id = cur.lastrowid
@@ -3714,9 +3751,9 @@ def test_task1_review_card_computes_elapsed_days(client):
 
 def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
     """当 edge_tts 缺失且 edge_tts_mini 抛异常时，平滑降级到备选引擎。"""
-    import sys
     import asyncio
-    from unittest.mock import AsyncMock
+    import sys
+
     from delector.routes import main as routes_main
 
     # 模拟 edge_tts 缺失
@@ -3814,7 +3851,9 @@ def test_task1_create_writing_card_bounds_check(client):
 def test_task1_is_safe_public_url_port_validation(monkeypatch):
     """is_safe_public_url 仅允许白名单端口 (80, 443, 8080, 8443, None)。"""
     import socket as _socket
-    monkeypatch.setattr(_socket, "getaddrinfo", lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
+    monkeypatch.setattr(
+        _socket, "getaddrinfo",
+        lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
 
     # 允许的端口
     assert is_safe_public_url("https://example.com") is True
@@ -3835,10 +3874,14 @@ def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
     """fetch_remote_html 拦截 Content-Length > 2MB 或流式传输体积超过 2MB 的响应。"""
     import asyncio
     import socket as _socket
+
     from fastapi import HTTPException
+
     from delector.routes import main as routes_main
 
-    monkeypatch.setattr(_socket, "getaddrinfo", lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
+    monkeypatch.setattr(
+        _socket, "getaddrinfo",
+        lambda host, port: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
 
     class BigContentLengthResp:
         status_code = 200
@@ -3979,7 +4022,9 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         # 1. Windows PyInstaller
         assert hidden in pkg, f"{mod} 未在 package_windows.py 的 --hidden-import 中注册"
         # 2. Linux & macOS CI PyInstaller
-        assert wf.count(hidden) >= 2, f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 (count={wf.count(hidden)})"
+        assert wf.count(hidden) >= 2, (
+            f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 "
+            f"(count={wf.count(hidden)})")
     # 3. Android Chaquopy：Phase 2 后整目录拷入。再逐个 cp 扁平 .py 会漏模块 ——
     #    v5.3.0 实际漏过 routes_a2.py（server.py:233 静态 import 它），整目录拷贝修掉它。
     assert "cp -r start.py" in wf, "Android 应单独拷贝入口 start.py"
@@ -4316,7 +4361,7 @@ def test_get_vocab_by_cefr_level(client):
 
 
 def test_corpus_syntax_stats_db_contract(tmp_path):
-    from delector.core.database import init_progress_db, upsert_corpus_syntax_stats, get_all_corpus_syntax_stats
+    from delector.core.database import get_all_corpus_syntax_stats, init_progress_db, upsert_corpus_syntax_stats
     test_db = tmp_path / "test_syntax_progress.db"
     init_progress_db(db_path=str(test_db))
 

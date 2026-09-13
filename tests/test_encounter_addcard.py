@@ -44,7 +44,10 @@ import fs from "node:fs";
 const ctx = JSON.parse(fs.readFileSync(0, "utf8"));
 const DB = await import("./deck-bridge.mjs");
 const out = {};
-function noThrow(fn) { try { return { ok: true, v: fn() }; } catch (e) { return { ok: false, err: String(e && e.message || e) }; } }
+function noThrow(fn) {
+  try { return { ok: true, v: fn() }; }
+  catch (e) { return { ok: false, err: String(e && e.message || e) }; }
+}
 if (ctx.op === "makeWordObject") {
   out.word = DB.makeWordObject(ctx.lemma, ctx.gloss, ctx.pos, ctx.genId,
                                ctx.nowMs != null ? ctx.nowMs : undefined);

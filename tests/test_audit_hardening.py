@@ -5,24 +5,25 @@
 会执行 init_db() + seed_preset_articles()，落到真实库会造成数据污染。
 本模块自用独立的临时库文件名，避免与 test_server.py 的 test_delector.db 冲突。
 """
-import os
 import gc
+import os
 import sqlite3
+
 import pytest
 
 os.environ["DATABASE_PATH"] = "test_audit_delector.db"
 os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"
 
-from fastapi.testclient import TestClient  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
-from delector.server import app, get_setting, set_setting  # noqa: E402
 from delector.core.database import (  # noqa: E402
-    BACKUP_SETTINGS_WHITELIST,
     BACKUP_SETTINGS_EXPORT_WHITELIST,
     BACKUP_SETTINGS_IMPORT_WHITELIST,
+    BACKUP_SETTINGS_WHITELIST,
     verify_wb_key,
 )
+from delector.server import app, get_setting, set_setting  # noqa: E402
 
 
 @pytest.fixture
@@ -507,7 +508,7 @@ def test_backup_whitelist_split_semantics():
 def test_vocab_anki_note_escapes_user_html():
     """用户词/句子可注入 HTML：导出到 .apkg 的字段必须先转义，
     否则 Anki 打开牌组时 `<img onerror>` 这类标签会执行。"""
-    from delector.core.database import _vocab_anki_note, _grammar_anki_note
+    from delector.core.database import _vocab_anki_note
     row = {
         "word": '<img src=x onerror=alert(1)>', "lemma": "x", "pos": "NOUN",
         "gender": None, "cefr_level": "B1",
@@ -672,6 +673,7 @@ def test_split_komposita_cached_fresh_equal_results():
 def test_m4_hot_path_lru_caches_structural():
     """M4-2 结构护栏：两处热路径底层实现必须挂 lru_cache（防回退成每次重算/新建）。"""
     import inspect
+
     from delector.data import core_dict
     from delector.nlp_engine import linguistics
     assert "lru_cache" in inspect.getsource(core_dict._core_entry_cached)

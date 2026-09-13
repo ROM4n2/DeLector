@@ -3,8 +3,8 @@ Unit Tests for DeLector v3.5.0 German Syntax Tree & Topological Field Engine (sy
 """
 from delector.nlp_engine.syntax_tree import (
     analyze_sentence_topology,
-    build_clause_tree,
     analyze_syntax_tree,
+    build_clause_tree,
     get_spacy_nlp,
 )
 

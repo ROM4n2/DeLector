@@ -13,8 +13,9 @@
 env 再 import server（server 模块顶层有 init_db() 副作用），clean_db
 autouse 前后双钉 env + gc.collect() 后删库（Windows 句柄释放纪律）。
 """
-import os
 import gc
+import os
+
 import pytest
 
 os.environ["DATABASE_PATH"] = "test_catalog.db"
@@ -22,12 +23,14 @@ os.environ["PROGRESS_DB_PATH"] = "test_catalog_progress.db"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from delector.data import (
+    a1_dict,  # noqa: E402
+    a1_hoeren_dict,  # noqa: E402
+    a1_lesen_dict,  # noqa: E402
+    a1_writing_dict,  # noqa: E402
+)
 from delector.server import app  # noqa: E402
 from delector.services import exam_catalog  # noqa: E402
-from delector.data import a1_dict  # noqa: E402
-from delector.data import a1_hoeren_dict  # noqa: E402
-from delector.data import a1_lesen_dict  # noqa: E402
-from delector.data import a1_writing_dict  # noqa: E402
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 with open(os.path.join(_ROOT, "static", "index.html"), encoding="utf-8") as _f:

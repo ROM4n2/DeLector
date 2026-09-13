@@ -205,14 +205,14 @@ def test_3_annotate_has_known_and_unknown_tokens(client):
                 continue
             (known_lemmas if _is_known(known_set, lemma) else unknown_lemmas).append(lemma)
 
-    assert "mann" in [l.lower() for l in known_lemmas], \
+    assert "mann" in [lem.lower() for lem in known_lemmas], \
         "正文里的已背词 Mann 必须被 annotate 出对应 lemma 并匹配为 known"
-    assert "gehen" in [l.lower() for l in known_lemmas], \
+    assert "gehen" in [lem.lower() for lem in known_lemmas], \
         "正文里的已背词 gehen 必须被 annotate 出对应 lemma 并匹配为 known"
     # 未背词：schule（不在 deck）必须出现在 unknown 一侧。
-    assert any(l.lower() == "schule" for l in unknown_lemmas), \
+    assert any(lem.lower() == "schule" for lem in unknown_lemmas), \
         "正文里的未背词 Schule 必须落在 unknown 一侧（known/unknown 双向非空）"
-    assert any(l.lower() == "unverzagt" for l in unknown_lemmas), \
+    assert any(lem.lower() == "unverzagt" for lem in unknown_lemmas), \
         "正文里的生词 unverzagt 必须落在 unknown 一侧"
 
 

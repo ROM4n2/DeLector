@@ -2,6 +2,7 @@
 """Unit tests for writing_rules.py local rule engine."""
 import pytest
 import spacy
+
 from delector.services.writing import analyze_essay_text, decline_determiner
 
 

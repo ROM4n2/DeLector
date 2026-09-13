@@ -12,9 +12,10 @@
 db_path，测试一律喂 **tmp_path 一次性 SQLite 文件**（含 progress 库），绝不触
 及真实 delector.db / progress.db。Windows 句柄释放：删文件前 gc.collect()。
 """
-import os
 import gc
 import json
+import os
+
 import pytest
 
 import delector.core.database as database  # noqa: E402

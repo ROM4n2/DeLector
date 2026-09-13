@@ -2,10 +2,10 @@
 Tests for sentence-level diff and merge engine (essay_diff.py).
 """
 from delector.services.essay_diff import (
-    split_sentences,
-    join_sentences,
     diff_sentences,
+    join_sentences,
     merge_sentences,
+    split_sentences,
 )
 
 

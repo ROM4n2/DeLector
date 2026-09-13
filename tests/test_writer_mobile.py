@@ -2,7 +2,6 @@
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).parent.parent
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 WRITER = (ROOT / "static" / "js" / "writer.js").read_text(encoding="utf-8")
@@ -183,23 +182,33 @@ def _main_activity_code():
         c = src[i]
         nxt = src[i + 1] if i + 1 < n else ""
         if c == '"':                      # 字符串字面量：原样保留，内部 /* // 不算注释
-            out.append(c); i += 1
+            out.append(c)
+            i += 1
             while i < n:
                 if src[i] == "\\":
-                    out.append(src[i]); out.append(src[i + 1] if i + 1 < n else ""); i += 2; continue
+                    out.append(src[i])
+                    out.append(src[i + 1] if i + 1 < n else "")
+                    i += 2
+                    continue
                 out.append(src[i])
                 if src[i] == '"':
-                    i += 1; break
+                    i += 1
+                    break
                 i += 1
             continue
         if c == "'":                      # 字符字面量
-            out.append(c); i += 1
+            out.append(c)
+            i += 1
             while i < n:
                 if src[i] == "\\":
-                    out.append(src[i]); out.append(src[i + 1] if i + 1 < n else ""); i += 2; continue
+                    out.append(src[i])
+                    out.append(src[i + 1] if i + 1 < n else "")
+                    i += 2
+                    continue
                 out.append(src[i])
                 if src[i] == "'":
-                    i += 1; break
+                    i += 1
+                    break
                 i += 1
             continue
         if c == "/" and nxt == "/":       # 行注释
@@ -213,7 +222,8 @@ def _main_activity_code():
                 i += 1
             i += 2
             continue
-        out.append(c); i += 1
+        out.append(c)
+        i += 1
     return "".join(out)
 
 
@@ -329,8 +339,10 @@ def test_mobile_sheet_is_geometrically_stable():
     j = fixed_idx
     while depth and j < len(STYLE):
         c = STYLE[j]
-        if c == "{": depth += 1
-        elif c == "}": depth -= 1
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
         j += 1
     sheet = STYLE[fixed_idx:j - 1]
 
@@ -357,8 +369,10 @@ def _mobile_writer_sidebar_block():
     depth, j = 1, fixed
     while depth and j < len(STYLE):
         c = STYLE[j]
-        if c == "{": depth += 1
-        elif c == "}": depth -= 1
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
         j += 1
     return STYLE[fixed:j - 1]
 

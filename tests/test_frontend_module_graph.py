@@ -429,6 +429,6 @@ def test_workbench_wbsync_trigger_paths_present():
     j = i_debug
     while j < len(lines) and not lines[j].rstrip().endswith("};"):
         j += 1
-    assert any("wbsync:" in l for l in lines[i_debug:j + 1]), (
+    assert any("wbsync:" in ln for ln in lines[i_debug:j + 1]), (
         "__wb 调试出口未暴露 wbsync"
     )

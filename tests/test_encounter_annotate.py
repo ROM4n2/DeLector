@@ -28,9 +28,9 @@ os.environ.setdefault("PROGRESS_DB_PATH", "test_encounter_annotate_progress.db")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from delector.server import app  # noqa: E402
 from delector.core import database  # noqa: E402
 from delector.nlp_engine import processor as _enc_nlp  # noqa: E402
+from delector.server import app  # noqa: E402
 
 
 def _de_spacy_model_loaded() -> bool:

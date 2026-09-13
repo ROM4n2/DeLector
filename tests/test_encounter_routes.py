@@ -17,6 +17,7 @@ DATABASE_PATH/PROGRESS_DB_PATH 钉到 tmp_path throwaway 文件并 init_db；Win
 import gc
 import json
 import os
+
 import pytest
 
 # 先钉 env 再 import server（模块级 create_app 的 init_db 有副作用）
@@ -25,9 +26,9 @@ os.environ.setdefault("PROGRESS_DB_PATH", "test_encounter_routes_progress.db")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from delector.server import app  # noqa: E402
 from delector.core import database  # noqa: E402
 from delector.routes import encounter as encounter_mod  # noqa: E402
+from delector.server import app  # noqa: E402
 
 CARD_PACK_SCHEMA = "encounter-pack/v1"
 

@@ -5,11 +5,14 @@ Teil 1 (Formular-Training) + Teil 2 (30-Wort E-Mail & Brief Lab).
 """
 import os
 from pathlib import Path
+
 import pytest
+
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
-from delector.server import app
+
 from delector.data import a1_writing_dict
+from delector.server import app
 from delector.services.writing import analyze_a1_email, check_a1_formular_answer
 
 
@@ -221,7 +224,8 @@ def test_a1_writing_frontend_html_and_css():
 def _m5_isolated_db_teardown():
     """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
     yield
-    import gc, os as _os
+    import gc
+    import os as _os
     gc.collect()
     for _suffix in ("", "-journal", "-wal", "-shm"):
         try:
