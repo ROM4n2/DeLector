@@ -276,3 +276,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 产物：docs/specs/2026-09-13-listening-micro-training-design.md（已批准）+ docs/plans/2026-09-13-listen-micro-training.md（待审）
 - 计划：4 阶段 6 Task TDD，分支 feature/listen-micro-training，vault-exec maker-checker 派发
 - 待办：作者审计划 → vault-exec 初始化 ledger 执行
+
+### 2026-09-14 01:16 | deepseek-v4-flash__trae-code | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：听力微训工坊（docs/plans/2026-09-13-listen-micro-training.md，分支 feature/listen-micro-training）T1–T6 全绿。
+1. T1 diagnose_diktat 词级 LCS 逐字归因（afc85e1）；T2 make_cloze 启发式挖空（809a335，含黄卡修复）；T3 listen_trials 表 + /api/listen 四端点（ffe5daa）；T4 前端 listen-lab.js 三模式挂备考域（12220f7）；T5 前端行为探针 + 模块图守卫（2671588）；T6 回归 + 文档回填。
+2. 材料源：encounter 分级短文 + a1_hoeren audio_text_de（sanitize 路径可取，侦察确认无需非脱敏）。
+3. 偏差：Mode C 挖空为前端本地镜像 make_cloze 同策略（行为等价，探针钉死，spec §3 注明）。
+4. maker-checker 5/5 APPROVED（T4 一次 REWORK 已修复）。
+门禁：全量 **788 passed + 1 skipped**（基线 751→788，净增 35：引擎 21 + API 9 + 探针 2 + 模块图 3）；ruff 零告警；mypy 零错误；Go 三门禁不受影响。
+分支/PR：feature/listen-micro-training 收尾 1 个 PR 待合 master（本事件仅文档回填，不 commit，主线程负责）。
+遗留：Android 真机 TTS 点检（发版后并入既有点检清单）；B 候选「语料长难句强化」待试用反馈拍板。

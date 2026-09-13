@@ -95,6 +95,7 @@
 - 三模式控制器 + 听写输入框 + 逐字反馈渲染（correct/umlaut/case/inflection/missing/extra 六色胶囊）
 - 材料选择器（level 过滤）+ 会话成绩汇总
 - 挂载：index.html 备考域容器 + `main.js` 视图映射
+- **Mode C 实现决策（2026-09-14 执行期补充）**：挖空在前端本地镜像 `make_cloze` 同策略实现（行为等价，已由行为探针钉死契约）；服务端 `make_cloze` 保留为纯函数，供后端/工具复用
 
 ### 与既有资产的关系
 | 资产 | 角色 |

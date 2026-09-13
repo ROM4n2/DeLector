@@ -247,3 +247,21 @@
 - **hoeren 材料可达性**：Task 3 Step 0 侦察决定 sanitize 路径，若 `audio_text_de` 被剥则材料源仅 encounter
 - **make_cloze 无 POS**：启发式可能误挖（功能词停用表兜底）；A2 名词策略留参数口
 - **不扩大**：不建独立材料库、不预合成音频、不改 a1_hoeren 考试模式、不做波形可视化
+
+---
+
+## 执行状态（2026-09-14 收官，T1–T6 全绿）
+
+- **门禁**：全量 pytest **788 passed + 1 skipped**（基线 751→788，净增 35：引擎 21 + API 9 + 探针 2 + 模块图 3）；`ruff check .` 零告警；mypy 零错误；模块图 / 切片 / 打包注册守卫全过；Go 三门禁不受影响。
+- **maker-checker**：5/5 APPROVED（T4 一次 REWORK 已修复）。
+- **逐 Task commit**：
+  - T1 听写诊断引擎 `diagnose_diktat`（词级 LCS 逐字归因）→ `afc85e1`
+  - T2 听力填空挖空 `make_cloze` → `809a335`（含黄卡修复：umlaut 大小写守卫 / 屈折最短词长）
+  - T3 `listen_trials` 表 + `/api/listen` 四端点（materials/diagnose/trials）→ `ffe5daa`
+  - T4 前端微训工坊三模式 + 备考域挂载 → `12220f7`
+  - T5 前端行为探针 + 模块图守卫 → `2671588`
+  - T6 全量回归 + 文档回填（本计划 + OVERVIEW / work.log / FEATURES / spec 同步）
+- **偏差记录**：
+  1. **Mode C 挖空实现为「前端本地镜像」而非服务端 `make_cloze` 调用**：`listen-lab.js` 在前端本地镜像同策略挖空（避免每句往返），行为等价，已由行为探针钉死契约（红线 11）；服务端 `make_cloze` 保留为纯函数供后端/工具复用，spec §3 已同步注明。
+  2. **hoeren 材料经 sanitize 路径可取 `audio_text_de`**：Task 3 Step 0 侦察确认 `get_hoeren_set_by_id(sanitize=...)` 不剥 `audio_text_de`，材料源 encounter + hoeren 双源齐备，无需非脱敏路径。
+- **遗留**：Android 真机 TTS 点检（发版后并入既有点检清单）；B 候选「语料长难句强化」待试用反馈拍板。

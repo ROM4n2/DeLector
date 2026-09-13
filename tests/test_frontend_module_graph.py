@@ -483,9 +483,9 @@ def _import_edges(modules):
 def _cycles_through(modules, target):
     """DFS：找所有从 target 出发能回到 target 的环（target 必在环上）。"""
     edges = _import_edges(modules)
-    found = []
+    found: list[list[str]] = []
 
-    def dfs(node, path, seen):
+    def dfs(node: str, path: list[str], seen: set[str]) -> None:
         if found:
             return
         for nxt in edges.get(node, ()):
