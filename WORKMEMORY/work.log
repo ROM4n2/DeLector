@@ -331,3 +331,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 PR: https://github.com/ROM4n2/DeLector/pull/45（+3082/-5，20 文件，标题"feat(syntax): 长难句精读工坊（评分+挑句+拆解揭示+成绩落盘）"）。
 CI：ubuntu Tests & Go Gates run 34819353502 启动中（IN_PROGRESS）。
 遗留：CI 绿后作者合 master；真用户试用收三问反馈。
+
+### 2026-09-14 18:30 | GLM-5.2__trae-code | PR_MERGED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者确认 PR #45 已合并（merge commit cedee9d，2026-09-14 10:23:47Z）。
+1. 本地 master fast-forward 2596ae1..cedee9d（20 文件 +3089/-5，含 PR_OPEN 事件回填的 7 行）。
+2. 本地 feature/hard-sentences 分支已删除（was 8544e4b）；远端分支保留。
+3. work.log 回填本事件。
+遗留：长难句精读工坊已合 master（未发版，版本面未 bump）；真用户试用收三问反馈（最高价值）；Mypy --strict 递延、预置包 gloss 富化保留。
