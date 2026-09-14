@@ -333,6 +333,16 @@ def test_hard_sentences_all_resilient_to_bad_material(client, monkeypatch):
 # ── trials 落盘与回读（不挂闸） ────────────────────────────────────────
 
 
+def test_spacy_status_endpoint(client):
+    """spaCy 加载诊断端点（v5.7.4）：返回 {path, error}，只读契约。"""
+    res = client.get("/api/syntax/spacy-status")
+    assert res.status_code == 200
+    data = res.json()
+    assert set(data) == {"path", "error"}
+    assert data["path"] in ("spacy", "pure")
+    assert isinstance(data["error"], str)
+
+
 def test_trials_post_get_roundtrip(client):
     """POST trials 落盘返回 trial_id；GET trials 回读字段逐字一致。"""
     res = client.post(

@@ -23,7 +23,12 @@ from delector.core.database import (
     list_hard_sentence_trials,
     record_hard_sentence_trial,
 )
-from delector.nlp_engine.syntax_tree import analyze_syntax_tree, split_sentences_pure_python
+from delector.nlp_engine.syntax_tree import (
+    _spacy_load_error,
+    analyze_syntax_tree,
+    get_spacy_nlp,
+    split_sentences_pure_python,
+)
 from delector.services.syntax_score import _detect_path, rank_sentences, score_sentence
 
 router = APIRouter(prefix="/api/syntax", tags=["syntax"])
@@ -108,6 +113,16 @@ def _list_article_ids() -> List[Dict[str, Any]]:
     with db_conn() as conn:
         rows = conn.execute("SELECT id, raw_text FROM articles ORDER BY id").fetchall()
         return [dict(r) for r in rows]
+
+
+@router.get("/spacy-status")
+def api_syntax_spacy_status():
+    """spaCy 加载诊断（v5.7.4：无 adb 时在 App 内定位 Android 走 pure 的原因）。
+
+    返回当前实际路径（spacy/pure）与加载失败的具体异常；成功加载时 error 为空。
+    纯只读、非敏感，供前端「轻量分析」提示旁展示定位信息。
+    """
+    return {"path": "spacy" if get_spacy_nlp() else "pure", "error": _spacy_load_error or ""}
 
 
 @router.get("/hard-sentences")

@@ -25,17 +25,28 @@ except ImportError:
 # Global cached spaCy German model instance
 _nlp_instance = None
 
+# 诊断：spaCy 加载失败原因（v5.7.4：Android 打包 spacy+de_core_news_sm 仍走 pure，
+# 无 adb 时用于在 App 内定位 import/模型加载失败点；成功加载则清空）
+_spacy_load_error = ""
+
 
 def get_spacy_nlp():
     """Load or return cached spaCy German model with robust fallback."""
-    global _nlp_instance
-    if _nlp_instance is None and spacy is not None:
+    global _nlp_instance, _spacy_load_error
+    if spacy is None:
+        if not _spacy_load_error:
+            _spacy_load_error = "import spacy 失败（ImportError，模块级降级占位）"
+        return None
+    if _nlp_instance is None:
         try:
             _nlp_instance = spacy.load("de_core_news_md")
-        except Exception:
+        except Exception as e:
+            _spacy_load_error = f"md: {type(e).__name__}: {e}"
             try:
                 _nlp_instance = spacy.load("de_core_news_sm")
-            except Exception:
+                _spacy_load_error = ""
+            except Exception as e2:
+                _spacy_load_error += f" | sm: {type(e2).__name__}: {e2}"
                 _nlp_instance = None
     return _nlp_instance
 

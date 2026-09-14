@@ -40,6 +40,7 @@ const _q = {
   detail: null,         // 当前句揭示出的完整分析 {analysis:{clause_tree, topology}}
   revealed: false,      // 本句是否揭示过
   revealedKeys: new Set(), // 本会话内揭示过的句子键
+  spacyError: "",       // spaCy 加载诊断（/api/syntax/spacy-status，v5.7.4）
   startedAt: 0,
 };
 
@@ -171,6 +172,7 @@ function _ensureStyle() {
 .hs-chips { display:flex; flex-wrap:wrap; gap:0.35rem; margin-bottom:0.75rem; }
 .hs-chip { display:inline-flex; align-items:center; padding:0.3rem 0.6rem; border-radius:999px; border:1.5px solid var(--rule); font-size:0.75rem; font-family:var(--mono); color:var(--pencil); background:var(--paper); }
 .hs-path-note { font-size:0.75rem; font-family:var(--mono); color:var(--amber); margin-bottom:0.6rem; }
+.hs-diag { color:var(--ink-faint); font-size:0.6875rem; }
 .hs-actions { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; }
 .hs-reveal-zone { margin-top:0.9rem; }
 .hs-reveal-tip { font-size:0.8125rem; color:var(--pencil); margin-bottom:0.6rem; }
@@ -402,7 +404,7 @@ function _renderStage() {
         <span class="hs-score">难度<b>${Math.round(Number(item.score) || 0)}</b>/100 · ${esc(_scoreLabel(item.score))}</span>
         ${_q.source === "all" ? `<span class="hs-src-tag">${esc(item.source)}#${esc(String(item.source_id))} · 第${Number(item.sentence_index) + 1}句</span>` : ""}
       </div>
-      ${item.path === "pure" ? `<div class="hs-path-note">✦ 轻量分析：难度画像为粗估，排序供参考，不必当真</div>` : ""}
+      ${item.path === "pure" ? `<div class="hs-path-note">✦ 轻量分析：难度画像为粗估，排序供参考，不必当真${_q.spacyError ? ` <span class="hs-diag" title="NLP 引擎降级原因">诊断：${esc(_q.spacyError)}</span>` : ""}</div>` : ""}
       <div class="hs-sentence">${_sentenceHtml(item)}</div>
       <div class="hs-chips">${_dimChipsHtml(item.dimensions)}</div>
       ${revealedZone}
@@ -526,7 +528,18 @@ export async function enterHardSentences() {
   _ensureStyle();
   if (!el("hs-stage")) return;
   if (!_q.itemsLoaded) await _loadItems();
+  _loadSpacyDiag(); // 静默：spaCy 降级诊断（pure 提示旁展示失败原因，v5.7.4）
   _renderAll();
+}
+
+// 拉 spaCy 加载诊断（只读；失败静默，不阻断工坊）
+async function _loadSpacyDiag() {
+  try {
+    const data = await api("/api/syntax/spacy-status");
+    _q.spacyError = (data && data.path === "pure" && data.error) || "";
+  } catch (_e) {
+    _q.spacyError = "";
+  }
 }
 
 // 离开备考域：落盘当前句试练（幂等；本句已揭示则记 1）
