@@ -355,3 +355,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 1. 非草稿非预发布；四平台资产全部 uploaded：Android APK 61.2MB / Windows ZIP 78.0MB / macOS 59.7MB / Linux 122.6MB。
 2. work.log 本事件回填（未 commit，待用户后续提交）。
 遗留：作者覆盖安装 Android 真机点检长难句工坊；真用户试用收三问反馈（最高价值）。
+
+### 2026-09-14 19:30 | GLM-5.2__trae-code | BUG_FIX
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.7.0 真机点检缺陷「长难句清单加载失败 Internal Server Error」修复。
+1. 症状：Android 真机所有源失败；单源列表可出句子，点击（揭示句法树）→ 500；全语料难度榜 → 空态。
+2. 根因：detail 端点是唯一无容错路径——rank_sentences 有逐句 try/except 跳过坏句，detail 的 analyze_syntax_tree 无保护，Android 环境（spaCy 版本/数据差异）某句分析抛 → 500。桌面无法复现（seed 数据 + OFFICIAL_CORPUS 64 句 + 强制 pure + 全边界参数均 200/404/422）。
+3. 修复：① detail 分析失败降级 404「该句暂无法分析」（不 500）；② `_rank_source` 切句 try → 空榜；③ source=all 逐材料隔离（坏材料 SQL/切句异常只丢自身，不炸整榜）。
+4. 回归测试 +3：detail 分析抛→404 人话 / 切句崩→单材料空榜 200 / all 坏材料→其余材料仍上榜。门禁：**831 passed + 1 skipped**（828→831）+ ruff 零告警 + mypy 零错误。
+遗留：作者 Android 真机复测长难句工坊（验证点检清单 10 项）；复测通过则发 v5.7.1 patch（Android 需覆盖安装）。

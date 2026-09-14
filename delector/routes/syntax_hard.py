@@ -75,7 +75,13 @@ def _rank_source(source: str, source_id: int, text: str) -> List[Dict[str, Any]]
     cached = _RANK_CACHE.get(key)
     if cached and cached[0] > now:
         return cached[1]
-    sents = split_sentences_pure_python(text)
+    # 红线 1/纪律：切句与分析同属可失败路径——与 rank_sentences 的逐句容错对齐，
+    # 单材料整体失败返回空榜（不炸调用方，source=all 逐材料隔离依赖这里）。
+    try:
+        sents = split_sentences_pure_python(text)
+    except Exception:
+        _RANK_CACHE[key] = (now + _CACHE_TTL_SEC, [])
+        return []
     idx_of: Dict[str, int] = {}
     for i, s in enumerate(sents):
         idx_of.setdefault(s, i)
@@ -119,10 +125,25 @@ def api_syntax_hard_sentences(
     lim = max(1, min(int(limit), 100))
     if src == "all":
         items: List[Dict[str, Any]] = []
-        for art in _list_article_ids():
-            items.extend(_rank_source("article", art["id"], art["raw_text"]))
-        for enc in list_encounter_texts():
-            items.extend(_rank_source("encounter", enc["id"], enc["content"]))
+        # 逐材料隔离：任一材料切句/分析异常只丢该材料，不炸整榜（纪律同 _rank_source）
+        try:
+            arts = _list_article_ids()
+        except Exception:
+            arts = []
+        for art in arts:
+            try:
+                items.extend(_rank_source("article", art["id"], art["raw_text"]))
+            except Exception:
+                continue
+        try:
+            encs = list_encounter_texts()
+        except Exception:
+            encs = []
+        for enc in encs:
+            try:
+                items.extend(_rank_source("encounter", enc["id"], enc["content"]))
+            except Exception:
+                continue
         # 各材料内部已降序，跨材料合并后须整体按难度降序（难度榜契约）
         items.sort(key=lambda it: it["score"], reverse=True)
     else:
@@ -137,19 +158,26 @@ def api_syntax_hard_sentences(
 
 @router.get("/hard-sentences/detail")
 def api_syntax_hard_sentences_detail(source: str, source_id: int, sentence_index: int):
-    """单句完整分析：analysis 含 clause_tree/topology（供前端揭示渲染）；越界/缺失 404。"""
+    """单句完整分析：analysis 含 clause_tree/topology（供前端揭示渲染）；越界/缺失/分析失败 404。"""
     src = (source or "").lower()
     text = _material_text(src, source_id)
     sents = split_sentences_pure_python(text)
     if sentence_index < 0 or sentence_index >= len(sents):
         raise HTTPException(status_code=404, detail="句子序号越界")
     sent = sents[sentence_index]
-    analysis = analyze_syntax_tree(sent)
-    batch = analysis.get("sentences")
-    if not isinstance(batch, list) or not batch:
-        raise HTTPException(status_code=404, detail="该句无法分析")
-    single = batch[0]
-    scored = score_sentence(single, path=_detect_path(single))
+    # 红线 1/纪律：单句分析是可失败路径（Android spaCy/数据差异下 analyze_syntax_tree
+    # 可能抛）——与 rank_sentences 逐句容错对齐，失败降级 404 人话而非 500。
+    try:
+        analysis = analyze_syntax_tree(sent)
+        batch = analysis.get("sentences")
+        if not isinstance(batch, list) or not batch:
+            raise HTTPException(status_code=404, detail="该句暂无法分析")
+        single = batch[0]
+        scored = score_sentence(single, path=_detect_path(single))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=404, detail="该句暂无法分析") from None
     return {
         "sentence": sent,
         "score": scored.score,

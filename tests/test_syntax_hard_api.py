@@ -276,6 +276,60 @@ def test_hard_sentences_detail_404(client):
     assert r3.status_code == 404
 
 
+def test_hard_sentences_detail_analysis_error_404(client, monkeypatch):
+    """红线 1 纪律：单句分析抛异常（Android spaCy/数据差异）→ 404 人话而非 500。
+
+    回归：v5.7.0 真机报「长难句清单加载失败 Internal Server Error」——detail 端点
+    无容错（rank_sentences 有逐句 try/except 而 detail 没有），某句 analyze_syntax_tree
+    抛 → 500。此测试钉死失败降级 404。
+    """
+    aid = _seed_article()
+
+    def _boom(text):
+        raise RuntimeError("spaCy 分析崩")
+
+    monkeypatch.setattr(syntax_hard, "analyze_syntax_tree", _boom)
+    res = client.get(
+        "/api/syntax/hard-sentences/detail",
+        params={"source": "article", "source_id": aid, "sentence_index": 0},
+    )
+    assert res.status_code == 404
+    assert "无法分析" in res.json()["detail"]
+
+
+def test_rank_source_split_error_returns_empty(client, monkeypatch):
+    """切句异常（极端文本/环境差异）→ 单材料空榜 200，不炸调用方。"""
+    tid = _seed_encounter()
+
+    def _boom(text):
+        raise RuntimeError("切句崩")
+
+    monkeypatch.setattr(syntax_hard, "split_sentences_pure_python", _boom)
+    res = client.get(
+        "/api/syntax/hard-sentences",
+        params={"source": "encounter", "source_id": tid},
+    )
+    assert res.status_code == 200
+    assert res.json()["items"] == []
+
+
+def test_hard_sentences_all_resilient_to_bad_material(client, monkeypatch):
+    """source=all 逐材料隔离：坏材料（SQL/切句异常）只丢自身，其余材料仍上榜。"""
+    _seed_encounter()
+    fake = _fake_scored([("Einzig guter Satz.", 60.0, "B1")])
+    monkeypatch.setattr(syntax_hard, "rank_sentences", lambda text: list(fake))
+
+    def _boom():
+        raise RuntimeError("文章表崩")
+
+    monkeypatch.setattr(syntax_hard, "_list_article_ids", _boom)
+    res = client.get("/api/syntax/hard-sentences", params={"source": "all"})
+    assert res.status_code == 200
+    items = res.json()["items"]
+    assert items, "坏材料不应炸掉全榜"
+    assert all(it["source"] == "encounter" for it in items)
+
+
 # ── trials 落盘与回读（不挂闸） ────────────────────────────────────────
 
 
