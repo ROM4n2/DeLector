@@ -409,3 +409,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. UX 澄清（非 bug）："当前 x/100" 是**难度分**不是句次序（进度在卡面"句 x/y"）；列表按难度降序 → 点上一句分数变大（正常）；pure 路径分低 + Math.round 相同 → 点几次分数才跳（正常）。文案改为「当前句难度 x/100」消歧。
 4. 回归：探针 fixture TOPOLOGY 改真实形状（field_texts 字符串）+ 新增 2 断言（无 "[object Object]" / 渲染字符串原文）；46 断言 + 3 变异全绿。门禁 **832 passed + 1 skipped** + ruff/mypy 零告警。
 遗留：发 v5.7.3 patch（Android 需覆盖安装复测）；/vault-save 沉淀「探针 fixture 必须用真实 API 形状」教训；真用户试用收三问反馈。
+
+### 2026-09-14 20:56 | GLM-5.2__trae-code | RELEASE_v5.7.3
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准 → v5.7.3 发版（[object Object] 渲染修复）。
+1. bump commit 9732e96（5 文件 +13/-11）：sw.js v5.7.3 / build.gradle 5.7.3+50703 / index.html 顶栏 / README（badge 保持 832/833、下载表 v5.7.3、Roadmap v5.7.3 条目）/ PROJECT_OVERVIEW 发布面。
+2. tag v5.7.3 打在 bump commit 上；master+tag 已推送。
+3. CI Build & Publish run 34846223875 queued（head 9732e96）。
+遗留：CI 出四平台资产 → 作者覆盖安装 v5.7.3 复测（揭示句法树应显示五场域可读文案而非 [object Object]）；/vault-save 沉淀「探针 fixture 真实形状」教训；真用户试用收三问反馈。
