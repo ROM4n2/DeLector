@@ -377,3 +377,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：v5.7.1 发布闭环（CI run 34838228362 success，publishedAt 2026-09-14T11:35:45Z，四平台 asset 全部 uploaded：Android 61.2MB / Windows 78.0MB / macOS 59.7MB / Linux 122.6MB）。
 遗留：作者覆盖安装 v5.7.1 复测长难句工坊 10 项点检；真用户试用收三问反馈（最高价值）。
+
+### 2026-09-14 20:00 | GLM-5.2__trae-code | BUG_FIX_ROUND2（vault-debug 真根因）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.7.1 复测仍 500，vault-debug 4 步重查 → **真根因 = pydantic v2 专属 API**。
+1. 证据：Android Chaquopy 打包 `pydantic<2.0.0`（1.10.x）+ `fastapi<0.100.0` + Python 3.10（build.gradle:84-92）；桌面 pydantic 2.13.4。临时 venv（pydantic 1.10.26 + fastapi 0.99.1）复现：`BaseModel.model_copy` **不存在**（AttributeError），`copy()` 才是 v1 API。
+2. 根因链：syntax_score.py:205 `score_sentence(...).model_copy(update={"sentence": sent})` → Android pydantic 1.x AttributeError → `rank_sentences` 抛（`_rank_source` 只 try 了切句，未 try rank_sentences 调用）→ `/api/syntax/hard-sentences` 全源 500 → 前端"长难句清单加载失败 Internal Server Error"。**上轮修复（detail 容错/all 隔离）未触碰 model_copy，故未生效**；桌面 pydantic 2.x 无法复现的原因。
+3. 修复：`model_copy` 改为直接构造 SentenceScore（v1/v2 通用，对齐 routes/main.py:1524 的 hasattr 兼容纪律）。全仓排查 v2 专属 API：仅此 1 处（routes/main.py 已兼容）。
+4. 回归守卫：`test_syntax_score_no_pydantic_v2_only_api`（regex 钉死 syntax_score.py 无 `.model_x(` 调用，落实 DELECTOR-DEV-RULES §2.4 跨端打包同步守卫）。
+5. 验证：pv1test（pydantic 1.10.26+fastapi 0.99.1）修复后 rank_sentences 正常（2 句）；门禁 **832 passed + 1 skipped**（831→832）+ ruff/mypy 零告警。
+遗留：发 v5.7.2 patch（Android 需覆盖安装复测）；/vault-save 沉淀「Android pydantic 1.x 兼容」教训；真用户试用收三问反馈。

@@ -11,6 +11,8 @@ fixture 按 syntax_tree.analyze_syntax_tree 实际输出形状手工构造（不
   sentences[i] = {sentence_id, text, clause_tree{...features/token_ids/topology/children}, topology{sentence_type, ...}}
 """
 
+import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -392,3 +394,29 @@ def test_rank_sentences_spacy_split_differ_keeps_full_sentence(monkeypatch):
     result = rank_sentences(sent)
     assert len(result) == 1  # batch 多句不重复/不丢句，仍以纯 Python 切句粒度为准
     assert result[0].sentence == sent  # 完整原句回填
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 跨端打包兼容守卫（DELECTOR-DEV-RULES §2.4 跨端打包同步守卫）
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_syntax_score_no_pydantic_v2_only_api():
+    """Android Chaquopy 打包 `pydantic<2.0.0`（1.x），而 pydantic v2 专属 API
+    （model_copy/model_dump/model_validate/model_construct）在 1.x 不存在。
+
+    回归：v5.7.0/v5.7.1 真机「长难句清单加载失败 Internal Server Error」——rank_sentences
+    第 205 行曾用 `.model_copy(update=...)`，Android pydantic 1.x 下 AttributeError →
+    /api/syntax/hard-sentences 全源 500（桌面 pydantic 2.x 无法复现）。守卫钉死：
+    syntax_score.py 不得出现任何 pydantic v2 专属 API token（此模块无需 dict/validate，
+    需要时用 v1/v2 双兼容写法，参照 routes/main.py 的 `hasattr` 守卫）。
+    """
+    src_path = Path(sc.__file__).resolve()
+    src = src_path.read_text(encoding="utf-8")
+    # 只匹配调用形式 `.model_x(`（英文括号）；注释里写成"不用 model_copy（"（中文括号）
+    # 是说明文字，不误报。v1/v2 双兼容的 `hasattr` 守卫写法不在禁止列。
+    pattern = re.compile(r"\.(model_copy|model_dump|model_validate|model_construct|model_fields)\s*\(")
+    match = pattern.search(src)
+    assert not match, (
+        f"syntax_score.py 含 pydantic v2 专属 API 调用：{match.group(0)!r}（Android pydantic 1.x 会炸）"
+    )

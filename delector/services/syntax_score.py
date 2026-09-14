@@ -201,8 +201,18 @@ def rank_sentences(text: str) -> List[SentenceScore]:
             # 以纯 Python 切句粒度为准只取 batch[0]，绝不静默丢句 —— sentence
             # 字段仍回填完整原句 sent（调用方拿到的始终是切句粒度下的一句）。
             pass
+        base = score_sentence(batch[0], path=_detect_path(batch[0]))
+        # 不用 model_copy（pydantic v2 专属，Android 打包 pydantic<2.0.0 无此方法会
+        # AttributeError → 列表端点 500）：直接构造，v1/v2 通用（对齐 routes/main.py
+        # 的 hasattr 兼容纪律）。sentence 回填纯 Python 切句粒度下的完整原句。
         scored.append(
-            score_sentence(batch[0], path=_detect_path(batch[0])).model_copy(update={"sentence": sent})
+            SentenceScore(
+                score=base.score,
+                level=base.level,
+                dimensions=base.dimensions,
+                path=base.path,
+                sentence=sent,
+            )
         )
     scored.sort(key=lambda s: s.score, reverse=True)
     return scored
