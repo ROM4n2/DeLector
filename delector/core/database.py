@@ -348,6 +348,23 @@ def init_db(db_path: Optional[str] = None):
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_encounter_level ON encounter_texts(level)")
 
+        # 听力微训工坊会话成绩（Task 3）：本地单用户记录，非敏感不挂闸。
+        # created_at 用 TEXT DEFAULT (datetime('now'))，与材料表时间戳形态一致。
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS listen_trials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mode TEXT,
+                source_type TEXT,
+                source_id INTEGER,
+                level TEXT,
+                total INTEGER,
+                correct INTEGER,
+                score REAL,
+                duration_sec INTEGER,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
         # 读路径查询索引（幂等，旧库启动自动补）：SRS 到期队列 + 文章维度
         # 过滤/级联。缺失时「到期复习」「某文相关卡」「删文连带」在长库全表扫。
         conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_srs ON vocab_cards(mastered, due_date)")
@@ -1094,6 +1111,31 @@ _BACKUP_TABLES = {
         ("id", "pack_id", "title", "level", "source", "content", "pack_json", "created_at"),
         {"pack_id": None, "title": "", "level": "A2", "source": "", "content": "", "pack_json": None},
     ),
+    # 听力微训成绩（Task 3）：备份/还原缺失该表会让换机还原后听力记录全丢。
+    "listen_trials": (
+        (
+            "id",
+            "mode",
+            "source_type",
+            "source_id",
+            "level",
+            "total",
+            "correct",
+            "score",
+            "duration_sec",
+            "created_at",
+        ),
+        {
+            "mode": "",
+            "source_type": "",
+            "source_id": 0,
+            "level": "",
+            "total": 0,
+            "correct": 0,
+            "score": 0.0,
+            "duration_sec": 0,
+        },
+    ),
 }
 
 _PROGRESS_TABLES = {
@@ -1529,6 +1571,47 @@ def get_a1_lesen_history(limit: int = 50, db_path: Optional[str] = None) -> List
     return get_exam_history("A1", "lesen", limit=limit, db_path=db_path)
 
 
+def record_listen_trial(
+    mode: str,
+    source_type: str,
+    source_id: int,
+    level: str,
+    total: int,
+    correct: int,
+    score: float,
+    duration_sec: int,
+    db_path: Optional[str] = None,
+) -> int:
+    """写入一次听力微训会话成绩（listen_trials，主库），返回新行 id。
+
+    本地单用户成绩记录，非敏感数据，不参与 _require_localhost 闸。
+    score 由调用方按 correct/total 计算传入（total 为 0 时取 0）。
+    """
+    with db_conn(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO listen_trials (
+                mode, source_type, source_id, level, total, correct, score, duration_sec
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (mode, source_type, source_id, level, total, correct, score, duration_sec),
+        )
+        return cur.lastrowid
+
+
+def list_listen_trials(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """查询听力微训历史；created_at 倒序（同秒以 id 倒序打平），limit 钳制在 1..100。"""
+    with db_conn(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM listen_trials
+            ORDER BY created_at DESC, id DESC LIMIT ?
+        """,
+            (max(1, min(int(limit), 100)),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 _A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
 _A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None
 
@@ -1920,6 +2003,8 @@ __all__ = [
     "record_exam_trial",
     "get_exam_history",
     "migrate_a1_records_to_exam_trials",
+    "record_listen_trial",
+    "list_listen_trials",
     "get_vocab_by_cefr",
     "upsert_corpus_syntax_stats",
     "get_all_corpus_syntax_stats",

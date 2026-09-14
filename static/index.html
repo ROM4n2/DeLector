@@ -2495,6 +2495,7 @@
           <button id="exam-card-lesen" class="exam-module-card" onclick="setExamModule('lesen')">📖 阅读工坊 (Leseverstehen)</button>
           <button id="exam-card-sprechen" class="exam-module-card" onclick="setExamModule('sprechen')">💬 口语问答 (Sprechen)</button>
           <button id="exam-card-vocab" class="exam-module-card" onclick="setExamModule('vocab')">📖 官方考纲词表 (Wortliste)</button>
+          <button id="exam-card-listen" class="exam-module-card" onclick="setExamModule('listen')">🎧 听力微训 (Hörlabor)</button>
         </div>
 
         <!-- ── 模块面板：exam-card-* 页签点击 setExamModule() 点亮对应面板 ── -->
@@ -2773,6 +2774,27 @@
           <div id="exam-cards-container"></div>
           <div id="a1-hoeren-container" class="a1-hoeren-container hidden"></div>
           <div id="a1-lesen-container" class="a1-lesen-container hidden"></div>
+        </section>
+
+        <!-- ── 模块面板：🎧 听力微训 (Listening Micro-Training Lab) ──
+             容器静态占位；等级/材料/模式/播放条/舞台/成绩卡全部由
+             static/js/listen-lab.js 渲染（ListenLab 命名空间接线）。 -->
+        <section id="exam-listen" class="exam-module-panel hidden">
+          <div class="listen-lab-topbar">
+            <div>
+              <div class="a1-card-label">🎧 听力微训 · Hörlabor</div>
+              <div class="listen-subhead">碎片化听力精听 / 听写 / 填空 · TTS 按需合成 · 材料与遇见区/听力句库同源</div>
+            </div>
+            <div class="a1-topbar-actions">
+              <button class="btn btn-ghost btn-sm" onclick="ListenLab.listenExit()" title="返回材料选择">⟲ 换材料</button>
+            </div>
+          </div>
+          <div id="listen-level-bar" class="listen-bar"></div>
+          <div id="listen-material-bar" class="listen-bar"></div>
+          <div id="listen-mode-bar" class="listen-bar"></div>
+          <div id="listen-player-bar" class="listen-bar"></div>
+          <div id="listen-stage" class="listen-stage"></div>
+          <div id="listen-score-card" class="listen-score-card"></div>
         </section>
       </div>
     </main>
