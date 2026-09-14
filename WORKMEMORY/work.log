@@ -364,3 +364,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 修复：① detail 分析失败降级 404「该句暂无法分析」（不 500）；② `_rank_source` 切句 try → 空榜；③ source=all 逐材料隔离（坏材料 SQL/切句异常只丢自身，不炸整榜）。
 4. 回归测试 +3：detail 分析抛→404 人话 / 切句崩→单材料空榜 200 / all 坏材料→其余材料仍上榜。门禁：**831 passed + 1 skipped**（828→831）+ ruff 零告警 + mypy 零错误。
 遗留：作者 Android 真机复测长难句工坊（验证点检清单 10 项）；复测通过则发 v5.7.1 patch（Android 需覆盖安装）。
+
+### 2026-09-14 19:26 | GLM-5.2__trae-code | RELEASE_v5.7.1
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准 → v5.7.1 热修发版（长难句工坊真机 500 修复）。
+1. bump commit 068fd6e（5 文件 +15/-13）：sw.js v5.7.1 / build.gradle 5.7.1+50701 / index.html 顶栏 / README（badge 831/832、下载表 v5.7.1、Roadmap 热修条目）/ PROJECT_OVERVIEW 发布面+基线 831。
+2. tag v5.7.1 打在 bump commit 上；master+tag 已推送。
+3. CI Build & Publish run 34838228362 queued（head 068fd6e）。
+遗留：CI 出四平台资产（预计非草稿自动发布）→ 作者覆盖安装复测长难句工坊 10 项；真用户试用收三问反馈。
