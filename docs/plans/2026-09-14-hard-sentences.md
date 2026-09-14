@@ -238,3 +238,24 @@
 - **性能**：全文逐句分析重计算——内存缓存 + limit 护栏；大语料首拉延迟可接受（懒算）
 - **复习盒**：复用 `saveGrammar`/`grammar_cards`，不新建卡种表（scope 收敛）
 - **不扩大**：不建长难句题库、不持久化句子特征、不改 Grammatik-Radar 既有展示
+
+---
+
+## 执行状态（2026-09-14）
+
+T1–T6 全部落地，maker-checker 5/5 APPROVED。分支 `feature/hard-sentences`。
+
+| Task | 内容 | commit |
+| --- | --- | --- |
+| T1 | 句子难度评分 `score_sentence` + 级别估算 `estimate_level`（7 维加权 + CEFR 带） | `0ea6d31` |
+| T2 | 全文切句评分 `rank_sentences`（红线 10 唯一切句 + 双路径 path 标注） | `4f3a39a` |
+| T3 | `hard_sentence_trials` 表 + `/api/syntax` 三端点（hard-sentences/detail/trials）+ 注册/打包守卫同步 | `080eb53` |
+| T4 | 前端长难句精读工坊 `hard-sentences.js`（选源/卡片流/拆解揭示/查词/入复习盒）+ 备考域挂载 | `7e31b21` |
+| T5 | 前端行为探针 + 模块图守卫（红线 11 契约钉死） | `3ec5d45` |
+| T6 | 全量回归 + 文档回填 | 当前阶段（文档已回填；T6 原子 commit + PR 合 master 由主线程提交后补齐 hash） |
+
+**门禁**：全量 pytest **828 passed + 1 skipped**（基线 788→828，净增 40）；`ruff check .` 零告警；`mypy` 零错误；Go 三门禁不受影响；10/10 `tools/*.mjs` 探针全绿。
+
+**偏差记录**：
+1. **`path` 注入来源**：实测 `analyze_syntax_tree` 返回 dict **不含 `path` 键**（该双路径函数未在返回内自带来源标注）。`path` 由 `rank_sentences` 按实际调用的分析路径增量探测并注入（spaCy 可用→`spacy`，降级→`pure`）——规格 §3 已预见"双路径标注"红线 1 纪律，此为生产层补全，语义不变。
+2. **复习盒入盒**：不新增端点，前端直接拼装既有 `POST /api/cards/grammar`（`saveGrammar` 语义）写 `grammar_cards`，不新建卡种表——与设计「复用既有端点 / scope 收敛」一致。

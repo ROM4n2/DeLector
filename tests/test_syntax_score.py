@@ -219,8 +219,10 @@ def test_path_defaults_to_spacy():
 
 
 def test_empty_analysis_falls_back_to_minimum():
-    for bad in (None, {}, {"clause_tree": None}, {"clause_tree": {}}, {"clause_tree": {"children": "oops"}}):
-        result = score_sentence(bad)  # type: ignore[arg-type]
+    # bad 为任意非法输入形态（None/空 dict/形状异常 dict），score_sentence 须容错返回最低分
+    bads: List[Any] = [None, {}, {"clause_tree": None}, {"clause_tree": {}}, {"clause_tree": {"children": "oops"}}]
+    for bad in bads:
+        result = score_sentence(bad)
         assert result.score == 0.0
         assert result.level == "A1"
         assert result.dimensions == {}
@@ -305,7 +307,13 @@ def test_rank_sentences_uses_split_sentences_pure_python(monkeypatch):
     # 红线 10：切句唯一入口是 split_sentences_pure_python（monkeypatch 记录调用，禁止自造切句）
     sents = ["Erste.", "Zweite."]
     calls: List[str] = []
-    monkeypatch.setattr(sc, "split_sentences_pure_python", lambda t: calls.append(t) or sents)
+
+    def _fake_split(t: str) -> List[str]:
+        # 记录切句收到的原文，并返回预设 sents（避免 list.append 无返回值的技巧）
+        calls.append(t)
+        return sents
+
+    monkeypatch.setattr(sc, "split_sentences_pure_python", _fake_split)
     monkeypatch.setattr(sc, "analyze_syntax_tree", lambda s: {"sentences": [_analysis(n_tokens=5)]})
 
     result = rank_sentences("Erste. Zweite.")
