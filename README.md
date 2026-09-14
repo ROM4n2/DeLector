@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.7.3-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.7.4-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-832%2F833%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-838%2F839%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -20,14 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ✅ **v5.7.3 四平台安装/便携包由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.7.3-*`）。**v5.5.0 起 Android 端内置 4 篇 A1/A2 分级短文（覆盖安装后打开「遇见区」即可阅读）；v5.5.1 修复了「新版本已就绪」提示点不动与常驻遮挡的问题；v5.6.0 新增备考域「🎧 听力微训工坊」三模式（精听/影子跟读 · 听写诊断 · 听力填空），Android 真机 TTS 链路已点检通过；v5.7.0 新增备考域「✍️ 长难句精读工坊」——句子难度 7 维评分 + 跨语料挑长难句 + 先拆解后揭示句法树 + 入复习盒闭环；v5.7.1 修复长难句工坊 Android 真机 500（单句分析失败降级 404 人话 + 全语料榜逐材料隔离 + 切句容错）；v5.7.2 修复真根因——rank_sentences 弃用 pydantic v2 专属 `model_copy`（Android 打包 pydantic 1.x 无此方法 → 全源 500）+ 跨端打包兼容守卫；v5.7.3 修复揭示句法树 `[object Object]` 渲染（field_texts 字符串兼容）+ 难度分文案消歧。**
+> ✅ **v5.7.4 四平台安装/便携包由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.7.4-*`）。**v5.5.0 起 Android 端内置 4 篇 A1/A2 分级短文（覆盖安装后打开「遇见区」即可阅读）；v5.5.1 修复了「新版本已就绪」提示点不动与常驻遮挡的问题；v5.6.0 新增备考域「🎧 听力微训工坊」三模式（精听/影子跟读 · 听写诊断 · 听力填空），Android 真机 TTS 链路已点检通过；v5.7.0 新增备考域「✍️ 长难句精读工坊」——句子难度 7 维评分 + 跨语料挑长难句 + 先拆解后揭示句法树 + 入复习盒闭环；v5.7.1/5.7.2/5.7.3 修复长难句工坊 Android 真机 500（detail 容错 → model_copy 真根因 → `[object Object]` 渲染）+ 跨端打包兼容守卫；v5.7.4 纯 Python 降级路径评分增强（文本启发式区分度）+ 前端字号优化 + 轻量分析文案 + spaCy 加载诊断端点。**
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.7.3` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.3)     |
-| 🍎 **macOS**       | `v5.7.3` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.3)  |
-| 🐧 **Linux x64**   | `v5.7.3` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.3)  |
-| 📱 **Android**     | `v5.7.3` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.3) |
+| 🪟 **Windows x64** | `v5.7.4` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.4)     |
+| 🍎 **macOS**       | `v5.7.4` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.4)  |
+| 🐧 **Linux x64**   | `v5.7.4` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.4)  |
+| 📱 **Android**     | `v5.7.4` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.4) |
 
 ---
 
@@ -399,6 +399,8 @@ DeLector/
 - [x] **v5.7.2**：**长难句工坊 500 真根因修复 —— Android pydantic 1.x 兼容**（2026-09-14，vault-debug 4 步）——v5.7.1 复测仍报「长难句清单加载失败 Internal Server Error」：Android Chaquopy 打包 `pydantic<2.0.0`（1.10.x）+ `fastapi<0.100.0` + Python 3.10（build.gradle:84-92），而 `syntax_score.rank_sentences` 用了 **`model_copy()`（pydantic v2 专属 API，1.x 不存在）** → AttributeError → `/api/syntax/hard-sentences` 全源 500（桌面 pydantic 2.x 无法复现，上轮 detail 容错/all 隔离未触碰此行故无效）。修法：`model_copy` 改为直接构造 `SentenceScore`（v1/v2 通用，对齐 `routes/main.py` 既有 `hasattr` 兼容纪律）；全仓排查确认仅此 1 处 v2 专属 API；新增**跨端打包兼容守卫** `test_syntax_score_no_pydantic_v2_only_api`（regex 钉死 syntax_score.py 无 `.model_x(` 调用，落实 DELECTOR-DEV-RULES §2.4）。验证：临时 venv（pydantic 1.10.26 + fastapi 0.99.1）复现 `model_copy` 缺失 + 修复后 `rank_sentences` 正常出句；测试基线 **832 passed + 1 skipped**（831→832）。Android 需覆盖安装生效。
 
 - [x] **v5.7.3**：**揭示句法树 `[object Object]` 渲染修复 + 难度分文案消歧**（2026-09-14，vault-debug）——v5.7.2 复测报：揭示句法树只能看到 `[object Object],[object Object]`（用户简记 [object, object]）。根因：`_topologyHtml` 的 `Array.isArray(ft) ? ft.join(" ") : topo[key]` —— `field_texts` 在 spaCy 与纯 Python 双路径恒为**字符串**，恒走 else → `vals = topo[key]`（原始 token 数组）→ `String(数组)` 渲染成 `[object Object]`；**探针 fixture 误用数组 field_texts（与真实 API 形状不符）→ 恒走 join 分支 → 漏检**。修法：`_topologyHtml` 优先取 `field_texts` 字符串原文，缺失才退化顶层 token 数组 join；探针 fixture 改真实形状 + 新增 2 断言（无 `[object Object]` / 渲染字符串原文），46 断言 + 3 变异全绿。附带消歧：「当前 x/100」实为**难度分**（非句次序，进度在卡面"句 x/y"；列表按难度降序 → 点上一句分数变大属正常），文案改「当前句难度 x/100」。测试基线 **832 passed + 1 skipped**；Android 需覆盖安装生效。
+
+- [x] **v5.7.4**：**pure 降级评分增强 + 前端字号 + spaCy 诊断**（2026-09-14）——① **pure 路径评分增强**：v5.7.3 真机反馈纯 Python 降级句"普遍 5/100 无区分度"（pure 树单节点无 features，只剩句长维度）。`syntax_score` 新增 `_pure_text_hints` 文本启发式（逗号/从属连词 → clause_count 粗估；`wird/wurde` → 被动；`würde/hätte` → 虚拟式；`, weil/dass` → VL 句框；`, der/die` → 关系从句），`score_sentence` 在 `path="pure"` 时注入，难度榜恢复排序依据（**评分仍是内部启发式非权威，排序供参考**）；② **前端字号优化**（字小又累）：材料卡片 13→15px、原句 17→18px、揭示树/拓扑 13→15px+行高 1.85、树节点类型 11→12px、卡片留白加大；③ **文案软化**：`⚠ 近似分析（纯 Python 降级路径，评分仅供参考）` → `✦ 轻量分析：难度画像为粗估，排序供参考，不必当真`；④ **spaCy 加载诊断**（免 adb）：`GET /api/syntax/spacy-status` 返回 `{path, error}`（spaCy import/模型加载失败的具体异常），前端「轻量分析」提示旁自动展示——用于定位 Android 打包 spacy+de_core_news_sm 却仍走 pure 的根因。测试基线 **838 passed + 1 skipped**（832→838：pure 启发式 +5、spacy-status +1）；Android 需覆盖安装生效。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 
