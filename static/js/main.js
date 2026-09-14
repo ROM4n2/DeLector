@@ -160,6 +160,7 @@ import {
   connectDesktop,
 } from "./encounter.js";
 import * as ListenLab from "./listen-lab.js";
+import * as HardSentences from "./hard-sentences.js";
 
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
@@ -214,6 +215,8 @@ export function show(view) {
     if (typeof A1Lesen?.stopLesenExam === "function") A1Lesen.stopLesenExam();
     // 听力微训工坊：离开备考域停掉播放队列（幂等，模块未初始化也安全）
     ListenLab.stopListenLab();
+    // 长难句精读工坊：离开备考域落盘当前句试练（幂等）
+    HardSentences.stopHardSentences();
   }
 
   const player = document.getElementById("shadow-player");
@@ -273,14 +276,17 @@ export function setExamModule(mod) {
   const writingPanel = document.getElementById("exam-writing");
   const familyPanel = document.getElementById("exam-cards-family");
   const listenPanel = document.getElementById("exam-listen");
+  const hardsentPanel = document.getElementById("exam-hard-sentences");
   const isWriting = _examModule === "writing";
   if (writingPanel) writingPanel.classList.toggle("hidden", !isWriting);
   if (familyPanel)
     familyPanel.classList.toggle(
       "hidden",
-      isWriting || _examModule === "listen",
+      isWriting || _examModule === "listen" || _examModule === "hardsent",
     );
   if (listenPanel) listenPanel.classList.toggle("hidden", _examModule !== "listen");
+  if (hardsentPanel)
+    hardsentPanel.classList.toggle("hidden", _examModule !== "hardsent");
 
   [
     ["writing", "exam-card-writing"],
@@ -289,6 +295,7 @@ export function setExamModule(mod) {
     ["sprechen", "exam-card-sprechen"],
     ["vocab", "exam-card-vocab"],
     ["listen", "exam-card-listen"],
+    ["hardsent", "exam-card-hardsent"],
   ].forEach(([m, btnId]) => {
     document
       .getElementById(btnId)
@@ -304,6 +311,9 @@ export function setExamModule(mod) {
   } else if (_examModule === "listen") {
     // 听力微训工坊：进入时幂等初始化（样式/材料缓存/会话现场恢复）
     ListenLab.enterListenLab().catch(() => {});
+  } else if (_examModule === "hardsent") {
+    // 长难句精读工坊：进入时幂等初始化（样式 + 默认全部难度榜）
+    HardSentences.enterHardSentences().catch(() => {});
   } else if (isWriting) {
     setExamWritingTab("formular");
   }
@@ -1081,6 +1091,9 @@ Object.assign(window, {
 
   // Listening Micro-Training Lab（听力微训工坊 · ListenLab 命名空间接线）
   ListenLab,
+
+  // Hard-Sentence Reading Lab（长难句精读工坊 · HardSentences 命名空间接线）
+  HardSentences,
 });
 
 // ── PWA Service Worker Registration ──────────────────────────────────────────
