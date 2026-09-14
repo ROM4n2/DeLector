@@ -287,3 +287,8 @@ Caps: filesystem-read, filesystem-write, shell-exec
 门禁：全量 **788 passed + 1 skipped**（基线 751→788，净增 35：引擎 21 + API 9 + 探针 2 + 模块图 3）；ruff 零告警；mypy 零错误；Go 三门禁不受影响。
 分支/PR：feature/listen-micro-training 收尾 1 个 PR 待合 master（本事件仅文档回填，不 commit，主线程负责）。
 遗留：Android 真机 TTS 点检（发版后并入既有点检清单）；B 候选「语料长难句强化」待试用反馈拍板。
+
+### 2026-09-14 09:30 | deepseek-v4-flash__trae-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+听力微训工坊 PR #44 已由作者 merge（master=14da7ec），本地 master 已同步。分支 feature/listen-micro-training 待清理（本地+远端未删）。
+后续候选：语料长难句强化（先 A 后 B 的 B）；遗留：Android 真机 TTS 三模式点检（发版后）。
