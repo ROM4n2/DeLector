@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.7.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.7.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-828%2F829%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-831%2F832%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -20,14 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ✅ **v5.7.0 四平台安装/便携包由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.7.0-*`）。**v5.5.0 起 Android 端内置 4 篇 A1/A2 分级短文（覆盖安装后打开「遇见区」即可阅读）；v5.5.1 修复了「新版本已就绪」提示点不动与常驻遮挡的问题；v5.6.0 新增备考域「🎧 听力微训工坊」三模式（精听/影子跟读 · 听写诊断 · 听力填空），Android 真机 TTS 链路已点检通过；v5.7.0 新增备考域「✍️ 长难句精读工坊」——句子难度 7 维评分 + 跨语料挑长难句 + 先拆解后揭示句法树 + 入复习盒闭环。**
+> ✅ **v5.7.1 四平台安装/便携包由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.7.1-*`）。**v5.5.0 起 Android 端内置 4 篇 A1/A2 分级短文（覆盖安装后打开「遇见区」即可阅读）；v5.5.1 修复了「新版本已就绪」提示点不动与常驻遮挡的问题；v5.6.0 新增备考域「🎧 听力微训工坊」三模式（精听/影子跟读 · 听写诊断 · 听力填空），Android 真机 TTS 链路已点检通过；v5.7.0 新增备考域「✍️ 长难句精读工坊」——句子难度 7 维评分 + 跨语料挑长难句 + 先拆解后揭示句法树 + 入复习盒闭环；v5.7.1 修复长难句工坊 Android 真机 500（单句分析失败降级 404 人话 + 全语料榜逐材料隔离 + 切句容错）。**
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.7.0` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.0)     |
-| 🍎 **macOS**       | `v5.7.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.0)  |
-| 🐧 **Linux x64**   | `v5.7.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.0)  |
-| 📱 **Android**     | `v5.7.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.0) |
+| 🪟 **Windows x64** | `v5.7.1` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.1)     |
+| 🍎 **macOS**       | `v5.7.1` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.1)  |
+| 🐧 **Linux x64**   | `v5.7.1` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.1)  |
+| 📱 **Android**     | `v5.7.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.1) |
 
 ---
 
@@ -393,6 +393,8 @@ DeLector/
 - [x] **v5.6.0**：**听力微训工坊 —— 备考域三模式听练**（PR #44，2026-09-14）——① **L 精听 / 影子跟读**：逐句播放 + 变速/重复/循环 + 跟读停顿；② **D 听写诊断**：隐藏文本逐句听写 → `diagnose_diktat` 词级 LCS 逐字归因（correct/umlaut/case/inflection/missing/extra 六色胶囊）；③ **C 听力填空**：动词/名词启发式挖空 + 填答校验。材料源复用遇见区分级短文（encounter）+ A1 听力音频句库（`a1_hoeren` 的 `audio_text_de`）；后端 `delector/services/listen.py`（`diagnose_diktat` + `make_cloze` 纯函数）+ `delector/routes/listen.py`（`/api/listen` materials/diagnose/trials 四端点）+ `listen_trials` 表（对齐 `exam_trials` 模式，随备份还原）；前端 `static/js/listen-lab.js` 挂进备考域。测试基线 **788 passed + 1 skipped**（基线 751→788，净增 35：引擎 21 + API 9 + 探针 2 + 模块图 3）；Android 真机 TTS 链路留发版后一次性真机点检。
 
 - [x] **v5.7.0**：**长难句精读工坊 —— 备考域句子级攻坚**（PR #45，2026-09-14）——① **句子难度评分引擎**：`delector/services/syntax_score.py` 7 维加权评分 0–100（从句深度/从句复合度/被动/虚拟式/VL 句框/关系从句/句长）+ `estimate_level` CEFR 带估算 + `rank_sentences` 全文切句评分（复用红线 10 唯一切句 `split_sentences_pure_python`，spaCy/纯 Python 双路径带 `path` 降级标注，红线 1）；② **跨语料挑句**：`GET /api/syntax/hard-sentences` 按 source（article/encounter/all）× level × min_score × limit 挑句，进程内存缓存 + limit 护栏；`GET /api/syntax/hard-sentence/<sid>/detail` 句法树+原句+源元信息；③ **拆解→揭示句法树**：句卡先"尝试拆解"（默认隐藏句法树）→ 揭示渲染 clause_tree/topology + 查词链路（`/api/lookup/vocab`）；④ **入复习盒 + 成绩落盘**：「加入复习盒」复用 `saveGrammar` 语义写 `grammar_cards`（不新建卡种表，同句已入盒显示"已加入"）；会话成绩 `POST /api/syntax/hard-sentence/<sid>/trials` 落 `hard_sentence_trials` 表（对齐 `listen_trials`，随备份还原）；⑤ **等级门控适配过渡期**：默认 A2+ 门控（可切全部），`path="pure"` 句显示"近似分析"提示，评分仅参考。测试基线 **828 passed + 1 skipped**（基线 788→828，净增 40：引擎 16 + API 11 + 探针 5 + 模块图 8）；Android 端 static 打包在 APK 内，需覆盖安装生效。
+
+- [x] **v5.7.1**：**长难句工坊 Android 真机 500 热修**（2026-09-14）——v5.7.0 真机点检报「长难句清单加载失败 Internal Server Error」：Android 环境（spaCy/数据差异）某句 `analyze_syntax_tree` 抛异常，而 detail 端点是唯一无容错路径（`rank_sentences` 有逐句 try/except 跳过坏句，detail 没有）→ 点击揭示句法树 500；`source=all` 全语料榜整榜遍历任一材料异常 → 空态。修法：① detail 单句分析失败降级 **404「该句暂无法分析」**（不 500，对齐 rank_sentences 容错纪律）；② `_rank_source` 切句异常 → 单材料空榜；③ `source=all` **逐材料隔离**（坏材料 SQL/切句异常只丢自身，不炸整榜）。回归测试 +3（detail 分析抛→404 人话 / 切句崩→空榜 200 / all 坏材料→其余材料仍上榜）。测试基线 **831 passed + 1 skipped**（828→831）；Android 需覆盖安装生效。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 
