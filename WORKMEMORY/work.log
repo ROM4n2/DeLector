@@ -324,3 +324,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 门禁：全量 **828 passed + 1 skipped**（基线 788→828，净增 40）；ruff 零告警；mypy 零错误；Go 三门禁不受影响；10/10 tools/*.mjs 探针全绿。
 分支/PR：feature/hard-sentences 处于 T6 阶段（本事件仅文档回填，不 commit；T6 原子 commit + PR 合 master 由主线程负责）。
 遗留：真实用户试用（收三问反馈，最高价值）；全功能候选已清（听力微训 + 长难句均落地）；Mypy --strict 递延、预置包 gloss 富化保留。
+
+### 2026-09-14 19:45 | GLM-5.2__trae-code | PR_OPEN
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准 → 主线程推送 feature/hard-sentences 至 origin 并开 PR #45 合 master。
+PR: https://github.com/ROM4n2/DeLector/pull/45（+3082/-5，20 文件，标题"feat(syntax): 长难句精读工坊（评分+挑句+拆解揭示+成绩落盘）"）。
+CI：ubuntu Tests & Go Gates run 34819353502 启动中（IN_PROGRESS）。
+遗留：CI 绿后作者合 master；真用户试用收三问反馈。
