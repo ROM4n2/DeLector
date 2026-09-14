@@ -387,3 +387,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 4. 回归守卫：`test_syntax_score_no_pydantic_v2_only_api`（regex 钉死 syntax_score.py 无 `.model_x(` 调用，落实 DELECTOR-DEV-RULES §2.4 跨端打包同步守卫）。
 5. 验证：pv1test（pydantic 1.10.26+fastapi 0.99.1）修复后 rank_sentences 正常（2 句）；门禁 **832 passed + 1 skipped**（831→832）+ ruff/mypy 零告警。
 遗留：发 v5.7.2 patch（Android 需覆盖安装复测）；/vault-save 沉淀「Android pydantic 1.x 兼容」教训；真用户试用收三问反馈。
+
+### 2026-09-14 20:15 | GLM-5.2__trae-code | RELEASE_v5.7.2
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准 → v5.7.2 真根因修复发版（Android pydantic 1.x 兼容）。
+1. bump commit caca9bb（5 文件 +15/-13）：sw.js v5.7.2 / build.gradle 5.7.2+50702 / index.html 顶栏 / README（badge 832/833、下载表 v5.7.2、Roadmap v5.7.2 条目）/ PROJECT_OVERVIEW 发布面+基线 832。
+2. tag v5.7.2 打在 bump commit 上；master+tag 已推送（SSH 恢复）。
+3. CI Build & Publish run 34842426777 in_progress（head caca9bb）。
+遗留：CI 出四平台资产 → 作者覆盖安装 v5.7.2 复测长难句工坊 10 项（重点：全源列表出句 + 揭示不 500 + pure 提示）；/vault-save 沉淀教训；真用户试用收三问反馈。
