@@ -400,3 +400,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：v5.7.2 发布闭环（CI run 34842426777 success，publishedAt 2026-09-14T12:20:14Z，四平台 asset 全部 uploaded：Android 61.2MB / Windows 78.0MB / macOS 59.7MB / Linux 122.6MB）。
 遗留：作者覆盖安装 v5.7.2 复测长难句工坊 10 项点检（重点验证 model_copy 根因修复生效）；/vault-save 沉淀「Android pydantic 1.x 兼容」教训；真用户试用收三问反馈（最高价值）。
+
+### 2026-09-14 20:50 | GLM-5.2__trae-code | BUG_FIX_topology（vault-debug）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.7.2 复测新报障——揭示句法树渲染 "[object Object],[object Object]"（用户简记 [object, object]）。
+1. 根因：`_topologyHtml` 的 `Array.isArray(ft) ? ft.join(" ") : topo[key]` —— `field_texts` 在 spaCy 与纯 Python 双路径恒为**字符串**，恒走 else → `vals = topo[key]`（token 数组）→ `String(数组)` 渲染成 "[object Object]"。**探针 fixture 用数组 field_texts（与真实 API 形状不符）→ 恒走 join 分支 → 漏检**（minimal repro 已复现）。
+2. 修复：`_topologyHtml` 优先取 field_texts 字符串原文，缺失才退化顶层 token 数组 join。
+3. UX 澄清（非 bug）："当前 x/100" 是**难度分**不是句次序（进度在卡面"句 x/y"）；列表按难度降序 → 点上一句分数变大（正常）；pure 路径分低 + Math.round 相同 → 点几次分数才跳（正常）。文案改为「当前句难度 x/100」消歧。
+4. 回归：探针 fixture TOPOLOGY 改真实形状（field_texts 字符串）+ 新增 2 断言（无 "[object Object]" / 渲染字符串原文）；46 断言 + 3 变异全绿。门禁 **832 passed + 1 skipped** + ruff/mypy 零告警。
+遗留：发 v5.7.3 patch（Android 需覆盖安装复测）；/vault-save 沉淀「探针 fixture 必须用真实 API 形状」教训；真用户试用收三问反馈。

@@ -338,7 +338,20 @@ function _topologyHtml(analysis) {
   ];
   for (const [key, zh] of fieldOrder) {
     const ft = topo.field_texts && topo.field_texts[key];
-    const vals = Array.isArray(ft) ? ft.join(" ") : topo[key];
+    // field_texts 值为**字符串**（spaCy 与纯 Python 双路径的真实形状）；缺失时
+    // 才退化到顶层 token 数组。旧实现 `Array.isArray(ft) ? ft.join(" ") : topo[key]`
+    // 对字符串 field_texts 恒走 else → vals=原始 token 数组 → String(数组) 渲染成
+    // "[object Object],[object Object]"（真机报障，探针 fixture 形状错误漏检）。
+    let vals = null;
+    if (typeof ft === "string" && ft.trim()) {
+      vals = ft;
+    } else if (Array.isArray(ft)) {
+      vals = ft.join(" ");
+    } else if (Array.isArray(topo[key])) {
+      vals = topo[key].join(" ");
+    } else if (topo[key] != null) {
+      vals = topo[key];
+    }
     if (vals && String(vals).trim()) {
       lines.push(`<span class="hs-topo-k">${zh}</span> <span class="hs-topo-v">${esc(String(vals))}</span>`);
     }
@@ -434,7 +447,7 @@ function _renderSummary() {
         <span>·</span>
         <span>已揭示 <b>${_q.revealedKeys.size}</b></span>
         <span>·</span>
-        <span>当前 ${Math.round(Number(_q.items[_q.idx].score) || 0)}/100</span>
+        <span>当前句难度 <b>${Math.round(Number(_q.items[_q.idx].score) || 0)}/100</b></span>
       </div>
       <div class="hs-summary-actions">
         <button class="hs-btn" onclick="HardSentences.restart()">↺ 重新加载</button>

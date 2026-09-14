@@ -136,11 +136,23 @@ const CLAUSE_TREE = {
   ],
 };
 
+// 真实 API 形状（syntax_tree.analyze_sentence_topology / 纯 Python 降级输出）：
+// field_texts 值为**字符串**，顶层 vorfeld/mittelfeld 为 token 数组。旧 fixture 用数组
+// field_texts 与真实输出不符 → `Array.isArray(ft) ? ft.join(" ") : topo[key]` 走 join 分支，
+// 掩盖了字符串 field_texts 时渲染成 "[object Object]" 的真机 bug（v5.7.2 报障）。
 const TOPOLOGY = {
-  field_texts: { vorfeld: ["Der", "Mann"], mittelfeld: ["lernt", "fleißig"] },
-  linke_klammer: "",
-  rechte_klammer: "",
-  nachfeld: "",
+  vorfeld: [{ text: "Der", id: 0 }, { text: "Mann", id: 1 }],
+  linke_klammer: [],
+  mittelfeld: [{ text: "lernt", id: 2 }, { text: "fleißig", id: 3 }],
+  rechte_klammer: [],
+  nachfeld: [],
+  field_texts: {
+    vorfeld: "Der Mann",
+    linke_klammer: "",
+    mittelfeld: "lernt fleißig",
+    rechte_klammer: "",
+    nachfeld: "",
+  },
   sentence_type: "Verbzweitsatz",
   bracket_structure: "VF / LK / MF / RK",
 };
@@ -397,6 +409,16 @@ async function runScenarios(cfg) {
   check(
     stage().includes("VF 前置场") && stage().includes("MF 中段") && stage().includes("框型"),
     "analysis.topology 未渲染（field_texts/框型）",
+    "detail_analysis",
+  );
+  check(
+    !stage().includes("[object Object]"),
+    "topology 渲染出现 '[object Object]'（字符串 field_texts 被当 token 数组 toString，v5.7.2 真机报障）",
+    "detail_analysis",
+  );
+  check(
+    stage().includes("Der Mann") && stage().includes("lernt fleißig"),
+    "topology 未渲染 field_texts 可读文案（应为字符串原文而非 token 数组）",
     "detail_analysis",
   );
 
