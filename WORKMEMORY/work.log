@@ -339,3 +339,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 2. 本地 feature/hard-sentences 分支已删除（was 8544e4b）；远端分支保留。
 3. work.log 回填本事件。
 遗留：长难句精读工坊已合 master（未发版，版本面未 bump）；真用户试用收三问反馈（最高价值）；Mypy --strict 递延、预置包 gloss 富化保留。
+
+### 2026-09-14 18:46 | GLM-5.2__trae-code | RELEASE_v5.7.0
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准发版 → v5.7.0（长难句精读工坊，PR #45 已合）。
+1. 门禁：pytest **828 passed + 1 skipped** + ruff 零告警 + mypy 零错误 + test_writer_mobile 30/30（三处版本一致）。
+2. bump commit 2afa5bf（5 文件 +15/-13）：sw.js CACHE_NAME / build.gradle 5.7.0+50700 / index.html 顶栏 / README（Release badge、Tests 828/829、下载表 v5.7.0、Roadmap v5.7.0 长难句条目）/ PROJECT_OVERVIEW 发布面。
+3. tag v5.7.0 打在 bump commit 上；master 与 tag 均已推送（作者确认）。
+4. CI Build & Publish run 34834861205 queued（head 2afa5bf）。
+遗留：CI 出四平台资产后作者覆盖安装 Android 真机点检长难句工坊（选源→挑句→拆解→查词→入盒→trials 落盘）；真用户试用收三问反馈。
