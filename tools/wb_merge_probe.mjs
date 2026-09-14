@@ -104,6 +104,11 @@ const PIECES = {
   migrateSeedIdAliases: extractFn(html, "migrateSeedIdAliases"),
   normHw: extractFn(html, "normHw"),
   applyMerge: extractFn(html, "applyMerge"),
+  /* Task 4（ADR-0011）：词对象契约归一 + 存量迁移 */
+  normalizeWord: extractFn(html, "normalizeWord"),
+  normalizeAllWords: extractFn(html, "normalizeAllWords"),
+  migrateWordSchema: extractFn(html, "migrateWordSchema"),
+  markSchemaMigrated: extractFn(html, "markSchemaMigrated"),
 };
 for (const [k, v] of Object.entries(PIECES)) {
   if (!v || v.length < 40) throw new Error(`切片 ${k} 长度异常（${v && v.length}），锚点可能失配`);
@@ -112,6 +117,8 @@ for (const [k, v] of Object.entries(PIECES)) {
 /* 防死测：切片必须是真实现，而不是碰巧匹配到的空壳 */
 if (!/byHw/.test(PIECES.applyMerge)) throw new Error("applyMerge 切片里没有词头二级索引，切歪了");
 if (!/cardWins/.test(PIECES.migrateSeedIdAliases)) throw new Error("migrateSeedIdAliases 切片切歪了");
+if (!/cefr/.test(PIECES.normalizeWord)) throw new Error("normalizeWord 切片里没有 cefr 归一，切歪了");
+if (!/SCHEMA_KEY/.test(PIECES.migrateWordSchema)) throw new Error("migrateWordSchema 切片里没有 wb.schema.v1 标记守卫，切歪了");
 
 /* ---------------------------------------------------------------------------
  * 2. 沙箱：只提供 workbench.html 里被测代码依赖的最小桩
@@ -122,7 +129,8 @@ var DEFAULT_SETTINGS = {};
 var S = { words: [], cards: {}, log: {}, wrong: {}, settings: {} };
 var __toasts = [];
 function toast(m) { __toasts.push(String(m)); }
-function saveWords() {}
+var __saveWordsCalls = 0;
+function saveWords() { __saveWordsCalls++; }
 function saveCards() {}
 function saveLog() {}
 function saveWrong() {}
@@ -131,6 +139,14 @@ function applyTheme() {}
 function renderHeaderBadge() {}
 function showView() {}
 function wordById(id) { return S.words.find(function (w) { return w.id === id; }) || null; }
+/* Task 4 迁移桩：SCHEMA_KEY 常量 + localStorage 桩（键值存 __ls） */
+var SCHEMA_KEY = "wb.schema.v1";
+var __ls = {};
+var localStorage = {
+  getItem: function (k) { return Object.prototype.hasOwnProperty.call(__ls, k) ? __ls[k] : null; },
+  setItem: function (k, v) { __ls[k] = String(v); },
+  removeItem: function (k) { delete __ls[k]; },
+};
 `;
 
 const ctx = vm.createContext({ console });
@@ -354,12 +370,100 @@ function runAliasMigration() {
   };
 }
 
+/* ---------------------------------------------------------------------------
+ * 6. 场景四：词对象契约归一 + 存量数据一次性迁移（Task 4 / ADR-0011 决策 2）
+ * ------------------------------------------------------------------------ */
+
+function runSchemaMigration() {
+  /* 旧形状混存：A1 gloss/ex 富字段 + A2 zh/gender/plural 新契约 + reader card-*（缺 gender/plural/cefr） */
+  const legacy = [
+    { id: "a1-0001", hw: "Haus", pos: "n.", gloss: "房子", ipa: "haʊs", ex: [{ de: "Das Haus ist groß.", zh: "房子很大。" }], letter: "H", page: 1, tags: ["core"], custom: false, up: 0 },
+    { id: "a2-abenteuer", hw: "das Abenteuer", pos: "n.", zh: "冒险", de: "", gender: "das", plural: "die Abenteuer", core: false, cefr: "A2", tags: ["a2"], custom: true, up: 1 },
+    { id: "card-Testwort", hw: "Testwort", pos: "", gloss: "测试词", ipa: "", ex: [], letter: "T", page: 0, tags: ["reader"], custom: true, up: 2 },
+  ];
+  const idBefore = legacy.map(w => w.id);
+  setState({
+    words: JSON.parse(JSON.stringify(legacy)),
+    cards: { "a1-0001": { reps: 3, due: 10 } },
+    log: {},
+    wrong: { "card-Testwort": { n: 2 } },
+  });
+  const keySet = (o) => Object.keys(o).sort().join("|");
+  const cardsKeysBefore = keySet(cardsNow());
+  const wrongKeysBefore = keySet(wrongNow());
+
+  /* (d) 幂等：normalize 连跑两次 deep-equal */
+  const once = vm.runInContext("JSON.stringify(S.words.map(normalizeWord))", ctx);
+  const twice = vm.runInContext("JSON.stringify(S.words.map(normalizeWord).map(normalizeWord))", ctx);
+  const normalizeIdempotent = once === twice;
+
+  /* 一次性迁移（真实 migrateWordSchema）：全成功才 saveWords 落盘并写标记 */
+  vm.runInContext("__saveWordsCalls = 0; __ls = {};", ctx);
+  const firstRunChanged = call("migrateWordSchema");
+  const markerAfterFirst = vm.runInContext("localStorage.getItem(SCHEMA_KEY)", ctx);
+  const saveCallsAfterFirst = vm.runInContext("__saveWordsCalls", ctx);
+  const migrated = wordsNow();
+  vm.runInContext("__saveWordsCalls = 0;", ctx);
+  const secondRunChanged = call("migrateWordSchema");
+  const saveCallsAfterSecond = vm.runInContext("__saveWordsCalls", ctx);
+  const migratedSecond = wordsNow();
+  const cardsKeysAfter = keySet(cardsNow());
+  const wrongKeysAfter = keySet(wrongNow());
+
+  /* 失败路径：一条非法词（缺 id）→ 整体放弃，不落盘、不写标记 */
+  setState({ words: [{ id: "a1-0002", hw: "Wohnung" }, { hw: "无 id 的坏词" }], cards: {}, log: {}, wrong: {} });
+  vm.runInContext("__saveWordsCalls = 0; __ls = {};", ctx);
+  const failRunChanged = call("migrateWordSchema");
+  const failMarker = vm.runInContext("localStorage.getItem(SCHEMA_KEY)", ctx);
+  const failSaveCalls = vm.runInContext("__saveWordsCalls", ctx);
+
+  const byId = {};
+  for (const w of migrated) byId[w.id] = w;
+  const contractKeys = ["zh", "gloss", "gender", "plural", "cefr"];
+  const contractMissing = migrated
+    .filter(w => contractKeys.some(k => !Object.prototype.hasOwnProperty.call(w, k)))
+    .map(w => w.id);
+
+  return {
+    /* (a) id 集合逐一不变 */
+    idsUnchanged: JSON.stringify(idBefore) === JSON.stringify(migrated.map(w => w.id))
+      && JSON.stringify(idBefore) === JSON.stringify(migratedSecond.map(w => w.id)),
+    /* (b) 契约键齐全（reader 词补 null/"" 后也过） */
+    contractMissingIds: contractMissing,
+    a1ZhFromGloss: byId["a1-0001"].zh === "房子" && byId["a1-0001"].gloss === "房子",
+    a2GlossFromZh: byId["a2-abenteuer"].gloss === "冒险" && byId["a2-abenteuer"].zh === "冒险",
+    a1Cefr: byId["a1-0001"].cefr,
+    a2Cefr: byId["a2-abenteuer"].cefr,
+    readerCefrNull: byId["card-Testwort"].cefr === null,
+    readerGenderNull: byId["card-Testwort"].gender === null,
+    readerPluralEmpty: byId["card-Testwort"].plural === "",
+    a1GenderNull: byId["a1-0001"].gender === null,
+    a2GenderPreserved: byId["a2-abenteuer"].gender === "das" && byId["a2-abenteuer"].plural === "die Abenteuer",
+    /* 不丢数据：A1 富字段原样保留 */
+    a1RichFieldsPreserved: byId["a1-0001"].ipa === "haʊs"
+      && Array.isArray(byId["a1-0001"].ex) && byId["a1-0001"].ex.length === 1
+      && byId["a1-0001"].letter === "H" && byId["a1-0001"].page === 1
+      && JSON.stringify(byId["a1-0001"].tags) === JSON.stringify(["core"]),
+    /* (d) 幂等 */
+    normalizeIdempotent,
+    migrationStable: JSON.stringify(migrated) === JSON.stringify(migratedSecond),
+    /* (c) cards/wrong 键集合不变 */
+    cardsKeysUnchanged: cardsKeysBefore === cardsKeysAfter,
+    wrongKeysUnchanged: wrongKeysBefore === wrongKeysAfter,
+    /* 全成功才落盘 / 已标记跳过 / 失败不写半套 */
+    firstRunChanged, markerAfterFirst: markerAfterFirst === "1", saveCallsAfterFirst,
+    secondRunChanged, saveCallsAfterSecond,
+    failRunChanged, failMarkerNull: failMarker === null, failSaveCalls,
+  };
+}
+
 /* ------------------------------------------------------------------------ */
 
 const doubleImport = runDoubleImport();
 const caseSensitivity = runCaseSensitivity();
 const aliasMigration = runAliasMigration();
+const schemaMigration = runSchemaMigration();
 
-const out = { doubleImport, caseSensitivity, aliasMigration };
+const out = { doubleImport, caseSensitivity, aliasMigration, schemaMigration };
 process.stdout.write(JSON.stringify(out, null, JSON_MODE ? 0 : 2));
 if (!JSON_MODE) process.stdout.write("\n");

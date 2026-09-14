@@ -1029,10 +1029,71 @@ const DEFAULT_SETTINGS = { retention: 0.9, dailyNew: 15, newOrder: "shuffle", pl
 
 const S = { words: [], cards: {}, log: {}, wrong: {}, settings: { ...DEFAULT_SETTINGS } };
 
+/* ======================================================================
+ * Task 4 · 词对象契约归一 + 存量数据一次性迁移（ADR-0011 决策 2）
+ *  - 统一契约键：zh/gloss（双写对齐）、gender、plural、cefr；
+ *  - id 只增不改（最高红线）；原有字段一律保留，不许丢数据；
+ *  - 迁移幂等（wb.schema.v1 标记）且失败不损坏数据（先内存归一、全成功才落盘）。
+ * ==================================================================== */
+const SCHEMA_KEY = "wb.schema.v1";
+
+/** 把单个词对象归一到统一契约。纯函数：不改入参、无随机/时间/存储依赖，
+ *  连跑两次结果 deep-equal（幂等）；非法输入返回 null，由调用方整体放弃。 */
+function normalizeWord(w) {
+  if (!w || typeof w !== "object" || typeof w.id !== "string" || !w.id) return null;
+  const out = Object.assign({}, w);
+  /* gloss/zh 语义对齐：缺哪个用另一个补哪个（双写，两个名字都在，不丢显示别名） */
+  if (typeof out.zh !== "string" || out.zh === "") out.zh = typeof out.gloss === "string" ? out.gloss : "";
+  if (typeof out.gloss !== "string" || out.gloss === "") out.gloss = typeof out.zh === "string" ? out.zh : "";
+  /* 契约键缺失补显式空值（A1 富字段与 reader 精读生词都没有 gender/plural） */
+  if (out.gender === undefined || out.gender === null) out.gender = null;
+  if (out.plural === undefined || out.plural === null) out.plural = "";
+  /* cefr 按 id 前缀推导；无已知前缀（reader card-* / core-*）显式 null */
+  if (!out.cefr) {
+    out.cefr = null;
+    const byPrefix = [["a1-", "A1"], ["a2-", "A2"], ["b1-", "B1"]];
+    for (const [prefix, level] of byPrefix) {
+      if (out.id.startsWith(prefix)) { out.cefr = level; break; }
+    }
+  }
+  return out;
+}
+
+/** 逐条归一；任何一条非法即整体放弃（返回 null），绝不产出半套结果。 */
+function normalizeAllWords(words) {
+  const out = [];
+  for (const w of words) {
+    const nw = normalizeWord(w);
+    if (!nw) {
+      console.warn("[wb] 存在缺少合法 id 的词对象，放弃本次契约归一（存量数据保持原样）:", w);
+      return null;
+    }
+    out.push(nw);
+  }
+  return out;
+}
+
+function markSchemaMigrated() {
+  try { localStorage.setItem(SCHEMA_KEY, "1"); } catch (e) { /* 标记写失败：下次启动重跑，归一幂等 */ }
+}
+
+/** 存量词表一次性迁移收尾：wb.schema.v1 已标记则跳过（幂等）。未标记时 S.words
+ *  已经过 loadAll 的内存归一（种子建表分支或 localStorage 读出分支），这里复核一次，
+ *  全部成功才 saveWords() 落盘并写标记；任何一条失败 → 整体放弃，不写半套。 */
+function migrateWordSchema() {
+  if (localStorage.getItem(SCHEMA_KEY) === "1") return false;
+  const normalized = normalizeAllWords(S.words);
+  if (!normalized) return false;
+  S.words = normalized;
+  saveWords();
+  markSchemaMigrated();
+  return true;
+}
+
 function loadAll() {
   try { S.words = JSON.parse(localStorage.getItem(K.words) || "null") || null; } catch (e) { S.words = null; }
   if (!Array.isArray(S.words)) {
-    S.words = SEED_WORDS.map(w => ({
+    S.words = SEED_WORDS.map(w => normalizeWord({
       id: w.id, hw: w.hw, pos: w.pos || "", gloss: w.gloss || "",
       ipa: w.ipa || "", ex: Array.isArray(w.ex) ? w.ex : [], letter: w.letter || "",
       page: w.page || 0, tags: CORE_WORD_SEED_IDS.has(w.id) ? ["core"] : [],
@@ -1040,8 +1101,14 @@ function loadAll() {
     }));
     // 核心词表里 SEED_WORDS 没有的 22 个新词：展开复制成新对象，
     // 不能把常量里的对象引用直接塞进 S.words（用户编辑会改到常量本身）
-    S.words.push(...CORE_CUSTOM_WORDS.map(w => ({ ...w, tags: ["core"], custom: true, up: w.up || 0 })));
+    S.words.push(...CORE_CUSTOM_WORDS.map(w => normalizeWord({ ...w, tags: ["core"], custom: true, up: w.up || 0 })));
     saveWords();
+    markSchemaMigrated(); // 种子建表已逐条过 normalizeWord，契约天然齐 → 直接视为已迁移
+  } else {
+    // Task 4：localStorage 存量词对象读出后、进 S.words 被消费前逐条在内存归一
+    // （无论是否已标记——远端镜像可能把旧形状词拉回来）。任一条失败 → 整体放弃，S.words 保留原样。
+    const normalized = normalizeAllWords(S.words);
+    if (normalized) S.words = normalized;
   }
   const load = (key, fallback) => {
     try { const v = JSON.parse(localStorage.getItem(key) || "null"); return v == null ? fallback : v; }
@@ -1051,6 +1118,7 @@ function loadAll() {
   S.log = load(K.log, {});
   S.wrong = load(K.wrong, {});
   S.settings = Object.assign({}, DEFAULT_SETTINGS, load(K.set, {}));
+  migrateWordSchema();
 }
 
 /** 已有用户数据幂等补 core tag / 注入缺失的核心新词（Task 7）。

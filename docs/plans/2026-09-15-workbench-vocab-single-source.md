@@ -336,6 +336,9 @@ T4 ◄────────┘（T4 可与 T2/T3 并行）
   - T3-Y2：B1 条数基线 `>=1000` 未钉死 1712 → **T4 顺带钉死**（权威词表接入时随数据变更同 commit 更新）。
   - T3-Y3：`cefr="ALL"` 分支无契约断言 → T4 顺带补一条。
   - T3-Y4：`linguistics.py:12` 同型 `except ImportError` 降级（红线 1 有意豁免）→ **T7 收官时显式裁决去留**。
+  - T4-N1：**applyMerge 入口未接 normalizeWord**（计划 Files 内偏差，CRV 评估为可接受：local-first 下零数据/进度丢失，混版本双端窗口有快照形状驱动的 PUT 振荡、双端同版自愈，且回做修不掉振荡根源）→ **T6 顺带接线**（同文件小改，顺带覆盖 `syncA2CardsFromServer` 构造词缺 `zh` 同类问题）；PR 描述须记录该振荡窗口。
+  - T4-N2：探针 `a1RichFieldsPreserved` 未断言 `custom/up`（结构全拷贝不可能丢）→ T6/T7 顺带补断言。
+  - T4-N3：`normalizeWord` 对非字符串 `zh/gloss` 会覆盖原值（现实数据恒为字符串）→ 防御性一档，暂缓。
 - 已知边界（不进本轮）：
   - **A2/B1 的 `ipa` / 例句（`ex`）补齐**：属"富字段扩展"，会触碰存储 schema → 须另立 ADR（本轮 A2/B1 卡片信息量仍低于 A1）。
   - **`--strict` / 其他静态债**：无关，不动。

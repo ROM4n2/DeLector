@@ -26,6 +26,10 @@ CONTRACT_FIELDS = {"id", "hw", "pos", "gender", "plural", "de", "zh", "core", "c
 A1_CORE_TOTAL = 235
 A1_ALL_TOTAL = 704
 A2_TOTAL = 974
+# 【CRV 黄牌承接 Y2】B1 条数钉死为当前权威基线（core_dict 现量）。
+# 权威词表接入后条数会变 —— 届时随数据变更**同 commit** 更新此基线；
+# 消费方（exam_catalog count_fn 等）一律动态推导，不得抄这里。
+B1_TOTAL = 1712
 
 
 @pytest.fixture(autouse=True)
@@ -83,11 +87,25 @@ def test_a2_hw_assembly_unchanged():
 def test_b1_generic_branch_contract_uniform():
     """B1：仍走通用分支，id 形如 b1-{lemma}，字段集同契约。"""
     res = get_vocab_by_cefr(cefr="B1", scope="all")
-    assert res["total"] >= 1000, "B1 词库条数异常（权威词表接入前应为 1712 量级）"
+    # 【CRV 黄牌承接 Y2】条数钉死为权威基线，防止通用分支静默漏读/重复读；
+    # 权威词表接入后随数据变更同 commit 更新 B1_TOTAL。
+    assert res["total"] == B1_TOTAL, (
+        f"B1 词库条数漂移：{res['total']} != {B1_TOTAL}"
+        "（权威词表接入后随数据变更同 commit 更新 B1_TOTAL）"
+    )
     _assert_contract_uniform(res["words"], 10)
     ids = [w["id"] for w in res["words"]]
     assert all(i.startswith("b1-") and len(i) > 3 for i in ids), "B1 存在非 b1-{lemma} 形态的 id"
     assert len(set(ids)) == len(ids), "B1 id 有重复"
+
+
+def test_cefr_all_contract_uniform():
+    """【CRV 黄牌承接 Y3】cefr="ALL" 聚合分支（A1 视图 ⊕ A2 ⊕ 其余 core_dict 级别）
+    同样必须产出统一契约字段集 —— 聚合路径漏掉 _contract_from_core_entry 之类的
+    装饰点就会在这里爆出字段集漂移。"""
+    res = get_vocab_by_cefr(cefr="ALL", scope="all")
+    assert res["total"] > 0, "ALL 聚合不应为空表"
+    _assert_contract_uniform(res["words"], 10)
 
 
 def test_a2_missing_core_dict_raises(monkeypatch):

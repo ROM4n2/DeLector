@@ -2785,3 +2785,172 @@ def test_lan_pair_panel_wiring_starts_after_wbsync_boot():
     assert "wbsync.pair.info(" in ui_block, "配对面板必须读 wbsync.pair.info() 回填"
     assert "wbsync.pair.set(" in ui_block, "保存必须调 wbsync.pair.set（只写 localStorage 配对不生效）"
     assert "wbsync.pair.clear(" in ui_block, "清除必须调 wbsync.pair.clear"
+
+
+# --------------------------------------------------------------------------
+# Task 4 · normalizeWord + 存量数据幂等迁移（ADR-0011 决策 2）
+# --------------------------------------------------------------------------
+
+
+def _normalize_word_body():
+    """normalizeWord 函数体（定义到下一个顶层 function 为止）。"""
+    assert "function normalizeWord(" in _WORKBENCH, "缺少 normalizeWord 归一函数"
+    body = _top_fn_segment("function normalizeWord(")
+    assert "return out" in body, "切片没落在 normalizeWord 上（找不到 return out）"
+    return body
+
+
+def _normalize_all_words_body():
+    """normalizeAllWords 函数体。"""
+    assert "function normalizeAllWords(" in _WORKBENCH, "缺少 normalizeAllWords 逐条归一函数"
+    body = _top_fn_segment("function normalizeAllWords(")
+    assert "normalizeWord(" in body, "切片没落在 normalizeAllWords 上"
+    return body
+
+
+def _migrate_schema_body():
+    """migrateWordSchema 函数体（定义到下一个顶层 function 为止）。"""
+    assert "function migrateWordSchema(" in _WORKBENCH, "缺少 migrateWordSchema 迁移函数"
+    body = _top_fn_segment("function migrateWordSchema(")
+    assert "SCHEMA_KEY" in body, "切片没落在 migrateWordSchema 上"
+    return body
+
+
+def test_normalize_word_wired_into_both_load_all_branches():
+    """normalizeWord 必须同时接入 loadAll 的两个词源分支。
+
+    种子建表分支（SEED_WORDS.map 与 CORE_CUSTOM_WORDS.map）与 localStorage 存量
+    读出分支（经 migrateWordSchema → normalizeAllWords → normalizeWord）都要归一，
+    只接一头就会出现「老用户归一了、重装用户没归一」的半套契约。
+
+    变异验证：把种子分支的 normalizeWord 包裹删掉 → 种子分支计数断言红；
+              把 loadAll 末尾的 migrateWordSchema() 删掉 → 存量分支断言红。
+    """
+    seed_block = _seed_init_block()
+    assert seed_block.count("normalizeWord(") >= 2, (
+        "种子建表分支的 SEED_WORDS.map 与 CORE_CUSTOM_WORDS.map 都必须过 normalizeWord"
+    )
+    load_all_body = _load_all_body()
+    assert "migrateWordSchema();" in load_all_body, (
+        "loadAll 必须调用 migrateWordSchema() 完成 localStorage 存量词的契约归一"
+    )
+    assert "normalizeAllWords(" in _migrate_schema_body(), (
+        "migrateWordSchema 必须经 normalizeAllWords → normalizeWord 逐条归一"
+    )
+
+
+def test_normalize_word_is_pure_and_idempotent():
+    """normalizeWord 幂等纯函数：无随机/时间/存储依赖，不改 id，gloss/zh 双写不丢数据。
+
+    幂等的本质是确定性：函数体一旦引用 Math.random / Date.now / localStorage / S，
+    同一输入两次调用就可能不同，迁移就不再幂等。id 只增不改是最高红线，
+    归一只许补契约键（gender→null、plural→""、cefr 按 id 前缀推导），不许改 id。
+
+    变异验证：往 normalizeWord 里加一行 Date.now() 时间戳 → 禁用引用断言红；
+              把 out.id = ... 改写逻辑塞进去 → id 禁写断言红。
+    """
+    body = _normalize_word_body()
+    for forbidden in ("Math.random", "Date.now", "localStorage", "S.words", "idbPut", "saveWords"):
+        assert forbidden not in body, f"normalizeWord 必须是纯函数，不得引用 {forbidden}"
+    assert not re.search(r"\b(out|w)\.id\s*=[^=]", body), "normalizeWord 不得改写 id（id 只增不改是最高红线）"
+    # gloss/zh 双写对齐：两个字段都要补齐，语义别名不许丢（不许丢数据）
+    assert re.search(r"out\.zh\s*=", body) and re.search(r"out\.gloss\s*=", body), (
+        "gloss/zh 必须双写补齐（只补一个会丢另一侧的显示别名）"
+    )
+    assert re.search(r"out\.gender\s*=\s*null", body), "缺 gender 必须补显式 null"
+    assert re.search(r'out\.plural\s*=\s*""', body), "缺 plural 必须补显式空串"
+    assert "out.cefr" in body and '"a1-"' in body and '"A1"' in body, (
+        "缺 cefr 必须按 id 前缀推导（a1- → A1 等）"
+    )
+
+
+def test_migrate_schema_guard_skips_when_marked():
+    """迁移守卫：wb.schema.v1 已标记时第一行就跳过，不再归一、不再落盘（幂等）。
+
+    变异验证：把标记守卫删掉 → 每次启动都全量 saveWords + wbsync push，断言红。
+    """
+    body = _migrate_schema_body()
+    guard_pos = body.index("localStorage.getItem(SCHEMA_KEY)")
+    normalize_pos = body.index("normalizeAllWords(")
+    save_pos = body.index("saveWords()")
+    assert guard_pos < normalize_pos < save_pos, "标记守卫必须先于归一与落盘（已迁移的库不得重复写盘）"
+
+
+def test_migrate_schema_persists_only_after_full_success():
+    """全成功才落盘：任一条归一失败 → 整体放弃，不写标记、不调 saveWords（不写半套）。
+
+    失败守卫必须位于 saveWords 之前，且 saveWords 在整个迁移函数体里只出现一次；
+    失败必须 console.warn（不得静默）；迁移标记只能在落盘成功之后写入。
+
+    变异验证：把 if (!normalized) return false 删掉 → 坏词直接进 S.words 并落盘，断言红；
+              把 saveWords() 挪到归一失败分支之前 → 顺序断言红。
+    """
+    body = _migrate_schema_body()
+    fail_guard = re.search(r"if\s*\(!normalized\)\s*return\s+false\s*;", body)
+    assert fail_guard, "归一失败必须整体放弃（if (!normalized) return false）"
+    assert fail_guard.start() < body.index("saveWords()"), "失败守卫必须在 saveWords 之前"
+    assert body.count("saveWords()") == 1, "saveWords 只能出现在全成功路径上"
+    assert "console.warn" in _normalize_all_words_body(), "失败放弃必须 console.warn（不得静默）"
+    assert body.index("markSchemaMigrated()") > body.index("saveWords()"), (
+        "迁移标记必须在落盘成功之后写入（先内存归一、全成功才落盘）"
+    )
+
+
+def test_schema_migration_behaves_under_node():
+    """动态探针：把真实 normalizeWord / normalizeAllWords / migrateWordSchema 抽出来在 node 里真跑。
+
+    静态断言证明不了「旧形状混存词表归一后 id 不变」「迁移幂等」「失败不写半套」——
+    这些是行为，只有真跑才知道。探针喂一份旧形状 words（A1 gloss/ex 富字段 +
+    A2 zh/gender/plural 新契约 + reader card-* 缺 gender/plural），四条硬断言：
+      (a) id 集合逐一不变（id 只增不改是最高红线，违反 = FSRS 进度全丢）；
+      (b) 契约键齐全（reader 词补 null/"" 后也过）；
+      (c) cards/wrong 键集合不变（进度零丢失）；
+      (d) normalize 连跑两次结果 deep-equal（幂等）。
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_merge_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_merge_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)["schemaMigration"]
+
+    # (a) id 不变
+    assert out["idsUnchanged"], "归一/迁移不得改写任何词 id"
+    # (b) 契约键齐全 + 各等级补值正确
+    assert out["contractMissingIds"] == [], "归一后仍有词缺契约键：%s" % out["contractMissingIds"]
+    assert out["a1ZhFromGloss"], "A1 词缺 zh 必须从 gloss 双写补齐"
+    assert out["a2GlossFromZh"], "A2 词缺 gloss 必须从 zh 双写补齐"
+    assert out["a1Cefr"] == "A1" and out["a2Cefr"] == "A2", "cefr 必须按 id 前缀推导"
+    assert out["readerCefrNull"] and out["readerGenderNull"] and out["readerPluralEmpty"], (
+        "reader card-* 词必须补 gender=null / plural=\"\" / cefr=null（显式空）"
+    )
+    assert out["a1GenderNull"], "A1 词缺 gender 必须补显式 null"
+    assert out["a2GenderPreserved"], "A2 已有 gender/plural 必须原样保留"
+    assert out["a1RichFieldsPreserved"], "归一不得丢 A1 富字段（ipa/ex/letter/page/tags）"
+    # (c) 进度零丢失
+    assert out["cardsKeysUnchanged"] and out["wrongKeysUnchanged"], "迁移不得碰 cards/wrong 的键集合"
+    # (d) 幂等
+    assert out["normalizeIdempotent"], "normalizeWord 连跑两次必须 deep-equal"
+    assert out["migrationStable"], "迁移连跑两次结果必须一致"
+    # 全成功才落盘 / 已标记跳过 / 失败不写半套
+    assert out["firstRunChanged"] is True, "首次迁移必须执行"
+    assert out["markerAfterFirst"], "迁移完成后必须写 wb.schema.v1 标记"
+    assert out["saveCallsAfterFirst"] >= 1, "首次迁移必须 saveWords 落盘"
+    assert out["secondRunChanged"] is False, "已标记后二次迁移必须跳过"
+    assert out["saveCallsAfterSecond"] == 0, "已标记后不得重复落盘"
+    assert out["failRunChanged"] is False, "存在非法词对象时必须整体放弃"
+    assert out["failMarkerNull"], "失败路径不得写迁移标记"
+    assert out["failSaveCalls"] == 0, "失败路径不得 saveWords（不写半套）"
