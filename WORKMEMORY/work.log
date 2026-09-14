@@ -372,3 +372,8 @@ Caps: filesystem-read, filesystem-write, shell-exec
 2. tag v5.7.1 打在 bump commit 上；master+tag 已推送。
 3. CI Build & Publish run 34838228362 queued（head 068fd6e）。
 遗留：CI 出四平台资产（预计非草稿自动发布）→ 作者覆盖安装复测长难句工坊 10 项；真用户试用收三问反馈。
+
+### 2026-09-14 19:35 | GLM-5.2__trae-code | RELEASE_PUBLISHED_5.7.1
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.7.1 发布闭环（CI run 34838228362 success，publishedAt 2026-09-14T11:35:45Z，四平台 asset 全部 uploaded：Android 61.2MB / Windows 78.0MB / macOS 59.7MB / Linux 122.6MB）。
+遗留：作者覆盖安装 v5.7.1 复测长难句工坊 10 项点检；真用户试用收三问反馈（最高价值）。
