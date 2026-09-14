@@ -4334,6 +4334,9 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "a1_lesen_dict",
         "corpus_dict",
         "encounter_seed_dict",
+        # ADR-0011 Task 1：A1 工作台词库单一真相（被 database.py 延迟导入），
+        # 漏登记 = 打包后 ModuleNotFoundError 而本地 pytest 全绿。
+        "a1_workbench_dict",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =
