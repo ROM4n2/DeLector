@@ -4348,13 +4348,15 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "rtc",
         "exam",
         "listen",
+        "syntax_hard",
         "main",
         "tools",
     }
     # Phase 1 Task 5：4 个服务模块收进 delector.services/ 子包（edge_tts_mini →
     # services.tts，monkeypatch 契约同步迁到 delector.services.tts，不再有顶层 shim）
     # Task 3：listen 服务（听写诊断/填空引擎）与路由同步进打包面。
-    service_modules = {"writing", "essay_diff", "exam_catalog", "tts", "listen"}
+    # Task 3（长难句）：syntax_score 服务（句子难度评分）与 syntax_hard 路由同步进打包面。
+    service_modules = {"writing", "essay_diff", "exam_catalog", "tts", "listen", "syntax_score"}
     top_level_modules: set[str] = set()
     required_modules = sorted(data_dict_modules | route_modules | service_modules | top_level_modules)
 
@@ -4389,7 +4391,9 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "delector/routes/rtc.py",
         "delector/routes/exam.py",
         "delector/routes/listen.py",
+        "delector/routes/syntax_hard.py",
         "delector/services/listen.py",
+        "delector/services/syntax_score.py",
         "delector/services/exam_catalog.py",
         "delector/routes/a2.py",
     ]

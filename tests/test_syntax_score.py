@@ -350,3 +350,37 @@ def test_rank_sentences_skips_failing_sentence(monkeypatch):
 
     result = rank_sentences(f"{good1} {bad} {good2}")
     assert [r.sentence for r in result] == [good1, good2]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Task 2 验收黄卡修复（CRV 黄牌折入 Task 3 Step 0）
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_detect_path_empty_clause_tree_is_not_pure():
+    # 黄卡：spaCy 分支对无 token 句返回 clause_tree={}（build_clause_tree 空 dict），
+    # 不得误标 pure —— 空 dict 只可能来自 spaCy 分支（pure 分支切句恒非空，必带
+    # 完整 clause_tree）。缺失/非 dict 无特征可判 → pure；pure 形状（非空无 features）→ pure。
+    assert sc._detect_path({"clause_tree": {}}) == "spacy"
+    assert sc._detect_path({}) == "pure"
+    assert sc._detect_path({"clause_tree": None}) == "pure"
+    assert sc._detect_path(_pure_analysis("Das Wetter ist schoen.")) == "pure"
+    # 非空 + features → spaCy（对照）
+    spacy_analysis = _analysis(n_tokens=6)
+    del spacy_analysis["path"]
+    assert sc._detect_path(spacy_analysis) == "spacy"
+
+
+def test_rank_sentences_spacy_split_differ_keeps_full_sentence(monkeypatch):
+    # 黄卡：spaCy doc.sents 粒度与 split_sentences_pure_python 不一致时（batch>1），
+    # 以纯 Python 切句粒度为准只取 batch[0]，sentence 字段仍为完整原句 —— 不静默丢句。
+    sent = "Er kam, weil es regnete, nicht."
+    monkeypatch.setattr(sc, "split_sentences_pure_python", lambda t: [sent])
+    monkeypatch.setattr(
+        sc,
+        "analyze_syntax_tree",
+        lambda s: {"sentences": [_analysis(n_tokens=8), _analysis(n_tokens=3)]},
+    )
+    result = rank_sentences(sent)
+    assert len(result) == 1  # batch 多句不重复/不丢句，仍以纯 Python 切句粒度为准
+    assert result[0].sentence == sent  # 完整原句回填

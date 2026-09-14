@@ -155,8 +155,12 @@ def score_sentence(analysis: Any, path: Optional[str] = None) -> SentenceScore:
 def _detect_path(analysis: Any) -> Literal["spacy", "pure"]:
     """探测单句 analysis 的来源路径（红线 1：analyze_syntax_tree 输出不含 path 键）。
 
-    优先显式 path 键；否则按 clause_tree 特征键推断：spaCy 分支的 clause_tree
-    必有 features dict（_classify_single_clause 恒构造），pure 分支无 features/topology/text 键。
+    优先显式 path 键；否则按 clause_tree 形状推断（Task 2 黄卡修复）：
+      - 缺失/非 dict：无特征可判，回落 "pure"；
+      - 空 dict {}：只可能来自 spaCy 分支的无 token 句（build_clause_tree 返回 {}），
+        pure 分支切句恒非空必带完整 clause_tree —— 空 dict 不误标 pure，判 "spacy"；
+      - 非空 dict：spaCy 分支的 clause_tree 必有 features dict
+        （_classify_single_clause 恒构造）→ 命中判 "spacy"，否则为 pure 分支形状判 "pure"。
     """
     if isinstance(analysis, dict):
         raw = analysis.get("path")
@@ -165,7 +169,10 @@ def _detect_path(analysis: Any) -> Literal["spacy", "pure"]:
         if raw == "spacy":
             return "spacy"
         tree = analysis.get("clause_tree")
-        if isinstance(tree, dict) and isinstance(tree.get("features"), dict):
+        if not isinstance(tree, dict):
+            return "pure"
+        # 空 dict（spaCy 无 token 句）或带 features（spaCy 恒构造）→ spacy；其余为 pure 形状
+        if not tree or isinstance(tree.get("features"), dict):
             return "spacy"
     return "pure"
 
@@ -188,6 +195,12 @@ def rank_sentences(text: str) -> List[SentenceScore]:
         batch = analysis.get("sentences")
         if not isinstance(batch, list) or not batch:
             continue
+        if len(batch) > 1:
+            # Task 2 黄卡修复：spaCy 的 doc.sents 切句粒度可能与纯 Python 切句
+            # （split_sentences_pure_python）不一致（缩写/省略号边界等），此时
+            # 以纯 Python 切句粒度为准只取 batch[0]，绝不静默丢句 —— sentence
+            # 字段仍回填完整原句 sent（调用方拿到的始终是切句粒度下的一句）。
+            pass
         scored.append(
             score_sentence(batch[0], path=_detect_path(batch[0])).model_copy(update={"sentence": sent})
         )

@@ -365,6 +365,23 @@ def init_db(db_path: Optional[str] = None):
             );
         """)
 
+        # 长难句精读训练记录（Task 3）：本地单用户记录，非敏感不挂闸（红线 7）。
+        # 对齐 listen_trials 模式；source ∈ article/encounter，sentence_index 为句在
+        # 材料中的序号，revealed 为是否揭示过句法树（0/1）。
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS hard_sentence_trials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT,
+                source_id INTEGER,
+                sentence_index INTEGER,
+                level TEXT,
+                score REAL,
+                revealed INTEGER,
+                duration_sec INTEGER,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
         # 读路径查询索引（幂等，旧库启动自动补）：SRS 到期队列 + 文章维度
         # 过滤/级联。缺失时「到期复习」「某文相关卡」「删文连带」在长库全表扫。
         conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_srs ON vocab_cards(mastered, due_date)")
@@ -1136,6 +1153,29 @@ _BACKUP_TABLES = {
             "duration_sec": 0,
         },
     ),
+    # 长难句精读训练记录（Task 3）：备份/还原缺失该表会让换机还原后训练记录全丢。
+    "hard_sentence_trials": (
+        (
+            "id",
+            "source",
+            "source_id",
+            "sentence_index",
+            "level",
+            "score",
+            "revealed",
+            "duration_sec",
+            "created_at",
+        ),
+        {
+            "source": "",
+            "source_id": 0,
+            "sentence_index": 0,
+            "level": "",
+            "score": 0.0,
+            "revealed": 0,
+            "duration_sec": 0,
+        },
+    ),
 }
 
 _PROGRESS_TABLES = {
@@ -1612,6 +1652,46 @@ def list_listen_trials(limit: int = 50, db_path: Optional[str] = None) -> List[D
         return [dict(r) for r in rows]
 
 
+def record_hard_sentence_trial(
+    source: str,
+    source_id: int,
+    sentence_index: int,
+    level: str,
+    score: float,
+    revealed: int,
+    duration_sec: int,
+    db_path: Optional[str] = None,
+) -> int:
+    """写入一次长难句精读训练记录（hard_sentence_trials，主库），返回新行 id。
+
+    本地单用户训练记录，非敏感数据，不参与 _require_localhost 闸（红线 7）。
+    对齐 listen_trials 模式；score/level/revealed 由调用方（前端会话汇总）传入。
+    """
+    with db_conn(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO hard_sentence_trials (
+                source, source_id, sentence_index, level, score, revealed, duration_sec
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (source, source_id, sentence_index, level, score, revealed, duration_sec),
+        )
+        return cur.lastrowid
+
+
+def list_hard_sentence_trials(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """查询长难句精读训练历史；created_at 倒序（同秒以 id 倒序打平），limit 钳制在 1..100。"""
+    with db_conn(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM hard_sentence_trials
+            ORDER BY created_at DESC, id DESC LIMIT ?
+        """,
+            (max(1, min(int(limit), 100)),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 _A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
 _A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None
 
@@ -2005,6 +2085,8 @@ __all__ = [
     "migrate_a1_records_to_exam_trials",
     "record_listen_trial",
     "list_listen_trials",
+    "record_hard_sentence_trial",
+    "list_hard_sentence_trials",
     "get_vocab_by_cefr",
     "upsert_corpus_syntax_stats",
     "get_all_corpus_syntax_stats",
