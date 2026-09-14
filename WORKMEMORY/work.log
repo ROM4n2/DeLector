@@ -308,3 +308,26 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 作者覆盖安装 v5.6.0 真机验证三模式 TTS **通过**（无缺陷）。
 4. OVERVIEW 发布面/听力微训条目已回填「点检已闭环」。
 遗留：真实用户试用收三问反馈（最高价值）；B 候选语料长难句强化；Mypy --strict 递延。
+
+### 2026-09-14 14:00 | deepseek-v4-flash__trae-code | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：B 候选语料长难句强化（先 A 后 B 的 B）——0→1 流程：spark 定规格 → plan 出计划 → 作者批准后 exec。
+上下文：A 候选听力微训已落地（v5.6.0）。B 已知基础：Grammatik-Radar 6 维指标（corpus_syntax_stats）、syntax_tree 句法拓扑、ghost pill 显式触发；缺口=雷达只展示无"挑长难句→针对性精读训练"动作闭环。
+不做范围：不动 A 候选听力微训代码；不发版（产出规格+计划为先）。
+
+### 2026-09-14 18:00 | deepseek-v4-flash__trae-code | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：长难句精读工坊（docs/plans/2026-09-14-hard-sentences.md，分支 feature/hard-sentences）T1–T6 全绿。
+1. commit 序列：T1 0ea6d31（score_sentence/estimate_level）→ T2 4f3a39a（rank_sentences）→ T3 080eb53（hard_sentence_trials 表 + /api/syntax 三端点）→ T4 7e31b21（前端 hard-sentences.js 卡片流）→ T5 3ec5d45（行为探针 + 模块图守卫）→ T6 文档回填（含本事件）。
+2. 偏差：① path 不来自 analyze_syntax_tree 输出（该双路径函数返回 dict 无 path 键），由 rank_sentences 按调用路径增量探测注入（spacy/pure），规格 §3 已预见双路径标注；② 入复习盒直拼 POST /api/cards/grammar 复用 grammar_cards，不新增端点（scope 收敛）。
+3. maker-checker 5/5 APPROVED。
+门禁：全量 **828 passed + 1 skipped**（基线 788→828，净增 40）；ruff 零告警；mypy 零错误；Go 三门禁不受影响；10/10 tools/*.mjs 探针全绿。
+分支/PR：feature/hard-sentences 处于 T6 阶段（本事件仅文档回填，不 commit；T6 原子 commit + PR 合 master 由主线程负责）。
+遗留：真实用户试用（收三问反馈，最高价值）；全功能候选已清（听力微训 + 长难句均落地）；Mypy --strict 递延、预置包 gloss 富化保留。
+
+### 2026-09-14 19:45 | GLM-5.2__trae-code | PR_OPEN
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准 → 主线程推送 feature/hard-sentences 至 origin 并开 PR #45 合 master。
+PR: https://github.com/ROM4n2/DeLector/pull/45（+3082/-5，20 文件，标题"feat(syntax): 长难句精读工坊（评分+挑句+拆解揭示+成绩落盘）"）。
+CI：ubuntu Tests & Go Gates run 34819353502 启动中（IN_PROGRESS）。
+遗留：CI 绿后作者合 master；真用户试用收三问反馈。

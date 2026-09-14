@@ -29,6 +29,7 @@ from delector.routes import (
     main,
     rtc,
     sync,
+    syntax_hard,
     tools,
 )
 from delector.routes.sync import (
@@ -48,6 +49,7 @@ __all__ = [
     "listen",
     "rtc",
     "sync",
+    "syntax_hard",
     "main",
     "tools",
     "MAX_SYNC_CACHE_ENTRIES",
@@ -76,6 +78,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(encounter.router)
     # listen 在 main 之前：/api/listen 独立前缀，放这里保持"分域路由在前、通用垫底"。
     app.include_router(listen.router)
+    # syntax_hard 在 main 之前：/api/syntax 独立前缀，与分域路由同纪律（通用 handler 垫底）。
+    app.include_router(syntax_hard.router)
     app.include_router(main.router)
     # tools 在 main 之后：/api/tools/{name} 是独立前缀，不与任何分域路由冲突；
     # 放最后只是保持"通用 handler 永远垫底"的注册序纪律。

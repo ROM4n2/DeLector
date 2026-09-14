@@ -2496,6 +2496,7 @@
           <button id="exam-card-sprechen" class="exam-module-card" onclick="setExamModule('sprechen')">💬 口语问答 (Sprechen)</button>
           <button id="exam-card-vocab" class="exam-module-card" onclick="setExamModule('vocab')">📖 官方考纲词表 (Wortliste)</button>
           <button id="exam-card-listen" class="exam-module-card" onclick="setExamModule('listen')">🎧 听力微训 (Hörlabor)</button>
+          <button id="exam-card-hardsent" class="exam-module-card" onclick="setExamModule('hardsent')">✍️ 长难句 (Satz-Labor)</button>
         </div>
 
         <!-- ── 模块面板：exam-card-* 页签点击 setExamModule() 点亮对应面板 ── -->
@@ -2795,6 +2796,26 @@
           <div id="listen-player-bar" class="listen-bar"></div>
           <div id="listen-stage" class="listen-stage"></div>
           <div id="listen-score-card" class="listen-score-card"></div>
+        </section>
+
+        <!-- ── 模块面板：✍️ 长难句精读 (Hard-Sentence Reading Lab) ──
+             容器静态占位；材料源/级别/材料/舞台/汇总全部由
+             static/js/hard-sentences.js 渲染（HardSentences 命名空间接线）。 -->
+        <section id="exam-hard-sentences" class="exam-module-panel hidden">
+          <div class="hs-topbar">
+            <div>
+              <div class="a1-card-label">✍️ 长难句精读 · Satz-Labor</div>
+              <div class="hs-subhead">跨语料难度榜 → 尝试拆解 → 揭示句法树 → 逐词释义 → 加入复习盒</div>
+            </div>
+            <div class="a1-topbar-actions">
+              <button class="btn btn-ghost btn-sm" onclick="HardSentences.exit()" title="返回材料选择">⟲ 换材料</button>
+            </div>
+          </div>
+          <div id="hs-source-bar" class="hs-bar"></div>
+          <div id="hs-level-bar" class="hs-bar"></div>
+          <div id="hs-material-bar" class="hs-bar"></div>
+          <div id="hs-stage" class="hs-stage"></div>
+          <div id="hs-summary" class="hs-summary"></div>
         </section>
       </div>
     </main>
