@@ -431,3 +431,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. **文案软化**（"评分仅供参考"太硬）：`⚠ 近似分析（纯 Python 降级路径，评分仅供参考）` → `✦ 轻量分析：难度画像为粗估，排序供参考，不必当真`；探针断言同步。
 4. **真机 spaCy 根因取证（待作者）**：Android 打包 spacy==3.8.7+de_core_news_sm 但仍走 pure → 需 `adb logcat | grep -iE "spacy|thinc|blis|python|ImportError|de_core"` 定位 import/模型加载失败点。
 遗留：发 v5.7.4 patch；作者抓 logcat 交回 → 定位 Android spaCy 加载；复测 10 项 + 新 UI/评分。
+
+### 2026-09-14 23:33 | GLM-5.2__trae-code | RELEASE_v5.7.4
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准 → v5.7.4 发版（pure 评分增强 + 字号 + 文案 + spaCy 诊断）。
+1. bump commit d72d3ce（5 文件 +15/-13）：sw.js v5.7.4 / build.gradle 5.7.4+50704 / index.html 顶栏 / README（badge 838/839、下载表 v5.7.4、Roadmap v5.7.4 条目）/ PROJECT_OVERVIEW 发布面+基线 838。
+2. tag v5.7.4 打在 bump commit 上；master+tag 已推送。
+3. CI Build & Publish run 34862940237 queued（head d72d3ce）。
+4. 附带：adb 本机不可用（无 Android SDK），spaCy 降级根因取证改走代码层诊断（/api/syntax/spacy-status + 前端提示旁显示），无需 adb。
+遗留：CI 出包 → 作者覆盖安装 v5.7.4 复测（UI 字号/评分区分度/「轻量分析」提示 + 诊断小字）→ 把诊断小字内容发回 → 定位 Android spaCy 加载根因。
