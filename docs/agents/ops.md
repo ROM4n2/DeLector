@@ -72,6 +72,35 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 
 ---
 
+## Android 真机点检：听力微训 TTS 三模式
+
+> 前置条件：**手机上必须装有包含听力微训的 APK**（当前需 v5.6.0 发版后覆盖安装，或本地
+> `cd android && ./gradlew assembleDebug` + adb 安装；Android 是独立实例，static 打包在 APK 内，
+> master 已合入的功能不会自动到达手机）。建议联网（Edge TTS 兜底需网络；Native TTS 免网）。
+
+TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网）→ `POST /api/audio/tts`
+（Edge TTS，`services/tts.py` stdlib 客户端，需网络）→ `speechSynthesis`（WebView 兜底）。
+
+**点检项（三模式各跑一个短会话）：**
+
+- **Mode L 精听/影子跟读**
+  1. 选材料 → 播放 → 逐句出声，当前句高亮与播放同步
+  2. 变速 0.75x / 1.0x / 1.25x 切换即时生效；上一句/下一句/重复正常
+  3. 跟读停顿：播放后停顿数秒再进下一句（shadow 模式）；切「连续」无停顿
+  4. 三层全失败（飞行模式 + 系统无德语引擎）：停止并显示「⚠ 语音引擎不可用」，不空转
+- **Mode D 听写**
+  5. 隐藏原文 → 逐句播放 → 输入 → 提交 → 六色胶囊反馈（correct/umlaut/case/inflection/missing/extra + hint）
+  6. 逐句推进；会话结束成绩卡出现
+  7. diagnose 为本地比对（免网）——飞行模式下应仍能提交判分
+- **Mode C 填空**
+  8. 挖空渲染（`___` 占位）→ 播放 → 输入 → 大小写/变音容差校验
+  9. 短句（<5 词）不挖空；成绩计入会话
+
+**记录纪律**：逐项记「期望 vs 实际」；异常抓 `adb logcat -s TextToSpeech` 或 WebView 控制台。
+发现缺陷 → 记入 work.log 并在下个补丁回合修复（PWA 类修复须发 patch 才能到用户手机）。
+
+---
+
 ## Agent 工作惯例
 
 1. **先验证再断言**：声称"已修复/已完成"前先跑验证并给出证据（复现脚本、测试输出、

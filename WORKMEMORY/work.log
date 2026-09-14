@@ -292,3 +292,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 听力微训工坊 PR #44 已由作者 merge（master=14da7ec），本地 master 已同步。分支 feature/listen-micro-training 待清理（本地+远端未删）。
 后续候选：语料长难句强化（先 A 后 B 的 B）；遗留：Android 真机 TTS 三模式点检（发版后）。
+
+### 2026-09-14 10:00 | deepseek-v4-flash__trae-code | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：Android 真机 TTS 点检（听力微训三模式）。
+产出：ops.md 新增「Android 真机点检：听力微训 TTS 三模式」清单（已写入）。
+前置：手机需装含听力微训的 APK —— master 已合 PR #44 但未发版，需 v5.6.0 bump+tag 或本地 assembleDebug。
+不做范围：不动 TTS 代码（无缺陷证据前）；不发版（待作者批准）。
