@@ -1048,14 +1048,10 @@ function normalizeWord(w) {
   /* 契约键缺失补显式空值（A1 富字段与 reader 精读生词都没有 gender/plural） */
   if (out.gender === undefined || out.gender === null) out.gender = null;
   if (out.plural === undefined || out.plural === null) out.plural = "";
-  /* cefr 按 id 前缀推导；无已知前缀（reader card-* / core-*）显式 null */
-  if (!out.cefr) {
-    out.cefr = null;
-    const byPrefix = [["a1-", "A1"], ["a2-", "A2"], ["b1-", "B1"]];
-    for (const [prefix, level] of byPrefix) {
-      if (out.id.startsWith(prefix)) { out.cefr = level; break; }
-    }
-  }
+  /* cefr 按 id 前缀推导；无已知前缀（reader card-* / core-*）显式 null。
+   * Task 5（ADR-0011 决策 3）：前缀表抽为 CEFR_BY_PREFIX + cefrFromId 公共 helper，
+   * 与 cefrOf 共用同一套推导 —— 全文件禁止第二套等级推导。 */
+  if (!out.cefr) out.cefr = cefrFromId(out.id);
   return out;
 }
 
@@ -1682,9 +1678,55 @@ async function idbHydrate() {
 
 function wordById(id) { return S.words.find(w => w.id === id) || null; }
 function cardOf(id) { return S.cards[id] || null; }
-/* 核心词模式判定helper：全局唯一 truth source 是 wordFilters.scope === "core" */
+/* ======================================================================
+ * Task 5 · 等级判定数据驱动（ADR-0011 决策 3 / §5-#4 判定唯一入口）
+ *  - cefrOf：全文件唯一的等级推导口径，与 normalizeWord 共用同一张前缀表
+ *    （CEFR_BY_PREFIX + cefrFromId），禁止第二套推导；
+ *  - SCOPE_PREDICATES：每档一条声明式谓词，新增等级 = 加一行配置；
+ *  - isInScope：scope 判定唯一入口；inScopeWord 只是它的单参薄封装
+ *    （旧名兼容全部既有调用点）。
+ * ==================================================================== */
+const CEFR_BY_PREFIX = [["a1-", "A1"], ["a2-", "A2"], ["b1-", "B1"]];
+
+/** id 前缀 → 等级；无已知前缀（reader card-* / core-* 自定义词）返回 null。 */
+function cefrFromId(id) {
+  for (const [prefix, level] of CEFR_BY_PREFIX) {
+    if (String(id || "").startsWith(prefix)) return level;
+  }
+  return null;
+}
+
+/** 词的 CEFR 等级：显式 cefr 字段优先，否则按 id 前缀推导（与 normalizeWord 同口径）。 */
+function cefrOf(w) {
+  if (!w) return null;
+  return w.cefr || cefrFromId(w.id);
+}
+
+/* all 档的排除规则由配置生成，不手写 OR 链：
+ *  - OTHER_LEVEL_SCOPES：会随 sync 并入 S.words 的其他已开放等级，新增等级在此
+ *    追加其 scope 名即可。b1 暂不列入 —— B1 词当前没有并入 S.words 的入口（T6
+ *    开档时随其 sync 一并加入），现在列入会改变 all 档对 B1 形态词的既有筛选结果；
+ *  - 精读生词：custom 且带 reader 标记。这是改造前 all 分支的收窄口径，刻意比
+ *    reader 谓词窄 —— 仅 card- 前缀命中、不带 custom 的词在 all 档仍然可见。 */
+const OTHER_LEVEL_SCOPES = ["a2"];
+const SCOPE_PREDICATES = {
+  core: w => (w.tags || []).includes("core"),
+  reader: w => !!(w.custom || (w.tags || []).includes("reader") || String(w.id || "").startsWith("card-")),
+  a2: w => cefrOf(w) === "A2" || (w.tags || []).includes("a2"),
+  /* b1 预留谓词：T6 暴露档位按钮，本任务不开入口（scope 永不等于 "b1"） */
+  b1: w => cefrOf(w) === "B1" || (w.tags || []).includes("b1"),
+  all: w => !OTHER_LEVEL_SCOPES.some(s => SCOPE_PREDICATES[s](w)) && !(w.custom && (w.tags || []).includes("reader")),
+};
+
+/** scope 判定唯一入口。未注册的 scope 沿用改造前的兜底语义（恒真）。 */
+function isInScope(w, scope) {
+  const pred = SCOPE_PREDICATES[scope];
+  return pred ? !!pred(w) : true;
+}
+
+/* 核心词模式判定 helper：全局唯一 truth source 是 isInScope(w, wordFilters.scope) */
 function inScopeWord(w) {
-  return !w || (wordFilters.scope === "core" ? (w.tags || []).includes("core") : (wordFilters.scope === "reader" ? !!(w.custom || (w.tags || []).includes("reader") || String(w.id || "").startsWith("card-")) : (wordFilters.scope === "a2" ? (w.cefr === "A2" || (w.tags || []).includes("a2") || String(w.id || "").startsWith("a2-")) : (wordFilters.scope === "all" ? !(w.cefr === "A2" || (w.tags || []).includes("a2") || String(w.id || "").startsWith("a2-") || (w.custom && (w.tags || []).includes("reader"))) : wordFilters.scope !== "core"))));
+  return !w || isInScope(w, wordFilters.scope);
 }
 function logToday() {
   const k = todayStr();

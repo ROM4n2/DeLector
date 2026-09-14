@@ -806,8 +806,13 @@ def test_core_scope_in_review_queue():
               把 inScopeWord 内部改成无条件 true → helper 定义断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
+    # ADR-0011 Task 5：helper 降级为唯一判定入口 isInScope 的薄封装 —— 源码特征串
+    # 断言（红线 11 死测）撤掉，筛选语义改由 test_scope_predicates_four_way_snapshot
+    # 在 node 里真跑判定区源码钉住；这里只保留「判定唯一入口」类结构断言。
+    assert re.search(r"\bisInScope\s*\(\s*w\s*,\s*wordFilters\.scope\s*\)", helper), (
+        "inScopeWord 必须是 isInScope(w, wordFilters.scope) 唯一判定入口的薄封装；"
+        "把它内部改成无条件 true 会同时打红 test_scope_predicates_four_way_snapshot"
+    )
 
     body = _build_review_queue_body()
     assert re.search(_INSCOPE_WORD_CALL, body), (
@@ -951,8 +956,13 @@ def test_core_scope_aware_header_badge():
               inScopeWord 内部改成无条件 true → helper 定义断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
+    # ADR-0011 Task 5：helper 降级为唯一判定入口 isInScope 的薄封装 —— 源码特征串
+    # 断言（红线 11 死测）撤掉，筛选语义改由 test_scope_predicates_four_way_snapshot
+    # 在 node 里真跑判定区源码钉住；这里只保留「判定唯一入口」类结构断言。
+    assert re.search(r"\bisInScope\s*\(\s*w\s*,\s*wordFilters\.scope\s*\)", helper), (
+        "inScopeWord 必须是 isInScope(w, wordFilters.scope) 唯一判定入口的薄封装；"
+        "把它内部改成无条件 true 会同时打红 test_scope_predicates_four_way_snapshot"
+    )
 
     body = _fn_body("renderHeaderBadge")
     assert re.search(_INSCOPE_WORD_CALL, body), (
@@ -1217,8 +1227,13 @@ def test_core_scope_quiz_pool_filtered():
     变异验证：任一分支去掉 inScopeWord → 对应断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
+    # ADR-0011 Task 5：helper 降级为唯一判定入口 isInScope 的薄封装 —— 源码特征串
+    # 断言（红线 11 死测）撤掉，筛选语义改由 test_scope_predicates_four_way_snapshot
+    # 在 node 里真跑判定区源码钉住；这里只保留「判定唯一入口」类结构断言。
+    assert re.search(r"\bisInScope\s*\(\s*w\s*,\s*wordFilters\.scope\s*\)", helper), (
+        "inScopeWord 必须是 isInScope(w, wordFilters.scope) 唯一判定入口的薄封装；"
+        "把它内部改成无条件 true 会同时打红 test_scope_predicates_four_way_snapshot"
+    )
 
     body = _quiz_pool_body()
     assert re.search(_INSCOPE_WORD_CALL, body), "quizPool 必须调用 inScopeWord 进行 scope 过滤"
@@ -1262,8 +1277,13 @@ def test_core_scope_inject_wrong_words_filtered():
     变异验证：filter 里去掉 inScopeWord → 断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
+    # ADR-0011 Task 5：helper 降级为唯一判定入口 isInScope 的薄封装 —— 源码特征串
+    # 断言（红线 11 死测）撤掉，筛选语义改由 test_scope_predicates_four_way_snapshot
+    # 在 node 里真跑判定区源码钉住；这里只保留「判定唯一入口」类结构断言。
+    assert re.search(r"\bisInScope\s*\(\s*w\s*,\s*wordFilters\.scope\s*\)", helper), (
+        "inScopeWord 必须是 isInScope(w, wordFilters.scope) 唯一判定入口的薄封装；"
+        "把它内部改成无条件 true 会同时打红 test_scope_predicates_four_way_snapshot"
+    )
 
     body = _inject_wrong_words_body()
     assert re.search(_INSCOPE_WORD_CALL, body), "injectWrongWords 必须调用 inScopeWord 进行 scope 过滤"
@@ -1280,8 +1300,13 @@ def test_core_scope_extra_practice_and_new_filtered():
     变异验证：任一路去掉 inScopeWord → 对应断言红。
     """
     helper = _inscope_helper_definition()
-    assert re.search(_SCOPE_IS_CORE, helper), "inScopeWord helper 必须以 wordFilters.scope === 'core' 为 truth source"
-    assert re.search(_CORE_TAG_CHECK, helper), "inScopeWord helper 必须按 (w.tags || []).includes('core') 判定核心词"
+    # ADR-0011 Task 5：helper 降级为唯一判定入口 isInScope 的薄封装 —— 源码特征串
+    # 断言（红线 11 死测）撤掉，筛选语义改由 test_scope_predicates_four_way_snapshot
+    # 在 node 里真跑判定区源码钉住；这里只保留「判定唯一入口」类结构断言。
+    assert re.search(r"\bisInScope\s*\(\s*w\s*,\s*wordFilters\.scope\s*\)", helper), (
+        "inScopeWord 必须是 isInScope(w, wordFilters.scope) 唯一判定入口的薄封装；"
+        "把它内部改成无条件 true 会同时打红 test_scope_predicates_four_way_snapshot"
+    )
 
     practice = _extra_practice_body()
     new_words = _extra_new_words_body()
@@ -2859,9 +2884,15 @@ def test_normalize_word_is_pure_and_idempotent():
     )
     assert re.search(r"out\.gender\s*=\s*null", body), "缺 gender 必须补显式 null"
     assert re.search(r'out\.plural\s*=\s*""', body), "缺 plural 必须补显式空串"
-    assert "out.cefr" in body and '"a1-"' in body and '"A1"' in body, (
-        "缺 cefr 必须按 id 前缀推导（a1- → A1 等）"
+    # Task 5（ADR-0011）：前缀表抽为 CEFR_BY_PREFIX + cefrFromId 公共 helper 后，
+    # normalizeWord 的 cefr 兜底必须**委托** cefrFromId（全文件唯一推导入口），
+    # 不许在函数体内再内联第二套前缀表。推导行为语义由
+    # test_schema_migration_behaves_under_node（a1Cefr/a2Cefr/readerCefrNull）
+    # 与 test_scope_predicates_four_way_snapshot（cefrOf 行）钉住。
+    assert re.search(r'if\s*\(\s*!out\.cefr\s*\)\s*out\.cefr\s*=\s*cefrFromId\(\s*out\.id\s*\)', body), (
+        "缺 cefr 必须委托唯一推导入口 cefrFromId(out.id) 按 id 前缀推导（a1- → A1 等）"
     )
+    assert '"a1-"' not in body, "normalizeWord 体内不许再内联前缀表（等级推导唯一入口是 cefrFromId）"
 
 
 def test_migrate_schema_guard_skips_when_marked():
@@ -2954,3 +2985,193 @@ def test_schema_migration_behaves_under_node():
     assert out["failRunChanged"] is False, "存在非法词对象时必须整体放弃"
     assert out["failMarkerNull"], "失败路径不得写迁移标记"
     assert out["failSaveCalls"] == 0, "失败路径不得 saveWords（不写半套）"
+
+
+# --------------------------------------------------------------------------
+# ADR-0011 Task 5 · scope 判定数据驱动（SCOPE_PREDICATES + isInScope / cefrOf）
+# --------------------------------------------------------------------------
+# 行为快照 provenance：期望值 = **改造前实跑记录** —— 把原版嵌套三元 inScopeWord
+# （workbench.html:1686-1688）逐字拷进 node 对同一 fixture 实跑的输出（2026-09-15
+# 记录，core/all/a2/reader 四档逐 id 抄录），禁止从新实现生成。
+#
+# fixture 覆盖六种真实词形：
+#   a1-0001      A1 core，T4 归一后形态（显式 cefr="A1"）；
+#   a1-0007      A1 非 core，原始种子形态（无 cefr 字段，靠 id 前缀推导）；
+#   a2-haus      A2，syncA2CardsFromServer 落库形态（tags:["a2"] + cefr:"A2"）；
+#   b1-essen     B1 形态 id（无 cefr 无标记 —— 前缀推导的独有信号）；
+#   card-Wohnung 精读生词，syncReaderCardsFromServer 落库形态（reader tag + custom）；
+#   core-001     core-* 自定义补缺词（CORE_CUSTOM_WORDS 形态，core tag + custom）。
+# 改造前实跑基线（逐字）：
+#   core:   ["a1-0001", "core-001"]
+#   all:    ["a1-0001", "a1-0007", "b1-essen", "core-001"]   ← B1 形态词在 all 档是放行的，
+#                                                              故 all 的等级排除表只能含 a2
+#   a2:     ["a2-haus"]
+#   reader: ["card-Wohnung", "core-001"]
+#   b1:     全部 6 条（改造前未知 scope 走「恒真」兜底；b1 谓词是本任务唯一的新增行为）
+
+_SCOPE_SNAPSHOT_FIXTURE = [
+    {"id": "a1-0001", "hw": "der Bahnhof", "tags": ["core"], "cefr": "A1"},
+    {"id": "a1-0007", "hw": "der Absender", "tags": []},
+    {"id": "a2-haus", "hw": "das Haus", "tags": ["a2"], "cefr": "A2"},
+    {"id": "b1-essen", "hw": "das Essen", "tags": []},
+    {"id": "card-Wohnung", "hw": "die Wohnung", "tags": ["reader"], "custom": True, "cefr": None},
+    {"id": "core-001", "hw": "der Wohnort", "tags": ["core"], "custom": True, "cefr": None},
+]
+
+_SCOPE_SNAPSHOT_EXPECTED = {
+    "core": ["a1-0001", "core-001"],
+    "all": ["a1-0001", "a1-0007", "b1-essen", "core-001"],
+    "a2": ["a2-haus"],
+    "reader": ["card-Wohnung", "core-001"],
+}
+
+# cefrOf 六词形推导口径（口径权威 = T4 normalizeWord 的既有规则：显式 cefr 优先，
+# 缺失才按 id 前缀推导，card-* / core-* 无已知前缀 → null）：
+#   a1-0001 显式 "A1"；a1-0007 无字段 → 前缀推导 "A1"；a2-haus 显式 "A2"；
+#   b1-essen 无字段 → 前缀推导 "B1"；card-* / core-* → null
+_CEFR_OF_EXPECTED = ["A1", "A1", "A2", "B1", None, None]
+
+
+def _js_top_function(name):
+    """按括号配平切出顶层 `function name(...) { ... }` 的完整源码。"""
+    m = re.search(r"^function\s+%s\s*\(" % re.escape(name), _WORKBENCH, re.M)
+    assert m, "workbench.html 里找不到顶层函数 %s" % name
+    open_at = _WORKBENCH.index("{", m.start())
+    body = _slice_balanced(_WORKBENCH, open_at, "{", "}")
+    return _WORKBENCH[m.start() : open_at + len(body)]
+
+
+def _js_top_const(name):
+    """按括号配平切出顶层 `const name = ...` 的完整声明源码（不含结尾分号）。"""
+    m = re.search(r"^const\s+%s\s*=" % re.escape(name), _WORKBENCH, re.M)
+    assert m, "workbench.html 里找不到顶层常量 %s" % name
+    i = m.end()
+    while _WORKBENCH[i] not in "[{(":
+        i += 1
+    open_ch = _WORKBENCH[i]
+    val = _slice_balanced(_WORKBENCH, i, open_ch, {"[": "]", "{": "}", "(": ")"}[open_ch])
+    return _WORKBENCH[m.start() : i + len(val)]
+
+
+def _scope_judgment_region():
+    """等级判定的**全部**真实源码（cefrFromId / cefrOf / SCOPE_PREDICATES / isInScope
+    / inScopeWord 及其配置表）。「全文件唯一判定入口」断言以此为唯一合法落点。"""
+    return "\n".join(
+        [
+            _js_top_const("CEFR_BY_PREFIX"),
+            _js_top_function("cefrFromId"),
+            _js_top_function("cefrOf"),
+            _js_top_const("OTHER_LEVEL_SCOPES"),
+            _js_top_const("SCOPE_PREDICATES"),
+            _js_top_function("isInScope"),
+            _js_top_function("inScopeWord"),
+        ]
+    )
+
+
+def _scope_in_out_via_node():
+    """把判定区真源码切出来丢进 node 真跑：固定 fixture × 各 scope → 进出名单。
+
+    一律切源码不重抄 —— 实现若回退成嵌套三元，切不到 SCOPE_PREDICATES 直接红；
+    在这里重抄一份新实现，则实现怎么改探针照样绿（红线 11 死测教训）。
+    """
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    import pytest
+
+    if not shutil.which("node"):
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    js = "\n".join(
+        [
+            'import fs from "node:fs";',
+            _scope_judgment_region(),
+            _js_top_const("wordFilters"),
+            "const words = JSON.parse(fs.readFileSync(0, 'utf8'));",
+            "const out = { cefrOf: words.map(w => cefrOf(w)) };",
+            "for (const s of ['core', 'all', 'a2', 'reader', 'b1']) {",
+            "  wordFilters.scope = s;",
+            "  out[s] = words.filter(w => inScopeWord(w)).map(w => w.id);",
+            "}",
+            "process.stdout.write(JSON.stringify(out));",
+        ]
+    )
+    fd, path = tempfile.mkstemp(suffix=".mjs")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(js)
+        res = subprocess.run(
+            ["node", path],
+            input=json.dumps(_SCOPE_SNAPSHOT_FIXTURE, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert res.returncode == 0, "判定源码执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+        return json.loads(res.stdout)
+    finally:
+        os.unlink(path)
+
+
+def test_scope_predicates_four_way_snapshot():
+    """固定 fixture × core/all/a2/reader 四范围 → 进出名单逐 id 精确等于改造前快照。
+
+    期望快照来源：改造前实跑记录（见本节头注），禁止从新实现生成。
+    实现改成无条件 true / 极性取反 / 漏配某档谓词，任何一种坏法都会让对应档的
+    名单变样 → 本条红。b1 是 T6 预留档位：当前无 UI 入口（scope 永不等于 "b1"），
+    改造前未知 scope 恒真，b1 谓词落地后 B1 形态词独立成档 —— 这是本任务唯一的
+    新增行为，单独钉在最后一条断言里，不与四既有范围的等价断言混在一起。
+    """
+    out = _scope_in_out_via_node()
+    for scope in ("core", "all", "a2", "reader"):
+        expected = _SCOPE_SNAPSHOT_EXPECTED[scope]
+        assert out[scope] == expected, "scope=%s 进出名单漂移：%r != 改造前快照 %r" % (
+            scope,
+            out[scope],
+            expected,
+        )
+    assert out["cefrOf"] == _CEFR_OF_EXPECTED, "cefrOf 推导口径漂移：%r != %r" % (
+        out["cefrOf"],
+        _CEFR_OF_EXPECTED,
+    )
+    assert out["b1"] == ["b1-essen"], "b1 预留谓词应只放行 B1 形态词：%r" % out["b1"]
+
+
+def test_scope_judgment_single_entry():
+    """全文件唯一判定入口（ADR-0011 §5-#4）：scope 判定只经 isInScope。
+
+    只保留「唯一入口」类结构断言（红线 11 允许保留的那一类）：
+      1. inScopeWord 是 isInScope(w, wordFilters.scope) 的薄封装，自身不重抄判定；
+      2. 等级判定特征串（a2/b1 tag、card- 前缀、A2/B1 等级比较）全文件的每一次
+         出现都必须落在判定区源码里 —— 配置区之外多出一份 = 第二份等级判定副本；
+      3. 三路 OR 冗余必须消除：id 前缀信号已并入 cefrOf 的前缀表，不许再以
+         字面 `startsWith("a2-")` / `w.cefr === "A2"` 的形式出现在任何地方。
+    行为语义由 test_scope_predicates_four_way_snapshot 在 node 里真跑钉住。
+    """
+    helper = _inscope_helper_definition()
+    assert re.search(r"\bisInScope\s*\(\s*w\s*,\s*wordFilters\.scope\s*\)", helper), (
+        "inScopeWord 必须是 isInScope(w, wordFilters.scope) 的单参薄封装"
+    )
+    assert not re.search(_CORE_TAG_CHECK, helper), "薄封装里不许重抄 core tag 判定"
+    assert not re.search(_SCOPE_IS_CORE, helper), "薄封装里不许重抄 scope === 'core' 判定"
+
+    region = _scope_judgment_region()
+    for token in (
+        'includes("a2")',
+        'includes("b1")',
+        'includes("reader")',
+        'startsWith("card-")',
+        'cefrOf(w) === "A2"',
+        'cefrOf(w) === "B1"',
+    ):
+        whole, inside = _WORKBENCH.count(token), region.count(token)
+        assert whole > 0, "判定特征串 %r 全文件找不到 —— 判定区被挪走了？" % token
+        assert whole == inside, (
+            "等级判定特征串 %r 出现在判定区之外（全文件 %d 处，判定区内 %d 处）—— "
+            "存在第二份等级判定副本，违反 ADR-0011 §5-#4 判定唯一入口" % (token, whole, inside)
+        )
+    for gone in ('startsWith("a2-")', 'startsWith("b1-")', 'w.cefr === "A2"', 'w.cefr === "B1"'):
+        assert gone not in _WORKBENCH, "三路 OR 冗余未消除：全文件仍含 %r" % gone

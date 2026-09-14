@@ -105,6 +105,10 @@ const PIECES = {
   normHw: extractFn(html, "normHw"),
   applyMerge: extractFn(html, "applyMerge"),
   /* Task 4（ADR-0011）：词对象契约归一 + 存量迁移 */
+  /* Task 5：normalizeWord 的 cefr 推导抽到 CEFR_BY_PREFIX + cefrFromId 公共 helper，
+   * 沙箱必须一并带上（只加切片，护栏语义零漂移）。 */
+  CEFR_BY_PREFIX: extractDecl(html, "CEFR_BY_PREFIX"),
+  cefrFromId: extractFn(html, "cefrFromId"),
   normalizeWord: extractFn(html, "normalizeWord"),
   normalizeAllWords: extractFn(html, "normalizeAllWords"),
   migrateWordSchema: extractFn(html, "migrateWordSchema"),
