@@ -14,7 +14,7 @@
 - `AGENTS.md`（项目根）：**纯路由入口**（2026-09-05 二轮瘦身，~30 行）——只有 WORKMEMORY 约定与文档路由。架构在 `docs/agents/architecture.md`，安全/环境/工作惯例在 `docs/agents/ops.md`，版本历史在 README Roadmap。状态、红线、待办都在本文件，勿往 AGENTS 回填。
 - `FEATURES.md`：产品特性全览。
 - `docs/specs/`、`docs/plans/`：设计与实施计划（含 ledger）。
-- ADR 存于 vault：`vault://08-Projects/DeLector/01-ADR/`（0001 工作台核心词 / 0002 scope 控制 / 0004 LAN 同步 Stage B / 0005 导航重布局与多等级可扩展，未提交状态）。
+- ADR 存于 vault：`vault://08-Projects/DeLector/01-ADR/`（0001 工作台核心词 / 0002 scope 控制 / 0004 LAN 同步 Stage B / 0005 导航重布局与多等级可扩展 / 0006 工作台 Zettelkasten 重塑 / 0007 语法雷达幽灵胶囊 / 0009 Python 包重构与工具契约 / 0010 遇见区分层架构 / 0011 词库单一真相化与等级判定数据驱动，未提交状态）。
 - `.vault-exec-ledger.json`：/vault-exec 任务台账。
 
 ## 当前状态（2026-09-13 快照）
