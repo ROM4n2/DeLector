@@ -84,14 +84,25 @@ def test_workbench_scope_selector_modes():
 
 
 def test_workbench_scope_selector_has_a2_option():
-    """#scopeSeg 必须扩充至 4 档，支持 A2 范围判定与服务端同步函数。"""
+    """#scopeSeg 必须扩充至 4 档，支持 A2 范围判定与服务端同步函数。
+
+    ADR-0011 T5 后 `inScopeWord` 收敛为 `isInScope` 唯一入口的薄委托，
+    a2 范围由配置表 `SCOPE_PREDICATES.a2` 声明；旧断言
+    「inScopeWord 内出现 wordFilters.scope === "a2"」是字符串存在死测
+    （红线 11），T5 数据驱动改版后必然失效，故改为委托形态断言。
+    A2 筛选**行为**正确性由 `tools/wb_queue_probe.mjs` 13 条切片护栏
+    （含 a2 切片）兜底，不在此重复。
+    """
     assert os.path.exists(WORKBENCH_HTML_PATH)
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
     assert "syncA2CardsFromServer" in content, "必须定义 syncA2CardsFromServer"
     in_scope_block = content.split("function inScopeWord")[1].split("function logToday")[0]
-    assert 'wordFilters.scope === "a2"' in in_scope_block or "wordFilters.scope === 'a2'" in in_scope_block, (
-        "inScopeWord 必须显式处理 a2 scope"
+    assert "isInScope(w, wordFilters.scope)" in in_scope_block, (
+        "inScopeWord 必须委托 isInScope 唯一入口（ADR-0011 T5 数据驱动判定），"
+        "不得保留第二处等级/范围判定副本"
     )
+    predicates_block = content.split("const SCOPE_PREDICATES")[1].split("};")[0]
+    assert "a2:" in predicates_block, "SCOPE_PREDICATES 必须声明 a2 谓词（A2 范围的单一真相）"
 
 
 def test_workbench_editorial_typography_contract():

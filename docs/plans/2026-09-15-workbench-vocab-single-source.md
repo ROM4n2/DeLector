@@ -326,18 +326,30 @@ T4 ◄────────┘（T4 可与 T2/T3 并行）
 
 ---
 
-## 执行状态（收官时回填）
+## 执行状态（收官态，2026-09-15 T7 回填）
 
-- 状态：**IN_PROGRESS**（2026-09-15：T1 `1edc7b7` / T2 `913608a` 已收官并经 CRV APPROVED；T3 已实现待提交；T4–T7 待做）
+- 状态：**DONE**（七任务收官。commit 链：T1 `1edc7b7` / T2 `913608a` / T3 `11386d5` / T4 `ff8c681` / T5 `1cf0946` / T6 `275a513` / T7 验证+文档回填（本文档 + OVERVIEW + work.log + `tests/test_workbench_tokens.py` 死测修复），T1/T2 曾经 CRV APPROVED，T4–T6 经 CRV REVISE 闭环）
+- **T7 全量门禁证据（2026-09-15，工作区含 T6 尾巴待提交改动）**：
+  - `python -m pytest -q`：**882 passed + 1 skipped**（883 collected；基线 838+1 → 净增 44，≥ 857+1 达标；首轮唯一失败见下方死测修复条目）
+  - `ruff check .`：All checks passed；`python -m mypy`：Success, no issues（106 文件）
+  - `for f in tools/*.mjs; do node $f; done`：**11/11 全绿**（exit=0）；`wb_queue_probe` 13/13 切片护栏通过；`wb_merge_probe` schemaMigration 断言全 true（idsUnchanged / normalizeIdempotent / migrationStable / cards·wrongKeysUnchanged / failSaveCalls=0）
+  - Go 三门禁（`agent/`）：`gofmt -l .` 空 / `go vet ./...` 零告警 / `go test -race ./...` 8 包 ok
+  - 关键契约抽测：`test_writer_mobile.py` **30 passed**（版本面锁死不受影响）；`test_a2_vocab_data.py` 4 passed（974/冠词红线）；`test_vocab_contract_uniform.py` 8 passed；`test_a1_workbench_source.py` 17 passed
+  - 运行时冒烟：`get_vocab_by_cefr` A1=704 / A2=974 / B1=1712，三等级输出字段集逐键一致（9 字段统一契约）；catalog 动态 count B1=1712 / A2=974（零硬编码）
+- **T7 收官裁决与修复**：
+  - **T3-Y4 裁决（闭环）：`linguistics.py:12` 的 `except ImportError` 降级——保留**。理由：它是 NLP 引擎红线 1 的有意降级路径（带降级占位函数与注释、mypy 校验双签名），与 `database.py` 词库单一真相（缺失=打包坏必须炸）性质不同；`prep_dict.py` / `core_dict_ext.py` 同型豁免为既有先例，不在本计划 scope。
+  - **T4-N2 闭环**：`wb_merge_probe.mjs` `a1RichFieldsPreserved` 已补 `custom/up` 断言（T6 顺带落实，待提交）。
+  - **T5 漏项修复（本任务）**：`tests/test_workbench_tokens.py::test_workbench_scope_selector_has_a2_option` 是字符串存在死测（红线 11），T5 数据驱动改版后必然失效——首轮全量 pytest 97% 处 1 F 即此条。已按 T5 Step 3 意图改为「`inScopeWord` 委托 `isInScope` 唯一入口 + `SCOPE_PREDICATES` 必须声明 `a2` 谓词」断言，A2 行为正确性由 `wb_queue_probe` 13/13 切片护栏兜底。
+- **⚠️ T6 提交尾巴（主线程提交时注意）**：`275a513` 未含 `delector/services/exam_catalog.py`（B1 注册 + 动态 count_fn）、`static/js/main.js`（EXAM_LEVEL_KEYS 泛化 + 徽标动态化）、`tests/test_exam_catalog.py` / `tests/test_german_workbench.py` / `tests/test_server.py` 扩展、`tools/wb_merge_probe.mjs`（T4-N2 断言）——功能已在工作区验证通过，须随 T7 一并原子提交（建议与并行会话的 syntax 修复分开成笔）。
 - 评审黄牌台账（CRV 记录，均不阻断）：
   - T1：工具写文件非原子（无 temp+rename）→ 后续加固；测试 `byte_identical` 基于归一化读取 → 改 `newline=""` 读取。
   - T2→已承接进 T3 并落实：A2/通用分支 `except ImportError` 根除、异常类型收紧（RuntimeError/TypeError）。
   - T3-Y1：**reader scope 分支未纳入统一契约**（保守裁剪，行为零变化）→ 显式递延；**T4 `normalizeWord` 必须容忍 reader 词缺 `gender/plural` 键**。
   - T3-Y2：B1 条数基线 `>=1000` 未钉死 1712 → **T4 顺带钉死**（权威词表接入时随数据变更同 commit 更新）。
   - T3-Y3：`cefr="ALL"` 分支无契约断言 → T4 顺带补一条。
-  - T3-Y4：`linguistics.py:12` 同型 `except ImportError` 降级（红线 1 有意豁免）→ **T7 收官时显式裁决去留**。
+  - T3-Y4：`linguistics.py:12` 同型 `except ImportError` 降级（红线 1 有意豁免）→ **T7 已裁决：保留**（见上）。
   - T4-N1：**applyMerge 入口未接 normalizeWord**（计划 Files 内偏差，CRV 评估为可接受：local-first 下零数据/进度丢失，混版本双端窗口有快照形状驱动的 PUT 振荡、双端同版自愈，且回做修不掉振荡根源）→ **T6 顺带接线**（同文件小改，顺带覆盖 `syncA2CardsFromServer` 构造词缺 `zh` 同类问题）；PR 描述须记录该振荡窗口。
-  - T4-N2：探针 `a1RichFieldsPreserved` 未断言 `custom/up`（结构全拷贝不可能丢）→ T6/T7 顺带补断言。
+  - T4-N2：探针 `a1RichFieldsPreserved` 未断言 `custom/up`（结构全拷贝不可能丢）→ **T6 顺带补断言，已闭环**（见上）。
   - T4-N3：`normalizeWord` 对非字符串 `zh/gloss` 会覆盖原值（现实数据恒为字符串）→ 防御性一档，暂缓。
   - T5-Y1：`cefrFromId` 的 `b1-` 分支等价性存疑 → **主线程已裁决闭环**（`git show ff8c681` 证实 T4 内联表本就含 `["b1-","B1"]`，抽取逐字等价）。
   - T5-Y2：唯一入口 token 扫描 region 自含 helper 体（helper 体内二次内联判定不可见）→ 行为快照已兜底，可接受；T6 接 B1 时可收窄 region。

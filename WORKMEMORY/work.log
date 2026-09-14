@@ -445,3 +445,21 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：v5.7.4 复测反馈「轻量分析提示正常但无诊断小字」→ 定位**前端竞态 bug**：`enterHardSentences` 里 `_loadSpacyDiag()` 未 await，`_renderAll` 抢先渲染时 `_q.spacyError` 为空 → 诊断永不渲染。修复：await 诊断再渲染 + `path="pure"` 且 error 空时占位「未捕获到加载异常」。作者批准 → v5.7.5 发版（bump commit 2556c38，tag 已推，CI run 34865240096 queued）。
 遗留：CI 出包 → 作者覆盖安装 v5.7.5 复测看诊断小字 → 发回内容 → 定位 Android spaCy 加载根因（拿回 spacy 路径）。
+
+### 2026-09-15 06:55 | trae-llm__trae-code | PITFALL（spaCy 诊断 error 永远为空）
+Caps: filesystem-read, filesystem-write, shell-exec
+现象：v5.7.5 真机 `/api/syntax/spacy-status` 返回 `path:"pure"` 但 `error:""`，前端兜底显示「未捕获到加载异常（需进一步排查）」。
+根因：**Python from-import 按值拷贝不可变对象**。`syntax_hard.py` 用 `from syntax_tree import _spacy_load_error` 拿到的是导入时的初始空串 `""`；`get_spacy_nlp()` 内部 `global _spacy_load_error = "..."` 只重绑定 syntax_tree 模块命名空间，route 持有的旧引用不变 → error 永远空。
+解法：syntax_tree 加 `get_spacy_load_error()` getter，route 调函数实时读；删 `from ... import _spacy_load_error`。回归测试 `test_spacy_status_reports_live_error_on_pure_path` 锁定（mock get_spacy_nlp→None + 设 _spacy_load_error，断言 endpoint error 等于实时值）。
+验证：syntax_hard_api 18 passed；syntax_tree+score 60 passed。
+遗留：此修复需出新版本（v5.7.6）作者覆盖安装后才能看到真实 spaCy 加载异常（大概率模型文件未打包进 APK / Chaquopy native 依赖问题），拿到 error 文本后再定位根因。
+
+### 2026-09-15 08:40 | Code-Plan-Executor__cpe | SESSION（ADR-0011 词库收敛七任务收官）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：ADR-0011（workbench 词库单一真相化 + 等级判定数据驱动）T7 收官验证 + 文档回填（分支 feature/workbench-vocab-single-source）。
+1. commit 链：T1 1edc7b7（A1 数据模块 + 双向构建工具）/ T2 913608a（服务端根除 HTML 正则与静默回退）/ T3 11386d5（四路径契约统一 + ImportError 根除）/ T4 ff8c681（normalizeWord 幂等归一 + wb.schema.v1 迁移）/ T5 1cf0946（SCOPE_PREDICATES + isInScope 数据驱动）/ T6 275a513（B1 入口全链 + 信封解包修复）。
+2. 门禁：全量 pytest **882 passed + 1 skipped**（838→882 净增 44）；ruff 零告警 / mypy 零错误；11/11 tools/*.mjs 探针全绿（wb_queue 13/13 切片护栏）；Go 三门禁（gofmt 空 / vet / -race 8 包）全绿。契约抽测：writer_mobile 30 / a2_vocab 4 / contract_uniform 8 / a1_workbench_source 17 全 passed；冒烟 A1=704 / A2=974 / B1=1712 同契约，catalog 动态 count 零硬编码。
+3. T7 裁决/修复：T3-Y4 linguistics.py ImportError 降级裁决**保留**（红线 1 有意设计）；T4-N2 custom/up 断言已补闭环；修复 T5 漏项死测 test_workbench_tokens.py（inScopeWord 字符串断言 → 唯一入口委托断言）。
+4. ⚠️ T6 提交尾巴：275a513 未含 exam_catalog.py B1 注册、main.js 等级泛化/动态徽标、测试扩展与 wb_merge_probe.mjs T4-N2 断言（工作区已验证通过，待主线程一并提交）；另有并行会话 syntax 修复未提交（syntax_tree/syntax_hard/test_syntax_hard_api，未触碰）。
+5. 文档回填：PROJECT_OVERVIEW（快照 2026-09-15 + 基线 882+1 + 探针 11/11 + ADR-0011 收官条目）、本计划执行状态块（收官态）、本条 work.log。
+遗留：作者双端点检（桌面 python start.py 五档可见/B1 可刷/备考域 B1 1712 词；Android 覆盖安装后同上且进度不丢）→ 主线程提交并开 PR → PR CI 真验证。
