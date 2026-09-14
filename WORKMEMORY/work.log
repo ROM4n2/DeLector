@@ -348,3 +348,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. tag v5.7.0 打在 bump commit 上；master 与 tag 均已推送（作者确认）。
 4. CI Build & Publish run 34834861205 queued（head 2afa5bf）。
 遗留：CI 出四平台资产后作者覆盖安装 Android 真机点检长难句工坊（选源→挑句→拆解→查词→入盒→trials 落盘）；真用户试用收三问反馈。
+
+### 2026-09-14 18:52 | GLM-5.2__trae-code | RELEASE_PUBLISHED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.7.0 发布闭环（CI run 34834861205 success，publishedAt 2026-09-14T10:52:20Z）。
+1. 非草稿非预发布；四平台资产全部 uploaded：Android APK 61.2MB / Windows ZIP 78.0MB / macOS 59.7MB / Linux 122.6MB。
+2. work.log 本事件回填（未 commit，待用户后续提交）。
+遗留：作者覆盖安装 Android 真机点检长难句工坊；真用户试用收三问反馈（最高价值）。
