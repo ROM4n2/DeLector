@@ -390,3 +390,113 @@ def test_a1_cards_supports_a2_vocab_level():
     save_body = a1_js.split("export async function saveA1WordToDeck(")[1].split("export const saveA1VocabCard")[0]
     assert save_body.count("cefr_level:") == 1, "saveA1WordToDeck 中 cefr_level 字段定义重复（必须恰好出现 1 次）"
     assert 'cefr_level: _examVocabLevel || "A1"' in save_body, "saveA1WordToDeck 必须使用动态 _examVocabLevel || 'A1'"
+
+
+# ── ADR-0011 Task 6：B1 备考域入口（等级泛化 + 徽标动态 + B1 取数） ───────────
+
+
+def _main_js_fn_body(name):
+    """main.js 里 `function name(` 起到下一个顶层 `\nfunction ` 的切片。"""
+    m = re.search(r"(?:export\s+)?(?:async\s+)?function\s+%s\s*\(" % re.escape(name), _MAIN_JS)
+    assert m, "main.js 缺少函数 %s()" % name
+    nxt = _MAIN_JS.find("\nfunction ", m.end())
+    assert nxt != -1, "%s 之后找不到下一个顶层 function（声明顺序漂移）" % name
+    return _MAIN_JS[m.end() : nxt]
+
+
+def _main_js_exam_level_region():
+    """等级配置区 + setExamLevel 入口整段（等级站点表/徽标缓存是模块级常量，
+    切函数体会漏掉它们 —— 只能切配置区）。"""
+    start = _MAIN_JS.index('let _examModule = "writing";')
+    end = _MAIN_JS.index("export function setExamModule(")
+    return _MAIN_JS[start:end]
+
+
+def _main_js_catalog_region():
+    """catalog 数据补强区整段（WIRED_EXAM_LEVELS 注册表是模块级常量，同上）。"""
+    start = _MAIN_JS.index("let _examCatalogDone = false;")
+    end = _MAIN_JS.index("function lazyInitExamCatalog(")
+    return _MAIN_JS[start:end]
+
+
+def test_set_exam_level_generalized_to_b1():
+    """setExamLevel 等级数组必须含 b1，且无任何硬编码词条数徽标（974/702 都不行）。"""
+    region = _main_js_exam_level_region()
+    assert re.search(r'\[\s*["\']a1["\']\s*,\s*["\']a2["\']\s*,\s*["\']b1["\']\s*\]', region), (
+        "setExamLevel 的等级页签数组必须泛化为 a1/a2/b1（加级 = 改配置，不留 no-op 页签）"
+    )
+    for banned in ("974", "702", "1712"):
+        assert banned not in _MAIN_JS, f"main.js 硬编码词条数 {banned}（徽标必须从 catalog 动态取 count）"
+    assert "_examVocabCounts" in region, "setExamLevel 必须经 catalog count 缓存动态刷徽标"
+
+
+def test_exam_catalog_wires_a2_and_b1_tabs():
+    """initExamCatalog 必须对 a2/b1 都真接线（onclick → setExamLevel），不得留 no-op 死页签。"""
+    region = _main_js_catalog_region()
+    assert re.search(r"b1\s*:", region), "initExamCatalog 的已接线等级表必须含 b1"
+    assert "setExamLevel(lv.id)" in region, "已接线等级页签必须 onclick → setExamLevel(lv.id)"
+    # 未知等级仍走显式「待接入」占位（不得静默死按钮）——该兜底分支必须保留
+    assert "待接入" in region and "aria-disabled" in region
+
+
+def test_a1_cards_exam_vocab_fetch_by_level():
+    """a1_cards.js 按等级取数：A2 走 /api/a2/vocab，B1 走 /api/cards/vocab，缓存按等级隔离。"""
+    a1_js = (_ROOT / "static" / "js" / "a1_cards.js").read_text(encoding="utf-8")
+    assert '"/api/a2/vocab"' in a1_js or "'/api/a2/vocab'" in a1_js, "A2 既有取数路径不得改变"
+    assert "/api/cards/vocab?cefr=B1&scope=all" in a1_js, "B1 必须走 /api/cards/vocab?cefr=B1&scope=all 取数"
+    assert "_examVocabLevel === \"A2\"" not in a1_js and "_examVocabLevel === 'A2'" not in a1_js, (
+        "setExamVocabLevel 的 A2 硬编码特判必须泛化为按等级取数"
+    )
+    # 缓存按等级隔离：不存在跨等级共享的单份缓存常量
+    assert re.search(r"_examVocabCaches\s*=", a1_js) or re.search(r"VOCAB_CACHES\s*=", a1_js), (
+        "备考域词表缓存必须按等级隔离（per-level cache 表）"
+    )
+
+
+def test_a1_cards_b1_envelope_unwrap_probe():
+    """R1 行为探针：/api/cards/vocab 信封 {cefr,scope,total,words} 必须解包进缓存。
+
+    GET /api/cards/vocab?cefr=B1&scope=all 返回信封 dict 而非数组；loadExamVocab
+    若只做 `Array.isArray(res) ? res : []`，B1 缓存恒为 [] 且被永久缓存（CRV R1）。
+    字符串断言对「解包没做」全程绿（红线 11）——本用例把 a1_cards.js 真源码剥
+    import/export 后丢进 node:vm 真跑，喂真实信封 JSON 形状，断言词项进入
+    _examVocabCaches["B1"] 且逐字段经 mapCardsVocabItem 映射（含 topic/core）。
+    解包回退时本用例必红（tools/wb_cards_vocab_unwrap_probe.mjs 自身退出码 1）。
+    """
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_cards_vocab_unwrap_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_cards_vocab_unwrap_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)
+    assert out["ok"] is True
+    dyn = out["unwrap"]
+    assert dyn["cacheFilled"], "信封未解包：_examVocabCaches['B1'] 仍是空数组（B1 备考域页签永远空表）"
+    assert dyn["itemCount"] == dyn["envelope"]["words"], "缓存词项数与信封 words 数不一致"
+    assert dyn["mappedByMapCardsVocabItem"], "缓存词项未经 mapCardsVocabItem 映射（字段缺失或错位）"
+    assert dyn["a2ArraySourceUnchanged"], "A2 数组端点 /api/a2/vocab 取数路径被误改"
+
+
+def test_no_hardcoded_vocab_counts_in_a1_cards_and_workbench():
+    """Y2 禁硬编码词条数字面量：a1_cards.js 与 workbench.html 一并纳入（口径同 main.js）。
+
+    ADR-0011 Task 6：条数一律动态推导（catalog count_fn / 现数缓存），权威词表
+    接入后条数会变。main.js 已有同款断言（test_set_exam_level_generalized_to_b1），
+    这里补齐其余两处前端词库消费源。workbench.html 现无合法数字语境冲突
+    （1712/974/702 均未出现），故沿用整串字面量模式即可，无需收窄。
+    """
+    a1_js = (_ROOT / "static" / "js" / "a1_cards.js").read_text(encoding="utf-8")
+    wb_html = (_ROOT / "static" / "german" / "workbench.html").read_text(encoding="utf-8")
+    for banned in ("1712", "974", "702"):
+        assert banned not in a1_js, f"a1_cards.js 硬编码词条数 {banned}（条数必须动态推导）"
+        assert banned not in wb_html, f"workbench.html 硬编码词条数 {banned}（条数必须动态推导）"

@@ -21,37 +21,86 @@ export let a1CardIndex = 0;
 export let a1CardFlipped = false;
 export let _a1SavedLemmas = new Set();
 export let _examVocabLevel = "A1";
-export let _a2VocabCache = null;
-let _a2VocabLoadingPromise = null;
+
+/* ── ADR-0011 Task 6：备考域词表按等级取数（A1 既有路径不动） ────────────────
+ * EXAM_VOCAB_SOURCES：等级 → 取数端点。A1 走 /api/a1/vocab（loadA1Data 承载，
+ * 不入此表）；A2 走专用规范化端点；B1 走通用分级词库端点（服务端零新增）。
+ * 加一个等级 = 在此插一行 + exam_catalog 注册 + main.js WIRED_EXAM_LEVELS 插行。 */
+const EXAM_VOCAB_SOURCES = {
+  A2: "/api/a2/vocab",
+  B1: "/api/cards/vocab?cefr=B1&scope=all",
+};
+
+/* 缓存/在途请求按等级隔离：同一套 fetch-去重-兜底链路服务所有等级。 */
+const _examVocabCaches = {};
+const _examVocabLoadingPromises = {};
+
+/* /api/cards/vocab 产出统一契约 {id,hw,pos,gender,plural,de,zh,...}，映射成
+ * 卡片渲染消费的 A2 形态（word/lemma/definition_zh/example_*），与 a2.py 同构
+ * （topic/core 两键同 a2.py:36-37 的 A2 形态，杜绝「有的等级有、有的没有」）。 */
+function mapCardsVocabItem(w) {
+  return {
+    id: w.id,
+    word: w.hw,
+    hw: w.hw,
+    lemma: String(w.id || "").replace(/^b1-/, ""),
+    pos: w.pos,
+    gender: w.gender,
+    plural: w.plural || "",
+    definition_zh: w.zh || "",
+    zh: w.zh || "",
+    example_de: w.de || "",
+    de: w.de || "",
+    example_zh: "",
+    topic: "general",
+    core: true,
+    cefr: w.cefr,
+  };
+}
+
+async function loadExamVocab(level) {
+  if (_examVocabCaches[level]) return _examVocabCaches[level];
+  if (!_examVocabLoadingPromises[level]) {
+    const src = EXAM_VOCAB_SOURCES[level];
+    _examVocabLoadingPromises[level] = api(src)
+      .then((res) => {
+        /* /api/cards/vocab 返回信封 {cefr,scope,total,words:[...]}（非数组），
+         * 必须先解包 res.words 再入缓存 —— 口径与 workbench.html 的
+         * syncB1CardsFromServer 一致（Array.isArray(data.words)）。漏解包时
+         * Array.isArray(res) 恒假 → 空数组永久缓存 → B1 页签永远空表（CRV R1）。 */
+        const unwrapped =
+          src.startsWith("/api/cards") && res && Array.isArray(res.words)
+            ? res.words
+            : res;
+        const list = Array.isArray(unwrapped) ? unwrapped : [];
+        _examVocabCaches[level] = src.startsWith("/api/cards") ? list.map(mapCardsVocabItem) : list;
+        _examVocabLoadingPromises[level] = null;
+        return _examVocabCaches[level];
+      })
+      .catch((e) => {
+        console.error("Failed to load " + level + " vocab", e);
+        _examVocabCaches[level] = [];
+        _examVocabLoadingPromises[level] = null;
+        return [];
+      });
+  }
+  return _examVocabLoadingPromises[level];
+}
+
+/** 当前等级是否有独立取数路径（A1 无 → 走 loadA1Data 既有缓存）。 */
+function hasExamVocabSource(level) {
+  return !!EXAM_VOCAB_SOURCES[level];
+}
 
 export async function setExamVocabLevel(level) {
   _examVocabLevel = (level || "A1").toUpperCase();
   a1CardIndex = 0;
   a1CardFlipped = false;
-  if (_examVocabLevel === "A2") {
-    if (!_a2VocabCache) {
-      if (!_a2VocabLoadingPromise) {
-        _a2VocabLoadingPromise = api("/api/a2/vocab")
-          .then((res) => {
-            _a2VocabCache = res || [];
-            _a2VocabLoadingPromise = null;
-            return _a2VocabCache;
-          })
-          .catch((e) => {
-            console.error("Failed to load A2 vocab", e);
-            _a2VocabCache = [];
-            _a2VocabLoadingPromise = null;
-            return [];
-          });
-      }
-      await _a2VocabLoadingPromise;
-    }
-    renderA1TopicPills();
-    renderA1();
-  } else {
-    renderA1TopicPills();
-    renderA1();
+  if (hasExamVocabSource(_examVocabLevel)) {
+    await loadExamVocab(_examVocabLevel);
   }
+  renderA1TopicPills();
+  renderA1();
 }
 
 export function getA1Mode() {
@@ -109,11 +158,12 @@ export function renderA1TopicPills() {
   const container = document.getElementById("a1-topic-pills");
   if (!container) return;
 
-  if (_examVocabLevel === "A2") {
-    const totalCount = _a2VocabCache ? _a2VocabCache.length : 974;
+  if (hasExamVocabSource(_examVocabLevel)) {
+    const cache = _examVocabCaches[_examVocabLevel] || [];
+    const totalCount = cache.length;
     container.innerHTML = `
       <button class="a1-pill active" onclick="filterA1Topic('')">
-        🌟 全部 A2 考纲词汇 <span class="a1-pill-count">${totalCount}</span>
+        🌟 全部 ${esc(_examVocabLevel)} 考纲词汇 <span class="a1-pill-count">${totalCount}</span>
       </button>
     `;
     return;
@@ -121,7 +171,8 @@ export function renderA1TopicPills() {
 
   if (!a1TopicsCache) return;
 
-  const totalCount = a1VocabCache.length || 702;
+  // 徽标口径动态现数（ADR-0011 Task 6：条数一律动态推导，不许写死词条数）
+  const totalCount = a1VocabCache.length;
   let html = `
     <button class="a1-pill ${a1CurrentTopic === "" ? "active" : ""}" onclick="filterA1Topic('')">
       🌟 全部主题 <span class="a1-pill-count">${totalCount}</span>
@@ -202,9 +253,9 @@ export function setA1Mode(mode) {
   // 题库懒加载：原 cards.js 'a1' 段的「未加载先 fetch 再渲染」链路随分流段
   // 一起迁走。备考域入口 setExamModule → setA1Mode，这里补上同语义守卫，
   // 否则首次进入 vocab/口语会拿空缓存渲染成「未找到考纲词汇」空态。
-  if (mode === "vocab" && _examVocabLevel === "A2") {
-    if (!_a2VocabCache) {
-      setExamVocabLevel("A2").catch(() => {});
+  if (mode === "vocab" && hasExamVocabSource(_examVocabLevel)) {
+    if (!_examVocabCaches[_examVocabLevel]) {
+      setExamVocabLevel(_examVocabLevel).catch(() => {});
       return;
     }
     renderA1TopicPills();
@@ -269,8 +320,8 @@ export function randomA1Card() {
 
 export function getA1CurrentList() {
   if (a1Mode === "vocab") {
-    if (_examVocabLevel === "A2") {
-      let list = _a2VocabCache || [];
+    if (hasExamVocabSource(_examVocabLevel)) {
+      let list = _examVocabCaches[_examVocabLevel] || [];
       if (a1SearchQuery) {
         list = list.filter(
           (w) =>

@@ -341,6 +341,9 @@ T4 ◄────────┘（T4 可与 T2/T3 并行）
   - T4-N3：`normalizeWord` 对非字符串 `zh/gloss` 会覆盖原值（现实数据恒为字符串）→ 防御性一档，暂缓。
   - T5-Y1：`cefrFromId` 的 `b1-` 分支等价性存疑 → **主线程已裁决闭环**（`git show ff8c681` 证实 T4 内联表本就含 `["b1-","B1"]`，抽取逐字等价）。
   - T5-Y2：唯一入口 token 扫描 region 自含 helper 体（helper 体内二次内联判定不可见）→ 行为快照已兜底，可接受；T6 接 B1 时可收窄 region。
+  - T6-R1（红牌，已修复闭环）：`a1_cards.js loadExamVocab` 未解包 `/api/cards` 信封致 B1 页签空表 → 已修 + node:vm 行为探针 `wb_cards_vocab_unwrap_probe.mjs`（探针总数 10→11）。
+  - T6-Y1：`mapCardsVocabItem` 补 `topic/core` 与 a2.py 同构（已落实）；T6-Y2：禁硬编码断言扩至 a1_cards.js/workbench.html（已落实）；T6-Y3：T5 失真注释更新（已落实）。
+  - T6-N1：异常/畸形响应仍将 `[]` 永久写入 `_examVocabCaches`（**既有 fail-static 语义**，非本轮引入）→ 后续任务：catch 分支不写缓存改重试。
 - 已知边界（不进本轮）：
   - **A2/B1 的 `ipa` / 例句（`ex`）补齐**：属"富字段扩展"，会触碰存储 schema → 须另立 ADR（本轮 A2/B1 卡片信息量仍低于 A1）。
   - **`--strict` / 其他静态债**：无关，不动。
