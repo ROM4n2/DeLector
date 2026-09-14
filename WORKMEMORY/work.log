@@ -299,3 +299,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 产出：ops.md 新增「Android 真机点检：听力微训 TTS 三模式」清单（已写入）。
 前置：手机需装含听力微训的 APK —— master 已合 PR #44 但未发版，需 v5.6.0 bump+tag 或本地 assembleDebug。
 不做范围：不动 TTS 代码（无缺陷证据前）；不发版（待作者批准）。
+
+### 2026-09-14 13:30 | deepseek-v4-flash__trae-code | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：Android 真机 TTS 点检（听力微训三模式）。
+1. 产出 ops.md「Android 真机点检：听力微训 TTS 三模式」清单（9 项 + 记录纪律）。
+2. v5.6.0 发版完成：版本面五件套 bump（sw.js/index.html/build.gradle/README/OVERVIEW）+ README Roadmap 5.x 排序修正（错位→严格升序）+ 新条目；tag 打在 bump commit 上；CI 四平台 Release 已出（APK + Win/macOS/Linux 四资产，非草稿非预发布）。
+3. 作者覆盖安装 v5.6.0 真机验证三模式 TTS **通过**（无缺陷）。
+4. OVERVIEW 发布面/听力微训条目已回填「点检已闭环」。
+遗留：真实用户试用收三问反馈（最高价值）；B 候选语料长难句强化；Mypy --strict 递延。
