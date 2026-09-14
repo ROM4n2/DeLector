@@ -527,8 +527,10 @@ async function _loadMaterials() {
 export async function enterHardSentences() {
   _ensureStyle();
   if (!el("hs-stage")) return;
+  // 先等诊断就绪再渲染：_loadSpacyDiag 非 await 时 _renderAll 抢先执行，
+  // _q.spacyError 还是空串 → 诊断小字永不出现（v5.7.4 真机确认）。
+  await _loadSpacyDiag();
   if (!_q.itemsLoaded) await _loadItems();
-  _loadSpacyDiag(); // 静默：spaCy 降级诊断（pure 提示旁展示失败原因，v5.7.4）
   _renderAll();
 }
 
@@ -536,7 +538,10 @@ export async function enterHardSentences() {
 async function _loadSpacyDiag() {
   try {
     const data = await api("/api/syntax/spacy-status");
-    _q.spacyError = (data && data.path === "pure" && data.error) || "";
+    _q.spacyError =
+      data && data.path === "pure"
+        ? data.error || "未捕获到加载异常（需进一步排查）"
+        : "";
   } catch (_e) {
     _q.spacyError = "";
   }
