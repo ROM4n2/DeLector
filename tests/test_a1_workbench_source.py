@@ -14,8 +14,14 @@
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any, Dict, List
+
+import pytest
+
+from delector.core import database
 
 _ROOT = Path(__file__).resolve().parent.parent
 WORKBENCH_HTML = _ROOT / "static" / "german" / "workbench.html"
@@ -215,3 +221,128 @@ def test_injection_is_idempotent():
     once = tool.render_html(html, **kwargs)
     twice = tool.render_html(once, **kwargs)
     assert once == twice, "注入不幂等（第二次结果与第一次不同）"
+
+
+# ── 4. 服务端消费侧（Task 2 / ADR-0011 红线 2）───────────────────────────
+#
+# 服务端 `_load_a1_workbench_words()` 必须直接 import 数据模块：
+# - 不再正则解析 workbench.html（前端文件不是数据源）；
+# - 数据模块缺失/形状坏必须抛清晰异常（不得返回空表、不得静默回退）；
+# - 对外输出 `{id, hw, pos, de, zh, core, cefr}` 与改造前逐条一致。
+
+DATABASE_PY = _ROOT / "delector" / "core" / "database.py"
+
+# monkeypatch 数据模块常量用的迷你数据（覆盖 de/zh 两种派生路径 + core/custom 两分支）
+MINI_SEED: List[Dict[str, Any]] = [
+    {
+        "id": "a1-0001",
+        "hw": "ab",
+        "pos": "Präp",
+        "gloss": "迷你释义A",
+        "ex": [{"de": "Mini de.", "zh": "迷你中文"}],
+    },
+    {"id": "a1-0002", "hw": "aber", "pos": "Konj", "zh": "纯zh释义"},
+]
+MINI_CUSTOM: List[Dict[str, Any]] = [
+    {"id": "core-001", "hw": "Miniwort", "pos": "N", "gloss": "迷你新词"}
+]
+MINI_CORE_IDS = frozenset({"a1-0001"})
+
+# 改造前（正则解析版）对真实数据模块产出的 20 条样本：前 10 条种子词 + 前 10 条自定义词。
+# 由改造前实现现场导出固化于此，钉住"输出逐条不变"。
+_SNAPSHOT_FIELDS = ("id", "hw", "pos", "de", "zh", "core", "cefr")
+_SNAPSHOT_ROWS = [
+    ("a1-0001", "ab", "Präp", "Ab morgen muss ich arbeiten.", "从…起；自…起", False, "A1"),
+    ("a1-0002", "aber", "Konj", "Ich bin oft im Büro, aber nur für wenige Stunden.", "但是；可是", False, "A1"),
+    ("a1-0003", "abfahren", "V", "Wir fahren um zwölf Uhr ab.", "出发；驶离", True, "A1"),
+    ("a1-0004", "die Abfahrt", "f.", "Vor der Abfahrt rufe ich an.", "出发；发车", True, "A1"),
+    ("a1-0005", "abgeben", "V", "Ich muss meine Schlüssel abgeben.", "交还；交出", False, "A1"),
+    ("a1-0006", "abholen", "V", "Wann kann ich den Schrank bei dir abholen?", "取；接（人/物）", False, "A1"),
+    ("a1-0007", "der Absender", "m.", "Da ist ein Brief für dich ohne Absender.", "寄件人", True, "A1"),
+    ("a1-0008", "Achtung", "Int", "Achtung! Das dürfen Sie nicht tun.", "注意！当心！", False, "A1"),
+    ("a1-0009", "die Adresse,-en", "f.", "Können Sie mir seine Adresse sagen?", "地址", True, "A1"),
+    ("a1-0010", "all-", "Pron", "Alles Gute!", "全部；所有（构成 alle, alles 等）", False, "A1"),
+    ("core-001", "der Wohnort", "m.", "Mein Wohnort ist Berlin.", "居住地", True, "A1"),
+    ("core-002", "die Staatsangehörigkeit", "f.", "Staatsangehörigkeit: Chinesisch.", "国籍", True, "A1"),
+    ("core-003", "die Nationalität", "f.", "Meine Nationalität ist chinesisch.", "国籍", True, "A1"),
+    ("core-004", "geschieden", "Adj", "Er ist seit gestern geschieden.", "离异的", True, "A1"),
+    ("core-005", "verwitwet", "Adj", "Meine Oma ist verwitwet.", "丧偶的", True, "A1"),
+    ("core-006", "das Mittagessen", "n.", "Wann gibt es Mittagessen?", "午餐", True, "A1"),
+    ("core-007", "das Abendessen", "n.", "Das Abendessen ist fertig.", "晚餐", True, "A1"),
+    ("core-008", "der Käse", "m.", "Ein Brötchen mit Käse bitte.", "奶酪", True, "A1"),
+    ("core-009", "der Zucker", "m.", "Der Kaffee braucht Zucker.", "糖", True, "A1"),
+    ("core-010", "der Stuhl", "m.", "Ist der Stuhl noch frei?", "椅子", True, "A1"),
+]
+EXPECTED_SNAPSHOT = [dict(zip(_SNAPSHOT_FIELDS, row)) for row in _SNAPSHOT_ROWS]
+
+
+@pytest.fixture
+def fresh_a1_cache():
+    """隔离模块级缓存：测试前后都清空，防止迷你数据泄漏给其他测试。"""
+    database._reset_a1_workbench_cache()
+    yield
+    database._reset_a1_workbench_cache()
+
+
+def test_database_no_longer_references_workbench_html():
+    """(a) 源码级：服务端不得再把前端 HTML 当数据源（全文无 workbench.html 字样）。"""
+    src = DATABASE_PY.read_text(encoding="utf-8")
+    assert "workbench.html" not in src, "database.py 仍引用 workbench.html（必须改 import 数据模块）"
+
+
+def test_load_reads_data_module_constants(monkeypatch, fresh_a1_cache):
+    """(b) 行为级：monkeypatch 数据模块常量后输出随之变化 —— 证明真读模块而非缓存。"""
+    import delector.data.a1_workbench_dict as wb_dict
+
+    monkeypatch.setattr(wb_dict, "A1_WORKBENCH_SEED", MINI_SEED)
+    monkeypatch.setattr(wb_dict, "A1_WORKBENCH_CUSTOM", MINI_CUSTOM)
+    monkeypatch.setattr(wb_dict, "A1_WORKBENCH_CORE_IDS", MINI_CORE_IDS)
+
+    words = database._load_a1_workbench_words()
+    assert [w["id"] for w in words] == ["a1-0001", "a1-0002", "core-001"]
+    # de 派生：ex[0].de 优先；zh 派生：gloss 优先
+    assert words[0]["de"] == "Mini de."
+    assert words[0]["zh"] == "迷你释义A"
+    assert words[0]["core"] is True  # id ∈ core_ids
+    # 无 ex/gloss：de 落空串，zh 落 zh 字段
+    assert words[1]["de"] == ""
+    assert words[1]["zh"] == "纯zh释义"
+    assert words[1]["core"] is False
+    # custom 全部 core=True
+    assert words[2]["core"] is True
+    assert words[2]["zh"] == "迷你新词"
+    for w in words:
+        assert set(w.keys()) == {"id", "hw", "pos", "de", "zh", "core", "cefr"}
+        assert w["cefr"] == "A1"
+
+
+def test_missing_data_module_raises(monkeypatch, fresh_a1_cache):
+    """(c) 失败必须炸：数据模块 import 失败 → 抛异常，绝不返回空表。"""
+    monkeypatch.setitem(sys.modules, "delector.data.a1_workbench_dict", None)
+    with pytest.raises(Exception) as ei:
+        database._load_a1_workbench_words()
+    assert "a1_workbench_dict" in str(ei.value)
+
+
+def test_bad_shape_raises(monkeypatch, fresh_a1_cache):
+    """(c) 失败必须炸：常量形状坏（SEED 非列表）→ 抛异常而非静默容错。"""
+    import delector.data.a1_workbench_dict as wb_dict
+
+    monkeypatch.setattr(wb_dict, "A1_WORKBENCH_SEED", "not-a-list")
+    with pytest.raises(Exception) as ei:
+        database._load_a1_workbench_words()
+    assert "A1_WORKBENCH_SEED" in str(ei.value)
+
+
+def test_a1_cache_is_reused(fresh_a1_cache):
+    """缓存语义保持：同一进程内二次调用直接命中缓存（同一对象）。"""
+    first = database._load_a1_workbench_words()
+    second = database._load_a1_workbench_words()
+    assert second is first
+
+
+def test_output_snapshot_matches_pre_refactor(fresh_a1_cache):
+    """(d) 等价性快照：改造后对同一数据模块的产出与改造前逐条完全一致（20 条样本）。"""
+    words = database._load_a1_workbench_words()
+    got = words[:10] + words[-22:-12]  # 前 10 条种子词 + 前 10 条自定义词
+    assert got == EXPECTED_SNAPSHOT

@@ -129,6 +129,8 @@
 - 定义唯一字段集常量并在所有分支复用；A2 专用分支（`_load_a2_vocab_words`）并入通用路径（可保留缓存，但产出同一契约）。
 - 补齐 A2/B1 的 `gender/plural`（通用分支已有）与 A1 的 `gender/plural`（当前 A1 输出**没有**这两字段）——若补齐会影响前端，先用契约测试锁定差异，再由 Task 4 的前端 normalize 吸收。
 - **存储 5 元组不动**（ADR §5-#6）。
+- **【CRV 黄牌承接，T2 评审追加】同型静默回退必须一并根除**：`_load_a2_vocab_words` 与通用分支里的 `except ImportError: CORE_VOCAB_DB = {}`（T2 后约 :1790/:1877）与红线 2 同型——改为直接 import（core_dict 是必然在包内的第 1 个数据模块，缺失=打包坏，必须炸）。
+- **【CRV 黄牌承接】异常类型收紧**：T2 的 `pytest.raises(Exception)`（test_a1_workbench_source.py 失败炸用例）收紧为 `pytest.raises(RuntimeError)` / `pytest.raises(TypeError)`。
 
 **Subagent Prompt Scaffold (for /vault-exec):**
 > "Implement Task 3: 词对象契约统一（输出侧）。

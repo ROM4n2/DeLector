@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import random
-import re
 import secrets
 import shutil
 import sqlite3
@@ -1696,91 +1695,67 @@ _A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
 _A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None
 
 
+def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
+    """把数据模块的一条 A1 词条映射为对外契约 {id, hw, pos, de, zh, core, cefr}。
+
+    de/zh 派生规则与改造前逐字相同（ADR-0011：输出逐条不变）：
+    de = (ex and ex[0].de) or de or ""；zh = gloss or zh or (ex and ex[0].zh) or ""。
+    """
+    ex = w.get("ex")
+    return {
+        "id": w.get("id", ""),
+        "hw": w.get("hw", ""),
+        "pos": w.get("pos", ""),
+        "de": (ex and ex[0].get("de")) or w.get("de") or "",
+        "zh": w.get("gloss") or w.get("zh") or (ex and ex[0].get("zh")) or "",
+        "core": core,
+        "cefr": "A1",
+    }
+
+
+def _load_a1_workbench_dict_module() -> Any:
+    """导入 A1 词库数据模块（单一真相）；缺失即抛清晰异常，绝不静默回退（ADR-0011 红线 2）。"""
+    try:
+        import delector.data.a1_workbench_dict as a1_wb
+    except ImportError as exc:
+        raise RuntimeError(
+            "A1 词库数据模块 delector.data.a1_workbench_dict 导入失败：它是 A1 工作台词库"
+            "的单一真相，缺失说明安装/打包不完整。禁止静默回退（ADR-0011 红线 2）。"
+        ) from exc
+    return a1_wb
+
+
 def _load_a1_workbench_words() -> List[Dict[str, Any]]:
-    """加载并缓存 A1 词库（优先解析 workbench.html 保证与工作台 100% 同步，回退 a1_dict）。"""
+    """加载并缓存 A1 词库（单一真相 = delector.data.a1_workbench_dict 数据模块）。"""
     global _A1_WORKBENCH_WORDS_CACHE
     if _A1_WORKBENCH_WORDS_CACHE is not None:
         return _A1_WORKBENCH_WORDS_CACHE
 
-    words: List[Dict[str, Any]] = []
-    workbench_paths = [
-        os.path.join(DATA_DIR, "static", "german", "workbench.html"),
-        os.path.join(DATA_DIR, "static", "german", "workbench.html"),
-    ]
-    loaded = False
-    for wp in workbench_paths:
-        if os.path.exists(wp):
-            try:
-                with open(wp, "r", encoding="utf-8") as f:
-                    txt = f.read()
-                m_seed = re.search(r"const\s+SEED_WORDS\s*=\s*(\[.*?\]);\s*\n", txt, re.DOTALL)
-                m_custom = re.search(r"const\s+CORE_CUSTOM_WORDS\s*=\s*(\[.*?\]);", txt, re.DOTALL)
-                m_ids = re.search(r"const\s+CORE_WORD_SEED_IDS\s*=\s*new Set\((\[.*?\])\);", txt, re.DOTALL)
-                if m_seed and m_custom and m_ids:
-                    seeds = json.loads(m_seed.group(1))
-                    custom = json.loads(m_custom.group(1))
-                    core_ids = set(json.loads(m_ids.group(1)))
+    a1_wb = _load_a1_workbench_dict_module()
+    seeds = a1_wb.A1_WORKBENCH_SEED
+    customs = a1_wb.A1_WORKBENCH_CUSTOM
+    core_ids = a1_wb.A1_WORKBENCH_CORE_IDS
+    if not isinstance(seeds, list) or not isinstance(customs, list):
+        raise TypeError(
+            "a1_workbench_dict 形状损坏：A1_WORKBENCH_SEED / A1_WORKBENCH_CUSTOM "
+            "必须是 List，实际 %s / %s" % (type(seeds).__name__, type(customs).__name__)
+        )
+    if not isinstance(core_ids, (set, frozenset)):
+        raise TypeError(
+            "a1_workbench_dict 形状损坏：A1_WORKBENCH_CORE_IDS 必须是 Set/FrozenSet，"
+            "实际 %s" % type(core_ids).__name__
+        )
 
-                    for w in seeds:
-                        wid = w.get("id", "")
-                        is_core = wid in core_ids
-                        de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
-                        zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
-                        words.append(
-                            {
-                                "id": wid,
-                                "hw": w.get("hw", ""),
-                                "pos": w.get("pos", ""),
-                                "de": de,
-                                "zh": zh,
-                                "core": is_core,
-                                "cefr": "A1",
-                            }
-                        )
-
-                    for w in custom:
-                        wid = w.get("id", "")
-                        de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
-                        zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
-                        words.append(
-                            {
-                                "id": wid,
-                                "hw": w.get("hw", ""),
-                                "pos": w.get("pos", ""),
-                                "de": de,
-                                "zh": zh,
-                                "core": True,
-                                "cefr": "A1",
-                            }
-                        )
-                    loaded = True
-                    break
-            except Exception:
-                pass
-
-    if not loaded:
-        try:
-            from delector.data.a1_dict import GOETHE_A1_VOCAB
-
-            idx = 1
-            for k, v in GOETHE_A1_VOCAB.items():
-                words.append(
-                    {
-                        "id": f"a1-{idx:04d}",
-                        "hw": v.get("word", k),
-                        "pos": v.get("pos", ""),
-                        "de": v.get("example_de", ""),
-                        "zh": v.get("definition_zh", ""),
-                        "core": True,
-                        "cefr": "A1",
-                    }
-                )
-                idx += 1
-        except Exception:
-            pass
-
+    words = [_a1_workbench_row(w, w.get("id", "") in core_ids) for w in seeds]
+    words.extend(_a1_workbench_row(w, True) for w in customs)
     _A1_WORKBENCH_WORDS_CACHE = words
     return words
+
+
+def _reset_a1_workbench_cache() -> None:
+    """清空 A1 词库缓存（测试在 monkeypatch 数据模块常量后用它重置，保证可测试性）。"""
+    global _A1_WORKBENCH_WORDS_CACHE
+    _A1_WORKBENCH_WORDS_CACHE = None
 
 
 GENDER_ARTICLE_MAP: Dict[str, str] = {
