@@ -328,7 +328,14 @@ T4 ◄────────┘（T4 可与 T2/T3 并行）
 
 ## 执行状态（收官时回填）
 
-- 状态：**PENDING**
+- 状态：**IN_PROGRESS**（2026-09-15：T1 `1edc7b7` / T2 `913608a` 已收官并经 CRV APPROVED；T3 已实现待提交；T4–T7 待做）
+- 评审黄牌台账（CRV 记录，均不阻断）：
+  - T1：工具写文件非原子（无 temp+rename）→ 后续加固；测试 `byte_identical` 基于归一化读取 → 改 `newline=""` 读取。
+  - T2→已承接进 T3 并落实：A2/通用分支 `except ImportError` 根除、异常类型收紧（RuntimeError/TypeError）。
+  - T3-Y1：**reader scope 分支未纳入统一契约**（保守裁剪，行为零变化）→ 显式递延；**T4 `normalizeWord` 必须容忍 reader 词缺 `gender/plural` 键**。
+  - T3-Y2：B1 条数基线 `>=1000` 未钉死 1712 → **T4 顺带钉死**（权威词表接入时随数据变更同 commit 更新）。
+  - T3-Y3：`cefr="ALL"` 分支无契约断言 → T4 顺带补一条。
+  - T3-Y4：`linguistics.py:12` 同型 `except ImportError` 降级（红线 1 有意豁免）→ **T7 收官时显式裁决去留**。
 - 已知边界（不进本轮）：
   - **A2/B1 的 `ipa` / 例句（`ex`）补齐**：属"富字段扩展"，会触碰存储 schema → 须另立 ADR（本轮 A2/B1 卡片信息量仍低于 A1）。
   - **`--strict` / 其他静态债**：无关，不动。

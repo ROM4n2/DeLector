@@ -317,19 +317,19 @@ def test_load_reads_data_module_constants(monkeypatch, fresh_a1_cache):
 
 
 def test_missing_data_module_raises(monkeypatch, fresh_a1_cache):
-    """(c) 失败必须炸：数据模块 import 失败 → 抛异常，绝不返回空表。"""
+    """(c) 失败必须炸：数据模块 import 失败 → 抛 RuntimeError，绝不返回空表。"""
     monkeypatch.setitem(sys.modules, "delector.data.a1_workbench_dict", None)
-    with pytest.raises(Exception) as ei:
+    with pytest.raises(RuntimeError) as ei:
         database._load_a1_workbench_words()
     assert "a1_workbench_dict" in str(ei.value)
 
 
 def test_bad_shape_raises(monkeypatch, fresh_a1_cache):
-    """(c) 失败必须炸：常量形状坏（SEED 非列表）→ 抛异常而非静默容错。"""
+    """(c) 失败必须炸：常量形状坏（SEED 非列表）→ 抛 TypeError 而非静默容错。"""
     import delector.data.a1_workbench_dict as wb_dict
 
     monkeypatch.setattr(wb_dict, "A1_WORKBENCH_SEED", "not-a-list")
-    with pytest.raises(Exception) as ei:
+    with pytest.raises(TypeError) as ei:
         database._load_a1_workbench_words()
     assert "A1_WORKBENCH_SEED" in str(ei.value)
 
