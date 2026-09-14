@@ -522,3 +522,52 @@ def test_listen_lab_no_circular_dependency():
     """listen-lab.js 不得出现在任何 import 环上（环破坏 ES 模块求值序）。"""
     cycles = _cycles_through(_load_modules(), "listen-lab.js")
     assert not cycles, f"listen-lab.js 存在循环依赖：{cycles}"
+
+
+# ── 长难句精读工坊（hard-sentences.js）：非孤岛、无循环依赖、导出齐全 ────────
+# Task 5（红线 11 契约探针配套）：hard-sentences.js 由 main.js `import * as
+# HardSentences` 命名空间接线（main.js:163，window 挂载于 :1096）。若它变成孤岛
+# （没人 import）、或与其它模块成环（求值序不确定 → 断裂传播到整个 ES 模块图），
+# 模块图守卫必须红。注意：其 named import（core.js 的 api/esc/notify）已由上方
+# test_every_named_import_resolves_to_a_real_export 自动覆盖。
+
+# main.js 通过 `import * as HardSentences` 消费 / 模块内 `HardSentences.xxx`
+# onclick 直调的全部导出名（也是行为探针的驱动面）
+HARD_SENT_EXPORTS = (
+    "enterHardSentences",
+    "stopHardSentences",
+    "setHardSource",
+    "setHardLevel",
+    "pickHardMaterial",
+    "revealTree",
+    "lookupWord",
+    "addCard",
+    "nextCard",
+    "prevCard",
+    "restart",
+    "exit",
+)
+
+
+def test_hard_sentences_not_an_island():
+    """hard-sentences.js 必须存在、非空、且被 main.js import（孤岛 = 前端接线静默失效）。"""
+    path = JS_DIR / "hard-sentences.js"
+    assert path.exists(), "hard-sentences.js 缺失"
+    src = path.read_text(encoding="utf-8")
+    assert len(src.strip()) > 0, "hard-sentences.js 为空（同 v4.7.0 a1_cards 空文件回归）"
+    main_src = (JS_DIR / "main.js").read_text(encoding="utf-8")
+    assert "hard-sentences.js" in main_src, "hard-sentences.js 是孤岛：main.js 未 import 它"
+
+
+def test_hard_sentences_exports_complete():
+    """main.js `import * as HardSentences` 依赖的全部导出名必须在 hard-sentences.js 里。"""
+    modules = _load_modules()
+    own = modules["hard-sentences.js"]["own"]
+    for name in HARD_SENT_EXPORTS:
+        assert name in own, f"hard-sentences.js 缺导出 {name}"
+
+
+def test_hard_sentences_no_circular_dependency():
+    """hard-sentences.js 不得出现在任何 import 环上（环破坏 ES 模块求值序）。"""
+    cycles = _cycles_through(_load_modules(), "hard-sentences.js")
+    assert not cycles, f"hard-sentences.js 存在循环依赖：{cycles}"

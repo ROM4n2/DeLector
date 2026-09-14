@@ -41,7 +41,6 @@ const _q = {
   revealed: false,      // 本句是否揭示过
   revealedKeys: new Set(), // 本会话内揭示过的句子键
   startedAt: 0,
-  cardBtnPending: false,
 };
 
 const _SAVED_PREFIX = "hardsent:saved:";
@@ -371,7 +370,6 @@ function _renderStage() {
   const meta = _LEVEL_META[item.level] || {};
   const a1a2Note = item.level === "A1" || item.level === "A2";
   const saved = _isSaved(item);
-  const revealedNote = _q.revealed ? "" : "";
   const revealedZone = _q.revealed
     ? _renderRevealedZone(item)
     : `<div class="hs-reveal-zone">
@@ -394,7 +392,7 @@ function _renderStage() {
       ${item.path === "pure" ? `<div class="hs-path-note">⚠ 近似分析（纯 Python 降级路径，评分仅供参考）</div>` : ""}
       <div class="hs-sentence">${_sentenceHtml(item)}</div>
       <div class="hs-chips">${_dimChipsHtml(item.dimensions)}</div>
-      ${revealedZone}${revealedNote}
+      ${revealedZone}
       <div id="hs-lookup-pop-zone"></div>
       <div class="hs-actions" style="${_q.revealed ? "" : "margin-top:0.9rem;"}">
         <button class="hs-btn hs-btn-dark" onclick="HardSentences.addCard()" id="hs-add-card-btn">${saved ? "✔ 已加入复习盒" : "➕ 加入复习盒"}</button>
