@@ -443,11 +443,13 @@ function runSchemaMigration() {
     readerPluralEmpty: byId["card-Testwort"].plural === "",
     a1GenderNull: byId["a1-0001"].gender === null,
     a2GenderPreserved: byId["a2-abenteuer"].gender === "das" && byId["a2-abenteuer"].plural === "die Abenteuer",
-    /* 不丢数据：A1 富字段原样保留 */
+    /* 不丢数据：A1 富字段原样保留（T4-N2 承接：custom/up 也在结构全拷贝保护面内） */
     a1RichFieldsPreserved: byId["a1-0001"].ipa === "haʊs"
       && Array.isArray(byId["a1-0001"].ex) && byId["a1-0001"].ex.length === 1
       && byId["a1-0001"].letter === "H" && byId["a1-0001"].page === 1
-      && JSON.stringify(byId["a1-0001"].tags) === JSON.stringify(["core"]),
+      && JSON.stringify(byId["a1-0001"].tags) === JSON.stringify(["core"])
+      && byId["a1-0001"].custom === false
+      && byId["a1-0001"].up === 0,
     /* (d) 幂等 */
     normalizeIdempotent,
     migrationStable: JSON.stringify(migrated) === JSON.stringify(migratedSecond),

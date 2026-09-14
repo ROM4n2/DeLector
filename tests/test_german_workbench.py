@@ -619,10 +619,10 @@ def test_scope_control_is_globally_single():
         "#scopeSeg 必须全文件只出现一次（多个同 id 容器 = 多个写入口）"
     )
     hdr = _header_top()
-    assert len(re.findall(r'data-scope="', _WORKBENCH)) == 4, (
-        "全文件的 data-scope 档位按钮必须恰好四个（core / all / a2 / reader）"
+    assert len(re.findall(r'data-scope="', _WORKBENCH)) == 5, (
+        "全文件的 data-scope 档位按钮必须恰好五个（core / all / a2 / b1 / reader，ADR-0011 Task 6 开 B1 档）"
     )
-    assert len(re.findall(r'data-scope="', hdr)) == 4, "四个档位按钮必须都在顶栏切片里（在别处 = 又多了一个控件）"
+    assert len(re.findall(r'data-scope="', hdr)) == 5, "五个档位按钮必须都在顶栏切片里（在别处 = 又多了一个控件）"
 
 
 def test_core_scope_filter_in_words_view():
@@ -1073,8 +1073,8 @@ def test_scope_segment_has_both_modes():
     assert 'id="scopeSeg"' in hdr, "顶栏里没有 #scopeSeg，无从检查档位"
     seg = hdr.split('id="scopeSeg"')[1].split("</div>")[0]
     scopes = re.findall(r'<button[^>]*\bdata-scope="([a-z0-9]+)"', seg)
-    assert {"core", "all", "a2", "reader"} <= set(scopes), (
-        "#scopeSeg 必须覆盖 core / all / a2 / reader 模式，实际 %r" % (scopes,)
+    assert {"core", "all", "a2", "b1", "reader"} <= set(scopes), (
+        "#scopeSeg 必须覆盖 core / all / a2 / b1 / reader 模式（ADR-0011 Task 6 开 B1），实际 %r" % (scopes,)
     )
 
 
@@ -1343,7 +1343,9 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
     assert "Object.assign(cur, w)" in merge, (
         "applyMerge 必须用 Object.assign 覆盖旧自定义词，确保 tags（含 core）被更新"
     )
-    assert "S.words.push(w)" in merge, "applyMerge 必须把新自定义词追加到 S.words"
+    assert re.search(r"S\.words\.push\(\s*nw\s*\)", merge), (
+        "applyMerge 必须把新自定义词（先过 normalizeWord 契约归一，ADR-0011 T4-N1 承接）追加到 S.words"
+    )
     # 确认没有「同步时给 seed 词打 core tag」的奇异逻辑
     assert not re.search(_CORE_TAG_CHECK, merge), (
         "applyMerge 不应自己处理 core tag（种子词不走 merge，自定义词的 tags 随字段自然合并）"
@@ -3003,11 +3005,13 @@ def test_schema_migration_behaves_under_node():
 #   core-001     core-* 自定义补缺词（CORE_CUSTOM_WORDS 形态，core tag + custom）。
 # 改造前实跑基线（逐字）：
 #   core:   ["a1-0001", "core-001"]
-#   all:    ["a1-0001", "a1-0007", "b1-essen", "core-001"]   ← B1 形态词在 all 档是放行的，
-#                                                              故 all 的等级排除表只能含 a2
+#   all:    ["a1-0001", "a1-0007", "b1-essen", "core-001"]   ← T5 改造前 B1 形态词在 all 档是
+#                                                              放行的；T6 开 B1 档后 B1 词经
+#                                                              sync 并入 S.words，OTHER_LEVEL_SCOPES
+#                                                              追加 "b1"，all 档排除 B1 形态词
 #   a2:     ["a2-haus"]
 #   reader: ["card-Wohnung", "core-001"]
-#   b1:     全部 6 条（改造前未知 scope 走「恒真」兜底；b1 谓词是本任务唯一的新增行为）
+#   b1:     ["b1-essen"]（T6 起为正式档位）
 
 _SCOPE_SNAPSHOT_FIXTURE = [
     {"id": "a1-0001", "hw": "der Bahnhof", "tags": ["core"], "cefr": "A1"},
@@ -3020,7 +3024,9 @@ _SCOPE_SNAPSHOT_FIXTURE = [
 
 _SCOPE_SNAPSHOT_EXPECTED = {
     "core": ["a1-0001", "core-001"],
-    "all": ["a1-0001", "a1-0007", "b1-essen", "core-001"],
+    # T6 起 OTHER_LEVEL_SCOPES = ["a2", "b1"]：B1 词经 sync 并入 S.words 后，
+    # all 档（A1 全量）必须排除 B1 形态词 —— b1-essen 出局。
+    "all": ["a1-0001", "a1-0007", "core-001"],
     "a2": ["a2-haus"],
     "reader": ["card-Wohnung", "core-001"],
 }
@@ -3121,9 +3127,9 @@ def test_scope_predicates_four_way_snapshot():
 
     期望快照来源：改造前实跑记录（见本节头注），禁止从新实现生成。
     实现改成无条件 true / 极性取反 / 漏配某档谓词，任何一种坏法都会让对应档的
-    名单变样 → 本条红。b1 是 T6 预留档位：当前无 UI 入口（scope 永不等于 "b1"），
-    改造前未知 scope 恒真，b1 谓词落地后 B1 形态词独立成档 —— 这是本任务唯一的
-    新增行为，单独钉在最后一条断言里，不与四既有范围的等价断言混在一起。
+    名单变样 → 本条红。b1 是 T6 转正的正式档位（SCOPE_PREDICATES.b1 谓词 +
+    顶栏档位按钮 + syncB1CardsFromServer），all 档对 B1 形态词的排除随
+    OTHER_LEVEL_SCOPES 追加 "b1" 一并生效（快照已同步更新）。
     """
     out = _scope_in_out_via_node()
     for scope in ("core", "all", "a2", "reader"):
@@ -3175,3 +3181,75 @@ def test_scope_judgment_single_entry():
         )
     for gone in ('startsWith("a2-")', 'startsWith("b1-")', 'w.cefr === "A2"', 'w.cefr === "B1"'):
         assert gone not in _WORKBENCH, "三路 OR 冗余未消除：全文件仍含 %r" % gone
+
+
+# --------------------------------------------------------------------------
+# ADR-0011 Task 6 · B1 入口（工作台档位 + 服务端 sync + applyMerge 归一接线）
+# --------------------------------------------------------------------------
+
+
+def _b1_sync_body():
+    """syncB1CardsFromServer 函数体（第 0 列 `}` 作边界）。"""
+    m = re.search(r"async function syncB1CardsFromServer\(\)\s*\{.*?\n\}", _WORKBENCH, re.S)
+    assert m, "workbench.html 缺少 syncB1CardsFromServer()（T6 交付物：B1 档位 sync）"
+    return m.group(0)
+
+
+def _sync_a2_body():
+    """syncA2CardsFromServer 函数体（第 0 列 `}` 作边界）。"""
+    m = re.search(r"async function syncA2CardsFromServer\(\)\s*\{.*?\n\}", _WORKBENCH, re.S)
+    assert m, "workbench.html 缺少 syncA2CardsFromServer()"
+    return m.group(0)
+
+
+def test_b1_scope_button_in_header_segment():
+    """顶栏 #scopeSeg 有第 5 档 data-scope="b1" 按钮（风格对齐既有档位）。
+
+    变异验证：删掉 B1 按钮 → 档位集合断言（test_scope_segment_has_both_modes）
+    与档位总数断言（test_scope_control_is_globally_single）双红。
+    """
+    hdr = _header_top()
+    seg = hdr.split('id="scopeSeg"')[1].split("</div>")[0]
+    m = re.search(r'<button[^>]*\bdata-scope="b1"[^>]*>', seg)
+    assert m, "顶栏 #scopeSeg 缺 data-scope=\"b1\" 档位按钮"
+    btn = m.group(0)
+    assert 'type="button"' in btn, "B1 档位按钮必须对齐既有档位的 type=\"button\" 写法"
+
+
+def test_b1_sync_fetches_endpoint_and_merges_normalized():
+    """syncB1CardsFromServer：走 /api/cards/vocab?cefr=B1&scope=all，构造词过 normalizeWord。"""
+    body = _b1_sync_body()
+    assert "/api/cards/vocab?cefr=B1&scope=all" in body, "B1 sync 必须走通用分级词库端点（服务端零新增）"
+    assert 'wordFilters.scope !== "b1"' in body, "B1 sync 必须带 scope 守卫（与 A2/reader sync 同款）"
+    assert "data.words" in body, "B1 sync 必须从 {words:[...]} 信封取词（get_vocab_by_cefr 契约）"
+    assert "normalizeWord(" in body, "B1 sync 构造词必须过 normalizeWord（契约字段归一，N1 同款纪律）"
+    assert "saveWords()" in body and "refilterReviewQueueForScope()" in body, (
+        "B1 sync 落库后必须 saveWords + 重过滤复习队列 + 刷徽标（对齐 A2 sync 链路）"
+    )
+    assert 'tags: ["b1"]' in body and 'cefr: "B1"' in body, (
+        "B1 词必须带 b1 标记与显式 cefr（SCOPE_PREDICATES.b1 的判定信号）"
+    )
+
+
+def test_b1_sync_wired_in_scope_switch_handler():
+    """顶栏切到 b1 档时必须触发 syncB1CardsFromServer（不得留不可达死档位）。"""
+    handler = _scope_seg_click_handler()
+    assert 'if (next === "b1") syncB1CardsFromServer();' in handler, (
+        "#scopeSeg click handler 缺 b1 → syncB1CardsFromServer() 接线（B1 档切过去永远空列表 = 死档位）"
+    )
+
+
+def test_sync_a2_words_carry_zh_contract_field():
+    """N1 顺带承接：syncA2CardsFromServer 构造词缺 zh 的同类问题必须修掉。"""
+    body = _sync_a2_body()
+    assert "normalizeWord(" in body, "A2 sync 构造词也必须过 normalizeWord（补齐 zh/gender/plural/cefr 契约键）"
+
+
+def test_apply_merge_push_path_normalized():
+    """N1 承接（T4 黄牌台账）：applyMerge 的 push/add 路径接 normalizeWord。"""
+    body = _apply_merge_body()
+    added_block = body.split("if (!cur) {")[1].split("continue;")[0]
+    assert "normalizeWord(" in added_block, (
+        "applyMerge 新增词路径必须先过 normalizeWord 再入 S.words（远端/导入词契约归一），"
+        "实际新增分支：%r" % added_block
+    )
