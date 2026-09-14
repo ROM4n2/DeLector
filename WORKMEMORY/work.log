@@ -308,3 +308,9 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 作者覆盖安装 v5.6.0 真机验证三模式 TTS **通过**（无缺陷）。
 4. OVERVIEW 发布面/听力微训条目已回填「点检已闭环」。
 遗留：真实用户试用收三问反馈（最高价值）；B 候选语料长难句强化；Mypy --strict 递延。
+
+### 2026-09-14 14:00 | deepseek-v4-flash__trae-code | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：B 候选语料长难句强化（先 A 后 B 的 B）——0→1 流程：spark 定规格 → plan 出计划 → 作者批准后 exec。
+上下文：A 候选听力微训已落地（v5.6.0）。B 已知基础：Grammatik-Radar 6 维指标（corpus_syntax_stats）、syntax_tree 句法拓扑、ghost pill 显式触发；缺口=雷达只展示无"挑长难句→针对性精读训练"动作闭环。
+不做范围：不动 A 候选听力微训代码；不发版（产出规格+计划为先）。
