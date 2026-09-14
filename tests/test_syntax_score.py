@@ -15,7 +15,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from delector.services.syntax_score import SentenceScore, estimate_level, score_sentence
+from delector.services import syntax_score as sc
+from delector.services.syntax_score import SentenceScore, estimate_level, rank_sentences, score_sentence
 
 # ──────────────────────────────────────────────────────────────────────────────
 # fixture：按侦察到的特征键构造最小 analysis dict
@@ -224,3 +225,128 @@ def test_empty_analysis_falls_back_to_minimum():
         assert result.level == "A1"
         assert result.dimensions == {}
         assert result.path == "spacy"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# rank_sentences 全文切句评分（计划 Task 2）
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _pure_analysis(sent: str) -> Dict[str, Any]:
+    """pure 降级路径形状的 analysis（clause_tree 无 features/topology/text 键）。"""
+    words = sent.split()
+    return {
+        "sentence_id": 0,
+        "text": sent,
+        "clause_tree": {
+            "id": "root",
+            "type": "hauptsatz",
+            "label": "Hauptsatz (主句)",
+            "label_zh": "主句核心",
+            "connector": "",
+            "finite_verb": "",
+            "token_ids": list(range(len(words))),
+            "formula": "[Vorfeld] + [Linke Klammer] + [Mittelfeld] + [Rechte Klammer] + [Nachfeld]",
+            "children": [],
+        },
+        "topology": {
+            "vorfeld": [],
+            "linke_klammer": [],
+            "mittelfeld": [{"text": w, "id": i} for i, w in enumerate(words)],
+            "rechte_klammer": [],
+            "nachfeld": [],
+            "field_texts": {
+                "vorfeld": "",
+                "linke_klammer": "",
+                "mittelfeld": sent,
+                "rechte_klammer": "",
+                "nachfeld": "",
+            },
+            "sentence_type": "V2",
+            "bracket_structure": "Einfacher Satz",
+            "clause_type": "hauptsatz",
+        },
+    }
+
+
+def test_rank_sentences_descending_with_hardest_first(monkeypatch):
+    # 三段文本：难句（深嵌套 + 被动 + VL + 20 词）> 中句（单层从句）> 易句（简单句 0 分）
+    hard = "Weil der Mann, der gestern ankam, das Buch lesen wollte, blieb er zu Hause."
+    mid = "Obwohl es regnete, ging sie spazieren."
+    easy = "Das Wetter ist heute schoen."
+    text = f"{easy} {hard} {mid}"
+    analyses = {
+        hard: _analysis(
+            sentence_type="VL",
+            features={"is_passive": True, "is_subjunctive": False},
+            children=[_clause(type_="konjunktionalsatz", children=[_clause(type_="relativsatz")])],
+            n_tokens=20,
+        ),
+        mid: _analysis(children=[_clause(type_="konjunktionalsatz")], n_tokens=10),
+        easy: _analysis(n_tokens=5),
+    }
+    monkeypatch.setattr(sc, "split_sentences_pure_python", lambda t: [easy, hard, mid])
+    monkeypatch.setattr(sc, "analyze_syntax_tree", lambda s: {"sentences": [analyses[s]]})
+
+    result = rank_sentences(text)
+    scores = [r.score for r in result]
+    assert scores == sorted(scores, reverse=True)  # 降序
+    assert scores[0] > scores[-1]
+    assert result[0].sentence == hard  # 首条为最难句
+    for r in result:
+        assert isinstance(r, SentenceScore)
+        assert r.sentence  # 每项含原文
+        assert 0.0 <= r.score <= 100.0
+        assert isinstance(r.level, str)
+        assert r.path in ("spacy", "pure")
+
+
+def test_rank_sentences_uses_split_sentences_pure_python(monkeypatch):
+    # 红线 10：切句唯一入口是 split_sentences_pure_python（monkeypatch 记录调用，禁止自造切句）
+    sents = ["Erste.", "Zweite."]
+    calls: List[str] = []
+    monkeypatch.setattr(sc, "split_sentences_pure_python", lambda t: calls.append(t) or sents)
+    monkeypatch.setattr(sc, "analyze_syntax_tree", lambda s: {"sentences": [_analysis(n_tokens=5)]})
+
+    result = rank_sentences("Erste. Zweite.")
+    assert calls == ["Erste. Zweite."]  # 切句函数收到原文且仅此一次调用
+    assert [r.sentence for r in result] == sents
+
+
+def test_rank_sentences_marks_path_spacy_and_pure(monkeypatch):
+    # 红线 1：analyze_syntax_tree 输出无 path 键 → rank_sentences 必须自行探测标注 spacy/pure
+    spacy_sent = "Der Mann liest das Buch."
+    pure_sent = "Das Wetter ist schoen."
+    spacy_analysis = _analysis(n_tokens=6)
+    del spacy_analysis["path"]  # 模拟真实输出：无 path 键，需按 clause_tree 特征键探测
+    pure_analysis = _pure_analysis(pure_sent)
+    monkeypatch.setattr(sc, "split_sentences_pure_python", lambda t: [spacy_sent, pure_sent])
+    monkeypatch.setattr(
+        sc, "analyze_syntax_tree", lambda s: {"sentences": [spacy_analysis if s == spacy_sent else pure_analysis]}
+    )
+
+    result = rank_sentences(f"{spacy_sent} {pure_sent}")
+    by_sentence = {r.sentence: r.path for r in result}
+    assert by_sentence[spacy_sent] == "spacy"  # spaCy 路径不得误标 pure
+    assert by_sentence[pure_sent] == "pure"  # 纯 Python 降级不得缺省误标 spacy
+
+
+def test_rank_sentences_empty_text_returns_empty():
+    assert rank_sentences("") == []
+    assert rank_sentences("   \n\t ") == []
+
+
+def test_rank_sentences_skips_failing_sentence(monkeypatch):
+    # 异常句容错：单句分析失败 → 跳过该句，不炸整批
+    good1, bad, good2 = "Gut.", "Kaputt.", "Auch gut."
+
+    def fake_analyze(sent: str) -> Dict[str, Any]:
+        if sent == bad:
+            raise RuntimeError("syntax engine boom")
+        return {"sentences": [_analysis(n_tokens=5)]}
+
+    monkeypatch.setattr(sc, "split_sentences_pure_python", lambda t: [good1, bad, good2])
+    monkeypatch.setattr(sc, "analyze_syntax_tree", fake_analyze)
+
+    result = rank_sentences(f"{good1} {bad} {good2}")
+    assert [r.sentence for r in result] == [good1, good2]

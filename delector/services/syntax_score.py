@@ -1,6 +1,6 @@
 """
 DeLector - Sentence-level Difficulty Scoring Engine (v3.6.0)
-句子难度评分纯函数：score_sentence / estimate_level。
+句子难度评分纯函数：score_sentence / estimate_level / rank_sentences。
 
 100% 纯标准库 + Pydantic v2，零外部依赖。
 输入为 syntax_tree.analyze_syntax_tree 的单句输出（sentences[i]）：
@@ -10,28 +10,43 @@ DeLector - Sentence-level Difficulty Scoring Engine (v3.6.0)
     - topology: {sentence_type: "V2"|"V1"|"VL"|"Infinitiv", bracket_structure, ...}
     - path: "spacy" | "pure"（红线 1 降级标注，缺省 "spacy"）
   纯 Python 降级路径（_analyze_syntax_tree_pure_python）的 clause_tree 无 features/topology
-  —— 提取特征时全部容错。
+  —— 提取特征时全部容错；rank_sentences 负责按分支/特征键自行注入 path（见 _detect_path）。
 
 权重对齐 Grammatik-Radar 维度口径（clause 深度/复合度/被动/虚拟式/VL 句框/关系从句/长度）。
 """
 
-from typing import Any, Dict, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
+from delector.nlp_engine.syntax_tree import analyze_syntax_tree, split_sentences_pure_python
+
 
 class SentenceScore(BaseModel):
-    """句子难度评分结果（score 0–100 + CEFR 级别 + 维度明细 + 分析来源路径）。"""
+    """句子难度评分结果（score 0–100 + CEFR 级别 + 维度明细 + 分析来源路径 + 原文）。"""
 
     score: float
     level: str
     dimensions: Dict[str, Any]
     path: Literal["spacy", "pure"]
+    sentence: str = ""
 
 
-def _fallback_score() -> SentenceScore:
+def _fallback_score(path: Literal["spacy", "pure"] = "spacy") -> SentenceScore:
     """空/非法 analysis 的最低分兜底：0 分 + A1 + 空维度，不抛异常。"""
-    return SentenceScore(score=0.0, level=estimate_level(0.0), dimensions={}, path="spacy")
+    return SentenceScore(score=0.0, level=estimate_level(0.0), dimensions={}, path=path)
+
+
+def _normalize_path(path: Optional[str], analysis: Any) -> Literal["spacy", "pure"]:
+    """来源路径规范化（红线 1）：显式 path 参数优先 > analysis["path"] > 默认 "spacy"。"""
+    if path == "spacy":
+        return "spacy"
+    if path == "pure":
+        return "pure"
+    raw: Any = analysis.get("path", "spacy") if isinstance(analysis, dict) else "spacy"
+    if raw == "pure":
+        return "pure"
+    return "spacy"
 
 
 def _walk_clause(node: Dict[str, Any], depth: int, agg: Dict[str, Any]) -> None:
@@ -70,18 +85,19 @@ def _sentence_length(root: Dict[str, Any]) -> int:
     return 0
 
 
-def score_sentence(analysis: Any) -> SentenceScore:
+def score_sentence(analysis: Any, path: Optional[str] = None) -> SentenceScore:
     """从单句 analysis dict 提取特征，加权归一为 0–100 难度分 + CEFR 级别 + 维度明细。
 
     analysis 为 analyze_syntax_tree 输出 sentences[i] 的形状（含 clause_tree/topology/path）。
+    path 为显式来源路径（"spacy"/"pure"），优先级高于 analysis["path"]（红线 1 降级标注）。
     空/非法输入（None、缺 clause_tree 等）返回最低分兜底，不抛异常。
     """
     if not isinstance(analysis, dict):
-        return _fallback_score()
+        return _fallback_score(_normalize_path(path, analysis))
     tree = analysis.get("clause_tree")
     # 非法判定：非 dict / 空 dict / 缺 type 键（真实输出的 clause_tree 必有 type）
     if not isinstance(tree, dict) or not tree or "type" not in tree:
-        return _fallback_score()
+        return _fallback_score(_normalize_path(path, analysis))
 
     agg: Dict[str, Any] = {
         "node_count": 0,
@@ -131,14 +147,52 @@ def score_sentence(analysis: Any) -> SentenceScore:
         "length": {"value": length, "score": round(length_score, 3)},
     }
 
-    # 红线 1：来源路径透传（spacy/pure），非法值回落默认 "spacy"
-    raw_path: Any = analysis.get("path", "spacy")
-    path: Literal["spacy", "pure"]
-    if raw_path in ("spacy", "pure"):
-        path = raw_path
-    else:
-        path = "spacy"
-    return SentenceScore(score=score, level=estimate_level(score), dimensions=dimensions, path=path)
+    # 红线 1：来源路径透传（显式 path 参数 > analysis["path"]，非法值回落 "spacy"）
+    path_lit: Literal["spacy", "pure"] = _normalize_path(path, analysis)
+    return SentenceScore(score=score, level=estimate_level(score), dimensions=dimensions, path=path_lit)
+
+
+def _detect_path(analysis: Any) -> Literal["spacy", "pure"]:
+    """探测单句 analysis 的来源路径（红线 1：analyze_syntax_tree 输出不含 path 键）。
+
+    优先显式 path 键；否则按 clause_tree 特征键推断：spaCy 分支的 clause_tree
+    必有 features dict（_classify_single_clause 恒构造），pure 分支无 features/topology/text 键。
+    """
+    if isinstance(analysis, dict):
+        raw = analysis.get("path")
+        if raw == "pure":
+            return "pure"
+        if raw == "spacy":
+            return "spacy"
+        tree = analysis.get("clause_tree")
+        if isinstance(tree, dict) and isinstance(tree.get("features"), dict):
+            return "spacy"
+    return "pure"
+
+
+def rank_sentences(text: str) -> List[SentenceScore]:
+    """整段文本 → 逐句切分/双路径分析/评分 → 按难度降序返回 SentenceScore 列表。
+
+    红线 10：切句唯一实现为 split_sentences_pure_python（禁止自造切句）。
+    红线 1：analyze_syntax_tree 输出无 path 键 → 此处自行探测标注 spacy/pure。
+    空文本 → []；单句分析异常 → 跳过该句，不炸整批。
+    """
+    if not text or not text.strip():
+        return []
+    scored: List[SentenceScore] = []
+    for sent in split_sentences_pure_python(text):
+        try:
+            analysis = analyze_syntax_tree(sent)
+        except Exception:
+            continue
+        batch = analysis.get("sentences")
+        if not isinstance(batch, list) or not batch:
+            continue
+        scored.append(
+            score_sentence(batch[0], path=_detect_path(batch[0])).model_copy(update={"sentence": sent})
+        )
+    scored.sort(key=lambda s: s.score, reverse=True)
+    return scored
 
 
 def estimate_level(score: float) -> str:
