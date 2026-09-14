@@ -377,8 +377,8 @@ async function runScenarios(cfg) {
     "源标签未按 source/source_id/sentence_index 拼装（理性数化）",
     "data_contract",
   );
-  // path==="pure" → 「近似分析」提示（红线 1）
-  check(stage().includes("近似分析"), "path=pure 未渲染『近似分析』提示（红线 1）", "data_contract");
+  // path==="pure" → 「轻量分析」提示（红线 1，v5.7.3 文案软化）
+  check(stage().includes("轻量分析"), "path=pure 未渲染『轻量分析』提示（红线 1）", "data_contract");
   // dimensions 各子键消费：clause_depth/clause_count/length 带数值后缀，verb_last/relative_clause 布尔
   check(
     stage().includes("从句深度 2层") && stage().includes("从句数 3个") && stage().includes("句长 9词"),

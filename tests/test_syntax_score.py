@@ -420,3 +420,53 @@ def test_syntax_score_no_pydantic_v2_only_api():
     assert not match, (
         f"syntax_score.py 含 pydantic v2 专属 API 调用：{match.group(0)!r}（Android pydantic 1.x 会炸）"
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# pure 降级路径文本启发式（v5.7.3 真机反馈：pure 句普遍 0–7 分无区分度）
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_pure_text_hints_simple_sentence_has_no_hits():
+    hints = sc._pure_text_hints("Das Wetter ist schön.")
+    assert hints["clause_hint"] == 0
+    assert hints["passive"] == 0
+    assert hints["subjunctive"] == 0
+    assert hints["verb_last"] == 0
+    assert hints["relativ"] == 0
+
+
+def test_pure_text_hints_complex_sentence_counts_clauses():
+    hints = sc._pure_text_hints("Obwohl es regnet, gehe ich spazieren, weil ich frische Luft brauche.")
+    assert hints["clause_hint"] >= 3  # 2 逗号 + weil/obwohl 命中
+    assert hints["verb_last"] == 1  # ", weil" / ", obwohl" 结构
+    assert hints["relativ"] == 0
+
+
+def test_pure_passive_and_subjunctive_hints_detected():
+    hints = sc._pure_text_hints("Das Haus wird gebaut, weil es nötig war.")
+    assert hints["passive"] == 1
+    hints2 = sc._pure_text_hints("Ich würde kommen, wenn ich Zeit hätte.")
+    assert hints2["subjunctive"] == 1
+
+
+def test_pure_complex_sentence_scores_higher_than_simple():
+    """pure 路径区分度回归：含从句线索的句子分数应显著高于简单句（不再是 0–7 分挤在一起）。
+
+    rank_sentences/detail 真实调用均以 `_detect_path` 显式传 path="pure"，此处同口径。
+    """
+    simple = score_sentence(_pure_analysis("Das Wetter ist schön."), path="pure")
+    complex_ = score_sentence(
+        _pure_analysis("Obwohl es den ganzen Tag regnet, gehe ich trotzdem spazieren, weil ich frische Luft brauche."),
+        path="pure",
+    )
+    assert simple.score < 10.0  # 简单 pure 句保持低分
+    assert complex_.score > simple.score
+    assert complex_.dimensions["clause_count"]["value"] >= 3
+    assert complex_.dimensions["verb_last"]["value"] is True
+
+
+def test_pure_passive_hint_sets_passive_dimension():
+    result = score_sentence(_pure_analysis("Das Haus wird von den Arbeitern gebaut."), path="pure")
+    assert result.dimensions["passive"]["value"] is True
+    assert result.score > score_sentence(_pure_analysis("Das Haus ist schön."), path="pure").score

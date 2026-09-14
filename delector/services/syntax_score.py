@@ -15,6 +15,7 @@ DeLector - Sentence-level Difficulty Scoring Engine (v3.6.0)
 权重对齐 Grammatik-Radar 维度口径（clause 深度/复合度/被动/虚拟式/VL 句框/关系从句/长度）。
 """
 
+import re
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
@@ -85,6 +86,43 @@ def _sentence_length(root: Dict[str, Any]) -> int:
     return 0
 
 
+# ── pure 降级路径文本启发式（红线 1：无 features/从句树时的粗估） ──────────
+_SUBORD_CONJUNCTIONS = (
+    "weil", "dass", "obwohl", "wenn", "nachdem", "bevor", "während", "wobei",
+    "indem", "damit", "falls", "sobald", "solange", "sofern", "ob", "wo",
+    "worüber", "wovon", "womit", "wodurch",
+)
+_RELATIVE_PRONOUNS = ("der", "die", "das", "den", "dem", "dessen", "deren", "welcher", "welche", "welches")
+_PASSIVE_WORD_HINTS = ("wird", "werden", "wurde", "wurden", "worden")
+_SUBJUNCTIVE_WORD_HINTS = (
+    "würde", "wäre", "hätte", "könnte", "sollte", "müsste", "dürfte", "sei", "wären", "hätten", "könnten",
+)
+_VL_SUBORD_OPENERS = ("dass", "ob", "weil", "wenn", "obwohl", "nachdem", "bevor", "während")
+
+
+def _pure_text_hints(text: str) -> Dict[str, int]:
+    """从纯文本提取难度线索（无依存句法时的粗估，供 pure 路径评分）。
+
+    返回命中计数：clause_hint（逗号分隔从句 + 从属连词）、relativ（逗号后关系代词）、
+    passive/subjunctive/verb_last（词形/结构线索 0/1）。这是**启发式粗估**——只用于
+    给 pure 路径 0–7 分的无区分度区间提供排序依据，不改变 path="pure" 的"评分仅参考"语义。
+    """
+    t = (text or "").lower()
+    clause_hint = t.count(",") + t.count("，") + t.count("；")
+    clause_hint += sum(1 for c in _SUBORD_CONJUNCTIONS if re.search(rf"\b{c}\b", t))
+    relativ = sum(1 for p in _RELATIVE_PRONOUNS if re.search(rf",\s*{p}\b", t))
+    passive = 1 if re.search(r"\b(" + "|".join(_PASSIVE_WORD_HINTS) + r")\b", t) else 0
+    subjunctive = 1 if re.search(r"\b(" + "|".join(_SUBJUNCTIVE_WORD_HINTS) + r")\b", t) else 0
+    verb_last = 1 if re.search(r",\s*(" + "|".join(_VL_SUBORD_OPENERS) + r")\b", t) else 0
+    return {
+        "clause_hint": clause_hint,
+        "relativ": relativ,
+        "passive": passive,
+        "subjunctive": subjunctive,
+        "verb_last": verb_last,
+    }
+
+
 def score_sentence(analysis: Any, path: Optional[str] = None) -> SentenceScore:
     """从单句 analysis dict 提取特征，加权归一为 0–100 难度分 + CEFR 级别 + 维度明细。
 
@@ -115,6 +153,20 @@ def score_sentence(analysis: Any, path: Optional[str] = None) -> SentenceScore:
     depth: int = int(agg["max_depth"])
     count: int = int(agg["node_count"])
     length: int = _sentence_length(tree)
+
+    # 红线 1：来源路径（显式 path 参数 > analysis["path"]，非法值回落 "spacy"）
+    path_lit: Literal["spacy", "pure"] = _normalize_path(path, analysis)
+
+    # pure 降级路径文本启发式（v5.7.3 真机反馈：纯 Python 降级句普遍 0–7 分，
+    # 难度榜失去区分度）。无 features/从句树信息时用纯文本线索粗估 count 与命中
+    # 维度，给排序提供依据；path="pure" 的"评分仅参考"语义不变。
+    if path_lit == "pure":
+        hints = _pure_text_hints(analysis.get("text") or "")
+        count = max(count, hints["clause_hint"] + 1)
+        agg["is_passive"] = bool(agg["is_passive"]) or bool(hints["passive"])
+        agg["is_subjunctive"] = bool(agg["is_subjunctive"]) or bool(hints["subjunctive"])
+        agg["verb_last"] = bool(agg["verb_last"]) or bool(hints["verb_last"])
+        agg["has_relativ"] = bool(agg["has_relativ"]) or bool(hints["relativ"])
 
     # 各维度子分（0–1）：深度/复合度/长度递增封顶，被动/虚拟式/VL/关系从句为命中加分
     depth_score: float = min(1.0, (depth - 1) * 0.3)
@@ -147,8 +199,6 @@ def score_sentence(analysis: Any, path: Optional[str] = None) -> SentenceScore:
         "length": {"value": length, "score": round(length_score, 3)},
     }
 
-    # 红线 1：来源路径透传（显式 path 参数 > analysis["path"]，非法值回落 "spacy"）
-    path_lit: Literal["spacy", "pure"] = _normalize_path(path, analysis)
     return SentenceScore(score=score, level=estimate_level(score), dimensions=dimensions, path=path_lit)
 
 

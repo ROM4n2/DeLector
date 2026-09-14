@@ -145,9 +145,9 @@ function _ensureStyle() {
 .hs-pill { min-height:44px; padding:0.5rem 0.9rem; border:1.5px solid var(--ink); border-radius:999px; background:var(--paper-card); color:var(--ink); font-family:var(--mono); font-size:0.75rem; cursor:pointer; }
 .hs-pill.active { background:var(--ink); color:var(--paper); }
 .hs-select { min-height:44px; padding:0.45rem 0.6rem; border:1.5px solid var(--rule); border-radius:6px; background:var(--paper-card); color:var(--ink); font-family:var(--mono); font-size:0.75rem; cursor:pointer; }
-.hs-material-card { display:flex; align-items:center; gap:0.5rem; min-height:44px; padding:0.45rem 0.8rem; border:1.5px solid var(--rule); border-radius:8px; background:var(--paper-card); font-size:0.8125rem; cursor:pointer; text-align:left; max-width:100%; }
+.hs-material-card { display:flex; align-items:center; gap:0.5rem; min-height:44px; padding:0.55rem 0.85rem; border:1.5px solid var(--rule); border-radius:8px; background:var(--paper-card); font-size:0.9375rem; cursor:pointer; text-align:left; max-width:100%; }
 .hs-material-card.active { border-color:var(--coral); background:var(--paper-warm); box-shadow:var(--shadow-sm); }
-.hs-mat-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hs-mat-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
 .hs-empty { font-size:0.8125rem; color:var(--pencil); padding:0.5rem 0; }
 .hs-btn { min-height:44px; padding:0.5rem 0.85rem; border:1.5px solid var(--ink); border-radius:6px; background:var(--paper-card); color:var(--ink); font-family:var(--mono); font-size:0.75rem; cursor:pointer; }
 .hs-btn-dark { background:var(--ink); color:var(--paper); }
@@ -155,7 +155,7 @@ function _ensureStyle() {
 .hs-btn:disabled { opacity:0.5; cursor:not-allowed; }
 .hs-stage-head { display:flex; align-items:baseline; justify-content:space-between; gap:0.5rem; margin:0.75rem 0 0.5rem; flex-wrap:wrap; }
 .hs-progress { font-family:var(--mono); font-size:0.75rem; color:var(--pencil); white-space:nowrap; }
-.hs-card { border:1.5px solid var(--ink); border-radius:10px; background:var(--paper-card); padding:1.1rem 1.2rem; box-shadow:3px 4px 0 rgba(26,23,20,0.1); }
+.hs-card { border:1.5px solid var(--ink); border-radius:10px; background:var(--paper-card); padding:1.3rem 1.4rem; box-shadow:3px 4px 0 rgba(26,23,20,0.1); }
 .hs-card-meta { display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.6rem; }
 .hs-score { font-family:var(--mono); font-weight:700; font-size:0.8125rem; }
 .hs-score b { font-size:1.05rem; }
@@ -165,24 +165,24 @@ function _ensureStyle() {
 .hs-lv-b1 { border-color:var(--amber); background:#fbeedd; color:#9a5200; }
 .hs-lv-b2 { border-color:var(--cherry); background:#fbeae7; color:#8f2424; }
 .hs-src-tag { font-family:var(--mono); font-size:0.6875rem; color:var(--ink-faint); }
-.hs-sentence { font-size:1.0625rem; line-height:1.8; color:var(--ink); margin:0.5rem 0 0.75rem; }
+.hs-sentence { font-size:1.125rem; line-height:1.85; color:var(--ink); margin:0.6rem 0 0.8rem; }
 .hs-word { cursor:pointer; border-bottom:1px dotted var(--pencil); padding:0 1px; }
 .hs-word:hover { background:var(--hl-A2); border-bottom-color:var(--ink); }
 .hs-chips { display:flex; flex-wrap:wrap; gap:0.35rem; margin-bottom:0.75rem; }
-.hs-chip { display:inline-flex; align-items:center; padding:0.25rem 0.55rem; border-radius:999px; border:1.5px solid var(--rule); font-size:0.6875rem; font-family:var(--mono); color:var(--pencil); background:var(--paper); }
+.hs-chip { display:inline-flex; align-items:center; padding:0.3rem 0.6rem; border-radius:999px; border:1.5px solid var(--rule); font-size:0.75rem; font-family:var(--mono); color:var(--pencil); background:var(--paper); }
 .hs-path-note { font-size:0.75rem; font-family:var(--mono); color:var(--amber); margin-bottom:0.6rem; }
 .hs-actions { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; }
 .hs-reveal-zone { margin-top:0.9rem; }
 .hs-reveal-tip { font-size:0.8125rem; color:var(--pencil); margin-bottom:0.6rem; }
-.hs-tree { margin-top:0.6rem; font-size:0.8125rem; }
-.hs-tree-node { margin-bottom:0.4rem; padding-left:0.75rem; border-left:2px solid var(--rule); }
+.hs-tree { margin-top:0.6rem; font-size:0.9375rem; line-height:1.8; }
+.hs-tree-node { margin-bottom:0.45rem; padding-left:0.85rem; border-left:2px solid var(--rule); }
 .hs-tree-node .hs-tn-label { font-weight:700; color:var(--ink); }
-.hs-tree-node .hs-tn-type { font-family:var(--mono); font-size:0.6875rem; color:var(--coral); }
-.hs-tree-node .hs-tn-verb { font-family:var(--mono); font-size:0.75rem; color:var(--cherry); }
+.hs-tree-node .hs-tn-type { font-family:var(--mono); font-size:0.75rem; color:var(--coral); }
+.hs-tree-node .hs-tn-verb { font-family:var(--mono); font-size:0.8125rem; color:var(--cherry); }
 .hs-tree-node .hs-tn-text { color:var(--pencil); }
-.hs-topo { margin-top:0.7rem; padding-top:0.7rem; border-top:1px dashed var(--rule); font-size:0.8125rem; line-height:1.7; }
-.hs-topo .hs-topo-k { font-family:var(--mono); font-size:0.6875rem; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em; }
-.hs-topo .hs-topo-v { font-family:var(--mono); color:var(--ink); }
+.hs-topo { margin-top:0.7rem; padding-top:0.7rem; border-top:1px dashed var(--rule); font-size:0.9375rem; line-height:1.85; }
+.hs-topo .hs-topo-k { font-family:var(--mono); font-size:0.75rem; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em; }
+.hs-topo .hs-topo-v { font-family:var(--mono); color:var(--ink); font-weight:600; }
 .hs-added-note { font-family:var(--mono); font-size:0.75rem; color:var(--moss); font-weight:700; }
 .hs-lookup-pop { margin-top:0.7rem; border:1.5px solid var(--ink); border-radius:8px; background:var(--paper-warm); padding:0.7rem 0.8rem; font-size:0.8125rem; box-shadow:var(--shadow-sm); }
 .hs-lookup-word { font-family:var(--mono); font-weight:700; }
@@ -402,7 +402,7 @@ function _renderStage() {
         <span class="hs-score">难度<b>${Math.round(Number(item.score) || 0)}</b>/100 · ${esc(_scoreLabel(item.score))}</span>
         ${_q.source === "all" ? `<span class="hs-src-tag">${esc(item.source)}#${esc(String(item.source_id))} · 第${Number(item.sentence_index) + 1}句</span>` : ""}
       </div>
-      ${item.path === "pure" ? `<div class="hs-path-note">⚠ 近似分析（纯 Python 降级路径，评分仅供参考）</div>` : ""}
+      ${item.path === "pure" ? `<div class="hs-path-note">✦ 轻量分析：难度画像为粗估，排序供参考，不必当真</div>` : ""}
       <div class="hs-sentence">${_sentenceHtml(item)}</div>
       <div class="hs-chips">${_dimChipsHtml(item.dimensions)}</div>
       ${revealedZone}
