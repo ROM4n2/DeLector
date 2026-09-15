@@ -241,6 +241,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          # 必须覆盖 packages：action 默认是 "tools platform-tools"，而 2026-09
+          # runner 镜像把 cmdline-tools 升到 20.0 后 sdkmanager 已移除废弃的
+          # "tools" 包 → "Failed to find package 'tools'" exit 1 → Android job 全挂
+          # （v5.7.6 release 首次失败即此因）。显式装 compileSdk 34 所需组件，
+          # 不装 tools，避免踩同样的坑。
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0"
 
       - name: Set up Gradle 8.6
         uses: gradle/actions/setup-gradle@v3
@@ -273,6 +280,12 @@ jobs:
           cp -r delector android/app/src/main/python/
           MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
           cp -r "$MODEL_DIR" android/app/src/main/python/de_core_news_sm
+          # v5.7.7：必须连 .dist-info 一起拷。spaCy 3.8 的 is_package() 只认 pip 元数据
+          # （importlib.metadata.distribution），不碰文件系统——只拷包目录没有 dist-info，
+          # 真机 is_package('de_core_news_sm') → False → E050 "not a Python package"
+          # （v5.7.6 诊断小字实证，根因定位见 work.log）。
+          MODEL_DISTINFO=$(python -c "import glob, os, de_core_news_sm as m; base = os.path.dirname(os.path.dirname(m.__file__)); hits = glob.glob(os.path.join(base, 'de_core_news_sm-*.dist-info')); assert hits, '未找到 de_core_news_sm dist-info'; print(hits[0])")
+          cp -r "$MODEL_DISTINFO" android/app/src/main/python/
           mkdir -p android/app/src/main/assets
           cp -r static android/app/src/main/assets/
 
@@ -408,20 +421,29 @@ jobs:
               # 在 requirements-<abi>.imy —— v4.4.0 首跑实测把 spacy/thinc 塞进
               # app.imy 检查会误报缺失。两个容器各查各的。
               APP_NEEDLES = ("delector/server.py", "de_core_news_sm", "delector/routes/corpus.py", "delector/routes/a1_hoeren.py", "delector/routes/a1_lesen.py", "delector/routes/rtc.py", "delector/routes/exam.py", "delector/routes/listen.py", "delector/routes/syntax_hard.py", "delector/services/listen.py", "delector/services/syntax_score.py", "delector/services/exam_catalog.py", "delector/data/corpus_dict.py", "delector/data/a1_hoeren_dict.py", "delector/data/a1_lesen_dict.py", "delector/routes/a2.py")
+              # v5.7.7 回归守卫：spaCy 3.8 is_package() 只认 pip 元数据，dist-info 缺失
+              # → 真机 E050（v5.7.6 实证）。必须精确断言 dist-info 存在（含 METADATA），
+              # 不能只查 "de_core_news_sm" 子串——包目录在时它恒命中，防不住漏拷。
+              DIST_INFO_NEEDLES = ("de_core_news_sm-", ".dist-info/METADATA")
               REQ_NEEDLES = ("spacy", "thinc")
               def find_in(data):
                   found = set()
                   try:
                       with zipfile.ZipFile(io.BytesIO(data)) as inner:
                           names = inner.namelist()
-                          for needle in APP_NEEDLES + REQ_NEEDLES:
+                          for needle in APP_NEEDLES + REQ_NEEDLES + DIST_INFO_NEEDLES:
                               if any(needle in n for n in names):
                                   found.add(needle)
+                          for n in names:
+                              if "de_core_news_sm-" in n and n.endswith(".dist-info/METADATA"):
+                                  found.add("dist-info-complete")
                   except zipfile.BadZipFile:
                       pass
-                  for needle in APP_NEEDLES + REQ_NEEDLES:
+                  for needle in APP_NEEDLES + REQ_NEEDLES + DIST_INFO_NEEDLES:
                       if needle not in found and needle.encode() in data:
                           found.add(needle)
+                  if "de_core_news_sm-" in found and ".dist-info/METADATA" in found:
+                      found.add("dist-info-complete")
                   return found
               app_found = find_in(z.read("assets/chaquopy/app.imy"))
               req_imy = [n for n in namelist if n.startswith("assets/chaquopy/requirements") and n.endswith(".imy")]
@@ -433,6 +455,9 @@ jobs:
                   req_found |= find_in(z.read(rn))
               missing_app = [n for n in APP_NEEDLES if n not in app_found]
               missing_req = [n for n in REQ_NEEDLES if n not in req_found]
+              if "dist-info-complete" not in app_found:
+                  print("::error::app.imy 缺少 de_core_news_sm 的 dist-info（spaCy is_package 认不出 → 真机 E050）", file=sys.stderr)
+                  sys.exit(1)
               if missing_app:
                   print(f"::error::app.imy 缺少: {', '.join(missing_app)}", file=sys.stderr)
                   sys.exit(1)

@@ -24,8 +24,8 @@ from delector.core.database import (
     record_hard_sentence_trial,
 )
 from delector.nlp_engine.syntax_tree import (
-    _spacy_load_error,
     analyze_syntax_tree,
+    get_spacy_load_error,
     get_spacy_nlp,
     split_sentences_pure_python,
 )
@@ -122,7 +122,7 @@ def api_syntax_spacy_status():
     返回当前实际路径（spacy/pure）与加载失败的具体异常；成功加载时 error 为空。
     纯只读、非敏感，供前端「轻量分析」提示旁展示定位信息。
     """
-    return {"path": "spacy" if get_spacy_nlp() else "pure", "error": _spacy_load_error or ""}
+    return {"path": "spacy" if get_spacy_nlp() else "pure", "error": get_spacy_load_error() or ""}
 
 
 @router.get("/hard-sentences")

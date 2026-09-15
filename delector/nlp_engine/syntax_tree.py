@@ -30,6 +30,16 @@ _nlp_instance = None
 _spacy_load_error = ""
 
 
+def get_spacy_load_error() -> str:
+    """返回 spaCy 加载失败的最新诊断信息（成功加载则为空串）。
+
+    必须通过函数读取，禁止 from syntax_tree import _spacy_load_error——
+    字符串不可变，按值导入后 route 持有的永远是初始空串，
+    get_spacy_nlp() 里 global 重新绑定对 route 不可见（v5.7.5 真机确诊）。
+    """
+    return _spacy_load_error
+
+
 def get_spacy_nlp():
     """Load or return cached spaCy German model with robust fallback."""
     global _nlp_instance, _spacy_load_error
