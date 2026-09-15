@@ -9,7 +9,9 @@ import functools
 from typing import Any, Dict, Optional
 
 # Structure: lemma -> (cefr, pos, gender, plural, definition_zh)
-CORE_VOCAB_DB: Dict[str, tuple] = {
+# 手编核心分片（R3/ADR-0012）：暴露为 CORE_VOCAB_MANUAL 供 lexicon 主干按来源注册。
+# 模块底部再与 CORE_VOCAB_EXT 合并回 CORE_VOCAB_DB（内容/条数逐字不变）。
+CORE_VOCAB_MANUAL: Dict[str, tuple] = {
     # ── A1 Core Nouns ──────────────────────────────────────────────────────────
     "tag": ("A1", "NOUN", "Masc", "-e", "白天，日子，一天"),
     "morgen": ("A1", "NOUN", "Masc", "-", "早晨，上午"),
@@ -521,4 +523,4 @@ try:
     from delector.data.core_dict_ext import CORE_VOCAB_EXT
 except ImportError:
     CORE_VOCAB_EXT = {}
-CORE_VOCAB_DB = {**CORE_VOCAB_EXT, **CORE_VOCAB_DB}
+CORE_VOCAB_DB = {**CORE_VOCAB_EXT, **CORE_VOCAB_MANUAL}
