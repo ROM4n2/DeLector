@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.7.6-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.7.7-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -20,14 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ✅ **v5.7.6 四平台安装/便携包由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.7.6-*`）。**v5.5.0 起 Android 端内置 4 篇 A1/A2 分级短文（覆盖安装后打开「遇见区」即可阅读）；v5.5.1 修复了「新版本已就绪」提示点不动与常驻遮挡的问题；v5.6.0 新增备考域「🎧 听力微训工坊」三模式（精听/影子跟读 · 听写诊断 · 听力填空），Android 真机 TTS 链路已点检通过；v5.7.0 新增备考域「✍️ 长难句精读工坊」——句子难度 7 维评分 + 跨语料挑长难句 + 先拆解后揭示句法树 + 入复习盒闭环；v5.7.1–5.7.3 修复长难句工坊 Android 真机 500（detail 容错 → model_copy 真根因 → `[object Object]` 渲染）+ 跨端打包兼容守卫；v5.7.4 pure 评分增强 + 前端字号优化 + 轻量分析文案 + spaCy 加载诊断端点；v5.7.5 修复诊断竞态（_loadSpacyDiag 未 await → 诊断小字不渲染）；v5.7.6 修复 spaCy 诊断 error 永远为空（route 按值 import 不可变字符串 `_spacy_load_error` → 真机只能看到「未捕获到加载异常」，getter 实时读取后即可显示真实加载异常）。**
+> ✅ **v5.7.7 四平台安装/便携包由 CI 自动构建并挂载至下方 Releases**（Windows 便携 ZIP / macOS·Linux TAR.GZ / Android arm64 APK）；Go agent 预览包见 Actions artifact（`DeLector-Agent-5.7.7-*`）。**v5.5.0 起 Android 端内置 4 篇 A1/A2 分级短文（覆盖安装后打开「遇见区」即可阅读）；v5.5.1 修复了「新版本已就绪」提示点不动与常驻遮挡的问题；v5.6.0 新增备考域「🎧 听力微训工坊」三模式（精听/影子跟读 · 听写诊断 · 听力填空），Android 真机 TTS 链路已点检通过；v5.7.0 新增备考域「✍️ 长难句精读工坊」——句子难度 7 维评分 + 跨语料挑长难句 + 先拆解后揭示句法树 + 入复习盒闭环；v5.7.1–5.7.3 修复长难句工坊 Android 真机 500（detail 容错 → model_copy 真根因 → `[object Object]` 渲染）+ 跨端打包兼容守卫；v5.7.4 pure 评分增强 + 前端字号优化 + 轻量分析文案 + spaCy 加载诊断端点；v5.7.5 修复诊断竞态（_loadSpacyDiag 未 await → 诊断小字不渲染）；v5.7.6 修复 spaCy 诊断 error 永远为空（route 按值 import 不可变字符串 `_spacy_load_error` → getter 实时读取显示真实加载异常）；v5.7.7 修复真机 spaCy E050（CI 拷模型漏了 .dist-info → `is_package()` 只认 pip 元数据判"不是包" → 连 dist-info 一起打包 + APK 探针守卫）。**
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.7.6` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.6)     |
-| 🍎 **macOS**       | `v5.7.6` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.6)  |
-| 🐧 **Linux x64**   | `v5.7.6` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.6)  |
-| 📱 **Android**     | `v5.7.6` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.6) |
+| 🪟 **Windows x64** | `v5.7.7` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.7)     |
+| 🍎 **macOS**       | `v5.7.7` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.7)  |
+| 🐧 **Linux x64**   | `v5.7.7` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.7)  |
+| 📱 **Android**     | `v5.7.7` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.7.7) |
 
 ---
 
@@ -405,6 +405,8 @@ DeLector/
 - [x] **v5.7.5**：**spaCy 诊断竞态修复**（2026-09-14）——v5.7.4 复测：长难句工坊显示「轻量分析」但诊断小字不出现。根因：`enterHardSentences` 里 `_loadSpacyDiag()` **未 await**，`_renderAll()` 在诊断请求返回前抢先渲染，`_q.spacyError` 仍是空串 → 诊断永不渲染。修法：await 诊断就绪后再渲染 + `path="pure"` 且 error 空时显示占位「未捕获到加载异常（需进一步排查）」。探针 46 断言全绿；测试基线 **838 passed + 1 skipped**；Android 需覆盖安装生效。
 
 - [x] **v5.7.6**：**spaCy 诊断 error 永远为空修复**（2026-09-15）——v5.7.5 真机：`/api/syntax/spacy-status` 返回 `path:"pure"` 但 `error:""`，前端兜底显示「未捕获到加载异常（需进一步排查）」。根因：**Python from-import 按值拷贝不可变对象**——`syntax_hard.py` 用 `from syntax_tree import _spacy_load_error` 拿到的是导入时的初始空串；`get_spacy_nlp()` 内 `global` 重绑定只改 `syntax_tree` 模块命名空间，route 持有的旧引用不变 → error 永远空（**spaCy 实际并未加载成功**，`path:"pure"` 即铁证）。修法：`syntax_tree` 新增 `get_spacy_load_error()` getter，route 改调函数实时读取；回归测试 `test_spacy_status_reports_live_error_on_pure_path` 锁定（mock get_spacy_nlp→None + 设实时错误，断言 endpoint error 等于实时值）。测试基线 **839 passed + 1 skipped**（838→839）；Android 需覆盖安装 v5.7.6 后诊断小字才显示真实 spaCy 加载异常，用于定位 Android 走 pure 的根因。
+
+- [x] **v5.7.7**：**真机 spaCy E050 根因修复 —— dist-info 缺失**（2026-09-15，vault-debug）——v5.7.6 诊断小字首次显示真实错误：`E050 Can't find model (md 与 sm 双模型)`。根因排查：APK 解包显示模型文件 44 项全完整、`extract_packages` 生效、spaCy import 正常——但 spaCy 3.8 的 `is_package()` 实现是 `importlib.metadata.distribution(name)`，**只认 pip 元数据（.dist-info）不碰文件系统**；CI 把 `de_core_news_sm` 包目录 `cp -r` 进 APK 时**漏拷了平级的 `de_core_news_sm-3.8.0.dist-info`** → 真机判定"不是 Python 包" → E050。用独立 venv 干净复现：仅包目录 `is_package=False + E050`；补上 dist-info 后 `is_package=True + spacy.load OK`。修法：① CI "Sync Python Backend" 步骤用 glob 定位 dist-info 并连拷进 `src/main/python`；② CI APK 探针加 `dist-info-complete` 精确守卫（v5.7.6 旧 APK 被正确拦截、新 APK 放行，本地用真实 APK 验证）。测试基线不变（纯 CI 打包层修复）；Android 需覆盖安装 v5.7.7、长难句工坊从「轻量分析」切回 spaCy 完整解析。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 

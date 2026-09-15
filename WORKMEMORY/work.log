@@ -470,3 +470,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：首次 run 34931365235 因 Android SDK 步骤失败（见上条 PITFALL）→ 修复 workflow（d49e7e2）→ 重打 v5.7.6 tag（8eabc14→d49e7e2）→ run 34934076914 全绿：四平台 asset 挂载（Android APK / Linux / macOS / Windows ZIP），Publish GitHub Release 完成。
 遗留：作者覆盖安装 v5.7.6 APK → 长难句工坊诊断小字应显示真实 spaCy 加载异常（getter 修复已含在 8eabc14）→ 发回内容定位 Android spaCy 加载根因。
+
+### 2026-09-15 15:00 | trae-llm__trae-code | PITFALL（v5.7.6 真机 spaCy E050：dist-info 缺失）
+Caps: filesystem-read, filesystem-write, shell-exec
+现象：v5.7.6 诊断小字首次显示真实错误：`E050 Can't find model 'de_core_news_md/sm'`。
+根因（vault-debug 4 步）：APK 解包证明模型文件 44 项完整 + extract_packages 生效 + spaCy import 正常——但 spaCy 3.8 `is_package()` 用 `importlib.metadata.distribution()` **只认 pip 元数据（.dist-info）不碰文件系统**。CI 手动 `cp -r de_core_news_sm` 进 APK 时漏拷平级 `de_core_news_sm-3.8.0.dist-info` → 真机判定"不是 Python 包" → E050。独立 venv 干净复现：仅包目录 → is_package=False + E050；补 dist-info → True + load OK。
+解法：① CI Sync 步骤 glob 定位 dist-info 连拷进 src/main/python；② CI APK 探针加 `dist-info-complete` 精确守卫（v5.7.6 旧 APK 被拦截验证）。修复 commit ef77dd7。
+副产物：git 间歇性 Permission denied 根因 = .git 残留异常 DENY ACE（SID 无法映射）→ PowerShell Get-Acl/RemoveAccessRuleSpecific 清除后恢复。
+遗留：发 v5.7.7 → 作者覆盖安装 → 长难句工坊应从「轻量分析」切回 spaCy 完整解析（path 显示 spacy）。
+
+### 2026-09-15 15:05 | trae-llm__trae-code | RELEASE_v5.7.7（dist-info 修复发版）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.7.6 真机 E050 根因修复（dist-info 缺失，见上条 PITFALL）→ bump v5.7.7（sw.js / build.gradle 5.7.7+50707 / index.html / README badge+下载表+Roadmap / PROJECT_OVERVIEW 发布面），tag 已推，CI queued。
+遗留：CI 出包 → 作者覆盖安装 v5.7.7 → 长难句工坊 path 应从 pure 切 spacy（诊断小字消失 = spaCy 加载成功）。
