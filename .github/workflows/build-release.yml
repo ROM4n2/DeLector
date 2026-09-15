@@ -282,16 +282,7 @@ jobs:
           # （importlib.metadata.distribution），不碰文件系统——只拷包目录没有 dist-info，
           # 真机 is_package('de_core_news_sm') → False → E050 "not a Python package"
           # （v5.7.6 诊断小字实证，根因定位见 work.log）。
-          MODEL_DISTINFO=$(python - <<'PY'
-import glob, os
-import de_core_news_sm as m
-base = os.path.dirname(os.path.dirname(m.__file__))
-hits = glob.glob(os.path.join(base, "de_core_news_sm-*.dist-info"))
-if not hits:
-    raise SystemExit("未找到 de_core_news_sm dist-info")
-print(hits[0])
-PY
-)
+          MODEL_DISTINFO=$(python -c "import glob, os, de_core_news_sm as m; base = os.path.dirname(os.path.dirname(m.__file__)); hits = glob.glob(os.path.join(base, 'de_core_news_sm-*.dist-info')); assert hits, '未找到 de_core_news_sm dist-info'; print(hits[0])")
           cp -r "$MODEL_DISTINFO" android/app/src/main/python/
           mkdir -p android/app/src/main/assets
           cp -r static android/app/src/main/assets/
