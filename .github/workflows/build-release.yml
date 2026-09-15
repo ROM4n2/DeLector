@@ -239,6 +239,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          # 必须覆盖 packages：action 默认是 "tools platform-tools"，而 2026-09
+          # runner 镜像把 cmdline-tools 升到 20.0 后 sdkmanager 已移除废弃的
+          # "tools" 包 → "Failed to find package 'tools'" exit 1 → Android job 全挂
+          # （v5.7.6 release 首次失败即此因）。显式装 compileSdk 34 所需组件，
+          # 不装 tools，避免踩同样的坑。
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0"
 
       - name: Set up Gradle 8.6
         uses: gradle/actions/setup-gradle@v3
