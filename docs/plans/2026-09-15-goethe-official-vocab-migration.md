@@ -108,7 +108,7 @@
   - `OFFICIAL_A1_VOCAB: Dict[str, tuple]`（660）
   - `OFFICIAL_A1_AUGMENT: Dict[str, tuple]`（10）
   - `OFFICIAL_A2B1_VOCAB: Dict[str, tuple]`（2353，各条自带 cefr）
-  - `OFFICIAL_VOCAB: Dict[str, tuple]` = `{**OFFICIAL_A1_VOCAB, **OFFICIAL_A1_AUGMENT, **OFFICIAL_A2B1_VOCAB}`
+  - `OFFICIAL_VOCAB: Dict[str, tuple]` = `{**OFFICIAL_A2B1_VOCAB, **OFFICIAL_A1_VOCAB, **OFFICIAL_A1_AUGMENT}`（**A1 后写 = 低等级优先**，去重 2732 条）
 
 **规范化规则（必须固化在种子生成/校验里）:**
 - lemma 全小写、去首尾空格；连字符可分动词统一保留连字符（`an-sein`）；
