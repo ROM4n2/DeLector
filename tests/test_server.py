@@ -4827,11 +4827,14 @@ def test_syntax_stats_endpoints(client):
 
 
 def test_get_a2_vocab_endpoint(client):
-    """验证 GET /api/a2/vocab 返回 974 个 A2 词条，结构完整且支持搜索。"""
+    """验证 GET /api/a2/vocab 默认返回 A2 考纲官方精选词条（sources=official），结构完整且支持搜索。"""
+    from delector.core.database import get_vocab_by_cefr
+
     res = client.get("/api/a2/vocab")
     assert res.status_code == 200
     words = res.json()
-    assert len(words) == 974
+    # 默认即官方视图（sources=official）；count 动态推导，禁止硬编码词条数
+    assert len(words) == len(get_vocab_by_cefr("A2", sources={"official"})["words"])
     # 抽查关键字段与格式
     w0 = words[0]
     for key in ("id", "word", "hw", "lemma", "pos", "zh", "cefr"):
@@ -4840,16 +4843,16 @@ def test_get_a2_vocab_endpoint(client):
     assert w0["cefr"] == "A2"
 
     # 抽查名词包含冠词
-    abenteuer = next((w for w in words if "Abenteuer" in w["word"]), None)
-    assert abenteuer is not None
-    assert abenteuer["word"] == "das Abenteuer"
-    assert abenteuer["pos"] == "NOUN"
+    apotheke = next((w for w in words if "Apotheke" in w["word"]), None)
+    assert apotheke is not None
+    assert apotheke["word"] == "die Apotheke"
+    assert apotheke["pos"] == "NOUN"
 
     # 抽查搜索过滤
-    search_res = client.get("/api/a2/vocab?q=Abenteuer")
+    search_res = client.get("/api/a2/vocab?q=Apotheke")
     assert search_res.status_code == 200
     s_words = search_res.json()
-    assert any("Abenteuer" in w["word"] for w in s_words)
+    assert any("Apotheke" in w["word"] for w in s_words)
 
 
 # ── exam catalog B1 注册（ADR-0011 Task 6：count 动态推导，禁硬编码词条数）──
@@ -4863,8 +4866,9 @@ def test_exam_catalog_b1_registered_with_dynamic_count():
     assert "B1" in exam_catalog.EXAM_CATALOG, "exam_catalog 必须注册 B1 等级"
     b1_mods = exam_catalog.EXAM_CATALOG["B1"]["modules"]
     assert "vocab" in b1_mods, "B1 必须有 vocab 模块"
-    assert b1_mods["vocab"]["count_fn"]() == len(get_vocab_by_cefr("B1")["words"]), (
-        "B1 count 必须动态推导（len(get_vocab_by_cefr('B1')['words'])），禁止硬编码词条数"
+    assert b1_mods["vocab"]["count_fn"]() == len(get_vocab_by_cefr("B1", sources={"official"})["words"]), (
+        "B1 count 必须动态推导（len(get_vocab_by_cefr('B1', sources={'official'})['words'])，官方精选口径），"
+        "禁止硬编码词条数"
     )
 
     src = open(os.path.join(ROOT, "delector", "services", "exam_catalog.py"), encoding="utf-8").read()

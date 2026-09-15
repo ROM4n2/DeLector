@@ -3263,7 +3263,7 @@ async function syncB1CardsFromServer() {
   if (typeof location === "undefined" || !location.protocol.startsWith("http")) return;
   if (wordFilters.scope !== "b1") return;
   try {
-    const res = await fetch("/api/cards/vocab?cefr=B1&scope=all");
+    const res = await fetch("/api/cards/vocab?cefr=B1&scope=all&sources=official");
     if (!res.ok) return;
     const data = await res.json();
     const words = Array.isArray(data.words) ? data.words : [];

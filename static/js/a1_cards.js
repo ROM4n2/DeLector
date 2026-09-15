@@ -28,7 +28,7 @@ export let _examVocabLevel = "A1";
  * 加一个等级 = 在此插一行 + exam_catalog 注册 + main.js WIRED_EXAM_LEVELS 插行。 */
 const EXAM_VOCAB_SOURCES = {
   A2: "/api/a2/vocab",
-  B1: "/api/cards/vocab?cefr=B1&scope=all",
+  B1: "/api/cards/vocab?cefr=B1&scope=all&sources=official",
 };
 
 /* 缓存/在途请求按等级隔离：同一套 fetch-去重-兜底链路服务所有等级。 */

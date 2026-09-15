@@ -135,7 +135,7 @@ function buildCtx(routes) {
 const tick = () => new Promise((r) => process.nextTick(r));
 
 async function runScenarioA() {
-  const ctx = buildCtx([["/api/cards/vocab?cefr=B1&scope=all", ENVELOPE]]);
+  const ctx = buildCtx([["/api/cards/vocab?cefr=B1&scope=all&sources=official", ENVELOPE]]);
   vm.runInContext(transformed, ctx, { filename: "a1_cards.stripped.js#b1" });
   await vm.runInContext('setExamVocabLevel("B1")', ctx);
   await tick(); await tick();
@@ -163,8 +163,8 @@ const problems = [];
 const a = await runScenarioA();
 log(`[A] fetch: ${a.fetches.join(" | ")}`);
 log(`[A] cache["B1"]: ${JSON.stringify(a.cache)}`);
-if (!a.fetches.includes("/api/cards/vocab?cefr=B1&scope=all"))
-  problems.push("setExamVocabLevel('B1') 未请求 /api/cards/vocab?cefr=B1&scope=all");
+if (!a.fetches.includes("/api/cards/vocab?cefr=B1&scope=all&sources=official"))
+  problems.push("setExamVocabLevel('B1') 未请求 /api/cards/vocab?cefr=B1&scope=all&sources=official");
 if (!Array.isArray(a.cache))
   problems.push("_examVocabCaches['B1'] 不是数组（缓存契约破坏）");
 if (a.cache.length !== ENVELOPE.words.length)
@@ -201,7 +201,7 @@ if (problems.length) fail(problems);
 const out = {
   ok: true,
   unwrap: {
-    requestedUrl: "/api/cards/vocab?cefr=B1&scope=all",
+    requestedUrl: "/api/cards/vocab?cefr=B1&scope=all&sources=official",
     cacheFilled: Array.isArray(a.cache) && a.cache.length === ENVELOPE.words.length,
     itemCount: a.cache.length,
     mappedByMapCardsVocabItem: mappedAll,

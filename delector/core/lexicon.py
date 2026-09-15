@@ -25,7 +25,12 @@ from typing import Dict, Iterable, Mapping, Optional, Sequence
 
 from delector.data.core_dict import CORE_VOCAB_MANUAL
 from delector.data.core_dict_ext import CORE_VOCAB_EXT
-from delector.data.official_vocab import OFFICIAL_VOCAB
+from delector.data.official_vocab import (
+    OFFICIAL_A1_AUGMENT,
+    OFFICIAL_A1_VOCAB,
+    OFFICIAL_A2B1_VOCAB,
+    OFFICIAL_VOCAB,
+)
 
 # 来源优先级：低 -> 高（后者覆盖前者）。
 SOURCE_PRIORITY: tuple = ("ai", "manual", "official")
@@ -90,3 +95,28 @@ def view(sources: Optional[Iterable[str]] = None) -> Dict[str, tuple]:
         if source in selected:
             result.update(FRAGMENTS[source])
     return result
+
+
+def official_level(cefr: str) -> Dict[str, tuple]:
+    """官方某等级的**原样**词表视图（各档保留官方原样、容忍跨档重叠）。
+
+    - ``"A1"`` -> ``OFFICIAL_A1_VOCAB`` ⊕ ``OFFICIAL_A1_AUGMENT``（670）
+    - ``"A2"`` -> ``OFFICIAL_A2B1_VOCAB`` 中 ``cefr == "A2"``（736）
+    - ``"B1"`` -> ``OFFICIAL_A2B1_VOCAB`` 中 ``cefr == "B1"``（1617）
+    - 其它 -> ``{}``
+
+    注意：**不要**用 ``OFFICIAL_VOCAB``——那是按低等级优先合并后的全量视图，
+    A2/B1 会因 291 条跨档重叠被 A1 覆盖而变少。本函数各档保留官方原样、
+    容忍跨档重叠（A1 与 A2/B1 同 lemma 各留其自带的 cefr 值）。
+
+    大小写不敏感：``cefr.strip().upper()``。纯函数、零副作用（只读分片常量）。
+    """
+    level = (cefr or "").strip().upper()
+    if level == "A1":
+        a1_view: Dict[str, tuple] = {}
+        a1_view.update(OFFICIAL_A1_VOCAB)
+        a1_view.update(OFFICIAL_A1_AUGMENT)
+        return a1_view
+    if level in ("A2", "B1"):
+        return {lemma: val for lemma, val in OFFICIAL_A2B1_VOCAB.items() if val[0] == level}
+    return {}

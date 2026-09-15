@@ -701,11 +701,13 @@ def get_cards():
 
 
 @router.get("/api/cards/vocab")
-def get_cards_vocab(cefr: str = "A1", scope: str = "core"):
+def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str] = None):
     scope_norm = (scope or "core").lower().strip()
     if scope_norm not in ("core", "all", "reader"):
         raise HTTPException(400, "scope must be 'core', 'all', or 'reader'")
-    return get_vocab_by_cefr(cefr=cefr, scope=scope_norm)
+    # sources：逗号分隔的来源名（如 "official"）；空/缺省 -> None（走默认分支，逐字不变）。
+    sources_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
+    return get_vocab_by_cefr(cefr=cefr, scope=scope_norm, sources=sources_set)
 
 
 # --- Phase A: Delete & Master ---
