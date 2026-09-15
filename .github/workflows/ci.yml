@@ -83,7 +83,7 @@ jobs:
         run: pytest -q
 
       - name: Set up Go 1.26
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: "1.26"
           # cache 是 boolean（区别于 setup-python 的字符串 "pip"）；
