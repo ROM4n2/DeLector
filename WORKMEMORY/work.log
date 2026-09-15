@@ -445,3 +445,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：v5.7.4 复测反馈「轻量分析提示正常但无诊断小字」→ 定位**前端竞态 bug**：`enterHardSentences` 里 `_loadSpacyDiag()` 未 await，`_renderAll` 抢先渲染时 `_q.spacyError` 为空 → 诊断永不渲染。修复：await 诊断再渲染 + `path="pure"` 且 error 空时占位「未捕获到加载异常」。作者批准 → v5.7.5 发版（bump commit 2556c38，tag 已推，CI run 34865240096 queued）。
 遗留：CI 出包 → 作者覆盖安装 v5.7.5 复测看诊断小字 → 发回内容 → 定位 Android spaCy 加载根因（拿回 spacy 路径）。
+
+### 2026-09-15 06:55 | trae-llm__trae-code | PITFALL（spaCy 诊断 error 永远为空）
+Caps: filesystem-read, filesystem-write, shell-exec
+现象：v5.7.5 真机 `/api/syntax/spacy-status` 返回 `path:"pure"` 但 `error:""`，前端兜底显示「未捕获到加载异常（需进一步排查）」。**path:"pure" 即铁证——spaCy 实际并未加载成功**，error 为空是诊断 bug 而非"没报错"。
+根因：**Python from-import 按值拷贝不可变对象**。`syntax_hard.py` 用 `from syntax_tree import _spacy_load_error` 拿到的是导入时的初始空串 `""`；`get_spacy_nlp()` 内部 `global _spacy_load_error = "..."` 只重绑定 syntax_tree 模块命名空间，route 持有的旧引用不变 → error 永远空。
+解法：syntax_tree 加 `get_spacy_load_error()` getter，route 调函数实时读；删 `from ... import _spacy_load_error`。回归测试 `test_spacy_status_reports_live_error_on_pure_path` 锁定（mock get_spacy_nlp→None + 设 _spacy_load_error，断言 endpoint error 等于实时值）。
+验证：master 全量门禁 839 passed + 1 skipped；ruff 零告警 / mypy 零错误。
+遗留：作者覆盖安装 v5.7.6 后把诊断小字（真实 spaCy 加载异常）发回 → 定位 Android 走 pure 根因。
+
+### 2026-09-15 07:05 | trae-llm__trae-code | RELEASE_v5.7.6（spaCy 诊断 getter 修复）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.7.5 复测反馈「path=pure 但 error 空 → 未捕获到加载异常」→ 定位 **from-import 按值拷贝不可变字符串** bug（见上条 PITFALL）。修复 3 文件（syntax_tree.py getter / syntax_hard.py 改调函数 / test_syntax_hard_api.py 回归）。作者批准发版 → v5.7.6 bump（sw.js / build.gradle 5.7.6+50706 / index.html / README badge+下载表+Roadmap / PROJECT_OVERVIEW 基线 839），tag v5.7.6 已推，CI queued。
+遗留：CI 出包 → 作者覆盖安装 v5.7.6 复测 → 把诊断小字真实内容发回 → 定位 Android spaCy 加载根因（重点怀疑：de_core_news_sm 模型未打包进 APK / Chaquopy thinc-blis native 依赖）。

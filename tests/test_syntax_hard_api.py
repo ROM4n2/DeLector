@@ -343,6 +343,23 @@ def test_spacy_status_endpoint(client):
     assert isinstance(data["error"], str)
 
 
+def test_spacy_status_reports_live_error_on_pure_path(client, monkeypatch):
+    """回归：spaCy 走 pure 时 error 必须是 get_spacy_nlp() 记录的实时异常，
+    而非空串（v5.7.5 真机确诊：route 按值 import _spacy_load_error 导致永远为空）。"""
+    from delector.nlp_engine import syntax_tree
+
+    monkeypatch.setattr(syntax_hard, "get_spacy_nlp", lambda: None)
+    syntax_tree._spacy_load_error = "md: OSError: [E050] Can't find model 'de_core_news_md'"
+    try:
+        res = client.get("/api/syntax/spacy-status")
+        data = res.json()
+        assert data["path"] == "pure"
+        assert data["error"] == syntax_tree._spacy_load_error
+        assert data["error"]  # 非空——前端不再兜底显示"未捕获到加载异常"
+    finally:
+        syntax_tree._spacy_load_error = ""
+
+
 def test_trials_post_get_roundtrip(client):
     """POST trials 落盘返回 trial_id；GET trials 回读字段逐字一致。"""
     res = client.post(
