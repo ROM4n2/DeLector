@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import random
-import re
 import secrets
 import shutil
 import sqlite3
@@ -1696,91 +1695,67 @@ _A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
 _A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None
 
 
+def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
+    """把数据模块的一条 A1 词条映射为对外契约 {id, hw, pos, de, zh, core, cefr}。
+
+    de/zh 派生规则与改造前逐字相同（ADR-0011：输出逐条不变）：
+    de = (ex and ex[0].de) or de or ""；zh = gloss or zh or (ex and ex[0].zh) or ""。
+    """
+    ex = w.get("ex")
+    return {
+        "id": w.get("id", ""),
+        "hw": w.get("hw", ""),
+        "pos": w.get("pos", ""),
+        "de": (ex and ex[0].get("de")) or w.get("de") or "",
+        "zh": w.get("gloss") or w.get("zh") or (ex and ex[0].get("zh")) or "",
+        "core": core,
+        "cefr": "A1",
+    }
+
+
+def _load_a1_workbench_dict_module() -> Any:
+    """导入 A1 词库数据模块（单一真相）；缺失即抛清晰异常，绝不静默回退（ADR-0011 红线 2）。"""
+    try:
+        import delector.data.a1_workbench_dict as a1_wb
+    except ImportError as exc:
+        raise RuntimeError(
+            "A1 词库数据模块 delector.data.a1_workbench_dict 导入失败：它是 A1 工作台词库"
+            "的单一真相，缺失说明安装/打包不完整。禁止静默回退（ADR-0011 红线 2）。"
+        ) from exc
+    return a1_wb
+
+
 def _load_a1_workbench_words() -> List[Dict[str, Any]]:
-    """加载并缓存 A1 词库（优先解析 workbench.html 保证与工作台 100% 同步，回退 a1_dict）。"""
+    """加载并缓存 A1 词库（单一真相 = delector.data.a1_workbench_dict 数据模块）。"""
     global _A1_WORKBENCH_WORDS_CACHE
     if _A1_WORKBENCH_WORDS_CACHE is not None:
         return _A1_WORKBENCH_WORDS_CACHE
 
-    words: List[Dict[str, Any]] = []
-    workbench_paths = [
-        os.path.join(DATA_DIR, "static", "german", "workbench.html"),
-        os.path.join(DATA_DIR, "static", "german", "workbench.html"),
-    ]
-    loaded = False
-    for wp in workbench_paths:
-        if os.path.exists(wp):
-            try:
-                with open(wp, "r", encoding="utf-8") as f:
-                    txt = f.read()
-                m_seed = re.search(r"const\s+SEED_WORDS\s*=\s*(\[.*?\]);\s*\n", txt, re.DOTALL)
-                m_custom = re.search(r"const\s+CORE_CUSTOM_WORDS\s*=\s*(\[.*?\]);", txt, re.DOTALL)
-                m_ids = re.search(r"const\s+CORE_WORD_SEED_IDS\s*=\s*new Set\((\[.*?\])\);", txt, re.DOTALL)
-                if m_seed and m_custom and m_ids:
-                    seeds = json.loads(m_seed.group(1))
-                    custom = json.loads(m_custom.group(1))
-                    core_ids = set(json.loads(m_ids.group(1)))
+    a1_wb = _load_a1_workbench_dict_module()
+    seeds = a1_wb.A1_WORKBENCH_SEED
+    customs = a1_wb.A1_WORKBENCH_CUSTOM
+    core_ids = a1_wb.A1_WORKBENCH_CORE_IDS
+    if not isinstance(seeds, list) or not isinstance(customs, list):
+        raise TypeError(
+            "a1_workbench_dict 形状损坏：A1_WORKBENCH_SEED / A1_WORKBENCH_CUSTOM "
+            "必须是 List，实际 %s / %s" % (type(seeds).__name__, type(customs).__name__)
+        )
+    if not isinstance(core_ids, (set, frozenset)):
+        raise TypeError(
+            "a1_workbench_dict 形状损坏：A1_WORKBENCH_CORE_IDS 必须是 Set/FrozenSet，"
+            "实际 %s" % type(core_ids).__name__
+        )
 
-                    for w in seeds:
-                        wid = w.get("id", "")
-                        is_core = wid in core_ids
-                        de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
-                        zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
-                        words.append(
-                            {
-                                "id": wid,
-                                "hw": w.get("hw", ""),
-                                "pos": w.get("pos", ""),
-                                "de": de,
-                                "zh": zh,
-                                "core": is_core,
-                                "cefr": "A1",
-                            }
-                        )
-
-                    for w in custom:
-                        wid = w.get("id", "")
-                        de = (w.get("ex") and w["ex"][0].get("de")) or w.get("de") or ""
-                        zh = w.get("gloss") or w.get("zh") or (w.get("ex") and w["ex"][0].get("zh")) or ""
-                        words.append(
-                            {
-                                "id": wid,
-                                "hw": w.get("hw", ""),
-                                "pos": w.get("pos", ""),
-                                "de": de,
-                                "zh": zh,
-                                "core": True,
-                                "cefr": "A1",
-                            }
-                        )
-                    loaded = True
-                    break
-            except Exception:
-                pass
-
-    if not loaded:
-        try:
-            from delector.data.a1_dict import GOETHE_A1_VOCAB
-
-            idx = 1
-            for k, v in GOETHE_A1_VOCAB.items():
-                words.append(
-                    {
-                        "id": f"a1-{idx:04d}",
-                        "hw": v.get("word", k),
-                        "pos": v.get("pos", ""),
-                        "de": v.get("example_de", ""),
-                        "zh": v.get("definition_zh", ""),
-                        "core": True,
-                        "cefr": "A1",
-                    }
-                )
-                idx += 1
-        except Exception:
-            pass
-
+    words = [_a1_workbench_row(w, w.get("id", "") in core_ids) for w in seeds]
+    words.extend(_a1_workbench_row(w, True) for w in customs)
     _A1_WORKBENCH_WORDS_CACHE = words
     return words
+
+
+def _reset_a1_workbench_cache() -> None:
+    """清空 A1 词库缓存（测试在 monkeypatch 数据模块常量后用它重置，保证可测试性）。"""
+    global _A1_WORKBENCH_WORDS_CACHE
+    _A1_WORKBENCH_WORDS_CACHE = None
 
 
 GENDER_ARTICLE_MAP: Dict[str, str] = {
@@ -1806,39 +1781,90 @@ def format_vocab_headword(lemma: str, pos: str, gender: Optional[str] = None) ->
     return lemma.lower()
 
 
+# ── 词对象契约统一（ADR-0011 决策 2，仅作用输出侧；存储 5 元组 schema 冻结 §5-#6）──
+
+
+def _contract_item(
+    vocab_id: str,
+    hw: str,
+    pos: str,
+    gender: Optional[str],
+    plural: str,
+    de: str,
+    zh: str,
+    core: bool,
+    cefr: str,
+) -> Dict[str, Any]:
+    """「存储视图 → 契约条目」的唯一映射点：所有分支产出同一字段集，缺失字段显式空值。"""
+    return {
+        "id": vocab_id,
+        "hw": hw,
+        "pos": pos,
+        "gender": gender,
+        "plural": plural,
+        "de": de,
+        "zh": zh,
+        "core": core,
+        "cefr": cefr,
+    }
+
+
+def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """A1 内部行（T2 快照冻结的 7 键形状）→ 契约条目。
+
+    gender/plural 显式空值：A1 数据模块无富字段，从词头冠词做推导猜测属递延 ADR（YAGNI）。
+    """
+    return _contract_item(
+        vocab_id=row["id"],
+        hw=row["hw"],
+        pos=row["pos"],
+        gender=None,
+        plural="",
+        de=row["de"],
+        zh=row["zh"],
+        core=row["core"],
+        cefr=row["cefr"],
+    )
+
+
+def _contract_from_core_entry(lemma: str, val: tuple) -> Dict[str, Any]:
+    """CORE_VOCAB_DB 5 元组存储视图 → 契约条目（A2/通用等级共用，消除两套字段拼装）。"""
+    lvl = val[0].upper()
+    pos = val[1] or ""
+    gender = val[2] if len(val) > 2 and val[2] != "None" else None
+    plural = val[3] if len(val) > 3 and val[3] != "None" else ""
+    zh = val[4] if len(val) > 4 else ""
+    return _contract_item(
+        vocab_id=f"{lvl.lower()}-{lemma.lower()}",
+        hw=format_vocab_headword(lemma, pos, gender),
+        pos=pos,
+        gender=gender,
+        plural=plural,
+        de="",
+        zh=zh,
+        core=True,
+        cefr=lvl,
+    )
+
+
 def _load_a2_vocab_words() -> List[Dict[str, Any]]:
-    """加载并缓存 A2 词库（从 core_dict 提取并应用规范化格式）。"""
+    """加载并缓存 A2 词库（取 core_dict 的 A2 存储视图，经同一映射函数产出契约条目）。
+
+    A2 专用分支已并入通用路径：本函数只剩「过滤 A2 视图 + 缓存」，字段拼装与
+    通用等级分支共用 ``_contract_from_core_entry``。core_dict 是包内必然存在的
+    第 1 个数据模块，缺失 = 打包损坏 —— ImportError 直接炸，绝不静默回退（红线 2）。
+    """
     global _A2_VOCAB_CACHE
     if _A2_VOCAB_CACHE is not None:
         return _A2_VOCAB_CACHE
 
-    try:
-        from delector.data.core_dict import CORE_VOCAB_DB
-    except ImportError:
-        CORE_VOCAB_DB = {}
+    from delector.data.core_dict import CORE_VOCAB_DB
 
-    words: List[Dict[str, Any]] = []
-    for lemma, val in CORE_VOCAB_DB.items():
-        lvl = val[0]
-        if lvl.upper() == "A2":
-            pos = val[1] or ""
-            gender = val[2] if len(val) > 2 and val[2] != "None" else None
-            plural = val[3] if len(val) > 3 and val[3] != "None" else ""
-            zh = val[4] if len(val) > 4 else ""
-            hw = format_vocab_headword(lemma, pos, gender)
-            words.append(
-                {
-                    "id": f"a2-{lemma.lower()}",
-                    "hw": hw,
-                    "pos": pos,
-                    "gender": gender,
-                    "plural": plural,
-                    "de": "",
-                    "zh": zh,
-                    "core": True,
-                    "cefr": "A2",
-                }
-            )
+    words = [
+        _contract_from_core_entry(lemma, val)
+        for lemma, val in CORE_VOCAB_DB.items()
+        if val[0].upper() == "A2"
+    ]
 
     _A2_VOCAB_CACHE = words
     return words
@@ -1878,85 +1904,30 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
 
     if cefr_norm == "A1":
         a1_words = _load_a1_workbench_words()
-        if scope_norm == "core":
-            filtered = [w for w in a1_words if w.get("core")]
-        else:
-            filtered = a1_words
-        return {
-            "cefr": cefr_norm,
-            "scope": scope_norm,
-            "total": len(filtered),
-            "words": filtered,
-        }
-
-    if cefr_norm == "A2":
-        a2_words = _load_a2_vocab_words()
-        return {
-            "cefr": "A2",
-            "scope": scope_norm,
-            "total": len(a2_words),
-            "words": a2_words,
-        }
-
-    # 其他级别 (B1, B2, C1, ALL): 回退到 core_dict.CORE_VOCAB_DB
-    try:
-        from delector.data.core_dict import CORE_VOCAB_DB
-    except ImportError:
-        CORE_VOCAB_DB = {}
-
-    words = []
-    if cefr_norm == "ALL":
-        a1_words = _load_a1_workbench_words()
-        if scope_norm == "core":
-            words.extend([w for w in a1_words if w.get("core")])
-        else:
-            words.extend(a1_words)
-
-        words.extend(_load_a2_vocab_words())
-
-        for lemma, val in CORE_VOCAB_DB.items():
-            lvl = val[0]
-            if lvl.upper() not in ("A1", "A2"):
-                pos = val[1] or ""
-                gender = val[2] if len(val) > 2 and val[2] != "None" else None
-                plural = val[3] if len(val) > 3 and val[3] != "None" else ""
-                zh = val[4] if len(val) > 4 else ""
-                hw = format_vocab_headword(lemma, pos, gender)
-                words.append(
-                    {
-                        "id": f"{lvl.lower()}-{lemma.lower()}",
-                        "hw": hw,
-                        "pos": pos,
-                        "gender": gender,
-                        "plural": plural,
-                        "de": "",
-                        "zh": zh,
-                        "core": True,
-                        "cefr": lvl.upper(),
-                    }
-                )
+        filtered = [w for w in a1_words if w["core"]] if scope_norm == "core" else a1_words
+        words = [_contract_from_a1_row(w) for w in filtered]
     else:
-        for lemma, val in CORE_VOCAB_DB.items():
-            lvl = val[0]
-            if lvl.upper() == cefr_norm:
-                pos = val[1] or ""
-                gender = val[2] if len(val) > 2 and val[2] != "None" else None
-                plural = val[3] if len(val) > 3 and val[3] != "None" else ""
-                zh = val[4] if len(val) > 4 else ""
-                hw = format_vocab_headword(lemma, pos, gender)
-                words.append(
-                    {
-                        "id": f"{lvl.lower()}-{lemma.lower()}",
-                        "hw": hw,
-                        "pos": pos,
-                        "gender": gender,
-                        "plural": plural,
-                        "de": "",
-                        "zh": zh,
-                        "core": True,
-                        "cefr": lvl.upper(),
-                    }
-                )
+        # A2 并入通用路径（经 _load_a2_vocab_words 薄函数 + 缓存）；其余级别读 core_dict
+        from delector.data.core_dict import CORE_VOCAB_DB
+
+        if cefr_norm == "A2":
+            words = _load_a2_vocab_words()
+        elif cefr_norm == "ALL":
+            a1_words = _load_a1_workbench_words()
+            a1_view = [w for w in a1_words if w["core"]] if scope_norm == "core" else a1_words
+            words = [_contract_from_a1_row(w) for w in a1_view]
+            words.extend(_load_a2_vocab_words())
+            words.extend(
+                _contract_from_core_entry(lemma, val)
+                for lemma, val in CORE_VOCAB_DB.items()
+                if val[0].upper() not in ("A1", "A2")
+            )
+        else:
+            words = [
+                _contract_from_core_entry(lemma, val)
+                for lemma, val in CORE_VOCAB_DB.items()
+                if val[0].upper() == cefr_norm
+            ]
 
     return {
         "cefr": cefr_norm,

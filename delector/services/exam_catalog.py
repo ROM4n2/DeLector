@@ -73,6 +73,19 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
             },
         },
     },
+    # ADR-0011 Task 6：打开 B1 入口。服务端零新增端点 —— /api/cards/vocab?cefr=B1
+    # 直接可用；count 从数据层动态推导（权威词表接入后条数变化自动吸收，禁硬编码）。
+    "B1": {
+        "title": "B1",
+        "modules": {
+            "vocab": {
+                "title": "📖 官方考纲词表 (Wortliste)",
+                "panel": "exam-cards-family",
+                "api_prefix": "/api/cards",
+                "count_fn": lambda: len(get_vocab_by_cefr("B1")["words"]),
+            },
+        },
+    },
 }
 
 

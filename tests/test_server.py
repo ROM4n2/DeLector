@@ -4334,6 +4334,9 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "a1_lesen_dict",
         "corpus_dict",
         "encounter_seed_dict",
+        # ADR-0011 Task 1：A1 工作台词库单一真相（被 database.py 延迟导入），
+        # 漏登记 = 打包后 ModuleNotFoundError 而本地 pytest 全绿。
+        "a1_workbench_dict",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =
@@ -4847,3 +4850,23 @@ def test_get_a2_vocab_endpoint(client):
     assert search_res.status_code == 200
     s_words = search_res.json()
     assert any("Abenteuer" in w["word"] for w in s_words)
+
+
+# ── exam catalog B1 注册（ADR-0011 Task 6：count 动态推导，禁硬编码词条数）──
+
+
+def test_exam_catalog_b1_registered_with_dynamic_count():
+    """catalog 注册 B1 vocab 模块，count_fn 动态推导 == 数据层实测长度。"""
+    from delector.core.database import get_vocab_by_cefr
+    from delector.services import exam_catalog
+
+    assert "B1" in exam_catalog.EXAM_CATALOG, "exam_catalog 必须注册 B1 等级"
+    b1_mods = exam_catalog.EXAM_CATALOG["B1"]["modules"]
+    assert "vocab" in b1_mods, "B1 必须有 vocab 模块"
+    assert b1_mods["vocab"]["count_fn"]() == len(get_vocab_by_cefr("B1")["words"]), (
+        "B1 count 必须动态推导（len(get_vocab_by_cefr('B1')['words'])），禁止硬编码词条数"
+    )
+
+    src = open(os.path.join(ROOT, "delector", "services", "exam_catalog.py"), encoding="utf-8").read()
+    for banned in ("1712", "974"):
+        assert banned not in src, f"exam_catalog.py 硬编码了词条数 {banned}（权威词表接入后即漂移）"

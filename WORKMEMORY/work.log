@@ -453,11 +453,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 解法：syntax_tree 加 `get_spacy_load_error()` getter，route 调函数实时读；删 `from ... import _spacy_load_error`。回归测试 `test_spacy_status_reports_live_error_on_pure_path` 锁定（mock get_spacy_nlp→None + 设 _spacy_load_error，断言 endpoint error 等于实时值）。
 验证：master 全量门禁 839 passed + 1 skipped；ruff 零告警 / mypy 零错误。
 遗留：作者覆盖安装 v5.7.6 后把诊断小字（真实 spaCy 加载异常）发回 → 定位 Android 走 pure 根因。
+验证：syntax_hard_api 18 passed；syntax_tree+score 60 passed。
 
 ### 2026-09-15 07:05 | trae-llm__trae-code | RELEASE_v5.7.6（spaCy 诊断 getter 修复）
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：v5.7.5 复测反馈「path=pure 但 error 空 → 未捕获到加载异常」→ 定位 **from-import 按值拷贝不可变字符串** bug（见上条 PITFALL）。修复 3 文件（syntax_tree.py getter / syntax_hard.py 改调函数 / test_syntax_hard_api.py 回归）。作者批准发版 → v5.7.6 bump（sw.js / build.gradle 5.7.6+50706 / index.html / README badge+下载表+Roadmap / PROJECT_OVERVIEW 基线 839），tag v5.7.6 已推，CI queued。
 遗留：CI 出包 → 作者覆盖安装 v5.7.6 复测 → 把诊断小字真实内容发回 → 定位 Android spaCy 加载根因（重点怀疑：de_core_news_sm 模型未打包进 APK / Chaquopy thinc-blis native 依赖）。
+
 
 ### 2026-09-15 07:46 | trae-llm__trae-code | PITFALL（setup-android 默认装 tools 包 → sdkmanager 20.0 失败）
 Caps: filesystem-read, filesystem-write, shell-exec
@@ -466,10 +468,22 @@ Caps: filesystem-read, filesystem-write, shell-exec
 解法：覆盖 packages 参数，显式装 compileSdk 34 所需组件：`packages: "platform-tools platforms;android-34 build-tools;34.0.0"`（不装 tools）。修复 commit d49e7e2。
 验证：重打 v5.7.6 tag（force push 到 d49e7e2）触发 run 34934076914 全绿——Android APK 2m41s 成功，四平台资产全部挂载，Publish 完成。
 
+
 ### 2026-09-15 07:46 | trae-llm__trae-code | RELEASE_v5.7.6（重跑成功）
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：首次 run 34931365235 因 Android SDK 步骤失败（见上条 PITFALL）→ 修复 workflow（d49e7e2）→ 重打 v5.7.6 tag（8eabc14→d49e7e2）→ run 34934076914 全绿：四平台 asset 挂载（Android APK / Linux / macOS / Windows ZIP），Publish GitHub Release 完成。
 遗留：作者覆盖安装 v5.7.6 APK → 长难句工坊诊断小字应显示真实 spaCy 加载异常（getter 修复已含在 8eabc14）→ 发回内容定位 Android spaCy 加载根因。
+
+
+### 2026-09-15 08:40 | Code-Plan-Executor__cpe | SESSION（ADR-0011 词库收敛七任务收官）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：ADR-0011（workbench 词库单一真相化 + 等级判定数据驱动）T7 收官验证 + 文档回填（分支 feature/workbench-vocab-single-source）。
+1. commit 链：T1 1edc7b7（A1 数据模块 + 双向构建工具）/ T2 913608a（服务端根除 HTML 正则与静默回退）/ T3 11386d5（四路径契约统一 + ImportError 根除）/ T4 ff8c681（normalizeWord 幂等归一 + wb.schema.v1 迁移）/ T5 1cf0946（SCOPE_PREDICATES + isInScope 数据驱动）/ T6 275a513（B1 入口全链 + 信封解包修复）。
+2. 门禁：全量 pytest **882 passed + 1 skipped**（838→882 净增 44）；ruff 零告警 / mypy 零错误；11/11 tools/*.mjs 探针全绿（wb_queue 13/13 切片护栏）；Go 三门禁（gofmt 空 / vet / -race 8 包）全绿。契约抽测：writer_mobile 30 / a2_vocab 4 / contract_uniform 8 / a1_workbench_source 17 全 passed；冒烟 A1=704 / A2=974 / B1=1712 同契约，catalog 动态 count 零硬编码。
+3. T7 裁决/修复：T3-Y4 linguistics.py ImportError 降级裁决**保留**（红线 1 有意设计）；T4-N2 custom/up 断言已补闭环；修复 T5 漏项死测 test_workbench_tokens.py（inScopeWord 字符串断言 → 唯一入口委托断言）。
+4. ⚠️ T6 提交尾巴：275a513 未含 exam_catalog.py B1 注册、main.js 等级泛化/动态徽标、测试扩展与 wb_merge_probe.mjs T4-N2 断言（工作区已验证通过，待主线程一并提交）；另有并行会话 syntax 修复未提交（syntax_tree/syntax_hard/test_syntax_hard_api，未触碰）。
+5. 文档回填：PROJECT_OVERVIEW（快照 2026-09-15 + 基线 882+1 + 探针 11/11 + ADR-0011 收官条目）、本计划执行状态块（收官态）、本条 work.log。
+遗留：作者双端点检（桌面 python start.py 五档可见/B1 可刷/备考域 B1 1712 词；Android 覆盖安装后同上且进度不丢）→ 主线程提交并开 PR → PR CI 真验证。
 
 ### 2026-09-15 15:00 | trae-llm__trae-code | PITFALL（v5.7.6 真机 spaCy E050：dist-info 缺失）
 Caps: filesystem-read, filesystem-write, shell-exec
@@ -479,10 +493,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 副产物：git 间歇性 Permission denied 根因 = .git 残留异常 DENY ACE（SID 无法映射）→ PowerShell Get-Acl/RemoveAccessRuleSpecific 清除后恢复。
 遗留：发 v5.7.7 → 作者覆盖安装 → 长难句工坊应从「轻量分析」切回 spaCy 完整解析（path 显示 spacy）。
 
+
 ### 2026-09-15 15:05 | trae-llm__trae-code | RELEASE_v5.7.7（dist-info 修复发版）
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：v5.7.6 真机 E050 根因修复（dist-info 缺失，见上条 PITFALL）→ bump v5.7.7（sw.js / build.gradle 5.7.7+50707 / index.html / README badge+下载表+Roadmap / PROJECT_OVERVIEW 发布面），tag 已推，CI queued。
 遗留：CI 出包 → 作者覆盖安装 v5.7.7 → 长难句工坊 path 应从 pure 切 spacy（诊断小字消失 = spaCy 加载成功）。
+
 
 ### 2026-09-15 16:20 | trae-llm__trae-code | VERIFIED（真机闭环：v5.7.7 spaCy 加载成功）
 Caps: filesystem-read, filesystem-write

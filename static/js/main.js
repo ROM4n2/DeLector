@@ -249,23 +249,42 @@ export function show(view) {
 let _examModule = "writing";
 let _currentExamLevel = "A1";
 
+/* ADR-0011 Task 6：等级站点表 —— 加一个等级 = 在此插一项（页签点亮用小写 key）。
+ * setExamLevel 对 A1 恢复上次停留模块，其余等级直接落到 vocab（各等级目前
+ * 只开放官方考纲词表模块）。 */
+const EXAM_LEVEL_KEYS = ["a1", "a2", "b1"];
+
+/* 词表模块徽标计数缓存：initExamCatalog 拉到 catalog 后按等级填充
+ *（{ A1: n1, A2: n2, B1: n3 } 形态，值全部来自 catalog count，零硬编码）。
+ * setExamLevel 切等级时从缓存刷徽标；catalog 未就绪时保持现有文案不动（回退语义）。 */
+let _examVocabCounts = {};
+
+function formatExamCount(n) {
+  return n >= 1000
+    ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k"
+    : String(n);
+}
+
+function syncExamVocabBadge(level) {
+  const n = _examVocabCounts[level];
+  if (typeof n !== "number") return;
+  const badge = document.querySelector("#exam-card-vocab .exam-module-count");
+  if (badge) badge.textContent = formatExamCount(n);
+}
+
 export function setExamLevel(level) {
   _currentExamLevel = (level || "A1").toUpperCase();
-  ["a1", "a2"].forEach((lv) => {
+  EXAM_LEVEL_KEYS.forEach((lv) => {
     document
       .getElementById("exam-level-" + lv)
       ?.classList.toggle("active", lv === _currentExamLevel.toLowerCase());
   });
-  if (_currentExamLevel === "A2") {
-    const badge = document.querySelector("#exam-card-vocab .exam-module-count");
-    if (badge) badge.textContent = "974";
-    setExamVocabLevel("A2");
-    setExamModule("vocab");
-  } else {
-    const badge = document.querySelector("#exam-card-vocab .exam-module-count");
-    if (badge) badge.textContent = "702";
-    setExamVocabLevel("A1");
+  syncExamVocabBadge(_currentExamLevel);
+  setExamVocabLevel(_currentExamLevel);
+  if (_currentExamLevel === "A1") {
     setExamModule(_examModule || "writing");
+  } else {
+    setExamModule("vocab");
   }
 }
 
@@ -328,6 +347,14 @@ export function setExamModule(mod) {
 // 不弹错——导航数据是锦上添花，不该打断备考动线）。
 let _examCatalogDone = false;
 
+/* 已接线等级注册表（ADR-0011 Task 6）：key = 等级小写 id，value = 页签 title。
+ * 新等级在 catalog 注册 + 在此插一行 + a1_cards.js 端点表加一行 = 三处即通，
+ * 未列入的等级页签仍走「待接入」占位（不静默死按钮）。 */
+const WIRED_EXAM_LEVELS = {
+  a2: "歌德 A2 备考工坊（已激活官方考纲词表）",
+  b1: "歌德 B1 备考工坊（已激活官方考纲词表）",
+};
+
 async function initExamCatalog() {
   if (_examCatalogDone) return;
   _examCatalogDone = true;
@@ -343,6 +370,13 @@ async function initExamCatalog() {
   const a1 = levels.find((lv) => lv.id === "A1");
   if (!a1 || !Array.isArray(a1.modules)) return;
 
+  // 词表模块徽标计数入缓存（按等级），供 setExamLevel 切级时动态刷徽标（零硬编码）。
+  levels.forEach((lv) => {
+    if (!lv.id) return;
+    const vocab = (lv.modules || []).find((m) => m.id === "vocab");
+    if (vocab && vocab.count > 0) _examVocabCounts[lv.id.toUpperCase()] = vocab.count;
+  });
+
   // 模块卡片补强：标题回写 + count 徽标（卡片 id/onclick 静态接线不动，
   // 目录若删了某模块，本地卡片原样保留——回退语义，不做删卡）。
   a1.modules.forEach((m) => {
@@ -352,18 +386,15 @@ async function initExamCatalog() {
     if (m.count > 0) {
       const badge = document.createElement("span");
       badge.className = "exam-module-count";
-      badge.textContent =
-        m.count >= 1000
-          ? (m.count / 1000).toFixed(1).replace(/\.0$/, "") + "k"
-          : String(m.count);
+      badge.textContent = formatExamCount(m.count);
       card.appendChild(badge);
     }
   });
 
-  // 等级页签：静态占位已有 A1；目录里超出静态占位的等级（未来 A2 = 插
+  // 等级页签：静态占位已有 A1；目录里超出静态占位的等级（未来新等级 = 插
   // 一行注册）在这里追加成页签。目录缺失的静态页签不动（回退语义）。
-  // 新增页签目前没有面板接线（setExamModule mediator 只认识 A1 模块 id），
-  // 必须显式标注「待接入」而非静默挂着当死按钮（v5.1.0 前科纪律）：
+  // 已接线等级（WIRED_EXAM_LEVELS）真挂 setExamLevel；未接入的必须显式标注
+  // 「待接入」而非静默挂着当死按钮（v5.1.0 前科纪律）：
   // no-op onclick + title 提示 + aria-disabled。
   const tabs = document.getElementById("exam-level-tabs");
   if (!tabs) return;
@@ -379,9 +410,10 @@ async function initExamCatalog() {
     btn.id = "exam-level-" + key;
     btn.className = "exam-level-tab";
     btn.textContent = lv.title || lv.id;
-    if (key === "a2") {
-      btn.title = "歌德 A2 备考工坊（已激活官方考纲词表）";
-      btn.onclick = () => setExamLevel("A2");
+    const wiredTitle = WIRED_EXAM_LEVELS[key];
+    if (wiredTitle) {
+      btn.title = wiredTitle;
+      btn.onclick = () => setExamLevel(lv.id);
     } else {
       btn.title = "该等级模块待接入";
       btn.setAttribute("aria-disabled", "true");

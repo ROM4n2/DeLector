@@ -150,6 +150,15 @@ const PIECES = {
   /* 状态 + scope 判定 */
   wordFilters: extractDecl(html, "wordFilters"),
   wordById: extractFn(html, "wordById"),
+  /* Task 5（ADR-0011）：等级判定数据驱动 —— inScopeWord 委托 isInScope，
+   * 沙箱必须带上判定区全链，否则 inScopeWord 一跑就 ReferenceError。
+   * 只加切片、不加护栏：13 条护栏语义零漂移。 */
+  CEFR_BY_PREFIX: extractDecl(html, "CEFR_BY_PREFIX"),
+  cefrFromId: extractFn(html, "cefrFromId"),
+  cefrOf: extractFn(html, "cefrOf"),
+  OTHER_LEVEL_SCOPES: extractDecl(html, "OTHER_LEVEL_SCOPES"),
+  SCOPE_PREDICATES: extractDecl(html, "SCOPE_PREDICATES"),
+  isInScope: extractFn(html, "isInScope"),
   inScopeWord: extractFn(html, "inScopeWord"),
   logToday: extractFn(html, "logToday"),
   wordState: extractFn(html, "wordState"),
