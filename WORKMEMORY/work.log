@@ -483,3 +483,9 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：v5.7.6 真机 E050 根因修复（dist-info 缺失，见上条 PITFALL）→ bump v5.7.7（sw.js / build.gradle 5.7.7+50707 / index.html / README badge+下载表+Roadmap / PROJECT_OVERVIEW 发布面），tag 已推，CI queued。
 遗留：CI 出包 → 作者覆盖安装 v5.7.7 → 长难句工坊 path 应从 pure 切 spacy（诊断小字消失 = spaCy 加载成功）。
+
+### 2026-09-15 16:20 | trae-llm__trae-code | VERIFIED（真机闭环：v5.7.7 spaCy 加载成功）
+Caps: filesystem-read, filesystem-write
+事件：作者覆盖安装 v5.7.7 复测确认成功——长难句工坊从「轻量分析」切回**完整 spaCy 解析**（path:"spacy"），dist-info 缺失根因修复闭环。
+验证要点：v5.7.0 起 Android 长难句工坊首次真正吃到 spaCy 完整句法树（此前全走 pure 降级）；此前五连发（v5.7.0→v5.7.6）都没触到真根因，最终由「诊断 getter 修复（v5.7.6，from-import 按值拷贝）→ 诊断小字暴露 E050 → dist-info 缺失（v5.7.7）」三段定位完成。此坑已沉淀 vault Inbox 2026-09-15。
+遗留：feature/workbench-vocab-single-source 分支仍持有 ADR-0011 收官改动待合 master；真用户试用收三问反馈（最高价值待办）。
