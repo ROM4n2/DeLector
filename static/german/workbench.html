@@ -3197,7 +3197,9 @@ async function syncReaderCardsFromServer() {
           pos: rw.pos || "",
           gloss: rw.zh || rw.gloss || "",
           ipa: rw.ipa || "",
-          ex: rw.de ? [rw.de] : (Array.isArray(rw.ex) ? rw.ex : []),
+          /* ex 形状统一为 [{de,zh}]（同 A2/B1；渲染层读 ex[i].de/zh）：
+           * reader 卡无中文例句，zh 落空串。 */
+          ex: rw.de ? [{ de: rw.de, zh: rw.example_zh || "" }] : [],
           letter: (rw.hw && rw.hw[0] ? rw.hw[0] : "?").toUpperCase(),
           page: 0,
           tags: ["reader"],
