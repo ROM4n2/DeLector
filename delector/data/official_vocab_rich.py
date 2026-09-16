@@ -3,7 +3,7 @@
 
 来源文件：仓库根 ``official_vocab_rich.py``（外部 agent 依计划 §9.5 提示词产出，
 525KB / 3034 行）。本模块**原样搬运**其 3 个常量，释义/例句一字不改。
-生成方式：外部脚本 ``gen_rich.py``（当前不在仓库内，见下方 TODO）。
+生成方式：外部脚本 ``gen_rich.py``（已归档至仓库 ``tools/gen_rich.py``，见下方归档说明）。
 Schema（ADR-0013）：lemma -> {"ipa","example_de","example_zh","topic"}
   - ipa: 规则式 g2p 生成（源 ipa_map.json），非官方音标；含空格 = 名词带冠词发音。
   - example_de: 官方 PDF Beispielsätze；example_zh: 逐字取自 tr_*.json / a2b1_enrich.json。
@@ -16,9 +16,10 @@ IPA 归一化规则（ADR-0013 §4-4；本模块相对源文件的改动之一�
   归一化只作用于 ipa 字段（U+0361 在源中仅出现于 ipa 值）；example_de / example_zh / topic 一字不改。
   三个常量（含 A1）均归一化。
 
-本仓已回填 10 条空 IPA：来源 = A1_WORKBENCH_SEED 同 lemma 的音标（去 tie-bar）；重跑外部 ``gen_rich.py`` 时需带上这 10 条，否则回退丢失。
+本仓已回填 10 条空 IPA：来源 = A1_WORKBENCH_SEED 同 lemma 的音标（去 tie-bar）；重跑 ``tools/gen_rich.py`` 时需带上这 10 条，否则回退丢失。
 
-TODO：向外部索取 ``gen_rich.py`` 归档 ``tools/`` 以保证可重放（当前生成脚本不在仓库内）。
+归档收口：生成脚本 ``gen_rich.py`` 已归档至仓库 ``tools/gen_rich.py``（外部生成链的快照，供可重放性参考）。
+  该脚本依赖外部目录（``D:/Ran/...``）与外部 helper（``build_a1`` / ``build_a2b1_v2`` / ``g2p.py``），在本仓库内不可直接运行；重跑前需先具备这些外部前置条件。
 
 导入期零副作用：模块只含常量字面量（零网络 / 零 IO / 无函数 / 无副作用 import）。
 """
