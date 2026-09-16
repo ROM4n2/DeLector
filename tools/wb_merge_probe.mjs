@@ -184,11 +184,11 @@ function freshWords() {
       return {
         id: w.id, hw: w.hw, pos: w.pos || "", gloss: w.gloss || "",
         ipa: w.ipa || "", ex: Array.isArray(w.ex) ? w.ex : [], letter: w.letter || "",
-        page: w.page || 0, tags: CORE_WORD_SEED_IDS.has(w.id) ? ["core"] : [],
+        page: w.page || 0, tags: CORE_WORD_SEED_IDS.has(w.id) ? ["a1", "core"] : ["a1"],
         custom: false, up: 0
       };
     }).concat(CORE_CUSTOM_WORDS.map(function (w) {
-      return Object.assign({}, w, { tags: ["core"], custom: true, up: w.up || 0 });
+      return Object.assign({}, w, { tags: ["a1", "core"], custom: true, up: w.up || 0 });
     }))
   )`, ctx));
 }

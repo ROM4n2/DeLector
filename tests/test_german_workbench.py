@@ -448,18 +448,27 @@ def _seed_init_block():
 
 
 def test_core_tag_applied_during_seed_init():
-    """种子建表时按 CORE_WORD_SEED_IDS 打 core tag，而不是无条件 tags: []。
+    """种子建表时按 CORE_WORD_SEED_IDS 打 core tag，并对全部 A1 词补等级标签 a1。
 
-    tag 是核心词模式唯一的运行时身份来源（词表过滤 / 复习队列 / 统计都读它），
-    这里不打，后面所有 scope 过滤都会筛出 0 个词。
+    两条身份来源分工（见 workbench.html SCOPE_PREDICATES 上方注释）：
+      - 语义标签 core：核心词模式的身份来源（词表过滤 / 复习队列 / 统计都读它），
+        不打则后续所有 core scope 过滤会筛出 0 个词；
+      - 等级标签 a1：等级身份来源，「全部标签」下拉据此筛出 A1 全量
+        （用户需求：不局限 core 也能单看某一等级）。
+    故核心词 = ['a1','core']，非核心 A1 词 = ['a1']。
 
-    变异验证：把 tags 改回 `tags: []` → 两条断言同时红。
+    变异验证：把 tags 改回 `tags: []` / 漏补 a1 → 对应断言红。
     """
     block = _seed_init_block()
     assert re.search(r"tags:\s*CORE_WORD_SEED_IDS\.has\(w\.id\)\s*\?", block), (
         "种子词的 tags 必须按 CORE_WORD_SEED_IDS.has(w.id) 判定"
     )
-    assert re.search(r"\?\s*\[\s*['\"]core['\"]\s*\]", block), "命中核心词 id 时 tags 必须是 ['core']"
+    assert re.search(r"\?\s*\[\s*['\"]a1['\"]\s*,\s*['\"]core['\"]\s*\]", block), (
+        "命中核心词 id 时 tags 必须是 ['a1','core']（等级标签 a1 + 语义标签 core）"
+    )
+    assert re.search(r":\s*\[\s*['\"]a1['\"]\s*\]", block), (
+        "非核心 A1 种子词的 tags 必须是 ['a1']（补等级标签，才能按等级筛全量）"
+    )
     assert not re.search(r"tags:\s*\[\s*\]", block), "种子词 tags 不得无条件置空（无条件 tags: [] 会抹掉核心词身份）"
 
 
@@ -3026,8 +3035,11 @@ def test_schema_migration_behaves_under_node():
 #                                                              sync 并入 S.words，OTHER_LEVEL_SCOPES
 #                                                              追加 "b1"，all 档排除 B1 形态词
 #   a2:     ["a2-haus"]
-#   reader: ["card-Wohnung", "core-001"]
 #   b1:     ["b1-essen"]（T6 起为正式档位）
+# 后续收窄（等级标签补齐 Task）：reader 谓词去掉 w.custom 兜底 —— 原口径把任何 custom 词
+#   都当精读生词，core-001（custom:true 但只有 core tag）被 core 与 reader 两档重复收录。
+#   收窄后 reader 只认 reader 标记 或 card- 前缀 id，故 reader 档基线更新为 ["card-Wohnung"]
+#   （唯一真精读生词）；all 档排除项（custom 且带 reader 标记）不受影响，core-001 仍在 all。
 
 _SCOPE_SNAPSHOT_FIXTURE = [
     {"id": "a1-0001", "hw": "der Bahnhof", "tags": ["core"], "cefr": "A1"},
@@ -3044,7 +3056,8 @@ _SCOPE_SNAPSHOT_EXPECTED = {
     # all 档（A1 全量）必须排除 B1 形态词 —— b1-essen 出局。
     "all": ["a1-0001", "a1-0007", "core-001"],
     "a2": ["a2-haus"],
-    "reader": ["card-Wohnung", "core-001"],
+    # reader 谓词收窄后（去掉 w.custom 兜底）：core-001 是核心补缺词、不是精读生词，出局。
+    "reader": ["card-Wohnung"],
 }
 
 # cefrOf 六词形推导口径（口径权威 = T4 normalizeWord 的既有规则：显式 cefr 优先，
@@ -3197,6 +3210,65 @@ def test_scope_judgment_single_entry():
         )
     for gone in ('startsWith("a2-")', 'startsWith("b1-")', 'w.cefr === "A2"', 'w.cefr === "B1"'):
         assert gone not in _WORKBENCH, "三路 OR 冗余未消除：全文件仍含 %r" % gone
+
+
+# --------------------------------------------------------------------------
+# 等级标签补齐（a1）+ reader 谓词收窄 · 行为级动态探针 tools/wb_tags_probe.mjs
+# --------------------------------------------------------------------------
+# 修复根因：A2/B1 有等级标签（a2/b1），A1 只有 core（语义），「全部标签」下拉筛不出
+# 「A1 全量」。本探针把真实 backfillCoreWords + SCOPE_PREDICATES（含收窄后的 reader）
+# 切进 node:vm 真跑，喂一份「老形状」词表钉住四类词行为。
+
+
+def test_tag_level_backfill_and_reader_narrowing_under_node():
+    """动态探针：真实 backfillCoreWords + 收窄后的 reader 谓词在 node 里真跑。
+
+    四条硬断言（每一条回退实现必红）：
+      1. A1 非核心词 → tags 含 a1、不含 core；A1 核心词 → 同时含 a1 与 core；
+      2. 22 条 core-* 补缺词 → 全部补 a1（含 core），且 reader 谓词误收数为 0
+         （去掉 w.custom 兜底前，它们会被同时算进「精读生词」）；
+      3. 精读生词 card-* → 仍命中 reader，但不被补 a1；
+      4. backfill 幂等：二次返回 false 且词表逐字节不变。
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_tags_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_tags_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    out = json.loads(res.stdout)
+    assert out["ok"], "行为自检失败：%s" % out["problems"]
+    p = out["probes"]
+    assert "a1" in p["a1NonCore"]["tags"] and "core" not in p["a1NonCore"]["tags"], (
+        "A1 非核心词必须补 a1、不得含 core：%r" % p["a1NonCore"]
+    )
+    assert "a1" in p["a1Core"]["tags"] and "core" in p["a1Core"]["tags"], (
+        "A1 核心词必须同时含 a1 与 core：%r" % p["a1Core"]
+    )
+    assert p["coreCustom"]["allHaveA1"] and p["coreCustom"]["allHaveCore"], (
+        "core-* 补缺词必须补 a1 且保留 core"
+    )
+    assert p["coreCustom"]["anyReader"] == 0, "core-* 补缺词仍被 reader 谓词误收（收窄失败）"
+    assert p["readerWord"]["isReader"] and "a1" not in p["readerWord"]["tags"], (
+        "精读生词必须仍命中 reader，且不被补 a1：%r" % p["readerWord"]
+    )
+    assert p["allScopeExcludesReader"], "「A1 全量」档混入了精读生词"
+    assert p["changedFirst"] is True and p["idempotent"]["changedSecond"] is False, (
+        "backfill 必须首次 true、二次 false（幂等）"
+    )
+    assert p["idempotent"]["stable"], "backfill 二次运行后词表发生了变化（非幂等）"
 
 
 # --------------------------------------------------------------------------
