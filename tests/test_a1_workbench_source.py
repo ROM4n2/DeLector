@@ -137,6 +137,34 @@ def test_module_ids_are_unique_and_resolvable():
     assert not missing, "这些核心词 id 不在种子词表里：%s" % missing
 
 
+# ── 1b. IPA 无 tie-bar 残留（ADR-0013 §5-4）─────────────────────────────
+
+# tie-bar = COMBINING DOUBLE INVERTED BREVE（U+0361）。
+_TIE_BAR = "\u0361"
+
+
+def test_seed_ipa_has_no_tie_bar_residue():
+    """``A1_WORKBENCH_SEED`` 的 ipa 无 tie-bar 残留：U+0361 计数为 0（ADR-0013 §5-4）。
+
+    ADR-0013「IPA 表示法唯一：全局无 tie-bar」——任一条 seed 词 ipa 回归 tie-bar
+    连写写法（塞擦音连字符）即失败。
+    """
+    mod = _load_dict_module()
+    total = sum((w.get("ipa") or "").count(_TIE_BAR) for w in mod.A1_WORKBENCH_SEED)
+    assert total == 0, "A1_WORKBENCH_SEED 仍有 tie-bar 残留（实测命中 %d）" % total
+
+
+def test_custom_ipa_has_no_tie_bar_residue():
+    """``A1_WORKBENCH_CUSTOM`` 的 ipa 无 tie-bar 残留：U+0361 计数为 0（ADR-0013 §5-4）。
+
+    ADR-0013 §5-4 是「全局无 tie-bar」：核心新词（custom）与种子词同受约束。任一条
+    custom 词 ipa 回归 tie-bar 连写写法（塞擦音连字符，如 ``t\u0361s``）即失败。
+    """
+    mod = _load_dict_module()
+    total = sum((w.get("ipa") or "").count(_TIE_BAR) for w in mod.A1_WORKBENCH_CUSTOM)
+    assert total == 0, "A1_WORKBENCH_CUSTOM 仍有 tie-bar 残留（实测命中 %d）" % total
+
+
 # ── 2. 模块 ↔ HTML 双向等价 ─────────────────────────────────────────────
 
 

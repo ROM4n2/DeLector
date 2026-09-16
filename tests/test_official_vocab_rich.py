@@ -54,6 +54,30 @@ def test_every_entry_is_dict_with_frozen_keyset():
                 assert isinstance(value, str), f"{name}:{lemma}.{field} 非 str"
 
 
+def test_no_empty_ipa_in_any_fragment():
+    """空 IPA 断言收紧为 0：三级分片 ipa 全非空（A1 660 / A2 736 / B1 1617）。
+
+    原 10 条空 IPA（A1 fax/polizei/praxis/rezeption/taxi/zigarette、A2 polizei/
+    praxis/rezeption、B1 zigarette）有内部可溯源来源 —— 借自 ``A1_WORKBENCH_SEED``
+    同 lemma 的音标（去 tie-bar），故不再允许任何空 IPA 残留；若重跑外部 ``gen_rich.py``
+    未带上这 10 条，本断言立刻变红。
+    """
+    fragments = {
+        "A1": rich.OFFICIAL_RICH_A1,
+        "A2": rich.OFFICIAL_RICH_A2,
+        "B1": rich.OFFICIAL_RICH_B1,
+    }
+    assert [len(d) for d in fragments.values()] == [660, 736, 1617]
+    empties = [(name, lemma) for name, d in fragments.items() for lemma, v in d.items() if not v["ipa"].strip()]
+    assert empties == [], f"仍有空 IPA（实测 {len(empties)} 条）: {empties[:10]}"
+
+
+def test_backfilled_ipa_borrowed_from_a1_seed():
+    """回填值抽取断言：借自 ``A1_WORKBENCH_SEED`` 同 lemma 音标（去 tie-bar），值以实测为准。"""
+    assert rich.OFFICIAL_RICH_A1["polizei"]["ipa"] == "ˈpolɪtsaɪ̯"
+    assert rich.OFFICIAL_RICH_B1["zigarette"]["ipa"] == "ˈtsɪɡaʁette"
+
+
 def test_no_tie_bar_residue_in_ipa():
     """IPA 归一化：三常量全部 ipa 值不含 U+0361，且 tie-bar 连写形式均不出现。
 

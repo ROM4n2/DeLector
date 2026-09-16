@@ -10,11 +10,13 @@ Schema（ADR-0013）：lemma -> {"ipa","example_de","example_zh","topic"}
   - topic: 恒为 "general"（源无主题标签）。
   - 空值语义：缺失字段留空串 ""（不编造 / 不翻译 / 宁缺毋滥）。
 
-IPA 归一化规则（ADR-0013 §4-4；本模块相对源文件的唯一改动）：
+IPA 归一化规则（ADR-0013 §4-4；本模块相对源文件的改动之一）：
   去除 tie-bar 组合字符 U+0361（COMBINING DOUBLE INVERTED BREVE），
   将塞擦音连写归一为现有 A1 主流表示 —— 统一为 ts / pf / tʃ。
   归一化只作用于 ipa 字段（U+0361 在源中仅出现于 ipa 值）；example_de / example_zh / topic 一字不改。
   三个常量（含 A1）均归一化。
+
+本仓已回填 10 条空 IPA：来源 = A1_WORKBENCH_SEED 同 lemma 的音标（去 tie-bar）；重跑外部 ``gen_rich.py`` 时需带上这 10 条，否则回退丢失。
 
 TODO：向外部索取 ``gen_rich.py`` 归档 ``tools/`` 以保证可重放（当前生成脚本不在仓库内）。
 
@@ -226,7 +228,7 @@ OFFICIAL_RICH_A1: Dict[str, Dict[str, str]] = {
     'familienname': {"ipa": 'deːɐ fˈaːmiːliːnnaːmə', "example_de": 'Meine Familiennamen sind García González.', "example_zh": '', "topic": "general"},
     'familienstand': {"ipa": 'deːɐ fˈaːmiːliːnstant', "example_de": 'Bei „Familienstand“ musst du „ledig“ ankreuzen.', "example_zh": '', "topic": "general"},
     'farbe': {"ipa": 'diː fˈaɐbə', "example_de": 'Die Farbe gefällt mir gut.', "example_zh": '', "topic": "general"},
-    'fax': {"ipa": '', "example_de": 'Schicken Sie uns einfach ein Fax!', "example_zh": '', "topic": "general"},
+    'fax': {"ipa": 'ˈfaks', "example_de": 'Schicken Sie uns einfach ein Fax!', "example_zh": '', "topic": "general"},
     'fehlen': {"ipa": 'fˈeːlən', "example_de": 'Herr Müller ist nicht da, er fehlt schon seit drei Tagen.', "example_zh": '', "topic": "general"},
     'fehler': {"ipa": 'deːɐ fˈeːləɐ', "example_de": 'Diesen Fehler mache ich immer.', "example_zh": '', "topic": "general"},
     'feiern': {"ipa": 'fˈaɪɛɐn', "example_de": 'Wir feiern heute meinen Geburtstag.', "example_zh": '', "topic": "general"},
@@ -475,12 +477,12 @@ OFFICIAL_RICH_A1: Dict[str, Dict[str, str]] = {
     'pause': {"ipa": 'diː pˈaʊzə', "example_de": 'Von 12.00 bis 12.30 Uhr haben wir Mittagspause.', "example_zh": '', "topic": "general"},
     'plan': {"ipa": 'deːɐ plˈaːn', "example_de": 'Ich kaufe mir einen Stadtplan.', "example_zh": '', "topic": "general"},
     'platz': {"ipa": 'deːɐ plˈats', "example_de": 'Tut mir leid, der Platz ist besetzt.', "example_zh": '', "topic": "general"},
-    'polizei': {"ipa": '', "example_de": 'Holen Sie die Polizei!', "example_zh": '', "topic": "general"},
+    'polizei': {"ipa": 'ˈpolɪtsaɪ̯', "example_de": 'Holen Sie die Polizei!', "example_zh": '', "topic": "general"},
     'pommes-frites': {"ipa": 'diː pˈɔmməs fʁˈiːtəs', "example_de": 'Die Kinder essen Hähnchen mit Pommes frites.', "example_zh": '', "topic": "general"},
     'post': {"ipa": 'diː pˈɔst', "example_de": 'Wo ist die Post, bitte?', "example_zh": '', "topic": "general"},
     'postleitzahl': {"ipa": 'diː pˈɔstlaɪtsaːl', "example_de": 'Wie ist Ihre Postleitzahl?', "example_zh": '', "topic": "general"},
     'praktikum': {"ipa": 'das pʁˈaktiːkuːm', "example_de": 'Ich mache ein Praktikum bei Siemens.', "example_zh": '', "topic": "general"},
-    'praxis': {"ipa": '', "example_de": 'Die Praxis ist ab acht Uhr geöffnet.', "example_zh": '', "topic": "general"},
+    'praxis': {"ipa": 'ˈpʁaksɪz', "example_de": 'Die Praxis ist ab acht Uhr geöffnet.', "example_zh": '', "topic": "general"},
     'preis': {"ipa": 'deːɐ pʁˈaɪs', "example_de": 'Die Preise sind hoch.', "example_zh": '', "topic": "general"},
     'problem': {"ipa": 'das pʁˈɔpləm', "example_de": 'Mein Problem ist die Sprache.', "example_zh": '', "topic": "general"},
     'prospekt': {"ipa": 'deːɐ pʁˈɔspəkt', "example_de": 'Bitte schicken Sie mir einen Prospekt von Ihrem Hotel.', "example_zh": '', "topic": "general"},
@@ -501,7 +503,7 @@ OFFICIAL_RICH_A1: Dict[str, Dict[str, str]] = {
     'reparatur': {"ipa": 'diː ʁˈeːpaːʁaːtuːɐ', "example_de": 'Die Reparatur ist sehr teuer.', "example_zh": '', "topic": "general"},
     'reparieren': {"ipa": 'ʁˈeːpaːʁiːʁən', "example_de": 'Er hat das Fahrrad repariert.', "example_zh": '', "topic": "general"},
     'restaurant': {"ipa": 'das ʁˈɛstaʊʁant', "example_de": 'Wir essen heute in einem Restaurant.', "example_zh": '', "topic": "general"},
-    'rezeption': {"ipa": '', "example_de": 'Fragen Sie bitte im Hotel an der Rezeption.', "example_zh": '', "topic": "general"},
+    'rezeption': {"ipa": 'ˈʁetseptɪon', "example_de": 'Fragen Sie bitte im Hotel an der Rezeption.', "example_zh": '', "topic": "general"},
     'richtig': {"ipa": 'ʁˈɪçtɪç', "example_de": 'Habe ich das richtig verstanden?', "example_zh": '', "topic": "general"},
     'riechen': {"ipa": 'ʁˈiːçən', "example_de": 'Dieser Wein riecht gut.', "example_zh": '', "topic": "general"},
     'ruhig': {"ipa": 'ʁˈuːɪç', "example_de": 'Ich möchte ein ruhiges Zimmer.', "example_zh": '', "topic": "general"},
@@ -580,7 +582,7 @@ OFFICIAL_RICH_A1: Dict[str, Dict[str, str]] = {
     'suchen': {"ipa": 'zˈuːxən', "example_de": 'Suchst du etwas?', "example_zh": '', "topic": "general"},
     'tanzen': {"ipa": 'tˈantsən', "example_de": 'Tanzen Sie gern?', "example_zh": '', "topic": "general"},
     'tasche': {"ipa": 'diː tˈaʃə', "example_de": 'Ich habe die Schlüssel in der Tasche.', "example_zh": '', "topic": "general"},
-    'taxi': {"ipa": '', "example_de": 'Es gibt heute keinen Bus mehr. Er fährt mit dem Taxi.', "example_zh": '', "topic": "general"},
+    'taxi': {"ipa": 'ˈtaksɪ', "example_de": 'Es gibt heute keinen Bus mehr. Er fährt mit dem Taxi.', "example_zh": '', "topic": "general"},
     'tee': {"ipa": 'deːɐ tˈeː', "example_de": 'Ich trinke morgens immer Tee.', "example_zh": '', "topic": "general"},
     'teil': {"ipa": 'deːɐ tˈaɪl', "example_de": 'Lies bitte auch den zweiten Teil.', "example_zh": '', "topic": "general"},
     'telefon': {"ipa": 'das tˈeːləfoːn', "example_de": 'Haben Sie Telefon?', "example_zh": '', "topic": "general"},
@@ -667,7 +669,7 @@ OFFICIAL_RICH_A1: Dict[str, Dict[str, str]] = {
     'zahlen': {"ipa": 'tsˈaːlən', "example_de": 'Zahlen, bitte!', "example_zh": '', "topic": "general"},
     'zeit': {"ipa": 'diː tsˈaɪt', "example_de": 'Ich habe heute keine Zeit.', "example_zh": '', "topic": "general"},
     'zeitung': {"ipa": 'diː tsˈaɪtʊŋ', "example_de": 'Ich lese gern Zeitung.', "example_zh": '', "topic": "general"},
-    'zigarette': {"ipa": '', "example_de": 'Wie teuer sind die Zigaretten?', "example_zh": '', "topic": "general"},
+    'zigarette': {"ipa": 'ˈtsɪɡaʁette', "example_de": 'Wie teuer sind die Zigaretten?', "example_zh": '', "topic": "general"},
     'zimmer': {"ipa": 'das tsˈɪmməɐ', "example_de": 'Das Zimmer ist groß.', "example_zh": '', "topic": "general"},
     'zoll': {"ipa": 'deːɐ tsˈɔll', "example_de": 'Wir müssen noch durch den Zoll.', "example_zh": '', "topic": "general"},
     'zu': {"ipa": 'tsˈuː', "example_de": 'Der Bus fährt zum Bahnhof.', "example_zh": '', "topic": "general"},
@@ -1147,12 +1149,12 @@ OFFICIAL_RICH_A2: Dict[str, Dict[str, str]] = {
     'plan': {"ipa": 'deːɐ plˈaːn', "example_de": 'Ich kaufe mir einen Stadtplan.', "example_zh": '我给自己买一张市区地图。', "topic": "general"},
     'planen': {"ipa": 'plˈaːnən', "example_de": 'Wir sollen zusammen eine Klassenparty planen.', "example_zh": '我们应该一起筹划一次班级聚会。', "topic": "general"},
     'plötzlich': {"ipa": 'plˈœtslɪç', "example_de": 'Plötzlich war das Licht aus.', "example_zh": '突然灯灭了。', "topic": "general"},
-    'polizei': {"ipa": '', "example_de": 'Rufen Sie die Polizei!', "example_zh": '快叫警察！', "topic": "general"},
+    'polizei': {"ipa": 'ˈpolɪtsaɪ̯', "example_de": 'Rufen Sie die Polizei!', "example_zh": '快叫警察！', "topic": "general"},
     'portion': {"ipa": 'diː pˈɔɐtiːoːn', "example_de": 'Ich nehme eine kleine Portion Eis.', "example_zh": '我要一小份冰淇淋。', "topic": "general"},
     'post': {"ipa": 'diː pˈɔst', "example_de": 'Entschuldigung, wo ist die Post?', "example_zh": '打扰一下，邮局在哪里？', "topic": "general"},
     'praktikum': {"ipa": 'das pʁˈaktiːkuːm', "example_de": 'Ich mache ein Praktikum bei Siemens.', "example_zh": '我在西门子公司实习。', "topic": "general"},
     'praktisch': {"ipa": 'pʁˈaktɪʃ', "example_de": 'Mit meinem neuen Handy kann ich auch im Internet surfen und Fotos machen. Das finde ich sehr praktisch.', "example_zh": '用我的新手机我还能上网和拍照。我觉得这非常方便。', "topic": "general"},
-    'praxis': {"ipa": '', "example_de": 'Unsere Praxis ist ab acht Uhr geöffnet. Frau Doktor Weiß hat ab neun Uhr Sprechstunde.', "example_zh": '我们的诊所八点起开门。魏斯医生九点起看门诊。', "topic": "general"},
+    'praxis': {"ipa": 'ˈpʁaksɪz', "example_de": 'Unsere Praxis ist ab acht Uhr geöffnet. Frau Doktor Weiß hat ab neun Uhr Sprechstunde.', "example_zh": '我们的诊所八点起开门。魏斯医生九点起看门诊。', "topic": "general"},
     'preiswert': {"ipa": 'pʁˈaɪsvəɐt', "example_de": 'Die Jacke ist sehr preiswert. Sie kostet nur 15 Euro.', "example_zh": '这件外套非常实惠。只要15欧元。', "topic": "general"},
     'privat': {"ipa": 'pʁˈiːfaːt', "example_de": 'Das ist meine Nummer im Büro und das ist meine private Handynummer.', "example_zh": '这是我办公室的号码，这是我的私人手机号码。', "topic": "general"},
     'pro': {"ipa": 'pʁˈoː', "example_de": 'Das Zimmer kostet 100 Euro pro Nacht.', "example_zh": '这个房间每晚100欧元。', "topic": "general"},
@@ -1193,7 +1195,7 @@ OFFICIAL_RICH_A2: Dict[str, Dict[str, str]] = {
     'rest': {"ipa": 'deːɐ ʁˈɛst', "example_de": 'Hier sind 50 Euro. Den Rest gebe ich dir später.', "example_zh": '这是50欧元。余下的我晚些给你。', "topic": "general"},
     'restaurant': {"ipa": 'das ʁˈɛstaʊʁant', "example_de": 'Wir essen heute in einem Restaurant.', "example_zh": '我们今天在一家餐馆吃饭。', "topic": "general"},
     'rezept': {"ipa": 'das ʁˈeːtsəpt', "example_de": 'Dieser Kuchen schmeckt super! Kannst du mir bitte das Rezept geben?', "example_zh": '这个蛋糕太好吃了！你能把食谱给我吗？', "topic": "general"},
-    'rezeption': {"ipa": '', "example_de": 'Geben Sie bitte den Schlüssel an der Rezeption ab.', "example_zh": '请把钥匙交到前台。', "topic": "general"},
+    'rezeption': {"ipa": 'ˈʁetseptɪon', "example_de": 'Geben Sie bitte den Schlüssel an der Rezeption ab.', "example_zh": '请把钥匙交到前台。', "topic": "general"},
     'riechen': {"ipa": 'ʁˈiːçən', "example_de": 'Diese Blumen riechen gut.', "example_zh": '这些花闻起来很香。', "topic": "general"},
     'rind': {"ipa": 'das ʁˈɪnt', "example_de": 'Ich esse nur Fleisch vom Rind.', "example_zh": '我只吃牛肉。', "topic": "general"},
     'ring': {"ipa": 'deːɐ ʁˈɪŋ', "example_de": 'Ich habe meinen Ring verloren.', "example_zh": '我把戒指弄丢了。', "topic": "general"},
@@ -2972,7 +2974,7 @@ OFFICIAL_RICH_B1: Dict[str, Dict[str, str]] = {
     'zeuge': {"ipa": 'deːɐ tsˈɔɪgə', "example_de": 'Die Polizei sucht noch Zeugen für den Unfall.', "example_zh": '警方还在寻找这起事故的证人。', "topic": "general"},
     'ziehen': {"ipa": 'tsˈiːən', "example_de": 'Sie müssen ziehen, nicht drücken.', "example_zh": '您得拉，不是推。', "topic": "general"},
     'ziemlich': {"ipa": 'tsˈiːmlɪç', "example_de": 'Ich bin schon ziemlich müde. Ich gehe ins Bett.', "example_zh": '我已经相当累了，我去睡了。', "topic": "general"},
-    'zigarette': {"ipa": '', "example_de": 'Wie viele Zigaretten rauchst du am Tag?', "example_zh": '你一天抽多少支烟？', "topic": "general"},
+    'zigarette': {"ipa": 'ˈtsɪɡaʁette', "example_de": 'Wie viele Zigaretten rauchst du am Tag?', "example_zh": '你一天抽多少支烟？', "topic": "general"},
     'zinsen': {"ipa": 'diː tsˈɪnsən', "example_de": 'Wie viele Zinsen bekomme ich für mein Sparkonto?', "example_zh": '我的储蓄账户有多少利息？', "topic": "general"},
     'zivilstand': {"ipa": 'tsˈiːfɪlstant', "example_de": 'Bei „Zivilstand“ musst du „ledig“ ankreuzen.', "example_zh": '在「婚姻状况」一栏你要填「未婚」并勾选出来。', "topic": "general"},
     'zoll': {"ipa": 'deːɐ tsˈɔll', "example_de": 'Das war die Passkontrolle. Wir müssen jetzt noch durch den Zoll.', "example_zh": '刚才是护照检查，现在我们还得过海关。', "topic": "general"},

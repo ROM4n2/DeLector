@@ -392,6 +392,14 @@ def test_core_custom_words_headwords_match_source_export():
 
     源文件缺失时跳过（该 JSON 不在仓库内），存在时逐字段对齐。
     """
+
+    def _strip_tie_bar(s):
+        """去除 IPA 连接符 U+0361（tie bar）。
+
+        仅用于消除「表示法」层面的差异，不改变音素内容。
+        """
+        return s.replace("\u0361", "")
+
     src = Path("d:/Ran/Goethe_A1/delector_custom_words.json")
     if not src.exists():
         import pytest
@@ -403,7 +411,15 @@ def test_core_custom_words_headwords_match_source_export():
         origin = by_hw.get(w["hw"])
         assert origin, "%s（%s）在源词库中找不到，疑似编造" % (w["id"], w["hw"])
         assert w["gloss"] == origin["gloss"], "%s gloss 与源不一致" % w["id"]
-        assert w["ipa"] == origin["ipa"], "%s ipa 与源不一致" % w["id"]
+        # ADR-0013 §5-4 统一了 IPA 表示法（全局无 tie-bar），而外部导出快照
+        # d:/Ran/Goethe_A1/delector_custom_words.json 是旧版（仍含 tie-bar）。
+        # 二者差异恰为可忽略的纯表示差异，故 ipa 按「去除 U+0361 后」归一化比对。
+        # 「本仓 ipa 无 tie-bar」的表示法要求另由 tests/test_a1_workbench_source.py 的
+        # test_seed_ipa_has_no_tie_bar_residue / test_custom_ipa_has_no_tie_bar_residue
+        # 单独钉住——此处归一化只是消化快照的旧表示法，不放宽表示法要求本身。
+        assert _strip_tie_bar(w["ipa"]) == _strip_tie_bar(origin["ipa"]), (
+            "%s ipa 与源不一致（按去除 tie-bar 归一化后比对）" % w["id"]
+        )
         assert w["pos"] == origin["pos"], "%s pos 与源不一致" % w["id"]
 
 
