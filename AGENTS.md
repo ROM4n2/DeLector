@@ -15,7 +15,7 @@
 | 当前状态 / 红线速查 / 开放待办 / 项目定位 | `WORKMEMORY/PROJECT_OVERVIEW.md` |
 | 架构细节：技术栈 / NLP 降级 / Android 互锁 / DB schema / API 全览 / 前端拓扑 / LAN 同步 / FSRS / 完形 / 切句 | `docs/agents/architecture.md` |
 | 安全守卫 / 本机环境 / 打包 / Agent 工作惯例 | `docs/agents/ops.md` |
-| 版本历史与发布记录 | `README.md` Roadmap（changelog）+ git tag |
+| 版本历史与发布记录 | `CHANGELOG.md`（版本历史正主）+ git tag / GitHub Releases |
 | 产品特性全览 / 设计与实施计划 | `FEATURES.md`；`docs/specs/`、`docs/plans/` |
 | 语义知识检索与沉淀 | `search_vault` MCP 或 `python d:\Obsidian\Coding\scripts\search-vault.py`；成熟知识走 `/vault-save` |
 
