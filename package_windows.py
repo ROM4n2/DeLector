@@ -74,6 +74,8 @@ def build_windows():
         # 字段级合并共享纯函数），均住 delector/data/，与其它数据模块同口径逐条注册。
         "--hidden-import=delector.data.official_vocab",
         "--hidden-import=delector.data.lexicon_merge",
+        # Phase 2 · S1：富字段 side-car 分片（ipa/例句），与其它数据模块同口径逐条注册。
+        "--hidden-import=delector.data.official_vocab_rich",
         "--hidden-import=delector.routes.a1",
         "--hidden-import=delector.routes.a2",
         "--hidden-import=delector.routes.a1_hoeren",
