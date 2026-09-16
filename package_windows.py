@@ -70,6 +70,10 @@ def build_windows():
         "--hidden-import=delector.data.corpus_dict",
         "--hidden-import=delector.data.encounter_seed_dict",
         "--hidden-import=delector.data.a1_workbench_dict",
+        # R8 交付 1：本分支新增两片（official_vocab 官方词表分片 + lexicon_merge
+        # 字段级合并共享纯函数），均住 delector/data/，与其它数据模块同口径逐条注册。
+        "--hidden-import=delector.data.official_vocab",
+        "--hidden-import=delector.data.lexicon_merge",
         "--hidden-import=delector.routes.a1",
         "--hidden-import=delector.routes.a2",
         "--hidden-import=delector.routes.a1_hoeren",

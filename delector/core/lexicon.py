@@ -104,3 +104,26 @@ def official_level(cefr: str) -> Dict[str, tuple]:
     if level in ("A2", "B1"):
         return {lemma: val for lemma, val in OFFICIAL_A2B1_VOCAB.items() if val[0] == level}
     return {}
+
+
+def core_ids_by_level() -> Dict[str, frozenset]:
+    """多级核心词白名单（预留结构）。
+
+    现状：仅 A1 有名单（213，来自 ``a1_workbench_dict.A1_WORKBENCH_CORE_IDS``）；
+    ``A2`` / ``B1`` / ``B2`` 为**空集占位**，表示「该级尚未定义核心词」。
+    扩展方式（纯数据）：在此登记该级 id 集 + 前端 ``#scopeSeg`` 加一个 ``data-scope``
+    按钮并在 ``SCOPE_PREDICATES`` 加一行谓词（见 ``workbench.html`` 既有数据驱动机制）。
+
+    纯只读：A1 名单惰性取自 ``delector.data.a1_workbench_dict``（保持单一真相，
+    不复制一份名单过来），每次返回全新的 ``frozenset`` 副本，不修改任何全局名单。
+    """
+    # 惰性导入：a1_workbench_dict 是较大的纯数据模块，避免 lexicon 顶层加载期连带
+    # 导入（与 database / security 的惰性策略一致）；此处只用其 A1 核心 id 的单一真相。
+    from delector.data.a1_workbench_dict import A1_WORKBENCH_CORE_IDS
+
+    return {
+        "A1": frozenset(A1_WORKBENCH_CORE_IDS),
+        "A2": frozenset(),
+        "B1": frozenset(),
+        "B2": frozenset(),
+    }

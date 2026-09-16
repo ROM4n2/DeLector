@@ -1720,6 +1720,14 @@ const SCOPE_PREDICATES = {
   all: w => !OTHER_LEVEL_SCOPES.some(s => SCOPE_PREDICATES[s](w)) && !(w.custom && (w.tags || []).includes("reader")),
 };
 
+/* 多级核心词档扩展位（预留 · R8 交付 3）：
+ * 后端 delector.core.lexicon.core_ids_by_level() 现仅 A1 有核心词名单，
+ * A2/B1/B2 为空集占位。将来开放某级核心词档 = 三步纯数据改动，无需改判定逻辑：
+ *   ① 后端 core_ids_by_level() 登记该级 id 集；
+ *   ② 顶栏 #scopeSeg 增加一个 data-scope 档位按钮；
+ *   ③ 在 SCOPE_PREDICATES 本表增加一行谓词（本表即数据驱动入口）。
+ * 本次刻意不新增按钮/谓词，避免死代码与档位数护栏漂移。 */
+
 /** scope 判定唯一入口。未注册的 scope 沿用改造前的兜底语义（恒真）。 */
 function isInScope(w, scope) {
   const pred = SCOPE_PREDICATES[scope];

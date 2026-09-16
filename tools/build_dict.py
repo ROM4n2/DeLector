@@ -53,6 +53,17 @@ SOURCE_FILES = {
     "b2": DATA_DIR / "b2_all.csv",  # 1924 行 German,English（德国词在第 0 列）
 }
 
+# ── 噪声黑名单（R7 对账工具实测）────────────────────────────────────────
+# R8 交付 2：R7 的 tools/audit_official_vocab.py 对账 AI 分片，实测唯一混入的
+# 英语噪声是 "dishwasher"（源 tools/data/b2_all.csv 第 0 列的英语词误当德语词）。
+# 生成器据此在**生成候选**与**最终合并写出**两处跳过，避免重跑把这条噪声再写回。
+BLOCKLIST = frozenset({"dishwasher"})
+
+
+def _is_blocklisted(lemma: str) -> bool:
+    """噪声黑名单命中判定（小写归一，纯函数）。"""
+    return lemma.strip().lower() in BLOCKLIST
+
 # ── 规范化规则 ──────────────────────────────────────────────────────────
 _TOKEN_RE = re.compile(r"^[a-zäöüß][a-zäöüß-]*$")
 _ARTICLES = ("der ", "die ", "das ", "den ", "dem ", "des ")
@@ -132,9 +143,9 @@ def collect_candidates() -> Dict[str, str]:
 
 
 def exclude_existing(candidates: Dict[str, str]) -> Dict[str, str]:
-    """剔除已在现有词库的词元（只补缺口）。"""
+    """剔除已在现有词库的词元（只补缺口）与噪声黑名单词（R7 对账实测）。"""
     existing = set(CORE_VOCAB_DB.keys()) | set(k.lower() for k in LINGUISTICS_VOCAB_EXT.keys())
-    return {k: v for k, v in candidates.items() if k not in existing}
+    return {k: v for k, v in candidates.items() if k not in existing and not _is_blocklisted(k)}
 
 
 # ── DeepSeek 批量生成 ───────────────────────────────────────────────────
@@ -345,7 +356,12 @@ def validate_entry(entry: dict) -> Optional[str]:
 
 
 def emit_module(entries: List[dict], sources: Dict[str, str]) -> Path:
-    """生成 core_dict_ext.py（按 cefr 再按词元排序）。返回输出路径。"""
+    """生成 core_dict_ext.py（按 cefr 再按词元排序）。返回输出路径。
+
+    写出前先过滤噪声黑名单（R7 对账实测的英语混入词）：这是全部写出路径
+    （整包 / --reemit / --refill）的共同收口，在此拦下可保证黑名单词永不落盘。
+    """
+    entries = [e for e in entries if not _is_blocklisted(e["wort"])]
     entries.sort(key=lambda e: (_CEFR_ORDER.index(e["cefr"]), e["wort"]))
     src_names = ",".join(sorted(set(sources.values())))
     lines = [

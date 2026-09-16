@@ -45,3 +45,14 @@ def test_linguistics_ext_lookup():
     assert hit and hit["source"] == "linguistics_ext"
     assert "气候" in hit["definition_zh"]
     assert lookup_linguistics_ext("zzzznope") is None
+
+
+def test_english_noise_absent_from_core_vocab_db():
+    """R8 交付 2：R7 对账实测混入 AI 分片的英语噪声词（dishwasher）必须已被清除。
+
+    python `dishwasher` 是英语词，来源 `tools/data/b2_all.csv` 第 0 列（英语词误当
+    德语词入表），是 R7 的 `tools/audit_official_vocab.py` 在真实 AI 分片上实测到的
+    **唯一**噪声。删它 1 条后 ai 分片 3969→3968、主干 LEXICON/CORE_VOCAB_DB 4763→4762。
+    生成器侧由 `tools/build_dict.py` 的 BLOCKLIST 兜底，防止重跑复现。
+    """
+    assert "dishwasher" not in CORE_VOCAB_DB

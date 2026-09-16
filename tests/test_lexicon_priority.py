@@ -21,10 +21,12 @@ from delector.core.lexicon import (
     LEXICON,
     PROVENANCE,
     SOURCE_PRIORITY,
+    core_ids_by_level,
     merge_fragments,
     sources_of,
     view,
 )
+from delector.data.a1_workbench_dict import A1_WORKBENCH_CORE_IDS
 from delector.data.core_dict import CORE_VOCAB_DB, CORE_VOCAB_EXT, CORE_VOCAB_MANUAL
 from delector.data.lexicon_merge import FIELD_ORDER, FIELD_PRIORITY
 from delector.data.official_vocab import OFFICIAL_VOCAB
@@ -65,7 +67,7 @@ def test_lexicon_is_union_of_all_fragments():
     union = set(FRAGMENTS["ai"]) | set(FRAGMENTS["manual"]) | set(FRAGMENTS["official"])
     assert set(LEXICON) == union
     assert len(LEXICON) == len(union)
-    assert len(LEXICON) == 4763
+    assert len(LEXICON) == 4762
 
 
 def test_lexicon_takes_each_field_from_designated_source():
@@ -298,11 +300,11 @@ def test_source_priority_covers_all_fragments():
 def test_core_dict_shard_sizes_are_frozen():
     """CORE_VOCAB_DB 及相关分片的精确条数：合并顺序/分片被误改会静默漂移。
 
-    字段级合并三分片：手编 443 + AI 3969 + 官方 2732，去重后并集 = 4763；
+    字段级合并三分片：手编 443 + AI 3968 + 官方 2732，去重后并集 = 4762；
     ``CORE_VOCAB_DB`` 与主干 ``LEXICON`` 条数恒等（单真值）。
     """
     assert len(CORE_VOCAB_MANUAL) == 443
-    assert len(CORE_VOCAB_EXT) == 3969
+    assert len(CORE_VOCAB_EXT) == 3968
     assert len(OFFICIAL_VOCAB) == 2732
     assert len(CORE_VOCAB_DB) == len(LEXICON)
 
@@ -319,3 +321,39 @@ def test_core_dict_db_equals_lexicon():
     # 抽样冲突 lemma：两常量的 cefr 都必须取官方值（证明「不是碰巧相等」）。
     for lemma in ("zurzeit", "abfahren"):
         assert CORE_VOCAB_DB[lemma][0] == LEXICON[lemma][0] == OFFICIAL_VOCAB[lemma][0], lemma
+
+
+# ── 9. 多级核心词白名单预留结构（R8 交付 3）────────────────────────────────
+
+
+def test_core_ids_by_level_keys_and_reserved_placeholders():
+    """``core_ids_by_level()`` 键集恰为 {A1,A2,B1,B2}；仅 A1 有名单，其余为空集占位。
+
+    A2/B1/B2 的空集是**预留位**（该级尚未定义核心词），不是数据缺失 —— 将来开放
+    某级核心词档时在此登记该级 id 集即可（前端加一个 data-scope 按钮 + 一行谓词）。
+    """
+    by_level = core_ids_by_level()
+    assert set(by_level) == {"A1", "A2", "B1", "B2"}
+    assert by_level["A1"], "A1 核心词名单不应为空"
+    assert by_level["A1"] == frozenset(A1_WORKBENCH_CORE_IDS), (
+        "A1 值必须惰性取自 a1_workbench_dict（单一真相，不复制名单过来）"
+    )
+    for level in ("A2", "B1", "B2"):
+        assert isinstance(by_level[level], frozenset), f"{level} 应为 frozenset"
+        assert by_level[level] == frozenset(), f"{level} 应为空集占位（预留位，尚未定义核心词）"
+
+
+def test_core_ids_by_level_is_pure_and_readonly():
+    """纯函数：两次调用结果相等、每次返回全新 dict，且不修改任何全局名单。"""
+    import copy
+
+    snapshot = copy.deepcopy(A1_WORKBENCH_CORE_IDS)
+    first = core_ids_by_level()
+    second = core_ids_by_level()
+    assert first == second, "确定性：两次调用结果必须相等"
+    assert first is not second, "每次应返回全新 dict（不得返回共享可变状态）"
+    assert A1_WORKBENCH_CORE_IDS == snapshot, "不得修改全局 A1 核心词名单"
+
+    # 篡改本次返回值不得泄漏到下一次调用（证明无共享可变状态、纯只读）
+    first["A1"] = frozenset()
+    assert core_ids_by_level()["A1"] == frozenset(A1_WORKBENCH_CORE_IDS)

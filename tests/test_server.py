@@ -4342,6 +4342,12 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         # ADR-0011 Task 1：A1 工作台词库单一真相（被 database.py 延迟导入），
         # 漏登记 = 打包后 ModuleNotFoundError 而本地 pytest 全绿。
         "a1_workbench_dict",
+        # R8 交付 1：本分支新增两片，均住 delector/data/，与其它数据模块同口径
+        # （前缀 delector.data.）逐条钉进打包面 —— 漏登记 = 打包后 ModuleNotFoundError
+        # 而本地 pytest 全绿。official_vocab=官方歌德词表分片；lexicon_merge=字段级
+        # 合并共享纯函数（被 delector.core.lexicon 与 core_dict 共用）。
+        "official_vocab",
+        "lexicon_merge",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =

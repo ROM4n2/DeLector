@@ -6,7 +6,7 @@ Schema: lemma -> (cefr, pos, gender, plural, definition_zh)
 手动改会丢，改源后重跑 tools/build_dict.py。
 """
 
-CORE_VOCAB_EXT = {  # 3969 词条 · 来源 a2,b1,b2 · cefr 由 AI 分级
+CORE_VOCAB_EXT = {  # 3968 词条 · 来源 a2,b1,b2 · cefr 由 AI 分级（R8 交付 2：删 dishwasher 英语噪声 1 条）
     "ab": ("A1", "PREP", "None", "", "从...起,离开"),
     "aber": ("A1", "CONJ", "None", "", "但是/不过"),
     "achtung": ("A1", "NOUN", "Fem", "-", "注意"),
@@ -463,7 +463,6 @@ CORE_VOCAB_EXT = {  # 3969 词条 · 来源 a2,b1,b2 · cefr 由 AI 分级
     "diesmal": ("A2", "ADV", "None", "", "这次"),
     "direkt": ("A2", "ADJ", "None", "", "直接的/直接"),
     "disco": ("A2", "NOUN", "Fem", "-s", "迪斯科"),
-    "dishwasher": ("A2", "NOUN", "Masc", "-", "洗碗机"),
     "diskothek": ("A2", "NOUN", "Fem", "-en", "迪斯科舞厅"),
     "doktor": ("A2", "NOUN", "Masc", "-en", "博士，医生"),
     "donner": ("A2", "NOUN", "Masc", "-", "雷，雷声"),

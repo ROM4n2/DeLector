@@ -4,7 +4,7 @@ High-frequency German-Chinese dictionary with accurate lemma, POS, gender (der/d
 plural endings, CEFR level, and concise Chinese definitions.
 O(1) memory lookup for zero-latency token inspection and CEFR difficulty tagging.
 
-**权威主干是 ``delector.core.lexicon.LEXICON``**（手编 ⊕ AI ⊕ 官方，字段级合并，4763）。
+**权威主干是 ``delector.core.lexicon.LEXICON``**（手编 ⊕ AI ⊕ 官方，字段级合并，4762）。
 本模块的 ``CORE_VOCAB_DB`` 现为**主干等价视图**（= ``lexicon.LEXICON``，与 ``LEXICON``
 逐字同值，含键集与取值），仅作为兼容既有 import 的入口保留；新代码请优先走 ``lexicon``
 （``LEXICON`` / ``view`` / ``sources_of``），不要直连本模块的分片常量。
