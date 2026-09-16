@@ -368,6 +368,23 @@ Schema：`lemma -> {"ipa", "example_de", "example_zh", "topic"}`；常量 `OFFIC
 | **S5** | 消费端接线 | `/api/a2/vocab` 下发 `ipa`；workbench A2/B1 档（`ipa` + `ex:[{de,zh}]`）；`a1_cards.js` 接 `example_zh`；探针同步 |
 | **S6** | QA 与收口 | IPA 人工复核清单 + 文档回填 + 全量门禁 |
 
+### 10.7 执行状态（Phase 2，2026-09-16 收官）
+
+**分支**：`feature/vocab-rich-fields`（本地逐 Task 原子 commit）
+
+| Task | commit | 内容 |
+| --- | --- | --- |
+| 文档 | `9a8d7ed` | 本方案（§10）+ ADR-0013 引用 |
+| S1 | `1c851a5` | 富字段分片 `delector/data/official_vocab_rich.py` + **IPA 去 tie-bar**（309 字符/300 条 → 0）+ 打包三处（12→13） |
+| S2 | `a6daa65` | 主干 `lexicon.RICH`(2722) / `rich_of()`（A2/B1 覆盖 A1 的 291 条重叠） |
+| S4 | `4e329bd` | **契约 9 → 11 字段**（`+ipa` / `+example_zh`，`de` = 德语例句）；`_a1_workbench_row` 补 A1 中文例句（S3 并入） |
+| S5 | `86ba390` | 消费端接线：`/api/a2/vocab` 下发 ipa/example_zh；workbench A2/B1 `ex:[{de,zh}]` + ipa；`a1_cards.js` `example_zh` 接真值；探针同步 |
+| S6 | `cbf0844` | reader 卡 `ex` 形状对齐 + `docs/plans/2026-09-16-rich-ipa-review-checklist.md`（空 IPA 10 / artifacts 候选 381·69·74） |
+
+**关键数据**：`RICH` 2722 条（A1 660 ∪ A2 736 ∪ B1 1617，291 条跨档重叠由 A2/B1 覆盖）；`/api/a2/vocab` **726/736** 条含非空 `ipa`+`example_zh`；契约 11 字段（`{id,hw,pos,gender,plural,de,zh,ipa,example_zh,core,cefr}`）。
+**门禁**：除 `test_server.py` **731 passed**（+2 pre-existing，见 §6）+ `test_server.py` 单独 **228 passed** = **959 passed + 1 skipped**；**11/11 node 探针**零漂移；`ruff check .` 零告警；`mypy` 0 error（118 源文件）。
+**未做**：A1 富结构（`A1_WORKBENCH_SEED` / `GOETHE_A1_VOCAB`）从主干派生收敛（ADR-0012 Phase 2 的另一支）；A2/B1/B2 核心词名单。
+
 ### 10.6 风险与守线
 - 契约扩展（S4）**破 9 字段冻结** → 已由 **ADR-0013** 决策 + 必须同步契约守卫测试（严格相等改为 11 字段，**不得放宽为子集**）。
 - 富字段是 **side-car 分片**，**不改 5 元组存储 schema**（ADR-0011 §5-6 / ADR-0012 §5-1 不破）。
