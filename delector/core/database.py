@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import random
+import re
 import secrets
 import shutil
 import sqlite3
@@ -1694,21 +1695,87 @@ def list_hard_sentence_trials(limit: int = 50, db_path: Optional[str] = None) ->
 _A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
 _A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None
 
+# A1 名词元数据补全（S7 / ADR-0012 §4-4 派生）：seed 的 ``hw`` 归一化后到主干视图
+# ``lexicon.A1_LEMMA_META`` join gender / plural。冠词剥离集合（仅剥离**首个词**）。
+_A1_ARTICLE_PREFIXES = ("der", "die", "das", "den", "dem", "des", "ein", "eine")
+
+
+def _normalize_a1_headword(hw: str) -> str:
+    """把 A1 seed 的 ``hw`` 归一化为可 join ``lexicon`` 的 lemma 键。
+
+    规则（严格顺序）：小写 → 剥首个词冠词（``der/die/das/den/dem/des/ein/eine``）
+    → 去除括号内容（如 ``(sich)`` / ``(pl.)``）→ 取**逗号前**首段 → 去尾 ``-``
+    → 去首尾空白。例：``die Adresse,-en``→``adresse``；``der Apfel, -Ä``→``apfel``；
+    ``(sich) anmelden``→``anmelden``；``zum Beispiel/z. B.``→``zum beispiel/z. b.``。
+
+    纯函数、只读入参（不触碰任何全局状态）。
+    """
+    s = (hw or "").strip().lower()
+    parts = s.split(None, 1)  # 仅按首个空白切一次：剥「首个词」冠词
+    if parts and parts[0] in _A1_ARTICLE_PREFIXES:
+        s = parts[1] if len(parts) > 1 else ""
+    s = re.sub(r"\([^)]*\)", "", s)  # 去括号内容，如 (sich) / (pl.)
+    s = s.split(",", 1)[0]  # 取逗号前首段（逗号后是复数/变音标记）
+    s = s.rstrip("-")  # 去尾 '-'，如 all- / ander-
+    return s.strip()
+
+
+def _a1_noun_meta(hw: str) -> Tuple[Optional[str], str]:
+    """归一化 ``hw`` → join ``lexicon.A1_LEMMA_META`` → 返回 ``(gender, plural)``。
+
+    A1 名词元数据的唯一真相来自**主干 LEXICON**（``lexicon.A1_LEMMA_META`` 是其只读薄封装，
+    ``{"gender", "plural"}`` 直取主干 5 元组 ``v[2]`` / ``v[3]``）——两端格式同构，
+    故本层**直接取用**（唯一的规约化：主干以字面量 ``"None"`` 表示「无性别 / 无复数」，
+    与 ``_contract_from_core_entry`` 同规约，须归一化为 ``None`` / ``""``）：
+
+    - gender = ``meta["gender"]``（``Masc/Fem/Neut/Plur``；``"None"`` / 缺 → ``None``）；
+    - plural = ``meta["plural"]``（后缀标记，如 ``"-en"`` / ``"-.."`` / ``"-"``；
+      ``"None"`` / 缺 → ``""``）。
+
+    未命中（lemma 不在主干 LEXICON）→ ``(None, "")``，**绝不编造**。
+
+    惰性导入主干视图（与 ``_contract_from_core_entry`` 的 ``rich_of`` 同策略，
+    导入期零副作用）；主干缺失 = 打包损坏，直接 ImportError 炸出（红线 2）。
+    """
+    from delector.core.lexicon import a1_lemma_meta_of
+
+    lemma = _normalize_a1_headword(hw)
+    if not lemma:
+        return None, ""
+    meta = a1_lemma_meta_of(lemma)
+    if meta is None:
+        return None, ""
+    # 与 _contract_from_core_entry 同规约：主干非名词条目（PRON/ADJ 等）以字面量 "None"
+    # 表示无性别 / 无复数（842 条），契约层须归一化，禁止把字符串 "None" 泄漏进契约。
+    gender = meta.get("gender")
+    plural = meta.get("plural")
+    if gender == "None":
+        gender = None
+    if plural in (None, "None"):
+        plural = ""
+    return gender, plural
+
 
 def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
     """把数据模块的一条 A1 词条映射为内部行
-    {id, hw, pos, de, zh, ipa, example_zh, core, cefr}。
+    {id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr}。
 
     de/zh 派生规则与改造前逐字相同（ADR-0011：输出逐条不变，除新增字段）：
     de = (ex and ex[0].de) or de or ""；zh = gloss or zh or (ex and ex[0].zh) or ""。
     新增字段（S3，供契约 9 → 11）：
     ipa = w.ipa or ""（seed 逐条带音标）；example_zh = ex[0].zh or ""（种子 682/682 全覆盖）。
+    新增字段（S7，A1 卡片补齐）：gender/plural 由 ``hw`` 归一化后 join
+    ``lexicon.A1_LEMMA_META``（源 = 主干 LEXICON，格式同构）**直取**（见 ``_a1_noun_meta``）；
+    未命中 → None/""（不编造）。
     """
     ex = w.get("ex")
+    gender, plural = _a1_noun_meta(w.get("hw", ""))
     return {
         "id": w.get("id", ""),
         "hw": w.get("hw", ""),
         "pos": w.get("pos", ""),
+        "gender": gender,
+        "plural": plural,
         "de": (ex and ex[0].get("de")) or w.get("de") or "",
         "zh": w.get("gloss") or w.get("zh") or (ex and ex[0].get("zh")) or "",
         "ipa": w.get("ipa") or "",
@@ -1825,9 +1892,11 @@ def _contract_item(
 
 
 def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """A1 内部行（S4 起 9 键：新增 ipa / example_zh）→ 契约条目。
+    """A1 内部行（S7 起 11 键：新增 gender / plural）→ 契约条目。
 
-    gender/plural 显式空值：A1 数据模块无富字段，从词头冠词做推导猜测属递延 ADR（YAGNI）。
+    gender/plural 由 ``_a1_workbench_row``（S7）从 ``hw`` 归一化后 join
+    ``lexicon.A1_LEMMA_META``（源 = 主干 LEXICON）**直取**（命中即用；未命中 → None/""），
+    此处原样透传（不再硬编码空值）。
     ipa / example_zh 由 ``_a1_workbench_row``（S3）取自 seed 的 ``ipa`` / ``ex[0].zh``
     （682/682 全覆盖），此处原样透传。
     """
@@ -1835,8 +1904,8 @@ def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
         vocab_id=row["id"],
         hw=row["hw"],
         pos=row["pos"],
-        gender=None,
-        plural="",
+        gender=row["gender"],
+        plural=row["plural"],
         de=row["de"],
         zh=row["zh"],
         ipa=row["ipa"],

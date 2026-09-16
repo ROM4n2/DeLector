@@ -345,8 +345,26 @@ def test_load_reads_data_module_constants(monkeypatch, fresh_a1_cache):
     assert words[0]["example_zh"] == "迷你中文"
     assert words[1]["ipa"] == ""  # 无 ipa → 空串
     assert words[1]["example_zh"] == ""  # 无 ex → 空串
+    # S7 新增 gender / plural：由 hw 归一化 join lexicon 视图（主干 LEXICON）直取
+    # （迷你数据均未命中 → None/""）
+    assert words[0]["gender"] is None
+    assert words[0]["plural"] == ""
+    assert words[2]["gender"] is None  # "Miniwort" 不在官方 A1 分片 → None/""（不编造）
+    assert words[2]["plural"] == ""
     for w in words:
-        assert set(w.keys()) == {"id", "hw", "pos", "de", "zh", "ipa", "example_zh", "core", "cefr"}
+        assert set(w.keys()) == {
+            "id",
+            "hw",
+            "pos",
+            "gender",
+            "plural",
+            "de",
+            "zh",
+            "ipa",
+            "example_zh",
+            "core",
+            "cefr",
+        }
         assert w["cefr"] == "A1"
 
 

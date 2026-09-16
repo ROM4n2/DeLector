@@ -30,6 +30,7 @@
 （与 ``database`` / ``security`` 同策略），避免无关导入触发重依赖。
 """
 
+from collections.abc import Iterator, Mapping
 from typing import Any, Dict, Iterable, Optional
 
 # 主干对外 API（re-export，唯一实现仍在 delector.data.core_dict）：
@@ -173,3 +174,55 @@ def core_ids_by_level() -> Dict[str, frozenset]:
         "B1": frozenset(),
         "B2": frozenset(),
     }
+
+
+# ── A1 名词元数据视图（ADR-0012 §4-4 派生；输出层补全，不改存储）─────────────
+#
+# A1 工作台 seed（``A1_WORKBENCH_SEED``）本身**无** gender/plural 字段，A1 卡片的这两列
+# 长期为空。数据源（S7c 修正）= **主干** ``LEXICON``（字段级合并的唯一入口，ADR-0012 §5-1）：
+#   - ``gender`` = ``v[2]``，值域 ``{Masc, Fem, Neut, Plur, None}``（与契约格式一致）；
+#   - ``plural`` = ``v[3]``，**本身就是后缀标记**（``"-en"`` / ``"-.."`` / ``"-"`` ...），
+#     与契约 / 5 元组格式**完全同构**——直接取用，无需任何推导 / 转换。
+#
+# 为什么用主干 LEXICON 而非 ``official_level("A1")``（S7b 源）：官方 Wortliste 的 ``plural``
+# 列质量粗（``apfel`` 官方 ``"Ä"`` **连前导 ``-`` 都没有**、约 30% 是占位 ``"-"``），而
+# ADR-0012 §5-1 定义**富字段优先级**「手编 > 官方 > AI」，主干 LEXICON 正是该优先级的结果
+# —— ``apfel`` 取手编 ``"-.."``（精确）、``schule`` 取 ``"-n"``（胜官方占位 ``"-"``）。
+# 改走主干后 A1 与 A2/B1 分支（``_contract_from_core_entry`` 亦读 ``LEXICON``）**完全同源**，
+# 符合 ADR-0012 §5-1「主干唯一入口」。
+#
+# 本视图把主干的**名词元数据**以只读旁路形式暴露给数据库层 join（ADR-0012 §4-4 派生）：
+# 只读派生，零网络 / 零 IO / 零 SQLite 写入，**不进 5 元组存储**（存储 schema 冻结红线不变）。
+class _LemmaMetaView(Mapping):
+    """``lemma -> {"gender", "plural"}`` 只读薄封装。
+
+    直接派生自主干 ``LEXICON``（``__getitem__`` 取 ``v[2]`` / ``v[3]``），**不复制**整表
+    数据（避免双份真相）。键集 == ``LEXICON``；``dict(A1_LEMMA_META)`` 可展开为普通 dict。
+    """
+
+    def __getitem__(self, lemma: str) -> Dict[str, Any]:
+        val = LEXICON[lemma]
+        return {"gender": val[2], "plural": val[3]}
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(LEXICON)
+
+    def __len__(self) -> int:
+        return len(LEXICON)
+
+
+# 源 = 主干 ``LEXICON``（字段级：富字段 手编 > 官方 > AI）；A1 与 A2/B1 同源。
+A1_LEMMA_META: Mapping[str, Dict[str, Any]] = _LemmaMetaView()
+
+
+def a1_lemma_meta_of(lemma: str) -> Optional[Dict[str, Any]]:
+    """返回主干 ``LEXICON`` 中该 lemma 的名词元数据 ``{"gender": str|None, "plural": str}``。
+
+    ``gender`` = ``v[2]``；``plural`` = ``v[3]``（后缀标记，直接取用，不做任何推导 / 转换）。
+    未知 lemma 返回 ``None``（不抛错、不编造）。只读视图：A1 卡片补全用，不进存储。
+    源 = 主干 LEXICON（字段级优先级：富字段 手编 > 官方 > AI），故 A1 与 A2/B1 同源。
+    """
+    val = LEXICON.get(lemma)
+    if val is None:
+        return None
+    return {"gender": val[2], "plural": val[3]}

@@ -33,6 +33,16 @@ from delector.data.core_dict import CORE_VOCAB_DB
 # 唯一契约字段集（ADR-0013 §4-1：9 → 11；一份 schema，缺失字段显式空值）
 CONTRACT_FIELDS = {"id", "hw", "pos", "gender", "plural", "de", "zh", "ipa", "example_zh", "core", "cefr"}
 
+# A1 plural 合法值域（S7c：源 = 主干 LEXICON，惯例 = 后缀标记 ``"" | "-..."``）。
+# 例外：LEXICON 已知数据瑕疵 —— ``Firma`` → ``"Firmen"`` / ``Studium`` → ``"Studien"``
+# 是不规则**完整形式**，无法用「后缀标记」表达，故显式登记放行。
+A1_PLURAL_IRREGULAR = {"Firmen", "Studien"}
+
+
+def _is_valid_a1_plural(p: str) -> bool:
+    """A1 plural 是否满足主干 5 元组惯例（``""`` | ``-...``，含已登记的不规则例外）。"""
+    return p == "" or p.startswith("-") or p in A1_PLURAL_IRREGULAR
+
 # 条数基线（T2 后）：A1 core = 213 seed core ids + 22 customs；A1 all = 682 seeds + 22 customs。
 # A1 走 a1_dict 工作台分支，与 core_dict 无关，故仍为硬编码基线。
 A1_CORE_TOTAL = 235
@@ -63,14 +73,20 @@ def _assert_contract_uniform(words: List[Dict[str, Any]], min_count: int) -> Non
 
 
 def test_a1_core_scope_contract_uniform():
-    """A1 core：字段集 == 契约集，gender/plural 显式空值（不做冠词推导）。"""
+    """A1 core：字段集 == 契约集；gender/plural 由 seed hw join 主干 LEXICON**直取**（S7c）。
+
+    未命中仍显式空值（None/""）；plural 值域 = 主干 5 元组惯例（``"" | -...``，不编造）。
+    """
     res = get_vocab_by_cefr(cefr="A1", scope="core")
     assert res["total"] == A1_CORE_TOTAL
     _assert_contract_uniform(res["words"], 10)
-    for w in res["words"][:10]:
-        assert w["gender"] is None, f"{w['id']} A1 gender 应显式 None"
-        assert w["plural"] == "", f"{w['id']} A1 plural 应显式空串"
+    for w in res["words"]:
         assert w["cefr"] == "A1"
+        assert w["gender"] in {None, "Masc", "Fem", "Neut", "Plur"}, w["id"]
+        assert isinstance(w["plural"], str) and _is_valid_a1_plural(w["plural"]), w["id"]
+    # 覆盖不得回退成恒空（保持「S7 补全确实生效」的意图）
+    assert any(w["gender"] for w in res["words"])
+    assert any(w["plural"] for w in res["words"])
 
 
 def test_a1_all_scope_contract_uniform():
