@@ -76,6 +76,7 @@ from delector.core.database import (
     upsert_corpus_syntax_stats,
     verify_wb_key,
 )
+from delector.core.lexicon import lookup_core_vocab
 from delector.core.security import (
     PRESET_FEEDS,
     clean_html_to_article,
@@ -84,7 +85,6 @@ from delector.core.security import (
     parse_rss_feed,
 )
 from delector.core.utils import _attachment_headers
-from delector.data.core_dict import lookup_core_vocab
 from delector.nlp_engine.linguistics import (
     build_prep_matrix,
     lookup_irregular_verb,

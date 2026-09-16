@@ -12,8 +12,8 @@ except ImportError:
     # spaCy 缺失时的运行时降级占位（红线 1：降级路径是有意设计）——带理由豁免。
     spacy = None  # type: ignore[assignment]
 
+from delector.core.lexicon import get_core_cefr_level, lookup_core_vocab
 from delector.core.utils import is_android
-from delector.data.core_dict import get_core_cefr_level, lookup_core_vocab
 
 from .syntax_tree import analyze_sentence_topology, build_clause_tree, split_sentences_pure_python
 

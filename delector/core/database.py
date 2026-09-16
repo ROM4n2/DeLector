@@ -1858,7 +1858,7 @@ def _load_a2_vocab_words() -> List[Dict[str, Any]]:
     if _A2_VOCAB_CACHE is not None:
         return _A2_VOCAB_CACHE
 
-    from delector.data.core_dict import CORE_VOCAB_DB
+    from delector.core.lexicon import LEXICON as CORE_VOCAB_DB
 
     words = [
         _contract_from_core_entry(lemma, val)
@@ -1938,7 +1938,7 @@ def get_vocab_by_cefr(
         words = [_contract_from_a1_row(w) for w in filtered]
     else:
         # A2 并入通用路径（经 _load_a2_vocab_words 薄函数 + 缓存）；其余级别读 core_dict
-        from delector.data.core_dict import CORE_VOCAB_DB
+        from delector.core.lexicon import LEXICON as CORE_VOCAB_DB
 
         if cefr_norm == "A2":
             words = _load_a2_vocab_words()

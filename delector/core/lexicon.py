@@ -26,7 +26,10 @@
 
 from typing import Dict, Iterable, Optional
 
-from delector.data.core_dict import CORE_VOCAB_MANUAL
+# 主干对外 API（re-export，唯一实现仍在 delector.data.core_dict）：
+# ``get_core_cefr_level`` / ``lookup_core_vocab`` 是主干对外 API，实现唯一、禁止再复制，
+# 消费端统一 ``from delector.core.lexicon import ...``、不再直连分片（ADR-0012）。
+from delector.data.core_dict import CORE_VOCAB_MANUAL, get_core_cefr_level, lookup_core_vocab  # noqa: F401
 from delector.data.core_dict_ext import CORE_VOCAB_EXT
 from delector.data.lexicon_merge import FIELD_PRIORITY, merge_fragments, provenance_of
 from delector.data.official_vocab import (

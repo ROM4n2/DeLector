@@ -10,7 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Import local Goethe core dictionary for compound base elements & CEFR lookup
 try:
-    from delector.data.core_dict import CORE_VOCAB_DB, lookup_core_vocab
+    from delector.core.lexicon import LEXICON as CORE_VOCAB_DB
+    from delector.core.lexicon import lookup_core_vocab
 except ImportError:
     CORE_VOCAB_DB = {}
 
