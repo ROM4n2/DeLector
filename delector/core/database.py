@@ -1758,7 +1758,7 @@ def _a1_noun_meta(hw: str) -> Tuple[Optional[str], str]:
 
 def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
     """把数据模块的一条 A1 词条映射为内部行
-    {id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr}。
+    {id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr, letter}。
 
     de/zh 派生规则与改造前逐字相同（ADR-0011：输出逐条不变，除新增字段）：
     de = (ex and ex[0].de) or de or ""；zh = gloss or zh or (ex and ex[0].zh) or ""。
@@ -1767,6 +1767,8 @@ def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
     新增字段（S7，A1 卡片补齐）：gender/plural 由 ``hw`` 归一化后 join
     ``lexicon.A1_LEMMA_META``（源 = 主干 LEXICON，格式同构）**直取**（见 ``_a1_noun_meta``）；
     未命中 → None/""（不编造）。
+    新增字段（S1，ADR-0014 §6-S1）：letter = w.letter or "" —— **seed 原值逐字透传，
+    绝不派生**（前端 letterOf 派生会在 10 条上与内联 seed 值漂移，导致字母分组静默错位）。
     """
     ex = w.get("ex")
     gender, plural = _a1_noun_meta(w.get("hw", ""))
@@ -1782,6 +1784,7 @@ def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
         "example_zh": (ex and ex[0].get("zh")) or "",
         "core": core,
         "cefr": "A1",
+        "letter": w.get("letter") or "",
     }
 
 
@@ -1868,13 +1871,19 @@ def _contract_item(
     example_zh: str,
     core: bool,
     cefr: str,
+    letter: str,
 ) -> Dict[str, Any]:
-    """「存储视图 → 契约条目」的唯一映射点：所有分支产出同一 **11 字段**集
-    ``{id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr}``，
-    缺失字段显式空值（ADR-0013 §4-1：契约 9 → 11）。
+    """「存储视图 → 契约条目」的唯一映射点：所有分支产出同一 **12 字段**集
+    ``{id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr, letter}``，
+    缺失字段显式空值（ADR-0013 §4-1：契约 9 → 11；ADR-0014 §6-S1：契约 11 → 12）。
 
     - ``de`` 语义 = **德语例句**；``zh`` = 中文释义；``example_zh`` = 例句中文对照。
     - ``ipa`` = 音标（主干富字段，未登记 lemma 显式空串）。
+    - ``letter`` = 字母分组建表键（A1 首装靠它做字母分组）。**各分支口径不同**：
+      A1 = seed 原值逐字透传（``A1_WORKBENCH_SEED[*].letter``，缺失空串，**不派生** ——
+      派生会在 10 条上与内联 seed 漂移）；非 A1 = 与前端现行派生逐字一致的首字母大写
+      （``(hw or " ")[0].toUpperCase()``，对应 ``syncB1CardsFromServer`` / reader sync）。
+      本参数由各分支算好后传入，``_contract_item`` 只做原样落键。
     """
     return {
         "id": vocab_id,
@@ -1888,17 +1897,20 @@ def _contract_item(
         "example_zh": example_zh,
         "core": core,
         "cefr": cefr,
+        "letter": letter,
     }
 
 
 def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """A1 内部行（S7 起 11 键：新增 gender / plural）→ 契约条目。
+    """A1 内部行（S1 起 12 键：新增 letter）→ 契约条目。
 
     gender/plural 由 ``_a1_workbench_row``（S7）从 ``hw`` 归一化后 join
     ``lexicon.A1_LEMMA_META``（源 = 主干 LEXICON）**直取**（命中即用；未命中 → None/""），
     此处原样透传（不再硬编码空值）。
     ipa / example_zh 由 ``_a1_workbench_row``（S3）取自 seed 的 ``ipa`` / ``ex[0].zh``
     （682/682 全覆盖），此处原样透传。
+    letter 由 ``_a1_workbench_row``（S1，ADR-0014 §6-S1）取自 seed 原值（缺失空串），
+    此处原样透传——**绝不在此派生**（派生会漂移那 10 条）。
     """
     return _contract_item(
         vocab_id=row["id"],
@@ -1912,6 +1924,7 @@ def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
         example_zh=row["example_zh"],
         core=row["core"],
         cefr=row["cefr"],
+        letter=row["letter"],
     )
 
 
@@ -1937,9 +1950,14 @@ def _contract_from_core_entry(lemma: str, val: tuple) -> Dict[str, Any]:
     ipa = (rich or {}).get("ipa", "") or ""
     example_zh = (rich or {}).get("example_zh", "") or ""
 
+    hw = format_vocab_headword(lemma, pos, gender)
+    # letter（S1，ADR-0014 §6-S1）：非 A1 分支取「与前端现行派生逐字一致」的首字母大写。
+    # 依据：前端 syncB1CardsFromServer / reader sync 现行写法 = ``(rw.hw && rw.hw[0] ?
+    # rw.hw[0] : "?").toUpperCase()``（取 hw 首字母大写）；非 A1 的 hw 恒非空
+    # （format_vocab_headword 对非空 lemma 恒返回非空），故 (hw or " ")[0] 恒等于 hw[0]。
     return _contract_item(
         vocab_id=f"{lvl.lower()}-{lemma.lower()}",
-        hw=format_vocab_headword(lemma, pos, gender),
+        hw=hw,
         pos=pos,
         gender=gender,
         plural=plural,
@@ -1949,6 +1967,7 @@ def _contract_from_core_entry(lemma: str, val: tuple) -> Dict[str, Any]:
         example_zh=example_zh,
         core=True,
         cefr=lvl,
+        letter=(hw or " ")[0].upper(),
     )
 
 
@@ -2019,22 +2038,27 @@ def get_vocab_by_cefr(
             rows = conn.execute("SELECT * FROM vocab_cards ORDER BY id ASC").fetchall()
         words = []
         for r in rows:
+            hw = r["word"]
+            # reader 卡片无富字段：gender/plural/ipa/example_zh 显式空值，经
+            # ``_contract_item`` 统一产出同一 12 字段集（ADR-0011 决策 2 / ADR-0013 §4-1 /
+            # ADR-0014 §6-S1），保证各产出点字段集一致。
+            # letter 口径 = 与前端 ``syncReaderCardsFromServer`` 现行派生逐字一致：
+            # ``(rw.hw && rw.hw[0] ? rw.hw[0] : "?").toUpperCase()``（hw = 卡片 word 字段）。
             words.append(
-                {
-                    "id": f"card-{r['id']}",
-                    "hw": r["word"],
-                    "pos": r["pos"] or "",
-                    # reader 卡片无富字段：gender/plural/ipa/example_zh 显式空值，
-                    # 与契约同一 11 字段集，保证各产出点字段集一致（ADR-0011 决策 2）。
-                    "gender": None,
-                    "plural": "",
-                    "de": r["sentence_context"] or "",
-                    "zh": r["definition_zh"] or "",
-                    "ipa": "",
-                    "example_zh": "",
-                    "core": False,
-                    "cefr": r["cefr_level"] or "A1",
-                }
+                _contract_item(
+                    vocab_id=f"card-{r['id']}",
+                    hw=hw,
+                    pos=r["pos"] or "",
+                    gender=None,
+                    plural="",
+                    de=r["sentence_context"] or "",
+                    zh=r["definition_zh"] or "",
+                    ipa="",
+                    example_zh="",
+                    core=False,
+                    cefr=r["cefr_level"] or "A1",
+                    letter=(hw or " ")[0].upper(),
+                )
             )
         return {
             "cefr": cefr_norm,
