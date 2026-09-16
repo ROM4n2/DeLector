@@ -24,6 +24,9 @@ def get_a2_vocab(
     默认官方精选 736 词条（``sources=official``）。本端点语义即「A2 考纲词表」，
     故不传参 / 显式传 ``sources=`` 空串、None 或任意非官方取值时均取官方视图；
     ``sources`` 参数保留仅为向后兼容既有 query 形状。
+
+    富字段下发（ADR-0013 §4-5）：每条同时透传 ``ipa``（音标）与 ``example_zh``
+    （德语例句 ``de`` 的中文对照），供工作台 A2 卡片渲染；主干缺富字段时落空串。
     """
     sources_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
     if not sources_set or "official" not in sources_set:
@@ -44,7 +47,8 @@ def get_a2_vocab(
             "zh": w.get("zh", ""),
             "example_de": w.get("de", ""),
             "de": w.get("de", ""),
-            "example_zh": "",
+            "ipa": w.get("ipa") or "",
+            "example_zh": w.get("example_zh") or "",
             "topic": "general",
             "core": True,
             "cefr": "A2",
