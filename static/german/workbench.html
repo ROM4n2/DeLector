@@ -3197,7 +3197,9 @@ async function syncReaderCardsFromServer() {
           pos: rw.pos || "",
           gloss: rw.zh || rw.gloss || "",
           ipa: rw.ipa || "",
-          ex: rw.de ? [rw.de] : (Array.isArray(rw.ex) ? rw.ex : []),
+          /* ex 形状统一为 [{de,zh}]（同 A2/B1；渲染层读 ex[i].de/zh）：
+           * reader 卡无中文例句，zh 落空串。 */
+          ex: rw.de ? [{ de: rw.de, zh: rw.example_zh || "" }] : [],
           letter: (rw.hw && rw.hw[0] ? rw.hw[0] : "?").toUpperCase(),
           page: 0,
           tags: ["reader"],
@@ -3240,7 +3242,9 @@ async function syncA2CardsFromServer() {
           pos: rw.pos || "",
           gloss: rw.zh || rw.definition_zh || "",
           ipa: rw.ipa || "",
-          ex: rw.de ? [rw.de] : (rw.example_de ? [rw.example_de] : []),
+          /* ex 形状统一为 [{de,zh}]（同 A1 种子；渲染层读 ex[i].de/zh）：
+           * rw.de 为德语例句、rw.example_zh 为中文对照（S5 服务端已下发）。 */
+          ex: rw.de ? [{ de: rw.de, zh: rw.example_zh || "" }] : [],
           letter: (rw.lemma && rw.lemma[0] ? rw.lemma[0] : (rw.hw && rw.hw[0] ? rw.hw[0] : "?")).toUpperCase(),
           page: 0,
           tags: ["a2"],
@@ -3286,8 +3290,10 @@ async function syncB1CardsFromServer() {
           hw: rw.hw || "",
           pos: rw.pos || "",
           gloss: rw.zh || "",
-          ipa: "",
-          ex: rw.de ? [rw.de] : [],
+          ipa: rw.ipa || "",
+          /* ex 形状统一为 [{de,zh}]（同 A1 种子；渲染层读 ex[i].de/zh）：
+           * B1 通用分级端点 {de,zh,ipa,...} 已随 S4 下发 example_zh。 */
+          ex: rw.de ? [{ de: rw.de, zh: rw.example_zh || "" }] : [],
           letter: (rw.hw && rw.hw[0] ? rw.hw[0] : "?").toUpperCase(),
           page: 0,
           tags: ["b1"],

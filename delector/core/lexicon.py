@@ -18,13 +18,19 @@
 仅供加载后查询「仅官方精选」等来源感知视图；它是内存中的 ``frozenset``，
 **不进存储 schema**（5 元组冻结不变）。
 
+**富字段是输出层 side-car**（ADR-0013 §5-1）：``RICH`` / ``rich_of`` 提供
+``lemma -> {ipa, example_de, example_zh, topic}`` 的**展示用**富字段视图，
+来源为 ``delector.data.official_vocab_rich`` 三常量（A1/A2/B1）。它**只服务输出层**
+（前端富卡片 / 例句 / 音标），**不进 5 元组存储**、不改 ``LEXICON`` / ``PROVENANCE``
+语义（单入口见 §5-5：消费端统一走本模块）。加载期零网络 / 零 IO（纯内存合并）。
+
 **加载期零副作用**：纯内存合并（零网络 / 零 IO / 零 SQLite 写入）。
 消费端统一走本模块（``LEXICON`` / ``view`` / ``sources_of``），禁止再直连分片。
 注意：本模块刻意 **不** 加进 ``delector/core/__init__.py``，保持惰性导入
 （与 ``database`` / ``security`` 同策略），避免无关导入触发重依赖。
 """
 
-from typing import Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 # 主干对外 API（re-export，唯一实现仍在 delector.data.core_dict）：
 # ``get_core_cefr_level`` / ``lookup_core_vocab`` 是主干对外 API，实现唯一、禁止再复制，
@@ -37,6 +43,11 @@ from delector.data.official_vocab import (
     OFFICIAL_A1_VOCAB,
     OFFICIAL_A2B1_VOCAB,
     OFFICIAL_VOCAB,
+)
+from delector.data.official_vocab_rich import (
+    OFFICIAL_RICH_A1,
+    OFFICIAL_RICH_A2,
+    OFFICIAL_RICH_B1,
 )
 
 # 来源优先级：低 -> 高（后者覆盖前者）。
@@ -58,6 +69,41 @@ LEXICON: Dict[str, tuple] = merge_fragments(FRAGMENTS, FIELD_PRIORITY)
 
 # provenance：lemma -> 贡献该 lemma 的来源集合（同 lemma 在几片出现就含几个来源名）。
 PROVENANCE: Dict[str, frozenset] = provenance_of(FRAGMENTS)
+
+
+# 富字段 side-car 分片注册表：来源 official_rich（A1/A2/B1 三常量，纯数据 · 只读消费）。
+# 不进 5 元组存储（ADR-0013 §5-1），仅供输出层富卡片 / 例句 / 音标。
+RICH_FRAGMENTS: Dict[str, Dict[str, dict]] = {
+    "official_rich_a1": OFFICIAL_RICH_A1,
+    "official_rich_a2": OFFICIAL_RICH_A2,
+    "official_rich_b1": OFFICIAL_RICH_B1,
+}
+
+
+def _merge_rich(fragments: Dict[str, Dict[str, dict]]) -> Dict[str, Dict[str, Any]]:
+    """按分片注册顺序平面合并富字段（后者覆盖前者，key = lemma）。
+
+    纯函数、零副作用：只读传入分片，返回全新 ``dict``。合并顺序由 ``fragments``
+    插入顺序决定（此处为 A1 -> A2 -> B1）。
+    """
+    merged: Dict[str, Dict[str, Any]] = {}
+    for fragment in fragments.values():
+        merged.update(fragment)
+    return merged
+
+
+# 富字段视图：lemma -> {ipa, example_de, example_zh, topic}。
+# 合并顺序 A1 -> A2 -> B1：**A2/B1 的 lemma 覆盖 A1**（A1 与 A2B1 有 291 条跨档重叠，
+# A1 卡片走 seed / GOETHE_A1_VOCAB 不用本表，故重叠时以 A2/B1 为准）。
+RICH: Dict[str, Dict[str, Any]] = _merge_rich(RICH_FRAGMENTS)
+
+
+def rich_of(lemma: str) -> Optional[Dict[str, Any]]:
+    """返回该 lemma 的富字段（``{ipa, example_de, example_zh, topic}``）。
+
+    未知 lemma 返回 ``None``（不抛错）。只读视图（输出层 side-car，不进存储）。
+    """
+    return RICH.get(lemma)
 
 
 def sources_of(lemma: str) -> frozenset:

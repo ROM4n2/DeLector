@@ -322,6 +322,77 @@
 
 ---
 
+## 10. Phase 2 富字段挂载方案（`official_vocab_rich.py` 检验 + 方案，2026-09-16）
+
+### 10.1 交付物检验（外部 agent 产出，525KB / 3034 行）
+Schema：`lemma -> {"ipa", "example_de", "example_zh", "topic"}`；常量 `OFFICIAL_RICH_A1`(660) / `OFFICIAL_RICH_A2`(736) / `OFFICIAL_RICH_B1`(1617)。头注：IPA 由 `g2p.py` 规则生成（源 `ipa_map.json`）；例句德文来自官方 PDF `entries_raw.json`；中文 **逐字取自** `tr_*.json` / `a2b1_enrich.json`（非机翻）。
+
+| 等级 | rich | 官方分片 | 交集 | rich 多余 | 官方未覆盖 |
+| --- | --- | --- | --- | --- | --- |
+| A1 | 660 | 670 | 660 | 0 | **10**（=`OFFICIAL_A1_AUGMENT` 表外常用词） |
+| A2 | **736** | 736 | 736 | 0 | **0** |
+| B1 | **1617** | 1617 | 1617 | 0 | **0** |
+
+字段完整度：IPA A1 654 / A2 733 / B1 1616（**空 10 条**）；`example_de` A1 660 / A2 732 / B1 1617；`example_zh` A2 729 / B1 1617 / **A1 仅 198 ⚠️**。
+
+### 10.2 三条关键结论
+1. **A2/B1 是主要收益**（项目原先**完全没有** A2/B1 的 IPA/例句）→ 覆盖 736/1617 = **100%**，join key 零偏差。
+2. **A1 基本冗余**：`A1_WORKBENCH_SEED`(682 全覆盖 ipa+ex) 与 `GOETHE_A1_VOCAB`(702 全覆盖 example_zh) 已有富数据；rich 的 A1 与之 **IPA 差异 586 相同 / 50 不同，且 50 条全是表示法差异**（rich 用 `t͡s`/`p͡f` tie-bar，现有用 `ts`/`pf`）。→ **A1 建议不换**（避免表示法不一致与无谓风险）；A1 中文例句缺口可用内部数据补到 **640/660**（`seed.ex[0].zh` 或 `GOETHE_A1_VOCAB.example_zh`）。
+3. **IPA 是规则 g2p 生成**（非官方来源），存在 artifacts：`abfall`→`ˈapfall`（未简化双辅音）、`an-sein`→`ˈan zˈaɪn`、`abenteuer`→`das ˈaːbəntɔɪeːɐ`、`am-besten`→`ˈam bɛstˈən`。**含空格 = 名词带冠词发音**（`diː`/`deːɐ`/`das`），与现有 A1 风格一致（A1 329/660、A2 342/736、B1 846/1617）。
+
+### 10.3 方案（Phase 2，分 5 步）
+
+| # | 步骤 | 产出 / 要点 |
+| --- | --- | --- |
+| **S1** | **富字段分片入库** | `delector/data/official_vocab_rich.py`（保留 3 常量，纯数据零副作用）；**建议向外部 agent 索取 `gen_rich.py` 归档 `tools/`**（可重放性）；打包三处同步 |
+| **S2** | **主干富字段视图** | `lexicon` 增 `RICH` + `rich_of(lemma)`（加载期从 side-car 取，**不入 5 元组存储**）；不改 provenance 语义 |
+| **S3** | **A1 中文例句补齐**（仅当 A1 也走 rich） | 用 `A1_WORKBENCH_SEED.ex[0].zh` / `GOETHE_A1_VOCAB.example_zh` 回填 198→640（内部数据，零外部依赖） |
+| **S4** | **输出契约扩展（需 ADR 增补）** | 9 字段冻结的例外路径：`_contract_item` 扩为 `example_de` / `example_zh`（或 `ex:[{de,zh}]` 对齐 A1 工作台形状）；同步 `tests/test_vocab_contract_uniform.py` |
+| **S5** | **消费端接线** | `/api/cards/vocab` 下发富字段；`a1_cards.js` 的 `example_zh`（现硬编码 `""`）接上；工作台 A2/B1 档同步填 `ipa`/`ex`（`wb.words.v1` 形状已支持） |
+
+### 10.4 用户裁决（2026-09-16「按推荐来开做」）
+1. **A1 不切 rich** ✅（现有 seed/GOETHE_A1_VOCAB 已全覆盖；rich 的 A1 仅表示法差异）
+2. **IPA 统一为现有表示** ✅ → 落地为**去 tie-bar（U+0361）**：`t͡s→ts`、`p͡f→pf`、`t͡ʃ→tʃ`（252 条受影响）；不反向改 A1
+3. **IPA 质量门** ✅ → 产出**人工复核清单**（10 条空 IPA + artifacts 抽样），不做重质量门
+
+契约扩展决策落 **ADR-0013**（Vault `01-ADR/0013-rich-vocab-fields-output-contract.md`）：契约 9 → **11 字段**（新增 `ipa` / `example_zh`，`de` 语义统一为德语例句）。
+
+### 10.5 Phase 2 任务分解（S1–S6，/vault-exec）
+
+| # | 任务 | 产出 |
+| --- | --- | --- |
+| **S1** | 富字段分片入库（含 IPA 去 tie-bar） | `delector/data/official_vocab_rich.py` + `tests/test_official_vocab_rich.py` |
+| **S2** | 主干富字段视图 | `lexicon.RICH` / `rich_of(lemma)` + 测试 |
+| **S3** | A1 中文例句补齐（内部数据回填） | A1 分支 `example_zh` 覆盖 198 → ~640 |
+| **S4** | 契约扩展 9→11 | `_contract_item` + 三分支填值 + **同步 `tests/test_vocab_contract_uniform.py`** |
+| **S5** | 消费端接线 | `/api/a2/vocab` 下发 `ipa`；workbench A2/B1 档（`ipa` + `ex:[{de,zh}]`）；`a1_cards.js` 接 `example_zh`；探针同步 |
+| **S6** | QA 与收口 | IPA 人工复核清单 + 文档回填 + 全量门禁 |
+
+### 10.7 执行状态（Phase 2，2026-09-16 收官）
+
+**分支**：`feature/vocab-rich-fields`（本地逐 Task 原子 commit）
+
+| Task | commit | 内容 |
+| --- | --- | --- |
+| 文档 | `9a8d7ed` | 本方案（§10）+ ADR-0013 引用 |
+| S1 | `1c851a5` | 富字段分片 `delector/data/official_vocab_rich.py` + **IPA 去 tie-bar**（309 字符/300 条 → 0）+ 打包三处（12→13） |
+| S2 | `a6daa65` | 主干 `lexicon.RICH`(2722) / `rich_of()`（A2/B1 覆盖 A1 的 291 条重叠） |
+| S4 | `4e329bd` | **契约 9 → 11 字段**（`+ipa` / `+example_zh`，`de` = 德语例句）；`_a1_workbench_row` 补 A1 中文例句（S3 并入） |
+| S5 | `86ba390` | 消费端接线：`/api/a2/vocab` 下发 ipa/example_zh；workbench A2/B1 `ex:[{de,zh}]` + ipa；`a1_cards.js` `example_zh` 接真值；探针同步 |
+| S6 | `cbf0844` | reader 卡 `ex` 形状对齐 + `docs/plans/2026-09-16-rich-ipa-review-checklist.md`（空 IPA 10 / artifacts 候选 381·69·74） |
+
+**关键数据**：`RICH` 2722 条（A1 660 ∪ A2 736 ∪ B1 1617，291 条跨档重叠由 A2/B1 覆盖）；`/api/a2/vocab` **726/736** 条含非空 `ipa`+`example_zh`；契约 11 字段（`{id,hw,pos,gender,plural,de,zh,ipa,example_zh,core,cefr}`）。
+**门禁**：除 `test_server.py` **731 passed**（+2 pre-existing，见 §6）+ `test_server.py` 单独 **228 passed** = **959 passed + 1 skipped**；**11/11 node 探针**零漂移；`ruff check .` 零告警；`mypy` 0 error（118 源文件）。
+**未做**：A1 富结构（`A1_WORKBENCH_SEED` / `GOETHE_A1_VOCAB`）从主干派生收敛（ADR-0012 Phase 2 的另一支）；A2/B1/B2 核心词名单。
+
+### 10.6 风险与守线
+- 契约扩展（S4）**破 9 字段冻结** → 已由 **ADR-0013** 决策 + 必须同步契约守卫测试（严格相等改为 11 字段，**不得放宽为子集**）。
+- 富字段是 **side-car 分片**，**不改 5 元组存储 schema**（ADR-0011 §5-6 / ADR-0012 §5-1 不破）。
+- 前端改动（S5）→ **Android 需覆盖安装**。
+- 打包三处同步新分片（S1）。
+
+---
+
 ## 7. 架构评估（开工前复审 · 2026-09-15）
 
 > 触发：用户拍板**备考域「仅官方精选」（736/1617）**，并要求复审"新结构是否利于长期维护与扩展"。结论：**原 Phase 1（把官方塞进 `core_dict` 合并成一体）在新口径下不成立**，需修订（见 §8）。

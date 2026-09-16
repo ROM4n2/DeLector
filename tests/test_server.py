@@ -4348,6 +4348,9 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         # 合并共享纯函数（被 delector.core.lexicon 与 core_dict 共用）。
         "official_vocab",
         "lexicon_merge",
+        # Phase 2 · S1：富字段 side-car 分片 official_vocab_rich（ipa/例句），
+        # 同口径逐条钉进打包面 —— 漏登记 = 打包后 ModuleNotFoundError 而本地全绿。
+        "official_vocab_rich",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =
@@ -4675,7 +4678,7 @@ def test_get_vocab_by_cefr_level(client):
     assert data1["total"] == len(data1["words"])
     assert data1["total"] in (213, 235)
     first = data1["words"][0]
-    for key in ("id", "hw", "pos", "de", "zh", "core", "cefr"):
+    for key in ("id", "hw", "pos", "de", "zh", "ipa", "example_zh", "core", "cefr"):
         assert key in first, f"缺少字段: {key}"
     assert first["core"] is True
     assert first["cefr"] == "A1"

@@ -51,7 +51,7 @@ function mapCardsVocabItem(w) {
     zh: w.zh || "",
     example_de: w.de || "",
     de: w.de || "",
-    example_zh: "",
+    example_zh: w.example_zh || "",
     topic: "general",
     core: true,
     cefr: w.cefr,
