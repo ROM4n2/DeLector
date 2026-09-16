@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.9.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.9.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -20,19 +20,19 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
+> ✅ **v5.9.1 词库等级标签补齐 + 入口文档瘦身（2026-09-16）**：工作台词库补 A1 等级标签 `a1`（此前只有 `core`，词库「全部标签」筛不出 A1）；修 `reader` 谓词的 `custom` 兜底（22 条补缺词误入精读生词档）；README 瘦身 433→131 行，版本历史迁出为 `CHANGELOG.md`。测试基线 973 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > ✅ **v5.9.0 词库富字段与主干分层正式发布（2026-09-16）**：ADR-0012 词汇主干 lexicon 落地 + 官方歌德 A1/A2/B1 词表迁入；ADR-0013 输出契约 9→11 字段（新增 `ipa` 与中文例句），A2/B1 卡片首次具备音标与双语例句；A1 卡片补齐名词性别/复数（97.67%）。测试基线 972 passed + 1 skipped。
 > ✅ **v5.8.0 ADR-0011 词库单一真相化与等级判定数据驱动（2026-09-15）**：背词工作台词库改为单一数据真相，根除 HTML 正则解析与静默回退；新增 B1 档位（工作台第 5 档 + 备考域 B1 页签，1712 词）。测试基线 883 passed + 1 skipped。
-> ✅ **v5.7.7 真机 spaCy E050 根因修复 —— dist-info 缺失（2026-09-15）**：CI 拷模型漏拷 `.dist-info` 致真机 `is_package()` 误判 E050；修复后长难句工坊从「轻量分析」切回 spaCy 完整解析。
 >
 > 📱 **Android 用户注意**：改动含 `static/` 的版本（如 v5.8.0 / v5.9.0）需**覆盖安装**才生效。
 > 📜 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.9.0` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.0)     |
-| 🍎 **macOS**       | `v5.9.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.0)  |
-| 🐧 **Linux x64**   | `v5.9.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.0)  |
-| 📱 **Android**     | `v5.9.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.0) |
+| 🪟 **Windows x64** | `v5.9.1` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.1)     |
+| 🍎 **macOS**       | `v5.9.1` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.1)  |
+| 🐧 **Linux x64**   | `v5.9.1` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.1)  |
+| 📱 **Android**     | `v5.9.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.1) |
 
 ---
 
@@ -118,9 +118,9 @@ DeLector/
 
 ## 🗺️ 版本历史 (Version History)
 
+- **v5.9.1（2026-09-16）**：词库等级标签补齐（A1 补 `a1`、修 `reader` 谓词 custom 兜底）+ 入口文档瘦身（README 433→131 行，版本历史迁出为 `CHANGELOG.md`）。测试 973 passed + 1 skipped。
 - **v5.9.0（2026-09-16）**：词库富字段与主干分层——ADR-0012 词汇主干 lexicon + 官方歌德 A1/A2/B1 词表迁入；ADR-0013 输出契约 9→11 字段（新增音标 `ipa` 与中文例句），A2/B1 卡片首次具备音标与双语例句；A1 卡片补齐名词性别/复数（97.67%）。测试 972 passed + 1 skipped。
 - **v5.8.0（2026-09-15）**：ADR-0011 词库单一真相化 + 等级判定数据驱动——词库改单一数据真相，根除 HTML 正则解析与静默回退；新增 B1 档位（工作台第 5 档 + 备考域 B1 页签，1712 词）。测试 883 passed + 1 skipped。
-- **v5.7.7（2026-09-15）**：真机 spaCy E050 根因修复——CI 拷模型漏拷 `.dist-info` 致 `is_package()` 误判，修复后长难句工坊从「轻量分析」切回 spaCy 完整解析。
 
 > 📜 完整版本历史（含全部 70+ 版本）见 [CHANGELOG.md](CHANGELOG.md)。
 

@@ -4,7 +4,7 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.9.0（2026-09-16）**
+**最新版本：v5.9.1（2026-09-16）**
 
 ---
 
@@ -135,6 +135,8 @@
 - [x] **v5.8.0**：**ADR-0011 词库单一真相化 + 等级判定数据驱动正式发布**（2026-09-15，PR #46）——① 背词工作台词库改为**单一数据真相**（`delector/data/a1_workbench_dict.py` 682 词 / 213 核心 / 22 自定义，A1 704 / A2 974 / B1 1712 同契约），根除 HTML 正则解析与静默回退（服务端直接 import 数据模块，缺失抛 RuntimeError）；② 四路径契约统一（9 字段集 `{id,hw,pos,gender,plural,de,zh,core,cefr}`）；③ 前端 `normalizeWord` 幂等归一 + `wb.schema.v1` 一次性迁移（id/进度零丢失，merge 探针全绿）；④ scope 判定数据驱动（`SCOPE_PREDICATES` + `isInScope`/`cefrOf` 唯一入口，13/13 切片护栏零漂移）；⑤ **新增 B1 入口**（工作台第 5 档 + 备考域 B1 页签 + 徽标动态化，catalog `count_fn` 动态推导零硬编码）+ `/api/cards` 信封解包修复。测试基线 **883 passed + 1 skipped**（838→883 净增 44）；Android 需覆盖安装 v5.8.0 生效（B1 入口 + normalizeWord 迁移）。
 
 - [x] **v5.9.0**：**词库富字段与主干分层正式发布**（2026-09-16，PR #54/#55/#56/#57）——① **ADR-0012 词汇主干落地**：`delector/core/lexicon.py`（分片注册表 + provenance + 字段级优先级「cefr 官方 > 手编 > AI、富字段 手编 > 官方 > AI」；`CORE_VOCAB_DB == LEXICON == 4762` 单真值）+ 官方歌德 A1/A2/B1 词表迁入 `delector/data/official_vocab.py`（备考域/工作台 A2 **736**、B1 **1617** 官方精选；`/api/a2/vocab` 默认官方）；② **ADR-0013 输出契约 9→11 字段**（新增 `ipa` / `example_zh`，`de` 语义统一为德语例句）+ 富字段分片 `delector/data/official_vocab_rich.py`（A1 660 / A2 736 / B1 1617，join 零差），**A2/B1 卡片首次具备音标 + 双语例句**；③ **IPA 表示法全局统一**（去 tie-bar，全仓词表 0 残留：A1 seed/custom 10 条归一 + rich 空 IPA 10 条从 A1 seed 回填）；④ **A1 卡片补齐名词 gender/plural**（336/344 = **97.67%**，此前 0%；源 = 主干 LEXICON，与 A2/B1 同源）；⑤ 新增词表来源对账工具 `tools/audit_official_vocab.py` + 归档生成脚本 `tools/gen_rich.py`。测试基线 **972 passed + 1 skipped**（883→972 净增 89）；**Android 需覆盖安装 v5.9.0 生效**（改动含 `static/`）。
+
+- [x] **v5.9.1**：**词库等级标签补齐 + 入口文档瘦身**（2026-09-16，PR #59/#60）——① **工作台词库补 A1 等级标签 `a1`**：此前 A1 只有 `core`（核心语义）而缺等级语义，导致词库工具栏「全部标签」下拉**筛不出 A1**（A2/B1 恰好有 `a2`/`b1`，且词库浏览只在 `core` 档按 scope 过滤，其余档显示全库 → 按标签筛等级是唯一手段）；标签语义统一为 **`a1`/`a2`/`b1` = 等级、`core` = 核心词、`reader` = 精读生词**，种子建表 / `CORE_CUSTOM_WORDS` / 存量 `backfillCoreWords()` 幂等迁移（**不动 FSRS 进度**）。② **修 `reader` 谓词的 `w.custom` 兜底**：22 条 `core-*` 补缺词（`der Wohnort`/`die Nationalität`…）此前被误判为「精读生词」而**同时出现在两档**；收窄为 `tags.includes("reader") || id.startsWith("card-")`。③ **README 瘦身 433 → 131 行（DOC-GOVERNANCE 合规）**：版本历史迁出为 **`CHANGELOG.md`**（70 条历史零丢失，成为版本历史正主）；核心特性 12 子节 → 摘要 + 指针 `FEATURES.md`；目录结构 → 顶层树 + 指针 `docs/agents/architecture.md`；快速启动精简 → 指针 `docs/agents/ops.md`；新增「文档导航」路由表。④ 顺带修正既有滞后：`linguistics`/`syntax_tree` 路径补 `nlp_engine/` 前缀、测试模块数 27 → 60+。测试基线 **973 passed + 1 skipped**；**Android 需覆盖安装 v5.9.1 生效**（改动含 `static/`）。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 

@@ -128,7 +128,7 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
    `CHANGELOG.md`，**绝不在 README 复制第二份**（DOC-GOVERNANCE 单一真相源）。不要等发布后再补
    ——README 是仓库门面，滞后会让用户/协作者看到与代码不一致的版本。
 9. **大改动后**：更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 的「当前状态」「红线速查」「开放待办」；
-   发布类变更在 `CHANGELOG.md` 顶部追加版本条目（版本历史正主），README 只留最近 3 版摘要与指针。
+   发布类变更在 `CHANGELOG.md` 追加版本条目（**升序：接在最新版本条目之后**，版本历史正主），README 只留最近 3 版摘要与指针。
 10. **缓存问题**：**不要再用 `?v=X.X.X` 查询串给 CSS/JS 打版本号**（v4.4.5 已退役）。
     它挡不住真正的问题，还制造了安全感：安卓覆盖安装后磁盘上那份文件本身就是旧的，
     请求 URL 与响应内容是一对自洽的旧配对；而 `main.js` 的 ES module import 全是裸路径
