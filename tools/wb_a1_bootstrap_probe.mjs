@@ -11,6 +11,9 @@
  * CORE_WORD_SEED_IDS 全部从 static/german/workbench.html 按括号配对整段切出，丢进 node:vm
  * 真跑；本文件只提供夹具与断言。
  *
+ * 场景 C（Task B-S3 裁决版）：内联降级为离线 fallback —— 服务端可用时 a1WordsFromInline
+ * 调用 0 次、fetch 拒绝时恰好 1 次（704 条），计数器桩证明内联不是主路径数据源。
+ *
  * 真数据：通过 --fixture <path> 接收由 pytest 用 Python 产出的 JSON：
  *   {"rows": [...12 字段服务端行...], "inline": {"seed": [...], "custom": [...]}}
  *   rows   = delector.core.database.get_vocab_by_cefr("A1", scope="all")["words"]
@@ -179,9 +182,12 @@ const sb = (expr) => JSON.parse(vm.runInContext(`JSON.stringify(${expr})`, ctx))
  * ------------------------------------------------------------------------ */
 const cases = [];
 let failCount = 0;
-function check(name, cond, detail) {
+function check(name, cond, detail, extra) {
   const ok = !!cond;
-  cases.push({ name, ok, detail: detail == null ? "" : String(detail) });
+  const entry = { name, ok, detail: detail == null ? "" : String(detail) };
+  /* extra：结构化字段（如内联调用次数），让 pytest 能按字段名断言而不必解析 detail 文本 */
+  if (extra && typeof extra === "object") Object.assign(entry, extra);
+  cases.push(entry);
   if (!ok) failCount++;
   if (!JSON_MODE) console.log(ok ? `PASS  ${name}` : `FAIL  ${name}${detail ? "  —  " + detail : ""}`);
 }
@@ -359,7 +365,7 @@ for (const [name, seg] of [["同步启动段", STARTUP_SEG], ["hydrate 重载段
 /** 造一个全新沙箱：真实切片 + 可观测 localStorage 桩 + 可控 fetch。 */
 function makeRuntime(fetchMode) {
   const store = new Map();
-  const rec = { wordsWrites: [], saveCalls: [], writes: {}, fetchCalls: 0, toasts: [] };
+  const rec = { wordsWrites: [], saveCalls: [], writes: {}, fetchCalls: 0, toasts: [], inlineCalls: 0 };
   /* vm 内 console 一律走 stderr：--json 模式下 stdout 只能是那一个 JSON 对象，
    * bootstrapA1Words 的 console.log 绝不能污染 stdout。 */
   const vmConsole = {
@@ -386,6 +392,8 @@ function makeRuntime(fetchMode) {
     fetch: () => {
       rec.fetchCalls++;
       if (fetchMode === "server") return Promise.resolve({ ok: true, status: 200, json: async () => ({ words: ROWS }) });
+      // down：服务不可用（连接被拒）—— bootstrap 的 try/catch 应吃掉并回退内联
+      if (fetchMode === "down") return Promise.reject(new Error("ECONNREFUSED：本地服务未起"));
       return new Promise(() => {});   // 默认永挂：模拟首装挂在 await fetch
     },
     idbPut: () => {},
@@ -406,7 +414,11 @@ function makeRuntime(fetchMode) {
     `var SEED_WORDS = ${JSON.stringify(SEED)};\nvar CORE_CUSTOM_WORDS = ${JSON.stringify(CUSTOM)};\n` +
       Object.values(P2).join("\n") + "\n" +
       "var __realSaveWords = saveWords;\n" +
-      "saveWords = function () { __rec.saveCalls.push(JSON.parse(JSON.stringify(S.words))); return __realSaveWords.apply(this, arguments); };\n",
+      "saveWords = function () { __rec.saveCalls.push(JSON.parse(JSON.stringify(S.words))); return __realSaveWords.apply(this, arguments); };\n" +
+      /* 内联兜底调用计数器：只 +1 并转发给真切片，不重抄实现 —— 用于证明
+       * 「服务端可用时 a1WordsFromInline 一次都没被调用」。 */
+      "var __realInline = a1WordsFromInline;\n" +
+      "a1WordsFromInline = function () { __rec.inlineCalls++; return __realInline.apply(this, arguments); };\n",
     context,
     { filename: "workbench-a1-runtime-slices.js" }
   );
@@ -510,6 +522,53 @@ const sb2 = (context, expr) => JSON.parse(vm.runInContext(`JSON.stringify(${expr
       `w0.hw=${out.w0 && out.w0.hw} w0.ex=${JSON.stringify(out.w0 && out.w0.ex)} ` +
       `w0.ipa=${out.w0 && out.w0.ipa}(期望${target.ipa}) w0.letter=${out.w0 && out.w0.letter}(期望${target.letter}) ` +
       `w2=${out.w2 && out.w2.hw}/${out.w2 && out.w2.ipa}/${out.w2 && out.w2.letter} cardsWrites=${out.cardsWrites}`
+  );
+}
+
+/* 场景 C：内联仅作离线兜底（ADR-0014 §6-S3 裁决版）—— 真跑 bootstrapA1Words 源码切片，
+ * 同一段实现跑两种情形对比：
+ *   (a) fetch 成功             → 词表来自服务端（a1-0001 与服务端行一致），a1WordsFromInline 调用 **0** 次；
+ *   (b) fetch 拒绝（服务不可用）→ 词表来自内联（a1WordsFromInline 调用 **1** 次），条数 704。
+ * 调用次数由沙箱计数器桩给出（包住真切片：只 +1 并转发，探针里没有重抄实现）。
+ * 场景价值：静态正则只能证明「代码长这样」，证明不了「服务端可用时那 682+22 条一次都没被用过」——
+ * 裁决保留内联的前提就是它**只**在 file:// 直开 / 服务不可用这两条路上出场。 */
+{
+  const PROBE_ID = "a1-0001";
+  const probeRow = ROWS.find((r) => r.id === PROBE_ID) || null;
+  const runs = {};
+  for (const mode of ["server", "down"]) {
+    const { context } = makeRuntime(mode);
+    vm.runInContext(
+      "S.words = []; A1_BOOT_PENDING = true; S.cards = {}; S.log = {}; S.wrong = {};",
+      context
+    );
+    await vm.runInContext("bootstrapA1Words()", context);
+    runs[mode] = sb2(
+      context,
+      `{ inlineCalls: __rec.inlineCalls, fetchCalls: __rec.fetchCalls, len: S.words.length,
+         marker: localStorage.getItem("wb.a1.src.v1"), toasts: __rec.toasts,
+         probe: (S.words.find(function (w) { return w.id === ${JSON.stringify(PROBE_ID)}; }) || null) }`
+    );
+  }
+  const a = runs.server;
+  const b = runs.down;
+  const hwFromServer = !!a.probe && !!probeRow && a.probe.hw === probeRow.hw;
+  check(
+    "C1 内联仅作离线兜底：服务端可用时内联零调用",
+    a.inlineCalls === 0 && a.fetchCalls === 1 && a.len === ROWS.length && hwFromServer
+      && a.marker === "server" && a.toasts.length === 0,
+    `inlineCalls=${a.inlineCalls} fetchCalls=${a.fetchCalls} len=${a.len}/${ROWS.length} ` +
+      `${PROBE_ID}.hw=${a.probe && a.probe.hw}（服务端行=${probeRow && probeRow.hw}） ` +
+      `marker=${a.marker} toasts=${a.toasts.length}`,
+    { inlineCalls: a.inlineCalls, len: a.len, marker: a.marker, hw: (a.probe && a.probe.hw) || null }
+  );
+  check(
+    "C2 内联仅作离线兜底：服务不可用时兜底一次",
+    b.inlineCalls === 1 && b.fetchCalls === 1 && b.len === SEED.length + CUSTOM.length && b.len === 704
+      && b.marker === "inline" && b.toasts.length === 1,
+    `inlineCalls=${b.inlineCalls} fetchCalls=${b.fetchCalls} len=${b.len}/${SEED.length + CUSTOM.length} ` +
+      `marker=${b.marker} toasts=${b.toasts.length}`,
+    { inlineCalls: b.inlineCalls, len: b.len, marker: b.marker }
   );
 }
 

@@ -3625,6 +3625,8 @@ def test_a1_bootstrap_probe_equivalence(tmp_path):
         "挂起期不落盘空表",
         "兜底闸挡住挂起空表",
         "inline 标记设备下次启动重试",
+        # B-S3 裁决版：内联降级为离线 fallback 的行为证据
+        "内联仅作离线兜底",
     ):
         assert any(needle in n for n in names), (
             "探针缺少关键场景「%s」，场景集合：%r" % (needle, names)
@@ -3632,6 +3634,17 @@ def test_a1_bootstrap_probe_equivalence(tmp_path):
     # 等价场景必须真比了 704 条（682 seed + 22 custom），不许「样例过一下就绿」。
     eq = next(c for c in out["cases"] if "逐字段等价" in c["name"])
     assert "matched=704" in eq["detail"], "等价性场景未全量比对 704 条：%r" % eq["detail"]
+
+    # B-S3：内联**只**作离线兜底的行为证据 —— 调用次数由探针的计数器桩给出
+    # （服务端可用 0 次 / 服务不可用 1 次），静态正则证明不了这一条。
+    c_ok = next(c for c in out["cases"] if "内联仅作离线兜底" in c["name"] and "服务端可用" in c["name"])
+    c_down = next(c for c in out["cases"] if "内联仅作离线兜底" in c["name"] and "服务不可用" in c["name"])
+    assert c_ok["inlineCalls"] == 0, (
+        "服务端可用时仍调用了内联兜底（内联回了主路径）：%r" % (c_ok,)
+    )
+    assert c_down["inlineCalls"] == 1, (
+        "服务不可用时内联兜底未被恰好调用一次（离线能力断了 / 被调了多次）：%r" % (c_down,)
+    )
 
 
 def test_a1_bootstrap_probe_usage_without_fixture():
@@ -3655,3 +3668,115 @@ def test_a1_bootstrap_probe_usage_without_fixture():
     )
     assert res.returncode == 0, "无参数应退出码 0：\n%s\n%s" % (res.stdout, res.stderr)
     assert "用法" in (res.stdout + res.stderr), "无参数时应打印可读用法提示"
+
+
+# ---------------------------------------------------------------------------
+# ADR-0014 §6-S3（Task B-S3 裁决版）：内联种子降级为「离线 fallback」的三条守卫
+#
+# 裁决：**不删** SEED_WORDS(682) / CORE_CUSTOM_WORDS(22) —— file:// 直开是 ADR-0011 明示
+# 保护的离线能力（删了「服务未起首启」与 file:// 下直接无词表），本地服务下 124KB 的
+# 体积收益近零。故改为「保留 + 标注（见两个常量上方注释）+ 守卫」：数据还在，
+# 但**绝不许它回到主路径**。三条守卫分工：
+#   G1 首装不再同步建表（loadAll 里不许出现内联建表）；
+#   G2 内联兜底实现只允许「1 定义 + 1 调用」，且调用点只许落在 bootstrapA1Words 体内；
+#   G3 bootstrap 成功路径（fetch → 映射 → saveWords）绝不引用内联。
+# 三条都切成函数体/分支级切片 —— 整文件模糊匹配必然命中注释与兜底自身，挡不住回归。
+# ---------------------------------------------------------------------------
+
+
+def test_load_all_first_install_never_builds_table_inline():
+    """G1：loadAll 首装分支不得再同步建表（无 `SEED_WORDS.map(` / `a1WordsFromInline`）。
+
+    S2 之前 loadAll 在无词表时当场 `S.words = SEED_WORDS.map(...)` 建表：首屏就把 682 条
+    内联种子当成真数据源，服务端 /api/cards/vocab?cefr=A1&scope=all 永远进不来
+    （ADR-0014 §6-S2 的病根）。现首装只置空表 + 挂 A1_BOOT_PENDING，建表交给
+    bootstrapA1Words() 异步走服务端，失败才兜底。
+
+    作用域是 **loadAll 函数体切片**（`_load_all_body`），不是整文件 —— 整文件搜必然命中
+    a1WordsFromInline 自身与其注释，挡不住「把建表挪回 loadAll」。
+
+    变异验证（已实跑）：把 `S.words = SEED_WORDS.map(w => w);` 塞回 loadAll 首装分支 → 本条红。
+    """
+    body = _load_all_body()
+    assert "SEED_WORDS.map(" not in body, (
+        "loadAll 里又出现 SEED_WORDS.map(：首装回到同步内联建表，服务端 A1 视图永无机会"
+    )
+    assert "a1WordsFromInline" not in body, (
+        "loadAll 里出现 a1WordsFromInline：首装回到同步内联建表"
+        "（首装应只置空表 + 挂起标记，建表交给 bootstrapA1Words）"
+    )
+    # 防死测：loadAll 仍得有「首装挂起」这条分支，否则「不建表」三个字是空话
+    assert "A1_BOOT_PENDING = true" in body, "loadAll 缺少首装挂起分支，切片或实现已漂移"
+
+
+def test_inline_builder_has_single_callsite_inside_bootstrap():
+    """G2：a1WordsFromInline( 全文件恰 2 处（1 定义 + 1 调用），唯一调用点落在 bootstrap 体内。
+
+    它是「离线兜底」的唯一实现，按裁决保留；但一旦长出第二个调用点（有人从渲染路径、
+    设置路径或 backfill 里调它补表），内联就从 fallback 变回主路径 —— 正是 S3 要钉的回归。
+    **计数 + 位置**双断言：只计数挡不住「调用点挪出 bootstrap 仍在 bootstrap 之外另建一份」，
+    只查位置挡不住「新增第二处调用」。
+
+    变异验证（已实跑）：在 bootstrapA1Words 之外（例如 backfillCoreWords 里）再加一处
+    `a1WordsFromInline();` → 计数断言与位置断言同时红。
+    """
+    decl = "function a1WordsFromInline("
+    assert _WORKBENCH.count(decl) == 1, (
+        "a1WordsFromInline 定义应恰好 1 处，实际 %d 处（内联建表实现被复制了）"
+        % _WORKBENCH.count(decl)
+    )
+    total = _WORKBENCH.count("a1WordsFromInline(")
+    assert total == 2, (
+        "a1WordsFromInline( 全文件应恰好 2 处（1 定义 + 1 调用），实际 %d 处 —— "
+        "多出来的调用点意味着内联重回主路径" % total
+    )
+    boot = _bootstrap_a1_body()
+    assert boot.count("a1WordsFromInline(") == 1, (
+        "bootstrapA1Words 体内 a1WordsFromInline( 应恰好 1 处（唯一兜底调用点），实际 %d 处"
+        % boot.count("a1WordsFromInline(")
+    )
+    # 定义自身不在 bootstrap 体内（`_a1_words_from_inline_body` 自带切片有效性断言），
+    # 故「全文件 2 处 + bootstrap 内 1 处」即证明唯一调用点确实落在 bootstrap 里。
+    assert "SEED_WORDS.map(" in _a1_words_from_inline_body(), "内联建表实现被掏空（防死测）"
+
+
+def test_bootstrap_success_path_never_uses_inline_seed():
+    """G3：bootstrapA1Words 的成功路径不得引用 a1WordsFromInline，且仍保留 inline 重试分支。
+
+    服务端可用时词表**必须**来自 /api/cards/vocab?cefr=A1&scope=all。若成功路径也过一遍
+    内联（哪怕只是「先内联再整体覆盖」），内联就不是 fallback 而是第二数据源 —— 服务端
+    增词 / 改例句在本地永远看不见。切片取 `await fetch(` 到 fetch 的 `} catch` 之间，
+    窄到只覆盖「拉服务端 + 映射」这一段；再用兜底三元的行内位置钉住「内联只在 else 分支」。
+
+    触发条件断言沿用既有风格（与 test_a1_bootstrap_source_marker_retries_when_inline 同款
+    正则），不另造一套写法。
+
+    变异验证（已实跑）：把兜底三元改成 `S.words = fromServer ? a1WordsFromInline() : words;`
+    （内联整体覆盖服务端结果）→ 三元分支断言红。
+    """
+    body = _bootstrap_a1_body()
+    at_fetch = body.index("await fetch(")
+    at_catch = body.index("} catch (e) {", at_fetch)
+    success = body[at_fetch:at_catch]
+    assert "/api/cards/vocab?cefr=A1&scope=all" in success, (
+        "成功路径切片里找不到服务端 A1 端点，锚点漂移（切片不再覆盖成功路径）"
+    )
+    assert "a1WordsFromInline" not in success, (
+        "bootstrap 成功路径（fetch → 映射）引用了 a1WordsFromInline："
+        "内联成了主路径数据源，服务端 A1 视图的增量在本地看不见"
+    )
+    # 唯一兜底调用点必须留在 fromServer 三元的 **else** 分支（失败才走）
+    line = _sole_line(body, "a1WordsFromInline(", "bootstrap 兜底调用点")
+    parts = line.split("fromServer ?", 1)
+    assert len(parts) == 2, (
+        "兜底调用点不在 `fromServer ? ... : ...` 三元里：内联不再只服务兜底分支（%r）" % line
+    )
+    true_branch = parts[1].split(":", 1)[0]
+    assert "a1WordsFromInline" not in true_branch, (
+        "a1WordsFromInline 出现在 fromServer=true 的分支里："
+        "服务端成功后仍被内联整体覆盖（%r）" % line
+    )
+    # 触发条件必须含 A1_SRC_KEY 的 inline 重试分支（沿用既有断言风格）
+    assert re.search(r"!A1_BOOT_PENDING[^;]*\"inline\"", body), (
+        "bootstrap 触发条件必须含 inline 重试分支（兜底过的设备下次启动重试服务端）"
+    )
