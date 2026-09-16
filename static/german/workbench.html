@@ -1093,12 +1093,12 @@ function loadAll() {
     S.words = SEED_WORDS.map(w => normalizeWord({
       id: w.id, hw: w.hw, pos: w.pos || "", gloss: w.gloss || "",
       ipa: w.ipa || "", ex: Array.isArray(w.ex) ? w.ex : [], letter: w.letter || "",
-      page: w.page || 0, tags: CORE_WORD_SEED_IDS.has(w.id) ? ["core"] : [],
+      page: w.page || 0, tags: CORE_WORD_SEED_IDS.has(w.id) ? ["a1", "core"] : ["a1"],
       custom: false, up: 0
     }));
     // 核心词表里 SEED_WORDS 没有的 22 个新词：展开复制成新对象，
     // 不能把常量里的对象引用直接塞进 S.words（用户编辑会改到常量本身）
-    S.words.push(...CORE_CUSTOM_WORDS.map(w => normalizeWord({ ...w, tags: ["core"], custom: true, up: w.up || 0 })));
+    S.words.push(...CORE_CUSTOM_WORDS.map(w => normalizeWord({ ...w, tags: ["a1", "core"], custom: true, up: w.up || 0 })));
     saveWords();
     markSchemaMigrated(); // 种子建表已逐条过 normalizeWord，契约天然齐 → 直接视为已迁移
   } else {
@@ -1132,10 +1132,23 @@ function backfillCoreWords() {
         changed = true;
       }
     }
+    /* A1 等级标签幂等补齐（与上面补 core tag 同纪律）：A1 身份 = id 前缀 a1- / core-，
+     * 或 cefrOf 推导为 A1；reader 档精读生词（reader 标记 / card- 前缀）不是课程 A1
+     * 词，排除 —— 只补 a1，绝不改 cards / log / wrong 三个进度库。 */
+    const isA1 = cefrOf(w) === "A1"
+      || String(w.id || "").startsWith("a1-")
+      || String(w.id || "").startsWith("core-");
+    if (isA1 && !isInScope(w, "reader")) {
+      if (!w.tags) w.tags = [];
+      if (!w.tags.includes("a1")) {
+        w.tags.push("a1");
+        changed = true;
+      }
+    }
   }
   for (const cw of CORE_CUSTOM_WORDS) {
     if (!existingIds.has(cw.id)) {
-      S.words.push({ ...cw, tags: ["core"], custom: true, up: cw.up || 0 });
+      S.words.push({ ...cw, tags: ["a1", "core"], custom: true, up: cw.up || 0 });
       existingIds.add(cw.id);
       changed = true;
     }
@@ -1710,9 +1723,18 @@ function cefrOf(w) {
  *  - 精读生词：custom 且带 reader 标记。这是改造前 all 分支的收窄口径，刻意比
  *    reader 谓词窄 —— 仅 card- 前缀命中、不带 custom 的词在 all 档仍然可见。 */
 const OTHER_LEVEL_SCOPES = ["a2", "b1"];
+/* 标签分工（词条 tags 数组）：
+ *  - 等级标签 a1 / a2 / b1：课程等级身份，一条课程词恰属一个等级；词库「全部标签」
+ *    下拉据此筛出「某一等级全量」（用户需求：不局限 core 也能单看 A1 / A2 / B1）。
+ *  - 语义标签 core：核心词标记，与等级标签共存（A1 核心词 = a1 + core）；
+ *  - 语义标签 reader：精读生词来源标记，连同 card- 前缀 id 一起被 reader 档谓词识别。
+ * 每档一条声明式谓词（下表即数据驱动入口），新增等级 = 加一行配置。 */
 const SCOPE_PREDICATES = {
   core: w => (w.tags || []).includes("core"),
-  reader: w => !!(w.custom || (w.tags || []).includes("reader") || String(w.id || "").startsWith("card-")),
+  /* reader 谓词收窄：去掉 w.custom 兜底 —— 否则任何自定义词（含 22 条 A1 核心补缺词
+   * core-*）都会被当成精读生词，同时出现在「A1 全量」与「精读生词」两档。
+   * 精读生词真实身份信号 = reader 标记 或 card- 前缀 id（syncReaderCardsFromServer 落库形态）。 */
+  reader: w => !!((w.tags || []).includes("reader") || String(w.id || "").startsWith("card-")),
   a2: w => cefrOf(w) === "A2" || (w.tags || []).includes("a2"),
   /* b1 谓词：T6（ADR-0011）已开入口 —— 顶栏 #scopeSeg 有 B1 档位按钮 +
    * 切换处 syncB1CardsFromServer 落库，不再是预留谓词 */
