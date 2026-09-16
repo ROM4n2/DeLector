@@ -8,11 +8,14 @@
    B1 仍走通用分支（id 形如 ``b1-{lemma}``）；
 3. ``hw`` 拼装规则未被改动（A2 名词仍 ``das Abenteuer`` 形态，format_vocab_headword 单一装饰点）。
 
-CRV 黄牌承接①：core_dict 数据模块缺失 = 打包损坏，必须直接炸（ImportError），
-不得静默回退为空表（红线 2 同型根除）。
+CRV 黄牌承接①（R6 迁移后）：主干 **lexicon** 缺失 = 打包损坏，必须直接炸（ImportError），
+不得静默回退为空表（红线 2 同型根除）。R6 已把 database 的 A2/通用分支导入来源由
+``delector.data.core_dict`` 迁到 ``delector.core.lexicon``（``LEXICON as CORE_VOCAB_DB``），
+故打桩目标须同步为真实导入来源，否则旧打桩失效、用例假绿。
 """
 
 import sys
+from pathlib import Path
 from typing import Any, Dict, List
 
 import pytest
@@ -114,15 +117,47 @@ def test_cefr_all_contract_uniform():
     _assert_contract_uniform(res["words"], 10)
 
 
-def test_a2_missing_core_dict_raises(monkeypatch):
-    """CRV 黄牌承接①：core_dict 缺失 = 打包损坏，ImportError 必须炸出，不得返回空表。"""
-    monkeypatch.setitem(sys.modules, "delector.data.core_dict", None)
+def test_a2_missing_backbone_raises(monkeypatch):
+    """CRV 黄牌承接①（R6 迁移后）：主干 lexicon 缺失 = 打包损坏，ImportError 必须炸出，
+    不得返回空表（红线 2）。
+
+    打桩目标是 database.py A2 分支的**真实导入来源** ``delector.core.lexicon``
+    （``from delector.core.lexicon import LEXICON as CORE_VOCAB_DB``，R6 由 core_dict 迁入）。
+    """
+    monkeypatch.setitem(sys.modules, "delector.core.lexicon", None)
     with pytest.raises(ImportError):
         get_vocab_by_cefr(cefr="A2", scope="all")
 
 
-def test_b1_missing_core_dict_raises(monkeypatch):
-    """CRV 黄牌承接①：通用分支（B1）同样不得静默回退。"""
-    monkeypatch.setitem(sys.modules, "delector.data.core_dict", None)
+def test_b1_missing_backbone_raises(monkeypatch):
+    """CRV 黄牌承接①（R6 迁移后）：通用分支（B1）同样不得静默回退。
+
+    打桩目标同 ``test_a2_missing_backbone_raises``（真实导入来源 ``delector.core.lexicon``）。
+    """
+    monkeypatch.setitem(sys.modules, "delector.core.lexicon", None)
     with pytest.raises(ImportError):
         get_vocab_by_cefr(cefr="B1", scope="all")
+
+
+def test_backbone_import_chain_is_hard_dependency():
+    """双保险（源码层静态钉）：主干缺失的硬依赖链是 ``lexicon → core_dict``。
+
+    上面两条运行期用例证明「主干缺失 → ImportError 炸出」；本条从**源码文本**再钉一次
+    根因，防止未来有人在分片导入上悄悄加 ``try/except`` 兜底——那会把「打包损坏」
+    静默降级成空表，正是红线 2 要根除的形态：
+
+    1. ``delector/core/lexicon.py`` 顶层**模块级直接** ``from delector.data.core_dict import ...``
+       （无 try/except，缺失即 ImportError）；
+    2. 该文件源码中**不存在** ``except ImportError``，即任何分片导入都不做静默回退。
+
+    实现刻意用「读文件文本 + 字符串匹配」，避免 import 内部结构带来的脆弱性。
+    """
+    lexicon_src = (
+        Path(__file__).resolve().parents[1] / "delector" / "core" / "lexicon.py"
+    ).read_text(encoding="utf-8")
+    assert "from delector.data.core_dict import" in lexicon_src, (
+        "主干 lexicon 未直连 core_dict 分片：硬依赖链断裂（契约已漂移）"
+    )
+    assert "except ImportError" not in lexicon_src, (
+        "lexicon 出现 except ImportError 兜底：主干缺失将被静默降级为空表，违反红线 2"
+    )

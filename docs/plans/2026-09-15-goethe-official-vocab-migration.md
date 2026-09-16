@@ -289,9 +289,36 @@
 
 ---
 
-## 6. 执行状态
+## 6. 执行状态（2026-09-15/16 收官）
 
-（待 `/vault-exec` 开工后回填：各 Task commit、对账报告、测试基线）
+**分支**：`feature/official-vocab-lexicon-backbone`（本地逐 Task 原子 commit）
+
+| Task | commit | 内容 |
+| --- | --- | --- |
+| 文档 | `326347b` | 本计划 + ADR-0012 引用 + 官方内部 291 条重叠处置 |
+| R2 | `f6cffc0` | 官方分片 `official_vocab.py`（A1 660 / 增补 10 / A2B1 2353 → 合并 2732 低等级优先） |
+| R3 | `8ec66cb` | 主干 `lexicon.py`（FRAGMENTS / provenance / 优先级）；`core_dict` 暴露 `CORE_VOCAB_MANUAL` |
+| R4 | `b1f0b49` | `sources` 贯通；备考域/工作台 A2·B1 切官方（736/1617）；`/api/a2/vocab` 默认官方 |
+| R5 | `5d0f0b8` | **字段级合并**（cefr 官方优先 / 富字段手编优先）+ 单真值（`CORE_VOCAB_DB == LEXICON`） |
+| R6 | `44c2248` | 主干单入口化（7 处消费端迁移 + `test_lexicon_single_entry` 守卫）；`vocab_stats` A2 对齐官方 |
+| R7 | `942a4d6` | 对账工具 `tools/audit_official_vocab.py`（cefr 冲突 952 / 噪声 1） |
+| R8 | `301891b` | 打包三处同步 + `dishwasher` 清理 + `core_ids_by_level()` 多级核心词预留 |
+
+**关键数据（收官实测）**
+- 分片：ai **3968**（清 dishwasher 后）/ manual **443** / official **2732**
+- 主干：`LEXICON` == `CORE_VOCAB_DB` == **4762**（单真值，由同一纯函数 `lexicon_merge.merge_fragments` 算出）
+- 官方各档（`official_level`）：A1 **670** / A2 **736** / B1 **1617**（备考域·工作台口径）
+- 默认视图（合并后按 cefr 过滤）：A1 827 / A2 615 / B1 2181 / B2 736 / C1 404
+- 字段级冲突样例：`haus` = 官方 cefr `A1` + 手编 plural `-..er`；`schule` plural `-n`；`arzt` `-..e`
+
+**门禁**：定向测试全绿（各 Task 均记录）；`ruff check .` 零告警；`python -m mypy` 0 error（115 源文件）；单入口守卫（0 直连分片）绿。
+
+**已知既有问题（非本次引入）**：本机 Windows 全量 `pytest` 存在跨文件 `DATABASE_PATH` 环境串扰 —— `test_exam_trials + test_goethe_a1_hoeren + test_goethe_a1_lesen` 三文件组合在 **`master` 基线（`358777e`）同样 2 failed**（`no such table: exam_trials`，经 `git worktree` A/B 证实）。权威门禁以 CI（ubuntu `ci.yml`）为准。
+
+**未做（明确留待）**
+- Phase 2：A1 富结构（`A1_WORKBENCH_SEED` / `GOETHE_A1_VOCAB`）从主干派生收敛（需 id 映射 + 富字段 join）。
+- A2/B1 富字段（IPA/例句）：本机侧无来源，待用户 + 外部 agent 按 §9.5 提示词补齐后另行挂载。
+- A2/B1/B2 核心词名单：仅预留结构（`core_ids_by_level()`），未挑名单。
 
 ---
 
