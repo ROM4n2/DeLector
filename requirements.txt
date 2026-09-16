@@ -9,5 +9,5 @@ uvicorn>=0.52.4
 spacy>=3.8.16
 httpx>=0.28.1
 genanki>=0.13.1
-pytest>=8.0.0
+pytest>=9.1.1
 edge-tts>=7.2.8
