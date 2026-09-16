@@ -3341,3 +3341,113 @@ def test_apply_merge_push_path_normalized():
         "applyMerge 新增词路径必须先过 normalizeWord 再入 S.words（远端/导入词契约归一），"
         "实际新增分支：%r" % added_block
     )
+
+
+# --------------------------------------------------------------------------
+# 富字段回填修复 · A2/B1 存量词条「永远缺例句」根因（fix/rich-fields-backfill）
+# --------------------------------------------------------------------------
+
+
+def test_sync_functions_backfill_empty_rich_fields():
+    """根因修复：A2/B1 sync 从 append-only 升级为「只增 + 只补空字段」。
+
+    旧实现只在 `!existingIds.has(wid)` 时 push，无 else 分支 → 富字段上线前
+    首次同步进去的存量词条永远是 `ex: []`，此后每次同步都被跳过，用户看到
+    「A2 只有部分词有例句」。修复后：新词照旧 push（逐字不变）；已存在词
+    只补空字段（ex / ipa，B1 另有 gender / plural），绝不覆盖非空。
+    """
+    a2 = _sync_a2_body()
+    b1 = _b1_sync_body()
+    for name, body in (("syncA2CardsFromServer", a2), ("syncB1CardsFromServer", b1)):
+        assert "} else {" in body, (
+            "%s 必须新增「已存在则回填」else 分支（无 else = append-only = 存量词条永远缺例句）" % name
+        )
+        # 已存在分支：只补空 ex —— 当前为空数组/缺失 且 服务端有 de 才回填
+        assert re.search(r"!cur\.ex\s*\|\|\s*!cur\.ex\.length", body), (
+            "%s 回填 ex 必须先判空（!cur.ex || !cur.ex.length），不得覆盖已有例句" % name
+        )
+        assert re.search(r"cur\.ex\s*=\s*\[\{\s*de:\s*rw\.de", body), (
+            "%s 回填必须把 rw.de/rw.example_zh 组装成 [{de,zh}]（与渲染层同形状）" % name
+        )
+        # 只补空 ipa
+        assert re.search(r"!cur\.ipa\s*&&\s*rw\.ipa", body), (
+            "%s 回填 ipa 必须先判空（!cur.ipa && rw.ipa），不得覆盖非空 ipa" % name
+        )
+        assert re.search(r"cur\.ipa\s*=\s*rw\.ipa", body), "%s 缺 ipa 回填赋值语句" % name
+    # B1 额外补 gender / plural（只补空）
+    assert re.search(r"!cur\.gender\s*&&\s*rw\.gender", b1), (
+        "syncB1CardsFromServer 必须只补空 gender（!cur.gender && rw.gender）"
+    )
+    assert re.search(r"!cur\.plural\s*&&\s*rw\.plural", b1), (
+        "syncB1CardsFromServer 必须只补空 plural（!cur.plural && rw.plural）"
+    )
+
+
+def test_sync_backfill_never_touches_review_progress():
+    """红线守卫：两 sync 函数体切片里不得出现 S.cards / S.log / S.wrong。
+
+    回填只动词表（S.words），FSRS 复习进度（cards / log / wrong）与本次修复
+    无关；id 别名搬家由历史迁移脚本负责，sync 不做这事。此处防日后有人把
+    进度写入误加进 sync（回填红线：只增 + 只补空，不碰复习进度）。
+    """
+    for name, body in (("syncA2CardsFromServer", _sync_a2_body()),
+                       ("syncB1CardsFromServer", _b1_sync_body())):
+        for forbidden in ("S.cards", "S.log", "S.wrong"):
+            assert forbidden not in body, (
+                "%s 出现 %s：回填只动词表，禁止触碰 FSRS 复习进度" % (name, forbidden)
+            )
+
+
+def test_rich_backfill_probe_reports_no_failures():
+    """动态探针：把真实 syncA2CardsFromServer / syncB1CardsFromServer 抽出来在 node 里真跑。
+
+    静态断言证明不了「手编例句真的没被覆盖」「二次同步真的 no-op」「FSRS 进度真的
+    没被动」—— 这些是行为，只有真跑才知道。tools/wb_rich_backfill_probe.mjs 只提供
+    S / fetch / save* 等最小桩，用 node:vm 真跑 workbench.html 里切出来的两个 sync
+    函数体，覆盖：A2 回填空 ex、保护手编例句（不覆盖非空 ex）、保护非空 ipa、
+    FSRS 进度深度不变、幂等（首跑写盘 / 二跑 no-op）、新词仍加入，B1 另有补齐空
+    gender/plural；并输出 JSON 供本用例断言。
+
+    分工说明（CRV Y2/Y4）：本文件里针对 sync 的静态正则断言（如
+    test_sync_functions_backfill_empty_rich_fields）不锁控制流邻接、其反向守卫
+    （test_sync_backfill_never_touches_review_progress）也可被 helper 间接绕过 ——
+    静态断言只守「源码形态」；真正的行为级语义（回填是否真发生、手编例句是否真被
+    保护、二次同步是否真 no-op、FSRS 是否真没被动）由本探针跑真实现覆盖，二者互补。
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_rich_backfill_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_rich_backfill_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    try:
+        out = json.loads(res.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(
+            "探针 --json 输出不是合法 JSON：%s\nstdout(前 500 字):\n%s\nstderr(前 500 字):\n%s"
+            % (exc, res.stdout[:500], res.stderr[:500])
+        )
+
+    assert out["fail"] == 0, "探针有失败场景：%r" % (
+        [c for c in out["cases"] if not c["ok"]],
+    )
+    assert out["total"] >= 7, "探针场景数异常偏少（%d），可能场景被删" % out["total"]
+
+    names = [c["name"] for c in out["cases"]]
+    # 场景名存在性钉死：日后删掉关键场景也必红，不允许「删场景换全绿」。
+    for needle in ("回填空 ex", "保护手编例句", "幂等", "FSRS", "新词仍加入"):
+        assert any(needle in n for n in names), (
+            "探针缺少关键场景「%s」，场景集合：%r" % (needle, names)
+        )

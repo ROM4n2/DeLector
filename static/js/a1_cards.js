@@ -467,11 +467,12 @@ export function renderA1PokerCard() {
                 <div class="deck-def-text">${esc(cur.definition_zh)}</div>
               </div>
 
+              ${(cur.example_de || cur.example_zh) ? `
               <div class="deck-example-block" style="margin-top:0.75rem;">
                 <div class="deck-def-label">GOETHE ${_examVocabLevel || "A1"} STANDARD-BEISPIEL · 官方考纲例句</div>
                 <div class="deck-example-de" style="font-size:0.95rem;font-weight:500;color:var(--ink);">${esc(cur.example_de)}</div>
                 <div class="deck-example-zh" style="font-size:0.85rem;color:var(--ink-mute);margin-top:0.25rem;">${esc(cur.example_zh)}</div>
-              </div>
+              </div>` : ""}
             </div>
 
             <div class="deck-card-foot" style="justify-content:space-between;" onclick="event.stopPropagation()">
@@ -529,10 +530,11 @@ export function renderA1GridView() {
         </div>
         <div class="card-lemma-row">${esc(w.lemma)} · ${esc(w.pos || "")} ${w.plural ? "· Pl: " + esc(w.plural) : ""}</div>
         <div class="card-def">${esc(w.definition_zh)}</div>
+        ${(w.example_de || w.example_zh) ? `
         <div class="card-context" style="margin-top:0.5rem;font-size:0.85rem;">
           <div style="color:var(--ink);">${esc(w.example_de)}</div>
           <div style="color:var(--ink-mute);font-size:0.775rem;">${esc(w.example_zh)}</div>
-        </div>
+        </div>` : ""}
         <div class="card-actions" style="margin-top:0.75rem;justify-content:flex-end;">
           <button class="btn ${isSaved ? "btn-ghost saved" : "btn-accent"} btn-xs"
                   onclick="saveA1WordToDeck(${jsAttr(w.lemma)}, ${jsAttr(w.word)}, ${jsAttr(w.pos || "")}, ${jsAttr(w.gender || "")}, ${jsAttr(w.plural || "")}, ${jsAttr(w.definition_zh || "")}, ${jsAttr(w.example_de || "")}, ${jsAttr(w.example_zh || "")}, this)">

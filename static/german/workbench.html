@@ -3252,6 +3252,7 @@ async function syncA2CardsFromServer() {
     const words = await res.json();
     if (!Array.isArray(words) || !words.length) return;
     const existingIds = new Set(S.words.map(w => w.id));
+    const byId = new Map(S.words.map(w => [w.id, w]));
     let changed = false;
     for (const rw of words) {
       const wid = rw.id || ("a2-" + (rw.lemma || rw.word || ""));
@@ -3276,6 +3277,19 @@ async function syncA2CardsFromServer() {
         }));
         existingIds.add(wid);
         changed = true;
+      } else {
+        /* 已存在则回填：存量词条（富字段上线前首次同步进去的）永远是 ex:[]，
+         * 旧 append-only 逻辑直接跳过 → 用户看到「A2 只有部分词有例句」。
+         * 这里只补空字段，绝不覆盖非空：保护用户手编的例句/音标，不清洗用户
+         * 数据；hw/gloss/tags/id 一律不碰（释义可能被手编，tags 由前端管）。
+         * 回填只动词表（S.words），与 FSRS 复习进度（cards/log/wrong）无关。 */
+        const cur = byId.get(wid);
+        if (!cur) continue;
+        if ((!cur.ex || !cur.ex.length) && rw.de) {
+          cur.ex = [{ de: rw.de, zh: rw.example_zh || "" }];
+          changed = true;
+        }
+        if (!cur.ipa && rw.ipa) { cur.ipa = rw.ipa; changed = true; }
       }
     }
     if (changed) {
@@ -3303,6 +3317,7 @@ async function syncB1CardsFromServer() {
     const words = Array.isArray(data.words) ? data.words : [];
     if (!words.length) return;
     const existingIds = new Set(S.words.map(w => w.id));
+    const byId = new Map(S.words.map(w => [w.id, w]));
     let changed = false;
     for (const rw of words) {
       const wid = rw.id || ("b1-" + (rw.hw || ""));
@@ -3327,6 +3342,21 @@ async function syncB1CardsFromServer() {
         }));
         existingIds.add(wid);
         changed = true;
+      } else {
+        /* 已存在则回填：同 syncA2CardsFromServer —— 存量词条永远是 ex:[]，
+         * 旧 append-only 直接跳过 → B1 档同样只有部分词有例句。只补空字段，
+         * 绝不覆盖非空：保护用户手编的例句/音标/性数，不清洗用户数据；
+         * hw/gloss/tags/id 一律不碰（释义可能被手编，tags 由前端管）。
+         * 回填只动词表（S.words），与 FSRS 复习进度（cards/log/wrong）无关。 */
+        const cur = byId.get(wid);
+        if (!cur) continue;
+        if ((!cur.ex || !cur.ex.length) && rw.de) {
+          cur.ex = [{ de: rw.de, zh: rw.example_zh || "" }];
+          changed = true;
+        }
+        if (!cur.ipa && rw.ipa) { cur.ipa = rw.ipa; changed = true; }
+        if (!cur.gender && rw.gender) { cur.gender = rw.gender; changed = true; }
+        if (!cur.plural && rw.plural) { cur.plural = rw.plural; changed = true; }
       }
     }
     if (changed) {
