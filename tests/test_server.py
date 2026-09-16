@@ -4678,7 +4678,7 @@ def test_get_vocab_by_cefr_level(client):
     assert data1["total"] == len(data1["words"])
     assert data1["total"] in (213, 235)
     first = data1["words"][0]
-    for key in ("id", "hw", "pos", "de", "zh", "core", "cefr"):
+    for key in ("id", "hw", "pos", "de", "zh", "ipa", "example_zh", "core", "cefr"):
         assert key in first, f"缺少字段: {key}"
     assert first["core"] is True
     assert first["cefr"] == "A1"

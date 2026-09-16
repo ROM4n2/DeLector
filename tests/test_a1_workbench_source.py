@@ -239,6 +239,7 @@ MINI_SEED: List[Dict[str, Any]] = [
         "hw": "ab",
         "pos": "Präp",
         "gloss": "迷你释义A",
+        "ipa": "ˈmiːni",
         "ex": [{"de": "Mini de.", "zh": "迷你中文"}],
     },
     {"id": "a1-0002", "hw": "aber", "pos": "Konj", "zh": "纯zh释义"},
@@ -311,8 +312,13 @@ def test_load_reads_data_module_constants(monkeypatch, fresh_a1_cache):
     # custom 全部 core=True
     assert words[2]["core"] is True
     assert words[2]["zh"] == "迷你新词"
+    # S4 新增 ipa / example_zh：ipa 取自 seed 的 ipa（缺则空串）；example_zh 取自 ex[0].zh
+    assert words[0]["ipa"] == "ˈmiːni"
+    assert words[0]["example_zh"] == "迷你中文"
+    assert words[1]["ipa"] == ""  # 无 ipa → 空串
+    assert words[1]["example_zh"] == ""  # 无 ex → 空串
     for w in words:
-        assert set(w.keys()) == {"id", "hw", "pos", "de", "zh", "core", "cefr"}
+        assert set(w.keys()) == {"id", "hw", "pos", "de", "zh", "ipa", "example_zh", "core", "cefr"}
         assert w["cefr"] == "A1"
 
 
@@ -342,7 +348,13 @@ def test_a1_cache_is_reused(fresh_a1_cache):
 
 
 def test_output_snapshot_matches_pre_refactor(fresh_a1_cache):
-    """(d) 等价性快照：改造后对同一数据模块的产出与改造前逐条完全一致（20 条样本）。"""
+    """(d) 等价性快照：改造后对同一数据模块的产出与改造前逐条完全一致（20 条样本）。
+
+    S4 起内部行新增 ipa / example_zh 两键（契约 9 → 11）；本快照仍钉住改造前
+    ``_SNAPSHOT_FIELDS``（7 个存储行字段）逐条不变 —— 按字段投影比较，既不改快照
+    字段集、也不放宽为子集（新两键由 test_load_reads_data_module_constants 单独钉住）。
+    """
     words = database._load_a1_workbench_words()
     got = words[:10] + words[-22:-12]  # 前 10 条种子词 + 前 10 条自定义词
-    assert got == EXPECTED_SNAPSHOT
+    projected = [{k: w[k] for k in _SNAPSHOT_FIELDS} for w in got]
+    assert projected == EXPECTED_SNAPSHOT

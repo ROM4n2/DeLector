@@ -1696,10 +1696,13 @@ _A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None
 
 
 def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
-    """把数据模块的一条 A1 词条映射为对外契约 {id, hw, pos, de, zh, core, cefr}。
+    """把数据模块的一条 A1 词条映射为内部行
+    {id, hw, pos, de, zh, ipa, example_zh, core, cefr}。
 
-    de/zh 派生规则与改造前逐字相同（ADR-0011：输出逐条不变）：
+    de/zh 派生规则与改造前逐字相同（ADR-0011：输出逐条不变，除新增字段）：
     de = (ex and ex[0].de) or de or ""；zh = gloss or zh or (ex and ex[0].zh) or ""。
+    新增字段（S3，供契约 9 → 11）：
+    ipa = w.ipa or ""（seed 逐条带音标）；example_zh = ex[0].zh or ""（种子 682/682 全覆盖）。
     """
     ex = w.get("ex")
     return {
@@ -1708,6 +1711,8 @@ def _a1_workbench_row(w: Dict[str, Any], core: bool) -> Dict[str, Any]:
         "pos": w.get("pos", ""),
         "de": (ex and ex[0].get("de")) or w.get("de") or "",
         "zh": w.get("gloss") or w.get("zh") or (ex and ex[0].get("zh")) or "",
+        "ipa": w.get("ipa") or "",
+        "example_zh": (ex and ex[0].get("zh")) or "",
         "core": core,
         "cefr": "A1",
     }
@@ -1792,10 +1797,18 @@ def _contract_item(
     plural: str,
     de: str,
     zh: str,
+    ipa: str,
+    example_zh: str,
     core: bool,
     cefr: str,
 ) -> Dict[str, Any]:
-    """「存储视图 → 契约条目」的唯一映射点：所有分支产出同一字段集，缺失字段显式空值。"""
+    """「存储视图 → 契约条目」的唯一映射点：所有分支产出同一 **11 字段**集
+    ``{id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr}``，
+    缺失字段显式空值（ADR-0013 §4-1：契约 9 → 11）。
+
+    - ``de`` 语义 = **德语例句**；``zh`` = 中文释义；``example_zh`` = 例句中文对照。
+    - ``ipa`` = 音标（主干富字段，未登记 lemma 显式空串）。
+    """
     return {
         "id": vocab_id,
         "hw": hw,
@@ -1804,15 +1817,19 @@ def _contract_item(
         "plural": plural,
         "de": de,
         "zh": zh,
+        "ipa": ipa,
+        "example_zh": example_zh,
         "core": core,
         "cefr": cefr,
     }
 
 
 def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """A1 内部行（T2 快照冻结的 7 键形状）→ 契约条目。
+    """A1 内部行（S4 起 9 键：新增 ipa / example_zh）→ 契约条目。
 
     gender/plural 显式空值：A1 数据模块无富字段，从词头冠词做推导猜测属递延 ADR（YAGNI）。
+    ipa / example_zh 由 ``_a1_workbench_row``（S3）取自 seed 的 ``ipa`` / ``ex[0].zh``
+    （682/682 全覆盖），此处原样透传。
     """
     return _contract_item(
         vocab_id=row["id"],
@@ -1822,26 +1839,45 @@ def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
         plural="",
         de=row["de"],
         zh=row["zh"],
+        ipa=row["ipa"],
+        example_zh=row["example_zh"],
         core=row["core"],
         cefr=row["cefr"],
     )
 
 
 def _contract_from_core_entry(lemma: str, val: tuple) -> Dict[str, Any]:
-    """CORE_VOCAB_DB 5 元组存储视图 → 契约条目（A2/通用等级共用，消除两套字段拼装）。"""
+    """CORE_VOCAB_DB 5 元组存储视图 → 契约条目（A2/通用等级/官方视图共用）。
+
+    富字段（``de`` 德语例句 / ``ipa`` 音标 / ``example_zh`` 例句中文）取自主干富字段
+    side-car ``lexicon.rich_of(lemma)``（ADR-0013 §5-5 单入口）；未登记 lemma 一律
+    显式空串，**禁止编造 / 静默降级**（ADR-0013 §5-3）。
+    """
     lvl = val[0].upper()
     pos = val[1] or ""
     gender = val[2] if len(val) > 2 and val[2] != "None" else None
     plural = val[3] if len(val) > 3 and val[3] != "None" else ""
     zh = val[4] if len(val) > 4 else ""
+
+    # 惰性导入富字段 side-car：与既有 `from delector.core.lexicon import ...` 同风格，
+    # 避免模块级循环 / 重依赖（导入期零副作用，红线 9）。
+    from delector.core.lexicon import rich_of
+
+    rich = rich_of(lemma)
+    de = (rich or {}).get("example_de", "") or ""
+    ipa = (rich or {}).get("ipa", "") or ""
+    example_zh = (rich or {}).get("example_zh", "") or ""
+
     return _contract_item(
         vocab_id=f"{lvl.lower()}-{lemma.lower()}",
         hw=format_vocab_headword(lemma, pos, gender),
         pos=pos,
         gender=gender,
         plural=plural,
-        de="",
+        de=de,
         zh=zh,
+        ipa=ipa,
+        example_zh=example_zh,
         core=True,
         cefr=lvl,
     )
@@ -1882,7 +1918,7 @@ def get_vocab_by_cefr(
     - ``None``（默认）→ **完全走既有分支**，输出逐字不变（A1 workbench /
       A2 core_dict / B1 core_dict / ALL / reader）。
     - 含 ``"official"`` → 官方原样视图 ``lexicon.official_level(cefr)``，逐条经
-      既有 ``_contract_from_core_entry`` 产出 9 字段契约。官方视图是「该级全量」，
+      既有 ``_contract_from_core_entry`` 产出 11 字段契约。官方视图是「该级全量」，
       故 ``scope``（core/all/reader）只做合法性校验、不影响条数。
     - 非 ``None`` 但不含 ``"official"``（未知来源名）→ **降级为 ``None`` 默认视图**
       （绝不静默返回空表）：sources 是「官方源」开关，无法识别的来源名一律退回
@@ -1919,8 +1955,14 @@ def get_vocab_by_cefr(
                     "id": f"card-{r['id']}",
                     "hw": r["word"],
                     "pos": r["pos"] or "",
+                    # reader 卡片无富字段：gender/plural/ipa/example_zh 显式空值，
+                    # 与契约同一 11 字段集，保证各产出点字段集一致（ADR-0011 决策 2）。
+                    "gender": None,
+                    "plural": "",
                     "de": r["sentence_context"] or "",
                     "zh": r["definition_zh"] or "",
+                    "ipa": "",
+                    "example_zh": "",
                     "core": False,
                     "cefr": r["cefr_level"] or "A1",
                 }
