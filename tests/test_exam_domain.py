@@ -443,7 +443,9 @@ def test_a1_cards_exam_vocab_fetch_by_level():
     """a1_cards.js 按等级取数：A2 走 /api/a2/vocab，B1 走 /api/cards/vocab，缓存按等级隔离。"""
     a1_js = (_ROOT / "static" / "js" / "a1_cards.js").read_text(encoding="utf-8")
     assert '"/api/a2/vocab"' in a1_js or "'/api/a2/vocab'" in a1_js, "A2 既有取数路径不得改变"
-    assert "/api/cards/vocab?cefr=B1&scope=all" in a1_js, "B1 必须走 /api/cards/vocab?cefr=B1&scope=all 取数"
+    assert "/api/cards/vocab?cefr=B1&scope=all&sources=official" in a1_js, (
+        "B1 必须走 /api/cards/vocab?cefr=B1&scope=all&sources=official 取数"
+    )
     assert "_examVocabLevel === \"A2\"" not in a1_js and "_examVocabLevel === 'A2'" not in a1_js, (
         "setExamVocabLevel 的 A2 硬编码特判必须泛化为按等级取数"
     )

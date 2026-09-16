@@ -76,6 +76,7 @@ from delector.core.database import (
     upsert_corpus_syntax_stats,
     verify_wb_key,
 )
+from delector.core.lexicon import lookup_core_vocab
 from delector.core.security import (
     PRESET_FEEDS,
     clean_html_to_article,
@@ -84,7 +85,6 @@ from delector.core.security import (
     parse_rss_feed,
 )
 from delector.core.utils import _attachment_headers
-from delector.data.core_dict import lookup_core_vocab
 from delector.nlp_engine.linguistics import (
     build_prep_matrix,
     lookup_irregular_verb,
@@ -701,11 +701,13 @@ def get_cards():
 
 
 @router.get("/api/cards/vocab")
-def get_cards_vocab(cefr: str = "A1", scope: str = "core"):
+def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str] = None):
     scope_norm = (scope or "core").lower().strip()
     if scope_norm not in ("core", "all", "reader"):
         raise HTTPException(400, "scope must be 'core', 'all', or 'reader'")
-    return get_vocab_by_cefr(cefr=cefr, scope=scope_norm)
+    # sources：逗号分隔的来源名（如 "official"）；空/缺省 -> None（走默认分支，逐字不变）。
+    sources_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
+    return get_vocab_by_cefr(cefr=cefr, scope=scope_norm, sources=sources_set)
 
 
 # --- Phase A: Delete & Master ---

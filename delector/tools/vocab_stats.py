@@ -8,10 +8,10 @@
 `delector.services.exam_catalog` 口径所引用的数据源，**不内嵌新词表**——
 - A1 考纲词 = `delector.data.a1_dict.GOETHE_A1_VOCAB` 各条目 `lemma` 字段
   （与 exam_catalog 的 A1 vocab count_fn 同源；已确认该词典条目携带小写 lemma）。
-- A2 考纲词 = `delector.data.core_dict.CORE_VOCAB_DB` 中 CEFR=A2 条目的 lemma
-  key（即 `get_vocab_by_cefr("A2")` 读取的同源常量；A2 词条对外只暴露带定冠词
-  装饰的 hw 与 `a2-{lemma}` id，**无独立 lemma 字段**，故直接从底层常量取原始
-  小写 lemma）。
+- A2 考纲词 = `delector.core.lexicon.official_level("A2")` 的 lemma key 集
+  （即 exam_catalog 的 A2 vocab count_fn 所引用的同源**官方备考域口径 736**；A2 词条
+  对外只暴露带定冠词装饰的 hw 与 `a2-{lemma}` id，**无独立 lemma 字段**，故直接从主干
+  官方视图取原始小写 lemma）。
 
 纯函数、无 DB（ADR-0009 纪律）。已知 lemma 集做模块级惰性缓存。
 
@@ -41,14 +41,15 @@ def _load_a1_lemmas() -> frozenset:
 
 
 def _load_a2_lemmas() -> frozenset:
-    """A2 考纲词 lemma 集（惰性）。源 = core_dict CEFR=A2 条目 lemma key。
+    """A2 考纲词 lemma 集（惰性）。源 = ``lexicon.official_level("A2")`` 的 lemma key。
 
-    词条对外只暴露装饰过的 hw / `a2-{lemma}` id、无独立 lemma 字段，故直接从
-    与 get_vocab_by_cefr("A2") 同源的 CORE_VOCAB_DB 常量取原始小写 lemma。
+    与 exam_catalog 的 A2 vocab count_fn 同源（官方备考域口径 736）；A2 词条对外只暴露
+    装饰过的 hw / `a2-{lemma}` id、无独立 lemma 字段，故直接从主干官方视图取原始小写 lemma。
     """
-    from delector.data.core_dict import CORE_VOCAB_DB
+    from delector.core.lexicon import official_level
 
-    lemmas = {lemma.strip().lower() for lemma, val in CORE_VOCAB_DB.items() if str(val[0]).upper() == "A2"}
+    lemmas = {str(lemma).strip().lower() for lemma in official_level("A2")}
+    lemmas.discard("")
     return frozenset(lemmas)
 
 

@@ -3,13 +3,32 @@ DeLector - Offline Goethe CEFR Vocabulary Core Dictionary
 High-frequency German-Chinese dictionary with accurate lemma, POS, gender (der/die/das),
 plural endings, CEFR level, and concise Chinese definitions.
 O(1) memory lookup for zero-latency token inspection and CEFR difficulty tagging.
+
+**权威主干是 ``delector.core.lexicon.LEXICON``**（手编 ⊕ AI ⊕ 官方，字段级合并，4762）。
+本模块的 ``CORE_VOCAB_DB`` 现为**主干等价视图**（= ``lexicon.LEXICON``，与 ``LEXICON``
+逐字同值，含键集与取值），仅作为兼容既有 import 的入口保留；新代码请优先走 ``lexicon``
+（``LEXICON`` / ``view`` / ``sources_of``），不要直连本模块的分片常量。
+``CORE_VOCAB_MANUAL`` / ``CORE_VOCAB_EXT`` 仍作为 lexicon 主干的数据来源分片保持可用、
+内容不变。``CORE_VOCAB_DB`` 与 ``LEXICON`` 由**同一份纯函数**
+（``delector.data.lexicon_merge.merge_fragments``）算出，字段级优先级为
+``cefr: official > manual > ai``、富字段 ``manual > official > ai``（单一真值，不得各写一份）。
 """
 
 import functools
 from typing import Any, Dict, Optional
 
+# 共享合并纯函数（lexicon_merge 仅依赖 typing，无 delector 内部依赖，故无循环导入）。
+from delector.data.lexicon_merge import FIELD_PRIORITY, merge_fragments
+
+# 官方歌德词表分片（delector.data.official_vocab）是包内必需模块，缺失即应响亮失败
+# （ADR-0012 红线 2），故用直接 import 置于文件顶部（不做 try/except 兜底）。
+from delector.data.official_vocab import OFFICIAL_VOCAB
+
 # Structure: lemma -> (cefr, pos, gender, plural, definition_zh)
-CORE_VOCAB_DB: Dict[str, tuple] = {
+# 手编核心分片（R3/ADR-0012）：暴露为 CORE_VOCAB_MANUAL 供 lexicon 主干按来源注册。
+# 模块底部用 lexicon_merge.merge_fragments 与 CORE_VOCAB_EXT / OFFICIAL_VOCAB 字段级合并回
+# CORE_VOCAB_DB（= lexicon.LEXICON 的等价视图）。
+CORE_VOCAB_MANUAL: Dict[str, tuple] = {
     # ── A1 Core Nouns ──────────────────────────────────────────────────────────
     "tag": ("A1", "NOUN", "Masc", "-e", "白天，日子，一天"),
     "morgen": ("A1", "NOUN", "Masc", "-", "早晨，上午"),
@@ -521,4 +540,11 @@ try:
     from delector.data.core_dict_ext import CORE_VOCAB_EXT
 except ImportError:
     CORE_VOCAB_EXT = {}
-CORE_VOCAB_DB = {**CORE_VOCAB_EXT, **CORE_VOCAB_DB}
+
+# 字段级合并三分片 → CORE_VOCAB_DB（= lexicon.LEXICON 等价视图，单真值）。
+# 复用 lexicon_merge.merge_fragments（与 delector.core.lexicon 同一段逻辑），
+# 字段级优先级 cefr: official>manual>ai、富字段 manual>official>ai（见 FIELD_PRIORITY）。
+CORE_VOCAB_DB = merge_fragments(
+    {"ai": CORE_VOCAB_EXT, "manual": CORE_VOCAB_MANUAL, "official": OFFICIAL_VOCAB},
+    FIELD_PRIORITY,
+)

@@ -13,7 +13,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import genanki
 from fastapi import HTTPException, Request
@@ -1858,7 +1858,7 @@ def _load_a2_vocab_words() -> List[Dict[str, Any]]:
     if _A2_VOCAB_CACHE is not None:
         return _A2_VOCAB_CACHE
 
-    from delector.data.core_dict import CORE_VOCAB_DB
+    from delector.core.lexicon import LEXICON as CORE_VOCAB_DB
 
     words = [
         _contract_from_core_entry(lemma, val)
@@ -1870,13 +1870,43 @@ def _load_a2_vocab_words() -> List[Dict[str, Any]]:
     return words
 
 
-def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[str] = None) -> Dict[str, Any]:
-    """按 CEFR 等级与核心范围获取词汇（供工作台与外部组件拉取）。"""
+def get_vocab_by_cefr(
+    cefr: str = "A1",
+    scope: str = "core",
+    db_path: Optional[str] = None,
+    sources: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    """按 CEFR 等级与核心范围获取词汇（供工作台与外部组件拉取）。
+
+    ``sources`` 语义（ADR-0012，纯增量）：
+    - ``None``（默认）→ **完全走既有分支**，输出逐字不变（A1 workbench /
+      A2 core_dict / B1 core_dict / ALL / reader）。
+    - 含 ``"official"`` → 官方原样视图 ``lexicon.official_level(cefr)``，逐条经
+      既有 ``_contract_from_core_entry`` 产出 9 字段契约。官方视图是「该级全量」，
+      故 ``scope``（core/all/reader）只做合法性校验、不影响条数。
+    - 非 ``None`` 但不含 ``"official"``（未知来源名）→ **降级为 ``None`` 默认视图**
+      （绝不静默返回空表）：sources 是「官方源」开关，无法识别的来源名一律退回
+      既有默认分支，保证默认行为与调用方预期不被静默破坏。
+    """
     cefr_norm = (cefr or "A1").strip().upper()
     scope_norm = (scope or "core").strip().lower()
 
     if scope_norm not in ("core", "all", "reader"):
         raise ValueError(f"Invalid scope: {scope}. Must be 'core', 'all', or 'reader'")
+
+    if sources is not None and "official" in set(sources):
+        # 惰性导入：lexicon 只依赖 data 分片常量，导入期零重依赖（红线 9）。
+        from delector.core import lexicon
+
+        words = [
+            _contract_from_core_entry(lemma, val) for lemma, val in lexicon.official_level(cefr_norm).items()
+        ]
+        return {
+            "cefr": cefr_norm,
+            "scope": scope_norm,
+            "total": len(words),
+            "words": words,
+        }
 
     if scope_norm == "reader":
         target_path = get_db_path(db_path)
@@ -1908,7 +1938,7 @@ def get_vocab_by_cefr(cefr: str = "A1", scope: str = "core", db_path: Optional[s
         words = [_contract_from_a1_row(w) for w in filtered]
     else:
         # A2 并入通用路径（经 _load_a2_vocab_words 薄函数 + 缓存）；其余级别读 core_dict
-        from delector.data.core_dict import CORE_VOCAB_DB
+        from delector.core.lexicon import LEXICON as CORE_VOCAB_DB
 
         if cefr_norm == "A2":
             words = _load_a2_vocab_words()

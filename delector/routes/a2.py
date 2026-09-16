@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 DeLector - Goethe-Zertifikat A2 Workshop Router
-Endpoints for A2 Wortliste (974 vocab).
+Endpoints for A2 Wortliste (默认官方精选 736 vocab；sources=official).
 """
 
 from typing import Any, Dict, List, Optional
@@ -14,9 +14,21 @@ router = APIRouter(prefix="/api/a2", tags=["Goethe A2"])
 
 
 @router.get("/vocab")
-def get_a2_vocab(topic: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
-    """获取 A2 考纲词汇列表（974 词条，规范化定冠词与词性）。"""
-    raw_words = get_vocab_by_cefr(cefr="A2", scope="all")["words"]
+def get_a2_vocab(
+    topic: Optional[str] = None,
+    q: Optional[str] = None,
+    sources: Optional[str] = "official",
+) -> List[Dict[str, Any]]:
+    """获取 A2 考纲词汇列表（规范化定冠词与词性）。
+
+    默认官方精选 736 词条（``sources=official``）。本端点语义即「A2 考纲词表」，
+    故不传参 / 显式传 ``sources=`` 空串、None 或任意非官方取值时均取官方视图；
+    ``sources`` 参数保留仅为向后兼容既有 query 形状。
+    """
+    sources_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
+    if not sources_set or "official" not in sources_set:
+        sources_set = {"official"}
+    raw_words = get_vocab_by_cefr(cefr="A2", scope="all", sources=sources_set)["words"]
     res: List[Dict[str, Any]] = []
     for w in raw_words:
         lemma = w.get("id", "").replace("a2-", "")

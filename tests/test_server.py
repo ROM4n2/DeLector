@@ -2634,12 +2634,17 @@ def test_lookup_plural_haeuser(client, monkeypatch):
 
 
 def test_lookup_linguistics_ext_tier(client, monkeypatch):
-    """主链查不到时落 EXT（LINGUISTICS_VOCAB_EXT 接线）。"""
+    """主链查不到时落 EXT（LINGUISTICS_VOCAB_EXT 接线）。
+
+    探针词从旧的 ``klima`` 换为 ``tunnel``：官方词表接入主干后 ``klima`` 已是
+    core_dict 命中词（source=local_dict），不再能证明 EXT 回退层；``tunnel`` 只在
+    LINGUISTICS_VOCAB_EXT、不在任何主干分片里，仍能钉住这条回退链。
+    """
     monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "")
-    r = client.post("/api/lookup/vocab", json={"sentence": "Klima.", "target_word": "klima"})
+    r = client.post("/api/lookup/vocab", json={"sentence": "Tunnel.", "target_word": "tunnel"})
     data = r.json()
     assert data["source"] == "linguistics_ext"
-    assert "气候" in data["definition_zh"]
+    assert "隧道" in data["definition_zh"]
 
 
 def test_lookup_no_hit_honest_none(client, monkeypatch):
@@ -4337,6 +4342,12 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         # ADR-0011 Task 1：A1 工作台词库单一真相（被 database.py 延迟导入），
         # 漏登记 = 打包后 ModuleNotFoundError 而本地 pytest 全绿。
         "a1_workbench_dict",
+        # R8 交付 1：本分支新增两片，均住 delector/data/，与其它数据模块同口径
+        # （前缀 delector.data.）逐条钉进打包面 —— 漏登记 = 打包后 ModuleNotFoundError
+        # 而本地 pytest 全绿。official_vocab=官方歌德词表分片；lexicon_merge=字段级
+        # 合并共享纯函数（被 delector.core.lexicon 与 core_dict 共用）。
+        "official_vocab",
+        "lexicon_merge",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =
@@ -4827,11 +4838,14 @@ def test_syntax_stats_endpoints(client):
 
 
 def test_get_a2_vocab_endpoint(client):
-    """验证 GET /api/a2/vocab 返回 974 个 A2 词条，结构完整且支持搜索。"""
+    """验证 GET /api/a2/vocab 默认返回 A2 考纲官方精选词条（sources=official），结构完整且支持搜索。"""
+    from delector.core.database import get_vocab_by_cefr
+
     res = client.get("/api/a2/vocab")
     assert res.status_code == 200
     words = res.json()
-    assert len(words) == 974
+    # 默认即官方视图（sources=official）；count 动态推导，禁止硬编码词条数
+    assert len(words) == len(get_vocab_by_cefr("A2", sources={"official"})["words"])
     # 抽查关键字段与格式
     w0 = words[0]
     for key in ("id", "word", "hw", "lemma", "pos", "zh", "cefr"):
@@ -4840,16 +4854,16 @@ def test_get_a2_vocab_endpoint(client):
     assert w0["cefr"] == "A2"
 
     # 抽查名词包含冠词
-    abenteuer = next((w for w in words if "Abenteuer" in w["word"]), None)
-    assert abenteuer is not None
-    assert abenteuer["word"] == "das Abenteuer"
-    assert abenteuer["pos"] == "NOUN"
+    apotheke = next((w for w in words if "Apotheke" in w["word"]), None)
+    assert apotheke is not None
+    assert apotheke["word"] == "die Apotheke"
+    assert apotheke["pos"] == "NOUN"
 
     # 抽查搜索过滤
-    search_res = client.get("/api/a2/vocab?q=Abenteuer")
+    search_res = client.get("/api/a2/vocab?q=Apotheke")
     assert search_res.status_code == 200
     s_words = search_res.json()
-    assert any("Abenteuer" in w["word"] for w in s_words)
+    assert any("Apotheke" in w["word"] for w in s_words)
 
 
 # ── exam catalog B1 注册（ADR-0011 Task 6：count 动态推导，禁硬编码词条数）──
@@ -4863,8 +4877,9 @@ def test_exam_catalog_b1_registered_with_dynamic_count():
     assert "B1" in exam_catalog.EXAM_CATALOG, "exam_catalog 必须注册 B1 等级"
     b1_mods = exam_catalog.EXAM_CATALOG["B1"]["modules"]
     assert "vocab" in b1_mods, "B1 必须有 vocab 模块"
-    assert b1_mods["vocab"]["count_fn"]() == len(get_vocab_by_cefr("B1")["words"]), (
-        "B1 count 必须动态推导（len(get_vocab_by_cefr('B1')['words'])），禁止硬编码词条数"
+    assert b1_mods["vocab"]["count_fn"]() == len(get_vocab_by_cefr("B1", sources={"official"})["words"]), (
+        "B1 count 必须动态推导（len(get_vocab_by_cefr('B1', sources={'official'})['words'])，官方精选口径），"
+        "禁止硬编码词条数"
     )
 
     src = open(os.path.join(ROOT, "delector", "services", "exam_catalog.py"), encoding="utf-8").read()

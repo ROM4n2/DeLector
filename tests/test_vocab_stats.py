@@ -4,8 +4,8 @@
 
 已知 = lemma ∈ (A1∪A2 考纲词 lemma 集) ∪ known_extra（hw 小写比对）。词集取自既有
 delector.services.exam_catalog 口径所引用的数据源（A1 = GOETHE_A1_VOCAB 的
-lemma 字段；A2 = core_dict A2 条目 lemma），**不内嵌新词表**——故测试用真实
-A1/A2 词断言 known/unknown 判定（非死测试）。
+lemma 字段；A2 = lexicon.official_level("A2") 的 lemma key，官方备考域口径），
+**不内嵌新词表**——故测试用真实 A1/A2 词断言 known/unknown 判定（非死测试）。
 """
 
 import asyncio
@@ -44,16 +44,16 @@ def test_known_a1_word_when_level_contains_a1():
 
 
 def test_a2_word_only_known_when_level_contains_a2():
-    # "abbiegen" 是 core_dict A2 真实词条 lemma
-    lev_a1 = asyncio.run(run(_payload(_tokens([("abbiegen", 1)]), levels=["A1"])))
+    # "anmelden" 是 core_dict A2 真实词条 lemma（且不在 A1 词集，保证 A1-only 判未知）
+    lev_a1 = asyncio.run(run(_payload(_tokens([("anmelden", 1)]), levels=["A1"])))
     assert lev_a1["known_count"] == 0
-    lev_both = asyncio.run(run(_payload(_tokens([("abbiegen", 1)]), levels=["A1", "A2"])))
+    lev_both = asyncio.run(run(_payload(_tokens([("anmelden", 1)]), levels=["A1", "A2"])))
     assert lev_both["known_count"] == 1
 
 
 def test_level_selection_defaults_to_a1_a2():
     # levels 缺省 = A1∪A2
-    out = asyncio.run(run(_payload(_tokens([("gehen", 1), ("abbiegen", 1)]))))
+    out = asyncio.run(run(_payload(_tokens([("gehen", 1), ("anmelden", 1)]))))
     assert out["known_count"] == 2
 
 
@@ -125,6 +125,17 @@ def test_empty_tokens():
     assert out["known_rate"] == 0.0
     assert out["unknown_ranked"] == []
     assert out["level_hint"] == "A1"  # 无 token → unknown_rate 定义 0
+
+
+# ---------- A2 词集口径对齐（官方备考域 lexicon.official_level("A2")） ----------
+def test_a2_lemma_set_uses_official_level_caliber():
+    # A2 词集 == lexicon.official_level("A2") 的 lemma key 集（动态推导，不写死条数）
+    from delector.core.lexicon import official_level
+    from delector.tools.vocab_stats import _load_a2_lemmas
+
+    expected = frozenset(str(k).strip().lower() for k in official_level("A2"))
+    assert _load_a2_lemmas() == expected
+    assert "anmelden" in expected  # 真词抽样，防恒等空集
 
 
 # ---------- 返回字段形状 / known_rate 舍入 ----------

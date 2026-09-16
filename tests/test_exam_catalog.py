@@ -106,18 +106,18 @@ def test_catalog_endpoint_contract(client):
     assert mods["sprechen"]["count"] == (len(a1_dict.A1_SPRECHEN_TEIL2) + len(a1_dict.A1_SPRECHEN_TEIL3))
     assert mods["vocab"]["count"] == len(a1_dict.GOETHE_A1_VOCAB)
 
-    # A2 考纲模块验证（count 动态推导，禁止硬编码 974）
+    # A2 考纲模块验证（count 动态推导，官方精选口径 sources={"official"}，禁止硬编码）
     a2 = next(lv for lv in levels if lv["id"] == "A2")
     a2_mods = {m["id"]: m for m in a2["modules"]}
     assert "vocab" in a2_mods
-    assert a2_mods["vocab"]["count"] == len(get_vocab_by_cefr("A2")["words"])
+    assert a2_mods["vocab"]["count"] == len(get_vocab_by_cefr("A2", sources={"official"})["words"])
     assert a2_mods["vocab"]["api_prefix"] == "/api/a2"
 
-    # ADR-0011 Task 6：B1 考纲模块注册，count 动态推导（禁止硬编码 1712）
+    # ADR-0011 Task 6：B1 考纲模块注册，count 动态推导（官方精选口径 sources={"official"}，禁止硬编码）
     b1 = next(lv for lv in levels if lv["id"] == "B1")
     b1_mods = {m["id"]: m for m in b1["modules"]}
     assert "vocab" in b1_mods
-    assert b1_mods["vocab"]["count"] == len(get_vocab_by_cefr("B1")["words"])
+    assert b1_mods["vocab"]["count"] == len(get_vocab_by_cefr("B1", sources={"official"})["words"])
     assert b1_mods["vocab"]["count"] > 0, "B1 词库必须非空（数据层已就绪）"
     assert b1_mods["vocab"]["panel"] == "exam-cards-family"
     assert b1_mods["vocab"]["api_prefix"] == "/api/cards"
