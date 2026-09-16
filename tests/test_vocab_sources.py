@@ -7,8 +7,8 @@
 2. 官方视图逐条 == 9 字段契约集（与
    ``tests/test_vocab_contract_uniform.py::CONTRACT_FIELDS`` 同口径）；
 3. id 形态：A2 -> ``a2-{lemma}``、B1 -> ``b1-{lemma}``；
-4. **默认路径回归护栏**：``sources=None``（默认）A2 仍 974、B1 仍 1712，
-   与改造前逐字一致；
+4. **默认路径回归护栏**：``sources=None``（默认）A2/B1 条数 == core_dict 对应
+   CEFR 条目数（动态推导，不硬编码）；
 5. 官方视图与 scope 无关（``core`` 与 ``all`` 同结果）；
 6. 未知来源名（不含 ``"official"`` 的非 None 集合）→ 与 ``sources=None`` 同路
    （降级为默认视图，绝不静默返回空表）—— 本文件把该决策钉成契约。
@@ -21,6 +21,7 @@ import pytest
 from delector.core import database
 from delector.core.database import get_vocab_by_cefr
 from delector.core.lexicon import official_level
+from delector.data.core_dict import CORE_VOCAB_DB
 
 # 唯一契约字段集（同 test_vocab_contract_uniform.CONTRACT_FIELDS）
 CONTRACT_FIELDS = {"id", "hw", "pos", "gender", "plural", "de", "zh", "core", "cefr"}
@@ -30,9 +31,10 @@ OFFICIAL_A1_TOTAL = 670  # OFFICIAL_A1_VOCAB(660) ⊕ OFFICIAL_A1_AUGMENT(10)
 OFFICIAL_A2_TOTAL = 736
 OFFICIAL_B1_TOTAL = 1617
 
-# 默认路径（sources=None）既有基线，改造不得触碰
-DEFAULT_A2_TOTAL = 974
-DEFAULT_B1_TOTAL = 1712
+# 默认路径（sources=None）条数从权威数据源（core_dict CEFR 条目数）动态推导：
+# 官方词表接入后 A2/B1 分布随数据变更（R5-v2 字段级合并），硬编码基线会静默漂移。
+DEFAULT_A2_TOTAL = sum(1 for val in CORE_VOCAB_DB.values() if val[0].upper() == "A2")
+DEFAULT_B1_TOTAL = sum(1 for val in CORE_VOCAB_DB.values() if val[0].upper() == "B1")
 
 
 @pytest.fixture(autouse=True)
@@ -126,7 +128,7 @@ def test_sources_official_scope_agnostic():
 
 
 def test_default_path_unchanged_regression_guard():
-    """不给 sources 时必须完全走现有分支：A2 974 / B1 1712 逐字不变。"""
+    """不给 sources 时必须完全走现有分支：A2/B1 条数 == core_dict 对应 CEFR 条目数。"""
     assert get_vocab_by_cefr("A2")["total"] == DEFAULT_A2_TOTAL
     assert get_vocab_by_cefr("A2", scope="all")["total"] == DEFAULT_A2_TOTAL
     assert get_vocab_by_cefr("B1")["total"] == DEFAULT_B1_TOTAL

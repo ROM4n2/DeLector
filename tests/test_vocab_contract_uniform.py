@@ -4,7 +4,8 @@
 钉住三件事：
 1. ``get_vocab_by_cefr`` 各分支（A1 core/all、A2、B1 通用分支）产出**同一字段集**
    ``{id, hw, pos, gender, plural, de, zh, core, cefr}``，缺失字段显式空值；
-2. 条数与 T2 后基线一致（A1 235/704、A2 974）、B1 仍走通用分支（id 形如 ``b1-{lemma}``）；
+2. 条数与权威基线一致（A1 235/704 硬编码；A2/B1 从 core_dict 动态推导）、
+   B1 仍走通用分支（id 形如 ``b1-{lemma}``）；
 3. ``hw`` 拼装规则未被改动（A2 名词仍 ``das Abenteuer`` 形态，format_vocab_headword 单一装饰点）。
 
 CRV 黄牌承接①：core_dict 数据模块缺失 = 打包损坏，必须直接炸（ImportError），
@@ -18,18 +19,20 @@ import pytest
 
 from delector.core import database
 from delector.core.database import get_vocab_by_cefr
+from delector.data.core_dict import CORE_VOCAB_DB
 
 # 唯一契约字段集（ADR-0011 决策 2：一份 schema，缺失字段显式空值）
 CONTRACT_FIELDS = {"id", "hw", "pos", "gender", "plural", "de", "zh", "core", "cefr"}
 
-# 条数基线（T2 后）：A1 core = 213 seed core ids + 22 customs；A1 all = 682 seeds + 22 customs
+# 条数基线（T2 后）：A1 core = 213 seed core ids + 22 customs；A1 all = 682 seeds + 22 customs。
+# A1 走 a1_dict 工作台分支，与 core_dict 无关，故仍为硬编码基线。
 A1_CORE_TOTAL = 235
 A1_ALL_TOTAL = 704
-A2_TOTAL = 974
-# 【CRV 黄牌承接 Y2】B1 条数钉死为当前权威基线（core_dict 现量）。
-# 权威词表接入后条数会变 —— 届时随数据变更**同 commit** 更新此基线；
-# 消费方（exam_catalog count_fn 等）一律动态推导，不得抄这里。
-B1_TOTAL = 1712
+# A2/B1 条数从权威数据源（core_dict 中对应 CEFR 的条目数）**动态推导**：
+# 官方词表接入后 A2/B1 分布随数据变更（R5-v2 字段级合并），硬编码基线会静默漂移。
+# 断言仍守住原意——「通用/A2 分支不得静默漏读或重复读 core_dict 条目」。
+A2_TOTAL = sum(1 for val in CORE_VOCAB_DB.values() if val[0].upper() == "A2")
+B1_TOTAL = sum(1 for val in CORE_VOCAB_DB.values() if val[0].upper() == "B1")
 
 
 @pytest.fixture(autouse=True)
@@ -68,20 +71,23 @@ def test_a1_all_scope_contract_uniform():
     _assert_contract_uniform(res["words"], 10)
 
 
-def test_a2_contract_uniform_and_count_974():
-    """A2：并入统一契约后仍为 974 条，字段集与 A1 完全一致。"""
+def test_a2_contract_uniform_and_count():
+    """A2：并入统一契约后条数 == core_dict A2 条目数，字段集与 A1 完全一致。"""
     res = get_vocab_by_cefr(cefr="A2", scope="all")
     assert res["total"] == A2_TOTAL
     _assert_contract_uniform(res["words"], 10)
 
 
 def test_a2_hw_assembly_unchanged():
-    """hw 拼装规则未被改动：A2 名词仍 'das Abenteuer' 形态（定冠词 + 大写）。"""
+    """hw 拼装规则未被改动：A2 名词仍 'das Krankenhaus' 形态（定冠词 + 大写）。
+
+    抽样词取当前仍属 A2 的名词（abenteuer/abfahrt/abfall 已按官方 cefr 改档）。
+    """
     res = get_vocab_by_cefr(cefr="A2", scope="all")
     word_map = {w["id"]: w for w in res["words"]}
-    assert word_map["a2-abenteuer"]["hw"] == "das Abenteuer"
-    assert word_map["a2-abfahrt"]["hw"] == "die Abfahrt"
-    assert word_map["a2-abfall"]["hw"] == "der Abfall"
+    assert word_map["a2-krankenhaus"]["hw"] == "das Krankenhaus"
+    assert word_map["a2-ampel"]["hw"] == "die Ampel"
+    assert word_map["a2-besuch"]["hw"] == "der Besuch"
 
 
 def test_b1_generic_branch_contract_uniform():

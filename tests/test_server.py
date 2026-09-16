@@ -2634,12 +2634,17 @@ def test_lookup_plural_haeuser(client, monkeypatch):
 
 
 def test_lookup_linguistics_ext_tier(client, monkeypatch):
-    """主链查不到时落 EXT（LINGUISTICS_VOCAB_EXT 接线）。"""
+    """主链查不到时落 EXT（LINGUISTICS_VOCAB_EXT 接线）。
+
+    探针词从旧的 ``klima`` 换为 ``tunnel``：官方词表接入主干后 ``klima`` 已是
+    core_dict 命中词（source=local_dict），不再能证明 EXT 回退层；``tunnel`` 只在
+    LINGUISTICS_VOCAB_EXT、不在任何主干分片里，仍能钉住这条回退链。
+    """
     monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda: "")
-    r = client.post("/api/lookup/vocab", json={"sentence": "Klima.", "target_word": "klima"})
+    r = client.post("/api/lookup/vocab", json={"sentence": "Tunnel.", "target_word": "tunnel"})
     data = r.json()
     assert data["source"] == "linguistics_ext"
-    assert "气候" in data["definition_zh"]
+    assert "隧道" in data["definition_zh"]
 
 
 def test_lookup_no_hit_honest_none(client, monkeypatch):

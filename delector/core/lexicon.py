@@ -6,10 +6,13 @@
     - ``manual``   <- ``delector.data.core_dict.CORE_VOCAB_MANUAL``    （手编核心）
     - ``official`` <- ``delector.data.official_vocab.OFFICIAL_VOCAB``  （官方歌德词表）
 
-**优先级语义**（由合并顺序表达，见 ``SOURCE_PRIORITY``）：
-    低 -> 高 = ``ai < manual < official``；同 lemma 冲突时高优先来源覆盖低优先，
-    即官方 > 手编 > AI。这样 AI 与官方对同一 lemma 的 cefr/释义不一致时，
-    难度标注与考纲词集以官方权威为准。
+**优先级语义是「字段级」而非「整条覆盖」**（规则集中在 ``delector.data.lexicon_merge``）：
+    - ``cefr``：``official > manual > ai`` —— 难度等级以官方考纲为权威；
+    - ``pos`` / ``gender`` / ``plural`` / ``def_zh``：``manual > official > ai``
+      —— 富字段保留人工质量（官方 ``plural`` 列约 30% 是占位 ``-``，
+      整条用官方覆盖手编会劣化：``haus`` ``-..er``→``-ä``、``schule`` ``-n``→``-``）。
+    ``SOURCE_PRIORITY`` 仍保留（``ai < manual < official``），仅用于 provenance / 子视图
+    的「来源顺序」说明；真正的逐字段取值规则由 ``FIELD_PRIORITY`` 表达。
 
 **provenance 是运行期旁路**：``PROVENANCE`` 记录每个 lemma 由哪些来源贡献，
 仅供加载后查询「仅官方精选」等来源感知视图；它是内存中的 ``frozenset``，
@@ -21,10 +24,11 @@
 （与 ``database`` / ``security`` 同策略），避免无关导入触发重依赖。
 """
 
-from typing import Dict, Iterable, Mapping, Optional, Sequence
+from typing import Dict, Iterable, Optional
 
 from delector.data.core_dict import CORE_VOCAB_MANUAL
 from delector.data.core_dict_ext import CORE_VOCAB_EXT
+from delector.data.lexicon_merge import FIELD_PRIORITY, merge_fragments, provenance_of
 from delector.data.official_vocab import (
     OFFICIAL_A1_AUGMENT,
     OFFICIAL_A1_VOCAB,
@@ -43,37 +47,14 @@ FRAGMENTS: Dict[str, Dict[str, tuple]] = {
 }
 
 
-def merge_fragments(
-    fragments: Mapping[str, Mapping[str, tuple]],
-    priority: Sequence[str],
-) -> Dict[str, tuple]:
-    """按 ``priority``（低 -> 高）顺序合并分片，高优先来源覆盖同 lemma 的低优先值。
-
-    纯函数、零副作用：只读传入的 ``fragments``，返回全新 dict（key=lemma 唯一，
-    插入顺序 = 各片首次出现顺序，与逐片 ``update`` 语义一致，故与旧内联推导式的
-    产物逐字相等）。
-
-    单独抽出来是为「中间层优先级」留一个可单测的接缝 —— 真实分片里 ai 与 manual
-    恰好没有同 lemma 冲突，因此 ``SOURCE_PRIORITY`` 若被误写为
-    ``("manual", "ai", "official")``（= ai 覆盖 manual，语义反转），主干的
-    ``LEXICON`` 不会有任何可见差异；只有用人工构造的 ``fragments`` 直接调本函数，
-    才能把这段顺序语义钉死。
-    """
-    result: Dict[str, tuple] = {}
-    for source in priority:
-        result.update(fragments[source])
-    return result
-
-
-# 按 SOURCE_PRIORITY 顺序合并（高优先覆盖低优先），key=lemma 唯一。
-LEXICON: Dict[str, tuple] = merge_fragments(FRAGMENTS, SOURCE_PRIORITY)
+# 逐字段合并（字段级优先级见 lexicon_merge.FIELD_PRIORITY）：key=lemma 唯一，
+# 取值按字段分别取权威来源 —— cefr 官方优先、富字段手编优先。
+# ``merge_fragments`` 与 ``provenance_of`` 是 lexicon_merge 的共享纯函数（零内部依赖），
+# core_dict.CORE_VOCAB_DB 亦复用同一段逻辑，保证主干单真值（CORE_VOCAB_DB == LEXICON）。
+LEXICON: Dict[str, tuple] = merge_fragments(FRAGMENTS, FIELD_PRIORITY)
 
 # provenance：lemma -> 贡献该 lemma 的来源集合（同 lemma 在几片出现就含几个来源名）。
-_all_lemmas = {lemma for fragment in FRAGMENTS.values() for lemma in fragment}
-PROVENANCE: Dict[str, frozenset] = {
-    lemma: frozenset(source for source in SOURCE_PRIORITY if lemma in FRAGMENTS[source])
-    for lemma in _all_lemmas
-}
+PROVENANCE: Dict[str, frozenset] = provenance_of(FRAGMENTS)
 
 
 def sources_of(lemma: str) -> frozenset:

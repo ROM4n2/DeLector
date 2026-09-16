@@ -44,16 +44,16 @@ def test_known_a1_word_when_level_contains_a1():
 
 
 def test_a2_word_only_known_when_level_contains_a2():
-    # "abbiegen" 是 core_dict A2 真实词条 lemma
-    lev_a1 = asyncio.run(run(_payload(_tokens([("abbiegen", 1)]), levels=["A1"])))
+    # "anmelden" 是 core_dict A2 真实词条 lemma（且不在 A1 词集，保证 A1-only 判未知）
+    lev_a1 = asyncio.run(run(_payload(_tokens([("anmelden", 1)]), levels=["A1"])))
     assert lev_a1["known_count"] == 0
-    lev_both = asyncio.run(run(_payload(_tokens([("abbiegen", 1)]), levels=["A1", "A2"])))
+    lev_both = asyncio.run(run(_payload(_tokens([("anmelden", 1)]), levels=["A1", "A2"])))
     assert lev_both["known_count"] == 1
 
 
 def test_level_selection_defaults_to_a1_a2():
     # levels 缺省 = A1∪A2
-    out = asyncio.run(run(_payload(_tokens([("gehen", 1), ("abbiegen", 1)]))))
+    out = asyncio.run(run(_payload(_tokens([("gehen", 1), ("anmelden", 1)]))))
     assert out["known_count"] == 2
 
 
