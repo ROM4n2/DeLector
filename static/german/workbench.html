@@ -1087,20 +1087,88 @@ function migrateWordSchema() {
   return true;
 }
 
+/* 首装挂起标记（ADR-0014 §6-S2）：localStorage 无词表 → S.words 先置空、由
+ * bootstrapA1Words() 异步优先拉服务端 A1 视图（失败回退内联种子）。挂起期间 UI
+ * 显示「正在加载 A1 词库…」，不得把空表渲染成「没有词 / 已完成」的误导态。 */
+let A1_BOOT_PENDING = false;
+
+/* 首装词库来源标记（ADR-0014 §6-S2 验收修复黄牌②）：记录本设备上一次首装落盘的词库来源。
+ *  - "server"：服务端 A1 视图；  - "inline"：服务端当时不可用、以内联兜底建表。
+ * 为 "inline" 的设备下次启动会重试服务端（兑现 toast 承诺的「可稍后刷新重试」），
+ * 成功后升级为 "server" 不再重试；已有 server 缓存的设备读一次即 return，不反复请求。 */
+const A1_SRC_KEY = "wb.a1.src.v1";
+
+/** 服务端 A1 契约行（12 字段 {id,hw,pos,gender,plural,de,zh,ipa,example_zh,core,cefr,letter}）
+ *  → 前端词对象，口径与旧内联建表逐字段等价，并逐条过 normalizeWord（非法 → 返回 null，
+ *  由调用方整体放弃）。纯函数：无 IO / 无随机 / 不改入参，连跑两次 deep-equal。
+ *  口径说明：
+ *   - gloss ← rw.zh（服务端 zh 即旧内联 seed.gloss，实测逐条相等）；
+ *   - ex 只携首条例句 { de: rw.de, zh: rw.example_zh }（服务端契约仅下发首条）；
+ *   - letter 用服务端下发的 seed 原值，**不用 letterOf 派生**（派生会在 10 条上漂移）；
+ *   - page 恒 0（write-only，全文无读取点，ADR-0014 §6 校正③）；
+ *   - tags = rw.core ? ["a1","core"] : ["a1"]（旧口径 = CORE_WORD_SEED_IDS.has(id)）；
+ *   - custom = id 以 "core-" 开头（旧内联 22 条补缺词 id 即 core-*）；
+ *   - cefr 不显式落值，交 normalizeWord 按 id 前缀推导（a1-* → "A1"，core-* → null），
+ *     与旧内联建表逐字段一致（服务端对 core-* 下发 "A1"，此处不采信以保等价）。 */
+function a1WordFromApi(rw) {
+  return normalizeWord({
+    id: rw.id, hw: rw.hw || "", pos: rw.pos || "",
+    gloss: rw.zh || "",
+    ipa: rw.ipa || "",
+    ex: rw.de ? [{ de: rw.de, zh: rw.example_zh || "" }] : [],
+    letter: rw.letter || "",
+    page: 0,
+    tags: rw.core ? ["a1", "core"] : ["a1"],
+    custom: String(rw.id || "").startsWith("core-"),
+    up: 0
+  });
+}
+
+/** 首装内联兜底建表：把 A1 种子词 + 22 条核心补缺词按既有口径逐条过 normalizeWord，
+ *  返回新数组（不写 S / 不落盘）。与 a1WordFromApi 逐字段等价（page 除外：内联保留
+ *  seed 原 page 值，API 路径恒 0 —— page 是 write-only，无读取点）。首装兜底与成功
+ *  路径都复用它，全文件只有这一份内联建表实现。 */
+function a1WordsFromInline() {
+  const words = SEED_WORDS.map(w => normalizeWord({
+    id: w.id, hw: w.hw, pos: w.pos || "", gloss: w.gloss || "",
+    ipa: w.ipa || "", ex: Array.isArray(w.ex) ? w.ex : [], letter: w.letter || "",
+    page: w.page || 0, tags: CORE_WORD_SEED_IDS.has(w.id) ? ["a1", "core"] : ["a1"],
+    custom: false, up: 0
+  }));
+  // 核心词表里 SEED_WORDS 没有的 22 个新词：展开复制成新对象，
+  // 不能把常量里的对象引用直接塞进 S.words（用户编辑会改到常量本身）
+  words.push(...CORE_CUSTOM_WORDS.map(w => normalizeWord({ ...w, tags: ["a1", "core"], custom: true, up: w.up || 0 })));
+  return words;
+}
+
+/** 曾以内联兜底落盘的设备（词表非空），服务端恢复后按 ADR-0014 §4-3「失败可恢复」语义**合并**：
+ *  - 服务端新增 id → 直接追加（词表只有种子时这些词本就不存在）；
+ *  - 已存在条目 → **只补空字段**：ex 为空且服务端有例句则填、ipa 空则填、letter 空则填；
+ *  - **绝不覆盖非空**（hw/gloss/tags 与用户手编过的 ex 一律原样保留）；
+ *  - **绝不触碰 cards/log/wrong 三个进度库**（FSRS 进度零丢失）。
+ *  返回是否真发生变更，供调用方决定是否 saveWords（幂等：服务端无新信息时为 no-op）。 */
+function mergeA1ServerWords(incoming) {
+  const byId = new Map(S.words.map(w => [w.id, w]));
+  let changed = false;
+  for (const iw of incoming) {
+    if (!iw || typeof iw.id !== "string") continue;
+    const ew = byId.get(iw.id);
+    if (!ew) { S.words.push(iw); byId.set(iw.id, iw); changed = true; continue; }
+    if (!(Array.isArray(ew.ex) && ew.ex.length) && Array.isArray(iw.ex) && iw.ex.length) { ew.ex = iw.ex; changed = true; }
+    if (!ew.ipa && iw.ipa) { ew.ipa = iw.ipa; changed = true; }
+    if (!ew.letter && iw.letter) { ew.letter = iw.letter; changed = true; }
+  }
+  return changed;
+}
+
 function loadAll() {
   try { S.words = JSON.parse(localStorage.getItem(K.words) || "null") || null; } catch (e) { S.words = null; }
+  A1_BOOT_PENDING = false;
   if (!Array.isArray(S.words)) {
-    S.words = SEED_WORDS.map(w => normalizeWord({
-      id: w.id, hw: w.hw, pos: w.pos || "", gloss: w.gloss || "",
-      ipa: w.ipa || "", ex: Array.isArray(w.ex) ? w.ex : [], letter: w.letter || "",
-      page: w.page || 0, tags: CORE_WORD_SEED_IDS.has(w.id) ? ["a1", "core"] : ["a1"],
-      custom: false, up: 0
-    }));
-    // 核心词表里 SEED_WORDS 没有的 22 个新词：展开复制成新对象，
-    // 不能把常量里的对象引用直接塞进 S.words（用户编辑会改到常量本身）
-    S.words.push(...CORE_CUSTOM_WORDS.map(w => normalizeWord({ ...w, tags: ["a1", "core"], custom: true, up: w.up || 0 })));
-    saveWords();
-    markSchemaMigrated(); // 种子建表已逐条过 normalizeWord，契约天然齐 → 直接视为已迁移
+    // 首装：不再当场建表 —— 由 bootstrapA1Words() 优先拉服务端 A1 视图（失败回退内联）。
+    // 此处仅置空表 + 挂起标记，等异步结果再覆盖；期间 UI 显示「正在加载 A1 词库…」。
+    S.words = [];
+    A1_BOOT_PENDING = true;
   } else {
     // Task 4：localStorage 存量词对象读出后、进 S.words 被消费前逐条在内存归一
     // （无论是否已标记——远端镜像可能把旧形状词拉回来）。任一条失败 → 整体放弃，S.words 保留原样。
@@ -1115,7 +1183,80 @@ function loadAll() {
   S.log = load(K.log, {});
   S.wrong = load(K.wrong, {});
   S.settings = Object.assign({}, DEFAULT_SETTINGS, load(K.set, {}));
-  migrateWordSchema();
+  /* 首装挂起时 S.words 为空：migrateWordSchema() 会把空表落盘并写 schema 标记，
+   * 造成「关页 → 下次读回 [] → 不再进首装分支」的永久空表。故挂起时跳过，
+   * 由 bootstrapA1Words() 在词表就绪后再调用。存量词表分支（非挂起）照旧。 */
+  if (!A1_BOOT_PENDING) migrateWordSchema();
+}
+
+/** 首装 A1 词库：API 优先 → 内联兜底 → 写 localStorage 缓存（ADR-0014 §6-S2）。
+ *  触发条件（验收修复黄牌②，「首装一次」与「兜底可重试」并存）：
+ *    ① A1_BOOT_PENDING —— 本次 loadAll 判定 localStorage 无词表（首次 / 被清空）；
+ *    ② A1_SRC_KEY === "inline" —— 上次是以内联兜底落盘的（服务端当时不可用），
+ *       本次启动重试服务端（兑现 toast 承诺的「可稍后刷新重试」）。
+ *  已有 server 缓存（pending=false 且标记 "server"）→ 首行 return，零请求。 */
+async function bootstrapA1Words() {
+  const lastSrc = localStorage.getItem(A1_SRC_KEY);
+  if (!A1_BOOT_PENDING && lastSrc !== "inline") return;
+  const canUseServer = typeof location !== "undefined" && location.protocol.startsWith("http");
+  let words = null;                 // 服务端映射结果（成功时非空）
+  let fromServer = false;
+  if (canUseServer) {
+    try {
+      const res = await fetch("/api/cards/vocab?cefr=A1&scope=all");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      const rows = Array.isArray(data.words) ? data.words : [];
+      if (rows.length === 0) throw new Error("服务端 A1 视图为空");
+      // 逐条映射（a1WordFromApi 内已过 normalizeWord）：任一条非法 → 整体放弃，不产出半套
+      const mapped = rows.map(a1WordFromApi);
+      if (mapped.some(w => !w)) throw new Error("服务端 A1 行存在非法项，整体放弃");
+      words = mapped;
+      fromServer = true;
+      console.log("[wb] A1 词库来源：服务端 /api/cards/vocab?cefr=A1&scope=all（" + words.length + " 条）");
+    } catch (e) {
+      console.warn("[wb] A1 词库服务端加载失败，回退内置词表：" + (e && e.message ? e.message : e));
+    }
+  }
+  /* 尾部纳入 try/catch/finally（验收修复黄牌③）：saveWords 抛错（配额 / localStorage 被禁）
+   * 或渲染抛错都不得让 A1_BOOT_PENDING 卡在 true（UI 永久停在「正在加载 A1 词库…」）。
+   * 调用点另接 .catch 兜底 unhandled rejection；finally 里无条件解除挂起并刷新 UI。 */
+  try {
+    if (A1_BOOT_PENDING) {
+      /* 首装：S.words 为空 → 整体建表（服务端优先，服务未起/失败回退内联）。
+       * 先解除挂起再落盘 —— 让 saveWords() 的统一兜底闸（空表+挂起 → return）绝不误挡首装成功路径。 */
+      S.words = fromServer ? words : a1WordsFromInline();
+      A1_BOOT_PENDING = false;
+      saveWords();                                // 首装结果落盘即为缓存
+      markSchemaMigrated();
+      if (backfillCoreWords()) saveWords();        // 建表后补 core/a1 tag（幂等，建表已带 tag 时为 no-op）
+    } else if (fromServer) {
+      /* 曾以内联兜底落盘的设备（词表非空）服务端已恢复：**合并**（ADR-0014 §4-3）——
+       * 追加缺失 id、只补空字段、绝不覆盖非空、不碰 cards/log/wrong。 */
+      if (mergeA1ServerWords(words)) saveWords();
+    }
+    /* 建表/合并完成后补跑一次 id 归并迁移（新表也可能残留已下架 id），语义与启动序一致：
+     * 返回 changed 才落盘，cards/log/wrong 三个进度库照常保存（它们是用户数据）。 */
+    if (migrateSeedIdAliases()) { saveWords(); saveCards(); saveLog(); saveWrong(); }
+    /* 来源标记最后写：只有建表/合并/迁移都没抛错才升级为 "server"（否则保持 "inline" 下次重试）。 */
+    localStorage.setItem(A1_SRC_KEY, fromServer ? "server" : "inline");
+  } catch (e) {
+    console.warn("[wb] A1 首装收尾失败，已降级（下次启动将重试）：" + (e && e.message ? e.message : e));
+  } finally {
+    /* 无论落盘/补 tag/合并是否抛错，都必须解除挂起并刷新 UI（降级态显示当前 S.words）。 */
+    A1_BOOT_PENDING = false;
+    try {
+      renderWords();
+      refilterReviewQueueForScope();
+      renderHeaderBadge();
+      renderReview();
+    } catch (e) {
+      console.warn("[wb] A1 首装降级渲染失败：" + (e && e.message ? e.message : e));
+    }
+  }
+  if (canUseServer && !fromServer) {
+    toast("A1 词库未从服务端加载，已使用内置词表（可稍后刷新重试）");
+  }
 }
 
 /** 已有用户数据幂等补 core tag / 注入缺失的核心新词（Task 7）。
@@ -1194,7 +1335,11 @@ function migrateSeedIdAliases() {
   if (kept.length !== S.words.length) { S.words = kept; changed = true; }
   return changed;
 }
-function saveWords() { localStorage.setItem(K.words, JSON.stringify(S.words)); idbPut("words", S.words); wbsync.push(); }
+/* 落盘闸 + 缓存写入（ADR-0014 §6-S2 验收修复红牌①）：首装挂起期词表为空时绝不写
+ * wb.words.v1，防任何新增调用点把 [] 写进缓存造成「关页 → 下次读回 [] → 不再进首装」
+ * 的永久空表。首装成功路径在 bootstrapA1Words() 里已先置 A1_BOOT_PENDING=false 再
+ * saveWords()，故此闸只挡「空表 + 挂起」这一种组合，绝不误挡首装成功路径。 */
+function saveWords() { if (A1_BOOT_PENDING && S.words.length === 0) return; localStorage.setItem(K.words, JSON.stringify(S.words)); idbPut("words", S.words); wbsync.push(); }
 function saveCards() { localStorage.setItem(K.cards, JSON.stringify(S.cards)); idbPut("cards", S.cards); wbsync.push(); }
 function saveLog() { localStorage.setItem(K.log, JSON.stringify(S.log)); idbPut("log", S.log); wbsync.push(); }
 function saveWrong() { localStorage.setItem(K.wrong, JSON.stringify(S.wrong)); idbPut("wrong", S.wrong); wbsync.push(); }
@@ -2340,6 +2485,8 @@ function queueInfoText() {
 }
 
 function renderReview() {
+  /* 首装挂起（S.words 为空）：显示加载占位，不得渲染成「今日复习任务已完成」的误导态。 */
+  if (A1_BOOT_PENDING) { renderA1BootLoading(); return; }
   /* 队列按天构建、会话内保持稳定：评价后不重建，保证「上一张」可回看 */
   const today = todayStr();
   if (queueDay !== today || revIdx >= revQueue.length) {
@@ -3120,7 +3267,23 @@ function cycleWordState(id) {
   toast("「" + w.hw + "」→ " + label);
 }
 
+/* 首装挂起（S.words 为空）期间的统一占位：卡片区 / 词表区 / 顶栏徽标都显示一行
+ * 「正在加载 A1 词库…」，不得把空表渲染成「没有词 / 今日已完成」的误导态。
+ * 集中在一处，供 renderWords / renderReview / renderHeaderBadge 的首装挂起分支调用。 */
+function renderA1BootLoading() {
+  $("wCount").textContent = "正在加载 A1 词库…";
+  $("wBody").innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--muted);padding:24px'>正在加载 A1 词库…</td></tr>";
+  $("revBoard").style.display = "none";
+  $("revEmpty").style.display = "";
+  $("revEmptyText").textContent = "正在加载 A1 词库…";
+  const bd = $("dueBadge");
+  bd.textContent = "正在加载 A1 词库…";
+  bd.classList.remove("hot");
+}
+
 function renderWords() {
+  /* 首装挂起（S.words 为空）：显示加载占位，不得渲染成「没有匹配的单词」的误导态。 */
+  if (A1_BOOT_PENDING) { renderA1BootLoading(); return; }
   /* 字母与标签下拉（保留当前选择） */
   const selL = $("wLetter"), selT = $("wTag");
   const curL = selL.value, curT = selT.value;
@@ -4307,6 +4470,8 @@ $("btnResetAll").addEventListener("click", async () => {
  * 顶栏徽标
  * ==================================================================== */
 function renderHeaderBadge() {
+  /* 首装挂起（S.words 为空）：徽标显示加载态，不得渲染成「今日已完成 ✓」的误导态。 */
+  if (A1_BOOT_PENDING) { renderA1BootLoading(); return; }
   const eod = endToday();
   /* 徽标口径必须与 buildReviewQueue 一致（同一个 wordFilters.scope）：
    * 否则核心模式下顶栏会挂着一堆永远进不了队列的非核心待学数，永远清不到「已完成」 */
@@ -4365,8 +4530,22 @@ document.addEventListener("keydown", (e) => {
  * 启动
  * ==================================================================== */
 loadAll();
-if (migrateSeedIdAliases()) { saveWords(); saveCards(); saveLog(); saveWrong(); }
-if (backfillCoreWords()) saveWords();
+/* 首装：API 优先 → 内联兜底 → 缓存（异步，完成后自行刷新 UI）。已有缓存时内部直接 return。 */
+bootstrapA1Words().catch(e => {
+  /* 黄牌③兜底：bootstrap 内部已 try/finally，这里再防御一层 —— 万一仍抛错也不得让 UI
+     永久停在「正在加载 A1 词库…」，并避免 unhandled rejection。 */
+  console.warn("[wb] A1 首装 bootstrap 异常，已降级：" + (e && e.message ? e.message : e));
+  A1_BOOT_PENDING = false;
+  try { renderWords(); renderHeaderBadge(); renderReview(); } catch (err) { /* 渲染兜底失败：忽略 */ }
+});
+/* 首装挂起期 S.words 为空：saveWords 必须挂起守卫 —— 否则会把 [] 写进 wb.words.v1，
+ * 造成「关页 → 下次读回 [] → Array.isArray([]) 为真 → 不再进首装」的永久空表。
+ * saveCards/saveLog/saveWrong 是用户数据，照常保存（进度零丢失）。 */
+if (migrateSeedIdAliases()) { if (!A1_BOOT_PENDING) saveWords(); saveCards(); saveLog(); saveWrong(); }
+/* 首装挂起期间 S.words 为空：backfill 无意义（并会误注入 22 条 custom，且此时落盘会
+ * 让「关页 → 下次读回非空表 → 不再首装」），跳过；交由 bootstrapA1Words() 在词表就绪后
+ * 再跑一次（见其函数体）。 */
+if (!A1_BOOT_PENDING) { if (backfillCoreWords()) saveWords(); }
 applyTheme();
 fsrsSelfTest();
 syncScopeControls();
@@ -4380,8 +4559,8 @@ renderReview();
     if (updated) {
       // IDB 数据更新，重新加载 S 并刷新 UI
       loadAll();
-      if (migrateSeedIdAliases()) { saveWords(); saveCards(); saveLog(); saveWrong(); }
-      if (backfillCoreWords()) saveWords();
+      if (migrateSeedIdAliases()) { if (!A1_BOOT_PENDING) saveWords(); saveCards(); saveLog(); saveWrong(); }
+      if (!A1_BOOT_PENDING) { if (backfillCoreWords()) saveWords(); }
       renderHeaderBadge();
       renderReview();
       if (typeof renderSettings === "function") renderSettings();
