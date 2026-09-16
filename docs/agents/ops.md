@@ -119,13 +119,16 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
    `extractPackages` 列了那三个包）。
 7. **提交前**：`git diff --stat` 确认范围合理；绝不提交 `.env`、`*.db`、APK 等产物；
    pre-commit 钩子必须启用且不绕过。
-8. **每次 git 推送必须同步更新 README.md（MUST）**：发版/修复涉及版本号、特性、测试数、
-   目录结构、路线图任一变化时，README 的对应落点要同一提交内更新到位（Release badge、
-   下载表版本与 release 链接、Tests badge、核心特性节、技术栈测试数、目录结构 js 模块与
-   测试文件清单、Roadmap 版本条目）。不要等发布后再补——README 是仓库门面，滞后会让
-   用户/协作者看到与代码不一致的版本。
+8. **每次 git 推送必须同步更新版本面（MUST）**：发版/修复涉及版本号、特性、测试数、
+   目录结构任一变化时，对应落点要同一提交内更新到位（Release badge、下载表版本与 release
+   链接、Tests badge、核心特性摘要、技术栈测试数、目录结构）。**版本历史与发版 changelog 的
+   正主（single source of truth）是仓库根的 `CHANGELOG.md`** —— 发版五件套中的版本历史落点为
+   **④ `README.md`（badge + 下载表 + 最近 3 版摘要）与 `CHANGELOG.md`（追加本次版本条目 —— 版本
+   历史正主）**：`README.md` 是入口只留 badge 与最近 3 版摘要的指针，完整历史一律指向
+   `CHANGELOG.md`，**绝不在 README 复制第二份**（DOC-GOVERNANCE 单一真相源）。不要等发布后再补
+   ——README 是仓库门面，滞后会让用户/协作者看到与代码不一致的版本。
 9. **大改动后**：更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 的「当前状态」「红线速查」「开放待办」；
-   发布类变更同步 README Roadmap changelog。
+   发布类变更在 `CHANGELOG.md` 顶部追加版本条目（版本历史正主），README 只留最近 3 版摘要与指针。
 10. **缓存问题**：**不要再用 `?v=X.X.X` 查询串给 CSS/JS 打版本号**（v4.4.5 已退役）。
     它挡不住真正的问题，还制造了安全感：安卓覆盖安装后磁盘上那份文件本身就是旧的，
     请求 URL 与响应内容是一对自洽的旧配对；而 `main.js` 的 ES module import 全是裸路径
