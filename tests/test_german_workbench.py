@@ -427,29 +427,40 @@ def test_core_custom_words_headwords_match_source_export():
 
 
 def _load_all_body():
-    """loadAll 函数体（到下一个顶层 function 为止）。"""
-    body = _top_fn_segment("function loadAll()")
-    assert "SEED_WORDS.map(" in body, "切片没落在 loadAll 上（找不到种子建表）"
+    """loadAll 函数体（到下一个顶层 function / async function 为止）。
+
+    ADR-0014 §6-S2 起首装建表从 loadAll 抽到 a1WordsFromInline()，loadAll 自身不再内联
+    建表；它后面紧跟的是 async function bootstrapA1Words，故边界必须同时识别两种前缀，
+    否则切片会漂移进后续函数体（把 bootstrap 里的 backfillCoreWords 误当 loadAll 内容）。
+    切片标识用 loadAll 独有的首装挂起标记 A1_BOOT_PENDING，锚点漂移即红。
+    """
+    decl = "function loadAll()"
+    start = _WORKBENCH.find(decl)
+    assert start != -1, "找不到函数声明: %s" % decl
+    start += len(decl)
+    m = re.search(r"\n(?:async\s+)?function\s+\w", _WORKBENCH[start:])
+    assert m, "loadAll 之后找不到下一个顶层 function（声明顺序漂移）"
+    body = _WORKBENCH[start : start + m.start()]
+    assert "A1_BOOT_PENDING" in body, "切片没落在 loadAll 上（缺少首装挂起标记）"
     return body
 
 
-def _seed_init_block():
-    """loadAll 里「localStorage 无词表 → 用 SEED_WORDS 建表」那个分支体。
+def _a1_words_from_inline_body():
+    """a1WordsFromInline 函数体（到下一个顶层 function 为止）。
 
-    上界是 `if (!Array.isArray(S.words))` 守卫，下界是该分支内的 saveWords()。
-    切这么窄是为了让断言不能被「写在 if 外面」的实现骗过去：
-    分支外的注入每次加载都会重复追加词，切片里看不到就红。
+    首装建表（无论 API 路径成功还是服务未起回退）都复用它 —— 全文件只此一份内联建表实现。
+    上界即函数体起点，下界到下一个顶层 function；断言只能被真实现打破、不能被整文件模糊匹配骗过。
     """
-    body = _load_all_body()
-    assert "if (!Array.isArray(S.words))" in body, "loadAll 缺少种子建表守卫"
-    block = body.split("if (!Array.isArray(S.words))")[1].split("saveWords();")[0]
-    assert "SEED_WORDS.map(" in block, "切片没落在种子建表分支上"
-    return block
+    assert "function a1WordsFromInline(" in _WORKBENCH, "缺少 a1WordsFromInline 函数定义"
+    body = _top_fn_segment("function a1WordsFromInline(")
+    assert "SEED_WORDS.map(" in body, "切片没落在 a1WordsFromInline 上（找不到种子建表）"
+    return body
 
 
 def test_core_tag_applied_during_seed_init():
-    """种子建表时按 CORE_WORD_SEED_IDS 打 core tag，并对全部 A1 词补等级标签 a1。
+    """首装建表时按 CORE_WORD_SEED_IDS 打 core tag，并对全部 A1 词补等级标签 a1。
 
+    建表逻辑现居 a1WordsFromInline()（API 路径 a1WordFromApi 与内联兜底共用同一口径）。
     两条身份来源分工（见 workbench.html SCOPE_PREDICATES 上方注释）：
       - 语义标签 core：核心词模式的身份来源（词表过滤 / 复习队列 / 统计都读它），
         不打则后续所有 core scope 过滤会筛出 0 个词；
@@ -459,7 +470,7 @@ def test_core_tag_applied_during_seed_init():
 
     变异验证：把 tags 改回 `tags: []` / 漏补 a1 → 对应断言红。
     """
-    block = _seed_init_block()
+    block = _a1_words_from_inline_body()
     assert re.search(r"tags:\s*CORE_WORD_SEED_IDS\.has\(w\.id\)\s*\?", block), (
         "种子词的 tags 必须按 CORE_WORD_SEED_IDS.has(w.id) 判定"
     )
@@ -473,28 +484,34 @@ def test_core_tag_applied_during_seed_init():
 
 
 def test_core_custom_words_injected_during_seed_init():
-    """22 个核心新词必须在种子建表分支内、map 之后注入，且只注入一次。
+    """22 个核心新词必须在首装建表函数内、SEED_WORDS.map 之后注入，且只注入一次。
 
-    三条不变量：
-      1. 在 `!Array.isArray(S.words)` 分支内 —— 写在分支外则每次加载重复追加 22 词；
+    建表实现现居 a1WordsFromInline()。四条不变量：
+      1. 在 a1WordsFromInline 函数体内 —— 写在函数外则不受「首装一次」约束、可能重复追加；
       2. 在 SEED_WORDS.map 之后 —— 先建表再追加；
-      3. 整个 loadAll 里只出现一次 —— 挡住「顺手多写一处」的重复注入。
+      3. 函数内只出现一次 —— 挡住「顺手多写一处」的重复注入；
+      4. 全文件只有一份内联建表实现（SEED_WORDS.map 全文件恰一处）—— 挡住第二份抄写。
 
-    变异验证：把 push 移到 saveWords() 之后 / 分支外 → 断言 1 红；
-              复制一份 push → 断言 3 红。
+    变异验证：把 push 移到 return 之后 / 函数外 → 断言 1/2 红；
+              复制一份 push → 断言 3 红；另写一份内联建表 → 断言 4 红。
     """
-    block = _seed_init_block()
-    assert "CORE_CUSTOM_WORDS" in block, "核心新词必须在种子建表分支内注入 S.words（写在分支外会每次加载重复追加）"
+    block = _a1_words_from_inline_body()
+    assert "CORE_CUSTOM_WORDS" in block, "核心新词必须在 a1WordsFromInline 内注入（写在函数外会脱离首装一次性约束）"
     assert block.index("SEED_WORDS.map(") < block.index("CORE_CUSTOM_WORDS"), (
         "核心新词必须在 SEED_WORDS.map 建表之后追加"
     )
-    assert _load_all_body().count("CORE_CUSTOM_WORDS") == 1, "loadAll 里只能注入一次 CORE_CUSTOM_WORDS"
+    assert _a1_words_from_inline_body().count("CORE_CUSTOM_WORDS") == 1, (
+        "a1WordsFromInline 里只能注入一次 CORE_CUSTOM_WORDS"
+    )
+    assert _WORKBENCH.count("SEED_WORDS.map(") == 1, (
+        "全文件只能有一份内联建表实现（a1WordsFromInline），禁止第二份抄写"
+    )
     push = block[block.index("CORE_CUSTOM_WORDS") :]
-    assert re.search(r"S\.words\.push\(|S\.words\s*=\s*S\.words\.concat\(", block), (
-        "核心新词必须真的进 S.words（push / concat）"
+    assert re.search(r"words\.push\(|\.concat\(", block), (
+        "核心新词必须真的进建表结果数组（push / concat）"
     )
     assert re.search(r"\{\s*\.\.\.\s*w\b", push), (
-        "必须展开复制成新对象，不能把 CORE_CUSTOM_WORDS 里的对象引用直接塞进 S.words"
+        "必须展开复制成新对象，不能把 CORE_CUSTOM_WORDS 里的对象引用直接塞进结果"
         "（否则用户编辑核心词会改到常量本身）"
     )
 
@@ -510,11 +527,10 @@ def _backfill_function_body():
 
 
 def test_core_backfill_defined_outside_loadAll():
-    """backfillCoreWords 必须定义在 loadAll 外部，否则 CORE_CUSTOM_WORDS 在 loadAll 内出现两次，破坏既有计数断言。
+    """backfillCoreWords 必须定义在 loadAll 外部（backfill 是对老用户的补偿，独立于首装建表）。
 
-    现有 test_core_custom_words_injected_during_seed_init 用 _load_all_body().count('CORE_CUSTOM_WORDS') == 1
-    把注射逻辑钉在种子分支内；backfill 作为对老用户的补偿必须独立在外。
-    变异验证：把函数整个挪进 loadAll 末尾 → 本断言红，且上述计数断言也红。
+    首装建表现居 a1WordsFromInline()；本断言钉住 loadAll 函数体本身不内联建表 / 不改 tag，
+    避免它与首装流程耦合。变异验证：把 backfill 函数整个挪进 loadAll → 本断言红。
     """
     load_all_body = _load_all_body()
     assert "backfillCoreWords" not in load_all_body, "backfillCoreWords 不得定义在 loadAll 函数体内"
@@ -1628,7 +1644,9 @@ def test_alias_migration_runs_before_backfill_at_both_startup_sites():
 
     变异验证（已实跑确认红）：把 updated 分支里的迁移调用删掉 → 计数断言 2 变 1 红。
     """
-    call = "if (migrateSeedIdAliases()) { saveWords(); saveCards(); saveLog(); saveWrong(); }"
+    # 验收修复红牌①：三处启动 saveWords() 都加了 !A1_BOOT_PENDING 守卫
+    # （挂起期 S.words 为空，裸 saveWords() 会把 [] 写进 wb.words.v1 → 永久空表）。
+    call = "if (migrateSeedIdAliases()) { if (!A1_BOOT_PENDING) saveWords(); saveCards(); saveLog(); saveWrong(); }"
     backfill = "if (backfillCoreWords()) saveWords();"
 
     startup = _WORKBENCH.split("loadAll();")[1].split("(async () => {")[0]
@@ -1644,6 +1662,71 @@ def test_alias_migration_runs_before_backfill_at_both_startup_sites():
     assert _WORKBENCH.count(call) == 2, "迁移调用应恰好两处（同步启动 + hydrate 重载），实际 %d 处" % _WORKBENCH.count(
         call
     )
+
+
+def _bootstrap_a1_body():
+    """bootstrapA1Words 函数体（async 声明 → 下一个顶层 function 为止）。"""
+    decl = "async function bootstrapA1Words("
+    assert decl in _WORKBENCH, "缺少 bootstrapA1Words 定义"
+    return _top_fn_segment(decl)
+
+
+def _save_words_body():
+    """saveWords 函数体（声明 → 下一个顶层 function 为止）。"""
+    assert "function saveWords(" in _WORKBENCH, "缺少 saveWords 定义"
+    return _top_fn_segment("function saveWords(")
+
+
+def test_a1_boot_pending_guards_all_startup_savewords():
+    """验收修复红牌①（黄牌④钉住）：三处启动 saveWords() 都必须带 !A1_BOOT_PENDING 守卫，
+    且 saveWords() 顶部有统一兜底闸。
+
+    机理：http 首装时 A1_BOOT_PENDING=true、S.words=[]；若启动序里 migrateSeedIdAliases /
+    backfillCoreWords 落盘分支无守卫，会把 [] 或 22 条 custom 半表写进 wb.words.v1 →
+    下次读回非空 → 不再进首装 → 永久空表 / 永久半表。
+
+    变异验证：去掉任一处 !A1_BOOT_PENDING 守卫（改回裸 saveWords()）→ 对应切片断言红；
+             去掉 saveWords 顶部兜底闸 → 末条断言红。
+    """
+    startup = _WORKBENCH.split("loadAll();")[1].split("(async () => {")[0]
+    async_block = _WORKBENCH.split("(async () => {")[1].split("})();")[0]
+    updated = async_block.split("if (updated) {")[1].split("console.log")[0]
+    guarded_migrate = (
+        "if (migrateSeedIdAliases()) { if (!A1_BOOT_PENDING) saveWords(); saveCards(); saveLog(); saveWrong(); }"
+    )
+    guarded_backfill = "if (!A1_BOOT_PENDING) { if (backfillCoreWords()) saveWords(); }"
+    for name, seg in (("同步启动", startup), ("hydrate 重载", updated)):
+        assert guarded_migrate in seg, "%s 的迁移落盘 saveWords 必须带 !A1_BOOT_PENDING 守卫" % name
+        assert guarded_backfill in seg, "%s 的 backfill 落盘 saveWords 必须带 !A1_BOOT_PENDING 守卫" % name
+        # 启动切片内不得出现无守卫的裸落盘（bootstrap 内部落盘时 A1_BOOT_PENDING 已清除，另论）
+        assert "if (migrateSeedIdAliases()) { saveWords();" not in seg, (
+            "%s 的迁移落盘不得在挂起期无守卫裸执行" % name
+        )
+    # saveWords 顶部统一兜底闸（防未来新增调用点重蹈）
+    assert "if (A1_BOOT_PENDING && S.words.length === 0) return;" in _save_words_body(), (
+        "saveWords 顶部必须有统一兜底闸：挂起 + 空表绝不落盘"
+    )
+
+
+def test_a1_bootstrap_source_marker_retries_when_inline():
+    """验收修复黄牌②（黄牌④钉住）：来源标记 A1_SRC_KEY + bootstrap 触发条件含 inline 重试分支。
+
+    不修则 toast 承诺的「刷新重试」永不发生（兜底也写 markSchemaMigrated + 非空落盘 →
+    下次加载不进首装 → bootstrap 首行 return）。
+
+    变异验证：把触发条件改回「仅 A1_BOOT_PENDING」→ 触发断言红；
+             把合并改成整体覆盖（无 mergeA1ServerWords）→ 合并断言红。
+    """
+    assert 'const A1_SRC_KEY = "wb.a1.src.v1";' in _WORKBENCH, "缺少 A1_SRC_KEY 来源标记常量"
+    body = _bootstrap_a1_body()
+    assert "localStorage.getItem(A1_SRC_KEY)" in body, "bootstrap 必须读来源标记决定是否重试"
+    assert re.search(r"!A1_BOOT_PENDING[^;]*\"inline\"", body), (
+        "bootstrap 触发条件必须含 inline 重试分支（兜底过的设备下次启动重试服务端）"
+    )
+    assert '"server"' in body, "成功路径必须把来源标记升级为 server（不再反复重试）"
+    # 合并语义（ADR-0014 §4-3）：存在专门的非覆盖合并函数
+    merge_body = _top_fn_segment("function mergeA1ServerWords(")
+    assert "S.words.push(" in merge_body and "byId" in merge_body, "缺少按 id 追加缺失词的合并实现"
 
 
 def test_merge_and_alias_migration_behave_under_node():
@@ -2878,11 +2961,17 @@ def test_normalize_word_wired_into_both_load_all_branches():
     变异验证：把种子分支的 normalizeWord 包裹删掉 → 种子分支计数断言红；
               把 loadAll 末尾的 migrateWordSchema() 删掉 → 存量分支断言红。
     """
-    seed_block = _seed_init_block()
+    seed_block = _a1_words_from_inline_body()
     assert seed_block.count("normalizeWord(") >= 2, (
-        "种子建表分支的 SEED_WORDS.map 与 CORE_CUSTOM_WORDS.map 都必须过 normalizeWord"
+        "首装建表的 SEED_WORDS.map 与 CORE_CUSTOM_WORDS.map 都必须过 normalizeWord"
     )
     load_all_body = _load_all_body()
+    # 强断言（验收修复黄牌④）：migrateWordSchema() 必须受 A1_BOOT_PENDING 守卫。
+    # 旧写法 assert "migrateWordSchema();" in body 是弱断言 —— 「无条件调用」也含该子串而照样绿。
+    # 挂起期 S.words 为空，无条件调用会把空表落盘 + 写 schema 标记 → 永久空表。
+    assert "if (!A1_BOOT_PENDING) migrateWordSchema();" in load_all_body, (
+        "loadAll 的 migrateWordSchema() 必须受 A1_BOOT_PENDING 守卫（挂起期空表不得落盘/写标记）"
+    )
     assert "migrateWordSchema();" in load_all_body, (
         "loadAll 必须调用 migrateWordSchema() 完成 localStorage 存量词的契约归一"
     )
@@ -3340,4 +3429,354 @@ def test_apply_merge_push_path_normalized():
     assert "normalizeWord(" in added_block, (
         "applyMerge 新增词路径必须先过 normalizeWord 再入 S.words（远端/导入词契约归一），"
         "实际新增分支：%r" % added_block
+    )
+
+
+# --------------------------------------------------------------------------
+# 富字段回填修复 · A2/B1 存量词条「永远缺例句」根因（fix/rich-fields-backfill）
+# --------------------------------------------------------------------------
+
+
+def test_sync_functions_backfill_empty_rich_fields():
+    """根因修复：A2/B1 sync 从 append-only 升级为「只增 + 只补空字段」。
+
+    旧实现只在 `!existingIds.has(wid)` 时 push，无 else 分支 → 富字段上线前
+    首次同步进去的存量词条永远是 `ex: []`，此后每次同步都被跳过，用户看到
+    「A2 只有部分词有例句」。修复后：新词照旧 push（逐字不变）；已存在词
+    只补空字段（ex / ipa，B1 另有 gender / plural），绝不覆盖非空。
+    """
+    a2 = _sync_a2_body()
+    b1 = _b1_sync_body()
+    for name, body in (("syncA2CardsFromServer", a2), ("syncB1CardsFromServer", b1)):
+        assert "} else {" in body, (
+            "%s 必须新增「已存在则回填」else 分支（无 else = append-only = 存量词条永远缺例句）" % name
+        )
+        # 已存在分支：只补空 ex —— 当前为空数组/缺失 且 服务端有 de 才回填
+        assert re.search(r"!cur\.ex\s*\|\|\s*!cur\.ex\.length", body), (
+            "%s 回填 ex 必须先判空（!cur.ex || !cur.ex.length），不得覆盖已有例句" % name
+        )
+        assert re.search(r"cur\.ex\s*=\s*\[\{\s*de:\s*rw\.de", body), (
+            "%s 回填必须把 rw.de/rw.example_zh 组装成 [{de,zh}]（与渲染层同形状）" % name
+        )
+        # 只补空 ipa
+        assert re.search(r"!cur\.ipa\s*&&\s*rw\.ipa", body), (
+            "%s 回填 ipa 必须先判空（!cur.ipa && rw.ipa），不得覆盖非空 ipa" % name
+        )
+        assert re.search(r"cur\.ipa\s*=\s*rw\.ipa", body), "%s 缺 ipa 回填赋值语句" % name
+    # B1 额外补 gender / plural（只补空）
+    assert re.search(r"!cur\.gender\s*&&\s*rw\.gender", b1), (
+        "syncB1CardsFromServer 必须只补空 gender（!cur.gender && rw.gender）"
+    )
+    assert re.search(r"!cur\.plural\s*&&\s*rw\.plural", b1), (
+        "syncB1CardsFromServer 必须只补空 plural（!cur.plural && rw.plural）"
+    )
+
+
+def test_sync_backfill_never_touches_review_progress():
+    """红线守卫：两 sync 函数体切片里不得出现 S.cards / S.log / S.wrong。
+
+    回填只动词表（S.words），FSRS 复习进度（cards / log / wrong）与本次修复
+    无关；id 别名搬家由历史迁移脚本负责，sync 不做这事。此处防日后有人把
+    进度写入误加进 sync（回填红线：只增 + 只补空，不碰复习进度）。
+    """
+    for name, body in (("syncA2CardsFromServer", _sync_a2_body()),
+                       ("syncB1CardsFromServer", _b1_sync_body())):
+        for forbidden in ("S.cards", "S.log", "S.wrong"):
+            assert forbidden not in body, (
+                "%s 出现 %s：回填只动词表，禁止触碰 FSRS 复习进度" % (name, forbidden)
+            )
+
+
+def test_rich_backfill_probe_reports_no_failures():
+    """动态探针：把真实 syncA2CardsFromServer / syncB1CardsFromServer 抽出来在 node 里真跑。
+
+    静态断言证明不了「手编例句真的没被覆盖」「二次同步真的 no-op」「FSRS 进度真的
+    没被动」—— 这些是行为，只有真跑才知道。tools/wb_rich_backfill_probe.mjs 只提供
+    S / fetch / save* 等最小桩，用 node:vm 真跑 workbench.html 里切出来的两个 sync
+    函数体，覆盖：A2 回填空 ex、保护手编例句（不覆盖非空 ex）、保护非空 ipa、
+    FSRS 进度深度不变、幂等（首跑写盘 / 二跑 no-op）、新词仍加入，B1 另有补齐空
+    gender/plural；并输出 JSON 供本用例断言。
+
+    分工说明（CRV Y2/Y4）：本文件里针对 sync 的静态正则断言（如
+    test_sync_functions_backfill_empty_rich_fields）不锁控制流邻接、其反向守卫
+    （test_sync_backfill_never_touches_review_progress）也可被 helper 间接绕过 ——
+    静态断言只守「源码形态」；真正的行为级语义（回填是否真发生、手编例句是否真被
+    保护、二次同步是否真 no-op、FSRS 是否真没被动）由本探针跑真实现覆盖，二者互补。
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_rich_backfill_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_rich_backfill_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    try:
+        out = json.loads(res.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(
+            "探针 --json 输出不是合法 JSON：%s\nstdout(前 500 字):\n%s\nstderr(前 500 字):\n%s"
+            % (exc, res.stdout[:500], res.stderr[:500])
+        )
+
+    assert out["fail"] == 0, "探针有失败场景：%r" % (
+        [c for c in out["cases"] if not c["ok"]],
+    )
+    assert out["total"] >= 7, "探针场景数异常偏少（%d），可能场景被删" % out["total"]
+
+    names = [c["name"] for c in out["cases"]]
+    # 场景名存在性钉死：日后删掉关键场景也必红，不允许「删场景换全绿」。
+    for needle in ("回填空 ex", "保护手编例句", "幂等", "FSRS", "新词仍加入"):
+        assert any(needle in n for n in names), (
+            "探针缺少关键场景「%s」，场景集合：%r" % (needle, names)
+        )
+
+
+# ── A1 首装 API 化行为级探针 tools/wb_a1_bootstrap_probe.mjs（Task B-S2 · ADR-0014 §6-S2） ─
+# 背景：A1 首装改走服务端 API（a1WordFromApi 映射 12 字段行），服务未起/失败回退内联
+# 种子（a1WordsFromInline 抽自旧 loadAll 建表分支）。静态断言只能证明「代码长这样」，
+# 证明不了「服务端 704 行映射后与内联 682+22 逐字段等价」。探针把 workbench.html 里的
+# 真实函数体（a1WordFromApi / a1WordsFromInline / normalizeWord / cefrFromId /
+# CEFR_BY_PREFIX）按括号配对切出来丢进 node:vm 真跑，喂 pytest 用 Python 从真实数据源
+# 生成的 fixture —— 探针里没有任何一份重抄的实现。
+
+
+def _a1_bootstrap_fixture(tmp_path):
+    """用 Python 真实数据源生成探针 fixture（rows=服务端 A1 视图；inline=内联种子/补缺词）。
+
+    rows   ← delector.core.database.get_vocab_by_cefr("A1", scope="all")["words"]
+    inline ← delector.data.a1_workbench_dict.A1_WORKBENCH_SEED / A1_WORKBENCH_CUSTOM
+    fixture 写到 tmp_path，**不提交进仓库**。
+    """
+    from delector.core.database import get_vocab_by_cefr
+    from delector.data.a1_workbench_dict import A1_WORKBENCH_CUSTOM, A1_WORKBENCH_SEED
+
+    rows = get_vocab_by_cefr("A1", scope="all")["words"]
+    fixture = {
+        "rows": rows,
+        "inline": {"seed": A1_WORKBENCH_SEED, "custom": A1_WORKBENCH_CUSTOM},
+    }
+    dest = tmp_path / "a1_bootstrap_fixture.json"
+    dest.write_text(json.dumps(fixture, ensure_ascii=False), encoding="utf-8")
+    return dest
+
+
+def test_a1_bootstrap_probe_equivalence(tmp_path):
+    """动态探针：a1WordFromApi(服务端行) 与 a1WordsFromInline() 逐字段等价（704 vs 682+22）。
+
+    探针切片真实函数体跑五组场景（静态正则证明不了的）：
+      1. 逐字段等价（704 条全比；id 集合与顺序一致）；
+      2. 服务端行契约 12 字段齐全（防契约漂移）；
+      3. letter 不派生（a1-0462 === 'O'，若用 letterOf 会得 'Ö'）；
+      4. custom/tags 口径（core-* 含 core&custom；核心 seed 含 a1&core）；
+      5. page 恒 0 / ex 形状为 [{de,zh}] 或 []。
+
+    变异验证：把 a1WordFromApi 的 letter 改成 letterOf 派生 / 把 tags 口径写反 /
+              cefr 硬编码为 "A1"（core-* 会与内联 null 漂移）→ 对应场景红。
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_a1_bootstrap_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_a1_bootstrap_probe.mjs 动态探针"
+    fixture = _a1_bootstrap_fixture(tmp_path)
+    res = subprocess.run(
+        ["node", str(probe), "--json", "--fixture", str(fixture)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    try:
+        out = json.loads(res.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(
+            "探针 --json 输出不是合法 JSON：%s\nstdout(前 500 字):\n%s\nstderr(前 500 字):\n%s"
+            % (exc, res.stdout[:500], res.stderr[:500])
+        )
+
+    assert out["fail"] == 0, "探针有失败场景：%r" % ([c for c in out["cases"] if not c["ok"]],)
+    assert out["total"] >= 5, "探针场景数异常偏少（%d），可能场景被删" % out["total"]
+
+    names = [c["name"] for c in out["cases"]]
+    for needle in (
+        "逐字段等价",
+        "契约 12 字段",
+        "letter",
+        "custom/tags",
+        "page",
+        # 验收修复轮新增行为场景（红牌① / 黄牌②）：挂起不落盘空表 + inline 设备重试
+        "挂起期不落盘空表",
+        "兜底闸挡住挂起空表",
+        "inline 标记设备下次启动重试",
+        # B-S3 裁决版：内联降级为离线 fallback 的行为证据
+        "内联仅作离线兜底",
+    ):
+        assert any(needle in n for n in names), (
+            "探针缺少关键场景「%s」，场景集合：%r" % (needle, names)
+        )
+    # 等价场景必须真比了 704 条（682 seed + 22 custom），不许「样例过一下就绿」。
+    eq = next(c for c in out["cases"] if "逐字段等价" in c["name"])
+    assert "matched=704" in eq["detail"], "等价性场景未全量比对 704 条：%r" % eq["detail"]
+
+    # B-S3：内联**只**作离线兜底的行为证据 —— 调用次数由探针的计数器桩给出
+    # （服务端可用 0 次 / 服务不可用 1 次），静态正则证明不了这一条。
+    c_ok = next(c for c in out["cases"] if "内联仅作离线兜底" in c["name"] and "服务端可用" in c["name"])
+    c_down = next(c for c in out["cases"] if "内联仅作离线兜底" in c["name"] and "服务不可用" in c["name"])
+    assert c_ok["inlineCalls"] == 0, (
+        "服务端可用时仍调用了内联兜底（内联回了主路径）：%r" % (c_ok,)
+    )
+    assert c_down["inlineCalls"] == 1, (
+        "服务不可用时内联兜底未被恰好调用一次（离线能力断了 / 被调了多次）：%r" % (c_down,)
+    )
+
+
+def test_a1_bootstrap_probe_usage_without_fixture():
+    """无 --fixture 时探针给出可读用法提示并正常退出（不误报失败，零漂移 loop 不受影响）。"""
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = _ROOT / "tools" / "wb_a1_bootstrap_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_a1_bootstrap_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(_ROOT),
+    )
+    assert res.returncode == 0, "无参数应退出码 0：\n%s\n%s" % (res.stdout, res.stderr)
+    assert "用法" in (res.stdout + res.stderr), "无参数时应打印可读用法提示"
+
+
+# ---------------------------------------------------------------------------
+# ADR-0014 §6-S3（Task B-S3 裁决版）：内联种子降级为「离线 fallback」的三条守卫
+#
+# 裁决：**不删** SEED_WORDS(682) / CORE_CUSTOM_WORDS(22) —— file:// 直开是 ADR-0011 明示
+# 保护的离线能力（删了「服务未起首启」与 file:// 下直接无词表），本地服务下 124KB 的
+# 体积收益近零。故改为「保留 + 标注（见两个常量上方注释）+ 守卫」：数据还在，
+# 但**绝不许它回到主路径**。三条守卫分工：
+#   G1 首装不再同步建表（loadAll 里不许出现内联建表）；
+#   G2 内联兜底实现只允许「1 定义 + 1 调用」，且调用点只许落在 bootstrapA1Words 体内；
+#   G3 bootstrap 成功路径（fetch → 映射 → saveWords）绝不引用内联。
+# 三条都切成函数体/分支级切片 —— 整文件模糊匹配必然命中注释与兜底自身，挡不住回归。
+# ---------------------------------------------------------------------------
+
+
+def test_load_all_first_install_never_builds_table_inline():
+    """G1：loadAll 首装分支不得再同步建表（无 `SEED_WORDS.map(` / `a1WordsFromInline`）。
+
+    S2 之前 loadAll 在无词表时当场 `S.words = SEED_WORDS.map(...)` 建表：首屏就把 682 条
+    内联种子当成真数据源，服务端 /api/cards/vocab?cefr=A1&scope=all 永远进不来
+    （ADR-0014 §6-S2 的病根）。现首装只置空表 + 挂 A1_BOOT_PENDING，建表交给
+    bootstrapA1Words() 异步走服务端，失败才兜底。
+
+    作用域是 **loadAll 函数体切片**（`_load_all_body`），不是整文件 —— 整文件搜必然命中
+    a1WordsFromInline 自身与其注释，挡不住「把建表挪回 loadAll」。
+
+    变异验证（已实跑）：把 `S.words = SEED_WORDS.map(w => w);` 塞回 loadAll 首装分支 → 本条红。
+    """
+    body = _load_all_body()
+    assert "SEED_WORDS.map(" not in body, (
+        "loadAll 里又出现 SEED_WORDS.map(：首装回到同步内联建表，服务端 A1 视图永无机会"
+    )
+    assert "a1WordsFromInline" not in body, (
+        "loadAll 里出现 a1WordsFromInline：首装回到同步内联建表"
+        "（首装应只置空表 + 挂起标记，建表交给 bootstrapA1Words）"
+    )
+    # 防死测：loadAll 仍得有「首装挂起」这条分支，否则「不建表」三个字是空话
+    assert "A1_BOOT_PENDING = true" in body, "loadAll 缺少首装挂起分支，切片或实现已漂移"
+
+
+def test_inline_builder_has_single_callsite_inside_bootstrap():
+    """G2：a1WordsFromInline( 全文件恰 2 处（1 定义 + 1 调用），唯一调用点落在 bootstrap 体内。
+
+    它是「离线兜底」的唯一实现，按裁决保留；但一旦长出第二个调用点（有人从渲染路径、
+    设置路径或 backfill 里调它补表），内联就从 fallback 变回主路径 —— 正是 S3 要钉的回归。
+    **计数 + 位置**双断言：只计数挡不住「调用点挪出 bootstrap 仍在 bootstrap 之外另建一份」，
+    只查位置挡不住「新增第二处调用」。
+
+    变异验证（已实跑）：在 bootstrapA1Words 之外（例如 backfillCoreWords 里）再加一处
+    `a1WordsFromInline();` → 计数断言与位置断言同时红。
+    """
+    decl = "function a1WordsFromInline("
+    assert _WORKBENCH.count(decl) == 1, (
+        "a1WordsFromInline 定义应恰好 1 处，实际 %d 处（内联建表实现被复制了）"
+        % _WORKBENCH.count(decl)
+    )
+    total = _WORKBENCH.count("a1WordsFromInline(")
+    assert total == 2, (
+        "a1WordsFromInline( 全文件应恰好 2 处（1 定义 + 1 调用），实际 %d 处 —— "
+        "多出来的调用点意味着内联重回主路径" % total
+    )
+    boot = _bootstrap_a1_body()
+    assert boot.count("a1WordsFromInline(") == 1, (
+        "bootstrapA1Words 体内 a1WordsFromInline( 应恰好 1 处（唯一兜底调用点），实际 %d 处"
+        % boot.count("a1WordsFromInline(")
+    )
+    # 定义自身不在 bootstrap 体内（`_a1_words_from_inline_body` 自带切片有效性断言），
+    # 故「全文件 2 处 + bootstrap 内 1 处」即证明唯一调用点确实落在 bootstrap 里。
+    assert "SEED_WORDS.map(" in _a1_words_from_inline_body(), "内联建表实现被掏空（防死测）"
+
+
+def test_bootstrap_success_path_never_uses_inline_seed():
+    """G3：bootstrapA1Words 的成功路径不得引用 a1WordsFromInline，且仍保留 inline 重试分支。
+
+    服务端可用时词表**必须**来自 /api/cards/vocab?cefr=A1&scope=all。若成功路径也过一遍
+    内联（哪怕只是「先内联再整体覆盖」），内联就不是 fallback 而是第二数据源 —— 服务端
+    增词 / 改例句在本地永远看不见。切片取 `await fetch(` 到 fetch 的 `} catch` 之间，
+    窄到只覆盖「拉服务端 + 映射」这一段；再用兜底三元的行内位置钉住「内联只在 else 分支」。
+
+    触发条件断言沿用既有风格（与 test_a1_bootstrap_source_marker_retries_when_inline 同款
+    正则），不另造一套写法。
+
+    变异验证（已实跑）：把兜底三元改成 `S.words = fromServer ? a1WordsFromInline() : words;`
+    （内联整体覆盖服务端结果）→ 三元分支断言红。
+    """
+    body = _bootstrap_a1_body()
+    at_fetch = body.index("await fetch(")
+    at_catch = body.index("} catch (e) {", at_fetch)
+    success = body[at_fetch:at_catch]
+    assert "/api/cards/vocab?cefr=A1&scope=all" in success, (
+        "成功路径切片里找不到服务端 A1 端点，锚点漂移（切片不再覆盖成功路径）"
+    )
+    assert "a1WordsFromInline" not in success, (
+        "bootstrap 成功路径（fetch → 映射）引用了 a1WordsFromInline："
+        "内联成了主路径数据源，服务端 A1 视图的增量在本地看不见"
+    )
+    # 唯一兜底调用点必须留在 fromServer 三元的 **else** 分支（失败才走）
+    line = _sole_line(body, "a1WordsFromInline(", "bootstrap 兜底调用点")
+    parts = line.split("fromServer ?", 1)
+    assert len(parts) == 2, (
+        "兜底调用点不在 `fromServer ? ... : ...` 三元里：内联不再只服务兜底分支（%r）" % line
+    )
+    true_branch = parts[1].split(":", 1)[0]
+    assert "a1WordsFromInline" not in true_branch, (
+        "a1WordsFromInline 出现在 fromServer=true 的分支里："
+        "服务端成功后仍被内联整体覆盖（%r）" % line
+    )
+    # 触发条件必须含 A1_SRC_KEY 的 inline 重试分支（沿用既有断言风格）
+    assert re.search(r"!A1_BOOT_PENDING[^;]*\"inline\"", body), (
+        "bootstrap 触发条件必须含 inline 重试分支（兜底过的设备下次启动重试服务端）"
     )

@@ -4,7 +4,7 @@
 钉住六件事：
 1. ``sources={"official"}`` 官方**原样**视图 = A1 670 / A2 736 / B1 1617
    （``lexicon.official_level`` 各档保留官方原样、容忍跨档重叠）；
-2. 官方视图逐条 == 11 字段契约集（S4 由 9 扩展；与
+2. 官方视图逐条 == 12 字段契约集（S4 由 9 扩到 11、ADR-0014 §6-S1 扩到 12；与
    ``tests/test_vocab_contract_uniform.py::CONTRACT_FIELDS`` 同口径）；
 3. id 形态：A2 -> ``a2-{lemma}``、B1 -> ``b1-{lemma}``；
 4. **默认路径回归护栏**：``sources=None``（默认）A2/B1 条数 == core_dict 对应
@@ -23,8 +23,22 @@ from delector.core.database import get_vocab_by_cefr
 from delector.core.lexicon import official_level
 from delector.data.core_dict import CORE_VOCAB_DB
 
-# 唯一契约字段集（同 test_vocab_contract_uniform.CONTRACT_FIELDS；S4 契约 9 → 11）
-CONTRACT_FIELDS = {"id", "hw", "pos", "gender", "plural", "de", "zh", "ipa", "example_zh", "core", "cefr"}
+# 唯一契约字段集（同 test_vocab_contract_uniform.CONTRACT_FIELDS；S4 契约 9 → 11；
+# ADR-0014 §6-S1：11 → 12，新增 letter）
+CONTRACT_FIELDS = {
+    "id",
+    "hw",
+    "pos",
+    "gender",
+    "plural",
+    "de",
+    "zh",
+    "ipa",
+    "example_zh",
+    "core",
+    "cefr",
+    "letter",
+}
 
 # 官方原样视图条数（各档保留官方原样，容忍跨档重叠）
 OFFICIAL_A1_TOTAL = 670  # OFFICIAL_A1_VOCAB(660) ⊕ OFFICIAL_A1_AUGMENT(10)
@@ -97,7 +111,7 @@ def test_sources_official_counts(cefr, expected):
 
 
 def test_sources_official_contract_uniform():
-    """官方视图每条为 11 字段契约集（含 ipa / example_zh，S4）。"""
+    """官方视图每条为 12 字段契约集（含 ipa / example_zh / letter；S4 + ADR-0014 §6-S1）。"""
     for cefr in ("A1", "A2", "B1"):
         _assert_contract_uniform(get_vocab_by_cefr(cefr=cefr, sources={"official"})["words"])
 

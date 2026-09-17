@@ -260,7 +260,9 @@ def test_injection_is_idempotent():
 
 DATABASE_PY = _ROOT / "delector" / "core" / "database.py"
 
-# monkeypatch 数据模块常量用的迷你数据（覆盖 de/zh 两种派生路径 + core/custom 两分支）
+# monkeypatch 数据模块常量用的迷你数据（覆盖 de/zh 两种派生路径 + core/custom 两分支）。
+# S1（ADR-0014 §6-S1）起 seed 带 letter（透传原值）：a1-0001 有 "A"、a1-0002 缺键（→ ""）、
+# custom core-001 有 "M"。
 MINI_SEED: List[Dict[str, Any]] = [
     {
         "id": "a1-0001",
@@ -269,11 +271,12 @@ MINI_SEED: List[Dict[str, Any]] = [
         "gloss": "迷你释义A",
         "ipa": "ˈmiːni",
         "ex": [{"de": "Mini de.", "zh": "迷你中文"}],
+        "letter": "A",
     },
     {"id": "a1-0002", "hw": "aber", "pos": "Konj", "zh": "纯zh释义"},
 ]
 MINI_CUSTOM: List[Dict[str, Any]] = [
-    {"id": "core-001", "hw": "Miniwort", "pos": "N", "gloss": "迷你新词"}
+    {"id": "core-001", "hw": "Miniwort", "pos": "N", "gloss": "迷你新词", "letter": "M"}
 ]
 MINI_CORE_IDS = frozenset({"a1-0001"})
 
@@ -351,6 +354,10 @@ def test_load_reads_data_module_constants(monkeypatch, fresh_a1_cache):
     assert words[0]["plural"] == ""
     assert words[2]["gender"] is None  # "Miniwort" 不在官方 A1 分片 → None/""（不编造）
     assert words[2]["plural"] == ""
+    # S1 新增 letter：A1 分支 = seed 原值**逐字透传**（不派生）；缺键 → ""
+    assert words[0]["letter"] == "A"  # seed a1-0001 带 letter "A"
+    assert words[1]["letter"] == ""  # seed a1-0002 缺 letter 键 → ""
+    assert words[2]["letter"] == "M"  # custom core-001 带 letter "M"
     for w in words:
         assert set(w.keys()) == {
             "id",
@@ -364,6 +371,7 @@ def test_load_reads_data_module_constants(monkeypatch, fresh_a1_cache):
             "example_zh",
             "core",
             "cefr",
+            "letter",
         }
         assert w["cefr"] == "A1"
 

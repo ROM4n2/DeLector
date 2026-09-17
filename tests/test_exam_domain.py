@@ -502,3 +502,21 @@ def test_no_hardcoded_vocab_counts_in_a1_cards_and_workbench():
     for banned in ("1712", "974", "702"):
         assert banned not in a1_js, f"a1_cards.js 硬编码词条数 {banned}（条数必须动态推导）"
         assert banned not in wb_html, f"workbench.html 硬编码词条数 {banned}（条数必须动态推导）"
+
+
+def test_a1_cards_example_blocks_conditionally_rendered():
+    """空例句不得渲染「孤立标签 + 空行」：背面 deck-example-block + 列表 .card-context。
+
+    根因：备考域卡片背面与列表卡片的例句块是无条件渲染，example_de/example_zh
+    为空时仍输出标签行，用户看到孤立「官方考纲例句」标题。修复：仅当
+    (…example_de || …example_zh) 非空时才输出整块。A1 真无例句的词（disko 等
+    属 A2）也走同一分支，故断言只认「条件包裹」这条结构信号，不硬编码词表。
+    """
+    a1_js = (_ROOT / "static" / "js" / "a1_cards.js").read_text(encoding="utf-8")
+    assert re.search(r"\(\s*cur\.example_de\s*\|\|\s*cur\.example_zh\s*\)\s*\?", a1_js), (
+        "deck-card 背面例句块必须由 (cur.example_de || cur.example_zh) 三元条件渲染"
+        "（空例句不得产生孤立标签 + 空行）"
+    )
+    assert re.search(r"\(\s*w\.example_de\s*\|\|\s*w\.example_zh\s*\)\s*\?", a1_js), (
+        "列表卡片 .card-context 必须由 (w.example_de || w.example_zh) 三元条件渲染"
+    )

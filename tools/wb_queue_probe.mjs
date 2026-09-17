@@ -224,6 +224,9 @@ log(`[guard] ${GUARDS.length} 条切片护栏通过`);
 const PRELUDE = `
 var S = { words: [], cards: {}, log: {}, wrong: {}, settings: { retention: 0.9, dailyNew: 15, newOrder: "seed" } };
 var revQueue = [], revIdx = 0, ratedCount = 0, flipped = false, queueDay = null, curView = "review";
+/* Task B-S2（ADR-0014 §6-S2）：renderReview 首装挂起分支引用 A1_BOOT_PENDING。
+ * 探针场景均在「已就绪」态（false），故桩为 false —— 不改变任何被测队列行为。 */
+var A1_BOOT_PENDING = false;
 var __toasts = [];
 var __els = {};
 function $(id) {

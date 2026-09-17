@@ -2,8 +2,8 @@
 """词对象契约统一（Task 3 / ADR-0011 决策 2；S4 契约 9 → 11，ADR-0013 §4-1，输出侧）。
 
 钉住三件事：
-1. ``get_vocab_by_cefr`` 各分支（A1 core/all、A2、B1 通用分支）产出**同一 11 字段集**
-   ``{id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr}``，缺失字段显式空值；
+1. ``get_vocab_by_cefr`` 各分支（A1 core/all、A2、B1 通用分支）产出**同一 12 字段集**
+   ``{id, hw, pos, gender, plural, de, zh, ipa, example_zh, core, cefr, letter}``，缺失字段显式空值；
 2. 条数与权威基线一致（A1 235/704 硬编码；A2/B1 从 core_dict 动态推导）、
    B1 仍走通用分支（id 形如 ``b1-{lemma}``）；
 3. ``hw`` 拼装规则未被改动（A2 名词仍 ``das Abenteuer`` 形态，format_vocab_headword 单一装饰点）。
@@ -30,8 +30,22 @@ from delector.core import database
 from delector.core.database import get_vocab_by_cefr
 from delector.data.core_dict import CORE_VOCAB_DB
 
-# 唯一契约字段集（ADR-0013 §4-1：9 → 11；一份 schema，缺失字段显式空值）
-CONTRACT_FIELDS = {"id", "hw", "pos", "gender", "plural", "de", "zh", "ipa", "example_zh", "core", "cefr"}
+# 唯一契约字段集（ADR-0013 §4-1：9 → 11；ADR-0014 §6-S1：11 → 12，新增 letter；
+# 一份 schema，缺失字段显式空值）
+CONTRACT_FIELDS = {
+    "id",
+    "hw",
+    "pos",
+    "gender",
+    "plural",
+    "de",
+    "zh",
+    "ipa",
+    "example_zh",
+    "core",
+    "cefr",
+    "letter",
+}
 
 # A1 plural 合法值域（S7c：源 = 主干 LEXICON，惯例 = 后缀标记 ``"" | "-..."``）。
 # 例外：LEXICON 已知数据瑕疵 —— ``Firma`` → ``"Firmen"`` / ``Studium`` → ``"Studien"``
@@ -263,3 +277,69 @@ def test_missing_rich_does_not_raise_and_yields_empty(monkeypatch):
         assert w["ipa"] == "", f"{w['id']} ipa 应为空串（rich 未登记）"
         assert w["example_zh"] == "", f"{w['id']} example_zh 应为空串（rich 未登记）"
         assert w["de"] == "", f"{w['id']} de 应为空串（rich 未登记）"
+
+
+# ── S1：契约 11 → 12（letter 字母分组；ADR-0014 §6-S1）───────────────────────
+#
+# 背景：A1 前端首装改走服务端 API（删 124K 内联种子副本），字母分组靠 seed 的 letter。
+# 前端 letterOf 派生值与内联 SEED_WORDS 的 letter 在 **10 条**上不同（如 a1-0462 内联 O /
+# 派生 Ö），若用派生值字母分组会**静默漂移**。故契约新增 letter 字段，且各分支口径不同：
+#   - A1：seed 原值逐字透传（不派生）；
+#   - 非 A1：与前端现行派生逐字一致的首字母大写。
+
+
+def test_a1_letter_equals_seed_verbatim():
+    """A1 分支 letter == seed 原值逐字透传（682 seed + 22 core-*，ADR-0014 §6-S1）。
+
+    ``A1_WORKBENCH_SEED``（682）在前、``A1_WORKBENCH_CUSTOM``（22）在后拼成
+    scope="all" 的 704 条（见 ``_load_a1_workbench_words`` 加载顺序）。custom 无
+    letter 键者按实现口径落 ""。逐条比对 id 与 letter，防透传错位/派生漂移。
+    """
+    from delector.data.a1_workbench_dict import A1_WORKBENCH_CUSTOM, A1_WORKBENCH_SEED
+
+    res = get_vocab_by_cefr(cefr="A1", scope="all")
+    words = res["words"]
+    assert len(words) == len(A1_WORKBENCH_SEED) + len(A1_WORKBENCH_CUSTOM)
+    seed_view = words[: len(A1_WORKBENCH_SEED)]
+    custom_view = words[len(A1_WORKBENCH_SEED):]
+    for w, s in zip(seed_view, A1_WORKBENCH_SEED):
+        assert w["id"] == s["id"]
+        assert w["letter"] == (s.get("letter") or ""), f"{w['id']} letter 未透传 seed 原值"
+    for w, c in zip(custom_view, A1_WORKBENCH_CUSTOM):
+        assert w["id"] == c["id"]
+        assert w["letter"] == (c.get("letter") or ""), f"{w['id']} custom letter 口径不符"
+    # 覆盖不得回退成恒空（保持「seed letter 确实带出」的意图）
+    assert any(w["letter"] for w in seed_view)
+
+
+def test_non_a1_letter_matches_frontend_derivation():
+    """非 A1 分支（A2/B1）letter == 前端现行派生：``(hw or " ")[0].toUpperCase()``。
+
+    口径依据：前端 ``syncB1CardsFromServer`` / reader sync 现行写法即
+    ``(rw.hw && rw.hw[0] ? rw.hw[0] : "?").toUpperCase()``（取 hw 首字母大写）。
+    非 A1 的 hw 恒非空（``format_vocab_headword`` 对非空 lemma 恒返回非空），故逐条断言。
+    """
+    for cefr in ("A2", "B1"):
+        res = get_vocab_by_cefr(cefr=cefr, scope="all")
+        assert res["words"], f"{cefr} 视图不应为空"
+        for w in res["words"]:
+            assert w["letter"] == w["hw"][0].upper(), f"{w['id']} letter 与前端派生不符"
+
+
+def test_a1_letter_is_seed_value_not_derived():
+    """反向守卫：A1 分支 letter 必须取 seed 原值，**不得**退回 letterOf 派生值。
+
+    这 3 条是内联 SEED_WORDS 的 letter 与前端 ``letterOf`` 派生**明确不同**的代表：
+    - ``a1-0462`` ``öffnen``：seed ``O`` vs 派生 ``Ö``；
+    - ``a1-0602`` ``über``：seed ``U`` vs 派生 ``Ü``；
+    - ``a1-0034`` ``an sein``：seed ``A`` vs 派生 ``S``（letterOf 剥掉前缀 ``an``）。
+    后人若"顺手改成派生"，字母分组会静默漂移 —— 此断言即防线。
+    """
+    res = get_vocab_by_cefr(cefr="A1", scope="all")
+    word_map = {w["id"]: w for w in res["words"]}
+    assert word_map["a1-0462"]["letter"] == "O"
+    assert word_map["a1-0462"]["letter"] != "Ö"
+    assert word_map["a1-0602"]["letter"] == "U"
+    assert word_map["a1-0602"]["letter"] != "Ü"
+    assert word_map["a1-0034"]["letter"] == "A"
+    assert word_map["a1-0034"]["letter"] != "S"
