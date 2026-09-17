@@ -1103,7 +1103,8 @@ let A1_BOOT_PENDING = false;
 /* 首装词库来源标记（ADR-0014 §6-S2 验收修复黄牌②）：记录本设备上一次首装落盘的词库来源。
  *  - "server"：服务端 A1 视图；  - "inline"：服务端当时不可用、以内联兜底建表。
  * 为 "inline" 的设备下次启动会重试服务端（兑现 toast 承诺的「可稍后刷新重试」），
- * 成功后升级为 "server" 不再重试；已有 server 缓存的设备读一次即 return，不反复请求。 */
+ * 成功后升级为 "server"；"server" 设备每次启动仍跑一次幂等合并（只补空字段 + 追加缺失 id，
+ * 开销仅 704 条本地请求），把服务端后续新增富字段吸纳进存量，不再早退。 */
 const A1_SRC_KEY = "wb.a1.src.v1";
 
 /** 服务端 A1 契约行（12 字段 {id,hw,pos,gender,plural,de,zh,ipa,example_zh,core,cefr,letter}）
@@ -1198,15 +1199,16 @@ function loadAll() {
 }
 
 /** 首装 A1 词库：API 优先 → 内联兜底 → 写 localStorage 缓存（ADR-0014 §6-S2）。
- *  触发条件（验收修复黄牌②，「首装一次」与「兜底可重试」并存）：
- *    ① A1_BOOT_PENDING —— 本次 loadAll 判定 localStorage 无词表（首次 / 被清空）；
- *    ② A1_SRC_KEY === "inline" —— 上次是以内联兜底落盘的（服务端当时不可用），
- *       本次启动重试服务端（兑现 toast 承诺的「可稍后刷新重试」）。
- *  已有 server 缓存（pending=false 且标记 "server"）→ 首行 return，零请求。 */
+ *  触发条件（验收修复黄牌②，「首装一次」与「兜底可重试」并存，并修复存量 A1 富字段不回填）：
+ *    ① A1_BOOT_PENDING —— 本次 loadAll 判定 localStorage 无词表（首次 / 被清空）→ 走建表分支；
+ *    ② 非首装 + 服务端可达 → 跑 mergeA1ServerWords（只补空字段 + 追加缺失 id，幂等、
+ *       不碰 cards/log/wrong），把服务端后续新增的富字段（例句/音标）吸纳进存量。
+ *  旧逻辑 `!A1_BOOT_PENDING && lastSrc !== "inline"` 会让「已以 server 落盘」的设备每次启动
+ *  直接 return —— 若旧版构建首装时服务端/种子尚无例句音标，存量裸条目便永远补不回来。
+ *  改为此处仅在「非首装且服务端完全不可用」时早退。 */
 async function bootstrapA1Words() {
-  const lastSrc = localStorage.getItem(A1_SRC_KEY);
-  if (!A1_BOOT_PENDING && lastSrc !== "inline") return;
   const canUseServer = typeof location !== "undefined" && location.protocol.startsWith("http");
+  if (!A1_BOOT_PENDING && !canUseServer) return;
   let words = null;                 // 服务端映射结果（成功时非空）
   let fromServer = false;
   if (canUseServer) {

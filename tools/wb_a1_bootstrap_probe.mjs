@@ -525,6 +525,52 @@ const sb2 = (context, expr) => JSON.parse(vm.runInContext(`JSON.stringify(${expr
   );
 }
 
+/* 场景 B2：server 标记设备（lastSrc="server"）下次启动也要重新合并（修复早退闸）——
+ * 预置：来源标记 = server + 词表非空 + 两条存量 A1 词条 ex/ipa/letter 为空（旧版裸条目），
+ * fetch 返回真实 rows：断言触发判定为真、裸条目被补上空字段（ex/ipa/letter）、追加缺失 id、
+ * 标记保持 server、绝不触碰 cards/log/wrong。这直接钉住「已 server 落盘的设备不再早退」这条修复。 */
+{
+  const { context, rec } = makeRuntime("server");
+  const t1 = ROWS.find((r) => String(r.id || "").startsWith("a1-") && r.ipa && r.letter) || ROWS[0];
+  const t2 = ROWS.find((r) => r.id !== t1.id && String(r.id || "").startsWith("a1-") && r.ipa) || ROWS[1];
+  const existing = [
+    { id: t1.id, hw: t1.hw, pos: "", gloss: "旧词条", zh: "", ipa: "", ex: [], letter: "", page: 0, tags: ["a1"], custom: false, up: 0, cefr: "A1", gender: null, plural: "" },
+    { id: t2.id, hw: t2.hw, pos: "", gloss: "旧词条2", zh: "", ipa: "", ex: [], letter: "", page: 0, tags: ["a1"], custom: false, up: 0, cefr: "A1", gender: null, plural: "" },
+  ];
+  vm.runInContext(
+    `S.words = ${JSON.stringify(existing)};\n` +
+      "A1_BOOT_PENDING = false;\n" +
+      `S.cards = { "${t1.id}": { reps: 5, due: 2000 } }; S.log = {}; S.wrong = {};\n` +
+      'localStorage.setItem("wb.words.v1", JSON.stringify(S.words));\n' +
+      'localStorage.setItem("wb.a1.src.v1", "server");\n' +
+      'localStorage.setItem("wb.schema.v1", "1");\n',
+    context
+  );
+  await vm.runInContext("bootstrapA1Words()", context);
+  const out = sb2(
+    context,
+    `{ fetchCalls: __rec.fetchCalls, marker: localStorage.getItem("wb.a1.src.v1"), len: S.words.length,
+       w1: S.words.find(w => w.id === ${JSON.stringify(t1.id)}),
+       w2: S.words.find(w => w.id === ${JSON.stringify(t2.id)}),
+       cards: S.cards, cardsWrites: __rec.writes["wb.cards.v1"] || 0 }`
+  );
+  const w1Ok = !!out.w1 && out.w1.ipa === t1.ipa && out.w1.letter === t1.letter
+    && Array.isArray(out.w1.ex) && out.w1.ex.length === 1
+    && out.w1.ex[0].de === t1.de && out.w1.ex[0].zh === t1.example_zh;
+  const w2Ok = !!out.w2 && out.w2.ipa === t2.ipa
+    && Array.isArray(out.w2.ex) && out.w2.ex.length === 1;
+  const cardsOk = JSON.stringify(out.cards) === JSON.stringify({ [t1.id]: { reps: 5, due: 2000 } })
+    && out.cardsWrites === 0;
+  check(
+    "B2 server 标记设备重启动也重新合并（补空字段）",
+    out.fetchCalls >= 1 && out.marker === "server" && out.len === ROWS.length
+      && w1Ok && w2Ok && cardsOk,
+    `fetch=${out.fetchCalls} marker=${out.marker} len=${out.len}/${ROWS.length} ` +
+      `w1.ipa=${out.w1 && out.w1.ipa}(期望${t1.ipa}) w1.ex=${JSON.stringify(out.w1 && out.w1.ex)} ` +
+      `w2.ipa=${out.w2 && out.w2.ipa} cardsWrites=${out.cardsWrites}`
+  );
+}
+
 /* 场景 C：内联仅作离线兜底（ADR-0014 §6-S3 裁决版）—— 真跑 bootstrapA1Words 源码切片，
  * 同一段实现跑两种情形对比：
  *   (a) fetch 成功             → 词表来自服务端（a1-0001 与服务端行一致），a1WordsFromInline 调用 **0** 次；

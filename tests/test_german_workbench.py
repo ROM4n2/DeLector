@@ -1708,22 +1708,27 @@ def test_a1_boot_pending_guards_all_startup_savewords():
     )
 
 
-def test_a1_bootstrap_source_marker_retries_when_inline():
-    """验收修复黄牌②（黄牌④钉住）：来源标记 A1_SRC_KEY + bootstrap 触发条件含 inline 重试分支。
+def test_a1_bootstrap_remerges_every_boot_when_server_available():
+    """修复早退闸：已 server 落盘的设备每次启动也重新合并，不再因 lastSrc==="server" 早退。
 
-    不修则 toast 承诺的「刷新重试」永不发生（兜底也写 markSchemaMigrated + 非空落盘 →
-    下次加载不进首装 → bootstrap 首行 return）。
+    旧逻辑 `!A1_BOOT_PENDING && lastSrc !== "inline"` 让存量裸条目（旧版构建首装时服务端/种子
+    尚无例句音标）永远补不回来。修复后闸门改为 `!A1_BOOT_PENDING && !canUseServer`：
+    仅「非首装且服务端不可用」才早退；服务端可达时既存设备每次启动跑幂等合并。
 
-    变异验证：把触发条件改回「仅 A1_BOOT_PENDING」→ 触发断言红；
-             把合并改成整体覆盖（无 mergeA1ServerWords）→ 合并断言红。
+    行为层由 tools/wb_a1_bootstrap_probe.mjs 场景 B2 钉住（server 标记设备重启动也重新合并）。
+    此处做轻量静态守卫：
+      - 闸门不得再依赖来源标记（不得出现 getItem(A1_SRC_KEY) 的早退判定）；
+      - 闸门必须含 `!canUseServer` 早退条件；
+      - 成功路径仍把来源标记升级为 "server"（A1_SRC_KEY 常量仍须存在）。
     """
     assert 'const A1_SRC_KEY = "wb.a1.src.v1";' in _WORKBENCH, "缺少 A1_SRC_KEY 来源标记常量"
     body = _bootstrap_a1_body()
-    assert "localStorage.getItem(A1_SRC_KEY)" in body, "bootstrap 必须读来源标记决定是否重试"
-    assert re.search(r"!A1_BOOT_PENDING[^;]*\"inline\"", body), (
-        "bootstrap 触发条件必须含 inline 重试分支（兜底过的设备下次启动重试服务端）"
+    # 修复前：bootstrap 用 getItem(A1_SRC_KEY) + `!== "inline"` 决定是否早退 → 已 server 设备被漏掉。
+    assert "getItem(A1_SRC_KEY)" not in body, (
+        "bootstrap 不应再读来源标记来早退（已 server 落盘设备需每次重新合并）"
     )
-    assert '"server"' in body, "成功路径必须把来源标记升级为 server（不再反复重试）"
+    assert "!canUseServer" in body, "bootstrap 早退条件必须含 !canUseServer（仅服务端不可用时早退）"
+    assert '"server"' in body, "成功路径必须把来源标记升级为 server"
     # 合并语义（ADR-0014 §4-3）：存在专门的非覆盖合并函数
     merge_body = _top_fn_segment("function mergeA1ServerWords(")
     assert "S.words.push(" in merge_body and "byId" in merge_body, "缺少按 id 追加缺失词的合并实现"
@@ -3625,6 +3630,8 @@ def test_a1_bootstrap_probe_equivalence(tmp_path):
         "挂起期不落盘空表",
         "兜底闸挡住挂起空表",
         "inline 标记设备下次启动重试",
+        # 早退闸修复：已 server 落盘的设备每次启动也重新合并（补空字段）
+        "server 标记设备重启动也重新合并",
         # B-S3 裁决版：内联降级为离线 fallback 的行为证据
         "内联仅作离线兜底",
     ):
@@ -3776,7 +3783,11 @@ def test_bootstrap_success_path_never_uses_inline_seed():
         "a1WordsFromInline 出现在 fromServer=true 的分支里："
         "服务端成功后仍被内联整体覆盖（%r）" % line
     )
-    # 触发条件必须含 A1_SRC_KEY 的 inline 重试分支（沿用既有断言风格）
-    assert re.search(r"!A1_BOOT_PENDING[^;]*\"inline\"", body), (
-        "bootstrap 触发条件必须含 inline 重试分支（兜底过的设备下次启动重试服务端）"
+    # 触发条件不再依赖来源标记（已 server 落盘设备也要重新合并，修存量裸条目 bug）：
+    # 改为「非首装且服务端不可用才早退（!canUseServer）」，且不得再读来源标记来早退。
+    assert "!canUseServer" in body, (
+        "bootstrap 早退条件必须含 !canUseServer（仅服务端不可用时早退，否则既存设备重新合并）"
+    )
+    assert "getItem(A1_SRC_KEY)" not in body, (
+        "bootstrap 不应再读来源标记来早退（防止「已 server 落盘即 return」的存量裸条目 bug 回归）"
     )
