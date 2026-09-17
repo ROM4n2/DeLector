@@ -4,7 +4,7 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.9.1（2026-09-16）**
+**最新版本：v5.9.2（2026-09-17）**
 
 ---
 
@@ -137,6 +137,8 @@
 - [x] **v5.9.0**：**词库富字段与主干分层正式发布**（2026-09-16，PR #54/#55/#56/#57）——① **ADR-0012 词汇主干落地**：`delector/core/lexicon.py`（分片注册表 + provenance + 字段级优先级「cefr 官方 > 手编 > AI、富字段 手编 > 官方 > AI」；`CORE_VOCAB_DB == LEXICON == 4762` 单真值）+ 官方歌德 A1/A2/B1 词表迁入 `delector/data/official_vocab.py`（备考域/工作台 A2 **736**、B1 **1617** 官方精选；`/api/a2/vocab` 默认官方）；② **ADR-0013 输出契约 9→11 字段**（新增 `ipa` / `example_zh`，`de` 语义统一为德语例句）+ 富字段分片 `delector/data/official_vocab_rich.py`（A1 660 / A2 736 / B1 1617，join 零差），**A2/B1 卡片首次具备音标 + 双语例句**；③ **IPA 表示法全局统一**（去 tie-bar，全仓词表 0 残留：A1 seed/custom 10 条归一 + rich 空 IPA 10 条从 A1 seed 回填）；④ **A1 卡片补齐名词 gender/plural**（336/344 = **97.67%**，此前 0%；源 = 主干 LEXICON，与 A2/B1 同源）；⑤ 新增词表来源对账工具 `tools/audit_official_vocab.py` + 归档生成脚本 `tools/gen_rich.py`。测试基线 **972 passed + 1 skipped**（883→972 净增 89）；**Android 需覆盖安装 v5.9.0 生效**（改动含 `static/`）。
 
 - [x] **v5.9.1**：**词库等级标签补齐 + 入口文档瘦身**（2026-09-16，PR #59/#60）——① **工作台词库补 A1 等级标签 `a1`**：此前 A1 只有 `core`（核心语义）而缺等级语义，导致词库工具栏「全部标签」下拉**筛不出 A1**（A2/B1 恰好有 `a2`/`b1`，且词库浏览只在 `core` 档按 scope 过滤，其余档显示全库 → 按标签筛等级是唯一手段）；标签语义统一为 **`a1`/`a2`/`b1` = 等级、`core` = 核心词、`reader` = 精读生词**，种子建表 / `CORE_CUSTOM_WORDS` / 存量 `backfillCoreWords()` 幂等迁移（**不动 FSRS 进度**）。② **修 `reader` 谓词的 `w.custom` 兜底**：22 条 `core-*` 补缺词（`der Wohnort`/`die Nationalität`…）此前被误判为「精读生词」而**同时出现在两档**；收窄为 `tags.includes("reader") || id.startsWith("card-")`。③ **README 瘦身 433 → 131 行（DOC-GOVERNANCE 合规）**：版本历史迁出为 **`CHANGELOG.md`**（70 条历史零丢失，成为版本历史正主）；核心特性 12 子节 → 摘要 + 指针 `FEATURES.md`；目录结构 → 顶层树 + 指针 `docs/agents/architecture.md`；快速启动精简 → 指针 `docs/agents/ops.md`；新增「文档导航」路由表。④ 顺带修正既有滞后：`linguistics`/`syntax_tree` 路径补 `nlp_engine/` 前缀、测试模块数 27 → 60+。测试基线 **973 passed + 1 skipped**；**Android 需覆盖安装 v5.9.1 生效**（改动含 `static/`）。
+
+- [x] **v5.9.2**：**A1 取数统一（ADR-0014）+ 词表富字段回填修复**（2026-09-17，PR #61 + `e2d5504`）——① **A1 取数统一（ADR-0014 S1–S3）**：A1 首装改走 `GET /api/cards/vocab?cefr=A1&scope=all`（API 优先 + 内联降级为 `file://` 离线 fallback + localStorage 缓存 + 失败可恢复重试 + 挂起期占位），输出契约 11→12 字段（+`letter`，服务端下发 seed 原值、不派生——实测 `letterOf` 会在 10 条上漂移 `O↔Ö`/`U↔Ü`）；三条守卫钉死「内联绝不当主路径」。② **A2/B1 富字段回填**：`sync{A2,B1}CardsFromServer` 由 **append-only 升级为「只增 + 只补空字段」**（幂等、绝不覆盖非空、不碰 `cards/log/wrong`）——根治「A2/B1 只有部分词有例句」（根因＝存量词条在首次同步后永久冻结，`ex:[]` 再不刷新；进 A2/B1 档即自愈）；备考域卡片空例句块改**条件渲染**（空值不输出孤立标签）。③ **A1 早退闸修复**：`bootstrapA1Words` 早退闸不再依赖来源标记（旧 `lastSrc !== "inline"` → 改 `!canUseServer`），已以 `server` 落盘的设备**每次启动重新合并** A1 富字段——修「`anbieten`/`allein` 等存量 A1 条目无例句无音标」（旧版构建首装时服务端/种子尚无富字段，裸条目被永久冻结；实测用户 `localStorage` 中 `a1-0011`/`a1-0016` `exLen=0`、`ipa=''`，而 A2 同源条目齐全）。行为级探针新增 A1 早退闸场景 B2 + A2/B1 回填 19 场景（真实源码切片 + `node:vm` 真跑，接入 pytest/CI）。测试基线 **987 passed + 1 skipped**（759 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`，工作区 A/B 证实为既有）；13+ `tools/*.mjs` 探针零漂移；ruff 全绿。**Android 需覆盖安装 v5.9.2 生效**（改动含 `static/`）。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 
