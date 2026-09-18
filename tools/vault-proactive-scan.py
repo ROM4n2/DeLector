@@ -86,7 +86,8 @@ def check_security() -> None:
     found_keys: dict[str, tuple[Path, int, str]] = {}
     for ext in (".py", ".js", ".html", ".css", ".json", ".xml", ".md"):
         for p in ROOT.rglob(f"*{ext}"):
-            if any(ign in p.parts for ign in (".git", "__pycache__", ".cache", "venv", ".pytest_cache")):
+            ignored_dirs = (".git", "__pycache__", ".cache", "venv", ".pytest_cache", "node_modules")
+            if any(ign in p.parts for ign in ignored_dirs):
                 continue
             try:
                 content = p.read_text(encoding="utf-8", errors="ignore")
