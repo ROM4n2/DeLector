@@ -14,7 +14,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 import genanki
 from fastapi import HTTPException, Request
@@ -60,15 +60,15 @@ def _configure_sqlite_conn(conn: sqlite3.Connection) -> sqlite3.Connection:
     return conn
 
 
-def get_db(db_path: Optional[str] = None):
+def get_db(db_path: Optional[str] = None) -> sqlite3.Connection:
     conn = sqlite3.connect(get_db_path(db_path))
     return _configure_sqlite_conn(conn)
 
 
-_INITIALIZED_PROGRESS_DBS: set = set()
+_INITIALIZED_PROGRESS_DBS: Set[str] = set()
 
 
-def get_progress_db(db_path: Optional[str] = None):
+def get_progress_db(db_path: Optional[str] = None) -> sqlite3.Connection:
     target_path = get_progress_db_path(db_path)
     if target_path not in _INITIALIZED_PROGRESS_DBS:
         init_progress_db(target_path)
@@ -76,7 +76,7 @@ def get_progress_db(db_path: Optional[str] = None):
     return _configure_sqlite_conn(conn)
 
 
-def init_progress_db(db_path: Optional[str] = None):
+def init_progress_db(db_path: Optional[str] = None) -> None:
     target_path = get_progress_db_path(db_path)
     conn = sqlite3.connect(target_path)
     _configure_sqlite_conn(conn)
@@ -167,7 +167,7 @@ def log_study_event(
     note: str = "",
     minutes: int = 0,
     db_path: Optional[str] = None,
-):
+) -> None:
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         with db_progress_conn(db_path) as conn:
@@ -209,7 +209,7 @@ def log_study_event(
         print(f"[Warn] Failed to log study event: {e}")
 
 
-def init_db(db_path: Optional[str] = None):
+def init_db(db_path: Optional[str] = None) -> None:
     target_path = get_db_path(db_path)
     with db_conn(target_path) as conn:
         conn.execute("""
@@ -430,13 +430,13 @@ def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> s
         with db_conn(db_path) as conn:
             row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             if row and row["value"] is not None and row["value"] != "":
-                return row["value"]
+                return row["value"]  # type: ignore[no-any-return]  # sqlite3.Row 索引为 Any，此处运行时恒为 str
     except Exception:
         pass
     return os.environ.get(key, default)
 
 
-def set_setting(key: str, value: str, db_path: Optional[str] = None):
+def set_setting(key: str, value: str, db_path: Optional[str] = None) -> None:
     with db_conn(db_path) as conn:
         conn.execute(
             """
@@ -448,7 +448,7 @@ def set_setting(key: str, value: str, db_path: Optional[str] = None):
         )
 
 
-def _close_db_conn(conn):
+def _close_db_conn(conn: sqlite3.Connection) -> None:
     """确定性关闭 get_db 打开的连接。
 
     裸 `with conn`（sqlite3.Connection 自带的上下文管理）只提交/回滚事务并不会
@@ -463,7 +463,7 @@ def _close_db_conn(conn):
 
 
 @contextmanager
-def db_conn(db_path: Optional[str] = None):
+def db_conn(db_path: Optional[str] = None) -> Iterator[sqlite3.Connection]:
     """`with db_conn(...) as conn:` —— 语义与旧 `with get_db(...) as conn:` 等价
     （成功 commit / 异常 rollback），但 finally 确定性 close，不再依赖循环 GC。
     """
@@ -480,7 +480,7 @@ def db_conn(db_path: Optional[str] = None):
 
 
 @contextmanager
-def db_progress_conn(db_path: Optional[str] = None):
+def db_progress_conn(db_path: Optional[str] = None) -> Iterator[sqlite3.Connection]:
     """同 db_conn，面向 progress 库。注意 init_progress_db 内部不得使用本函数。"""
     conn = get_progress_db(db_path)
     try:
@@ -494,7 +494,7 @@ def db_progress_conn(db_path: Optional[str] = None):
         _close_db_conn(conn)
 
 
-def get_wb_state(db_path: Optional[str] = None) -> dict:
+def get_wb_state(db_path: Optional[str] = None) -> Dict[str, Any]:
     """读 workbench 背词进度 server 镜像；无记录或解析失败一律返回 {}。"""
     conn = get_db(db_path)
     try:
@@ -510,7 +510,7 @@ def get_wb_state(db_path: Optional[str] = None) -> dict:
         return {}
 
 
-def save_wb_state(payload: dict, db_path: Optional[str] = None) -> str:
+def save_wb_state(payload: Dict[str, Any], db_path: Optional[str] = None) -> str:
     """单行 upsert workbench 背词进度镜像（id 恒为 1），返回本次写入的 updated_at。"""
     updated_at = datetime.now().isoformat()
     text = json.dumps(payload, ensure_ascii=False)
@@ -570,10 +570,10 @@ def create_encounter_text(
             "INSERT INTO encounter_texts (title, level, source, content, pack_id, pack_json) VALUES (?, ?, ?, ?, ?, ?)",
             (title or "", level or "A2", source or "", content or "", pack_id, pack_json),
         )
-        return cur.lastrowid
+        return cur.lastrowid  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
 
-def import_encounter_pack(pack: dict, db_path: Optional[str] = None) -> int:
+def import_encounter_pack(pack: Dict[str, Any], db_path: Optional[str] = None) -> int:
     """把 job#1 encounter-pack/v1 整包落库为一行短文；幂等。
 
     契约：pack_id 已存在时直接返回既有行的 id（不新增）。缺必需键
@@ -600,7 +600,7 @@ def import_encounter_pack(pack: dict, db_path: Optional[str] = None) -> int:
     with db_conn(target_path) as conn:
         existing = conn.execute("SELECT id FROM encounter_texts WHERE pack_id = ?", (pack_id,)).fetchone()
         if existing:
-            return existing["id"]
+            return existing["id"]  # type: ignore[no-any-return]  # sqlite3.Row 索引为 Any，主键恒 int
         cur = conn.execute(
             "INSERT INTO encounter_texts (pack_id, title, level, content, pack_json) VALUES (?, ?, ?, ?, ?)",
             (
@@ -611,7 +611,7 @@ def import_encounter_pack(pack: dict, db_path: Optional[str] = None) -> int:
                 json.dumps(pack, ensure_ascii=False),
             ),
         )
-        return cur.lastrowid
+        return cur.lastrowid  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
 
 def get_wb_sync_key(db_path: Optional[str] = None) -> str:
@@ -709,10 +709,10 @@ def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_
             "INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
             (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""),
         )
-        return cur.lastrowid
+        return cur.lastrowid  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
 
-def seed_preset_articles(db_path: Optional[str] = None):
+def seed_preset_articles(db_path: Optional[str] = None) -> None:
     target = get_db_path(db_path)
     with db_conn(target) as conn:
         count = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
@@ -822,7 +822,7 @@ GRAMMAR_MODEL = genanki.Model(
 )
 
 
-def _anki_esc(value) -> str:
+def _anki_esc(value: Any) -> str:
     """用户/可编辑数据进 Anki HTML 字段前一律转义。
 
     genanki 不自动转义，裸标签（如 `<img onerror>`）在 Anki 打开牌组时会执行，
@@ -831,7 +831,7 @@ def _anki_esc(value) -> str:
     return _html.escape(str(value or ""), quote=True)
 
 
-def _vocab_anki_note(r) -> genanki.Note:
+def _vocab_anki_note(r: Dict[str, Any]) -> genanki.Note:
     """构造词汇卡 note：先转义再高亮替换，顺序不可颠倒（先转义否则破坏 <b> 结构）。"""
     word = _anki_esc(r["word"])
     sentence = _anki_esc(r["sentence_context"])
@@ -849,7 +849,7 @@ def _vocab_anki_note(r) -> genanki.Note:
     )
 
 
-def _grammar_anki_note(r) -> genanki.Note:
+def _grammar_anki_note(r: Dict[str, Any]) -> genanki.Note:
     """构造语法卡 note：五个模板字段全部来自句库/卡片数据，逐字段转义。"""
     return genanki.Note(
         model=GRAMMAR_MODEL,
@@ -979,7 +979,7 @@ def get_cache_info(cache_dir: Optional[str] = None) -> Dict[str, Any]:
     return {"file_count": count, "total_size_mb": round(total_size / (1024 * 1024), 2), "total_size_bytes": total_size}
 
 
-def prune_audio_cache(max_files: int = 300, cache_dir: Optional[str] = None):
+def prune_audio_cache(max_files: int = 300, cache_dir: Optional[str] = None) -> None:
     target_dir = cache_dir or AUDIO_CACHE_DIR
     if not os.path.exists(target_dir):
         return
@@ -1037,7 +1037,7 @@ _SRS_DEFAULTS = {
     "repetition_count": 0,
 }
 
-_BACKUP_TABLES = {
+_BACKUP_TABLES: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]] = {
     "articles": (
         ("id", "title", "source_url", "raw_text", "processed_json", "created_at"),
         {"title": "Untitled", "source_url": "", "raw_text": "", "processed_json": "{}"},
@@ -1178,7 +1178,7 @@ _BACKUP_TABLES = {
     ),
 }
 
-_PROGRESS_TABLES = {
+_PROGRESS_TABLES: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]] = {
     "study_log": (
         ("id", "event_type", "ref_id", "note", "logged_at"),
         {"event_type": "", "note": ""},
@@ -1264,7 +1264,7 @@ _PROGRESS_TABLES = {
 }
 
 
-def _require_localhost(request: Request):
+def _require_localhost(request: Request) -> None:
     """敏感接口仅允许本机访问。
 
     桌面端有意绑 0.0.0.0（start.py 的 get_bind_host，同 Wi-Fi 的手机/平板可读文章），
@@ -1282,7 +1282,11 @@ def _require_localhost(request: Request):
         raise HTTPException(403, "该接口仅允许本机访问")
 
 
-def _rows_to_tuples(rows: List[Dict[str, Any]], columns: Tuple[str, ...], defaults: Dict[str, Any]) -> List[Tuple]:
+def _rows_to_tuples(
+    rows: List[Dict[str, Any]],
+    columns: Tuple[str, ...],
+    defaults: Dict[str, Any],
+) -> List[Tuple[Any, ...]]:
     return [tuple(r.get(c, defaults.get(c)) for c in columns) for r in rows]
 
 
@@ -1344,7 +1348,7 @@ def _issue_pending(pending: Dict[str, Any], payload: Any, filename: str) -> str:
         filename=filename,
         expires_at=time.time() + BACKUP_TOKEN_TTL_SEC,
     )
-    return pending["token"]
+    return pending["token"]  # type: ignore[no-any-return]  # Dict[str, Any] 取值，运行时恒 str
 
 
 def _take_pending(pending: Dict[str, Any], token: str) -> Tuple[Any, str]:
@@ -1363,7 +1367,7 @@ def _take_pending(pending: Dict[str, Any], token: str) -> Tuple[Any, str]:
 
 
 @contextmanager
-def _db_snapshot_guard():
+def _db_snapshot_guard() -> Iterator[None]:
     """还原前给两个库做文件级快照，任一步失败就整体拷回。
 
     delector.db 与 progress.db 是两个**独立** SQLite 文件，无法共处一个事务。
@@ -1392,7 +1396,11 @@ def _db_snapshot_guard():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def _replace_tables(conn, spec: Dict[str, Tuple], payload: Dict[str, List[Dict[str, Any]]]):
+def _replace_tables(
+    conn: sqlite3.Connection,
+    spec: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]],
+    payload: Dict[str, List[Dict[str, Any]]],
+) -> None:
     for name, (columns, defaults) in spec.items():
         conn.execute(f"DELETE FROM {name}")
         rows = payload.get(name) or []
@@ -1405,14 +1413,14 @@ def _replace_tables(conn, spec: Dict[str, Tuple], payload: Dict[str, List[Dict[s
         )
 
 
-def get_prep_saved(db_path: Optional[str] = None) -> set:
+def get_prep_saved(db_path: Optional[str] = None) -> Set[str]:
     """返回所有已入卡的 (lemma, praep, kasus) 三元组 key 集合。"""
     with db_conn(db_path) as conn:
         rows = conn.execute("SELECT lemma, praep, kasus FROM prep_saved").fetchall()
         return {f"{r['lemma']}|{r['praep']}|{r['kasus']}" for r in rows}
 
 
-def add_prep_saved(lemma: str, praep: str, kasus: str, db_path: Optional[str] = None):
+def add_prep_saved(lemma: str, praep: str, kasus: str, db_path: Optional[str] = None) -> None:
     """记录一条搭配已入卡。幂等：重复插入被主键忽略。"""
     with db_conn(db_path) as conn:
         conn.execute(
@@ -1474,7 +1482,7 @@ def record_exam_trial(
         minutes=max(1, duration_seconds // 60),
         db_path=db_path,
     )
-    return record_id
+    return record_id  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
 
 def get_exam_history(level: str, module: str, limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1636,7 +1644,7 @@ def record_listen_trial(
         """,
             (mode, source_type, source_id, level, total, correct, score, duration_sec),
         )
-        return cur.lastrowid
+        return cur.lastrowid  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
 
 def list_listen_trials(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1676,7 +1684,7 @@ def record_hard_sentence_trial(
         """,
             (source, source_id, sentence_index, level, score, revealed, duration_sec),
         )
-        return cur.lastrowid
+        return cur.lastrowid  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
 
 def list_hard_sentence_trials(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1928,7 +1936,7 @@ def _contract_from_a1_row(row: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _contract_from_core_entry(lemma: str, val: tuple) -> Dict[str, Any]:
+def _contract_from_core_entry(lemma: str, val: Tuple[Any, ...]) -> Dict[str, Any]:
     """CORE_VOCAB_DB 5 元组存储视图 → 契约条目（A2/通用等级/官方视图共用）。
 
     富字段（``de`` 德语例句 / ``ipa`` 音标 / ``example_zh`` 例句中文）取自主干富字段

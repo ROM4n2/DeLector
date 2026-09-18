@@ -18,6 +18,10 @@ TTS 生成、完形填空生成器、备份还原……全挤在一个模块里�
    打在旧的 `delector.server.*` 上不再生效（那是搬迁期最容易静默失效的一类）。
 """
 
+# mypy: disable-error-code="misc,untyped-decorator"
+# 仅 --follow-imports=skip 校验模式下 pydantic/fastapi 被降级为 Any 才误报
+# （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
+
 import asyncio
 import hashlib
 import ipaddress
@@ -188,7 +192,7 @@ class IngestUrlReq(BaseModel):
 
 
 @router.post("/api/articles/ingest-url")
-async def ingest_from_url(req: IngestUrlReq):
+async def ingest_from_url(req: IngestUrlReq) -> Dict[str, Any]:
     if not is_safe_public_url(req.url):
         raise HTTPException(400, "无效网址或受限制的内部网络地址 (SSRF Protection)")
 
@@ -206,12 +210,12 @@ async def ingest_from_url(req: IngestUrlReq):
 
 
 @router.get("/api/feed/sources")
-def get_feed_sources():
+def get_feed_sources() -> Dict[str, Any]:
     return {"sources": PRESET_FEEDS}
 
 
 @router.get("/api/feed/items")
-async def get_feed_items(url: str):
+async def get_feed_items(url: str) -> Dict[str, Any]:
     if not is_safe_public_url(url):
         raise HTTPException(400, "无效网址或受限制的内部网络地址 (SSRF Protection)")
     raw_xml = await fetch_remote_html(url)
@@ -220,13 +224,13 @@ async def get_feed_items(url: str):
 
 
 @router.post("/api/articles/ingest")
-def ingest(req: IngestReq):
+def ingest(req: IngestReq) -> Dict[str, Any]:
     art_id = ingest_article(req.title or "Untitled", req.raw_text)
     return {"article_id": art_id, "title": req.title}
 
 
 @router.get("/api/articles")
-def list_articles():
+def list_articles() -> List[Dict[str, Any]]:
     # 只读列表路径：不再对 stats 缺失行做逐行 NLP 重算 + UPDATE（N+1 写副作用）。
     # 惰性迁移唯一保留在单篇 GET /api/articles/{id}。
     with db_conn() as conn:
@@ -250,7 +254,7 @@ def list_articles():
 
 
 @router.get("/api/articles/{article_id}")
-def get_article(article_id: int):
+def get_article(article_id: int) -> Dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not row:
@@ -271,7 +275,7 @@ def get_article(article_id: int):
 
 
 @router.delete("/api/articles/{article_id}")
-def delete_article(article_id: int, request: Request):
+def delete_article(article_id: int, request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     with db_conn() as conn:
         row = conn.execute("SELECT id FROM articles WHERE id = ?", (article_id,)).fetchone()
@@ -283,7 +287,7 @@ def delete_article(article_id: int, request: Request):
 
 
 @router.post("/api/lookup/grammar")
-async def lookup_grammar(req: GrammarLookupReq):
+async def lookup_grammar(req: GrammarLookupReq) -> Any:
     key = get_effective_api_key()
     if not key:
         return {
@@ -349,7 +353,7 @@ class VocabLookupReq(BaseModel):
 
 
 @router.post("/api/lookup/vocab")
-async def lookup_vocab(req: VocabLookupReq):
+async def lookup_vocab(req: VocabLookupReq) -> Dict[str, Any]:
     # 查词链重排：离线零延迟层在前，AI 垫底。原来只查表面形（token.text），
     # geht/Häuser/ist 全查不到；现在 lemma 优先（spaCy 入库时已算好 token.lemma）。
     res = {}
@@ -478,7 +482,7 @@ async def lookup_vocab(req: VocabLookupReq):
 _prep_matrix_response_cache = None
 
 
-def get_prep_matrix_with_cefr():
+def get_prep_matrix_with_cefr() -> Dict[str, Any]:
     """矩阵响应构建 + CEFR 注入，进程级缓存。
 
     CEFR 在这一层而不是 linguistics.build_prep_matrix 里注入：
@@ -508,7 +512,7 @@ def get_prep_matrix_with_cefr():
 
 
 @router.get("/api/prep/matrix")
-def api_prep_matrix():
+def api_prep_matrix() -> Dict[str, Any]:
     return get_prep_matrix_with_cefr()
 
 
@@ -519,13 +523,13 @@ class PrepSavedReq(BaseModel):
 
 
 @router.get("/api/prep/saved")
-def api_prep_saved():
+def api_prep_saved() -> Dict[str, Any]:
     """返回当前用户已入卡的搭配 key 列表。"""
     return {"keys": sorted(get_prep_saved())}
 
 
 @router.post("/api/prep/saved")
-def api_add_prep_saved(req: PrepSavedReq):
+def api_add_prep_saved(req: PrepSavedReq) -> Dict[str, Any]:
     """记录一条搭配已入卡。"""
     add_prep_saved(req.lemma, req.praep, req.kasus)
     return {"status": "ok"}
@@ -631,7 +635,7 @@ def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) 
 
 
 @router.post("/api/cards/vocab")
-def add_vocab_card(req: VocabCardReq):
+def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO vocab_cards "
@@ -655,7 +659,7 @@ def add_vocab_card(req: VocabCardReq):
 
 
 @router.post("/api/cards/grammar")
-def add_grammar_card(req: GrammarCardReq):
+def add_grammar_card(req: GrammarCardReq) -> Dict[str, Any]:
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO grammar_cards "
@@ -679,7 +683,7 @@ def add_grammar_card(req: GrammarCardReq):
 
 
 @router.get("/api/cards")
-def get_cards():
+def get_cards() -> Dict[str, Any]:
     with db_conn() as conn:
         v = [
             dict(r)
@@ -701,7 +705,7 @@ def get_cards():
 
 
 @router.get("/api/cards/vocab")
-def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str] = None):
+def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str] = None) -> Any:
     scope_norm = (scope or "core").lower().strip()
     if scope_norm not in ("core", "all", "reader"):
         raise HTTPException(400, "scope must be 'core', 'all', or 'reader'")
@@ -714,7 +718,7 @@ def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str
 
 
 @router.delete("/api/cards/{card_type}/{card_id}")
-def delete_card(card_type: str, card_id: int, request: Request):
+def delete_card(card_type: str, card_id: int, request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     if card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
@@ -733,7 +737,7 @@ class MasterReq(BaseModel):
 
 
 @router.patch("/api/cards/{card_type}/{card_id}/master")
-def toggle_master(card_type: str, card_id: int, req: MasterReq):
+def toggle_master(card_type: str, card_id: int, req: MasterReq) -> Dict[str, Any]:
     if card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
@@ -761,7 +765,7 @@ class QuizRecordReq(BaseModel):
 
 
 @router.post("/api/quiz/record")
-def record_quiz(req: QuizRecordReq):
+def record_quiz(req: QuizRecordReq) -> Dict[str, Any]:
     if req.card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if req.card_type == "vocab" else "grammar_cards"
@@ -797,13 +801,13 @@ class ReadLogReq(BaseModel):
 
 
 @router.post("/api/progress/log-read")
-def log_article_read(req: ReadLogReq):
+def log_article_read(req: ReadLogReq) -> Dict[str, Any]:
     log_study_event("read_article", req.article_id, req.title or "", minutes=8)
     return {"status": "ok"}
 
 
 @router.get("/api/progress/stats")
-def get_progress_stats():
+def get_progress_stats() -> Dict[str, Any]:
     from datetime import timedelta
 
     # --- main db ---
@@ -962,7 +966,7 @@ def get_progress_stats():
 
 
 @router.get("/api/cards/export/apkg")
-def export_apkg():
+def export_apkg() -> Any:
     tmp = tempfile.gettempdir()
     path = os.path.join(tmp, "DeLector_Deck.apkg")
     export_anki_deck(path)
@@ -1059,7 +1063,7 @@ _TTS_VOICE_WHITELIST = frozenset(
 )
 
 
-async def _serve_tts(text: str, voice: str, rate: str):
+async def _serve_tts(text: str, voice: str, rate: str) -> Any:
     """POST 与 GET 两个路由共享的 TTS 服务逻辑。"""
     if not _TTS_RATE_RE.match(rate or ""):
         raise HTTPException(status_code=400, detail="rate must look like '+0%', '-10%' or '+50%'")
@@ -1079,24 +1083,24 @@ async def _serve_tts(text: str, voice: str, rate: str):
 
 
 @router.post("/api/audio/tts")
-async def get_audio_tts(req: TTSReq):
+async def get_audio_tts(req: TTSReq) -> Any:
     return await _serve_tts(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
 
 
 @router.get("/api/audio/tts")
-async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%"):
+async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> Any:
     """GET 版 TTS：供 <audio src="/api/audio/tts?text=..."> 直接用。
     与 POST 共享同一缓存池（cache key 仍为 sha256(f"{voice}_{rate}_{clean_text}")）。"""
     return await _serve_tts(text, voice, rate)
 
 
 @router.get("/api/audio/cache")
-def get_audio_cache():
+def get_audio_cache() -> Any:
     return get_cache_info(AUDIO_CACHE_DIR)
 
 
 @router.post("/api/audio/cache/clear")
-def clear_audio_cache(request: Request):
+def clear_audio_cache(request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     info = get_cache_info(AUDIO_CACHE_DIR)
     cleared_count = 0
@@ -1121,7 +1125,7 @@ class ReadingNoteReq(BaseModel):
 
 
 @router.get("/api/articles/{article_id}/notes")
-def list_article_notes(article_id: int):
+def list_article_notes(article_id: int) -> List[Dict[str, Any]]:
     with db_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM reading_notes WHERE article_id = ? ORDER BY id ASC", (article_id,)
@@ -1130,7 +1134,7 @@ def list_article_notes(article_id: int):
 
 
 @router.post("/api/articles/{article_id}/notes")
-def create_article_note(article_id: int, req: ReadingNoteReq):
+def create_article_note(article_id: int, req: ReadingNoteReq) -> Dict[str, Any]:
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO reading_notes "
@@ -1141,7 +1145,7 @@ def create_article_note(article_id: int, req: ReadingNoteReq):
 
 
 @router.delete("/api/notes/{note_id}")
-def delete_article_note(note_id: int, request: Request):
+def delete_article_note(note_id: int, request: Request) -> Dict[str, Any]:
     # 删除批注同本机写闸约定：与 delete_article / delete_card / delete_essay 一致，
     # 防局域网设备任意删用户精读批注。
     _require_localhost(request)
@@ -1166,7 +1170,7 @@ class NoteAssistReq(BaseModel):
 
 
 @router.post("/api/ai/note-assist")
-async def note_assist(req: NoteAssistReq):
+async def note_assist(req: NoteAssistReq) -> Any:
     key = get_effective_api_key()
     if not key:
         import logging
@@ -1228,7 +1232,7 @@ class SettingsUpdate(BaseModel):
 
 
 @router.get("/api/settings")
-def get_app_settings():
+def get_app_settings() -> Dict[str, Any]:
     key = get_effective_api_key()
     masked = ""
     if key:
@@ -1249,7 +1253,7 @@ def get_app_settings():
 
 
 @router.post("/api/settings")
-def update_app_settings(settings: SettingsUpdate, request: Request):
+def update_app_settings(settings: SettingsUpdate, request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     if settings.api_key is not None and settings.api_key.strip() != "":
         set_setting("DEEPSEEK_API_KEY", settings.api_key.strip())
@@ -1265,7 +1269,7 @@ def update_app_settings(settings: SettingsUpdate, request: Request):
 
 
 @router.post("/api/settings/test-key")
-async def test_api_key(settings: SettingsUpdate, request: Request):
+async def test_api_key(settings: SettingsUpdate, request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     key = settings.api_key.strip() if (settings.api_key and settings.api_key.strip()) else get_effective_api_key()
     if not key:
@@ -1292,7 +1296,7 @@ async def test_api_key(settings: SettingsUpdate, request: Request):
 
 # --- Study Guide Export (Markdown) ---
 @router.get("/api/articles/{article_id}/export-guide")
-def export_study_guide(article_id: int):
+def export_study_guide(article_id: int) -> Any:
     with db_conn() as conn:
         art = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not art:
@@ -1350,7 +1354,7 @@ def export_study_guide(article_id: int):
 
 
 @router.get("/api/backup/export")
-def export_database_backup(request: Request):
+def export_database_backup(request: Request) -> Any:
     """原始导出端点，保留给脚本/桌面直连使用。
 
     UI 走 /prepare + /download —— 只有那条路径能带上 localStorage，
@@ -1365,7 +1369,7 @@ class PrepareBackupReq(BaseModel):
 
 
 @router.post("/api/backup/prepare")
-def prepare_backup_download(req: PrepareBackupReq, request: Request):
+def prepare_backup_download(req: PrepareBackupReq, request: Request) -> Dict[str, Any]:
     """前端提交 localStorage → 后端合成完整备份 → 返回一个 TTL 内有效的下载 token。
 
     为什么要两步：导航只能是 GET，所以 POST 的响应无法触发浏览器下载；
@@ -1387,7 +1391,7 @@ def prepare_backup_download(req: PrepareBackupReq, request: Request):
 
 
 @router.get("/api/backup/download/{token}")
-def download_prepared_backup(token: str, request: Request):
+def download_prepared_backup(token: str, request: Request) -> Any:
     _require_localhost(request)
     payload, filename = _take_pending(_pending_backup, token)
     return Response(
@@ -1406,14 +1410,14 @@ class WbBackupReq(BaseModel):
 
 
 @router.post("/api/wb/backup/prepare")
-def wb_prepare_backup(req: WbBackupReq, request: Request):
+def wb_prepare_backup(req: WbBackupReq, request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     token = _issue_pending(_pending_wb, req.payload, req.filename)
     return {"token": token, "filename": req.filename, "expires_in": BACKUP_TOKEN_TTL_SEC}
 
 
 @router.get("/api/wb/backup/download/{token}")
-def wb_download_backup(token: str, request: Request):
+def wb_download_backup(token: str, request: Request) -> Any:
     _require_localhost(request)
     payload, filename = _take_pending(_pending_wb, token)
     return Response(
@@ -1436,12 +1440,12 @@ class WbStateReq(BaseModel):
 
 
 @router.get("/api/wb/state")
-def wb_get_state():
+def wb_get_state() -> Any:
     return get_wb_state()
 
 
 @router.put("/api/wb/state")
-def wb_put_state(req: WbStateReq, request: Request):
+def wb_put_state(req: WbStateReq, request: Request) -> Dict[str, Any]:
     if not verify_wb_key(request.headers.get("X-WB-Key"), get_wb_sync_key()):
         raise HTTPException(403, "invalid X-WB-Key")
     updated_at = save_wb_state(req.payload or {})
@@ -1449,20 +1453,20 @@ def wb_put_state(req: WbStateReq, request: Request):
 
 
 @router.get("/api/wb/state/key")
-def wb_get_state_key(request: Request):
+def wb_get_state_key(request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     return {"key": get_wb_sync_key()}
 
 
 @router.post("/api/wb/state/key")
-def wb_regenerate_state_key(request: Request):
+def wb_regenerate_state_key(request: Request) -> Dict[str, Any]:
     """重新生成同步密钥（= 撤销配对）：旧 key 立即失效。仅本机可调。"""
     _require_localhost(request)
     return {"key": regenerate_wb_sync_key()}
 
 
 @router.get("/api/wb/lan-info")
-def wb_lan_info():
+def wb_lan_info() -> Dict[str, Any]:
     """局域网可读主机信息：配对 UI 提示「把 IP 填进手机」用。不含任何机密。
 
     lan_ip 是尽力而为的探测（本机多网卡时取第一个私有 IPv4），探测不到返回空串，
@@ -1514,7 +1518,7 @@ class RestoreReq(BaseModel):
 
 
 @router.post("/api/backup/restore")
-def restore_database_backup(req: RestoreReq, request: Request):
+def restore_database_backup(req: RestoreReq, request: Request) -> Dict[str, Any]:
     """真覆盖还原：事务内清库再灌，而非按 id merge。
 
     为什么不是 merge：merge 需要重新映射 article_id 外键
@@ -1574,7 +1578,7 @@ class CardReviewReq(BaseModel):
 
 
 @router.post("/api/cards/{card_type}/{card_id}/review")
-def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
+def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq) -> Dict[str, Any]:
     if card_type not in ("vocab", "grammar"):
         raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
     tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
@@ -1639,7 +1643,7 @@ def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq):
 
 
 @router.get("/api/cards/due")
-def get_due_cards():
+def get_due_cards() -> Dict[str, Any]:
     today = datetime.now().strftime("%Y-%m-%d")
     with db_conn() as conn:
         v = [
@@ -1819,7 +1823,7 @@ class ClozeGenReq(BaseModel):
 
 
 @router.post("/api/articles/{article_id}/exercise/cloze")
-def get_article_cloze_exercise(article_id: int, req: ClozeGenReq):
+def get_article_cloze_exercise(article_id: int, req: ClozeGenReq) -> Dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if not row:
@@ -1840,7 +1844,7 @@ class ClozeEvalReq(BaseModel):
 
 
 @router.post("/api/exercise/cloze/evaluate")
-def evaluate_cloze_exercise(req: ClozeEvalReq):
+def evaluate_cloze_exercise(req: ClozeEvalReq) -> Dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (req.article_id,)).fetchone()
         if not row:
@@ -1890,7 +1894,7 @@ class SyntaxAnalyzeReq(BaseModel):
 
 
 @router.post("/api/syntax/analyze")
-def api_syntax_analyze(req: SyntaxAnalyzeReq):
+def api_syntax_analyze(req: SyntaxAnalyzeReq) -> Any:
     return analyze_syntax_tree(req.text)
 
 
@@ -1911,7 +1915,7 @@ SYSTEM_WRITING_POLISH_PROMPT = """你是一位精通德语学术写作与德福/
 不要输出除 JSON 以外的任何文字。"""
 
 
-def _get_writer_nlp():
+def _get_writer_nlp() -> Any:
     try:
         return nlp
     except Exception:
@@ -1919,14 +1923,14 @@ def _get_writer_nlp():
 
 
 @router.post("/api/writing/analyze")
-def api_writing_analyze(req: WritingAnalyzeReq):
+def api_writing_analyze(req: WritingAnalyzeReq) -> Any:
     from delector.services.writing import analyze_essay_text
 
     return analyze_essay_text(req.text[:2000], _get_writer_nlp())
 
 
 @router.post("/api/essays")
-def create_essay(req: EssayCreateReq):
+def create_essay(req: EssayCreateReq) -> Dict[str, Any]:
     from delector.services.writing import analyze_essay_text
 
     a = analyze_essay_text(req.content[:5000], _get_writer_nlp())
@@ -1949,7 +1953,7 @@ def create_essay(req: EssayCreateReq):
 
 
 @router.get("/api/essays")
-def list_essays():
+def list_essays() -> List[Dict[str, Any]]:
     with db_conn() as conn:
         rows = conn.execute(
             "SELECT id, title, cefr_level, error_count, sentence_count, created_at, updated_at "
@@ -1959,7 +1963,7 @@ def list_essays():
 
 
 @router.get("/api/essays/{essay_id}")
-def get_essay(essay_id: int):
+def get_essay(essay_id: int) -> Dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
     if not row:
@@ -1974,7 +1978,7 @@ def get_essay(essay_id: int):
 
 
 @router.put("/api/essays/{essay_id}")
-def update_essay(essay_id: int, req: EssayUpdateReq):
+def update_essay(essay_id: int, req: EssayUpdateReq) -> Dict[str, Any]:
     from delector.services.writing import analyze_essay_text
 
     with db_conn() as conn:
@@ -2004,7 +2008,7 @@ def update_essay(essay_id: int, req: EssayUpdateReq):
 
 
 @router.delete("/api/essays/{essay_id}")
-def delete_essay(essay_id: int, request: Request):
+def delete_essay(essay_id: int, request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     with db_conn() as conn:
         row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
@@ -2016,7 +2020,7 @@ def delete_essay(essay_id: int, request: Request):
 
 
 @router.post("/api/writing/cards")
-def save_writing_card(req: WritingCardReq):
+def save_writing_card(req: WritingCardReq) -> Any:
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (req.essay_id,)).fetchone()
     if not row:
@@ -2106,7 +2110,7 @@ async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
 
 
 @router.post("/api/writing/ai-polish")
-async def api_writing_ai_polish(req: AIPolishReq):
+async def api_writing_ai_polish(req: AIPolishReq) -> Dict[str, Any]:
     text = req.text[:2000]
     corrected_text, notes_zh, error_count = await _ai_polish_call(text)
     return {
@@ -2120,7 +2124,7 @@ async def api_writing_ai_polish(req: AIPolishReq):
 
 
 @router.post("/api/writing/ai-polish/diff")
-async def api_writing_ai_polish_diff(req: AIPolishReq):
+async def api_writing_ai_polish_diff(req: AIPolishReq) -> Dict[str, Any]:
     from delector.services.essay_diff import diff_sentences
 
     text = req.text[:2000]
@@ -2139,7 +2143,7 @@ async def api_writing_ai_polish_diff(req: AIPolishReq):
 
 
 @router.post("/api/essays/{essay_id}/versions")
-def save_essay_version(essay_id: int, req: EssayVersionCreateReq):
+def save_essay_version(essay_id: int, req: EssayVersionCreateReq) -> Dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
@@ -2156,7 +2160,7 @@ def save_essay_version(essay_id: int, req: EssayVersionCreateReq):
 
 
 @router.get("/api/essays/{essay_id}/versions")
-def list_essay_versions(essay_id: int):
+def list_essay_versions(essay_id: int) -> List[Dict[str, Any]]:
     with db_conn() as conn:
         row = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not row:
@@ -2187,7 +2191,7 @@ def list_essay_versions(essay_id: int):
 
 
 @router.get("/api/essays/{essay_id}/versions/{version_id}")
-def get_essay_version(essay_id: int, version_id: int):
+def get_essay_version(essay_id: int, version_id: int) -> Dict[str, Any]:
     with db_conn() as conn:
         essay = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
         if not essay:
@@ -2218,7 +2222,7 @@ def get_essay_version(essay_id: int, version_id: int):
 
 
 @router.delete("/api/essays/{essay_id}/versions/{version_id}")
-def delete_essay_version(essay_id: int, version_id: int, request: Request):
+def delete_essay_version(essay_id: int, version_id: int, request: Request) -> Dict[str, Any]:
     _require_localhost(request)
     with db_conn() as conn:
         essay = conn.execute("SELECT id FROM essays WHERE id = ?", (essay_id,)).fetchone()
@@ -2234,7 +2238,7 @@ def delete_essay_version(essay_id: int, version_id: int, request: Request):
 
 
 @router.post("/api/essays/{essay_id}/restore")
-def restore_essay_version(essay_id: int, req: EssayRestoreReq):
+def restore_essay_version(essay_id: int, req: EssayRestoreReq) -> Dict[str, Any]:
     from delector.services.writing import analyze_essay_text
 
     with db_conn() as conn:
@@ -2283,7 +2287,7 @@ def restore_essay_version(essay_id: int, req: EssayRestoreReq):
 
 
 @router.post("/api/writing/apply")
-def api_writing_apply(req: WritingApplyReq):
+def api_writing_apply(req: WritingApplyReq) -> Dict[str, Any]:
     from delector.services.essay_diff import diff_sentences, merge_sentences
     from delector.services.writing import analyze_essay_text
 
@@ -2344,11 +2348,11 @@ class SyntaxStatsReq(BaseModel):
 
 
 @router.post("/api/syntax/stats")
-async def api_syntax_stats_save(req: SyntaxStatsReq, background_tasks: BackgroundTasks):
+async def api_syntax_stats_save(req: SyntaxStatsReq, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     background_tasks.add_task(upsert_corpus_syntax_stats, req.article_id, req.stats)
     return {"ok": True}
 
 
 @router.get("/api/syntax/stats")
-def api_syntax_stats_get():
+def api_syntax_stats_get() -> Any:
     return get_all_corpus_syntax_stats()
