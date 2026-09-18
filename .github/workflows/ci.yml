@@ -72,7 +72,7 @@ jobs:
         run: pip install mypy
 
       - name: Mypy type gate
-        run: mypy --strict deletor
+        run: mypy --strict delector
 
       # 测试需要德语 spaCy 模型，与 build-release.yml 同源
       - name: Download spaCy German model
