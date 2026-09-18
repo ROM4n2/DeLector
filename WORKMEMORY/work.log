@@ -530,3 +530,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 3. 门禁：ci.yml Mypy gate `mypy` → `mypy --strict deletor`（tests/tools 沿用适度档）；test_ci_hardening 守卫兼容（含 "mypy" 子串断言）。
 4. 产出：docs/plans/2026-09-18-mypy-strict-annotation-sweep.md 状态收官。
 遗留：gloss 产包仍阻塞（DEEPSEEK_API_KEY 缺失）；真用户试用三问反馈仍未启动；tests/tools strict 另立。
+
+### 2026-09-18 20:10 | trae-llm__trae-code | MYPY_STRICT_EXT（tools 另立升级完成）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：vault-spark 决策 B「只清 tools，tests 保持适度档」→ tools strict 清账落地。
+1. tools 3 文件 108→0（vault-proactive-scan.py 61 / gen_rich.py 42 / audit_official_vocab.py 5；no-untyped-call 连锁为主，补 61 处注解）。
+2. 门禁双轨：ci.yml `mypy --strict deletor tools`（strict）+ `mypy --follow-imports=skip tests`（tests 适度档，skip 避免 deletor strict ignore 在配置档 unused 冲突）；test_server.py 文件级豁免 unused-ignore（动态面 ignore 正常模式需要）。
+3. 全程踩坑：**delector 拼写连续 7 次写成 deletor**（本地/ci.yml/注释），CI 首跑 0s 失败实证 2 次——最后用 'de'+'lector' 拼接 + 文件替换解决。教训：长命令手打包名必错，改变量/拼接。
+4. 验证：两个门禁命令本地零错误；CI 35342745037 全绿（含 pytest 989+1）。
+遗留：tests strict 另立评估（1897 处，pytest 函数注解收益低）；vault-proactive-scan.py 报告 2 个疑似真实缺陷（check_frontend_consistency 空 versions 误报、check_security found_keys 未去重）待裁决。
