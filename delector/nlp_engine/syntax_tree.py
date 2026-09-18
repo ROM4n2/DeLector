@@ -8,6 +8,11 @@ Topologisches Feldermodell (Vorfeld, Linke Satzklammer, Mittelfeld, Rechte Satzk
 Zero external API dependencies.
 """
 
+# mypy: disable-error-code="unused-ignore"
+# 红线 1 的 spaCy 降级占位（spacy=None; Doc/Span/Token=Any）自带的 type: ignore 豁免，
+# 在 --follow-imports=skip 校验模式下被判定为 unused（导入被跳过、行上无错误可豁免）；
+# 正常跟随模式下豁免有效。占位绑定与注释系项目有意设计，一律保留，不改形态。
+
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -40,7 +45,7 @@ def get_spacy_load_error() -> str:
     return _spacy_load_error
 
 
-def get_spacy_nlp():
+def get_spacy_nlp() -> Any:
     """Load or return cached spaCy German model with robust fallback."""
     global _nlp_instance, _spacy_load_error
     if spacy is None:

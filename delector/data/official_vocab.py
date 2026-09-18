@@ -22,9 +22,9 @@ Schema（ADR-0011 #6 冻结）:
 导入期零副作用：模块只含常量字面量（零网络 / 零 IO / 无函数 / 无副作用 import）。
 """
 
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
-OFFICIAL_A1_VOCAB: Dict[str, tuple] = {
+OFFICIAL_A1_VOCAB: Dict[str, Tuple[str, str, Optional[str], str, str]] = {
     "ab": ("A1", "PREP", None, "", "从…起；自…起"),
     "aber": ("A1", "CONJ", None, "", "但是；可是"),
     "abfahren": ("A1", "VERB", None, "", "出发；驶离"),
@@ -687,7 +687,7 @@ OFFICIAL_A1_VOCAB: Dict[str, tuple] = {
     "überweisen": ("A1", "VERB", None, "", "转账"),
 }
 
-OFFICIAL_A1_AUGMENT: Dict[str, tuple] = {
+OFFICIAL_A1_AUGMENT: Dict[str, Tuple[str, str, Optional[str], str, str]] = {
     "abend": ("A1", "NOUN", "Masc", "-e", "傍晚，晚上"),
     "alle": ("A1", "PRON", None, "", "所有/全部"),
     "alles": ("A1", "PRON", None, "", "一切"),
@@ -700,7 +700,7 @@ OFFICIAL_A1_AUGMENT: Dict[str, tuple] = {
     "tag": ("A1", "NOUN", "Masc", "-e", "白天，日子，一天"),
 }
 
-OFFICIAL_A2B1_VOCAB: Dict[str, tuple] = {
+OFFICIAL_A2B1_VOCAB: Dict[str, Tuple[str, str, Optional[str], str, str]] = {
     "abbiegen": ("B1", "VERB", None, "", "拐弯，转弯"),
     "abbildung": ("B1", "NOUN", "Fem", "-en", "插图，图"),
     "abenteuer": ("B1", "NOUN", "Neut", "-", "冒险，历险"),
@@ -3057,7 +3057,7 @@ OFFICIAL_A2B1_VOCAB: Dict[str, tuple] = {
 }
 
 # 三片合并去重：低等级优先（A1 > A2 > B1）。顺序敏感，勿改。
-OFFICIAL_VOCAB: Dict[str, tuple] = {
+OFFICIAL_VOCAB: Dict[str, Tuple[str, str, Optional[str], str, str]] = {
     **OFFICIAL_A2B1_VOCAB,
     **OFFICIAL_A1_VOCAB,
     **OFFICIAL_A1_AUGMENT,

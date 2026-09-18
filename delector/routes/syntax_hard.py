@@ -11,7 +11,7 @@ hard-sentences 列表/detail 纯只读。
 """
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -36,10 +36,12 @@ router = APIRouter(prefix="/api/syntax", tags=["syntax"])
 # 排名结果内存缓存：键 = "source:id"，值 = (过期时刻, items 全量)。
 # 存放**未过滤未截断**的全量 items（过滤/limit 在读取时应用），TTL 内同材料
 # 不重复跑 analyze_syntax_tree（红线 10 切句 + spaCy 逐句分析的重计算）。
-_RANK_CACHE: Dict[str, Any] = {}
+# 缓存值 = (过期时刻, items 全量)，显式类型让 _rank_source 的读取免 Any 回落。
+_RANK_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 _CACHE_TTL_SEC = 300.0
 
 
+# --follow-imports=skip 下 pydantic 无 stub，BaseModel 为 Any，无法做子类化检查，豁免 misc
 class HardSentenceTrialRequest(BaseModel):
     """长难句训练记录落盘请求：会话汇总字段（level/score/revealed 由前端传入）。"""
 
@@ -59,12 +61,14 @@ def _material_text(source: str, source_id: int) -> str:
             row = conn.execute("SELECT raw_text FROM articles WHERE id = ?", (source_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="文章不存在")
-        return row["raw_text"]
+        # sqlite 行对象无 stub 为 Any，取列值无法静态确认类型，豁免 no-any-return
+        return row["raw_text"]  # type: ignore[no-any-return]
     if source == "encounter":
         row = get_encounter_text(source_id)
         if not row:
             raise HTTPException(status_code=404, detail="短文不存在")
-        return row["content"]
+        # get_encounter_text 跨模块导入被 skip 为 Any，取列值免 Any 回落豁免
+        return row["content"]  # type: ignore[no-any-return]
     raise HTTPException(status_code=404, detail="未知材料来源")
 
 
@@ -115,8 +119,8 @@ def _list_article_ids() -> List[Dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
-@router.get("/spacy-status")
-def api_syntax_spacy_status():
+@router.get("/spacy-status")# --follow-imports=skip 下 fastapi 装饰器为 Any
+def api_syntax_spacy_status() -> Dict[str, Any]:
     """spaCy 加载诊断（v5.7.4：无 adb 时在 App 内定位 Android 走 pure 的原因）。
 
     返回当前实际路径（spacy/pure）与加载失败的具体异常；成功加载时 error 为空。
@@ -125,14 +129,14 @@ def api_syntax_spacy_status():
     return {"path": "spacy" if get_spacy_nlp() else "pure", "error": get_spacy_load_error() or ""}
 
 
-@router.get("/hard-sentences")
+@router.get("/hard-sentences")# 同上：fastapi 装饰器为 Any
 def api_syntax_hard_sentences(
     source: str = "all",
     source_id: Optional[int] = None,
     level: Optional[str] = None,
     min_score: Optional[float] = None,
     limit: int = 50,
-):
+) -> Dict[str, Any]:
     """跨语料句子难度榜：source ∈ article/encounter/all；level/min_score 过滤 + limit 护栏。"""
     src = (source or "all").lower()
     if src not in ("article", "encounter", "all"):
@@ -171,8 +175,8 @@ def api_syntax_hard_sentences(
     return {"items": items[:lim]}
 
 
-@router.get("/hard-sentences/detail")
-def api_syntax_hard_sentences_detail(source: str, source_id: int, sentence_index: int):
+@router.get("/hard-sentences/detail")# 同上：fastapi 装饰器为 Any
+def api_syntax_hard_sentences_detail(source: str, source_id: int, sentence_index: int) -> Dict[str, Any]:
     """单句完整分析：analysis 含 clause_tree/topology（供前端揭示渲染）；越界/缺失/分析失败 404。"""
     src = (source or "").lower()
     text = _material_text(src, source_id)
@@ -203,8 +207,8 @@ def api_syntax_hard_sentences_detail(source: str, source_id: int, sentence_index
     }
 
 
-@router.post("/hard-sentence/trials")
-def api_syntax_record_trial(req: HardSentenceTrialRequest):
+@router.post("/hard-sentence/trials")# 同上：fastapi 装饰器为 Any
+def api_syntax_record_trial(req: HardSentenceTrialRequest) -> Dict[str, Any]:
     """长难句训练记录落盘：本地单用户记录，非敏感，不挂闸（红线 7）。"""
     trial_id = record_hard_sentence_trial(
         source=req.source,
@@ -218,7 +222,7 @@ def api_syntax_record_trial(req: HardSentenceTrialRequest):
     return {"trial_id": trial_id}
 
 
-@router.get("/hard-sentence/trials")
-def api_syntax_hard_trials(limit: int = 50):
+@router.get("/hard-sentence/trials")# 同上：fastapi 装饰器为 Any
+def api_syntax_hard_trials(limit: int = 50) -> Dict[str, Any]:
     """长难句训练历史：created_at 倒序，limit 上限 100（钳制在 database 层）。"""
     return {"items": list_hard_sentence_trials(limit=limit)}

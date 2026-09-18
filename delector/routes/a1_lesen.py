@@ -2,8 +2,12 @@
 DeLector - Goethe A1 Lesen (Reading) API Routes
 """
 
+# mypy: disable-error-code="misc,untyped-decorator"
+# 仅 --follow-imports=skip 校验模式下 pydantic/fastapi 被降级为 Any 才误报
+# （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
+
 import json
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -21,13 +25,13 @@ class LesenGradeRequest(BaseModel):
 
 
 @lesen_router.get("/sets")
-def api_get_lesen_sets():
+def api_get_lesen_sets() -> Dict[str, Any]:
     """获取 6 套 A1 阅读试卷概览列表"""
     return {"sets": get_lesen_set_list()}
 
 
 @lesen_router.get("/set/{set_id}")
-def api_get_lesen_set(set_id: int):
+def api_get_lesen_set(set_id: int) -> Any:
     """获取指定套题内容（脱敏）"""
     data = get_lesen_set_by_id(set_id, sanitize=True)
     if not data:
@@ -36,7 +40,7 @@ def api_get_lesen_set(set_id: int):
 
 
 @lesen_router.post("/grade")
-def api_grade_lesen(req: LesenGradeRequest):
+def api_grade_lesen(req: LesenGradeRequest) -> Any:
     """提交答案并进行 25 分制评分与结果记录"""
     graded = grade_lesen_answers(req.set_id, req.answers)
     if "error" in graded:
@@ -59,6 +63,6 @@ def api_grade_lesen(req: LesenGradeRequest):
 
 
 @lesen_router.get("/history")
-def api_get_lesen_history(limit: int = 50):
+def api_get_lesen_history(limit: int = 50) -> Dict[str, Any]:
     """获取 A1 阅读模考历史记录"""
     return {"history": get_a1_lesen_history(limit=limit)}

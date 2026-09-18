@@ -521,3 +521,12 @@ Caps: filesystem-read
 ### 2026-09-17 06:01 | (补记) | RELEASE_v5.9.2（ADR-0014 A1 取数统一 + 富字段回填修复）
 Caps: filesystem-read
 事件：ADR-0014 词表存储边界与 A1 取数统一——B-S1 输出契约 11→12 字段（+letter）；B-S2 A1 首装 API 化（API 优先 + 内联兜底 + 缓存 + 可恢复重试）；B-S3 内联种子降级为离线 fallback + 三条不得当主路径守卫；A2/B1 富字段回填（修存量词条永远缺例句）+ 空例句块不渲染；A1 早退闸修复（已 server 落盘设备每次启动重新合并富字段，PR #61）。测试基线 973+1。遗留：预置包 LLM gloss 富化仍开放；真用户试用三问反馈仍未启动。
+
+### 2026-09-18 19:10 | trae-llm__trae-code | MYPY_STRICT（250→0 清账收官 + 门禁升级）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：vault-spark 决策「技术债收口」→ Mypy strict 升级落地。spec：docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md（已批准）。
+1. 清账：4 个并行 subagent 分 Phase 2a/2b/3a/3b 补注解 ~127 处 + 主线程收口（processor 红线 1 占位恢复带理由 ignore、lexicon re-export as、main.py:509 groups 显式 List[Dict[str,Any]]、删 skip 模式 unused-ignore 17 处、test_official_vocab 纯数据守卫白名单扩 Optional/Tuple）。
+2. 验收：`mypy --strict deletor` **250→0**（53 源文件）；全量 pytest **989 passed + 1 skipped** 零回退；ruff 零告警。
+3. 门禁：ci.yml Mypy gate `mypy` → `mypy --strict deletor`（tests/tools 沿用适度档）；test_ci_hardening 守卫兼容（含 "mypy" 子串断言）。
+4. 产出：docs/plans/2026-09-18-mypy-strict-annotation-sweep.md 状态收官。
+遗留：gloss 产包仍阻塞（DEEPSEEK_API_KEY 缺失）；真用户试用三问反馈仍未启动；tests/tools strict 另立。

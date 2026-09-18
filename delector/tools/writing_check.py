@@ -6,10 +6,12 @@ vault-grill ADR-0009 Q2A 纠正）。Phase 2 若出现真正的练习生成需�
 不在本模块上长。
 """
 
+from typing import Any, Dict
+
 from delector.services.writing import analyze_a1_email
 
 
-async def run(payload: dict) -> dict:
+async def run(payload: Dict[str, Any]) -> Any:
     text = payload["text"]
     leitpunkte = payload.get("leitpunkte")
     return analyze_a1_email(text, leitpunkte)

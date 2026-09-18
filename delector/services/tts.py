@@ -21,6 +21,7 @@ import socket
 import ssl
 import struct
 import time
+from typing import Dict, Iterator, Tuple
 from xml.sax.saxutils import escape
 
 # 与 edge_tts.constants 保持一致（上游若更换令牌需同步）
@@ -53,7 +54,7 @@ def _connect_id() -> str:
     return os.urandom(16).hex()
 
 
-def _split_text(text: str):
+def _split_text(text: str) -> Iterator[str]:
     """按字节上限切成块；优先在空格处断，避免拆词。"""
     encoded = text.encode("utf-8")
     if len(encoded) <= CHUNK_BYTES:
@@ -111,7 +112,7 @@ def _ssml_frame(text: str, voice: str, rate: str) -> str:
 class _HandshakeError(Exception):
     """WebSocket 升级被拒，携带响应状态与头（用于 403 时钟校准重试）。"""
 
-    def __init__(self, status_line: bytes, headers: dict):
+    def __init__(self, status_line: bytes, headers: Dict[bytes, bytes]):
         super().__init__(f"handshake failed: {status_line.decode('latin-1')}")
         self.status_code = int(status_line.split(b" ", 2)[1]) if len(status_line.split(b" ", 2)) > 1 else 0
         self.headers = headers
@@ -190,7 +191,7 @@ class _WebSocket:
             header += struct.pack(">Q", n)
         self._sock.sendall(bytes(header) + mask + masked)
 
-    def recv_frame(self):
+    def recv_frame(self) -> Tuple[int, bytes]:
         """返回 (opcode, payload)。自动处理 ping→pong 与分片续帧。"""
         while True:
             hdr = self._read_exact(2)
@@ -236,7 +237,7 @@ class _WebSocket:
             self._sock.close()
 
 
-def _parse_headers(block: bytes) -> dict:
+def _parse_headers(block: bytes) -> Dict[bytes, bytes]:
     headers = {}
     for line in block.split(b"\r\n"):
         if b":" in line:

@@ -1,19 +1,26 @@
 # -*- coding: utf-8 -*-
 """SSRF 判定与 IP 过滤、网页正文提取与安全抓取、RSS 订阅解析。"""
 
+# mypy: disable-error-code="unused-ignore"
+# fetch_remote_html 内 httpx.Response.text 在 --follow-imports=skip 校验下为 Any（需行内
+# ignore），default 全仓口径下类型为 str（ignore 变为 unused）——两模式并存，关闭本模块
+# unused-ignore 检查使行内豁免在两种校验口径下都稳定。
+
 import html
 import ipaddress
 import re
 import socket
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
 
 
-def _resolve_ssrf_targets(ip_obj):
+def _resolve_ssrf_targets(
+    ip_obj: Union[ipaddress.IPv4Address, ipaddress.IPv6Address],
+) -> List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]:
     """把地址归一到「数据包真正会打到的目的地」，再交给闸门判定。
 
     IPv4-mapped(`::ffff:0:0/96`)、6to4(`2002::/16`)、Teredo(`2001::/32`) 三种
@@ -73,7 +80,7 @@ _IPV6_DENY_PREFIXES = tuple(
 )
 
 
-def _is_blocked_addr(ip_obj) -> bool:
+def _is_blocked_addr(ip_obj: Union[ipaddress.IPv4Address, ipaddress.IPv6Address]) -> bool:
     for t in _resolve_ssrf_targets(ip_obj):
         if t.is_private or t.is_loopback or t.is_link_local or t.is_reserved or t.is_multicast or t.is_unspecified:
             return True
@@ -225,7 +232,7 @@ async def fetch_remote_html(url: str) -> str:
                 text = resp.text
                 if len(text.encode("utf-8")) > MAX_HTML_BYTES:
                     raise HTTPException(400, "网页体积超限，已中止抓取")
-                return text
+                return text  # type: ignore[no-any-return]  # --follow-imports=skip 下 httpx.Response.text 为 Any，运行时恒为 str
 
         raise HTTPException(400, "重定向次数过多，已中止抓取")
 

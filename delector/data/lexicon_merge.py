@@ -19,7 +19,7 @@
 导致的双真值漂移（单真值守卫 ``CORE_VOCAB_DB == LEXICON`` 即钉死此点）。
 """
 
-from typing import Dict, Iterator, Mapping, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, Iterator, Mapping, Sequence, Set, Tuple
 
 # 5 元组字段顺序：与存储 schema（ADR-0011 #6 冻结）逐位对应，勿改。
 FIELD_ORDER: Tuple[str, ...] = ("cefr", "pos", "gender", "plural", "def_zh")
@@ -27,7 +27,7 @@ FIELD_ORDER: Tuple[str, ...] = ("cefr", "pos", "gender", "plural", "def_zh")
 # 字段级优先级（每字段列出「从高到低」的来源名）。
 #   - cefr：官方 > 手编 > AI（难度等级以官方考纲为权威）；
 #   - 富字段：手编 > 官方 > AI（官方 plural 列约 30% 是占位 '-'，覆盖手编会劣化）。
-FIELD_PRIORITY: Dict[str, tuple] = {
+FIELD_PRIORITY: Dict[str, Tuple[str, ...]] = {
     "cefr": ("official", "manual", "ai"),
     "pos": ("manual", "official", "ai"),
     "gender": ("manual", "official", "ai"),
@@ -36,7 +36,7 @@ FIELD_PRIORITY: Dict[str, tuple] = {
 }
 
 
-def _iter_lemmas(fragments: Mapping[str, Mapping[str, tuple]]) -> Iterator[str]:
+def _iter_lemmas(fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]]) -> Iterator[str]:
     """按分片注册顺序产出全部 lemma（首次出现即产出，去重、保序）。
 
     保序是刻意的：合并结果的 key 插入顺序 = 各分片首次出现顺序，与旧逐片 ``update``
@@ -51,9 +51,9 @@ def _iter_lemmas(fragments: Mapping[str, Mapping[str, tuple]]) -> Iterator[str]:
 
 
 def merge_fragments(
-    fragments: Mapping[str, Mapping[str, tuple]],
+    fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]],
     field_priority: Mapping[str, Sequence[str]] = FIELD_PRIORITY,
-) -> Dict[str, tuple]:
+) -> Dict[str, Tuple[Any, ...]]:
     """逐字段合并：对每个 lemma 的每个字段，取 ``field_priority[字段]`` 中
     第一个含该 lemma 的来源在该字段位置的值。
 
@@ -64,7 +64,7 @@ def merge_fragments(
     走**同一段**合并逻辑 —— 否则两份常量各写一份合并，稍有不慎就会静默分叉成双真值
     （ADR-0012 明令单真值）。
     """
-    merged: Dict[str, tuple] = {}
+    merged: Dict[str, Tuple[Any, ...]] = {}
     for lemma in _iter_lemmas(fragments):
         values = []
         for position, field in enumerate(FIELD_ORDER):
@@ -80,15 +80,15 @@ def merge_fragments(
 
 
 def provenance_of(
-    fragments: Mapping[str, Mapping[str, tuple]],
-) -> Dict[str, frozenset]:
+    fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]],
+) -> Dict[str, FrozenSet[str]]:
     """``lemma -> 含该 lemma 的来源集合``（``frozenset``）。
 
     运行期旁路：记录每个 lemma 由哪些来源贡献，仅供加载后查询「仅官方精选」等
     来源感知视图；它是内存中的 ``frozenset``，**不进存储 schema**（5 元组冻结不变）。
     纯函数、零副作用（只读传入的 ``fragments``）。
     """
-    contributors: Dict[str, set] = {}
+    contributors: Dict[str, Set[str]] = {}
     for source, fragment in fragments.items():
         for lemma in fragment:
             contributors.setdefault(lemma, set()).add(source)

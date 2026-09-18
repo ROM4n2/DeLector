@@ -21,7 +21,7 @@ level_hint 启发式（契约）：unknown_rate = 未知 token / tokens_total，
 （无信息输入按最乐观定级，避免除零）。
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, FrozenSet, List, Set
 
 # 允许作为 known 基准的考纲等级（与 exam_catalog 实存词表对应）。
 _ALLOWED_LEVELS = frozenset({"A1", "A2"})
@@ -31,7 +31,7 @@ _UNKNOWN_CAP = 60
 _RATE_ROUND = 3
 
 
-def _load_a1_lemmas() -> frozenset:
+def _load_a1_lemmas() -> FrozenSet[str]:
     """A1 考纲词 lemma 集（惰性）。源 = GOETHE_A1_VOCAB 条目 lemma 字段。"""
     from delector.data.a1_dict import GOETHE_A1_VOCAB
 
@@ -40,7 +40,7 @@ def _load_a1_lemmas() -> frozenset:
     return frozenset(lemmas)
 
 
-def _load_a2_lemmas() -> frozenset:
+def _load_a2_lemmas() -> FrozenSet[str]:
     """A2 考纲词 lemma 集（惰性）。源 = ``lexicon.official_level("A2")`` 的 lemma key。
 
     与 exam_catalog 的 A2 vocab count_fn 同源（官方备考域口径 736）；A2 词条对外只暴露
@@ -54,10 +54,10 @@ def _load_a2_lemmas() -> frozenset:
 
 
 # 模块级惰性缓存：首次访问才解析 210KB+ 数据模块，避免 import 期冷启动。
-_LEVEL_CACHE: Dict[str, frozenset] = {}
+_LEVEL_CACHE: Dict[str, FrozenSet[str]] = {}
 
 
-def _level_lemmas(level: str) -> frozenset:
+def _level_lemmas(level: str) -> FrozenSet[str]:
     cached = _LEVEL_CACHE.get(level)
     if cached is None:
         cached = _load_a1_lemmas() if level == "A1" else _load_a2_lemmas()
@@ -65,7 +65,7 @@ def _level_lemmas(level: str) -> frozenset:
     return cached
 
 
-async def run(payload: dict) -> dict:
+async def run(payload: Dict[str, Any]) -> Dict[str, Any]:
     """纯函数词表覆盖统计。
 
     payload:
@@ -109,7 +109,7 @@ async def run(payload: dict) -> dict:
         raise ValueError("payload['known_extra'] must be a list")
 
     # --- 已知 lemma 集 = ∪(levels 考纲词 lemma) ∪ known_extra（小写） ---
-    known_lemmas: set = set()
+    known_lemmas: Set[str] = set()
     for level in levels:
         known_lemmas |= _level_lemmas(level)
     for hw in known_extra:

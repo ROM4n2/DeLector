@@ -1,6 +1,7 @@
 import ipaddress
 import mimetypes
 import os
+from typing import Awaitable, Callable
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
@@ -14,7 +15,7 @@ mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("font/woff", ".woff")
 
 
-def load_env():
+def load_env() -> None:
     try:
         import dotenv
 
@@ -222,7 +223,9 @@ FRONTEND_NO_CACHE_TYPES = (
 
 # 注册走 create_app() 里的 app.middleware("http")(...)：app 是工厂产物，模块级没有
 # 可装饰的对象。
-async def add_frontend_no_cache_headers(request: Request, call_next):
+async def add_frontend_no_cache_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     response = await call_next(request)
     path = request.url.path
     # API 自己决定缓存语义，不由这里代劳；音频（.cache/audio 下的 MP3）也只经
@@ -274,7 +277,7 @@ def _is_private_origin(origin: str) -> bool:
 
 # 注册走 create_app() 里的 app.middleware("http")(...)：app 是工厂产物，模块级没有
 # 可装饰的对象。
-async def _wb_sync_cors(request: Request, call_next):
+async def _wb_sync_cors(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     path = request.url.path
     origin = request.headers.get("Origin", "")
     is_wb_path = path in _WB_CORS_EXACT_PATHS or path.startswith(_WB_CORS_PREFIXES)

@@ -14,8 +14,13 @@ O(1) memory lookup for zero-latency token inspection and CEFR difficulty tagging
 ``cefr: official > manual > ai``、富字段 ``manual > official > ai``（单一真值，不得各写一份）。
 """
 
+# mypy: disable-error-code="unused-ignore"
+# get_core_cefr_level 内 CORE_VOCAB_DB[key][0] 在 --follow-imports=skip 校验下为 Any（需行内
+# ignore），default 全仓口径下 merge_fragments 可解析（无 warn-return-any、ignore 变为 unused）
+# ——两模式并存，关闭本模块 unused-ignore 检查使行内豁免在两种校验口径下都稳定。
+
 import functools
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 # 共享合并纯函数（lexicon_merge 仅依赖 typing，无 delector 内部依赖，故无循环导入）。
 from delector.data.lexicon_merge import FIELD_PRIORITY, merge_fragments
@@ -28,7 +33,7 @@ from delector.data.official_vocab import OFFICIAL_VOCAB
 # 手编核心分片（R3/ADR-0012）：暴露为 CORE_VOCAB_MANUAL 供 lexicon 主干按来源注册。
 # 模块底部用 lexicon_merge.merge_fragments 与 CORE_VOCAB_EXT / OFFICIAL_VOCAB 字段级合并回
 # CORE_VOCAB_DB（= lexicon.LEXICON 的等价视图）。
-CORE_VOCAB_MANUAL: Dict[str, tuple] = {
+CORE_VOCAB_MANUAL: Dict[str, Tuple[str, str, Optional[str], Optional[str], str]] = {
     # ── A1 Core Nouns ──────────────────────────────────────────────────────────
     "tag": ("A1", "NOUN", "Masc", "-e", "白天，日子，一天"),
     "morgen": ("A1", "NOUN", "Masc", "-", "早晨，上午"),
@@ -528,7 +533,7 @@ def get_core_cefr_level(lemma: str) -> Optional[str]:
         return None
     key = lemma.strip().lower()
     if key in CORE_VOCAB_DB:
-        return CORE_VOCAB_DB[key][0]
+        return CORE_VOCAB_DB[key][0]  # type: ignore[no-any-return]  # merge_fragments 值元素泛化为 Any，运行时恒为 str
     return None
 
 

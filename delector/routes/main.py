@@ -492,7 +492,7 @@ def get_prep_matrix_with_cefr() -> Dict[str, Any]:
     """
     global _prep_matrix_response_cache
     if _prep_matrix_response_cache is None:
-        groups = []
+        groups: List[Dict[str, Any]] = []
         for praep, by_case in build_prep_matrix().items():
             entries_by_case = {
                 kasus: [{**e, "cefr": get_cefr_level(e["lemma"])} for e in entries]

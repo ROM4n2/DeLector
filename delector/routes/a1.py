@@ -3,9 +3,13 @@ DeLector - Goethe-Zertifikat A1 Workshop Router
 Endpoints for A1 Wortliste (702 vocab), Sprechen (Teil 2 & Teil 3), and Schreiben (Teil 1 Formular & Teil 2 E-Mail).
 """
 
+# mypy: disable-error-code="misc,untyped-decorator"
+# 仅 --follow-imports=skip 校验模式下 pydantic/fastapi 被降级为 Any 才误报
+# （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
+
 import os
 import tempfile
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -20,8 +24,8 @@ router = APIRouter(prefix="/api/a1", tags=["Goethe A1"])
 
 # --- Goethe-Zertifikat A1 Wortliste & Sprechen Lab ---
 @router.get("/topics")
-def get_a1_topics():
-    counts: dict = {}
+def get_a1_topics() -> List[Dict[str, Any]]:
+    counts: Dict[str, int] = {}
     for entry in a1_dict.GOETHE_A1_VOCAB.values():
         t = entry.get("topic", "phrases")
         counts[t] = counts.get(t, 0) + 1
@@ -38,7 +42,7 @@ def get_a1_topics():
 
 
 @router.get("/vocab")
-def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None):
+def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
     res = list(a1_dict.GOETHE_A1_VOCAB.values())
     if topic:
         res = [w for w in res if w.get("topic") == topic]
@@ -55,7 +59,7 @@ def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None):
 
 
 @router.get("/sprechen/teil2")
-def get_a1_sprechen_teil2(topic: Optional[str] = None):
+def get_a1_sprechen_teil2(topic: Optional[str] = None) -> Any:
     cards = a1_dict.A1_SPRECHEN_TEIL2
     if topic:
         cards = [c for c in cards if c.get("topic_id") == topic]
@@ -63,12 +67,12 @@ def get_a1_sprechen_teil2(topic: Optional[str] = None):
 
 
 @router.get("/sprechen/teil3")
-def get_a1_sprechen_teil3():
+def get_a1_sprechen_teil3() -> Any:
     return a1_dict.A1_SPRECHEN_TEIL3
 
 
 @router.get("/export/anki")
-def export_a1_anki():
+def export_a1_anki() -> FileResponse:
     from delector.core.utils import _attachment_headers
 
     tmp = tempfile.gettempdir()
@@ -94,12 +98,12 @@ class A1EmailDiagnoseReq(BaseModel):
 
 
 @router.get("/schreiben/teil1")
-def get_a1_schreiben_teil1():
+def get_a1_schreiben_teil1() -> Any:
     return a1_writing_dict.A1_SCHREIBEN_TEIL1
 
 
 @router.post("/schreiben/teil1/check")
-def check_a1_schreiben_teil1(req: A1FormularCheckReq):
+def check_a1_schreiben_teil1(req: A1FormularCheckReq) -> Dict[str, Any]:
     ex_map = {ex["id"]: ex for ex in a1_writing_dict.A1_SCHREIBEN_TEIL1}
     ex = ex_map.get(req.exercise_id)
     if not ex:
@@ -129,10 +133,10 @@ def check_a1_schreiben_teil1(req: A1FormularCheckReq):
 
 
 @router.get("/schreiben/teil2")
-def get_a1_schreiben_teil2():
+def get_a1_schreiben_teil2() -> Any:
     return a1_writing_dict.A1_SCHREIBEN_TEIL2
 
 
 @router.post("/schreiben/teil2/diagnose")
-def diagnose_a1_schreiben_teil2(req: A1EmailDiagnoseReq):
+def diagnose_a1_schreiben_teil2(req: A1EmailDiagnoseReq) -> Any:
     return analyze_a1_email(req.text[:2000], req.leitpunkte)

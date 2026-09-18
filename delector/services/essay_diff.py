@@ -3,8 +3,13 @@ DeLector - Sentence-level Diff & Merge Engine for Writing Desk (v3.12.0)
 100% pure Python stdlib (difflib) + syntax_tree.split_sentences_pure_python.
 """
 
+# mypy: disable-error-code="unused-ignore"
+# split_sentences_pure_python 在单文件 --follow-imports=skip 校验下为 Any（需行内 ignore），
+# 全量文件同跑时类型正确（ignore 变为 unused）——两模式并存，关闭本模块 unused-ignore 检查
+# 使行内豁免在两种校验口径下都稳定。
+
 import difflib
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List, Tuple
 
 from delector.nlp_engine.syntax_tree import split_sentences_pure_python
 
@@ -13,7 +18,7 @@ def split_sentences(text: str) -> List[str]:
     """Split text into sentences, preserving sentence-final punctuation."""
     if not text or not text.strip():
         return []
-    return split_sentences_pure_python(text)
+    return split_sentences_pure_python(text)  # type: ignore[no-any-return]  # --follow-imports=skip 下跨模块调用为 Any，运行时恒为 List[str]
 
 
 def join_sentences(sents: List[str]) -> str:
@@ -23,7 +28,7 @@ def join_sentences(sents: List[str]) -> str:
     return " ".join(s.strip() for s in sents if s and s.strip())
 
 
-def _decompose_opcodes(sents_orig: List[str], sents_corr: List[str]):
+def _decompose_opcodes(sents_orig: List[str], sents_corr: List[str]) -> Iterator[Tuple[str, List[str], List[str]]]:
     """Walk difflib opcodes, decomposing 1-to-1 sentence replacements and additions/deletions into individual hunks."""
     matcher = difflib.SequenceMatcher(None, sents_orig, sents_corr)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():

@@ -31,12 +31,20 @@
 """
 
 from collections.abc import Iterator, Mapping
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, FrozenSet, Iterable, Optional, Tuple
 
 # 主干对外 API（re-export，唯一实现仍在 delector.data.core_dict）：
 # ``get_core_cefr_level`` / ``lookup_core_vocab`` 是主干对外 API，实现唯一、禁止再复制，
 # 消费端统一 ``from delector.core.lexicon import ...``、不再直连分片（ADR-0012）。
-from delector.data.core_dict import CORE_VOCAB_MANUAL, get_core_cefr_level, lookup_core_vocab  # noqa: F401
+from delector.data.core_dict import (  # noqa: F401
+    CORE_VOCAB_MANUAL,
+)
+from delector.data.core_dict import (
+    get_core_cefr_level as get_core_cefr_level,
+)
+from delector.data.core_dict import (
+    lookup_core_vocab as lookup_core_vocab,
+)
 from delector.data.core_dict_ext import CORE_VOCAB_EXT
 from delector.data.lexicon_merge import FIELD_PRIORITY, merge_fragments, provenance_of
 from delector.data.official_vocab import (
@@ -52,10 +60,10 @@ from delector.data.official_vocab_rich import (
 )
 
 # 来源优先级：低 -> 高（后者覆盖前者）。
-SOURCE_PRIORITY: tuple = ("ai", "manual", "official")
+SOURCE_PRIORITY: Tuple[str, str, str] = ("ai", "manual", "official")
 
 # 分片注册表：键 = 来源名，值 = 该来源的 5 元组分片（直接引用，只读消费）。
-FRAGMENTS: Dict[str, Dict[str, tuple]] = {
+FRAGMENTS: Dict[str, Dict[str, Tuple[Any, ...]]] = {
     "ai": CORE_VOCAB_EXT,
     "manual": CORE_VOCAB_MANUAL,
     "official": OFFICIAL_VOCAB,
@@ -66,22 +74,22 @@ FRAGMENTS: Dict[str, Dict[str, tuple]] = {
 # 取值按字段分别取权威来源 —— cefr 官方优先、富字段手编优先。
 # ``merge_fragments`` 与 ``provenance_of`` 是 lexicon_merge 的共享纯函数（零内部依赖），
 # core_dict.CORE_VOCAB_DB 亦复用同一段逻辑，保证主干单真值（CORE_VOCAB_DB == LEXICON）。
-LEXICON: Dict[str, tuple] = merge_fragments(FRAGMENTS, FIELD_PRIORITY)
+LEXICON: Dict[str, Tuple[Any, ...]] = merge_fragments(FRAGMENTS, FIELD_PRIORITY)
 
 # provenance：lemma -> 贡献该 lemma 的来源集合（同 lemma 在几片出现就含几个来源名）。
-PROVENANCE: Dict[str, frozenset] = provenance_of(FRAGMENTS)
+PROVENANCE: Dict[str, FrozenSet[str]] = provenance_of(FRAGMENTS)
 
 
 # 富字段 side-car 分片注册表：来源 official_rich（A1/A2/B1 三常量，纯数据 · 只读消费）。
 # 不进 5 元组存储（ADR-0013 §5-1），仅供输出层富卡片 / 例句 / 音标。
-RICH_FRAGMENTS: Dict[str, Dict[str, dict]] = {
+RICH_FRAGMENTS: Dict[str, Dict[str, Dict[str, str]]] = {
     "official_rich_a1": OFFICIAL_RICH_A1,
     "official_rich_a2": OFFICIAL_RICH_A2,
     "official_rich_b1": OFFICIAL_RICH_B1,
 }
 
 
-def _merge_rich(fragments: Dict[str, Dict[str, dict]]) -> Dict[str, Dict[str, Any]]:
+def _merge_rich(fragments: Dict[str, Dict[str, Dict[str, str]]]) -> Dict[str, Dict[str, Any]]:
     """按分片注册顺序平面合并富字段（后者覆盖前者，key = lemma）。
 
     纯函数、零副作用：只读传入分片，返回全新 ``dict``。合并顺序由 ``fragments``
@@ -107,12 +115,12 @@ def rich_of(lemma: str) -> Optional[Dict[str, Any]]:
     return RICH.get(lemma)
 
 
-def sources_of(lemma: str) -> frozenset:
+def sources_of(lemma: str) -> FrozenSet[str]:
     """返回贡献该 lemma 的来源集合（未登记 lemma 返回空集）。"""
     return PROVENANCE.get(lemma, frozenset())
 
 
-def view(sources: Optional[Iterable[str]] = None) -> Dict[str, tuple]:
+def view(sources: Optional[Iterable[str]] = None) -> Dict[str, Tuple[Any, ...]]:
     """按来源过滤返回子视图（不复制数据以外的结构）。
 
     ``None`` 表示全部来源（等价于 ``LEXICON``）；否则仅合并选中的来源，
@@ -121,14 +129,14 @@ def view(sources: Optional[Iterable[str]] = None) -> Dict[str, tuple]:
     if sources is None:
         return dict(LEXICON)
     selected = set(sources)
-    result: Dict[str, tuple] = {}
+    result: Dict[str, Tuple[Any, ...]] = {}
     for source in SOURCE_PRIORITY:
         if source in selected:
             result.update(FRAGMENTS[source])
     return result
 
 
-def official_level(cefr: str) -> Dict[str, tuple]:
+def official_level(cefr: str) -> Dict[str, Tuple[Any, ...]]:
     """官方某等级的**原样**词表视图（各档保留官方原样、容忍跨档重叠）。
 
     - ``"A1"`` -> ``OFFICIAL_A1_VOCAB`` ⊕ ``OFFICIAL_A1_AUGMENT``（670）
@@ -144,7 +152,7 @@ def official_level(cefr: str) -> Dict[str, tuple]:
     """
     level = (cefr or "").strip().upper()
     if level == "A1":
-        a1_view: Dict[str, tuple] = {}
+        a1_view: Dict[str, Tuple[Any, ...]] = {}
         a1_view.update(OFFICIAL_A1_VOCAB)
         a1_view.update(OFFICIAL_A1_AUGMENT)
         return a1_view
@@ -153,7 +161,7 @@ def official_level(cefr: str) -> Dict[str, tuple]:
     return {}
 
 
-def core_ids_by_level() -> Dict[str, frozenset]:
+def core_ids_by_level() -> Dict[str, FrozenSet[str]]:
     """多级核心词白名单（预留结构）。
 
     现状：仅 A1 有名单（213，来自 ``a1_workbench_dict.A1_WORKBENCH_CORE_IDS``）；
@@ -193,7 +201,7 @@ def core_ids_by_level() -> Dict[str, frozenset]:
 #
 # 本视图把主干的**名词元数据**以只读旁路形式暴露给数据库层 join（ADR-0012 §4-4 派生）：
 # 只读派生，零网络 / 零 IO / 零 SQLite 写入，**不进 5 元组存储**（存储 schema 冻结红线不变）。
-class _LemmaMetaView(Mapping):
+class _LemmaMetaView(Mapping[str, Dict[str, Any]]):
     """``lemma -> {"gender", "plural"}`` 只读薄封装。
 
     直接派生自主干 ``LEXICON``（``__getitem__`` 取 ``v[2]`` / ``v[3]``），**不复制**整表

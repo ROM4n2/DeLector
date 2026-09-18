@@ -22,9 +22,11 @@ _EXPECTED_PUBLIC_NAMES = {
     "OFFICIAL_A2B1_VOCAB",
     "OFFICIAL_VOCAB",
     "Dict",
+    "Optional",
+    "Tuple",
 }
 # typing 导入的类型对象白名单：callable 但属类型注解，不算「可调用逻辑」。
-_ALLOWED_CALLABLE_IMPORTS = {"Dict"}
+_ALLOWED_CALLABLE_IMPORTS = {"Dict", "Optional", "Tuple"}
 
 
 def _assert_schema(db):

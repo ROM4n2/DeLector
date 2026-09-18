@@ -8,6 +8,10 @@ DeLector - WebRTC LAN 信令中继（Stage B M3）
 邮箱 id 取密钥的 sha256 摘要而非密钥原文：没必要让密钥在内存结构里再多留一份明文。
 """
 
+# mypy: disable-error-code="misc,untyped-decorator"
+# 仅 --follow-imports=skip 校验模式下 pydantic/fastapi 被降级为 Any 才误报
+# （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
+
 import hashlib
 import json
 import threading
@@ -59,7 +63,7 @@ class RtcSignalReq(BaseModel):
 
 
 @router.post("/signal")
-def rtc_post_signal(req: RtcSignalReq, request: Request):
+def rtc_post_signal(req: RtcSignalReq, request: Request) -> Dict[str, Any]:
     _verify_wb_key(request)
     if len(json.dumps(req.payload)) > MAX_RTC_PAYLOAD_BYTES:
         raise HTTPException(400, "信令 payload 超过最大体积限制 (32KB)")
@@ -73,7 +77,7 @@ def rtc_post_signal(req: RtcSignalReq, request: Request):
 
 
 @router.get("/signal")
-def rtc_get_signal(request: Request, client: str = "", after: float = 0):
+def rtc_get_signal(request: Request, client: str = "", after: float = 0) -> Dict[str, Any]:
     _verify_wb_key(request)
     with _rtc_lock:
         _purge(time.time())

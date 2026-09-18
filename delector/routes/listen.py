@@ -6,7 +6,11 @@
 （红线 7 写操作分类纪律）；材料端点纯只读。
 """
 
-from typing import Dict, List, Optional
+# mypy: disable-error-code="misc,untyped-decorator"
+# 仅 --follow-imports=skip 校验模式下 pydantic/fastapi 被降级为 Any 才误报
+# （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
+
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -85,7 +89,7 @@ def _collect_hoeren_sentences(data: Dict[str, object]) -> List[str]:
 
 
 @router.get("/materials")
-def api_listen_materials(level: Optional[str] = None):
+def api_listen_materials(level: Optional[str] = None) -> Dict[str, Any]:
     """材料聚合：encounter 短文 + hoeren 音频句库；level 为空返回全部。"""
     items = _encounter_materials(level=level)
     if not level or level == _HOEREN_LEVEL:
@@ -94,7 +98,7 @@ def api_listen_materials(level: Optional[str] = None):
 
 
 @router.get("/materials/{source_type}/{source_id}")
-def api_listen_material_detail(source_type: str, source_id: int):
+def api_listen_material_detail(source_type: str, source_id: int) -> Dict[str, Any]:
     """材料详情：content/题面切句后的句子列表；材料不存在 → 404 人话。"""
     if source_type == "encounter":
         row = get_encounter_text(source_id)
@@ -126,7 +130,7 @@ def api_listen_diagnose(req: DiagnoseRequest) -> ListenDiagnosis:
 
 
 @router.post("/trials")
-def api_listen_record_trial(req: ListenTrialRequest):
+def api_listen_record_trial(req: ListenTrialRequest) -> Dict[str, Any]:
     """听力微训成绩落盘：本地单用户记录，非敏感，不挂闸。score=correct/total。"""
     score = req.correct / req.total if req.total else 0.0
     trial_id = record_listen_trial(
@@ -143,6 +147,6 @@ def api_listen_record_trial(req: ListenTrialRequest):
 
 
 @router.get("/trials")
-def api_listen_trials(limit: int = 50):
+def api_listen_trials(limit: int = 50) -> Dict[str, Any]:
     """听力微训历史：created_at 倒序，limit 上限 100（钳制在 database 层）。"""
     return {"items": list_listen_trials(limit=limit)}

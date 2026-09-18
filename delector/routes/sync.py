@@ -3,6 +3,10 @@ DeLector - WebRTC LAN Sync Router
 Handles short-lived in-memory SDP exchange for zero-copy-paste P2P progress sync.
 """
 
+# mypy: disable-error-code="misc,untyped-decorator"
+# 仅 --follow-imports=skip 校验模式下 pydantic/fastapi 被降级为 Any 才误报
+# （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
+
 import json
 import secrets
 import threading
@@ -56,7 +60,7 @@ class SyncStoreReq(BaseModel):
 
 
 @router.get("/info")
-def sync_instance_info():
+def sync_instance_info() -> Dict[str, Any]:
     """返回本进程实例指纹，供前端判断两端是否连同一台 DeLector 服务端。"""
     return {
         "instance_id": _SYNC_INSTANCE_ID,
@@ -66,7 +70,7 @@ def sync_instance_info():
 
 
 @router.post("/store")
-def sync_store_sdp(req: SyncStoreReq, request: Request):
+def sync_store_sdp(req: SyncStoreReq, request: Request) -> Dict[str, Any]:
     _verify_wb_key(request)
     raw_json = json.dumps(req.sdp)
     if len(raw_json.encode("utf-8")) > MAX_SDP_PAYLOAD_BYTES:
@@ -84,7 +88,7 @@ def sync_store_sdp(req: SyncStoreReq, request: Request):
 
 
 @router.get("/fetch/{code}")
-def sync_fetch_sdp(code: str, request: Request):
+def sync_fetch_sdp(code: str, request: Request) -> Dict[str, Any]:
     _verify_wb_key(request)
     key = code.strip().upper()
     with _sync_lock:

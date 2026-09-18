@@ -6,7 +6,7 @@ Goethe A1-C1 Irregular Verbs Stammformen & German Compound Noun (Komposita) Spli
 
 import functools
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 # Import local Goethe core dictionary for compound base elements & CEFR lookup
 try:
@@ -606,7 +606,7 @@ IRREGULAR_VERBS_DB = IRREGULAR_VERBS
 # ==============================================================================
 
 
-class VerbTrio(tuple):
+class VerbTrio(tuple[str, str, str, str]):
     """
     Structured 4-tuple (Präteritum, Partizip II, Hilfsverb, Definition_zh)
     with named attribute access, dict indexing ('praeteritum', 'infinitiv'), and dictionary serialization.
@@ -620,7 +620,14 @@ class VerbTrio(tuple):
     hilfsverb: str
     definition_zh: str
 
-    def __new__(cls, praeteritum: str, partizip2: str, hilfsverb: str, definition_zh: str, infinitiv: str = ""):
+    def __new__(
+        cls,
+        praeteritum: str,
+        partizip2: str,
+        hilfsverb: str,
+        definition_zh: str,
+        infinitiv: str = "",
+    ) -> "VerbTrio":
         obj = super(VerbTrio, cls).__new__(cls, (praeteritum, partizip2, hilfsverb, definition_zh))
         obj.infinitiv = infinitiv
         obj.praeteritum = praeteritum
@@ -629,7 +636,7 @@ class VerbTrio(tuple):
         obj.definition_zh = definition_zh
         return obj
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, str]) -> str:  # type: ignore[override]  # tuple 的 slice 重载与按字符串键扩展不兼容，无消费方用 slice，签名已收窄
         if isinstance(item, str):
             if item == "infinitiv":
                 return self.infinitiv
@@ -644,7 +651,7 @@ class VerbTrio(tuple):
             raise KeyError(item)
         return super().__getitem__(item)
 
-    def get(self, key: str, default=None):
+    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         try:
             return self[key]
         except (KeyError, IndexError, TypeError):
@@ -1454,7 +1461,7 @@ def split_komposita(word: str, min_part_len: int = 3) -> List[Dict[str, Any]]:
     clean_word = word.strip()
     if len(clean_word) < 7:
         return []
-    return json.loads(_split_komposita_json_cached(clean_word, min_part_len))
+    return cast(List[Dict[str, Any]], json.loads(_split_komposita_json_cached(clean_word, min_part_len)))
 
 
 # ==============================================================================
@@ -1490,7 +1497,9 @@ def lookup_prep_collocations(lemma_or_word: str) -> List[Dict[str, str]]:
 # ==============================================================================
 # 5. Präpositionen-Matrix（按介词反转的浏览索引）
 # ==============================================================================
-def build_prep_matrix_core(collocations):
+def build_prep_matrix_core(
+    collocations: Dict[str, Tuple[Tuple[str, str, str, str], ...]],
+) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
     """build_prep_matrix 的无状态内核：接受任意 {lemma: ((praep, kasus, zh, bsp), ...)}。
 
     单独拆出来是为了让「空表降级」「排序」「守恒」这些行为可以在不 monkeypatch
@@ -1516,10 +1525,10 @@ def build_prep_matrix_core(collocations):
     return matrix
 
 
-_prep_matrix_cache = None
+_prep_matrix_cache: Optional[Dict[str, Dict[str, List[Dict[str, Any]]]]] = None
 
 
-def build_prep_matrix():
+def build_prep_matrix() -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
     """把 PREP_COLLOCATIONS 反转成 {praeposition: {kasus: [entry]}}。
 
     entry 含 reflexive 标记但不含 cefr —— CEFR 由 server 层注入

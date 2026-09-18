@@ -7,6 +7,12 @@
 Go Agent 与 Web 同机跑，localhost 可达。Phase 2 若需跨机再放宽闸。
 """
 
+# mypy: disable-error-code="misc,untyped-decorator"
+# 仅 --follow-imports=skip 校验模式下 pydantic/fastapi 被降级为 Any 才误报
+# （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
+
+from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -17,16 +23,16 @@ router = APIRouter(prefix="/api/tools", tags=["agent-tools"])
 
 
 class ToolCall(BaseModel):
-    payload: dict = {}
+    payload: Dict[str, Any] = {}
 
 
 @router.get("/")
-def list_tools() -> dict:
+def list_tools() -> Dict[str, Any]:
     return {"tools": sorted(TOOL_REGISTRY.keys())}
 
 
 @router.post("/{tool_name}", dependencies=[Depends(_require_localhost)])
-async def run_tool(tool_name: str, call: ToolCall) -> dict:
+async def run_tool(tool_name: str, call: ToolCall) -> Any:
     tool = TOOL_REGISTRY.get(tool_name)
     if tool is None:
         raise HTTPException(status_code=404, detail=f"unknown tool: {tool_name}")

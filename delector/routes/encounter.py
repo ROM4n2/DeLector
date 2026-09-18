@@ -17,7 +17,7 @@ word_count = 简单空白分词计数（服务端 cheap 计算），不做 spaCy
 
 import copy
 import json
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,6 +41,7 @@ CARD_PACK_SCHEMA = "encounter-pack/v1"
 _ALLOWED_LEVELS = ("A1", "A2", "B1")
 
 
+# --follow-imports=skip 下 pydantic 无 stub，BaseModel 为 Any，无法做子类化检查，豁免 misc
 class CreateTextRequest(BaseModel):
     title: str = Field(min_length=1)
     level: str = "A2"
@@ -48,11 +49,11 @@ class CreateTextRequest(BaseModel):
     content: str = Field(min_length=1)
 
 
-class ImportPackRequest(BaseModel):
-    pack: dict
+class ImportPackRequest(BaseModel):# 同上：BaseModel 为 Any
+    pack: Dict[str, Any]
 
 
-class PullPackRequest(BaseModel):
+class PullPackRequest(BaseModel):# 同上：BaseModel 为 Any
     """手机端出站拉取桌面货架的入参。"""
 
     desktop_base: str = Field(min_length=1)
@@ -75,7 +76,7 @@ def _count_words(content: str) -> int:
     return len(content.split())
 
 
-def validate_pack(pack) -> None:
+def validate_pack(pack: Dict[str, Any]) -> None:
     """校验一个 encounter-pack/v1 卡包的结构（不校验 estimated_cefr —— 那在路由归一）。
 
     与 A1 import_encounter_pack 的 guard 语义一致：缺必需键抛 ValueError，文案用中文。
@@ -97,7 +98,7 @@ def validate_pack(pack) -> None:
         raise ValueError("pack.article.raw_text 必填且不能为空")
 
 
-def _to_list_payload(row: dict) -> dict:
+def _to_list_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     """把 store 行压缩成列表端点所需的元数据（不含 content/pack_json）。"""
     return {
         "id": row["id"],
@@ -109,15 +110,16 @@ def _to_list_payload(row: dict) -> dict:
     }
 
 
+# --follow-imports=skip 下 fastapi 装饰器无类型，无法静态检查，豁免 untyped-decorator
 @router.get("/texts")
-def api_list_texts(level: Optional[str] = None) -> dict:
+def api_list_texts(level: Optional[str] = None) -> Dict[str, Any]:
     """遇见区短文列表：可传 ?level=A2 过滤，含服务端算的 word_count。"""
     rows = list_encounter_texts(level=level)
     return {"texts": [_to_list_payload(r) for r in rows]}
 
 
-@router.get("/texts/{text_id:int}")
-def api_get_text(text_id: int) -> dict:
+@router.get("/texts/{text_id:int}")# 同上：fastapi 装饰器为 Any
+def api_get_text(text_id: int) -> Dict[str, Any]:
     """取单篇短文（含 content / pack_json），缺失 404。"""
     row = get_encounter_text(text_id)
     if row is None:
@@ -132,7 +134,7 @@ def api_get_text(text_id: int) -> dict:
     }
 
 
-def _annotate_tokens(sent_payload: dict) -> list:
+def _annotate_tokens(sent_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     """把 process_german_text 产出的单句 tokens 映射成 annotate 需要的
     {text, lemma, pos}（标点也保留，前端自行过滤）；跳过纯空白伪 token。"""
     out = []
@@ -143,8 +145,8 @@ def _annotate_tokens(sent_payload: dict) -> list:
     return out
 
 
-@router.get("/texts/{text_id:int}/annotate")
-def api_annotate_text(text_id: int) -> dict:
+@router.get("/texts/{text_id:int}/annotate")# 同上：fastapi 装饰器为 Any
+def api_annotate_text(text_id: int) -> Dict[str, Any]:
     """逐句逐 token 注解（lemma + 粗粒度 POS），前端据此做已背词匹配。
 
     读取 encounter_texts 正文，跑 spaCy（P0 直跑、禁缓存）。sentence idx 0-based
@@ -167,8 +169,9 @@ def api_annotate_text(text_id: int) -> dict:
     }
 
 
+# --follow-imports=skip 下 fastapi 装饰器无类型，无法静态检查，豁免 untyped-decorator
 @router.post("/texts", status_code=201, dependencies=[Depends(_require_localhost)])
-def api_create_text(req: CreateTextRequest) -> dict:
+def api_create_text(req: CreateTextRequest) -> Dict[str, Any]:
     """本机新增一篇手工短文，返回 {id,title,level}。"""
     level = _normalize_level(req.level)
     new_id = create_encounter_text(
@@ -180,8 +183,8 @@ def api_create_text(req: CreateTextRequest) -> dict:
     return {"id": new_id, "title": req.title.strip(), "level": level}
 
 
-@router.post("/import-pack", dependencies=[Depends(_require_localhost)])
-def api_import_pack(req: ImportPackRequest) -> dict:
+@router.post("/import-pack", dependencies=[Depends(_require_localhost)])# fastapi 装饰器为 Any
+def api_import_pack(req: ImportPackRequest) -> Dict[str, Any]:
     """把 encounter-pack/v1 整包落库成一篇短文。
 
     落库前先本地校验结构 + 把 estimated_cefr 规一到白名单大写（A1/A2/B1）。
@@ -219,7 +222,7 @@ def api_import_pack(req: ImportPackRequest) -> dict:
 # 搬到手机」，不是通用短文导出；手工短文没有 pack_id、搬过去也无法幂等去重。
 
 
-def _shelf_entry(row: dict) -> Optional[dict]:
+def _shelf_entry(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """把一行 encounter_texts 压缩成货架清单项；非真 pack 行返回 None（不进清单）。
 
     只暴露跨机搬运必需的元数据（pack_id/title/level/word_count），**绝不返回
@@ -242,8 +245,8 @@ def _shelf_entry(row: dict) -> Optional[dict]:
     }
 
 
-@router.get("/packs")
-def api_list_packs() -> dict:
+@router.get("/packs")# 同上：fastapi 装饰器为 Any
+def api_list_packs() -> Dict[str, Any]:
     """桌面货架清单（**局域网只读**，不挂本机闸）。
 
     返回 {"packs": [{pack_id, title, level, word_count}, ...]}。只列真正的
@@ -258,8 +261,8 @@ def api_list_packs() -> dict:
     return {"packs": entries}
 
 
-@router.get("/packs/{pack_id}")
-def api_get_pack(pack_id: str) -> dict:
+@router.get("/packs/{pack_id}")# 同上：fastapi 装饰器为 Any
+def api_get_pack(pack_id: str) -> Dict[str, Any]:
     """取货架上单个完整 encounter-pack/v1（**局域网只读**，不挂本机闸）。
 
     从任意 pack_json 可解析且 pack_id 匹配的行反序列化返回；未知 pack_id → 404。
@@ -309,8 +312,8 @@ def _shelf_get(url: str) -> Any:
         raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT) from exc
 
 
-@router.post("/pull-pack", dependencies=[Depends(_require_localhost)])
-def api_pull_pack(req: PullPackRequest) -> dict:
+@router.post("/pull-pack", dependencies=[Depends(_require_localhost)])# fastapi 装饰器为 Any
+def api_pull_pack(req: PullPackRequest) -> Dict[str, Any]:
     """手机端出站拉取桌面货架（**挂本机闸**：写路径只允许本机触发）。
 
     - pack_id 为空 → 代理桌面货架清单（出站 GET {desktop_base}/api/encounter/packs），

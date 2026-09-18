@@ -4,12 +4,12 @@
 import importlib
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 try:
     import spacy
 except ImportError:
-    # spaCy 缺失时的运行时降级占位（红线 1：降级路径是有意设计）——带理由豁免。
+    # spaCy 缺失时的运行时降级占位（红线 1：降级路径是有意设计）。
     spacy = None  # type: ignore[assignment]
 
 from delector.core.lexicon import get_core_cefr_level, lookup_core_vocab
@@ -23,7 +23,7 @@ SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")
 AUTO_DOWNLOAD_MODEL = "de_core_news_sm"
 
 
-def _load_spacy_model(name: str):
+def _load_spacy_model(name: str) -> Tuple[Any, str]:
     """加载指定德语模型，返回 (nlp, 加载方式描述)；全部策略失败则抛 RuntimeError。
 
     为什么不能只用 spacy.load(name)：它走 spacy.util.is_package()，查的是
@@ -80,7 +80,7 @@ if spacy is not None:
         try:
             nlp, how = _load_spacy_model(candidate)
             NLP_ENGINE = "spacy"
-            NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}"
+            NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}"  # type: ignore[attr-defined]  # spaCy 无 __init__ 类型导出
             break
         except Exception as e:
             load_errors.append(str(e))
@@ -92,12 +92,12 @@ if spacy is not None:
             NLP_ENGINE_DETAIL = "spaCy 已装但模型加载失败，降级为纯 Python：" + " | ".join(load_errors)
         else:
             try:
-                from spacy.cli import download
+                from spacy.cli import download  # type: ignore[attr-defined]  # spacy.cli 不显式导出 download
 
                 download(AUTO_DOWNLOAD_MODEL)
                 nlp, how = _load_spacy_model(AUTO_DOWNLOAD_MODEL)
                 NLP_ENGINE = "spacy"
-                NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}（自动下载）"
+                NLP_ENGINE_DETAIL = f"spaCy {spacy.__version__} + {how}（自动下载）"  # type: ignore[attr-defined]
             except Exception as e:
                 NLP_ENGINE_DETAIL = f"spaCy 已装但模型不可用，降级为纯 Python：{e}"
 
@@ -325,7 +325,7 @@ def get_cefr_level(lemma: str) -> str:
     return "A1"
 
 
-def calculate_cefr_stats(tokens_list: list) -> Dict[str, Any]:
+def calculate_cefr_stats(tokens_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     counts = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
     words = [t for t in tokens_list if t.get("cefr_level")]
     total_words = len(words)

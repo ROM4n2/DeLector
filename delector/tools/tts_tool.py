@@ -2,11 +2,12 @@
 """TTS tool：薄包装 services.tts.synthesize（标准库版 Edge TTS 客户端）。"""
 
 import base64
+from typing import Any, Dict
 
 from delector.services.tts import synthesize
 
 
-async def run(payload: dict) -> dict:
+async def run(payload: Dict[str, Any]) -> Dict[str, Any]:
     text = payload["text"]
     voice = payload.get("voice", "de-DE-KatjaNeural")
     rate = payload.get("rate", "+0%")
