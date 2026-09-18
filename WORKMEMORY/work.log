@@ -505,3 +505,19 @@ Caps: filesystem-read, filesystem-write
 事件：作者覆盖安装 v5.7.7 复测确认成功——长难句工坊从「轻量分析」切回**完整 spaCy 解析**（path:"spacy"），dist-info 缺失根因修复闭环。
 验证要点：v5.7.0 起 Android 长难句工坊首次真正吃到 spaCy 完整句法树（此前全走 pure 降级）；此前五连发（v5.7.0→v5.7.6）都没触到真根因，最终由「诊断 getter 修复（v5.7.6，from-import 按值拷贝）→ 诊断小字暴露 E050 → dist-info 缺失（v5.7.7）」三段定位完成。此坑已沉淀 vault Inbox 2026-09-15。
 遗留：feature/workbench-vocab-single-source 分支仍持有 ADR-0011 收官改动待合 master；真用户试用收三问反馈（最高价值待办）。
+
+### 2026-09-15 08:17 | (补记) | RELEASE_v5.8.0（ADR-0011 词库单一真相化）
+Caps: filesystem-read
+事件：work.log 缺口回填（v5.8.0–5.9.2 事件由 git log v5.7.7..v5.9.2 共 63 commits 重建）。v5.8.0：ADR-0011 词库单一真相化 + 等级判定数据驱动 + B1 入口（工作台第 5 档 + 备考域 B1 页签 1712 词，PR #46 合入 master）。门禁 882+1（v5.7.7 基线 839→882，净增 43：A1 数据模块 + 契约统一 + normalizeWord 幂等 + SCOPE_PREDICATES + B1 全链）。Android 需覆盖安装（B1 入口 + wb.schema.v1 迁移）。
+
+### 2026-09-16 13:25 | (补记) | RELEASE_v5.9.0（ADR-0012 词汇主干 + ADR-0013 富字段契约）
+Caps: filesystem-read
+事件：官方歌德 A1/A2/B1 词表迁入（备考域/工作台 A2 736、B1 1617 官方精选，/api/a2/vocab 默认官方）；输出契约 9→11 字段（新增 ipa/example_zh，de 统一德语例句）；IPA 表示法全局统一（去 tie-bar）；A1 卡片补齐名词 gender/plural（97.67%）；对账工具 + 生成脚本归档（tools/gen_rich.py 可重放）。测试基线 972+1（882→972 净增 90）。PR #55/#56/#57/#58。
+
+### 2026-09-16 14:17 | (补记) | RELEASE_v5.9.1（A1 等级标签 + README 瘦身）
+Caps: filesystem-read
+事件：工作台词库补 A1 等级标签 a1（「全部标签」可按等级筛：a1/a2/b1=等级、core=核心、reader=精读生词）+ 修 reader 谓词 custom 兜底（22 条补缺词不再误入精读生词档）；README 433→131 行瘦身 + 版本历史迁出 CHANGELOG.md（DOC-GOVERNANCE 合规）。测试基线 973+1。Android 需覆盖安装（改动含 static）。
+
+### 2026-09-17 06:01 | (补记) | RELEASE_v5.9.2（ADR-0014 A1 取数统一 + 富字段回填修复）
+Caps: filesystem-read
+事件：ADR-0014 词表存储边界与 A1 取数统一——B-S1 输出契约 11→12 字段（+letter）；B-S2 A1 首装 API 化（API 优先 + 内联兜底 + 缓存 + 可恢复重试）；B-S3 内联种子降级为离线 fallback + 三条不得当主路径守卫；A2/B1 富字段回填（修存量词条永远缺例句）+ 空例句块不渲染；A1 早退闸修复（已 server 落盘设备每次启动重新合并富字段，PR #61）。测试基线 973+1。遗留：预置包 LLM gloss 富化仍开放；真用户试用三问反馈仍未启动。
