@@ -37,6 +37,7 @@ import importlib.util
 import json
 import os
 import re
+from typing import Any, Dict, List, Optional, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -47,12 +48,12 @@ _ba1 = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_ba1)
 _norm_lemma = _ba1.normalize_lemma
 
-def normalize_a1(hw):
+def normalize_a1(hw: str) -> str:
     """Mirror build_a1.parse_entry's final lemma derivation exactly (sich- prefix for reflexive)."""
     lemma, _article, _rest, reflexive, _plural_only = _norm_lemma(hw)
     if reflexive and not lemma.startswith('sich-'):
         lemma = 'sich-' + lemma
-    return lemma
+    return lemma  # type: ignore[no-any-return]  # 外部 helper normalize_lemma 无注解→Any；按契约 lemma 恒为 str
 
 # ---------- reuse build_a2b1_v2.parse_entry (exact A2/B1 lemma keys, no sich- prefix) ----------
 _spec2 = importlib.util.spec_from_file_location("build_a2b1_v2", os.path.join(HERE, 'build_a2b1_v2.py'))
@@ -60,7 +61,7 @@ assert _spec2 is not None and _spec2.loader is not None  # 归档快照：缺外
 _ba2 = importlib.util.module_from_spec(_spec2)
 _spec2.loader.exec_module(_ba2)
 
-def raw_to_lemma_a2b1(hw):
+def raw_to_lemma_a2b1(hw: str) -> Optional[str]:
     """Mirror build_a2b1_v2.parse_entry lemma derivation (article/reflexive strip, spaces->hyphen)."""
     pos_label = "n." if _ba2.ART_RE.match(hw) else "v."
     r, err = _ba2.parse_entry({"hw": hw, "pos_label": pos_label, "zh": ""})
@@ -74,21 +75,21 @@ assert _specg is not None and _specg.loader is not None  # 归档快照：缺外
 _g2p = importlib.util.module_from_spec(_specg)
 _specg.loader.exec_module(_g2p)
 
-def g2p_ipa(lem):
+def g2p_ipa(lem: str) -> str:
     ipa, unc = _g2p.transcribe_lemma(lem)
     return "" if (unc or not ipa) else ipa
 
 # simple normalizer retained for A2/B1 headwords (matches build_a2b1_v2 normalization)
 ART = re.compile(r'^(der|die|das|den|dem|des|ein|eine|einen|einem|einer)\s+', re.I)
-def normalize(hw):
+def normalize(hw: str) -> str:
     s = hw.strip()
     s = re.sub(r'^\(sich\)\s*', '', s, flags=re.I)
     s = ART.sub('', s).strip()
     s = s.split(',')[0].strip()
     return s.lower()
 
-def load_fragment(path, const):
-    ns: dict = {}
+def load_fragment(path: str, const: str) -> Any:
+    ns: Dict[str, Any] = {}
     exec(open(path, encoding='utf-8').read(), ns)
     return ns[const]
 
@@ -103,8 +104,8 @@ for fn in os.listdir(A1_TR_DIR):
         if isinstance(d, dict):
             a1_tr.update(d)
 # build A1 lookups (normalized with normalize_a1 so keys == a1_fragment lemma keys)
-a1_tr_ex = {}      # lemma -> (de, zh)  from tr [de,zh]
-a1_er_ex: dict = {}       # lemma -> [de, ...] from entries_raw
+a1_tr_ex: Dict[str, Tuple[str, str]] = {}      # lemma -> (de, zh)  from tr [de,zh]
+a1_er_ex: Dict[str, List[str]] = {}       # lemma -> [de, ...] from entries_raw
 for k, v in a1_tr.items():
     lem = normalize_a1(k)
     sense = v[0] if v and isinstance(v, list) else None
@@ -122,7 +123,7 @@ for e in a1_entries:
 ENRICH = json.load(open('D:/Ran/tools/data/a2b1_enrich.json', encoding='utf-8'))
 a2_entries = json.load(open('D:/Ran/Goethe_A2/_build/entries_raw.json', encoding='utf-8'))['entries']
 b1_entries = json.load(open('D:/Ran/Goethe_B1/_build/entries_raw.json', encoding='utf-8'))['entries']
-a2b1_er_ex: dict = {}
+a2b1_er_ex: Dict[str, List[str]] = {}
 for e in a2_entries + b1_entries:
     lem = normalize(e['headword'])
     a2b1_er_ex.setdefault(lem, []).extend(e.get('examples') or [])
@@ -134,7 +135,7 @@ A2_DB = {k: v for k, v in A2B1_DB.items() if v[0] == 'A2'}
 B1_DB = {k: v for k, v in A2B1_DB.items() if v[0] == 'B1'}
 
 # ---------- IPA maps (g2p rule-based; keyed by RAW headword) -> lemma->ipa ----------
-def load_ipa(path):
+def load_ipa(path: str) -> Dict[str, str]:
     return json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
 
 IPA_SRC = {
@@ -143,8 +144,8 @@ IPA_SRC = {
     'B1': load_ipa('D:/Ran/Goethe_B1/_build/ipa_map.json'),
 }
 
-def build_lemma_ipa(ipa_map, level):
-    out: dict = {}
+def build_lemma_ipa(ipa_map: Dict[str, str], level: str) -> Dict[str, str]:
+    out: Dict[str, str] = {}
     for hw, ipa in ipa_map.items():
         if not ipa or ipa == '待确认':
             continue                       # 待确认 = 无法确定性推导 -> 留空，不编造
@@ -167,7 +168,7 @@ for IPA, db in ((IPA_A1, A1_DB), (IPA_A2, A2_DB), (IPA_B1, B1_DB)):
             if ipa:
                 IPA[lem] = ipa
 
-def lookup(lemma, tr_ex, er_ex):
+def lookup(lemma: str, tr_ex: Dict[str, Tuple[str, str]], er_ex: Dict[str, List[str]]) -> Tuple[str, str]:
     if lemma in tr_ex:
         return tr_ex[lemma][0], tr_ex[lemma][1]
     if lemma in er_ex and er_ex[lemma]:
@@ -181,7 +182,12 @@ def lookup(lemma, tr_ex, er_ex):
             return er_ex[alt][0], ''
     return '', ''
 
-def build(db, tr_ex, er_ex, ipa_map):
+def build(
+    db: Dict[str, Any],
+    tr_ex: Dict[str, Tuple[str, str]],
+    er_ex: Dict[str, List[str]],
+    ipa_map: Dict[str, str],
+) -> Dict[str, Dict[str, str]]:
     out = {}
     for lem in db:
         de, zh = lookup(lem, tr_ex, er_ex)
@@ -192,7 +198,7 @@ def build(db, tr_ex, er_ex, ipa_map):
 RICH_A1 = build(A1_DB, a1_tr_ex, a1_er_ex, IPA_A1)
 
 # ENRICH is keyed by lemma with {ex:[{de,zh}]}; override A2/B1 from it for clean de+zh
-def from_enrich(db, enrich, ipa_map):
+def from_enrich(db: Dict[str, Any], enrich: Any, ipa_map: Dict[str, str]) -> Dict[str, Dict[str, str]]:
     out = {}
     for lem in db:
         rec = enrich.get(lem)
@@ -208,7 +214,7 @@ RICH_A2 = from_enrich(A2_DB, ENRICH, IPA_A2)
 RICH_B1 = from_enrich(B1_DB, ENRICH, IPA_B1)
 
 # ---------- emit ----------
-def stats(name, d):
+def stats(name: str, d: Dict[str, Dict[str, str]]) -> None:
     n = len(d)
     hde = sum(1 for v in d.values() if v['example_de'])
     hzh = sum(1 for v in d.values() if v['example_zh'])
@@ -229,7 +235,7 @@ missing_a1 = [lem for lem in sorted(RICH_A1) if not RICH_A1[lem]['example_de'] a
 if missing_a1:
     print('\nA1 still without any example:', missing_a1)
 
-def dump(name, d):
+def dump(name: str, d: Dict[str, Dict[str, str]]) -> str:
     lines = [f'{name} = {{']
     for lem in sorted(d):
         v = d[lem]

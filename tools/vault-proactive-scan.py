@@ -32,31 +32,31 @@ class Colors:
     BOLD = "\033[1m"
 
 
-issues: list = []
-warnings: list = []
-passes: list = []
+issues: list[tuple[str, str, str]] = []
+warnings: list[tuple[str, str, str]] = []
+passes: list[tuple[str, str]] = []
 
 
-def record_pass(category, desc):
+def record_pass(category: str, desc: str) -> None:
     passes.append((category, desc))
     print(f"  {Colors.GREEN}[PASS]{Colors.END} {desc}")
 
 
-def record_warn(category, desc, fix=""):
+def record_warn(category: str, desc: str, fix: str = "") -> None:
     warnings.append((category, desc, fix))
     print(f"  {Colors.YELLOW}[WARN]{Colors.END} {desc}")
     if fix:
         print(f"     {Colors.CYAN}↳ 建议: {fix}{Colors.END}")
 
 
-def record_issue(category, desc, fix=""):
+def record_issue(category: str, desc: str, fix: str = "") -> None:
     issues.append((category, desc, fix))
     print(f"  {Colors.RED}[FAIL]{Colors.END} {desc}")
     if fix:
         print(f"     {Colors.CYAN}↳ 修复方案: {fix}{Colors.END}")
 
 
-def scan_section(title):
+def scan_section(title: str) -> None:
     print(
         f"\n{Colors.BOLD}{Colors.BLUE}======================================================================{Colors.END}"
     )
@@ -66,7 +66,7 @@ def scan_section(title):
     )
 
 
-def check_security():
+def check_security() -> None:
     scan_section("1. 安全合规与密钥防线 (Security & Secret Scans)")
 
     hook_path = ROOT / ".githooks" / "pre-commit"
@@ -114,7 +114,7 @@ def check_security():
         record_issue("SEC", f"_require_localhost 异常: {e}")
 
 
-def check_data_and_backup():
+def check_data_and_backup() -> None:
     scan_section("2. 数据架构与备份自洽性 (Data Architecture & Backup Integrity)")
 
     try:
@@ -189,7 +189,7 @@ def check_data_and_backup():
         record_issue("DATA", f"数据架构扫描异常: {e}")
 
 
-def check_db_concurrency():
+def check_db_concurrency() -> None:
     scan_section("3. 数据库并发与锁防护 (Database Concurrency & Locking)")
 
     try:
@@ -237,7 +237,7 @@ def check_db_concurrency():
         record_issue("DB", f"数据库检查异常: {e}")
 
 
-def check_frontend_consistency():
+def check_frontend_consistency() -> None:
     scan_section("4. 前端工程与跨端一致性 (Frontend & Cross-Platform Sync)")
 
     versions = {}
@@ -274,7 +274,7 @@ def check_frontend_consistency():
         record_issue("FE", f"缓存中间件未就绪: {e}")
 
 
-def check_nlp_and_linguistics():
+def check_nlp_and_linguistics() -> None:
     scan_section("5. NLP 引擎与降级路径 (NLP & Linguistics Pipelines)")
 
     try:
@@ -304,7 +304,7 @@ def check_nlp_and_linguistics():
         record_issue("NLP", f"NLP 模块异常: {e}")
 
 
-def check_hygiene_and_tests():
+def check_hygiene_and_tests() -> None:
     scan_section("6. 代码卫生与测试套件执行 (Code Hygiene & Pytest Suite)")
 
     try:
@@ -342,7 +342,7 @@ def check_hygiene_and_tests():
         record_warn("TEST", f"Pytest 收集异常: {e}")
 
 
-def main():
+def main() -> None:
     print(f"{Colors.BOLD}{Colors.HEADER}")
     print("========================================================================")
     print("        DeLector 360° 全方位技术债与架构健康扫描器 (Proactive Scan)    ")

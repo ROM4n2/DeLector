@@ -65,14 +65,18 @@ jobs:
 
       # Mypy 类型门禁（2026-09-13 mypy-cleanup 起步；2026-09-18 strict 清账升级）。
       # 开发期工具：CI 内单独安装，**不进 requirements.txt**（Android 运行时纯净）。
-      # 档位：--strict 覆盖全仓 53 源文件零错误（250→0，见 docs/specs/2026-09-18-
-      # mypy-strict-annotation-sweep-design.md）；pyproject.toml [tool.mypy] 保留
-      # 适度档基线配置（tests/tools 未 strict，沿用配置档）。
+      # 档位：--strict 覆盖 delector + tools 零错误（delector 250→0、tools 108→0，
+      # 见 docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md）；tests
+      # 保持适度档（pytest 测试函数注解收益低，另立评估），--follow-imports=skip
+      # 只查 tests 自身（避免 delector 的 strict ignore 在配置档下 unused 冲突）。
       - name: Install Mypy
         run: pip install mypy
 
-      - name: Mypy type gate
-        run: mypy --strict delector
+      - name: Mypy type gate (strict)
+        run: mypy --strict delector tools
+
+      - name: Mypy type gate (tests, config baseline)
+        run: mypy --follow-imports=skip tests
 
       # 测试需要德语 spaCy 模型，与 build-release.yml 同源
       - name: Download spaCy German model

@@ -1,3 +1,8 @@
+# 本文件含「正常模式需要、--follow-imports=skip 下 unused」的动态面 type: ignore
+# （BaseRoute 静态无 endpoint/path、运行时必为 APIRoute 的动态访问）——门禁用
+# `mypy --follow-imports=skip tests` 跑，skip 下 fastapi 降 Any 使这些 ignore 变
+# unused，故文件级豁免 unused-ignore（其它错误码仍全查）。
+# mypy: disable-error-code="unused-ignore"
 import gc
 import ipaddress
 import json

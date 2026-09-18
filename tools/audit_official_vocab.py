@@ -42,7 +42,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 # 允许从仓库根直接 `python tools/audit_official_vocab.py` 运行：把仓库根加入 sys.path。
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -77,7 +77,7 @@ _MAX_CEFR_DETAILS = 50
 _MAX_NOISE_DETAILS = 100
 
 
-def non_german_chars(lemma: str) -> tuple:
+def non_german_chars(lemma: str) -> Tuple[str, ...]:
     """返回 lemma 中不属于德语字符集的字符（保序、去重）。纯函数。"""
     extras: List[str] = []
     for ch in lemma:
@@ -99,7 +99,7 @@ def noise_reason(lemma: str) -> Optional[str]:
     return None
 
 
-def _pairwise(fragments: Mapping[str, Mapping[str, tuple]], names: List[str]) -> Dict[str, Any]:
+def _pairwise(fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]], names: List[str]) -> Dict[str, Any]:
     """两两来源的 ``intersection`` / ``only_a`` / ``only_b``（条数）。纯函数。"""
     result: Dict[str, Any] = {}
     for i in range(len(names)):
@@ -116,7 +116,7 @@ def _pairwise(fragments: Mapping[str, Mapping[str, tuple]], names: List[str]) ->
     return result
 
 
-def _cefr_conflicts(fragments: Mapping[str, Mapping[str, tuple]], names: List[str]) -> Dict[str, Any]:
+def _cefr_conflicts(fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]], names: List[str]) -> Dict[str, Any]:
     """同 lemma 在不同来源 cefr 不一致的明细（汇总条数 + 可截断明细）。纯函数。"""
     by_lemma: Dict[str, Dict[str, Any]] = {}
     for name in names:
@@ -134,7 +134,7 @@ def _cefr_conflicts(fragments: Mapping[str, Mapping[str, tuple]], names: List[st
     }
 
 
-def _noise_candidates(fragments: Mapping[str, Mapping[str, tuple]], names: List[str]) -> Dict[str, Any]:
+def _noise_candidates(fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]], names: List[str]) -> Dict[str, Any]:
     """疑似噪声 lemma（每项附来源与原因；汇总条数 + 可截断明细）。纯函数。"""
     details: List[Dict[str, Any]] = []
     for name in names:
@@ -149,7 +149,7 @@ def _noise_candidates(fragments: Mapping[str, Mapping[str, tuple]], names: List[
     }
 
 
-def audit(fragments: Mapping[str, Mapping[str, tuple]]) -> Dict[str, Any]:
+def audit(fragments: Mapping[str, Mapping[str, Tuple[Any, ...]]]) -> Dict[str, Any]:
     """对账多来源分片，返回结构化结果（纯函数、零副作用、确定性）。
 
     ``fragments``：``{来源名: {lemma: 5 元组}}``（键序即来源顺序，用于 pairwise 命名）。
