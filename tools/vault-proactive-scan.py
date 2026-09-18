@@ -83,7 +83,7 @@ def check_security() -> None:
         r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
         r"|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
     )
-    found_keys = []
+    found_keys: dict[str, tuple[Path, int, str]] = {}
     for ext in (".py", ".js", ".html", ".css", ".json", ".xml", ".md"):
         for p in ROOT.rglob(f"*{ext}"):
             if any(ign in p.parts for ign in (".git", "__pycache__", ".cache", "venv", ".pytest_cache")):
@@ -95,14 +95,17 @@ def check_security() -> None:
                         continue
                     m = KEY_REGEX.search(line)
                     if m:
-                        found_keys.append((p.relative_to(ROOT), i + 1, m.group(0)[:8] + "..."))
+                        # 按密钥全文去重：同一密钥多处/多行命中只报首次位置，
+                        # 避免一密多行刷屏；截断仅用于展示，去重键是完整密钥。
+                        key = m.group(0)
+                        found_keys.setdefault(key, (p.relative_to(ROOT), i + 1, key[:12] + "..."))
             except Exception:
                 pass
 
     if not found_keys:
         record_pass("SEC", "全仓库源码无任何硬编码 API Key / Token / 私钥")
     else:
-        for f, ln, k in found_keys:
+        for f, ln, k in found_keys.values():
             record_issue("SEC", f"{f}:{ln} 疑似存在硬编码密钥 ({k})", "立即轮换密钥并移入 .env / app_settings")
 
     try:
@@ -257,9 +260,21 @@ def check_frontend_consistency() -> None:
         if m:
             versions["build.gradle"] = "v" + m.group(1)
 
-        unique_vers = set(versions.values())
-        if len(unique_vers) == 1:
-            record_pass("FE", f"多端版本号严密一致 ({next(iter(unique_vers))})：index.html / sw.js / build.gradle")
+        # 一致性判定前提是三端都匹配到版本号；正则不命中即缺条目。
+        # 缺条目时（含全部缺失 → versions={}）不再误报「不一致」，
+        # 而是降级为 WARN 说明哪个文件没匹配上，便于人工核查正则漂移。
+        if len(versions) < 2:
+            missing = [name for name in ("index.html", "sw.js", "build.gradle") if name not in versions]
+            record_warn(
+                "FE",
+                f"版本号校验不完整（{', '.join(missing)} 未匹配），跳过一致性判定",
+                "核查对应正则是否随版本格式漂移",
+            )
+        elif len(set(versions.values())) == 1:
+            record_pass(
+                "FE",
+                f"多端版本号严密一致 ({next(iter(set(versions.values())))}): index.html / sw.js / build.gradle",
+            )
         else:
             record_issue("FE", f"多端版本号不一致: {versions}", "统一同步版本号")
     except Exception as e:
