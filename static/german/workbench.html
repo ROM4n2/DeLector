@@ -1054,7 +1054,8 @@ function normalizeWord(w) {
   /* gloss/zh 语义对齐：缺哪个用另一个补哪个（双写，两个名字都在，不丢显示别名） */
   if (typeof out.zh !== "string" || out.zh === "") out.zh = typeof out.gloss === "string" ? out.gloss : "";
   if (typeof out.gloss !== "string" || out.gloss === "") out.gloss = typeof out.zh === "string" ? out.zh : "";
-  /* 契约键缺失补显式空值（A1 富字段与 reader 精读生词都没有 gender/plural） */
+  /* 契约键缺失补显式空值（A1 富字段没有 gender/plural；reader 精读生词则由服务端
+   * get_vocab_by_cefr(scope="reader") 回填主干 LEXICON 的 gender/plural，未命中仍是空值） */
   if (out.gender === undefined || out.gender === null) out.gender = null;
   if (out.plural === undefined || out.plural === null) out.plural = "";
   /* cefr 按 id 前缀推导；无已知前缀（reader card-* / core-*）显式 null。
@@ -3382,6 +3383,7 @@ async function syncReaderCardsFromServer() {
     const words = Array.isArray(data.words) ? data.words : [];
     if (!words.length) return;
     const existingIds = new Set(S.words.map(w => w.id));
+    const byId = new Map(S.words.map(w => [w.id, w]));
     let changed = false;
     for (const rw of words) {
       const wid = rw.id || ("card-" + (rw.hw || ""));
@@ -3393,16 +3395,39 @@ async function syncReaderCardsFromServer() {
           gloss: rw.zh || rw.gloss || "",
           ipa: rw.ipa || "",
           /* ex 形状统一为 [{de,zh}]（同 A2/B1；渲染层读 ex[i].de/zh）：
-           * reader 卡无中文例句，zh 落空串。 */
+           * 服务端对「有原句」的卡不下发 example_zh（原句配官方中文文不对题），
+           * 此时 zh 落空串；无原句时才是官方例句 + 其中文对照。 */
           ex: rw.de ? [{ de: rw.de, zh: rw.example_zh || "" }] : [],
           letter: (rw.hw && rw.hw[0] ? rw.hw[0] : "?").toUpperCase(),
           page: 0,
           tags: ["reader"],
           custom: true,
-          up: Date.now()
+          up: Date.now(),
+          /* 契约键 gender/plural 显式带上（normalizeWord 已把它们列为契约键：
+           * reader 卡此前恒空，服务端回填后非空时一并落库）。 */
+          gender: rw.gender || null,
+          plural: rw.plural || ""
         });
         existingIds.add(wid);
         changed = true;
+      } else {
+        /* 已存在则回填：同 syncA2CardsFromServer / syncB1CardsFromServer —— 旧逻辑是
+         * append-only（无 else）→ 富字段上线前同步进去的存量生词恒为 ipa:"" / ex:[]，
+         * 此后每次同步都被跳过，生词卡永远裸（无例句无音标），与 A1/A2/B1 三档信息量
+         * 不对齐。
+         * **只补空、绝不覆盖非空**：用户可能手编过例句/音标，或服务端那条 de 是生词
+         * 所在原句（此时 example_zh 为空，回填 zh 落空串是预期）；覆盖 = 清洗用户数据。
+         * hw / gloss / tags / id 一律不碰（释义可能被手编，tags 由前端管）。
+         * 回填只动词表（S.words），与 FSRS 复习进度（cards / log / wrong）无关。 */
+        const cur = byId.get(wid);
+        if (!cur) continue;
+        if (!cur.ipa && rw.ipa) { cur.ipa = rw.ipa; changed = true; }
+        if ((!cur.ex || !cur.ex.length) && rw.de) {
+          cur.ex = [{ de: rw.de, zh: rw.example_zh || "" }];
+          changed = true;
+        }
+        if (!cur.gender && rw.gender) { cur.gender = rw.gender; changed = true; }
+        if (!cur.plural && rw.plural) { cur.plural = rw.plural; changed = true; }
       }
     }
     if (changed) {

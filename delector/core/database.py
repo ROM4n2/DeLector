@@ -2002,6 +2002,72 @@ def _load_a2_vocab_words() -> List[Dict[str, Any]]:
     return words
 
 
+# ── reader 精读生词富字段回填（ADR-0013 §5-3：未命中显式空值，禁止编造）──────────
+#
+# 查表键必须归一的原因（实测）：主干 ``RICH``（2722 键）与 ``LEXICON`` 的键 **100%
+# 全小写** —— ``rich_of("Zustand")`` 不命中、``rich_of("zustand")`` 命中。而写卡方
+# 传入的 ``lemma`` 可能是首字母大写、甚至带冠词的形式（如 ``a1_hoeren.js`` 只去冠词
+# 未小写），直接拿原始值查表会**大面积静默漏命中**，生词卡照样是裸的。
+_READER_ARTICLE_RE = re.compile(
+    r"^(?:der|die|das|ein|eine|einen|einem|einer|eines|den|dem|des)\s+",
+    re.IGNORECASE,
+)
+
+
+def _reader_lemma_key(word: str, lemma: str) -> str:
+    """reader 卡片 → 富字段查表键：去前导冠词 + 小写。
+
+    取值顺序：``lemma`` 优先（屈折形→lemma 在写入侧已归一，见 routes/main.py 落库
+    INSERT），``lemma`` 为空才退回 ``word``（老数据可能只填了 word）；两者皆空返回
+    ``""``，调用方据此直接走「全空值」分支。
+    """
+    for raw in (lemma, word):
+        if not raw:
+            continue
+        stripped = str(raw).strip()
+        if not stripped:
+            continue
+        return _READER_ARTICLE_RE.sub("", stripped).lower()
+    return ""
+
+
+def _reader_rich_fields(word: str, lemma: str) -> Dict[str, Any]:
+    """reader 卡片的富字段（音标 / 例句 / 性数）；**未命中一律显式空值，绝不编造**。
+
+    返回 ``{"ipa", "de", "example_zh", "gender", "plural"}``：
+    - ``ipa`` / ``de``(=``example_de``) / ``example_zh`` ← ``lexicon.rich_of``；
+    - ``gender`` / ``plural`` ← ``lexicon.a1_lemma_meta_of``（源 = 主干 LEXICON
+      4762 条全量，覆盖非 A1 等级；动词天然 ``gender=None``）。
+    - 两者都未命中 → 走不规则动词兜底：生词常以**屈折形**入库（``ging`` / ``war`` /
+      ``hatte``），用双向 ``lookup_irregular_verb`` 取不定式再查一次；仍不命中则全空
+      （ADR-0013 §5-3 红线：禁止编造 / 静默降级）。
+
+    惰性 import 放在函数内：保持模块导入期零重依赖（红线 9）。
+    """
+    empty: Dict[str, Any] = {"ipa": "", "de": "", "example_zh": "", "gender": None, "plural": ""}
+    key = _reader_lemma_key(word, lemma)
+    if not key:
+        return empty
+
+    from delector.core import lexicon
+    from delector.nlp_engine.linguistics import lookup_irregular_verb
+
+    if lexicon.rich_of(key) is None and lexicon.a1_lemma_meta_of(key) is None:
+        trio = lookup_irregular_verb(key)
+        if trio is not None:
+            key = trio.infinitiv.strip().lower()
+
+    rich = lexicon.rich_of(key) or {}
+    meta = lexicon.a1_lemma_meta_of(key) or {}
+    return {
+        "ipa": rich.get("ipa") or "",
+        "de": rich.get("example_de") or "",
+        "example_zh": rich.get("example_zh") or "",
+        "gender": meta.get("gender"),
+        "plural": meta.get("plural") or "",
+    }
+
+
 def get_vocab_by_cefr(
     cefr: str = "A1",
     scope: str = "core",
@@ -2047,22 +2113,32 @@ def get_vocab_by_cefr(
         words = []
         for r in rows:
             hw = r["word"]
-            # reader 卡片无富字段：gender/plural/ipa/example_zh 显式空值，经
-            # ``_contract_item`` 统一产出同一 12 字段集（ADR-0011 决策 2 / ADR-0013 §4-1 /
+            # reader 卡片的富字段来自主干 LEXICON（经 ``_reader_rich_fields`` 归一查表，
+            # 含不规则动词屈折形兜底）；未命中一律显式空值（ADR-0013 §5-3：禁止编造）。
+            # 经 ``_contract_item`` 统一产出同一 12 字段集（ADR-0011 决策 2 / ADR-0013 §4-1 /
             # ADR-0014 §6-S1），保证各产出点字段集一致。
+            # ``de`` 语义：有原句时保留生词所在**原句**（最贴合用户记忆的语境锚点），
+            # 此时**不补** example_zh —— 那是官方例句的中文，配原句会文不对题；
+            # 无原句才退回富字段官方例句 + 其中文对照。
             # letter 口径 = 与前端 ``syncReaderCardsFromServer`` 现行派生逐字一致：
             # ``(rw.hw && rw.hw[0] ? rw.hw[0] : "?").toUpperCase()``（hw = 卡片 word 字段）。
+            rich = _reader_rich_fields(hw, r["lemma"] or "")
+            ctx = r["sentence_context"] or ""
+            if ctx:
+                de_val, ex_zh_val = ctx, ""
+            else:
+                de_val, ex_zh_val = rich["de"], rich["example_zh"]
             words.append(
                 _contract_item(
                     vocab_id=f"card-{r['id']}",
                     hw=hw,
                     pos=r["pos"] or "",
-                    gender=None,
-                    plural="",
-                    de=r["sentence_context"] or "",
+                    gender=rich["gender"],
+                    plural=rich["plural"],
+                    de=de_val,
                     zh=r["definition_zh"] or "",
-                    ipa="",
-                    example_zh="",
+                    ipa=rich["ipa"],
+                    example_zh=ex_zh_val,
                     core=False,
                     cefr=r["cefr_level"] or "A1",
                     letter=(hw or " ")[0].upper(),

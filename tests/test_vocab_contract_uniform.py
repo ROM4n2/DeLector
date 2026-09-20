@@ -343,3 +343,140 @@ def test_a1_letter_is_seed_value_not_derived():
     assert word_map["a1-0602"]["letter"] != "Ü"
     assert word_map["a1-0034"]["letter"] == "A"
     assert word_map["a1-0034"]["letter"] != "S"
+
+
+# ── reader 精读生词富字段回填（fix/reader-vocab-rich-backfill）──────────────────
+#
+# 背景：reader 分支（get_vocab_by_cefr(scope="reader")）曾把 gender/plural/ipa/
+# example_zh **一律显式置空**，生词卡永远裸（无例句无音标），与 A1/A2/B1 三档信息量
+# 不对齐。修复后：按 lemma（归一：去冠词 + 小写）查主干 LEXICON 富字段，未命中仍
+# 显式空值（ADR-0013 §5-3：禁止编造）。
+
+
+@pytest.fixture
+def reader_db(tmp_path, monkeypatch):
+    """tmp_path 一次性 SQLite（只建 reader 分支实际读取的 vocab_cards 一张表）。
+
+    刻意**不跑** ``init_db``：它会连带 ``init_progress_db()`` + ``seed_preset_articles()``
+    （真实库污染面），而本次只断言契约字段，单表足够。同时把 DATABASE_PATH /
+    PROGRESS_DB_PATH 钉到 tmp_path，任何意外的默认路径回退都落在 tmp 里。
+    """
+    import sqlite3
+
+    db = str(tmp_path / "reader_vocab.db")
+    pdb = str(tmp_path / "reader_vocab_progress.db")
+    monkeypatch.setenv("DATABASE_PATH", db)
+    monkeypatch.setenv("PROGRESS_DB_PATH", pdb)
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("""
+            CREATE TABLE vocab_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id INTEGER,
+                word TEXT NOT NULL,
+                lemma TEXT NOT NULL,
+                pos TEXT,
+                gender TEXT,
+                plural TEXT,
+                cefr_level TEXT,
+                definition_zh TEXT NOT NULL,
+                sentence_context TEXT NOT NULL,
+                mastered INTEGER DEFAULT 0,
+                mastered_at TIMESTAMP,
+                correct_count INTEGER DEFAULT 0,
+                wrong_count INTEGER DEFAULT 0,
+                due_date TEXT,
+                interval_days INTEGER DEFAULT 1,
+                ease_factor REAL DEFAULT 2.5,
+                repetition_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+    return db
+
+
+def _insert_reader_card(
+    db: str,
+    word: str,
+    lemma: str,
+    pos: str,
+    definition_zh: str,
+    sentence_context: str,
+    cefr_level: str = "A1",
+) -> None:
+    """按 routes/main.py 的落库口径插一条生词卡（word/lemma/pos/释义/原句/等级）。"""
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute(
+            "INSERT INTO vocab_cards (word, lemma, pos, definition_zh, sentence_context, cefr_level) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (word, lemma, pos, definition_zh, sentence_context, cefr_level),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_reader_scope_backfills_rich_fields_when_lemma_hits(reader_db):
+    """命中主干富字段的 lemma → ipa / de / example_zh / gender / plural 全部接通。
+
+    样本刻意用**首字母大写**的 lemma（``Zustand``）：主干 RICH 键 100% 小写，不归一
+    就会漏命中 —— 这条同时钉住 ``_reader_lemma_key`` 的归一语义。``sentence_context``
+    留空，故 ``de`` 应取富字段的官方德语例句。
+    """
+    from delector.core.lexicon import a1_lemma_meta_of, rich_of
+
+    _insert_reader_card(reader_db, "Zustand", "Zustand", "n.", "状态", "")
+    res = get_vocab_by_cefr(cefr="A1", scope="reader", db_path=reader_db)
+    assert res["total"] == 1, "reader 分支应只读 vocab_cards"
+    w = res["words"][0]
+    assert set(w.keys()) == CONTRACT_FIELDS, f"reader 字段集漂移：{sorted(w.keys())}"
+
+    rich = rich_of("zustand")
+    meta = a1_lemma_meta_of("zustand")
+    assert rich is not None and meta is not None, "样本前提失效：zustand 不在主干 LEXICON"
+    assert w["ipa"] and w["ipa"] == rich["ipa"], f"reader ipa 未接通主干富字段：{w['ipa']!r}"
+    assert w["de"] == rich["example_de"], f"reader de 应为富字段例句：{w['de']!r}"
+    assert w["example_zh"] == rich["example_zh"], f"reader example_zh 未接通：{w['example_zh']!r}"
+    assert w["gender"] == meta["gender"], f"reader gender 未接通：{w['gender']!r}"
+    assert w["plural"] == meta["plural"], f"reader plural 未接通：{w['plural']!r}"
+    # 非富字段口径逐字不变（回归）：zh / letter / cefr / core / id / hw
+    assert w["zh"] == "状态"
+    assert w["letter"] == "Z"
+    assert w["cefr"] == "A1"
+    assert w["core"] is False
+
+
+def test_reader_scope_keeps_empty_when_lemma_misses(reader_db):
+    """未登记 lemma → ipa / de / example_zh 显式空串、gender 为 None（不编造、不抛错）。
+
+    ADR-0013 §5-3 红线：主干没有的东西一律留空，绝不用近似匹配 / 首字母猜测糊一个值。
+    """
+    _insert_reader_card(reader_db, "Qquuxzz", "qquuxzz", "n.", "不存在词", "")
+    res = get_vocab_by_cefr(cefr="A1", scope="reader", db_path=reader_db)
+    w = res["words"][0]
+    assert set(w.keys()) == CONTRACT_FIELDS, f"reader 字段集漂移：{sorted(w.keys())}"
+    assert w["ipa"] == "", f"未命中 lemma 的 ipa 应为空串（禁止编造），实际 {w['ipa']!r}"
+    assert w["de"] == "", f"未命中 lemma 的 de 应为空串（禁止编造），实际 {w['de']!r}"
+    assert w["example_zh"] == "", f"未命中 lemma 的 example_zh 应为空串，实际 {w['example_zh']!r}"
+    assert w["gender"] is None and w["plural"] == ""
+
+
+def test_reader_scope_sentence_context_wins_over_official_example(reader_db):
+    """原句优先：有 sentence_context 时 de = 生词所在原句，且**不补** example_zh。
+
+    官方例句的中文配原句会文不对题，故此时 example_zh 留空（由调用方自行判断）。
+    """
+    sentence = "Der Zustand der Wohnung war sehr schlecht."
+    _insert_reader_card(reader_db, "Zustand", "Zustand", "n.", "状态", sentence)
+    res = get_vocab_by_cefr(cefr="A1", scope="reader", db_path=reader_db)
+    w = res["words"][0]
+    assert w["de"] == sentence, f"有原句时 de 必须是原句本身，实际 {w['de']!r}"
+    assert w["example_zh"] == "", f"配原句时 example_zh 必须留空（官方中文文不对题），实际 {w['example_zh']!r}"
+    # 音标/性数与原句无关，仍照常回填
+    assert w["ipa"], "有原句时音标仍应回填"
