@@ -190,3 +190,17 @@
 - 分半全量回归：`pytest -q --ignore=tests/test_server.py` + `pytest tests/test_server.py -q`（2 条既有 `exam_trials` 环境失败不算回归）
 - 更新 `FEATURES.md`（新功能条目）+ `CHANGELOG.md`（待发版时）+ `WORKMEMORY/PROJECT_OVERVIEW.md`
 - 主线程统一 commit；如需发布 → 五件套 bump + tag
+
+---
+
+### Task 6（验收后修订，2026-09-20）：截断语义拆分
+
+**触发**：T5 验收后实测发现 `truncated` 被**两种性质不同**的截断共用——「`limit` 每组 20 条限量（正常分页）」vs「语料 hard cap 未扫完（真异常）」→ `haus`/`wohnung`/`der` 等几乎每次搜索都弹「⚠ 结果已截断」＝噪音且不可操作。用户确认修复。
+
+**变更**：
+- `services/search.py`：返回**移除 `truncated`**、**新增 `groups_total`**（每组 `limit` 截断前命中数；恒有 `total == sum(groups_total)`）；短 q 短路同形状。
+- `routes/search.py`：`res["truncated"] = corpus_truncated`（**去掉 OR**）→ `truncated` **仅**表语料 hard cap。
+- `static/js/search.js`：组尾信息性「仅显示前 N 条（命中 M）」；`truncated` 警告改「⚠ 部分语料未扫描完」；删除旧「结果已截断」。
+- 测试/探针同步：`limit`-only → `truncated False`、语料 cap → `True`、`scope != all` 下 `groups_total`、探针新增 `truncation_notices` 场景并纳入 `_PROBE_SCENARIOS` 守卫。
+
+**门禁**：检索三套件 **78 passed** / 探针 **4 场景 7 断言 ALL PASS**（`--json fail:0`）/ ruff / mypy 双轨 0 error / 全 `tools/*.mjs` 零漂移。**CRV APPROVED**（0 红 6 黄，Y1–Y5 当场修）。commit `29bae16`。

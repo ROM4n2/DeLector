@@ -102,11 +102,13 @@
   ```json
   { "q": "...", "scope": "all", "total": 12,
     "groups": { "vocab": [], "example": [], "colloc": [], "corpus": [] },
+    "groups_total": { "vocab": 12, "example": 30, "colloc": 3, "corpus": 0 },
     "truncated": false }
   ```
 - `fold(q)` 后长度 `< 2` → `total=0` + 四组空数组（**不报错、不 500**）。
-- **`total` 口径** = 去重 + `scope` 过滤后、**`limit` 截断前**的命中数（截断时 `total ≥ Σ 组长度`）。
-- **`truncated` 语义** = 发生了**任一**截断（`limit` 组截断 ∪ 语料 hard cap）的并集；前端只需提示"结果已截断"。
+- **`total` 口径** = 去重 + `scope` 过滤后、**`limit` 截断前**的命中数（恒 `== sum(groups_total)`）。
+- **`groups_total`** = 每组在 `limit` 截断前的命中数（键集恒为四组、无命中为 0）；前端据此在**组尾**显示信息性「仅显示前 N 条（命中 M）」。
+- **`truncated` 语义** = **仅**表示"**语料 hard cap 未扫完**"（真异常）；`limit` 每组限量**不**计入（那是正常分页，由 `groups_total` 表达）→ 前端仅在真异常时提示「⚠ 部分语料未扫描完」。
 - **非法 `scope` → 400 由路由层校验**；service 纯函数收到非法值一律按 `all` 处理且**不抛错**（纯函数不承担输入校验）。
 - 只读、无副作用；语料扫描有单请求上限（见 §4）。
 
