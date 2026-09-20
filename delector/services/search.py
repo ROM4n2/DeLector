@@ -1,14 +1,22 @@
 # -*- coding: utf-8 -*-
-"""例句 / 搭配 / 语料 全文检索纯函数（spec 2026-09-20 §3.2，Task 1）。
+"""例句 / 搭配 / 语料 全文检索纯函数（spec 2026-09-20 §3.2，Task 1+2）。
 
 **内存扫描版**（ADR-0014：固定词库侧 ≈8175 条，全量扫描 <50ms，无需 FTS5）。
-本模块是**纯函数层**：只读、无副作用、不落库、不读 DB、零新依赖（仅 stdlib +
-既有 ``lexicon`` / ``prep_dict``）。语料由调用方（T2）以 ``corpus_docs`` 参数注入。
+本模块覆盖两层：
+  - Task 1：词库侧三源（``lexicon`` / ``prep_dict``）的 ``fold`` / ``iter_vocab_docs`` /
+    ``match_score`` / ``search``；
+  - Task 2：语料侧 ``iter_corpus_docs`` 以**只读**方式读取 ``articles`` /
+    ``encounter_texts``（DB 连接 ``conn`` 由调用方经 ``db_conn`` 传入），并纳入同一
+    ``search``。
+
+零新依赖（仅 stdlib + 既有 ``lexicon`` / ``prep_dict``）。所有函数**只读、无副作用**：
+不写库、**不改调用方传入的对象**（命中语料 doc 补 ``snippet`` 时走浅拷贝，见 ``search``）。
 
 分层：
     lexicon.LEXICON / RICH / prep_dict.PREP_COLLOCATIONS   （代码常量真值）
                  \\            |            /
-              delector/services/search.py  ← fold / iter_vocab_docs / match_score / search
+              delector/services/search.py  ← fold / iter_vocab_docs / iter_corpus_docs
+                                              / match_score / search
                           |
               delector/routes/search.py    → GET /api/search（薄路由，校验 scope/limit）
 
@@ -19,6 +27,7 @@
     - 计分表见 ``match_score``；同分排序由 ``search`` 固定序（kind 序 + id 升序）钉死。
 """
 
+import sqlite3
 from collections.abc import Iterable, Iterator
 from typing import Any, Dict, List, Literal, Tuple, TypedDict
 
@@ -28,6 +37,7 @@ from delector.data.prep_dict import PREP_COLLOCATIONS
 __all__ = [
     "SearchDoc",
     "fold",
+    "iter_corpus_docs",
     "iter_vocab_docs",
     "match_score",
     "search",
@@ -153,6 +163,91 @@ def iter_vocab_docs() -> Iterator[SearchDoc]:
             }
 
 
+# ── 语料：SQLite 行 → corpus doc（Task 2）─────────────────────────────────────
+
+
+def _as_str(value: Any) -> str:
+    """sqlite 取值 → str（None → ''；非 str 值转字符串）。"""
+    return "" if value is None else str(value)
+
+
+def _iter_corpus_rows(conn: sqlite3.Connection) -> Iterator[Tuple[str, int, str, str, str]]:
+    """惰性产出 ``(source, ref_id, title, level, text)``。
+
+    先遍历 ``articles`` 全量（按 ``id`` 升序），再接 ``encounter_texts`` 全量（按
+    ``id`` 升序）。**惰性迭代**（不 ``fetchall``）以便 hard cap 真正提前停止、不把
+    整库读进内存。参数化 SELECT、只读。
+    """
+    for row in conn.execute("SELECT id, title, raw_text FROM articles ORDER BY id ASC"):
+        yield "article", int(row[0]), _as_str(row[1]), "", _as_str(row[2])
+    for row in conn.execute("SELECT id, title, level, content FROM encounter_texts ORDER BY id ASC"):
+        yield "encounter", int(row[0]), _as_str(row[1]), _as_str(row[2]), _as_str(row[3])
+
+
+def iter_corpus_docs(
+    conn: sqlite3.Connection,
+    *,
+    max_docs: int = 2000,
+    max_chars: int = 2_000_000,
+) -> Tuple[List[SearchDoc], bool]:
+    """把 ``articles`` 与 ``encounter_texts`` 规范成 ``kind="corpus"`` 的 doc 列表。
+
+    - **只读、无副作用**：参数化 SELECT，不写库；``conn`` 由调用方（T3 路由，经
+      ``db_conn``）提供，本函数**不自己开连接**（便于测试注入临时库）。
+    - 空 ``text``（``strip()`` 后为空）的文档**整体跳过**：``"" in ""`` 恒真，空串会
+      让任意 q 都「命中」，必须挡在 doc 构造之前。
+    - **hard cap**：按 ``id`` 升序遍历两表，累计文档数达 ``max_docs`` **或** 累计字符
+      超 ``max_chars`` 即停止；此时返回 ``truncated=True``，正常遍历完为 ``False``。
+      返回 ``(docs, truncated)``。语料 cap 的 ``truncated`` 与 ``search`` 的 limit 截断
+      由路由层（T3）按 OR 合并（spec §3.3）。
+    """
+    docs: List[SearchDoc] = []
+    total_chars = 0
+    for source, ref_id, title, level, text in _iter_corpus_rows(conn):
+        if not text.strip():
+            continue
+        if len(docs) >= max_docs or total_chars + len(text) > max_chars:
+            return docs, True
+        docs.append(
+            {
+                "kind": "corpus",
+                "id": f"{source}:{ref_id}",
+                "lemma": "",
+                "hw": "",
+                # pos/cefr 仅占位：pos 复用 source（article/encounter），cefr 复用 encounter
+                # 的 level；二者**不参与 match_score**（语料计分只看 fields 的 title=18 / text=8）。
+                "pos": source,
+                "cefr": level,  # article 无 level → ""；encounter 用 level 作 cefr
+                "fields": {"title": title, "text": text},
+                "payload": {"source": source, "ref_id": ref_id, "title": title, "level": level},
+            }
+        )
+        total_chars += len(text)
+    return docs, False
+
+
+def _snippet(text: str, q: str, radius: int = 80) -> str:
+    """``text`` 中首个命中的上下文片段（``…`` 包裹）；未命中返回空串。
+
+    定位：先 ``text.lower().find(q.lower())``；未命中再走 ``fold(text).find(fold(q))``。
+    **fold 路径的命中位置仅作近似**——``ß→ss`` 会改变字符串长度，折叠坐标与原文坐标
+    不严格对齐，窗口边界可能略有偏移；这只影响截断边界、不影响可读性，可接受。
+
+    返回 ``text[max(0,i-radius) : i+len(q)+radius]``（去首尾空白）——超长文本被裁剪，
+    **绝不整篇返回**；空 ``text`` / 空 ``q`` 一律空串。
+    """
+    if not text or not q:
+        return ""
+    idx = text.lower().find(q.lower())
+    if idx < 0:
+        idx = fold(text).find(fold(q))
+    if idx < 0:
+        return ""
+    start = max(0, idx - radius)
+    end = idx + len(q) + radius
+    return f"…{text[start:end].strip()}…"
+
+
 # ── 计分 ──────────────────────────────────────────────────────────────────────
 
 
@@ -261,5 +356,20 @@ def search(
         if len(items) > clamped:
             groups[kind] = items[:clamped]
             truncated = True
+
+    # 补 snippet 放在**每组 limit 截断之后**，且**只对最终返回**的 corpus doc 补——
+    # 既不为将被截掉的 doc 白算 snippet，也与下方「浅拷贝」共同保证无副作用：
+    # 浅拷贝 ``{**doc, "payload": {**doc["payload"]}}`` 后写入，**绝不改写入参 doc**
+    # （同一 ``corpus_docs`` 可被不同 q 多次调用，就地写会互相覆盖且违反“无副作用”）。
+    groups["corpus"] = [
+        {
+            **doc,
+            "payload": {
+                **doc["payload"],
+                "snippet": _snippet(doc["fields"].get("text", ""), q),
+            },
+        }
+        for doc in groups["corpus"]
+    ]
 
     return {"q": q, "scope": eff_scope, "total": total, "groups": groups, "truncated": truncated}
