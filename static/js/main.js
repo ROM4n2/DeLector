@@ -161,6 +161,7 @@ import {
 } from "./encounter.js";
 import * as ListenLab from "./listen-lab.js";
 import * as HardSentences from "./hard-sentences.js";
+import * as Search from "./search.js";
 
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
@@ -240,6 +241,7 @@ export function show(view) {
     setupEditorListeners();
   }
   if (view === "encounter") showView();
+  if (view === "search") Search.initSearch();
 }
 
 // ── Exam Domain Module Tabs (ADR-0005 Task 2) ───────────────────────────────
@@ -1126,6 +1128,9 @@ Object.assign(window, {
 
   // Hard-Sentence Reading Lab（长难句精读工坊 · HardSentences 命名空间接线）
   HardSentences,
+
+  // Full-Text Search（全文检索 · Search 命名空间接线，view-search inline onclick）
+  Search,
 });
 
 // ── PWA Service Worker Registration ──────────────────────────────────────────

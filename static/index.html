@@ -74,6 +74,10 @@
           <span class="nav-tab-code">VOKABELN</span>
           <span class="nav-tab-label">德语背词</span>
         </button>
+        <button id="nav-btn-search" class="nav-tab" onclick="show('search')">
+          <span class="nav-tab-code">SUCHE</span>
+          <span class="nav-tab-label">🔍 检索</span>
+        </button>
       </div>
       <div class="nav-actions">
         <button
@@ -2830,6 +2834,79 @@
       ></iframe>
     </main>
 
+    <!-- ── View 7: Full-Text Search (Suche) ─────────────────────── -->
+    <main id="view-search" class="view">
+      <div class="search-panel">
+        <div class="search-bar">
+          <input
+            id="search-input"
+            class="search-input"
+            type="search"
+            autocomplete="off"
+            placeholder="输入 ≥2 字符，检索 词条 / 例句 / 搭配 / 语料…"
+            aria-label="全文检索输入框"
+          />
+        </div>
+        <div id="search-scope-bar" class="search-scope-bar">
+          <button
+            class="btn btn-ghost search-scope-btn active"
+            data-scope="all"
+            onclick="Search.setSearchScope('all')"
+          >
+            全部
+          </button>
+          <button
+            class="btn btn-ghost search-scope-btn"
+            data-scope="vocab"
+            onclick="Search.setSearchScope('vocab')"
+          >
+            词条
+          </button>
+          <button
+            class="btn btn-ghost search-scope-btn"
+            data-scope="example"
+            onclick="Search.setSearchScope('example')"
+          >
+            例句
+          </button>
+          <button
+            class="btn btn-ghost search-scope-btn"
+            data-scope="colloc"
+            onclick="Search.setSearchScope('colloc')"
+          >
+            搭配
+          </button>
+          <button
+            class="btn btn-ghost search-scope-btn"
+            data-scope="corpus"
+            onclick="Search.setSearchScope('corpus')"
+          >
+            语料
+          </button>
+        </div>
+        <div id="search-status" class="search-status"></div>
+        <div id="search-results" class="search-results">
+          <section id="search-group-sec-vocab" class="search-group">
+            <h3 class="search-group-head">词条</h3>
+            <div id="search-group-vocab" class="search-group-body"></div>
+          </section>
+          <section id="search-group-sec-example" class="search-group">
+            <h3 class="search-group-head">例句</h3>
+            <div id="search-group-example" class="search-group-body"></div>
+          </section>
+          <section id="search-group-sec-colloc" class="search-group">
+            <h3 class="search-group-head">搭配</h3>
+            <div id="search-group-colloc" class="search-group-body"></div>
+          </section>
+          <section id="search-group-sec-corpus" class="search-group">
+            <h3 class="search-group-head">语料</h3>
+            <div id="search-group-corpus" class="search-group-body"></div>
+          </section>
+        </div>
+        <div id="search-empty" class="search-empty"></div>
+      </div>
+    </main>
+
     <!-- ── Mobile Android / iOS Bottom Navigation Dock ─────────── -->
     <nav id="mobile-bottom-nav" class="mobile-bottom-nav mobile-dock">
       <button
@@ -2879,6 +2956,14 @@
       >
         <span class="mob-icon">📚</span>
         <span class="mob-label">背词</span>
+      </button>
+      <button
+        class="mobile-nav-btn dock-item"
+        id="mob-btn-search"
+        onclick="show('search')"
+      >
+        <span class="mob-icon">🔍</span>
+        <span class="mob-label">检索</span>
       </button>
       <button
         class="mobile-nav-btn dock-item"
