@@ -21,8 +21,10 @@
   分布导致断言漂移。
 """
 
+import ast
 import os
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -219,3 +221,109 @@ def test_corpus_hard_cap_truncated_or_merged_into_response(client):
     assert body["total"] == 1, "命中仅 1 条 → search 自身不因 limit 截断"
     assert [d["id"] for d in body["groups"]["corpus"]] == [f"article:{aid}"]
     assert body["truncated"] is True, "语料 hard cap 截断必须 OR 合并进响应"
+
+
+# ── 性能守卫：全量（真实词库 ≈8175 doc + ~200KB 语料）单次 search < 50ms ─────────
+#
+# ADR-0014 的立论是「固定词库侧全量内存扫描 <50ms，故不需 FTS5」。静态断言证明不了
+# 这条性能前提，它只能靠回归断言钉住：真跑全量 iter_vocab_docs()（不是小样本）+
+# 注入 ~200KB 合成语料，断言单次 search() 的最小耗时 < 50ms。
+#
+# 阈值纪律（防环境抖动）：取多次采样的**最小值**（min 只受最快一次支配，屏蔽 GC /
+# 调度抖动；实测量级 ≈20ms，阈值 50ms 留 2×+ 余量）。最小值仍会因为「被测对象被
+# 换成小样本 / 人为放大语料 / 注入 sleep」而真实上升 —— 该守卫不会因此失去意义。
+
+_ROOT = Path(__file__).resolve().parent.parent
+
+# 语料填充句（含命中串 wohnung；×60 使单篇 ≈5KB → 40 篇 ≈ 200KB）。
+_CORPUS_FILLER_SENTENCE = (
+    "Der schnelle braune Fuchs springt ueber den faulen Hund und die Wohnung ist gross. "
+)
+
+
+def test_full_scan_search_under_50ms():
+    """全量内存扫描单次 < 50ms（ADR-0014 FTS5 可行性的回归锚点）。
+
+    实测（本机）：195KB 语料 min≈22ms；放大到 9.7MB（50×）→ min≈87ms 越过阈值。
+    变异验证（已实跑）：把语料放大 50×（~9.7MB）→ best 87.2ms ≥ 50ms → 必红
+    （语料/扫描被放大会真实推高耗时，故该守卫对小样本替换 / 放大 / sleep 敏感）。
+    """
+    from delector.services import search as svc
+
+    docs = list(svc.iter_vocab_docs())
+    assert len(docs) >= 8000, f"词库侧 doc 数异常（应 ≈8175）：{len(docs)}"
+
+    filler = _CORPUS_FILLER_SENTENCE * 60
+    corpus: list[dict] = [
+        {
+            "kind": "corpus",
+            "id": f"article:{i}",
+            "lemma": "",
+            "hw": "",
+            "pos": "article",
+            "cefr": "",
+            "fields": {"title": f"Titel {i} Wohnung", "text": filler},
+            "payload": {"source": "article", "ref_id": i, "title": f"Titel {i}", "level": ""},
+        }
+        for i in range(40)
+    ]
+    corpus_bytes = sum(len(d["fields"]["text"]) + len(d["fields"]["title"]) for d in corpus)
+    assert corpus_bytes >= 190_000, f"注入语料应 ≈200KB：{corpus_bytes}"
+
+    samples: list[float] = []
+    resp: dict = {}
+    for _ in range(9):
+        t0 = time.perf_counter()
+        resp = svc.search("wohnung", corpus_docs=corpus)
+        samples.append((time.perf_counter() - t0) * 1000.0)
+    best = min(samples)
+    assert resp["total"] > 0, "命中串应真有结果（否则扫描被短路，守卫失去意义）"
+    assert best < 50.0, (
+        f"全量扫描单次耗时 {best:.1f}ms ≥ 50ms（阈值）；"
+        f"样本(ms)={[round(x, 1) for x in samples]}（min={best:.1f}）"
+    )
+
+
+# ── 注册守卫：search 必须在 main 之前 include（FastAPI 按注册序匹配） ──────────
+#
+# 落地依据：spec/计划「路由注册：新 router 在 register_routes 中于 main 之前 include」
+# 与 delector/routes/__init__.py 的「分域路由在前、通用 handler 垫底」纪律。
+# 用 AST 取 register_routes 内 include_router(...) 的调用序（不靠脆弱的行号/正则），
+# 断言 search 的出现位置严格早于 main。变异验证（已实跑）：把注册顺序改成 main 在
+# search 之前 → order.index('search') > order.index('main') → 必红。
+
+
+def _register_routes_include_order() -> list[str]:
+    """register_routes 内 app.include_router(X.router) 的模块名有序列表。"""
+    src = (_ROOT / "delector" / "routes" / "__init__.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "register_routes"
+        ),
+        None,
+    )
+    assert fn is not None, "delector/routes/__init__.py 找不到 register_routes"
+    order: list[str] = []
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "include_router"):
+            continue
+        arg = node.args[0]
+        if isinstance(arg, ast.Attribute) and isinstance(arg.value, ast.Name):
+            order.append(arg.value.id)
+    return order
+
+
+def test_search_router_registered_before_main():
+    """register_routes 中 search.router 必须在 main.router 之前 include。"""
+    order = _register_routes_include_order()
+    assert "search" in order, f"register_routes 未 include search.router：{order}"
+    assert "main" in order, f"register_routes 未 include main.router：{order}"
+    assert order.index("search") < order.index("main"), (
+        f"search 必须在 main 之前注册（分域路由在前、通用 handler 垫底）：{order}"
+    )

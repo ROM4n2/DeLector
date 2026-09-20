@@ -178,3 +178,54 @@ def test_main_mounts_search_namespace_on_window():
     assert "Object.assign(window, {" in MAIN_JS, "main.js 必须在 window 上挂载模块命名空间"
     block = MAIN_JS.split("Object.assign(window, {", 1)[1]
     assert re.search(r"\bSearch\b", block), "window 挂载块必须含 Search 命名空间（供 inline onclick 调用）"
+
+
+# ── 行为级动态探针 tools/wb_search_probe.mjs（Task 5） ─────────────────────────
+#
+# 上面的静态断言只能证明「源码里写着 esc( / <mark> / 四个分组」。探针把 core.js 的
+# esc 与 search.js 的 _highlight / 四个渲染器 / renderSearchGroups 按括号配对**真实
+# 切片**丢进 node:vm 真跑（探针里没有一份重抄的实现）：
+#   ① 高亮转义安全（含 <script> 的字段不注入 innerHTML）；② 四组渲染；③ 空态。
+# 这里驱动它、断言 fail==0 且三个关键场景名都在（防场景被删仍全绿）。
+
+_PROBE_SCENARIOS = ("xss_highlight_escape", "four_groups_render", "empty_state")
+
+
+def _run_search_probe() -> dict:
+    """跑 tools/wb_search_probe.mjs --json，返回解析后的 dict（含 fail/total/cases）。"""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    if not shutil.which("node"):
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+    probe = ROOT / "tools" / "wb_search_probe.mjs"
+    assert probe.exists(), "缺少 tools/wb_search_probe.mjs 动态探针"
+    res = subprocess.run(
+        ["node", str(probe), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(ROOT),
+    )
+    assert res.returncode == 0, "探针执行失败：\n%s\n%s" % (res.stdout, res.stderr)
+    try:
+        return json.loads(res.stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(
+            "探针 --json 输出不是合法 JSON：%s\nstdout 片段：%r\nstderr 片段：%r"
+            % (e, res.stdout[:400], res.stderr[:400])
+        )
+
+
+def test_search_ui_behaves_under_node():
+    """动态探针：真实 esc/_highlight/渲染器在 node:vm 里跑三个行为场景。"""
+    out = _run_search_probe()
+    assert out["fail"] == 0, "探针有失败场景：%s" % [c for c in out["cases"] if not c["ok"]]
+    assert out["total"] >= 3, "探针场景数必须 ≥3，实际 %s" % out["total"]
+    names = {c["name"] for c in out["cases"]}
+    for key in _PROBE_SCENARIOS:
+        assert key in names, "关键场景 %r 缺失（被删仍全绿风险）；实际场景：%s" % (key, sorted(names))
