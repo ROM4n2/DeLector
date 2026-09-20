@@ -264,6 +264,9 @@ function syntheticResponse() {
     q: "haus",
     scope: "all",
     total: 4,
+    // 每组截断前命中数（Task 6）；与各组实际条数相等 → 无「仅显示前」噪音。
+    groups_total: { vocab: 1, example: 1, colloc: 1, corpus: 1 },
+    // truncated 仅表示语料 hard cap 未扫完（真异常）；本夹具未触发。
     truncated: false,
     groups: {
       vocab: [
@@ -401,6 +404,40 @@ function check(name, cond, detail) {
     threw
       ? `抛错：${threw && threw.message}`
       : `anyRow=${anyRow} allHidden=${allHidden} empty=${JSON.stringify(emptyNode.innerHTML.slice(0, 60))}`
+  );
+}
+
+/* 场景 4（Task 6）：截断语义拆分 —— limit 每组限量走**信息性**组尾提示「仅显示前 N 条」，
+ * 语料 hard cap 未扫完走**警告**「⚠ 部分语料未扫描完」；旧「结果已截断」文案必须消失。 */
+{
+  const resp = syntheticResponse();
+  resp.groups_total.vocab = 30; // 实际显示 1 条、截断前 30 条 → 信息性提示
+  resp.truncated = true; // 语料 hard cap 未扫完 → 警告
+  let threw = null;
+  try {
+    runRender(resp);
+  } catch (e) {
+    threw = e;
+  }
+  const vocabHtml = domEl("search-group-vocab").innerHTML;
+  const exampleHtml = domEl("search-group-example").innerHTML;
+  const statusHtml = domEl("search-status").innerHTML;
+  check(
+    "truncation_notices",
+    !threw &&
+      vocabHtml.includes("仅显示前 1 条") &&
+      vocabHtml.includes("命中 30") &&
+      statusHtml.includes("部分语料未扫描完") &&
+      !statusHtml.includes("结果已截断"),
+    threw
+      ? `抛错：${threw && threw.message}`
+      : `vocab尾=${JSON.stringify(vocabHtml.slice(-90))} status=${JSON.stringify(statusHtml)}`
+  );
+  // 未截断组（groups_total==条数）不得出现「仅显示前」噪音。
+  check(
+    "truncation_notices: 未截断组无噪音",
+    !exampleHtml.includes("仅显示前"),
+    "example尾=" + JSON.stringify(exampleHtml.slice(-60))
   );
 }
 

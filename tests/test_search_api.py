@@ -3,13 +3,15 @@
 
 覆盖：
 - 正常命中：`q=公寓`（中文两字词）/ `q=wohnung` → 200、四组键集完整、vocab 非空；
-- 响应形状：`{q,scope,total,groups{4},truncated}`；
+- 响应形状：`{q,scope,total,groups{4},groups_total,truncated}`；
 - 过短 `q`（`x`）→ 200 且四组空、`total==0`（不 500）；
 - 非法 `scope` → 400（路由层校验）；合法五值均 200；
 - `limit=999` 透传（search 内钳到 100，路由**不重复钳制**）；`limit=1` 每组 ≤1；
 - `q` 缺失 → 422（FastAPI 必填校验）；
-- 语料命中（`corpus` 组 + snippet）与 **truncated OR 合并**（CRV Y5）：语料 hard cap
-  触发时必须为 True，且该场景**不因 limit 截断**——保证断言可区分（删掉 OR 必红）。
+- **truncated 语义拆分（Task 6）**：`truncated` 现**仅**表示「语料 hard cap 未扫完」这一
+  真异常——limit 的每组限量（几乎总发生）改由新增的 `groups_total` 表达，路由层**不再**
+  把 limit 截断 OR 进 truncated（原 CRV Y5 语义已废）。故：`haus`（total>20，仅 limit
+  截断）→ `truncated is False`；语料 hard cap 触发 → `truncated is True`。
 
 隔离纪律（对齐 `test_listen_api.py` / `test_search_service.py`）：
 - `delector/server.py` 模块级单例 app 在收集期首次 import 即 `create_app()`
@@ -108,17 +110,20 @@ def _seed_articles(count: int) -> None:
 
 
 def test_response_shape_and_group_keys(client):
-    """响应含 `q/scope/total/groups/truncated`，groups 键集固定为四类且均为列表。"""
+    """响应含 `q/scope/total/groups/groups_total/truncated`，四组键集固定且均为列表。"""
     res = client.get("/api/search", params={"q": "wohnung"})
     assert res.status_code == 200
     body = res.json()
-    assert set(body) == {"q", "scope", "total", "groups", "truncated"}
+    assert set(body) == {"q", "scope", "total", "groups", "groups_total", "truncated"}
     assert set(body["groups"]) == _GROUP_KEYS
+    assert set(body["groups_total"]) == _GROUP_KEYS
     assert body["q"] == "wohnung"
     assert body["scope"] == "all"
     assert isinstance(body["total"], int)
     assert isinstance(body["truncated"], bool)
     assert all(isinstance(v, list) for v in body["groups"].values())
+    assert all(isinstance(v, int) for v in body["groups_total"].values())
+    assert body["total"] == sum(body["groups_total"].values())
 
 
 def test_chinese_two_char_query_hits_vocab(client):
@@ -139,6 +144,7 @@ def test_short_query_returns_empty_without_error(client):
     body = res.json()
     assert body["total"] == 0
     assert body["groups"] == {"vocab": [], "example": [], "colloc": [], "corpus": []}
+    assert body["groups_total"] == {"vocab": 0, "example": 0, "colloc": 0, "corpus": 0}
     assert body["truncated"] is False
 
 
@@ -187,7 +193,10 @@ def test_missing_q_returns_422(client):
     assert res.status_code == 422
 
 
-# ── 语料命中 + truncated OR 合并（CRV Y5） ───────────────────────────────────
+# ── 语料命中 + truncated 语义拆分（Task 6） ───────────────────────────────────
+#
+# `truncated` 现**仅**表示「语料 hard cap 未扫完」（唯一来源）；limit 的每组限量改由
+# `groups_total` 表达，路由层**不再**把 limit 截断 OR 进 truncated（原 CRV Y5 语义已废）。
 
 
 def test_corpus_hit_appears_in_corpus_group_with_snippet(client):
@@ -203,15 +212,60 @@ def test_corpus_hit_appears_in_corpus_group_with_snippet(client):
     assert body["truncated"] is False
 
 
-def test_corpus_hard_cap_truncated_or_merged_into_response(client):
-    """**CRV Y5**：路由层把语料 hard cap 的 `truncated` 与 limit 截断按 OR 合并。
+def test_limit_only_truncation_keeps_truncated_false(client):
+    """**拆分生效**：`haus`（total>20，仅被 limit 截断）→ `truncated is False`。
+
+    证明 truncated 不再随 limit 量而置 True。注意：service 已**不再返回** `truncated` 键，
+    故**单改路由**（如把路由改回 `bool(res.get("truncated")) or corpus_truncated`）**不会**
+    让本断言变红 —— `res.get("truncated")` 恒为 `None` → 仍算 `False`。必须**同时**恢复
+    service 按 limit 置 `truncated`（或重新引入该键）才会红。limit 量改由 `groups_total` 表达。
+    """
+    res = client.get("/api/search", params={"q": "haus"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] > 20, "haus 命中应 >20（触发 limit 截断）"
+    assert body["truncated"] is False, "limit 限量不得置 truncated（仅语料 hard cap 才置 True）"
+
+
+def test_response_carries_groups_total_matching_total(client):
+    """响应含 `groups_total`（四组），且 `total == sum(groups_total.values())`。
+
+    `haus` 的 vocab 截断前命中 > 显示条数（默认 limit=20）→ groups_total 保留截断前真实条数。
+    """
+    res = client.get("/api/search", params={"q": "haus"})
+    assert res.status_code == 200
+    body = res.json()
+    assert set(body["groups_total"]) == _GROUP_KEYS
+    assert body["total"] == sum(body["groups_total"].values())
+    assert body["groups_total"]["vocab"] > len(body["groups"]["vocab"])
+
+
+def test_groups_total_reflects_scope(client):
+    """`scope='vocab'` 下 `groups_total` 仅 vocab 非 0、其余为 0，`total == sum(groups_total)`。
+
+    守卫 `groups_total` **在 scope 过滤后**统计：若误在 scope 过滤前对四组计数，未选中的
+    example/colloc/corpus 会残留非 0，`gt['example'] == 0` 等断言必红。
+    """
+    res = client.get("/api/search", params={"q": "haus", "scope": "vocab"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["scope"] == "vocab"
+    gt = body["groups_total"]
+    assert gt["vocab"] > 0
+    assert gt["example"] == 0
+    assert gt["colloc"] == 0
+    assert gt["corpus"] == 0
+    assert body["total"] == gt["vocab"] == sum(gt.values())
+
+
+def test_corpus_hard_cap_sets_truncated_true(client):
+    """语料 hard cap 未扫完 → `truncated is True`（truncated 的**唯一**来源）。
 
     构造：先插一篇命中合成 token 的文章（`init_db` seed 的 4 篇预置之后 → 落在前 2000 内），
     再塞满 2000 篇填充 → 总篇数 > `max_docs` 默认 2000，`iter_corpus_docs` 返回 `truncated=True`。
     查询用合成 token `Zorblax`（与真实词库零碰撞）→ 命中数 = 1，默认 `limit=20` 下
     `search()` 自身**不会**因 limit 截断。故 `truncated is True` **只能**来自语料 hard cap：
-    删掉路由里的 `or corpus_truncated` 合并，则 `search()` 回落的 `False` 会让本断言必红
-    （即本断言能区分「语料截断」与「limit 截断」）。
+    删掉路由里的 `res["truncated"] = corpus_truncated`，则 `search()` 落下的 `False` 会让本断言必红。
     """
     aid = _seed_article("Zorblax Bericht", "Hier steht Zorblax im Fliesstext.")
     _seed_articles(_CORPUS_MAX_DOCS_DEFAULT)  # 合计 > max_docs → 语料被截断
@@ -220,7 +274,8 @@ def test_corpus_hard_cap_truncated_or_merged_into_response(client):
     body = res.json()
     assert body["total"] == 1, "命中仅 1 条 → search 自身不因 limit 截断"
     assert [d["id"] for d in body["groups"]["corpus"]] == [f"article:{aid}"]
-    assert body["truncated"] is True, "语料 hard cap 截断必须 OR 合并进响应"
+    assert body["truncated"] is True, "语料 hard cap 截断必须置 truncated True"
+    assert body["total"] == sum(body["groups_total"].values())
 
 
 # ── 性能守卫：全量（真实词库 ≈8175 doc + ~200KB 语料）单次 search < 50ms ─────────

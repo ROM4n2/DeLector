@@ -118,10 +118,15 @@ def test_search_renders_four_groups_and_exports():
     assert "_GROUP_ORDER" in SEARCH, "四组渲染应走固定序常量表"
 
 
-def test_search_has_empty_state_and_truncated_notice():
+def test_search_has_empty_state_and_truncation_notices():
     assert "search-empty" in SEARCH, "search.js 必须能填空态"
     assert "未找到" in SEARCH or "至少 2 个字符" in SEARCH, "search.js 缺少空态文案"
-    assert "truncated" in SEARCH and "结果已截断" in SEARCH, "search.js 必须提示 truncated"
+    # 截断语义拆分（Task 6）：limit 每组限量 → 信息性「仅显示前 N 条」；
+    # 语料 hard cap 未扫完 → 警告「部分语料未扫描完」。二者性质不同、文案分离。
+    assert "仅显示前" in SEARCH, "search.js 必须在每组被 limit 截断时提示「仅显示前 N 条」"
+    assert "部分语料未扫描完" in SEARCH, "search.js 必须在语料 hard cap 时提示「部分语料未扫描完」"
+    # 旧文案（把 limit 限量误当异常）必须移除。
+    assert "结果已截断" not in SEARCH, "旧的「结果已截断」文案必须移除（已拆分为上述两类）"
 
 
 def test_search_degrades_without_local_service():
@@ -186,9 +191,14 @@ def test_main_mounts_search_namespace_on_window():
 # esc 与 search.js 的 _highlight / 四个渲染器 / renderSearchGroups 按括号配对**真实
 # 切片**丢进 node:vm 真跑（探针里没有一份重抄的实现）：
 #   ① 高亮转义安全（含 <script> 的字段不注入 innerHTML）；② 四组渲染；③ 空态。
-# 这里驱动它、断言 fail==0 且三个关键场景名都在（防场景被删仍全绿）。
+# 这里驱动它、断言 fail==0 且四个关键场景名都在（防场景被删仍全绿）。
 
-_PROBE_SCENARIOS = ("xss_highlight_escape", "four_groups_render", "empty_state")
+_PROBE_SCENARIOS = (
+    "xss_highlight_escape",
+    "four_groups_render",
+    "empty_state",
+    "truncation_notices",
+)
 
 
 def _run_search_probe() -> dict:

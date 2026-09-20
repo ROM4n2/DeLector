@@ -256,6 +256,23 @@ def test_scope_vocab_only_returns_vocab_group():
     assert res["groups"]["corpus"] == []
 
 
+def test_groups_total_reflects_scope_filter():
+    """``scope='vocab'`` 下 ``groups_total`` 仅 vocab 非 0、其余为 0，``total == sum(groups_total)``。
+
+    守卫 ``groups_total`` 在 **scope 过滤后**统计：若误在过滤前对四组计数，未选中的
+    example/colloc/corpus 会残留非 0 → ``gt['example'] == 0`` 等断言必红。非选中组亦无显示条数。
+    """
+    res = search("haus", scope="vocab")
+    gt = res["groups_total"]
+    assert set(gt) == {"vocab", "example", "colloc", "corpus"}
+    assert gt["vocab"] > 0
+    assert gt["example"] == 0
+    assert gt["colloc"] == 0
+    assert gt["corpus"] == 0
+    assert res["total"] == gt["vocab"] == sum(gt.values())
+    assert all(res["groups"][k] == [] for k in ("example", "colloc", "corpus"))
+
+
 def test_invalid_scope_treated_as_all():
     """非法 scope 由路由层 400；纯函数收到非法值按 'all' 处理（一致且不抛错）。"""
     res_bad = search("wohnung", scope="bogus")
@@ -299,7 +316,10 @@ def test_limit_exact_upper_boundary_100_and_101():
     assert [d["id"] for d in res101["groups"]["corpus"]] == [
         d["id"] for d in res100["groups"]["corpus"]
     ]
-    assert res100["truncated"] is True  # 150 > 100 → 被截断
+    # 截断语义已归 `groups_total`：150 条命中、显示 100 条 → groups_total 记截断前 150。
+    assert res100["groups_total"]["corpus"] == 150
+    assert res101["groups_total"]["corpus"] == 150
+    assert res100["total"] == sum(res100["groups_total"].values()) == 150
 
 
 # ── 9. 空 / 单字符 q → 零结果、不抛错 ────────────────────────────────────────
@@ -311,6 +331,8 @@ def test_short_or_empty_query_returns_empty_groups_without_error():
         res = search(q)
         assert res["total"] == 0
         assert res["groups"] == {"vocab": [], "example": [], "colloc": [], "corpus": []}
+        assert res["groups_total"] == {"vocab": 0, "example": 0, "colloc": 0, "corpus": 0}
+        assert "truncated" not in res  # 截断语义已从 service 移出
 
 
 # ── 10. vocab 优先去重 ───────────────────────────────────────────────────────
@@ -333,11 +355,54 @@ def test_vocab_wins_dedup_over_same_lemma_example():
 
 
 def test_response_shape_and_group_keys():
-    """响应含 q/scope/total/groups/truncated，groups 键集固定为四类且均为列表。"""
+    """响应含 q/scope/total/groups/groups_total，groups 键集固定为四类且均为列表。"""
     res = search("haus")
-    assert set(res) == {"q", "scope", "total", "groups", "truncated"}
+    assert set(res) == {"q", "scope", "total", "groups", "groups_total"}
     assert set(res["groups"]) == {"vocab", "example", "colloc", "corpus"}
     assert all(isinstance(v, list) for v in res["groups"].values())
+
+
+def test_groups_total_counts_pre_limit_hits_and_total_is_sum():
+    """``groups_total`` = 每组在 ``limit`` 截断前的命中数；``total`` 恒 == sum(groups_total.values())。
+
+    ``haus`` 命中 vocab 内容超过默认 ``limit=20``（被截到 20），故 ``groups_total['vocab']``
+    必须**严格大于**显示条数 20 —— 若 groups_total 误按截断后记（会等于 20）、或漏建该键、
+    或 total 与 sum 不一致，本用例必红。**未截断**组的 groups_total 与显示条数天然相等，
+    对「记截断前 / 记截断后」无区分力，故不在此断言；确切值的区分力由合成用例
+    ``test_groups_total_records_pre_limit_count_exactly`` 承担。
+    """
+    res = search("haus")  # limit 默认 20
+    gt = res["groups_total"]
+    assert set(gt) == {"vocab", "example", "colloc", "corpus"}
+    assert all(isinstance(v, int) for v in gt.values())
+    assert res["total"] == sum(gt.values())
+    assert len(res["groups"]["vocab"]) == 20
+    assert gt["vocab"] > len(res["groups"]["vocab"])  # 截断前 > 20 → 被 limit 截断
+
+
+def test_groups_total_records_pre_limit_count_exactly():
+    """``groups_total`` 记**截断前**确切命中数（合成输入，不依赖真实词库分布）。
+
+    150 条合成 corpus 命中、``limit=20``：``groups_total['corpus']`` 必须是**截断前**确切值
+    150，而显示只 20 条。若实现改成「按 limit 截断后记数」，``groups_total['corpus']`` 会退化
+    为 20 == 显示条数 → 断言 ``== 150`` 必红（故本断言对「记截断前 / 记截断后」有区分力）。
+    """
+    docs = [
+        _doc(kind="corpus", id=f"c{i:03d}", fields={"text": f"zqx item {i}"})
+        for i in range(150)
+    ]
+    res = search("zqx", limit=20, corpus_docs=docs)
+    gt = res["groups_total"]
+    assert gt["corpus"] == 150  # 截断前确切值；按 limit 记则退化为 20 → 红
+    assert len(res["groups"]["corpus"]) == 20
+    assert gt["corpus"] > len(res["groups"]["corpus"])
+    assert res["total"] == sum(gt.values()) == 150
+
+
+def test_search_result_has_no_truncated_key():
+    """截断语义已从 service 移除：返回中**不得**再有 ``truncated`` 键（职责归路由层）。"""
+    assert "truncated" not in search("haus")
+    assert "truncated" not in search("x")
 
 
 # ── 12. iter_vocab_docs：三源规范化 ─────────────────────────────────────────

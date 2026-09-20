@@ -198,8 +198,10 @@ def iter_corpus_docs(
       让任意 q 都「命中」，必须挡在 doc 构造之前。
     - **hard cap**：按 ``id`` 升序遍历两表，累计文档数达 ``max_docs`` **或** 累计字符
       超 ``max_chars`` 即停止；此时返回 ``truncated=True``，正常遍历完为 ``False``。
-      返回 ``(docs, truncated)``。语料 cap 的 ``truncated`` 与 ``search`` 的 limit 截断
-      由路由层（T3）按 OR 合并（spec §3.3）。
+      返回 ``(docs, truncated)``。**语料 cap 的 ``truncated`` 是 ``truncated`` 的唯一
+      来源**（路由层据此置响应 ``truncated``）；``search`` 的 limit「每组限量」**不**由
+      ``truncated`` 表达，而由 ``groups_total`` 表达（见 ``search`` 与
+      ``delector/routes/search.py``）。
     """
     docs: List[SearchDoc] = []
     total_chars = 0
@@ -302,14 +304,20 @@ def search(
 ) -> Dict[str, Any]:
     """对词库侧三源（+ 注入的 ``corpus_docs``）做子串匹配 → 计分 → 排序 → 分组截断。
 
-    返回 ``{"q","scope","total","groups","truncated"}``：
+    返回 ``{"q","scope","total","groups","groups_total"}``（**不含** ``truncated``：截断
+    语义已移交路由层，见下）：
 
-    - ``fold(q)`` 后长度 < 2 → ``total=0`` + 四组空数组（**绝不抛错**）；
+    - ``fold(q)`` 后长度 < 2 → ``total=0`` + 四组空数组 + 四组零计数（**绝不抛错**）；
     - ``scope`` ∈ {all,vocab,example,colloc,corpus}：非 ``all`` 只回该组，其余组空数组。
       **非法 scope 由路由层校验 400**；纯函数收到非法值时按 ``"all"`` 处理（一致且不抛错）；
     - ``limit`` 钳制 1..100（≤0→1，>100→100），**每组各取前 limit 条**；
-    - ``total`` = 去重且 scope 过滤后的命中数（**截断前**）；``truncated`` = 是否有组被
-      ``limit`` 截断。（语料侧 hard cap 的 ``truncated`` 由 T2/T3 在路由层 OR 进来。）
+    - ``groups_total`` = **每组在 ``limit`` 截断前的命中条数**（去重 + scope 过滤后该组大小）；
+      ``total`` = 命中总数，恒 ``== sum(groups_total.values())``。二者皆**与 limit 无关**：
+      limit 的「每组限量」不再由本函数的 ``truncated`` 表达，而是由调用方（前端）比较
+      ``groups_total[k] > len(groups[k])`` 后按组显示信息性提示。
+    - **截断语义（Task 6）**：本纯函数**不再返回** ``truncated``。``truncated``（= 语料
+      hard cap 未扫完，真异常）的唯一来源是路由层：``iter_corpus_docs`` 的返回，见
+      ``delector/routes/search.py``。
     - **去重（仅 ``scope='all'``）**：同一 lemma 若已被词条组命中，则例句组不再重复该
       lemma（词条优先）。**定向 scope（如 ``'example'``）不做去重**——否则目标词自身的
       例句会被其词条命中吞掉，而无关例句却保留（真 UX 缺陷）。
@@ -320,7 +328,13 @@ def search(
 
     q_folded = fold(q)
     if len(q_folded) < _MIN_Q:
-        return {"q": q, "scope": eff_scope, "total": 0, "groups": groups, "truncated": False}
+        return {
+            "q": q,
+            "scope": eff_scope,
+            "total": 0,
+            "groups": groups,
+            "groups_total": {kind: 0 for kind in _KIND_ORDER},
+        }
 
     clamped = max(_LIMIT_MIN, min(limit, _LIMIT_MAX))
 
@@ -349,13 +363,14 @@ def search(
             continue
         groups[doc["kind"]].append(doc)
 
-    total = sum(len(items) for items in groups.values())
+    # 截断前的每组命中数（= 去重 + scope 过滤后该组大小）；total = 其总和。二者与 limit 无关。
+    groups_total: Dict[str, int] = {kind: len(items) for kind, items in groups.items()}
+    total = sum(groups_total.values())
 
-    truncated = False
+    # limit 每组限量：只裁剪返回数组，不改 groups_total（截断前真值由路由/前端据此对比展示）。
     for kind, items in groups.items():
         if len(items) > clamped:
             groups[kind] = items[:clamped]
-            truncated = True
 
     # 补 snippet 放在**每组 limit 截断之后**，且**只对最终返回**的 corpus doc 补——
     # 既不为将被截掉的 doc 白算 snippet，也与下方「浅拷贝」共同保证无副作用：
@@ -372,4 +387,10 @@ def search(
         for doc in groups["corpus"]
     ]
 
-    return {"q": q, "scope": eff_scope, "total": total, "groups": groups, "truncated": truncated}
+    return {
+        "q": q,
+        "scope": eff_scope,
+        "total": total,
+        "groups": groups,
+        "groups_total": groups_total,
+    }

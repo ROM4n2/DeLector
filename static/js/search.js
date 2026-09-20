@@ -6,7 +6,10 @@
  *
  * 后端契约（delector/routes/search.py，字段名逐字一致 —— 红线 11）：
  *   GET /api/search?q=&scope=&limit=
- *     → {q, scope, total, groups:{vocab,example,colloc,corpus}, truncated}
+ *     → {q, scope, total, groups:{vocab,example,colloc,corpus}, groups_total, truncated}
+ *   - groups_total[k]：第 k 组在 limit 截断前的命中条数（截断语义拆分，Task 6）。
+ *     组被 limit 截断（groups_total[k] > groups[k].length）时在组尾追加信息提示。
+ *   - truncated：**仅**表示「语料 hard cap 未扫完」这一真异常（limit 限量不计入）。
  *   - groups.vocab[]   : {hw, lemma, pos, cefr, fields:{hw,def_zh}, payload:{cefr,pos,gender,plural}}
  *   - groups.example[] : {lemma, hw, fields:{example_de,example_zh}, payload:{ipa}}
  *   - groups.colloc[]  : {lemma, fields:{prep,case,colloc_zh,example_de}, payload:{prep,case}}
@@ -91,6 +94,7 @@ function _ensureStyle() {
 .search-item-corpus:hover { border-color:var(--coral); box-shadow:var(--shadow-sm); }
 .search-item mark { background:var(--hl-A2); color:inherit; padding:0 0.1rem; border-radius:2px; }
 .search-empty { text-align:center; padding:2rem 1rem; color:var(--pencil); font-size:0.9375rem; }
+.search-group-more { font-family:var(--mono); font-size:0.75rem; color:var(--pencil); padding:0.25rem 0.1rem 0; }
 `;
   (document.head || document.documentElement).appendChild(style);
 }
@@ -238,6 +242,7 @@ function _itemHtml(kind, item, index, q) {
 export function renderSearchGroups(resp) {
   const data = resp || {};
   const groups = data.groups || {};
+  const groupsTotal = data.groups_total || {};
   const q = data.q || _s.q;
   const scope = data.scope || _s.scope;
   const total = Number(data.total) || 0;
@@ -260,7 +265,14 @@ export function renderSearchGroups(resp) {
     }
     rendered = true;
     if (sec) sec.classList.remove("hidden");
-    body.innerHTML = items.map((it, i) => _itemHtml(kind, it, i, q)).join("");
+    let html = items.map((it, i) => _itemHtml(kind, it, i, q)).join("");
+    // limit 每组限量是**正常**现象（几乎总发生）→ 组尾给**信息性**提示，而非全局警告。
+    // 仅当该组截断前命中数 > 当前展示条数时出现；展示值仍走 esc()。
+    const groupTotal = Number(groupsTotal[kind]) || 0;
+    if (groupTotal > items.length) {
+      html += `<div class="search-group-more">仅显示前 ${esc(items.length)} 条（命中 ${esc(groupTotal)}）</div>`;
+    }
+    body.innerHTML = html;
   }
 
   if (!rendered) {
@@ -273,7 +285,8 @@ export function renderSearchGroups(resp) {
   if (empty) empty.innerHTML = "";
   const parts = [`共 ${total} 条命中`];
   if (shown !== total) parts.push(`当前展示 ${shown} 条`);
-  if (data.truncated) parts.push("⚠ 结果已截断");
+  // truncated 仅表示「语料 hard cap 未扫完」这一真异常（limit 限量走组尾信息提示）。
+  if (data.truncated) parts.push("⚠ 部分语料未扫描完");
   _setStatus(parts.join(" · "));
 }
 
