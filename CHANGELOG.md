@@ -4,7 +4,7 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.9.3（2026-09-18）**
+**最新版本：v5.9.4（2026-09-20）**
 
 ---
 
@@ -141,6 +141,8 @@
 - [x] **v5.9.2**：**A1 取数统一（ADR-0014）+ 词表富字段回填修复**（2026-09-17，PR #61 + `e2d5504`）——① **A1 取数统一（ADR-0014 S1–S3）**：A1 首装改走 `GET /api/cards/vocab?cefr=A1&scope=all`（API 优先 + 内联降级为 `file://` 离线 fallback + localStorage 缓存 + 失败可恢复重试 + 挂起期占位），输出契约 11→12 字段（+`letter`，服务端下发 seed 原值、不派生——实测 `letterOf` 会在 10 条上漂移 `O↔Ö`/`U↔Ü`）；三条守卫钉死「内联绝不当主路径」。② **A2/B1 富字段回填**：`sync{A2,B1}CardsFromServer` 由 **append-only 升级为「只增 + 只补空字段」**（幂等、绝不覆盖非空、不碰 `cards/log/wrong`）——根治「A2/B1 只有部分词有例句」（根因＝存量词条在首次同步后永久冻结，`ex:[]` 再不刷新；进 A2/B1 档即自愈）；备考域卡片空例句块改**条件渲染**（空值不输出孤立标签）。③ **A1 早退闸修复**：`bootstrapA1Words` 早退闸不再依赖来源标记（旧 `lastSrc !== "inline"` → 改 `!canUseServer`），已以 `server` 落盘的设备**每次启动重新合并** A1 富字段——修「`anbieten`/`allein` 等存量 A1 条目无例句无音标」（旧版构建首装时服务端/种子尚无富字段，裸条目被永久冻结；实测用户 `localStorage` 中 `a1-0011`/`a1-0016` `exLen=0`、`ipa=''`，而 A2 同源条目齐全）。行为级探针新增 A1 早退闸场景 B2 + A2/B1 回填 19 场景（真实源码切片 + `node:vm` 真跑，接入 pytest/CI）。测试基线 **987 passed + 1 skipped**（759 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`，工作区 A/B 证实为既有）；13+ `tools/*.mjs` 探针零漂移；ruff 全绿。**Android 需覆盖安装 v5.9.2 生效**（改动含 `static/`）。
 
 - [x] **v5.9.3**：**类型门禁全仓 `--strict` 清账 + CI 门禁升级 + 工具链修复**（2026-09-18，纯工程治理、**无用户可见变更**）——① **mypy `--strict` 全仓 250→0 清账**（三阶段：`routes/main.py`(62) + `core/database.py`(24) 补注解 → 全仓 133 → `tools/` 108→0），CI 门禁升级为**双轨 strict**（`delector`+`tools` 走 strict、`tests` skip）+ 修正门禁路径拼写（`deletor`→`delector`）；设计见 `docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md`。② **工具链修复**：`tools/vault-proactive-scan.py` 两缺陷修复、`tools/check_security` 排除 `node_modules`（消除 WASM base64 误报）。测试基线 **987 passed + 1 skipped**（与 v5.9.2 持平；2 条既有 Windows 环境失败 `no such table: exam_trials`）。**本次无 `static/` 改动** → 桌面端即时生效；Android 覆盖安装为可选（无前端变更）。
+
+- [x] **v5.9.4**：**精读生词（reader 档）富字段回填 + 原句优先**（2026-09-20，`a7801ec`）——补最后一个同型缺口：**reader 生词卡此前永远裸**（服务端 `scope=reader` 显式置空富字段 + 前端 `syncReaderCardsFromServer` append-only → 存量永不刷新），与 A1/A2/B1 三档信息量不对齐。① **服务端**：新增 `_reader_lemma_key`（去冠词 + 小写归一——`RICH`/`LEXICON` 键 100% 小写，而写入侧 `lemma` 可能大写/带冠词）+ `_reader_rich_fields`（`rich_of` 取 `ipa`/例句、`a1_lemma_meta_of` 取 `gender`/`plural`——源 = 主干 LEXICON 4762 全量、覆盖非 A1、`lookup_irregular_verb` 屈折形兜底 `ging→gehen`），reader 分支改「**命中才补，未命中留空不编造**」；`de` 语义 = **原句优先**（有 `sentence_context` 保留生词原句且不补 `example_zh`，避免「德文原句 + 官方例句中文」文不对题）。② **前端**：`syncReaderCardsFromServer` 由 append-only 升级为「**只增 + 只补空**」（`ipa`/`ex`/`gender`/`plural`），不覆盖非空、不碰 `cards`/`log`/`wrong`、幂等 → 进「生词」档即自愈。③ 行为级探针 `tools/wb_reader_rich_backfill_probe.mjs`（13 场景，真实源码切片 + `node:vm` 真跑，含防死测守卫）接入 pytest。测试基线 **993 passed + 1 skipped**（765 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；15 个 `tools/*.mjs` 探针零漂移；ruff 全绿 / mypy `--strict` 0 error。**Android 需覆盖安装 v5.9.4 生效**（改动含 `static/`）。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
 

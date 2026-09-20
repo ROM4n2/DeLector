@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.9.3-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.9.4-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-987%2F988%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-993%2F994%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -20,19 +20,19 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
+> ✅ **v5.9.4 精读生词（reader 档）富字段回填 + 原句优先（2026-09-20）**：reader 生词卡补 `ipa` + 例句 + `gender`/`plural`（服务端归一查表 + 不规则动词兜底，**命中才补、不编造**）；`de` 原句优先（保留生词原句，有原句时不补官方中文，避免文不对题）；前端同步升级为「只增 + 只补空」，进「生词」档即自愈。测试基线 993 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > ✅ **v5.9.3 类型门禁全仓 `--strict` 清账 + CI 门禁升级 + 工具链修复（2026-09-18）**：mypy `--strict` 全仓 250→0（含 `tools/` 108→0），CI 门禁升级为双轨 strict（`delector`+`tools` strict、`tests` skip）；修 `vault-proactive-scan` 两缺陷 + `check_security` 排除 `node_modules`（消 WASM base64 误报）。**纯工程治理、无用户可见变更**；测试基线 987 passed + 1 skipped（本次无 `static/` 改动，桌面端即时生效）。
 > ✅ **v5.9.2 A1 取数统一（ADR-0014）+ 词表富字段回填修复（2026-09-17）**：A1 首装改走服务端 API（API 优先 + 内联降级为 `file://` 离线 fallback + 本地缓存），输出契约 11→12 字段（+`letter`）；A2/B1 词库同步由 append-only 升级为「只增 + 只补空字段」，根治「只有部分词有例句」（进 A2/B1 档即自愈）；**A1 早退闸修复**——已以 `server` 落盘的设备每次启动重新合并 A1 富字段，修「anbieten/allein 等存量 A1 条目无例句无音标」。测试基线 987 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
-> ✅ **v5.9.1 词库等级标签补齐 + 入口文档瘦身（2026-09-16）**：工作台词库补 A1 等级标签 `a1`（此前只有 `core`，词库「全部标签」筛不出 A1）；修 `reader` 谓词的 `custom` 兜底（22 条补缺词误入精读生词档）；README 瘦身 433→131 行，版本历史迁出为 `CHANGELOG.md`。测试基线 973 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 >
 > 📱 **Android 用户注意**：改动含 `static/` 的版本（如 v5.8.0 / v5.9.0）需**覆盖安装**才生效。
 > 📜 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.9.3` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.3)     |
-| 🍎 **macOS**       | `v5.9.3` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.3)  |
-| 🐧 **Linux x64**   | `v5.9.3` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.3)  |
-| 📱 **Android**     | `v5.9.3` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.3) |
+| 🪟 **Windows x64** | `v5.9.4` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.4)     |
+| 🍎 **macOS**       | `v5.9.4` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.4)  |
+| 🐧 **Linux x64**   | `v5.9.4` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.4)  |
+| 📱 **Android**     | `v5.9.4` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.9.4) |
 
 ---
 
@@ -118,10 +118,9 @@ DeLector/
 
 ## 🗺️ 版本历史 (Version History)
 
+- **v5.9.4（2026-09-20）**：精读生词（reader 档）富字段回填——生词卡补 ipa + 例句 + gender/plural（服务端归一查表 + 不规则动词兜底，命中才补、不编造）；de 原句优先（保留生词原句，有原句时不补官方中文）；前端同步升级「只增 + 只补空」，进生词档即自愈。测试 993 passed + 1 skipped。
 - **v5.9.3（2026-09-18）**：类型门禁全仓 `--strict` 清账（250→0，含 tools 108→0）+ CI 门禁双轨升级 + 工具链修复（vault-proactive-scan / check_security node_modules）。纯工程治理，无用户可见变更。测试 987 passed + 1 skipped。
 - **v5.9.2（2026-09-17）**：A1 取数统一（ADR-0014：首装 API 化 + 内联降级为离线 fallback + 契约 11→12 字段 `+letter`）+ A2/B1 富字段回填（修「只有部分词有例句」）+ A1 早退闸修复（已 server 落盘设备每启动重新合并富字段，修存量 A1 裸条目无例句无音标）。测试 987 passed + 1 skipped。
-- **v5.9.1（2026-09-16）**：词库等级标签补齐（A1 补 `a1`、修 `reader` 谓词 custom 兜底）+ 入口文档瘦身（README 433→131 行，版本历史迁出为 `CHANGELOG.md`）。测试 973 passed + 1 skipped。
-
 > 📜 完整版本历史（含全部 70+ 版本）见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
