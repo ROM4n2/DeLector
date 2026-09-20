@@ -112,6 +112,7 @@
 
 ### 3.4 前端
 - `static/index.html` 新增 `<main id="view-search" class="view">`（顶栏搜索框 + 分段控件 + 四组结果容器 + 空态）。
+  - **入口**：顶栏 `nav-btn-search` **+ 移动端底部 dock `mob-btn-search`**（≤1024px 时 `#nav .nav-links` 被隐藏，必须经 dock 才可达；dock 为 `flex`+`.dock-item{flex:1}`，加第 8 个按钮不触列数断言）。
 - `static/js/search.js`：请求 `/api/search`、渲染四组、**所有展示字段经 `esc()`**、防抖、空态、点击跳转/发音/进卡。
 - `main.js`：import 模块 + 注册视图路由（照 `hard-sentences.js` / `listen-lab.js` 既有模式）+ 顶栏导航项。
 
@@ -131,6 +132,7 @@
 | 语料过大 | 单请求语料扫描 hard cap（如最多 N 篇 / 总字符上限），超出置 `truncated=true` 并在前端提示"结果已截断" |
 | 并发 | 只读短连接 `db_conn()`；语料扫描请求内完成，**不加缓存**（YAGNI，实测慢再加进程内 TTL 缓存） |
 | XSS / 注入 | 前端一律 `esc()`；后端 SQLite 参数化查询，绝不拼 SQL |
+| 高亮实体边界（**已知限制**） | `_highlight` 在 `esc()` **之后**的串上定位命中，若查询串恰为 HTML 实体名子串（`amp`/`lt`/`gt`/`quot`/`39`）且展示字段含对应特殊字符，`<mark>` 会插进实体内部（显示异常；**非 XSS**，转义仍成立）。**待后续任务修**：最小修法 = 先在**原文**定位命中区间，再按区间切片 `esc()` 后包 `<mark>` |
 | `file://` 直开 / 服务未起 | 检索视图显示"需本地服务"提示（与既有 http 守卫同纪律），不白屏 |
 | 去重 | 同一 `lemma` 的"词条命中 + 例句命中"合并为一条（词条优先）；**仅 `scope='all'` 时生效**——定向 scope（如 `example`）不去重，否则目标词自身例句会被其词条命中吞掉（CRV P1 实测缺陷） |
 | 前后端版本错位（Android 覆盖安装不一致） | 端点缺失时前端 `try/catch` 降级为"检索不可用"，不影响其它功能 |
