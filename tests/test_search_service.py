@@ -16,7 +16,7 @@ TDD：先红后绿。覆盖
 
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 from delector.services.search import (
     SearchDoc,
@@ -43,7 +43,7 @@ def _doc(**over: Any) -> SearchDoc:
         "payload": {},
     }
     base.update(over)
-    return base  # type: ignore[return-value]
+    return cast(SearchDoc, base)
 
 
 # ── 1. fold：小写 + 变音 + ß + 空白压缩 ───────────────────────────────────────
