@@ -69,7 +69,12 @@ function _ensureStyle() {
   style.id = "search-view-style";
   style.textContent = `
 #view-search { background: var(--paper-warm); }
-.search-panel { max-width: 60rem; margin: 0 auto; }
+/* 与 .exam-container 同构：.view 自身无 padding，容器须自带水平内边距，
+   否则窄屏上内容直接贴边（本视图此前无 padding = 贴边根因）。 */
+.search-panel { max-width: 60rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; width: 100%; }
+.search-head { margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--ink); }
+.search-head h2 { margin: 0; font-family: var(--serif); font-size: 1.5rem; font-style: italic; font-weight: 700; color: var(--ink); }
+.search-head-hint { display: block; margin-top: 0.2rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 400; font-style: normal; color: var(--pencil); }
 .search-bar { margin-bottom: 0.75rem; }
 .search-input { width:100%; min-height:46px; padding:0.6rem 0.9rem; border:1.5px solid var(--ink); border-radius:8px; background:var(--paper-card); color:var(--ink); font-size:1rem; font-family:var(--serif-body, var(--mono)); }
 .search-input:focus { outline:none; box-shadow:0 0 0 3px var(--hl-A2); }
@@ -95,6 +100,17 @@ function _ensureStyle() {
 .search-item mark { background:var(--hl-A2); color:inherit; padding:0 0.1rem; border-radius:2px; }
 .search-empty { text-align:center; padding:2rem 1rem; color:var(--pencil); font-size:0.9375rem; }
 .search-group-more { font-family:var(--mono); font-size:0.75rem; color:var(--pencil); padding:0.25rem 0.1rem 0; }
+/* 长德语复合词 / 长串不撑破窄屏（横向滚动条是移动端最常见的"贴边"次生症状） */
+.search-hw, .search-def, .search-ex-de, .search-ex-zh, .search-title, .search-snippet { overflow-wrap: anywhere; }
+/* 移动端：对齐 #view-home/#view-cards/#view-progress 的页面内边距约定（1.25rem 1rem 5.5rem，
+   5.5rem 底部为固定 dock 让位）+ 触屏目标放大。 */
+@media (max-width: 1024px) {
+  .search-panel { padding: 1.25rem 1rem 5.5rem; }
+  .search-head { margin-bottom: 1rem; }
+  .search-head h2 { font-size: 1.25rem; }
+  .search-scope-btn { min-height: 42px; padding: 0 1.05rem; }
+  .search-item { padding: 0.7rem 0.85rem; }
+}
 `;
   (document.head || document.documentElement).appendChild(style);
 }

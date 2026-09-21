@@ -239,3 +239,26 @@ def test_search_ui_behaves_under_node():
     names = {c["name"] for c in out["cases"]}
     for key in _PROBE_SCENARIOS:
         assert key in names, "关键场景 %r 缺失（被删仍全绿风险）；实际场景：%s" % (key, sorted(names))
+
+
+# ── 布局守卫：搜索视图「贴边」回归（手机端实测反馈） ────────────────────────────
+#
+# 根因：``.view`` 自身没有 padding，容器视图（``.exam-container``）靠**自带**水平内边距
+# 把内容推开。``.search-panel`` 初版只有 ``max-width + margin:auto``，于是在窄屏上内容
+# 直接贴到最左/最右边缘。这里把「容器必须自带水平内边距」+「≤1024px 移动端内边距 /
+# 触屏目标 / dock 让位」钉成断言，防回归。
+def test_search_panel_owns_page_padding_and_mobile_rules():
+    """布局回归：.search-panel 自带水平内边距；≤1024px 有移动端内边距 + 触屏目标。"""
+    assert ".search-panel { max-width: 60rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; width: 100%; }" in SEARCH, (
+        ".search-panel 必须自带水平内边距（与 .exam-container 同构），否则窄屏内容贴边"
+    )
+    assert "@media (max-width: 1024px)" in SEARCH, "缺少移动端断点：触屏内边距/目标尺寸会退化"
+    assert ".search-panel { padding: 1.25rem 1rem 5.5rem; }" in SEARCH, (
+        "移动端内边距须对齐 #view-home/#view-cards/#view-progress 的 1.25rem 1rem 5.5rem 约定"
+        "（5.5rem 底部为固定 dock 让位）"
+    )
+    assert ".search-scope-btn { min-height: 42px;" in SEARCH, "移动端范围按钮须放大到 ≥42px 触屏目标"
+    assert "overflow-wrap: anywhere" in SEARCH, "长德语复合词须可换行，防窄屏横向溢出（贴边的次生症状）"
+    # 视图标题块（与 exam/writer/cards 的 topbar 保持视图一致性）
+    assert 'class="search-head"' in INDEX, "搜索视图缺少标题块"
+    assert ".search-head h2 { margin: 0; font-family: var(--serif);" in SEARCH, "标题须复用既有 topbar 字体口径"
