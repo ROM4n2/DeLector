@@ -193,3 +193,30 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 （PWA 类修复须发 patch 才能到用户手机）。
 
 ---
+
+## 存量富字段回填规范（MUST · 词表/精读生词同步）
+
+> 2026-09-21 立规（源：A1 存量裸条目 `anbieten`/`allein` 排障 + A2/B1 与 reader 生词回填设计）。
+> 适用于「服务端 / 上游 → 本地词表、精读生词」的**全部**同步路径（A1 首装合并、A2/B1 档同步、
+> reader 生词同步）。跨项目正式规范：Coding Vault `01-Rules/STORED-DATA-BACKFILL.md`。
+
+用户报「升级了还是旧的」时，**先怀疑存量记录被冻结，而不是数据缺失**——上游数据通常是全的。
+
+1. **回填 MUST 发生在读取期（派生投影）**，MUST NOT 只靠写入期填充。写入期填充只覆盖未来：旧版本首次
+   落盘的记录已被写死，此后上游补的字段永远进不来。`bootstrapA1Words` / `sync{A2,B1}CardsFromServer` /
+   `syncReaderCardsFromServer` 都属读取期合并点。
+2. **重复合并的闸门 MUST 按「能力」判定**（此刻上游是否可达），MUST NOT 按「历史来源标记」判定。
+   反例（v5.9.1 及以前）：`if (!A1_BOOT_PENDING && lastSrc !== "inline") return;` → 已以 `server` 落盘的
+   设备永不重新合并；正例（v5.9.2 起）：`if (!A1_BOOT_PENDING && !canUseServer) return;`。
+3. **同步 MUST 只增 + 只补空 + 幂等**：已存在的词条 MUST NOT 被覆盖；仅补空字段；不碰 `cards`/`log`/`wrong`
+   与手编内容；上游无新信息时 `changed === false` 且不写盘。append-only（`if (!has(id))` 且无 else）不满足本条。
+4. **补字段 MUST NOT 跨语义来源混用**：同名槽位在不同来源可能语义不同——`de` 在 A2/B1 是「官方例句」，
+   在 reader 生词是「该词所在原句」。既有值非空 → 保留原值（**原句优先 · 只补空**）；两种语义都要 →
+   **另立字段**，不得复用同一槽位；也不得只补"半件"（德文原句 + 官方例句的中文 = 文不对题）。
+5. **未命中 MUST 诚实留空**（不编造、不用默认值兜底）。提升命中率靠**归一化上游键**（小写、去冠词
+   `der/die/das/ein/eine`、`lookup_irregular_verb` 兜底）与确定性查表，MUST NOT 靠降低诚实度。
+6. **回归 MUST 是行为级探针**（`tools/*.mjs` 真实源码切片 + `node:vm` 真跑），断言五条：补空生效 /
+   非空不被覆盖 / 用户数据零写入 / 二次运行零变化 / 标记不回退。静态断言不得替代（Coding Vault
+   `01-Rules/TESTING-PATTERNS`）。
+
+---

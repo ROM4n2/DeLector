@@ -93,6 +93,7 @@
 9. import 期不得联网、不得抛异常（Android 启动卡死的历史根因）。
 10. 切句只有 `syntax_tree.split_sentences_pure_python()` 一处实现，别造第二份。
 11. 跨边界契约（前端 body ↔ 后端模型）必须行为探针验证，字符串存在断言是死测（2026-09-02 事故）。
+12. 「上游 → 本地词表/精读生词」同步 MUST 只增 + 只补空 + 幂等，闸门按「能力」判定（MUST NOT 按历史来源标记）；补字段 MUST NOT 跨语义来源混用（生词原句 vs 官方例句）。详情见 `docs/agents/ops.md`「存量富字段回填规范」+ Coding Vault `01-Rules/STORED-DATA-BACKFILL`。
 
 ## 工作方式
 
