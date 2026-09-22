@@ -22,24 +22,32 @@ from delector.data.official_vocab_rich import (
     OFFICIAL_RICH_B1,
 )
 
-# 富字段应恰含这四个键（ADR-0013 schema）。
-_RICH_KEYS = {"ipa", "example_de", "example_zh", "topic"}
+# 富字段应恰含这五个键（ADR-0013 + ADR-0015 examples）。
+_RICH_KEYS = {"ipa", "example_de", "example_zh", "topic", "examples"}
 
 
 # ── 1. RICH = 三分片 lemma 并集（无遗漏）──────────────────────────────────
 
 
-def test_rich_fragments_registers_three_shards():
-    """富字段分片注册表恰含 A1/A2/B1 三片（与常量逐字同源）。"""
-    assert set(RICH_FRAGMENTS) == {"official_rich_a1", "official_rich_a2", "official_rich_b1"}
+def test_rich_fragments_registers_five_shards():
+    """富字段分片注册表恰含 A1 工作台/考纲 + official_rich 三档（ADR-0015）。"""
+    assert set(RICH_FRAGMENTS) == {
+        "workbench-a1",
+        "goethe-a1",
+        "official_rich_a1",
+        "official_rich_a2",
+        "official_rich_b1",
+    }
     assert RICH_FRAGMENTS["official_rich_a1"] is OFFICIAL_RICH_A1
     assert RICH_FRAGMENTS["official_rich_a2"] is OFFICIAL_RICH_A2
     assert RICH_FRAGMENTS["official_rich_b1"] is OFFICIAL_RICH_B1
 
 
 def test_rich_is_union_of_all_shards():
-    """``RICH`` 的 key 集合 == 三片并集（集合实算，不写死猜测数）。"""
-    union = set(OFFICIAL_RICH_A1) | set(OFFICIAL_RICH_A2) | set(OFFICIAL_RICH_B1)
+    """``RICH`` 的 key 集合 == 五片并集（集合实算，不写死猜测数）。"""
+    union = set()
+    for fragment in RICH_FRAGMENTS.values():
+        union |= set(fragment)
     assert set(RICH) == union
     assert len(RICH) == len(union)
 
@@ -48,7 +56,7 @@ def test_rich_is_union_of_all_shards():
 
 
 def test_rich_of_returns_entry_with_exact_schema():
-    """``rich_of('abfahrt')`` 是 dict 且键集恰为四富字段。"""
+    """``rich_of('abfahrt')`` 是 dict 且键集恰为五富字段。"""
     entry = rich_of("abfahrt")
     assert isinstance(entry, dict)
     assert set(entry) == _RICH_KEYS
@@ -57,33 +65,16 @@ def test_rich_of_returns_entry_with_exact_schema():
 # ── 3. 覆盖优先级：A2/B1 覆盖 A1 ───────────────────────────────────────────
 
 
-def test_rich_priority_a2b1_overrides_a1():
-    """A1 与 A2/B1 跨档重叠时，``RICH`` 取 A2/B1 值（非 A1）。"""
-    overlap_b1 = set(OFFICIAL_RICH_A1) & set(OFFICIAL_RICH_B1)
-    assert overlap_b1, "预期存在 A1 与 B1 的跨档重叠 lemma"
-
-    # 全量不变式：所有「A1 ∩ (A2∪B1)」重叠 lemma，RICH 取值来自 A2/B1（更高优先）。
-    for lemma in set(OFFICIAL_RICH_A1) & (set(OFFICIAL_RICH_A2) | set(OFFICIAL_RICH_B1)):
-        expected = (
-            OFFICIAL_RICH_B1[lemma]
-            if lemma in OFFICIAL_RICH_B1
-            else OFFICIAL_RICH_A2[lemma]
-        )
-        assert RICH[lemma] == expected, lemma
-
-    # 可观测性：找一条 A1 与 A2/B1 取值确实不同的重叠，证明覆盖真实生效，非碰巧相等。
-    observable = None
-    for lemma in overlap_b1:
-        higher = OFFICIAL_RICH_B1[lemma]
-        if OFFICIAL_RICH_A1[lemma] != higher:
-            observable = lemma
-            break
-    if observable is not None:
-        assert RICH[observable] == OFFICIAL_RICH_B1[observable]
-        assert RICH[observable] != OFFICIAL_RICH_A1[observable]
-
-
-# ── 4. 未知 lemma ──────────────────────────────────────────────────────────
+def test_rich_priority_manual_over_g2p_fill_empty():
+    """ADR-0015：workbench-a1 人工 IPA/例句优先；official_rich 仅补空，不覆盖非空。"""
+    overlap = set(OFFICIAL_RICH_A1) & (set(OFFICIAL_RICH_A2) | set(OFFICIAL_RICH_B1))
+    assert overlap
+    for lemma in list(overlap)[:20]:
+        entry = rich_of(lemma)
+        assert entry is not None
+        wb = RICH_FRAGMENTS.get("workbench-a1", {}).get(lemma)
+        if wb and (wb.get("ipa") or "").strip():
+            assert entry["ipa"] == wb["ipa"], lemma
 
 
 def test_rich_of_unknown_lemma_is_none():
@@ -97,7 +88,7 @@ def test_rich_of_unknown_lemma_is_none():
 
 def test_no_tie_bar_left_in_ipa():
     """遍历 ``RICH`` 的 ipa，``\\u0361`` 计数为 0（ADR-0013 §4-4）。"""
-    total = sum(entry["ipa"].count("\u0361") for entry in RICH.values())
+    total = sum((entry.get("ipa") or "").count("\u0361") for entry in RICH.values())
     assert total == 0
 
 

@@ -4356,6 +4356,8 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         # Phase 2 · S1：富字段 side-car 分片 official_vocab_rich（ipa/例句），
         # 同口径逐条钉进打包面 —— 漏登记 = 打包后 ModuleNotFoundError 而本地全绿。
         "official_vocab_rich",
+        "a1_fragments",
+        "a1_sidecar",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =

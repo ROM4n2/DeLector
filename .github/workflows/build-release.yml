@@ -105,6 +105,8 @@ jobs:
             --hidden-import=delector.data.official_vocab \
             --hidden-import=delector.data.lexicon_merge \
             --hidden-import=delector.data.official_vocab_rich \
+            --hidden-import=delector.data.a1_fragments \
+            --hidden-import=delector.data.a1_sidecar \
             --hidden-import=delector.routes.a1 \
             --hidden-import=delector.routes.a2 \
             --hidden-import=delector.routes.a1_hoeren \
@@ -196,6 +198,8 @@ jobs:
             --hidden-import=delector.data.official_vocab \
             --hidden-import=delector.data.lexicon_merge \
             --hidden-import=delector.data.official_vocab_rich \
+            --hidden-import=delector.data.a1_fragments \
+            --hidden-import=delector.data.a1_sidecar \
             --hidden-import=delector.routes.a1 \
             --hidden-import=delector.routes.a2 \
             --hidden-import=delector.routes.a1_hoeren \

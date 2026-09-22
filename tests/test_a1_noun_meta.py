@@ -28,7 +28,8 @@ from delector.core.lexicon import A1_LEMMA_META, LEXICON, a1_lemma_meta_of
 from delector.data.a1_workbench_dict import A1_WORKBENCH_CUSTOM, A1_WORKBENCH_SEED
 
 # 契约 gender 值域（与主干 5 元组一致，None = 无性别 / 非名词）
-_VALID_GENDERS = {None, "Masc", "Fem", "Neut", "Plur"}
+# 含主干字面量哨兵 "None"（非名词 / 无性别，契约层归一化为 None）。
+_VALID_GENDERS = {None, "None", "Masc", "Fem", "Neut", "Plur"}
 
 # 名词判据：``hw`` 首词为定冠词（seed 名词 hw 形如 ``die Adresse,-en`` / ``der Apfel, -Ä``）。
 _A1_NOUN_ARTICLES = {"der", "die", "das"}

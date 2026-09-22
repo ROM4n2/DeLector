@@ -546,10 +546,22 @@ try:
 except ImportError:
     CORE_VOCAB_EXT = {}
 
-# 字段级合并三分片 → CORE_VOCAB_DB（= lexicon.LEXICON 等价视图，单真值）。
+# 字段级合并五分片 → CORE_VOCAB_DB（= lexicon.LEXICON 等价视图，单真值）。
 # 复用 lexicon_merge.merge_fragments（与 delector.core.lexicon 同一段逻辑），
-# 字段级优先级 cefr: official>manual>ai、富字段 manual>official>ai（见 FIELD_PRIORITY）。
+# 字段级优先级见 FIELD_PRIORITY（ADR-0012 + ADR-0015 goethe-a1/workbench-a1）。
+try:
+    from delector.data.a1_fragments import GOETHE_A1_FIVE, WORKBENCH_A1_FIVE
+except ImportError:  # pragma: no cover - 生成前的过渡
+    GOETHE_A1_FIVE = {}
+    WORKBENCH_A1_FIVE = {}
+
 CORE_VOCAB_DB = merge_fragments(
-    {"ai": CORE_VOCAB_EXT, "manual": CORE_VOCAB_MANUAL, "official": OFFICIAL_VOCAB},
+    {
+        "ai": CORE_VOCAB_EXT,
+        "workbench-a1": WORKBENCH_A1_FIVE,
+        "manual": CORE_VOCAB_MANUAL,
+        "official": OFFICIAL_VOCAB,
+        "goethe-a1": GOETHE_A1_FIVE,
+    },
     FIELD_PRIORITY,
 )
