@@ -32,6 +32,7 @@ exclude = [
     "tools/raw_prep",
     "tools/raw_refill",
     "tools/raw_embedded",
+    ".worktrees",       # 本地 git worktree 副本，不进 CI
 ]
 
 [lint]
