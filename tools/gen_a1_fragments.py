@@ -22,12 +22,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from delector.data.a1_dict import GOETHE_A1_VOCAB  # noqa: E402
+from delector.data.a1_sidecar import A1_WORKBENCH_ID_ALIASES  # noqa: E402
 from delector.data.a1_workbench_dict import (  # noqa: E402
     A1_WORKBENCH_CORE_IDS,
     A1_WORKBENCH_CUSTOM,
     A1_WORKBENCH_SEED,
 )
-from delector.data.a1_sidecar import A1_WORKBENCH_ID_ALIASES  # noqa: E402
 from delector.data.lexicon_merge import lemma_key  # noqa: E402
 
 
