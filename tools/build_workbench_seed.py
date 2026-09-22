@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Dict, Iterable, List, Sequence
@@ -243,7 +244,10 @@ def _write_raw_text(path: Path, text: str) -> None:
 
 
 def load_module(module_path: Path) -> ModuleType:
-    """按路径加载数据模块（不依赖 sys.path，也不占用 delector.data 这个名字）。"""
+    """加载数据模块（ADR-0015：模块已投影依赖 package，须保证 repo root 在 sys.path）。"""
+    repo_root = str(_REPO_ROOT)
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
     spec = importlib.util.spec_from_file_location("a1_workbench_dict_source", str(module_path))
     if spec is None or spec.loader is None:  # pragma: no cover - 路径不可用时
         raise SystemExit("[build_workbench_seed] 无法加载数据模块：%s" % module_path)

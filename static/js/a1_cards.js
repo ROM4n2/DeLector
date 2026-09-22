@@ -47,6 +47,7 @@ function mapCardsVocabItem(w) {
     pos: w.pos,
     gender: w.gender,
     plural: w.plural || "",
+    ipa: w.ipa || "",
     definition_zh: w.zh || "",
     zh: w.zh || "",
     example_de: w.de || "",
@@ -426,7 +427,7 @@ export function renderA1PokerCard() {
               <div>
                 <div class="deck-word-title">${esc(cur.word)}</div>
                 <div class="deck-meta-lemma">
-                  ${esc(cur.lemma)} · ${esc(cur.pos || "WORT")} ${cur.plural ? "· Pl: " + esc(cur.plural) : ""}
+                  ${esc(cur.lemma)} · ${esc(cur.pos || "WORT")} ${cur.plural ? "· Pl: " + esc(cur.plural) : ""}${cur.ipa ? `<div class="deck-ipa" style="font-size:0.85rem;color:var(--ink-mute);font-weight:400;margin-top:0.2rem;">${esc(cur.ipa)}</div>` : ""}
                 </div>
               </div>
               <div class="card-top-actions">
@@ -528,7 +529,7 @@ export function renderA1GridView() {
             <span class="cefr-badge badge-${_examVocabLevel || "A1"}">${_examVocabLevel || "A1"}</span>
           </div>
         </div>
-        <div class="card-lemma-row">${esc(w.lemma)} · ${esc(w.pos || "")} ${w.plural ? "· Pl: " + esc(w.plural) : ""}</div>
+        <div class="card-lemma-row">${esc(w.lemma)} · ${esc(w.pos || "")} ${w.plural ? "· Pl: " + esc(w.plural) : ""}${w.ipa ? ` <span style="color:var(--ink-mute);font-weight:400;font-size:0.8em;">${esc(w.ipa)}</span>` : ""}</div>
         <div class="card-def">${esc(w.definition_zh)}</div>
         ${(w.example_de || w.example_zh) ? `
         <div class="card-context" style="margin-top:0.5rem;font-size:0.85rem;">

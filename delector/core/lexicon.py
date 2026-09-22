@@ -36,6 +36,12 @@ from typing import Any, Dict, FrozenSet, Iterable, Optional, Tuple
 # 主干对外 API（re-export，唯一实现仍在 delector.data.core_dict）：
 # ``get_core_cefr_level`` / ``lookup_core_vocab`` 是主干对外 API，实现唯一、禁止再复制，
 # 消费端统一 ``from delector.core.lexicon import ...``、不再直连分片（ADR-0012）。
+from delector.data.a1_fragments import (
+    GOETHE_A1_FIVE,
+    GOETHE_A1_RICH,
+    WORKBENCH_A1_FIVE,
+    WORKBENCH_A1_RICH,
+)
 from delector.data.core_dict import (  # noqa: F401
     CORE_VOCAB_MANUAL,
 )
@@ -46,7 +52,16 @@ from delector.data.core_dict import (
     lookup_core_vocab as lookup_core_vocab,
 )
 from delector.data.core_dict_ext import CORE_VOCAB_EXT
-from delector.data.lexicon_merge import FIELD_PRIORITY, merge_fragments, provenance_of
+from delector.data.lexicon_merge import (
+    FIELD_PRIORITY,
+    RICH_FIELD_PRIORITY,
+    merge_fragments,
+    merge_rich_fragments,
+    provenance_of,
+)
+from delector.data.lexicon_merge import (
+    lemma_key as lemma_key,
+)
 from delector.data.official_vocab import (
     OFFICIAL_A1_AUGMENT,
     OFFICIAL_A1_VOCAB,
@@ -60,13 +75,16 @@ from delector.data.official_vocab_rich import (
 )
 
 # 来源优先级：低 -> 高（后者覆盖前者）。
-SOURCE_PRIORITY: Tuple[str, str, str] = ("ai", "manual", "official")
+SOURCE_PRIORITY: Tuple[str, ...] = ("ai", "workbench-a1", "manual", "official", "goethe-a1")
 
 # 分片注册表：键 = 来源名，值 = 该来源的 5 元组分片（直接引用，只读消费）。
+# ADR-0015：workbench-a1 / goethe-a1 内容并入主干；展示层在 a1_sidecar。
 FRAGMENTS: Dict[str, Dict[str, Tuple[Any, ...]]] = {
     "ai": CORE_VOCAB_EXT,
+    "workbench-a1": WORKBENCH_A1_FIVE,
     "manual": CORE_VOCAB_MANUAL,
     "official": OFFICIAL_VOCAB,
+    "goethe-a1": GOETHE_A1_FIVE,
 }
 
 
@@ -80,30 +98,29 @@ LEXICON: Dict[str, Tuple[Any, ...]] = merge_fragments(FRAGMENTS, FIELD_PRIORITY)
 PROVENANCE: Dict[str, FrozenSet[str]] = provenance_of(FRAGMENTS)
 
 
-# 富字段 side-car 分片注册表：来源 official_rich（A1/A2/B1 三常量，纯数据 · 只读消费）。
+# 富字段 side-car 分片注册表：A1 工作台/考纲 + official_rich（纯数据 · 只读消费）。
 # 不进 5 元组存储（ADR-0013 §5-1），仅供输出层富卡片 / 例句 / 音标。
-RICH_FRAGMENTS: Dict[str, Dict[str, Dict[str, str]]] = {
+# 合并语义 = 字段级**只补空**（ADR-0015 / RICH_FIELD_PRIORITY）。
+RICH_FRAGMENTS: Dict[str, Dict[str, Dict[str, Any]]] = {
+    "workbench-a1": WORKBENCH_A1_RICH,
+    "goethe-a1": GOETHE_A1_RICH,
     "official_rich_a1": OFFICIAL_RICH_A1,
     "official_rich_a2": OFFICIAL_RICH_A2,
     "official_rich_b1": OFFICIAL_RICH_B1,
 }
 
 
-def _merge_rich(fragments: Dict[str, Dict[str, Dict[str, str]]]) -> Dict[str, Dict[str, Any]]:
-    """按分片注册顺序平面合并富字段（后者覆盖前者，key = lemma）。
+def _merge_rich(fragments: Dict[str, Dict[str, Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+    """按字段级优先级**只补空**合并富字段（ADR-0015）。
 
-    纯函数、零副作用：只读传入分片，返回全新 ``dict``。合并顺序由 ``fragments``
-    插入顺序决定（此处为 A1 -> A2 -> B1）。
+    纯函数、零副作用：只读传入分片，返回全新 ``dict``。实现唯一在
+    ``lexicon_merge.merge_rich_fragments``（禁止在本模块再写一份合并）。
     """
-    merged: Dict[str, Dict[str, Any]] = {}
-    for fragment in fragments.values():
-        merged.update(fragment)
-    return merged
+    return merge_rich_fragments(fragments, RICH_FIELD_PRIORITY)
 
 
-# 富字段视图：lemma -> {ipa, example_de, example_zh, topic}。
-# 合并顺序 A1 -> A2 -> B1：**A2/B1 的 lemma 覆盖 A1**（A1 与 A2B1 有 291 条跨档重叠，
-# A1 卡片走 seed / GOETHE_A1_VOCAB 不用本表，故重叠时以 A2/B1 为准）。
+# 富字段视图：lemma -> {ipa, example_de, example_zh, examples, topic}。
+# 人工 IPA/例句（workbench-a1）> 考纲（goethe-a1）> g2p rich；只补空、非空不覆盖。
 RICH: Dict[str, Dict[str, Any]] = _merge_rich(RICH_FRAGMENTS)
 
 
@@ -226,11 +243,15 @@ A1_LEMMA_META: Mapping[str, Dict[str, Any]] = _LemmaMetaView()
 def a1_lemma_meta_of(lemma: str) -> Optional[Dict[str, Any]]:
     """返回主干 ``LEXICON`` 中该 lemma 的名词元数据 ``{"gender": str|None, "plural": str}``。
 
-    ``gender`` = ``v[2]``；``plural`` = ``v[3]``（后缀标记，直接取用，不做任何推导 / 转换）。
+    ``gender`` = ``v[2]``（字符串 ``"None"`` 规范为 ``None``）；``plural`` = ``v[3]``
+    （后缀标记，直接取用，不做任何推导 / 转换）。
     未知 lemma 返回 ``None``（不抛错、不编造）。只读视图：A1 卡片补全用，不进存储。
     源 = 主干 LEXICON（字段级优先级：富字段 手编 > 官方 > AI），故 A1 与 A2/B1 同源。
     """
     val = LEXICON.get(lemma)
     if val is None:
         return None
-    return {"gender": val[2], "plural": val[3]}
+    gender = val[2]
+    if gender == "None":
+        gender = None
+    return {"gender": gender, "plural": val[3]}

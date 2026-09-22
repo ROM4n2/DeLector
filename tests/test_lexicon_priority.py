@@ -37,21 +37,24 @@ _FIELD_POSITION = {field: i for i, field in enumerate(FIELD_ORDER)}
 # ── 1. 分片注册表 ──────────────────────────────────────────────────────────
 
 
-def test_fragments_has_exactly_three_sources():
-    """分片注册表键必须恰为 {ai, manual, official}。"""
-    assert set(FRAGMENTS) == {"ai", "manual", "official"}
+def test_fragments_has_exactly_five_sources():
+    """分片注册表键必须恰为五源（ADR-0015：+workbench-a1 / goethe-a1）。"""
+    assert set(FRAGMENTS) == {"ai", "workbench-a1", "manual", "official", "goethe-a1"}
 
 
 def test_priority_order_is_low_to_high():
-    """SOURCE_PRIORITY 自低到高：ai -> manual -> official（保留供 provenance/子视图）。"""
-    assert tuple(SOURCE_PRIORITY) == ("ai", "manual", "official")
+    """SOURCE_PRIORITY 自低到高（保留供 provenance/子视图）。"""
+    assert tuple(SOURCE_PRIORITY) == ("ai", "workbench-a1", "manual", "official", "goethe-a1")
 
 
 def test_field_priority_is_field_level():
-    """FIELD_PRIORITY 逐字段规则：cefr 官方优先；pos/gender/plural/def_zh 手编优先。"""
-    assert FIELD_PRIORITY["cefr"] == ("official", "manual", "ai")
-    for field in ("pos", "gender", "plural", "def_zh"):
-        assert FIELD_PRIORITY[field] == ("manual", "official", "ai"), field
+    """FIELD_PRIORITY 逐字段规则（ADR-0015）：cefr 官方优先；pos/plural 展示层手编优先；
+    gender/def_zh 考纲 > 手编 > 官方 > workbench-a1 > ai。"""
+    assert FIELD_PRIORITY["cefr"] == ("official", "goethe-a1", "workbench-a1", "manual", "ai")
+    assert FIELD_PRIORITY["pos"] == ("manual", "official", "ai")
+    assert FIELD_PRIORITY["plural"] == ("manual", "official", "ai")
+    for field in ("gender", "def_zh"):
+        assert FIELD_PRIORITY[field] == ("goethe-a1", "manual", "official", "workbench-a1", "ai"), field
     assert set(FIELD_PRIORITY) == set(FIELD_ORDER)
 
 
@@ -59,15 +62,17 @@ def test_field_priority_is_field_level():
 
 
 def test_lexicon_is_union_of_all_fragments():
-    """LEXICON 的 key 集合 == 三片 key 的并集（不丢任何 lemma），且条数钉死。
+    """LEXICON 的 key 集合 == 五片 key 的并集（不丢任何 lemma），且条数钉死。
 
     仅断言集合相等检测力偏弱：``len(LEXICON)`` 精确到条，能抓住「并集成立，
     但补丁顺手多塞/漏塞了 key」这类肉眼看不出的静默漂移。
     """
-    union = set(FRAGMENTS["ai"]) | set(FRAGMENTS["manual"]) | set(FRAGMENTS["official"])
+    union = set()
+    for fragment in FRAGMENTS.values():
+        union |= set(fragment)
     assert set(LEXICON) == union
     assert len(LEXICON) == len(union)
-    assert len(LEXICON) == 4762
+    assert len(LEXICON) == 4867
 
 
 def test_lexicon_takes_each_field_from_designated_source():
@@ -80,10 +85,13 @@ def test_lexicon_takes_each_field_from_designated_source():
 
     def expected_field(lemma: str, field: str):
         for source in FIELD_PRIORITY[field]:
-            fragment = FRAGMENTS[source]
-            if lemma in fragment:
-                return fragment[lemma][_FIELD_POSITION[field]]
-        raise AssertionError(f"{lemma}.{field} 在 FIELD_PRIORITY 里无任何来源")
+            fragment = FRAGMENTS.get(source)
+            if fragment is not None and lemma in fragment:
+                candidate = fragment[lemma][_FIELD_POSITION[field]]
+                if candidate is None or (isinstance(candidate, str) and candidate.strip() == ""):
+                    continue
+                return candidate
+        return None
 
     # 覆盖多片冲突（zurzeit/abfahren）与单片/普通 lemma
     for lemma in ("zurzeit", "abfahren", "gehen", "haus", "abflug", "tag"):
@@ -134,15 +142,17 @@ def test_real_conflict_plural_kept_from_manual():
 
 
 def test_provenance_multi_source_lemma():
-    """zurzeit 同现于 official 与 ai：sources_of 恰为两者。"""
-    assert sources_of("zurzeit") == frozenset({"official", "ai"})
+    """zurzeit 同现于 official 与 ai：sources_of 至少含两者（A1 分片可并入）。"""
+    assert {"official", "ai"} <= set(sources_of("zurzeit"))
 
 
 def test_provenance_single_source_lemma():
-    """abflug 只现于 official：sources_of 恰为 {official}。"""
+    """abflug 主源 official：sources_of 含 official，且不含 manual/ai。"""
     assert "abflug" in OFFICIAL_VOCAB
     assert "abflug" not in CORE_VOCAB_MANUAL and "abflug" not in CORE_VOCAB_EXT
-    assert sources_of("abflug") == frozenset({"official"})
+    sources = sources_of("abflug")
+    assert "official" in sources
+    assert "manual" not in sources and "ai" not in sources
 
 
 def test_provenance_unknown_lemma_is_empty():
@@ -172,13 +182,15 @@ def test_view_official_equals_official_vocab():
 
 
 def test_view_none_equals_lexicon():
-    """view(None) / view() 覆盖全部来源：键集 == 三片并集，逐条值 == LEXICON。
+    """view(None) / view() 覆盖全部来源：键集 == 五片并集，逐条值 == LEXICON。
 
     原写法 ``view() == LEXICON`` 是自等断言 —— ``view(None)`` 内部就是
     ``dict(LEXICON)``，恒真、检测力为零。改为独立推导键集（三片并集）与逐条对值，
     这样 view 的实现若换成「只取某一片」或「复制时串了值」都会变红。
     """
-    union = set(FRAGMENTS["ai"]) | set(FRAGMENTS["manual"]) | set(FRAGMENTS["official"])
+    union = set()
+    for fragment in FRAGMENTS.values():
+        union |= set(fragment)
     for sub in (view(), view(None)):
         assert sub  # 非空
         assert set(sub) == union
@@ -284,9 +296,8 @@ def test_source_priority_index_relations():
     不写死整条元组（那是顺序全等的强断言），而是断言相对次序。
     """
     assert SOURCE_PRIORITY.index("manual") > SOURCE_PRIORITY.index("ai")
-    assert SOURCE_PRIORITY.index("official") == max(
-        SOURCE_PRIORITY.index(source) for source in ("ai", "manual", "official")
-    )
+    assert SOURCE_PRIORITY.index("official") > SOURCE_PRIORITY.index("manual")
+    assert SOURCE_PRIORITY.index("goethe-a1") > SOURCE_PRIORITY.index("official")
 
 
 def test_source_priority_covers_all_fragments():
@@ -300,7 +311,7 @@ def test_source_priority_covers_all_fragments():
 def test_core_dict_shard_sizes_are_frozen():
     """CORE_VOCAB_DB 及相关分片的精确条数：合并顺序/分片被误改会静默漂移。
 
-    字段级合并三分片：手编 443 + AI 3968 + 官方 2732，去重后并集 = 4762；
+    字段级合并五分片：手编 443 + AI 3968 + 官方 2732 + A1 两侧，去重后并集 = 4867；
     ``CORE_VOCAB_DB`` 与主干 ``LEXICON`` 条数恒等（单真值）。
     """
     assert len(CORE_VOCAB_MANUAL) == 443

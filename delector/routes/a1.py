@@ -43,6 +43,8 @@ def get_a1_topics() -> List[Dict[str, Any]]:
 
 @router.get("/vocab")
 def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
+    from delector.core.lexicon import lemma_key, rich_of
+
     res = list(a1_dict.GOETHE_A1_VOCAB.values())
     if topic:
         res = [w for w in res if w.get("topic") == topic]
@@ -55,7 +57,14 @@ def get_a1_vocab(topic: Optional[str] = None, q: Optional[str] = None) -> List[D
             or query in w.get("lemma", "").lower()
             or query in w.get("definition_zh", "").lower()
         ]
-    return res
+    # ADR-0015：考纲卡富字段补 IPA（人工 workbench-a1 > rich；缺则空串，不编造）。
+    out: List[Dict[str, Any]] = []
+    for w in res:
+        item = dict(w)
+        rich = rich_of(lemma_key(str(item.get("lemma") or item.get("word") or "")))
+        item["ipa"] = (rich or {}).get("ipa") or ""
+        out.append(item)
+    return out
 
 
 @router.get("/sprechen/teil2")
