@@ -547,3 +547,6 @@ Caps: filesystem-read, filesystem-write, shell-exec
 2. check_frontend_consistency：正则全缺/缺条目时不再误报「多端不一致」，降级 WARN 列出未匹配文件。
 验证：scratch 三场景（同密钥 3 文件→1 条 / 三端全缺→warn 无 issue / 一致→PASS）；mypy --strict + ruff 零告警。
 另发现（未修）：check_security 扫描含 scratch/browsercheck/node_modules（排除列表无 node_modules），WASM 生成代码的 base64 误报 AKIA 假密钥——待定是否加排除。
+### 2026-09-21 | mimocode | DELIVERED(A1-rich-convergence)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：feature/a1-rich-convergence @ 8dd8002（worktree .worktrees/a1-rich-convergence，base master 7ac49d2）。ADR-0015 落地。门禁 pytest 1081+1 / ruff 0 / mypy --strict 0 / Go 全绿 / 探针 16/16。评审 subagent 卡死取消，关键不变量自审通过。待用户收口 merge/PR；Android 覆盖安装点检开放。

@@ -93,7 +93,7 @@ IPA 全局去 tie-bar（延续 ADR-0013）。
 
 | 常量 | 规模 | 说明 |
 |---|---|---|
-| `WORKBENCH_MEMBERSHIP` | 682 | `{id, lemma, letter, page}`，id/letter **逐字不变** |
+| `WORKBENCH_MEMBERSHIP` | 682 | `{id,lemma,hw,pos,gloss,ipa,ex,letter,page,core}` 逐 id 展示+内容（同形异义安全） |
 | `A1_WORKBENCH_CORE_IDS` | 213 | 语义不变 |
 | `A1_WORKBENCH_CUSTOM` / `CUSTOM_22` | 22 | `core-*` 全量条目（官方 A1 不含） |
 | `A1_WORKBENCH_ID_ALIASES` | 2 | 进度迁移不变 |
