@@ -547,6 +547,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 2. check_frontend_consistency：正则全缺/缺条目时不再误报「多端不一致」，降级 WARN 列出未匹配文件。
 验证：scratch 三场景（同密钥 3 文件→1 条 / 三端全缺→warn 无 issue / 一致→PASS）；mypy --strict + ruff 零告警。
 另发现（未修）：check_security 扫描含 scratch/browsercheck/node_modules（排除列表无 node_modules），WASM 生成代码的 base64 误报 AKIA 假密钥——待定是否加排除。
+### 2026-09-21 00:00 | mimocode | WORK_START(A1-rich-convergence-grill)
+Caps: filesystem-read, shell-exec
+事件：/vault-grill + /compose-next 启动。议题=A1 富结构收敛（ADR-0013 defer：A1_WORKBENCH_SEED / GOETHE_A1_VOCAB 从主干派生）。取证完成：A1 三源（seed 682+custom22 / GOETHE 702 / official+rich 670·660），seed↔GOETHE 仅 ~391 共享 lemma，无 id 映射表。待 Frontier 拍板后建 worktree。
+### 2026-09-21 | mimocode | DECISION(A1-rich-convergence Q1-Q4)
+Caps: filesystem-read, filesystem-write
+事件：/vault-grill 前沿四轴全选推荐：Q1 成员清单+共享字段单源；Q2 字段级优先级；Q3 专有词全部进 FRAGMENTS；Q4 考纲 A1 露出 IPA。ADR-0015 已写入 vault 08-Projects/DeLector/01-ADR/0015-...。git worktree add 被沙箱拦截（主检出 registry 保护）——待用户裁决 Workspace。
 ### 2026-09-21 | mimocode | DELIVERED(A1-rich-convergence)
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：feature/a1-rich-convergence @ 8dd8002（worktree .worktrees/a1-rich-convergence，base master 7ac49d2）。ADR-0015 落地。门禁 pytest 1081+1 / ruff 0 / mypy --strict 0 / Go 全绿 / 探针 16/16。评审 subagent 卡死取消，关键不变量自审通过。待用户收口 merge/PR；Android 覆盖安装点检开放。
+### 2026-09-21 | mimocode | RELEASE_v5.10.0
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：PR #62 已 merge（1d08cc7）。五件套 bump 5.9.5→5.10.0 / versionCode 50905→51000（sw.js / index.html / build.gradle / README / PROJECT_OVERVIEW + CHANGELOG）；test_writer_mobile 30 全绿。bump commit 上打 tag v5.10.0 推送，待 CI Build & Publish。内容=A1 富结构收敛（ADR-0015）。Android 覆盖安装点检仍开放。

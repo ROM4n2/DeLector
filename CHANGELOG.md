@@ -4,7 +4,7 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.9.5（2026-09-21）**
+**最新版本：v5.10.0（2026-09-21）**
 
 ---
 
@@ -144,6 +144,7 @@
 
 - [x] **v5.9.4**：**精读生词（reader 档）富字段回填 + 原句优先**（2026-09-20，`a7801ec`）——补最后一个同型缺口：**reader 生词卡此前永远裸**（服务端 `scope=reader` 显式置空富字段 + 前端 `syncReaderCardsFromServer` append-only → 存量永不刷新），与 A1/A2/B1 三档信息量不对齐。① **服务端**：新增 `_reader_lemma_key`（去冠词 + 小写归一——`RICH`/`LEXICON` 键 100% 小写，而写入侧 `lemma` 可能大写/带冠词）+ `_reader_rich_fields`（`rich_of` 取 `ipa`/例句、`a1_lemma_meta_of` 取 `gender`/`plural`——源 = 主干 LEXICON 4762 全量、覆盖非 A1、`lookup_irregular_verb` 屈折形兜底 `ging→gehen`），reader 分支改「**命中才补，未命中留空不编造**」；`de` 语义 = **原句优先**（有 `sentence_context` 保留生词原句且不补 `example_zh`，避免「德文原句 + 官方例句中文」文不对题）。② **前端**：`syncReaderCardsFromServer` 由 append-only 升级为「**只增 + 只补空**」（`ipa`/`ex`/`gender`/`plural`），不覆盖非空、不碰 `cards`/`log`/`wrong`、幂等 → 进「生词」档即自愈。③ 行为级探针 `tools/wb_reader_rich_backfill_probe.mjs`（13 场景，真实源码切片 + `node:vm` 真跑，含防死测守卫）接入 pytest。测试基线 **993 passed + 1 skipped**（765 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；15 个 `tools/*.mjs` 探针零漂移；ruff 全绿 / mypy `--strict` 0 error。**Android 需覆盖安装 v5.9.4 生效**（改动含 `static/`）。
 
+- [x] **v5.10.0**：**A1 富结构收敛（FRAGMENTS 单源 + membership side-car）**（2026-09-21，PR #62，ADR-0015，`/vault-grill` + `/compose-next`）——落地 ADR-0013/0014 明确 defer 的 A1 三源收敛：① **成员清单 + 共享字段单源**（seed∩GOETHE ≈391，非同一表；membership side-car 按 id 承载）；② **字段级优先级**（同形异义 bitte/essen/leben/sie 按 id 带 `ipa`/`ex`，主干 `"None"` 为无性别哨兵）；③ **专有词全部进 FRAGMENTS**；④ **考纲 A1 露出 IPA**；GOETHE plural 完整形不入 5 元组后缀位。门禁：pytest **1081+1** / ruff 0 / mypy `--strict` 0 / Go 全绿 / 探针 16/16。**Android 需覆盖安装 v5.10.0 生效**（改动含 `static/`）。
 - [x] **v5.9.5**：**例句 / 搭配 / 语料 全文检索（内存扫描版）**（2026-09-21，分支 `feature/vocab-search`，/vault-exec **6 Task 全绿**）——新增「🔍 检索」子系统：对 **词条 4762 + 例句 2722 + 介词搭配 691 + 语料全文**（文章/分级短文）做检索，四组结果（词条 / 例句 / 搭配 / 语料）。① **服务端**：`delector/services/search.py`（纯函数 `fold`/`iter_vocab_docs`/`iter_corpus_docs`/`match_score`/`search`——德语变音折叠 `ä→a ö→o ü→u ß→ss` + **中文子串**匹配；字段加权排序；`groups_total` 每组命中数）+ `delector/routes/search.py`（`GET /api/search?q=&scope=&limit=`，注册于 `main` **之前**）。② **前端**：`view-search` + `static/js/search.js`（顶栏 `nav-btn-search` **+ 移动 dock `mob-btn-search`**、四组渲染、**高亮先 `esc()` 再 `<mark>`**、空态/降级、语料 source 分叉跳转）。③ **截断语义拆分（T6）**：`truncated` **仅**表"语料 hard cap 未扫完"（真异常）；`limit` 每组限量由 `groups_total` 表达（组尾「仅显示前 N 条（命中 M）」）——修「几乎每次搜索都弹 ⚠ 结果已截断」的噪音。④ **测试工程**：行为探针 `tools/wb_search_probe.mjs`（**真实切片 `node:vm`**，4 场景 7 断言：XSS / 四组 / 空态 / 截断提示）+ **性能守卫**（8175 词库 + ~195KB 语料，单次 min≈**21.7ms** < 50ms）+ **注册守卫**（AST）接入 CI。**技术路线 = 内存扫描（不落库）**；**FTS5 被 Spike 否决**（`unicode61` 对 CJK 不切词 / `trigram` 要求查询 ≥3 字符致中文**两字词全废** / Android 内嵌 sqlite FTS5 不确定 / 规模远未达 ADR-0014 门槛）——见 ADR-0014 与 `docs/specs/2026-09-20-vocab-search-design.md`。测试基线 **1071 passed + 1 skipped**（843 + `test_server` 228；2 条既有 Windows 环境失败 `no such table: exam_trials`）；全 `tools/*.mjs` 探针零漂移；ruff 全绿 / mypy 双轨（strict + skip tests）0 error。**Android 需覆盖安装 v5.9.5 生效**（改动含 `static/`）。**已知小限制**：`_highlight` 在 `esc()` 后定位，查询恰为 HTML 实体名子串时 `<mark>` 误插实体内部（**非 XSS**，待后续修）。
 
 - [x] **`server.py`** **拆分重构**（v4.6.4）：3053 行单文件拆为 `nlp.py`（NLP/CEFR/文本分析）、`database.py`（DB/CRUD/备份）、`security.py`（SSRF/URL 安全），`server.py` 保留路由骨架。依赖图无环，319 测试全绿。
