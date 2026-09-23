@@ -559,3 +559,23 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-09-21 | mimocode | RELEASE_v5.10.0
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：PR #62 已 merge（1d08cc7）。五件套 bump 5.9.5→5.10.0 / versionCode 50905→51000（sw.js / index.html / build.gradle / README / PROJECT_OVERVIEW + CHANGELOG）；test_writer_mobile 30 全绿。bump commit 上打 tag v5.10.0 推送，待 CI Build & Publish。内容=A1 富结构收敛（ADR-0015）。Android 覆盖安装点检仍开放。
+
+### 2026-09-23 | codebuddy | WORK_START(encounter-i1-content-and-selection)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：/vault-spark 方向裁定（先 A 后 B）→ spec + plan 已出，/vault-exec 启动。范围 = 遇见区 i+1 补齐——A 内容放量（预置 4→7 篇 + 版本化增量补装，让存量设备零操作升级）+ B 就近选材（新增只读索引端点 + 前端本机算覆盖率并排序/推荐）。
+分支：feature/encounter-i1（worktree .worktrees/encounter-i1，base master 954eb1d）。6 Task。
+风险报备：ledger 原为 2026-09-20 vocab-search 计划（6/6 completed），本次 init 将覆盖该账本（旧计划完成状态以 commit 链为准，属已知限制）。
+
+### 2026-09-23 | codebuddy | DELIVERED(encounter-i1-content-and-selection) — 6/6 Task 全绿（本地分支，未 push）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：vault-spark → plan → vault-exec 全链完成。分支 `feature/encounter-i1`（worktree `.worktrees/encounter-i1`，base master 954eb1d），8 个原子提交：
+- `ae30cb4` docs（spec + plan）
+- `d46fa8e` T1 预置短文 4→7 篇 + 每包预计算 `analysis.lemma_seq`（annotate 口径：剔 is_space、留标点）
+- `f0ad2f4` T2 版本化增量补装（`PRESET_SEED_VERSION=2` + `app_settings.encounter_seed_version` + 只增 + 只补空 lemma_seq）
+- `431f427` T3 只读端点 `GET /api/encounter/texts/index`（零 spaCy、不挂本机闸、缺字段 null 不丢行）
+- `dc4b9ec` T4 前端纯函数 `static/js/enc-i1.js` + `tools/wb_enc_i1_probe.mjs`（node:vm 真源码，38 断言）
+- `9924028` T5 遇见区列表集成（徽章/排序/推荐条/索引失败降级）
+- `3349acc` T6 I-1 口径一致性端到端 + `docs(encounter)` 收官回写
+门禁（收官复跑，编排者独立验证）：分半全量 = 非 server 半 **881 passed + 2 failed（既有 `no such table: exam_trials`，非本次引入）** + server 半 **228 passed + 1 skipped** ⇒ **1109 passed + 1 skipped**（基线 1081 → +28）；ruff 零告警 / `mypy --strict delector tools` 62 files 0 error / 全 `tools/*.mjs` 零漂移。maker-checker：6 Task 逐个经 CRV，**2 轮 REVISE**（T2 红牌 R1「只补空」断言缺「其余键逐字段不变」→ 已补并变异实红；T5 黄牌 Y2 恒真弱断言 + Y1 grid 列间隙 → 已修）。
+关键不变量：**I-1**（`index.lemma_seq` 与 annotate 逐 token 序列全序列逐元素相等、分母相等、rate 逐位相等）—— 反绿变异（丢标点）7 篇全红实证。
+遗留/报备：① **未 push、未开 PR、未发版**（改动含 `static/` → 发版需走五件套 + Android 覆盖安装）；② CRV 黄牌 3 条非阻塞未修（I-1 的 known 集合未按 deck-bridge 剥冠词规则构造；`_MUTATION_TABLE` 行 500 归属重合已补注；`PROJECT_OVERVIEW:57` 尾句「叠加 v5.7.7 基线 839」与新基线并置易误读）；③ `_MUTATION_TABLE` 之外的既有黄牌：`pyproject.toml` mypy `exclude` 含裸子串 `build` ⇒ `tools/build_*.py` 目录模式漏检（既有配置缺陷，maker 已为该文件补全注解，建议单独立项修 exclude 锚定）；④ 残留 worktree `.worktrees/a1-rich-convergence`（其分支已合并）未清理。
