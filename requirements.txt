@@ -3,7 +3,7 @@
 # test_register_routes_covers_every_module_in_routes_package 会把全部路由
 # 误判为 missing（2026-09-09 v5.4.0 发版 CI 三平台全炸的根因）。
 # 升级前先本地全量 pytest 验证该守卫测试。
-fastapi==0.136.3
+fastapi==0.141.1
 starlette==1.6.0
 uvicorn>=0.53.0
 spacy>=3.8.16
