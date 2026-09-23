@@ -18,8 +18,10 @@ import {
   mergeServerDeck,
   annotateWithDeck,
   addCardToDeck,
+  buildKnownSet,
   DECK_KEYS,
 } from "./deck-bridge.js";
+import { rankEntries, topPick, hasCoverage } from "./enc-i1.js";
 import {
   PULL_ENDPOINT,
   normalizeDesktopBase,
@@ -41,6 +43,9 @@ function readerEl() {
 }
 function coverageEl() {
   return document.getElementById("enc-coverage");
+}
+function i1HintEl() {
+  return document.getElementById("enc-i1-hint");
 }
 
 // ── A6 交互状态 ─────────────────────────────────────────────────────────────
@@ -74,6 +79,14 @@ function setCoverage(html) {
   if (!el) return;
   el.innerHTML = html;
   el.style.display = "";
+}
+
+// i+1 提示条：隐藏并清空（索引失败降级 / 无 i1 命中 / 进场复位都用它）。
+function hideI1Hint() {
+  const el = i1HintEl();
+  if (!el) return;
+  el.style.display = "none";
+  el.innerHTML = "";
 }
 
 // A5：解析本机 deck；本机为空时尝试用 GET /api/wb/state 镜像兜底并合并。
@@ -176,8 +189,63 @@ export async function fetchTexts() {
   return (res && res.texts) || [];
 }
 
+// i+1：拉索引端点（每篇 total_tokens / lemma_seq）。本函数**不吞异常** —— 由调用方
+// （showView 的 Promise.allSettled）兜底：索引失败时整段退回既有列表行为。
+export async function fetchIndex() {
+  const res = await api("/api/encounter/texts/index");
+  return (res && res.items) || [];
+}
+
+/* ======================================================================
+ * i+1 就近选材：不点开任何一篇，按本机已背词覆盖率分组排序并标出「正好读」。
+ *
+ * 数据流（showView）：fetchTexts + fetchIndex（Promise.allSettled）→
+ *   mergeListWithIndex（以 texts 为全集）→ buildKnownSet(loadDeck(storage)) →
+ *   rankEntries → renderTextList(texts, ranked) + renderI1Hint(ranked, knownSet)。
+ * 索引端点失败 → 以**单参**调用 renderTextList 退回既有行为（逐字、不抛、不弹错）。
+ * 选材纯函数（分区间 / 排序 / 取推荐 / 覆盖率）全在 ./enc-i1.js（Node 可测）。
+ * ==================================================================== */
+
+// 三态徽章文案 + class **单点定义**（渲染层不得散落 threshold / 文案字面量）。
+const I1_BADGES = {
+  i1: { cls: "enc-i1-i1", label: "✅ 正好读" },
+  easy: { cls: "enc-i1-easy", label: "偏简单" },
+  hard: { cls: "enc-i1-hard", label: "偏难" },
+};
+
+// 新用户 / 未背词时的引导文案（不推 0% 短文，先引导去背词工作台）。
+const I1_HINT_GUIDE = "先在背词工作台背一些词，这里就会告诉你哪篇正好适合你";
+
+/**
+ * i1BadgeHtml(cov) -> string
+ * cov = enc-i1.js coverageOf / rankEntries 的一项（{available, rate, band, ...}）。
+ * 无对应 band（缺项降级）→ 空串。所有展示字段一律 esc()（class 亦经 esc()）。
+ */
+function i1BadgeHtml(cov) {
+  const badge = cov ? I1_BADGES[cov.band] : null;
+  if (!badge) return "";
+  const pct = Math.round(Number(cov.rate) * 100);
+  return `<span class="enc-i1-badge ${esc(badge.cls)}">${esc(badge.label)} ${pct}%</span>`;
+}
+
+// 单张台账卡片：cov 为空 → 无 i+1 徽章（DOM 与既有列表逐字一致）。
+function i1CardHtml(t, cov) {
+  const badge = cov && cov.available ? i1BadgeHtml(cov) : "";
+  return `
+      <div class="encounter-card" onclick="encounterOpenText(${Number(t.id)})" role="button" tabindex="0">
+        <span class="encounter-badge ${esc(t.level)}">${esc(t.level)}</span>
+        <span class="encounter-card-title">${esc(t.title)}</span>
+        ${badge}
+        <span class="encounter-card-meta">
+          ${typeof t.word_count === "number" ? `${t.word_count} 词 · ` : ""}
+          ${esc(t.created_at || "")} · ${esc(t.source || "—")}
+        </span>
+      </div>
+    `;
+}
+
 // ── Render list ─────────────────────────────────────────────────────────────
-export function renderTextList(texts) {
+export function renderTextList(texts, ranked = null) {
   const el = listEl();
   if (!el) return;
   if (!texts.length) {
@@ -187,26 +255,71 @@ export function renderTextList(texts) {
       '<div class="encounter-empty">遇见区暂无短篇 —— 可在电脑本机点右上「＋ 加文本」添加（手机/平板端只能阅读与背词）。</div>';
     return;
   }
-  el.innerHTML = texts
-    .map(
-      (t) => `
-      <div class="encounter-card" onclick="encounterOpenText(${Number(t.id)})" role="button" tabindex="0">
-        <span class="encounter-badge ${esc(t.level)}">${esc(t.level)}</span>
-        <span class="encounter-card-title">${esc(t.title)}</span>
-        <span class="encounter-card-meta">
-          ${typeof t.word_count === "number" ? `${t.word_count} 词 · ` : ""}
-          ${esc(t.created_at || "")} · ${esc(t.source || "—")}
-        </span>
-      </div>
-    `,
-    )
-    .join("");
+  // ranked（i+1 排序结果）为空 → 逐字退回既有行为：texts 原顺序（id DESC）、无徽章。
+  const rows = Array.isArray(ranked)
+    ? ranked.map((r) => i1CardHtml(r.entry, r))
+    : texts.map((t) => i1CardHtml(t, null));
+  el.innerHTML = rows.join("");
+}
+
+/**
+ * mergeListWithIndex(texts, indexItems) -> Array
+ *
+ * 以 `texts`（列表端点）为**全集与权威顺序**，按 `id` 关联索引端点的 total_tokens /
+ * lemma_seq。索引缺项 → 该项两字段视为缺失（undefined），**仍出现在列表中**（绝不因
+ * 缺索引而丢项）。返回新数组、元素为浅拷贝（绝不改编入参）。
+ */
+function mergeListWithIndex(texts, indexItems) {
+  const byId = new Map();
+  const items = Array.isArray(indexItems) ? indexItems : [];
+  for (const it of items) {
+    if (it && it.id != null) byId.set(String(it.id), it);
+  }
+  const src = Array.isArray(texts) ? texts : [];
+  return src.map((t) => {
+    const hit = t && t.id != null ? byId.get(String(t.id)) : null;
+    return Object.assign({}, t, {
+      total_tokens: hit ? hit.total_tokens : undefined,
+      lemma_seq: hit ? hit.lemma_seq : undefined,
+    });
+  });
+}
+
+/**
+ * renderI1Hint(ranked, knownSet) -> void
+ *
+ * - hasCoverage(knownSet) === false（新用户 / 未背词）→ 显示引导文案，**不显示推荐条**
+ *   （优先于 i1 判定：空集合下所有篇目都落到 0%，不能拿 0% 短文糊弄新用户）。
+ * - 有覆盖率但无 i1 命中（topPick 为 null）→ 隐藏容器。
+ * - 有 i1 命中 → 显示推荐条（「正好读」的那一篇 + 已背词覆盖率）。
+ * knownSet 可省略（默认现从本机 deck 计算），保证单参可调用。
+ */
+function renderI1Hint(ranked, knownSet) {
+  const el = i1HintEl();
+  if (!el) return;
+  const known = knownSet != null ? knownSet : buildKnownSet(loadDeck(encStorage()));
+  if (!hasCoverage(known)) {
+    el.innerHTML = `<span class="enc-i1-hint-text">${esc(I1_HINT_GUIDE)}</span>`;
+    el.style.display = "";
+    return;
+  }
+  const pick = topPick(ranked);
+  if (!pick || !pick.entry) {
+    hideI1Hint();
+    return;
+  }
+  const pct = Math.round(Number(pick.rate) * 100);
+  el.innerHTML =
+    `<span class="enc-i1-hint-pick">${esc(I1_BADGES.i1.label)}：《${esc(pick.entry.title)}》</span>` +
+    `<span class="enc-i1-hint-rate">已背词 ${pct}%</span>`;
+  el.style.display = "";
 }
 
 export async function showView() {
   // 默认回到列表态；若已在详情态则刷新当前详情标题/正文不改动（进入入口卡首次为列表）。
   _detailOpen = false;
   hideCoverage();
+  hideI1Hint();
   resetSessionReview();
   closePopover();
   const rd = readerEl();
@@ -215,17 +328,33 @@ export async function showView() {
   if (ls) ls.style.display = "";
   const addForm = document.getElementById("encounter-add-form");
   if (addForm) addForm.classList.remove("open");
-  try {
-    const texts = await fetchTexts();
-    renderTextList(texts);
-  } catch (e) {
+
+  // 并行拉「列表」与「索引」。索引失败不得连累列表 —— Promise.allSettled 各自兜底。
+  const [textsRes, indexRes] = await Promise.allSettled([fetchTexts(), fetchIndex()]);
+
+  if (textsRes.status === "rejected") {
     const el = listEl();
     if (el) {
       el.innerHTML = `<div class="encounter-empty">加载遇见区列表失败：${esc(
-        e.message || "未知错误",
+        (textsRes.reason && textsRes.reason.message) || "未知错误",
       )}</div>`;
     }
+    return;
   }
+  const texts = textsRes.value;
+
+  // 索引端点失败 → 完全退回既有列表行为（原顺序、无徽章、无 i+1 提示；不抛、不弹错）。
+  if (indexRes.status === "rejected") {
+    renderTextList(texts);
+    return;
+  }
+
+  // 索引成功 → 覆盖率分组排序 + 推荐。texts 为全集，index 只补 total_tokens / lemma_seq。
+  const merged = mergeListWithIndex(texts, indexRes.value);
+  const knownSet = buildKnownSet(loadDeck(encStorage()));
+  const ranked = rankEntries(knownSet, merged);
+  renderTextList(texts, ranked);
+  renderI1Hint(ranked, knownSet);
 }
 
 // ── Detail ──────────────────────────────────────────────────────────────────
