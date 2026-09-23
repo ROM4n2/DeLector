@@ -721,26 +721,147 @@ def seed_preset_articles(db_path: Optional[str] = None) -> None:
                 ingest_article(art["title"], art["text"], db_path=target)
 
 
-def seed_preset_encounter_texts(db_path: Optional[str] = None) -> int:
-    """把预置遇见区卡包（encounter-pack/v1）灌入空库；返回本次实际导入的行数。
+# 遇见区预置内容的**内容版本号**。升这个号（+1）才会让已升级过的设备再触发一次补装：
+# seed 成功走完后把本值写进 app_settings["encounter_seed_version"]，下次启动读到
+# `>= PRESET_SEED_VERSION` 即热路径早退（只读 1 行 app_settings）。因此**新增预置内容
+# 时必须同步 +1**，否则存量设备永远拿不到新内容。
+PRESET_SEED_VERSION: int = 2
 
-    幂等与守卫（三重，缺一不可）
-    ---------------------------
-    1. **空库守卫**：先数 `encounter_texts` 行数，`count == 0` 才导入；非空库直接
-       返回 0，**绝不动用户已有内容**（预置内容只是「首次启动的默认供给」，不是
-       每次启动都要补齐的资材）。
-    2. **逐包幂等**：逐包走既有 `import_encounter_pack`（按 `pack_id` 去重），
-       不自己写 INSERT —— 即便守卫被绕过，第二次调用也不会插入重复行。
-    3. **逐包异常隔离**：单包导入失败不得让整个启动崩（离线数据损坏/约束冲突
-       时仍要起得来）。失败包记录到日志并计入 `failed`，**绝不静默吞掉**导致
-       数据半残而无从观测：有失败即 `logging.error` 汇总，返回值 = 成功导入行数
-       （失败数与包总数可从日志与「返回值 < 包数」推知）。
+_ENCOUNTER_SEED_VERSION_KEY = "encounter_seed_version"
+
+
+def _read_preset_seed_version(db_path: Optional[str] = None) -> int:
+    """读 app_settings["encounter_seed_version"]；缺失 / 非法一律视为 0（从未补装过）。
+
+    **不经 env** 的直读 SQL（参数化）：版本闸是「库内真值」判定，不能走 `get_setting`
+    —— 后者尾部有 `return os.environ.get(key, default)` 兜底，进程环境里恰好存在同名
+    变量（`encounter_seed_version`）时会**伪造版本**，强制跳过或反复触发补装。DB 是
+    唯一真值，故读取只认库行（写入路径 `set_setting` 本就只写库，保持不变）。
+    """
+    try:
+        with db_conn(db_path) as conn:
+            row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = ?",
+                (_ENCOUNTER_SEED_VERSION_KEY,),
+            ).fetchone()
+    except Exception:
+        return 0
+    if row is None or row["value"] is None:
+        return 0
+    try:
+        return int(row["value"])
+    except (TypeError, ValueError):
+        return 0
+
+
+def _backfill_pack_lemma_seq(
+    pack_id: str,
+    existing_pack_json: Optional[str],
+    new_pack: Dict[str, Any],
+) -> Optional[str]:
+    """能力闸门（只补空）：既有行缺 `analysis.lemma_seq` 时返回补装后的 `pack_json` 文本。
+
+    返回 `None` 表示「无需写回」（调用方据此跳过 UPDATE）。判据：
+    - 新包无**非空** `lemma_seq`，或既有 `pack_json` 为空 → `None`；
+    - 既有 `lemma_seq` **非空**即返回 `None`（**不覆盖**，哪怕值是哨兵）；
+    - 旧 `pack_json` 解析失败 / 结构异常一律返回 `None` 并 `logging.error`，**绝不抛**
+      ——单行数据损坏不得崩启动。
+    """
+    new_seq: Any = (new_pack.get("analysis") or {}).get("lemma_seq") or []
+    if not new_seq or not existing_pack_json:
+        return None
+    try:
+        old_pack: Any = json.loads(existing_pack_json)
+    except (TypeError, ValueError) as exc:
+        logging.error("seed_preset_encounter_texts: 既有行 pack_json 解析失败 pack_id=%r: %r", pack_id, exc)
+        return None
+    if not isinstance(old_pack, dict):
+        logging.error("seed_preset_encounter_texts: 既有行 pack_json 非对象 pack_id=%r", pack_id)
+        return None
+    analysis = old_pack.get("analysis")
+    if not isinstance(analysis, dict):
+        logging.error("seed_preset_encounter_texts: 既有行 pack_json.analysis 非对象 pack_id=%r", pack_id)
+        return None
+    if analysis.get("lemma_seq"):  # 非空（含哨兵）→ 不覆盖
+        return None
+    patched: Dict[str, Any] = dict(old_pack)
+    patched["analysis"] = {**analysis, "lemma_seq": new_seq}
+    return json.dumps(patched, ensure_ascii=False)
+
+
+def _seed_or_backfill_preset_pack(pack: Dict[str, Any], db_path: str) -> bool:
+    """处理单个预置包，返回是否**新建**了行。
+
+    - `pack_id` 不存在 → `import_encounter_pack` 只增导入（返回 True）；
+    - `pack_id` 已存在 → 只补空 `lemma_seq`（返回 False，不新增行）。
+
+    空库即「全部缺失」，自然退化为「全量导入」；非空库则「只增缺失 + 只补空既有」。
+    """
+    pack_id = str(pack.get("pack_id") or "")
+    with db_conn(db_path) as conn:
+        row = conn.execute("SELECT id, pack_json FROM encounter_texts WHERE pack_id = ?", (pack_id,)).fetchone()
+    if row is None:
+        import_encounter_pack(pack, db_path=db_path)
+        return True
+    patched = _backfill_pack_lemma_seq(pack_id, row["pack_json"], pack)
+    if patched is not None:
+        with db_conn(db_path) as conn:
+            conn.execute(
+                "UPDATE encounter_texts SET pack_json = ? WHERE pack_id = ?",
+                (patched, pack_id),
+            )
+    return False
+
+
+def _try_seed_or_backfill_preset_pack(pack: Any, db_path: str) -> Optional[bool]:
+    """逐包异常隔离的唯一落点：成功返回「是否新建行」，失败返回 `None` 并 `logging.error`。
+
+    任何异常（离线数据损坏 / 约束冲突）都在此吞成 `None`，**绝不外溢崩启动**。
+    """
+    try:
+        return _seed_or_backfill_preset_pack(pack, db_path)
+    except Exception as exc:  # noqa: BLE001 —— 单包失败不得崩启动
+        # 类型安全取值：pack 可能**非 dict**（损坏的数据模块项，如 str/list）。
+        # 旧写法 `(pack or {}).get(...)` 会在日志行对非 dict 再次 .get 抛
+        # AttributeError，异常逃逸出本函数 → 违反「单包失败不得崩启动」。
+        logging.error(
+            "seed_preset_encounter_texts: 预置包导入失败 pack_id=%r: %r",
+            pack.get("pack_id") if isinstance(pack, dict) else None,
+            exc,
+        )
+        return None
+
+
+def seed_preset_encounter_texts(db_path: Optional[str] = None) -> int:
+    """版本化增量补装预置遇见区卡包（encounter-pack/v1）；返回本次**实际新建**的行数。
+
+    语义（红线 12 / Vault `01-Rules/STORED-DATA-BACKFILL`：只增 + 只补空 + 幂等）
+    ---------------------------------------------------------------------------
+    1. **版本闸**：先读 `app_settings["encounter_seed_version"]`（缺省 0），
+       `>= PRESET_SEED_VERSION` 即热路径返回 0（每次启动只读 1 行）。升
+       `PRESET_SEED_VERSION` 才会再触发一次补装。
+    2. **只增补装**：逐包走既有 `import_encounter_pack`（按 `pack_id` 去重，不自己写
+       INSERT）——库里没有的 `pack_id` 新建，已存在的**不动其行**。空库即等于
+       「全量导入」（7 包全缺），保留既有「空库 = 空列表」的空态语义。
+    3. **只补空**：已存在的 `pack_id`，若其 `pack_json.analysis` 缺 `lemma_seq`
+       （或为空）而新包有非空值，则**仅补写该字段**（UPDATE `pack_json`），绝不触碰
+       `title/level/content/source/created_at` 与其它键；既有序列**非空则不覆盖**
+       （哪怕值是哨兵）。解析失败/结构异常跳过该行 + `logging.error`，绝不抛。
+    4. **成功后写版本**：全部包无失败时写入 `app_settings["encounter_seed_version"]
+       = PRESET_SEED_VERSION`；有失败则不写（下次启动重试缺失包），返回值只计**成功
+       新建**行数（失败数与包总数可从日志与「返回值 < 包数」推知）。
+    5. **逐包异常隔离**：单包导入失败不得让整个启动崩（离线数据损坏/约束冲突时仍要
+       起得来）。失败包记录到日志，**绝不静默吞掉**导致数据半残而无从观测。
+
+    **不引墓碑**：版本闸天然只补「这一次」，用户主动删除的预置短文不会在后续每次启动
+    复活（记录已是 2）。代价：升级那一次会把用户删过的预置包补回来一次——可接受，且
+    行为可解释（「随版本发布的内容资产」与「用户数据」分离）。
 
     为何不进 `init_db()`
     -------------------
     既有契约测试（`tests/test_encounter_routes.py::test_get_list_empty` 等 6 条）
     把「空库 = 空列表」钉成遇见区的**空态语义**；测试夹具调用 `init_db()` 建库，
-    若 seed 塞进 `init_db`，这些用例会集体由「空」变「含 4 篇」而变红，语义被
+    若 seed 塞进 `init_db`，这些用例会集体由「空」变「含 7 篇」而变红，语义被
     削弱为「包含」。预置内容属**产品默认内容**而非 schema 事务，schema 建表
     （`init_db`）与默认内容供给（`create_app`）必须分权：由唯一的生产装配入口
     `create_app()` 在 `seed_preset_articles()` 之后调用本函数。
@@ -749,31 +870,27 @@ def seed_preset_encounter_texts(db_path: Optional[str] = None) -> int:
     from delector.data.encounter_seed_dict import PRESET_ENCOUNTER_PACKS
 
     target = get_db_path(db_path)
-    with db_conn(target) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM encounter_texts").fetchone()[0]
-    if count != 0:
+    # 热路径：版本已够 → 只读 1 行 app_settings 即返回，不碰 encounter_texts。
+    if _read_preset_seed_version(target) >= PRESET_SEED_VERSION:
         return 0
 
     imported = 0
     failed = 0
     for pack in PRESET_ENCOUNTER_PACKS:
-        try:
-            import_encounter_pack(pack, db_path=target)
-            imported += 1
-        except Exception as exc:  # noqa: BLE001 —— 单包失败不得崩启动
+        created = _try_seed_or_backfill_preset_pack(pack, target)
+        if created is None:
             failed += 1
-            logging.error(
-                "seed_preset_encounter_texts: 预置包导入失败 pack_id=%r: %r",
-                (pack or {}).get("pack_id"),
-                exc,
-            )
+        elif created:
+            imported += 1
     if failed:
         logging.error(
-            "seed_preset_encounter_texts: %d/%d 预置包导入失败（成功 %d）",
+            "seed_preset_encounter_texts: %d/%d 预置包导入失败（成功新建 %d）",
             failed,
             len(PRESET_ENCOUNTER_PACKS),
             imported,
         )
+        return imported  # 有失败：不写版本，下次启动重试缺失包
+    set_setting(_ENCOUNTER_SEED_VERSION_KEY, str(PRESET_SEED_VERSION), db_path=target)
     return imported
 
 
