@@ -16,6 +16,9 @@
 - 分析字段 = 离线纯函数 `delector.tools.vocab_stats.run`（考纲 A1∪A2 lemma 集，
   无 DB 无网络），即 job#1 gloss 前一步的**同一实现**；其 `unknown_ranked`
   映射为 pack.analysis 的 `unknown_lemmas`。
+- `analysis.lemma_seq` = 逐 token 的 lemma 序列，口径**与
+  `delector/routes/encounter.py::_annotate_tokens` 同源**（剔除 `is_space` 空白 token、
+  保留标点 token），供前端在本机算覆盖率；改动须两侧同步。长度 == `tokens_total`。
 - `estimated_cefr` 取语料自带 `cefr`（考纲权威分级），**不用**启发式 `level_hint` 覆盖。
 - `glosses` 留空数组：阅读时释义走 `/api/lookup/vocab` 本地词典，UI 不消费 pack.glosses
   （`validate_pack` 亦不强制 glosses 非空）。
@@ -34,7 +37,7 @@
 
 可选参数：
     --out PATH        产物路径（默认 delector/data/encounter_seed_dict.py）
-    --levels A1,A2    参与产包的语料分级（默认 A1,A2）
+    --levels A1,A2,B1 参与产包的语料分级（默认 A1,A2,B1）
     --created-at DATE 产物头部注释里的日期（ISO 字符串，默认今天）
 
 禁止手工改 `delector/data/encounter_seed_dict.py` 的内容 —— 要改就重跑本脚本。
@@ -46,6 +49,7 @@ import datetime
 import json
 import os
 import sys
+from typing import Any
 
 # 允许从仓库根直接 `python tools/build_encounter_seed.py` 运行：把仓库根加入 sys.path。
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -54,9 +58,9 @@ if _REPO_ROOT not in sys.path:
 
 # encounter-pack/v1 契约版本（与 delector/routes/encounter.py 的 CARD_PACK_SCHEMA 同值）。
 _PACK_SCHEMA = "encounter-pack/v1"
-# 默认产物路径与默认分级。
+# 默认产物路径与默认分级（A1/A2/B1：预置遇见区卡包 7 篇 = A1×2 + A2×2 + B1×3）。
 _DEFAULT_OUT = os.path.join(_REPO_ROOT, "delector", "data", "encounter_seed_dict.py")
-_DEFAULT_LEVELS = "A1,A2"
+_DEFAULT_LEVELS = "A1,A2,B1"
 
 # 产物头部注释模板（时间戳/命令由 CLI 注入；中文不转义）。
 _HEADER_TEMPLATE = '''# -*- coding: utf-8 -*-
@@ -79,6 +83,8 @@ _HEADER_TEMPLATE = '''# -*- coding: utf-8 -*-
 分析字段（Analysis）
     每包 analysis 由离线纯函数 delector.tools.vocab_stats.run 生成
     （考纲 A1∪A2 lemma 覆盖统计，无 DB/网络）；未知词频排名映射为 unknown_lemmas。
+    analysis.lemma_seq 为逐 token lemma 序列，口径与 routes/encounter.py::_annotate_tokens
+    同源（剔除 is_space 空白 token、保留标点 token），供前端在本机算覆盖率。
 
 免责（Determinism & Immutability）
     本模块为纯数据：仅导出 PRESET_ENCOUNTER_PACKS，导入期零 spaCy、零网络、零副作用
@@ -91,9 +97,9 @@ from typing import Any
 PRESET_ENCOUNTER_PACKS: list[dict[str, Any]] = '''
 
 
-def _parse_levels(raw: str) -> list:
+def _parse_levels(raw: str) -> list[str]:
     """把 "A1,A2" 解析为去空白、去重、保序的等级列表。"""
-    out = []
+    out: list[str] = []
     for part in (raw or "").split(","):
         lv = part.strip().upper()
         if lv and lv not in out:
@@ -101,19 +107,38 @@ def _parse_levels(raw: str) -> list:
     return out
 
 
-def _collect_tokens(parsed: dict) -> list:
+def _collect_tokens(parsed: dict[str, Any]) -> list[dict[str, Any]]:
     """从 process_german_text 的返回结构里抽平所有句子的 tokens（保留 text/lemma/pos）。
 
     标点 token（is_punct）/空白 token（is_space）保留在 payload 里但词表统计只按
     lemma 计；这里与 vocab_stats 契约一致，直接透传 token dict。
     """
-    tokens = []
+    tokens: list[dict[str, Any]] = []
     for sent in parsed.get("sentences", []):
         tokens.extend(sent.get("tokens", []))
     return tokens
 
 
-def build_packs(levels: list) -> list:
+def _annotate_lemma_seq(parsed: dict[str, Any]) -> list[str]:
+    """按 annotate 口径把 process_german_text 结果抽成逐 token 的 lemma 序列。
+
+    口径**与 `delector/routes/encounter.py::_annotate_tokens` 同源**：遍历每句的
+    tokens、剔除 `is_space` 空白 token、但**保留**标点 token（标点亦有非空 lemma）。
+    因此本序列长度 == annotate.total_tokens == vocab_stats.tokens_total，可作为前端
+    本机算覆盖率的**权威分母**。
+
+    改动需两侧（本函数 与 `routes/encounter.py::_annotate_tokens`）同步，勿单边漂移。
+    """
+    seq: list[str] = [
+        tok["lemma"]
+        for sent in parsed["sentences"]
+        for tok in sent["tokens"]
+        if not tok.get("is_space")
+    ]
+    return seq
+
+
+def build_packs(levels: list[str]) -> list[dict[str, Any]]:
     """按 levels 筛选 OFFICIAL_CORPUS 并逐篇产 encounter-pack/v1 dict 列表。
 
     返回列表按 pack_id 升序（确定性）；每包结构见 validate_pack 契约：
@@ -124,7 +149,7 @@ def build_packs(levels: list) -> list:
     from delector.tools import vocab_stats
 
     level_set = set(levels)
-    packs = []
+    packs: list[dict[str, Any]] = []
     for item in OFFICIAL_CORPUS:
         corpus_id = item["id"]
         cefr = item["cefr"]
@@ -148,6 +173,8 @@ def build_packs(levels: list) -> list:
                 "known_rate": stats["known_rate"],
                 "unknown_lemmas": stats["unknown_ranked"],
                 "level_hint": stats["level_hint"],
+                # 逐 token lemma 序列（annotate 口径，剔除 is_space）；前端口算覆盖率的权威分母。
+                "lemma_seq": _annotate_lemma_seq(parsed),
             },
             "glosses": [],
             "article": {
@@ -162,7 +189,7 @@ def build_packs(levels: list) -> list:
     return packs
 
 
-def render_module(packs: list, levels: list, created_at: str) -> str:
+def render_module(packs: list[dict[str, Any]], levels: list[str], created_at: str) -> str:
     """渲染完整 Python 模块源码字符串（含头部注释 + 纯字面量数据）。
 
     使用 json.dumps(indent=4, ensure_ascii=False) —— 其输出（对象/数组/字符串/数字/
@@ -200,7 +227,7 @@ def _require_spacy_model() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="从 OFFICIAL_CORPUS 离线生成 encounter-pack/v1 预置包模块。")
     parser.add_argument("--out", default=_DEFAULT_OUT, help="产物路径")
-    parser.add_argument("--levels", default=_DEFAULT_LEVELS, help="参与分级（逗号分隔，默认 A1,A2）")
+    parser.add_argument("--levels", default=_DEFAULT_LEVELS, help="参与分级（逗号分隔，默认 A1,A2,B1）")
     parser.add_argument(
         "--created-at",
         default=datetime.date.today().isoformat(),
@@ -217,7 +244,7 @@ def main() -> int:
     packs = build_packs(levels)
 
     # levels 分布统计（打印）。
-    dist = {}
+    dist: dict[str, int] = {}
     for p in packs:
         dist[p["estimated_cefr"]] = dist.get(p["estimated_cefr"], 0) + 1
     dist_str = ", ".join(f"{lv}:{dist[lv]}" for lv in sorted(dist))

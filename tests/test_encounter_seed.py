@@ -4,8 +4,8 @@
 契约面
 ------
 - 数据（delector/data/encounter_seed_dict.py）：PRESET_ENCOUNTER_PACKS 每包过
-  validate_pack、estimated_cefr ∈ {A1,A2}、pack_id 全局唯一、正文非空且德语、
-  glosses == []。
+  validate_pack、estimated_cefr ∈ {A1,A2,B1}、pack_id 全局唯一、正文非空且德语、
+  glosses == []，且 analysis.lemma_seq 为逐 token 非空 lemma 序列。
 - 接线（delector/core/database.py::seed_preset_encounter_texts）：空库才导入、
   逐包走 import_encounter_pack 幂等、非空库返回 0 且不动用户内容。
 - 装配（delector/server.py::create_app）：在 seed_preset_articles 之后调用
@@ -21,6 +21,7 @@
 
 import ast
 import gc
+import importlib.util
 import os
 import subprocess
 import sys
@@ -39,6 +40,18 @@ from delector.routes.encounter import validate_pack  # noqa: E402
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BUILD_SCRIPT = os.path.join(_REPO_ROOT, "tools", "build_encounter_seed.py")
 _SERVER_SRC = os.path.join(_REPO_ROOT, "delector", "server.py")
+
+
+def _load_build_under_test():
+    """按路径加载 tools/build_encounter_seed.py（tools/ 不是 package）。"""
+    spec = importlib.util.spec_from_file_location("build_encounter_seed_under_test", _BUILD_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_build = _load_build_under_test()
 
 
 @pytest.fixture(autouse=True)
@@ -85,15 +98,15 @@ def _count_encounter_rows(db_path) -> int:
 def test_packs_pass_validate_pack():
     """每包都必须过 routes.encounter.validate_pack（结构契约）。"""
     assert isinstance(PRESET_ENCOUNTER_PACKS, list)
-    assert len(PRESET_ENCOUNTER_PACKS) == 4, "对外承诺 4 个预置包（A1×2 + A2×2）"
+    assert len(PRESET_ENCOUNTER_PACKS) == 7, "对外承诺 7 个预置包（A1×2 + A2×2 + B1×3）"
     for pack in PRESET_ENCOUNTER_PACKS:
         validate_pack(pack)  # 不合法即抛 ValueError → 红
 
 
 def test_packs_cefr_whitelist():
-    """estimated_cefr 必须落在 {A1, A2} 白名单内。"""
+    """estimated_cefr 必须落在 {A1, A2, B1} 白名单内。"""
     seen = {p["estimated_cefr"] for p in PRESET_ENCOUNTER_PACKS}
-    assert seen == {"A1", "A2"}, f"CEFR 只应为 A1/A2，实际 {seen}"
+    assert seen == {"A1", "A2", "B1"}, f"CEFR 只应为 A1/A2/B1，实际 {seen}"
 
 
 def test_packs_pack_id_globally_unique():
@@ -120,17 +133,59 @@ def test_packs_glosses_empty():
         assert pack["glosses"] == [], f"{pack['pack_id']} glosses 应为 []"
 
 
+def test_each_pack_has_lemma_seq():
+    """每包 analysis.lemma_seq 为逐 token 非空 lemma 序列，长度对齐 tokens_total。
+
+    口径与 routes.encounter._annotate_tokens 同源：剔除 is_space 空白 token、
+    保留标点 token。lemma_seq 是后续阶段前端在本机算覆盖率的**权威分母来源**。
+    """
+    for pack in PRESET_ENCOUNTER_PACKS:
+        pid = pack["pack_id"]
+        seq = pack["analysis"]["lemma_seq"]
+        assert isinstance(seq, list), f"{pid} lemma_seq 应为 list，实际 {type(seq).__name__}"
+        assert len(seq) > 0, f"{pid} lemma_seq 不得为空"
+        for i, lemma in enumerate(seq):
+            assert isinstance(lemma, str), f"{pid} lemma_seq[{i}] 应为 str"
+            assert lemma.strip() != "", f"{pid} lemma_seq[{i}] 不得为空白串"
+        assert len(seq) == pack["analysis"]["tokens_total"], (
+            f"{pid} lemma_seq 长度 {len(seq)} 应等于 tokens_total {pack['analysis']['tokens_total']}"
+        )
+
+
+def test_annotate_lemma_seq_drops_space_keeps_punct():
+    """逐 token lemma 序列口径：剔除 is_space 空白 token、保留标点 token。
+
+    真实语料实测 space_tokens == 0，故「删掉 is_space 过滤」不会在聚合测试上变红；
+    这里用**人工 fixture** 直接喂 `_annotate_lemma_seq`，让该过滤缺失必红：
+    改动实现去掉 `if not tok.get("is_space")` → 结果多出 " " → 本用例 red。
+    """
+    parsed = {
+        "sentences": [
+            {
+                "tokens": [
+                    {"text": "Der", "lemma": "der", "pos": "DET", "is_space": False},
+                    {"text": " ", "lemma": " ", "pos": "SPACE", "is_space": True},
+                    {"text": "Hund", "lemma": "Hund", "pos": "NOUN", "is_space": False},
+                    {"text": ".", "lemma": ".", "pos": "PUNCT", "is_punct": True, "is_space": False},
+                    {"text": " ", "lemma": " ", "pos": "SPACE", "is_space": True},
+                ]
+            }
+        ]
+    }
+    assert _build._annotate_lemma_seq(parsed) == ["der", "Hund", "."]
+
+
 # ── 2. 幂等 ───────────────────────────────────────────────────────────────────
 def test_seed_idempotent(tmp_path):
-    """空库 seed 一次返回 4、库里 4 行；二次调用返回 0 且仍 4 行。"""
+    """空库 seed 一次返回 7、库里 7 行；二次调用返回 0 且仍 7 行。"""
     db_path = str(tmp_path / "encounter_seed.db")
     first = database.seed_preset_encounter_texts(db_path)
-    assert first == 4, f"首次应导入 4 行，实际 {first}"
-    assert _count_encounter_rows(db_path) == 4
+    assert first == 7, f"首次应导入 7 行，实际 {first}"
+    assert _count_encounter_rows(db_path) == 7
 
     second = database.seed_preset_encounter_texts(db_path)
     assert second == 0, f"二次调用应因空库守卫返回 0，实际 {second}"
-    assert _count_encounter_rows(db_path) == 4, "二次调用不得重复插入"
+    assert _count_encounter_rows(db_path) == 7, "二次调用不得重复插入"
 
 
 # ── 3. 用户内容不被触碰 ───────────────────────────────────────────────────────
@@ -257,5 +312,9 @@ _MUTATION_TABLE = textwrap.dedent(
     """test_packs_article_text_is_german_prose | validate_pack 抛 ValueError / 空正文 → red |
 | 两包复用同一 pack_id | test_packs_pack_id_globally_unique | 去重集合比长度短 → red |
 | 把正文换成英文 | test_packs_article_text_is_german_prose | 无变音/无德语功能词 → red |
+| 去掉 _annotate_lemma_seq 的 `is_space` 过滤 | test_annotate_lemma_seq_drops_space_keeps_punct | """
+    """人工 fixture 带空白 token → 结果多出 " " → red（真实语料 space==0，聚合测试不红） |
+| 把 _DEFAULT_LEVELS 改回 "A1,A2" | test_packs_pass_validate_pack / test_packs_cefr_whitelist / """
+    """test_seed_idempotent | 篇数回落 4 → red |
 """
 )
