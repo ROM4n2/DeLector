@@ -5695,7 +5695,8 @@ body.drawer-open .shadow-player {
 
   #view-home,
   #view-cards,
-  #view-progress {
+  #view-progress,
+  #view-encounter {
     padding: 1.25rem 1rem 5.5rem;
   }
 
@@ -10280,7 +10281,10 @@ body.drawer-open .companion {
 .encounter-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /* 动态 4 列：等级印章 · 标题(1fr) · i+1 徽章 · 元数据。无徽章时仅 3 个子项自动
+     占满前 3 列、第 4 列(宽 0)空置；空置列仍带一个列间隙，故下方用宽屏规则把无徽章
+     卡的 meta 占满末两列并贴右，消除 meta 与右缘间的假列间隙（右缘与既有 3 列版逐字一致）。 */
+  grid-template-columns: auto 1fr auto auto;
   align-items: baseline;
   gap: 0.35rem 0.9rem;
   padding: 0.85rem 0.5rem;
@@ -10303,6 +10307,22 @@ body.drawer-open .companion {
 .encounter-badge.A1 { color: var(--hl-A1-ink, #1d548c); background: var(--hl-A1, #e3effb); }
 .encounter-badge.A2 { color: var(--hl-A2-ink, #20662a); background: var(--hl-A2, #d6eccf); }
 .encounter-badge.B1 { color: var(--hl-B1-ink, #825c00); background: var(--hl-B1, #fde9bd); }
+
+/* ── i+1 就近选材：三态徽章（复用 CEFR 荧光笔同族墨色，不新造硬编码色值）────
+   正好读(i1)=橄榄绿 · 偏简单(easy)=靛蓝 · 偏难(hard)=砖红；同「印章」形态。 */
+.enc-i1-badge {
+  font-family: var(--enc-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 0.13rem 0.42rem;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.enc-i1-badge.enc-i1-i1 { color: var(--hl-A2-ink, #20662a); background: var(--hl-A2, #d6eccf); }
+.enc-i1-badge.enc-i1-easy { color: var(--hl-A1-ink, #1d548c); background: var(--hl-A1, #e3effb); }
+.enc-i1-badge.enc-i1-hard { color: var(--hl-B2-ink, #91261b); background: var(--hl-B2, #fde0d7); }
 .encounter-card-title {
   font-family: var(--enc-display);
   font-weight: 600;
@@ -10318,6 +10338,40 @@ body.drawer-open .companion {
   color: var(--ink-faint, #8b8676);
   white-space: nowrap;
 }
+/* 无 i+1 徽章卡：meta 既是末子项又紧跟标题（标题 + meta:last-child 命中）。「从电脑
+   导入」行的 meta 后还有「导入」按钮，meta 非末子项 → 天然不被本规则命中。宽屏下让
+   meta 占满末两列并贴右，消除空置第 4 列在 meta 与右缘间多出的 ~0.9rem 假列间隙，
+   使无徽章卡的右缘与既有 3 列版逐字一致（视觉零变化，方案 A）。窄屏断点 ≤640px 另有
+   `.encounter-card-meta { grid-column: 2 }` 归位，本规则经 min-width 限定不干扰该断点。 */
+@media (min-width: 641px) {
+  .encounter-card-title + .encounter-card-meta:last-child {
+    grid-column: 3 / -1;
+    justify-self: end;
+  }
+}
+
+/* ── i+1 提示条：推荐(左)芥末墨线走字条 / 引导文案（与覆盖统计同族）──────
+   #enc-i1-hint 默认 display:none（index.html 内联），由 renderI1Hint 切换。 */
+.enc-i1-hint {
+  font-family: var(--enc-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  line-height: 1.6;
+  color: var(--ink-mute, #5a5448);
+  border: 1px solid var(--rule, #d8d0c2);
+  border-left: 3px solid var(--moss, #3b6e3f);
+  border-radius: 2px;
+  padding: 0.5rem 0.8rem;
+  margin-bottom: 0.9rem;
+  background: var(--paper-warm, #f7f4ec);
+}
+.enc-i1-hint-text { color: var(--ink-mute, #5a5448); }
+.enc-i1-hint-pick {
+  font-weight: 600;
+  color: var(--moss, #3b6e3f);
+  margin-right: 0.5rem;
+}
+.enc-i1-hint-rate { color: var(--ink-faint, #8b8676); }
 
 /* ── 阅读页：一张印出来的纸（1.5px 墨线 + 硬投影 + 首字下沉）──────────── */
 .encounter-reader {
@@ -10642,4 +10696,7 @@ body.drawer-open .companion {
   .encounter-entry-sub { grid-column: 2; text-align: left; }
   .encounter-card { grid-template-columns: auto 1fr; }
   .encounter-card-meta { grid-column: 2; white-space: normal; }
+  /* i+1：窄屏提示条留白加厚、徽章允许换行，避免溢出贴边。 */
+  .enc-i1-hint { padding: 0.6rem 0.9rem; }
+  .enc-i1-badge { white-space: normal; }
 }

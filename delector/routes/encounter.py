@@ -17,7 +17,7 @@ word_count = 简单空白分词计数（服务端 cheap 计算），不做 spaCy
 
 import copy
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -167,6 +167,69 @@ def api_annotate_text(text_id: int) -> Dict[str, Any]:
         "total_tokens": total_tokens,
         "sentences": sentences,
     }
+
+
+def _parse_pack_analysis(raw: Any) -> Tuple[Optional[int], Optional[List[Any]]]:
+    """从 pack_json 原文安全提取 (tokens_total, lemma_seq)，供前端算覆盖率。
+
+    任一环节不合法（空 / 非法 JSON / 非 dict / analysis 缺失或非 dict /
+    tokens_total 非 int / lemma_seq 非 list）→ 返回 (None, None)，**绝不抛异常**。
+    """
+    if not raw:
+        return None, None
+    try:
+        pack = json.loads(raw)
+    except (TypeError, ValueError):
+        return None, None
+    if not isinstance(pack, dict):
+        return None, None
+    analysis = pack.get("analysis")
+    if not isinstance(analysis, dict):
+        return None, None
+    total_tokens = analysis.get("tokens_total")
+    lemma_seq = analysis.get("lemma_seq")
+    if not isinstance(total_tokens, int) or isinstance(total_tokens, bool):
+        return None, None
+    if not isinstance(lemma_seq, list):
+        return None, None
+    return total_tokens, lemma_seq
+
+
+def _index_entry(row: Dict[str, Any]) -> Dict[str, Any]:
+    """把一行 encounter_texts 映射成覆盖率索引项（与 `_shelf_entry` 同风格）。
+
+    返回 {id, title, level, word_count, total_tokens, lemma_seq}；word_count 复用
+    `_count_words`，total_tokens / lemma_seq 取自 pack_json.analysis（annotate 口径：
+    剔除 is_space、保留标点，零 spaCy）。
+
+    **降级语义**：pack_json 为空 / 非法 JSON / 非 dict / analysis 缺失或异常 / 字段
+    类型不符 —— 任一条成立时两字段均为 None，但该行**照常返回**（前端据 None 降级
+    展示，绝不丢行）。**绝不返回 content / pack_json / source 原文**（防泄）。
+    """
+    total_tokens, lemma_seq = _parse_pack_analysis(row.get("pack_json"))
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "level": row["level"],
+        "word_count": _count_words(row["content"] or ""),
+        "total_tokens": total_tokens,
+        "lemma_seq": lemma_seq,
+    }
+
+
+# ── 覆盖率索引（局域网只读）─────────────────────────────────────────────────
+# 安全边界（同 /packs*）：**不挂** _require_localhost —— 它只是局域网内只读的词序列
+# 元数据，供手机/平板在前端用自身背词 deck 算覆盖率并排序/推荐。这里**绝不提供任何
+# 写操作**，也不返回 content/pack_json/source 原文。
+@router.get("/texts/index")# 同上：fastapi 装饰器为 Any
+def api_list_text_index() -> Dict[str, Any]:
+    """每篇短文的 annotate 口径词序列索引（**局域网只读**，不挂本机闸）。
+
+    返回 {"items": [{id,title,level,word_count,total_tokens,lemma_seq}, ...]}。lemma_seq
+    与 GET /texts/{id}/annotate 同口径（剔除 is_space、保留标点），但**零 spaCy**，直接
+    读库内 pack_json.analysis。pack_json 缺失/损坏的行两字段降级为 None 但仍返回（不丢行）。
+    """
+    return {"items": [_index_entry(row) for row in list_encounter_texts()]}
 
 
 # --follow-imports=skip 下 fastapi 装饰器无类型，无法静态检查，豁免 untyped-decorator

@@ -342,8 +342,9 @@ def create_app() -> FastAPI:
     init_db()
     seed_preset_articles()
     # 遇见区预置短文：产品默认内容，属装配期供给而非 schema 事务，故放在这里而非
-    # init_db()。空库守卫 + 逐包 pack_id 幂等（见 database.seed_preset_encounter_texts）：
-    # 既有契约测试把「空库 = 空列表」钉成遇见区空态语义，若塞进 init_db 会集体变红。
+    # init_db()。版本闸增量补装：版本不足时只增缺失包 + 只补空 lemma_seq（见
+    # database.seed_preset_encounter_texts）：既有契约测试把「空库 = 空列表」钉成
+    # 遇见区空态语义，若塞进 init_db 会集体变红。
     seed_preset_encounter_texts()
     if STATIC_DIR and os.path.exists(STATIC_DIR):
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

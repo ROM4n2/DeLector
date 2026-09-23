@@ -208,6 +208,9 @@
         <div id="enc-add-error" class="encounter-form-error"></div>
       </div>
 
+      <!-- i+1 就近选材提示条：按本机已背词覆盖率标出「正好读」的那一篇（索引端点
+           失败时保持隐藏，列表退回既有行为）。必须位于列表之前。 -->
+      <div id="enc-i1-hint" class="enc-i1-hint" aria-live="polite" style="display:none"></div>
       <div id="encounter-text-list" class="encounter-list"></div>
       <div id="enc-coverage" class="enc-coverage" aria-live="polite" style="display:none"></div>
       <div id="encounter-reader" class="encounter-reader" style="display:none"></div>
