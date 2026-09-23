@@ -486,8 +486,8 @@ _MUTATION_TABLE = textwrap.dedent(
 | 变异 | 预期变红的用例 | 说明 |
 | --- | --- | --- |
 | 删掉 seeder 的版本早退（`version >= PRESET_SEED_VERSION` 提前返回） | """
-    """test_seed_idempotent / test_seed_version_gate_shortcircuits_on_empty_db / """
-    """test_seed_does_not_resurrect_deleted_preset | 热路径失效 → 二次调用重复插入 / 复活已删行 → red |
+    """test_seed_version_gate_shortcircuits_on_empty_db / """
+    """test_seed_does_not_resurrect_deleted_preset | 热路径失效 → 空库被全量补齐 / 复活已删行 → red |
 | 把「只补空」改成无条件覆盖 lemma_seq | test_seed_does_not_overwrite_nonempty_lemma_seq | """
     """哨兵值被新序列覆盖 → red |
 | 把 `_backfill_pack_lemma_seq` 的合并行改成 `patched["analysis"] = {"lemma_seq": new_seq}` | """
@@ -497,7 +497,9 @@ _MUTATION_TABLE = textwrap.dedent(
     """非空非 dict 项在日志行二次 .get 抛 AttributeError 逃逸 → red |
 | 把 `_read_preset_seed_version` 改回走 `get_setting`（含 env 兜底） | """
     """test_seed_version_gate_ignores_env_pollution | env 强灌 encounter_seed_version=99 误热退 → red |
-| 二次调用改写既有行 pack_json | test_seed_idempotent | 版本闸早退后 pack_json 仍被改 → red |
+| 二次调用改写既有行 pack_json（版本闸失效后第二趟才触达） | """
+    """test_seed_version_gate_shortcircuits_on_empty_db / """
+    """test_seed_does_not_resurrect_deleted_preset | 版本闸失效后第二趟走过既有行改写路径 → red |
 | 把逐包循环改成只处理第一个包 | test_seed_empty_db_imports_all_and_writes_version / """
     """test_seed_nonempty_db_only_adds_missing_presets | 行数骤减、返回非 7 → red |
 | 去掉 seeder 的逐包 try/except 异常隔离 | test_seed_survives_single_pack_failure | """

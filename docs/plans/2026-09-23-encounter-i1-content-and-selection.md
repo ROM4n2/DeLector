@@ -166,7 +166,7 @@
 > TDD Steps:
 > 1. 先写探针（RED）：`tools/wb_enc_i1_probe.mjs` 读 `static/js/enc-i1.js` **真实源码**，用 `node:vm`（`SourceTextModule` 或去 `export` 后注入沙箱，**照抄 `tools/wb_rich_backfill_probe.mjs` 的既有切法**）执行，注入桩 `knownSet`，覆盖 4 场景：① 区间边界（rate = 0.84 / 0.85 / 0.96 / 0.97 → `hard / i1 / i1 / easy`）；② 排序（i1 组在 easy 前、hard 后；组内 rate 降序；同分按 id 升序；`available=false` 最后）；③ `topPick`（有 i1 返回首条；只有 easy/hard 返回 null）；④ 幂等/纯度（`rankEntries` 不改入参数组与其元素）；另含 `hasCoverage`（空 Set → false）。输出 `--json` 结果，有失败时非零退出或 JSON 里 `failures > 0`。
 > 2. 跑 `node tools/wb_enc_i1_probe.mjs` 确认 RED（模块不存在 → 探针报失败）。
-> 3. 实现 `static/js/enc-i1.js`（GREEN）：零 import、无 `localStorage`/`document`/`window`、坏输入返回降级值不抛。覆盖率算法**逐字为**：`knownTokens = entry.lemma_seq.filter((l) => knownSet.has(String(l).toLowerCase())).length; rate = knownTokens / entry.totalTokens;`（**分母用 `entry.totalTokens`，MUST NOT 用 `lemma_seq.length`**）。
+> 3. 实现 `static/js/enc-i1.js`（GREEN）：零 import、无 `localStorage`/`document`/`window`、坏输入返回降级值不抛。覆盖率算法**逐字为**：`knownTokens = entry.lemma_seq.filter((l) => knownSet.has(String(l).toLowerCase())).length; rate = knownTokens / entry.total_tokens;`（**分母用 `entry.total_tokens`，MUST NOT 用 `lemma_seq.length`**）。
 > 4. 跑 `node tools/wb_enc_i1_probe.mjs` 全绿；再写 `tests/test_enc_i1_probe.py` 跑探针并断言 `failures == 0`，接入 pytest；跑 `python -m pytest tests/test_enc_i1_probe.py -q`。
 > 5. REFACTOR：阈值只在 `I1_BANDS` 定义一次（`bandOf` 内不得出现裸露的 `0.85`/`0.97` 字面量）；每个导出函数带 docstring 说明语义与边界。
 > **变异验证（必做并回报）**：① 把 `bandOf` 的 `0.85` 改成 `0.8` → 边界场景必红；② 把 `rankEntries` 改成就地排序（`entries.sort`）→ 纯度断言必红；③ 把分母换成 `lemma_seq.length` 并在探针里构造 `totalTokens ≠ lemma_seq.length` 的场景 → 必红。
@@ -187,7 +187,7 @@
 **Files:**
 - Modify: `static/index.html`（`view-encounter` 内 `#encounter-text-list` 之前新增 `<div id="enc-i1-hint" class="enc-i1-hint" style="display:none"></div>`）
 - Modify: `static/js/encounter.js`（`fetchIndex()` / `renderTextList` 接受排序后条目 / `renderI1Hint` / `showView` 并发取数 + 降级）
-- Modify: `static/css/style.css`（`.enc-i1-badge` 三态 + `.enc-i1-hint`；移动端断点内补规则）
+- Modify: `static/style.css`（`.enc-i1-badge` 三态 + `.enc-i1-hint`；移动端断点内补规则）
 - Test: Modify `tests/test_encounter_ui_probes.py`（结构 + `esc()` + 降级路径断言）
 
 **Interfaces:**
@@ -201,7 +201,7 @@
 **Subagent Prompt Scaffold (for /vault-exec):**
 > "Implement Task 5: 前端集成。
 > Goal: 让遇见区列表在**不点开任何一篇**的前提下，按本机已背词覆盖率分组排序并标出 i+1 推荐；索引失败时**完全退回**既有列表行为。
-> Target Files: Modify `static/index.html`, Modify `static/js/encounter.js`, Modify `static/css/style.css`, Modify `tests/test_encounter_ui_probes.py`.
+> Target Files: Modify `static/index.html`, Modify `static/js/encounter.js`, Modify `static/style.css`, Modify `tests/test_encounter_ui_probes.py`.
 > TDD Steps:
 > 1. 写失败测试（RED，追加到 `tests/test_encounter_ui_probes.py`）：① `index.html` 的 `view-encounter` 段内存在 `id="enc-i1-hint"`；② `encounter.js` import 了 `./enc-i1.js` 与 `deck-bridge.js`（**可达性契约**，同时满足 `tests/test_frontend_module_graph.py`）；③ 徽章渲染路径调用 `esc(` 且 `band` 经白名单映射（断言 `enc-i1-badge` 与三态 class 名出现）；④ 降级：`Promise.allSettled` 出现且索引 rejected 分支不抛（断言「索引失败 → 仍调用 renderTextList」的代码路径存在，且 `renderTextList` 的 `ranked` 为可选参数）。跑 `python -m pytest tests/test_encounter_ui_probes.py -q` 确认 RED。
 > 2. 跑测试确认失败。
