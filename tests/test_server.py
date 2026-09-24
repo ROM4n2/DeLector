@@ -4436,8 +4436,25 @@ def test_register_routes_covers_every_module_in_routes_package():
 
     防范的正是本仓库踩过的那类事故：路由模块存在、也被 server 静态 import，
     但没人 include_router —— 端点静默 404 或打包后 ModuleNotFoundError，
-    而"模块文件在"这种断言全绿。这里比对的是**端点函数对象**而非路径字符串：
-    router 上的 path 不含 prefix，字符串比不出来。
+    而"模块文件在"这种断言全绿。
+
+    比对的是 **HTTP 语义键**（完整 path + methods）而非**端点函数对象身份**：
+    前者是框架文档化契约、跨版本稳定；后者是纯实现细节（无任何向后兼容承诺）。
+    starlette ≥1.6 随 fastapi ≥0.141 漂移后，`include_router`/`APIRoute` 不再
+    保持对原函数对象的引用 → 对象身份比对会把**全部**路由误判 missing。改用
+    HTTP 语义键后，本守卫对上游 `include_router`/`APIRoute` 的实现细节漂移免疫，
+    同时真漏挂时仍能精确定位到具体 path。
+
+    已注册侧取自 `app.openapi()["paths"]`（FastAPI 文档化的 HTTP 契约）而非
+    `probe.routes` 的展平结构：fastapi ≥0.141 起 `include_router` 把子路由改为
+    **嵌套**（`app.routes` 里是 `_IncludedRouter`，无 `path` 属性），实测
+    `probe.routes` 只剩 4 条默认路由 → 展平式枚举会把**全部**路由误判 missing。
+    OpenAPI paths 是"挂进 app 的 HTTP 端点"的规范化视图，两版 fastapi 下均可靠。
+
+    定义侧：`route.path` 即完整挂载 path —— FastAPI 的 `add_api_route` 在**定义
+    时**就把 `router.prefix` 烘进了 `route.path`（`self.prefix + path`），
+    `register_routes` 的 `include_router` 未再叠加前缀，故**不能**再加 `router.prefix`
+    （否则双拼）。仅需把路径转换器语法 `{name:int}` 归一化为 `{name}` 与 OpenAPI 对齐。
     """
     import importlib
     import pkgutil
@@ -4447,9 +4464,21 @@ def test_register_routes_covers_every_module_in_routes_package():
     import delector.routes as routes_pkg
     from delector.routes import register_routes
 
+    def _semantic_path(path: str) -> str:
+        # 归一化路径转换器语法 `{name:int}` → `{name}`：route.path 保留转换器后缀，
+        # 而 OpenAPI 契约只暴露参数名 —— 两侧对齐后才能当同一个 HTTP 语义键来比。
+        return re.sub(r"\{(\w+):[^}]+\}", r"{\1}", path)
+
     probe = FastAPI()
     register_routes(probe)
-    registered = {r.endpoint for r in probe.routes if hasattr(r, "endpoint")}
+    # 已注册侧 = app 暴露的 (path, method) HTTP 语义键集合（OpenAPI 契约）。
+    # 逐 method 展开而非按 path 聚合成 frozenset：同一 path 可挂多个方法（如
+    # GET 列表 + POST 新建），须与定义侧"每 route 一组方法"逐条对齐才不漏比。
+    registered = {
+        (_semantic_path(path), method.upper())
+        for path, ops in probe.openapi().get("paths", {}).items()
+        for method in ops
+    }
 
     missing = []
     covered_modules = []
@@ -4461,9 +4490,12 @@ def test_register_routes_covers_every_module_in_routes_package():
         for router in routers:
             for route in router.routes:
                 # router.routes 静态标为 BaseRoute，但经装饰器注册的路由运行时必是
-                # APIRoute（endpoint/path 是其专有属性），属刻意的动态面访问
-                if route.endpoint not in registered:  # type: ignore[attr-defined]  # BaseRoute 静态无 endpoint，运行时必为 APIRoute（见上注释）
-                    missing.append(f"{mod_info.name}:{route.path}")  # type: ignore[attr-defined]  # 同上：APIRoute 专有属性
+                # APIRoute（path/methods 是其 HTTP 语义属性），属刻意的动态面访问。
+                # route.path 已含 router.prefix（见 docstring），勿再拼 prefix。
+                path = _semantic_path(route.path)  # type: ignore[attr-defined]  # BaseRoute 静态无 path，运行时必为 APIRoute（见上注释）
+                for method in getattr(route, "methods", ()) or ():
+                    if (path, method) not in registered:
+                        missing.append(f"{mod_info.name}:{path}")
 
     assert "main" in covered_modules, "routes/main.py（通用 handler）没被扫描到"
     assert not missing, f"这些路由定义了却没挂进 app（漏 include_router）: {missing}"

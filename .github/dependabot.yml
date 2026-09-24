@@ -34,7 +34,8 @@ updates:
     # 人工升级路径：本地 `pip install -U` → 跑**全量** pytest（尤其对象身份类守卫）
     # → 更新 requirements.txt 的 pin → 单独一笔 commit（便于回滚）。
     # 解除本 ignore 的前提 = 把该守卫测试从「endpoint 对象身份比对」改为
-    # 「(prefix+path, methods) 比对」。
+    # 「HTTP 语义键：(完整 path, METHOD)，已注册侧取自 app.openapi()["paths"]」比对
+    # —— 该改造已于 2026-09-24 完成。
     ignore:
       - dependency-name: "fastapi"
       - dependency-name: "starlette"

@@ -63,22 +63,34 @@
 ### 3.1 A：比对键
 
 ```python
-# 已注册侧（probe.routes 里带 path 的路由）
+def _semantic_path(path: str) -> str:
+    # 归一化路径转换器语法 `{name:int}` → `{name}`：route.path 保留转换器后缀，
+    # 而 OpenAPI 契约只暴露参数名 —— 两侧对齐后才能当同一个 HTTP 语义键来比。
+    return re.sub(r"\{(\w+):[^}]+\}", r"{\1}", path)
+
+# 已注册侧（OpenAPI 契约视图，逐 method 展开）：
 registered = {
-    (r.path, frozenset(getattr(r, "methods", ()) or ()))
-    for r in probe.routes
-    if hasattr(r, "path")
+    (_semantic_path(path), method.upper())
+    for path, ops in probe.openapi().get("paths", {}).items()
+    for method in ops
 }
 
-# 定义侧（router 上的 path 不含 prefix → 拼回完整 path）
-key = (router.prefix + route.path, frozenset(getattr(route, "methods", ()) or ()))
-if key not in registered:
-    missing.append(f"{mod_info.name}:{key[0]}")
+# 定义侧（route.path 已含 router.prefix，勿再拼）：
+path = _semantic_path(route.path)
+for method in getattr(route, "methods", ()) or ():
+    if (path, method) not in registered:
+        missing.append(f"{mod_info.name}:{path}")
 ```
+
+> **本节已按 T1 实测订正**（原公式经实测推翻，见 §4）。
 
 **为何 `path`/`methods` 可靠而 `endpoint` 不可靠**：前两者是**HTTP 语义**（框架文档化契约、跨版本稳定），后者是**实现细节**（对象身份无任何向后兼容承诺）。这正是 post-mortem §4.2 那条"依赖对象身份/私有属性的测试是漂移哨兵而非回归防线"的直接落地。
 
-**边界**：`Mount`（static 挂载）无 `methods` → 空 `frozenset()`，不会与 APIRoute 键碰撞（真实路由必带方法）；`router.prefix` 为空时退化为 `route.path`。
+**边界**：
+- `route.path` **已含** `router.prefix`（FastAPI `add_api_route` 在**定义时**即 `self.prefix + path`），**不得**再拼，否则双拼、`missing` 形如 `/api/a1/api/a1/topics`；
+- 路径转换器语法 `{name:int}` 必须在**两侧一致**归一（漏一侧 → 含转换器的路由误报 missing）；
+- `Mount` 等非 APIRoute 无 `methods` → 不参与比对；
+- 同一 path 多方法：`openapi()["paths"]` 逐 method 展开，与定义侧逐 method 一致。
 
 ### 3.2 B：exclude 正则锚定
 
@@ -109,7 +121,7 @@ PYTHONPATH=/tmp/tc_dep python -m pytest tests/test_server.py -q -k register_rout
 
 | 场景 | 行为 |
 |---|---|
-| 路由模块 `prefix` 为空 | `router.prefix + route.path` 退化为 `route.path`，仍正确 |
+| 定义侧是否需再拼 `router.prefix` | **不需要**：`route.path` 已含 router 前缀（`add_api_route` 定义时即 `self.prefix + path`），再拼即双拼，`missing` 形如 `/api/a1/api/a1/topics` |
 | 同一 `(path, methods)` 在多处重复注册 | 已注册侧是 `set`（天然去重）；定义侧逐条比对仍可命中 |
 | `probe.routes` 含 `Mount` / 非 APIRoute | `getattr(r, "methods", ())` → 空集，不参与匹配 |
 | 路由 `methods` 为 `None` | `or ()` 兜底为空集（防御上游返回形态差异） |
@@ -121,7 +133,78 @@ PYTHONPATH=/tmp/tc_dep python -m pytest tests/test_server.py -q -k register_rout
 
 ### 实测记录（T1 第 3/4 步回填）
 
-> 待 T1 执行后回填：新依赖环境是否可用、旧/新实现的双向结果、全量 pytest 结果、是否升级 pin。
+**隔离环境可用性**：`pip install --target /tmp/tc_dep "fastapi==0.141.1" "starlette==1.6.0"` 成功；
+`PYTHONPATH=/tmp/tc_dep python -c "import fastapi, starlette"` → `0.141.1 1.6.0`。
+注意：**starlette 两版同为 1.6.0**，本轮唯一变量是 **fastapi 0.136.3 → 0.141.1**。
+
+**⚠️ §3.1 的两处前提被实测推翻（本计划据此修正）**：
+
+1. **定义侧不能再拼 `router.prefix`**：FastAPI 的 `APIRouter.add_api_route` 用
+   `self.prefix + path` **在定义时**就把 router 自身前缀烘进了 `route.path`
+   （实测 `APIRouter(prefix="/api/a1")` + `@router.get("/topics")` → `route.path ==
+   "/api/a1/topics"`，两版皆然）；`register_routes` 的 `app.include_router(router)`
+   未再叠加前缀。故 §3.1 的 `router.prefix + route.path` **必然双拼**（当前 pin 下
+   守卫即红，missing 形如 `/api/a1/api/a1/topics`）。定义侧应**直接取 `route.path`**。
+2. **已注册侧不能走 `probe.routes` 展平**：fastapi ≥0.141 起 `include_router` 把
+   子路由改为**嵌套**（`app.routes` 里是 `_IncludedRouter`，无 `path` 属性），实测
+   `probe.routes` 带 `path` 的只剩 **4 条默认路由**（`/openapi.json`、`/docs`、
+   `/docs/oauth2-redirect`、`/redoc`）→ 展平式枚举在新版会把**全部** 115 条路由误判
+   missing。改用 **`app.openapi()["paths"]`**（FastAPI 文档化的 HTTP 契约）：两版下
+   与定义侧**精确相等**（115 == 115，双向差为空）。仅需归一化路径转换器语法
+   `{name:int}` → `{name}` 与定义侧对齐。
+
+**最终改造后的比对键（HTTP 语义键，逐 method 展开）**：
+
+```python
+# 已注册侧（OpenAPI 契约视图）：
+registered = {
+    (_semantic_path(path), method.upper())
+    for path, ops in probe.openapi().get("paths", {}).items()
+    for method in ops
+}
+# 定义侧（route.path 已含 router.prefix，勿再拼）：
+path = _semantic_path(route.path)
+for method in getattr(route, "methods", ()) or ():
+    if (path, method) not in registered:
+        missing.append(f"{mod_info.name}:{path}")
+```
+
+**判别力反证（第 3 步）**：临时注释 `delector/routes/__init__.py` 里
+`app.include_router(listen.router)` → 守卫**必红**，`missing` **只含 listen 的 5 条**：
+
+```
+['listen:/api/listen/materials', 'listen:/api/listen/materials/{source_type}/{source_id}',
+ 'listen:/api/listen/diagnose', 'listen:/api/listen/trials', 'listen:/api/listen/trials']
+```
+
+（对比改造前的"全量 missing"）`cp` 还原后 `cmp /tmp/tc_routes_init.bak
+delector/routes/__init__.py` → **逐字节一致（IDENTICAL）**，复跑回绿；`delector/` 不进最终 diff。
+
+**双向验证（第 4 步，隔离环境 fastapi 0.141.1）**：
+
+| 实现 | 环境 | 结果 |
+|---|---|---|
+| 旧（`route.endpoint` 对象身份） | 0.141.1 | 🔴 红，`missing` = **115（全量）** |
+| 新（HTTP 语义键） | 0.141.1 | 🟢 绿（1 passed） |
+| 新（HTTP 语义键） | 本机 0.136.3 | 🟢 绿（1 passed） |
+
+**全量 pytest 结果（第 4 步 ③）**：
+
+- `PYTHONPATH=/tmp/tc_dep pytest -q tests/test_server.py` → **228 passed, 1 skipped**。
+- `PYTHONPATH=/tmp/tc_dep pytest -q --ignore=tests/test_server.py`（半 A）→ **2 failed, 891 passed**。
+- 对照：本机 pin `pytest -q --ignore=tests/test_server.py`（半 A）→ **同样 2 failed, 891 passed**（**同一错误**）。
+- 失败用例：`tests/test_goethe_a1_hoeren.py::test_hoeren_api_endpoints`、
+  `tests/test_goethe_a1_lesen.py::test_lesen_api_endpoints`，报错
+  `sqlite3.OperationalError: no such table: exam_trials`（`delector/core/database.py`）。
+  **判定：与本升级无关** —— ① 当前 pin 下**完全相同**地失败（非新依赖引入）；
+  ② 隔离环境下**单独跑通过**（顺序/共享 sqlite 状态相关，非 fastapi/starlette API 不兼容）。
+  → 即**新依赖未引入任何回归**。
+
+**pin 决策（第 5 步）**：按第 5 步"**严格按 ③ 结果，不要臆测**"，③ **非全绿**
+（含上述 2 例既有环境性失败）→ **未修改 `requirements.txt`、未撤 `dependabot.yml` 的
+`ignore`**。证据显示**无回归**（失败为既有、与升级无关），是否借势解除禁区留待编排者裁量。
+
+**本机 pin 复核（第 4 步 ④）**：`python -c "import fastapi, starlette"` → **`0.136.3 1.6.0`**（未被隔离环境污染）。
 
 ---
 
