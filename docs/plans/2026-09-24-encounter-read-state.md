@@ -155,7 +155,7 @@
 | 每 Task | `python -m pytest <目标文件> -q` | 全绿 |
 | 每 Task | `for f in tools/*.mjs; do node "$f" >/dev/null 2>&1 \|\| echo FAIL $f; done` | 无 FAIL（零漂移，含新探针） |
 | 每 Task | `python -m ruff check .` / `python -m mypy --strict delector tools` | 0 告警 / 0 error |
-| 收官 | 分半跑 pytest | 基线 **1109 passed + 1 skipped**（v5.11.0）→ 预计 **≈1125 passed + 1 skipped**（净增 T1/T2 用例；2 条既有 `exam_trials` 环境失败保留） |
+| 收官 | 分半跑 pytest | 基线 **1109 passed + 1 skipped**（v5.11.0）→ 预计 **≈1125 passed + 1 skipped**；**实测 1119 passed + 1 skipped**（净增 T1/T2 用例；2 条既有 `exam_trials` 环境失败保留） |
 
 ## 回滚 (Rollback)
 

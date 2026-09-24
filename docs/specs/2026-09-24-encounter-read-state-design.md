@@ -102,7 +102,7 @@ export function pickUnread(ranked, readState);      // -> ranked 中首个未读
 | 位置 | 改动 |
 |---|---|
 | `openText(id)`（`encounter.js:428`） | 渲染成功后 `markRead(encStorage(), id, Date.now())`（失败静默） |
-| `i1CardHtml(t, cov, readState)` | 已读 → 追加 `<span class="enc-read-mark">✓ 已读</span>` + 卡片类 `is-read` |
+| `i1CardHtml(t, cov, readFlag)`（readFlag 即由 readState 态推导出的布尔） | 已读 → 追加 `<span class="enc-read-mark">✓ 已读</span>` + 卡片类 `is-read` |
 | `renderTextList(texts, ranked = null, readState = null)` | 透传 `readState` 到卡片（默认参数，**不传时逐字保持既有行为**） |
 | `renderI1Hint(ranked, knownSet, readState = null)` | 用 `pickUnread` 取代 `topPick`；`null` → 完成态；`band !== "i1"` → 降级文案 |
 

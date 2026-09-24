@@ -203,7 +203,7 @@ export async function fetchIndex() {
  * 数据流（showView）：fetchTexts + fetchIndex（Promise.allSettled）→
  *   mergeListWithIndex（以 texts 为全集）→ buildKnownSet(loadDeck(storage)) →
  *   rankEntries → renderTextList(texts, ranked, readState) + renderI1Hint(ranked, knownSet, readState)。
- * 索引端点失败 → 以**单参**调用 renderTextList 退回既有行为（逐字、不抛、不弹错）。
+ * 索引端点失败 → 以 renderTextList(texts, null, readState) 退回既有列表行为（原顺序、无徽章、不抛、不弹错；仅多带 readState → 已读标记仍显示）。
  * 选材纯函数（分区间 / 排序 / 取推荐 / 覆盖率）全在 ./enc-i1.js（Node 可测）。
  * ==================================================================== */
 
@@ -416,7 +416,7 @@ export async function showView() {
   const texts = textsRes.value;
 
   // 索引端点失败 → 完全退回既有列表行为（原顺序、无徽章、无 i+1 提示；不抛、不弹错）。
-  // A7：仍传 readState → 已读标记照常显示（ruled 序号不变，标记值缺省即无标记）。
+  // A7：仍传 readState → 已读标记照常显示（原顺序不变，readState 缺省即无标记）。
   if (indexRes.status === "rejected") {
     renderTextList(texts, null, readState);
     return;
