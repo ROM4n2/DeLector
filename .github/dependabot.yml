@@ -7,7 +7,8 @@
 # ci.yml 兜底——每个升级 PR 都会自动触发 CI 全量门禁（pytest + gofmt /
 # vet / -race），不绿不合并，依赖漂移不攒到发版日。
 #
-#   - pip            ：Python 后端依赖（fastapi/starlette 已 pin，其余靠周更盯防）
+#   - pip            ：Python 后端依赖（fastapi/starlette 已 pin **并列入 ignore**，
+#                      须人工升级；其余靠周更盯防）
 #   - github-actions ：workflow 自身（actions/* 版本漂移）
 #   - gomod          ：agent/ 的 Go 模块依赖（与 build-agent.yml 的构建面同源）
 #
@@ -24,6 +25,19 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     reviewers: [ROM4n2]
+    # fastapi / starlette 必须人工升级，不让 dependabot 自动开 PR：
+    # starlette >= 1.6 随 fastapi >= 0.141 漂移进来后，`include_router` 生成的
+    # `APIRoute.endpoint` 不再保持对原函数对象的引用 → 路由守卫测试
+    # `test_register_routes_covers_every_module_in_routes_package` 会把**全部**路由
+    # 误判为 missing（2026-09-09 v5.4.0 发版 CI 三平台全炸的根因；详见
+    # 08-Projects/DeLector/POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT.md）。
+    # 人工升级路径：本地 `pip install -U` → 跑**全量** pytest（尤其对象身份类守卫）
+    # → 更新 requirements.txt 的 pin → 单独一笔 commit（便于回滚）。
+    # 解除本 ignore 的前提 = 把该守卫测试从「endpoint 对象身份比对」改为
+    # 「(prefix+path, methods) 比对」。
+    ignore:
+      - dependency-name: "fastapi"
+      - dependency-name: "starlette"
 
   -
     package-ecosystem: "github-actions"
