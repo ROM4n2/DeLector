@@ -579,3 +579,17 @@ Caps: filesystem-read, filesystem-write, shell-exec
 门禁（收官复跑，编排者独立验证）：分半全量 = 非 server 半 **881 passed + 2 failed（既有 `no such table: exam_trials`，非本次引入）** + server 半 **228 passed + 1 skipped** ⇒ **1109 passed + 1 skipped**（基线 1081 → +28）；ruff 零告警 / `mypy --strict delector tools` 62 files 0 error / 全 `tools/*.mjs` 零漂移。maker-checker：6 Task 逐个经 CRV，**2 轮 REVISE**（T2 红牌 R1「只补空」断言缺「其余键逐字段不变」→ 已补并变异实红；T5 黄牌 Y2 恒真弱断言 + Y1 grid 列间隙 → 已修）。
 关键不变量：**I-1**（`index.lemma_seq` 与 annotate 逐 token 序列全序列逐元素相等、分母相等、rate 逐位相等）—— 反绿变异（丢标点）7 篇全红实证。
 遗留/报备：① **未 push、未开 PR、未发版**（改动含 `static/` → 发版需走五件套 + Android 覆盖安装）；② CRV 黄牌 3 条非阻塞未修（I-1 的 known 集合未按 deck-bridge 剥冠词规则构造；`_MUTATION_TABLE` 行 500 归属重合已补注；`PROJECT_OVERVIEW:57` 尾句「叠加 v5.7.7 基线 839」与新基线并置易误读）；③ `_MUTATION_TABLE` 之外的既有黄牌：`pyproject.toml` mypy `exclude` 含裸子串 `build` ⇒ `tools/build_*.py` 目录模式漏检（既有配置缺陷，maker 已为该文件补全注解，建议单独立项修 exclude 锚定）；④ 残留 worktree `.worktrees/a1-rich-convergence`（其分支已合并）未清理。
+
+### 2026-09-24 | codebuddy | WORK_START(encounter-read-state)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：v5.11.0 发版后收尾（远端 prune 完成 + 6 个已合并本地分支删除，本地仅剩 master；`v5.11.0` Release 4 资产已确认挂载，APK 61.6MB）→ 用户裁定下一步 = 遇见区「已读状态 + 推荐顺延」（v5.11.0 推荐机制自造的新需求：推荐基于覆盖率、与读没读过无关 → 读完推荐那篇后推荐不顺延）。用户决策：**打开即已读** + **只加标记不动排序**。
+分支 `feature/encounter-read`（worktree `.worktrees/encounter-read`，base master `f8ef5f6`，注意 master 已含 PR #63 dependabot uvicorn 升级）。3 Task（纯函数+探针 / 前端集成 / 收官）。
+关键设计：存储键 **`delector_encounter_read_v1`**（依据 `cards.js:897-900` 的前缀契约：`delector_`/`wb.` 随备份导出+还原，`enc.` 是设备本地偏好 → 已读属学习进度故用 `delector_` 前缀，`cards.js` 零改动）；服务端零改动；不做跨端同步。
+
+### 2026-09-24 | codebuddy | DELIVERED(encounter-read-state) — 3/3 Task 全绿（本地分支，未 push）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：分支 `feature/encounter-read`（worktree `.worktrees/encounter-read`，base master `f8ef5f6`），5 个原子提交：`8aa763a` docs（spec+plan）→ `38969b2` T1（`static/js/enc-read.js` 零依赖纯函数 + `tools/wb_enc_read_probe.mjs` 35 断言）→ `f307f32` T2（已读标记 + 推荐顺延集成）→ `a820e37` T3（收官回写）→ `7cd1660` T3 修订。
+功能：打开短篇即记已读（localStorage `delector_encounter_read_v1`，**随备份导出/还原**）；列表卡片 `✓ 已读` + `.is-read` 轻降权（标记置于 `.encounter-card-meta` 段内，**不新增 grid 子项**）；推荐条改 `pickUnread` 跳过已读顺延（i+1 读完→「i+1 都读完了，试试《X》」；本就无 i+1→中性「试试下一篇」；全读完→「🎉 N 篇都读过了」；未背词→引导文案优先）；`ranked` 空/非数组→`hideI1Hint()`（回到 v5.11.0 行为）。
+门禁（编排者独立复跑）：分半全量 = 半 A **891 passed + 2 failed（既有 `no such table: exam_trials`）** + 半 B **228 passed + 1 skipped** ⇒ **1119 passed + 1 skipped**（v5.11.0 基线 1109 → **+10**）；ruff 零告警 / `mypy --strict delector tools` 62 files 0 error / 全 `tools/*.mjs` 零漂移。maker-checker：3 Task 逐个 CPE→CRV，**3 轮 REVISE**（T1 黄牌×2：`loadRead` 硬编码 SCHEMA_V 致 schema 漂移测不到、pytest needle 未覆盖 S3；T2 黄牌×3：`backToList`/`refreshList` **漏传 readState** 使"读完返回列表不显示已读"、空 `ranked` 误显"0 篇都读过了"、grid 硬约束无探针；T3 **红牌**：同一注释块内「以单参调用 renderTextList」与本任务刚改的三参实现自相矛盾）——**全部闭环且变异实红**。
+可复用经验：① localStorage 键**前缀即备份契约**（`delector_`/`wb.` 随备份走、`enc.` 是设备偏好），命名前先查 `cards.js:897-900`；② 「读态/进度」类状态要顺带检查**所有**列表渲染调用点（`backToList`/`refreshList` 这类旁路最易漏传）；③ 改注释时留意**同一注释块内的其它行**是否因此自相矛盾（本轮 T3 红牌即此）。
+未做：push / 开 PR / 发版（改动含 `static/` → 需五件套 + Android 覆盖安装）。
