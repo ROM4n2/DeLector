@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.11.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.12.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-1109%2F1110%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-1119%2F1120%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -20,20 +20,20 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
+> ✅ **v5.12.0 遇见区「已读状态 + 推荐顺延」（2026-09-24）**：补上 `✓ 已读` 一等状态——**打开短篇即记已读**（`localStorage["delector_encounter_read_v1"]`，用 `delector_` 前缀故**随备份导出/还原**）；列表卡片显示 `✓ 已读` + 轻降权（标记置于 meta 段内、**不新增 grid 子项**、排序不变）；**推荐条跳过已读顺延**（i+1 读完→「i+1 都读完了，试试《X》」；本就无 i+1→中性「试试下一篇」；全读完→「🎉 N 篇都读过了」；未背词→引导优先）。服务端零改动、已读本机判定。测试基线 1119 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > ✅ **v5.11.0 遇见区 i+1 补齐（内容放量 + 就近选材）（2026-09-23）**：预置分级短文 **4 → 7 篇**（A1×2/A2×2/B1×3，复用仓库既有分级语料）+ 每包**预计算** annotate 口径 `lemma_seq`；预置补装由空库守卫升级为**版本闸 + 只增 + 只补空**（存量设备零操作补装、旧行只补空 `lemma_seq`、不覆盖用户内容）；新增只读 `GET /api/encounter/texts/index`（零 spaCy、不挂本机闸）+ 遇见区列表**覆盖率分组排序与「👉 建议先读」推荐条**（索引失败完全降级回原列表、未背词显示引导）。硬不变量 I-1 = 索引词序列与 annotate 逐 token **全序列逐元素相等**（列表徽章覆盖率 ≡ 阅读页覆盖率）。测试基线 1109 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > ✅ **v5.10.0 A1 富结构收敛（FRAGMENTS 单源 + membership side-car）（2026-09-21）**：ADR-0015——成员清单 + 共享字段单源、字段级优先级、专有词进 FRAGMENTS、考纲 A1 露出 IPA；seed∩GOETHE 仅 ~391、同形异义按 id 带 ipa/ex、GOETHE plural 不入 5 元组后缀位。测试基线 1081 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > ✅ **v5.9.5 例句 / 搭配 / 语料 全文检索（2026-09-21）**：新增「🔍 检索」——内存扫描覆盖 词条 4762 + 例句 2722 + 介词搭配 691 + **语料全文**（文章/分级短文），四组结果；德语变音折叠（`schon↔schön`）+ **中文两字词子串**可命中；顶栏 + **移动 dock** 入口；高亮**先 `esc()` 再 `<mark>`**（XSS 安全）；**`truncated` 仅表语料 hard cap**，`limit` 每组限量由 `groups_total` 表达。**不做 FTS5**（Spike：中文分词硬伤 + Android 不确定 + 规模用不上）。测试基线 1071 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
-> ✅ **v5.9.4 精读生词（reader 档）富字段回填 + 原句优先（2026-09-20）**：reader 生词卡补 `ipa` + 例句 + `gender`/`plural`（服务端归一查表 + 不规则动词兜底，**命中才补、不编造**）；`de` 原句优先（保留生词原句，有原句时不补官方中文，避免文不对题）；前端同步升级为「只增 + 只补空」，进「生词」档即自愈。测试基线 993 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > 
 > 📱 **Android 用户注意**：改动含 `static/` 的版本（如 v5.8.0 / v5.9.0）需**覆盖安装**才生效。
 > 📜 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.11.0` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.11.0)     |
-| 🍎 **macOS**       | `v5.11.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.11.0)  |
-| 🐧 **Linux x64**   | `v5.11.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.11.0)  |
-| 📱 **Android**     | `v5.11.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.11.0) |
+| 🪟 **Windows x64** | `v5.12.0` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.12.0)     |
+| 🍎 **macOS**       | `v5.12.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.12.0)  |
+| 🐧 **Linux x64**   | `v5.12.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.12.0)  |
+| 📱 **Android**     | `v5.12.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.12.0) |
 
 ---
 
