@@ -202,7 +202,7 @@ export async function fetchIndex() {
  *
  * 数据流（showView）：fetchTexts + fetchIndex（Promise.allSettled）→
  *   mergeListWithIndex（以 texts 为全集）→ buildKnownSet(loadDeck(storage)) →
- *   rankEntries → renderTextList(texts, ranked) + renderI1Hint(ranked, knownSet)。
+ *   rankEntries → renderTextList(texts, ranked, readState) + renderI1Hint(ranked, knownSet, readState)。
  * 索引端点失败 → 以**单参**调用 renderTextList 退回既有行为（逐字、不抛、不弹错）。
  * 选材纯函数（分区间 / 排序 / 取推荐 / 覆盖率）全在 ./enc-i1.js（Node 可测）。
  * ==================================================================== */

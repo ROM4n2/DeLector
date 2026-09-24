@@ -79,7 +79,7 @@
   - `renderTextList(texts, ranked = null, readState = null)` —— `readState` 缺省时**逐字**保持 v5.11.0 行为
   - `renderI1Hint(ranked, knownSet = null, readState = null)` —— 用 `pickUnread(ranked, readState)` 取代 `topPick`；`pick === null` → 完成态文案；`pick.band !== "i1"` → 降级文案；`hasCoverage === false` 仍优先引导文案
   - `openText(id)` —— 在 `renderTextDetailAnnotated(...)` **await 成功之后**调用 `markRead(encStorage(), id, Date.now())`（失败静默，不影响渲染）
-  - 文案常量集中：`READ_MARK_TEXT = "✓ 已读"`、`I1_HINT_ALL_READ`（完成态）、`I1_HINT_NEXT_BAND`（降级模板）
+  - 文案常量集中：`READ_MARK_TEXT = "✓ 已读"`、`I1_HINT_ALL_READ`（完成态）、`I1_HINT_FALLBACK`（降级模板）、`I1_HINT_NEUTRAL_PICK`（中性降级文案）
 
 **Subagent Prompt Scaffold (for /vault-exec):**
 > "Implement Task 2: 前端集成（已读标记 + 推荐顺延）。

@@ -126,6 +126,7 @@ export function pickUnread(ranked, readState);      // -> ranked 中首个未读
 | 未背词 + 全部已读 | 仍显示引导文案（"先背词"的信息价值高于"读完了"） |
 | `ranked` 为空数组 / 非数组 | `pickUnread` → `null` → `hideI1Hint()`（与现状一致） |
 | 还原备份 | `delector_` 前缀整体覆盖 → 已读随备份迁移；`enc.desktop.v1` 不受影响 |
+| **已知限制**：`backToList()` / `refreshList()` 复用列表渲染 | 这两条路径**只**现取 `readState` 传入（`ranked` 仍传 `null`）——**不重算 i+1 排序与徽章**。属有意的最小修复：返回列表后已读标记即时生效，但顶部推荐条 / 徽章需重进视图才刷新（保持 v5.11.0 该路径既有行为） |
 | Android | 改动含 `static/` → **必须发版 + 覆盖安装**才生效 |
 
 ---
