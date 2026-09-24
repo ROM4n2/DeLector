@@ -29,7 +29,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import httpx
 
@@ -133,7 +133,7 @@ _VALID_CASES = {"Akk", "Dat", "Gen"}
 # 它们不能取决于某次调用的运气。同一词头以 seed 为准、AI 只补 seed 没有的词——
 # 人工校验过的条目不该被一次幻觉降级。
 # 格式与生成结果一致：lemma -> ((介词, 格, 中文义, 例句), ...)
-SEED_COLLOCATIONS: Dict[str, list] = {
+SEED_COLLOCATIONS: Dict[str, list[list[str]]] = {
     "achten": [["auf", "Akk", "注意", "Bitte achten Sie auf die Verkehrszeichen."]],
     "anfangen": [["mit", "Dat", "开始做", "Wir fangen mit der Übung an."]],
     "antworten": [["auf", "Akk", "回答", "Er antwortet auf die Frage."]],
@@ -207,14 +207,14 @@ SEED_COLLOCATIONS: Dict[str, list] = {
 }
 
 
-def merge_with_seed(collocations: Dict[str, list]) -> Dict[str, list]:
+def merge_with_seed(collocations: Dict[str, list[list[str]]]) -> Dict[str, list[list[str]]]:
     """seed 覆盖 AI：人工校验过的词头以 seed 为准，AI 只补 seed 没有的词。"""
     merged = dict(collocations)
     merged.update(SEED_COLLOCATIONS)
     return merged
 
 
-def prune_unknown_lemmas(final: Dict[str, list], targets: Dict[str, str]) -> List[str]:
+def prune_unknown_lemmas(final: Dict[str, list[list[str]]], targets: Dict[str, str]) -> List[str]:
     """删掉词库里已不存在的词头，返回被删的列表。
 
     缓存是按**当时**的词库问的。词库后来修了拼写（ratseln → rätseln）之后，
@@ -250,12 +250,12 @@ _PREP_CONTRACTIONS = {
 }
 
 
-def _accepted_surface_forms(prep: str) -> set:
+def _accepted_surface_forms(prep: str) -> set[str]:
     """介词本身 + 它与冠词缩合后的形式。"""
     return {prep, *_PREP_CONTRACTIONS.get(prep, ())}
 
 
-def validate_collocation(item: dict) -> Optional[str]:
+def validate_collocation(item: dict[str, Any]) -> Optional[str]:
     """返回错误信息（合法返回 None）。
 
     `beispiel` 必须真的含该介词 —— 这是本数据集唯一的自动幻觉检测：
@@ -280,7 +280,7 @@ def validate_collocation(item: dict) -> Optional[str]:
     return None
 
 
-async def call_deepseek_batch(words: List[str], key: str, base: str, model: str) -> List[dict]:
+async def call_deepseek_batch(words: List[str], key: str, base: str, model: str) -> List[dict[str, Any]]:
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     body = {
         "model": model,
@@ -294,13 +294,13 @@ async def call_deepseek_batch(words: List[str], key: str, base: str, model: str)
         resp = await client.post(f"{base}/chat/completions", headers=headers, json=body)
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
-    return json.loads(content).get("results", [])
+    return cast(List[dict[str, Any]], json.loads(content).get("results", []))
 
 
 _ADJ_INFLECTIONS = ("e", "en", "er", "es", "em")
 
 
-def _resolve_requested(lemma: str, asked: set) -> List[str]:
+def _resolve_requested(lemma: str, asked: set[str]) -> List[str]:
     """AI 返回的词头 → 它实际回答的那些请求词。
 
     为什么需要这层映射：提示词第 79 行明确要求反身动词「wort 保持不带 sich 的形式」，
@@ -332,8 +332,8 @@ def _resolve_requested(lemma: str, asked: set) -> List[str]:
 
 
 def _parse_batch(
-    raw_results: List[dict], requested: List[str], verbose: bool = True
-) -> Tuple[Dict[str, list], List[str]]:
+    raw_results: List[dict[str, Any]], requested: List[str], verbose: bool = True
+) -> Tuple[Dict[str, list[list[str]]], List[str]]:
     """AI 原始响应 → (有搭配的词, 明确没有搭配的词)。
 
     这两者必须分开编码：**「本批失败」和「这些词确实没有搭配」不是一回事**。
@@ -341,7 +341,7 @@ def _parse_batch(
     与「问失败了、还得再问」，只能整批重付一次钱（AGENTS.md 里的那个坑）。
     """
     asked = {w.lower() for w in requested}
-    found: Dict[str, list] = {}
+    found: Dict[str, list[list[str]]] = {}
     none: List[str] = []
     for entry in raw_results:
         lemma = (entry.get("wort") or "").strip().lower()  # 键必须小写，否则查词全 miss
@@ -394,15 +394,17 @@ def _cache_path(batch: List[str]) -> Path:
     return RAW_DIR / f"batch_{digest}.json"
 
 
-async def _generate(words: List[str], args, key: str, base: str, model: str) -> Tuple[Dict[str, list], set]:
+async def _generate(
+    words: List[str], args: argparse.Namespace, key: str, base: str, model: str
+) -> Tuple[Dict[str, list[list[str]]], set[str]]:
     """并发跑所有批次，返回 (搭配表, 已问过的词集合)。"""
     sem = asyncio.Semaphore(max(1, args.parallel))
-    collocations: Dict[str, list] = {}
-    answered: set = set()
+    collocations: Dict[str, list[list[str]]] = {}
+    answered: set[str] = set()
     total = len(words)
     done = 0
 
-    async def process(start: int):
+    async def process(start: int) -> None:
         nonlocal done
         batch = words[start : start + args.batch_size]
         label = f"{start // args.batch_size}"
@@ -418,7 +420,7 @@ async def _generate(words: List[str], args, key: str, base: str, model: str) -> 
         else:
             found, none = {}, []
         if not found and not none:
-            raw: Optional[List[dict]] = None
+            raw: Optional[List[dict[str, Any]]] = None
             async with sem:
                 for attempt in range(4):
                     try:
@@ -451,15 +453,15 @@ async def _generate(words: List[str], args, key: str, base: str, model: str) -> 
     return collocations, answered
 
 
-def load_cache(skip_v1: bool = False) -> Tuple[Dict[str, list], set]:
+def load_cache(skip_v1: bool = False) -> Tuple[Dict[str, list[list[str]]], set[str]]:
     """读全部缓存 → (搭配表, 已问过的词)。缺失的文件即「还没问过」。
 
     存了 `raw` 的缓存**每次重新走校验**：校验器修好后可零成本捡回被误杀的搭配。
     v1 缓存只存了校验后的结果、原始响应已丢，它的负例名单里混着误杀的词，
     `skip_v1` 时整批当作「没问过」交给调用方重问。
     """
-    collocations: Dict[str, list] = {}
-    answered: set = set()
+    collocations: Dict[str, list[list[str]]] = {}
+    answered: set[str] = set()
     for path in sorted(RAW_DIR.glob("batch_*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         if "raw" in data:
@@ -489,7 +491,7 @@ def drop_v1_caches() -> int:
 
 
 # ── 产出模块 ────────────────────────────────────────────────────────────
-def guard_regression(final: Dict[str, list], force: bool) -> None:
+def guard_regression(final: Dict[str, list[list[str]]], force: bool) -> None:
     """产出前拦住「越写越少」。
 
     2026-08-20 实遇：key 过期 → 全批 401 → 脚本仍照常写出一个 0 词条的
@@ -512,7 +514,7 @@ def guard_regression(final: Dict[str, list], force: bool) -> None:
         )
 
 
-def emit_module(collocations: Dict[str, list], answered_count: int) -> Path:
+def emit_module(collocations: Dict[str, list[list[str]]], answered_count: int) -> Path:
     """生成 prep_dict.py。位置元组惯例照 core_dict_ext.py。"""
     total_rows = sum(len(v) for v in collocations.values())
     lines = [
@@ -593,7 +595,7 @@ _SEPARABLE_PREFIXES = (
 )
 
 
-def _lemma_surface_hints(lemma: str) -> set:
+def _lemma_surface_hints(lemma: str) -> set[str]:
     """例句里可能出现的词元痕迹（前 3 字母 / 可分前缀 / 去前缀后的词根）。
 
     只做前缀级的粗匹配，因为德语变位会改词干（sprechen → spricht、
@@ -609,7 +611,7 @@ def _lemma_surface_hints(lemma: str) -> set:
     return hints
 
 
-def qa_spotcheck(collocations: Dict[str, list]) -> None:
+def qa_spotcheck(collocations: Dict[str, list[list[str]]]) -> None:
     """抽查产出。
 
     定向那一档只覆盖 seed（人工校验过、根本不走 AI 校验），所以它 14/14

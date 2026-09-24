@@ -4,7 +4,7 @@ Builder script to generate `a1_dict.py` from Goethe-Zertifikat A1 vocabulary sta
 """
 
 
-def main():
+def main() -> None:
     from delector.data import a1_dict
 
     assert len(a1_dict.A1_TOPICS) == 15

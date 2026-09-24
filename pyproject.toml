@@ -36,7 +36,9 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 # Chaquopy 侧是仓库代码的拷贝（不重复检查）；scratch/ 与 tools/raw* 是 .gitignore 的本地物
-exclude = '(\.venv|dist|build|android|scratch|tools/raw)'
+# 注意：`build` 必须锚定为独立路径段。写成裸子串 `build` 会命中 `tools/build_*.py`
+# → 这 6 个脚本被静默排除出 mypy 门禁（2026-09-24 修复，实测曾掩盖 47 个 strict 错误）。
+exclude = '(\.venv|dist|android|scratch|tools/raw|(^|/)build(/|$))'
 
 # 显式声明检查面：本地裸跑 `python -m mypy` 即与 CI 同口径，避免漏参导致口径漂移
 files = ["delector", "tests", "tools", "conftest.py", "start.py", "package_windows.py"]

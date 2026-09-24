@@ -35,7 +35,7 @@ CEFR_ORDER = {"A1": 0, "A2": 1, "B1": 2, "B2": 3}
 TTS_VOICE = "de-DE-KatjaNeural"
 
 
-def _get_ordered_words(top: int) -> list:
+def _get_ordered_words(top: int) -> list[str]:
     sys.path.insert(0, str(ROOT))
     from delector.data.core_dict import CORE_VOCAB_DB
 
@@ -53,7 +53,7 @@ def _get_ordered_words(top: int) -> list:
     return [w for _, w in words[:top]]
 
 
-async def _generate_one(word: str, out_path: Path):
+async def _generate_one(word: str, out_path: Path) -> bytes | None:
     if out_path.exists():
         return out_path.read_bytes()
     try:
@@ -78,7 +78,7 @@ async def _generate_one(word: str, out_path: Path):
         return None
 
 
-def _patch_workbench(audio_dict: dict) -> None:
+def _patch_workbench(audio_dict: dict[str, str]) -> None:
     src = WORKBENCH.read_text(encoding="utf-8")
     pattern = r"const EMBEDDED_AUDIO\s*=\s*\{[^}]*\};"
     replacement_body = json.dumps(audio_dict, ensure_ascii=False, indent=2)

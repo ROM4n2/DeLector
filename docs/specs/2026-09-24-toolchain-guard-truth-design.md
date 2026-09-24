@@ -122,8 +122,8 @@ PYTHONPATH=/tmp/tc_dep python -m pytest tests/test_server.py -q -k register_rout
 | 场景 | 行为 |
 |---|---|
 | 定义侧是否需再拼 `router.prefix` | **不需要**：`route.path` 已含 router 前缀（`add_api_route` 定义时即 `self.prefix + path`），再拼即双拼，`missing` 形如 `/api/a1/api/a1/topics` |
-| 同一 `(path, methods)` 在多处重复注册 | 已注册侧是 `set`（天然去重）；定义侧逐条比对仍可命中 |
-| `probe.routes` 含 `Mount` / 非 APIRoute | `getattr(r, "methods", ())` → 空集，不参与匹配 |
+| 同一 `(path, methods)` 在多处重复注册 | 已注册侧取自 `probe.openapi()["paths"]`（契约视图：path 为唯一键、逐 method 展开）→ 天然去重；定义侧逐条 membership 查询，重复注册仅多次命中，不误报 |
+| 定义侧遍历的 `router.routes` 含 `Mount` / 非 APIRoute | `getattr(route, "methods", ()) or ()` → 空集，不产生 `(path, method)` 键，不参与匹配（已注册侧取自 `openapi()["paths"]`，不含 Mount） |
 | 路由 `methods` 为 `None` | `or ()` 兜底为空集（防御上游返回形态差异） |
 | 隔离环境不可用（无网 / 装不上新版本） | **降级**：仅在当前 pin 下验证守卫绿 + 判别力反证；**不升级 pin、不撤 ignore**；把"新依赖下验证"记为未完成（放入 §4 实测记录） |
 | 新依赖下全量 pytest 有失败 | **保留 pin 与 ignore**；失败清单写入本 spec；另立计划 |

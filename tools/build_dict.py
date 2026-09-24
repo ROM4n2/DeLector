@@ -28,7 +28,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import httpx
 
@@ -178,7 +178,7 @@ def _read_db_setting(key: str, default: str = "") -> str:
         with sqlite3.connect(db_path) as conn:
             row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             if row and row[0]:
-                return row[0]
+                return cast(str, row[0])
     except Exception:
         pass
     return default
@@ -214,7 +214,7 @@ def _read_api_config() -> Tuple[str, str, str]:
     return key, base, model
 
 
-async def call_deepseek_batch(words: List[str], key: str, base: str, model: str) -> List[dict]:
+async def call_deepseek_batch(words: List[str], key: str, base: str, model: str) -> List[dict[str, Any]]:
     """一次调用生成一批词的释义。返回 [{wort, cefr, pos, gender, plural, definition_zh}]。"""
     payload = {"wörter": words}
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
@@ -231,23 +231,23 @@ async def call_deepseek_batch(words: List[str], key: str, base: str, model: str)
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
         parsed = json.loads(content)
-    return parsed.get("results", [])
+    return cast(List[dict[str, Any]], parsed.get("results", []))
 
 
 async def _generate_parallel(
-    words: List[str], args, key: str, base: str, model: str, raw_dir: Path = RAW_DIR
-) -> List[dict]:
+    words: List[str], args: argparse.Namespace, key: str, base: str, model: str, raw_dir: Path = RAW_DIR
+) -> List[dict[str, Any]]:
     """并发处理所有批次。复用 raw_dir 缓存（断点续跑不重付钱）。
 
     raw_dir 可切换：缓存按批次序号命名，不同词表的 batch_0 内容完全不同，
     整包跑与 refill 必须各用一个目录，否则互相覆盖原始响应。"""
     sem = asyncio.Semaphore(max(1, args.parallel))
-    entries: List[dict] = []
-    seen: set = set()
+    entries: List[dict[str, Any]] = []
+    seen: set[str] = set()
     total = len(words)
     done = 0
 
-    async def process(start: int):
+    async def process(start: int) -> None:
         nonlocal done
         batch = words[start : start + args.batch_size]
         batch_index = start // args.batch_size
@@ -337,7 +337,7 @@ _CEFR_ORDER = ("A1", "A2", "B1", "B2", "C1")
 _VALID_POS = {"NOUN", "VERB", "ADJ", "ADV", "PRON", "PREP", "CONJ", "INTERJ", "NUM"}
 
 
-def validate_entry(entry: dict) -> Optional[str]:
+def validate_entry(entry: dict[str, Any]) -> Optional[str]:
     """返回错误信息（合法返回 None）。"""
     if not entry.get("wort"):
         return "缺 wort"
@@ -355,7 +355,7 @@ def validate_entry(entry: dict) -> Optional[str]:
     return None
 
 
-def emit_module(entries: List[dict], sources: Dict[str, str]) -> Path:
+def emit_module(entries: List[dict[str, Any]], sources: Dict[str, str]) -> Path:
     """生成 core_dict_ext.py（按 cefr 再按词元排序）。返回输出路径。
 
     写出前先过滤噪声黑名单（R7 对账实测的英语混入词）：这是全部写出路径
@@ -390,7 +390,7 @@ def emit_module(entries: List[dict], sources: Dict[str, str]) -> Path:
     return out
 
 
-def qa_spotcheck(entries: List[dict]) -> None:
+def qa_spotcheck(entries: List[dict[str, Any]]) -> None:
     """QA 抽查：30 随机 + 10 定向。"""
     import random
 
@@ -466,8 +466,8 @@ def main() -> None:
         return
 
     if args.reemit:
-        entries: List[dict] = []
-        seen: set = set()
+        entries: List[dict[str, Any]] = []
+        seen: set[str] = set()
         for path in sorted(RAW_DIR.glob("batch_*.json")):
             for entry in json.loads(path.read_text(encoding="utf-8")):
                 if entry.get("wort"):
@@ -491,7 +491,7 @@ def main() -> None:
         # 先从整包跑的原始响应里回收：缺口里很大一部分其实 AI 早就答过了，
         # 只是当时那一批没并进 core_dict_ext（或被校验拦下后连原始响应一起没人再看）。
         # 缓存存的是原始响应、校验在读取时做，所以这里重跑校验就能免费捞回来。
-        recovered: List[dict] = []
+        recovered: List[dict[str, Any]] = []
         for path in sorted(RAW_DIR.glob("batch_*.json")):
             try:
                 cached = json.loads(path.read_text(encoding="utf-8"))
@@ -517,7 +517,7 @@ def main() -> None:
         # 合并现有 core_dict_ext + 新补的词，整体重新 emit（不整包重来，只增缺）
         from delector.data.core_dict_ext import CORE_VOCAB_EXT as EXISTING
 
-        merged: List[dict] = []
+        merged: List[dict[str, Any]] = []
         for k, t in EXISTING.items():
             merged.append(
                 {"wort": k, "cefr": t[0], "pos": t[1], "gender": t[2], "plural": t[3] or "", "definition_zh": t[4]}
@@ -551,7 +551,7 @@ def main() -> None:
     entries = asyncio.run(_generate_parallel(words, args, key, base, model))
 
     # 与现有词库合并后总体覆盖统计（生成词去重后）
-    merged_names: Dict[str, tuple] = dict(CORE_VOCAB_DB)
+    merged_names: Dict[str, Tuple[Any, ...]] = dict(CORE_VOCAB_DB)
     for entry in entries:
         merged_names.setdefault(entry["wort"], ())
     print(f"\n生成有效 {len(entries)} 词，合并后总词元 {len(merged_names)}")
