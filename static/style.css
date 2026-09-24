@@ -10373,6 +10373,20 @@ body.drawer-open .companion {
 }
 .enc-i1-hint-rate { color: var(--ink-faint, #8b8676); }
 
+/* ── A7：已读标记 + 已读卡轻降权（沿用 Editorial token，不新造硬编码色值）──────
+   .enc-read-mark 落于 .encounter-card-meta 段内部最前（不新增 grid 子项）；.is-read
+   仅轻度降权标题，保持「读过即淡」的观感，仍可点开重读。 */
+.enc-read-mark {
+  font-family: var(--enc-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--moss, #3b6e3f);
+  margin-right: 0.5rem;
+  white-space: nowrap;
+}
+.is-read .encounter-card-title { opacity: 0.62; }
+
 /* ── 阅读页：一张印出来的纸（1.5px 墨线 + 硬投影 + 首字下沉）──────────── */
 .encounter-reader {
   border: 1.5px solid var(--ink, #15140f);
@@ -10699,4 +10713,6 @@ body.drawer-open .companion {
   /* i+1：窄屏提示条留白加厚、徽章允许换行，避免溢出贴边。 */
   .enc-i1-hint { padding: 0.6rem 0.9rem; }
   .enc-i1-badge { white-space: normal; }
+  /* A7：已读标记窄屏不与词数/来源挤在一起、且不贴右缘（meta 已 normal 换行）。 */
+  .enc-read-mark { margin-right: 0.35rem; }
 }

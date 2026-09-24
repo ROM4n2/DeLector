@@ -21,7 +21,8 @@ import {
   buildKnownSet,
   DECK_KEYS,
 } from "./deck-bridge.js";
-import { rankEntries, topPick, hasCoverage } from "./enc-i1.js";
+import { rankEntries, hasCoverage } from "./enc-i1.js";
+import { loadRead, markRead, isRead, pickUnread } from "./enc-read.js";
 import {
   PULL_ENDPOINT,
   normalizeDesktopBase,
@@ -216,6 +217,21 @@ const I1_BADGES = {
 // 新用户 / 未背词时的引导文案（不推 0% 短文，先引导去背词工作台）。
 const I1_HINT_GUIDE = "先在背词工作台背一些词，这里就会告诉你哪篇正好适合你";
 
+// A7：已读标记文案（卡片 meta 段内最前，**单点定义**；渲染层不得散落字面量）。
+const READ_MARK_TEXT = "✓ 已读";
+
+// A7：完成态文案模板 —— ranked 全部读过时显示（n = 篇数，按 ranked 动态）。
+const I1_HINT_ALL_READ = (n) => `🎉 ${n} 篇都读过了`;
+
+// A7：降级文案模板 —— i+1 全被读过 → 跳过已读顺延推荐次优一篇（注入 title/bandLabel/pct）。
+const I1_HINT_FALLBACK = (title, bandLabel, pct) =>
+  `i+1 都读完了，试试《${title}》（${bandLabel} ${pct}%）`;
+
+// A7 修复（Y3③）：中性文案模板 —— 未读池首条非 i+1，但**本就不存在 i+1**（全偏简单/偏难）
+//   → 不得谎称「i+1 都读完了」，只中性地推荐下一篇（注入 title/bandLabel/pct）。
+const I1_HINT_NEUTRAL_PICK = (title, bandLabel, pct) =>
+  `试试下一篇：《${title}》（${bandLabel} ${pct}%）`;
+
 /**
  * i1BadgeHtml(cov) -> string
  * cov = enc-i1.js coverageOf / rankEntries 的一项（{available, rate, band, ...}）。
@@ -229,14 +245,23 @@ function i1BadgeHtml(cov) {
 }
 
 // 单张台账卡片：cov 为空 → 无 i+1 徽章（DOM 与既有列表逐字一致）。
-function i1CardHtml(t, cov) {
+// A7：readFlag === true → 根 div 追加 .is-read；并在 meta 段**内部最前**插入已读标记。
+//   ⚠ MUST NOT 新增 .encounter-card 的 grid 子项 —— 该卡是 4 列 grid + `meta:last-child`
+//   补位规则，新增子项会错位；标记只能进 meta 段内部。
+function i1CardHtml(t, cov, readFlag) {
   const badge = cov && cov.available ? i1BadgeHtml(cov) : "";
+  const readCls = readFlag === true ? " is-read" : "";
+  const readMark =
+    readFlag === true
+      ? `<span class="enc-read-mark">${esc(READ_MARK_TEXT)}</span>`
+      : "";
   return `
-      <div class="encounter-card" onclick="encounterOpenText(${Number(t.id)})" role="button" tabindex="0">
+      <div class="encounter-card${readCls}" onclick="encounterOpenText(${Number(t.id)})" role="button" tabindex="0">
         <span class="encounter-badge ${esc(t.level)}">${esc(t.level)}</span>
         <span class="encounter-card-title">${esc(t.title)}</span>
         ${badge}
         <span class="encounter-card-meta">
+          ${readMark}
           ${typeof t.word_count === "number" ? `${t.word_count} 词 · ` : ""}
           ${esc(t.created_at || "")} · ${esc(t.source || "—")}
         </span>
@@ -245,7 +270,8 @@ function i1CardHtml(t, cov) {
 }
 
 // ── Render list ─────────────────────────────────────────────────────────────
-export function renderTextList(texts, ranked = null) {
+// A7：readState 缺省 / null → 逐字保持 v5.11.0 行为（无任何已读标记）；传入则逐卡标已读。
+export function renderTextList(texts, ranked = null, readState = null) {
   const el = listEl();
   if (!el) return;
   if (!texts.length) {
@@ -256,9 +282,10 @@ export function renderTextList(texts, ranked = null) {
     return;
   }
   // ranked（i+1 排序结果）为空 → 逐字退回既有行为：texts 原顺序（id DESC）、无徽章。
+  // isRead(readState, id) 对 null readState 恒 false → 无标记，逐字兼容旧行为。
   const rows = Array.isArray(ranked)
-    ? ranked.map((r) => i1CardHtml(r.entry, r))
-    : texts.map((t) => i1CardHtml(t, null));
+    ? ranked.map((r) => i1CardHtml(r.entry, r, isRead(readState, r.id)))
+    : texts.map((t) => i1CardHtml(t, null, isRead(readState, t.id)));
   el.innerHTML = rows.join("");
 }
 
@@ -286,29 +313,71 @@ function mergeListWithIndex(texts, indexItems) {
 }
 
 /**
- * renderI1Hint(ranked, knownSet) -> void
+ * renderI1Hint(ranked, knownSet = null, readState = null) -> void
  *
- * - hasCoverage(knownSet) === false（新用户 / 未背词）→ 显示引导文案，**不显示推荐条**
- *   （优先于 i1 判定：空集合下所有篇目都落到 0%，不能拿 0% 短文糊弄新用户）。
- * - 有覆盖率但无 i1 命中（topPick 为 null）→ 隐藏容器。
- * - 有 i1 命中 → 显示推荐条（「正好读」的那一篇 + 已背词覆盖率）。
- * knownSet 可省略（默认现从本机 deck 计算），保证单参可调用。
+ * 推荐条：按「跳过已读」顺延，给出下一篇该读什么。分支（Guard Clause 早退）：
+ *   ① hasCoverage(known) === false（新用户 / 未背词）→ 引导文案（**优先、不变**）：
+ *      空集合下所有篇目都落到 0%，不能拿 0% 短文糊弄新用户。
+ *   ②a ranked 为空数组 / 非数组 → hideI1Hint()（与 v5.11.0 一致：pickUnread 亦返回 null）。
+ *      「库里没短文」≠「都读完了」，绝不能显示「🎉 0 篇都读过了」。
+ *   ②b 非空 ranked 且全部读过（pickUnread → null）→ 完成态（I1_HINT_ALL_READ，篇数按 ranked.length）。
+ *   ③ 首个未读不是 i1（顺延到偏简单/偏难）→ 文案二分（用 isRead 判定是否真的存在已读 i1）：
+ *      - 存在已读的 i1（真的「i+1 都读完了」）→ 降级文案（I1_HINT_FALLBACK）；
+ *      - 本就不存在 i1（全偏简单/偏难）→ 中性文案（I1_HINT_NEUTRAL_PICK）。
+ *   ④ 首个未读正是 i1 → 「正好读」推荐条（与既有文案逐字一致）。
+ *
+ * 形参语义：knownSet / readState 均可缺省（null）。knownSet 为 null 时现从本机 deck 计算；
+ *   readState 为 null 时 isRead 恒 false → pickUnread 返回 ranked 首元，退回既有推荐语义，
+ *   保证旧调用形态（renderI1Hint(ranked)）仍可跑。
  */
-function renderI1Hint(ranked, knownSet) {
+function renderI1Hint(ranked, knownSet = null, readState = null) {
   const el = i1HintEl();
   if (!el) return;
+
   const known = knownSet != null ? knownSet : buildKnownSet(loadDeck(encStorage()));
+  // ① 无覆盖率（新用户）→ 引导文案（优先于一切推荐判定）。
   if (!hasCoverage(known)) {
     el.innerHTML = `<span class="enc-i1-hint-text">${esc(I1_HINT_GUIDE)}</span>`;
     el.style.display = "";
     return;
   }
-  const pick = topPick(ranked);
-  if (!pick || !pick.entry) {
+
+  // ②a ranked 为空数组 / 非数组 → hideI1Hint()（与 v5.11.0 逐字一致；pickUnread 亦返回 null）。
+  //     「库里没短文（ranked === []）」≠「全部读过」——不得显示「🎉 0 篇都读过了」完成态。
+  if (!Array.isArray(ranked) || ranked.length === 0) {
     hideI1Hint();
     return;
   }
+
+  // pickUnread 返回的是 ranked 的元素（{entry, available, band, rate, ...}，与 topPick 同族）。
+  const pick = pickUnread(ranked, readState);
+  // ②b 非空 ranked 且全部读过 → 完成态（篇数按 ranked.length 动态）。
+  if (!pick || !pick.entry) {
+    el.innerHTML = `<span class="enc-i1-hint-text">${esc(I1_HINT_ALL_READ(ranked.length))}</span>`;
+    el.style.display = "";
+    return;
+  }
+
+  const badge = I1_BADGES[pick.band];
   const pct = Math.round(Number(pick.rate) * 100);
+  // ③ 首个未读不是 i+1 → 顺延推荐次优一篇。文案二分（篇名/band 标签/百分比一律经 esc()）：
+  //     只有 ranked 中**确实存在已读的 i+1**时才是「i+1 都读完了」；否则只中性推荐下一篇。
+  if (pick.band !== "i1") {
+    const hadReadI1 = ranked.some((r) => r && r.band === "i1" && isRead(readState, r.id));
+    if (hadReadI1) {
+      el.innerHTML = `<span class="enc-i1-hint-pick">${esc(
+        I1_HINT_FALLBACK(pick.entry.title, badge ? badge.label : "", pct),
+      )}</span>`;
+    } else {
+      el.innerHTML = `<span class="enc-i1-hint-pick">${esc(
+        I1_HINT_NEUTRAL_PICK(pick.entry.title, badge ? badge.label : "", pct),
+      )}</span>`;
+    }
+    el.style.display = "";
+    return;
+  }
+
+  // ④ 首个未读正是 i+1 → 「正好读」推荐条（既有文案不变）。
   el.innerHTML =
     `<span class="enc-i1-hint-pick">${esc(I1_BADGES.i1.label)}：《${esc(pick.entry.title)}》</span>` +
     `<span class="enc-i1-hint-rate">已背词 ${pct}%</span>`;
@@ -332,6 +401,9 @@ export async function showView() {
   // 并行拉「列表」与「索引」。索引失败不得连累列表 —— Promise.allSettled 各自兜底。
   const [textsRes, indexRes] = await Promise.allSettled([fetchTexts(), fetchIndex()]);
 
+  // A7：已读态只读一次，两条渲染分支都传（索引失败时行为其余与 v5.11.0 一致，但标记仍在）。
+  const readState = loadRead(encStorage());
+
   if (textsRes.status === "rejected") {
     const el = listEl();
     if (el) {
@@ -344,8 +416,9 @@ export async function showView() {
   const texts = textsRes.value;
 
   // 索引端点失败 → 完全退回既有列表行为（原顺序、无徽章、无 i+1 提示；不抛、不弹错）。
+  // A7：仍传 readState → 已读标记照常显示（ruled 序号不变，标记值缺省即无标记）。
   if (indexRes.status === "rejected") {
-    renderTextList(texts);
+    renderTextList(texts, null, readState);
     return;
   }
 
@@ -353,8 +426,8 @@ export async function showView() {
   const merged = mergeListWithIndex(texts, indexRes.value);
   const knownSet = buildKnownSet(loadDeck(encStorage()));
   const ranked = rankEntries(knownSet, merged);
-  renderTextList(texts, ranked);
-  renderI1Hint(ranked, knownSet);
+  renderTextList(texts, ranked, readState);
+  renderI1Hint(ranked, knownSet, readState);
 }
 
 // ── Detail ──────────────────────────────────────────────────────────────────
@@ -437,6 +510,9 @@ export async function openText(id) {
       fetchAnnotate(id),
     ]);
     await renderTextDetailAnnotated(text, annotate);
+    // A7：短篇渲染成功即记已读（纯函数静默：坏 storage 不抛，失败也不影响阅读）。
+    //   放在渲染之后 → 渲染错误仍走 catch，绝不被已读写入吞掉。
+    markRead(encStorage(), id, Date.now());
   } catch (e) {
     const rd = readerEl();
     if (rd) {
@@ -458,7 +534,11 @@ export function backToList() {
   const ls = listEl();
   if (ls) {
     ls.style.display = "";
-    fetchTexts().then(renderTextList).catch(() => {});
+    // A7 修复（Y2）：返回列表须现取 readState 传入 —— 否则刚读完的那篇当场不显示 ✓ 已读，
+    // 必须重进视图才更新。ranked 仍传 null（保持本路径 v5.11.0 既有行为；不重算 i+1 排序）。
+    fetchTexts()
+      .then((ts) => renderTextList(ts, null, loadRead(encStorage())))
+      .catch(() => {});
   }
 }
 
@@ -693,10 +773,11 @@ async function importPack(packId, packTitle, btn) {
   }
 }
 
-/** 刷新遇见区列表（复用 fetchTexts/renderTextList；失败静默）。 */
+/** 刷新遇见区列表（复用 fetchTexts/renderTextList；失败静默）。
+ *  A7 修复（Y2）：现取 readState 传入，导入/刷新后已读标记当场生效（ranked 仍 null，保持既有行为）。 */
 async function refreshList() {
   try {
-    renderTextList(await fetchTexts());
+    renderTextList(await fetchTexts(), null, loadRead(encStorage()));
   } catch (e) {
     /* 刷新失败不打断：面板已关，用户可手动重进遇见区。 */
   }
