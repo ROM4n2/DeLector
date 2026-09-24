@@ -162,7 +162,327 @@ def test_encounter_js_degrades_when_index_endpoint_fails():
     assert re.search(
         r"function\s+renderTextList\s*\(\s*texts\s*,\s*ranked\s*=", ENCOUNTER_JS
     ), "renderTextList 的 ranked 形参必须可为空（带默认值）"
-    # 降级调用点：索引失败时以「单参」调用（不传 ranked）。
+    # 降级调用点：索引失败时以 renderTextList(texts, null, readState) 调用 —— 第二参
+    # ranked 传 null（不排序、无徽章），但已读标记（readState）仍要在降级路径生效。
     assert re.search(
-        r"renderTextList\s*\(\s*texts\s*\)", ENCOUNTER_JS
-    ), "索引失败降级路径必须以 renderTextList(texts) 单参调用"
+        r"renderTextList\s*\(\s*texts\s*,\s*null\s*,\s*readState\s*\)", ENCOUNTER_JS
+    ), "索引失败降级路径必须以 renderTextList(texts, null, readState) 调用（不传 ranked）"
+
+
+# ── Task 2（打开短篇即记已读 + 推荐条跳过已读顺延）：字符串探针 ──────────────
+# 契约：复用 Task 1 的纯函数 ./enc-read.js（loadRead/markRead/isRead/pickUnread）；
+#   翻开即记已读；列表逐卡标「✓ 已读」；推荐条跳过已读顺延（i+1 读完 → 降级文案；
+#   全读完 → 完成态）。索引失败时行为与 v5.11.0 一致，但已读标记仍在。探针风格沿用
+#   本文件：切函数体 + 结构/子串断言，避免「全文子串 in」这类无判别力弱断言。
+
+
+def _enc_read_import_names():
+    """抽 encounter.js 内 `import {…} from "./enc-read.js"` 的具名导入集合。"""
+    m = re.search(
+        r"""import\s*\{([^}]*)\}\s*from\s*["']\./enc-read\.js["']""",
+        ENCOUNTER_JS,
+        re.S,
+    )
+    assert m, "encounter.js 必须 import ./enc-read.js（复用纯函数，不重复实现）"
+    return {n.strip() for n in m.group(1).split(",") if n.strip()}
+
+
+def test_encounter_imports_enc_read_module():
+    """① encounter.js 复用 ./enc-read.js 的四个纯函数（模块可达 + 无重复实现）。"""
+    assert "./enc-read.js" in ENCOUNTER_JS
+    names = _enc_read_import_names()
+    for name in ("loadRead", "markRead", "isRead", "pickUnread"):
+        assert name in names, f"enc-read 具名导入缺少 {name}"
+
+
+def test_i1_card_html_renders_read_mark_escaped():
+    """② 卡片渲染体含 .enc-read-mark 标记与 is-read 根类，且标记文案经 esc(READ_MARK_TEXT)。"""
+    body = _slice_function(ENCOUNTER_JS, "i1CardHtml")
+    assert "enc-read-mark" in body, "卡片内必须有 .enc-read-mark 已读标记"
+    assert "is-read" in body, "已读卡片根 div 必须追加 is-read 类"
+    # 去掉 esc( 或改回字面量 → 本断言必红（XSS 安全 + 文案单点定义）。
+    assert re.search(r"esc\(\s*READ_MARK_TEXT\s*\)", body), (
+        "已读标记必须以 esc(READ_MARK_TEXT) 输出"
+    )
+    assert "const READ_MARK_TEXT" in ENCOUNTER_JS, "READ_MARK_TEXT 必须在模块级单点定义"
+
+
+def test_render_text_list_read_state_param_backward_compatible():
+    """③ renderTextList 形参含 readState = null（省略即逐字保持 v5.11.0 行为）。"""
+    assert re.search(
+        r"function\s+renderTextList\s*\(\s*texts\s*,\s*ranked\s*=\s*null\s*,\s*readState\s*=\s*null\s*\)",
+        ENCOUNTER_JS,
+    ), "renderTextList 签名必须为 (texts, ranked = null, readState = null)"
+
+
+def test_render_i1_hint_skips_read_and_escapes_copies():
+    """④ renderI1Hint 用 pickUnread 顺延；完成态/降级两条文案常量各自经 esc()。"""
+    body = _slice_function(ENCOUNTER_JS, "renderI1Hint")
+    assert "pickUnread(" in body, "renderI1Hint 必须用 pickUnread(ranked, readState) 跳过已读顺延"
+    assert "readState" in body, "renderI1Hint 必须消费 readState 形参"
+    for const in ("I1_HINT_ALL_READ", "I1_HINT_FALLBACK"):
+        assert f"const {const}" in ENCOUNTER_JS, f"{const} 文案常量必须在模块级单点定义"
+        assert re.search(rf"esc\(\s*{const}\b", body), f"{const} 必须经 esc() 输出"
+
+
+def test_open_text_marks_read_after_render():
+    """⑤ openText 渲染成功后调用 markRead(encStorage(), id, …) 记录已读。"""
+    body = _slice_function(ENCOUNTER_JS, "openText")
+    assert "markRead(" in body, "openText 必须调用 markRead 记录已读"
+    assert "encStorage(" in body, "openText 必须用既有 encStorage() 取 localStorage"
+
+
+# ── 修订轮（CRV 黄牌 Y2/Y3/Y4）───────────────────────────────────────────────
+# Y2：backToList / refreshList 复用列表渲染时漏传 readState（刚读完的那篇当场不显示 ✓ 已读）。
+# Y3：renderI1Hint 两处分支比设计边界表更宽（ranked===[] 谎报完成态；无 i1 时谎报「i+1 都读完了」）。
+# Y4：全局硬约束「MUST NOT 新增 .encounter-card 的 grid 子项」缺探针（已读标记须留在 meta 段内）。
+#
+# 工具函数用**源码扫描器**（配平括号 + 跳过字符串/注释）而非「全文子串 in」，
+# 保证断言钉到具体调用点 / 具体切片，具备判别力（编辑器打回 Y2/Y3/Y4 时必红）。
+
+
+def _strip_js_comments(src):
+    """去掉 JS 源码里的 `//` 行注释与 `/* */` 块注释（保留字符串/模板串/正则字面量内容）。
+
+    目的：doc comment 里常出现示例调用（如「renderTextList(texts, ranked)」），
+    若不清除会被误判为真实调用点。字符串/模板串/正则字面量内的 `//` 不当作注释。
+    正则字面量用「上一个有效字符」启发式识别（`= ( , : [ ! & | ? { } ;` 后跟 `/`）。
+    """
+    out = []
+    i = 0
+    n = len(src)
+    quote = None
+    prev_sig = ""  # 上一个非空白有效字符（用于识别正则字面量起始）
+    regex_start_after = "=(,:[!&|?{};+*%^~"
+    while i < n:
+        ch = src[i]
+        if quote:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(src[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+                prev_sig = ch
+            i += 1
+            continue
+        if ch in "\"'`":
+            quote = ch
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and src[i + 1] == "/":
+            while i < n and src[i] != "\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and src[i + 1] == "*":
+            i += 2
+            while i + 1 < n and not (src[i] == "*" and src[i + 1] == "/"):
+                i += 1
+            i += 2
+            continue
+        if ch == "/" and prev_sig and prev_sig in regex_start_after:
+            # 正则字面量：跳到闭合的未转义 '/'（字符类 [...] 内的 '/' 不算）
+            out.append(ch)
+            i += 1
+            in_class = False
+            while i < n:
+                c = src[i]
+                out.append(c)
+                if c == "\\" and i + 1 < n:
+                    out.append(src[i + 1])
+                    i += 2
+                    continue
+                if c == "[":
+                    in_class = True
+                elif c == "]":
+                    in_class = False
+                elif c == "/" and not in_class:
+                    i += 1
+                    break
+                i += 1
+            prev_sig = "/"
+            continue
+        out.append(ch)
+        if not ch.isspace():
+            prev_sig = ch
+        i += 1
+    return "".join(out)
+
+
+def _iter_js_calls(src, name):
+    """返回 src 内每个 `name(...)` 调用的**顶层参数列表文本**（排除 `function name(` 定义）。
+
+    手写扫描器配平括号并跳过字符串/模板串 → 正确处理嵌套调用（如 loadRead(encStorage())）。
+    """
+    calls = []
+    for m in re.finditer(r"(?<![\w$])" + re.escape(name) + r"\s*\(", src):
+        if re.search(r"function\s+$", src[max(0, m.start() - 20) : m.start()]):
+            continue  # 函数定义，非调用点
+        i = m.end()  # '(' 之后
+        depth = 1
+        start = i
+        while i < len(src):
+            ch = src[i]
+            if ch in "\"'`":
+                q = ch
+                i += 1
+                while i < len(src) and src[i] != q:
+                    if src[i] == "\\":
+                        i += 1
+                    i += 1
+                i += 1
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        calls.append(src[start:i])
+    return calls
+
+
+def _split_top_level_args(argtext):
+    """按**顶层**逗号切分参数列表（忽略嵌套括号 / 字符串内的逗号）。"""
+    args = []
+    cur = []
+    depth = 0
+    i = 0
+    n = len(argtext)
+    while i < n:
+        ch = argtext[i]
+        if ch in "\"'`":
+            q = ch
+            cur.append(ch)
+            i += 1
+            while i < n and argtext[i] != q:
+                if argtext[i] == "\\" and i + 1 < n:
+                    cur.append(argtext[i])
+                    cur.append(argtext[i + 1])
+                    i += 2
+                    continue
+                cur.append(argtext[i])
+                i += 1
+            if i < n:
+                cur.append(argtext[i])
+                i += 1
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            args.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+        i += 1
+    if "".join(cur).strip():
+        args.append("".join(cur))
+    return args
+
+
+def test_all_render_text_list_calls_pass_read_state():
+    """Y2：encounter.js 内**所有** renderTextList(...) 调用点都传 readState（第三参非空）。
+
+    backToList（← 返回列表）与 refreshList（导入后刷新）曾以 `then(renderTextList)` /
+    `renderTextList(await fetchTexts())` 复用列表渲染而漏传 readState → 用户读完一篇点返回后
+    那篇当场**不显示 ✓ 已读**（须重进视图才更新）。本断言用调用点**计数 + 每点 3 参形态**钉住：
+    去掉任一处 readState（或退回裸回调 then(renderTextList)）→ 必红。
+    """
+    src = _strip_js_comments(ENCOUNTER_JS)
+    calls = _iter_js_calls(src, "renderTextList")
+    assert len(calls) >= 4, (
+        f"renderTextList 调用点应 >= 4（showView 两条 + backToList + refreshList），实际 {len(calls)}"
+    )
+    for argtext in calls:
+        args = _split_top_level_args(argtext)
+        assert len(args) == 3, (
+            f"每个 renderTextList 调用点必须传 3 参 (texts, ranked, readState)，"
+            f"实际 {len(args)} => renderTextList({argtext.strip()})"
+        )
+        assert args[2].strip(), f"renderTextList 第三参 readState 不得为空 => renderTextList({argtext.strip()})"
+    # 不得把 renderTextList 作为裸回调透传（then(renderTextList)）——那会丢掉 readState。
+    assert not re.search(r"[(,]\s*renderTextList\s*[),]", src), (
+        "renderTextList 不得作为裸回调透传（如 then(renderTextList)）—— 会丢 readState"
+    )
+
+
+def test_render_i1_hint_hides_on_empty_or_nonarray_ranked():
+    """Y3②：ranked 为空数组/非数组 → hideI1Hint()（与 v5.11.0 一致）。
+
+    设计边界表：`ranked` 为空数组 / 非数组 → `pickUnread` → `null` → **hideI1Hint()**。
+    改回「显示完成态」会让 empty ranked 谎报「🎉 0 篇都读过了」→ 本断言必红。
+    """
+    body = _slice_function(ENCOUNTER_JS, "renderI1Hint")
+    assert "hideI1Hint(" in body, "renderI1Hint 必须对空/非数组 ranked 调 hideI1Hint()"
+    guard = re.search(
+        r"if\s*\(\s*!Array\.isArray\(\s*ranked\s*\)\s*\|\|\s*ranked\.length\s*===?\s*0\s*\)", body
+    )
+    assert guard, "renderI1Hint 必须先守卫「ranked 为非空数组」（空/非数组 → hideI1Hint 早退）"
+    hide_at = body.index("hideI1Hint(")
+    allread_at = body.index("I1_HINT_ALL_READ")
+    assert hide_at < allread_at, (
+        "空 ranked 守卫必须出现在完成态之前（否则 ranked === [] 会显示「🎉 0 篇都读过了」）"
+    )
+    # 完成态篇数取 ranked.length（此处 ranked 已保证是非空数组）
+    assert re.search(r"I1_HINT_ALL_READ\(\s*ranked\.length\s*\)", body), (
+        "完成态篇数必须用 ranked.length（非空数组），不得再回退到 count=0 兜底"
+    )
+
+
+def test_render_i1_hint_neutral_copy_when_no_real_i1_read():
+    """Y3③：未读池首条非 i+1 且**本就不存在 i+1**（全偏简单/偏难）→ 中性文案。
+
+    原先只要首个未读 `band !== "i1"` 就打「i+1 都读完了」，但「本来就一篇 i+1 都没有」
+    也会这么说 → 语义不精确。修法：用 isRead 判定 ranked 中**是否真的存在已读的 i+1**，
+    有 → 降级文案（I1_HINT_FALLBACK）；无 → 中性文案（I1_HINT_NEUTRAL_PICK）。两条均经 esc()。
+    """
+    body = _slice_function(ENCOUNTER_JS, "renderI1Hint")
+    assert re.search(r"ranked\.some\(", body), "renderI1Hint 必须用 ranked.some(...) 判定是否存在已读的 i+1"
+    assert re.search(r"band\s*===\s*[\"']i1[\"']", body), "判定须锁定 band === \"i1\""
+    assert re.search(r"isRead\(\s*readState", body), "判定须用 isRead(readState, r.id)"
+    assert "const I1_HINT_FALLBACK" in ENCOUNTER_JS, "降级文案常量必须在模块级单点定义"
+    assert "const I1_HINT_NEUTRAL_PICK" in ENCOUNTER_JS, "中性文案常量必须在模块级单点定义"
+    assert re.search(r"esc\(\s*I1_HINT_FALLBACK\b", body), "降级文案必须经 esc() 输出"
+    assert re.search(r"esc\(\s*I1_HINT_NEUTRAL_PICK\b", body), "中性文案必须经 esc() 输出"
+
+
+def test_i1_card_read_mark_stays_inside_last_meta_child():
+    """Y4：钉住硬约束「MUST NOT 新增 .encounter-card 的 grid 子项」。
+
+    ✓ 已读标记（由 `readMark` 变量渲染）必须落在 `.encounter-card-meta` 段**内部**，且
+    `.encounter-card-meta` 是卡片内的**最后**一个子项（该卡是 4 列 grid + `meta:last-child`
+    补位规则；把标记挪到卡片根会错位）。
+
+    用**切片内相对位置比较**（body.index 大小关系），避免「全文 in」弱断言：
+      - `.encounter-card-meta` 开标签 < `${readMark}` 插值 < meta 的 `</span>`；
+      - meta 的 `</span>` 之后到卡片 `</div>` 之间不得再出现新的 `<span` / `<div` 子项。
+    注：`.enc-read-mark` 字面量在 `readMark` 变量定义处，真实 DOM 位置由 `${readMark}` 插值决定，
+    故位置比较锚定 `${readMark}`。把 readMark 从 meta 段内移到卡片根（meta 之前或之后）→ 必红。
+    """
+    body = _slice_function(ENCOUNTER_JS, "i1CardHtml")
+    # readMark 渲染体确实产出 .enc-read-mark span（把变量与标记绑定，位置比较才有意义）
+    assert re.search(r"<span class=\"enc-read-mark\">", body), "readMark 必须渲染 .enc-read-mark span"
+    # 切出 return 的卡片模板字面量：readMark 的 `${readMark}` 插值决定真实 DOM 位置
+    ret_at = body.index("return")
+    tmpl = body[body.index("`", ret_at) + 1 : body.rindex("`")]
+    meta_open = tmpl.index('<span class="encounter-card-meta">')
+    meta_close = tmpl.index("</span>", meta_open)
+    readmark_use = tmpl.index("${readMark}")
+    assert meta_open < readmark_use, (
+        "✓ 已读标记（${readMark} 渲染的 .enc-read-mark）必须出现在 .encounter-card-meta 开标签**之后**"
+    )
+    assert readmark_use < meta_close, (
+        "✓ 已读标记必须落在 .encounter-card-meta 段**内部**（meta 闭合 </span> 之前）"
+    )
+    # meta 必须是卡片最后一个子项：其 </span> 之后到卡片 </div> 之间不得有新子项
+    tail = tmpl[meta_close + len("</span>") :]
+    card_close = tail.index("</div>")
+    rest = tail[:card_close]
+    assert "<span" not in rest and "<div" not in rest, (
+        f".encounter-card-meta 必须是卡片最后一个子项（其后不得再有子项），实际残留：{rest!r}"
+    )
