@@ -53,7 +53,7 @@ tests/test_goethe_a1_lesen.py::test_lesen_api_endpoints   - sqlite3.OperationalE
 
 1. **消除污染源**：让"模块级直接赋值 `DATABASE_PATH`"在 `tests/` 中**不再存在**（它是根因链第 1 环）。
 2. **给受害者自洽能力**：让"只清理不建库"的模块的隔离 fixture 变成**自建库**（钉 env + `init_db`），不再依赖"谁先 import"。
-3. **兜底**：`tests/conftest.py` 提供稳定的测试默认 env，确保 `server` 顶层 `init_db()` 永远不会落到仓库根的真实 `delector.db`。
+3. **兜底**：`conftest.py`（仓库根） 提供稳定的测试默认 env，确保 `server` 顶层 `init_db()` 永远不会落到仓库根的真实 `delector.db`。
 4. **根因级守卫**：新增 AST 守卫测试 —— 任何**模块级**直接赋值 `os.environ["DATABASE_PATH"]` 都判红（把这次踩的坑钉死成契约）。
 5. **验收**：半 A / 半 B 双绿 + 全量（不分半）在下也尽量绿。
 
@@ -72,7 +72,7 @@ tests/test_goethe_a1_lesen.py::test_lesen_api_endpoints   - sqlite3.OperationalE
 
 > C2 相比现状的关键增量：**"钉 env 之后必须 `init_db()`"** —— hoeren/lesen 现在缺的正是这一步（它们的 fixture 只 yield 后清理）。
 
-### 3.2 兜底：`tests/conftest.py`
+### 3.2 兜底：`conftest.py`（仓库根）
 
 在现有 sys.path 注入之后追加：
 
@@ -90,7 +90,7 @@ os.environ.setdefault("PROGRESS_DB_PATH", "test_conftest_default_progress.db")
 
 | 文件 | 改动 |
 |---|---|
-| `tests/conftest.py` | +兜底 env（§3.2） |
+| `conftest.py`（仓库根） | +兜底 env（§3.2） |
 | `tests/test_audit_hardening.py` | 删模块级 `os.environ[...] = ...`（2 行），保留 fixture |
 | `tests/test_exam_catalog.py` | 同上 |
 | `tests/test_exam_trials.py` | 同上 |

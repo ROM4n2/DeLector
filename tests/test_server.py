@@ -13,9 +13,11 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-# Ensure test DBs are isolated
 # 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
-# 钉住的 IPv6 段），必须在上面设好 DATABASE_PATH 之后再 import。
+# 钉住的 IPv6 段），故 import 模块对象而非仅具名导入。
+# 不再需要"先设好 DATABASE_PATH 再 import"：库 env 由根 conftest 的 setdefault 兜底，
+# 并由各模块 autouse fixture（本文件：clean_db）在用例前后钉定；本模块不再在模块级赋值
+# （契约 C1，见 docs/specs/2026-09-26-test-db-isolation-design.md §3.1）。
 from delector import server
 from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
 from delector.server import (
