@@ -9,19 +9,15 @@
   推导：不复制数据、不入 SQLite；数据模块缺失/重命名时 count 记 0，
   不得拖垮 server 启动。
 
-与 test_server.py / test_audit_hardening.py 同款纪律：模块顶层先钉隔离
-env 再 import server（server 模块顶层有 init_db() 副作用），clean_db
-autouse 前后双钉 env + gc.collect() 后删库（Windows 句柄释放纪律）。
+与 test_server.py / test_audit_hardening.py 同款纪律：库 env 由 clean_db autouse
+fixture 在用例前后钉定（+ init_db），模块级赋值已移除（契约见
+docs/specs/2026-09-26-test-db-isolation-design.md §3.1 C1）。
 """
 
 import gc
 import os
 
 import pytest
-
-os.environ["DATABASE_PATH"] = "test_catalog.db"
-os.environ["PROGRESS_DB_PATH"] = "test_catalog_progress.db"
-
 from fastapi.testclient import TestClient  # noqa: E402
 
 from delector.core.database import get_vocab_by_cefr  # noqa: E402
@@ -48,8 +44,8 @@ def client():
 @pytest.fixture(autouse=True)
 def clean_db():
     # database.get_db_path() 每次调用都读 os.environ（不是 import 时冻结）：
-    # 全量 pytest 时更晚收集的测试文件会在模块顶层改写 env，故每个用例
-    # 前后双钉自己的库文件名，不能只靠模块顶层那一次赋值。
+    # 全量 pytest 时其它模块会在 fixture 内钉/还原 env，故每个用例前后双钉
+    # 自己的库名并 init_db()，不依赖任何「谁先 import」的隐式前提（见 spec §3.1 C2）。
     saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
     os.environ["DATABASE_PATH"] = "test_catalog.db"
     os.environ["PROGRESS_DB_PATH"] = "test_catalog_progress.db"

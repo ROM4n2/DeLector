@@ -13,15 +13,11 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
-
 # Ensure test DBs are isolated
-os.environ["DATABASE_PATH"] = "test_delector.db"
-os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
-
 # 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
 # 钉住的 IPv6 段），必须在上面设好 DATABASE_PATH 之后再 import。
 from delector import server
+from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
 from delector.server import (
     BACKUP_FORMAT_VERSION,
     BACKUP_SETTINGS_WHITELIST,

@@ -153,14 +153,33 @@ def test_hoeren_api_endpoints():
 
 @pytest.fixture(autouse=True, scope="module")
 def _m5_isolated_db_teardown():
-    """M5-1: 模块结束时回收句柄并删除隔离临时库，防残留串入下次运行。"""
-    yield
+    """M5-1: 本模块自建隔离临时库 —— 前置钉 env + init_db()，收尾回收句柄删库并还原 env。
+
+    不再依赖上一位 import 者留下的 env（自建库，故与模块执行顺序无关）；env 用完归位，
+    删库也就不再伤到别人（契约见 docs/specs/2026-09-26-test-db-isolation-design.md
+    §3.1 C2/C3）。保留原「Windows 句柄释放纪律」：删库前先 gc.collect()。
+    """
     import gc
     import os as _os
 
+    from delector.server import init_db
+
+    _db = "test_delector_goethe_a1_hoeren.db"
+    _pdb = "test_delector_goethe_a1_hoeren_progress.db"
+    _saved = {k: _os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
+    _os.environ["DATABASE_PATH"] = _db
+    _os.environ["PROGRESS_DB_PATH"] = _pdb
+    init_db(_db)  # 连带按 env 建进度库（含 exam_trials）；history 端点读的就是它
+    yield
     gc.collect()
-    for _suffix in ("", "-journal", "-wal", "-shm"):
-        try:
-            _os.remove("test_delector_goethe_a1_hoeren.db" + _suffix)
-        except OSError:
-            pass
+    for _base in (_db, _pdb):
+        for _suffix in ("", "-journal", "-wal", "-shm"):
+            try:
+                _os.remove(_base + _suffix)
+            except OSError:
+                pass
+    for _key, _val in _saved.items():
+        if _val is None:
+            _os.environ.pop(_key, None)
+        else:
+            _os.environ[_key] = _val

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """审计修复（M1–M5）回归测试。
 
-模块级 env 必须在 import server 之前设好：server 模块顶层（server.py:245-246）
-会执行 init_db() + seed_preset_articles()，落到真实库会造成数据污染。
+库 env 由 clean_db autouse fixture 在用例前后钉定（+ init_db）；模块级赋值已移除，
+避免永久污染进程 env（契约见 docs/specs/2026-09-26-test-db-isolation-design.md §3.1 C1）。
 本模块自用独立的临时库文件名，避免与 test_server.py 的 test_delector.db 冲突。
 """
 
@@ -11,10 +11,6 @@ import os
 import sqlite3
 
 import pytest
-
-os.environ["DATABASE_PATH"] = "test_audit_delector.db"
-os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"
-
 from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -42,9 +38,8 @@ def lan_client():
 @pytest.fixture(autouse=True)
 def clean_db():
     # database.get_db_path() 每次调用都读 os.environ（不是 import 时冻结）。
-    # 全量 pytest 时更晚收集的 test_server.py 会在模块顶层把 DATABASE_PATH
-    # 改写成本文件，导致本文件用例的默认路径命中未建表的 test_delector.db。
-    # 故每个用例前后都钉住自己的 env，不能只靠模块顶层那一次赋值。
+    # 全量 pytest 时其它模块会在 fixture 内钉/还原 env，故每个用例前后都钉住
+    # 自己的库并 init_db()，不依赖任何「谁先 import」的隐式前提（见 spec §3.1 C2）。
     saved = {key: os.environ.get(key) for key in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
     os.environ["DATABASE_PATH"] = "test_audit_delector.db"
     os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"

@@ -9,9 +9,9 @@
 - 备份链：_PROGRESS_TABLES 带 exam_trials → export 键齐 → RestoreReq 接
   exam_trials 字段 → restore 真覆盖灌表。
 
-与 test_audit_hardening.py 同款纪律：模块顶层先钉隔离 env 再 import
-server（顶层 init_db() 副作用），clean_db autouse 前后双钉 env +
-gc.collect() 后删库（Windows 句柄释放纪律）。
+与 test_audit_hardening.py 同款纪律：库 env 由 clean_db autouse fixture 在用例
+前后钉定（+ init_db），模块级赋值已移除（契约见
+docs/specs/2026-09-26-test-db-isolation-design.md §3.1 C1）。
 """
 
 import gc
@@ -19,10 +19,6 @@ import os
 from typing import Any
 
 import pytest
-
-os.environ["DATABASE_PATH"] = "test_exam_trials_delector.db"
-os.environ["PROGRESS_DB_PATH"] = "test_exam_trials_progress.db"
-
 from fastapi.testclient import TestClient  # noqa: E402
 
 import delector.core.database as database  # noqa: E402
