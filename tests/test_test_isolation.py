@@ -79,10 +79,11 @@ def _module_level_env_assignments(path):
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     found = []
     for node in _iter_module_level(tree.body):
+        targets: list[ast.expr]
         if isinstance(node, ast.Assign):
             targets = node.targets
         elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
-            targets = (node.target,)
+            targets = [node.target]
         else:
             continue
         for target in targets:
