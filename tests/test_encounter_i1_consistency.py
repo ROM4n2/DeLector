@@ -19,8 +19,9 @@
 3. index → 取该项 `lemma_seq` 与 `total_tokens`；
 4. **`index.lemma_seq == annotate_lemmas`（逐元素、全序列相等）**；
 5. **`index.total_tokens == annotate["total_tokens"]`**；
-6. 用**同一** known 集合（取自 annotate_lemmas 的前 1/3 个不同 lemma）分别算
-   `annotate_rate` 与 `index_rate`，**逐位相等（==，非近似）**。
+6. 用**同一** known 集合（取自 annotate_lemmas 的前 1/3 个不同 lemma，**再按
+   `static/js/deck-bridge.js` 的生产语义归一**（剥冠词 + 小写）构成 known 集合）
+   分别算 `annotate_rate` 与 `index_rate`，**逐位相等（==，非近似）**。
 
 降级一致性
 ----------
@@ -41,6 +42,8 @@ tmp_path 临时双库；**绝不碰仓库根 `delector.db`**；Windows 句柄释
 
 import gc
 import os
+import re
+from pathlib import Path
 
 import pytest
 
@@ -111,22 +114,78 @@ def _annotate_lemmas(payload):
     ]
 
 
+_GERMAN_ARTICLES: tuple[str, ...] = (
+    "der", "die", "das", "ein", "eine", "eines", "einer", "einem", "einen",
+    "den", "dem", "des",
+)
+
+
+def _strip_german_article(hw: str) -> str:
+    """去德语冠词/格后缀/标点，返回核心词。
+
+    与 ``static/js/deck-bridge.js::stripGermanArticle`` **同源**（零 import 硬约束下
+    只能复制，两处改动须同步）。冠词表（第 2 步）由
+    ``test_article_list_matches_deck_bridge_source`` 双向守卫（改任一侧即红）；
+    第 3–5 步无自动守卫，改动时须与 JS 源逐条人工比对。
+    规则逐条镜像 JS 源：
+    1) ``trim()``；
+    2) 删前导冠词 ``^(der|die|…)\\s+``（``re.I``）；
+    3) 删 ``[,，·.].*\\Z``（逗号/中文逗号/间隔号/点起至字符串末尾；JS 的 ``$``
+       无 ``m`` 标志 = 字符串末尾，此处以 ``\\Z`` 忠实镜像其语义源。**但注意**：
+       在**本函数内** ``\\Z`` 与 ``$`` 行为完全等价——开头 ``trim()`` 已剥掉尾随
+       换行，任何经由本函数的输入都无法判别二者；``\\Z`` 只是更贴近 JS 源写法的
+       忠实镜像，并非有可观测差异的行为修正）；
+    4) 删尾部破折号段 ``\\s*[–—-]+\\s*[^\\s]*\\Z``（同理用 ``\\Z``）；
+    5) 仅保留 ``[A-Za-zÄÖÜäöüß\\s\\-']``；
+    6) ``trim()``。空输入返回空串。
+    """
+    if not hw:
+        return ""
+    s = str(hw).strip()
+    s = re.sub(
+        r"^(der|die|das|ein|eine|eines|einer|einem|einen|den|dem|des)\s+",
+        "",
+        s,
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(r"[,，·.].*\Z", "", s)
+    s = re.sub(r"\s*[–—-]+\s*[^\s]*\Z", "", s)
+    s = re.sub(r"[^A-Za-zÄÖÜäöüß\s\-']", "", s)
+    return s.strip()
+
+
 def _coverage_rate(seq, known, total):
-    """覆盖率 = 命中 known 的 token 数 / total（与前端 enc-i1.js 同分母口径）。"""
+    """覆盖率 = 命中 known 的 token 数 / total。
+
+    与 ``static/js/enc-i1.js::coverageOf`` **同口径**：分母用 ``total_tokens``，
+    双方成员判断均**小写**（``knownSet.has(String(l).toLowerCase())``）。
+    """
     if not total:
         return 0.0
-    known_tokens = sum(1 for lemma in seq if lemma in known)
+    known_tokens = sum(1 for lemma in seq if str(lemma).lower() in known)
     return known_tokens / total
 
 
-def _first_third_distinct(seq):
-    """取序列中不同 lemma 的前 1/3 作为"已背词"known 集合（同一集合两处复用）。"""
+def _first_third_known_set(seq):
+    """取序列中不同 lemma 的前 1/3，再按 ``deck-bridge.js`` 生产语义归一为 known 集合。
+
+    生产 known 集合（``buildKnownSet``）的元素是 ``stripGermanArticle(hw).lower()``
+    ——**全小写、无标点、无冠词**；故本夹具对每个 lemma 走 ``_strip_german_article``
+    后 ``.lower()`` 入集合，并丢掉空串。返回 ``set[str]``（生产形状）。
+    """
     distinct = []
     for lemma in seq:
         if lemma not in distinct:
             distinct.append(lemma)
     k = max(1, len(distinct) // 3)
-    return set(distinct[:k])
+    known = {
+        norm
+        for norm in (
+            _strip_german_article(str(lemma)).lower() for lemma in distinct[:k]
+        )
+        if norm
+    }
+    return known
 
 
 # ── ① I-1 硬不变量：逐包端到端同源 ───────────────────────────────────────────
@@ -168,7 +227,7 @@ def test_index_lemma_seq_is_bit_identical_to_annotate(client, clean_db, pack):
     assert len(item["lemma_seq"]) == item["total_tokens"]
 
     # ⑥ 同一 known 集合 → 两处 rate 逐位相等（== 而非近似）
-    known = _first_third_distinct(annotate_lemmas)
+    known = _first_third_known_set(annotate_lemmas)
     assert known, f"{pack['pack_id']}: known 集合不得为空"
     annotate_rate = _coverage_rate(annotate_lemmas, known, annotate["total_tokens"])
     index_rate = _coverage_rate(item["lemma_seq"], known, item["total_tokens"])
@@ -200,3 +259,44 @@ def test_manual_text_end_to_end_degrades_consistently(client, clean_db):
     resp = client.get(f"/api/encounter/texts/{manual_id}/annotate")
     assert resp.status_code == 200, resp.text
     assert resp.json()["total_tokens"] > 0
+
+
+# ── ③ 生产语义守卫：剥冠词镜像同源 + 查找侧小写口径 ──────────────────────────
+
+
+def test_article_list_matches_deck_bridge_source():
+    """同源守卫：本模块 `_GERMAN_ARTICLES` 必须与 deck-bridge.js 的冠词捕获组一致。
+
+    零 import 硬约束下 `_strip_german_article` 只能复制 JS 源；本守卫读 JS 源取出
+    第一处 ``replace(/^(der|die|…)\\s+/i`` 捕获组，去重后与本模块常量逐字比对，
+    防止两处漂移。**失败即表示两处须同步**。
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    src = (repo_root / "static" / "js" / "deck-bridge.js").read_text(encoding="utf-8")
+    m = re.search(r"replace\(/\^\((der\|die\|[^)]+)\)\\s\+/i", src)
+    assert m is not None, (
+        "未能在 static/js/deck-bridge.js 定位前导冠词捕获组——"
+        "两处须同步（该 JS 源或本模块 _GERMAN_ARTICLES 已漂移）"
+    )
+    js_articles = set(m.group(1).split("|"))
+    assert js_articles == set(_GERMAN_ARTICLES), (
+        "static/js/deck-bridge.js::stripGermanArticle 的冠词表与本模块 _GERMAN_ARTICLES "
+        f"漂移，两处须同步：JS={sorted(js_articles)} Python={sorted(_GERMAN_ARTICLES)}"
+    )
+
+
+def test_known_lookup_is_case_insensitive_and_article_stripped():
+    """行为钉：剥冠词（deck-bridge 同源）+ 查找侧小写（enc-i1 同口径）双语义。
+
+    任一规则漏掉（未剥冠词 / 未 `.lower()`）→ 本用例必红。
+    """
+    # 剥前导冠词
+    assert _strip_german_article("die Abfahrt") == "Abfahrt"
+    assert _strip_german_article("der Samstag") == "Samstag"
+    # 剥逗号后缀
+    assert _strip_german_article("das Abenteuer,") == "Abenteuer"
+    # 剥尾部破折号段
+    assert _strip_german_article("Bahnhof –") == "Bahnhof"
+
+    # 大写 lemma 必须命中"剥冠词后小写"的 known —— 任一侧漏 .lower() 即红
+    assert _coverage_rate(["Samstag"], {"samstag"}, 1) == 1.0

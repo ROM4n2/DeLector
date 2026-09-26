@@ -497,9 +497,6 @@ _MUTATION_TABLE = textwrap.dedent(
     """非空非 dict 项在日志行二次 .get 抛 AttributeError 逃逸 → red |
 | 把 `_read_preset_seed_version` 改回走 `get_setting`（含 env 兜底） | """
     """test_seed_version_gate_ignores_env_pollution | env 强灌 encounter_seed_version=99 误热退 → red |
-| 二次调用改写既有行 pack_json（版本闸失效后第二趟才触达） | """
-    """test_seed_version_gate_shortcircuits_on_empty_db / """
-    """test_seed_does_not_resurrect_deleted_preset | 版本闸失效后第二趟走过既有行改写路径 → red |
 | 把逐包循环改成只处理第一个包 | test_seed_empty_db_imports_all_and_writes_version / """
     """test_seed_nonempty_db_only_adds_missing_presets | 行数骤减、返回非 7 → red |
 | 去掉 seeder 的逐包 try/except 异常隔离 | test_seed_survives_single_pack_failure | """
