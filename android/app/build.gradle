@@ -81,6 +81,14 @@ android {
             extractPackages "spacy", "thinc", "de_core_news_sm"
 
             pip {
+                // ⚠️ 下面两条是**为 Android 打包面有意分离**的约束，**不等于** requirements.txt 的
+                // 桌面/CI 口径（那边现为 fastapi 0.141.1 + pydantic v2）—— **不要**照着对齐。
+                // 理由：Chaquopy 只能装**纯 Python** 依赖（Android 上无法编译原生扩展），而 pydantic v2
+                // 依赖 Rust 写的 pydantic-core ⇒ 只能锁 pydantic v1 ⇒ fastapi 连带锁在 0.100 之前。
+                // 来由：commit 61a9c9b「fix(ci): pin pure-python deps for Android」——该提交体未写更多
+                // 理由，fastapi 上界的确切依据已不可考（按"与 pydantic v1 配套"理解即可）。
+                // 若要放开：先确认 Chaquopy 仓库已提供 pydantic-core 的 cp310/android_24 wheel，
+                // 并做真机覆盖安装点检 —— 单独立项，勿顺手改（2026-09-26 已核实过一次，结论：不动）。
                 install "pydantic<2.0.0"
                 install "fastapi<0.100.0"
                 install "uvicorn"
