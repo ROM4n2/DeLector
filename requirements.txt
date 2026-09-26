@@ -1,10 +1,11 @@
-# fastapi/starlette 必须 pin：CI 实测 starlette 1.6.0（随 fastapi>=0.141 漂移进来）
-# 下 include_router 后 APIRoute.endpoint 不再保持原函数对象，该守卫测试
-# （test_register_routes_covers_every_module_in_routes_package）曾据对象身份比对
-# 把全部路由误判为 missing（2026-09-09 v5.4.0 发版 CI 三平台全炸的根因）。
-# 该守卫现已改用 HTTP 语义键：(完整 path, METHOD)，已注册侧取自 app.openapi()["paths"]。
-# 升级前先本地全量 pytest 验证该守卫测试。
-fastapi==0.136.3
+# fastapi/starlette 显式 pin（勿放开为 `>=`）：fastapi 0.141 起 include_router 改为嵌套路由，
+# 曾令 test_register_routes_covers_every_module_in_routes_package 把全部路由误判为 missing
+# （2026-09-09 v5.4.0 发版 CI 三平台全炸的根因）。
+# 该守卫已于 2026-09-24 改为 HTTP 语义键比对（完整 path + METHOD，已注册侧取自
+# app.openapi()["paths"]）而对上游实现漂移免疫；2026-09-26 修完测试库跨模块串扰后
+# 本地全量验证通过（分半 896 + 228 全绿），遂升到 0.141.1 并撤销 dependabot 的 ignore。
+# 升级路径（仍然适用）：先跑**全量** pytest（含路由守卫）→ 再改此处 pin → 单独一笔 commit。
+fastapi==0.141.1
 starlette==1.6.0
 uvicorn>=0.53.0
 spacy>=3.8.16

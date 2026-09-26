@@ -205,6 +205,29 @@ delector/routes/__init__.py` → **逐字节一致（IDENTICAL）**，复跑回�
 `starlette==1.6.0`；**仅在 Task 1 收尾轮订正了其顶部注释中描述比对键的口径**）、**未撤
 `dependabot.yml` 的 `ignore`**。证据显示**无回归**（失败为既有、与升级无关），是否借势解除禁区留待编排者裁量。
 
+**升级闭环（2026-09-26，分支 `chore/fastapi-upgrade`）**：上述那 2 例"既有失败"的本质是
+**测试库跨模块串扰**（模块级 env 抢占 + 删库 → 空库 `no such table`），已由
+`docs/specs/2026-09-26-test-db-isolation-design.md`（分支 `fix/test-db-isolation`）修复并合并入
+master（半 A 首次 `0 failed`）。前置条件解除后，按本 spec §2 A 的条件分支执行了**真实升级**
+（不再用 `--target` 隔离环境）：
+
+| 项 | 结果 |
+|---|---|
+| 版本 | `fastapi 0.136.3 → 0.141.1`；starlette 保持 `1.6.0`（唯一变量仍是 fastapi，与隔离轮一致） |
+| **路由守卫（决定性）** | `pytest tests/test_server.py -k register_routes` → **1 passed**（旧实现同环境必红 115 条） |
+| 半 A | **896 passed, 0 failed** |
+| 半 B | **228 passed, 1 skipped** |
+| 其它门禁 | `ruff` 0 / `mypy --strict delector tools` **68 files 0 error** / 全 `tools/*.mjs` 零 FAIL / `test_ci_hardening` + `test_test_isolation` **10 passed** |
+| `dependabot.yml` | **撤销** fastapi/starlette 的 `ignore`（校验后 `pip ignore: None`）；保留历史根因注释 + 新增立场句"再遇同类问题**优先修守卫而不是加 ignore**" |
+
+⇒ **禁区解除**：fastapi/starlette 恢复由「dependabot 周更 + `ci.yml` 全量门禁」双层兜底
+（"不绿不合并，依赖漂移不攒到发版日"）。
+
+**范围外备注（本次未处理，留档）**：`android/app/build.gradle:85` 的 Chaquopy `pip` 块独立
+`install "fastapi<0.100.0"` + `install "pydantic<2.0.0"` —— **Android 打包面与桌面/CI 的
+fastapi/pydantic 版本本就不同源**，且无注释说明约束来由。本次升级只影响桌面端与 CI；
+Android 侧是否需要同步（以及那条 `<0.100.0` 是否仍必要）需单独核实，**不属本计划范围**。
+
 **本机 pin 复核（第 4 步 ④）**：`python -c "import fastapi, starlette"` → **`0.136.3 1.6.0`**（未被隔离环境污染）。
 
 ---
