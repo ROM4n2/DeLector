@@ -593,3 +593,52 @@ Caps: filesystem-read, filesystem-write, shell-exec
 门禁（编排者独立复跑）：分半全量 = 半 A **891 passed + 2 failed（既有 `no such table: exam_trials`）** + 半 B **228 passed + 1 skipped** ⇒ **1119 passed + 1 skipped**（v5.11.0 基线 1109 → **+10**）；ruff 零告警 / `mypy --strict delector tools` 62 files 0 error / 全 `tools/*.mjs` 零漂移。maker-checker：3 Task 逐个 CPE→CRV，**3 轮 REVISE**（T1 黄牌×2：`loadRead` 硬编码 SCHEMA_V 致 schema 漂移测不到、pytest needle 未覆盖 S3；T2 黄牌×3：`backToList`/`refreshList` **漏传 readState** 使"读完返回列表不显示已读"、空 `ranked` 误显"0 篇都读过了"、grid 硬约束无探针；T3 **红牌**：同一注释块内「以单参调用 renderTextList」与本任务刚改的三参实现自相矛盾）——**全部闭环且变异实红**。
 可复用经验：① localStorage 键**前缀即备份契约**（`delector_`/`wb.` 随备份走、`enc.` 是设备偏好），命名前先查 `cards.js:897-900`；② 「读态/进度」类状态要顺带检查**所有**列表渲染调用点（`backToList`/`refreshList` 这类旁路最易漏传）；③ 改注释时留意**同一注释块内的其它行**是否因此自相矛盾（本轮 T3 红牌即此）。
 未做：push / 开 PR / 发版（改动含 `static/` → 需五件套 + Android 覆盖安装）。
+
+### 2026-09-24 | codebuddy | RELEASE_v5.12.0（遇见区已读状态 + 推荐顺延）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：PR #65 合并（`a1c4291`，PR CI success）→ 五件套 bump v5.11.0 → v5.12.0（commit `52984f6` + `e2b3b6c`，附注 tag `v5.12.0`）；Release 四平台资产已确认挂载（APK 61.6MB）。守护测试 `test_writer_mobile.py` 30 passed。Android 需覆盖安装 v5.12.0。
+内容：打开短篇即记已读（`localStorage["delector_encounter_read_v1"]`，`delector_` 前缀 → 随备份导出/还原）+ 列表 `✓ 已读` 标记 + 推荐条跳过已读顺延（i+1 读完→降级文案 / 本就无 i+1→中性文案 / 全读完→完成态）；服务端零改动、已读本机判定不做跨端。
+
+### 2026-09-24 | codebuddy | FIX(dependabot-fastapi-ignore)＋WORK_START(toolchain-guard-truth)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件 A（已完成，commit `d25543a`）：排查 dependabot PR #48（fastapi 0.136.3→0.141.1）CI 为何红 —— **不是新 bug、也不是"可升"**：CI 日志实证装的是 `fastapi-0.141.1 + starlette-1.6.0`，触发的正是 `POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT` 记录的坑（starlette 1.6 起 `include_router` 后 `APIRoute.endpoint` 不再保持原函数对象引用 → 路由守卫把**全部**路由误判 missing）。处置：PR #48 已关闭（附 post-mortem 理由）；`.github/dependabot.yml` 的 pip 生态加 `ignore: fastapi/starlette`（含人工升级路径与解除前提注释）；`tests/test_ci_hardening.py` 7 passed、YAML 解析验证通过。
+事件 B（进行中）：**WORK_START(toolchain-guard-truth)** —— 把两处「假门」修真：① 路由守卫改为 `(prefix+path, methods)` 比对（解除 fastapi 升级禁区，并在真漏挂时能精确定位而非"全量 missing"）；② 修 `pyproject.toml` 的 mypy `exclude` 裸子串 `build`（静默吃掉 6 个 `tools/build_*.py`，显式清单实测 **47 errors in 4 files**）。分支 `chore/toolchain-guards`（worktree `.worktrees/toolchain-guards`，base `d25543a`），2 Task。
+
+### 2026-09-24 | codebuddy | DELIVERED(toolchain-guard-truth) — 2/2 Task 全绿（本地分支，未 push）
+Caps: filesystem-read, filesystem-write, shell-exec
+分支 `chore/toolchain-guards`（worktree，base `d25543a`），4 个原子提交：`17904a5` docs → `450700f` T1（路由守卫改 HTTP 语义键）→ `a0892b8` T2（mypy exclude 锚定 + 注解清账）→ 收官 docs。
+**T1 关键（计划两处前提被实测推翻，务必记）**：① **`route.path` 已含 `router.prefix`**（FastAPI `add_api_route` 定义时即 `self.prefix + path`）→ 计划里 `router.prefix + route.path` 会**双拼**（missing 形如 `/api/a1/api/a1/topics`）；② **fastapi ≥0.141 起 `include_router` 改为嵌套**（`app.routes` 里是无 `path` 的 `_IncludedRouter`，实测 `probe.routes` 只剩 4 条默认路由）→ 已注册侧改取 **`app.openapi()["paths"]`**（文档化 HTTP 契约），比对键 `(_semantic_path(path), METHOD)` 逐 method 展开 + `{name:int}`→`{name}` 归一。判别力反证：摘掉 `listen` 的 include → `missing` **只含 listen 5 条**（改造前"全量 115 条"）。隔离验证（`pip install --target /tmp/tc_dep "fastapi==0.141.1"`）：旧实现红 / 新实现绿；`test_server` 228+1skip；半 A 2 failed/891 passed（**与本机 pin 完全一致 ⇒ 升级无回归**）。
+**fastapi 升级禁区状态**：守卫已免疫，但 **pin（`requirements.txt`）与 `dependabot.yml` 的 `ignore` 暂不解除** —— 按「新环境全量真绿才升」的规则，正确次序 = **先修 `exam_trials` 那 2 例既有失败 → 再同笔升 pin + 撤 ignore**（同进同退，否则基线带红时撤 ignore 只会放大噪音）。
+**T2**：`pyproject.toml` 的 mypy `exclude` 裸子串 `build` → 锚定 `(^|/)build(/|$)`；`tools/` 全部 11 个 `.py` 纳入门禁（覆盖 **62 → 68** files），4 个产包脚本 **47 个 strict 注解债 → 0**（仅注解、零行为；3 处 `no-any-return` 用 `typing.cast` 修，运行时恒等）。变异：改回裸子串 → 62 files（门禁重新失明）；`ci.yml:76` 本就是 `mypy --strict delector tools` → 自动受益。
+门禁（CPE 跑 + 编排者定向复核）：分半全量 = 半 A **891 passed + 2 failed（既有 `exam_trials`）** + 半 B **228 passed + 1 skipped** ⇒ **1119 passed + 1 skipped**（与 v5.12.0 基线一致，本计划为工程债收口、无净增）；ruff 0 / `mypy --strict delector tools` **68 files 0 error** / 全 `tools/*.mjs` 零漂移 / `test_ci_hardening` 7 passed。maker-checker：2 Task 逐个 CPE→CRV，**2 轮 REVISE**（T1 黄牌 2：spec §3.1/边界表/§4 表行与 requirements/dependabot 注释口径旧；T2 黄牌 5：3 条系 CRV 主检出对比视角差 + 2 条报告措辞）—— 全部闭环。
+未做：push / PR / 发版（工程债收口不发版）；新增待办 = 修 `exam_trials` 2 例既有失败（`no such table: exam_trials`）以便后续安全升级 fastapi。
+
+### 2026-09-26 | codebuddy | WORK_START(test-db-isolation)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户选「修 `exam_trials` 2 例既有失败」（它是安全升 fastapi 的唯一前置）→ 按 `/vault-debug` 4 步协议排查，**根因已用受控实验坐实**。
+根因链（务必记）：① 某些测试模块在**模块级直接赋值** `os.environ["DATABASE_PATH"]`（永久、无人还原）→ ② `delector/server.py:356` 的模块级 `app = create_app()` 顶层执行 `init_db()` 时，建的是**那个被抢走的库** → ③ 后续模块的模块级 `os.environ.setdefault(...)` **失效** → ④ 受害模块（`test_goethe_a1_hoeren/lesen`）的 autouse fixture（`_m5_isolated_db_teardown`）**只做清理不建表**，其隔离 100% 依赖"setdefault 生效 + server 顶层 init_db 建过表"这个隐式前提 → ⑤ 那个库又被抢者的 fixture 在结尾 `os.remove` 掉 → ⑥ 用例请求时 sqlite **新建空库** → `no such table: exam_trials`。
+**为何只在 Windows 红**：ubuntu 上句柄未释放使 `os.remove` 抛 `OSError` 被 `except OSError: pass` 吞掉 → 库其实还在 → CI 长期 success（**跨平台都存在的顺序耦合，只是 ubuntu 掩盖了**）。
+受控实验（决定性）：注释 `test_audit_hardening.py:15-16` 的模块级赋值 → `pytest tests/test_audit_hardening.py tests/test_goethe_a1_hoeren.py -q` 从 `1 failed, 34 passed` 变 **35 passed**（还原 `IDENTICAL`）。
+**无关项澄清**：`server.app` 单例**无辜**（`database.get_db_path()` 每次调用读 env，不冻结路径）；`db_conn` 也**不自动建表**（建表只在 `init_db`）。
+修法（契约 C1–C4）：① 模块级 MUST NOT 赋值库 env；② 需要独立库的模块 → autouse fixture 内「捕获 saved → 钉 env → **`init_db()`** → yield → 清理 → 还原」；③ fixture 可删自己的库；④ 纯逻辑模块可不加夹具。外加 `tests/conftest.py` 兜底默认库（防 server 顶层 init_db 落到真实 `delector.db`）+ 新增 AST 守卫 `tests/test_test_isolation.py`（根因级防回归）。
+分支 `fix/test-db-isolation`（worktree `.worktrees/fix-test-db-isolation`，base `d25543a`），2 Task；**零生产代码改动**。
+
+### 2026-09-26 | codebuddy | DELIVERED(test-db-isolation) — 2/2 Task 全绿（本地分支，未 push）
+Caps: filesystem-read, filesystem-write, shell-exec
+分支 `fix/test-db-isolation`（worktree，base `d25543a`），3 提交：`d22225e` docs → `fe84e16` T1 → T2。
+**成果**：半 A **896 passed / 0 failed**（修复前 `2 failed, 891 passed`）——`no such table: exam_trials` 2 例彻底消失；半 B `228 passed, 1 skipped`；合计 **1124 passed + 1 skipped**（原 1119 + 修好的 2 例 + 新增守卫 3 支）。ruff 0 / mypy 62 files 0 / 全探针零漂移。
+**改动**（7+1 文件，零生产代码）：① 根 `conftest.py` 加 `setdefault` 兜底库（防 server 顶层 `init_db()` 落到真实 `delector.db`）；② 删 4 个模块（`test_audit_hardening`/`test_exam_catalog`/`test_exam_trials`/`test_server`）的**模块级** env 赋值；③ `test_goethe_a1_hoeren/lesen` 的 autouse fixture 由「只清理」升级为「捕获 saved → 钉 env → **`init_db()`** → yield → gc + 删自己的库 → 还原 saved」（自洽、与模块执行顺序无关）；④ 新增根因级 **AST 守卫 `tests/test_test_isolation.py`**（3 支：模块级 env 赋值即红 / 根 conftest 有兜底 `setdefault` / sys.path 注入未丢）；⑤ OVERVIEW 测试隔离契约**就地精确化**为 C1–C4。
+**契约（C1–C4，已写入 spec 与 OVERVIEW）**：C1 模块级 MUST NOT 直接赋值库 env；C2 需要独立库的模块 → autouse fixture「钉 env → `init_db()` → 还原」；C3 fixture 可删自己的库（用完归位故不伤人）；C4 纯逻辑模块可不加夹具。**注**：`setdefault` 是 `Call` 非赋值，C1 不禁（且被 conftest 兜底覆盖为 no-op）。
+**重要方法论（vault-debug 副产品）**：单点变异可能被**另一处修复免疫**而"不红"（本例：加回污染源不再致红，因为受害者已自洽）→ **必须做配对变异**（污染源 + 还原受害者）才能造出红/绿对比、坐实根因链。这是"变异验证要盯着**判别力**而非机械照做"的又一实例。
+遗留（记录，非阻塞）：`test_server.py` 的 `clean_db` fixture **内部**注释仍含旧机制描述（受 scope-lock 未改）。
+**下一步可做**：① push + PR 合并本分支；② 合并后即可做「升 fastapi pin + 撤 `dependabot.yml` ignore」（其唯一前置已解除；需在新依赖下重跑全量确认 0 failed）。
+
+### 2026-09-26 | codebuddy | DONE(两分支已合并入 master) + WORK_START(fastapi-upgrade)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按用户「c（两件一起）」先**按序合并两个计划分支入 master**：
+- `chore/toolchain-guards`（守卫收口）→ fast-forward 到 `ce6d454`；
+- `fix/test-db-isolation`（测试库隔离修复）→ merge commit `180b1cd`（**自动合并零冲突**：两边改的是 `tests/test_server.py` 与 `PROJECT_OVERVIEW.md` 的不同区域）；
+- 合并后**完整复跑**：半 A `896 passed / 0 failed`、半 B `228 passed + 1 skipped`、mypy **68 files 0 error**、守卫 10 passed、判别点 35 passed、路由守卫 1 passed、ruff 0、全探针零漂移 → `git push origin master`（`ce6d454..180b1cd`）。
+随后启动 **WORK_START(fastapi-upgrade)**（分支 `chore/fastapi-upgrade`，worktree `.worktrees/fastapi-upgrade`，base `180b1cd`）—— 解除 fastapi 升级禁区：`requirements.txt` 升 `fastapi 0.136.3 → 0.141.1`（starlette 保持 1.6.0，唯一变量仍是 fastapi）+ **撤销** `.github/dependabot.yml` 的 fastapi/starlette `ignore` + spec §4 补「升级闭环」证据表。
+新依赖下真实验证（**非隔离环境**）：路由守卫（决定性）`1 passed`（旧实现同环境必红 115 条）· 半 A `896 passed / 0 failed` · 半 B `228 passed + 1 skipped` · ruff 0 · mypy 68 files 0 error · 全探针零 FAIL · `test_ci_hardening` + `test_test_isolation` 10 passed · `pip ignore: None`（已撤销且 YAML 仍可解析）。
+**新发现（留档，本次未处理）**：`android/app/build.gradle:85` 的 Chaquopy `pip` 块独立 `install "fastapi<0.100.0"` + `install "pydantic<2.0.0"` —— **Android 打包面与桌面/CI 的 fastapi/pydantic 版本本就不同源**（且无注释说明来由）。本次升级只影响桌面端与 CI，Android 行为不变；是否同步需单独核实。
