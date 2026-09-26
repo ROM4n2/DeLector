@@ -642,3 +642,22 @@ Caps: filesystem-read, filesystem-write, shell-exec
 随后启动 **WORK_START(fastapi-upgrade)**（分支 `chore/fastapi-upgrade`，worktree `.worktrees/fastapi-upgrade`，base `180b1cd`）—— 解除 fastapi 升级禁区：`requirements.txt` 升 `fastapi 0.136.3 → 0.141.1`（starlette 保持 1.6.0，唯一变量仍是 fastapi）+ **撤销** `.github/dependabot.yml` 的 fastapi/starlette `ignore` + spec §4 补「升级闭环」证据表。
 新依赖下真实验证（**非隔离环境**）：路由守卫（决定性）`1 passed`（旧实现同环境必红 115 条）· 半 A `896 passed / 0 failed` · 半 B `228 passed + 1 skipped` · ruff 0 · mypy 68 files 0 error · 全探针零 FAIL · `test_ci_hardening` + `test_test_isolation` 10 passed · `pip ignore: None`（已撤销且 YAML 仍可解析）。
 **新发现（留档，本次未处理）**：`android/app/build.gradle:85` 的 Chaquopy `pip` 块独立 `install "fastapi<0.100.0"` + `install "pydantic<2.0.0"` —— **Android 打包面与桌面/CI 的 fastapi/pydantic 版本本就不同源**（且无注释说明来由）。本次升级只影响桌面端与 CI，Android 行为不变；是否同步需单独核实。
+
+### 2026-09-26 12:00 | gemini-3-8-flash__antigravity | WORK_END(fastapi-upgrade)
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：解除 FastAPI 升级禁区，合入 master（PR #66，commit `df96237`）。
+1. 改动：`requirements.txt` 升级 `fastapi 0.136.3 → 0.141.1`（starlette 保持 1.6.0）；撤销 `.github/dependabot.yml` 对 fastapi/starlette 的 `ignore` 规则；`tests/test_test_isolation.py` 修正 tests 档 mypy 报错（list[expr] 变量被赋 tuple，`e339562`）；设计规范 `docs/specs/2026-09-24-toolchain-guard-truth-design.md` §4 补齐真实升级验证证据表。
+2. 验证：HTTP 语义路由守卫免疫（1 passed，旧实现同环境必红 115 条）；半 A 896 passed / 0 failed；半 B `test_server` 228 passed + 1 skipped；`mypy --strict delector tools` 68 files 0 error；`mypy --follow-imports=skip tests` 69 files 0 error；`ruff check .` 零告警；Go 门禁全绿；`dependabot.yml` YAML 解析通过。
+
+### 2026-09-26 12:35 | gemini-3-8-flash__antigravity | NOTE(encounter-yellow-cards)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：CRV 3 条黄牌清账，合入 master（PR #67，commit `74f703e`，分支 `fix/encounter-yellow-cards` @ `4d7247c`）。
+1. I-1 夹具生产语义对齐：`tests/test_encounter_i1_consistency.py` 改造 `_first_third_known_set`，按 `deck-bridge.js` 生产语义归一（`_strip_german_article` 剥冠词 + `.lower()` 小写），新增同源守卫 `test_article_list_matches_deck_bridge_source` 双向比对 JS 源与 Python 冠词表，新增 `test_known_lookup_is_case_insensitive_and_article_stripped` 行为测试。
+2. 变异表去重：`tests/test_encounter_seed.py` 中 `_MUTATION_TABLE` 移除 500 行归属重合条目。
+3. 文档措辞：`PROJECT_OVERVIEW.md` 修正测试基线描述。
+
+### 2026-09-26 12:50 | gemini-3-8-flash__antigravity | NOTE(android-pin-rationale)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：Android 依赖锁定理由核实留档，合入 master（PR #68，commit `4e015f5`，分支 `docs/android-pin-rationale` @ `8784a5d`）。
+1. 事实核实：`android/app/build.gradle` 中的 `fastapi<0.100.0` 与 `pydantic<2.0.0` 为 Android 端有意分离的独立打包面，源于 Chaquopy 无法编译 Rust 原生扩展（`pydantic-core`），必须锁 v1。
+2. 落地：在 `android/app/build.gradle:84-91` 详细补写分离原由与约束依据。核实结论为桌面端/CI 升级不受影响，Android 端保持不动，勿轻易顺手改动。
