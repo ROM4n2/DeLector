@@ -661,3 +661,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 事件：Android 依赖锁定理由核实留档，合入 master（PR #68，commit `4e015f5`，分支 `docs/android-pin-rationale` @ `8784a5d`）。
 1. 事实核实：`android/app/build.gradle` 中的 `fastapi<0.100.0` 与 `pydantic<2.0.0` 为 Android 端有意分离的独立打包面，源于 Chaquopy 无法编译 Rust 原生扩展（`pydantic-core`），必须锁 v1。
 2. 落地：在 `android/app/build.gradle:84-91` 详细补写分离原由与约束依据。核实结论为桌面端/CI 升级不受影响，Android 端保持不动，勿轻易顺手改动。
+
+### 2026-09-26 13:30 | codebuddy | RELEASE(v5.12.1)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按用户指令「升个 5.12.1 吧」发版 —— **patch 级，无用户可见改动**（`git diff --stat v5.12.0..master -- static/` **为空**；i+1 就近选材 = v5.11.0、已读状态 = v5.12.0 均已发布），发版目的是把本轮工程债收口（真门禁 + 依赖升级 + 测试隔离）记入版本面。
+版本面六处同步：`static/sw.js` `delector-static-v5.12.1` / `static/index.html` `System · v5.12.1 Online` / `android/app/build.gradle` fallback `5.12.1`·`51201` / `README` badge + Tests `1124/1125` + 下载表四行（版本单元格与 URL）+ 摘要区（加 v5.12.1、删最旧 v5.9.5 保持 4 条）/ `CHANGELOG` 顶行「最新版本 v5.12.1（2026-09-26）」+ 末尾完整条目 / `PROJECT_OVERVIEW` 发布面。
+守护测试：`tests/test_writer_mobile.py` + `tests/test_server.py` = **258 passed + 1 skipped**（版本一致性 / README 下载表 / build.gradle 三条守卫全绿）；`ruff check .` 零告警。
+流水线：push master + tag `v5.12.1` → `ci.yml`(master) + `Build & Publish DeLector Releases`(tag) + `Build Agent Artifacts`(tag)。
+⚠️ 协作提示：本轮发现**另一并行会话**（签名 `gemini-3-8-flash__antigravity`）也在写本 work.log；写前必须重新读取，**禁止整文件覆盖式写入**（本次一度用过期快照覆盖掉对方 19 行，已 `git restore --source=HEAD` 复原）。
