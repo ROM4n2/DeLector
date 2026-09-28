@@ -77,22 +77,28 @@ def clean_db():
     saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
     os.environ["DATABASE_PATH"] = "test_delector.db"
     os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
+    # 连带删除 WAL 旁文件（-wal/-shm）：启用 WAL 后它们与主库同生共死，只删主库会把
+    # 陈旧 -shm 留给下个用例 → 打开即 `disk I/O error`。其它测试模块早已按三件套清理。
     gc.collect()
     for f in ("test_delector.db", "test_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+        for suffix in ("", "-wal", "-shm"):
+            p = f + suffix
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
     init_db("test_delector.db")
     yield
     gc.collect()
     for f in ("test_delector.db", "test_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+        for suffix in ("", "-wal", "-shm"):
+            p = f + suffix
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
@@ -3961,10 +3967,12 @@ def test_sync_sdp_cache_capacity_and_size_limit(client):
 
 
 def test_db_busy_timeout_and_concurrency_guard():
-    """SQLite 连接必须启用 busy_timeout 与 synchronous=NORMAL 守卫，避免并发读写锁库。"""
+    """SQLite 连接必须启用 WAL + busy_timeout + synchronous=NORMAL 守卫，避免并发读写锁库。"""
     with get_db("test_delector.db") as conn:
+        jmode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
         sync_mode = conn.execute("PRAGMA synchronous").fetchone()[0]
+    assert jmode.lower() == "wal"  # 写不阻塞读、崩溃恢复更稳（2026-09-28 swarm 审计 P1）
     assert busy_timeout >= 5000
     assert sync_mode in (1, 2)  # NORMAL or FULL
 

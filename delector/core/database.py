@@ -53,6 +53,10 @@ def get_progress_db_path(db_path: Optional[str] = None) -> str:
 def _configure_sqlite_conn(conn: sqlite3.Connection) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     try:
+        # WAL：写不阻塞读、崩溃恢复更稳；与 synchronous=NORMAL 是官方推荐组合。
+        # 注意：WAL 会在库文件旁生成 -wal/-shm；容器部署须挂**目录**而非单文件
+        # （见 docker-compose.yml 的 ./data 挂载），否则尾写落在容器层。
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
     except Exception:
@@ -1483,14 +1487,53 @@ def _take_pending(pending: Dict[str, Any], token: str) -> Tuple[Any, str]:
     return pending["payload"], pending["filename"]
 
 
+def _backup_db_file(src_path: str, dst_path: str) -> None:
+    """用 SQLite backup API 把 src_path 导出一致性快照文件 dst_path。
+
+    为什么不用 `shutil.copy2`：WAL 模式下最新提交可能只落在 -wal 里，且本项目
+    的 `get_db()` **只结束事务、不 close**（句柄靠循环 GC 释放），库里可能随时挂着
+    未关闭的连接。此时直接拷文件会拿到不一致快照；回滚时把主库/-wal 换回去，又会
+    让仍在映射旧 WAL 的连接把库读成 `disk I/O error`。backup API 由 SQLite 按页读
+    出一个**一致视图**，天然绕开这两点。
+    """
+    src = sqlite3.connect(src_path)
+    dst = sqlite3.connect(dst_path)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+
+
+def _restore_db_file(snapshot_path: str, dst_path: str) -> None:
+    """用 backup API 把快照文件写回活库 dst_path。
+
+    写回走 SQLite 自身的页复制：落在活库当前的日志模式（WAL）里、沿用既有连接，
+    因此**不需要**搬/删 -wal/-shm 旁文件，也不会在别处持有连接时把库改成
+    `disk I/O error`。busy_timeout 兜住与在途写事务的短暂争用。
+    """
+    snap = sqlite3.connect(snapshot_path)
+    live = sqlite3.connect(dst_path)
+    try:
+        live.execute("PRAGMA busy_timeout=5000")
+        snap.backup(live)
+    finally:
+        live.close()
+        snap.close()
+
+
 @contextmanager
 def _db_snapshot_guard() -> Iterator[None]:
-    """还原前给两个库做文件级快照，任一步失败就整体拷回。
+    """还原前给两个库做快照，任一步失败就整体写回。
 
     delector.db 与 progress.db 是两个**独立** SQLite 文件，无法共处一个事务。
     还原已改成「清库再灌」，所以清空之后、灌完之前若失败（JSON 损坏、磁盘满、
     进程被杀），数据就「已删而备份没进去」——把丢复习进度的 bug 换成丢全部数据的 bug。
-    单库事务保护不了跨文件操作，只能在文件层再兜一层。
+    单库事务保护不了跨文件操作，只能在库外再兜一层（两个库各自留一份 backup API 快照）。
+
+    快照/写回均走 SQLite **backup API**（而非文件拷贝）：WAL 模式下文件拷贝既会
+    拿到可能陈旧/不一致的快照，也会在库仍挂有连接时把库搞成 `disk I/O error`
+    —— 见 `_backup_db_file` / `_restore_db_file` 的说明。
     """
     paths = [p for p in (get_db_path(), get_progress_db_path()) if os.path.exists(p)]
     tmpdir = tempfile.mkdtemp(prefix="delector_restore_")
@@ -1498,14 +1541,14 @@ def _db_snapshot_guard() -> Iterator[None]:
     try:
         for p in paths:
             dst = os.path.join(tmpdir, os.path.basename(p))
-            shutil.copy2(p, dst)
+            _backup_db_file(p, dst)
             snapshots[p] = dst
         yield
     except BaseException:
         # 连 KeyboardInterrupt 也要回滚——半个还原比不还原更糟
         for original, snapshot in snapshots.items():
             try:
-                shutil.copy2(snapshot, original)
+                _restore_db_file(snapshot, original)
             except Exception:
                 pass
         raise
