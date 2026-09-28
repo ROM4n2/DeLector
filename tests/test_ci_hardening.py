@@ -17,6 +17,7 @@
 但不能冻结文件内容、阻挡正常演进。
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -218,4 +219,33 @@ def test_mypy_config_locks_adoption_flags_and_stays_out_of_runtime_deps():
     assert "mypy" not in req, (
         "requirements.txt 不得包含 mypy：它是开发期工具，混入运行时依赖会增大"
         "Android 打包面体积与依赖漂移面（ci.yml 内单独 pip install 即可）"
+    )
+
+
+# ── 容器入口守卫（2026-09-28 swarm 审计 P1）────────────────────────────────────
+# 背景：Dockerfile 的 CMD 曾写 `uvicorn server:app`，而仓库根并无 server.py
+# （真实入口是 delector.server:app）——`docker compose up` 直接 ModuleNotFoundError。
+# 本守卫静态钉住"入口模块文件存在 + 属性在模块级定义"，不触发 spaCy/lexicon 重导入。
+
+DOCKERFILE = REPO_ROOT / "Dockerfile"
+
+
+def test_dockerfile_uvicorn_entrypoint_points_to_real_module():
+    """Dockerfile 的 uvicorn 入口必须指向真实存在的模块与模块级属性。"""
+    text = _read_guard_file(DOCKERFILE)
+
+    m = re.search(r'"uvicorn"\s*,\s*"([\w.]+):(\w+)"', text)
+    assert m, (
+        f"{DOCKERFILE} 未找到 `uvicorn <module>:<attr>` 形式的 CMD 入口：容器入口无法被本守卫校验。"
+    )
+    module, attr = m.group(1), m.group(2)
+
+    module_file = REPO_ROOT.joinpath(*module.split(".")).with_suffix(".py")
+    assert module_file.exists(), (
+        f"Dockerfile CMD 指向的模块不存在：{module}:{attr} → 期望文件 {module_file} 缺失。"
+        "真实入口通常是 delector.server:app（仓库根并无 server.py）。"
+    )
+    src = module_file.read_text(encoding="utf-8")
+    assert re.search(rf"^{re.escape(attr)}\s*=", src, re.MULTILINE), (
+        f"{module_file} 未在模块级定义 `{attr}`：Dockerfile CMD 期望 {module}:{attr} 可被 uvicorn 加载。"
     )
