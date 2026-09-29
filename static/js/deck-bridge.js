@@ -161,6 +161,27 @@ export function buildKnownSet(deck) {
   return known;
 }
 
+/**
+ * mergeKnownLemmas(knownSet, lemmas) -> Set
+ *
+ * 把**主背词路径**（卡片盒 / KARTEI，`GET /api/cards/known-lemmas` 返回的「已学」原形）
+ * 并进已有的 known 集合，打通「遇见区 i+1 覆盖率」与「主阅读/卡盒背词」两条数据流
+ * （2026-09-28 swarm 审计 P1：两池原先互不相通，旗舰 i+1 对多数用户静默失效）。
+ *
+ * 归一与 buildKnownSet **同口径**（stripGermanArticle + toLowerCase）；**不改入参**
+ * knownSet，返回新 Set。lemmas 非数组 / 含 null/undefined → 安全跳过、绝不抛。
+ */
+export function mergeKnownLemmas(knownSet, lemmas) {
+  const out = knownSet instanceof Set ? new Set(knownSet) : new Set();
+  if (!Array.isArray(lemmas)) return out;
+  for (const raw of lemmas) {
+    if (raw == null) continue;
+    const norm = stripGermanArticle(String(raw)).toLowerCase();
+    if (norm) out.add(norm);
+  }
+  return out;
+}
+
 /** isKnown(knownSet, lemma) -> bool：lemma 小写后是否命中已知集。 */
 export function isKnown(knownSet, lemma) {
   if (!knownSet || lemma == null) return false;
@@ -168,18 +189,20 @@ export function isKnown(knownSet, lemma) {
 }
 
 /**
- * annotateWithDeck(deck, annotateResp) -> {
+ * annotateWithDeck(deck, annotateResp, extraKnownLemmas) -> {
  *   sentences: [{idx, tokens:[{text,lemma,pos,known}]}],
  *   stats: {total_tokens, known_tokens, known_rate, unknown_top:[{lemma,count}]}
  * }
  *
  * - 每个 token 加 known 布尔（纯 isKnown，标点也保留、记 known=false，进 total）。
+ * - 已知池 = 工作台 deck ∪ extraKnownLemmas（主路径「已学」原形，可缺省；
+ *   打通两条数据流、与列表 i+1 覆盖率同口径 —— 2026-09-28 swarm 审计 P1）。
  * - stats.known_rate = known/total 四舍五入 2 位；total==0 时 rate=0。
  * - unknown_top = 未知 token 中"生词候选"lemma 按频次降序（同频按首现先后）取前 10；
  *   标点（pos 属 PUNCT/SYM 或 text 全非字母）不入候选、也不计入。
  */
-export function annotateWithDeck(deck, annotateResp) {
-  const knownSet = buildKnownSet(deck);
+export function annotateWithDeck(deck, annotateResp, extraKnownLemmas) {
+  const knownSet = mergeKnownLemmas(buildKnownSet(deck), extraKnownLemmas);
   const srcSentences =
     annotateResp && Array.isArray(annotateResp.sentences)
       ? annotateResp.sentences
