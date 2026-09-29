@@ -532,7 +532,13 @@ def get_wb_state(db_path: Optional[str] = None) -> Dict[str, Any]:
 
 
 def save_wb_state(payload: Dict[str, Any], db_path: Optional[str] = None) -> str:
-    """单行 upsert workbench 背词进度镜像（id 恒为 1），返回本次写入的 updated_at。"""
+    """单行 upsert workbench 背词进度镜像（id 恒为 1），返回本次写入的 updated_at。
+
+    ADR-0016 Phase 3 / Task 2：写镜像 blob 的同时把 wb 快照幂等投影进统一池
+    ``vocab_cards``（``project_wb_deck``）。两者落在**同一个** ``with conn:`` 事务内：
+    投影失败 ⇒ 整体回滚，blob 也不写（无「半写」，Migration-Idempotency §2）。
+    投影异常**不被吞**，向上冒泡给调用方（让事务回滚并把错误暴露出来）。
+    """
     updated_at = datetime.now().isoformat()
     text = json.dumps(payload, ensure_ascii=False)
     conn = get_db(db_path)
@@ -548,6 +554,11 @@ def save_wb_state(payload: Dict[str, Any], db_path: Optional[str] = None) -> str
             """,
                 (text, updated_at),
             )
+            # 惰性导入（本仓约定：database 不顶层 import lexicon 主干）；投影不 commit，
+            # 复用同一连接与事务。投影抛错 ⇒ with conn 回滚，blob 与投影一起回滚。
+            from delector.core.vocab_pool import project_wb_deck
+
+            project_wb_deck(conn, payload)
     finally:
         _close_db_conn(conn)
     return updated_at

@@ -4716,6 +4716,106 @@ def test_wb_state_survives_reinit(client):
     assert client.get("/api/wb/state").json() == {"words": []}
 
 
+# ── ADR-0016 Phase 3 / Task 2：wb 镜像写入与统一池投影同事务（Migration-Idempotency §2/§3）──
+
+
+def test_wb_state_put_projects_into_vocab_pool(client):
+    """接线生效：PUT /api/wb/state 落盘的同时把 wb 快照幂等投影进统一池 vocab_cards。
+
+    证明 Task 1 的 ``project_wb_deck`` 已接进写镜像路径：PUT 后 vocab_cards 出现该
+    lemma 行，且 FSRS-6 参数（``fsrs_s``/``fsrs_d``/``fsrs_lapses``）来自 wb 卡。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    payload = {
+        "words": [
+            {
+                "id": "a1-0001",
+                "hw": "der Abfahrt",
+                "gloss": "出发；发车",
+                "ex": [{"de": "Die Abfahrt ist um acht.", "zh": "八点发车。"}],
+            }
+        ],
+        "cards": {"a1-0001": {"s": 3.5, "d": 4.2, "lapses": 1}},
+    }
+    r = client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
+    assert r.status_code == 200
+    assert r.json().get("updated_at")
+
+    with get_db("test_delector.db") as conn:
+        row = conn.execute(
+            "SELECT word, definition_zh, fsrs_s, fsrs_d, fsrs_lapses "
+            "FROM vocab_cards WHERE word = ?",
+            ("der Abfahrt",),
+        ).fetchone()
+    assert row is not None, "投影应把 wb 词条写进 vocab_cards（接线未生效？）"
+    assert row["fsrs_s"] == 3.5
+    assert row["fsrs_d"] == 4.2
+    assert row["fsrs_lapses"] == 1
+    assert row["definition_zh"] == "出发；发车"
+
+
+def test_wb_state_put_projection_idempotent_three_phase(client):
+    """Migration-Idempotency §3 三段时序：PUT → 追加新词 → 再 PUT 只新增新词，旧词不重复。
+
+    第二次 PUT 的 payload 仍含旧词条（wb 快照是全量镜像），投影必须按内容去重，
+    只新增那条新词条——不得把旧词条重复插入。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    word_a = {"id": "a1-0001", "hw": "der Abfahrt", "gloss": "出发；发车"}
+    payload1 = {"words": [word_a], "cards": {"a1-0001": {"s": 3.5}}}
+    assert client.put("/api/wb/state", json={"payload": payload1}, headers={"X-WB-Key": key}).status_code == 200
+    with get_db("test_delector.db") as conn:
+        n1 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    assert n1 == 1, "首次 PUT 应投影出 1 行"
+
+    # 追加一条新词条，旧词条仍留在全量 payload 中
+    word_b = {"id": "a1-0002", "hw": "der Bahnhof", "gloss": "火车站"}
+    payload2 = {"words": [word_a, word_b], "cards": {"a1-0001": {"s": 3.5}, "a1-0002": {"s": 2.0}}}
+    assert client.put("/api/wb/state", json={"payload": payload2}, headers={"X-WB-Key": key}).status_code == 200
+    with get_db("test_delector.db") as conn:
+        n2 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+        dup_a = conn.execute("SELECT COUNT(*) FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchone()[0]
+    assert n2 == 2, "再 PUT 只应新增 1 行，旧词条不得被重复插入"
+    assert dup_a == 1, "同一条 wb 词条二次投影不得产生重复行（幂等）"
+
+
+def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch):
+    """Task 2 核心：投影失败 ⇒ 同一事务整体回滚，wb 镜像 blob 也不写（无「半写」）。
+
+    用桩把 ``project_wb_deck`` 换成抛异常：PUT 必须失败（500），且 wb_state 表
+    **未被更新**（读回仍是旧 updated_at / 旧 payload）——证明 blob 写入与投影同事务。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    # raise_server_exceptions=False 才能拿到 500 响应而非让异常从 TestClient 冒出
+    fail_client = TestClient(app, client=("127.0.0.1", 54321), raise_server_exceptions=False)
+
+    # 先写一版基线，记录 updated_at / payload
+    base_payload = {"words": [{"id": "a1-0001", "hw": "der Abfahrt"}], "cards": {"a1-0001": {"s": 3.5}}}
+    assert client.put("/api/wb/state", json={"payload": base_payload}, headers={"X-WB-Key": key}).status_code == 200
+    before = server.get_wb_state()
+    with get_db("test_delector.db") as conn:
+        before_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
+
+    def _boom(conn, payload):
+        raise RuntimeError("projection forced failure")
+
+    # save_wb_state 函数体内惰性 import project_wb_deck ⇒ 运行时取到本桩
+    monkeypatch.setattr("delector.core.vocab_pool.project_wb_deck", _boom)
+
+    new_payload = {
+        "words": [{"id": "a1-0001", "hw": "der Abfahrt"}, {"id": "a1-0002", "hw": "der Bahnhof"}],
+        "cards": {"a1-0001": {"s": 9.0}},
+    }
+    r = fail_client.put("/api/wb/state", json={"payload": new_payload}, headers={"X-WB-Key": key})
+    assert r.status_code >= 500, "投影抛错应向上冒泡成 500，而非被吞掉"
+
+    # blob 必须未被更新（同事务回滚）
+    assert server.get_wb_state() == before, "投影失败时 wb_state 镜像 blob 不得被写入"
+    with get_db("test_delector.db") as conn:
+        after_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
+    assert after_ts == before_ts, "投影失败时 wb_state.updated_at 不得变化（半写）"
+
+
 # ── 局域网 CORS（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 1）──
 # 手机 APP 的 WebView 页面 origin 是它自己的 127.0.0.1:8000（Chaquopy 本地 server），
 # 要跨域访问桌面 192.168.x.x 的 /api/wb/state 必须拿到 ACAO 反射；公网 Origin 不得反射。

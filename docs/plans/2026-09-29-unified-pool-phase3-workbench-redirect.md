@@ -65,8 +65,8 @@
 ### Task 2: 接线到 `PUT /api/wb/state`（单事务） [Mode: AFK] [Role: TDD Builder]
 
 **Files:**
-- Modify: `delector/routes/main.py`（`save_wb_state`，`~:1447`）
-- Test: `tests/test_server.py`（新增：`PUT /api/wb/state` 后统一池出现对应行；重复 PUT 无新增）
+- Modify: `delector/core/database.py::save_wb_state`（**实定义处**；`routes/main.py::wb_put_state` 仅调用、不改）—— 写镜像 blob 与池投影同事务
+- Test: `tests/test_server.py`（新增：`PUT /api/wb/state` 后统一池出现对应行；重复 PUT 无新增；投影失败整体回滚）
 
 **Interfaces:**
 - Consumes: `project_wb_deck`（Task 1）
