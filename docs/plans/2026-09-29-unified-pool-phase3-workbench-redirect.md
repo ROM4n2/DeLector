@@ -171,15 +171,20 @@
 ### Task 5: 还原路径补迁移（restore-then-migrate） [Mode: AFK] [Role: TDD Builder]
 
 **Files:**
-- Modify: `delector/routes/main.py`（`/api/backup/restore`）/ `delector/core/vocab_pool.py`
-- Test: `tests/test_server.py`（备份还原后统一池与 deck 一致；失败整体回滚）
+- Modify: `delector/core/database.py`（`_BACKUP_TABLES["vocab_cards"]` 补齐新列）/ `delector/routes/main.py`（`/api/backup/restore`）
+- Test: `tests/test_server.py`（备份还原后统一池与 deck 一致；新列往返无损；失败整体回滚）
 
 **Interfaces:**
-- Consumes: `_db_snapshot_guard`（PR #69 的 backup-API 快照守卫）
+- Consumes: `_db_snapshot_guard`（PR #69 的 backup-API 快照守卫）、`project_wb_deck`、`get_wb_state`
 - Produces: restore 成功后**同快照守卫内**补跑幂等投影；失败与 restore 一起回滚（Migration-Idempotency §4）
+
+**范围补正（2026-09-29 执行时开发现场取证发现）**：`_BACKUP_TABLES["vocab_cards"]` 的列清单**漏了 T1(Phase 1) 新增的 `source` / `fsrs_s` / `fsrs_d` / `fsrs_lapses`** ⇒ `_replace_tables` 只写清单内列 ⇒ **备份→还原往返会静默把 `source` 打回默认 `'user'`、`fsrs_*` 清空**。这是 T1 引列时的遗漏，正属"还原路径补迁移"范畴，**须在本任务一并修**（补齐列 + 默认值）。
+（`wb_state` 纳入 `_BACKUP_TABLES` 属 ADR-0016 **Phase 4**，不在本任务。）
 
 **Injected Instincts:**
 - [ ] `[Instinct: Restore-Then-Migrate]`: 旧备份（只有旧数据）还原后 MUST 补迁移，否则"还原成功但读新表为空"的**静默数据丢失**（§4）。
+- [ ] `[Instinct: Lossless-Round-Trip]`: 备份契约 MUST 覆盖表内**全部**语义列；新增列而不同步备份清单 = 往返静默丢数据（本任务实证）。
+- [ ] `[Instinct: Fill-Empty-Only]`: 补迁移**只补空**、不覆盖既有值；老备份（无新列）还原后 `source` 落默认 `'user'`（无法与真实 user 区分）属**可接受**，不越权改写（Backfill §4）。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 5: restore 路径补迁移。

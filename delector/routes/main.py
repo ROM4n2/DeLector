@@ -1589,6 +1589,23 @@ def restore_database_backup(req: RestoreReq, request: Request) -> Dict[str, Any]
         # 到这里就是零写入 no-op。
         migrate_a1_records_to_exam_trials()
 
+        # ADR-0016 Phase 3 / Task 5（restore-then-migrate，Migration-Idempotency §4）：
+        # wb_state 镜像**不进备份**（不在 _BACKUP_TABLES），换机还原后 vocab_cards 可能
+        # 缺已学词。用当前 wb 快照把可投影词条**只补空 / 幂等**地补回统一池。
+        # - 同一 _db_snapshot_guard() 内：投影抛错 ⇒ 与 restore 一起整体回滚（不留半成品）；
+        # - 惰性导入/调用（避免顶层拉重依赖）；空 payload ⇒ 无输入，自然 no-op；
+        # - MUST NOT 吞异常：project_wb_deck 抛错必须向上冒泡。
+        wb_payload = get_wb_state()
+        if wb_payload:
+            from delector.core.vocab_pool import project_wb_deck
+
+            proj_conn = get_db()
+            try:
+                with proj_conn:
+                    project_wb_deck(proj_conn, wb_payload)
+            finally:
+                proj_conn.close()
+
     return {"status": "ok", "message": "全量备份恢复成功"}
 
 

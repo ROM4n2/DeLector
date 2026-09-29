@@ -1205,7 +1205,12 @@ _BACKUP_TABLES: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]] = {
             "sentence_context",
             "created_at",
         )
-        + _SRS_COLUMNS,
+        + _SRS_COLUMNS
+        # ADR-0016 Phase 3 / Task 5：统一池语义列（Phase 1 新增）。此前漏在清单外 ⇒
+        # _replace_tables 不写它们，备份→还原往返把 source 静默打回默认 'user'、
+        # fsrs_* 清空（数据丢失）。旧备份（无这些键）经 _rows_to_tuples 的
+        # ``r.get(c, defaults.get(c))`` 自动落到与建表 DDL 一致的默认值——刻意的向后兼容。
+        + ("source", "fsrs_s", "fsrs_d", "fsrs_lapses"),
         dict(
             _SRS_DEFAULTS,
             word="",
@@ -1216,6 +1221,10 @@ _BACKUP_TABLES: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]] = {
             cefr_level="A1",
             definition_zh="",
             sentence_context="",
+            source="user",
+            fsrs_s=None,
+            fsrs_d=None,
+            fsrs_lapses=0,
         ),
     ),
     "grammar_cards": (
