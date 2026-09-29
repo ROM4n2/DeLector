@@ -3977,6 +3977,59 @@ def test_db_busy_timeout_and_concurrency_guard():
     assert sync_mode in (1, 2)  # NORMAL or FULL
 
 
+def test_vocab_cards_has_unified_pool_columns(client):
+    """ADR-0016 Phase 1：vocab_cards 具备统一池列（source + FSRS-6），新卡默认 source='user'。
+
+    本轮为**加性** schema（无人读写）——只钉"列在、默认值对"，为 Phase 2 的派生投影打底。
+    """
+    with get_db("test_delector.db") as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(vocab_cards)").fetchall()}
+    assert {"source", "fsrs_s", "fsrs_d", "fsrs_lapses"} <= cols, (
+        f"vocab_cards 缺统一池列（ADR-0016 Phase 1），实际列：{sorted(cols)}"
+    )
+    with get_db("test_delector.db") as conn:
+        conn.execute(
+            "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context) VALUES (?, ?, ?, ?)",
+            ("Haus", "Haus", "房子", "Das Haus."),
+        )
+        row = conn.execute(
+            "SELECT source, fsrs_s, fsrs_d, fsrs_lapses FROM vocab_cards ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert row["source"] == "user"  # 默认来源；官方/手编/AI 由 Phase 2 派生投影写
+    assert row["fsrs_s"] is None and row["fsrs_d"] is None and row["fsrs_lapses"] == 0
+
+
+def test_init_db_migrates_legacy_vocab_cards_to_unified_pool_columns(tmp_path):
+    """旧库（无统一池列）跑 init_db 自动补列并回填 source='user'（加性迁移，ADR-0016 Phase 1）。"""
+    import sqlite3 as _sqlite3
+
+    legacy = str(tmp_path / "legacy_pool.db")
+    raw = _sqlite3.connect(legacy)
+    # 拟真旧 schema：有 article_id（否则 idx_vocab_article 建索引会失败），无 SRS/统一池列。
+    raw.execute(
+        "CREATE TABLE vocab_cards (id INTEGER PRIMARY KEY AUTOINCREMENT, article_id INTEGER, "
+        "word TEXT NOT NULL, lemma TEXT NOT NULL, pos TEXT, gender TEXT, plural TEXT, "
+        "cefr_level TEXT, definition_zh TEXT NOT NULL, sentence_context TEXT NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    raw.execute(
+        "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context) VALUES ('alt', 'alt', '旧', 'Alt.')"
+    )
+    raw.commit()
+    raw.close()
+
+    init_db(legacy)
+
+    raw = _sqlite3.connect(legacy)
+    raw.row_factory = _sqlite3.Row
+    cols = {r[1] for r in raw.execute("PRAGMA table_info(vocab_cards)").fetchall()}
+    row = raw.execute("SELECT source, fsrs_lapses FROM vocab_cards").fetchone()
+    raw.close()
+    assert {"source", "fsrs_s", "fsrs_d", "fsrs_lapses"} <= cols
+    assert row["source"] == "user"  # 存量行回填（ADD COLUMN 常量默认值）
+    assert row["fsrs_lapses"] == 0
+
+
 def test_a1_hoeren_routes(client):
     """验证 A1 听力工坊相关 REST API 路由与判分持久化。"""
     res_list = client.get("/api/a1/hoeren/sets")

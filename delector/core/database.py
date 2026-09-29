@@ -246,6 +246,12 @@ def init_db(db_path: Optional[str] = None) -> None:
                 interval_days INTEGER DEFAULT 1,
                 ease_factor REAL DEFAULT 2.5,
                 repetition_count INTEGER DEFAULT 0,
+                -- ADR-0016 Phase 1（统一池）：source 记词条来源（official/manual/ai/user），
+                -- fsrs_* 承载背词工作台的 FSRS-6 卡参数。加性、零行为变化（无人读写）。
+                source TEXT DEFAULT 'user',
+                fsrs_s REAL,
+                fsrs_d REAL,
+                fsrs_lapses INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -386,14 +392,6 @@ def init_db(db_path: Optional[str] = None) -> None:
             );
         """)
 
-        # 读路径查询索引（幂等，旧库启动自动补）：SRS 到期队列 + 文章维度
-        # 过滤/级联。缺失时「到期复习」「某文相关卡」「删文连带」在长库全表扫。
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_srs ON vocab_cards(mastered, due_date)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_srs ON grammar_cards(mastered, due_date)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_article ON vocab_cards(article_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_article ON grammar_cards(article_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_article ON reading_notes(article_id)")
-
         # Migrations for existing databases
         for tbl in ["vocab_cards", "grammar_cards"]:
             cols = [col[1] for col in conn.execute(f"PRAGMA table_info({tbl})").fetchall()]
@@ -414,10 +412,29 @@ def init_db(db_path: Optional[str] = None) -> None:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN ease_factor REAL DEFAULT 2.5")
             if "repetition_count" not in cols:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN repetition_count INTEGER DEFAULT 0")
+            if tbl == "vocab_cards":
+                # ADR-0016 Phase 1：旧库自动补统一池列（加性、幂等、零行为变化）。
+                # source 有常量默认值 ⇒ 存量行自动回填 'user'（官方/手编/AI 由 Phase 2 派生投影写）。
+                if "source" not in cols:
+                    conn.execute("ALTER TABLE vocab_cards ADD COLUMN source TEXT DEFAULT 'user'")
+                if "fsrs_s" not in cols:
+                    conn.execute("ALTER TABLE vocab_cards ADD COLUMN fsrs_s REAL")
+                if "fsrs_d" not in cols:
+                    conn.execute("ALTER TABLE vocab_cards ADD COLUMN fsrs_d REAL")
+                if "fsrs_lapses" not in cols:
+                    conn.execute("ALTER TABLE vocab_cards ADD COLUMN fsrs_lapses INTEGER DEFAULT 0")
             if tbl == "grammar_cards":
                 for col in ("corrected_form", "error_type"):
                     if col not in cols:
                         conn.execute(f"ALTER TABLE grammar_cards ADD COLUMN {col} TEXT DEFAULT ''")
+
+        # 读路径查询索引（幂等）：**必须在补列之后**——旧库可能缺 mastered/due_date，
+        # 先建索引会 `no such column: mastered` 直接炸启动（ADR-0016 Phase 1 暴露的次序 bug）。
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_srs ON vocab_cards(mastered, due_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_srs ON grammar_cards(mastered, due_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_article ON vocab_cards(article_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_article ON grammar_cards(article_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_article ON reading_notes(article_id)")
 
         conn.execute("""
             INSERT INTO essay_versions (essay_id, content, analysis_json, message)
