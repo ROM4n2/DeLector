@@ -7,7 +7,8 @@ trials 为本地单用户训练记录，非敏感，不挂 _require_localhost �
 hard-sentences 列表/detail 纯只读。
 
 性能纪律（规格 §4）：全文逐句分析是重计算（spaCy ~42ms/句）——进程内存缓存
-（键=source+id，TTL 300s）防重复计算 + limit 护栏（默认 50 上限 100）+ 按需懒算。
+（键=source+id，TTL 300s，容量上限 256 条）防重复计算 + limit 护栏（默认 50 上限 100）
++ 按需懒算（材料正文仅缓存缺失时读，聚合只取 id 不 materialize 全文）。
 """
 
 import time
@@ -19,7 +20,6 @@ from pydantic import BaseModel
 from delector.core.database import (
     db_conn,
     get_encounter_text,
-    list_encounter_texts,
     list_hard_sentence_trials,
     record_hard_sentence_trial,
 )
@@ -39,6 +39,17 @@ router = APIRouter(prefix="/api/syntax", tags=["syntax"])
 # 缓存值 = (过期时刻, items 全量)，显式类型让 _rank_source 的读取免 Any 回落。
 _RANK_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 _CACHE_TTL_SEC = 300.0
+# 容量上限（2026-09-28 swarm 审计）：长期运行材料不断增删时缓存条目只增不减会缓慢
+# 泄漏内存；超限按**最早过期优先**淘汰（TTL 相同时近似插入序 LRU，新写入的必不被淘汰）。
+_RANK_CACHE_MAX_ENTRIES = 256
+
+
+def _put_rank_cache(key: str, expires: float, items: List[Dict[str, Any]]) -> None:
+    """写入排名缓存；超出容量上限时淘汰最早过期的一条，防长期运行内存无界增长。"""
+    _RANK_CACHE[key] = (expires, items)
+    if len(_RANK_CACHE) > _RANK_CACHE_MAX_ENTRIES:
+        oldest = min(_RANK_CACHE, key=lambda k: _RANK_CACHE[k][0])
+        _RANK_CACHE.pop(oldest, None)
 
 
 # --follow-imports=skip 下 pydantic 无 stub，BaseModel 为 Any，无法做子类化检查，豁免 misc
@@ -72,8 +83,11 @@ def _material_text(source: str, source_id: int) -> str:
     raise HTTPException(status_code=404, detail="未知材料来源")
 
 
-def _rank_source(source: str, source_id: int, text: str) -> List[Dict[str, Any]]:
+def _rank_source(source: str, source_id: int) -> List[Dict[str, Any]]:
     """单材料的句子难度榜（含缓存）；sentence_index 对齐原文切句序号。
+
+    材料正文**仅在缓存缺失时**才读（2026-09-28 swarm 审计）：`source=all` 每请求
+    重新 materialize 全部正文是多余 I/O —— 热请求直接命中缓存、完全不碰正文。
 
     红线 10：切句只走 split_sentences_pure_python（与 rank_sentences 内部同一切句
     实现，句子一一对应）；rank_sentences 降序后按句子文本回填原始序号（重复句取
@@ -84,12 +98,14 @@ def _rank_source(source: str, source_id: int, text: str) -> List[Dict[str, Any]]
     cached = _RANK_CACHE.get(key)
     if cached and cached[0] > now:
         return cached[1]
+    # 材料缺失 → 404 向上传播（单材料直查需要；source=all 由调用方按材料隔离）。
+    text = _material_text(source, source_id)
     # 红线 1/纪律：切句与分析同属可失败路径——与 rank_sentences 的逐句容错对齐，
     # 单材料整体失败返回空榜（不炸调用方，source=all 逐材料隔离依赖这里）。
     try:
         sents = split_sentences_pure_python(text)
     except Exception:
-        _RANK_CACHE[key] = (now + _CACHE_TTL_SEC, [])
+        _put_rank_cache(key, now + _CACHE_TTL_SEC, [])
         return []
     idx_of: Dict[str, int] = {}
     for i, s in enumerate(sents):
@@ -108,15 +124,22 @@ def _rank_source(source: str, source_id: int, text: str) -> List[Dict[str, Any]]
                 "sentence_index": idx_of.get(r.sentence, 0),
             }
         )
-    _RANK_CACHE[key] = (now + _CACHE_TTL_SEC, items)
+    _put_rank_cache(key, now + _CACHE_TTL_SEC, items)
     return items
 
 
-def _list_article_ids() -> List[Dict[str, Any]]:
-    """遍历全部文章的 (id, raw_text)（source=all 难度榜聚合用）。"""
+def _list_article_ids() -> List[int]:
+    """全部文章 id（source=all 难度榜聚合用）；只取 id，不 materialize 正文。"""
     with db_conn() as conn:
-        rows = conn.execute("SELECT id, raw_text FROM articles ORDER BY id").fetchall()
-        return [dict(r) for r in rows]
+        rows = conn.execute("SELECT id FROM articles ORDER BY id").fetchall()
+        return [int(r["id"]) for r in rows]
+
+
+def _list_encounter_ids() -> List[int]:
+    """全部 encounter 短文 id（source=all 聚合用）；只取 id，不 materialize 正文。"""
+    with db_conn() as conn:
+        rows = conn.execute("SELECT id FROM encounter_texts ORDER BY id DESC").fetchall()
+        return [int(r["id"]) for r in rows]
 
 
 @router.get("/spacy-status")# --follow-imports=skip 下 fastapi 装饰器为 Any
@@ -146,27 +169,27 @@ def api_syntax_hard_sentences(
         items: List[Dict[str, Any]] = []
         # 逐材料隔离：任一材料切句/分析异常只丢该材料，不炸整榜（纪律同 _rank_source）
         try:
-            arts = _list_article_ids()
+            art_ids = _list_article_ids()
         except Exception:
-            arts = []
-        for art in arts:
+            art_ids = []
+        for aid in art_ids:
             try:
-                items.extend(_rank_source("article", art["id"], art["raw_text"]))
+                items.extend(_rank_source("article", aid))
             except Exception:
                 continue
         try:
-            encs = list_encounter_texts()
+            enc_ids = _list_encounter_ids()
         except Exception:
-            encs = []
-        for enc in encs:
+            enc_ids = []
+        for eid in enc_ids:
             try:
-                items.extend(_rank_source("encounter", enc["id"], enc["content"]))
+                items.extend(_rank_source("encounter", eid))
             except Exception:
                 continue
         # 各材料内部已降序，跨材料合并后须整体按难度降序（难度榜契约）
         items.sort(key=lambda it: it["score"], reverse=True)
     else:
-        items = _rank_source(src, int(source_id or 0), _material_text(src, int(source_id or 0)))
+        items = _rank_source(src, int(source_id or 0))
     if level:
         level_norm = level.strip().upper()
         items = [it for it in items if it["level"] == level_norm]
