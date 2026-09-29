@@ -19,10 +19,12 @@ import os
 from typing import Any
 
 import pytest
+from db_cleanup import remove_db_files  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import delector.core.database as database  # noqa: E402
-from delector.server import app, get_progress_db, init_db  # noqa: E402
+from delector.core.database import db_progress_conn  # noqa: E402
+from delector.server import app, init_db  # noqa: E402
 
 _DB = "test_exam_trials_delector.db"
 _PDB = "test_exam_trials_progress.db"
@@ -53,25 +55,11 @@ def clean_db():
     os.environ["DATABASE_PATH"] = _DB
     os.environ["PROGRESS_DB_PATH"] = _PDB
     gc.collect()
-    for f in _DB_FILES:
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files(*_DB_FILES)
     init_db(_DB)  # 内部连带 init_progress_db() + 迁移调用
     yield
     gc.collect()
-    for f in _DB_FILES:
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files(*_DB_FILES)
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
@@ -305,7 +293,7 @@ def test_restore_exam_trials_roundtrip(client):
     res = client.post("/api/backup/restore", json=payload)
     assert res.status_code == 200
 
-    with get_progress_db(_PDB) as conn:
+    with db_progress_conn(_PDB) as conn:
         got = dict(conn.execute("SELECT * FROM exam_trials WHERE id = 7").fetchone())
     for k, v in row.items():
         assert got[k] == v, f"{k}: {got[k]!r} != {v!r}"

@@ -11,6 +11,7 @@ import re
 import time
 
 import pytest
+from db_cleanup import remove_db_files
 from fastapi.testclient import TestClient
 
 # 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
@@ -19,6 +20,7 @@ from fastapi.testclient import TestClient
 # 并由各模块 autouse fixture（本文件：clean_db）在用例前后钉定；本模块不再在模块级赋值
 # （契约 C1，见 docs/specs/2026-09-26-test-db-isolation-design.md §3.1）。
 from delector import server
+from delector.core.database import db_conn, db_progress_conn
 from delector.core.lexicon import lemma_key
 from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
 from delector.server import (
@@ -28,8 +30,6 @@ from delector.server import (
     app,
     clean_html_to_article,
     get_cefr_level,
-    get_db,
-    get_progress_db,
     init_db,
     is_safe_public_url,
     process_german_text,
@@ -81,25 +81,11 @@ def clean_db():
     # 连带删除 WAL 旁文件（-wal/-shm）：启用 WAL 后它们与主库同生共死，只删主库会把
     # 陈旧 -shm 留给下个用例 → 打开即 `disk I/O error`。其它测试模块早已按三件套清理。
     gc.collect()
-    for f in ("test_delector.db", "test_progress.db"):
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files("test_delector.db", "test_progress.db")
     init_db("test_delector.db")
     yield
     gc.collect()
-    for f in ("test_delector.db", "test_progress.db"):
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files("test_delector.db", "test_progress.db")
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
@@ -508,7 +494,7 @@ def test_delete_essay_cascades_versions(client, test_db_path):
 def test_seed_preset_articles_with_a1(client, test_db_path):
     init_db(test_db_path)
 
-    with get_db(test_db_path) as conn:
+    with db_conn(test_db_path) as conn:
         rows = conn.execute("SELECT title, raw_text FROM articles").fetchall()
         assert len(rows) >= 4
         titles = [r["title"] for r in rows]
@@ -801,7 +787,7 @@ def test_restore_preserves_srs_state(client):
     res = client.post("/api/backup/restore", json={"version": 2, "vocab_cards": [card]})
     assert res.status_code == 200
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 501").fetchone())
     for col in (
         "mastered",
@@ -857,7 +843,7 @@ def test_progress_db_roundtrips(client):
     }
     assert client.post("/api/backup/restore", json=payload).status_code == 200
 
-    with get_progress_db("test_progress.db") as conn:
+    with db_progress_conn("test_progress.db") as conn:
         assert conn.execute("SELECT COUNT(*) FROM study_log").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM quiz_log").fetchone()[0] == 1
         summary = dict(conn.execute("SELECT * FROM daily_summary").fetchone())
@@ -901,7 +887,7 @@ def test_restore_does_not_wipe_api_key(client):
     )
     assert res.status_code == 200
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         rows = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM app_settings").fetchall()}
     assert rows["DEEPSEEK_API_KEY"] == "sk-must-survive-restore"
     assert rows["TTS_VOICE"] == "de-DE-ConradNeural"
@@ -943,7 +929,7 @@ def test_restore_accepts_v1_backup(client):
     }
     assert client.post("/api/backup/restore", json=v1).status_code == 200
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 77").fetchone())
     assert row["definition_zh"] == "旧的"
     assert row["ease_factor"] == 2.5  # schema 默认值
@@ -962,7 +948,7 @@ def test_failed_restore_rolls_back_both_databases():
     服务端异常原样抛给调用方，拿不到 500 响应。
     """
     client = TestClient(app, client=("127.0.0.1", 54321), raise_server_exceptions=False)
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
     assert before > 0, "预置文章应存在，否则这个测试证明不了什么"
 
@@ -984,7 +970,7 @@ def test_failed_restore_rolls_back_both_databases():
     res = client.post("/api/backup/restore", json=bad)
     assert res.status_code >= 500
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         leaked = conn.execute("SELECT COUNT(*) FROM articles WHERE id = 900").fetchone()[0]
     assert after == before, "主库未被回滚：还原失败却把原有文章清掉了"
@@ -1303,12 +1289,12 @@ def test_master_vocab_card(client):
     assert patch_res.status_code == 200
     assert patch_res.json()["mastered"] is True
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = conn.execute("SELECT mastered, mastered_at FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["mastered"] == 1
         assert row["mastered_at"] is not None
 
-    with get_progress_db("test_progress.db") as conn:
+    with db_progress_conn("test_progress.db") as conn:
         row = conn.execute(
             "SELECT event_type FROM study_log WHERE ref_id=? AND event_type='master_card'", (card_id,)
         ).fetchone()
@@ -1334,7 +1320,7 @@ def test_unmaster_card(client):
     client.patch(f"/api/cards/vocab/{card_id}/master", json={"mastered": True})
     client.patch(f"/api/cards/vocab/{card_id}/master", json={"mastered": False})
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = conn.execute("SELECT mastered FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["mastered"] == 0
 
@@ -1362,12 +1348,12 @@ def test_quiz_record_correct(client):
     )
     assert quiz_res.status_code == 200
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = conn.execute("SELECT correct_count, wrong_count FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["correct_count"] == 1
         assert row["wrong_count"] == 0
 
-    with get_progress_db("test_progress.db") as conn:
+    with db_progress_conn("test_progress.db") as conn:
         row = conn.execute("SELECT correct FROM quiz_log WHERE card_id=?", (card_id,)).fetchone()
         assert row["correct"] == 1
 
@@ -1391,7 +1377,7 @@ def test_quiz_record_wrong(client):
         "/api/quiz/record", json={"card_id": card_id, "card_type": "vocab", "mode": "dictation", "correct": False}
     )
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = conn.execute("SELECT correct_count, wrong_count FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["wrong_count"] == 1
         assert row["correct_count"] == 0
@@ -3122,10 +3108,9 @@ def test_backup_download_rejects_lan_even_with_valid_token(client, lan_client):
 
 def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
     """被 403 的还原请求不得改库。"""
-    from delector import server
 
     # 先写一条已知文章
-    with server.get_db(test_db_path) as conn:
+    with db_conn(test_db_path) as conn:
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
     payload = {
         "version": 2,
@@ -3142,7 +3127,7 @@ def test_backup_restore_lan_does_not_mutate_db(lan_client, test_db_path):
     }
     res = lan_client.post("/api/backup/restore", json=payload)
     assert res.status_code == 403
-    with server.get_db(test_db_path) as conn:
+    with db_conn(test_db_path) as conn:
         after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         hacked = conn.execute("SELECT COUNT(*) FROM articles WHERE id=9999").fetchone()[0]
     assert after == before
@@ -3157,7 +3142,7 @@ def test_backup_restore_failure_keeps_original_db(client, test_db_path):
 
     # 用 raise_server_exceptions=False 才能拿到 500 响应而非抛异常
     fail_client = TC(server.app, client=("127.0.0.1", 54322), raise_server_exceptions=False)
-    with server.get_db(test_db_path) as conn:
+    with db_conn(test_db_path) as conn:
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         titles_before = {r[0] for r in conn.execute("SELECT title FROM articles").fetchall()}
     # daily_summary 主键重复触发 IntegrityError
@@ -3177,7 +3162,7 @@ def test_backup_restore_failure_keeps_original_db(client, test_db_path):
     }
     res = fail_client.post("/api/backup/restore", json=bad)
     assert res.status_code >= 500
-    with server.get_db(test_db_path) as conn:
+    with db_conn(test_db_path) as conn:
         after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         leaked = conn.execute("SELECT COUNT(*) FROM articles WHERE id=9100").fetchone()[0]
         titles_after = {r[0] for r in conn.execute("SELECT title FROM articles").fetchall()}
@@ -3915,7 +3900,7 @@ def test_backup_grammar_cards_preserves_error_type_and_corrected_form(client):
     }
     assert client.post("/api/backup/restore", json=payload).status_code == 200
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = dict(conn.execute("SELECT * FROM grammar_cards WHERE id = 777").fetchone())
     assert row["corrected_form"] == "in dem Buch"
     assert row["error_type"] == "kasus"
@@ -3969,7 +3954,7 @@ def test_sync_sdp_cache_capacity_and_size_limit(client):
 
 def test_db_busy_timeout_and_concurrency_guard():
     """SQLite 连接必须启用 WAL + busy_timeout + synchronous=NORMAL 守卫，避免并发读写锁库。"""
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         jmode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
         sync_mode = conn.execute("PRAGMA synchronous").fetchone()[0]
@@ -3983,12 +3968,12 @@ def test_vocab_cards_has_unified_pool_columns(client):
 
     本轮为**加性** schema（无人读写）——只钉"列在、默认值对"，为 Phase 2 的派生投影打底。
     """
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(vocab_cards)").fetchall()}
     assert {"source", "fsrs_s", "fsrs_d", "fsrs_lapses"} <= cols, (
         f"vocab_cards 缺统一池列（ADR-0016 Phase 1），实际列：{sorted(cols)}"
     )
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         conn.execute(
             "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context) VALUES (?, ?, ?, ?)",
             ("Haus", "Haus", "房子", "Das Haus."),
@@ -4059,7 +4044,7 @@ def test_add_vocab_card_sets_source_from_lexicon(client):
         "/api/cards/vocab",
         json={"word": "zzzquux", "lemma": "zzzquux", "definition_zh": "造词", "sentence_context": "Zzz quux."},
     )
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         rows = {r["lemma"]: r["source"] for r in conn.execute("SELECT lemma, source FROM vocab_cards").fetchall()}
     assert rows["ab"] == "official"  # 主干收录 → 官方
     assert rows["zzzquux"] == "user"  # 主干未收录的自定义词
@@ -4075,7 +4060,7 @@ def test_known_lemmas_endpoint_reflects_studied_cards_only(client):
     3. fsrs_s>0（在背词工作台 FSRS 学过至少一次，统一池投影写入）——第三条为 2026-09-28 补入。
     **仅加入卡盒**（mastered=0 且 repetition_count=0 且 fsrs_s 空）**不算**已知（承项目既有约定）。
     """
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         for word, mastered, reps in (("Abfahrt", 0, 0), ("Haus", 0, 2), ("Baum", 1, 0)):
             conn.execute(
                 "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context, "
@@ -4169,7 +4154,7 @@ def test_task1_restore_req_includes_a1_records(client):
     res = client.post("/api/backup/restore", json=payload)
     assert res.status_code == 200
 
-    with get_progress_db() as pconn:
+    with db_progress_conn() as pconn:
         h = pconn.execute("SELECT * FROM a1_hoeren_records WHERE id = 101").fetchone()
         lr = pconn.execute("SELECT * FROM a1_lesen_records WHERE id = 201").fetchone()
     assert h is not None and h["score_raw"] == 14
@@ -4181,7 +4166,7 @@ def test_task1_review_card_computes_elapsed_days(client):
     from datetime import datetime, timedelta
 
     ten_days_ago = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
-    with get_db() as conn:
+    with db_conn() as conn:
         cur = conn.execute(
             """
             INSERT INTO vocab_cards (word, lemma, pos, cefr_level, definition_zh, sentence_context,
@@ -4261,7 +4246,7 @@ def test_task1_localhost_protection_on_destructive_endpoints(client, lan_client)
 
 def test_task1_get_article_corrupted_json(client):
     """get_article 面对损坏的 processed_json 能够平滑重新分析，不产生 500。"""
-    with get_db() as conn:
+    with db_conn() as conn:
         cur = conn.execute(
             """
             INSERT INTO articles (title, raw_text, processed_json)
@@ -4280,7 +4265,7 @@ def test_task1_get_article_corrupted_json(client):
 
 def test_task1_create_writing_card_bounds_check(client):
     """save_writing_card 对越界的 sentence_id / span_index 进行防御性校验，返回 400 而非 500。"""
-    with get_db() as conn:
+    with db_conn() as conn:
         cur = conn.execute(
             """
             INSERT INTO essays (title, content, analysis_json, cefr_level, error_count, sentence_count)
@@ -4746,7 +4731,7 @@ def test_wb_state_put_projects_into_vocab_pool(client):
     assert r.status_code == 200
     assert r.json().get("updated_at")
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = conn.execute(
             "SELECT word, definition_zh, fsrs_s, fsrs_d, fsrs_lapses "
             "FROM vocab_cards WHERE word = ?",
@@ -4770,7 +4755,7 @@ def test_wb_state_put_projection_idempotent_three_phase(client):
     # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
     payload1 = {"words": [word_a], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
     assert client.put("/api/wb/state", json={"payload": payload1}, headers={"X-WB-Key": key}).status_code == 200
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         n1 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
     assert n1 == 1, "首次 PUT 应投影出 1 行"
 
@@ -4781,7 +4766,7 @@ def test_wb_state_put_projection_idempotent_three_phase(client):
         "cards": {"a1-0001": {"s": 3.5, "reps": 1}, "a1-0002": {"s": 2.0, "reps": 1}},
     }
     assert client.put("/api/wb/state", json={"payload": payload2}, headers={"X-WB-Key": key}).status_code == 200
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         n2 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
         dup_a = conn.execute("SELECT COUNT(*) FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchone()[0]
     assert n2 == 2, "再 PUT 只应新增 1 行，旧词条不得被重复插入"
@@ -4803,7 +4788,7 @@ def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch)
     base_payload = {"words": [{"id": "a1-0001", "hw": "der Abfahrt"}], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
     assert client.put("/api/wb/state", json={"payload": base_payload}, headers={"X-WB-Key": key}).status_code == 200
     before = server.get_wb_state()
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         before_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
 
     def _boom(conn, payload):
@@ -4821,7 +4806,7 @@ def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch)
 
     # blob 必须未被更新（同事务回滚）
     assert server.get_wb_state() == before, "投影失败时 wb_state 镜像 blob 不得被写入"
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         after_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
     assert after_ts == before_ts, "投影失败时 wb_state.updated_at 不得变化（半写）"
 
@@ -4836,7 +4821,7 @@ def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch)
 
 def _snapshot_vocab_cards() -> "list[dict]":
     """抽 vocab_cards 全量快照（按 id 排序）供逐字比对。"""
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         return [dict(r) for r in conn.execute("SELECT * FROM vocab_cards ORDER BY id").fetchall()]
 
 
@@ -4846,7 +4831,7 @@ def test_backup_restore_preserves_pool_semantic_columns(client):
     旧列清单漏了这 4 列，_replace_tables 只写清单内列 ⇒ 还原把 source 静默打回默认
     'user'、fsrs_* 清空。
     """
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         conn.execute(
             "INSERT INTO vocab_cards "
             "(word, lemma, definition_zh, sentence_context, source, fsrs_s, fsrs_d, fsrs_lapses) "
@@ -4865,7 +4850,7 @@ def test_backup_restore_preserves_pool_semantic_columns(client):
 
     # 还原同一份 ⇒ 这 4 列逐字保留。
     assert client.post("/api/backup/restore", json=payload).status_code == 200
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE word = 'Wanderlust'").fetchone())
     assert row["source"] == "official", f"source 往返被丢：{row['source']!r}"
     assert row["fsrs_s"] == 1.5, f"fsrs_s 往返被丢：{row['fsrs_s']!r}"
@@ -4895,7 +4880,7 @@ def test_backup_restore_old_backup_defaults_new_columns(client):
         ],
     }
     assert client.post("/api/backup/restore", json=old).status_code == 200
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 71").fetchone())
     assert row["source"] == "user"
     assert row["fsrs_s"] is None
@@ -4926,7 +4911,7 @@ def test_backup_restore_reprojects_wb_deck(client):
     backup["vocab_cards"] = []
 
     assert client.post("/api/backup/restore", json=backup).status_code == 200
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = conn.execute(
             "SELECT fsrs_s, fsrs_d, fsrs_lapses FROM vocab_cards WHERE word = ?",
             ("der Abfahrt",),
@@ -4949,7 +4934,7 @@ def test_backup_restore_reprojection_idempotent(client):
 
     assert client.post("/api/backup/restore", json=backup).status_code == 200
     assert client.post("/api/backup/restore", json=backup).status_code == 200
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         rows = conn.execute("SELECT * FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchall()
     assert len(rows) == 1, f"重复还原不得产生重复行，实际 {len(rows)} 行"
     assert dict(rows[0])["fsrs_s"] == 3.5, "重复还原不得改动既有值"
@@ -5347,7 +5332,7 @@ def test_known_lemmas_includes_fsrs_projected_word(client):
     assert res.status_code == 200, res.text
 
     # 前提：投影确实把该词写进了池，且只写 fsrs_s（未写 rep / mastered）。
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = 'haus'").fetchone())
     assert row["fsrs_s"] == 2.3065, f"投影必须把卡的 s 写进 fsrs_s：{row}"
     assert row["repetition_count"] == 0 and row["mastered"] == 0, "FSRS≠DSR：投影不得写 rep / mastered"
@@ -5390,7 +5375,7 @@ def test_known_lemmas_excludes_added_but_unreviewed_card(client):
     )
     assert res.status_code == 200, res.text
 
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = 'lesen'").fetchone())
     assert row["repetition_count"] == 0 and row["mastered"] == 0, "前提：入卡未复习"
     assert row["fsrs_s"] is None, "reader 入卡不得带 fsrs_s"
@@ -5412,7 +5397,7 @@ def test_known_lemmas_includes_dsr_reviewed_card(client):
         },
     )
     card_id = res.json()["id"]
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         conn.execute("UPDATE vocab_cards SET repetition_count = 1 WHERE id = ?", (card_id,))
 
     assert "gehen" in _known_lemma_keys(client), "卡盒复习过（repetition_count>0）的词仍应算已知"
@@ -5432,7 +5417,7 @@ def test_known_lemmas_includes_mastered_card(client):
         },
     )
     card_id = res.json()["id"]
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         conn.execute("UPDATE vocab_cards SET mastered = 1 WHERE id = ?", (card_id,))
 
     assert "schreiben" in _known_lemma_keys(client), "mastered=1 的词仍应算已知"
@@ -5458,7 +5443,7 @@ def test_known_lemmas_excludes_zero_fsrs_row(client):
     )
     card_id = res.json()["id"]
     # 手工构造退化行：fsrs_s 有列但值为 0（并非「真有卡」）。
-    with get_db("test_delector.db") as conn:
+    with db_conn("test_delector.db") as conn:
         conn.execute("UPDATE vocab_cards SET fsrs_s = 0 WHERE id = ?", (card_id,))
 
     assert "alt" not in _known_lemma_keys(client), "fsrs_s=0 不是『真有卡』，不得算已知"

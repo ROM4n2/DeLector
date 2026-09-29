@@ -30,6 +30,7 @@ from collections.abc import Iterator
 from typing import Any, Dict, List
 
 import pytest
+from db_cleanup import remove_db_files
 from fastapi.testclient import TestClient
 
 from delector.core.database import db_conn
@@ -55,25 +56,11 @@ def clean_db() -> Iterator[None]:
     # sqlite3.Connection 与内部 statement 互为引用环：先 gc.collect() 断环，Windows 上
     # 句柄未释放时 os.remove 抛 PermissionError（被吞），旧库残留 → 隔离失效。
     gc.collect()
-    for f in (DB_FILE, PROGRESS_FILE):
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files(DB_FILE, PROGRESS_FILE)
     init_db(DB_FILE)
     yield
     gc.collect()
-    for f in (DB_FILE, PROGRESS_FILE):
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files(DB_FILE, PROGRESS_FILE)
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
