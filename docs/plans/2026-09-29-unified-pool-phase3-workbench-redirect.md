@@ -35,8 +35,10 @@
 - Test: `tests/test_vocab_pool_projection.py`
 
 **Interfaces:**
-- Consumes: `delector.core.lexicon.primary_source(raw: str) -> str`（Phase 2）；`delector.core.database.db_conn()`；wb 快照 `{words:[{id,hw,pos,gloss,ipa,ex:[{de,zh}],...}], cards:{id:{s,d,due,last,reps,lapses}}}`
-- Produces: `project_wb_deck(conn: sqlite3.Connection, payload: dict) -> {"inserted": int, "updated": int, "unchanged": int}`（幂等；单事务由调用方控制）
+- Consumes: `delector.core.lexicon.primary_source(raw: str) -> str`（Phase 2）；`delector.core.database.db_conn()`；wb 快照 `{words:[{id,hw,pos,gloss,ipa,ex:[{de,zh}],custom:bool,...}], cards:{id:{s,d,due,last,reps,lapses}}}`
+- Produces: `project_wb_deck(conn: sqlite3.Connection, payload: dict) -> {"inserted": int, "updated": int, "unchanged": int, "skipped": int}`（幂等；单事务由调用方控制）
+
+**范围闸（2026-09-29 修订 · 用户拍板）**：只投影「**已学**（`cards[String(id)].reps > 0`）」或「**自建**（`word.custom === true`）」的词条；**自动加载的 A1/A2/B1 种子词（非 custom 且未学）MUST NOT 入池**——否则 `GET /api/cards`/`stats`（尚无 source 过滤）会被几百~几千条种子词淹没。被排除的计入 `skipped`。
 
 **Injected Instincts:**
 - [ ] `[Instinct: Content-Dedup]`: **按 `lemma` 去重**（`NOT EXISTS`/UNIQUE），**禁止**计数对账（Migration-Idempotency §1）。
@@ -65,8 +67,8 @@
 ### Task 2: 接线到 `PUT /api/wb/state`（单事务） [Mode: AFK] [Role: TDD Builder]
 
 **Files:**
-- Modify: `delector/routes/main.py`（`save_wb_state`，`~:1447`）
-- Test: `tests/test_server.py`（新增：`PUT /api/wb/state` 后统一池出现对应行；重复 PUT 无新增）
+- Modify: `delector/core/database.py::save_wb_state`（**实定义处**；`routes/main.py::wb_put_state` 仅调用、不改）—— 写镜像 blob 与池投影同事务
+- Test: `tests/test_server.py`（新增：`PUT /api/wb/state` 后统一池出现对应行；重复 PUT 无新增；投影失败整体回滚）
 
 **Interfaces:**
 - Consumes: `project_wb_deck`（Task 1）
@@ -94,7 +96,11 @@
 
 ---
 
-### Task 3: 工作台读路径 —— 服务端优先 + localStorage 兜底 [Mode: AFK] [Role: TDD Builder]
+### Task 3: 工作台读路径 —— 服务端优先 + localStorage 兜底 [**已废弃 · 2026-09-29 用户决定跳过**]
+
+> **跳过理由**：T2 已把 deck 投影进统一池 ⇒ 服务端**事实上**已是权威。而本任务要把 `loadAll()` 从「本地为准」翻成「服务端优先」，与 `wbsync` 明写的 *"本地为准（local-first）：localStorage/IDB 的键永不因同步被删改，远端只是最近镜像"* 正面冲突，且动的是**离线保证**，收益可疑。**不改工作台读路径。**（下方原始任务描述保留作记录，不执行。）
+
+### ~~Task 3（原描述）: 工作台读路径 —— 服务端优先 + localStorage 兜底~~ [Mode: AFK] [Role: TDD Builder]
 
 **Files:**
 - Modify: `static/german/workbench.html`（仅 `loadAll()`，`:1174-1200`；**不改** 5 个 `saveXxx` 的写语义）
@@ -135,8 +141,10 @@
 - Test: `tests/test_vocab_pool_projection.py`
 
 **Interfaces:**
-- Consumes: `project_wb_deck`
-- Produces: `reconcile_report(conn, payload) -> {"deck_words": int, "pool_player": int, "missing": [...], "extra": [...]}`（**只读**，量化缺口；供日志/守卫断言）
+- Consumes: `project_wb_deck`、`_is_projectable`（**复用**范围闸，不复制判定逻辑）
+- Produces: `reconcile_report(conn, payload) -> {"deck_projectable": int, "deck_in_pool": int, "missing": [...], "pool_total": int}`（**只读**，量化缺口；供日志/守卫断言）
+  - **刻意不产出 `extra`**（2026-09-29 修订）：`vocab_cards` **不记录行来源**（deck vs 主阅读「存词」写入的用户卡）⇒ 任何 `extra` 必然把用户卡误报成异常，故按「诚实留空」不产出该字段。
+  - 池 `pool_total` 在 payload 损坏但库正常时仍**如实查询**（不随 deck 侧一并归 0）。
 
 **Injected Instincts:**
 - [ ] `[Instinct: Content-Dedup]`: 对账按 `lemma` 集合求交/差，**不用计数相等**（§1）。
@@ -163,15 +171,20 @@
 ### Task 5: 还原路径补迁移（restore-then-migrate） [Mode: AFK] [Role: TDD Builder]
 
 **Files:**
-- Modify: `delector/routes/main.py`（`/api/backup/restore`）/ `delector/core/vocab_pool.py`
-- Test: `tests/test_server.py`（备份还原后统一池与 deck 一致；失败整体回滚）
+- Modify: `delector/core/database.py`（`_BACKUP_TABLES["vocab_cards"]` 补齐新列）/ `delector/routes/main.py`（`/api/backup/restore`）
+- Test: `tests/test_server.py`（备份还原后统一池与 deck 一致；新列往返无损；失败整体回滚）
 
 **Interfaces:**
-- Consumes: `_db_snapshot_guard`（PR #69 的 backup-API 快照守卫）
+- Consumes: `_db_snapshot_guard`（PR #69 的 backup-API 快照守卫）、`project_wb_deck`、`get_wb_state`
 - Produces: restore 成功后**同快照守卫内**补跑幂等投影；失败与 restore 一起回滚（Migration-Idempotency §4）
+
+**范围补正（2026-09-29 执行时开发现场取证发现）**：`_BACKUP_TABLES["vocab_cards"]` 的列清单**漏了 T1(Phase 1) 新增的 `source` / `fsrs_s` / `fsrs_d` / `fsrs_lapses`** ⇒ `_replace_tables` 只写清单内列 ⇒ **备份→还原往返会静默把 `source` 打回默认 `'user'`、`fsrs_*` 清空**。这是 T1 引列时的遗漏，正属"还原路径补迁移"范畴，**须在本任务一并修**（补齐列 + 默认值）。
+（`wb_state` 纳入 `_BACKUP_TABLES` 属 ADR-0016 **Phase 4**，不在本任务。）
 
 **Injected Instincts:**
 - [ ] `[Instinct: Restore-Then-Migrate]`: 旧备份（只有旧数据）还原后 MUST 补迁移，否则"还原成功但读新表为空"的**静默数据丢失**（§4）。
+- [ ] `[Instinct: Lossless-Round-Trip]`: 备份契约 MUST 覆盖表内**全部**语义列；新增列而不同步备份清单 = 往返静默丢数据（本任务实证）。
+- [ ] `[Instinct: Fill-Empty-Only]`: 补迁移**只补空**、不覆盖既有值；老备份（无新列）还原后 `source` 落默认 `'user'`（无法与真实 user 区分）属**可接受**，不越权改写（Backfill §4）。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 5: restore 路径补迁移。

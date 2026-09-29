@@ -4716,6 +4716,269 @@ def test_wb_state_survives_reinit(client):
     assert client.get("/api/wb/state").json() == {"words": []}
 
 
+# ── ADR-0016 Phase 3 / Task 2：wb 镜像写入与统一池投影同事务（Migration-Idempotency §2/§3）──
+
+
+def test_wb_state_put_projects_into_vocab_pool(client):
+    """接线生效：PUT /api/wb/state 落盘的同时把 wb 快照幂等投影进统一池 vocab_cards。
+
+    证明 Task 1 的 ``project_wb_deck`` 已接进写镜像路径：PUT 后 vocab_cards 出现该
+    lemma 行，且 FSRS-6 参数（``fsrs_s``/``fsrs_d``/``fsrs_lapses``）来自 wb 卡。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    payload = {
+        "words": [
+            {
+                "id": "a1-0001",
+                "hw": "der Abfahrt",
+                "gloss": "出发；发车",
+                "ex": [{"de": "Die Abfahrt ist um acht.", "zh": "八点发车。"}],
+            }
+        ],
+        # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
+        "cards": {"a1-0001": {"s": 3.5, "d": 4.2, "lapses": 1, "reps": 1}},
+    }
+    r = client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
+    assert r.status_code == 200
+    assert r.json().get("updated_at")
+
+    with get_db("test_delector.db") as conn:
+        row = conn.execute(
+            "SELECT word, definition_zh, fsrs_s, fsrs_d, fsrs_lapses "
+            "FROM vocab_cards WHERE word = ?",
+            ("der Abfahrt",),
+        ).fetchone()
+    assert row is not None, "投影应把 wb 词条写进 vocab_cards（接线未生效？）"
+    assert row["fsrs_s"] == 3.5
+    assert row["fsrs_d"] == 4.2
+    assert row["fsrs_lapses"] == 1
+    assert row["definition_zh"] == "出发；发车"
+
+
+def test_wb_state_put_projection_idempotent_three_phase(client):
+    """Migration-Idempotency §3 三段时序：PUT → 追加新词 → 再 PUT 只新增新词，旧词不重复。
+
+    第二次 PUT 的 payload 仍含旧词条（wb 快照是全量镜像），投影必须按内容去重，
+    只新增那条新词条——不得把旧词条重复插入。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    word_a = {"id": "a1-0001", "hw": "der Abfahrt", "gloss": "出发；发车"}
+    # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
+    payload1 = {"words": [word_a], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
+    assert client.put("/api/wb/state", json={"payload": payload1}, headers={"X-WB-Key": key}).status_code == 200
+    with get_db("test_delector.db") as conn:
+        n1 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    assert n1 == 1, "首次 PUT 应投影出 1 行"
+
+    # 追加一条新词条，旧词条仍留在全量 payload 中
+    word_b = {"id": "a1-0002", "hw": "der Bahnhof", "gloss": "火车站"}
+    payload2 = {
+        "words": [word_a, word_b],
+        "cards": {"a1-0001": {"s": 3.5, "reps": 1}, "a1-0002": {"s": 2.0, "reps": 1}},
+    }
+    assert client.put("/api/wb/state", json={"payload": payload2}, headers={"X-WB-Key": key}).status_code == 200
+    with get_db("test_delector.db") as conn:
+        n2 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+        dup_a = conn.execute("SELECT COUNT(*) FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchone()[0]
+    assert n2 == 2, "再 PUT 只应新增 1 行，旧词条不得被重复插入"
+    assert dup_a == 1, "同一条 wb 词条二次投影不得产生重复行（幂等）"
+
+
+def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch):
+    """Task 2 核心：投影失败 ⇒ 同一事务整体回滚，wb 镜像 blob 也不写（无「半写」）。
+
+    用桩把 ``project_wb_deck`` 换成抛异常：PUT 必须失败（500），且 wb_state 表
+    **未被更新**（读回仍是旧 updated_at / 旧 payload）——证明 blob 写入与投影同事务。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    # raise_server_exceptions=False 才能拿到 500 响应而非让异常从 TestClient 冒出
+    fail_client = TestClient(app, client=("127.0.0.1", 54321), raise_server_exceptions=False)
+
+    # 先写一版基线，记录 updated_at / payload
+    # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
+    base_payload = {"words": [{"id": "a1-0001", "hw": "der Abfahrt"}], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
+    assert client.put("/api/wb/state", json={"payload": base_payload}, headers={"X-WB-Key": key}).status_code == 200
+    before = server.get_wb_state()
+    with get_db("test_delector.db") as conn:
+        before_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
+
+    def _boom(conn, payload):
+        raise RuntimeError("projection forced failure")
+
+    # save_wb_state 函数体内惰性 import project_wb_deck ⇒ 运行时取到本桩
+    monkeypatch.setattr("delector.core.vocab_pool.project_wb_deck", _boom)
+
+    new_payload = {
+        "words": [{"id": "a1-0001", "hw": "der Abfahrt"}, {"id": "a1-0002", "hw": "der Bahnhof"}],
+        "cards": {"a1-0001": {"s": 9.0, "reps": 1}},
+    }
+    r = fail_client.put("/api/wb/state", json={"payload": new_payload}, headers={"X-WB-Key": key})
+    assert r.status_code >= 500, "投影抛错应向上冒泡成 500，而非被吞掉"
+
+    # blob 必须未被更新（同事务回滚）
+    assert server.get_wb_state() == before, "投影失败时 wb_state 镜像 blob 不得被写入"
+    with get_db("test_delector.db") as conn:
+        after_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
+    assert after_ts == before_ts, "投影失败时 wb_state.updated_at 不得变化（半写）"
+
+
+# ── ADR-0016 Phase 3 / Task 5：备份列清单补齐 + 还原后补迁移 ────────────────────
+# 两个缺陷锁在同一块：
+# ① _BACKUP_TABLES["vocab_cards"] 漏了 Phase 1 新增语义列 ⇒ 「备份→还原」往返静默丢
+#    source / fsrs_*（数据丢失）；
+# ② wb_state 镜像不进备份 ⇒ 换机还原后已学词的统一池行回不来
+#    （restore-then-migrate，Migration-Idempotency §4）。
+
+
+def _snapshot_vocab_cards() -> "list[dict]":
+    """抽 vocab_cards 全量快照（按 id 排序）供逐字比对。"""
+    with get_db("test_delector.db") as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM vocab_cards ORDER BY id").fetchall()]
+
+
+def test_backup_restore_preserves_pool_semantic_columns(client):
+    """① 往返无损（核心）：source / fsrs_* 必须逐字度过「备份(准备/下载)→还原」往返。
+
+    旧列清单漏了这 4 列，_replace_tables 只写清单内列 ⇒ 还原把 source 静默打回默认
+    'user'、fsrs_* 清空。
+    """
+    with get_db("test_delector.db") as conn:
+        conn.execute(
+            "INSERT INTO vocab_cards "
+            "(word, lemma, definition_zh, sentence_context, source, fsrs_s, fsrs_d, fsrs_lapses) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("Wanderlust", "wanderlust", "漫游欲", "Ich habe Wanderlust.", "official", 1.5, 7.0, 3),
+        )
+
+    # 备份：走 Android 导出链路（POST prepare → GET download）。
+    token = client.post("/api/backup/prepare", json={"local_storage": {}}).json()["token"]
+    payload = client.get(f"/api/backup/download/{token}").json()
+    exported = next(c for c in payload["vocab_cards"] if c["word"] == "Wanderlust")
+    assert exported["source"] == "official"
+    assert exported["fsrs_s"] == 1.5
+    assert exported["fsrs_d"] == 7.0
+    assert exported["fsrs_lapses"] == 3
+
+    # 还原同一份 ⇒ 这 4 列逐字保留。
+    assert client.post("/api/backup/restore", json=payload).status_code == 200
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM vocab_cards WHERE word = 'Wanderlust'").fetchone())
+    assert row["source"] == "official", f"source 往返被丢：{row['source']!r}"
+    assert row["fsrs_s"] == 1.5, f"fsrs_s 往返被丢：{row['fsrs_s']!r}"
+    assert row["fsrs_d"] == 7.0, f"fsrs_d 往返被丢：{row['fsrs_d']!r}"
+    assert row["fsrs_lapses"] == 3, f"fsrs_lapses 往返被丢：{row['fsrs_lapses']!r}"
+
+
+def test_backup_restore_old_backup_defaults_new_columns(client):
+    """② 旧备份向后兼容：不含这 4 键的 v2 payload 不得报错，列落建表默认值。"""
+    old = {
+        "version": 2,
+        "vocab_cards": [
+            {
+                "id": 71,
+                "article_id": None,
+                "word": "alt",
+                "lemma": "alt",
+                "pos": "ADJ",
+                "gender": "None",
+                "plural": "",
+                "cefr_level": "A1",
+                "definition_zh": "旧的",
+                "sentence_context": "Alt.",
+                "created_at": "2026-01-01 00:00:00",
+                # 刻意不含 source / fsrs_s / fsrs_d / fsrs_lapses（模拟旧备份）
+            }
+        ],
+    }
+    assert client.post("/api/backup/restore", json=old).status_code == 200
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 71").fetchone())
+    assert row["source"] == "user"
+    assert row["fsrs_s"] is None
+    assert row["fsrs_d"] is None
+    assert row["fsrs_lapses"] == 0
+
+
+def _wb_learned_word_payload() -> dict:
+    """一条「已学词」（card.reps=1 过范围闸）的 wb 快照。"""
+    return {
+        "words": [{"id": "a1-0001", "hw": "der Abfahrt", "gloss": "出发；发车"}],
+        "cards": {"a1-0001": {"s": 3.5, "d": 4.2, "lapses": 1, "reps": 1}},
+    }
+
+
+def test_backup_restore_reprojects_wb_deck(client):
+    """③ 还原后补投影（restore-then-migrate）：wb_state 不进备份，但已学词必须补回统一池。
+
+    换机还原只带回 vocab_cards；若某已学词不在备份的 vocab_cards 里（旧导出漏词），
+    还原必须从 wb 快照把它幂等补投影回 vocab_cards。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    put = client.put("/api/wb/state", json={"payload": _wb_learned_word_payload()}, headers={"X-WB-Key": key})
+    assert put.status_code == 200
+
+    # 构造「缺该词」的备份：vocab_cards 置空。
+    backup = client.get("/api/backup/export").json()
+    backup["vocab_cards"] = []
+
+    assert client.post("/api/backup/restore", json=backup).status_code == 200
+    with get_db("test_delector.db") as conn:
+        row = conn.execute(
+            "SELECT fsrs_s, fsrs_d, fsrs_lapses FROM vocab_cards WHERE word = ?",
+            ("der Abfahrt",),
+        ).fetchone()
+    assert row is not None, "还原后应从 wb 快照把已学词补投影回 vocab_cards"
+    got = dict(row)
+    assert got["fsrs_s"] == 3.5, "补投影应带出卡上的 FSRS-6 参数"
+    assert got["fsrs_d"] == 4.2
+    assert got["fsrs_lapses"] == 1
+
+
+def test_backup_restore_reprojection_idempotent(client):
+    """④ 投影幂等：连做两次还原 → 该词行不重复、值不变。"""
+    key = client.get("/api/wb/state/key").json()["key"]
+    put = client.put("/api/wb/state", json={"payload": _wb_learned_word_payload()}, headers={"X-WB-Key": key})
+    assert put.status_code == 200
+
+    backup = client.get("/api/backup/export").json()
+    backup["vocab_cards"] = []
+
+    assert client.post("/api/backup/restore", json=backup).status_code == 200
+    assert client.post("/api/backup/restore", json=backup).status_code == 200
+    with get_db("test_delector.db") as conn:
+        rows = conn.execute("SELECT * FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchall()
+    assert len(rows) == 1, f"重复还原不得产生重复行，实际 {len(rows)} 行"
+    assert dict(rows[0])["fsrs_s"] == 3.5, "重复还原不得改动既有值"
+
+
+def test_backup_restore_projection_failure_rolls_back(client, monkeypatch):
+    """⑤ 失败整体回滚（关键）：投影抛错 ⇒ 还原失败，且库内容与还原前逐字一致。
+
+    投影在 _db_snapshot_guard() 内且不吞异常：一旦抛错两个库都从快照整体写回，
+    不留「还原了一半」的状态。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    put = client.put("/api/wb/state", json={"payload": _wb_learned_word_payload()}, headers={"X-WB-Key": key})
+    assert put.status_code == 200
+
+    before = _snapshot_vocab_cards()
+    assert before, "还原前应有 vocab_cards 内容，否则证明不了回滚"
+
+    def _boom(_conn, _payload):
+        raise RuntimeError("projection forced failure")
+
+    # 投影在 restore 函数体内惰性 import ⇒ 运行时取到本桩
+    monkeypatch.setattr("delector.core.vocab_pool.project_wb_deck", _boom)
+
+    # raise_server_exceptions=False 才能拿到 500 响应而非让异常从 TestClient 冒出
+    fail_client = TestClient(app, client=("127.0.0.1", 54321), raise_server_exceptions=False)
+    backup = {"version": 2, "vocab_cards": []}
+    res = fail_client.post("/api/backup/restore", json=backup)
+    assert res.status_code >= 500, "投影抛错应冒泡成 500，而非被吞掉"
+
+    assert _snapshot_vocab_cards() == before, "还原失败必须整体回滚，vocab_cards 不得残留半成品"
+
+
 # ── 局域网 CORS（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 1）──
 # 手机 APP 的 WebView 页面 origin 是它自己的 127.0.0.1:8000（Chaquopy 本地 server），
 # 要跨域访问桌面 192.168.x.x 的 /api/wb/state 必须拿到 ACAO 反射；公网 Origin 不得反射。

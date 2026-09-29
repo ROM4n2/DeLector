@@ -532,7 +532,13 @@ def get_wb_state(db_path: Optional[str] = None) -> Dict[str, Any]:
 
 
 def save_wb_state(payload: Dict[str, Any], db_path: Optional[str] = None) -> str:
-    """单行 upsert workbench 背词进度镜像（id 恒为 1），返回本次写入的 updated_at。"""
+    """单行 upsert workbench 背词进度镜像（id 恒为 1），返回本次写入的 updated_at。
+
+    ADR-0016 Phase 3 / Task 2：写镜像 blob 的同时把 wb 快照幂等投影进统一池
+    ``vocab_cards``（``project_wb_deck``）。两者落在**同一个** ``with conn:`` 事务内：
+    投影失败 ⇒ 整体回滚，blob 也不写（无「半写」，Migration-Idempotency §2）。
+    投影异常**不被吞**，向上冒泡给调用方（让事务回滚并把错误暴露出来）。
+    """
     updated_at = datetime.now().isoformat()
     text = json.dumps(payload, ensure_ascii=False)
     conn = get_db(db_path)
@@ -548,6 +554,11 @@ def save_wb_state(payload: Dict[str, Any], db_path: Optional[str] = None) -> str
             """,
                 (text, updated_at),
             )
+            # 惰性导入（本仓约定：database 不顶层 import lexicon 主干）；投影不 commit，
+            # 复用同一连接与事务。投影抛错 ⇒ with conn 回滚，blob 与投影一起回滚。
+            from delector.core.vocab_pool import project_wb_deck
+
+            project_wb_deck(conn, payload)
     finally:
         _close_db_conn(conn)
     return updated_at
@@ -1194,7 +1205,12 @@ _BACKUP_TABLES: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]] = {
             "sentence_context",
             "created_at",
         )
-        + _SRS_COLUMNS,
+        + _SRS_COLUMNS
+        # ADR-0016 Phase 3 / Task 5：统一池语义列（Phase 1 新增）。此前漏在清单外 ⇒
+        # _replace_tables 不写它们，备份→还原往返把 source 静默打回默认 'user'、
+        # fsrs_* 清空（数据丢失）。旧备份（无这些键）经 _rows_to_tuples 的
+        # ``r.get(c, defaults.get(c))`` 自动落到与建表 DDL 一致的默认值——刻意的向后兼容。
+        + ("source", "fsrs_s", "fsrs_d", "fsrs_lapses"),
         dict(
             _SRS_DEFAULTS,
             word="",
@@ -1205,6 +1221,10 @@ _BACKUP_TABLES: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]] = {
             cefr_level="A1",
             definition_zh="",
             sentence_context="",
+            source="user",
+            fsrs_s=None,
+            fsrs_d=None,
+            fsrs_lapses=0,
         ),
     ),
     "grammar_cards": (
