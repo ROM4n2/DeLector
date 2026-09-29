@@ -22,6 +22,10 @@
 5. **来源**：``source = primary_source(str(hw))``（Phase 2）；仅在该行 ``source`` 为空时补。
 6. **诚实留空**：查不到 / 缺失的字段留空，不编造兜底（Backfill §6）。
 7. **不抛**：payload 缺键 / words 非数组 / cards 非 dict → 安全降级（返回全 0，不抛）。
+8. **范围闸（只收「用户自己的词」）**：仅当词条 ``custom is True``（自建，**严格** ``is True``，非
+   truthy）或其 ``cards[str(id)].reps > 0``（已学）时才投影；自动加载的 A1/A2/B1 种子词
+   （非自建且未学）MUST NOT 入池 —— 跳过（不查库、不写库）并计入返回值的 ``skipped``。
+   判定在**归一键之后、查库之前**。
 
 读取期派生（Backfill §2）：``pos`` / ``gender`` / ``plural`` / ``cefr_level`` 等富元数据
 **不由本投影写入**（workbench 的 ``pos`` 标签是 view-owned 展示层，与池内约定不同，写入即
@@ -60,7 +64,7 @@ _FILLABLE_COLUMNS = (
 
 def _empty_result() -> Dict[str, int]:
     """安全降级返回值（不抛、零副作用）。"""
-    return {"inserted": 0, "updated": 0, "unchanged": 0}
+    return {"inserted": 0, "updated": 0, "unchanged": 0, "skipped": 0}
 
 
 def _is_empty(value: Any) -> bool:
@@ -173,14 +177,38 @@ def _fill_updates(existing: Any, desired: Dict[str, Any]) -> Dict[str, Any]:
     return updates
 
 
+def _is_projectable(entry: Dict[str, Any], cards: Dict[str, Any]) -> bool:
+    """范围闸（不变量 8）：只收「用户自己的词」——自建（``custom is True``）或已学（``reps > 0``）。
+
+    - ``custom`` 取 ``entry.get("custom") is True``（**严格** ``is True``，非 truthy）；
+    - ``reps`` 取 ``cards[str(entry["id"])]["reps"]``，卡不存在 / ``reps`` 非数 / ``<= 0`` ⇒ 未学。
+    自动加载的 A1/A2/B1 种子词（既非自建又未学）⇒ ``False``（MUST NOT 入池）。
+    """
+    if entry.get("custom") is True:
+        return True
+    word_id = entry.get("id")
+    if word_id is None:
+        return False
+    card = cards.get(str(word_id))
+    if not isinstance(card, dict):
+        return False
+    reps = _as_float(card.get("reps"))
+    return reps is not None and reps > 0
+
+
 def _project_word(conn: sqlite3.Connection, entry: Any, cards: Dict[str, Any]) -> Optional[str]:
-    """投影单条 wb 词条；返回 ``"inserted"`` / ``"updated"`` / ``"unchanged"``，无法作键 → ``None``。"""
+    """投影单条 wb 词条；返回 ``"inserted"`` / ``"updated"`` / ``"unchanged"`` / ``"skipped"``，
+    无法作键（非 dict / 无归一键）→ ``None``（不计入任何桶）。"""
     if not isinstance(entry, dict):
         return None
     hw = entry.get("hw")
     lemma = lemma_key(str(hw)) if hw is not None else ""
     if not lemma:
         return None  # 无归一键 ⇒ 无法按内容去重，跳过（不编造占位）
+
+    # 范围闸（不变量 8）：归一键判定之后、查库之前短路 —— 种子词不查库、不写库，仅计入 skipped。
+    if not _is_projectable(entry, cards):
+        return "skipped"
 
     desired = _desired_fields(entry, cards)
     existing = conn.execute(
@@ -206,7 +234,8 @@ def _project_word(conn: sqlite3.Connection, entry: Any, cards: Dict[str, Any]) -
 def project_wb_deck(conn: sqlite3.Connection, payload: Dict[str, Any]) -> Dict[str, int]:
     """把 wb 快照的 ``words`` / ``cards`` 幂等投影进 ``vocab_cards``。
 
-    返回 ``{"inserted": int, "updated": int, "unchanged": int}``；**不 commit**（事务交调用方）。
+    返回 ``{"inserted": int, "updated": int, "unchanged": int, "skipped": int}``；``skipped`` =
+    被范围闸挡下（非自建且未学）的词条数；**不 commit**（事务交调用方）。
     坏 payload（缺键 / ``words`` 非数组 / ``cards`` 非 dict）安全降级为全 0、不抛。
     """
     if not isinstance(payload, dict):
@@ -216,7 +245,7 @@ def project_wb_deck(conn: sqlite3.Connection, payload: Dict[str, Any]) -> Dict[s
     if not isinstance(words, list) or not isinstance(cards, dict):
         return _empty_result()
 
-    counts: Dict[str, int] = {"inserted": 0, "updated": 0, "unchanged": 0}
+    counts: Dict[str, int] = {"inserted": 0, "updated": 0, "unchanged": 0, "skipped": 0}
     for entry in words:
         outcome = _project_word(conn, entry, cards)
         if outcome is not None:

@@ -2,11 +2,13 @@
 """wb 快照 → 统一词池 `vocab_cards` 的幂等投影（ADR-0016 Phase 3 / Task 1）。
 
 契约面（``delector.core.vocab_pool.project_wb_deck``，纯存储层，无路由）：
-- ``project_wb_deck(conn, payload) -> {"inserted", "updated", "unchanged"}``，**不 commit**
+- ``project_wb_deck(conn, payload) -> {"inserted", "updated", "unchanged", "skipped"}``，**不 commit**
   （事务交调用方，便于与镜像 blob 同事务原子提交）。
+- **范围闸**：只投影「自建（``custom is True``）」或「已学（``reps > 0``）」的词条；自动加载的
+  A1/A2/B1 种子词不入池，计入 ``skipped``。
 
-钉住七条注入不变量（Vault 规则）：
-① 首投影 ``inserted == len(words)``；
+钉住注入不变量（Vault 规则）：
+① 首投影 ``inserted == len(words)``（**仅当全部词条可投影**；否则 ``inserted + skipped == len(words)``）；
 ② 二次同 payload ``inserted==0, updated==0, unchanged==N``，且**零写盘**（行快照不变）；
 ③ 已存在行**只补空、不覆盖**（用户手编 ``definition_zh`` 保持不变；空 ``sentence_context`` 被补）；
 ④ ``reps``（FSRS）**不写** ``repetition_count``（DSR）：``repetition_count==0`` 且 ``fsrs_s/d/lapses`` 有值；
@@ -88,6 +90,7 @@ def test_first_projection_inserts_all(clean_db):
             "ex": [{"de": "Vor der Abfahrt rufe ich an.", "zh": "出发前我打个电话。"}],
             "letter": "A",
             "page": 9,
+            "custom": True,  # 范围闸前提：自建词方可入池
         },
         {
             "id": "a1-0005",
@@ -98,11 +101,12 @@ def test_first_projection_inserts_all(clean_db):
             "ex": [{"de": "Das Haus ist groß.", "zh": "这房子很大。"}],
             "letter": "H",
             "page": 12,
+            "custom": True,  # 范围闸前提：自建词方可入池
         },
     ]
     with db_conn(clean_db["db"]) as conn:
         result = project_wb_deck(conn, _payload(words, cards={}))
-    assert result == {"inserted": 2, "updated": 0, "unchanged": 0}
+    assert result == {"inserted": 2, "updated": 0, "unchanged": 0, "skipped": 0}
 
     with db_conn(clean_db["db"]) as conn:
         rows = {r["lemma"]: r for r in conn.execute("SELECT * FROM vocab_cards").fetchall()}
@@ -120,14 +124,26 @@ def test_first_projection_inserts_all(clean_db):
 
 def test_second_projection_is_idempotent(clean_db):
     words = [
-        {"id": "a1-0001", "hw": "ab", "gloss": "从…起", "ex": [{"de": "Ab morgen.", "zh": "从明天起。"}]},
-        {"id": "a1-0003", "hw": "abfahren", "gloss": "出发", "ex": [{"de": "Wir fahren ab.", "zh": "我们出发。"}]},
+        {
+            "id": "a1-0001",
+            "hw": "ab",
+            "gloss": "从…起",
+            "ex": [{"de": "Ab morgen.", "zh": "从明天起。"}],
+            "custom": True,  # 范围闸前提：自建词方可入池
+        },
+        {
+            "id": "a1-0003",
+            "hw": "abfahren",
+            "gloss": "出发",
+            "ex": [{"de": "Wir fahren ab.", "zh": "我们出发。"}],
+            "custom": True,  # 范围闸前提：自建词方可入池
+        },
     ]
     payload = _payload(words, cards={})
 
     with db_conn(clean_db["db"]) as conn:
         first = project_wb_deck(conn, payload)
-    assert first == {"inserted": 2, "updated": 0, "unchanged": 0}
+    assert first == {"inserted": 2, "updated": 0, "unchanged": 0, "skipped": 0}
 
     with db_conn(clean_db["db"]) as conn:
         before = _dump(conn)
@@ -136,7 +152,7 @@ def test_second_projection_is_idempotent(clean_db):
     with db_conn(clean_db["db"]) as conn:
         after = _dump(conn)
 
-    assert second == {"inserted": 0, "updated": 0, "unchanged": 2}
+    assert second == {"inserted": 0, "updated": 0, "unchanged": 2, "skipped": 0}
     assert before == after  # 二次运行不写盘
 
 
@@ -152,7 +168,13 @@ def test_existing_row_not_overwritten_only_fill_empty(clean_db):
         )
 
     words = [
-        {"id": "x", "hw": "Haus", "gloss": "房子【自动】", "ex": [{"de": "Das Haus ist groß.", "zh": "这房子很大。"}]}
+        {
+            "id": "x",
+            "hw": "Haus",
+            "gloss": "房子【自动】",
+            "ex": [{"de": "Das Haus ist groß.", "zh": "这房子很大。"}],
+            "custom": True,  # 范围闸前提：自建词方可入池
+        }
     ]
     with db_conn(clean_db["db"]) as conn:
         result = project_wb_deck(conn, _payload(words, cards={}))
@@ -164,7 +186,7 @@ def test_existing_row_not_overwritten_only_fill_empty(clean_db):
         ).fetchone()
     assert row["definition_zh"] == "用户手编释义"  # 非空 → 不被覆盖
     assert row["sentence_context"] == "Das Haus ist groß."  # 空 → 被补
-    assert result == {"inserted": 0, "updated": 1, "unchanged": 0}
+    assert result == {"inserted": 0, "updated": 1, "unchanged": 0, "skipped": 0}
 
 
 # ── ④ reps（FSRS）不写 repetition_count（DSR）───────────────────────────────
@@ -207,7 +229,7 @@ def test_reps_not_written_to_repetition_count(clean_db):
 def test_bad_payload_returns_zeros_without_raising(clean_db, bad):
     with db_conn(clean_db["db"]) as conn:
         result = project_wb_deck(conn, bad)
-    assert result == {"inserted": 0, "updated": 0, "unchanged": 0}
+    assert result == {"inserted": 0, "updated": 0, "unchanged": 0, "skipped": 0}
     with db_conn(clean_db["db"]) as conn:
         count = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
     assert count == 0
@@ -224,8 +246,20 @@ def test_source_settled_by_primary_source(clean_db):
     assert primary_source(hw_unknown) == "user"
 
     words = [
-        {"id": "r", "hw": hw_real, "gloss": "房子", "ex": [{"de": "Das Haus ist groß.", "zh": "这房子很大。"}]},
-        {"id": "u", "hw": hw_unknown, "gloss": "自造词", "ex": [{"de": "Zzq xyz.", "zh": "自造。"}]},
+        {
+            "id": "r",
+            "hw": hw_real,
+            "gloss": "房子",
+            "ex": [{"de": "Das Haus ist groß.", "zh": "这房子很大。"}],
+            "custom": True,  # 范围闸前提：自建词方可入池
+        },
+        {
+            "id": "u",
+            "hw": hw_unknown,
+            "gloss": "自造词",
+            "ex": [{"de": "Zzq xyz.", "zh": "自造。"}],
+            "custom": True,  # 范围闸前提：自建词方可入池
+        },
     ]
     with db_conn(clean_db["db"]) as conn:
         project_wb_deck(conn, _payload(words, cards={}))
@@ -235,3 +269,74 @@ def test_source_settled_by_primary_source(clean_db):
     assert rows[lemma_key(hw_real)] == primary_source(hw_real)
     assert rows[lemma_key(hw_unknown)] == primary_source(hw_unknown)
     assert rows[lemma_key(hw_unknown)] == "user"
+
+
+# ── ⑦ 范围闸：只收「用户自己的词」（自建 custom is True / 已学 reps > 0）──────────
+# 自动加载的 A1/A2/B1 种子词（非自建且未学）MUST NOT 入池，跳过并计入 ``skipped``。
+
+
+def _vocab_count(db: Any) -> int:
+    with db_conn(db) as conn:
+        return int(conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0])
+
+
+def test_scope_gate_skips_seed_word_without_card(clean_db):
+    """非自建 + 无卡（种子未学）⇒ 不入池、``skipped`` 计数 +1、零落库。"""
+    words = [{"id": "a1-0001", "hw": "Haus", "gloss": "房子"}]
+    with db_conn(clean_db["db"]) as conn:
+        result = project_wb_deck(conn, _payload(words, cards={}))
+    assert result == {"inserted": 0, "updated": 0, "unchanged": 0, "skipped": 1}
+    assert _vocab_count(clean_db["db"]) == 0
+
+
+def test_scope_gate_skips_seed_word_reps_zero(clean_db):
+    """非自建 + ``reps == 0``（有卡但未学）⇒ 不入池、``skipped`` 计数 +1。"""
+    words = [{"id": "a1-0001", "hw": "Haus", "gloss": "房子"}]
+    cards = {"a1-0001": {"reps": 0, "s": 1.0}}
+    with db_conn(clean_db["db"]) as conn:
+        result = project_wb_deck(conn, _payload(words, cards=cards))
+    assert result == {"inserted": 0, "updated": 0, "unchanged": 0, "skipped": 1}
+    assert _vocab_count(clean_db["db"]) == 0
+
+
+def test_scope_gate_includes_learned_card(clean_db):
+    """非自建 + ``reps > 0``（已学）⇒ **入池**。"""
+    words = [{"id": "a1-0001", "hw": "Haus", "gloss": "房子"}]
+    cards = {"a1-0001": {"reps": 1, "s": 1.0}}
+    with db_conn(clean_db["db"]) as conn:
+        result = project_wb_deck(conn, _payload(words, cards=cards))
+    assert result == {"inserted": 1, "updated": 0, "unchanged": 0, "skipped": 0}
+    assert _vocab_count(clean_db["db"]) == 1
+
+
+def test_scope_gate_includes_custom_word_without_card(clean_db):
+    """``custom is True`` + 无卡（自建未学）⇒ **入池**。"""
+    words = [{"id": "u-1", "hw": "Zzqxyzgg", "gloss": "自造词", "custom": True}]
+    with db_conn(clean_db["db"]) as conn:
+        result = project_wb_deck(conn, _payload(words, cards={}))
+    assert result == {"inserted": 1, "updated": 0, "unchanged": 0, "skipped": 0}
+    assert _vocab_count(clean_db["db"]) == 1
+
+
+def test_scope_gate_custom_is_strict_true_not_truthy(clean_db):
+    """``custom`` 严格 ``is True``：truthy 非 ``True``（如 ``1``）不算自建 ⇒ 跳过。"""
+    words = [{"id": "a1-0001", "hw": "Haus", "gloss": "房子", "custom": 1}]
+    with db_conn(clean_db["db"]) as conn:
+        result = project_wb_deck(conn, _payload(words, cards={}))
+    assert result == {"inserted": 0, "updated": 0, "unchanged": 0, "skipped": 1}
+    assert _vocab_count(clean_db["db"]) == 0
+
+
+def test_scope_gate_conservation_inserted_plus_skipped(clean_db):
+    """守恒：所有词条均为可作键的合法 dict ⇒ ``inserted + skipped == len(words)``。"""
+    words: List[Dict[str, Any]] = [
+        {"id": "a1-0001", "hw": "Haus", "gloss": "房子"},  # 种子未学 → skip
+        {"id": "u-1", "hw": "Tisch", "gloss": "桌子", "custom": True},  # 自建 → insert
+        {"id": "a1-0003", "hw": "Stuhl", "gloss": "椅子"},  # 未学 → skip
+        {"id": "a1-0004", "hw": "Bahn", "gloss": "铁路"},  # 已学 → insert
+    ]
+    cards = {"a1-0004": {"reps": 2}}
+    with db_conn(clean_db["db"]) as conn:
+        result = project_wb_deck(conn, _payload(words, cards=cards))
+    assert result == {"inserted": 2, "updated": 0, "unchanged": 0, "skipped": 2}
+    assert result["inserted"] + result["skipped"] == len(words)

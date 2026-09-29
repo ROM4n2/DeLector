@@ -35,8 +35,10 @@
 - Test: `tests/test_vocab_pool_projection.py`
 
 **Interfaces:**
-- Consumes: `delector.core.lexicon.primary_source(raw: str) -> str`（Phase 2）；`delector.core.database.db_conn()`；wb 快照 `{words:[{id,hw,pos,gloss,ipa,ex:[{de,zh}],...}], cards:{id:{s,d,due,last,reps,lapses}}}`
-- Produces: `project_wb_deck(conn: sqlite3.Connection, payload: dict) -> {"inserted": int, "updated": int, "unchanged": int}`（幂等；单事务由调用方控制）
+- Consumes: `delector.core.lexicon.primary_source(raw: str) -> str`（Phase 2）；`delector.core.database.db_conn()`；wb 快照 `{words:[{id,hw,pos,gloss,ipa,ex:[{de,zh}],custom:bool,...}], cards:{id:{s,d,due,last,reps,lapses}}}`
+- Produces: `project_wb_deck(conn: sqlite3.Connection, payload: dict) -> {"inserted": int, "updated": int, "unchanged": int, "skipped": int}`（幂等；单事务由调用方控制）
+
+**范围闸（2026-09-29 修订 · 用户拍板）**：只投影「**已学**（`cards[String(id)].reps > 0`）」或「**自建**（`word.custom === true`）」的词条；**自动加载的 A1/A2/B1 种子词（非 custom 且未学）MUST NOT 入池**——否则 `GET /api/cards`/`stats`（尚无 source 过滤）会被几百~几千条种子词淹没。被排除的计入 `skipped`。
 
 **Injected Instincts:**
 - [ ] `[Instinct: Content-Dedup]`: **按 `lemma` 去重**（`NOT EXISTS`/UNIQUE），**禁止**计数对账（Migration-Idempotency §1）。
@@ -94,7 +96,11 @@
 
 ---
 
-### Task 3: 工作台读路径 —— 服务端优先 + localStorage 兜底 [Mode: AFK] [Role: TDD Builder]
+### Task 3: 工作台读路径 —— 服务端优先 + localStorage 兜底 [**已废弃 · 2026-09-29 用户决定跳过**]
+
+> **跳过理由**：T2 已把 deck 投影进统一池 ⇒ 服务端**事实上**已是权威。而本任务要把 `loadAll()` 从「本地为准」翻成「服务端优先」，与 `wbsync` 明写的 *"本地为准（local-first）：localStorage/IDB 的键永不因同步被删改，远端只是最近镜像"* 正面冲突，且动的是**离线保证**，收益可疑。**不改工作台读路径。**（下方原始任务描述保留作记录，不执行。）
+
+### ~~Task 3（原描述）: 工作台读路径 —— 服务端优先 + localStorage 兜底~~ [Mode: AFK] [Role: TDD Builder]
 
 **Files:**
 - Modify: `static/german/workbench.html`（仅 `loadAll()`，`:1174-1200`；**不改** 5 个 `saveXxx` 的写语义）

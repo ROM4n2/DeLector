@@ -4735,7 +4735,8 @@ def test_wb_state_put_projects_into_vocab_pool(client):
                 "ex": [{"de": "Die Abfahrt ist um acht.", "zh": "八点发车。"}],
             }
         ],
-        "cards": {"a1-0001": {"s": 3.5, "d": 4.2, "lapses": 1}},
+        # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
+        "cards": {"a1-0001": {"s": 3.5, "d": 4.2, "lapses": 1, "reps": 1}},
     }
     r = client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
     assert r.status_code == 200
@@ -4762,7 +4763,8 @@ def test_wb_state_put_projection_idempotent_three_phase(client):
     """
     key = client.get("/api/wb/state/key").json()["key"]
     word_a = {"id": "a1-0001", "hw": "der Abfahrt", "gloss": "出发；发车"}
-    payload1 = {"words": [word_a], "cards": {"a1-0001": {"s": 3.5}}}
+    # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
+    payload1 = {"words": [word_a], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
     assert client.put("/api/wb/state", json={"payload": payload1}, headers={"X-WB-Key": key}).status_code == 200
     with get_db("test_delector.db") as conn:
         n1 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
@@ -4770,7 +4772,10 @@ def test_wb_state_put_projection_idempotent_three_phase(client):
 
     # 追加一条新词条，旧词条仍留在全量 payload 中
     word_b = {"id": "a1-0002", "hw": "der Bahnhof", "gloss": "火车站"}
-    payload2 = {"words": [word_a, word_b], "cards": {"a1-0001": {"s": 3.5}, "a1-0002": {"s": 2.0}}}
+    payload2 = {
+        "words": [word_a, word_b],
+        "cards": {"a1-0001": {"s": 3.5, "reps": 1}, "a1-0002": {"s": 2.0, "reps": 1}},
+    }
     assert client.put("/api/wb/state", json={"payload": payload2}, headers={"X-WB-Key": key}).status_code == 200
     with get_db("test_delector.db") as conn:
         n2 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
@@ -4790,7 +4795,8 @@ def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch)
     fail_client = TestClient(app, client=("127.0.0.1", 54321), raise_server_exceptions=False)
 
     # 先写一版基线，记录 updated_at / payload
-    base_payload = {"words": [{"id": "a1-0001", "hw": "der Abfahrt"}], "cards": {"a1-0001": {"s": 3.5}}}
+    # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
+    base_payload = {"words": [{"id": "a1-0001", "hw": "der Abfahrt"}], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
     assert client.put("/api/wb/state", json={"payload": base_payload}, headers={"X-WB-Key": key}).status_code == 200
     before = server.get_wb_state()
     with get_db("test_delector.db") as conn:
@@ -4804,7 +4810,7 @@ def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch)
 
     new_payload = {
         "words": [{"id": "a1-0001", "hw": "der Abfahrt"}, {"id": "a1-0002", "hw": "der Bahnhof"}],
-        "cards": {"a1-0001": {"s": 9.0}},
+        "cards": {"a1-0001": {"s": 9.0, "reps": 1}},
     }
     r = fail_client.put("/api/wb/state", json={"payload": new_payload}, headers={"X-WB-Key": key})
     assert r.status_code >= 500, "投影抛错应向上冒泡成 500，而非被吞掉"
