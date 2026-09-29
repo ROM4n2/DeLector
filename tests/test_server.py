@@ -4030,6 +4030,40 @@ def test_init_db_migrates_legacy_vocab_cards_to_unified_pool_columns(tmp_path):
     assert row["fsrs_lapses"] == 0
 
 
+def test_source_class_maps_provenance_to_pool_values():
+    """ADR-0016 Phase 2：provenance 来源集合 → 统一池 source 值域（official/manual/ai/user）。"""
+    from delector.core import lexicon as LX
+
+    assert LX.source_class([]) == "user"
+    assert LX.source_class(["ai"]) == "ai"
+    assert LX.source_class(["manual"]) == "manual"
+    assert LX.source_class(["workbench-a1"]) == "manual"  # 工作台 A1 内容属人工
+    assert LX.source_class(["official"]) == "official"
+    assert LX.source_class(["goethe-a1"]) == "official"  # 考纲 A1 属官方
+    # 多来源按权威次序收敛：official > manual > ai
+    assert LX.source_class(["ai", "manual"]) == "manual"
+    assert LX.source_class(["ai", "manual", "official"]) == "official"
+
+
+def test_add_vocab_card_sets_source_from_lexicon(client):
+    """`POST /api/cards/vocab` 按主干 provenance 落定 source（懒物化，ADR-0016 Phase 2）。"""
+    from delector.core import lexicon as LX
+
+    assert LX.primary_source("ab") == "official"  # "ab" 在官方 A1 词表
+    client.post(
+        "/api/cards/vocab",
+        json={"word": "ab", "lemma": "ab", "definition_zh": "从…起", "sentence_context": "Ab morgen."},
+    )
+    client.post(
+        "/api/cards/vocab",
+        json={"word": "zzzquux", "lemma": "zzzquux", "definition_zh": "造词", "sentence_context": "Zzz quux."},
+    )
+    with get_db("test_delector.db") as conn:
+        rows = {r["lemma"]: r["source"] for r in conn.execute("SELECT lemma, source FROM vocab_cards").fetchall()}
+    assert rows["ab"] == "official"  # 主干收录 → 官方
+    assert rows["zzzquux"] == "user"  # 主干未收录的自定义词
+
+
 def test_known_lemmas_endpoint_reflects_studied_cards_only(client):
     """GET /api/cards/known-lemmas：只回「已学」主卡原形（mastered=1 或 repetition_count>0）。
 

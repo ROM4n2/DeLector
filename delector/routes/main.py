@@ -80,7 +80,7 @@ from delector.core.database import (
     upsert_corpus_syntax_stats,
     verify_wb_key,
 )
-from delector.core.lexicon import lookup_core_vocab
+from delector.core.lexicon import lookup_core_vocab, primary_source
 from delector.core.security import (
     PRESET_FEEDS,
     clean_html_to_article,
@@ -636,11 +636,15 @@ def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) 
 
 @router.post("/api/cards/vocab")
 def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
+    # ADR-0016 Phase 2（懒物化）：词条进统一池时按主干 provenance 落定 `source`
+    # （official/manual/ai；主干未收录的自定义词 = user）。全部前端存词入口
+    # （reader / a1_cards / a1_hoeren / search）都打本端点 ⇒ 一处覆盖。
+    source = primary_source(req.lemma or req.word)
     with db_conn() as conn:
         cur = conn.execute(
             "INSERT INTO vocab_cards "
-            "(article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "(article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 req.article_id,
                 req.word,
@@ -651,6 +655,7 @@ def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
                 req.cefr_level,
                 req.definition_zh,
                 req.sentence_context,
+                source,
             ),
         )
         card_id = cur.lastrowid
