@@ -423,3 +423,46 @@ def test_trials_rejects_invalid_body(client):
     """trials body 缺字段 → Pydantic 422。"""
     res = client.post("/api/syntax/hard-sentence/trials", json={"source": "article"})
     assert res.status_code == 422
+
+
+# ── 排名缓存容量 + 懒读正文（2026-09-28 swarm 审计 P2 / 性能）────────────────
+
+
+def test_rank_cache_bounded_eviction():
+    """_RANK_CACHE 有容量上限：超限淘汰最早过期项，长期运行不无界增长。"""
+    syntax_hard._RANK_CACHE.clear()
+    limit = syntax_hard._RANK_CACHE_MAX_ENTRIES
+    for i in range(limit):
+        syntax_hard._put_rank_cache(f"m:{i}", 1000.0 + i, [])
+    assert len(syntax_hard._RANK_CACHE) == limit
+
+    syntax_hard._put_rank_cache("m:new", 10_000_000.0, [])
+    assert len(syntax_hard._RANK_CACHE) == limit, "超限后应淘汰到上限"
+    assert "m:0" not in syntax_hard._RANK_CACHE, "最早过期项应被淘汰"
+    assert "m:new" in syntax_hard._RANK_CACHE
+    syntax_hard._RANK_CACHE.clear()
+
+
+def test_list_article_ids_returns_only_ids():
+    """_list_article_ids 只取 id（不 materialize 全文）：避免每请求全量读正文。"""
+    aid = _seed_article()
+    ids = syntax_hard._list_article_ids()
+    assert aid in ids
+    assert all(isinstance(i, int) for i in ids), "应只返回 id（int），而非含 raw_text 的行 dict"
+
+
+def test_single_material_cache_hit_skips_text_fetch(client, monkeypatch):
+    """单材料热请求（缓存命中）不得再读材料正文——正文仅在缓存缺失时读。"""
+    aid = _seed_article()
+    client.get("/api/syntax/hard-sentences", params={"source": "article", "source_id": aid})
+
+    calls = {"n": 0}
+    orig = syntax_hard._material_text
+
+    def _counted(source: str, source_id: int) -> str:
+        calls["n"] += 1
+        return orig(source, source_id)
+
+    monkeypatch.setattr(syntax_hard, "_material_text", _counted)
+    client.get("/api/syntax/hard-sentences", params={"source": "article", "source_id": aid})
+    assert calls["n"] == 0, "缓存命中时不应再读材料正文"
