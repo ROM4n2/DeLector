@@ -137,6 +137,42 @@ def sources_of(lemma: str) -> FrozenSet[str]:
     return PROVENANCE.get(lemma, frozenset())
 
 
+# ── ADR-0016 Phase 2：统一池 `source` 值域（official / manual / ai / user）───────
+# 主干 provenance 有 5 个细粒度来源名；统一池只暴露 4 个类别。收敛规则：按
+# ``SOURCE_PRIORITY`` 从高到低取**首个**出现的来源 —— 与主干「cefr: official > manual > ai」
+# 的权威次序一致（ADR-0012）；Lexicon 未收录的自定义词 = ``user``。
+_SOURCE_CLASS: Dict[str, str] = {
+    "official": "official",
+    "goethe-a1": "official",
+    "manual": "manual",
+    "workbench-a1": "manual",
+    "ai": "ai",
+}
+
+
+def source_class(sources: Iterable[str]) -> str:
+    """把 provenance 来源集合收敛为统一池 `source` 值域：``official``/``manual``/``ai``；空集 → ``user``。
+
+    纯函数、零副作用（只读常量）。多来源按权威次序收敛（official > manual > ai）。
+    """
+    names = set(sources or ())
+    if not names:
+        return "user"
+    for name in reversed(SOURCE_PRIORITY):  # SOURCE_PRIORITY 为「低→高」，反向即「高→低」
+        if name in names:
+            return _SOURCE_CLASS[name]
+    return "user"
+
+
+def primary_source(raw: str) -> str:
+    """返回词形/lemma 在主干中的来源类别（``official``/``manual``/``ai``）；未收录 → ``user``。
+
+    ADR-0016 Phase 2（懒物化）：词条进统一池时用它落定 ``vocab_cards.source``。
+    入参先经 ``lemma_key`` 归一（小写 / 剥冠词 / 连字符分词）；空输入不抛、返回 ``user``。
+    """
+    return source_class(PROVENANCE.get(lemma_key(str(raw or "")), frozenset()))
+
+
 def view(sources: Optional[Iterable[str]] = None) -> Dict[str, Tuple[Any, ...]]:
     """按来源过滤返回子视图（不复制数据以外的结构）。
 
