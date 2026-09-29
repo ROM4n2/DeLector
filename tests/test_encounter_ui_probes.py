@@ -207,6 +207,34 @@ def test_i1_card_html_renders_read_mark_escaped():
     assert "const READ_MARK_TEXT" in ENCOUNTER_JS, "READ_MARK_TEXT 必须在模块级单点定义"
 
 
+def test_encounter_js_unions_main_path_known_pool():
+    """⑤ 已知词池 = 背词工作台 deck ∪ 主路径「已学」词（打通两条数据流，2026-09-28 审计 P1）。
+
+    encounter.js 必须 import deck-bridge.js 的 mergeKnownLemmas、best-effort 拉
+    /api/cards/known-lemmas、并在 showView 里把两者并进已知集**再** rankEntries。
+    去掉任一环（不 import / 不拉端点 / 拉了不 merge）→ 本断言必红。
+    """
+    assert "mergeKnownLemmas" in ENCOUNTER_JS, "encounter.js 必须用 mergeKnownLemmas 并入主路径已学词"
+    assert "/api/cards/known-lemmas" in ENCOUNTER_JS, "encounter.js 必须拉 /api/cards/known-lemmas"
+    # 并入已知集后再排序：不得「只拉不用」（拉到的 knownLemmas 必须进 mergeKnownLemmas）。
+    assert re.search(r"mergeKnownLemmas\s*\(\s*buildKnownSet\(", ENCOUNTER_JS), (
+        "showView 必须 mergeKnownLemmas(buildKnownSet(...), ...) 把主路径已学词并进已知集"
+    )
+    assert re.search(r"knownLemmas", ENCOUNTER_JS), "必须把拉到的 knownLemmas 变量并入"
+
+
+def test_detail_view_unions_main_path_known_pool_too():
+    """① 详情页（annotateWithDeck 路径）也必须并主路径已学词，与列表视图同口径。
+
+    否则会出现「列表说 i+1 90% 已知，点开却高亮少一半」的口径打架（2026-09-28 审计 P1）。
+    """
+    body = _slice_function(ENCOUNTER_JS, "renderTextDetailAnnotated")
+    assert "fetchKnownLemmas(" in body, "详情页必须拉主路径已学词"
+    assert re.search(
+        r"annotateWithDeck\(\s*deck\s*,\s*annotate\s*,\s*extraKnownLemmas\s*\)", body
+    ), "详情页必须把 extraKnownLemmas 传给 annotateWithDeck（否则详情高亮与列表覆盖率不一致）"
+
+
 def test_render_text_list_read_state_param_backward_compatible():
     """③ renderTextList 形参含 readState = null（省略即逐字保持 v5.11.0 行为）。"""
     assert re.search(

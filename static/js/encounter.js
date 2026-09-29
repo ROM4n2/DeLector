@@ -19,6 +19,7 @@ import {
   annotateWithDeck,
   addCardToDeck,
   buildKnownSet,
+  mergeKnownLemmas,
   DECK_KEYS,
 } from "./deck-bridge.js";
 import { rankEntries, hasCoverage } from "./enc-i1.js";
@@ -195,6 +196,18 @@ export async function fetchTexts() {
 export async function fetchIndex() {
   const res = await api("/api/encounter/texts/index");
   return (res && res.items) || [];
+}
+
+// i+1：拉**主背词路径**的「已学」原形（跨背词路径打通，2026-09-28 swarm 审计 P1）。
+// **全程 best-effort**：拉不到就返回空数组，绝不让它连累列表/覆盖率 —— 自带 try/catch，
+// 失败即空（与索引端点同族的「不连累别路」降级纪律）。
+export async function fetchKnownLemmas() {
+  try {
+    const res = await api("/api/cards/known-lemmas");
+    return res && Array.isArray(res.lemmas) ? res.lemmas : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 /* ======================================================================
@@ -398,8 +411,12 @@ export async function showView() {
   const addForm = document.getElementById("encounter-add-form");
   if (addForm) addForm.classList.remove("open");
 
-  // 并行拉「列表」与「索引」。索引失败不得连累列表 —— Promise.allSettled 各自兜底。
-  const [textsRes, indexRes] = await Promise.allSettled([fetchTexts(), fetchIndex()]);
+  // 并行拉「列表」「索引」「主路径已学词」。任一路失败不得连累其余 —— allSettled 各自兜底。
+  const [textsRes, indexRes, knownRes] = await Promise.allSettled([
+    fetchTexts(),
+    fetchIndex(),
+    fetchKnownLemmas(),
+  ]);
 
   // A7：已读态只读一次，两条渲染分支都传（索引失败时行为其余与 v5.11.0 一致，但标记仍在）。
   const readState = loadRead(encStorage());
@@ -424,7 +441,9 @@ export async function showView() {
 
   // 索引成功 → 覆盖率分组排序 + 推荐。texts 为全集，index 只补 total_tokens / lemma_seq。
   const merged = mergeListWithIndex(texts, indexRes.value);
-  const knownSet = buildKnownSet(loadDeck(encStorage()));
+  // 已知词池 = 背词工作台 deck ∪ 主路径已学词（打通两条数据流；2026-09-28 审计 P1）。
+  const knownLemmas = knownRes.status === "fulfilled" ? knownRes.value : [];
+  const knownSet = mergeKnownLemmas(buildKnownSet(loadDeck(encStorage())), knownLemmas);
   const ranked = rankEntries(knownSet, merged);
   renderTextList(texts, ranked, readState);
   renderI1Hint(ranked, knownSet, readState);
@@ -473,14 +492,15 @@ export function renderTextDetail(text) {
 export async function renderTextDetailAnnotated(text, annotate) {
   const rd = readerEl();
   if (!rd) return;
-  const deck = await resolveDeck();
+  // 已知词池 = 工作台 deck ∪ 主路径已学词（与列表视图同口径，2026-09-28 审计 P1）。
+  const [deck, extraKnownLemmas] = await Promise.all([resolveDeck(), fetchKnownLemmas()]);
 
   if (!annotate || !annotate.sentences || !annotate.sentences.length) {
     renderTextDetail(text);
     return;
   }
 
-  const { sentences, stats } = annotateWithDeck(deck, annotate);
+  const { sentences, stats } = annotateWithDeck(deck, annotate, extraKnownLemmas);
   renderReaderShell(
     text,
     `<div class="encounter-flow">${buildAnnotatedBody({ sentences })}</div>`,

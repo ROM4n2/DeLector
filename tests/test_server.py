@@ -3977,6 +3977,26 @@ def test_db_busy_timeout_and_concurrency_guard():
     assert sync_mode in (1, 2)  # NORMAL or FULL
 
 
+def test_known_lemmas_endpoint_reflects_studied_cards_only(client):
+    """GET /api/cards/known-lemmas：只回「已学」主卡原形（mastered=1 或 repetition_count>0）。
+
+    2026-09-28 swarm 审计 P1：i+1 已知词池原只读背词工作台 deck，主路径（/api/cards）
+    的词永不进池 → 打通后该端点供前端 mergeKnownLemmas 并入。这里钉住「已学」判据：
+    **仅加入卡盒**（mastered=0 且 repetition_count=0）**不算**已知（承项目既有约定）。
+    """
+    with get_db("test_delector.db") as conn:
+        for word, mastered, reps in (("Abfahrt", 0, 0), ("Haus", 0, 2), ("Baum", 1, 0)):
+            conn.execute(
+                "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context, "
+                "mastered, repetition_count) VALUES (?, ?, ?, ?, ?, ?)",
+                (word, word, "释义", f"Ein Satz mit {word}.", mastered, reps),
+            )
+    res = client.get("/api/cards/known-lemmas")
+    assert res.status_code == 200
+    # 已复习(Haus) 与已掌握(Baum) 入选；仅保存未学(Abfahrt) 落选
+    assert sorted(res.json()["lemmas"]) == ["Baum", "Haus"]
+
+
 def test_a1_hoeren_routes(client):
     """验证 A1 听力工坊相关 REST API 路由与判分持久化。"""
     res_list = client.get("/api/a1/hoeren/sets")

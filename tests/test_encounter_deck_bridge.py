@@ -53,11 +53,15 @@ if (ctx.op === "loadDeck") {
   out.known = [...s].sort();
   out.probeHits = (ctx.probe || []).map((l) => s.has(String(l).toLowerCase()));
 } else if (ctx.op === "annotateWithDeck") {
-  const r = DB.annotateWithDeck(ctx.deck, ctx.annotate);
+  const r = DB.annotateWithDeck(ctx.deck, ctx.annotate, ctx.extraLemmas);
   out.sentences = r.sentences;
   out.stats = r.stats;
 } else if (ctx.op === "mergeServerDeck") {
   out.result = DB.mergeServerDeck(ctx.deck, ctx.server);
+} else if (ctx.op === "mergeKnownLemmas") {
+  const s = DB.mergeKnownLemmas(new Set(ctx.known || []), ctx.lemmas);
+  out.known = [...s].sort();
+  out.probeHits = (ctx.probe || []).map((l) => s.has(String(l).toLowerCase()));
 }
 process.stdout.write(JSON.stringify(out));
 """
@@ -312,6 +316,78 @@ def test_annotate_with_deck_noun_hw_with_article_is_known(bridge):
     stats = out["stats"]
     assert stats["known_tokens"] == 2
     assert stats["unknown_top"] == [{"lemma": "auto", "count": 1}]
+
+
+# ── mergeKnownLemmas：主路径「已学」词并进已知集（跨背词路径打通）─────────────
+# 2026-09-28 swarm 审计 P1：i+1 已知词池原只读背词工作台 deck，主路径（/api/cards）
+# 的词永不进池 → 打通后由 mergeKnownLemmas 并入（归一与 buildKnownSet 同口径）。
+
+
+def test_merge_known_lemmas_unions_and_normalizes(bridge):
+    """mergeKnownLemmas：并进主路径原形，剥冠词/标点 + 小写（与 buildKnownSet 同口径）。"""
+    out = _run_node(
+        {
+            "op": "mergeKnownLemmas",
+            "known": ["gehen"],  # 工作台 deck 已有
+            "lemmas": ["die Abfahrt", "HAUS", None, "", "schön."],
+            "probe": ["abfahrt", "Haus", "schön", "gehen", "nichtda"],
+        },
+        bridge,
+    )
+    # None/空窜跳过；冠词/句点剥除 + 小写；与原 known 并集
+    assert out["known"] == ["abfahrt", "gehen", "haus", "schön"]
+    assert out["probeHits"] == [True, True, True, True, False]
+
+
+def test_merge_known_lemmas_safe_on_bad_inputs(bridge):
+    """lemmas 非数组 / knownSet 非 Set → 安全降级不抛（坏输入不炸 i+1 列表）。"""
+    out = _run_node({"op": "mergeKnownLemmas", "known": None, "lemmas": "oops"}, bridge)
+    assert out["known"] == []
+    out2 = _run_node({"op": "mergeKnownLemmas", "known": ["a"], "lemmas": ["B"]}, bridge)
+    assert out2["known"] == ["a", "b"]
+    out3 = _run_node({"op": "mergeKnownLemmas", "known": ["a"], "lemmas": None}, bridge)
+    assert out3["known"] == ["a"]
+
+
+def test_merge_known_lemmas_does_not_mutate_input_set(bridge):
+    """不改入参：mergeKnownLemmas 返回新 Set（原 known 不被改写）。"""
+    out = _run_node(
+        {"op": "mergeKnownLemmas", "known": ["keep"], "lemmas": ["neu"], "probe": ["keep", "neu"]},
+        bridge,
+    )
+    assert out["known"] == ["keep", "neu"]
+    assert out["probeHits"] == [True, True]
+
+
+def test_annotate_with_deck_merges_extra_main_path_lemmas(bridge):
+    """第 3 参 extraKnownLemmas：把主路径「已学」原形并进详情高亮/统计（与列表同口径）。
+
+    缺省不传 → 主路径词不算 known（向后兼容旧调用形态）。
+    """
+    deck = {"words": [{"id": "w1", "hw": "gehen"}], "cards": {"w1": {"reps": 1}}}
+    annotate = {
+        "total_tokens": 2,
+        "sentences": [
+            {
+                "idx": 0,
+                "tokens": [
+                    {"text": "Geht", "lemma": "gehen", "pos": "VERB"},  # deck known
+                    {"text": "Abfahrt", "lemma": "abfahrt", "pos": "NOUN"},  # 仅主路径「die Abfahrt」
+                ],
+            }
+        ],
+    }
+    out = _run_node(
+        {"op": "annotateWithDeck", "deck": deck, "annotate": annotate, "extraLemmas": ["die Abfahrt"]},
+        bridge,
+    )
+    assert [t["known"] for t in out["sentences"][0]["tokens"]] == [True, True]
+    assert out["stats"]["known_tokens"] == 2
+
+    # 不传 extraLemmas → 主路径词不算 known（与旧行为逐字一致）
+    out2 = _run_node({"op": "annotateWithDeck", "deck": deck, "annotate": annotate}, bridge)
+    assert [t["known"] for t in out2["sentences"][0]["tokens"]] == [True, False]
+    assert out2["stats"]["known_tokens"] == 1
 
 
 def test_annotate_with_deck_empty_known_set_rank_and_cap(bridge):
