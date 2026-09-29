@@ -6,7 +6,7 @@
 # 本地全量验证通过（分半 896 + 228 全绿），遂升到 0.141.1 并撤销 dependabot 的 ignore。
 # 升级路径（仍然适用）：先跑**全量** pytest（含路由守卫）→ 再改此处 pin → 单独一笔 commit。
 fastapi==0.141.1
-starlette==1.6.0
+starlette==1.7.0
 uvicorn>=0.53.0
 spacy>=3.8.16
 httpx>=0.28.1
