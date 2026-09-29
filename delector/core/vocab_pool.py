@@ -33,7 +33,7 @@
 """
 
 import sqlite3
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 # 主干单入口（ADR-0012 §5-1）：lemma 归一键与来源判定唯一实现，禁止在本模块复制一份。
 from delector.core.lexicon import lemma_key, primary_source
@@ -177,6 +177,17 @@ def _fill_updates(existing: Any, desired: Dict[str, Any]) -> Dict[str, Any]:
     return updates
 
 
+def _entry_lemma(entry: Any) -> str:
+    """取 wb 词条的归一键 lemma（唯一归一口径，投影 / 对账共用）。
+
+    非 dict 或无 ``hw`` → ``""``（无法按内容去重，调用方据此跳过，与 ``_project_word`` 同口径）。
+    """
+    if not isinstance(entry, dict):
+        return ""
+    hw = entry.get("hw")
+    return lemma_key(str(hw)) if hw is not None else ""
+
+
 def _is_projectable(entry: Dict[str, Any], cards: Dict[str, Any]) -> bool:
     """范围闸（不变量 8）：只收「用户自己的词」——自建（``custom is True``）或已学（``reps > 0``）。
 
@@ -199,12 +210,10 @@ def _is_projectable(entry: Dict[str, Any], cards: Dict[str, Any]) -> bool:
 def _project_word(conn: sqlite3.Connection, entry: Any, cards: Dict[str, Any]) -> Optional[str]:
     """投影单条 wb 词条；返回 ``"inserted"`` / ``"updated"`` / ``"unchanged"`` / ``"skipped"``，
     无法作键（非 dict / 无归一键）→ ``None``（不计入任何桶）。"""
-    if not isinstance(entry, dict):
-        return None
-    hw = entry.get("hw")
-    lemma = lemma_key(str(hw)) if hw is not None else ""
+    lemma = _entry_lemma(entry)
     if not lemma:
-        return None  # 无归一键 ⇒ 无法按内容去重，跳过（不编造占位）
+        return None  # 非 dict / 无归一键 ⇒ 无法按内容去重，跳过（不编造占位）
+    hw = entry.get("hw")
 
     # 范围闸（不变量 8）：归一键判定之后、查库之前短路 —— 种子词不查库、不写库，仅计入 skipped。
     if not _is_projectable(entry, cards):
@@ -251,3 +260,82 @@ def project_wb_deck(conn: sqlite3.Connection, payload: Dict[str, Any]) -> Dict[s
         if outcome is not None:
             counts[outcome] += 1
     return counts
+
+
+# ── ADR-0016 Phase 3 / Task 4：只读对账（绝不写盘）────────────────────────────
+
+
+def _pool_total(conn: sqlite3.Connection) -> int:
+    """如实取 ``vocab_cards`` 现有**总行数**（规模量，仅供参考）；查库失败 → 0（不抛）。"""
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()
+    except sqlite3.Error:
+        return 0
+    if row is None:
+        return 0
+    return int(row[0])
+
+
+def _pool_lemmas(conn: sqlite3.Connection) -> Set[str]:
+    """池侧归一键集合（只读 ``lemma`` 列）；查库失败 → 空集（不抛）。"""
+    try:
+        rows = conn.execute("SELECT lemma FROM vocab_cards").fetchall()
+    except sqlite3.Error:
+        return set()
+    return {str(r[0]) for r in rows if r[0] is not None}
+
+
+def _empty_reconcile(pool_total: int) -> Dict[str, Any]:
+    """坏 payload / 降级返回值（不抛）：deck 侧全 0，``pool_total`` 仍如实给出。"""
+    return {"deck_projectable": 0, "deck_in_pool": 0, "missing": [], "pool_total": pool_total}
+
+
+def reconcile_report(conn: sqlite3.Connection, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """只读对账：应入池的 deck 词条 vs 池中实际存在的行。**绝不写盘。**
+
+    返回**恰好** 4 个键：
+    - ``deck_projectable``：deck 中「可投影」（过范围闸 ``_is_projectable``）的词条数（按 lemma 去重）；
+    - ``deck_in_pool``：其上已在 ``vocab_cards`` 命中（按 ``lemma`` 去重后）的条数；
+    - ``missing``：应入池但缺失的 lemma（**已排序**，便于断言 / 日志）；
+    - ``pool_total``：``vocab_cards`` 现有总行数（仅供参考的规模量）。
+
+    不变量
+    ======
+    - **按内容去重（禁计数对账）**：deck 侧按 ``lemma_key(str(hw))`` 归一成 lemma **集合**，
+      池侧同样用 ``lemma`` 列；MUST NOT 以计数相等 / 大小判「是否一致」（Migration-Idempotency §1）。
+      同一 lemma 在 deck 出现多次只算一次。
+    - **只读**：函数内**只允许** ``SELECT``；MUST NOT 有任何 ``INSERT/UPDATE/DELETE/REPLACE``，
+      也 MUST NOT 调 ``project_wb_deck``。不 commit / rollback；返回后库状态不变
+      （同一 payload 连调两次结果一致）。
+    - **诚实留空**：deck 侧无 ``hw`` / 非 dict 的词条不计入 ``deck_projectable``
+      （与 ``project_wb_deck`` 口径一致——它们连 bucket 都不进）。
+    - **刻意不产出 ``extra``（池里多出来的行）**：``vocab_cards`` 里还有主阅读流「存词」写入的
+      用户卡（``POST /api/cards/vocab``），当前 schema **不记录行的来源是 deck 还是阅读**，
+      因此任何 ``extra`` 都必然把用户卡误报成异常 ⇒ 按诚实原则**不产出该字段**。
+    - **不抛**：``payload`` 缺 ``words`` / ``words`` 非数组 / ``cards`` 非 dict / 库为空 →
+      ``deck`` 侧全 0、``missing==[]``（``pool_total`` 仍如实查库给出真实值；查库本身失败则给 0）。
+    """
+    pool_total = _pool_total(conn)
+    if not isinstance(payload, dict):
+        return _empty_reconcile(pool_total)
+    words = payload.get("words")
+    cards = payload.get("cards")
+    if not isinstance(words, list) or not isinstance(cards, dict):
+        return _empty_reconcile(pool_total)
+
+    deck_lemmas: Set[str] = set()
+    for entry in words:
+        lemma = _entry_lemma(entry)
+        if not lemma:
+            continue  # 非 dict / 无归一键：与 project_wb_deck 口径一致，不计入
+        if not _is_projectable(entry, cards):
+            continue  # 范围闸：非自建且未学 → 不入池（与 skipped 口径一致）
+        deck_lemmas.add(lemma)  # 集合天然对同一 lemma 去重
+
+    in_pool = deck_lemmas & _pool_lemmas(conn)
+    return {
+        "deck_projectable": len(deck_lemmas),
+        "deck_in_pool": len(in_pool),
+        "missing": sorted(deck_lemmas - in_pool),
+        "pool_total": pool_total,
+    }

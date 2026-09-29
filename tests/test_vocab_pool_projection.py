@@ -28,7 +28,7 @@ import pytest
 import delector.core.database as database  # noqa: E402
 from delector.core.database import db_conn
 from delector.core.lexicon import lemma_key, primary_source
-from delector.core.vocab_pool import project_wb_deck
+from delector.core.vocab_pool import project_wb_deck, reconcile_report
 
 
 @pytest.fixture(autouse=True)
@@ -340,3 +340,154 @@ def test_scope_gate_conservation_inserted_plus_skipped(clean_db):
         result = project_wb_deck(conn, _payload(words, cards=cards))
     assert result == {"inserted": 2, "updated": 0, "unchanged": 0, "skipped": 2}
     assert result["inserted"] + result["skipped"] == len(words)
+
+
+# ── ⑧ 只读对账：deck 应入池 vs 池中实际存在（ADR-0016 Phase 3 / Task 4）──────────────
+# reconcile_report 只读量化「deck→池」缺口：按 **lemma 集合**对账（禁计数对账）；
+# 复用范围闸 `_is_projectable`（口径与 project_wb_deck.skipped 对齐）；不抛、绝不写盘、
+# 刻意不产 ``extra``（池内无法区分 deck 行与阅读流用户卡——诚实留空）。
+
+
+def _reconcile_snapshot(conn: Any) -> List[Any]:
+    """vocab_cards 的只读快照（id, lemma, definition_zh, source, fsrs_s），按 id 排序。"""
+    return [
+        tuple(r)
+        for r in conn.execute(
+            "SELECT id, lemma, definition_zh, source, fsrs_s FROM vocab_cards ORDER BY id"
+        ).fetchall()
+    ]
+
+
+def test_reconcile_reports_missing_gap(clean_db):
+    """① 缺口命中：deck 2 个可投影（1 已在池、1 缺失）⇒ projectable=2, in_pool=1, missing=[缺失]。"""
+    words = [
+        {"id": "u-1", "hw": "Haus", "gloss": "房子", "custom": True},
+        {"id": "u-2", "hw": "Tisch", "gloss": "桌子", "custom": True},
+    ]
+    payload = _payload(words, cards={})
+    with db_conn(clean_db["db"]) as conn:
+        project_wb_deck(conn, payload)  # 两条都入池
+    # 造缺口：删掉池里的 Tisch（保留 Haus）
+    with db_conn(clean_db["db"]) as conn:
+        conn.execute("DELETE FROM vocab_cards WHERE lemma = ?", (lemma_key("Tisch"),))
+
+    with db_conn(clean_db["db"]) as conn:
+        report = reconcile_report(conn, payload)
+
+    assert report["deck_projectable"] == 2
+    assert report["deck_in_pool"] == 1
+    assert report["missing"] == [lemma_key("Tisch")]
+    assert report["pool_total"] == 1  # 池中现剩 Haus 一行
+
+
+def test_reconcile_missing_is_sorted(clean_db):
+    """② missing 排序稳定：≥2 个缺失 ⇒ missing == sorted(missing)。"""
+    words = [
+        {"id": "u-1", "hw": "Zebra", "gloss": "", "custom": True},
+        {"id": "u-2", "hw": "Apfel", "gloss": "", "custom": True},
+        {"id": "u-3", "hw": "Maus", "gloss": "", "custom": True},
+    ]
+    payload = _payload(words, cards={})
+    # 池内只手工插一条 Apfel → 缺 Maus / Zebra 两条
+    with db_conn(clean_db["db"]) as conn:
+        conn.execute(
+            "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context) VALUES (?, ?, ?, ?)",
+            ("Apfel", lemma_key("Apfel"), "", ""),
+        )
+    with db_conn(clean_db["db"]) as conn:
+        report = reconcile_report(conn, payload)
+
+    assert report["deck_projectable"] == 3
+    assert report["deck_in_pool"] == 1
+    assert report["missing"] == sorted(report["missing"])
+    assert report["missing"] == [lemma_key("Maus"), lemma_key("Zebra")]
+
+
+def test_reconcile_dedups_deck_by_lemma(clean_db):
+    """③ lemma 去重：deck 两个不同 id 但同 lemma 的可投影词 ⇒ deck_projectable 只算 1。"""
+    words = [
+        {"id": "u-1", "hw": "Haus", "gloss": "房子", "custom": True},
+        {"id": "u-99", "hw": "Haus", "gloss": "房子（重复条目）", "custom": True},
+    ]
+    with db_conn(clean_db["db"]) as conn:
+        report = reconcile_report(conn, _payload(words, cards={}))
+
+    assert report["deck_projectable"] == 1  # 按 lemma 集合，非按词条计数
+    assert report["deck_in_pool"] == 0
+    assert report["missing"] == [lemma_key("Haus")]
+
+
+def test_reconcile_scope_gate_matches_projection(clean_db):
+    """④ 范围闸一致性：非 custom 且未学（无卡 / reps 0）的词不计入 deck_projectable。"""
+    words: List[Dict[str, Any]] = [
+        {"id": "a1-0001", "hw": "Haus", "gloss": "房子"},  # 非自建 + 无卡 → 挡下
+        {"id": "a1-0002", "hw": "Tisch", "gloss": "桌子"},  # 非自建 + reps 0 → 挡下
+        {"id": "u-1", "hw": "Stuhl", "gloss": "椅子", "custom": True},  # 自建 → 计入
+    ]
+    cards = {"a1-0002": {"reps": 0}}
+    payload = _payload(words, cards=cards)
+
+    with db_conn(clean_db["db"]) as conn:
+        report = reconcile_report(conn, payload)
+    assert report["deck_projectable"] == 1  # 仅自建词
+
+    # 与 project_wb_deck 的 skipped 口径对齐：同一 payload 只 1 条可投影、2 条被挡
+    with db_conn(clean_db["db"]) as conn:
+        projected = project_wb_deck(conn, payload)
+    assert projected == {"inserted": 1, "updated": 0, "unchanged": 0, "skipped": 2}
+    assert report["deck_projectable"] == projected["inserted"]
+
+
+def test_reconcile_is_read_only(clean_db):
+    """⑤ 只读（关键）：调用前后 vocab_cards 快照逐字未变（含行数）；两次调用结果相同。"""
+    words = [
+        {"id": "u-1", "hw": "Haus", "gloss": "房子", "custom": True},
+        {"id": "u-2", "hw": "Tisch", "gloss": "桌子", "custom": True},
+    ]
+    payload = _payload(words, cards={})
+    with db_conn(clean_db["db"]) as conn:
+        project_wb_deck(conn, payload)  # 池中先有 2 行
+
+    with db_conn(clean_db["db"]) as conn:
+        before = _reconcile_snapshot(conn)
+        before_changes = conn.total_changes
+        first = reconcile_report(conn, payload)
+        after = _reconcile_snapshot(conn)
+        after_changes = conn.total_changes
+        second = reconcile_report(conn, payload)
+        after_second = _reconcile_snapshot(conn)
+
+    assert before  # 快照非空，断言才有区分度
+    assert before == after == after_second  # 逐字未变（含行数）
+    assert after_changes == before_changes  # 零写盘：SQLite total_changes 不增（SELECT 不计）
+    assert first == second  # 幂等：同一 payload 连调结果一致
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,
+        {},
+        {"words": "x", "cards": {}},
+        {"words": [], "cards": []},
+        {"words": [1, 2], "cards": {}},
+        {"cards": {}},
+    ],
+)
+def test_reconcile_bad_payload_returns_zeros(clean_db, bad):
+    """⑥ 坏 payload：不抛且返回全 0（missing==[]；空库 pool_total==0）。"""
+    with db_conn(clean_db["db"]) as conn:
+        report = reconcile_report(conn, bad)
+    assert report == {"deck_projectable": 0, "deck_in_pool": 0, "missing": [], "pool_total": 0}
+
+
+def test_reconcile_bad_payload_still_reports_pool_total(clean_db):
+    """⑥+ 坏 payload 仍如实查库给出真实 pool_total（其余为 0 / 空），不编造。"""
+    with db_conn(clean_db["db"]) as conn:
+        conn.execute(
+            "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context) VALUES (?, ?, ?, ?)",
+            ("Haus", lemma_key("Haus"), "", ""),
+        )
+    with db_conn(clean_db["db"]) as conn:
+        report = reconcile_report(conn, {"words": "x", "cards": {}})
+    assert report == {"deck_projectable": 0, "deck_in_pool": 0, "missing": [], "pool_total": 1}

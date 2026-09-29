@@ -141,8 +141,10 @@
 - Test: `tests/test_vocab_pool_projection.py`
 
 **Interfaces:**
-- Consumes: `project_wb_deck`
-- Produces: `reconcile_report(conn, payload) -> {"deck_words": int, "pool_player": int, "missing": [...], "extra": [...]}`（**只读**，量化缺口；供日志/守卫断言）
+- Consumes: `project_wb_deck`、`_is_projectable`（**复用**范围闸，不复制判定逻辑）
+- Produces: `reconcile_report(conn, payload) -> {"deck_projectable": int, "deck_in_pool": int, "missing": [...], "pool_total": int}`（**只读**，量化缺口；供日志/守卫断言）
+  - **刻意不产出 `extra`**（2026-09-29 修订）：`vocab_cards` **不记录行来源**（deck vs 主阅读「存词」写入的用户卡）⇒ 任何 `extra` 必然把用户卡误报成异常，故按「诚实留空」不产出该字段。
+  - 池 `pool_total` 在 payload 损坏但库正常时仍**如实查询**（不随 deck 侧一并归 0）。
 
 **Injected Instincts:**
 - [ ] `[Instinct: Content-Dedup]`: 对账按 `lemma` 集合求交/差，**不用计数相等**（§1）。
