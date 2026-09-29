@@ -17,6 +17,7 @@
 但不能冻结文件内容、阻挡正常演进。
 """
 
+import ast
 import re
 from pathlib import Path
 
@@ -248,4 +249,111 @@ def test_dockerfile_uvicorn_entrypoint_points_to_real_module():
     src = module_file.read_text(encoding="utf-8")
     assert re.search(rf"^{re.escape(attr)}\s*=", src, re.MULTILINE), (
         f"{module_file} 未在模块级定义 `{attr}`：Dockerfile CMD 期望 {module}:{attr} 可被 uvicorn 加载。"
+    )
+
+
+# ── Android Python 运行时契约（pydantic v1 兼容；2026-09-28 swarm 审计 P1）────────
+# 背景：Android 打包面走 Chaquopy，只能装纯 Python 依赖 ⇒ 锁 `pydantic<2.0.0`
+# （v2 的 pydantic-core 是 Rust 写的，Android 上编译不了）⇒ fastapi 连带锁
+# `<0.100.0`（见 android/app/build.gradle 的 pip 块）。而 delector 源码**桌面/Android
+# 共用**、CI 只在 pydantic v2 + fastapi 0.141.1 下校验 —— 一旦有人用了 v2-only API，
+# CI 全绿、APK 在 import 阶段直接崩，且没有任何门禁会拦（审计认定的最危险盲区）。
+#
+# 本守卫在普通套件内**静态**钉住"delector 不使用 pydantic v2-only API"。它是**近似**
+# 而非等价：覆盖最常见的 API 形态回归，但不能替代真机覆盖安装点检（v1/v2 的校验/强转
+# 等行为差异不在此覆盖范围）。
+
+ANDROID_GRADLE = REPO_ROOT / "android" / "app" / "build.gradle"
+DELECTOR_DIR = REPO_ROOT / "delector"
+
+# pydantic v2 才有、v1 没有的名字：导入 / 装饰器 / 类属性 / 方法调用命中即 v1 下必炸。
+_PYDANTIC_V2_ONLY = {
+    # 导入名（from pydantic import X）
+    "ConfigDict",
+    "field_validator",
+    "model_validator",
+    "field_serializer",
+    "model_serializer",
+    "computed_field",
+    "TypeAdapter",
+    "RootModel",
+    "AliasChoices",
+    "AliasPath",
+    # 仅 v2 才有的类属性 / 方法
+    "model_config",
+    "model_validate",
+    "model_validate_json",
+    "model_construct",
+    "model_fields",
+    "model_json_schema",
+    "model_rebuild",
+}
+# v2 的 dump API（v1 对应 .dict()/.json()）：只能经 hasattr 兼容垫片使用
+_PYDANTIC_V2_COMPAT_DUMPS = {"model_dump", "model_dump_json"}
+# 仅 v2 支持的 Field 关键字（v1 用 regex= 而非 pattern= 等）
+_PYDANTIC_V2_FIELD_KWARGS = {"pattern", "json_schema_extra", "union_mode"}
+
+
+def _iter_delector_py() -> list[Path]:
+    """delector/ 下全部 .py（含子包），供静态扫描。"""
+    return sorted(DELECTOR_DIR.rglob("*.py"))
+
+
+def test_android_pins_pydantic_v1_and_fastapi_pre_0100():
+    """android/app/build.gradle 必须仍锁 pydantic<2 / fastapi<0.100（契约锚点）。
+
+    这条不是"崇拜旧版本"，而是把 Android 的 Python 运行时契约钉成显式断言：一旦有人
+    改了 Android 的 pin，本测试会红，逼他同步复核下一条守卫（delector 是否仍对
+    pydantic v1 兼容），而不是让桌面/Android 两边悄悄漂移。
+    """
+    text = _read_guard_file(ANDROID_GRADLE)
+    for needle, why in (
+        ('install "pydantic<2.0.0"', "Android 面必须锁 pydantic v1（Chaquopy 装不了 Rust 扩展）"),
+        ('install "fastapi<0.100.0"', "fastapi 需与 pydantic v1 配套，故锁在 0.100 之前"),
+    ):
+        assert needle in text, (
+            f"{ANDROID_GRADLE} 缺少 {needle!r}（{why}）。\n"
+            "若这是有意的升级，请同步复核 delector 是否仍对 pydantic v1 兼容，"
+            "并更新本守卫与 build.gradle 里 pin 理由的注释。"
+        )
+
+
+def test_delector_avoids_pydantic_v2_only_api():
+    """delector 源码不得使用 pydantic v2-only API（否则 CI 绿、Android APK 崩）。"""
+    offenders = []
+    for path in _iter_delector_py():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "pydantic":
+                for alias in node.names:
+                    if alias.name in _PYDANTIC_V2_ONLY:
+                        offenders.append(f"{path}:{node.lineno} import {alias.name}")
+            elif isinstance(node, ast.Attribute) and node.attr in _PYDANTIC_V2_ONLY:
+                offenders.append(f"{path}:{node.lineno} .{node.attr}")
+            elif isinstance(node, ast.Name) and node.id in _PYDANTIC_V2_ONLY:
+                offenders.append(f"{path}:{node.lineno} {node.id}")
+            elif isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    if kw.arg in _PYDANTIC_V2_FIELD_KWARGS:
+                        offenders.append(f"{path}:{node.lineno} Field(..., {kw.arg}=...)")
+    assert not offenders, (
+        "delector 使用了 pydantic v2-only API —— Android 面是 pydantic v1，"
+        "这些写法在 APK 里 import/调用即崩（而 CI 的 pydantic v2 不会报）：\n  "
+        + "\n  ".join(offenders)
+        + "\n修法：改用 v1/v2 兼容写法；dump 类 API 走 hasattr 兼容垫片。"
+    )
+
+
+def test_pydantic_dump_api_guarded_by_hasattr_shim():
+    """model_dump/model_dump_json 是 v2-only，必须经 hasattr 兼容垫片使用。"""
+    offenders = []
+    for path in _iter_delector_py():
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if any(f".{attr}" in line for attr in _PYDANTIC_V2_COMPAT_DUMPS):
+                if "hasattr(" not in line:
+                    offenders.append(f"{path}:{i}: {line.strip()}")
+    assert not offenders, (
+        "model_dump/model_dump_json 是 pydantic v2 才有的方法，v1 下会 AttributeError；"
+        '必须写成 `x.model_dump() if hasattr(x, "model_dump") else x.dict()` 的兼容垫片：\n  '
+        + "\n  ".join(offenders)
     )
