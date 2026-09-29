@@ -713,16 +713,29 @@ def get_cards() -> Dict[str, Any]:
 def get_known_lemmas() -> Dict[str, Any]:
     """i+1 覆盖率用的「已学」词原形列表（跨背词路径打通，2026-09-28 swarm 审计 P1）。
 
-    只取**已学过**的主卡：`mastered = 1`（已掌握）或 `repetition_count > 0`（至少复习过一次），
-    与背词工作台 deck-bridge.js 的「已学习 = reps>0」**同语义** —— **仅仅加入卡盒不算已学**
-    （承项目既有约定：加入词 ≠ 已知，见 deck-bridge.js 的 A6 注释）。
+    取**已学过**的主卡，三条来源任一成立即算已知：
+    1. `mastered = 1`：用户在卡盒手动置「已掌握」；
+    2. `repetition_count > 0`：在**卡盒**（DSR 复习）复习过至少一次；
+    3. `fsrs_s > 0`：在**背词工作台**（FSRS）学过至少一次 —— 统一池投影（`vocab_pool.py`）
+       是**唯一按工作台卡语义写入 `fsrs_s` 的写入者**（只从工作台卡的 `s` 写入；备份还原
+       `_replace_tables` 仅把备份中的 `fsrs_s` 原样回灌，不引入 DSR 语义，其合法来源仍是投影）；
+       而工作台卡一旦存在 `s` 即为正浮点 —— 首评置
+       `s = fsrsInitS(g) = max(FSRS_W[g-1], 0.1) ≥ 0.1`，其余转移一律 `clamp(…, S_MIN, …)`
+       （`S_MIN = 0.001`，见 workbench.html）⇒ 恒 `s ≥ 0.001 > 0`。故该条件**等价于**
+       `deck-bridge.js` 的「已学习 = `cards[id].reps > 0`」。
+
+    承项目既有约定：**仅仅加入卡盒（入卡未复习）不算已知**（加入词 ≠ 已知，见 deck-bridge.js
+    的 A6 注释）—— 上述三条之外的入卡行（`repetition_count = 0` / `mastered = 0` / `fsrs_s` 空）
+    一律不计。用 `fsrs_s > 0` 而非 `IS NOT NULL`：后者在「行有 fsrs 列但值退化（0 / 空串）」时
+    更宽，`> 0` 才是「真有工作台卡」的语义。
 
     词头归一（剥冠词 + 小写）由前端 mergeKnownLemmas 负责（与 deck 路径共用同一归一），
     此处只回原形去重。局域网只读、非敏感，与既有 `GET /api/cards` 同级不挂本机闸。
     """
     with db_conn() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT lemma FROM vocab_cards WHERE mastered = 1 OR repetition_count > 0"
+            "SELECT DISTINCT lemma FROM vocab_cards "
+            "WHERE mastered = 1 OR repetition_count > 0 OR fsrs_s > 0"
         ).fetchall()
     return {"lemmas": [r["lemma"] for r in rows if r["lemma"]]}
 

@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 # 并由各模块 autouse fixture（本文件：clean_db）在用例前后钉定；本模块不再在模块级赋值
 # （契约 C1，见 docs/specs/2026-09-26-test-db-isolation-design.md §3.1）。
 from delector import server
+from delector.core.lexicon import lemma_key
 from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
 from delector.server import (
     BACKUP_FORMAT_VERSION,
@@ -4065,11 +4066,14 @@ def test_add_vocab_card_sets_source_from_lexicon(client):
 
 
 def test_known_lemmas_endpoint_reflects_studied_cards_only(client):
-    """GET /api/cards/known-lemmas：只回「已学」主卡原形（mastered=1 或 repetition_count>0）。
+    """GET /api/cards/known-lemmas：只回「已学」主卡原形（三条来源任一成立即算已知）。
 
     2026-09-28 swarm 审计 P1：i+1 已知词池原只读背词工作台 deck，主路径（/api/cards）
     的词永不进池 → 打通后该端点供前端 mergeKnownLemmas 并入。这里钉住「已学」判据：
-    **仅加入卡盒**（mastered=0 且 repetition_count=0）**不算**已知（承项目既有约定）。
+    1. mastered=1（用户在卡盒手动置「已掌握」）；
+    2. repetition_count>0（在卡盒 DSR 复习过至少一次）；
+    3. fsrs_s>0（在背词工作台 FSRS 学过至少一次，统一池投影写入）——第三条为 2026-09-28 补入。
+    **仅加入卡盒**（mastered=0 且 repetition_count=0 且 fsrs_s 空）**不算**已知（承项目既有约定）。
     """
     with get_db("test_delector.db") as conn:
         for word, mastered, reps in (("Abfahrt", 0, 0), ("Haus", 0, 2), ("Baum", 1, 0)):
@@ -5305,3 +5309,156 @@ def test_exam_catalog_b1_registered_with_dynamic_count():
     src = open(os.path.join(ROOT, "delector", "services", "exam_catalog.py"), encoding="utf-8").read()
     for banned in ("1712", "974"):
         assert banned not in src, f"exam_catalog.py 硬编码了词条数 {banned}（权威词表接入后即漂移）"
+
+
+# ── GET /api/cards/known-lemmas 的「已学」口径（含背词工作台 FSRS 标记）────────
+#
+# 背景（2026-09-28 审计 P1 的另一半）：i+1 覆盖率的「已知词」来源就是本端点
+# （前端 encounter.js fetchKnownLemmas → mergeKnownLemmas）。ADR-0016 Phase 3 的
+# 统一池投影把工作台 FSRS 卡映射进池时，**只写 fsrs_s / fsrs_d / fsrs_lapses，
+# MUST NOT 写 repetition_count**（FSRS≠DSR 硬规则），mastered 也从不写 ⇒ 只在工作台
+# 背过的词，其 repetition_count 仍是 0、mastered 仍是 0。若 known-lemmas 只认
+# mastered / repetition_count，则这批词永远漏在「已知」之外 —— 下列用例钉死修复。
+
+
+def _put_wb_deck(client, payload):
+    """取 key 后带 X-WB-Key 写入工作台 deck 镜像（走真实投影路径），返回 PUT 响应。"""
+    key = client.get("/api/wb/state/key").json()["key"]
+    return client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
+
+
+def _known_lemma_keys(client) -> set:
+    """GET known-lemmas 的 lemma 列表 → 归一（lemma_key）后集合（与前端 mergeKnownLemmas 同口径）。"""
+    r = client.get("/api/cards/known-lemmas")
+    assert r.status_code == 200, r.text
+    return {lemma_key(lem) for lem in r.json()["lemmas"]}
+
+
+def test_known_lemmas_includes_fsrs_projected_word(client):
+    """① 工作台背过的词经统一池投影（只写 fsrs_s）后必须算已知（修复前必红）。
+
+    真实路径：PUT /api/wb/state → project_wb_deck 写 fsrs_s（不写 repetition_count / mastered）。
+    """
+    payload = {
+        "words": [{"id": "u-haus", "hw": "Haus", "pos": "NOUN", "gloss": "房子"}],
+        "cards": {"u-haus": {"reps": 1, "s": 2.3065, "d": 4.5, "lapses": 0}},
+    }
+    res = _put_wb_deck(client, payload)
+    assert res.status_code == 200, res.text
+
+    # 前提：投影确实把该词写进了池，且只写 fsrs_s（未写 rep / mastered）。
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = 'haus'").fetchone())
+    assert row["fsrs_s"] == 2.3065, f"投影必须把卡的 s 写进 fsrs_s：{row}"
+    assert row["repetition_count"] == 0 and row["mastered"] == 0, "FSRS≠DSR：投影不得写 rep / mastered"
+
+    assert "haus" in _known_lemma_keys(client), "工作台背过（fsrs_s>0）的词必须出现在 known-lemmas"
+
+
+def test_known_lemmas_excludes_unstudied_seed_word(client):
+    """② 未学、非自建的种子词即使随 deck 一起 PUT 也不得算已知。"""
+    payload = {
+        "words": [
+            {"id": "u-haus", "hw": "Haus", "pos": "NOUN", "gloss": "房子"},
+            {"id": "u-baum", "hw": "Baum", "pos": "NOUN", "gloss": "树"},
+        ],
+        "cards": {"u-haus": {"reps": 1, "s": 2.3065, "d": 4.5, "lapses": 0}},
+    }
+    res = _put_wb_deck(client, payload)
+    assert res.status_code == 200, res.text
+
+    keys = _known_lemma_keys(client)
+    assert "haus" in keys, f"背过的 Haus 应在（夹具对照）：{keys}"
+    assert "baum" not in keys, f"无卡、非自建的 Baum（未学冷种子）不得算已知：{keys}"
+
+
+def test_known_lemmas_excludes_added_but_unreviewed_card(client):
+    """③ 仅在卡盒入卡（reader 存词）不算已知 —— 既有约定「加入 ≠ 已知」不回归。
+
+    POST /api/cards/vocab 写入的行：repetition_count=0、mastered=0、fsrs_s 为空。
+    """
+    res = client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "lesen",
+            "lemma": "lesen",
+            "pos": "VERB",
+            "cefr_level": "A1",
+            "definition_zh": "读",
+            "sentence_context": "Ich lese.",
+        },
+    )
+    assert res.status_code == 200, res.text
+
+    with get_db("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = 'lesen'").fetchone())
+    assert row["repetition_count"] == 0 and row["mastered"] == 0, "前提：入卡未复习"
+    assert row["fsrs_s"] is None, "reader 入卡不得带 fsrs_s"
+
+    assert "lesen" not in _known_lemma_keys(client), "仅入卡未复习不得算已知"
+
+
+def test_known_lemmas_includes_dsr_reviewed_card(client):
+    """④ 卡盒（DSR）复习过的词仍算已知（旧语义不回归）。"""
+    res = client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "gehen",
+            "lemma": "gehen",
+            "pos": "VERB",
+            "cefr_level": "A1",
+            "definition_zh": "走，去",
+            "sentence_context": "Ich gehe.",
+        },
+    )
+    card_id = res.json()["id"]
+    with get_db("test_delector.db") as conn:
+        conn.execute("UPDATE vocab_cards SET repetition_count = 1 WHERE id = ?", (card_id,))
+
+    assert "gehen" in _known_lemma_keys(client), "卡盒复习过（repetition_count>0）的词仍应算已知"
+
+
+def test_known_lemmas_includes_mastered_card(client):
+    """⑤ 手动置「已掌握」(mastered=1) 的词仍算已知（旧语义不回归）。"""
+    res = client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "schreiben",
+            "lemma": "schreiben",
+            "pos": "VERB",
+            "cefr_level": "A1",
+            "definition_zh": "写",
+            "sentence_context": "Ich schreibe.",
+        },
+    )
+    card_id = res.json()["id"]
+    with get_db("test_delector.db") as conn:
+        conn.execute("UPDATE vocab_cards SET mastered = 1 WHERE id = ?", (card_id,))
+
+    assert "schreiben" in _known_lemma_keys(client), "mastered=1 的词仍应算已知"
+
+
+def test_known_lemmas_excludes_zero_fsrs_row(client):
+    """⑥ 边界：fsrs_s = 0 的行不得算已知（钉住 `> 0` 而非 `IS NOT NULL`）。
+
+    `IS NOT NULL` 在「行有 fsrs 列但值退化（0 / 空串）」时更宽；只有 `> 0` 才等价于
+    「该行真有工作台卡」（卡一旦存在，fsrsReview 首评即置 s = fsrsInitS(g) ≥ 0.1，
+    后续转移一律 clamp 到 S_MIN = 0.001，故恒 s > 0）。
+    """
+    res = client.post(
+        "/api/cards/vocab",
+        json={
+            "word": "alt",
+            "lemma": "alt",
+            "pos": "ADJ",
+            "cefr_level": "A1",
+            "definition_zh": "旧的",
+            "sentence_context": "Das ist alt.",
+        },
+    )
+    card_id = res.json()["id"]
+    # 手工构造退化行：fsrs_s 有列但值为 0（并非「真有卡」）。
+    with get_db("test_delector.db") as conn:
+        conn.execute("UPDATE vocab_cards SET fsrs_s = 0 WHERE id = ?", (card_id,))
+
+    assert "alt" not in _known_lemma_keys(client), "fsrs_s=0 不是『真有卡』，不得算已知"
