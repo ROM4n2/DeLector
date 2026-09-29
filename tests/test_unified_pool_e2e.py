@@ -14,9 +14,10 @@
    打开即 ``disk I/O error``）。``client`` 用本机来源 ``("127.0.0.1", ...)``：
 ``PUT /api/wb/state`` 与 ``GET /api/wb/state/key`` 均有本机闸。
 
-身份键说明（关键）：统一池按 ``lemma_key(hw)``（小写归一）去重，故「同一个词」的
-池内身份是**归一后的 lemma**。因此用户卡（``POST /api/cards/vocab``）也需以归一
-lemma 落库，才能与 deck 侧投影命中同一行——这是「只补空不覆盖」可被断言、且对
+身份键说明（关键）：统一池按 ``lemma_key(hw)``（小写归一）判「同一个词」，但存储的
+``lemma`` 列保留**原始形态**（``POST /api/cards/vocab`` 原样写入，如 ``"Haus"``）。
+投影 / 对账的**比较口径**统一走 ``lemma_key``（``delector.core.vocab_pool``），故用户卡
+以真实未归一形态落库时，deck 投影仍命中同一行——这是「只补空不覆盖」可被断言、且对
 「改成无条件覆盖」这一变异敏感的前提。
 
 运行（仓库根）：export PYTHONIOENCODING=utf-8 && python -m pytest tests/test_unified_pool_e2e.py -q
@@ -31,9 +32,10 @@ from typing import Any, Dict, List
 import pytest
 from fastapi.testclient import TestClient
 
+from delector.core.database import db_conn
 from delector.core.lexicon import lemma_key, primary_source
 from delector.core.vocab_pool import reconcile_report
-from delector.server import app, get_db, init_db
+from delector.server import app, init_db
 
 DB_FILE = "test_delector.db"
 PROGRESS_FILE = "test_progress.db"
@@ -93,7 +95,7 @@ def _put_deck(client: TestClient, payload: Dict[str, Any]) -> Any:
 
 def _pool_rows() -> Dict[str, Dict[str, Any]]:
     """统一池现有行，按 ``lemma`` 列（池内身份键）为 dict 键。"""
-    with get_db(DB_FILE) as conn:
+    with db_conn(DB_FILE) as conn:
         return {r["lemma"]: dict(r) for r in conn.execute("SELECT * FROM vocab_cards").fetchall()}
 
 
@@ -129,12 +131,12 @@ def test_group1_single_pool_visibility(client: TestClient) -> None:
 
 # ── 断言 2：用户数据零覆盖（只补空、不覆盖既有用户释义）─────────────────────────
 def test_group2_user_data_never_overwritten(client: TestClient) -> None:
-    # 用户先手建一张卡（lemma 用池内身份键：归一后的 "haus"）。
+    # 用户先手建一张卡（走真实端点：POST /api/cards/vocab 原样写入**未归一** lemma "Haus"）。
     r = client.post(
         "/api/cards/vocab",
         json={
             "word": "Haus",
-            "lemma": "haus",
+            "lemma": "Haus",
             "definition_zh": "用户手编释义",
             "sentence_context": "Mein Haus ist alt.",
             "cefr_level": "A1",
@@ -150,9 +152,17 @@ def test_group2_user_data_never_overwritten(client: TestClient) -> None:
     res = _put_deck(client, payload)
     assert res.status_code == 200, res.text
 
+    # 行数断言走 COUNT(*)：_pool_rows() 以 lemma 为键会折叠同 lemma 多行 —— 不能让它
+    # 把「按原始口径另插一行」静默折叠成通过。
+    with db_conn(DB_FILE) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    assert count == 1, f"同一身份键应只 1 行（投影命中用户卡同一行），实际 COUNT(*)={count}"
+
     rows = _pool_rows()
-    assert set(rows) == {lemma_key("Haus")}, f"同一身份键应只 1 行，实际 {set(rows)}"
-    row = rows[lemma_key("Haus")]
+    # 身份判定按**内容**（lemma_key）：存储的 lemma 保留原始形态 'Haus'，归一后 = 'haus'。
+    assert {lemma_key(k) for k in rows} == {lemma_key("Haus")}, f"身份键按内容归一后应为 {{haus}}，实际 {set(rows)}"
+    row = next(iter(rows.values()))
+    assert row["lemma"] == "Haus", "存储值不被本修复改写（仍是原始形态）"
     assert row["definition_zh"] == "用户手编释义", "既有用户释义不得被 deck gloss 覆盖（只补空）"
     assert row["sentence_context"] == "Mein Haus ist alt.", "既有语境句不得被覆盖"
     assert row["fsrs_s"] == 9.0, "空槽 fsrs_s 应被补上（证明投影命中同一行，而非另插一行）"
@@ -167,7 +177,7 @@ def test_group3_three_phase_idempotency(client: TestClient) -> None:
     assert _put_deck(client, p1).status_code == 200
     assert _put_deck(client, p1).status_code == 200  # 同 payload 二次 PUT
 
-    with get_db(DB_FILE) as conn:
+    with db_conn(DB_FILE) as conn:
         count_a = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
         lemmas_a = {r["lemma"] for r in conn.execute("SELECT lemma FROM vocab_cards").fetchall()}
     assert count_a == 1, f"同 payload 二次 PUT 不得新增行，实际 COUNT(*)={count_a}"
@@ -183,7 +193,7 @@ def test_group3_three_phase_idempotency(client: TestClient) -> None:
     }
     assert _put_deck(client, p2).status_code == 200
 
-    with get_db(DB_FILE) as conn:
+    with db_conn(DB_FILE) as conn:
         count_b = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
         lemmas_b = {r["lemma"] for r in conn.execute("SELECT lemma FROM vocab_cards").fetchall()}
     assert count_b == 2, f"新增已学词应只 +1 行（1→2），实际 COUNT(*)={count_b}"
@@ -202,7 +212,7 @@ def test_group4_reconcile_has_no_gap(client: TestClient) -> None:
     }
     assert _put_deck(client, payload).status_code == 200
 
-    with get_db(DB_FILE) as conn:
+    with db_conn(DB_FILE) as conn:
         report = reconcile_report(conn, payload)
     assert report["deck_projectable"] == 2, f"可投影应 2（Haus/Wasser），实际 {report}"
     assert report["deck_in_pool"] == 2, f"在池应 2，实际 {report}"
@@ -241,7 +251,7 @@ def test_group5_backup_roundtrip_and_restore_selfheal(client: TestClient) -> Non
     ]
     assert {lemma_key(str(c.get("lemma"))) for c in backup["vocab_cards"]} == {lemma_key("Haus")}
 
-    with get_db(DB_FILE) as conn:
+    with db_conn(DB_FILE) as conn:
         conn.execute("DELETE FROM vocab_cards")  # 清空目标池，模拟全新设备
 
     res = client.post("/api/backup/restore", json=backup)
@@ -256,7 +266,7 @@ def test_group5_backup_roundtrip_and_restore_selfheal(client: TestClient) -> Non
             assert got[col] == exp[col], f"{lemma}.{col} 还原后被改写：{got[col]!r} != {exp[col]!r}"
 
     # ② 对账无缺口（wb 快照里两词均已入池）。
-    with get_db(DB_FILE) as conn:
+    with db_conn(DB_FILE) as conn:
         report = reconcile_report(conn, payload)
     assert report["missing"] == [], f"还原后对账不得有缺口，实际 missing={report['missing']}"
     assert report["deck_in_pool"] == 2, f"还原后应在池 2，实际 {report}"
