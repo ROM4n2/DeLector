@@ -33,13 +33,15 @@
 """
 
 import sqlite3
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, Tuple
 
 # 主干单入口（ADR-0012 §5-1）：lemma 归一键与来源判定唯一实现，禁止在本模块复制一份。
 from delector.core.lexicon import lemma_key, primary_source
 
-# ``vocab_cards`` 中本投影可读 / 可写的列（SELECT 顺序即下列顺序，用整数下标读取，
-# 不依赖调用方连接的 row_factory）。
+# ``vocab_cards`` 中本投影可读 / 可写的列。行值元组**严格按下列顺序**布局，用整数下标读取，
+# 不依赖调用方连接的 ``row_factory``（历史上曾由一条 ``SELECT`` 顺序决定，措辞按现状收敛）。
+# 注意 ``_pool_index`` 的 ``SELECT lemma, <_READ_COLUMNS>`` 把 ``lemma`` **前置**到了下标 0，
+# 故该处的行元组须取 ``tuple(row[1:])`` 才是本布局。
 _READ_COLUMNS = (
     "id",
     "definition_zh",
@@ -49,6 +51,10 @@ _READ_COLUMNS = (
     "fsrs_d",
     "fsrs_lapses",
 )
+
+# 列名 → ``_READ_COLUMNS`` 内的整数下标：用于 UPDATE 后把落地的值写回映射里的那一行元组
+# （见 ``_project_word``），避免在代码里手写魔数下标。
+_READ_INDEX = {name: i for i, name in enumerate(_READ_COLUMNS)}
 
 # 已存在行的「只补空」目标列（不覆盖非空值）：工作台语义槽 + 来源 + FSRS-6 参数。
 # 注意：**不含** word / lemma（身份列）、**不含**任何 DSR / 用户进度列。
@@ -138,23 +144,32 @@ def _desired_fields(entry: Dict[str, Any], cards: Dict[str, Any]) -> Dict[str, A
     }
 
 
-def _insert_row(conn: sqlite3.Connection, word: str, lemma: str, desired: Dict[str, Any]) -> None:
-    """只增：插入一行统一池词条（仅本投影关心的列；其余列走 schema 默认值）。"""
-    conn.execute(
+def _insert_row(
+    conn: sqlite3.Connection, word: str, lemma: str, desired: Dict[str, Any]
+) -> Tuple[Any, ...]:
+    """只增：插入一行统一池词条（仅本投影关心的列；其余列走 schema 默认值）。
+
+    返回新行在 ``_READ_COLUMNS`` 布局下的值元组（``id`` + 本投影写入的列），供调用方
+    **登记进「归一键 → 行」映射**（见 ``project_wb_deck`` 的关键不变量）。
+    """
+    values = (
+        desired["definition_zh"] or "",
+        desired["sentence_context"] or "",
+        desired["source"] or "user",
+        desired["fsrs_s"],
+        desired["fsrs_d"],
+        desired["fsrs_lapses"],
+    )
+    cur = conn.execute(
         "INSERT INTO vocab_cards "
         "(word, lemma, definition_zh, sentence_context, source, fsrs_s, fsrs_d, fsrs_lapses) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            word,
-            lemma,
-            desired["definition_zh"] or "",
-            desired["sentence_context"] or "",
-            desired["source"] or "user",
-            desired["fsrs_s"],
-            desired["fsrs_d"],
-            desired["fsrs_lapses"],
-        ),
+        (word, lemma, *values),
     )
+    row_id = cur.lastrowid
+    if row_id is None:  # pragma: no cover - 成功的 INSERT 必然返回 rowid
+        raise sqlite3.IntegrityError("vocab_cards INSERT 未返回 lastrowid")
+    return (row_id, *values)
 
 
 def _fill_updates(existing: Any, desired: Dict[str, Any]) -> Dict[str, Any]:
@@ -207,9 +222,48 @@ def _is_projectable(entry: Dict[str, Any], cards: Dict[str, Any]) -> bool:
     return reps is not None and reps > 0
 
 
-def _project_word(conn: sqlite3.Connection, entry: Any, cards: Dict[str, Any]) -> Optional[str]:
+def _pool_index(conn: sqlite3.Connection) -> Dict[str, Tuple[Any, ...]]:
+    """构建「归一键 → 池内行」映射（投影期**每次调用一次性建立**，替代逐词查库）。
+
+    - 一次 ``SELECT``：``lemma`` + ``_READ_COLUMNS``（**整数下标读取**，不依赖调用方连接的
+      ``row_factory``）；映射键 = ``lemma_key(str(lemma))``（ADR-0015 §2.2 **唯一归一口径**，
+      ``_entry_lemma`` 同源），值 = 按 ``_READ_COLUMNS`` 布局的行元组（供 ``_fill_updates``
+      沿用原整数下标）。**身份比较按内容归一**，与存储的**原始形态** ``lemma`` 列解耦：
+      前缀端存词（``POST /api/cards/vocab``）原样写未归一 ``lemma``（如 ``"Haus"``），
+      若仍按原始串比对，同一词会大小写并存两行（本修复要消除的 bug）。
+    - **撞行确定性规则**：同一归一键命中多行时（历史重复行：原始未归一 + 曾按归一键插入），
+      优先「**原始 ``lemma`` 已等于其归一键**」的那行（已归一形态，语义最干净）；仍并列则取
+      **最小 ``id``**（最早写入者，最稳定）。规则确定、可测，不依赖 dict / ``SELECT`` 的
+      迭代顺序（历史库可能已存在这类重复行，必须给出可预期的一行）。
+    """
+    rows = conn.execute("SELECT lemma, " + ", ".join(_READ_COLUMNS) + " FROM vocab_cards").fetchall()
+    index: Dict[str, Tuple[Any, ...]] = {}
+    rank: Dict[str, Tuple[bool, int]] = {}
+    for row in rows:
+        raw = "" if row[0] is None else str(row[0])
+        lemma = lemma_key(raw)
+        value = tuple(row[1:])
+        # 排序键 (非「原始即归一等」, id)：越小越优先 ⇒ 归一等行优先，否则最小 id。
+        candidate = (raw != lemma, int(value[0]))
+        if lemma not in rank or candidate < rank[lemma]:
+            rank[lemma] = candidate
+            index[lemma] = value
+    return index
+
+
+def _project_word(
+    conn: sqlite3.Connection,
+    entry: Any,
+    cards: Dict[str, Any],
+    pool_index: Dict[str, Tuple[Any, ...]],
+) -> Optional[str]:
     """投影单条 wb 词条；返回 ``"inserted"`` / ``"updated"`` / ``"unchanged"`` / ``"skipped"``，
-    无法作键（非 dict / 无归一键）→ ``None``（不计入任何桶）。"""
+    无法作键（非 dict / 无归一键）→ ``None``（不计入任何桶）。
+
+    ``pool_index`` = 「归一键 → 池内行」映射（``project_wb_deck`` 每次调用经 ``_pool_index``
+    构建一次）：身份判定按**内容**（``lemma_key``）而非存储的原始形态，故命中前缀端存下的
+    未归一 ``lemma`` 行（同一词不再并存两行）。
+    """
     lemma = _entry_lemma(entry)
     if not lemma:
         return None  # 非 dict / 无归一键 ⇒ 无法按内容去重，跳过（不编造占位）
@@ -220,13 +274,12 @@ def _project_word(conn: sqlite3.Connection, entry: Any, cards: Dict[str, Any]) -
         return "skipped"
 
     desired = _desired_fields(entry, cards)
-    existing = conn.execute(
-        "SELECT " + ", ".join(_READ_COLUMNS) + " FROM vocab_cards WHERE lemma = ? LIMIT 1",
-        (lemma,),
-    ).fetchone()
+    existing = pool_index.get(lemma)
 
     if existing is None:
-        _insert_row(conn, str(hw), lemma, desired)
+        # 关键不变量：新行**必须登记进映射** —— 否则同一 deck 内后一个同 lemma 词条查不到
+        # 刚插入的这一行，会再插一行（原先逐词查库时第二个能查到第一个）。
+        pool_index[lemma] = _insert_row(conn, str(hw), lemma, desired)
         return "inserted"
 
     updates = _fill_updates(existing, desired)
@@ -237,6 +290,13 @@ def _project_word(conn: sqlite3.Connection, entry: Any, cards: Dict[str, Any]) -
         f"UPDATE vocab_cards SET {assignments} WHERE id = ?",
         (*updates.values(), existing[0]),
     )
+    # 关键不变量：**同步刷新映射里这一行的元组** —— 否则同一 deck 内后一个同 lemma 词条读到的仍是
+    # 陈旧行（被补的列仍显示为空），``_fill_updates`` 会误判「该列还空着」而再次 UPDATE，覆盖前一个
+    # 条目刚补上的值。刷新后与基线（逐词重查库）语义一致：只补空、后写的绝不覆盖先写的。
+    refreshed = list(existing)
+    for column, value in updates.items():
+        refreshed[_READ_INDEX[column]] = value
+    pool_index[lemma] = tuple(refreshed)
     return "updated"
 
 
@@ -255,8 +315,11 @@ def project_wb_deck(conn: sqlite3.Connection, payload: Dict[str, Any]) -> Dict[s
         return _empty_result()
 
     counts: Dict[str, int] = {"inserted": 0, "updated": 0, "unchanged": 0, "skipped": 0}
+    # 每次调用构建一次「归一键 → 行」映射（身份比较按内容归一）：避免逐词查库的口径漂移，
+    # 并在本 deck 内共享「新增行登记」状态（见 ``_project_word`` 关键不变量）。
+    pool_index = _pool_index(conn)
     for entry in words:
-        outcome = _project_word(conn, entry, cards)
+        outcome = _project_word(conn, entry, cards, pool_index)
         if outcome is not None:
             counts[outcome] += 1
     return counts
@@ -277,12 +340,17 @@ def _pool_total(conn: sqlite3.Connection) -> int:
 
 
 def _pool_lemmas(conn: sqlite3.Connection) -> Set[str]:
-    """池侧归一键集合（只读 ``lemma`` 列）；查库失败 → 空集（不抛）。"""
+    """池侧**归一键**集合（只读 ``lemma`` 列，逐行施加 ``lemma_key``）；查库失败 → 空集（不抛）。
+
+    存储的 ``lemma`` 是**原始形态**（前缀端存词原样写入，如 ``"Haus"``），故身份比较必须按
+    内容归一 —— 否则 ``Haus`` vs ``haus`` 会与 deck 侧归一键求交落空、误报 ``missing``。
+    ``None`` 行跳过。
+    """
     try:
         rows = conn.execute("SELECT lemma FROM vocab_cards").fetchall()
     except sqlite3.Error:
         return set()
-    return {str(r[0]) for r in rows if r[0] is not None}
+    return {lemma_key(str(r[0])) for r in rows if r[0] is not None}
 
 
 def _empty_reconcile(pool_total: int) -> Dict[str, Any]:
