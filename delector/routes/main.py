@@ -704,6 +704,24 @@ def get_cards() -> Dict[str, Any]:
         return {"vocab_cards": v, "grammar_cards": g}
 
 
+@router.get("/api/cards/known-lemmas")
+def get_known_lemmas() -> Dict[str, Any]:
+    """i+1 覆盖率用的「已学」词原形列表（跨背词路径打通，2026-09-28 swarm 审计 P1）。
+
+    只取**已学过**的主卡：`mastered = 1`（已掌握）或 `repetition_count > 0`（至少复习过一次），
+    与背词工作台 deck-bridge.js 的「已学习 = reps>0」**同语义** —— **仅仅加入卡盒不算已学**
+    （承项目既有约定：加入词 ≠ 已知，见 deck-bridge.js 的 A6 注释）。
+
+    词头归一（剥冠词 + 小写）由前端 mergeKnownLemmas 负责（与 deck 路径共用同一归一），
+    此处只回原形去重。局域网只读、非敏感，与既有 `GET /api/cards` 同级不挂本机闸。
+    """
+    with db_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT lemma FROM vocab_cards WHERE mastered = 1 OR repetition_count > 0"
+        ).fetchall()
+    return {"lemmas": [r["lemma"] for r in rows if r["lemma"]]}
+
+
 @router.get("/api/cards/vocab")
 def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str] = None) -> Any:
     scope_norm = (scope or "core").lower().strip()
