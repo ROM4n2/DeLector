@@ -11,6 +11,7 @@ import os
 import sqlite3
 
 import pytest
+from db_cleanup import remove_db_files  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -44,24 +45,17 @@ def clean_db():
     os.environ["DATABASE_PATH"] = "test_audit_delector.db"
     os.environ["PROGRESS_DB_PATH"] = "test_audit_progress.db"
     gc.collect()
-    for f in ("test_audit_delector.db", "test_audit_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+    # 原本只删主库；统一为三件套（主库 + -wal + -shm）：启用 WAL 后残留旁文件
+    # 会让下个用例打开即 disk I/O error（与其它测试模块同一纪律）。
+    remove_db_files("test_audit_delector.db", "test_audit_progress.db")
     from delector.server import init_db, init_progress_db
 
     init_db("test_audit_delector.db")
     init_progress_db("test_audit_progress.db")
     yield
     gc.collect()
-    for f in ("test_audit_delector.db", "test_audit_progress.db"):
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+    # 同上：统一为三件套清理。
+    remove_db_files("test_audit_delector.db", "test_audit_progress.db")
     for key, val in saved.items():
         if val is None:
             os.environ.pop(key, None)

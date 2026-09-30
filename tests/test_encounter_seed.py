@@ -38,6 +38,8 @@ import pytest
 os.environ.setdefault("DATABASE_PATH", "test_encounter_seed.db")
 os.environ.setdefault("PROGRESS_DB_PATH", "test_encounter_seed_progress.db")
 
+from db_cleanup import remove_db_files  # noqa: E402
+
 from delector.core import database  # noqa: E402
 from delector.data.encounter_seed_dict import PRESET_ENCOUNTER_PACKS  # noqa: E402
 from delector.routes.encounter import validate_pack  # noqa: E402
@@ -68,25 +70,11 @@ def clean_db(tmp_path):
     os.environ["DATABASE_PATH"] = _db
     os.environ["PROGRESS_DB_PATH"] = _pdb
     gc.collect()
-    for f in (_db, _pdb):
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files(_db, _pdb)
     database.init_db(_db)  # 连带 init_progress_db() 落在 tmp_path
     yield
     gc.collect()
-    for f in (_db, _pdb):
-        for suffix in ("", "-wal", "-shm"):
-            p = f + suffix
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+    remove_db_files(_db, _pdb)
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
