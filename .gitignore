@@ -23,6 +23,10 @@ credentials.json
 artifact*.html
 .pytest_cache/
 .cache/
+# 工具缓存：mypy / ruff 会在各自目录内写 `.gitignore: *` 自忽略，此处显式兜底
+# （内部 .gitignore 缺失或工具换版重建目录时，缓存内容会漏进 status）。
+.mypy_cache/
+.ruff_cache/
 build/
 dist/
 *.spec
@@ -53,6 +57,10 @@ keystore.properties
 # 本地 Claude Code 环境（hooks/settings/worktrees 均为本机 agent 工具配置，
 # 不忽略的话，一次 `git add -A` 会把 hook 脚本与 settings 当普通文件提交进来）。
 .claude/
+
+# 本地 git worktree（隔离开发用，路径约定 `.worktrees/<name>`）。
+# 不忽略的话，一次 `git add -A` 会把整棵工作树当普通目录塞进来。
+.worktrees/
 
 # 临时调试脚本与开发沙盒（Scratchpad & Agent Caches）
 scratch/
