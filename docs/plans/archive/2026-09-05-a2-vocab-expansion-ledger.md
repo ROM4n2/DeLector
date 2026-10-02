@@ -1,6 +1,6 @@
 # A2 词汇与全域背词系统扩展实施执行台账 (Ledger)
 
-> **计划路径**：[`docs/plans/2026-09-05-a2-vocab-expansion-implementation-plan.md`](file:///d:/Code/DeLector/docs/plans/2026-09-05-a2-vocab-expansion-implementation-plan.md)
+> **计划路径**：[`docs/plans/archive/2026-09-05-a2-vocab-expansion-implementation-plan.md`](file:///d:/Code/DeLector/docs/plans/archive/2026-09-05-a2-vocab-expansion-implementation-plan.md)
 > **目标特性**：A2 词汇与全域背词系统扩展 (方案 B：全域贯通方案)
 > **创建时间**：2026-09-05 16:35
 > **基线状态**：pytest 全量 574 passed (109.26s)，Node.js 行为探针 10/10 全绿通过（含 13/13 处切片护栏 100% 保护）。

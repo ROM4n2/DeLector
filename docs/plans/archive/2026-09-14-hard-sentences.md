@@ -206,7 +206,7 @@
 ### Task 6: 全量回归 + 文档回填 + PR [Role: VERIFY]
 
 **Files:**
-- Modify: `WORKMEMORY/PROJECT_OVERVIEW.md`、`WORKMEMORY/work.log`（WORK_END）、`FEATURES.md`、`docs/plans/2026-09-14-hard-sentences.md`（执行状态块）、`docs/specs/2026-09-14-hard-sentences-design.md`（偏差注记若有）
+- Modify: `WORKMEMORY/PROJECT_OVERVIEW.md`、`WORKMEMORY/work.log`（WORK_END）、`FEATURES.md`、`docs/plans/archive/2026-09-14-hard-sentences.md`（执行状态块）、`docs/specs/2026-09-14-hard-sentences-design.md`（偏差注记若有）
 
 **验证命令：**
 - `python -m pytest -q` 全量 → 0 FAILED（基线 788+1 + 新增）

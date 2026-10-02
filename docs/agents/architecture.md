@@ -269,7 +269,7 @@ GET    /api/wb/lan-info                         {hostname, port, lan_ip, instanc
   不加 ACAO（浏览器按跨域失败拦截）；无 Origin 头的本机/同源/存量流量行为零变化。
 - 前端：`wbsync.pair.set/clear/info` + 配对面板宿主/远端二态渲染。设计与验证详见
   `docs/specs/2026-09-03-lan-silent-sync-design.md`（§6 Stage A 已勾选）与
-  `docs/plans/2026-09-03-lan-silent-sync-stage-a(-ledger).md`。
+  `docs/plans/archive/2026-09-03-lan-silent-sync-stage-a(-ledger).md`。
 
 ## 局域网静默同步 Stage B（自动化 WebRTC · 2026-09-03 落地）
 
@@ -288,7 +288,7 @@ GET    /api/wb/lan-info                         {hostname, port, lan_ip, instanc
   收到信封一律 `applyMerge(payload,{silent:true})`。
 - **重连与兜底**：`connectionState` 失败/断开 → 去抖重建；连续失败超上限即降级，
   Stage A 的 HTTP 轮询始终在线兜底（保证「至少可达」）。
-- 详见 `docs/plans/2026-09-03-lan-silent-sync-stage-b(-ledger).md` 与 ADR-0004
+- 详见 `docs/plans/archive/2026-09-03-lan-silent-sync-stage-b(-ledger).md` 与 ADR-0004
   （`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0004-lan-sync-webrtc-stage-b.md`）。
   **真机验证**：桌面↔桌面浏览器可验；Android APP 须等下次发版（旧版 APK 未内嵌 Stage A+B 代码）。
 

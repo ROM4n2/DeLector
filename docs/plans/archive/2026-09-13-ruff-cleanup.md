@@ -2,7 +2,7 @@
 
 > **Goal**: 补齐 CI Hardening 显式登记的已知边界——为全仓 Python 代码（96 文件）引入 Ruff lint 清账（2265 → 0 告警）并接入 PR/push 门禁；`ruff format` 全量统一格式（独立成笔可回滚）；Mypy 严格模式递延另立计划。
 > **Tech Stack**: Ruff 0.16.7（开发期工具，不进 requirements.txt）/ pytest（回归门禁，基线 715+1 不回退）/ GitHub Actions（ci.yml PR/push master）
-> **Spec Reference**: Vault `PYTHON-STANDARDS` §8.1（Ruff 全面采用、零告警 MUST；Mypy 严格模式 MUST——本期递延）/ `AUTOMATION-GOTCHAS` §5（反冻结集合断言）；上游计划 `docs/plans/2026-09-09-ci-hardening.md`（本计划即其"已知边界"的落地）
+> **Spec Reference**: Vault `PYTHON-STANDARDS` §8.1（Ruff 全面采用、零告警 MUST；Mypy 严格模式 MUST——本期递延）/ `AUTOMATION-GOTCHAS` §5（反冻结集合断言）；上游计划 `docs/plans/archive/2026-09-09-ci-hardening.md`（本计划即其"已知边界"的落地）
 > **Global Constraints**:
 > - **ruff 不进 `requirements.txt`**（开发期工具；混入运行时依赖会增大 Android 打包面体积与漂移面）——CI 内单独 `pip install ruff`。
 > - **E402 一律 `# noqa`，禁止重排 import**：`delector/server.py` 的"`load_env()` 之后才 import"是刻意设计（env 必须先载入，红线 9 生态）；tests 的"先设 env 再 import"同理（曾因重排导致整批跑红 `no such table`）。

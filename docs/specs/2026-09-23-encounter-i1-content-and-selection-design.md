@@ -273,8 +273,8 @@ rate = knownTokens / entry.total_tokens;
 
 ## 6. 关联索引
 
-- `docs/plans/2026-09-23-encounter-i1-content-and-selection.md`（实施计划）
-- `docs/plans/2026-09-10-encounter-content-supply.md`（预置内容供给侧首建：本设计的直接前身）
+- `docs/plans/archive/2026-09-23-encounter-i1-content-and-selection.md`（实施计划）
+- `docs/plans/archive/2026-09-10-encounter-content-supply.md`（预置内容供给侧首建：本设计的直接前身）
 - `docs/specs/2026-09-05-a2-vocab-expansion-design.md`（等级扩展的先例形态）
 - `08-Projects/DeLector/01-ADR/0010-encounter-zone-layered-go-agent-producer.md`
 - `08-Projects/DeLector/01-ADR/0014-vocabulary-storage-boundary-and-a1-server-fetch.md`

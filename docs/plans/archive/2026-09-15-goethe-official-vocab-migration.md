@@ -379,7 +379,7 @@ Schema：`lemma -> {"ipa", "example_de", "example_zh", "topic"}`；常量 `OFFIC
 | S2 | `a6daa65` | 主干 `lexicon.RICH`(2722) / `rich_of()`（A2/B1 覆盖 A1 的 291 条重叠） |
 | S4 | `4e329bd` | **契约 9 → 11 字段**（`+ipa` / `+example_zh`，`de` = 德语例句）；`_a1_workbench_row` 补 A1 中文例句（S3 并入） |
 | S5 | `86ba390` | 消费端接线：`/api/a2/vocab` 下发 ipa/example_zh；workbench A2/B1 `ex:[{de,zh}]` + ipa；`a1_cards.js` `example_zh` 接真值；探针同步 |
-| S6 | `cbf0844` | reader 卡 `ex` 形状对齐 + `docs/plans/2026-09-16-rich-ipa-review-checklist.md`（空 IPA 10 / artifacts 候选 381·69·74） |
+| S6 | `cbf0844` | reader 卡 `ex` 形状对齐 + `docs/plans/archive/2026-09-16-rich-ipa-review-checklist.md`（空 IPA 10 / artifacts 候选 381·69·74） |
 
 **关键数据**：`RICH` 2722 条（A1 660 ∪ A2 736 ∪ B1 1617，291 条跨档重叠由 A2/B1 覆盖）；`/api/a2/vocab` **726/736** 条含非空 `ipa`+`example_zh`；契约 11 字段（`{id,hw,pos,gender,plural,de,zh,ipa,example_zh,core,cefr}`）。
 **门禁**：除 `test_server.py` **731 passed**（+2 pre-existing，见 §6）+ `test_server.py` 单独 **228 passed** = **959 passed + 1 skipped**；**11/11 node 探针**零漂移；`ruff check .` 零告警；`mypy` 0 error（118 源文件）。

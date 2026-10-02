@@ -194,7 +194,7 @@
 ### Task 6: 集成回归 + 文档回填 + ledger（收尾）[Role: Integrator]
 
 **Files:**
-- Modify: `AGENTS.md`（路由清单补 `/api/wb/rtc/signal` + Stage B 小节）、`FEATURES.md`（§十三 行升级为「WebRTC 加密静默」）、`docs/specs/2026-09-03-lan-silent-sync-design.md`（§6 Stage B 勾选）、`docs/plans/2026-09-03-lan-silent-sync-stage-a-ledger.md`（追加 Stage B Task 行 + 真机手动验证清单：桌面↔桌面浏览器可先于 APP；APP 挂下次发版）
+- Modify: `AGENTS.md`（路由清单补 `/api/wb/rtc/signal` + Stage B 小节）、`FEATURES.md`（§十三 行升级为「WebRTC 加密静默」）、`docs/specs/2026-09-03-lan-silent-sync-design.md`（§6 Stage B 勾选）、`docs/plans/archive/2026-09-03-lan-silent-sync-stage-a-ledger.md`（追加 Stage B Task 行 + 真机手动验证清单：桌面↔桌面浏览器可先于 APP；APP 挂下次发版）
 - Test: 回归 `test_server.py -k "wb or sync or rtc"`、`test_german_workbench.py`、`test_frontend_module_graph.py`
 
 **Interfaces:**

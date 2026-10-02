@@ -2,10 +2,10 @@
 
 > **Goal**: 按 ADR-0010 分层定案把「背词→阅读桥」做成真实闭环：P0 遇见区最小版（Python/Web 交互，手选短文，已背词高亮 + 生词进卡 + 小复习）先行上线；随后 Go agent 落地**首个真执行 job**（语料→分级卡包批处理，DeepSeek 定级/释义），产物喂给遇见区。
 > **Tech Stack**: Python 3.11（FastAPI + spaCy + SQLite）/ 原生 ES 前端 / Go 1.26.5（`github.com/ROM4n2/DeLector/agent`）
-> **Spec Reference**: Vault `08-Projects/DeLector/01-ADR/0010-encounter-zone-layered-go-agent-producer.md`（Accepted）；ADR-0008（DAG 口径）；ADR-0009（Python 工具契约）；上一阶段计划 `docs/plans/2026-09-06-go-agent-runtime-phase2a.md`、`...-phase2b.md`
+> **Spec Reference**: Vault `08-Projects/DeLector/01-ADR/0010-encounter-zone-layered-go-agent-producer.md`（Accepted）；ADR-0008（DAG 口径）；ADR-0009（Python 工具契约）；上一阶段计划 `docs/plans/archive/2026-09-06-go-agent-runtime-phase2a.md`、`...-phase2b.md`
 > **子计划（按执行顺序，A 先行）**:
-> - **Sub-Plan A** → `docs/plans/2026-09-07-encounter-zone-p0.md`（P0 遇见区，Python + 前端）
-> - **Sub-Plan B** → `docs/plans/2026-09-07-dag-job1-content-producer.md`（Go DAG 执行运行时 + job#1）
+> - **Sub-Plan A** → `docs/plans/archive/2026-09-07-encounter-zone-p0.md`（P0 遇见区，Python + 前端）
+> - **Sub-Plan B** → `docs/plans/archive/2026-09-07-dag-job1-content-producer.md`（Go DAG 执行运行时 + job#1）
 
 ## 核心约束（两个子计划共用）
 

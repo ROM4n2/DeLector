@@ -2,7 +2,7 @@
 
 > **Goal**: 继 Ruff（PR #41）之后补齐静态质量工具链的最后一块——为全仓 Python 代码（98 源文件）接入 Mypy 并清账至零错误，接入 PR/push 门禁；`strict` 全量类型注解另立计划（递延）。
 > **Tech Stack**: Mypy 2.3.1（开发期工具，**不进 requirements.txt**）/ pytest（基线 751+1 不回退）/ GitHub Actions
-> **Spec Reference**: Vault `PYTHON-STANDARDS` §8.1（Type Checker MUST 过 Mypy 严格模式——**本计划为渐进路径的第一阶段**）/ 上游：`docs/plans/2026-09-13-ruff-cleanup.md`（同型工程债，已收官）
+> **Spec Reference**: Vault `PYTHON-STANDARDS` §8.1（Type Checker MUST 过 Mypy 严格模式——**本计划为渐进路径的第一阶段**）/ 上游：`docs/plans/archive/2026-09-13-ruff-cleanup.md`（同型工程债，已收官）
 > **Global Constraints**:
 > - **禁止裸 `# type: ignore`**：每处豁免必须带错误码 + 理由注释（`# type: ignore[attr-defined]  # 理由`）；`--warn-unused-ignores` 开启后多余的 ignore 也会报错，形成自净。
 > - **每处告警要么真修、要么带理由豁免**——清账不得变成"到处 ignore"（掩耳盗铃）。

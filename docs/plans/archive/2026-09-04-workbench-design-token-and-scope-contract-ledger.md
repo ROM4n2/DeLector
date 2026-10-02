@@ -1,6 +1,6 @@
 # 路线 B 实施计划执行台账 (Ledger)
 
-> **计划路径**：`docs/plans/2026-09-04-workbench-design-token-and-scope-contract.md`
+> **计划路径**：`docs/plans/archive/2026-09-04-workbench-design-token-and-scope-contract.md`
 > **设计参考**：`docs/specs/2026-09-04-workbench-design-token-and-scope-contract-design.md`
 > **创建时间**：2026-09-04 20:25
 > **基线状态**：pytest 559 通过，Node.js 探针 10/10 通过。

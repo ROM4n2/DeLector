@@ -1,6 +1,6 @@
 # 路线 C — Grammatik-Radar: 精读语法雷达 实施计划执行台账 (Ledger)
 
-> **计划路径**：`docs/plans/2026-09-04-grammatik-radar-implementation-plan.md`
+> **计划路径**：`docs/plans/archive/2026-09-04-grammatik-radar-implementation-plan.md`
 > **目标特性**：路线 C Grammatik-Radar（精读五场域/从句树 Hover 触发 + 语料语法统计 + 蜘蛛图雷达）
 > **创建时间**：2026-09-05 15:20
 > **基线状态**：pytest 全量 569 passed (118.88s)，Node.js 行为探针 10/10 全绿通过（含 13/13 处切片护栏 100% 保护）。

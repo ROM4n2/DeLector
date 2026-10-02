@@ -2,7 +2,7 @@
 
 > **Goal**: 「遇见区」P0 上线——手选分级短文本 → 阅读视图把**已背词**高亮（按本机背词工作台 deck 判定）→ 生词点选看本地词典释义 → 一键进卡（写回 deck + wb 同步）→ 读完新词小复习。桌面源码实例与 Android Chaquopy 实例同源可用。
 > **Tech Stack**: Python 3.11 / FastAPI / spaCy / SQLite（读侧沿用既有 `nlp_engine` + `articles` 同库表纪律）/ 原生 ES（index.html + `static/js/*.js`）
-> **Spec Reference**: ADR-0010 §4 北星 / §5 边界（交互留 Python）；Master `docs/plans/2026-09-07-encounter-zone-and-dag-job1-program.md`
+> **Spec Reference**: ADR-0010 §4 北星 / §5 边界（交互留 Python）；Master `docs/plans/archive/2026-09-07-encounter-zone-and-dag-job1-program.md`
 > **Global Constraints**:
 > - **交互不离开本机**：已背词判定只在本机 deck（localStorage `wb.words.v1`/`wb.cards.v1`，服务端镜像 `GET /api/wb/state` 兜底）；任何写操作过本机既有 `_require_localhost` / `X-WB-Key` 闸。
 > - **不碰既有测试切片**：`test_german_workbench.py` 对 workbench.html 的字符串切片断言（禁 async IIFE 定位记号）；改/加 index.html 与 JS 后必须全量 `pytest -v` + 前端模块图测试（`test_frontend_module_graph.py`）通过。
