@@ -1,6 +1,6 @@
 # v4.1.0 写作台 Inlay Hints：语法内联提示
 
-> **保存位置**：批准后复制到 `docs/superpowers/plans/2026-08-21-writing-desk-v410.md`（与 v3.11/v3.12/v4.0 计划同目录）。
+> **保存位置**：批准后复制到 `docs/plans/archive/2026-08-21-writing-desk-v410.md`（与 v3.11/v3.12/v4.0 计划同目录）。
 
 ## Context
 
