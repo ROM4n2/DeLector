@@ -2,7 +2,7 @@
 
 > **Goal**: 依据 ADR-0006 裁决，彻底剔除背词工作台 2018 年 Bootstrap / 后台管理工具的粗糙视觉骨架；将全局字体、画布、Tab 导航与卡片体系重塑为与 DeLector 主站同源共生的 **Oxford / Zettelkasten 实体学术抽认卡** 与 **心流优先出版物轻量导航**；评分区全面替换为高质感的矿物植物墨水印章键，并全程严格守护 `tools/wb_queue_probe.mjs` 中的 13 处代码切片与既有测试套件 100% 全绿。
 > **Tech Stack**: 原生 CSS（Custom Properties 设计 Token、CSS 3D Transform）、原生 JavaScript（单文件 SPA + iframe 容器）、node:vm 行为级动态探针。
-> **ADR Reference**: [`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0006-workbench-zettelkasten-editorial-redesign.md`](file:///d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0006-workbench-zettelkasten-editorial-redesign.md) / [`docs/specs/2026-09-04-adr-0006-workbench-zettelkasten-editorial-redesign.md`](file:///d:/Code/DeLector/docs/specs/2026-09-04-adr-0006-workbench-zettelkasten-editorial-redesign.md)
+> **ADR Reference**: [`d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0006-workbench-zettelkasten-editorial-redesign.md`](file:///d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0006-workbench-zettelkasten-editorial-redesign.md) / [`docs/adr/2026-09-04-adr-0006-workbench-zettelkasten-editorial-redesign.md`](file:///d:/Code/DeLector/docs/adr/2026-09-04-adr-0006-workbench-zettelkasten-editorial-redesign.md)
 > **Global Constraints**:
 > - **切片护栏绝对红线 (MUST)**：`static/german/workbench.html` 必须严格保护 `tools/wb_queue_probe.mjs` 中的 13 处代码切片（`pad2`, `buildReviewQueue`, `refilterReviewQueueForScope`, `renormalizeQueueTail` 等）。严禁修改被测函数签名或内部大括号结构。
 > - **DOM ID 稳定性 (MUST)**：保留 `#cardFlip`, `#revBoard`, `#scopeSeg`, `#tabs`, `#cardHw`, `#cardIpa`, `#cardPos`, `#cardGloss`, `#cardEx`, `#dueBadge`, `#rate-btn` 等所有交互 ID。

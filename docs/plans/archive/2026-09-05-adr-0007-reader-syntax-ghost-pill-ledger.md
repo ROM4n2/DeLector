@@ -1,7 +1,7 @@
 # ADR-0007 实施计划执行台账 (Ledger)
 
 > **计划路径**：`docs/plans/archive/2026-09-05-adr-0007-reader-syntax-ghost-pill.md`
-> **设计参考**：`docs/specs/2026-09-05-adr-0007-reader-syntax-ghost-pill-explicit-trigger.md` / `D:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0007-reader-syntax-ghost-pill-explicit-trigger.md`
+> **设计参考**：`docs/adr/2026-09-05-adr-0007-reader-syntax-ghost-pill-explicit-trigger.md` / `D:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0007-reader-syntax-ghost-pill-explicit-trigger.md`
 > **目标特性**：ADR-0007 (精读句法拓扑行内幽灵微胶囊主动触发与心流保护)
 > **创建时间**：2026-09-05 16:02
 > **基线状态**：pytest 全量 574 passed (110.75s)，Node.js 行为探针 10/10 全绿通过（含 13/13 处切片护栏 100% 保护）。

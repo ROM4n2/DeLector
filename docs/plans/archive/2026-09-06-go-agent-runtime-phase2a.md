@@ -2,7 +2,7 @@
 
 > **Goal**: 用 Go 构建自研 DAG Agent Runtime，经 HTTP localhost 调用 Python NLP 微服务的 `/api/tools/*` 契约，产出 ~1000 行有含金量的 Go 工程代码。
 > **Tech Stack**: Go ≥1.22（以本机 `go version` 为准，先探测）/ Python 3.11（现有基线零改动）/ cobra / testify（可选，标准库 testing 优先）
-> **Spec Reference**: `docs/specs/2026-09-06-adr-0008-go-agent-runtime-architecture.md`（Accepted）；Vault 模式沉淀 `99-Inbox/2026-09-06-go-python-hybrid-architecture-pattern.md`
+> **Spec Reference**: `docs/adr/2026-09-06-adr-0008-go-agent-runtime-architecture.md`（Accepted）；Vault 模式沉淀 `99-Inbox/2026-09-06-go-python-hybrid-architecture-pattern.md`
 > **Global Constraints**:
 > - **契约即法律**：Python 侧 `TOOL_REGISTRY` 当前实为 5 工具 `ingest / analyze / writing_check / export / tts`（ADR-0009 后 exercise→writing_check）。ADR-0008 图中的 `review` 工具**尚不存在于 Python 侧**——Task 1 先修订 ADR-0008 工具清单，禁止 Go 侧凭图编程。
 > - **goroutine 泄露防线**：所有出站 HTTP 必须 `http.NewRequestWithContext` + 显式超时；错误判定用 `errors.Is(err, context.DeadlineExceeded)`，禁字符串比较。
@@ -75,7 +75,7 @@ agent/                              ← Go module（新建，go.mod 在此）
 
 **Files:**
 - Create: `agent/go.mod`、`agent/cmd/delector/main.go`、`agent/internal/pythonsvc/doc.go`
-- Modify: `docs/specs/2026-09-06-adr-0008-go-agent-runtime-architecture.md`（工具清单对齐 5 工具实况）
+- Modify: `docs/adr/2026-09-06-adr-0008-go-agent-runtime-architecture.md`（工具清单对齐 5 工具实况）
 
 **Interfaces:**
 - Produces: `cmd/delector` cobra 根命令 `delector version` / `delector run --dag <name>`（本 Task 只通 version）

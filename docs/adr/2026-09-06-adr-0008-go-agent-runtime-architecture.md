@@ -184,7 +184,7 @@ result, err := dag.Run(ctx, article)
 
 ## Next Steps (Implementation Roadmap)
 
-### Phase 1: Python 重构（前置，详见 [实施计划](../plans/2026-09-06-python-restructure-phase1.md)）
+### Phase 1: Python 重构（前置，详见 [实施计划](../plans/archive/2026-09-06-python-restructure-phase1.md)）
 
 1. **T1** — 消除 Hazard：修 back-edge + 跨边界 import，创建 `utils.py`
 2. **T2** — 数据层搬迁：8 个 `*_dict.py` → `delector/data/`

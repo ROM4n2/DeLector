@@ -1,7 +1,7 @@
 # Ledger — DeLector Python Restructure Phase 1
 
 > Plan: `docs/plans/archive/2026-09-06-python-restructure-phase1.md`
-> Spec: `docs/specs/2026-09-06-adr-0008-go-agent-runtime-architecture.md`
+> Spec: `docs/adr/2026-09-06-adr-0008-go-agent-runtime-architecture.md`
 > Created: 2026-09-06
 
 ## 执行方式（如实注明）

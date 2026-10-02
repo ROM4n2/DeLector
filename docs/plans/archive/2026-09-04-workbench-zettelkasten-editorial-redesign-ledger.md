@@ -1,7 +1,7 @@
 # ADR-0006 实施计划执行台账 (Ledger)
 
 > **计划路径**：`docs/plans/archive/2026-09-04-workbench-zettelkasten-editorial-redesign.md`
-> **设计参考**：`docs/specs/2026-09-04-adr-0006-workbench-zettelkasten-editorial-redesign.md` / `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0006-workbench-zettelkasten-editorial-redesign.md`
+> **设计参考**：`docs/adr/2026-09-04-adr-0006-workbench-zettelkasten-editorial-redesign.md` / `d:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0006-workbench-zettelkasten-editorial-redesign.md`
 > **目标特性**：ADR-0006 (Zettelkasten Academic Card & Editorial Focus-First Redesign)
 > **创建时间**：2026-09-04 21:30
 > **基线状态**：pytest 全量 565 项全绿通过 (112.00s)，Node.js 行为探针 10/10 全绿通过（含 13/13 处切片护栏 100% 保护）。
