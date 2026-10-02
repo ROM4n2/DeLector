@@ -56,7 +56,7 @@ EOF
 
 1. 读 `INDEX.md`（文件清单 + 主题索引 + Active handoffs）——小文件，先看这里找旧工作。
 2. 读 `PROJECT_OVERVIEW.md`（项目 primer，60 秒建立全局认知）。
-3. `tail -n 50 WORKMEMORY/work.log`（最近事件流）。
+3. `tail -n 50 WORKMEMORY/work.log`（最近事件流）；**顺手 `grep -c '^### ' WORKMEMORY/work.log`，若计数 > `HOT_RETENTION_EVENTS × 1.5` 就先按 §5 轮转再做别的**（把轮转变成读序的第一步，别等有人想起来才做）。
 4. 查旧主题：`grep -i "<关键词>" WORKMEMORY/INDEX.md` → 按索引只加载命中的 archive 文件，禁止通读全部历史。
 
 ## 4. 交接包（handoff_*.md）
@@ -87,6 +87,25 @@ status: open
 - **轮转触发**：事件数超 `HOT_RETENTION_EVENTS × 1.5` 时，**下一个开始工作的 agent** 顺手执行：最老事件移入 `archive/work-YYYY-MM-DD.log`（按事件日期分片），并更新 INDEX 主题索引。
 - **WARM**：`archive/`，只经 INDEX 索引按需加载。
 - **COLD**：`cold/digest-YYYY-MM.md`，仅在用户显式要求（"把上月总结成 digest"）时由 agent 蒸馏生成，并同步刷新 PROJECT_OVERVIEW.md。
+
+### 5.1 并发守卫（轮转 = 移动，不是改写）
+
+轮转是 `work.log` 唯一被允许的 read-modify-write 操作（§1.3 追加制的唯一例外），也是并发风险最高的一步——2026-09-26 事件已实证：另一并行会话同时在写同一 `work.log`，写方一度用**过期快照整文件覆盖**，抹掉对方 19 行，最终靠 `git restore --source=HEAD` 才复原。故轮转 MUST 遵守：
+
+- **轮转前**：立即重读 `work.log` 尾部（`tail -n $(…)` 或整文件），**禁止**使用会话早期或缓存的快照作为基准。
+- **轮转中**：只做「移出最老事件 + 保留最新 `HOT_RETENTION_EVENTS` 条」，**禁止**顺手改写 / 美化 / 去重 / 重排任何事件正文；移出的分片只做重定位，不改字节。
+- **轮转后**：复核两点——(a) 末条事件与轮转前一致（`### ` 末条头不变）；(b) 「轮转前 union 事件集合 == 轮转后 union 事件集合」，逐 `### ` 头对账：
+
+  ```bash
+  # 轮转前先存基线
+  grep -h '^### ' WORKMEMORY/work.log WORKMEMORY/archive/*.log | sort | uniq -c > /tmp/events.before
+  # …执行轮转…
+  grep -h '^### ' WORKMEMORY/work.log WORKMEMORY/archive/*.log | sort | uniq -c > /tmp/events.after
+  diff /tmp/events.before /tmp/events.after   # 无输出 = 事件集合守恒（不丢、不增、不改）
+  ```
+
+- **若发现写入期间有他方追加**（基线里没有的事件出现，或末条与基线不符）⇒ **以最新状态整体重做轮转**，绝不允许丢事件。
+- 一句话：**轮转的产物是「移动」，不是「改写」**——事件正文在整个生命周期内只追加、不修改。
 
 ## 6. 与 vault 的蒸馏联动
 

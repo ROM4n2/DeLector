@@ -1,0 +1,66 @@
+# WARM archive 2026-09-14
+
+### 2026-09-14 00:10 | deepseek-v4-flash__trae-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+新功能候选 A（听力微训工坊）方案阶段完成，待作者审计划后执行：
+- 选型：C 统一引擎 + 三模式（精听/影子跟读 L、听写诊断 D、听力填空 C）全含
+- 关键发现：v4.8.0 听写工坊设计（LCS 逐字归因 Umlaut/Case/Inflection/Missing）有 spec 无实现（plan 全 - [ ] 未执行）——本功能复活该设计；essay_diff.py 句子级 LCS + writer.js 词级 LCS DP 为算法底座
+- 产物：docs/specs/2026-09-13-listening-micro-training-design.md（已批准）+ docs/plans/2026-09-13-listen-micro-training.md（待审）
+- 计划：4 阶段 6 Task TDD，分支 feature/listen-micro-training，vault-exec maker-checker 派发
+- 待办：作者审计划 → vault-exec 初始化 ledger 执行
+
+### 2026-09-14 01:16 | deepseek-v4-flash__trae-code | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：听力微训工坊（docs/plans/2026-09-13-listen-micro-training.md，分支 feature/listen-micro-training）T1–T6 全绿。
+1. T1 diagnose_diktat 词级 LCS 逐字归因（afc85e1）；T2 make_cloze 启发式挖空（809a335，含黄卡修复）；T3 listen_trials 表 + /api/listen 四端点（ffe5daa）；T4 前端 listen-lab.js 三模式挂备考域（12220f7）；T5 前端行为探针 + 模块图守卫（2671588）；T6 回归 + 文档回填。
+2. 材料源：encounter 分级短文 + a1_hoeren audio_text_de（sanitize 路径可取，侦察确认无需非脱敏）。
+3. 偏差：Mode C 挖空为前端本地镜像 make_cloze 同策略（行为等价，探针钉死，spec §3 注明）。
+4. maker-checker 5/5 APPROVED（T4 一次 REWORK 已修复）。
+门禁：全量 **788 passed + 1 skipped**（基线 751→788，净增 35：引擎 21 + API 9 + 探针 2 + 模块图 3）；ruff 零告警；mypy 零错误；Go 三门禁不受影响。
+分支/PR：feature/listen-micro-training 收尾 1 个 PR 待合 master（本事件仅文档回填，不 commit，主线程负责）。
+遗留：Android 真机 TTS 点检（发版后并入既有点检清单）；B 候选「语料长难句强化」待试用反馈拍板。
+
+### 2026-09-14 09:30 | deepseek-v4-flash__trae-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+听力微训工坊 PR #44 已由作者 merge（master=14da7ec），本地 master 已同步。分支 feature/listen-micro-training 待清理（本地+远端未删）。
+后续候选：语料长难句强化（先 A 后 B 的 B）；遗留：Android 真机 TTS 三模式点检（发版后）。
+
+### 2026-09-14 10:00 | deepseek-v4-flash__trae-code | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：Android 真机 TTS 点检（听力微训三模式）。
+产出：ops.md 新增「Android 真机点检：听力微训 TTS 三模式」清单（已写入）。
+前置：手机需装含听力微训的 APK —— master 已合 PR #44 但未发版，需 v5.6.0 bump+tag 或本地 assembleDebug。
+不做范围：不动 TTS 代码（无缺陷证据前）；不发版（待作者批准）。
+
+### 2026-09-14 13:30 | deepseek-v4-flash__trae-code | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：Android 真机 TTS 点检（听力微训三模式）。
+1. 产出 ops.md「Android 真机点检：听力微训 TTS 三模式」清单（9 项 + 记录纪律）。
+2. v5.6.0 发版完成：版本面五件套 bump（sw.js/index.html/build.gradle/README/OVERVIEW）+ README Roadmap 5.x 排序修正（错位→严格升序）+ 新条目；tag 打在 bump commit 上；CI 四平台 Release 已出（APK + Win/macOS/Linux 四资产，非草稿非预发布）。
+3. 作者覆盖安装 v5.6.0 真机验证三模式 TTS **通过**（无缺陷）。
+4. OVERVIEW 发布面/听力微训条目已回填「点检已闭环」。
+遗留：真实用户试用收三问反馈（最高价值）；B 候选语料长难句强化；Mypy --strict 递延。
+
+### 2026-09-14 14:00 | deepseek-v4-flash__trae-code | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：B 候选语料长难句强化（先 A 后 B 的 B）——0→1 流程：spark 定规格 → plan 出计划 → 作者批准后 exec。
+上下文：A 候选听力微训已落地（v5.6.0）。B 已知基础：Grammatik-Radar 6 维指标（corpus_syntax_stats）、syntax_tree 句法拓扑、ghost pill 显式触发；缺口=雷达只展示无"挑长难句→针对性精读训练"动作闭环。
+不做范围：不动 A 候选听力微训代码；不发版（产出规格+计划为先）。
+
+### 2026-09-14 18:00 | deepseek-v4-flash__trae-code | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：长难句精读工坊（docs/plans/2026-09-14-hard-sentences.md，分支 feature/hard-sentences）T1–T6 全绿。
+1. commit 序列：T1 0ea6d31（score_sentence/estimate_level）→ T2 4f3a39a（rank_sentences）→ T3 080eb53（hard_sentence_trials 表 + /api/syntax 三端点）→ T4 7e31b21（前端 hard-sentences.js 卡片流）→ T5 3ec5d45（行为探针 + 模块图守卫）→ T6 文档回填（含本事件）。
+2. 偏差：① path 不来自 analyze_syntax_tree 输出（该双路径函数返回 dict 无 path 键），由 rank_sentences 按调用路径增量探测注入（spacy/pure），规格 §3 已预见双路径标注；② 入复习盒直拼 POST /api/cards/grammar 复用 grammar_cards，不新增端点（scope 收敛）。
+3. maker-checker 5/5 APPROVED。
+门禁：全量 **828 passed + 1 skipped**（基线 788→828，净增 40）；ruff 零告警；mypy 零错误；Go 三门禁不受影响；10/10 tools/*.mjs 探针全绿。
+分支/PR：feature/hard-sentences 处于 T6 阶段（本事件仅文档回填，不 commit；T6 原子 commit + PR 合 master 由主线程负责）。
+遗留：真实用户试用（收三问反馈，最高价值）；全功能候选已清（听力微训 + 长难句均落地）；Mypy --strict 递延、预置包 gloss 富化保留。
+
+### 2026-09-14 19:45 | GLM-5.2__trae-code | PR_OPEN
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：作者批准 → 主线程推送 feature/hard-sentences 至 origin 并开 PR #45 合 master。
+PR: https://github.com/ROM4n2/DeLector/pull/45（+3082/-5，20 文件，标题"feat(syntax): 长难句精读工坊（评分+挑句+拆解揭示+成绩落盘）"）。
+CI：ubuntu Tests & Go Gates run 34819353502 启动中（IN_PROGRESS）。
+遗留：CI 绿后作者合 master；真用户试用收三问反馈。
+

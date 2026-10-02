@@ -1,0 +1,36 @@
+# WARM archive 2026-09-06
+
+### 2026-09-06 | codebuddy__auto | WORK_END
+任务闭环：Phase 2 后端收包（26 业务模块进 delector/ 包）+ 全链路回归 + 三端打包联动 + 文档同步。
+1. 迁移：server/database/nlp/security + linguistics/core_dict/core_dict_ext/a1_dict/a1_writing_dict/a1_hoeren_dict/a1_lesen_dict/prep_dict/writing_rules/syntax_tree/essay_diff/edge_tts_mini/exam_catalog + routes_a1/routes_a2/routes_a1_hoeren/routes_a1_lesen/routes_exam/routes_sync/routes_corpus/routes_rtc 收进 delector/。database.py 数据目录显式回指仓库根（dont revert to dirname(__file__)）；start.py/package_windows.py 运行在根，App.DATA_DIR=根目录。conftest.py 注释更正：收包后 import delector 仍依赖根在 sys.path → conftest 长期保留。
+2. 测试：tests/ 全部改 from delector import …；新增 tests/test_import_root_modules.py 迁移哨兵；打包注册断言（prep_dict/corpus_dict/all_backend）用 importlib.util.find_spec 解析 spec 源码，钉住 pyinstaller hiddenimports 与 CI 字符串。test_server.py 225 passed 1 skipped。
+3. 打包联动（含两处既有缺陷）：yml Linux/macOS 区段 hidden-import 加前缀并补漏 routes_a2（Windows 有、CI 漏，server.py:233 静态 import → 旧打包必 ModuleNotFoundError）；Android v5.3.0 拷贝清单漏 routes_a2.py → 改 cp -r start.py + cp -r delector 整目录拷贝，消灭逐个清单维护面；Windows spec APP_NEEDLES 验包探针改包路径并补 routes_a2.py。
+4. 文档同步：README 目录树收成 delector/ 条目、功能表两格加前缀；architecture.md 技术栈后端行标注收包；PROJECT_OVERVIEW 更正 conftest 表述 + Phase 2 注记。
+遗留：旧 DeLector.spec 系 9/4 打包遗留（未跟踪，已删），重打包会生成新格式。提交：C1=1c82266 server 迁移+回退链、C2=f33962e? 测试适配、C3=…（详见 git log）。
+
+### 2026-09-06 | codebuddy__auto | WORK_END（收尾补录）
+全量回归暴露 2 failed 已修复（5984b68）：① 3 处残留旧路径 `delector.server.py`
+（writer_mobile:11 / german_workbench:21 / audit:194，9/4 收包中间态产物）；② tts 降级测试
+只顶 sys.modules["delector.edge_tts_mini"]，先例测试触发真延迟导入后包对象缓存真模块属性
+→ `from X import Y` 命中包属性绕开 sys.modules → 读到真 MP3 头。修复：setattr 包属性双保险。
+证据：583 passed 基线（194.41s）+ 2 修复定向 2 passed；修复后全量进度区 49%→100% 无 F/E
+（统计行被 safe-delete 守卫吞行，838>750，精确统计需换轮次）。
+准确 commit 序列：546c6a0/1d05ac9/e05d22b/3e9cb9e/1c82266（refactor 收包）→ dc8bd32（test 适配）
+→ f33962e（打包联动 + 补漏 routes_a2）→ fb891bf（文档）→ 5984b68（修复）。工作区干净。
+
+### 2026-09-06 | codebuddy__auto | WORK_END
+任务闭环：Python 后端包内重构 Phase 1（T1–T7，`docs/plans/2026-09-06-python-restructure-phase1.md`）全部收官。
+1. 分层：T2 `data/`（8 词典）→ T3 `nlp_engine/` → T4 `routes/`（8 分域 + main.py 通用 handler，`register_routes` 统一挂载，main 垫底）+ server.py 2418→330 行 app 工厂 → T5 `services/`（writing/essay_diff/exam_catalog/tts）→ T6 `core/`（database/security/utils）→ T7 `tools/`（Go Agent 工具接口）。顶层仅余 server.py。
+2. 红线保持：DATA_DIR 改「向上走到不再是包目录」锚定（delector/core/database.py 与旧位置都解析到仓库根，test_backend_package_layout 钉住）；workbench 13 处切片护栏零漂移；`_require_localhost` 闸随迁。
+3. T7 新增 `POST /api/tools/{name}` + `TOOL_REGISTRY`（5 tool 统一 `async def run(payload)->dict`），ingest/export 加 localhost 闸，为 Phase 2 Go Agent 备好 HTTP 契约。
+4. 守卫联动：注册覆盖测试（端点对象比对 + 变异验证）、打包注册测试 data/route/service 三集、APP_NEEDLES、hidden-imports 全部跟迁；测试收集 583→599（+12 tools 测试）无 import 错误。
+踩坑：① `git checkout --` 会把未提交改动整文件回退（T4b 的 routes/__init__.py 被回退一次，重做）；② star-import 不导出下划线私有名 → edge_tts_mini 不留顶层 shim，真搬迁 + monkeypatch 契约迁 `delector.services.tts`；③ `from delector import database as db` 模块属性式导入正则 `delector\.(database|…)` 搜不到（无点号）→ 漏改首跑 ImportError，改 `import delector.core.database as db`；④ fetch_remote_html 是 async，monkeypatch fake 必须用 async 函数。
+commit 序列：3e4e7b2（T4a routes 子包）→ 206b3d7（T4b 工厂+main.py）→ 83e1d1a（T5 services）→ e0234bd（T6 core）→ 20d82ee（T7 tools）。本环境无写码子代理，vault-exec 降级为主线程直写 + 每 Task 原子提交；全量 pytest 因耗时被环境跳过，用 `pytest --collect-only`（导入检查）+ 定向跑受影响文件替代。
+
+### 2026-09-06 | codebuddy__auto | WORK_END（vault-grill 收官拷打）
+任务闭环：对 Phase 1 T5–T7 落地物做重构师视角 Socratic 拷打，3 项拍板全部落地。
+1. Q1A：services/__init__ 删 17 个零调用方扁平符号 re-export（Deletion Test），只留 4 模块对象 re-export —— 消除与 core/__init__「只收零依赖符号」的自相矛盾（f900fe4）。
+2. Q2A：tools/exercise 语义造假（批改≠生成）→ 更名 writing_check（注册键同步）；tools/export 的 output_path 改必填，移除废弃 API tempfile.mktemp 的临时路径兜底（TOCTOU）（b14a938）。
+3. 决策归档 ADR-0009（独立编号，不并入 ADR-0008）：Vault 01-ADR/0009-python-package-restructure-deletion-test-and-tool-contract.md。Go Agent 契约变更：工具名 exercise→writing_check。
+纪律沉淀：① 子包 __init__ 符号级扁平入口须有真实调用方，否则删；② tool 命名=真实语义；③ 服务端禁止自选持久化落点。另修复一次 git mv 预暂存导致的红态中间提交（soft reset 重切边界，reflog 可溯）。
+
