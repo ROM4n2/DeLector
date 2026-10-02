@@ -1,7 +1,7 @@
 # Mypy Strict 类型门禁升级设计（2026-09-18）
 
-> 定位：`docs/specs/`（设计文档）；执行清单与状态跟踪见 `docs/plans/2026-09-18-mypy-strict-annotation-sweep.md`（待建）。
-> 上游背景：`docs/plans/2026-09-13-mypy-cleanup.md`（适度档清账收官，138→0）；本设计为下一档升级。
+> 定位：`docs/specs/`（设计文档）；执行清单与状态跟踪见 `docs/plans/archive/2026-09-18-mypy-strict-annotation-sweep.md`（待建）。
+> 上游背景：`docs/plans/archive/2026-09-13-mypy-cleanup.md`（适度档清账收官，138→0）；本设计为下一档升级。
 
 ## 1. Problem Statement & User Value
 

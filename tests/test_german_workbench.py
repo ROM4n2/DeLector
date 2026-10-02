@@ -1808,7 +1808,7 @@ def test_merge_and_alias_migration_behave_under_node():
 # --------------------------------------------------------------------------
 # Task 3 · 核心词模式下搜索旁路 scope
 # --------------------------------------------------------------------------
-# 落地依据（仓内）：docs/plans/workbench-scope-control-and-live-settings.md · Task 3
+# 落地依据（仓内）：docs/plans/archive/workbench-scope-control-and-live-settings.md · Task 3
 # 搜索框非空 = 全库查询（不受核心词模式限制），浏览才受模式限制；非核心命中行打
 # 淡色小标。改动只有三处：renderWords 过滤谓词一行 + 一处行 className + 一条 CSS。
 # 不新增状态变量、不碰 revQueue、不改 wordFilters.scope 本身。
@@ -1879,7 +1879,7 @@ def _flatten_parens(line):
 def test_words_search_bypasses_core_scope_filter():
     """核心模式下搜索框非空时，renderWords 谓词不再应用 scope 过滤。
 
-    落地依据：`docs/plans/workbench-scope-control-and-live-settings.md` · Task 3。
+    落地依据：`docs/plans/archive/workbench-scope-control-and-live-settings.md` · Task 3。
     Task 2 删掉词库那个 scope 下拉后，要查非核心词只剩「顶栏切到全部 → 查 → 切回」，
     而切到全部会立刻把非核心新词补进队列尾部，中途评一张就落卡、计入 today.nw、
     吃掉核心配额 —— 只是查个单词却动了复习进度（「浏览行为不得污染复习进度」）。
@@ -2074,7 +2074,7 @@ def test_out_of_scope_class_wired_on_word_row():
 
 # ── Task 6 留账：可执行的 renderWords 过滤谓词 ──────────────────────────────
 #
-# 计划文档：docs/plans/workbench-scope-control-and-live-settings.md · Task 6
+# 计划文档：docs/plans/archive/workbench-scope-control-and-live-settings.md · Task 6
 # 本文件上面那三条 Task 3 静态断言只能证明「谓词长这样」，证明不了
 # 「core 模式下搜 anbieten 真能命中、清空搜索后同一个词命中数为 0」。
 # 行为级覆盖由计划文档 Task 6 的 tools/wb_queue_probe.mjs（searchBypass 场景）承担，
@@ -2213,7 +2213,7 @@ def _run_node_predicate(js, words):
 # --------------------------------------------------------------------------
 # Task 4 · dailyNew 即时生效（含手动追加豁免）
 # --------------------------------------------------------------------------
-# 落地依据：docs/plans/workbench-scope-control-and-live-settings.md · Task 4
+# 落地依据：docs/plans/archive/workbench-scope-control-and-live-settings.md · Task 4
 # 本任务只守结构契约；「改数量后队列真的变了」等行为级覆盖由 Task 6 的
 # tools/wb_queue_probe.mjs 承担 —— 它自带 Node 侧的括号配对切片器，
 # 从 workbench.html 现切函数体，不依赖本文件提供任何构造块。
@@ -2338,7 +2338,7 @@ def test_refilter_review_queue_does_not_renormalize():
 # --------------------------------------------------------------------------
 # Task 5 · newOrder 即时生效 + 文案更正
 # --------------------------------------------------------------------------
-# 落地依据：docs/plans/workbench-scope-control-and-live-settings.md · Task 5
+# 落地依据：docs/plans/archive/workbench-scope-control-and-live-settings.md · Task 5
 # 只影响今后追加的词：renormalizeQueueTail 的补词分支已读 S.settings.newOrder，
 # 挂上它即可；已在队列中的词不重排（重排会打乱当前位置，违反 ADR-0002 D5）。
 
@@ -2425,7 +2425,7 @@ def test_extra_new_words_registers_manual_exemption_uncommented():
 def test_build_review_queue_clears_manual_exemptions():
     """整队重建必须清空 manualExtraIds —— 否则豁免登记只增不减，跨天漏裁。
 
-    落地依据：`docs/plans/workbench-scope-control-and-live-settings.md` · Task 6。
+    落地依据：`docs/plans/archive/workbench-scope-control-and-live-settings.md` · Task 6。
     `manualExtraIds` 的注释写着「与 revQueue 同生命周期」，但 revQueue 会被
     `buildReviewQueue()` 整队重建（跨天 rollover、完成态重建都会走到），
     而豁免集原先只 add 不 clear。可达后果：标签页跨夜不关，昨天手动追加的词
@@ -2454,7 +2454,7 @@ def test_build_review_queue_clears_manual_exemptions():
 # --------------------------------------------------------------------------
 # Task 6 · 行为级动态探针 tools/wb_queue_probe.mjs
 # --------------------------------------------------------------------------
-# 计划文档：docs/plans/workbench-scope-control-and-live-settings.md · Task 6
+# 计划文档：docs/plans/archive/workbench-scope-control-and-live-settings.md · Task 6
 # 上面 Task 3/4/5 的静态断言只能证明「代码长这样」。「dailyNew 15→30 后尾部
 # 真的从 10 个新词变成 25 个」「手动追加的 20 个一个都没被裁掉」「切 core 只过滤
 # 不补齐」这些行为，正则一条都证明不了。
@@ -2802,7 +2802,7 @@ def test_wbsync_phone_pulls_without_key():
 def test_wbsync_paired_push_goes_remote_absolute():
     """动态探针：配对远端（localStorage wb.pair.v1）后 wbsync 对远端绝对地址静默双向同步。
 
-    Stage A（2026-09-03，docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 3）：
+    Stage A（2026-09-03，docs/plans/archive/2026-09-03-lan-silent-sync-stage-a.md Task 3）：
     Android APP 页面 origin 是它自己的 127.0.0.1:8000；配对后 push/pull 必须打到
     http://<配对 host>/api/wb/state —— 否则相对路径会打到手机自己的本地 server，进度永不同步。
 
@@ -2882,7 +2882,7 @@ def test_wbsync_background_pull_is_silent():
 
 
 # --------------------------------------------------------------------------
-# Stage A · 局域网镜像配对面板（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 4）
+# Stage A · 局域网镜像配对面板（docs/plans/archive/2026-09-03-lan-silent-sync-stage-a.md Task 4）
 # --------------------------------------------------------------------------
 
 

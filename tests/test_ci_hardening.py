@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CI 配置守卫测试（docs/plans/2026-09-09-ci-hardening.md Task 1，RED 阶段）。
+"""CI 配置守卫测试（docs/plans/archive/2026-09-09-ci-hardening.md Task 1，RED 阶段）。
 
 在 `.github/workflows/ci.yml` 与 `.github/dependabot.yml` 尚不存在时，先钉死
 它们的**最低契约**，让后续 Task 3 / Task 4 按 RED → GREEN 落地，并长期防止
@@ -35,7 +35,7 @@ def _read_guard_file(path: Path) -> str:
         pytest.fail(
             f"被守护的配置文件不存在：{path}\n"
             "它是本守卫测试钉下的 CI 契约对象；请按 "
-            "docs/plans/2026-09-09-ci-hardening.md 的对应 Task 创建它，"
+            "docs/plans/archive/2026-09-09-ci-hardening.md 的对应 Task 创建它，"
             "而不是删除或跳过本测试。"
         )
     return path.read_text(encoding="utf-8")

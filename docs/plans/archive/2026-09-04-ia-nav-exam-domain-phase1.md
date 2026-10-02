@@ -18,7 +18,7 @@
 ### Task 0: 建立分支与回归基线 [Role: Guard]
 
 **Files:**
-- 无源码改动。产出基线记录 `docs/plans/2026-09-04-ia-nav-exam-domain-phase1-ledger.md`。
+- 无源码改动。产出基线记录 `docs/plans/archive/2026-09-04-ia-nav-exam-domain-phase1-ledger.md`。
 
 **Interfaces:**
 - Consumes: master @ v5.1.1；现有测试套件
@@ -181,7 +181,7 @@
 ### Task 5: 收口：全量回归 + ledger + 分支上传 + PR [Role: Guard]
 
 **Files:**
-- Modify: `docs/plans/2026-09-04-ia-nav-exam-domain-phase1-ledger.md`（勾选全部 Step、记录偏差与证据）
+- Modify: `docs/plans/archive/2026-09-04-ia-nav-exam-domain-phase1-ledger.md`（勾选全部 Step、记录偏差与证据）
 - Modify（如适用）: 废弃/停用标注遗留 UI 或死按钮（若 Task 2 后出现不可达入口，走“禁用标注”而非静默保留）
 
 **Interfaces:**

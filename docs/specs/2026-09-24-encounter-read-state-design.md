@@ -167,7 +167,7 @@ export function pickUnread(ranked, readState);      // -> ranked 中首个未读
 
 ## 6. 关联索引
 
-- `docs/plans/2026-09-24-encounter-read-state.md`（实施计划）
+- `docs/plans/archive/2026-09-24-encounter-read-state.md`（实施计划）
 - `docs/specs/2026-09-23-encounter-i1-content-and-selection-design.md`（前置能力：i+1 就近选材）
-- `docs/plans/2026-09-10-encounter-content-supply.md`（遇见区内容供给侧）
+- `docs/plans/archive/2026-09-10-encounter-content-supply.md`（遇见区内容供给侧）
 - `01-Rules/STORED-DATA-BACKFILL.md`（「只增 + 只补空 + 幂等」语义参照）

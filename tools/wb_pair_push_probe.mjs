@@ -1,7 +1,7 @@
 /**
  * wb_pair_push_probe.mjs —— wbsync 配对远端模式：push/pull 必须走绝对远端地址 + 配对 key
  *
- * Stage A（2026-09-03，docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 3）：
+ * Stage A（2026-09-03，docs/plans/archive/2026-09-03-lan-silent-sync-stage-a.md Task 3）：
  * 手机 APP 的页面 origin 是它自己的 127.0.0.1:8000，配对后 wbsync 必须把同步打到
  * http://<配对 host>/api/wb/state（而非相对路径 /api/wb/state，那会打到自己本地 server）。
  * 本探针把 workbench.html 里**真实 wbsync 源码**切进 node:vm，桩 localStorage 预置配对记录

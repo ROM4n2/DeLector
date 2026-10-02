@@ -1,6 +1,6 @@
 # M1–M5 审计修复 · 执行 Ledger
 
-> 计划：`docs/plans/2026-09-03-audit-hardening-m1-m5.md`
+> 计划：`docs/plans/archive/2026-09-03-audit-hardening-m1-m5.md`
 > 范围：2026-09-03 vault-team 全仓库审计（P1/P2）。执行期由**主线程直写**完成
 > （本环境无写码子代理，vault-exec 降级声明见计划「执行模式说明」，本 ledger 原样保留，不伪造子代理记录）。
 > 执行日期：2026-09-03。任务进度复核：M1–M2–M3、M4、M5 详见下表。
@@ -30,7 +30,7 @@
 | M3 | M3-4 PWA 温和更新 | ✅ | 去掉 `client.navigate` 硬刷；广播 `postMessage` + 页面提示「点击刷新」 |
 | M4 NLP 热路径 | M4-1 常量/正则提升 | ✅ | writing_rules（4 冠词表、A1 判题词表/日期正则、email 词表）、linguistics（复数表/前缀）、nlp（CEFR 后缀元组）、syntax_tree `_ABBR_PATTERN`（补遗 commit `187ae15`）。纯规则模块整跑绿 |
 | M4 | M4-2 缓存纯函数 | ✅ | `split_komposita` JSON 背衬 lru（`_split_komposita_json_cached`，返回全新对象防共享变异）+ `lookup_core_vocab` 命中共享条目（`_core_entry_cached`，调用方逐点审计仅读）。RED→GREEN：`test_lookup_core_vocab_hit_shared_no_news` / `test_split_komposita_cached_fresh_equal_results` / `test_m4_hot_path_lru_caches_structural` |
-| M4 | M4-3 从句拓扑去重 | ⏭️ 跳过（评审确认，非「没空做」） | 组合路径每句仅一次 spaCy 解析、从句级调用走 clause_tokens 纯 Python 分支，原假设不成立；去重需切分+分配深度耦合重写且无 golden 快照。见 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md` |
+| M4 | M4-3 从句拓扑去重 | ⏭️ 跳过（评审确认，非「没空做」） | 组合路径每句仅一次 spaCy 解析、从句级调用走 clause_tokens 纯 Python 分支，原假设不成立；去重需切分+分配深度耦合重写且无 golden 快照。见 `docs/plans/archive/2026-09-03-m4-3-clause-topology-dedup-review.md` |
 | M5 收口 | M5-1 6 模块临时库隔离 | ✅ | goethe_a1/lesen/hoeren/writing、corpus、audit_regressions 顶部设 `DATABASE_PATH` + module 级清理 fixture；隔离库名进 gitignore（`*.db*`）；37 passed |
 | M5 | M5-2 解析护栏 + 相对路径 | ✅ | `_top_fn_segment` helper 收敛 11 处 `split(声明)[1].split("\nfunction ")[0]`；改名标记变异演练显式红（DRILL OK）；writing 测试改 `Path(__file__)` 相对读文件 |
 | M5 | M5-3 前端 P2 收口 | ✅ 全项完成 | 计时器防叠 / pull 指数退避（5s→30s cap）/ rtc `disconnected` 不累计（`96b19d8`）；旧短码 LAN 面板停用标注+按钮整体禁用（`61391b1`，端点 M1-2 起强制 X-WB-Key、面板不带 key 必 403）；AI 判分/成功提示类残余 alert→notify、写路径保留并加双面护栏（`c492f43`） |
@@ -50,7 +50,7 @@
    是每从句 O(子句长) 常数扫描，去重需把依赖整句依赖树的子句切分与按 `clause_type`
    覆盖分配的五字段算法深度耦合重写，无 golden 快照时行为回归面不可控。替代的零风险
    优化已同批落地（M4-1 常量/正则提升、M4-2 split_komposita/lookup_core_vocab 缓存）。
-   详见 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md`。
+   详见 `docs/plans/archive/2026-09-03-m4-3-clause-topology-dedup-review.md`。
 2. **M5-3 全项完成**（原只完成 3/5）：
    - ✅ `a1_lesen.startLesenTimer` 开头 `clearInterval`（防叠）；
    - ✅ `pull()` 失败指数退避（保留 `_busy`/防抖结构不动，5s→30s cap）；

@@ -1,6 +1,6 @@
 # M4-3 评审：`build_clause_tree` 从句拓扑去重
 
-> 计划：`docs/plans/2026-09-03-audit-hardening-m1-m5.md` Task M4-3（可选/回归高风险）
+> 计划：`docs/plans/archive/2026-09-03-audit-hardening-m1-m5.md` Task M4-3（可选/回归高风险）
 > 评审日期：2026-09-03　状态：**维持「跳过」为正确决定（带证据）**
 > 结论速览：原始假设不成立——生产读路径**不存在**「每从句重跑 spaCy」的重复解析；
 > 残余可去重面是每从句 O(子句长度) 的纯 Python 字段分配，去重需把子句切分与五字段

@@ -24,8 +24,8 @@
 ### Task 1: 建立实施计划执行台账与回归基线 [Role: Guard]
 
 **Files:**
-- Create: `docs/plans/2026-09-04-workbench-zettelkasten-editorial-redesign-ledger.md`
-- Create: `docs/plans/2026-09-04-workbench-zettelkasten-editorial-redesign.md`
+- Create: `docs/plans/archive/2026-09-04-workbench-zettelkasten-editorial-redesign-ledger.md`
+- Create: `docs/plans/archive/2026-09-04-workbench-zettelkasten-editorial-redesign.md`
 
 **Interfaces:**
 - Consumes: master @ HEAD (`4ec0734`), 现有 565 项测试与 10/10 探针
@@ -37,7 +37,7 @@
 > TDD Steps:
 > 1. 运行 `pytest -q` 并确认 565 passed。
 > 2. 运行 `Get-ChildItem tools/*.mjs | ForEach-Object { node $_.FullName }` 确认 10/10 探针通过。
-> 3. 初始化 `docs/plans/2026-09-04-workbench-zettelkasten-editorial-redesign-ledger.md`。
+> 3. 初始化 `docs/plans/archive/2026-09-04-workbench-zettelkasten-editorial-redesign-ledger.md`。
 > Return: 基线通过记录与 ledger 路径。
 
 ---
@@ -144,7 +144,7 @@
 ### Task 6: 全量回归闭环、Ledger 收口与交付报告 [Role: Guard]
 
 **Files:**
-- Modify: `docs/plans/2026-09-04-workbench-zettelkasten-editorial-redesign-ledger.md`
+- Modify: `docs/plans/archive/2026-09-04-workbench-zettelkasten-editorial-redesign-ledger.md`
 - Modify: `WORKMEMORY/PROJECT_OVERVIEW.md`
 - Modify: `WORKMEMORY/work.log`
 

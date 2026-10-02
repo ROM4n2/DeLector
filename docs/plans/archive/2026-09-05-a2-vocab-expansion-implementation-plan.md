@@ -214,7 +214,7 @@
 **Files:**
 - Modify: `.github/workflows/build-release.yml` (if needed for cp to Chaquopy)
 - Modify: `test_server.py` (module registration test)
-- Create: `docs/plans/2026-09-05-a2-vocab-expansion-ledger.md`
+- Create: `docs/plans/archive/2026-09-05-a2-vocab-expansion-ledger.md`
 - Modify: `WORKMEMORY/PROJECT_OVERVIEW.md`
 - Modify: `WORKMEMORY/work.log`
 
@@ -227,7 +227,7 @@
 > 3. Run full regression:
 >    - `pytest -q`
 >    - `Get-ChildItem tools/*.mjs | ForEach-Object { node $_.FullName }`
-> 4. Create `docs/plans/2026-09-05-a2-vocab-expansion-ledger.md` recording all task statuses, commits, and verification evidence.
+> 4. Create `docs/plans/archive/2026-09-05-a2-vocab-expansion-ledger.md` recording all task statuses, commits, and verification evidence.
 > 5. Update `WORKMEMORY/PROJECT_OVERVIEW.md` and append WORK_START/WORK_END in `WORKMEMORY/work.log`.
 > Return: Full regression results and ledger path."
 

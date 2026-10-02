@@ -252,8 +252,8 @@ Android 侧是否需要同步（以及那条 `<0.100.0` 是否仍必要）需单
 
 ## 6. 关联索引
 
-- `docs/plans/2026-09-24-toolchain-guard-truth.md`（实施计划）
+- `docs/plans/archive/2026-09-24-toolchain-guard-truth.md`（实施计划）
 - `08-Projects/DeLector/POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT.md`（A 的历史根因）
 - `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md`（门禁三证；本计划即其执行）
-- `docs/plans/2026-09-13-mypy-cleanup.md` / `docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md`（B 的历史脉络）
+- `docs/plans/archive/2026-09-13-mypy-cleanup.md` / `docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md`（B 的历史脉络）
 - `.github/dependabot.yml`（本次刚加的 `ignore`，A 完成后视条件撤销）

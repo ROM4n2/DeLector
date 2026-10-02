@@ -1,9 +1,9 @@
 # DeLector 全仓库审计修复实施计划（M1–M5）
 
 > **Goal**: 修复 2026-09-03 vault-team 全仓库审计（多域并行只读侦察）产出的 P1/P2 问题：安全止血 → 数据库索引与连接 → 前端竞态与 UX → NLP 热路径 → 测试与健壮性收口。M1 安全优先，其余按里程碑顺序推进，每个 Task 原子提交。
-> **Status (2026-09-03 收口)**: M1（1-5）、M2（1-4）、M3（1-4）、M4-1、M4-2、M5-1、M5-2、M5-3（全项）、M5-4 ✅；M4-3 评审确认跳过（原假设不成立，见 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md`）。执行明细、决策与验证证据见 `docs/plans/2026-09-03-audit-hardening-m1-m5-ledger.md`。
+> **Status (2026-09-03 收口)**: M1（1-5）、M2（1-4）、M3（1-4）、M4-1、M4-2、M5-1、M5-2、M5-3（全项）、M5-4 ✅；M4-3 评审确认跳过（原假设不成立，见 `docs/plans/archive/2026-09-03-m4-3-clause-topology-dedup-review.md`）。执行明细、决策与验证证据见 `docs/plans/archive/2026-09-03-audit-hardening-m1-m5-ledger.md`。
 > **Tech Stack**: Python 3.10+ / FastAPI / sqlite3 / 原生 ES Modules（零构建）/ node:vm 探针
-> **Spec Reference**: 2026-09-03 vault-team 审计合成报告（会话内交付）；既有 stage-a/b 文档 `docs/plans/2026-09-03-lan-silent-sync-stage-a(-ledger).md`、`-stage-b(-ledger).md`；ADR-0004（stage-b，proposed）
+> **Spec Reference**: 2026-09-03 vault-team 审计合成报告（会话内交付）；既有 stage-a/b 文档 `docs/plans/archive/2026-09-03-lan-silent-sync-stage-a(-ledger).md`、`-stage-b(-ledger).md`；ADR-0004（stage-b，proposed）
 > **Global Constraints**:
 > - 测试命令须 `cd d:/Code/DeLector && export PYTHONIOENCODING=utf-8`；**禁止裸跑全量 pytest**（safe-delete 守卫会累积 >500 文件删除触发审批；超长命令易被跳过）。用 `python -m pytest <file> -k <case> -q` 定向子集。真实服务冒烟走 `TestClient(app, client=("127.0.0.1", 54321))`（默认 host 是 `testclient`，会被 `_require_localhost` 拒；局域网侧用 `client=("192.168.1.x", …)`）。
 > - 新 DB 连接**必须确定性关闭**：用 `database.py` 现有 `_close_db_conn`（finally），或新增 `closing` contextmanager；禁止依赖 `with get_db() as conn` 的 GC 自动 close（引用环，Windows 句柄不释放）。
@@ -416,7 +416,7 @@ def db_conn(db_path=None):
 **Step Breakdown:**
 - [x] golden 快照：评审判定不必做——组合路径 `process_german_text` 每句仅一次 spaCy（Span 入参），原「每从句二次解析」假设不成立
 - [x] 尝试去重：评审维持跳过（子句切分依赖整句依赖树、按 `clause_type` 覆盖分配，去重需深度耦合重写且无 golden 时回归不可控）
-- [x] 结论与证据写入 `docs/plans/2026-09-03-m4-3-clause-topology-dedup-review.md`（不提交代码改动）
+- [x] 结论与证据写入 `docs/plans/archive/2026-09-03-m4-3-clause-topology-dedup-review.md`（不提交代码改动）
 - [x] 在 ledger 记录决策与证据（2026-09-03 收口，commit `f51636b`）
 
 **Verification:** `test_syntax_tree.py` 整跑 + `test_server.py -k 'syntax or analyze'` + `test_german_workbench.py -k 语法`。
@@ -516,4 +516,4 @@ def db_conn(db_path=None):
 
 ## 下游动作
 
-Plan 已生成（含每 Task subagent prompt scaffold + TDD 步骤）。初始化 ledger `docs/plans/2026-09-03-audit-hardening-m1-m5-ledger.md` 后用 /vault-exec 执行？
+Plan 已生成（含每 Task subagent prompt scaffold + TDD 步骤）。初始化 ledger `docs/plans/archive/2026-09-03-audit-hardening-m1-m5-ledger.md` 后用 /vault-exec 执行？

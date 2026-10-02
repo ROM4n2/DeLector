@@ -53,7 +53,7 @@ agent/
 ├── internal/dag/presets.go     ← T2 新增：article-analysis 预设工厂
 └── scripts/package_agent.py    ← T3 新增：本地打包（venv + go build + 组装产物）
 .github/workflows/build-agent.yml  ← T4 新增：三平台 CI（独立 workflow，不碰 build-release.yml）
-docs/plans/2026-09-06-go-agent-runtime-phase2b.md  ← 本计划
+docs/plans/archive/2026-09-06-go-agent-runtime-phase2b.md  ← 本计划
 ```
 
 依赖方向不变：cmd → app → {pythonsvc, registry, dag}。**Consumes**：2a 全部接口（零改动）；**Produces**：`app.Run(ctx, opts)`、`dag.ArticleAnalysisDAG(reg *registry.Registry)`、CI artifact。

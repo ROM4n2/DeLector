@@ -2,7 +2,7 @@
 
 > **Goal**: 让 workbench 的背词进度 `{words, cards, log, wrong, settings}` 从「只存浏览器 localStorage/IndexedDB」迁移为「本地 + server 双读双写」，实现手机/电脑浏览器连同一台 server 时自动同步、任一端刷新看到另一端所背。
 > **Tech Stack**: Python 3.11 / FastAPI / SQLite（后端）＋ 原生 ES Modules `static/german/workbench.html`（前端）。
-> **Spec Reference**: `docs/plans/workbench-progress-server-sync.md`（本文件）；ADR-0003 `08-Projects/_template/01-ADR/0003-lan-sync-short-code.md`；`DELECTOR-DEV-RULES §2.1 本地优先与离线首选`。
+> **Spec Reference**: `docs/plans/archive/workbench-progress-server-sync.md`（本文件）；ADR-0003 `08-Projects/_template/01-ADR/0003-lan-sync-short-code.md`；`DELECTOR-DEV-RULES §2.1 本地优先与离线首选`。
 > **执行模式**: 每个 Task 是独立、原子、可单独交给一个 subagent 的提交。TDD：先写测试（RED）→ 跑出失败 → 实现（GREEN）→ 跑绿 → refactor → `git commit`。
 > **Global Constraints**: 测试用 `$env:PYTHONIOENCODING="utf-8"; pytest <file> -k <expr> -v`；JSON 序列化 `ensure_ascii=False`；前端 `fetch` 加 `cache:"no-store"`；**不删 localStorage/IDB**（本地优先）；单用户、无账号体系；不用 `DEEPSEEK_API_KEY` 混作同步密钥；不改 FSRS 引擎。
 

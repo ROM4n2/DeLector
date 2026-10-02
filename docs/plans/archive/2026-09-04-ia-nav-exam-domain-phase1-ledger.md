@@ -1,6 +1,6 @@
 # ADR-0005 Phase 1 Ledger
 
-> 计划：`docs/plans/2026-09-04-ia-nav-exam-domain-phase1.md`（修订版）。分支：`feat/ia-nav-exam-domain`。基线：master @ e2cc2a2 (v5.1.1)。
+> 计划：`docs/plans/archive/2026-09-04-ia-nav-exam-domain-phase1.md`（修订版）。分支：`feat/ia-nav-exam-domain`。基线：master @ e2cc2a2 (v5.1.1)。
 
 ## Task 0: 分支 + 修复收编 + 基线 [Role: Guard]
 

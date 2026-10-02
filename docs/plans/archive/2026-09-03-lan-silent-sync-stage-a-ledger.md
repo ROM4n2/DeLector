@@ -1,6 +1,6 @@
 # Vault-Exec Ledger — 局域网静默同步 Stage A
 
-> **计划**：`docs/plans/2026-09-03-lan-silent-sync-stage-a.md`
+> **计划**：`docs/plans/archive/2026-09-03-lan-silent-sync-stage-a.md`
 > **Spec**：`docs/specs/2026-09-03-lan-silent-sync-design.md`
 > **执行模式（降级，如实注明）**：本环境**无写码子代理**（`task` 仅只读 code-explorer），
 > vault-exec 的 multi-subagent 派工在此降级为「编排者主线程直写 + TDD 纪律 + Maker-Checker

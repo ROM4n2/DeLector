@@ -17,7 +17,7 @@
 
 **Files:**
 
-- Create: `docs/plans/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`
+- Create: `docs/plans/archive/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`
 
 **Interfaces:**
 
@@ -32,7 +32,7 @@
 >
 > 1. 运行 `pytest -q` 并记录通过数。
 > 2. 运行 `Get-ChildItem tools/*.mjs | ForEach-Object { node $_.FullName }` 确认探针全部通过。
-> 3. 创建 `docs/plans/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`。
+> 3. 创建 `docs/plans/archive/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`。
 >    Return: 基线通过记录与 ledger 路径。
 
 **Step Breakdown:**
@@ -198,7 +198,7 @@
 
 **Files:**
 
-- Modify: `docs/plans/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`
+- Modify: `docs/plans/archive/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`
 - Modify: `WORKMEMORY/PROJECT_OVERVIEW.md`
 - Modify: `WORKMEMORY/work.log`
 
@@ -215,7 +215,7 @@
 >
 > 1. 运行 `pytest -q`，确认全绿。
 > 2. 运行 `Get-ChildItem tools/*.mjs | ForEach-Object { node $_.FullName }`，确认 10/10 全绿。
-> 3. 回填 `docs/plans/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`。
+> 3. 回填 `docs/plans/archive/2026-09-04-workbench-design-token-and-scope-contract-ledger.md`。
 > 4. 更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 与 `WORKMEMORY/work.log`。
 > 5. Git 原子提交 `docs: 路线 B 实施计划完成与全量测试全绿`。
 >    Return: 全量回归证据。

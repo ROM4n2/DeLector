@@ -534,7 +534,7 @@ function runIdempotency() {
  * 本场景出两组数据，**读法完全不同**，别混用：
  *   - scene()               合成完成态（见其函数头注释）：只守与裁决无关的不变式；
  *   - runReachableFinished() 真实可达完成态：**这组才是线上行为**，裁决照它做。
- * 裁决结论（docs/plans/workbench-scope-control-and-live-settings.md · Task 6）：
+ * 裁决结论（docs/plans/archive/workbench-scope-control-and-live-settings.md · Task 6）：
  * 重建确实发生，但产出空队列 → 完成屏，不补齐、不弹卡、不抹 ratedCount，无害。
  * ------------------------------------------------------------------------ */
 

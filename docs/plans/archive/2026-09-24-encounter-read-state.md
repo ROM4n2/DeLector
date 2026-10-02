@@ -166,6 +166,6 @@
 ## 关联索引
 
 - `docs/specs/2026-09-24-encounter-read-state-design.md`
-- `docs/specs/2026-09-23-encounter-i1-content-and-selection-design.md` / `docs/plans/2026-09-23-encounter-i1-content-and-selection.md`
+- `docs/specs/2026-09-23-encounter-i1-content-and-selection-design.md` / `docs/plans/archive/2026-09-23-encounter-i1-content-and-selection.md`
 - `WORKMEMORY/PROJECT_OVERVIEW.md`（当前状态 / 开放待办）
 - `01-Rules/TESTING-PATTERNS.md`（行为探针 + 变异验证纪律）
