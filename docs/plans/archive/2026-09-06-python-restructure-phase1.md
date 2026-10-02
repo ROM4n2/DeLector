@@ -2,7 +2,7 @@
 
 > **Goal**: 将扁平 `delector/` 包重组为分层 sub-package 结构，为 Go Agent 层提供干净的 Python NLP 接口
 > **Tech Stack**: Python 3.10/3.11 (Phase 1) → Go 1.24+ (Phase 2)
-> **Spec Reference**: [ADR-0008](../specs/2026-09-06-adr-0008-go-agent-runtime-architecture.md)
+> **Spec Reference**: [ADR-0008](../../adr/2026-09-06-adr-0008-go-agent-runtime-architecture.md)
 > **Global Constraints**: 582 测试基线零改动必须全绿；import 路径变更必须 atomic（一步到位）；data 层纯搬迁不改逻辑
 
 ---

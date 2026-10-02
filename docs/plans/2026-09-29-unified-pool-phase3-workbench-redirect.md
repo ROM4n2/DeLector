@@ -2,7 +2,7 @@
 
 > **Goal**: 让统一池（服务端 `vocab_cards`）成为"用户词汇"的**权威**；工作台 localStorage 降级为**离线缓存**；存量数据一次性**幂等**迁移（先备份、后对账）。
 > **Tech Stack**: Python 3.11 / FastAPI / SQLite(WAL) · 原生 JS ES Modules（`static/german/workbench.html` 单文件）· pytest + Node 探针
-> **Spec Reference**: `docs/specs/2026-09-29-adr-0016-unified-vocab-pool-architecture.md`（§4/§5）＋ Vault 规则 `01-Rules/DATABASE-MIGRATION-IDEMPOTENCY`、`01-Rules/STORED-DATA-BACKFILL`、`08-Projects/DeLector/DELECTOR-DEV-RULES.md` §2.1（本地优先 / 数据自主）
+> **Spec Reference**: `docs/adr/2026-09-29-adr-0016-unified-vocab-pool-architecture.md`（§4/§5）＋ Vault 规则 `01-Rules/DATABASE-MIGRATION-IDEMPOTENCY`、`01-Rules/STORED-DATA-BACKFILL`、`08-Projects/DeLector/DELECTOR-DEV-RULES.md` §2.1（本地优先 / 数据自主）
 > **Global Constraints**:
 > - **离线优先不可破**（ADR-0016 §5）：`file://` / 断网下工作台必须完整可用 ⇒ localStorage **永远是读兜底**，服务端只是增强。
 > - **迁移谓词 MUST 按内容去重**（Migration-Idempotency §1）：workbench 与统一池**双写并存** ⇒ **禁计数对账**（`==`/`>=` 都不适用），MUST 按 `lemma` / `id` 去重（`NOT EXISTS` 或 UNIQUE）。

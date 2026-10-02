@@ -2,7 +2,7 @@
 
 > **Goal**: 废除光标停留 600ms 被动弹出抽屉的设计，替换为「行内幽灵微胶囊按钮 (Quiet Ghost Pill on Hover) + 显式点击打开句法抽屉」，保护阅读心流与生词查词状态。
 > **Tech Stack**: 原生 ES Modules JS + 原生 CSS tokens
-> **Spec Reference**: `docs/specs/2026-09-05-adr-0007-reader-syntax-ghost-pill-explicit-trigger.md` / `D:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0007-reader-syntax-ghost-pill-explicit-trigger.md`
+> **Spec Reference**: `docs/adr/2026-09-05-adr-0007-reader-syntax-ghost-pill-explicit-trigger.md` / `D:/Obsidian/Coding/08-Projects/DeLector/01-ADR/0007-reader-syntax-ghost-pill-explicit-trigger.md`
 > **Global Constraints**: 574+ pytest 不退, 10/10 Node 探针不退, 零主线程代码篡改，全流程通过 Subagent 执行并落实 Maker-Checker。
 
 ---
