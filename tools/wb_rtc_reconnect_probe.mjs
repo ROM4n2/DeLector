@@ -1,7 +1,7 @@
 /**
  * wb_rtc_reconnect_probe.mjs —— 自动重连（去抖）与 HTTP 兜底降级
  *
- * Stage B M4（docs/plans/2026-09-03-lan-silent-sync-stage-b.md Task 5）：
+ * Stage B M4（docs/plans/archive/2026-09-03-lan-silent-sync-stage-b.md Task 5）：
  * WebRTC 断线要能自动重建，但不能无限重试；WebRTC 不可用（企业网禁 UDP/ICE、
  * 老浏览器）时必须退回 Stage A 的 HTTP 轮询，保证「至少可达」。
  *

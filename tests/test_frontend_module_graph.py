@@ -377,7 +377,7 @@ def test_a1_engines_present_in_main_window_exposer():
 
 
 # ── Workbench 进度 server 镜像同步（wbsync）─────────────────────────────────
-# 契约（docs/plans/workbench-progress-server-sync.md Task 3）：
+# 契约（docs/plans/archive/workbench-progress-server-sync.md Task 3）：
 #  1. 5 个 saveXxx() 定义行都挂 `wbsync.push()` —— 本地一落盘就往 server 推；
 #  2. `wbsync.init()` 只在启动块 async IIFE（IDB hydrate 完成）之后才被调用；
 #  3. 有 轮询(pull/setInterval) / 切走(pushNow) / visibilitychange 三条路径；

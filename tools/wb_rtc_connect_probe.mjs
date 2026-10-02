@@ -1,7 +1,7 @@
 /**
  * wb_rtc_connect_probe.mjs —— 前端 WebRTC 建连与 DataChannel 收发契约
  *
- * Stage B M3（docs/plans/2026-09-03-lan-silent-sync-stage-b.md Task 4）：
+ * Stage B M3（docs/plans/archive/2026-09-03-lan-silent-sync-stage-b.md Task 4）：
  * 本环境跑不了真 P2P，所以用**桩 RTCPeerConnection** 把建连/收发的行为钉住。探针把
  * workbench.html 里真实的 wbsync 源码切进 node:vm，断言：
  *   1) rtc.connect() 建 DataChannel 并 createOffer；

@@ -4605,7 +4605,7 @@ def test_register_routes_covers_every_module_in_routes_package():
     assert not missing, f"这些路由定义了却没挂进 app（漏 include_router）: {missing}"
 
 
-# ── Workbench 进度 server 同步（docs/plans/workbench-progress-server-sync.md）──
+# ── Workbench 进度 server 同步（docs/plans/archive/workbench-progress-server-sync.md）──
 
 
 def test_wb_state_roundtrip():
@@ -4968,7 +4968,7 @@ def test_backup_restore_projection_failure_rolls_back(client, monkeypatch):
     assert _snapshot_vocab_cards() == before, "还原失败必须整体回滚，vocab_cards 不得残留半成品"
 
 
-# ── 局域网 CORS（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 1）──
+# ── 局域网 CORS（docs/plans/archive/2026-09-03-lan-silent-sync-stage-a.md Task 1）──
 # 手机 APP 的 WebView 页面 origin 是它自己的 127.0.0.1:8000（Chaquopy 本地 server），
 # 要跨域访问桌面 192.168.x.x 的 /api/wb/state 必须拿到 ACAO 反射；公网 Origin 不得反射。
 
@@ -5045,7 +5045,7 @@ def test_wb_state_no_origin_header_unchanged(client):
     assert "access-control-allow-origin" not in r.headers
 
 
-# ── GET /api/wb/lan-info（docs/plans/2026-09-03-lan-silent-sync-stage-a.md Task 2）──
+# ── GET /api/wb/lan-info（docs/plans/archive/2026-09-03-lan-silent-sync-stage-a.md Task 2）──
 
 
 def test_wb_lan_info_open_to_lan(lan_client):

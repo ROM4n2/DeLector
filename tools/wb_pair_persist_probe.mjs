@@ -1,7 +1,7 @@
 /**
  * wb_pair_persist_probe.mjs —— 持久配对凭证：set 持久化 / revoke 撤销后旧 key 失效
  *
- * Stage B M2（docs/plans/2026-09-03-lan-silent-sync-stage-b.md Task 2）：
+ * Stage B M2（docs/plans/archive/2026-09-03-lan-silent-sync-stage-b.md Task 2）：
  * 配对凭证要长期有效，前提是「随时能一键作废」。本探针把 workbench.html 里**真实的
  * wbsync 源码**切进 node:vm，桩 localStorage / fetch，断言：
  *   1) pair.set(host,key) 真的把 {host,key} 落进 localStorage（不只是内存里有效）；
