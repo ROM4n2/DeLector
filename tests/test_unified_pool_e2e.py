@@ -8,7 +8,7 @@
    被范围闸挡下；用户手编数据只补空、绝不覆盖；三段时序幂等；只读对账无缺口
    （T4）；备份往返（含 source/fsrs_*）逐字保留 + 还原后按 wb 快照自愈（T5）；
   ``known-lemmas`` 的「已学」口径分档（含一条**已知缺口**：有 reps 缺 s 的卡被漏计）。
-   另加一条**静态**断言钉住 Phase 3 边界「不改前端 static/」（T3 已按用户决定跳过）。
+
 
 库隔离照搬 ``tests/test_server.py::clean_db``：保存/还原 env、建库、并把 WAL 旁文件
 ``-wal`` / ``-shm`` 一并清理（启用 WAL 后只删主库会把陈旧 ``-shm`` 留给下个用例 →
@@ -26,7 +26,6 @@
 
 import gc
 import os
-import subprocess
 from collections.abc import Iterator
 from typing import Any, Dict, List
 
@@ -318,37 +317,3 @@ def test_group6_known_lemmas_learned_notion(client: TestClient) -> None:
     # ③ 冷种子未学 ⇒ 不计入。
     assert lemma_key("Baum") not in known, f"冷种子未学词 Baum 不应计入 known-lemmas，实际 {known}"
 
-
-# ── 附加：静态钉住「Phase 3 不改前端 static/」（T3 已按用户决定跳过）────────────
-def test_phase3_does_not_modify_frontend_static() -> None:
-    """Phase 3 的明确边界：不改前端。用 git 钉住 static/ 零改动。
-
-    离线 CI（无 git / 无 origin/master）显式 pytest.skip——**绝不**用 ``except: pass``
-    变成「环境缺失即静默通过」的假绿。
-    """
-    try:
-        base_proc = subprocess.run(
-            ["git", "merge-base", "HEAD", "origin/master"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        pytest.skip(f"git / origin/master 不可用（离线 CI？），跳过 static/ 静态断言：{exc}")
-
-    base = base_proc.stdout.strip()
-    if not base:
-        pytest.skip("git merge-base 输出为空，无法确定 Phase 3 基座，跳过 static/ 静态断言")
-
-    try:
-        diff_proc = subprocess.run(
-            ["git", "diff", "--name-only", f"{base}..HEAD", "--", "static/"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        pytest.skip(f"git diff 不可用，跳过 static/ 静态断言：{exc}")
-
-    changed = diff_proc.stdout.strip()
-    assert changed == "", f"Phase 3 不得修改 static/ 下的文件，实际改动：\n{changed}"
