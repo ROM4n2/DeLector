@@ -243,6 +243,12 @@ def api_create_text(req: CreateTextRequest) -> Dict[str, Any]:
         source=req.source or "",
         content=req.content,
     )
+    # 事务已在 create_encounter_text 内提交（db_conn 正常退出即 commit）⇒ 此处失效
+    # 聚合榜缓存：新短文下一次 source=all 立即可见，不等 300s TTL。函数体内 import
+    # 以避免本模块顶层多拉 syntax_hard（spaCy 分析链）这条重依赖。
+    from delector.routes.syntax_hard import invalidate_rank_cache
+
+    invalidate_rank_cache()
     return {"id": new_id, "title": req.title.strip(), "level": level}
 
 
@@ -270,6 +276,14 @@ def api_import_pack(req: ImportPackRequest) -> Dict[str, Any]:
     normalized_pack = copy.deepcopy(pack)
     normalized_pack["estimated_cefr"] = normalized_level
     new_id = import_encounter_pack(normalized_pack)
+    # 事务已在 import_encounter_pack 内提交（其 with db_conn 退出即 commit）⇒ 此处失效
+    # 聚合榜缓存：整包导入的短文下一次 source=all 立即可见，不等 300s TTL。函数体内
+    # import（与 api_create_text 同风格），避免模块顶层多拉 syntax_hard 这条 spaCy 重依赖。
+    # 幂等说明：import_encounter_pack 按 pack_id 幂等，重复导入同一包不新增行；失效调用
+    # **每次导入都调**是安全的 —— invalidate_rank_cache 只 pop 聚合 key，重复执行无副作用。
+    from delector.routes.syntax_hard import invalidate_rank_cache
+
+    invalidate_rank_cache()
     return {"id": new_id, "imported": True}
 
 
@@ -408,4 +422,9 @@ def api_pull_pack(req: PullPackRequest) -> Dict[str, Any]:
     normalized_pack = copy.deepcopy(pack)
     normalized_pack["estimated_cefr"] = normalized_level
     new_id = import_encounter_pack(normalized_pack)
+    # 同 import-pack：事务已提交后失效聚合榜缓存，函数体内 import 沿用既有风格。
+    # 幂等说明：重复拉取同一 pack_id 不新增行，重复失效无副作用，故每次都调。
+    from delector.routes.syntax_hard import invalidate_rank_cache
+
+    invalidate_rank_cache()
     return {"id": new_id, "imported": True, "pack_id": normalized_pack["pack_id"]}
