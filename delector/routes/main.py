@@ -1702,8 +1702,32 @@ def get_due_cards() -> Dict[str, Any]:
         v = [
             dict(r)
             for r in conn.execute(
+                # 排除「工作台投影且卡盒无进度」的行：投影侧（core/vocab_pool.py）只写
+                # fsrs_* 、不写 due_date ⇒ due_date 为 NULL ⇒ 旧谓词把工作台背过的词全收进
+                # 「今日到期」，卡面还显示「0 正 / 0 误」（对用户说谎）。判据并置两套语义：
+                # fsrs_s（工作台 FSRS 侧，唯一按工作台卡语义写入者即 vocab_pool.py）说明
+                # 「该行有工作台 FSRS 卡」，repetition_count（卡盒 DSR 侧）== 0 说明「卡盒没进度」。
+                # 卡盒 DSR 复习（review_card_sm2）不写 fsrs_*，故本谓词不会误伤纯卡盒行；
+                # MUST NOT 依赖 mastered（已在上面的 WHERE 里）。
+                #
+                # **口径 MUST 与姊妹端点 /api/cards/known-lemmas 一致：用 `fsrs_s > 0`，
+                # MUST NOT 用 `IS NOT NULL`。** 后者更宽 —— 备份还原（core/database.py）
+                # 原样回灌 fsrs_s 且该列非 STRICT，legacy / 手改备份里的 0 或 "" 都能落盘；这类行
+                # 会既不被 known-lemmas 算「已学」（它要 > 0）、又被本谓词排除 ⇒ 两头不可见。
+                # COALESCE(fsrs_s, 0) 只是把 NULL 显式读作「无值」：**SQL 三值逻辑下
+                # `NULL > 0` 是 NULL、`NOT(NULL)` 仍是 NULL ⇒ WHERE 会把该行整行丢掉**
+                # （曾真发生过：裸 `> 0` 会把所有 reader 普通卡误杀出 due_vocab）。COALESCE 后
+                # `> 0` 对每个存储类的真值与姊妹端点逐行一致（NULL→假、0→假、其余同 `> 0`）。
+                #
+                # **已知缺口（本谓词不覆盖）**：自建但尚未在工作台评级过的词条，
+                # `_is_projectable`（core/vocab_pool.py）对 `custom is True` 立即 True、不查卡 ⇒
+                # `_desired_fields` 拿到 card={} ⇒ fsrs_s 为 NULL ⇒ 与 reader 普通卡不可区分 ⇒
+                # 仍会涌入「今日到期」。真修它需改投影写入语义（= 编造 FSRS 状态，违反 FSRS≠DSR），
+                # 越出本任务范围；见 ADR-0016 收尾 + tests/test_server.py 用例⑥。
                 "SELECT * FROM vocab_cards WHERE mastered = 0 "
-                "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+                "AND (due_date IS NULL OR due_date <= ?) "
+                "AND NOT (COALESCE(fsrs_s, 0) > 0 AND repetition_count = 0) "
+                "ORDER BY wrong_count DESC, id ASC",
                 (today,),
             ).fetchall()
         ]

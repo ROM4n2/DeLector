@@ -9,6 +9,7 @@ import json
 import os
 import re
 import time
+from typing import Any, Dict
 
 import pytest
 from db_cleanup import remove_db_files
@@ -1550,6 +1551,137 @@ def test_due_cards_endpoint(client):
     assert "due_grammar" in data
     assert "due_count" in data
     assert data["due_count"] >= 1
+
+
+def _insert_vocab_card(**over: object) -> int:
+    """直插一行 vocab_cards（绕过建卡端点，以便精确摆出 fsrs_*/repetition_count 组合）。
+
+    最小必填列：word / lemma / definition_zh / sentence_context。
+    """
+    row: Dict[str, Any] = {
+        "word": "Haus",
+        "lemma": "Haus",
+        "definition_zh": "房子",
+        "sentence_context": "Das Haus ist alt.",
+    }
+    row.update(over)
+    with db_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO vocab_cards "
+            "(word, lemma, definition_zh, sentence_context, fsrs_s, repetition_count, mastered, due_date) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                row["word"],
+                row["lemma"],
+                row["definition_zh"],
+                row["sentence_context"],
+                row.get("fsrs_s"),
+                row.get("repetition_count", 0),
+                row.get("mastered", 0),
+                row.get("due_date"),
+            ),
+        )
+        return int(cur.lastrowid or 0)
+
+
+def _due_vocab_lemmas(client) -> list:
+    res = client.get("/api/cards/due")
+    assert res.status_code == 200
+    return [c["lemma"] for c in res.json()["due_vocab"]]
+
+
+def test_due_cards_excludes_workbench_projection_without_deck_progress(client):
+    """① 工作台投影行（有 fsrs_s，卡盒 repetition_count=0）MUST NOT 进「今日到期」。
+
+    投影侧只写 fsrs_* / 不写 due_date ⇒ due_date 为 NULL ⇒ 旧谓词把它全收进来，
+    卡面还显示「0 正 / 0 误」，对用户说谎。
+
+    **非空基线（同用例内的对照卡）**：本断言是纯否定断言，若端点因任何原因返回空
+    ``due_vocab``，它会空转通过。故同时候插一张 reader 普通卡（``fsrs_s`` NULL），
+    断言它**在** ``due_vocab`` 里 —— 「端点返空」会让本用例的红灯更早、更准。
+    """
+    _insert_vocab_card(word="Kirche", lemma="Kirche", fsrs_s=None, repetition_count=0, due_date=None)
+    _insert_vocab_card(word="Fenster", lemma="Fenster", fsrs_s=12.3, repetition_count=0, due_date=None)
+    lemmas = _due_vocab_lemmas(client)
+    assert "Kirche" in lemmas, "非空基线：对照卡（fsrs_s NULL）必须在 due_vocab，否则本用例空转通过"
+    assert "Fenster" not in lemmas
+
+
+def test_due_cards_keeps_degenerate_fsrs_s_zero_row(client):
+    """⑤ ``fsrs_s = 0``（退化值：行有 fsrs 列但值退化）⇒ **仍进** due。
+
+    判别契约（不是注释里的口头约定）：due 排除谓词 MUST 用 ``fsrs_s > 0``，MUST NOT 用
+    ``fsrs_s IS NOT NULL`` —— 后者更宽，把退化行（``0`` / 空串）也排除，而
+    ``/api/cards/known-lemmas``（同文件姊妹端点）只认 ``> 0``（见其 docstring），故这类行
+    会**既不被算「已学」、又被 due 排除** ⇒ 对用户彻底不可见（两头都看不见）。
+    退化值能从哪来：``core/database.py`` 的备份还原原样回灌 ``fsrs_s``，而该列**非 STRICT**
+    ⇒ legacy / 手改备份里的 ``0`` 或 ``""`` 都能落盘。
+
+    把谓词改回 ``IS NOT NULL`` ⇒ 本用例必红。
+    """
+    _insert_vocab_card(word="Zug", lemma="Zug", fsrs_s=0, repetition_count=0, due_date=None)
+    assert "Zug" in _due_vocab_lemmas(client), "fsrs_s 退化（=0）≠ 有工作台卡：不得被 due 排除"
+
+
+def test_due_cards_keeps_workbench_projection_reviewed_in_deck(client):
+    """② 同一行但 repetition_count=2（用户曾在卡盒复习过）⇒ 仍进 due（旧语义不回归）。"""
+    _insert_vocab_card(word="Tuer", lemma="Tuer", fsrs_s=12.3, repetition_count=2, due_date=None)
+    assert "Tuer" in _due_vocab_lemmas(client)
+
+
+def test_due_cards_keeps_plain_reader_card(client):
+    """③ reader 存的普通卡（fsrs_s NULL / repetition_count=0）⇒ 仍进 due。
+
+    「入卡未复习也进今日到期」是既有行为，本次 MUST NOT 顺手改掉。
+    """
+    _insert_vocab_card(word="Buch", lemma="Buch", fsrs_s=None, repetition_count=0, due_date=None)
+    assert "Buch" in _due_vocab_lemmas(client)
+
+
+def test_due_cards_grammar_branch_untouched(client):
+    """④ grammar_cards 分支 MUST NOT 受该谓词影响（该表根本没有 fsrs_s 列）。"""
+    with db_conn() as conn:
+        conn.execute(
+            "INSERT INTO grammar_cards "
+            "(sentence_context, grammar_name, cefr_level, explanation_zh, mastered, due_date) "
+            "VALUES (?, ?, ?, ?, 0, NULL)",
+            ("Er geht nach Hause.", "Akkusativ", "A1", "第四格带冠词的定语从句"),
+        )
+    res = client.get("/api/cards/due")
+    assert res.status_code == 200
+    data = res.json()
+    assert any(c["grammar_name"] == "Akkusativ" for c in data["due_grammar"])
+
+
+def test_due_cards_still_includes_custom_workbench_word_never_rated(client):
+    """⑥ **已知缺口**：工作台自建词（``custom: True``）但从未在工作台评级过 ⇒ 投影行的
+    ``fsrs_s`` 为 NULL ⇒ 与 reader 普通卡不可区分 ⇒ **仍在** ``due_vocab``。
+
+    这是**已知缺口，本任务不修**：``vocab_pool._is_projectable`` 对 ``custom is True``
+    **立即** return True、不检查卡是否存在 ⇒ ``_desired_fields`` 拿到 ``card = {}`` ⇒
+    ``fsrs_s = None``。故「``fsrs_s > 0`` ⇒ 有工作台卡」这个方向的蕴含成立，但**反向不成立**：
+    ``fsrs_s IS NULL`` **不能**推出「来自 reader」，它也可能是尚未评级的工作台词。
+
+    要真修它就得改投影写入语义（给自建词编造一个 FSRS ``s``），那是**编造 FSRS 状态**、
+    违反 FSRS≠DSR（``vocab_pool`` 注入不变量 4），也越出本任务范围（ADR-0016 收尾）。
+    本用例的作用是让缺口**显式可测**：将来若有人真去修了，本用例必红、提醒同步更新谓词注释。
+    """
+    key = client.get("/api/wb/state/key").json()["key"]
+    payload = {
+        # custom=True ⇒ 过范围闸（_is_projectable 立即 True），即便它根本没有卡
+        "words": [{"id": "u-neu", "hw": "Neuschule", "gloss": "新学校", "custom": True}],
+        # 卡存在但从未评级：reps=0、无 s ⇒ 投影落 fsrs_s = NULL
+        "cards": {"u-neu": {"reps": 0}},
+    }
+    res = client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
+    assert res.status_code == 200, res.text
+
+    with db_conn("test_delector.db") as conn:
+        row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = ?", ("neuschule",)).fetchone())
+    assert row["fsrs_s"] is None, f"自建未评级词投影后 fsrs_s 应为 NULL（缺口前提）：{row}"
+
+    lemmas = _due_vocab_lemmas(client)
+    assert "neuschule" in lemmas, "已知缺口（未修）：自建未评级的工作台词仍会进 due_vocab"
 
 
 def test_cloze_exercise_generation_and_eval(client):
