@@ -23,7 +23,7 @@
 ## 当前状态
 
 - **最新发布 v5.13.0（2026-10-03）** —— **ADR-0016 统一词库池 + P0 数据真相修复**：`vocab_cards` 成为「我的词汇」的**服务端权威派生态**（Phase 1 加 `source`/`fsrs_*` 列懒物化 → Phase 2 按 provenance 落定 `source` → Phase 3 工作台 deck **同事务幂等**投影进池 + 只读对账 `reconcile_report`；还原后同守卫内补迁移）；P0 侧修 Docker 数据目录迁移闸（fail-loud 拒绝静默空库）、`.dockerignore` 阻断密钥进镜像、due 队列排除「工作台来源且无卡盒进度」的行、`known-lemmas` 等价性断言照实降级。**含 `static/` 改动 ⇒ Android 需覆盖安装**。
-- **测试 / 门禁基线（截至 v5.13.0）**：全量 **1224 passed + 1 skipped**（分半：非 server **971** + `test_server` **253**）；`ruff check .` 零告警；`mypy --follow-imports=skip tests`（74 files）零错误；`tools/*.mjs` 探针零漂移；`test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**；`test_audit_hardening.py` **31 passed**；pre-commit 密钥守卫有效。
+- **测试 / 门禁基线（截至 v5.13.0）**：全量 **1223 passed + 1 skipped**（分半：非 server **970** + `test_server` **253**）；`ruff check .` 零告警；`mypy --follow-imports=skip tests`（74 files）零错误；`tools/*.mjs` 探针零漂移；`test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**；`test_audit_hardening.py` **31 passed**；pre-commit 密钥守卫有效。
 - **本批已随 v5.13.0 发布的其它改动**：
   - **i+1 已知词池打通（#72）**：`known-lemmas` 补 `OR fsrs_s > 0`（工作台已学词纳入覆盖率），列表 + 详情同口径；`deck-bridge.js` / `encounter.js` 打通 i+1 与主背词路径。
   - **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn` 取代 17 份复制粘贴，44 处句柄泄漏清扫；决定性变异证明旧实现**静默残留**（假红/假绿）。

@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-1224%2F1225%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-1223%2F1224%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
@@ -20,7 +20,7 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ✅ **v5.13.0 统一词库池 + P0 数据真相修复（2026-10-03）**：**ADR-0016 统一词库池**（#73/#74/#75）——`vocab_cards` 成为「我的词汇」的服务端**权威派生态**；新增 `source`/`fsrs_*` 列（懒物化，不动存量行）；背词工作台 deck 的已学/自建词条在写镜像时**同事务幂等**投影进池（投影失败则 blob 也不写）；新增只读对账 `reconcile_report`；备份列补齐防往返丢 `source`/`fsrs_*`，还原后同快照守卫内补投影。**P0 修复**（#88）——Docker 数据目录迁移闸（fail-loud 拒绝静默空库）+ `.dockerignore`（阻断密钥/库文件进镜像）；due 队列排除「工作台来源且无卡盒进度」的行（与 `known-lemmas` 同口径）；`known-lemmas` 等价性断言照实降级。**其它**——i+1 已知词池打通（#72）、测试库隔离收口（#78，共享 `remove_db_files` + 44 处句柄清扫）、文档目录约定重构与 `WORKMEMORY` 三层记忆落地（#81~#85）。测试基线 **1224 passed + 1 skipped**；本版含 `static/` 改动（i+1 池打通 + 卡面文案），**Android 需覆盖安装生效**。
+> ✅ **v5.13.0 统一词库池 + P0 数据真相修复（2026-10-03）**：**ADR-0016 统一词库池**（#73/#74/#75）——`vocab_cards` 成为「我的词汇」的服务端**权威派生态**；新增 `source`/`fsrs_*` 列（懒物化，不动存量行）；背词工作台 deck 的已学/自建词条在写镜像时**同事务幂等**投影进池（投影失败则 blob 也不写）；新增只读对账 `reconcile_report`；备份列补齐防往返丢 `source`/`fsrs_*`，还原后同快照守卫内补投影。**P0 修复**（#88）——Docker 数据目录迁移闸（fail-loud 拒绝静默空库）+ `.dockerignore`（阻断密钥/库文件进镜像）；due 队列排除「工作台来源且无卡盒进度」的行（与 `known-lemmas` 同口径）；`known-lemmas` 等价性断言照实降级。**其它**——i+1 已知词池打通（#72）、测试库隔离收口（#78，共享 `remove_db_files` + 44 处句柄清扫）、文档目录约定重构与 `WORKMEMORY` 三层记忆落地（#81~#85）。测试基线 **1223 passed + 1 skipped**；本版含 `static/` 改动（i+1 池打通 + 卡面文案），**Android 需覆盖安装生效**。
 > ✅ **v5.12.1 工程债收口（真门禁 + 依赖升级 + 测试隔离）（2026-09-26）**：**无用户可见改动**（static/ 相对 v5.12.0 零差异）——路由守卫改 **HTTP 语义键** `(完整 path, METHOD)` 比对（对上游依赖漂移免疫；判别力反证：摘掉一个模块的 `include_router` 只报该模块 5 条，改造前是"全量 115 条"误报）；`tools/build_*.py` 纳入 mypy `--strict`（覆盖 62 → 68 files）；`fastapi 0.136.3 → 0.141.1` 并**撤销 dependabot ignore**；测试库跨模块 env 串扰修复（半 A 首次 0 failed，新增根因级 AST 守卫）；`android/app/build.gradle` 补写 Android 依赖分离理由。测试基线 **1124 passed + 1 skipped**；**无需 Android 覆盖安装**（无 static 改动）。
 > ✅ **v5.12.0 遇见区「已读状态 + 推荐顺延」（2026-09-24）**：补上 `✓ 已读` 一等状态——**打开短篇即记已读**（`localStorage["delector_encounter_read_v1"]`，用 `delector_` 前缀故**随备份导出/还原**）；列表卡片显示 `✓ 已读` + 轻降权（标记置于 meta 段内、**不新增 grid 子项**、排序不变）；**推荐条跳过已读顺延**（i+1 读完→「i+1 都读完了，试试《X》」；本就无 i+1→中性「试试下一篇」；全读完→「🎉 N 篇都读过了」；未背词→引导优先）。服务端零改动、已读本机判定。测试基线 1119 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > ✅ **v5.11.0 遇见区 i+1 补齐（内容放量 + 就近选材）（2026-09-23）**：预置分级短文 **4 → 7 篇**（A1×2/A2×2/B1×3，复用仓库既有分级语料）+ 每包**预计算** annotate 口径 `lemma_seq`；预置补装由空库守卫升级为**版本闸 + 只增 + 只补空**（存量设备零操作补装、旧行只补空 `lemma_seq`、不覆盖用户内容）；新增只读 `GET /api/encounter/texts/index`（零 spaCy、不挂本机闸）+ 遇见区列表**覆盖率分组排序与「👉 建议先读」推荐条**（索引失败完全降级回原列表、未背词显示引导）。硬不变量 I-1 = 索引词序列与 annotate 逐 token **全序列逐元素相等**（列表徽章覆盖率 ≡ 阅读页覆盖率）。测试基线 1109 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。

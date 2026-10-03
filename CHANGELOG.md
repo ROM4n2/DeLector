@@ -63,8 +63,9 @@
 #### 升级提示
 
 - **Android 需覆盖安装 v5.13.0 生效**：本版含 `static/` 改动（i+1 已知词池打通 + 卡面文案）。
-- 测试基线 **1224 passed + 1 skipped**（分半：非 server **971** + `test_server` **253**）；
+- 测试基线 **1223 passed + 1 skipped**（分半：非 server **971** + `test_server` **253**）；
   `ruff check .` 零告警；`mypy --follow-imports=skip tests`（74 files）零错误；`tools/*.mjs` 探针零漂移。
+> 🧹 移除 `test_phase3_does_not_modify_frontend_static`：其基座随分支漂移（master 上恒空、合法改 `static/` 的分支上误伤），在浅克隆 CI 上更会直接失败；Phase 3 已合并，该守卫无前瞻价值，按审计建议删除而非留一条假绿门禁。
 
 ---
 
