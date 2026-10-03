@@ -5579,3 +5579,92 @@ def test_known_lemmas_excludes_zero_fsrs_row(client):
         conn.execute("UPDATE vocab_cards SET fsrs_s = 0 WHERE id = ?", (card_id,))
 
     assert "alt" not in _known_lemma_keys(client), "fsrs_s=0 不是『真有卡』，不得算已知"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/cards/counts：只数个数的轻量端点（2026-10-03 Task 2）
+# ---------------------------------------------------------------------------
+
+
+def _insert_grammar_card(**over: object) -> int:
+    """直插一行 grammar_cards（照 `test_due_cards_grammar_branch_untouched` 的手法）。
+
+    最小必填列：sentence_context / grammar_name / cefr_level / explanation_zh。
+    """
+    row: Dict[str, Any] = {
+        "sentence_context": "Er geht nach Hause.",
+        "grammar_name": "Akkusativ",
+        "cefr_level": "A1",
+        "explanation_zh": "第四格带冠词的定语从句",
+    }
+    row.update(over)
+    with db_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO grammar_cards "
+            "(sentence_context, grammar_name, cefr_level, explanation_zh, mastered, due_date) "
+            "VALUES (?, ?, ?, ?, ?, NULL)",
+            (
+                row["sentence_context"],
+                row["grammar_name"],
+                row["cefr_level"],
+                row["explanation_zh"],
+                row.get("mastered", 0),
+            ),
+        )
+        return int(cur.lastrowid or 0)
+
+
+def test_card_counts_empty_db_returns_zero_not_null(client):
+    """① 空库 ⇒ 五个字段全为 ``0``；**尤其 mastered 必须是 ``0`` 而不是 ``null``**。
+
+    ``SUM(mastered = 1)`` 在空表上返回 ``NULL``（不是 ``0``）⇒ 若端点不写 ``or 0``，
+    本用例必红。``null`` 会顺着 ``${n} 张卡`` 的模板串渲染成字面量 ``null张卡``。
+
+    修复前本请求 404（端点不存在）⇒ 端点一旦落地，此用例即钉住「诚实留 0」。
+    """
+    res = client.get("/api/cards/counts")
+    assert res.status_code == 200
+    data = res.json()
+    for key in ("vocab_total", "vocab_mastered", "grammar_total", "grammar_mastered", "total"):
+        assert key in data, f"计数端点缺字段 {key}：前端角标会渲染出 undefined"
+        assert data[key] == 0, f"空库时 {key} MUST 为 0，实际 {data[key]!r}（null 会渲染成字面量 null）"
+
+
+def test_card_counts_reports_per_table_totals_and_mastered(client):
+    """② 2 张 vocab（1 张 ``mastered=1``）+ 1 张 grammar（``mastered=0``）⇒ 逐字段断言。
+
+    非空基线：若端点返回全 0（假绿），本用例会红；``total`` 另钉「两表之和」。
+    """
+    _insert_vocab_card(word="Haus", lemma="haus", mastered=0)
+    _insert_vocab_card(word="Baum", lemma="baum", mastered=1)
+    _insert_grammar_card(grammar_name="Akkusativ", mastered=0)
+
+    res = client.get("/api/cards/counts")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["vocab_total"] == 2, f"vocab_total 应为 2，实际 {data['vocab_total']!r}"
+    assert data["vocab_mastered"] == 1, f"vocab_mastered 应为 1，实际 {data['vocab_mastered']!r}"
+    assert data["grammar_total"] == 1, f"grammar_total 应为 1，实际 {data['grammar_total']!r}"
+    assert data["grammar_mastered"] == 0, f"grammar_mastered 应为 0，实际 {data['grammar_mastered']!r}"
+    assert data["total"] == 3, f"total 应为两表之和 3，实际 {data['total']!r}"
+
+
+def test_card_counts_does_not_run_fsrs_next_intervals(client, monkeypatch):
+    """③ 计数端点 **MUST NOT** 做逐卡 FSRS 递推（端点存在的全部理由）。
+
+    ``GET /api/cards`` 对每张卡跑 ``get_fsrs_next_intervals``；计数端点只要两个整数，
+    递推纯属浪费。把模块属性换成抛异常的桩后仍 MUST 200。
+
+    端点改成 ``SELECT *`` 再取 ``len`` ⇒ 桩被调用 ⇒ 本用例必红。
+    """
+    from delector.routes import main as routes_main
+
+    def _boom(*args: object, **kwargs: object):
+        raise AssertionError("计数端点调用了 get_fsrs_next_intervals：它只数个数，不该逐卡递推 FSRS")
+
+    monkeypatch.setattr(routes_main, "get_fsrs_next_intervals", _boom)
+    _insert_vocab_card(word="Haus", lemma="haus", mastered=1)
+
+    res = client.get("/api/cards/counts")
+    assert res.status_code == 200
+    assert res.json()["vocab_total"] == 1

@@ -110,6 +110,11 @@ from delector.nlp_engine.syntax_tree import analyze_syntax_tree
 # 走包子属性会撞上半初始化状态。
 from delector.routes.sync import _SYNC_INSTANCE_ID
 
+# 材料写入/删除后失效长难句聚合榜缓存（source=all 整榜，TTL 300s）。只导入失效入口
+# （纯 dict pop + 锁），不引 syntax_hard 的其余重依赖；syntax_hard 本身不 import
+# routes.*，故此处顶层导入无环。
+from delector.routes.syntax_hard import invalidate_rank_cache
+
 router = APIRouter()
 
 
@@ -203,6 +208,9 @@ async def ingest_from_url(req: IngestUrlReq) -> Dict[str, Any]:
 
     final_title = req.title.strip() if req.title else title
     art_id = await asyncio.to_thread(ingest_article, final_title, body_text, None, req.url)
+    # 事务已在 ingest_article 内提交（db_conn 正常退出即 commit）⇒ 此处失效聚合榜缓存：
+    # 放在事务提交之后，新文章下一次 source=all 立即可见，不等 300s TTL。
+    invalidate_rank_cache()
     with db_conn() as conn:
         row = conn.execute("SELECT processed_json FROM articles WHERE id = ?", (art_id,)).fetchone()
         pj = json.loads(row["processed_json"]) if row else {}
@@ -226,6 +234,8 @@ async def get_feed_items(url: str) -> Dict[str, Any]:
 @router.post("/api/articles/ingest")
 def ingest(req: IngestReq) -> Dict[str, Any]:
     art_id = ingest_article(req.title or "Untitled", req.raw_text)
+    # 同 ingest_from_url：ingest_article 返回即事务已提交 ⇒ 失效聚合榜缓存（不等 300s TTL）。
+    invalidate_rank_cache()
     return {"article_id": art_id, "title": req.title}
 
 
@@ -283,7 +293,10 @@ def delete_article(article_id: int, request: Request) -> Dict[str, Any]:
             raise HTTPException(404, "Article not found")
         conn.execute("DELETE FROM reading_notes WHERE article_id = ?", (article_id,))
         conn.execute("DELETE FROM articles WHERE id = ?", (article_id,))
-        return {"deleted": True, "article_id": article_id}
+    # return 移出 with：删除已提交（db_conn 正常退出即 commit）后才失效聚合榜缓存，
+    # 已删文章下一次 source=all 立即消失，不滞留 300s TTL。404 早退路径不失效（无变更）。
+    invalidate_rank_cache()
+    return {"deleted": True, "article_id": article_id}
 
 
 @router.post("/api/lookup/grammar")
@@ -707,6 +720,42 @@ def get_cards() -> Dict[str, Any]:
                 card.get("repetition_count") or 0, card.get("interval_days") or 1, card.get("ease_factor") or 2.5
             )
         return {"vocab_cards": v, "grammar_cards": g}
+
+
+@router.get("/api/cards/counts")
+def get_card_counts() -> Dict[str, int]:
+    """只要「有多少张卡」时的轻量计数端点（替代「为了拿计数而拉全量卡片」这一用法）。
+
+    **它替代的用法**：前端角标（`refreshCardCounters`）过去为了显示一个 ``length`` 而请求
+    ``GET /api/cards`` —— 那条路径是 ``SELECT *`` 全表 + **逐卡** ``get_fsrs_next_intervals``
+    递推（O(N) 行物化 + O(N) 次递推），而它挂在 7 个「每次存卡后」的调用点上 ⇒ 存 N 张卡是
+    **O(N²)** 的写路径放大。本端点把它压成每表 1 次聚合、共 2 次查询。
+
+    **与 `GET /api/cards` 的分工**：后者**仍然保留且契约逐字不变** —— `cards.js` 消费它做
+    **全量**卡盒渲染（逐卡字段 + ``next_intervals``）。凡「要卡面」继续走 `/api/cards`；
+    只有「只要数字」的角标走本端点。
+
+    实现 MUST 保持的三条性质：
+    - **单扫条件聚合**：照 ``get_progress_stats`` 的既有写法 ``COUNT(*)`` + ``SUM(mastered = 1)``，
+      每表 1 次查询；MUST NOT ``SELECT *``、MUST NOT 跑 ``get_fsrs_next_intervals``、MUST NOT 读正文。
+    - **诚实留零**：空表时 ``SUM(mastered = 1)`` 返回 ``NULL`` ⇒ 用 ``or 0`` 折成 ``0``，
+      MUST NOT 让 ``null`` 流到前端（会渲染成字面量 ``null张卡``）。
+    - **纯只读 GET**：不触发任何写或迁移。
+
+    鉴权与 ``GET /api/cards`` 同级（局域网只读、非敏感）⇒ **不设本机闸**。
+    """
+    with db_conn() as conn:
+        vc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM vocab_cards").fetchone()
+        gc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM grammar_cards").fetchone()
+    vocab_total = vc["total"] or 0
+    grammar_total = gc["total"] or 0
+    return {
+        "vocab_total": vocab_total,
+        "vocab_mastered": vc["mastered"] or 0,
+        "grammar_total": grammar_total,
+        "grammar_mastered": gc["mastered"] or 0,
+        "total": vocab_total + grammar_total,
+    }
 
 
 @router.get("/api/cards/known-lemmas")
