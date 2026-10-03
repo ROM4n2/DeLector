@@ -722,6 +722,42 @@ def get_cards() -> Dict[str, Any]:
         return {"vocab_cards": v, "grammar_cards": g}
 
 
+@router.get("/api/cards/counts")
+def get_card_counts() -> Dict[str, int]:
+    """只要「有多少张卡」时的轻量计数端点（替代「为了拿计数而拉全量卡片」这一用法）。
+
+    **它替代的用法**：前端角标（`refreshCardCounters`）过去为了显示一个 ``length`` 而请求
+    ``GET /api/cards`` —— 那条路径是 ``SELECT *`` 全表 + **逐卡** ``get_fsrs_next_intervals``
+    递推（O(N) 行物化 + O(N) 次递推），而它挂在 7 个「每次存卡后」的调用点上 ⇒ 存 N 张卡是
+    **O(N²)** 的写路径放大。本端点把它压成每表 1 次聚合、共 2 次查询。
+
+    **与 `GET /api/cards` 的分工**：后者**仍然保留且契约逐字不变** —— `cards.js` 消费它做
+    **全量**卡盒渲染（逐卡字段 + ``next_intervals``）。凡「要卡面」继续走 `/api/cards`；
+    只有「只要数字」的角标走本端点。
+
+    实现 MUST 保持的三条性质：
+    - **单扫条件聚合**：照 ``get_progress_stats`` 的既有写法 ``COUNT(*)`` + ``SUM(mastered = 1)``，
+      每表 1 次查询；MUST NOT ``SELECT *``、MUST NOT 跑 ``get_fsrs_next_intervals``、MUST NOT 读正文。
+    - **诚实留零**：空表时 ``SUM(mastered = 1)`` 返回 ``NULL`` ⇒ 用 ``or 0`` 折成 ``0``，
+      MUST NOT 让 ``null`` 流到前端（会渲染成字面量 ``null张卡``）。
+    - **纯只读 GET**：不触发任何写或迁移。
+
+    鉴权与 ``GET /api/cards`` 同级（局域网只读、非敏感）⇒ **不设本机闸**。
+    """
+    with db_conn() as conn:
+        vc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM vocab_cards").fetchone()
+        gc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM grammar_cards").fetchone()
+    vocab_total = vc["total"] or 0
+    grammar_total = gc["total"] or 0
+    return {
+        "vocab_total": vocab_total,
+        "vocab_mastered": vc["mastered"] or 0,
+        "grammar_total": grammar_total,
+        "grammar_mastered": gc["mastered"] or 0,
+        "total": vocab_total + grammar_total,
+    }
+
+
 @router.get("/api/cards/known-lemmas")
 def get_known_lemmas() -> Dict[str, Any]:
     """i+1 覆盖率用的「已学」词原形列表（跨背词路径打通，2026-09-28 swarm 审计 P1）。
