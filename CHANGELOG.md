@@ -4,9 +4,73 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.12.1（2026-09-26）**
+**最新版本：v5.13.0（2026-10-03）**
 
-### 🛡️ 未发版：Docker 数据目录迁移闸（fail-loud）
+### 🗄️ 统一词库池（ADR-0016）+ P0 数据真相修复（PR #73/#74/#75/#88）
+
+#### ADR-0016 统一词库池：让「我的词汇」成为单一权威池的**派生态**
+
+本版的主体。此前「我的词汇」（工作台词库）与主背词路径（`vocab_cards`）是**两套各自为政的数据**，
+用户在一个地方背过的词，另一个地方看不见。ADR-0016 把 `vocab_cards` 定为**服务端权威池**，
+「我的词汇」改为它的**幂等派生态**——不再自己当真相。
+
+- **Phase 1（#73）**：`vocab_cards` 新增统一池列 `source` + `fsrs_*`（FSRS-6 加性迁移，不动存量行），
+  顺带修掉 `init_db()` 建索引次序 bug。
+- **Phase 2（#74）**：**懒物化**——写路径按主干 provenance 落定 `source`
+  （`official`/`manual`/`ai`/`user`），不在读取时补算，避免两处真相。
+- **Phase 3（#75）**：
+  - **范围闸**：只把**已学**（`reps>0`）或**自建**的词条投影进池，种子词不入池（种子不是用户的词汇）。
+  - **同事务幂等投影**：背词工作台 deck 在写镜像时**同一事务**内把已学/自建词条投影进统一池；
+    投影失败则 blob 也不写（不留半状态）。
+  - **只读对账**：新增 `reconcile_report`（lemma 集合比对 + 禁计数），刻意**不**产出 extra（不写盘）。
+  - **备份/还原**：备份列补齐（防往返丢 `source`/`fsrs_*`），还原后**同快照守卫内补迁移**；
+    顺带修两处备份/还原真 bug（漏 Phase 1 新列 → 静默丢数据）。
+- **身份键口径（#76）**：归一化统一走**比较侧**的 `lemma_key`，避免改动双用途的 `lemma` 字段、零显示回归。
+
+#### P0：数据真相与部署安全（#88）
+
+- **Docker 数据目录迁移闸（fail-loud）**：修掉一条 P0 级事故链——
+  `docker-compose.yml` 从**单文件**挂载改为**目录**挂载并设 `DELECTOR_DATA_DIR`，
+  而 `get_db_path()` 读 `DATA_DIR/delector.db` ⇒ 存量用户升级后旧库**不再被挂进容器**，
+  `init_db()` 只建一套**空 schema** ⇒ 打开应用「功能全正常、数据全空」，且全仓无任何探测/告警。
+  - 新增 `preflight_data_dir(data_dir, repo_root)`：**纯只读**启动自检。
+    **新位置无库 + 旧位置有非空库** ⇒ 抛 `RuntimeError` 拒绝启动，日志含两个绝对路径
+    + 一条可直接复制的 `cp` 命令；`init_db()` 在**建表之前**调用它（空库一旦落盘，再响的警报也晚了）。
+  - 刻意**不**自动搬文件：启动路径上不做用户没要求的写操作（No-Silent-Write）。
+  - `size==0` 的空壳文件**不**拦启动（Honest-Null）；桌面端 `DATA_DIR == 仓库根`**绝不**误报。
+  - **升级步骤**：`mkdir -p data && cp delector.db data/delector.db`（`progress.db` 同理）后 `docker compose up -d --build`；
+    未复制就直接 `up`，应用会拒绝启动并把该命令打进日志。
+- **`.dockerignore`（CI 双向守卫）**：新增 `.dockerignore` 阻断**密钥/库文件进镜像**，
+  CI 补守卫（含零取反断言，确保规则不是空壳）。
+- **due 队列口径修正**：due 队列排除「工作台来源且无卡盒进度」的行，与 `known-lemmas` 同口径（`>0`）；
+  并把自建未评级缺口钉为显式契约。
+- **`known-lemmas` 等价性断言照实降级**：等价性仅对本仓自造卡成立，端到端钉住该漏计缺口。
+
+#### 其它
+
+- **i+1 已知词池打通（#72）**：`deck-bridge.js`/`encounter.js` 打通 i+1 已知词池与主背词路径
+  （∪ `/api/cards` 已学词），列表 + 详情**同口径**。
+- **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn`
+  取代 17 份复制粘贴，44 处句柄泄漏清扫。
+- **文档目录约定重构与 `WORKMEMORY` 三层记忆落地（#81~#85）**：`docs/plans/` 归档分层、
+  `docs/README.md` 立为目录约定正主、ADR 副本拆入 `docs/adr/`；HOT/WARM/COLD 三层记忆真正跑起来
+  （逾期轮转 + 首份九月 digest + primer 瘦身 + INDEX 面 + §5.1 并发守卫）。
+- **Docker/WAL 修复（#69）**：`Dockerfile` CMD 改 `delector.server:app`（原 `server:app` 容器启动即死）
+  + `PRAGMA journal_mode=WAL`；备份/还原改 SQLite backup API（WAL 下文件级拷贝必 `disk I/O error`）。
+- **Android pydantic-v1 运行时契约守卫（#70）**、**长难句 `source=all` 热请求不再读正文 + `_RANK_CACHE` 容量上限（#71）**。
+- 依赖：`starlette 1.6.0 → 1.7.0`、`uvicorn >=0.53.0 → >=0.54.0`。
+
+#### 升级提示
+
+- **Android 需覆盖安装 v5.13.0 生效**：本版含 `static/` 改动（i+1 已知词池打通 + 卡面文案）。
+- 测试基线 **1224 passed + 1 skipped**（分半：非 server **971** + `test_server` **253**）；
+  `ruff check .` 零告警；`mypy --follow-imports=skip tests`（74 files）零错误；`tools/*.mjs` 探针零漂移。
+
+---
+
+### 🛡️ v5.12.1 已发版内容（供参考）：Docker 数据目录迁移闸（fail-loud）
+
+> 以下内容已随 v5.13.0 一并发布，保留原文备查。
 
 修掉一条 P0 级事故链：`docker-compose.yml` 从**单文件**挂载（`./delector.db:/app/delector.db`）
 改为**目录**挂载（`./data:/app/data`）并**无条件**设 `DELECTOR_DATA_DIR=/app/data`，而

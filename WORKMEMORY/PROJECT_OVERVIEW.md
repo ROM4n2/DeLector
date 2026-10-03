@@ -22,16 +22,15 @@
 
 ## 当前状态
 
-- **最新发布 v5.12.1（2026-09-26）** —— 工程债收口（**无用户可见改动**，四平台制品功能等同 v5.12.0）：路由守卫改 **HTTP 语义键** `(path, METHOD)` 比对、mypy 覆盖扩至 `tools/build_*.py`、`fastapi 0.136.3 → 0.141.1` + 撤销 dependabot `ignore`、测试库跨模块 env 串扰修复。
-- **测试 / 门禁基线（截至 v5.12.1）**：全量 **1124 passed + 1 skipped**（分半：非 server **896** + `test_server` **228**）；`ruff check .` 零告警；`mypy --strict delector tools`（68 files）零错误 + tests 适度档；Go `vet` / `gofmt -l` / `test -race`（8 包）全绿；`tools/*.mjs` 探针零漂移；pre-commit 密钥守卫有效。
-- **v5.12.1 之后的未发版批量（PR #69–#84，已合入 master 即 HEAD=`e61a409`，尚未发版）**：
-  - **ADR-0016 统一池 Phase 3（#75）**：把「我的词汇」改为统一池的**幂等派生态**（范围闸只收已学 `reps>0` 或自建），接进 `save_wb_state` 同事务（投影失败则 blob 也不写），新增只读对账；顺带修两处备份/还原真 bug（漏 Phase 1 新列 → 静默丢 `source`/`fsrs_*`）；T3 跳过（与 wbsync local-first 冲突）。
-  - **i+1 known-lemmas（#77）**：`known-lemmas` 端点补 `OR fsrs_s > 0`——Phase 3 只把词「放进池」、消费面看不见，工作台背过的词仍不算「已知」。
-  - **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn` 取代 17 份复制粘贴；决定性变异证明旧实现**静默残留**（假红/假绿）。
-  - **Docker/WAL 修复（#69）**：`Dockerfile` CMD 改 `delector.server:app`（原 `server:app` 容器启动即死）+ `PRAGMA journal_mode=WAL`；备份/还原改 SQLite backup API（WAL 下文件级拷贝必 `disk I/O error`）。
-  - **docs 约定收口（#81–#84）**：`.gitignore` 忽略 `.worktrees/` 与 mypy/ruff 缓存；`docs/plans/` 归档分层（52+15 份进 `archive/`）；`docs/README.md` 立为**目录约定正主**；ADR 副本拆入 `docs/adr/`；移除失真的 `release-v2.1.md`。
-  - 另有：**#70** Android pydantic-v1 运行时契约守卫、**#71** 长难句 `source=all` 热请求不再读正文 + `_RANK_CACHE` 容量上限（实测推翻原 P1 严重度）、**#76** 统一池身份键口径修正（归一在**比较侧**，避免改动双用途 `lemma`）。
-- **产品能力（截至 v5.12.1）**：精读（分词 + 语法雷达）+ 词汇/卡片工作台（FSRS；A1/A2/B1 + 核心/生词档）+ 备考域（A1 读写听说、听力微训、长难句精读）+ 遇见区分级短文（7 篇，已背词高亮 + i+1 就近选材 + 已读状态）+ 检索（词条/例句/搭配/语料）+ 写作润色台 + LAN 静默同步。各功能细节见 `FEATURES.md` 与 `WORKMEMORY/cold/digest-2026-09.md`。
+- **最新发布 v5.13.0（2026-10-03）** —— **ADR-0016 统一词库池 + P0 数据真相修复**：`vocab_cards` 成为「我的词汇」的**服务端权威派生态**（Phase 1 加 `source`/`fsrs_*` 列懒物化 → Phase 2 按 provenance 落定 `source` → Phase 3 工作台 deck **同事务幂等**投影进池 + 只读对账 `reconcile_report`；还原后同守卫内补迁移）；P0 侧修 Docker 数据目录迁移闸（fail-loud 拒绝静默空库）、`.dockerignore` 阻断密钥进镜像、due 队列排除「工作台来源且无卡盒进度」的行、`known-lemmas` 等价性断言照实降级。**含 `static/` 改动 ⇒ Android 需覆盖安装**。
+- **测试 / 门禁基线（截至 v5.13.0）**：全量 **1224 passed + 1 skipped**（分半：非 server **971** + `test_server` **253**）；`ruff check .` 零告警；`mypy --follow-imports=skip tests`（74 files）零错误；`tools/*.mjs` 探针零漂移；`test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**；`test_audit_hardening.py` **31 passed**；pre-commit 密钥守卫有效。
+- **本批已随 v5.13.0 发布的其它改动**：
+  - **i+1 已知词池打通（#72）**：`known-lemmas` 补 `OR fsrs_s > 0`（工作台已学词纳入覆盖率），列表 + 详情同口径；`deck-bridge.js` / `encounter.js` 打通 i+1 与主背词路径。
+  - **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn` 取代 17 份复制粘贴，44 处句柄泄漏清扫；决定性变异证明旧实现**静默残留**（假红/假绿）。
+  - **Docker/WAL 修复（#69）**：`Dockerfile` CMD 改 `delector.server:app` + `PRAGMA journal_mode=WAL`；备份/还原改 SQLite backup API（WAL 下文件级拷贝必 `disk I/O error`）。
+  - **docs 约定 + 三层记忆（#81–#85）**：`docs/plans/` 归档分层（52+15 份进 `archive/`）、`docs/README.md` 立为**目录约定正主**、ADR 副本拆入 `docs/adr/`、移除失真的 `release-v2.1.md`；HOT/WARM/COLD 三层真正跑起来（逾期轮转 + 首份九月 digest + primer 瘦身）。
+  - 另有：**#70** Android pydantic-v1 运行时契约守卫、**#71** 长难句 `source=all` 热请求不再读正文 + `_RANK_CACHE` 容量上限（实测推翻原 P1 严重度）、**#76** 统一池身份键口径修正（归一在**比较侧**，不改动双用途 `lemma`）、依赖 `starlette 1.7.0` / `uvicorn >=0.54.0`。
+- **产品能力（截至 v5.13.0）**：精读（分词 + 语法雷达）+ 词汇/卡片工作台（FSRS；A1/A2/B1 + 核心/生词档，**工作台与主背词共享统一池**）+ 备考域（A1 读写听说、听力微训、长难句精读）+ 遇见区分级短文（7 篇，已背词高亮 + i+1 就近选材 + 已读状态 + 已知词池与主路径同口径）+ 检索（词条/例句/搭配/语料）+ 写作润色台 + LAN 静默同步。各功能细节见 `FEATURES.md` 与 `WORKMEMORY/cold/digest-2026-09.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 
@@ -53,7 +52,6 @@
 - **真实用户试用（当前最高价值动作）**：手机端开箱即有 7 篇 A1/A2/B1 分级短文——收三问反馈（分级是否合适 / 已背词高亮与一键进卡是否顺手 / 本地词典释义够不够用），用反馈决定下一步。
 - **Android 真机点检**：凡改动含 `static/` 的版本需覆盖安装验证（清单见 `docs/agents/ops.md`）。
 - **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；注意 `import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
-- **本批未发版改动**（见上「当前状态」）待发版决策（含 `static/` 者需五件套 + Android 覆盖安装）。
 - 递延项：tests `--strict`、检索 `_highlight` 的 HTML 实体边界、残留 worktree / 已合并本地分支清理。
 
 ## 工作方式
