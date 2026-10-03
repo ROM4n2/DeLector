@@ -1,0 +1,75 @@
+# Docker 构建上下文排除表（2026-10-03 审计 P0-2）
+#
+# 为什么必须有这个文件：Dockerfile 第 14 行是 `COPY . .`，而 `docker build` 复制的是
+# **工作树**而非 git tree —— 未被本文件排除的文件会直接进镜像层：
+#   - 开发者本地的 `.env`（含 DEEPSEEK_API_KEY 明文）；
+#   - `*.db`（用户真实数据：对话与账目），进镜像后就是躺在镜像层里的孤儿数据。
+# 关键点：这不只是镜像体积问题。delector/server.py 的 load_env() 显式读
+# `os.getcwd()/.env`，而 Dockerfile 的 WORKDIR 正是 `/app` ⇒ 容器启动时**真的**会把
+# 该 key 载入 os.environ，并被 get_setting() 的 env 兜底实际使用。
+#
+# 纪律：**逐条**排除，绝不用 `*` / `**` 把仓库根整片排掉（那会让 COPY . . 变空目录、
+# 构建出无法启动的镜像）。delector/、static/、requirements.txt、Dockerfile、android/
+# 都是构建/运行必需物，不得整目录排除。
+#
+# 本文件由 tests/test_ci_hardening.py 双向守卫（正向：条目齐全 + 零取反行；反向：不得过宽）。
+# 纪律补充：**不得出现任何 `!` 开头的取反行**。Docker 的 .dockerignore 是后出现的行
+# 胜出，在 `.env` 之后补一行 `!.env` 会把密钥重新纳入上下文，而"条目齐全"的检查仍绿
+# （假绿）。守卫对此有专门断言。
+
+# ── 密钥与凭据 ────────────────────────────────────────────────────────────────
+# .env 是明文密钥；容器 WORKDIR=/app 恰好让 load_env() 在启动时载入它
+.env
+.env.*
+# 任意 <name>.env 变体（app.env / prod.env …）。Docker 的 * 可匹配空串，
+# 故这一条连 .env 本身也命中；与 .env 并列写出是为了让"逐条排除"的意图可读
+*.env
+# 本地明文配置：.gitignore 已把它们列为敏感，git tree 干净 ≠ 构建上下文干净，
+# COPY . . 仍会把工作树里的这些文件烤进镜像层（常夹明文口令/token）
+config.yaml
+config.yml
+# 私钥与证书材料：进镜像等于公开私钥
+*.pem
+*.key
+# 本机私有 JSON 配置与字面凭据文件
+*.local.json
+credentials.json
+# Android 签名密钥：进镜像等于公开签名身份
+*.jks
+*.keystore
+
+# ── 用户数据（绝不进镜像）─────────────────────────────────────────────────────
+# 对话库、进度库及其 SQLite 旁文件
+*.db
+*.db-wal
+*.db-shm
+
+# ── 版本库与 CI 配置 ──────────────────────────────────────────────────────────
+# .git 的对象/refs 会让镜像暴涨并泄露提交历史；workflow 内没有任何东西需要它
+.git
+.github
+
+# ── 工具缓存与字节码 ──────────────────────────────────────────────────────────
+# 宿主产出的 .pyc 可能与镜像内解释器版本不符；各语言工具缓存对运行时无价值
+__pycache__
+*.pyc
+.cache
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+node_modules
+
+# ── 构建产物与本地开发工具态 ──────────────────────────────────────────────────
+# 二进制产物（体积大、可反编译），镜像用不到
+build/
+dist/
+*.apk
+# 开发/工具态目录与本地记忆快照：进镜像无意义，且可能夹带本地数据
+.vscode/
+.codebuddy/
+.worktrees/
+.vault-exec-ledger.json
+WORKMEMORY/
+# 文档不属于运行时交付物
+docs/

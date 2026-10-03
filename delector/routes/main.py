@@ -713,16 +713,45 @@ def get_cards() -> Dict[str, Any]:
 def get_known_lemmas() -> Dict[str, Any]:
     """i+1 覆盖率用的「已学」词原形列表（跨背词路径打通，2026-09-28 swarm 审计 P1）。
 
-    取**已学过**的主卡，三条来源任一成立即算已知：
-    1. `mastered = 1`：用户在卡盒手动置「已掌握」；
+    取**已学过**的主卡，三条来源任一成立即算已知——**三者量纲不同、不可互相替代**：
+    1. `mastered = 1`：用户在**卡盒**手动置「已掌握」；
     2. `repetition_count > 0`：在**卡盒**（DSR 复习）复习过至少一次；
-    3. `fsrs_s > 0`：在**背词工作台**（FSRS）学过至少一次 —— 统一池投影（`vocab_pool.py`）
+    3. `fsrs_s > 0`：在**背词工作台**（FSRS）评级过至少一次。统一池投影（`vocab_pool.py`）
        是**唯一按工作台卡语义写入 `fsrs_s` 的写入者**（只从工作台卡的 `s` 写入；备份还原
-       `_replace_tables` 仅把备份中的 `fsrs_s` 原样回灌，不引入 DSR 语义，其合法来源仍是投影）；
-       而工作台卡一旦存在 `s` 即为正浮点 —— 首评置
-       `s = fsrsInitS(g) = max(FSRS_W[g-1], 0.1) ≥ 0.1`，其余转移一律 `clamp(…, S_MIN, …)`
-       （`S_MIN = 0.001`，见 workbench.html）⇒ 恒 `s ≥ 0.001 > 0`。故该条件**等价于**
-       `deck-bridge.js` 的「已学习 = `cards[id].reps > 0`」。
+       `_replace_tables` 仅把备份中的 `fsrs_s` 原样回灌，不引入 DSR 语义，其合法来源仍是投影）。
+
+    ⚠️ **关于「`fsrs_s > 0` 等价于工作台 `reps > 0`」——该等价性仅对本仓工作台**自造**的卡成立，
+    对导入 / 外部推送的卡不成立**（2026-10-03 P0 数据真相审计 Task 4 据实降级）：
+
+    - **成立的那一半**：本仓工作台自造的卡确实恒含 `s`。`fsrsReview` 的返回体硬编码
+      `{s, d, due, last, reps, lapses}`，首评 `s = fsrsInitS(g) = max(FSRS_W[g-1], 0.1) ≥ 0.1`，
+      其余三条转移（`fsrsRecallS` / `fsrsForgetS` / `fsrsShortTermS`）一律 `clamp(…, S_MIN, …)`
+      且 `S_MIN = 0.001`（见 workbench.html）⇒ 恒 `s ≥ 0.001 > 0`；手动「稳固」亦写含 `s` 的
+      字面量。此时确有 `reps > 0 ⟺ s > 0`，故与 deck-bridge.js 的「已学习」口径一致。
+    - **不成立的那一半**：`PUT /api/wb/state` 的 payload 是**裸 `Dict[str, Any]`、无任何形状校验**
+      （`WbStateReq`，`main.py` 的 `wb_put_state` 直接 `save_wb_state(req.payload or {})`），
+      而可达的**零校验入口**都能把**缺 `s`** 的卡灌进来：
+      （a）`applyOverwrite`（workbench.html：`S.cards = data.cards || {}`，整库覆盖，导入文件是
+      用户可见的正式功能）；（b）`wb_put_state`（局域网同步的裸 payload）；（c）`loadAll` 裸读
+      localStorage；（d）`applyMerge`（workbench.html：`S.cards[id] = b`，**整卡赋值、不校验
+      `s`**，按 `last` 取新）——它被**四处**复用：合并导入分支（`btnImportSync` 的合并模式，
+      与 `applyOverwrite` 的覆盖模式并列）、局域网 B 端 `dc.onmessage`、后台轮询
+      `wbsync.pull`、BroadcastChannel `rtcOnMessage`。故导入 / 外部推送的卡**可以** `reps > 0`
+      而无 `s`
+      ⇒ 投影的 `_desired_fields` 取不到 `s` ⇒ `fsrs_s` 落 NULL ⇒ `fsrs_s > 0` 为假
+      ⇒ **该词在 deck-bridge 的「已学」口径下算已学，却在 i+1 覆盖率里被漏计**。
+      端到端契约见 `tests/test_unified_pool_e2e.py::test_group6_known_lemmas_learned_notion`
+      （① 含 `s` ⇒ 计入；② 有 `reps` 缺 `s` ⇒ **当前不计入，即漏计**）。是否收紧投影范围闸
+      **未决**——它会改变 `tests/test_vocab_pool_projection.py` 里一条把现状钉成契约的断言
+      （`test_scope_gate_conservation_inserted_plus_skipped` 以 `{"a1-0004": {"reps": 2}}`
+      这张「有 `reps` 而缺 `s`」的卡断言 `inserted`，收紧后它将转为 `skipped`），属**产品/契约
+      决策**而非可由实现自行判定的技术细节；此类未决项登记在 ADR-0016
+      （`docs/adr/2026-09-29-adr-0016-unified-vocab-pool-architecture.md`）§5「已定 / 待确认」
+      一节，该节**尚未**收录本条。本端点不做判断，只把现状钉成显式契约。
+    - **另一条已知缺口**（与 `vocab_pool.py::_is_projectable` 的注意栏同一说明、措辞对齐）：
+      `custom is True` 的自建词**不查卡**即入池，尚无 FSRS 卡时 `fsrs_s` 为 NULL ⇒
+      **与 reader 普通卡不可区分**（故 `fsrs_s IS NULL` 不能推出「来自 reader」），
+      这类词同样不计「已学」。
 
     承项目既有约定：**仅仅加入卡盒（入卡未复习）不算已知**（加入词 ≠ 已知，见 deck-bridge.js
     的 A6 注释）—— 上述三条之外的入卡行（`repetition_count = 0` / `mastered = 0` / `fsrs_s` 空）
@@ -1702,8 +1731,32 @@ def get_due_cards() -> Dict[str, Any]:
         v = [
             dict(r)
             for r in conn.execute(
+                # 排除「工作台投影且卡盒无进度」的行：投影侧（core/vocab_pool.py）只写
+                # fsrs_* 、不写 due_date ⇒ due_date 为 NULL ⇒ 旧谓词把工作台背过的词全收进
+                # 「今日到期」，卡面还显示「0 正 / 0 误」（对用户说谎）。判据并置两套语义：
+                # fsrs_s（工作台 FSRS 侧，唯一按工作台卡语义写入者即 vocab_pool.py）说明
+                # 「该行有工作台 FSRS 卡」，repetition_count（卡盒 DSR 侧）== 0 说明「卡盒没进度」。
+                # 卡盒 DSR 复习（review_card_sm2）不写 fsrs_*，故本谓词不会误伤纯卡盒行；
+                # MUST NOT 依赖 mastered（已在上面的 WHERE 里）。
+                #
+                # **口径 MUST 与姊妹端点 /api/cards/known-lemmas 一致：用 `fsrs_s > 0`，
+                # MUST NOT 用 `IS NOT NULL`。** 后者更宽 —— 备份还原（core/database.py）
+                # 原样回灌 fsrs_s 且该列非 STRICT，legacy / 手改备份里的 0 或 "" 都能落盘；这类行
+                # 会既不被 known-lemmas 算「已学」（它要 > 0）、又被本谓词排除 ⇒ 两头不可见。
+                # COALESCE(fsrs_s, 0) 只是把 NULL 显式读作「无值」：**SQL 三值逻辑下
+                # `NULL > 0` 是 NULL、`NOT(NULL)` 仍是 NULL ⇒ WHERE 会把该行整行丢掉**
+                # （曾真发生过：裸 `> 0` 会把所有 reader 普通卡误杀出 due_vocab）。COALESCE 后
+                # `> 0` 对每个存储类的真值与姊妹端点逐行一致（NULL→假、0→假、其余同 `> 0`）。
+                #
+                # **已知缺口（本谓词不覆盖）**：自建但尚未在工作台评级过的词条，
+                # `_is_projectable`（core/vocab_pool.py）对 `custom is True` 立即 True、不查卡 ⇒
+                # `_desired_fields` 拿到 card={} ⇒ fsrs_s 为 NULL ⇒ 与 reader 普通卡不可区分 ⇒
+                # 仍会涌入「今日到期」。真修它需改投影写入语义（= 编造 FSRS 状态，违反 FSRS≠DSR），
+                # 越出本任务范围；见 ADR-0016 收尾 + tests/test_server.py 用例⑥。
                 "SELECT * FROM vocab_cards WHERE mastered = 0 "
-                "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
+                "AND (due_date IS NULL OR due_date <= ?) "
+                "AND NOT (COALESCE(fsrs_s, 0) > 0 AND repetition_count = 0) "
+                "ORDER BY wrong_count DESC, id ASC",
                 (today,),
             ).fetchall()
         ]

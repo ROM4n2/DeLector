@@ -42,6 +42,83 @@ except Exception:
 PROGRESS_DB_PATH = os.path.join(DATA_DIR, "progress.db")
 
 
+def _norm_path(path: str) -> str:
+    """把路径规范化到「可直接比较」的形态：abspath（消解相对段）+ normpath（消解分隔符差异）。
+
+    桌面端 `DATA_DIR` 与 `_REPO_ROOT` 在同一进程里可能**字面不同但指向同地**（例如
+    `DATA_DIR=/app` vs `_REPO_ROOT=/app/`、或一方带尾斜杠）。迁移闸的唯一依据是
+    「两个路径是否真的不同」，故必须规范化后再比，绝不字符串直比。
+    """
+    return os.path.normpath(os.path.abspath(path))
+
+
+def preflight_data_dir(data_dir: str, repo_root: str) -> None:
+    """启动自检：数据还在旧位置 ⇒ 抛异常拒绝建空库（fail-loud）。纯函数、只读、不碰 DB。
+
+    事故背景
+    --------
+    `docker-compose.yml` 早期把卷挂成**单文件** `./delector.db:/app/delector.db`，后改为
+    **目录** `./data:/app/data` 并无条件设 `DELECTOR_DATA_DIR=/app/data`。而
+    `get_db_path()` 优先读 `DATABASE_PATH`、其次 `DATA_DIR/delector.db` ⇒ 存量用户升级后
+    旧库**不再被挂进容器**，`init_db()` 只会建一套**空 schema**。用户看到的是「功能全正常、
+    数据全空」的应用，且全仓无任何探测/告警/迁移说明。
+
+    为何抛异常而不「告警后继续」
+    --------------------------
+    静默空库比响亮崩溃危险得多：空库一旦建出，用户的诊断直觉是「数据丢了」，进而做
+    「恢复出厂」这类**不可逆**操作；而审计已核实数据文件**根本没被删除**，只差一次 `cp`。
+    宁可见的 crash-loop，也不要静默空库。
+
+    判据（四者**同时**成立才抛）
+    ----------------------------
+    1. 新位置 `data_dir/delector.db` **不是**已存在的库文件（`os.path.isfile`）；
+    2. 旧位置 `repo_root/delector.db` **是**已存在的库文件（同上）；
+    3. 该旧文件 `size > 0`（size==0 是初始化残留的空壳，**不算数据** ⇒ 诚实留空，不拦启动）；
+    4. 两个路径**规范化后不同**（桌面端 `DATA_DIR == _REPO_ROOT` 恒成立 4，故**绝不误报**）。
+
+    为何用 `isfile` 而非 `exists`（且 ①/② 对称）
+    -------------------------------------------------
+    旧版 compose 挂的是**单文件** `./delector.db:/app/delector.db`；宿主文件不存在时
+    Docker 会**自动建一个同名目录** `./delector.db/`，它又被 `Dockerfile` 的 `COPY . .`
+    带进镜像落在 `/app/delector.db`。Linux 下目录 `st_size == 4096 > 0`，于是
+    `exists` + `getsize > 0` 的判据会**四条件全中**：目录里根本没有数据，用户却被拦死，
+    而消息里的 `cp /app/delector.db /app/data/delector.db` 还会报 `omitting a directory`。
+    `isfile` 对目录返回 `False`，让「有目录残留」与「有库数据」彻底分开。
+
+    No-Silent-Write：本函数**只读不写**，修数据由用户照消息里的 `cp` 自己做——启动路径上
+    不做用户没要求的写操作。Idempotent：正常路径零输出、零日志，重复启动不重复报警。
+    """
+    legacy_db = os.path.join(data_dir, "delector.db")
+    if os.path.isfile(legacy_db):
+        return  # 新位置已有库：数据在位，闸无话可说
+    old_db = os.path.join(repo_root, "delector.db")
+    if not os.path.isfile(old_db):
+        return  # 旧位置也没有库文件：全新安装（或只剩 Docker 建的同名目录），诚实留空
+    if _norm_path(data_dir) == _norm_path(repo_root):
+        # 条件④ 在**当前**守卫顺序下是防御性冗余：当两路径规范化后相同，`legacy_db` 与
+        # `old_db` 指向同一文件，①（无库）与 ②（有库）互斥，永远到不了这一行。
+        # 判据明文要求四条件并列，故**保留**该守卫 —— 未来若重构调整守卫顺序（例如把
+        # ② 挪到 ① 之前），它是防止闸在「两路径同地」时误报的唯一拦阻，不得删。
+        return  # 桌面端默认：两路径同地，绝不误报
+    if os.path.getsize(old_db) <= 0:
+        return  # 0 字节空壳不算数据，不拦启动
+
+    new_abs = os.path.abspath(legacy_db)
+    old_abs = os.path.abspath(old_db)
+    message = (
+        "检测到数据目录迁移未完成：数据库文件仍留在旧位置，但程序已指向新位置。\n"
+        "继续启动会在新位置重建一个**空库**（功能正常、数据全空），因此已拒绝启动。\n"
+        "数据文件本身**没有被删除**，照下面这条命令复制过去再重启即可恢复：\n"
+        f'  cp "{old_abs}" "{new_abs}"\n'
+        f"  旧位置（数据在此）：{old_abs}\n"
+        f"  新位置（程序要读）：{new_abs}\n"
+        "注意：上面这条 cp 的两个路径是**容器内**的绝对路径，请在容器里执行（或用\n"
+        "`docker compose cp`）；宿主机侧怎么搬见 README「数据目录与旧版迁移」一节。"
+    )
+    logging.getLogger("delector").error(message)
+    raise RuntimeError(message)
+
+
 def get_db_path(db_path: Optional[str] = None) -> str:
     return db_path or os.environ.get("DATABASE_PATH", os.path.join(DATA_DIR, "delector.db"))
 
@@ -214,6 +291,11 @@ def log_study_event(
 
 
 def init_db(db_path: Optional[str] = None) -> None:
+    # 迁移闸必须**在建表之前**跑：一旦 `CREATE TABLE` 执行，空库文件就落盘了，
+    # 用户看到的正是「功能正常、数据全空」且此后更难分辨的静默失败。抛错即中止，
+    # 不留下任何半成品。传显式 db_path（测试夹具）时数据目录不参与判据，故直接跳过。
+    if db_path is None:
+        preflight_data_dir(DATA_DIR, _REPO_ROOT)
     target_path = get_db_path(db_path)
     with db_conn(target_path) as conn:
         conn.execute("""

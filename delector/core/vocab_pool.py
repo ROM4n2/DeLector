@@ -25,7 +25,8 @@
 8. **范围闸（只收「用户自己的词」）**：仅当词条 ``custom is True``（自建，**严格** ``is True``，非
    truthy）或其 ``cards[str(id)].reps > 0``（已学）时才投影；自动加载的 A1/A2/B1 种子词
    （非自建且未学）MUST NOT 入池 —— 跳过（不查库、不写库）并计入返回值的 ``skipped``。
-   判定在**归一键之后、查库之前**。
+   判定在**归一键之后、查库之前**。**已知缺口**：``custom is True`` 不查卡 ⇒ 自建未评级词入池后
+   ``fsrs_s`` 为 NULL，与 reader 卡不可区分（详见 ``_is_projectable`` 的注意栏）。
 
 读取期派生（Backfill §2）：``pos`` / ``gender`` / ``plural`` / ``cefr_level`` 等富元数据
 **不由本投影写入**（workbench 的 ``pos`` 标签是 view-owned 展示层，与池内约定不同，写入即
@@ -209,6 +210,12 @@ def _is_projectable(entry: Dict[str, Any], cards: Dict[str, Any]) -> bool:
     - ``custom`` 取 ``entry.get("custom") is True``（**严格** ``is True``，非 truthy）；
     - ``reps`` 取 ``cards[str(entry["id"])]["reps"]``，卡不存在 / ``reps`` 非数 / ``<= 0`` ⇒ 未学。
     自动加载的 A1/A2/B1 种子词（既非自建又未学）⇒ ``False``（MUST NOT 入池）。
+
+    注意（下游读侧已知缺口，ADR-0016 收尾）：``custom is True`` 的分支**不查卡是否存在** ⇒
+    自建但尚未在工作台评级过的词条照样入池，而 ``_desired_fields`` 拿到 ``card = {}`` ⇒
+    落库行 ``fsrs_s`` 为 NULL ⇒ **与 reader 普通卡不可区分**（故 ``fsrs_s IS NULL`` 不能推出
+    「来自 reader」）。``fsrs_s > 0`` ⇒ 有工作台卡成立，但**反向不成立**。真修它需要给自建词
+    编造 FSRS ``s``（= 编造 FSRS 状态，违反不变量 4）⇒ 本模块刻意不修，只让缺口显式可测。
     """
     if entry.get("custom") is True:
         return True

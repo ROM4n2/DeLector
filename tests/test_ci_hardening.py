@@ -357,3 +357,112 @@ def test_pydantic_dump_api_guarded_by_hasattr_shim():
         '必须写成 `x.model_dump() if hasattr(x, "model_dump") else x.dict()` 的兼容垫片：\n  '
         + "\n  ".join(offenders)
     )
+
+
+# ── 镜像构建上下文守卫（2026-10-03 审计 P0-2）──────────────────────────────────
+# 背景：仓库根曾**不存在** .dockerignore，而 Dockerfile 第 14 行是 COPY . .。
+# docker build 复制的是**工作树**而非 git tree ⇒ 开发者本地的 .env（内含
+# DEEPSEEK_API_KEY 明文）与 *.db（用户真实数据）会被烤进镜像层。
+# 关键点：这不只是「镜像里有冗余文件」——delector/server.py 的 load_env() 显式读
+# os.getcwd()/.env，而 Dockerfile 的 WORKDIR 正是 /app ⇒ 容器**启动时真的会把
+# 该 key 载入 os.environ**，并被 get_setting() 的 env 兜底实际使用。
+#
+# 本守卫双向钉死：
+#   正向 —— 敏感/数据条目必须被排除（漏一条＝密钥或用户数据随镜像外流）；
+#   反向 —— 不得用 * / ** 之类过宽模式把构建必需物（Dockerfile、delector/、
+#          static/、requirements.txt）一并排掉，否则 build 会在 COPY 或 pip 阶段炸。
+
+DOCKERIGNORE = REPO_ROOT / ".dockerignore"
+
+# 必须出现在 .dockerignore 中的条目 → (为什么非排不可)
+_DOCKERIGNORE_REQUIRED: dict[str, str] = {
+    ".git": "版本库全量历史（对象、refs）不该进镜像：体积暴涨且泄露提交历史",
+    ".env": ".env 是**明文密钥**（DEEPSEEK_API_KEY）；容器 WORKDIR=/app 恰好让 "
+    "load_env() 在启动时把它载入 os.environ 并被实际使用",
+    ".env.*": ".env.* 变体（.env.local / .env.production）同样是明文密钥",
+    "*.db": "*.db 是**用户真实数据**（对话、账目）；进镜像层就是躺在镜像里的孤儿数据",
+    "*.db-wal": "SQLite WAL 旁文件也是用户数据，且会与镜像内的旧 .db 错配",
+    "*.db-shm": "SQLite 共享内存旁文件同样是用户数据",
+    "*.apk": "*.apk 是构建产物（体积大、可被反编译），镜像用不到",
+    "*.jks": "*.jks 是 Android 签名密钥：进镜像等于公开签名身份",
+    "*.keystore": "*.keystore 同为签名密钥，必须与 *.jks 一起排除",
+    "__pycache__": "__pycache__ 是宿主 Python 产出的 .pyc，与镜像内解释器版本可能不符",
+    ".cache": ".cache 是工具链缓存目录，对运行时无价值",
+    # Y6：.gitignore 已把下列本地明文敏感文件列为敏感，.dockerignore 漏排 ⇒
+    # COPY . . 仍会把它们烤进镜像层（git tree 干净 ≠ 构建上下文干净）。
+    "config.yaml": "config.yaml 在 .gitignore 的敏感清单内：本地 YAML 配置常夹明文口令/token",
+    "config.yml": "config.yml 同为 .gitignore 敏感清单内的本地明文配置",
+    "*.pem": "*.pem 是私钥/证书（PEM）：.gitignore 已列为敏感，进镜像等于公开私钥",
+    "*.key": "*.key 同为私钥材料，.gitignore 已列为敏感",
+    "*.local.json": "*.local.json 是本机私有 JSON 配置（可能夹 token），.gitignore 已列为敏感",
+    "credentials.json": "credentials.json 字面即凭据文件，.gitignore 已列为敏感",
+    "*.env": "*.env 覆盖任意 <name>.env 变体（Docker 的 * 可匹配空串，故连 .env 本身也命中）",
+}
+
+# 不得作为**整行**出现的过宽模式：会连构建必需物一起排掉
+_DOCKERIGNORE_FORBIDDEN: dict[str, str] = {
+    "*": "* 排掉一切：Dockerfile 的 COPY . . 会变成空目录，构建出的镜像无法启动",
+    "**": "** 同样过宽，构建上下文会被清空",
+    "/*": "/* 排掉仓库根下所有内容，等价于放弃构建",
+    "delector": "排掉 delector 目录 = 排掉应用本体，uvicorn delector.server:app 直接 ModuleNotFoundError",
+    "delector/": "排掉 delector 目录 = 排掉应用本体，uvicorn delector.server:app 直接 ModuleNotFoundError",
+    "static/": "排掉 static 目录 = 前端静态资源丢失，页面 404",
+    "Dockerfile": "排掉 Dockerfile 本身属于自相矛盾（它由 build context 读，"
+    "一旦被排掉、后续有人改用 COPY 就会缺文件）",
+    "requirements.txt": "排掉 requirements.txt：Dockerfile 第 10 行的 COPY requirements.txt . 会直接失败",
+    "android": "排掉 android 目录：本仓库的 Android 打包面依赖它，不该由 Docker 镜像面单方面丢弃",
+    "android/": "排掉 android 目录：本仓库的 Android 打包面依赖它，不该由 Docker 镜像面单方面丢弃",
+}
+
+
+def _dockerignore_lines() -> set[str]:
+    """返回 .dockerignore 的有效行集合（去空白、去空行、去注释）。
+
+    只做最小归一化，不解析 ! 取反/通配语义 —— 守卫要盯的是「条目在不在」，
+    而不是替 Docker 重写一遍匹配器。
+    """
+    text = _read_guard_file(DOCKERIGNORE)
+    return {s for line in text.splitlines() if (s := line.strip()) and not s.startswith("#")}
+
+
+def test_dockerignore_excludes_secrets_and_databases() -> None:
+    """.dockerignore 必须存在，并逐条排除密钥与用户数据条目。"""
+    lines = _dockerignore_lines()
+
+    # Y1：先钉"不得有取反行"，再钉条目齐全。
+    # Docker 的 .dockerignore 语义是**后出现的行胜出**，`!` 前缀表示取反。
+    # 因此在 `.env` 之后追加一行 `!.env` 会把 .env **重新纳入**构建上下文，
+    # 而下面的"条目齐全"检查仍然绿（`.env` 那行还在文件里）——纯条目断言
+    # 看不见这个旁路。守卫本身也必须零取反：排除表里出现 `!` 就没有别的
+    # 可靠信号可判（我们不替 Docker 实现匹配器）。
+    negated = sorted(s for s in lines if s.startswith("!"))
+    assert not negated, (
+        f"{DOCKERIGNORE} 出现取反条目 {negated}：取反行会让前面的排除失效——"
+        "Docker 的 .dockerignore 是后出现的行胜出，在 `.env` 之后追加 `!.env` "
+        "会把明文密钥**重新纳入**构建上下文，而条目齐全的检查仍会绿（假绿）。"
+        "修法：删掉这些 `!` 开头的行；本守卫统一以「逐条排除」表达意图，"
+        "不依赖取反语义。"
+    )
+
+    missing = [f"未排除 {needle!r}（{why}）" for needle, why in _DOCKERIGNORE_REQUIRED.items() if needle not in lines]
+    assert not missing, (
+        f"{DOCKERIGNORE} 缺少关键排除条目：\n"
+        + "\n".join(missing)
+        + "\n背景：Dockerfile 是 COPY . .，docker build 复制的是**工作树**而非 git tree，"
+        "漏排的条目会随 docker build 进入镜像层；其中 .env 会被 /app 下的 load_env() "
+        "在启动时真正载入 os.environ，*.db 则是用户真实数据。"
+        "修法：在 .dockerignore 补上缺失条目，而不是删除或跳过本测试。"
+    )
+
+
+def test_dockerignore_does_not_exclude_build_inputs() -> None:
+    """.dockerignore 不得用过宽模式把构建必需物排掉（否则 build 直接坏）。"""
+    lines = _dockerignore_lines()
+
+    offenders = [f"出现 {pattern!r}（{why}）" for pattern, why in _DOCKERIGNORE_FORBIDDEN.items() if pattern in lines]
+    assert not offenders, (
+        f"{DOCKERIGNORE} 出现了会破坏构建的过宽排除模式：\n"
+        + "\n".join(offenders)
+        + "\n.dockerignore 的职责是**逐条**排掉密钥/数据/产物，"
+        "而不是整片排除 —— 请把 * 之类改成具体条目（.git / .env / *.db / __pycache__ …）。"
+    )

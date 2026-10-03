@@ -8,6 +8,14 @@ services:
       - "8000:8000"
     # 挂**目录**而非单文件：启用 WAL 后会生成 delector.db-wal/-shm 旁文件，
     # 单文件挂载会把它们留在容器层（docker compose down 后丢尾写）。数据统一落在 ./data。
+    #
+    # ⚠️ 从**旧版单文件挂载**（./delector.db:/app/delector.db）升级的用户必读：
+    # 旧库还在仓库根的 ./delector.db，而本文件把数据指向 ./data 且**无条件**设
+    # DELECTOR_DATA_DIR=/app/data ⇒ 直接 up 会「功能正常、数据全空」（空库，不是数据丢了）。
+    # 迁移只需一步（数据文件没被删除，容器读不到而已）：
+    #   mkdir -p data && cp delector.db data/delector.db
+    # 应用启动时会自检此场景：发现旧位置有非空库而新位置没有 ⇒ **拒绝启动**并打印上面
+    # 这条 cp 命令，绝不静默建空库。progress.db 同理。
     volumes:
       - ./data:/app/data
     restart: unless-stopped

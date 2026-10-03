@@ -94,6 +94,30 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 >
 > 📖 Windows 分支 / Docker 细节 / 环境变量 / 打包 / 安全守卫等完整说明见 [docs/agents/ops.md](docs/agents/ops.md)。
 
+### 📦 数据目录与旧版迁移（Docker 用户必读）
+
+桌面端数据落在**仓库根**（`delector.db` / `progress.db`），无需任何配置。
+
+**Docker 部署的数据落在 `./data` 目录**（`DELECTOR_DATA_DIR=/app/data`）。挂目录而非单文件，
+是因为 WAL 会在库旁生成 `-wal`/`-shm`，单文件挂载会在 `docker compose down` 后丢尾写。
+
+⚠️ **从旧版单文件挂载（`./delector.db:/app/delector.db`）升级的用户**：直接
+`docker compose up -d --build` 会得到一个**功能正常但数据全空**的应用——旧库还在仓库根，
+而容器现在去读 `./data`。**数据文件没有被删除**，只差一次复制：
+
+```bash
+mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
+```
+
+为杜绝「静默空库」（空库一旦建出，用户的诊断直觉是「数据丢了」，进而可能做不可逆的
+恢复出厂操作），应用启动时会自检：**新位置无库 + 旧位置有非空库 ⇒ 拒绝启动**，并在日志里
+打印两个绝对路径和一条可直接复制的 `cp` 命令。照做后重启即可。（日志里的 `cp` 给的是
+**容器内**路径，要在容器里执行，或用 `docker compose cp`。）
+
+同一条迁移规则对**桌面端手工设 `DELECTOR_DATA_DIR`** 同样适用：把 `DELECTOR_DATA_DIR`
+指向一个新目录、而旧位置的 `delector.db` 还在仓库根时，闸会以同样理由拒绝启动，直到你把
+库复制到新目录为止。
+
 ---
 
 ## 📁 目录结构 (Project Layout)

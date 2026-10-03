@@ -6,6 +6,30 @@
 
 **最新版本：v5.12.1（2026-09-26）**
 
+### 🛡️ 未发版：Docker 数据目录迁移闸（fail-loud）
+
+修掉一条 P0 级事故链：`docker-compose.yml` 从**单文件**挂载（`./delector.db:/app/delector.db`）
+改为**目录**挂载（`./data:/app/data`）并**无条件**设 `DELECTOR_DATA_DIR=/app/data`，而
+`get_db_path()` 读 `DATA_DIR/delector.db` ⇒ 存量用户升级后旧库**不再被挂进容器**，`init_db()`
+只建一套**空 schema** ⇒ 打开应用「功能全正常、数据全空」，且全仓无任何探测/告警/迁移说明。
+
+- 新增 `preflight_data_dir(data_dir, repo_root)`：**纯只读**启动自检。**新位置无库 + 旧位置有
+  非空库** ⇒ 抛 `RuntimeError` 拒绝启动，日志含两个绝对路径 + 一条可直接复制的 `cp` 命令；
+  `init_db()` 在**建表之前**调用它（空库一旦落盘，再响的警报也晚了）。
+- 刻意**不**自动搬文件：启动路径上不做用户没要求的写操作（No-Silent-Write）。
+- size==0 的空壳文件**不**拦启动（Honest-Null）；桌面端 `DATA_DIR == 仓库根`**绝不**误报。
+- **升级步骤（数据文件并未被删除，只是容器读不到）**：
+
+  ```bash
+  mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
+  docker compose up -d --build
+  ```
+
+  未复制就直接 `up` 的话，应用会拒绝启动并把上面这条命令打进日志，照做后重启即可。
+- 同步文档：`docker-compose.yml` 卷段注释 / `README.md` 新增「数据目录与旧版迁移」一节 /
+  `docs/agents/ops.md` / `.env.example` 补 `DELECTOR_DATA_DIR` 说明。
+- 零 `static/` 改动 ⇒ 无需 Android 覆盖安装，本次不发版。
+
 ---
 
 ## 🗺️ 路线图 (Roadmap)
