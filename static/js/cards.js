@@ -185,6 +185,47 @@ export function renderCardsGrid() {
   }
 }
 
+/**
+ * 卡面正面页脚 meta 行的文案（纯文本，调用方塞进 <span class="card-stats-tag">）。
+ *
+ * **为什么要分来源**：统一池（delector/core/vocab_pool.py）把工作台背过的词投影进
+ * `vocab_cards`，但按不变量只写 `fsrs_s` / `fsrs_d` / `fsrs_lapses`，
+ * **不写** `due_date` / `correct_count` / `wrong_count`（那三列是卡盒 DSR 侧的语义）。
+ * 于是这类工作台词在卡面会显示「⏳ 待复习 · 0 正 / 0 误」——而用户在工作台背了 5 次。
+ * 「N 正 / N 误」是 DSR 复习统计，对工作台词**恒为 0**，照实显示即对用户说谎。
+ *
+ * **判据**：`fsrs_s` 是**唯一**按工作台卡语义写入该列的写入者（vocab_pool.py 的
+ * `_desired_fields`），卡盒 DSR 复习（review_card_sm2）不写 `fsrs_*`
+ * ⇒ `fsrs_s > 0` 即「该行来自工作台」。
+ * 口径 MUST 与后端姊妹端点 /api/cards/due（delector/routes/main.py:1758 的
+ * `NOT (COALESCE(fsrs_s, 0) > 0 AND repetition_count = 0)`）以及
+ * /api/cards/known-lemmas（`fsrs_s > 0`）一致：**用 `> 0`，MUST NOT 用 `IS NOT NULL`**。
+ * 后者更宽，会把「有 fsrs 列但值退化为 0 / 空串」的行误判成工作台来源。
+ * 前端对应写法即 `Number(fsrs_s)` 有限且 `> 0`（`Number(null)/Number("")` 得 0 ⇒ 假，
+ * 脏值 `Number("abc")` 得 NaN ⇒ 假，与 SQL 三值逻辑下 COALESCE 后的行为逐行一致）。
+ *
+ * **为什么 `mastered` 徽记永不隐藏**：`mastered` 是**用户在卡盒亲手设的标记**，
+ * 与 DSR 进度无关。工作台分支若整体接管文案就会把它吞掉，用户会以为自己的
+ * 「已掌握」没生效 —— 那是**用一个新的不实换一个旧的不实**。故工作台分支只在
+ * 前缀补一枚徽记：`🛡️ 已掌握 · 📚 工作台 · s=…`；`mastered` 为假时逐字沿用
+ * `📚 工作台 · s=…`。被修掉的不实只有「0 正 / 0 误」与「⏳ 待复习」两处。
+ *
+ * **MUST NOT 暗示 `s` 等价于卡盒的 `repetition_count`**：两者量纲不同，
+ * `s` 是 FSRS 记忆稳定性（天），`repetition_count` 是 DSR 复习次数（次）。
+ * 故工作台分支只报 `s` 原值，**不出现**「次 / 复习 / 轮」等次数字眼，
+ * 也不复现 `correct_count` / `wrong_count` 两列。
+ *
+ * 非工作台词（`fsrs_s` 为 NULL / 0 / 脏值）路径**逐字不变**。
+ */
+export function cardStatsTag(card) {
+  const wbS = Number(card.fsrs_s);
+  if (Number.isFinite(wbS) && wbS > 0) {
+    const masteredBadge = card.mastered ? "🛡️ 已掌握 · " : "";
+    return `${masteredBadge}📚 工作台 · s=${wbS.toFixed(1)}`;
+  }
+  return `${card.mastered ? "🛡️ 已掌握" : card.due_date ? `⏳ 到期: ${card.due_date}` : "⏳ 待复习"} · ${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误`;
+}
+
 export function renderDeckStage(vList, gList) {
   const container = document.getElementById("cards-container");
   if (!container) return;
@@ -281,7 +322,7 @@ export function renderDeckStage(vList, gList) {
 
             <!-- Front Footer -->
             <div class="deck-card-footer" onclick="event.stopPropagation()">
-              <span class="card-stats-tag">${card.mastered ? "🛡️ 已掌握" : card.due_date ? `⏳ 到期: ${card.due_date}` : "⏳ 待复习"} · ${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误</span>
+              <span class="card-stats-tag">${cardStatsTag(card)}</span>
               <button class="card-master-btn ${card.mastered ? "mastered-active" : ""}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
                 ${card.mastered ? "↺ 重返待复习" : "✓ 斩 (已掌握)"}
               </button>
