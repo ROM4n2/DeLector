@@ -6,7 +6,8 @@
    背词工作台背过的词（reps>0）经 ``PUT /api/wb/state`` 幂等投影进统一池
    ``vocab_cards``（T1/T2）→ 在 ``GET /api/cards`` 可见；冷种子词（非自建且未学）
    被范围闸挡下；用户手编数据只补空、绝不覆盖；三段时序幂等；只读对账无缺口
-   （T4）；备份往返（含 source/fsrs_*）逐字保留 + 还原后按 wb 快照自愈（T5）。
+   （T4）；备份往返（含 source/fsrs_*）逐字保留 + 还原后按 wb 快照自愈（T5）；
+  ``known-lemmas`` 的「已学」口径分档（含一条**已知缺口**：有 reps 缺 s 的卡被漏计）。
    另加一条**静态**断言钉住 Phase 3 边界「不改前端 static/」（T3 已按用户决定跳过）。
 
 库隔离照搬 ``tests/test_server.py::clean_db``：保存/还原 env、建库、并把 WAL 旁文件
@@ -257,6 +258,65 @@ def test_group5_backup_roundtrip_and_restore_selfheal(client: TestClient) -> Non
         report = reconcile_report(conn, payload)
     assert report["missing"] == [], f"还原后对账不得有缺口，实际 missing={report['missing']}"
     assert report["deck_in_pool"] == 2, f"还原后应在池 2，实际 {report}"
+
+
+# ── 断言 6：known-lemmas 的「已学」口径（Task 4：等价性只对本仓自造卡成立）────────
+def test_group6_known_lemmas_learned_notion(client: TestClient) -> None:
+    """端到端钉住 ``GET /api/cards/known-lemmas`` 的「已学」判定，逐词分档。
+
+    走**真实端点链路**：``PUT /api/wb/state`` → ``save_wb_state`` → ``project_wb_deck``
+    → ``GET /api/cards/known-lemmas``。**不**直接调内部函数伪造（否则测的是替身而非契约）。
+
+    三个词分档，恰好构成对 docstring 里「等价性」断言的完整证伪：
+
+    ① ``hw='Bahn'``：卡 ``{'reps':2,'s':2.3,...}`` **含 ``s``** ⇒ 投影写出 ``fsrs_s > 0``
+       ⇒ 断言**在** ``known-lemmas``。这条是回归护栏：一旦 ``OR fsrs_s > 0`` 被去掉，①转红。
+    ② ``hw='Ufer'``：卡 ``{'reps':2}`` **不含 ``s``**（模拟老版本 / 导入 / 外部推送的卡）⇒
+       投影的 ``_desired_fields`` 拿不到 ``s`` ⇒ ``fsrs_s`` 落 NULL ⇒ ``fsrs_s > 0`` 为假 ⇒
+       断言**当前行为是「不在」**，即 deck-bridge 的 ``reps > 0`` 口径下算「已学」的词，
+       在 ``known-lemmas`` 里**被漏计**。
+
+       ⚠️ 这是**已知缺口**（等价性不成立），**是否**收紧投影范围闸见本次审计计划的 Fog 1
+       （待定，未决）。本用例的作用是**把它钉成显式契约**（让漏计可测、可回归），
+       **不是认可该行为**。若将来 Fog 1 决断要修（收紧范围闸使缺 ``s`` 的卡不入池、或让
+       ``reps`` 也进投影口径），本用例应随之**一并改红**——那正是契约变更应有的信号，
+       而非本用例失效。
+    ③ ``hw='Baum'`` 冷种子词：非 ``custom``、无卡 ⇒ 不入池（范围闸）⇒ 断言**不在**。
+
+    ①②的对比是本用例的全部价值：同一 deck、同一 ``reps=2``，仅差一个 ``s`` 键，
+    ``known-lemmas`` 的判定就分岔 ⇒ docstring 的等价性断言必须降级为「仅对本仓自造卡成立」。
+    """
+    payload = {
+        "words": [
+            {"id": "u-bahn", "hw": "Bahn", "gloss": "火车"},
+            {"id": "u-ufer", "hw": "Ufer", "gloss": "河岸"},
+            {"id": "u-baum", "hw": "Baum", "gloss": "树"},  # 冷种子：非 custom、无卡
+        ],
+        "cards": {
+            "u-bahn": {"reps": 2, "s": 2.3, "d": 5, "lapses": 0},
+            "u-ufer": {"reps": 2},  # 有 reps 无 s —— 缺口来源（导入 / 外部推送）
+        },
+    }
+    res = _put_deck(client, payload)
+    assert res.status_code == 200, res.text
+
+    # 前置体检：② 的卡确实**入了池但 fsrs_s 为 NULL**（否则下面的断言可能因「根本没入池」
+    # 而假通过 —— 那测的是范围闸，不是 known-lemmas 的判定口径）。
+    rows = {lemma_key(k): v for k, v in _pool_rows().items()}
+    ufer = rows.get(lemma_key("Ufer"))
+    assert ufer is not None, f"Ufer 有 reps>0 的卡，应入池（证明 ② 不是被范围闸挡下的），实际 {set(rows)}"
+    assert ufer["fsrs_s"] is None, f"缺 s 的卡投影后 fsrs_s 应为 NULL，实际 {ufer['fsrs_s']!r}"
+
+    known = {lemma_key(x) for x in client.get("/api/cards/known-lemmas").json()["lemmas"]}
+    # ① 含 s ⇒ fsrs_s > 0 ⇒ 计入已学。
+    assert lemma_key("Bahn") in known, f"含 s 的已学卡应计入 known-lemmas，实际 {known}"
+    # ② 缺 s ⇒ fsrs_s IS NULL ⇒ 不计入（**已知缺口 / 当前行为**，非认可）。
+    assert lemma_key("Ufer") not in known, (
+        "Ufer(reps=2 但缺 s) 当前不在 known-lemmas —— 这是「等价性不成立」的已知缺口，"
+        f"本用例把它钉成显式契约而非认可；实际 {known}"
+    )
+    # ③ 冷种子未学 ⇒ 不计入。
+    assert lemma_key("Baum") not in known, f"冷种子未学词 Baum 不应计入 known-lemmas，实际 {known}"
 
 
 # ── 附加：静态钉住「Phase 3 不改前端 static/」（T3 已按用户决定跳过）────────────
