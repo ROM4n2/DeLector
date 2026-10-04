@@ -466,3 +466,59 @@ def test_dockerignore_does_not_exclude_build_inputs() -> None:
         + "\n.dockerignore 的职责是**逐条**排掉密钥/数据/产物，"
         "而不是整片排除 —— 请把 * 之类改成具体条目（.git / .env / *.db / __pycache__ …）。"
     )
+
+
+# ── CI 作业超时护栏（2026-10-04 韧性审计 P1）──────────────────────────────────
+# 背景：ci.yml 的 jobs.ci 没写 timeout-minutes，GitHub Actions 对 job 的默认上限是
+# 360 分钟（6 小时）。一条卡死的测试（例如某个网络桩永不返回）会把 runner 烧满
+# 六小时才红 —— 提交者早就改去下一件事了，"卡住的 PR 挡住 master"本身就是故障。
+#
+# 这里钉**上界**而不只是"有没有 timeout-minutes"：写成 `timeout-minutes: 3600`
+# 的护栏形同虚设（比默认还宽），且从 YAML 上看不出意图。实测单次 CI 约 2.5–3.5min，
+# 文件头注释自陈"PR 反馈预期 < 8min"，30 分钟已是 8–10 倍余量。
+
+MAX_CI_JOB_TIMEOUT_MINUTES = 30
+
+
+def _ci_job_block(job_name: str) -> str:
+    """截出 ci.yml 里某个 job 的 YAML 块（按两空格缩进的同级键切分）。
+
+    不引 pyyaml（它不在 requirements.txt，是 CI 内单独装的开发期工具）：
+    这里只需要"这个 job 自己的字段"，按缩进层级切比全文搜索更严 ——
+    别的 job 写了 timeout-minutes 不算数，得是 `ci` 这个 job 自己有。
+    """
+    text = _read_guard_file(CI_WORKFLOW)
+    lines = text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if line == f"  {job_name}:")
+    except StopIteration:
+        pytest.fail(f"{CI_WORKFLOW} 找不到 jobs.{job_name}（两空格缩进的 `{job_name}:` 键）")
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        # 下一个同级 job / 顶层键：缩进回到两空格且以 "- " 之外的内容开头
+        if lines[i].startswith("  ") and not lines[i].startswith("    ") and lines[i].strip():
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_ci_job_has_bounded_timeout() -> None:
+    """jobs.ci 必须有 timeout-minutes，且值 MUST ≤ 30（护栏必须有上界）。"""
+    block = _ci_job_block("ci")
+
+    match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", block, re.MULTILINE)
+    assert match, (
+        f"{CI_WORKFLOW} 的 jobs.ci 没有 timeout-minutes：\n"
+        "GitHub Actions 对单个 job 的默认上限是 360 分钟（6 小时），"
+        "一条卡死的测试会把 runner 烧满六小时才红——提交者早改去下一件事了。"
+        "\n修法：给 jobs.ci 加 `timeout-minutes: 15`（实测单次约 2.5–3.5min，"
+        f"本守卫允许的上界是 {MAX_CI_JOB_TIMEOUT_MINUTES}）。"
+    )
+
+    minutes = int(match.group(1))
+    assert 0 < minutes <= MAX_CI_JOB_TIMEOUT_MINUTES, (
+        f"jobs.ci 的 timeout-minutes = {minutes}，超过上界 {MAX_CI_JOB_TIMEOUT_MINUTES}：\n"
+        "写成 3600 之类的大值等于没设护栏（比 Actions 默认的 360 分钟还宽）。"
+        "\n修法：改回 15；确需更长时先查清是哪一步变慢，而不是把闸门整体放开。"
+    )

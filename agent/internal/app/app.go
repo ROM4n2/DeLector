@@ -243,8 +243,12 @@ func NewSupervisor(opts Options) *pythonsvc.Supervisor {
 	return pythonsvc.NewSupervisor(supervisorConfig(opts))
 }
 
+// healthURLForPort 拼健康探针地址：**探 GET /api/health**（真健康端点，会真查
+// 一次 SQLite）。此前指向 /api/tools/ —— 那个端点只枚举工具、完全不碰数据库，
+// 于是库已损坏时探针照样回 200，`delector run` 判定服务健康并继续把调用打过来。
+// 与 pythonsvc.defaultHealthURL 保持同一端点（两处都要改，别只改一处）。
 func healthURLForPort(port int) string {
-	return baseURLForPort(port) + "/api/tools/"
+	return baseURLForPort(port) + "/api/health"
 }
 
 // repoRoot 上溯定位仓库根（delector Python 包所在目录），供 PYTHONPATH 注入，
