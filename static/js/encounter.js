@@ -57,6 +57,40 @@ let _sessionAdded = [];      // 本次 openText 会话已加入的词 {hw, gloss
 let _sessionSyncOk = true;   // 本会话 wb 镜像同步是否全部成功（失败要在复习区记录）
 let _pending = null;         // 弹层当前词 {lemma, surface, pos, gloss, sentence, known}
 
+// ── 打开短篇的重入守卫（2026-10-04 子计划 3 Task 1）─────────────────────────
+// 单次 openText 最坏 3 次 RTT + 1 次全量标注（annotate 端点 P0 直跑、禁缓存，
+// spaCy 每次真跑；renderTextDetailAnnotated 还要 await resolveDeck + fetchKnownLemmas）
+// ⇒ 竞态窗口是**秒级**。此窗口内用户完全可以再点一篇，而 renderReaderShell 是
+// 整体覆写 rd.innerHTML、markRead 幂等写盘 ⇒ 晚到者必定覆盖先到者，且两篇都被
+// 记已读（晚到那篇被 pickUnread 永久剔出 i+1 推荐）。
+//
+// _openSeq = 请求代号（代号最大者才配得上屏 / 记已读）；showView 也复用它，
+//   ⇒ 「跨调用」的旧响应同样被拦住（离开列表后晚到的列表响应不得盖回详情）。
+// _openCtrl = 在途的 AbortController；新一次打开先 abort 旧的，省掉一次全量
+//   spaCy 标注。signal 经 api() 原生支持（core.js 合并外部 signal + 自清 timer）。
+let _openSeq = 0;
+let _openCtrl = null;
+
+/** 打开/回列表的公共入口：领一个新代号并作废在途请求。 */
+function beginOpen() {
+  const seq = ++_openSeq;
+  if (_openCtrl) {
+    try {
+      _openCtrl.abort();
+    } catch (e) {
+      /* 已中止的 controller 再 abort 不该炸；吞掉不影响读新的一篇。 */
+    }
+  }
+  const ctrl = new AbortController();
+  _openCtrl = ctrl;
+  return { seq, ctrl };
+}
+
+/** 覆盖前守门：代号不是最新 → 这次响应已过期，直接丢弃（绝不碰 DOM / 绝不记已读）。 */
+function isStaleOpen(seq) {
+  return seq !== _openSeq;
+}
+
 function popoverEl() {
   return document.getElementById("enc-popover");
 }
@@ -398,6 +432,10 @@ function renderI1Hint(ranked, knownSet = null, readState = null) {
 }
 
 export async function showView() {
+  // 重入守卫（子计划 3 Task 1）：复用 openText 的同一代号计数器 ⇒ 跨调用的旧
+  // 响应一并被拦住（进入列表/别的视图后，上一次 openText 与上一次 showView 的
+  // 晚到响应都不得再碰 DOM）。
+  const { seq } = beginOpen();
   // 默认回到列表态；若已在详情态则刷新当前详情标题/正文不改动（进入入口卡首次为列表）。
   _detailOpen = false;
   hideCoverage();
@@ -417,6 +455,10 @@ export async function showView() {
     fetchIndex(),
     fetchKnownLemmas(),
   ]);
+
+  // 覆盖前守门：三个请求在途期间用户可能已经点开了某篇短篇 —— 此时列表
+  // 响应已过期，渲染它会把正在读的详情顶掉。
+  if (isStaleOpen(seq)) return;
 
   // A7：已读态只读一次，两条渲染分支都传（索引失败时行为其余与 v5.11.0 一致，但标记仍在）。
   const readState = loadRead(encStorage());
@@ -450,13 +492,15 @@ export async function showView() {
 }
 
 // ── Detail ──────────────────────────────────────────────────────────────────
-export async function fetchText(id) {
-  return api(`/api/encounter/texts/${Number(id)}`);
+// A7：opts 形参**只**用于透传调用方的 {signal}（默认 {} ⇒ 逐字保持旧行为：
+// api() 自己的 25s 超时、鉴权头、错误文案一概不变）。竞态取消靠它，不改语义。
+export async function fetchText(id, opts = {}) {
+  return api(`/api/encounter/texts/${Number(id)}`, opts);
 }
 
-// A5：拉逐词注解（annotate 端点）。
-export async function fetchAnnotate(id) {
-  return api(`/api/encounter/texts/${Number(id)}/annotate`);
+// A5：拉逐词注解（annotate 端点）。opts 同上：仅透传 {signal}。
+export async function fetchAnnotate(id, opts = {}) {
+  return api(`/api/encounter/texts/${Number(id)}/annotate`, opts);
 }
 
 // 通用"头部 + 正文容器"渲染，返回正文容器（id = enc-reader-body），
@@ -489,16 +533,23 @@ export function renderTextDetail(text) {
 // A5：有已背词时，把 annotate 逐 token 高亮 + 覆盖统计行一起渲染。
 // A6：即使本机/镜像都没有已背词（knownSet 空），也照常渲染 token 流 ——
 //     此时每个词都算「未学」，都带 .enc-unk 可点 → 走 A6 一键进卡。
-export async function renderTextDetailAnnotated(text, annotate) {
+// A7（子计划 3 Task 1）：seq 形参 = 本次打开的请求代号；非最新代号一律不碰 DOM
+//     （renderReaderShell 是整体覆写 rd.innerHTML，晚到者必须在此被拦下）。
+//     缺省 null = 旧调用形态（无竞态语境），行为与之前逐字一致。
+export async function renderTextDetailAnnotated(text, annotate, seq = null) {
   const rd = readerEl();
   if (!rd) return;
-  // 已知词池 = 工作台 deck ∪ 主路径已学词（与列表视图同口径，2026-09-28 审计 P1）。
-  const [deck, extraKnownLemmas] = await Promise.all([resolveDeck(), fetchKnownLemmas()]);
-
+  // 空 annotate 的降级守卫 MUST 排在**任何 await 之前**：无 token 的短文（未入 spaCy
+  // 词典 / 纯符号）没必要白等 resolveDeck + fetchKnownLemmas 两次往返。
   if (!annotate || !annotate.sentences || !annotate.sentences.length) {
     renderTextDetail(text);
     return;
   }
+  // 已知词池 = 工作台 deck ∪ 主路径已学词（与列表视图同口径，2026-09-28 审计 P1）。
+  const [deck, extraKnownLemmas] = await Promise.all([resolveDeck(), fetchKnownLemmas()]);
+
+  // 覆盖前守门：等这两个 await 期间用户可能已经点开了别的短篇 / 已返回列表。
+  if (seq != null && isStaleOpen(seq)) return;
 
   const { sentences, stats } = annotateWithDeck(deck, annotate, extraKnownLemmas);
   renderReaderShell(
@@ -519,6 +570,9 @@ function renderCoverage(stats) {
 }
 
 export async function openText(id) {
+  // 重入守卫（子计划 3 Task 1）：领新代号 + abort 上一次在途的两个请求
+  // （annotate 每次真跑 spaCy，掐掉一次省一次全量标注）。
+  const { seq, ctrl } = beginOpen();
   try {
     // 打开一篇新文本 = 新的阅读会话：小复习列表重置（A6）。
     resetSessionReview();
@@ -526,14 +580,25 @@ export async function openText(id) {
     // 拉详情 + 注解（并行）。annotate 失败（如无该文本）会让 Promise.all 整段失败，
     // 落到 catch 提示 —— 文本内容与注解必须同时到齐才能渲染 token 流。
     const [text, annotate] = await Promise.all([
-      fetchText(id),
-      fetchAnnotate(id),
+      fetchText(id, { signal: ctrl.signal }),
+      fetchAnnotate(id, { signal: ctrl.signal }),
     ]);
-    await renderTextDetailAnnotated(text, annotate);
+    // 第一道守卫：两个 fetch 都到了才判过期 —— 用来省掉「明知要丢弃」的
+    // renderTextDetailAnnotated 一整轮 deck + known-lemmas 往返。
+    if (isStaleOpen(seq)) return;
+    await renderTextDetailAnnotated(text, annotate, seq);
+    // 第二道守卫：renderTextDetailAnnotated 内部还有 await（resolveDeck /
+    // fetchKnownLemmas），这期间仍可能被抢占。renderReaderShell 已在那里面
+    // 做过覆写（它自己有一道覆盖前守门），此处是最后一道闸：过期响应
+    // MUST NOT 记已读 —— 否则晚到那篇被 pickUnread 永久剔出 i+1 推荐。
+    if (isStaleOpen(seq)) return;
     // A7：短篇渲染成功即记已读（纯函数静默：坏 storage 不抛，失败也不影响阅读）。
-    //   放在渲染之后 → 渲染错误仍走 catch，绝不被已读写入吞掉。
+    //   放在两道守卫之后 → 只给真正上屏的那篇记已读；渲染错误仍走 catch。
     markRead(encStorage(), id, Date.now());
   } catch (e) {
+    // 被抢占/被取消的这一篇不得写失败提示 —— catch 同样是整体覆写 rd.innerHTML，
+    // 否则 A 的报错会盖掉 B 已经上屏的正文。
+    if (isStaleOpen(seq)) return;
     const rd = readerEl();
     if (rd) {
       rd.style.display = "block";
