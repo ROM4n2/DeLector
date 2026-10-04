@@ -186,19 +186,17 @@ export function renderCardsGrid() {
 }
 
 /**
- * 工作台来源判据（子计划 5 Task 1）。与下方 `cardStatsTag` 的分支判据**逐字同源**：
- * 都写 `Number.isFinite(wbS) && wbS > 0`（变量名也一致，探针
- * tools/cards_workbench_no_review_probe.mjs 的 E1 逐字比对两行，MUST NOT 漂移）。
+ * 工作台来源的唯一判据（子计划 5 Task 1）。`Number.isFinite(wbS) && wbS > 0`
+ * 只允许在这里定义；`cardStatsTag` 与 `renderDeckStage` 必须调用
+ * `isWorkbenchSourced(card)`，不得各自复制阈值。
  *
- * **为什么要第二处**：卡面渲染需要知道「这行来自工作台吗」才能决定**给不给
+ * **为什么需要这个判据**：卡面渲染需要知道「这行来自工作台吗」才能决定**给不给
  * DSR 复习按钮**。工作台词在卡盒点「1 重来 / 2 困难 / 3 良好 / 4 简单」时，
  * DSR 四列被写、但卡面因 fsrs_s 优先仍显示 `📚 工作台 · s=25`（屏幕什么都没变），
  * 而工作台那侧的 FSRS 也没动 —— **白复习**：复习了，等于没复习。
  *
- * ⚠ 这里的 `> 0` 与 cardStatsTag 的那处是**同一语义的两份写法**，不是两份真相：
- * tools/cards_wb_source_probe.mjs 钉住标签文案、tools/cards_workbench_no_review_probe.mjs
- * 钉住按钮显隐，两条探针的判据 MUST 永远同源（任一处漂移即红）。
- * `cardStatsTag` 本身 MUST NOT 被本任务改动（子计划 3 T5 的产物）。
+ * tools/cards_wb_source_probe.mjs 钉住标签文案，
+ * tools/cards_workbench_no_review_probe.mjs 钉住按钮显隐、复用关系与边界行为。
  */
 export function isWorkbenchSourced(card) {
   const wbS = Number(card.fsrs_s);
@@ -239,7 +237,7 @@ export function isWorkbenchSourced(card) {
  */
 export function cardStatsTag(card) {
   const wbS = Number(card.fsrs_s);
-  if (Number.isFinite(wbS) && wbS > 0) {
+  if (isWorkbenchSourced(card)) {
     const masteredBadge = card.mastered ? "🛡️ 已掌握 · " : "";
     return `${masteredBadge}📚 工作台 · s=${wbS.toFixed(1)}`;
   }

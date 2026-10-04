@@ -25,8 +25,9 @@
  *   C 边界带（fsrs_s = 0 / "" / "abc" / NaN / 负数）⇒ 仍给四个按钮，
  *     判据放宽成 `>= 0` 或反向 MUST 立刻变红。
  *   D 工作台词 + 用户手动「已掌握」⇒ mastered 徽记与按钮仍在，复习按钮仍不渲染。
- *   E 单一判据：isWorkbenchSourced 与 cardStatsTag 的判据表达式**逐字一致**，
- *     且二者在整条边界输入带上**行为等价**（标签说工作台 ⇔ 按钮被收走）。
+ *   E 单一判据：cardStatsTag MUST 调用 isWorkbenchSourced（复用），且体内 MUST NOT
+ *     再抄 Number.isFinite / `wbS > 0`（禁止双写）；二者在整条边界输入带上
+ *     **行为等价**（标签说工作台 ⇔ 按钮被收走）。
  *   F 复用阶梯：renderDeckStage 体内 MUST NOT 出现第二份 fsrs_s 阈值
  *     （MUST 调 isWorkbenchSourced，MUST NOT 自造判据）。
  *   G 路由非自造：「去工作台」的 href MUST 沿用 index.html 里既有的工作台路由。
@@ -362,7 +363,7 @@ for (const [label, value] of [
   );
 }
 
-/* ══ E 单一判据：表达式逐字一致 + 整条边界带上行为等价 ═══════════════════ */
+/* ══ E 单一判据：cardStatsTag 复用 helper + 整条边界带上行为等价 ════════ */
 if (predicateMissing) {
   record(
     "E0-存在工作台来源判据函数",
@@ -370,46 +371,38 @@ if (predicateMissing) {
     "cards.js 里没有 isWorkbenchSourced(card) —— 卡面没有可复用的工作台来源判据（只能去复制第二份阈值）",
   );
 } else {
-  const norm = (fnSrc) => {
-    const line = stripComments(fnSrc)
-      .split("\n")
-      .map((l) => l.trim())
-      .find((l) => l.includes("isFinite"));
-    if (!line) return null;
-    /* 归一：剥 `if (` / `return ` 前缀与 `)` `;` `{` 尾巴，只留判据表达式本体。
-     * 目的是让 `if (EXPR) {`（cardStatsTag）与 `return EXPR;`（isWorkbenchSourced）
-     * 两种句式比对的是**同一条判据**，而不是连标点都比。 */
-    return line
-      .replace(/^if\s*\(/, "")
-      .replace(/^return\s+/, "")
-      .replace(/[)\s;{]+$/, "")
-      .replace(/\s+/g, " ");
-  };
-  const a = norm(predicateFn);
-  const b = norm(statsFn);
-  if (a === null || b === null) {
-    problems.push(`E-判据表达式定位失败：isWorkbenchSourced=${JSON.stringify(a)} cardStatsTag=${JSON.stringify(b)}`);
-  } else if (a !== b) {
-    problems.push(
-      `E-判据表达式两份拷贝已漂移：isWorkbenchSourced=${JSON.stringify(a)} vs cardStatsTag=${JSON.stringify(b)} —— ` +
-      `同一语义两个真相（标签与按钮会不一致）`,
-    );
-  }
-  record("E1-判据表达式逐字同源", a !== null && b !== null && a === b, `两份判据不一致：${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+  const statsBody = stripComments(statsFn);
+  const reusesPredicate = /isWorkbenchSourced\s*\(/.test(statsBody);
+  const duplicatesFiniteCheck = /Number\s*\.\s*isFinite\s*\(/.test(statsBody);
+  const duplicatesThreshold = /\bwbS\s*>\s*0\b/.test(statsBody);
+  /* ⚠ 场景名是被 tests/ 钉死的稳定锚点，改名会让「删一整段换全绿」的守卫失效。
+   * 单点化之后已不存在「两份表达式可逐字比对」这回事：唯一可能的同源形态就是
+   * cardStatsTag 调同一份 helper。故 E1 的判据改为「复用 + 禁止双写」。 */
+  record(
+    "E1-判据表达式逐字同源",
+    reusesPredicate && !duplicatesFiniteCheck && !duplicatesThreshold,
+    `cardStatsTag 必须调用 isWorkbenchSourced(card)，且不得复制 Number.isFinite / wbS > 0 阈值：` +
+    `reuses=${reusesPredicate} Number.isFinite=${duplicatesFiniteCheck} wbS>0=${duplicatesThreshold}`,
+  );
 
-  /* 行为等价：判据说「工作台」⇔ 标签说「工作台」。判据漂移必在带内露馅。 */
+  /* 行为等价：判据与标签必须同源，且都符合这条边界带的既定来源契约。 */
   const band = [
     null, undefined, 0, "0", "", " ", 25, "25.0", 0.0001, -1, Number.NaN, "abc", 1e-9, 25.5, 3,
   ];
-  const diverged = band.filter((v) => {
+  const expectedBand = [
+    false, false, false, false, false, false, true, true, true, false, false, false, true, true, true,
+  ];
+  const diverged = band.filter((v, index) => {
     const card = { ...READER_CARD, fsrs_s: v };
-    return askPredicate(card) !== /工作台/.test(askTag(card));
+    const predicateResult = askPredicate(card);
+    const tagResult = /工作台/.test(askTag(card));
+    return predicateResult !== expectedBand[index] || tagResult !== expectedBand[index];
   });
   record(
     "E2-判据与标签整带行为等价",
     diverged.length === 0,
-    `以下 fsrs_s 取值上「是否工作台来源」与「标签是否说工作台」判定分叉：${JSON.stringify(diverged)} —— ` +
-    `按钮会与标签对不上（用户看到 📚 工作台 却仍能点 DSR 复习，或反之）`,
+    `以下 fsrs_s 取值上判据/标签未同时满足来源契约：${JSON.stringify(diverged)} —— ` +
+    `按钮会与标签对不上，或工作台来源阈值已经漂移`,
   );
   record(
     "E3-工作台侧判据为真",

@@ -14,7 +14,7 @@
  * ⇒ 目录视图此前**不受任何守卫**，可以静默回退。
  *
  * 本探针按括号配对把 static/js/cards.js 里**真实的**
- * cardStatsTag / renderCatalogGrid 两个函数整段切出来，丢进 node:vm 沙箱真跑
+ * isWorkbenchSourced / cardStatsTag / renderCatalogGrid 三个函数整段切出来，丢进 node:vm 沙箱真跑
  * （MUST NOT 重抄一份被测实现），只桩 document / esc / jsAttr，读回
  * renderCatalogGrid 写进容器的那份**真 innerHTML**，从里面正则抠出
  * <span class="card-stats-tag"> 的真实文案做断言。
@@ -27,7 +27,7 @@
  *      （cardStatsTag 非工作台分支自带 due_date，见 A6 的基线切片）
  *   A4 目录视图源码切片里 MUST NOT 残留 correct_count（防「只换了一半」）
  *   A5 语法考点卡网格非工作台路径不回归（仍给正/误统计）
- *   A6 cardStatsTag 源码零改动（切片 SHA-256 与基线逐字比对，防误改/误抄）
+ *   A6 cardStatsTag MUST 复用 isWorkbenchSourced，且二者在整条边界带行为符合来源契约
  *
  * 用法：
  *   node tools/cards_catalog_tag_probe.mjs            # 人类可读（日志走 stderr）
@@ -100,23 +100,27 @@ function sliceFunction(src, declNeedle) {
   return src.slice(at, end + 1).replace(/^export\s+/, "");
 }
 
-/** 行尾归一：工作区 checkout 是 CRLF，哈希 MUST NOT 随行尾风格漂移。 */
+/** 行尾归一：避免源码诊断随 checkout 的 CRLF / LF 风格漂移。 */
 const lf = (s) => s.replace(/\r\n/g, "\n");
 
 const cardsJs = fs.readFileSync(path.join(ROOT, "static", "js", "cards.js"), "utf8");
 
+let predicateFn = "";
 let statsFn = "";
 let gridFn = "";
 try {
+  predicateFn = sliceFunction(cardsJs, "function isWorkbenchSourced(");
   statsFn = sliceFunction(cardsJs, "function cardStatsTag(");
   gridFn = sliceFunction(cardsJs, "export function renderCatalogGrid(");
 } catch (e) {
   fail([`源码切片失败：${e.message}`]);
 }
-const transformed = statsFn + "\n\n" + gridFn;
+const transformed = predicateFn + "\n\n" + statsFn + "\n\n" + gridFn;
 
 /* 切片护栏：切歪 / 回退 ⇒ 直接红，不许静默假绿（项目红线 11） */
 const stripProblems = [];
+if (!/\bfunction\s+isWorkbenchSourced\s*\(/.test(transformed))
+  stripProblems.push("执行切片缺 isWorkbenchSourced（cardStatsTag 的唯一来源判据未注入沙箱）");
 if (!/class="card-stats-tag"/.test(gridFn))
   stripProblems.push("renderCatalogGrid 切片缺 card-stats-tag（目录网格的统计位被挪走或实现回退）");
 /* cardStatsTag 返回**纯文本**，类名由调用方的 <span> 提供 ⇒ 它的切片锚点是
@@ -180,6 +184,13 @@ function askTag(card) {
   return vm.runInContext("cardStatsTag(__card)", ctx);
 }
 
+/** 直接问真 isWorkbenchSourced，供 A6 在整条边界带核对来源契约。 */
+function askPredicate(card) {
+  const { ctx } = buildCtx();
+  vm.runInContext("var __card = " + JSON.stringify(card) + ";", ctx, { filename: "card-fixture.js" });
+  return vm.runInContext("isWorkbenchSourced(__card)", ctx);
+}
+
 /* ---------------------------------------------------------------------------
  * 3. 夹具与断言常量（**期望值是断言常量**，MUST NOT 是被测实现的重抄）
  * ------------------------------------------------------------------------ */
@@ -232,10 +243,24 @@ const READER_GRAMMAR = {
 const LEGACY_READER_TAG = "⏳ 到期: 2026-10-05 · 7 正 / 2 误";
 const LEGACY_GRAMMAR_TAG = "⏳ 到期: 2026-10-06 · 5 正 / 1 误";
 
-/** 断言常量：cardStatsTag 切片（子计划 3 T5 / PR #98 基线）的 SHA-256（行尾已归一）。
- *  本轮 MUST NOT 改 cardStatsTag —— 改它会同时影响卡面（renderDeckStage）与目录视图，
- *  且既有探针 cards_wb_source_probe.mjs 的逐字比对会红。此处独立钉一份哈希防误改。 */
-const BASELINE_STATS_SHA256 = "4c4885812b241815348f0e4da22042bdab201fbc0c6e346071d77db593d967a1";
+/** 工作台来源边界契约：期望值是测试数据，不复制被测实现的阈值表达式。 */
+const SOURCE_BOUNDARY_CASES = [
+  ["null", null, false],
+  ["undefined", undefined, false],
+  ["0", 0, false],
+  ['"0"', "0", false],
+  ['""', "", false],
+  ['" "', " ", false],
+  ["25", 25, true],
+  ['"25.0"', "25.0", true],
+  ["0.0001", 0.0001, true],
+  ["-1", -1, false],
+  ["NaN", Number.NaN, false],
+  ['"abc"', "abc", false],
+  ["1e-9", 1e-9, true],
+  ["25.5", 25.5, true],
+  ["3", 3, true],
+];
 
 const problems = [];
 const cases = [];
@@ -321,14 +346,25 @@ const record = (name, ok, detail) => { cases.push({ name, ok, detail }); if (!ok
   );
 }
 
-/* ══ E cardStatsTag 源码零改动：切片哈希与基线逐字比对 ═══════════════════ */
+/* ══ E cardStatsTag 复用唯一来源判据，且整条边界带行为符合契约 ══════════ */
 {
-  const sha = crypto.createHash("sha256").update(lf(statsFn), "utf8").digest("hex");
+  const statsBody = lf(statsFn);
+  const reusesPredicate = /isWorkbenchSourced\s*\(/.test(statsBody);
+  const duplicatesFiniteCheck = /Number\s*\.\s*isFinite\s*\(/.test(statsBody);
+  const duplicatesThreshold = /\bwbS\s*>\s*0\b/.test(statsBody);
+  const diverged = SOURCE_BOUNDARY_CASES.filter(([, value, expected]) => {
+    const card = { ...READER_VOCAB, fsrs_s: value };
+    const predicateResult = askPredicate(card);
+    const tagResult = /工作台/.test(askTag(card));
+    return predicateResult !== expected || tagResult !== expected || predicateResult !== tagResult;
+  }).map(([label]) => label);
   record(
+    // 场景键为既有 pytest wrapper 的兼容接口；通过条件已由“零改动哈希”改为下方行为契约。
     "E1-cardStatsTag零改动",
-    sha === BASELINE_STATS_SHA256,
-    `cardStatsTag 切片哈希漂移 ${sha}（基线 ${BASELINE_STATS_SHA256}）—— 本轮 MUST NOT 改 cardStatsTag` +
-    `（它是子计划 3 T5 / PR #98 的产物，卡面 renderDeckStage 也消费它）`,
+    reusesPredicate && !duplicatesFiniteCheck && !duplicatesThreshold && diverged.length === 0,
+    `cardStatsTag 必须只调用 isWorkbenchSourced，且判据/标签须在边界带符合来源契约：` +
+    `reuses=${reusesPredicate} Number.isFinite=${duplicatesFiniteCheck} wbS>0=${duplicatesThreshold} ` +
+    `diverged=${JSON.stringify(diverged)}`,
   );
 }
 
@@ -343,7 +379,7 @@ const out = {
     vocabWorkbench: renderGrid([WORKBENCH_VOCAB]).vocabTags[0],
     vocabReader: renderGrid([READER_VOCAB]).vocabTags[0],
     grammarReader: renderGrid([READER_VOCAB], [READER_GRAMMAR]).grammarTags[0],
-    cardStatsTagSha256: BASELINE_STATS_SHA256,
+    cardStatsTagSha256: crypto.createHash("sha256").update(lf(statsFn), "utf8").digest("hex"),
   },
 };
 if (JSON_MODE) process.stdout.write(JSON.stringify(out, null, 2) + "\n");
@@ -351,7 +387,7 @@ else {
   console.log("词汇网格（工作台词）:", out.samples.vocabWorkbench);
   console.log("词汇网格（普通卡）:", out.samples.vocabReader);
   console.log("语法网格（普通卡）:", out.samples.grammarReader);
-  console.log(`cardStatsTag 切片 SHA-256: ${out.samples.cardStatsTagSha256}`);
+  console.log(`cardStatsTag 切片 SHA-256（观察项，不参与门禁）: ${out.samples.cardStatsTagSha256}`);
   console.log(`场景数: ${out.total}`);
   console.log("✅ PASS: 目录/网格视图复用 cardStatsTag —— 工作台词不再谎报「0 正 / 0 误」，普通卡与语法卡的正误统计及 due_date 逐字未变");
 }
