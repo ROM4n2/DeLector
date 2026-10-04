@@ -3,6 +3,7 @@
 # `mypy --follow-imports=skip tests` 跑，skip 下 fastapi 降 Any 使这些 ignore 变
 # unused，故文件级豁免 unused-ignore（其它错误码仍全查）。
 # mypy: disable-error-code="unused-ignore"
+import asyncio
 import gc
 import ipaddress
 import json
@@ -5668,3 +5669,160 @@ def test_card_counts_does_not_run_fsrs_next_intervals(client, monkeypatch):
     res = client.get("/api/cards/counts")
     assert res.status_code == 200
     assert res.json()["vocab_total"] == 1
+
+
+# ── TTS 并发闸（k=4，把无界排队变成有界 429）───────────────────────────────
+#
+# 背景：generate_edge_tts_audio 内部走 asyncio.to_thread（默认池
+# min(32, cpu+4)），池满后 asyncio **无界排队**而非拒绝；叠加 edge_tts 无显式
+# 超时 + services/tts.py 对任意异常重试一次 + main.py 降级 3 个 HTTP provider
+# 各 6s ⇒ 单请求最坏约 76s。docker-compose 把 0.0.0.0:8000 全网暴露，局域网
+# 多设备（或同一设备多个 <audio> 同时起播）足以把线程池打满、请求无界堆积。
+#
+# 契约：MUST 把无界排队变成**有界拒绝**（429），MUST NOT 只是加延时；
+# Semaphore MUST 是模块级（每请求新建 ⇒ 限流形同虚设）；GET 与 POST 两个入口
+# 都要加（<audio src> 走 GET，最容易漏）。MUST NOT 让正常单用户请求开始失败，
+# 故生产取值 k=4（局域网默认 1~2 台设备够用）。
+
+
+@pytest.fixture
+def tts_gate(monkeypatch, tmp_path):
+    """把 TTS 并发闸压到 k=1，并把音频生成卡成阻塞桩，返回一个跑「并发两请求」的函数。
+
+    压到 1 只是为了**测试不必并发 4 个真实 TTS**（那会真打 edge_tts 网络）；
+    生产常量仍是 4，并另有一条上界断言钉住「k 必须有界」——
+    有人把 k 调成 1_000_000（闸形同虚设）时，是那条断言先红。
+
+    返回的 scenario(method, second_override=None) ⇒ (第一个请求的响应, 第二个请求的响应)：
+    第一个请求在桩里 await 到测试放行为止，故第二个请求抵达时闸必然已被占住。
+
+    second_override 用于把**第二个**请求的入参改坏（``{"voice": ...}`` / ``{"rate": ...}``），
+    用来验证「闸满不会压掉入参校验的 400 语义」——这条收益 MUST 有测试钉住，
+    否则把闸挪回路由入口（校验之前）就没人拦了。
+    """
+    from delector.routes import main as routes_main
+
+    assert 1 <= routes_main._TTS_CONCURRENCY_LIMIT <= 8, (
+        f"TTS 并发上限必须是有界的（当前 {routes_main._TTS_CONCURRENCY_LIMIT}）："
+        "无界 ⇒ 线程池打满后请求无界堆积，等于根本没设闸"
+    )
+
+    fake_mp3 = tmp_path / "gate.mp3"
+    fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00gate_audio")
+
+    # 换掉模块级那把闸（monkeypatch 负责还原，避免污染其它用例）
+    monkeypatch.setattr(routes_main, "_TTS_SEMAPHORE", asyncio.Semaphore(1))
+
+    async def scenario(method: str, second_override: Any = None) -> Any:
+        import httpx
+
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def _blocking_tts(*_args: Any, **_kwargs: Any) -> str:
+            entered.set()
+            await release.wait()
+            return str(fake_mp3)
+
+        monkeypatch.setattr(routes_main, "generate_edge_tts_audio", _blocking_tts)
+
+        async def one(client: Any, override: Any = None) -> Any:
+            if method == "get":
+                params: Dict[str, Any] = {"text": "hallo"}
+                params.update(override or {})
+                return await client.get("/api/audio/tts", params=params)
+            body: Dict[str, Any] = {"text": "hallo"}
+            body.update(override or {})
+            return await client.post("/api/audio/tts", json=body)
+
+        transport = httpx.ASGITransport(app=server.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as ac:
+            first = asyncio.create_task(one(ac))
+            try:
+                await asyncio.wait_for(entered.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                release.set()
+                pytest.fail("第一个 TTS 请求没进到音频生成桩：并发用例的前置条件不成立")
+            try:
+                second = await asyncio.wait_for(one(ac, second_override), timeout=5)
+            except asyncio.TimeoutError:
+                release.set()
+                await first
+                pytest.fail(
+                    "第二个 TTS 请求既没被拒（429）也没返回：闸退化成了无界排队，"
+                    "只该拒绝不该让它等"
+                )
+            release.set()
+            return await first, second
+
+    return scenario
+
+
+def test_tts_concurrency_gate_rejects_overflow_on_post(tts_gate):
+    """POST /api/audio/tts：第一个请求占住闸 ⇒ 第二个 MUST 拿 429（有界拒绝）。"""
+    first, second = asyncio.run(tts_gate("post"))
+
+    assert first.status_code == 200, f"第一个请求应正常出声，实际 {first.status_code}"
+    assert second.status_code == 429, (
+        f"并发已满时第二个 POST 必须被拒（429），实际 {second.status_code}："
+        "无界排队会让最坏 76s 的合成请求堆死线程池"
+    )
+
+
+def test_tts_concurrency_gate_rejects_overflow_on_get(tts_gate):
+    """GET /api/audio/tts 同样 MUST 有闸——``<audio src>`` 走的就是这个入口，最容易漏。"""
+    first, second = asyncio.run(tts_gate("get"))
+
+    assert first.status_code == 200, f"第一个请求应正常出声，实际 {first.status_code}"
+    assert second.status_code == 429, (
+        f"并发已满时第二个 GET 必须被拒（429），实际 {second.status_code}："
+        "<audio src> 直连 GET，漏了它就等于给绕过闸开了一条路"
+    )
+
+
+def test_tts_concurrency_gate_429_detail_is_human_readable(tts_gate):
+    """429 的 detail MUST 是人话：非空，且不含 traceback / 内部路径等内部信息。"""
+    _first, second = asyncio.run(tts_gate("post"))
+
+    assert second.status_code == 429
+    detail = second.json()["detail"]
+    assert isinstance(detail, str) and detail.strip(), f"429 detail 不该为空：{detail!r}"
+
+    leaked = ["Traceback", 'File "', "delector\\", "delector/", "/api/", "_TTS_SEMAPHORE", "semaphore"]
+    for marker in leaked:
+        assert marker not in detail, f"429 detail 泄露了内部信息 {marker!r}：{detail!r}"
+
+
+def test_tts_gate_does_not_hide_validation_errors(tts_gate):
+    """闸满 + 入参非法 ⇒ MUST 仍是 400，MUST NOT 变成 429「并发已满，请稍后重试」。
+
+    闸在**入参校验之后**：用户填错 voice/rate 是他自己的错，跟并发无关。把它报成
+    429 会让人以为「系统忙，等会儿就好」，于是反复重试一个注定 400 的请求——
+    而重试又会把本就不够的名额继续占着，自我加剧。
+
+    闸挪回路由入口（= 校验之前）⇒ 本用例必红：拿到的是 429。
+    """
+    for bad in ({"voice": "not-a-real-voice"}, {"rate": "not-a-rate"}):
+        _first, second = asyncio.run(tts_gate("post", bad))
+
+        assert second.status_code == 400, (
+            f"闸满时非法入参 {bad} 仍应报 400（用户自己的错），"
+            f"实际 {second.status_code}（{second.text[:200]}）："
+            f"把入参错误报成 429 会误导成「稍后重试」，"
+            f"并且让注定失败的请求继续吃名额"
+        )
+
+
+def test_tts_single_request_not_blocked_by_gate(client, monkeypatch, tmp_path):
+    """不回归：单请求（非并发）MUST 200——闸拦的是超载，不是正常单用户朗读。"""
+    from unittest.mock import AsyncMock
+
+    fake_mp3 = tmp_path / "single.mp3"
+    fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00single_audio")
+    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
+
+    res = client.post("/api/audio/tts", json={"text": "Guten Tag", "voice": "de-DE-KatjaNeural"})
+    assert res.status_code == 200, f"单请求不该被并发闸误伤，实际 {res.status_code}：{res.text[:200]}"
+
+    res_get = client.get("/api/audio/tts", params={"text": "Guten Tag"})
+    assert res_get.status_code == 200, f"单请求 GET 也不该被误伤，实际 {res_get.status_code}"
