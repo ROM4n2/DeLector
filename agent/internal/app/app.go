@@ -14,7 +14,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -52,9 +54,15 @@ type Options struct {
 
 // supervisor 是 app 对托管进程的最小抽象（生产实现为 *pythonsvc.Supervisor）。
 // 单测经 newSupervisor seam 注入 fake，避免真实起 Python。
+//
+// Failures 是**崩溃的出口**：Python 反复崩溃且重启配额（退避 + 上限）耗尽后，
+// pythonsvc 把最终错误送达此通道。Run MUST 消费它并以非 nil 错误返回，否则
+// agent 会带着一个已死的 Python 继续存活接任务（静默失败、无退出码、
+// restart: unless-stopped / systemd 无从接管）。
 type supervisor interface {
 	Start(ctx context.Context) error
 	Stop()
+	Failures() <-chan error
 }
 
 // newSupervisor 构造托管进程（生产：*pythonsvc.Supervisor）。单测覆盖以注入 fake。
@@ -74,7 +82,9 @@ var buildArticleDAG = func(tools *registry.Registry) (*dag.DAG, error) {
 	return dag.ArticleAnalysisDAG(tools)
 }
 
-// Run 装配 supervisor + registry + DAG 预设并常驻，直至 ctx 取消后优雅退出。
+// Run 装配 supervisor + registry + DAG 预设并常驻，直至 ctx 取消后优雅退出，
+// **或** supervisor 上报崩溃恢复最终失败（sup.Failures）——后者 MUST 以非 nil
+// 错误返回并使进程非零退出，否则 agent 会带着已死的 Python 静默存活。
 // 装配期错误（Start 失败 / DAG 构建失败）以 %w 透传；ctx 取消时 Stop supervisor。
 //
 // 子进程 ctx 解耦：sup.Start 收到派生于 context.Background 的 procCtx，与调用方
@@ -101,12 +111,59 @@ func Run(ctx context.Context, opts Options) error {
 		sup.Stop()
 		return fmt.Errorf("app: 构建 article-analysis DAG 预设: %w", err)
 	}
-	// 常驻：暴露 registry + DAG 预设，直到调用方 ctx 取消（Ctrl+C / SIGTERM）。
+	// 常驻：暴露 registry + DAG 预设，直到调用方 ctx 取消（Ctrl+C / SIGTERM）
+	// **或** supervisor 上报崩溃恢复最终失败（Failures）。
 	// g 已构建并持有，供上层编排触发（本 Task 仅常驻暴露，不循环执行）。
 	_ = g
-	<-ctx.Done()
-	sup.Stop()
-	return nil
+	// failWatch：Failures 的唯一消费者。watchCtx 在 Run 返回前 cancel，
+	// 使该 goroutine 在任何收场路径都干净退出（无泄漏、不向已弃通道发送）。
+	watchCtx, stopWatch := context.WithCancel(context.Background())
+	defer stopWatch()
+	failC := watchSupervisorFailures(watchCtx, sup)
+
+	select {
+	case <-ctx.Done():
+		sup.Stop()
+		return nil
+	case err := <-failC:
+		// 崩溃恢复最终失败：打完整错误链（MUST NOT 只打 "failed"，禁静默），
+		// 释放子进程后以非 nil 错误返回，让上层（cmd → os.Exit(1)）产出
+		// 非零退出码，交由 restart: unless-stopped / systemd 重启接管。
+		sup.Stop()
+		logFullError("app: Python 托管进程崩溃恢复最终失败", err)
+		return fmt.Errorf("app: Python 托管进程崩溃恢复最终失败（进程退出交由进程管理器重启接管）: %w", err)
+	}
+}
+
+// watchSupervisorFailures 消费 sup.Failures()：崩溃恢复最终失败送到 out 后
+// goroutine 即退出。通道**正常关闭**（无错误）时直接收场，绝不向 out 发送
+// 零值 err（否则 Run 会误判为崩溃失败而假报错）；ctx 取消时同样收场。
+// out 带缓冲 1：即使 Run 已因 ctx 取消先返回，发送也不阻塞，杜绝 goroutine 泄漏。
+func watchSupervisorFailures(ctx context.Context, sup supervisor) <-chan error {
+	out := make(chan error, 1)
+	go func() {
+		select {
+		case err, ok := <-sup.Failures():
+			if !ok || err == nil {
+				return // 通道关闭 / 空错误：保持常驻语义，不制造假失败
+			}
+			select {
+			case out <- err:
+			case <-ctx.Done(): // Run 已收场，丢弃，避免阻塞泄漏
+			}
+		case <-ctx.Done():
+		}
+	}()
+	return out
+}
+
+// logFullError 打出完整错误链（逐层 %w 展开，含 errors.Is/As 目标），
+// 禁静默吞错——运维 MUST 看到根因（MUST NOT 只打 "failed"）。
+func logFullError(prefix string, err error) {
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		log.Printf("%s: %v", prefix, e)
+		prefix = "  因: " // 缩进展示下一层，形成完整因果链
+	}
 }
 
 // validateOpts 装配前参数校验：端口必须合法（0=默认，否则 1..65535）。
