@@ -140,8 +140,9 @@ function hideI1Hint() {
 // `stats.known_tokens`（分子）= `buildKnownSet(deck) ∪ extraKnownLemmas` ⇒ **两路降级都只
 // 压低分子、不动分母**。所以「数据不完整」是对「分子失真」的准确描述，不是和稀泥。
 //
-// 降级状态**从降级点流到渲染点**（不靠渲染点猜）：两个降级点各自在模块级记一个标志，
-// 渲染点读它们。**resolveDeck() 的返回值逐字不变**（仍是 deck 本体）—— 改它的返回形状
+// 降级状态**从降级点流到渲染点**（不靠渲染点猜），但**与本次调用绑定**：渲染点开一个
+// 「本次调用的降级回执盒」，两路降级点各往盒里写一个字段，渲染点只读自己那个盒。
+// **resolveDeck() 的返回值逐字不变**（仍是 deck 本体）—— 改它的返回形状
 // 会撞子计划 3 T3 的「列表/详情 deck 同源」契约（tools/enc_known_same_source_probe.mjs
 // 对 resolveDeck 打计数桩并断言两端词池逐字相等），MUST NOT 为拿状态而动它。
 const COVERAGE_DEGRADED_MARK = "⚠";
@@ -151,18 +152,29 @@ const COVERAGE_DEGRADED_REASON = {
   known: "部分已背词没能取到，已背词数可能偏低",
   deck: "背词工作台的数据没能取到，本地记录可能已过期",
 };
-// 两路降级标志（各由自己的降级点写，渲染点只读）
-let _knownDegraded = false;
-let _deckDegraded = false;
 
-/** 当前两路降级状态（渲染点唯一的状态来源）。 */
-function degradedSources() {
-  return { known: _knownDegraded, deck: _deckDegraded };
+// ── 降级回执盒（2026-10-05 清债轮 Task 3）────────────────────────────────────
+// 缺陷：上面两路降级**曾是模块级全局**（`_knownDegraded` / `_deckDegraded`）。
+// 而快照点在**详情渲染路径**上（`renderTextDetailAnnotated` 里两路 await 之后）。
+// 当 `showView` 的 `resolveDeck()` 与详情的 `resolveDeck()` 并发、且以**相反结果交错
+// 结束**时 —— 详情自己的 deck **成功**了，但详情还在等 `fetchKnownLemmas()`，
+// 这期间列表那次镜像请求**失败** ⇒ 全局 `_deckDegraded` 被**别人那次调用**写成 true
+// ⇒ 详情快照读到 true ⇒ 「拿到自己的成功 deck，却显示 deck 降级」，把成功谎报成失败。
+// （可触发：main.js 以 fire-and-forget 调 showView，用户在镜像请求在飞时点旧 DOM 卡片。）
+//
+// ⇒ 状态随**调用**走：每个渲染点自己 `newDegradedReceipt()` 一个盒并传给两路，
+//   盒是**每次调用一个** ⇒ 并发的两路各写各的盒，谁也污名化不了谁。
+//   不传盒（列表的 showView 不渲染覆盖率行）⇒ 那次调用的降级判定**无处可写**，
+//   也就无从污染任何人的快照。
+/** 一次渲染的降级回执盒（每次调用一个，MUST NOT 提到模块级）。 */
+function newDegradedReceipt() {
+  return { known: false, deck: false };
 }
 
 // A5：解析本机 deck；本机为空时尝试用 GET /api/wb/state 镜像兜底并合并。
-// 返回值**逐字不变**（deck 本体）—— 降级状态只经模块级 _deckDegraded 出，不改返回形状。
-async function resolveDeck() {
+// 返回值**逐字不变**（deck 本体）—— 降级状态只经 `receipt` 出，不改返回形状。
+// `receipt`（可选）：本次调用的降级回执盒；不传 ⇒ 本次判定不回传（列表视图即用此形）。
+async function resolveDeck(receipt = null) {
   const storage =
     typeof window !== "undefined" && window.localStorage
       ? window.localStorage
@@ -173,14 +185,15 @@ async function resolveDeck() {
     deck.words.length === 0 ||
     !deck.cards ||
     Object.keys(deck.cards).length === 0;
-  _deckDegraded = false;
+  // 本次调用先落「未降级」：盒子按调用开，写它不会碰到别的调用那一份。
+  if (receipt) receipt.deck = false;
   if (empty) {
     let server = null;
     try {
       server = await api("/api/wb/state");
     } catch (e) {
       /* 镜像拉取失败静默：回退到本机（即便本机空）。覆盖率行据此标「数据不完整」。 */
-      _deckDegraded = true;
+      if (receipt) receipt.deck = true;
     }
     if (
       server &&
@@ -293,30 +306,42 @@ export async function fetchIndex() {
 // 不会连带废掉另一个调用方正在等的那次请求（它只会自己丢弃结果）。MUST NOT 为了「省一次
 // 请求」把本函数塞进 abort 域：一旦带上 signal，先发起的那个调用方被抢占就会把共享请求
 // 连带 abort，另一个调用方只能拿到 []（覆盖率静默变 0）。探针 A4 钉住这条。
+// 在飞记录 `{promise, known}`：`known` 是**这一份响应**的降级判定。降级状态记在
+// 记录上而不是模块级变量 ⇒ 复用同一份响应的调用方拿到同一份判定，而**另起一轮**
+// 请求的调用方写的是**它自己那条记录**，互不串味（同 Task 3 的回执盒纪律）。
 let _knownLemmasInFlight = null;
 
-export async function fetchKnownLemmas() {
+export async function fetchKnownLemmas(receipt = null) {
   // 已有在飞 ⇒ 复用同一次请求（不新开），并拿同一份结果。
-  if (_knownLemmasInFlight) return _knownLemmasInFlight;
-  const p = (async () => {
+  if (_knownLemmasInFlight) {
+    const shared = _knownLemmasInFlight;
+    try {
+      return await shared.promise;
+    } finally {
+      // 共享同一份响应 ⇒ 共享同一份降级判定（不是「抄别人的状态」，是同一份结果）。
+      if (receipt) receipt.known = shared.known;
+    }
+  }
+  const rec = { promise: null, known: false };
+  rec.promise = (async () => {
     try {
       const res = await api("/api/cards/known-lemmas");
-      _knownDegraded = false;
       return res && Array.isArray(res.lemmas) ? res.lemmas : [];
     } catch (e) {
       // 降级可观测（债 4）：分子会因此偏低，覆盖率行据此标「数据不完整」。
-      _knownDegraded = true;
+      rec.known = true;
       return [];
     }
   })();
-  _knownLemmasInFlight = p;
+  _knownLemmasInFlight = rec;
   try {
-    return await p;
+    return await rec.promise;
   } finally {
+    if (receipt) receipt.known = rec.known;
     // **必须**在 finally 清（then 与 catch 都要清）：失败结果 MUST NOT 被缓存，
     // 否则一次网络抖动会让整个会话的「已学词」永久为空（探针 A3）。
-    // 只清自己发起的那一个：p 落地后可能已有别的调用开了新一轮，空指针会把它误清。
-    if (_knownLemmasInFlight === p) _knownLemmasInFlight = null;
+    // 只清自己发起的那一个：本轮落地后可能已有别的调用开了新一轮，空指针会把它误清。
+    if (_knownLemmasInFlight === rec) _knownLemmasInFlight = null;
   }
 }
 
@@ -571,6 +596,8 @@ export async function showView() {
   // 「本机空就拉 /api/wb/state」。resolveDeck 自身零改动 ⇒ 离线行为不变（镜像拉取
   // 失败静默回退本机，沿用其既有 catch），镜像失败也**不会**让整个列表渲染失败。
   const knownLemmas = knownRes.status === "fulfilled" ? knownRes.value : [];
+  // 列表不渲染覆盖率行 ⇒ **不传回执盒**：它的降级判定无处可写，也就无从把详情
+  // （并发的另一路）污名化成「deck 降级」（Task 3）。deck 解析本身仍逐字复用。
   const knownSet = mergeKnownLemmas(buildKnownSet(await resolveDeck()), knownLemmas);
   // 覆写前守门（Task 1 不变量在 Task 3 新增的 await 处继续成立）：resolveDeck 可能
   // 触发一次镜像往返（仅本机 deck 空时），这期间用户可能已经点开了某篇短篇 ⇒ 此时
@@ -636,14 +663,20 @@ export async function renderTextDetailAnnotated(text, annotate, seq = null) {
     return;
   }
   // 已知词池 = 工作台 deck ∪ 主路径已学词（与列表视图同口径，2026-09-28 审计 P1）。
-  const [deck, extraKnownLemmas] = await Promise.all([resolveDeck(), fetchKnownLemmas()]);
+  // `receipt` = **本次渲染**的降级回执盒：两路各写自己的字段 ⇒ 读到的一定是**本次**
+  // 这两路的判定，而不是可能被另一次并发调用覆写后的值（Task 3：并发串味）。
+  const receipt = newDegradedReceipt();
+  const [deck, extraKnownLemmas] = await Promise.all([
+    resolveDeck(receipt),
+    fetchKnownLemmas(receipt),
+  ]);
 
   // 覆盖前守门：等这两个 await 期间用户可能已经点开了别的短篇 / 已返回列表。
   if (seq != null && isStaleOpen(seq)) return;
 
-  // 降级状态快照（债 4）：紧接上面这次 await 读，使读到的就是**本次**两路的判定，
-  // 而不是可能被另一次并发 resolveDeck 覆写后的值。
-  const degraded = degradedSources();
+  // 降级状态快照（债 4）：从**本次**的回执盒读（全局时代这里读的是模块级标志，
+  // 会被并发的另一次调用覆写 ⇒ tools/enc_degraded_concurrency_probe.mjs S1）。
+  const degraded = { known: receipt.known, deck: receipt.deck };
   const { sentences, stats } = annotateWithDeck(deck, annotate, extraKnownLemmas);
   renderReaderShell(
     text,
@@ -661,7 +694,9 @@ function renderCoverage(stats, degraded) {
   const pct = Math.round(rateNum * 100);
   // 正常路径逐字未变（探针 B5 钉死）—— 降级只在后面追加，数字与措辞一律不动。
   const base = `已背词覆盖 ${known}/${total} 词位（${pct}%）`;
-  const d = degraded || degradedSources();
+  // 无回执传入（旧调用形态）⇒ 视作两路都未降级：降级 MUST 由调用点传下来，
+  // 渲染层 MUST NOT 自己去找模块级状态（找了就是 Task 3 的串味入口）。
+  const d = degraded || newDegradedReceipt();
   const reasons = [];
   if (d.known) reasons.push(COVERAGE_DEGRADED_REASON.known);
   if (d.deck) reasons.push(COVERAGE_DEGRADED_REASON.deck);
