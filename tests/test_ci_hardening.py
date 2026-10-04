@@ -27,6 +27,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
+ROOT_CONFTEST = REPO_ROOT / "conftest.py"
 
 
 def _read_guard_file(path: Path) -> str:
@@ -610,3 +611,29 @@ def test_ci_workflow_installs_node_explicitly() -> None:
         "改 Node 大版本会让 .mjs 探针的真实执行结果变化（vm 沙箱行为与内置 API 都有差异），"
         "属需要显式复核的变更。确需升级请同步改本守卫的 NODE_MAJOR 并复核探针。"
     )
+
+
+def test_ci_missing_node_fails_at_session_start() -> None:
+    """根 conftest 必须让 CI 在 node 缺失时失败，而本地仍可由 wrapper skip。"""
+    text = _read_guard_file(ROOT_CONFTEST)
+    tree = ast.parse(text)
+    hook = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "pytest_sessionstart"
+        ),
+        None,
+    )
+    assert hook is not None, "根 conftest.py 缺 pytest_sessionstart：CI 缺 node 时 29 处 wrapper 会静默 skip"
+
+    block = ast.get_source_segment(text, hook)
+    assert block is not None
+    required_contract = [
+        ('os.environ.get("CI")', "检查必须只在 CI 环境启用，本地缺 node 仍应 skip"),
+        ('shutil.which("node")', "检查必须验证 node 是否真的在 PATH 上"),
+        ("pytest.exit(", "CI 缺 node 时必须立即让 pytest 非零退出，不能继续到 wrapper skip"),
+        ("returncode=1", "pytest 退出码必须明确为失败"),
+    ]
+    missing = [f"缺 {needle!r}（{why}）" for needle, why in required_contract if needle not in block]
+    assert not missing, "pytest_sessionstart 没有钉住 CI 必需的 node 运行时：\n" + "\n".join(missing)

@@ -12,8 +12,11 @@ pytest 不注入 CWD 的事实，`import delector` 依然需要根在 sys.path�
 """
 
 import os
+import shutil
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent
 
@@ -26,3 +29,12 @@ if str(ROOT) not in sys.path:
 # 用 setdefault：尊重外部（CI）已显式指定的库。
 os.environ.setdefault("DATABASE_PATH", "test_conftest_default.db")
 os.environ.setdefault("PROGRESS_DB_PATH", "test_conftest_default_progress.db")
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """CI 缺少必需的 Node 运行时时立即失败；本地仍由各 wrapper 决定是否 skip。"""
+    if os.environ.get("CI") and not shutil.which("node"):
+        pytest.exit(
+            "CI 环境缺少必需的 node 运行时；.mjs 探针不能以 skip 静默跳过",
+            returncode=1,
+        )
