@@ -710,10 +710,12 @@ export async function saveGrammar() {
 
 export async function refreshCardCounters() {
   try {
-    const data = await api("/api/cards");
-    const vLen = (data.vocab_cards || []).length;
-    const gLen = (data.grammar_cards || []).length;
-    const total = vLen + gLen;
+    // 只要「有多少张卡」⇒ 打轻量计数端点，MUST NOT 拉 /api/cards 全量再取 length
+    // （那是 SELECT * + 逐卡 FSRS 递推，挂在 7 个存卡后调用点上 = O(N²) 写放大）。
+    const data = await api("/api/cards/counts");
+    // total 缺失（代理截断等）时抛错走下方 catch 保留旧值，MUST NOT 显示 undefined。
+    const total = data && data.total;
+    if (!Number.isFinite(total)) throw new Error("cards/counts 缺少 total");
     const badge = document.getElementById("card-count");
     const mobBadge = document.getElementById("mob-card-count");
     if (badge) badge.textContent = total;
