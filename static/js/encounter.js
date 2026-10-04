@@ -484,8 +484,22 @@ export async function showView() {
   // 索引成功 → 覆盖率分组排序 + 推荐。texts 为全集，index 只补 total_tokens / lemma_seq。
   const merged = mergeListWithIndex(texts, indexRes.value);
   // 已知词池 = 背词工作台 deck ∪ 主路径已学词（打通两条数据流；2026-09-28 审计 P1）。
+  //
+  // Task 3（2026-10-04，同源）：deck MUST 走 resolveDeck()，与详情
+  // renderTextDetailAnnotated 用**同一个**解析函数。此前列表用裸 loadDeck(encStorage())
+  // （只读本机）、详情用 resolveDeck（本机 → 空则拉 GET /api/wb/state 镜像 → 合并）
+  // ⇒ 清过站点数据 / 换浏览器 profile / 跨设备（桌面用过工作台）时：列表徽章「偏难 0%」，
+  // 点进去「已背词覆盖 82%」—— 同一功能两个真相。
+  //
+  // 复用阶梯（Reuse-Ladder）：**纯复用**既有 resolveDeck，MUST NOT 在此新写一份
+  // 「本机空就拉 /api/wb/state」。resolveDeck 自身零改动 ⇒ 离线行为不变（镜像拉取
+  // 失败静默回退本机，沿用其既有 catch），镜像失败也**不会**让整个列表渲染失败。
   const knownLemmas = knownRes.status === "fulfilled" ? knownRes.value : [];
-  const knownSet = mergeKnownLemmas(buildKnownSet(loadDeck(encStorage())), knownLemmas);
+  const knownSet = mergeKnownLemmas(buildKnownSet(await resolveDeck()), knownLemmas);
+  // 覆写前守门（Task 1 不变量在 Task 3 新增的 await 处继续成立）：resolveDeck 可能
+  // 触发一次镜像往返（仅本机 deck 空时），这期间用户可能已经点开了某篇短篇 ⇒ 此时
+  // 渲染列表会把正在读的详情顶掉。过期响应 MUST NOT 碰 DOM。
+  if (isStaleOpen(seq)) return;
   const ranked = rankEntries(knownSet, merged);
   renderTextList(texts, ranked, readState);
   renderI1Hint(ranked, knownSet, readState);
