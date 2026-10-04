@@ -11,16 +11,25 @@
 它是纯 helper（同 `tests/db_cleanup.py` 的既有做法）。
 
 ═══ 关于探针输出形状的重要事实 ═══
-`--json` 的输出契约并**不统一**。实测 24 个探针分三类：
+`--json` 的输出契约并**不统一**。实测 24 个探针分三类（下面用**占位名**举例，
+刻意不写真实探针名 —— 理由见本段末）：
 
   A. 标准契约 `{ok, failures, total, cases:[{name, ok}], samples}`
-     —— 仅 4 个（cards_wb_source / cards_workbench_no_review / wb_enc_i1 /
-        wb_enc_read）。判据用 `failures == 0` + `total >= N` + `cases[].name`。
+     —— 仅 4 个（形如 `<family>_wb_source_probe` / `<family>_workbench_no_review_probe`
+        / `wb_<family>_i1_probe` / `wb_<family>_read_probe`）。
+        判据用 `failures == 0` + `total >= N` + `cases[].name`。
   B. 扁平「场景名 → 一句人话」：`{ok, "A": "...", "B": "..."}`
-     —— 如 enc_known_same_source / enc_open_race / enc_popover_clamp。
-        顶层键**就是**场景名，值为该场景的自陈。
+     —— 如 `<family>_known_same_source_probe` / `<family>_open_race_probe` /
+        `<family>_popover_clamp_probe`。顶层键**就是**场景名，值为该场景的自陈。
   C. 扁平「探针结论」：`{ok, <若干布尔/结构字段>}`
-     —— 如 cards_count_probe / wb_rtc_* / wb_pair_persist。顶层键是被测维度。
+     —— 如 `<family>_count_probe` / `wb_rtc_<aspect>_probe` / `wb_pair_<verb>_probe`。
+        顶层键是被测维度。
+
+**为什么这里用占位名而不写真实探针名**：`tests/test_probe_wiring_guard.py` 的
+漏接线守卫把 `tests/**/test_*.py` 拼成 corpus 做子串匹配，判断某探针是否"被 wrapper
+引用"。**文档点名真实文件，等于给守卫埋一颗"文档即证据"的哑雷** —— 将来若有人把
+corpus 放宽回 `*.py`（看着更"通用"），本文件的分类说明会重新把被删掉的探针"顶"成
+"已接线"，漏接线守卫当场假绿。故分类语义保留，文件名去实名化。
 
 B/C 两类**没有** `failures` / `total` / `cases` 字段。因此本模块的
 `assert_probe_clean` 对 A 类断言 `failures == 0`，对 B/C 类断言 `ok is True`。

@@ -56,10 +56,32 @@ _PROBE_GLOB = "*_probe.mjs"
 _SELF_DECLARED = ("探针", "probe")
 
 
+def _corpus_files() -> list[Path]:
+    """tests/ 下参与「已接线证据」的文件，按路径排序。
+
+    **只收 `test_*.py`，刻意不收全部 `*.py`**（2026-10-05 fix-round 修正）：
+    pytest 自身的收集规则就是 `test_*.py` / `*_test.py`
+    ⇒ **一个不可能被 pytest 收集的文件，本来就不可能是 wrapper**。
+    把不参与收集的 helper（`probe_runner.py` / `db_cleanup.py` 之类）计入
+    "已接线证据"是逻辑错误 —— 它们不会被 CI 收集，凭什么当 someone's wrapper。
+
+    实测过的真实假绿：原口径下 `tests/probe_runner.py` 的 docstring 点名了某族真实
+    探针名，于是 `mv` 走对应真 wrapper 后 `test_every_tools_probe_has_pytest_wrapper`
+    **照样绿**。收窄后该探针只剩真 wrapper 引用，删了就红。
+
+    收窄不误伤既有接线的核实（2026-10-05 实测，非推断）：`tools/` 下 24 个
+    `*_probe.mjs`，每一个的名字都能在**某个 `test_*.py` 里**查到
+    （`ls tests/**/*.py` 全量确认：tests/ 下只有 `db_cleanup.py` 与 `probe_runner.py`
+    两个文件不叫 `test_*.py`，二者都是纯 helper，无一个探针引用只靠它们支撑）。
+    该核实已固化为 `test_wiring_corpus_excludes_non_test_py_files`。
+    """
+    return sorted(TESTS_DIR.rglob("test_*.py"))
+
+
 def _all_tests_py_text() -> str:
-    """把 tests/ 下全部 .py（含子目录）拼成一个大字符串，供子串匹配。"""
+    """把 corpus 源（`_corpus_files()`）拼成一个大字符串，供子串匹配。"""
     return "\n".join(
-        p.read_text(encoding="utf-8", errors="replace") for p in sorted(TESTS_DIR.rglob("*.py"))
+        p.read_text(encoding="utf-8", errors="replace") for p in _corpus_files()
     )
 
 
@@ -129,6 +151,44 @@ def test_exclusion_list_contains_only_unwired_probes() -> None:
         f"排除清单里这些探针其实**已被 tests/ 引用**（已接线）：{wrongly_excluded}\n"
         "把它们排除掉不会让上面那条守卫变红（unwired 仍为空）⇒ 排除清单成了漏接线的静默旁路。\n"
         "修法：从 _NOT_PROBES 里删掉这些条目。排除清单只保留真正没有 wrapper 的非探针文件。"
+    )
+
+
+def test_wiring_corpus_excludes_non_test_py_files() -> None:
+    """corpus 源 MUST 只含 `test_*.py`：不参与 pytest 收集的 helper 不是「已接线证据」。
+
+    为什么这条要单独钉住（2026-10-05 fix-round 实测踩到的假绿漏洞）：
+    `_all_tests_py_text()` 原本收 `tests/**/*.py`，而 `tests/probe_runner.py` 是抽出来的
+    纯 helper，**不叫 `test_*.py`、pytest 不会收集它**。可它的模块 docstring 里点了
+    真实探针名的族 ⇒ 那些名字在 corpus 里"被提到" ⇒ 守卫把它们误判成"已接线"。
+    实测：把某个真 wrapper 整个移走，`test_every_tools_probe_has_pytest_wrapper`
+    **照样绿**（真 wrapper 已经不在 CI 里了，漏接线静默逃逸）。
+
+    判据本身也站在同一条逻辑上：pytest 的收集规则就是 `test_*.py` / `*_test.py`
+    ⇒ **一个不可能被 pytest 收集的文件，本来就不可能是 wrapper**。把 helper
+    （`probe_runner.py` / `db_cleanup.py` 之类）计入"已接线证据"是逻辑错误。
+
+    这条守卫是防"将来有人把 glob 放宽回 `*.py`"——看着更"通用"，实际是给假绿开门。
+    """
+    sources = _corpus_files()
+    names = {p.name for p in sources}
+
+    non_test_py = sorted(
+        p.name
+        for p in sources
+        if not p.name.startswith("test_") and not p.name.endswith("_test.py")
+    )
+    assert not non_test_py, (
+        f"corpus 源里混进了非 `test_*.py` 的 .py：{non_test_py}\n"
+        "后果：这些文件**不会被 pytest 收集**，它们的 docstring / 注释里哪怕只是"
+        "'提到'某个探针名，也会让漏接线守卫误判成'已接线'⇒ 删掉真 wrapper 也不红。\n"
+        "修法：把 `_corpus_files()` 的 glob 收窄回 `test_*.py`，"
+        "并把 helper 文档里的真实探针名改成 `<family>_probe` 之类的占位形式。"
+    )
+    # 定点钉住被点名的那个 helper：它是这个漏洞的真实来源，名字写死防"换个文件再犯"
+    assert "probe_runner.py" not in names, (
+        "corpus 源里又出现了 tests/probe_runner.py（纯 helper，不叫 test_*.py）："
+        "它的模块 docstring 分类说明会点名真实探针名 ⇒ 文档即证据 ⇒ 漏接线守卫假绿"
     )
 
 
