@@ -517,6 +517,27 @@ function attachDeckSwipeListener() {
   cardEl.addEventListener("touchend", onTouchEnd);
 }
 
+/**
+ * 目录/网格视图（卡盒的第二视图）。
+ *
+ * **统计位 MUST 走 cardStatsTag(c)，MUST NOT 硬编码 correct_count / wrong_count。**
+ * 统一池（core/vocab_pool.py）把工作台背过的词投影进 vocab_cards 时只写
+ * `fsrs_s` / `fsrs_d` / `fsrs_lapses`，**不写** `correct_count` / `wrong_count`
+ * ⇒ 这两列对工作台词恒为 0。目录视图原为 `${c.correct_count || 0} 正 / …`，
+ * 于是同一条词**卡面说「📚 工作台 · s=25」、目录说「0 正 / 0 误」** ——
+ * 同一张卡两套说法，且目录那套是说谎（用户在背词工作台背了 5 次）。
+ * 卡面 renderDeckStage 自 PR #98 起已改用 cardStatsTag，目录视图当时漏了。
+ *
+ * **为什么换用后不丢 due_date**：原词汇网格那段 ` · 到期: ${c.due_date}` 后缀是
+ * 冗余的 —— cardStatsTag 的非工作台分支自带该前缀
+ * （`⏳ 到期: ${card.due_date}`），且把「已掌握」徽记排在 due_date 之前。
+ * 探针 tools/cards_catalog_tag_probe.mjs 的 B1/B2/B3 三条钉住这一点。
+ *
+ * 语法考点卡也一并换用（一致性优先）：`grammar_cards` 表（core/database.py 的
+ * 建表 + ALTER 补列）**没有 fsrs_* 列** ⇒ 语法卡永远走非工作台分支，
+ * 换用对它是行为等价 + 顺带把 due_date / 已掌握徽记补齐（卡面 renderDeckStage
+ * 对语法卡本来就走 cardStatsTag，目录与卡面口径 MUST NOT 分叉）。
+ */
 export function renderCatalogGrid(vList, gList) {
   const container = document.getElementById("cards-container");
   if (!container) return;
@@ -543,7 +564,7 @@ export function renderCatalogGrid(vList, gList) {
         <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos || "WORT")}${c.gender ? " · " + esc(c.gender) : ""}</div>
         <div class="memo-sent">${esc(c.sentence_context)}</div>
         <div class="card-footer-actions">
-          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误${c.due_date ? ` · 到期: ${c.due_date}` : ""}</span>
+          <span class="card-stats-tag">${cardStatsTag(c)}</span>
           <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" onclick="toggleMaster('vocab', ${c.id}, ${!!c.mastered})">
             ${c.mastered ? "↺ 重返待复习" : "✓ 斩 (已掌握)"}
           </button>
@@ -570,7 +591,7 @@ export function renderCatalogGrid(vList, gList) {
         <div class="grammar-memo-exp">${esc(c.explanation_zh)}</div>
         <div class="memo-sent">${esc(c.sentence_context)}</div>
         <div class="card-footer-actions">
-          <span class="card-stats-tag">${c.correct_count || 0} 正 / ${c.wrong_count || 0} 误</span>
+          <span class="card-stats-tag">${cardStatsTag(c)}</span>
           <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" onclick="toggleMaster('grammar', ${c.id}, ${!!c.mastered})">
             ${c.mastered ? "↺ 重返待复习" : "✓ 斩 (已掌握)"}
           </button>
