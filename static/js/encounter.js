@@ -1028,8 +1028,21 @@ function openPopoverNear(rect, lemma, surface, pos, si) {
   pop.classList.add("open");
   // fixed 定位到点词下方（视口坐标，getBoundingClientRect 已给出），避免滚出视野。
   const vw = window.innerWidth;
-  const left = Math.min(Math.max(8, Math.round(rect.left)), vw - pop.offsetWidth - 8);
-  const top = Math.round(rect.bottom + 6);
+  const vh = window.innerHeight;
+  const popW = pop.offsetWidth;
+  const popH = pop.offsetHeight;   // 读一次即缓存：同帧反复读会触发强制重排
+  const GAP = 6;                   // 点词与弹层的间距
+  const EDGE = 8;                  // 与视口边缘的安全留白（弹层贴屏顶/贴屏边都不好看）
+  const left = Math.min(Math.max(EDGE, Math.round(rect.left)), vw - popW - EDGE);
+  // 垂直方向必须**下边界夹取**：手机竖屏（~640px 可视高）读短文滚到每屏最后一行时
+  // rect.bottom ≈ 596，弹层高 150-200px，无夹取则整块弹层落在屏幕外 ⇒ 点击零反馈。
+  // 但**不能只 Math.min**——那会把弹层压到 rect 上沿、盖住用户刚点的词；所以
+  // 下方放不下时先**向上翻转**到点词上方，再把翻转结果夹进 [EDGE, vh-popH-EDGE]。
+  // 极矮视口（vh < popH + 2*EDGE）时下界会变成负数，Math.max(EDGE, …) 兜住顶部留白。
+  const below = Math.round(rect.bottom) + GAP;
+  const above = Math.round(rect.top) - GAP - popH;
+  const fit = below + popH + EDGE <= vh ? below : above;   // 下方不够就翻到上方
+  const top = Math.max(EDGE, Math.min(fit, vh - popH - EDGE));
   pop.style.left = `${left}px`;
   pop.style.top = `${top}px`;
   lookupGloss(_pending);
