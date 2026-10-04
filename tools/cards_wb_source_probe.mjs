@@ -104,15 +104,20 @@ function sliceFunction(src, declNeedle) {
 }
 
 const cardsJs = fs.readFileSync(path.join(ROOT, "static", "js", "cards.js"), "utf8");
+let predicateFn = "";
 let statsFn = "";
 let renderFn = "";
 try {
+  /* renderDeckStage 自子计划 5 Task 1 起会调 isWorkbenchSourced（决定工作台词
+   * 收不收 DSR 复习按钮），该函数 MUST 一并进沙箱，否则本探针的卡面渲染会撞
+   * ReferenceError。这是**补齐切片**（渲染路径多了一个依赖），不改动任何断言。 */
+  predicateFn = sliceFunction(cardsJs, "function isWorkbenchSourced(");
   statsFn = sliceFunction(cardsJs, "function cardStatsTag(");
   renderFn = sliceFunction(cardsJs, "export function renderDeckStage(");
 } catch (e) {
   fail([`源码切片失败：${e.message}`]);
 }
-const transformed = statsFn + "\n\n" + renderFn;
+const transformed = predicateFn + "\n\n" + statsFn + "\n\n" + renderFn;
 
 /* 切片护栏：切歪 / 回退 ⇒ 直接红，不许假绿 */
 const stripProblems = [];
