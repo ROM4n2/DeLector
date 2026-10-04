@@ -110,10 +110,13 @@ function hideCoverage() {
   if (el) el.style.display = "none";
 }
 
-function setCoverage(html) {
+function setCoverage(html, title) {
   const el = coverageEl();
   if (!el) return;
   el.innerHTML = html;
+  // 降级原因写 title（悬停可见）。用 setAttribute 写空串而不是 removeAttribute：
+  // title="" 与无 title 同样不弹提示，而 removeAttribute 在哑 DOM 沙箱里未必存在。
+  el.setAttribute("title", title || "");
   el.style.display = "";
 }
 
@@ -125,7 +128,40 @@ function hideI1Hint() {
   el.innerHTML = "";
 }
 
+// ── 覆盖率行的降级标注（2026-10-05 清债轮 B 债 4）──────────────────────────
+// 缺陷：覆盖率行只有三个数字（`已背词覆盖 12/312 词位（4%）`），**无来源、无降级标记**。
+// 而它的两路来源都在前端**静默降级**：resolveDeck 的镜像 catch 是空实现、
+// fetchKnownLemmas 的 catch 返回 []。⇒ 离线 / 清过站点数据 / 镜像拉取失败时，覆盖率
+// **静默变低**成「已背词覆盖 0/312 词位（0%）」，用户**无法分辨**是「真没背」还是
+// 「拉取失败」—— 这是把「数据不完整」谎报成「学习事实」。
+//
+// 已核实（读 deck-bridge.js:220-258 的真实现，不凭印象）：`stats.total_tokens`（分母）由
+// annotateWithDeck 从 **annotate 端点返回的 token 流**数出，**与 resolveDeck 无关**；
+// `stats.known_tokens`（分子）= `buildKnownSet(deck) ∪ extraKnownLemmas` ⇒ **两路降级都只
+// 压低分子、不动分母**。所以「数据不完整」是对「分子失真」的准确描述，不是和稀泥。
+//
+// 降级状态**从降级点流到渲染点**（不靠渲染点猜）：两个降级点各自在模块级记一个标志，
+// 渲染点读它们。**resolveDeck() 的返回值逐字不变**（仍是 deck 本体）—— 改它的返回形状
+// 会撞子计划 3 T3 的「列表/详情 deck 同源」契约（tools/enc_known_same_source_probe.mjs
+// 对 resolveDeck 打计数桩并断言两端词池逐字相等），MUST NOT 为拿状态而动它。
+const COVERAGE_DEGRADED_MARK = "⚠";
+const COVERAGE_DEGRADED_NOTE = "数据不完整";
+// 降级原因（人话；MUST NOT 出现 fsrs_s / lemmas / known-lemmas / 端点路径 / HTTP 状态码）
+const COVERAGE_DEGRADED_REASON = {
+  known: "部分已背词没能取到，已背词数可能偏低",
+  deck: "背词工作台的数据没能取到，本地记录可能已过期",
+};
+// 两路降级标志（各由自己的降级点写，渲染点只读）
+let _knownDegraded = false;
+let _deckDegraded = false;
+
+/** 当前两路降级状态（渲染点唯一的状态来源）。 */
+function degradedSources() {
+  return { known: _knownDegraded, deck: _deckDegraded };
+}
+
 // A5：解析本机 deck；本机为空时尝试用 GET /api/wb/state 镜像兜底并合并。
+// 返回值**逐字不变**（deck 本体）—— 降级状态只经模块级 _deckDegraded 出，不改返回形状。
 async function resolveDeck() {
   const storage =
     typeof window !== "undefined" && window.localStorage
@@ -137,12 +173,14 @@ async function resolveDeck() {
     deck.words.length === 0 ||
     !deck.cards ||
     Object.keys(deck.cards).length === 0;
+  _deckDegraded = false;
   if (empty) {
     let server = null;
     try {
       server = await api("/api/wb/state");
     } catch (e) {
-      /* 镜像拉取失败静默：回退到本机（即便本机空）。 */
+      /* 镜像拉取失败静默：回退到本机（即便本机空）。覆盖率行据此标「数据不完整」。 */
+      _deckDegraded = true;
     }
     if (
       server &&
@@ -263,8 +301,11 @@ export async function fetchKnownLemmas() {
   const p = (async () => {
     try {
       const res = await api("/api/cards/known-lemmas");
+      _knownDegraded = false;
       return res && Array.isArray(res.lemmas) ? res.lemmas : [];
     } catch (e) {
+      // 降级可观测（债 4）：分子会因此偏低，覆盖率行据此标「数据不完整」。
+      _knownDegraded = true;
       return [];
     }
   })();
@@ -600,22 +641,41 @@ export async function renderTextDetailAnnotated(text, annotate, seq = null) {
   // 覆盖前守门：等这两个 await 期间用户可能已经点开了别的短篇 / 已返回列表。
   if (seq != null && isStaleOpen(seq)) return;
 
+  // 降级状态快照（债 4）：紧接上面这次 await 读，使读到的就是**本次**两路的判定，
+  // 而不是可能被另一次并发 resolveDeck 覆写后的值。
+  const degraded = degradedSources();
   const { sentences, stats } = annotateWithDeck(deck, annotate, extraKnownLemmas);
   renderReaderShell(
     text,
     `<div class="encounter-flow">${buildAnnotatedBody({ sentences })}</div>`,
   );
-  renderCoverage(stats);
+  renderCoverage(stats, degraded);
   showReviewToggleIfNeeded();
 }
 
-function renderCoverage(stats) {
+function renderCoverage(stats, degraded) {
   if (!stats) return;
   const total = Number(stats.total_tokens) || 0;
   const known = Number(stats.known_tokens) || 0;
   const rateNum = Number(stats.known_rate) || 0;
   const pct = Math.round(rateNum * 100);
-  setCoverage(`已背词覆盖 ${known}/${total} 词位（${pct}%）`);
+  // 正常路径逐字未变（探针 B5 钉死）—— 降级只在后面追加，数字与措辞一律不动。
+  const base = `已背词覆盖 ${known}/${total} 词位（${pct}%）`;
+  const d = degraded || degradedSources();
+  const reasons = [];
+  if (d.known) reasons.push(COVERAGE_DEGRADED_REASON.known);
+  if (d.deck) reasons.push(COVERAGE_DEGRADED_REASON.deck);
+  if (!reasons.length) {
+    setCoverage(base, "");
+    return;
+  }
+  // 降级：**只叠一份**标记（两路都降级也只标一次），具体原因并列写进 title。
+  // 只标这一行、列表侧徽章（enc-i1-badge）不标：徽章只有百分比、没有分母，误导性弱，
+  // 且 i1 徽章按 band 文案（✅ 正好读 / 偏简单 / 偏难）表达，标了反而与「分档」语义打架。
+  setCoverage(
+    `${COVERAGE_DEGRADED_MARK} ${base}· ${COVERAGE_DEGRADED_NOTE}`,
+    reasons.join("；"),
+  );
 }
 
 export async function openText(id) {
