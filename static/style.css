@@ -5592,6 +5592,59 @@ body.drawer-open .shadow-player {
   opacity: 0.8;
 }
 
+/* ── Workbench Hint: 卡盒遇到工作台词时的「去工作台复习」块 ─────────────────
+ * 上面那一整排 .sm2-btn（1 重来 / 2 困难 / 3 良好 / 4 简单）在这里被**收走**：
+ * 工作台词的调度权在统一池那侧（core/vocab_pool.py 只写 fsrs_s/d/lapses，
+ * 不写 repetition_count / due_date），卡盒 DSR 复习 review_card_sm2 又不写
+ * fsrs_*。点了就是**白复习**——DSR 四列被写、工作台那侧 FSRS 不动、
+ * 屏幕上什么都没变。四个按钮留着只是骗用户以为复习过了。
+ * 故换成本块：一句人话 + 一个「去工作台复习」跳转，视觉沿用下面
+ * .sm2-btn 的 neo-brutalist 语言（硬边 1.5px 实线 + 1.5px 实心投影 + 等宽粗体），
+ * 色系取 .sm2-btn-easy 的蓝（#eff6ff / #2563eb）——暗示「简单，去那边复习」。
+ * 窄视口用 flex-wrap 兜住（文字与按钮换行），不引 @media。 */
+.deck-workbench-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.deck-workbench-hint-text {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.deck-workbench-link {
+  flex: none;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px solid var(--ink);
+  background: #eff6ff;
+  color: #2563eb;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 1.5px 1.5px 0 var(--ink);
+  transition: all 0.12s ease;
+}
+
+.deck-workbench-link:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 2.5px 2.5px 0 var(--ink);
+}
+
+.deck-workbench-link:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
 /* ── Mobile & Android First Optimizations (@media <= 1024px) ── */
 .mobile-bottom-nav,
 .mobile-dock {

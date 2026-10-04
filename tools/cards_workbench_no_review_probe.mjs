@@ -450,6 +450,57 @@ if (predicateMissing) {
   );
 }
 
+/* ══ H 样式守卫：改 HTML 却忘了定义样式（裸 <a> 蓝下划线）本轮要绝迹 ═════════
+ * A~G 全在看**行为**（有没有按钮 / 链接指向哪），看不见**长什么样**：
+ * 三个新 class 只在 cards.js 里吐出来、static/style.css 里零定义时，A~G 全绿，
+ * 但用户看到的是浏览器默认样式的蓝色带下划线 <a>，与周围 .sm2-btn 的
+ * neo-brutalist 语言割裂。故补 H1~H3 三条样式契约。 */
+{
+  const styleCss = fs.readFileSync(path.join(ROOT, "static", "style.css"), "utf8");
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  /* 取 `选择器 { … }` 的规则体。`\s*\{` 保证逐字命中**裸选择器**本身：
+   * `.deck-workbench-link:hover {` 不会被 `.deck-workbench-link` 误配，
+   * `.deck-workbench-hint-text {` 也不会被 `.deck-workbench-hint` 误配。 */
+  const ruleBody = (selector) => {
+    const m = new RegExp(escapeRe(selector) + "\\s*\\{([^{}]*)\\}").exec(styleCss);
+    return m ? m[1] : null;
+  };
+  /* 取规则体里某属性的值（归一空白后逐字可比）。属性头须在 body 开头或 `;` 之后，
+   * 否则 `border-color` 会误命中 `border`。 */
+  const decl = (body, prop) => {
+    if (body === null) return null;
+    const m = new RegExp("(?:^|;)\\s*" + escapeRe(prop) + "\\s*:\\s*([^;]+)").exec(body);
+    return m ? m[1].trim().replace(/\s+/g, " ") : null;
+  };
+
+  const undefined_ = ["deck-workbench-hint", "deck-workbench-hint-text", "deck-workbench-link"]
+    .filter((c) => ruleBody("." + c) === null);
+  record(
+    "H1-工作台提示块三类已定义样式",
+    undefined_.length === 0,
+    `static/style.css 里 ${JSON.stringify(undefined_.map((c) => "." + c))} 没有对应规则 —— ` +
+    `卡面吐出了 class 却没定义样式（裸 <a> 退回浏览器默认的蓝色下划线，与 .sm2-btn 的 neo-brutalist 割裂）`,
+  );
+
+  const linkBody = ruleBody(".deck-workbench-link");
+  const deco = decl(linkBody, "text-decoration");
+  record(
+    "H2-跳转按钮已去下划线",
+    deco !== null && deco.toLowerCase() === "none",
+    `.deck-workbench-link 规则体里 text-decoration 的值是 ${JSON.stringify(deco)}（期望 none）—— ` +
+    `裸 <a> 的默认下划线正是本轮要消灭的缺陷`,
+  );
+
+  const linkShadow = decl(linkBody, "box-shadow");
+  const sm2Shadow = decl(ruleBody(".sm2-btn"), "box-shadow");
+  record(
+    "H3-跳转按钮沿用SM-2阴影语言",
+    linkShadow !== null && sm2Shadow !== null && linkShadow === sm2Shadow,
+    `.deck-workbench-link 的 box-shadow=${JSON.stringify(linkShadow)} 与 .sm2-btn 的 ${JSON.stringify(sm2Shadow)} 不一致 —— ` +
+    `新块自成一套视觉，同一张卡面上两种风格并存`,
+  );
+}
+
 if (problems.length) fail(problems);
 
 const out = {
