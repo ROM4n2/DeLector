@@ -23,6 +23,7 @@ TTS 生成、完形填空生成器、备份还原……全挤在一个模块里�
 # （BaseModel 子类化 / @router 装饰器）；正常 import 跟随下两错误码在本模块从不触发。
 
 import asyncio
+import contextlib
 import hashlib
 import ipaddress
 import json
@@ -33,7 +34,7 @@ import socket
 import tempfile
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -1176,6 +1177,43 @@ _TTS_VOICE_WHITELIST = frozenset(
     }
 )
 
+# --- TTS 并发闸：把「无界排队」换成「有界拒绝」--------------------------------
+# 为什么需要：generate_edge_tts_audio 内部走 asyncio.to_thread（默认池
+# min(32, cpu+4)），池满后 asyncio 的默认行为是**继续排队**，而不是拒绝；再叠加
+# edge_tts 无显式超时 + services/tts.py 对任意异常重试一次（socket timeout 30s
+# ⇒ 最坏 60s）+ 下面 3 个 HTTP provider 降级各 6s，单请求最坏约 76s。docker-compose
+# 又把 0.0.0.0:8000 暴露给整个局域网，于是几台设备（或同一设备多个 <audio> 同时
+# 起播）就能把线程池打满、合成请求无界堆积，越合成越慢、越慢越堆积。
+#
+# 取值 4：**无遥测，保守取值；如需调整看这里**。够局域网默认的 1~2 台设备同时朗读
+# （每台同时只有一段在播），又能在池被打满前早早把超出的请求拒掉。改大前先看
+# 真实并发峰值，别拍脑袋。
+#
+# 两条纪律：
+# 1. MUST 是**模块级**对象。每请求新建一个 Semaphore ⇒ 每个请求都拿到满额令牌，
+#    限流彻底形同虚设（这是限流实现最常见的自欺）。
+# 2. 拿不到就**立刻 429**，MUST NOT 排队等——等下去只是把无界排队换个地方发生。
+# 3. 闸在 _serve_tts **入参校验之后、合成之前**（详见那里的注释）：保住 400 语义，
+#    也不让注定失败的请求白吃名额。
+_TTS_CONCURRENCY_LIMIT = 4
+_TTS_SEMAPHORE = asyncio.Semaphore(_TTS_CONCURRENCY_LIMIT)
+
+# 429 的对外文案：给「稍后重试」的人话，不带 traceback / 内部路径 / 第三方异常
+# （细节只进服务端日志，理由同 _serve_tts 的 500 分支）。
+_TTS_BUSY_DETAIL = "TTS 并发已满，请稍后重试"
+
+
+@contextlib.asynccontextmanager
+async def _tts_slot() -> AsyncIterator[None]:
+    """占用一个 TTS 名额；拿不到立刻抛 429（不等待）。"""
+    if _TTS_SEMAPHORE.locked():
+        raise HTTPException(status_code=429, detail=_TTS_BUSY_DETAIL)
+    await _TTS_SEMAPHORE.acquire()
+    try:
+        yield
+    finally:
+        _TTS_SEMAPHORE.release()
+
 
 async def _serve_tts(text: str, voice: str, rate: str) -> Any:
     """POST 与 GET 两个路由共享的 TTS 服务逻辑。"""
@@ -1183,21 +1221,31 @@ async def _serve_tts(text: str, voice: str, rate: str) -> Any:
         raise HTTPException(status_code=400, detail="rate must look like '+0%', '-10%' or '+50%'")
     if (voice or "") not in _TTS_VOICE_WHITELIST:
         raise HTTPException(status_code=400, detail="unsupported voice")
-    try:
-        audio_path = await generate_edge_tts_audio(text, voice, rate)
-        return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
-    except HTTPException:
-        raise
-    except Exception:
-        # 细节只进服务端日志：内部路径/第三方异常对 LAN 客户端无意义且是信息泄露
-        import logging
+    # 并发闸放在**这两行校验之后**、真正合成之前：
+    # 1. 保住 400 语义——用户填错 voice/rate 是他自己的错，跟并发无关。报成 429
+    #    「并发已满，请稍后重试」会让人反复重试一个注定 400 的请求，而重试又把
+    #    本就不够的名额继续占着，自我加剧。错误语义 MUST NOT 被闸压改变。
+    # 2. 也不让注定失败的请求白吃名额——名额要留给真的在合成的请求。
+    # 闸之前那段只是同步正则/集合查询，耗时可忽略，绕开它不影响限流的严格性：
+    # 要限的是 generate_edge_tts_audio 的在飞数量，而它整个都在闸内。
+    async with _tts_slot():
+        try:
+            audio_path = await generate_edge_tts_audio(text, voice, rate)
+            return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
+        except HTTPException:
+            raise
+        except Exception:
+            # 细节只进服务端日志：内部路径/第三方异常对 LAN 客户端无意义且是信息泄露
+            import logging
 
-        logging.getLogger("delector").exception("TTS synthesis failed")
-        raise HTTPException(500, "语音合成失败，请稍后重试")
+            logging.getLogger("delector").exception("TTS synthesis failed")
+            raise HTTPException(500, "语音合成失败，请稍后重试")
 
 
 @router.post("/api/audio/tts")
 async def get_audio_tts(req: TTSReq) -> Any:
+    # 并发闸在 _serve_tts 内部（校验之后、合成之前）⇒ 两个入口都自动覆盖，
+    # 也不怕哪天新增第三个入口忘了加闸。
     return await _serve_tts(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
 
 
@@ -1205,6 +1253,7 @@ async def get_audio_tts(req: TTSReq) -> Any:
 async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> Any:
     """GET 版 TTS：供 <audio src="/api/audio/tts?text=..."> 直接用。
     与 POST 共享同一缓存池（cache key 仍为 sha256(f"{voice}_{rate}_{clean_text}")）。"""
+    # <audio src> 走的正是这个入口；闸在 _serve_tts 里，所以同样被限流。
     return await _serve_tts(text, voice, rate)
 
 

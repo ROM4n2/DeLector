@@ -1653,6 +1653,12 @@ def _db_snapshot_guard() -> Iterator[None]:
     快照/写回均走 SQLite **backup API**（而非文件拷贝）：WAL 模式下文件拷贝既会
     拿到可能陈旧/不一致的快照，也会在库仍挂有连接时把库搞成 `disk I/O error`
     —— 见 `_backup_db_file` / `_restore_db_file` 的说明。
+
+    回滚失败（P0）**不静默**：写回失败意味着库可能停在「已清空、未灌回」的半还原态。
+    此时 `finally` 的 rmtree 会把快照目录删掉，之后既无凭据也无退路，故 MUST 在此刻
+    打出「哪张库 / 快照在哪 / 为什么失败」，运维据此手工把库捞回来。回滚是**尽力而为**：
+    逐个库独立记录，一处失败不阻断其余；但原始异常始终上抛（回滚失败只是附加信息，
+    替换主异常会掩盖真正的故障原因）。
     """
     paths = [p for p in (get_db_path(), get_progress_db_path()) if os.path.exists(p)]
     tmpdir = tempfile.mkdtemp(prefix="delector_restore_")
@@ -1664,12 +1670,22 @@ def _db_snapshot_guard() -> Iterator[None]:
             snapshots[p] = dst
         yield
     except BaseException:
-        # 连 KeyboardInterrupt 也要回滚——半个还原比不还原更糟
+        # 连 KeyboardInterrupt 也要回滚——半个还原比不还原更糟；
+        # 但回滚不了也必须「如实」留痕，否则这条理由就自己破了。
         for original, snapshot in snapshots.items():
             try:
                 _restore_db_file(snapshot, original)
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.getLogger("delector").error(
+                    "还原回滚失败：数据库 %s 可能已损坏（已清空但未灌回），"
+                    "请用同目录快照 %s 手工恢复后再启动。快照目录 %s 将在本次调用结束后"
+                    "被删除，务必先复制出来。回滚错误：%r",
+                    original,
+                    snapshot,
+                    tmpdir,
+                    exc,
+                    exc_info=True,
+                )
         raise
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

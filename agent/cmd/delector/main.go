@@ -188,7 +188,16 @@ func loadDotEnv() {
 
 func main() {
 	loadDotEnv() // 先于命令执行，让 .env 中的凭证对 job/run 可见
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+	os.Exit(exitCode(rootCmd.Execute()))
+}
+
+// exitCode 由命令执行结果映射进程退出码：成功 0，**任何非 nil 错误一律非零**。
+// 钉死这一映射：Python 托管进程崩溃经 app.Run 上抛的错误 MUST 变成非零退出码，
+// 否则 docker `restart: unless-stopped` / systemd Restart=on-failure 无从接管，
+// 故障退化为"进程存活但 Python 已死"的静默失败。禁只打日志后返回 0。
+func exitCode(err error) int {
+	if err != nil {
+		return 1
 	}
+	return 0
 }
