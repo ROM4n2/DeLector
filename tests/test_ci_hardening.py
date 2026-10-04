@@ -522,3 +522,91 @@ def test_ci_job_has_bounded_timeout() -> None:
         "写成 3600 之类的大值等于没设护栏（比 Actions 默认的 360 分钟还宽）。"
         "\n修法：改回 15；确需更长时先查清是哪一步变慢，而不是把闸门整体放开。"
     )
+
+
+# ── Node 工具链显式化守卫（2026-10-05 清债轮 C 组）──────────────────────────────
+# 背景：`tests/` 下有一批 wrapper 会 `node tools/*.mjs` 真跑 .mjs 行为探针（把前端真源码
+# 切进 node:vm 沙箱执行）。但 ci.yml 此前**从不安装 node**，也没提过 setup-node ——
+# wrapper 在 CI 上"恰好真跑"靠的是 `ubuntu-latest` runner 镜像**预装**的 Node 20.x。
+#
+# 这是**隐式依赖**，且失败模式极隐蔽：node 一旦不在 PATH，`shutil.which("node")` 守卫
+# 走的是 `pytest.skip`（本地开发机没 node 不该红，是刻意设计）⇒ 在 CI 上会**静默跳过**
+# 全部探针，测试全绿而探针根本没跑。绿灯掩盖了「回归守卫没执行」，比直接红更坏。
+#
+# 故 ci.yml 显式加一步 setup-node@v4 并固定 major '20'，本守卫钉住它：
+#   1. 必须有 setup-node 步骤（防被删/被 revert 掉）；
+#   2. node-version MUST 固定 major，MUST NOT 是 latest / lts / 20.x 之类浮动值
+#      （浮动 ⇒ 不可复现构建）。
+#
+# 不引 pyyaml（沿用本文件既有的"按缩进层级切文本"手法，pyyaml 不在 requirements.txt，
+# 是 CI 内单独装的开发期工具，守卫不该把它变成硬依赖）。
+
+NODE_MAJOR = "20"
+
+
+def _setup_node_with_block() -> str:
+    """截出 ci.yml 里 setup-node 步骤的 `with:` 块（按缩进层级切文本）。
+
+    只需要「这个步骤自己的 inputs」，按缩进切比全文搜索更严：
+    别的步骤写了 `node-version` 不算数，得是 `actions/setup-node` 这步自己写。
+    """
+    text = _read_guard_file(CI_WORKFLOW)
+    lines = text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if "actions/setup-node@" in line)
+    except StopIteration:
+        pytest.fail(
+            f"{CI_WORKFLOW} 找不到 actions/setup-node 步骤：\n"
+            "tests/ 下的 .mjs 行为探针 wrapper 靠 `node tools/*.mjs` 真跑，此前靠 runner 镜像"
+            "**预装**的 Node 20.x 侥幸运行（隐式依赖）。一旦镜像不再预装，node 不在 PATH → "
+            "`shutil.which(\"node\")` 守卫 pytest.skip → 全部探针**静默跳过**、测试全绿，"
+            "而回归守卫根本没执行。\n"
+            "修法：在 jobs.ci 的 steps 里（setup-python 之后）加一步 actions/setup-node@v4 "
+            f"并固定 node-version: \"{NODE_MAJOR}\"，而不是删掉本守卫。"
+        )
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].strip() and not lines[i].startswith(" " * 8):
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_ci_workflow_installs_node_explicitly() -> None:
+    """ci.yml 必须显式安装 node —— 消除 wrapper 对 runner 预装的隐式依赖。
+
+    与 `test_ci_job_has_bounded_timeout` 同族：守卫钉的是「fail 模式」。
+    这里最隐蔽的失败模式不是红，是**绿**（探针被静默 skip），
+    所以缺这一步 MUST 立刻红。
+    """
+    text = _read_guard_file(CI_WORKFLOW)
+    assert "actions/setup-node@v" in text, (
+        f"{CI_WORKFLOW} 没有 setup-node 步骤：.mjs 探针 wrapper 将退回依赖 runner 镜像预装的 "
+        "Node —— node 缺失时它们会静默 skip（测试全绿而探针没跑）。"
+    )
+
+    block = _setup_node_with_block()
+    match = re.search(r"""node-version:\s*['"]?([^'"\s]+)['"]?""", block)
+    assert match, (
+        f"setup-node 步骤没有声明 node-version（{block!r}）：\n"
+        "不固定版本时 setup-node 会按 .nvmrc / runner 默认值解析，构建不可复现。"
+    )
+
+    version = match.group(1)
+    assert version not in ("latest", "lts/*", "lts", "*"), (
+        f"setup-node 的 node-version = {version!r}：\n"
+        "latest/lts 是浮动值，构建不可复现（今天的绿灯明天可能红，且无法二分定位）。\n"
+        f"修法：固定 major，例如 node-version: \"{NODE_MAJOR}\"。"
+    )
+    # 固定 major：纯数字或 v 前缀数字（'20' / 'v20'），拒绝 20.x / >=20 这类浮动写法
+    assert re.fullmatch(r"v?\d+", version), (
+        f"setup-node 的 node-version = {version!r}，不是固定的 major 版本：\n"
+        f"MUST 写死 major（建议 \"{NODE_MAJOR}\"，与 runner 自带的 20.x 对齐），"
+        "MUST NOT 写 20.x / >=20 / latest 之类会随时间漂移的值。"
+    )
+    assert version.lstrip("v") == NODE_MAJOR, (
+        f"setup-node 的 node-version = {version!r}，与守卫钉定的 major {NODE_MAJOR!r} 不符：\n"
+        "改 Node 大版本会让 .mjs 探针的真实执行结果变化（vm 沙箱行为与内置 API 都有差异），"
+        "属需要显式复核的变更。确需升级请同步改本守卫的 NODE_MAJOR 并复核探针。"
+    )

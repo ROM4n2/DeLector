@@ -51,6 +51,17 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      # Node 门禁的显式安装（2026-10-05 清债轮 C 组）。
+      # tests/ 下有一批 wrapper 会 `node tools/*.mjs` 真跑 .mjs 行为探针。此前 CI 从不
+      # 安装 node，wrapper 之所以"恰好真跑"靠的是 ubuntu-latest 镜像**预装**的 Node 20.x
+      # —— 属隐式依赖：镜像一旦换版本/摘掉预装，探针会走 `shutil.which("node")` 守卫
+      # **静默 skip**，测试全绿而探针根本没跑（比红更坏：回归无声溜过）。
+      # 固定 major '20'（对齐 runner 自带的 20.x），MUST NOT 用 latest（不可复现）。
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       # 不装 pyinstaller——那是打包面（build-release.yml 的职责）
       - name: Install Python dependencies
         run: |
