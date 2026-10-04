@@ -450,6 +450,39 @@ if (predicateMissing) {
   );
 }
 
+/* ══ G2/G3/G4 「去工作台」留在主站壳内：左键切视图，href 留给新标签页 ═══════
+ * G1 只钉住「href 指向哪」，但整页跳转会脱离主站壳（无导航栏），用户只能
+ * 浏览器后退。主站是用 iframe 内嵌工作台的（index.html 的 view-german），
+ * 站内正规入口是既有视图切换函数。故要求左键路径额外走壳内切换。
+ *
+ * G4 单独守一个真实陷阱：cards.js 是 ES 模块，模板串里的 inline onclick
+ * 只能沿作用域链摸到 window。main.js 里 show 是 `export function show`，
+ * 顶层函数声明在模块里**不会**自动挂到 window；它靠 Object.assign(window,
+ * {...show}) 显式挂载。一旦那行被删，onclick 里的 show 会静默抛
+ * ReferenceError，而只扫 cards.js 文本的 G2/G3 全绿。故必须连挂载一起钉。 */
+{
+  const linkTag = (render(WORKBENCH_CARD).match(/<a class="deck-workbench-link"[^>]*>/) || [""])[0];
+  const onclickBody = (linkTag.match(/onclick="([^"]*)"/) || ["", ""])[1];
+  record(
+    "G2-左键留在壳内（onclick 走既有视图切换）",
+    linkTag !== "" && /window\.show\(\s*['"]german['"]\s*\)/.test(onclickBody),
+    `工作台链接的 onclick 未调用主站既有视图切换 window.show('german')，实测 onclick=${JSON.stringify(onclickBody)}`,
+  );
+  record(
+    "G3-左键不整页跳走（preventDefault）",
+    /preventDefault\s*\(/.test(onclickBody),
+    `工作台链接的 onclick 缺 preventDefault，左键会照样整页跳走、留壳内目标失效，实测 onclick=${JSON.stringify(onclickBody)}`,
+  );
+  const mainJs = fs.readFileSync(path.join(ROOT, "static", "js", "main.js"), "utf8");
+  const showOnWindow =
+    /Object\.assign\(\s*window\s*,[\s\S]*?\bshow\s*,/.test(mainJs) || /window\.show\s*=/.test(mainJs);
+  record(
+    "G4-视图切换函数真挂到 window（onclick 可达）",
+    showOnWindow,
+    "main.js 未把 show 挂到 window：模块里的 export function 不会成为全局，inline onclick 取不到它",
+  );
+}
+
 /* ══ H 样式守卫：改 HTML 却忘了定义样式（裸 <a> 蓝下划线）本轮要绝迹 ═════════
  * A~G 全在看**行为**（有没有按钮 / 链接指向哪），看不见**长什么样**：
  * 三个新 class 只在 cards.js 里吐出来、static/style.css 里零定义时，A~G 全绿，

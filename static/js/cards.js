@@ -381,7 +381,7 @@ export function renderDeckStage(vList, gList) {
               ${isWorkbenchSourced(card) ? `
                 <div class="deck-workbench-hint">
                   <span class="deck-workbench-hint-text">这张卡在工作台学习，请到工作台复习</span>
-                  <a class="deck-workbench-link" href="/german/workbench.html">📚 去工作台复习</a>
+                  <a class="deck-workbench-link" href="/german/workbench.html" onclick="event.preventDefault();window.show('german')">📚 去工作台复习</a>
                 </div>
               ` : `
               <button class="sm2-btn sm2-btn-again" onclick="event.stopPropagation();submitCardReview('${card._type}', ${card.id}, 1)" title="完全忘记，重置为 1 天">
