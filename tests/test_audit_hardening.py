@@ -7,6 +7,7 @@
 """
 
 import gc
+import logging
 import os
 import sqlite3
 
@@ -765,3 +766,98 @@ def test_m53_front_p2_debounce_and_pull_backoff_structural():
     seg = wb.split("function rtcOnStateChange()")[1].split("function rtcScheduleRetry")[0]
     assert 'rtcScheduleRetry(st === "disconnected")' in seg, "disconnected 瞬态不得累计失败"
     assert "function rtcScheduleRetry(skipCount)" in wb, "退避计数需可跳过参数"
+
+
+# ── 还原回滚失败必须留痕（P0：库可能半残却无人知情）─────────────────────────
+
+
+def _enter_guard_and_fail(fail_with):
+    """在 `_db_snapshot_guard` 内抛出指定异常（触发回滚分支），返回上抛的异常对象。
+
+    注意：guard 的快照走 `tempfile.mkdtemp()`（系统 temp，不是 DATA_DIR），所以
+    DATA_DIR 满盘时快照本身仍能成功——回滚写回失败正是这种「快照还在、却打不回去」
+    的典型场景；而 finally 的 rmtree 会立刻删掉快照目录 ⇒ 事后不留路径 = 无凭据可查。
+    """
+    from delector.core import database as db
+
+    try:
+        with db._db_snapshot_guard():
+            raise fail_with
+    except BaseException as exc:  # 测试就是要抓 guard 上抛的那个异常
+        return exc
+    raise AssertionError("guard 应当把原始异常上抛")
+
+
+def test_rollback_failure_logs_db_path_snapshot_and_cause(monkeypatch, caplog):
+    """回滚失败 MUST 留下可操作日志：哪张库、快照在哪、为什么失败。
+
+    静默 `pass` 等于把「半个还原比不还原更糟」这条理由自己抹掉：用户只拿到原始
+    异常，既不知道自己的库可能已损坏，也没人知道该从哪个快照捞回。
+    """
+    from delector.core import database as db
+
+    def boom(snapshot, dst):
+        raise OSError("磁盘满")
+
+    monkeypatch.setattr(db, "_restore_db_file", boom)
+
+    caplog.set_level(logging.ERROR, logger="delector")
+    raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
+
+    # [Instinct: Original-Exception-Wins] 回滚失败是附加信息，MUST NOT 替换主异常。
+    assert isinstance(raised, RuntimeError), f"上抛的不是原始异常，而是回滚异常：{raised!r}"
+    assert str(raised) == "原始炸了", "主异常信息不得被回滚失败改写"
+
+    errs = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errs, "回滚失败却没有留下任何 error 级日志（静默吞掉了 P0 事件）"
+    text = "\n".join(r.getMessage() for r in errs)
+    assert "磁盘满" in text, f"日志须含错误本身，缺：磁盘满\n实际：{text}"
+    # 目标库路径 + 快照路径（含快照目录，用户据此手工恢复）。
+    assert "test_audit_delector.db" in text, f"日志须含目标库路径\n实际：{text}"
+    assert "test_audit_progress.db" in text, f"日志须含第二个库的目标路径\n实际：{text}"
+    assert "delector_restore_" in text, f"日志须含快照目录/快照路径\n实际：{text}"
+    assert "损坏" in text and "恢复" in text, f"日志须含人类可读的行动提示\n实际：{text}"
+    # 错误链：exc_info=True ⇒ 记录里带原始回滚异常（不是主异常）。
+    assert any(
+        r.exc_info is not None and isinstance(r.exc_info[1], OSError) for r in errs
+    ), f"回滚日志必须带 exc_info=True 的错误链（回滚异常），现为：{[r.exc_info for r in errs]}"
+
+
+def test_rollback_failure_does_not_abort_other_databases(monkeypatch, caplog):
+    """[Instinct: Multi-Table-DB] 主库 + progress 库各留一份快照：其中一处回滚失败
+    MUST NOT 中断其余回滚（保持「尽力回滚全部」语义），且失败的那处必须被点名留痕。"""
+    from delector.core import database as db
+
+    attempted = []
+
+    def flaky(snapshot, dst):
+        attempted.append(dst)
+        if "progress" in dst:
+            raise OSError("磁盘满")
+
+    monkeypatch.setattr(db, "_restore_db_file", flaky)
+
+    caplog.set_level(logging.ERROR, logger="delector")
+    raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
+
+    assert isinstance(raised, RuntimeError) and str(raised) == "原始炸了"
+    assert len(attempted) == 2, f"两个库都必须尝试回滚，一处失败不得中断其余：{attempted}"
+    assert any("progress" in p for p in attempted), f"progress 库未被尝试回滚：{attempted}"
+    assert any("progress" not in p for p in attempted), f"主库未被尝试回滚：{attempted}"
+
+    text = "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR)
+    assert "test_audit_progress.db" in text, f"失败的那个库必须被点名\n实际：{text}"
+
+
+def test_successful_rollback_emits_no_error_log(monkeypatch, caplog):
+    """回滚成功是常态，MUST NOT 产 error 级日志（否则真出故障时噪声淹没信号）。"""
+    from delector.core import database as db
+
+    monkeypatch.setattr(db, "_restore_db_file", lambda snapshot, dst: None)
+
+    caplog.set_level(logging.ERROR, logger="delector")
+    raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
+
+    assert isinstance(raised, RuntimeError), "回滚成功时原始异常仍须上抛"
+    noisy = [r for r in caplog.records if r.name == "delector" and r.levelno >= logging.ERROR]
+    assert not noisy, f"回滚成功却打了 error 日志（噪声）：{[r.getMessage() for r in noisy]}"
