@@ -5826,3 +5826,93 @@ def test_tts_single_request_not_blocked_by_gate(client, monkeypatch, tmp_path):
 
     res_get = client.get("/api/audio/tts", params={"text": "Guten Tag"})
     assert res_get.status_code == 200, f"单请求 GET 也不该被误伤，实际 {res_get.status_code}"
+
+
+# ── GET /api/health（子计划4 Task 4：真健康端点）──────────────────────────────
+# 背景：Go agent 此前拿 `GET /api/tools/` 当健康探针，而它**只枚举工具、完全不碰
+# 数据库** ⇒ 库损坏/磁盘掉线时它照样回 200，agent 认为"服务健康"继续把调用打过来。
+# 本组用例钉住：健康端点 MUST 真查库；库不可用时 MUST 非 200，且失败响应 MUST NOT
+# 泄露路径/异常栈/异常类名（探针响应会经日志与监控外流）。
+#
+# 惯例（非本组用例的断言对象，但记在这里免得被"顺手加个本机闸"改掉）：
+# 只读 GET 一律不挂 `_require_localhost` —— 全仓 16 处该闸全在写/密钥/备份类端点上。
+
+
+def test_health_endpoint_ok_when_db_usable(client):
+    """库可用 ⇒ 200，且明确报出"库这一层是通的"（探针要能区分"进程活着"与"库活着"）。"""
+    res = client.get("/api/health")
+
+    assert res.status_code == 200, f"库可用时健康端点应为 200，实际 {res.status_code}：{res.text[:200]}"
+    body = res.json()
+    assert body["status"] == "ok", f"200 响应应带 status=ok，实际 {body}"
+    assert body["database"] == "ok", f"200 响应应带 database=ok（证明真查了库），实际 {body}"
+
+
+def test_health_endpoint_fails_when_db_connection_raises(client, monkeypatch, tmp_path):
+    """**核心**：DB 连接抛错 ⇒ MUST 非 200，且响应体 MUST NOT 泄露路径/栈/异常类名。
+
+    把库路径塞进异常消息里（`unable to open database file: <path>` 是 sqlite3 的
+    真实措辞），再用该路径字符串做否定断言 —— 只断言"不含 Traceback"是不够的：
+    一条裸路径泄露的杀伤力与栈同级。
+    """
+    import sqlite3
+
+    from delector.routes import main as routes_main
+
+    secret_path = str(tmp_path / "gone" / "delector.db")
+
+    def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise sqlite3.OperationalError(f"unable to open database file: {secret_path}")
+
+    monkeypatch.setattr(routes_main, "db_conn", _boom)
+
+    res = client.get("/api/health")
+
+    assert res.status_code != 200, (
+        f"库连不上却回 200，等于把本 Task 要修的病根又装回去：{res.status_code} {res.text[:200]}"
+    )
+    assert res.status_code == 503, f"库不可用应是 503（Service Unavailable），实际 {res.status_code}"
+
+    body = res.json()
+    assert body["status"] == "unhealthy", f"失败响应应带 status=unhealthy，实际 {body}"
+    detail = body["detail"]
+    assert isinstance(detail, str) and detail.strip(), f"失败原因不该为空：{body}"
+
+    for marker in ("Traceback", 'File "', "sqlite3", "OperationalError", secret_path, "delector\\", "delector/"):
+        assert marker not in res.text, f"健康端点失败响应泄露了内部信息 {marker!r}：{res.text[:300]}"
+
+
+def test_health_endpoint_fails_when_db_query_raises(client, monkeypatch):
+    """DB 连得上但**查询**抛错（库文件损坏）⇒ 同样 MUST 非 200。
+
+    上一条只覆盖"连不上"；这一条覆盖"连上了但读不动"。少了它，把探测换成
+    "只开连接不查询"（或只查一个 sqlite 不读页的元数据）也能骗过上一条用例。
+    """
+    import contextlib
+    import sqlite3
+
+    class _CorruptedConn:
+        def execute(self, *_args: Any, **_kwargs: Any) -> Any:
+            raise sqlite3.DatabaseError("database disk image is malformed")
+
+        def commit(self) -> None:
+            pass
+
+        def rollback(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    @contextlib.contextmanager
+    def _broken_db_conn(*_args: Any, **_kwargs: Any) -> Any:
+        yield _CorruptedConn()
+
+    monkeypatch.setattr("delector.routes.main.db_conn", _broken_db_conn)
+
+    res = client.get("/api/health")
+
+    assert res.status_code == 503, (
+        f"库文件损坏（连得上但查询炸）仍应报 503，实际 {res.status_code}：{res.text[:200]}"
+    )
+    assert "database disk image is malformed" not in res.text, f"原始异常消息泄露到了响应体：{res.text[:300]}"

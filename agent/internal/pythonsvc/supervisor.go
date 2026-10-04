@@ -36,7 +36,11 @@ var defaultPythonCmd = []string{
 }
 
 const (
-	defaultHealthURL     = "http://127.0.0.1:8001/api/tools/"
+	// defaultHealthURL 探 GET /api/health —— **真健康端点**：它会真查一次
+	// SQLite（SELECT 1），库损坏 / 磁盘掉线 / DATA_DIR 权限丢失时回 503。
+	// 此前指向 GET /api/tools/，而那个端点只枚举工具、完全不碰数据库 ⇒ 200
+	// 不代表库可用，agent 会在库已死时判定"服务健康"继续把调用打过来。
+	defaultHealthURL     = "http://127.0.0.1:8001/api/health"
 	defaultProbeInterval = 1 * time.Second
 	defaultMaxRestarts   = 5
 	defaultStopTimeout   = 5 * time.Second
@@ -58,7 +62,9 @@ const (
 type SupervisorConfig struct {
 	// PythonCmd 启动命令（argv 形式）。默认 defaultPythonCmd（uvicorn :8001）。
 	PythonCmd []string
-	// HealthURL 健康探针地址，默认 defaultHealthURL（GET /api/tools/）。
+	// HealthURL 健康探针地址，默认 defaultHealthURL（GET /api/health）。
+	// 该端点 MUST 真查数据库（SELECT 1）—— 不要改指任何"不碰库"的只读端点
+	// （如 GET /api/tools/ 那种只枚举工具的），否则探针 200 与库可用性脱钩。
 	HealthURL string
 	// ExtraEnv 以 KEY=VALUE 追加到子进程环境，供注入临时 DATABASE_PATH /
 	// DELECTOR_DATA_DIR——绝不让测试或 agent 托管实例触碰用户库。

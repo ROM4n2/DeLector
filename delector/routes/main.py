@@ -2560,3 +2560,50 @@ async def api_syntax_stats_save(req: SyntaxStatsReq, background_tasks: Backgroun
 @router.get("/api/syntax/stats")
 def api_syntax_stats_get() -> Any:
     return get_all_corpus_syntax_stats()
+
+
+# --- Health Check ---
+#
+# 真健康端点：**必须真查数据库**。Go agent 的 supervisor 用它当启动探针与崩溃后
+# 的存活探针（见 agent/internal/pythonsvc/supervisor.go 的 defaultHealthURL）。
+# 此前探针指向 `GET /api/tools/`，而那个端点只枚举工具、**完全不碰数据库** ——
+# 库损坏 / 磁盘掉线 / DATA_DIR 权限丢失时它照样回 200，agent 于是判定"服务健康"
+# 并继续把调用打过来，报错延后到真正用到库的地方才炸，且现场已被探针掩盖。
+#
+# 纪律：
+# 1. **真探测**：`SELECT 1` 走一次真实往返。它能捕获连接失败、库文件损坏
+#    （sqlite 会在读页时报 disk image is malformed）与权限问题，且是常数级开销，
+#    适合被 1s 间隔的探针高频调用。不用 `PRAGMA quick_check`（全库扫描，探针
+#    每秒调一次太贵），也不缓存结果（缓存等于把本端点退化成又一个"进程活着吗"）。
+# 2. **不泄露**：失败响应只带状态与一句人类可读原因。库路径、异常类型、栈一律
+#    只进服务端日志（`exc_info=True`）—— 探针响应会流经监控与日志聚合系统，
+#    裸路径在那些系统里等同对外泄露部署布局。真实原因必须留痕，不能因"不外泄"而丢。
+# 3. **不挂 `_require_localhost`**：只读 GET 不挂本机闸是本仓库惯例（全仓 16 处
+#    该闸全在写 / 密钥 / 备份类端点）。健康端点是纯只读、无副作用、且探针本就在
+#    同机（agent 托管 127.0.0.1:8001）；给它挂闸只会让"闸把人挡在门外"被误读成
+#    "服务不健康"，反而制造假故障。
+_HEALTH_DETAIL_UNAVAILABLE = "本地数据库暂时不可用，请稍后重试"
+
+
+@router.get("/api/health")
+def api_health() -> Any:
+    """健康探针：库可用回 200，不可用回 503（Service Unavailable）。
+
+    503 而非 500：语义上"依赖不可用、稍后可能自愈"，与真正的服务端缺陷区分开，
+    探针方（agent supervisor、LB）才能把它当可重试信号而非立即告警。
+    """
+    try:
+        with db_conn() as conn:
+            conn.execute("SELECT 1").fetchone()
+    except Exception:
+        import logging
+
+        # 真实原因（含路径与栈）只进服务端日志：运维需要它定位，用户不需要，
+        # 而探针响应是会被外部系统读取的。
+        logging.getLogger("delector").exception("health check failed: database unavailable")
+        return Response(
+            status_code=503,
+            content=json.dumps({"status": "unhealthy", "detail": _HEALTH_DETAIL_UNAVAILABLE}, ensure_ascii=False),
+            media_type="application/json; charset=utf-8",
+        )
+    return {"status": "ok", "database": "ok"}

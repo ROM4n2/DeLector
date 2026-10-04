@@ -37,6 +37,10 @@ jobs:
   ci:
     name: Tests & Go Gates (ubuntu)
     runs-on: ubuntu-latest
+    # 卡死护栏：不设时 GitHub Actions 对单个 job 的默认上限是 360 分钟（6 小时），
+    # 一条永不返回的测试会把 runner 烧满六小时才红——提交者早改去下一件事了。
+    # 取 15：文件头自陈"PR 反馈预期 < 8min"，实测单次约 2.5–3.5min，留足余量。
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
