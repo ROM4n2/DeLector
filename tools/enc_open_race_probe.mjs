@@ -157,6 +157,9 @@ function newEnv() {
     held: new Map(),   // url -> [{resolve, reject}]
     requests: [],      // {url, signal}
     abortMode: "ignore",
+    // 仅场景 B 打开：本机 deck 为空 ⇒ resolveDeck 必发 GET /api/wb/state，
+    // 而它是**逐次调用各发一次**（无 in-flight 去重）⇒ 可按队列下标错开两个 await 者。
+    localDeckEmpty: false,
   };
 
   function api(url, opts = {}) {
@@ -213,7 +216,12 @@ function newEnv() {
     esc: (s) => String(s == null ? "" : s),
     notify() {},
     playGermanAudio() {},
-    loadDeck: () => ({ words: [{ word: "x", lemma: "x", pos: "NOUN" }], cards: { x: { lemma: "x" } } }),
+    // net.localDeckEmpty：仅场景 B 打开 —— 让本机 deck 为空 ⇒ resolveDeck 必发
+    // GET /api/wb/state（逐次调用各发一次，可按队列下标错开两个 await 者）。
+    loadDeck: () =>
+      net.localDeckEmpty
+        ? { words: [], cards: {} }
+        : { words: [{ word: "x", lemma: "x", pos: "NOUN" }], cards: { x: { lemma: "x" } } },
     mergeServerDeck: (d) => d,
     addCardToDeck: () => ({ deck: {} }),
     buildKnownSet: () => new Set(["x"]),
@@ -318,36 +326,49 @@ const problems = [];
   const { ctx, doc, net, marked } = newEnv();
   vm.runInContext(transformed, ctx, { filename: "encounter.js#B" });
   net.abortMode = "ignore";
+  net.localDeckEmpty = true;                 // ⇒ resolveDeck 逐次各发一次 /api/wb/state
   net.held.set("/api/encounter/texts/1", []);
   net.held.set("/api/encounter/texts/1/annotate", []);
   net.held.set("/api/cards/known-lemmas", []);
+  net.held.set("/api/wb/state", []);
   net.held.set("/api/encounter/texts/2", []);
   net.held.set("/api/encounter/texts/2/annotate", []);
 
-  // A：两个 fetch 放行 → A 进入 renderTextDetailAnnotated，卡在内部 fetchKnownLemmas
+  // A：两个 fetch 放行 → A 进入 renderTextDetailAnnotated，卡在内部
+  //     Promise.all([resolveDeck(), fetchKnownLemmas()])
   vm.runInContext("openText(1)", ctx);
   await flush(2);
   net.held.get("/api/encounter/texts/1")[0].resolve(fixtureFor("/api/encounter/texts/1"));
   net.held.get("/api/encounter/texts/1/annotate")[0].resolve(fixtureFor("/api/encounter/texts/1/annotate"));
   await flush(10);
   if (readerHtml(doc).includes("TITLE-A"))
-    problems.push("[B] 夹具失配：A 在 B 之前就上屏了（known-lemmas 未被 hold 住）");
+    problems.push("[B] 夹具失配：A 在 B 之前就上屏了（内部 await 未被 hold 住）");
   if (net.held.get("/api/cards/known-lemmas").length !== 1)
     problems.push("[B] 夹具失配：A 未停在 renderTextDetailAnnotated 内部 await");
 
-  // B：完整跑完并上屏（它的 known-lemmas 是队列第 2 个）
+  // B：完整跑完并上屏。
+  // ⚠ 2026-10-05 清债轮 B 债 3（fetchKnownLemmas 加 in-flight 去重）后，B **复用 A 的
+  // 同一次在飞请求**（known-lemmas 队列始终只有第 0 个），不再发第 2 次 ⇒ 错开两个
+  // await 者的桩时序改由 **/api/wb/state**（resolveDeck 逐次各发一次）承担：
+  // 释放 B 的 wb/state[1] + 共享的 known-lemmas[0] ⇒ B 先上屏；A 仍卡在自己的
+  // wb/state[0] 上，最后释放它来验证「A 恢复后不得覆写」。下方 4 条断言的**语义逐条
+  // 不变**（A 不覆写 / A 不 markRead / B 上屏 / B 被 markRead）。
   vm.runInContext("openText(2)", ctx);
   await flush(4);
   net.held.get("/api/encounter/texts/2")[0].resolve(fixtureFor("/api/encounter/texts/2"));
   net.held.get("/api/encounter/texts/2/annotate")[0].resolve(fixtureFor("/api/encounter/texts/2/annotate"));
   await flush(4);
-  net.held.get("/api/cards/known-lemmas")[1].resolve(fixtureFor("/api/cards/known-lemmas"));
+  if (net.held.get("/api/wb/state").length !== 2)
+    problems.push("[B] 夹具失配：B 的 resolveDeck 未发出第二次 /api/wb/state（错开时序失效）");
+  net.held.get("/api/cards/known-lemmas")[0].resolve(fixtureFor("/api/cards/known-lemmas"));
+  net.held.get("/api/wb/state")[1].resolve(fixtureFor("/api/wb/state"));
   await flush(20);
   if (!readerHtml(doc).includes("TITLE-B"))
     problems.push("[B] 夹具失配：B 未成功上屏");
 
-  // A 恢复：它的 known-lemmas 现在才 resolve
-  net.held.get("/api/cards/known-lemmas")[0].resolve(fixtureFor("/api/cards/known-lemmas"));
+  // A 恢复：释放 A 自己的 wb/state[0] ⇒ A 从 renderTextDetailAnnotated 内部 await 醒来，
+  // MUST NOT 覆写 DOM / MUST NOT 被记已读（覆写点之前缺 seq 守卫就会红在这里）。
+  net.held.get("/api/wb/state")[0].resolve(fixtureFor("/api/wb/state"));
   await flush(20);
 
   if (readerHtml(doc).includes("TITLE-A"))
