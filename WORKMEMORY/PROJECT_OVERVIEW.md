@@ -22,15 +22,15 @@
 
 ## 当前状态
 
-- **最新发布 v5.13.0（2026-10-03）** —— **ADR-0016 统一词库池 + P0 数据真相修复**：`vocab_cards` 成为「我的词汇」的**服务端权威派生态**（Phase 1 加 `source`/`fsrs_*` 列懒物化 → Phase 2 按 provenance 落定 `source` → Phase 3 工作台 deck **同事务幂等**投影进池 + 只读对账 `reconcile_report`；还原后同守卫内补迁移）；P0 侧修 Docker 数据目录迁移闸（fail-loud 拒绝静默空库）、`.dockerignore` 阻断密钥进镜像、due 队列排除「工作台来源且无卡盒进度」的行、`known-lemmas` 等价性断言照实降级。**含 `static/` 改动 ⇒ Android 需覆盖安装**。
-- **测试 / 门禁基线（截至 v5.13.0）**：全量 **1223 passed + 1 skipped**（分半：非 server **970** + `test_server` **253**）；`ruff check .` 零告警；`mypy --follow-imports=skip tests`（74 files）零错误；`tools/*.mjs` 探针零漂移；`test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**；`test_audit_hardening.py` **31 passed**；pre-commit 密钥守卫有效。
+- **最新发布 v5.14.0（2026-10-05）** —— **韧性 / 前端竞态 / KARTEI 去复习化**（6 席 swarm 审计落地 5 子计划 + 3 组清债，含两个 P0）：卡盒「白复习」消除（#98，工作台词**可见但不可复习**：收走四个 DSR 按钮、保留 `mastered` 徽记 + 去工作台跳转）；`openText` 重入守卫 / 弹层向上翻转 / 列表详情 deck 同源（#97）；TTS 并发闸 `Semaphore(k=4)` + 429（#95）；真健康端点 `/api/health`（原探针拼错 `/api/tools/`）；目录视图改用 `cardStatsTag`、`fetchKnownLemmas` in-flight 去重、覆盖率行标注降级来源（#99/#100）；27 个探针全接进 pytest + 显式装 Node 20 + 防漏接线守卫（#101/#102）。**含 `static/` 改动 ⇒ Android 需覆盖安装**。
+- **测试 / 门禁基线（截至 v5.14.0）**：全量 **1289 passed + 1 skipped**（分半：非 server **1025** + `test_server` **264**）；`ruff check .` 零告警；`mypy --follow-imports=skip tests`（88 files）零错误、`mypy --strict delector tools`（70 files）零错误；`tools/*.mjs` 探针 **27/27** 零漂移；`test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**；防漏接线守卫 `test_probe_wiring_guard.py` **5 passed**；pre-commit 密钥守卫有效。
 - **本批已随 v5.13.0 发布的其它改动**：
   - **i+1 已知词池打通（#72）**：`known-lemmas` 补 `OR fsrs_s > 0`（工作台已学词纳入覆盖率），列表 + 详情同口径；`deck-bridge.js` / `encounter.js` 打通 i+1 与主背词路径。
   - **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn` 取代 17 份复制粘贴，44 处句柄泄漏清扫；决定性变异证明旧实现**静默残留**（假红/假绿）。
   - **Docker/WAL 修复（#69）**：`Dockerfile` CMD 改 `delector.server:app` + `PRAGMA journal_mode=WAL`；备份/还原改 SQLite backup API（WAL 下文件级拷贝必 `disk I/O error`）。
   - **docs 约定 + 三层记忆（#81–#85）**：`docs/plans/` 归档分层（52+15 份进 `archive/`）、`docs/README.md` 立为**目录约定正主**、ADR 副本拆入 `docs/adr/`、移除失真的 `release-v2.1.md`；HOT/WARM/COLD 三层真正跑起来（逾期轮转 + 首份九月 digest + primer 瘦身）。
   - 另有：**#70** Android pydantic-v1 运行时契约守卫、**#71** 长难句 `source=all` 热请求不再读正文 + `_RANK_CACHE` 容量上限（实测推翻原 P1 严重度）、**#76** 统一池身份键口径修正（归一在**比较侧**，不改动双用途 `lemma`）、依赖 `starlette 1.7.0` / `uvicorn >=0.54.0`。
-- **产品能力（截至 v5.13.0）**：精读（分词 + 语法雷达）+ 词汇/卡片工作台（FSRS；A1/A2/B1 + 核心/生词档，**工作台与主背词共享统一池**）+ 备考域（A1 读写听说、听力微训、长难句精读）+ 遇见区分级短文（7 篇，已背词高亮 + i+1 就近选材 + 已读状态 + 已知词池与主路径同口径）+ 检索（词条/例句/搭配/语料）+ 写作润色台 + LAN 静默同步。各功能细节见 `FEATURES.md` 与 `WORKMEMORY/cold/digest-2026-09.md`。
+- **产品能力（截至 v5.14.0）**：精读（分词 + 语法雷达）+ 词汇/卡片工作台（FSRS；A1/A2/B1 + 核心/生词档，**工作台与主背词共享统一池**）+ 备考域（A1 读写听说、听力微训、长难句精读）+ 遇见区分级短文（7 篇，已背词高亮 + i+1 就近选材 + 已读状态 + 已知词池与主路径同口径）+ 检索（词条/例句/搭配/语料）+ 写作润色台 + LAN 静默同步。各功能细节见 `FEATURES.md` 与 `WORKMEMORY/cold/digest-2026-09.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 

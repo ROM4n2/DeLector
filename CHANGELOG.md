@@ -4,9 +4,63 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.13.0（2026-10-03）**
+**最新版本：v5.14.0（2026-10-05）**
 
-### 🗄️ 统一词库池（ADR-0016）+ P0 数据真相修复（PR #73/#74/#75/#88）
+### 🛡️ 韧性 / 前端竞态 / KARTEI 去复习化（swarm 审计 5 子计划 + 清债轮，PR #93~#102）
+
+本版主体是一次 6 席 swarm 审计（`docs/reviews/2026-10-03-swarm-audit-master.md`）的落地：5 个子计划 + 3 组清债，
+**两个 P0 真 bug**（卡盒"白复习"、TTS 并发无闸）与一批"门禁在跑但判别力是假的"缺陷。
+
+**① 卡片角标切专用端点（#93）**——徽章不再从全量 `/api/cards` 客户端算，改走 `/api/cards/counts`（9 维计数）。
+
+**② 量化 `/api/cards` 排序成本（#96，审计后决定不加索引）**——新增可复跑基准 `tools/bench_cards_endpoint.py`
+（三 env 隔离 + 真实分布数据 + 1k/20k/50k × 7 轮**中位数**，四段对照）。**结论：明确不加 `idx_vocab_list`**——
+filesort 仅占端点 **8.9%**（20k 档 70.2ms / 790ms），远低于 30% 否决线；Python 物化 + FSRS 占 **84.1%**，
+审计报的 93.8ms 只反映 SQLite 侧。两条观察：耗时**超线性**（行数 ×50 ⇒ 耗时 ×68.1）；`segment_A ≈ segment_C`
+（55.7 vs 54.9ms，因 temp B-tree 搬运整行 19 列负载）⇒ **削弱"加索引能省 A"的收益**。真解法在 FSRS 批量化（需 schema）
+与 keyset 分页（需发版）。
+
+**③ 前端竞态三修（#97）**——
+- `openText` **重入守卫**：请求代号 `_openSeq` + `AbortController` + 覆写前/后**双守卫** + `markRead` 排在守卫之后
+  （否则晚到那篇被 `pickUnread` 永久剔出 i+1 推荐）。三道守卫：两个 fetch 到齐后 / `renderTextDetailAnnotated` 后且
+  记已读前 / catch 写错误前。
+- `openPopoverNear` **垂直夹取 + 向上翻转**：只 `Math.min` 会让贴底弹层溢出视口；`offsetHeight` **只读一次**防同帧强制重排。
+- 列表/详情 **deck 同源**：`showView` 的列表分支由裸 `loadDeck` 改走 `resolveDeck()` 复用阶梯（本机 → 空则拉
+  `GET /api/wb/state` 镜像 → 合并），消除两端 deck 不同源。
+
+**④ 韧性四项 + 真健康端点（#95）**——Go 崩溃出口（`63b2ab6`）、回滚失败留痕、**TTS 并发闸**、**真健康端点**。
+- TTS：模块级 `asyncio.Semaphore(k=4)`（**每请求新建则限流失效**），拿不到立即 **429** 人话，**有界拒绝而非无界排队**
+  （`asyncio.to_thread` 默认线程池满后无界排队，`edge_tts` 无显式超时 + 3 个 HTTP provider 降级各 6s ⇒ 单请求最坏约 76s）。
+  闸位定在 `_serve_tts` **校验之后、合成之前**——放错位会让本该 400 的非法 voice/rate 拿到 429「稍后重试」，误导用户。
+- 健康端点：新增真 `SELECT 1` 的 `GET /api/health`（原 supervisor 拼 `/api/tools/`，只改默认值会"单测全过、真实 run
+  仍用旧探针"）。`ci.yml` 加 job 级 `timeout-minutes: 15`。
+
+**⑤ KARTEI 去复习化（#98）—— P0：消除"白复习"**。用户在卡盒点复习一条**工作台词**：DSR 四列被写、卡面却因
+`fsrs_s` 优先仍显示 `📚 工作台 · s=25`、工作台那侧 FSRS 也没动 ⇒ **复习了，等于没复习**（比"两套排程打架"更隐蔽，
+它连打架都算不上，是纯粹的静默丢弃）。用户决策 **A（彻底分家）+ 可见但不可复习**：工作台词在卡盒**保持可见**
+（统一池价值保留）但**只读**——收走四个 DSR 按钮，保留 `mastered` 徽记/按钮（用户亲手设的标记，永不隐藏）
++ 「📚 去工作台复习」跳转（`href` 沿用既有路由 ⇒ 中键/右键仍可新标签页打开；左键 `preventDefault` + `window.show('german')`
+留在主站壳内）。普通 reader 卡的四个按钮**逐字不变**。
+
+**⑥ 清债轮（#99/#100/#101/#102）**——
+- 卡盒目录/网格视图（`renderCatalogGrid`）此前**硬编码** `correct_count/wrong_count`，与卡面口径分叉 ⇒ 工作台词
+  在目录里仍谎报「0 正 / 0 误」。改用 `cardStatsTag`（`grammar_cards` 表经核实**无任何 `fsrs_*` 列** ⇒ 语法卡
+  永不走工作台分支，换用是行为等价 + 补齐此前缺失的 `due_date`）。
+- `fetchKnownLemmas` 加 **in-flight 去重**（一次会话读 N 篇原本打 N+1 次后端）。**刻意不做 TTL 缓存**——串行重复是
+  "每篇刷新一次"的正常语义，用 TTL 会让"刚背的词在 TTL 内不出现"，是 UX 回归。
+- 覆盖率行**标注降级来源**：离线/镜像失败时原本静默显示「已背词覆盖 0/312 词位（0%）」，用户无法分辨"真没背"与
+  "拉取失败"。降级时给 `⚠ … · 数据不完整` + `title` 并列原因。
+- **CI 门禁补全**：`tools/` 下 27 个 `.mjs` 探针全部接入 pytest（此前 **8 个从未进 CI**，含守"白复习"P0 回归的那个）；
+  `ci.yml` **显式安装 Node 20**（此前 wrapper 靠 `ubuntu-latest` 镜像**预装**，属隐式依赖——镜像一换版本探针就
+  `shutil.which` **静默 skip**，测试全绿而探针根本没跑，**比红更坏**）；新增**防漏接线守卫**（任何
+  `tools/*_probe.mjs` 缺 wrapper 即红）——它落地后**当场把三个并行分支新加的探针顶了出来**，按红补齐。
+
+门禁：**1289 passed + 1 skipped**（分半：非 server **1025** + `test_server` **264**）；`ruff check .` 零告警；
+`mypy` 两道（`delector`+`tools` **70** files、`tests` **88** files）零错误；`tools/*.mjs` 探针 **27/27** 零漂移；
+`test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**。
+**Android 需覆盖安装 v5.14.0 生效**（改动含 `static/`：`cards.js` +59 / `encounter.js` +237 / `reader.js` +10 / `style.css` +53）。
+
+### v5.13.0 · 🗄️ 统一词库池（ADR-0016）+ P0 数据真相修复（PR #73/#74/#75/#88）
 
 #### ADR-0016 统一词库池：让「我的词汇」成为单一权威池的**派生态**
 
