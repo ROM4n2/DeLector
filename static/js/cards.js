@@ -186,6 +186,26 @@ export function renderCardsGrid() {
 }
 
 /**
+ * 工作台来源判据（子计划 5 Task 1）。与下方 `cardStatsTag` 的分支判据**逐字同源**：
+ * 都写 `Number.isFinite(wbS) && wbS > 0`（变量名也一致，探针
+ * tools/cards_workbench_no_review_probe.mjs 的 E1 逐字比对两行，MUST NOT 漂移）。
+ *
+ * **为什么要第二处**：卡面渲染需要知道「这行来自工作台吗」才能决定**给不给
+ * DSR 复习按钮**。工作台词在卡盒点「1 重来 / 2 困难 / 3 良好 / 4 简单」时，
+ * DSR 四列被写、但卡面因 fsrs_s 优先仍显示 `📚 工作台 · s=25`（屏幕什么都没变），
+ * 而工作台那侧的 FSRS 也没动 —— **白复习**：复习了，等于没复习。
+ *
+ * ⚠ 这里的 `> 0` 与 cardStatsTag 的那处是**同一语义的两份写法**，不是两份真相：
+ * tools/cards_wb_source_probe.mjs 钉住标签文案、tools/cards_workbench_no_review_probe.mjs
+ * 钉住按钮显隐，两条探针的判据 MUST 永远同源（任一处漂移即红）。
+ * `cardStatsTag` 本身 MUST NOT 被本任务改动（子计划 3 T5 的产物）。
+ */
+export function isWorkbenchSourced(card) {
+  const wbS = Number(card.fsrs_s);
+  return Number.isFinite(wbS) && wbS > 0;
+}
+
+/**
  * 卡面正面页脚 meta 行的文案（纯文本，调用方塞进 <span class="card-stats-tag">）。
  *
  * **为什么要分来源**：统一池（delector/core/vocab_pool.py）把工作台背过的词投影进
@@ -350,7 +370,20 @@ export function renderDeckStage(vList, gList) {
             </div>
 
             <!-- SuperMemo SM-2 Rating Bar on Back -->
+            <!-- 工作台词（子计划 5 Task 1）：**不渲染** DSR 复习按钮。
+                 复习入口在工作台，卡盒这边点了是白复习（DSR 四列被写、工作台的
+                 记忆稳定性不动 ⇒ 屏幕上什么都没变）。只留一句人话 + 去工作台的跳转。
+                 href 沿用 index.html 里既有的工作台路由，MUST NOT 自造路由。
+                 mastered 按钮在正面页脚（无条件渲染），永不隐藏。
+                 ⚠ 本注释在 JS 模板串内，MUST NOT 出现反引号（会提前闭合模板串），
+                 也不写技术字段名（会随 innerHTML 泄漏到 DOM）。 -->
             <div class="deck-sm2-rating-bar" onclick="event.stopPropagation()">
+              ${isWorkbenchSourced(card) ? `
+                <div class="deck-workbench-hint">
+                  <span class="deck-workbench-hint-text">这张卡在工作台学习，请到工作台复习</span>
+                  <a class="deck-workbench-link" href="/german/workbench.html">📚 去工作台复习</a>
+                </div>
+              ` : `
               <button class="sm2-btn sm2-btn-again" onclick="event.stopPropagation();submitCardReview('${card._type}', ${card.id}, 1)" title="完全忘记，重置为 1 天">
                 <span>1 重来</span>
                 <span class="sm2-int-tag">${nextAgain}天</span>
@@ -367,6 +400,7 @@ export function renderDeckStage(vList, gList) {
                 <span>4 简单</span>
                 <span class="sm2-int-tag">${nextEasy}天</span>
               </button>
+              `}
             </div>
           </div>
 
