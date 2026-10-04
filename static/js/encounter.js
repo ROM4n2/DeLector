@@ -235,12 +235,47 @@ export async function fetchIndex() {
 // i+1：拉**主背词路径**的「已学」原形（跨背词路径打通，2026-09-28 swarm 审计 P1）。
 // **全程 best-effort**：拉不到就返回空数组，绝不让它连累列表/覆盖率 —— 自带 try/catch，
 // 失败即空（与索引端点同族的「不连累别路」降级纪律）。
+//
+// ── in-flight 去重（2026-10-05 清债轮 B 债 3）────────────────────────────────
+// 缺陷：本函数既无模块级 promise 也无缓存 ⇒ **无并发去重**。调用点只有 2 处
+// （showView 的 Promise.allSettled、renderTextDetailAnnotated 的 Promise.all），
+// 而这两处会在同一个渲染窗口内并发进来；一次会话读 N 篇短文 = **N+1 次**
+// `GET /api/cards/known-lemmas`（进场 1 次 + 每篇 1 次），后端 get_known_lemmas()
+// （delector/routes/main.py:762）**无缓存**，每次都 SELECT ⇒ 纯浪费。
+//
+// **只去重并发，MUST NOT 加 TTL 缓存**（有意的取舍）：TTL/永久缓存会让「刚背的词在
+// TTL 内不出现」⇒ 覆盖率与逐 token 高亮滞后于用户刚做的动作，是 UX 回归。去重只解决
+// **并发**重复；**串行重复（每篇一次）是「每篇刷新一次」的正常语义，本轮明确不处理**。
+//
+// 范式照既有 `a1_cards.js` 的 `_examVocabLoadingPromises`（判在途 / then 与 catch 都清空），
+// 但那里额外有 TTL 缓存层，本函数**刻意不引入**。
+//
+// ⚠ **不参与 abort**：本函数签名没有 opts 形参、api() 也收不到 signal ⇒ 共享的在飞
+// promise 与 openText 的 AbortController **天然解耦** —— 被抢占的调用方 abort 旧 ctrl 时
+// 不会连带废掉另一个调用方正在等的那次请求（它只会自己丢弃结果）。MUST NOT 为了「省一次
+// 请求」把本函数塞进 abort 域：一旦带上 signal，先发起的那个调用方被抢占就会把共享请求
+// 连带 abort，另一个调用方只能拿到 []（覆盖率静默变 0）。探针 A4 钉住这条。
+let _knownLemmasInFlight = null;
+
 export async function fetchKnownLemmas() {
+  // 已有在飞 ⇒ 复用同一次请求（不新开），并拿同一份结果。
+  if (_knownLemmasInFlight) return _knownLemmasInFlight;
+  const p = (async () => {
+    try {
+      const res = await api("/api/cards/known-lemmas");
+      return res && Array.isArray(res.lemmas) ? res.lemmas : [];
+    } catch (e) {
+      return [];
+    }
+  })();
+  _knownLemmasInFlight = p;
   try {
-    const res = await api("/api/cards/known-lemmas");
-    return res && Array.isArray(res.lemmas) ? res.lemmas : [];
-  } catch (e) {
-    return [];
+    return await p;
+  } finally {
+    // **必须**在 finally 清（then 与 catch 都要清）：失败结果 MUST NOT 被缓存，
+    // 否则一次网络抖动会让整个会话的「已学词」永久为空（探针 A3）。
+    // 只清自己发起的那一个：p 落地后可能已有别的调用开了新一轮，空指针会把它误清。
+    if (_knownLemmasInFlight === p) _knownLemmasInFlight = null;
   }
 }
 
