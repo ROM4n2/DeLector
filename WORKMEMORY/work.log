@@ -356,3 +356,26 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **#77 fix(i+1)**：`known-lemmas` 补 `OR fsrs_s > 0`——Phase 3 只把词**放进池**、消费面**看不见**（`mastered`/`repetition_count` 投影从不写）⇒ 工作台背过的词仍不算"已知"。等价性证据：工作台卡 `{s,d,due,last,reps,lapses}`，`fsrsInitS = max(W[g-1],0.1) ≥ 0.1`、其余转移 `clamp(…, S_MIN=0.001, …)` ⇒ 卡存在 ⟹ `s > 0`；DSR 复习路径不写 `fsrs_s`（已核实无污染）。
 - **#78 test(isolation)**：测试库隔离收口——共享 `tests/db_cleanup.py::remove_db_files`（三件套 + `gc` 重试 + **最终 fail loudly**）取代 17 份复制粘贴；44 处 `with get_db(`→`db_conn(`（`sqlite3.Connection` 上下文管理器只 commit/rollback、**不 close**）。决定性变异：单点回退 + 注入必失败断言 ⇒ 旧世界**静默残留**（假红/假绿），新世界立即抛点名根因的 OSError。
 - **#81/#82/#83/#84 chore(docs)**：`.gitignore` 显式忽略 `.worktrees/` 与 mypy/ruff 缓存；`docs/plans/` 归档分层（52 + 15 份进 `archive/`，本层只留在途）；新增 `docs/README.md` 为**目录约定正主**；ADR 副本拆入 `docs/adr/`；移除已失真的 `release-v2.1.md`（写着"测试 20/20"、Docker"挂载当前目录"，而 #69 早已改 `./data`）。
+
+### 2026-10-04 16:10 | codebuddy | DONE(sp1–sp5 全 5 项) + WORK_START(debt-clear-round)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：swarm 审计（`docs/reviews/2026-10-03-swarm-audit-master.md`）拆 5 个子计划，**本轮全部完成**。**补记**（协议 §1.7 漏写不是灾难，下一 agent 补 NOTE 即可，不回改历史）。
+- **sp1 (#93)** 角标切 `/api/cards/counts`（去 N+1）。
+- **sp2 (#96)** 量化 `/api/cards` 排序成本。**决定不加 `idx_vocab_list`**：filesort 仅占端点 8.9%（20k 档 70.2ms/790ms），远低于 30% 否决线；Python 物化+FSRS 占 84.1%。两条观察：耗时超线性（行数×50 ⇒ ×68.1）；`segment_A ≈ segment_C`（55.7 vs 54.9ms，因 temp B-tree 搬运整行 19 列负载）⇒ **削弱"加索引能省 A"的收益**。真解法在 FSRS 批量化（需 schema）/ keyset 分页（需发版）。
+- **sp3 (#97)** 前端竞态三修：`openText` 重入守卫（请求代号 + `AbortController` + 覆写前/后双守卫 + `markRead` 排序）、`openPopoverNear` 垂直夹取**含向上翻转**（不能只 `Math.min`）、列表/详情 deck 同源（`resolveDeck()` 替裸 `loadDeck`）。
+- **sp4 (#95)** 韧性四项：Go 崩溃出口 63、回滚失败留痕、**TTS 并发闸**（模块级 `Semaphore(k=4)` + 429）、**真健康端点 `/api/health`**（原 supervisor 拼 `/api/tools/` ⇒ 改默认值会"单测全过、真实 run 仍用旧探针"）。
+- **sp5 (#98)** KARTEI 去复习化：工作台词在卡盒**可见但不可复习**（消「白复习」：DSR 四列被写、`fsrs_s` 优先使卡面无变化、工作台 FSRS 也不动）。收走四个 DSR 按钮，保留 `mastered` 徽记/按钮 + 「去工作台复习」。
+编排者教训三条：①给 maker 的指令错 3 次、子代理纠正 3 次 ⇒ **双向核验不可省**；②引缓存/加闸/加限流必须自带**失效入口与位置守卫**（聚合 key 无失效 ⇒ 静默 300s；TTS 闸放错位 ⇒ 400 变 429）；③**「修 A 顺手做 B」若不查 B 的不变量，会悄悄撤销 A 的修复**（sp3 T3 reopen 了 T1 竞态）。
+⚠️ 已知取舍：sp5 的「去工作台」是**整页跳转**（脱离主站壳，无导航栏，只能浏览器后退）。
+随后启动 **WORK_START(debt-clear-round)**：清理 sp3/sp5 遗留债，分三组并行（各组独立 worktree，**PR #98 保持已验收状态不塞新债**）：A 组改 `static/js/cards.js`（目录视图 `renderCatalogGrid` 对工作台词说谎 + 跳转落点留主站壳内）、B 组改 `static/js/encounter.js`（`fetchKnownLemmas` 无 in-flight 去重 + 覆盖率行无降级标记，**需 UI 决策**）、C 组改 `tests/`+`.github/`（**7 个** `.mjs` 探针未接 pytest；且 `ci.yml` 无 `setup-node` ⇒ 靠 ubuntu runner 预装，属隐式依赖）。**全部完成后一次性发版**（static/ 已累积 #93/#97/#98 改动 ⇒ 建议 v5.14.0）。
+
+### 2026-10-05 00:30 | codebuddy | DONE(debt-clear-round) + RELEASE(v5.14.0)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：清债轮三组并行完工并全部合入 master（`4aed9fa`），随后发版 **v5.14.0**（tag 已打，触发三平台 Release 流水线）。
+- **A 组 #99**（`static/js/cards.js`）：目录/网格视图 `renderCatalogGrid` 两处硬编码 `correct_count/wrong_count` 改用 `cardStatsTag`——此前**同一条词卡面说「📚 工作台 · s=25」、目录说「0 正 / 0 误」**。核实「换用后不丢 `due_date`」：`cardStatsTag` 非工作台词分支自带 `⏳ 到期:`。语法卡一并换用，论据 `grammar_cards` 表**无任何 `fsrs_*` 列**（建表 `database.py:341-361` 无 + 迁移 `:478-511` 的 `fsrs_*` 补列显式包在 `if tbl == "vocab_cards"` 内）。「去工作台」改 `preventDefault` + `window.show('german')` 留主站壳内，`href` 逐字保留供新标签页；**关键事实**：`show` 定义在 `main.js:167`，靠 `main.js:943-946` 的 `Object.assign(window,{show})` 显式挂载才可从 inline `onclick` 取到（顶层 `function` 不会自动挂 `window`）。
+- **B 组 #100**（`static/js/encounter.js`）：`fetchKnownLemmas` 加 in-flight 去重（原一次会话读 N 篇打 N+1 次后端）。**刻意不做 TTL 缓存**——串行重复是「每篇刷新一次」的正常语义，TTL 会让「刚背的词在 TTL 内不出现」。覆盖率行**标注降级来源**（离线/镜像失败原本静默显示 0/312，用户无法分辨「真没背」与「拉取失败」）⇒ `⚠ … · 数据不完整` + `title` 并列原因。核实两路降级**只压低分子不动分母**（`total` 来自 annotate 端点的 token 流，非 `resolveDeck`）。**越界自报**：改了既有 `enc_open_race_probe.mjs` 35 行——场景 B 原用「两次 `known-lemmas` 错开」制造时序，而那正是本次要消灭的重复，**逻辑上不可能两立**；改由 `resolveDeck` 的 `/api/wb/state`（无去重）承担，4 条原契约断言语义逐条未动；编排者独立复验判别力：删 `encounter.js:642` 内部 seq 守门 ⇒ 场景 B 必红。
+- **C 组 #101/#102**（`tests/`+`.github/`）：复核**推翻两条编排者前提**——①漏项是 **8 个不是 7 个**（含 #98 刚建的 `cards_workbench_no_review_probe`，**守白复习 P0 的守卫从未进过 CI**）；②这批探针**都不返回** `failures/total/cases`（24 个 `.mjs` 仅 4 个标准契约）⇒ 未改任何 `tools/*.mjs`，改断言 `ok is True`（因「problems 非空即 exit 1」，与 `failures==0` 等价且更紧）。`ci.yml` **显式装 Node 20**——此前 wrapper 靠 `ubuntu-latest` 预装，属隐式依赖：镜像一换版本探针走 `shutil.which` **静默 skip**，测试全绿而探针没跑，**比红更坏**。
+- **编排者实测出并修掉一个假绿漏洞**：`test_probe_wiring_guard.py` 的 corpus 拼入全部 `.py`，而共享 helper `probe_runner.py` 的**文档字符串点名了真实探针** ⇒ 移走真 wrapper 守卫**仍绿**。复现：`mv tests/test_cards_count_probe.py` 后守卫 `1 passed`。三管齐下修复：corpus 收窄到 `rglob("test_*.py")`（pytest 收集规则如此，不参与收集的文件本来就不可能是 wrapper）+ helper 文档举例去实名化 + 新增守卫钉住收窄。复验：`1 failed` / 还原 `5 passed`。
+- **守卫立刻抓出存量漏接线**：#102 合并前，半 A 跑出 `1 failed, 1015 passed`——三个并行分支各自新建的探针无 wrapper，防漏接线守卫当场把 **3 个**顶出来，补齐后 `1025 passed` 零 failed。**这正是「先立守卫 → 立刻把存量漏接线顶出来 → 按红补齐」的顺序价值**。
+⚠️ 编排者本轮失误：用 `grep … | head -8` 截断守卫输出 ⇒ 只看到 3 个漏接线里的 2 个，给 maker 的任务书写错数字；**maker 停下上报而未擅自扩大范围**，才没造成二次返工。教训：提取失败项/统计行**禁用 head/tail 截断**；管道还会吃掉上游退出码（同 `if git push | tail -1` 误报成功那次）。
+**门禁（v5.14.0 基线）**：`1289 passed + 1 skipped`（半 A `1025` + `test_server` `264`）/ 全 `tools/*.mjs` 探针 **27/27** / `ruff` 0 / `mypy` 两道（`delector`+`tools` 70 files、`tests` 88 files）0 error / `test_writer_mobile.py`（发版守护）`30` / 防漏接线守卫 `5`。
