@@ -23,7 +23,7 @@
 ## 当前状态
 
 - **最新发布 v5.14.0（2026-10-05）** —— **韧性 / 前端竞态 / KARTEI 去复习化**（6 席 swarm 审计落地 5 子计划 + 3 组清债，含两个 P0）：卡盒「白复习」消除（#98，工作台词**可见但不可复习**：收走四个 DSR 按钮、保留 `mastered` 徽记 + 去工作台跳转）；`openText` 重入守卫 / 弹层向上翻转 / 列表详情 deck 同源（#97）；TTS 并发闸 `Semaphore(k=4)` + 429（#95）；真健康端点 `/api/health`（原探针拼错 `/api/tools/`）；目录视图改用 `cardStatsTag`、`fetchKnownLemmas` in-flight 去重、覆盖率行标注降级来源（#99/#100）；27 个探针全接进 pytest + 显式装 Node 20 + 防漏接线守卫（#101/#102）。**含 `static/` 改动 ⇒ Android 需覆盖安装**。
-- **测试 / 门禁基线（截至 v5.14.0）**：全量 **1289 passed + 1 skipped**（分半：非 server **1025** + `test_server` **264**）；`ruff check .` 零告警；`mypy --follow-imports=skip tests`（88 files）零错误、`mypy --strict delector tools`（70 files）零错误；`tools/*.mjs` 探针 **27/27** 零漂移；`test_writer_mobile.py`（发版守护：版本一致性 / README 下载表 / Android 重打包）**30 passed**；防漏接线守卫 `test_probe_wiring_guard.py` **5 passed**；pre-commit 密钥守卫有效。
+- **测试 / 门禁基线（当前 master，v5.14.0 之后）**：全量 **1299 passed + 1 skipped**（分半：非 server **1035** + `test_server` **264**）；`ruff check .` 零告警；`mypy --strict delector tools`（**70** files）、`mypy --follow-imports=skip tests`（**92** files）零错误；`tools/*.mjs` 探针 **28/28** 零漂移；`test_writer_mobile.py`（发版守护）**30 passed**；**新增守卫**：`test_probe_wiring_guard.py`（防漏接线，**5 passed**）、`test_probe_json_contract.py`（探针 `--json` 契约冻结，**5 passed**）、`test_localhost_guard.py`（受 `_require_localhost` 保护路由集合，**20 条** allowlist）。
 - **本批已随 v5.13.0 发布的其它改动**：
   - **i+1 已知词池打通（#72）**：`known-lemmas` 补 `OR fsrs_s > 0`（工作台已学词纳入覆盖率），列表 + 详情同口径；`deck-bridge.js` / `encounter.js` 打通 i+1 与主背词路径。
   - **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn` 取代 17 份复制粘贴，44 处句柄泄漏清扫；决定性变异证明旧实现**静默残留**（假红/假绿）。
