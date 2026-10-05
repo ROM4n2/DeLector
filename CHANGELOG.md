@@ -4,9 +4,29 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.14.0（2026-10-05）**
+**最新版本：v5.15.0（2026-10-05）**
 
-### 🛡️ 韧性 / 前端竞态 / KARTEI 去复习化（swarm 审计 5 子计划 + 清债轮，PR #93~#102）
+### 🛡️ 登记项收口第二轮：三条新守卫 + 降级串味修复 + LAN posture 裁决（PR #103~#107）
+
+把 v5.14.0 发版后仍在册的 5 项技术债收口，全部以**"立守卫防漂移"**而非"改实现"的方式落地。
+
+**① localhost 受保护路由集合守卫（#103）**——该惯例此前只存在于 `tests/test_server.py` 的一段注释里，且注释写的"16 处"**已漂移**：AST 实测全集 **20 个**（`main.py` 16 处函数体内调用 + `encounter.py` 3 处 + `tools.py` 1 处 `Depends` 形式）。守卫判据是**精确 allowlist 相等**，**不是**"GET 不该挂闸"——因为有 **4 个受保护的敏感 GET**（`/api/backup/export`、`/api/backup/download/{token}`、`/api/wb/backup/download/{token}`、`/api/wb/state/key`），按方法粗分类会误伤。
+
+**② 降级标记的并发串味修复（#105，用户可见）**——`encounter.js` 用模块级标志记录降级状态，而快照点在详情渲染路径上。**可实际触发**：`showView` 以 fire-and-forget 调 `resolveDeck()`，用户在镜像请求在飞时点开短文又进一次 `resolveDeck()`，两次**以相反结果交错结束** ⇒ 详情拿到自己的**成功** deck 却显示「deck 降级」。改为**状态与本次调用绑定**（每次渲染开一个回执盒，两路 await 各写自己的盒），模块级全局与 `degradedSources()` 全部删除。**不破坏**上一轮立的同源契约：`resolveDeck` 仍是 `async function`、返回形状不变、调用次数不变（同源探针的计数桩 showView 后 1 次 / 详情后累计 2 次，改前改后两次都绿）。
+
+**③ 工作台来源判据单点化（#104）**——`isWorkbenchSourced` 与 `cardStatsTag` 曾各写一份 `Number.isFinite(wbS) && wbS > 0`，靠探针逐字钉住防漂移。现在 `cardStatsTag` 改为**复用**（1 行），E1 断言从"两份文本雷同"改为"**只有一份、另一处复用**"（MUST 出现 `isWorkbenchSourced(` + MUST NOT 出现 `Number.isFinite`/`wbS > 0`）。catalog 探针原有的 SHA 哈希守卫与本目标**直接冲突**，已换成**行为等价守卫**（14 值边界带），**没有**靠"更新哈希值"放行。
+
+**④ CI 必需运行时缺失必须红（#106）**——`tests/` 有 **29 处** `shutil.which("node")` skip，CI 上 node 缺失会**测试全绿而 28 个 `.mjs` 探针根本没跑**（**比红更坏：回归无声溜过**）。在根 `conftest.py` 用 `pytest_sessionstart` **一处**解决；只把 CI 必需的 node 升级为 fail，**不做**"CI 零 skip"全局禁令（会误伤 Windows 专用用例、env 覆盖、本地构建产物缺失、bash 不可用等合理 skip），非 CI 环境仍 skip。
+
+**⑤ 探针 `--json` 契约冻结（#107）**——28 个探针的 JSON 输出有 5 种形态。**冻结而非统一**：严格迁移要动 23 个 probe + 约 13 个 wrapper，且把结构化样例压成 `{name, ok}` 会**降低诊断能力**。23 条登记进显式过渡清单，并加"清单长度 MUST NOT 增长"守卫。判据是**实跑输出**不是源码文本（对照实验：只改注释 ⇒ 绿；改输出结构 ⇒ 红）。
+
+**⑥ 安全 posture 裁决：内网可信（用户裁定）**——盘点 LAN 暴露面后确认：28 个 LAN 可达写端点（🔴6 / 🟡11 / 🟢11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与**清库式还原**、`POST /api/settings` 改写 API Key 与网关、`wb/state/key`）；覆盖最大的 `PUT /wb/state` 由 **128-bit `X-WB-Key`** 保护且该 key **无法经 HTTP 从 LAN 取得**。**关键结论：加固不会断手机同步**——手机端 32 处 `/api/` 调用只写 3 个端点且全是 `X-WB-Key` 路径，内容写端点无一被手机端调用。**已知并接受的代价**：LAN 第二台设备从"可读可写"降级为"可读但保存按钮报错"；`GET /api/settings` 会泄露模型网关地址与模型名（key 是掩码）；5 个 AI 端点无配额；写入无审计日志。
+
+门禁：**1299 passed + 1 skipped**（分半：非 server **1035** + `test_server` **264**）；`tools/*.mjs` 探针 **28/28** 零漂移；`ruff` 0；`mypy` 两道（**70** + **92** files）零错误；发版守护 **30 passed**；三条新守卫（防漏接线 / 契约冻结 / localhost 集合）全绿。
+**本轮防漏接线守卫第三次当场抓出漏接线**（新探针落地即被顶出，补 wrapper 后转绿）。
+⚠️ 含 `static/` 改动（`cards.js` +16/−6、`encounter.js` +87/−31）⇒ **Android 需覆盖安装生效**。
+
+### v5.14.0 · 🛡️ 韧性 / 前端竞态 / KARTEI 去复习化（swarm 审计 5 子计划 + 清债轮，PR #93~#102）
 
 本版主体是一次 6 席 swarm 审计（`docs/reviews/2026-10-03-swarm-audit-master.md`）的落地：5 个子计划 + 3 组清债，
 **两个 P0 真 bug**（卡盒"白复习"、TTS 并发无闸）与一批"门禁在跑但判别力是假的"缺陷。
