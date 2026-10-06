@@ -285,7 +285,11 @@ def _decorator_path_and_is_get(decorator: ast.expr) -> Optional[Tuple[str, bool]
     if attr == "api_route":
         for kw in decorator.keywords:
             if kw.arg == "methods" and isinstance(kw.value, (ast.List, ast.Tuple)):
-                verbs = {e.value.upper() for e in kw.value.elts if isinstance(e, ast.Constant)}
+                verbs = {
+                    e.value.upper()
+                    for e in kw.value.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)
+                }
                 return path, "GET" in verbs
     return None
 
