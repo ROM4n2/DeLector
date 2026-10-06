@@ -637,3 +637,168 @@ def test_ci_missing_node_fails_at_session_start() -> None:
     ]
     missing = [f"缺 {needle!r}（{why}）" for needle, why in required_contract if needle not in block]
     assert not missing, "pytest_sessionstart 没有钉住 CI 必需的 node 运行时：\n" + "\n".join(missing)
+
+
+# ── CI 必需运行时清单守卫（2026-10 Fog 4）───────────────────────────────────────
+# 上一轮（#106）把 node 从「静默 skip」升级为「CI 下必红」，消掉了 29 处
+# `shutil.which("node")` 守卫的静默性。本节把「哪些二进制算 CI 必需」这条
+# **判据本身**钉成清单，防止两种反向劣化：
+#   1. 有人把**平台相关**的二进制（bash）也塞进 CI 必需 ⇒ 本地 Windows /
+#      无 bash 环境被误伤成红（#106 明确不做「CI 零 skip」全局禁令）；
+#   2. 有人把真正 CI 必需的项悄悄摘掉 ⇒ 又退回静默 skip。
+#
+# 判据（与 #106 一致）：**「CI 上缺了它 ⇒ 整批回归守卫静默失效」**。
+# 满足此判据 ⇒ 进清单；只是「本机恰好没装 / 该平台本就没这命令」⇒ 不进。
+
+# 判定为「CI 必需」的运行时：缺了它，CI 上大批回归守卫会静默 skip。
+CI_REQUIRED_RUNTIMES: tuple[str, ...] = ("node",)
+
+# 判定为「平台相关、非 CI 必需」的运行时：**刻意不进**清单，理由逐条钉住。
+#   bash —— CI(ubuntu) 上必然存在（ubuntu-latest 镜像自带，且 GitHub Actions
+#           的 run 步骤本身就以 bash 为默认 shell），缺失不现实；而它在
+#           tests/test_server.py:2591 的用法是 `_find_bash()` 的**最后一招**
+#           （前面还有 git-bash 路径探测 / `where bash` / PATH 扫描三套策略），
+#           其 skip 语义是「本机找不到任何可用 bash」——这是**平台相关**的
+#           合理 skip（Windows 无 Git-Bash/WSL 时就该跳），不是静默失效。
+#           故 MUST NOT 升级为 fail。
+PLATFORM_RELATED_RUNTIMES: tuple[str, ...] = ("bash",)
+
+
+def _sessionstart_source() -> str:
+    """取出根 conftest 里 pytest_sessionstart 的源码（缺失即 fail）。"""
+    text = _read_guard_file(ROOT_CONFTEST)
+    tree = ast.parse(text)
+    hook = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "pytest_sessionstart"
+        ),
+        None,
+    )
+    assert hook is not None, (
+        "根 conftest.py 缺 pytest_sessionstart：CI 缺 node 时 29 处 wrapper 会静默 skip，"
+        "测试全绿而 .mjs 探针根本没跑。"
+    )
+    block = ast.get_source_segment(text, hook)
+    assert block is not None
+    return block
+
+
+def _checked_runtimes_in_sessionstart() -> set[str]:
+    """从 pytest_sessionstart 源码里抽出被 `shutil.which(...)` 检查的运行时名。
+
+    只认**直接以字符串字面量传参**的调用（`shutil.which("node")`）。清单若被改成
+    循环/变量间接传入，这里会抽不到 ⇒ 守卫失败，属刻意的「别玩花样」。
+    """
+    return set(re.findall(r"""shutil\.which\(\s*["']([^"']+)["']\s*\)""", _sessionstart_source()))
+
+
+def test_ci_required_runtimes_manifest_matches_session_check() -> None:
+    """「CI 必需运行时」清单 MUST 与 conftest 实际检查的集合逐字一致。
+
+    双向钉：清单里有但没查（= 白写，守卫形同虚设）⇒ 红；
+    查了但清单里没有（= 有人绕过清单偷偷加项）⇒ 红。
+    """
+    actual = _checked_runtimes_in_sessionstart()
+    assert actual == set(CI_REQUIRED_RUNTIMES), (
+        f"conftest 实际检查的运行时 = {sorted(actual)}，与清单 "
+        f"{sorted(CI_REQUIRED_RUNTIMES)} 不一致。\n"
+        "清单是判据的唯一落点：漏写 = 该项退回静默 skip；多写 = 绕过清单，"
+        "下次没人知道它为什么被升级为 fail。\n"
+        "修法：改 CI_REQUIRED_RUNTIMES，或改 conftest 使两者一致。"
+    )
+
+
+@pytest.mark.parametrize("runtime", CI_REQUIRED_RUNTIMES)
+def test_ci_required_runtime_is_actually_checked(runtime: str) -> None:
+    """清单里每一项 MUST 在 session 检查里被 shutil.which 真查（防清单空转）。"""
+    assert runtime in _checked_runtimes_in_sessionstart(), (
+        f"清单把 {runtime!r} 列为 CI 必需，但 conftest 的 session 检查里没有 "
+        f"shutil.which({runtime!r})：清单与实现脱节，守卫形同虚设。"
+    )
+
+
+@pytest.mark.parametrize("runtime", PLATFORM_RELATED_RUNTIMES)
+def test_platform_related_runtime_is_not_promoted_to_fail(runtime: str) -> None:
+    """平台相关运行时 MUST NOT 被升级进「CI 必需」清单（防误伤本地 Windows）。
+
+    这是本节最要紧的一条反向钉。把它升级为 fail 的诱惑是真实的——它同样
+    长得像「CI 下缺了就静默 skip」——但判据不成立：
+
+      * bash 在 CI(ubuntu) 上必然存在（镜像自带，且 Actions 的 run 步骤默认
+        就是 bash），「CI 上缺 bash」不是现实场景；
+      * tests/test_server.py 的用法是 `_find_bash()` 的**兜底分支**（前面还有
+        三套探测策略），skip 语义是「本机找不到任何可用 bash」——Windows 上
+        没装 Git-Bash/WSL 时跳过是**正确**行为，不是回归守卫静默失效。
+
+    升级成 fail 的代价是实的：本地无 bash 的开发者会被红，且违背 #106 明确的
+    「不做 CI 零 skip 全局禁令」（会误伤平台专用用例等合理 skip）。
+    """
+    assert runtime not in CI_REQUIRED_RUNTIMES, (
+        f"{runtime!r} 被放进了 CI_REQUIRED_RUNTIMES：它是**平台相关**的合理 skip，"
+        "不是 CI 必需运行时。\n"
+        "升级为 fail 会让本地无 bash 的环境直接红，与 #106「只升级真正 CI 必需项、"
+        "不做零 skip 全局禁令」相悖。\n"
+        f"修法：从 CI_REQUIRED_RUNTIMES 移除 {runtime!r}。"
+    )
+    assert runtime not in _checked_runtimes_in_sessionstart(), (
+        f"conftest 的 session 检查里出现 shutil.which({runtime!r})："
+        f"{runtime!r} 是平台相关 skip，CI 下缺它 MUST NOT 让整个 session 失败。"
+    )
+
+
+def test_local_env_still_skips_instead_of_failing() -> None:
+    """「CI 必需」判据 MUST 仍由 CI 环境变量把关——本地缺运行时只 skip 不红。
+
+    这是 #106 的核心不变量：session 检查只在 CI 生效。判据一旦被改成恒真
+    （例如误写成 `if True and not shutil.which(...)`），本地 Windows 开发机
+    缺 node 就直接红；本测试用「判据表达式必须真的读 CI 环境变量」把它钉住。
+    """
+    block = _sessionstart_source()
+    assert 'os.environ.get("CI")' in block, (
+        "pytest_sessionstart 不再读 CI 环境变量：session 检查会在**本地**也生效，"
+        "缺运行时的开发者直接被红（#106 明确：本地仍由各 wrapper 决定是否 skip）。\n"
+        '修法：恢复 `if os.environ.get("CI") and ...` 的判据形态。'
+    )
+    # 恒真变异（`if True and ...`）会同时丢掉 CI 判据，上面一条即可杀死；
+    # 这里再钉一条「判据不得被短路成与 CI 无关的常量」，双保险。
+    assert not re.search(r"if\s+(True|1)\s*(and|:)", block), (
+        "pytest_sessionstart 的判据被短路成恒真（`if True and ...`）："
+        "session 检查会在本地也生效，与 #106 的「本地仍 skip」相悖。"
+    )
+
+
+def test_db_cleanup_needs_no_external_binary() -> None:
+    """DB 清理 MUST NOT 依赖外部 `rm` 命令（它是纯跨平台 os.remove）。
+
+    Fog 4 调研曾报「`delector/core/database.py` 约 :2086 的 test_cleanup 用
+    `shutil.which("rm")` 做守卫，是第 8 处同类漏网」。**该前提经核实不成立**：
+    全仓 `shutil.which("rm")` 命中 0 次，`def test_cleanup` 命中 0 次，
+    `delector/core/database.py` 内 `shutil.which` 命中 0 次。真实的清理实现在
+    `tests/db_cleanup.py::remove_db_files`，用的是 `os.remove`（跨平台，
+    Windows 上同样可用，不经 shell、不需要 PATH 上有 rm）。
+
+    本测试把「不依赖外部 rm」这条事实钉住：若将来有人图省事改成
+    `subprocess(["rm", ...])`，或加一条 `shutil.which("rm")` 守卫，
+    本测试立刻红——避免「Windows 上没有 rm ⇒ 静默 skip ⇒ 清理守卫失效」
+    这类新 Fog。
+    """
+    helper = REPO_ROOT / "tests" / "db_cleanup.py"
+    text = _read_guard_file(helper)
+    offenders = [
+        line.strip()
+        for line in text.splitlines()
+        if re.search(r"""shutil\.which\(\s*["']rm["']\s*\)|subprocess""", line)
+    ]
+    assert not offenders, (
+        f"tests/db_cleanup.py 出现了对外部命令的依赖：{offenders}\n"
+        "清理逻辑 MUST 继续用 os.remove（跨平台、无需 PATH 上存在 rm）。\n"
+        "改成 `subprocess(['rm', ...])` 或加 `shutil.which('rm')` 守卫会让 "
+        "Windows 上没有 rm 的环境**静默 skip**清理守卫——正是 Fog 4 要消除的那类 Fog。"
+    )
+    # 反向确认：真的在用 os.remove（守卫不是空转）
+    assert "os.remove(" in text, (
+        "tests/db_cleanup.py 不再使用 os.remove：清理实现被改动过，"
+        "请复核是否重新引入了对外部命令 / 平台专有 API 的依赖。"
+    )
