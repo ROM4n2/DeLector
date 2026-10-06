@@ -236,7 +236,7 @@
 ## 🌫️ Fog of War
 
 - **[RESOLVED 2026-10-05] LAN 写权限：用户裁决「内网可信」⇒ 不加固。** 暴露面 28 个（🔴6 / 🟡11 / 🟢11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与清库式还原、`POST /api/settings` 改写 API Key 与网关、`wb/state/key`）；覆盖最大的 `PUT /wb/state` 由 128-bit `X-WB-Key` 保护且该 key **无法经 HTTP 从 LAN 取得**。**关键结论：加固不会断手机同步**（手机端只写 3 个 `X-WB-Key` 端点，A1–A23 无一被手机端调用）。已知代价（用户知悉）：LAN 第二台设备从"可读可写"降级为"可读但保存按钮 403"。`GET /api/settings` 未挂闸会泄露模型网关地址与模型名（key 是掩码），单独知悉未处置。**本条不再是 Fog**；PR #103 的守卫现为"钉住**已决策**的现状"。如日后要正式化安全 posture，再写 `docs/adr/`。
-- **[Unknown 2] `GET /api/articles/{id}` 的惰性写**（`main.py:267-283`，旧 `processed_json` 情形会 UPDATE）⇒ "按 HTTP 方法判断只读"不可靠。Task 1 用 allowlist 规避了它；若要改成方法判据，必须先处理这条。
+- **[RESOLVED 2026-10-06] `GET /api/articles/{id}` 的惰性写 —— 追根因发现真 bug，已修（#108）。** 原登记为"按 HTTP 方法判只读不可靠"的前提条件（已因 Task 1 改用精确 allowlist 而失效）。追进去发现：写入端 `processor.py:421/:480` 两条路径都返回 `"3.5.0"`，而判据端 `main.py:278` 写死 `!= "3.4.0"` ⇒ **判据恒真** ⇒ 「惰性迁移」退化成「**每次 GET 都重跑完整 spaCy 并 UPDATE articles**」。列表路径早在 `:245` 就优化掉这个 N+1，但单篇 GET 一直全量重算——**惰性迁移从未真正生效**。修法＝导出 `PROCESSED_JSON_VERSION` 单一真相源（两条返回路径 + 判据共用），惰性迁移语义完整保留，向后兼容已核。守卫：AST 白名单（带写 GET 端点集合 == `{GET /api/articles/{id}}`，即 Fog 2 的原始价值）+ 行为测试（**数真实 SQL 首词**而非断言版本字符串——字符串对、判据错正是该 bug 潜伏的原因）。**教训：把 Fog 标记为"已规避"而不追根因，会把真实缺陷一起留下。**
 - **[Unknown 3] 把 20 处直接调用统一成 `dependencies=[Depends(...)]`**：会让守卫从 AST 降到 `route.dependant.dependencies`（更可靠），但会改变校验顺序（422 与 403 的优先级需复核）。**未定**——Task 1 用 AST 形态规避。
 - **[Unknown 4] Bash / Git 仍是 `ubuntu-latest` 隐式依赖**（`ci.yml:39,115,124,129` 用到 bash；hook 行为测试 `test_server.py:2591-2593` 找不到 bash 就 skip）。是否纳入 Task 4 的"CI 必需"集合，**待定**——本轮只做 node。
 
