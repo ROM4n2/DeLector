@@ -52,7 +52,7 @@
 - **真实用户试用（当前最高价值动作）**：手机端开箱即有 7 篇 A1/A2/B1 分级短文——收三问反馈（分级是否合适 / 已背词高亮与一键进卡是否顺手 / 本地词典释义够不够用），用反馈决定下一步。
 - **Android 真机点检**：凡改动含 `static/` 的版本需覆盖安装验证（清单见 `docs/agents/ops.md`）。
 - **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；注意 `import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
-- 递延项：tests `--strict`、检索 `_highlight` 的 HTML 实体边界、残留 worktree / 已合并本地分支清理。
+- 递延项：tests `--strict`。
 
 ## 工作方式
 
