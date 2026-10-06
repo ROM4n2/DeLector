@@ -4,9 +4,52 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.15.0（2026-10-05）**
+**最新版本：v5.16.0（2026-10-06）**
 
-### 🛡️ 登记项收口第二轮：三条新守卫 + 降级串味修复 + LAN posture 裁决（PR #103~#107）
+### ⚡ 修掉一个长期潜伏的性能缺陷 + 三处守卫加固（PR #108/#109/#110）
+
+Fog 1~4 全部收口。本版**不含** `static/` 改动——三个 PR 分别是 1 处性能修复与两组测试守卫。
+
+**① 每次 GET 文章都重跑完整 spaCy（#108，用户可感知）**——追 Fog 2（「`GET /api/articles/{id}` 有惰性写」）根因时发现：
+惰性迁移判据写死 `pj.get("version") != "3.4.0"`，而写入端 `processor.py` 的**两条**路径（spaCy 与纯 Python 回退）
+**都返回 `"3.5.0"`** ⇒ 判据**恒真** ⇒「惰性迁移」退化成「**每次迁移**」：每次打开文章都重跑完整德语 NLP 并 `UPDATE articles`。
+讽刺的是列表路径早就在 `main.py:245` 优化掉了这个 N+1 重算（注释还专门写"惰性迁移唯一保留在单篇 GET"），
+而单篇 GET 一直在全量重算——**惰性迁移从未真正生效过**。
+修法＝导出 `PROCESSED_JSON_VERSION` **单一真相源**（两条返回路径 + 判据共用），惰性迁移语义完整保留
+（老数据首次 GET 仍迁移并升级），向后兼容已核。`"3.4.0"` 字面量已从 `main.py` 彻底消失。
+
+**② CI 必需运行时清单显式化 + 两条否定式守卫（#109）**——把「哪些二进制缺失会导致探针静默不跑」写成显式清单与守卫，
+并钉住两条**否定**结论：`rm`（`shutil.which("rm")` **全仓 0 次**，`tests/db_cleanup.py` 用跨平台 `os.remove`）
+与 `bash`（判为「平台相关」：CI 是 ubuntu 且 Actions 的 `run:` 本身以 bash 为默认 shell；
+`test_server.py:2591` 的 skip 是 `_find_bash()` **五套策略的最后一招**，语义是"本机找不到任何可用 bash"，
+Windows 无 Git-Bash 时跳过是**正确**行为）⇒ **两者都不进 CI 必需清单**，防将来有人误升级为 fail。
+
+**③ localhost 守卫加固（#110）**——关掉三个已实测确认的漏检洞（**将来会漏，现在没漏**）：
+- 只认字面 `router` 变量名 ⇒ 模块级实有 **14 个** router（12×`router` + `hoeren_router` + `lesen_router`），
+  将来给 `hoeren_router` 加一道闸，allowlist 不会包含它而守卫**压根看不见、不报警**
+- prefix 只从单个 router 取 ⇒ 一模块双 router 时**键失真且恰好蒙对**（实测：真实前缀 `/api/real` 的路由
+  被报成 allowlist 里已有的 `/api/settings`）
+- 闸调用名字面量 ⇒ `import ... as` 别名漏检
+allowlist **20 条逐字未动**（只改「怎么发现」，不改「发现什么」），`delector/` 零改动。
+
+**④ 安全 posture 已裁决：内网可信**（用户裁定，不加固 LAN 写端点）。盘点结果存档：暴露面 28 个写端点
+（🔴6 / 🟡11 / 🟢11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与**清库式还原**、
+`POST /api/settings` 改写 API Key 与网关、`wb/state/key`）；覆盖最大的 `PUT /wb/state` 由 **128-bit `X-WB-Key`**
+保护且该 key **无法经 HTTP 从 LAN 取得**；**加固不会断手机同步**（手机端 32 处调用只写 3 个 `X-WB-Key` 端点）。
+已接受代价：LAN 第二台设备「保存按钮 403」、AI 端点无配额、写入无审计。
+
+**Fog 3 的收益论证本身被实测推翻**（值得记）：原写"统一成 `Depends` 后守卫可改用运行时 `dependant`，更可靠"——
+实测运行时枚举**只看得到 4 条**（全是 `Depends` 形式），**看不到函数体内调用的 16 条**，天然不覆盖该形态。
+故 Fog 3 的目标改由 ③ 以**零行为变化**达成，16 处形式统一（唯一真行为变化：LAN + 非法参数 **422 → 403**）
+经用户裁决**不做**。
+
+门禁：**1317 passed + 1 skipped**（分半：非 server **1053** + `test_server` **264**）；
+`tools/*.mjs` 探针 **28/28** 零漂移；`ruff` 零告警；`mypy` 两道（**93** + **70** files）零错误；
+发版守护 **30 passed**；`test_ci_hardening.py` **21 passed**；`test_localhost_guard.py` 与
+`test_get_endpoints_with_writes.py` 各 **7 passed**。
+**无 `static/` 改动** ⇒ 桌面端刷新即生效；Android APK 仍会随 tag 重新构建（versionCode `51600`，可覆盖安装）。
+
+### v5.15.0 · 🛡️ 登记项收口第二轮：三条新守卫 + 降级串味修复 + LAN posture 裁决（PR #103~#107）
 
 把 v5.14.0 发版后仍在册的 5 项技术债收口，全部以**"立守卫防漂移"**而非"改实现"的方式落地。
 
