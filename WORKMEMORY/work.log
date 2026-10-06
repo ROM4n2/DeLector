@@ -424,7 +424,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 **门禁**：`test_localhost_guard.py` 7 passed / `test_ci_hardening.py` 21 passed / 半 A `1048` / 半 B `264 passed, 1 skipped` / `mypy` 两道（`93` + `70` files）0 error / `ruff` 通过。
 
 ### 2026-10-06 14:40 | codebuddy | DECISION(Fog 3 关闭：C-F 不做) — 全部 Fog 清空
-Caps: filesystem-read, filesystem-write, shell-execs
+Caps: filesystem-read, filesystem-write, shell-exec
 事件：用户裁决 **Fog 3 关闭，不做 C-F（16 处形式统一）**。至此本轮登记项**全部清空**。
 **裁决依据**：①Fog 3 的**目标**是"守卫更可靠"，Task B（#110）已用**零行为变化**达成同等可靠性——加固后的 AST 守卫同时覆盖「函数体内直调」与「`Depends`」两种挂载形式，20 条 allowlist 继续被守护；②C-F 的唯一真行为变化是 **LAN + 非法参数 422 → 403**（编排者实测确认，语义收紧但是用户可见的）；③16 处改动最易误伤的是 **`POST /api/wb/state`——它刻意不挂本机闸**（用 `X-WB-Key`，`test_server.py:4798-4820` 会红）；④`request: Request` 形参删除有 **lint 盲区**（`pyproject.toml` 无 `[tool.ruff]`，默认规则集 E4/E7/E9/F 不含未使用形参 ⇒ 漏删不会被任何门禁拦住）。
 **同时纠正一个我曾写进文档的错误前提**：Fog 3 原文与上两条 log 都把「运行时 `dependant` 更可靠」当作收益依据。**实测否定**：`dependant` 枚举只找出 4 条（`encounter.router` 3 + `tools.router` 1，全 `Depends` 形式），**看不到函数体内调用的 16 条**；且它天然看不到函数体调用 ⇒ 就算做完 C-F，运行时方案也并非更优，只是"换一种看法"。**教训：Fog/债务的"收益论证"本身也可能是错的，应与"待修的缺陷"一样接受实测检验。**
