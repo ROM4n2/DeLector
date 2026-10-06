@@ -186,11 +186,22 @@ for (const [k, v] of Object.entries(PIECES)) {
 if (!/replace\(\/&\/g/.test(PIECES.esc) || !/replace\(\/</.test(PIECES.esc)) {
   throw new Error("esc 切片里没有 &/< 替换，切歪或实现回退了");
 }
-if (!/esc\(text/.test(PIECES._highlight) || !/esc\(needle/.test(PIECES._highlight) || !/<mark>/.test(PIECES._highlight)) {
-  throw new Error("_highlight 切片里没有 esc(text)/esc(needle)/<mark>，切歪或实现回退了");
+if (!/esc\(/.test(PIECES._highlight) || !/<mark>/.test(PIECES._highlight)) {
+  throw new Error("_highlight 切片里没有 esc( / <mark>，切歪或实现回退了");
 }
-if (PIECES._highlight.indexOf("esc(text") > PIECES._highlight.indexOf("<mark>")) {
-  throw new Error("_highlight 里 <mark> 出现在 esc(text) 之前（顺序颠倒 = XSS 隐患）");
+if (PIECES._highlight.indexOf("esc(") > PIECES._highlight.indexOf("<mark>")) {
+  throw new Error("_highlight 里 <mark> 出现在 esc( 之前（顺序颠倒 = XSS 隐患）");
+}
+// 防回退：旧实现是「先 esc() 再在已转义串上定位」，标志为 safe / safeNeedle。
+// 那套写法有两个已实测的缺陷——① 命中区间切在实体中间（& → &amp; 的边界，
+// 高亮范围与用户所见的字符不对应）；② toLowerCase 可改变长度（İ → i̇，1→2），
+// 折叠串索引整体错位 ⇒ 高亮落到完全无关的字符（实测：原文「İstanbul」搜「T」高亮「a」）。
+if (/\bsafe\b|safeNeedle/.test(PIECES._highlight)) {
+  throw new Error("_highlight 仍含旧「先 esc 再定位」实现的 safe/safeNeedle（命中区间会被实体边界与折叠长度变化带偏）");
+}
+// 防回退：码点级展开是长度对齐的前提（slice 按 UTF-16 计数，𝔘 占 2）。
+if (!/\[\.\.\./.test(PIECES._highlight)) {
+  throw new Error("_highlight 缺少码点级展开（[...raw]）：非码点切片会被 UTF-16 计数与 toLowerCase 的长度变化带偏");
 }
 const KINDS = ["vocab", "example", "colloc", "corpus"];
 for (const kind of KINDS) {
@@ -439,6 +450,46 @@ function check(name, cond, detail) {
     !exampleHtml.includes("仅显示前"),
     "example尾=" + JSON.stringify(exampleHtml.slice(-60))
   );
+}
+
+/* 场景 5：命中定位 MUST 落在**未转义原文**上。
+ * 不变式（对每组 text/needle 都断言）：
+ *   ① 去掉 <mark> 后反转义 === 原文（命中不得改写/吃掉任何字符 ⇒ 永不切开实体）；
+ *   ② 每个 <mark> 内反转义 === needle（命中区间不多不少 ⇒ 不许错高亮）；
+ *   ③ 输出不含可执行 <script>（XSS 面未因重排而破）。
+ * 关键回归用例：İ 的 toLowerCase() 长度 1→2，若在已转义串/UTF-16 索引上定位，
+ * 折叠串索引会整体错位，原文「İstanbul」搜「T」会高亮到字母「a」。 */
+{
+  const hl = (t, q) => vm.runInContext(`_highlight(${JSON.stringify(t)}, ${JSON.stringify(q)})`, ctx);
+  const unescHtml = (s) =>
+    s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const markBodies = (html) => [...html.matchAll(/<mark>([\s\S]*?)<\/mark>/g)].map((m) => m[1]);
+  const PAIRS = [
+    ["İstanbul", "t"], ["İstanbul", "T"], ["İstanbul", "i"], ["aİbİc", "İ"],
+    ["AT&T", "T&T"], ["a&b", "a&"], ["a&a&a", "a&"], ["Fuß & Größe", "größe"],
+    ["ẛ̣ebel", "ẛ̣"], ["𝔘nicode", "u"], ["ΣΟΦΟΣ", "σοφος"],
+    ["<script>alert(1)</script>", "<script>"], ["a&amp;b", "a&"],
+  ];
+  const bad = [];
+  for (const [t, q] of PAIRS) {
+    const out = hl(t, q);
+    const label = `${JSON.stringify(t)}/${JSON.stringify(q)}`;
+    if (unescHtml(out.replace(/<\/?mark>/g, "")) !== t) {
+      bad.push(`${label}: 非命中段被改动或字符丢失 -> ${JSON.stringify(out)}`);
+    }
+    for (const m of markBodies(out)) {
+      const hit = unescHtml(m);
+      if (hit.toLowerCase() !== q.toLowerCase()) bad.push(`${label}: mark 内 ${JSON.stringify(hit)} ≠ needle`);
+    }
+    if (/<script/i.test(out)) bad.push(`${label}: 输出含可执行 <script>`);
+  }
+  check("highlight_hit_alignment", bad.length === 0, bad.slice(0, 4).join(" | "));
+  // 两条等值断言把「错高亮」钉死成具体字符（上面的不变式只说"不对"，这里说"对成什么"）。
+  const outT = hl("İstanbul", "t");
+  check("highlight_hit_alignment: İstanbul 搜 t 只高亮字母 T", outT === "İs<mark>t</mark>anbul", "out=" + outT);
+  const outAmp = hl("AT&T", "T&T");
+  check("highlight_hit_alignment: 实体边界不被切开", outAmp === "A<mark>T&amp;T</mark>", "out=" + outAmp);
 }
 
 /* ---------------------------------------------------------------------------

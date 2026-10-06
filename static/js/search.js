@@ -16,8 +16,8 @@
  *   - groups.corpus[]  : {pos:source, cefr:level, payload:{source,ref_id,title,level,snippet}}
  *
  * 硬纪律（spec §3.4/§4）：
- *   - 所有展示字段一律经 esc()（或经先 esc 后包 <mark> 的 _highlight）；绝不 innerHTML
- *     直插未转义数据 —— 查询串含 `<script>` 时不得注入（XSS 守卫）。
+ *   - 所有展示字段一律经 esc()（或经 _highlight：原文定位命中后逐段 esc 再包 <mark>）；
+ *     绝不 innerHTML 直插未转义数据 —— 查询串含 `<script>` 时不得注入（XSS 守卫）。
  *   - 输入 ≥2 字符触发、300ms 防抖；范围分段控件状态**不持久化**（与工作台同纪律）。
  *   - 复用既有入口：🔊 playGermanAudio · 「+ 加入 FSRS 盒」saveA1WordToDeck ·
  *     语料跳转 openReader(article) / openText(encounter)。
@@ -115,27 +115,47 @@ function _ensureStyle() {
   (document.head || document.documentElement).appendChild(style);
 }
 
-/* ── 命中高亮：先 esc() 再包 <mark>（XSS 守卫 —— 顺序不可颠倒） ────────────────
- * 原文与查询串都先 esc()，再在**已转义串**上做大小写不敏感的子串定位；切片索引
- * 在同一个已转义串上计算，故两串无论是否含 & < > 都保持对齐。查询串含
- * `<script>` 时 esc 后成为 `&lt;script&gt;`，包进 <mark> 也只是纯文本。 */
+/* ── 命中高亮：在**未转义原文**上定位命中，再逐段 esc() 后包 <mark> ────────────────
+ * 两条不可省的纪律（顺序/形态都不可回退）：
+ *
+ * ① 匹配 MUST 发生在**未转义原文**上，esc() 只用于**输出前逐段**转义。若先 esc()
+ *    再定位，命中区间就是「转义后的形态」：`&`→`&amp;` 的实体边界会被切开（高亮范围
+ *    与用户所见的字符不对应），且 `İ`.toLowerCase() 长度 1→2 这类**折叠改变长度**的
+ *    字符会把折叠串索引整体错位 ⇒ 高亮落到完全无关的字符上（实测：原文「İstanbul」
+ *    搜「T」会高亮字母「a」）。本实现同时消除这两个瑕疵。
+ *
+ * ② 比较 MUST 走**码点数组**：`String.prototype.toLowerCase()` 不保证长度不变
+ *    （`İ` → `i̇` 两码位），而 `.length`/`slice` 又是 UTF-16 计数（`𝔘` 占 2）⇒ 只
+ *    有按码点折叠并按码点切片，命中区间才与原文严格一一对应。
+ *
+ * XSS 安全不变式：输出前**每一段**（命中段与非命中段）都过 esc()，`<script>` 之类
+ * 只能以纯文本形式出现，`<mark>` 是唯一由本函数插入的标签。 */
 function _highlight(text, q) {
-  const safe = esc(text == null ? "" : String(text));
+  const raw = text == null ? "" : String(text);
   const needle = String(q == null ? "" : q).trim();
-  if (!needle) return safe;
-  const safeNeedle = esc(needle);
-  if (!safeNeedle) return safe;
-  const hay = safe.toLowerCase();
-  const target = safeNeedle.toLowerCase();
+  if (!needle) return esc(raw);
+  // 逐码点小写化；若某码点小写化后长度变了（İ / ẛ̣ 之类），保留原码点 ——
+  // 保证 hay 与原文 src 严格同长同位，宁可漏高亮也不错高亮。
+  const fold = (cp) => { const f = cp.toLowerCase(); return f.length === cp.length ? f : cp; };
+  const src = [...raw];
+  const hay = src.map(fold);
+  const target = [...needle].map(fold);
+  if (!target.length) return esc(raw);
   let out = "";
   let from = 0;
-  let idx = hay.indexOf(target, from);
-  while (idx !== -1) {
-    out += safe.slice(from, idx) + "<mark>" + safe.slice(idx, idx + safeNeedle.length) + "</mark>";
-    from = idx + safeNeedle.length;
-    idx = hay.indexOf(target, from);
+  let i = 0;
+  while (i + target.length <= hay.length) {
+    let hit = true;
+    for (let j = 0; j < target.length; j++) {
+      if (hay[i + j] !== target[j]) { hit = false; break; }
+    }
+    if (!hit) { i++; continue; }
+    out += esc(src.slice(from, i).join("")) +
+      "<mark>" + esc(src.slice(i, i + target.length).join("")) + "</mark>";
+    from = i + target.length;
+    i = from;
   }
-  return out + safe.slice(from);
+  return out + esc(src.slice(from).join(""));
 }
 
 /* ── 防抖 ─────────────────────────────────────────────────────────────────── */

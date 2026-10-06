@@ -148,13 +148,22 @@ def test_search_reuses_existing_audio_and_deck_entries():
 # ── XSS 守卫：高亮必须先 esc() 再包 <mark> ────────────────────────────────────
 
 
-def test_highlight_escapes_before_wrapping_mark():
+def test_highlight_matches_on_raw_text_then_escapes_each_segment():
     body = _js_fn(SEARCH, "function _highlight(")
-    # 关键：必须对**原文参数 text** 走 esc()（而非仅对 needle），否则查询/字段含
-    # <script> 时原样进 innerHTML 注入。断言 "esc(text" 使「删掉这层转义」直接变红。
-    assert "esc(text" in body, "高亮函数必须先对原文 esc(text)（否则含 <script> 会注入）"
+    # 反回归守卫：高亮 MUST 在**未转义原文**上定位命中，esc() 只用于**输出前逐段**转义。
+    # 旧实现是「先 esc() 再在已转义串上定位」（safe / safeNeedle 两个变量），已实测两个缺陷：
+    #   ① 命中区间切在实体中间（& → &amp; 的边界，高亮范围与用户所见的字符不对应）；
+    #   ② toLowerCase 可改变长度（İ → i̇，1→2）⇒ 折叠串索引整体错位，高亮落到**完全
+    #      无关的字符**上（原文「İstanbul」搜「T」会高亮字母「a」）。
+    # 行为层证据在 tools/wb_search_probe.mjs 的 highlight_hit_alignment（13 组 text/needle
+    # × 三条不变式 + 两条等值断言）；这里只钉形态：旧标志 MUST NOT 再现、esc( 早于 <mark>、
+    # 必须码点级展开（String.slice 按 UTF-16 计数，𝔘 占 2 —— 非码点切片同样会错位）。
     assert "<mark>" in body, "高亮必须用 <mark> 包裹命中"
-    assert body.index("esc(text") < body.index("<mark>"), "esc(text) 必须发生在 <mark> 包裹之前"
+    assert "esc(" in body, "高亮必须经 esc() 转义（否则含 <script> 的字段会注入 innerHTML）"
+    assert body.index("esc(") < body.index("<mark>"), "esc( 必须发生在 <mark> 包裹之前"
+    assert "safeNeedle" not in body, "禁止回退到「先 esc 再定位」（safeNeedle 是旧实现标志）"
+    assert not re.search(r"\bsafe\b", body), "禁止回退到「先 esc 再定位」（safe 是旧实现标志）"
+    assert "[..." in body, "必须码点级展开（[...raw]）：UTF-16 计数 + 折叠长度变化都会让索引错位"
 
 
 def test_highlight_is_used_across_all_renderers():
@@ -190,7 +199,8 @@ def test_main_mounts_search_namespace_on_window():
 # 上面的静态断言只能证明「源码里写着 esc( / <mark> / 四个分组」。探针把 core.js 的
 # esc 与 search.js 的 _highlight / 四个渲染器 / renderSearchGroups 按括号配对**真实
 # 切片**丢进 node:vm 真跑（探针里没有一份重抄的实现）：
-#   ① 高亮转义安全（含 <script> 的字段不注入 innerHTML）；② 四组渲染；③ 空态。
+#   ① 高亮转义安全（含 <script> 的字段不注入 innerHTML）；② 四组渲染；③ 空态；
+#   ④ 截断语义；⑤ 高亮命中定位对齐（原文上定位 ⇒ 实体边界不切开、折叠长度变化不错位）。
 # 这里驱动它、断言 fail==0 且四个关键场景名都在（防场景被删仍全绿）。
 
 _PROBE_SCENARIOS = (
@@ -198,6 +208,7 @@ _PROBE_SCENARIOS = (
     "four_groups_render",
     "empty_state",
     "truncation_notices",
+    "highlight_hit_alignment",
 )
 
 
@@ -232,7 +243,7 @@ def _run_search_probe() -> dict:
 
 
 def test_search_ui_behaves_under_node():
-    """动态探针：真实 esc/_highlight/渲染器在 node:vm 里跑三个行为场景。"""
+    """动态探针：真实 esc/_highlight/渲染器在 node:vm 里跑五个行为场景组（含高亮对齐）。"""
     out = _run_search_probe()
     assert out["fail"] == 0, "探针有失败场景：%s" % [c for c in out["cases"] if not c["ok"]]
     assert out["total"] >= 3, "探针场景数必须 ≥3，实际 %s" % out["total"]
