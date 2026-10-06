@@ -22,6 +22,13 @@ from .syntax_tree import analyze_sentence_topology, build_clause_tree, split_sen
 SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")
 AUTO_DOWNLOAD_MODEL = "de_core_news_sm"
 
+# processed_json 的 schema 版本号 —— 全仓唯一真相源。
+# 惰性迁移判据（routes/main.py 的 GET /api/articles/{article_id}）按它比对：
+# 判据端与写入端 MUST 共用这一个常量。曾因两端各写一份字面量而漂移
+#（写入 "3.5.0" / 判据 "3.4.0"），判据恒真 ⇒ 「惰性迁移」退化成
+#「每次 GET 都重跑 spaCy 并 UPDATE articles」。改版本号只改这里。
+PROCESSED_JSON_VERSION = "3.5.0"
+
 
 def _load_spacy_model(name: str) -> Tuple[Any, str]:
     """加载指定德语模型，返回 (nlp, 加载方式描述)；全部策略失败则抛 RuntimeError。
@@ -418,7 +425,12 @@ def _process_german_text_pure_python(text: str) -> Dict[str, Any]:
             }
         )
     stats = calculate_cefr_stats(all_tokens)
-    return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
+    return {
+        "version": PROCESSED_JSON_VERSION,
+        "sentence_count": len(sentences),
+        "sentences": sentences,
+        "stats": stats,
+    }
 
 
 def process_german_text(text: str) -> Dict[str, Any]:
@@ -477,7 +489,12 @@ def process_german_text(text: str) -> Dict[str, Any]:
         tree = build_clause_tree(sent)
         sentences.append({"id": sent_idx, "text": sent.text, "tokens": tokens, "topology": top, "clause_tree": tree})
     stats = calculate_cefr_stats(all_tokens)
-    return {"version": "3.5.0", "sentence_count": len(sentences), "sentences": sentences, "stats": stats}
+    return {
+        "version": PROCESSED_JSON_VERSION,
+        "sentence_count": len(sentences),
+        "sentences": sentences,
+        "stats": stats,
+    }
 
 
 SYSTEM_GRAMMAR_PROMPT = (

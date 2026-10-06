@@ -100,6 +100,7 @@ from delector.nlp_engine.linguistics import (
 from delector.nlp_engine.processor import (
     NLP_ENGINE,
     NLP_ENGINE_DETAIL,
+    PROCESSED_JSON_VERSION,
     SYSTEM_GRAMMAR_PROMPT,
     get_cefr_level,
     nlp,
@@ -275,7 +276,14 @@ def get_article(article_id: int) -> Dict[str, Any]:
             pj = json.loads(data.get("processed_json") or "{}")
         except Exception:
             pj = {}
-        if not isinstance(pj, dict) or "stats" not in pj or pj.get("version") != "3.4.0":
+        if (
+            not isinstance(pj, dict)
+            or "stats" not in pj
+            or pj.get("version") != PROCESSED_JSON_VERSION
+        ):
+            # 惰性迁移：老数据（processed_json 缺失/非 dict/无 stats/版本落后）首次 GET
+            # 时重算并回写。判据 MUST 引用 processor 的单一真相源 —— 曾硬编码字面量
+            # 与写入端漂移，导致本分支恒真 ⇒ 每次 GET 都重跑 spaCy 并 UPDATE。
             pj = process_german_text(data.get("raw_text") or "")
             conn.execute(
                 "UPDATE articles SET processed_json = ? WHERE id = ?",
