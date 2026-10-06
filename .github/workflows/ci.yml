@@ -58,7 +58,7 @@ jobs:
       # **静默 skip**，测试全绿而探针根本没跑（比红更坏：回归无声溜过）。
       # 固定 major '20'（对齐 runner 自带的 20.x），MUST NOT 用 latest（不可复现）。
       - name: Set up Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
