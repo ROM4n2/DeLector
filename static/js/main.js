@@ -162,6 +162,7 @@ import {
 import * as ListenLab from "./listen-lab.js";
 import * as HardSentences from "./hard-sentences.js";
 import * as Search from "./search.js";
+import { initUpdateCheck } from "./update.js";
 
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
@@ -1182,4 +1183,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEditorListeners();
   ShadowPlayer.init();
   Companion.init();
+  // 顶栏更新 chip：落后时才可见；自动路径在无新版/拿不准/失败时零可见变化。
+  initUpdateCheck();
 });

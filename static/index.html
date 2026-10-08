@@ -31,9 +31,13 @@
         >
         <!-- 这个字面量是判断「前端到底刷新了没有」的唯一肉眼指标，
            test_writer_mobile.py 断言它与 sw.js / build.gradle 的版本号一致 -->
-        <span class="right"
-          ><span class="pulse"></span>System · v5.16.0 Online</span
+        <span class="right" id="topbar-system"
+          ><span class="pulse"></span>System · v5.16.0</span
         >
+        <!-- 版本更新 chip：仅「落后」时可见；无新版 / 拿不准 / 请求失败一律零可见变化。
+             刻意作为左侧版本自证串的**兄弟元素** —— test_writer_mobile.py 的正则锚定
+             「System · vX.Y.Z</span>」，把 chip 插进那句与其 </span> 之间会立刻失配。 -->
+        <span id="update-chip" class="update-chip" hidden></span>
       </div>
     </div>
 

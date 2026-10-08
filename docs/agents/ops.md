@@ -165,7 +165,11 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
     - `static/sw.js` 的 `CACHE_NAME`（决定 activate 何时清旧缓存）
     - `android/app/build.gradle` 的 `DELECTOR_VERSION_NAME` / `..._CODE` fallback
       （`versionCode` = `major*10000 + minor*100 + patch`）
-    - `static/index.html` 顶栏 `System · vX.Y.Z Online` —— **别把它当装饰**。
+    - `static/index.html` 顶栏 `System · vX.Y.Z` —— **别把它当装饰**。
+      **更新状态不得写入这一句**（它只自证"前端资源刷没刷新"）：落后提示由
+      `#update-chip` 承载（`static/js/update.js`）；`wb_update_chip_probe.mjs` 会把
+      `#topbar-system` 的**运行期**文本一并纳入快照，往这句里追加内容即红
+      （源码静态断言拦不住运行期追加）。
       它是用户唯一能肉眼判断「前端刷新了没有」的指示灯。v4.4.5 就漏了这一处：
       升级链路修好了，指示灯照旧报旧版本，于是"修复没生效"与"缓存闸失效"
       在现象上无法区分，最后只能靠拆 APK 才排查清楚。
@@ -208,7 +212,7 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 - **入复习盒 + 成绩落盘**
   8. 「加入复习盒」→ 写入 `grammar_cards`，句卡按钮变「已加入」；重复点不再重复入盒（幂等）
   9. 会话结束/退出时成绩落 `hard_sentence_trials`（可到复习卡域确认该句按 SRS 复习）；飞行模式下提交 trials 与入盒均应可用
-  10. 顶栏「System · v5.7.0 Online」指示器与 APK 内前端一致（覆盖安装后确认已刷新）
+  10. 顶栏「System · vX.Y.Z」指示器与 APK 内前端一致（覆盖安装后确认已刷新）
 
 **记录纪律**：逐项记「期望 vs 实际」；异常抓 `adb logcat` 或 WebView 控制台（前端报错看
 `hard-sentences.js` 调用 `/api/syntax/*` 的响应）。发现缺陷 → 记入 work.log 并在下个补丁回合修复

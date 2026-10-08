@@ -4,6 +4,7 @@
 > **决策者:** Haoyu Xi ｜ **产出方式:** `/dfs-grill` 双镜拷问（product-ux + sre-resilience 席位）
 
 - **状态**: Accepted（2026-10-08）
+- **实施**: **已完成**（2026-10-08，分支 `feat/update-visibility`，6 个 commit `b2f191c`/`cf69bf2`/`efee426`/`1acdcf7`/`051ed7d`/`c335215`，**未发版**）。Android 真机两条假设仍待验证，见 §7.3。
 - **日期**: 2026-10-08
 - **领域**: 发布工程 / Android 分发 / 前端可用性 / 本地优先
 - **决策者**: Haoyu Xi
@@ -196,7 +197,33 @@
 
 ---
 
-## 7. 关联
+## 7. 实施记录（2026-10-08）
+
+### 7.1 交付物
+
+| 层 | 交付 |
+| --- | --- |
+| 版本真相源 | `delector/core/version.py`（`APP_VERSION` + `version_code()`，叶模块零 import） |
+| 守卫升级 | `tests/test_writer_mobile.py` 两条发版守卫基准从"三面互等"改为"每面 == `APP_VERSION`"；顺带修掉 `tools/vault-proactive-scan.py:260` 的**真 bug**（原正则要求 `,` 分隔而实际是 `?:` ⇒ 永不命中，该脚本的版本一致性判定实际只覆盖两端，靠 `len(versions) < 2` 恰好躲过 WARN） |
+| 端点 | `delector/routes/update.py` + `__init__.py` 三处挂载（`main.router` 之前） |
+| 契约守卫 | `tests/test_update_check_endpoint.py`：穷举 iff 双向（4 类 error_reason + 2 类成功态）、结构证不写库（AST：无 sqlite3/aiosqlite/`delector.core.database` 前缀、无写动词字面量 SQL）、无本机闸 |
+| 前端 | `static/js/update.js`、`static/index.html` chip 锚点、`static/js/main.js` 接线、`static/style.css` |
+| 行为探针 | `tools/wb_update_chip_probe.mjs`（11 场景）+ `tests/test_update_chip_ui.py` |
+
+### 7.2 实施中据实修正的两处决策细节
+
+1. **§4.1 附带默认被**收窄**（重要）**：原文写"顶栏 `System · vX.Y.Z Online` 改为真实版本 + 真实检查结果"。实施时发现该静态串是**用户判断"前端资源刷没刷新"的唯一肉眼指标**（`tests/test_writer_mobile.py:75-79` 记录了 v4.4.5 漏 bump 的事故）。若改成由 `/api/version` 动态渲染，该指标立刻失效（服务端版本只反映**后端代码**，证明不了前端资源是否刷新）。⇒ 裁决：**静态 `System · vX.Y.Z` 保留**并由守卫继续钉死等于 `APP_VERSION`；只去掉在单机回环下**字面撒谎**的 `Online`；动态更新状态**只**由新 chip 承载（`#update-chip`）。
+2. **chip 的 DOM 位置是被守卫倒逼的**：`tests/test_writer_mobile.py:96` 的正则锚定 `System · vX.Y.Z</span`，所以 chip 必须做成**兄弟元素**而**不能**插进版本号与其 `</span>` 之间（否则该守卫立刻失配）。此约束已写进 `static/index.html` 的注释与本文档，避免后人"顺手"挪动。
+
+### 7.3 实际验证与剩余未验证
+
+- **已验证（桌面侧真实出网）**：`_fetch_latest_release(3.0)` 成功取到 `tag_name=v5.16.0`（4.04s），`check_for_update()` 真实返回 `has_update=false`（当前 = latest）；缓存真实路径正确（首调出网、二/三调 `cached=true` 且 `checked_at` 保持原值、TTL 21600s、计数出网 1 次）。**注意** `_HTTP_TIMEOUT=3.0` 是 httpx **各阶段**超时而非总时长，实测总耗时 4.04s 仍成功。
+- **仍未验证（阻塞，需真机）**：① **Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 HTTPS**（`delector/routes/encounter.py:381` 的手机出网是**手机→桌面的 LAN HTTP**，不能作为公网 TLS 可用的证据）；② **Android WebView 点击 chip 外链是否被交给系统浏览器**（若被吞，需改 `MainActivity` 的 URL 拦截，而 Java 侧本机无 Android SDK ⇒ 只能靠 CI 验证）。二者任一失败都会改变本 ADR 的可行性判断（可能需重议 Option E）。
+- **未做**：发版（发布面五件套未动，README 未 bump）。
+
+---
+
+## 8. 关联
 
 - **上游**：本 ADR 由 `/dfs-grill` 双镜拷问产出（`product-ux` 镜头：瓶颈定位在"不知道有新版"；`sre-resilience` 镜头：实核 manifest / workflow / MainActivity，给出 Option B 的信任锚与失败模式清单）。
 - **相关**：`docs/agents/architecture.md`（Android 独立单机版一节）、`docs/agents/ops.md`（打包与真机点检）、红线 4（versionCode 编码）、红线 6（缓存闸）、红线 9（import 期不联网）、红线 11（跨边界契约须行为探针验证）。
