@@ -54,6 +54,7 @@
 - **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；注意 `import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
 - **⏸ 更新可见性（ADR-0017）：桌面端已上线 / Android 端暂缓**（用户 2026-10-08 决定"先暂缓安卓"）。代码**已合入 master**（PR #115/#116 → `ee68ec8`，master CI success）：`delector/core/version.py: APP_VERSION` 单一真相源、`GET /api/update/check`（GitHub Releases 唯一真相源 + 成功 6h / **失败 60s** TTL + 3s 超时 + **不挂本机闸**＝ADR §4.3 显式决定）、顶栏 chip + `wb_update_chip_probe.mjs`（11 场景）。实测基线：半 A **1106** / 半 B **264**+1 skipped / 探针文件 **29** / mypy **96**+**72**；**桌面侧真实出网已验证**（4.04s 取到 `v5.16.0`）。
   **⚠️ 暂缓 ≠ 已验证：Android 端能力未知**（两条假设从未验证）——① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（手机现有出网是 **LAN HTTP**，不是证据）；② Android WebView 点 chip 外链是否交给系统浏览器。**不得**把"代码已合并"记为"双端已验证"；恢复验证时见 work.log 2026-10-08 事件与 ADR §7.3。
+- **⏳ 性能路线（ADR-0018 已裁决，待执行测量）**：**先测量、不换主体**。测量方案：4 场景（冷启/长文精读/热读/卡盒 20k）+ 分层剖析（Python CPU/RSS/前端/SQL/网络）+ 判定门（Python CPU >50% **且** p95 >2 倍目标）。按结果选路：CPU 主导 → **热点下沉**；编排/并发主导 → **扩展 ADR-0008 边界（Go Agent）**。**"换 HTTP 主体"已永久否决**（三条依据 + 三条翻盘条件见 ADR §3.2）。已知前提：spaCy 单价现有**两个矛盾值**（42ms/句 vs 2.1ms/句），需由测量收口；全仓唯一基准 `bench_cards_endpoint.py` **只断言结构、不钉阈值**（测量产物须补上）。
 - 递延项：tests `--strict`；`tools/vault-proactive-scan.py` 的三条版本正则**本身无自动化守卫**（Task 2 修掉的那个"正则永不命中"缺陷恰是无人守的类型）。
 
 ## 工作方式

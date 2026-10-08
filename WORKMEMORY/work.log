@@ -485,3 +485,12 @@ Caps: filesystem-read, filesystem-write
   ① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（现有手机出网是 **LAN HTTP**，不是证据）；
   ② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无 Android SDK、只能靠 CI）。
   **三处同标记**：本 log、`PROJECT_OVERVIEW` 待办、ADR-0017 §7.3；exec 台账 `.vault-exec-ledger.json` 的 Task 6 保持 `blocked`。防的是未来 agent（或我自己）把"代码已合并"误读成"双端已验证"。
+
+### 2026-10-09 00:10 | codebuddy | ADR-0018 产出（/dfs-grill：性能换语言提案 → 裁决"先测量、不换主体"）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户提案「不用 Python 做系统主体，只留生态库调德语/记忆算法，不想性能拖垮项目」。走 `/dfs-grill` 后**否掉了提案的字面形态**，产出 ADR-0018（vault 正式件 + 仓内副本 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md`）。**未改任何生产代码**。
+- **改变提案形状的两条事实**：
+  ① **"把重活给更高效语言"项目里已有且已决策** —— ADR-0008（Go Agent Runtime + Python NLP Engine 混合架构）已落地 `agent/`（Go：CLI+DAG+supervisor，拉起 uvicorn 子进程 8001）；ADR-0010 已划边界（Go=编排/并发/退避重试，Python=spaCy 形态学/lemmatization）。**方向恒为 Go→Python，主应用不调 Go** ⇒ 真正的待决问题只是"要不要把 **HTTP 主体**也搬过去"。
+  ② **"Python 性能拖垮项目"证据不足** —— 全仓唯一真基准 `tools/bench_cards_endpoint.py` **只断言结构、不钉阈值**；审计文档里的数字**不可复跑**且部分自带 UNVERIFIED；**spaCy 单价有两个矛盾值**（`syntax_hard.py:9` 写 `~42ms/句` vs 审计写 `~2.1ms/句`，**差 20 倍**，都没脚本兜底）。perf 席位实测 20k 卡 790ms（Python/FSRS 84%、排序 9%），瓶颈排序 **AI/TTS(网络) > spaCy(Cython) > SQLite > 冷启 > 前端 > HTTP/序列化** ⇒ 前两项换语言都解决不了。全仓**唯一点名 GIL** 的地方是 `ExportSaver.java:73`（大导出并发）。
+- **裁决**：D1 **先测量不换**（1 小时方案：4 场景冷启/长文/热读/卡盒 + 分层剖析 + 阈值「Python CPU>50% 且 p95>2 倍目标」）；D2 按结果选路（CPU 主导→**热点下沉 O2**；编排/并发主导→**扩展 ADR-0008 边界 O3**）；D3 **永久否决"换 HTTP 主体 O1"**（依据：spaCy 不可移除⇒NLP 退化成跨进程 IPC 多一跳、最大瓶颈不受宿主语言影响、Android 双运行时与 56.7MB 内嵌 Python 冲突），并写入**三条翻盘条件**防悄悄重开；D4 测量后先做便宜杠杆；D5 明确 **Python 不可移除**（永远讨论"边界"而非"替换"）；D6 新基准**必须钉阈值**（补上现基准只断言结构的缺口）。
+- **Fog**：测量结果本身（D2 分支取决于它，测量前不许选路）；Android 侧如何测量（本机无 Android SDK）；卡盒前端渲染占比未剖析；若走 O2 则 Android arm64 交叉编译链路未定。
