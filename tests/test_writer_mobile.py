@@ -2,6 +2,8 @@
 import re
 from pathlib import Path
 
+from delector.core.version import APP_VERSION, version_code
+
 ROOT = Path(__file__).parent.parent
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 WRITER = (ROOT / "static" / "js" / "writer.js").read_text(encoding="utf-8")
@@ -57,37 +59,54 @@ def test_android_disables_inlay_hints_by_default():
 
 
 def test_version_is_consistent_across_release_surfaces():
-    """版本号有两个必须一致的落点：sw.js 的 CACHE_NAME（决定旧缓存何时被清）
-    与 build.gradle 的 fallback（无 CI 环境变量时本地构建的版本）。
+    """版本号有四处必须一致的落点：sw.js 的 CACHE_NAME（决定旧缓存何时被清）、
+    build.gradle 的 fallback（无 CI 环境变量时本地构建的版本）、index.html 顶栏的
+    肉眼指示灯，以及 delector.core.version.APP_VERSION（后端单一真相源）。
 
-    断言两者相等，而不是断言某个字面量 —— 写死字面量的测试每次 bump 都要改，
-    而改测试的人迟早只改测试、不查它守的东西是否还成立（v4.4.4 就是这样：
-    测试守着 index.html 的 ?v= 查询串，而那个机制早已挡不住任何东西）。
+    断言每一面都等于 APP_VERSION，而不是断言各面两两相等 —— 两两相等只保证它们
+    「彼此」一致；基准自己若漂了（比如某次 bump 只改了一处），几面仍可能大小相等地
+    停在旧版本上。钉到 APP_VERSION 后，任何一面漏 bump 都会变红。
+
+    那为什么这里仍需解析字面量、而不是让被守对象直接 import APP_VERSION？因为
+    index.html / sw.js 是浏览器与 Service Worker 直接加载的静态资源，build.gradle 是
+    Gradle 构建脚本 —— 三者都吃不下 Python 的 import，没有任何运行时通道能把
+    APP_VERSION 注入进去，故只能靠这道守卫解析文本、把它们钉死在 Python 侧真相源上。
+
+    写死字面量的测试每次 bump 都要改，而改测试的人迟早只改测试、不查它守的东西是否
+    还成立（v4.4.4 就是这样：测试守着 index.html 的 ?v= 查询串，而那个机制早已挡不住
+    任何东西）。
     """
     sw_match = re.search(r"delector-static-v(\d+\.\d+\.\d+)", SW)
     assert sw_match, "sw.js 里找不到 delector-static-vX.Y.Z 形式的 CACHE_NAME"
+    assert sw_match.group(1) == APP_VERSION, (
+        f"版本不一致：sw.js={sw_match.group(1)} vs APP_VERSION={APP_VERSION}"
+    )
+
     gradle_name = re.search(r'DELECTOR_VERSION_NAME"\)\s*\?:\s*"(\d+\.\d+\.\d+)"', GRADLE)
     assert gradle_name, "build.gradle 里找不到 DELECTOR_VERSION_NAME 的 fallback"
-    assert sw_match.group(1) == gradle_name.group(1), (
-        f"版本不一致：sw.js={sw_match.group(1)} vs build.gradle={gradle_name.group(1)}"
+    assert gradle_name.group(1) == APP_VERSION, (
+        f"版本不一致：build.gradle={gradle_name.group(1)} vs APP_VERSION={APP_VERSION}"
     )
 
-    # index.html 顶栏那句 "System · vX.Y.Z Online" 是用户判断「前端刷新了没有」的
+    # index.html 顶栏那句 "System · vX.Y.Z" 是用户判断「前端刷新了没有」的
     # 唯一肉眼指标。v4.4.5 发版时漏 bump 了它，于是修好的升级链路看起来像没生效
     # —— 缓存闸门是对的，指示灯是坏的，而指示灯说什么用户就信什么。
-    index_label = re.search(r"System · v(\d+\.\d+\.\d+) Online", INDEX)
-    assert index_label, "index.html 顶栏找不到 'System · vX.Y.Z Online' 版本标签"
-    assert index_label.group(1) == gradle_name.group(1), (
-        f"版本不一致：index.html 顶栏={index_label.group(1)} vs build.gradle={gradle_name.group(1)}"
+    # 正则钉在 </span 上：版本号后不许再挂 " Online" 之类的尾巴，否则又成了一句
+    # 只绑回环的单机里不该说的字面谎言。
+    index_label = re.search(r"System · v(\d+\.\d+\.\d+)</span", INDEX)
+    assert index_label, "index.html 顶栏找不到 'System · vX.Y.Z</span>' 版本标签"
+    assert index_label.group(1) == APP_VERSION, (
+        f"版本不一致：index.html 顶栏={index_label.group(1)} vs APP_VERSION={APP_VERSION}"
     )
 
-    # versionCode 编码规则 major*10000 + minor*100 + patch，必须与 versionName 对得上。
+    # versionCode 编码规则由 delector.core.version.version_code 唯一定义
+    # （major*10000 + minor*100 + patch），这里断言 build.gradle 的 fallback 与之一致
+    # —— 不要再在本测试里手算第二份编码规则，否则规则一改就两处不同步。
     # 旧规则 major*100+minor*10+patch 在 3.10.0 与 4.0.0 上撞车过，而 versionCode
     # 撞车意味着新版无法覆盖安装旧版。
     gradle_code = re.search(r'DELECTOR_VERSION_CODE"\)\s*\?:\s*"(\d+)"', GRADLE)
     assert gradle_code, "build.gradle 里找不到 DELECTOR_VERSION_CODE 的 fallback"
-    major, minor, patch = (int(x) for x in gradle_name.group(1).split("."))
-    assert int(gradle_code.group(1)) == major * 10000 + minor * 100 + patch
+    assert int(gradle_code.group(1)) == version_code(APP_VERSION)
 
     # tag → 构建的注入链路
     assert 'System.getenv("DELECTOR_VERSION_NAME")' in GRADLE
@@ -106,23 +125,21 @@ def test_version_is_consistent_across_release_surfaces():
 
 
 def test_readme_download_table_points_at_current_version():
-    """README 的下载表与 Release badge 必须跟 build.gradle 的版本走。
+    """README 的下载表与 Release badge 必须跟 APP_VERSION 走。
 
-    版本三处代码落点（index.html / sw.js / build.gradle）由上一条测试钉死，漏
-    bump 会红；README 的四行下载表却没人守 —— v4.9.0 发版时 badge、词量、用例数、
-    路线图都同步了，偏偏四行下载链接还指向 v4.8.3，用户从 README 点下载会拿到
+    版本四处代码落点（index.html / sw.js / build.gradle / APP_VERSION）由上一条测试
+    钉死，漏 bump 会红；README 的四行下载表却没人守 —— v4.9.0 发版时 badge、词量、
+    用例数、路线图都同步了，偏偏四行下载链接还指向 v4.8.3，用户从 README 点下载会拿到
     上一版。这类漏发不会让任何东西报错，只会静默发错包，所以必须变成红灯。
 
-    断言「与 build.gradle 相等」而不是写死字面量：写死的每次 bump 都要改测试，
+    断言「与 APP_VERSION 相等」而不是写死字面量：写死的每次 bump 都要改测试，
     而改测试的人迟早只改测试、不查它守的东西是否还成立。
     """
-    gradle_name = re.search(r'DELECTOR_VERSION_NAME"\)\s*\?:\s*"(\d+\.\d+\.\d+)"', GRADLE)
-    assert gradle_name, "build.gradle 里找不到 DELECTOR_VERSION_NAME 的 fallback"
-    version = gradle_name.group(1)
+    version = APP_VERSION
 
     badge = re.search(r"badge/Release-v(\d+\.\d+\.\d+)-", README)
     assert badge, "README 顶部找不到 Release badge"
-    assert badge.group(1) == version, f"版本不一致：README badge={badge.group(1)} vs build.gradle={version}"
+    assert badge.group(1) == version, f"版本不一致：README badge={badge.group(1)} vs APP_VERSION={version}"
 
     # 逐行取下载表：每行同时含「版本单元格」与「releases/tag 链接」，两者都要对。
     # 只断言「没有旧版本链接」是不够的 —— 表整个被删掉也能过。
@@ -134,10 +151,10 @@ def test_readme_download_table_points_at_current_version():
     for row in rows:
         cell = re.search(r"`v(\d+\.\d+\.\d+)`", row)
         assert cell, "下载表某行缺少 `vX.Y.Z` 版本单元格：%s" % row[:60]
-        assert cell.group(1) == version, f"下载表版本单元格={cell.group(1)} vs build.gradle={version}：{row[:60]}"
+        assert cell.group(1) == version, f"下载表版本单元格={cell.group(1)} vs APP_VERSION={version}：{row[:60]}"
         link = re.search(r"releases/tag/v(\d+\.\d+\.\d+)", row)
         assert link, "下载表某行缺少 releases/tag 链接：%s" % row[:60]
-        assert link.group(1) == version, f"下载链接={link.group(1)} vs build.gradle={version}：{row[:60]}"
+        assert link.group(1) == version, f"下载链接={link.group(1)} vs APP_VERSION={version}：{row[:60]}"
 
 
 def test_android_reunpacks_static_assets_on_version_change():

@@ -247,7 +247,7 @@ def check_frontend_consistency() -> None:
     versions = {}
     try:
         idx = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-        m = re.search(r"System · (v[\d\.]+) Online", idx)
+        m = re.search(r"System · (v[\d\.]+)", idx)
         if m:
             versions["index.html"] = m.group(1)
 
@@ -257,14 +257,18 @@ def check_frontend_consistency() -> None:
             versions["sw.js"] = m.group(1)
 
         gr = (ROOT / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
-        m = re.search(r"DELECTOR_VERSION_NAME\s*,\s*\"([\d\.]+)\"", gr)
+        # build.gradle:8 的实际文本是 System.getenv("DELECTOR_VERSION_NAME") ?: "5.16.0"。
+        # 旧正则要求 `,` 分隔（…NAME", "5.16.0"），永远不命中 —— 于是本脚本的版本
+        # 一致性判定实际只覆盖 index.html + sw.js 两端。这里对齐真实的 `?:` fallback 形态。
+        m = re.search(r'DELECTOR_VERSION_NAME"\)\s*\?:\s*"([\d\.]+)"', gr)
         if m:
             versions["build.gradle"] = "v" + m.group(1)
 
-        # 一致性判定前提是三端都匹配到版本号；正则不命中即缺条目。
-        # 缺条目时（含全部缺失 → versions={}）不再误报「不一致」，
-        # 而是降级为 WARN 说明哪个文件没匹配上，便于人工核查正则漂移。
-        if len(versions) < 2:
+        # 一致性判定前提是三面（index.html / sw.js / build.gradle）都匹配到版本号；
+        # 正则不命中即缺条目。缺任一面（含全部缺失 → versions={}）不再误报「不一致」，
+        # 而是降级为 WARN 说明哪个文件没匹配上。阈值取 3 而非 2：三面正则都能命中时，
+        # 少一面就说明某条正则漂移了，必须真的报警，别再靠计数恰好躲过 WARN。
+        if len(versions) < 3:
             missing = [name for name in ("index.html", "sw.js", "build.gradle") if name not in versions]
             record_warn(
                 "FE",
