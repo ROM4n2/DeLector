@@ -52,7 +52,8 @@
 - **真实用户试用（当前最高价值动作）**：手机端开箱即有 7 篇 A1/A2/B1 分级短文——收三问反馈（分级是否合适 / 已背词高亮与一键进卡是否顺手 / 本地词典释义够不够用），用反馈决定下一步。
 - **Android 真机点检**：凡改动含 `static/` 的版本需覆盖安装验证（清单见 `docs/agents/ops.md`）。
 - **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；注意 `import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
-- **Android 更新可见性（ADR-0017，已实施待发版）**：分支 `feat/update-visibility`（6 commit；**ADR/计划已随 PR #115 合入 master**）已完成——`delector/core/version.py: APP_VERSION` 单一真相源、`GET /api/update/check`（GitHub Releases 唯一真相源 + 成功 6h / **失败 60s** TTL + 3s 超时 + **不挂本机闸**＝ADR §4.3 显式决定）、顶栏 chip + `wb_update_chip_probe.mjs`（11 场景）。**该分支实测基线**：半 A **1106**（基线 1053 + 53 新增）/ 半 B **264**+1 skipped / 探针文件 **29** / mypy **96**+**72**。**剩余阻塞＝Android 真机两条未验证假设**（Chaquopy 公网 HTTPS 出网、WebView 外链是否交系统浏览器；见 work.log 2026-10-08 事件）。桌面侧真实出网已验证成功（4.04s 取到 `v5.16.0`）。
+- **⏸ 更新可见性（ADR-0017）：桌面端已上线 / Android 端暂缓**（用户 2026-10-08 决定"先暂缓安卓"）。代码**已合入 master**（PR #115/#116 → `ee68ec8`，master CI success）：`delector/core/version.py: APP_VERSION` 单一真相源、`GET /api/update/check`（GitHub Releases 唯一真相源 + 成功 6h / **失败 60s** TTL + 3s 超时 + **不挂本机闸**＝ADR §4.3 显式决定）、顶栏 chip + `wb_update_chip_probe.mjs`（11 场景）。实测基线：半 A **1106** / 半 B **264**+1 skipped / 探针文件 **29** / mypy **96**+**72**；**桌面侧真实出网已验证**（4.04s 取到 `v5.16.0`）。
+  **⚠️ 暂缓 ≠ 已验证：Android 端能力未知**（两条假设从未验证）——① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（手机现有出网是 **LAN HTTP**，不是证据）；② Android WebView 点 chip 外链是否交给系统浏览器。**不得**把"代码已合并"记为"双端已验证"；恢复验证时见 work.log 2026-10-08 事件与 ADR §7.3。
 - 递延项：tests `--strict`；`tools/vault-proactive-scan.py` 的三条版本正则**本身无自动化守卫**（Task 2 修掉的那个"正则永不命中"缺陷恰是无人守的类型）。
 
 ## 工作方式

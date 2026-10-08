@@ -219,6 +219,7 @@
 
 - **已验证（桌面侧真实出网）**：`_fetch_latest_release(3.0)` 成功取到 `tag_name=v5.16.0`（4.04s），`check_for_update()` 真实返回 `has_update=false`（当前 = latest）；缓存真实路径正确（首调出网、二/三调 `cached=true` 且 `checked_at` 保持原值、TTL 21600s、计数出网 1 次）。**注意** `_HTTP_TIMEOUT=3.0` 是 httpx **各阶段**超时而非总时长，实测总耗时 4.04s 仍成功。
 - **仍未验证（阻塞，需真机）**：① **Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 HTTPS**（`delector/routes/encounter.py:381` 的手机出网是**手机→桌面的 LAN HTTP**，不能作为公网 TLS 可用的证据）；② **Android WebView 点击 chip 外链是否被交给系统浏览器**（若被吞，需改 `MainActivity` 的 URL 拦截，而 Java 侧本机无 Android SDK ⇒ 只能靠 CI 验证）。二者任一失败都会改变本 ADR 的可行性判断（可能需重议 Option E）。
+- **⏸ 状态（2026-10-08 用户裁决）**：**Android 侧验证暂缓**。**桌面端已可用并已上线 master**（端点 + chip + 桌面侧真实出网验证通过）；**Android 端能力仍未验证，不得记为"双端已验证"**，执行台账 `Task 6` 保持 `blocked`。恢复时按上面①②逐条真机确认。
 - **未做**：发版（发布面五件套未动，README 未 bump）。
 
 ---

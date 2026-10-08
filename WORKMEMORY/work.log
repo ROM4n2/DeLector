@@ -477,3 +477,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 **门禁（feat 分支实测，数字来自本次最终 commit 的本人实跑）**：半 A **1106** passed（基线 1053 + 53 新增：Task1 16 / Task3+4 27 / Task5 10）；半 B `test_server` **264** passed + 1 skipped；`tools/*_probe.mjs` **29** 个文件（原 28 + 新增 `wb_update_chip_probe.mjs`，其中 12 个标准三键 + 16 个 legacy 扁平形态由 `test_probe_json_contract.py` 覆盖 + 1 个需参数的 `wb_a1_bootstrap_probe.mjs` 由其驱动测试传参）；`ruff check .` 0；mypy 两道 **96** + **72** files 零错误；探针 `wb_update_chip_probe` **11/11**。
 **桌面侧真实出网验证（Fog Unknown 1 的桌面侧数据点）**：`_fetch_latest_release(3.0)` **成功**（4.04s，`tag_name=v5.16.0`）⇒ 本机到 `api.github.com` 的 TLS 通路可用；`check_for_update()` 真实返回 `has_update=false`（当前 = latest = 5.16.0，语义正确）。注意 `_HTTP_TIMEOUT=3.0` 是 **httpx 各阶段超时**而非总时长，实测总耗时 4.04s 仍成功 —— 记录以免将来误判。
 **仍未验证（Fog of War，需真机）**：① Android/Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 HTTPS（`encounter.py:381` 的手机出网是 **LAN HTTP**，不能作为证据）；② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无法编译、只能靠 CI）。**Task 6 Step 3 因此仍阻塞**。
+
+### 2026-10-08 23:52 | codebuddy | STANDBY(Android 侧) 暂缓标记 + 新提案：Windows 桌面端封装为 desktop app
+Caps: filesystem-read, filesystem-write
+事件：用户决定「**先暂缓安卓**」并询问「**Windows 桌面端能否封装成 desktop**、用什么技术栈」。先做标记，再回答。
+- **⏸ 暂缓（非完成、非取消）**：ADR-0017 的代码**已合并 master**（PR #115/#116 → `ee68ec8`，master CI success），**桌面端已可用**（端点 + chip 均已上线，且桌面侧真实出网已验证）；但 **Android 侧两条假设仍未验证** ⇒ **Android 端能力不确定，不得记为"更新可见性已在 Android 验证通过"**：
+  ① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（现有手机出网是 **LAN HTTP**，不是证据）；
+  ② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无 Android SDK、只能靠 CI）。
+  **三处同标记**：本 log、`PROJECT_OVERVIEW` 待办、ADR-0017 §7.3；exec 台账 `.vault-exec-ledger.json` 的 Task 6 保持 `blocked`。防的是未来 agent（或我自己）把"代码已合并"误读成"双端已验证"。
