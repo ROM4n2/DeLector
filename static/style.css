@@ -202,6 +202,37 @@ a {
   animation: pulse 2.4s ease-in-out infinite;
 }
 
+/* 顶栏 System 版本号兼作「手动检查更新」入口（update.js 绑 click）。 */
+.topbar-inner .right {
+  cursor: pointer;
+}
+
+/* ── 顶栏版本更新 chip（落后时唯一可见的更新状态承载）── */
+.update-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.75rem;
+}
+/* 必须显式覆盖：作者样式的 display 会盖掉 UA 的 [hidden]，否则无新版时 chip 反而可见。 */
+.update-chip[hidden] {
+  display: none;
+}
+.update-chip-link {
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: var(--coral, var(--accent));
+  text-decoration: none;
+  border: 1px solid var(--coral, var(--accent));
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
+}
+.update-chip-link:hover {
+  background: var(--coral, var(--accent));
+  color: #fff;
+}
+
 @keyframes pulse {
   0%,
   100% {
