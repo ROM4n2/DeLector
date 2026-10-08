@@ -448,3 +448,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **门禁**：`wb_search_probe.mjs` **10/10**（原 7 项 + 新 3 项）；全 `tools/*.mjs` 探针 **28/28**；半 A **1053** passed / 半 B `test_server` **264** passed + 1 skipped ⇒ 全量 **1317** + 1 skipped（与 v5.16.0 基线同数，因本轮是**重写**一条测试、未新增测试函数）；`ruff check .` 0；`mypy --follow-imports=skip tests` **93** files / `mypy --strict delector tools` **70** files，零错误。
 - **守卫自证（不靠"我跑过了"）**：把 `static/js/search.js` 单独 `git stash` 回退到旧实现后跑探针 ⇒ 切片检查按预期抛 `Error: _highlight 仍含旧「先 esc 再定位」实现的 safe/safeNeedle…` 且 `EXITCODE=1`；恢复后全绿。旧 `test_highlight_escapes_before_wrapping_mark` 也如预期变红（`esc(text` 不再出现），确认两处守卫都是真守卫。
 ⚠️ **编排者教训（本轮第三次同类）**：给用户写选项时把缺陷描述成"高亮切在实体中间"（听起来像纯显示瑕疵、收益小），实测发现真缺陷是**高亮到无关字符**（功能性错误）。**"递延项的缺陷描述"与"债务的收益论证"一样，是待检验的前提，不是事实**——选项文案里对缺陷的断言 MUST 先复现再写。
+
+### 2026-10-08 09:49 | codebuddy | ADR-0017 产出（/dfs-grill：Android 更新可见性，不做应用内安装）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户提问「安卓能不能做一个可以直接更新的功能？现在还是要覆盖安装」，走 `/dfs-grill` 双镜拷问后**改变了提案的形状**，产出 ADR-0017（vault 正式件 + 仓内副本 `docs/adr/2026-10-08-adr-0017-android-update-check-notifier.md`）。
+- **两个镜头都实核了文件（非推理）**：product-ux 指出真瓶颈是「**不知道有新版**」而非"安装这个动作"；sre-resilience 实核 `AndroidManifest.xml:4-31`（无 `REQUEST_INSTALL_PACKAGES`、无 FileProvider）、`MainActivity.java:257-258`（**WebView 所有下载统一进 ExportSaver** ⇒ APK 走这条路会报"导出失败"且无安装 Intent 接续）、`build-release.yml:380`（**CI 已 pin 签名证书 `EXPECTED_SHA256`** = 现成且不与下载源同源的信任锚）。sre 还明确："只校验随包发布的 `.sha256` 是假防线——能换 APK 的人也能换那个哈希"。
+- **用户四轮拍板**：Q1-A（只做"检查+提示"，不做应用内下载/安装唤起）、Q2-A（GitHub Releases API 为唯一真相源，不可达时**不得伪装成"已是最新"**）、Q3-A（**后端端点** `/api/update/check` 代查，非前端直连）、Q4-A（启动后延迟自动检查 + TTL 缓存 + 仅落后时显示 chip；无新版或检查失败**均静默**，失败仅手动检查时给人话）。
+- **被否决项已存档理由**：B 应用内下载（增量收益仅"少开一次浏览器"，代价是权限+FileProvider+DownloadManager 分流+三条新失败路径）、C 现成侧载更新器（治不了盲区）、**D 热更新 `static/`**（与 Python 后端强耦合契约，会静默破坏跨边界契约 + 破坏 APK 内自包含的离线模型）、E 委托 LAN 桌面代理（新增信任面，且真正需要更新的场景恰恰是桌面不在线时）。
+- **拷问挖出的前置依赖（重要）**：**后端当前没有版本常量**（全仓无 `__version__`，版本散落 `static/index.html:35` / `sw.js` / `build.gradle`）。若在新端点里硬编码版本串，就是把 v5.16.0 刚修掉的"判据写死"缺陷原样再造（同 vault `POST-MORTEM-V5.5.2-VERSION-NUMBER-SCATTER`）⇒ ADR §6.1 定为落地第一步。
+- **一个显式安全决定（防将来被当漏网）**：`/api/update/check` **不挂 `_require_localhost`** —— 理由：LAN 浏览器版用户同样需要更新可见性，该端点只读、不写数据；代价（LAN 消耗主机 GitHub 配额）由 TTL 缓存 + 3s 出网超时兜住。已写进 ADR §4.3。
+- **顺带产品发现**：顶栏 `System · vX.Y.Z Online`（`static/index.html:35`）在**只绑回环的单机场景下"Online"字面撒谎**，ADR 附带默认改为真实版本 + 真实检查结果。
+- **未实施**：本次只产出决策文档，未写代码。ADR 已给端点契约草案、4 条 MUST 不变式（含「`has_update === null ⇔ error_reason !== null`」）、验收判据表与 NOT doing 清单。
