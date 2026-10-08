@@ -33,6 +33,9 @@ D      完整 ``get_cards()``（含 dict(r) 物化 + 逐卡 FSRS 递推）    D�
   比例 N/4 灌（段 D 确实含它，且它自己也有同样的 filesort）。
 - ``filesort_pct_of_sqlite`` = (B−C)/B，是"**加索引最多能省下多少**"的上限
   （索引只能消掉 filesort，消不掉回表与 Python 侧开销）。
+- ``python_pct`` = (D−B)/D，与 ``filesort_pct`` **同分母**（都是端点总耗时 D），
+  故两者可直接横向比大小。它是 ADR-0018 §6 判定门的输入：Python 侧占比 > 50%
+  才够格进入"热点下沉"评估；反过来它也给出**查询侧优化的收益上限**。
 - **不跑 ``ANALYZE``**：本仓生产路径无人执行它（`grep ANALYZE` 零命中），跑了
   反而让 SQLite 拿到生产环境没有的统计信息，测出来的计划偏乐观。故与生产一致。
 
@@ -58,6 +61,9 @@ D      完整 ``get_cards()``（含 dict(r) 物化 + 逐卡 FSRS 递推）    D�
     segment_C_ms=...
     segment_D_ms=...
     filesort_pct=NN.N%
+    python_pct=NN.N%
+    per_row_us=NN.NN
+    python_verdict=<可判定区间结论：只报 ADR-0018 §6 的条件①，非路线裁决>
 """
 
 import os
@@ -281,6 +287,9 @@ def _bench_scale(
         "python_ms": d - b,  # dict(r) 物化 + 逐卡 FSRS 递推
         "filesort_pct": filesort_ms / d * 100.0 if d > 0 else 0.0,
         "filesort_pct_of_sqlite": filesort_ms / b * 100.0 if b > 0 else 0.0,
+        # 与 filesort_pct 同分母（端点总耗时 D）：两者可直接横向比大小，回答
+        # "优化该砸在 SQLite 侧还是 Python 侧"。
+        "python_pct": (d - b) / d * 100.0 if d > 0 else 0.0,
         "plan": plan,
     }
 
@@ -292,6 +301,35 @@ def _verdict(pct: float) -> str:
     if pct < 30.0:
         return "不加索引（filesort 占比 < 30%，索引收益上限被回表 + Python 侧开销压死，写代价不划算）"
     return "中间区间（30%~50%），需另带写代价评估后再定"
+
+
+def _python_verdict(pct: float) -> str:
+    """Python 侧占比的可判定结论（ADR-0018 §6 判定门的**条件①**输入）。
+
+    沿用 `_verdict()` 的"可判定区间"风格：只报占比不给建议等于把判定的活推回给读
+    者。阈值沿用同一套 50% / 30% 分档，因为两侧是**同分母**竞争关系——此消彼长，
+    用同一把尺子才能直接比。
+
+    措辞纪律（**勿改**，越权即误判）：本函数**只报条件①，不下路线裁决**。
+    ADR-0018 §6 的门是**双条件 AND**：① Python CPU 占比 > 50%；② p95 > 2 倍目标。
+    本脚本只供 ①（占比），② 必须等 Task 5 的分层剖析才能判定 —— 二者 AND 成立才
+    走热点下沉。故 >50% 分支 MUST NOT 写成"走热点下沉"：那会让 Task 6 回填 ADR 时
+    把它误当成最终结论。三个分支一律给"区间 + 建议"，不给定稿。
+    """
+    if pct > 50.0:
+        return (
+            "满足条件①（Python 侧占比 > 50%）；条件②（p95 > 2 倍目标）待分层剖析"
+            "（Task 5）判定 —— 二者 AND 才走热点下沉，此处不下路线结论"
+        )
+    if pct < 30.0:
+        return (
+            "不满足条件①（Python 侧占比 < 30%）：瓶颈仍在 SQLite 查询侧，"
+            "建议先优化查询侧再谈下沉（条件②仍待 Task 5，此处不下路线结论）"
+        )
+    return (
+        "中间区间（30%~50%），条件①不成立：建议先压低占比更高的那一侧再复测"
+        "（条件②仍待 Task 5，此处不下路线结论）"
+    )
 
 
 def main() -> int:
@@ -331,6 +369,7 @@ def main() -> int:
             print(f"python_fsrs_ms={r['python_ms']:.3f}")
             print(f"filesort_pct={r['filesort_pct']:.1f}%")
             print(f"filesort_pct_of_sqlite={r['filesort_pct_of_sqlite']:.1f}%")
+            print(f"python_pct={r['python_pct']:.1f}%")
             per_ms = r["D"] / n * 1000.0
             print(f"per_row_us={per_ms:.2f}")
 
@@ -341,9 +380,11 @@ def main() -> int:
         print(
             f"构成：排序 filesort {target['filesort_ms']:.1f}ms（占端点 {target['filesort_pct']:.1f}%，"
             f"占 SQLite 侧 {target['filesort_pct_of_sqlite']:.1f}%）｜多列回表 {target['lookup_ms']:.1f}ms"
-            f"｜Python 物化+FSRS {target['python_ms']:.1f}ms｜端点总计 {target['D']:.1f}ms"
+            f"｜Python 物化+FSRS {target['python_ms']:.1f}ms（占端点 {target['python_pct']:.1f}%）"
+            f"｜端点总计 {target['D']:.1f}ms"
         )
         print(f"verdict={_verdict(target['filesort_pct'])}")
+        print(f"python_verdict={_python_verdict(target['python_pct'])}")
         if len(results) > 1:
             lo, hi = results[0], results[-1]
             ratio_n = hi["n_vocab"] / lo["n_vocab"]
