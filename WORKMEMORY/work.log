@@ -518,3 +518,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **checker 抓到的同类项**：本机\`import_ms(2242) > app_ready(263)\` 余量约 2000ms（来自 import 期的 spaCy 模型加载）；但**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，这条同进程断言的余量会塌到噪声级 ⇒ 已列为待收口项（详见下条）。
 - **顺带修掉一个会随机打红 CI 的 flake**：\`tests/test_spacy_unit_cost.py::test_bench_verdict_names_both_legacy_values\` 偶发失败（\`per_sentence_ms=7.115\` 时输出行 \`7.11\` 而断言期望 \`7.12\`）。**根因是测试端双重取整**（不是值不同源）：测试从**3 位小数的打印字符串**反解析回 \`float\` 后再 \`.2f\`，而 verdict 是对**原始中位数**直接 \`.2f\`，落在两位小数边界 \`X.XX5\`±0.0005 时必不一致。修法：断言换成**正则取数值 + 容差 0.005+1e-9**（恰为一次两位小数舍入的最大偏差），文案写死仍必超差 ⇒ 守卫强度不减；修复后连跑 **15/15** 通过。
 - **⚠️ 编排者教训（本轮第二次同类：本机复跑通过 ≠ 门禁可靠）**：我在 Task 4 的复跑里\`app_ready(245) > init_db(148)\` 同向通过，**把一条机器相关的比较当成了已验证的不变式**。同类错误在 Task 2 已出现过（跨函数相除），本轮是跨进程量级比较。**规律：凡是"两个在不同进程/不同前置状态下测得的量"的任何大小关系，默认都不是不变式**；要钉就只能钉**状态无关**的事实（文件/表是否存在、可解析性、同进程内的包含）。
+
+### 2026-10-09 13:53 | codebuddy | 后验：红 master 事故的机械证据 + 修复合并 + master CI 绿
+Caps: filesystem-read, shell-exec
+事件：为"跨进程量级比较"这条诊断补一条**决定性后验证据**（同一份代码、两种结果）。
+- **同一提交在两条 CI 上结论相反**：PR #117 的**分支 CI 失败**（run \`37883798324\`，\`app_ready_ms(95.490) 未大于 init_db_ms(209.850)\`），而**同一提交合并到 master 后的 push CI 却 success**（run \`37884073719\`，5m10s）⇒ 这不是"某段被打桩"，而是**机器/状态相关**，机械地印证了根因判断（probe A 与 probe B 是两个不同进程、不同前置状态的量）。
+- **修复 PR #118 已合并**（\`e8c8f1f\`，3 commit：\`c36d420\` 门禁改钉真不变式 / \`5c85c13\` spaCy 断言取整 flake / \`82493e9\` 教训入库），**master CI success**（run \`37890280999\`，4m6s）；分支已清理（本地/远端均无残留），工作区干净、与 origin/master 同步。
+- **ADR-0018 的 Task 6 回填亦在 master**（\`204e761\`）：ADR §1–§9 齐全（§7 实施记录 / §8 Fog / §9 关联），五个基准 + 五套门禁（\`bench_cards_endpoint\`/\`bench_spacy_unit\`/\`bench_long_read\`/\`bench_cold_start\`/\`bench_profile_layers\` + \`bench_stats\`）全部落地。⇒ **ADR-0018 D1 闭环**：判定门定案 **O0**（条件① 成立 85.9% / 条件② 不成立）。
+- **仍开放（同类残余，已登记 PROJECT_OVERVIEW 递延项④）**：\`tests/test_cold_start_cost.py\` 保留了 \`import_ms > app_ready_ms\`（**同进程**，安全），但其余量主要来自 import 期的 spaCy 模型加载（本机约 2000ms）；**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，余量会塌到噪声级 ⇒ 需加条件（例如仅 \`nlp_path=spacy\` 时断言）或改为机器无关形式。未收口。
