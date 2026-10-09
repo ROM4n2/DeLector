@@ -22,14 +22,27 @@ Task 4（冷启动基准）的交付物是「进程起到**可服务**」的各�
 为什么**不钉绝对毫秒阈值**（`[Instinct: Flaky-Aware]`）
 ------------------------------------------------------
 冷启动对磁盘缓存 / 杀毒软件 / 机器负载极敏感，同一台机器相邻两次能差 2 倍以上。
-钉绝对阈值 ⇒ CI 假红。故本文件**只钉可解析 + 正区间 + 分段之间的物理包含关系**：
-- `app_ready_ms > init_db_ms`：`create_app()` 内部就调用 `init_db()`，还多了路由
-  注册、预置文章导入与静态挂载 ⇒ 必然更大。谁把 `app_ready_ms` 打桩成 0，这里红。
-- `import_ms > app_ready_ms`：`import delector.server` 除 spaCy 模型加载外，模块级
-  就 `app = create_app()` ⇒ 必然更大。
-- `model_load_ms <= import_ms`：模型加载发生在 `import delector.server` **之内**
-  （`processor.py:81-111` 在导入期加载），是它的**子集** ⇒ 不可能更大。
-这三条是**结构关系**而非绝对阈值，既不假红，也不是「能跑就绿」。
+钉绝对阈值 ⇒ CI 假红。故本文件**只钉可解析 + 正区间 + 状态无关的不变式**：
+- `import_ms > app_ready_ms`：两条**同一进程**（probe B）内测得 —— `import delector.server`
+  除 spaCy 模型加载外，模块级就 `app = create_app()`，而 `app_ready_ms` 只是其后的第二次
+  `create_app()` ⇒ 前者必然更大。
+- `app_ready_db_tables >= 1` / `app_ready_progress_tables >= 1` / `init_db_tables >= 1` /
+  `init_db_progress_tables >= 1` / `app_ready_fresh_db_used == yes`：
+  probe A 的 `init_db()` 与 probe B 的第二次 `create_app()` 都必须在**全新库**上真建出表
+  （守卫**对称**：probe A / probe B 两侧都设，避免只在一侧无设防）。表要么在、要么不在，与
+  机器 / 缓存无关 —— `0` 就说明那段被打了桩、或「冷库装配」的标注在撒谎，**必须红**。这才是
+  **防恒真**的那条。
+
+刻意**不钉**跨进程量级关系（`app_ready_ms > init_db_ms`、`model_load_ms <= import_ms`）：
+`init_db_ms` / `model_load_ms` 来自 probe A，`app_ready_ms` / `import_ms` 来自 probe B，是
+**两个进程、不同前置状态**（probe B 在 import 期已跑过一次完整 `create_app()`，进程级与文件
+系统级缓存已热），**不存在必然的大小关系**（本机同向、CI 反向，见 `segments_note`）。
+
+一条**例外**（⑬ `test_health_200_covers_whole_startup`）：它是**跨进程**比较（`health_200_ms`
+来自 probe C、`import_ms` 来自 probe B），本不属"同进程不变式"。之所以保留，是因为 `health_200_ms`
+的那一次起服务里**本就含一次冷 import**，故它必须 ≥ import 段的一半；机器抖动用 `0.5` 松弛兜底，
+只钉 `> import_ms * 0.5` 这一条**弱下界**、不钉绝对量级。这是"`health_200` 不是空转"的唯一守卫，
+故不删。
 
 门禁跑的是快档（`BENCH_COLD_START_ROUNDS=5`，下限也是 5）。
 """
@@ -133,6 +146,8 @@ def test_script_declares_contract_lines() -> None:
     src = SCRIPT.read_text(encoding="utf-8")
     for key in (
         *NUMERIC_KEYS,
+        "init_db_tables",
+        "init_db_progress_tables",
         "rounds",
         "nlp_path",
         "verdict",
@@ -263,25 +278,50 @@ def test_repo_root_db_is_untouched(bench_out: str) -> None:
 
 
 def test_segments_satisfy_physical_containment(bench_out: str) -> None:
-    """⑫ 分段之间的物理包含关系（**这才是防恒真的那条**，见模块 docstring）。
+    """⑫ 分段自检（**这才是防恒真的那条**，见模块 docstring）。
 
-    三条关系任一反转就说明某段被打了桩、或测的已不是它自称的东西。
+    只钉**状态无关**的不变式：
+    - `import_ms > app_ready_ms`：**同一进程**（probe B）内测得，import 含 spaCy 模型加载
+      + 模块级 create_app，而 app_ready 只是其后的第二次 create_app ⇒ 前者必然更大。
+    - `init_db_tables >= 1` / `init_db_progress_tables >= 1`：probe A 的 `init_db()` 必须在
+      **全新库**上真建出表（守卫对称，不能只给 probe B 设防）。
+    - `app_ready_db_tables >= 1` / `app_ready_progress_tables >= 1` / `app_ready_fresh_db_used == yes`：
+      第二次 create_app() 必须在**全新库**上真建出表；表要么在、要么不在，与机器 / 缓存无关。
+
+    刻意**不再**钉跨进程量级关系（`app_ready_ms > init_db_ms`、`model_load_ms <= import_ms`）：
+    probe A / probe B 是两个进程、前置状态不同，跨进程不存在必然的大小关系（本机同向、CI 反向）。
     """
     import_ms = _number(bench_out, "import_ms")
-    init_db_ms = _number(bench_out, "init_db_ms")
     app_ready_ms = _number(bench_out, "app_ready_ms")
-    model_load_ms = _number(bench_out, "model_load_ms")
-    assert app_ready_ms > init_db_ms, (
-        f"app_ready_ms({app_ready_ms:.3f}) 未大于 init_db_ms({init_db_ms:.3f})："
-        f"create_app() 内部就含 init_db()，还多了路由注册与预置内容导入\n{bench_out}"
-    )
     assert import_ms > app_ready_ms, (
         f"import_ms({import_ms:.3f}) 未大于 app_ready_ms({app_ready_ms:.3f})："
-        f"import delector.server 含 spaCy 模型加载与模块级 create_app()\n{bench_out}"
+        f"同一进程内 import delector.server 含 spaCy 模型加载与模块级 create_app()\n{bench_out}"
     )
-    assert model_load_ms <= import_ms, (
-        f"model_load_ms({model_load_ms:.3f}) 大于 import_ms({import_ms:.3f})："
-        f"模型加载发生在 import 之内，是它的子集\n{bench_out}"
+    init_db_tables = _number(bench_out, "init_db_tables")
+    assert init_db_tables >= 1.0, (
+        f"probe A 的 init_db() 后全新库 initdb/init.db 的 sqlite_master 表数为 {init_db_tables:.0f}："
+        f"没有建表 ⇒ env 未生效或 init_db() 落到了热库（守卫不能只设在 probe B 一侧）\n{bench_out}"
+    )
+    init_db_progress_tables = _number(bench_out, "init_db_progress_tables")
+    assert init_db_progress_tables >= 1.0, (
+        f"probe A 的 init_db() 后全新库 initdb/init_progress.db 的 sqlite_master 表数为 "
+        f"{init_db_progress_tables:.0f}：没有建进度表 ⇒ init_db() 没走完整初始化\n{bench_out}"
+    )
+    db_tables = _number(bench_out, "app_ready_db_tables")
+    assert db_tables >= 1.0, (
+        f"第二次 create_app() 后全新库 appready/second.db 的 sqlite_master 表数为 {db_tables:.0f}："
+        f"没有建表 ⇒ 门上标的『冷库装配』不成立\n{bench_out}"
+    )
+    progress_tables = _number(bench_out, "app_ready_progress_tables")
+    assert progress_tables >= 1.0, (
+        f"第二次 create_app() 后全新库 appready/second_progress.db 的 sqlite_master 表数为 "
+        f"{progress_tables:.0f}：没有建进度表 ⇒ 第二次 create_app() 没走完整 init_db()\n{bench_out}"
+    )
+    fresh = re.search(r"^app_ready_fresh_db_used=(yes|no)$", bench_out, re.MULTILINE)
+    assert fresh is not None, f"缺少 `app_ready_fresh_db_used=yes|no` 自检行\n{bench_out}"
+    assert fresh.group(1) == "yes", (
+        f"app_ready_fresh_db_used=no：第二次 create_app() 没有写在新库路径上"
+        f"（可能又写回了 main_db）\n{bench_out}"
     )
 
 
