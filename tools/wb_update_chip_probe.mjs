@@ -36,6 +36,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const UPDATE_JS = path.join(ROOT, "static", "js", "update.js");
 const CORE_JS = path.join(ROOT, "static", "js", "core.js");
+const INDEX_HTML = path.join(ROOT, "static", "index.html");
 const JSON_MODE = process.argv.includes("--json");
 const log = (...a) => { if (!JSON_MODE) console.error(...a); };
 
@@ -146,6 +147,17 @@ try {
   sliceError = e;
 }
 
+function readTopbarAttributes() {
+  const html = fs.readFileSync(INDEX_HTML, "utf8");
+  const tag = /<span\b[^>]*id="topbar-system"[^>]*>/.exec(html);
+  if (!tag) return {};
+  return Object.fromEntries(
+    Array.from(tag[0].matchAll(/([\w-]+)="([^"]*)"/g), (match) => [match[1], match[2]]),
+  );
+}
+
+const TOPBAR_ATTRIBUTES = readTopbarAttributes();
+
 /* ---------------------------------------------------------------------------
  * 2. 最小 DOM 桩：记录 innerHTML / textContent / hidden 写值与事件处理器
  * ------------------------------------------------------------------------ */
@@ -164,7 +176,9 @@ function makeEl(id) {
       const idx = arr.indexOf(fn);
       if (idx >= 0) arr.splice(idx, 1);
     },
-    dispatch(type) { (el._handlers[type] || []).slice().forEach((fn) => fn()); },
+    dispatch(type, event) {
+      (el._handlers[type] || []).slice().forEach((fn) => fn(event));
+    },
     setAttribute(k, v) { el.attributes[k] = String(v); },
     getAttribute(k) { return Object.prototype.hasOwnProperty.call(el.attributes, k) ? el.attributes[k] : null; },
   };
@@ -180,6 +194,7 @@ function makeSandbox(fetchImpl) {
   const chip = getEl("update-chip");
   chip.hidden = true; // 与 index.html 的 hidden 属性一致（无新版时零可见变化）
   const trigger = getEl("topbar-system");
+  Object.assign(trigger.attributes, TOPBAR_ATTRIBUTES);
   // 按 index.html 真实结构补桩：<span class="right" id="topbar-system">…System · vX.Y.Z</span>。
   // 这句「System · vX.Y.Z」是「前端资源刷没刷新」的唯一肉眼自证指标（v4.4.5 漏 bump 出过事故），
   // 运行期快照要拿它做前后比对，故桩内必须有真实初值，绝不能是空串（空串会让污染仅表现为
@@ -207,6 +222,15 @@ function makeSandbox(fetchImpl) {
     },
     fireTimers() { timers.splice(0).forEach((t) => t.fn()); },
     click() { trigger.dispatch("click"); },
+    keydown(key) {
+      const event = {
+        key,
+        defaultPrevented: false,
+        preventDefault() { event.defaultPrevented = true; },
+      };
+      trigger.dispatch("keydown", event);
+      return event;
+    },
   };
 }
 
@@ -437,6 +461,41 @@ if (sliceError) {
     const human = shownHtml.indexOf("连不上 GitHub") !== -1;
     const noRaw = !/HTTP \d|fetch failed|TypeError/.test(shownHtml);
     check("manual_click_humanizes_error", shown && human && noRaw && cleared, "shownHtml=" + shownHtml);
+  }
+
+  /* 场景 10：手动入口必须可发现且键盘可达；Enter/Space 各触发恰一次，Space 阻止滚动。 */
+  {
+    let requests = 0;
+    const sb = makeSandbox(() => {
+      requests++;
+      return Promise.resolve(okResp(upToDateResponse()));
+    });
+    const initialTitle = sb.trigger.getAttribute("title");
+    const discoverable = !!initialTitle && initialTitle.indexOf("检查更新") !== -1;
+    const buttonSemantics = sb.trigger.getAttribute("role") === "button" &&
+      sb.trigger.getAttribute("tabindex") === "0";
+    sb.start();
+    sb.fireTimers();
+    await flush();
+    const afterAuto = requests;
+    sb.keydown("Enter");
+    await flush();
+    const enterTriggeredOnce = requests === afterAuto + 1;
+    const updatedTitle = sb.trigger.getAttribute("title");
+    const titleTracksStatus = !!updatedTitle && updatedTitle.indexOf("已是最新") !== -1;
+    sb.fireTimers();
+    const spaceEvent = sb.keydown(" ");
+    await flush();
+    const spaceTriggeredOnce = requests === afterAuto + 2;
+    check(
+      "manual_entry_is_discoverable",
+      discoverable && buttonSemantics && enterTriggeredOnce && titleTracksStatus &&
+        spaceTriggeredOnce && spaceEvent.defaultPrevented,
+      "title=" + initialTitle + " updatedTitle=" + updatedTitle +
+        " role=" + sb.trigger.getAttribute("role") +
+        " tabindex=" + sb.trigger.getAttribute("tabindex") +
+        " requests=" + requests + " spacePrevented=" + spaceEvent.defaultPrevented,
+    );
   }
 
   /* 兜底：任何路径都不得产生未处理的 promise 拒绝。 */

@@ -25,7 +25,14 @@ export function initUpdateCheck(options = {}) {
 
   // 端点路径内联（不抽标量常量），使本函数自足、可被探针按括号配对整段切片。
   const chip = document.getElementById("update-chip");
+  const trigger = document.getElementById("topbar-system");
   if (!chip || typeof doFetch !== "function" || typeof schedule !== "function") return;
+
+  // title 是手动入口的非侵入式状态反馈，不改写顶栏版本自证文本。
+  function setTriggerTitle(text) {
+    if (!trigger || typeof trigger.setAttribute !== "function") return;
+    trigger.setAttribute("title", text);
+  }
 
   // 失败原因 → 人话。禁止直出「HTTP 403」/「fetch failed」/「TypeError」之类原始文本；
   // 未登记的 reason 一律兜底，绝不回显原始串（回显等于把实现细节漏给用户）。
@@ -63,6 +70,7 @@ export function initUpdateCheck(options = {}) {
   // manual=false（自动）：非「有新版」一律不动 DOM（零可见变化）。
   // manual=true（点顶栏 System 版本号）：把结论以人话回显到 chip。
   async function runCheck(manual) {
+    if (manual) setTriggerTitle("正在检查更新…");
     let hasUpdate = null;
     let latest = "";
     let pageUrl = "";
@@ -88,6 +96,9 @@ export function initUpdateCheck(options = {}) {
       reason = reason || "network";
     }
 
+    if (manual && hasUpdate === true) {
+      setTriggerTitle("发现新版本，点击重新检查");
+    }
     if (hasUpdate === true) {
       showChip(latest, pageUrl);
       return;
@@ -95,15 +106,28 @@ export function initUpdateCheck(options = {}) {
     if (!manual) return;                 // 自动路径：零可见变化
     if (hasUpdate === false) {
       showNotice("已是最新");
-    } else {
-      showNotice(humanize(reason));
+      setTriggerTitle("已是最新，点击重新检查");
+      return;
     }
+    const failureMessage = humanize(reason);
+    showNotice(failureMessage);
+    setTriggerTitle(failureMessage + "，点击重试");
   }
 
-  // 手动检查入口：点顶栏那句「System · vX.Y.Z」。
-  const trigger = document.getElementById("topbar-system");
+  // 点击与键盘共用同一入口，避免两条交互路径的检查语义漂移。
+  function runManualCheck() {
+    runCheck(true);
+  }
+
+  function handleTriggerKeydown(event) {
+    if (!event || (event.key !== "Enter" && event.key !== " ")) return;
+    if (event.key === " ") event.preventDefault();
+    runManualCheck();
+  }
+
   if (trigger && typeof trigger.addEventListener === "function") {
-    trigger.addEventListener("click", function () { runCheck(true); });
+    trigger.addEventListener("click", runManualCheck);
+    trigger.addEventListener("keydown", handleTriggerKeydown);
   }
 
   // 一次性延迟检查（禁止轮询式定时器：会持续打后端且毫无意义）。

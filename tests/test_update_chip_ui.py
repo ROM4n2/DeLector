@@ -43,6 +43,8 @@ _PROBE_SCENARIOS = (
     "xss_page_url_escaped",
     "manual_click_shows_latest",
     "manual_click_humanizes_error",
+    "manual_entry_is_discoverable",
+    "no_unhandled_rejection",
 )
 
 
@@ -80,10 +82,13 @@ def test_update_chip_behaves_under_node():
         "探针 --json 必须输出精确三键 {failures,total,cases}，实际 %s" % sorted(out)
     )
     assert out["failures"] == 0, "探针有失败场景：%s" % [c for c in out["cases"] if not c["ok"]]
-    assert out["total"] >= 5, "探针场景数必须 ≥5，实际 %s" % out["total"]
     names = {c["name"] for c in out["cases"]}
-    for key in _PROBE_SCENARIOS:
-        assert key in names, "关键场景 %r 缺失（被删仍全绿风险）；实际场景：%s" % (key, sorted(names))
+    assert out["total"] == len(_PROBE_SCENARIOS), (
+        "探针场景数必须精确为 %s，实际 %s" % (len(_PROBE_SCENARIOS), out["total"])
+    )
+    assert names == set(_PROBE_SCENARIOS), (
+        "探针场景集合失配；实际场景：%s" % sorted(names)
+    )
 
 
 # ── update.js 静态契约 ────────────────────────────────────────────────────────
@@ -121,9 +126,13 @@ def test_index_has_update_chip_hidden_by_default():
     assert "update-chip" in m.group(0), "update-chip 必须带 class（供 style.css 命中）"
 
 
-def test_index_has_manual_check_trigger_id():
+def test_index_has_discoverable_manual_check_trigger():
     m = re.search(r"<span\b[^>]*id=\"topbar-system\"[^>]*>", INDEX)
     assert m, "顶栏 System 版本号 span 必须有 id=\"topbar-system\"（手动检查触发点）"
+    tag = m.group(0)
+    assert re.search(r'title="[^"]*检查更新[^"]*"', tag), "手动检查入口必须用 title 说明用途"
+    assert 'role="button"' in tag, "手动检查入口必须声明按钮语义"
+    assert 'tabindex="0"' in tag, "手动检查入口必须可通过 Tab 聚焦"
 
 
 def test_topbar_version_self_attest_string_intact():
@@ -160,3 +169,10 @@ def test_style_defines_update_chip_rules():
         "必须显式 .update-chip[hidden] { display: none }，"
         "否则作者样式的 display 会盖掉 hidden 属性（更新 chip 在无新版时反而可见）"
     )
+
+
+def test_style_makes_manual_entry_discoverable():
+    trigger_rule = re.search(r"#topbar-system\s*\{([^}]*)\}", STYLE, re.DOTALL)
+    assert trigger_rule, "style.css 必须为 #topbar-system 定义交互样式"
+    assert "cursor: pointer" in trigger_rule.group(1), "手动检查入口必须显示可点击指针"
+    assert "#topbar-system:hover" in STYLE, "手动检查入口必须有 hover 视觉提示"
