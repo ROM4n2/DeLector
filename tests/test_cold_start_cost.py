@@ -23,9 +23,24 @@ Task 4（冷启动基准）的交付物是「进程起到**可服务**」的各�
 ------------------------------------------------------
 冷启动对磁盘缓存 / 杀毒软件 / 机器负载极敏感，同一台机器相邻两次能差 2 倍以上。
 钉绝对阈值 ⇒ CI 假红。故本文件**只钉可解析 + 正区间 + 状态无关的不变式**：
-- `import_ms > app_ready_ms`：两条**同一进程**（probe B）内测得 —— `import delector.server`
-  除 spaCy 模型加载外，模块级就 `app = create_app()`，而 `app_ready_ms` 只是其后的第二次
-  `create_app()` ⇒ 前者必然更大。
+- `import_ms` 与 `app_ready_ms` 的**同进程**关系（二者都在 probe B 内测得，`[Instinct:
+  Flaky-Aware]`），钉**无条件**严格不等式 `import_ms > app_ready_ms`（见 ⑫
+  `_assert_segment_containment`）。**为什么无条件成立**（结构性理由，照抄不删）：
+  `import_ms` = `import delector.server` 的墙钟 = 【**整个模块图导入**】 + 模块级
+  `app = create_app()`（`server.py:356`）；`app_ready_ms` = 其后对全新库的**第二次**
+  `create_app()` ⇒ 只含 1 次 `create_app()`、不含模块图。故
+  `import_ms − app_ready_ms ≈ T_模块图 + (两次 create_app 的成本差 ≈ 0) ≈ T_模块图 > 0`。
+  `T_模块图` 恒为正且非噪声级（几百 ms，含 fastapi/starlette/pydantic 与整个 `delector`
+  包），**与 spaCy 是否可用无关** —— spaCy 模型加载只是模块图里的一块，去掉它只是让余量
+  从 ~1.5s 降到 ~670ms，**不改变符号**。
+  **为什么不分叉（本次纠错，勿再改回）**：曾误以为 pure 路径余量会塌到噪声级、转而钉
+  「同量级比值带 `import_ms / app_ready_ms ∈ [0.2, 10.0]`」。但该上界要求
+  `T_模块图 ≤ 9 × T_create_app`，而二者由**完全不同的资源**决定（模块图 ∝ 模块数 × 每模块
+  成本，不随库/盘变快等比缩小；`create_app` ∝ SQLite DDL + 预置导入，对 tmpfs / 暖缓存极
+  敏感）⇒ **无结构耦合**，健康机器上也可能 ratio > 10 打红（反例：`T_create_app≈60ms`、
+  `T_模块图≈600ms` ⇒ ratio≈11；历史 CI 数据里 `app_ready_ms` 会从本机 250ms 掉到 95ms，
+  模块图开销却不跟着缩）。实测也推翻该假设：pure 下比值 ≈4.6、余量 ≈670ms 仍稳健 ⇒ 撤回
+  比值带，回到无条件严格不等式。
 - `app_ready_db_tables >= 1` / `app_ready_progress_tables >= 1` / `init_db_tables >= 1` /
   `init_db_progress_tables >= 1` / `app_ready_fresh_db_used == yes`：
   probe A 的 `init_db()` 与 probe B 的第二次 `create_app()` 都必须在**全新库**上真建出表
@@ -54,7 +69,7 @@ import statistics
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Pattern
+from typing import Dict, List, Optional, Pattern
 
 import pytest
 
@@ -83,8 +98,13 @@ SUPPRESSION_RES: tuple[Pattern[str], ...] = (
 ANDROID_TOKENS = ("Android", "30MB", "84000", "android=unmeasured")
 
 
-def _run_bench(tmp_path: Path) -> str:
-    """在隔离环境里实跑基准脚本，返回 stdout 原文。"""
+def _run_bench(tmp_path: Path, env_extra: Optional[Dict[str, str]] = None) -> str:
+    """在隔离环境里实跑基准脚本，返回 stdout 原文。
+
+    `env_extra` 用于注入额外环境（如用 `raise ImportError` 的假 `spacy` 桩逼出纯 Python
+    降级路径，见 `test_segment_containment_is_visible_on_pure_python_path`）：环境由
+    `dict(os.environ)` 派生，故注入的键会随 env 传播到基准的每个子进程。
+    """
     env = dict(os.environ)
     env.update(
         {
@@ -96,6 +116,8 @@ def _run_bench(tmp_path: Path) -> str:
             "PROGRESS_DB_PATH": str(tmp_path / "outer_progress.db"),
         }
     )
+    if env_extra:
+        env.update(env_extra)
     proc = subprocess.run(
         [sys.executable, str(SCRIPT)],
         cwd=str(ROOT),
@@ -245,6 +267,35 @@ def test_nlp_path_is_declared(bench_out: str) -> None:
     assert match is not None, f"nlp_path 不可解析（只接受 spacy|pure）\n{bench_out}"
 
 
+def test_nlp_path_label_matches_between_probes(bench_out: str) -> None:
+    """⑧' 路径标签与计时必须**同源**：A/B 两个探针各自报自己的标签，且必须一致。
+
+    为什么钉：`import_ms` / `app_ready_ms` 来自 **probe B**，而汇总输出的 `nlp_path` 只由
+    **probe A** 计算。若两进程判定分叉（例如模型自动下载在 A 成功、B 失败），门禁会拿 **A 的
+    标签**去判 **B 的时序**而无人知晓。故这里要求 probe B 也打印**它自己的**标签，并断言 A 与 B
+    **一致** —— 不一致即红。
+
+    这是**类别一致性**断言（比的是标签 `spacy|pure`，不是量级），与「跨进程量级比较」（本文件
+    刻意不钉的那类）不是同类问题，故允许且应该钉。
+    """
+    labels = {}
+    for probe in ("a", "b"):
+        match = re.search(rf"^nlp_path_probe_{probe}=(spacy|pure)$", bench_out, re.MULTILINE)
+        assert match is not None, (
+            f"缺少可解析的 `nlp_path_probe_{probe}=(spacy|pure)` 行：无法证明标签与计时同源\n{bench_out}"
+        )
+        labels[probe] = match.group(1)
+    top = re.search(r"^nlp_path=(spacy|pure)$", bench_out, re.MULTILINE)
+    assert top is not None, f"nlp_path 不可解析（只接受 spacy|pure）\n{bench_out}"
+    assert labels["a"] == labels["b"], (
+        f"probe A 标签 nlp_path_probe_a={labels['a']} 与 probe B 标签 nlp_path_probe_b={labels['b']} "
+        f"不一致：门禁会拿 A 的标签去判 B 的时序，标签与计时不同源\n{bench_out}"
+    )
+    assert top.group(1) == labels["a"], (
+        f"顶层 nlp_path={top.group(1)} 与 nlp_path_probe_a={labels['a']} 不一致\n{bench_out}"
+    )
+
+
 def test_android_is_declared_unmeasured(bench_out: str) -> None:
     """⑨ Android 侧本机不可测 ⇒ 必须明写 `android=unmeasured` 并给原因，不得编造。"""
     assert re.search(r"^android=unmeasured$", bench_out, re.MULTILINE) is not None, (
@@ -277,52 +328,98 @@ def test_repo_root_db_is_untouched(bench_out: str) -> None:
     assert match.group(1) != "no", f"仓库根真实 delector.db 被基准改动了\n{bench_out}"
 
 
-def test_segments_satisfy_physical_containment(bench_out: str) -> None:
-    """⑫ 分段自检（**这才是防恒真的那条**，见模块 docstring）。
+def _assert_segment_containment(out: str) -> None:
+    """分段自检的**唯一**判据（spaCy 与纯 Python 两条路径共用同一断言，见模块 docstring）。
 
-    只钉**状态无关**的不变式：
-    - `import_ms > app_ready_ms`：**同一进程**（probe B）内测得，import 含 spaCy 模型加载
-      + 模块级 create_app，而 app_ready 只是其后的第二次 create_app ⇒ 前者必然更大。
-    - `init_db_tables >= 1` / `init_db_progress_tables >= 1`：probe A 的 `init_db()` 必须在
-      **全新库**上真建出表（守卫对称，不能只给 probe B 设防）。
-    - `app_ready_db_tables >= 1` / `app_ready_progress_tables >= 1` / `app_ready_fresh_db_used == yes`：
-      第二次 create_app() 必须在**全新库**上真建出表；表要么在、要么不在，与机器 / 缓存无关。
+    钉**无条件**严格不等式 `import_ms > app_ready_ms`。两者同为 probe B **同一进程**内测得：
+    `import_ms` = `import delector.server` 的墙钟 = 【**整个模块图导入**】 + 模块级
+    `app = create_app()`（`server.py:356`）；`app_ready_ms` 只是其后的**第二次**
+    `create_app()` ⇒ 只含 1 次 `create_app()`、不含模块图。故
+    `import_ms − app_ready_ms ≈ T_模块图 + (两次 create_app 的成本差 ≈ 0) ≈ T_模块图 > 0`。
+    `T_模块图` 恒为正且非噪声级（几百 ms），**与 spaCy 是否可用无关** —— 模型加载只是模块图
+    里的一块，去掉它只是让余量从 ~1.5s 降到 ~670ms，**不改变符号**。
+
+    **本次纠错（勿再改回分叉 / 比值带）**：曾误以为 pure 路径余量会塌到噪声级、改钉同量级
+    比值带；但比值带上界要求 `T_模块图 ≤ 9 × T_create_app`，二者由完全不同资源决定
+    （模块图 ∝ 模块数 × 每模块成本；`create_app` ∝ SQLite DDL + 预置导入，对 tmpfs / 暖缓存
+    极敏感）⇒ 无结构耦合，健康机器也可能 ratio > 10 打红。实测 pure 下比值 ≈4.6、余量
+    ≈670ms 仍稳健 ⇒ 撤回比值带。
+
+    表数类不变式（`*_tables >= 1` / `fresh_db_used == yes`）与机器 / 缓存无关，两条路径共用。
+    """
+    import_ms = _number(out, "import_ms")
+    app_ready_ms = _number(out, "app_ready_ms")
+    assert import_ms > app_ready_ms, (
+        f"import_ms({import_ms:.3f}) 未大于 app_ready_ms({app_ready_ms:.3f})：同一进程内 "
+        f"import delector.server 含【整个模块图导入 T_模块图】+ 模块级 create_app()（server.py:356），"
+        f"而 app_ready_ms 只是其后的第二次 create_app() ⇒ 差值 ≈ T_模块图 > 0，与 spaCy 是否可用无关"
+        f"（模型加载只是模块图里的一块）\n{out}"
+    )
+    init_db_tables = _number(out, "init_db_tables")
+    assert init_db_tables >= 1.0, (
+        f"probe A 的 init_db() 后全新库 initdb/init.db 的 sqlite_master 表数为 {init_db_tables:.0f}："
+        f"没有建表 ⇒ env 未生效或 init_db() 落到了热库（守卫不能只设在 probe B 一侧）\n{out}"
+    )
+    init_db_progress_tables = _number(out, "init_db_progress_tables")
+    assert init_db_progress_tables >= 1.0, (
+        f"probe A 的 init_db() 后全新库 initdb/init_progress.db 的 sqlite_master 表数为 "
+        f"{init_db_progress_tables:.0f}：没有建进度表 ⇒ init_db() 没走完整初始化\n{out}"
+    )
+    db_tables = _number(out, "app_ready_db_tables")
+    assert db_tables >= 1.0, (
+        f"第二次 create_app() 后全新库 appready/second.db 的 sqlite_master 表数为 {db_tables:.0f}："
+        f"没有建表 ⇒ 门上标的『冷库装配』不成立\n{out}"
+    )
+    progress_tables = _number(out, "app_ready_progress_tables")
+    assert progress_tables >= 1.0, (
+        f"第二次 create_app() 后全新库 appready/second_progress.db 的 sqlite_master 表数为 "
+        f"{progress_tables:.0f}：没有建进度表 ⇒ 第二次 create_app() 没走完整 init_db()\n{out}"
+    )
+    fresh = re.search(r"^app_ready_fresh_db_used=(yes|no)$", out, re.MULTILINE)
+    assert fresh is not None, f"缺少 `app_ready_fresh_db_used=yes|no` 自检行\n{out}"
+    assert fresh.group(1) == "yes", (
+        f"app_ready_fresh_db_used=no：第二次 create_app() 没有写在新库路径上"
+        f"（可能又写回了 main_db）\n{out}"
+    )
+
+
+def test_segments_satisfy_physical_containment(bench_out: str) -> None:
+    """⑫ 分段自检（**这才是防恒真的那条**，见模块 docstring 与 `_assert_segment_containment`）。
+
+    这里执行**无条件**严格不等式 `import_ms > app_ready_ms`（与 `nlp_path` 无关）；纯 Python
+    路径由 `test_segment_containment_is_visible_on_pure_python_path` 注入假 `spacy` 桩真实覆盖
+    —— 二者复用同一断言，保证严格不等式在 pure 下也成立。
 
     刻意**不再**钉跨进程量级关系（`app_ready_ms > init_db_ms`、`model_load_ms <= import_ms`）：
     probe A / probe B 是两个进程、前置状态不同，跨进程不存在必然的大小关系（本机同向、CI 反向）。
     """
-    import_ms = _number(bench_out, "import_ms")
-    app_ready_ms = _number(bench_out, "app_ready_ms")
-    assert import_ms > app_ready_ms, (
-        f"import_ms({import_ms:.3f}) 未大于 app_ready_ms({app_ready_ms:.3f})："
-        f"同一进程内 import delector.server 含 spaCy 模型加载与模块级 create_app()\n{bench_out}"
+    _assert_segment_containment(bench_out)
+
+
+def test_segment_containment_is_visible_on_pure_python_path(tmp_path: Path) -> None:
+    """⑫' 纯 Python 回退路径必须**真实到达**且严格不等式在其上仍成立（不得用 `pytest.skip` 回避）。
+
+    这里用 `PYTHONPATH` 注入一个 `raise ImportError` 的假 `spacy.py`（子进程 env 由
+    `dict(os.environ)` 派生 ⇒ 桩会传播到基准的每个子进程），强制 processor 走纯 Python 降级，
+    再复用同一判据 `_assert_segment_containment`。它的价值是同时证明两件事：pure 路径**真实可达**，
+    且**无条件严格不等式在 pure 下也成立**（余量来自模块图导入，与 spaCy 无关）。
+
+    若桩未生效（`nlp_path` 仍为 `spacy`）本断言立刻红 —— 绝不静默通过，从而杜绝「pure 路径
+    未被覆盖却无人知晓」。
+    """
+    stub_dir = tmp_path / "stub"
+    stub_dir.mkdir()
+    (stub_dir / "spacy.py").write_text(
+        "raise ImportError('gate stub: spacy unavailable')\n", encoding="utf-8"
     )
-    init_db_tables = _number(bench_out, "init_db_tables")
-    assert init_db_tables >= 1.0, (
-        f"probe A 的 init_db() 后全新库 initdb/init.db 的 sqlite_master 表数为 {init_db_tables:.0f}："
-        f"没有建表 ⇒ env 未生效或 init_db() 落到了热库（守卫不能只设在 probe B 一侧）\n{bench_out}"
+    env_extra = {"PYTHONPATH": str(stub_dir) + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    out = _run_bench(tmp_path, env_extra)
+    nlp_match = re.search(r"^nlp_path=(spacy|pure)$", out, re.MULTILINE)
+    assert nlp_match is not None, f"nlp_path 不可解析（只接受 spacy|pure）\n{out}"
+    assert nlp_match.group(1) == "pure", (
+        f"假 spacy 桩未生效，基准仍走 `nlp_path={nlp_match.group(1)}` ⇒ 纯 Python 分支未被覆盖\n{out}"
     )
-    init_db_progress_tables = _number(bench_out, "init_db_progress_tables")
-    assert init_db_progress_tables >= 1.0, (
-        f"probe A 的 init_db() 后全新库 initdb/init_progress.db 的 sqlite_master 表数为 "
-        f"{init_db_progress_tables:.0f}：没有建进度表 ⇒ init_db() 没走完整初始化\n{bench_out}"
-    )
-    db_tables = _number(bench_out, "app_ready_db_tables")
-    assert db_tables >= 1.0, (
-        f"第二次 create_app() 后全新库 appready/second.db 的 sqlite_master 表数为 {db_tables:.0f}："
-        f"没有建表 ⇒ 门上标的『冷库装配』不成立\n{bench_out}"
-    )
-    progress_tables = _number(bench_out, "app_ready_progress_tables")
-    assert progress_tables >= 1.0, (
-        f"第二次 create_app() 后全新库 appready/second_progress.db 的 sqlite_master 表数为 "
-        f"{progress_tables:.0f}：没有建进度表 ⇒ 第二次 create_app() 没走完整 init_db()\n{bench_out}"
-    )
-    fresh = re.search(r"^app_ready_fresh_db_used=(yes|no)$", bench_out, re.MULTILINE)
-    assert fresh is not None, f"缺少 `app_ready_fresh_db_used=yes|no` 自检行\n{bench_out}"
-    assert fresh.group(1) == "yes", (
-        f"app_ready_fresh_db_used=no：第二次 create_app() 没有写在新库路径上"
-        f"（可能又写回了 main_db）\n{bench_out}"
-    )
+    _assert_segment_containment(out)
 
 
 def test_health_200_covers_whole_startup(bench_out: str) -> None:

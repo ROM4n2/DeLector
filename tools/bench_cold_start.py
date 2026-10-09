@@ -119,6 +119,8 @@ Android 侧：**不伪造**
     model_load_ms=N.NN      # import delector.nlp_engine.processor（import_ms 的子集）
     rounds=N
     nlp_path=<spacy|pure>   # 生产自己的判据：processor.NLP_ENGINE + syntax_tree.get_spacy_nlp()
+    nlp_path_probe_a=<spacy|pure>  # probe A 自报的标签（顶层 nlp_path 即取自它）
+    nlp_path_probe_b=<spacy|pure>  # probe B 自报的标签（import_ms/app_ready_ms 来自它）—— A/B 必须一致
     android=unmeasured      # 本机无 Android SDK，见 android_note
     verdict=<可判定结论：点名 Android 30MB / 84000ms 口径>
 """
@@ -366,11 +368,22 @@ def _probe_import_and_app_ready(fresh_db: str, fresh_progress: str) -> int:
         inode_differs = True
     fresh_used = "yes" if fresh_exists and path_differs and inode_differs else "no"
 
+    # 路径标签：probe B 也报**它自己**的判据（沿用生产同一判据 `_nlp_path`）。`import_ms` /
+    # `app_ready_ms` 来自本探针，而顶层 `nlp_path` 只由 probe A 算出；两进程若判定分叉（例如模型
+    # 自动下载在 A 成功、B 失败），门禁会拿 **A 的标签**判 **B 的时序**而无人知晓。父进程据此打印
+    # `nlp_path_probe_a` / `nlp_path_probe_b` 两行，测试断言二者一致。这里在计时之后才 import，不污染
+    # import_ms / app_ready_ms（且 server 已把它们载入 sys.modules，命中缓存）。
+    syntax_tree = importlib.import_module("delector.nlp_engine.syntax_tree")
+    processor = importlib.import_module("delector.nlp_engine.processor")
+    nlp_path, nlp_detail = _nlp_path(syntax_tree, processor)
+
     print(f"probe_import_ms={import_ms:.2f}")
     print(f"probe_app_ready_ms={app_ready_ms:.2f}")
     print(f"probe_app_ready_db_tables={app_ready_db_tables}")
     print(f"probe_app_ready_progress_tables={app_ready_progress_tables}")
     print(f"probe_app_ready_fresh_db_used={fresh_used}")
+    print(f"probe_nlp_path={nlp_path}")
+    print(f"probe_nlp_path_detail={nlp_detail}")
     return 0
 
 
@@ -534,6 +547,10 @@ def _measure_round() -> Dict[str, Any]:
             "health_200_ms": health_200_ms,
             "nlp_path": probe_a["nlp_path"],
             "nlp_path_detail": probe_a["nlp_path_detail"],
+            # A / B 两个探针各自的路径标签：顶层 nlp_path 取自 A，而 import_ms/app_ready_ms 取自 B，
+            # 故两标签必须由测试断言一致（防「拿 A 的标签判 B 的时序」）。
+            "nlp_path_probe_a": probe_a["nlp_path"],
+            "nlp_path_probe_b": probe_b["nlp_path"],
             "child_isolated": child_isolated,
             "app_ready_db_tables": int(probe_b["app_ready_db_tables"]),
             "app_ready_progress_tables": int(probe_b["app_ready_progress_tables"]),
@@ -653,6 +670,10 @@ def _run_benchmark(rounds: int) -> int:
     samples: Dict[str, List[float]] = {key: [] for key in sample_keys}
     nlp_path = "unknown"
     nlp_detail = ""
+    # A（标签来源）/ B（timing 来源）各自的路径标签，逐轮取最后一轮值（与 nlp_path 同口径），
+    # 输出后由测试断言 A == B（防两进程判定分叉而门禁拿错标签）。
+    nlp_path_probe_a = "unknown"
+    nlp_path_probe_b = "unknown"
     isolated = True
     init_db_tables: List[int] = []
     init_db_progress_tables: List[int] = []
@@ -665,6 +686,8 @@ def _run_benchmark(rounds: int) -> int:
             samples[key].append(float(result[key]))
         nlp_path = str(result["nlp_path"])
         nlp_detail = str(result["nlp_path_detail"])
+        nlp_path_probe_a = str(result["nlp_path_probe_a"])
+        nlp_path_probe_b = str(result["nlp_path_probe_b"])
         isolated = isolated and bool(result["child_isolated"])
         init_db_tables.append(int(result["init_db_tables"]))
         init_db_progress_tables.append(int(result["init_db_progress_tables"]))
@@ -693,6 +716,10 @@ def _run_benchmark(rounds: int) -> int:
     print(f"rounds={rounds}")
     print(f"nlp_path={nlp_path}")
     print(f"nlp_path_detail={nlp_detail}")
+    # 标签与计时同源守卫：顶层 nlp_path 取自 probe A，而 import_ms/app_ready_ms 取自 probe B；
+    # 两行分别报 A、B 自己算出的标签，测试断言二者一致（不一致 = 门禁拿 A 的标签判 B 的时序）。
+    print(f"nlp_path_probe_a={nlp_path_probe_a}")
+    print(f"nlp_path_probe_b={nlp_path_probe_b}")
     print(f"import_ms={medians['import_ms']:.2f}")
     print(f"init_db_ms={medians['init_db_ms']:.2f}")
     print(f"init_db_tables={min_init_db_tables}")
