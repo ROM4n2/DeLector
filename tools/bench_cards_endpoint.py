@@ -33,6 +33,9 @@ D      完整 ``get_cards()``（含 dict(r) 物化 + 逐卡 FSRS 递推）    D�
   比例 N/4 灌（段 D 确实含它，且它自己也有同样的 filesort）。
 - ``filesort_pct_of_sqlite`` = (B−C)/B，是"**加索引最多能省下多少**"的上限
   （索引只能消掉 filesort，消不掉回表与 Python 侧开销）。
+- ``python_pct`` = (D−B)/D，与 ``filesort_pct`` **同分母**（都是端点总耗时 D），
+  故两者可直接横向比大小。它是 ADR-0018 §6 判定门的输入：Python 侧占比 > 50%
+  才够格进入"热点下沉"评估；反过来它也给出**查询侧优化的收益上限**。
 - **不跑 ``ANALYZE``**：本仓生产路径无人执行它（`grep ANALYZE` 零命中），跑了
   反而让 SQLite 拿到生产环境没有的统计信息，测出来的计划偏乐观。故与生产一致。
 
@@ -50,6 +53,14 @@ D      完整 ``get_cards()``（含 dict(r) 物化 + 逐卡 FSRS 递推）    D�
     export PYTHONIOENCODING=utf-8
     python tools/bench_cards_endpoint.py                    # 1k / 20k / 50k
     BENCH_SCALES=8000 BENCH_ROUNDS=5 python tools/bench_cards_endpoint.py   # 门禁快档
+    BENCH_P95_ROUNDS=20 python tools/bench_cards_endpoint.py                # 人工档：提 p95 样本量
+
+为什么 p95 要能单独调轮数
+------------------------
+中位数取 5~7 轮就稳（对单侧尖峰不敏感），p95 远不是：n=5 的经验 p95 基本就是最大值，
+且 P(max₅ < 真 p95) = 0.95⁵ ≈ 77% ⇒ **系统性低估尾部**。故想用 p95 判"条件②不成立"
+这类强结论，必须能把 n 提到 ≥20。这条开关让人工档不必改代码就能提精度 —— 改了代码的
+测量，数字就不再可信。
 
 输出契约（``tests/test_cards_endpoint_cost.py`` 逐行断言，勿改格式）::
 
@@ -57,23 +68,36 @@ D      完整 ``get_cards()``（含 dict(r) 物化 + 逐卡 FSRS 递推）    D�
     segment_B_ms=...
     segment_C_ms=...
     segment_D_ms=...
+    segment_D_p95_ms=...             # 与 segment_D_ms **同一批**样本的 p95（n=5 时≈最大值、系统性低估尾部）
+    samples_segment_D_ms=...         # 该批原始样本（逗号分隔），供下游独立重算分位
     filesort_pct=NN.N%
+    python_pct=NN.N%
+    per_row_us=NN.NN
+    python_verdict=<可判定区间结论：只报 ADR-0018 §6 的条件①，非路线裁决>
 """
 
 import os
 import random
 import shutil
 import sqlite3
-import statistics
 import sys
 import tempfile
 import time
 from typing import Any, Callable, Dict, List, Tuple
 
+# bench_stats 与本脚本同处 tools/：以脚本方式运行（`python tools/xxx.py`）时 Python 已把
+# tools/ 放进 sys.path[0]，故可直接顶层导入（放在这里也顺带避开 E402）。p95 口径与它的
+# 已知偏差方向见 tools/bench_stats.py —— 三个基准必须共用同一份实现，不许各写一份。
+from bench_stats import format_samples, median_ms, p95_ms
+
 # 允许从任意 CWD 直接 `python tools/bench_cards_endpoint.py` 运行（同 tools/ 其余脚本约定）。
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+_TOOLS_DIR = os.path.join(_REPO_ROOT, "tools")
+# tools/ 也要进 sys.path：本脚本与其余基准共用 tools/bench_stats.py 的 p95 口径，
+# 而 tools/ 不是包（无 __init__.py），只能靠目录进路径做顶层 import。
+for _path in (_REPO_ROOT, _TOOLS_DIR):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 # 段 A/B/C 的 SQL。**字面量**取自 delector/routes/main.py::get_cards（逐字对齐，
 # 改这里等于改被测对象，必须同步改生产码并重跑本基准）。
@@ -105,6 +129,14 @@ def _env_scales() -> List[int]:
 
 
 def _env_rounds() -> int:
+    """轮数：`BENCH_P95_ROUNDS` 优先，否则沿用既有的 `BENCH_ROUNDS` / 默认 7。
+
+    为什么要第二个开关：中位数 5~7 轮就稳，p95 远不够（n=5 的经验 p95≈最大值且系统性
+    低估尾部）。两个开关分开，是为了让"提 p95 精度"不必顺带改动门禁档已有的轮数口径。
+    """
+    raw_p95 = os.environ.get("BENCH_P95_ROUNDS", "").strip()
+    if raw_p95:
+        return max(MIN_ROUNDS, int(raw_p95))
     raw = os.environ.get("BENCH_ROUNDS", "").strip()
     if not raw:
         return 7
@@ -237,18 +269,27 @@ def _fill(db_path: str, n_vocab: int, n_grammar: int, seed: int) -> None:
 # --------------------------------------------------------------------------- #
 # 计时（[Instinct: Median-Not-Mean]）
 # --------------------------------------------------------------------------- #
-def _median_ms(fn: Callable[[], Any], rounds: int) -> float:
-    """跑 rounds 轮，返回**中位数**毫秒。
+def _samples_ms(fn: Callable[[], Any], rounds: int) -> List[float]:
+    """跑 rounds 轮，返回**每轮**毫秒样本（不折叠）。
 
-    刻意不用均值：单轮会被 GC / 磁盘 / 页面缓存污染，均值把这些尖峰摊进结果里，
-    差值（B−C 这种小差）就会失真。中位数对单侧尖峰不敏感。
+    刻意只采样本、不做统计：中位数与 p95 必须来自**同一批**样本，否则二者之差（尾部
+    有多厚）就混进了两次测量的抖动，不再是同一条分布的性质。
     """
     samples: List[float] = []
     for _ in range(rounds):
         t0 = time.perf_counter()
         fn()
         samples.append((time.perf_counter() - t0) * 1000.0)
-    return float(statistics.median(samples))
+    return samples
+
+
+def _median_ms(fn: Callable[[], Any], rounds: int) -> float:
+    """跑 rounds 轮，返回**中位数**毫秒。
+
+    刻意不用均值：单轮会被 GC / 磁盘 / 页面缓存污染，均值把这些尖峰摊进结果里，
+    差值（B−C 这种小差）就会失真。中位数对单侧尖峰不敏感。
+    """
+    return median_ms(_samples_ms(fn, rounds))
 
 
 def _bench_scale(
@@ -266,7 +307,11 @@ def _bench_scale(
     finally:
         conn.close()
     # 段 D 走生产码 get_cards() 自身开连接（与真实请求同路径），不复用上面的连接。
-    d = _median_ms(get_cards, rounds)
+    # 段 D 是 ADR-0018 §6 判定门的输入场景（端点总耗时），故只有它需要 p95：
+    # 中位数取自 samples、p95 取自**同一批** samples，不重新计时。
+    d_samples = _samples_ms(get_cards, rounds)
+    d = median_ms(d_samples)
+    d_p95 = p95_ms(d_samples)
 
     filesort_ms = b - c
     return {
@@ -276,11 +321,16 @@ def _bench_scale(
         "B": b,
         "C": c,
         "D": d,
+        "D_p95": d_p95,
+        "D_samples": d_samples,
         "lookup_ms": b - a,  # 多列回表
         "filesort_ms": filesort_ms,
         "python_ms": d - b,  # dict(r) 物化 + 逐卡 FSRS 递推
         "filesort_pct": filesort_ms / d * 100.0 if d > 0 else 0.0,
         "filesort_pct_of_sqlite": filesort_ms / b * 100.0 if b > 0 else 0.0,
+        # 与 filesort_pct 同分母（端点总耗时 D）：两者可直接横向比大小，回答
+        # "优化该砸在 SQLite 侧还是 Python 侧"。
+        "python_pct": (d - b) / d * 100.0 if d > 0 else 0.0,
         "plan": plan,
     }
 
@@ -292,6 +342,35 @@ def _verdict(pct: float) -> str:
     if pct < 30.0:
         return "不加索引（filesort 占比 < 30%，索引收益上限被回表 + Python 侧开销压死，写代价不划算）"
     return "中间区间（30%~50%），需另带写代价评估后再定"
+
+
+def _python_verdict(pct: float) -> str:
+    """Python 侧占比的可判定结论（ADR-0018 §6 判定门的**条件①**输入）。
+
+    沿用 `_verdict()` 的"可判定区间"风格：只报占比不给建议等于把判定的活推回给读
+    者。阈值沿用同一套 50% / 30% 分档，因为两侧是**同分母**竞争关系——此消彼长，
+    用同一把尺子才能直接比。
+
+    措辞纪律（**勿改**，越权即误判）：本函数**只报条件①，不下路线裁决**。
+    ADR-0018 §6 的门是**双条件 AND**：① Python CPU 占比 > 50%；② p95 > 2 倍目标。
+    本脚本只供 ①（占比），② 必须等 Task 5 的分层剖析才能判定 —— 二者 AND 成立才
+    走热点下沉。故 >50% 分支 MUST NOT 写成"走热点下沉"：那会让 Task 6 回填 ADR 时
+    把它误当成最终结论。三个分支一律给"区间 + 建议"，不给定稿。
+    """
+    if pct > 50.0:
+        return (
+            "满足条件①（Python 侧占比 > 50%）；条件②（p95 > 2 倍目标）待分层剖析"
+            "（Task 5）判定 —— 二者 AND 才走热点下沉，此处不下路线结论"
+        )
+    if pct < 30.0:
+        return (
+            "不满足条件①（Python 侧占比 < 30%）：瓶颈仍在 SQLite 查询侧，"
+            "建议先优化查询侧再谈下沉（条件②仍待 Task 5，此处不下路线结论）"
+        )
+    return (
+        "中间区间（30%~50%），条件①不成立：建议先压低占比更高的那一侧再复测"
+        "（条件②仍待 Task 5，此处不下路线结论）"
+    )
 
 
 def main() -> int:
@@ -311,6 +390,7 @@ def main() -> int:
 
         print("=== bench_cards_endpoint ===")
         print(f"scales={','.join(str(s) for s in scales)} rounds={rounds} (median) analyzer=off(与生产一致)")
+        print(f"rounds={rounds}")
         print(f"vocab_indexes={idx}")
 
         results: List[Dict[str, Any]] = []
@@ -326,11 +406,14 @@ def main() -> int:
             print(f"segment_B_ms={r['B']:.3f}")
             print(f"segment_C_ms={r['C']:.3f}")
             print(f"segment_D_ms={r['D']:.3f}")
+            print(f"segment_D_p95_ms={r['D_p95']:.3f}")
+            print(f"samples_segment_D_ms={format_samples(r['D_samples'])}")
             print(f"lookup_ms={r['lookup_ms']:.3f}")
             print(f"filesort_ms={r['filesort_ms']:.3f}")
             print(f"python_fsrs_ms={r['python_ms']:.3f}")
             print(f"filesort_pct={r['filesort_pct']:.1f}%")
             print(f"filesort_pct_of_sqlite={r['filesort_pct_of_sqlite']:.1f}%")
+            print(f"python_pct={r['python_pct']:.1f}%")
             per_ms = r["D"] / n * 1000.0
             print(f"per_row_us={per_ms:.2f}")
 
@@ -341,9 +424,11 @@ def main() -> int:
         print(
             f"构成：排序 filesort {target['filesort_ms']:.1f}ms（占端点 {target['filesort_pct']:.1f}%，"
             f"占 SQLite 侧 {target['filesort_pct_of_sqlite']:.1f}%）｜多列回表 {target['lookup_ms']:.1f}ms"
-            f"｜Python 物化+FSRS {target['python_ms']:.1f}ms｜端点总计 {target['D']:.1f}ms"
+            f"｜Python 物化+FSRS {target['python_ms']:.1f}ms（占端点 {target['python_pct']:.1f}%）"
+            f"｜端点总计 {target['D']:.1f}ms"
         )
         print(f"verdict={_verdict(target['filesort_pct'])}")
+        print(f"python_verdict={_python_verdict(target['python_pct'])}")
         if len(results) > 1:
             lo, hi = results[0], results[-1]
             ratio_n = hi["n_vocab"] / lo["n_vocab"]
