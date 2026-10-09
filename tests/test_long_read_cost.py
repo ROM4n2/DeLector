@@ -318,7 +318,7 @@ def test_cache_clear_is_verified_as_miss(bench_out: str) -> None:
 
 
 def test_nlp_path_is_declared_and_verdict_carries_it(bench_out: str) -> None:
-    """不声明走哪条 NLP 路径，spacy_ms 与 42ms/句的对照就会在无人察觉时整体失真。"""
+    """不声明走哪条 NLP 路径，spacy_ms 与历史值 42ms/句的对照就会在无人察觉时整体失真。"""
     match = re.search(r"^nlp_path=(spacy|pure)$", bench_out, re.MULTILINE)
     assert match is not None, f"nlp_path 不可解析（只接受 spacy|pure）\n{bench_out}"
     path = match.group(1)
