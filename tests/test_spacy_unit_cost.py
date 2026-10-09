@@ -431,9 +431,27 @@ def test_bench_verdict_names_both_legacy_values(bench_out: str) -> None:
     assert "见上文" not in verdict, f"结论是空话（「见上文」之类），不是可判定结论\n{verdict}"
     found = _nums(bench_out)
     per_sentence_ms = found["per_sentence_ms"]
-    # ① 结论里的实测量必须与输出行是同一个数（防文案写死）。
-    assert f"{per_sentence_ms:.2f}ms/句" in verdict, (
-        f"结论里的实测量与输出行的 per_sentence_ms={per_sentence_ms:.3f} 对不上\n{verdict}"
+    # ① 结论里的实测量必须与「脚本打印行」是同一个数（防文案写死）。
+    #
+    # 为什么不用 `f"{per_sentence_ms:.2f}ms/句" in verdict`（字符串相等）：
+    # 打印行按 `.3f` 印出中位数，测试把它**重新解析**成 float 后再 `.2f`，等于对
+    # 同一个数做了**两次舍入**；而 verdict（`tools/bench_spacy_unit.py:311`）是拿
+    # **原始中位数**直接 `.2f` —— 两者同源同聚合，问题只出在测试端这层「先.3f再.2f」。
+    # 当原始中位数落在两位小数边界 `X.XX5` 的 ±0.0005 内时，两条舍入路径会分道扬镳，
+    # 断言随机打红（CI flake）：例如原始值 v=7.1149 → 打印行 "7.115" →
+    # 测试 `f"{7.115:.2f}"`="7.12"，而 verdict `f"{v:.2f}"`="7.11"，两数其实只差 0.005。
+    # 故改为**数值 + 容差**：容差取「一次两位小数舍入」0.005（这正是双重取整可能
+    # 引入的最大偏差）再加浮点表示误差 1e-9。文案若被写死成别的数，|n-实测| 必然
+    # 超差 ⇒ 仍红，故「常数 ↔ 文案 ↔ 测量三者互锁」的原意保持不变。
+    m_measured = re.search(r"稳态实测\s*([0-9]+(?:\.[0-9]+)?)ms/句", verdict)
+    assert m_measured is not None, (
+        f"结论里找不到『稳态实测 N.NNms/句』的实测量\n{verdict}"
+    )
+    verdict_measured = float(m_measured.group(1))
+    assert abs(verdict_measured - per_sentence_ms) <= 0.005 + 1e-9, (
+        f"结论里的实测量 {verdict_measured:.2f} 与输出行的 per_sentence_ms="
+        f"{per_sentence_ms:.3f} 不一致（差 {abs(verdict_measured - per_sentence_ms):.6f} "
+        f"> 0.005 + 1e-9）——超过一次两位小数舍入的最大偏差\n{verdict}"
     )
     consts = _script_constants()
     # ② 解析「实测/2.1 = N×」：底数必须是脚本里的常量，比值必须等于实测/常量。
