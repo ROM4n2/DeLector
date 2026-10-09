@@ -1,10 +1,10 @@
 # ADR-0018: 性能前提先测量，Python 主体不换（热点下沉策略）
 
-> **正式件:** `08-Projects/DeLector/01-ADR/0018-performance-measurement-before-runtime-swap.md`（vault）。本文件是仓内副本，内容与正式件同源。
-> **决策者:** Haoyu Xi ｜ **产出方式:** `/dfs-grill` 双镜拷问（code-explorer 事实核查 + perf-profiler 实测席位）+ 用户拍板
+> **正式件:** `08-Projects/DeLector/01-ADR/0018-performance-measurement-before-runtime-swap.md`（vault）。本文件是仓内副本，内容与正式件同源（本次由正式件机械重新生成，未手抄）。
+> **决策者:** Haoyu Xi ｜ **产出方式:** `/dfs-grill` 双镜拷问（code-explorer 事实核查 + perf-profiler 实测席位）+ 用户拍板；**D1 已由 `/dfs-plan` + `/dfs-exec` 执行完毕**（见 §7）。
 
 - **状态**: Accepted（2026-10-09）
-- **实施**: **待执行**（本 ADR 的第一动作是"测量"，尚未跑）
+- **实施**: **D1 已执行**（2026-10-09，分支 `perf/measurement-baseline`）。**结论：AND 门不成立 ⇒ 走 O0（维持现状 + 便宜杠杆）** —— 条件① 成立（Python 侧占比 85.9%）但条件② 不成立（四场景 p95 距 2× 目标还有 2.9~40 倍余量）。完整数字与证据见 §7。
 - **日期**: 2026-10-09
 - **领域**: 性能工程 / 架构边界 / 多形态打包
 - **决策者**: Haoyu Xi
@@ -37,6 +37,7 @@
 | 审计文档数字 | `docs/reviews/2026-10-03-swarm-audit-master.md`（save_wb_state 4.9/27.0/154.5ms；WAL p99 434ms 等） | **不可复跑**，部分自带 `UNVERIFIED` 标注 |
 | spaCy 单价 | `syntax_hard.py:9` 注释写 `~42ms/句`；`docs/reviews/2026-09-28-swarm-audit-master.md:36` 写 `实测 ~2.1 ms/句` | ⚠️ **同一量两个值差 20 倍，都没有可复跑脚本兜底** |
 | GIL 感知点 | `ExportSaver.java:73`「单线程串行：服务端是单 worker uvicorn + GIL」 | 全仓**唯一**点名 GIL 处 ⇒ 只在"大导出并发"被感知 |
+| **本批可复跑实测（2026-10-09）** | `tools/bench_cards_endpoint.py` / `bench_spacy_unit.py` / `bench_long_read.py` / `bench_cold_start.py` / `bench_profile_layers.py`（五个基准 + 对应门禁，见 §7） | ✅ **可复跑 + 门禁钉住（含 p95 与样本量）** ⇒ 本节其余各条的"不可复跑"性质由此被替代；其中 **spaCy 单价的 20 倍矛盾被重新定性为"跨口径"而非"有一个错值"**（见 §7.4） |
 
 **结论**：「Python 性能拖垮项目」目前是**直觉，不是测量**。
 
@@ -95,8 +96,8 @@ NLP 结果缓存、批处理、`de_core_news_sm/md` 选择、惰性加载、卡�
 
 | 编号 | 决策 |
 | --- | --- |
-| **D1（Q1-A）** | **先测量，不换**。用 §6 的 1 小时方案取得可复跑数据，再决定下一步。**在此之前不动任何架构。** |
-| **D2（Q2 按建议）** | 按测量结果选路：**Python CPU 主导 → O2（热点下沉）**；**编排/并发主导 → O3（扩展 ADR-0008 边界）** |
+| **D1（Q1-A）** | **先测量，不换**。用 §6 的 1 小时方案取得可复跑数据，再决定下一步。**在此之前不动任何架构。** → ✅ **已于 2026-10-09 执行完毕，见 §7** |
+| **D2（Q2 按建议）** | 按测量结果选路：**Python CPU 主导 → O2（热点下沉）**；**编排/并发主导 → O3（扩展 ADR-0008 边界）** → ✅ **实测结论：走 O0**（条件① 成立但条件② 不成立 ⇒ AND 不成立；**不满足**进入 O2/O3 的门，见 §7.2） |
 | **D3** | **O1（换 HTTP 主体）永久否决**，除非 §3.2 列出的三条翻盘条件同时成立且另开 ADR |
 | **D4** | 测量**之后**默认先做 O0 的便宜杠杆（尤其"重复 NLP"类），再评估是否需要 O2/O3 |
 | **D5** | 明确写入：**Python 不可移除**（spaCy 硬依赖）；本 ADR 讨论的永远是"边界"而非"替换" |
@@ -142,16 +143,92 @@ Python CPU / RSS / 前端渲染 / SQLite / 网络（AI·TTS·RSS）
 
 ---
 
-## 7. Fog of War
+## 7. 实施记录：D1 测量结果（2026-10-09）
 
-- **[Unknown 1] 测量结果本身**：D2 的两条分支取决于它 —— 这是本 ADR 唯一的开放式未知，**不得在测量前预先选路**。
+### 7.1 交付物（分支 `perf/measurement-baseline`）
+
+| 基准 | 回答什么 | 门禁 |
+| --- | --- | --- |
+| `tools/bench_cards_endpoint.py`（改造） | 卡盒端点各层占比（新增 `python_pct`、`segment_D_p95_ms`） | `tests/test_cards_endpoint_cost.py` |
+| `tools/bench_spacy_unit.py` | spaCy 单价（加载/预热/稳态三段分离） | `tests/test_spacy_unit_cost.py` |
+| `tools/bench_long_read.py` | 长文精读冷/热读 + 缓存是否生效 | `tests/test_long_read_cost.py` |
+| `tools/bench_cold_start.py` | 进程起到 `/api/health` 200 的分段 | `tests/test_cold_start_cost.py` |
+| `tools/bench_profile_layers.py` + `tools/bench_stats.py` | 分层占比汇总 + 判定门 verdict | `tests/test_profile_layers.py` |
+
+全部复用既有范式（`mkdtemp` 隔离、**中位数**、`MIN_ROUNDS=5`），并补上 §1.3 指出的缺口：**新基准一律钉阈值**（比值优先，不钉绝对毫秒）。
+
+### 7.2 判定门结论（**D2 的答案**）
+
+| 条件 | 结果 | 数字（n=20 档） |
+| --- | --- | --- |
+| ① Python CPU 占比 > 50% | ✅ **成立** | 加权代理占比 **85.9%**（卡盒 84% / 长文 98%） |
+| ② p95 > 2 倍目标 | ❌ **不成立** | 四场景 p95 距 2× 目标的余量：卡盒 **0.35×**、冷启 0.26×、长文冷读 0.02×、热读 0.0001× |
+| **AND** | ❌ **不成立** | ⇒ **走 O0（维持现状 + 便宜杠杆）** |
+
+**这条结论的实质**：Python 侧占比确实很高（85.9%），但**绝对延迟离目标还有 2.9~40 倍余量** ⇒ 没有理由为"Python 慢"做架构改造。占比高只说明"若要优化就该优化 Python 侧"，不说明"现在必须优化"。
+
+**两级档位（统计纪律）**：默认 n=5 档（CI/门禁）只输出"**仅可否证**"—— 因为 n=5 的经验 p95 ≈ 最大值且 `P(max₅ < 真p95) ≈ 77%`（系统性**低估**尾部）；只有 `BENCH_P95_ROUNDS=20` 档才允许写"不成立"这种强结论。
+
+### 7.3 实测数字（可复跑）
+
+| 场景 | 数字 |
+| --- | --- |
+| 卡盒（20k 卡） | 端点 p95 **0.696s**；**Python 侧占比 84%**；SQL filesort 仅 3~5%（查询侧优化收益上限被压死） |
+| 长文精读 | 冷读 **122ms**（12 句 ⇒ 10.2ms/句）；热读 **17.7µs** ⇒ 缓存生效（数量级 ~6.9e3，非算法加速倍数） |
+| spaCy 单价 | 稳态 **7.1ms/句**（`de_core_news_sm`，≈296µs/token）；长句档 11.2ms；**首次/稳态仅 1.3×** |
+| 冷启动 | `health_200` **2.6s**；其中 import 2.1s（**spaCy 模型加载 1.47s 占首启 58%**）+ 建表 0.15s + 装配 0.24s |
+
+### 7.4 spaCy 单价的 20 倍矛盾 → **重新定性为"跨口径"，不是"有一个错值"**
+
+- 实测 `process_german_text`（完整管线）稳态 **7.1ms/句**；
+- 但 `syntax_hard.py:9` 的 **42ms** 与审计文档的 **2.1ms** 指向的是 **`rank_sentences` 路径**（`syntax_hard.py:187` 的热路径）——**与本次实测的不是同一个函数**；
+- ⇒ **两者不可直接相除**，"实测/2.1 = 3.4×"属**跨函数差**，**不能**读作"2.1ms 偏乐观"；**要修订那条 42ms 注释，必须先补测 `rank_sentences`/`analyze_syntax_tree` 的单价**（**未完成项**，见 §8）；
+- 42ms 的三个候选解释（**均未定案**）：① `md`（带词向量，更贵）口径；② 含冷启动摊薄；③ 整篇一次性处理 + 含 DB 写入口径。
+  ⚠️ 「冷启动摊薄 ⇒ N≈42 句」**不构成证据**：该方程对任意 `0 < steady < 42` 恒有正解（N 是自由参数），且分子含词库 import、换机器即变 —— 属**单位巧合**。
+
+### 7.5 未测项（各附原因，**不伪造数字**）
+
+| 层 | 状态 | 原因 |
+| --- | --- | --- |
+| 网络（AI/TTS/RSS） | `unmeasured` | AI 需 `DEEPSEEK_API_KEY`；TTS 免 key 但属第三方服务；RSS 是公开免 key 源但会给 CI 引入外网抖动。**本基准选择不发外部请求**（且网络层对本次四场景贡献为 0） |
+| 前端渲染 | `unmeasured` | 本机无浏览器自动化基线（需 Chrome DevTools 手工录制） |
+| RSS/内存峰值 | `unmeasured` | Windows 无 stdlib `resource`，且不为测量新增 `psutil` 依赖 |
+| Android 全项 | `unmeasured` | 本机无 Android SDK/模拟器/Chaquopy 运行时；`84000ms` 是启动页**轮询上限**而非实测首启耗时，与桌面 `health_200` 不同口径、**不可相减/相除** |
+| 四场景 p95（n<20 时） | 仅可否证 | 见 §7.2 的统计纪律 |
+
+### 7.6 ⚠️ 结论对"假设目标值"的依赖（**必须随结论一起读**）
+
+`target_cold_start_s=5.0` / `target_long_read_cold_s=3.0` / `target_cards_list_s=1.0` /
+`target_warm_read_s=0.1` 这组目标是**本基准的假设值，未经用户确认**
+（输出里以 `target_status=unconfirmed` + 每场景 `headroom_to_2x_target_*` 绑定声明）。
+**条件② 的"不成立"完全依赖这组值** —— 若用户给出更严的目标，结论可能翻转。
+另：四场景是**代理口径**（`segment_D` 是进程内 SQL/物化段、非"列表+滚动端到端"；
+`health_200` ≠ 首屏可用），见输出里的 `scenario_scope_note`。
+
+### 7.7 测量顺带发现的生产代码缺口（**非本计划范围，仅登记**）
+
+`delector/core/database.py:91-93` 的数据目录迁移闸条件① 用 `isfile` **不看 `size`**，
+而"0 字节不算数据"的判定只作用于**旧位置** ⇒ **新位置放一个 0 字节 `delector.db`
+\+ 旧位置有真实数据 ⇒ 闸静默放行**，正是它自己要防的"静默空库"场景。
+现有用例只覆盖"0 字节在旧位置"（`tests/test_data_dir_migration_gate.py:98`）。
+建议后续补一条用例并同步闸逻辑。另：`invalidate_rank_cache()` 只清聚合键是
+**有意取舍**（docstring 已论证），本次经独立核实**无害**（材料内容入库后不可变 +
+id 不复用），无需改动。
+
+---
+
+## 8. Fog of War
+
+- **[Unknown 1] ~~测量结果本身~~ → ✅ 已解决（2026-10-09）**：结论为 **O0**（见 §7.2）。
+- **[Unknown 5·新] `rank_sentences` 单价未测**：`syntax_hard.py:9` 那条 **42ms/句** 注释至今**无法被证实或证伪**（本次实测的是另一个函数）。要动它必须先补测该路径（§7.4）。
+- **[Unknown 6·新] 假设目标值未确认**：§7.6 的 `target_*` 需用户拍板；拍板后条件② 应复算一次。
 - **[Unknown 2] Android 侧如何测量**：本机无 Android SDK（Java 侧改动只能靠 CI 验证）；真机冷启动/首启解包 30MB 的体验成本如何量化，未定。
 - **[Unknown 3] 卡盒前端渲染的占比**：perf 席位标注"排序未实测"，20k 卡 790ms 中前端部分未剖析。
 - **[Unknown 4] O2 的 Android 交叉编译链路**：若热点下沉命中 Android，需 arm64 交叉编译 + Chaquopy 装载方式，方案未定（不在本 ADR 范围）。
 
 ---
 
-## 8. 关联
+## 9. 关联
 
 - **上游**：ADR-0008（Go Agent Runtime + Python NLP Engine 混合架构）、ADR-0010 §5（Go/Python 边界"尽量靠拢"硬分界）。
 - **同族教训**：v5.16.0 的 `PROCESSED_JSON_VERSION` 判据漂移（"重复 NLP"真实存在过一次）；`docs/reviews/2026-10-03-swarm-audit-master.md`（不可复跑数字的来源）。

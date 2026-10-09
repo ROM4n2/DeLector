@@ -54,8 +54,9 @@
 - **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；注意 `import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
 - **⏸ 更新可见性（ADR-0017）：桌面端已上线 / Android 端暂缓**（用户 2026-10-08 决定"先暂缓安卓"）。代码**已合入 master**（PR #115/#116 → `ee68ec8`，master CI success）：`delector/core/version.py: APP_VERSION` 单一真相源、`GET /api/update/check`（GitHub Releases 唯一真相源 + 成功 6h / **失败 60s** TTL + 3s 超时 + **不挂本机闸**＝ADR §4.3 显式决定）、顶栏 chip + `wb_update_chip_probe.mjs`（11 场景）。实测基线：半 A **1106** / 半 B **264**+1 skipped / 探针文件 **29** / mypy **96**+**72**；**桌面侧真实出网已验证**（4.04s 取到 `v5.16.0`）。
   **⚠️ 暂缓 ≠ 已验证：Android 端能力未知**（两条假设从未验证）——① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（手机现有出网是 **LAN HTTP**，不是证据）；② Android WebView 点 chip 外链是否交给系统浏览器。**不得**把"代码已合并"记为"双端已验证"；恢复验证时见 work.log 2026-10-08 事件与 ADR §7.3。
-- **⏳ 性能路线（ADR-0018 已裁决，待执行测量）**：**先测量、不换主体**。测量方案：4 场景（冷启/长文精读/热读/卡盒 20k）+ 分层剖析（Python CPU/RSS/前端/SQL/网络）+ 判定门（Python CPU >50% **且** p95 >2 倍目标）。按结果选路：CPU 主导 → **热点下沉**；编排/并发主导 → **扩展 ADR-0008 边界（Go Agent）**。**"换 HTTP 主体"已永久否决**（三条依据 + 三条翻盘条件见 ADR §3.2）。已知前提：spaCy 单价现有**两个矛盾值**（42ms/句 vs 2.1ms/句），需由测量收口；全仓唯一基准 `bench_cards_endpoint.py` **只断言结构、不钉阈值**（测量产物须补上）。
+- **✅ 性能路线（ADR-0018 D1 已执行完毕 → 结论 O0）**：判定门定案 —— 条件① **成立**（加权 Python CPU 代理占比 **85.9%**）／条件② **不成立**（四场景 p95 距 2× 目标余量 0.35×~0.0001×）⇒ **AND 不成立 ⇒ 走 O0（维持现状 + 便宜杠杆）**，**不做**热点下沉也不用扩 ADR-0008 边界。**"换 HTTP 主体"永久否决**（三条依据 + 三条翻盘条件见 ADR-0018 §3.2）。分支 `perf/measurement-baseline`（6 commit）：五个基准 + 五个门禁（`bench_cards_endpoint` / `bench_spacy_unit` / `bench_long_read` / `bench_cold_start` / `bench_profile_layers` + `bench_stats`）。实测：卡盒 p95 0.696s（Python 侧 84%）、长文冷读 122ms 热读 17.7µs（缓存生效）、spaCy 稳态 7.1ms/句、冷启 2.6s（其中 spaCy 模型加载 1.47s 占 57%）。
 - 递延项：tests `--strict`；`tools/vault-proactive-scan.py` 的三条版本正则**本身无自动化守卫**（Task 2 修掉的那个"正则永不命中"缺陷恰是无人守的类型）。
+- 递延项（本轮测量挖出）：① **`database.py:91-93` 迁移闸条件① 用 `isfile` 不看 `size`** ⇒ 新位置放 0 字节 `delector.db` + 旧位置有真实数据时**闸静默放行**，正是它自己要防的"静默空库"（现有用例只覆盖"0 字节在旧位置"），建议补用例 + 同步闸逻辑；② **`rank_sentences` 单价未测** ⇒ `syntax_hard.py:9` 那条 `~42ms/句` 注释至今无法证实/证伪（要改它必须先补测该路径）；③ **ADR-0018 §7.6 的 `target_*` 假设目标值未确认** ⇒ 条件② 的结论依赖它，用户拍板后应复算。
 
 ## 工作方式
 
