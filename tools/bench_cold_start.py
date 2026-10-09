@@ -82,9 +82,11 @@ bind 之间被抢 ⇒ 失败时换新端口**重试**而非写死。
 ``DATA_DIR`` 是临时目录而**仓库根存在真实 ``delector.db``** 时，它的四个条件全中
 （新位置无库 + 旧位置有库且非空 + 两路径不同）⇒ 抛 ``RuntimeError``。这是**正确的**
 生产行为（防止「用户数据留在旧位置而程序偷偷建空库」），但基准**刻意**就要一次性空
-库。故本脚本在临时数据目录里预置一个 **0 字节** ``delector.db``（SQLite 视 0 字节
-文件为空库），使闸按其设计条件①「新位置已有库」返回；整个测量期间 ``DATABASE_PATH``
-全程指向 tmpdir，闸要防的那件事在本基准里根本不存在。见输出行 ``data_dir_gate_note``。
+库。故本脚本在临时数据目录里摆一个**非空的、合法** ``delector.db``（``sqlite3`` 建一张
+占位表），使闸按其设计条件①「新位置已有**非空**库」合法通过；整个测量期间
+``DATABASE_PATH`` 全程指向 tmpdir。这**不掩盖**闸要防的事：临时目录从诞生起就是**唯一**
+数据目录，仓库根那个库**不是**它的「旧位置」（二者无迁移关系），故「新位置空壳 + 旧位置
+有真实数据」这一闸要拦的组合在此根本不存在。见输出行 ``data_dir_gate_note``。
 
 Android 侧：**不伪造**
 ----------------------
@@ -186,8 +188,9 @@ ANDROID_NOTE = (
 DATA_DIR_GATE_NOTE = (
     "迁移闸中和：database.preflight_data_dir() 在 DATA_DIR 为临时目录且仓库根存在真实 "
     "delector.db 时会抛 RuntimeError（防『用户数据留在旧位置而程序偷偷建空库』，生产行为正确）；"
-    "本基准刻意用一次性空库，故在临时数据目录预置 0 字节 delector.db（SQLite 视为空库）"
-    "使闸按条件①『新位置已有库』返回 —— DATABASE_PATH 全程指向 tmpdir，闸要防的那件事不存在"
+    "本基准刻意用一次性空库，故在临时数据目录摆一个**非空的、合法** delector.db（sqlite3 建一张"
+    "占位表，不是 0 字节空壳）使闸按条件①『新位置已有**非空**库』合法返回 —— DATABASE_PATH 全程"
+    "指向 tmpdir，闸要防的那件事不存在"
 )
 SEGMENTS_NOTE = (
     "分段口径：import_ms / app_ready_ms / init_db_ms 各由**独立子进程**测得，且前置状态不同 —— "
@@ -515,9 +518,18 @@ def _prepare_round_dir(tmpdir: str) -> Dict[str, str]:
     }
     for sub in ("initdb", "appready", "serve"):
         os.makedirs(os.path.join(tmpdir, sub), exist_ok=True)
-    # 迁移闸中和：0 字节文件（SQLite 视为空库），理由见 DATA_DIR_GATE_NOTE。
-    with open(paths["main_db"], "wb"):
-        pass
+    # 迁移闸中和：摆一个**非空的、合法**的 SQLite 库（建一张占位表），使闸按条件①
+    # 「新位置已有**非空**库」合法返回；理由见 DATA_DIR_GATE_NOTE。**不能**用随机字节伪造：
+    # main_db 会被子进程的 init_db() 打开，非法内容会 `file is not a database`。
+    # 显式 close（而非 `with sqlite3.connect(...)`）：Connection 的上下文只管事务、不关句柄，
+    # 句柄悬着会让 Windows 上 finally 的 rmtree 删不掉临时目录（沿用 database.py 的
+    # `_close_db_conn` 纪律：不依赖循环 GC）。
+    conn = sqlite3.connect(paths["main_db"])
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS _gate_neutralizer (id INTEGER PRIMARY KEY)")
+        conn.commit()
+    finally:
+        conn.close()
     return paths
 
 
