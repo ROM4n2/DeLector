@@ -18,6 +18,12 @@ syntax_tree.py:1533 双双退回纯 Python），此时 `spacy_ms` 量到的是�
 也就是 syntax_hard.py:225 `/spacy-status` 对外报的那套），不在基准里另发明一套；
 只有两层都报 spaCy 才标 `nlp_path=spacy`，分歧靠 `nlp_path_detail` 行暴露。
 
+Task 5b 起冷读/热读同时输出 **p95**（`cold_p95_ms` / `warm_p95_ms`）与原始样本行
+（`samples_cold_ms` / `samples_warm_ms`）：ADR-0018 §6 的判定门条件②按 **p95 > 2 倍
+目标** 判，不是按中位数。p95 与中位数取自**同一批**样本（不重新计时），口径见
+`tools/bench_stats.py`：n=5 时该分位 ≈ 最大值且**系统性低估尾部**，故样本不足时不许
+拿它下强结论。
+
 `cache_speedup` 的分母是微秒级 dict 命中（抖动 ±10%），只报 2 位有效数字，只作
 数量级参考，不解读为算法加速倍数。`cache_items_identical` 逐轮比对冷读与热读返回
 的 items：只证"热读更快"不够，热读还必须返回同一份结果，否则是缓存正确性问题。
@@ -30,16 +36,24 @@ import importlib
 import os
 import shutil
 import sqlite3
-import statistics
 import sys
 import tempfile
 import time
 from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
+# bench_stats 与本脚本同处 tools/：以脚本方式运行（`python tools/xxx.py`）时 Python 已把
+# tools/ 放进 sys.path[0]，故可直接顶层导入（放在这里也顺带避开 E402）。p95 口径与它的
+# 已知偏差方向见 tools/bench_stats.py —— 三个基准必须共用同一份实现，不许各写一份。
+from bench_stats import format_samples, median_ms, p95_ms
+
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+_TOOLS_DIR = os.path.join(_REPO_ROOT, "tools")
+# tools/ 也要进 sys.path：本脚本与其余基准共用 tools/bench_stats.py 的 p95 口径，
+# 而 tools/ 不是包（无 __init__.py），只能靠目录进路径做顶层 import。
+for _path in (_REPO_ROOT, _TOOLS_DIR):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 MIN_ROUNDS = 5
 DEFAULT_ROUNDS = 7
@@ -96,6 +110,14 @@ RankFn = Callable[[str, Optional[int], Optional[str], Optional[float], int], Dic
 
 
 def _env_rounds() -> int:
+    """轮数：`BENCH_P95_ROUNDS` 优先，否则沿用 `BENCH_LONG_READ_ROUNDS` / 默认 7。
+
+    p95 对样本量远比中位数敏感（n=5 的经验 p95≈最大值、系统性低估尾部），故"提精度"
+    单独给一个开关，避免它顺带改写人工档既有的轮数口径。
+    """
+    raw_p95 = os.environ.get("BENCH_P95_ROUNDS", "").strip()
+    if raw_p95:
+        return max(MIN_ROUNDS, int(raw_p95))
     raw = os.environ.get("BENCH_LONG_READ_ROUNDS", "").strip()
     return max(MIN_ROUNDS, int(raw)) if raw else DEFAULT_ROUNDS
 
@@ -111,7 +133,7 @@ def _bootstrap_env(tmpdir: str) -> None:
 
 
 def _median_ms(samples: List[float]) -> float:
-    return float(statistics.median(samples))
+    return median_ms(samples)
 
 
 def _seed_article(db_path: str) -> int:
@@ -137,8 +159,12 @@ def _items_of(result: Dict[str, Any]) -> object:
 
 def _read_samples(
     rank: RankFn, clear_cache: Callable[[], None], article_id: int, rounds: int
-) -> Tuple[float, float, bool]:
-    """冷/热读各取 rounds 轮中位数；同时逐轮比对两者返回的 items 是否一致。
+) -> Tuple[List[float], List[float], bool]:
+    """冷/热读各采 rounds 轮**原始样本**返回；同时逐轮比对两者返回的 items 是否一致。
+
+    为什么返回样本而不是中位数：Task 5b 要求 p95，而 p95 必须与中位数取自**同一批**
+    样本（另跑一轮计时的话，两者之差就混进了两次测量的抖动）。故这里只采样，统计量
+    由调用方从同一批样本里同时折叠出中位数与 p95。
 
     为什么每轮都比：只证明"热读更快"不足以说明缓存是对的——热读若返回了另一份
     （或空）结果，那比慢更严重。故把"同样快"与"同样对"一起测，任一轮不等即判否。
@@ -156,7 +182,7 @@ def _read_samples(
         warm_samples.append((time.perf_counter() - warm_start) * 1000.0)
         if _items_of(cold_result) != _items_of(warm_result):
             items_identical = False
-    return _median_ms(cold_samples), _median_ms(warm_samples), items_identical
+    return cold_samples, warm_samples, items_identical
 
 
 def _count_tokens(result: Dict[str, Any]) -> int:
@@ -274,7 +300,12 @@ def main() -> int:
         clear_cache()
         cleared = get_rank_cache(f"article:{article_id}") is None
         sentences = split(LONG_ARTICLE_TEXT)
-        cold_ms, warm_ms, items_identical = _read_samples(rank, clear_cache, article_id, rounds)
+        cold_samples, warm_samples, items_identical = _read_samples(rank, clear_cache, article_id, rounds)
+        # 中位数与 p95 必须来自**同一批**样本：见 bench_stats 的口径说明（n 小时 p95 系统性低估尾部）。
+        cold_ms = _median_ms(cold_samples)
+        warm_ms = _median_ms(warm_samples)
+        cold_p95_ms = p95_ms(cold_samples)
+        warm_p95_ms = p95_ms(warm_samples)
         spacy_ms, tokens = _spacy_samples(process, sentences, rounds)
         effect = _cache_effect(cold_ms, warm_ms)
         speedup = cold_ms / warm_ms
@@ -283,6 +314,10 @@ def main() -> int:
         nlp_path, nlp_path_detail = _nlp_path(syntax_tree, processor)
         print(f"cold_ms={cold_ms:.6f}")
         print(f"warm_ms={warm_ms:.6f}")
+        print(f"cold_p95_ms={cold_p95_ms:.6f}")
+        print(f"warm_p95_ms={warm_p95_ms:.6f}")
+        print(f"samples_cold_ms={format_samples(cold_samples)}")
+        print(f"samples_warm_ms={format_samples(warm_samples)}")
         print(f"cache_speedup={_format_speedup(speedup)}")
         print(f"approx_note={APPROX_NOTE}")
         print(f"cache_effective={effect}")

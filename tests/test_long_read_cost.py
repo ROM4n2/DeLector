@@ -4,6 +4,7 @@
 import ast
 import os
 import re
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,12 @@ POSITIVE_KEYS = (
     "spacy_ms",
     "rounds",
 )
+# Task 5b 新增：p95 必须与中位数同批样本，且样本行可独立重算分位（同
+# test_cards_endpoint_cost.py 的纪律：只给 p95 数字不给样本 = 不可复核）。
+P95_PAIRS = (("cold_p95_ms", "samples_cold_ms", "cold_ms"), ("warm_p95_ms", "samples_warm_ms", "warm_ms"))
+SAMPLES_RE_TEMPLATE = r"^{key}=([0-9.]+(?:,[0-9.]+)+)$"
+QUANTILE_ABS_TOL_MS = 1e-5
+
 SUPPRESSION_RES: tuple[Pattern[str], ...] = (
     re.compile(r"type:\s*ignore"),
     re.compile(r"#\s*noqa"),
@@ -146,6 +153,10 @@ def test_script_exists_and_declares_contract() -> None:
         "cache_items_identical",
         "cache_clear_verified",
         "approx_note",
+        "cold_p95_ms",
+        "warm_p95_ms",
+        "samples_cold_ms",
+        "samples_warm_ms",
     ):
         assert f'print(f"{key}=' in src, f"源码没有真实打印 `{key}=`"
 
@@ -250,6 +261,36 @@ def test_cost_breakdown_and_verdict_are_honest(bench_out: str) -> None:
     text = verdict.group(1)
     for required in ("syntax_hard.py:9", "42ms/句", "process_german_text", "rank_sentences", "不可直接比较"):
         assert required in text, f"verdict 缺少 `{required}`：{text}"
+
+
+def test_p95_comes_from_the_same_sample_batch(bench_out: str) -> None:
+    """冷/热读 p95 必须与各自中位数取自同一批样本，且不得是中位数本身。
+
+    逐条对照见 `test_cards_endpoint_cost.py::test_bench_output_reports_p95_over_the_
+    same_samples` 的说明：重算分位 + 物理边界（p95 ≥ median、p95 ≤ max）。
+    """
+    rounds = int(_number(bench_out, "rounds"))
+    for p95_key, samples_key, median_key in P95_PAIRS:
+        samples_match = re.search(
+            SAMPLES_RE_TEMPLATE.format(key=samples_key), bench_out, re.MULTILINE
+        )
+        assert samples_match is not None, f"输出缺少 `{samples_key}=<逗号分隔>` 样本行\n{bench_out}"
+        samples = [float(item) for item in samples_match.group(1).split(",")]
+        assert len(samples) == rounds, f"`{samples_key}` 样本数 {len(samples)} ≠ rounds={rounds}\n{bench_out}"
+        p95 = _number(bench_out, p95_key)
+        expected = statistics.quantiles(sorted(samples), n=100, method="inclusive")[94]
+        assert p95 == pytest.approx(expected, abs=QUANTILE_ABS_TOL_MS), (
+            f"`{p95_key}`={p95} 与样本重算值 {expected} 不符：不是同批样本算出来的\n{bench_out}"
+        )
+        median = _number(bench_out, median_key)
+        assert p95 >= median - QUANTILE_ABS_TOL_MS, f"`{p95_key}`={p95} 低于中位数 {median}\n{bench_out}"
+        assert p95 <= max(samples) + QUANTILE_ABS_TOL_MS, f"`{p95_key}`={p95} 超过样本最大值\n{bench_out}"
+
+
+def test_p95_rounds_are_env_tunable() -> None:
+    """轮数必须可提（n=5 的 p95≈最大值、系统性低估尾部 ⇒ 判强结论需要 n≥20）。"""
+    src = SCRIPT.read_text(encoding="utf-8")
+    assert "BENCH_P95_ROUNDS" in src, "基准脚本必须支持 BENCH_P95_ROUNDS 提高 p95 样本量"
 
 
 def test_cache_speedup_has_no_false_precision(bench_out: str) -> None:

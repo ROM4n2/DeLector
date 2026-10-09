@@ -53,6 +53,14 @@ D      完整 ``get_cards()``（含 dict(r) 物化 + 逐卡 FSRS 递推）    D�
     export PYTHONIOENCODING=utf-8
     python tools/bench_cards_endpoint.py                    # 1k / 20k / 50k
     BENCH_SCALES=8000 BENCH_ROUNDS=5 python tools/bench_cards_endpoint.py   # 门禁快档
+    BENCH_P95_ROUNDS=20 python tools/bench_cards_endpoint.py                # 人工档：提 p95 样本量
+
+为什么 p95 要能单独调轮数
+------------------------
+中位数取 5~7 轮就稳（对单侧尖峰不敏感），p95 远不是：n=5 的经验 p95 基本就是最大值，
+且 P(max₅ < 真 p95) = 0.95⁵ ≈ 77% ⇒ **系统性低估尾部**。故想用 p95 判"条件②不成立"
+这类强结论，必须能把 n 提到 ≥20。这条开关让人工档不必改代码就能提精度 —— 改了代码的
+测量，数字就不再可信。
 
 输出契约（``tests/test_cards_endpoint_cost.py`` 逐行断言，勿改格式）::
 
@@ -60,6 +68,8 @@ D      完整 ``get_cards()``（含 dict(r) 物化 + 逐卡 FSRS 递推）    D�
     segment_B_ms=...
     segment_C_ms=...
     segment_D_ms=...
+    segment_D_p95_ms=...             # 与 segment_D_ms **同一批**样本的 p95（n=5 时≈最大值、系统性低估尾部）
+    samples_segment_D_ms=...         # 该批原始样本（逗号分隔），供下游独立重算分位
     filesort_pct=NN.N%
     python_pct=NN.N%
     per_row_us=NN.NN
@@ -70,16 +80,24 @@ import os
 import random
 import shutil
 import sqlite3
-import statistics
 import sys
 import tempfile
 import time
 from typing import Any, Callable, Dict, List, Tuple
 
+# bench_stats 与本脚本同处 tools/：以脚本方式运行（`python tools/xxx.py`）时 Python 已把
+# tools/ 放进 sys.path[0]，故可直接顶层导入（放在这里也顺带避开 E402）。p95 口径与它的
+# 已知偏差方向见 tools/bench_stats.py —— 三个基准必须共用同一份实现，不许各写一份。
+from bench_stats import format_samples, median_ms, p95_ms
+
 # 允许从任意 CWD 直接 `python tools/bench_cards_endpoint.py` 运行（同 tools/ 其余脚本约定）。
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+_TOOLS_DIR = os.path.join(_REPO_ROOT, "tools")
+# tools/ 也要进 sys.path：本脚本与其余基准共用 tools/bench_stats.py 的 p95 口径，
+# 而 tools/ 不是包（无 __init__.py），只能靠目录进路径做顶层 import。
+for _path in (_REPO_ROOT, _TOOLS_DIR):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 # 段 A/B/C 的 SQL。**字面量**取自 delector/routes/main.py::get_cards（逐字对齐，
 # 改这里等于改被测对象，必须同步改生产码并重跑本基准）。
@@ -111,6 +129,14 @@ def _env_scales() -> List[int]:
 
 
 def _env_rounds() -> int:
+    """轮数：`BENCH_P95_ROUNDS` 优先，否则沿用既有的 `BENCH_ROUNDS` / 默认 7。
+
+    为什么要第二个开关：中位数 5~7 轮就稳，p95 远不够（n=5 的经验 p95≈最大值且系统性
+    低估尾部）。两个开关分开，是为了让"提 p95 精度"不必顺带改动门禁档已有的轮数口径。
+    """
+    raw_p95 = os.environ.get("BENCH_P95_ROUNDS", "").strip()
+    if raw_p95:
+        return max(MIN_ROUNDS, int(raw_p95))
     raw = os.environ.get("BENCH_ROUNDS", "").strip()
     if not raw:
         return 7
@@ -243,18 +269,27 @@ def _fill(db_path: str, n_vocab: int, n_grammar: int, seed: int) -> None:
 # --------------------------------------------------------------------------- #
 # 计时（[Instinct: Median-Not-Mean]）
 # --------------------------------------------------------------------------- #
-def _median_ms(fn: Callable[[], Any], rounds: int) -> float:
-    """跑 rounds 轮，返回**中位数**毫秒。
+def _samples_ms(fn: Callable[[], Any], rounds: int) -> List[float]:
+    """跑 rounds 轮，返回**每轮**毫秒样本（不折叠）。
 
-    刻意不用均值：单轮会被 GC / 磁盘 / 页面缓存污染，均值把这些尖峰摊进结果里，
-    差值（B−C 这种小差）就会失真。中位数对单侧尖峰不敏感。
+    刻意只采样本、不做统计：中位数与 p95 必须来自**同一批**样本，否则二者之差（尾部
+    有多厚）就混进了两次测量的抖动，不再是同一条分布的性质。
     """
     samples: List[float] = []
     for _ in range(rounds):
         t0 = time.perf_counter()
         fn()
         samples.append((time.perf_counter() - t0) * 1000.0)
-    return float(statistics.median(samples))
+    return samples
+
+
+def _median_ms(fn: Callable[[], Any], rounds: int) -> float:
+    """跑 rounds 轮，返回**中位数**毫秒。
+
+    刻意不用均值：单轮会被 GC / 磁盘 / 页面缓存污染，均值把这些尖峰摊进结果里，
+    差值（B−C 这种小差）就会失真。中位数对单侧尖峰不敏感。
+    """
+    return median_ms(_samples_ms(fn, rounds))
 
 
 def _bench_scale(
@@ -272,7 +307,11 @@ def _bench_scale(
     finally:
         conn.close()
     # 段 D 走生产码 get_cards() 自身开连接（与真实请求同路径），不复用上面的连接。
-    d = _median_ms(get_cards, rounds)
+    # 段 D 是 ADR-0018 §6 判定门的输入场景（端点总耗时），故只有它需要 p95：
+    # 中位数取自 samples、p95 取自**同一批** samples，不重新计时。
+    d_samples = _samples_ms(get_cards, rounds)
+    d = median_ms(d_samples)
+    d_p95 = p95_ms(d_samples)
 
     filesort_ms = b - c
     return {
@@ -282,6 +321,8 @@ def _bench_scale(
         "B": b,
         "C": c,
         "D": d,
+        "D_p95": d_p95,
+        "D_samples": d_samples,
         "lookup_ms": b - a,  # 多列回表
         "filesort_ms": filesort_ms,
         "python_ms": d - b,  # dict(r) 物化 + 逐卡 FSRS 递推
@@ -349,6 +390,7 @@ def main() -> int:
 
         print("=== bench_cards_endpoint ===")
         print(f"scales={','.join(str(s) for s in scales)} rounds={rounds} (median) analyzer=off(与生产一致)")
+        print(f"rounds={rounds}")
         print(f"vocab_indexes={idx}")
 
         results: List[Dict[str, Any]] = []
@@ -364,6 +406,8 @@ def main() -> int:
             print(f"segment_B_ms={r['B']:.3f}")
             print(f"segment_C_ms={r['C']:.3f}")
             print(f"segment_D_ms={r['D']:.3f}")
+            print(f"segment_D_p95_ms={r['D_p95']:.3f}")
+            print(f"samples_segment_D_ms={format_samples(r['D_samples'])}")
             print(f"lookup_ms={r['lookup_ms']:.3f}")
             print(f"filesort_ms={r['filesort_ms']:.3f}")
             print(f"python_fsrs_ms={r['python_ms']:.3f}")

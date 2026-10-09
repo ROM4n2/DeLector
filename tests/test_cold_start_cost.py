@@ -37,6 +37,7 @@ Task 4（冷启动基准）的交付物是「进程起到**可服务**」的各�
 import ast
 import os
 import re
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -52,6 +53,11 @@ NUMERIC_KEYS = ("import_ms", "init_db_ms", "app_ready_ms", "health_200_ms", "mod
 POSITIVE_KEYS = NUMERIC_KEYS
 
 GATE_ROUNDS = "5"
+
+# Task 5b 新增：health_200 的 p95 必须与中位数同批样本（样本行供独立重算分位）。
+SAMPLES_HEALTH_RE = re.compile(r"^samples_health_200_ms=([0-9.]+(?:,[0-9.]+)+)$", re.MULTILINE)
+# 冷启动是秒级量，p95 按 2 位小数打印（与 health_200_ms 同精度）⇒ 容差取 0.01ms。
+QUANTILE_ABS_TOL_MS = 1e-2
 
 SUPPRESSION_RES: tuple[Pattern[str], ...] = (
     re.compile(r"type:\s*ignore"),
@@ -125,7 +131,15 @@ def test_script_declares_contract_lines() -> None:
     被删，断言照样绿（半恒真）。
     """
     src = SCRIPT.read_text(encoding="utf-8")
-    for key in (*NUMERIC_KEYS, "rounds", "nlp_path", "verdict", "android"):
+    for key in (
+        *NUMERIC_KEYS,
+        "rounds",
+        "nlp_path",
+        "verdict",
+        "android",
+        "health_200_p95_ms",
+        "samples_health_200_ms",
+    ):
         assert f'print(f"{key}=' in src, f"源码没有真实打印 `{key}=`"
 
 
@@ -290,6 +304,37 @@ def test_verdict_names_android_baseline(bench_out: str) -> None:
     for token in ANDROID_TOKENS:
         assert token in text, f"verdict 缺少 `{token}`：{text}"
     assert "health_200_ms=" in text or "桌面" in text, f"verdict 必须带上桌面侧数字：{text}"
+
+
+def test_health_200_p95_comes_from_the_same_sample_batch(bench_out: str) -> None:
+    """⑯ `health_200_p95_ms` 必须与 `health_200_ms`（中位数）取自同一批样本。
+
+    冷启动是**跨进程**测量（每轮一个全新解释器 + 一次起服务），重算分位只能靠脚本
+    自己吐出的样本行 —— 没有样本行就无从复核 p95 是不是拿中位数冒充的。
+    物理边界同另两个基准：median ≤ p95 ≤ max。
+    """
+    samples_match = SAMPLES_HEALTH_RE.search(bench_out)
+    assert samples_match is not None, (
+        f"输出缺少 `samples_health_200_ms=<逗号分隔>` 样本行（无样本则 p95 不可复核）\n{bench_out}"
+    )
+    samples = [float(item) for item in samples_match.group(1).split(",")]
+    assert len(samples) == int(_number(bench_out, "rounds")), (
+        f"`samples_health_200_ms` 样本数 {len(samples)} ≠ rounds\n{bench_out}"
+    )
+    p95 = _number(bench_out, "health_200_p95_ms")
+    expected = statistics.quantiles(sorted(samples), n=100, method="inclusive")[94]
+    assert p95 == pytest.approx(expected, abs=QUANTILE_ABS_TOL_MS), (
+        f"health_200_p95_ms={p95} 与样本重算值 {expected} 不符：不是同批样本算出来的\n{bench_out}"
+    )
+    median = _number(bench_out, "health_200_ms")
+    assert p95 >= median - QUANTILE_ABS_TOL_MS, f"p95={p95} 低于中位数 {median}\n{bench_out}"
+    assert p95 <= max(samples) + QUANTILE_ABS_TOL_MS, f"p95={p95} 超过样本最大值\n{bench_out}"
+
+
+def test_p95_rounds_are_env_tunable() -> None:
+    """⑰ 轮数必须可提：冷启动抖动最大，判"条件②不成立"需要 n≥20 的样本量。"""
+    src = SCRIPT.read_text(encoding="utf-8")
+    assert "BENCH_P95_ROUNDS" in src, "基准脚本必须支持 BENCH_P95_ROUNDS 提高 p95 样本量"
 
 
 def test_model_load_caliber_is_declared(bench_out: str) -> None:

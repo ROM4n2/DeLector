@@ -90,6 +90,7 @@ Android 侧：**不伪造**
     export PYTHONIOENCODING=utf-8
     python tools/bench_cold_start.py                        # 5 轮中位数（默认）
     BENCH_COLD_START_ROUNDS=9 python tools/bench_cold_start.py   # 人工档，多几轮压噪声
+    BENCH_P95_ROUNDS=20 python tools/bench_cold_start.py         # 人工档：提 p95 样本量
 
 输出契约（``tests/test_cold_start_cost.py`` 逐行断言，勿改格式）::
 
@@ -97,6 +98,8 @@ Android 侧：**不伪造**
     init_db_ms=N.NN         # 建库/建表
     app_ready_ms=N.NN       # create_app()（冷库）返回
     health_200_ms=N.NN      # 子进程起服务 → /api/health 200 的墙钟（用户体感主指标）
+    health_200_p95_ms=N.NN  # 与 health_200_ms **同一批**样本的 p95（n=5 时≈最大值、系统性低估尾部）
+    samples_health_200_ms=N.NN,...  # 该批原始样本，供下游独立重算分位（不许拿中位数冒充）
     model_load_ms=N.NN      # import delector.nlp_engine.processor（import_ms 的子集）
     rounds=N
     nlp_path=<spacy|pure>   # 生产自己的判据：processor.NLP_ENGINE + syntax_tree.get_spacy_nlp()
@@ -120,10 +123,20 @@ import urllib.request
 from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# bench_stats 与本脚本同处 tools/：以脚本方式运行（`python tools/bench_cold_start.py`）时
+# Python 已把 tools/ 放进 sys.path[0]，故可直接顶层导入。**必须放在文件顶部**（早于任何
+# 其他语句）才不触发 E402 —— 与其余两个基准保持同一写法，三个基准共用同一份 p95 口径。
+# p95 的口径与已知偏差方向见 tools/bench_stats.py。
+from bench_stats import format_samples, p95_ms
+
 # 允许从任意 CWD 直接 `python tools/bench_cold_start.py` 运行（同 tools/ 其余脚本约定）。
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+_TOOLS_DIR = os.path.join(_REPO_ROOT, "tools")
+# tools/ 也要进 sys.path：本脚本与其余基准共用 tools/bench_stats.py 的 p95 口径，
+# 而 tools/ 不是包（无 __init__.py），只能靠目录进路径做顶层 import。
+for _path in (_REPO_ROOT, _TOOLS_DIR):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 _SCRIPT = os.path.abspath(__file__)
 
@@ -173,6 +186,14 @@ MODEL_LOAD_NOTE = (
 # 环境准备（父进程侧）
 # --------------------------------------------------------------------------- #
 def _env_rounds() -> int:
+    """轮数：`BENCH_P95_ROUNDS` 优先，否则沿用 `BENCH_COLD_START_ROUNDS` / 默认 5。
+
+    冷启动是抖动最大的一档（每轮一个全新解释器 + 一次起服务），判"p95 未超 2 倍目标"
+    这种强结论必须有足够样本；单独开关让人工档能一键把 n 提到 ≥20 而不改代码。
+    """
+    raw_p95 = os.environ.get("BENCH_P95_ROUNDS", "").strip()
+    if raw_p95:
+        return max(MIN_ROUNDS, int(raw_p95))
     raw = os.environ.get("BENCH_COLD_START_ROUNDS", "").strip()
     if not raw:
         return DEFAULT_ROUNDS
@@ -572,6 +593,10 @@ def _run_benchmark(rounds: int) -> int:
     print(f"init_db_ms={medians['init_db_ms']:.2f}")
     print(f"app_ready_ms={medians['app_ready_ms']:.2f}")
     print(f"health_200_ms={medians['health_200_ms']:.2f}")
+    # p95 与中位数取自**同一批**样本（不重新计时）：冷启动每轮一个全新解释器，重跑
+    # 一遍计时就等于换了一次测量，尾部与中位数不再可比。
+    print(f"health_200_p95_ms={p95_ms(samples['health_200_ms']):.2f}")
+    print(f"samples_health_200_ms={format_samples(samples['health_200_ms'])}")
     print(f"model_load_ms={medians['model_load_ms']:.2f}")
     print(f"import_other_ms={medians['import_ms'] - medians['model_load_ms']:.2f}")
     print(f"residual_ms={residual_ms:.2f}")

@@ -37,6 +37,7 @@ Task 1（卡盒基准补「各层占比」）在以上三条之外又钉了两�
 
 import os
 import re
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -55,6 +56,16 @@ FILESORT_RE = re.compile(r"^filesort_pct=([0-9]+(?:\.[0-9]+)?)%$", re.MULTILINE)
 # 与 `filesort_pct` 同构（都是 `x / 段D * 100`），故用同一套抓取方式。
 PYTHON_PCT_RE = re.compile(r"^python_pct=([0-9]+(?:\.[0-9]+)?)%$", re.MULTILINE)
 PER_ROW_US_RE = re.compile(r"^per_row_us=([0-9]+(?:\.[0-9]+)?)$", re.MULTILINE)
+
+# Task 5b 新增：p95 行 + **原始样本行**。只给 p95 数字不给样本，下游（含 ADR 回填）
+# 无从复核它到底是不是拿中位数冒充的 —— 样本行是这条门禁能成立的**前提**。
+SEGMENT_D_P95_RE = re.compile(r"^segment_D_p95_ms=([0-9]+(?:\.[0-9]+)?)$", re.MULTILINE)
+SAMPLES_D_RE = re.compile(r"^samples_segment_D_ms=([0-9.]+(?:,[0-9.]+)+)$", re.MULTILINE)
+ROUNDS_RE = re.compile(r"^rounds=([0-9]+)$", re.MULTILINE)
+
+# 分位重算容差（毫秒）：按 p95 行的**打印精度**定（3 位小数 ⇒ ±0.0005），
+# 取 1e-3 只多留一倍余量 —— 仍能抓住"拿中位数冒充 p95"（实测两者相差数十毫秒）。
+QUANTILE_ABS_TOL_MS = 1e-3
 
 # 规模与轮数：门禁要**快**（每次 pytest 都跑），故用比人工基准小得多的规模。
 # 取值仍需足够大，让「排序」在噪声之上可测（段 B > 段 C 才有统计意义）。
@@ -77,12 +88,17 @@ GATE_ROUNDS = "5"
 MAX_PER_ROW_US = 120.0
 
 
-def _run_bench(tmp_path: Path) -> str:
-    """在隔离环境里实跑基准脚本，返回 stdout 原文。"""
+def _run_bench(tmp_path: Path, p95_rounds: str = GATE_ROUNDS) -> str:
+    """在隔离环境里实跑基准脚本，返回 stdout 原文。
+
+    `BENCH_P95_ROUNDS` 显式钉死（而不是"留空走默认"）：门禁必须**确定性**地知道
+    样本数，否则外面一个残留的环境变量就会让"样本数 == rounds"这条断言失去意义。
+    """
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     env["BENCH_SCALES"] = GATE_SCALE
     env["BENCH_ROUNDS"] = GATE_ROUNDS
+    env["BENCH_P95_ROUNDS"] = p95_rounds
     # 双保险：即便脚本自身有 bug，也把库路径钉死在临时目录之外的独立位置。
     env["DATABASE_PATH"] = str(tmp_path / "gate_delector.db")
     env["PROGRESS_DB_PATH"] = str(tmp_path / "gate_progress.db")
@@ -217,3 +233,52 @@ def test_bench_per_row_us_within_budget(tmp_path: Path) -> None:
         f"每卡耗时 {per_row_us}µs 超出预算上界 {MAX_PER_ROW_US}µs"
         f"（超出 {per_row_us / MAX_PER_ROW_US:.2f}×）：端点侧出现数量级退化\n{out}"
     )
+
+
+def test_bench_output_reports_p95_over_the_same_samples(tmp_path: Path) -> None:
+    """⑧ p95 必须与中位数取自**同一批**样本，且不得是中位数本身（Task 5b 硬纪律）。
+
+    为什么必须同时打印样本行：只断言"有个 p95 数字"是**半恒真** —— 拿中位数填进
+    p95 行也能过（p95 ≥ median 恒成立）。故本断言要求脚本把原始样本整批吐出来，
+    由**测试侧独立重算**分位数并逐位对齐：
+    - 对不上 ⇒ p95 不是从这批样本算的（多半是重新计时或换了口径）；
+    - 没有样本行 ⇒ 无从审计，同样判失败（不许用"信我就行"代替可复核）。
+    另钉 `p95 ≥ median` 与 `p95 ≤ max`：分位数的物理边界，越界即算法被改坏。
+    """
+    out = _run_bench(tmp_path)
+    p95_match = SEGMENT_D_P95_RE.search(out)
+    assert p95_match is not None, f"输出里找不到 `segment_D_p95_ms=NN.NNN`\n{out}"
+    samples_match = SAMPLES_D_RE.search(out)
+    assert samples_match is not None, (
+        f"输出里找不到 `samples_segment_D_ms=<逗号分隔>`：无样本则无法复核 p95 是否由同批样本算出\n{out}"
+    )
+    rounds_match = ROUNDS_RE.search(out)
+    assert rounds_match is not None, f"输出里找不到 `rounds=N`\n{out}"
+
+    samples = [float(item) for item in samples_match.group(1).split(",")]
+    assert len(samples) == int(rounds_match.group(1)), (
+        f"样本数 {len(samples)} 与 rounds={rounds_match.group(1)} 不符：p95 与中位数不是同一批样本\n{out}"
+    )
+    p95 = float(p95_match.group(1))
+    expected = statistics.quantiles(sorted(samples), n=100, method="inclusive")[94]
+    assert p95 == pytest.approx(expected, abs=QUANTILE_ABS_TOL_MS), (
+        f"p95={p95} 与样本重算值 {expected} 不符：p95 不是从这批样本算出来的\n{out}"
+    )
+    median = float(dict(SEGMENT_RE.findall(out))["segment_D"])
+    assert p95 >= median - QUANTILE_ABS_TOL_MS, f"p95={p95} 低于中位数 {median}：分位算法被改坏\n{out}"
+    assert p95 <= max(samples) + QUANTILE_ABS_TOL_MS, f"p95={p95} 超过样本最大值：分位算法被改坏\n{out}"
+
+
+def test_p95_rounds_are_env_tunable(tmp_path: Path) -> None:
+    """⑨ 轮数必须能用环境变量提高（p95 对样本量远比中位数敏感，人工档要一键提精度）。
+
+    n=5 的 p95 ≈ 最大值、且系统性低估尾部（P(max₅ < 真p95) ≈ 77%），所以"想判强结论
+    就得能加到 n≥20"。若轮数写死在代码里，人工档就得改代码 —— 那等于把"提高精度"
+    变成一次带代码改动的测量，数字不再可信。
+    """
+    src = SCRIPT.read_text(encoding="utf-8")
+    assert "BENCH_P95_ROUNDS" in src, "基准脚本必须支持 BENCH_P95_ROUNDS 提高 p95 样本量"
+    out = _run_bench(tmp_path, p95_rounds="7")
+    samples_match = SAMPLES_D_RE.search(out)
+    assert samples_match is not None, f"输出里找不到样本行\n{out}"
+    assert len(samples_match.group(1).split(",")) == 7, f"BENCH_P95_ROUNDS=7 未生效\n{out}"
