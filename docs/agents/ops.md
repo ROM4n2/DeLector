@@ -58,13 +58,15 @@ mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
 ```
 
 启动自检 `preflight_data_dir()`（`init_db()` **建表之前**调用）会拦下这一场景：**新位置无库 +
-旧位置有非空库 ⇒ 抛 `RuntimeError` 拒绝启动**，日志含两个绝对路径 + 可复制的 `cp`（该 `cp` 是
+旧位置有非空库 ⇒ 抛 `RuntimeError` 拒绝启动**（**新位置只有 0 字节空壳时也算"无库"** —— 判据已
+对称化，见下），日志含两个绝对路径 + 可复制的 `cp`（该 `cp` 是
 **容器内**路径，宿主机侧照上面的 `cp delector.db data/delector.db` 即可）。刻意
 **只告警不抛**是错的——静默空库会让用户以为数据丢了而做不可逆的恢复出厂。
 同一条规则覆盖桌面端手工设 `DELECTOR_DATA_DIR` 指向新目录的场景：旧库非空且新库缺失时同样
 拒绝启动，直到用户把库复制过去。
-语义由 `tests/test_data_dir_migration_gate.py` 钉住（size==0 空壳不拦、桌面端不误报、
-旧位置的同名**目录**（Docker 单文件挂载自动创建）不算库）。
+语义由 `tests/test_data_dir_migration_gate.py` 钉住（**两处**的 `size==0` 空壳都**不算数据**：
+新位置放一个 0 字节 `delector.db` 且旧位置有真实数据时**同样会拦**；桌面端路径同地**绝不误报**；
+新/旧位置的同名**目录**（Docker 单文件挂载自动创建）都不算库）。
 
 **Git 推送通道**：这台机器上 HTTPS 连 fetch 都会失败（`schannel: failed to receive handshake`），
 `origin` 已指向 `ssh://git@ssh.github.com:443/ROM4n2/DeLector.git`（22 端口时通时不通，443 稳定）。
