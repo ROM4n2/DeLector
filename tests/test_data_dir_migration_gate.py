@@ -23,12 +23,16 @@
 ``cp`` 命令。绝不代用户搬文件（No-Silent-Write：启动路径上不做用户没要求的写操作），
 也绝不 `logging.warning` 后继续建空库（Fail-Loud）。
 
-六条行为用例的分工
-----------------
-① 事故形态 ⇒ 抛；② size==0 的空壳文件不算数据（Honest-Null）；
+八条行为用例的分工（另有两条补充用例见下）
+----------------------------------------
+① 事故形态 ⇒ 抛；② size==0 的空壳文件不算数据（Honest-Null，旧位置）；
 ③ 桌面端默认 ``DATA_DIR == _REPO_ROOT`` **绝不能误报**（最危险的回归）；
+③' 两路径同地 + 共享库 **0 字节** ⇒ 仍**不**抛（①/② 不再互斥后，条件④ 真正被执行的那条路径）；
 ④ 新位置已有库 ⇒ 一切正常，不拦；⑤ 旧位置只剩 Docker 建的同名**目录** ⇒ 不拦
-（`isfile` 语义，事故现场在 Linux 容器内）；⑥ 新位置是**目录** ⇒ 算「无库」，交回旧位置判据。
+（`isfile` 语义，事故现场在 Linux 容器内）；⑥ 新位置是**目录** ⇒ 算「无库」，交回旧位置判据；
+⑥' 新位置是**目录** + 旧位置**非空** ⇒ **抛**（`isfile` 对目录返回 False 的既有设计决定）；
+⑦ 新位置 0 字节空壳 + 旧位置有数据 ⇒ **仍抛**（size 对称化，堵住静默空库）；
+⑧ 新位置**非空** + 旧位置非空 ⇒ 不抛（对称性守卫，防改到另一极端）。
 另有 2 条接线/状态用例：模块级 ``DATA_DIR`` 与 ``_REPO_ROOT`` 同地、``init_db()`` 先跑闸后建表。
 """
 
@@ -119,6 +123,44 @@ def test_desktop_default_data_dir_equals_repo_root_never_fires(tmp_path: Path):
     _preflight()(str(shared), str(shared))  # data_dir == repo_root，不抛即通过
 
 
+def test_desktop_shared_empty_db_still_does_not_fire(tmp_path: Path):
+    """③' 两路径**同地** + 共享 `delector.db` 为 **0 字节** ⇒ **绝不**误报。
+
+    这是「①/② 不再是互斥」这个**新事实**的守卫，也是条件④ **唯一被真正执行**的那条路径：
+    条件① 加了 `size > 0` 后，0 字节共享文件不再让 ① 提前 `return`（`size == 0` 不成立），
+    而条件② 只看 `isfile`（文件确实存在）也不返回 ⇒ 控制流**真的**落到条件④ 并由它 `return`。
+    用例③（`test_desktop_default_data_dir_equals_repo_root_never_fires`）用的是**非空**共享
+    文件 —— 那条走 ① 早退，永远到不了 ④。本条补上的正是 ④ 的实际执行路径，钉住它的唯一
+    职责：桌面端两路径同地时**绝不**误报（否则所有桌面用户都起不来）。
+    """
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "delector.db").write_bytes(b"")  # 共享文件：0 字节空壳
+
+    assert (shared / "delector.db").stat().st_size == 0, "前提：共享文件必须是 0 字节"
+
+    _preflight()(str(shared), str(shared))  # data_dir == repo_root，不抛即通过
+
+
+def test_new_location_directory_with_nonempty_old_db_raises(tmp_path: Path):
+    """⑥' 新位置是**目录** + 旧位置**非空** ⇒ **抛**：`isfile` 对目录返回 False 是既有设计决定。
+
+    与用例⑥（新位置目录 + 旧位置**无**库 ⇒ 不抛）互补：`isfile` 语义下目录一律算「新位置
+    无库」，于是旧位置的非空真实数据会让四条件全中 ⇒ 必须拦（否则又是一次静默空库）。
+    这里 `isfile` 对目录返回 `False` 是**刻意**的（见用例⑤：目录残留不是数据），本条把这条
+    设计决定在新位置一侧也钉住 —— 若有人把判据退回 `os.path.exists`，本用例立刻转红。
+    """
+    repo_root = _make_repo_root(tmp_path, legacy_bytes=b"SQLite format 3\x00legacy rows")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "delector.db").mkdir()  # 新位置：目录，不是库文件
+
+    assert (data_dir / "delector.db").is_dir(), "前提：新位置必须是目录"
+
+    with pytest.raises(RuntimeError):
+        _preflight()(str(data_dir), str(repo_root))
+
+
 def test_existing_new_db_means_no_obstacle(tmp_path: Path):
     """④ 旧位置非空但新位置**已有**库 ⇒ **不**抛（数据已在位，闸无话可说）。"""
     repo_root = _make_repo_root(tmp_path, legacy_bytes=b"SQLite format 3\x00legacy")
@@ -181,6 +223,44 @@ def test_new_location_directory_counts_as_no_db_and_old_location_decides(
     assert (data_dir / "delector.db").is_dir(), "前提：新位置必须是目录"
     assert not (repo_root / "delector.db").exists(), "前提：旧位置必须没有库"
     _patch_dir_size_linux_semantics(monkeypatch)
+
+    _preflight()(str(data_dir), str(repo_root))  # 不抛即通过
+
+
+def test_empty_new_db_does_not_pass_the_gate_when_legacy_has_data(tmp_path: Path):
+    """⑦ 新位置是 **0 字节空壳** + 旧位置非空 ⇒ **仍抛**（size 判据在两个位置对称）。
+
+    这是被修的洞：旧版条件① 只 `isfile` **不看 size** ⇒ 新位置一个 0 字节 `delector.db`
+    就让闸提前 `return`，旧位置的真实数据被静默忽略，程序随即在新位置重建空库——正是
+    本闸（「新位置放空壳 + 旧位置有数据时报静默空库」）要防的场景。对称化后，0 字节空壳
+    （初始化残留在**任意位置**都算不上数据）不再让条件① 成立，闸照常开火。
+    """
+    repo_root = _make_repo_root(tmp_path, legacy_bytes=b"SQLite format 3\x00legacy rows")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "delector.db").write_bytes(b"")  # 新位置：0 字节空壳
+
+    assert (data_dir / "delector.db").stat().st_size == 0, "前提：新位置必须是 0 字节"
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _preflight()(str(data_dir), str(repo_root))
+
+    assert "cp " in str(excinfo.value), f"错误消息必须仍给出可复制的 cp 命令，实际为：{excinfo.value}"
+
+
+def test_nonempty_new_db_passes_the_gate(tmp_path: Path):
+    """⑧ 对称性：新位置**非空** + 旧位置非空 ⇒ **不抛**（条件① 凭非空库合法通过）。
+
+    与用例④（`test_existing_new_db_means_no_obstacle`，同样非空）呼应，但把「非空」这一
+    前提**明确**钉住：数据确实已在新位置 ⇒ 闸无话可说。它同时是「对称化没有把闸改到
+    另一个极端」的守卫——非空新库必须放行，否则所有迁移已完成的用户都起不来。
+    """
+    repo_root = _make_repo_root(tmp_path, legacy_bytes=b"SQLite format 3\x00legacy")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "delector.db").write_bytes(b"SQLite format 3\x00current")
+
+    assert (data_dir / "delector.db").stat().st_size > 0, "前提：新位置必须非空"
 
     _preflight()(str(data_dir), str(repo_root))  # 不抛即通过
 
