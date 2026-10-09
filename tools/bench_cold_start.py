@@ -14,8 +14,8 @@
 import/建库/装配」——84 秒是**轮询上限**不是实测耗时，两者不可相减。本脚本给出桌面
 侧**唯一可复跑**的口径，并把它与 Android 已知口径的关系写进 `verdict`。
 
-五段口径（**嵌套，不是互斥**——务必先看清）
-------------------------------------------
+五段口径（**各段独立子进程、前置状态不同 ⇒ 只可看概念包含，不可比大小**）
+--------------------------------------------------------------------------
 ===================  ==================================================  ============================
 行                   怎么测                                              含义
 ===================  ==================================================  ============================
@@ -26,8 +26,9 @@ import/建库/装配」——84 秒是**轮询上限**不是实测耗时，两�
                                                                          ``app = create_app()``**
                                                                          （``server.py:356``）
 ``init_db_ms``       **独立子进程**：导入 database 后单独计 ``init_db()``  仅建表（DDL）
-``app_ready_ms``     子进程 import 完之后，对**全新库**再调一次            冷库装配：建表 + 预置文章
-                     ``create_app()``                                    导入 + 遇见区补装 + 静态挂载
+``app_ready_ms``     probe B **同一进程**内 import 完之后，对另一套全新库    冷库装配：建表 + 预置文章导入
+                     再调一次 ``create_app()``（**第二次装配**）             + 遇见区补装 + 静态挂载；其冷度
+                                                                         与 probe A 不同源（见下）
 ``health_200_ms``    **独立子进程**起真实 uvicorn，轮询                    **用户体感主指标**
                      ``/api/health`` 直到 200                             （进程起 → 可服务）
 ``model_load_ms``    **独立子进程**：``import                             含 ``import spacy`` 本身；
@@ -35,16 +36,25 @@ import/建库/装配」——84 秒是**轮询上限**不是实测耗时，两�
                                                                          同口径
 ===================  ==================================================  ============================
 
-``import_ms ⊇ app_ready_ms ⊇ init_db_ms``：三段是**包含**关系（生产 import
-``delector.server`` 时模块级就调了 ``create_app()``），**相加无意义**。
-``model_load_ms`` 是 ``import_ms`` 的**子集**（模型加载就发生在 import 之内），
-故 ``import_ms − model_load_ms`` 只作近似归因，**不可当作一个独立分段**。
+``import_ms`` / ``app_ready_ms`` / ``init_db_ms`` 只有**概念上的**包含关系（``import``
+``delector.server`` 时模块级就调了 ``create_app()``，而 ``create_app()`` 内部又调了
+``init_db()``），但**三段各由独立子进程测得、前置状态不同**（probe B 的进程在 import
+期已跑过一次完整 ``create_app()``，进程级与文件系统级缓存已热）⇒ **不可按大小关系解读**
+（谁大谁小随机器与前置状态变：本机 ``app_ready_ms > init_db_ms``、CI 反向，见 ``segments_note``）。
+``model_load_ms`` 概念上是 ``import_ms`` 的**子集**（模型加载发生在 import 之内），但两者
+同样来自**不同子进程**，故 ``import_ms − model_load_ms`` 只作近似归因，**不可当作一个独立分段**，
+也**不可据此断言 ``model_load_ms <= import_ms``**。
 
 为什么每段都用**独立子进程**
 ----------------------------
 冷启动的被测对象就是「Python 进程的第一次 import」——同一进程里第二次 import 会命中
-``sys.modules``，测出来是 0。故每段各起一个干净解释器，轮数之间也各自新建临时数据
-目录，保证每一轮都是**真首次启动**（空库 ⇒ 预置文章导入也走冷路径）。
+``sys.modules``，测出来是 0。故 probe A（model/init_db）、probe B（import/app_ready）与
+serve 各起一个干净解释器，轮数之间也各自新建临时数据目录，保证每一轮都是**真首次启动**
+（空库 ⇒ 预置文章导入也走冷路径）。
+
+例外要点名：``app_ready_ms`` 与 ``import_ms`` **共用 probe B 这一个进程** —— 该进程在
+``import`` 期就跑了模块级 ``create_app()``，所以 ``app_ready_ms`` 量到的是"进程已热"后的
+**第二次装配**，其冷度与 probe A 的独立 ``init_db()`` 不同源（见上文与 ``segments_note``）。
 
 隔离纪律（`[Instinct: Isolated-DB]`）——**子进程也要隔离**
 --------------------------------------------------------
@@ -95,8 +105,14 @@ Android 侧：**不伪造**
 输出契约（``tests/test_cold_start_cost.py`` 逐行断言，勿改格式）::
 
     import_ms=N.NN          # import delector.server（含 spaCy 模型加载 + 模块级 create_app）
-    init_db_ms=N.NN         # 建库/建表
-    app_ready_ms=N.NN       # create_app()（冷库）返回
+    init_db_ms=N.NN         # **独立子进程**：单独计 init_db()（连带初始化进度库 + 预置文章导入）
+    init_db_tables=N        # probe A 自检：init_db() 后 initdb/init.db 的 sqlite_master 表数（0=没建表/落热库）
+    init_db_progress_tables=N  # 同上，initdb/init_progress.db（两库对称，机器无关的防恒真判据）
+    app_ready_ms=N.NN       # probe B 同一进程内**第二次 create_app()**：对另一套全新库装配
+                            #   （冷度与 probe A 不同源，见 segments_note；不可据此与 init_db_ms 比大小）
+    app_ready_db_tables=N   # 第二次 create_app() 后 appready/second.db 的 sqlite_master 表数（0=没建表）
+    app_ready_progress_tables=N  # 同上，appready/second_progress.db
+    app_ready_fresh_db_used=<yes|no>  # 第二次 create_app() 是否真写在全新库路径上（no=又写回了 main_db）
     health_200_ms=N.NN      # 子进程起服务 → /api/health 200 的墙钟（用户体感主指标）
     health_200_p95_ms=N.NN  # 与 health_200_ms **同一批**样本的 p95（n=5 时≈最大值、系统性低估尾部）
     samples_health_200_ms=N.NN,...  # 该批原始样本，供下游独立重算分位（不许拿中位数冒充）
@@ -113,6 +129,7 @@ import os
 import re
 import shutil
 import socket
+import sqlite3
 import statistics
 import subprocess
 import sys
@@ -171,8 +188,11 @@ DATA_DIR_GATE_NOTE = (
     "使闸按条件①『新位置已有库』返回 —— DATABASE_PATH 全程指向 tmpdir，闸要防的那件事不存在"
 )
 SEGMENTS_NOTE = (
-    "import_ms ⊇ app_ready_ms ⊇ init_db_ms：生产 import delector.server 时模块级就调了 "
-    "create_app()（server.py:356），三段是嵌套口径，相加无意义"
+    "分段口径：import_ms / app_ready_ms / init_db_ms 各由**独立子进程**测得，且前置状态不同 —— "
+    "probe B 的进程在 import delector.server 时模块级已跑过一次完整 create_app()（server.py:356），"
+    "其进程级缓存与文件系统缓存已热；probe A 是独立进程里单次 init_db()。三者只有**概念上的**"
+    "包含关系（import 含 create_app、create_app 含 init_db），**不可按大小关系解读**"
+    "（谁大谁小随机器与前置状态变：本机 app_ready>init_db、CI 反向），相加亦无意义"
 )
 MODEL_LOAD_NOTE = (
     "model_load_ms 是**独立子进程**里 import delector.nlp_engine.processor 的墙钟"
@@ -254,8 +274,31 @@ def _nlp_path(syntax_tree: ModuleType, processor: ModuleType) -> Tuple[str, str]
     return path, f"syntax_tree={tree_path};processor={proc_path}({detail})"
 
 
+def _count_tables(db_path: str) -> int:
+    """数一个 SQLite 库 sqlite_master 里的表数；文件不存在返回 0。
+
+    供 probe A（init_db）与 probe B（app_ready）**对称**自检：哪段的 env 失效、把建库落到了
+    已初始化/热库上，这里就会暴露成 0 —— 这是个**机器无关**的判据（表要么在、要么不在），
+    比"两次跨进程耗时谁大谁小"可靠得多。两段都要用它，避免守卫只设在一侧。
+    """
+    if not os.path.isfile(db_path):
+        return 0
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()
+        return int(row[0])
+    finally:
+        conn.close()
+
+
 def _probe_model_and_initdb() -> int:
-    """探针 A：``model_load_ms``（import processor）+ ``init_db_ms``（冷库建表）。"""
+    """探针 A：``model_load_ms``（import processor）+ ``init_db_ms``（冷库建表）。
+
+    除两段耗时外还自报两条**机器无关**的自检：``init_db()`` 之后两张库里的
+    ``sqlite_master`` 表数（与 probe B 对称，见 ``_count_tables``）。若 env 未生效 /
+    ``init_db()`` 落到了已初始化热库上，表数会直接变 0 —— 否则 ``init_db_ms`` 可任意小，
+    而只用 ``> 0`` 兜底，正是本次被修缺陷在另一个探针上的翻版。
+    """
     _require_isolated_env()
     start = time.perf_counter()
     processor = importlib.import_module("delector.nlp_engine.processor")
@@ -267,18 +310,32 @@ def _probe_model_and_initdb() -> int:
     init_db()  # 无参 ⇒ 走 DATABASE_PATH（父进程给的全新库）
     init_db_ms = (time.perf_counter() - start_db) * 1000.0
 
+    # 行为自检：init_db() 必须真在这两张**全新库**上建出表（env 失效落到热库 ⇒ 表数为 0）。
+    # 表在就是 ≥1、不在就是 0 —— 与机器/缓存无关，是 probe A 防恒真的判据（与 probe B 对称）。
+    init_db_tables = _count_tables(os.environ["DATABASE_PATH"])
+    init_db_progress_tables = _count_tables(os.environ["PROGRESS_DB_PATH"])
+
     syntax_tree = importlib.import_module("delector.nlp_engine.syntax_tree")
     nlp_path, nlp_detail = _nlp_path(syntax_tree, processor)
     print(f"probe_model_load_ms={model_load_ms:.2f}")
     print(f"probe_init_db_ms={init_db_ms:.2f}")
+    print(f"probe_init_db_tables={init_db_tables}")
+    print(f"probe_init_db_progress_tables={init_db_progress_tables}")
     print(f"probe_nlp_path={nlp_path}")
     print(f"probe_nlp_path_detail={nlp_detail}")
     return 0
 
 
 def _probe_import_and_app_ready(fresh_db: str, fresh_progress: str) -> int:
-    """探针 B：``import_ms``（冷 import）+ ``app_ready_ms``（对**全新库**再装一次）。"""
+    """探针 B：``import_ms``（冷 import）+ ``app_ready_ms``（对**全新库**再装一次）。
+
+    除两段耗时外还自报三条**机器无关**的自检：第二次 ``create_app()`` 之后，两张全新库里的
+    ``sqlite_master`` 表数、以及它是否真写在新库路径上（见 ``_count_tables``）。把
+    "app_ready 到底测到了什么"直接暴露成可断言的行，而不是靠跨进程耗时大小去猜。
+    """
     _require_isolated_env()
+    # 先记下 import 期模块级 create_app() 用的那套库（env 原值），供下面**独立**判「换没换路径」。
+    main_db = os.environ["DATABASE_PATH"]
     start = time.perf_counter()
     server = importlib.import_module("delector.server")
     import_ms = (time.perf_counter() - start) * 1000.0
@@ -292,8 +349,28 @@ def _probe_import_and_app_ready(fresh_db: str, fresh_progress: str) -> int:
     create_app()
     app_ready_ms = (time.perf_counter() - start_app) * 1000.0
 
+    # 行为自检：第二次 create_app() 必须把表建在**全新库**上（而不是又写回模块级那套 main_db）。
+    # 表在就是 ≥1、不在就是 0 —— 与机器/缓存无关，是这条门禁真正的防恒真判据。
+    app_ready_db_tables = _count_tables(fresh_db)
+    app_ready_progress_tables = _count_tables(fresh_progress)
+    # fresh_used **独立**判「新库文件真的出现在新路径上」：不再由表数派生（那样两者同真同假，
+    # 名字却暗示"判路径"）。这里查三样彼此独立的证据：文件在、规范化绝对路径与 main_db 不同、
+    # 且（拿得到 inode 时）inode 也不同。表数断言仍在下方独立保留，两条不再互为派生。
+    fresh_exists = os.path.isfile(fresh_db)
+    path_differs = os.path.normcase(os.path.abspath(fresh_db)) != os.path.normcase(os.path.abspath(main_db))
+    inode_differs = True  # 拿不到 inode 时不影响判定；拿得到则必须不同（顺带比对）
+    try:
+        if fresh_exists and os.path.isfile(main_db):
+            inode_differs = os.stat(fresh_db).st_ino != os.stat(main_db).st_ino
+    except OSError:
+        inode_differs = True
+    fresh_used = "yes" if fresh_exists and path_differs and inode_differs else "no"
+
     print(f"probe_import_ms={import_ms:.2f}")
     print(f"probe_app_ready_ms={app_ready_ms:.2f}")
+    print(f"probe_app_ready_db_tables={app_ready_db_tables}")
+    print(f"probe_app_ready_progress_tables={app_ready_progress_tables}")
+    print(f"probe_app_ready_fresh_db_used={fresh_used}")
     return 0
 
 
@@ -452,10 +529,15 @@ def _measure_round() -> Dict[str, Any]:
             "app_ready_ms": float(probe_b["app_ready_ms"]),
             "model_load_ms": float(probe_a["model_load_ms"]),
             "init_db_ms": float(probe_a["init_db_ms"]),
+            "init_db_tables": int(probe_a["init_db_tables"]),
+            "init_db_progress_tables": int(probe_a["init_db_progress_tables"]),
             "health_200_ms": health_200_ms,
             "nlp_path": probe_a["nlp_path"],
             "nlp_path_detail": probe_a["nlp_path_detail"],
             "child_isolated": child_isolated,
+            "app_ready_db_tables": int(probe_b["app_ready_db_tables"]),
+            "app_ready_progress_tables": int(probe_b["app_ready_progress_tables"]),
+            "app_ready_fresh_db_used": probe_b["app_ready_fresh_db_used"],
         }
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -495,23 +577,28 @@ def _verdict(
         f"桌面首次启动（空数据目录）到 /api/health 200 的中位墙钟 health_200_ms={health_200_ms:.0f}"
         f"（≈{health_200_ms / 1000.0:.1f}s），nlp_path={nlp_path}"
     )
-    model_pct = model_load_ms / import_ms * 100.0 if import_ms > 0 else 0.0
+    # 各段来自不同子进程、前置状态不同 ⇒ 任何跨进程比率（model_load/import、单项/health_200）
+    # 都不是份额、不可作证据。故这里**不给百分比**，只保留"不可比大小"的口径。
     segments = (
-        f"分段（嵌套口径，见 segments_note）：import_ms={import_ms:.0f}"
-        f"（其中 spaCy 模型加载 model_load_ms={model_load_ms:.0f}，占 import 的 {model_pct:.0f}%）"
-        f"｜init_db_ms={init_db_ms:.0f}（仅建表）｜create_app(冷库) app_ready_ms={app_ready_ms:.0f}"
+        f"分段（各段独立子进程、不可比大小，见 segments_note）：import_ms={import_ms:.0f}"
+        f"（其中 spaCy 模型加载 model_load_ms={model_load_ms:.0f}：跨进程近似归因，仅示意、不可当份额）"
+        f"｜init_db_ms={init_db_ms:.0f}（仅建表）｜create_app(第二次装配, 冷度与 probe A 不同源) "
+        f"app_ready_ms={app_ready_ms:.0f}"
         f"｜其余（进程起 + uvicorn 装配 + 首个请求）≈{residual_ms:.0f}"
     )
+    # 近似归因（跨进程，仅示意）：只用来定位"本机实测里哪个单项最大"。含跨进程相减 ⇒ 原始差
+    # 可为负，故 max 到 0 仅作显示，不代表它是独立分段。
     parts = {
         "spaCy 模型加载": model_load_ms,
+        # 跨进程相减，仅作示意，可为负（下面的 max 到 0 只为显示，不代表它是独立分段）。
         "其余 import（路由模块 + 首装 create_app）": max(import_ms - model_load_ms, 0.0),
         "进程起 + uvicorn 装配 + 首请求（近似）": max(residual_ms, 0.0),
     }
     biggest = max(parts, key=lambda key: parts[key])
-    share = parts[biggest] / health_200_ms * 100.0 if health_200_ms > 0 else 0.0
+    # 建议方向据"本机实测分布"给出，**不**用跨进程比率当证据（所以这里不打印占比）。
     desktop = (
-        f"桌面侧归因：最大单项是『{biggest}』{parts[biggest]:.0f}ms（占 health_200 的 {share:.0f}%），"
-        f"要压桌面首启先压它"
+        f"桌面侧归因（近似归因，各段跨进程、仅示意）：本机实测分布里最大单项是『{biggest}』"
+        f"{parts[biggest]:.0f}ms；据此，要压桌面首启先压它（方向据本机实测分布，非跨进程比率论证）"
     )
     android = (
         f"对照 Android 已知口径（docs/agents/architecture.md:100-101：首次启动解包约 "
@@ -567,6 +654,11 @@ def _run_benchmark(rounds: int) -> int:
     nlp_path = "unknown"
     nlp_detail = ""
     isolated = True
+    init_db_tables: List[int] = []
+    init_db_progress_tables: List[int] = []
+    app_ready_db_tables: List[int] = []
+    app_ready_progress_tables: List[int] = []
+    fresh_used_flags: List[bool] = []
     for _ in range(rounds):
         result = _measure_round()
         for key in samples:
@@ -574,9 +666,21 @@ def _run_benchmark(rounds: int) -> int:
         nlp_path = str(result["nlp_path"])
         nlp_detail = str(result["nlp_path_detail"])
         isolated = isolated and bool(result["child_isolated"])
+        init_db_tables.append(int(result["init_db_tables"]))
+        init_db_progress_tables.append(int(result["init_db_progress_tables"]))
+        app_ready_db_tables.append(int(result["app_ready_db_tables"]))
+        app_ready_progress_tables.append(int(result["app_ready_progress_tables"]))
+        fresh_used_flags.append(str(result["app_ready_fresh_db_used"]) == "yes")
 
     medians = {key: _median_ms(values) for key, values in samples.items()}
     residual_ms = medians["health_200_ms"] - medians["import_ms"]
+    # 表数取**最小轮**（最保守）：任一轮为 0 就报 0 ⇒ 门会红；fresh 要求**每轮**都为 yes。
+    # probe A 与 probe B 同口径（都取最小轮），守卫对称。
+    min_init_db_tables = min(init_db_tables) if init_db_tables else 0
+    min_init_db_progress_tables = min(init_db_progress_tables) if init_db_progress_tables else 0
+    min_app_ready_db_tables = min(app_ready_db_tables) if app_ready_db_tables else 0
+    min_app_ready_progress_tables = min(app_ready_progress_tables) if app_ready_progress_tables else 0
+    app_ready_fresh_used = "yes" if fresh_used_flags and all(fresh_used_flags) else "no"
     repo_after = _repo_db_signature()
     if repo_before is None and repo_after is None:
         repo_state = "absent"  # CI 上没有真实库文件 ⇒ 无从改动，不算通过也不算失败
@@ -591,7 +695,12 @@ def _run_benchmark(rounds: int) -> int:
     print(f"nlp_path_detail={nlp_detail}")
     print(f"import_ms={medians['import_ms']:.2f}")
     print(f"init_db_ms={medians['init_db_ms']:.2f}")
+    print(f"init_db_tables={min_init_db_tables}")
+    print(f"init_db_progress_tables={min_init_db_progress_tables}")
     print(f"app_ready_ms={medians['app_ready_ms']:.2f}")
+    print(f"app_ready_db_tables={min_app_ready_db_tables}")
+    print(f"app_ready_progress_tables={min_app_ready_progress_tables}")
+    print(f"app_ready_fresh_db_used={app_ready_fresh_used}")
     print(f"health_200_ms={medians['health_200_ms']:.2f}")
     # p95 与中位数取自**同一批**样本（不重新计时）：冷启动每轮一个全新解释器，重跑
     # 一遍计时就等于换了一次测量，尾部与中位数不再可比。
