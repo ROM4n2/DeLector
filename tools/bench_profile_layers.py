@@ -8,8 +8,11 @@ Task 5b 的三条硬纪律（改这个文件前务必先读）
 2. **样本量不足不许写强结论**：n<20 时 p95 系统性低估尾部（n=5 的经验 p95≈最大值，
    P(max₅ < 真p95) = 0.95⁵ ≈ 77%）⇒ 条件② 只能写「仅可否证（未能确证不成立）」，
    **不许**写「不成立」；只有 n≥20 才允许下强结论。见 `tools/bench_stats.py`。
-3. **目标值是假设**：`target_status=unconfirmed`。所有 `headroom_to_2x_target_*`
-   必须与它绑定阅读 —— 拆开搬运的余量数字会被下游当成已确认事实写进 ADR。
+3. **目标值已拍板但仍须绑定阅读**：`target_status=confirmed`（2026-10-09 用户拍板，性质为
+   价值判断 / 体验预算，无客观对错）。所有 `headroom_to_2x_target_*` 必须与它绑定阅读 ——
+   目标一变余量即变，拆开搬运的数字会被下游当成客观事实写进 ADR。
+4. **热读是缓存哨兵**：`warm_read` 只验证缓存生效（µs 级 dict 命中 vs 0.1s 目标差 4 个数量级），
+   **不参与条件②** —— 判定集恰 3 场景（cards_list / long_read_cold / cold_start），见门禁。
 
 用法::
 
@@ -32,19 +35,22 @@ ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
 TIMEOUT_S = 900
 
-TARGET_COLD_START_S = 5.0
-TARGET_LONG_READ_COLD_S = 3.0
+TARGET_COLD_START_S = 2.0
+TARGET_LONG_READ_COLD_S = 1.5
 TARGET_CARDS_LIST_S = 1.0
 TARGET_WARM_READ_S = 0.1
+# 目标值来源＝用户拍板（2026-10-09），性质＝**价值判断**（体验预算，无客观对错）。
+# 联动警示必须保留：目标一变，条件②与 headroom 一起变 —— 不得把余量数字拆开单独引用。
 TARGET_SOURCE = (
-    "本基准的假设值（未经用户确认）：按冷启动/重计算/大列表/缓存命中的保守桌面体验预算暂定；"
-    "条件②的成立与否完全依赖这组值；若用户有不同的目标，结论会变"
+    "来源＝用户拍板（2026-10-09）；本值的性质是价值判断（体验预算，无客观对错），"
+    "不是可推导的物理量；条件②的成立与否完全依赖这组值，目标一变则结论（含 headroom）即变"
 )
-# 目标值未确认，必须作为一行随数字一起输出：headroom 与条件②都随它联动，
-# 脱离这一行单独引用余量数字 = 把假设当事实。
+# 已拍板，但仍必须作为一行随数字一起输出：headroom 与条件②都随它联动，
+# 脱离这一行单独引用余量数字 = 把"体验预算"当客观事实。
 TARGET_STATUS_NOTE = (
-    "target_status=unconfirmed：四项目标值均为假设（见 target_source），未经用户确认；"
-    "headroom_to_2x_target_* 与条件②的结论都随目标值联动，禁止脱离本行单独引用余量数字"
+    "target_status=confirmed（2026-10-09 用户拍板）：四项目标值已确认，其性质是价值判断"
+    "（体验预算，无客观对错）；headroom_to_2x_target_* 与条件②的结论仍随目标值联动"
+    "（目标一变结论即变），禁止脱离本行单独引用余量数字"
 )
 
 # 条件② 的判定门：p95 > 2×目标（ADR-0018 §6）。
@@ -54,6 +60,46 @@ TWO_X_TARGET_S = {
     "warm_read": TARGET_WARM_READ_S * 2.0,
     "cold_start": TARGET_COLD_START_S * 2.0,
 }
+# 条件② 的判定场景集：**恰 3 场景**。warm_read 已被移出 —— 它是缓存哨兵（只证明缓存生效，
+# µs 级 dict 命中 vs 0.1s 目标差 4 个数量级），不构成"架构需改造"的信号，留在判定集只会稀释门。
+CONDITION_TWO_SCENARIOS: Tuple[str, ...] = ("cards_list", "long_read_cold", "cold_start")
+# 缓存哨兵场景集：仍测量、仍输出，但**不参与条件②**（见 SENTINEL_NOTE）。
+SENTINEL_SCENARIOS: Tuple[str, ...] = ("warm_read",)
+SENTINEL_ROLE = "sentinel"
+SENTINEL_NOTE = (
+    "warm_read_role=sentinel：热读是**缓存哨兵**，只用于验证缓存生效（实测 µs 级 dict 命中）；"
+    "它**不参与条件②**（已移出判定集），headroom_to_2x_target_warm_read 仅为对照、"
+    "不得用于 O2/O3 之类的架构判定"
+)
+
+
+def _validate_scenario_partition() -> None:
+    """启动期门禁：判定集恰 3 场景、哨兵恰 1 场景，两者互斥且合起来等于全部被测场景。
+
+    防将来有人**悄悄把 warm_read 加回判定集**（它会永远"不超标"从而稀释门）或**漏掉某个
+    判定场景**（会让条件②的口径在无人察觉下改变）。这不是装饰：断言在 import 期即执行。
+    """
+    two = set(CONDITION_TWO_SCENARIOS)
+    sentinel = set(SENTINEL_SCENARIOS)
+    if len(CONDITION_TWO_SCENARIOS) != 3:
+        raise AssertionError(
+            f"条件②判定集必须恰 3 场景，实际 {len(CONDITION_TWO_SCENARIOS)}：{CONDITION_TWO_SCENARIOS}"
+        )
+    if len(SENTINEL_SCENARIOS) != 1:
+        raise AssertionError(
+            f"哨兵场景集必须恰 1 场景，实际 {len(SENTINEL_SCENARIOS)}：{SENTINEL_SCENARIOS}"
+        )
+    if two & sentinel:
+        raise AssertionError(f"判定集与哨兵集不得重叠：{two & sentinel}")
+    if two | sentinel != set(TWO_X_TARGET_S):
+        raise AssertionError(
+            f"判定集 ∪ 哨兵集 != 全部被测场景：{two | sentinel} vs {set(TWO_X_TARGET_S)}"
+        )
+    if "warm_read" in two:
+        raise AssertionError("warm_read 不得进入条件②判定集（它是缓存哨兵）")
+
+
+_validate_scenario_partition()
 # 上游基准的 p95 键（毫秒）→ 本脚本的场景名。**刻意只认 _p95_ms**：
 # 若这里退化成读中位数键，条件② 就不再是 ADR 要求的口径。
 P95_SOURCE_KEYS = {
@@ -200,33 +246,48 @@ def _p95_seconds(sources: Mapping[str, BenchResult], scenario: str) -> Optional[
     return None if ms is None else ms / 1000.0
 
 
-def _condition_two(p95_s: Mapping[str, Optional[float]], p95_n: Optional[int]) -> Tuple[str, str]:
-    """按 ADR-0018 §6 判定条件②（p95 > 2×目标），返回 (措辞, 明细)。
+def _condition_two(
+    p95_s: Mapping[str, Optional[float]], p95_n: Optional[int]
+) -> Tuple[str, str, Tuple[str, ...]]:
+    """按 ADR-0018 §6 判定条件②（p95 > 2×目标），返回 (措辞, 明细, 超标场景元组)。
+
+    判定集 = CONDITION_TWO_SCENARIOS（**恰 3 场景**）。warm_read 已被移出：它是缓存哨兵
+    （µs 级 dict 命中 vs 0.1s 目标差 4 个数量级），只证明缓存生效，不构成"架构需改造"的信号。
 
     措辞纪律（**勿改**，越权即误判）
     ------------------------------
-    - 缺任一场景 p95 ⇒ `无法判定`（不给结论，也不给"看起来没超"的暗示）；
-    - 任一场景 p95 > 2×目标 ⇒ `成立`：**低估方向对我们有利** —— n 小时 p95 系统性
+    - 缺任一**判定集**场景 p95 ⇒ `无法判定`（不给结论，也不给"看起来没超"的暗示）；
+    - 任一判定场景 p95 > 2×目标 ⇒ `成立`：**低估方向对我们有利** —— n 小时 p95 系统性
       **低估**尾部，低估都超了，真值更超；
     - 全部未超 且 n < 20 ⇒ `仅可否证（未能确证不成立），需提高样本量`：低估方向对我们
       **不利**（可能只是没采到尾部），故不许写"不成立"；
     - 全部未超 且 n ≥ 20 ⇒ `不成立`（样本量已足以支撑强结论）。
+
+    第三个返回值（超标场景元组）供 `_verdict` 做"修法路由"：门与修法不得错配。
     """
-    measured = {name: value for name, value in p95_s.items() if value is not None}
-    missing = [name for name in P95_SOURCE_KEYS if p95_s.get(name) is None]
+    # 只对**判定集**场景要求 p95：warm_read 缺失不影响条件②（它是哨兵，不参与判定）。
+    missing = [name for name in CONDITION_TWO_SCENARIOS if p95_s.get(name) is None]
     if missing:
-        return "无法判定", f"缺 {','.join(missing)} 的 p95（上游基准未输出该行）"
-    ratios = {name: measured[name] / TWO_X_TARGET_S[name] for name in measured}
+        return "无法判定", f"缺 {','.join(missing)} 的 p95（上游基准未输出该行）", ()
+    measured: Dict[str, float] = {}
+    ratios: Dict[str, float] = {}
+    for name in CONDITION_TWO_SCENARIOS:
+        value = p95_s[name]
+        if value is None:  # 已由上面的 missing 拦截；此处仅收窄类型
+            return "无法判定", f"缺 {name} 的 p95（上游基准未输出该行）", ()
+        measured[name] = value
+        ratios[name] = value / TWO_X_TARGET_S[name]
     detail = "；".join(
         f"{name} p95={measured[name]:.3f}s vs 2×目标 {TWO_X_TARGET_S[name]:.2f}s（余量 {ratios[name]:.2f}x）"
-        for name in sorted(ratios)
+        for name in sorted(measured)
     )
-    over = [name for name in ratios if ratios[name] > 1.0]
+    over = tuple(sorted(name for name in ratios if ratios[name] > 1.0))
     if over:
         return (
             "成立",
-            f"{detail}；超门限场景 {','.join(sorted(over))}"
+            f"{detail}；超门限场景 {','.join(over)}"
             f"（n={p95_n}；p95 在小样本下系统性**低估**尾部，低估都超 ⇒ 真值更超）",
+            over,
         )
     if p95_n is None or p95_n < MIN_N_FOR_STRONG_VERDICT:
         return (
@@ -234,8 +295,47 @@ def _condition_two(p95_s: Mapping[str, Optional[float]], p95_n: Optional[int]) -
             f"{detail}；n={p95_n} 时 p95 系统性**低估**尾部（n=5 的经验 p95≈最大值，"
             f"P(max₅<真p95)=0.95⁵≈77%）⇒ 未超门限只能证否不了、不能确证不成立；"
             f"要下强结论须 BENCH_P95_ROUNDS≥{MIN_N_FOR_STRONG_VERDICT} 重跑（成本≈轮数线性）",
+            (),
         )
-    return "不成立", f"{detail}；n={p95_n}≥{MIN_N_FOR_STRONG_VERDICT}，样本量已足以支撑强结论"
+    return (
+        "不成立",
+        f"{detail}；n={p95_n}≥{MIN_N_FOR_STRONG_VERDICT}，样本量已足以支撑强结论",
+        (),
+    )
+
+
+def _route_for_over_limit(over: Sequence[str]) -> str:
+    """条件②成立时，**按超标场景**给出对应的修法方向 —— 门与修法不能错配。
+
+    真问题（产品席位指出）：唯一敏感场景是冷启动，而其瓶颈是 spaCy 模型加载 ≈1.47s
+    （占首启 58%）= **初始化/IO**；O2（把 FSRS/排序等 CPU 热路径下沉到 Rust/Go）**修不了它**。
+    故不能"条件②成立 ⇒ 直接建议 O2"，必须按超标场景分流。
+    """
+    if not over:
+        # 空集是**内部误用**：本函数只在条件②「成立」时被调用，而"成立"蕴含至少一个场景超标。
+        # 显式 raise 而非落到兜底的「建议O2评估」：否则未来有人直接传空集会拿到一个假的修法
+        # 建议（把"没有超标场景"误读成"卡盒/长文超标"，把方向带偏）。中性文案会把误用悄悄放过。
+        raise ValueError(
+            "_route_for_over_limit 收到空的超标场景集：本函数仅在条件②成立（至少一个场景超标）"
+            "时被调用；空集意味着判定门与修法路由被错接"
+        )
+    over_set = set(over)
+    has_cold = "cold_start" in over_set
+    has_hot = bool(over_set & {"cards_list", "long_read_cold"})
+    if has_cold and has_hot:
+        return (
+            "建议：先做 O0 杠杆压冷启动（spaCy 惰性加载/延后模型加载），再评估 O2（热点下沉）"
+            " —— 两者修的是不同瓶颈：冷启动是初始化/IO，卡盒/长文是 CPU 热路径"
+        )
+    if has_cold:
+        return (
+            "建议O0杠杆：spaCy 模型惰性加载/延后加载（直击首启模型加载 ≈1.47s、占首启 58%）；"
+            "明说：O2（热点下沉）修不了它 —— 模型加载是初始化/IO，不是 CPU 热路径"
+        )
+    return (
+        "建议O2评估（热点下沉）：超标场景（卡盒列表/长文冷读）是 CPU 热路径，"
+        "可将 FSRS/排序等下沉到 Rust/Go"
+    )
 
 
 def _verdict(
@@ -243,7 +343,7 @@ def _verdict(
     p95_s: Mapping[str, Optional[float]],
     p95_n: Optional[int],
 ) -> str:
-    two, two_detail = _condition_two(p95_s, p95_n)
+    two, two_detail, over = _condition_two(p95_s, p95_n)
     if python_pct is None:
         return (
             "条件①=无法判定（缺 Python 分层输入）；"
@@ -254,20 +354,20 @@ def _verdict(
         return (
             f"条件①=不成立（加权 Python CPU 代理占比 {python_pct:.1f}% ≤ 50%）；"
             f"条件②={two}（{two_detail}）；AND结果=不成立；建议O0（双条件 AND 已因条件①不成立；"
-            "目标仍为未经确认的假设，见 target_status）"
+            "仍可做便宜杠杆：惰性加载/缓存/预计算）"
         )
     if two == "成立":
         return (
             f"条件①=成立（加权 Python CPU 代理占比 {python_pct:.1f}% > 50%）；"
-            f"条件②=成立（{two_detail}）；AND结果=成立；建议O2（热点下沉）进入评估"
-            "（ADR-0018 §6：双条件 AND 成立；但四场景为代理口径见 scenario_scope_note，"
-            "目标值未确认见 target_status ⇒ 路线定稿仍需 HITL 确认）"
+            f"条件②=成立（{two_detail}）；AND结果=成立；{_route_for_over_limit(over)}"
+            "（ADR-0018 §6：双条件 AND 成立；但场景均为代理口径见 scenario_scope_note，"
+            "目标值为价值判断见 target_status ⇒ 路线按本路由定稿）"
         )
     if two == "不成立":
         return (
             f"条件①=成立（加权 Python CPU 代理占比 {python_pct:.1f}% > 50%）；"
             f"条件②=不成立（{two_detail}）；AND结果=不成立；建议O0"
-            "（双条件 AND 中条件②未成立；四场景为代理口径，见 scenario_scope_note）"
+            "（双条件 AND 中条件②未成立；仍可做便宜杠杆；场景均为代理口径，见 scenario_scope_note）"
         )
     return (
         f"条件①=成立（加权 Python CPU 代理占比 {python_pct:.1f}% > 50%）；"
@@ -382,10 +482,17 @@ def main() -> int:
         count = _sample_count(sources[source_name], key)
         if count is not None:
             counts[scenario] = count
-    # n 取四场景里**最小**的那个：判定门是 AND，最弱的一环决定能下多强的结论。
-    p95_n = min(counts.values()) if counts else None
+    # n 取**判定集**（CONDITION_TWO_SCENARIOS）里**最小**的那个：判定门是 AND，最弱的一环决定
+    # 能下多强的结论。**刻意不含哨兵 warm_read** —— 它不参与条件②，若把它的样本数并进 n，
+    # 等于让一个"不参与判决"的场景去限制判决强度，与"哨兵不得影响判决"概念冲突（今日冷/热样本
+    # 数恒相等，故这一步是**冗余、不改结果**；但语义上必须分离，否则将来冷/热样本数一旦分叉，
+    # 哨兵就会悄悄削判定强度）。
+    decision_counts: Dict[str, int] = {
+        scenario: counts[scenario] for scenario in CONDITION_TWO_SCENARIOS if scenario in counts
+    }
+    p95_n = min(decision_counts.values()) if decision_counts else None
     _print_number("p95_n", None if p95_n is None else float(p95_n), 0)
-    print(f"p95_note={_p95_note(p95_n, counts)}")
+    print(f"p95_note={_p95_note(p95_n, decision_counts)}")
     print(f"scenario_scope_note={SCENARIO_SCOPE_NOTE}")
     print("frontend_pct=unmeasured")
     print("frontend_note=本机无浏览器自动化基线；需用 Chrome DevTools Performance 手工录制卡盒滚动")
@@ -399,9 +506,13 @@ def main() -> int:
     print(f"target_cards_list_s={TARGET_CARDS_LIST_S:.1f}")
     print(f"target_warm_read_s={TARGET_WARM_READ_S:.1f}")
     print(f"target_source={TARGET_SOURCE}")
-    print("target_status=unconfirmed")
+    print("target_status=confirmed")
     print(f"target_status_note={TARGET_STATUS_NOTE}")
-    # 余量 = 实测 p95 ÷ (2×目标)：让"假设"与"余量"绑定出现，防止被拆开搬运。
+    # 条件② 的判定集与哨兵角色：显式输出，供门禁断言"判定集恰 3 场景、warm_read 不参与"。
+    print(f"condition_two_scenarios={','.join(CONDITION_TWO_SCENARIOS)}")
+    print(f"warm_read_role={SENTINEL_ROLE}")
+    print(f"warm_read_sentinel_note={SENTINEL_NOTE}")
+    # 余量 = 实测 p95 ÷ (2×目标)：让"目标"与"余量"绑定出现，防止被拆开搬运。
     for scenario in ("cards_list", "long_read_cold", "warm_read", "cold_start"):
         value = p95_s[scenario]
         # 6 位小数：热读的余量只有 1e-5 量级（微秒命中 vs 0.2s 门限），位数少了会打成
@@ -412,9 +523,13 @@ def main() -> int:
             6,
             "x",
         )
+        # 哨兵场景的余量必须带角色标注：否则读者会把"热读余量极低"误读成"缓存没问题 ⇒ 不用优化"。
+        if scenario in SENTINEL_SCENARIOS:
+            print(f"headroom_to_2x_target_{scenario}_role={SENTINEL_ROLE}")
     print(
         "headroom_note=余量=实测 p95 ÷ (2×目标)：<1 表示尚未超过门限、≥1 表示条件②成立；"
-        "与 target_status=unconfirmed 绑定阅读（目标值未经用户确认，目标一变余量即变）"
+        "与 target_status=confirmed 绑定阅读（目标值已拍板但性质为价值判断，目标一变余量即变）；"
+        f"其中 headroom_to_2x_target_{SENTINEL_SCENARIOS[0]} 属缓存哨兵、不参与条件②"
     )
     print(f"verdict={_verdict(weighted_python_pct, p95_s, p95_n)}")
     return 0 if all(result.error is None for result in results) else 1
