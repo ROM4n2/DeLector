@@ -5,7 +5,7 @@
 --------
 仓库里有两个互相矛盾、且都**不可复跑**的 spaCy 单价：
 
-- `delector/routes/syntax_hard.py:9` 的注释：`spaCy ~42ms/句`
+- `delector/routes/syntax_hard.py:9` 注释**曾写的** `spaCy ~42ms/句`（已于 2026-10-09 从代码移除的历史值）
 - `docs/reviews/2026-09-28-swarm-audit-master.md:36`：`实测 ~2.1 ms/句`
 
 差 20 倍。本文件把「唯一可复跑值」这件事钉成断言，共四层：
@@ -17,7 +17,7 @@
    `model=` / `engine=` 两条可枚举行，且**值必须为正**；
 3. **首次与稳态必须分开计时**（本任务的核心不变量）：`model_load_ms` 与
    `warmup_ms` 各占一行且都为正 —— 只给一个数字的脚本在这里立刻红；
-4. `verdict=` 必须**点名对照 42ms 与 2.1ms**，并给出落在哪一侧的判定。
+4. `verdict=` 必须**点名对照历史值 42ms 与 2.1ms**，并给出落在哪一侧的判定。
 
 为什么这些断言不是恒真
 ----------------------
@@ -67,6 +67,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "bench_spacy_unit.py"
+# 门禁 ③ 的扫描目标：生产模块 docstring（单价住在 tools/ 基准里，不进生产注释）。
+# 取舍：整目录扫 `delector/**/*.py` 会**额外**命中 `delector/services/search.py:4` 的
+# 「全量扫描 <50ms」—— 那是 ADR-0014 的**检索延迟声明**，与本轮 spaCy 单价不变量不同源、
+# 非本轮目标；且本轮纪律禁止改 `delector/`，无法就地消除它。故退而只锁本轮不变量真正落脚
+# 的文件（syntax_hard.py 的模块 docstring）。待 search.py 那条数字收口进基准后，可把范围
+# 放宽回整个 `delector/`。
+BARE_MS_SCAN_TARGETS = (ROOT / "delector" / "routes" / "syntax_hard.py",)
 
 # 契约数值行（脚本 MUST 逐条打印，且值为正）。
 NUM_KEYS = ("model_load_ms", "warmup_ms", "per_sentence_ms", "per_token_us", "sentences", "tokens", "rounds")
@@ -80,7 +87,7 @@ BUCKETS = ("short", "mid", "long")
 BUCKET_RE: Pattern[str] = re.compile(r"^bucket_(short|mid|long)_ms=([0-9]+(?:\.[0-9]+)?)$", re.MULTILINE)
 VERDICT_RE: Pattern[str] = re.compile(r"^verdict=(.+)$", re.MULTILINE)
 
-# 本任务要收口的两个旧值：verdict 必须**点名**它们，否则等于没结论。
+# 本任务要收口的两个历史值（其中 42ms 已从代码移除）：verdict 必须**点名**它们，否则等于没结论。
 LEGACY_SYNTAX_HARD = "42ms"
 LEGACY_AUDIT = "2.1ms"
 
@@ -313,7 +320,7 @@ def test_bench_output_model_and_engine_parsable(bench_out: str) -> None:
 def test_bench_output_separates_first_from_steady(bench_out: str) -> None:
     """⑤ 核心不变量：首次（加载 / 预热）与稳态**分开**计时，两个数字都得在场。
 
-    42ms vs 2.1ms 的 20 倍矛盾，最大嫌疑就是「一个含首次加载、一个是稳态」。
+    历史值 42ms vs 2.1ms 的 20 倍矛盾，最大嫌疑就是「一个含首次加载、一个是稳态」。
     若脚本只吐一个数字（把首次摊进稳态或反过来），这里的差值断言会塌 ⇒ 红。
     断言形式刻意取「加载 + 预热都远大于 0」而不是断言 `warmup > steady`：
     后者在稳态极快的机器上未必成立（预热未必触发 lazy init），而前者守的是
@@ -413,7 +420,7 @@ def test_bench_degrades_to_pure_python_without_spacy(tmp_path: Path) -> None:
 
 
 def test_bench_verdict_names_both_legacy_values(bench_out: str) -> None:
-    """⑧ `verdict=` 必须点名 42ms 与 2.1ms，且**常数 ↔ 文案 ↔ 测量**三者互锁。
+    """⑧ `verdict=` 必须点名历史值 42ms 与 2.1ms，且**常数 ↔ 文案 ↔ 测量**三者互锁。
 
     纯子串匹配太弱：把 `LEGACY_AUDIT_MS` 改成别的值、甚至删掉对比逻辑只留文案，
     门禁仍绿。故这里把 verdict 里的比值**解析回数字**，要求它与
@@ -423,7 +430,7 @@ def test_bench_verdict_names_both_legacy_values(bench_out: str) -> None:
     assert matches, f"输出里找不到 `verdict=` 结论行\n{bench_out}"
     verdict = matches[-1]
     assert LEGACY_SYNTAX_HARD in verdict, (
-        f"结论未点名旧值 42ms（syntax_hard.py:9）——不对照旧值等于没收口矛盾\n{verdict}"
+        f"结论未点名历史值 42ms（原 syntax_hard.py:9 注释，已移除）——不对照旧值等于没收口矛盾\n{verdict}"
     )
     assert LEGACY_AUDIT in verdict, (
         f"结论未点名旧值 2.1ms（swarm-audit-master.md:36）——不对照旧值等于没收口矛盾\n{verdict}"
@@ -491,7 +498,8 @@ def test_bench_verdict_declares_measured_target_and_scope(bench_out: str) -> Non
     assert "process_german_text" in verdict, f"结论未点名被测函数\n{verdict}"
     assert "不可直接相除" in verdict, f"结论未声明跨口径不可相除\n{verdict}"
     assert "rank_sentences" in verdict, f"结论未点名旧值的口径（rank_sentences）\n{verdict}"
-    # 下游要改 syntax_hard.py:9 的 42ms，必须看到「未覆盖该路径」而不是「可以改了」。
+    # 下游若要为该路径补一个可复跑值（历史值 42ms 已从 syntax_hard.py:9 移除），
+    # 必须看到「未覆盖该路径」而不是「可以改了」。
     assert "未覆盖" in verdict and "补测" in verdict, (
         f"结论未把「补测 rank_sentences 单价」写成未完成项\n{verdict}"
     )
@@ -531,4 +539,32 @@ def test_bench_verdict_amortization_is_candidate_not_conclusion(bench_out: str) 
         f"N={n:.0f} 与公式 B 反解值 {expected:.1f} 不符（打印取整，容差 1.5）——"
         f"若按公式 A 算则是 "
         f"{(found['model_load_ms'] + found['warmup_ms']) / consts['LEGACY_SYNTAX_HARD_MS']:.1f}\n{bench_out}"
+    )
+
+
+def test_production_docstrings_have_no_bare_ms() -> None:
+    """⑫ 门禁 A：生产模块 docstring 不得含 `\\d+\\s*ms` 形态的**裸毫秒数字**。
+
+    为什么需要它（本轮的真正不变量：单价住在 `tools/` 基准里，不进生产注释）：
+    改这个基准之前，`tests/` 全目录**没有任何**对生产 docstring 的断言 ⇒ 明天有人把
+    `~42ms/句` 写回 `delector/routes/syntax_hard.py:9`，上千条测试一条不红。而一个不可
+    复跑的毫秒数字一旦留在生产注释里，下游 agent 会顺着它把"历史值"当活命题引用
+    （假引用的根因之一）。
+
+    扫描对象：`BARE_MS_SCAN_TARGETS`（见其定义处的取舍说明）里各文件的**模块 docstring**
+    （`ast.get_docstring` —— 只看 docstring，不看普通行内注释，避免误伤）。缺了这条，本轮
+    "生产注释不含裸毫秒"这个结构性不变量就是零覆盖。
+    """
+    pattern = re.compile(r"\d+\s*ms")
+    offenders: List[str] = []
+    for path in BARE_MS_SCAN_TARGETS:
+        doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8")))
+        if not doc:
+            continue
+        found = pattern.search(doc)
+        if found is not None:
+            offenders.append(f"{path.relative_to(ROOT).as_posix()}: {found.group(0)!r}")
+    assert not offenders, (
+        "生产模块 docstring 含裸毫秒数字（单价应住 tools/ 基准，不进生产注释）：\n  "
+        + "\n  ".join(offenders)
     )

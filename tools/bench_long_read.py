@@ -13,7 +13,7 @@
 
 `nlp_path` 是本基准的可信前提：spaCy 加载失败是**静默降级**（processor.py:437 与
 syntax_tree.py:1533 双双退回纯 Python），此时 `spacy_ms` 量到的是纯 Python 成本，
-与 syntax_hard.py:9 的 42ms/句（spaCy 口径）对照不成立。故本脚本用**生产自己的
+与历史值 42ms/句（原 `syntax_hard.py:9` 注释，2026-10-09 移除）的对照不成立。故本脚本用**生产自己的
 判据**读实际路径（`syntax_tree.get_spacy_nlp()` 与 `processor.NLP_ENGINE`，
 也就是 syntax_hard.py:225 `/spacy-status` 对外报的那套），不在基准里另发明一套；
 只有两层都报 spaCy 才标 `nlp_path=spacy`，分歧靠 `nlp_path_detail` 行暴露。
@@ -57,6 +57,9 @@ for _path in (_REPO_ROOT, _TOOLS_DIR):
 
 MIN_ROUNDS = 5
 DEFAULT_ROUNDS = 7
+# 历史值：原 delector/routes/syntax_hard.py:9 注释里的数字（已于 2026-10-09 移除；不可复跑、
+# 且不参与任何参数决策：TTL 由陈旧性决定、缓存容量由内存上界定、聚合 key 由淘汰悬崖决定，
+# 均非由该数字推出 —— 依据：perf 席位裁定 + 用户采纳）
 LEGACY_SYNTAX_HARD_MS = 42.0
 # 输出旁的一句 caveat：cache_speedup 的分母是微秒级命中，other_ms/spacy_pct 是跨口径近似。
 # 写在输出里而不是只写在 docstring 里，是因为读数字的人（含后续回填 ADR）只看 stdout。
@@ -265,14 +268,15 @@ def _verdict(effect: str, cold_ms: float, warm_ms: float, sentences: int, nlp_pa
     else:
         path_text = (
             "nlp_path=pure：本环境 spaCy 不可用，process_german_text 与 analyze_syntax_tree "
-            "双双走纯 Python 降级路径，spacy_ms 量到的是纯 Python 成本，与 42ms/句的对照不成立"
+            "双双走纯 Python 降级路径，spacy_ms 量到的是纯 Python 成本，与历史值 42ms/句的对照不成立"
             "（哪一层降级见 nlp_path_detail 行）"
         )
     return (
-        f"{cache_text}；{path_text}；对照 syntax_hard.py:9 的 spaCy ~{LEGACY_SYNTAX_HARD_MS:g}ms/句注释："
+        f"{cache_text}；{path_text}；对照历史值 spaCy ~{LEGACY_SYNTAX_HARD_MS:g}ms/句"
+        "（原 syntax_hard.py:9 注释，2026-10-09 移除）："
         f"本次冷缓存端到端为 {per_sentence:.2f}ms/句，但其热路径是 rank_sentences，"
         "spacy_ms 测的是 process_german_text 完整管线，二者跨函数不可直接比较；"
-        "因此本次只能判定缓存收益，不能直接支持或否证 42ms/句。"
+        "因此本次只能判定缓存收益，不能支持或否证该历史值 42ms/句（已从代码移除）。"
     )
 
 

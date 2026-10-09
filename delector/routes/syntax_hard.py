@@ -6,7 +6,7 @@
 trials 为本地单用户训练记录，非敏感，不挂 _require_localhost 闸（红线 7）；
 hard-sentences 列表/detail 纯只读。
 
-性能纪律（规格 §4）：全文逐句分析是重计算（spaCy ~42ms/句）——进程内存缓存
+性能纪律（规格 §4）：全文逐句分析是重计算（单价见可复跑基准 tools/bench_long_read.py）——进程内存缓存
 （键=source+id，TTL 300s，容量上限 256 条）防重复计算 + limit 护栏（默认 50 上限 100）
 + 按需懒算（材料正文仅缓存缺失时读，聚合只取 id 不 materialize 全文）。
 source=all 额外走**聚合层缓存**（整榜一个 key，见 _ALL_RANK_CACHE_KEY）：材料数

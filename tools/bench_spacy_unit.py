@@ -5,8 +5,10 @@
 ------------------
 仓库里有两个互相矛盾、且都**不可复跑**的 spaCy 单价：
 
-- `delector/routes/syntax_hard.py:9`（模块 docstring 的性能纪律）：``spaCy ~42ms/句``
-  —— 其热路径（``:187``）走的同样是 ``rank_sentences``
+- `delector/routes/syntax_hard.py:9`（模块 docstring 的性能纪律）**曾写的** ``spaCy ~42ms/句``
+  —— **该数字已于 2026-10-09 从代码中移除**（不可复跑、且不参与任何参数决策：TTL 由陈旧性
+  决定、缓存容量由内存上界定、聚合 key 由淘汰悬崖决定，均非由该数字推出 —— 依据：perf 席位
+  裁定 + 用户采纳）；此处仅作**历史值**对照，其热路径（``:187``）走的同样是 ``rank_sentences``
 - `docs/reviews/2026-09-28-swarm-audit-master.md:36`（perf-profiler 座 CONFIRMED）：
   ``每篇跑 spaCy rank_sentences（实测 ~2.1 ms/句）``
 
@@ -19,8 +21,9 @@
 token/lemma/morph/CEFR 反查/可分动词回扫/统计；而本脚本实测的是
 ``process_german_text``（``nlp_engine/processor.py:436``，**完整管线**）。即本脚
 本与两个旧值**都不是同一个函数** ⇒ 打印出来的比值一律是「跨函数差」，**不得**
-读作「某个旧值偏乐观/悲观 N 倍」（红卡 1 的根因）。要改 ``syntax_hard.py:9`` 的
-注释，必须先补测 ``rank_sentences`` 的单价 —— 本脚本**未覆盖**该路径（未完成项）。
+读作「某个旧值偏乐观/悲观 N 倍」（红卡 1 的根因）。历史值 42ms 已从 ``syntax_hard.py:9``
+注释移除（2026-10-09）；若要为该路径留一个可复跑值，必须先补测 ``rank_sentences`` 的单价
+—— 本脚本**未覆盖**该路径（未完成项）。
 
 核心假设与测量设计（**首次与稳态必须分开**）
 --------------------------------------------
@@ -55,7 +58,7 @@ token/lemma/morph/CEFR 反查/可分动词回扫/统计；而本脚本实测的�
   是 ``process_german_text``（完整管线：token + lemma + morph + CEFR 反查 + 可分
   动词回扫 + ``calculate_cefr_stats``）。故 verdict 里的 ``实测/2.1 = N×`` 只能
   读作「两个函数的固有成本差」，**不能**读作「2.1ms 偏乐观 N 倍」，也**不足以**
-  支撑改写 ``syntax_hard.py:9`` 的 42ms —— 那需要先补测 ``rank_sentences`` 单价。
+  支撑为 ``syntax_hard.py:9`` 该路径补一个可复跑值 —— 那需要先补测 ``rank_sentences`` 单价。
 - **冷启动摊薄假说不可证伪（红卡 2）**：``cold_amortized_sentences_to_42ms`` 由
   ``(model_load + warmup + N×steady) / N = 42`` 反解得 N；对任意
   ``0 < steady < 42`` 该方程**恒有正解** ⇒ 本脚本永远算得出一个 N，**永远无法**
@@ -126,8 +129,11 @@ if _REPO_ROOT not in sys.path:
 MIN_ROUNDS = 5  # 取中位数而非均值；少于 5 轮噪声压不住（[Instinct: Median-Not-Mean]）
 DEFAULT_ROUNDS = 7
 
-# 两个待收口的旧值（改这里等于改对照对象，必须与生产注释/审计文档同步）。
-LEGACY_SYNTAX_HARD_MS = 42.0  # delector/routes/syntax_hard.py:9
+# 两个待收口的历史值（改这里等于改对照对象；两者都**不再**是代码里的当前值）。
+# 历史值：原 delector/routes/syntax_hard.py:9 注释里的数字（已于 2026-10-09 移除；
+# 不可复跑、且不参与任何参数决策：TTL 由陈旧性决定、缓存容量由内存上界定、聚合 key
+# 由淘汰悬崖决定，均非由该数字推出 —— 依据：perf 席位裁定 + 用户采纳）
+LEGACY_SYNTAX_HARD_MS = 42.0
 LEGACY_AUDIT_MS = 2.1  # docs/reviews/2026-09-28-swarm-audit-master.md:36
 
 # 本脚本的被测对象（verdict 开头必须显式声明，否则读者会拿它去和另一个函数相除）。
@@ -311,21 +317,21 @@ def _verdict(
         f"实测对象={MEASURED_TARGET}；稳态实测 {per_sentence_ms:.2f}ms/句"
         f"（engine={engine}, model={model}）"
     )
-    # 旧值全部用常量插值：把常量改掉（或删掉对照逻辑只留文案）时，门禁必须跟着红。
+    # 历史值全部用常量插值：把常量改掉（或删掉对照逻辑只留文案）时，门禁必须跟着红。
     audit = f"{LEGACY_AUDIT_MS:g}ms"
     hard = f"{LEGACY_SYNTAX_HARD_MS:g}ms"
     audit_n = f"{LEGACY_AUDIT_MS:g}"
     hard_n = f"{LEGACY_SYNTAX_HARD_MS:g}"
     if per_sentence_ms <= LEGACY_GEO_MID_MS:
         side = (
-            f"与旧值 {audit} 不可直接相除（其口径为 {LEGACY_AUDIT_SCOPE}）："
+            f"与历史值 {audit} 不可直接相除（其口径为 {LEGACY_AUDIT_SCOPE}）："
             f"实测/{audit_n} = {per_sentence_ms / LEGACY_AUDIT_MS:.2f}× 属跨函数差，"
             f"不能读作『{audit} 偏乐观』；{hard_n}/实测 = {LEGACY_SYNTAX_HARD_MS / per_sentence_ms:.2f}×"
-            f"（{hard} 热路径同为 rank_sentences，同样是跨函数差）"
+            f"（历史值 {hard} 热路径同为 rank_sentences、且已从代码移除，同样是跨函数差）"
         )
     else:
         side = (
-            f"与旧值 {hard} 不可直接相除（其热路径同为 rank_sentences）："
+            f"与历史值 {hard} 不可直接相除（其热路径同为 rank_sentences、且已从代码移除）："
             f"{hard_n}/实测 = {LEGACY_SYNTAX_HARD_MS / per_sentence_ms:.2f}× 属跨函数差，"
             f"不能读作『{hard} 偏悲观』；实测/{audit_n} = {per_sentence_ms / LEGACY_AUDIT_MS:.2f}×"
             f"（{audit} 口径为 {LEGACY_AUDIT_SCOPE}）"
@@ -373,16 +379,16 @@ def _verdict(
         )
     # 三个候选一律并列、一律不作断言：本脚本只测了其中一种口径，没有裁定权。
     candidates = (
-        "20 倍差距的候选口径（并列，均非定案结论）："
+        "历史值 20 倍差距的候选口径（并列，均非定案结论）："
         f"候选①：{hard} 是 md（带词向量，显著更贵）口径；"
         f"候选②：{hard} 含冷启动摊薄（见上，需独立句子数证据）；"
         f"候选③：{hard} 是整篇一次性处理 + DB 写入口径（本脚本测的是逐句单独调用）"
     )
-    # 未完成项：本脚本没测 rank_sentences，故不足以支撑改写 syntax_hard.py:9。
+    # 未完成项：本脚本没测 rank_sentences，故不足以给出该路径的可复跑单价。
     pending = (
-        f"未完成项：若要修订 syntax_hard.py:9 的 {hard} 注释，必须先补测 "
-        f"rank_sentences/analyze_syntax_tree 的单价 —— 本脚本未覆盖该路径"
-        f"（实测的是 {MEASURED_TARGET}），现有数字不足以支撑改注释"
+        f"未完成项：本脚本测的是 {MEASURED_TARGET}，未覆盖 rank_sentences/analyze_syntax_tree "
+        f"路径 —— 历史值 {hard} 已从 syntax_hard.py:9 注释移除，若要为该路径补一个可复跑值，"
+        f"必须先补测该单价；现有数字不足以支撑定案"
     )
 
     tail = ""

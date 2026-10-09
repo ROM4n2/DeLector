@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """分层剖析汇总脚本的可执行输出门禁。"""
 
+import ast
+import importlib.util
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -29,6 +32,35 @@ SCENARIO_KEYS = (
     "scenario_warm_read_s",
     "startup_s",
 )
+
+
+def _load_script_module() -> ModuleType:
+    """按路径加载 tools/bench_profile_layers.py（tools/ 不是 package，只能按路径加载）。
+
+    路由补丁的四种输入组合现实中只会落一个分支，故必须直接调用 `_verdict` 逐一断言
+    —— 靠实跑输出只能覆盖到当前机器恰好命中的那一条。
+    """
+    spec = importlib.util.spec_from_file_location("bench_profile_layers_under_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# 一个"全部未超 2×目标"的基线 p95（秒）；逐个 override 制造"仅某场景超标"的输入。
+_UNDER_P95: dict[str, float] = {
+    "cards_list": 0.05,
+    "long_read_cold": 0.05,
+    "warm_read": 0.00002,
+    "cold_start": 0.05,
+}
+_OVER = 99.0  # 远超任一 2×目标 ⇒ 该场景必判"超标"
+
+
+def _p95_mapping(**overrides: float) -> dict[str, float]:
+    mapping = dict(_UNDER_P95)
+    mapping.update(overrides)
+    return mapping
 
 
 def _run_bench() -> str:
@@ -141,12 +173,14 @@ def test_unmeasured_layers_are_explicit_and_explained(bench_out: str) -> None:
         assert "resource" in _value(bench_out, "rss_note")
 
 
-def test_targets_are_explicit_assumptions(bench_out: str) -> None:
+def test_targets_are_explicit_confirmed_value_judgements(bench_out: str) -> None:
+    """目标值来源已从"未确认假设"改为"用户拍板 + 价值判断"，且联动警示必须保留。"""
     for key in TARGET_KEYS:
         assert _number(bench_out, key) > 0.0
     source = _value(bench_out, "target_source")
-    for phrase in ("本基准的假设值", "未经用户确认", "条件②", "完全依赖", "结论会变"):
+    for phrase in ("用户拍板", "价值判断", "体验预算", "无客观对错", "条件②", "完全依赖", "结论"):
         assert phrase in source, f"target_source 缺少 `{phrase}`：{source}"
+    assert "未经用户确认" not in source, f"target_source 仍在宣称未确认：{source}"
 
 
 def test_p95_is_measured_per_scenario_and_sample_size_is_declared(bench_out: str) -> None:
@@ -188,9 +222,11 @@ def test_verdict_separates_both_conditions_and_and_result(bench_out: str) -> Non
             assert int(_value(bench_out, "p95_n")) < 20, f"n≥20 时不该停留在仅可否证：{verdict}"
 
 
-def test_targets_are_marked_unconfirmed_and_headroom_is_printed(bench_out: str) -> None:
-    """目标值必须与余量**绑定出现**：拆开搬运的余量数字会被当成已确认事实。"""
-    assert _value(bench_out, "target_status") == "unconfirmed"
+def test_targets_are_confirmed_and_headroom_is_printed(bench_out: str) -> None:
+    """目标值已拍板（confirmed），但仍须与余量**绑定出现**：余量数字仍随目标值联动。"""
+    assert _value(bench_out, "target_status") == "confirmed"
+    status_note = _value(bench_out, "target_status_note")
+    assert "confirmed" in status_note and "未确认" not in status_note, status_note
     for scenario in ("cold_start", "long_read_cold", "cards_list", "warm_read"):
         assert _number(bench_out, f"headroom_to_2x_target_{scenario}", "x") > 0.0, bench_out
     note = _value(bench_out, "headroom_note")
@@ -202,3 +238,113 @@ def test_scenario_scope_is_declared_as_proxy(bench_out: str) -> None:
     note = _value(bench_out, "scenario_scope_note")
     assert "代理" in note, note
     assert "端到端" in note, note
+
+
+def test_condition_two_uses_exactly_three_scenarios_and_warm_read_is_sentinel(bench_out: str) -> None:
+    """门禁：条件②判定集**恰 3 场景**，warm_read 只作缓存哨兵、被排除在判定集之外。
+
+    为什么必须钉死：warm_read 是 µs 级 dict 命中，与目标差 4 个数量级 —— 一旦被悄悄加回
+    判定集，它会永远"不超标"从而稀释门；漏掉某个判定场景则会让条件②口径在无人察觉下改变。
+    """
+    scenarios = _value(bench_out, "condition_two_scenarios")
+    members = scenarios.split(",")
+    assert members == ["cards_list", "long_read_cold", "cold_start"], scenarios
+    assert len(members) == 3, scenarios
+    assert "warm_read" not in members, scenarios
+    assert _value(bench_out, "warm_read_role") == "sentinel"
+    assert "不参与条件②" in _value(bench_out, "warm_read_sentinel_note")
+    # 哨兵仍必须被测量并输出（移出判定集 ≠ 不再测量）
+    assert _number(bench_out, "scenario_warm_read_p95_s") > 0.0, bench_out
+
+
+def test_warm_read_over_target_does_not_trigger_condition_two() -> None:
+    """哨兵不得参与门：把 warm_read 拉到远超目标，条件②仍不得判"成立"。"""
+    module = _load_script_module()
+    condition_two = getattr(module, "_condition_two")
+    # warm_read 巨大、判定集三场景全部未超 ⇒ 条件②只能是"不成立"（n=20）而非"成立"。
+    text, _detail, over = condition_two(_p95_mapping(warm_read=_OVER), 20)
+    assert text != "成立", text
+    assert over == (), over
+    assert "warm_read" not in _detail or "超门限" not in _detail, _detail
+
+
+@pytest.mark.parametrize(
+    ("overrides", "required", "forbidden"),
+    [
+        # 仅 cold_start 超标 ⇒ O0 杠杆（spaCy 惰性加载）+ 明说 O2 修不了它
+        (
+            {"cold_start": _OVER},
+            ("建议O0杠杆", "spaCy", "修不了它", "初始化/IO", "O2"),
+            ("建议O2评估",),
+        ),
+        # 仅 cards_list 超标 ⇒ O2 评估（热点下沉）
+        ({"cards_list": _OVER}, ("建议O2评估", "热点下沉"), ("建议O0杠杆",)),
+        # 仅 long_read_cold 超标 ⇒ O2 评估（热点下沉）
+        ({"long_read_cold": _OVER}, ("建议O2评估", "热点下沉"), ("建议O0杠杆",)),
+        # 同时超标 ⇒ 先做 O0 压冷启动，再评估 O2
+        ({"cold_start": _OVER, "cards_list": _OVER}, ("先", "O0", "O2"), ()),
+    ],
+)
+def test_verdict_routes_remediation_by_over_limit_scenario(
+    overrides: dict[str, float],
+    required: tuple[str, ...],
+    forbidden: tuple[str, ...],
+) -> None:
+    """门与修法不得错配：条件②成立时必须**按超标场景**给出对应修法方向。
+
+    现实实跑只会落一个分支，故这里对四种输入组合直接调用 `_verdict` 逐一断言。
+    """
+    module = _load_script_module()
+    verdict_text = getattr(module, "_verdict")(85.9, _p95_mapping(**overrides), 20)
+    assert "条件②=成立" in verdict_text, verdict_text
+    for phrase in required:
+        assert phrase in verdict_text, f"缺少 `{phrase}`：{verdict_text}"
+    for phrase in forbidden:
+        assert phrase not in verdict_text, f"不该出现 `{phrase}`：{verdict_text}"
+
+
+def test_scenario_partition_gate_is_invoked_at_import() -> None:
+    """④ 启动期分区门禁的**调用点**必须存在 —— 否则门禁被静默拆除。
+
+    现况：`bench_profile_layers.py` 定义了 `_validate_scenario_partition()` 并在模块层调用
+    （`_validate_scenario_partition()` 那一行），但**没有任何测试**钉住这行调用 ⇒ 删掉调用
+    而保留函数与正确常量时，其余测试全绿：门禁被静默拆除，warm_read 就能悄悄回到条件②判定集
+    而无人察觉。故这里两路钉死：
+    ① AST 断言**模块层真的调用了它**（只保留定义不够）；
+    ② 直接调用函数，断言之错的分区会 raise（函数确实在执法，不是空壳）。
+    """
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    module_level_calls = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "_validate_scenario_partition"
+    ]
+    assert module_level_calls, (
+        "bench_profile_layers.py 模块层不再调用 `_validate_scenario_partition()`："
+        "启动期分区门禁被拆除（warm_read 可悄悄回到条件②判定集而无人察觉）"
+    )
+    # ② 函数确实在执法：合法分区不抛；把判定集改成含 warm_read 必须 raise。
+    module = _load_script_module()
+    validate = getattr(module, "_validate_scenario_partition")
+    validate()  # 合法分区：不抛
+    # 用 setattr 而非直接属性赋值：`module` 是 `ModuleType`，直接赋值会被 mypy 判 attr-defined，
+    # 而本轮禁用类型检查豁免，故走 setattr。
+    setattr(module, "CONDITION_TWO_SCENARIOS", ("cards_list", "long_read_cold", "warm_read"))
+    with pytest.raises(AssertionError):
+        validate()
+
+
+def test_route_for_empty_over_limit_is_explicit() -> None:
+    """⑥ `_route_for_over_limit(())` 空集必须**显式处理**，不得落进「建议O2评估」。
+
+    现况：空集只因 `_verdict` 只在 `over` 非空（条件②成立）时调用它而**不可达**；一旦未来
+    有人直接调用，会落到兜底的「建议O2评估（热点下沉）」——把"没有超标场景"误读成"卡盒/长文
+    超标"，把修法方向带偏。故显式 raise，让误用立刻暴露，而不是给一个假的修法建议。
+    """
+    module = _load_script_module()
+    route = getattr(module, "_route_for_over_limit")
+    with pytest.raises(ValueError):
+        route(())
