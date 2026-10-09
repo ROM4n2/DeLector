@@ -12,6 +12,12 @@ import time
 import webbrowser
 from contextlib import nullcontext
 
+# 数据落点必须在 `import server` **之前**定下来：`delector.core.database` 在被 import 的
+# 那一瞬就按"当时的 env"算出 DATA_DIR，之后再设 DELECTOR_DATA_DIR 毫无作用 —— 于是数据
+# 仍落在程序目录里，用户"解压新版覆盖旧目录 / 删掉旧目录"= 学习记录全空且零提示
+# （ADR-0019 Q2-A / Q3-B）。真正的调用在 `main()` 开头的第一个语句处（见那里的注释）。
+from delector.core.data_dir_bootstrap import bootstrap_data_dir
+
 
 def _noop_signal_context(*_args, **_kwargs):
     """空 context manager：替代 uvicorn 的 capture_signals（Android 子线程禁信号用）。"""
@@ -65,6 +71,11 @@ def main():
         if not android:
             open_browser(port)
         return
+
+    # ⚠️ 必须在 `import uvicorn` / `from delector.server import app` **之前**执行：那两行一跑，
+    # `database` 已按仓库根把 DATA_DIR 落定，此时再设 DELECTOR_DATA_DIR 就晚了。
+    # 放在端口占用早退**之后**是刻意的：已有实例在跑时不动它的库（Windows 上改名会被占用挡住）。
+    bootstrap_data_dir(os.environ)
 
     host = get_bind_host()
     print("=" * 60)
