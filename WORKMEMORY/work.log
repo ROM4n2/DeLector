@@ -608,3 +608,13 @@ Caps: filesystem-write, shell-exec
 - **回填 ADR-0020 §8 实施记录**：交付三步（数据外置 / 更新入口可发现 / 真桌面壳）+ **过程中真实修掉的 5 起事故**（P0 GUI 时序死锁、主窗口不可缩放、`--server-only` 重定向崩编码、PR 语境版本号含 `/`、**CI 闸自身接线把 master 弄红**）+ **验收口径诚实区分**（闸/探针机械验证 vs 用户人工裁定）。
 - **仍未取得具体数字**：**首屏可用秒数**、**Defender 扫描结果** ⇒ ADR-0020 §6 `[Unknown 2]`/`[Unknown 3]` 与 ADR-0018 §8 `Unknown 8`（端到端代理口径缺口）**仍未关闭**，已在 §8 显著标注。
 - 仓内副本机械重生成，与正式件逐行同源（差异 0）。
+
+### 2026-10-11 | codebuddy | EXEC 登记项 3A/5A + 2A + 3A′ 与 1A/4A 登记口径
+Caps: filesystem-write, shell-exec
+事件：用户「按建议」⇒ 执行登记项 1A/2A/3A/4A/5A。
+- **3A（`e95f918`）**：`bench_long_read.py` 的 `proc_path` 由读**静态声明值** `NLP_ENGINE` 改为**按真实加载状态**判定（未解析如实标注 + 指向可复跑判据；**不主动触发加载**）；门禁由子串断言升级为 **AST + 行为级**（原 `"NLP_ENGINE" in src` 是 docstring 提到就能过的假门）。变异：改回静态值 ⇒ 2 failed；"未解析"假装已解析 ⇒ 行为级 failed；恢复 ⇒ 23 passed。
+- **5A（`e95f918`）**：`desktop.py` 落两枚标记 —— 进程级计时起点 + pywebview **`loaded` 事件**驱动的"真实 UI 已加载（首屏可用）"（绑定在 `_after_start` 内 ⇒ 必然晚于 `webview.start()`，且**早于** `load_url`（pywebview 内部会 `events.loaded.clear()`）⇒ 由 AST 锁钉住）。新增 `tools/first_screen_from_log.py`（纯标准库）解析 `launch.log` 算「起点→就绪 / 就绪→首屏 / **端到端首屏**」；缺 `loaded` 行 ⇒ 明写"不含首屏事件"且**非零退出**（不猜、不静默给 0）。
+- **2A（`c071c08`）**：**难度跳变消灭**。新增 `tools/gen_preset_processed.py` ⇒ `delector/data/preset_processed.json`（**455989 字节 / 4 条目 / 按文本 sha256 索引 / 含 `version=3.5.0`**）；`database.py::preset_processed_json` 命中即落 **spaCy 口径**（首次打开不再跳变），未命中/缺失 ⇒ **可见 WARNING** + 回退纯 Python（**不加载 spaCy** ⇒ 惰性不变量保持）。三个打包位点（Windows + Linux/macOS）显式 `--add-data`（共用常量 `PRESET_PROCESSED_DATA_REL`）；Android 由 `cp -r delector` 整目录覆盖（Chaquopy 是否收非 `.py` **无法本地复验** ⇒ 登记，不制造不可复现的 CI 红，由运行时 WARNING 兜底）。`verify_windows_portable.py` 增加"真产物内含该文件"断言 ⇒ **对旧产物正确 FAIL**。
+- **3A′（`c071c08`）**：同类**第三处** `bench_rank_sentences.py` 同法修正（含门禁升级 AST+行为级，2 组变异自证）。
+- **1A / 4A（登记口径，不改 ADR 历史决策）**：冷启动 2.0s **未达**（本机 2128ms）⇒ 记为"**本机实测 2.128s，机器依赖**"，残余是 `import spacy` 本身，不再为 125ms 投入；Win10 WebView2 ⇒ **已知限制**（检测 + 官方 Evergreen 短链已有，Win10 需先装运行时，不捆绑以免 +100–150MB）。
+- **产物重建并验收**：`dist/DeLector-v5.16.0-Windows-x64-Portable`（commit `c071c08`）⇒ 闸 **11/11 PASS**，含新增的"预置文章预生成数据文件存在"。
