@@ -40,9 +40,26 @@ jobs:
         run: |
           pytest -v
 
-      - name: Build Windows Portable Release
+      # 构建 / 验包 / 压缩 拆成三步（顺序即契约，MUST NOT 调换）：
+      #   1. 构建：只产 dist/DeLector-<ver>-Windows-x64-Portable；
+      #   2. 验包：**真启一次**产物（完整性 + /api/health 就绪 + 干净退出），坏产物必须在这里就红；
+      #   3. 压缩 + 上传：只对**已验过**的产物打包。
+      # 为什么验包 MUST 早于压缩与 upload-artifact：一旦先压缩/先上传，坏产物就进了 zip/artifact，
+      # 用户下载到的正是那个坏包 —— 闸形同虚设（tests/test_ci_hardening.py 有顺序守卫钉住）。
+      - name: Build Windows Portable (PyInstaller)
         run: |
           python package_windows.py
+
+      - name: Verify Windows Portable (真启闸)
+        run: |
+          # --expect-commit 传**完整** GITHUB_SHA（40 位十六进制）；产物里存的是
+          # `git rev-parse --short HEAD` 的短 sha，而脚本按**前缀**比对（见
+          # tools/verify_windows_portable.py::commit_mismatch）—— 故无需在 PowerShell 里截断 sha，
+          # 少一处平台相关的字符串处理（PowerShell 的 Substring 与 bash 的 ${sha::7} 并不通用）。
+          python tools/verify_windows_portable.py --expect-commit ${{ github.sha }}
+
+      - name: Compress Windows Portable Release
+        run: |
           $zipName = "DeLector-${{ github.ref_name }}-Windows-x64-Portable.zip"
           Get-ChildItem -Path dist -Directory -Filter "DeLector-*-Windows-x64-Portable" | ForEach-Object {
             Compress-Archive -Path $_.FullName -DestinationPath "dist/$zipName" -Force
