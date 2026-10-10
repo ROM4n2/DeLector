@@ -228,6 +228,36 @@ def test_desktop_entry_mypy_gate_pins_windows_platform():
         )
 
 
+def test_desktop_entry_mypy_gate_includes_start_entry() -> None:
+    """桌面入口 mypy 门禁 MUST 覆盖 `start.py`（防日后被单独摘除后类型债盲区回潮）。
+
+    为什么单列一条：上一条只钉那条命令的 `--platform win32`，**不钉目标文件清单**；若有人把
+    `start.py` 从那行删掉，门禁依旧"在场"却**不再覆盖启动入口**—— 而 start.py 正是 ADR-0021
+    点名的"最真实的类型债盲区"（长期无类型门禁）。故对它单点固化。
+    """
+    text = _read_guard_file(CI_WORKFLOW)
+
+    # 与上一条同款定位：同含 mypy 与三个既有目标文件的那一行（避开说明性注释）。
+    gate_lines = [
+        line
+        for line in text.splitlines()
+        if "mypy" in line
+        and "desktop.py" in line
+        and "package_windows.py" in line
+        and "conftest.py" in line
+    ]
+    assert gate_lines, (
+        f"{CI_WORKFLOW} 找不到桌面入口的 mypy 门禁命令"
+        "（应含 `mypy ... desktop.py package_windows.py conftest.py start.py`）：门禁被删或改了目标面。"
+    )
+    missing = [line.strip() for line in gate_lines if "start.py" not in line]
+    assert not missing, (
+        f"{CI_WORKFLOW} 的桌面入口 mypy 门禁未覆盖 start.py：\n  " + "\n  ".join(missing) + "\n"
+        "start.py 是启动入口，长期无类型门禁（ADR-0021 点名的类型债盲区）；"
+        "2026-10 去掉其两处 `# type: ignore` 后已并入本条，MUST NOT 被单独摘除。"
+    )
+
+
 def test_mypy_config_locks_adoption_flags_and_stays_out_of_runtime_deps():
     """[tool.mypy] 必须锁住档位关键项；mypy 不得混入运行时依赖。"""
     text = _read_guard_file(MYPY_CONFIG)

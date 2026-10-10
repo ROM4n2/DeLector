@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 import webbrowser
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 
 # 为什么必须在最顶部就把 stdout/stderr 重配成 utf-8（本仓既有写法，见 package_windows.py 顶部）：
 # 下面那条启动横幅用 print() 打中文，而**被重定向到文件的 stdout 在 Windows 上默认按 locale/ANSI
@@ -37,7 +37,7 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 from delector.core.data_dir_bootstrap import bootstrap_data_dir
 
 
-def _noop_signal_context(*_args, **_kwargs):
+def _noop_signal_context(*_args: object, **_kwargs: object) -> AbstractContextManager[None]:
     """空 context manager：替代 uvicorn 的 capture_signals（Android 子线程禁信号用）。"""
     return nullcontext()
 
@@ -51,7 +51,9 @@ def get_local_ip() -> str:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
+        # getsockname() 被 typeshed 标成 Any（地址族相关）；AF_INET 下 [0] 本就是 str，
+        # 声明成 str 只做静态收窄、不改运行时值，顺带消掉 no-any-return。
+        ip: str = s.getsockname()[0]
         s.close()
         return ip
     except Exception:
@@ -72,7 +74,7 @@ def get_bind_host() -> str:
     return "127.0.0.1" if is_android() else "0.0.0.0"
 
 
-def open_browser(port: int):
+def open_browser(port: int) -> None:
     time.sleep(1.2)
     # Support Android Termux termux-open-url fallback
     if os.environ.get("TERMUX_VERSION") or os.path.exists("/data/data/com.termux"):
@@ -107,7 +109,7 @@ def print_banner(port: int, android: bool) -> None:
     print("  按 Ctrl+C 停止服务\n")
 
 
-def main():
+def main() -> None:
     port = 8000
     android = is_android()
     if is_port_in_use(port):
@@ -137,8 +139,11 @@ def main():
         # capture_signals，install_signal_handlers 已不存在）——两代都覆盖，
         # 否则「防护」会静默失效成一条没人调用的实例属性（mypy 抓到这个失效）。
         if threading.current_thread() is not threading.main_thread():
-            server.install_signal_handlers = lambda: None  # type: ignore[attr-defined]  # 旧 uvicorn API
-            server.capture_signals = _noop_signal_context  # type: ignore[method-assign]  # 新 uvicorn API
+            # 用 setattr(名字字符串) 覆盖两代 API：按名字赋值绕开静态属性检查（不同 uvicorn
+            # 版本声明的属性不一样，直接点属性访问会被 mypy 判 attr-defined/method-assign），
+            # 行为与直接属性赋值逐字一致 —— 不必写 `# type: ignore`（禁新增豁免）。
+            setattr(server, "install_signal_handlers", lambda: None)  # 旧 uvicorn API
+            setattr(server, "capture_signals", _noop_signal_context)  # 新 uvicorn API
     except Exception:
         pass
     # 非 daemon 线程里跑 server，主线程 join 等待；Ctrl+C 时先收尸再退出 —— 这替代了

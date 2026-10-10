@@ -259,3 +259,68 @@ def test_main_stops_server_on_keyboard_interrupt(monkeypatch):
 
     assert recorded, "Ctrl+C 时必须调用 shutdown 收尸，否则服务线程会残留"
     assert recorded[0][0] is fake_server, "shutdown 收的必须是本次起的 server"
+
+
+def test_main_covers_both_uvicorn_signal_apis_in_non_main_thread(monkeypatch):
+    """非主线程启服务时（Android/Chaquopy），MUST 同时覆盖两代 uvicorn 信号 API。
+
+    为什么两代都要覆盖：`signal.signal` 只允许在 Python **主线程**调用，故在子线程里跑 server
+    必须把「安装信号处理器」整条关掉；而 uvicorn 的 API 随版本迁移（0.52 起只剩 `capture_signals`，
+    旧的 `install_signal_handlers` 已不存在）。只覆盖其中一代 ⇒ 另一代照常调 `signal.signal`
+    ⇒ 子线程里抛「signal only works in main thread」，把服务直接带崩。
+
+    用替身 server 断言「两代入口都被装上」：这既钉住语义，也钉住「`setattr` 按名赋值」的写法
+    （改回点属性访问会被 mypy 的 skip 口径判 unused-ignore，见 ci.yml 门禁）。
+    """
+    import sys
+    import types
+
+    from delector.core import server_lifecycle
+
+    fake_server = types.SimpleNamespace(should_exit=False)
+
+    class _AlreadyFinishedThread:
+        """替身线程：join 立即返回、is_alive 恒 False（本用例只关心信号接线）。"""
+
+        daemon = False
+
+        def join(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: False)
+    monkeypatch.setattr(start, "is_android", lambda: True)  # 走回环、且不起浏览器线程
+    monkeypatch.setattr(start, "bootstrap_data_dir", lambda *_a, **_k: "")
+    monkeypatch.setattr(server_lifecycle, "build_server", lambda host, port, app: fake_server)
+    monkeypatch.setattr(server_lifecycle, "serve_in_thread", lambda server: _AlreadyFinishedThread())
+    monkeypatch.setattr(server_lifecycle, "shutdown", lambda *_a, **_k: True)
+    monkeypatch.setitem(sys.modules, "delector.server", types.SimpleNamespace(app=object()))
+
+    errors: List[Exception] = []
+
+    def _run_main() -> None:
+        try:
+            start.main()
+        except Exception as exc:  # 子线程里的异常需搬回主线程断言，否则会被静默吞掉
+            errors.append(exc)
+
+    # 必须在**非主线程**里跑 main()：信号禁用的分支只在子线程生效（这正是 Android 的处境）。
+    worker = threading.Thread(target=_run_main, name="start-main-under-test")
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "main() 在子线程里未在窗口内返回"
+    assert not errors, f"main() 在子线程里抛异常：{errors!r}"
+
+    # 旧代 API：装上的是空 no-op（可调用且返回 None）。
+    assert hasattr(fake_server, "install_signal_handlers"), (
+        "旧 uvicorn API install_signal_handlers 未被覆盖：老版本 uvicorn 会照常调 signal.signal，"
+        "在子线程里直接崩"
+    )
+    assert fake_server.install_signal_handlers() is None, "旧代信号入口必须是空 no-op"
+    # 新代 API：装上的正是模块级的空 context manager（供 capture_signals 使用）。
+    assert fake_server.capture_signals is start._noop_signal_context, (
+        "新 uvicorn API capture_signals 未被覆盖成 _noop_signal_context：新版 uvicorn 会照常调 "
+        "signal.signal，在子线程里直接崩"
+    )
