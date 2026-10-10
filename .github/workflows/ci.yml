@@ -144,3 +144,73 @@ jobs:
       - name: Go test gate (race detector)
         shell: bash
         run: cd agent && go test -race ./...
+
+  # ── Windows 产物冒烟（仅"打包面"变更时触发）────────────────────────────────────
+  # 为什么要有这个 job：build-release.yml 只在**发版 tag** 时跑，故打包面（打包脚本 / 桌面入口 /
+  # 依赖清单 / 验包脚本本身）若在合并进 master 之前就是坏的，要等到发版日才炸 —— 反馈太晚。
+  # 本 job 把「构建 + 真启验包」提前到 PR/merge 上，且只在打包面变更时点亮，避免每次 PR 都烧
+  # 一台 windows runner 跑十几分钟 PyInstaller。
+  #
+  # 为什么用 dorny/paths-filter 而非把 `paths:` 写进 workflow 的 `on:`：GitHub 的 `paths` 只作用于
+  # **整个 workflow**，挂在顶层会让不碰打包面的 PR 连 `ci` 质量闸都不跑（严重回归）。故用一个
+  # 便宜的 ubuntu job 先探路径，再让 windows 冒烟 job 用 `if` 与之联动。
+  windows-smoke-changes:
+    name: Detect packaging-surface changes
+    runs-on: ubuntu-latest
+    outputs:
+      packaging: ${{ steps.filter.outputs.packaging }}
+    steps:
+      - name: Detect packaging-surface changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # 「打包面」路径清单：命中任一 ⇒ 点亮下面的 Windows 冒烟 job。这份清单即「闸的触发面」，
+          # MUST 与 build-release.yml 的 Windows 构建面保持同源（tests/test_ci_hardening.py 逐项
+          # 钉死，防清单漂移导致"闸永不触发"——本仓有过"正则永不命中"的教训）。
+          filters: |
+            packaging:
+              - 'package_windows.py'
+              - 'desktop.py'
+              - 'start.py'
+              - 'requirements.txt'
+              - 'requirements-desktop.txt'
+              - 'tools/verify_windows_portable.py'
+              - '.github/workflows/build-release.yml'
+
+  windows-portable-smoke:
+    name: Windows Portable Smoke (build + 真启闸)
+    needs: windows-smoke-changes
+    # 手动触发（workflow_dispatch）时 paths-filter 无 base 可比 ⇒ 无条件跑，方便按需验证。
+    if: needs.windows-smoke-changes.outputs.packaging == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    # 与 ci job 同款护栏：PyInstaller 构建 + spaCy 收集较慢，但绝不放任卡死烧满默认 6 小时。
+    timeout-minutes: 30
+    env:
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 与 build-release.yml 的 Windows 装法**逐项同源**（含 requirements-desktop.txt 与 spaCy
+      # 模型）：冒烟环境若与发布环境不同，闸过了也证明不了发布产物能起。
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pytest
+          pip install -r requirements-desktop.txt
+          python -m spacy download de_core_news_sm
+
+      - name: Build Windows Portable
+        run: python package_windows.py
+
+      - name: Verify Windows Portable (真启闸)
+        # --expect-commit 传完整 GITHUB_SHA；脚本按前缀比对产物里的短 sha（详见
+        # tools/verify_windows_portable.py::commit_mismatch）。
+        run: python tools/verify_windows_portable.py --expect-commit ${{ github.sha }}

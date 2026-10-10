@@ -12,6 +12,24 @@ import time
 import webbrowser
 from contextlib import nullcontext
 
+# 为什么必须在最顶部就把 stdout/stderr 重配成 utf-8（本仓既有写法，见 package_windows.py 顶部）：
+# 下面那条启动横幅用 print() 打中文，而**被重定向到文件的 stdout 在 Windows 上默认按 locale/ANSI
+# 编码打开**（CI runner 上是 cp1252，本机是 GBK）⇒ 打中文直接抛 UnicodeEncodeError ⇒ 进程退出 1。
+# 而"输出被重定向 / 被日志采集 / 由服务或计划任务拉起"正是"当服务用"最常见的环境 —— 不加固等于
+# 这些场景下根本起不来（`DeLector.exe --server-only` 启动即崩，实测原始报错 position 13-28 即标题行汉字）。
+# 先判 `sys.stdout`/`sys.stderr` 是否为 None（--windowed 冻结后可能为 None）；errors="replace" 保证
+# 即便重配失败也不会因一个字符崩掉整个进程。
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # 数据落点必须在 `import server` **之前**定下来：`delector.core.database` 在被 import 的
 # 那一瞬就按"当时的 env"算出 DATA_DIR，之后再设 DELECTOR_DATA_DIR 毫无作用 —— 于是数据
 # 仍落在程序目录里，用户"解压新版覆盖旧目录 / 删掉旧目录"= 学习记录全空且零提示
@@ -63,6 +81,32 @@ def open_browser(port: int):
         webbrowser.open(f"http://127.0.0.1:{port}")
 
 
+def _address_lines(port: int, android: bool) -> list[str]:
+    """横幅里的地址行（Android 只监听回环、桌面端还会给出局域网地址，故两者文案不同）。"""
+    if android:
+        return [f"  ● 仅本机监听: http://127.0.0.1:{port} (应用内 WebView)"]
+    lines = [f"  ● 电脑本机访问: http://localhost:{port}"]
+    ip = get_local_ip()
+    if ip != "127.0.0.1":
+        lines.append(f"  ● 手机/平板访问: http://{ip}:{port} (同一 Wi-Fi 局域网)")
+    return lines
+
+
+def print_banner(port: int, android: bool) -> None:
+    """打印启动横幅（含中文）。
+
+    为什么抽成独立函数：这是"重定向流下打中文会崩"那条缺陷的落点，抽出来后回归锁可在真子进程里
+    直接调用它、精确复现"敌意流"（见 tests/test_start_banner_encoding.py），不必真起服务。
+    """
+    print("=" * 60)
+    print("  DeLector — 德语欧标沉浸阅读与考点剖析工作台")
+    print("=" * 60)
+    for line in _address_lines(port, android):
+        print(line)
+    print("=" * 60)
+    print("  按 Ctrl+C 停止服务\n")
+
+
 def main():
     port = 8000
     android = is_android()
@@ -78,18 +122,7 @@ def main():
     bootstrap_data_dir(os.environ)
 
     host = get_bind_host()
-    print("=" * 60)
-    print("  DeLector — 德语欧标沉浸阅读与考点剖析工作台")
-    print("=" * 60)
-    if android:
-        print(f"  ● 仅本机监听: http://127.0.0.1:{port} (应用内 WebView)")
-    else:
-        print(f"  ● 电脑本机访问: http://localhost:{port}")
-        ip = get_local_ip()
-        if ip != "127.0.0.1":
-            print(f"  ● 手机/平板访问: http://{ip}:{port} (同一 Wi-Fi 局域网)")
-    print("=" * 60)
-    print("  按 Ctrl+C 停止服务\n")
+    print_banner(port, android)
 
     if not android:
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()

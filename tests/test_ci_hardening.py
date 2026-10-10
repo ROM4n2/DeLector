@@ -520,20 +520,7 @@ def _ci_job_block(job_name: str) -> str:
     这里只需要"这个 job 自己的字段"，按缩进层级切比全文搜索更严 ——
     别的 job 写了 timeout-minutes 不算数，得是 `ci` 这个 job 自己有。
     """
-    text = _read_guard_file(CI_WORKFLOW)
-    lines = text.splitlines()
-    try:
-        start = next(i for i, line in enumerate(lines) if line == f"  {job_name}:")
-    except StopIteration:
-        pytest.fail(f"{CI_WORKFLOW} 找不到 jobs.{job_name}（两空格缩进的 `{job_name}:` 键）")
-
-    end = len(lines)
-    for i in range(start + 1, len(lines)):
-        # 下一个同级 job / 顶层键：缩进回到两空格且以 "- " 之外的内容开头
-        if lines[i].startswith("  ") and not lines[i].startswith("    ") and lines[i].strip():
-            end = i
-            break
-    return "\n".join(lines[start:end])
+    return _job_block(CI_WORKFLOW, job_name)
 
 
 def test_ci_job_has_bounded_timeout() -> None:
@@ -833,4 +820,125 @@ def test_db_cleanup_needs_no_external_binary() -> None:
     assert "os.remove(" in text, (
         "tests/db_cleanup.py 不再使用 os.remove：清理实现被改动过，"
         "请复核是否重新引入了对外部命令 / 平台专有 API 的依赖。"
+    )
+
+
+# ── Windows 产物验包闸的 CI 接线守卫（ADR-0021「替代投资#1」）────────────────────
+# 背景：build-release.yml 此前对 Windows 产物**零验证**（pytest → 打包 → 压缩 → 上传，
+# 从不真跑一次产物）。现在把 windows job 拆成「构建 / 验包 / 压缩」三步，验包用
+# tools/verify_windows_portable.py 真启一次产物。本节把两件事钉死：
+#   1. 验包步**存在**且**顺序早于**压缩与上传 —— 只断言"字符串在场"挡不住"挪到压缩之后"；
+#   2. ci.yml 的 Windows 冒烟 job 存在，且其 paths 过滤清单逐项齐全（防"闸永不触发"）。
+
+BUILD_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "build-release.yml"
+VERIFY_SCRIPT_NEEDLE = "tools/verify_windows_portable.py"
+
+# 「打包面」路径清单：改任一文件都可能让 Windows 产物变坏 ⇒ 应点亮冒烟 job。
+# 这是"闸的触发面"，与 ci.yml 内 dorny/paths-filter 的清单逐项同源。
+PACKAGING_SURFACE_PATHS: tuple[str, ...] = (
+    "package_windows.py",
+    "desktop.py",
+    "start.py",
+    "requirements.txt",
+    "requirements-desktop.txt",
+    "tools/verify_windows_portable.py",
+    ".github/workflows/build-release.yml",
+)
+
+
+def _job_block(workflow: Path, job_name: str) -> str:
+    """截出某个 workflow 文件里 jobs.<job_name> 的 YAML 文本块。
+
+    不引 pyyaml（它不在 requirements.txt，是 CI 内单独装的开发期工具）：按两空格缩进的同级键
+    切分，只取"这个 job 自己"的内容 —— 别的 job 出现同一字符串不算数，比全文搜索更严。
+    """
+    text = _read_guard_file(workflow)
+    lines = text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if line == f"  {job_name}:")
+    except StopIteration:
+        pytest.fail(f"{workflow} 找不到 jobs.{job_name}（两空格缩进的 `{job_name}:` 键）")
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        # 下一个同级 job / 顶层键：缩进回到两空格且以 "- " 之外的内容开头
+        if lines[i].startswith("  ") and not lines[i].startswith("    ") and lines[i].strip():
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def _packaging_filter_block() -> str:
+    """截出 ci.yml 里 `filters: |` 起的路径清单块（按缩进切，只认该块自己的行）。"""
+    text = _read_guard_file(CI_WORKFLOW)
+    lines = text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if line.strip() == "filters: |")
+    except StopIteration:
+        pytest.fail(f"{CI_WORKFLOW} 找不到 `filters: |`（paths 过滤清单）：Windows 冒烟 job 的触发面丢失。")
+
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    collected = []
+    for line in lines[start + 1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        collected.append(line)
+    return "\n".join(collected)
+
+
+def test_build_release_verifies_before_compress_and_upload() -> None:
+    """build-release.yml 的 windows job：验包步存在，且顺序早于压缩与上传。
+
+    为什么不只断言"字符串在场"：把验包步整段挪到 Compress-Archive 之后，字符串依旧在场，
+    而"坏产物已先进 zip/artifact"—— 闸形同虚设。故这里比**文本顺序**，钉死真实保证。
+    """
+    block = _job_block(BUILD_RELEASE_WORKFLOW, "build-windows")
+
+    assert VERIFY_SCRIPT_NEEDLE in block, (
+        f"{BUILD_RELEASE_WORKFLOW} 的 windows job 缺少验包步（未调用 {VERIFY_SCRIPT_NEEDLE}）：\n"
+        "产物将不经真启验收就压缩上传（ADR-0021 替代投资#1 的核心闸被摘）。"
+    )
+    assert "Compress-Archive" in block, (
+        f"{BUILD_RELEASE_WORKFLOW} 的 windows job 找不到 Compress-Archive：压缩步被改/被删？"
+    )
+    assert "actions/upload-artifact@" in block, (
+        f"{BUILD_RELEASE_WORKFLOW} 的 windows job 找不到 upload-artifact 步。"
+    )
+
+    verify_at = block.index(VERIFY_SCRIPT_NEEDLE)
+    compress_at = block.index("Compress-Archive")
+    upload_at = block.index("actions/upload-artifact@")
+
+    assert verify_at < compress_at, (
+        f"{BUILD_RELEASE_WORKFLOW} 的验包步出现在压缩**之后**：坏产物已先进 zip。\n"
+        "验包 MUST 早于压缩 —— 否则 zip 里装的就是那个没验过的包。"
+    )
+    assert verify_at < upload_at, (
+        f"{BUILD_RELEASE_WORKFLOW} 的验包步出现在 upload-artifact **之后**：坏产物已被上传为 CI artifact。\n"
+        "验包 MUST 早于上传。"
+    )
+
+
+def test_ci_has_windows_smoke_job_gated_on_packaging_paths() -> None:
+    """ci.yml 必须有 Windows 冒烟 job，且其 paths 过滤清单逐项齐全（防"闸永不触发"）。"""
+    text = _read_guard_file(CI_WORKFLOW)
+    assert "windows-portable-smoke:" in text, (
+        f"{CI_WORKFLOW} 缺 Windows 产物冒烟 job：打包面在合入 master 前坏了要等到发版日才炸。"
+    )
+    smoke = _job_block(CI_WORKFLOW, "windows-portable-smoke")
+    assert "runs-on: windows-latest" in smoke, "冒烟 job 必须在 windows-latest 上跑（Linux 起不了 Windows exe）。"
+    assert VERIFY_SCRIPT_NEEDLE in smoke, f"冒烟 job 必须真的调用验包脚本 {VERIFY_SCRIPT_NEEDLE}。"
+
+    # 闸必须与 paths 过滤真正联动：与过滤脱钩则 job 恒不触发 = 闸形同虚设。
+    assert "needs.windows-smoke-changes.outputs.packaging" in smoke, (
+        "冒烟 job 没有引用 paths 过滤的输出（needs.windows-smoke-changes.outputs.packaging）："
+        "job 会恒不触发 —— 这正是「闸永不触发」的失败形态。"
+    )
+
+    filter_block = _packaging_filter_block()
+    missing = [p for p in PACKAGING_SURFACE_PATHS if f"'{p}'" not in filter_block]
+    assert not missing, (
+        f"{CI_WORKFLOW} 的 paths 过滤缺少打包面关键项：{missing}\n"
+        "漏一项会让「只改该文件的 PR」不点亮冒烟 job —— 闸静默失效"
+        "（本仓有过「正则永不命中」的教训）。"
     )
