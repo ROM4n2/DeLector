@@ -1,0 +1,22 @@
+# DeLector 桌面壳（Windows）运行时依赖 —— 仅在 **Windows 打包任务**（Task 5 接线 / CI build-release）
+# 里单独安装，**绝不并入 requirements.txt**。
+#
+# 为什么不进 requirements.txt（硬约束，勿合并）
+# ------------------------------------------
+# CI 在 Linux 上按 requirements.txt 装依赖并跑全量 pytest；`import webview` 在缺 GTK/WebKit 的
+# Linux 上会直接抛异常 —— 一旦把它带进公共依赖面，任何"收集全部测试模块"的动作都会炸，弄红全部
+# 测试（而这与桌面壳的正确性无关）。故桌面依赖隔离到本文件，由 Windows 打包位点独占。
+#
+# 版本取自本机**已装并实测可用**的组合（2026-10）：
+#   pywebview 6.2.1  → 走系统 Edge WebView2（WinForms/EdgeChromium 后端）
+#   pystray   0.19.5 → Windows 托盘（内含 _win32 后端）
+#   pythonnet 3.2.1  → pywebview 的 Windows 后端（clr/WebView2）所必需
+#   pillow    12.3.0 → pystray 生成托盘图标
+#
+# 打包冻结提示（ADR-0020 §3.1，属 Task 5 的接线范围，此处仅登记）：
+#   --collect-all=webview + hidden-import（webview.platforms.edgechromium / winforms、pystray._win32）
+#   并**验包** WebView2Loader.dll、Microsoft.Web.WebView2*.dll —— 遗漏会白屏（与既有打包事故同款）。
+pywebview==6.2.1
+pystray==0.19.5
+pythonnet==3.2.1
+pillow==12.3.0

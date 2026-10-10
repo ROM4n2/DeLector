@@ -90,6 +90,7 @@ from delector.core.security import (
     parse_rss_feed,
 )
 from delector.core.utils import _attachment_headers
+from delector.core.version import APP_VERSION
 from delector.nlp_engine.linguistics import (
     build_prep_matrix,
     lookup_irregular_verb,
@@ -2611,7 +2612,23 @@ def api_health() -> Any:
         logging.getLogger("delector").exception("health check failed: database unavailable")
         return Response(
             status_code=503,
-            content=json.dumps({"status": "unhealthy", "detail": _HEALTH_DETAIL_UNAVAILABLE}, ensure_ascii=False),
+            content=json.dumps(
+                {
+                    "status": "unhealthy",
+                    "detail": _HEALTH_DETAIL_UNAVAILABLE,
+                    "app": "delector",
+                    "version": APP_VERSION,
+                },
+                ensure_ascii=False,
+            ),
             media_type="application/json; charset=utf-8",
         )
-    return {"status": "ok", "database": "ok"}
+    # 身份字段（ADR-0020 §4 前置①）：桌面壳启动时必须能凭 /api/health 分辨「这是不是
+    # DeLector」，以消除「复用别人的端口 / 跑旧进程」两类静默失败。库这一层通时就给出
+    # 应用名与版本。
+    #
+    # **503 分支同样给身份**（这一点是契约，不是"额外暴露"）：`server_lifecycle.probe_identity`
+    # 的契约是「**接受 503、只看身份**」—— 库坏但进程是 DeLector，仍算 DeLector。若 503 不带
+    # 身份，`start.py` 第二次启动会把「自己的降级实例」误报成「端口被其他程序占用」并 `exit(1)`
+    # —— 正是本任务要消灭的盲误判之镜像。身份之外（路径/栈/异常类名）仍只进服务端日志。
+    return {"status": "ok", "database": "ok", "app": "delector", "version": APP_VERSION}

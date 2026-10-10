@@ -44,6 +44,12 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 静态检查:  ruff check .       （全仓零告警门禁，CI 的 ci.yml 已接入；旧的手工 pyflakes 命令已退役）
 ```
 
+⚠️ **真实跑 `python start.py` 会触发数据外置迁移**（ADR-0019；`data_dir_bootstrap.bootstrap_data_dir`）：
+它会按桌面默认落点把仓库根的 `delector.db` / `progress.db` **改名**成 `*.bak-<时间戳>` 并复制到
+`%LOCALAPPDATA%\DeLector` —— 原件**永不删除**，但改名足以污染工作区并制造"数据丢了"的假象（已多次
+在任务实跑时发生）。**dev 验证请走两个显式出口之一**：把 `DELECTOR_DATA_DIR` 指向临时目录，或设
+`DELECTOR_PORTABLE=1` 保持"数据随程序目录"。两者都会让 bootstrap 不去搬仓库根那份真实库。
+
 **数据目录（部署面）**
 : 桌面端 `DATA_DIR` = 仓库根（`delector.db` / `progress.db` 并排），无 `DELECTOR_DATA_DIR` 兜底时
   即如此，**桌面端不设该变量**。

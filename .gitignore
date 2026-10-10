@@ -18,6 +18,10 @@ credentials.json
 *.db-shm
 *.db-wal
 *.db-journal
+# 迁移备份（`data_dir_bootstrap._retire_originals` 把旧库改名成它）：里面是**真实用户
+# 学习记录**，单个可达数 MB。上面几条 `*.db*` 都匹配不到 `.bak-<时间戳>` 后缀，
+# 故它在仓库根是「未忽略的未跟踪文件」——一次 `git add -A` 就会把用户数据提交进历史。
+*.db.bak-*
 *.apkg
 *.apk
 artifact*.html

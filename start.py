@@ -12,6 +12,12 @@ import time
 import webbrowser
 from contextlib import nullcontext
 
+# 数据落点必须在 `import server` **之前**定下来：`delector.core.database` 在被 import 的
+# 那一瞬就按"当时的 env"算出 DATA_DIR，之后再设 DELECTOR_DATA_DIR 毫无作用 —— 于是数据
+# 仍落在程序目录里，用户"解压新版覆盖旧目录 / 删掉旧目录"= 学习记录全空且零提示
+# （ADR-0019 Q2-A / Q3-B）。真正的调用在 `main()` 开头的第一个语句处（见那里的注释）。
+from delector.core.data_dir_bootstrap import bootstrap_data_dir
+
 
 def _noop_signal_context(*_args, **_kwargs):
     """空 context manager：替代 uvicorn 的 capture_signals（Android 子线程禁信号用）。"""
@@ -61,10 +67,15 @@ def main():
     port = 8000
     android = is_android()
     if is_port_in_use(port):
-        print(f"[提示] 端口 {port} 正在运行中或已被占用，正在尝试连接已有服务...")
-        if not android:
-            open_browser(port)
+        # 不再盲复用：先分辨占用者是不是 DeLector 自己（ADR-0020 §6.4），否则会为
+        # 一个无关程序打开页面。判定与动作封装在 _handle_existing_port（惰性 import）。
+        _handle_existing_port(port, android)
         return
+
+    # ⚠️ 必须在 `from delector.server import app` **之前**执行：那一行一跑，`database`
+    # 已按仓库根把 DATA_DIR 落定，此时再设 DELECTOR_DATA_DIR 就晚了。
+    # 放在端口占用早退**之后**是刻意的：已有实例在跑时不动它的库（Windows 上改名会被占用挡住）。
+    bootstrap_data_dir(os.environ)
 
     host = get_bind_host()
     print("=" * 60)
@@ -83,12 +94,10 @@ def main():
     if not android:
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
 
-    import uvicorn
-
+    from delector.core.server_lifecycle import build_server, serve_in_thread, shutdown
     from delector.server import app
 
-    config = uvicorn.Config(app, host=host, port=port, reload=False, log_level="info")
-    server = uvicorn.Server(config)
+    server = build_server(host, port, app)
     try:
         # 禁用信号处理：Android Chaquopy 在子线程里跑 server，而 signal.signal 只允许
         # 在 Python 主线程调用。注意 uvicorn 的 API 随版本迁移（0.52 起只有
@@ -99,7 +108,42 @@ def main():
             server.capture_signals = _noop_signal_context  # type: ignore[method-assign]  # 新 uvicorn API
     except Exception:
         pass
-    server.run()
+    # 非 daemon 线程里跑 server，主线程 join 等待；Ctrl+C 时先收尸再退出 —— 这替代了
+    # 原来裸 `server.run()` 的「无退出控制」，消除「壳退了服务还残留」的静默失败。
+    thread = serve_in_thread(server)
+    try:
+        thread.join()
+    except KeyboardInterrupt:
+        print("\n[提示] 收到停止信号，正在收尸...")
+    # join 之后再收一次是**有意保留**的兜底：覆盖 KeyboardInterrupt 之外的退出路径。
+    # `shutdown` 是幂等的（置 should_exit + join 一个已结束的线程都无副作用），重复调用安全
+    # —— 勿当成"重复 shutdown 的 bug"删除。
+    shutdown(server, thread)
+    print("[提示] 服务已停止。")
+
+
+def _handle_existing_port(port: int, android: bool) -> None:
+    """端口已被占用时的处理：先分辨占用者是不是 DeLector 自己，再决定动作。
+
+    - 是 DeLector（`probe_identity` 为真，含库坏时的 503）⇒ 保持既有行为：提示 + 打开
+      浏览器指向已有实例，然后返回（不重复起服务）。
+    - 不是 DeLector ⇒ 明确报错并退出，**绝不**为无关程序打开页面（ADR-0020 §6.4）。
+
+    这里用**惰性 import** 而非文件顶部导入：本函数定义在 main() 之后，其 import 语句
+    的行号才大于 main() 里 `bootstrap_data_dir(...)` 的调用行号 —— 否则会撞上
+    tests/test_desktop_data_dir_bootstrap.py::test_start_py_bootstrap_precedes_every_delector_import
+    （那条闸钉「bootstrap 必须早于任何 delector.* 导入」，以保 DATA_DIR 在被冻结前定好）。
+    """
+    from delector.core.server_lifecycle import probe_identity
+
+    if probe_identity(port):
+        print(f"[提示] DeLector 已在端口 {port} 运行，正在打开已有页面...")
+        if not android:
+            open_browser(port)
+        return
+    print(f"[错误] 端口 {port} 已被其他程序占用，无法启动 DeLector。")
+    print("       请关闭占用该端口的程序，或结束残留的 DeLector 进程后重试。")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

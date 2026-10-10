@@ -202,9 +202,20 @@ a {
   animation: pulse 2.4s ease-in-out infinite;
 }
 
-/* 顶栏 System 版本号兼作「手动检查更新」入口（update.js 绑 click）。 */
-.topbar-inner .right {
+/* 顶栏版本号兼作手动检查入口，反馈必须区别于普通元数据才能被发现。 */
+#topbar-system {
   cursor: pointer;
+  transition: color var(--dur-fast) ease;
+}
+#topbar-system:hover,
+#topbar-system:focus-visible {
+  color: var(--coral, var(--accent));
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+#topbar-system:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 3px;
 }
 
 /* ── 顶栏版本更新 chip（落后时唯一可见的更新状态承载）── */
