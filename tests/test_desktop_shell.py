@@ -590,6 +590,10 @@ def test_window_ops_run_only_after_webview_start_at_runtime(
         def load_url(self, _url: str) -> None:
             order.append("load_url")
 
+        def show(self) -> None:
+            # 双窗口方案会显式 show 主窗口；替身补上以便仍能钉住"写入晚于 start"的顺序锁。
+            order.append("show")
+
         def destroy(self) -> None:
             order.append("destroy")
 
@@ -621,6 +625,183 @@ def test_window_ops_run_only_after_webview_start_at_runtime(
         f"窗口写入早于 webview.start()（P0 死锁形状）：order={order}"
     )
     assert code == 0
+
+
+# ── 主窗口可缩放回归锁：真实 UI 绝不得被塞进 frameless/on_top 的 splash 窗口 ──────
+# 缺陷现场：就绪后只对 splash（frameless=True, on_top=True, 430x270）load_url ⇒ 真实 UI 被关进
+# 一个无标题栏（无最大化/还原按钮、无可拖边）、永远置顶的小窗。下列锁用**录制的 fake webview**
+# 捕获建窗 kwargs 与调用顺序（不只断言"函数存在"），把"最终窗口是普通可缩放窗口"钉死。
+def _install_recording_webview(
+    monkeypatch: pytest.MonkeyPatch,
+    mod: Any,
+    order: List[str],
+    record: Dict[str, Any],
+) -> None:
+    """装一个记录调用顺序的假 `webview`：两窗口按 `hidden` 区分（main=隐藏, splash=非隐藏）。"""
+
+    class _Signal:
+        def __init__(self) -> None:
+            self.handlers: List[Any] = []
+
+        def __iadd__(self, other: Any) -> "_Signal":
+            self.handlers.append(other)
+            return self
+
+    class _Events:
+        def __init__(self) -> None:
+            self.closed = _Signal()
+
+    class _FakeWindow:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.events = _Events()
+
+        def evaluate_js(self, _script: str) -> None:
+            order.append(f"{self.name}.evaluate_js")
+
+        def load_url(self, _url: str) -> None:
+            order.append(f"{self.name}.load_url")
+
+        def show(self) -> None:
+            order.append(f"{self.name}.show")
+
+        def destroy(self) -> None:
+            order.append(f"{self.name}.destroy")
+
+    windows: Dict[str, "_FakeWindow"] = {}
+    created: List[Dict[str, Any]] = []
+
+    def _create_window(*_a: Any, **kwargs: Any) -> "_FakeWindow":
+        name = "main" if kwargs.get("hidden") else "splash"
+        created.append(kwargs)
+        window = _FakeWindow(name)
+        windows[name] = window
+        order.append(f"create:{name}")
+        return window
+
+    def _start(func: Any = None, args: Any = None, **_k: Any) -> None:
+        order.append("start")
+        if func is not None:
+            func(*(args or ()))
+
+    fake_webview: Any = types.ModuleType("webview")
+    fake_webview.create_window = _create_window
+    fake_webview.start = _start
+
+    monkeypatch.setitem(sys.modules, "webview", fake_webview)
+
+    # 就绪门用替身返回 True，并把"就绪时刻"记进 order，供断言"show 在就绪之后"。
+    def _ready(*_a: Any, **_k: Any) -> bool:
+        order.append("await_ready")
+        return True
+
+    monkeypatch.setattr(mod, "await_ready", _ready)
+    monkeypatch.setattr(mod, "_message_box", lambda *_a, **_k: None)
+
+    def _trap_tray(window: Any, coordinator: Any, log_path: str) -> None:
+        order.append("tray")
+        record["coordinator"] = coordinator
+
+    monkeypatch.setattr(mod, "_start_tray", _trap_tray)
+
+    record["windows"] = windows
+    record["created"] = created
+
+
+def test_main_window_is_created_as_a_normal_resizable_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """主窗口建窗参数必须是"普通可缩放窗口"：有边框、非置顶、够大、有 min_size。
+
+    症状"没法放大缩写、没法做尺寸变化"的根因就是真实 UI 落在了 frameless 的无标题小窗里；
+    这条锁直接检查交给 `webview.create_window` 的 kwargs，杜绝"函数存在但参数回退"的假绿。
+    """
+    mod = _mod()
+    order: List[str] = []
+    record: Dict[str, Any] = {}
+    _install_recording_webview(monkeypatch, mod, order, record)
+
+    code = mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+
+    assert code == 0
+    created: List[Dict[str, Any]] = record["created"]
+    mains = [kwargs for kwargs in created if kwargs.get("hidden") is True]
+    assert len(mains) == 1, f"必须恰有一个隐藏的主窗口（就绪后显示），实际 {len(mains)}"
+    main = mains[0]
+
+    assert main.get("frameless") is False, "主窗口必须有边框（无边框 ⇒ 无标题栏 ⇒ 无最大化/还原按钮、无可拖边）"
+    assert main.get("on_top") is False, "主窗口不得永远置顶（只有 splash 才刻意置顶）"
+    assert main.get("width", 0) >= 1200 and main.get("height", 0) >= 800, (
+        f"主窗口默认尺寸必须够大：width={main.get('width')} height={main.get('height')}"
+    )
+    assert tuple(main.get("min_size", (0, 0))) >= (900, 600), "主窗口必须给可缩放下限 min_size"
+
+    splashes = [kwargs for kwargs in created if kwargs.get("frameless") is True]
+    assert len(splashes) == 1, "splash 仍应保留为无边框小窗（这是刻意的启动反馈设计）"
+
+
+def test_final_ui_is_the_main_window_shown_after_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """最终呈现给用户的必须**不是** splash：就绪后 show 主窗口 + 销毁 splash，且 show 在就绪之后。
+
+    同时钉住顺序：先亮主窗口再销毁 splash —— 否则销毁瞬间零窗口会让 pywebview 的 GUI 循环提前退出。
+    """
+    mod = _mod()
+    order: List[str] = []
+    record: Dict[str, Any] = {}
+    _install_recording_webview(monkeypatch, mod, order, record)
+
+    mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+
+    assert "main.show" in order, "必须显式 show 主窗口，否则用户看到的仍是 splash"
+    assert "splash.destroy" in order, "就绪后必须销毁 splash（否则它永不消失）"
+    assert "main.load_url" in order, "主窗口必须加载真实 UI"
+    assert order.index("main.show") > order.index("await_ready"), "主窗口显示必须发生在服务就绪之后"
+    assert order.index("main.show") < order.index("splash.destroy"), (
+        "必须先亮主窗口再销毁 splash：否则瞬间零窗口 ⇒ GUI 循环提前退出"
+    )
+
+    # 硬约束②回归：任何窗口操作都不得早于 webview.start()（P0 死锁形状）。
+    start_index = order.index("start")
+    for op in ("main.show", "main.load_url", "splash.destroy", "splash.evaluate_js"):
+        assert order.index(op) > start_index, f"{op} 早于 webview.start()（P0 死锁形状）：order={order}"
+
+
+def test_main_window_close_requests_quit_and_reaps_splash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """主窗口关闭 ⇒ 接到统一收尸触发器；且若 splash 仍在要一并销毁。
+
+    `webview.start()` 阻塞到**所有**窗口关闭；主窗口关而 splash 尚存会使循环永不返回 ⇒ 进程挂起。
+    """
+    mod = _mod()
+    order: List[str] = []
+    record: Dict[str, Any] = {}
+    _install_recording_webview(monkeypatch, mod, order, record)
+
+    mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+
+    main = record["windows"]["main"]
+    coordinator = record["coordinator"]
+    assert coordinator is not None and coordinator.requested is False, "前置：主窗口关闭前不应已请求退出"
+    assert main.events.closed.handlers, "主窗口的 closed 事件必须被接线（否则关窗不收尸）"
+
+    for handler in main.events.closed.handlers:
+        handler()
+
+    assert coordinator.requested is True, "主窗口关闭必须触发统一收尸触发器（QuitCoordinator）"
+
+
+def test_on_main_closed_destroys_a_surviving_splash(tmp_path: Path):
+    """`_on_main_closed`：标记退出 + 销毁仍在的 splash（否则 start() 永不返回）。"""
+    mod = _mod()
+    destroyed: List[int] = []
+
+    class _Splash:
+        def destroy(self) -> None:
+            destroyed.append(1)
+
+    coordinator = mod.QuitCoordinator()
+
+    mod._on_main_closed(_Splash(), coordinator, str(tmp_path / "launch.log"))
+
+    assert coordinator.requested is True, "关主窗口 = 请求退出"
+    assert destroyed == [1], "主窗口关闭时若 splash 还在，必须一并销毁"
 
 
 # ── 入口分派：默认=桌面窗口；`--server-only`=既有服务行为（Task 5 行为变化）────────
