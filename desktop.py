@@ -9,6 +9,10 @@ r"""DeLector Windows 桌面壳：pywebview 窗口 + pystray 托盘 + 统一退�
   `serve_in_thread`（**非 daemon**）；托盘（pystray）放**独立线程**。
 - **四条必须一起做的前置**（缺一即静默失败）：① 退出收尸；② 启动反馈（splash 分阶段）；
   ③ WebView2 运行时检测；④ 日志（`launch.log`）与失败弹窗。
+- **双窗口（方案 A）**：splash 是无边框置顶小窗（启动反馈）；真实 UI 住在**另一个普通可缩放
+  窗口**（有标题栏、可最大化/还原/拖边、不置顶，初始隐藏），就绪后亮主窗口并销毁 splash。
+  二者需求相反（置顶/无边框 vs 可缩放/有标题栏），共用一个窗口会把真实 UI 关进无标题栏小窗
+  —— 即"没法放大、没法改尺寸"的成因。
 - **可安全 import**：模块顶层**不**导入 webview / pystray、不启动任何东西；重活只在
   `run_desktop()` 与 `if __name__ == "__main__":` 内发生（CI 缺 GTK/WebKit 时 import 不会炸）。
 
@@ -62,6 +66,17 @@ WEBVIEW2_DOWNLOAD_URL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 
 # Release 页：托盘「检查更新」直接打开它（与 /api/update/check 的 page_url 同源语义）。
 RELEASE_PAGE_URL = "https://github.com/ROM4n2/DeLector/releases"
+
+# ── 窗口几何：splash 是刻意的小窗启动反馈；主窗口必须是**普通可缩放窗口** ─────────
+# 为什么拆成两个窗口（方案 A）：splash 需要无边框 + 置顶才有"启动反馈"的观感，而真实 UI 必须有
+# 标题栏（最大化/还原/拖边）且不得永远置顶。二者需求相反，同一个窗口无法兼得 —— 旧实现复用同一个
+# splash 窗口 load_url，把真实 UI 关进无标题栏小窗（本次缺陷：没法放大、没法改尺寸）。
+SPLASH_WIDTH = 430
+SPLASH_HEIGHT = 270
+MAIN_WINDOW_TITLE = "DeLector"
+MAIN_WINDOW_WIDTH = 1280
+MAIN_WINDOW_HEIGHT = 820
+MAIN_WINDOW_MIN_SIZE: Tuple[int, int] = (900, 600)
 
 # ── splash 分阶段文案（启动反馈：ADR-0020 §4 前置②）──────────────────────────
 SPLASH_LOADING_MODEL = "正在加载德语模型…"
@@ -365,6 +380,8 @@ def _destroy_window(window: Any, log_path: str) -> None:
 
     失败路径**必须真正结束进程**：不能只弹窗然后把一个空 splash 永远挂着（那正是本次事故的形态）。
     销毁失败也要留痕，否则又回到"窗口不出、零线索"。
+
+    对已被销毁的窗口重复调用是**安全**的（pywebview 在实例已消失时静默返回）。
     """
     try:
         window.destroy()
@@ -372,8 +389,31 @@ def _destroy_window(window: Any, log_path: str) -> None:
         _append_log(log_path, f"销毁窗口失败：{exc!r}")
 
 
+def _abort_windows(splash: Any, main: Any, coordinator: QuitCoordinator, log_path: str) -> None:
+    """就绪失败 / 异常时的收尾：标记退出并销毁**两个**窗口。
+
+    为什么两个都要销毁：pywebview 的 GUI 循环在**最后一个**窗口关闭时才退出（winforms 平台在
+    `BrowserView.instances` 清空时调 `Application.Exit`）。只销毁 splash 而隐藏的主窗口仍存活 ⇒
+    `start()` 永不返回 ⇒ 进程挂着不退（与 P0 同形的静默挂起）。
+    """
+    coordinator.request_quit()
+    _destroy_window(splash, log_path)
+    _destroy_window(main, log_path)
+
+
+def _on_main_closed(splash: Any, coordinator: QuitCoordinator, log_path: str) -> None:
+    """主窗口关闭 = 用户显式退出：标记统一收尸触发器，并把仍在的 splash 一并销毁。
+
+    为什么必须销毁 splash：GUI 循环在最后一个窗口关闭时才退出；若主窗口先关而 splash 仍在（就绪后
+    销毁与关窗之间的竞态边界），循环永不返回。对已销毁的 splash 重复销毁是安全的（见 `_destroy_window`）。
+    """
+    coordinator.request_quit()
+    _destroy_window(splash, log_path)
+
+
 def _after_start(
-    window: Any,
+    splash: Any,
+    main: Any,
     coordinator: QuitCoordinator,
     port: int,
     log_path: str,
@@ -386,46 +426,54 @@ def _after_start(
     （`scratch/repro_splash_deadlock.py` 三模式实测），窗口永不出现、进程永不退出。放进 `func` 后
     循环已在跑，evaluate_js / load_url 都安全。
 
-    `result` 是回传给主线程 `_show_window` 的退出码容器：失败时置 1 并**销毁窗口**，让
+    就绪后**切到主窗口**（方案 A 的双窗口）：先 `main.show()` 亮出普通可缩放窗口，再
+    `main.load_url(...)` 加载真实 UI，最后 `splash.destroy()` 收掉启动反馈。顺序不可颠倒：
+    销毁 splash 前主窗口必须已在（否则瞬间零窗口 ⇒ GUI 循环提前退出）。
+
+    `result` 是回传给主线程 `_show_window` 的退出码容器：失败时置 1 并**销毁两个窗口**，让
     `webview.start()` 得以返回（否则进程会挂着一个空 splash 永不退出）。
     """
     try:
-        _set_splash_stage(window, SPLASH_STARTING_SERVER, log_path)
+        _set_splash_stage(splash, SPLASH_STARTING_SERVER, log_path)
         _append_log(log_path, "等待服务就绪…")
         if not await_ready(port, deadline_s=READY_DEADLINE_S):
             # 就绪失败必须**可见**：日志 + 弹窗 + 真正结束进程（不留空 splash）。
             _append_log(log_path, "服务在就绪窗口内未就绪：提示用户并退出。")
             _message_box("DeLector 启动超时", f"本地服务在 {READY_DEADLINE_S:.0f}s 内未就绪，详情见 launch.log。")
             result[0] = 1
-            coordinator.request_quit()
-            _destroy_window(window, log_path)
+            _abort_windows(splash, main, coordinator, log_path)
             return
         _append_log(log_path, "服务已就绪。")
-        _set_splash_stage(window, SPLASH_READY, log_path)
-        _append_log(log_path, f"切换到真实 UI：http://127.0.0.1:{port}")
-        window.load_url(f"http://127.0.0.1:{port}")
+        _set_splash_stage(splash, SPLASH_READY, log_path)
+        _append_log(log_path, f"切换到主窗口（真实 UI）：http://127.0.0.1:{port}")
+        main.show()  # 先亮主窗口：此刻起至少有一个窗口在，销毁 splash 不会触发 GUI 循环退出
+        main.load_url(f"http://127.0.0.1:{port}")  # 再把真实 UI 载入主窗口（非 splash）
+        _destroy_window(splash, log_path)  # 最后收掉 splash（实例非空 ⇒ 不触发 Application.Exit）
+        _append_log(log_path, "已切换到主窗口，splash 已关闭。")
     except Exception as exc:
         # 后台线程里的异常若不接住，线程会**静默死亡**（又回到"窗口不出、零线索"）；必须留痕并收尾。
         _append_log(log_path, f"就绪/切 UI 阶段异常：{exc!r}")
         result[0] = 1
-        coordinator.request_quit()
-        _destroy_window(window, log_path)
+        _abort_windows(splash, main, coordinator, log_path)
 
 
 def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str) -> int:
-    """建 splash → 起托盘 → 进主线程事件循环；就绪等待与切 UI 交给 `_after_start`。
+    """建 splash + 主窗口 → 起托盘 → 进主线程事件循环；就绪等待与切 UI 交给 `_after_start`。
+
+    两个窗口（方案 A）：splash 无边框置顶小窗（启动反馈）；主窗口是**普通可缩放窗口**（有标题栏、
+    可最大化/还原/拖边、不置顶、初始隐藏）。就绪后由 `_after_start` 亮主窗口并销毁 splash。
 
     时序是本次 P0 死锁的核心：先 `create_window`，再 **`webview.start(_after_start, ...)` 把事件循环
-    跑起来**，最后让 `_after_start` 在循环内做 `_set_splash_stage` / `await_ready` / `load_url`。
+    跑起来**，最后让 `_after_start` 在循环内做 `_set_splash_stage` / `await_ready` / `show` / `load_url`。
     """
     import webview  # 惰性：GUI 依赖不得进模块顶层（CI 无 GUI 时 import desktop 不能炸）
 
     coordinator = QuitCoordinator()
     splash = webview.create_window(
-        "DeLector",
+        MAIN_WINDOW_TITLE,
         html=_splash_html(SPLASH_LOADING_MODEL),
-        width=430,
-        height=270,
+        width=SPLASH_WIDTH,
+        height=SPLASH_HEIGHT,
         frameless=True,
         on_top=True,
     )
@@ -436,13 +484,35 @@ def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str
         _message_box("DeLector 启动失败", "无法创建桌面窗口，详情见 launch.log。")
         return 1
     _append_log(log_path, "已创建 splash 窗口。")
-    splash.events.closed += lambda: coordinator.request_quit()  # 关窗 = 请求退出（与托盘同一路径）
-    _start_tray(splash, coordinator, log_path)
+
+    main = webview.create_window(
+        MAIN_WINDOW_TITLE,
+        html=_splash_html(SPLASH_READY),
+        width=MAIN_WINDOW_WIDTH,
+        height=MAIN_WINDOW_HEIGHT,
+        min_size=MAIN_WINDOW_MIN_SIZE,
+        frameless=False,  # 有标题栏 ⇒ 有最大化/还原按钮、可拖边（缺陷修复要点）
+        on_top=False,  # 不得永远置顶（置顶是 splash 的刻意行为，不是 UI 该有的）
+        hidden=True,  # 就绪前不显示（否则用户会看到空窗）
+    )
+    if main is None:
+        # 同 splash 分支：原生窗口要到 `webview.start()` 才建，此处直接返回即可（进程随 run_desktop
+        # 返回退出，无残留窗口）。**不得**在此调 destroy —— 任何窗口操作都必须在 start 之后（P0 约束）。
+        _append_log(log_path, "webview.create_window 返回 None（主窗口）：无法创建桌面窗口。")
+        _message_box("DeLector 启动失败", "无法创建桌面窗口，详情见 launch.log。")
+        return 1
+    _append_log(log_path, "已创建主窗口（普通可缩放窗口，就绪后显示）。")
+
+    # 退出语义重钉：主窗口关闭 = 用户显式退出 ⇒ 接统一收尸触发器；若 splash 仍在则一并销毁
+    # （否则 GUI 循环在最后一个窗口关闭前不会返回）。splash 无法被用户关闭（无边框无控件，仅程序销毁），
+    # 故不为它接线 closed —— 那只会让"退出标记"被程序性销毁误触发。
+    main.events.closed += lambda: _on_main_closed(splash, coordinator, log_path)
+    _start_tray(main, coordinator, log_path)
     _append_log(log_path, "托盘线程已启动。")
 
     result: List[int] = [0]  # 由 _after_start（后台线程）写回：失败=1，成功保持 0
     _append_log(log_path, "进入 GUI 事件循环（webview.start）。")
-    webview.start(_after_start, (splash, coordinator, port, log_path, result))  # 阻塞主线程直到窗口关闭
+    webview.start(_after_start, (splash, main, coordinator, port, log_path, result))  # 阻塞直到所有窗口关闭
     _append_log(log_path, "GUI 事件循环已退出（窗口已关闭）。")
     return result[0]
 
