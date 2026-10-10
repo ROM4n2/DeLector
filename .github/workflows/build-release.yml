@@ -30,6 +30,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller pytest
+          # 桌面壳依赖（pywebview/pystray/pythonnet）只在这里装：`import webview` 在缺
+          # GTK/WebKit 的 Linux 上会直接抛异常，故绝不并入 requirements.txt，Linux/macOS
+          # job 也不装它（与桌面壳正确性无关，且会让它们全红）。
+          pip install -r requirements-desktop.txt
           python -m spacy download de_core_news_sm
 
       - name: Run Tests

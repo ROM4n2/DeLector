@@ -41,4 +41,4 @@ warn_redundant_casts = true
 exclude = '(\.venv|dist|android|scratch|tools/raw|(^|/)build(/|$))'
 
 # 显式声明检查面：本地裸跑 `python -m mypy` 即与 CI 同口径，避免漏参导致口径漂移
-files = ["delector", "tests", "tools", "conftest.py", "start.py", "package_windows.py"]
+files = ["delector", "tests", "tools", "conftest.py", "start.py", "desktop.py", "package_windows.py"]

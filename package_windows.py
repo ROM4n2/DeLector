@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+from typing import List, Tuple
 
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     try:
@@ -19,6 +20,40 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+
+# ── 验包自检：产物必须含 WebView2 运行时 DLL ─────────────────────────────────
+# pywebview 走系统 Edge WebView2；漏收这两个 DLL，exe 能起、窗口却**白屏**（无报错弹窗）
+# —— 与 v4.8.1（routes_corpus 漏登记） / v5.2.0（routes_rtc/exam 漏登记）同款的
+# "本地全绿、打包后静默失败"。故构建后**硬自检**，缺失即非零退出。
+REQUIRED_WEBVIEW2_DLL_NEEDLES: Tuple[str, ...] = (
+    "WebView2Loader.dll",
+    "Microsoft.Web.WebView2",
+)
+
+
+def verify_webview2_payload(release_dir: str) -> List[str]:
+    """递归扫描产物目录，返回**缺失**的 WebView2 DLL 清单（空清单 = 通过）。
+
+    大小写不敏感（Windows 文件名大小写不固定）；递归（DLL 落在 `_internal/webview/lib/`
+    之类的子目录，只扫顶层会漏判 ⇒ 白屏包被放行）。
+    """
+    names: List[str] = []
+    for _dirpath, _dirnames, filenames in os.walk(release_dir):
+        names.extend(name.lower() for name in filenames)
+    return [needle for needle in REQUIRED_WEBVIEW2_DLL_NEEDLES if not any(needle.lower() in name for name in names)]
+
+
+def assert_webview2_payload(release_dir: str) -> None:
+    """缺 DLL ⇒ 打印缺失清单并**非零退出**（构建失败），绝不只打印警告就放行。"""
+    missing = verify_webview2_payload(release_dir)
+    if not missing:
+        return
+    print("[Error] 打包产物缺少 WebView2 运行时 DLL ⇒ 解压后双击会**白屏**（窗口起不来、无报错）：")
+    for name in missing:
+        print(f"    - {name}")
+    print("        这与 v4.8.1 / v5.2.0 的漏模块事故同款：本地全绿、打包后静默失败。")
+    sys.exit(1)
 
 
 def build_windows():
@@ -103,7 +138,14 @@ def build_windows():
         "--hidden-import=httpx",
         "--collect-all=de_core_news_sm",
         "--collect-all=spacy",
-        os.path.join(root_dir, "start.py"),
+        # Windows 桌面壳冻结项（ADR-0020 §3.1，按 pywebview 官方 PyInstaller 建议）：
+        # pywebview 走系统 Edge WebView2，必须整包收集 webview 及其 Windows 后端，
+        # 否则冻结后 import 失败 / 窗口白屏（本地 pytest 全绿）。
+        "--collect-all=webview",
+        "--hidden-import=webview.platforms.edgechromium",
+        "--hidden-import=webview.platforms.winforms",
+        "--hidden-import=pystray._win32",
+        os.path.join(root_dir, "desktop.py"),
     ]
 
     print("\n[1/3] 正在编译二进制可执行程序并收集依赖与 spaCy 语言模型...")
@@ -122,7 +164,10 @@ def build_windows():
     if os.path.exists(built_output):
         shutil.move(built_output, release_dir)
 
-    # 4. Copy helper files
+    # 4. 验包：产物必须含 WebView2 运行时 DLL（缺 ⇒ 解压后白屏）。硬失败，非警告。
+    assert_webview2_payload(release_dir)
+
+    # 5. Copy helper files
     readme_content = f"""# DeLector — 德语学术精读与备考工作台 ({version} 绿色便携版)
 
 ## 🚀 启动方式
