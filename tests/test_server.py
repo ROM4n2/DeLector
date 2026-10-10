@@ -3,6 +3,7 @@
 # `mypy --follow-imports=skip tests` 跑，skip 下 fastapi 降 Any 使这些 ignore 变
 # unused，故文件级豁免 unused-ignore（其它错误码仍全查）。
 # mypy: disable-error-code="unused-ignore"
+import ast
 import asyncio
 import gc
 import ipaddress
@@ -4666,6 +4667,215 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         spec = open(spec_path, encoding="utf-8").read()
         for mod in required_modules:
             assert f"'{_mod_prefix(mod)}{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
+
+
+def _workflow_job_segment(workflow: str, job: str) -> str:
+    """截取 workflow 中某个 job 的文本段（从 `  <job>:` 头到下一个 `  <name>:` 头）。
+
+    为什么按 job 头切片而非只 `wf.count(...)`：只数出现次数不钉"落在哪个 job" —— 把安装整体
+    挪到 Linux job 里，count 仍是 1、断言照样绿。切片后即可断言"Windows 段含、Linux/macOS 段不含"。
+    job 头缩进恰好 2 空格（其 body 至少 4 空格），故 `^  name:` 只会命中 job 边界。
+    """
+    header = re.compile(rf"^  {re.escape(job)}:\s*$", re.M).search(workflow)
+    assert header is not None, f"build-release.yml 缺 job {job!r}"
+    boundary = re.compile(r"^  [A-Za-z0-9_-]+:\s*$", re.M).search(workflow, header.end())
+    return workflow[header.start() : boundary.start() if boundary else len(workflow)]
+
+
+def test_windows_portable_entry_is_desktop_shell_and_isolates_desktop_deps():
+    """Windows 便携包入口改为桌面壳 `desktop.py`，且桌面依赖只在 Windows 位点安装。
+
+    为什么入口要换成 desktop.py：Task 4 的 pywebview 桌面壳（窗口 + 托盘）才是"双击 exe"
+    该有的形态；旧的 `start.py` 只起服务 + 开浏览器，不是桌面应用。
+
+    为什么桌面依赖**不并** requirements.txt：`import webview` 在缺 GTK/WebKit 的 Linux 上
+    直接抛异常 —— 一旦进公共依赖面，CI 在 Linux 装依赖 / 收集测试就会炸，而这与桌面壳
+    的正确性无关。故桌面依赖独占 `requirements-desktop.txt`，且**只允许** Windows 位点安装。
+
+    为什么不但数次数（见 `_workflow_job_segment`）：`wf.count(...) == 1` 不钉"落在哪个 job"，
+    把安装整体挪到 Linux job 仍绿。故额外钉 job 边界：build-windows 段必须含、build-linux /
+    build-macos 段必须不含。
+    """
+    pkg = open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read()
+    wf = open(os.path.join(ROOT, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
+
+    assert "desktop.py" in pkg, "Windows 便携包入口必须是桌面壳 desktop.py"
+    assert '"start.py"' not in pkg, "入口已改为 desktop.py，不得残留旧的 start.py 入口"
+
+    # count==1 钉"只装一次"；job 边界钉"装对了 job"（二者缺一都能被绕过）。
+    assert wf.count("requirements-desktop.txt") == 1, (
+        "requirements-desktop.txt 只允许在 Windows 位点安装一次"
+        "（Linux/macOS 装了会因缺 GTK/WebKit 崩，且与桌面壳正确性无关）"
+    )
+    assert "pip install -r requirements-desktop.txt" in _workflow_job_segment(wf, "build-windows"), (
+        "build-windows 位点缺桌面依赖安装步骤"
+    )
+    for job in ("build-linux", "build-macos"):
+        assert "requirements-desktop.txt" not in _workflow_job_segment(wf, job), (
+            f"{job} 不得安装桌面依赖：Linux/macOS 缺 GTK/WebKit，装了必崩且与桌面壳无关"
+        )
+
+    # 依赖隔离反向钉：requirements.txt 必须零桌面依赖（防被顺手合并）。
+    # pillow 同为桌面独占（pystray 生成托盘图标用），一并纳入黑名单。
+    req = open(os.path.join(ROOT, "requirements.txt"), encoding="utf-8").read()
+    for dep in ("pywebview", "pystray", "pythonnet", "pillow"):
+        assert dep not in req, f"{dep} 不得进 requirements.txt：会污染 Linux/Android 依赖面"
+
+
+def test_windows_portable_declares_webview2_freeze_items():
+    """打包冻结项：按 pywebview 官方 PyInstaller 建议收集 webview 包 + Windows 平台后端。
+
+    漏收 ⇒ `webview.platforms.winforms` / `edgechromium` 在冻结后 import 失败，exe 起得来
+    却拉不起窗口（白屏 / 直接崩），而本地 pytest 全绿。
+    """
+    pkg = open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read()
+
+    for needle in (
+        "--collect-all=webview",
+        "--hidden-import=webview.platforms.edgechromium",
+        "--hidden-import=webview.platforms.winforms",
+        "--hidden-import=pystray._win32",
+    ):
+        assert needle in pkg, f"{needle} 未在 package_windows.py 的冻结项中"
+
+
+def test_windows_portable_declares_webview2_payload_verification():
+    """Windows 便携包必须**构建后自检** WebView2 运行时 DLL，且缺了就**硬失败**。
+
+    为什么这是"最能防事故"的一条：pywebview 走系统 Edge WebView2，一旦打包漏收
+    WebView2Loader.dll / Microsoft.Web.WebView2*.dll，exe 能起、窗口却**白屏**（无报错弹窗）
+    —— 与 v4.8.1（routes_corpus 漏） / v5.2.0（routes_rtc/exam 漏）同款的"本地全绿、
+    打包后静默失败"。故断言：① 自检函数存在；② 所需 DLL 清单完整登记（删一项即白屏）；
+    ③ 缺失走**非零退出**（不是打印警告）；④ 文案点名"白屏"，让后人看懂为何不能删。
+    """
+    pkg = open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read()
+
+    assert "verify_webview2_payload" in pkg, "缺构建后自检函数：漏收 WebView2 DLL 会白屏而无人发现"
+    assert "assert_webview2_payload" in pkg, "缺「缺失即失败」的执行入口（自检与失败处置分离更好测）"
+
+    for needle in ("WebView2Loader.dll", "Microsoft.Web.WebView2"):
+        assert needle in pkg, f"WebView2 DLL 清单缺 {needle!r}：漏了它 exe 就白屏"
+
+    assert "白屏" in pkg, "失败文案必须点明后果（白屏），否则后人会把自检当噪音删掉"
+
+
+def test_verify_webview2_payload_reports_missing_dlls_recursively(tmp_path):
+    """行为级：递归 + 大小写不敏感地查 WebView2 DLL；缺谁就精确点名谁。
+
+    产物里 DLL 落在 `_internal/webview/lib/` 之类的**子目录**，只扫顶层会漏判 ⇒ 白屏放行。
+    """
+    import package_windows
+
+    nested = tmp_path / "_internal" / "webview" / "lib"
+    nested.mkdir(parents=True)
+    (nested / "webview2loader.dll").write_bytes(b"")  # 小写：大小写不敏感
+    (nested / "Microsoft.Web.WebView2.Core.dll").write_bytes(b"")
+    assert package_windows.verify_webview2_payload(str(tmp_path)) == [], "齐全时不得误报缺失"
+
+    (nested / "Microsoft.Web.WebView2.Core.dll").unlink()
+    missing = package_windows.verify_webview2_payload(str(tmp_path))
+    assert missing == ["Microsoft.Web.WebView2"], f"缺失清单必须精确点名，实际 {missing}"
+
+
+def test_assert_webview2_payload_hard_fails_when_dll_missing(tmp_path):
+    """缺 DLL ⇒ **非零退出**（`SystemExit`），绝不能只打印警告就放行。
+
+    这是本任务的核心守卫：自检**必须真的会让构建失败**，否则白屏包照样发布。
+    """
+    import package_windows
+
+    with pytest.raises(SystemExit) as excinfo:
+        package_windows.assert_webview2_payload(str(tmp_path))
+
+    assert excinfo.value.code != 0, "缺 WebView2 DLL 时必须非零退出（构建失败）"
+
+
+def test_assert_webview2_payload_passes_when_dlls_present(tmp_path):
+    """齐全 ⇒ 不抛、正常返回（否则每次正常构建都会被自己的自检拒掉）。"""
+    import package_windows
+
+    (tmp_path / "WebView2Loader.dll").write_bytes(b"")
+    (tmp_path / "Microsoft.Web.WebView2.Core.dll").write_bytes(b"")
+
+    package_windows.assert_webview2_payload(str(tmp_path))  # 不抛即通过
+
+
+def test_verify_webview2_payload_requires_a_dll_suffix(tmp_path):
+    """同名 `.xml`/`.pdb` 不得冒充 DLL：只收集到 `Microsoft.Web.WebView2.Core.xml` 时仍判缺失。
+
+    为什么必须锚定 `.dll`：产物常伴同名 `.xml`/`.pdb`，只做子串匹配会被同伴文件名命中 ⇒ 真漏收
+    DLL 却**假绿**，白屏包照样发布。
+    """
+    import package_windows
+
+    (tmp_path / "WebView2Loader.dll").write_bytes(b"")
+    (tmp_path / "Microsoft.Web.WebView2.Core.xml").write_bytes(b"")
+    (tmp_path / "Microsoft.Web.WebView2.Core.pdb").write_bytes(b"")
+
+    missing = package_windows.verify_webview2_payload(str(tmp_path))
+
+    assert missing == ["Microsoft.Web.WebView2"], f"只有同名 .xml/.pdb 时仍须判缺失，实际 {missing}"
+
+
+def _package_windows_build_windows_fn() -> ast.FunctionDef:
+    """取出 `package_windows.py` 的 `build_windows` 函数节点（供调用点守卫共用）。"""
+    tree = ast.parse(open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read())
+    build_fn = next(
+        (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "build_windows"),
+        None,
+    )
+    assert build_fn is not None, "package_windows.py 必须定义 build_windows()"
+    return build_fn
+
+
+def _calls_named(body: ast.AST, name: str) -> bool:
+    """`body` 内是否出现对 `name(...)` 的调用（支持裸名或属性形式）。"""
+
+    def _is_match(node: ast.AST) -> bool:
+        if not isinstance(node, ast.Call):
+            return False
+        if isinstance(node.func, ast.Name):
+            return node.func.id == name
+        return isinstance(node.func, ast.Attribute) and node.func.attr == name
+
+    return any(_is_match(node) for node in ast.walk(body))
+
+
+def test_build_windows_actually_invokes_webview2_payload_check():
+    """`assert_webview2_payload(...)` 的调用点 MUST 落在 `build_windows()` 函数体内。
+
+    为什么用 AST 钉调用点而非只查函数名出现在源码里：现有守卫只断言"函数名 / DLL 名 / '白屏'
+    字样在源码中"，把 `build_windows()` 里那行调用删掉，闸就**失效**而全套测试仍绿。AST 把
+    "定义存在"提升为"真的在构建路径上被调用"，删调用即红（本轮已做变异自证）。
+    """
+    build_fn = _package_windows_build_windows_fn()
+
+    assert _calls_named(build_fn, "assert_webview2_payload"), (
+        "build_windows() 内必须真调用 assert_webview2_payload()：否则验包闸形同虚设（删调用全套仍绿）"
+    )
+
+
+def test_windows_portable_readme_matches_desktop_entry():
+    """产物《说明_README.txt》必须与入口一致：双击=桌面窗口、手机访问=`--server-only`。
+
+    防"入口改了、文案没跟"的文档漂移：否则用户会照着 README 找一个已不存在的"默认浏览器"启动方式。
+    """
+    import package_windows
+
+    readme = package_windows.release_readme("v9.9.9")
+
+    assert "桌面窗口" in readme, "README 必须点明双击 DeLector.exe 打开的是桌面窗口"
+    assert "--server-only" in readme, "README 必须告诉用户手机/平板访问要走 --server-only"
+    assert "默认浏览器" not in readme, "入口已改为桌面窗口，README 不得再写'默认浏览器'"
+
+
+def test_readme_generation_is_wired_into_build_windows():
+    """`build_windows()` 必须把 `release_readme(...)` 的文本写进产物 README（防守卫与被写文本脱钩）。"""
+    build_fn = _package_windows_build_windows_fn()
+
+    assert _calls_named(build_fn, "release_readme"), (
+        "build_windows() 必须调用 release_readme() 生成产物文案，否则守卫测的不是真正的产物内容"
+    )
 
 
 def test_register_routes_covers_every_module_in_routes_package():

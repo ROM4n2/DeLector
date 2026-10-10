@@ -229,6 +229,34 @@ def test_tray_menu_actions_are_wired_to_distinct_handlers():
     assert actions == ["open", "check_update", "quit"]
 
 
+def test_build_tray_handlers_covers_every_spec_action():
+    """`spec → handlers` 的键集合必须**恒等**（缺一即托盘键漂移）。
+
+    为什么抽成纯函数并单钉：原实现把 handlers 硬编码在托盘线程里，`TRAY_MENU_SPEC` 的动作
+    键一旦漂移，`handlers[action]` 会 KeyError 让**托盘线程静默死亡**（用户只看到托盘没了、
+    零线索）。抽出来后键一致性在**不依赖 pystray 真跑**的前提下即可被钉死。
+    """
+    mod = _mod()
+    spec_keys = {action for _label, action in mod.TRAY_MENU_SPEC}
+
+    handlers = mod.build_tray_handlers(mod.TRAY_MENU_SPEC, window=object(), coordinator=mod.QuitCoordinator())
+
+    assert set(handlers) == spec_keys, "handlers 键集合必须与 spec 的动作键集合恒等"
+    assert all(callable(fn) for fn in handlers.values()), "每个动作键都必须映射到可调用处理函数"
+
+
+def test_build_tray_handlers_rejects_spec_drift():
+    """spec 出现 handlers 未覆盖的动作键 ⇒ 必须**显式报错**，而不是留到托盘线程里 KeyError。
+
+    这是"键漂移 ⇒ 托盘静默死亡"的回归钉：漏覆盖时要在组装期就炸，而不是运行时无声无息。
+    """
+    mod = _mod()
+    drifted = (("打开", "open"), ("幽灵动作", "ghost"))
+
+    with pytest.raises(ValueError):
+        mod.build_tray_handlers(drifted, window=object(), coordinator=mod.QuitCoordinator())
+
+
 def test_quit_coordinator_is_idempotent_so_close_and_tray_share_one_path():
     """「关窗」与「托盘退出」共用同一收尸触发器；它必须幂等 —— 两条路径都触发时只收尸一次。
 
@@ -322,13 +350,98 @@ def test_desktop_module_level_has_no_launch_side_effect():
 
 
 def test_desktop_launch_is_guarded_by_main():
-    """起窗口 / 起服务只在 `if __name__ == '__main__':` 下发生（被 import 时零副作用）。"""
+    """起窗口 / 起服务只在 `if __name__ == '__main__':` 下发生（被 import 时零副作用）。
+
+    入口收口到单一分派器 `dispatch`（Task 5：默认=窗口、`--server-only`=旧服务行为），
+    故守卫断言的是"分派器只在 main 守卫内被调用"——重活仍不在 import 期发生。
+    """
     tree = _parse_desktop()
     guarded = any(
-        isinstance(node, ast.If) and _is_main_guard(node) and "run_desktop" in ast.dump(node) for node in tree.body
+        isinstance(node, ast.If) and _is_main_guard(node) and "dispatch" in ast.dump(node) for node in tree.body
     )
 
-    assert guarded, "入口必须在 `if __name__ == '__main__':` 守卫内调用 run_desktop"
+    assert guarded, "入口必须在 `if __name__ == '__main__':` 守卫内调用 dispatch"
+
+
+# ── 入口分派：默认=桌面窗口；`--server-only`=既有服务行为（Task 5 行为变化）────────
+def test_parser_accepts_server_only_flag():
+    """`--server-only` 开关存在且默认关闭；`--port` 仍可用（默认 8000）。"""
+    mod = _mod()
+
+    assert mod._parse_args([]).server_only is False, "默认必须是桌面窗口，而非仅服务"
+    assert mod._parse_args(["--server-only"]).server_only is True
+    assert mod._parse_args(["--server-only", "--port", "9000"]).port == 9000
+
+
+def test_dispatch_default_launches_desktop_window(monkeypatch: pytest.MonkeyPatch):
+    """默认（无 `--server-only`）⇒ 起桌面窗口：`dispatch(False, port)` 必须走 `run_desktop(port)`。"""
+    mod = _mod()
+    seen: List[int] = []
+
+    def _fake_run_desktop(port: int) -> int:
+        seen.append(port)
+        return 0
+
+    monkeypatch.setattr(mod, "run_desktop", _fake_run_desktop)
+
+    code = mod.dispatch(server_only=False, port=8123)
+
+    assert seen == [8123], "默认路径必须以解析到的端口起桌面窗口"
+    assert code == 0
+
+
+def test_dispatch_server_only_delegates_to_start_main(monkeypatch: pytest.MonkeyPatch):
+    """`--server-only` ⇒ 委托 `start.main()` 的既有行为（无窗口、绑 0.0.0.0、开浏览器）。
+
+    保留"同 Wi-Fi 手机可访问"的既有工作流：这不是新写一套服务，而是**复用** start.main，
+    故这里钉的是"真的调了 start.main"，而不是"等价实现"。
+    """
+    import start
+
+    mod = _mod()
+    calls: List[str] = []
+    monkeypatch.setattr(start, "main", lambda: calls.append("main"))
+    monkeypatch.setattr(mod, "run_desktop", lambda port: pytest.fail("--server-only 不得起桌面窗口"))
+
+    code = mod.dispatch(server_only=True, port=8123)
+
+    assert calls == ["main"], "--server-only 必须委托 start.main()（复用既有服务行为）"
+    assert code == 0
+
+
+def test_dispatch_server_only_warns_that_port_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """`--server-only --port <非默认>` ⇒ 必须**显式警告** `--port` 不生效，绝不静默丢弃。
+
+    `--server-only` 复用 `start.main()`（固定端口 8000），该路径不接受 `--port`；argparse 却宣称
+    `--port` 可用 ⇒ 静默用 8000 会被用户误读成"端口没换成功"。这条钉住"不静默"。
+    """
+    import start
+
+    mod = _mod()
+    monkeypatch.setattr(start, "main", lambda: None)
+    monkeypatch.setattr(mod, "run_desktop", lambda port: pytest.fail("--server-only 不得起桌面窗口"))
+
+    code = mod.dispatch(server_only=True, port=9000)
+    err = capsys.readouterr().err
+
+    assert code == 0
+    assert "9000" in err and "--port" in err, "必须显式告知 --port 在该组合下不生效（不得静默）"
+
+
+def test_dispatch_server_only_does_not_warn_for_default_port(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """`--server-only` 用默认端口（无分歧）⇒ **不**告警：正常用法不该被当噪音。"""
+    import start
+
+    mod = _mod()
+    monkeypatch.setattr(start, "main", lambda: None)
+
+    mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
+
+    assert capsys.readouterr().err == "", "端口无分歧时不得告警"
 
 
 def test_import_desktop_has_no_side_effects():

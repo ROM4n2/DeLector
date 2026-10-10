@@ -24,12 +24,13 @@ r"""DeLector Windows 桌面壳：pywebview 窗口 + pystray 托盘 + 统一退�
 `shutdown(server, thread)`；超时（返回 False）则硬退出，绝不留残留。
 """
 
+import argparse
 import os
 import sys
 import threading
 import time
 import traceback
-from typing import Any, Callable, List, Mapping, Optional, TextIO, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, TextIO, Tuple
 
 from delector.core.data_dir_bootstrap import bootstrap_data_dir, resolve_data_dir
 from delector.core.server_lifecycle import await_ready, build_server, serve_in_thread, shutdown
@@ -42,6 +43,10 @@ BIND_HOST = "0.0.0.0"
 # 就绪窗口给足：首启 health_200 ≈ 2.6s，其中 spaCy 模型加载 ≈ 1.47s（ADR-0018 §7.3）⇒ 冷启动
 # 首次建档更慢。取 60s 兜底，宁慢勿"静默判未就绪"。
 READY_DEADLINE_S = 60.0
+
+# 默认端口：桌面窗口路径用它；`--server-only` 复用 `start.main()` 时**固定**用它
+# —— 该路径不接受 `--port`（见 dispatch 的显式警告），此常量是其真实端口的单一真相。
+DEFAULT_PORT = 8000
 
 # ── WebView2 运行时检测（锚点取自本机实测注册表）────────────────────────────
 # 实测：HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{GUID} 的 pv=154.0.4258.62。
@@ -287,6 +292,40 @@ def _tray_quit(window: Any, coordinator: QuitCoordinator) -> None:
             pass
 
 
+def _tray_handler_map(window: Any, coordinator: QuitCoordinator) -> Dict[str, Callable[[], None]]:
+    """动作键 → 处理函数的**唯一**真相（键名与 `TRAY_MENU_SPEC` 的 action 对齐）。"""
+    return {
+        "open": lambda: _tray_open(window),
+        "check_update": lambda: _tray_check_update(window),
+        "quit": lambda: _tray_quit(window, coordinator),
+    }
+
+
+def assert_keys_cover_spec(spec: Tuple[Tuple[str, str], ...], handlers: Mapping[str, Any]) -> None:
+    """断言 `spec` 的动作键集合与 `handlers` 键集合**恒等**（缺一或多一都算漂移）。
+
+    为什么是"恒等"而非"覆盖"：多出来的 handler 是死代码（无人调用），漏掉的 spec 动作键会
+    在菜单组装时 KeyError。两者都要报，才能保证两个独立声明始终同步。
+    """
+    spec_keys = [action for _label, action in spec]
+    if set(spec_keys) != set(handlers):
+        raise ValueError(f"托盘菜单 spec 与 handlers 键不一致：spec={spec_keys} handlers={list(handlers)}")
+
+
+def build_tray_handlers(
+    spec: Tuple[Tuple[str, str], ...], window: Any, coordinator: QuitCoordinator
+) -> Dict[str, Callable[[], None]]:
+    """由 spec 校验并构造处理函数表（纯函数，**不依赖 pystray 真跑**）。
+
+    原实现把 handlers 硬编码在托盘线程内，`TRAY_MENU_SPEC` 的动作键一旦漂移，`handlers[action]`
+    会 KeyError 让**托盘线程静默死亡**（用户只看到托盘没了、零线索）。抽成纯函数后，键一致性
+    可在 import/测试期即被钉死；运行期漂移也会在此显式报错而非无声 KeyError。
+    """
+    handlers = _tray_handler_map(window, coordinator)
+    assert_keys_cover_spec(spec, handlers)
+    return handlers
+
+
 def _run_tray(window: Any, coordinator: QuitCoordinator, log_path: str) -> None:
     """托盘线程主体：组装菜单并从 `TRAY_MENU_SPEC` 映射处理函数。GUI 依赖在此惰性导入。"""
     try:
@@ -296,14 +335,11 @@ def _run_tray(window: Any, coordinator: QuitCoordinator, log_path: str) -> None:
         _append_log(log_path, f"托盘不可用（{exc}）：功能降级为仅窗口。")
         return
 
-    handlers = {
-        "open": lambda: _tray_open(window),
-        "check_update": lambda: _tray_check_update(window),
-        "quit": lambda: _tray_quit(window, coordinator),
-    }
-    menu = pystray.Menu(*[pystray.MenuItem(label, handlers[action]) for label, action in TRAY_MENU_SPEC])
-    icon = pystray.Icon("DeLector", _tray_image(Image, ImageDraw), "DeLector", menu)
+    # 组装也放进 try：spec→handlers 漂移会在此显式报错并被**记入日志**，不再静默杀死线程。
     try:
+        handlers = build_tray_handlers(TRAY_MENU_SPEC, window, coordinator)
+        menu = pystray.Menu(*[pystray.MenuItem(label, handlers[action]) for label, action in TRAY_MENU_SPEC])
+        icon = pystray.Icon("DeLector", _tray_image(Image, ImageDraw), "DeLector", menu)
         icon.run()
     except Exception as exc:
         _append_log(log_path, f"托盘线程异常退出（{exc}）。")
@@ -332,6 +368,12 @@ def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str
         frameless=True,
         on_top=True,
     )
+    if splash is None:
+        # pywebview 理论上不返回 None；真出现说明环境异常，必须**可见地**失败而非崩在下一行
+        # （此处收窄也让 mypy 通过，无需 type: ignore）。
+        _append_log(log_path, "webview.create_window 返回 None：无法创建桌面窗口。")
+        _message_box("DeLector 启动失败", "无法创建桌面窗口，详情见 launch.log。")
+        return 1
     splash.events.closed += lambda: coordinator.request_quit()  # 关窗 = 请求退出（与托盘同一路径）
     _start_tray(splash, coordinator, log_path)
 
@@ -371,7 +413,7 @@ def _run_desktop_inner(port: int, log_path: str) -> int:
         coordinated_shutdown(server, thread, log_path)
 
 
-def run_desktop(port: int = 8000) -> int:
+def run_desktop(port: int = DEFAULT_PORT) -> int:
     """启动桌面壳：返回**进程退出码**。
 
     **所有**退出路径（关窗 / 托盘退出 / 异常 / Ctrl+C）都会先 `shutdown(server, thread)`：
@@ -390,18 +432,53 @@ def run_desktop(port: int = 8000) -> int:
         return 1
 
 
-def _parse_port(argv: Optional[List[str]]) -> int:
-    """解析 `--port`（`--help` 由 argparse 处理，供 import 安全性实证）。"""
-    import argparse
-
+def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
+    """解析命令行：`--port` 与 `--server-only`（`--help` 由 argparse 处理）。"""
     parser = argparse.ArgumentParser(
         prog="desktop.py",
         description="DeLector Windows 桌面壳（pywebview 窗口 + pystray 托盘，ADR-0020）。",
     )
-    parser.add_argument("--port", type=int, default=8000, help="本地服务端口（默认 8000）")
-    args = parser.parse_args(argv)
-    return int(args.port)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"本地服务端口（默认 {DEFAULT_PORT}）")
+    parser.add_argument(
+        "--server-only",
+        action="store_true",
+        help="仅启动本地服务（无桌面窗口），保留同 Wi-Fi 手机/平板可访问的既有工作流",
+    )
+    return parser.parse_args(argv)
+
+
+def run_server_only() -> int:
+    """`--server-only`：委托 `start.main()` 的**既有行为**（无窗口、绑 0.0.0.0、开浏览器）。
+
+    为什么复用而不是另写一套：这条路径要精确保留便携版原来的启动语义（含端口占用时的
+    身份校验、LAN 访问、`bootstrap_data_dir` 顺序），复用是唯一能保证"不漂移"的做法。
+    """
+    import start
+
+    start.main()
+    return 0
+
+
+def dispatch(server_only: bool, port: int) -> int:
+    """入口分派（可测的纯接线）：`--server-only` ⇒ 既有服务；否则 ⇒ 桌面窗口。
+
+    ⚠️ `--server-only` **复用** `start.main()`（固定端口，见 `run_server_only` 的理由）：该路径
+    不接受 `--port`。用户若在此组合下显式给了非默认端口，必须**显式告知**它不生效 —— 静默丢弃会被
+    误读成"端口没换成功"，正是本任务要消除的一类静默失败（不动 `start.main()` 签名是为了不引入
+    port-identity / LAN 面回归）。
+    """
+    if not server_only:
+        return run_desktop(port)
+    # 守卫式压平（最大缩进 2 层）：下面这条警告是"不静默"的落点，理由见上方 docstring。
+    if port != DEFAULT_PORT:
+        print(
+            f"[警告] --server-only 复用既有服务，固定端口 {DEFAULT_PORT}："
+            f"你传入的 --port {port} 不会生效。",
+            file=sys.stderr,
+        )
+    return run_server_only()
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_desktop(_parse_port(sys.argv[1:])))
+    _args = _parse_args(sys.argv[1:])
+    raise SystemExit(dispatch(_args.server_only, _args.port))

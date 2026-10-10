@@ -196,6 +196,38 @@ def test_ci_workflow_has_mypy_gate():
     assert not missing, f"{CI_WORKFLOW} 缺少 Mypy 门禁要素：\n" + "\n".join(missing)
 
 
+def test_desktop_entry_mypy_gate_pins_windows_platform():
+    """桌面入口的 mypy 门禁 MUST 带 `--platform win32`（防"顺手删掉"⇒ Linux CI 必红）。
+
+    为什么这条断言必须存在：`desktop.py` 是本项目 **Windows 专属**入口，源码用
+    `ctypes.windll` 与 `winreg.*`；mypy **默认按运行平台**挑 typeshed，CI（ubuntu）下这两个
+    模块没有 windll / OpenKey / KEY_READ / QueryValueEx / CloseKey 等属性 ⇒ 报 5 处
+    attr-defined。即：不带 `--platform win32` 时同一条门禁"本地 Windows 绿、CI Linux 红"
+    —— 结果是**平台的函数，不是代码的函数**（2026-10-10 该门禁第一次上线即因此红）。
+    `--platform win32` 正是让它与目标平台一致的那味药，MUST NOT 删。
+    """
+    text = _read_guard_file(CI_WORKFLOW)
+
+    # 定位桌面入口门禁命令：同时含 mypy 与三个目标文件的那一行（避免撞上说明性注释）。
+    gate_lines = [
+        line
+        for line in text.splitlines()
+        if "mypy" in line and "desktop.py" in line and "package_windows.py" in line and "conftest.py" in line
+    ]
+    assert gate_lines, (
+        f"{CI_WORKFLOW} 找不到桌面入口的 mypy 门禁命令"
+        "（应含 `mypy ... desktop.py package_windows.py conftest.py`）：门禁被删或改了目标面。"
+    )
+    for line in gate_lines:
+        assert "--platform win32" in line, (
+            f"{CI_WORKFLOW} 的桌面入口 mypy 门禁缺 `--platform win32`：\n"
+            f"    {line.strip()}\n"
+            "desktop.py 是 Windows 专属入口（ctypes.windll / winreg.*），不带该 flag 时 mypy 按 "
+            "Linux typeshed 解析 ⇒ 报 5 处 attr-defined，CI（ubuntu）必红（本地 Windows 绿）。"
+            "这条 flag 是门禁与目标平台一致的前提，MUST NOT 删。"
+        )
+
+
 def test_mypy_config_locks_adoption_flags_and_stays_out_of_runtime_deps():
     """[tool.mypy] 必须锁住档位关键项；mypy 不得混入运行时依赖。"""
     text = _read_guard_file(MYPY_CONFIG)

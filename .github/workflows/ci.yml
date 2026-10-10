@@ -93,6 +93,22 @@ jobs:
       - name: Mypy type gate (tests, config baseline)
         run: mypy --follow-imports=skip tests
 
+      # Mypy 类型门禁（新入口裸露面，2026-10-10 windows-desktop-shell 收口）。
+      # 上面两条门禁都**显式传了目标**（`--strict delector tools` / `--follow-imports=skip tests`），
+      # 故仓库根的 desktop.py / conftest.py / package_windows.py / start.py **从不被检查**；pyproject
+      # 的 `files` 只影响"本地裸跑 python -m mypy"（且裸跑会因既有 17 条无关错误转红），CI 不裸跑。
+      # 口径：`--follow-imports=skip` 只查目标文件自身（不把既有 delector 模块的 unused-ignore 卷进来，
+      # 与 tests 门禁同款）+ `--strict`（对齐 headline 档）。start.py 因两处 `# type: ignore` 在 skip 下
+      # 变 unused-ignore 而**卡住**（禁新增豁免）⇒ 未纳入，登记为后续（见计划 Task 5 "后续"）。
+      - name: Mypy type gate (desktop entry surface, strict)
+        # MUST 带 `--platform win32`：desktop.py 是本项目 **Windows 专属**入口，源码用
+        # `ctypes.windll` 与 `winreg.*`；mypy **默认按运行平台**（CI 是 ubuntu）挑 typeshed，
+        # Linux 下这两个模块没有 windll / OpenKey / KEY_READ / QueryValueEx / CloseKey 等属性
+        # ⇒ 报 5 处 attr-defined（本地 Windows 绿、CI 红 —— 门禁结果随平台漂移，是设计缺陷）。
+        # 显式声明 `--platform win32` 使门禁与该文件真实目标平台一致：这正是它 2026-10-10
+        # 第一次上线就在 CI 红掉的原因，别再顺手删掉。
+        run: mypy --platform win32 --strict --follow-imports=skip desktop.py package_windows.py conftest.py
+
       # 测试需要德语 spaCy 模型，与 build-release.yml 同源
       - name: Download spaCy German model
         run: python -m spacy download de_core_news_sm

@@ -165,7 +165,10 @@
 - Consumes: `delector.core.server_lifecycle.build_server/serve_in_thread/shutdown/probe_identity`（Task 3 产物）、`delector.core.data_dir_bootstrap.resolve_data_dir`（Task 1 产物）
 - Produces:
   - `def ensure_webview2_runtime() -> bool` —— 检测失败返回 `False`（由上层决定是否引导安装）
-  - `def run_desktop(port: int, log_path: str) -> int` —— 返回进程退出码；**所有退出路径** MUST 先 `shutdown(server, thread)` 再退出
+  - `def run_desktop(port: int = DEFAULT_PORT) -> int` —— 返回进程退出码；**所有退出路径** MUST 先 `shutdown(server, thread)` 再退出。
+    > **实现漂移回填（Task 5 收口）**：计划原写 `run_desktop(port: int, log_path: str) -> int`，实际实现为
+    > `run_desktop(port: int = DEFAULT_PORT) -> int`（`DEFAULT_PORT = 8000`）。`log_path` 由 `resolve_log_path(os.environ)`
+    > **内部解析**（不作出参），`port` 给了默认值 —— 二者等价，且唯一消费者 `dispatch` 的调用方式不受影响。
   - splash：服务未 ready 前显示原生 loading 窗口，分阶段文案（加载模型 → 起服务 → 就绪）
   - 托盘菜单：`打开` / `检查更新`（打开 release 页 或 触发 `/api/update/check`） / `退出`
   - 日志：stdout/stderr 重定向到 `launch.log`；顶层 `try/except` 写 traceback 并弹 MessageBox
@@ -201,11 +204,22 @@
 **Files:**
 - Modify: `package_windows.py`（新增 `--collect-all=webview` 与 `webview.platforms.edgechromium` / `webview.platforms.winforms` / `pystray._win32` 的 hidden-import；增加 `desktop.py` 入口）
 - Modify: `.github/workflows/build-release.yml`（Windows 产物口径；**不新增第二产物/spec**）
+- Modify: `.github/workflows/ci.yml`（**收口回填**：新增新入口裸露面的 mypy 门禁；见下"收口回填"）
 - Test: `tests/test_server.py`（既有四端打包同步守卫 `:4559-4662`）+ 新增 **DLL 验包断言**
 
 **Interfaces:**
 - Consumes: `package_windows.py` 既有的 `--hidden-import` 列表结构
 - Produces: 产物内 MUST 含 `WebView2Loader.dll`、`Microsoft.Web.WebView2*.dll`（缺失 ⇒ 白屏，与既有事故同款）；守卫测试断言该清单
+
+**收口回填（2026-10-10 审查后，Task 5 收口轮）：**
+- **① 新入口类型门禁**：CI 两条既有 mypy 门禁都**显式传目标**（`mypy --strict delector tools` / `mypy --follow-imports=skip tests`），
+  故 `desktop.py` / `conftest.py` / `package_windows.py` / `start.py` **在 CI 里从不被检查**；`pyproject.toml` 的 `files`
+  只影响"本地裸跑 `python -m mypy`"（且裸跑会因既有 **17 条**无关错误转红，故**不可**裸跑当门禁）。⇒ 在 `ci.yml` 新增：
+  `mypy --strict --follow-imports=skip desktop.py package_windows.py conftest.py`。
+  **后续（未纳入）**：`start.py` 因两处 `# type: ignore`（`server.install_signal_handlers` / `capture_signals`）在 skip 口径下
+  变 `unused-ignore` 而卡住 —— 禁新增豁免，故本轮不纳入；待后续以签名/局部收窄替换那两处 ignore 后再并入本条门禁。
+- **⑥ `--server-only` 下 `--port` 语义**：选 **(a)** —— 该路径复用 `start.main()`（固定端口），对显式传入的非默认 `--port`
+  **发出显式警告**（不改 `start.main()` 签名，避免引入 port-identity / LAN 面回归）；**不再静默**。
 
 **Injected Instincts (Compile-Time Rule Injection):**
 - [ ] `[Instinct: Packaging-Sync]`：DEV-RULES §2.4 的四端同步守卫 —— 新增依赖 MUST 在所有相关位点注册（本 ADR 前提：**不新增第 5 个产物位点**，故只动 Windows 冻结项）。
