@@ -2,13 +2,15 @@
 """长文精读冷/热读基准的可执行输出门禁。"""
 
 import ast
+import importlib.util
 import os
 import re
 import statistics
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Pattern
+from types import ModuleType
+from typing import List, Pattern, Tuple
 
 import pytest
 
@@ -191,15 +193,48 @@ def test_ingest_guard_covers_attribute_calls() -> None:
     assert "ingest_article" in names
 
 
+def _processor_path_reads_and_compares() -> Tuple[set[str], List[ast.Compare]]:
+    """解析 `_processor_path` 的**真实代码**：返回（属性读名集合, 静态引擎比较列表）。
+
+    用 AST 而非子串：docstring 里提到字段名（``_nlp_resolved`` 等）也会命中子串，那样的门禁
+    对"是否真读状态"无证明力（="随便含个词就过"）—— 故只在**属性访问 / 比较**节点上判定。
+    """
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    funcs = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    assert "_processor_path" in funcs, "processor 侧判据必须收在 _processor_path（与 bench_cold_start 同口径）"
+    node = funcs["_processor_path"]
+    reads = {child.attr for child in ast.walk(node) if isinstance(child, ast.Attribute)}
+    static_compares = [
+        child
+        for child in ast.walk(node)
+        if isinstance(child, ast.Compare)
+        and isinstance(child.left, ast.Attribute)
+        and child.left.attr == "NLP_ENGINE"
+    ]
+    return reads, static_compares
+
+
 def test_nlp_path_uses_production_judgement_not_reimplemented() -> None:
     """路径判定必须复用生产判据：基准自己 import spacy 判一次会与生产分叉。
 
-    用 AST 查真实 import（而非子串匹配——docstring 里解释"为什么不用 import spacy"
-    也会命中子串，子串门禁会假红）。
+    processor 侧**不再**断言 `NLP_ENGINE`（惰性化后它是导入期声明值、恒为 "spacy"，拿它判
+    等于恒真、探测不到加载失败 —— 这正是本文件曾漏改的缺陷）。改钉**真实**判据（AST 属性读，
+    非子串——docstring 提到字段名不算数）：
+      - `_processor_path` 体内必须**真读** `processor.nlp` / `_nlp_resolved` / `_nlp_model`；
+      - **不得**出现 `processor.NLP_ENGINE == ...` 这种静态声明值比较。
+    对"改回读 NLP_ENGINE 静态值"与"让未解析分支假装已解析"两类变异都**必红**（见 3A 回执）。
     """
+    reads, static_compares = _processor_path_reads_and_compares()
+    for field in ("nlp", "_nlp_resolved", "_nlp_model"):
+        assert field in reads, (
+            f"_processor_path 必须真读 `processor.{field}`（惰性化后不能读导入期声明值）"
+        )
+    assert static_compares == [], (
+        "不得拿导入期声明值 processor.NLP_ENGINE 做判据（恒真，探测不到 processor 侧加载失败）"
+    )
+
     src = SCRIPT.read_text(encoding="utf-8")
     assert "get_spacy_nlp()" in src, "必须用生产 syntax_tree 自己的判定"
-    assert "NLP_ENGINE" in src, "必须用生产 processor 自己记录的生效引擎"
     imported: set[str] = set()
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, ast.Import):
@@ -208,6 +243,57 @@ def test_nlp_path_uses_production_judgement_not_reimplemented() -> None:
             imported.add(node.module or "")
     assert not any(name.split(".")[0] == "spacy" for name in imported), (
         f"基准不得自行 import spacy 另判一套：{sorted(imported)}"
+    )
+
+
+class _FakeProcessor:
+    """`_processor_path` 的注入替身：只提供它读的三个字段（不碰真实模型 / 不触发加载）。"""
+
+    def __init__(self, nlp: object, resolved: bool, model: object) -> None:
+        self.nlp = nlp
+        self._nlp_resolved = resolved
+        self._nlp_model = model
+
+
+def _load_bench_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """按路径加载 tools/bench_long_read.py（tools/ 非包，只能按路径加载）。
+
+    它顶层 `from bench_stats import ...`，故先把 tools/ 临时放进 sys.path（monkeypatch 自动还原）。
+    """
+    monkeypatch.syspath_prepend(str(ROOT / "tools"))
+    spec = importlib.util.spec_from_file_location("bench_long_read_under_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_processor_path_reflects_real_load_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """行为级：`_processor_path` 必须按**真实解析状态**判，而非导入期声明值。
+
+    这是对 AST 结构门禁的**行为**补强：两类变异都会被它打红 ——
+      - 改回读 `processor.NLP_ENGINE` 静态值 ⇒ 替身没有该属性 ⇒ 抛错转红；
+      - 让"未解析"分支假装已解析 ⇒ 下一条「未解析须标声明值」不成立 ⇒ 断言转红。
+    """
+    mod = _load_bench_module(monkeypatch)
+    processor_path = mod._processor_path
+
+    assert processor_path(_FakeProcessor(nlp=None, resolved=False, model=None))[0] == "pure", (
+        "nlp=None（红线 1 / Android）必须判为纯 Python"
+    )
+
+    declared_kind, declared_state = processor_path(_FakeProcessor(nlp=object(), resolved=False, model=None))
+    assert declared_kind == "spacy", "未解析时按声明值标 spacy"
+    assert "声明值" in declared_state and "未加载" in declared_state, (
+        f"未解析必须**如实**标注为「声明值(模型未加载)」，实际：{declared_state}"
+    )
+
+    loaded_kind, loaded_state = processor_path(_FakeProcessor(nlp=object(), resolved=True, model=object()))
+    assert loaded_kind == "spacy" and "已加载" in loaded_state, f"解析成功须标已加载：{loaded_state}"
+
+    failed_kind, failed_state = processor_path(_FakeProcessor(nlp=object(), resolved=True, model=None))
+    assert failed_kind == "pure" and "加载失败" in failed_state, (
+        f"已解析为 None（加载失败）必须判为纯 Python：{failed_state}"
     )
 
 

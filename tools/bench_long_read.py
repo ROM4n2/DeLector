@@ -11,12 +11,15 @@
 `analyze_syntax_tree`，两者不可直接比较。`other_ms = cold_ms - spacy_ms` 仅是跨口径
 近似差值，允许为负；`spacy_pct = spacy_ms / cold_ms` 也只作成本量级参考。
 
-`nlp_path` 是本基准的可信前提：spaCy 加载失败是**静默降级**（processor.py:437 与
-syntax_tree.py:1533 双双退回纯 Python），此时 `spacy_ms` 量到的是纯 Python 成本，
-与历史值 42ms/句（原 `syntax_hard.py:9` 注释，2026-10-09 移除）的对照不成立。故本脚本用**生产自己的
-判据**读实际路径（`syntax_tree.get_spacy_nlp()` 与 `processor.NLP_ENGINE`，
-也就是 syntax_hard.py:225 `/spacy-status` 对外报的那套），不在基准里另发明一套；
-只有两层都报 spaCy 才标 `nlp_path=spacy`，分歧靠 `nlp_path_detail` 行暴露。
+`nlp_path` 是本基准的可信前提：spaCy 不可用时 `syntax_tree` 会**静默降级**到纯 Python
+（syntax_tree.py:1533），此时 `spacy_ms` 若走 process_german_text 则该侧是 processor 的
+**硬失败**（抛异常、不降级，见 processor._resolve_nlp_model）。故本脚本用**生产自己的判据**读
+**实际**路径：`syntax_tree.get_spacy_nlp()`（syntax_hard.py:225 `/spacy-status` 对外报的那套）
+与 processor 侧的**实际加载状态**（`nlp` / `_nlp_resolved` / `_nlp_model`，见 `_processor_path`）
+—— 模型已**惰性化**（ADR-0018 §7.6 O0）后 `processor.NLP_ENGINE` 只是导入期**声明值**（恒为
+"spacy"，**不代表模型已加载**），故**不再**拿它当判据（那会恒真、探测不到 processor 侧加载失败，
+与 bench_cold_start.py 曾被漏改的缺陷同因）。只有两层都报 spaCy 才标 `nlp_path=spacy`，
+分歧靠 `nlp_path_detail` 行暴露。
 
 Task 5b 起冷读/热读同时输出 **p95**（`cold_p95_ms` / `warm_p95_ms`）与原始样本行
 （`samples_cold_ms` / `samples_warm_ms`）：ADR-0018 §6 的判定门条件②按 **p95 > 2 倍
@@ -223,25 +226,51 @@ def _cache_effect(cold_ms: float, warm_ms: float) -> str:
     return "unknown"
 
 
+def _processor_path(processor: ModuleType) -> Tuple[str, str]:
+    """判 processor 侧**实际**走的路径 —— 惰性化后**不能**直接读导入期声明值。
+
+    模型加载已从 import 期搬到「首次真正需要 NLP 时」（ADR-0018 §7.6 O0），故
+    ``processor.NLP_ENGINE`` 在导入期恒为 ``"spacy"``（**声明值**，不代表模型已加载）；
+    拿它判等于恒真，探测不到 processor 侧**实际**加载失败（与 bench_cold_start.py
+    `_processor_path` 同因、同口径）。改用**真实状态**：
+      - ``processor.nlp is None``（红线 1 / Android）⇒ 确定纯 Python（本就无模型）；
+      - 已解析（``_nlp_resolved``）⇒ 按**实际结果**（``_nlp_model is not None``）判 —— 成功
+        ``spacy``、失败 ``pure``（失败还会把 ``NLP_ENGINE`` 改写为 ``"spacy(加载失败)"``）；
+      - 未解析 ⇒ 如实标注为 ``spacy`` 的**声明值**（模型尚未加载），并指明可复跑的实际判据。
+
+    **不主动触发一次加载**：不在基准里 ``spacy.load``，更不触发 ``spacy.cli.download`` 联网兜底
+    —— 那会既多付一次加载、又污染被测对象。实际结果的**可复跑判据**：``python
+    tools/bench_spacy_unit.py`` 会触发 processor 首次加载并打印 ``engine=`` 行（spacy /
+    pure_python；加载失败则脚本在首次调用处抛错）。
+    """
+    if processor.nlp is None:
+        return "pure", "nlp=None(红线1/Android 降级)"
+    if not processor._nlp_resolved:
+        return "spacy", "声明值(模型未加载；实际见 tools/bench_spacy_unit.py 的 engine= 行)"
+    if processor._nlp_model is not None:
+        return "spacy", "已加载"
+    return "pure", "加载失败(已解析为 None，NLP_ENGINE 已改写)"
+
+
 def _nlp_path(syntax_tree: ModuleType, processor: ModuleType) -> Tuple[str, str]:
     """用**生产自己的判据**读出本次实际走的是 spaCy 还是纯 Python 降级路径。
 
     - `analyze_syntax_tree`（冷读热路径）分支在 `syntax_tree.get_spacy_nlp()`
       （syntax_tree.py:1532-1534），生产 route syntax_hard.py:225 的 `/spacy-status`
       用的就是同一个判据；
-    - `process_german_text`（spacy_ms 口径）分支在 processor 模块级 `nlp`
-      （processor.py:437），生产把实际生效的引擎记在 `NLP_ENGINE` / `NLP_ENGINE_DETAIL`。
+    - `process_german_text`（spacy_ms 口径）分支在 processor 侧的**实际加载状态**，
+      见 `_processor_path`（惰性化后不能读导入期声明值 `NLP_ENGINE`）。
 
     为什么不在基准里重新 `import spacy` 判一次：那会与生产加载模型的候选顺序、
     自动下载、Android 判定分叉，测出来的"路径"可能不是生产的路径。两层都报 spaCy
     才敢标 `spacy`；否则标 `pure`，并由 detail 行暴露到底哪层降了级。
     """
     tree_path = "spacy" if syntax_tree.get_spacy_nlp() else "pure"
-    proc_path = "spacy" if processor.NLP_ENGINE == "spacy" else "pure"
+    proc_path, proc_state = _processor_path(processor)
     path = "spacy" if tree_path == "spacy" and proc_path == "spacy" else "pure"
     # 生产记的 detail 可能带异常文本（含换行），压成单行，保证输出仍是 key=value 逐行可解析
     detail = " ".join(str(processor.NLP_ENGINE_DETAIL).split())
-    return path, f"syntax_tree={tree_path};processor={proc_path}({detail})"
+    return path, f"syntax_tree={tree_path};processor={proc_path}({proc_state};{detail})"
 
 
 def _format_speedup(value: float) -> str:

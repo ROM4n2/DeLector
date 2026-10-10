@@ -561,6 +561,119 @@ def test_success_path_writes_stage_logs_for_at_least_three_phases():
     assert count >= 3, f"成功路径阶段日志不足（{count} < 3）：卡住时将无从定位"
 
 
+# ── 5A：真实首屏口径（关掉 ADR-0018 §8 Unknown 8 的代理口径缺口）───────────────
+# 此前只有 health_200（服务就绪）这个**代理口径**；"首屏可用"从未测过。5A 让日志落两枚标记：
+# 「开始启动（进程级计时起点）」（进程最早处）与「真实 UI 已加载（首屏可用）」（pywebview 的
+# loaded 事件 = 页面渲染完成）。下列锁钉住"标记真的会被写"与"loaded 绑定确实在 start 之后"。
+_FIRST_SCREEN_MARKER = "真实 UI 已加载（首屏可用）"
+_TIMING_START_MARKER = "开始启动（进程级计时起点）"
+
+
+def test_run_desktop_logs_process_level_timing_start() -> None:
+    """计时起点必须在 `run_desktop` 的**最早处**（第一条 `_append_log`），否则端到端会少算一截。
+
+    用 AST 取 `run_desktop` 源码段：既要求标记出现，又要求它**就是**该函数里最靠前的那条
+    `_append_log`（"起点"被别的日志抢了头就不叫起点）。
+    """
+    src = (REPO_ROOT / "desktop.py").read_text(encoding="utf-8")
+    run = _funcs_by_name(ast.parse(src))["run_desktop"]
+    calls = [call for call in _calls(run) if _call_label(call) == "_append_log"]
+    assert calls, "run_desktop 必须写日志（进程级计时起点）"
+    first_call = min(calls, key=lambda call: call.lineno)
+    first_segment = ast.get_source_segment(src, first_call) or ""
+    assert _TIMING_START_MARKER in first_segment, (
+        f"run_desktop 最靠前的 _append_log 必须是计时起点标记，实际：{first_segment!r}"
+    )
+
+
+def test_loaded_event_binding_is_inside_start_delegated_tree_and_before_load_url() -> None:
+    """`main.events.loaded` 的绑定必须在 `webview.start()` 调度树内、且在 `load_url` 之前。
+
+    两处硬约束：① 绑定要发生在 GUI 事件循环已起之后（P0：循环启动前碰窗口/事件会永久阻塞）；
+    ② 必须早于 `load_url` —— 它内部会 `events.loaded.clear()`，注册晚了就永远收不到首屏事件。
+    """
+    tree = _parse_desktop()
+    _name, delegated = _delegated_function(tree)
+    binds = [
+        node
+        for node in ast.walk(delegated)
+        if isinstance(node, ast.AugAssign)
+        and isinstance(node.target, ast.Attribute)
+        and node.target.attr == "loaded"
+    ]
+    assert binds, "必须在 webview.start() 调度的函数内绑定 main.events.loaded（循环已起 ⇒ 绑定安全）"
+    load_lines = [call.lineno for call in _calls(delegated) if _call_label(call) == "load_url"]
+    assert load_lines, "调度函数必须 load_url"
+    assert binds[0].lineno < min(load_lines), (
+        "loaded 必须在 load_url 之前注册（load_url 会 events.loaded.clear()，晚注册收不到首屏）"
+    )
+
+
+def test_loaded_event_records_first_screen_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """行为回归锁：`loaded` 事件触发（页面渲染完成）时必须落一行「真实 UI 已加载（首屏可用）」。
+
+    用假 webview 在 `load_url` 时触发该窗口的 `loaded` 处理器（模拟渲染器 set()），断言 launch.log
+    里出现首屏标记。删掉绑定 / 不再记日志 ⇒ 本用例转红（不是只测"字符串在源码里"）。
+    """
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+
+    class _Signal:
+        def __init__(self) -> None:
+            self.handlers: List[Any] = []
+
+        def __iadd__(self, other: Any) -> "_Signal":
+            self.handlers.append(other)
+            return self
+
+        def fire(self) -> None:
+            for handler in list(self.handlers):
+                handler()
+
+    class _Events:
+        def __init__(self) -> None:
+            self.closed = _Signal()
+            self.loaded = _Signal()
+
+    class _FakeWindow:
+        def __init__(self) -> None:
+            self.events = _Events()
+
+        def evaluate_js(self, _script: str) -> None:
+            return None
+
+        def load_url(self, _url: str) -> None:
+            self.events.loaded.fire()  # 页面加载完成 ⇒ 真实 pywebview 由渲染器 events.loaded.set()
+
+        def show(self) -> None:
+            return None
+
+        def destroy(self) -> None:
+            return None
+
+    def _create_window(*_a: Any, **_k: Any) -> _FakeWindow:
+        return _FakeWindow()
+
+    def _start(func: Any = None, args: Any = None, **_k: Any) -> None:
+        if func is not None:
+            func(*(args or ()))
+
+    fake_webview: Any = types.ModuleType("webview")
+    fake_webview.create_window = _create_window
+    fake_webview.start = _start
+
+    monkeypatch.setitem(sys.modules, "webview", fake_webview)
+    monkeypatch.setattr(mod, "await_ready", lambda *_a, **_k: True)
+    monkeypatch.setattr(mod, "_start_tray", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "_message_box", lambda *_a, **_k: None)
+
+    code = mod._show_window(object(), object(), 8000, str(log_path))
+
+    assert code == 0
+    content = log_path.read_text(encoding="utf-8")
+    assert _FIRST_SCREEN_MARKER in content, "loaded 事件触发（首屏渲染完成）时必须记首屏标记"
+
+
 def test_window_ops_run_only_after_webview_start_at_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -579,6 +692,9 @@ def test_window_ops_run_only_after_webview_start_at_runtime(
     class _FakeEvents:
         def __init__(self) -> None:
             self.closed = _Signal()
+            # 5A：desktop 在 load_url 前注册 `loaded`（首屏真口径）⇒ 替身必须提供它（真实 pywebview
+            # 的 Window.events 本就有 loaded；缺了会在 `_after_start` 里 AttributeError 假红）。
+            self.loaded = _Signal()
 
     class _FakeWindow:
         def __init__(self) -> None:
@@ -650,6 +766,7 @@ def _install_recording_webview(
     class _Events:
         def __init__(self) -> None:
             self.closed = _Signal()
+            self.loaded = _Signal()  # 5A：首屏真口径的 `loaded` 绑定点（真实 Window.events 也有它）
 
     class _FakeWindow:
         def __init__(self, name: str) -> None:

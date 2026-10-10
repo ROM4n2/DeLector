@@ -13,6 +13,10 @@ r"""DeLector Windows 桌面壳：pywebview 窗口 + pystray 托盘 + 统一退�
   窗口**（有标题栏、可最大化/还原/拖边、不置顶，初始隐藏），就绪后亮主窗口并销毁 splash。
   二者需求相反（置顶/无边框 vs 可缩放/有标题栏），共用一个窗口会把真实 UI 关进无标题栏小窗
   —— 即"没法放大、没法改尺寸"的成因。
+- **真实首屏口径（关掉 ADR-0018 §8 `Unknown 8` 的代理口径缺口）**：日志在**进程最早处**记
+  「开始启动（进程级计时起点）」，并在主窗口 `load_url` 之后按 pywebview 的 **`loaded` 事件**
+  （页面渲染完成）记「真实 UI 已加载（首屏可用）」—— 这才是"首屏"的**真口径**；此前的
+  `health_200`（服务就绪）只是**代理口径**，不可冒充首屏。解析见 `tools/first_screen_from_log.py`。
 - **可安全 import**：模块顶层**不**导入 webview / pystray、不启动任何东西；重活只在
   `run_desktop()` 与 `if __name__ == "__main__":` 内发生（CI 缺 GTK/WebKit 时 import 不会炸）。
 
@@ -435,6 +439,10 @@ def _after_start(
     `main.load_url(...)` 加载真实 UI，最后 `splash.destroy()` 收掉启动反馈。顺序不可颠倒：
     销毁 splash 前主窗口必须已在（否则瞬间零窗口 ⇒ GUI 循环提前退出）。
 
+    **首屏真口径**：`load_url` 之前注册 pywebview 的 `loaded` 事件（页面渲染完成），命中时记
+    「真实 UI 已加载（首屏可用）」。注册放在这里（循环已起）既满足 P0（循环启动前碰窗口/事件会
+    永久阻塞），又因 `load_url` 会 `events.loaded.clear()` 而必须早于它注册。
+
     `result` 是回传给主线程 `_show_window` 的退出码容器：失败时置 1 并**销毁两个窗口**，让
     `webview.start()` 得以返回（否则进程会挂着一个空 splash 永不退出）。
     """
@@ -452,6 +460,13 @@ def _after_start(
         _set_splash_stage(splash, SPLASH_READY, log_path)
         _append_log(log_path, f"切换到主窗口（真实 UI）：http://127.0.0.1:{port}")
         main.show()  # 先亮主窗口：此刻起至少有一个窗口在，销毁 splash 不会触发 GUI 循环退出
+        # 首屏**真口径**：用 pywebview 的 `loaded` 事件（页面渲染完成 = 首屏可用）。注册必须在
+        # `load_url` **之前**——`load_url` 内部会 `events.loaded.clear()`，注册晚了就收不到。
+        # 此处已在 `webview.start()` 调度的事件循环**之内**（P0 约束：循环启动前碰窗口/事件会被
+        # marshal 到未运行的线程 ⇒ 永久阻塞，故不得挪到 start 之前）；`health_200` 只是"服务就绪"
+        # 的代理口径，不能冒充首屏。已过 `await_ready` ⇒ 主窗口初始 splash-html 的 loaded 早已触发，
+        # 此处注册只捕获后续 `load_url` 的真实 UI 渲染完成。
+        main.events.loaded += lambda: _append_log(log_path, "真实 UI 已加载（首屏可用）。")
         main.load_url(f"http://127.0.0.1:{port}")  # 再把真实 UI 载入主窗口（非 splash）
         _destroy_window(splash, log_path)  # 最后收掉 splash（实例非空 ⇒ 不触发 Application.Exit）
         _append_log(log_path, "已切换到主窗口，splash 已关闭。")
@@ -553,6 +568,9 @@ def run_desktop(port: int = DEFAULT_PORT) -> int:
     """
     log_path = resolve_log_path(os.environ)
     _redirect_std_streams(log_path)
+    # 进程级计时起点：让 launch.log 能**独立**算出"端到端"耗时（起点 → 服务就绪 / 起点 → 首屏）。
+    # 放在**最早处**（日志流一就绪）——晚于此处就漏掉"服务启动前"的进程开销，端到端就少算一截。
+    _append_log(log_path, "开始启动（进程级计时起点）。")
     try:
         return _run_desktop_inner(port, log_path)
     except KeyboardInterrupt:
