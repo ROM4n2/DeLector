@@ -108,21 +108,82 @@ BUILD_INFO_FILENAME = ".build-info.json"
 DEFAULT_ENTRY = "desktop.py"
 
 
-def resolve_version() -> str:
-    """发布版本号：优先 CI 注入的 GITHUB_REF_NAME（如 tag `v5.16.0`），否则回落 APP_VERSION。
+# ── 版本号净化 + tag 语境判断 ─────────────────────────────────────────────────
+# 为什么必须净化：GITHUB_REF_NAME 在 pull_request 事件里是 PR 合并引用名（形如 `128/merge`），
+# 直接当版本会让产物目录嵌套成 dist/DeLector-128/merge-Windows-x64-Portable —— 构建步报
+# "成功"、验包步（glob 只扫第一层）却找不到产物。同款脆弱点还会毁掉 build-release.yml 压缩步的
+# Get-ChildItem -Filter（同样只扫第一层）。故：只在**真 tag 语境**才信任 GITHUB_REF_NAME，
+# 且无论来源都做分隔符净化 + 硬失败断言。
+_PATH_SEPARATORS: Tuple[str, ...] = ("/", "\\")
 
-    为什么必须回落 APP_VERSION 而非写死字面量：曾写死 'v3.8.0'，本地不设
-    GITHUB_REF_NAME 时产物命名成 DeLector-v3.8.0-… 而 App 实为 v5.16.0，用户无从分辨。
-    APP_VERSION 是应用级单一真相源（delector/core/version.py），此处只在前面补 'v'。
+
+def tag_ref_name() -> str:
+    """返回可当版本用的 CI 引用名；非 tag 语境 / 名不合法时返回空串（调用方回落 APP_VERSION）。
+
+    GitHub 在 pull_request 事件里把 GITHUB_REF_NAME 设成 PR 合并引用名（`128/merge`），
+    只有 GITHUB_REF_TYPE == "tag" 才是真发布 tag。缺 GITHUB_REF_TYPE 时（本地手工设变量）
+    退化为"形如 v* 且不含路径分隔符"才采纳，兼顾本地可复现。
     """
-    tag = os.environ.get("GITHUB_REF_NAME")
-    if tag:
-        return tag
+    name = os.environ.get("GITHUB_REF_NAME", "")
+    if not name:
+        return ""
+    ref_type = os.environ.get("GITHUB_REF_TYPE")
+    if ref_type == "tag":
+        return name
+    if ref_type is None and _looks_like_release_tag(name):
+        return name
+    return ""
+
+
+def _looks_like_release_tag(name: str) -> bool:
+    """`name` 是否形如发布 tag（`v` 开头且不含路径分隔符）——GITHUB_REF_TYPE 缺失时的兜底判据。"""
+    return name.startswith("v") and not any(sep in name for sep in _PATH_SEPARATORS)
+
+
+def sanitize_version(raw: str) -> str:
+    """把版本串里的路径分隔符替换为 '-'，避免产物目录被嵌套（`/` 与 `\\`）。"""
+    version = raw
+    for sep in _PATH_SEPARATORS:
+        version = version.replace(sep, "-")
+    return version
+
+
+def assert_no_path_separator(version: str) -> None:
+    """净化后仍含路径分隔符 ⇒ **非零退出**（构建期硬失败），绝不产出嵌套目录。
+
+    为什么硬失败而非放行：嵌套产物会让下游验包 / 压缩步扫不到它（构建"成功"却没人能用），
+    比直接红更危险——静默坏包。故构建期就炸，强制暴露。
+    """
+    offending = [sep for sep in _PATH_SEPARATORS if sep in version]
+    if not offending:
+        return
+    print(f"[Error] 版本号仍含路径分隔符 {offending}：{version!r}")
+    print("        这会把产物目录嵌套成 dist/<版本>/merge-…，验包 / 压缩步将扫不到它。")
+    sys.exit(1)
+
+
+def resolve_version() -> str:
+    """发布版本号：仅在**真 tag 语境**取 CI 注入的 GITHUB_REF_NAME，否则回落 APP_VERSION。
+
+    为什么必须区分 tag / branch 语境：GITHUB_REF_NAME 在 pull_request 事件里是 PR 合并
+    引用名（`128/merge`），直接当版本会把产物目录嵌套成 dist/DeLector-128/merge-…，构建步
+    报成功、验包却扫不到（只扫第一层）。GitHub 提供 GITHUB_REF_TYPE（`tag` / `branch`），
+    只在 `tag` 时才信任该名（见 tag_ref_name）。
+    保持既有语义：GITHUB_REF_TYPE=tag 且 GITHUB_REF_NAME=v5.16.0 ⇒ 版本仍是 `v5.16.0`。
+
+    为什么必须回落 APP_VERSION 而非写死字面量：曾写死 'v3.8.0'，本地不设 GITHUB_REF_NAME
+    时产物命名成 DeLector-v3.8.0-… 而 App 实为 v5.16.0，用户无从分辨。APP_VERSION 是应用级
+    单一真相源（delector/core/version.py），此处只在前面补 'v'。
+    """
     # 直接 import 安全：delector.core.version 是只吃标准库的叶模块（实测不拉 spacy /
     # fastapi / webview 等重依赖），不会给构建脚本引入副作用，故不采用正则读源码的绕行写法。
     from delector.core.version import APP_VERSION
 
-    return f"v{APP_VERSION}"
+    raw = tag_ref_name() or f"v{APP_VERSION}"
+    # 防御性净化 + 断言：不管版本来自 CI 还是 fallback，都绝不产出含路径分隔符的目录名。
+    version = sanitize_version(raw)
+    assert_no_path_separator(version)
+    return version
 
 
 def current_commit_short_sha(repo_dir: str) -> str:

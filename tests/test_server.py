@@ -5029,9 +5029,15 @@ def test_readme_has_human_fingerprint_line():
 
 
 def test_resolve_version_prefers_github_ref_name(monkeypatch):
-    """CI 注入 GITHUB_REF_NAME 时优先取它（tag 即发布版本）。"""
+    """CI 注入 GITHUB_REF_NAME 且语境为 tag 时优先取它（tag 即发布版本）。
+
+    显式设 GITHUB_REF_TYPE=tag：GitHub Actions 会给 pytest 步骤带上 GITHUB_REF_TYPE
+    环境变量（PR/push 为 branch），不设它就会让"是否采纳该名"取决于**运行环境**而非被测
+    逻辑（本机绿、CI 红）。设成 tag 才是这条用例真正要表达的发布语境。
+    """
     import package_windows
 
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
     monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9")
     assert package_windows.resolve_version() == "v9.9.9"
 
@@ -5045,6 +5051,80 @@ def test_resolve_version_falls_back_to_app_version(monkeypatch):
     assert package_windows.resolve_version() == f"v{APP_VERSION}", (
         "本地构建的版本必须来自 APP_VERSION，而不是写死的 v3.8.0 误导名"
     )
+
+
+# ── 回归锁：版本号含斜杠（CI 闸第一次上线就抓到的产物嵌套）──────────────────────
+# 症状：pull_request 事件里 GITHUB_REF_NAME = `128/merge`，被当版本后产物目录嵌套成
+# dist/DeLector-128/merge-Windows-x64-Portable —— 构建步报成功、验包步（只扫第一层）
+# 找不到产物。下面四条把"tag 语境判断 + 分隔符净化 + 硬失败"钉死，防回潮。
+
+
+def test_resolve_version_pr_ref_name_yields_no_path_separator(monkeypatch):
+    """PR 语境（GITHUB_REF_NAME=128/merge）⇒ 版本不含路径分隔符，且回落 APP_VERSION。
+
+    "不含路径分隔符"是硬要求：一旦带上 `/`，产物目录就嵌套、下游验包 / 压缩步扫不到它。
+    """
+    import package_windows
+    from delector.core.version import APP_VERSION
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "branch")
+    monkeypatch.setenv("GITHUB_REF_NAME", "128/merge")
+    version = package_windows.resolve_version()
+
+    assert "/" not in version and "\\" not in version, (
+        f"版本号 {version!r} 含路径分隔符：产物目录会被嵌套成 dist/DeLector-128/merge-…，"
+        "验包 / 压缩步（只扫第一层）扫不到 —— 构建报成功却没人能用"
+    )
+    assert version == f"v{APP_VERSION}", "非 tag 语境必须回落 APP_VERSION"
+
+
+def test_resolve_version_branch_ref_type_falls_back_to_app_version(monkeypatch):
+    """GITHUB_REF_TYPE=branch ⇒ 即使 GITHUB_REF_NAME 形如 v* 也回落 APP_VERSION。"""
+    import package_windows
+    from delector.core.version import APP_VERSION
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "branch")
+    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9")
+    assert package_windows.resolve_version() == f"v{APP_VERSION}"
+
+
+def test_resolve_version_tag_ref_type_keeps_tag_name(monkeypatch):
+    """防把发布命名改坏：GITHUB_REF_TYPE=tag + GITHUB_REF_NAME=v9.9.9 ⇒ 仍是 v9.9.9。"""
+    import package_windows
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9")
+    assert package_windows.resolve_version() == "v9.9.9"
+
+
+def test_resolve_version_sanitizes_illegal_separators(monkeypatch):
+    """含非法分隔符的 tag 名 ⇒ 被净化成合法 slug（版本串不含路径分隔符）。"""
+    import package_windows
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", "v1.2.3/rc1")
+    version = package_windows.resolve_version()
+
+    assert "/" not in version and "\\" not in version, f"净化后仍含分隔符：{version!r}"
+    assert version == "v1.2.3-rc1", f"分隔符应被替换为 '-'，实际 {version!r}"
+
+
+def test_assert_no_path_separator_hard_fails():
+    """净化后仍含分隔符的版本串 ⇒ 非零退出（构建期硬失败），绝不产出嵌套目录。"""
+    import package_windows
+
+    with pytest.raises(SystemExit) as excinfo:
+        package_windows.assert_no_path_separator("v1/2")
+    assert excinfo.value.code != 0, "含路径分隔符的版本号必须非零退出（构建失败）"
+
+
+def test_without_github_ref_type_local_v_tag_is_adopted(monkeypatch):
+    """GITHUB_REF_TYPE 未设（本地手工设变量）时，形如 v* 且不含分隔符的名仍被采纳。"""
+    import package_windows
+
+    monkeypatch.delenv("GITHUB_REF_TYPE", raising=False)
+    monkeypatch.setenv("GITHUB_REF_NAME", "v5.16.0")
+    assert package_windows.resolve_version() == "v5.16.0"
 
 
 def test_version_fallback_targets_app_version_not_hardcoded():
