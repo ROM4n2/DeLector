@@ -159,11 +159,28 @@ jobs:
     name: Detect packaging-surface changes
     runs-on: ubuntu-latest
     outputs:
-      packaging: ${{ steps.filter.outputs.packaging }}
+      # fail-open：过滤步「没拿到干净的 success 结果」（失败 / 被跳过）时，packaging 缺省为 'true'
+      # ⇒ 下面的 Windows 冒烟 job 照跑。一个「只用来决定要不要跑」的过滤步，绝不该有能力把
+      # master push 弄红 —— 宁可多烧一台 windows runner 跑一次闸。
+      # 判据用 steps.filter.outcome（continue-on-error 改写前的**真实**结果），而非 conclusion：
+      # 过滤步失败时 outcome='failure'，但 conclusion 会被 continue-on-error 改写成 'success'。
+      packaging: ${{ steps.filter.outcome == 'success' && steps.filter.outputs.packaging || 'true' }}
     steps:
+      # MUST 先检出**全历史**（fetch-depth: 0）：dorny/paths-filter 在 push 事件下要以
+      # github.event.before 为基线做 git diff；checkout 默认浅克隆（fetch-depth: 1）时基线提交
+      # 不在本地对象库 ⇒ git exit 128（这正是 master push 红、PR 绿的原因——PR 走另一套基线机制）。
+      # 全历史检出是 dorny/paths-filter 文档对 push 事件的硬性要求；位置与写法对齐 ci.yml 其它 job。
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Detect packaging-surface changes
         id: filter
         uses: dorny/paths-filter@v3
+        # fail-open 接线：本步失败（例如基线缺失致 git exit 128）时 MUST NOT 让 job 红 —— 上面的
+        # outputs 表达式会把 packaging 缺省为 'true'（按「发生变更」处理，照跑闸）。
+        continue-on-error: true
         with:
           # 「打包面」路径清单：命中任一 ⇒ 点亮下面的 Windows 冒烟 job。这份清单即「闸的触发面」，
           # MUST 与 build-release.yml 的 Windows 构建面保持同源（tests/test_ci_hardening.py 逐项

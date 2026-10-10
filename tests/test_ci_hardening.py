@@ -972,3 +972,120 @@ def test_ci_has_windows_smoke_job_gated_on_packaging_paths() -> None:
         "漏一项会让「只改该文件的 PR」不点亮冒烟 job —— 闸静默失效"
         "（本仓有过「正则永不命中」的教训）。"
     )
+
+
+# ── 打包面检测步「失败不倒向红色」守卫（2026-10 master push 变红事故）──────────────
+# 事故：windows-smoke-changes 的 dorny/paths-filter 在 **push** 事件下要以
+# github.event.before 为基线做 git diff；checkout 浅克隆（fetch-depth: 1）时基线提交不在
+# 本地对象库 ⇒ `git` 退出 128 ⇒ 检测步失败 ⇒ 整个 job 红 ⇒ master 变红
+# （PR 走另一套基线机制，故同一 job 在 PR 上是绿的）。
+#
+# 两道互不替代的闸：
+#   ① 修根因：检测步所在 job MUST 先 checkout **全历史**（fetch-depth: 0）；
+#   ② fail-open：即便 ① 日后被删/回归，一个「只用来决定要不要跑」的检测步也 MUST NOT
+#      有能力把 job（进而 master）弄红 —— 取不到干净结果时按「发生变更」处理，宁可多跑
+#      一次闸，也不让过滤步成为红源。判据 MUST 依赖 steps.filter.outcome（continue-on-error
+#      改写前的真实结果），而非 conclusion（它会被 continue-on-error 改写成 success）。
+
+
+def _windows_smoke_changes_block() -> str:
+    """截出 ci.yml 里 windows-smoke-changes job（检测步所在 job）的 YAML 块。"""
+    return _job_block(CI_WORKFLOW, "windows-smoke-changes")
+
+
+def _steps_of(job_block: str) -> list[str]:
+    """把一个 job 块按 `      - ` 切分成各 step 的文本块。
+
+    step 以 6 空格加 `- ` 起头（job 键两空格 + 其后字段再缩进四空格 + 连字符）。多行
+    `run: |` 的正文缩进更深（10 空格），不会被误当作新 step。仅用于把「某一步自己的
+    写法」与别步隔开，不解析 YAML（沿用本文件既有的按缩进切文本手法）。
+    """
+    lines = job_block.splitlines()
+    starts = [i for i, line in enumerate(lines) if re.match(r"^ {6}- ", line)]
+    blocks: list[str] = []
+    for idx, start in enumerate(starts):
+        end = starts[idx + 1] if idx + 1 < len(starts) else len(lines)
+        blocks.append("\n".join(lines[start:end]))
+    return blocks
+
+
+def _step_using(job_block: str, needle: str) -> str:
+    """返回 job 块里第一条包含 needle 的 step 文本；找不到即 fail。"""
+    matches = [step for step in _steps_of(job_block) if needle in step]
+    assert matches, f"{CI_WORKFLOW} 的某个 job 内找不到包含 {needle!r} 的 step：\n{job_block}"
+    return matches[0]
+
+
+def test_packaging_detect_checkout_fetches_full_history() -> None:
+    """检测步所在 job 的 checkout MUST 带 fetch-depth: 0（防日后被删 ⇒ 重现 master 红）。
+
+    为什么这条在「失败不倒向」之外必须独立存在：fetch-depth: 0 修的是**根因**
+    （push 下 paths-filter 拿不到 github.event.before 基线 ⇒ git exit 128）；fail-open
+    只是**兜底**。只留 fail-open，会让每次因基线缺失而全量点亮 windows runner（昂贵且
+    掩盖真问题）；只留 fetch-depth，一旦有人顺手删掉就再次红。两者缺一不可。
+    """
+    detect = _windows_smoke_changes_block()
+
+    checkout = _step_using(detect, "actions/checkout@")
+    assert re.search(r"fetch-depth:\s*0\b", checkout), (
+        f"{CI_WORKFLOW} 的 windows-smoke-changes checkout 缺 `fetch-depth: 0`：\n{checkout}\n"
+        "dorny/paths-filter 在 push 事件下以 github.event.before 为基线做 git diff，浅克隆"
+        "（默认 fetch-depth: 1）时基线提交不在本地对象库 ⇒ git exit 128 ⇒ 检测步把 master"
+        "弄红（PR 走另一套基线机制故绿）。修法：给该 checkout 的 with: 加 fetch-depth: 0。"
+    )
+
+    # 顺序：checkout MUST 早于 paths-filter，否则 paths-filter 仍在没有 .git 的目录里跑。
+    steps = _steps_of(detect)
+    checkout_idx = next(i for i, s in enumerate(steps) if "actions/checkout@" in s)
+    filter_idx = next(i for i, s in enumerate(steps) if "dorny/paths-filter@" in s)
+    assert checkout_idx < filter_idx, (
+        f"{CI_WORKFLOW} 的 checkout 出现在 dorny/paths-filter **之后**：\n"
+        "paths-filter 需要在已检出的仓库里跑 git diff，checkout MUST 早于它。"
+    )
+
+
+def test_packaging_filter_step_is_fail_open() -> None:
+    """「检测变更」步 MUST NOT 有能力把 job（进而 master）弄红：失败 ⇒ 视为发生变更。
+
+    失败形态：检测步只决定「要不要跑闸」，它红 ⇒ 整个 job 红 ⇒ master push 变红，而 CI
+    的本意是「宁可多跑一次闸」也不能让过滤步成为红源。故：
+      1. 检测步 MUST 带 continue-on-error: true（失败不把 job 弄红）；
+      2. 判定 MUST 以 steps.filter.outcome 兜底 —— 取不到干净 success 结果时缺省为
+         「发生变更」（fail-open 到跑闸）。MUST 用 outcome 而非 conclusion：continue-on-error
+         会把失败的 conclusion 改写成 success，只有 outcome 保留真实失败，据此才能判
+         「取不到结果」。
+    """
+    detect = _windows_smoke_changes_block()
+
+    assert "continue-on-error: true" in detect, (
+        f"{CI_WORKFLOW} 的打包面检测步缺 `continue-on-error: true`：\n"
+        "该步只用来决定「要不要跑闸」，一旦失败就红 ⇒ 有能力把 master push 弄红。\n"
+        "修法：给该步加 continue-on-error: true，并把判定改为 fail-open。"
+    )
+
+    assert re.search(r"steps\.filter\.outcome\s*==\s*'success'", detect), (
+        f"{CI_WORKFLOW} 的打包面判定未以 steps.filter.outcome 兜底：\n"
+        "检测步失败/被跳过时会取不到 outputs，若判定直接依赖 outputs，缺省即「无变更」"
+        "= fail-closed，闸静默失效（而「过滤步红 ⇒ master 红」正是要消除的失败形态）。"
+    )
+    assert re.search(r"\|\|\s*'true'", detect), (
+        f"{CI_WORKFLOW} 的打包面判定缺 'true' 缺省值：\n"
+        "检测步「取不到结果」时 MUST 缺省为「发生变更」（fail-open 到跑闸），"
+        "而非缺省为「无变更」。"
+    )
+
+
+def test_packaging_surface_manifest_stays_readable_in_workflow() -> None:
+    """「打包面」清单 MUST 仍留在 workflow 里逐项可读（不藏进 action 的隐式行为）。
+
+    与 `test_ci_has_windows_smoke_job_gated_on_packaging_paths` 互补：那条钉「清单在闸的
+    触发面（filters）里齐全」，这条钉「清单本身仍在 workflow 文本内、可读、可复跑验证」，
+    防止有人把触发面改写成 action 的隐式默认路径（那份清单将无法被本守卫逐项核对）。
+    """
+    filter_block = _packaging_filter_block()
+    missing = [p for p in PACKAGING_SURFACE_PATHS if p not in filter_block]
+    assert not missing, (
+        f"{CI_WORKFLOW} 的 paths 过滤缺打包面关键项：{missing}\n"
+        "「哪些文件算打包面」这份清单 MUST 留在 workflow 里（可读、可复跑验证），"
+        "且逐项齐全 —— 漏项会让「只改该文件的 PR」不点亮冒烟 job（闸静默失效）。"
+    )
