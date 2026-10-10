@@ -40,5 +40,8 @@ warn_redundant_casts = true
 # → 这 6 个脚本被静默排除出 mypy 门禁（2026-09-24 修复，实测曾掩盖 47 个 strict 错误）。
 exclude = '(\.venv|dist|android|scratch|tools/raw|(^|/)build(/|$))'
 
-# 显式声明检查面：本地裸跑 `python -m mypy` 即与 CI 同口径，避免漏参导致口径漂移
+# 显式声明检查面：**只影响"本地裸跑 `python -m mypy`"**。CI **不读本 `files`** —— 三条门禁都显式
+# 传目标（`--strict delector tools` / `--follow-imports=skip tests` /
+# `--strict --follow-imports=skip desktop.py package_windows.py conftest.py`），故裸跑 ≠ CI 同口径。
+# 且裸跑当前会因**既有 17 条无关错误**（落在 10 个既有文件）转红 ⇒ 仅作"全仓体检"，不是门禁口径。
 files = ["delector", "tests", "tools", "conftest.py", "start.py", "desktop.py", "package_windows.py"]

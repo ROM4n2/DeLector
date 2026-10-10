@@ -41,7 +41,13 @@ def verify_webview2_payload(release_dir: str) -> List[str]:
     names: List[str] = []
     for _dirpath, _dirnames, filenames in os.walk(release_dir):
         names.extend(name.lower() for name in filenames)
-    return [needle for needle in REQUIRED_WEBVIEW2_DLL_NEEDLES if not any(needle.lower() in name for name in names)]
+    # MUST 锚定 `.dll` 后缀：产物同目录常伴 `Microsoft.Web.WebView2.Core.xml`/`.pdb`（同名却非 DLL），
+    # 只做子串匹配会被这些同伴文件名命中 ⇒ 真漏收 DLL 却**假绿**，白屏包照样发布。
+    return [
+        needle
+        for needle in REQUIRED_WEBVIEW2_DLL_NEEDLES
+        if not any(name.endswith(".dll") and needle.lower() in name for name in names)
+    ]
 
 
 def assert_webview2_payload(release_dir: str) -> None:
@@ -56,7 +62,29 @@ def assert_webview2_payload(release_dir: str) -> None:
     sys.exit(1)
 
 
-def build_windows():
+def release_readme(version: str) -> str:
+    """产物内《说明_README.txt》正文（入口的**单一文案真相**）。
+
+    为什么抽成纯函数：入口从"起服务 + 开默认浏览器"改为"打开桌面窗口"后，文案若不同步，用户会照着
+    README 找一个已不存在的启动方式 —— 属"文档漂移"类静默失败。抽出来后守卫测试可直接断言文本
+    （tests/test_server.py::test_windows_portable_readme_matches_desktop_entry）。
+    """
+    return f"""# DeLector — 德语学术精读与备考工作台 ({version} 绿色便携版)
+
+## 🚀 启动方式
+直接双击运行 `DeLector.exe` ⇒ 打开**桌面窗口**（原生窗口，无需浏览器）。
+
+## ⚙️ API 配置 (可选)
+软件内置 0ms 德语核心词库、形态学三态表、复合词拆解、五场域拓扑与从句树分析，全部 100% 离线运行。
+如需使用 DeepSeek 深度 AI 考点剖析，在页面右上角点击「⚙️ 设置」填入 API Key 即可。
+
+## 📱 手机 / 平板局域网伴读（旧工作流）
+需要手机 / 平板在**同一 Wi-Fi** 下访问工作台 ⇒ 运行 `DeLector.exe --server-only`：
+它会打印局域网地址（例如 `http://192.168.x.x:8000`），在手机浏览器打开该地址即可同步阅读。
+"""
+
+
+def build_windows() -> None:
     version = os.environ.get("GITHUB_REF_NAME", "v3.8.0")
     print("=" * 60)
     print(f"  DeLector {version} -- Windows Portable Packager")
@@ -167,21 +195,9 @@ def build_windows():
     # 4. 验包：产物必须含 WebView2 运行时 DLL（缺 ⇒ 解压后白屏）。硬失败，非警告。
     assert_webview2_payload(release_dir)
 
-    # 5. Copy helper files
-    readme_content = f"""# DeLector — 德语学术精读与备考工作台 ({version} 绿色便携版)
-
-## 🚀 启动方式
-直接双击运行 `DeLector.exe` 即可自动启动服务并在默认浏览器中打开工作台！
-
-## ⚙️ API 配置 (可选)
-软件内置 0ms 德语核心词库、形态学三态表、复合词拆解、五场域拓扑与从句树分析，全部 100% 离线运行。
-如需使用 DeepSeek 深度 AI 考点剖析，在页面右上角点击「⚙️ 设置」填入 API Key 即可。
-
-## 📱 手机 / 平板局域网伴读
-保持电脑与手机在同一 Wi-Fi 下，手机浏览器访问控制台显示的局域网 IP（例如 `http://192.168.x.x:8000`）即可同步阅读！
-"""
+    # 5. Copy helper files（文案与入口同源：见 release_readme 的单一真相说明）
     with open(os.path.join(release_dir, "说明_README.txt"), "w", encoding="utf-8") as f:
-        f.write(readme_content)
+        f.write(release_readme(version))
 
     print("\n" + "=" * 60)
     print("[SUCCESS] 绿色便携版打包成功！")

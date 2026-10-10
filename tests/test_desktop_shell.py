@@ -409,6 +409,41 @@ def test_dispatch_server_only_delegates_to_start_main(monkeypatch: pytest.Monkey
     assert code == 0
 
 
+def test_dispatch_server_only_warns_that_port_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """`--server-only --port <非默认>` ⇒ 必须**显式警告** `--port` 不生效，绝不静默丢弃。
+
+    `--server-only` 复用 `start.main()`（固定端口 8000），该路径不接受 `--port`；argparse 却宣称
+    `--port` 可用 ⇒ 静默用 8000 会被用户误读成"端口没换成功"。这条钉住"不静默"。
+    """
+    import start
+
+    mod = _mod()
+    monkeypatch.setattr(start, "main", lambda: None)
+    monkeypatch.setattr(mod, "run_desktop", lambda port: pytest.fail("--server-only 不得起桌面窗口"))
+
+    code = mod.dispatch(server_only=True, port=9000)
+    err = capsys.readouterr().err
+
+    assert code == 0
+    assert "9000" in err and "--port" in err, "必须显式告知 --port 在该组合下不生效（不得静默）"
+
+
+def test_dispatch_server_only_does_not_warn_for_default_port(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """`--server-only` 用默认端口（无分歧）⇒ **不**告警：正常用法不该被当噪音。"""
+    import start
+
+    mod = _mod()
+    monkeypatch.setattr(start, "main", lambda: None)
+
+    mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
+
+    assert capsys.readouterr().err == "", "端口无分歧时不得告警"
+
+
 def test_import_desktop_has_no_side_effects():
     """子进程实证：`import desktop` 返回 0 且**零输出**（没起服务、没弹窗、没拉 GUI）。"""
     proc = subprocess.run(

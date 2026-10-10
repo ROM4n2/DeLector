@@ -44,6 +44,10 @@ BIND_HOST = "0.0.0.0"
 # 首次建档更慢。取 60s 兜底，宁慢勿"静默判未就绪"。
 READY_DEADLINE_S = 60.0
 
+# 默认端口：桌面窗口路径用它；`--server-only` 复用 `start.main()` 时**固定**用它
+# —— 该路径不接受 `--port`（见 dispatch 的显式警告），此常量是其真实端口的单一真相。
+DEFAULT_PORT = 8000
+
 # ── WebView2 运行时检测（锚点取自本机实测注册表）────────────────────────────
 # 实测：HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{GUID} 的 pv=154.0.4258.62。
 WEBVIEW2_GUID = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -409,7 +413,7 @@ def _run_desktop_inner(port: int, log_path: str) -> int:
         coordinated_shutdown(server, thread, log_path)
 
 
-def run_desktop(port: int = 8000) -> int:
+def run_desktop(port: int = DEFAULT_PORT) -> int:
     """启动桌面壳：返回**进程退出码**。
 
     **所有**退出路径（关窗 / 托盘退出 / 异常 / Ctrl+C）都会先 `shutdown(server, thread)`：
@@ -434,7 +438,7 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
         prog="desktop.py",
         description="DeLector Windows 桌面壳（pywebview 窗口 + pystray 托盘，ADR-0020）。",
     )
-    parser.add_argument("--port", type=int, default=8000, help="本地服务端口（默认 8000）")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"本地服务端口（默认 {DEFAULT_PORT}）")
     parser.add_argument(
         "--server-only",
         action="store_true",
@@ -456,10 +460,23 @@ def run_server_only() -> int:
 
 
 def dispatch(server_only: bool, port: int) -> int:
-    """入口分派（可测的纯接线）：`--server-only` ⇒ 既有服务；否则 ⇒ 桌面窗口。"""
-    if server_only:
-        return run_server_only()
-    return run_desktop(port)
+    """入口分派（可测的纯接线）：`--server-only` ⇒ 既有服务；否则 ⇒ 桌面窗口。
+
+    ⚠️ `--server-only` **复用** `start.main()`（固定端口，见 `run_server_only` 的理由）：该路径
+    不接受 `--port`。用户若在此组合下显式给了非默认端口，必须**显式告知**它不生效 —— 静默丢弃会被
+    误读成"端口没换成功"，正是本任务要消除的一类静默失败（不动 `start.main()` 签名是为了不引入
+    port-identity / LAN 面回归）。
+    """
+    if not server_only:
+        return run_desktop(port)
+    # 守卫式压平（最大缩进 2 层）：下面这条警告是"不静默"的落点，理由见上方 docstring。
+    if port != DEFAULT_PORT:
+        print(
+            f"[警告] --server-only 复用既有服务，固定端口 {DEFAULT_PORT}："
+            f"你传入的 --port {port} 不会生效。",
+            file=sys.stderr,
+        )
+    return run_server_only()
 
 
 if __name__ == "__main__":
