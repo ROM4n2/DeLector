@@ -2,7 +2,7 @@
 
 > **正式件:** `08-Projects/DeLector/01-ADR/0021-stay-on-python-language-choice-criteria.md`（vault）。本文件是仓内副本，内容与正式件同源（机械重新生成，未手抄）。
 > **决策者:** Haoyu Xi ｜ **产出方式:** `/dfs-grill` 三面镜（技术/产品/交付）+ vault 梯子检索 + 用户拍板（Q1-A / Q2-A）。
-> **要点:** 继续 Python 主体；**语言选择以运行时/交付为判据**，"编辑期少犯错"用工具纪律解决（本次 14 条真实缺陷里仅 3 条可在编译期消除 ⇒ 21%，其余 79% 换语言照样犯）。替代投资第一优先 = **CI 真启产物闸**。
+> **要点:** 继续 Python 主体；**语言选择以运行时/交付为判据**，"编辑期少犯错"用工具纪律解决（14 条真实缺陷里仅 3 条可在编译期消除 ⇒ 21%）。替代投资四项已全部落地（CI 真启产物闸 / start.py 类型门禁 / 前端跨边界契约闸 / spaCy 惰性加载 −32%）。
 
 - **状态**: Accepted（2026-10-10）
 - **实施**: **无需代码改动**。本 ADR 的"实施"是**替代投资**：① **CI 真启产物闸**（最高优先）→ ② `mypy --strict` 收尾 → ③ `static/` 前端类型检查 → ④ spaCy 惰性加载（ADR-0018 §7.6 的 O0 杠杆）。
@@ -125,7 +125,11 @@
 
 1. **⭐ CI 真启产物闸（最高优先，两个席位独立得出同一结论）**：`build-release.yml` 目前**对产物零验证**（只 `pytest` 后打包）。应在 CI 上**真启一次 Windows 产物**：启动 → 校验 DeLector 身份（`/api/health` 的 `app` 字段）→ 断言 **≤N 秒干净退出**。**这是唯一能在作者双击之前抓住本次 P0 的闸。**
 2. **`mypy --strict` 收尾**（`pyproject.toml` 已递延项）：把 `start.py` 那两处 `unused-ignore` 用签名/局部收窄替换后纳入门禁。
-3. **`static/`（33k 行前端）加类型检查**：当前 JS↔Python 的外部边界才是真正的"跨边界误用"来源（这是编译期检查价值**真正成立**的那一类）。
+3. **`static/`（33k 行前端）加跨边界检查** ⇒ ✅ **已执行（2026-10-10，口径经实修订正）**：当前 JS↔Python 的外部边界才是真正的"跨边界误用"来源（这是编译期检查价值**真正成立**的那一类）。
+   - **实修订正口径**：`tsc --checkJs` 扫全部 23 个 JS 文件实测 **219 条错误，其中 199 条为 `TS2339 Property 'X' does not exist on HTMLElement/Window`（缺 DOM/全局声明的噪音）** ⇒ 全量 `checkJs` 会沦为"永远红的噪音源"（本仓刚有过恒真/恒红门禁的教训）。⇒ 改为**抓真实跨边界误用**。
+   - **主仪器（阻塞闸）**：`tools/check_frontend_api_contract.py` —— 用 **`delector.server.app.routes` 真实枚举**（124 条；新版 FastAPI 需递归 `_IncludedRouter.original_router.routes`）校验 `static/js` 的**真实调用写法**（`api()` 包装 ~104 处 / `fetch` / `doFetch` / `location.href`），模板插值与 `+` 拼接归一化为 `{}`，**未知端点非零退出**。当前 117 个调用点 → 109 可静态解析 → **全部匹配（PASS，未发现真缺陷）**；开发中修掉一处**工具假阳性**（`/api/listen/materials${levelParam}` 的插值实为查询串构造器）。
+   - **次仪器（窄口径）**：`static/js/api-types.js`（**JSDoc typedef，形状从后端 handler 抄写**）+ `tsconfig.json` **显式 allowlist**（`api-types.js`、`update.js`）+ 固定版本 `typescript@5.6.3`；并加"allowlist 不得改成全量 glob"的守卫。
+   - 两者都接进 ubuntu 质量闸作**阻塞步**，含归属/顺序守卫与两处变异自证。
 4. **spaCy 惰性加载**（ADR-0018 §7.6 的 O0 杠杆，省 1.47s/2.6s）。
 
 ### 6.2 正面

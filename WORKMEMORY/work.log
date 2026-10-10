@@ -592,3 +592,12 @@ Caps: filesystem-write, shell-exec
 - **替代投资（=本 ADR 的实施，按优先级）**：① **⭐ CI 真启产物闸**（`build-release.yml` 目前对产物**零验证**，只 pytest 后打包 ⇒ **两个席位独立得出同一结论**：这是唯一能在作者双击前抓住本次 P0 的闸：启动 → 校验 DeLector 身份 → 断言 ≤N 秒干净退出）；② `mypy --strict` 收尾（先换掉 `start.py` 两处 `unused-ignore`）；③ `static/`（33k 行）加类型检查（JS↔Python 才是真跨边界）；④ spaCy 惰性加载（ADR-0018 §7.6 O0 杠杆）。
 - **Fog**：CI runner 无 GUI ⇒ "真启产物闸"能否覆盖**窗口形态**未验（可能需 `--server-only` 口径 + 真机 HITL）；Android"永久否决"的时效依赖 Chaquopy 约束与 Android 端 ⏸ 状态；`static/` 类型检查的实际拦截率未测。
 - **本轮纯决策/文档**：ADR-0021（vault + 仓内副本，逐行同源差异 0）+ PROJECT_OVERVIEW + work.log，**零代码改动**。
+
+### 2026-10-10 | codebuddy | EXEC(ADR-0021 替代投资 ①③) + FEAT(前端跨边界契约闸)
+Caps: filesystem-write, shell-exec
+事件：用户「都做吧」⇒ 执行 ADR-0021 剩余替代投资，并按实测**修正**第 3 项口径。
+- **① `start.py` 纳入 mypy 门禁**（`1bab669`）：去掉两处 `# type: ignore`（改按名 `setattr`，语义逐字不变；两代 uvicorn 信号 API 覆盖保留）+ 诚实修掉**另外 5 处**既有 strict 错误，**零豁免**；变异自证（改回 ignore ⇒ `unused-ignore` 红）。
+- **③ spaCy 惰性加载（ADR-0018 §7.6 O0 杠杆）**（`f2fa8b6`）：冷启动 `health_200` **3123 → 2128ms（−32%）**；`model_load_ms` 1679→1092ms。**计划外但必需**：实测真正 import 期触发 `spacy.load` 的是 `create_app() → seed_preset_articles()`（只改 processor 时 3123→3120 纹丝不动）⇒ 预置文章改纯 Python 落库 + 靠既有**惰性迁移**在首次打开时升级为 spaCy。**未达 2.0s 目标**（差 ≈125ms，残余是 `import spacy` 本身；**机器依赖**，单机不可外推）；checker 立场 = **就此收手**（惰性化 `syntax_tree.py` 会动运行时 `isinstance` 与"红线 1 降级判据"）⇒ 采纳并登记。**取舍**：列表难度预览在首开前为纯 Python 口径（可能"列表 A2→点进去 B1"）；模型加载失败 = **硬失败不降级**且状态对 `/api/settings` 可见；首需 NLP 的请求等 ≈462ms。
+- **③′ 黄牌收口**：`tools/bench_cold_start.py` 原**被漏改**（口径标签名实不符 + `nlp_path` 读导入期静态声明值）⇒ 据实修正并把 processor 半支改为**按真实状态判定**（不主动触发加载，避免污染冷启动被测对象）；`routes/main.py` 的 `/api/settings` 改为 **live 读**（按值 import 会让失败状态不可见）。
+- **②′ 前端跨边界契约闸**（`a65a379`）—— **口径经实修订正**：`tsc --checkJs` 全量实测 **219 错/其中 199 条是 DOM 噪音** ⇒ 不接全量。改为主仪器 **路由契约检查**（`tools/check_frontend_api_contract.py`：用 `delector.server.app.routes` **真实枚举 124 条**，校验 `static/js` 真实调用写法，模板插值归一化，**未知端点非零退出**；117 调用点→109 可解析→**全部匹配 PASS，无真缺陷**；开发中修掉一处**工具假阳性**）+ 次仪器 **窄口径 JSDoc/tsconfig allowlist + 固定 `typescript@5.6.3`**。都接进 ubuntu 闸作**阻塞步**，含归属/顺序守卫 + 两处变异自证。
+- **⚠️ 事故（编排者流程错误，已修）**：新产物闸的接线在 **master push** 上坏了 —— `windows-smoke-changes` job **根本没有 checkout 步** ⇒ paths-filter 取不到 `github.event.before` ⇒ `git` exit 128；且"只用来决定是否跑闸"的步**有能力把 master 弄红**。而我**直接推了两次没验 CI** ⇒ master 红约 1 小时。修复：`f49d359`（补 `fetch-depth: 0` + 过滤步 **fail-open**：用 `outcome` 而非 `conclusion`，取不到结果即视为变更照跑闸）+ `80d37ec`（**把 `ci.yml` 自身纳入打包面清单** —— 改闸定义就该重跑闸，这正是它潜伏一小时的原因）。**端到端证明**：master push 上三个 job 全绿、冒烟真被触发（10/10 PASS，commit 80d37ec）。
