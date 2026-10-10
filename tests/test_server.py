@@ -2265,14 +2265,20 @@ def test_bind_host_is_loopback_only_on_android(monkeypatch):
 
 
 def test_settings_reports_nlp_engine(client):
-    """降级是静默的，所以引擎状态必须能从 API 读到（真机上唯一的可验证途径）。"""
-    from delector import server
+    """降级 / 硬失败都不是静默的，所以引擎状态必须能从 API 读到（真机上唯一的可验证途径）。
+
+    模型惰性化后 /api/settings **live** 读 `processor.NLP_ENGINE`（而非导入期快照，见
+    routes/main.py 顶部注释），故这里也与**同一个 live 源**比对。合法取值多一个
+    `"spacy(加载失败)"`：运行期模型加载失败是**硬失败不降级**（见 processor._resolve_nlp_model），
+    此时必须如实报出来，而不是仍谎报可用的 `"spacy"`。
+    """
+    from delector.nlp_engine import processor
 
     res = client.get("/api/settings")
     assert res.status_code == 200
     data = res.json()
-    assert data["nlp_engine"] in ("spacy", "pure_python")
-    assert data["nlp_engine"] == server.NLP_ENGINE
+    assert data["nlp_engine"] in ("spacy", "pure_python", "spacy(加载失败)")
+    assert data["nlp_engine"] == processor.NLP_ENGINE
     assert data["nlp_engine_detail"]
 
 

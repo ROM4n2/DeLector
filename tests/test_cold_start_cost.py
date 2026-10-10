@@ -475,7 +475,13 @@ def test_p95_rounds_are_env_tunable() -> None:
 
 
 def test_model_load_caliber_is_declared(bench_out: str) -> None:
-    """⑮ `model_load_ms` 的口径必须写明：它是 import_ms 的**子集**，不可直接相减。"""
+    """⑮ `model_load_ms` 的口径必须写明：它是 import_ms 的**子集**且**不含模型加载**（已惰性化）。
+
+    模型加载惰性化后（ADR-0018 §7.6 O0）`model_load_ms` 只量 `import processor`，**不再含**
+    模型反序列化。口径文本必须与之一致，否则读者会以为冷启动仍含模型加载 —— 这正是本脚本曾因
+    「漏改」而口径静默漂移的那类不一致；故这里把「惰性」也钉进断言（比只钉"子集"更强，非削弱）。
+    """
     note = re.search(r"^model_load_note=(.+)$", bench_out, re.MULTILINE)
     assert note is not None, f"缺少 model_load_note 口径行\n{bench_out}"
     assert "子集" in note.group(1), f"必须写明 model_load_ms 是 import_ms 的子集：{note.group(1)}"
+    assert "惰性" in note.group(1), f"必须写明模型已惰性化、model_load_ms 不含模型加载：{note.group(1)}"

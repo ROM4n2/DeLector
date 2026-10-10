@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 import genanki
 from fastapi import HTTPException, Request
 
-from delector.nlp_engine.processor import process_german_text
+from delector.nlp_engine.processor import _process_german_text_pure_python, process_german_text
 
 # 本文件现在位于 delector/core/database.py（Phase 1 Task 6 搬入 core/）。DATA_DIR
 # 必须指向**仓库根**（delector/ 的父目录），不能落到 delector/ 包目录。用「向上走到
@@ -843,13 +843,35 @@ def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_
         return cur.lastrowid  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
 
+def _preset_processed_json_lite(text: str) -> str:
+    """预置文章**导入期免模型**分析：用纯 Python 路径产出 processed_json（毫秒级）。
+
+    为什么不走 ``process_german_text``：那会触发 spaCy 模型加载（本机约 0.5~1.7s），而
+    ``create_app() → init_db() → seed_preset_articles()`` 正处在桌面冷启动的关键路径上
+    （ADR-0018 §7.6 的 O0 杠杆 / ADR-0021 替代投资#4）。故预置文章先以纯 Python 落库，
+    并**故意不带 ``version``**：单篇 GET（``/api/articles/{id}``）的既有「惰性迁移」判据
+    ``pj.get("version") != PROCESSED_JSON_VERSION`` 因此命中，用户**首次打开该文**时用
+    spaCy 全量重算并回写 —— 模型加载被推迟到「首次真正需要 NLP 的请求」。列表
+    （``/api/articles``）仍能读到非空的 ``stats``（含 ``cefr_percentages``）。
+
+    代价（诚实登记）：列表里的难度预览在文章被首次打开前是纯 Python 口径（略粗）；
+    打开即升级为 spaCy 全量口径。
+    """
+    processed = _process_german_text_pure_python(text)
+    processed.pop("version", None)
+    return json.dumps(processed, ensure_ascii=False)
+
+
 def seed_preset_articles(db_path: Optional[str] = None) -> None:
     target = get_db_path(db_path)
     with db_conn(target) as conn:
         count = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         if count == 0:
             for art in PRESET_ARTICLES:
-                ingest_article(art["title"], art["text"], db_path=target)
+                conn.execute(
+                    "INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
+                    (art["title"], art["text"], _preset_processed_json_lite(art["text"]), ""),
+                )
 
 
 # 遇见区预置内容的**内容版本号**。升这个号（+1）才会让已升级过的设备再触发一次补装：

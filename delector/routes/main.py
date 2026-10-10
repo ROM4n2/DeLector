@@ -91,6 +91,12 @@ from delector.core.security import (
 )
 from delector.core.utils import _attachment_headers
 from delector.core.version import APP_VERSION
+
+# 惰性加载后 NLP_ENGINE / NLP_ENGINE_DETAIL 会在**首次真正需要 NLP 时**被回填（成功仍 "spacy"、
+# 失败改 "spacy(加载失败)"）。若像旧写法那样 `from ... import NLP_ENGINE` 按值取，字符串被**按值
+# 拷贝**，回填对 route 不可见 ⇒ /api/settings 永远报导入期声明值（v5.7.6 真机确诊同类坑）。
+# 故这里改取**模块对象**，在 handler 内 live 读，让「失败=硬失败」的真实状态能被读到。
+from delector.nlp_engine import processor as _nlp_processor
 from delector.nlp_engine.linguistics import (
     build_prep_matrix,
     lookup_irregular_verb,
@@ -99,8 +105,6 @@ from delector.nlp_engine.linguistics import (
     split_komposita,
 )
 from delector.nlp_engine.processor import (
-    NLP_ENGINE,
-    NLP_ENGINE_DETAIL,
     PROCESSED_JSON_VERSION,
     SYSTEM_GRAMMAR_PROMPT,
     get_cefr_level,
@@ -1419,8 +1423,9 @@ def get_app_settings() -> Dict[str, Any]:
         "api_model": get_effective_api_model(),
         "tts_voice": get_setting("TTS_VOICE", "de-DE-KatjaNeural"),
         "tts_rate": get_setting("TTS_RATE", "+0%"),
-        "nlp_engine": NLP_ENGINE,
-        "nlp_engine_detail": NLP_ENGINE_DETAIL,
+        # live 读（非导入期快照）：模型惰性加载后，成功/失败状态在首次使用时才回填，见顶部注释。
+        "nlp_engine": _nlp_processor.NLP_ENGINE,
+        "nlp_engine_detail": _nlp_processor.NLP_ENGINE_DETAIL,
     }
 
 

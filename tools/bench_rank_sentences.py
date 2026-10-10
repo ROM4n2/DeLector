@@ -281,6 +281,23 @@ def _short_model_name(name: str) -> str:
     return name
 
 
+def _resolved_model_detail(nlp: Any, fallback_detail: str) -> str:
+    """从**已加载**的 nlp 对象反解模型包名（如 ``de_core_news_sm``）；取不到则退回 detail。
+
+    spaCy 的 ``nlp.meta`` 带 ``lang``（de）与 ``name``（core_news_sm）⇒ 拼回完整包名。
+    模型惰性化（ADR-0018 §7.6 O0 杠杆）后，``processor.NLP_ENGINE_DETAIL`` 在解析前不含
+    实际模型名；而本基准走 ``syntax_tree.get_spacy_nlp()``（不经 processor 的加载器）⇒
+    ``model=`` 需改从被测对象自身取，否则会打成 ``unknown``（口径不可复核）。
+    """
+    meta = getattr(nlp, "meta", None)
+    if not isinstance(meta, dict):
+        return fallback_detail
+    lang = str(meta.get("lang", ""))
+    name = str(meta.get("name", ""))
+    package = f"{lang}_{name}".strip("_")
+    return package or fallback_detail
+
+
 def _model_label(detail: str, engine: str, candidates: Tuple[str, ...]) -> str:
     """从 processor 的引擎信息反解**实际生效**的模型名（含降级标注）；照抄 bench_spacy_unit 口径。
 
@@ -414,9 +431,12 @@ def main() -> int:
         rank: RankFn = syntax_score.rank_sentences
         nlp = syntax_tree.get_spacy_nlp()
         nlp_path, nlp_path_detail = _nlp_path(nlp, str(processor.NLP_ENGINE))
-        # 实际生效模型名：据 processor 的引擎信息反解，用 nlp_path 把关（见 _model_label）。
+        # 实际生效模型名：优先从**已加载**的 nlp.meta 反解（processor 的 NLP_ENGINE_DETAIL
+        # 现已惰性，未触发 processor 加载时不含模型名），解析不出再退回该 detail；用 nlp_path 把关。
         model = _model_label(
-            str(processor.NLP_ENGINE_DETAIL), nlp_path, tuple(processor.SPACY_MODEL_CANDIDATES)
+            _resolved_model_detail(nlp, str(processor.NLP_ENGINE_DETAIL)),
+            nlp_path,
+            tuple(processor.SPACY_MODEL_CANDIDATES),
         )
 
         items = _corpus_items()

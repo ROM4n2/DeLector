@@ -34,10 +34,11 @@ token/lemma/morph/CEFR 反查/可分动词回扫/统计；而本脚本实测的�
 ======  ==================================================  ==============================
 段      测什么                                              含义
 ======  ==================================================  ==============================
-加载    ``import delector.nlp_engine.processor``            含 spacy 导入 + 模型反序列化
-                                                           （processor 在**导入期**就
-                                                           ``spacy.load``，见 :81-111）
-预热    第一次 ``process_german_text`` 调用                  含组件 lazy init（首次调用）
+加载    ``import delector.nlp_engine.processor``            仅含 ``import spacy`` 本身；
+                                                           **不含**模型反序列化（模型已
+                                                           惰性化，见 processor.py 惰性加载块）
+预热    第一次 ``process_german_text`` 调用                  含**模型惰性加载（反序列化）**
+                                                           + 组件 lazy init（首次调用）
 稳态    ``rounds`` × 语料全量，逐句单独调用，取中位数          可复跑的"单价"
 ======  ==================================================  ==============================
 
@@ -92,8 +93,8 @@ Python 降级路径，照样打印 ``engine=pure_python`` + ``model=pure-python`
 
 输出契约（``tests/test_spacy_unit_cost.py`` 逐行断言，勿改格式）::
 
-    model_load_ms=N.NN            # import/加载模型（含首次初始化）耗时
-    warmup_ms=N.NN                # 第一次 process_german_text（预热，含 lazy init）
+    model_load_ms=N.NN            # import processor（含 import spacy；**不含**模型反序列化）耗时
+    warmup_ms=N.NN                # 第一次 process_german_text（含模型惰性加载 + 组件 lazy init）
     per_sentence_ms=N.NN          # 稳态：单次 process_german_text 的中位耗时
     per_token_us=N.NN             # 稳态：每 token 微秒
     model=<name>                  # de_core_news_md / de_core_news_sm / pure-python
@@ -338,8 +339,9 @@ def _verdict(
         )
     ratio = warmup_ms / short_ms if short_ms > 0 else 0.0
     mech = (
-        f"首次口径证据：model_load_ms={model_load_ms:.2f}（import 期加载模型）+ "
-        f"warmup_ms={warmup_ms:.2f}（首次调用含 lazy init），首次/稳态 = {ratio:.1f}×"
+        f"首次口径证据：model_load_ms={model_load_ms:.2f}（import processor；模型现为**惰性加载**，"
+        f"其反序列化已并入下面的 warmup_ms）+ warmup_ms={warmup_ms:.2f}"
+        f"（首次调用含模型惰性加载 + 组件 lazy init），首次/稳态 = {ratio:.1f}×"
     )
     length = (
         f"句长敏感度：短句档 {short_ms:.2f}ms → 长句档 {long_ms:.2f}ms"
@@ -407,25 +409,30 @@ def main() -> int:
     tmpdir = tempfile.mkdtemp(prefix="delector_bench_spacy_")
     try:
         _bootstrap_env(tmpdir)
-        # 延迟导入：必须在 _bootstrap_env 之后。processor 在 import 期就 spacy.load
-        # 模型并打印引擎行 —— 这段正是「加载」段，故单独计时。
+        # 延迟导入：必须在 _bootstrap_env 之后。processor 已改**惰性加载** —— import 期只做廉价
+        # 判定（含 import spacy），**不再** spacy.load；模型反序列化推迟到首次调用（见下方预热段）。
+        # 故这段量的是「import processor」本身，**不含**模型加载。
         t0 = time.perf_counter()
         from delector.nlp_engine import processor
 
         model_load_ms = (time.perf_counter() - t0) * 1000.0
 
-        engine = str(processor.NLP_ENGINE)
-        detail = str(processor.NLP_ENGINE_DETAIL)
-        model = _model_label(detail, engine, tuple(processor.SPACY_MODEL_CANDIDATES))
         process = processor.process_german_text
 
         items = _corpus_items()
 
-        # 预热段：全流程第一次调用（含 spaCy 组件的 lazy init）。刻意只计这一次，
-        # 与后面的稳态采样彻底分开 —— 42ms vs 2.1ms 的嫌疑就在这条缝上。
+        # 预热段：全流程第一次调用（含 spaCy **模型惰性加载** + 组件 lazy init）。刻意只计
+        # 这一次，与后面的稳态采样彻底分开 —— 42ms vs 2.1ms 的嫌疑就在这条缝上。模型加载已从
+        # import 期搬到这次首次调用（ADR-0018 §7.6），故 warmup_ms 现在含模型反序列化。
         t1 = time.perf_counter()
         process(items[0][1])
         warmup_ms = (time.perf_counter() - t1) * 1000.0
+
+        # 引擎 / 模型名必须在**首次调用（解析）之后**再读：模型惰性化后，导入期的
+        # NLP_ENGINE_DETAIL 只说「将惰性加载」，不含实际生效的模型名。
+        engine = str(processor.NLP_ENGINE)
+        detail = str(processor.NLP_ENGINE_DETAIL)
+        model = _model_label(detail, engine, tuple(processor.SPACY_MODEL_CANDIDATES))
 
         # 稳态段：逐句单独调用（一次调用 = 一句，与两个旧值的「/句」口径对齐）。
         samples: List[float] = []

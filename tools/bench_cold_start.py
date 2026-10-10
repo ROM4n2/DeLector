@@ -19,21 +19,22 @@ import/建库/装配」——84 秒是**轮询上限**不是实测耗时，两�
 ===================  ==================================================  ============================
 行                   怎么测                                              含义
 ===================  ==================================================  ============================
-``import_ms``        **独立子进程**：``import delector.server`` 的墙钟    含 spaCy 模型加载（
-                                                                         ``processor.py:81-111`` 在
-                                                                         导入期加载）+ 路由模块
-                                                                         import + **模块级
+``import_ms``        **独立子进程**：``import delector.server`` 的墙钟    含路由模块 import + **模块级
                                                                          ``app = create_app()``**
-                                                                         （``server.py:356``）
+                                                                         （``server.py:356``）；
+                                                                         **不含** spacy 模型加载
+                                                                         （模型已惰性化到首次使用，
+                                                                         见 processor.py 惰性加载块）
 ``init_db_ms``       **独立子进程**：导入 database 后单独计 ``init_db()``  仅建表（DDL）
 ``app_ready_ms``     probe B **同一进程**内 import 完之后，对另一套全新库    冷库装配：建表 + 预置文章导入
                      再调一次 ``create_app()``（**第二次装配**）             + 遇见区补装 + 静态挂载；其冷度
                                                                          与 probe A 不同源（见下）
 ``health_200_ms``    **独立子进程**起真实 uvicorn，轮询                    **用户体感主指标**
-                     ``/api/health`` 直到 200                             （进程起 → 可服务）
-``model_load_ms``    **独立子进程**：``import                             含 ``import spacy`` 本身；
-                     delector.nlp_engine.processor``                     与 ``bench_spacy_unit.py``
-                                                                         同口径
+                     ``/api/health`` 直到 200                             （进程起 → 可服务；/health
+                                                                         不触发 NLP ⇒ 不含模型加载）
+``model_load_ms``    **独立子进程**：``import                             仅 import processor 模块本身
+                     delector.nlp_engine.processor``                     （含 ``import spacy``），
+                                                                         **不含**模型反序列化（已惰性化）
 ===================  ==================================================  ============================
 
 ``import_ms`` / ``app_ready_ms`` / ``init_db_ms`` 只有**概念上的**包含关系（``import``
@@ -41,9 +42,12 @@ import/建库/装配」——84 秒是**轮询上限**不是实测耗时，两�
 ``init_db()``），但**三段各由独立子进程测得、前置状态不同**（probe B 的进程在 import
 期已跑过一次完整 ``create_app()``，进程级与文件系统级缓存已热）⇒ **不可按大小关系解读**
 （谁大谁小随机器与前置状态变：本机 ``app_ready_ms > init_db_ms``、CI 反向，见 ``segments_note``）。
-``model_load_ms`` 概念上是 ``import_ms`` 的**子集**（模型加载发生在 import 之内），但两者
-同样来自**不同子进程**，故 ``import_ms − model_load_ms`` 只作近似归因，**不可当作一个独立分段**，
-也**不可据此断言 ``model_load_ms <= import_ms``**。
+``model_load_ms`` 现在量的是 ``import delector.nlp_engine.processor`` **本身**（含 ``import spacy``），
+**不含模型反序列化** —— 模型加载已惰性化（ADR-0018 §7.6 O0）到首次 ``process_german_text``
+（首次真正需要 NLP 的请求，见 processor.py 惰性加载块）。processor 是 ``delector.server`` 模块图的
+一部分 ⇒ ``model_load_ms`` 概念上仍是 ``import_ms`` 的**子集**，但两者来自**不同子进程**，
+``import_ms − model_load_ms`` 只作近似归因，**不可当作一个独立分段**，也**不可据此断言
+``model_load_ms <= import_ms``**。
 
 为什么每段都用**独立子进程**
 ----------------------------
@@ -106,7 +110,7 @@ Android 侧：**不伪造**
 
 输出契约（``tests/test_cold_start_cost.py`` 逐行断言，勿改格式）::
 
-    import_ms=N.NN          # import delector.server（含 spaCy 模型加载 + 模块级 create_app）
+    import_ms=N.NN          # import delector.server（**不含**模型加载 + 模块级 create_app）
     init_db_ms=N.NN         # **独立子进程**：单独计 init_db()（连带初始化进度库 + 预置文章导入）
     init_db_tables=N        # probe A 自检：init_db() 后 initdb/init.db 的 sqlite_master 表数（0=没建表/落热库）
     init_db_progress_tables=N  # 同上，initdb/init_progress.db（两库对称，机器无关的防恒真判据）
@@ -118,9 +122,9 @@ Android 侧：**不伪造**
     health_200_ms=N.NN      # 子进程起服务 → /api/health 200 的墙钟（用户体感主指标）
     health_200_p95_ms=N.NN  # 与 health_200_ms **同一批**样本的 p95（n=5 时≈最大值、系统性低估尾部）
     samples_health_200_ms=N.NN,...  # 该批原始样本，供下游独立重算分位（不许拿中位数冒充）
-    model_load_ms=N.NN      # import delector.nlp_engine.processor（import_ms 的子集）
+    model_load_ms=N.NN      # import processor（含 import spacy，**不含**模型反序列化；import_ms 的子集）
     rounds=N
-    nlp_path=<spacy|pure>   # 生产自己的判据：processor.NLP_ENGINE + syntax_tree.get_spacy_nlp()
+    nlp_path=<spacy|pure>   # 生产自己的判据：syntax_tree.get_spacy_nlp() + processor（实际加载状态，非导入期声明值）
     nlp_path_probe_a=<spacy|pure>  # probe A 自报的标签（顶层 nlp_path 即取自它）
     nlp_path_probe_b=<spacy|pure>  # probe B 自报的标签（import_ms/app_ready_ms 来自它）—— A/B 必须一致
     android=unmeasured      # 本机无 Android SDK，见 android_note
@@ -201,9 +205,11 @@ SEGMENTS_NOTE = (
 )
 MODEL_LOAD_NOTE = (
     "model_load_ms 是**独立子进程**里 import delector.nlp_engine.processor 的墙钟"
-    "（含 import spacy 本身，与 bench_spacy_unit.py 的 model_load_ms 同口径）；"
-    "processor 在导入期就加载模型 ⇒ 它是 import_ms 的**子集**，两者非互斥分段，"
-    "import_ms − model_load_ms 只作近似归因，不可直接相减"
+    "（含 import spacy 本身，与 bench_spacy_unit.py 的 model_load_ms 同口径）—— 模型加载已"
+    "**惰性化**（ADR-0018 §7.6 O0）：import processor **不再** spacy.load，故本行**不含模型反序列化**，"
+    "只量 processor 模块的 import 成本；模型反序列化推迟到首次 process_german_text（首次真正需要 NLP "
+    "的请求，见 processor.py 惰性加载块）。processor 属于 delector.server 的模块图 ⇒ 它仍是 import_ms 的"
+    "**子集**，两者非互斥分段，import_ms − model_load_ms 只作近似归因，不可直接相减（且现两者都**不含**模型加载）"
 )
 
 
@@ -263,20 +269,44 @@ def _free_port() -> int:
 # --------------------------------------------------------------------------- #
 # 子进程探针：每段一个干净解释器（冷 import 只能发生一次）
 # --------------------------------------------------------------------------- #
+def _processor_path(processor: ModuleType) -> Tuple[str, str]:
+    """判 processor 侧**实际**走的路径 —— 惰性化后**不能**直接读导入期声明值。
+
+    模型加载已从 import 期搬到「首次真正需要 NLP 时」（ADR-0018 §7.6 O0），故
+    ``processor.NLP_ENGINE`` 在导入期恒为 ``"spacy"``（**声明值**）；拿它判等于恒真，探测不到
+    processor 侧**实际**加载失败（这正是本脚本被漏改时口径静默漂移的根因）。改用真实状态：
+      - ``processor.nlp is None``（红线 1 / Android）⇒ 确定纯 Python（本就无模型）；
+      - 已解析（``_nlp_resolved``）⇒ 按**实际结果**（``_nlp_model is not None``）判 —— 成功
+        ``spacy``、失败 ``pure``（失败还会把 ``NLP_ENGINE`` 改写为 ``"spacy(加载失败)"``）；
+      - 未解析 ⇒ 如实标注为 ``spacy`` 的**声明值**（模型尚未加载），并指明可复跑的实际判据。
+
+    **不主动触发一次加载**：那会既多付一次 spacy.load、又在模型缺失时引入联网下载兜底，污染
+    「冷启动」被测对象。实际结果的**可复跑判据**：``python tools/bench_spacy_unit.py`` 会触发
+    processor 的首次加载并打印 ``engine=`` 行（spacy / pure_python；加载失败则脚本在首次调用处抛错）。
+    """
+    if processor.nlp is None:
+        return "pure", "nlp=None(红线1/Android 降级)"
+    if not processor._nlp_resolved:
+        return "spacy", "声明值(模型未加载；实际见 tools/bench_spacy_unit.py 的 engine= 行)"
+    if processor._nlp_model is not None:
+        return "spacy", "已加载"
+    return "pure", "加载失败(已解析为 None，NLP_ENGINE 已改写)"
+
+
 def _nlp_path(syntax_tree: ModuleType, processor: ModuleType) -> Tuple[str, str]:
     """用**生产自己的判据**读出本次走的是 spaCy 还是纯 Python 降级路径。
 
-    - ``syntax_tree.get_spacy_nlp()``：生产 ``/spacy-status`` 用的判据；
-    - ``processor.NLP_ENGINE``：processor 自己记录的生效引擎。
+    - ``syntax_tree.get_spacy_nlp()``：生产 ``/spacy-status`` 用的判据（会真加载模型）；
+    - processor 侧：见 ``_processor_path``（惰性化后按**真实状态**判，不读导入期声明值）。
 
     刻意不在基准里自己 ``import spacy`` 判一次：那会与生产的候选顺序 / 自动下载 /
     Android 判定分叉。两层都报 spaCy 才标 ``spacy``。
     """
     tree_path = "spacy" if syntax_tree.get_spacy_nlp() else "pure"
-    proc_path = "spacy" if processor.NLP_ENGINE == "spacy" else "pure"
+    proc_path, proc_state = _processor_path(processor)
     path = "spacy" if tree_path == "spacy" and proc_path == "spacy" else "pure"
     detail = " ".join(str(processor.NLP_ENGINE_DETAIL).split())
-    return path, f"syntax_tree={tree_path};processor={proc_path}({detail})"
+    return path, f"syntax_tree={tree_path};processor={proc_path}({proc_state};{detail})"
 
 
 def _count_tables(db_path: str) -> int:
@@ -610,7 +640,8 @@ def _verdict(
     # 都不是份额、不可作证据。故这里**不给百分比**，只保留"不可比大小"的口径。
     segments = (
         f"分段（各段独立子进程、不可比大小，见 segments_note）：import_ms={import_ms:.0f}"
-        f"（其中 spaCy 模型加载 model_load_ms={model_load_ms:.0f}：跨进程近似归因，仅示意、不可当份额）"
+        f"（现**不含** spaCy 模型加载；其内 import processor model_load_ms={model_load_ms:.0f}，"
+        f"跨进程近似归因，仅示意、不可当份额）"
         f"｜init_db_ms={init_db_ms:.0f}（仅建表）｜create_app(第二次装配, 冷度与 probe A 不同源) "
         f"app_ready_ms={app_ready_ms:.0f}"
         f"｜其余（进程起 + uvicorn 装配 + 首个请求）≈{residual_ms:.0f}"
@@ -618,7 +649,7 @@ def _verdict(
     # 近似归因（跨进程，仅示意）：只用来定位"本机实测里哪个单项最大"。含跨进程相减 ⇒ 原始差
     # 可为负，故 max 到 0 仅作显示，不代表它是独立分段。
     parts = {
-        "spaCy 模型加载": model_load_ms,
+        "import processor（现不含模型加载）": model_load_ms,
         # 跨进程相减，仅作示意，可为负（下面的 max 到 0 只为显示，不代表它是独立分段）。
         "其余 import（路由模块 + 首装 create_app）": max(import_ms - model_load_ms, 0.0),
         "进程起 + uvicorn 装配 + 首请求（近似）": max(residual_ms, 0.0),
