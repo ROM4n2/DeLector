@@ -107,6 +107,13 @@ def assert_no_env_in_payload(release_dir: str) -> None:
 BUILD_INFO_FILENAME = ".build-info.json"
 DEFAULT_ENTRY = "desktop.py"
 
+# ── 预置文章预生成数据（子计划 2A）──────────────────────────────────────────────
+# 数据文件的**仓库相对路径**（= 产物内相对路径）。用单一常量 + 字面量串表达，既作
+# `--add-data` 的 src/dest，也让 `tests/test_server.py` 的打包守卫能对**同一字面量**做断言。
+# 为什么 MUST 显式 --add-data：`--hidden-import` 只收 .py，收不到这个 .json；漏收不崩，但
+# 运行时会静默降级成纯 Python 口径（「列表预览与详情跳变」复发），而本地 pytest 全绿。
+PRESET_PROCESSED_DATA_REL = "delector/data/preset_processed.json"
+
 
 # ── 版本号净化 + tag 语境判断 ─────────────────────────────────────────────────
 # 为什么必须净化：GITHUB_REF_NAME 在 pull_request 事件里是 PR 合并引用名（形如 `128/merge`），
@@ -284,6 +291,10 @@ def build_windows() -> None:
         "--clean",
         "--console",  # Keep console so user sees service logs & IP addresses
         f"--add-data={os.path.join(root_dir, 'static')}{os.pathsep}static",
+        # 子计划 2A：预置文章 spaCy 口径 processed_json 数据文件（见 PRESET_PROCESSED_DATA_REL
+        # 的说明）。src 取仓库内相对路径，dest 钉在同一相对路径 ⇒ 运行时按包相对定位能命中。
+        f"--add-data={os.path.join(root_dir, PRESET_PROCESSED_DATA_REL)}"
+        f"{os.pathsep}{os.path.dirname(PRESET_PROCESSED_DATA_REL)}",
         "--hidden-import=uvicorn.logging",
         "--hidden-import=uvicorn.loops",
         "--hidden-import=uvicorn.loops.auto",

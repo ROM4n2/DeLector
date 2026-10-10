@@ -100,6 +100,12 @@ REQUIRED_BUILD_INFO_KEYS: Tuple[str, ...] = ("commit", "built_at", "app_version"
 REQUIRED_DLL_NEEDLES: Tuple[str, ...] = ("WebView2Loader.dll", "Microsoft.Web.WebView2")
 # 桌面壳的两大运行时目录：缺 webview ⇒ 无桌面窗口；缺 pythonnet ⇒ WebView2 后端(clr)不可用。
 REQUIRED_INTERNAL_DIRS: Tuple[str, ...] = ("webview", "pythonnet")
+# 预置文章**预生成数据**（子计划 2A）：打包时靠 `--add-data` 显式纳入（只收 .py 的
+# `--hidden-import` 收不到它）。缺它不崩，但运行时会**静默降级**成纯 Python 口径
+#（「列表预览与详情跳变」复发）—— 正是「只在真产物上才能发现」的那类问题，故本闸必须拦。
+# 锚定**以该相对路径结尾**的路径（递归查），不硬编码 `_internal/` 前缀：PyInstaller 版本
+# 间的布局前缀（`_internal/` 有无）属可变细节，锚定相对子路径对两种布局都成立。
+REQUIRED_DATA_SUFFIX = "delector/data/preset_processed.json"
 
 ENV_FILE_SUFFIX = ".env"
 ARTIFACT_GLOB = "DeLector-*-Windows-x64-Portable"
@@ -295,6 +301,20 @@ def missing_internal_dirs(artifact: Path) -> List[str]:
     """返回缺失的 `_internal/<name>` 目录名（空 = 通过）。"""
     internal = artifact / "_internal"
     return [name for name in REQUIRED_INTERNAL_DIRS if not (internal / name).is_dir()]
+
+
+def missing_data_files(artifact: Path) -> List[str]:
+    """返回缺失的必需数据文件（空 = 通过）。锚定**以该相对路径结尾**的路径，递归查。
+
+    用 `rglob` 而非固定 `_internal/...`：PyInstaller onedir 把 `--add-data` 收到 bundle 根的
+    相对子路径下（6.x 起 bundle 根是 `_internal/`），硬编码前缀会在版本变化时静默失效；锚定
+    相对子路径则对 `_internal/delector/data/...` 与旧布局 `delector/data/...` 都成立。
+    大小写不敏感（Windows 文件名大小写不固定）。
+    """
+    needles = [p.as_posix().lower() for p in artifact.rglob("*") if p.is_file()]
+    if any(path.endswith(REQUIRED_DATA_SUFFIX.lower()) for path in needles):
+        return []
+    return [REQUIRED_DATA_SUFFIX]
 
 
 def health_is_ready(status_code: int, payload: Any) -> bool:
@@ -542,6 +562,15 @@ def _check_integrity(report: Report, artifact: Path, expect_commit: str) -> None
         report.fail("_internal 关键目录存在", f"缺少 {missing_dir}（期望 _internal/{{webview,pythonnet}}）")
     else:
         report.ok("_internal 关键目录存在", "webview / pythonnet")
+    missing_data = missing_data_files(artifact)
+    if missing_data:
+        report.fail(
+            "预置文章预生成数据文件存在",
+            f"缺少 {missing_data} —— 产物会静默降级成纯 Python 口径（首次打开难易跳变）；"
+            "构建期 --add-data 漏收即此（--hidden-import 只收 .py，收不到 .json）",
+        )
+    else:
+        report.ok("预置文章预生成数据文件存在", REQUIRED_DATA_SUFFIX)
 
 
 def _child_env(data_dir: Path) -> Dict[str, str]:

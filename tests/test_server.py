@@ -4675,6 +4675,43 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
             assert f"'{_mod_prefix(mod)}{mod}'" in spec, f"{mod} 未在 DeLector.spec 的 hiddenimports 中注册"
 
 
+def test_preset_processed_data_registered_in_all_packaging_targets():
+    """子计划 2A：预置文章预生成数据文件必须在**三个**打包位点显式纳入，且产物验收闸有断言。
+
+    为什么不能只靠 `--hidden-import`：那只收 `.py` —— `delector/data/preset_processed.json`
+    是数据文件，MUST 用 `--add-data` 显式纳入；否则产物里没有它，运行时会**静默降级**成纯
+    Python 口径（「列表 A2 → 点进去 A1」跳变复发），而本地 pytest 全绿（同 v4.8.1 / v5.2.0
+    的漏模块事故同款失效面）。
+
+    Android 端（DEV-RULES §2.4 第③端）由 `build-release.yml` 的 `cp -r delector` 整目录拷贝覆盖
+    ——`preset_processed.json` 就在 `delector/` 目录下，随整目录进 APK，故**无需**单独声明。
+    """
+    root = ROOT
+    needle = "delector/data/preset_processed.json"
+
+    # 断言的是「PyInstaller 命令里真有一行 --add-data 引用了这个数据文件」，而非只是常量定义在场
+    # —— 否则删掉 add-data 那行、只留常量，纯子串断言仍会绿（本守卫会被绕过）。
+    pkg = open(os.path.join(root, "package_windows.py"), encoding="utf-8").read()
+    assert any("--add-data" in line and "PRESET_PROCESSED_DATA_REL" in line for line in pkg.splitlines()), (
+        "package_windows.py 未在 PyInstaller 命令里用 --add-data 纳入预生成数据文件（Windows 位点）："
+        "漏收 ⇒ 产物静默降级为纯 Python 口径，本地全绿"
+    )
+    assert needle in pkg, "package_windows.py 缺少预生成数据文件的相对路径常量 PRESET_PROCESSED_DATA_REL"
+
+    wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
+    assert wf.count(needle) == 2, (
+        f"build-release.yml 应在 Linux / macOS 两个 PyInstaller 位点各纳入一次 (count={wf.count(needle)})"
+    )
+    # Android 覆盖：整目录拷贝（与四端打包同步守卫同款依据）。
+    assert "cp -r delector" in wf, "Android 端需整目录拷入 delector/ 才能带上该数据文件"
+
+    verify = open(os.path.join(root, "tools", "verify_windows_portable.py"), encoding="utf-8").read()
+    assert needle in verify, "verify_windows_portable.py 缺少对预生成数据文件的**真产物**断言"
+    assert "missing_data_files" in verify, (
+        "verify_windows_portable.py 必须真扫产物、缺数据文件即 FAIL（这是「只在真产物上才能发现」的闸）"
+    )
+
+
 def _workflow_job_segment(workflow: str, job: str) -> str:
     """截取 workflow 中某个 job 的文本段（从 `  <job>:` 头到下一个 `  <name>:` 头）。
 

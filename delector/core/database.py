@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """数据库连接、初始化、CRUD、配置存储、音频缓存管理与备份还原底层。"""
 
+import hashlib
 import html as _html
 import json
 import logging
@@ -19,7 +20,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 import genanki
 from fastapi import HTTPException, Request
 
-from delector.nlp_engine.processor import _process_german_text_pure_python, process_german_text
+from delector.nlp_engine.processor import PROCESSED_JSON_VERSION, _process_german_text_pure_python, process_german_text
 
 # 本文件现在位于 delector/core/database.py（Phase 1 Task 6 搬入 core/）。DATA_DIR
 # 必须指向**仓库根**（delector/ 的父目录），不能落到 delector/ 包目录。用「向上走到
@@ -844,22 +845,120 @@ def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_
 
 
 def _preset_processed_json_lite(text: str) -> str:
-    """预置文章**导入期免模型**分析：用纯 Python 路径产出 processed_json（毫秒级）。
+    """预置文章**免模型**分析：用纯 Python 路径产出 processed_json（毫秒级）。
 
-    为什么不走 ``process_german_text``：那会触发 spaCy 模型加载（本机约 0.5~1.7s），而
-    ``create_app() → init_db() → seed_preset_articles()`` 正处在桌面冷启动的关键路径上
-    （ADR-0018 §7.6 的 O0 杠杆 / ADR-0021 替代投资#4）。故预置文章先以纯 Python 落库，
-    并**故意不带 ``version``**：单篇 GET（``/api/articles/{id}``）的既有「惰性迁移」判据
+    这是 ``preset_processed_json`` 的**回退路径**（未命中构建期预生成数据时用）。不走
+    ``process_german_text`` 的理由：那会触发 spaCy 模型加载（本机约 0.5~1.7s），而
+    ``create_app() → init_db() → seed_preset_articles()`` 处在桌面冷启动的关键路径上
+    （ADR-0018 §7.6 的 O0 杠杆 / ADR-0021 替代投资#4）。故回退时以纯 Python 落库，
+    并**不带 ``version``**：单篇 GET（``/api/articles/{id}``）的既有「惰性迁移」判据
     ``pj.get("version") != PROCESSED_JSON_VERSION`` 因此命中，用户**首次打开该文**时用
     spaCy 全量重算并回写 —— 模型加载被推迟到「首次真正需要 NLP 的请求」。列表
     （``/api/articles``）仍能读到非空的 ``stats``（含 ``cefr_percentages``）。
 
-    代价（诚实登记）：列表里的难度预览在文章被首次打开前是纯 Python 口径（略粗）；
-    打开即升级为 spaCy 全量口径。
+    代价（诚实登记）：回退生效时，列表里的难度预览在文章被首次打开前是纯 Python 口径（略粗），
+    打开即升级为 spaCy 全量口径 ⇒ 存在「A2 → A1」跳变。构建期预生成数据正是为消除该跳变。
     """
     processed = _process_german_text_pure_python(text)
     processed.pop("version", None)
     return json.dumps(processed, ensure_ascii=False)
+
+
+# ── 预置文章预生成数据（子计划 2A：谁固定，就在哪算）──────────────────────────────
+# 预置文本是随代码发布的固定文本，「算准」应发生在**构建期**；推迟到运行时会因列表预览
+# （纯 Python 口径）与首次打开（惰性迁移升级为 spaCy 口径）不一致而让用户看到难度跳变。
+# 生成器：tools/gen_preset_processed.py；产物：delector/data/preset_processed.json（按文本哈希索引）。
+PRESET_PROCESSED_SCHEMA = "preset-processed/v1"
+_PRESET_PROCESSED_FILENAME = "preset_processed.json"
+_preset_processed_entries: Optional[Dict[str, Any]] = None
+_preset_processed_loaded = False
+
+
+def preset_text_hash(text: str) -> str:
+    """预置文章正文的内容哈希（sha256 十六进制）。
+
+    生成器与运行时 MUST 共用本函数：两边各算一份，任一侧写法漂移都会让「命中」判据恒不成立、
+    预生成数据静默永不命中（退化成未命中回退，且只在日志里可见）。
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def preset_processed_data_path() -> str:
+    """预生成数据文件路径（相对**包目录**定位，dev 与 PyInstaller 冻结后同一相对位置）。
+
+    本模块在 ``delector/core/``：回指一级到包目录再进 ``data/``。PyInstaller onedir 下
+    ``__file__`` 指向 ``_internal/delector/core/database.pyc``，故本相对路径冻结后同样成立
+    —— 前提是打包时用 ``--add-data ...;delector/data`` 把文件收到同一位置（见
+    package_windows.py 与 build-release.yml；漏收不崩，但会**静默降级**，故打包守卫 + 产物
+    验收闸兜底）。
+    """
+    return os.path.join(os.path.dirname(_PKG_DIR), "data", _PRESET_PROCESSED_FILENAME)
+
+
+def _warn_preset_processed(reason: str) -> None:
+    """预置文章降级为纯 Python 口径时的**可见**告警（No-Silent-Failure）。
+
+    降级本身可接受（有回退），但后果是「列表预览与详情跳变」这一已知缺陷复发；静默降级则让
+    「打包漏收数据文件」这类问题无从观测，故 MUST 打出 WARNING。
+    """
+    logging.getLogger("delector").warning(
+        "预置文章未走构建期预生成数据，已回退纯 Python 口径（首次打开可能跳变）：%s", reason
+    )
+
+
+def _load_preset_processed() -> Dict[str, Any]:
+    """读并缓存预生成数据索引：``{text_hash: {"version": ..., "processed": {...}}}``。
+
+    只读 JSON，**绝不**触发 spaCy 模型加载（「import 期不加载模型」这条不变量由此保持，
+    tests/test_nlp_lazy_load.py 钉它）。文件缺失 / 解析失败 / 结构不符 → 返回 ``{}`` 并
+    **可见**告警一次，由调用方回退纯 Python 口径。
+    """
+    global _preset_processed_entries, _preset_processed_loaded
+    if _preset_processed_loaded:
+        return _preset_processed_entries or {}
+    _preset_processed_loaded = True
+    path = preset_processed_data_path()
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError) as exc:
+        _warn_preset_processed(f"读取 {path} 失败：{exc!r}")
+        _preset_processed_entries = {}
+        return _preset_processed_entries
+    entries = data.get("entries") if isinstance(data, dict) else None
+    if not isinstance(entries, dict):
+        _warn_preset_processed(f"{path} 结构不符：缺少 entries 映射")
+        _preset_processed_entries = {}
+        return _preset_processed_entries
+    _preset_processed_entries = entries
+    return _preset_processed_entries
+
+
+def _reset_preset_processed_cache() -> None:
+    """清空预生成数据缓存（测试在 monkeypatch 文件路径后用它强制重载）。"""
+    global _preset_processed_entries, _preset_processed_loaded
+    _preset_processed_entries = None
+    _preset_processed_loaded = False
+
+
+def preset_processed_json(text: str) -> str:
+    """预置文章落库用的 ``processed_json``：优先用构建期预生成数据，未命中则**可见地**回退。
+
+    命中判据 = 文本哈希一致 **且** 条目 version 等于 ``PROCESSED_JSON_VERSION``（版本不符说明
+    预生成数据已过期，同「未命中」处理并告警）。命中即落 spaCy 口径 + version ⇒ 单篇 GET 的
+    惰性迁移判据不成立 ⇒ 首次打开**不再跳变**。
+
+    未命中 / 文件缺失 ⇒ 记一条 WARNING（可见的降级提示）后回退 ``_preset_processed_json_lite``
+    （纯 Python 口径、**不带 version**，靠惰性迁移在首次打开时升级）。
+    """
+    text_hash = preset_text_hash(text)
+    entry = _load_preset_processed().get(text_hash)
+    if isinstance(entry, dict) and entry.get("version") == PROCESSED_JSON_VERSION:
+        processed = entry.get("processed")
+        if isinstance(processed, dict):
+            return json.dumps(processed, ensure_ascii=False)
+    _warn_preset_processed(f"文本哈希 {text_hash[:12]} 未命中（或版本不符 / 文件缺失）")
+    return _preset_processed_json_lite(text)
 
 
 def seed_preset_articles(db_path: Optional[str] = None) -> None:
@@ -870,7 +969,7 @@ def seed_preset_articles(db_path: Optional[str] = None) -> None:
             for art in PRESET_ARTICLES:
                 conn.execute(
                     "INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
-                    (art["title"], art["text"], _preset_processed_json_lite(art["text"]), ""),
+                    (art["title"], art["text"], preset_processed_json(art["text"]), ""),
                 )
 
 

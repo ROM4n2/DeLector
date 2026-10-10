@@ -103,6 +103,7 @@ jobs:
             --noconfirm \
             --clean \
             --add-data="static:static" \
+            --add-data="delector/data/preset_processed.json:delector/data" \
             --hidden-import=uvicorn.logging \
             --hidden-import=uvicorn.loops \
             --hidden-import=uvicorn.loops.auto \
@@ -196,6 +197,7 @@ jobs:
             --noconfirm \
             --clean \
             --add-data="static:static" \
+            --add-data="delector/data/preset_processed.json:delector/data" \
             --hidden-import=uvicorn.logging \
             --hidden-import=uvicorn.loops \
             --hidden-import=uvicorn.loops.auto \
