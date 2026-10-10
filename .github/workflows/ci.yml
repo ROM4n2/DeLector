@@ -194,6 +194,8 @@ jobs:
               - 'requirements-desktop.txt'
               - 'tools/verify_windows_portable.py'
               - '.github/workflows/build-release.yml'
+              # 改闸自己的定义也要重跑闸 —— 否则「接线被改坏」这件事只能等下次真正的打包面变更才暴露
+              - '.github/workflows/ci.yml'
 
   windows-portable-smoke:
     name: Windows Portable Smoke (build + 真启闸)
