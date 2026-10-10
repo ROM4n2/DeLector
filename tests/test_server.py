@@ -5846,6 +5846,14 @@ def test_health_endpoint_ok_when_db_usable(client):
     body = res.json()
     assert body["status"] == "ok", f"200 响应应带 status=ok，实际 {body}"
     assert body["database"] == "ok", f"200 响应应带 database=ok（证明真查了库），实际 {body}"
+    # 身份字段（ADR-0020 §4 前置①）：桌面壳启动期必须能凭 /api/health 分辨「这是不是
+    # DeLector」，以消除「复用别人的端口 / 跑旧进程」两类静默失败。故版本与标识都要在。
+    from delector.core.version import APP_VERSION
+
+    assert body["app"] == "delector", f"200 响应应带 DeLector 身份 app=delector（供启动期身份探针），实际 {body}"
+    assert body["version"] == APP_VERSION, (
+        f"200 响应应带 version 且与 version.py 单一真相源一致，实际 {body} vs {APP_VERSION!r}"
+    )
 
 
 def test_health_endpoint_fails_when_db_connection_raises(client, monkeypatch, tmp_path):
@@ -5875,6 +5883,12 @@ def test_health_endpoint_fails_when_db_connection_raises(client, monkeypatch, tm
 
     body = res.json()
     assert body["status"] == "unhealthy", f"失败响应应带 status=unhealthy，实际 {body}"
+    # 身份契约必须钉在**真实 503 路由**上：库坏时也要带 app=delector。`probe_identity` 的
+    # 契约是「接受 503、只看身份」—— 缺了它，第二次启动会把「自己的降级实例」误报成
+    # 「端口被其他程序占用」。只测手搓的假 503 形状给的是假安心，唯有这条路由级断言作数。
+    assert body.get("app") == "delector", (
+        f"503 必须带 DeLector 身份字段（供 probe_identity 分辨「自己的降级实例」与「别人的端口」），实际 {body}"
+    )
     detail = body["detail"]
     assert isinstance(detail, str) and detail.strip(), f"失败原因不该为空：{body}"
 
@@ -5914,5 +5928,9 @@ def test_health_endpoint_fails_when_db_query_raises(client, monkeypatch):
 
     assert res.status_code == 503, (
         f"库文件损坏（连得上但查询炸）仍应报 503，实际 {res.status_code}：{res.text[:200]}"
+    )
+    assert res.json().get("app") == "delector", (
+        "查询抛错的 503 同样必须带身份（probe_identity 接受任意 503、只看身份），"
+        f"否则会把自己的降级实例误判为陌生端口。实际 {res.json()}"
     )
     assert "database disk image is malformed" not in res.text, f"原始异常消息泄露到了响应体：{res.text[:300]}"

@@ -284,9 +284,12 @@ def bootstrap_data_dir(env: MutableMapping[str, str], legacy_dir: Optional[str] 
     env[DATA_DIR_ENV] = target
     if migrate_legacy_data_dir(old, target):
         _LOGGER.warning(
-            "数据目录已迁移：%s → %s（旧文件保留为 *.bak-<时间戳>，确认无误后可自行删除）。",
+            "数据目录已迁移：%s → %s（旧文件保留为 *.bak-<时间戳>，确认无误后可自行删除）。"
+            "需保持「数据随程序目录」请设 %s=1；需指定落点请设 %s=<目录>。",
             old,
             target,
+            PORTABLE_ENV,
+            DATA_DIR_ENV,
         )
         return target
 
