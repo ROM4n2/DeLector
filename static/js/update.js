@@ -1,3 +1,4 @@
+// @ts-check
 /* DeLector - 顶栏「版本更新 chip」的唯一驱动源（Task 5）。
  *
  * 端点契约：GET /api/update/check（同源）返回恰 7 键

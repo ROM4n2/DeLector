@@ -1,0 +1,29 @@
+// DeLector 前端「API 边界」类型检查配置（ADR-0021 替代投资#3，次仪器·窄口径）。
+//
+// 为什么不给 static/ 全量开 checkJs —— 实测数字，不是偏好：
+//   typescript@5.6.3 对全部 23 个 static/js/*.js 跑 --allowJs --checkJs 共 219 条存量错误，
+//   其中 199 条是 TS2339（缺 DOM/全局声明）**噪音**，只有 20 条是真类型不匹配。
+//   全量接线 = 把 199 条噪音灌进 CI，立刻变成「永远红的噪音源」（本仓有过门禁恒红教训）。
+//   ⇒ 只对**少数真正打 API 的模块**分阶段启用：下面的 "files" 是**显式 allowlist**，
+//     逐个文件列出（每个文件首行 `// @ts-check`）。这不是「忘了开全量」。
+//
+// 用固定版本的 tsc 跑（见 .github/workflows/ci.yml 的 Frontend API-boundary type gate 步）：
+//   npx --yes -p typescript@5.6.3 tsc --noEmit
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "esnext",
+    "lib": ["ES2020", "DOM"],
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  // 显式 allowlist：MUST NOT 改成 "include": ["static/js/**/*.js"] 之类全量 glob ——
+  // 那会把 199 条 DOM 噪音灌进门禁（tests/test_frontend_api_contract.py 逐项钉死这一点）。
+  "files": [
+    "static/js/api-types.js",
+    "static/js/update.js"
+  ]
+}

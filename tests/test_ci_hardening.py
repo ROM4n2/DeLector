@@ -1089,3 +1089,130 @@ def test_packaging_surface_manifest_stays_readable_in_workflow() -> None:
         "「哪些文件算打包面」这份清单 MUST 留在 workflow 里（可读、可复跑验证），"
         "且逐项齐全 —— 漏项会让「只改该文件的 PR」不点亮冒烟 job（闸静默失效）。"
     )
+
+
+# ── 前端跨边界门禁的 CI 接线守卫（ADR-0021「替代投资#3」，改口径版）───────────────
+# 背景（实测结论）：ADR-0021 §6.1 原计划给 static/（33k 行前端）加类型检查，但实测
+# 全量 `tsc --allowJs --checkJs` 共 219 条存量错误、其中 199 条是缺 DOM 声明的 TS2339
+# **噪音** ⇒ 全量接线 = 永远红的噪音源（本仓有过门禁恒真/恒红教训）。改口径后接进
+# ubuntu 质量闸两件：
+#   ① 路由契约（主仪器，阻塞步）：用**真实** app.routes 校验 static/js 的真实 HTTP 调用；
+#   ② API 边界窄口径 tsc（次仪器）：固定 typescript@5.6.3，只查 tsconfig.json 的显式
+#      allowlist（逐个文件列出，非全量 glob）。
+# 本节把「步存在」「步归属 ubuntu 的 ci job（不是别的 job）」「版本固定」「allowlist 非
+# 全量」逐一钉死 —— 只断言字符串在场挡不住「把步挪去别的 job」这类归属漂移。
+
+CONTRACT_SCRIPT = "tools/check_frontend_api_contract.py"
+TSC_PIN = "typescript@5.6.3"
+TSCONFIG = REPO_ROOT / "tsconfig.json"
+API_TYPES_JS = REPO_ROOT / "static" / "js" / "api-types.js"
+UPDATE_JS = REPO_ROOT / "static" / "js" / "update.js"
+
+
+def test_frontend_route_contract_gate_in_ubuntu_ci_job() -> None:
+    """路由契约步 MUST 存在于 ubuntu 的 `ci` job，且为阻塞步（归属断言，非全文在场）。"""
+    block = _ci_job_block("ci")
+    assert "runs-on: ubuntu-latest" in block, "ci job 必须在 ubuntu 上跑（门禁定位：纯 Python、快）"
+    assert CONTRACT_SCRIPT in block, (
+        f"{CI_WORKFLOW} 的 ci job 未接线路由契约检查（{CONTRACT_SCRIPT}）：\n"
+        "ADR-0021 替代投资#3 的主仪器被摘，前端调未知端点将无人拦截。"
+    )
+    step = _step_using(block, CONTRACT_SCRIPT)
+    assert "continue-on-error: true" not in step, (
+        "路由契约步带了 continue-on-error: true ⇒ 契约失败不阻断，闸形同虚设。"
+    )
+
+
+def test_frontend_route_contract_gate_precedes_pytest() -> None:
+    """路由契约步 MUST 早于全量 pytest（顺序断言，防被挪到 pytest 之后 / 别的 job）。"""
+    block = _ci_job_block("ci")
+    steps = _steps_of(block)
+    contract_idx = next((i for i, s in enumerate(steps) if CONTRACT_SCRIPT in s), None)
+    pytest_idx = next((i for i, s in enumerate(steps) if "pytest -q" in s), None)
+    assert contract_idx is not None, "找不到路由契约步（归属断言见上一条）"
+    assert pytest_idx is not None, "找不到全量 pytest 步"
+    assert contract_idx < pytest_idx, (
+        "路由契约步出现在全量 pytest 之后：先失败先反馈的顺序被破坏，且归属可疑。"
+    )
+
+
+def test_frontend_tsc_gate_pins_fixed_version_in_ci() -> None:
+    """窄口径 tsc 步 MUST 存在且固定 typescript 版本（MUST NOT latest —— 不可复现）。"""
+    block = _ci_job_block("ci")
+    steps = _steps_of(block)
+    tsc_steps = [s for s in steps if "tsc --noEmit" in s]
+    assert tsc_steps, f"{CI_WORKFLOW} 的 ci job 未接线 tsc 类型检查步（次仪器被摘）。"
+    assert any(TSC_PIN in s for s in tsc_steps), (
+        f"tsc 步未固定 {TSC_PIN}（应 `npx -p {TSC_PIN} tsc --noEmit`）：浮动版本不可复现。"
+    )
+    assert not any("latest" in s for s in tsc_steps), "tsc 步不得用 typescript@latest（不可复现）。"
+
+
+def _skip_to_line_end(text: str, i: int) -> int:
+    """i 指向行注释的 `/`，返回行尾（换行符）下标。"""
+    while i < len(text) and text[i] != "\n":
+        i += 1
+    return i
+
+
+def _skip_block_comment(text: str, i: int) -> int:
+    """i 指向块注释的 `/`，返回 `*/` 之后的下标。"""
+    i += 2
+    while i + 1 < len(text) and not (text[i] == "*" and text[i + 1] == "/"):
+        i += 1
+    return i + 2
+
+
+def _strip_jsonc_comments(text: str) -> str:
+    """去掉 JSONC 的 // 与 /* */ 注释，只留有效配置（本文件含中文说明注释）。
+
+    守卫要盯的是**配置本身**，不是注释里出现的字面量；不剥离会因注释里提到「全量 glob」
+    而误报。配置字符串内不含 `//`（无 URL），故行注释按「到行尾」处理即安全。
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] == "/" and i + 1 < n and text[i + 1] == "/":
+            i = _skip_to_line_end(text, i)
+            continue
+        if text[i] == "/" and i + 1 < n and text[i + 1] == "*":
+            i = _skip_block_comment(text, i)
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
+
+
+def test_tsconfig_allowlist_is_not_a_full_glob() -> None:
+    """tsconfig.json 的检查面 MUST 是显式 allowlist，MUST NOT 是全量 glob（防噪音灌闸）。"""
+    effective = _strip_jsonc_comments(_read_guard_file(TSCONFIG))
+    assert '"files"' in effective, (
+        f'{TSCONFIG} 缺 "files" 显式 allowlist：无它时 tsc 会纳入全部 .js，'
+        "把 199 条 DOM 噪音灌进 CI（永远红的噪音源）。"
+    )
+    for bad in ("**/*.js", "static/js/**", '"include"'):
+        assert bad not in effective, (
+            f"{TSCONFIG} 的有效配置出现全量检查面 {bad!r}：禁止把 allowlist 改成 glob —— "
+            "实测全量 checkJs 有 219 条存量错误（199 条噪音），会变成永远红的门禁。"
+        )
+    assert "api-types.js" in effective, (
+        f"{TSCONFIG} 的 allowlist 未含 api-types.js（API 边界类型的单一真相源）。"
+    )
+    assert "checkJs" in effective and "false" in effective, (
+        f"{TSCONFIG} 未显式声明 checkJs 默认关闭（应仅由各文件首行 `// @ts-check` 逐个开启）。"
+    )
+
+
+def test_checked_api_modules_declare_ts_check() -> None:
+    """allowlist 里的 JS 文件顶部 MUST 有 `// @ts-check`（否则 checkJs:false 下不被检查）。"""
+    for path in (API_TYPES_JS, UPDATE_JS):
+        head = _read_guard_file(path).splitlines()[:3]
+        assert any(line.strip() == "// @ts-check" for line in head), (
+            f"{path} 顶部缺 `// @ts-check`：checkJs 默认关闭时它不会被类型检查，"
+            "allowlist 会变成空转。"
+        )
+    # 反向确认 allowlist 不是空转：api-types.js 真的承载了 typedef（否则检查面为空壳）。
+    assert "@typedef" in _read_guard_file(API_TYPES_JS), (
+        f"{API_TYPES_JS} 不含任何 @typedef：API 边界类型真相源为空壳，检查无意义。"
+    )

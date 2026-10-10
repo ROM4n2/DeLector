@@ -114,6 +114,20 @@ jobs:
       - name: Download spaCy German model
         run: python -m spacy download de_core_news_sm
 
+      # ── 前端跨边界门禁（ADR-0021「替代投资#3」，改口径版）─────────────────────
+      # 为什么是这两条而不是「全量 checkJs」：实测全量 --allowJs --checkJs 共 219 条存量
+      # 错误，其中 199 条是缺 DOM 声明的 TS2339 噪音 ⇒ 全量接线 = 永远红的噪音源。故：
+      #   ① 路由契约（主仪器）：用**真实** app.routes 校验 static/js 里真实存在的 HTTP
+      #      调用，调了未注册端点 ⇒ 非零退出。纯 Python、快、确定性强，作为**阻塞**步。
+      #   ② API 边界类型（次仪器）：固定 typescript@5.6.3，只查 tsconfig.json 的**显式
+      #      allowlist**（逐个文件列出，见 tsconfig.json 与 static/js/api-types.js 顶部）。
+      - name: Frontend API contract gate (routes)
+        run: python tools/check_frontend_api_contract.py
+
+      # 固定 typescript@5.6.3（对齐本会话实测可用版本；MUST NOT 用 latest —— 不可复现）。
+      - name: Frontend API-boundary type gate (tsc)
+        run: npx --yes -p typescript@5.6.3 tsc --noEmit
+
       # 全量门禁：Python 测试套件一个不漏
       - name: Run full pytest suite
         run: pytest -q
