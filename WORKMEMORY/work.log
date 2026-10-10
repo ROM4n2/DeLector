@@ -601,3 +601,10 @@ Caps: filesystem-write, shell-exec
 - **③′ 黄牌收口**：`tools/bench_cold_start.py` 原**被漏改**（口径标签名实不符 + `nlp_path` 读导入期静态声明值）⇒ 据实修正并把 processor 半支改为**按真实状态判定**（不主动触发加载，避免污染冷启动被测对象）；`routes/main.py` 的 `/api/settings` 改为 **live 读**（按值 import 会让失败状态不可见）。
 - **②′ 前端跨边界契约闸**（`a65a379`）—— **口径经实修订正**：`tsc --checkJs` 全量实测 **219 错/其中 199 条是 DOM 噪音** ⇒ 不接全量。改为主仪器 **路由契约检查**（`tools/check_frontend_api_contract.py`：用 `delector.server.app.routes` **真实枚举 124 条**，校验 `static/js` 真实调用写法，模板插值归一化，**未知端点非零退出**；117 调用点→109 可解析→**全部匹配 PASS，无真缺陷**；开发中修掉一处**工具假阳性**）+ 次仪器 **窄口径 JSDoc/tsconfig allowlist + 固定 `typescript@5.6.3`**。都接进 ubuntu 闸作**阻塞步**，含归属/顺序守卫 + 两处变异自证。
 - **⚠️ 事故（编排者流程错误，已修）**：新产物闸的接线在 **master push** 上坏了 —— `windows-smoke-changes` job **根本没有 checkout 步** ⇒ paths-filter 取不到 `github.event.before` ⇒ `git` exit 128；且"只用来决定是否跑闸"的步**有能力把 master 弄红**。而我**直接推了两次没验 CI** ⇒ master 红约 1 小时。修复：`f49d359`（补 `fetch-depth: 0` + 过滤步 **fail-open**：用 `outcome` 而非 `conclusion`，取不到结果即视为变更照跑闸）+ `80d37ec`（**把 `ci.yml` 自身纳入打包面清单** —— 改闸定义就该重跑闸，这正是它潜伏一小时的原因）。**端到端证明**：master push 上三个 job 全绿、冒烟真被触发（10/10 PASS，commit 80d37ec）。
+
+### 2026-10-10 | codebuddy | HITL 收口：Windows 桌面壳实机验收通过（用户裁定「可用」）
+Caps: filesystem-write, shell-exec
+事件：用户实机双击 `dist/DeLector-v5.16.0-Windows-x64-Portable/DeLector.exe` 后裁定 **「可用」** ⇒ ADR-0019→0020→0021 整条链闭环，计划 Task 6（HITL 实机验收与回填）完成，台账 **6/6**。
+- **回填 ADR-0020 §8 实施记录**：交付三步（数据外置 / 更新入口可发现 / 真桌面壳）+ **过程中真实修掉的 5 起事故**（P0 GUI 时序死锁、主窗口不可缩放、`--server-only` 重定向崩编码、PR 语境版本号含 `/`、**CI 闸自身接线把 master 弄红**）+ **验收口径诚实区分**（闸/探针机械验证 vs 用户人工裁定）。
+- **仍未取得具体数字**：**首屏可用秒数**、**Defender 扫描结果** ⇒ ADR-0020 §6 `[Unknown 2]`/`[Unknown 3]` 与 ADR-0018 §8 `Unknown 8`（端到端代理口径缺口）**仍未关闭**，已在 §8 显著标注。
+- 仓内副本机械重生成，与正式件逐行同源（差异 0）。

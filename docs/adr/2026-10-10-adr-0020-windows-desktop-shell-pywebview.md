@@ -2,7 +2,7 @@
 
 > **正式件:** `08-Projects/DeLector/01-ADR/0020-windows-desktop-shell-pywebview.md`（vault）。本文件是仓内副本，内容与正式件同源（机械重新生成，未手抄）。
 > **决策者:** Haoyu Xi ｜ **产出方式:** `/dfs-grill` 续轮（sre-resilience 可行性/代价评估）+ 用户拍板（Q5-A / Q6-A）。
-> **要点:** 采纳 `pywebview` + `pystray` 桌面壳（Python 仍是 HTTP 主体，**不违反 ADR-0018**）；按 A 顺序：数据外置 → 手动更新入口 → 桌面壳；四个必须前置：退出收尸 / 启动反馈 / WebView2 检测 / 日志弹窗。
+> **状态（2026-10-10）:** 已交付并经**实机验收（用户裁定「可用」）**；见 §8 实施记录（含过程中修掉的 5 起事故与验收口径）。
 
 - **状态**: Accepted（2026-10-10）
 - **实施**: **待执行**。按 **A 顺序**推进：① 数据目录外置（ADR-0019 Q2-A，强制前置）→ ② 手动「检查更新」入口（Q5-A）→ ③ 桌面壳本体（窗口 + 托盘 + 退出收尸 + splash + WebView2 检测）。
@@ -123,3 +123,41 @@ Tauri/Electron、CEF、安装器与卸载器、开机自启、应用内安装更
 
 - **ADR-0017**（更新可见性边界：不做应用内安装）、**ADR-0018**（主体不换 / 首启数字）、**ADR-0019**（数据外置与"不换壳"的原始判定，其 Q1 前提已被本篇推翻）、DEV-RULES §2.4（四端打包同步守卫）
 - `08-Projects/Hermes/02-Post-mortem/POST-MORTEM-ELEVATED-INSTALLER-ACL-LOCKOUT.md`（否决安装器的依据，本篇继续沿用）
+
+---
+
+## 8. 实施记录（2026-10-10）
+
+**状态：已交付，且经实机验收（用户裁定「可用」）。** 计划见 `docs/plans/2026-10-10-windows-desktop-shell.md`（Task 1–6 全部完成）。
+
+### 交付（按 A 顺序）
+
+| 步 | 内容 | 证据 |
+| --- | --- | --- |
+| ① | **数据目录外置**到 `%LOCALAPPDATA%\DeLector`（默认外置 + `DELECTOR_PORTABLE=1` 便携开关）+ 一次性迁移（幂等、先复制再把原件改名 `*.bak-<ts>`、WAL 双路径、异常不半搬） | 实机 `%LOCALAPPDATA%\DeLector\` 已生成并承载真实库；变异自证两次 |
+| ② | **手动「检查更新」入口可被发现**（原功能已存在，只是 `#topbar-system` 无 `title`/无指针、用户不可能猜到能点） | 探针 11 → **12 场景全 PASS**；含"无更新一律零可见变化"红线 |
+| ③ | **`desktop.py` 真桌面壳**：pywebview（系统 WebView2）+ pystray 托盘 + splash 分阶段 + **统一退出收尸**（7 条退出路径全过 `coordinated_shutdown`）+ 日志与崩溃弹窗 | 探针实测：splash `415×232 无边框` → 主窗口 `1280×820 caption/resizable/maximize=True`；关窗后进程自行退出 `code=0` |
+
+### 本实施过程中真实发生并已修的事故（都是"闸抓到的"，值得留档）
+
+1. **P0 死锁（用户首次双击症状：无窗口、进程不退出、零日志）**：根因是 `evaluate_js`/`load_url` 在 `webview.start()`
+   **之前**调用（pywebview 会把窗口方法 marshal 到 GUI 线程，循环未跑 ⇒ 永久阻塞）。修法：`webview.start(_after_start, …)`
+   把后续工作交给循环启动后的后台任务；并去除静默吞异常、补齐成功路径阶段日志。**回归锁 6 条**（含 AST 顺序锁 + 行为级顺序锁）。
+2. **主窗口不可缩放（用户症状：窗口很小、没法最大化/拖边）**：真实 UI 被 `load_url` 塞进了 `frameless=True, on_top=True, 430×270`
+   的 **splash** 窗口。修法：双窗口 —— splash 保持原样，真实 UI 用新的普通窗口，就绪后 `main.show()` → 加载 → `splash.destroy()`。
+3. **`--server-only` 在 stdout 被重定向时启动即崩**（`UnicodeEncodeError`，cp1252）—— **由新增的 CI 真启产物闸抓到**：
+   等于"这应用在被日志采集/由服务拉起时根本起不来"。修法：`start.py` 顶部 `reconfigure(utf-8, errors="replace")`。
+4. **PR 语境的 `GITHUB_REF_NAME` = `128/merge`** ⇒ 版本串带 `/` ⇒ 产物被嵌套成目录（**同一坑也会毁掉按名过滤的压缩步**）。
+   修法：只在真 tag 语境采用 + 强制净化 + 净化后仍含分隔符则**硬失败**。
+5. **CI 闸自己的接线在 master push 上坏了**：新 job 没有 checkout ⇒ `paths-filter` 取不到基线 ⇒ `git` exit 128，
+   且"只用来决定是否跑闸"的过滤步**有能力把 master 弄红**。修法：`fetch-depth: 0` + 过滤步 **fail-open**（用 `outcome` 判定）
+   + 把 `ci.yml` 自身纳入打包面清单（**改闸的定义就该重跑闸**）。
+
+### 验收口径（诚实区分）
+
+- **由闸/探针机械验证**：产物完整性（构建指纹、抗陈旧 commit、无 `.env`、WebView2 DLL、`_internal` 依赖）、
+  **真启一次**（`--server-only` → `/api/health` 200 且 `app=="delector"` → 端口释放 → 无孤儿）、窗口样式位（caption/resizable/maximize）、
+  退出收尸（7 条路径的单元级顺序锁 + 关窗后 `code=0`）。
+- **由用户人工裁定**：**「可用」**（2026-10-10）。
+- **仍未取得具体数字**：首屏**可用秒数**、Defender 扫描结果 ⇒ 见 §6 `[Unknown 2]` / `[Unknown 3]` **仍未关闭**。
+
