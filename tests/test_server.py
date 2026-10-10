@@ -4878,6 +4878,195 @@ def test_readme_generation_is_wired_into_build_windows():
     )
 
 
+# ── 打包三加固：.env 泄漏闸 / 构建指纹 / 版本 fallback ─────────────────────────
+# 背景（用户双击便携版时真实踩到的坑）：
+# ① 担心 .env（内含 DEEPSEEK_API_KEY）随包发出去 —— 目前产物里确实没有，但**没有任何守卫**
+#    拦住"哪天有人把 .env 放进构建目录"；② 无法分辨自己双击的是哪个构建（本地不设
+#    GITHUB_REF_NAME 时产物被命名成 v3.8.0，而 App 实为 v5.16.0，排查中"以为是新包、
+#    其实是旧包"白浪费大半轮）；③ 版本 fallback 写死误导名 v3.8.0。
+# 三条共用同一批 AST 辅助函数（_package_windows_build_windows_fn / _calls_named），
+# 把"函数定义存在"提升为"真的在 build_windows() 构建路径上被调用"，删调用即红。
+
+
+def test_windows_portable_declares_env_leak_guard():
+    """便携包必须**构建后自检**产物里没有 .env，且命中即**硬失败**。
+
+    为什么这是"最该有"的一条：便携版"解压即用"，整包会被转发给任何人。一旦 .env
+    （内含 DEEPSEEK_API_KEY）混进产物，API Key 就随包发出去 —— 与漏收 WebView2 DLL
+    同款的"本地全绿、打包后静默出事"，只是后果从白屏升级成密钥泄露。故断言：
+    ① 扫描 + 执行入口两个函数在场（自检与失败处置分离，更好测）；② 走非零退出的硬失败；
+    ③ 文案点明"API Key 随包发出去"的后果，让后人看懂为何不能删掉这道闸。
+    """
+    pkg = open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read()
+
+    assert "find_env_files" in pkg, "缺 .env 扫描函数：混进构建目录的 .env 会静默随包发出"
+    assert "assert_no_env_in_payload" in pkg, "缺「命中即失败」的执行入口（自检与失败处置分离更好测）"
+    assert "API Key" in pkg, "失败文案必须点明后果（API Key 随包发出去），否则后人会把自检当噪音删掉"
+
+
+def test_build_windows_actually_invokes_env_leak_check():
+    """`assert_no_env_in_payload(...)` 的调用点 MUST 落在 `build_windows()` 函数体内。
+
+    只断言"函数名出现在源码里"是不够的：把 build_windows() 里那行调用删掉，闸就**失效**
+    而全套测试仍绿。AST 把"定义存在"提升为"真的在构建路径上被调用"，删调用即红。
+    """
+    build_fn = _package_windows_build_windows_fn()
+
+    assert _calls_named(build_fn, "assert_no_env_in_payload"), (
+        "build_windows() 内必须真调用 assert_no_env_in_payload()：否则 .env 闸形同虚设（删调用全套仍绿）"
+    )
+
+
+def test_find_env_files_detects_dotenv_and_variants(tmp_path):
+    """行为级：`.env` 与 `*.env` 变体都要命中，裸 `.env` 之外的改名（`prod.env`）同样会带走 Key。"""
+    import package_windows
+
+    (tmp_path / ".env").write_text("DEEPSEEK_API_KEY=sk-secret\n", encoding="utf-8")
+    nested = tmp_path / "_internal"  # 改名变体：与裸 .env 不同目录，避免大小写不敏感 FS 覆盖
+    nested.mkdir()
+    (nested / "prod.env").write_text("X=1\n", encoding="utf-8")
+    other = tmp_path / "_other"
+    other.mkdir()
+    (other / "PROD.ENV").write_text("X=1\n", encoding="utf-8")  # 大写变体：扫描须大小写不敏感
+    (tmp_path / "not_env.txt").write_text("safe\n", encoding="utf-8")
+
+    hits = package_windows.find_env_files(str(tmp_path))
+
+    assert ".env" in hits, f"裸 .env 必须命中，实际 {hits}"
+    assert sorted(hits) == sorted(
+        [".env", os.path.join("_internal", "prod.env"), os.path.join("_other", "PROD.ENV")]
+    ), f"命中清单必须精确覆盖 .env 与 *.env 变体、且不误伤 not_env.txt，实际 {hits}"
+
+
+def test_find_env_files_clean_dir_returns_empty(tmp_path):
+    """干净产物目录 ⇒ 空清单（否则每次正常构建都会被自己的自检拒掉）。"""
+    import package_windows
+
+    (tmp_path / "DeLector.exe").write_bytes(b"")
+    (tmp_path / "说明_README.txt").write_text("hi", encoding="utf-8")
+
+    assert package_windows.find_env_files(str(tmp_path)) == []
+
+
+def test_assert_no_env_in_payload_hard_fails_when_env_present(tmp_path):
+    """产物夹带 .env ⇒ **非零退出**（`SystemExit`），绝不能只打印警告就放行。
+
+    这是本任务的核心守卫：闸**必须真的会让构建失败**，否则 Key 照样随包发布。
+    """
+    import package_windows
+
+    (tmp_path / ".env").write_text("DEEPSEEK_API_KEY=sk-secret\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as excinfo:
+        package_windows.assert_no_env_in_payload(str(tmp_path))
+
+    assert excinfo.value.code != 0, "产物夹带 .env 时必须非零退出（构建失败）"
+
+
+def test_assert_no_env_in_payload_passes_on_clean_dir(tmp_path):
+    """干净目录 ⇒ 不抛、正常返回（否则每次正常构建都会被自己的自检拒掉）。"""
+    import package_windows
+
+    (tmp_path / "DeLector.exe").write_bytes(b"")
+
+    package_windows.assert_no_env_in_payload(str(tmp_path))  # 不抛即通过
+
+
+def test_windows_portable_declares_build_fingerprint():
+    """产物必须写一份**机器可读**构建指纹，键至少含 commit / built_at / app_version / entry。"""
+    pkg = open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read()
+
+    assert "write_build_fingerprint" in pkg, "缺构建指纹写入函数：产物无法机器识别是哪个构建"
+    for key in ("commit", "built_at", "app_version", "entry"):
+        assert f'"{key}"' in pkg, f"指纹内容键缺 {key!r}"
+
+
+def test_build_windows_actually_invokes_build_fingerprint():
+    """`write_build_fingerprint(...)` 的调用点 MUST 落在 `build_windows()` 函数体内（否则指纹不落进产物）。"""
+    build_fn = _package_windows_build_windows_fn()
+
+    assert _calls_named(build_fn, "write_build_fingerprint"), (
+        "build_windows() 内必须真调用 write_build_fingerprint()：否则指纹文件根本不生成"
+    )
+
+
+def test_write_build_fingerprint_creates_machine_readable_file(tmp_path):
+    """行为级：指纹文件被生成、内容键齐全、取值逐字落盘（用临时目录，不跑 PyInstaller）。"""
+    import package_windows
+
+    path = package_windows.write_build_fingerprint(
+        str(tmp_path), "v5.16.0", "desktop.py", "abc1234", "2026-10-08T12:00:00"
+    )
+
+    assert os.path.exists(path), "指纹文件必须真被写到产物目录"
+    assert os.path.basename(path) == package_windows.BUILD_INFO_FILENAME
+
+    info = json.loads(open(path, encoding="utf-8").read())
+    assert info == {
+        "commit": "abc1234",
+        "built_at": "2026-10-08T12:00:00",
+        "app_version": "v5.16.0",
+        "entry": "desktop.py",
+    }, f"指纹内容键/取值不符，实际 {info}"
+
+
+def test_current_commit_short_sha_falls_back_to_unknown_without_git(tmp_path):
+    """非 git 环境取不到 sha ⇒ 回落 'unknown'，**绝不抛**（源码包也要能构建）。"""
+    import package_windows
+
+    assert package_windows.current_commit_short_sha(str(tmp_path)) == "unknown"
+
+
+def test_readme_has_human_fingerprint_line():
+    """README 顶部 MUST 有一行人读指纹（版本 + 短 sha + 构建时间），供用户分辨双击的是哪个包。"""
+    import package_windows
+
+    readme = package_windows.release_readme("v5.16.0", "abc1234", "2026-10-08T12:00:00")
+
+    assert "v5.16.0" in readme, "人读指纹必须含版本号"
+    assert "abc1234" in readme, "人读指纹必须含短 sha"
+    assert "2026-10-08T12:00:00" in readme, "人读指纹必须含构建时间"
+
+
+def test_resolve_version_prefers_github_ref_name(monkeypatch):
+    """CI 注入 GITHUB_REF_NAME 时优先取它（tag 即发布版本）。"""
+    import package_windows
+
+    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9")
+    assert package_windows.resolve_version() == "v9.9.9"
+
+
+def test_resolve_version_falls_back_to_app_version(monkeypatch):
+    """不设 GITHUB_REF_NAME ⇒ 回落 APP_VERSION（单一真相源，带 'v' 前缀）。"""
+    import package_windows
+    from delector.core.version import APP_VERSION
+
+    monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
+    assert package_windows.resolve_version() == f"v{APP_VERSION}", (
+        "本地构建的版本必须来自 APP_VERSION，而不是写死的 v3.8.0 误导名"
+    )
+
+
+def test_version_fallback_targets_app_version_not_hardcoded():
+    """守卫：版本 fallback 指向 APP_VERSION，且代码里**不得**再出现写死的 'v3.8.0' 字符串常量。
+
+    用 AST 收集字符串**常量**而非子串匹配源码：注释/文档里说明"曾写死 v3.8.0"应当允许，
+    真正要拦的是可执行的 `os.environ.get("GITHUB_REF_NAME", "v3.8.0")` 这类字面量。
+    """
+    pkg = open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read()
+
+    assert "APP_VERSION" in pkg, "版本 fallback 必须来自 delector.core.version.APP_VERSION（单一真相源）"
+
+    literals = {
+        node.value
+        for node in ast.walk(ast.parse(pkg))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "v3.8.0" not in literals, (
+        "不得再写死误导版本名 'v3.8.0'：本地构建会命名成它，而 App 实为 v5.16.0，用户无从分辨"
+    )
+
+
 def test_register_routes_covers_every_module_in_routes_package():
     """`delector/routes/` 下每个模块定义的路由都必须真的挂进 app。
 

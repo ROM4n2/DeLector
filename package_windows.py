@@ -4,11 +4,13 @@ DeLector - Windows Portable Packager
 Builds a standalone, zero-dependency Windows portable distribution.
 """
 
+import json
 import os
 import shutil
 import subprocess
 import sys
-from typing import List, Tuple
+from datetime import datetime
+from typing import Dict, List, Tuple
 
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     try:
@@ -62,14 +64,122 @@ def assert_webview2_payload(release_dir: str) -> None:
     sys.exit(1)
 
 
-def release_readme(version: str) -> str:
+# ── 验包自检：产物不得夹带 .env（否则 API Key 随包发出去）─────────────────────────
+# 便携版是"解压即用"，整包会被下载/转发给任何人。一旦构建目录里混进 `.env`
+# （内含 DEEPSEEK_API_KEY 等），产物就会把 API Key 一起发出去 —— 与漏收 WebView2 DLL
+# 同款的"本地全绿、打包后静默出事"，只是后果从白屏升级成**密钥泄露**。故构建后硬自检。
+_ENV_FILE_SUFFIX = ".env"
+
+
+def find_env_files(release_dir: str) -> List[str]:
+    """递归扫描产物目录，返回**命中**的 .env 文件清单（相对产物根的路径，空清单 = 通过）。
+
+    匹配 `.env` 与 `*.env` 两种变体（`endswith(".env")` 同时覆盖二者）：`prod.env` 这类
+    改名同样会把 Key 带出去，不能只认裸 `.env`；大小写不敏感（Windows 文件名大小写不固定）。
+    用 relpath 而非绝对路径：报错清单里不该出现构建机的私有目录结构。
+    """
+    hits: List[str] = []
+    for dirpath, _dirnames, filenames in os.walk(release_dir):
+        hits.extend(
+            os.path.relpath(os.path.join(dirpath, name), release_dir)
+            for name in filenames
+            if name.lower().endswith(_ENV_FILE_SUFFIX)
+        )
+    return sorted(hits)
+
+
+def assert_no_env_in_payload(release_dir: str) -> None:
+    """产物夹带 .env ⇒ 打印命中清单并**非零退出**（构建失败），绝不只打印警告就放行。"""
+    leaked = find_env_files(release_dir)
+    if not leaked:
+        return
+    print("[Error] 打包产物夹带了 .env ⇒ 解压后会把 API Key（如 DEEPSEEK_API_KEY）一起发给每个下载者：")
+    for rel in leaked:
+        print(f"    - {rel}")
+    print("        请把 .env 挪出构建目录（.gitignore 已忽略它，但仍可能被人工复制进构建产物）。")
+    sys.exit(1)
+
+
+# ── 产物构建指纹 + 版本 fallback ─────────────────────────────────────────────
+# 用户无法分辨自己双击的是哪个构建：本地不设 GITHUB_REF_NAME 时产物被命名成
+# DeLector-v3.8.0-…（写死的误导名），而 App 实际是 v5.16.0 —— 排查中"以为是新包、
+# 其实是旧包"白烧一轮。故在产物里写一份**机器可读**指纹 + README 顶一行人读指纹。
+BUILD_INFO_FILENAME = ".build-info.json"
+DEFAULT_ENTRY = "desktop.py"
+
+
+def resolve_version() -> str:
+    """发布版本号：优先 CI 注入的 GITHUB_REF_NAME（如 tag `v5.16.0`），否则回落 APP_VERSION。
+
+    为什么必须回落 APP_VERSION 而非写死字面量：曾写死 'v3.8.0'，本地不设
+    GITHUB_REF_NAME 时产物命名成 DeLector-v3.8.0-… 而 App 实为 v5.16.0，用户无从分辨。
+    APP_VERSION 是应用级单一真相源（delector/core/version.py），此处只在前面补 'v'。
+    """
+    tag = os.environ.get("GITHUB_REF_NAME")
+    if tag:
+        return tag
+    # 直接 import 安全：delector.core.version 是只吃标准库的叶模块（实测不拉 spacy /
+    # fastapi / webview 等重依赖），不会给构建脚本引入副作用，故不采用正则读源码的绕行写法。
+    from delector.core.version import APP_VERSION
+
+    return f"v{APP_VERSION}"
+
+
+def current_commit_short_sha(repo_dir: str) -> str:
+    """取当前 HEAD 的短 sha；非 git 环境 / 未装 git / 命令失败一律回落 'unknown'，绝不抛。
+
+    为什么必须回落而非硬失败：没有 git 元数据的源码包（如 CI 下载的 zip）也要能构建，
+    sha 取不到只是指纹不完整，不该让整个打包失败。
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return "unknown"
+    if proc.returncode != 0:
+        return "unknown"
+    return proc.stdout.strip() or "unknown"
+
+
+def build_fingerprint(version: str, entry: str, commit: str, built_at: str) -> Dict[str, str]:
+    """构造机器可读指纹的键值（纯函数，便于守卫直接比对内容）。"""
+    return {
+        "commit": commit,
+        "built_at": built_at,
+        "app_version": version,
+        "entry": entry,
+    }
+
+
+def write_build_fingerprint(release_dir: str, version: str, entry: str, commit: str, built_at: str) -> str:
+    """把指纹写到产物根 `.build-info.json`，返回其绝对路径。"""
+    path = os.path.join(release_dir, BUILD_INFO_FILENAME)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(build_fingerprint(version, entry, commit, built_at), f, ensure_ascii=False, indent=2)
+    return path
+
+
+def readme_fingerprint_line(version: str, commit: str, built_at: str) -> str:
+    """README 顶部**一行**人读指纹（版本 + 短 sha + 构建时间）。"""
+    return f"构建指纹：{version} · commit {commit} · 构建于 {built_at}"
+
+
+def release_readme(version: str, commit: str = "unknown", built_at: str = "") -> str:
     """产物内《说明_README.txt》正文（入口的**单一文案真相**）。
 
     为什么抽成纯函数：入口从"起服务 + 开默认浏览器"改为"打开桌面窗口"后，文案若不同步，用户会照着
     README 找一个已不存在的启动方式 —— 属"文档漂移"类静默失败。抽出来后守卫测试可直接断言文本
     （tests/test_server.py::test_windows_portable_readme_matches_desktop_entry）。
+
+    顶部那行是人读构建指纹（见 readme_fingerprint_line）：用户靠它分辨自己双击的是哪个构建。
     """
-    return f"""# DeLector — 德语学术精读与备考工作台 ({version} 绿色便携版)
+    return f"""{readme_fingerprint_line(version, commit, built_at)}
+
+# DeLector — 德语学术精读与备考工作台 ({version} 绿色便携版)
 
 ## 🚀 启动方式
 直接双击运行 `DeLector.exe` ⇒ 打开**桌面窗口**（原生窗口，无需浏览器）。
@@ -85,7 +195,7 @@ def release_readme(version: str) -> str:
 
 
 def build_windows() -> None:
-    version = os.environ.get("GITHUB_REF_NAME", "v3.8.0")
+    version = resolve_version()
     print("=" * 60)
     print(f"  DeLector {version} -- Windows Portable Packager")
     print("=" * 60)
@@ -192,12 +302,16 @@ def build_windows() -> None:
     if os.path.exists(built_output):
         shutil.move(built_output, release_dir)
 
-    # 4. 验包：产物必须含 WebView2 运行时 DLL（缺 ⇒ 解压后白屏）。硬失败，非警告。
+    # 4. 验包：产物必须含 WebView2 运行时 DLL（缺 ⇒ 解压后白屏），且不得夹带 .env（防 Key 外泄）。硬失败，非警告。
     assert_webview2_payload(release_dir)
+    assert_no_env_in_payload(release_dir)
 
-    # 5. Copy helper files（文案与入口同源：见 release_readme 的单一真相说明）
+    # 5. 写机器可读构建指纹 + 人读文案（文案与入口同源：见 release_readme 的单一真相说明）
+    commit = current_commit_short_sha(root_dir)
+    built_at = datetime.now().isoformat(timespec="seconds")
+    write_build_fingerprint(release_dir, version, DEFAULT_ENTRY, commit, built_at)
     with open(os.path.join(release_dir, "说明_README.txt"), "w", encoding="utf-8") as f:
-        f.write(release_readme(version))
+        f.write(release_readme(version, commit, built_at))
 
     print("\n" + "=" * 60)
     print("[SUCCESS] 绿色便携版打包成功！")
