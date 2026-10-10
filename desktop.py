@@ -249,12 +249,17 @@ def _splash_html(stage: str) -> str:
     )
 
 
-def _set_splash_stage(window: Any, stage: str) -> None:
-    """把 splash 阶段文案推进一格（失败不影响主流程）。"""
+def _set_splash_stage(window: Any, stage: str, log_path: str) -> None:
+    """把 splash 阶段文案推进一格。
+
+    **不再静默吞异常**（P0 事故帮凶）：`evaluate_js` 会 marshal 到 GUI 线程执行，而该线程要等
+    `webview.start()` 才跑 —— 时序错了它不报错而是**永久等待**；旧实现的 `except Exception: pass`
+    把这件事彻底抹掉，事故排查时零线索。现在失败一律 `_append_log`（写清哪一步、什么异常）。
+    """
     try:
         window.evaluate_js(f"document.getElementById('stage').textContent = {stage!r}")
-    except Exception:
-        pass
+    except Exception as exc:
+        _append_log(log_path, f"splash 阶段更新失败（stage={stage}）：{exc!r}")
 
 
 # ── 托盘（pystray 放独立线程，不阻塞主线程 GUI 事件循环）────────────────────
@@ -355,8 +360,64 @@ def _start_tray(window: Any, coordinator: QuitCoordinator, log_path: str) -> Non
     ).start()
 
 
+def _destroy_window(window: Any, log_path: str) -> None:
+    """销毁窗口，让阻塞中的 `webview.start()` 得以返回。
+
+    失败路径**必须真正结束进程**：不能只弹窗然后把一个空 splash 永远挂着（那正是本次事故的形态）。
+    销毁失败也要留痕，否则又回到"窗口不出、零线索"。
+    """
+    try:
+        window.destroy()
+    except Exception as exc:
+        _append_log(log_path, f"销毁窗口失败：{exc!r}")
+
+
+def _after_start(
+    window: Any,
+    coordinator: QuitCoordinator,
+    port: int,
+    log_path: str,
+    result: List[int],
+) -> None:
+    """GUI 事件循环**启动后**（由 `webview.start(func, args)` 在独立线程调度）要做的后台工作。
+
+    为什么这段必须搬到这里（P0 死锁根因）：pywebview 会把 `evaluate_js` / `load_url` marshal 到
+    GUI 线程执行，而 GUI 事件循环由 `webview.start()` 才启动 —— 在 start **之前**调它们会永久等待
+    （`scratch/repro_splash_deadlock.py` 三模式实测），窗口永不出现、进程永不退出。放进 `func` 后
+    循环已在跑，evaluate_js / load_url 都安全。
+
+    `result` 是回传给主线程 `_show_window` 的退出码容器：失败时置 1 并**销毁窗口**，让
+    `webview.start()` 得以返回（否则进程会挂着一个空 splash 永不退出）。
+    """
+    try:
+        _set_splash_stage(window, SPLASH_STARTING_SERVER, log_path)
+        _append_log(log_path, "等待服务就绪…")
+        if not await_ready(port, deadline_s=READY_DEADLINE_S):
+            # 就绪失败必须**可见**：日志 + 弹窗 + 真正结束进程（不留空 splash）。
+            _append_log(log_path, "服务在就绪窗口内未就绪：提示用户并退出。")
+            _message_box("DeLector 启动超时", f"本地服务在 {READY_DEADLINE_S:.0f}s 内未就绪，详情见 launch.log。")
+            result[0] = 1
+            coordinator.request_quit()
+            _destroy_window(window, log_path)
+            return
+        _append_log(log_path, "服务已就绪。")
+        _set_splash_stage(window, SPLASH_READY, log_path)
+        _append_log(log_path, f"切换到真实 UI：http://127.0.0.1:{port}")
+        window.load_url(f"http://127.0.0.1:{port}")
+    except Exception as exc:
+        # 后台线程里的异常若不接住，线程会**静默死亡**（又回到"窗口不出、零线索"）；必须留痕并收尾。
+        _append_log(log_path, f"就绪/切 UI 阶段异常：{exc!r}")
+        result[0] = 1
+        coordinator.request_quit()
+        _destroy_window(window, log_path)
+
+
 def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str) -> int:
-    """建 splash → 等就绪（分阶段反馈）→ 切真实 UI → 进主线程事件循环。"""
+    """建 splash → 起托盘 → 进主线程事件循环；就绪等待与切 UI 交给 `_after_start`。
+
+    时序是本次 P0 死锁的核心：先 `create_window`，再 **`webview.start(_after_start, ...)` 把事件循环
+    跑起来**，最后让 `_after_start` 在循环内做 `_set_splash_stage` / `await_ready` / `load_url`。
+    """
     import webview  # 惰性：GUI 依赖不得进模块顶层（CI 无 GUI 时 import desktop 不能炸）
 
     coordinator = QuitCoordinator()
@@ -374,21 +435,16 @@ def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str
         _append_log(log_path, "webview.create_window 返回 None：无法创建桌面窗口。")
         _message_box("DeLector 启动失败", "无法创建桌面窗口，详情见 launch.log。")
         return 1
+    _append_log(log_path, "已创建 splash 窗口。")
     splash.events.closed += lambda: coordinator.request_quit()  # 关窗 = 请求退出（与托盘同一路径）
     _start_tray(splash, coordinator, log_path)
+    _append_log(log_path, "托盘线程已启动。")
 
-    _set_splash_stage(splash, SPLASH_STARTING_SERVER)
-    if not await_ready(port, deadline_s=READY_DEADLINE_S):
-        # 就绪失败必须**可见**：弹窗 + 日志，绝不静默卡在 splash。
-        _append_log(log_path, "服务在就绪窗口内未就绪：提示用户并退出。")
-        _message_box("DeLector 启动超时", f"本地服务在 {READY_DEADLINE_S:.0f}s 内未就绪，详情见 launch.log。")
-        coordinator.request_quit()
-        return 1
-    _set_splash_stage(splash, SPLASH_READY)
-    splash.load_url(f"http://127.0.0.1:{port}")
-
-    webview.start()  # 阻塞**主线程**，直到窗口关闭（GUI 事件循环必须占主线程）
-    return 0
+    result: List[int] = [0]  # 由 _after_start（后台线程）写回：失败=1，成功保持 0
+    _append_log(log_path, "进入 GUI 事件循环（webview.start）。")
+    webview.start(_after_start, (splash, coordinator, port, log_path, result))  # 阻塞主线程直到窗口关闭
+    _append_log(log_path, "GUI 事件循环已退出（窗口已关闭）。")
+    return result[0]
 
 
 def _run_desktop_inner(port: int, log_path: str) -> int:

@@ -26,8 +26,9 @@ import os
 import subprocess
 import sys
 import threading
+import types
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import pytest
 
@@ -361,6 +362,265 @@ def test_desktop_launch_is_guarded_by_main():
     )
 
     assert guarded, "入口必须在 `if __name__ == '__main__':` 守卫内调用 dispatch"
+
+
+# ── P0 死锁回归锁：窗口操作必须在 webview.start() 之后（GUI 事件循环内）执行 ──────
+# 真根因（scratch/repro_splash_deadlock.py 三模式实测）：pywebview 把 evaluate_js / load_url
+# marshal 到 GUI 线程执行，而 GUI 事件循环由 webview.start() 才启动；在 start **之前**调它们会
+# 永久等待 ⇒ 窗口永不出现、进程永不退出。下列断言把"何时才允许碰窗口"钉死，且不只测"函数存在"。
+_WINDOW_WRITE_ATTRS = {"evaluate_js", "load_url"}
+_STAGE_HELPER = "_set_splash_stage"  # 该助手内部调 evaluate_js，只能在循环起来后跑
+
+
+def _funcs_by_name(tree: ast.Module) -> Dict[str, ast.FunctionDef]:
+    """模块顶层函数名 → 定义节点（本文件所有相关函数都在顶层）。"""
+    return {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+
+
+def _calls(node: ast.AST) -> Iterator[ast.Call]:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            yield child
+
+
+def _call_label(call: ast.Call) -> Optional[str]:
+    """调用的"可读名"：`a.b()` → attr `b`；`f()` → id `f`；其余返回 None。"""
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return None
+
+
+def _is_webview_start_call(call: ast.Call) -> bool:
+    func = call.func
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "start"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "webview"
+    )
+
+
+def _find_start_call(tree: ast.Module) -> ast.Call:
+    starts = [call for call in _calls(tree) if _is_webview_start_call(call)]
+    assert len(starts) == 1, f"应恰有一处 webview.start(...) 调用，实际 {len(starts)}"
+    return starts[0]
+
+
+def _delegated_function(tree: ast.Module) -> Tuple[str, ast.FunctionDef]:
+    """`webview.start(...)` 首参指向的顶层函数 `(函数名, 定义节点)`。"""
+    start_call = _find_start_call(tree)
+    funcs = _funcs_by_name(tree)
+    assert start_call.args, "webview.start 必须传入首参（事件循环启动后要跑的函数）"
+    first_arg = start_call.args[0]
+    assert isinstance(first_arg, ast.Name), "webview.start 的首参必须是函数名（而非内联 lambda）"
+    return first_arg.id, funcs[first_arg.id]
+
+
+def _reachable_function_names(root: ast.FunctionDef, funcs: Dict[str, ast.FunctionDef]) -> Set[str]:
+    """从 `root` 出发、沿"调用本模块顶层函数"的可达闭包（含 `root` 自身，仅供白名单用）。"""
+    reachable: Set[str] = {root.name}
+    visited: Set[str] = {root.name}
+    stack: List[ast.FunctionDef] = [root]
+    while stack:
+        current = stack.pop()
+        for call in _calls(current):
+            label = _call_label(call)
+            if label is None or label not in funcs or label in visited:
+                continue
+            visited.add(label)
+            reachable.add(label)
+            stack.append(funcs[label])
+    return reachable
+
+
+def _reachable_labels(root: ast.FunctionDef, funcs: Dict[str, ast.FunctionDef]) -> Set[str]:
+    """从 `root` 出发可达的**全部**调用标签（含属性调用如 `window.load_url`，并跟进顶层函数）。"""
+    labels: Set[str] = set()
+    visited: Set[str] = {root.name}
+    stack: List[ast.FunctionDef] = [root]
+    while stack:
+        current = stack.pop()
+        for call in _calls(current):
+            label = _call_label(call)
+            if label is None:
+                continue
+            labels.add(label)
+            if label in funcs and label not in visited:
+                visited.add(label)
+                stack.append(funcs[label])
+    return labels
+
+
+def _enclosing_function_calls(tree: ast.Module) -> Iterator[Tuple[str, ast.Call]]:
+    """产出 `(函数名, 该函数体内的调用)`（只遍历顶层函数，逐个 walk，不重复计数）。"""
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            for call in _calls(node):
+                yield node.name, call
+
+
+def test_show_window_does_not_touch_the_window_at_setup_time():
+    """`_show_window` 的"进循环前"部分**不得**出现 evaluate_js / load_url / _set_splash_stage。
+
+    这三者在 GUI 事件循环启动前调用会被 marshal 到一个没在跑的线程 ⇒ 永久阻塞（P0 死锁）。
+    """
+    tree = _parse_desktop()
+    show = _funcs_by_name(tree)["_show_window"]
+
+    offending = [
+        (call.lineno, _call_label(call))
+        for call in _calls(show)
+        if _call_label(call) in _WINDOW_WRITE_ATTRS or _call_label(call) == _STAGE_HELPER
+    ]
+
+    assert offending == [], (
+        f"_show_window 在 webview.start() 之前调用了窗口操作 {offending}；"
+        "这些必须交给 webview.start(func, args) 调度的函数（循环已在跑）"
+    )
+
+
+def test_window_writes_happen_only_inside_the_start_delegated_call_tree():
+    """所有 evaluate_js / load_url 调用点都必须落在 `webview.start()` 调度函数的**可达闭包**内。
+
+    这是对"start 之后才碰窗口"的结构性保证：只有 start 首参函数（及其调用的本模块函数）体内才
+    允许写窗口 ⇒ 执行时事件循环必然已在跑。把 load_url 挪回 start 之前 ⇒ 本断言转红。
+    """
+    tree = _parse_desktop()
+    funcs = _funcs_by_name(tree)
+    _name, delegated = _delegated_function(tree)
+    allowed = _reachable_function_names(delegated, funcs)
+
+    writes = [
+        (func_name, _call_label(call))
+        for func_name, call in _enclosing_function_calls(tree)
+        if _call_label(call) in _WINDOW_WRITE_ATTRS
+    ]
+    assert writes, "desktop.py 必然存在窗口写入（evaluate_js / load_url）"
+
+    stray = [(func_name, label) for func_name, label in writes if func_name not in allowed]
+    assert stray == [], (
+        f"窗口写入出现在 webview.start() 调度树之外 {stray}；"
+        "在 GUI 事件循环启动前调用会永久阻塞（P0 死锁）"
+    )
+
+
+def test_start_delegated_function_switches_to_real_ui():
+    """`webview.start()` 首参函数必须真正做"分阶段反馈 + 切真实 UI"。
+
+    钉住"函数存在但空转"的假绿：调度函数体内（可达闭包）必须同时出现 evaluate_js 与 load_url。
+    """
+    tree = _parse_desktop()
+    _name, delegated = _delegated_function(tree)
+    reachable = _reachable_labels(delegated, _funcs_by_name(tree))
+
+    assert "load_url" in reachable, "切换真实 UI（load_url）必须在 start 调度的函数体内"
+    assert "evaluate_js" in reachable, "分阶段反馈（evaluate_js）必须在 start 调度函数（可达）体内"
+
+
+def test_set_splash_stage_logs_failures_instead_of_swallowing_them():
+    """`_set_splash_stage` 的失败路径**必须** `_append_log`，不得再 `except Exception: pass`。
+
+    静默吞异常正是本次事故的帮凶：evaluate_js 的失败被 `pass` 抹掉，排查时零线索。
+    """
+    tree = _parse_desktop()
+    stage_fn = _funcs_by_name(tree)["_set_splash_stage"]
+
+    handlers: List[ast.ExceptHandler] = [
+        handler
+        for node in ast.walk(stage_fn)
+        if isinstance(node, ast.Try)
+        for handler in node.handlers
+    ]
+    assert handlers, "_set_splash_stage 必须捕获 evaluate_js 的失败（否则异常直接逃逸）"
+
+    for handler in handlers:
+        only_pass = all(isinstance(stmt, ast.Pass) for stmt in handler.body)
+        assert not only_pass, "不得再 `except Exception: pass` 静默吞异常（本次事故帮凶）"
+
+    logged = any(
+        _call_label(call) == "_append_log" for handler in handlers for call in _calls(handler)
+    )
+    assert logged, "失败路径必须 `_append_log` 留痕，绝不静默"
+
+
+def test_success_path_writes_stage_logs_for_at_least_three_phases():
+    """成功路径必须至少 3 处 `_append_log` 阶段日志（"卡住无法定位"的根本原因）。
+
+    事故现场：服务就绪后进程卡住，却**一条阶段日志都没有** ⇒ 完全黑盒。故在此钉死下限。
+    """
+    tree = _parse_desktop()
+    show = _funcs_by_name(tree)["_show_window"]
+    _name, delegated = _delegated_function(tree)
+    phases = [show, delegated]
+
+    count = sum(1 for fn in phases for call in _calls(fn) if _call_label(call) == "_append_log")
+
+    assert count >= 3, f"成功路径阶段日志不足（{count} < 3）：卡住时将无从定位"
+
+
+def test_window_ops_run_only_after_webview_start_at_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """行为回归锁：用替身 `webview` 记录调用顺序，断言窗口写入都发生在 start 之后。
+
+    替身无法复现"marshal 到未启动 GUI 线程 = 永久阻塞"，但能钉住**调用顺序**：`start` 必须先于
+    任何 load_url / evaluate_js。把 load_url 挪回 start 之前 ⇒ 本断言转红（即真实死锁的静态形状）。
+    """
+    mod = _mod()
+    order: List[str] = []
+
+    class _Signal:
+        def __iadd__(self, _other: Any) -> "_Signal":
+            return self
+
+    class _FakeEvents:
+        def __init__(self) -> None:
+            self.closed = _Signal()
+
+    class _FakeWindow:
+        def __init__(self) -> None:
+            self.events = _FakeEvents()
+
+        def evaluate_js(self, _script: str) -> None:
+            order.append("evaluate_js")
+
+        def load_url(self, _url: str) -> None:
+            order.append("load_url")
+
+        def destroy(self) -> None:
+            order.append("destroy")
+
+    def _create_window(*_a: Any, **_k: Any) -> _FakeWindow:
+        order.append("create_window")
+        return _FakeWindow()
+
+    def _start(func: Any = None, args: Any = None, **_k: Any) -> None:
+        order.append("start")
+        if func is not None:
+            func(*(args or ()))
+
+    fake_webview: Any = types.ModuleType("webview")
+    fake_webview.create_window = _create_window
+    fake_webview.start = _start
+
+    monkeypatch.setitem(sys.modules, "webview", fake_webview)
+    monkeypatch.setattr(mod, "await_ready", lambda *_a, **_k: True)
+    monkeypatch.setattr(mod, "_start_tray", lambda *_a, **_k: order.append("tray"))
+    monkeypatch.setattr(mod, "_message_box", lambda *_a, **_k: order.append("message_box"))
+
+    code = mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+
+    assert "start" in order, "必须调用 webview.start"
+    start_index = order.index("start")
+    writes = [index for index, op in enumerate(order) if op in _WINDOW_WRITE_ATTRS]
+    assert writes, "成功路径必然有窗口写入（evaluate_js / load_url）"
+    assert all(index > start_index for index in writes), (
+        f"窗口写入早于 webview.start()（P0 死锁形状）：order={order}"
+    )
+    assert code == 0
 
 
 # ── 入口分派：默认=桌面窗口；`--server-only`=既有服务行为（Task 5 行为变化）────────
