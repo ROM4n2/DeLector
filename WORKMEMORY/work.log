@@ -587,3 +587,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **版本面枚举缺失** ⇒ 新增：枚举所有版本落点 + 单一真相源 + 守卫测试（本次实测 6+ 处，且 `test_without_github_ref_type_local_v_tag_is_adopted` 写死旧 tag 名被发版门守卫当场打红）。
 - **`scripts/changelog_gen.py` 三个真 bug**（在临时仓库自测抓到）：① `--version` 有静默默认 `0.1.0` ⇒ 改必填；② **默认就写盘且用 `entry + existing` 前插 ⇒ 会把新条目插到文档标题之上、破坏人工策展的头部** ⇒ 改为默认 dry-run + `--write` 显式 + 插到第一个既有版本标题之前；③ **`subprocess(text=True)` 不带 `encoding=` 用 GBK 解码 ⇒ 中文提交信息让 `stdout=None` ⇒ 报毫不相关的 `AttributeError: 'NoneType'`** ⇒ 显式 `encoding="utf-8", errors="replace"` + 判 None + 打印降级。自测含中文提交信息的临时仓库，4 条用例 + 1 条变异自证（抽掉 `encoding="utf-8"` 复现原崩溃路径）。
 - 反模式表新增 4 行（三平台绿就发 / 模板正文会没问题 / tag 了就完事 / 我轮询到底）。仓库侧 `docs/agents/ops.md` §8 已在前一提交写明追加约定。
+
+### 2026-10-12 | codebuddy | DECISION 宣传延后，先做"可被发现"的薄壳落地页（/dfs-grill Track 1 收敛，不落 ADR）
+Caps: filesystem-read, filesystem-write, shell-exec
+决策（就一个）：**小红书产品种草帖延后到门槛满足；现在只做"可被发现"——独立薄壳站点 + 内容先行，产品演示类冻结。**
+- 站点：独立仓库 + 零构建纯静态 + `github.io`（域名后置）；单页只承载"一句话价值 + 截图 + 下载"，下载指向 `releases/latest`，**版本号/资产运行时 fetch GitHub Releases API**；功能清单与更新历史一律不复述（防第三张会漂的脸——今天的版本面对账教训同族）。
+- 内容：备考方法论打头、开发理念做信任线；产品演示类等闸门。
+- 开闸门槛（全绿才发种草帖）：① ≥5 份真实三问反馈（分级/高亮+一键进卡/本地释义）；② 新手"下载 → 打开 → 读到第一篇短文"连续无协助成功；③ README 首屏含截图与 Win10 WebView2 前置；④ Android 真机覆盖安装点检通过。
+- Why：三个已知限制（Win10 需 WebView2 / 冷启动约 6s / Android 不可回滚）全砸在"第一次打开"上，未验证就铺量只会换来 install→uninstall 的 churn，先背工单而不是先拿反馈。
+- 两条执行前提：① 小红书正文外链不可点 ⇒ 站点只承接主页/私信/搜索流量，别指望笔记导流；② 截图随产品形态过期（v5.17 起已是原生窗口）⇒ 发版需同步换图，这是薄壳唯一人工维护项。
+- 未立项（本次**不**拆任务）：README 首屏改造、站点仓库初始化、反馈入口、Android 点检、选题排期。要走执行再开 `/dfs-plan`。
