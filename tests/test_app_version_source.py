@@ -89,3 +89,52 @@ def test_version_module_is_a_leaf_without_package_imports():
     assert not re.search(r"^\s*(?:from|import)\s+delector", src, re.M), (
         "version.py 不该 import 任何 delector.* 模块（叶模块纪律，避免循环依赖）"
     )
+
+
+# ── 守卫①（2026-10-11 发版门）：发布 tag 必须与 APP_VERSION 绑定 ────────────────────
+# 为什么值得一条守卫：打包侧取版本是 **tag 优先**（`resolve_version`），应用自报的是
+# `APP_VERSION`（`/api/health`）。漏 bump `version.py` 就推 tag ⇒ 产物自称 tag 名、应用报旧
+# 版本 ⇒ 更新提示永远显示"落后"。而 **CI 与真启包闸都看不见**（前者不比对 tag 名、后者只查
+# build-info 四键齐全）。历史事故同族：本地无 tag 时产物被命名成 v3.8.0 而 App 实为 v5.16.0。
+def test_release_tag_guard_accepts_matching_tag() -> None:
+    """tag == `v` + APP_VERSION ⇒ 放行。"""
+    import package_windows
+
+    package_windows.assert_tag_matches_app_version(f"v{APP_VERSION}", APP_VERSION)  # 不抛即通过
+
+
+def test_release_tag_guard_accepts_prerelease_suffix() -> None:
+    """预发布 tag（`v5.17.0-rc1`）必须放行 —— 否则 prerelease 流程会被自己的闸挡住。"""
+    import package_windows
+
+    package_windows.assert_tag_matches_app_version(f"v{APP_VERSION}-rc1", APP_VERSION)
+
+
+def test_release_tag_guard_rejects_mismatched_tag(capsys: pytest.CaptureFixture[str]) -> None:
+    """tag 与 APP_VERSION 不一致 ⇒ `SystemExit(1)`，且消息里两个版本号都要点名（可操作）。"""
+    import package_windows
+
+    with pytest.raises(SystemExit) as exc:
+        package_windows.assert_tag_matches_app_version("v9.9.9", APP_VERSION)
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert "v9.9.9" in out and APP_VERSION in out, out
+
+
+def test_resolve_version_gate_is_wired(monkeypatch: pytest.MonkeyPatch) -> None:
+    """接线（不是只测纯函数）：真 tag 语境下 `resolve_version()` 必须过这道闸。"""
+    import package_windows
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9")
+    with pytest.raises(SystemExit):
+        package_windows.resolve_version()
+
+
+def test_resolve_version_accepts_tag_that_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """一致时既有语义不变：真 tag 语境仍返回该 tag（不是 APP_VERSION 的回落值）。"""
+    import package_windows
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{APP_VERSION}")
+    assert package_windows.resolve_version() == f"v{APP_VERSION}"

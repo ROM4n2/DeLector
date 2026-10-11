@@ -696,3 +696,34 @@ def test_tools_calling_init_db_pin_their_data_dir() -> None:
         "`database.DATA_DIR` 缺席时兜底仓库根 ⇒ 它们会默默在仓库根建库，"
         "并毒化 test_save_wb_state_cost 的迁移闸（本地红 / CI 绿）"
     )
+
+
+def test_legacy_data_dir_under_frozen_bundle_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """冻结产物布局下 `legacy_data_dir()` 落在哪 —— **一次性迁移的源目录**就是它。
+
+    实测依据（2026-10-11，真实产物 `dist/DeLector-v5.16.0-Windows-x64-Portable/`）：
+    `_internal/delector/` 下**只有 `data`**，没有 `__init__.py`、也没有 `core/`（纯 Python 模块在
+    PYZ 存档里，磁盘上没有）⇒ `_package_root()` 的"向上走到没有 `__init__.py`"**一次都不执行**，
+    直接返回 `dirname(__file__)` = `<pkg>/_internal/delector/core`。
+
+    这条钉的是**当前实现的实际取值**、不是"设计意图"：若将来要让冻结态的旧落点变成程序目录
+    （或 `_internal`），必须**同时**改这里与"解压新版覆盖旧目录"的人工冒烟 —— 否则迁移会去错
+    地方、静默不搬，症状正是 ADR-0019 要防的「升级后记录全空且零提示」。
+    """
+    import delector.core.data_dir_bootstrap as bootstrap
+
+    frozen_core = tmp_path / "pkg" / "_internal" / "delector" / "core"
+    frozen_core.mkdir(parents=True)
+    module_path = frozen_core / "data_dir_bootstrap.py"
+    module_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(bootstrap, "__file__", str(module_path))
+
+    assert bootstrap._package_root() == str(frozen_core), (
+        f"冻结布局下 _package_root() 应为 {frozen_core}（PYZ 里没有 __init__.py ⇒ 不向上走），"
+        f"实际 {bootstrap._package_root()}"
+    )
+    assert bootstrap.legacy_data_dir() == str(frozen_core), (
+        "旧落点变了：一次性迁移的**源目录**随之改变，必须同步改这条测试与覆盖安装的迁移冒烟"
+    )

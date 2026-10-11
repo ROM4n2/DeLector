@@ -169,6 +169,27 @@ def assert_no_path_separator(version: str) -> None:
     sys.exit(1)
 
 
+def assert_tag_matches_app_version(tag: str, app_version: str) -> None:
+    """发布 tag 必须等于 `v` + `APP_VERSION`（允许预发布尾缀）⇒ 否则**构建期硬失败**。
+
+    为什么必须硬失败而非警告：打包侧取版本是 **tag 优先**（`resolve_version`），而应用**自报**
+    的是 `APP_VERSION`（`/api/health`）。两者不一致时产物会**自称 tag 名、应用却报另一个版本**
+    ⇒ 用户端"更新提示"会把最新版永远判为落后；历史事故是同族（本地无 tag 时产物被命名成
+    `DeLector-v3.8.0-…` 而 App 实为 v5.16.0，用户无从分辨）。而"漏 bump `version.py` 就推 tag"
+    是最容易犯的错，且 **CI 与真启包闸都看不见**（前者不比对 tag 名、后者只查 `build-info` 四键齐全）。
+    预发布 tag（`v5.17.0-rc1`）放行：只比对 `-` 之前的核心段。
+    """
+    expected = f"v{app_version}"
+    core = tag.split("-", 1)[0]
+    if core == expected:
+        return
+    print(f"[Error] 发布 tag 与 APP_VERSION 不一致：tag={tag!r}，APP_VERSION={app_version!r}（期望 {expected!r}）")
+    print(f"        修法：① 把 delector/core/version.py 的 APP_VERSION 改成 {core.lstrip('v')!r} 后重推 tag；或")
+    print("              ② 删掉这个 tag，改对版本号再重打（不要只改 tag 名，两处必须一致）")
+    print("        为何硬失败：tag 优先命名产物、应用自报 APP_VERSION，不一致会让更新提示永远显示落后。")
+    sys.exit(1)
+
+
 def resolve_version() -> str:
     """发布版本号：仅在**真 tag 语境**取 CI 注入的 GITHUB_REF_NAME，否则回落 APP_VERSION。
 
@@ -181,12 +202,18 @@ def resolve_version() -> str:
     为什么必须回落 APP_VERSION 而非写死字面量：曾写死 'v3.8.0'，本地不设 GITHUB_REF_NAME
     时产物命名成 DeLector-v3.8.0-… 而 App 实为 v5.16.0，用户无从分辨。APP_VERSION 是应用级
     单一真相源（delector/core/version.py），此处只在前面补 'v'。
+
+    真 tag 语境下**必须**先过 `assert_tag_matches_app_version`：tag 名与 APP_VERSION 不一致
+    时产物与自报版本会分叉（见该函数 docstring 的历史事故与"CI 看不见"的理由）。
     """
     # 直接 import 安全：delector.core.version 是只吃标准库的叶模块（实测不拉 spacy /
     # fastapi / webview 等重依赖），不会给构建脚本引入副作用，故不采用正则读源码的绕行写法。
     from delector.core.version import APP_VERSION
 
-    raw = tag_ref_name() or f"v{APP_VERSION}"
+    tag = tag_ref_name()
+    if tag:
+        assert_tag_matches_app_version(tag, APP_VERSION)
+    raw = tag or f"v{APP_VERSION}"
     # 防御性净化 + 断言：不管版本来自 CI 还是 fallback，都绝不产出含路径分隔符的目录名。
     version = sanitize_version(raw)
     assert_no_path_separator(version)

@@ -5077,12 +5077,18 @@ def test_resolve_version_prefers_github_ref_name(monkeypatch):
     显式设 GITHUB_REF_TYPE=tag：GitHub Actions 会给 pytest 步骤带上 GITHUB_REF_TYPE
     环境变量（PR/push 为 branch），不设它就会让"是否采纳该名"取决于**运行环境**而非被测
     逻辑（本机绿、CI 红）。设成 tag 才是这条用例真正要表达的发布语境。
+
+    为什么用**预发布** tag（`v<APP_VERSION>-rc1`）而不是任意 tag：2026-10-11 起真 tag 语境必须过
+    `assert_tag_matches_app_version`（tag 名与 APP_VERSION 分叉会让产物自称 tag、应用报旧版本）。
+    而一个与 APP_VERSION **完全相同**的 tag 就无法再区分"tag 优先"与"回落 APP_VERSION"——
+    预发布 tag 是唯一**既合法、又与回落值不同**的形态，用它才保住这条用例的判别力。
     """
     import package_windows
+    from delector.core.version import APP_VERSION
 
     monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
-    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9")
-    assert package_windows.resolve_version() == "v9.9.9"
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{APP_VERSION}-rc1")
+    assert package_windows.resolve_version() == f"v{APP_VERSION}-rc1"
 
 
 def test_resolve_version_falls_back_to_app_version(monkeypatch):
@@ -5132,24 +5138,50 @@ def test_resolve_version_branch_ref_type_falls_back_to_app_version(monkeypatch):
 
 
 def test_resolve_version_tag_ref_type_keeps_tag_name(monkeypatch):
-    """防把发布命名改坏：GITHUB_REF_TYPE=tag + GITHUB_REF_NAME=v9.9.9 ⇒ 仍是 v9.9.9。"""
+    """防把发布命名改坏：GITHUB_REF_TYPE=tag ⇒ 版本串仍是那个 tag 名（而不是回落值）。
+
+    用**预发布** tag（`v<APP_VERSION>-rc1`）：2026-10-11 起真 tag 语境必须过
+    `assert_tag_matches_app_version`（tag 名与 APP_VERSION 分叉会让产物自称 tag、应用报旧版本），
+    而与 APP_VERSION **完全相同**的 tag 又无法区分"保留 tag 名"与"回落 APP_VERSION"——
+    预发布 tag 是唯一既合法又不同的形态。
+    """
     import package_windows
+    from delector.core.version import APP_VERSION
 
     monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
-    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9")
-    assert package_windows.resolve_version() == "v9.9.9"
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{APP_VERSION}-rc1")
+    assert package_windows.resolve_version() == f"v{APP_VERSION}-rc1"
 
 
-def test_resolve_version_sanitizes_illegal_separators(monkeypatch):
-    """含非法分隔符的 tag 名 ⇒ 被净化成合法 slug（版本串不含路径分隔符）。"""
+def test_sanitize_version_replaces_path_separators():
+    """含非法分隔符的版本串 ⇒ 被净化成合法 slug（版本串不含路径分隔符）。
+
+    为什么从"经 `resolve_version()` 集成验证"改成**直测纯函数**（2026-10-11）：新守卫
+    `assert_tag_matches_app_version` 要求真 tag 语境的名字必须匹配 `v`+APP_VERSION，而
+    `v1.2.3/rc1` 这类名字**永远不可能匹配** ⇒ 那条集成路径已不可达。真正的事故面（PR 事件里
+    `GITHUB_REF_NAME=128/merge`）由 `test_resolve_version_pr_ref_name_yields_no_path_separator`
+    独立覆盖，不依赖本用例；净化器本身仍作为纵深防御保留，故直测它。
+    """
+    import package_windows
+
+    version = package_windows.sanitize_version("v1.2.3/rc1")
+
+    assert "/" not in version and "\\" not in version, f"净化后仍含分隔符：{version!r}"
+    assert version == "v1.2.3-rc1", f"分隔符应被替换为 '-'，实际 {version!r}"
+
+
+def test_resolve_version_rejects_tag_with_path_separator(monkeypatch):
+    """真 tag 语境下含分隔符的 tag 名 ⇒ 被守卫①拒（`SystemExit`），不再进入净化路径。
+
+    钉住的是**优先级**：版本身份（tag 必须匹配 APP_VERSION）先于目录合法性判定 —— 顺序反了会
+    给出一条"已净化"的错版本号，而那正是历史事故（产物目录嵌套）想要的结果。
+    """
     import package_windows
 
     monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
     monkeypatch.setenv("GITHUB_REF_NAME", "v1.2.3/rc1")
-    version = package_windows.resolve_version()
-
-    assert "/" not in version and "\\" not in version, f"净化后仍含分隔符：{version!r}"
-    assert version == "v1.2.3-rc1", f"分隔符应被替换为 '-'，实际 {version!r}"
+    with pytest.raises(SystemExit):
+        package_windows.resolve_version()
 
 
 def test_assert_no_path_separator_hard_fails():
