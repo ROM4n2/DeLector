@@ -11,12 +11,20 @@
   - `开始启动（进程级计时起点）`  —— 进程级计时起点（日志里最早的标记）；
   - `服务已就绪`                  —— uvicorn 已可服务（≈ `health_200` 的口径）；
   - `真实 UI 已加载（首屏可用）`  —— pywebview 的 `loaded` 事件（页面渲染完成）⇒ **真实首屏**。
-本脚本把三点连成一张小表，给出三段耗时：起点→服务就绪、服务就绪→首屏、起点→首屏（端到端首屏）。
+另落一枚**可选**的未测段标记（紧随计时起点）：
+  - `进程已运行 {N} ms（自进程创建；此前为未测段）` —— `desktop.py` 问 OS 要的**进程创建时刻**
+    到这里过了多久（见其 `_ms_since_process_create`）。它覆盖"解释器启动 + 模块级 import +
+    打包 bootstrap"这段**在计时起点之前**的开销；取不到时写 `?`。
+本脚本把三点连成一张小表，给出三段耗时：起点→服务就绪、服务就绪→首屏、起点→首屏（端到端首屏），
+外加那一段未测段。
 
 口径与边界
 ----------
 - 时间戳精度 = `_append_log` 的 `%H:%M:%S`（**秒**级）；差值以秒为单位。刻意不为计时去改
   `_append_log` 的时间戳格式（避免动既有 8 段阶段日志的口径）。
+- **未测段是毫秒、其余三段是秒级** ⇒ 不得把两者相加后当"毫秒精度"报；脚本末尾有一行口径声明。
+- 未测段标记是**可选**的：旧日志没有它 ⇒ 如实报"该日志不含此项"，**退出码不变**（它不是首屏事件，
+  缺它不构成"算不出"）。
 - 日志是**追加**写：多次启动会留下多个 `开始启动` 标记 ⇒ 取**最后一次**启动为计时起点，
   只统计其后的 `服务已就绪` / `真实 UI 已加载`。
 - 旧日志（本脚本之前产生）**没有** `loaded` 行 ⇒ 如实报"该日志不含首屏事件"，
@@ -53,6 +61,8 @@ APP_DIR_NAME = "DeLector"
 START_MARKER = "开始启动（进程级计时起点）"
 READY_MARKER = "服务已就绪"
 SCREEN_MARKER = "真实 UI 已加载（首屏可用）"
+# 可选：紧随计时起点的"进程创建 → 此处"毫秒行（旧日志没有它 ⇒ 不构成错误，见模块 docstring）。
+PRE_START_MARKER = "自进程创建"
 
 EXIT_OK = 0
 EXIT_NO_FIRST_SCREEN = 3
@@ -61,6 +71,9 @@ EXIT_BAD_FORMAT = 5
 
 # `_append_log` 的行格式：`[YYYY-MM-DD HH:MM:SS] 消息`（时间戳秒级；容忍可选的 `.毫秒` 尾巴）。
 _LINE_RE = re.compile(r"^\[(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s*(?P<msg>.*)$")
+
+# 未测段行里的数字：`进程已运行 123 ms（自进程创建；…）`，取不到时 `desktop.py` 写 `?`。
+_PRE_START_RE = re.compile(r"进程已运行 (?P<ms>\?|\d+) ms（自进程创建")
 
 
 class _MarkedLine(NamedTuple):
@@ -127,6 +140,28 @@ def _fmt_stamp(when: datetime) -> str:
     return when.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _pre_start_ms(lines: List[_MarkedLine], after: int) -> Optional[str]:
+    """取计时起点之后那行里的毫秒数（或 `?`）；旧日志没有该行时返回 None。
+
+    三种结果**必须区分**：`None` = 旧日志不含该行；`"?"` = 有该行但 `desktop.py` 本机没取到
+    进程创建时刻；否则是数字串（毫秒）。**不得**把 `None` 当成 0 或当成"很快"。
+    """
+    index = _first_index_after(lines, PRE_START_MARKER, after)
+    if index is None:
+        return None
+    match = _PRE_START_RE.search(lines[index].message)
+    return match.group("ms") if match is not None else None
+
+
+def _fmt_pre_start(value: Optional[str]) -> str:
+    """把 `_pre_start_ms` 的三种结果转成人话（缺失/取不到都不静默给 0）。"""
+    if value is None:
+        return "该日志不含此项（旧版本 desktop.py）"
+    if value == "?":
+        return "本机未取到（该运行写的是 `?`）"
+    return f"{value} ms"
+
+
 def _read_text(log_path: str) -> str:
     """读日志全文（UTF-8、坏字节替换）；IO 失败原样抛出，由调用方转成人话。"""
     with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
@@ -171,11 +206,13 @@ def run(log_path: str) -> int:
     print("=== 首屏耗时（来自 launch.log）===")
     print(f"日志文件: {log_path}")
     print(f"计时起点: {_fmt_stamp(start.when)}")
+    print(f"进程创建 → 计时起点（此前未测段）: {_fmt_pre_start(_pre_start_ms(lines, start_index))}")
     print(f"服务就绪: {_fmt_stamp(ready.when)}")
     print(f"首屏已加载: {_fmt_stamp(screen.when)}")
     print(f"起点 → 服务就绪: {_fmt_seconds((ready.when - start.when).total_seconds())}")
     print(f"服务就绪 → 首屏已加载: {_fmt_seconds((screen.when - ready.when).total_seconds())}")
     print(f"起点 → 首屏已加载（端到端首屏）: {_fmt_seconds((screen.when - start.when).total_seconds())}")
+    print("（「进程创建 → 计时起点」是毫秒；其余三段由秒级时间戳相减 ⇒ 端到端首屏只在秒级可比）")
     return EXIT_OK
 
 

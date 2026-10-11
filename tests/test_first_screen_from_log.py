@@ -10,8 +10,11 @@ import ast
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "first_screen_from_log.py"
@@ -213,3 +216,76 @@ def test_new_stage_markers_do_not_contain_first_screen_anchor_substrings() -> No
             assert anchor not in marker, (
                 f"新标记 {marker!r} 含首屏锚串 {anchor!r}：解析器会抢错行、端到端数字静默变味"
             )
+
+
+# ── 本轮：未测段（进程创建 → 计时起点）是**可选**行，三种结果必须区分 ──────────────
+# 造行不手抄字面量：调 `desktop.py` 的**真写入方** `_log_prestart_elapsed` 生成消息，只把时间戳
+# 留给本文件拼（否则测试里就是第二份字面量，写方一改就静默漂移）。
+def _prestart_message(monkeypatch: pytest.MonkeyPatch, ms: Optional[float]) -> str:
+    """用真写方生成那条消息（`ms=None` ⇒ 走"取不到"分支写 `?`），返回去掉时间戳前缀的消息。"""
+    import desktop
+
+    monkeypatch.setattr(desktop, "_ms_since_process_create", lambda: ms)
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / "launch.log"
+        desktop._log_prestart_elapsed(str(log))
+        raw = log.read_text(encoding="utf-8").splitlines()[-1]
+    return raw.split("] ", 1)[1]
+
+
+def test_prestart_row_reports_ms_from_real_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """有未测段行 ⇒ 报**那个毫秒数**，且三行老口径不受影响（未测段行没抢锚）。"""
+    log = _write_log(
+        tmp_path / "launch.log",
+        [
+            ("2026-10-10 12:00:08", START + "。"),
+            ("2026-10-10 12:00:08", _prestart_message(monkeypatch, 4321.6)),
+            ("2026-10-10 12:00:13", READY + "。"),
+            ("2026-10-10 12:00:14", SCREEN + "。"),
+        ],
+    )
+    proc = _run(log)
+    assert proc.returncode == 0, proc.stderr
+    out_lines = proc.stdout.splitlines()
+    assert "进程创建 → 计时起点（此前未测段）: 4322 ms" in out_lines, proc.stdout
+    assert "起点 → 服务就绪: 5s" in out_lines, proc.stdout
+    assert "服务就绪 → 首屏已加载: 1s" in out_lines, proc.stdout
+    assert "起点 → 首屏已加载（端到端首屏）: 6s" in out_lines, proc.stdout
+
+
+def test_prestart_row_absent_for_old_log_keeps_exit_code_ok(tmp_path: Path) -> None:
+    """**旧日志没有该行不是错误**：如实报"不含此项"，退出码仍 0（它不是首屏事件）。"""
+    log = _write_log(
+        tmp_path / "launch.log",
+        [
+            ("2026-10-10 12:00:08", START + "。"),
+            ("2026-10-10 12:00:13", READY + "。"),
+            ("2026-10-10 12:00:14", SCREEN + "。"),
+        ],
+    )
+    proc = _run(log)
+    assert proc.returncode == 0, proc.stderr
+    assert (
+        "进程创建 → 计时起点（此前未测段）: 该日志不含此项（旧版本 desktop.py）"
+        in proc.stdout.splitlines()
+    ), proc.stdout
+
+
+def test_prestart_row_reports_question_mark_when_probe_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """写方取不到时刻（写 `?`）⇒ 解析器如实报"本机未取到"，**绝不**当成 0 或"很快"。"""
+    log = _write_log(
+        tmp_path / "launch.log",
+        [
+            ("2026-10-10 12:00:08", START + "。"),
+            ("2026-10-10 12:00:08", _prestart_message(monkeypatch, None)),
+            ("2026-10-10 12:00:13", READY + "。"),
+            ("2026-10-10 12:00:14", SCREEN + "。"),
+        ],
+    )
+    proc = _run(log)
+    assert proc.returncode == 0, proc.stderr
+    assert "进程创建 → 计时起点（此前未测段）: 本机未取到（该运行写的是 `?`）" in proc.stdout.splitlines(), proc.stdout
