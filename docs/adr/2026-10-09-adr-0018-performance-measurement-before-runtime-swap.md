@@ -268,10 +268,11 @@ docstring 已论证；且材料内容入库后不可变 + id 不复用 ⇒ 无�
     - **更严的边界**：该"计时起点"是 `desktop.py::run_desktop` 内**最早**的日志行，**晚于** Python 解释器启动与该模块自身的 import ⇒ 用户双击感知的端到端**比 6s 更长**，那一段**尚未被测到**（要测需在更早处落标记，或改用壳外计时）。
     - ⇒ **§7.6 路由的下一杠杆不在前端**，而在「进程起点 → 服务就绪」这段。
     - **那 5s 的既有分段（非新仪表：读同一次 `launch.log` 的既有阶段行；秒级、单样本）**：
-      `起点 14:29:08` → `已创建 splash 窗口 14:29:11` = **3s** —— 该段是**一个未标记的空档**，混合了：端口/身份校验 + WebView2 运行时检测 + `bootstrap_data_dir` + **`from delector.server import app`** + `build_server` + `serve_in_thread` + 两次 `create_window` + 托盘；
+      `起点 14:29:08` → `已创建 splash 窗口 14:29:11` = **3s** —— **当时**是**一个未标记的空档**（混合了：端口/身份校验 + WebView2 运行时检测 + `bootstrap_data_dir` + **`from delector.server import app`** + `build_server` + `serve_in_thread` + 两次 `create_window` + 托盘）—— **现已加 6 枚阶段标记（Task-1，commit `ce2274b`）**：`端口与身份校验通过。` / `WebView2 运行时检测通过。` / `数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。` / `服务端模块已导入（delector.server）。` / `HTTP 服务已装配（build_server 完成）。` / `本地服务线程已启动（等在就绪窗口内命中）。` ⇒ **该空档已被切开**；
       → `进入 GUI 事件循环 14:29:11` → `等待服务就绪 14:29:13` = **2s**（`webview.start()` 起步：WebView2 环境/窗口落地，再到 `_after_start` 里 health 命中）；
       → `切换主窗口 / load_url 14:29:13` → `首屏 14:29:14` = **1s**（前端）。
-    - ⇒ **下一步该补的是那 3s 空档的阶段标记**（同款 `_append_log`，零新依赖），而不是再动前端 —— 3s 里 Python 侧前置与 webview 建窗混在一起，**当前无法归因**。
+    - ⇒ **那 3s 空档的阶段标记已补**（Task-1，`ce2274b`，同款 `_append_log`，零新依赖）⇒ **真实分段有待用户重跑一次 `python desktop.py` 后用 `tools/first_screen_from_log.py` 取数**；**重跑前禁止声称任一段占比**（上列 3s / 2s / 1s 是**标记前**读既有阶段行得出的历史值，原样保留）。
+    - 解析器侧已有**兼容性回归锁**（Task-2，`cf84c80`）：6 枚新标记**不得**含三条锚串（`开始启动（进程级计时起点）` / `服务已就绪` / `真实 UI 已加载（首屏可用）`）的子串，否则解析器会**抢错锚行**、端到端数字静默变味。
     - 另：`真实 UI 已加载` 在 14:29:14 与 14:29:16 各触发一次（工具取首次，与上次同款）。
 - **[Unknown 2] Android 侧如何测量**：本机无 Android SDK（Java 侧改动只能靠 CI 验证）；真机冷启动/首启解包 30MB 的体验成本如何量化，未定。
 - **[Unknown 3] 卡盒前端渲染的占比**：perf 席位标注"排序未实测"，20k 卡 790ms 中前端部分未剖析。

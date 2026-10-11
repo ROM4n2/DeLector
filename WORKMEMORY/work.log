@@ -479,3 +479,17 @@ Caps: filesystem-read, filesystem-write
 - `14:29:13 切主窗口/load_url` → `14:29:14 首屏` = **1s**（前端）。
 - 口径：秒级、单样本；`真实 UI 已加载` 在 14:29:14 与 14:29:16 各触发一次（工具取首次）。
 - ⇒ **下一步的杠杆是给那 3s 空档补阶段标记**（同款 `_append_log`，零新依赖），不是再动前端。已回写 ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、PROJECT_OVERVIEW。
+
+### 2026-10-11 | codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：worktree `feat/desktop-stage-markers`（基线 `ce2274b` / `cf84c80`）「desktop 启动链可归因化」三任务收官 —— 本任务（Task-3）**只改文档**，不碰生产代码。
+- **Task-1（`ce2274b`）**：`desktop.py::_run_desktop_inner` 纯 +6 行 `_append_log`（零删改/零顺序变更），把「起点 → 已创建 splash 窗口」这 ~3s 空档切成 6 段：端口与身份校验通过。/ WebView2 运行时检测通过。/ 数据目录已就绪（bootstrap_data_dir 完成）。/ 服务端模块已导入（delector.server）。/ HTTP 服务已装配（build_server 完成）。/ 本地服务线程已启动（等在就绪窗口内命中）。`tests/test_desktop_shell.py` +136 行（6 枚标记的存在 + 源码顺序 1→6 + 位置夹逼）。**变异自证**：6 枚整体下移到 `serve_in_thread` 之后保序 ⇒ 转红 `AssertionError: 必须写在下一枚锚语句（第 610 行）之前，实际在第 624 行`；备份 md5 复原 ⇒ 48 passed / 2 skipped。
+- **Task-2（`cf84c80`）**：`tests/test_first_screen_from_log.py` +88 行 —— 解析器（`tools/first_screen_from_log.py` 用**子串匹配**切锚）的**兼容性回归锁**：6 枚新标记 MUST NOT 含三条锚串（开始启动（进程级计时起点）/ 服务已就绪 / 真实 UI 已加载（首屏可用））的子串，否则**抢错锚行**（不报错、数字静默变味）；标记清单由 AST 从 `desktop.py` 同源取（不在测试里复制第二份）。**变异自证**：第 6 枚临时改为 `本地服务线程已启动（服务已就绪）。` ⇒ 锚被抢、`起点 → 服务就绪: 3s`（期望 5s）、`服务就绪 → 首屏: 3s`（期望 1s）⇒ 2 failed / 6 passed；复原 ⇒ 8 passed。
+- **Task-3（本次）**：文档回写 —— **ADR-0018 §8 `[Unknown 8]` 复核条**：那 3s 从「**一个未标记的空档 … 当前无法归因**」改为「**已加 6 枚阶段标记（Task-1 `ce2274b`）** ⇒ 空档已被切开；**真实分段有待用户重跑一次 `python desktop.py` 后用 `tools/first_screen_from_log.py` 取数；重跑前禁止声称任一段占比**」，并补解析器兼容锁（Task-2 `cf84c80`）。**ADR-0020 §6 `[Unknown 2]`**：「下一步补 3s 空档的阶段标记」→「**已补**（Task-1 `ce2274b`），待重跑取数」。以上两份 ADR 的**仓内副本 + vault 正式件**同步改（body 逐行同源，已脚本自证）。`PROJECT_OVERVIEW.md` 开放待办同口径更新。
+- 数字纪律：**只写"已标记、待重跑"**，未新增任何"某段占多少秒"的数字；原有 3s / 2s / 1s 是**标记前**历史值，原样保留。
+- **未闭合项（唯一）＝ 用户重跑一次 `python desktop.py`** 后取真实分段（6 枚标记已就位，重跑即出数）。
+
+### 2026-10-11 | codebuddy | NOTE（marker 3 改名：名不副实 → 不再宣称"已就绪"）
+Caps: filesystem-write
+事件：/dfs-team 共识返工 Fix-2 —— `bootstrap_data_dir` 是 **fail-soft、永不抛**（失败只回退旧落点 + 记 ERROR）⇒ 原 marker 3 字面「数据目录已就绪（bootstrap_data_dir 完成）。」会把"回退了"读成"就绪了"。已改名（附新字面量）为：**`数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。`**。同步位点：`desktop.py`、`tests/test_desktop_shell.py::_STARTUP_STAGE_MARKERS`（规格字面量，故意漂移锁）、ADR-0018 仓内副本 + vault 正式件（两份正文逐行同源，已自证同一）。既往行一律不改（本条为追加）。
+
