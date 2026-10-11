@@ -568,3 +568,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **Release 说明**：`build-release.yml` 的 body 是写死样板、不读 CHANGELOG（ADR-0022 R4）⇒ 已 `gh release edit` 补两段：「🖥️ 本版重点」（原生窗口 / 数据外置 / 更新 chip / 六条随版到达的修复）与「⚠️ 已知限制」（含 Q2=B 硬要求的两条：那 2s 端口/身份校验**不许当提速卖点**、`launch.log` 约 **3% 整行**丢失；另加 WebView2 前置、Android `versionCode` 不可回滚、数据落点勿删）。
 - **门禁**：全量 **1768 passed + 2 skipped**；探针 **29/29**；`ruff` 0；mypy **87 + 121 + 4** files 零错误；前端契约闸 PASS + `tsc` PASS；`test_writer_mobile` 30 passed。
 - **口径教训（同族）**：受打印/舍入影响的两个量比大小或比相等时，容差 MUST 由**精度**推导（不许凭手感给固定百分比）；且"只在特定机器复现"的缺陷**行为断言锁不住**，必须配源码级棘轮。
+
+### 2026-10-11 | codebuddy | NOTE Release 模板 / 仓库 About 对齐当前产品
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户问"Release 文案 + 仓库描述与标签是否也要更新" ⇒ 都过时了，已一并修（commit `98910ee` + 远端设置）。
+- **Release 模板（`build-release.yml` 的 `body:`）**：改前 Windows 行仍写「解压即用，双击 `DeLector.exe` **秒级启动**」——与自家 known-issues「那 2s 不许当提速卖点」直接冲突；能力清单 8 行缺桌面壳 / 遇见区 i+1 / 全库检索 / 听力微训 / 长难句工坊 / 背词工作台与统一池 / 552-691 搭配 / 写作台 Inlay Hints / 更新 chip。改后：前言补「三形态共用同一后端」+ CHANGELOG/FEATURES 指针；四平台安装说明逐条改写；能力清单 8 → **11 行**与 `FEATURES.md` 对齐。
+- **约定落纸**：模板内加注释 + `docs/agents/ops.md` §8 —— **版本专属段落（「本版重点」/「已知限制」）逐版不同，发版后 MUST 用 `gh release edit <tag> --notes-file` 追加**（ADR-0022 R4，v5.17.0 首次实践即人工补的）。模板只放跨版本稳定内容。
+- **v5.17.0 的 Release 正文已按新模板重渲染**（本地用 `yaml.safe_load` 取模板 + `${{ github.ref_name }}` → `v5.17.0`，再拼上两段版本专属内容，39 行，四节齐全）。
+- **仓库 About（`gh repo edit`）**：描述改为「德语欧标沉浸精读 + 歌德/德福备考 · 本地优先、离线可用 | …spaCy NLP, FSRS, native desktop / portable / Android」；主页设为 Releases 页；标签 11 → **19**（新增 `fsrs` / `offline-first` / `local-first` / `pwa` / `pywebview` / `chaquopy` / `desktop-app` / `sqlite`）。
+- 门禁：`yaml.safe_load` 通过（jobs 5、body 24 行）；`test_ci_hardening` + `test_writer_mobile` 63 passed；`test_server` 相关子集 22 passed。该文件在 CI「打包面」清单内 ⇒ push master 自动点亮 `Windows Portable Smoke` 复验（无测试断言 Release 正文，已 grep 确认）。
