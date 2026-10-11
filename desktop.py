@@ -606,20 +606,26 @@ def _run_desktop_inner(port: int, log_path: str) -> int:
     # 校验失败 ⇒ 已弹窗 + 已落日志 ⇒ 退出码 3（2 已被"缺 WebView2"占用）。
     if not _check_port_or_fail(port, log_path):
         return 3
+    _append_log(log_path, "端口与身份校验通过。")
 
     if not ensure_webview2_runtime():
         _append_log(log_path, "未检测到 WebView2 运行时：提示安装并退出。")
         _message_box("缺少 WebView2 运行时", webview2_missing_message())
         return 2
+    _append_log(log_path, "WebView2 运行时检测通过。")
 
     # ⚠️ 必须在 `from delector.server import app` **之前**：那一行一跑，`database` 已按仓库根把
     # DATA_DIR 落定，之后再设 DELECTOR_DATA_DIR 就晚了（与 start.py 同款接线）。
     bootstrap_data_dir(os.environ)
+    _append_log(log_path, "数据目录已就绪（bootstrap_data_dir 完成）。")
 
     from delector.server import app
+    _append_log(log_path, "服务端模块已导入（delector.server）。")
 
     server = build_server(BIND_HOST, port, app)
+    _append_log(log_path, "HTTP 服务已装配（build_server 完成）。")
     thread = serve_in_thread(server)
+    _append_log(log_path, "本地服务线程已启动（等在就绪窗口内命中）。")
     try:
         return _show_window(server, thread, port, log_path)
     finally:

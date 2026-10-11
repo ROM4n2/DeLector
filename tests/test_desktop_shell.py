@@ -649,6 +649,142 @@ def test_run_desktop_logs_process_level_timing_start() -> None:
     )
 
 
+# ── Task 1：`_run_desktop_inner` 的启动阶段标记（把「开始启动 → 已创建 splash」这 ~3s 拆开）────
+# 缺陷背景：`run_desktop` 写下「开始启动（进程级计时起点）」之后、到 `_show_window` 的第一条日志
+# 之前，`_run_desktop_inner` 这一整段（端口/身份校验 → WebView2 检测 → 定数据落点 → 导入 server →
+# 建服 → 起服务线程）**一条日志都没有** ⇒ launch.log 上约 3s 全是黑盒，卡死时无法归因到哪一步。
+# 下列锁钉住 6 枚新标记：① 全部存在；② 源码顺序恒为 1→6；③ 每枚都**夹在**它要标记的那条语句
+# 与下一枚锚语句之间（下界「晚于本锚」证伪「标记写在语句之前」；上界「早于下一锚」证伪「整体
+# 下移但保持顺序」——只有下界时后者会假绿）；另钉一条：新标记绝不把首屏工具的锚串当子串（否则
+# `first_screen_from_log` 的 `_last_index` / `_first_index_after` 会抢错行）。
+_STARTUP_STAGE_MARKERS: List[str] = [
+    "端口与身份校验通过。",                        # ← `_check_port_or_fail` 通过之后
+    "WebView2 运行时检测通过。",                    # ← `ensure_webview2_runtime` 通过之后
+    "数据目录已就绪（bootstrap_data_dir 完成）。",   # ← `bootstrap_data_dir` 之后
+    "服务端模块已导入（delector.server）。",         # ← `from delector.server import app` 之后
+    "HTTP 服务已装配（build_server 完成）。",        # ← `build_server` 之后
+    "本地服务线程已启动（等在就绪窗口内命中）。",    # ← `serve_in_thread` 之后（紧接 `try:` 之前）
+]
+# 首屏工具（tools/first_screen_from_log.py）用于切片的三个锚串：任何新标记都不得包含它们。
+_FIRST_SCREEN_ANCHORS: Tuple[str, ...] = (
+    "开始启动（进程级计时起点）",
+    "服务已就绪",
+    "真实 UI 已加载（首屏可用）",
+)
+
+
+def _stage_log_entries(func_name: str) -> List[Tuple[int, str]]:
+    """`func_name` 内所有 `_append_log(x, "<字面量>")` 的（行号, 字面量），按行号升序。"""
+    fn = _funcs_by_name(_parse_desktop())[func_name]
+    entries: List[Tuple[int, str]] = []
+    for call in _calls(fn):
+        if _call_label(call) != "_append_log" or len(call.args) < 2:
+            continue
+        arg = call.args[1]
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            entries.append((call.lineno, arg.value))
+    return sorted(entries)
+
+
+def _stage_stmt_span(func_name: str, predicate: Any) -> Tuple[int, int]:
+    """`func_name` 里首个满足 `predicate` 的顶层语句的（起始行, 结束行）。找不到即报错。"""
+    fn = _funcs_by_name(_parse_desktop())[func_name]
+    for stmt in fn.body:
+        if predicate(stmt):
+            return stmt.lineno, stmt.end_lineno or stmt.lineno
+    raise AssertionError(f"{func_name} 里找不到满足断言的语句（谓词={predicate!r}）")
+
+
+def _stmt_has_call(stmt: ast.stmt, label: str) -> bool:
+    return any(_call_label(call) == label for call in _calls(stmt))
+
+
+def test_run_desktop_inner_logs_six_stage_markers_in_order_after_their_anchor_stmts() -> None:
+    """`_run_desktop_inner` 必落 6 枚启动阶段标记，顺序为 1→6，且各自**夹在**它要标记的语句与
+    下一条锚语句之间（下界：晚于本锚语句；上界：早于下一枚锚语句的起始行）。
+
+    为什么钉「存在 + 顺序 + 位置」三者：只钉「字符串在源码里出现过」会被「标记写在语句之前 /
+    顺序颠倒」骗过；而 `first_screen_from_log` 的切片完全依赖**先后次序**，位置错了归因就错。
+
+    为什么位置要**夹逼**而不只有下界：只有下界时，把 6 枚标记**整体下移**（例如全塞到
+    `serve_in_thread` 之后、仍保持 1→6 顺序）仍会全绿 —— `ordered` 与 6 条下界断言都骗得过去，
+    但归因已经张冠李戴（每枚标记都不再紧贴它要标记的那一步）。上界（早于下一枚锚）把这种
+    「整体漂移」挡在门外：末枚标记的上界锚是紧随其后的 `try:` 顶层语句。
+    """
+    entries = _stage_log_entries("_run_desktop_inner")
+    messages = [message for _lineno, message in entries]
+
+    for marker in _STARTUP_STAGE_MARKERS:
+        assert marker in messages, (
+            f"_run_desktop_inner 缺少启动阶段标记 {marker!r}；现有 _append_log 字面量：{messages}"
+        )
+
+    ordered = [message for _lineno, message in entries if message in set(_STARTUP_STAGE_MARKERS)]
+    assert ordered == _STARTUP_STAGE_MARKERS, (
+        f"6 枚启动阶段标记的源码顺序必须为 1→6，实际：{ordered}"
+    )
+
+    line_of = {message: lineno for lineno, message in entries}
+    # 7 条锚语句 span：前 6 条是 6 枚标记各自的锚，第 7 条（`try:`）是末枚标记的**上界锚**。
+    # 逐枚用 anchor_spans[i] 与 anchor_spans[i+1] 夹逼 —— 只钉"晚于本锚"的下界会被"6 枚标记
+    # 整体下移到后面、但仍保持 1→6 顺序"骗过（ordered 与下界断言全绿）；加上"早于下一条锚的
+    # 起始行"的上界才真正钉住"就落在本条语句之下、下一条锚之上"这个位置区间。
+    anchor_spans = [
+        _stage_stmt_span(
+            "_run_desktop_inner",
+            lambda s: isinstance(s, ast.If) and _stmt_has_call(s, "_check_port_or_fail"),
+        ),
+        _stage_stmt_span(
+            "_run_desktop_inner",
+            lambda s: isinstance(s, ast.If) and _stmt_has_call(s, "ensure_webview2_runtime"),
+        ),
+        _stage_stmt_span("_run_desktop_inner", lambda s: _stmt_has_call(s, "bootstrap_data_dir")),
+        _stage_stmt_span(
+            "_run_desktop_inner",
+            lambda s: isinstance(s, ast.ImportFrom) and s.module == "delector.server",
+        ),
+        _stage_stmt_span(
+            "_run_desktop_inner",
+            lambda s: isinstance(s, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "server" for t in s.targets),
+        ),
+        _stage_stmt_span(
+            "_run_desktop_inner",
+            lambda s: isinstance(s, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "thread" for t in s.targets),
+        ),
+        # 第 7 条锚：`_run_desktop_inner` 的顶层 `try:`（在 `serve_in_thread` 之后、`_show_window`
+        # 之前）——它就是第 6 枚标记的上界，把"6 枚整体下移到 `try:` 之后"的假绿挡在门外。
+        _stage_stmt_span("_run_desktop_inner", lambda s: isinstance(s, ast.Try)),
+    ]
+
+    for index, marker in enumerate(_STARTUP_STAGE_MARKERS):
+        lower_start, lower_end = anchor_spans[index]
+        upper_start, _upper_end = anchor_spans[index + 1]
+        assert line_of[marker] > lower_end, (
+            f"标记 {marker!r} 必须写在它要标记的语句（第 {lower_start}-{lower_end} 行）**之后**，"
+            f"实际在第 {line_of[marker]} 行 —— 写在语句之前会让归因张冠李戴"
+        )
+        assert line_of[marker] < upper_start, (
+            f"标记 {marker!r} 必须写在下一枚锚语句（第 {upper_start} 行）**之前**，"
+            f"实际在第 {line_of[marker]} 行 —— 整体下移到下一枚锚之后会让归因张冠李戴"
+        )
+
+
+def test_stage_markers_do_not_contain_first_screen_anchor_substrings() -> None:
+    """结构化前置断言：6 枚新标记与首屏工具的三个锚串互不为子串。
+
+    为什么必须防：`first_screen_from_log` 用子串匹配（`marker in line.message`）。若某枚新标记
+    内含「服务已就绪 / 开始启动（进程级计时起点）/ 真实 UI 已加载（首屏可用）」，`_last_index`
+    或 `_first_index_after` 会先命中这枚新标记 ⇒ 计时/切片**抢错行**，端到端数字被悄悄算歪。
+    """
+    for marker in _STARTUP_STAGE_MARKERS:
+        for anchor in _FIRST_SCREEN_ANCHORS:
+            assert anchor not in marker, (
+                f"新标记 {marker!r} 不得包含首屏锚串 {anchor!r}（否则切片抢错行）"
+            )
+
+
 def test_loaded_event_binding_is_inside_start_delegated_tree_and_before_load_url() -> None:
     """`main.events.loaded` 的绑定必须在 `webview.start()` 调度树内、且在 `load_url` 之前。
 
