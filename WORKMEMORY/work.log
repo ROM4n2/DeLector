@@ -460,3 +460,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 **HOT 轮转（`e1f34aa`）**：77 → 50（阈值 75 已过），`work.log` 纯删除（`--numstat` `0 190`，零改写）、字节守恒复核过；新建分片 09-15/09-16/09-17，`INDEX.md` 两条来源行同步。
 
 **Follow-up**：惰性化**后未复跑端到端首屏** ⇒ `6s` 仍是惰性化**前**的数字，重测需真启 `desktop.py` 后读 `tools/first_screen_from_log.py`。
+
+### 2026-10-11 | codebuddy | MEASURE 首屏复测（P2 惰性化后）：端到端仍 6s ⇒ 前端不是主项
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户复跑 `tools/first_screen_from_log.py`（读真实 `launch.log`，非我代跑），数字如下。
+- **端到端首屏仍是 6s**：起点 14:29:08 → 服务就绪 14:29:13 → 首屏已加载 14:29:14（即 **5s / 1s**）。
+- 对照惰性化前那次：6s / 0s / 端到端 6s ⇒ **端到端未变**。
+- ⭐ 两条纪律（防将来误读）：① 分段差异落在 `_append_log` 的 `%H:%M:%S`（**秒级**）±1s 量化内，且两次**各为单样本** ⇒ **不构成"惰性化省了 1s"的证据**；两次之间唯一可比量是端到端「6s → 6s」。② 该"计时起点"写在 `desktop.py::run_desktop` 内，**晚于** Python 解释器启动与 `desktop.py` 自身的模块 import ⇒ 用户双击感知的端到端**比 6s 更长**，那一段**未被测到**。
+- **⭐ 形状修正（推翻本 ADR 的旧结论）**：旧文本写"剩余杠杆在**前端首屏负载**"；实测 `就绪 → 首屏` 仅 **~1s ⇒ 前端天花板 ~1s**，主项是那 **5s 的「进程起点 → 服务就绪」** ⇒ **§7.6 路由的下一杠杆不在前端**。
+- **回写**：ADR-0018 §8 `[Unknown 8]` 复核条 + 文件头（**仓内副本 + vault 正式件**，两份差异仅头部 frontmatter/状态块，已 `diff` 复核逐行同源）、ADR-0020 §6 `[Unknown 2]` + §8 验收口径（同样两份）、`PROJECT_OVERVIEW.md` 开放待办。
+- 未做：那 5s 的**分阶段拆解**（无数据，不猜）；更早处落计时标记（若要覆盖解释器启动/import，需改 `desktop.py` 之外的口径）。
