@@ -157,6 +157,10 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
    历史正主）**：`README.md` 是入口只留 badge 与最近 3 版摘要的指针，完整历史一律指向
    `CHANGELOG.md`，**绝不在 README 复制第二份**（DOC-GOVERNANCE 单一真相源）。不要等发布后再补
    ——README 是仓库门面，滞后会让用户/协作者看到与代码不一致的版本。
+   **GitHub Release 说明**：`build-release.yml` 的正文只放**跨版本稳定**的内容（安装说明 + 能力清单，
+   已与 `FEATURES.md` 对齐）；**「🖥️ 本版重点」与「⚠️ 已知限制」逐版不同，发版后 MUST 用
+   `gh release edit <tag> --notes-file <文件>` 追加**（ADR-0022 R4；2026-10-11 v5.17.0 首次按此执行，
+   当时正文还没有这两段，是人工补的）。
 9. **大改动后**：更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 的「当前状态」「红线速查」「开放待办」；
    发布类变更在 `CHANGELOG.md` 追加版本条目（**升序：接在最新版本条目之后**，版本历史正主），README 只留最近 3 版摘要与指针。
 10. **缓存问题**：**不要再用 `?v=X.X.X` 查询串给 CSS/JS 打版本号**（v4.4.5 已退役）。
