@@ -11,7 +11,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "first_screen_from_log.py"
@@ -130,11 +130,14 @@ def _new_stage_markers_from_desktop() -> List[str]:
     （如「未检测到 WebView2 运行时…」）嵌在 `if` 内、不属于这 6 枚 —— 取顶层即可精确命中。
     """
     tree = ast.parse(DESKTOP.read_text(encoding="utf-8"))
-    func = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "_run_desktop_inner"
-    )
+    # 显式遍历 + 断言（而非 `next(...)`）：`next` 找不到时抛 `StopIteration`，消息难读；这里给
+    # 人话原因，函数被改名/搬走时一眼可见。
+    func: Optional[ast.FunctionDef] = None
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "_run_desktop_inner":
+            func = node
+            break
+    assert func is not None, "desktop.py 里找不到 `_run_desktop_inner`（被改名了？）"
     markers: List[str] = []
     for stmt in func.body:
         if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
@@ -162,12 +165,16 @@ def test_new_stage_markers_do_not_hijack_first_screen_parser(tmp_path: Path) -> 
         "（标记增删请同步本回归锁，勿让它静默守护过期清单）"
     )
 
-    # 时间戳（秒级）与顺序严格照 desktop.py 的写入次序：起点=08、6 枚标记=08→11、splash=11、
-    # 服务就绪=13、首屏=14 ⇒ 期望三段为 5s / 1s / 6s。
+    # 时间戳（秒级）与顺序严格照 desktop.py 的写入次序：**真起点=07**、6 枚标记=08→11、splash=11、
+    # 服务就绪=13、首屏=14 ⇒ 期望三段为 6s / 1s / 7s。
+    # ⚠️ 真起点（07）**刻意早于** markers[0]（08）：这样一旦 markers[0] 变成含「开始启动（进程级
+    # 计时起点）」的形态，解析器的 `_last_index`（取**最后一次**出现）会命中 markers[0] 而非真起点
+    # ⇒ 三段数字变味、本用例转红。（旧版把真起点与 markers[0] 都写成 08 ⇒ 起点被抢后三段仍不变，
+    # 用例恒真 —— 见 Fix-3 变异自证。）
     log = _write_log(
         tmp_path / "launch.log",
         [
-            ("2026-10-10 12:00:08", START + "。"),
+            ("2026-10-10 12:00:07", START + "。"),
             ("2026-10-10 12:00:08", markers[0]),
             ("2026-10-10 12:00:09", markers[1]),
             ("2026-10-10 12:00:09", markers[2]),
@@ -181,11 +188,13 @@ def test_new_stage_markers_do_not_hijack_first_screen_parser(tmp_path: Path) -> 
     )
     proc = _run(log)
     assert proc.returncode == 0, proc.stderr
+    # 直接钉"起点锚没被抢"：输出的计时起点必须仍是真起点行（07），而非被某枚新标记顶替。
+    assert "计时起点: 2026-10-10 12:00:07" in proc.stdout, proc.stdout
     # 逐行断言（不是"含某个数字"）：三段都必须精确取自真锚行；任一新标记含锚串都会让此处对不上。
     out_lines = proc.stdout.splitlines()
-    assert "起点 → 服务就绪: 5s" in out_lines, proc.stdout
+    assert "起点 → 服务就绪: 6s" in out_lines, proc.stdout
     assert "服务就绪 → 首屏已加载: 1s" in out_lines, proc.stdout
-    assert "起点 → 首屏已加载（端到端首屏）: 6s" in out_lines, proc.stdout
+    assert "起点 → 首屏已加载（端到端首屏）: 7s" in out_lines, proc.stdout
 
 
 def test_new_stage_markers_do_not_contain_first_screen_anchor_substrings() -> None:

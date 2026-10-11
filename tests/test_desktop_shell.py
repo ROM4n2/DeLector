@@ -660,7 +660,7 @@ def test_run_desktop_logs_process_level_timing_start() -> None:
 _STARTUP_STAGE_MARKERS: List[str] = [
     "端口与身份校验通过。",                        # ← `_check_port_or_fail` 通过之后
     "WebView2 运行时检测通过。",                    # ← `ensure_webview2_runtime` 通过之后
-    "数据目录已就绪（bootstrap_data_dir 完成）。",   # ← `bootstrap_data_dir` 之后
+    "数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。",  # ← `bootstrap_data_dir` 之后
     "服务端模块已导入（delector.server）。",         # ← `from delector.server import app` 之后
     "HTTP 服务已装配（build_server 完成）。",        # ← `build_server` 之后
     "本地服务线程已启动（等在就绪窗口内命中）。",    # ← `serve_in_thread` 之后（紧接 `try:` 之前）
@@ -753,9 +753,13 @@ def test_run_desktop_inner_logs_six_stage_markers_in_order_after_their_anchor_st
             lambda s: isinstance(s, ast.Assign)
             and any(isinstance(t, ast.Name) and t.id == "thread" for t in s.targets),
         ),
-        # 第 7 条锚：`_run_desktop_inner` 的顶层 `try:`（在 `serve_in_thread` 之后、`_show_window`
-        # 之前）——它就是第 6 枚标记的上界，把"6 枚整体下移到 `try:` 之后"的假绿挡在门外。
-        _stage_stmt_span("_run_desktop_inner", lambda s: isinstance(s, ast.Try)),
+        # 第 7 条锚：**调用 `_show_window` 的那条顶层语句**（`_run_desktop_inner` 里 `_show_window`
+        # 由 `try:` 体内的 `return` 调起 ⇒ 该 `try:` 就是这条锚）——语义即"第 6 枚标记必须在调用
+        # `_show_window` 之前"，把"6 枚整体下移到 `_show_window` 之后"的假绿挡在门外。
+        # 为何不锚"首个顶层 `try`"（`isinstance(s, ast.Try)`）：将来在该函数更早处加一个**与
+        # `_show_window` 无关**的顶层 `try` 会让锚**前移** ⇒ 假红。改锚"含 `_show_window` 调用的
+        # 顶层语句"即不受影响（`_stmt_has_call` 会 walk 进 `try` 体命中该调用）。
+        _stage_stmt_span("_run_desktop_inner", lambda s: _stmt_has_call(s, "_show_window")),
     ]
 
     for index, marker in enumerate(_STARTUP_STAGE_MARKERS):
@@ -772,11 +776,19 @@ def test_run_desktop_inner_logs_six_stage_markers_in_order_after_their_anchor_st
 
 
 def test_stage_markers_do_not_contain_first_screen_anchor_substrings() -> None:
-    """结构化前置断言：6 枚新标记与首屏工具的三个锚串互不为子串。
+    """分层守卫（**本文件清单侧**）：`_STARTUP_STAGE_MARKERS`（**本文件的清单常量**）与首屏工具的
+    三个锚串互不为子串。
 
-    为什么必须防：`first_screen_from_log` 用子串匹配（`marker in line.message`）。若某枚新标记
-    内含「服务已就绪 / 开始启动（进程级计时起点）/ 真实 UI 已加载（首屏可用）」，`_last_index`
-    或 `_first_index_after` 会先命中这枚新标记 ⇒ 计时/切片**抢错行**，端到端数字被悄悄算歪。
+    本用例**只比对本文件清单常量、不读 `desktop.py`**。清单与实现的**同步**由
+    `test_run_desktop_inner_logs_six_stage_markers_in_order_after_their_anchor_stmts`（读 AST 的
+    存在/顺序/夹逼）保证；解析器侧的**同源**守卫在
+    `tests/test_first_screen_from_log.py::test_new_stage_markers_do_not_contain_first_screen_anchor_substrings`
+    （它从 `desktop.py` 同源取标记）。
+
+    为何保留本用例（与顺序用例构成分层）：顺序用例挡"实现漂移"；本用例挡"清单与实现**被一起**
+    改成含锚串"——若有人把实现与这份清单同步改成含「开始启动（进程级计时起点）/ 服务已就绪 /
+    真实 UI 已加载（首屏可用）」，解析器（子串匹配 `marker in line.message`）会**抢错锚行**、
+    端到端数字静默变味，本用例正是拦这一步。
     """
     for marker in _STARTUP_STAGE_MARKERS:
         for anchor in _FIRST_SCREEN_ANCHORS:

@@ -34,7 +34,7 @@
 - Produces: 6 枚新日志标记，**按写入顺序**：
   1. `端口与身份校验通过。`（`_check_port_or_fail` 返回 True 之后）
   2. `WebView2 运行时检测通过。`（`ensure_webview2_runtime()` 为真之后）
-  3. `数据目录已就绪（bootstrap_data_dir 完成）。`（`bootstrap_data_dir(os.environ)` 之后）
+  3. `数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。`（`bootstrap_data_dir(os.environ)` 之后）
   4. `服务端模块已导入（delector.server）。`（`from delector.server import app` 之后）
   5. `HTTP 服务已装配（build_server 完成）。`（`build_server(...)` 之后）
   6. `本地服务线程已启动（等在就绪窗口内命中）。`（`serve_in_thread(server)` 之后）
@@ -146,13 +146,40 @@
 
 | Metric | 改前（无 6 枚标记） | 改后（含 6 枚标记） | Delta | Verification |
 |---|---|---|---|---|
-| `_append_log` 单次调用 | — | **251.1 µs**（median；min 211.3 / max 253.1，7 轮 × 2000 × 6 次） | — | 本机 stdlib 计时，多轮取中位数 |
-| 6 枚标记合计 | 0 ms（不存在） | **1.51 ms**（median） | **+1.51 ms** | 同上 |
-| 占实测端到端首屏（6s）比例 | — | **0.0251 %** | — | 相对 2026-10-11 用户实测值 |
-| 与仪器分辨率之比 | — | **1.5 ms vs 1000 ms ⇒ 0.15 %** | — | `_append_log` 时间戳为秒级 |
+| `_append_log` 单次调用 | — | **251.1 µs**（median；min 211.3 / max 253.1，7 轮 × 2000 × 6 次）⇒ **单价 ≈0.25 ms/枚** | — | 本机 stdlib 计时，多轮取中位数 |
+| 6 枚标记合计 | 0 ms（不存在） | **≥1.51 ms（下界；median）** | **≥+1.51 ms（下界）** | 同上；**进程内单线程**实测，**未含**与 uvicorn 写同一 `launch.log` 的重叠成本 ⇒ 真实增量只会更大 |
+| 与端到端首屏（~6s）的量级关系 | — | **低约 3.6 个数量级（量级 ~10⁻⁴，不给具体比率）** | — | 示意级：**跨机/跨进程/跨状态，比率不可当份额**；分母为单样本、秒级（±1s），不予精确比较 |
+| 与仪器分辨率之比 | — | **1.5 ms vs 1000 ms ⇒ ~0.15 %** | — | `_append_log` 时间戳为秒级 |
 | 新依赖 / 新线程 / 新文件句柄 | 0 | **0** | 无 | 纯新增 6 次既有函数调用 |
 
-**结论（可复跑）**：仪表成本 **≈1.5 ms**，比它自己的秒级分辨率小 3 个数量级 ⇒ **不足以污染将被它测量的那 5s**，也**不能**被该仪器测出来（所以本轮不去做"改动前后端到端 A/B"——做了也只会得到 6s vs 6s 的噪声，见 WORKMEMORY 记忆「声称某改动更快前先查工具分辨率与计时窗口」）。
+> **为何不给百分比（本仓成文禁令）**：`tools/bench_cold_start.py:639-640` 明写「任何跨进程比率（model_load/import、单项/health_200）都不是份额、不可作证据。故这里**不给百分比**」；同文件 `:644` 要求同类近似归因必须挂「跨进程近似归因，**仅示意、不可当份额**」。本卡的分母是**用户单样本**的端到端首屏（~6s）、且观测精度只有**秒级（±1s）** ⇒ 相对不确定度 ≈17%，写成 `0.0251 %`（3 位有效数字）是**伪精度**。故此处只给**数量级**，并挂「示意级、不可当份额」。
+
+**结论（一次性实测、未入库脚本）**：仪表成本 **≥1.51 ms（下界，≈0.25 ms/枚）** —— 相对**端到端首屏（~6s）低约 3.6 个数量级**、相对**仪器自身 1s 分辨率低约 2.8 个数量级** ⇒ **不足以污染将被它测量的那 5s**，也**不能**被该仪器测出来（所以本轮不去做"改动前后端到端 A/B"——做了也只会得到 6s vs 6s 的噪声，见 WORKMEMORY 记忆「声称某改动更快前先查工具分辨率与计时窗口」）。
+
+> 说明：「单价 ≈0.25 ms/枚」供将来**扩链线性外推**用（避免把 1.51 ms 当成与枚数无关的常量）；该微基准是**一次性实测、未入库脚本**，下附确切可复跑命令（`PYTHONIOENCODING=utf-8`，目录=仓库根）：
+
+```bash
+export PYTHONIOENCODING=utf-8
+python - <<'PY'
+import os, statistics, sys, tempfile, time
+sys.path.insert(0, os.getcwd())
+from desktop import _append_log
+
+log = os.path.join(tempfile.gettempdir(), "bench_append_log_probe.log")
+open(log, "w").close()
+rounds, iters = 7, 2000
+per_call_us = []
+for _ in range(rounds):
+    t0 = time.perf_counter()
+    for _ in range(iters):
+        for _ in range(6):
+            _append_log(log, "占位阶段标记。")
+    per_call_us.append((time.perf_counter() - t0) / (iters * 6) * 1e6)
+med = statistics.median(per_call_us)
+print("median=%.1f  min=%.1f  max=%.1f (µs/次)" % (med, min(per_call_us), max(per_call_us)))
+print("six_markers_ms median=%.2f" % (med * 6 / 1000))
+PY
+```
 
 **Phase 7 门禁（worktree 内实跑，原始输出）**
 ```
@@ -169,3 +196,21 @@ pytest -q ................................ 1749 passed, 3 skipped in 460.87s
        PyInstaller 产物 DeLector.spec（主工作区有 ⇒ 主力基线里它是 pass）；与本改动无关
     新增 4 条用例（Task-1 ×2 + Task-2 ×2）**全部 pass**）
 ```
+
+---
+
+## 📌 递延与登记（本轮不做，显式留给下一轮）
+
+`/dfs-team` 三席位共提出 15 项；经 Phase 1.5 对抗复核与合并去重后，**6 项已修**（见上），其余**显式登记**于此（不修 ≠ 不知道）：
+
+| # | 项 | 来源席位 | 定级 | 为何本轮不做 |
+|---|---|---|---|---|
+| D1 | **三句柄追加同一 `launch.log`：行序非确定，且实测会丢整行**（主线程 `_append_log` 的瞬时句柄 vs `_redirect_std_streams` 给 uvicorn 的两个长活句柄）。单写者 4000/4000 精确；双写者并发 **A 丢 120–135 整行（约 3%）、malformed=0**（3 次复现）。**无内存级数据竞争**（各写各句柄） | perf | P2（**既有**，非本次引入） | 自桌面壳诞生起就存在；只有**新增的 6 枚**之一被丢才会静默错位，而三条锚串中 `起点` 写在服务线程启动**之前**、`服务已就绪`/`首屏` 若被丢会让 `first_screen_from_log.py` **可见地非零退出**。真要堵，唯一零新依赖做法是让 6 枚也走既有 `sys.stdout` 句柄 ⇒ 引入跨线程共享 `TextIOWrapper`（才有锁竞争），把 P0 风险从 0 变成 >0 —— **收益 1.5ms 换真风险，不做**（见下 D2） |
+| D2 | `_append_log` 每次 `open(...,"a")`（实测 ≈99% 成本是 open/close 系统调用对；长活句柄 write 仅 9.4µs，26× 更省） | perf | P2（**不值得做**） | Reuse Ladder 上 stdlib `logging.FileHandler` / 仓内 `open_log_streams` 都已在手，但这是**启动期 6 次**调用、省 ~1.4ms（≈0.02%）；代价是跨线程共享可变状态。**YAGNI 判否**，现状"无状态、每次开关"恰是它无 data race 的原因 |
+| D3 | `_append_log` 只兜 `OSError`（`ValueError`/`UnicodeEncodeError` 会逃逸；字面量调用不可达，但 `write_crash(traceback…)`/`{exc!r}` 理论可达） | SRE | P2（既有） | 与本次改动无因果；独立小硬化（`except (OSError, ValueError)`），宜单独一笔 |
+| D4 | 第 6 枚标记 = `thread.start()` 已返回，**≠** 端口已 bind/在监听；绑定失败时要空等 `READY_DEADLINE_S=60s` 才分辨 | SRE | P2（可选增强） | 建议在 `await_ready` 失败分支补 `thread.is_alive()` 判据并落一行日志（"线程已死（疑似绑定失败）" vs "存活但未就绪"）。属增值，不构缺陷 |
+| D5 | 两处"从 `desktop.py` 抽 6 枚标记"的辅助**语义不一致**（`test_desktop_shell._stage_log_entries` 用 `ast.walk` 含嵌套；`test_first_screen_from_log._new_stage_markers_from_desktop` 只取顶层） | code-quality | P2 | 两者**用途不同**（前者喂顺序/位置断言，须含嵌套；后者喂"清单条数/碰撞"，须只取顶层）⇒ 是否收敛为共享辅助需先定"顶层 vs 嵌套"的语义，本轮不擅自合并 |
+| D6 | `WORKMEMORY/work.log` 事件头缺 `HH:MM`、agent-id 非 `model__harness` 形（`codebuddy`） | code-quality | YELLOW（**全库既有**） | 全库 20+ 条 `codebuddy` 历史事件同款；单点改正会与全文件风格不一致，宜全库统一迁移时一次做（含 `PROTOCOL.md` §2 的模板对齐） |
+| D7 | vault ADR frontmatter 的 `updated:` 未随正文编辑刷新 | code-quality | YELLOW（既有） | 先于本任务存在；宜与 D6 一并作为"工程记忆卫生"批量项 |
+
+**下一轮的第一件事仍是**：用户重跑一次 `python desktop.py` → `tools/first_screen_from_log.py`，读取 6 枚标记的真实分段（本卡的"待重跑"缺口）。

@@ -617,7 +617,7 @@ def _run_desktop_inner(port: int, log_path: str) -> int:
     # ⚠️ 必须在 `from delector.server import app` **之前**：那一行一跑，`database` 已按仓库根把
     # DATA_DIR 落定，之后再设 DELECTOR_DATA_DIR 就晚了（与 start.py 同款接线）。
     bootstrap_data_dir(os.environ)
-    _append_log(log_path, "数据目录已就绪（bootstrap_data_dir 完成）。")
+    _append_log(log_path, "数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。")
 
     from delector.server import app
     _append_log(log_path, "服务端模块已导入（delector.server）。")
