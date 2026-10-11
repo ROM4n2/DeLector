@@ -534,3 +534,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **变异自证 3 条**（全"红→复原绿"，md5 `28a3749ea04f2ca02fa50795032f4740` 复核）：① 端到端注入"在仓库根建库"的临时用例 ⇒ 守卫 teardown 报 `新出现：delector.db` 且 `1 passed, 1 error`（EXIT=1），清理后仓库根干净；② helper 忽略"新出现" ⇒ 该用例红；③ 结构性判据 pin 列表清空 ⇒ tools 用例红。
 - **全量验证**：`pytest -q` = **1761 passed, 2 skipped**（改前 `2 failed, 1756 passed, 2 skipped`）；**守卫在全量中未响** ⇒ 测试套件内无泄漏路径（15:45 那套来自套件之外）；跑完仓库根无库 ✓。`ruff` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK。
 - 另：`C:\Users\Haoyu\AppData\Local\Temp\delector-root-db-backup-20261011\` 存着被移走的 8 个文件（用户已确认非其数据）。
+
+### 2026-10-11 | codebuddy | MEASURE 产物路径取数（T4 收官）：未测段 冷 1527ms / 暖 858ms
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户重建便携产物（= 当前 master，6 枚 P2 标记 + 未测段标记均在）后真启取数，冷/暖各一次。
+- **未测段（进程创建 → 计时起点）**：源码 `python desktop.py`（暖）**372 ms** ｜ 产物 **冷 1527 ms**、**暖 858 ms**。
+- **真实端到端**（起点→首屏 + 未测段）：源码暖 ≈ **5.4s**（5s + 0.372）｜ 产物冷 ≈ **8.5s**（7s + 1.527）、暖 ≈ **6.9s**（6s + 0.858）。
+- **可比的差只有一个**：**PyInstaller bootstrap 净增 ≈0.49s**（858 vs 372 ms，同机、两次皆暖态、毫秒级）。
+  ⚠️ **冷启动比暖态多 ≈0.67s**（1527 → 858）⇒ **报产物数必须带冷/暖标签**，否则同一个"产物路径"能报出两个差 0.67s 的数。
+  ⚠️ 段内（起点→首屏）源码 5s / 产物 6s 的差**落在 ±1s 量化步长内且各为单样本** ⇒ **不得**断言"产物内部更慢"；产物那次的 `import delector.server` 冷态 3s、暖态回到 2s（与源码暖态一致）。
+- **顺手纠正一次误读**：用户第一次给的 19:43 输出显示"该日志不含此项（旧版本 desktop.py）" —— 取证（日志块里连 6 枚 P2 标记都没有）判定那是**改动前打的旧产物**，不是仪表失灵 ⇒ 先重建再测（已写入"报数须带冷/暖标签"的同族纪律）。
+- 已回写：ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、`PROJECT_OVERVIEW`。**T4 收官**；本线程（首屏口径 + 未测段可观测化）全部闭合。
