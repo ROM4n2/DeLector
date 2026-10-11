@@ -577,3 +577,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **v5.17.0 的 Release 正文已按新模板重渲染**（本地用 `yaml.safe_load` 取模板 + `${{ github.ref_name }}` → `v5.17.0`，再拼上两段版本专属内容，39 行，四节齐全）。
 - **仓库 About（`gh repo edit`）**：描述改为「德语欧标沉浸精读 + 歌德/德福备考 · 本地优先、离线可用 | …spaCy NLP, FSRS, native desktop / portable / Android」；主页设为 Releases 页；标签 11 → **19**（新增 `fsrs` / `offline-first` / `local-first` / `pwa` / `pywebview` / `chaquopy` / `desktop-app` / `sqlite`）。
 - 门禁：`yaml.safe_load` 通过（jobs 5、body 24 行）；`test_ci_hardening` + `test_writer_mobile` 63 passed；`test_server` 相关子集 22 passed。该文件在 CI「打包面」清单内 ⇒ push master 自动点亮 `Windows Portable Smoke` 复验（无测试断言 Release 正文，已 grep 确认）。
+
+### 2026-10-11 | codebuddy | NOTE dfs-release skill 按本次发版实测升级（v0.2.0 → v0.3.0）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户指出「dfs-release 还需要优化修改一下」⇒ 该 skill 是全局用户级（`C:/Users/Haoyu/.codebuddy/skills/dfs-release`），本次 v5.17.0 发版实测出它四个真缺环，已修：
+- **生命周期止于"打 tag"** ⇒ 新增 **Stage 5 Post-Release Verification & Notes**（核资产数量/体积/签名闸；pipeline 的 Release body 是静态样板 ⇒ 须 `gh release edit` 追加版本专属两段并复核；仓库 About/描述/标签也会漂）与 **Post-Tag Failure Recovery**（红平台 ⇒ 无 Release 但 tag 在；先判 flake 还是 deterministic **并给出算术**；重切 tag 属破坏性操作须用户批准，且只有"未发布/无人下载/单向计数器未分发"三条全成立才安全）。
+- **前置门不含"门禁覆盖面"** ⇒ 新增 Gate coverage 规则：绿闸只证它真跑的东西（Windows Smoke 只构建+真启不跑 pytest ⇒ 盖不住 macOS 那类测试缺陷；四平台各自只跑自己的测试）。
+- **清单条款不现实** ⇒ "100% green 无 skip"改为「skip 必须解释并与基线比」（本机 2 skipped / macOS 7 skipped 都是合法的）；安全扫描改为"生态有才跑，没有就**登记为缺口**"。
+- **版本面枚举缺失** ⇒ 新增：枚举所有版本落点 + 单一真相源 + 守卫测试（本次实测 6+ 处，且 `test_without_github_ref_type_local_v_tag_is_adopted` 写死旧 tag 名被发版门守卫当场打红）。
+- **`scripts/changelog_gen.py` 三个真 bug**（在临时仓库自测抓到）：① `--version` 有静默默认 `0.1.0` ⇒ 改必填；② **默认就写盘且用 `entry + existing` 前插 ⇒ 会把新条目插到文档标题之上、破坏人工策展的头部** ⇒ 改为默认 dry-run + `--write` 显式 + 插到第一个既有版本标题之前；③ **`subprocess(text=True)` 不带 `encoding=` 用 GBK 解码 ⇒ 中文提交信息让 `stdout=None` ⇒ 报毫不相关的 `AttributeError: 'NoneType'`** ⇒ 显式 `encoding="utf-8", errors="replace"` + 判 None + 打印降级。自测含中文提交信息的临时仓库，4 条用例 + 1 条变异自证（抽掉 `encoding="utf-8"` 复现原崩溃路径）。
+- 反模式表新增 4 行（三平台绿就发 / 模板正文会没问题 / tag 了就完事 / 我轮询到底）。仓库侧 `docs/agents/ops.md` §8 已在前一提交写明追加约定。
