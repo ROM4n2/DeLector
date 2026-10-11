@@ -13,7 +13,6 @@
 | `work.log`            | HOT 事件流（append-only，最近 50 条；第三读）                 |
 | `archive/`            | WARM 层（按日分片 `work-YYYY-MM-DD.log`，只按下方索引按需加载） |
 | `cold/`               | COLD 层（按月 digest，当前 `digest-2026-09.md`）              |
-| `corrections.md`      | 纠正账本（追加制）：记录用户纠正，顶部 open 条目是会话开工必读的 Anchor 读序最后一站（协议 §2.1）；成熟条目蒸馏入 vault 后置 `closed` |
 | `handoff_*.md`        | 跨 agent 交接包（**按需出现**：仅当存在活跃交接时才存在，非常驻文件；协议 §4） |
 
 ## 主题索引（archive / digest 内容导航）
