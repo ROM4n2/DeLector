@@ -45,6 +45,13 @@ from delector.core.server_lifecycle import await_ready, build_server, serve_in_t
 
 LOG_FILE_NAME = "launch.log"
 
+# 日志轮转上限：桌面端长期运行会持续追加（uvicorn 每请求一行 access，见 server_lifecycle
+# 的 log_level="info"），无上限的追加早晚吃满磁盘。启动时若 launch.log 超过此值就滚动为
+# `launch.log.1`（只保留一份旧的），保证它有界。**不改日志行格式**——
+# `tools/first_screen_from_log.py` 依赖 `[时间戳] 消息` 解析，格式一变该工具即失效。
+LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+LOG_BACKUP_SUFFIX = ".1"
+
 # 桌面端绑 0.0.0.0 是**有意保留**的特性（与 start.py 一致）：同 Wi-Fi 的手机/平板可访问工作台。
 BIND_HOST = "0.0.0.0"
 
@@ -115,6 +122,25 @@ def open_log_streams(log_path: str) -> Tuple[TextIO, TextIO]:
     out = open(log_path, "a", encoding="utf-8", buffering=1)
     err = open(log_path, "a", encoding="utf-8", buffering=1)
     return out, err
+
+
+def rotate_log_if_needed(log_path: str, max_bytes: int = LOG_MAX_BYTES) -> bool:
+    """启动时滚动过大日志：超 `max_bytes` 就把 `launch.log` 移为 `launch.log.1`（覆盖旧备份）。
+
+    为什么在**启动时**做（而非运行期定时器）：运行期滚动要与两个永不关闭的追加句柄
+    （`open_log_streams` 的 stdout/stderr 句柄）协调，竞态复杂；每次启动都是一条干净边界，
+    此处滚动最简单、无竞态。只保留**一份**旧的：滚动后新 `launch.log` 从空开始。
+    返回 True 表示真的滚动了（供调用方/测试观测）；轮转失败**不阻断启动**（维护动作，
+    写不进好过起不来），但**不静默吞**：把原因落 `_append_log`。
+    """
+    try:
+        if not os.path.isfile(log_path) or os.path.getsize(log_path) <= max_bytes:
+            return False
+        os.replace(log_path, log_path + LOG_BACKUP_SUFFIX)
+        return True
+    except OSError as exc:
+        _append_log(log_path, f"启动时日志大小检查/轮转失败（不阻断启动）：{exc!r}")
+        return False
 
 
 def _append_log(log_path: str, message: str) -> None:
@@ -610,6 +636,9 @@ def run_desktop(port: int = DEFAULT_PORT) -> int:
     `coordinated_shutdown` 硬退出（`os._exit(1)`），不留残留进程。
     """
     log_path = resolve_log_path(os.environ)
+    # 先滚动过大日志（若有）再重定向/追加 —— 必须在 `_redirect_std_streams` 打开两个追加句柄
+    # **之前**（Windows 上对已打开文件 `os.replace` 会失败）；只保守一份旧档，不改行格式。
+    rotate_log_if_needed(log_path)
     _redirect_std_streams(log_path)
     # 进程级计时起点：让 launch.log 能**独立**算出"端到端"耗时（起点 → 服务就绪 / 起点 → 首屏）。
     # 放在**最早处**（日志流一就绪）——晚于此处就漏掉"服务启动前"的进程开销，端到端就少算一截。

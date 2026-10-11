@@ -441,3 +441,22 @@ Caps: filesystem-write, shell-exec
 - **⭐ 这条数字改了性能问题的形状**：代理口径 `health_200`（2.6s）**不是瓶颈** —— 服务就绪到首屏几乎为 0 ⇒ ~6s 花在**进程启动 + WebView2 建档 + 前端首屏负载**。按 §7.6 修法路由（端到端 >4s ⇒ O0 杠杆），服务侧 O0（惰性加载 −1.47s）已做完 ⇒ **剩余杠杆在前端首屏负载**，首要嫌疑 = `index.html:2841-2846` 的 `german/workbench.html`（**392KB**）**iframe 首屏即加载 + 5s 轮询**（frontend 席早已点出）。
 - 局限：单机单次非 p95；`loaded` 事件 13:32:39 与 13:32:43 各触发一次（取首次）。
 - 另：`work.log` 内另有 **mimo-v2.6-flash__claude-code** 的 NOTE 行（它按 ADR-0004 Q1=A 删除 `corrections.md` 并改 INDEX）—— 同一文件无法分离，随本次提交一并落盘，内容归属已在提交信息标注。
+
+### 2026-10-11 | codebuddy | WORK_END(P2 批次五项 + 复核) + NOTE(HOT 轮转)
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：全仓评估清单的 **P2 批次五项**落地（CPE subagent 执行、主线复核后提交），顺手执行到期的 HOT 轮转。
+
+**P2 五项**
+1. **workbench iframe 惰性化**：`index.html` 改 `data-src`（去静态 `src`）+ `main.js::ensureGermanWorkbench()` 幂等赋值（只在首次 `show('german')`，重设 src 会丢工作台进度）。静态首屏移除 **392,563 B**（＝本机 `os.path.getsize('static/german/workbench.html')` 实测，非抄报告）。**未做** JS 代码分割。
+2. **死绿测试改 AST**：`test_cold_start_cost` / `test_cards_endpoint_cost` 的「字面量 in src」断言改 AST（只认真实调用点 / 非 docstring 的字符串常量）。变异自证：删真实调用 ⇒ 2 红，且旧子串仍在 docstring 里 ⇒ 证明原本半恒真。
+3. **X-WB-Key 鉴权收敛**：新增 `delector/core/wb_auth.py::require_wb_key`，收编 `routes/{sync,rtc}.py` 各一份 `_verify_wb_key` + `main.py` 内联第三份；一致性用例 `(403,403,403)` / `(200,200,200)` + 全仓唯一实现 AST 守卫。住 `core/` 而非 `routes/`：`test_server` 要求 routes 每模块定义 `APIRouter`。
+4. **`desktop.py` 启动时日志轮转**：`rotate_log_if_needed`（`launch.log` > 5MB ⇒ 滚为 `launch.log.1`，只留一份），必须在 `_redirect_std_streams` **之前**（Windows 对已打开文件 `os.replace` 必失败）；**不改行格式**（`tools/first_screen_from_log.py` 依赖）。
+5. **`.env` 回落链回归锁**：sre 席「按 README 配 `.env` 无效」的前提**被推翻**（`get_effective_api_key → get_setting` 本有 `os.environ` 兜底、`load_env()` 把 `.env` 灌进去）⇒ **无生产改动**，补 2 条端到端回归锁（库空 ⇒ 回落 env；库有值 ⇒ 库值优先）。
+
+**复核（主线自跑原始输出，非抄 subagent 报告）**：`ruff check .` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK；`mypy --platform win32 --strict` 入口面 4 files OK；`check_frontend_api_contract.py` PASS；`tsc --noEmit` exit 0；`pytest -q` **1746 passed, 2 skipped**（＝非 server 1450 + `test_server` 296）。
+
+**⭐ 复核抓出一处本批新引入的半恒真（已修）**：`tests/test_german_workbench.py:69` 原断言 `'src="/german/workbench.html"' in block` —— 改成 `data-src` 后该断言**因子串撞上 `data-src=` 而恒真**（实证：无裸 `src` 的块里该子串 `in` 仍为 True），正是本批第 2 项在别处修掉的同一类陷阱 ⇒ 改为锚 `id` + 全量 `data-src=`。
+
+**HOT 轮转（`e1f34aa`）**：77 → 50（阈值 75 已过），`work.log` 纯删除（`--numstat` `0 190`，零改写）、字节守恒复核过；新建分片 09-15/09-16/09-17，`INDEX.md` 两条来源行同步。
+
+**Follow-up**：惰性化**后未复跑端到端首屏** ⇒ `6s` 仍是惰性化**前**的数字，重测需真启 `desktop.py` 后读 `tools/first_screen_from_log.py`。

@@ -80,7 +80,6 @@ from delector.core.database import (
     save_wb_state,
     set_setting,
     upsert_corpus_syntax_stats,
-    verify_wb_key,
 )
 from delector.core.lexicon import lookup_core_vocab, primary_source
 from delector.core.security import (
@@ -92,6 +91,10 @@ from delector.core.security import (
 )
 from delector.core.utils import _attachment_headers
 from delector.core.version import APP_VERSION
+
+# X-WB-Key 鉴权单一实现（信令 sync/rtc + 本模块的 PUT /api/wb/state 共用一份，
+# 杜绝「改一处漏一处 = 鉴权绕过」）。只依赖 database，不成环。
+from delector.core.wb_auth import require_wb_key
 
 # 惰性加载后 NLP_ENGINE / NLP_ENGINE_DETAIL 会在**首次真正需要 NLP 时**被回填（成功仍 "spacy"、
 # 失败改 "spacy(加载失败)"）。若像旧写法那样 `from ... import NLP_ENGINE` 按值取，字符串被**按值
@@ -1705,8 +1708,7 @@ def wb_get_state() -> Any:
 
 @router.put("/api/wb/state")
 def wb_put_state(req: WbStateReq, request: Request) -> Dict[str, Any]:
-    if not verify_wb_key(request.headers.get("X-WB-Key"), get_wb_sync_key()):
-        raise HTTPException(403, "invalid X-WB-Key")
+    require_wb_key(request)
     updated_at = save_wb_state(req.payload or {})
     return {"ok": True, "updated_at": updated_at}
 

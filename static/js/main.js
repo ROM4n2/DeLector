@@ -164,6 +164,18 @@ import * as HardSentences from "./hard-sentences.js";
 import * as Search from "./search.js";
 import { initUpdateCheck } from "./update.js";
 
+// ── German Workbench 惰性挂载（首屏优化）─────────────────────────────────────
+// index.html 的 workbench iframe 只带 data-src（不设 src）⇒ 首屏不加载它、也不启动其内部
+// 轮询（workbench.html 的 wbsync.init → 后台 pull 定时器）。用户**首次**进入背词视图
+// （show('german')）时才把 data-src 赋给 src。**幂等**：已赋过 src 即返回 —— 工作台内部有
+// 状态（S.words / 复习进度），重设 src 会整页重载、丢用户进度。
+function ensureGermanWorkbench() {
+  const frame = document.getElementById("german-workbench-frame");
+  if (!frame || frame.getAttribute("src")) return;
+  const lazySrc = frame.getAttribute("data-src");
+  if (lazySrc) frame.setAttribute("src", lazySrc);
+}
+
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
   if (view === "articles") view = "home";
@@ -243,6 +255,7 @@ export function show(view) {
   }
   if (view === "encounter") showView();
   if (view === "search") Search.initSearch();
+  if (view === "german") ensureGermanWorkbench(); // 惰性挂载：首次进入才加载 workbench iframe
 }
 
 // ── Exam Domain Module Tabs (ADR-0005 Task 2) ───────────────────────────────

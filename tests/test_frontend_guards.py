@@ -19,17 +19,27 @@ r"""P0-3 / P0-4 前端守卫：openReader 失败可见化 + 评分按钮重入�
 - P0-4：`cards.js:submitCardReview` 无重入闸 + 评分按钮无 disabled
   ⇒ 连点会 FSRS 双推进 + 跳两张卡（学习数据写脏且不可回滚）
   ⇒ 函数体内必须含 `_reviewInFlight` 重入闸、按钮 disabled、finally 恢复。
+- P2 首屏惰性：`index.html` 的 workbench iframe 曾带静态 `src`（383KB 的
+  workbench.html 首屏即加载并启动内部轮询，即使从不进背词工作台）
+  ⇒ iframe 必须只带 `data-src`、**不含**静态 `src=`；`main.js` 在 `show('german')`
+  时按视图幂等赋值。
 
 **变异自证**：把 openReader 的 try/catch 删掉 / 把 submitCardReview 的
-disabled 与重入闸删掉 ⇒ 对应用例立即转红。
+disabled 与重入闸删掉 / 把 workbench iframe 的静态 `src=` 加回去 ⇒ 对应用例立即转红。
 """
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CORE = (ROOT / "static" / "js" / "core.js").read_text(encoding="utf-8")
 READER = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")
 CARDS = (ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
+INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+MAIN = (ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
+
+# 与 index.html / main.js 同源的惰性工作台路由（漂移即两侧一起改）。
+_WORKBENCH_ROUTE = "/german/workbench.html"
 
 
 def _extract_function(source: str, signature: str) -> str:
@@ -88,3 +98,37 @@ def test_submit_card_review_has_reentry_gate_and_disabled_buttons():
 # ── 评分按钮的 onclick 与重入闸共存（按钮本体仍可点，由函数内部挡） ────────────
 def test_rating_bar_buttons_still_rendered_with_submit_handler():
     assert "submitCardReview(" in CARDS, "评分按钮必须仍接线 submitCardReview（守卫不得误删接线）"
+
+
+# ── P2 首屏惰性：workbench iframe 不得静态挂载（data-src + 按视图赋值）────────────
+def _german_view_block() -> str:
+    """截取 index.html 里 `#view-german` 的 `<main>` 块（与 test_german_workbench 同切法）。"""
+    return INDEX.split('id="view-german"')[1].split("</main>")[0]
+
+
+def test_workbench_iframe_is_lazy_no_static_src():
+    """首屏不得静态挂载 workbench iframe：必须用 `data-src`，且**没有**裸 `src=` 属性。
+
+    ⚠️ **结构守卫（文本结构断言），弱于行为测试**：本仓无 JS 测试基建，它只能证明
+    "正确的代码形状存在"，**不能**证明真实浏览器里首屏真的不再加载该 iframe。真实验收
+    靠 HITL（真实启动一次、看 network 面板 / `launch.log` 首屏口径）。
+    """
+    block = _german_view_block()
+    assert f'data-src="{_WORKBENCH_ROUTE}"' in block, "workbench iframe 必须用 data-src 惰性路由"
+    # data-src= 里含子串 `src=`，故用负向后顾 `(?<![-\w])` 排除 `-src=` / 标识符前缀，
+    # 只匹配真正的 `src=` 属性；否则守卫会被 data-src 形态骗过。
+    assert re.search(r"(?<![-\w])src\s*=", block) is None, (
+        "workbench iframe 不得带静态 src=（会让 383KB 的 workbench.html 首屏即加载、并启动其内部轮询）"
+    )
+
+
+def test_main_js_wires_lazy_workbench_on_german_view():
+    """main.js 必须在进入 german 视图时按视图幂等赋 src（结构守卫，弱于行为测试）。"""
+    helper = _extract_function(MAIN, "function ensureGermanWorkbench(")
+    assert 'getElementById("german-workbench-frame")' in helper, "未按 id 取到 workbench iframe"
+    assert 'getAttribute("data-src")' in helper, "未从 data-src 读取惰性路由"
+    assert 'setAttribute("src"' in helper, "未把惰性路由赋给 src"
+    assert 'getAttribute("src")' in helper, "缺少幂等守卫（重设 src 会整页重载、丢工作台状态）"
+
+    show_body = _extract_function(MAIN, "export function show(")
+    assert "ensureGermanWorkbench()" in show_body, "show('german') 未接线 ensureGermanWorkbench()"

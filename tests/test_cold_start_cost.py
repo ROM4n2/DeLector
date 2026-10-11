@@ -155,6 +155,51 @@ def _top_level_imports(tree: ast.Module) -> List[str]:
     return names
 
 
+def _count_calls(tree: ast.AST, dotted: str) -> int:
+    """数 AST 里 `dotted(...)` 形态的**真实调用点**（如 ``tempfile.mkdtemp(...)``）。
+
+    只看调用节点、**不搜文件文本**：模块 docstring 的「隔离纪律」段里含同一字面量，
+    纯 `"... " in src` 断言会在真实调用被删后照样绿（半恒真）。`dotted` 用点号分隔的
+    属性链或裸名（``_require_isolated_env``）。
+    """
+    parts = dotted.split(".")
+    count = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func: ast.expr = node.func
+        names: List[str] = []
+        while isinstance(func, ast.Attribute):
+            names.append(func.attr)
+            func = func.value
+        if isinstance(func, ast.Name):
+            names.append(func.id)
+        if list(reversed(names)) == parts:
+            count += 1
+    return count
+
+
+def _subscript_str_keys(tree: ast.AST) -> List[str]:
+    """收集所有 `x["KEY"]` 形态里的字符串键（AST 下标）——docstring 里的文本天然被排除。"""
+    keys: List[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Subscript):
+            continue
+        sl = node.slice
+        if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+            keys.append(sl.value)
+    return keys
+
+
+def _has_try_finally(tree: ast.AST) -> bool:
+    """是否存在带 `finally` 的 `try`。
+
+    `finally:` 关键字在 docstring 里只是**文本**，AST 才能分清「真有一个 try/finally」
+    与「docstring 提了一嘴」。
+    """
+    return any(isinstance(node, ast.Try) and node.finalbody for node in ast.walk(tree))
+
+
 def test_script_exists() -> None:
     assert SCRIPT.is_file(), f"缺少基准脚本：{SCRIPT}"
 
@@ -184,16 +229,27 @@ def test_script_isolated_before_delector_import_and_cleans_up() -> None:
     """② 隔离纪律（`[Instinct: Isolated-DB]`）：delector 只能在函数内导入。
 
     本脚本的 delector 导入**全部发生在子进程**，父进程一个都不做，故用 AST 断言
-    「模块级没有 delector 导入」——这是比「源码含 mkdtemp」更强的证据。
+    「模块级没有 delector 导入」。
+
+    **半恒真纠错（本次）**：隔离纪律的四条断言曾用纯文本 `in src`（`tempfile.mkdtemp` /
+    `shutil.rmtree` / 三环境变量 / `finally:`），而这些字面量在脚本的模块 docstring
+    （「隔离纪律」段）里逐字出现 ⇒ 删掉真实调用照样绿（死绿）。现改 AST：只认「代码里的
+    真实调用点 / 真 try-finally」，docstring 文本不再能冒充。**变异自证**：删掉真实调用
+    ⇒ 对应用例转红。
     """
     src = SCRIPT.read_text(encoding="utf-8")
     tree = ast.parse(src)
     assert not any(name.split(".")[0] == "delector" for name in _top_level_imports(tree)), (
         f"模块级不得 import delector（会抢在 _bootstrap_env 之前跑）：{_top_level_imports(tree)}"
     )
-    assert "tempfile.mkdtemp" in src, "必须用 tempfile.mkdtemp() 建隔离数据目录"
-    assert all(key in src for key in ("DELECTOR_DATA_DIR", "DATABASE_PATH", "PROGRESS_DB_PATH"))
-    assert "shutil.rmtree" in src and "finally:" in src, "必须在 finally 里清理临时目录"
+    # 以下四条改 **AST 断言**（曾是死绿：字面量同时出现在模块 docstring 的「隔离纪律」段里，
+    # 删掉真实调用也照样绿）。AST 只认「代码里的真实调用点 / 真 try-finally」。
+    assert _count_calls(tree, "tempfile.mkdtemp") >= 1, "必须真实调用 tempfile.mkdtemp() 建隔离数据目录"
+    env_keys = _subscript_str_keys(tree)
+    missing = [k for k in ("DELECTOR_DATA_DIR", "DATABASE_PATH", "PROGRESS_DB_PATH") if k not in env_keys]
+    assert not missing, f"必须真实读写这三个环境变量（AST 下标键）：缺 {missing}"
+    assert _count_calls(tree, "shutil.rmtree") >= 1, "必须真实调用 shutil.rmtree() 清理临时目录"
+    assert _has_try_finally(tree), "必须在 try/finally 里清理临时目录（docstring 里的 `finally:` 不算）"
 
 
 def test_probe_paths_require_inherited_isolation() -> None:
@@ -203,7 +259,11 @@ def test_probe_paths_require_inherited_isolation() -> None:
     import delector 的子进程入口函数**第一行**就调 `_require_isolated_env()`。
     """
     src = SCRIPT.read_text(encoding="utf-8")
-    assert "_require_isolated_env()" in src
+    tree = ast.parse(src)
+    # 改 AST：`_require_isolated_env()` 字样在 docstring 里也有，纯文本断言是死绿。
+    assert _count_calls(tree, "_require_isolated_env") >= 1, (
+        "子进程入口必须真实调用 _require_isolated_env()（docstring 字样不算）"
+    )
     for fn in ("_probe_model_and_initdb", "_probe_import_and_app_ready", "_serve"):
         assert f"def {fn}(" in src, f"缺少子进程入口函数 {fn}"
         body = src.split(f"def {fn}(", 1)[1]

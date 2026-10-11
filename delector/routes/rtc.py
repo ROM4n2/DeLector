@@ -21,7 +21,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from delector.core.database import get_wb_sync_key, verify_wb_key
+from delector.core.wb_auth import require_wb_key
 
 router = APIRouter(prefix="/api/wb/rtc", tags=["WebRTC Sync"])
 
@@ -32,11 +32,6 @@ RTC_TTL_SECONDS = 120
 
 _rtc_mailboxes: Dict[str, List[Dict[str, Any]]] = {}
 _rtc_lock = threading.Lock()
-
-
-def _verify_wb_key(request: Request) -> None:
-    if not verify_wb_key(request.headers.get("X-WB-Key"), get_wb_sync_key()):
-        raise HTTPException(403, "invalid X-WB-Key")
 
 
 def _mailbox_id(request: Request) -> str:
@@ -64,7 +59,7 @@ class RtcSignalReq(BaseModel):
 
 @router.post("/signal")
 def rtc_post_signal(req: RtcSignalReq, request: Request) -> Dict[str, Any]:
-    _verify_wb_key(request)
+    require_wb_key(request)
     if len(json.dumps(req.payload)) > MAX_RTC_PAYLOAD_BYTES:
         raise HTTPException(400, "信令 payload 超过最大体积限制 (32KB)")
     msg = {"sender": req.client, "type": req.type, "payload": req.payload, "ts": time.time()}
@@ -78,7 +73,7 @@ def rtc_post_signal(req: RtcSignalReq, request: Request) -> Dict[str, Any]:
 
 @router.get("/signal")
 def rtc_get_signal(request: Request, client: str = "", after: float = 0) -> Dict[str, Any]:
-    _verify_wb_key(request)
+    require_wb_key(request)
     with _rtc_lock:
         _purge(time.time())
         box = list(_rtc_mailboxes.get(_mailbox_id(request), []))

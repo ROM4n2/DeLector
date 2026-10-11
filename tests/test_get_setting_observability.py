@@ -18,6 +18,13 @@ key 被静默忽略 ⇒ `get_effective_api_key` 返回空 ⇒ `main.py` 走 stub
 
 **变异自证**：把 `except sqlite3.Error` 改回 `except Exception: pass`（无日志）
 ⇒ `test_get_setting_logs_warning_on_db_error` 立即转红（warning 记录消失）。
+
+补充（P2-⑤ 结论）
+----------------
+`get_effective_api_key()`（服务端 AI key 的真正入口）**本就带 env 兜底**（走 `get_setting`）⇒
+按 README / `ops.md` 配 `.env` 是**真实生效**的，sre 席「配 .env 无效」之判不可复现、无需改生产码。
+`test_get_effective_api_key_reads_env_fallback` / `..._prefers_db_over_env` 把这条链路端到端钉住
+（真实空库 + 库有值时优先库值），防将来删掉 env 兜底又谎报成"文档问题"。
 """
 
 import logging
@@ -89,6 +96,52 @@ def test_get_setting_logs_when_falling_back_to_env(
         "DELECTOR_GUARD_ENV_FALLBACK" in r.getMessage() and "环境变量" in r.getMessage()
         for r in caplog.records
     ), "回落到环境变量时必须留下可见日志（不许悄悄用 env 值）"
+
+
+def test_get_effective_api_key_reads_env_fallback(tmp_path: Any, monkeypatch: pytest.MonkeyPatch):
+    """服务端 AI key 的真正入口 `get_effective_api_key()` 在库内为空时**必须**回落到 env。
+
+    这钉住的是 P2-⑤ 的结论：sre 席曾判「按 README 配 `.env` 不会有任何效果（服务端只读
+    app_settings 表）」，但 `get_effective_api_key → get_setting` 这条链**本就带 env 兜底**
+    （P0-2 保住的那条：`delector/server.py:load_env()` 把 `.env` 灌进 `os.environ`，`get_setting`
+    库内取不到时回落 `os.environ`）⇒ 配 `.env` 是**生效**的，无需改生产码；本用例把这条链路
+    钉成可执行断言，防将来有人把 env 兜底删掉、又把它谎报成"文档问题"。
+
+    走**真实** sqlite 库（tmp_path 下的空库、只建空的 app_settings 表）而非替身：证明端到端
+    回落，不是靠打桩骗过。**不出网**：只取值，不发任何 HTTP 请求。
+    """
+    db_path = str(tmp_path / "env_fallback.db")
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "from-dotenv-env")
+    value = database.get_effective_api_key(db_path=db_path)
+
+    assert value == "from-dotenv-env", "库内为空 ⇒ get_effective_api_key 必须回落到 .env/env"
+
+
+def test_get_effective_api_key_prefers_db_over_env(tmp_path: Any, monkeypatch: pytest.MonkeyPatch):
+    """库内有值时**优先用库值**：env 兜底不得反过来冒充/覆盖用户在设置页配的 key。"""
+    db_path = str(tmp_path / "db_wins.db")
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)",
+            ("DEEPSEEK_API_KEY", "db-key-wins", "2026-10-10 00:00:00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "env-should-not-win")
+    value = database.get_effective_api_key(db_path=db_path)
+
+    assert value == "db-key-wins", "库内有 key ⇒ 必须用库值（env 兜底只在库内为空时生效）"
 
 
 def test_get_setting_returns_db_row_without_env_fallback(

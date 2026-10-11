@@ -64,9 +64,17 @@ def test_workbench_data_intact():
 
 
 def test_view_german_embeds_workbench():
-    """DeLector 有 view-german，内含指向 workbench 的 iframe + autoplay 许可。"""
+    """DeLector 有 view-german，内含指向 workbench 的 iframe + autoplay 许可。
+
+    首屏惰性后 iframe **只带 `data-src`、不带静态 `src=`**（`main.js` 的
+    `ensureGermanWorkbench()` 在 `show('german')` 时赋值）。断言必须写全 `data-src=`：
+    旧写法 `'src="/german/workbench.html"' in block` 会因 **data-src 含该子串而恒真**
+    —— 正好是本轮在 `test_cold_start_cost` / `test_cards_endpoint_cost` 修掉的那类
+    半恒真（本文件模块 docstring 亦已立规：断言必须能被回退实现打破）。
+    """
     block = _INDEX.split('id="view-german"')[1].split("</main>")[0]
-    assert 'src="/german/workbench.html"' in block
+    assert 'id="german-workbench-frame"' in block
+    assert 'data-src="/german/workbench.html"' in block
     assert "autoplay" in block
 
 

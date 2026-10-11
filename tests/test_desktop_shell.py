@@ -148,6 +148,69 @@ def test_resolve_log_path_is_absolute_and_named_launch_log(tmp_path: Path):
     assert os.path.basename(resolved) == "launch.log"
 
 
+# ── ②' 日志轮转：超限滚动为 launch.log.1，新文件从空开始（行为级 + 变异自证）──────
+def test_rotate_log_rolls_over_limit_and_resets_new_file(tmp_path: Path):
+    """超限的 launch.log 必须滚动为 launch.log.1，且新 launch.log 从空开始。
+
+    **行为级**（不只看源码字符串）：造一份超限的假日志 ⇒ `rotate_log_if_needed` ⇒
+    旧档里是原始内容、新路径不再指向旧内容。**变异自证**：注释掉函数体里的 `os.replace`
+    ⇒ 本用例转红。
+    """
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+    payload = "x" * (mod.LOG_MAX_BYTES + 1024)
+    log_path.write_text(payload, encoding="utf-8")
+
+    rolled = mod.rotate_log_if_needed(str(log_path))
+
+    assert rolled is True, "超限日志必须被滚动（否则 launch.log 无界增长）"
+    backup = tmp_path / ("launch.log" + mod.LOG_BACKUP_SUFFIX)
+    assert backup.is_file(), "旧档必须滚动到 launch.log.1"
+    assert backup.read_text(encoding="utf-8") == payload, "旧档内容必须逐字保留"
+    assert not log_path.exists() or log_path.read_text(encoding="utf-8") == "", (
+        "滚动后新的 launch.log 必须为空/不存在（从空开始，不残留旧内容）"
+    )
+
+
+def test_rotate_log_keeps_small_file_untouched(tmp_path: Path):
+    """未超限 ⇒ 不滚动（原文件原样保留，返回 False）——防止把正常日志也清掉。"""
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+    log_path.write_text("small\n", encoding="utf-8")
+
+    assert mod.rotate_log_if_needed(str(log_path)) is False
+    assert log_path.read_text(encoding="utf-8") == "small\n"
+    assert not (tmp_path / "launch.log.1").exists()
+
+
+def test_rotate_log_overwrites_previous_backup(tmp_path: Path):
+    """只保留**一份**旧的：第二次滚动覆盖第一次的 `launch.log.1`。"""
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+    backup = tmp_path / "launch.log.1"
+    backup.write_text("old-backup", encoding="utf-8")
+    log_path.write_text("y" * (mod.LOG_MAX_BYTES + 1), encoding="utf-8")
+
+    assert mod.rotate_log_if_needed(str(log_path)) is True
+    assert backup.read_text(encoding="utf-8").startswith("yyy"), "旧档必须被本次滚动覆盖"
+
+
+def test_run_desktop_rotates_before_redirecting_streams():
+    """接线钉（**结构层**，非行为）：`run_desktop` 必须在 `_redirect_std_streams` **之前**轮转。
+
+    为什么是结构断言：真跑 `run_desktop` 会进 GUI 循环，CI 拉不起。但它能钉住"轮转确实接进
+    启动路径、且在打开两个追加句柄之前"这一顺序约束——少了它，超大日志永不被滚动；
+    顺序反了则 Windows 上对已打开文件的 `os.replace` 失败、轮转静默失效。
+    """
+    mod = _mod()
+    src = Path(mod.__file__).read_text(encoding="utf-8")
+    body = src.split("def run_desktop(", 1)[1]
+    assert "rotate_log_if_needed(" in body, "run_desktop 必须调用 rotate_log_if_needed（否则无界增长）"
+    assert body.index("rotate_log_if_needed(") < body.index("_redirect_std_streams("), (
+        "轮转必须在重定向/打开追加句柄之前（Windows 上对已打开文件 os.replace 会失败）"
+    )
+
+
 # ── ③ 退出编排：所有退出路径先 shutdown，超时硬退出 ──────────────────────────
 def test_coordinated_shutdown_reaps_server_then_reports_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """干净退出：先 `shutdown(server, thread)`，返回 True，且**不**触发硬退出。"""

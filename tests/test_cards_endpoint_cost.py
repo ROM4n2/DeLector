@@ -35,12 +35,14 @@ Task 1（卡盒基准补「各层占比」）在以上三条之外又钉了两�
 未被改动——这是对 `[Instinct: Isolated-DB]` 的可执行化，而不是靠 review 自觉。
 """
 
+import ast
 import os
 import re
 import statistics
 import subprocess
 import sys
 from pathlib import Path
+from typing import List
 
 import pytest
 
@@ -88,6 +90,55 @@ GATE_ROUNDS = "5"
 MAX_PER_ROW_US = 120.0
 
 
+# ── AST 辅助：把「字面量在文件里」升级为「真实调用点在代码里」──────────────────────
+# 动机（本文件 `test_bench_script_isolated_from_repo_db` 曾死绿）：`tempfile.mkdtemp` /
+# `shutil.rmtree` / `DATABASE_PATH` / `PROGRESS_DB_PATH` 这些字面量同时出现在脚本的模块
+# docstring（隔离纪律段）里 ⇒ 纯 `in src` 在真实调用被删后照样绿。AST 只认真实调用点。
+def _count_calls(tree: ast.AST, dotted: str) -> int:
+    """数 AST 里 `dotted(...)` 形态的真实调用点（如 ``tempfile.mkdtemp(...)``）。"""
+    parts = dotted.split(".")
+    count = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func: ast.expr = node.func
+        names: List[str] = []
+        while isinstance(func, ast.Attribute):
+            names.append(func.attr)
+            func = func.value
+        if isinstance(func, ast.Name):
+            names.append(func.id)
+        if list(reversed(names)) == parts:
+            count += 1
+    return count
+
+
+def _string_literals_in_code(tree: ast.AST) -> List[str]:
+    """收集**代码里**（排除模块 docstring 节点）出现的字符串字面量。
+
+    只按 AST 常量节点取数：docstring 内容不会被当成「代码里出现了该字面量」，故删掉真实
+    的 env 读写后，docstring 里的同名字样无法再让断言变绿。
+    """
+    docstring_ids = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body:
+            first = body[0]
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                docstring_ids.add(id(first.value))
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstring_ids
+    ]
+
+
 def _run_bench(tmp_path: Path, p95_rounds: str = GATE_ROUNDS) -> str:
     """在隔离环境里实跑基准脚本，返回 stdout 原文。
 
@@ -127,12 +178,24 @@ def test_bench_script_isolated_from_repo_db() -> None:
     只做**源码级**静态断言而非跑后比对 mtime：跑后比对需要仓库根存在真实
     `delector.db`（在 CI 上不存在 ⇒ 断言恒真，等于没有断言）。源码里出现
     `mkdtemp` + 两个库路径环境变量，才是这条纪律真正被写下的证据。
+
+    **半恒真纠错（本次）**：这四条曾用纯文本 `in src`，而这些字面量在脚本的模块 docstring
+    （第 42-47 行「隔离纪律」段）里逐字出现 ⇒ 删掉真实调用照样绿（死绿，本文件
+    `test_bench_output_declares_python_side_lines` 的 docstring 自己早写明了这个陷阱）。
+    现改为 **AST 断言**：只认真实调用点 / 代码里的字符串常量，docstring 文本不再能冒充。
+    **变异自证**：删掉 `tempfile.mkdtemp(...)` / `shutil.rmtree(...)` 真实调用 ⇒ 本用例转红。
     """
     src = SCRIPT.read_text(encoding="utf-8")
-    assert "tempfile.mkdtemp" in src, "基准脚本必须用 tempfile.mkdtemp() 建隔离库目录"
-    assert "DATABASE_PATH" in src, "基准脚本必须用 DATABASE_PATH 环境变量重定向主库"
-    assert "PROGRESS_DB_PATH" in src, "基准脚本必须用 PROGRESS_DB_PATH 环境变量重定向进度库"
-    assert "shutil.rmtree" in src, "基准脚本必须在 finally 里清理临时目录"
+    tree = ast.parse(src)
+    assert _count_calls(tree, "tempfile.mkdtemp") >= 1, (
+        "基准脚本必须真实调用 tempfile.mkdtemp() 建隔离库目录（docstring 里的字样不算）"
+    )
+    literals = _string_literals_in_code(tree)
+    assert "DATABASE_PATH" in literals, "基准脚本必须用 DATABASE_PATH 环境变量重定向主库"
+    assert "PROGRESS_DB_PATH" in literals, "基准脚本必须用 PROGRESS_DB_PATH 环境变量重定向进度库"
+    assert _count_calls(tree, "shutil.rmtree") >= 1, (
+        "基准脚本必须真实调用 shutil.rmtree() 清理临时目录（docstring 里的字样不算）"
+    )
 
 
 @pytest.mark.parametrize("label", SEGMENT_LABELS)
