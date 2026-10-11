@@ -23,20 +23,16 @@
 > ✅ **v5.16.0 修掉长期潜伏的性能缺陷 + 三处守卫加固（2026-10-06）**：Fog 1~4 全部收口。**① 每次 GET 文章都重跑完整 spaCy（用户可感知）**——追 Fog 2 根因发现惰性迁移判据写死 `"3.4.0"` 而写入端两条路径都写 `"3.5.0"`，判据恒真 ⇒「惰性迁移」退化成「每次迁移」；列表路径早已优化掉这个 N+1，单篇 GET 却一直全量重算，**惰性迁移从未真正生效**。修法＝导出 `PROCESSED_JSON_VERSION` 单一真相源，惰性迁移语义完整保留。**② CI 必需运行时清单显式化**，并钉住两条否定结论：`rm` 全仓不存在、`bash` 判为平台相关，**都不进清单**，防将来误升级为 fail。**③ localhost 守卫加固**——关掉三个「将来会漏」的洞：只认字面 `router`（实有 14 个 router）、prefix 只从单个取（一模块双 router 时键失真且恰好蒙对）、闸调用名漏 `import ... as` 别名；allowlist 20 条逐字未动。**④ 安全 posture 已裁决：内网可信**（不加固 LAN 写端点；不可逆毁数据能力全在闸内 + 128-bit `X-WB-Key` + 加固不会断手机同步）。Fog 3 的 16 处形式统一经裁决**不做**（其收益论证已被实测推翻）。门禁 **1317 passed + 1 skipped**、探针 **28/28**、mypy 93+70 files 零错误。**无 `static/` 改动 ⇒ 桌面端刷新即生效。**
 > ✅ **v5.15.0 登记项收口第二轮（2026-10-05）**：把 v5.14.0 遗下的 5 项技术债以「立守卫防漂移」的方式收口。**三条新守卫**——① localhost 受保护路由集合（注释里的「16 处」已漂移，AST 实测 **20 个**；判据用**精确 allowlist** 而非「GET 不该挂闸」，因为有 4 个受保护的敏感 GET）；② **CI 下 node 缺失必须红**（29 处 `shutil.which` skip 会让 CI **全绿而 28 个探针根本没跑**，比红更坏）；③ 探针 `--json` 契约**冻结**（28 个探针 5 种形态，存量 23 条登记过渡 + 「清单不得增长」守卫；判**实跑输出**不是源码文本）。**两处代码修复**——④ **降级标记并发串味**（用户可见：`showView` 与详情的 `resolveDeck()` 以相反结果交错结束时，详情拿到成功 deck 却显示「deck 降级」；改为状态与本次调用绑定，不破坏同源契约）；⑤ 工作台来源判据**单点化**（消除双真相源，E1 从「两份雷同」改为「复用且禁止双写」）。**安全 posture 裁决：内网可信**（用户裁定）——盘点 LAN 暴露面 28 个写端点后确认不可逆毁数据能力全在闸内、`PUT /wb/state` 由 128-bit `X-WB-Key` 保护且 key 无法经 HTTP 从 LAN 取得，且**加固不会断手机同步**；已知代价：LAN 第二台设备保存按钮会 403、AI 端点无配额、写入无审计。测试基线 **1299 passed + 1 skipped**、探针 **28/28**、mypy 70+92 files 零错误；本轮防漏接线守卫**第三次当场抓出漏接线**。⚠️ 含 `static/` 改动 ⇒ **Android 需覆盖安装生效**。
 > ✅ **v5.14.0 韧性 / 前端竞态 / KARTEI 去复习化（2026-10-05）**：6 席 swarm 审计落地 5 个子计划 + 3 组清债，含**两个 P0 真 bug**。**P0「白复习」**（#98）——卡盒复习工作台词时 DSR 四列被写、卡面因 `fsrs_s` 优先仍显示 `📚 工作台 · s=25`、工作台 FSRS 也不动，**复习了等于没复习**；改为工作台词**可见但不可复习**（收走四个 DSR 按钮，保留 `mastered` 徽记 + 「去工作台复习」跳转，普通卡逐字不变）。**前端竞态三修**（#97）——`openText` 重入守卫（请求代号 + `AbortController` + 覆写前后双守卫，`markRead` 排在守卫之后）、弹层垂直夹取**含向上翻转**、列表/详情 deck 同源。**TTS 并发闸**（#95）——模块级 `Semaphore(k=4)` + 429 人话，**有界拒绝而非无界排队**；**真健康端点** `/api/health`（原探针拼错 `/api/tools/`）。**清债轮**（#99~#102）——目录视图改用 `cardStatsTag`（此前对工作台词谎报「0 正 / 0 误」）、`fetchKnownLemmas` in-flight 去重（**刻意不做 TTL**：会让"刚背的词不出现"）、覆盖率行**标注降级来源**（区分"真没背"与"拉取失败"）。**CI 门禁补全**——`tools/` 下 **27 个探针全部接入 pytest**（此前 **8 个从未进 CI**）；**显式安装 Node 20**（此前靠 runner 预装，属隐式依赖——镜像一换探针就静默 skip，**比红更坏**）；新增**防漏接线守卫**，落地后当场把三个并行分支新加的探针顶了出来。**量化结论**（#96）：明确**不加** `idx_vocab_list`——filesort 仅占端点 8.9%，Python 物化+FSRS 占 84.1%。测试基线 **1289 passed + 1 skipped**；探针 **27/27** 零漂移；本版含 `static/` 改动，**Android 需覆盖安装生效**。
-> ✅ **v5.13.0 统一词库池 + P0 数据真相修复（2026-10-03）**：**ADR-0016 统一词库池**（#73/#74/#75）——`vocab_cards` 成为「我的词汇」的服务端**权威派生态**；新增 `source`/`fsrs_*` 列（懒物化，不动存量行）；背词工作台 deck 的已学/自建词条在写镜像时**同事务幂等**投影进池（投影失败则 blob 也不写）；新增只读对账 `reconcile_report`；备份列补齐防往返丢 `source`/`fsrs_*`，还原后同快照守卫内补投影。**P0 修复**（#88）——Docker 数据目录迁移闸（fail-loud 拒绝静默空库）+ `.dockerignore`（阻断密钥/库文件进镜像）；due 队列排除「工作台来源且无卡盒进度」的行（与 `known-lemmas` 同口径）；`known-lemmas` 等价性断言照实降级。**其它**——i+1 已知词池打通（#72）、测试库隔离收口（#78，共享 `remove_db_files` + 44 处句柄清扫）、文档目录约定重构与 `WORKMEMORY` 三层记忆落地（#81~#85）。测试基线 **1223 passed + 1 skipped**；本版含 `static/` 改动（i+1 池打通 + 卡面文案），**Android 需覆盖安装生效**。
-> ✅ **v5.12.1 工程债收口（真门禁 + 依赖升级 + 测试隔离）（2026-09-26）**：**无用户可见改动**（static/ 相对 v5.12.0 零差异）——路由守卫改 **HTTP 语义键** `(完整 path, METHOD)` 比对（对上游依赖漂移免疫；判别力反证：摘掉一个模块的 `include_router` 只报该模块 5 条，改造前是"全量 115 条"误报）；`tools/build_*.py` 纳入 mypy `--strict`（覆盖 62 → 68 files）；`fastapi 0.136.3 → 0.141.1` 并**撤销 dependabot ignore**；测试库跨模块 env 串扰修复（半 A 首次 0 failed，新增根因级 AST 守卫）；`android/app/build.gradle` 补写 Android 依赖分离理由。测试基线 **1124 passed + 1 skipped**；**无需 Android 覆盖安装**（无 static 改动）。
-> ✅ **v5.12.0 遇见区「已读状态 + 推荐顺延」（2026-09-24）**：补上 `✓ 已读` 一等状态——**打开短篇即记已读**（`localStorage["delector_encounter_read_v1"]`，用 `delector_` 前缀故**随备份导出/还原**）；列表卡片显示 `✓ 已读` + 轻降权（标记置于 meta 段内、**不新增 grid 子项**、排序不变）；**推荐条跳过已读顺延**（i+1 读完→「i+1 都读完了，试试《X》」；本就无 i+1→中性「试试下一篇」；全读完→「🎉 N 篇都读过了」；未背词→引导优先）。服务端零改动、已读本机判定。测试基线 1119 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
-> ✅ **v5.11.0 遇见区 i+1 补齐（内容放量 + 就近选材）（2026-09-23）**：预置分级短文 **4 → 7 篇**（A1×2/A2×2/B1×3，复用仓库既有分级语料）+ 每包**预计算** annotate 口径 `lemma_seq`；预置补装由空库守卫升级为**版本闸 + 只增 + 只补空**（存量设备零操作补装、旧行只补空 `lemma_seq`、不覆盖用户内容）；新增只读 `GET /api/encounter/texts/index`（零 spaCy、不挂本机闸）+ 遇见区列表**覆盖率分组排序与「👉 建议先读」推荐条**（索引失败完全降级回原列表、未背词显示引导）。硬不变量 I-1 = 索引词序列与 annotate 逐 token **全序列逐元素相等**（列表徽章覆盖率 ≡ 阅读页覆盖率）。测试基线 1109 passed + 1 skipped；Android 需覆盖安装生效（改动含 static）。
 > 
 > 📱 **Android 用户注意**：改动含 `static/` 的版本（如 v5.8.0 / v5.9.0）需**覆盖安装**才生效。
 > 📜 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.16.0` | 免安装 Python / 零环境依赖，解压双击 `DeLector.exe` 即可秒开                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.16.0)     |
+| 🪟 **Windows x64** | `v5.16.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；**需 Win10+ 与 WebView2 运行时**（Win11 自带；Win10 装不上时的表现见「已知限制」）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.16.0)     |
 | 🍎 **macOS**       | `v5.16.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.16.0)  |
 | 🐧 **Linux x64**   | `v5.16.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.16.0)  |
-| 📱 **Android**     | `v5.16.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。（CI 自动构建 APK；**v4.9.0 新增背词台核心词模式（235 词 / 704 词一键切换）与导入按归一词头去重，老设备幂等回填、FSRS 进度零丢失。**） | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.16.0) |
+| 📱 **Android**     | `v5.16.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.16.0) |
 
 ---
 
@@ -51,7 +47,7 @@
 | 安全守卫 / 本机环境 / 打包 / 工作惯例 | `docs/agents/ops.md` |
 | 设计与实施计划 | `docs/specs/`、`docs/plans/` |
 | 版本历史 | `CHANGELOG.md` |
-| 架构决策记录（ADR） | Obsidian Vault `08-Projects/DeLector/01-ADR/` |
+| 架构决策记录（ADR） | `docs/adr/` |
 
 ---
 
@@ -90,6 +86,7 @@
 pip install -r requirements.txt          # 安装 Python 依赖
 python -m spacy download de_core_news_md # 下载德语 NLP 模型
 python start.py                          # 或 Windows 双击 start.bat —— 一键启动并打开浏览器
+python desktop.py                        # Windows 桌面壳（原生窗口 + 托盘 + 启动 splash）
 docker compose up -d --build             # 或 Docker 容器化一键部署
 ```
 
@@ -97,9 +94,16 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 >
 > 📖 Windows 分支 / Docker 细节 / 环境变量 / 打包 / 安全守卫等完整说明见 [docs/agents/ops.md](docs/agents/ops.md)。
 
-### 📦 数据目录与旧版迁移（Docker 用户必读）
+### 📦 数据目录与旧版迁移（桌面端 / Docker 均必读）
 
-桌面端数据落在**仓库根**（`delector.db` / `progress.db`），无需任何配置。
+**桌面端默认把数据放在用户目录、不随程序目录**：Windows 为 `%LOCALAPPDATA%\DeLector`，
+macOS / Linux 为 `~/.local/share/DeLector`；文件是 `delector.db` 与 `progress.db`。两个开关：
+
+- `DELECTOR_PORTABLE=1` ⇒ 数据回到程序目录（U 盘 / 多机场景）；
+- `DELECTOR_DATA_DIR=<目录>` ⇒ 显式指定落点（优先级最高）。
+
+**首次从「数据随程序目录」的旧版升级**时会自动搬一次：新位置复制成功后，旧文件改名为
+`delector.db.bak-<时间戳>`（**永不删除**，确认无误后可自行清理）。
 
 **Docker 部署的数据落在 `./data` 目录**（`DELECTOR_DATA_DIR=/app/data`）。挂目录而非单文件，
 是因为 WAL 会在库旁生成 `-wal`/`-shm`，单文件挂载会在 `docker compose down` 后丢尾写。
@@ -131,7 +135,7 @@ DeLector/
 ├── static/            # 前端零构建 ES 模块（index.html + js/ 11 模块 + german/ 背词台 + css/ tokens）
 ├── android/           # Android 独立离线单机版工程 (Chaquopy + Gradle)
 ├── agent/             # Phase 2 Go Agent Runtime（CLI + DAG + 工具注册，预览通道）
-├── tests/             # 60+ 测试模块 + 迁移哨兵（pytest）
+├── tests/             # 117 个测试模块 + 迁移哨兵（pytest）
 ├── docs/              # 文档：agents/(架构·运维) · specs/(设计) · plans/(实施计划)
 ├── start.py           # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
 ├── package_windows.py # Windows 绿色免安装便携版打包脚本
@@ -146,11 +150,14 @@ DeLector/
 
 ## 🗺️ 版本历史 (Version History)
 
-- **v5.10.0（2026-09-21）**：A1 富结构收敛（ADR-0015）——FRAGMENTS 单源 + membership side-car；字段级优先级；考纲 A1 露出 IPA；同形异义按 id 带 ipa/ex。测试 1081 passed + 1 skipped。
-- **v5.9.5（2026-09-21）**：例句/搭配/语料全文检索（内存扫描）——词条 4762 + 例句 2722 + 搭配 691 + 语料全文；变音折叠 + 中文子串；顶栏 + 移动 dock；高亮 esc 优先；性能守卫 21.7ms；truncated 语义拆分。测试 1071 passed + 1 skipped。
-- **v5.9.4（2026-09-20）**：精读生词（reader 档）富字段回填——生词卡补 ipa + 例句 + gender/plural（服务端归一查表 + 不规则动词兜底，命中才补、不编造）；de 原句优先（保留生词原句，有原句时不补官方中文）；前端同步升级「只增 + 只补空」，进生词档即自愈。测试 993 passed + 1 skipped。
-- **v5.9.3（2026-09-18）**：类型门禁全仓 `--strict` 清账（250→0，含 tools 108→0）+ CI 门禁双轨升级 + 工具链修复（vault-proactive-scan / check_security node_modules）。纯工程治理，无用户可见变更。测试 987 passed + 1 skipped。
-> 📜 完整版本历史（含全部 70+ 版本）见 [CHANGELOG.md](CHANGELOG.md)。
+最近 3 版的摘要见上方「多平台下载发布包」一节；**完整版本历史的正主是 [CHANGELOG.md](CHANGELOG.md)**（此处不再复制第二份）。
+
+## ⚠️ 已知限制 (Known Limits)
+
+- **Win10 需先装 WebView2 运行时**（Win11 自带）：缺运行时双击 `DeLector.exe` 会提示安装后退出，不会白屏。
+- **冷启动约 6s**（本机实测）：其中约 2s 是「建服前的端口/身份校验」（防旧进程冒充新构建），另有约 2s 加载后端依赖；数据面已优化（文章列表 918ms → 8.9ms）。
+- **`launch.log` 有已知的整行丢失**（Windows 上多个句柄并发追加同一文件，实测约 3% 的行整行消失、**不是半行**）：排查启动问题时若日志缺行，先按此排除；`tools/first_screen_from_log.py` 报退出码 3/5（缺锚行）**不必然**等于日志损坏。
+- **Android 覆盖安装才生效**：含 `static/` 改动的版本必须覆盖安装（应用按 `versionCode` 判定重解包）。
 
 ---
 
