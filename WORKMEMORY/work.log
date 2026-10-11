@@ -470,3 +470,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **⭐ 形状修正（推翻本 ADR 的旧结论）**：旧文本写"剩余杠杆在**前端首屏负载**"；实测 `就绪 → 首屏` 仅 **~1s ⇒ 前端天花板 ~1s**，主项是那 **5s 的「进程起点 → 服务就绪」** ⇒ **§7.6 路由的下一杠杆不在前端**。
 - **回写**：ADR-0018 §8 `[Unknown 8]` 复核条 + 文件头（**仓内副本 + vault 正式件**，两份差异仅头部 frontmatter/状态块，已 `diff` 复核逐行同源）、ADR-0020 §6 `[Unknown 2]` + §8 验收口径（同样两份）、`PROJECT_OVERVIEW.md` 开放待办。
 - 未做：那 5s 的**分阶段拆解**（无数据，不猜）；更早处落计时标记（若要覆盖解释器启动/import，需改 `desktop.py` 之外的口径）。
+
+### 2026-10-11 | codebuddy | NOTE（补上一条 MEASURE）：那 5s 的分段拆解本来就有数据 —— 读同一次 launch.log 的既有阶段行
+Caps: filesystem-read, filesystem-write
+事件：上一条我写"未做：那 5s 的分阶段拆解（无数据，不猜）"——**这句要改**：`launch.log` 里**既有**阶段行（desktop.py 的 8 段标记）就够拆，**无需新仪表**。读用户 2026-10-11 14:29 那次的日志：
+- `14:29:08 起点` → `14:29:11 已创建 splash 窗口` = **3s**，**一个未标记的空档**，混合了：端口/身份校验 + WebView2 运行时检测 + `bootstrap_data_dir` + **`from delector.server import app`** + `build_server` + `serve_in_thread` + 两次 `create_window` + 托盘 ⇒ **无法归因**（注意"起点"写在 `run_desktop` 内、**早于** `_run_desktop_inner`，所以服务栈 import 在这 3s 里）。
+- `14:29:11 进入 GUI 事件循环` → `14:29:13 等待服务就绪/已就绪` = **2s**（`webview.start()` 起步：WebView2 环境/窗口落地，再到 `_after_start` health 命中）。
+- `14:29:13 切主窗口/load_url` → `14:29:14 首屏` = **1s**（前端）。
+- 口径：秒级、单样本；`真实 UI 已加载` 在 14:29:14 与 14:29:16 各触发一次（工具取首次）。
+- ⇒ **下一步的杠杆是给那 3s 空档补阶段标记**（同款 `_append_log`，零新依赖），不是再动前端。已回写 ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、PROJECT_OVERVIEW。
