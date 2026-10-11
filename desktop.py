@@ -154,6 +154,74 @@ def _append_log(log_path: str, message: str) -> None:
         pass
 
 
+def _win_ms_since_create() -> float:
+    """Windows：自**进程创建**到此刻的毫秒数（`GetProcessTimes` + `GetSystemTimeAsFileTime`）。
+
+    两个时刻都是 OS 给的 FILETIME（100ns 单位、自 1601-01-01 起）⇒ 直接相减，与时区/夏令时无关。
+    失败**会抛**（由 `_ms_since_process_create` 统一兜成 None）：这里只负责"问一次系统"，错误
+    处理只该在一个地方，免得两处口径漂移。
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetProcessTimes.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+    ]
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
+    created = wintypes.FILETIME()
+    exited = wintypes.FILETIME()
+    kernel = wintypes.FILETIME()
+    user = wintypes.FILETIME()
+    ok = kernel32.GetProcessTimes(
+        kernel32.GetCurrentProcess(),
+        ctypes.byref(created),
+        ctypes.byref(exited),
+        ctypes.byref(kernel),
+        ctypes.byref(user),
+    )
+    if not ok:
+        raise OSError("GetProcessTimes 返回失败")
+    now = wintypes.FILETIME()
+    kernel32.GetSystemTimeAsFileTime(ctypes.byref(now))
+    delta = ((now.dwHighDateTime << 32) | now.dwLowDateTime) - (
+        (created.dwHighDateTime << 32) | created.dwLowDateTime
+    )
+    return delta / 10000.0  # 100ns 单位 ⇒ 毫秒
+
+
+def _ms_since_process_create() -> Optional[float]:
+    """自**进程创建**到此刻的毫秒数；取不到返回 None，**绝不抛**。
+
+    为什么必须问 OS 要"进程创建时刻"、而不能用 `time.time()` 减一个模块级常量：解释器启动、
+    本模块的模块级 import、以及打包形态下 PyInstaller 的 bootstrap 全在本文件第一条语句**之前**
+    —— 自己记的起点只能量到那之后，恰恰漏掉要测的那段。
+    非 Windows 直接返回 None（CI 是 ubuntu，`ctypes.windll` 在那儿根本不存在）。
+    """
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        return _win_ms_since_create()
+    except Exception:
+        # 取不到就报"取不到"（调用方写 `?`）：绝不让一个仪表把启动搞崩。
+        return None
+
+
+def _log_prestart_elapsed(log_path: str) -> None:
+    """落一行「自进程创建」的毫秒数（取不到写 `?`）。
+
+    **另起一行**、不改既有锚行：`tools/first_screen_from_log.py` 用子串匹配锚行（起点/就绪/首屏），
+    把机器相关数字塞进锚行会让既有断言变脆。
+    """
+    elapsed = _ms_since_process_create()
+    shown = "?" if elapsed is None else f"{elapsed:.0f}"
+    _append_log(log_path, f"进程已运行 {shown} ms（自进程创建；此前为未测段）")
+
+
 def _redirect_std_streams(log_path: str) -> None:
     """把 stdout/stderr 重定向到 `launch.log`。失败只降级、不阻止启动（看不到日志好过起不来）。"""
     try:
@@ -649,6 +717,9 @@ def run_desktop(port: int = DEFAULT_PORT) -> int:
     # 进程级计时起点：让 launch.log 能**独立**算出"端到端"耗时（起点 → 服务就绪 / 起点 → 首屏）。
     # 放在**最早处**（日志流一就绪）——晚于此处就漏掉"服务启动前"的进程开销，端到端就少算一截。
     _append_log(log_path, "开始启动（进程级计时起点）。")
+    # 紧接着补一行"自进程创建"的毫秒数：起点之前的解释器启动 / 本模块模块级 import / 打包
+    # bootstrap 都在本行之前发生，只有问 OS 要进程创建时刻才测得到（见 `_ms_since_process_create`）。
+    _log_prestart_elapsed(log_path)
     try:
         return _run_desktop_inner(port, log_path)
     except KeyboardInterrupt:

@@ -1249,6 +1249,110 @@ def test_run_desktop_real_window_smoke():  # pragma: no cover - 只在真实桌�
     assert threading.active_count() >= 1
 
 
+# ── 本轮：把「进程创建 → 计时起点」这段未测段落进日志 ──────────────────────────
+# 背景：ADR-0018 §8 明写这个计时起点"晚于解释器启动与该模块自身的 import ⇒ 用户双击感知的
+# 端到端**比 6s 更长**，而那一段**从未被测到**"。锁分三层：
+#   ① AST：新标记**紧随**计时起点，且**不含**三条锚串（含了就抢错行 ⇒ 数字静默变味）；
+#   ② 行为级：注入替身取数 ⇒ 落出的行必须带**那个数**（不是常量、不是 0）；
+#   ③ fail-soft：底层取数抛异常 ⇒ 返回 None、写 `?`、**绝不外抛**（绝不让仪表把启动搞崩）。
+_PRE_START_HINT = "自进程创建"
+
+
+def test_prestart_marker_is_written_right_after_timing_start_and_carries_no_anchor() -> None:
+    """未测段标记必须**紧随**计时起点，且不得含三条锚串（否则解析器抢错行）。
+
+    实现把"落行"抽成 `_log_prestart_elapsed`（便于注入替身做行为级测试），故这里分两处看：
+    ① `run_desktop` 里"起点"那条顶层语句的**下一条**必须是 `_log_prestart_elapsed(...)` 调用；
+    ② 真正的字面量在该函数内 —— 锚串碰撞要往它里面看。
+    """
+    src = (REPO_ROOT / "desktop.py").read_text(encoding="utf-8")
+    funcs = _funcs_by_name(ast.parse(src))
+    run = funcs["run_desktop"]
+
+    start_index = next(
+        (
+            index
+            for index, stmt in enumerate(run.body)
+            if _TIMING_START_MARKER in (ast.get_source_segment(src, stmt) or "")
+        ),
+        None,
+    )
+    assert start_index is not None, "run_desktop 里找不到计时起点标记"
+    next_stmt = run.body[start_index + 1]
+    next_segment = ast.get_source_segment(src, next_stmt) or ""
+    assert any(_call_label(call) == "_log_prestart_elapsed" for call in _calls(next_stmt)), (
+        f"计时起点之后紧邻的顶层语句必须是 `_log_prestart_elapsed(...)`，实际：{next_segment!r}"
+    )
+
+    helper_literals = [
+        node.value
+        for node in ast.walk(funcs["_log_prestart_elapsed"])
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+    template = next((text for text in helper_literals if _PRE_START_HINT in text), None)
+    assert template is not None, (
+        f"`_log_prestart_elapsed` 里找不到含 {_PRE_START_HINT!r} 的字面量：{helper_literals}"
+    )
+    for anchor in (_TIMING_START_MARKER, "服务已就绪", _FIRST_SCREEN_MARKER):
+        assert anchor not in template, f"未测段标记不得含锚串 {anchor!r}（含了就抢错行、数字静默变味）"
+
+
+def test_prestart_line_reports_the_probed_ms(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """行为级：**输入变则输出变** —— 两次不同注入必须落出两行不同的数。
+
+    为什么不用"单次注入 + 断言含该数"：变量与常量会撞车（初版注入 123.4 ⇒ 格式化成 `123`，
+    恰好与"把数字写成常量 123"这条变异同形 ⇒ 变异后仍绿，等于没测）。
+    """
+    mod = _mod()
+    slow_log = tmp_path / "slow.log"
+    fast_log = tmp_path / "fast.log"
+    monkeypatch.setattr(mod, "_ms_since_process_create", lambda: 4321.6)
+    mod._log_prestart_elapsed(str(slow_log))
+    monkeypatch.setattr(mod, "_ms_since_process_create", lambda: 87.2)
+    mod._log_prestart_elapsed(str(fast_log))
+    slow_text = slow_log.read_text(encoding="utf-8")
+    fast_text = fast_log.read_text(encoding="utf-8")
+    assert "进程已运行 4322 ms（自进程创建；此前为未测段）" in slow_text, slow_text
+    assert "进程已运行 87 ms（自进程创建；此前为未测段）" in fast_text, fast_text
+    assert slow_text != fast_text, "两次注入不同探针值却落出同一行 ⇒ 数字不是来自探针（是常量）"
+
+
+def test_prestart_line_writes_question_mark_when_probe_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """取不到时刻（非 Windows / 系统调用失败）⇒ 写 `?` 且**不抛**、不阻断启动。"""
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+    monkeypatch.setattr(mod, "_ms_since_process_create", lambda: None)
+    mod._log_prestart_elapsed(str(log_path))
+    assert "进程已运行 ? ms（自进程创建；此前为未测段）" in log_path.read_text(encoding="utf-8")
+
+
+def test_ms_since_process_create_never_raises_when_underlying_probe_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fail-soft 契约：底层取数**抛异常** ⇒ 本函数返回 None（绝不外抛）。
+
+    刻意把平台守卫"撬开"（`sys.platform` → win32）再让底层抛 ⇒ **Linux（CI）与 Windows 上跑的是
+    同一条路径、同一条变异**（拿掉 try/except 在两处都会红），不靠"本机正好是 Windows"。
+    """
+    mod = _mod()
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    def _boom() -> float:
+        raise OSError("模拟系统调用失败")
+
+    monkeypatch.setattr(mod, "_win_ms_since_create", _boom)
+    assert mod._ms_since_process_create() is None
+
+
+def test_ms_since_process_create_returns_none_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """非 Windows 直接 None（CI 是 ubuntu，`ctypes.windll` 在那儿根本不存在 ⇒ 不许碰它）。"""
+    mod = _mod()
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert mod._ms_since_process_create() is None
+
+
 @pytest.mark.skipif(
     os.environ.get("DELECTOR_GUI_TEST") != "1",
     reason="需要真实桌面会话：pystray 与 pywebview 事件循环共存需真窗口实测（ADR-0020 §6 Unknown 4）",
