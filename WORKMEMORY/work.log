@@ -545,3 +545,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
   ⚠️ 段内（起点→首屏）源码 5s / 产物 6s 的差**落在 ±1s 量化步长内且各为单样本** ⇒ **不得**断言"产物内部更慢"；产物那次的 `import delector.server` 冷态 3s、暖态回到 2s（与源码暖态一致）。
 - **顺手纠正一次误读**：用户第一次给的 19:43 输出显示"该日志不含此项（旧版本 desktop.py）" —— 取证（日志块里连 6 枚 P2 标记都没有）判定那是**改动前打的旧产物**，不是仪表失灵 ⇒ 先重建再测（已写入"报数须带冷/暖标签"的同族纪律）。
 - 已回写：ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、`PROJECT_OVERVIEW`。**T4 收官**；本线程（首屏口径 + 未测段可观测化）全部闭合。
+
+### 2026-10-11 | codebuddy | DECISION 发版门 = B / 搁置边界 = B（ADR-0022）+ 两条守卫落地
+Caps: filesystem-read, filesystem-write, shell-exec
+用户以 `/dfs-grill` 提问"现在值得发版吗？这些小的先不修改？"，拍板 **Q1=B（先补守卫+文案再发）、Q2=B（搁置全保留含 Defender，只写 known-issues）**。
+- **前提被纠正（决定性）**：本版不是"几条小修"，是**首个原生桌面壳 + 首次数据落点外置**（`v5.16.0:desktop.py` 不存在；`v5.16.0:start.py` 调 `bootstrap_data_dir` 0 次，现 3 次；`DEFAULT_ENTRY` 从无到 `desktop.py`）；已装用户**拿不到**那 6 条可感知修复（static 内嵌产物）。
+- **守卫①（`package_windows.py`）**：真 tag 必须 == `v`+`APP_VERSION`（预发布尾缀放行）⇒ 构建期硬失败。堵的是"漏 bump 就推 tag ⇒ 产物自称 tag、应用报旧版本 ⇒ 更新提示永远落后"，而 CI 与真启包闸**都看不见**。5 用例 + 2 变异自证。
+- **守卫②（被改写，如实记录）**：原提案"真启闸加真实迁移变体"—— 勘察真实产物发现 `_internal/delector/` 只有 `data`（无 `__init__.py`）⇒ `_package_root()` 不向上走，**旧落点 = `<pkg>/_internal/delector/core`**（既非程序目录也非 `_internal`）⇒ 变体的播种目录需先定案 ⇒ 降级为**冻结语义钉**（monkeypatch `__file__`）+ 人工覆盖安装冒烟。1 用例 + 1 变异自证。
+- **连带改写 3 条既有用例**：两条 `v9.9.9` 当 tag 的改用**预发布 tag**（保判别力）；一条"非法分隔符经净化"重构为直测 `sanitize_version()` + 新增优先级用例（`128/merge` 事故面另有独立用例）。
+- **README 健康处理（用户要求）**：去个人 Obsidian Vault 路径（隐私）；纠数据落点（外置真相 + 两个开关 + 首迁留 `.bak`）与 Windows 行（WebView2 前置、删"零依赖秒开"）；测试模块数 60+ → 117；裁掉与 CHANGELOG 重复且与上方矛盾的旧版本摘要；新增「已知限制」承载 2s 与 D1 两条 known-issues。
+- 门禁（**四档全跑**，含因改 `package_windows.py` 必跑的入口面档）：ruff / 入口面 4 files / tests 121 files / delector+tools 87 files 全绿；`test_server.py` **297 passed**。
+- 登记：R2（Android 不可回滚）、R4（release body 不读 CHANGELOG）、R5（端口探针**无 timeout** 无界调用）、Defender 搁置；递延不变。
+- 未闭合：发版本身交 `/dfs-release`（版本面 3 处 bump + CHANGELOG + tag + 产物 + Release 的 known-issues 段）；发 tag 前同 commit 手动跑 `Windows Portable Smoke`。
