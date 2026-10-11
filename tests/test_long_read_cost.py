@@ -104,6 +104,28 @@ def _significant_digits(raw: str) -> int:
     return len(mantissa.rstrip("0")) or 1
 
 
+def _half_ulp(raw: str) -> float:
+    """由**打印出来的字符串本身**推出半 ULP —— 即"与实测值比对时该给多大容差"。
+
+    为什么必须从字符串推、不能凭手感给一个百分比：`cache_speedup` 只报 **2 位有效数字**
+    （`tools/bench_long_read.py::_format_speedup`：分母 warm_ms 是微秒级 dict 命中，多打印
+    一位就是伪精度），而 2 位有效数字的舍入误差**最坏可达 5%**（首位数接近 1.0 时）。此前本
+    文件写死 `rel=0.03` —— **比被测报告的精度还紧**，于是它只在"首位数恰好离舍入边界远"的机器
+    上偶然通过：
+
+      2026-10-11 发 v5.17.0 时 macOS runner 打印 `cache_speedup=1.1e+04`，而同一次实测比值是
+      10658.46（偏高 3.2%）⇒ 判红；Windows / Linux 同一 commit 全绿。**不是 macOS 算错了，
+      是容差的口径错了**（同族教训：跨/经舍入的量不许用固定小容差比，容差必须由精度推导）。
+
+    口径：`1.1e+04`（指数 4）⇒ ULP = 10^3 ⇒ 半 ULP = 500；`1.23`（个位区走 `.2f`）⇒ 半 ULP = 0.005。
+    """
+    mantissa, _, exp = raw.strip().lower().partition("e")
+    if exp:
+        return 0.5 * 10.0 ** (int(exp) - 1)
+    decimals = len(mantissa.partition(".")[2])
+    return 0.5 * 10.0 ** (-decimals)
+
+
 def _called_names(tree: ast.AST) -> set[str]:
     """收集被调用的名字：既收 `f(...)`，也收 `a.f(...)` 的属性名。
 
@@ -330,8 +352,63 @@ def test_cache_classification_matches_measured_relationship(bench_out: str) -> N
         assert effective == "no" and "缓存未生效" in bench_out
     else:
         assert effective == "unknown" and cold * 0.9 <= warm < cold
-    speedup = _number(bench_out, "cache_speedup")
-    assert speedup == pytest.approx(cold / warm, rel=0.03)
+    # 比对的容差 MUST 由**报告精度**推出（半 ULP），不能凭手感给个百分比：cache_speedup 只报
+    # 2 位有效数字，最坏舍入误差 5%，而旧口径写死 rel=0.03 ⇒ 换一台机器（macOS）必偶发红。
+    speedup_raw = _raw_value(bench_out, "cache_speedup")
+    speedup = float(speedup_raw)
+    measured = cold / warm
+    tol = _half_ulp(speedup_raw)
+    assert abs(speedup - measured) <= tol * (1 + 1e-9), (
+        f"cache_speedup={speedup_raw} 与实测比值 {measured:.6f} 不一致："
+        f"差 {abs(speedup - measured):.6f} 超出该打印精度的半 ULP {tol:g}"
+    )
+
+
+def test_half_ulp_follows_the_printed_precision() -> None:
+    """容差口径由字符串本身推导：指数形式走 10^(exp-1)，小数形式走末位，无小数点也不许崩。"""
+    assert _half_ulp("1.1e+04") == pytest.approx(500.0)
+    assert _half_ulp("1.0e+05") == pytest.approx(5000.0)
+    assert _half_ulp("1.23") == pytest.approx(0.005)
+    assert _half_ulp("1200") == pytest.approx(0.5)
+
+
+def test_speedup_tolerance_covers_two_significant_digit_rounding() -> None:
+    """回归锁：macOS 那次实况（10658.46 → `1.1e+04`，偏高 3.2%）必须放行，且旧口径必须判红。
+
+    两个方向都钉住才叫有判别力：只断言"新口径放行"时，把容差改回固定百分比这条用例**照样绿**
+    （改严了当然也放行不了——但它绿是因为方向反了），故必须同时断言"旧口径在此必红"。
+    """
+    for raw, measured in (("1.1e+04", 10658.461252525252), ("1.0e+04", 10499.0)):
+        diff = abs(float(raw) - measured)
+        assert diff > measured * 0.03, (
+            f"{raw} vs {measured} 必须落在旧口径 rel=0.03（±{measured * 0.03:.2f}）之外，"
+            "否则它证明不了本次修复的判别力"
+        )
+        assert diff <= _half_ulp(raw) * (1 + 1e-9), (
+            f"{raw} vs {measured} 的差 {diff:.2f} 应落在该精度的半 ULP {_half_ulp(raw):g} 内"
+        )
+
+
+def test_no_guessed_percentage_tolerance_on_rounded_measurements() -> None:
+    """源码级棘轮：**不许**对这里的测量值用固定相对容差（`pytest.approx(..., rel=...)`）。
+
+    为什么必须源码锁而不能只靠行为锁：那次红卡只在"2 位有效数字恰好跨过舍入边界"的机器上
+    复现（macOS 偏高 3.2%），本机与 Windows/Linux 全绿 ⇒ 把容差改回 `rel=0.03` 之后本机
+    **照样全绿**，行为断言锁不住这次回归。容差只能由打印精度推出（见 `_half_ulp`）。
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    offenders = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "approx"
+        and any(kw.arg == "rel" for kw in node.keywords)
+    ]
+    assert offenders == [], (
+        f"第 {offenders} 行对测量值用了固定相对容差：打印后的值只带 2 位有效数字时，"
+        "固定百分比会在别的机器上偶发红（2026-10-11 macOS：10658.46 打印成 1.1e+04 = 偏高 3.2%）"
+    )
 
 
 def test_cost_breakdown_and_verdict_are_honest(bench_out: str) -> None:
