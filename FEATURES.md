@@ -151,7 +151,7 @@
 | **Linux x64 便携版**       | Ubuntu / Debian / Arch 通用打包（`DeLector-v5.17.0-Linux-x64.tar.gz`）       | 解压即用，支持服务器与工作站环境。                                                                                      |
 | **Android 独立单机版 APK** | Chaquopy 嵌入式 Python 运行时 + 原生离线 TTS 桥接（`android/`；v5.16.0 发布实测 APK 58.8 MB） | 嵌入式 Python 与 spaCy 离线模型，脱离电脑 100% 独立离线单机运行（arm64-v8a）；CI 钉死签名 keystore 并验签，可覆盖升级。 |
 
-> **体积（截至 v5.16.0 发布实测）**：Windows 75.2 MB · macOS 57.7 MB · Linux x64 118.1 MB · Android 58.8 MB。v5.17.0 的 Windows 包因内嵌 WebView 壳依赖**预计 80–90 MB**（ADR-0020 预估，实测以 Release 附件为准）。四个平台均由 CI 在打 tag 后构建并发布。
+> **体积（v5.17.0 发布实测，四平台 Release 附件）**：Windows **85.8** MB · macOS **58.1** MB · Linux x64 **118.5** MB · Android **58.9** MB。上一版 v5.16.0 为 75.2 / 57.7 / 118.1 / 58.8 MB ⇒ Windows 增加 10.6 MB（本版新增桌面壳依赖 `requirements-desktop.txt`，与 ADR-0020 预估的 80–90 MB 相符）。四个平台均由 CI 在打 tag 后构建、跑测试与真启闸，全绿才发布。
 
 ### 十二、🖋️ 德语内联 IDE 写作工坊 (Schreibwerkstatt)
 
