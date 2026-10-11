@@ -618,3 +618,16 @@ Caps: filesystem-write, shell-exec
 - **3A′（`c071c08`）**：同类**第三处** `bench_rank_sentences.py` 同法修正（含门禁升级 AST+行为级，2 组变异自证）。
 - **1A / 4A（登记口径，不改 ADR 历史决策）**：冷启动 2.0s **未达**（本机 2128ms）⇒ 记为"**本机实测 2.128s，机器依赖**"，残余是 `import spacy` 本身，不再为 125ms 投入；Win10 WebView2 ⇒ **已知限制**（检测 + 官方 Evergreen 短链已有，Win10 需先装运行时，不捆绑以免 +100–150MB）。
 - **产物重建并验收**：`dist/DeLector-v5.16.0-Windows-x64-Portable`（commit `c071c08`）⇒ 闸 **11/11 PASS**，含新增的"预置文章预生成数据文件存在"。
+
+### 2026-10-11 13:07 | mimo-v2.6-flash__claude-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按 ADR-0004 Q1=A 处置 —— 删除 WORKMEMORY/corrections.md（本项目账本 0 条数据；4/5 项目本就无此文件）并同步 INDEX 文件清单行。捕获落点改为 WORK_END 可选一行「本次被纠正: <1 行>」（ADR-0004 §4.1-7，已由计划 Task B7 写进 PROTOCOL.md §2）。
+
+### 2026-10-11 | codebuddy | MEASURE 端到端首屏 = 6s（零新依赖）⇒ ADR-0018 §8 Unknown 8 关闭
+Caps: filesystem-write, shell-exec
+事件：用户问"首屏秒数在哪里看" ⇒ 跑 `tools/first_screen_from_log.py` 读 `launch.log`，**实测已有数字**。
+- **本机冷启动端到端首屏 = 6s**（起点→服务就绪 **6s**；服务就绪→首屏 **0s**）。
+- **关闭 ADR-0018 §8 `Unknown 8`**：曾判定"要测必须引入**浏览器自动化基线**（新依赖）、收益不大 ⇒ 暂缓" —— **该前提被推翻**：用应用自身可观测性（`desktop.py` 的进程级计时起点 + pywebview `loaded` 事件）即可测，**零新依赖**。ADR-0020 §6 `Unknown 2` 同步关闭。
+- **⭐ 这条数字改了性能问题的形状**：代理口径 `health_200`（2.6s）**不是瓶颈** —— 服务就绪到首屏几乎为 0 ⇒ ~6s 花在**进程启动 + WebView2 建档 + 前端首屏负载**。按 §7.6 修法路由（端到端 >4s ⇒ O0 杠杆），服务侧 O0（惰性加载 −1.47s）已做完 ⇒ **剩余杠杆在前端首屏负载**，首要嫌疑 = `index.html:2841-2846` 的 `german/workbench.html`（**392KB**）**iframe 首屏即加载 + 5s 轮询**（frontend 席早已点出）。
+- 局限：单机单次非 p95；`loaded` 事件 13:32:39 与 13:32:43 各触发一次（取首次）。
+- 另：`work.log` 内另有 **mimo-v2.6-flash__claude-code** 的 NOTE 行（它按 ADR-0004 Q1=A 删除 `corrections.md` 并改 INDEX）—— 同一文件无法分离，随本次提交一并落盘，内容归属已在提交信息标注。
