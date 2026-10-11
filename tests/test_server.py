@@ -5194,12 +5194,19 @@ def test_assert_no_path_separator_hard_fails():
 
 
 def test_without_github_ref_type_local_v_tag_is_adopted(monkeypatch):
-    """GITHUB_REF_TYPE 未设（本地手工设变量）时，形如 v* 且不含分隔符的名仍被采纳。"""
+    """GITHUB_REF_TYPE 未设（本地手工设变量）时，形如 v* 且不含分隔符的名仍被采纳。
+
+    用**预发布** tag（`v<APP_VERSION>-rc1`）而非与 APP_VERSION 完全相同的名：2026-10-11 起
+    真 tag 语境必须过 `assert_tag_matches_app_version`，写死的旧版本名会直接被守卫拒（本用例
+    原用 `v5.16.0`，bump 到 5.17.0 后即红）；而与 APP_VERSION 相同的名又无法区分"采纳 tag"
+    与"回落 APP_VERSION"，预发布 tag 是唯一既合法又不同的形态。
+    """
     import package_windows
+    from delector.core.version import APP_VERSION
 
     monkeypatch.delenv("GITHUB_REF_TYPE", raising=False)
-    monkeypatch.setenv("GITHUB_REF_NAME", "v5.16.0")
-    assert package_windows.resolve_version() == "v5.16.0"
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{APP_VERSION}-rc1")
+    assert package_windows.resolve_version() == f"v{APP_VERSION}-rc1"
 
 
 def test_version_fallback_targets_app_version_not_hardcoded():

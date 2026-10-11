@@ -4,9 +4,43 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.16.0（2026-10-06）**
+**最新版本：v5.17.0（2026-10-11）**
 
-### ⚡ 修掉一个长期潜伏的性能缺陷 + 三处守卫加固（PR #108/#109/#110）
+### 🖥️ 首个原生桌面壳 + 首次数据落点外置 + 发版门（PR #111~#129）
+
+自 v5.16.0（`90f62a3`，2026-10-06）起 **111 个提交**收成一版（不含本次发版 bump）。载荷是两个"首次"——**首个原生桌面壳**与**首次把数据落点外置**；其余是 CI/守卫加固，以及一批"已装用户拿不到"的修复（`static/` 内嵌在产物里，必须重下新产物）。
+
+**① 原生桌面壳（`pywebview` 走系统 Edge WebView2 + `pystray`，ADR-0020，#123~#125 / #127）**——`v5.16.0` 里 `desktop.py` **根本不存在**。新增：窗口主线程 + 同进程非 daemon 服务线程 + 托盘 + 原生 splash，退出统一 `should_exit` + 5s graceful + join。动因是 `start.py` 此前只有 `server.run()`——**退不干净 ⇒ 下次盲复用端口 = "以为升级了其实跑旧进程"**的静默失败。同批修掉两个 P0：**窗口永不出现的时序死锁**（`evaluate_js` / `load_url` 在 `webview.start()` 之前调用）、真实 UI 被塞进 splash 小窗（改普通可缩放窗口）。**Python + FastAPI 仍是 HTTP 主体 ⇒ 不违反 ADR-0018**（那条否决的是"换主体"，不是"换宿主"）。体积 **75MB → 80–90MB（ADR 预估）**。
+
+**② 数据落点外置（ADR-0019 四项摩擦里唯一真会丢东西的一项）**——`database.py` 桌面端无 `DELECTOR_DATA_DIR` 兜底 ⇒ 数据落在解压目录，而迁移闸条件④桌面端恒等 ⇒ **"升级时解压覆盖 / 删目录 = 学习记录全空且零提示"**。改为默认 `%LOCALAPPDATA%\DeLector` + 一次性迁移（首迁留 `.bak`）+ 保留便携开关可回退到"数据随程序目录"。`start.py` 调 `bootstrap_data_dir` 由 **0 → 3** 次。
+
+**③ 打包面（#124 / #128 / #129；ADR-0021 替代投资）**——`DEFAULT_ENTRY` 切到 `desktop.py`，复用现有 Windows 产物位点、不新增第 5 个位点。三件加固：**`.env` 验包闸**（产物夹带即硬失败）、**构建指纹**（`.build-info.json` 四键 + README 顶行人读指纹，供用户分辨双击的是哪个包）、**WebView2 验包闸**（漏 `WebView2Loader.dll` 就白屏，与既有事故同款）。**真启产物闸（#128）**：构建后先跑一次产物（完整性 + `/api/health` 就绪 + 干净退出），坏包不许进 zip/artifact —— **上线即抓出两个产品真 bug**：`--server-only` 在 stdout 被重定向时 `UnicodeEncodeError` **启动即崩**；PR 语境 `GITHUB_REF_NAME`（形如 `128/merge`）把产物目录**嵌套**成 `dist/DeLector-128/merge-…`（构建报成功、下游扫不到）。
+
+**④ 更新可见性（#115 / #116）**——`delector/core/version.py: APP_VERSION` **单一真相源** + `GET /api/update/check`（GitHub Releases 唯一真相源；**成功 6h / 失败 60s** TTL + 3s 超时 + **不挂本机闸**＝ADR-0017 §4.3 显式决定）+ 顶栏落后 chip（`wb_update_chip_probe.mjs` 11 场景）。⚠️ **Android 端未验证**：两条假设（Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**、WebView 点 chip 外链是否交给系统浏览器）从未验证，手机现有出网是 **LAN HTTP**、不是证据 ⇒ 本版只上桌面端。
+
+**⑤ 六条用户可感知修复**——错高亮改为**在原文上定位命中**（`ad556a1`，修掉错高亮与实体边界）；列表成本 **918ms → 8.9ms（103×）**；静态首屏少 **383.4 KB**（工作台 iframe 惰性化，`8f07820`，`os.path.getsize` 实测 392,563 B）；四条 P0（`3def83d`：建服前端口/身份校验、`get_setting` 不再吞异常、`openReader` 失败可见、评分防连点）；难度跳变（`c071c08`：构建期预生成 `delector/data/preset_processed.json`，落库直接 spaCy 口径 ⇒ 跳变消失，**未命中给可见 WARNING**，不许静默降级）；启动日志轮转与 `.env` 回落锁。
+
+**⑥ spaCy 模型惰性加载（`f2fa8b6`，ADR-0018 §7.6 O0 杠杆）**——冷启动 `health_200` **3123 → 2128ms（−32%）**；残余主要是 `import spacy` 库导入本身（≈1.09s）且**机器依赖**（磁盘缓存/杀毒/负载敏感）⇒ 按登记项 1A **接受并改口径**，不再为 125ms 投入。
+
+**⑦ CI 与守卫**——**前端跨边界契约闸**（真实 `app.routes` 校验 `static/js` 里真实存在的 HTTP 调用 + `tsc` 只查显式 allowlist，固定 `typescript@5.6.3`）；**`ci.yml` 自身纳入"打包面"清单**（改闸的定义就该重跑闸）；**桌面入口 mypy 门禁**（`--platform win32`，去掉 `start.py` 两处 `type: ignore`）；**发版门守卫**（真 `tag` 必须等于 `v`+`APP_VERSION`，堵"漏 bump `version.py` 就推 tag ⇒ 产物自称 tag、应用报旧版本 ⇒ 更新提示永远落后"，而 **CI 与真启包闸都看不见**）；**仓库根数据目录守卫**（挡"没先钉落点就 `import server` ⇒ 在仓库根建库"）；**桌面启动链可归因化**（`desktop.py` 补 6 枚阶段标记）+ **未测段可观测化**（"进程创建 → 计时起点"耗时落 `launch.log`，零新依赖）。
+
+**⑧ 性能测量与裁决（ADR-0018，#117~#121）**——五个基准 + 五个门禁落地；判定门定案 **O0（维持现状 + 便宜杠杆）**，条件①成立（加权 Python CPU 代理占比 **85.9%**）/条件②不成立 ⇒ **AND 不成立**；**"换 HTTP 主体"永久否决**（三条依据 + 三条翻盘条件见 ADR-0018 §3.2）。红 master 事故（PR #117 在 CI 未跑完时被合并）同批修复：删两条**跨进程量级比较**断言，改为机器无关自检。
+
+**已知限制（本版不修，明文登记）**
+- **冷启动约 6s**（本机端到端实测）：其中 **~2s 是"建服前端口/身份校验"——本版新引入的显式校验**，另有 ~2s 加载后端依赖；**不得**把这段当提速卖点。⭐ 那 2s 已单独复现为 `is_port_in_use` 的 `connect_ex(("127.0.0.1", port))`（端口空闲时**本机恒 ~2.03s**，正在监听 0.4ms，UDP 不受影响 ⇒ TCP 专属）。已**排除** Defender 网络保护、第三方 LWF 过滤驱动、`初始 RTO≈2s` 重传假说（实测 RTO=1000）；剩余嫌疑是 WFP 层（Clash TUN）与 TCP 全局特性。**环境嫌疑未定案**，三步可逆恢复法见 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md` §8；**守卫保持原样、不立项**（改它是 P0 风险换一个可能只影响本机的 2s）。
+- **`launch.log` 有已知的整行丢失**（Windows 上多个句柄并发追加同一文件，实测约 **3%**、**整行不是半行**）⇒ `tools/first_screen_from_log.py` 报退出码 3/5（缺锚行）**不必然**等于日志损坏。
+- **Android 不可回滚**：`versionCode` 只升不降（本版 `51700`）。
+- **Win10 需先装 WebView2 运行时**（Win11 自带）：缺运行时双击 `DeLector.exe` 会提示安装后退出，**不会白屏**；此项**打破"解压即用"**，不捆绑固定运行时（否则 +100–150MB）。
+
+**门禁（本版实测）**：**1768 passed + 2 skipped**；`tools/*.mjs` 探针 **29/29** 零漂移；`ruff check .` 零告警；mypy 三道（`--strict delector tools` **87** + `--follow-imports=skip tests` **121** + 入口面 `desktop.py package_windows.py conftest.py start.py` **4** files）零错误；发版守护 `test_writer_mobile.py` **30 passed**。⚠️ 含 `static/` 改动（`update.js` / `api-types.js` / `index.html` / `main.js`）⇒ **Android 需覆盖安装生效**。
+
+**回滚 (Rollback)**
+- **代码**：`git revert` 本版提交后重建；或直接用上一版产物（`v5.16.0`）覆盖。
+- **数据**：**不要**删 `%LOCALAPPDATA%\DeLector`（学习数据在那里）。旧版不认识外置落点 ⇒ 会回到"数据随程序目录"，需把 `delector.db` 手工拷回程序目录；迁移首迁留的 `.bak` 可整库回退。
+- **DB**：本版对 schema 只做**加列**（`articles.stats_json`）与 3 个 `CREATE INDEX IF NOT EXISTS`（`idx_exam_lm` / `idx_vocab_queue` / `idx_grammar_queue`），无破坏性变更 ⇒ 旧版代码可继续读同一个库。
+- **Android**：见上「不可回滚」——只能卸载重装（会清应用私有数据，请先导出备份）。
+
+### v5.16.0 · ⚡ 修掉一个长期潜伏的性能缺陷 + 三处守卫加固（PR #108/#109/#110）
 
 Fog 1~4 全部收口。本版**不含** `static/` 改动——三个 PR 分别是 1 处性能修复与两组测试守卫。
 
