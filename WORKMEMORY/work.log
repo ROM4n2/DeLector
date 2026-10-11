@@ -511,3 +511,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **选项评估（结论：不动代码）**：① 改探测方式（`bind`）—— 三场景虽与 `connect` 同结论，但**动的是 P0 守卫语义**，且 TIME_WAIT 假阳性 vs `SO_REUSEADDR` 假阴性两难未定案 ⇒ 不建议；② 把探针与 `import delector.server` **并发** —— 技术/可测性可行，但代价是"旧实例在跑"路径上也会先跑 `bootstrap_data_dir`，与 `start.py:123` 的**刻意设计**冲突；③ **先判环境** —— 若属环境层，改代码就是拿 P0 风险换一个只影响本机的 2s。
 - **⏸ 暂缓（用户）**：最后一问（**退出 Clash 后重测**）推迟 —— 用户另一 agent 正在使用 Clash。**三步可逆恢复方式**（记在 ADR-0018 §8 `[Unknown 8]`）：退出 Clash → `netsh int tcp set global fastopen=disabled` → `rsc=disabled`（每步测完恢复）。**任一让探测从 ~2s 掉到 ~1ms 即结案环境层。**
 - 已回写：ADR-0018 §8（仓内 + vault，正文同源）、ADR-0020 §6（仓内 + vault）、PROJECT_OVERVIEW。**零代码改动、零新依赖、守卫原样。**
+
+### 2026-10-11 | codebuddy | WORK_END 未测段可观测化（T1+T2+T3 落地；T4 待用户真启产物）
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：按 `docs/plans/2026-10-11-prestart-timing-instrument.md` 落地"把「进程创建 → 计时起点」未测段纳入 launch.log"。用户裁定**轻量化执行**（不走 pipeline/worktree、不启用 `.vault-exec-ledger.json` 台账）。
+- **T1（`51899fd`）**：`desktop.py` 新增 `_win_ms_since_create()`（`ctypes` + `GetProcessTimes` + `GetSystemTimeAsFileTime`，FILETIME 相减）/ `_ms_since_process_create()`（平台守卫 + fail-soft）/ `_log_prestart_elapsed()`（**另起一行**，取不到写 `?`），`run_desktop` 紧随计时起点调用。
+- **T2（`db24260`）**：`tools/first_screen_from_log.py` 增 `PRE_START_MARKER` + `_pre_start_ms`（三态：缺行 / `?` / 数字）+ `_fmt_pre_start` + 输出一行 + 精度口径脚注；**缺行不改退出码**。
+- **实测（3 次稳定）**：进程创建→首个 Python 语句 **98/99/99 ms**；`+ import desktop` **343/339/350 ms** ⇒ `import` 自身 ≈245ms ⇒ **源路径未测段 ≈0.34–0.35s** ⇒ **真实端到端 ≈6.35s**（缺口 ≈5%）⇒ 该段**无优化空间**，本任务价值 = **口径完整**。
+- **变异自证 5 条**（全"红→复原绿"，未提交文件用仓库外备份 + md5 复核）：T1 M1 拿掉 try/except ⇒ 红；T1 M2 数字写成常量 —— **初版用例竟仍绿**（注入值 123.4 格式化成 `123` 与变异同形！）⇒ 用例强化为"两次不同注入必须落出两行不同的数" ⇒ 重跑转红；T1 M3 删调用 ⇒ AST 位置锁红；T2 M1 恒返回 `"0"` ⇒ 红；T2 M2 缺行静默给 0 ⇒ 红。
+- **真实日志冒烟**：对用户 `launch.log`（15:43，改动前写的）输出 `该日志不含此项（旧版本 desktop.py）`，**EXIT=0** ✓。
+- 门禁：`pytest`（两文件）64 passed, 2 skipped；`ruff` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK。
+- **待办 T4（HITL）**：用户真启两次 —— ① `python desktop.py`；② 双击打包产物 `DeLector.exe` —— 取两条路径的未测段数值并回填文档（PyInstaller bootstrap 段大小未知）。
+- 已回写：ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、`PROJECT_OVERVIEW`。

@@ -125,6 +125,7 @@ Tauri/Electron、CEF、安装器与卸载器、开机自启、应用内安装更
       **建窗 / 托盘 / `bootstrap_data_dir` / `build_server` / `serve_in_thread` / 前端全部 <1s** ⇒ "WebView2 建档/建窗是主项"**不成立**。
       而「端口/身份校验」那 2s 已单独复现：`is_port_in_use` 的 `connect_ex(("127.0.0.1", port))` 在端口空闲时**本机恒为 ~2.03s**（12 次采样 2017–2057ms、与端口号/地址无关；正在监听则 0.4ms；**UDP 不受影响 ⇒ TCP 专属**；改 `bind()` 探测仅 0.1ms）⇒ **下一杠杆在此**（登记在 ADR-0018 §8 `[Unknown 8]`，需单独立项，因它是 P0 守卫且与 `start.py` 共用实现）。
       **⏸ 暂缓（2026-10-11，用户裁定）**：**先判它是否属环境层** —— 已**排除** Defender 网络保护（`EnableNetworkProtection=0`）、第三方 LWF 过滤驱动（`Get-NetAdapterBinding` 全为 `ms_*`）、`初始 RTO≈2s` 重传假说（实测 RTO=1000，**凑不出稳定的 2.03s，已证伪**）；**剩余嫌疑** = WFP 层（Clash 的 TUN/嗅探，不出现在 LWF 清单里）与 TCP 全局特性（`快速打开`/`接收段合并` 均 enabled）。判定实验（**退出 Clash 后重测**）因用户另一 agent 正在使用 Clash 而**推迟**；三步可逆恢复方式记在 ADR-0018 §8 `[Unknown 8]`。**守卫保持原样、不立项。**
+      **✅ 起点之前的未测段已可测（2026-10-11，`51899fd` + `db24260`）**：`desktop.py` 紧随计时起点落一行 `进程已运行 {N} ms（自进程创建；此前为未测段）`（N 取自 OS 的**进程创建时刻**，`ctypes`+`GetProcessTimes`，**零新依赖**；取不到写 `?`，非 Windows 跳过）；`tools/first_screen_from_log.py` 增一行输出。**源路径实测 ≈0.35s**（解释器启动 98–99ms + `import desktop` ≈245ms）⇒ 真实端到端 ≈ **6.35s**；**打包产物路径（`DeLector.exe` 双击）待真启一次取数**（同一标记对两条路径同样有效）。
 - **[Unknown 3] 误报率变化**：加了 GUI/native DLL 后 Defender 命中率是否上升 —— 需发布后观测。
 - **[Unknown 4] 托盘在 Windows 上的交互细节**：pystray 与 pywebview 的事件循环共存方式需实测（是否要各自线程）。
 
