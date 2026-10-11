@@ -133,3 +133,39 @@
 - **前端进一步优化 / 代码分割**（ADR-0018 §8 复核条已判"前端非主项，天花板 ~1s"）。
 - **`launch.log` 轮转策略调整**（P2 已交付 5MB 启动时轮转）。
 - **Android / 打包面**（本改动只在 Windows 桌面入口）。
+
+---
+
+## ⚡ Stage 7（/dfs-perf）：仪表成本卡 —— **不是提速卡**
+
+> **Target Language / Runtime**: Python 3.11（Windows 桌面壳）
+> **Host Environment**: win32（本机；未跨机构建）
+> **Baseline**: 基线 commit `4f01d72`（改前）→ 变更后 `0bbddfa`（Task-1/2/3 全落地）
+
+本轮的"before/after"**不是**性能优化前后，而是**「不加这 6 枚标记」 vs 「加这 6 枚标记」的成本**——因为本任务**只做可归因化、不改启动行为**。把它写成"提速"就是造假。
+
+| Metric | 改前（无 6 枚标记） | 改后（含 6 枚标记） | Delta | Verification |
+|---|---|---|---|---|
+| `_append_log` 单次调用 | — | **251.1 µs**（median；min 211.3 / max 253.1，7 轮 × 2000 × 6 次） | — | 本机 stdlib 计时，多轮取中位数 |
+| 6 枚标记合计 | 0 ms（不存在） | **1.51 ms**（median） | **+1.51 ms** | 同上 |
+| 占实测端到端首屏（6s）比例 | — | **0.0251 %** | — | 相对 2026-10-11 用户实测值 |
+| 与仪器分辨率之比 | — | **1.5 ms vs 1000 ms ⇒ 0.15 %** | — | `_append_log` 时间戳为秒级 |
+| 新依赖 / 新线程 / 新文件句柄 | 0 | **0** | 无 | 纯新增 6 次既有函数调用 |
+
+**结论（可复跑）**：仪表成本 **≈1.5 ms**，比它自己的秒级分辨率小 3 个数量级 ⇒ **不足以污染将被它测量的那 5s**，也**不能**被该仪器测出来（所以本轮不去做"改动前后端到端 A/B"——做了也只会得到 6s vs 6s 的噪声，见 WORKMEMORY 记忆「声称某改动更快前先查工具分辨率与计时窗口」）。
+
+**Phase 7 门禁（worktree 内实跑，原始输出）**
+```
+ruff check . ............................. All checks passed!            EXIT=0
+mypy --strict delector tools ............. 87 files OK
+mypy --follow-imports=skip tests ......... 120 files OK
+mypy --platform win32 入口面 .............. 4 files OK
+check_frontend_api_contract.py ........... PASS
+pytest -q ................................ 1749 passed, 3 skipped in 460.87s
+  （collected 1752；3 条 skip 已逐条定位：
+    ① test_run_desktop_real_window_smoke —— GUI skipif（需真桌面会话）
+    ② test_tray_coexists_with_webview_event_loop —— GUI skipif（ADR-0020 §6 Unknown 4）
+    ③ test_task1_corpus_dict_registered_in_all_packaging_targets —— 干净 worktree 缺本地
+       PyInstaller 产物 DeLector.spec（主工作区有 ⇒ 主力基线里它是 pass）；与本改动无关
+    新增 4 条用例（Task-1 ×2 + Task-2 ×2）**全部 pass**）
+```
