@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Dict, Iterator, Mapping, Tuple
 
 import pytest
 
@@ -37,4 +38,63 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         pytest.exit(
             "CI 环境缺少必需的 node 运行时；.mjs 探针不能以 skip 静默跳过",
             returncode=1,
+        )
+
+
+# ── 仓库根「数据目录」守卫（2026-10-11）──────────────────────────────────────────
+# 为什么需要它：`database.DATA_DIR` 在 `DELECTOR_DATA_DIR` 缺席时**兜底到仓库根**
+# （`delector/core/database.py:36`），而 `delector/server.py` 在**模块顶层**就调 `init_db()`
+# ⇒ 任何"没先钉落点就 import server"的路径（诊断 import / 忘钉 env 的脚本 / 别的会话）
+# 都会在**仓库根**建一套库。后果不只是脏：根目录一有库，`tests/test_save_wb_state_cost.py`
+# 的迁移闸（`preflight_data_dir`）就拒绝运行 ⇒ **本地红、CI 绿**（CI 是干净克隆）。
+# 为什么比对**快照差值**而不是"断言根目录没有库"：便携模式（`DELECTOR_PORTABLE=1`）下
+# 仓库根**本来**就是合法落点，开发者手上可能先就有库 —— 那种情况不该判红；只有
+# "**本次测试运行期间**新出现 / 被改动"才是泄漏。
+_ROOT_DB_NAMES: Tuple[str, ...] = ("delector.db", "progress.db")
+
+
+def root_db_snapshot(root: Path) -> Dict[str, int]:
+    """仓库根那两套库（含 `-wal` / `-shm` 侧文件）的快照：文件名 → 字节数。"""
+    snapshot: Dict[str, int] = {}
+    for name in _ROOT_DB_NAMES:
+        for suffix in ("", "-wal", "-shm"):
+            path = root / f"{name}{suffix}"
+            if path.is_file():
+                snapshot[path.name] = path.stat().st_size
+    return snapshot
+
+
+def describe_root_db_diff(before: Mapping[str, int], after: Mapping[str, int]) -> str:
+    """把两次快照的差异说成人话（新出现 / 被改动 / 消失），供守卫报错用。"""
+    added = sorted(set(after) - set(before))
+    changed = sorted(name for name in set(after) & set(before) if after[name] != before[name])
+    removed = sorted(set(before) - set(after))
+    parts = []
+    if added:
+        parts.append(f"新出现：{', '.join(added)}")
+    if changed:
+        parts.append(f"被改动：{', '.join(changed)}")
+    if removed:
+        parts.append(f"消失：{', '.join(removed)}")
+    return "；".join(parts) if parts else "无差异"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _guard_repo_root_data_dirs() -> Iterator[None]:
+    """会话级守卫：本次测试运行期间仓库根**不得**新增 / 改动 `delector.db` / `progress.db`。
+
+    失败时给出**根因与修法**（不是"你自己去看"）：见下方断言消息里的三步。
+    """
+    before = root_db_snapshot(ROOT)
+    yield
+    after = root_db_snapshot(ROOT)
+    if after != before:
+        raise AssertionError(
+            f"测试运行期间仓库根的数据文件被动了：{describe_root_db_diff(before, after)}。\n"
+            "根因通常是：某条路径在 `DELECTOR_DATA_DIR` 缺席时用了 `database.DATA_DIR` 的"
+            "仓库根兜底（`delector/core/database.py:36`），而 `delector/server.py` 在**模块顶层**"
+            "就 `init_db()` ⇒ import 即建库。\n"
+            "修法：给那条路径显式钉 `DELECTOR_DATA_DIR`（或 `DATABASE_PATH` / `PROGRESS_DB_PATH`）；"
+            "已经产生的文件请**移走**——它们会毒化 `tests/test_save_wb_state_cost.py` 的迁移闸，"
+            "造成「本地红 / CI 绿」。冒烟纪律见 `delector/core/data_dir_bootstrap.py` 的模块 docstring。"
         )

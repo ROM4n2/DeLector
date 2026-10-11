@@ -523,3 +523,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 门禁：`pytest`（两文件）64 passed, 2 skipped；`ruff` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK。
 - **待办 T4（HITL）**：用户真启两次 —— ① `python desktop.py`；② 双击打包产物 `DeLector.exe` —— 取两条路径的未测段数值并回填文档（PyInstaller bootstrap 段大小未知）。
 - 已回写：ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、`PROJECT_OVERVIEW`。
+
+### 2026-10-11 | codebuddy | WORK_END 仓库根数据目录卫生（用户选 B；B-3 经裁决不做并登记技术债）
+Caps: filesystem-read, filesystem-write, shell-exec
+背景：仓库根在 15:45:01 出现了一套**新的** `delector.db`/`progress.db`，随后 `tests/test_save_wb_state_cost.py` 的迁移闸拒绝运行 ⇒ 本地 2 红、CI 绿。用户裁定"开做 B"。
+- **机制已定位（一行代码 + 一处接线）**：`database.py:36` `DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", _REPO_ROOT)` ⇒ 缺省兜底仓库根；而 **`delector/server.py` 在模块顶层就 `init_db()`**（conftest 注释 26-31 行印证）⇒ **"没先钉落点就 import server" = 在仓库根建库**。并发事实：应用本身干净（`desktop.py` 先 `bootstrap_data_dir` → `%LOCALAPPDATA%`；用户 15:35 那次的真实库确实落在那里，794 KB / 4 篇 / 22 词卡 = 数据未丢）。
+- **落地 B-A（`conftest.py`）**：新增会话级 autouse 守卫 `_guard_repo_root_data_dirs` + 两个纯 helper（`root_db_snapshot` / `describe_root_db_diff`）。刻意比对**快照差值**而非"断言根目录无库"——便携模式（`DELECTOR_PORTABLE=1`）下仓库根本来就是合法落点，不该误判；只有"本次运行期间新出现/被改动"才算泄漏。失败消息给**根因 + 三步修法**（不甩锅给读者）。
+- **落地 B-B（测试）**：`tests/test_desktop_data_dir_bootstrap.py` 增 3 条 —— helper 快照覆盖面、差异描述三类、**结构性判据**"凡 `init_db()` 的 tools 必须钉落点"（当前 `bench_cold_start` / `bench_save_wb_state` 2/2 合规，该判据只挡未来回归；实测其余 6 个工具不碰 DB）。
+- **B-3（conftest 全局 `setdefault("DELECTOR_DATA_DIR", tmp)`) 裁决：不做** —— 依据 `test_backend_package_layout.py:40` 与 `test_data_dir_migration_gate.py:276` 两处**已带 `pytest.skip` 兜底**的"DATA_DIR 默认=仓库根"守卫：全局钉住会把它们变成**永久 skip = 门禁削弱**；而该兜底的防护意图已由 B-A 的**响亮失败**覆盖（本仓偏好 No-Silent-Failure，不偏好静默改道）。**技术债登记**：若将来仍要全局钉，必须先把那两条改写成"子进程干净 env"形态以保住覆盖。
+- **变异自证 3 条**（全"红→复原绿"，md5 `28a3749ea04f2ca02fa50795032f4740` 复核）：① 端到端注入"在仓库根建库"的临时用例 ⇒ 守卫 teardown 报 `新出现：delector.db` 且 `1 passed, 1 error`（EXIT=1），清理后仓库根干净；② helper 忽略"新出现" ⇒ 该用例红；③ 结构性判据 pin 列表清空 ⇒ tools 用例红。
+- **全量验证**：`pytest -q` = **1761 passed, 2 skipped**（改前 `2 failed, 1756 passed, 2 skipped`）；**守卫在全量中未响** ⇒ 测试套件内无泄漏路径（15:45 那套来自套件之外）；跑完仓库根无库 ✓。`ruff` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK。
+- 另：`C:\Users\Haoyu\AppData\Local\Temp\delector-root-db-backup-20261011\` 存着被移走的 8 个文件（用户已确认非其数据）。

@@ -641,3 +641,58 @@ def test_bootstrap_keeps_explicit_env_when_migration_fails(tmp_path: Path, monke
 
     assert mod.bootstrap_data_dir(env, legacy_dir=str(legacy)) == str(target)
     assert env["DELECTOR_DATA_DIR"] == str(target), "显式值不得因迁移失败被换成旧落点"
+
+
+# ── 仓库根「数据目录」守卫（根 conftest 的会话级 fixture 用这两个 helper）────────────
+# 缺陷现场（2026-10-11）：仓库根出现了一套**新的** delector.db / progress.db（15:45:01），
+# 随后 `tests/test_save_wb_state_cost.py` 的迁移闸拒绝运行 ⇒ **本地 2 红、CI 全绿**。
+# 机制：`database.DATA_DIR` 在没有 `DELECTOR_DATA_DIR` 时兜底仓库根（database.py:36），而
+# `delector/server.py` 在**模块顶层**就 `init_db()` ⇒ 「没先钉落点就 import server」= 建库。
+def test_root_db_snapshot_covers_main_and_side_files(tmp_path: Path) -> None:
+    """快照只看存在的 `delector.db` / `progress.db` 及其 `-wal` / `-shm`，别的 `.db` 不算。"""
+    import conftest  # 根 conftest 与 repo root 同在 sys.path ⇒ 可直接 import
+
+    assert conftest.root_db_snapshot(tmp_path) == {}
+    (tmp_path / "delector.db").write_bytes(b"x" * 10)
+    (tmp_path / "delector.db-wal").write_bytes(b"y" * 3)
+    (tmp_path / "progress.db").write_bytes(b"z")
+    (tmp_path / "test_conftest_default.db").write_bytes(b"w")  # 测试库：不在守卫范围
+    assert conftest.root_db_snapshot(tmp_path) == {
+        "delector.db": 10,
+        "delector.db-wal": 3,
+        "progress.db": 1,
+    }
+
+
+def test_describe_root_db_diff_names_each_kind_of_change() -> None:
+    """差异描述三类都要点名（新出现 / 被改动 / 消失）——守卫报错全靠它说人话。"""
+    import conftest
+
+    before = {"delector.db": 10, "progress.db": 5}
+    after = {"delector.db": 20, "progress.db-wal": 7}
+    text = conftest.describe_root_db_diff(before, after)
+    assert "新出现：progress.db-wal" in text, text
+    assert "被改动：delector.db" in text, text
+    assert "消失：progress.db" in text, text
+    assert conftest.describe_root_db_diff(before, before) == "无差异"
+
+
+def test_tools_calling_init_db_pin_their_data_dir() -> None:
+    """凡会 `init_db()` 的 tools 脚本，入口必须钉数据落点（否则 import 即往仓库根建库）。
+
+    判据刻意用**文本**而不是 AST：`init_db()` 在这些脚本里既可能是真调用、也可能是模块
+    docstring 里的说明（`bench_cold_start.py` 两者都有），而两种情况下"这个脚本碰 DB"
+    都成立。代价是"只在注释里提到 init_db 却完全没钉落点"会误报 —— 遇上就把措辞改掉
+    或把落点钉上（当前 `bench_cold_start.py` / `bench_save_wb_state.py` 都合规）。
+    """
+    pins = ("DELECTOR_DATA_DIR", "DATABASE_PATH", "PROGRESS_DB_PATH")
+    offenders = []
+    for path in sorted((REPO_ROOT / "tools").glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "init_db()" in text and not any(pin in text for pin in pins):
+            offenders.append(path.name)
+    assert not offenders, (
+        f"这些工具会 init_db() 却没在入口钉数据落点：{offenders}；"
+        "`database.DATA_DIR` 缺席时兜底仓库根 ⇒ 它们会默默在仓库根建库，"
+        "并毒化 test_save_wb_state_cost 的迁移闸（本地红 / CI 绿）"
+    )
