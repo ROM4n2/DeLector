@@ -28,8 +28,8 @@
 | CI Hardening / Ruff / Mypy 静态门禁                                         | `archive/work-2026-09-09.log` · `archive/work-2026-09-13.log`                                         |
 | 内容供给侧 / 预置分级短文 / A7 验收自动化                                   | `archive/work-2026-09-10.log`                                                                         |
 | WiFi 手机拉取式内容分发                                                     | `archive/work-2026-09-13.log`                                                                         |
-| 听力微训 / 长难句精读工坊 + v5.7.x 真机热修（含 spaCy E050 / pydantic v1）  | `archive/work-2026-09-13.log` · `archive/work-2026-09-14.log` · `work.log`（延续）                    |
-| 词库单一真相化 / 主干分层 / 富字段 / A1 取数（ADR-0011~0015，v5.8.0~v5.10.0） | `cold/digest-2026-09.md` · `work.log`（2026-09-15 ~ 09-21）                                           |
+| 听力微训 / 长难句精读工坊 + v5.7.x 真机热修（含 spaCy E050 / pydantic v1）  | `archive/work-2026-09-13.log` · `archive/work-2026-09-14.log` ~ `archive/work-2026-09-15.log`（2026-10-11 WARM 化） |
+| 词库单一真相化 / 主干分层 / 富字段 / A1 取数（ADR-0011~0015，v5.8.0~v5.10.0） | `cold/digest-2026-09.md` · `archive/work-2026-09-15.log` ~ `archive/work-2026-09-17.log`（09-15 ~ 09-17，2026-10-11 WARM 化）· `work.log`（09-18 ~ 09-21） |
 | 遇见区 i+1 / 已读状态 + 工程债收口（v5.11.0~v5.12.1）                       | `cold/digest-2026-09.md` · `work.log`（2026-09-23 ~ 09-26）                                           |
 | 2026-09-28 起（Docker/WAL 修复、ADR-0016 统一池 Phase 3 等，未发版）        | `work.log`（HOT；09-28 起的记录缺口由 10-02 的 2 条 `NOTE(gap-backfill-1/2)` 补记；细节见 `docs/reviews/2026-09-28-swarm-audit-master.md`） |
 

@@ -1,0 +1,10 @@
+# WARM archive 2026-09-16
+
+### 2026-09-16 13:25 | (补记) | RELEASE_v5.9.0（ADR-0012 词汇主干 + ADR-0013 富字段契约）
+Caps: filesystem-read
+事件：官方歌德 A1/A2/B1 词表迁入（备考域/工作台 A2 736、B1 1617 官方精选，/api/a2/vocab 默认官方）；输出契约 9→11 字段（新增 ipa/example_zh，de 统一德语例句）；IPA 表示法全局统一（去 tie-bar）；A1 卡片补齐名词 gender/plural（97.67%）；对账工具 + 生成脚本归档（tools/gen_rich.py 可重放）。测试基线 972+1（882→972 净增 90）。PR #55/#56/#57/#58。
+
+### 2026-09-16 14:17 | (补记) | RELEASE_v5.9.1（A1 等级标签 + README 瘦身）
+Caps: filesystem-read
+事件：工作台词库补 A1 等级标签 a1（「全部标签」可按等级筛：a1/a2/b1=等级、core=核心、reader=精读生词）+ 修 reader 谓词 custom 兜底（22 条补缺词不再误入精读生词档）；README 433→131 行瘦身 + 版本历史迁出 CHANGELOG.md（DOC-GOVERNANCE 合规）。测试基线 973+1。Android 需覆盖安装（改动含 static）。
+
