@@ -502,3 +502,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **⭐ 意外发现（已单独复现）**：那 2s 不是 import（`import start` 实测 0.016–0.12s），而是 `start.is_port_in_use(port)` 的 `connect_ex(("127.0.0.1", port))` —— **端口空闲时本机恒为 ~2.03s**（3 次：2.034 / 2.041 / 2.044s；且与端口号无关：8000/8001/59999/1 均 ≈2.03s，rc=10061；有监听的 445 为 0.3ms）。**对照**：同端口改 `bind()` 探测 = **0.1ms**（约 2 万倍差）。**机制假说（未证伪，不当作结论）**：本机有过滤驱动/防火墙拦掉 loopback 的 RST，connect 走完 SYN 重传退避。
 - **下一杠杆（登记，未做）**：① 改 `is_port_in_use` 的探测方式/调用时机（它是 **P0 守卫**、且是 `start.py` 与桌面端**共用**的唯一实现 ⇒ 须保"空闲继续 / 被 DeLector 占拒 / 被他人占拒"三分支语义、不许两处口径漂移）；② 或让它与 `import delector.server` 并发。两条都要单独立项 + 变异自证。
 - 已回写：ADR-0018 §8 `[Unknown 8]` 复核条（仓内 + vault，正文同源）、ADR-0020 §6 `[Unknown 2]`（仓内 + vault）、`PROJECT_OVERVIEW`。口径提醒：本次分段**只与本次同运行内相减**，不得跨运行相减。
+
+### 2026-10-11 | codebuddy | DECISION 端口探测 2s：暂缓环境判定（Clash 占用中）；守卫不动、不立项
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户下令"先不 pipeline，先做边界澄清" ⇒ 只做边界澄清（零代码改动），并把环境排查推进到"只剩最后一问"。
+- **触发条件刻画（本机，可复现）**：端口**正在监听** ⇒ connect 成功 **0.4ms**；端口**未监听**（无 socket 与已 bind 未 listen 同命）⇒ RST 延迟 **~2.03s**；**UDP 同端口 0ms（ICMP 立即到）⇒ TCP 专属**；同一端口连 5 次全 ~2.03s ⇒ **无负缓存**。12 次采样全落 2017–2057ms。
+- **已排除（逐条有命令输出）**：① ~~首包丢失 + `初始 RTO≈2s` 重传退避~~ ⇒ **已证伪**（`netsh int tcp show global`：初始 RTO = **1000**，指数退避只会给 ~1s/~3s，凑不出稳定的 2.03s）；② Defender 网络保护 ⇒ **排除**（`Get-MpPreference`：`EnableNetworkProtection = 0`，本来就是关的）；③ 第三方 LWF 过滤驱动 ⇒ **排除**（`Get-NetAdapterBinding` 全为 `ms_*`，无自定义 `*_lwf`）。**剩余嫌疑**：WFP 层（Clash 的 TUN/嗅探，**不出现在 LWF 清单里**）与 TCP 全局特性（`快速打开`/`接收段合并` 均 enabled）。
+- **选项评估（结论：不动代码）**：① 改探测方式（`bind`）—— 三场景虽与 `connect` 同结论，但**动的是 P0 守卫语义**，且 TIME_WAIT 假阳性 vs `SO_REUSEADDR` 假阴性两难未定案 ⇒ 不建议；② 把探针与 `import delector.server` **并发** —— 技术/可测性可行，但代价是"旧实例在跑"路径上也会先跑 `bootstrap_data_dir`，与 `start.py:123` 的**刻意设计**冲突；③ **先判环境** —— 若属环境层，改代码就是拿 P0 风险换一个只影响本机的 2s。
+- **⏸ 暂缓（用户）**：最后一问（**退出 Clash 后重测**）推迟 —— 用户另一 agent 正在使用 Clash。**三步可逆恢复方式**（记在 ADR-0018 §8 `[Unknown 8]`）：退出 Clash → `netsh int tcp set global fastopen=disabled` → `rsc=disabled`（每步测完恢复）。**任一让探测从 ~2s 掉到 ~1ms 即结案环境层。**
+- 已回写：ADR-0018 §8（仓内 + vault，正文同源）、ADR-0020 §6（仓内 + vault）、PROJECT_OVERVIEW。**零代码改动、零新依赖、守卫原样。**
