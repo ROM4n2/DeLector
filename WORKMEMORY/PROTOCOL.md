@@ -1,4 +1,5 @@
 # WORKMEMORY 协议（跨 Agent 共享工作记忆）
+> protocol-version: 1
 
 > 本文件是协议本体，所有能读写文件的 AI agent（Claude Code / Codex / OpenCode / Antigravity / Gemini CLI / CodeBuddy / …）一律遵守。
 > 协议铁律的规范层见 vault：`d:\Obsidian\Coding\01-Rules\CROSS-AGENT-MEMORY.md`。
