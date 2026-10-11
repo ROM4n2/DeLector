@@ -15,6 +15,7 @@
 import gc
 import os
 import time
+from typing import Dict, Mapping
 
 # 首删 1 次 + 至多 _RETRY_LIMIT 次重试；每次失败后 gc.collect() 断
 # sqlite3.Connection 内部 statement 缓存的引用环 + 短 sleep 给句柄释放留时间。
@@ -61,3 +62,37 @@ def remove_db_files(*paths: str) -> None:
                         ) from exc
                     gc.collect()  # 断 sqlite3.Connection 引用环，给句柄释放机会
                     time.sleep(_RETRY_SLEEP_SECONDS)
+
+
+# ── 仓库根「数据目录」快照（`tests/conftest.py` 的会话守卫用）────────────────────
+# 缺陷现场（2026-10-11）：仓库根出现一套**新的** delector.db / progress.db，随后
+# `tests/test_save_wb_state_cost.py` 的迁移闸拒绝运行 ⇒ **本地 2 红、CI 全绿**。
+# 机制：`database.DATA_DIR` 在 `DELECTOR_DATA_DIR` 缺席时兜底仓库根（database.py:36），而
+# `delector/server.py` 在**模块顶层**就 `init_db()` ⇒ 「没先钉落点就 import server」= 建库。
+ROOT_DB_NAMES = ("delector.db", "progress.db")
+
+
+def root_db_snapshot(root: str) -> Dict[str, int]:
+    """仓库根那两套库（含 `-wal` / `-shm` 侧文件）的快照：文件名 → 字节数。"""
+    snapshot: Dict[str, int] = {}
+    for name in ROOT_DB_NAMES:
+        for suffix in ("", "-wal", "-shm"):
+            path = os.path.join(root, f"{name}{suffix}")
+            if os.path.isfile(path):
+                snapshot[f"{name}{suffix}"] = os.path.getsize(path)
+    return snapshot
+
+
+def describe_root_db_diff(before: Mapping[str, int], after: Mapping[str, int]) -> str:
+    """把两次快照的差异说成人话（新出现 / 被改动 / 消失），供守卫报错用。"""
+    added = sorted(set(after) - set(before))
+    changed = sorted(name for name in set(after) & set(before) if after[name] != before[name])
+    removed = sorted(set(before) - set(after))
+    parts = []
+    if added:
+        parts.append(f"新出现：{', '.join(added)}")
+    if changed:
+        parts.append(f"被改动：{', '.join(changed)}")
+    if removed:
+        parts.append(f"消失：{', '.join(removed)}")
+    return "；".join(parts) if parts else "无差异"

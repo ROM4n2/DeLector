@@ -650,14 +650,14 @@ def test_bootstrap_keeps_explicit_env_when_migration_fails(tmp_path: Path, monke
 # `delector/server.py` 在**模块顶层**就 `init_db()` ⇒ 「没先钉落点就 import server」= 建库。
 def test_root_db_snapshot_covers_main_and_side_files(tmp_path: Path) -> None:
     """快照只看存在的 `delector.db` / `progress.db` 及其 `-wal` / `-shm`，别的 `.db` 不算。"""
-    import conftest  # 根 conftest 与 repo root 同在 sys.path ⇒ 可直接 import
+    import db_cleanup  # tests/ 在 sys.path（pytest prepend 模式）⇒ 与其它用例同款 import
 
-    assert conftest.root_db_snapshot(tmp_path) == {}
+    assert db_cleanup.root_db_snapshot(str(tmp_path)) == {}
     (tmp_path / "delector.db").write_bytes(b"x" * 10)
     (tmp_path / "delector.db-wal").write_bytes(b"y" * 3)
     (tmp_path / "progress.db").write_bytes(b"z")
     (tmp_path / "test_conftest_default.db").write_bytes(b"w")  # 测试库：不在守卫范围
-    assert conftest.root_db_snapshot(tmp_path) == {
+    assert db_cleanup.root_db_snapshot(str(tmp_path)) == {
         "delector.db": 10,
         "delector.db-wal": 3,
         "progress.db": 1,
@@ -666,15 +666,15 @@ def test_root_db_snapshot_covers_main_and_side_files(tmp_path: Path) -> None:
 
 def test_describe_root_db_diff_names_each_kind_of_change() -> None:
     """差异描述三类都要点名（新出现 / 被改动 / 消失）——守卫报错全靠它说人话。"""
-    import conftest
+    import db_cleanup
 
     before = {"delector.db": 10, "progress.db": 5}
     after = {"delector.db": 20, "progress.db-wal": 7}
-    text = conftest.describe_root_db_diff(before, after)
+    text = db_cleanup.describe_root_db_diff(before, after)
     assert "新出现：progress.db-wal" in text, text
     assert "被改动：delector.db" in text, text
     assert "消失：progress.db" in text, text
-    assert conftest.describe_root_db_diff(before, before) == "无差异"
+    assert db_cleanup.describe_root_db_diff(before, before) == "无差异"
 
 
 def test_tools_calling_init_db_pin_their_data_dir() -> None:
