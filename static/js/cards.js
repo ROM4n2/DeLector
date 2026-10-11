@@ -423,7 +423,17 @@ export function renderDeckStage(vList, gList) {
   attachDeckSwipeListener();
 }
 
+// P0-4：评分请求的重入闸。曾四个评分按钮无 disabled、本函数无重入闸 ⇒ 连点会
+// 触发两次 POST ⇒ 后端每次基于当前行重算并 UPDATE ⇒ FSRS 双推进 + 跳两张卡
+// （学习数据写脏且不可回滚）。前端飞行闸是第一道也是最实际的一道防线。
+let _reviewInFlight = false;
+
 export async function submitCardReview(type, id, grade) {
+  if (_reviewInFlight) return; // 重入闸：请求飞行期间的连点直接丢弃
+  _reviewInFlight = true;
+  // 请求飞行期间禁用全部评分按钮（照 writer.js:saveWriterEssay 的既有模式）
+  const ratingBtns = Array.from(document.querySelectorAll(".deck-sm2-rating-bar .sm2-btn"));
+  ratingBtns.forEach((b) => { b.disabled = true; });
   try {
     if (navigator.vibrate) {
       navigator.vibrate(grade >= 3 ? [15, 30, 20] : 30);
@@ -439,6 +449,10 @@ export async function submitCardReview(type, id, grade) {
     Companion.celebrate(grade >= 3 ? "review_good" : "review_hard");
   } catch (e) {
     console.error("Failed to submit review:", e);
+    notify(`记忆评分提交失败: ${(e && e.message) || e}`, { kind: "error" });
+  } finally {
+    _reviewInFlight = false;
+    ratingBtns.forEach((b) => { b.disabled = false; });
   }
 }
 

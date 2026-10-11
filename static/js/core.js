@@ -121,3 +121,28 @@ export async function api(url, opts = {}) {
     if (signal) signal.removeEventListener('abort', onUserAbort);
   }
 }
+
+// ── 浏览器侧全局错误兜底（P0-3）───────────────────────────────────────────────
+// 此前 static/ 内零全局兜底：任何未被 catch 的 rejection / 脚本错误都无声死掉
+// （openReader 全程静默失败正是其中一例）。统一走 notify 弹 toast；
+// 同一错误 3 秒内只弹一次（节流），避免失败风暴弹成一串。
+let _lastGlobalError = { message: "", at: 0 };
+
+function _reportGlobalError(message) {
+  const now = Date.now();
+  if (message === _lastGlobalError.message && now - _lastGlobalError.at < 3000) return;
+  _lastGlobalError = { message, at: now };
+  console.error('[Global Guard]', message);
+  notify(`发生未处理错误: ${message}`, { kind: 'error' });
+}
+
+if (typeof window !== 'undefined' && !window.__delectorGlobalGuards) {
+  window.__delectorGlobalGuards = true;
+  window.addEventListener('unhandledrejection', (ev) => {
+    const reason = ev && ev.reason;
+    _reportGlobalError(reason && reason.message ? reason.message : String(reason));
+  });
+  window.onerror = (msg, _src, _line, _col, err) => {
+    _reportGlobalError(err && err.message ? err.message : String(msg));
+  };
+}

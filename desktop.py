@@ -537,8 +537,50 @@ def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str
     return result[0]
 
 
+def _check_port_or_fail(port: int, log_path: str) -> bool:
+    """桌面建服**之前**的端口/身份校验（P0-1：防旧实例冒充新构建）。
+
+    缺陷背景：此前直接 `build_server` + `serve_in_thread`，没有任何校验。uvicorn
+    绑定失败走 `sys.exit` ⇒ 被 `threading.excepthook` 静默忽略 ⇒ server 线程真死；
+    而 `await_ready` 对**旧实例**照样返回 200+身份 ⇒ 照常亮主窗口 ⇒ 用户以为升级了，
+    实际是旧进程在服务。三分支：
+    - 端口空闲 ⇒ True，正常继续；
+    - 被占且身份是 DeLector ⇒ 弹窗 + 日志 + False（拒绝启动）。**刻意不做**"连过去"
+      的窗口复用——那会把复杂度带回 P0 时序雷区，拒绝启动是诚实且最简单的处理；
+    - 被占但不是 DeLector ⇒ 弹窗 + 日志 + False。
+    所有失败路径必须**弹窗 + 日志**（调用方据此非零退出），不许只写日志。
+    """
+    # 惰性 import：复用 start.py 的既有判定与 server_lifecycle 的既有身份探测，
+    # 不另写一套（两处判法一旦漂移，桌面端与 `--server-only` 就会对同一端口给出不同结论）。
+    import start
+    from delector.core.server_lifecycle import probe_identity
+
+    if not start.is_port_in_use(port):
+        return True
+    if probe_identity(port):
+        _append_log(
+            log_path, f"端口 {port} 已有 DeLector 在运行：拒绝启动（防旧实例冒充新构建）。"
+        )
+        _message_box(
+            "DeLector 已在运行",
+            f"已有 DeLector 在运行（端口 {port}）。若要使用新版本，请先退出旧实例。",
+        )
+        return False
+    _append_log(log_path, f"端口 {port} 被其他程序占用：拒绝启动。")
+    _message_box(
+        "端口被占用",
+        f"端口 {port} 被其他程序占用，DeLector 无法启动。请关闭占用该端口的程序后重试。",
+    )
+    return False
+
+
 def _run_desktop_inner(port: int, log_path: str) -> int:
-    """桌面壳主体：检测运行时 → 定数据落点 → 起服务 → 起窗口；**任何**路径都先收尸。"""
+    """桌面壳主体：端口/身份校验 → 检测运行时 → 定数据落点 → 起服务 → 起窗口；**任何**路径都先收尸。"""
+    # P0-1：建服**最早处**先校验端口/身份（要早、要响、要简单）。
+    # 校验失败 ⇒ 已弹窗 + 已落日志 ⇒ 退出码 3（2 已被"缺 WebView2"占用）。
+    if not _check_port_or_fail(port, log_path):
+        return 3
+
     if not ensure_webview2_runtime():
         _append_log(log_path, "未检测到 WebView2 运行时：提示安装并退出。")
         _message_box("缺少 WebView2 运行时", webview2_missing_message())
@@ -563,8 +605,9 @@ def run_desktop(port: int = DEFAULT_PORT) -> int:
     """启动桌面壳：返回**进程退出码**。
 
     **所有**退出路径（关窗 / 托盘退出 / 异常 / Ctrl+C）都会先 `shutdown(server, thread)`：
-    干净退出返回 0；就绪超时返回 1；缺 WebView2 返回 2；收尸超时则经 `coordinated_shutdown`
-    硬退出（`os._exit(1)`），不留残留进程。
+    干净退出返回 0；就绪超时返回 1；缺 WebView2 返回 2；端口被占（DeLector 或其他程序）
+    返回 3（建服前的端口/身份校验，见 `_check_port_or_fail`）；收尸超时则经
+    `coordinated_shutdown` 硬退出（`os._exit(1)`），不留残留进程。
     """
     log_path = resolve_log_path(os.environ)
     _redirect_std_streams(log_path)

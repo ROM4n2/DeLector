@@ -184,8 +184,29 @@ export async function loadArticles() {
 // 陈旧响应守卫：用户在文章间快速切换时，较早的慢响应不得覆盖后打开的文章。
 let _readerOpenToken = 0;
 
+// P0-3：本函数曾全程静默失败（无 try/catch、无加载态）——首次打开恰逢 spaCy 惰性迁移
+// 时 25s 超时 ⇒ 页面停在列表零提示。拆成两层：本壳负责"加载占位 + 失败 notify +
+// finally 恢复标题"；正文原样搬进 _openReaderBody（逐行零改动，降低搬运风险）。
 export async function openReader(id) {
   const token = ++_readerOpenToken;
+  const titleEl = document.getElementById("reader-title");
+  const prevTitle = titleEl ? titleEl.textContent : "";
+  if (titleEl) titleEl.textContent = "⏳ 载入中…";
+  try {
+    await _openReaderBody(id, token);
+  } catch (err) {
+    console.error("openReader failed:", err);
+    notify(`打开文章失败: ${(err && err.message) || err}`, { kind: "error" });
+  } finally {
+    // 成功路径标题已被 a.title 覆盖；失败/早退且仍是占位时才还原旧标题。
+    // 以 token 收窄：被更新的调用接手后，旧调用不得回写旧标题。
+    if (titleEl && token === _readerOpenToken && titleEl.textContent === "⏳ 载入中…") {
+      titleEl.textContent = prevTitle;
+    }
+  }
+}
+
+async function _openReaderBody(id, token) {
   const a = await api("/api/articles/" + id);
   if (!a || a.id !== Number(id)) return;
   if (token !== _readerOpenToken) return; // 期间用户已打开另一篇，丢弃本次

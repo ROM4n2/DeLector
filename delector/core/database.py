@@ -547,14 +547,29 @@ def init_db(db_path: Optional[str] = None) -> None:
 
 
 def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> str:
+    # P0-2：曾经 `except Exception: pass` 无日志——库锁/损坏时**已配置的 API key 被静默忽略**
+    # （get_effective_api_key 走这里 ⇒ main.py 误走 stub，报"用户没配 key"）。收窄到
+    # sqlite3.Error 并落 WARNING（带 exc_info），回落不再是静默的。
     try:
         with db_conn(db_path) as conn:
             row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             if row and row["value"] is not None and row["value"] != "":
                 return row["value"]  # type: ignore[no-any-return]  # sqlite3.Row 索引为 Any，此处运行时恒为 str
-    except Exception:
-        pass
-    return os.environ.get(key, default)
+    except sqlite3.Error:
+        logging.getLogger("delector").warning(
+            "get_setting(%s) 读取失败，回落到默认值/环境变量", key, exc_info=True
+        )
+    # env 兜底**保留**（依赖调查结论）：delector/server.py 的 load_env() 会把 .env 的
+    # DEEPSEEK_API_KEY 等灌进 os.environ，Docker（WORKDIR=/app）与 .env 用户会真实走
+    # 这条路（tests/test_ci_hardening.py 的 .dockerignore 守卫注释亦证实）；删掉 = 静默
+    # 破坏既有部署。保留但加可见日志——回落不许再是无声的。
+    env_val = os.environ.get(key)
+    if env_val:
+        logging.getLogger("delector").info(
+            "设置 %s 库内未取到，回落到环境变量", key
+        )
+        return env_val
+    return default
 
 
 def set_setting(key: str, value: str, db_path: Optional[str] = None) -> None:
