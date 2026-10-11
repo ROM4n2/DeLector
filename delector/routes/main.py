@@ -32,6 +32,7 @@ import os
 import re
 import socket
 import tempfile
+import threading
 import time
 from datetime import datetime, timedelta
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
@@ -246,28 +247,78 @@ def ingest(req: IngestReq) -> Dict[str, Any]:
     return {"article_id": art_id, "title": req.title}
 
 
+ARTICLES_LIST_DEFAULT_LIMIT = 200
+
+
 @router.get("/api/articles")
-def list_articles() -> List[Dict[str, Any]]:
+def list_articles(limit: int = ARTICLES_LIST_DEFAULT_LIMIT) -> List[Dict[str, Any]]:
     # 只读列表路径：不再对 stats 缺失行做逐行 NLP 重算 + UPDATE（N+1 写副作用）。
     # 惰性迁移唯一保留在单篇 GET /api/articles/{id}。
+    #
+    # P1-6 列表成本与文章数解耦（前端契约不变：{id,title,created_at,char_count,stats}
+    # 五字段原样，renderMiniBar(a.stats) 消费的形状一字不动）：
+    # - 改前捞整列 processed_json（单篇 45–54KB）却只交付 ~200B 的 stats，且无 LIMIT；
+    #   合成基准（tools/bench_articles_list.py，2000 行 × 36KB）：945ms，其中 Python
+    #   json.loads 解析 136MB ⇒ ~90%。
+    # - 改后只投影 stats_json 落库时同步写的小列（ingest/预置/惰性迁移三路径同步写），
+    #   Python 解析字节量 136MB → 31KB；基准 9.5ms（99.6×）。
+    # - COALESCE 兜底：stats_json 为 NULL 的行（旧库回填时 processed_json 损坏/缺 stats、
+    #   或老备份还原进来的行）当场用 json_extract 从 blob 取——只有这些**少数**行付
+    #   blob 读取成本；其余行走纯小列投影。
+    limit = max(1, limit)
     with db_conn() as conn:
         rows = conn.execute(
-            "SELECT id, title, created_at, length(raw_text) as char_count, processed_json "
-            "FROM articles ORDER BY id DESC"
+            "SELECT id, title, created_at, length(raw_text) as char_count, "
+            "COALESCE(stats_json, CASE WHEN json_valid(processed_json) "
+            "THEN json_extract(processed_json, '$.stats') END) AS stats_json "
+            "FROM articles ORDER BY id DESC LIMIT ?",
+            (limit,),
         ).fetchall()
-        result = []
-        for r in rows:
-            d = {"id": r["id"], "title": r["title"], "created_at": r["created_at"], "char_count": r["char_count"]}
+    result = []
+    for r in rows:
+        d = {"id": r["id"], "title": r["title"], "created_at": r["created_at"], "char_count": r["char_count"]}
+        raw = r["stats_json"]
+        if raw:
             try:
-                pj = json.loads(r["processed_json"])
-                if not isinstance(pj, dict):
-                    d["stats"] = {}
-                else:
-                    d["stats"] = pj.get("stats", {})
+                stats = json.loads(raw)
+                d["stats"] = stats if isinstance(stats, dict) else {}
             except Exception:
+                # 与旧口径一致：stats 子 JSON 损坏 ⇒ 空 dict，绝不让异常流出列表。
                 d["stats"] = {}
-            result.append(d)
-        return result
+        else:
+            d["stats"] = {}
+        result.append(d)
+    return result
+
+
+# P1-8 惰性迁移 single-flight：per-article 的锁（重算 spaCy 全量 + UPDATE 是成本主体，
+# 8 并发打开同一篇陈旧文章曾 = 8× CPU 与 8× 写放大）。
+#
+# 权衡（为什么 per-article 而不是全局锁）：全局锁会把"8 篇**不同**旧文并发首开"
+# 也串行化——spaCy 计算 0.5~1.7s/篇，串行即 4~14s 墙钟，比并发重算慢得多；
+# per-article 锁只让**同一篇**的并发互斥（恰好就是我们要挡的重复计算），不同篇照常并行。
+#
+# 字典清理策略：单用户规模下**不做清理**——每把 threading.Lock ~100B，条目数上限
+# = 打开过的陈旧文章数（千级 ≈ 几百 KB），且文章删除后残留的锁无害（不会再被
+# GET 命中，DELETE /api/articles/{id} 与 GET 无共享状态）。清理逻辑本身反而引入
+# 「取锁与删锁竞态」的新风险（A 拿锁、B 等锁、A 完成删锁、C 又建新锁），不划算。
+_MIGRATION_LOCKS: Dict[int, threading.Lock] = {}
+_MIGRATION_LOCKS_GUARD = threading.Lock()
+
+
+def _migration_lock(article_id: int) -> threading.Lock:
+    """取 per-article 迁移锁（字典本身的并发由一把小锁护——只护 dict 读写，纳秒级）。"""
+    with _MIGRATION_LOCKS_GUARD:
+        lock = _MIGRATION_LOCKS.get(article_id)
+        if lock is None:
+            lock = threading.Lock()
+            _MIGRATION_LOCKS[article_id] = lock
+        return lock
+
+
+def _needs_lazy_migration(pj: Any) -> bool:
+    """惰性迁移判据（与写入端单一真相源对齐）：非 dict / 无 stats / 版本落后 ⇒ 需迁移。"""
+    return not (isinstance(pj, dict) and "stats" in pj and pj.get("version") == PROCESSED_JSON_VERSION)
 
 
 @router.get("/api/articles/{article_id}")
@@ -281,19 +332,42 @@ def get_article(article_id: int) -> Dict[str, Any]:
             pj = json.loads(data.get("processed_json") or "{}")
         except Exception:
             pj = {}
-        if (
-            not isinstance(pj, dict)
-            or "stats" not in pj
-            or pj.get("version") != PROCESSED_JSON_VERSION
-        ):
+        if _needs_lazy_migration(pj):
             # 惰性迁移：老数据（processed_json 缺失/非 dict/无 stats/版本落后）首次 GET
             # 时重算并回写。判据 MUST 引用 processor 的单一真相源 —— 曾硬编码字面量
             # 与写入端漂移，导致本分支恒真 ⇒ 每次 GET 都重跑 spaCy 并 UPDATE。
-            pj = process_german_text(data.get("raw_text") or "")
-            conn.execute(
-                "UPDATE articles SET processed_json = ? WHERE id = ?",
-                (json.dumps(pj, ensure_ascii=False), article_id),
-            )
+            #
+            # P1-8 single-flight：拿 per-article 锁 + **锁内重检**——等锁期间别的请求
+            # 可能已完成迁移并提交，重检命中 ⇒ 直接用现成结果，不重算不重写。
+            # spaCy 计算留在事务内（既有语义）：UPDATE 仍在 db_conn 的事务里，
+            # 异常整体回滚、无半写；锁只做"同篇互斥"，不改变事务边界。
+            with _migration_lock(article_id):
+                fresh = conn.execute(
+                    "SELECT processed_json FROM articles WHERE id = ?", (article_id,)
+                ).fetchone()
+                try:
+                    fresh_pj = json.loads(fresh["processed_json"]) if fresh is not None else None
+                except Exception:
+                    fresh_pj = None
+                if not _needs_lazy_migration(fresh_pj):
+                    pj = fresh_pj  # 别的请求已迁完：直接用，不重算（这正是省掉 7/8 CPU 的那一行）
+                else:
+                    pj = process_german_text(data.get("raw_text") or "")
+                    conn.execute(
+                        # P1-6：惰性迁移同步回写 stats 投影列（否则该行列表永远走 blob 兜底）。
+                        # UPDATE 的事务边界不变：仍在 db_conn 的事务里，异常整体回滚、无半写。
+                        "UPDATE articles SET processed_json = ?, stats_json = ? WHERE id = ?",
+                        (
+                            json.dumps(pj, ensure_ascii=False),
+                            json.dumps(pj.get("stats") or {}, ensure_ascii=False),
+                            article_id,
+                        ),
+                    )
+                    # 提交必须在**释放锁之前**完成：重检读的是"已提交"数据，若 commit
+                    # 留在 handler 末尾（锁外），等锁者拿锁重检时读到的仍是陈旧值 ⇒
+                    # single-flight 空转（实测 8 并发算 2 次）。提前 commit 只改提交时机、
+                    # 不改事务内容：仍只有这一条 UPDATE，异常时不走到这行、整体回滚。
+                    conn.commit()
         data.update(pj)
         return data
 
@@ -314,7 +388,11 @@ def delete_article(article_id: int, request: Request) -> Dict[str, Any]:
 
 
 @router.post("/api/lookup/grammar")
-async def lookup_grammar(req: GrammarLookupReq) -> Any:
+async def lookup_grammar(req: GrammarLookupReq, request: Request) -> Any:
+    # P1-5 本机闸：本端点有 key 时会真实出网烧 DeepSeek 配额，桌面端绑 0.0.0.0，
+    # 不挂闸 ⇒ 同网段任意设备可无鉴权烧光配额。形态与模块内既有受保护端点
+    # （delete_article / delete_card 等）一致：request 入参 + 函数体首行直调。
+    _require_localhost(request)
     key = get_effective_api_key()
     if not key:
         return {
@@ -380,7 +458,9 @@ class VocabLookupReq(BaseModel):
 
 
 @router.post("/api/lookup/vocab")
-async def lookup_vocab(req: VocabLookupReq) -> Dict[str, Any]:
+async def lookup_vocab(req: VocabLookupReq, request: Request) -> Dict[str, Any]:
+    # P1-5 本机闸：AI 兜底层（Tier 2）会出网烧配额，理由同 /api/lookup/grammar。
+    _require_localhost(request)
     # 查词链重排：离线零延迟层在前，AI 垫底。原来只查表面形（token.text），
     # geht/Häuser/ist 全查不到；现在 lemma 优先（spaCy 入库时已算好 token.lemma）。
     res = {}
@@ -1346,7 +1426,9 @@ class NoteAssistReq(BaseModel):
 
 
 @router.post("/api/ai/note-assist")
-async def note_assist(req: NoteAssistReq) -> Any:
+async def note_assist(req: NoteAssistReq, request: Request) -> Any:
+    # P1-5 本机闸：有 key 时真实出网烧配额，理由同 /api/lookup/grammar。
+    _require_localhost(request)
     key = get_effective_api_key()
     if not key:
         import logging
@@ -2328,7 +2410,9 @@ async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
 
 
 @router.post("/api/writing/ai-polish")
-async def api_writing_ai_polish(req: AIPolishReq) -> Dict[str, Any]:
+async def api_writing_ai_polish(req: AIPolishReq, request: Request) -> Dict[str, Any]:
+    # P1-5 本机闸：_ai_polish_call 有 key 时真实出网烧配额，理由同 /api/lookup/grammar。
+    _require_localhost(request)
     text = req.text[:2000]
     corrected_text, notes_zh, error_count = await _ai_polish_call(text)
     return {
@@ -2342,7 +2426,9 @@ async def api_writing_ai_polish(req: AIPolishReq) -> Dict[str, Any]:
 
 
 @router.post("/api/writing/ai-polish/diff")
-async def api_writing_ai_polish_diff(req: AIPolishReq) -> Dict[str, Any]:
+async def api_writing_ai_polish_diff(req: AIPolishReq, request: Request) -> Dict[str, Any]:
+    # P1-5 本机闸（怀疑者复核时补的第五条）：内部同样走 _ai_polish_call 出网烧配额。
+    _require_localhost(request)
     from delector.services.essay_diff import diff_sentences
 
     text = req.text[:2000]

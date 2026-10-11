@@ -251,6 +251,12 @@ def init_progress_db(db_path: Optional[str] = None) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_quiz_card ON quiz_log(card_id);
             CREATE INDEX IF NOT EXISTS idx_study_logged ON study_log(logged_at);
+            -- P1-7：泛化模考表此前无任何索引 ⇒ get_exam_history 的
+            -- WHERE level=? AND module=? ORDER BY id DESC 与启动路径
+            -- migrate_a1_records_to_exam_trials 的 2 次全表 COUNT 均落 SCAN exam_trials。
+            -- (level, module, id DESC) 与查询方向逐段一致 ⇒ SEARCH + 零排序
+            -- （EXPLAIN 证据：tests/test_query_plans.py）。
+            CREATE INDEX IF NOT EXISTS idx_exam_lm ON exam_trials(level, module, id DESC);
         """)
     finally:
         # init 阶段不能用 db_progress_conn（会递归回自身自动建表），此处确定关闭
@@ -323,6 +329,10 @@ def init_db(db_path: Optional[str] = None) -> None:
                 source_url TEXT,
                 raw_text TEXT NOT NULL,
                 processed_json TEXT NOT NULL,
+                -- P1-6：列表投影列（~200B 的 stats 子 JSON）。与 processed_json 在全部
+                -- 三条写入路径同步写（ingest_article / seed_preset_articles / 惰性迁移），
+                -- 列表查询只投影本列，不再捞整列 blob（改前 2000 篇列表 ≈950ms）。
+                stats_json TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -528,10 +538,36 @@ def init_db(db_path: Optional[str] = None) -> None:
                     if col not in cols:
                         conn.execute(f"ALTER TABLE grammar_cards ADD COLUMN {col} TEXT DEFAULT ''")
 
+        # P1-6：旧库补列表投影列 + **一次性** SQL 侧回填。回填策略 = 一次性（迁移时点，
+        # 列刚补上的这次 init_db 里执行），**不在列表路径给全表回填**、也不在每次启动重跑
+        # （列已存在 ⇒ 分支跳过，幂等）。回填用 json_extract 在 SQLite C 侧完成，Python 零
+        # 解析；缺 stats / processed_json 损坏的行回填为 NULL，由列表查询的 COALESCE 兜底
+        # （回填成本实测：2000 行 × 36KB ≈ 7ms，见 tools/bench_articles_list.py 的 backfill_ms）。
+        article_cols = [col[1] for col in conn.execute("PRAGMA table_info(articles)").fetchall()]
+        if "stats_json" not in article_cols:
+            conn.execute("ALTER TABLE articles ADD COLUMN stats_json TEXT")
+            # json_valid 守卫必须带：SQLite 的 json_extract 对**损坏 JSON 是抛错**而非
+            # 返回 NULL，裸 UPDATE 会让一行脏数据炸掉整次启动迁移。
+            conn.execute(
+                "UPDATE articles SET stats_json = json_extract(processed_json, '$.stats') "
+                "WHERE stats_json IS NULL AND json_valid(processed_json)"
+            )
+
         # 读路径查询索引（幂等）：**必须在补列之后**——旧库可能缺 mastered/due_date，
         # 先建索引会 `no such column: mastered` 直接炸启动（ADR-0016 Phase 1 暴露的次序 bug）。
         conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_srs ON vocab_cards(mastered, due_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_srs ON grammar_cards(mastered, due_date)")
+        # P1-7 卡盒队列索引：/api/cards 的 ORDER BY mastered ASC, wrong_count DESC, id DESC
+        # 原落 TEMP B-TREE（20k 卡 118ms）。**必须用混合方向列**：ASC 变体
+        # (mastered, wrong_count, id) 实测仍触发 TEMP B-TREE（SQLite 单方向索引吃不下
+        # 混合方向排序），DESC 列（SQLite 支持）与查询方向逐段一致 ⇒ EXPLAIN 零排序
+        # （证据：tests/test_query_plans.py 的 EXPLAIN 断言）。
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vocab_queue ON vocab_cards(mastered, wrong_count DESC, id DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_grammar_queue ON grammar_cards(mastered, wrong_count DESC, id DESC)"
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_article ON vocab_cards(article_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_grammar_article ON grammar_cards(article_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_article ON reading_notes(article_id)")
@@ -853,8 +889,16 @@ def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_
     target_path = get_db_path(db_path)
     with db_conn(target_path) as conn:
         cur = conn.execute(
-            "INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
-            (title or "Untitled", text, json.dumps(processed, ensure_ascii=False), source_url or ""),
+            # P1-6：stats 投影列与 processed_json 同步写（列表只读投影列，不再解析整列 blob）
+            "INSERT INTO articles (title, raw_text, processed_json, stats_json, source_url) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                title or "Untitled",
+                text,
+                json.dumps(processed, ensure_ascii=False),
+                json.dumps(processed.get("stats") or {}, ensure_ascii=False),
+                source_url or "",
+            ),
         )
         return cur.lastrowid  # type: ignore[return-value]  # typeshed 标 lastrowid 为 int | None，INSERT 后运行时恒 int
 
@@ -982,9 +1026,13 @@ def seed_preset_articles(db_path: Optional[str] = None) -> None:
         count = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         if count == 0:
             for art in PRESET_ARTICLES:
+                pj = preset_processed_json(art["text"])
                 conn.execute(
-                    "INSERT INTO articles (title, raw_text, processed_json, source_url) VALUES (?, ?, ?, ?)",
-                    (art["title"], art["text"], preset_processed_json(art["text"]), ""),
+                    # P1-6：预置落库同步写 stats 投影列（json_extract 与回填同一口径，
+                    # 只算一次 preset_processed_json，避免回退路径下纯 Python 分析跑两遍）
+                    "INSERT INTO articles (title, raw_text, processed_json, stats_json, source_url) "
+                    "VALUES (?, ?, ?, json_extract(?, '$.stats'), ?)",
+                    (art["title"], art["text"], pj, pj, ""),
                 )
 
 
