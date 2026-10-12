@@ -1294,3 +1294,50 @@ def test_pyinstaller_timeout_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> N
         package_windows.build_windows()
 
     assert exc.value.code == 1, "PyInstaller 超时 MUST 以非零码退出（构建失败），而不是静默继续"
+
+
+# ── Windows 冒烟 job「测试先于构建」守卫（2026-10 windows smoke 自洽）──────────────
+# 背景：windows-portable-smoke 此前只做「Install → Build → Verify(真启)」，**不跑 pytest**
+# （安装步里装了 pytest 却从不调用，是死安装）⇒ 平台专属的测试失败只能等打 tag 后才暴露。
+# 实证：v5.17.0 首次 tag 时四平台里 macOS 的一个测试红卡，导致 Publish GitHub Release
+# 被跳过（tag 存在但无 Release）。修法：在 Build **之前**插入 `pytest -q` —— 测试红就
+# 别再花 10 分钟构建。
+#
+# 为什么钉「顺序」而不只钉「字符串在场」：把 pytest 步整段挪到 Build 之后，字符串依旧在场，
+# 而「构建先跑完、测试失败照常发生」—— 提前反馈、省构建时间的意义荡然无存。故比**步骤
+# 顺序**，与 test_frontend_route_contract_gate_precedes_pytest 同族。
+
+PYTEST_RUN_NEEDLE = "pytest -q"
+BUILD_STEP_NEEDLE = "Build Windows Portable"
+
+
+def test_windows_smoke_runs_pytest_before_build() -> None:
+    """windows-portable-smoke 的 pytest 步 MUST 早于 Build（测试红就别再构建）。
+
+    定位到 **step 级**且用 `pytest -q` 作针脚：安装步里的 `pip install pyinstaller pytest`
+    只是装工具（死安装），不算跑测试；只有以 `pytest -q` 为 run 命令的步才是真执行。
+    """
+    block = _job_block(CI_WORKFLOW, "windows-portable-smoke")
+    steps = _steps_of(block)
+
+    build_idx = next((i for i, s in enumerate(steps) if BUILD_STEP_NEEDLE in s), None)
+    assert build_idx is not None, (
+        f"{CI_WORKFLOW} 的 windows-portable-smoke 找不到 Build 步（{BUILD_STEP_NEEDLE!r}）："
+        "冒烟 job 的构建步被改/被删？本守卫失去顺序锚点，请复核该 job 的结构。"
+    )
+
+    pytest_idx = next((i for i, s in enumerate(steps) if PYTEST_RUN_NEEDLE in s), None)
+    assert pytest_idx is not None, (
+        f"{CI_WORKFLOW} 的 windows-portable-smoke 没有执行 pytest 的步骤（{PYTEST_RUN_NEEDLE!r}）：\n"
+        "该 job 此前只验「打包 + 真启」、不跑测试 —— 安装步里 `pip install pyinstaller pytest` "
+        "装了 pytest 却从不调用（死安装）⇒ 平台专属的测试失败只能等打 tag 后才暴露"
+        "（v5.17.0 首次 tag 的 macOS 红卡正是此形态，导致 Publish GitHub Release 被跳过、"
+        "tag 存在但无 Release）。\n"
+        "修法：在 Install dependencies 步之后、Build Windows Portable 步之前插入一步 "
+        "`run: pytest -q` —— 测试红就别再花 10 分钟构建。"
+    )
+    assert pytest_idx < build_idx, (
+        f"{CI_WORKFLOW} 的 windows-portable-smoke 把 pytest 步排在了 Build **之后**：\n"
+        "「测试先于构建」的顺序被破坏 —— 构建照跑、失败照常发生，提前反馈的意义荡然无存。\n"
+        "修法：把 pytest 步挪回 Build Windows Portable 之前。"
+    )

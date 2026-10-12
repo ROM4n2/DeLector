@@ -241,6 +241,11 @@ jobs:
           pip install -r requirements-desktop.txt
           python -m spacy download de_core_news_sm
 
+      - name: Run pytest suite
+        # 测试先于构建：本闸此前只验「打包 + 真启」、不跑测试 ⇒ 平台专属的测试失败只能等
+        # 打 tag 后才暴露（v5.17.0 首次 tag 的 macOS 红卡正是此形态）。红就别再构建。
+        run: pytest -q
+
       - name: Build Windows Portable
         run: python package_windows.py
 
