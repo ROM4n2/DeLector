@@ -625,3 +625,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - ⚠️ **一处设计反转（待修，需 Tier 2）**：Task 1 的设计意图是"子进程护栏 MUST **早于** job 级护栏触发，否则 job 被平台杀掉前 subprocess 已挂起、人话错误留不下"——但实际取值 **`timeout=1800` 与 job `timeout-minutes: 30` 相同** ⇒ 真挂住时两者同时到点、job 级先杀全部进程，`TimeoutExpired` 的人话错误**可能来不及落盘**。修法：PyInstaller 子进程超时降到 **1200s（20 分钟，仍远高于实测 2–3 分钟）**，并同步常量 `PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS` 与其注释。
 - **两张黄牌可回填（建议同一次 Tier 2 里做）**：① Task 1 常量注释"实测约 3–4min" → 改引本次 run（Windows job 全程 12:18、构建段约 2–3min）；② Task 2 注释"别再花 10 分钟构建" → 实测构建段仅约 2–3 分钟，原值**高估约 3–5 倍**，改为"约 3 分钟"。
 - **CI 行为记录（非缺陷）**：连推两批时，后一批会按并发组**取消**前一批的 run；若前一批才含打包面变更，Smoke 会被 skip（本次即此路径）⇒ 需 `gh workflow run CI --ref master` 手动补跑，dispatch 下 Smoke 无条件跑（已实测）。
+
+### 2026-10-12 | codebuddy | NOTE 闭环：子进程/job 超时反转已修（80c3aa0）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：上一条 NOTE 标记的「子进程 timeout=1800 与 job timeout-minutes:30 同时到点」设计反转**已修**（Tier 2 / Gear 2：CPE 实现 → CRV 验收 PASS → 提交 `80c3aa0`）。
+- 修法：`package_windows.py` PyInstaller `timeout=1800 → 1200`（20 分钟，仍高于实测构建段 2–3 分钟 6–10 倍余量，且稳定早于 job 级 30 分钟到点）；人话文案同步。
+- **新增两道守卫（都比改动本身值钱）**：① 假绿口封堵——`hang_forever` 捕获生产代码传给 `subprocess.run` 的真实 kwargs 并断言 `timeout == 常量`（此前只用自己的常量造 `TimeoutExpired`、不断言生产值 ⇒ 生产值改成任何数都照绿；RED 实测 `assert 1800 == 1200` 精确抓住）；② 设计不变量守卫——子进程超时 MUST **严格小于** `build-windows` 的 job 级护栏（分钟数从 `BUILD_RELEASE_JOB_TIMEOUT_BOUNDS` 取、不写死数字，bounds 调整自动跟随）。
+- 两张黄牌已回填（bounds 注释改引 run 38209850232 实测；「10 分钟构建」改「约 3 分钟」，原值高估 3–5 倍）。
+- 门禁：RED 1 failed + 40 passed → GREEN 41 passed；`test_writer_mobile`+`test_app_version_source` 51 passed；`test_server` 297 passed；ruff 0；mypy win32 strict 零错误；CRLF 纯。CRV 另证明 captured 断言**不存在假绿路径**（须先过 `pytest.raises(SystemExit)`，而它只能由真实调用点的 `TimeoutExpired` 触发）。
+- 教训：**给一条链路加两道护栏时，必须验它们的"到点次序"，而不只验"各自存在"** —— 两道同时到点的护栏等于只有一道，且失效方向恰是"留不下人话错误"这种最难排查的形态。
