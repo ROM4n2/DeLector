@@ -607,3 +607,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **门禁（本机实测）**：pytest **1778 passed + 2 skipped**（= v5.17.0 基线 1768 + macOS 红卡修复 3 + Task 1 的 6 + Task 2 的 1）；`ruff` 0；mypy **87+121+4** files 零错误；前端契约闸 PASS；发版守护 56 passed。
 - **两次自伤都被断言拦住（零损伤，方法比结果更值得记）**：① `Path.read_text()` 默认做通用换行翻译（CRLF→`\n`），切分前那句"预期纯 CRLF"断言直接失败——动 `WORKMEMORY` 这类 CRLF 文件必须 `open(newline="")`；② f-string 表达式里带 `\r\r\n` 反斜杠转义触发 **SyntaxError（解析期，脚本整体未执行）**——打印字节计数要先把值算进变量。共同教训：**改共享文档前先断言形态（行尾/行号锚点），让错误在写入前炸，而不是写入后**。
 - **仍待用户批准/外部条件**：人工前置动作 A1（删孤儿 tag `v5.1.1` + 记账，破坏性操作未获批准）；master 三个新提交尚未推送（SSH 通道时好时坏）；本计划自身按「成果已发版」判据留待下一版发布后再归档。
+
+### 2026-10-12 | codebuddy | NOTE 孤儿 tag v5.1.1 已删除（人工前置动作 A1 执行）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按 `docs/plans/2026-10-12-…` 的人工前置动作 A1（用户批准"按计划全做"），删除孤儿 tag **`v5.1.1`**（远端 + 本地 `e2cc2a2`）。
+- **删前安全断言（三条全过才动手）**：① 远端确有此 tag；② `gh release view v5.1.1` → **release not found**（从未产生 Release）；③ 版本已过期一个月，补发只会让用户看到陈旧产物 ⇒ 判定"删 + 记账"而非"补发"。
+- **事故模式记账（这不是第一次，也不会自动绝迹）**：某平台 job 红 ⇒ `publish-github-release` 因 `needs` 四平台全绿而 **skipped** ⇒ **tag 存在但无 Release**，且无任何 runbook/记账。同形态已发生三次：v5.1.1（2026-09，无人恢复、WORKMEMORY 零记录）、v5.17.0 首次 tag（2026-10-11，macOS 测试红卡，当时靠删 tag 重打恢复）。
+- **本批已堵的结构口子**：Task 1 给五 job 加超时护栏（卡死不再烧 6 小时）；Task 2 让 Windows Smoke 在构建前先跑 pytest（平台专属测试失败不再只能等 tag 后暴露）。**仍未堵的**：macOS/Linux 专属失败仍要 tag 后才暴露（跨平台预检 job 未立项）；Publish 被跳过后的恢复 runbook 仍未写（见开放待办递延项）。
+- **补发路径的文档冲突（备查）**：Vault v5.4.0 复盘实证「dispatch 到**分支** ⇒ publish 静默跳过，靠移 tag 补跑」；怀疑者据 `gh workflow run --help`（`--ref` 接受 branch or tag）推断 dispatch 到 **tag** 可满足 `if: startsWith(github.ref,'refs/tags/v')`，但**本仓从未实证** ⇒ 将来真要走这条路，**唯一判据是 `gh release list` / `--json assets`，不是 run 绿灯**。
