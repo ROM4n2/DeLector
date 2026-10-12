@@ -615,3 +615,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **事故模式记账（这不是第一次，也不会自动绝迹）**：某平台 job 红 ⇒ `publish-github-release` 因 `needs` 四平台全绿而 **skipped** ⇒ **tag 存在但无 Release**，且无任何 runbook/记账。同形态已发生三次：v5.1.1（2026-09，无人恢复、WORKMEMORY 零记录）、v5.17.0 首次 tag（2026-10-11，macOS 测试红卡，当时靠删 tag 重打恢复）。
 - **本批已堵的结构口子**：Task 1 给五 job 加超时护栏（卡死不再烧 6 小时）；Task 2 让 Windows Smoke 在构建前先跑 pytest（平台专属测试失败不再只能等 tag 后暴露）。**仍未堵的**：macOS/Linux 专属失败仍要 tag 后才暴露（跨平台预检 job 未立项）；Publish 被跳过后的恢复 runbook 仍未写（见开放待办递延项）。
 - **补发路径的文档冲突（备查）**：Vault v5.4.0 复盘实证「dispatch 到**分支** ⇒ publish 静默跳过，靠移 tag 补跑」；怀疑者据 `gh workflow run --help`（`--ref` 接受 branch or tag）推断 dispatch 到 **tag** 可满足 `if: startsWith(github.ref,'refs/tags/v')`，但**本仓从未实证** ⇒ 将来真要走这条路，**唯一判据是 `gh release list` / `--json assets`，不是 run 绿灯**。
+
+### 2026-10-12 | codebuddy | NOTE Task 1/2 的 CI 实证数据 + 一处设计反转待修
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：手动 dispatch run **`38209850232`**（master `72beae9`）**全绿**，取到 Task 1/2 的真实 runner 数据 ⇒ 可回填两张黄牌，并暴露一处需修的设计反转。
+- **Task 2 实证成立**：Smoke job 步骤序 = Install → **`Run pytest suite`（success）** → Build → Verify；Windows runner 上 `1775 passed, 5 skipped`（**542s / 9:02**）。⇒ 平台专属失败今后在打 tag 前就能在 Windows 上暴露（macOS/Linux 仍要 tag 后才暴露，Fog of War 未立项）。
+- **跨平台 skip 基线（首次建立，供将来比对）**：总数三处一致 **1780**，但通过/跳过分裂不同 —— 本机 Windows **1778 passed + 2 skipped** ／ CI ubuntu **1773 + 7 skipped** ／ CI windows-latest **1775 + 5 skipped**。⇒ 有 3–5 条测试是**平台门控**的；**"skip 变多"必须按平台比对，不能跨平台直接比**（"报数必须带标签"的同族纪律）。
+- **Task 1 上界有实测支撑**：整个 Smoke job（Install + pytest + Build + Verify）**12:18**，远低于 `build-windows` 的 30 分钟上界；其中 PyInstaller 构建段约 **2–3 分钟**。
+- ⚠️ **一处设计反转（待修，需 Tier 2）**：Task 1 的设计意图是"子进程护栏 MUST **早于** job 级护栏触发，否则 job 被平台杀掉前 subprocess 已挂起、人话错误留不下"——但实际取值 **`timeout=1800` 与 job `timeout-minutes: 30` 相同** ⇒ 真挂住时两者同时到点、job 级先杀全部进程，`TimeoutExpired` 的人话错误**可能来不及落盘**。修法：PyInstaller 子进程超时降到 **1200s（20 分钟，仍远高于实测 2–3 分钟）**，并同步常量 `PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS` 与其注释。
+- **两张黄牌可回填（建议同一次 Tier 2 里做）**：① Task 1 常量注释"实测约 3–4min" → 改引本次 run（Windows job 全程 12:18、构建段约 2–3min）；② Task 2 注释"别再花 10 分钟构建" → 实测构建段仅约 2–3 分钟，原值**高估约 3–5 倍**，改为"约 3 分钟"。
+- **CI 行为记录（非缺陷）**：连推两批时，后一批会按并发组**取消**前一批的 run；若前一批才含打包面变更，Smoke 会被 skip（本次即此路径）⇒ 需 `gh workflow run CI --ref master` 手动补跑，dispatch 下 Smoke 无条件跑（已实测）。
