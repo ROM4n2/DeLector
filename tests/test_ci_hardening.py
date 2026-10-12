@@ -1230,17 +1230,21 @@ def test_checked_api_modules_declare_ts_check() -> None:
 # 还宽，形同虚设，且从 YAML 上看不出意图。各 job 按实测构建时长留足余量。
 
 BUILD_RELEASE_JOB_TIMEOUT_BOUNDS: dict[str, int] = {
-    "build-windows": 30,  # 实测约 3–4min（PyInstaller + spaCy 收集，五档里最重）
+    # build-windows 实测锚点：Windows Smoke job 全程 12:18（run 38209850232，2026-10-12；
+    # 含 Install + pytest 9:02 + 构建段约 2–3 分钟 + 验包），30min 上界留足余量。
+    "build-windows": 30,  # 实测构建段约 2–3min（见上注释），30min 上界留足余量
     "build-linux": 20,
     "build-macos": 20,
     "build-android": 30,  # Gradle 冷缓存下载 + APK 构建，波动最大
     "publish-github-release": 10,  # 只上传已构建好的产物，分钟级
 }
 
-# PyInstaller 子进程超时（秒）：30 分钟。与 build-windows job 的 timeout-minutes: 30
-# 对齐 —— 子进程护栏必须**早于** job 级护栏触发，否则 job 被平台杀掉前 subprocess 已
-# 挂起，连人话错误都留不下。
-PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS = 1800
+# PyInstaller 子进程超时（秒）：20 分钟。取值 MUST 严格小于 build-windows job 的
+# timeout-minutes × 60（子进程护栏要先到点，否则 job 被平台杀掉时人话错误来不及落盘）。
+# 本次由 1800 → 1200 正是为修这个反转：原 1800s 与 job 级 30min 相同 ⇒ 真挂住时两级
+# 护栏同时到点、job 级先杀全部进程，TimeoutExpired 的人话错误留不下来。实测构建段仅约
+# 2–3 分钟（run 38209850232），1200s 仍远高于实测、且能稳定早于 job 级 30 分钟到点。
+PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS = 1200
 
 
 @pytest.mark.parametrize(
@@ -1283,7 +1287,12 @@ def test_pyinstaller_timeout_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> N
     # 混进断言。被测的是 PyInstaller 那一处 subprocess.run 的真实代码路径。
     monkeypatch.setattr(package_windows.shutil, "rmtree", lambda *args, **kwargs: None)
 
+    # 捕获生产代码传给 subprocess.run 的真实 kwargs：此前只用自己的常量造 TimeoutExpired、
+    # 不断言生产值 ⇒ 生产值被改成任何数测试都照绿（假绿口）。这里钉死生产 timeout 与本常量一致。
+    captured_run_kwargs: dict[str, object] = {}
+
     def hang_forever(*args: object, **kwargs: object) -> None:
+        captured_run_kwargs.update(kwargs)
         raise subprocess.TimeoutExpired(
             cmd=["python", "-m", "PyInstaller"], timeout=PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS
         )
@@ -1295,13 +1304,40 @@ def test_pyinstaller_timeout_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert exc.value.code == 1, "PyInstaller 超时 MUST 以非零码退出（构建失败），而不是静默继续"
 
+    assert captured_run_kwargs.get("timeout") == PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS, (
+        f"生产代码传给 subprocess.run 的 timeout={captured_run_kwargs.get('timeout')!r}，"
+        f"与 PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS={PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS} 不一致：\n"
+        "子进程护栏的值必须与测试常量对齐，否则护栏形同虚设"
+        "（假绿：生产值改成任何数测试都照绿）。"
+    )
+
+
+def test_pyinstaller_timeout_precedes_build_windows_job_guard() -> None:
+    """子进程护栏 MUST 严格早于 build-windows 的 job 级护栏到点（设计不变量）。
+
+    子进程 timeout 若 ≥ job 级 timeout-minutes，真挂住时两级护栏同时到点、job 级先杀全部
+    进程，subprocess.TimeoutExpired 的人话错误来不及落盘 —— 提前反馈的意义荡然无存。分钟数
+    从 BUILD_RELEASE_JOB_TIMEOUT_BOUNDS 取（护栏上界）换算成秒，严格大于子进程超时；不写死
+    数字，随 bounds 调整自动跟随。
+    """
+    job_guard_seconds = BUILD_RELEASE_JOB_TIMEOUT_BOUNDS["build-windows"] * 60
+    assert PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS < job_guard_seconds, (
+        f"PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS={PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS}s 未严格小于 "
+        f"build-windows job 级护栏 {BUILD_RELEASE_JOB_TIMEOUT_BOUNDS['build-windows']}min"
+        f"（={job_guard_seconds}s）：\n"
+        "子进程护栏若与 job 级护栏同时到点，job 被平台杀掉时 subprocess.TimeoutExpired 的"
+        "人话错误来不及落盘。\n"
+        "修法：把子进程超时降到严格小于 job 级 timeout-minutes × 60"
+        "（实测构建段仅约 2–3 分钟，留足余量即可）。"
+    )
+
 
 # ── Windows 冒烟 job「测试先于构建」守卫（2026-10 windows smoke 自洽）──────────────
 # 背景：windows-portable-smoke 此前只做「Install → Build → Verify(真启)」，**不跑 pytest**
 # （安装步里装了 pytest 却从不调用，是死安装）⇒ 平台专属的测试失败只能等打 tag 后才暴露。
 # 实证：v5.17.0 首次 tag 时四平台里 macOS 的一个测试红卡，导致 Publish GitHub Release
 # 被跳过（tag 存在但无 Release）。修法：在 Build **之前**插入 `pytest -q` —— 测试红就
-# 别再花 10 分钟构建。
+# 别再花约 3 分钟构建（实测构建段仅 2–3 分钟，run 38209850232；原「10 分钟」高估 3–5 倍）。
 #
 # 为什么钉「顺序」而不只钉「字符串在场」：把 pytest 步整段挪到 Build 之后，字符串依旧在场，
 # 而「构建先跑完、测试失败照常发生」—— 提前反馈、省构建时间的意义荡然无存。故比**步骤
@@ -1334,7 +1370,8 @@ def test_windows_smoke_runs_pytest_before_build() -> None:
         "（v5.17.0 首次 tag 的 macOS 红卡正是此形态，导致 Publish GitHub Release 被跳过、"
         "tag 存在但无 Release）。\n"
         "修法：在 Install dependencies 步之后、Build Windows Portable 步之前插入一步 "
-        "`run: pytest -q` —— 测试红就别再花 10 分钟构建。"
+        "`run: pytest -q` —— 测试红就别再花约 3 分钟构建"
+        "（实测构建段仅 2–3 分钟，run 38209850232；原「10 分钟」高估 3–5 倍）。"
     )
     assert pytest_idx < build_idx, (
         f"{CI_WORKFLOW} 的 windows-portable-smoke 把 pytest 步排在了 Build **之后**：\n"
