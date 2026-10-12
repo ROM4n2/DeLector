@@ -386,7 +386,17 @@ def build_windows() -> None:
     ]
 
     print("\n[1/3] 正在编译二进制可执行程序并收集依赖与 spaCy 语言模型...")
-    result = subprocess.run(pyinstaller_cmd, cwd=root_dir)
+    try:
+        result = subprocess.run(pyinstaller_cmd, cwd=root_dir, timeout=1800)
+    except subprocess.TimeoutExpired:
+        # 卡死的 PyInstaller（依赖下载挂起 / 死锁）不能无限等下去：没有 timeout 时它会
+        # 挂到 GitHub Actions 的 job 级 6 小时硬上限，白烧额度且无人发现。超时即中止，
+        # 人话错误走 stderr（与打包失败同等的非零退出惯例）。
+        print(
+            "[Error] PyInstaller 打包超时（超过 1800 秒）！构建已中止 —— 通常是依赖下载卡死或 PyInstaller 死锁。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     if result.returncode != 0:
         print("[Error] PyInstaller 打包失败！")
         sys.exit(result.returncode)

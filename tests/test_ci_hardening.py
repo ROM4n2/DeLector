@@ -19,6 +19,7 @@
 
 import ast
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -1216,3 +1217,80 @@ def test_checked_api_modules_declare_ts_check() -> None:
     assert "@typedef" in _read_guard_file(API_TYPES_JS), (
         f"{API_TYPES_JS} 不含任何 @typedef：API 边界类型真相源为空壳，检查无意义。"
     )
+
+
+# ── 发布链路超时护栏（Task 1，2026-10 韧性审计 P1）─────────────────────────────
+# 背景：build-release.yml 的 5 个 job 全都没写 timeout-minutes，且 package_windows.py
+# 里跑 PyInstaller 的 subprocess.run 没有 timeout ⇒ 一次卡住的 job（下载卡死 /
+# PyInstaller 挂起）可以一路烧到 GitHub Actions 的 360 分钟（6 小时）硬上限，
+# 白烧额度且无人发现。ci.yml 的 jobs.ci 已有 timeout-minutes（见上节），发布链路
+# 却是个漏口径。
+#
+# 这里同样钉**上界**而不只"有没有"：`timeout-minutes: 3600` 的护栏比 Actions 默认
+# 还宽，形同虚设，且从 YAML 上看不出意图。各 job 按实测构建时长留足余量。
+
+BUILD_RELEASE_JOB_TIMEOUT_BOUNDS: dict[str, int] = {
+    "build-windows": 30,  # 实测约 3–4min（PyInstaller + spaCy 收集，五档里最重）
+    "build-linux": 20,
+    "build-macos": 20,
+    "build-android": 30,  # Gradle 冷缓存下载 + APK 构建，波动最大
+    "publish-github-release": 10,  # 只上传已构建好的产物，分钟级
+}
+
+# PyInstaller 子进程超时（秒）：30 分钟。与 build-windows job 的 timeout-minutes: 30
+# 对齐 —— 子进程护栏必须**早于** job 级护栏触发，否则 job 被平台杀掉前 subprocess 已
+# 挂起，连人话错误都留不下。
+PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS = 1800
+
+
+@pytest.mark.parametrize(
+    ("job_name", "max_minutes"),
+    list(BUILD_RELEASE_JOB_TIMEOUT_BOUNDS.items()),
+)
+def test_build_release_job_has_bounded_timeout(job_name: str, max_minutes: int) -> None:
+    """build-release.yml 的每个 job 必须有 timeout-minutes，且值 MUST ≤ 各自上界。"""
+    block = _job_block(BUILD_RELEASE_WORKFLOW, job_name)
+
+    match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", block, re.MULTILINE)
+    assert match, (
+        f"{BUILD_RELEASE_WORKFLOW} 的 jobs.{job_name} 没有 timeout-minutes：\n"
+        "GitHub Actions 对单个 job 的默认上限是 360 分钟（6 小时），"
+        "一次卡死的构建（下载卡死 / PyInstaller 挂起）会把 runner 烧满六小时才红——"
+        "提交者早改去下一件事了。\n"
+        f"修法：给 jobs.{job_name} 加 `timeout-minutes`（本守卫允许的上界是 {max_minutes}）。"
+    )
+
+    minutes = int(match.group(1))
+    assert 0 < minutes <= max_minutes, (
+        f"jobs.{job_name} 的 timeout-minutes = {minutes}，超过上界 {max_minutes}：\n"
+        "写成 3600 之类的大值等于没设护栏（比 Actions 默认的 360 分钟还宽）。"
+        "\n修法：按实测构建时长收紧；确需更长时先查清是哪一步变慢，而不是把闸门整体放开。"
+    )
+
+
+def test_pyinstaller_timeout_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PyInstaller 子进程卡死（TimeoutExpired）时，打包 MUST 以 SystemExit(1) 退出。
+
+    没有 timeout 的 subprocess.run 会永远挂起，直到 job 级 6 小时硬上限来收拾——
+    比任何 timeout-minutes 都宽。加了 timeout 还必须接住 TimeoutExpired：不接的话
+    异常会以裸 traceback 抛出，构建脚本"失败即 sys.exit(1)"的惯例被打破，且 stderr
+    里留不下人话错误信息（卡死的 PyInstaller 只能从 traceback 反推）。
+    """
+    import package_windows
+
+    # 清理阶段（rmtree build/ 与 dist/DeLector）不是本测试的对象：置为空转，避免每次
+    # 跑测试都删掉开发者机器上的 PyInstaller 构建缓存，也避免把与超时无关的删除副作用
+    # 混进断言。被测的是 PyInstaller 那一处 subprocess.run 的真实代码路径。
+    monkeypatch.setattr(package_windows.shutil, "rmtree", lambda *args, **kwargs: None)
+
+    def hang_forever(*args: object, **kwargs: object) -> None:
+        raise subprocess.TimeoutExpired(
+            cmd=["python", "-m", "PyInstaller"], timeout=PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS
+        )
+
+    monkeypatch.setattr(package_windows.subprocess, "run", hang_forever)
+
+    with pytest.raises(SystemExit) as exc:
+        package_windows.build_windows()
+
+    assert exc.value.code == 1, "PyInstaller 超时 MUST 以非零码退出（构建失败），而不是静默继续"
