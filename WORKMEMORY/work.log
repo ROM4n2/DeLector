@@ -597,3 +597,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - Why：三个已知限制（Win10 需 WebView2 / 冷启动约 6s / Android 不可回滚）全砸在"第一次打开"上，未验证就铺量只会换来 install→uninstall 的 churn，先背工单而不是先拿反馈。
 - 两条执行前提：① 小红书正文外链不可点 ⇒ 站点只承接主页/私信/搜索流量，别指望笔记导流；② 截图随产品形态过期（v5.17 起已是原生窗口）⇒ 发版需同步换图，这是薄壳唯一人工维护项。
 - 未立项（本次**不**拆任务）：README 首屏改造、站点仓库初始化、反馈入口、Android 点检、选题排期。要走执行再开 `/dfs-plan`。
+
+### 2026-10-12 | codebuddy | WORK_END(release-pipeline-and-docs-consolidation)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`/dfs-exec` 三挡执行 `docs/plans/2026-10-12-release-pipeline-and-docs-consolidation.md`，6 个任务全部交付（3 个提交）。台账按计划 A3 未初始化，用 todo 手工跟踪。
+- **Task 1 [Tier 2 / Gear 2] `f66d203`**：发布链路超时护栏 —— `build-release.yml` 五 job 加 `timeout-minutes`（30/20/20/30/10）+ `package_windows.py:389` PyInstaller `subprocess` `timeout=1800` + `TimeoutExpired` → stderr 人话错误 + `sys.exit(1)`。TDD：RED 6 失败（5 job 无 timeout + TimeoutExpired 从真实调用点裸抛）→ GREEN 39 passed。CRV 验收 **PASS**（1 黄牌：新增常量注释"实测约 3–4min"无测量凭据，待有真实发布 run 时长回填或改软为"预估"）。
+- **Task 2 [Tier 2 / Gear 2] `ed3d4ee`**：Smoke 闸在构建前先跑 pytest —— `ci.yml` 于 Install 后、Build 前插 `Run pytest suite`（`run: pytest -q`）。守卫钉**顺序**而非"字符串在场"（整段挪到 Build 后字符串仍在而提前反馈的意义丧失），针脚用 `pytest -q` 精确匹配以避开安装步 `pip install pyinstaller pytest` 的死安装文本（防假绿）。CRV **PASS**（1 黄牌：注释"10 分钟构建"无源估算）。**覆盖面诚实边界**：只覆盖 Windows 全量测试；macOS/Linux 专属失败仍需 tag 后才暴露（要提前抓需跨平台 dispatch 预检 job，已列 Fog of War，未立项）。
+- **Batch 1 [Tier 1 / Gear 1] `e0587e7`**（Tasks 3–6 一次批量提交）：① FEATURES 删第二份「快速开始」（与 README 重复且版本口径已漂移：一边钉 3.11、一边写更低版本号）改一行指针，`3.10+` 与安装命令 grep 归零；② 冷启动数字补「路径 × 冷/暖」双标签（源码暖 5.4s/冷 6s vs **便携产物冷 8.5s/暖 6.9s**，纪律出处 `work.log:542`）+ Android 两条已知限制（更新 chip 能力未验证、`versionCode` 只升不降）；③ **零门槛反馈入口**（`.github/ISSUE_TEMPLATE/feedback.md` + README 下载表下直达链接）⇒ 10-12 DECISION 的开闸门槛①**从不可启动变为可启动**；④ `docs/plans/` 按「成果已发版」判据归档 **15 份**已交付计划（只留在途 1 份；已确认无测试/代码引用非 archive 路径）+ `PROJECT_OVERVIEW` 开放待办收敛为 **5 条活项**，历史裁决（ADR-0018~0021、登记项 1A~5A、红 master、冷启动 2.0s 口径、性能 O0）整体下沉 `WORKMEMORY/cold/2026-10-12-settled-todos.md`（保留裁决语境，只进不出）。
+- **门禁（本机实测）**：pytest **1778 passed + 2 skipped**（= v5.17.0 基线 1768 + macOS 红卡修复 3 + Task 1 的 6 + Task 2 的 1）；`ruff` 0；mypy **87+121+4** files 零错误；前端契约闸 PASS；发版守护 56 passed。
+- **两次自伤都被断言拦住（零损伤，方法比结果更值得记）**：① `Path.read_text()` 默认做通用换行翻译（CRLF→`\n`），切分前那句"预期纯 CRLF"断言直接失败——动 `WORKMEMORY` 这类 CRLF 文件必须 `open(newline="")`；② f-string 表达式里带 `\r\r\n` 反斜杠转义触发 **SyntaxError（解析期，脚本整体未执行）**——打印字节计数要先把值算进变量。共同教训：**改共享文档前先断言形态（行尾/行号锚点），让错误在写入前炸，而不是写入后**。
+- **仍待用户批准/外部条件**：人工前置动作 A1（删孤儿 tag `v5.1.1` + 记账，破坏性操作未获批准）；master 三个新提交尚未推送（SSH 通道时好时坏）；本计划自身按「成果已发版」判据留待下一版发布后再归档。
