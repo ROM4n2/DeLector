@@ -14,13 +14,17 @@ r"""Windows 便携产物验收闸：完整性 + **真启一次**（ADR-0021 替�
 三面镜评审里两个席位独立得出同一结论：**"在 CI 真启一次产物"是唯一能在作者双击之前
 抓住这类问题的闸**。本脚本就是那道闸：可本地跑、可 CI 跑，**只用标准库**。
 
-它验什么（两层）
+它验什么（三层）
 ================
 (a) **完整性**：产物目录定位 / `.build-info.json` 四键齐全 + commit 抗陈旧 / 无 `.env` /
     必需 WebView2 DLL / `_internal/webview` 与 `_internal/pythonnet` 存在。
 (b) **真启一次**（本闸核心）：以 ``DeLector.exe --server-only`` 起子进程，轮询
     ``http://127.0.0.1:8000/api/health`` 直到 **200 且 ``status=="ok"`` 且 ``app=="delector"``**
     （**身份校验**，不是"端口能连上"）；再终止它，断言**进程消失 + 端口释放 + 无孤儿**。
+(c) **无控制台语境再真启一次**（Task 5 新增，**默认开**）：以 ``CREATE_NO_WINDOW`` 起
+    ``--server-only``（不为子进程分配控制台窗口），断言 ① health 就绪 ② 进程可干净终止
+    ③ 数据目录生成 ``lan-address.txt``（探不到 LAN 允许不存在，但 launch.log 必须留痕）
+    ④ **整段日志无 traceback**。边界说明见 ``_check_no_console_launch`` 与下方覆盖边界。
 
 ⚠️ 覆盖边界（**必读：别误以为它覆盖了窗口形态**）
 ================================================
@@ -28,6 +32,13 @@ CI runner 无桌面会话，GUI 路径（pywebview / pystray）在无头环境**
 故本闸**只用 ``--server-only``**：它验的是"真产物里的服务能否起来并干净退出"。
 **窗口形态（双击出不出窗口 / 进程退不退）不在本闸覆盖范围内** —— 那由本机人工双击 +
 ``scratch/`` 复现脚本覆盖。把这条写在这里，是为了不让后人误以为"CI 绿了 ⇒ 双击没问题"。
+
+(c) 步也有边界（**别以为它复现了 ``sys.stdout is None``**）：CI 里子进程的 stdout/stderr
+被**重定向进日志文件** ⇒ 子进程的 ``sys.stdout`` 并非 ``None``，"双击 ``--windowed`` 产物时
+``sys.stdout is None`` 导致裸 ``print`` 即崩"那一类，由 ``tests/test_desktop_shell.py`` 的
+``sys.stdout=None`` 注入单测钉死（那里才复现得了 None 语境）。(c) 步在 CI 钉的是：**无控制台
+窗口语境下起服 + 整段日志无 traceback**（含健康就绪**之后**才发生的崩溃 —— (b) 步只看就绪，
+那类它抓不到）+ ``lan-address.txt`` 地址出口。两者互补，都不可省。
 
 为什么独立实现、不 import 打包脚本
 ==================================
@@ -150,10 +161,34 @@ _PROBE_DEAD = "dead"
 # terminate 作默认；graceful 保留为 --terminate-mode 供对比 / 需要优雅信号时手工指定。
 DEFAULT_TERMINATE_MODE = "terminate"
 
+# ── Task 5：无控制台语境（no-console mode）判据常量 ───────────────────────────
+# no-console：以 CREATE_NO_WINDOW 起 --server-only，不为子进程分配控制台窗口，复现「双击
+# --windowed 产物」的无控制台语境。与 terminate / graceful 并列，是 `_creation_flags` 的第三种 mode。
+NO_CONSOLE_MODE = "no-console"
+# 数据目录里的局域网地址出口（与 desktop.LAN_ADDRESS_FILE_NAME 同值）：--server-only 与桌面态
+# LAN 可用时写；探不到 LAN（离线 / 仅回环）允许不写，但 launch.log 必须留痕（见 lan_address_state）。
+LAN_ADDRESS_FILENAME = "lan-address.txt"
+# 产物自写的 launch.log 落点文件名（与 desktop.LOG_FILE_NAME 同值）：落在数据目录，「未探测到
+# 局域网 IP」留痕与 write_crash 的 traceback 都在这里（子进程的 stdout/stderr 另落 server.log）。
+LAUNCH_LOG_FILENAME = "launch.log"
+# launch.log 里「探不到 LAN、本次不写地址文件」的留痕锚点（与 desktop.write_lan_address 同口径）：
+# 据此把「有据可查的不存在」（离线机器）与「静默缺失」区分开，后者才判红。
+_LAN_ABSENT_LOG_MARKER = "未探测到局域网 IP"
+# lan-address.txt 三态（lan_address_state 返回）：
+#   present        文件在 ⇒ 地址出口已生成
+#   absent-traced  文件不在但 launch.log 有留痕 ⇒ 允许（离线 / 仅回环），不算缺失
+#   absent-silent  文件不在且无留痕 ⇒ **静默缺失**，编排层据此判红
+_LAN_PRESENT = "present"
+_LAN_ABSENT_TRACED = "absent-traced"
+_LAN_ABSENT_SILENT = "absent-silent"
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Windows 专有符号：Linux 上也要能 import（单测 / mypy 在 ubuntu 跑），故 getattr 兜底。
 _CREATE_NEW_PROCESS_GROUP: int = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+# CREATE_NO_WINDOW = 0x08000000（Windows 专有）：不为子进程分配控制台窗口 —— Task 5 的
+# no-console mode 靠它复现"无控制台"语境。与上一行同款 getattr 兜底，理由相同。
+_CREATE_NO_WINDOW: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _CTRL_BREAK_EVENT: Optional[int] = getattr(signal, "CTRL_BREAK_EVENT", None)
 # SIGKILL 在 Windows 上不存在（typeshed win32 无此常量）⇒ getattr 兜底，避免撞 mypy attr-defined。
 _SIGKILL: int = getattr(signal, "SIGKILL", getattr(signal, "SIGTERM", 15))
@@ -362,7 +397,18 @@ def launch_server_only(exe: Path, log_path: Path, env: Mapping[str, str], mode: 
 
 
 def _creation_flags(mode: str) -> int:
-    """graceful 模式需要 CREATE_NEW_PROCESS_GROUP 才能给子进程发 CTRL_BREAK；否则为 0。"""
+    """按 mode 返回 subprocess creationflags：
+
+    - ``no-console``：CREATE_NO_WINDOW（0x08000000）——不为子进程分配控制台窗口，
+      复现「双击 --windowed 产物」的无控制台语境（Task 5 的 (c) 步）。
+    - ``graceful``：CREATE_NEW_PROCESS_GROUP，子进程才能收到 CTRL_BREAK。
+    - 其余（``terminate`` 等）：0（跨平台恒为 0）。
+
+    Win32 符号一律走模块级 getattr 兜底常量（``_CREATE_NO_WINDOW`` / ``_CREATE_NEW_PROCESS_GROUP``），
+    故 Linux 上两者为 0，本函数仍可 import 与单测（CI 在 ubuntu 跑）。
+    """
+    if mode == NO_CONSOLE_MODE:
+        return _CREATE_NO_WINDOW
     return _CREATE_NEW_PROCESS_GROUP if mode == "graceful" else 0
 
 
@@ -524,6 +570,41 @@ def _kill_pid_impl(pid: int) -> None:
     os.kill(pid, _SIGKILL)
 
 
+# ── (c) 无控制台语境的纯判据 + 平台 seam（可单测，不依赖 Windows / 不起进程）─────
+def _is_windows() -> bool:
+    """是否 Windows。抽成 seam 供单测注入（**不 monkeypatch os.name**：那会让 pathlib 在
+    Windows 上实例化 PosixPath，把 pytest 自己崩掉）。"""
+    return os.name == "nt"
+
+
+def log_has_traceback(log_text: str) -> bool:
+    """整段日志是否含 Python traceback（Task 5 断言④判据）。
+
+    锚定 ``Traceback (most recent call last)`` 这一**解释器崩溃签名**，而非裸 ``Error`` /
+    ``失败`` 字样：业务日志里的 error / 失败（如「连接重置」「写库超时」）是正常运维噪声，
+    宽判据会把这道闸刷成恒红、迟早被绕开。只有解释器真的打印了 traceback 才算「崩过」
+    （裸 ``print`` 到 ``sys.stdout is None`` 的那一族崩溃正落在这里）。
+    """
+    return "Traceback (most recent call last)" in log_text
+
+
+def lan_address_state(data_dir: Path, log_text: str) -> str:
+    """`lan-address.txt` 三态判定（Task 5 断言③判据），返回三态常量之一。
+
+    - 文件在 ⇒ ``_LAN_PRESENT``：地址出口已生成。
+    - 文件不在但 launch.log 有「未探测到局域网 IP」留痕 ⇒ ``_LAN_ABSENT_TRACED``：
+      离线 / 仅回环机器允许没有地址文件，但**必须留痕**（「有据可查的不存在」）。
+    - 文件不在且无留痕 ⇒ ``_LAN_ABSENT_SILENT``：**静默缺失**，编排层据此判红。
+
+    三态必须可区分：把「静默缺失」和「有据可查的不存在」混为一谈，就等于放过真正的缺失。
+    """
+    if (data_dir / LAN_ADDRESS_FILENAME).is_file():
+        return _LAN_PRESENT
+    if _LAN_ABSENT_LOG_MARKER in log_text:
+        return _LAN_ABSENT_TRACED
+    return _LAN_ABSENT_SILENT
+
+
 # ── 各步的编排（打印 + 汇总）─────────────────────────────────────────────────
 def _check_build_info(report: Report, artifact: Path, expect_commit: str) -> None:
     try:
@@ -595,6 +676,18 @@ def _tail(path: Path, limit: int = 2000) -> str:
         return f"(读日志失败：{exc})"
 
 
+def _read_log(path: Path) -> str:
+    """读**整段**日志全文（traceback / 留痕判定要全量，不能只取尾）；文件不在 / 读失败返回空串。
+
+    返回空串而非占位符：判定函数只做「子串在不在」的检测，占位文本既不构成留痕也不构成
+    traceback，空串等价且不会误触判据。
+    """
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
 def _check_orphans(report: Report, root_pid: int) -> None:
     """断言无孤儿后代；有则清掉并复验（"若产生子进程，一并清掉并断言已清"）。"""
     orphans = descendant_pids(root_pid)
@@ -657,6 +750,89 @@ def _check_launch(report: Report, artifact: Path, mode: str) -> None:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _check_lan_address(report: Report, data_dir: Path) -> None:
+    """断言③：`lan-address.txt` 三态。present / absent-traced 记 PASS；absent-silent 判红。
+
+    留痕读产物自写的 `launch.log`（`_append_log` 只落该文件，不进子进程 stdout 重定向的
+    server.log），故此处读 `data_dir / LAUNCH_LOG_FILENAME`。
+    """
+    state = lan_address_state(data_dir, _read_log(data_dir / LAUNCH_LOG_FILENAME))
+    if state == _LAN_PRESENT:
+        report.ok("无控制台：数据目录生成 lan-address.txt", LAN_ADDRESS_FILENAME)
+    elif state == _LAN_ABSENT_TRACED:
+        report.ok(
+            "无控制台：局域网地址出口有据可查",
+            f"未探测到 LAN（离线 / 仅回环）⇒ 不写 {LAN_ADDRESS_FILENAME}，launch.log 已留痕",
+        )
+    else:
+        report.fail(
+            "无控制台：局域网地址出口",
+            f"{LAN_ADDRESS_FILENAME} 既不存在、launch.log 也无「未探测到局域网 IP」留痕 —— 静默缺失",
+        )
+
+
+def _check_no_traceback(report: Report, data_dir: Path, server_log: Path) -> None:
+    """断言④：整段日志无 Python traceback（抓健康就绪**之后**才发生的崩溃）。
+
+    同时扫子进程 stdout/stderr 重定向（server.log，解释器崩溃的 traceback 落点）与产物自写的
+    launch.log（`desktop.write_crash` 的 traceback 落点）：任一处出现即判红。干净运行两处皆无。
+    """
+    combined = _read_log(server_log) + "\n" + _read_log(data_dir / LAUNCH_LOG_FILENAME)
+    if log_has_traceback(combined):
+        report.fail("无控制台：整段日志无 traceback", f"日志出现 Python traceback；尾部：\n{_tail(server_log)}")
+    else:
+        report.ok("无控制台：整段日志无 traceback")
+
+
+def _check_no_console_launch(report: Report, artifact: Path) -> None:
+    """(c) 无控制台语境再真启一次：以 CREATE_NO_WINDOW 起 --server-only，四项断言。
+
+    ① `/api/health` 就绪（复用 `wait_until_ready` + `health_is_ready` 的身份校验口径）
+    ② 进程可干净终止（复用 `_check_termination`：进程结束 + 端口释放 + 无孤儿）
+    ③ `lan-address.txt` 三态（present / absent-traced / absent-silent=红，见 `_check_lan_address`）
+    ④ **整段日志无 traceback**（见 `_check_no_traceback`）
+
+    ⚠️ 覆盖边界：本步**不声称**复现 `sys.stdout is None` —— CI 里子进程 stdout/stderr 被重定向进
+    日志文件 ⇒ 并非 None；那一类由 `tests/test_desktop_shell.py` 的 None 注入单测钉死。本步在 CI
+    钉的是「无控制台窗口语境下起服 + 整段日志无 traceback + 地址出口」，与 (b) 步互补（(b) 只看就绪，
+    抓不到就绪之后才崩的那一族）。此边界写在模块 docstring，**勿改**。
+
+    非 Windows：显式 SKIP 并写明原因（CREATE_NO_WINDOW 仅 Windows 有效）——**不假绿**。
+    """
+    if not _is_windows():
+        report.skip(
+            "无控制台语境再真启（CREATE_NO_WINDOW）",
+            f"非 Windows（os.name={os.name!r}）：CREATE_NO_WINDOW 仅 Windows 有效，跳过而非假绿",
+        )
+        return
+    exe = artifact / EXE_NAME
+    if not exe.is_file():
+        report.fail("无控制台真启找得到可执行文件", f"缺少 {exe}")
+        return
+    if port_in_use(SERVER_PORT):
+        report.fail("无控制台起服前端口空闲", f"端口 {SERVER_PORT} 已被占用 —— 无法判定产物能否在无控制台语境起服务")
+        return
+    tmp_dir = Path(tempfile.mkdtemp(prefix="delector_verify_noconsole_"))
+    server_log = tmp_dir / "server.log"
+    try:
+        proc = launch_server_only(exe, server_log, _child_env(tmp_dir), NO_CONSOLE_MODE)
+        ready_s = wait_until_ready(proc)
+        if ready_s is None:
+            detail = (
+                f"产物在 {HEALTH_DEADLINE_S:.0f}s 内未就绪（期望 /api/health 200 且 app=='delector'）；"
+                f"进程退出码={proc.poll()}。服务日志尾部：\n{_tail(server_log)}"
+            )
+            report.fail("无控制台真启 --server-only 至就绪", detail)
+            _abort_launch(proc, NO_CONSOLE_MODE)
+            return
+        report.ok("无控制台真启 --server-only 至就绪", f"起服耗时 {ready_s:.1f}s（CREATE_NO_WINDOW 语境）")
+        _check_termination(report, proc, NO_CONSOLE_MODE)
+        _check_lan_address(report, tmp_dir)
+        _check_no_traceback(report, tmp_dir, server_log)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def _finish(report: Report) -> int:
     print("=" * 60)
     if report.failed:
@@ -694,6 +870,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if report.failed:
         return _finish(report)
     _check_launch(report, artifact, args.terminate_mode)
+    # (c) 无控制台语境再真启一次（Task 5，**默认开**）：接在标准真启之后作互补证据 ——
+    # (b) 只看就绪，(c) 额外抓「就绪之后才崩」（traceback）+ 无控制台窗口语境 + 地址出口。
+    # 默认开是关键：CI 只传 --expect-commit，若要显式 flag 才跑，CI 永远跑不到它 = 假绿。
+    _check_no_console_launch(report, artifact)
     return _finish(report)
 
 

@@ -6,6 +6,9 @@
 产物目录定位（唯一 / 多候选 / 无候选 / override）、`.build-info.json` 四键与 commit 抗陈旧
 一致性、`.env` 检出、WebView2 DLL 缺失检出、`_internal` 关键目录缺失检出、健康就绪判定。
 
+Task 5 追加（无控制台语境真启，仍不启动产物）：no-console mode 的 creationflags 口径、
+traceback 判据、`lan-address.txt` 三态、非 Windows 的显式 skip 语义、main 的接线顺序。
+
 为什么单测**刻意不跑 exe**：真启段（launch / terminate / 端口 / 孤儿）要起真进程、绑真端口，
 既慢又绑死平台，还会在无桌面会话的 runner 上产生与环境耦合的假红 —— 那一段由 CI 的 Windows
 冒烟 job 与 `build-release.yml` 的验包步用**真实产物**跑（见 `.github/workflows/`）。
@@ -19,7 +22,7 @@
 import importlib.util
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 import pytest
 
@@ -237,6 +240,116 @@ def test_health_is_ready_false_when_payload_not_object() -> None:
     assert vp.health_is_ready(200, None) is False
 
 
+# ── Task 5：无控制台语境真启（no-console mode）的纯逻辑与 skip 语义 ──────────────
+def test_creation_flags_no_console_uses_create_no_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """no-console mode 必须取 CREATE_NO_WINDOW（0x08000000）：不为子进程分配控制台窗口。
+
+    刻意钉**模块常量**而非平台真值：CI 在 ubuntu 上跑，`subprocess.CREATE_NO_WINDOW`
+    不存在（getattr 兜底为 0），比平台值会恒真。注入哨兵值后，"忽略 mode 直接返回 0"
+    的实现必红。
+    """
+    monkeypatch.setattr(vp, "_CREATE_NO_WINDOW", 0x08000000)
+    assert vp._creation_flags(vp.NO_CONSOLE_MODE) == 0x08000000
+
+
+def test_creation_flags_graceful_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """既有 graceful 口径不动（闸只扩不缩）：仍取 CREATE_NEW_PROCESS_GROUP。"""
+    monkeypatch.setattr(vp, "_CREATE_NEW_PROCESS_GROUP", 0x00000200)
+    assert vp._creation_flags("graceful") == 0x00000200
+
+
+def test_creation_flags_terminate_mode_is_zero() -> None:
+    """terminate 等其余 mode 无额外 creationflags（跨平台恒为 0）。"""
+    assert vp._creation_flags("terminate") == 0
+
+
+def test_log_has_traceback_detects_python_crash() -> None:
+    """日志出现 `Traceback (most recent call last):` ⇒ 判"崩过"（Task 5 断言④判据）。"""
+    text = (
+        "INFO: Started server process\n"
+        "Traceback (most recent call last):\n"
+        '  File "desktop.py", line 243, in <module>\n'
+        "AttributeError: 'NoneType' object has no attribute 'write'\n"
+    )
+    assert vp.log_has_traceback(text) is True
+
+
+def test_log_has_traceback_clean_when_absent() -> None:
+    assert vp.log_has_traceback("INFO: Uvicorn running on http://0.0.0.0:8000\n[警告] --port 不生效\n") is False
+
+
+def test_log_has_traceback_ignores_bare_error_words() -> None:
+    """业务日志里的 error/失败 字样**不算** traceback：宽判据的误报会让这道闸被绕开。"""
+    assert vp.log_has_traceback("ERROR:root:connection reset\n失败：写库超时\n") is False
+
+
+def test_lan_address_state_present(tmp_path: Path) -> None:
+    """文件在 ⇒ present（无控制台形态的第一地址出口已生成）。"""
+    (tmp_path / vp.LAN_ADDRESS_FILENAME).write_text("http://192.168.1.50:8000\n", encoding="utf-8")
+    assert vp.lan_address_state(tmp_path, "") == vp._LAN_PRESENT
+
+
+def test_lan_address_state_absent_but_traced(tmp_path: Path) -> None:
+    """文件不在但 launch.log 有「未探测到局域网 IP」留痕 ⇒ absent-traced。
+
+    离线 / 仅回环机器允许没有地址文件，但**必须留痕**：本用例钉的正是"有据可查的不存在"
+    与"静默缺失"必须可区分 —— 不许静默跳过。
+    """
+    log = f"未探测到局域网 IP（端口 8000）：本次不写 {vp.LAN_ADDRESS_FILENAME}。\n"
+    assert vp.lan_address_state(tmp_path, log) == vp._LAN_ABSENT_TRACED
+
+
+def test_lan_address_state_absent_silent(tmp_path: Path) -> None:
+    """文件不在且无留痕 ⇒ absent-silent（编排层据此判红：静默缺失）。"""
+    assert vp.lan_address_state(tmp_path, "INFO: 服务正常\n") == vp._LAN_ABSENT_SILENT
+
+
+def test_no_console_check_skips_off_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """非 Windows：显式 SKIP 且不 FAIL（CREATE_NO_WINDOW 仅 Windows 有效，不假绿）。
+
+    skip 原因必须写在输出里：否则将来没人知道这一步为什么没跑。
+    平台判据走 `_is_windows` seam 注入（**不 monkeypatch os.name**：那会让 pathlib 在
+    Windows 上实例化 PosixPath，把 pytest 自己崩掉）。
+    """
+    monkeypatch.setattr(vp, "_is_windows", lambda: False)
+    report = vp.Report()
+    vp._check_no_console_launch(report, _make_artifact(tmp_path))
+    assert report.failed is False
+    out = capsys.readouterr().out
+    assert "[SKIP]" in out and "CREATE_NO_WINDOW" in out, "skip 必须显式且带原因"
+
+
+def test_no_console_check_runs_on_windows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows 上这条路真走（不 skip）：缺 exe 时 FAIL 而不是 SKIP。
+
+    与上条互为对照，钉死"skip 只属于非 Windows"—— 防将来有人把 Windows 上也跳过。
+    """
+    monkeypatch.setattr(vp, "_is_windows", lambda: True)
+    report = vp.Report()
+    vp._check_no_console_launch(report, _make_artifact(tmp_path))  # 假产物无 DeLector.exe
+    assert report.failed is True
+
+
+def test_main_appends_no_console_step_after_standard_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """main 必须在普通真启之后追加无控制台真启，且**默认开**。
+
+    默认开是关键：CI 的 build-release.yml 只传 --expect-commit（本任务不改 yml），
+    若这步要显式 flag 才跑，CI 永远跑不到它 = 假绿。
+    """
+    calls: List[str] = []
+    monkeypatch.setattr(vp, "locate_artifact", lambda *_args, **_kwargs: tmp_path)
+    monkeypatch.setattr(vp, "_check_integrity", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(vp, "_check_launch", lambda *_args, **_kwargs: calls.append("launch"))
+    monkeypatch.setattr(vp, "_check_no_console_launch", lambda *_args, **_kwargs: calls.append("no-console"))
+    code = vp.main([])
+    assert code == 0
+    assert calls == ["launch", "no-console"], "no-console 步必须在普通真启之后追加"
+
+
 # ── MUTATION 表（防恒真自证：改坏实现 ⇒ 对应用例转红）─────────────────────────
 # | 改坏实现（verify_windows_portable.py）                     | 转红的用例                                    |
 # |------------------------------------------------------------|-----------------------------------------------|
@@ -252,3 +365,10 @@ def test_health_is_ready_false_when_payload_not_object() -> None:
 # | health_is_ready: 去掉 app 身份校验                           | test_health_is_ready_false_when_app_is_not... |
 # | health_is_ready: 去掉 status 校验                            | test_health_is_ready_false_when_status...     |
 # | health_is_ready: 去掉 `status_code != 200` 判断              | test_health_is_ready_false_when_not_200       |
+# | _creation_flags: no-console 分支漏加 CREATE_NO_WINDOW（返回 0）| test_creation_flags_no_console_uses_create...  |
+# | _creation_flags: graceful 分支被删                            | test_creation_flags_graceful_unchanged         |
+# | log_has_traceback: 恒真                                       | test_log_has_traceback_clean_when_absent       |
+# | log_has_traceback: 判据放宽成 "Error" 子串                     | test_log_has_traceback_ignores_bare_error_words|
+# | lan_address_state: 恒 present（不读留痕）                      | test_lan_address_state_absent_but_traced/silent|
+# | _check_no_console_launch: 去掉 os.name 守卫（非 Windows 也真启）| test_no_console_check_skips_off_windows        |
+# | main: 不接 no-console 步 / 接到普通真启之前                     | test_main_appends_no_console_step_after...     |
