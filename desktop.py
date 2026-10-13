@@ -222,14 +222,81 @@ def _log_prestart_elapsed(log_path: str) -> None:
     _append_log(log_path, f"进程已运行 {shown} ms（自进程创建；此前为未测段）")
 
 
-def _redirect_std_streams(log_path: str) -> None:
-    """把 stdout/stderr 重定向到 `launch.log`。失败只降级、不阻止启动（看不到日志好过起不来）。"""
-    try:
-        out, err = open_log_streams(log_path)
-    except OSError:
+def _bind_missing_streams_to_devnull() -> None:
+    """日志/控制台都不可用时的最后兜底：只补缺失流，且**绝不抛**。"""
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name) is not None:
+            continue
+        try:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8", buffering=1))
+        except Exception:
+            # 连 devnull 都打不开时已无可用的留痕介质；仍不得让收口本身阻断启动。
+            pass
+
+
+def _allocate_debug_console() -> None:
+    """Windows debug 模式按需挂回控制台；非 Windows 或任意失败都直接返回。"""
+    if sys.platform != "win32":
         return
-    sys.stdout = out
-    sys.stderr = err
+    try:
+        import ctypes
+
+        ctypes.windll.kernel32.AllocConsole()
+    except Exception:
+        return
+
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name) is not None:
+            continue
+        try:
+            setattr(sys, name, open("CONOUT$", "w", encoding="utf-8", buffering=1))
+        except Exception:
+            # AllocConsole 成功但设备流打开失败时，交给 ensure_streams 的 devnull 兜底。
+            pass
+
+
+def ensure_streams(log_path: str, debug_console: bool = False) -> None:
+    """确保 stdout/stderr 可写，供桌面与跨平台入口共同调用。
+
+    默认只收口 `None` 流：将其绑定到既有 `launch.log` 追加流，不覆盖真实终端或 pytest 捕获流。
+    `debug_console=True` 时不写日志；Windows 上按需 `AllocConsole()`，失败或非 Windows 则退到
+    devnull。整个收口链路**绝不抛**，避免日志设施反过来阻断进程启动。
+    """
+    try:
+        if debug_console:
+            if sys.stdout is None or sys.stderr is None:
+                _allocate_debug_console()
+            _bind_missing_streams_to_devnull()
+            return
+
+        missing_out = sys.stdout is None
+        missing_err = sys.stderr is None
+        if not missing_out and not missing_err:
+            return
+
+        parent = os.path.dirname(os.path.abspath(log_path))
+        os.makedirs(parent, exist_ok=True)
+        out, err = open_log_streams(log_path)
+        if missing_out:
+            sys.stdout = out
+        else:
+            out.close()
+        if missing_err:
+            sys.stderr = err
+        else:
+            err.close()
+    except Exception as exc:
+        # 先复用既有日志惯例留痕；路径本身不可写时再静默降级，二者都不得外抛。
+        try:
+            _append_log(log_path, f"标准流收口失败，退到静默流：{exc!r}")
+        except Exception:
+            pass
+        _bind_missing_streams_to_devnull()
+
+
+def _redirect_std_streams(log_path: str, debug_console: bool = False) -> None:
+    """兼容既有启动接线：仅收口缺失的 stdout/stderr，失败不阻止启动。"""
+    ensure_streams(log_path, debug_console)
 
 
 def _message_box(title: str, detail: str) -> None:
@@ -701,7 +768,7 @@ def _run_desktop_inner(port: int, log_path: str) -> int:
         coordinated_shutdown(server, thread, log_path)
 
 
-def run_desktop(port: int = DEFAULT_PORT) -> int:
+def run_desktop(port: int = DEFAULT_PORT, debug_console: bool = False) -> int:
     """启动桌面壳：返回**进程退出码**。
 
     **所有**退出路径（关窗 / 托盘退出 / 异常 / Ctrl+C）都会先 `shutdown(server, thread)`：
@@ -713,7 +780,7 @@ def run_desktop(port: int = DEFAULT_PORT) -> int:
     # 先滚动过大日志（若有）再重定向/追加 —— 必须在 `_redirect_std_streams` 打开两个追加句柄
     # **之前**（Windows 上对已打开文件 `os.replace` 会失败）；只保守一份旧档，不改行格式。
     rotate_log_if_needed(log_path)
-    _redirect_std_streams(log_path)
+    _redirect_std_streams(log_path, debug_console)
     # 进程级计时起点：让 launch.log 能**独立**算出"端到端"耗时（起点 → 服务就绪 / 起点 → 首屏）。
     # 放在**最早处**（日志流一就绪）——晚于此处就漏掉"服务启动前"的进程开销，端到端就少算一截。
     _append_log(log_path, "开始启动（进程级计时起点）。")
@@ -731,7 +798,7 @@ def run_desktop(port: int = DEFAULT_PORT) -> int:
 
 
 def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
-    """解析命令行：`--port` 与 `--server-only`（`--help` 由 argparse 处理）。"""
+    """解析命令行：端口、仅服务模式与调试控制台（`--help` 由 argparse 处理）。"""
     parser = argparse.ArgumentParser(
         prog="desktop.py",
         description="DeLector Windows 桌面壳（pywebview 窗口 + pystray 托盘，ADR-0020）。",
@@ -742,10 +809,15 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
         action="store_true",
         help="仅启动本地服务（无桌面窗口），保留同 Wi-Fi 手机/平板可访问的既有工作流",
     )
+    parser.add_argument(
+        "--debug-console",
+        action="store_true",
+        help="调试时挂回控制台，不把缺失的标准流收口到 launch.log",
+    )
     return parser.parse_args(argv)
 
 
-def run_server_only() -> int:
+def run_server_only(debug_console: bool = False) -> int:
     """`--server-only`：委托 `start.main()` 的**既有行为**（无窗口、绑 0.0.0.0、开浏览器）。
 
     为什么复用而不是另写一套：这条路径要精确保留便携版原来的启动语义（含端口占用时的
@@ -753,11 +825,14 @@ def run_server_only() -> int:
     """
     import start
 
-    start.main()
+    if debug_console:
+        start.main(debug_console=True)
+    else:
+        start.main()
     return 0
 
 
-def dispatch(server_only: bool, port: int) -> int:
+def dispatch(server_only: bool, port: int, debug_console: bool = False) -> int:
     """入口分派（可测的纯接线）：`--server-only` ⇒ 既有服务；否则 ⇒ 桌面窗口。
 
     ⚠️ `--server-only` **复用** `start.main()`（固定端口，见 `run_server_only` 的理由）：该路径
@@ -766,7 +841,14 @@ def dispatch(server_only: bool, port: int) -> int:
     port-identity / LAN 面回归）。
     """
     if not server_only:
+        if debug_console:
+            return run_desktop(port, debug_console=True)
         return run_desktop(port)
+
+    # server-only 的警告发生在 start.main() 之前，故本入口必须先自行收口标准流。
+    log_path = resolve_log_path(os.environ)
+    rotate_log_if_needed(log_path)
+    ensure_streams(log_path, debug_console)
     # 守卫式压平（最大缩进 2 层）：下面这条警告是"不静默"的落点，理由见上方 docstring。
     if port != DEFAULT_PORT:
         print(
@@ -774,9 +856,11 @@ def dispatch(server_only: bool, port: int) -> int:
             f"你传入的 --port {port} 不会生效。",
             file=sys.stderr,
         )
+    if debug_console:
+        return run_server_only(debug_console=True)
     return run_server_only()
 
 
 if __name__ == "__main__":
     _args = _parse_args(sys.argv[1:])
-    raise SystemExit(dispatch(_args.server_only, _args.port))
+    raise SystemExit(dispatch(_args.server_only, _args.port, _args.debug_console))

@@ -4,6 +4,7 @@ DeLector - Cross-Platform Instant Launcher
 Auto-detects port availability, LAN IP, and launches default browser.
 """
 
+import argparse
 import os
 import socket
 import sys
@@ -35,6 +36,25 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 # 仍落在程序目录里，用户"解压新版覆盖旧目录 / 删掉旧目录"= 学习记录全空且零提示
 # （ADR-0019 Q2-A / Q3-B）。真正的调用在 `main()` 开头的第一个语句处（见那里的注释）。
 from delector.core.data_dir_bootstrap import bootstrap_data_dir
+
+
+def _ensure_entry_streams(debug_console: bool) -> None:
+    """跨平台入口复用桌面壳的 launch.log 标准流收口。
+
+    整段（含 `from desktop import ...`）都在 try 里，是**刻意的**：Android APK 的 Python 源集
+    只有 `start.py` + `delector/`（见 .github/workflows/build-release.yml：只 `cp -r
+    start.py`，**没有** `cp desktop.py`），而 APK 入口正是 `py.getModule("start")
+    .callAttr("main")`（MainActivity.java）⇒ 这里一句硬 import 就会在 `main()` 首行抛
+    ModuleNotFoundError，被 Java 侧 `catch (Throwable)` 兜成「Python 引擎异常」，**APK 起不来**。
+    而 Android 上 `sys.stdout` 本就不是 None（Chaquopy 重定向到 logcat）⇒ 这次收口在 Android 上
+    恒为 no-op，却换来一次致命崩溃。故：收口失败时宁可不留痕，也绝不得阻断启动。
+    """
+    try:
+        from desktop import ensure_streams, resolve_log_path
+
+        ensure_streams(resolve_log_path(os.environ), debug_console)
+    except Exception:
+        return
 
 
 def _noop_signal_context(*_args: object, **_kwargs: object) -> AbstractContextManager[None]:
@@ -109,7 +129,8 @@ def print_banner(port: int, android: bool) -> None:
     print("  按 Ctrl+C 停止服务\n")
 
 
-def main() -> None:
+def main(debug_console: bool = False) -> None:
+    _ensure_entry_streams(debug_console)
     port = 8000
     android = is_android()
     if is_port_in_use(port):
@@ -184,5 +205,17 @@ def _handle_existing_port(port: int, android: bool) -> None:
     sys.exit(1)
 
 
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    """解析跨平台入口的调试控制台运行时开关。"""
+    parser = argparse.ArgumentParser(prog="start.py", description="DeLector 跨平台启动器。")
+    parser.add_argument(
+        "--debug-console",
+        action="store_true",
+        help="调试时挂回控制台，不把缺失的标准流收口到 launch.log",
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    main()
+    _args = _parse_args(sys.argv[1:])
+    main(debug_console=_args.debug_console)

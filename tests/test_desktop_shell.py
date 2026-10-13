@@ -28,7 +28,7 @@ import sys
 import threading
 import types
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 import pytest
 
@@ -1226,6 +1226,225 @@ def test_import_desktop_has_no_side_effects():
     assert proc.returncode == 0, f"import desktop 失败：{proc.stderr}"
     assert proc.stdout.strip() == "", f"import desktop 不得有任何输出：{proc.stdout!r}"
     assert proc.stderr.strip() == "", f"import desktop 不得有任何 stderr：{proc.stderr!r}"
+
+
+# ── Task 3：无控制台时 stdout/stderr 收口 + `--debug-console` ────────────────
+def _run_with_missing_streams(
+    monkeypatch: pytest.MonkeyPatch, action: Callable[[], None]
+) -> None:
+    """临时移除标准流并在动作后恢复，避免重定向文件句柄污染 pytest 自身输出。"""
+    original_out, original_err = sys.stdout, sys.stderr
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    try:
+        action()
+    finally:
+        redirected_out, redirected_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = original_out, original_err
+        for stream in (redirected_out, redirected_err):
+            if stream is not None and stream not in (original_out, original_err):
+                stream.close()
+
+
+def test_missing_streams_capture_start_banner_notice_and_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """start.py 的横幅/提示/报错在无控制台时都不得抛，且必须写入 launch.log。"""
+    import start
+    from delector.core import server_lifecycle
+
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+
+    def _exercise() -> None:
+        mod.ensure_streams(str(log_path))
+        start.print_banner(8000, android=True)
+        monkeypatch.setattr(server_lifecycle, "probe_identity", lambda _port: True)
+        start._handle_existing_port(8000, android=True)
+        monkeypatch.setattr(server_lifecycle, "probe_identity", lambda _port: False)
+        with pytest.raises(SystemExit) as exc_info:
+            start._handle_existing_port(8000, android=True)
+        assert exc_info.value.code == 1
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+
+    content = log_path.read_text(encoding="utf-8")
+    assert "DeLector — 德语欧标沉浸阅读与考点剖析工作台" in content
+    assert "[提示] DeLector 已在端口 8000 运行" in content
+    assert "[错误] 端口 8000 已被其他程序占用" in content
+
+
+def test_missing_stderr_captures_desktop_fallback_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """desktop.py 原生弹窗的 stderr 降级路径在无控制台时仍须落 launch.log。"""
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+    fake_ctypes = types.ModuleType("ctypes")
+    monkeypatch.setitem(sys.modules, "ctypes", fake_ctypes)
+
+    def _exercise() -> None:
+        mod.ensure_streams(str(log_path))
+        # 先钉"stderr 真的被绑上了"再 print：CPython 下 `print(x, file=None)` 等价于打到
+        # stdout ⇒ 只绑 stdout、把 stderr 留在 None 的实现也能让上面的日志断言全绿（假绿）。
+        assert sys.stderr is not None, "收口后 stderr 必须已绑上，否则降级信息其实打去了 stdout"
+        mod._message_box("桌面提示", "无控制台回归")
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+
+    assert "[桌面提示] 无控制台回归" in log_path.read_text(encoding="utf-8")
+
+
+def test_desktop_server_only_entry_captures_warning_before_delegation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """desktop --server-only 的端口警告发生在委托前，也必须先完成流收口。"""
+    import start
+
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(start, "main", lambda: None)
+
+    def _exercise() -> None:
+        real_ensure_streams = mod.ensure_streams
+        bound_after: List[bool] = []
+
+        def _spy(log_path: str, debug_console: bool = False) -> None:
+            real_ensure_streams(log_path, debug_console)
+            # 收口刚完成、端口警告还没 print：此刻 stderr 必须已绑上。否则 `print(...,
+            # file=sys.stderr)` 会因 file=None 退到 stdout ⇒ 日志里照样有 [警告]，
+            # "只绑 stdout"的实现也能让本用例全绿（假绿）。
+            bound_after.append(sys.stderr is not None)
+
+        monkeypatch.setattr(mod, "ensure_streams", _spy)
+        assert mod.dispatch(server_only=True, port=9000) == 0
+        assert bound_after == [True], (
+            "dispatch 必须在打印端口警告之前完成流收口，且收口要把 stderr 也绑上（不能只绑 stdout）"
+        )
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+
+    content = (tmp_path / "launch.log").read_text(encoding="utf-8")
+    assert "[警告]" in content and "--port 9000" in content
+
+
+def test_start_main_entry_ensures_streams_before_existing_port_notice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """start.py 单独作为入口时，端口占用提示之前必须自行完成流收口。"""
+    import start
+    from delector.core import server_lifecycle
+
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(start, "is_android", lambda: True)
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
+    monkeypatch.setattr(server_lifecycle, "probe_identity", lambda _port: True)
+
+    _run_with_missing_streams(monkeypatch, start.main)
+
+    content = (tmp_path / "launch.log").read_text(encoding="utf-8")
+    assert "[提示] DeLector 已在端口 8000 运行" in content
+
+
+def test_start_entry_streams_survives_missing_desktop_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Android APK 里没有 `desktop.py` ⇒ 入口收口必须**静默放弃**，绝不得冒异常。
+
+    为什么必须有这条：APK 的 Python 源集只有 `start.py` + `delector/`（build-release.yml
+    里只 `cp -r start.py`，**没有** `cp desktop.py`），入口是 `py.getModule("start")
+    .callAttr("main")` ⇒ 收口里那句硬 `from desktop import ...` 会在 `main()` 首行抛
+    ModuleNotFoundError，被 Java 侧 `catch (Throwable)` 兜成「Python 引擎异常」⇒ **APK
+    起不来**。而 Android 上 `sys.stdout` 本就不是 None（Chaquopy 重定向到 logcat）⇒ 这次
+    收口在 Android 上恒为 no-op，却换来一次致命崩溃 —— 直接违背"收口绝不抛、不得阻断启动"。
+
+    用 `sys.modules["desktop"] = None` 模拟"包内不含该模块"（此刻 `import desktop` 抛
+    ImportError），断言 `main()` 的收口步骤**不冒泡**。
+    """
+    import start
+    from delector.core import server_lifecycle
+
+    monkeypatch.setitem(sys.modules, "desktop", None)  # ⇒ `import desktop` 抛 ImportError
+    monkeypatch.setattr(start, "is_android", lambda: True)  # 不起浏览器线程
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
+    monkeypatch.setattr(server_lifecycle, "probe_identity", lambda _port: True)
+
+    start.main()  # 不得抛：收口失败宁可不留痕，也绝不得阻断启动
+
+    assert sys.stdout is not None, "收口失败也不得把既有 stdout 弄丢（pytest 捕获流仍在）"
+
+
+def test_debug_console_flag_defaults_off_and_is_accepted() -> None:
+    """两个入口都只提供同一运行时开关；默认关闭，不新增第二个 exe。"""
+    import start
+
+    mod = _mod()
+    assert mod._parse_args([]).debug_console is False
+    assert mod._parse_args(["--debug-console"]).debug_console is True
+    assert start._parse_args([]).debug_console is False
+    assert start._parse_args(["--debug-console"]).debug_console is True
+
+
+def test_debug_console_keeps_existing_console_streams(
+    tmp_path: Path,
+) -> None:
+    """已有控制台时 debug 模式不得把现有 stdout/stderr 收口到日志。"""
+    mod = _mod()
+    original_out, original_err = sys.stdout, sys.stderr
+
+    mod.ensure_streams(str(tmp_path / "launch.log"), debug_console=True)
+
+    assert sys.stdout is original_out
+    assert sys.stderr is original_err
+    assert not (tmp_path / "launch.log").exists()
+
+
+def test_default_path_leaves_existing_streams_untouched(tmp_path: Path) -> None:
+    """默认路径（非 debug）：stdout/stderr **已存在** ⇒ 不得接管它们、也不得建/写 launch.log。
+
+    这是上一条的**默认分支镜像**：那条钉 `debug_console=True`，这条钉默认分支。缺了它，
+    "把默认分支改回『总是重定向』"（覆盖真实终端 / pytest 捕获流，并新建一个 launch.log）
+    这条变异仍全绿 —— 而"接管既有流"正是收口要防的反向失败。
+    """
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+    original_out, original_err = sys.stdout, sys.stderr
+
+    mod.ensure_streams(str(log_path))
+
+    assert sys.stdout is original_out, "已有 stdout 时默认路径不得接管它"
+    assert sys.stderr is original_err, "已有 stderr 时默认路径不得接管它"
+    assert not log_path.exists(), "已有流时不得创建/写入 launch.log"
+
+
+def test_debug_console_never_calls_win32_api_off_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ubuntu CI 上必须守住平台边界；无控制台时退到静默流，也不能触碰 Win32。
+
+    为什么用**记录型假 ctypes**（`__getattr__` 只记账、返回一个哑对象），而不是"哨兵"
+    （一访问就抛 AssertionError）：收口链路里的 `except Exception` 会**吞掉**哨兵
+    （AssertionError ⊂ Exception）⇒ 即使有人删掉 `sys.platform != "win32"` 守卫，哨兵版
+    仍然全绿（假绿）。记录型**不抛**，调用后断言"一次都没被访问过"，才真能钉住"非 win32
+    不碰 Win32 API"（`windll` / `kernel32` 之类入口）。
+    """
+    mod = _mod()
+    touched: List[str] = []
+
+    class _RecordingCtypes(types.ModuleType):
+        def __getattr__(self, name: str) -> Any:
+            touched.append(name)
+            return _RecordingCtypes(name)
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setitem(sys.modules, "ctypes", _RecordingCtypes("ctypes"))
+
+    def _exercise() -> None:
+        mod.ensure_streams(str(tmp_path / "launch.log"), debug_console=True)
+        assert sys.stdout is not None
+        assert sys.stderr is not None
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+    assert not (tmp_path / "launch.log").exists()
+    assert touched == [], f"非 win32 不得触碰任何 Win32 API 入口（ctypes.*），实际访问：{touched}"
 
 
 # ── GUI：真窗口 / 真托盘 / 三线程互不阻塞（无桌面会话下跳过，绝不假绿）────────
