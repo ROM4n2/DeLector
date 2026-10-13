@@ -45,6 +45,11 @@ from delector.core.server_lifecycle import await_ready, build_server, serve_in_t
 
 LOG_FILE_NAME = "launch.log"
 
+# 局域网地址文件：`--windowed` 打包后没有控制台，start.py 的横幅（唯一带 LAN 地址的输出）
+# 没人看得见 ⇒ 在数据目录落一份 `http://<LAN_IP>:<port>`（每次启动覆盖；能双击打开、能复制、
+# 随时再看）。托盘「显示局域网地址」读它；`--server-only` 与桌面态 LAN 可用时都写。
+LAN_ADDRESS_FILE_NAME = "lan-address.txt"
+
 # 日志轮转上限：桌面端长期运行会持续追加（uvicorn 每请求一行 access，见 server_lifecycle
 # 的 log_level="info"），无上限的追加早晚吃满磁盘。启动时若 launch.log 超过此值就滚动为
 # `launch.log.1`（只保留一份旧的），保证它有界。**不改日志行格式**——
@@ -99,9 +104,10 @@ SPLASH_LOADING_MODEL = "正在启动服务…"
 SPLASH_STARTING_SERVER = "正在等待服务就绪…"
 SPLASH_READY = "就绪"
 
-# ── 托盘菜单（打开 / 检查更新 / 退出）；action 键供实现映射到处理函数 ──────────
+# ── 托盘菜单（打开 / 显示局域网地址 / 检查更新 / 退出）；action 键供实现映射到处理函数 ──
 TRAY_MENU_SPEC: Tuple[Tuple[str, str], ...] = (
     ("打开", "open"),
+    ("显示局域网地址", "show_lan_address"),
     ("检查更新", "check_update"),
     ("退出", "quit"),
 )
@@ -111,6 +117,11 @@ TRAY_MENU_SPEC: Tuple[Tuple[str, str], ...] = (
 def resolve_log_path(env: Mapping[str, str]) -> str:
     """日志落点 = Task 1 的数据目录 + `launch.log`（与库、备份同处一地，覆盖安装不丢）。"""
     return os.path.join(resolve_data_dir(env), LOG_FILE_NAME)
+
+
+def resolve_lan_address_path(env: Mapping[str, str]) -> str:
+    """局域网地址文件落点 = 数据目录 + `lan-address.txt`（与 launch.log、库同处一地，覆盖安装不丢）。"""
+    return os.path.join(resolve_data_dir(env), LAN_ADDRESS_FILE_NAME)
 
 
 def open_log_streams(log_path: str) -> Tuple[TextIO, TextIO]:
@@ -152,6 +163,45 @@ def _append_log(log_path: str, message: str) -> None:
     except OSError:
         # 日志不可写是"最没得治"的环境问题；此处只静默放弃（调用方可能正在崩溃处理中）。
         pass
+
+
+def _detect_lan_address(port: int) -> Optional[str]:
+    """探测局域网地址 `http://<LAN_IP>:<port>`；探不到 LAN IP（离线/仅回环）返回 None。
+
+    复用 `start.get_local_ip`（惰性 import）：桌面端与 `--server-only` 对"有没有 LAN"必须
+    同一判法，另写一套 socket 探测迟早漂移。判据与 start.py 横幅一致：回环 = 没有 LAN。
+    """
+    import start
+
+    ip = start.get_local_ip()
+    if ip == "127.0.0.1":
+        return None
+    return f"http://{ip}:{port}"
+
+
+def write_lan_address(port: int, env: Mapping[str, str], log_path: str) -> Optional[str]:
+    """把局域网地址写进数据目录的 `lan-address.txt`（每次启动覆盖）。返回写入的地址。
+
+    为什么需要它：`--windowed` 打包后 stdout 不可见，start.py 的横幅没了 ⇒ 落一份文件
+    （双击可看、可复制、随时再看），托盘「显示局域网地址」也读它。两条硬约束：
+    - **没有 LAN 就不写**：回环地址不是"局域网地址"，写进去只会让用户拿它连手机然后失败；
+    - **写失败不得阻断启动**：地址是便利功能，"起不来"比"没有地址"严重得多 —— 失败落
+      `_append_log` 留痕后返回 None。
+    """
+    address = _detect_lan_address(port)
+    if address is None:
+        _append_log(log_path, f"未探测到局域网 IP（端口 {port}）：本次不写 {LAN_ADDRESS_FILE_NAME}。")
+        return None
+    path = resolve_lan_address_path(env)
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(address + "\n")
+    except OSError as exc:
+        _append_log(log_path, f"写 {LAN_ADDRESS_FILE_NAME} 失败（不阻断启动）：{exc!r}")
+        return None
+    _append_log(log_path, f"局域网地址已写入 {path}：{address}")
+    return address
 
 
 def _win_ms_since_create() -> float:
@@ -473,6 +523,39 @@ def _tray_check_update(_window: Any) -> None:
         pass
 
 
+def _read_lan_address() -> str:
+    """读数据目录里的 `lan-address.txt`；读不到 / 内容为空返回空串（调用方给可读失败提示）。"""
+    try:
+        with open(resolve_lan_address_path(os.environ), "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
+def _tray_show_lan_address(_window: Any) -> None:
+    """托盘「显示局域网地址」：弹原生窗显示地址（可 Ctrl+C 复制）；拿不到时给**可读**失败提示。
+
+    不许静默：用户点了一项却什么都没发生，比没有这项更糟。失败同时弹窗 + 落 launch.log。
+    """
+    address = _read_lan_address()
+    if not address:
+        _append_log(
+            resolve_log_path(os.environ), "托盘「显示局域网地址」未读到地址：lan-address.txt 缺失或为空。"
+        )
+        _message_box(
+            "无法显示局域网地址",
+            "未找到局域网地址（数据目录里的 lan-address.txt 缺失或为空）。\n"
+            "可能原因：启动时未探测到局域网 IP（电脑未联网）。\n"
+            "请确认电脑已联网后重启 DeLector，详情见 launch.log。",
+        )
+        return
+    _message_box(
+        "局域网地址",
+        f"手机/平板（同一 Wi-Fi）可用浏览器打开：\n{address}\n\n"
+        f"地址也已写入数据目录的 {LAN_ADDRESS_FILE_NAME}，可随时复制。",
+    )
+
+
 def _tray_quit(window: Any, coordinator: QuitCoordinator) -> None:
     """托盘「退出」：与关窗走**同一**收尸路径（先标记 coordinator，再销毁窗口）。"""
     if coordinator.request_quit():
@@ -486,6 +569,7 @@ def _tray_handler_map(window: Any, coordinator: QuitCoordinator) -> Dict[str, Ca
     """动作键 → 处理函数的**唯一**真相（键名与 `TRAY_MENU_SPEC` 的 action 对齐）。"""
     return {
         "open": lambda: _tray_open(window),
+        "show_lan_address": lambda: _tray_show_lan_address(window),
         "check_update": lambda: _tray_check_update(window),
         "quit": lambda: _tray_quit(window, coordinator),
     }
@@ -753,6 +837,9 @@ def _run_desktop_inner(port: int, log_path: str) -> int:
     # DATA_DIR 落定，之后再设 DELECTOR_DATA_DIR 就晚了（与 start.py 同款接线）。
     bootstrap_data_dir(os.environ)
     _append_log(log_path, "数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。")
+    # 桌面态 LAN 可用时同样落一份地址（托盘「显示局域网地址」读它；--windowed 无控制台）。
+    # 放在 bootstrap 之后：env 里的数据目录落点已定，文件与库、launch.log 同处一地。
+    write_lan_address(port, os.environ, log_path)
 
     from delector.server import app
     _append_log(log_path, "服务端模块已导入（delector.server）。")
@@ -856,6 +943,9 @@ def dispatch(server_only: bool, port: int, debug_console: bool = False) -> int:
             f"你传入的 --port {port} 不会生效。",
             file=sys.stderr,
         )
+    # 地址出口：无控制台（--windowed）时用户唯一能拿到 `http://<LAN_IP>:<port>` 的地方。
+    # 端口用 DEFAULT_PORT —— 该路径固定 8000，`--port` 不生效（见上方警告）。
+    write_lan_address(DEFAULT_PORT, os.environ, log_path)
     if debug_console:
         return run_server_only(debug_console=True)
     return run_server_only()

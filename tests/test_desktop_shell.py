@@ -276,21 +276,21 @@ def test_coordinated_shutdown_logs_the_timeout(tmp_path: Path):
 
 # ── ④ 托盘菜单：标签固定且「退出」与关窗共用同一触发器 ───────────────────────
 def test_tray_menu_labels_are_open_update_quit():
-    """托盘菜单三枚：打开 / 检查更新 / 退出（顺序稳定，便于用户形成肌肉记忆）。"""
+    """托盘菜单四枚：打开 / 显示局域网地址 / 检查更新 / 退出（顺序稳定，便于用户形成肌肉记忆）。"""
     mod = _mod()
 
     labels = [label for label, _action in mod.TRAY_MENU_SPEC]
 
-    assert labels == ["打开", "检查更新", "退出"]
+    assert labels == ["打开", "显示局域网地址", "检查更新", "退出"]
 
 
 def test_tray_menu_actions_are_wired_to_distinct_handlers():
-    """三枚菜单各接一个动作键：open / check_update / quit（quit 走统一收尸路径）。"""
+    """四枚菜单各接一个动作键：open / show_lan_address / check_update / quit（quit 走统一收尸路径）。"""
     mod = _mod()
 
     actions = [action for _label, action in mod.TRAY_MENU_SPEC]
 
-    assert actions == ["open", "check_update", "quit"]
+    assert actions == ["open", "show_lan_address", "check_update", "quit"]
 
 
 def test_build_tray_handlers_covers_every_spec_action():
@@ -332,6 +332,66 @@ def test_quit_coordinator_is_idempotent_so_close_and_tray_share_one_path():
     assert coordinator.request_quit() is True, "首次请求应生效"
     assert coordinator.request_quit() is False, "重复请求（关窗 + 托盘同时触发）应被忽略"
     assert coordinator.requested is True
+
+
+# ── ④-b 托盘「显示局域网地址」：无控制台形态的第二条地址出口 ─────────────────
+def test_tray_menu_includes_show_lan_address_item():
+    """「显示局域网地址」必须在托盘菜单里，且其 action 能解析成 handler（缺一即静默丢菜单项）。
+
+    背景：打包切 `--windowed` 后没有控制台，`--server-only` 原先靠 start.py 打印局域网地址，
+    桌面用户看不到 ⇒ 托盘是地址的第二出口（第一出口是数据目录的 `lan-address.txt`）。
+    """
+    mod = _mod()
+
+    labels = [label for label, _action in mod.TRAY_MENU_SPEC]
+    assert "显示局域网地址" in labels, "无控制台形态下托盘必须提供局域网地址入口"
+    action = dict(mod.TRAY_MENU_SPEC)["显示局域网地址"]
+
+    handlers = mod.build_tray_handlers(mod.TRAY_MENU_SPEC, window=object(), coordinator=mod.QuitCoordinator())
+
+    assert action in handlers, f"动作键 {action!r} 必须在 handlers 里可解析（否则点击即 KeyError）"
+    assert callable(handlers[action]), "「显示局域网地址」必须映射到可调用处理函数"
+
+
+def test_tray_show_lan_address_pops_the_address_from_data_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """点击「显示局域网地址」⇒ 弹原生窗显示 `lan-address.txt` 里的地址（复用 `_message_box`）。
+
+    弹窗内容必须**原样含文件里的地址**：这项的存在意义就是让用户能当场看到并复制它。
+    """
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    (tmp_path / "lan-address.txt").write_text("http://192.168.1.50:8000\n", encoding="utf-8")
+    popped: List[Tuple[str, str]] = []
+    monkeypatch.setattr(mod, "_message_box", lambda title, detail: popped.append((title, detail)))
+
+    handlers = mod.build_tray_handlers(mod.TRAY_MENU_SPEC, window=object(), coordinator=mod.QuitCoordinator())
+    handlers[dict(mod.TRAY_MENU_SPEC)["显示局域网地址"]]()
+
+    assert popped, "点击后必须弹窗，否则用户点了没反应（比没有这项更糟）"
+    assert "http://192.168.1.50:8000" in popped[0][1], "弹窗必须原样显示文件里的地址"
+
+
+def test_tray_show_lan_address_fails_readably_when_address_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """拿不到地址（文件缺失/为空）⇒ 必须弹**可读**失败提示并留痕，不许静默。
+
+    "点了一项却什么都没发生"是本任务要消除的一类静默失败：弹窗让用户知道为什么没有地址，
+    launch.log 让排障时有线索。
+    """
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))  # 空目录：没有 lan-address.txt
+    popped: List[str] = []
+    monkeypatch.setattr(mod, "_message_box", lambda title, detail: popped.append(title))
+
+    handlers = mod.build_tray_handlers(mod.TRAY_MENU_SPEC, window=object(), coordinator=mod.QuitCoordinator())
+    handlers[dict(mod.TRAY_MENU_SPEC)["显示局域网地址"]]()
+
+    assert popped, "拿不到地址时必须给出可见的失败提示，不许静默吞掉"
+    log_text = (tmp_path / "launch.log").read_text(encoding="utf-8")
+    assert "显示局域网地址" in log_text, "失败也要落 launch.log，不能只有弹窗"
 
 
 # ── ⑤ 崩溃：写 traceback 到 launch.log + 弹窗（替身 MessageBoxW）─────────────
@@ -1211,6 +1271,78 @@ def test_dispatch_server_only_does_not_warn_for_default_port(
     mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
 
     assert capsys.readouterr().err == "", "端口无分歧时不得告警"
+
+
+# ── `--server-only` 的地址出口：数据目录落 lan-address.txt（无控制台时唯一可见）──
+def test_dispatch_server_only_writes_lan_address_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`--server-only` 必须在数据目录写 `lan-address.txt`，内容含 `http://`。
+
+    `--windowed` 打包后 stdout 不可见，start.py 的横幅（唯一带 LAN 地址的输出）没了 ⇒
+    这份文件是用户拿到 `http://<LAN_IP>:<port>` 的第一出口（双击可看、可复制、随时再看）。
+    端口必须用 DEFAULT_PORT：该路径固定 8000，`--port` 不生效（见上方警告）。
+    """
+    import start
+
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(start, "main", lambda: None)
+    monkeypatch.setattr(start, "get_local_ip", lambda: "192.168.1.50")
+
+    code = mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
+
+    assert code == 0
+    lan_file = tmp_path / "lan-address.txt"
+    assert lan_file.exists(), "--server-only 必须写 lan-address.txt（无控制台时唯一可见的地址出口）"
+    content = lan_file.read_text(encoding="utf-8")
+    assert "http://" in content, "文件内容必须是 http:// 开头的地址"
+    assert f"http://192.168.1.50:{mod.DEFAULT_PORT}" in content, "地址必须用真实端口（--server-only 固定 8000）"
+
+
+def test_write_lan_address_skips_when_no_lan_ip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """探不到 LAN IP（离线/仅回环）⇒ 不写文件、不留假地址，但要在 launch.log 说明原因。
+
+    写 `http://127.0.0.1:<port>` 冒充"局域网地址"会让用户拿它连手机然后失败 —— 比没有
+    文件更糟；但跳过本身不许静默（否则用户只会以为"功能坏了"）。
+    """
+    import start
+
+    mod = _mod()
+    monkeypatch.setattr(start, "get_local_ip", lambda: "127.0.0.1")
+    log_path = tmp_path / "launch.log"
+
+    result = mod.write_lan_address(8000, {"DELECTOR_DATA_DIR": str(tmp_path)}, str(log_path))
+
+    assert result is None, "没有 LAN IP 时不得写文件（写了也是假地址）"
+    assert not (tmp_path / "lan-address.txt").exists()
+    assert "局域网" in log_path.read_text(encoding="utf-8"), "跳过也要留痕，不许静默"
+
+
+def test_write_lan_address_failure_does_not_block_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """写 lan-address.txt 失败（磁盘满/被杀软锁）⇒ **不阻断启动**，且原因落 launch.log。
+
+    地址是便利功能，"起不来"比"没有地址"严重得多；但失败必须留痕（哪一步、什么异常），
+    不许静默吞掉。
+    """
+    import start
+
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(start, "main", lambda: None)
+    monkeypatch.setattr(start, "get_local_ip", lambda: "192.168.1.50")
+    # 让落点变成一个**目录**：open(..., "w") 必抛 IsADirectoryError（OSError 子类）。
+    monkeypatch.setattr(mod, "resolve_lan_address_path", lambda _env: str(tmp_path))
+
+    code = mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
+
+    assert code == 0, "地址文件写失败不得阻断 --server-only 启动"
+    log_text = (tmp_path / "launch.log").read_text(encoding="utf-8")
+    assert "lan-address.txt" in log_text and "失败" in log_text, "写失败必须留痕（哪一步、什么异常）"
 
 
 def test_import_desktop_has_no_side_effects():
