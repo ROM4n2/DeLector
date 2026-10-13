@@ -316,7 +316,10 @@ def build_windows() -> None:
         "--onedir",
         "--noconfirm",
         "--clean",
-        "--console",  # Keep console so user sees service logs & IP addresses
+        "--windowed",  # 控制台已由 ensure_streams 收口到 launch.log，无控制台下失败走原生弹窗/托盘，故不再需要控制台
+        # exe 品牌图标 assets/DeLector.ico（16/32/48/256 多档）：--icon 在构建期把 ico 嵌进
+        # exe，产物无需夹带该文件；src 与 --add-data 同口径经 root_dir 构造（不写死绝对路径）。
+        f"--icon={os.path.join(root_dir, 'assets', 'DeLector.ico')}",
         f"--add-data={os.path.join(root_dir, 'static')}{os.pathsep}static",
         # 子计划 2A：预置文章 spaCy 口径 processed_json 数据文件（见 PRESET_PROCESSED_DATA_REL
         # 的说明）。src 取仓库内相对路径，dest 钉在同一相对路径 ⇒ 运行时按包相对定位能命中。

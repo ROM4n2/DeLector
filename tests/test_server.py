@@ -4782,6 +4782,34 @@ def test_windows_portable_declares_webview2_freeze_items():
         assert needle in pkg, f"{needle} 未在 package_windows.py 的冻结项中"
 
 
+def test_windows_portable_builds_windowed_with_brand_icon():
+    """Windows 便携包必须 `--windowed` + `--icon=assets/DeLector.ico`，且**不得**再 `--console`。
+
+    黑框根因：服务是同进程非 daemon 线程（没有子进程），`--console` 让每次双击都多弹一个
+    控制台窗口 —— 用户以为"多开了 PowerShell"。stdout/stderr 已由 ensure_streams 收口到
+    launch.log（提交 3217161），控制台不再承担"看服务日志与 IP"的职责；无控制台下的失败
+    改走原生弹窗 / 托盘提示，故 `--console` 必须退役为 `--windowed`。`--icon` 缺省时 exe
+    用 PyInstaller 默认图标，与 DeLector 品牌不一致，故显式挂 assets/DeLector.ico。
+    """
+    pkg = open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read()
+
+    assert "--windowed" in pkg, "Windows 打包必须 --windowed：双击 DeLector.exe 不应再弹出控制台黑框"
+    assert "--console" not in pkg, (
+        "不得再出现 --console：stdout/stderr 已由 ensure_streams 收口到 launch.log，"
+        "留着 --console 等于每次双击多弹一个黑框（服务是同进程线程，没有子进程需要它）"
+    )
+
+    icon_lines = [ln for ln in pkg.splitlines() if "--icon=" in ln]
+    assert icon_lines, "打包命令缺 --icon=：exe 会用 PyInstaller 默认图标而非 assets/DeLector.ico"
+    for ln in icon_lines:
+        assert "DeLector.ico" in ln and "assets" in ln, (
+            f"--icon= 必须指向 assets/DeLector.ico，实际：{ln.strip()}"
+        )
+        assert "root_dir" in ln, (
+            f"图标路径必须与 --add-data 同口径经 root_dir 构造（打包机目录不定），实际：{ln.strip()}"
+        )
+
+
 def test_windows_portable_declares_webview2_payload_verification():
     """Windows 便携包必须**构建后自检** WebView2 运行时 DLL，且缺了就**硬失败**。
 
