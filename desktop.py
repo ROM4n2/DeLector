@@ -70,6 +70,13 @@ READY_DEADLINE_S = 60.0
 # —— 该路径不接受 `--port`（见 dispatch 的显式警告），此常量是其真实端口的单一真相。
 DEFAULT_PORT = 8000
 
+# ── AppUserModelID（Win32 任务栏身份）────────────────────────────────────────
+# PyInstaller `--windowed` 的进程默认继承宿主 exe 的身份 ⇒ 任务栏按钮被归到 "Python" 分组、
+# 固定到任务栏后也认不出是 DeLector。`SetCurrentProcessExplicitAppUserModelID` 必须在**建窗
+# 之前**调用（任务栏按钮在首个窗口出现时定身份，晚设不生效）；仅 win32、**绝不抛**、失败落
+# `launch.log`（范式同 `_allocate_debug_console`）。
+APP_USER_MODEL_ID = "ROM4n2.DeLector"
+
 # ── WebView2 运行时检测（锚点取自本机实测注册表）────────────────────────────
 # 实测：HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{GUID} 的 pv=154.0.4258.62。
 WEBVIEW2_GUID = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -179,18 +186,36 @@ def _detect_lan_address(port: int) -> Optional[str]:
     return f"http://{ip}:{port}"
 
 
+def _remove_stale_lan_address(env: Mapping[str, str], log_path: str) -> None:
+    """删除上一轮残留的 `lan-address.txt`（本次没探测到 LAN）。**绝不抛**。
+
+    黄牌背景：探不到 LAN 时只"不写"不够 —— 上一轮的文件还在，托盘「显示局域网地址」会读出
+    **上一轮**的 IP 给用户（拿着过期地址连手机然后失败，比没有文件更糟）。删掉它，托盘就走
+    "可读失败"路径（明说本次没有地址）。删除失败（被杀软锁等）不阻断启动，仅留痕。
+    """
+    path = resolve_lan_address_path(env)
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+            _append_log(log_path, f"已删除上一轮残留的 {LAN_ADDRESS_FILE_NAME}（本次未探测到局域网 IP）。")
+    except OSError as exc:
+        _append_log(log_path, f"删除残留 {LAN_ADDRESS_FILE_NAME} 失败（不阻断启动）：{exc!r}")
+
+
 def write_lan_address(port: int, env: Mapping[str, str], log_path: str) -> Optional[str]:
     """把局域网地址写进数据目录的 `lan-address.txt`（每次启动覆盖）。返回写入的地址。
 
     为什么需要它：`--windowed` 打包后 stdout 不可见，start.py 的横幅没了 ⇒ 落一份文件
     （双击可看、可复制、随时再看），托盘「显示局域网地址」也读它。两条硬约束：
     - **没有 LAN 就不写**：回环地址不是"局域网地址"，写进去只会让用户拿它连手机然后失败；
+      且必须**清掉上一轮残留**（否则托盘读出过期 IP，见 `_remove_stale_lan_address`）；
     - **写失败不得阻断启动**：地址是便利功能，"起不来"比"没有地址"严重得多 —— 失败落
       `_append_log` 留痕后返回 None。
     """
     address = _detect_lan_address(port)
     if address is None:
         _append_log(log_path, f"未探测到局域网 IP（端口 {port}）：本次不写 {LAN_ADDRESS_FILE_NAME}。")
+        _remove_stale_lan_address(env, log_path)
         return None
     path = resolve_lan_address_path(env)
     try:
@@ -303,6 +328,24 @@ def _allocate_debug_console() -> None:
         except Exception:
             # AllocConsole 成功但设备流打开失败时，交给 ensure_streams 的 devnull 兜底。
             pass
+
+
+def _set_app_user_model_id(log_path: str) -> None:
+    """Windows：给进程设显式 AppUserModelID；非 Windows 或任意失败都直接返回（**绝不抛**）。
+
+    为什么需要它：`--windowed` 打包后进程默认继承宿主 exe 身份，任务栏按钮会被归到 "Python"
+    分组、固定到任务栏后也认不出是 DeLector。显式设置后任务栏/固定快捷方式才与品牌一致。
+    时机：进程早期、**建窗之前** —— 任务栏按钮在首个窗口出现时定身份，晚设不生效。
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+        _append_log(log_path, f"AppUserModelID 已设置：{APP_USER_MODEL_ID}")
+    except Exception as exc:
+        _append_log(log_path, f"设置 AppUserModelID 失败（不阻断启动）：{exc!r}")
 
 
 def ensure_streams(log_path: str, debug_console: bool = False) -> None:
@@ -524,11 +567,16 @@ def _tray_check_update(_window: Any) -> None:
 
 
 def _read_lan_address() -> str:
-    """读数据目录里的 `lan-address.txt`；读不到 / 内容为空返回空串（调用方给可读失败提示）。"""
+    """读数据目录里的 `lan-address.txt`；读不到 / 内容为空返回空串（调用方给可读失败提示）。
+
+    except 必须捕 `(OSError, UnicodeDecodeError)`：坏文件（非 UTF-8 字节）抛的是
+    UnicodeDecodeError（⊂ ValueError，**不是** OSError）—— 只捕 OSError 会让它穿过本函数
+    逃进 pystray 托盘回调 ⇒ 托盘线程静默死亡。扩捕后坏文件与缺失同走"可读失败"路径。
+    """
     try:
         with open(resolve_lan_address_path(os.environ), "r", encoding="utf-8") as handle:
             return handle.read().strip()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return ""
 
 
@@ -874,6 +922,9 @@ def run_desktop(port: int = DEFAULT_PORT, debug_console: bool = False) -> int:
     # 紧接着补一行"自进程创建"的毫秒数：起点之前的解释器启动 / 本模块模块级 import / 打包
     # bootstrap 都在本行之前发生，只有问 OS 要进程创建时刻才测得到（见 `_ms_since_process_create`）。
     _log_prestart_elapsed(log_path)
+    # AppUserModelID 必须在**建窗之前**设置（任务栏按钮在首个窗口出现时定身份，晚设不生效）；
+    # 仅 win32、绝不抛、失败落 launch.log（范式同 _allocate_debug_console）。
+    _set_app_user_model_id(log_path)
     try:
         return _run_desktop_inner(port, log_path)
     except KeyboardInterrupt:

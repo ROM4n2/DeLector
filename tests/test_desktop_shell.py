@@ -11,7 +11,7 @@ WebView2 检测 / 日志弹窗）会**没有任何守卫**（假绿）。故把�
 1. `ensure_webview2_runtime`：注册表三处（HKLM WOW6432Node / HKLM / HKCU）+ `pv` 值判定；
 2. `resolve_log_path`：落在 Task 1 的数据目录下，文件名固定 `launch.log`；
 3. 退出编排：**所有**退出路径先 `shutdown(server, thread)`；超时（返回 False）⇒ 硬退出；
-4. 托盘菜单：标签固定为 打开 / 检查更新 / 退出，且「退出」与关窗共用同一收尸触发器；
+4. 托盘菜单：标签固定为 打开 / 显示局域网地址 / 检查更新 / 退出，且「退出」与关窗共用同一收尸触发器；
 5. `write_crash`：traceback 落 `launch.log` + 弹窗（把 MessageBoxW 换成替身，不真弹）。
 
 GUI 部分（真窗口 / 真托盘 / 三线程互不阻塞）单独一条 `pytest.skip`，**绝不假绿**。
@@ -1711,3 +1711,133 @@ def test_ms_since_process_create_returns_none_off_windows(monkeypatch: pytest.Mo
 def test_tray_coexists_with_webview_event_loop():  # pragma: no cover - 只在真实桌面会话手动执行
     """托盘与窗口事件循环共存（默认跳过）：这是 ADR-0020 §6 Unknown 4，必须在真桌面实测。"""
     pytest.skip("GUI 冒烟：请在真实桌面会话手动验证托盘与窗口互不阻塞")
+
+
+# ── Task 4b：AppUserModelID + CRV 黄牌修复（陈旧地址残留 / 非 UTF-8 坏文件 / 文档漂移）───
+# 背景：Task 4a（提交 eb5eaf5）实现 lan-address.txt + 托盘「显示局域网地址」，CRV 验收 PASS
+# 但开 4 张黄牌。本轮修：① AppUserModelID（任务栏身份，进程早期、建窗之前）；② 黄牌 1：
+# 探不到 LAN 时**清掉**上一轮残留的 lan-address.txt（否则托盘读出过期 IP）；③ 黄牌 3：
+# `_read_lan_address` 的 except 扩为 (OSError, UnicodeDecodeError)（坏文件不再漏进托盘回调）；
+# ④ 黄牌 4a/4b：文档漂移（本文件 docstring 的托盘四项、package_windows 的 --server-only 文案）。
+# 记录型假 ctypes 复用 `test_debug_console_never_calls_win32_api_off_windows` 同款范式：
+# __getattr__ 只记账**不抛**（哨兵版会被实现里的 except Exception 吞掉 ⇒ 假绿）。
+class _RecordingCtypes(types.ModuleType):
+    """记录型假 ctypes：属性访问记账（`touched`）、调用记账并返回 0（`calls`），**绝不抛**。"""
+
+    def __init__(self, name: str, touched: List[str], calls: List[Any]) -> None:
+        super().__init__(name)
+        self._touched = touched
+        self._calls = calls
+
+    def __getattr__(self, name: str) -> Any:
+        self._touched.append(name)
+        return _RecordingCtypes(name, self._touched, self._calls)
+
+    def __call__(self, *args: Any, **_kwargs: Any) -> int:
+        self._calls.append(args)
+        return 0
+
+
+def test_app_user_model_id_is_set_on_win32_before_window_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """win32 下必须调 `shell32.SetCurrentProcessExplicitAppUserModelID("ROM4n2.DeLector")`。
+
+    记录型假 ctypes 钉住**属性链**（windll → shell32 → SetCurrentProcessExplicitAppUserModelID）
+    与**实参**（AppUserModelID 常量）：换成别的 API、换了 ID、或把调用挪去建窗之后都会转红。
+    """
+    mod = _mod()
+    touched: List[str] = []
+    calls: List[Any] = []
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setitem(sys.modules, "ctypes", _RecordingCtypes("ctypes", touched, calls))
+
+    mod._set_app_user_model_id(str(tmp_path / "launch.log"))
+
+    assert "windll" in touched, "必须经 ctypes.windll 走 Win32 API"
+    assert "shell32" in touched, "AppUserModelID 属 shell32"
+    assert "SetCurrentProcessExplicitAppUserModelID" in touched, (
+        "必须调 SetCurrentProcessExplicitAppUserModelID（任务栏/固定快捷方式身份）"
+    )
+    assert calls and calls[0] == ("ROM4n2.DeLector",), f"实参必须是 AppUserModelID 常量，实际：{calls}"
+
+
+def test_app_user_model_id_never_touches_win32_off_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """非 win32（CI ubuntu）不得触碰任何 Win32 API，且绝不抛。"""
+    mod = _mod()
+    touched: List[str] = []
+    calls: List[Any] = []
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setitem(sys.modules, "ctypes", _RecordingCtypes("ctypes", touched, calls))
+
+    mod._set_app_user_model_id(str(tmp_path / "launch.log"))
+
+    assert touched == [], f"非 win32 不得触碰 Win32 API，实际访问：{touched}"
+    assert calls == []
+
+
+def test_app_user_model_id_failure_logs_and_never_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """设置失败（如 shell32 不可用）⇒ **绝不抛**，且落 launch.log 留痕（范式同 _allocate_debug_console）。"""
+    mod = _mod()
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    class _BoomCtypes(types.ModuleType):
+        def __getattr__(self, name: str) -> Any:
+            raise OSError("模拟 shell32 不可用")
+
+    monkeypatch.setitem(sys.modules, "ctypes", _BoomCtypes("ctypes"))
+    log_path = tmp_path / "launch.log"
+
+    mod._set_app_user_model_id(str(log_path))  # 不得抛
+
+    assert "AppUserModelID" in log_path.read_text(encoding="utf-8"), "失败必须留痕，不许静默"
+
+
+def test_stale_lan_address_file_is_cleared_when_no_lan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """黄牌 1：探不到 LAN 时必须**清掉**上一轮的 lan-address.txt，否则托盘弹出过期 IP。
+
+    上一轮留下的 `http://10.x.x.x` 若不被清，用户这次离线启动、点「显示局域网地址」看到的
+    是**上一轮**的地址 —— 拿着过期 IP 连手机然后失败，比没有文件更糟。清掉后托盘走"可读
+    失败"路径（明说本次没有地址）。
+    """
+    import start
+
+    mod = _mod()
+    monkeypatch.setattr(start, "get_local_ip", lambda: "127.0.0.1")
+    lan_file = tmp_path / "lan-address.txt"
+    lan_file.write_text("http://10.0.0.9:8000\n", encoding="utf-8")  # 上一轮的残留
+    log_path = tmp_path / "launch.log"
+
+    result = mod.write_lan_address(8000, {"DELECTOR_DATA_DIR": str(tmp_path)}, str(log_path))
+
+    assert result is None, "没有 LAN IP 时不得写文件"
+    leftover = lan_file.exists() and lan_file.read_text(encoding="utf-8").strip()
+    assert not leftover, "无 LAN 时上一轮的地址必须被删除或截断（不得残留过期 IP 骗托盘）"
+
+
+def test_tray_show_lan_address_fails_readably_on_non_utf8_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """黄牌 3：lan-address.txt 含非 UTF-8 字节 ⇒ 走可读失败路径（弹窗 + 留痕），不把异常漏进托盘回调。
+
+    旧实现 except 只捕 OSError：坏文件抛的 UnicodeDecodeError 会穿过 `_read_lan_address` 逃进
+    pystray 回调 ⇒ 托盘线程静默死亡。扩为 (OSError, UnicodeDecodeError) 后坏文件与缺失同路。
+    """
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    (tmp_path / "lan-address.txt").write_bytes(b"\xff\xfe\x80stale-bytes")  # 非 UTF-8 坏文件
+    popped: List[str] = []
+    monkeypatch.setattr(mod, "_message_box", lambda title, detail: popped.append(title))
+
+    handlers = mod.build_tray_handlers(mod.TRAY_MENU_SPEC, window=object(), coordinator=mod.QuitCoordinator())
+    handlers[dict(mod.TRAY_MENU_SPEC)["显示局域网地址"]]()  # 不得抛
+
+    assert popped, "坏文件必须给出可见的失败提示，不许让异常逃逸进托盘回调"
+    log_text = (tmp_path / "launch.log").read_text(encoding="utf-8")
+    assert "显示局域网地址" in log_text, "失败也要落 launch.log，不能只有弹窗"
