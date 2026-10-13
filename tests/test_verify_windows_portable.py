@@ -21,6 +21,7 @@ traceback 判据、`lan-address.txt` 三态、非 Windows 的显式 skip 语义�
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 from typing import Any, List
 
@@ -279,8 +280,15 @@ def test_log_has_traceback_clean_when_absent() -> None:
 
 
 def test_log_has_traceback_ignores_bare_error_words() -> None:
-    """业务日志里的 error/失败 字样**不算** traceback：宽判据的误报会让这道闸被绕开。"""
-    assert vp.log_has_traceback("ERROR:root:connection reset\n失败：写库超时\n") is False
+    """业务日志里的 error/失败 字样**不算** traceback：宽判据的误报会让这道闸被绕开。
+
+    样本刻意**大小写混合**：`ERROR:`（全大写）+ `Error:`（混合大小写）+ `失败` 三类并存。
+    只放全大写 ERROR 时，"判据放宽成 `"Error" in log_text`"这条变异不会转红（样本里根本没有
+    混合大小写的 Error）—— 而 MUTATION 表声称它会转红，属自证表虚报。混样后该变异必红
+    （见文末 MUTATION 表对应行）。
+    """
+    text = "ERROR:root:connection reset\nError: 写库超时\n失败：重试中\n"
+    assert vp.log_has_traceback(text) is False
 
 
 def test_lan_address_state_present(tmp_path: Path) -> None:
@@ -332,6 +340,18 @@ def test_no_console_check_runs_on_windows(tmp_path: Path, monkeypatch: pytest.Mo
     assert report.failed is True
 
 
+def test_is_windows_seam_matches_os_name() -> None:
+    """`_is_windows()` seam 必须与 `os.name` 同构（**不 monkeypatch**，直接调真身）。
+
+    上面两条 skip / 真启用例都经 seam 注入（`lambda: False/True`），钉的是"编排层会走 seam"，
+    钉不住 seam **自身**：若它被改成恒 False，Windows CI 上整道 no-console 闸（CREATE_NO_WINDOW
+    真启）会静默 skip —— 看着全绿，其实那道闸从没跑过（假绿）；恒 True 则让 Linux 上也真启、
+    creationflags 静默变 0。本用例断言 `vp._is_windows() is (os.name == "nt")`：seam 与
+    `os.name` 不一致即转红 —— Windows 上钉"恒 False"（上述假绿形态），Linux 上钉"恒 True"。
+    """
+    assert vp._is_windows() is (os.name == "nt")
+
+
 def test_main_appends_no_console_step_after_standard_launch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -368,7 +388,7 @@ def test_main_appends_no_console_step_after_standard_launch(
 # | _creation_flags: no-console 分支漏加 CREATE_NO_WINDOW（返回 0）| test_creation_flags_no_console_uses_create...  |
 # | _creation_flags: graceful 分支被删                            | test_creation_flags_graceful_unchanged         |
 # | log_has_traceback: 恒真                                       | test_log_has_traceback_clean_when_absent       |
-# | log_has_traceback: 判据放宽成 "Error" 子串                     | test_log_has_traceback_ignores_bare_error_words|
+# | log_has_traceback: 判据放宽成 "Error" 子串（含大小写混合）    | test_log_has_traceback_ignores_bare_error_words|
 # | lan_address_state: 恒 present（不读留痕）                      | test_lan_address_state_absent_but_traced/silent|
 # | _check_no_console_launch: 去掉 os.name 守卫（非 Windows 也真启）| test_no_console_check_skips_off_windows        |
 # | main: 不接 no-console 步 / 接到普通真启之前                     | test_main_appends_no_console_step_after...     |

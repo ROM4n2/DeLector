@@ -28,7 +28,7 @@ import sys
 import threading
 import types
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
 import pytest
 
@@ -1719,6 +1719,12 @@ def test_tray_coexists_with_webview_event_loop():  # pragma: no cover - 只在�
 # 探不到 LAN 时**清掉**上一轮残留的 lan-address.txt（否则托盘读出过期 IP）；③ 黄牌 3：
 # `_read_lan_address` 的 except 扩为 (OSError, UnicodeDecodeError)（坏文件不再漏进托盘回调）；
 # ④ 黄牌 4a/4b：文档漂移（本文件 docstring 的托盘四项、package_windows 的 --server-only 文案）。
+# 回炉黄牌（4b 验收再开 4 张之一，测试名过度承诺）：隔离调用那条原名
+# `..._before_window_creation` 声称"挪去建窗之后都会转红"，但它只隔离调用、无任何顺序/结构
+# 断言 ⇒ 名实不符。修法：改名去掉时机承诺（`test_app_user_model_id_is_set_on_win32`），
+# 另补一条**位置无关**的 AST 顺序断言（`test_app_user_model_id_is_set_before_window_creation`）：
+# 沿调用链钉"每条到达 webview.create_window 的路径必经 _set_app_user_model_id 且更早"——
+# 真机若发现任务栏仍归 Python 组、需要调调用时机时，改实现即可，不会被迫删断言。
 # 记录型假 ctypes 复用 `test_debug_console_never_calls_win32_api_off_windows` 同款范式：
 # __getattr__ 只记账**不抛**（哨兵版会被实现里的 except Exception 吞掉 ⇒ 假绿）。
 class _RecordingCtypes(types.ModuleType):
@@ -1738,13 +1744,17 @@ class _RecordingCtypes(types.ModuleType):
         return 0
 
 
-def test_app_user_model_id_is_set_on_win32_before_window_creation(
+def test_app_user_model_id_is_set_on_win32(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """win32 下必须调 `shell32.SetCurrentProcessExplicitAppUserModelID("ROM4n2.DeLector")`。
 
     记录型假 ctypes 钉住**属性链**（windll → shell32 → SetCurrentProcessExplicitAppUserModelID）
-    与**实参**（AppUserModelID 常量）：换成别的 API、换了 ID、或把调用挪去建窗之后都会转红。
+    与**实参**（AppUserModelID 常量）：换成别的 API、换了 ID 都会转红。
+
+    刻意**不含**时机承诺（旧名 `..._before_window_creation` 属过度承诺：本用例直接隔离调用
+    `_set_app_user_model_id`，没有任何顺序/结构断言，"把调用挪去建窗之后"它照绿）。时机由
+    `test_app_user_model_id_is_set_before_window_creation`（AST 顺序断言）钉。
     """
     mod = _mod()
     touched: List[str] = []
@@ -1760,6 +1770,87 @@ def test_app_user_model_id_is_set_on_win32_before_window_creation(
         "必须调 SetCurrentProcessExplicitAppUserModelID（任务栏/固定快捷方式身份）"
     )
     assert calls and calls[0] == ("ROM4n2.DeLector",), f"实参必须是 AppUserModelID 常量，实际：{calls}"
+
+
+# ── AppUserModelID 的**时机**钉：建窗之前（AST 顺序断言，位置无关）──────────────────
+_APP_USER_MODEL_ID_CALL = "_set_app_user_model_id"
+
+
+def _is_webview_create_window_call(call: ast.Call) -> bool:
+    """`webview.create_window(...)`：属性链锚定 `webview` 对象，防同名方法误判。"""
+    func = call.func
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "create_window"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "webview"
+    )
+
+
+def _call_paths(root: str, target: str, funcs: Dict[str, ast.FunctionDef]) -> List[List[Tuple[str, str, int]]]:
+    """从 `root` 到 `target` 的全部调用路径（沿本模块顶层函数调用边，防环）。
+
+    每条路径是边序列 `[(caller, callee, 调用点行号), ...]`；同一对函数有多个调用点时每个
+    调用点各产出一条边（行号不同，顺序断言才钉得准）。
+    """
+    paths: List[List[Tuple[str, str, int]]] = []
+
+    def _dfs(current: str, edges: List[Tuple[str, str, int]], seen: FrozenSet[str]) -> None:
+        if current == target:
+            paths.append(list(edges))
+            return
+        for call in _calls(funcs[current]):
+            label = _call_label(call)
+            if label is None or label not in funcs or label in seen:
+                continue
+            _dfs(label, edges + [(current, label, call.lineno)], seen | {label})
+
+    _dfs(root, [], frozenset({root}))
+    return paths
+
+
+def test_app_user_model_id_is_set_before_window_creation() -> None:
+    """`_set_app_user_model_id` 必须在**任何** `webview.create_window` 之前执行到（AST 顺序断言）。
+
+    为什么隔离调用那条不够：它直接调 `_set_app_user_model_id`，钉得住 API 与实参，钉不住
+    **时机** —— 把调用挪进 `_show_window`（create_window 之后）它仍全绿。而任务栏按钮在首个
+    窗口出现时定身份，晚设不生效 ⇒ 必须沿调用链钉死"建窗之前"。
+
+    **位置无关**：不断言 set 在哪个函数里，只断言"每条到达建窗的路径上、进入建窗函数之前
+    必经 set，且 set 调用点早于该路径上后续每一步"。真机若发现任务栏仍归 Python 组、需要调
+    调用时机时，改的是实现（更早 / 换到别的函数都行），不会被迫删断言。
+    """
+    tree = _parse_desktop()
+    funcs = _funcs_by_name(tree)
+
+    creates = sorted(
+        (name, call.lineno)
+        for name, fn in funcs.items()
+        for call in _calls(fn)
+        if _is_webview_create_window_call(call)
+    )
+    assert creates, "desktop.py 必然存在 webview.create_window（不建窗 = 没有桌面壳）"
+
+    for func_name, create_line in creates:
+        paths = _call_paths("run_desktop", func_name, funcs)
+        assert paths, f"从 run_desktop 到 {func_name}（第 {create_line} 行建窗）没有调用路径：入口漂移了？"
+        for path in paths:
+            edges = [*path, (func_name, "webview.create_window", create_line)]
+            guarded = False
+            for caller, callee, call_line in edges:
+                set_lines = [
+                    call.lineno for call in _calls(funcs[caller]) if _call_label(call) == _APP_USER_MODEL_ID_CALL
+                ]
+                for set_line in set_lines:
+                    assert set_line < call_line, (
+                        f"{caller} 里第 {set_line} 行的 _set_app_user_model_id 晚于第 {call_line} 行对 "
+                        f"{callee} 的调用：任务栏按钮在首个窗口出现时定身份，AppUserModelID 必须在建窗之前设置"
+                    )
+                guarded = guarded or bool(set_lines)
+            assert guarded, (
+                f"到达 webview.create_window（{func_name} 第 {create_line} 行）的这条路径没有经过 "
+                f"_set_app_user_model_id：{edges}"
+            )
 
 
 def test_app_user_model_id_never_touches_win32_off_windows(
