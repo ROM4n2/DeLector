@@ -763,9 +763,11 @@ def _after_start(
         main.load_url(f"http://127.0.0.1:{port}")  # 再把真实 UI 载入主窗口（非 splash）
         _destroy_window(splash, log_path)  # 最后收掉 splash（实例非空 ⇒ 不触发 Application.Exit）
         _append_log(log_path, "已切换到主窗口，splash 已关闭。")
-    except Exception as exc:
+    except Exception:
         # 后台线程里的异常若不接住，线程会**静默死亡**（又回到"窗口不出、零线索"）；必须留痕并收尾。
-        _append_log(log_path, f"就绪/切 UI 阶段异常：{exc!r}")
+        # 与就绪超时分支对齐（两条失败出口行为一致）：日志 + 弹窗 + 置失败码 + 销毁两窗。
+        # 复用 write_crash（全栈落 launch.log + 原生弹窗），不另造第三种失败出口。
+        write_crash("DeLector 启动失败", traceback.format_exc(), log_path)
         result[0] = 1
         _abort_windows(splash, main, coordinator, log_path)
 
@@ -931,7 +933,9 @@ def run_desktop(port: int = DEFAULT_PORT, debug_console: bool = False) -> int:
         _append_log(log_path, "收到 Ctrl+C：退出（服务已收尸）。")
         return 0
     except Exception:
-        write_crash("DeLector 启动失败", traceback.format_exc(), log_path)
+        # 弹窗只给人话一句（traceback 原样只落盘）：面向用户的文案禁止含堆栈，但必须给出日志路径。
+        _append_log(log_path, traceback.format_exc())
+        write_crash("DeLector 启动失败", f"启动失败，详情见 {log_path}", log_path)
         return 1
 
 

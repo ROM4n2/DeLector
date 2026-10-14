@@ -431,6 +431,95 @@ def test_write_crash_still_pops_when_log_write_fails(tmp_path: Path, monkeypatch
     assert popped == ["标题"], "即便落盘失败，弹窗也必须发生"
 
 
+# ── Task 2（失败出口统一）：切 UI 异常必须弹窗 + 全栈落盘；外层弹窗不许吐栈 ────
+def test_after_start_exception_pops_dialog_and_logs_full_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`_after_start` 内窗口调用抛异常 ⇒ 必须弹窗，且 `launch.log` 含全栈 traceback。
+
+    缺陷现场：该异常分支此前只写一行 `exc!r` 就 `_abort_windows` 收尸 —— `--windowed` 打包后
+    无控制台，用户看到的是"窗口一闪就没、零线索"；而同函数的就绪超时分支反而有弹窗，两条
+    失败出口不一致。无头环境把 MessageBoxW 换替身（不真弹），断言弹窗发生且全栈落盘。
+    """
+    mod = _mod()
+    log_path = tmp_path / "launch.log"
+    popped: List[Tuple[str, str]] = []
+    monkeypatch.setattr(mod, "_message_box", lambda title, detail: popped.append((title, detail)))
+    monkeypatch.setattr(mod, "await_ready", lambda *_a, **_k: True)
+
+    class _Signal:
+        def __iadd__(self, _other: Any) -> "_Signal":
+            return self
+
+    class _Events:
+        def __init__(self) -> None:
+            self.closed = _Signal()
+            self.loaded = _Signal()
+
+    class _Splash:
+        def __init__(self) -> None:
+            self.events = _Events()
+
+        def evaluate_js(self, _script: str) -> None:
+            return None
+
+        def destroy(self) -> None:
+            return None
+
+    class _BoomMain:
+        def __init__(self) -> None:
+            self.events = _Events()
+
+        def show(self) -> None:
+            raise RuntimeError("boom-main-show")
+
+        def load_url(self, _url: str) -> None:
+            return None
+
+        def destroy(self) -> None:
+            return None
+
+    result: List[int] = [0]
+
+    mod._after_start(_Splash(), _BoomMain(), mod.QuitCoordinator(), 8000, str(log_path), result)
+
+    assert result[0] == 1, "异常路径必须置失败退出码（否则 start() 返回后进程装成功）"
+    assert popped, "切 UI 阶段异常必须弹窗（无控制台时这是用户唯一可见的失败反馈）"
+    content = log_path.read_text(encoding="utf-8")
+    assert "Traceback" in content, "launch.log 必须含全栈 traceback（只有 repr 一行不足以定位）"
+    assert "boom-main-show" in content, "异常信息必须落盘"
+
+
+def test_run_desktop_outer_failure_pops_one_liner_without_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """外层失败路径：弹窗只给人话一句（给出日志路径），**不得**原样吐 traceback。
+
+    缺陷现场：`run_desktop` 的 `except Exception` 此前把 `traceback.format_exc()` 原样传给
+    `write_crash` ⇒ 完整堆栈进弹窗（无控制台用户被一大段英文栈吓住，也读不出所以然）。
+    修法：traceback 只落盘，弹窗一句话"启动失败，详情见 <log_path>"（路径一并给出）。
+    """
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    log_path = tmp_path / "launch.log"
+    popped: List[Tuple[str, str]] = []
+    monkeypatch.setattr(mod, "_message_box", lambda title, detail: popped.append((title, detail)))
+
+    def _boom(*_a: Any, **_k: Any) -> int:
+        raise RuntimeError("boom-outer")
+
+    monkeypatch.setattr(mod, "_run_desktop_inner", _boom)
+
+    code = mod.run_desktop(port=8000)
+
+    assert code == 1, "外层异常必须以非零码退出"
+    assert popped, "外层失败必须弹窗"
+    _title, detail = popped[0]
+    assert "Traceback" not in detail, f"弹窗文案不得含 traceback（排障信息只许落盘）：{detail!r}"
+    assert "Traceback" in log_path.read_text(encoding="utf-8"), "全栈 traceback 必须落盘"
+    assert str(log_path) in detail, "弹窗必须给出日志路径，用户/支持者才能定位"
+
+
 # ── import 安全性：`import desktop` 不得起服务 / 弹窗 / 拉 GUI ────────────────
 def _parse_desktop() -> ast.Module:
     return ast.parse((REPO_ROOT / "desktop.py").read_text(encoding="utf-8"))
