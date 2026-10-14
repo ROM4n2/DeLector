@@ -689,6 +689,132 @@ def test_desktop_launch_is_guarded_by_main():
     assert guarded, "入口必须在 `if __name__ == '__main__':` 守卫内调用 dispatch"
 
 
+# ── Task 4：标准流收口前的裸输出守卫（AST 结构级，no-console 顺序契约）──────────
+# 判据出处：docs/plans/2026-10-14-no-console-feedback-gaps.md Task 4（怀疑者复核后的事实）：
+# CPython 的 print() 在 sys.stdout is None 时是**静默 no-op**（builtin print 内部
+# `if file is None: return`），不崩；真会崩的是 `None.write`（argparse 的 file.write
+# 路径，Task 1 已修）。故本守卫防的不是"解释器崩"，是**零线索**：--windowed 产物里，
+# 收口点之前直接写标准流的代码，要么被静默蒸发（print 到 None），要么当场
+# AttributeError（None.write）⇒ 用户面对一扇不出现的窗口、launch.log 零行。
+#
+# 为什么是 AST 守卫而不是"真启一次"：CI 的子进程 stdout 被重定向进日志 ⇒ 标准流并非
+# None，那类回归在 verify_windows_portable.py 的 (c) 步语境下**不会被触发**，扫
+# traceback 也瞄不到它（判据从一开始就瞄错了对象）。None 语境只有本文件的
+# `sys.stdout=None` 注入单测复现得了；顺序契约则由这里静态钉死。
+#
+# 收口点（标准流被保证可写的时刻）= 调用 ensure_streams 一族函数的语句：
+# - `ensure_streams`：桌面/跨平台共用的收口实现（desktop.py）；
+# - `_ensure_entry_streams`：start.py 入口对上述收口的复用包装（内部就是
+#   `from desktop import ensure_streams`；其 docstring 明言"复用桌面壳的 launch.log 收口"）；
+# - `_redirect_std_streams`：run_desktop 内的兼容接线（内部转调 ensure_streams）。
+_STREAM_COVERAGE_CALLS: FrozenSet[str] = frozenset(
+    {"ensure_streams", "_ensure_entry_streams", "_redirect_std_streams"}
+)
+# 受守护的入口模块（相对仓库根）：桌面入口与跨平台入口（Task 1 把两者 __main__ 都改成先收口后解析）。
+_STREAM_GUARD_FILES: Tuple[str, ...] = ("desktop.py", "start.py")
+
+
+def _walk_flat(node: ast.AST) -> Iterator[ast.AST]:
+    """walk 但不深入嵌套函数/类/lambda：那些是独立作用域，由各自的语句序列管辖。"""
+    yield node
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        yield from _walk_flat(child)
+
+
+def _stream_write_violation(call: ast.Call) -> Optional[str]:
+    """裸输出调用 ⇒ 人类可读标签；合法调用（带 file= / 非标准流 write）⇒ None。"""
+    func = call.func
+    if isinstance(func, ast.Name) and func.id == "print":
+        if any(kw.arg == "file" for kw in call.keywords):
+            return None
+        return "无 file= 关键字参数的 print(...)（收口前写到 None 流 = 静默蒸发）"
+    if isinstance(func, ast.Attribute) and func.attr == "write":
+        target = func.value
+        if (
+            isinstance(target, ast.Attribute)
+            and target.attr in {"stdout", "stderr"}
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "sys"
+        ):
+            return f"sys.{target.attr}.write(...)（收口前对 None 流调用 = AttributeError 零线索崩溃）"
+    return None
+
+
+def _direct_coverage_lineno(stmts: List[ast.stmt]) -> Optional[int]:
+    """模块级：只认**直接**是收口调用的表达式语句（If/Try 块由各自单位管辖，不进子树）。"""
+    for stmt in stmts:
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            func = stmt.value.func
+            if isinstance(func, ast.Name) and func.id in _STREAM_COVERAGE_CALLS:
+                return stmt.value.lineno
+    return None
+
+
+def _scoped_coverage_lineno(stmts: List[ast.stmt]) -> Optional[int]:
+    """函数/入口块：控制流块（try/if/for…）内的收口调用也算界，但不深入嵌套 def/class。"""
+    best: Optional[int] = None
+    for stmt in stmts:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        for node in _walk_flat(stmt):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in _STREAM_COVERAGE_CALLS
+            ):
+                if best is None or node.lineno < best:
+                    best = node.lineno
+    return best
+
+
+def _statement_scopes(tree: ast.Module) -> Iterator[Tuple[str, List[ast.stmt], Optional[int]]]:
+    """产出所有线性执行序列 `(作用域名, 语句表, 收口行号)`；无收口行号 ⇒ 该序列不受静态管辖。"""
+    yield ("<module>", tree.body, _direct_coverage_lineno(tree.body))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield (node.name, node.body, _scoped_coverage_lineno(node.body))
+        elif isinstance(node, ast.If) and _is_main_guard(node):
+            yield ("<__main__>", node.body, _scoped_coverage_lineno(node.body))
+
+
+def _stream_guard_violations(source: str, filename: str) -> List[str]:
+    violations: List[str] = []
+    tree = ast.parse(source, filename=filename)
+    for scope, stmts, boundary in _statement_scopes(tree):
+        if boundary is None:
+            continue  # 该序列没有收口点 ⇒ 裸输出的执行时机由调用方决定，静态不可判
+        for stmt in stmts:
+            if stmt.lineno > boundary:
+                break  # 已过收口点：标准流此时已保证可写，允许裸 print / write
+            for node in _walk_flat(stmt):
+                if isinstance(node, ast.Call) and node.lineno < boundary:
+                    label = _stream_write_violation(node)
+                    if label is not None:
+                        violations.append(f"{filename}:{node.lineno}（{scope}）{label}")
+    return violations
+
+
+@pytest.mark.parametrize("relpath", _STREAM_GUARD_FILES)
+def test_no_bare_stream_writes_before_stream_coverage(relpath: str) -> None:
+    """收口点之前不得出现裸 print / sys.stdout.write / sys.stderr.write（Task 4 结构守卫）。
+
+    先证过"无守卫时抓不到"：临时在两个入口的收口调用前各插一个裸 print，既有 124 条
+    用例全绿。本用例落地后再做同样的插入 ⇒ 转红（RED 原文见提交信息）；删除复原 ⇒ 转绿
+    （仓库外副本备份 + md5 复核，未用 git checkout/restore）。
+    """
+    source = (REPO_ROOT / relpath).read_text(encoding="utf-8")
+    violations = _stream_guard_violations(source, relpath)
+
+    assert not violations, (
+        f"{relpath} 在标准流收口（ensure_streams 一族）之前出现裸输出：\n"
+        + "\n".join(f"  - {v}" for v in violations)
+        + "\n收口前写标准流 = 无控制台（--windowed）语境下零线索：print 静默蒸发、"
+        "sys.stdout/stderr.write 直接 AttributeError。请把输出移到收口调用之后，或显式传 file=。"
+    )
+
+
 # ── P0 死锁回归锁：窗口操作必须在 webview.start() 之后（GUI 事件循环内）执行 ──────
 # 真根因（scratch/repro_splash_deadlock.py 三模式实测）：pywebview 把 evaluate_js / load_url
 # marshal 到 GUI 线程执行，而 GUI 事件循环由 webview.start() 才启动；在 start **之前**调它们会

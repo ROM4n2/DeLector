@@ -33,12 +33,18 @@ CI runner 无桌面会话，GUI 路径（pywebview / pystray）在无头环境**
 **窗口形态（双击出不出窗口 / 进程退不退）不在本闸覆盖范围内** —— 那由本机人工双击 +
 ``scratch/`` 复现脚本覆盖。把这条写在这里，是为了不让后人误以为"CI 绿了 ⇒ 双击没问题"。
 
-(c) 步也有边界（**别以为它复现了 ``sys.stdout is None``**）：CI 里子进程的 stdout/stderr
-被**重定向进日志文件** ⇒ 子进程的 ``sys.stdout`` 并非 ``None``，"双击 ``--windowed`` 产物时
-``sys.stdout is None`` 导致裸 ``print`` 即崩"那一类，由 ``tests/test_desktop_shell.py`` 的
-``sys.stdout=None`` 注入单测钉死（那里才复现得了 None 语境）。(c) 步在 CI 钉的是：**无控制台
-窗口语境下起服 + 整段日志无 traceback**（含健康就绪**之后**才发生的崩溃 —— (b) 步只看就绪，
-那类它抓不到）+ ``lan-address.txt`` 地址出口。两者互补，都不可省。
+(c) 步也有边界（**别以为它复现了 ``sys.stdout is None``，更别以为它瞄的是那类回归**）：
+CI 里子进程的 stdout/stderr 被**重定向进日志文件** ⇒ 子进程的 ``sys.stdout`` 并非
+``None``。事实澄清（2026-10-14 怀疑者复核）：Py3 的 ``print()`` 在 ``sys.stdout is None``
+时是**静默 no-op**（builtin print 内部 ``if file is None: return``），不会崩；真会崩的是
+``None.write``（argparse 的 ``file.write`` 路径，Task 1 已修）。这道闸扫 traceback 抓不到
+那类回归，不是"不够严"，是**判据从一开始就瞄错对象**：本步的子进程标准流被重定向（并非
+``None``）⇒ ``None.write`` 路径在 CI 语境下根本不会被触发，日志里自然没有它的 traceback。
+收口前的裸输出顺序契约，由 ``tests/test_desktop_shell.py`` 的 AST 结构守卫静态钉死
+（``ensure_streams`` 调用点之前不得出现无 ``file=`` 的 ``print`` / ``sys.stdout.write`` /
+``sys.stderr.write``）。(c) 步在 CI 钉的是：**无控制台窗口语境下起服 + 整段日志无
+traceback**（含健康就绪**之后**才发生的崩溃 —— (b) 步只看就绪，那类它抓不到）+
+``lan-address.txt`` 地址出口。两者互补，都不可省。
 
 为什么独立实现、不 import 打包脚本
 ==================================
@@ -582,8 +588,16 @@ def log_has_traceback(log_text: str) -> bool:
 
     锚定 ``Traceback (most recent call last)`` 这一**解释器崩溃签名**，而非裸 ``Error`` /
     ``失败`` 字样：业务日志里的 error / 失败（如「连接重置」「写库超时」）是正常运维噪声，
-    宽判据会把这道闸刷成恒红、迟早被绕开。只有解释器真的打印了 traceback 才算「崩过」
-    （裸 ``print`` 到 ``sys.stdout is None`` 的那一族崩溃正落在这里）。
+    宽判据会把这道闸刷成恒红、迟早被绕开。只有解释器真的打印了 traceback 才算「崩过」。
+
+    覆盖边界（2026-10-14 怀疑者复核后澄清，**别再把判据瞄错对象**）：Py3 的 ``print()`` 在
+    ``sys.stdout is None`` 时是**静默 no-op**（builtin print 内部 ``if file is None:
+    return``），不会崩；真会崩的是 ``None.write``（argparse 的 ``file.write`` 路径，
+    Task 1 已修）。而本闸的子进程 stdout/stderr 被**重定向进日志** ⇒ 标准流并非 ``None``，
+    ``None.write`` 路径在 CI 语境下根本不会被触发 ⇒ 那类回归的 traceback 不会出现在日志里，
+    本判据**瞄不到它**（不是"不够严"，是判据从一开始就瞄错了对象）。收口前的裸输出顺序契约
+    由 ``tests/test_desktop_shell.py`` 的 AST 结构守卫静态钉死：``ensure_streams`` 调用点
+    之前不得出现无 ``file=`` 的 ``print`` / ``sys.stdout.write`` / ``sys.stderr.write``。
     """
     return "Traceback (most recent call last)" in log_text
 
