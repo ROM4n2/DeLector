@@ -665,3 +665,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **CRV 七轮**：Task 3 首轮 **REVISE**（2 套件作废 + vacuous 红线）→ 回炉 → 复核 PASS；Task 1/2/4/5/6 与 mypy 修复均 PASS（累计黄牌 12 张，非阻塞，其中最实的一张"`__main__` 先开句柄后轮转 ⇒ Windows 5MB 轮转被静默跳过"已折入 Task 3 修掉）。
 - **门禁（本机实测，批次终值）**：pytest **1832 passed + 2 skipped**；ruff 0；mypy 三档 **87 / 121 / 4** files 零错误；7 个触碰文件行尾纯 CRLF（CRCRLF=0）。
 - **仍待办**：① 本分支 PR 合入（合并 MUST 等 CI 绿）；② **真机双击验收**（无黑框 / 品牌图标 / splash 前段有反馈 / 失败有人话弹窗）——只能人工做，代码层已尽力；③ Task 5 遗留边界：端口被**外部程序**占用时上一轮的陈旧 `lan-address.txt` 不复写也不删除（有弹窗+日志，非静默），要清理需 `start.main` 回传 abort 原因，未立项。
+
+### 2026-10-14 | codebuddy | NOTE 闭环：PR #131 已合入 master（a4984c2），真启闸在新代码上 PASS
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：上一条 WORK_END 记的"待 PR 合入"已闭环 —— PR **#131** 经用户批准合并（merge commit **`a4984c2`**，随本仓既有 `--merge` 约定），分支 `fix/no-console-feedback-gaps` 已删。
+- **合并前 CI 全绿**（run `38515501154`）：`Detect packaging-surface` pass / `Tests & Go Gates (ubuntu)` pass（5m41s）/ **`Windows Portable Smoke` success**，七步全绿（含 Task 2 那步 `Run pytest suite`）。
+- **真启闸在新代码上的实证（本次取到日志，含 Task 5 的新判据）**：
+  - `[PASS] 无控制台真启 --server-only 至就绪：起服耗时 4.3s（CREATE_NO_WINDOW 语境）`
+  - `[PASS] 无控制台：数据目录生成 lan-address.txt：`**`内容匹配 http://<IPv4>:<port>`**（Task 5 把判据从 `is_file()` 升级为内容匹配后，真实产物上确实过）
+  - `[PASS] 无控制台：整段日志无 traceback`
+  - `验收结论：PASS —— 产物通过完整性 + 真启验收`
+- **仍属人工**：真机双击验收（无黑框 / 品牌图标 / splash 前段有反馈 / 失败有人话弹窗）——CI 不覆盖窗口形态（脚本 docstring 已声明该边界）。
+- 本仓 CI 行为补充：`Detect packaging-surface changes` 判 packaging=false 时 Smoke 会被 skip（paths-filter），此时只能 `gh workflow run CI --ref master` 手动补跑（dispatch 下无条件跑，已多次实证）。
