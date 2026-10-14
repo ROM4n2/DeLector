@@ -18,8 +18,8 @@ status: open
 - **集成门禁现状**：`cd agent && go test -tags integration ./...` ⇒ **116 PASS / 0 FAIL / 0 SKIP**（9 包全 ok）；`go build ./...` / `go vet ./...` / `go vet -tags integration ./...` / `go test ./...` 全 0；`gofmt -l` 空；改动文件纯 LF。
 
 ## 未完成 / 下一步（按序）
-1. **Task 2 CI 半（HITL，需用户批准）**：`.github/workflows/ci.yml` 新增 integration job（ubuntu；装 `requirements.txt`；`cd agent && go test -tags integration ./...`；**必须带 `timeout-minutes`**）。台账里 `Task-2` 处于 IN_PROGRESS，等它落地才能 complete。
-2. **Task 3**：LLM client 收口 —— 5 处裸 HTTP（`delector/routes/main.py` 的 `413/516/1449/1544/2374`，超时 **30/15/20/10/30** 各写各的；生成路径**零 `max_tokens`**）→ 新建 `delector/services/llm_client.py`；payload **MUST** 带 `max_tokens`；超时由调用方传入（保值语义不变）；错误仍 502。TDD：`tests/test_llm_client.py`（mock transport，**不发真请求**）。
+1. ~~**Task 2 CI 半**~~ — **已完成并回炉**（分支提交 `f96a8d2`）：零 SKIP 判据（两级 `go list` 差集收窄到集成专属包）+ `-count=1`。首轮 CRV 开出两张红卡：Skip⇒job 静默绿、Go 缓存复用旧 ok。：`.github/workflows/ci.yml` 新增 integration job（ubuntu；装 `requirements.txt`；`cd agent && go test -tags integration ./...`；**必须带 `timeout-minutes`**）。台账里 `Task-2` 处于 IN_PROGRESS，等它落地才能 complete。
+2. ~~**Task 3**：LLM client 收口~~ — **已完成并回炉**（分支提交 `9e17399`）：红卡（可用 key 被误报连接失败）修为 `parse_json` 开关；收口守卫升级为**结构判据**；新模块登记进 2 个 canonical 打包位点 + `test_server.py` 守卫集合。 —— 5 处裸 HTTP（`delector/routes/main.py` 的 `413/516/1449/1544/2374`，超时 **30/15/20/10/30** 各写各的；生成路径**零 `max_tokens`**）→ 新建 `delector/services/llm_client.py`；payload **MUST** 带 `max_tokens`；超时由调用方传入（保值语义不变）；错误仍 502。TDD：`tests/test_llm_client.py`（mock transport，**不发真请求**）。
 3. **Task 4**：循环内核 `delector/services/polish_loop.py` —— 模型驱动流转（有工具调用则继续/无则请求收尾）+ **收尾终审守卫**（无裁判裁决不许终止）+ `v_n ≥ v_{n-1} ⇒ break` 且回退 `argmin` 候选 + `judge_unreliable` 哨兵 + 每轮**前置**检查 `{max_tokens_total, deadline_s}` + 裁判异常按 errors-as-messages 单轮降级 + 证据注入按行数/字节双限截断。测试 `tests/test_ai_polish_loop.py`，**逐条变异自证**（抽掉守卫/预算/哨兵 ⇒ 必须红）。
 4. **Task 5**：`delector/services/polish_tools.py` —— 工具白名单**恰好 3 项只读**（`writing_check` / `analyze` / `vocab_stats`）+ 前置钩子 + **同进程直调**；测试 MUST 断言白名单与 `TOOL_REGISTRY` 的**差集含 `ingest`/`export`/`tts`**。
 5. **Task 6**：`ai-polish` 返回契约加 `converged` / `unconverged_reason`（**只增不改**）+ 前端 `static/js/writer.js` 逐轮进度/取消/未收敛 toast + 跑 `python tools/check_frontend_api_contract.py`（契约闸）+ 发版守护套件。
@@ -31,8 +31,8 @@ status: open
 - **`integration_test.go` 的 `HealthURL` 探针指向 `/api/tools/`**（不是 `/api/health`）：外来服务更容易在探针处回 200，目前靠 `assertSupervisorIdentity` 兜底（黄牌，Task 0 域外）。
 - **`TestRunEndToEnd` 的 `PythonCmd` 透传只有结构验证**，缺该用例自身原始输出（黄牌）。
 - **相对断言不覆盖"既有行被删改"**：`addedRows` 只遍历 after（import-pack 语义为只增；若要覆盖，加一条"before 标题多重集 ⊆ after"）。
-- **Task 3 是 Task 4 的前置**（循环要按 token 预算调用）；**Task 6 必须与前端同批**（`ENDPOINT-CONTRACT-FRONTEND-SYNC` 规矩）。
-- 本批**无 Python 生产代码改动**（只动 `agent/` 测试基础设施）⇒ Task 3~6 才开始动产品代码，Tier 2 纪律照旧（先 RED、变异自证、CRV 独立验收）。
+- **Task 3 已完成** ⇒ 循环可按 token 预算调用；`DEFAULT_MAX_TOKENS = 4096` 是**保守占位**（计划 Unknown B：待 Task 4 的 stub 基线给出）⇒ **Task 4 MUST 给出该数的实测依据**。；**Task 6 必须与前端同批**（`ENDPOINT-CONTRACT-FRONTEND-SYNC` 规矩）。
+- **（已更新）后来动了 Python 生产代码**：Task 3 新建 `delector/services/llm_client.py` 并收口 5 处；打包面已同步登记（2 个 canonical 位点 + 守卫集合）。⇒ Task 3~6 才开始动产品代码，Tier 2 纪律照旧（先 RED、变异自证、CRV 独立验收）。
 - 计划外触碰过的文件：`agent/run_integration_test.go`（Task 0 时为恢复编译 +6 行；Task 2 代码半时透传解释器）—— 后续任务若再动它，注意它是**第三个**调用点。
 
 ## 关联

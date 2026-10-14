@@ -641,3 +641,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **门禁现状**：`cd agent && go test -tags integration ./...` ⇒ **116 PASS / 0 FAIL / 0 SKIP**；`go build`/`go vet`/`go vet -tags integration`/`go test` 全 0；gofmt 空；纯 LF。
 - **台账**：2/7（Task-0、Task-1 完成；Task-2 IN_PROGRESS 待 CI 半；Task-3/4/5/6 pending）。
 - ⏳ **续跑入口**：`WORKMEMORY/handoff_interactive-agent-loop.md`。顺序：CI 半（HITL）→ Task 3 → 4 → 5 → 6 → 开 PR。
+
+### 2026-10-15 00:45 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：计划 2026-10-14 再进一步 —— Task 2 CI 半与 Task 3 均完成（各经一轮 REVISE 回炉），台账 **4/7**。
+- **Task 2 CI 半** `f96a8d2`：新增 job `agent-integration`；回炉修两张红卡 —— ① Skip ⇒ job 静默绿（改 `go test -count=1 -json` + 两级 `go list` 差集的**零 SKIP** 判据，判据自身失效也 fail-closed）；② Go 测试缓存会在只改 Python 时复用旧 `ok`（加 `-count=1`）。
+- **Task 3** `9e17399`：LLM 出网收口到 `delector/services/llm_client.py`（5 处裸 HTTP → 单一 client，补 `max_tokens`，超时 30/15/20/10/30 原值保留）；回炉修红卡（可用 key 被误报连接失败 ⇒ `parse_json` 开关）、收口守卫升为结构判据（双变异自证：老判据对换拼接写法永久失明）、新模块登记进 2 个 canonical 打包位点 + 守卫集合。
+- **门禁**：`pytest -q` **1849 passed, 2 skipped**（净增 17 = 本任务 15+2）；ruff 0；mypy 四档；契约闸 PASS；Go 侧集成门禁 116 PASS / 0 SKIP。
+- **CRV 的价值（本次实证）**：两个任务**首轮都被判 REVISE**，红卡都是**判据失效型**缺陷 —— 守卫存在但换种写法就瞎（Task 3）、门禁绿但根本没有信号（Task 2）。这两类缺陷在 maker 自证（我跑过了、全绿）下**都不会被发现**。
+- ⏳ **后续**：Task 4（循环内核）→ Task 5（工具白名单）→ Task 6（契约+UI）→ 开 PR。黄牌留档：包级差集边界未写进注释 / 只防 PASS=0 不防用例变少 / 守卫按行数计数可加固为出现次数 / `DeLector.spec` 属本机 PyInstaller 产物（`.gitignore` 忽略、含 `D:/` 绝对路径）不计入交付，canonical 打包位点是 2 个。
