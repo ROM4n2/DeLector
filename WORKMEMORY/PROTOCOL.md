@@ -17,8 +17,9 @@
 6. **禁止敏感信息**：work.log / handoff / NOTES 禁止 API key、token、密码字面量（引用名称即可）；pre-commit 密钥扫描兜底。
 7. **协议靠约定维持**：某 agent 漏写事件不是灾难——下一个 agent 读 tail 发现缺口时补一条 `NOTE` 说明即可，不回改历史。
 8. **实现任务 MUST 在独立分支 / worktree 上做**：开工前先判分支 —— 实现 / 多步任务走分支 + PR 合入 `master`；
-   仅**两类**操作允许直推 `master`（须用户批准）：**① 发版类**（bump / tag / Release 文案 / 发版文档）；
-   **② 簿记类**（**WORKMEMORY 记忆簿记** —— `work.log` 纯追加事件、`INDEX.md` 索引节更新（Active handoffs 等）、`NOTES-*` / `handoff_*` 新增；不改代码 / 门禁 / 测试；2026-10-14 用户确认，同日二次放宽以覆盖上述记忆产物）。
+   仅**三类**操作允许直推 `master`（须用户批准）：**① 发版类**（bump / tag / Release 文案 / 发版文档）；
+   **② 簿记类**（**WORKMEMORY 记忆簿记** —— `work.log` 纯追加事件、`INDEX.md` 索引节更新（Active handoffs 等）、`NOTES-*` / `handoff_*` 新增；不改代码 / 门禁 / 测试）；
+   **③ 文档类**（**纯文档改动** —— 说明 / 计划 / ADR / README / 注释，含本规则措辞本身；不触及代码、门禁、CI 定义、测试、打包脚本）。三者均于 2026-10-14 经用户确认。
    本条于 2026-10-14 补入：此前它只存在于 `dfs-pipeline` skill 与一条记忆里，本仓文档零命中
    ⇒ 2026-10-13 那批 9 个含生产源码与 CI 定义的提交全程直推 `master`、零 PR。完整复盘见
    `docs/agents/ops.md`「Agent 工作惯例」第 9 条与 work.log 同日 NOTE。
