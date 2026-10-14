@@ -50,6 +50,12 @@ func TestRunEndToEnd(t *testing.T) {
 	t.Logf("TestRunEndToEnd OK: 真实 Python 起服务 + 工具端点 200 + 优雅退出")
 }
 
+// healthURL 是本用例专用的健康端点：TestRunEndToEnd 直连 app.Run，并显式以
+// app.Options.Port=8001 钉住端口（见上方 opts），故其端点固定在 8001，与
+// integration_test.go 的动态 baseURL 无耦合。（本 const 由本用例自持，避免与
+// 动态端口门禁共享可变符号。）
+const healthURL = "http://127.0.0.1:8001/api/tools/"
+
 // pollHealth 轮询 healthURL 直至 200 或超时；返回是否曾达 200。
 func pollHealth(t *testing.T, timeout time.Duration) bool {
 	t.Helper()

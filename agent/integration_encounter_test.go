@@ -16,7 +16,7 @@
 //     estimated_cefr=A1 且 glosses 与之逐条对齐的 GlossResult JSON（可被
 //     job.ParseGlossLLMOutput 解析），无需真实 DeepSeek key。
 //  4. t.TempDir 语料 fixture（2 篇真实德语 A1 短文）→ registry.DefaultRegistry
-//     接真实 python → job.RunEncounterPack(deliver-url = python 8001 实例) →
+//     接真实 python → job.RunEncounterPack(deliver-url = 托管 python 实例，动态端口) →
 //     断言 2 pack 落盘、JSON 可回读且 Pack.Validate 通过、import-pack 200
 //     （Result.Packs==2 且 Result.Failed==0）。
 //  5. GET /api/encounter/texts（同 python 实例）→ 断言 2 行命中、title 匹配、
@@ -74,7 +74,7 @@ func TestEncounterRealChain(t *testing.T) {
 		t.Fatalf("构造 llm client（指向桩）: %v", err)
 	}
 
-	// ---- 门禁 4：语料 fixture + RunEncounterPack（投递到真实 python 8001） ----
+	// ---- 门禁 4：语料 fixture + RunEncounterPack（投递到托管 python 实例，动态端口） ----
 	corpusDir := t.TempDir()
 	outDir := t.TempDir()
 	writeCorpus(t, corpusDir, "mein_tag.txt", corpusArticle1)
