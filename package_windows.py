@@ -373,6 +373,9 @@ def build_windows() -> None:
         "--hidden-import=delector.services.listen",
         "--hidden-import=delector.services.syntax_score",
         "--hidden-import=delector.services.llm_client",
+        # Task 4（循环内核）：polish_loop 服务（验证驱动 agent 循环内核），
+        # 不登记 ⇒ 打包后 ModuleNotFoundError 而本地 pytest 全绿。
+        "--hidden-import=delector.services.polish_loop",
         "--hidden-import=de_core_news_sm",
         "--hidden-import=spacy.lang.de",
         "--hidden-import=genanki",

@@ -29,8 +29,25 @@ from delector.core.database import get_effective_api_base_url, get_effective_api
 # ── 预算常量 ──────────────────────────────────────────────────────────────────
 # `max_tokens` 默认值**没有既有来源**：收口前全仓仅一处 max_tokens（连通性自检的 5，
 # 见 `main.py` 的 /api/settings/test-key），生成路径一处都没有 ⇒ 无"既有约定上限"可抄。
-# 4096 是**保守占位**，不是实测结论：计划 Unknown B 明确「循环真实轮次分布与 token 上界
-# 待 Task 4 的 stub 基线给出」。Task 4 定案后改这一个常量即可全链路生效。
+#
+# 4096 原是**保守占位**（计划 Unknown B）。Task 4 已用实测把它**定案为保留值**，公式为：
+#
+#     DEFAULT_MAX_TOKENS  >=  2 × 单轮最坏 completion 需求
+#     单轮最坏需求        =  ceil(最坏 completion 字符数 / CHARS_PER_TOKEN_ESTIMATE)
+#                        =  ceil(2073 / 3.0) = 691 token        （实测，见下）
+#     2 × 691 = 1382      <=  4096                              （余量 2.97× ⇒ 保留）
+#
+# 实测口径（`delector/services/polish_loop.py` 的"预算实测"段有完整数字表）：
+#   - 最坏输入 = 2000 字符（`main.py:2383` 的 `req.text[:2000]`）的真实德语 A1 电子邮件；
+#   - 录制桩跑满 3 轮（不出网、不用真 Key）：completion 139 / 139 / **2073** 字符；
+#   - **没有真 tokenizer**（本机 `import tiktoken` / `import transformers` 均
+#     ModuleNotFoundError）⇒ 走字符折算，`CHARS_PER_TOKEN_ESTIMATE = 3.0` 登记为
+#     **UNVERIFIED 假设**（偏保守：德语变音字母常被 BPE 拆多 token ⇒ 高估消耗）。
+#     该常量定义在 `polish_loop` 里 —— 本模块**不能反向 import**（`polish_loop` 依赖本模块）。
+# 余量 2× 的理由：stub 基线不是真实分布，模型可能回"原文 + 译文 + 逐句讲解"这类明显更长
+# 的回复；2× 是给"回复比输入更长"这个已知情形留的，不是随手拍的倍数。
+# 这些数字由 `tests/test_ai_polish_loop.py` **现算现比**（不抄过期常量）⇒ 改这一个常量，
+# 全链路（per-call 上限 + 循环级总量）与那条闸一起跟着动。
 DEFAULT_MAX_TOKENS = 4096
 # 连通性自检沿用收口前的现值（不是生成路径，别跟着 4096 走）。
 CONNECTIVITY_MAX_TOKENS = 5

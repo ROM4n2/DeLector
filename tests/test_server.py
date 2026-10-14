@@ -4626,7 +4626,18 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     # Task 3（长难句）：syntax_score 服务（句子难度评分）与 syntax_hard 路由同步进打包面。
     # Task 3（LLM 收口）：llm_client 服务（唯一出网口）与路由同步进打包面 —— 本批次新增，
     # 集合是硬编码的，不登记 ⇒ 这条守卫对新模块永久失明（本地全绿、打包后 ModuleNotFoundError）。
-    service_modules = {"writing", "essay_diff", "exam_catalog", "tts", "listen", "syntax_score", "llm_client"}
+    # Task 4（循环内核）：polish_loop 服务（验证驱动 agent 循环内核）与路由同步进打包面 —— 本批次新增，
+    # 集合是硬编码的，不登记 ⇒ 这条守卫对新模块永久失明（本地全绿、打包后 ModuleNotFoundError）。
+    service_modules = {
+        "writing",
+        "essay_diff",
+        "exam_catalog",
+        "tts",
+        "listen",
+        "syntax_score",
+        "llm_client",
+        "polish_loop",
+    }
     top_level_modules: set[str] = set()
     required_modules = sorted(data_dict_modules | route_modules | service_modules | top_level_modules)
 
@@ -4665,6 +4676,10 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "delector/services/listen.py",
         "delector/services/syntax_score.py",
         "delector/services/exam_catalog.py",
+        # Task 4（循环内核）：polish_loop 服务进 APP_NEEDLES 验包探针 —— 与
+        # services/listen|syntax_score|exam_catalog 同口径（Android 由 `cp -r delector`
+        # 整目录拷入覆盖，这里钉住「产物里真有」这一环）。
+        "delector/services/polish_loop.py",
         "delector/routes/a2.py",
     ]
     for needle in critical_apk_needles:
