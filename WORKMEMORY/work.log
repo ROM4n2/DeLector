@@ -603,3 +603,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 删后远端只剩 `master`（`git ls-remote --heads origin` 复核）；它们的提交都已通过 PR 进 master，**删的只是分支指针，不是历史**（如需回溯按 PR 号或 tag 找）。
 - 备注：这正是本仓"开了分支忘了删"的常态残留 —— PR 合并时加 `--delete-branch` 可避免（本次 #131/#132 用了）。
 - 本次改动属规则里的**簿记类例外**（纯追加、不改代码/门禁/测试）⇒ 按 2026-10-14 用户确认的例外直推 master。
+
+### 2026-10-14 | codebuddy | NOTE work.log 超限事件已拆分（PR #133 合并）＋ 查出巡检误报的真因
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按协议 §4 拆分 7 条超限事件（**已合并** `73c35b8`，PR #133），并顺带查出"某事件 56428 B"是**误报**。
+- **拆分**：7 条超限（4299–5882 B）正文搬入 `WORKMEMORY/NOTES-*.md`，事件体只留一行指针；结果事件数 74 不变、最大 4026 B、超限 0、work.log 606 行、纯 CRLF、前言保留。写盘前有「NOTES 正文 + 新 work.log == 原文」的逐行反推断言（第一版脚本丢过文件前言，被它拦下）。
+- **真因（比"太大"严重）**：vault 巡检的事件边界正则严格等于协议 §2（`### YYYY-MM-DD HH:MM | agent | <裸 EVENT_TYPE>`），而本仓 **73/74 条历史 header 不合规**——写成 `WORK_START(计划名)`（载荷混进类型位）或省了 HH:MM。后果是**静默的**：解析器认不出边界 ⇒ 几十个事件被并成一条，报出来是"56428 B 事件"而非"头不合规"。同类分布在 lover-instance(5) / qingjian(3)。
+- **已在 vault 侧修**（`a18cd3e` 已推 master）：① 边界判定改宽容式（时间可选、类型可带载荷）；② "头不合规"**单列为 advisory**（把静默漂移变可见）；③ 顺带补 `topic/agent-architecture` / `topic/multi-agent` 两条路由（原落 `CODING-UNIVERSAL` fallback）；④ 写库入口加内层双引号转义 + 写入前 YAML 自检（原先 `source` 含 ASCII 双引号会产出不可解析的 frontmatter 而写库**静默成功**）。
+- ⏳ **待用户决定**：是否回改这 73 条历史 header。建议**不补缺失的时间**（等于编造）；只做"把载荷移进正文"这类可无损归一，或保持现状（现有 advisory 盯着）。**新写事件一律按 §2 写裸 `EVENT_TYPE`、时间必填**——本条即按此写。
