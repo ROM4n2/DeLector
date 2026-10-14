@@ -200,7 +200,10 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
       或开**无痕窗口**访问（无痕无缓存/SW = 服务器磁盘真实文件）。无痕正常 ⇒ 用户侧缓存，代码不用动。
     - 教训：别在 `setupPWA`/`#sw-source` 上花时间"增强"离线——那段 SW 从没注册成功过。
 12. **开工前先判分支（MUST）**：**实现 / 多步任务一律在独立分支（或 worktree）上做，再走 PR 合入 `master`**；
-    只有**发版类操作**（版本 bump / 打 tag / Release 文案 / 发版文档回填）允许直接在 `master` 上推，且推送前须用户显式批准。
+    只有**两类操作**允许直接在 `master` 上推，且推送前须用户显式批准：
+    **① 发版类**（版本 bump / 打 tag / Release 文案 / 发版文档回填）；
+    **② 簿记类**（`WORKMEMORY/work.log` 等**纯追加**的事件记账 —— 不改代码、不改门禁、不改测试；
+    2026-10-14 用户明确确认簿记属例外）。除此之外一律走分支 + PR。
     为什么把这条写在这里：2026-10-13「去控制台 + 桌面化观感」那批 **9 个提交**（含生产源码 `desktop.py` / `start.py`、
     打包面 `package_windows.py` 与 CI 定义 `ci.yml` / `build-release.yml` / `tools/verify_windows_portable.py`）**全程直推
     `master`、零 PR**。事后复盘的根因**不是"忘了"**，而是这条规矩此前只存在于两处不可见的地方 ——
