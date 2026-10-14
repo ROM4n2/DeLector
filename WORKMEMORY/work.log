@@ -623,7 +623,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 交接包已写：`WORKMEMORY/handoff_no-console-feedback-gaps.md`（to: any · role: VERIFY/TEST · status: open）—— 真机双击验收 + digest 归一历史 header 两项延后事项按协议 §4 落盘，并同步更新 `INDEX.md` 的 Active handoffs。
 
-### 2026-10-14 23:05 | codebuddy | NOTE ADR-0023 实施计划就绪：台账已初始化，按用户指示暂不执行
+### 2026-10-14 23:05 | codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：ADR-0023（vault `dc4fc7f` 含新增 §9）与实施计划（`docs/plans/2026-10-14-interactive-agent-loop.md`，commit `604a98b`）均已落盘；台账按 `/dfs-plan` Phase 3 初始化完毕，**但按用户指示不启动执行**。
 - **计划**：6 任务（Go 门禁红灯① → 红灯②+CI → LLM client 收口 → 循环内核 → 工具白名单 → 契约+UI），全部带 Tier/Mode 标签、Files、Consumes/Produces、Subagent Scaffold、TDD Step Breakdown；Fog of War 4 条（裁判集扩充分派给下一个子计划，不投机拆任务）。**Branch 声明：`feat/interactive-agent-loop`**（尚未创建）。
