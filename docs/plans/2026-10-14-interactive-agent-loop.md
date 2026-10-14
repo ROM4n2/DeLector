@@ -15,6 +15,21 @@
 
 ---
 
+## ⚠️ 执行期发现与顺序调整（2026-10-14，Task 1 开工前）
+
+实跑真链路门禁发现**第三个红灯**，它推翻了 Task 1 的可验证前提：
+
+- **门禁在本机真的跑了**（红灯②**未复现**）：本 shell 的 `python` 就是带依赖的 3.11 ⇒ `exec.LookPath("python")` 与依赖探测均通过。⇒ 红灯②是 **shell/PATH 相关**而非机器相关，CI 上的表现需另测。
+- **它在更早的一步就红了**：`agent/integration_encounter_test.go:95` —— 两个 pack 均 `import-pack 返回 500`（**不是 Python 侧的 bug**）。
+- **真根因**：`127.0.0.1:8001` 被一个 **3 小时前的孤儿进程**占用（`uvicorn delector.server:app`，PID 6808，父进程已死）；而门禁把 `baseURL` **硬编码**为 `127.0.0.1:8001`（`agent/integration_test.go:37`）且**不校验服务身份** ⇒ 起服 bind 失败后**仍向 8001 发业务请求**，被外来进程应答。
+- **真实风险不是假红，是假绿**：外来服务若恰好答得对，门禁会**替别人的服务背书**。孤儿进程已清理，**但根因仍在** ⇒ 新增 Task 0 治本。
+
+**执行顺序据此调整为**：`Task 0（身份与失败语义）→ Task 2 的代码半（解释器候选探测）→ Task 1（断言相对化）→ Task 2 的 CI 半（HITL）→ Task 3 → Task 4 → Task 5 → Task 6`。
+
+> 与 ADR-0023 §4.2 同族：产品侧要求"端口被占时不留指向别人的地址文件"，**门禁侧同样要"端口被占时不测别人的服务"**。测试基础设施也会静默失败，而它的静默失败直接污染证据链。
+
+---
+
 ## 🏛️ Decisions So Far
 
 | # | 决策 | 依据 |
@@ -47,6 +62,29 @@
 ---
 
 ## 🎯 Active Frontier (Unblocked Tasks)
+
+### Task 0: 集成门禁的「身份与失败语义」（**执行期新增**） [Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]
+
+**Files:**
+- Modify: `agent/integration_test.go`（`baseURL` 用法 / 起服后的身份探针 / 失败语义）
+- Modify: `agent/integration_encounter_test.go`（同一 helper 的调用点）
+- Test: 门禁自身（`go test -tags integration`）
+
+**Interfaces:**
+- Consumes: `GET /api/health`（`delector/routes/main.py:2690`，契约：**接受 503、只看 `app`/`version` 两个身份字段**，与 Python 侧 `server_lifecycle.probe_identity` 同义）
+- Produces: `func assertHostedServiceIdentity(t *testing.T, baseURL string)` —— 身份不符/不可达即**fail-fast 并给出可操作诊断**；以及"起服失败则不再发业务请求"的失败语义
+
+**Subagent Prompt Scaffold (for /dfs-exec):**
+> "修 `agent/` 集成门禁的两处**静默失败**：① 起服（bind 8001）失败后**仍继续向 8001 发业务请求** ⇒ 会打到外来进程（实测：3 小时前的孤儿 uvicorn 回了 500，断言在 `integration_encounter_test.go:95` 假红）。改为：起服失败 ⇒ **立刻 fail-fast（或按既有约定真 skip）**，绝不继续；② 起服成功后 MUST 探 `GET /api/health` 断言 `app=="delector"` 且 `version` 与期望一致（**503 也算通过身份**，只读身份字段——与 `server_lifecycle.probe_identity` 契约对齐），身份不符即 fail-fast 并打印『8001 上是一个外来服务（app/version=X）』。**身份校验不等于实例校验**：同版本同 app 的另一个实例仍会通过 ⇒ 因此**首选同时改为动态空闲端口**（`net.Listen("tcp","127.0.0.1:0")` 取端口后传给 uvicorn，并同步 `baseURL` 由 const 变变量；8001 退化为可覆盖默认值，注释里的『端口约定』同步改写）。RUN：先**故意占用 8001**（如本机留一个 uvicorn）跑一次证明 fail-fast 生效，再释放后跑一次证明真链路通过；两条原始输出都要带回。"
+
+**Step Breakdown:**
+- [ ] Step 1: 复现静默失败（占用 8001 后跑门禁，证明它仍发业务请求并假红/假绿）——RED 证据
+- [ ] Step 2: 实现身份探针 + 失败语义（GREEN）
+- [ ] Step 3: 动态端口（推荐项）替代硬编码 8001，同步注释与调用点
+- [ ] Step 4: 两条对照运行（占端口 ⇒ fail-fast；空端口 ⇒ 通过）
+- [ ] Step 5: 原子提交
+
+---
 
 ### Task 1: Go 门禁红灯①——断言被预置短文污染 [Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]
 
