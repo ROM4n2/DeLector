@@ -180,28 +180,9 @@ Caps: filesystem-read, filesystem-write, shell-exec
 随后启动 **WORK_START(debt-clear-round)**：清理 sp3/sp5 遗留债，分三组并行（各组独立 worktree，**PR #98 保持已验收状态不塞新债**）：A 组改 `static/js/cards.js`（目录视图 `renderCatalogGrid` 对工作台词说谎 + 跳转落点留主站壳内）、B 组改 `static/js/encounter.js`（`fetchKnownLemmas` 无 in-flight 去重 + 覆盖率行无降级标记，**需 UI 决策**）、C 组改 `tests/`+`.github/`（**7 个** `.mjs` 探针未接 pytest；且 `ci.yml` 无 `setup-node` ⇒ 靠 ubuntu runner 预装，属隐式依赖）。**全部完成后一次性发版**（static/ 已累积 #93/#97/#98 改动 ⇒ 建议 v5.14.0）。
 
 ### 2026-10-05 00:30 | codebuddy | DONE(debt-clear-round) + RELEASE(v5.14.0)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：清债轮三组并行完工并全部合入 master（`4aed9fa`），随后发版 **v5.14.0**（tag 已打，触发三平台 Release 流水线）。
-- **A 组 #99**（`static/js/cards.js`）：目录/网格视图 `renderCatalogGrid` 两处硬编码 `correct_count/wrong_count` 改用 `cardStatsTag`——此前**同一条词卡面说「📚 工作台 · s=25」、目录说「0 正 / 0 误」**。核实「换用后不丢 `due_date`」：`cardStatsTag` 非工作台词分支自带 `⏳ 到期:`。语法卡一并换用，论据 `grammar_cards` 表**无任何 `fsrs_*` 列**（建表 `database.py:341-361` 无 + 迁移 `:478-511` 的 `fsrs_*` 补列显式包在 `if tbl == "vocab_cards"` 内）。「去工作台」改 `preventDefault` + `window.show('german')` 留主站壳内，`href` 逐字保留供新标签页；**关键事实**：`show` 定义在 `main.js:167`，靠 `main.js:943-946` 的 `Object.assign(window,{show})` 显式挂载才可从 inline `onclick` 取到（顶层 `function` 不会自动挂 `window`）。
-- **B 组 #100**（`static/js/encounter.js`）：`fetchKnownLemmas` 加 in-flight 去重（原一次会话读 N 篇打 N+1 次后端）。**刻意不做 TTL 缓存**——串行重复是「每篇刷新一次」的正常语义，TTL 会让「刚背的词在 TTL 内不出现」。覆盖率行**标注降级来源**（离线/镜像失败原本静默显示 0/312，用户无法分辨「真没背」与「拉取失败」）⇒ `⚠ … · 数据不完整` + `title` 并列原因。核实两路降级**只压低分子不动分母**（`total` 来自 annotate 端点的 token 流，非 `resolveDeck`）。**越界自报**：改了既有 `enc_open_race_probe.mjs` 35 行——场景 B 原用「两次 `known-lemmas` 错开」制造时序，而那正是本次要消灭的重复，**逻辑上不可能两立**；改由 `resolveDeck` 的 `/api/wb/state`（无去重）承担，4 条原契约断言语义逐条未动；编排者独立复验判别力：删 `encounter.js:642` 内部 seq 守门 ⇒ 场景 B 必红。
-- **C 组 #101/#102**（`tests/`+`.github/`）：复核**推翻两条编排者前提**——①漏项是 **8 个不是 7 个**（含 #98 刚建的 `cards_workbench_no_review_probe`，**守白复习 P0 的守卫从未进过 CI**）；②这批探针**都不返回** `failures/total/cases`（24 个 `.mjs` 仅 4 个标准契约）⇒ 未改任何 `tools/*.mjs`，改断言 `ok is True`（因「problems 非空即 exit 1」，与 `failures==0` 等价且更紧）。`ci.yml` **显式装 Node 20**——此前 wrapper 靠 `ubuntu-latest` 预装，属隐式依赖：镜像一换版本探针走 `shutil.which` **静默 skip**，测试全绿而探针没跑，**比红更坏**。
-- **编排者实测出并修掉一个假绿漏洞**：`test_probe_wiring_guard.py` 的 corpus 拼入全部 `.py`，而共享 helper `probe_runner.py` 的**文档字符串点名了真实探针** ⇒ 移走真 wrapper 守卫**仍绿**。复现：`mv tests/test_cards_count_probe.py` 后守卫 `1 passed`。三管齐下修复：corpus 收窄到 `rglob("test_*.py")`（pytest 收集规则如此，不参与收集的文件本来就不可能是 wrapper）+ helper 文档举例去实名化 + 新增守卫钉住收窄。复验：`1 failed` / 还原 `5 passed`。
-- **守卫立刻抓出存量漏接线**：#102 合并前，半 A 跑出 `1 failed, 1015 passed`——三个并行分支各自新建的探针无 wrapper，防漏接线守卫当场把 **3 个**顶出来，补齐后 `1025 passed` 零 failed。**这正是「先立守卫 → 立刻把存量漏接线顶出来 → 按红补齐」的顺序价值**。
-⚠️ 编排者本轮失误：用 `grep … | head -8` 截断守卫输出 ⇒ 只看到 3 个漏接线里的 2 个，给 maker 的任务书写错数字；**maker 停下上报而未擅自扩大范围**，才没造成二次返工。教训：提取失败项/统计行**禁用 head/tail 截断**；管道还会吃掉上游退出码（同 `if git push | tail -1` 误报成功那次）。
-**门禁（v5.14.0 基线）**：`1289 passed + 1 skipped`（半 A `1025` + `test_server` `264`）/ 全 `tools/*.mjs` 探针 **27/27** / `ruff` 0 / `mypy` 两道（`delector`+`tools` 70 files、`tests` 88 files）0 error / `test_writer_mobile.py`（发版守护）`30` / 防漏接线守卫 `5`。
-
+   > 正文超 §4 上限（4424 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-05-0030-done-debt-clear-round-release-v5-14-0.md`](WORKMEMORY/NOTES-2026-10-05-0030-done-debt-clear-round-release-v5-14-0.md)。
 ### 2026-10-05 02:40 | codebuddy | DONE(debt-round2, 5/5) + DECISION(Fog-1: 内网可信)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：`docs/plans/2026-10-05-debt-round2-guards.md` 的 5 个 Task 全部完工并合入 master（`333623c`）。**Fog 1 已由用户裁决：内网可信 ⇒ 不加固 LAN 写端点。**
-- **PR #103**（`tests/test_localhost_guard.py` +129）：把「哪些端点挂 `_require_localhost`」从注释变成红灯守卫。AST 实测全集 **20 个**（`main.py` 16 函数体内调用 + `encounter.py` 3 + `tools.py` 1 `Depends` 形式）——注释里的"16"已漂移。判据 MUST 是**精确 allowlist 相等**而非"GET 不该挂闸"（有 4 个**受保护的敏感 GET**：`/api/backup/export`、`/api/backup/download/{token}`、`/api/wb/backup/download/{token}`、`/api/wb/state/key`）。
-- **PR #104**（改 `static/`）：工作台来源判据**单点化**，`cardStatsTag` 第 242 行改为调 `isWorkbenchSourced`。E1 从"两份文本雷同"改为"**复用且禁止双写**"（`MUST 出现 isWorkbenchSourced(` + `MUST NOT 出现 Number.isFinite / wbS > 0`）——没有走"改成恒真/删掉"的捷径。catalog 探针的 `BASELINE_STATS_SHA256` 与本任务目标直接冲突，已换成**行为等价守卫**（**未**靠更新哈希放行）。maker 自查修掉一个真问题：一度改 E1 场景名 ⇒ `tests/` wrapper 逐字钉死场景名，红；**场景名是被 wrapper 钉死的稳定锚点，改名会让"删一段换全绿"的守卫失效**。
-- **PR #105**（改 `static/`）：降级状态与本次调用绑定（`newDegradedReceipt()` 回执盒），消掉一个**可实际触发**的串味：`showView` 的 `resolveDeck()` 失败晚于详情成功返回、但在详情快照前写标志 ⇒ 详情拿到成功 deck 却显示「deck 降级」。修法不违反四条硬约束（`resolveDeck` 仍是 `async function`、返回形状不变、调用次数不变——同源探针计数桩 showView 后 1 次/详情后累计 2 次仍绿）。
-- **PR #106**：`tests/` 有 **29 处** `shutil.which("node")` skip ⇒ CI 上 node 缺失会**全绿而 27 个探针根本没跑**（比红更坏）。在根 `conftest.py` 用 `pytest_sessionstart` 一处解决（选它因为在收集与 wrapper skip 之前）；只把 CI 必需的 node 升级为 fail，**MUST NOT** 做"CI 零 skip"全局禁令（会误伤 Windows 专用/env 覆盖/构建产物/bash 不可用等合理 skip），非 CI 仍 skip。
-- **PR #107**：探针 `--json` 契约**冻结**（非统一）。逐个**实跑**判定 5 种形态（标准 4 / 三键超集 3 / `fail` 4 / 扁平带 `ok` 14 / 扁平无 `ok` 2），23 条登记进 `LEGACY_NONSTANDARD` 并加"清单长度 MUST NOT 增长"守卫。两个关键自证：①**判的是实跑输出不是源码文本**（只改注释 ⇒ 绿；改输出结构 ⇒ 红）；②常量刻意放**非 `test_*.py`** 文件，规避 corpus 污染——若把 23 个真实探针名写进 `test_*.py`，光"提到名字"就会让它们被判成"已接线"（上一轮 `probe_runner.py` docstring 踩过的"文档即证据"哑雷）。
-- **防漏接线守卫本轮第三次当场抓出漏接线**：PR #105 新建探针但无 wrapper，守卫立刻顶出；补 wrapper 后转 5 passed。
-⚠️ 编排者本轮两处任务书错误（均被 maker 正确停下上报，未硬凑）：①给 Task 2 的门禁清单写了 `tests/test_localhost_guard.py`，但那是 Task 1 在**另一分支**新建、尚未合入 master 的文件 ⇒ 退出码 4；②给 Task 3 的门禁写"diff MUST NOT 出现 `tests/`"，与其新建探针被守卫要求 wrapper **自相矛盾**。教训：任务书里引用测试文件前 MUST 确认它已在 base 上存在；门禁约束之间要自查是否互斥。
-**Fog 1 裁决（用户：内网可信）**：LAN 未鉴权写端点**维持现状，不加固**。裁决依据已存档：暴露面 28 个（🔴6 / 🟡11 / 🟢11），但**不可逆毁数据能力全在闸内**（所有 DELETE、备份导出与**清库式还原**、`POST /api/settings` 改写 API Key 与网关、`wb/state/key`）；覆盖最大的 `PUT /wb/state` 由 **128-bit `X-WB-Key`** 保护且该 key **无法经 HTTP 从 LAN 取得**（`GET /wb/state/key` 挂本机闸，手机端注定 403，前端已按宿主/远端二态兼容）。**关键确定结论：加固不会断手机同步**——手机端 32 处 `/api/` 调用只写 3 个端点（`PUT /wb/state`、`POST /wb/rtc/signal`、`/wb/sync/store|fetch`），全是 `X-WB-Key` 路径，**A1–A23 无一被手机端调用**。已知代价：LAN 第二台设备从"可读可写"降级为"可读但保存按钮 403"（卡片复习打分/标掌握/存词、作文保存与版本、阅读器存词批注、模考交卷落盘、听力与长难句记录）。`GET /api/settings` 未挂闸会泄露模型网关地址与模型名（key 是掩码）——用户已知悉未单独处置。**本决策记入本 log 与计划文件 Fog 1，不另开 ADR**（如日后要正式化安全 posture，再写 `docs/adr/`）。
-
+   > 正文超 §4 上限（5056 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-05-0240-done-debt-round2-5-5-decision-fog-1-内网可信.md`](WORKMEMORY/NOTES-2026-10-05-0240-done-debt-round2-5-5-decision-fog-1-内网可信.md)。
 ### 2026-10-05 03:20 | codebuddy | RELEASE(v5.15.0) + 编排者事故(README 被打散成 844 行单字符)
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：登记项收口第二轮发版 **v5.15.0**（PR #103~#107 已在 master `30148f3`）。**过程中编排者破坏了一次 README，已修复**，如实记录。
@@ -221,18 +202,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 **门禁**：`1042 passed`（半 A）+ `264 passed, 1 skipped`（半 B）/ 新守卫 `7 passed` / `mypy` 两道（`93` + `70` files）0 error / `ruff` 通过。**不碰 `static/` ⇒ 不触发发版**（但已发布的 v5.15.0 不含此修复，用户要等下次发版才拿到性能改善）。
 
 ### 2026-10-06 14:10 | codebuddy | DONE(Fog 4 #109) + DONE(Fog 3 Task B #110) + 更正上一条错误记录
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：Fog 3 / Fog 4 收口。**编排者上一条记录里有个虚构事实，本次更正。**
-⚠️ **更正**：`shutil.which("rm")` **全仓 0 次**（三重交叉验证：`grep -rc 'shutil.which("rm")' tests/ delector/` = 0、`def test_cleanup` 全仓 0 次、`delector/core/database.py` 内 `shutil` 0 次）。上一条 log 记的"`database.py:2086` 的 `test_cleanup` 用 `shutil.which("rm")`，是第 8 处同类 skip 漏网"**是错的**——`tests/db_cleanup.py::remove_db_files` 用的是跨平台 `os.remove`。**教训：不要把未核实的记忆当事实写进 log。**
-- **Fog 4（#109，`tests/test_ci_hardening.py` +165）**：把「CI 必需运行时」清单**显式化**成守卫，并钉住两条**否定式**结论。①`rm` 标注为"平台相关、非 CI 必需"；②**`bash` 判为"平台相关"、不进清单**——依据：CI 是 ubuntu 且 GitHub Actions 的 `run:` 本身就以 bash 为默认 shell；`test_server.py:2591` 的 skip **不是** `if not shutil.which("bash")`，而是 `_find_bash()` **五套策略的最后一招**（`:2574`），语义是"本机找不到任何可用 bash"，Windows 无 Git-Bash 时跳过是**正确**行为。⇒ **扩进清单 0 项、未改 `conftest.py`**（硬塞 `bash` 只会制造一条错误门禁）。新守卫首跑**直接绿**（核实结论就是清单无需变更）⇒ 改用**五条变异**证非空转（清单清空/加 rm/加 bash/bash 同时进两个清单/`CI` 判据改恒真），全真红。
-- **Fog 3 的编排者实测取证（两项，决定 Fog 3 的走向）**：
-  - **Q1 校验顺序实测**：`in-body 闸 + 非法 body → 422` vs `Depends 闸 + 非法 body → 403`；合法 body 两者都 403。⇒ **统一成 `Depends` 的唯一真行为变化 = LAN + 非法参数时 422 → 403**（16 个 main.py 端点），语义收紧（不再对 LAN 泄露字段级校验消息）。
-  - **Q3 运行时 `dependant` 枚举实测**：模块级 router 变量共 **14 个**（12×`router` + `hoeren_router` + `lesen_router`）；运行时枚举**只找出 4 条**（`encounter.router` 3 + `tools.router` 1，全 `Depends` 形式）——**看不到函数体内调用的 16 条**。⇒ **"改用运行时 dependant 更可靠"这一 Fog 3 原始论证不成立**：它只在完成 16 处形式统一后才可行，而那时守卫也一并要改。当前 20 条 allowlist **是正确的**（`hoeren_router`/`lesen_router` 上确实没闸）。
-- **Fog 3 Task B（#110，只改 `tests/test_localhost_guard.py`，零行为变化）**：关掉三个**已实测确认**的漏检洞——①只认字面 `router`（现测 14 个 router 变量，将来给 `hoeren_router` 加闸则守卫**看不见、不报警**）；②prefix 只从单个 router 取（一模块双 router 时**键失真且恰好蒙对**）；③调用名字面量（`import ... as` 别名漏检）。三个洞均以**临时改 `delector/` 制造真实场景**完成"改前绿 / 改后红"取证，`delector/` 零残留（`git status --short -- delector/` 与 `diff --stat` 均为空）。allowlist 20 条**逐字未动**（`diff` 零删除行）。洞 3 **未覆盖** `functools.partial` / 包装函数间接调用 / `include_router` 跨模块前缀叠加，理由是需跨模块数据流分析、性价比低，**不假装做了**。
-- **一处约束冲突（maker 指出，编排者任务书自相矛盾）**：要求"router 变量名纳入 path 键构造"与"allowlist 20 条不得变"互斥。调和：path 键保持完整 URL 不变，router 变量名作为**键的归属方**参与判定，跨 router 撞键**抛 AssertionError** 而非静默覆盖。
-- **Fog 3 的 C-F（16 处形式统一）待用户裁决**：其收益（守卫可用运行时方案）已被实测证明需"改守卫 + 改 16 处"两步，而 Task B 已用零行为变化达成同等可靠性；成本是 422→403 的用户可见变化 + 16 处改动 + 误挂风险（`POST /api/wb/state` **刻意不挂闸**，用 `X-WB-Key`）。
-**门禁**：`test_localhost_guard.py` 7 passed / `test_ci_hardening.py` 21 passed / 半 A `1048` / 半 B `264 passed, 1 skipped` / `mypy` 两道（`93` + `70` files）0 error / `ruff` 通过。
-
+   > 正文超 §4 上限（4334 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md`](WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md)。
 ### 2026-10-06 14:40 | codebuddy | DECISION(Fog 3 关闭：C-F 不做) — 全部 Fog 清空
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：用户裁决 **Fog 3 关闭，不做 C-F（16 处形式统一）**。至此本轮登记项**全部清空**。
@@ -270,24 +240,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **顺带产品发现**：顶栏 `System · vX.Y.Z Online`（`static/index.html:35`）在**只绑回环的单机场景下"Online"字面撒谎**，ADR 附带默认改为真实版本 + 真实检查结果。
 - **未实施**：本次只产出决策文档，未写代码。ADR 已给端点契约草案、4 条 MUST 不变式（含「`has_update === null ⇔ error_reason !== null`」）、验收判据表与 NOT doing 清单。
 ### 2026-10-08 11:12 | codebuddy | EXEC(ADR-0017 实施) /dfs-exec 六任务全绿 + 编排者三次自查纠错
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：按 `docs/plans/2026-10-08-android-update-check.md` 走 `/dfs-exec`，maker-checker 逐任务派单（implementer=CPE，checker=CRV），**5 个原子 commit**（分支 `feat/update-visibility`，未 push、未发版）：
-`b2f191c` Task1 版本单一真相源 → `cf69bf2` Task2 版本面归一+守卫升级 → `efee426` Task3 端点 → `1acdcf7` Task4 契约守卫 → `051ed7d` Task5 前端 chip。
-（Task6 为 HITL 收口，由编排者亲自执行）
-- **交付内容**：① `delector/core/version.py`（`APP_VERSION` + `version_code()`，叶模块零 import）；② 两条发版守卫基准从"三面互等"升级为"每面 == APP_VERSION"，顶栏去掉误导词 `Online`；③ `GET /api/update/check`（GitHub Releases 唯一真相源，7 键契约，成功缓存 6h / **失败只 60s**，`threading.Lock`，**不挂本机闸**＝ADR-0017 §4.3 显式决定）；④ 端点契约守卫（穷举 iff 双向 + 结构证不写库 + 无本机闸）；⑤ 顶栏 chip（`static/js/update.js` + `tools/wb_update_chip_probe.mjs` 11 场景 + wrapper）。
-- **checker 三轮抓到的高价值项（都不是"风格问题"）**：
-  ① Task1 `part.isdigit()` 与 `int()` 定义域不重合 ⇒ 全角「５.１.０」**静默出数 50100**，与同函数 docstring 宣称的"绝不静默出数"矛盾（改 `isascii() and isdigit()` + 2 用例）；
-  ② Task3 注释**在撒谎**：称 Lock"避免并发重复出网"，而锁**不覆盖出网**（并发首个 miss 各出一次）；
-  ③ Task5 守卫盲区：静默快照原只覆盖 `#update-chip`，**运行期往自证串 `#topbar-system` 追加内容无守卫**（源码静态断言拦不住）⇒ 已纳入快照并变异自证（静默路径污染 → 4 条静默场景全红 failures=5）。
-- **编排者退回 implementer 修的（不 inline 补，守 maker-checker 边界）**：模块级 `# mypy: disable-error-code`（编排者做**决定性实验**：摘掉后两条 mypy 仍 95/72 全绿 ⇒ 该豁免不必要，maker"仅 skip 模式误报"的判断被推翻）；注释声称三类 DB import 是"本项目**全部**入口"（被 grep 证伪：`services/search.py`、`core/vocab_pool.py` 各自 `import sqlite3`）。
-⚠️ **编排者本轮三次自查纠错（全部如实记录）**：
-  ① 任务书把"越权注释位置"写成 `delector/routes/update.py`，实际在**测试文件**（maker 正确停下并纠正，且严格只改测试文件）；
-  ② 我的临时探针汇总 shell 脚本口径错（legacy 探针用 `fail` 键、标准形态用 `failures`）⇒ 误报一片 `NO-JSON`；改用 Python 双键解析重跑才拿到正确口径；
-  ③ 缓存验证脚本**先 `_cache.clear()` 再调第二次**，几乎把 `cached=false` 误报成实现缺陷；自查后重做（连续三次：首调出网、二/三调 `cached=true` 且 `checked_at` 保持原值、TTL 21600s、计数出网 1 次）。
-**门禁（feat 分支实测，数字来自本次最终 commit 的本人实跑）**：半 A **1106** passed（基线 1053 + 53 新增：Task1 16 / Task3+4 27 / Task5 10）；半 B `test_server` **264** passed + 1 skipped；`tools/*_probe.mjs` **29** 个文件（原 28 + 新增 `wb_update_chip_probe.mjs`，其中 12 个标准三键 + 16 个 legacy 扁平形态由 `test_probe_json_contract.py` 覆盖 + 1 个需参数的 `wb_a1_bootstrap_probe.mjs` 由其驱动测试传参）；`ruff check .` 0；mypy 两道 **96** + **72** files 零错误；探针 `wb_update_chip_probe` **11/11**。
-**桌面侧真实出网验证（Fog Unknown 1 的桌面侧数据点）**：`_fetch_latest_release(3.0)` **成功**（4.04s，`tag_name=v5.16.0`）⇒ 本机到 `api.github.com` 的 TLS 通路可用；`check_for_update()` 真实返回 `has_update=false`（当前 = latest = 5.16.0，语义正确）。注意 `_HTTP_TIMEOUT=3.0` 是 **httpx 各阶段超时**而非总时长，实测总耗时 4.04s 仍成功 —— 记录以免将来误判。
-**仍未验证（Fog of War，需真机）**：① Android/Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 HTTPS（`encounter.py:381` 的手机出网是 **LAN HTTP**，不能作为证据）；② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无法编译、只能靠 CI）。**Task 6 Step 3 因此仍阻塞**。
-
+   > 正文超 §4 上限（4522 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md`](WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md)。
 ### 2026-10-08 23:52 | codebuddy | STANDBY(Android 侧) 暂缓标记 + 新提案：Windows 桌面端封装为 desktop app
 Caps: filesystem-read, filesystem-write
 事件：用户决定「**先暂缓安卓**」并询问「**Windows 桌面端能否封装成 desktop**、用什么技术栈」。先做标记，再回答。
@@ -306,19 +259,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **Fog**：测量结果本身（D2 分支取决于它，测量前不许选路）；Android 侧如何测量（本机无 Android SDK）；卡盒前端渲染占比未剖析；若走 O2 则 Android arm64 交叉编译链路未定。
 
 ### 2026-10-09 12:24 | codebuddy | EXEC(ADR-0018 D1 性能测量) /dfs-exec 六任务全绿、判定门定案为 O0
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：按 `docs/plans/2026-10-09-performance-measurement.md` 走 `/dfs-exec`，maker-checker 逐任务派单（implementer=CPE，checker=CRV），分支 `perf/measurement-baseline`（先合 ADR-0018 于 master `6a58759` 再开分支，规避决策文档/exec 分支撞车）。**只加测量工具与门禁，零生产代码改动**（五个基准脚本 + 五个门禁）。
-- **交付（6 commit）**：`4380dca` 卡盒补 Python 侧占比与阈值闸 → `f9b90cb` spaCy 单价基准 → `60fc045` 长文冷/热读基准 → `b924ad6` 冷启动基准 → `5409ac2` 分层剖析汇总 + p95 补测 → 本次文档收口。
-- **⭐ 判定门定案（本轮的交付物）**：条件① **成立**（加权 Python CPU 代理占比 **85.9%**：卡盒 84% / 长文 98%）；条件② **不成立**（四场景 p95 距 2× 目标余量：卡盒 **0.35×**、冷启 0.26×、长文冷读 0.02×、热读 0.0001×）⇒ **AND 门不成立 ⇒ 走 O0（维持现状 + 便宜杠杆）**，**不做** O2（热点下沉）也不做 O3（扩展 ADR-0008 边界）。实质：Python 侧占比高只说明"若要优化就该优化 Python 侧"，**不说明现在必须优化** —— 绝对延迟离目标还有 2.9~40 倍余量。
-- **统计纪律（防"拿中位数冒充 p95"）**：默认 n=5 档只输出"**仅可否证**"（n=5 的经验 p95 ≈ 最大值，`P(max₅ < 真p95) ≈ 77%` ⇒ **系统性低估尾部**）；只有 `BENCH_P95_ROUNDS=20` 档（n≥20）才允许写"不成立"这类强结论。三基准 p95 均复用**已采集的同批样本**（不重新计时，时间增量 0）并输出原始样本行。
-- **实测数字**：卡盒端点 p95 **0.696s**（Python 侧 84%，SQL filesort 仅 3~5% ⇒ 查询侧优化收益上限被压死）；长文冷读 **122ms**（12 句）/ 热读 **17.7µs** ⇒ 缓存生效（数量级 ~6.9e3，非算法加速倍数）；spaCy 稳态 **7.1ms/句**（`de_core_news_sm`，≈296µs/token），首次/稳态仅 **1.3×**；冷启动 `health_200` **2.6s**（import 2.1s，其中 **spaCy 模型加载 1.47s 占首启 57%**）。
-- **⭐ spaCy 单价 20 倍矛盾 → 重新定性为"跨口径"而非"有一个错值"**：`syntax_hard.py:9` 的 42ms 与审计的 2.1ms 指向 **rank_sentences→analyze_syntax_tree** 路径，本次实测的是 `process_german_text`（完整管线）**不是同一个函数** ⇒ 两者**不可直接相除**，"实测/2.1 = 3.4×"属跨函数差。**未完成项**：要修订那条 42ms 注释，**必须先补测 rank_sentences 单价**（checker 抓出我原任务书里就存在这个跨口径混用）。另：42ms 的候选解释（① md 口径 ② 含冷启动摊薄 ③ 整篇含 DB 写入）**均未定案**；其中"摊薄 ⇒ N≈42 句"**不构成证据**（该方程对任意 steady<42 恒有正解、N 是自由参数、分子含词库 import 换机即变，属单位巧合）。
-- **checker 三轮抓到的非风格缺陷（都被收口）**：① Task 1 的 `_python_verdict` 在 >50% 时直接写"走热点下沉"，而 ADR §6 是**双条件 AND**（还差 p95）⇒ **结论越权**，改为只报条件①；② Task 2 结论**跨口径相除**（见上）+ "冷启动摊薄"假说**不可证伪却写成断言**；③ Task 3 未声明走哪条 NLP 路径（spaCy 不可用时会**静默降级到纯 Python** 而 `spacy_ms` 照常打印 ⇒ 输出整体失真），与"测不出必须写 unmeasured"同一条纪律。
-- **⚠️ 测量顺带发现的生产代码缺口（本计划不改，仅登记）**：`delector/core/database.py:91-93` 的数据目录迁移闸条件① 用 `isfile` **不看 size**，而"0 字节不算数据"的判定只作用于**旧位置** ⇒ **新位置放 0 字节 delector.db + 旧位置有真实数据 ⇒ 闸静默放行**，正是它自己要防的"静默空库"。现有用例只覆盖"0 字节在旧位置"（`tests/test_data_dir_migration_gate.py:98`）⇒ 新位置这条**无用例**（本基准正是靠这个不对称通过迁移闸，已用 `data_dir_gate_note` 写明）。另：`invalidate_rank_cache()` 只清聚合键是 **docstring 明确论证的有意取舍**，经独立核实**无害**（材料入库后不可变 + id 不复用），**不改**。
-- **未测项（各附原因，不伪造数字）**：网络层（AI 需 key；TTS 免 key 但属第三方服务；RSS 公开免 key 但会给 CI 引入外网抖动 ⇒ **选择**不发外部请求，且对四场景贡献为 0）；前端渲染（无浏览器自动化基线，需 Chrome DevTools 手工录制）；Windows RSS（无 stdlib `resource`，且不为测量新增 `psutil`）；Android 全项（本机无 SDK；84000ms 是**轮询上限**而非实测首启，与桌面 `health_200` 不同口径、**不可相减/相除**）。
-- **⚠️ 结论依赖未确认的假设目标值**：`target_cold_start_s=5.0` / `target_long_read_cold_s=3.0` / `target_cards_list_s=1.0` / `target_warm_read_s=0.1` 是**本基准的假设值**（输出以 `target_status=unconfirmed` + 每场景 `headroom_to_2x_target_*` 绑定声明）⇒ **条件②的"不成立"完全依赖它**，若用户给更严目标结论可能翻转。另：四场景是**代理口径**（`segment_D` 是进程内 SQL/物化段、非"列表+滚动端到端"；`health_200` ≠ 首屏可用），见 `scenario_scope_note`。
-**门禁（分支实测，数字来自本次最终 commit 的本人实跑）**：半 A **1189** passed（基线 1106 + 83 新增：Task1 3 / Task2 22 / Task3 20 / Task4 21 / Task5 17）；半 B `test_server` **264** passed + 1 skipped；`tools/*_probe.mjs` **29** 个文件零失败（标准三键 9 / legacy 扁平 19 / 需传参 1）；`ruff check .` 0；mypy 两道 **100** + **77** files 零错误。
-
+   > 正文超 §4 上限（5882 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md`](WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md)。
 ### 2026-10-09 13:40 | codebuddy | FIX(门禁) master 变红：跨进程量级比较被当成不变式 + spaCy 断言取整 flake
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：`perf/measurement-baseline`（PR #117）合并进 master 后 **master CI 红**：`tests/test_cold_start_cost.py::test_segments_satisfy_physical_containment` 报 `AssertionError: app_ready_ms(95.490) 未大于 init_db_ms(209.850)`，而**本机同一份代码**是 148/245（通过）⇒ **本机通过、CI 反转**。分支 `fix/cold-start-segment-gate`，**只改测试与基准，`delector/` 生产代码零改动**。
@@ -338,20 +279,7 @@ Caps: filesystem-read, shell-exec
 - **仍开放（同类残余，已登记 PROJECT_OVERVIEW 递延项④）**：`tests/test_cold_start_cost.py` 保留了 `import_ms > app_ready_ms`（**同进程**，安全），但其余量主要来自 import 期的 spaCy 模型加载（本机约 2000ms）；**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，余量会塌到噪声级 ⇒ 需加条件（例如仅 `nlp_path=spacy` 时断言）或改为机器无关形式。未收口。
 
 ### 2026-10-09 19:52 | codebuddy | DECISION(ADR-0018 门定稿) 目标值拍板 + 修法路由 + 移除不可复跑的 42ms
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：ADR-0018 D1 的两个待拍板项由**两个席位独立评估**后收敛，用户拍板「按这个组合」落地。分支 `feat/perf-gate-ratify-targets`。
-- **席位评估（并行，各自实核代码）**：product-ux 席位判"目标值本身不是重点，**门把修法指错了方向**才是" —— 唯一敏感场景是冷启动，而它的瓶颈是 **spaCy 模型加载 ≈1.47s（占首启 58%）= 初始化/IO**，**O2（下沉 CPU 热路径）修不了它**；perf 席位判"**不该补测**，该删数字" —— 42ms **只服务"缓存该做"这一个论证**，不参与任何参数决策（TTL 由陈旧性决定、容量 256 由内存上界定、聚合 key 由淘汰悬崖决定），且**覆盖该热路径的可复跑基准已存在**（`bench_long_read` 冷读走 `_rank_source → rank_sentences`）。
-- **① 目标值拍板（`target_status=confirmed`）**：冷启动 5.0→**2.0s**、长文冷读 3.0→**1.5s**、卡盒保持 **1.0s**；**热读降为「缓存哨兵」移出判定集**（实测 21µs 距目标 4 个数量级，只证明缓存生效）。判定集由四场景收为**三场景**，并加**启动期分区门禁**（恰 3 场景 + 哨兵恰 1 + 互斥 + 并集完备，用 `raise` 而非 `assert` ⇒ `python -O` 也剥不掉）。⇒ 冷启动余量从 0.26× 升到 **≈0.66×**（门终于"有牙"），条件② 仍**不成立** ⇒ 结论仍 **O0**。
-- **② 修法路由补丁（本轮的真价值）**：条件②成立时**按超标场景**给对应修法 —— **仅冷启动超标 ⇒ O0 杠杆（spaCy 惰性加载/延后模型加载）+ 明说 O2 修不了它**；卡盒/长文冷读超标 ⇒ O2 评估；同时超标 ⇒ 先 O0 再 O2。空集显式 `raise ValueError`（防误接）。
-- **③ 移除不可复跑的 42ms**：`delector/routes/syntax_hard.py:9` 的 `（spaCy ~42ms/句）` 改为 `（单价见可复跑基准 tools/bench_long_read.py）`（**只动这一行注释、不留任何毫秒数**）；两个基准里该值的**归属从"代码当前值"改写为"历史值（2026-10-09 移除）"**，门禁钉住的子串（42ms/2.1ms/syntax_hard.py:9/42ms/句…）逐条保留、断言一条未放宽。
-- **checker 两轮抓到的实质问题**：
-  ① **假引用**（红卡）：基准里写"理由见 ADR-0018 §7.4"，而 §7.4 当时恰恰写"要改该注释**必须先补测**" —— **语义相反的引用**会被未来 agent 读成"本轮移除违规"⇒ 已改为本轮真实依据（不参与任何参数决策）并**去掉文档指针**（不与 ADR 措辞耦合）。
-  ② 两条**同族守卫盲区**（都是我上一轮修复留下的）：**启动期门禁的调用点无人看守**（删掉那行调用而保留函数与正确常量 ⇒ 17 条测试全绿）；**生产 docstring"不得含裸毫秒数字"这一不变量零覆盖**（当天写回 `~42ms/句`，1200 条测试一条不红）⇒ 已各补一条**结构性**门禁（不是措辞匹配）。
-  ③ `p95_n` 原把哨兵 `warm_read` 纳入取最小（与"哨兵不得影响判决"概念冲突，今日冗余但将来冷/热样本数分叉会悄悄削判定强度）⇒ 改为只取判定集。
-- **门禁**：`tests/`（--ignore=test_server）**1200 passed**；三个相关测试文件 64 passed；mypy **100** + **77** files 零错误；`ruff check .` 0。两处实跑：默认档 `条件②=仅可否证`、`BENCH_P95_ROUNDS=20` 档 `条件②=不成立 ⇒ 建议O0`。
-- **ADR 回填（HITL）**：§1.3 spaCy 行改记处置、§6 门定义补"拍板 + 哨兵 + 修法路由"、§7.2 表按三场景更新、**§7.4 重写处置**（数字已移除；可复跑覆盖已存在；"先补测"前置条件失效）、**§7.6 重写**为"目标值（已拍板）+ 修法路由表"、**§8 Unknown 5 改述为"纯函数单价仍未测"（明确**不关闭**）**、Unknown 6 标已解决；仓内副本从正式件**机械重新生成**（255 行，差异 0）。
-- **登记未决**：冷启动**端到端 p95 未测**（现 2.6s 是"到 /api/health 200"的代理口径）—— 用户暂不做（半天成本），已登记 PROJECT_OVERVIEW 递延项⑤。
-
+   > 正文超 §4 上限（4321 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md`](WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md)。
 ### 2026-10-09 20:43 | codebuddy | CLOSE(登记项) ① 迁移闸 size 对称化 ② rank_sentences 纯函数单价补测
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：把 ADR-0018/PROJECT_OVERVIEW 里"仅登记、未动"的两个开放项**真正做完**，并把登记状态改为已完成。分支 `fix/close-registered-items`。
@@ -559,16 +487,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 未闭合：发版本身交 `/dfs-release`（版本面 3 处 bump + CHANGELOG + tag + 产物 + Release 的 known-issues 段）；发 tag 前同 commit 手动跑 `Windows Portable Smoke`。
 
 ### 2026-10-11 | codebuddy | WORK_START(v5.17.0-release)＋WORK_END(v5.17.0-release)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：v5.17.0 发版全流程闭环（ADR-0022 Q1=B / Q2=B 落地）。tag `v5.17.0` → commit **`f359ea6`**；Release https://github.com/ROM4n2/DeLector/releases/tag/v5.17.0 四资产齐：Windows **85.8** MB / macOS **58.07** / Linux x64 **118.53** / Android **58.89** MB（取 Release 附件实测）。
-- **版本面（commit `40a9f88`）**：四处 bump（`APP_VERSION` / build.gradle fallback `51700` / `sw.js CACHE_NAME` / `index.html` 顶栏）；README（badge + Tests **1223/1224 → 1768/1770** + 下载表 + 最近 3 版，移除 v5.14.0 摘要）；CHANGELOG 追加 v5.17.0（含「已知限制」「回滚」段）；PROJECT_OVERVIEW 当前状态与基线。**bump 连带修两条写死字面量**：`test_app_version_source` 的字面量，以及 `test_without_github_ref_type_local_v_tag_is_adopted` —— 旧写死的 `v5.16.0` 会被**新发版门守卫**直接拒（改用预发布 tag 形态保住"tag 优先 vs 回落值"的判别力）。这正是该守卫设计意图的首次实战命中。
-- **顺带（commit `e2812b1`）**：`FEATURES.md` 严重落后（`当前版本 v5.0.2`；版本历史止于 v4.7.0；与 CHANGELOG **重复两张表**；平台表挂 v3.10.0 产物名与 56.7 MB 旧体积）⇒ 补「十八 桌面形态、数据落点与更新可见性」「十九 背词工作台与统一池」；两张重复历史表收敛为一张「能力里程碑」+ 指针 `CHANGELOG.md`；路线图改真实在途项；修 531/660 → 552/691、APK 体积、开发入口补 `python desktop.py`。
-- **发版红卡（本线程唯一真事故）**：首次 tag（`e2812b1`，run 38143313101）四平台里 **macOS 红**于 `test_cache_classification_matches_measured_relationship`：`assert 11000.0 == 10658.46 ± 319.75`；`Publish` 因 needs 四平台全绿而 skipped（**未误发**）。**根因＝容差口径错，不是 macOS 算错**：`cache_speedup` 只报 **2 位有效数字**（`_format_speedup` 的 `:.2g`；分母是微秒级 dict 命中，多打印一位即伪精度），2 位有效数字舍入误差**最坏 5%**，而用例写死 `rel=0.03` ⇒ **容差比被测报告的精度还紧**；Windows/Linux 只是首位数离舍入边界远才偶然全绿。修法 `f359ea6`：新增 `_half_ulp(raw)` 由**打印出的字符串本身**推半 ULP（`1.1e+04`⇒500、`1.23`⇒0.005），主断言改 `|报出值 − 实测比值| ≤ 半 ULP`；并加**源码级棘轮**禁止本文件再出现 `pytest.approx(..., rel=...)`（行为断言锁不住回退：改回固定百分比后本机照样全绿）。变异自证 2 条（bench speedup ×1.5 ⇒ 主断言红；塞入 `rel=` 调用 ⇒ 棘轮红，均复原 + md5 复核）。
-- **验收**：删远端 tag 后重打在 `f359ea6`（用户批准；Release 从未生成、无人拿到该版本 ⇒ 同名重打无副作用），run **38144724706** 四平台 + `Publish GitHub Release` 全 **success**；macOS job 步骤逐项 success（含 `Run Tests`）。ADR-0022 要求的手动 `Windows Portable Smoke`（run 38143045303，在 `e2812b1`）**已绿** —— 但注意它**只构建 + 真启，不跑 pytest** ⇒ 覆盖不到这次红的那类测试缺陷（下一版可考虑让该 job 也跑一遍 `pytest -q`）。
-- **Release 说明**：`build-release.yml` 的 body 是写死样板、不读 CHANGELOG（ADR-0022 R4）⇒ 已 `gh release edit` 补两段：「🖥️ 本版重点」（原生窗口 / 数据外置 / 更新 chip / 六条随版到达的修复）与「⚠️ 已知限制」（含 Q2=B 硬要求的两条：那 2s 端口/身份校验**不许当提速卖点**、`launch.log` 约 **3% 整行**丢失；另加 WebView2 前置、Android `versionCode` 不可回滚、数据落点勿删）。
-- **门禁**：全量 **1768 passed + 2 skipped**；探针 **29/29**；`ruff` 0；mypy **87 + 121 + 4** files 零错误；前端契约闸 PASS + `tsc` PASS；`test_writer_mobile` 30 passed。
-- **口径教训（同族）**：受打印/舍入影响的两个量比大小或比相等时，容差 MUST 由**精度**推导（不许凭手感给固定百分比）；且"只在特定机器复现"的缺陷**行为断言锁不住**，必须配源码级棘轮。
-
+   > 正文超 §4 上限（4299 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-11-0000-work-start-v5-17-0-release-work-end-v5-17-0-rele.md`](WORKMEMORY/NOTES-2026-10-11-0000-work-start-v5-17-0-release-work-end-v5-17-0-rele.md)。
 ### 2026-10-11 | codebuddy | NOTE Release 模板 / 仓库 About 对齐当前产品
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：用户问"Release 文案 + 仓库描述与标签是否也要更新" ⇒ 都过时了，已一并修（commit `98910ee` + 远端设置）。
