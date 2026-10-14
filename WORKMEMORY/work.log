@@ -611,3 +611,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **真因（比"太大"严重）**：vault 巡检的事件边界正则严格等于协议 §2（`### YYYY-MM-DD HH:MM | agent | <裸 EVENT_TYPE>`），而本仓 **73/74 条历史 header 不合规**——写成 `WORK_START(计划名)`（载荷混进类型位）或省了 HH:MM。后果是**静默的**：解析器认不出边界 ⇒ 几十个事件被并成一条，报出来是"56428 B 事件"而非"头不合规"。同类分布在 lover-instance(5) / qingjian(3)。
 - **已在 vault 侧修**（`a18cd3e` 已推 master）：① 边界判定改宽容式（时间可选、类型可带载荷）；② "头不合规"**单列为 advisory**（把静默漂移变可见）；③ 顺带补 `topic/agent-architecture` / `topic/multi-agent` 两条路由（原落 `CODING-UNIVERSAL` fallback）；④ 写库入口加内层双引号转义 + 写入前 YAML 自检（原先 `source` 含 ASCII 双引号会产出不可解析的 frontmatter 而写库**静默成功**）。
 - ⏳ **待用户决定**：是否回改这 73 条历史 header。建议**不补缺失的时间**（等于编造）；只做"把载荷移进正文"这类可无损归一，或保持现状（现有 advisory 盯着）。**新写事件一律按 §2 写裸 `EVENT_TYPE`、时间必填**——本条即按此写。
+
+### 2026-10-14 21:09 | codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+本次被纠正: ① 实现任务直推 master（应开分支 + PR）；② 簿记类必须显式写进分支规矩的例外（我原先只写了发版类）；③ 历史 header 归一与其它项目 WORKMEMORY 按你指示**推迟到 digest**，不自行处理。
+- 本会话三块交付：① 「去控制台 + 桌面化观感」6 任务 + 门禁缺口修复（PR #131 已合，全量 1832 passed + 2 skipped）；② 分支纪律成文（ops.md 第 12 条 / PROTOCOL.md 铁律第 8 条，PR #130 与 #132 已合）；③ Vault 工具链三修（巡检解析器静默失效 / agent 类路由 / 写库入口 frontmatter 自检，coding-vault a18cd3e）。
+- 未做（明确推迟，非遗漏）：skill 侧「分支隔离」步骤（你指示暂缓）；73 条历史 header 归一（等 digest）；know-her / skill-dev 的 WORKMEMORY（不管）。
+- 回写检查：稳定结论已入 vault 与 ops.md / PROTOCOL.md；临时产物（pytest 日志、PR 正文暂存）都在系统临时目录，未入库。
