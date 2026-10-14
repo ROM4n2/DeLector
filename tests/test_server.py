@@ -4628,6 +4628,8 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     # 集合是硬编码的，不登记 ⇒ 这条守卫对新模块永久失明（本地全绿、打包后 ModuleNotFoundError）。
     # Task 4（循环内核）：polish_loop 服务（验证驱动 agent 循环内核）与路由同步进打包面 —— 本批次新增，
     # 集合是硬编码的，不登记 ⇒ 这条守卫对新模块永久失明（本地全绿、打包后 ModuleNotFoundError）。
+    # Task 5（工具白名单）：polish_tools 服务（任务级白名单 + 前置钩子，同进程直调）同步进打包面 ——
+    # 同上：集合硬编码，不登记 ⇒ 守卫对它永久失明。
     service_modules = {
         "writing",
         "essay_diff",
@@ -4637,6 +4639,7 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "syntax_score",
         "llm_client",
         "polish_loop",
+        "polish_tools",
     }
     top_level_modules: set[str] = set()
     required_modules = sorted(data_dict_modules | route_modules | service_modules | top_level_modules)
@@ -4680,6 +4683,8 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         # services/listen|syntax_score|exam_catalog 同口径（Android 由 `cp -r delector`
         # 整目录拷入覆盖，这里钉住「产物里真有」这一环）。
         "delector/services/polish_loop.py",
+        # Task 5（工具白名单）：polish_tools 服务同口径进 APP_NEEDLES 验包探针。
+        "delector/services/polish_tools.py",
         "delector/routes/a2.py",
     ]
     for needle in critical_apk_needles:
