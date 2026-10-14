@@ -630,3 +630,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **台账**：`init --plan-file docs/plans/2026-10-14-interactive-agent-loop.md` ⇒ 登记 6 任务全部 `pending`、`active_task_id=None`。**旧台账（10-10 desktop-shell，6/6 完成）已被覆盖**，备份在系统临时目录 `vault-exec-ledger-2026-10-10.bak`（3173 B）。
 - **ADR 追加 §9「语言边界的再确认」**（回答"agent 开发是否 Python 基础 / Go 能不能用"）：本项目 agent 已是**双语言**——交互层循环 Python（裁判与交付面都在 Python 侧 ⇒ 换 Go 会失去裁判）、批处理层 Go **已在跑**（`agent/go.mod`：go 1.26 + go-openai + cobra）、native-agent（Go 零框架 harness，0 行代码，未启动）。判据沿用 ADR-0021（换语言至多消 ≈21% 缺陷；代价=两套 runtime+IPC / 产物自省削弱 / 原生段不可 recover）。新增可复用判据：**先问「裁判在哪、交付物在哪」，再问「用哪种语言」**。
 - ⏳ **下一步（待用户下令）**：`git checkout -b feat/interactive-agent-loop` 后 `/dfs-exec`；Task 2 标 HITL（动 CI 定义）需人工确认。
+
+### 2026-10-14 23:35 | codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+本次被纠正: 无（本批按计划与推荐执行；两处偏离由我主动申报并经确认：① 顺序改为 Task 0→Task 2 代码半→Task 1；② 计划外触碰 agent/run_integration_test.go）。
+事件：执行 ADR-0023 实施计划的**前三个任务单元**，集成门禁由「静默测别人的服务 + 恒红断言 + 单名解释器探测」变为**整体转绿**。分支 `feat/interactive-agent-loop`（**未开 PR**，Task 3~6 未做）。
+- **Task 0** `b76d45a`（CRV PASS）：身份校验（探 `/api/health`，接受 200/503 只读身份，对齐 Python 侧 `probe_identity`）+ 起服失败即 fail-fast（不再向被占端口发业务请求）+ 动态端口。**修的是一类假绿**（外来服务答得对时门禁会替它背书）；RED 实测 `Errno 10048 ×29` + 外来服务回 500。
+- **Task 2 代码半** `42e8420`（CRV PASS）：解释器探测由 `LookPath("python")` 单名改为候选链 `$DELECTOR_PYTHON`→`python3`→`python` + 逐个实测 `import uvicorn, fastapi`（15s 短超时）+ 透传到起服 argv[0]（四个调用点全查）。CI 半属 HITL，未做。
+- **Task 1** `64f7abf`（CRV PASS）：门禁 5 由「恰好 2 行」（假设空库，被 `create_app()` 的 7 篇预置短文污染、恒红）改为**前后快照相对断言**（净增恰好 2 行且标题匹配）；`level==A1` 作用域由整表收窄到净增行。
+- **门禁现状**：`cd agent && go test -tags integration ./...` ⇒ **116 PASS / 0 FAIL / 0 SKIP**；`go build`/`go vet`/`go vet -tags integration`/`go test` 全 0；gofmt 空；纯 LF。
+- **台账**：2/7（Task-0、Task-1 完成；Task-2 IN_PROGRESS 待 CI 半；Task-3/4/5/6 pending）。
+- ⏳ **续跑入口**：`WORKMEMORY/handoff_interactive-agent-loop.md`。顺序：CI 半（HITL）→ Task 3 → 4 → 5 → 6 → 开 PR。
