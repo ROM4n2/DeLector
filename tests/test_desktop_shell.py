@@ -1678,7 +1678,8 @@ def test_dispatch_server_only_delegates_to_start_main(monkeypatch: pytest.Monkey
 
     mod = _mod()
     calls: List[str] = []
-    monkeypatch.setattr(start, "main", lambda: calls.append("main"))
+    # Task 5：dispatch 现在会多传一个**可选** on_serving 回调（地址写入时机），故替身须收下它。
+    monkeypatch.setattr(start, "main", lambda **kwargs: calls.append("main"))
     monkeypatch.setattr(mod, "run_desktop", lambda port: pytest.fail("--server-only 不得起桌面窗口"))
 
     code = mod.dispatch(server_only=True, port=8123)
@@ -1698,7 +1699,8 @@ def test_dispatch_server_only_warns_that_port_is_ignored(
     import start
 
     mod = _mod()
-    monkeypatch.setattr(start, "main", lambda: None)
+    # Task 5：替身收下 dispatch 新增的可选 on_serving 回调（地址写入时机）。
+    monkeypatch.setattr(start, "main", lambda **kwargs: None)
     monkeypatch.setattr(mod, "run_desktop", lambda port: pytest.fail("--server-only 不得起桌面窗口"))
 
     code = mod.dispatch(server_only=True, port=9000)
@@ -1715,7 +1717,8 @@ def test_dispatch_server_only_does_not_warn_for_default_port(
     import start
 
     mod = _mod()
-    monkeypatch.setattr(start, "main", lambda: None)
+    # Task 5：替身收下 dispatch 新增的可选 on_serving 回调（地址写入时机）。
+    monkeypatch.setattr(start, "main", lambda **kwargs: None)
 
     mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
 
@@ -1723,30 +1726,94 @@ def test_dispatch_server_only_does_not_warn_for_default_port(
 
 
 # ── `--server-only` 的地址出口：数据目录落 lan-address.txt（无控制台时唯一可见）──
-def test_dispatch_server_only_writes_lan_address_file(
+def test_dispatch_server_only_writes_lan_address_after_serving(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    """`--server-only` 必须在数据目录写 `lan-address.txt`，内容含 `http://`。
+) -> None:
+    """`--server-only` 在**服务真正持有端口之后**把地址写进数据目录 `lan-address.txt`（Task 5）。
 
     `--windowed` 打包后 stdout 不可见，start.py 的横幅（唯一带 LAN 地址的输出）没了 ⇒
-    这份文件是用户拿到 `http://<LAN_IP>:<port>` 的第一出口（双击可看、可复制、随时再看）。
-    端口必须用 DEFAULT_PORT：该路径固定 8000，`--port` 不生效（见上方警告）。
+    这份文件是用户拿到 `http://<LAN_IP>:<port>` 的第一出口。写入时机是 Task 5 的要害：
+    必须晚于端口校验（由 start.main 在 build_server 成功后回调 on_serving），端口被占 /
+    启动失败时不得写（见 `test_dispatch_server_only_leaves_no_address_file_when_port_busy`）。
+
+    这里用替身 start.main **在回调触发的那一刻** 读盘：只要回调一被调用，数据目录就必须
+    已有含正确端口的地址文件（端口号取自 start.main 的真相源）。
     """
     import start
 
     mod = _mod()
     monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(start, "main", lambda: None)
     monkeypatch.setattr(start, "get_local_ip", lambda: "192.168.1.50")
+    captured: Dict[str, str] = {}
+
+    def _fake_main(debug_console: bool = False, on_serving: Any = None) -> None:
+        assert on_serving is not None, "dispatch 必须把地址写入回调交给 start.main（端口持有后才写）"
+        on_serving(mod.DEFAULT_PORT)  # 模拟 build_server 成功后触发写入
+        captured["content"] = (tmp_path / "lan-address.txt").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(start, "main", _fake_main)
 
     code = mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
 
     assert code == 0
-    lan_file = tmp_path / "lan-address.txt"
-    assert lan_file.exists(), "--server-only 必须写 lan-address.txt（无控制台时唯一可见的地址出口）"
-    content = lan_file.read_text(encoding="utf-8")
-    assert "http://" in content, "文件内容必须是 http:// 开头的地址"
-    assert f"http://192.168.1.50:{mod.DEFAULT_PORT}" in content, "地址必须用真实端口（--server-only 固定 8000）"
+    assert "http://" in captured["content"], "文件内容必须是 http:// 开头的地址"
+    assert f"http://192.168.1.50:{mod.DEFAULT_PORT}" in captured["content"], (
+        "持有端口后必须把 http://<LAN_IP>:<端口> 写进 lan-address.txt"
+    )
+
+
+def test_dispatch_server_only_removes_address_file_on_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """服务退出后不得留下地址文件（Task 5）：它指向已停服务的目标 = 错误目标。
+
+    与上条互补：上条钉"持有时写"，本条钉"退出后删"（`run_server_only` 的 finally 里
+    "若已写则删除"）。两态都指向同一不变量：**文件存在 ⟺ 本进程正持有该端口**。
+    """
+    import start
+
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(start, "get_local_ip", lambda: "192.168.1.50")
+
+    def _fake_main(debug_console: bool = False, on_serving: Any = None) -> None:
+        assert on_serving is not None
+        on_serving(mod.DEFAULT_PORT)  # 持有端口 ⇒ 写
+        assert (tmp_path / "lan-address.txt").exists(), "写入必须发生在回调触发的那一刻"
+
+    monkeypatch.setattr(start, "main", _fake_main)
+
+    mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
+
+    assert not (tmp_path / "lan-address.txt").exists(), "退出后必须删除已写地址文件（不留错误目标）"
+
+
+def test_dispatch_server_only_leaves_no_address_file_when_port_busy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """端口被占 ⇒ `--server-only` 不得留下 `lan-address.txt`（Task 5，RED-A）。
+
+    旧实现先写地址、后查端口（写地址在 `dispatch`，`start.main` 里才 `is_port_in_use` →
+    `sys.exit(1)`）⇒ 端口被别的程序占用时，用户拿到一份**指向别的服务**的地址文件。
+    修法：写入挪到服务真正持有端口之后；端口被占即早退，根本没机会写。这里用**真实**
+    `start.main`（端口 / 身份探针打桩，不起真服务）复现该路径。
+    """
+    import start
+    from delector.core import server_lifecycle
+
+    mod = _mod()
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(start, "get_local_ip", lambda: "192.168.1.50")  # 有 LAN ⇒ 旧路径会写
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)  # 端口被占
+    monkeypatch.setattr(server_lifecycle, "probe_identity", lambda *_a, **_k: False)  # 非 DeLector
+    monkeypatch.setattr(start, "open_browser", lambda _port: pytest.fail("不得为无关程序打开页面"))
+
+    with pytest.raises(SystemExit):
+        mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
+
+    assert not (tmp_path / "lan-address.txt").exists(), (
+        "端口被占时必须早退，绝不得留下指向错误目标的 lan-address.txt"
+    )
 
 
 def test_write_lan_address_skips_when_no_lan_ip(
@@ -1782,10 +1849,16 @@ def test_write_lan_address_failure_does_not_block_startup(
 
     mod = _mod()
     monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(start, "main", lambda: None)
     monkeypatch.setattr(start, "get_local_ip", lambda: "192.168.1.50")
     # 让落点变成一个**目录**：open(..., "w") 必抛 IsADirectoryError（OSError 子类）。
     monkeypatch.setattr(mod, "resolve_lan_address_path", lambda _env: str(tmp_path))
+
+    # Task 5：地址写入现在由 start.main 在持有端口后回调触发 —— 替身须触发它，写失败才会发生。
+    def _fake_main(debug_console: bool = False, on_serving: Any = None) -> None:
+        if on_serving is not None:
+            on_serving(mod.DEFAULT_PORT)
+
+    monkeypatch.setattr(start, "main", _fake_main)
 
     code = mod.dispatch(server_only=True, port=mod.DEFAULT_PORT)
 
@@ -1884,7 +1957,8 @@ def test_desktop_server_only_entry_captures_warning_before_delegation(
 
     mod = _mod()
     monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(start, "main", lambda: None)
+    # Task 5：替身收下 dispatch 新增的可选 on_serving 回调（地址写入时机）。
+    monkeypatch.setattr(start, "main", lambda **kwargs: None)
 
     def _exercise() -> None:
         real_ensure_streams = mod.ensure_streams

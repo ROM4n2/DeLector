@@ -202,6 +202,22 @@ def _remove_stale_lan_address(env: Mapping[str, str], log_path: str) -> None:
         _append_log(log_path, f"删除残留 {LAN_ADDRESS_FILE_NAME} 失败（不阻断启动）：{exc!r}")
 
 
+def _remove_lan_address_file(env: Mapping[str, str], log_path: str) -> None:
+    """删除数据目录的 `lan-address.txt`（服务退出后调用）。**绝不抛**。
+
+    对外可见的"地址"类文件 MUST 只反映"本进程此刻是否在服务该地址"：服务一停（或从未真正
+    持有端口），留着它就是让用户（及托盘）读到一个**已不再服务 / 错误**的目标。删除失败
+    （被杀软锁等）不阻断退出，仅留痕。
+    """
+    path = resolve_lan_address_path(env)
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+            _append_log(log_path, f"已删除 {LAN_ADDRESS_FILE_NAME}（服务已退出，不再持有该端口）。")
+    except OSError as exc:
+        _append_log(log_path, f"删除 {LAN_ADDRESS_FILE_NAME} 失败（不阻断退出）：{exc!r}")
+
+
 def write_lan_address(port: int, env: Mapping[str, str], log_path: str) -> Optional[str]:
     """把局域网地址写进数据目录的 `lan-address.txt`（每次启动覆盖）。返回写入的地址。
 
@@ -998,13 +1014,35 @@ def run_server_only(debug_console: bool = False) -> int:
 
     为什么复用而不是另写一套：这条路径要精确保留便携版原来的启动语义（含端口占用时的
     身份校验、LAN 访问、`bootstrap_data_dir` 顺序），复用是唯一能保证"不漂移"的做法。
+
+    地址出口（Task 5）：`--windowed` 下无控制台，`lan-address.txt` 是用户唯一能看到
+    `http://<LAN_IP>:<port>` 的地方。该文件**只在服务真正持有端口之后**才写 —— 由
+    `start.main()` 在 `build_server` 成功后回调 `_on_serving`（端口号取 start.main 的
+    真相源，不在调用侧臆造）；端口被占 / 启动失败时根本走不到那里（`start.main` 先
+    `is_port_in_use` → `sys.exit`），故绝不留下**指向别的服务**的地址文件。服务退出
+    （正常或异常）后本进程不再持有该端口 ⇒ 删掉本轮写下的文件（"若已写则删除"），
+    不留指向已停服务的目标。
     """
     import start
 
-    if debug_console:
-        start.main(debug_console=True)
-    else:
-        start.main()
+    log_path = resolve_log_path(os.environ)
+    written: List[str] = []
+
+    def _on_serving(port: int) -> None:
+        address = write_lan_address(port, os.environ, log_path)
+        if address is not None:
+            written.append(address)
+
+    try:
+        if debug_console:
+            start.main(debug_console=True, on_serving=_on_serving)
+        else:
+            start.main(on_serving=_on_serving)
+    finally:
+        # 退出后不再持有端口：删掉本轮写的地址文件（若写成功）。端口被占 / 建服前失败时
+        # `written` 为空 ⇒ 不误删（也就不会有指向错误目标的文件）。
+        if written:
+            _remove_lan_address_file(os.environ, log_path)
     return 0
 
 
@@ -1013,8 +1051,8 @@ def dispatch(server_only: bool, port: int, debug_console: bool = False) -> int:
 
     ⚠️ `--server-only` **复用** `start.main()`（固定端口，见 `run_server_only` 的理由）：该路径
     不接受 `--port`。用户若在此组合下显式给了非默认端口，必须**显式告知**它不生效 —— 静默丢弃会被
-    误读成"端口没换成功"，正是本任务要消除的一类静默失败（不动 `start.main()` 签名是为了不引入
-    port-identity / LAN 面回归）。
+    误读成"端口没换成功"，正是本任务要消除的一类静默失败（只给 `start.main()` 加一个**可选回调**
+    参数、不加 `port` 参数，故不引入 port-identity / LAN 面回归）。
     """
     if not server_only:
         if debug_console:
@@ -1032,9 +1070,10 @@ def dispatch(server_only: bool, port: int, debug_console: bool = False) -> int:
             f"你传入的 --port {port} 不会生效。",
             file=sys.stderr,
         )
-    # 地址出口：无控制台（--windowed）时用户唯一能拿到 `http://<LAN_IP>:<port>` 的地方。
-    # 端口用 DEFAULT_PORT —— 该路径固定 8000，`--port` 不生效（见上方警告）。
-    write_lan_address(DEFAULT_PORT, os.environ, log_path)
+    # 地址出口（Task 5）：**不再**在此处提前写 `lan-address.txt`。旧实现在这里先写、`start.main`
+    # 里才 `is_port_in_use` 判端口 ⇒ 端口被别的程序占用时，用户拿到一份**指向别的服务**的地址。
+    # 写入已挪到服务真正持有端口之后（见 `run_server_only`：由 `start.main` 在 `build_server`
+    # 成功后回调写）。端口被占时下面会早退（`start.main` → `sys.exit`），绝不留下错误地址文件。
     if debug_console:
         return run_server_only(debug_console=True)
     return run_server_only()

@@ -12,6 +12,7 @@ import threading
 import time
 import webbrowser
 from contextlib import AbstractContextManager, nullcontext
+from typing import Callable, Optional
 
 # 为什么必须在最顶部就把 stdout/stderr 重配成 utf-8（本仓既有写法，见 package_windows.py 顶部）：
 # 下面那条启动横幅用 print() 打中文，而**被重定向到文件的 stdout 在 Windows 上默认按 locale/ANSI
@@ -129,7 +130,7 @@ def print_banner(port: int, android: bool) -> None:
     print("  按 Ctrl+C 停止服务\n")
 
 
-def main(debug_console: bool = False) -> None:
+def main(debug_console: bool = False, on_serving: Optional[Callable[[int], None]] = None) -> None:
     _ensure_entry_streams(debug_console)
     port = 8000
     android = is_android()
@@ -154,6 +155,11 @@ def main(debug_console: bool = False) -> None:
     from delector.server import app
 
     server = build_server(host, port, app)
+    # Task 5：端口校验已过（is_port_in_use 早退在更上方）、`uvicorn.Server` 已组装 ⇒ 调用方
+    # （desktop `--server-only`）据此写对外可见的地址文件。写入 MUST 晚于"确认本进程将持有
+    # 该端口"：端口被占 / 启动失败时根本到不了这里，故绝不留下指向错误目标的地址。
+    if on_serving is not None:
+        on_serving(port)
     try:
         # 禁用信号处理：Android Chaquopy 在子线程里跑 server，而 signal.signal 只允许
         # 在 Python 主线程调用。注意 uvicorn 的 API 随版本迁移（0.52 起只有
