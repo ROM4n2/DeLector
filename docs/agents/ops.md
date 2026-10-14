@@ -202,7 +202,7 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 12. **开工前先判分支（MUST）**：**实现 / 多步任务一律在独立分支（或 worktree）上做，再走 PR 合入 `master`**；
     只有**两类操作**允许直接在 `master` 上推，且推送前须用户显式批准：
     **① 发版类**（版本 bump / 打 tag / Release 文案 / 发版文档回填）；
-    **② 簿记类**（`WORKMEMORY/work.log` 等**纯追加**的事件记账 —— 不改代码、不改门禁、不改测试；
+    **② 簿记类**（**WORKMEMORY 记忆簿记** —— 含 `work.log` 的纯追加事件、`INDEX.md` 的索引节更新（Active handoffs 等）、`NOTES-*` / `handoff_*` 的新增；**不改代码、不改门禁、不改测试**；
     2026-10-14 用户明确确认簿记属例外）。除此之外一律走分支 + PR。
     为什么把这条写在这里：2026-10-13「去控制台 + 桌面化观感」那批 **9 个提交**（含生产源码 `desktop.py` / `start.py`、
     打包面 `package_windows.py` 与 CI 定义 `ci.yml` / `build-release.yml` / `tools/verify_windows_portable.py`）**全程直推
