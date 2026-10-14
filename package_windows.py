@@ -372,6 +372,7 @@ def build_windows() -> None:
         "--hidden-import=delector.services.tts",
         "--hidden-import=delector.services.listen",
         "--hidden-import=delector.services.syntax_score",
+        "--hidden-import=delector.services.llm_client",
         "--hidden-import=de_core_news_sm",
         "--hidden-import=spacy.lang.de",
         "--hidden-import=genanki",

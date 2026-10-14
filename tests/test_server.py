@@ -4624,7 +4624,9 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
     # services.tts，monkeypatch 契约同步迁到 delector.services.tts，不再有顶层 shim）
     # Task 3：listen 服务（听写诊断/填空引擎）与路由同步进打包面。
     # Task 3（长难句）：syntax_score 服务（句子难度评分）与 syntax_hard 路由同步进打包面。
-    service_modules = {"writing", "essay_diff", "exam_catalog", "tts", "listen", "syntax_score"}
+    # Task 3（LLM 收口）：llm_client 服务（唯一出网口）与路由同步进打包面 —— 本批次新增，
+    # 集合是硬编码的，不登记 ⇒ 这条守卫对新模块永久失明（本地全绿、打包后 ModuleNotFoundError）。
+    service_modules = {"writing", "essay_diff", "exam_catalog", "tts", "listen", "syntax_score", "llm_client"}
     top_level_modules: set[str] = set()
     required_modules = sorted(data_dict_modules | route_modules | service_modules | top_level_modules)
 

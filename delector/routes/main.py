@@ -126,6 +126,12 @@ from delector.routes.sync import _SYNC_INSTANCE_ID
 # routes.*，故此处顶层导入无环。
 from delector.routes.syntax_hard import invalidate_rank_cache
 
+# LLM 出网唯一收口（Task 3）：本模块 5 处重复的 httpx + /chat/completions 全部改调
+# llm_client.chat。取**模块对象**而非 `from ... import chat`：monkeypatch 打在调用方
+# 模块上才生效（本仓既有约定，见 tests 里对 `delector.routes.main.*` 的打桩）。
+# 注意：本模块其余出网（TTS 兜底、fetch_remote_html）仍直接用 httpx，不在本次收口范围。
+from delector.services import llm_client
+
 router = APIRouter()
 
 
@@ -410,37 +416,21 @@ async def lookup_grammar(req: GrammarLookupReq, request: Request) -> Any:
     model = get_effective_api_model()
     user_content = f'句子: "{req.sentence}"\n目标词/短语: "{req.target_phrase}"'
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_GRAMMAR_PROMPT},
-                        {"role": "user", "content": user_content},
-                    ],
-                    "response_format": {"type": "json_object"},
-                },
-            )
-            if getattr(resp, "status_code", 200) != 200:
-                raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
-            try:
-                data = resp.json()
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务返回非 JSON 响应")
-            try:
-                content = data["choices"][0]["message"]["content"]
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务响应格式异常")
-            try:
-                return json.loads(content)
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务返回内容非 JSON")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=502, detail="AI 服务连接失败")
+        return await llm_client.chat(
+            [
+                {"role": "system", "content": SYSTEM_GRAMMAR_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            model=model,
+            max_tokens=llm_client.DEFAULT_MAX_TOKENS,
+            timeout=30.0,  # 收口前本端点的现值（30s），语义不变
+            response_format=llm_client.JSON_OBJECT,
+            api_key=key,
+            base_url=base_url,
+        )
+    except llm_client.LLMError as e:
+        # 失败仍 502，detail 由 client 给出（与收口前逐字一致），此处不改写语义
+        raise HTTPException(status_code=502, detail=e.detail)
 
 
 SYSTEM_VOCAB_PROMPT = """你是一位精通德汉词典编纂的德语专家。
@@ -513,27 +503,28 @@ async def lookup_vocab(req: VocabLookupReq, request: Request) -> Dict[str, Any]:
             model = get_effective_api_model()
             user_content = f'句子: "{req.sentence}"\n目标词汇: "{req.target_word}"'
             try:
-                async with httpx.AsyncClient(timeout=15) as client:
-                    resp = await client.post(
-                        f"{base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                        json={
-                            "model": model,
-                            "messages": [
-                                {"role": "system", "content": SYSTEM_VOCAB_PROMPT},
-                                {"role": "user", "content": user_content},
-                            ],
-                            "response_format": {"type": "json_object"},
-                        },
-                    )
-                    if resp.status_code != 200:
-                        res = {"definition_zh": "", "plural": "", "synonyms": [], "source": "ai_error"}
-                    else:
-                        content = resp.json()["choices"][0]["message"]["content"]
-                        res = json.loads(content)
-                        res["source"] = "ai"
-            except Exception:
-                res = {"definition_zh": "", "plural": "", "synonyms": [], "source": "ai_exception"}
+                res = await llm_client.chat(
+                    [
+                        {"role": "system", "content": SYSTEM_VOCAB_PROMPT},
+                        {"role": "user", "content": user_content},
+                    ],
+                    model=model,
+                    max_tokens=llm_client.DEFAULT_MAX_TOKENS,
+                    timeout=15.0,  # 收口前本端点的现值（15s），语义不变
+                    response_format=llm_client.JSON_OBJECT,
+                    api_key=key,
+                    base_url=base_url,
+                )
+                res["source"] = "ai"
+            except llm_client.LLMError as e:
+                # 现状语义：HTTP 层回了非 200 ⇒ ai_error；200 但正文解析失败 / 传输层异常
+                # ⇒ ai_exception。两者在下游（三态表回填 linguistics）行为不同，不得合并。
+                res = {
+                    "definition_zh": "",
+                    "plural": "",
+                    "synonyms": [],
+                    "source": "ai_error" if (e.status_code is not None and e.status_code != 200) else "ai_exception",
+                }
 
     # Morphology & Linguistics Layer:
     # 1. Irregular / Strong verbs Stammformen（始终附；释义只在本地兜底没出时回填）
@@ -1446,41 +1437,25 @@ async def note_assist(req: NoteAssistReq, request: Request) -> Any:
     base_url = get_effective_api_base_url().rstrip("/")
     model = get_effective_api_model()
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.post(
-                f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_NOTE_PROMPT},
-                        # 截断后再送 LLM：与 writing/analyze 一致，控制请求成本
-                        {
-                            "role": "user",
-                            "content": (f'整句: "{req.sentence[:2000]}"\n划选部分: "{req.selected_text[:2000]}"'),
-                        },
-                    ],
-                    "response_format": {"type": "json_object"},
+        return await llm_client.chat(
+            [
+                {"role": "system", "content": SYSTEM_NOTE_PROMPT},
+                # 截断后再送 LLM：与 writing/analyze 一致，控制请求成本
+                {
+                    "role": "user",
+                    "content": (f'整句: "{req.sentence[:2000]}"\n划选部分: "{req.selected_text[:2000]}"'),
                 },
-            )
-            if getattr(resp, "status_code", 200) != 200:
-                raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
-            try:
-                data = resp.json()
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务返回非 JSON 响应")
-            try:
-                content = data["choices"][0]["message"]["content"]
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务响应格式异常")
-            try:
-                return json.loads(content)
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务返回内容非 JSON")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=502, detail="AI 服务连接失败")
+            ],
+            model=model,
+            max_tokens=llm_client.DEFAULT_MAX_TOKENS,
+            timeout=20.0,  # 收口前本端点的现值（20s），语义不变
+            response_format=llm_client.JSON_OBJECT,
+            api_key=key,
+            base_url=base_url,
+        )
+    except llm_client.LLMError as e:
+        # 失败仍 502，detail 由 client 给出（与收口前逐字一致），此处不改写语义
+        raise HTTPException(status_code=502, detail=e.detail)
 
 
 # --- Settings & Configuration API ---
@@ -1541,19 +1516,26 @@ async def test_api_key(settings: SettingsUpdate, request: Request) -> Dict[str, 
 
     start_t = time.time()
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": model, "messages": [{"role": "user", "content": "Sag 'OK'."}], "max_tokens": 5},
-            )
-            latency = int((time.time() - start_t) * 1000)
-            if resp.status_code == 200:
-                return {"success": True, "latency_ms": latency, "message": f"连接成功！响应延迟: {latency}ms"}
-            else:
-                return {"success": False, "error": f"连接返回错误代码: {resp.status_code} ({resp.text[:100]})"}
-    except Exception as e:
-        return {"success": False, "error": f"连接失败: {str(e)}"}
+        await llm_client.chat(
+            [{"role": "user", "content": "Sag 'OK'."}],
+            model=model,
+            # 连通性自检：沿用收口前的现值（5），它只要证明"能连上"，不是生成路径
+            max_tokens=llm_client.CONNECTIVITY_MAX_TOKENS,
+            timeout=10.0,  # 收口前本端点的现值（10s），语义不变
+            # 收口前本端点**只认 HTTP 200**，正文根本不解析（探针真实回的是 `OK`，
+            # 不是 JSON）⇒ 不开 content 解析，否则可用 key 会被报成"连接失败"。
+            parse_json=False,
+            api_key=key,
+            base_url=base_url,
+        )
+    except llm_client.LLMError as e:
+        # 现状两条文案保持原样：传输层失败 ⇒「连接失败: <原文>」；HTTP 非 200 ⇒
+        # 「连接返回错误代码: <码> (<正文前 100 字符>)」。e.raw 就是收口前的那两处原料。
+        if e.status_code is None:
+            return {"success": False, "error": f"连接失败: {e.raw}"}
+        return {"success": False, "error": f"连接返回错误代码: {e.status_code} ({e.raw[:100]})"}
+    latency = int((time.time() - start_t) * 1000)
+    return {"success": True, "latency_ms": latency, "message": f"连接成功！响应延迟: {latency}ms"}
 
 
 # --- Study Guide Export (Markdown) ---
@@ -2371,44 +2353,27 @@ async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
     base_url = get_effective_api_base_url().rstrip("/")
     model = get_effective_api_model()
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_WRITING_POLISH_PROMPT},
-                        {"role": "user", "content": f"德语文本:\n{text}"},
-                    ],
-                    "response_format": {"type": "json_object"},
-                },
-            )
-            if getattr(resp, "status_code", 200) != 200:
-                raise HTTPException(status_code=502, detail=f"AI 服务异常 ({getattr(resp, 'status_code', 500)})")
-            try:
-                data = resp.json()
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务返回非 JSON 响应")
-            try:
-                content = data["choices"][0]["message"]["content"]
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务响应格式异常")
-            try:
-                parsed = json.loads(content)
-            except Exception:
-                raise HTTPException(status_code=502, detail="AI 服务返回内容非 JSON")
-            corrected_text = parsed.get("corrected_text", text)
-            notes_zh = parsed.get("notes_zh", [])
-            error_count = parsed.get("error_count", len(notes_zh))
-            return corrected_text, notes_zh, error_count
-    except HTTPException:
-        raise
-    except Exception as e:
+        parsed = await llm_client.chat(
+            [
+                {"role": "system", "content": SYSTEM_WRITING_POLISH_PROMPT},
+                {"role": "user", "content": f"德语文本:\n{text}"},
+            ],
+            model=model,
+            max_tokens=llm_client.DEFAULT_MAX_TOKENS,
+            timeout=30.0,  # 收口前本端点的现值（30s），语义不变
+            response_format=llm_client.JSON_OBJECT,
+            api_key=key,
+            base_url=base_url,
+        )
+    except llm_client.LLMError as e:
         import logging
 
-        logging.error(f"[writing/ai-polish] DeepSeek API error: {e}")
-        raise HTTPException(status_code=502, detail="AI 服务连接失败")
+        logging.error(f"[writing/ai-polish] DeepSeek API error: {e.detail} | raw: {e.raw[:200]}")
+        raise HTTPException(status_code=502, detail=e.detail)
+    corrected_text = parsed.get("corrected_text", text)
+    notes_zh = parsed.get("notes_zh", [])
+    error_count = parsed.get("error_count", len(notes_zh))
+    return corrected_text, notes_zh, error_count
 
 
 @router.post("/api/writing/ai-polish")
