@@ -51,8 +51,8 @@ import (
 // TestEncounterRealChain 是 job#1 的真链路端到端门禁：真实 python 工具 +
 // stub DeepSeek LLM + 落盘 + import-pack 投递 + encounter texts 命中。
 func TestEncounterRealChain(t *testing.T) {
-	mustNotSkipEnv(t)
-	startRealSupervisor(t) // 临时库 + t.Cleanup(s.Stop)，绝不动用户库
+	python := mustNotSkipEnv(t)
+	startRealSupervisor(t, python) // 临时库 + t.Cleanup(s.Stop)，绝不动用户库
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()

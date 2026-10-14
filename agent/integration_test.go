@@ -64,24 +64,57 @@ ich lade dich zu meiner Geburtstagsparty ein.
 Viele Gruesse
 Maria`
 
-// mustNotSkipEnv 预先探测 Python 运行环境：缺解释器或核心依赖（uvicorn /
-// fastapi）即 t.Skipf。Start 阶段真正的"起服务失败"在 Start 后另行 skip。
-// 目的是避免在明显缺依赖的环境上白耗 30s 探针窗口。
-func mustNotSkipEnv(t *testing.T) {
+// pythonEnvKey 是显式覆盖 Python 解释器的环境变量：设置后作为最高优先候选。
+// 注意它不是"信任即用"——候选即使来自显式覆盖，仍 MUST 实测依赖（见 mustNotSkipEnv）。
+const pythonEnvKey = "DELECTOR_PYTHON"
+
+// pythonCandidates 返回解释器候选链（按优先级）：$DELECTOR_PYTHON（显式覆盖）
+// → python3 → python。名字层面"看起来对"不代表依赖可用，故调用方 MUST 逐个实测。
+func pythonCandidates() []string {
+	cands := make([]string, 0, 3)
+	if v := os.Getenv(pythonEnvKey); v != "" {
+		cands = append(cands, v)
+	}
+	return append(cands, "python3", "python")
+}
+
+// mustNotSkipEnv 逐候选探测 Python 运行环境并**返回选定的解释器路径**：候选顺序
+// 为 $DELECTOR_PYTHON（显式覆盖，最高优先）→ python3 → python；对每个候选 MUST
+// **实测** `-c "import uvicorn, fastapi"`（短超时，绝不让探测挂住门禁），第一个通过
+// 者即为选定解释器；全部候选都不行才 t.Skipf，且诊断 MUST 逐个列出候选及其失败原因。
+//
+// 设计动因（ADR-0023 §4.4 红灯② 修正）：此前硬编码 `LookPath("python")` 单名探测——
+// 若该名字对应的解释器恰好缺依赖即恒 skip（拿不到真实信号），且该缺陷与 shell/PATH
+// 强相关（本机 `python` 带依赖时缺陷不复现）。"只看名字"不可靠，故必须**实测依赖**。
+//
+// 返回的路径 MUST 传给起服路径（startRealSupervisor 的 PythonCmd / app.Options.
+// PythonCmd），否则会出现"探测用一个解释器、起服却用另一个"的新型静默失败。
+func mustNotSkipEnv(t *testing.T) string {
 	t.Helper()
-	python, err := exec.LookPath("python")
-	if err != nil {
-		t.Skipf("skip: 找不到 python 解释器（%v），无法托管真实服务", err)
+	var diags []string
+	for _, cand := range pythonCandidates() {
+		path, err := exec.LookPath(cand)
+		if err != nil {
+			diags = append(diags, fmt.Sprintf("  - %q：PATH 上找不到（%v）", cand, err))
+			continue
+		}
+		// 实测依赖：uvicorn + fastapi 必须可导入，否则服务根本起不来。逐候选
+		// 独立短超时，避免某个候选挂住拖垮整轮探测。
+		ctx, cancel := context.WithTimeout(context.Background(), preflightTO)
+		out, perr := exec.CommandContext(ctx, path, "-c",
+			"import uvicorn, fastapi; print('deps-ok')").CombinedOutput()
+		cancel()
+		if perr != nil {
+			diags = append(diags, fmt.Sprintf("  - %q（%s）：缺 uvicorn/fastapi（err=%v, out=%s）",
+				cand, path, perr, strings.TrimSpace(string(out))))
+			continue
+		}
+		t.Logf("选定 Python 解释器：候选 %q → %s（uvicorn/fastapi 实测可导入）", cand, path)
+		return path
 	}
-	// 探测依赖：uvicorn + fastapi 必须可导入，否则服务根本起不来。
-	ctx, cancel := context.WithTimeout(context.Background(), preflightTO)
-	defer cancel()
-	out, perr := exec.CommandContext(ctx, python, "-c",
-		"import uvicorn, fastapi; print('deps-ok')").CombinedOutput()
-	if perr != nil {
-		t.Skipf("skip: python 缺 uvicorn/fastapi（err=%v, out=%s），无法起真实服务",
-			perr, strings.TrimSpace(string(out)))
-	}
+	t.Skipf("skip: 无可用 Python 解释器（候选逐个实测依赖均失败），无法托管真实服务：\n%s",
+		strings.Join(diags, "\n"))
+	return "" // 不可达：t.Skipf 经 runtime.Goexit 终止用例；此行仅为满足编译器
 }
 
 // repoRoot 定位仓库根（delector Python 包所在目录）：以本测试源文件路径
@@ -103,7 +136,10 @@ func repoRoot() string {
 //     **绝不继续发任何业务请求**（否则请求会打到占用该端口的外来进程上）。
 //   - 起服成功后 MUST 校验身份（assertSupervisorIdentity）：确认端口上就是
 //     「我们」的 DeLector，否则 fail-fast。
-func startRealSupervisor(t *testing.T) *pythonsvc.Supervisor {
+//
+// 参数 python 是 mustNotSkipEnv 探测选定的解释器路径（argv[0]）：MUST 与探测
+// 用的解释器一致（杜绝"探测用一个、起服用另一个"的静默失败）。
+func startRealSupervisor(t *testing.T, python string) *pythonsvc.Supervisor {
 	t.Helper()
 	tmp := t.TempDir()
 	port := resolvePort(t)
@@ -111,9 +147,10 @@ func startRealSupervisor(t *testing.T) *pythonsvc.Supervisor {
 	healthURL := baseURL + "/api/tools/"
 	cfg := pythonsvc.SupervisorConfig{
 		// 端口参数化：默认命令硬编码 8001，此处显式覆盖为动态/指定端口，
-		// 保证托管实例与 client 用的 baseURL 同端口。
+		// 保证托管实例与 client 用的 baseURL 同端口。argv[0] 用探测选定的
+		// 解释器（python），保证"探测/起服"同源。
 		PythonCmd: []string{
-			"python", "-m", "uvicorn", "delector.server:app",
+			python, "-m", "uvicorn", "delector.server:app",
 			"--host", "127.0.0.1", "--port", strconv.Itoa(port),
 		},
 		HealthURL:    healthURL,
@@ -143,8 +180,8 @@ func startRealSupervisor(t *testing.T) *pythonsvc.Supervisor {
 
 // TestGoPythonPipeline 全链路主测试：真实进程可达 + writing_check 契约。
 func TestGoPythonPipeline(t *testing.T) {
-	mustNotSkipEnv(t)
-	startRealSupervisor(t) // 实例经内部 t.Cleanup(s.Stop) 托管至用例结束
+	python := mustNotSkipEnv(t)
+	startRealSupervisor(t, python) // 实例经内部 t.Cleanup(s.Stop) 托管至用例结束
 
 	// 真实 HTTP client：绑定到托管实例的 8001 宿主（_require_localhost 闸）。
 	client := pythonsvc.NewClient(baseURL, nil)
@@ -190,8 +227,8 @@ func TestGoPythonPipeline(t *testing.T) {
 // TestGoPythonPipelineAnalyze 可选增强：analyze 依赖 spaCy 模型。模型缺失或
 // 调用失败一律 t.Skipf（不因增强路径的环境缺失而红）。
 func TestGoPythonPipelineAnalyze(t *testing.T) {
-	mustNotSkipEnv(t)
-	startRealSupervisor(t)
+	python := mustNotSkipEnv(t)
+	startRealSupervisor(t, python)
 
 	client := pythonsvc.NewClient(baseURL, nil)
 	reg := registry.DefaultRegistry(client)

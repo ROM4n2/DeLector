@@ -16,12 +16,15 @@ import (
 // 取消 ctx 优雅退出（Stop supervisor）。依赖缺失一律 t.Skipf（含理由），
 // 绝不因环境缺失而红（Skip 契约同 2a T7）。
 func TestRunEndToEnd(t *testing.T) {
-	mustNotSkipEnv(t)
+	// 选定解释器 MUST 透传到起服路径（app.Options.PythonCmd），杜绝"探测用一个、
+	// 起服却用另一个"的静默失败。
+	python := mustNotSkipEnv(t)
 
 	tmp := t.TempDir()
 	opts := app.Options{
-		Port:    8001,
-		DataDir: tmp,
+		Port:      8001,
+		DataDir:   tmp,
+		PythonCmd: python,
 		// PYTHONPATH / PYTHONIOENCODING / DATABASE_PATH 由 app.Run 自动注入
 		// （repoRoot 经 runtime.Caller 上溯，2a T7 同款）。
 	}
