@@ -86,7 +86,7 @@ def _stub_fake_server_module(monkeypatch: pytest.MonkeyPatch) -> None:
     直接污染测试隔离 —— 正是测试卫生要防的雷。
     """
     fake_server = types.ModuleType("delector.server")
-    fake_server.app = object()  # `from delector.server import app` 只取这个属性
+    setattr(fake_server, "app", object())  # `from delector.server import app` 只取这个属性
     monkeypatch.setitem(sys.modules, "delector.server", fake_server)
 
 
@@ -270,7 +270,12 @@ def _name_calls_in_source_order(node: ast.AST) -> List[str]:
         if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
     ]
     calls.sort(key=lambda call: (call.lineno, call.col_offset))
-    return [call.func.id for call in calls]
+    names: List[str] = []
+    for call in calls:
+        func = call.func
+        assert isinstance(func, ast.Name)  # 推导式前置过滤对 mypy 不收窄，显式断言让 .id 可见
+        names.append(func.id)
+    return names
 
 
 def test_port_check_is_wired_before_build_server_in_run_desktop_inner():
