@@ -618,3 +618,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 本会话三块交付：① 「去控制台 + 桌面化观感」6 任务 + 门禁缺口修复（PR #131 已合，全量 1832 passed + 2 skipped）；② 分支纪律成文（ops.md 第 12 条 / PROTOCOL.md 铁律第 8 条，PR #130 与 #132 已合）；③ Vault 工具链三修（巡检解析器静默失效 / agent 类路由 / 写库入口 frontmatter 自检，coding-vault a18cd3e）。
 - 未做（明确推迟，非遗漏）：skill 侧「分支隔离」步骤（你指示暂缓）；73 条历史 header 归一（等 digest）；know-her / skill-dev 的 WORKMEMORY（不管）。
 - 回写检查：稳定结论已入 vault 与 ops.md / PROTOCOL.md；临时产物（pytest 日志、PR 正文暂存）都在系统临时目录，未入库。
+
+### 2026-10-14 21:17 | codebuddy | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+交接包已写：`WORKMEMORY/handoff_no-console-feedback-gaps.md`（to: any · role: VERIFY/TEST · status: open）—— 真机双击验收 + digest 归一历史 header 两项延后事项按协议 §4 落盘，并同步更新 `INDEX.md` 的 Active handoffs。

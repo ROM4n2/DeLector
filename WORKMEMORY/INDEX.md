@@ -35,7 +35,7 @@
 
 ## Active handoffs
 
-（无）
+- 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
 ## 蒸馏登记（WORKMEMORY → vault）
 
