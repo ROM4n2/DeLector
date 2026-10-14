@@ -604,7 +604,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 备注：这正是本仓"开了分支忘了删"的常态残留 —— PR 合并时加 `--delete-branch` 可避免（本次 #131/#132 用了）。
 - 本次改动属规则里的**簿记类例外**（纯追加、不改代码/门禁/测试）⇒ 按 2026-10-14 用户确认的例外直推 master。
 
-### 2026-10-14 | codebuddy | NOTE work.log 超限事件已拆分（PR #133 合并）＋ 查出巡检误报的真因
+### 2026-10-14 20:53 | codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：按协议 §4 拆分 7 条超限事件（**已合并** `73c35b8`，PR #133），并顺带查出"某事件 56428 B"是**误报**。
 - **拆分**：7 条超限（4299–5882 B）正文搬入 `WORKMEMORY/NOTES-*.md`，事件体只留一行指针；结果事件数 74 不变、最大 4026 B、超限 0、work.log 606 行、纯 CRLF、前言保留。写盘前有「NOTES 正文 + 新 work.log == 原文」的逐行反推断言（第一版脚本丢过文件前言，被它拦下）。
