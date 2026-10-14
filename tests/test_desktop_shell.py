@@ -211,6 +211,42 @@ def test_run_desktop_rotates_before_redirecting_streams():
     )
 
 
+def test_main_guard_rotates_before_ensuring_streams() -> None:
+    """接线钉（**结构层**）：`__main__` 里日志轮转必须早于 `ensure_streams`（黄牌 A）。
+
+    比照 `test_run_desktop_rotates_before_redirecting_streams`：那条钉 `run_desktop` 内的同一约束，
+    这条钉**入口**（`if __name__ == "__main__":`）。Task 1 把收口提到最前后，入口自己也会
+    "先开句柄、后轮转"；顺序一反，Windows 上对已打开文件 `os.replace` 失败、轮转被静默跳过
+    ⇒ launch.log 无界增长。真跑 `__main__` 会进 GUI 循环，故只做结构断言（不跑真入口）。
+
+    同时钉 Y5：`resolve_log_path(os.environ)` 在 `__main__` 只应解析**一次**（旧代码轮转、收口
+    各解析一遍）。合并后两处共用同一落点，不会因中途改 env 而两处不一致。
+    """
+    tree = _parse_desktop()
+    guard = next(
+        (node for node in tree.body if isinstance(node, ast.If) and _is_main_guard(node)),
+        None,
+    )
+    assert guard is not None, "desktop.py 里找不到 `if __name__ == '__main__':` 守卫（前提变了，需重写用例）"
+
+    def _lines(label: str) -> List[int]:
+        return [
+            call.lineno for stmt in guard.body for call in _calls(stmt) if _call_label(call) == label
+        ]
+
+    rotate_lines = _lines("rotate_log_if_needed")
+    ensure_lines = _lines("ensure_streams")
+    resolve_lines = _lines("resolve_log_path")
+    assert rotate_lines, "__main__ 必须先轮转（否则超大 launch.log 无界增长）"
+    assert ensure_lines, "__main__ 必须收口标准流（Task 1：--windowed 下 None 流的零线索路径）"
+    assert min(rotate_lines) < min(ensure_lines), (
+        "轮转必须在收口（打开 launch.log 追加句柄）之前（Windows 上对已打开文件 os.replace 会失败）"
+    )
+    assert len(resolve_lines) == 1, (
+        f"resolve_log_path 在 __main__ 只应解析一次（轮转/收口共用同一落点），实际 {len(resolve_lines)} 次"
+    )
+
+
 # ── ③ 退出编排：所有退出路径先 shutdown，超时硬退出 ──────────────────────────
 def test_coordinated_shutdown_reaps_server_then_reports_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """干净退出：先 `shutdown(server, thread)`，返回 True，且**不**触发硬退出。"""
@@ -431,6 +467,39 @@ def test_write_crash_still_pops_when_log_write_fails(tmp_path: Path, monkeypatch
     assert popped == ["标题"], "即便落盘失败，弹窗也必须发生"
 
 
+# ── Task 3 起共用的建服段替身（_after_start 里的 import/build/serve 已搬进事件循环）──────
+def _stub_server_build(
+    monkeypatch: pytest.MonkeyPatch, mod: Any, order: Optional[List[str]] = None
+) -> None:
+    """把 `_after_start` 的建服段（Task 3 搬入）换成替身：不起真服务、不 import 真
+    `delector.server`。
+
+    两个理由，缺一不可：
+    1. **不起真服务**：`build_server` / `serve_in_thread` 会真绑端口起 uvicorn —— 测试纪律
+       （不起真实服务/建窗）禁止；
+    2. **不 import 真 `delector.server`**：那一跑会把 DATA_DIR 按仓库根落定（desktop.py 的
+       ⚠️ 注释即为此），直接污染测试隔离（正是测试卫生要防的雷）。
+
+    `order` 非空时把两次调用记进去（供阶段顺序断言观测"建服晚于 webview.start()"）。
+    """
+    fake_server: Any = types.ModuleType("delector.server")
+    fake_server.app = object()  # `from delector.server import app` 只取这个属性
+    monkeypatch.setitem(sys.modules, "delector.server", fake_server)
+
+    def _fake_build_server(*_a: Any, **_k: Any) -> str:
+        if order is not None:
+            order.append("build_server")
+        return "FAKE_SERVER"
+
+    def _fake_serve_in_thread(*_a: Any, **_k: Any) -> str:
+        if order is not None:
+            order.append("serve_in_thread")
+        return "FAKE_THREAD"
+
+    monkeypatch.setattr(mod, "build_server", _fake_build_server)
+    monkeypatch.setattr(mod, "serve_in_thread", _fake_serve_in_thread)
+
+
 # ── Task 2（失败出口统一）：切 UI 异常必须弹窗 + 全栈落盘；外层弹窗不许吐栈 ────
 def test_after_start_exception_pops_dialog_and_logs_full_traceback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -446,6 +515,7 @@ def test_after_start_exception_pops_dialog_and_logs_full_traceback(
     popped: List[Tuple[str, str]] = []
     monkeypatch.setattr(mod, "_message_box", lambda title, detail: popped.append((title, detail)))
     monkeypatch.setattr(mod, "await_ready", lambda *_a, **_k: True)
+    _stub_server_build(monkeypatch, mod)  # Task 3 后建服段在 _after_start 里：不起真服务
 
     class _Signal:
         def __iadd__(self, _other: Any) -> "_Signal":
@@ -488,6 +558,49 @@ def test_after_start_exception_pops_dialog_and_logs_full_traceback(
     content = log_path.read_text(encoding="utf-8")
     assert "Traceback" in content, "launch.log 必须含全栈 traceback（只有 repr 一行不足以定位）"
     assert "boom-main-show" in content, "异常信息必须落盘"
+
+
+def _assigns_result_failure(stmt: ast.stmt) -> bool:
+    """`result[0] = 1`：把回传主线程的退出码容器置为失败。"""
+    if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+        return False
+    target = stmt.targets[0]
+    return (
+        isinstance(target, ast.Subscript)
+        and isinstance(target.value, ast.Name)
+        and target.value.id == "result"
+        and isinstance(target.slice, ast.Constant)
+        and target.slice.value == 0
+        and isinstance(stmt.value, ast.Constant)
+        and stmt.value.value == 1
+    )
+
+
+def test_after_start_pins_failure_code_before_write_crash() -> None:
+    """结构钉（黄牌 B）：`_after_start` 异常出口必须**先** `result[0] = 1`、**再** `write_crash`。
+
+    `write_crash` 要落盘 + 弹窗，若它二次异常（本不应，防御性）也不能让退出码停留在"成功"——
+    先钉死 1，再走可能失败的留痕路径。两条语句一互换就静默违背该不变量，故用 AST 行号钉住次序。
+    行为侧由 `test_after_start_exception_pops_dialog_and_logs_full_traceback` 守（异常 ⇒ 码 1 +
+    弹窗 + 全栈落盘）；本条守的是行为测试**看不见**的次序不变量。
+    """
+    tree = _parse_desktop()
+    after = _funcs_by_name(tree)["_after_start"]
+    handlers = [
+        handler
+        for node in ast.walk(after)
+        if isinstance(node, ast.Try)
+        for handler in node.handlers
+    ]
+    assert handlers, "_after_start 必须接住异常（后台线程里未接住的异常会静默杀死线程）"
+    for handler in handlers:
+        assigns = [stmt for stmt in handler.body if _assigns_result_failure(stmt)]
+        crashes = [call for call in _calls(handler) if _call_label(call) == "write_crash"]
+        assert assigns, "异常出口必须把 result[0] 置 1（否则 start() 返回后进程装成功）"
+        assert crashes, "异常出口必须 write_crash（全栈落盘 + 弹窗）"
+        assert min(stmt.lineno for stmt in assigns) < min(call.lineno for call in crashes), (
+            "必须先钉死失败退出码（result[0] = 1）再 write_crash：留痕路径二次异常时退出码不得停留在成功"
+        )
 
 
 def test_run_desktop_outer_failure_pops_one_liner_without_traceback(
@@ -582,6 +695,11 @@ def test_desktop_launch_is_guarded_by_main():
 # 永久等待 ⇒ 窗口永不出现、进程永不退出。下列断言把"何时才允许碰窗口"钉死，且不只测"函数存在"。
 _WINDOW_WRITE_ATTRS = {"evaluate_js", "load_url"}
 _STAGE_HELPER = "_set_splash_stage"  # 该助手内部调 evaluate_js，只能在循环起来后跑
+# P0 硬约束点名的**全部**窗口 API（evaluate_js / load_url / show / destroy，"等"以外就这些）。
+# 行为锁 `test_window_ops_run_only_after_webview_start_at_runtime` 按这个全集断言，而不是只查
+# `_WINDOW_WRITE_ATTRS`：只查 evaluate_js/load_url 会被"把 `main.show()` 挪到 `webview.start()`
+# 之前"的变异骗过 —— show 同样是窗口 API，提前调用同样被 marshal 到未启动的 GUI 线程 ⇒ 永久阻塞。
+_WINDOW_OPS = {"evaluate_js", "load_url", "show", "destroy"}
 
 
 def _funcs_by_name(tree: ast.Module) -> Dict[str, ast.FunctionDef]:
@@ -802,10 +920,12 @@ def test_run_desktop_logs_process_level_timing_start() -> None:
 # 缺陷背景：`run_desktop` 写下「开始启动（进程级计时起点）」之后、到 `_show_window` 的第一条日志
 # 之前，`_run_desktop_inner` 这一整段（端口/身份校验 → WebView2 检测 → 定数据落点 → 导入 server →
 # 建服 → 起服务线程）**一条日志都没有** ⇒ launch.log 上约 3s 全是黑盒，卡死时无法归因到哪一步。
-# 下列锁钉住 6 枚新标记：① 全部存在；② 源码顺序恒为 1→6；③ 每枚都**夹在**它要标记的那条语句
-# 与下一枚锚语句之间（下界「晚于本锚」证伪「标记写在语句之前」；上界「早于下一锚」证伪「整体
-# 下移但保持顺序」——只有下界时后者会假绿）；另钉一条：新标记绝不把首屏工具的锚串当子串（否则
-# `first_screen_from_log` 的 `_last_index` / `_first_index_after` 会抢错行）。
+# Task 3 后 6 枚标记的落点随语句拆成两半：①~③ 留循环外（`_run_desktop_inner`），④~⑥ 随建服/
+# 起服搬进循环内（`_after_start` 的 try 体）。下列锁分组钉住：① 全部存在；② 组内源码顺序
+# （1→3 / 4→6）；③ 每枚都**夹在**它要标记的那条语句与下一枚锚语句之间（下界「晚于本锚」证伪
+# 「标记写在语句之前」；上界「早于下一锚」证伪「整体下移但保持顺序」——只有下界时后者会假绿）；
+# 另钉一条：新标记绝不把首屏工具的锚串当子串（否则 `first_screen_from_log` 的 `_last_index` /
+# `_first_index_after` 会抢错行）。
 _STARTUP_STAGE_MARKERS: List[str] = [
     "端口与身份校验通过。",                        # ← `_check_port_or_fail` 通过之后
     "WebView2 运行时检测通过。",                    # ← `ensure_webview2_runtime` 通过之后
@@ -848,37 +968,69 @@ def _stmt_has_call(stmt: ast.stmt, label: str) -> bool:
     return any(_call_label(call) == label for call in _calls(stmt))
 
 
-def test_run_desktop_inner_logs_six_stage_markers_in_order_after_their_anchor_stmts() -> None:
-    """`_run_desktop_inner` 必落 6 枚启动阶段标记，顺序为 1→6，且各自**夹在**它要标记的语句与
-    下一条锚语句之间（下界：晚于本锚语句；上界：早于下一枚锚语句的起始行）。
+_PRE_LOOP_MARKERS: List[str] = _STARTUP_STAGE_MARKERS[:3]  # ①~③：循环外（_run_desktop_inner）
+_IN_LOOP_MARKERS: List[str] = _STARTUP_STAGE_MARKERS[3:]  # ④~⑥：循环内（_after_start，Task 3 搬入）
+
+
+def _after_start_try_body() -> List[ast.stmt]:
+    """`_after_start` 的 try 体语句（Task 3：建服段搬进循环内，且必须在 try 里）。
+
+    为什么必须在 try 里：`_after_start` 跑在 `webview.start()` 调度的**后台线程**，未接住的
+    异常会让线程静默死亡（又回到"窗口不出、零线索"）。故实现应是"单个顶层 try 包住全部"，
+    这里把该形状钉死；④~⑥ 的锚点要从 try 体里取（而不是函数顶层）。
+    """
+    fn = _funcs_by_name(_parse_desktop())["_after_start"]
+    assert len(fn.body) == 1 and isinstance(fn.body[0], ast.Try), (
+        "_after_start 应只有一个顶层 try（后台线程里的异常必须被接住并留痕）"
+    )
+    return list(fn.body[0].body)
+
+
+def _stmt_span_in(stmts: List[ast.stmt], predicate: Any) -> Tuple[int, int]:
+    """`stmts` 里首个满足 `predicate` 的语句的（起始行, 结束行）。找不到即报错。"""
+    for stmt in stmts:
+        if predicate(stmt):
+            return stmt.lineno, stmt.end_lineno or stmt.lineno
+    raise AssertionError(f"语句列表里找不到满足断言的语句（谓词={predicate!r}）")
+
+
+def test_stage_markers_stay_with_their_anchor_statements_across_the_move() -> None:
+    """6 枚启动阶段标记必须**贴着**它们要标记的语句：①~③ 留循环外（`_run_desktop_inner`），
+    ④~⑥ 随搬移进循环内（`_after_start` 的 try 体）。每组各钉"存在 + 顺序 + 夹逼"。
 
     为什么钉「存在 + 顺序 + 位置」三者：只钉「字符串在源码里出现过」会被「标记写在语句之前 /
     顺序颠倒」骗过；而 `first_screen_from_log` 的切片完全依赖**先后次序**，位置错了归因就错。
 
-    为什么位置要**夹逼**而不只有下界：只有下界时，把 6 枚标记**整体下移**（例如全塞到
-    `serve_in_thread` 之后、仍保持 1→6 顺序）仍会全绿 —— `ordered` 与 6 条下界断言都骗得过去，
-    但归因已经张冠李戴（每枚标记都不再紧贴它要标记的那一步）。上界（早于下一枚锚）把这种
-    「整体漂移」挡在门外：末枚标记的上界锚是紧随其后的 `try:` 顶层语句。
+    为什么位置要**夹逼**而不只有下界：只有下界时，把一组标记**整体下移**（仍保持组内顺序）
+    仍会全绿，但归因已经张冠李戴（每枚标记都不再紧贴它要标记的那一步）。上界（早于下一枚锚）
+    把这种「整体漂移」挡在门外。
+
+    Task 3 的背景：建服/起服搬进 `webview.start()` 调度的事件循环后，④~⑥ 若**留在**
+    `_run_desktop_inner`（循环外、语句之前），launch.log 的时间线就会说谎（标记写在重活之前）
+    —— 正是本断言要防的"归因张冠李戴"。故 ④~⑥ 必须随语句搬进 `_after_start` 的 try 体。
     """
-    entries = _stage_log_entries("_run_desktop_inner")
-    messages = [message for _lineno, message in entries]
-
-    for marker in _STARTUP_STAGE_MARKERS:
-        assert marker in messages, (
-            f"_run_desktop_inner 缺少启动阶段标记 {marker!r}；现有 _append_log 字面量：{messages}"
+    run_entries = _stage_log_entries("_run_desktop_inner")
+    run_messages = [message for _lineno, message in run_entries]
+    run_line_of = {message: lineno for lineno, message in run_entries}
+    for marker in _PRE_LOOP_MARKERS:
+        assert marker in run_messages, (
+            f"循环外标记 {marker!r} 必须仍在 _run_desktop_inner；现有 _append_log 字面量：{run_messages}"
         )
+    ordered_pre = [m for m in run_messages if m in set(_PRE_LOOP_MARKERS)]
+    assert ordered_pre == _PRE_LOOP_MARKERS, f"循环外三枚标记的源码顺序必须为 1→3，实际：{ordered_pre}"
 
-    ordered = [message for _lineno, message in entries if message in set(_STARTUP_STAGE_MARKERS)]
-    assert ordered == _STARTUP_STAGE_MARKERS, (
-        f"6 枚启动阶段标记的源码顺序必须为 1→6，实际：{ordered}"
-    )
+    loop_entries = _stage_log_entries("_after_start")
+    loop_messages = [message for _lineno, message in loop_entries]
+    loop_line_of = {message: lineno for lineno, message in loop_entries}
+    for marker in _IN_LOOP_MARKERS:
+        assert marker in loop_messages, (
+            f"循环内标记 {marker!r} 必须随语句搬进 _after_start；现有 _append_log 字面量：{loop_messages}"
+        )
+    ordered_loop = [m for m in loop_messages if m in set(_IN_LOOP_MARKERS)]
+    assert ordered_loop == _IN_LOOP_MARKERS, f"循环内三枚标记的源码顺序必须为 4→6，实际：{ordered_loop}"
 
-    line_of = {message: lineno for lineno, message in entries}
-    # 7 条锚语句 span：前 6 条是 6 枚标记各自的锚，第 7 条（`try:`）是末枚标记的**上界锚**。
-    # 逐枚用 anchor_spans[i] 与 anchor_spans[i+1] 夹逼 —— 只钉"晚于本锚"的下界会被"6 枚标记
-    # 整体下移到后面、但仍保持 1→6 顺序"骗过（ordered 与下界断言全绿）；加上"早于下一条锚的
-    # 起始行"的上界才真正钉住"就落在本条语句之下、下一条锚之上"这个位置区间。
-    anchor_spans = [
+    # 循环外锚：前 3 条是 ①~③ 各自的锚，第 4 条（含 `_show_window` 的顶层语句）是 ③ 的上界锚。
+    run_anchors = [
         _stage_stmt_span(
             "_run_desktop_inner",
             lambda s: isinstance(s, ast.If) and _stmt_has_call(s, "_check_port_or_fail"),
@@ -888,40 +1040,98 @@ def test_run_desktop_inner_logs_six_stage_markers_in_order_after_their_anchor_st
             lambda s: isinstance(s, ast.If) and _stmt_has_call(s, "ensure_webview2_runtime"),
         ),
         _stage_stmt_span("_run_desktop_inner", lambda s: _stmt_has_call(s, "bootstrap_data_dir")),
-        _stage_stmt_span(
-            "_run_desktop_inner",
+        # 锚"含 `_show_window` 调用的顶层语句"（`_run_desktop_inner` 里由 `try:` 体内的 `return`
+        # 调起）——语义即"③ 必须在调用 `_show_window` 之前"。为何不锚"首个顶层 `try`"：将来加一个
+        # 与 `_show_window` 无关的顶层 `try` 会让锚前移 ⇒ 假红。
+        _stage_stmt_span("_run_desktop_inner", lambda s: _stmt_has_call(s, "_show_window")),
+    ]
+    for index, marker in enumerate(_PRE_LOOP_MARKERS):
+        lower_start, lower_end = run_anchors[index]
+        upper_start, _upper_end = run_anchors[index + 1]
+        assert run_line_of[marker] > lower_end, (
+            f"标记 {marker!r} 必须写在它要标记的语句（第 {lower_start}-{lower_end} 行）**之后**，"
+            f"实际在第 {run_line_of[marker]} 行 —— 写在语句之前会让归因张冠李戴"
+        )
+        assert run_line_of[marker] < upper_start, (
+            f"标记 {marker!r} 必须写在下一枚锚语句（第 {upper_start} 行）**之前**，"
+            f"实际在第 {run_line_of[marker]} 行 —— 整体下移到下一枚锚之后会让归因张冠李戴"
+        )
+
+    # 循环内锚（`_after_start` 的 try 体）：import app → assign server → assign thread →
+    # `_set_splash_stage`（④~⑥ 各自夹在前后两个锚之间）。
+    loop_stmts = _after_start_try_body()
+    loop_anchors = [
+        _stmt_span_in(
+            loop_stmts,
             lambda s: isinstance(s, ast.ImportFrom) and s.module == "delector.server",
         ),
-        _stage_stmt_span(
-            "_run_desktop_inner",
+        _stmt_span_in(
+            loop_stmts,
             lambda s: isinstance(s, ast.Assign)
             and any(isinstance(t, ast.Name) and t.id == "server" for t in s.targets),
         ),
-        _stage_stmt_span(
-            "_run_desktop_inner",
+        _stmt_span_in(
+            loop_stmts,
             lambda s: isinstance(s, ast.Assign)
             and any(isinstance(t, ast.Name) and t.id == "thread" for t in s.targets),
         ),
-        # 第 7 条锚：**调用 `_show_window` 的那条顶层语句**（`_run_desktop_inner` 里 `_show_window`
-        # 由 `try:` 体内的 `return` 调起 ⇒ 该 `try:` 就是这条锚）——语义即"第 6 枚标记必须在调用
-        # `_show_window` 之前"，把"6 枚整体下移到 `_show_window` 之后"的假绿挡在门外。
-        # 为何不锚"首个顶层 `try`"（`isinstance(s, ast.Try)`）：将来在该函数更早处加一个**与
-        # `_show_window` 无关**的顶层 `try` 会让锚**前移** ⇒ 假红。改锚"含 `_show_window` 调用的
-        # 顶层语句"即不受影响（`_stmt_has_call` 会 walk 进 `try` 体命中该调用）。
-        _stage_stmt_span("_run_desktop_inner", lambda s: _stmt_has_call(s, "_show_window")),
+        _stmt_span_in(loop_stmts, lambda s: _stmt_has_call(s, "_set_splash_stage")),
     ]
-
-    for index, marker in enumerate(_STARTUP_STAGE_MARKERS):
-        lower_start, lower_end = anchor_spans[index]
-        upper_start, _upper_end = anchor_spans[index + 1]
-        assert line_of[marker] > lower_end, (
+    for index, marker in enumerate(_IN_LOOP_MARKERS):
+        lower_start, lower_end = loop_anchors[index]
+        upper_start, _upper_end = loop_anchors[index + 1]
+        assert loop_line_of[marker] > lower_end, (
             f"标记 {marker!r} 必须写在它要标记的语句（第 {lower_start}-{lower_end} 行）**之后**，"
-            f"实际在第 {line_of[marker]} 行 —— 写在语句之前会让归因张冠李戴"
+            f"实际在第 {loop_line_of[marker]} 行 —— 写在语句之前会让归因张冠李戴"
         )
-        assert line_of[marker] < upper_start, (
+        assert loop_line_of[marker] < upper_start, (
             f"标记 {marker!r} 必须写在下一枚锚语句（第 {upper_start} 行）**之前**，"
-            f"实际在第 {line_of[marker]} 行 —— 整体下移到下一枚锚之后会让归因张冠李戴"
+            f"实际在第 {loop_line_of[marker]} 行 —— 整体下移到下一枚锚之后会让归因张冠李戴"
         )
+
+
+def test_server_build_phase_lives_inside_the_start_delegated_function() -> None:
+    """Task 3 阶段顺序（结构锁）：建服/起服必须在 `webview.start()` 调度的函数体内。
+
+    把 `from delector.server import app` / `build_server` / `serve_in_thread` 留在
+    `_run_desktop_inner`（循环外）⇒ 本断言转红 —— 这正是当前实现的形状（RED）。搬进
+    `_after_start` 后，重活发生在 splash 已可见之后，首次双击的反馈起点从"重活全干完"
+    提前到"splash 出现"（4~6.5s 零反馈的修法）。
+
+    同时钉计划规格的另一半：端口校验与 WebView2 检测**留在循环外**（它们快且有弹窗）。
+    """
+    tree = _parse_desktop()
+    funcs = _funcs_by_name(tree)
+    name, delegated = _delegated_function(tree)
+    inner_labels = _reachable_labels(delegated, funcs)
+
+    for label in ("build_server", "serve_in_thread"):
+        assert label in inner_labels, (
+            f"{label} 必须搬进 webview.start() 调度的函数（{name}）体内（splash 可见之后才建服）"
+        )
+    in_loop_imports = [
+        node
+        for node in ast.walk(delegated)
+        if isinstance(node, ast.ImportFrom) and node.module == "delector.server"
+    ]
+    assert in_loop_imports, "`from delector.server import app` 必须在 start 调度的函数体内"
+
+    run_inner = funcs["_run_desktop_inner"]
+    run_inner_labels = {_call_label(call) for call in _calls(run_inner)}
+    for label in ("build_server", "serve_in_thread"):
+        assert label not in run_inner_labels, (
+            f"{label} 不得留在 _run_desktop_inner：循环外的重活正是 4~6.5s 零反馈的成因"
+        )
+    run_inner_imports = [
+        node
+        for node in ast.walk(run_inner)
+        if isinstance(node, ast.ImportFrom) and node.module == "delector.server"
+    ]
+    assert not run_inner_imports, "`from delector.server import app` 不得留在 _run_desktop_inner"
+
+    # 计划规格：端口校验与 WebView2 检测留在循环外（快且有弹窗，不必等 splash 可见）。
+    assert "_check_port_or_fail" in run_inner_labels, "端口/身份校验必须留在循环外（_run_desktop_inner）"
+    assert "ensure_webview2_runtime" in run_inner_labels, "WebView2 检测必须留在循环外（_run_desktop_inner）"
 
 
 def test_stage_markers_do_not_contain_first_screen_anchor_substrings() -> None:
@@ -929,7 +1139,7 @@ def test_stage_markers_do_not_contain_first_screen_anchor_substrings() -> None:
     三个锚串互不为子串。
 
     本用例**只比对本文件清单常量、不读 `desktop.py`**。清单与实现的**同步**由
-    `test_run_desktop_inner_logs_six_stage_markers_in_order_after_their_anchor_stmts`（读 AST 的
+    `test_stage_markers_stay_with_their_anchor_statements_across_the_move`（读 AST 的
     存在/顺序/夹逼）保证；解析器侧的**同源**守卫在
     `tests/test_first_screen_from_log.py::test_new_stage_markers_do_not_contain_first_screen_anchor_substrings`
     （它从 `desktop.py` 同源取标记）。
@@ -976,6 +1186,8 @@ def test_loaded_event_records_first_screen_marker(tmp_path: Path, monkeypatch: p
     里出现首屏标记。删掉绑定 / 不再记日志 ⇒ 本用例转红（不是只测"字符串在源码里"）。
     """
     mod = _mod()
+    # Task 3 后建服/起服在 _after_start 里：不起真服务、不 import 真 delector.server。
+    _stub_server_build(monkeypatch, mod)
     log_path = tmp_path / "launch.log"
 
     class _Signal:
@@ -1027,7 +1239,7 @@ def test_loaded_event_records_first_screen_marker(tmp_path: Path, monkeypatch: p
     monkeypatch.setattr(mod, "_start_tray", lambda *_a, **_k: None)
     monkeypatch.setattr(mod, "_message_box", lambda *_a, **_k: None)
 
-    code = mod._show_window(object(), object(), 8000, str(log_path))
+    code = mod._show_window(object(), 8000, str(log_path))
 
     assert code == 0
     content = log_path.read_text(encoding="utf-8")
@@ -1041,9 +1253,16 @@ def test_window_ops_run_only_after_webview_start_at_runtime(
 
     替身无法复现"marshal 到未启动 GUI 线程 = 永久阻塞"，但能钉住**调用顺序**：`start` 必须先于
     任何 load_url / evaluate_js。把 load_url 挪回 start 之前 ⇒ 本断言转红（即真实死锁的静态形状）。
+
+    Task 3 追加（Y2 黄牌修法）：同一份 `order` 也喂给 `_stub_server_build`，于是"建服/起服晚于
+    `webview.start()`"这条 docstring 承诺**第一次有了观测者** —— 此前 6 个调用点无一传 `order`，
+    承诺无人验证。把 build_server/serve_in_thread 挪回 `_show_window`（start 之前）⇒ 本断言转红。
     """
     mod = _mod()
+    # Task 3 后建服/起服在 _after_start 里：不起真服务、不 import 真 delector.server。
+    # order 必须在此先建后传入：替身要把 build_server/serve_in_thread 也记进同一份顺序表。
     order: List[str] = []
+    _stub_server_build(monkeypatch, mod, order)
 
     class _Signal:
         def __iadd__(self, _other: Any) -> "_Signal":
@@ -1091,15 +1310,24 @@ def test_window_ops_run_only_after_webview_start_at_runtime(
     monkeypatch.setattr(mod, "_start_tray", lambda *_a, **_k: order.append("tray"))
     monkeypatch.setattr(mod, "_message_box", lambda *_a, **_k: order.append("message_box"))
 
-    code = mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+    code = mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
 
     assert "start" in order, "必须调用 webview.start"
     start_index = order.index("start")
-    writes = [index for index, op in enumerate(order) if op in _WINDOW_WRITE_ATTRS]
-    assert writes, "成功路径必然有窗口写入（evaluate_js / load_url）"
-    assert all(index > start_index for index in writes), (
-        f"窗口写入早于 webview.start()（P0 死锁形状）：order={order}"
+    # 全集而不仅是 evaluate_js/load_url：show / destroy 也是窗口 API，提前调用同样被 marshal 到
+    # 未启动的 GUI 线程 ⇒ 永久阻塞（P0 硬约束原文：evaluate_js / load_url / show / destroy 等）。
+    window_ops = [index for index, op in enumerate(order) if op in _WINDOW_OPS]
+    assert window_ops, "成功路径必然有窗口操作（evaluate_js / load_url / show / destroy）"
+    assert all(index > start_index for index in window_ops), (
+        f"窗口操作早于 webview.start()（P0 死锁形状）：order={order}"
     )
+    # Task 3 / Y2：建服与起服同样必须晚于 start（它们已搬进 _after_start，即 start 调度函数体内）。
+    # 少了这条，"把 build_server 挪回 _show_window（start 之前）"会让 4~6.5s 零反馈复活而全绿。
+    for server_op in ("build_server", "serve_in_thread"):
+        assert server_op in order, f"{server_op} 必须被调到（order={order}）"
+        assert order.index(server_op) > start_index, (
+            f"{server_op} 早于 webview.start()（Task 3 回退形状：splash 前的重活零反馈）：order={order}"
+        )
     assert code == 0
 
 
@@ -1192,11 +1420,13 @@ def test_main_window_is_created_as_a_normal_resizable_window(tmp_path: Path, mon
     这条锁直接检查交给 `webview.create_window` 的 kwargs，杜绝"函数存在但参数回退"的假绿。
     """
     mod = _mod()
+    # Task 3 后建服/起服在 _after_start 里：不起真服务、不 import 真 delector.server。
+    _stub_server_build(monkeypatch, mod)
     order: List[str] = []
     record: Dict[str, Any] = {}
     _install_recording_webview(monkeypatch, mod, order, record)
 
-    code = mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+    code = mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
 
     assert code == 0
     created: List[Dict[str, Any]] = record["created"]
@@ -1221,11 +1451,13 @@ def test_final_ui_is_the_main_window_shown_after_ready(tmp_path: Path, monkeypat
     同时钉住顺序：先亮主窗口再销毁 splash —— 否则销毁瞬间零窗口会让 pywebview 的 GUI 循环提前退出。
     """
     mod = _mod()
+    # Task 3 后建服/起服在 _after_start 里：不起真服务、不 import 真 delector.server。
+    _stub_server_build(monkeypatch, mod)
     order: List[str] = []
     record: Dict[str, Any] = {}
     _install_recording_webview(monkeypatch, mod, order, record)
 
-    mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+    mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
 
     assert "main.show" in order, "必须显式 show 主窗口，否则用户看到的仍是 splash"
     assert "splash.destroy" in order, "就绪后必须销毁 splash（否则它永不消失）"
@@ -1247,11 +1479,13 @@ def test_main_window_close_requests_quit_and_reaps_splash(tmp_path: Path, monkey
     `webview.start()` 阻塞到**所有**窗口关闭；主窗口关而 splash 尚存会使循环永不返回 ⇒ 进程挂起。
     """
     mod = _mod()
+    # Task 3 后建服/起服在 _after_start 里：不起真服务、不 import 真 delector.server。
+    _stub_server_build(monkeypatch, mod)
     order: List[str] = []
     record: Dict[str, Any] = {}
     _install_recording_webview(monkeypatch, mod, order, record)
 
-    mod._show_window(object(), object(), 8000, str(tmp_path / "launch.log"))
+    mod._show_window(object(), 8000, str(tmp_path / "launch.log"))
 
     main = record["windows"]["main"]
     coordinator = record["coordinator"]

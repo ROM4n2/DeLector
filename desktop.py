@@ -720,26 +720,40 @@ def _after_start(
     port: int,
     log_path: str,
     result: List[int],
+    server_handoff: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """GUI 事件循环**启动后**（由 `webview.start(func, args)` 在独立线程调度）要做的后台工作。
-
-    为什么这段必须搬到这里（P0 死锁根因）：pywebview 会把 `evaluate_js` / `load_url` marshal 到
-    GUI 线程执行，而 GUI 事件循环由 `webview.start()` 才启动 —— 在 start **之前**调它们会永久等待
-    （`scratch/repro_splash_deadlock.py` 三模式实测），窗口永不出现、进程永不退出。放进 `func` 后
-    循环已在跑，evaluate_js / load_url 都安全。
-
-    就绪后**切到主窗口**（方案 A 的双窗口）：先 `main.show()` 亮出普通可缩放窗口，再
-    `main.load_url(...)` 加载真实 UI，最后 `splash.destroy()` 收掉启动反馈。顺序不可颠倒：
-    销毁 splash 前主窗口必须已在（否则瞬间零窗口 ⇒ GUI 循环提前退出）。
-
-    **首屏真口径**：`load_url` 之前注册 pywebview 的 `loaded` 事件（页面渲染完成），命中时记
-    「真实 UI 已加载（首屏可用）」。注册放在这里（循环已起）既满足 P0（循环启动前碰窗口/事件会
-    永久阻塞），又因 `load_url` 会 `events.loaded.clear()` 而必须早于它注册。
-
-    `result` 是回传给主线程 `_show_window` 的退出码容器：失败时置 1 并**销毁两个窗口**，让
-    `webview.start()` 得以返回（否则进程会挂着一个空 splash 永不退出）。
-    """
+    # 本函数是 `webview.start(func, args)` 在独立线程调度的后台工作；**刻意只有单个顶层 try**
+    # （无 docstring、无其它顶层语句）——后台线程里未接住的异常会让线程静默死亡（窗口不出、零线索），
+    # 故用单个 try 包住全部，失败统一走 except 留痕 + 收尾。
+    #
+    # 为什么搬到这里（P0 死锁根因）：pywebview 把 evaluate_js / load_url marshal 到 GUI 线程，而
+    # GUI 事件循环由 webview.start() 才启动 —— start 之前调它们会永久等待（repro 三模式实测）。放进
+    # func 后循环已在跑，evaluate_js / load_url 都安全。
+    #
+    # Task 3：建服/起服也搬进这里（from delector.server import app / build_server /
+    # serve_in_thread，随 ④~⑥ 标记紧贴各自语句）——重活推迟到 splash 可见之后，消灭 4~6.5s 零反馈。
+    # server_handoff：回传 server/thread 给主线程的交接容器（_run_desktop_inner 创建、_show_window
+    # 透传）；本函数跑在后台线程无法直接 return，故写进该 dict 供 _run_desktop_inner 收尸。缺省 None
+    # （单测直调时可省）⇒ 跳过交接，不影响窗口/就绪逻辑。
+    #
+    # 就绪后切到主窗口（方案 A 双窗口）：先 main.show() 亮主窗口，再 main.load_url 载真实 UI，最后
+    # splash.destroy() 收掉启动反馈；顺序不可颠倒（先亮主窗再毁 splash，否则瞬间零窗口 ⇒ GUI 循环退出）。
+    # 首屏真口径：load_url 前注册 loaded 事件（页面渲染完成）记「真实 UI 已加载（首屏可用）」——注册须
+    # 早于 load_url（它会 events.loaded.clear()）。result：回传主线程的退出码容器，失败置 1 并销毁两窗。
     try:
+        # Task 3：建服/起服搬进事件循环（原在 `_run_desktop_inner` 循环外、建窗之前）。④~⑥ 三枚
+        # 阶段标记随语句一并搬入，各自紧贴它要标记的那一步（launch.log 归因不张冠李戴）。
+        from delector.server import app
+        _append_log(log_path, "服务端模块已导入（delector.server）。")
+        server = build_server(BIND_HOST, port, app)
+        _append_log(log_path, "HTTP 服务已装配（build_server 完成）。")
+        thread = serve_in_thread(server)
+        _append_log(log_path, "本地服务线程已启动（等在就绪窗口内命中）。")
+        # 把 server/thread 写进交接容器：供主线程 `_run_desktop_inner` 在 webview.start 返回后收尸
+        # （本函数跑在后台线程，无法直接 return）。缺省 None / 测试替身非 dict 时跳过交接。
+        if isinstance(server_handoff, dict):
+            server_handoff["server"] = server
+            server_handoff["thread"] = thread
         _set_splash_stage(splash, SPLASH_STARTING_SERVER, log_path)
         _append_log(log_path, "等待服务就绪…")
         if not await_ready(port, deadline_s=READY_DEADLINE_S):
@@ -767,16 +781,23 @@ def _after_start(
         # 后台线程里的异常若不接住，线程会**静默死亡**（又回到"窗口不出、零线索"）；必须留痕并收尾。
         # 与就绪超时分支对齐（两条失败出口行为一致）：日志 + 弹窗 + 置失败码 + 销毁两窗。
         # 复用 write_crash（全栈落 launch.log + 原生弹窗），不另造第三种失败出口。
-        write_crash("DeLector 启动失败", traceback.format_exc(), log_path)
+        # 先置失败退出码、再 write_crash：write_crash 要落盘 + 弹窗，若它二次异常（本不应，防御性）
+        # 也不能让退出码停留在"成功"——先钉死 1，再走可能失败的留痕路径。
         result[0] = 1
+        write_crash("DeLector 启动失败", traceback.format_exc(), log_path)
         _abort_windows(splash, main, coordinator, log_path)
 
 
-def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str) -> int:
+def _show_window(server_handoff: Any, port: int, log_path: str) -> int:
     """建 splash + 主窗口 → 起托盘 → 进主线程事件循环；就绪等待与切 UI 交给 `_after_start`。
 
     两个窗口（方案 A）：splash 无边框置顶小窗（启动反馈）；主窗口是**普通可缩放窗口**（有标题栏、
     可最大化/还原/拖边、不置顶、初始隐藏）。就绪后由 `_after_start` 亮主窗口并销毁 splash。
+
+    `server_handoff` 是 Task 3 的**服务交接容器**（`_run_desktop_inner` 创建的空 dict）：建服/起服
+    已搬进 `_after_start`，server/thread 由它写进该容器，`_run_desktop_inner` 在 `webview.start()`
+    返回后据此收尸。本函数只**透传**。原 `thread` 形参随服务搬走后已无任何读取点（Y1 黄牌：
+    删死参而非留一个"为兼容而兼容"的形参——死参会让人误以为这里还管线程生命周期）。
 
     时序是本次 P0 死锁的核心：先 `create_window`，再 **`webview.start(_after_start, ...)` 把事件循环
     跑起来**，最后让 `_after_start` 在循环内做 `_set_splash_stage` / `await_ready` / `show` / `load_url`。
@@ -827,7 +848,8 @@ def _show_window(server: Any, thread: threading.Thread, port: int, log_path: str
 
     result: List[int] = [0]  # 由 _after_start（后台线程）写回：失败=1，成功保持 0
     _append_log(log_path, "进入 GUI 事件循环（webview.start）。")
-    webview.start(_after_start, (splash, main, coordinator, port, log_path, result))  # 阻塞直到所有窗口关闭
+    # 阻塞直到所有窗口关闭；第 7 实参 server_handoff 透传给 _after_start（Task 3 建服/起服在其中）。
+    webview.start(_after_start, (splash, main, coordinator, port, log_path, result, server_handoff))
     _append_log(log_path, "GUI 事件循环已退出（窗口已关闭）。")
     return result[0]
 
@@ -870,7 +892,13 @@ def _check_port_or_fail(port: int, log_path: str) -> bool:
 
 
 def _run_desktop_inner(port: int, log_path: str) -> int:
-    """桌面壳主体：端口/身份校验 → 检测运行时 → 定数据落点 → 起服务 → 起窗口；**任何**路径都先收尸。"""
+    """桌面壳主体：端口/身份校验 → 检测运行时 → 定数据落点 → 起窗口；**任何**路径都先收尸。
+
+    Task 3：建服/起服（`from delector.server import app` / `build_server` / `serve_in_thread`）
+    已搬进 `_after_start`（`webview.start()` 调度的事件循环内）——重活推迟到 splash 可见之后，
+    消灭 4~6.5s 零反馈。此处只留循环外的快速校验与落点；服务由 `_after_start` 落进
+    `server_handoff`，在本函数 `finally` 里读出并 `coordinated_shutdown` 收尸。
+    """
     # P0-1：建服**最早处**先校验端口/身份（要早、要响、要简单）。
     # 校验失败 ⇒ 已弹窗 + 已落日志 ⇒ 退出码 3（2 已被"缺 WebView2"占用）。
     if not _check_port_or_fail(port, log_path):
@@ -885,24 +913,30 @@ def _run_desktop_inner(port: int, log_path: str) -> int:
 
     # ⚠️ 必须在 `from delector.server import app` **之前**：那一行一跑，`database` 已按仓库根把
     # DATA_DIR 落定，之后再设 DELECTOR_DATA_DIR 就晚了（与 start.py 同款接线）。
+    # （Task 3：那行 import 连同 build_server / serve_in_thread 已搬进 `_after_start`——重活推迟
+    #  到 splash 可见之后；但顺序约束不变：此处先落定 DATA_DIR，`_after_start` 才 import server。）
     bootstrap_data_dir(os.environ)
     _append_log(log_path, "数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。")
     # 桌面态 LAN 可用时同样落一份地址（托盘「显示局域网地址」读它；--windowed 无控制台）。
     # 放在 bootstrap 之后：env 里的数据目录落点已定，文件与库、launch.log 同处一地。
     write_lan_address(port, os.environ, log_path)
 
-    from delector.server import app
-    _append_log(log_path, "服务端模块已导入（delector.server）。")
-
-    server = build_server(BIND_HOST, port, app)
-    _append_log(log_path, "HTTP 服务已装配（build_server 完成）。")
-    thread = serve_in_thread(server)
-    _append_log(log_path, "本地服务线程已启动（等在就绪窗口内命中）。")
+    # 服务交接容器：`_after_start`（webview.start 调度的事件循环内）建好服务后把 server/thread
+    # 写进来；`webview.start()` 返回（窗口全关）后由此处读出并收尸。空 dict 由本函数创建、经
+    # `_show_window` 透传——`_after_start` 跑在后台线程，无法直接 return 给主线程。
+    server_handoff: Dict[str, Any] = {}
     try:
-        return _show_window(server, thread, port, log_path)
+        return _show_window(server_handoff, port, log_path)
     finally:
         # 关窗 / 异常 / Ctrl+C 全部经此收尸（与托盘「退出」同一路径），绝不留残留服务。
-        coordinated_shutdown(server, thread, log_path)
+        # server/thread 由 `_after_start` 落进 handoff；建服前即失败/退出的极端边界下可能缺失，
+        # 绝不让 None 冲进 coordinated_shutdown（那会在 shutdown 里 AttributeError）。
+        server = server_handoff.get("server")
+        thread = server_handoff.get("thread")
+        if server is None or thread is None:
+            _append_log(log_path, "无已启动服务可收尸（建服阶段之前即失败或退出）。")
+        else:
+            coordinated_shutdown(server, thread, log_path)
 
 
 def run_desktop(port: int = DEFAULT_PORT, debug_console: bool = False) -> int:
@@ -1011,6 +1045,14 @@ if __name__ == "__main__":
     # None，而 argparse 的 `--help`/错参输出走 `file.write` —— 解析早于收口时，用户得到的
     # 是"零线索"（文本当场蒸发或 AttributeError，launch.log 零行、无窗口、无弹窗）。
     # debug 开关从原始 argv 探：此刻还没解析完，拿不到 `_args`。
-    ensure_streams(resolve_log_path(os.environ), "--debug-console" in sys.argv[1:])
+    # 黄牌 A：日志轮转必须**早于**收口 —— `ensure_streams` 会打开 launch.log 追加句柄，Task 1 把
+    # 收口提到最前后，若在开句柄**之后**才轮转，Windows 上对已打开文件 `os.replace` 会
+    # PermissionError 被静默跳过 ⇒ launch.log 无界增长。故先轮转（句柄未开、可安全 replace）、
+    # 再收口。`run_desktop` 内的既有轮转调用保持不变（窗口路径自身的第一道轮转）。
+    # Y5：`resolve_log_path(os.environ)` 只解析**一次**（旧代码调了两次：轮转一次、收口一次——
+    # 同一 env 解析两遍既慢又可能因中途改 env 而两处落点不一致）。
+    log_path = resolve_log_path(os.environ)
+    rotate_log_if_needed(log_path)
+    ensure_streams(log_path, "--debug-console" in sys.argv[1:])
     _args = _parse_args(sys.argv[1:])
     raise SystemExit(dispatch(_args.server_only, _args.port, _args.debug_console))
