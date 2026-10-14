@@ -23,7 +23,8 @@ r"""Windows 便携产物验收闸：完整性 + **真启一次**（ADR-0021 替�
     （**身份校验**，不是"端口能连上"）；再终止它，断言**进程消失 + 端口释放 + 无孤儿**。
 (c) **无控制台语境再真启一次**（Task 5 新增，**默认开**）：以 ``CREATE_NO_WINDOW`` 起
     ``--server-only``（不为子进程分配控制台窗口），断言 ① health 就绪 ② 进程可干净终止
-    ③ 数据目录生成 ``lan-address.txt``（探不到 LAN 允许不存在，但 launch.log 必须留痕）
+    ③ 数据目录生成 ``lan-address.txt``（**内容须匹配** ``^http://<IPv4>:<port>$``；探不到 LAN
+       允许不存在，但 launch.log 必须留痕）
     ④ **整段日志无 traceback**。边界说明见 ``_check_no_console_launch`` 与下方覆盖边界。
 
 ⚠️ 覆盖边界（**必读：别误以为它覆盖了窗口形态**）
@@ -33,12 +34,18 @@ CI runner 无桌面会话，GUI 路径（pywebview / pystray）在无头环境**
 **窗口形态（双击出不出窗口 / 进程退不退）不在本闸覆盖范围内** —— 那由本机人工双击 +
 ``scratch/`` 复现脚本覆盖。把这条写在这里，是为了不让后人误以为"CI 绿了 ⇒ 双击没问题"。
 
-(c) 步也有边界（**别以为它复现了 ``sys.stdout is None``**）：CI 里子进程的 stdout/stderr
-被**重定向进日志文件** ⇒ 子进程的 ``sys.stdout`` 并非 ``None``，"双击 ``--windowed`` 产物时
-``sys.stdout is None`` 导致裸 ``print`` 即崩"那一类，由 ``tests/test_desktop_shell.py`` 的
-``sys.stdout=None`` 注入单测钉死（那里才复现得了 None 语境）。(c) 步在 CI 钉的是：**无控制台
-窗口语境下起服 + 整段日志无 traceback**（含健康就绪**之后**才发生的崩溃 —— (b) 步只看就绪，
-那类它抓不到）+ ``lan-address.txt`` 地址出口。两者互补，都不可省。
+(c) 步也有边界（**别以为它复现了 ``sys.stdout is None``，更别以为它瞄的是那类回归**）：
+CI 里子进程的 stdout/stderr 被**重定向进日志文件** ⇒ 子进程的 ``sys.stdout`` 并非
+``None``。事实澄清（2026-10-14 怀疑者复核）：Py3 的 ``print()`` 在 ``sys.stdout is None``
+时是**静默 no-op**（builtin print 内部 ``if file is None: return``），不会崩；真会崩的是
+``None.write``（argparse 的 ``file.write`` 路径，Task 1 已修）。这道闸扫 traceback 抓不到
+那类回归，不是"不够严"，是**判据从一开始就瞄错对象**：本步的子进程标准流被重定向（并非
+``None``）⇒ ``None.write`` 路径在 CI 语境下根本不会被触发，日志里自然没有它的 traceback。
+收口前的裸输出顺序契约，由 ``tests/test_desktop_shell.py`` 的 AST 结构守卫静态钉死
+（``ensure_streams`` 调用点之前不得出现无 ``file=`` 的 ``print`` / ``sys.stdout.write`` /
+``sys.stderr.write``）。(c) 步在 CI 钉的是：**无控制台窗口语境下起服 + 整段日志无
+traceback**（含健康就绪**之后**才发生的崩溃 —— (b) 步只看就绪，那类它抓不到）+
+``lan-address.txt`` 地址出口。两者互补，都不可省。
 
 为什么独立实现、不 import 打包脚本
 ==================================
@@ -90,6 +97,7 @@ Windows 控制台是 GBK，本脚本的 print 含中文 ⇒ 必须把 stdout/std
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -175,12 +183,17 @@ LAUNCH_LOG_FILENAME = "launch.log"
 # 据此把「有据可查的不存在」（离线机器）与「静默缺失」区分开，后者才判红。
 _LAN_ABSENT_LOG_MARKER = "未探测到局域网 IP"
 # lan-address.txt 三态（lan_address_state 返回）：
-#   present        文件在 ⇒ 地址出口已生成
-#   absent-traced  文件不在但 launch.log 有留痕 ⇒ 允许（离线 / 仅回环），不算缺失
-#   absent-silent  文件不在且无留痕 ⇒ **静默缺失**，编排层据此判红
+#   present        文件在**且内容匹配** `^http://<IPv4>:<port>$` ⇒ 地址出口已生成
+#   absent-traced  文件不在（或内容不匹配）但 launch.log 有留痕 ⇒ 允许（离线 / 仅回环），不算缺失
+#   absent-silent  文件不在（或内容不匹配）且无留痕 ⇒ **静默缺失 / 坏内容**，编排层据此判红
 _LAN_PRESENT = "present"
 _LAN_ABSENT_TRACED = "absent-traced"
 _LAN_ABSENT_SILENT = "absent-silent"
+
+# lan-address.txt 的**内容**判据（Task 5 升级）：旧的 `is_file()` 对"空文件 / 乱内容"零判别力 ——
+# 一个 0 字节或内容损坏的文件照样能记 PASS，而用户双击看到的是空内容（等于没有地址出口）。
+# 合法内容形如 `http://<IPv4>:<port>`（`desktop.write_lan_address` 每次写 `address + "\n"`）。
+_LAN_ADDRESS_PATTERN = re.compile(r"^http://(?:\d{1,3}\.){3}\d{1,3}:\d{1,5}$")
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -582,23 +595,49 @@ def log_has_traceback(log_text: str) -> bool:
 
     锚定 ``Traceback (most recent call last)`` 这一**解释器崩溃签名**，而非裸 ``Error`` /
     ``失败`` 字样：业务日志里的 error / 失败（如「连接重置」「写库超时」）是正常运维噪声，
-    宽判据会把这道闸刷成恒红、迟早被绕开。只有解释器真的打印了 traceback 才算「崩过」
-    （裸 ``print`` 到 ``sys.stdout is None`` 的那一族崩溃正落在这里）。
+    宽判据会把这道闸刷成恒红、迟早被绕开。只有解释器真的打印了 traceback 才算「崩过」。
+
+    覆盖边界（2026-10-14 怀疑者复核后澄清，**别再把判据瞄错对象**）：Py3 的 ``print()`` 在
+    ``sys.stdout is None`` 时是**静默 no-op**（builtin print 内部 ``if file is None:
+    return``），不会崩；真会崩的是 ``None.write``（argparse 的 ``file.write`` 路径，
+    Task 1 已修）。而本闸的子进程 stdout/stderr 被**重定向进日志** ⇒ 标准流并非 ``None``，
+    ``None.write`` 路径在 CI 语境下根本不会被触发 ⇒ 那类回归的 traceback 不会出现在日志里，
+    本判据**瞄不到它**（不是"不够严"，是判据从一开始就瞄错了对象）。收口前的裸输出顺序契约
+    由 ``tests/test_desktop_shell.py`` 的 AST 结构守卫静态钉死：``ensure_streams`` 调用点
+    之前不得出现无 ``file=`` 的 ``print`` / ``sys.stdout.write`` / ``sys.stderr.write``。
     """
     return "Traceback (most recent call last)" in log_text
+
+
+def _lan_address_content_ok(path: Path) -> bool:
+    """文件内容是否为合法 `http://<IPv4>:<port>`（读失败 / 编码错一律当**_不_**合法）。
+
+    判据锚定**内容**而非"文件存在"：空文件 / 垃圾内容对旧 `is_file()` 判据零判别力。
+    `desktop.write_lan_address` 写的是 `address + "\\n"` ⇒ 比对前先 `strip()`。
+    """
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return False
+    return _LAN_ADDRESS_PATTERN.match(text) is not None
 
 
 def lan_address_state(data_dir: Path, log_text: str) -> str:
     """`lan-address.txt` 三态判定（Task 5 断言③判据），返回三态常量之一。
 
-    - 文件在 ⇒ ``_LAN_PRESENT``：地址出口已生成。
-    - 文件不在但 launch.log 有「未探测到局域网 IP」留痕 ⇒ ``_LAN_ABSENT_TRACED``：
-      离线 / 仅回环机器允许没有地址文件，但**必须留痕**（「有据可查的不存在」）。
-    - 文件不在且无留痕 ⇒ ``_LAN_ABSENT_SILENT``：**静默缺失**，编排层据此判红。
+    - 文件在**且内容匹配** `^http://<IPv4>:<port>$` ⇒ ``_LAN_PRESENT``：地址出口已生成。
+    - 文件不在（或内容**不匹配**）但 launch.log 有「未探测到局域网 IP」留痕 ⇒
+      ``_LAN_ABSENT_TRACED``：离线 / 仅回环机器允许没有地址文件，但**必须留痕**
+      （「有据可查的不存在」）。
+    - 文件不在（或内容不匹配）且无留痕 ⇒ ``_LAN_ABSENT_SILENT``：**静默缺失 / 坏内容**，
+      编排层据此判红。
 
-    三态必须可区分：把「静默缺失」和「有据可查的不存在」混为一谈，就等于放过真正的缺失。
+    判据是**内容**而非"文件存在"（Task 5 升级）：空文件 / 乱内容对旧的 `is_file()` 零判别力，
+    会把"看着有、其实是空的地址出口"记成 PASS。三态必须可区分：把「静默缺失」和
+    「有据可查的不存在」混为一谈，就等于放过真正的缺失。
     """
-    if (data_dir / LAN_ADDRESS_FILENAME).is_file():
+    path = data_dir / LAN_ADDRESS_FILENAME
+    if path.is_file() and _lan_address_content_ok(path):
         return _LAN_PRESENT
     if _LAN_ABSENT_LOG_MARKER in log_text:
         return _LAN_ABSENT_TRACED
@@ -755,10 +794,13 @@ def _check_lan_address(report: Report, data_dir: Path) -> None:
 
     留痕读产物自写的 `launch.log`（`_append_log` 只落该文件，不进子进程 stdout 重定向的
     server.log），故此处读 `data_dir / LAUNCH_LOG_FILENAME`。
+
+    present 的判据是**内容匹配** `^http://<IPv4>:<port>$`（Task 5 升级），不再只看"文件存在"：
+    空文件 / 乱内容 ⇒ 落 absent 分支（无留痕即判红）。
     """
     state = lan_address_state(data_dir, _read_log(data_dir / LAUNCH_LOG_FILENAME))
     if state == _LAN_PRESENT:
-        report.ok("无控制台：数据目录生成 lan-address.txt", LAN_ADDRESS_FILENAME)
+        report.ok("无控制台：数据目录生成 lan-address.txt", f"{LAN_ADDRESS_FILENAME} 内容匹配 http://<IPv4>:<port>")
     elif state == _LAN_ABSENT_TRACED:
         report.ok(
             "无控制台：局域网地址出口有据可查",
@@ -767,7 +809,8 @@ def _check_lan_address(report: Report, data_dir: Path) -> None:
     else:
         report.fail(
             "无控制台：局域网地址出口",
-            f"{LAN_ADDRESS_FILENAME} 既不存在、launch.log 也无「未探测到局域网 IP」留痕 —— 静默缺失",
+            f"{LAN_ADDRESS_FILENAME} 缺失或内容非 http://<IPv4>:<port>，"
+            "且 launch.log 无「未探测到局域网 IP」留痕 —— 静默缺失 / 坏内容",
         )
 
 

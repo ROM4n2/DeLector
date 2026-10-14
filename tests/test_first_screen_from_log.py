@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pytest
 
@@ -123,35 +123,76 @@ def test_missing_file_exits_nonzero_with_reason(tmp_path: Path) -> None:
 
 
 # ── Task 2：6 枚新启动标记不得让解析器抢错锚行（行为级 + 结构化守卫）──────────────
+# Task 3 后 6 枚标记的落点拆在两个函数：①~③ 留循环外（`_run_desktop_inner` 顶层），④~⑥ 随
+# 建服/起服搬进循环内（`_after_start`，即 `webview.start()` 调度函数的 try 体）。只扫一个函数
+# 会漏掉半组——本回归锁当初正是这么红的（len(markers)==6 拿到 3）。
+_STAGE_MARKER_FUNCS: Tuple[str, ...] = ("_run_desktop_inner", "_after_start")
+
+
+def _stage_marker_statements(func: ast.FunctionDef) -> List[ast.stmt]:
+    """取 `func` 里承载"启动阶段标记"的顶层语句。
+
+    `_run_desktop_inner`：整个函数体顶层即①~③（失败分支的日志嵌在 `if` 内，天然被排除）。
+
+    `_after_start`：它刻意只有单个顶层 try（后台线程必须接住异常），故取 **try 体**；但 try 体里
+    除④~⑥ 外还有就绪/切窗阶段的日志，其中「服务已就绪。」**本身就是首屏工具的锚行** —— 把它算进
+    "新标记"清单会自我矛盾（清单里出现锚行）。故用结构切口：只取到**第一个 `_set_splash_stage`
+    之前**的语句，即"建服/起服段"（`from delector.server import app` → `build_server` →
+    `serve_in_thread`）——④~⑥ 正是紧贴这三条语句的归因日志。
+    """
+    if func.name == "_after_start":
+        assert len(func.body) == 1 and isinstance(func.body[0], ast.Try), (
+            "_after_start 应只有一个顶层 try（后台线程里未接住的异常会静默杀死线程）"
+        )
+        stmts = list(func.body[0].body)
+        cut = next(
+            (index for index, stmt in enumerate(stmts) if _stmt_has_call(stmt, "_set_splash_stage")),
+            len(stmts),
+        )
+        return stmts[:cut]
+    return list(func.body)
+
+
+def _stmt_has_call(stmt: ast.stmt, label: str) -> bool:
+    """语句（含嵌套）里是否出现对 `label(...)` 的调用。"""
+    return any(
+        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == label
+        for node in ast.walk(stmt)
+    )
+
+
 def _new_stage_markers_from_desktop() -> List[str]:
-    """从 desktop.py 的 `_run_desktop_inner` **同源取** 6 枚启动阶段标记（AST 取 `_append_log` 的
-    第二个字符串实参，按源码出现顺序）。
+    """从 desktop.py **同源取** 6 枚启动阶段标记（AST 取 `_append_log` 的第二个字符串实参，
+    按源码出现顺序）。
 
     为何同源取而不在本文件复制字面量：复制即**第二份真相源** —— desktop.py 一改标记，副本会
     **静默漂移**，这枚回归锁转而去守护一份过期字面量（正是本项目反复栽过的坑）。
-    为何只取函数体**顶层**的 `_append_log`：成功路径的 6 枚标记都是顶层语句；失败分支里的日志
-    （如「未检测到 WebView2 运行时…」）嵌在 `if` 内、不属于这 6 枚 —— 取顶层即可精确命中。
+
+    Task 3 起分两处取（`_STAGE_MARKER_FUNCS`，顺序即写入顺序）：①~③ 取 `_run_desktop_inner`
+    顶层，④~⑥ 取 `_after_start` 的 try 体。只取各函数体的**顶层**：失败分支里的日志（如
+    「未检测到 WebView2 运行时…」）嵌在 `if` 内、不属于这 6 枚 —— 取顶层即可精确命中。
     """
     tree = ast.parse(DESKTOP.read_text(encoding="utf-8"))
-    # 显式遍历 + 断言（而非 `next(...)`）：`next` 找不到时抛 `StopIteration`，消息难读；这里给
+    # 显式建表 + 断言（而非 `next(...)`）：`next` 找不到时抛 `StopIteration`，消息难读；这里给
     # 人话原因，函数被改名/搬走时一眼可见。
-    func: Optional[ast.FunctionDef] = None
+    funcs: Dict[str, ast.FunctionDef] = {}
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name == "_run_desktop_inner":
-            func = node
-            break
-    assert func is not None, "desktop.py 里找不到 `_run_desktop_inner`（被改名了？）"
+        if isinstance(node, ast.FunctionDef):
+            funcs[node.name] = node
     markers: List[str] = []
-    for stmt in func.body:
-        if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
-            continue
-        call = stmt.value
-        if not (isinstance(call.func, ast.Name) and call.func.id == "_append_log"):
-            continue
-        if len(call.args) >= 2:
-            arg = call.args[1]
-            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                markers.append(arg.value)
+    for name in _STAGE_MARKER_FUNCS:
+        func = funcs.get(name)
+        assert func is not None, f"desktop.py 里找不到 `{name}`（被改名了？）"
+        for stmt in _stage_marker_statements(func):
+            if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
+                continue
+            call = stmt.value
+            if not (isinstance(call.func, ast.Name) and call.func.id == "_append_log"):
+                continue
+            if len(call.args) >= 2:
+                arg = call.args[1]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    markers.append(arg.value)
     return markers
 
 
@@ -164,16 +205,20 @@ def test_new_stage_markers_do_not_hijack_first_screen_parser(tmp_path: Path) -> 
     """
     markers = _new_stage_markers_from_desktop()
     assert len(markers) == 6, (
-        f"_run_desktop_inner 顶层应有 6 枚启动标记，实际 {len(markers)} 枚：{markers}"
+        f"启动阶段标记应共 6 枚（_run_desktop_inner 顶层 3 枚 + _after_start 的 try 体 3 枚），"
+        f"实际 {len(markers)} 枚：{markers}"
         "（标记增删请同步本回归锁，勿让它静默守护过期清单）"
     )
 
-    # 时间戳（秒级）与顺序严格照 desktop.py 的写入次序：**真起点=07**、6 枚标记=08→11、splash=11、
-    # 服务就绪=13、首屏=14 ⇒ 期望三段为 6s / 1s / 7s。
+    # 时间戳（秒级）与顺序严格照 desktop.py 的写入次序：**真起点=07**、循环外 3 枚=08→09、
+    # splash=10（`_show_window` 内、webview.start 之前）、循环内 3 枚=10→11、服务就绪=13、
+    # 首屏=14 ⇒ 期望三段为 6s / 1s / 7s。
     # ⚠️ 真起点（07）**刻意早于** markers[0]（08）：这样一旦 markers[0] 变成含「开始启动（进程级
     # 计时起点）」的形态，解析器的 `_last_index`（取**最后一次**出现）会命中 markers[0] 而非真起点
     # ⇒ 三段数字变味、本用例转红。（旧版把真起点与 markers[0] 都写成 08 ⇒ 起点被抢后三段仍不变，
     # 用例恒真 —— 见 Fix-3 变异自证。）
+    # 「已创建 splash 窗口。」是**填充行**（非 6 枚标记之一、也不含任何锚串）：它证明锚行之间的
+    # 无关行不会干扰切片；它写在 `_show_window` 里，故时刻必须夹在循环外 3 枚与循环内 3 枚之间。
     log = _write_log(
         tmp_path / "launch.log",
         [
@@ -181,10 +226,10 @@ def test_new_stage_markers_do_not_hijack_first_screen_parser(tmp_path: Path) -> 
             ("2026-10-10 12:00:08", markers[0]),
             ("2026-10-10 12:00:09", markers[1]),
             ("2026-10-10 12:00:09", markers[2]),
+            ("2026-10-10 12:00:10", "已创建 splash 窗口。"),
             ("2026-10-10 12:00:10", markers[3]),
             ("2026-10-10 12:00:10", markers[4]),
             ("2026-10-10 12:00:11", markers[5]),
-            ("2026-10-10 12:00:11", "已创建 splash 窗口。"),
             ("2026-10-10 12:00:13", READY + "。"),
             ("2026-10-10 12:00:14", SCREEN + "。"),
         ],
@@ -208,9 +253,14 @@ def test_new_stage_markers_do_not_contain_first_screen_anchor_substrings() -> No
     用 `marker in line.message` 做子串匹配 ⇒ 某枚新标记一旦含「开始启动（进程级计时起点）/
     服务已就绪 / 真实 UI 已加载（首屏可用）」，锚点会**先命中这枚新标记**、计时切片**抢错行**，
     端到端首屏数字**静默变味**（不报错，只是算成别的意思）。
+
+    6 枚的落点（Task 3）：`_run_desktop_inner` 顶层 3 枚 + `_after_start` 的 try 体 3 枚。
     """
     markers = _new_stage_markers_from_desktop()
-    assert len(markers) == 6, f"_run_desktop_inner 顶层应有 6 枚启动标记，实际 {len(markers)} 枚：{markers}"
+    assert len(markers) == 6, (
+        f"启动阶段标记应共 6 枚（_run_desktop_inner 顶层 3 枚 + _after_start 的 try 体 3 枚），"
+        f"实际 {len(markers)} 枚：{markers}"
+    )
     for marker in markers:
         for anchor in (START, READY, SCREEN):
             assert anchor not in marker, (

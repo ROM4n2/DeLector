@@ -312,6 +312,32 @@ def test_lan_address_state_absent_silent(tmp_path: Path) -> None:
     assert vp.lan_address_state(tmp_path, "INFO: 服务正常\n") == vp._LAN_ABSENT_SILENT
 
 
+def test_lan_address_state_empty_file_is_not_present(tmp_path: Path) -> None:
+    """**空文件不算 present**（Task 5 判据升级）：`is_file()` 对空文件零判别力。
+
+    旧判据只看"文件在" ⇒ 一个 0 字节的 `lan-address.txt` 也能让闸记 PASS，而用户双击看到的
+    是空内容（等于根本没有地址出口）。判据改为**内容匹配 `^http://<IPv4>:<port>$`**：
+    空内容不匹配 ⇒ 落到 absent 分支（此处无留痕 ⇒ absent-silent，编排层判红）。
+    """
+    (tmp_path / vp.LAN_ADDRESS_FILENAME).write_text("", encoding="utf-8")
+    assert vp.lan_address_state(tmp_path, "") == vp._LAN_ABSENT_SILENT
+
+
+def test_lan_address_state_garbage_content_is_not_present(tmp_path: Path) -> None:
+    """乱内容（非 `http://<IPv4>:<port>`）同样不算 present ⇒ 落 absent 分支（Task 5）。
+
+    旧 `is_file()` 判据对"文件在、但内容不是地址"同样零判别力 —— 判据必须校验内容。
+    """
+    (tmp_path / vp.LAN_ADDRESS_FILENAME).write_text("这不是地址\n", encoding="utf-8")
+    assert vp.lan_address_state(tmp_path, "") == vp._LAN_ABSENT_SILENT
+
+
+def test_lan_address_state_non_ipv4_host_is_not_present(tmp_path: Path) -> None:
+    """`http://<非 IPv4>:<port>`（如主机名 / 回环拼错）不算 present：判据锚定 IPv4 形态。"""
+    (tmp_path / vp.LAN_ADDRESS_FILENAME).write_text("http://example.com:8000\n", encoding="utf-8")
+    assert vp.lan_address_state(tmp_path, "") == vp._LAN_ABSENT_SILENT
+
+
 def test_no_console_check_skips_off_windows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -390,5 +416,8 @@ def test_main_appends_no_console_step_after_standard_launch(
 # | log_has_traceback: 恒真                                       | test_log_has_traceback_clean_when_absent       |
 # | log_has_traceback: 判据放宽成 "Error" 子串（含大小写混合）    | test_log_has_traceback_ignores_bare_error_words|
 # | lan_address_state: 恒 present（不读留痕）                      | test_lan_address_state_absent_but_traced/silent|
+# | lan_address_state: present 判据退回 is_file()（不校验内容）    | test_lan_address_state_empty_file_is_not_present|
+# |                                                              | test_lan_address_state_garbage_content_is_not...|
+# |                                                              | test_lan_address_state_non_ipv4_host_is_not...  |
 # | _check_no_console_launch: 去掉 os.name 守卫（非 Windows 也真启）| test_no_console_check_skips_off_windows        |
 # | main: 不接 no-console 步 / 接到普通真启之前                     | test_main_appends_no_console_step_after...     |

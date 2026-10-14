@@ -654,3 +654,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **修复（本次提交）**：`docs/agents/ops.md`「Agent 工作惯例」**第 12 条** + `WORKMEMORY/PROTOCOL.md` 铁律**第 8 条**写明——**实现 / 多步任务 MUST 走独立分支（或 worktree）+ PR 合入 master；仅发版类操作（bump / tag / Release 文案 / 发版文档）允许直推 master 且须用户批准**。**本次补规则的改动本身走分支 `docs/branch-discipline-rule` + PR**（否则"改规矩不守规矩"，规则当场失效）。
 - **暂缓**：给 `dfs-plan` / `dfs-exec` 补「分支隔离」步骤（全局 skill + 发布仓两侧同步）——用户指示 skill 先不动。
 - **未做**：不回滚那 9 个提交（CI 全绿、历史已推送，重写收益低且风险高）。
+
+### 2026-10-14 | codebuddy | WORK_END(no-console-feedback-gaps)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`/dfs-team` 三席审计（靶子 = 10-13 那批 `0f7b80f..b05a367`）+ 怀疑者复核后开出的 7 条发现，用 `/dfs-exec` 三挡执行 6 个 Tier 2 任务 + 1 处门禁缺口修复，全部交付（8 提交，分支 `fix/no-console-feedback-gaps`，待 PR 合入）。
+- **P1 ×3**：① `2eae2ba` 两个入口改「先收口后解析」——`--windowed` 下 argparse 的 `--help`/错参输出走 `file.write`，解析早于收口时用户零线索（本机 Py3.11 实测：`_print_message` 自带 `except (AttributeError, OSError): pass` ⇒ 文本被**静默吞掉**而非崩溃，缺陷形态一致）；② `53221f2` 失败出口统一——`_after_start` 异常分支原本只写 `repr` 不弹窗，外层却把完整 traceback 原样弹给用户 ⇒ 统一为"日志全栈 + 弹窗一句话（含日志路径）"；③ `d1656bd` 建服/起服搬进 `webview.start()` 事件循环（`_after_start`），splash 覆盖冷启动前段（消灭 4~6.5s 零反馈），新增 `server_handoff` 交接容器 + finally 收尸。
+- **P2 ×3**：④ `e945683` AST 结构守卫钉"收口前不得写标准流" + 修正 `verify_windows_portable.py:38/:586` 两处**错误注释**；⑤ `43061ea` `--server-only` 地址文件改"持有端口后写、退出即删"（不变量：文件存在 ⟺ 本进程持有该端口）+ 闸判据从 `is_file()` 升级为内容匹配 `^http://<IPv4>:<port>$`；⑥ `6c53345` 测试卫生——4 条 dispatch 用例曾把 `lan-address.txt` 写进**开发者真实数据目录**（新增 autouse fixture + 元测试兜底）+ 一条恒绿用例改记录型假 ctypes。
+- **⚠️ 怀疑者推翻了一条我们自己的前提（本批最值钱的发现）**：上批的动机叙事"`--windowed` 下裸 `print()` 会崩"**是错的** —— CPython 的 `print()` 对 `sys.stdout is None` 是**静默 no-op**；真会崩的是 `None.write`（argparse 路径，即 P1①）。⇒ 真启闸的 no-console 模式扫 traceback **抓不到**那类回归，不是"不够严"而是**判据瞄错对象**（且 CI 里子进程 stdout 被重定向，标准流并非 None）。修法不是加严闸，而是加 AST 守卫 + 修正错误注释。
+- **两处"门禁跑不全"造成的潜伏缺陷（都靠后续任务的验收命令才浮出）**：① Task 3 回炉改写了 `test_desktop_port_guard.py`，但验收只跑 `mypy --platform win32 --strict`（4 入口档）、**漏跑 tests 档** ⇒ 两处 attr-defined 潜伏至 Task 6 才暴露（已修 `2e9f262`）；② Task 3 的搬家**作废了另外两个测试套件的契约**（port_guard 2 条 + first_screen 2 条），CRV 首轮 REVISE 抓出，其中 `test_run_desktop_inner_does_not_build_server_when_port_is_taken` 更是**vacuous 通过**（删掉端口校验也不红 ⇒ P0-1 端口闸的行为红线被静默架空）。**教训：搬家类改动必须跑全量；改了测试文件必须把 mypy 四档都跑全。**
+- **CRV 七轮**：Task 3 首轮 **REVISE**（2 套件作废 + vacuous 红线）→ 回炉 → 复核 PASS；Task 1/2/4/5/6 与 mypy 修复均 PASS（累计黄牌 12 张，非阻塞，其中最实的一张"`__main__` 先开句柄后轮转 ⇒ Windows 5MB 轮转被静默跳过"已折入 Task 3 修掉）。
+- **门禁（本机实测，批次终值）**：pytest **1832 passed + 2 skipped**；ruff 0；mypy 三档 **87 / 121 / 4** files 零错误；7 个触碰文件行尾纯 CRLF（CRCRLF=0）。
+- **仍待办**：① 本分支 PR 合入（合并 MUST 等 CI 绿）；② **真机双击验收**（无黑框 / 品牌图标 / splash 前段有反馈 / 失败有人话弹窗）——只能人工做，代码层已尽力；③ Task 5 遗留边界：端口被**外部程序**占用时上一轮的陈旧 `lan-address.txt` 不复写也不删除（有弹窗+日志，非静默），要清理需 `start.main` 回传 abort 原因，未立项。
