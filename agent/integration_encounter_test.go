@@ -83,6 +83,11 @@ func TestEncounterRealChain(t *testing.T) {
 	client := pythonsvc.NewClient(baseURL, nil)
 	reg := registry.DefaultRegistry(client)
 
+	// ---- 门禁 5 前置：import-pack 之前先取 /api/encounter/texts 快照 ----
+	// create_app() 装配期会注入 7 篇预置短文，库**非空**；故门禁 5 改为「前后快照
+	// 相对断言」，不再依赖「库是空的」这一环境假设。
+	before := encounterTexts(t, ctx)
+
 	res, err := job.RunEncounterPack(ctx, reg, gloss, job.RunConfig{
 		CorpusDir:  corpusDir,
 		OutDir:     outDir,
@@ -101,23 +106,30 @@ func TestEncounterRealChain(t *testing.T) {
 	// 每篇 pack 落盘、JSON 可回读且 Pack.Validate 通过。
 	assertValidPacks(t, res.Packs)
 
-	// ---- 门禁 5：GET /api/encounter/texts 命中 2 行、title 匹配、level 归一 A1 ----
-	rows := encounterTexts(t, ctx)
-	if len(rows) != 2 {
-		t.Fatalf("import-pack 后 /api/encounter/texts 应命中 2 行，实得 %d：%v", len(rows), rows)
+	// ---- 门禁 5：GET /api/encounter/texts 相对快照断言 ----
+	// 不假设空库（库内另有 7 篇预置短文）：断言 import-pack 恰好**净增 2 行**，且
+	// 净增的 2 行标题正是本次投递的两篇 fixture。只断计数会掩盖「多了 2 个别的 +
+	// 少了 2 个我们的」（计数相等但行不对）；亦不放宽为「至少 2 行」（那会掩盖重复
+	// 导入）。level 归一断言只针对净增行——预置短文含 A2/B1，不能整表按 A1 断。
+	after := encounterTexts(t, ctx)
+	added := addedRows(before, after)
+	if len(added) != 2 {
+		t.Fatalf("import-pack 后应相对快照恰好净增 2 行（快照 %d → %d），实得净增 %d 行：%v",
+			len(before), len(after), len(added), added)
 	}
-	titles := make([]string, 0, len(rows))
-	for _, r := range rows {
-		titles = append(titles, r.Title)
+	addedTitles := make([]string, 0, len(added))
+	for _, r := range added {
+		addedTitles = append(addedTitles, r.Title)
 		if r.Level != "A1" {
-			t.Errorf("行 %q level 应为 A1（stub estimated_cefr=A1 归一），实得 %q", r.Title, r.Level)
+			t.Errorf("净增行 %q level 应为 A1（stub estimated_cefr=A1 归一），实得 %q", r.Title, r.Level)
 		}
 	}
-	sort.Strings(titles)
-	if !containsStr(titles, "im_supermarkt") || !containsStr(titles, "mein_tag") {
-		t.Errorf("encounter texts 应命中两篇 fixture title，实得 %v", titles)
+	sort.Strings(addedTitles)
+	if !containsStr(addedTitles, "im_supermarkt") || !containsStr(addedTitles, "mein_tag") {
+		t.Errorf("净增行标题应正是两篇 fixture（快照 %d → %d），实得 %v", len(before), len(after), addedTitles)
 	}
-	t.Logf("真链路 OK: tools=%v packs=%d texts=%v", tools, len(res.Packs), titles)
+	t.Logf("真链路 OK: tools=%v packs=%d texts 快照 %d → %d，净增 %d 行 titles=%v",
+		tools, len(res.Packs), len(before), len(after), len(added), addedTitles)
 }
 
 // ---- stub DeepSeek（桩）：解析 user prompt 的未知词并回吐对齐的 GlossResult ----
@@ -231,6 +243,33 @@ func encounterTexts(t *testing.T, ctx context.Context) []encounterTextRow {
 		out = append(out, encounterTextRow{Title: r.Title, Level: r.Level})
 	}
 	return out
+}
+
+// titleMultiset 把行列表投影为 title → 出现次数（多重集）：/api/encounter/texts
+// 行序不保证稳定，故快照比较按多重集而非切片。多重集（而非集合）还能捕捉同一
+// title 的重复行，为门禁 5 的「净增」断言兜底。
+func titleMultiset(rows []encounterTextRow) map[string]int {
+	m := make(map[string]int, len(rows))
+	for _, r := range rows {
+		m[r.Title]++
+	}
+	return m
+}
+
+// addedRows 返回 after 相对 before **净增**的行（按 title 多重集做差）：某 title 在
+// after 中比 before 多出的每一行都计为净增（覆盖重复导入而多得行的情形）。这是本
+// 文件门禁 5「相对快照断言」的核心——只断计数会掩盖「多了 2 个别的 + 少了 2 个我们的」。
+func addedRows(before, after []encounterTextRow) []encounterTextRow {
+	remaining := titleMultiset(before)
+	added := make([]encounterTextRow, 0)
+	for _, r := range after {
+		if remaining[r.Title] > 0 {
+			remaining[r.Title]--
+			continue
+		}
+		added = append(added, r)
+	}
+	return added
 }
 
 // getPythonJSON 对真实 python 实例发起 GET 并把 200 JSON 解到 out。
