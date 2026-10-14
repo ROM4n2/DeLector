@@ -677,3 +677,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - `验收结论：PASS —— 产物通过完整性 + 真启验收`
 - **仍属人工**：真机双击验收（无黑框 / 品牌图标 / splash 前段有反馈 / 失败有人话弹窗）——CI 不覆盖窗口形态（脚本 docstring 已声明该边界）。
 - 本仓 CI 行为补充：`Detect packaging-surface changes` 判 packaging=false 时 Smoke 会被 skip（paths-filter），此时只能 `gh workflow run CI --ref master` 手动补跑（dispatch 下无条件跑，已多次实证）。
+
+### 2026-10-14 | codebuddy | NOTE 远端分支清理（11 个已合并残留）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按用户指示清理远端残留分支 —— 删前逐条验"是否已合并进 master"，**11 个全部已合并、未合并 0 个** ⇒ 安全删除：`chore/workmemory-cold-and-rotation` / `docs/adr-0020-windows-shell` / `docs/audit-2026-10-03` / `fix/audit-p0-data-truth` / `fix/close-registered-items` / `fix/sub1-card-counts` / `fix/sub4-resilience` / `fix/sub5-kartei` / `perf/measure-cards-cost` / `perf/rank-cache-and-card-counts` / `release/v5.13.0`。
+- 删后远端只剩 `master`（`git ls-remote --heads origin` 复核）；它们的提交都已通过 PR 进 master，**删的只是分支指针，不是历史**（如需回溯按 PR 号或 tag 找）。
+- 备注：这正是本仓"开了分支忘了删"的常态残留 —— PR 合并时加 `--delete-branch` 可避免（本次 #131/#132 用了）。
+- 本次改动属规则里的**簿记类例外**（纯追加、不改代码/门禁/测试）⇒ 按 2026-10-14 用户确认的例外直推 master。
