@@ -42,6 +42,21 @@ def _mod() -> Any:
     return desktop
 
 
+# ── Task 6 卫生：全局把数据目录钉到 tmp_path（autouse 兜底，防漏）────────────────────
+@pytest.fixture(autouse=True)
+def _isolate_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """任何用例默认把 `DELECTOR_DATA_DIR` 钉到 `tmp_path`：**绝不**落到开发者真实数据目录。
+
+    为什么 autouse：`dispatch()` 的 `--server-only` 路径会读 `os.environ` 解析日志/地址落点
+    （`resolve_log_path` → `ensure_streams` → `rotate_log_if_needed`）—— 个别用例漏写 `tmp_path`
+    就会滚动真 `launch.log`、写出真 `lan-address.txt`（Task 5 前还会删真 `lan-address.txt`），落进
+    `%LOCALAPPDATA%\\DeLector` / `~/.local/share/DeLector`。逐条加易漏，故用**全局兜底**：新增用例
+    不写都安全。`resolve_log_path` 的既有用例都显式传 dict（不走 `os.environ`），不受影响；需要别的
+    落点的用例自行 `monkeypatch.setenv` 覆盖即可（后设生效）。
+    """
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+
+
 # ── ① WebView2 运行时检测：注册表三处 + pv 值 ────────────────────────────────
 def test_webview2_registry_targets_the_edgeupdate_client_guid():
     """检测锚点必须对准 Edge WebView2 的 EdgeUpdate 客户端项（漏/错 ⇒ 已装机器被误报缺失）。
@@ -1641,6 +1656,73 @@ def test_on_main_closed_destroys_a_surviving_splash(tmp_path: Path):
     assert destroyed == [1], "主窗口关闭时若 splash 还在，必须一并销毁"
 
 
+# ── 元测试：本文件每条 `dispatch(...)` 用例都必须隔离数据目录（Task 6 测试卫生）─────────
+def _calls_dispatch(fn: ast.FunctionDef) -> bool:
+    """函数体（含嵌套）里是否有 `xxx.dispatch(...)` 调用。"""
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "dispatch"
+        for node in ast.walk(fn)
+    )
+
+
+def _references_data_dir_env(fn: ast.FunctionDef) -> bool:
+    """函数体里是否显式引用了 `DELECTOR_DATA_DIR`（字符串常量，用于 monkeypatch.setenv）。"""
+    return any(
+        isinstance(node, ast.Constant) and node.value == "DELECTOR_DATA_DIR" for node in ast.walk(fn)
+    )
+
+
+def _module_has_autouse_data_dir_fixture(tree: ast.Module) -> bool:
+    """本文件是否有 autouse fixture 把 `DELECTOR_DATA_DIR` 全局钉住（`tmp_path` 兜底）。"""
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        autouse = any(
+            isinstance(dec, ast.Call)
+            and isinstance(dec.func, ast.Attribute)
+            and dec.func.attr == "fixture"
+            and any(
+                kw.arg == "autouse" and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                for kw in dec.keywords
+            )
+            for dec in node.decorator_list
+        )
+        if autouse and _references_data_dir_env(node):
+            return True
+    return False
+
+
+def test_all_dispatch_tests_isolate_the_data_dir() -> None:
+    """元测试：凡调 `dispatch(...)` 的用例都必须隔离数据目录 —— 防污染**真实**落点。
+
+    为什么必须是**元测试**而非逐条断言：隔离是**跨用例**的卫生约束，单条断言只能顾到当下这几条，
+    新增一条 `dispatch` 用例忘了 `tmp_path` 时它不会红。`dispatch()` 的 `--server-only` 路径会
+    `resolve_log_path(os.environ)` + `ensure_streams` + `rotate_log_if_needed` —— 没隔离就滚动真
+    `launch.log`、写出真 `lan-address.txt`（Task 5 前还会删掉真 `lan-address.txt`），落进开发者真实
+    数据目录（Windows `%LOCALAPPDATA%\\DeLector` / Linux `~/.local/share/DeLector`）。
+
+    两种隔离方式任一即算通过：用例体里显式 `DELECTOR_DATA_DIR`，或本文件有 autouse fixture 全局兜底。
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    module_guarded = _module_has_autouse_data_dir_fixture(tree)
+    offenders = [
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name.startswith("test_")
+        and _calls_dispatch(node)
+        and not module_guarded
+        and not _references_data_dir_env(node)
+    ]
+    assert not offenders, (
+        "这些 dispatch 用例未隔离数据目录（会滚动真 launch.log、写出真 lan-address.txt 到 "
+        f"%LOCALAPPDATA%\\DeLector / ~/.local/share/DeLector）：{offenders}；"
+        "请各自加 tmp_path + monkeypatch.setenv('DELECTOR_DATA_DIR', ...)，或补一条 autouse fixture 全局兜底"
+    )
+
+
 # ── 入口分派：默认=桌面窗口；`--server-only`=既有服务行为（Task 5 行为变化）────────
 def test_parser_accepts_server_only_flag():
     """`--server-only` 开关存在且默认关闭；`--port` 仍可用（默认 8000）。"""
@@ -2221,10 +2303,25 @@ def test_ms_since_process_create_never_raises_when_underlying_probe_fails(
 
 
 def test_ms_since_process_create_returns_none_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
-    """非 Windows 直接 None（CI 是 ubuntu，`ctypes.windll` 在那儿根本不存在 ⇒ 不许碰它）。"""
+    """非 Windows 直接 None，且**绝不触碰** `ctypes.windll` 链（CI 是 ubuntu，那儿根本不存在）。
+
+    记录型假 ctypes（同 `_RecordingCtypes`）记账每一次属性访问且**不抛**：`sys.platform="linux"` 下
+    平台守卫还在 ⇒ `_ms_since_process_create` 在 `import ctypes` 之前就早退 ⇒ `touched == []`。
+
+    **变异自证**（为什么必须断言 `touched == []` 而非只断言 `is None`）：删掉 `desktop.py` 里
+    `_ms_since_process_create` 的平台守卫后，`_win_ms_since_create` 会走 `ctypes.windll.kernel32 …`
+    —— 假 ctypes 记账（`touched` 非空）、`GetProcessTimes(...)` 返回 0 ⇒ 底层抛 `OSError` 被
+    `except Exception` 吞掉**仍返回 None**。旧版只断言 `is None` 时这会**照样绿**（恒绿：静默吞异常
+    骗过了"不许碰 Win32"的承诺）；本版由 `touched == []` 钉死，删守卫即转红。
+    """
     mod = _mod()
+    touched: List[str] = []
+    calls: List[Any] = []
     monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setitem(sys.modules, "ctypes", _RecordingCtypes("ctypes", touched, calls))
+
     assert mod._ms_since_process_create() is None
+    assert touched == [], f"非 Windows 不得触碰 Win32 API（ctypes.windll 链），实际访问：{touched}"
 
 
 @pytest.mark.skipif(
