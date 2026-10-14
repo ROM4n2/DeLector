@@ -161,6 +161,10 @@
 **Interfaces:**
 - Consumes: `llm_client.chat(...)` · `writing_check.run(payload)`（经白名单）· `analyze_a1_email`
 - Produces: `async def run_polish_loop(*, text: str, leitpunkte: list[str] | None, tools: Mapping[str, Callable], budget: Budget) -> LoopResult`，其中 `Budget = (max_turns:int=3, max_tokens_total:int, deadline_s:float)`，`LoopResult = (text:str, converged:bool, reason:str|None, rounds:int, violations:list)`，`reason ∈ {ok, no_improvement, turn_limit, token_budget, deadline, judge_unreliable, judge_error}`
+- **Produces 的两处执行期补充（2026-10-15 定案，编排者批准）**：
+  1. **依赖注入参数**：除 `text/leitpunkte/tools/budget` 四个必填项外，另有 `chat / judge / violations_of / dispatch / clock` 五个**仅测试用**的注入点（默认回落真身）。这不是范围扩张 —— 本任务 scaffold 第一句就是「**全部依赖注入、全部 stub 测试**（严禁真实 API Key）」，没有注入点就只能靠真 Key 或 monkeypatch 全局，两者都违反仓规。
+  2. **`reason` 增加 `cancelled`**：Task 6 的取消按钮需要内核有「用户中止」的出口，否则取消只能表现为连接中断（前端拿不到人话原因）。故**在 Task 4 就地留位**，避免 Task 6 回头改内核 —— 这是有计划的范围调整，不是顺手加的。
+- **已知边界（CRV 黄卡，刻意不改）**：基线 `v_0 == 0`（原文已零 error）时**不早退** —— 润色还有用词/地道化价值，裁判只管 error 级。副作用：若首个候选反而变差，会回退到零违规的原文并报 `converged=false / no_improvement`。文案上由 Task 6 的前端兜住（文本本身是干净的）。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "按 ADR-0023 §4.2/§8.2 实现循环内核（`delector/services/polish_loop.py`），**全部依赖注入、全部 stub 测试**（严禁真实 API Key）。必须逐条实现：① 二值判断——模型输出含工具调用则执行并继续，无则**收尾请求**；② **收尾终审守卫**：无裁判裁决的收尾 MUST 被驳回并强制补一次裁判；③ 运行时策略 `v_n >= v_{n-1} ⇒ break` 并回退 `argmin(violations)` 候选，`reason='no_improvement'`；④ 哨兵 `v_n == v_{n-1} and n>=2 ⇒ reason='judge_unreliable'`；⑤ 每轮**前置**检查 `max_tokens_total` 与 `deadline_s`，超支即 break 并给原因码；⑥ 裁判异常按 errors-as-messages 单轮降级（记 `judge_error`，**不得** 500）；⑦ 证据注入前按行数+字节双限截断。测试用例 MUST 至少覆盖：不降即停、超轮次、超 token、超 deadline、裁判抛异常、无裁决不许收尾（**删掉守卫必须变红**）。RUN：`python -m pytest tests/test_ai_polish_loop.py -q`。"
@@ -222,8 +226,10 @@
 ## 🌫️ Fog of War (Not Yet Specified)
 
 - **[Unknown A] 裁判集扩充（ADR §4.3 的"成败所在"）**：A1 真实评分维度中**哪些可纯规则化、哪些必须 LLM 辅助**未测（ADR §6 Unknown 1）⇒ **不切分**。它天然是**下一个子计划**（`/dfs-plan` 续作），不得在本计划里投机拆任务。
-- **[Unknown B] 循环真实轮次分布与 token 上界**：需先有 stub 基线或真 Key 实测（ADR §6 Unknown 2）⇒ `max_tokens_total` 的**默认值待 Task 4 的 stub 基线给出**，本计划只规定"必须有该参数"。
-- **[Unknown C] 是否需要 function calling 的原生形态**：D1 只要求"模型能选工具"，**披露协议**（原生 tool_calls vs JSON 契约字段）未定 ⇒ Task 4 实现时以"最小改动 + 可 stub"为准，选定后回写 ADR §6。
+- ~~**[Unknown B] 循环真实轮次分布与 token 上界**~~ **（2026-10-15 部分收敛，见 Task 4 交付）**：
+  - **token 上界已定案**：`DEFAULT_MAX_TOKENS` **保留 4096**（实测单轮最坏 691 token，2× 余量充足）；`DEFAULT_MAX_TOKENS_TOTAL = 4096`（刻意 < `4096 × 3`，使循环级预算**真会咬合**，不是真空闸）；`DEFAULT_DEADLINE_S = 18.0`（严格小于前端 `DEFAULT_TIMEOUT_MS=25000`，内层先到点）。
+  - **仍待回测**：① 折算系数 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 是 **UNVERIFIED 假设**（本机 `tiktoken` / `transformers` 实测均 `ModuleNotFoundError`，拿不到真 BPE 计数）；② **真实轮次分布** —— stub 基线只能给出"收敛于第 N 轮的**条件**"，真实分布须有 Key 后回测。
+- **[Unknown C] 是否需要 function calling 的原生形态**：**已定案（2026-10-15）= JSON 契约字段**（回复里的 `tool_call` 键），不用原生 `tool_calls`。理由三条（可 stub / 与 `llm_client.chat` 的 dict 返回值同形且不动 Task 3 刚收口的 client / 零新依赖），已写进 `polish_loop.py` 模块 docstring。**待办**：按原计划把它**回写 ADR-0023 §6**（本计划不代劳 ADR）。
 - **[Unknown D] `lookup_core_vocab`（`writing.py:680`）是否会抛**（ADR §8.4 标 UNVERIFIED）⇒ Task 4 的 `judge_error` 用例先按"会抛"设计，实测后收窄。
 
 ## 🚫 Out of Scope
