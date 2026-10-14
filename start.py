@@ -217,5 +217,10 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    # 先收口、后解析（Task 1，理由同 desktop.py 的 __main__）：None 流下 argparse 的
+    # `--help`/错参输出无处可写 ⇒ 用户零线索。复用 main() 同款 `_ensure_entry_streams`
+    # （整段包 try/except：Android APK 的 Python 源集没有 desktop.py，而 APK 上 sys.stdout
+    # 本就不是 None，收口失败也不得阻断启动）。debug 开关从原始 argv 探。
+    _ensure_entry_streams("--debug-console" in sys.argv[1:])
     _args = _parse_args(sys.argv[1:])
     main(debug_console=_args.debug_console)

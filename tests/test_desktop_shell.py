@@ -1932,3 +1932,113 @@ def test_tray_show_lan_address_fails_readably_on_non_utf8_file(
     assert popped, "坏文件必须给出可见的失败提示，不许让异常逃逸进托盘回调"
     log_text = (tmp_path / "launch.log").read_text(encoding="utf-8")
     assert "显示局域网地址" in log_text, "失败也要落 launch.log，不能只有弹窗"
+
+
+# ── Task 1（本轮）：入口「先收口后解析」—— --windowed 下 None 流的零反馈回归 ──────
+# 背景：`--windowed` 产物（package_windows.py:320）里 `sys.stdout`/`sys.stderr` 是 None，
+# 而两个 `__main__` 都是「先 `_parse_args`、后收口」⇒ argparse 的 `--help`/错参输出
+# 无处可写：本机 CPython 3.11 的 `_print_message` 把 `None.write` 的 AttributeError 吞掉
+# （不炸，但文本当场蒸发）；会外抛的版本则是 AttributeError + launch.log 零行。两种表现
+# 同一个后果：**用户零线索**（退出码非零、无窗口、无弹窗、日志零行）。修法：把收口
+# （`ensure_streams` / `_ensure_entry_streams`）提到 `_parse_args` 之前，debug 开关从
+# 原始 argv 探（此刻还没解析完，拿不到 `_args`）。
+def _run_entry_module(module_name: str, argv: List[str], monkeypatch: pytest.MonkeyPatch) -> int:
+    """以 `__main__` 身份执行入口模块（不真起进程），返回其退出码。
+
+    为什么是 runpy 而不是「直接调 `_parse_args`」：本回归的 RED/GREEN 分界在 `__main__`
+    **序列**里（收口与解析的先后）——直接调 `_parse_args` 绕开了那个序列，修复后它照样
+    拿不到流，断言永远红、根本绿不了。runpy 以 `__name__="__main__"` exec 真入口；
+    `--help`/错参都在 argparse 退出前止住，`dispatch`/`main` 不会被触达（不起服务、不建窗）。
+
+    为什么是 runpy 而不是 subprocess：要复现的 `sys.stdout/stderr is None` 只在
+    `--windowed` 打包形态出现，子进程的 stdio 永远是管道，造不出这个状态。
+
+    「不抛」的保证是结构性的：除 argparse 自己的 SystemExit 外，任何异常（如
+    `None.write` 的 AttributeError）都会直接穿出本函数把用例转红，无需额外捕获。
+    """
+    import runpy
+
+    monkeypatch.setattr(sys, "argv", [f"{module_name}.py", *argv])
+    try:
+        runpy.run_module(module_name, run_name="__main__")
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0  # parser.exit() 的默认语义（--help 走这条）
+        if isinstance(exc.code, int):
+            return exc.code
+        raise
+    return 0
+
+
+def test_desktop_entry_help_lands_in_launch_log_when_streams_are_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--windowed`（stdout/stderr=None）下 `desktop.py --help`：不抛、退出码 0、文本落 launch.log。"""
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    log_path = tmp_path / "launch.log"
+
+    def _exercise() -> None:
+        code = _run_entry_module("desktop", ["--help"], monkeypatch)
+        assert code == 0, "argparse --help 的既有语义是退出码 0（收口不得改变它）"
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+
+    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    assert "usage: desktop.py" in content, f"--help 文本必须落进 launch.log，实际：{content!r}"
+    assert "--server-only" in content and "--debug-console" in content, (
+        f"无控制台时 help 是用户唯一的使用说明，必须含全部开关，实际：{content!r}"
+    )
+
+
+def test_desktop_entry_bad_arg_lands_in_launch_log_when_streams_are_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """错参（--bogus）在 None 流下也必须给出用法+错误，退出码保持 argparse 既有语义（2，非零）。"""
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    log_path = tmp_path / "launch.log"
+
+    def _exercise() -> None:
+        code = _run_entry_module("desktop", ["--bogus"], monkeypatch)
+        assert code == 2, "argparse 错参的既有语义是退出码 2（非零；收口不得吞掉它）"
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+
+    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    assert "usage: desktop.py" in content, f"错参也必须给出用法，实际：{content!r}"
+    assert "unrecognized arguments: --bogus" in content, f"错误必须点名坏参数，实际：{content!r}"
+
+
+def test_start_entry_help_lands_in_launch_log_when_streams_are_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`start.py --help` 同款契约（跨平台入口复用 `_ensure_entry_streams`；APK 无 desktop.py）。"""
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    log_path = tmp_path / "launch.log"
+
+    def _exercise() -> None:
+        code = _run_entry_module("start", ["--help"], monkeypatch)
+        assert code == 0, "argparse --help 的既有语义是退出码 0（收口不得改变它）"
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+
+    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    assert "usage: start.py" in content, f"--help 文本必须落进 launch.log，实际：{content!r}"
+    assert "--debug-console" in content, f"help 必须含调试开关，实际：{content!r}"
+
+
+def test_start_entry_bad_arg_lands_in_launch_log_when_streams_are_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`start.py` 错参（--bogus）：不抛、退出码 2、用法+错误落 launch.log（契约同 desktop 入口）。"""
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    log_path = tmp_path / "launch.log"
+
+    def _exercise() -> None:
+        code = _run_entry_module("start", ["--bogus"], monkeypatch)
+        assert code == 2, "argparse 错参的既有语义是退出码 2（非零；收口不得吞掉它）"
+
+    _run_with_missing_streams(monkeypatch, _exercise)
+
+    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    assert "usage: start.py" in content, f"错参也必须给出用法，实际：{content!r}"
+    assert "unrecognized arguments: --bogus" in content, f"错误必须点名坏参数，实际：{content!r}"

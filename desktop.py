@@ -1003,5 +1003,10 @@ def dispatch(server_only: bool, port: int, debug_console: bool = False) -> int:
 
 
 if __name__ == "__main__":
+    # 先收口、后解析（Task 1：唯一零线索路径）：`--windowed` 产物里 sys.stdout/stderr 是
+    # None，而 argparse 的 `--help`/错参输出走 `file.write` —— 解析早于收口时，用户得到的
+    # 是"零线索"（文本当场蒸发或 AttributeError，launch.log 零行、无窗口、无弹窗）。
+    # debug 开关从原始 argv 探：此刻还没解析完，拿不到 `_args`。
+    ensure_streams(resolve_log_path(os.environ), "--debug-console" in sys.argv[1:])
     _args = _parse_args(sys.argv[1:])
     raise SystemExit(dispatch(_args.server_only, _args.port, _args.debug_console))
