@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-"""§4.3 第 8 条对照实验的三臂 harness 骨架（Task 2；**零 Key / `--dry-run` 可跑**）。
+"""§4.3 第 8 条对照实验的三臂 harness（Task 2 骨架 + Task-5a `--real` 真跑接线；`--dry-run` 零 Key 全链路）。
 
 为什么存在
 ----------
-计划 `docs/plans/2026-10-15-judge-gaming-experiment.md` 的 Task 2/3：把设计稿
+计划 `docs/plans/2026-10-15-judge-gaming-experiment.md` 的 Task 2/3/5：把设计稿
 `docs/specs/2026-10-15-judge-gaming-control-experiment-design.md` §3/§4 的三臂对照
 落成**可复跑的确定性 harness**。本文件负责「按三臂跑、如实记录、综合记账」——判决量
 （held-out 种子回收率 `R_uncovered`）与 `R_judge` / 成本 / 延迟的数学在本模块（Task 3）；
-盲评 rater（Task 4）只写 `report['auxiliary']`、真跑（HITL）在 Task 5/6。**不接线、不改生产代码路径**：
-只经 `run_polish_loop` 的注入缝复用生产链路（chat / tools / budget / judge /
-violations_of / system_prompt / on_progress），不改内核语义。
+盲评 rater（Task 4）只写 `report['auxiliary']`；真跑 = Task-5a 接线的 `--real`（本文件），
+运行由 HITL（编排者 / 用户）触发。**不改生产代码路径**：只经 `run_polish_loop` 的注入缝
+复用生产链路（chat / tools / budget / judge / violations_of / system_prompt / on_progress），
+不改内核语义。
 
 三臂定义（MUST 与设计稿 §4 表格逐条一致）
 ---------------------------------------
@@ -42,10 +43,33 @@ stub chat 按**轮次**返回预构造回复（第 1 轮 `writing_check` 取证�
 chat → 工具分发（生产白名单）→ 证据追加 → 裁判（带 nlp）→ 生产分流 → 收敛/回退。
 `tokens_used` / `elapsed_s` 取自循环自己的 `done` 事件（不另算一份账）。
 
+`--real`（真跑，HITL；Task-5a 接线）
+----------------------------------
+真跑与 `--dry-run` **共用同一条链路**（`run_arm` × 三臂、同一次序），唯一差异 = 驱动源：
+
+- 运行期先经 `delector.server.load_env()` 载入环境（**全文件唯一调用点、只住本分支** ——
+  与生产同源，不在 harness 里复刻 .env 解析；`--dry-run` 绝不触它，有测试用「调用即炸」
+  的 stub 钉住）；
+- 真 chat = `RealChat`，与 `routes.main._PolishReplyRecorder`（ai-polish 生产构造）**逐参
+  同形**：循环传入的 model 空串被忽略、以 `get_effective_api_model()` 生效模型名出网；
+  timeout / max_tokens / response_format 原样透传（单次调用有界 = 循环的
+  `min(30.0s, 剩余 deadline)`）；**无重试**；额外只加 `model_name` 读取面（`RunRecord.model`）；
+- 真跑前 stderr 打印**非泄值**事实：`key 存在=<bool>` 与生效模型名（**绝不打印 key 本体**；
+  任何输出 / 异常 / 日志都不带 key —— 「key 存在」布尔由 key 判定面归约而来）；
+- 失败语义（**绝不静默部分结果**）：无 Key / 运行期依赖不可用 ⇒ 前置退 2（stderr 人话）；
+  上游 `llm_client.LLMError` ⇒ 显式退 2 + stderr 人话原因（`run_real` 原样冒泡、不吞、
+  不重试、不落任何部分结果）；
+- 输出面与 `--dry-run` 一致：文本模式全量记录 + 【综合记账】；`--json` 仍为十键 RunRecord 列表。
+
+零 Key 红线的现行形态：`--dry-run` 全链路仍零 Key、零网络（socket 闸 + `llm_client.chat`
+闸 + 产物 tripwire）；`--real` 的 Key 接触面被三条钉子夹住 —— 唯一调用点（AST 计数）、
+非泄值打印面、输出 / 异常零 key（假 key 全程 tripwire）。
+
 退出码（照 `tools/bench_judge_fp.py` 惯例）
 -----------------------------------------
 `0` = 完成；`1` = 样本集无效（空集 / 缺 signal / 缺 probe / 注入字段破损 / id 重复）；
-`2` = 环境不可用（依赖链 import 失败 / 德语模型不可用 / 真跑未接线 —— 属 Task 5/6）。
+`2` = 环境不可用或真跑失败（依赖链 import 失败 / 德语模型不可用 / 无模式旗标或两旗标同给 /
+无 Key / 上游 LLM 异常 —— 真跑的任何失败都不产出部分结果）。
 
 可复跑：同输入同输出（无随机；`elapsed_s` 是墙钟观测值，不参与判定）。
 
@@ -58,10 +82,10 @@ Task-4b 附带指标（W4 裁决落地；**不进判决**）
 `R_uncovered_last_candidate`（仅池化「有候选」的记录）/ `candidates_recorded`。二者 MUST NOT
 进 P1/P2 判决（判决量仍 `R_uncovered`）—— 生产代码路径零变更（包装器只住 harness）。
 
-`--cases N`（零 Key 可测）
--------------------------
-只取 `SEED_CASES` 的**前 N 篇**（N ≥ 1；顺序即冻结顺序 ⇒ 确定性）；无效值（0 / 负 /
-非整数）由 argparse 直接退 2。`--json` 的输出形状不变（RunRecord 列表，Task 2 契约）——
+`--cases N`（零 Key 可测；与 `--dry-run` / `--real` 同用）
+---------------------------------------------------------
+只取 `SEED_CASES` 的**前 N 篇**（N ≥ 1；顺序即冻结顺序 ⇒ 确定性；切片在装载后、校验前）；
+无效值（0 / 负 / 非整数）由 argparse 直接退 2。`--json` 的输出形状不变（RunRecord 列表，Task 2 契约）——
 【综合记账】只进文本模式，避免破坏机器可读面。文本模式的汇总即 `summarize` 的产物
 （`judgement_basis=uncovered_seed_recovery`；Task 4 起 Report 含 `auxiliary` 槽（默认 `None`），
 LLM 评分只进该槽、不进判决面；`--dry-run` 不触发 rater）。
@@ -667,6 +691,144 @@ def build_dry_run_chat(case: SeedCase) -> DryRunChat:
 
 
 # --------------------------------------------------------------------------- #
+# Task-5a：真跑接线（--real）—— 运行期环境 / 真 chat（生产同形）/ 真跑驱动
+# --------------------------------------------------------------------------- #
+
+#: 无 Key 的人话原因（真跑前置失败 ⇒ 退出码 2）。MUST NOT 携带 key 本体（或任何凭据片段）。
+_NO_KEY_REASON = (
+    "未检测到 API Key（key 存在=False）：请先在应用设置（或 .env）配置后重试；"
+    "零 Key 场景请用 --dry-run（本模式绝不静默回退）"
+)
+
+
+class RealRunUnavailable(RuntimeError):
+    """`--real` 前置不满足（无 Key）⇒ 调用方映射为「环境不可用，退出码 2」。
+
+    只承载**非泄值**原因：MUST NOT 携带 Key 本体或任何凭据片段（有测试用假 key 全程 tripwire）。
+    """
+
+
+def _ensure_runtime_env() -> None:
+    """`--real` 分支**唯一**的运行期环境载入点（与生产同源：`delector.server.load_env`）。
+
+    为什么调生产自己的 `load_env` 而不是在 harness 里复刻 .env 解析：凭据载入口径 MUST 单源
+    （复刻即引入「生产能读到的 .env、实验读不到」的漂移面）。本函数只被 `--real` 分支调用
+    —— `--dry-run` 全链路绝不触它（有测试用「调用即 fail」的 stub 钉住），dry-run 的
+    「零 Key、不出网」不变量因此仍是产物级成立的。
+    """
+    from delector.server import load_env
+
+    load_env()
+
+
+def _effective_api_key() -> str:
+    """当前生效 API Key（**值绝不外传**：唯一消费者 = `RealChat` 构造；对外只报布尔）。
+
+    走 `llm_client` 的判定面（应用唯一出网口；与 `chat()` 内部取 key 的解析同源）。用
+    `getattr` 取模块属性而不是显式 import：`llm_client` 对这两个名字是裸 re-export，显式
+    import 会被 `mypy --strict`（no_implicit_reexport）判 attr-defined；`getattr` 保持
+    「取值面 = llm_client（测试可以该面 monkeypatch）」且类型门禁干净。
+    """
+    from delector.services import llm_client
+
+    return str(getattr(llm_client, "get_effective_api_key")())
+
+
+def _effective_api_base_url() -> str:
+    """当前生效 API base_url（同 `_effective_api_key` 的取值面；真 chat 构造期一次读取）。"""
+    from delector.services import llm_client
+
+    return str(getattr(llm_client, "get_effective_api_base_url")())
+
+
+def _effective_api_model() -> str:
+    """当前生效模型名（生产同款取值面；真 chat 的出网 `model` 与此读取面同源）。"""
+    from delector.core.database import get_effective_api_model
+
+    return str(get_effective_api_model())
+
+
+class RealChat:
+    """真跑 chat：与 `routes.main._PolishReplyRecorder`（ai-polish 生产构造）**逐参同形**。
+
+    生产链路（`routes/main.py`）：
+        key = get_effective_api_key()；recorder = _PolishReplyRecorder(key, base_url.rstrip("/"))
+        循环 → recorder(messages=…, model="", timeout=per_call, max_tokens=cap, response_format=…)
+        recorder → llm_client.chat(messages, model=get_effective_api_model(), timeout, max_tokens,
+                                   response_format, api_key=key, base_url=…)
+
+    本类逐参一致（含「循环传入的空串 model 被忽略、以生效模型名出网」这条既有约定）；
+    唯一新增面 = `model_name` / `key_present` 两个**非泄值**读取属性（`RunRecord.model` 的取值
+    来源与真跑前的布尔报告）。无状态 ⇒ 全实验共用一枚实例（生产「每请求一枚」是为捕获该请求
+    的 notes / error_count，本类没有该捕获面；harness 侧的每局记录由 `_ChatRecorder` 承担）。
+    纪律：key / base_url 只在本实例内保存，任何输出 / 异常 / 日志都不带它们。
+    """
+
+    def __init__(self, api_key: str, base_url: str) -> None:
+        self._api_key = api_key
+        self._base_url = base_url
+
+    @property
+    def key_present(self) -> bool:
+        """key 存在布尔（**非泄值判定面**：只归约成布尔，绝不回显 key 本体）。"""
+        return bool(self._api_key)
+
+    @property
+    def model_name(self) -> str:
+        """生效模型名（`RunRecord.model` 的取值来源；非泄值面）。"""
+        return _effective_api_model()
+
+    async def __call__(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        timeout: float,
+        max_tokens: int,
+        response_format: dict[str, str] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        from delector.services import llm_client
+
+        # 循环传入的 `model` 为空串（「注入 chat 时循环不读配置」的既有约定）⇒ 与生产一致，
+        # 以生效模型名出网；timeout / max_tokens / response_format 原样透传（单次调用有界、
+        # 无重试 —— 失败由 llm_client 封装成 LLMError 原样冒泡给调用方）。
+        return await llm_client.chat(
+            messages=messages,
+            model=_effective_api_model(),
+            timeout=timeout,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            api_key=self._api_key,
+            base_url=self._base_url,
+        )
+
+
+def build_real_chat() -> RealChat:
+    """构造真 chat（生产同形）：key / base_url 均在构造期读取一次（同 `_PolishReplyRecorder`）。
+
+    无 Key ⇒ `RealRunUnavailable`（人话原因；`--real` 绝不静默回退到 dry 桩）。
+    """
+    key = _effective_api_key()
+    if not key:
+        raise RealRunUnavailable(_NO_KEY_REASON)
+    return RealChat(api_key=key, base_url=_effective_api_base_url().rstrip("/"))
+
+
+def run_real(cases: Sequence[SeedCase], *, chat: ChatFn) -> list[RunRecord]:
+    """真跑：与 `run_dry_run` **同一次序**（逐篇三臂交错）跑完全部用例，驱动源 = 真 chat。
+
+    任何（篇 × 臂）的 chat 失败**原样冒泡**（调用方显式失败 → 退出码 2），绝不静默跳过 ——
+    「部分结果」会让实验记账看起来完整而实际缺局。
+    """
+    records: list[RunRecord] = []
+    for case in cases:
+        for arm in Arm:
+            records.append(run_arm(case, arm, chat=chat))
+    return records
+
+
+# --------------------------------------------------------------------------- #
 # 样本集校验（退出码 1 的归口）与环境探测（退出码 2 的归口）
 # --------------------------------------------------------------------------- #
 
@@ -769,10 +931,18 @@ def probe_environment(loader: Callable[[], Any] | None = None) -> str | None:
 # --------------------------------------------------------------------------- #
 
 
-def _print_text_report(records: Sequence[RunRecord], report: Report) -> None:
-    """文本模式：逐条原始记录（只报比例无法复核，故全量打印）+ 每臂汇聚行 + 【综合记账】（Task 3）。"""
-    print("=== bench_judge_gaming（§4.3 第 8 条对照实验 · 三臂 harness · --dry-run 全链路）===")
-    print(f"records={len(records)}（逐篇三臂交错；stub chat 按轮次预构造；零 Key、不出网）")
+def _print_text_report(records: Sequence[RunRecord], report: Report, *, real: bool = False) -> None:
+    """文本模式：逐条原始记录（只报比例无法复核，故全量打印）+ 每臂汇聚行 + 【综合记账】（Task 3）。
+
+    `real` 只影响**如实标注**的两行（模式与驱动源）：`--real` 的真跑头行 MUST NOT 复读
+    dry-run 的「零 Key、不出网」字样；记录与记账面两模式同构。
+    """
+    mode = "--real 真跑（真实 llm_client.chat；单次有界、无重试）" if real else "--dry-run 全链路"
+    print(f"=== bench_judge_gaming（§4.3 第 8 条对照实验 · 三臂 harness · {mode}）===")
+    if real:
+        print(f"records={len(records)}（逐篇三臂交错；真 chat 驱动；记录与记账口径同 --dry-run）")
+    else:
+        print(f"records={len(records)}（逐篇三臂交错；stub chat 按轮次预构造；零 Key、不出网）")
     for record in records:
         print(
             f"[{record.case_id}] {record.arm.value}: rounds={record.rounds} reason={record.reason} "
@@ -806,7 +976,7 @@ def _print_text_report(records: Sequence[RunRecord], report: Report) -> None:
         )
     print()
     print("退出码：0=完成；1=样本集无效（空集/缺 signal/缺 probe/注入破损）；")
-    print("        2=环境不可用（依赖链 import 失败 / 德语模型不可用 / 真跑未接线）。")
+    print("        2=环境不可用或真跑失败（依赖链 import 失败 / 德语模型不可用 / 无 Key / 上游 LLM 异常）。")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -819,12 +989,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             pass
 
     parser = argparse.ArgumentParser(
-        description="§4.3 第 8 条对照实验的三臂 harness（Task 2 骨架：--dry-run 零 Key 全链路）。"
+        description="§4.3 第 8 条对照实验的三臂 harness（--dry-run 零 Key 全链路；--real 真跑 HITL）。"
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="用确定性 stub chat 驱动 run_polish_loop 全链路（零 Key、不出网）",
+    )
+    parser.add_argument(
+        "--real",
+        action="store_true",
+        help="真跑（HITL）：载入运行时凭据逐条经 llm_client.chat 出网（会烧配额）；单次有界、无重试",
     )
     parser.add_argument(
         "--json",
@@ -836,17 +1011,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=int,
         default=None,
         metavar="N",
-        help="只跑 SEED_CASES 的前 N 篇（N ≥ 1；顺序冻结、确定性；与 --dry-run 同用）",
+        help="只跑 SEED_CASES 的前 N 篇（N ≥ 1；顺序冻结、确定性；与 --dry-run / --real 同用）",
     )
     args = parser.parse_args(argv)
 
     if args.cases is not None and args.cases < 1:
         parser.error(f"--cases 必须 ≥ 1（取 SEED_CASES 前 N 篇口径），收到 {args.cases}")
 
-    if not args.dry_run:
+    if args.dry_run and args.real:
+        parser.error("--dry-run 与 --real 互斥：两种驱动源只能选一种")
+
+    if not args.dry_run and not args.real:
         print(
-            "[环境不可用] 真跑模式未接线：本骨架（Task 2）只提供 --dry-run；真跑属 Task 5/6"
-            "（HITL，届时才接应用自身的凭据载入与 llm_client.chat）。",
+            "[用法错误] 未指定运行模式：需 --dry-run 或 --real"
+            "（--dry-run = 零 Key stub 链；--real = 真实出网、会烧配额，属 HITL）。",
             file=sys.stderr,
         )
         return 2
@@ -874,12 +1052,47 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"[环境不可用] {env_error}", file=sys.stderr)
             return 2
 
-        records = run_dry_run(cases)
+        if args.real:
+            # Task-5a 真跑接线：运行期环境载入（唯一调用点）→ 真 chat 构造（生产同形）→ 真跑。
+            try:
+                _ensure_runtime_env()
+                real_chat = build_real_chat()
+                model_name = _effective_api_model()
+            except RealRunUnavailable as exc:
+                print(f"[真跑不可用] {exc}", file=sys.stderr)
+                return 2
+            except Exception as exc:  # 依赖链 / 配置读取不可用 ⇒ 归「环境不可用」
+                print(f"[真跑不可用] 运行期依赖装载失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+                return 2
+            # 真跑前的**非泄值**事实行：只报布尔与模型名 —— 绝不打印 key 本体（红线）。
+            print(
+                f"[真跑] key 存在={real_chat.key_present}；生效模型={model_name}；"
+                f"样本 {len(cases)} 篇 × 3 臂 = {len(cases) * 3} 局；"
+                "单次 chat 超时 = 循环生产口径（min(30.0s, 剩余 deadline)）、无重试",
+                file=sys.stderr,
+            )
+            # `llm_client` 已在 build_real_chat 里成功 import（此处再 import 不可失败）。
+            # 只捕上游失败类型：LLMError 之外的一切照旧冒泡（harness 自身的 bug 不许被吞）。
+            from delector.services import llm_client
+
+            try:
+                records = run_real(cases, chat=real_chat)
+            except llm_client.LLMError as exc:
+                # 显式失败：人话原因 + 退 2（上游失败属「环境不可用」类；1 是样本集无效，不复用）。
+                # 只透 `detail`（固定人话）、不透 `raw`（可能带凭据）—— 且不产出任何部分结果。
+                print(
+                    f"[真跑失败] 上游 LLM 调用异常：{exc.detail}（status={exc.status_code}）；"
+                    "无重试、不产出部分结果（退出码 2）",
+                    file=sys.stderr,
+                )
+                return 2
+        else:
+            records = run_dry_run(cases)
 
     if args.json:
         print(json.dumps([record_to_dict(record) for record in records], ensure_ascii=False, indent=2))
     else:
-        _print_text_report(records, summarize(records, cases))
+        _print_text_report(records, summarize(records, cases), real=args.real)
     return 0
 
 

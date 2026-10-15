@@ -14,9 +14,11 @@
    A1 1 轮 `turn_limit`、A2 3 轮 `no_improvement` 回退原文、A3 3 轮 `ok` 收敛回修复文本。
 5. **RunRecord / ArmConfig 字段契约**（Task 3 的输入面）。
 6. **CLI**：退出码 0/1/2；`--json` 的 stdout 必须是**纯 JSON**（import 期诊断行已改道
-   stderr）；无 `--dry-run` 时未接线 ⇒ 2，**不打真网络**。
-7. **零 Key 红线的产物级钉子**：骨架源码不出现任何 Key 载入路径（真跑在 Task 5/6
-   才接线；届时本测试随接线显式更新 —— 它是 tripwire，不是永久禁令）。
+   stderr）；无模式旗标（或 `--dry-run`/`--real` 同给）⇒ 2，**不打真网络**。
+7. **零 Key 红线的产物级钉子（Task-5a 起分两面）**：`--dry-run` 全链路仍零 Key、不触任何
+   载入路径（运行期「调用即炸」stub + AST 结构闸：仓库 import 全住函数体内）；
+   `--real` 的 Key 接触面被三条钉子夹住 —— 唯一 `load_env` 调用点 / 非泄值打印面（只许
+   布尔与模型名）/ 输出与异常零 key（假 key 全程 tripwire）。
 
 8. **Task 3 测量与综合记账**：`score_uncovered`（只算 probe、逐处、`right` 按
    `expected_count` 封顶、`wrong` 残留清零）、`score_judge_violations`（生产分流口径）、
@@ -36,8 +38,16 @@
     守卫；既有九字段与判决面逐字不变）；dry-run 语义面（A1 零候选 / A2·A3 20/20 /
     A2 候选 1.0 vs final 0.0 / A3 皆 ≈1.0）。
 
-反挂死纪律：无 sleep / 无线程；唯一的子进程调用带固定 timeout（≤120s，实测 CLI 全
-干跑约 10s 量级）。
+    11. **Task-5a `--real` 真跑接线**（全 stub、零 Key、零真网）：`--dry-run` 与 `--real` 互斥、
+        无模式旗标 ⇒ 2；`load_env` **恰调用一次**且只住真跑分支（dry-run 用例装「调用即炸」stub）；
+        真 chat 与生产 `routes.main._PolishReplyRecorder` **逐参同形**（循环 model 空串被忽略、
+        生效模型名出网、timeout/max_tokens/response_format 原样透传、单次有界、无重试）；
+        无 Key ⇒ 前置退 2 且零 chat 调用；上游 `LLMError` ⇒ 显式退 2、零部分结果、只透 `detail`
+        不透 `raw`（raw 可能带凭据）；生效模型名进 `RunRecord.model`；文本/JSON 输出面与 dry-run
+        同构（头行如实标注真跑模式）。
+
+    反挂死纪律：无 sleep / 无线程；唯一的子进程调用带固定 timeout（≤120s，实测 CLI 全
+    干跑约 10s 量级）。
 """
 
 import ast
@@ -977,13 +987,21 @@ def test_probe_environment_passes_on_this_machine() -> None:
     assert bench.probe_environment() is None
 
 
-def test_cli_without_dry_run_is_not_wired_and_touches_no_network(capsys: pytest.CaptureFixture[str]) -> None:
-    """Task 2 骨架不接线真跑：无 --dry-run ⇒ 2 + 人话提示，绝不触任何出网路径。"""
+def test_cli_without_mode_flag_exits_2_with_usage_copy(capsys: pytest.CaptureFixture[str]) -> None:
+    """无模式旗标 ⇒ 2 + 文案「需 --dry-run 或 --real」（Task-5a：真跑已接线 ⇒ 不再有「未接线」文案）。"""
     rc = bench.main([])
     captured = capsys.readouterr()
     assert rc == 2
-    assert "真跑" in captured.err and "未接线" in captured.err
+    assert "需 --dry-run 或 --real" in captured.err
     assert captured.out == ""
+
+
+def test_cli_dry_run_and_real_are_mutually_exclusive(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--dry-run` 与 `--real` 同给 ⇒ argparse 报错退 2（两种驱动源 MUST 不可共存）。"""
+    with pytest.raises(SystemExit) as excinfo:
+        bench.main(["--dry-run", "--real"])
+    assert excinfo.value.code == 2
+    assert "互斥" in capsys.readouterr().err
 
 
 def test_cli_dry_run_json_outputs_pure_json_runrecord_list() -> None:
@@ -1079,12 +1097,12 @@ def test_cli_cases_larger_than_sample_set_is_harmless(
     assert len(data) == 2 * 3
 
 
-def test_cli_cases_without_dry_run_still_exit_2(capsys: pytest.CaptureFixture[str]) -> None:
-    """`--cases` 不改变「真跑未接线 ⇒ 2」的契约。"""
+def test_cli_cases_without_mode_flag_still_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--cases` 单独给（无模式旗标）仍退 2：模式必须显式（--dry-run 或 --real）。"""
     rc = bench.main(["--cases", "5"])
     captured = capsys.readouterr()
     assert rc == 2
-    assert "未接线" in captured.err
+    assert "需 --dry-run 或 --real" in captured.err
 
 
 def test_cli_text_report_prints_summary_block(
@@ -1160,15 +1178,17 @@ def test_cli_text_report_prints_summary_block(
 def test_cli_dry_run_touches_no_network_and_never_reaches_the_rater(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Task 4 契约：`--dry-run` 全链路**零网络**、不触发盲评 rater、Report 判决面不变。
+    """Task 4 契约 + Task-5a 增补：`--dry-run` 全链路**零网络**、不触发盲评 rater、Report 判决面不变。
 
-    三层闸都实装（实测在本机不误伤全链路）：① socket 非回环 connect/connect_ex 与非本机
-    DNS 查询 ⇒ 直接炸（回环放行是**刻意的**：asyncio 自管道走 socketpair 连回环，实测必须
-    放行；真实出口由非回环闸 + `llm_client.chat` 闸把守）；② `llm_client.chat`（应用唯一
-    出网口）⇒ 装成炸雷并断言**一次都没被调用**；③ 产物面：`--json` 输出不含 auxiliary/
-    评级字样，且 gaming 源码**在 AST 层不引用 rater 的符号**、预热链不含 llm_client
-    （文档字符串里提名字是允许的，故按 AST 判而非按子串扫）。
-    """
+        四道闸都实装（实测在本机不误伤全链路）：① socket 非回环 connect/connect_ex 与非本机
+        DNS 查询 ⇒ 直接炸（回环放行是**刻意的**：asyncio 自管道走 socketpair 连回环，实测必须
+        放行；真实出口由非回环闸 + `llm_client.chat` 闸把守）；② `llm_client.chat`（应用唯一
+        出网口）⇒ 装成炸雷并断言**一次都没被调用**；③ Task-5a：`delector.server.load_env` ⇒
+        装成「调用即 fail」并断言干跑全程零调用（运行期环境载入只许住 --real 分支）；④ 产物面：
+        `--json` 输出不含 auxiliary/评级字样，且 gaming 源码**在 AST 层不引用 rater 的符号**、
+        模块级 import 面不含任何仓库模块（真跑接线新增的 llm_client / delector.server 只住
+        函数体内）、预热链不含 llm_client（文档字符串里提名字是允许的，故按 AST 判而非按子串扫）。
+        """
     _require_nlp()
     import socket as socket_module
 
@@ -1207,6 +1227,11 @@ def test_cli_dry_run_touches_no_network_and_never_reaches_the_rater(
     monkeypatch.setattr(llm_client_module, "chat", forbidden_chat)
     monkeypatch.setattr(bench, "load_seed_cases", lambda: [SEED_CASES[0]])
 
+    # Task-5a 闸③：运行期环境载入（load_env）只许住 --real 分支 —— 干跑全程「调用即 fail」。
+    env_stub = types.ModuleType("delector.server")
+    setattr(env_stub, "load_env", lambda: pytest.fail("dry-run 触发了 load_env —— 载入点只许住 --real 分支"))
+    monkeypatch.setitem(sys.modules, "delector.server", env_stub)
+
     rc = bench.main(["--dry-run", "--json"])
     captured = capsys.readouterr()
     assert rc == 0, f"带三重闸的 dry-run 仍应完成（rc={rc}）stderr={captured.err}"
@@ -1217,25 +1242,273 @@ def test_cli_dry_run_touches_no_network_and_never_reaches_the_rater(
     assert set(data[0]) == _RECORD_FIELDS
     assert "auxiliary" not in captured.out and "rate_pair" not in captured.out
 
-    # AST 层 tripwire：gaming 源码**不得引用/调用** rater 的符号，也不得把 llm_client
-    # 挂进预热链（`_import_chain` 只能装 `_CHAIN_MODULES` 里列的东西）——这是结构性的
-    # 「dry-run 不可能触发 rater / 真实出网口」保证（运行期的三道闸另见上方）。
+    # AST 层 tripwire（Task-5a 更新）：rater 符号仍不得被引用；真跑接线新增的仓库 import
+    # （llm_client / delector.server）**只许住函数体内** —— 模块级 import 面保持「纯 stdlib、
+    # 零副作用」⇒「--dry-run 不可能触达真实出网口 / 不可能载入运行期环境」是**结构性**保证
+    # （运行期的四道闸另见上方）。
     tree = ast.parse(_SCRIPT.read_text(encoding="utf-8"))
     referenced = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     referenced |= {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
     for needle in ("rate_pair", "insert_into_report"):
         assert needle not in referenced, f"gaming 源码不得引用盲评 rater 的符号：{needle!r}"
-    imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
-    imported |= {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-    assert "delector.services.llm_client" not in imported
+    top_level_imports: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            top_level_imports |= {alias.name for alias in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            top_level_imports.add(node.module or "")
+    assert not any(name.startswith("delector") for name in top_level_imports), (
+        f"gaming 源码的仓库 import MUST 全部住在函数体内（模块级 = 纯 stdlib）：{sorted(top_level_imports)}"
+    )
     assert "delector.services.llm_client" not in bench._CHAIN_MODULES
+
+
+# ── Task-5a：--real 真跑接线（全 stub、零 Key、零真网） ───────────────────────
+
+#: 假 key / 假模型名 / 假 base_url —— **全部是 stub**，绝不触真凭据；反向扫描断言用的标记。
+_FAKE_REAL_KEY = "sk-fake-5a-DO-NOT-LEAK-0e1f2a3b"
+_FAKE_REAL_MODEL = "stub-model-5a"
+_FAKE_REAL_BASE = "https://stub.invalid/v1"
+
+
+def _stub_runtime_env(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """把 `delector.server` 换成 stub（**绝不 import 真模块**：真模块 import 期就执行
+    `load_env()` + `create_app()`（建库 / 播种）—— 测试里 MUST NOT 触发）。返回 load_env 调用记录。"""
+    calls: list[Any] = []
+    stub = types.ModuleType("delector.server")
+    setattr(stub, "load_env", lambda: calls.append("load_env"))
+    monkeypatch.setitem(sys.modules, "delector.server", stub)
+    return calls
+
+
+def _install_real_stubs(
+    monkeypatch: pytest.MonkeyPatch, *, key: str = _FAKE_REAL_KEY, reply_factory: Any = None
+) -> tuple[list[Any], list[dict[str, Any]]]:
+    """`--real` 的零 Key / 零真网 stub 面：load_env、llm_client 的 key / base_url / chat、
+    生效模型名（`_effective_api_model` = harness 的非泄值判定面）。
+
+    返回 `(load_env 调用记录, llm_client.chat 收到的 kwargs 记录)`。`reply_factory(n)` 决定
+    第 n 次（1 起）chat 的回复；未给 ⇒ 装「调用即炸」的雷（该用例本不该触达真 chat）。
+    """
+    env_calls = _stub_runtime_env(monkeypatch)
+    import delector.services.llm_client as llm_client_module
+
+    monkeypatch.setattr(llm_client_module, "get_effective_api_key", lambda *a, **k: key)
+    monkeypatch.setattr(llm_client_module, "get_effective_api_base_url", lambda *a, **k: _FAKE_REAL_BASE + "/")
+    monkeypatch.setattr(bench, "_effective_api_model", lambda: _FAKE_REAL_MODEL)
+    chat_calls: list[dict[str, Any]] = []
+
+    async def stub_chat(**kwargs: Any) -> Any:
+        chat_calls.append(kwargs)
+        if reply_factory is None:
+            raise AssertionError("本用例不应触达真 chat（llm_client.chat 必须零调用）")
+        return reply_factory(len(chat_calls))
+
+    monkeypatch.setattr(llm_client_module, "chat", stub_chat)
+    return env_calls, chat_calls
+
+
+def test_build_real_chat_is_production_shaped_and_key_gated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """真 chat 构造（生产同形）与非泄值判定面：`key_present`（bool；绝不回显 key）/ `model_name`；
+    无 key ⇒ `RealRunUnavailable`。单行变异靶点：删 `build_real_chat` 的 `if not key` 守卫 ⇒ 必红。"""
+    env_calls, _ = _install_real_stubs(monkeypatch)
+    chat = bench.build_real_chat()
+    assert isinstance(chat, bench.RealChat)
+    assert chat.key_present is True  # 非泄值面：只给布尔
+    assert chat.model_name == _FAKE_REAL_MODEL
+    assert env_calls == []  # 构造本身不触 load_env（载入点住 main 的 --real 分支）
+
+    import delector.services.llm_client as llm_client_module
+
+    monkeypatch.setattr(llm_client_module, "get_effective_api_key", lambda *a, **k: "")
+    with pytest.raises(bench.RealRunUnavailable):
+        bench.build_real_chat()
+
+
+def test_real_run_wires_production_shaped_chat_and_records(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """T5a 主体：`--real` 全链路（全 stub、零 Key、零真网）。
+
+    - `load_env` **恰调用一次**（唯一载入点、只在真跑分支）；
+    - `llm_client.chat` 以**生产同形 kwargs** 被调（逐参对照 `routes.main._PolishReplyRecorder`：
+      循环传入的 model 空串被忽略、以生效模型名出网；timeout / max_tokens / response_format
+      原样透传、单次有界 = min(30.0s, 剩余 deadline)；api_key / base_url 构造期绑定、
+      base_url 走 .rstrip("/")）；
+    - 生效模型名进 `RunRecord.model`（`RealChat.model_name` 面）—— 不是 DRY_RUN_MODEL；
+    - `--cases` 与 `--real` 同用照常（切片在装载后、校验前）：两篇种子 + `--cases 1` ⇒ 只跑第一篇；
+    - 输出面与 dry-run 一致：`--json` = 十键 RunRecord 列表、逐篇三臂交错。
+    """
+    _require_nlp()
+    import delector.services.llm_client as llm_client_module
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    first, second = SEED_CASES[0], SEED_CASES[1]
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: [first, second])
+    env_calls, chat_calls = _install_real_stubs(
+        monkeypatch, reply_factory=lambda _n: {"corrected_text": first.clean_text, "notes_zh": []}
+    )
+    # 清掉 import 期诊断行（若本用例是全进程首个触发 spaCy / llm_client 装载的用例）：只清
+    # 「main 之前」的噪声 —— main 自身的 stdout 契约（纯 JSON / 零输出）断言不受影响。
+    capsys.readouterr()
+
+    rc = bench.main(["--real", "--cases", "1", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 0, f"stub 真跑应完成（rc={rc}）stderr={captured.err}"
+
+    assert env_calls == ["load_env"]  # 恰一次（且确实发生在 --real 分支）
+    assert len(chat_calls) == 3  # 恰三臂各一次（candidate-only 脚本：每臂 1 轮收到收尾候选）
+    for call in chat_calls:
+        assert set(call) == {
+            "messages",
+            "model",
+            "timeout",
+            "max_tokens",
+            "response_format",
+            "api_key",
+            "base_url",
+        }
+        assert call["model"] == _FAKE_REAL_MODEL  # 循环的空串被忽略 ⇒ 生效模型名（生产同形）
+        assert call["api_key"] == _FAKE_REAL_KEY  # key 真进了出网口（未丢失；输出面另钉零泄漏）
+        assert call["base_url"] == _FAKE_REAL_BASE  # 生产 .rstrip("/") 口径
+        assert call["response_format"] == llm_client_module.JSON_OBJECT
+        assert 0.0 < call["timeout"] <= 30.0  # 有界：min(DEFAULT_PER_CALL_TIMEOUT_S, 剩余 deadline)
+        assert 0 < call["max_tokens"] <= llm_client_module.DEFAULT_MAX_TOKENS
+        assert call["messages"][0]["role"] == "system" and str(call["messages"][0]["content"]).strip()
+
+    data = json.loads(captured.out)
+    assert len(data) == 3  # --cases 1 生效（第二篇在装载后被切片拦下）
+    assert [record["case_id"] for record in data] == [first.id] * 3
+    assert [record["arm"] for record in data] == ["a1_baseline", "a2_no_signal", "a3_current"]
+    assert set(data[0]) == _RECORD_FIELDS  # 十键契约（与 --dry-run 同形）
+    assert {record["model"] for record in data} == {_FAKE_REAL_MODEL}  # 生效模型名进记录
+    assert all(record["model"] != bench.DRY_RUN_MODEL for record in data)  # 未静默回退 dry 桩
+    # 行为面（candidate-only 脚本）：A1/A2 固定违规 ⇒ 不降即停、回退原文；A3 生产分流见 v==0 ⇒ 收敛
+    assert (data[0]["reason"], data[0]["converged"], data[0]["final_text"]) == (
+        "no_improvement",
+        False,
+        first.text,
+    )
+    assert (data[2]["reason"], data[2]["converged"], data[2]["final_text"]) == ("ok", True, first.clean_text)
+    assert all(record["last_candidate_text"] == first.clean_text for record in data)  # 透明记录面照常
+
+    # 真跑前 stderr 的非泄值事实行：布尔 + 模型名齐备；key 本体绝不出现。
+    assert "key 存在=True" in captured.err and _FAKE_REAL_MODEL in captured.err
+    assert _FAKE_REAL_KEY not in captured.out and _FAKE_REAL_KEY not in captured.err
+
+
+def test_real_run_without_key_exits_2_before_any_chat(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """无 Key ⇒ 前置退 2（人话原因 + `key 存在=False`）；**绝不**静默回退 dry 桩、先于任何 chat。
+
+    单行变异靶点：删 `build_real_chat` 的 `if not key` 守卫 ⇒ 本用例必红（会继续走到 chat）。
+    """
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: [SEED_CASES[0]])
+    env_calls, chat_calls = _install_real_stubs(monkeypatch, key="")
+    # 清掉 import 期诊断行（若本用例是全进程首个触发 spaCy / llm_client 装载的用例）：只清
+    # 「main 之前」的噪声 —— main 自身的 stdout 契约（纯 JSON / 零输出）断言不受影响。
+    capsys.readouterr()
+
+    rc = bench.main(["--real", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert captured.out == ""  # 零输出：不产出部分结果、也不回退 dry 桩的 JSON
+    assert "key 存在=False" in captured.err and "API Key" in captured.err
+    assert "Traceback" not in captured.err
+    assert env_calls == ["load_env"]  # 载入仍发生 —— 正是它给出「无 key」的事实
+    assert chat_calls == []  # 先于任何出网
+
+
+def test_real_run_upstream_error_fails_loudly_without_partial_results(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """上游 `LLMError` ⇒ 显式失败：退 2 + stderr 人话原因；**零部分结果**（stdout 全空）。
+
+    第 1 次 chat 成功、第 2 次抛 ⇒ 若实现有「静默部分结果」路径，stdout 会出现记录 —— 本断言即闸；
+    同时钉「无重试」（chat 恰 2 次）与「异常面只透 detail、不透 raw」（raw 可能带凭据 ⇒ 假 key
+    塞进 raw，断言其绝不外泄）。
+    """
+    _require_nlp()
+    import delector.services.llm_client as llm_client_module
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    case = SEED_CASES[0]
+
+    def reply_factory(n: int) -> Any:
+        if n == 1:
+            return {"corrected_text": case.clean_text, "notes_zh": []}
+        raise llm_client_module.LLMError(
+            "AI 服务连接失败（stub 上游原因）", raw=f"stub raw 可能带凭据：{_FAKE_REAL_KEY}"
+        )
+
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: [case])
+    env_calls, chat_calls = _install_real_stubs(monkeypatch, reply_factory=reply_factory)
+    # 清掉 import 期诊断行（若本用例是全进程首个触发 spaCy / llm_client 装载的用例）：只清
+    # 「main 之前」的噪声 —— main 自身的 stdout 契约（纯 JSON / 零输出）断言不受影响。
+    capsys.readouterr()
+
+    rc = bench.main(["--real", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 2  # 退码钉死：上游失败属「环境不可用」类（1 是样本集无效，不复用）
+    assert captured.out == ""  # 绝不静默部分结果
+    assert "[真跑失败]" in captured.err and "stub 上游原因" in captured.err
+    assert "Traceback" not in captured.err
+    assert env_calls == ["load_env"]
+    assert len(chat_calls) == 2  # 第 1 次成功、第 2 次抛 ⇒ 无第 3 次（无重试）
+    assert _FAKE_REAL_KEY not in captured.err  # raw 不透出 ⇒ 凭据无外泄通道
+
+
+def test_real_run_text_mode_reports_records_and_summary_like_dry_run(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--real` 文本模式与 dry-run 同构：逐条全量记录 + 【综合记账】块；头行如实标注真跑模式
+    （MUST NOT 复读 dry-run 的「零 Key」字样）。"""
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    case = SEED_CASES[0]
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: [case])
+    env_calls, chat_calls = _install_real_stubs(
+        monkeypatch, reply_factory=lambda _n: {"corrected_text": case.clean_text, "notes_zh": []}
+    )
+    # 清掉 import 期诊断行（若本用例是全进程首个触发 spaCy / llm_client 装载的用例）：只清
+    # 「main 之前」的噪声 —— main 自身的 stdout 契约（纯 JSON / 零输出）断言不受影响。
+    capsys.readouterr()
+
+    rc = bench.main(["--real"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "【综合记账】judgement_basis=uncovered_seed_recovery" in captured.out
+    a3_line = next(
+        line for line in captured.out.splitlines() if line.startswith("[a3_current]") and "R_uncovered=" in line
+    )
+    assert "R_uncovered=1.000" in a3_line  # 收敛 ⇒ 回收率 1.0（真实链路算出来的，非 stub 数字）
+    assert "--real" in captured.out and "零 Key" not in captured.out  # 头行如实标注，不复读干跑声明
+    # 真链路确实被驱动（防「--real 静默回退 dry 桩」：load_env 恰一次 + 真 chat 被调过）
+    assert env_calls == ["load_env"] and chat_calls
 
 
 # ── 零 Key 红线（产物级 tripwire） ────────────────────────────────────────────
 
 
-def test_harness_source_has_no_key_loading_path() -> None:
-    """骨架源码不得出现任何 Key 载入路径（真跑接线属 Task 5/6，届时显式更新本测试）。"""
+def test_harness_source_confines_key_and_env_loading_to_the_real_branch() -> None:
+    """零 Key 红线的产物级钉子（Task-5a 起分两面；承 Task 2 的 tripwire 显式演进）。
+
+    `--real` 已接线 ⇒ 源码允许出现 Key 载入调用，但 MUST 被夹住：
+    1. 不含 `DEEPSEEK_API_KEY` 字样（绝不按环境变量名直读 key —— 一律走 llm_client 判定面）；
+    2. `load_env` 的**调用点恰一处**（AST Call 计数 = 「唯一载入点」的产物级证据；
+       运行期面另有 dry-run 用例的「调用即炸」stub 钉住「只住 --real 分支」）。
+    """
     source = _SCRIPT.read_text(encoding="utf-8")
-    for needle in ("load_env(", "get_effective_api_key", "DEEPSEEK_API_KEY"):
-        assert needle not in source, f"骨架不得触 Key 载入路径：{needle!r}"
+    assert "DEEPSEEK_API_KEY" not in source, "绝不按环境变量名直读 key（走 llm_client 的判定面）"
+    tree = ast.parse(source)
+    load_env_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "load_env"
+    ]
+    assert len(load_env_calls) == 1, f"load_env 调用点必须恰一处（实际 {len(load_env_calls)}）"
