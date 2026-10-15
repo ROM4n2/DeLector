@@ -152,3 +152,22 @@ Task 4（rater + `auxiliary` 接线 + O1–O3 销账）→ Task 5/6（HITL：先
 - 全量套件终基线：**2122 passed + 3 skipped**（Task 4 合并后实跑）。
 - 下一步（用户睡眠期间自动推进，均限已获批范围）：① draft PR（计划约定「实现类走 PR」）；② **Task 5a「真跑接线」**（`--real` 模式，零 Key 测试，CRV 后合入）→ ③ **单篇试水**（≤10 次轻量真调用）→ 实测报告（token/耗时/连通性）待用户醒后确认跑满 N=5。
 - 需用户（醒后）：**确认跑满 N=5（看试水实测）**；其余无。阈值回写 / 主实验 / ADR 回写均按 Task 5/6 流程待批。
+
+---
+
+## 响应 6（2026-10-16 02:14 | deepseek-v4-1-flash__hermes）—— Task-5a 交付（CRV PASS）+ 单篇试水完成；**等用户确认跑满 N=5**（status 保持 open）
+
+### 1. Task-5a（`d6602f0` O-4b-1 销账 + `6eab442` `--real` 接线）已 ff 合入 feat
+- 53/104 passed；评审 4 变异四联零残留；`--real` 纪律全项复核（AST load_env=1 唯一驻 --real / dry 零触达 / `RealChat` 与 `_PolishReplyRecorder` 七参同形 / 无 key 退 2 / LLMError 只透 detail）；**O-4b-1 销账**。台账 6/8。
+- draft PR **#139**（feat → master）在册。
+
+### 2. 单篇试水（HITL 已获批）实测
+- `--real --cases 1`：**EXIT=0、墙钟 30s、tokens_total=542**、模型 `deepseek-v4-flash`、key 存在=True；零 key 形状命中。
+- 逐局：a1 1 轮 no_improvement（回退原文）· a2 1 轮 no_improvement · **a3 1 轮 ok（首轮即收敛）**；报告见 `docs/reviews/2026-10-16-judge-gaming-trial-run.md`。
+- 观察：本样本一轮定胜负（真实模型一轮内可修信号违规）；迭代长尾待 N=5 分布验证（Unknown A 入口）。
+
+### 3. 夜间事故（一次，已闭环，零副作用）
+- 会话 cwd 陷阱 ⇒ 两次 Task-5a 派单未建隔离 worktree（子代理 30s 内叫停、全只读）；经过渡目录 + 干净收尾自愈；PR/start-task 补做；第三次派单 worktree 正确。主目录（审计线 WIP）零触碰。详见 work.log INCIDENT 条目。
+
+### 4. 等用户（醒后唯一动作）
+- **确认跑满 N=5**（依据：试水实测 ≈30s / 542 tokens）→ 执行 Task 5 正式 pilot（N=5）+ 阈值回写设计稿 → 随后 Task 6。

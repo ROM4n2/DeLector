@@ -645,3 +645,24 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 独立评审 PASS：doc diff 仅 1 hunk 且六项裁决语义逐条对齐、delector/ 零变更；5 条变异（4 条四联实红、1 条空串判定测试空白→ O-4b-1 登记）；审计钩子 .env=0 / 非回环=0 / server 未导入；base-vs-HEAD 归一化 70 行指标 identical。
 - **O-4b-1（测试空白，非缺陷）**：summarize 层「空串候选」无钉（`is not None`→真值判断变异可全绿）——随 Task-5a 补钉。
 - 台账：Task-4b → completed（5/8）。
+
+### 2026-10-16 02:14 | deepseek-v4-1-flash__hermes | INCIDENT
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**会话 cwd 陷阱（夜间一次，已闭环，零数据损失）**——Task-5a 首次派单前的一条终端脚本以非零码收尾（尾部杂散报错），宿主未更新会话 cwd（仍指向刚删除的子代理 worktree）⇒ ① 后续终端调用前置 cd 失败（脚本未执行：start-task/PR 未跑）；② 两次 Task-5a 子代理派单基点解析命中已删路径 ⇒ 未建隔离 worktree。
+处置：两个受影响子代理均在 30–60s 内叫停（回执：各 6/9 次调用、全只读、零编辑）；读 Hermes 源码确认机制（`terminal_tool_result.py`：仅「无 per-command workdir + 命令报告了结束 cwd」时记录会话 cwd；workdir 为瞬态）；经「过渡目录 + 干净收尾调用」自愈；补做 start-task 与 draft PR #139；第三次派单 worktree 已核实（base 990f9c2）。事后核验：closurewt clean、PR #139 回读 OPEN/draft、主目录改动经 mtime 归因审计线自身 WIP（未触碰）。
+教训：关键脚本尾部必须干净收尾；长脚本勿以杂散报错/管道收尾；依赖 cwd 的重要操作前先 `pwd` 复核。
+
+### 2026-10-16 02:14 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Task-5a（harness 真跑接线 --real + O-4b-1 销账）交付并合入 feat**（dfs-exec Gear 2 双席位；d6602f0+6eab442；评审 PASS）。
+- 编排核验：范围恰 2 文件；53/104 复跑绿；dry 60×10 键 / cases5=15 / noarg=2 / mutex=2；编排抽查变异（RealChat 忽略生效模型）实红零残留；CRLF 零裸 LF。
+- 独立评审 PASS：4 变异四联（无 key 前置 / 吞 LLMError / dry 触 load_env / O-4b-1 复现）；AST load_env=1 且唯一驻 --real；全 stub 驱动（socket 硬闸）零非回环拨号；RealChat 与 _PolishReplyRecorder 七参逐一同形；无 key 退 2 不回退；LLMError 只透 detail+status_code（raw 零外泄）；4 条非阻塞注记。
+- O-4b-1 销账。台账：Task-5a → completed（6/8）。
+
+### 2026-10-16 02:14 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, shell-exec
+事件：**单篇试水真跑（HITL，用户已获批）**——`--real --cases 1`；**EXIT=0 / 墙钟 30s / tokens_total=542**；key 存在=True；生效模型=deepseek-v4-flash；零 key 形状命中。
+- 实测（letter_01_party_einladung）：a1 rounds=1 no_improvement（回退原文）/ a2 rounds=1 no_improvement / a3 rounds=1 ok（首轮收敛）；elapsed 7.6/11.6/8.1s。
+- 观察：真跑首样本一轮定胜负（与 dry-run 3 轮形态不同）；迭代长尾分布待 N=5（Unknown A 入口）。
+- 报告：`docs/reviews/2026-10-16-judge-gaming-trial-run.md`；原始输出本机 `scratch/judge_gaming_trial/`。
+- **待用户确认：跑满 N=5（Task 5 正式 pilot）→ 阈值回写。**

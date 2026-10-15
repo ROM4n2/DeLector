@@ -137,6 +137,14 @@
 
 ---
 
+### Task 5a: harness 真跑接线（`--real`；零 Key 测试；O-4b-1 补钉） [Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]（2026-10-16 登记）
+
+**Files:** Modify: `tools/bench_judge_gaming.py` · `tests/test_bench_judge_gaming.py`
+
+**验收（已交付）**：`d6602f0`（O-4b-1 销账）+ `6eab442`（`--real` 接线）合入 feat；53/104 passed；实现者双变异 + 评审 4 变异（无 key 前置 / 吞 LLMError / dry 触 load_env / O-4b-1）四联实红零残留；`--real` 纪律（唯一显式 load_env 点 AST=1、dry 零触达、`RealChat` 与 `_PolishReplyRecorder` 七参逐一同形、无 key 退 2 不回退、LLMError 只透 detail）；审计钩子全净。**残余观察（非阻塞）**：server.py 模块级 load_env 幂等说明 / 宽 except 窗口说明 / `RealChat` 未复制 notes 捕获（文档化）/ 测试假 key 字形注记。**单篇试水已跑（2026-10-16，EXIT=0，报告见 `docs/reviews/2026-10-16-judge-gaming-trial-run.md`）**；跑满 N=5 属 Task 5（HITL，待用户确认）。
+
+---
+
 ### Task 5: **pilot 实跑（N=5）+ 阈值固定回写** [Tier: 3-Critical] [Mode: HITL] [Role: TDD Builder]
 
 **Files:**
