@@ -58,7 +58,14 @@
 
 - `converged=True ⇒ reason == "ok"`；未收敛 MUST 带原因码（零静默失败）；
 - 收尾候选 MUST 有**本轮新鲜裁判裁决**（D3），否则驳回并强制补跑一次裁判；
-- 每轮开始**之前**先查 `max_tokens_total` 与 `deadline_s`，超支即带原因码退出。
+- 每轮开始**之前**先查 `max_tokens_total` 与 `deadline_s`，超支即带原因码退出；
+- **每次 `dispatch` 都受超时约束**（Task 8 接缝①）：`min(DEFAULT_PER_CALL_TIMEOUT_S, 剩余 deadline)`，
+  剩余 deadline 在调用前**重算**；`asyncio.TimeoutError` ⇒ errors-as-messages（喂回模型），
+  **不炸循环、不冒泡** —— 收口仍由轮首的预算前置检查给原因码；
+- **同步裁判 MUST 移出事件循环**（Task 8 接缝②）：经 `asyncio.to_thread` 跑
+  ⇒ 长裁判不阻塞同进程其它路由，且 `task.cancel()` 掐得断在途裁判
+  （线程本身掐不断，但循环不再等待它）；注入 async 裁判时直接 `await`
+  （否则 `to_thread` 会把 coroutine 对象当返回值 ⇒ 静默假收敛）。
 
 ## 刻意不做
 
@@ -68,6 +75,8 @@
 - `on_progress` 回调抛异常同样**原样冒泡**（UI 回调不该被静默吞掉）。
 """
 
+import asyncio
+import inspect
 import json
 import math
 import time
@@ -265,6 +274,31 @@ def _default_judge(text: str, leitpunkte: list[str] | None) -> dict[str, Any]:
     return analyze_a1_email(text, leitpunkte)
 
 
+async def _call_judge(
+    fn: Callable[[str, list[str] | None], Any],
+    text: str,
+    leitpunkte: list[str] | None,
+) -> Any:
+    """调一次裁判：**同步裁判移出事件循环**（Task 8 接缝②）。
+
+    为什么必须绕这一层（两处调用点都走它）：
+
+    1. **长裁判不阻塞同进程其它路由**：`analyze_a1_email` 是同步 CPU/IO 活，直接跑在
+       事件循环上会把 `/api/health` 与其它路由一起按在地上（实测单次可达数百 ms）；
+    2. **取消可掐断**：跑在事件循环上时 `task.cancel()` 递不进去（取消要等协程让出
+       控制权，而同步函数不让）⇒ Task 6 的取消按钮对「在途裁判」无效。
+       `asyncio.to_thread` 的等待点可取消：任务立刻收到 `CancelledError`，
+       循环**不再等待**那个线程（线程本身掐不断，这是 asyncio 的既有语义）。
+
+    `iscoroutinefunction` 那一支**必须有**：注入方给了 async 裁判时，`to_thread`
+    只会把 **coroutine 对象**当返回值交回来 ⇒ 上层拿到「没有裁决」⇒ 违规数恒 0
+    ⇒ 循环静默假收敛（最危险的失败形态）。
+    """
+    if inspect.iscoroutinefunction(fn):
+        return await fn(text, leitpunkte)
+    return await asyncio.to_thread(fn, text, leitpunkte)
+
+
 def _make_default_dispatch(
     tools_map: Mapping[str, Callable[..., Awaitable[dict[str, Any]]]],
 ) -> Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]:
@@ -327,7 +361,7 @@ async def run_polish_loop(
 
     # v_0：先裁一次原文，给停止策略一个可比较的基线（裁判异常 ⇒ 单轮降级，不冒泡）。
     try:
-        baseline_violations = violations_fn(judge_fn(text, leitpunkte))
+        baseline_violations = violations_fn(await _call_judge(judge_fn, text, leitpunkte))
         prev_v = len(baseline_violations)
         history.append((text, prev_v, baseline_violations))
     except Exception as exc:  # 宽捕是刻意的：errors-as-messages，任何裁判异常都不得冒泡
@@ -408,8 +442,17 @@ async def run_polish_loop(
                 )
                 continue
             # 工具自身抛异常同样 errors-as-messages（不炸循环）
+            # 接缝①：dispatch 也 MUST 有超时。剩余 deadline 在**调用前重算**（不能复用
+            # 轮首那个：本轮的 chat 已经花掉时间），口径与 chat 完全一致 ——
+            # min(每轮默认超时, 剩余 deadline)。剩余 ≤0 ⇒ timeout=0 ⇒ `wait_for` 立刻
+            # 超时，同样喂回模型；下一轮轮首的预算前置检查会以 `deadline` 原因码收口。
+            remaining_now = budget.deadline_s - (clock() - t0)
+            dispatch_timeout = min(DEFAULT_PER_CALL_TIMEOUT_S, max(remaining_now, 0.0))
             try:
-                result = await dispatch_fn(name, payload)
+                result = await asyncio.wait_for(dispatch_fn(name, payload), timeout=dispatch_timeout)
+            except asyncio.TimeoutError:
+                # 超时是"证据"不是异常：喂回模型让它换招，循环不炸、不冒泡。
+                result = {"error": f"工具 '{name}' 执行超时（>{dispatch_timeout:.1f}s）"}
             except Exception as exc:  # 宽捕是刻意的：工具失败是"证据"，不是 500
                 result = {"error": f"工具 '{name}' 执行失败: {_brief(exc)}"}
             evidence = truncate_evidence(_render_evidence(result))
@@ -436,7 +479,7 @@ async def run_polish_loop(
         #    删掉这个守卫 ⇒ 裁判被跳过 ⇒ v_n 恒 0 ⇒ 循环**静默假收敛**（最危险的失败形态）。
         if verdict_this_round is None:
             try:
-                verdict_this_round = judge_fn(candidate, leitpunkte)
+                verdict_this_round = await _call_judge(judge_fn, candidate, leitpunkte)
             except Exception as exc:  # 宽捕是刻意的：Unknown D 按"会抛"设计 ⇒ 单轮降级
                 degraded = REASON_JUDGE_ERROR
                 messages.append({"role": "user", "content": f"[裁判异常] {_brief(exc)}"})

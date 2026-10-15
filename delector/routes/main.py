@@ -2520,8 +2520,20 @@ async def _polish_event_stream(*, request: Request, text: str, with_diff: bool) 
 
         try:
             outcome = await task
-        except llm_client.LLMError as e:
+        except HTTPException as e:
             # 流已经开了头（状态行已发出），改不了状态码 ⇒ 用一条 error 帧交代人话。
+            #
+            # 为什么捕 `HTTPException` 而不是 `llm_client.LLMError`（接缝③）：
+            # `_run_polish` 早就把 `LLMError` 转成 `HTTPException(502, detail=e.detail)`，
+            # 这里写 `except llm_client.LLMError` **永不命中** ⇒ 异常裸抛到
+            # StreamingResponse 外层 ⇒ starlette 抛
+            # "Caught handled exception, but response already started" ⇒ 用户既拿不到
+            # 状态码也拿不到 error 帧，只剩前端那句通用文案。
+            # 选 (b) 而不是 (a)（让 `_run_polish` 在流式路径原样抛 LLMError）的理由：
+            # `_run_polish` 的失败契约对两种调用方 MUST 同一形状（都是 502 + 人话
+            # detail），不该随「谁调它」变形；且流已开头、状态码改不了，error 帧是
+            # 唯一能把 `e.detail` 送到用户面前的通道（前端 writer.js 已按
+            # `ev.event === 'error'` / `ev.detail` 消费）。
             yield _sse_frame({"event": "error", "detail": e.detail})
             return
         payload = _polish_diff_payload(text, outcome) if with_diff else _polish_payload(outcome)

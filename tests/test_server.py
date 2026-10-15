@@ -7055,6 +7055,39 @@ def test_ai_polish_stream_cancels_loop_when_starlette_listener_preempts(monkeypa
     assert all(e.get("event") != "result" for e in snap["frames"]), "已断开就不该再产出完整 result"
 
 
+def test_ai_polish_stream_error_frame_carries_llm_detail(client, monkeypatch):
+    """接缝③：流已开头 ⇒ 上游 LLMError MUST 以 **error 帧**抵达用户（`e.detail` 人话）。
+
+    事实链：`_run_polish` 捕获 `llm_client.LLMError` 后 `raise HTTPException(502, detail=e.detail)`
+    ⇒ 流层原本写的 `except llm_client.LLMError` **永不命中** ⇒ error 帧永不发出 ⇒ 用户只拿到
+    前端那句通用「润色流结束但没有返回结果」。修法选 **(b) 流层捕获 `HTTPException`**：
+    `_run_polish` 的契约对两种调用方保持同一形状（失败 ⇒ HTTPException(502)），流已经开了头
+    改不了状态码，只能在流内用 error 帧把人话送出去；前端 `writer.js` 也早已按
+    `ev.event === 'error'` / `ev.detail` 消费。
+    """
+    from delector.services import llm_client
+
+    _stub_api_key(monkeypatch)
+    # 裁判引擎 deliberately 置为不可用：本条只关心「错误怎么抵达用户」，
+    # 让 chat 第一轮就抛，别把时间花在加载真 spaCy 模型上。
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: None)
+    monkeypatch.setattr("delector.nlp_engine.processor.try_load_nlp_no_download", lambda: None)
+
+    async def _chat(**kwargs: Any) -> Dict[str, Any]:
+        raise llm_client.LLMError("DeepSeek 服务暂时不可用 (503)")
+
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", _chat)
+
+    res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT, "stream": True})
+
+    assert res.status_code == 200
+    events = _parse_sse(res.text)
+    errors = [e for e in events if e.get("event") == "error"]
+    assert errors, f"上游失败 MUST 以 error 帧抵达用户，实际帧：{events}"
+    assert "DeepSeek 服务暂时不可用 (503)" in errors[0]["detail"], f"error 帧 MUST 带 e.detail 人话：{errors[0]}"
+    assert all(e.get("event") != "result" for e in events), "失败路径不该再产出 result 帧"
+
+
 def test_frontend_polish_reason_copy_covers_every_reason_code():
     """writer.js 的中文文案 MUST 覆盖 `polish_loop.REASONS` 全部成员 + 端点层 no_api_key。
 
