@@ -8,15 +8,25 @@ import os
 from pathlib import Path
 
 import pytest
+import spacy
 
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
 
 from delector.data import a1_writing_dict
-from delector.routes.main import _a1_violations_if_letter
+from delector.routes.main import violations_for
 from delector.server import app
 from delector.services.polish_loop import default_violations_of
-from delector.services.writing import analyze_a1_email, check_a1_formular_answer
+from delector.services.writing import analyze_a1_email, check_a1_formular_answer, collect_violations
+
+
+@pytest.fixture(scope="module")
+def nlp():
+    """真 spaCy 模型（沿用 `tests/test_writing_rules.py` 的 nlp fixture 惯例）；缺失 ⇒ skip。"""
+    try:
+        return spacy.load("de_core_news_sm")
+    except OSError:
+        pytest.skip("de_core_news_sm not installed")
 
 
 def test_a1_writing_dict_dataset_integrity():
@@ -210,15 +220,13 @@ _ESSAY_TEXT = "Ich habe ein Hund. Er ist gut."  # 非书信体（普通作文）
 _LETTER_TEXT = "Liebe Maria,\nich lade dich ein.\nViele Grüße,\nAnna"
 
 
-def test_a1_violations_gate_only_counts_when_text_is_a_letter():
-    """适用性闸门（**Unknown A 的边界**）：A1 书信规则只对书信体计数。
+def test_a1_violations_gate_format_family_still_letter_only():
+    """闸门（Task 7 收窄后的口径）：格式/字数族只对书信体生效；无语法违规的非书信文本 ⇒ 零计数。
 
-    裁判集今天**只有** A1 书信规则（`analyze_a1_email`，裁判集扩充属 Unknown A，
-    本计划不做）。对非书信文本它必然报 `a1_greeting_missing`(error) —— 那是**题材
-    差异**，不是错误 ⇒ 闸门让它「无话可说」（返回 []）。
-
-    注意这**不等于**「裁判判定无错」：它只是说明手上这套规则不适用于该文本，
-    语义等价于今天的一次性润色（首轮即接受），而不是「零违规」的证明。
+    - 非书信体 `_ESSAY_TEXT` 的裁决体只有格式族违规（无 nlp ⇒ 语法族未跑）⇒
+      `violations_for("prose", ·)` 为 [] —— 但这**不等于**「裁判判定无错」：语义是
+      「格式族对本文本不适用 + 语法族没有可计的东西」，与旧文档的措辞不同、结论按本次输入相同。
+    - 书信体照常计数（闸门必须**有选择性**，一律返回 [] 是关掉裁判，不是闸门）。
     """
     verdict_letter = analyze_a1_email(_LETTER_TEXT)
     verdict_essay = analyze_a1_email(_ESSAY_TEXT)
@@ -228,10 +236,47 @@ def test_a1_violations_gate_only_counts_when_text_is_a_letter():
 
     # 无闸门时：非书信体被判「缺少称呼语」= error ⇒ v_0 = 1 ⇒ 循环会误判「改不动」
     assert len(default_violations_of(verdict_essay)) >= 1
-    # 有闸门：规则不适用 ⇒ 零违规
-    assert _a1_violations_if_letter(verdict_essay) == []
-    # 书信体照常计数（闸门必须**有选择性**，一律返回 [] 是关掉裁判，不是闸门）
-    assert len(_a1_violations_if_letter(verdict_letter)) >= 1
+    # 收窄后的闸门：格式族对非书信体不计数（此处裁决体无语法违规 ⇒ 结果为空）
+    assert violations_for("prose", verdict_essay) == []
+    # 书信体照常计数
+    assert len(violations_for("letter", verdict_letter)) >= 1
+
+
+def test_a1_violations_gate_counts_grammar_for_non_letter_text(nlp):
+    """★ Task 7 闸门收窄（**旧钉子的显式改写**）：非书信体 + 语法错 ⇒ 语法违规**真被计数**。
+
+    这枚钉子此前钉住"非书信体 MUST 仍不计数"，目的就是让「闸门被收窄」不可能被静默做掉；
+    2026-10-15 用户拍板收窄后，本用例**翻转口径**成为新行为的守卫（谁把闸门改回
+    "非书信体一律零违规"，这条立刻红 —— 变异自证②）。
+
+    判别力来源：先证语法错**真实存在**于裁决体（"ein Hund" ⇒ `artikel` 违规），
+    再证闸门**现在**对它计数（不是「没有违规可挡」的空转），且格式族不被顺带带进来。
+    """
+    verdict_essay = analyze_a1_email(_ESSAY_TEXT, nlp=nlp)
+
+    # 前提①：非书信体（称呼语不合法 ⇒ 文本族 = prose）。
+    assert verdict_essay["greeting"]["valid"] is False
+
+    # 前提②：语法族**确实**报出了违规（否则这条用例就是空转 —— 验了个不存在的东西）。
+    essay_violations = collect_violations(verdict_essay)
+    assert any(v["rule"] == "artikel" for v in essay_violations), (
+        f"冠词格错必须被语法族捕获（夹具失效？实际={essay_violations}）"
+    )
+
+    counted = violations_for("prose", verdict_essay)
+    assert any(v["rule"] == "artikel" for v in counted), "非书信体的语法违规 MUST 被计数（闸门收窄）"
+    assert all(not v["rule"].startswith("a1_") for v in counted), "格式/字数族 MUST 只对书信体生效"
+
+
+def test_a1_violations_gate_letter_counts_format_and_grammar(nlp):
+    """闸门对照：书信体 ⇒ 格式/字数族 + 语法族**全计**（收窄不误伤书信体）。"""
+    letter = "Liebe Maria,\nich habe ein Hund.\nViele Grüße,\nAnna"
+    verdict = analyze_a1_email(letter, nlp=nlp)
+    assert verdict["greeting"]["valid"] is True
+
+    rules = [v["rule"] for v in violations_for("letter", verdict)]
+    assert "a1_valediction_comma" in rules, "书信体的格式错 MUST 照旧计数"
+    assert "artikel" in rules, "书信体的语法错 MUST 照旧计数"
 
 
 def test_ai_polish_endpoint_keeps_non_letter_polish(monkeypatch):

@@ -42,7 +42,13 @@ let polishState = {
   corrected: '',
   hunks: [],
   notes_zh: [],
-  error_count: 0
+  error_count: 0,
+  // Task 6/7 的响应契约（只增不改）：advisory 文本 + 引擎降级标记。
+  // 两者都只做**非阻断**呈现（overlay 的 notes 区），绝不弹 error toast。
+  judge_advisories: [],
+  judge_degraded: false,
+  // Y3：no-key 抑制分支的输入（no-key 路径循环根本没跑，见 renderPolishReview 的守卫）。
+  unconverged_reason: null
 };
 
 // ── Error Type Labels & Badges ──────────────────────────────────────────────
@@ -1199,14 +1205,40 @@ export function renderPolishReview() {
 
   const notesEl = document.getElementById('polish-notes');
   if (notesEl) {
-    if (polishState.notes_zh && polishState.notes_zh.length > 0) {
-      notesEl.classList.remove('hidden');
-      notesEl.innerHTML = `
-        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">💡 AI 润色解析与语法点评 (${polishState.notes_zh.length} 条)</div>
+    const notes = polishState.notes_zh || [];
+    // Task 6/7：advisory（warning 级，如时态口径不一致）与引擎降级提示都**复用**这块
+    // notes 区呈现 —— 非阻断、不是 error toast（降级提示的文案口径见
+    // `judge_degraded`；advisory 不参与任何计数，见后端 `advisories` / `judge_advisories`）。
+    const advisories = polishState.judge_advisories || [];
+    let html = '';
+    if (notes.length > 0) {
+      html += `
+        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">💡 AI 润色解析与语法点评 (${notes.length} 条)</div>
         <div class="writer-ai-notes-list">
-          ${polishState.notes_zh.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
+          ${notes.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
         </div>
       `;
+    }
+    if (advisories.length > 0) {
+      html += `
+        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">⚠️ 语法提醒（不影响采纳）(${advisories.length} 条)</div>
+        <div class="writer-ai-notes-list">
+          ${advisories.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
+        </div>
+      `;
+    }
+    // Y3 小修（二选一取①"抑制"）：no-key 路径循环**根本没跑**（后端 `_no_key_outcome`
+    // 什么都没检查）⇒"本次仅做格式/字数检查"不实 ⇒ `unconverged_reason === 'no_api_key'`
+    // 时抑制本提示（no-key 已有自己的 toast / notes 文案，抑制不丢信息）。不选②改措辞：
+    // 那会连"有 key 但无 nlp"这条提示真实成立（格式/字数确实做了）的路径一起说糊。
+    if (polishState.judge_degraded && polishState.unconverged_reason !== 'no_api_key') {
+      html += `
+        <div class="writer-ai-note-item">ℹ️ 语法检查未启用：本机未加载德语模型，本次仅做格式/字数检查。</div>
+      `;
+    }
+    if (html) {
+      notesEl.classList.remove('hidden');
+      notesEl.innerHTML = html;
     } else {
       notesEl.classList.add('hidden');
       notesEl.innerHTML = '';
@@ -1324,13 +1356,17 @@ export async function aiPolishEssay() {
     }
 
     if (payload) {
-      const { original, corrected, hunks, notes_zh, error_count } = payload;
+      const { original, corrected, hunks, notes_zh, error_count, judge_advisories, judge_degraded, unconverged_reason } = payload;
       polishState = {
         original: original || text,
         corrected: corrected || text,
         hunks: (hunks || []).map(h => ({ ...h, accepted: true })),
         notes_zh: notes_zh || [],
-        error_count: error_count || 0
+        error_count: error_count || 0,
+        judge_advisories: judge_advisories || [],
+        judge_degraded: judge_degraded === true,
+        // Y3：抑制分支的输入（收敛时为 null；no-key 路径为 'no_api_key'）。
+        unconverged_reason: unconverged_reason || null
       };
       openPolishOverlay();
       renderPolishReview();

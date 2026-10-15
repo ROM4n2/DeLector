@@ -17,6 +17,7 @@ import json
 import math
 import os
 import re
+import time
 from typing import Any, Callable
 
 import pytest
@@ -535,18 +536,79 @@ def test_token_accounting_falls_back_to_estimate() -> None:
     assert completion_tokens_of({"x": sample}) == estimate_tokens(dump({"x": sample}))
 
 
-def test_real_judge_is_wired_by_default() -> None:
-    """默认裁判 = `writing.analyze_a1_email`，默认抽取器只取 `level == 'error'`。"""
-    bad = "Liebe Maria,\nIch lade dich ein.\nViele Grüße,\nAnna"
-    good = "Liebe Maria,\nich lade dich ein.\nViele Grüße\nAnna"
-    rec = Recorder()
+@pytest.fixture(scope="module")
+def nlp() -> Any:
+    """真 spaCy 德语模型（沿用 `tests/test_writing_rules.py` 的 nlp fixture 惯例）；缺失 ⇒ skip。"""
+    import spacy
 
-    result = run(text=bad, chat=rec.chat([{"corrected_text": good}]))
+    try:
+        return spacy.load("de_core_news_sm")
+    except OSError:
+        pytest.skip("de_core_news_sm not installed")
 
-    assert result.converged is True, f"真实裁判下修好的文本 MUST 收敛：{result}"
-    assert result.reason == "ok"
-    assert result.text == good
-    # warning 级（如字数偏短）不构成违规 ⇒ 不得阻止收敛
+
+def test_real_judge_is_wired_at_the_assembly_point(nlp: Any, monkeypatch: Any) -> None:
+    """**装配点**（旧 pin `test_real_judge_is_wired_by_default` 的裁决改造）。
+
+    旧 pin 逐字钉住「内核默认裁判 == `writing.analyze_a1_email`」——那钉的是「业务住在机制
+    内核」。Task 1 的接缝方向相反：内核只留**可注入的缝**，业务由**产品层装配**。按计划
+    Global Constraints 的裁决规则，把它从「默认值」改为「装配点」：断言生产链路 `_run_polish`
+    传给 `run_polish_loop` 的 `judge=` 真是一个经 `analyze_a1_email(text, leitpunkte, nlp)`
+    装配、且**带 nlp** 的裁判（证据 = 裁决体 `judge_engine == "rules+spacy"` 且语法违规出现）。
+
+    **这不是放宽**：旧 pin 钉「内核自带业务」，新 pin 钉「业务在产品层装配**且真送进循环**」
+    —— 后者更强，能拦住「只改 `writing.py` 却没接到生产链路」的 dead-green。
+    """
+    from delector.nlp_engine import processor
+    from delector.routes.main import _run_polish
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_loop(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        # 模拟循环至少裁一次原文 ⇒ 触发 `_JudgeRecorder` 记下 judge_engine。
+        kwargs["judge"](kwargs["text"])
+        return LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
+    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr(processor, "get_loaded_nlp", lambda: nlp)
+
+    outcome = asyncio.run(_run_polish("Ich habe ein Hund.", "sk-stub"))
+
+    judge = captured.get("judge")
+    assert judge is not None, "端点 MUST 真的把 judge= 注入循环（否则生产上语法裁判恒不生效）"
+    verdict = judge("Ich habe ein Hund.")
+    assert verdict["judge_engine"] == "rules+spacy", "装配出的裁判 MUST 带 nlp"
+    assert any(v["rule"] == "artikel" for v in verdict["violations"]), "语法族 MUST 在装配出的裁判里生效"
+    assert outcome.judge_engine == "rules+spacy"
+
+
+def test_endpoint_assembly_degrades_to_rules_only_when_no_nlp(monkeypatch: Any) -> None:
+    """装配点对照：nlp 来源不可用 ⇒ 装配出的裁判 `judge_engine == "rules_only"`（如实降级）。"""
+    from delector.nlp_engine import processor
+    from delector.routes.main import _run_polish
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_loop(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        kwargs["judge"](kwargs["text"])
+        return LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
+    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr(processor, "get_loaded_nlp", lambda: None)
+    monkeypatch.setattr(processor, "try_load_nlp_no_download", lambda: None)
+
+    outcome = asyncio.run(_run_polish("Ich habe ein Hund.", "sk-stub"))
+
+    assert captured.get("judge") is not None
+    assert outcome.judge_engine == "rules_only"
+
+
+def test_default_violations_extractor_ignores_warnings() -> None:
+    """默认抽取器只取 `level == 'error'`（warning 是建议，不阻止收敛）。"""
     assert default_violations_of({"suggestions": [{"rule": "a1_word_count", "level": "warning"}]}) == []
 
 
@@ -663,3 +725,188 @@ def test_truncate_evidence_is_pure_and_both_limits_are_independent() -> None:
     cut_bytes = truncate_evidence(one_huge_line)
     assert len(cut_bytes.splitlines()) == 1
     assert len(cut_bytes.encode("utf-8")) <= EVIDENCE_MAX_BYTES
+
+
+# ── Task 8 接缝加固：dispatch 超时 / 裁判移出事件循环 ──────────────────────────
+# 反挂死红线：本区块每条用例都同时满足
+#   1) 所有 sleep 都有 `asyncio.wait_for` / 固定次数上限兜底（绝无无界 while）；
+#   2) 取消语义只用 `task.cancel()` + `wait_for(..., timeout=...)`，**禁止 join 线程**
+#      （线程掐不断，join 会让整轮门禁挂死）。
+def test_tool_dispatch_timeout_is_fed_back_not_raised() -> None:
+    """接缝①：`dispatch` MUST 受 `min(剩余 deadline, DEFAULT_PER_CALL_TIMEOUT_S)` 约束。
+
+    超时是**证据**（errors-as-messages），不是异常、不是 500：循环照常走到下一轮，
+    由轮首的预算前置检查以 `deadline` 原因码收口（零静默失败）。
+    `remaining` 在调用前**重算**（不能复用轮首那个：本轮 chat 已花掉时间）。
+
+    时钟用**可推进的桩**（沿用本文件 `test_deadline_breaks_loop_...` 的惯例）：每次工具
+    超时只记 0.5s 墙钟，而真实等待是 1.0s ⇒ 第一次超时后仍有剩余 ⇒ 循环能多跑一轮，
+    「超时作为证据喂回模型」这件事才**观测得到**（否则第 2 轮轮首就 deadline 退出，
+    证据消息根本没机会进任何一次 chat 的 messages）。
+    """
+    rec = Recorder()
+    state = {"t": 0.0}
+
+    def _clock() -> float:
+        return state["t"]
+
+    def _advance() -> None:
+        state["t"] += 0.5
+
+    async def _slow_hang(name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        _advance()  # 假装这次工具调用烧掉了 0.5s 墙钟（真实等待是 1.0s）
+        await asyncio.sleep(30)
+        return {"never": True}
+
+    async def _drive() -> Any:
+        # 外层 5s 兜底：实现侧 wait_for 被抽掉时本用例必须红（dispatch 会睡 30s）。
+        return await asyncio.wait_for(
+            run_polish_loop(
+                text="T0",
+                tools={"known": echo_tool({"ok": True})},
+                dispatch=_slow_hang,
+                chat=rec.chat([TOOL_CALL]),
+                judge=make_judge({"T0": 1}),
+                budget=Budget(deadline_s=1.0),
+                clock=_clock,
+            ),
+            timeout=5.0,
+        )
+
+    result = asyncio.run(_drive())
+
+    assert result.converged is False
+    assert result.reason == "deadline", f"超时只是证据，收口 MUST 是预算原因码：{result.reason}"
+    assert result.rounds == 2, f"第 3 轮轮首剩余 ≤0 ⇒ 直接退出：{result.rounds}"
+    assert any("执行超时" in c for c in rec.all_contents()), "工具超时 MUST 作为证据喂回模型（不是 500、不冒泡）"
+    assert len(rec.calls) == 2, f"两轮各调一次 chat（第 2 轮才带着证据上线）：{len(rec.calls)}"
+
+
+def test_sync_judge_does_not_block_the_event_loop() -> None:
+    """接缝②：同步裁判 MUST 经 `asyncio.to_thread` —— 长裁判不阻塞同进程其它协程。
+
+    探针是**有界**心跳协程（固定 20 次 × 0.02s 后自停，`finally` 里收尸），断言的是
+    **裁判执行期间**心跳被推进的次数：裁判若直接同步跑在事件循环上，这 0.3s 内心跳
+    一次都跑不了（探针只观察行为，不耦合「用了线程」这个实现细节）。
+
+    窗口取**跨调用最大值**（评审黄卡的修正）：循环会调两次裁判（v_0 基线 + 收尾候选），
+    而心跳寿命只有 ≈0.40s —— 若每次调用覆写 `window`，被测值就落在**第二次**窗口上
+    （只剩约 5 tick，余量趋近零 ⇒ 精确计时平台会误红）。取 max 后基线那次窗口
+    （≈15 tick）成为被测值，阈值 5 的余量 ≈10 tick。
+    """
+    ticks: list[int] = []
+    window = {"during": 0}
+
+    def _slow_judge(text: str, leitpunkte: list[str] | None = None) -> dict:
+        before = len(ticks)
+        time.sleep(0.3)  # 长裁判（0.3s 有界；下方 wait_for 兜底，绝不挂死门禁）
+        window["during"] = max(window["during"], len(ticks) - before)
+        return {"suggestions": [{"rule": "r", "level": "error", "message": "m"}]}
+
+    async def _drive() -> int:
+        async def _heartbeat() -> None:
+            # 有界：固定 20 次 × 0.02s = 0.4s 后自停（**禁止**无界 while 轮询）。
+            for _ in range(20):
+                await asyncio.sleep(0.02)
+                ticks.append(1)
+
+        hb = asyncio.ensure_future(_heartbeat())
+        try:
+            await asyncio.wait_for(
+                run_polish_loop(
+                    text="T0",
+                    chat=Recorder().chat([{"corrected_text": "T1"}]),
+                    judge=_slow_judge,
+                ),
+                timeout=5.0,
+            )
+        finally:
+            # 心跳本身有界（0.4s）；这里再兜底 2s，本用例最坏耗时因此有上界。
+            try:
+                await asyncio.wait_for(hb, timeout=2.0)
+            except asyncio.TimeoutError:
+                pass
+        return window["during"]
+
+    during = asyncio.run(_drive())
+
+    assert during >= 5, f"裁判执行期间事件循环 MUST 仍能推进（实测 tick {during} 次）"
+
+
+def test_cancel_interrupts_the_in_flight_sync_judge() -> None:
+    """接缝②：`task.cancel()` MUST 掐断在途同步裁判（修好前它跑在事件循环上，掐不断）。
+
+    线程掐不断是事实，但循环**不再等待**它 ⇒ 取消在毫秒级返回。禁止 `join` 线程
+    （那会把门禁挂死且语义也不对：我们断言的是「不再被等待」）。
+
+    为什么必须同时断言**耗时**：裁判同步跑在事件循环上时，`await asyncio.sleep(0.1)`
+    本身就被推迟到裁判跑完之后 ⇒ `task.cancel()` 也随之推迟 ⇒ `wait_for` 的 0.3s
+    超时根本来不及触发（循环被占着）⇒ 只看「有没有超时」会**假绿**。故补一条
+    「取消 MUST 立刻返回」的耗时断言（修好后是毫秒级，没修好是 0.5s 级）。
+    """
+    def _slow_judge(text: str, leitpunkte: list[str] | None = None) -> dict:
+        time.sleep(0.5)  # 有界：0.5s，由下方 cancel + wait_for(0.3) 兜底
+        return {"suggestions": []}
+
+    async def _drive() -> dict[str, Any]:
+        task = asyncio.ensure_future(
+            run_polish_loop(
+                text="T0",
+                chat=Recorder().chat([{"corrected_text": "T1"}]),
+                judge=_slow_judge,
+            )
+        )
+        # 等它进裁判：0.5s 的裁判此刻正在途（基线裁判在循环最前面，无需等太久）。
+        await asyncio.sleep(0.1)
+        task.cancel()
+        started = time.perf_counter()
+        outcome = "returned"
+        try:
+            await asyncio.wait_for(task, timeout=0.3)
+        except asyncio.TimeoutError:
+            outcome = "timeout"
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+        return {"outcome": outcome, "took": time.perf_counter() - started}
+
+    snap = asyncio.run(_drive())
+
+    assert snap["outcome"] != "timeout", "取消未在 0.3s 内完成 ⇒ 在途裁判仍在阻塞等待"
+    assert snap["outcome"] == "cancelled", f"取消 MUST 真正传导到循环任务（实测 {snap['outcome']}）"
+    assert snap["took"] < 0.25, (
+        f"取消 MUST 在裁判在途时立刻返回（实测 {snap['took']:.2f}s）"
+        " ⇒ 裁判仍在阻塞事件循环（连 cancel() 本身都被推迟到它跑完）"
+    )
+
+
+def test_async_judge_verdict_is_awaited_not_a_coroutine_object() -> None:
+    """接缝②：注入 `async def` 裁判 ⇒ 循环 MUST await 它，而不是把 coroutine 当裁决。
+
+    判别力（删掉 `iscoroutinefunction` 那支 ⇒ 本用例红）：`to_thread` 会把 coroutine
+    **对象**当返回值交给 `violations_of` ⇒ 那不是 dict ⇒ 违规数恒 0 ⇒ 循环**静默假收敛**。
+    这里把 v_0（原文）= 0、v_1（候选）= 1 摆成「不降即停」：
+      - 正确：`no_improvement` + 回退原文；
+      - 退化：假收敛 + 把候选当答案返回。
+    """
+    seen: list[Any] = []
+
+    async def _async_judge(text: str, leitpunkte: list[str] | None = None) -> dict:
+        n = 0 if text == "T0" else 1
+        return {"suggestions": [{"rule": f"r{i}", "level": "error", "message": f"v{i}"} for i in range(n)]}
+
+    def _spy(verdict: Any) -> list[dict[str, Any]]:
+        seen.append(verdict)
+        return default_violations_of(verdict)
+
+    result = run(
+        text="T0",
+        chat=Recorder().chat([{"corrected_text": "T1"}]),
+        judge=_async_judge,
+        violations_of=_spy,
+    )
+
+    assert len(seen) == 2, f"原文与收尾候选都要过裁判：{len(seen)}"
+    assert all(isinstance(v, dict) for v in seen), f"裁判交给循环的 MUST 是真裁决对象：{seen}"
+    assert result.converged is False, "async 裁判给候选判了 1 条违规，不得静默判成收敛"
+    assert result.reason == "no_improvement"
+    assert result.text == "T0"

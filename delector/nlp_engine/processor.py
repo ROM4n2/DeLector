@@ -167,6 +167,55 @@ def _resolve_nlp_model() -> Any:
         return _nlp_model
 
 
+# ── 只读 / 无下载加载助手（Task 1：给产品层「拿一个可用的 nlp」但不付下载成本）────────
+# 说明：`_resolve_nlp_model()` 是「首用即加载」且**带 `spacy.cli.download` 兜底**（出网 + 起 pip
+# 子进程、无时限）。产品层的润色循环不能付这个成本，于是拆成两件更窄的只读/无下载算力。
+def get_loaded_nlp() -> Any:
+    """只读**已加载**的 spaCy 模型：仅当此前成功解析过（`_nlp_resolved` 且 `_nlp_model` 非 None）才返回。
+
+    绝不触发加载、绝不 `spacy.cli.download` —— 这是给产品层「先看有没有现成模型」的纯读探针。
+    与 `_resolve_nlp_model()` 的分工：后者是首用即加载（可能起下载），本函数是**零副作用读取**。
+    """
+    if _nlp_resolved and _nlp_model is not None:
+        return _nlp_model
+    return None
+
+
+def try_load_nlp_no_download() -> Any:
+    """按 `SPACY_MODEL_CANDIDATES` **只做本地加载**：能装就装（写回既有缓存），装不上就返回 None。
+
+    **为什么需要这个中间态**（设计理由，勿删）：
+    - 只用 `get_loaded_nlp()` 会让**桌面首次润色**也落在 `rules_only`（模型是惰性加载的，别处
+      还没触发过）⇒ 生产上引擎标记长期假降级，与真实能力不符；
+    - 直接调 `_resolve_nlp_model()` 会走 `spacy.cli.download`（出网 + 起 pip 子进程，无时限）；
+    - 本函数取中间态：**本地能加载就加载、加载不上就诚实返回 None，绝不下载**。
+
+    成功 ⇒ 写入既有缓存（`_nlp_model` / `_nlp_resolved=True`）并刷新 `NLP_ENGINE` / `NLP_ENGINE_DETAIL`；
+    失败 ⇒ **不写任何全局**（不改 `_nlp_resolved` / `_nlp_error`），返回 None。
+
+    同步函数（内部不 await），可在 `asyncio.to_thread` 里跑，避免阻塞事件循环。并发安全：
+    沿用 `_model_lock` + 双检，保证与 `_resolve_nlp_model()` 共用同一份缓存、不重复加载。
+    """
+    global _nlp_model, _nlp_resolved, NLP_ENGINE, NLP_ENGINE_DETAIL
+    if _nlp_resolved and _nlp_model is not None:
+        return _nlp_model
+    with _model_lock:
+        if _nlp_resolved and _nlp_model is not None:
+            return _nlp_model
+        for candidate in SPACY_MODEL_CANDIDATES:
+            try:
+                model, how = _load_spacy_model(candidate)
+            except Exception:
+                # 该候选本地加载失败 ⇒ 试下一个；**绝不**退到 spacy.cli.download（见 docstring）。
+                continue
+            _nlp_model = model
+            _nlp_resolved = True
+            NLP_ENGINE = "spacy"
+            NLP_ENGINE_DETAIL = f"spaCy {getattr(spacy, '__version__', 'unknown')} + {how}"
+            return _nlp_model
+        return None
+
+
 class _LazyNlp:
     """惰性 spaCy 模型代理：首次**调用**时才真正加载（ADR-0018 §7.6 O0）。
 
