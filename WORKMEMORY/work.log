@@ -578,3 +578,26 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **Task 1 代码已完成但未验收**：种子集 20 篇（每篇 1 signal + 3~5 probe，全部 held-out）+ 信号注入（生产分流 v0=1，20/20 编排者逐篇实测）；88 passed；ruff/mypy 绿。**缺**：变异自证 3 条 + CRV 验收 + 原子提交（包内"三、1"有精确清单）。
 - **关键机制事实（已写进设计稿）**：`polish_loop` **不把裁判结论回灌模型**（模型只能主动调 writing_check 自查）⇒ 用户拍板测**现状形态**；"裁判结论回灌"登记为下一子计划。
 - 用户签批过的口径（勿回退）：§4.3 限定表述 / 回退语义保持 / A 维不做、B 维 advisory / Pi 式重构暂缓。
+
+### 2026-10-15 23:18 | deepseek-v4-1-flash__hermes | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：接手 `handoff_judge-gaming-experiment.md`（§4.3 第 8 条对照实验；用户指派换 agent）。读序完成（INDEX → PROJECT_OVERVIEW → work.log 尾 50 行）；包内「三、1」即收尾路径。
+- **接手方独立复核（全实跑，非转述）**：分支 `feat/judge-gaming-experiment` @ `a85edd6`（已推、与 origin 同步）；`pytest tests/test_a1_seed_errors_data.py -q` ⇒ **88 passed**（4.40s）；逐篇 v0 表重跑 **20/20 `v0==1`**（被计数条 rule == signal.error_class）；`ruff check .` 绿；`mypy --strict delector` 68 files 0；两新文件 CRLF、lone_LF=0。
+- **勘误**：signal 的 rule 分布实测 **kasus×9 / artikel×9 / praeposition×2**（a85edd6 提交消息与包内 §二 写 9/8/3，系笔误；以物理重算为准）。
+- 状态：Task 1 收尾（变异 ×3 + CRV）→ 见下条；Task 2~6 仍待做，包 **status 保持 open**。
+
+### 2026-10-15 23:18 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Task 1 收尾完成 —— 变异自证 ×3 全实红 + CRV PASS**。收尾簿记提交 `887282c`（计划 Task 1 五步勾选 + INDEX 行更新 + 交接响应节；work.log 事件为本条所在提交）。
+- **变异证据（跑完即 `git checkout --` 还原，零残留）**：① L1 signal 换 held-out 类（`kasus`→`nomen_grossschreibung`，`zu der Hause`→`zu hause`）⇒ 3 failed/85 passed：`test_signal_is_counted...[letter_01]`「v_0 应为 1，实际 0（rules=[]）」+ held-out 差分 + 信号恰一处守卫；② 删 L2 signal ⇒ 4 failed/84 passed：「signal 数 0 != 1」+ 三处 signal 依赖用例；③ L6 nomen probe 换可计数错误（`am freitag`→`für dem Freitag`）⇒ 4 failed/84 passed：held-out[letter_06]「text 计数 != clean + signal 一条」+ v0[letter_06]「实际 2（rules=['praeposition','kasus']）」+ 五类覆盖 + string 层（次序连带，防御纵深）。
+- **CRV 裁定 = PASS**：88 passed 复跑（4.40s；还原后 4.82s）/ 逐篇 v0 20/20==1 / ruff 0 / mypy --strict delector 68 files 0 / CRLF lone_LF=0；**补偿条**：原 TDD RED 原文未随 WIP 交付（maker 被 6004 掐断），以变异 ×3 实红钉「用例非真空」。
+- 台账 Task-1 → completed（commit_hash=a85edd6；`.vault-exec-ledger.json` 为 gitignore 本地文件）。
+- 下一步：Task 2（三臂 harness 骨架，AFK、`--dry-run` 零 Key）——待用户指令；主目录被并行线占用期间，后续建议继续走 worktree 隔离。
+
+### 2026-10-15 23:18 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**并行分支切换事故与处置（本仓共享单工作目录，2026-10-15 23:11:36）**。
+- **现象**：接手会话进行中，工作区被他方操作从 `feat/judge-gaming-experiment` 切到新建分支 `chore/swarm-audit-master`（reflog：`9d6ce78 HEAD@{2026-10-15 23:11:36 +0800}: checkout: moving from feat/judge-gaming-experiment to chore/swarm-audit-master`）；工作树内 `handoff_judge-gaming-experiment.md`、INDEX 的 Active handoffs 行、work.log / 设计稿的 a85edd6 版内容随之被替换为 9d6ce78 版本。**分支本体与全部提交对象无损**（已 `git show a85edd6:...` 逐件复核：种子集 761 行 / 测试 400 行 / 交接包头部 / INDEX judge 行均在）。
+- **处置**：① 停写 + 字节级取证（listdir / `git ls-files` / reflog）；② 证据保全至本机 scratch（变异原始输出 ×3、v0 表、计划勾选 diff）；③ 唯一脏文件（计划）已 `git checkout --` 还原，主目录恢复 clean、原样留给并行线；④ 杀掉跑在错误分支状态上的全量测试后台任务；⑤ 收尾改用**独立 worktree** `.worktrees/judge-gaming-closure` 完成（本仓 `.worktrees/` 既有约定），全程不再触碰主目录。
+- **教训（供后来者）**：本仓为**多 agent 共享单工作目录**（同日已观察到 `chore/swarm-audit-master` 审计线，操作者未确认；本仓 09-28 / 10-03 已有两轮 swarm-audit 先例）。⇒ (1) 长操作前后与**提交前** MUST `git branch --show-current` 复核；(2) 并行工作流 MUST 用 worktree / 独立克隆，勿共用工作树（本次一行 checkout 差点让收尾提交落到他人分支——在提交前 diff 复核时截获；**征兆 = 提交前 `git status` 的文件集与预期不符**）；(3) 他方切分支后，本分支内容一律可从 commit 恢复：先取证、再处置、勿慌。
+
