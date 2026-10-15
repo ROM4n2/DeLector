@@ -842,10 +842,16 @@ def test_summarize_last_candidate_metrics_pool_only_candidate_records() -> None:
     """Task-4b：`R_uncovered_last_candidate` 仅池化「有候选」记录（Σ候选回收 / Σ有候选 probe 处数）；
     `candidates_recorded` = 有候选记录数；与 final 口径（`R_uncovered`）互相独立（偷换即红）。
 
-    数字构造（synthetic；口径是纯字符串函数）：caseA 1 处 probe、caseB 2 处 probe；两条候选记录
-    分别按候选回收 1/1 与 1/2 ⇒ 池化 2/3。本断言把分母口径钉到「有候选记录」：
-    - 按记录等权 (1.0 + 0.5)/2 = 0.75 ≠ 2/3；
-    - 把无候选记录也算进分母 (1+1)/(1+2+1) = 0.5 ≠ 2/3。
+    数字构造（synthetic；口径是纯字符串函数）：caseA 1 处 probe、caseB 2 处 probe；候选记录
+    分别按候选回收 1/1、1/2、0/2 ⇒ 池化 2/5。本断言把分母口径钉到「有候选记录」：
+    - 按记录等权 (1.0 + 0.5 + 0.0)/3 = 0.5 ≠ 2/5；
+    - 把无候选记录也算进分母 (1+1+0)/(1+2+2+1) = 1/3 ≠ 2/5。
+
+    O-4b-1 补钉（Task-4b 评审残余）：`last_candidate_text=""`（空串）是**合法候选** ——
+    记录口径是「含该键即记录」（`_ChatRecorder` 侧已钉）。本断言把它纳入：
+    `candidates_recorded` 含它、候选分母含其 probe 处数（2 处）。单行变异自证：把 summarize 里
+    `if record.last_candidate_text is not None:` 改成**真值判断** `if record.last_candidate_text:`
+    ⇒ 空串记录被静默丢弃 ⇒ 上面两条数量断言必红（candidates_recorded 3→2；池化 2/5→2/3）。
     """
     _require_nlp()
     from delector.data.a1_seed_errors import Injection
@@ -859,14 +865,16 @@ def test_summarize_last_candidate_metrics_pool_only_candidate_records() -> None:
         _record(bench.Arm.A3_CURRENT, "pa", "（无回收的终稿）", last_candidate_text="AR 修复形"),
         _record(bench.Arm.A3_CURRENT, "pb", "", last_candidate_text="BR 修复形"),
         _record(bench.Arm.A3_CURRENT, "pa", "AR 修复形"),  # 无候选记录：不进候选池化
+        # O-4b-1：空串候选是**合法候选** —— MUST 进 candidates_recorded 与候选分母（pb 的 2 处 probe）。
+        _record(bench.Arm.A3_CURRENT, "pb", "（空串候选局的终稿：不回收）", last_candidate_text=""),
     ]
     report = bench.summarize(records, [case_a, case_b])
     a3 = report["arms"]["a3_current"]
 
-    assert a3["candidates_recorded"] == 2
-    assert a3["R_uncovered_last_candidate"] == pytest.approx(2 / 3)
-    # final 口径不受附带指标影响（判决面钉）：(0 + 0 + 1) / (1 + 2 + 1)
-    assert a3["R_uncovered"] == pytest.approx(1 / 4)
+    assert a3["candidates_recorded"] == 3
+    assert a3["R_uncovered_last_candidate"] == pytest.approx(2 / 5)
+    # final 口径不受附带指标影响（判决面钉）：(0 + 0 + 1 + 0) / (1 + 2 + 1 + 2)
+    assert a3["R_uncovered"] == pytest.approx(1 / 6)
     assert a3["R_uncovered_last_candidate"] != a3["R_uncovered"]  # 两口径不可互换
 
     # 零候选臂的除零守卫：A1 无记录 ⇒ 恒 0.0 + candidates_recorded=0（不得除零）
