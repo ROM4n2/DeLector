@@ -900,6 +900,107 @@ def detect_verb_second_position(tokens: List[Any], base: int) -> List[Dict[str, 
     return spans
 
 
+# ── 规则 F：过去时间锚 × 时态一致性（advisory / warning，Task 6 HITL 裁决）────────
+# 移植自 `tools/bench_judge_fp.py` 的 B 维探测（**该脚本是冻结的标定记录，勿改**）。
+# HITL 裁决（用户 2026-10-15）：接线为 `level="warning"` —— 正样本 FP 0/35、负样本 7/7、
+# 对照 0/6，两档阈值均成立；但样本偏小（7 错 + 6 对照）⇒ **先 advisory，不阻断收敛**
+# （`violations_of`/`collect_violations` 只认 `level=="error"`），积累真实用法后再议升 error。
+# 探测器刻意不依赖 dep 边（实测 spaCy 对德语框架解析不可靠，见 bench 模块头），只用
+# 「时间锚词表 + morph 时态 + 完成时豁免」。
+_PAST_ANCHOR_ADVERBS = frozenset(
+    {
+        "gestern",
+        "vorgestern",
+        "damals",
+        "früher",
+        "frueher",
+        "neulich",
+        "kürzlich",
+        "kuerzlich",
+        "ehemals",
+    }
+)
+# letzte/letzten/... + 时间名词 才是锚（单独 "letzte" 可能是"末班车"）。
+_LETZTE_FORMS = frozenset({"letzte", "letzten", "letzter", "letztes"})
+_TIME_NOUNS = frozenset(
+    {
+        "woche",
+        "wochen",
+        "monat",
+        "monaten",
+        "jahr",
+        "jahren",
+        "wochenende",
+        "mal",
+        "sommer",
+        "winter",
+        "tag",
+        "tagen",
+    }
+)
+# 现在时形式的完成时助动词（haben/sein）—— 句中存在 Partizip II 时豁免。
+# 例：`Gestern habe ich eine Suppe gekocht.` 的 habe 是现在时形态但整体是过去语义。
+_PERFECT_AUX_PRES = frozenset({"habe", "hast", "hat", "haben", "habt", "bin", "bist", "ist", "sind", "seid"})
+
+
+def _past_anchor_token(tokens: List[Any]) -> Optional[Any]:
+    """返回句中第一个过去时间锚 token（无 ⇒ None）。"""
+    for i, token in enumerate(tokens):
+        if token.lower_ in _PAST_ANCHOR_ADVERBS:
+            return token
+        if token.lower_ in _LETZTE_FORMS and i + 1 < len(tokens) and tokens[i + 1].lower_ in _TIME_NOUNS:
+            return token
+    return None
+
+
+def detect_past_anchor_tense_conflict(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
+    """规则 F（**advisory / warning**）：过去时间锚 + 现在时限定动词（非完成时结构）。
+
+    实测锚点：`Gestern gehe ich zur Schule.` ⇒ 报 span 指向 `gehe`（span=(8, 12)）；
+    `Gestern ging ich zur Schule.` / `Gestern habe ich eine Suppe gekocht.` ⇒ 0 条。
+
+    判据（词表 + morph；与 bench 同源）：
+      1. 句中含过去时间锚（gestern / letzte Woche / damals ...）；
+      2. 存在 morph `VerbForm=Fin` 且 `Tense=Pres` 的动词；
+      3. 豁免完成时结构：句中存在 Partizip II（`VerbForm=Part` 的 VERB）时，
+         haben/sein 的现在时形式不触发（`Gestern habe ich ... gekocht.` 是正确句）。
+
+    每句至多报 1 条（首个命中的限定动词；与 bench 的句级布尔口径一致，避免 advisory 刷屏）。
+
+    已知边界（未覆盖，如实登记，与 bench 同源）：`Gestern muss ich müde gewesen sein.` 这类
+    "情态词 + 完成时不定式"的正确推测句会被报（advisory 语义下可接受）；`Morgen`/`am Samstag`
+    等中性/未来时间表达不在锚表内 ⇒ 不报。
+
+    `corrected_form` 留空串：确定性的过去时形式需要完整变位表，编一个具体形式就是误导
+    （宁缺勿假）——方向性建议在 `explanation_zh` 里给出。
+    """
+    spans: List[Dict[str, Any]] = []
+    anchor = _past_anchor_token(tokens)
+    if anchor is None:
+        return spans
+    has_partizip = any(t.pos_ == "VERB" and "Part" in t.morph.get("VerbForm") for t in tokens)
+    for token in tokens:
+        if "Fin" in token.morph.get("VerbForm") and "Pres" in token.morph.get("Tense"):
+            if has_partizip and token.lower_ in _PERFECT_AUX_PRES:
+                continue
+            start, end = _tok_off(token, base)
+            spans.append(
+                {
+                    "severity": "warning",
+                    "error_type": "tempus",
+                    "corrected_form": "",
+                    "explanation_zh": (
+                        f"句中时间锚「{anchor.text}」指向过去，但限定动词「{token.text}」是现在时。"
+                        f"A1 建议改用过去时（Präteritum）或完成时（Perfekt）。"
+                    ),
+                    "start": start,
+                    "end": end,
+                }
+            )
+            break
+    return spans
+
+
 def _collect_prep_hints(tokens: List[Any], base: int) -> List[Dict[str, Any]]:
     """收集介词支配格内联提示。"""
     hints = []
@@ -1120,7 +1221,13 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None, nlp: Opt
 
     追加并列字段（Task 1/2，只增不改；既有键逐字不动）：
     - `violations`：统一形状 `{rule, level, message, span}`（格式族 + 语法族并列）；
+    - `advisories`：**warning 级**语法族的并列键（Task 6 HITL 裁决的 B 维 `tempus`）——
+      与 `violations` 同形状、同 span 口径，但 `collect_violations` 不读它 ⇒ **不阻断收敛**；
     - `judge_engine`：`"rules+spacy"`（nlp 可用且语法族至少跑过一个检测器）/ `"rules_only"`（否则）。
+
+    ⚠️ **warning 级条目按族分居两键**（如实登记）：格式族 warning（如 `a1_word_count`）
+    留在 `violations`（既有 pin 所钉），语法族 warning（`tempus`）入 `advisories`；
+    取"全部 warning"需并集两键。
 
     **降级运行时 `converged` 的语义边界**（评审 RED#2 的诚实性，勿删）：`judge_engine == "rules_only"`
     时语法族**根本未检查**，此时「零违规 ⇒ 收敛」只代表**格式族**无阻塞性违规，**不等于**语法正确；
@@ -1262,6 +1369,10 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None, nlp: Opt
     violations: List[Dict[str, Any]] = [
         {"rule": s["rule"], "level": s["level"], "message": s["message"], "span": None} for s in suggestions
     ]
+    # advisory 并列键（Task 6 HITL 收尾）：**warning 级**语法族（当前 = B 维 `tempus`）住这里。
+    # `collect_violations` 只读 `violations` 且只认 `level=="error"` ⇒ advisory 不阻断收敛；
+    # 端点经 `_JudgeRecorder` 取它的 `message` 进响应体 `judge_advisories`（可见性）。
+    advisories: List[Dict[str, Any]] = []
     judge_engine = "rules_only"
     if nlp is not None and text and text.strip():
         # 沿用 `analyze_essay_text(text, nlp)` 的「显式传 nlp」惯例：不在模块内自读全局 nlp。
@@ -1277,18 +1388,21 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None, nlp: Opt
                 + detect_subject_verb_agreement(toks, base)
                 + detect_verb_case_government(toks, base)
                 + detect_verb_second_position(toks, base)
+                + detect_past_anchor_tense_conflict(toks, base)
             )
             # 语法族至少跑过一个检测器（哪怕零违规）⇒ 引擎标记为 rules+spacy。
             judge_engine = "rules+spacy"
             for sp in spans:
-                violations.append(
-                    {
-                        "rule": str(sp.get("error_type", "")),
-                        "level": "error" if sp.get("severity") == "error" else "warning",
-                        "message": str(sp.get("explanation_zh", "")),
-                        "span": (int(sp["start"]), int(sp["end"])) if ("start" in sp and "end" in sp) else None,
-                    }
-                )
+                entry = {
+                    "rule": str(sp.get("error_type", "")),
+                    "level": "error" if sp.get("severity") == "error" else "warning",
+                    "message": str(sp.get("explanation_zh", "")),
+                    "span": (int(sp["start"]), int(sp["end"])) if ("start" in sp and "end" in sp) else None,
+                }
+                # 路由以 `level` 为准（单一判据点）：error ⇒ `violations`（进违规计数）；
+                # warning ⇒ `advisories`（advisory，不阻断收敛 —— Task 6 HITL 裁决的落地）。
+                # 变异自证①：把 tempus 的 severity 改成 error ⇒ 立刻翻进 `violations`。
+                (violations if entry["level"] == "error" else advisories).append(entry)
 
     return {
         "word_count": word_count,
@@ -1305,5 +1419,6 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None, nlp: Opt
         "leitpunkte_results": leitpunkte_results,
         "suggestions": suggestions,
         "violations": violations,
+        "advisories": advisories,
         "judge_engine": judge_engine,
     }

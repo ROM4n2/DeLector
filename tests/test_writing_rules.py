@@ -974,3 +974,74 @@ def test_common_correct_sentences_grammar_gate(nlp):
         assert diag["judge_engine"] == "rules+spacy", f"语法族未跑（门空转）: {s}"
         got = [v for v in collect_violations(diag) if not v["rule"].startswith("a1_")]
         assert got == [], f"合法句被语法族误报: {s} -> {got}"
+
+
+# ── Task 6 HITL 收尾（B 维）：过去时间锚 × 时态一致性 = advisory（warning）──────────
+# 移植自 `tools/bench_judge_fp.py` 的 B 维探测（该脚本是冻结的标定记录，勿改）。
+# HITL 裁决（用户 2026-10-15）：接线为 `level="warning"`（正样本 FP 0/35、负样本 7/7、
+# 对照 0/6 两档阈值均成立，但样本偏小 ⇒ 先 advisory，不阻断收敛）。
+
+
+def _tempus(text, nlp):
+    from delector.services.writing import detect_past_anchor_tense_conflict
+
+    return _sent_spans(text, nlp, detect_past_anchor_tense_conflict)
+
+
+def test_tempus_past_anchor_conflict_is_warning_span(nlp):
+    """负样本：过去时间锚 + 现在时限定动词 MUST 报 1 条，且是 **warning** 级（advisory）。"""
+    spans = _tempus("Gestern gehe ich zur Schule.", nlp)
+    assert len(spans) == 1
+    sp = spans[0]
+    assert set(sp.keys()) == {"severity", "error_type", "corrected_form", "explanation_zh", "start", "end"}
+    assert sp["severity"] == "warning", "B 维是 advisory：severity 必须是 warning（HITL 裁决）"
+    assert sp["error_type"] == "tempus"
+    assert (sp["start"], sp["end"]) == (8, 12), "span 应指向出错的定式动词 gehe"
+    assert "Gestern" in sp["explanation_zh"]
+    assert "过去" in sp["explanation_zh"]
+
+
+def test_tempus_correct_past_sentences_clean(nlp):
+    """正/边界样本：Präteritum / Perfekt / 未来现在时 MUST 零误报（与 bench 对照 0/6 同口径）。"""
+    for text in [
+        "Gestern ging ich zur Schule.",
+        "Gestern habe ich eine Suppe gekocht.",
+        "Letzte Woche bin ich nach Berlin gefahren.",
+        "Gestern kaufte ich ein Buch im Supermarkt.",
+        "Damals wohnte ich in Hamburg.",
+        "Morgen fahre ich nach Berlin.",
+    ]:
+        assert _tempus(text, nlp) == [], f"正确句被误报: {text}"
+
+
+def test_tempus_no_false_advisory_on_known_good_texts(nlp):
+    """FP 守卫（正样本零误报，D3 硬门同口径）：官方 10 篇 + 51 句硬门清单 MUST 零 advisory。"""
+    from delector.data import a1_writing_dict
+    from delector.services.writing import analyze_a1_email
+
+    for ex in a1_writing_dict.A1_SCHREIBEN_TEIL2:
+        advs = analyze_a1_email(ex["sample_email"], nlp=nlp)["advisories"]
+        assert advs == [], f"官方范文被报 advisory（误报）: {ex['id']} -> {advs}"
+    for s in COMMON_CORRECT_SENTENCES:
+        advs = analyze_a1_email(s, nlp=nlp)["advisories"]
+        assert advs == [], f"合法句被报 advisory（误报）: {s} -> {advs}"
+
+
+def test_tempus_advisory_wired_but_not_counted_as_error(nlp):
+    """接线缝：advisory 进并列键 `advisories`（统一形状、level=warning），**不进 error 计数**。
+
+    判别力（变异自证①）：把 tempus 的 severity 改成 error ⇒ 路由翻进 `violations` ⇒
+    `collect_violations` 非空 ⇒ 本用例 `== []` 断言 MUST 红。
+    """
+    from delector.services.writing import analyze_a1_email, collect_violations
+
+    letter = "Liebe Maria,\ngestern gehe ich zur Schule.\nViele Grüße\nAnna"
+    diag = analyze_a1_email(letter, nlp=nlp)
+    assert diag["judge_engine"] == "rules+spacy"
+    tempus = [a for a in diag["advisories"] if a["rule"] == "tempus"]
+    assert len(tempus) == 1
+    assert tempus[0]["level"] == "warning"
+    assert set(tempus[0].keys()) == {"rule", "level", "message", "span"}
+    assert tempus[0]["span"] == (21, 25), "advisory 的 span 与 detect_* 同口径（指向 gehe）"
+    assert collect_violations(diag) == [], "advisory 不得进 error 计数（否则阻断收敛）"
+    assert all(v["rule"] != "tempus" for v in diag["violations"]), "advisory 只住 advisories 键"

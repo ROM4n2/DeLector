@@ -329,6 +329,7 @@ async def run_polish_loop(
     judge: Callable[[str, list[str] | None], dict[str, Any]] | None = None,
     violations_of: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None,
     dispatch: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+    system_prompt: str | None = None,
     clock: Callable[[], float] = time.monotonic,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -336,6 +337,11 @@ async def run_polish_loop(
     """跑一遍有界润色循环。**全部依赖可注入**（测试一律 stub，严禁真 Key）。
 
     返回 `LoopResult`：未收敛 MUST 带原因码（零静默失败），`rounds` 是真实跑过的轮数。
+
+    `system_prompt`（Task 7，**唯一新增参数，向后兼容**）：`None` ⇒ 用内核默认的 A1 书信
+    提示词（`POLISH_LOOP_SYSTEM_PROMPT`）；产品层可按文本族传入（书信 ⇒ 默认；散文 ⇒
+    不含称呼语/结语指令的变体，见 `routes.main.pick_system_prompt`）。**只换提示词文本**：
+    停止策略 / 预算 / 收敛归属（Task 4 定稿）一律不动。
     """
     tools_map: Mapping[str, Callable[..., Awaitable[dict[str, Any]]]] = tools or {}
     judge_fn: Callable[[str, list[str] | None], dict[str, Any]] = judge if judge is not None else _default_judge
@@ -346,7 +352,8 @@ async def run_polish_loop(
     model = "" if chat is not None else get_effective_api_model()
 
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": POLISH_LOOP_SYSTEM_PROMPT},
+        # `system_prompt=None` ⇒ 内核默认 A1 书信提示词（向后兼容；Task 7 的注入缝）。
+        {"role": "system", "content": POLISH_LOOP_SYSTEM_PROMPT if system_prompt is None else system_prompt},
         {"role": "user", "content": f"待润色的德语文本:\n{text}"},
     ]
     if tools_map:

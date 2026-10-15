@@ -6640,23 +6640,48 @@ def test_ai_polish_no_key_reports_endpoint_level_reason(client, monkeypatch):
     )
 
 
-def test_ai_polish_non_letter_text_is_not_rolled_back(client, monkeypatch):
-    """★ 产品回归闸门：非书信体不得被回退成原文。
+def test_ai_polish_non_letter_grammar_error_is_counted_by_the_loop(client, monkeypatch):
+    """★ Task 7 闸门收窄（**三态死绿守卫的改写其一**）：非书信体 + 语法错 ⇒ 语法违规**真被计数**。
 
-    裁判集只有 A1 书信规则（`analyze_a1_email`）；对普通作文它必然报
-    `a1_greeting_missing` ⇒ 不挂适用性闸门的话 v_0=1、v_1>=v_0 ⇒ 回退原文
-    ⇒ 用户点了润色却拿回原文，功能报废。
+    场景：桩模型改了措辞但**不修**冠词错（`ein Hund` 原样保留）⇒ v_0 == v_1 == 1 ⇒
+    `no_improvement`（语法违规进了 v 才会发生）。
+
+    判别力（变异自证②）：把闸门改回"非书信体一律零违规" ⇒ v_0 == v_1 == 0 ⇒ 首轮即收敛
+    ⇒ 本用例 MUST 红 —— 旧闸门下的行为就是"零违规"，本用例的存在即"真被计数"与它的对比。
     """
+    nlp = _real_nlp_or_skip()
     _stub_api_key(monkeypatch)
-    polished = "Ich habe einen Hund. Er ist gut und sehr lieb."
-    chat = _ScriptedChat([{"corrected_text": polished, "notes_zh": ["用词更地道"]}])
+    chat = _ScriptedChat([{"corrected_text": "Ich habe ein Hund. Er ist sehr lieb.", "notes_zh": ["x"]}])
     monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
 
     result = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT}).json()["result"]
 
-    assert result["corrected"] == polished, "裁判对非书信体无话可说 ⇒ 首轮即接受，不得回退原文"
-    assert result["converged"] is True
-    assert result["unconverged_reason"] is None
+    assert result["converged"] is False, "非书信体的语法违规 MUST 被计数（否则修不动也会被判收敛）"
+    assert result["unconverged_reason"] == "no_improvement"
+    assert result["judge_degraded"] is False
+
+
+def test_ai_polish_non_letter_unfixable_falls_back_to_original(client, monkeypatch):
+    """★ 产品语义钉子（**三态死绿守卫的改写其二**；ADR §10.3 的落点，MUST 有断言）：
+    非书信体语法错**修不动** ⇒ 回退**原文**（**不是**"首轮即接受"）。
+
+    这是闸门收窄后的**明知而接受**的行为（2026-10-15 用户拍板；同款登记在
+    `violations_for` 与 `_make_judge` 的 docstring）：循环按 Task 4 钉死的
+    `no_improvement` 语义走 argmin ⇒ 原文；用户拿到的人话是前端
+    `POLISH_REASON_COPY.no_improvement`（"AI 改了几轮仍没能减少硬性错误，已保留更接近原文的一版。"）。
+    """
+    nlp = _real_nlp_or_skip()
+    _stub_api_key(monkeypatch)
+    chat = _ScriptedChat([{"corrected_text": "Ich habe ein Hund. Er ist sehr lieb.", "notes_zh": ["x"]}])
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
+
+    result = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT}).json()["result"]
+
+    assert result["corrected_text"] == _ESSAY_TEXT, "修不动 ⇒ 按循环语义回退原文（不是首轮即接受）"
+    assert result["converged"] is False
+    assert result["unconverged_reason"] == "no_improvement"
 
 
 def test_ai_polish_letter_text_still_judged_by_a1_rules(client, monkeypatch):
@@ -6737,6 +6762,138 @@ def test_ai_polish_endpoint_reports_degraded_when_no_nlp(client, monkeypatch):
     assert result["judge_degraded"] is True
     # 降级不阻止收敛（fail-open）：非书信体 + 无语法裁判 ⇒ 首轮即接受
     assert result["converged"] is True
+
+
+def test_ai_polish_endpoint_surfaces_advisories_without_blocking_convergence(client, monkeypatch):
+    """★ Task 6 HITL 收尾（B 维 advisory 可见性）：`judge_advisories` MUST 到达响应体，
+    且 advisory **不阻断收敛** —— 判定与「去掉该句」逐字段相同。
+
+    判别力（变异自证①）：把 advisory 的 level 改成 error ⇒ 它翻进 error 计数 ⇒
+    v_0 == v_1 == 1 ⇒ no_improvement ⇒ 本用例的 `converged is True` 与
+    `unconverged_reason is None` 断言 MUST 红。
+    """
+    nlp = _real_nlp_or_skip()
+    _stub_api_key(monkeypatch)
+    text_with = "Gestern gehe ich zur Schule."
+    text_without = "Ich gehe zur Schule."
+
+    # 桩模型「不修任何东西」：候选 = 原文 ⇒ 本用例只观察判定不受 advisory 影响。
+    chat_with = _ScriptedChat([{"corrected_text": text_with, "notes_zh": []}])
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat_with)
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
+    res_with = client.post("/api/writing/ai-polish", json={"text": text_with}).json()["result"]
+
+    chat_without = _ScriptedChat([{"corrected_text": text_without, "notes_zh": []}])
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat_without)
+    res_without = client.post("/api/writing/ai-polish", json={"text": text_without}).json()["result"]
+
+    assert res_with["judge_advisories"], "B 维 advisory MUST 到达响应体（否则 warning 是 no-op）"
+    assert all(isinstance(a, str) for a in res_with["judge_advisories"])
+    assert any("过去" in a for a in res_with["judge_advisories"]), (
+        f"advisory 文案应解释时间锚与时态冲突: {res_with['judge_advisories']}"
+    )
+    assert res_without["judge_advisories"] == [], "对照组不得有 advisory（防断言恒真）"
+    assert res_with["converged"] is True and res_with["unconverged_reason"] is None
+    assert res_with["judge_degraded"] is False
+    # 「与去掉该句逐字相同」：advisory 不得进 error 计数、不得改变停止策略。
+    assert (res_with["error_count"], res_with["converged"], res_with["unconverged_reason"]) == (
+        res_without["error_count"],
+        res_without["converged"],
+        res_without["unconverged_reason"],
+    ), "advisory 影响了判定（警告被当成错误计数？）"
+
+
+def test_ai_polish_response_carries_judge_advisories_contract(client, monkeypatch):
+    """响应契约（只增不改）：无 Key 路径也要带 `judge_advisories: []`（前端消费不炸）。"""
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+
+    result = client.post("/api/writing/ai-polish", json={"text": "Hallo."}).json()["result"]
+
+    assert result["judge_advisories"] == []
+    assert result["judge_degraded"] is True
+
+
+# ── Task 7：文本族感知的提示词参数化（立论冲突解法 b；业务知识住产品层）──────────
+
+
+def test_pick_system_prompt_letter_vs_prose():
+    """提示词选择：书信体 ⇒ 既有 A1 提示词**逐字**；散文 ⇒ 不含称呼语/结语指令。
+
+    为什么散文版必须去书信指令（评审黄卡 #2）：内核里逐字 A1 书信指令对非书信体会
+    **诱导模型加一个称呼语**，而格式族规则此时已被闸门关掉 ⇒ 污染无守卫。
+    """
+    from delector.routes.main import POLISH_PROSE_SYSTEM_PROMPT, pick_system_prompt
+
+    letter_prompt = pick_system_prompt("letter")
+    prose_prompt = pick_system_prompt("prose")
+
+    assert letter_prompt == polish_loop.POLISH_LOOP_SYSTEM_PROMPT, "书信体 MUST 用既有 A1 提示词（逐字）"
+    assert prose_prompt == POLISH_PROSE_SYSTEM_PROMPT, "散文体 MUST 用散文向提示词（产品层常量）"
+    assert prose_prompt != letter_prompt
+    assert "称呼语" not in prose_prompt and "结语" not in prose_prompt, "散文提示词不得含称呼语/结语指令"
+    assert "逐句润色" in prose_prompt and "保持句子的结构与出现顺序" in prose_prompt, "diff 关键约束 MUST 保留"
+    assert "corrected_text" in prose_prompt, "JSON 契约 MUST 保留（循环按它解析）"
+
+
+def test_run_polish_passes_text_family_aware_system_prompt(monkeypatch):
+    """装配点：`_run_polish` MUST 按文本族把系统提示词**真的送进循环**（否则参数化是死代码）。
+
+    判别力（变异自证③）：`pick_system_prompt` 恒返回 A1 提示词 ⇒ 本用例第一条断言（散文
+    提示词）MUST 红。
+    """
+    from delector.routes.main import POLISH_PROSE_SYSTEM_PROMPT, _run_polish
+
+    captured: List[Dict[str, Any]] = []
+
+    async def _fake_loop(**kwargs: Any) -> Any:
+        captured.append(kwargs)
+        return polish_loop.LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
+    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: None)
+    monkeypatch.setattr("delector.nlp_engine.processor.try_load_nlp_no_download", lambda: None)
+
+    essay = "Ich habe ein Hund. Er ist gut."
+    letter = "Liebe Maria,\nich lade dich ein.\nViele Grüße\nAnna"
+    asyncio.run(_run_polish(essay, "sk-stub"))
+    asyncio.run(_run_polish(letter, "sk-stub"))
+
+    assert captured[0]["system_prompt"] == POLISH_PROSE_SYSTEM_PROMPT, (
+        "非书信体 ⇒ 散文提示词 MUST 真送进循环（参数化不许是死代码）"
+    )
+    assert captured[1]["system_prompt"] == polish_loop.POLISH_LOOP_SYSTEM_PROMPT, "书信体 ⇒ 既有 A1 提示词"
+
+
+def test_writer_js_surfaces_degraded_hint_and_advisories_without_toast():
+    """前端生产者（评审黄卡的闭环）：`judge_degraded` / `judge_advisories` MUST 被
+    writer.js 消费，且走 **overlay notes 区的非阻断呈现**（Global Constraints 明说
+    "不是 error toast"）。
+
+    与 `test_frontend_polish_reason_copy_covers_every_reason_code` 同为源码级守卫：
+    后端加了字段而前端不渲染 ⇒ 字段等于没加（这正是评审黄卡点名的"无生产者"）。
+
+    no-key 抑制（评审黄卡 Y3 的闭环）：no-key 路径**循环根本没跑**（`_no_key_outcome`
+    什么都没检查）⇒ 降级提示里"本次仅做格式/字数检查"不实 ⇒ `unconverged_reason ==
+    "no_api_key"` 时 MUST 抑制该提示（no-key 已有自己的 toast / notes 文案，抑制不丢信息）。
+    """
+    src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
+    assert "judge_advisories" in src, "writer.js MUST 消费 judge_advisories（advisory 可见性）"
+    assert "judge_degraded" in src, "writer.js MUST 消费 judge_degraded（降级可见性）"
+
+    render_block = src[src.index("export function renderPolishReview") : src.index("// ── AI 润色：未收敛原因码")]
+    assert "polishState.judge_advisories" in render_block, "advisory MUST 在 renderPolishReview 里逐条呈现"
+    assert "polishState.judge_degraded" in render_block, "降级提示 MUST 在 renderPolishReview 里呈现"
+    assert "语法检查未启用" in render_block, "降级提示 MUST 是一句可见的人话（非阻断，不是 toast）"
+    assert (
+        "polishState.judge_degraded && polishState.unconverged_reason !== 'no_api_key'" in render_block
+    ), "no-key 路径循环根本没跑 ⇒ 提示 MUST 受 unconverged_reason 守卫（否则'仅做格式/字数检查'不实）"
+
+    # 生产侧（抑制条件的输入）：响应装配 MUST 把 unconverged_reason 存进 polishState
+    assign = src[src.index("const { original, corrected, hunks, notes_zh"):]
+    assert "unconverged_reason" in assign[: assign.index("};")], (
+        "polishState MUST 携带 unconverged_reason（no-key 抑制分支的输入）"
+    )
 
 
 def test_get_loaded_nlp_is_read_only(monkeypatch):
