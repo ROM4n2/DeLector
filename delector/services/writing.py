@@ -604,7 +604,49 @@ def check_a1_formular_answer(user_val: str, expected_val: str, aliases: Optional
     return {"correct": False, "expected": expected_val, "user_answer": user_val}
 
 
-def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[str, Any]:
+def collect_violations(analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """把一次裁判输出规整为**统一违规形状**，且只保留 `level == "error"`（阻止收敛的那一类）。
+
+    统一形状：`{"rule": str, "level": "error"|"warning", "message": str, "span": tuple[int, int] | None}`。
+
+    抽取顺序（Task 1 新增，`只增不改` 的落地）：
+    - **新键 `violations` 优先** —— `analyze_a1_email` 扩后的并列字段（格式族与语法族已按统一
+      形状并列其中）；
+    - 缺新键时回退 **legacy `suggestions`**（Task 4 起的旧形状），回退路径同样只取
+      `level == "error"`。
+
+    只取 error 的理由与 `polish_loop.default_violations_of` 一致：warning 是建议（字数偏短/
+    偏多、称呼语缺逗号…），不构成"不达标"；把 warning 也算违规 ⇒ 几乎所有 A1 短文永远
+    `v > 0` ⇒ 循环永不收敛，那才是真正的静默失败。
+    """
+    if not isinstance(analysis, dict):
+        return []
+    raw = analysis.get("violations")
+    if isinstance(raw, list):
+        source: List[Any] = raw
+    else:
+        legacy = analysis.get("suggestions")
+        source = legacy if isinstance(legacy, list) else []
+    out: List[Dict[str, Any]] = []
+    for item in source:
+        if not isinstance(item, dict) or item.get("level") != "error":
+            continue
+        span = item.get("span")
+        span_t: Optional[Tuple[int, int]] = None
+        if isinstance(span, (list, tuple)) and len(span) == 2:
+            span_t = (int(span[0]), int(span[1]))
+        out.append(
+            {
+                "rule": str(item.get("rule", "")),
+                "level": "error",
+                "message": str(item.get("message", "")),
+                "span": span_t,
+            }
+        )
+    return out
+
+
+def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None, nlp: Optional[Any] = None) -> Dict[str, Any]:
     """
     Automated evaluation and diagnostics for Goethe A1 Teil 2 (ca. 30 Woerter E-Mail/Brief).
     Checks:
@@ -613,6 +655,15 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
     3. Grussformel (Valediction) - presence, comma prohibition (NO comma after Viele Gruesse!).
     4. Word count recommendation (25-35 words).
     5. Leitpunkte coverage hints.
+
+    追加并列字段（Task 1/2，只增不改；既有键逐字不动）：
+    - `violations`：统一形状 `{rule, level, message, span}`（格式族 + 语法族并列）；
+    - `judge_engine`：`"rules+spacy"`（nlp 可用且语法族至少跑过一个检测器）/ `"rules_only"`（否则）。
+
+    **降级运行时 `converged` 的语义边界**（评审 RED#2 的诚实性，勿删）：`judge_engine == "rules_only"`
+    时语法族**根本未检查**，此时「零违规 ⇒ 收敛」只代表**格式族**无阻塞性违规，**不等于**语法正确；
+    任何人（判据表/发行说明/宣传文案）MUST NOT 把该次 `converged` 当作「全引擎零违规」的证据
+    （运行期 fail-open，声明 / 门禁层 fail-closed）。
     """
     lines = [ln.strip() for ln in text.strip().split("\n") if ln.strip()]
     words = [w for w in re.findall(r"[a-zA-ZäöüÄÖÜß]+", text)]
@@ -743,6 +794,34 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
 
     leitpunkte_matches = sum(1 for r in leitpunkte_results if r["matched"])
 
+    # ── 统一违规形状（Task 1 并列字段，只增不改）：格式族 + 语法族 ─────────────
+    # 既有 `suggestions` 逐字不动；这里只把它与语法族的 span 一并搬进统一的
+    # {rule, level, message, span} 形状，供 `collect_violations` 与端点层同口径消费。
+    violations: List[Dict[str, Any]] = [
+        {"rule": s["rule"], "level": s["level"], "message": s["message"], "span": None} for s in suggestions
+    ]
+    judge_engine = "rules_only"
+    if nlp is not None and text and text.strip():
+        # 沿用 `analyze_essay_text(text, nlp)` 的「显式传 nlp」惯例：不在模块内自读全局 nlp。
+        doc = nlp(text)
+        for sent in doc.sents:
+            toks = list(sent)
+            if not toks:
+                continue
+            base = toks[0].idx
+            spans = detect_determiner_noun_agreement(toks, base) + detect_preposition_case(toks, base)
+            # 语法族至少跑过一个检测器（哪怕零违规）⇒ 引擎标记为 rules+spacy。
+            judge_engine = "rules+spacy"
+            for sp in spans:
+                violations.append(
+                    {
+                        "rule": str(sp.get("error_type", "")),
+                        "level": "error" if sp.get("severity") == "error" else "warning",
+                        "message": str(sp.get("explanation_zh", "")),
+                        "span": (int(sp["start"]), int(sp["end"])) if ("start" in sp and "end" in sp) else None,
+                    }
+                )
+
     return {
         "word_count": word_count,
         "word_count_status": word_count_status,
@@ -757,4 +836,6 @@ def analyze_a1_email(text: str, leitpunkte: Optional[List[str]] = None) -> Dict[
         "leitpunkte_matches": leitpunkte_matches,
         "leitpunkte_results": leitpunkte_results,
         "suggestions": suggestions,
+        "violations": violations,
+        "judge_engine": judge_engine,
     }

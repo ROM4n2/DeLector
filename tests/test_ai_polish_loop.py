@@ -535,18 +535,79 @@ def test_token_accounting_falls_back_to_estimate() -> None:
     assert completion_tokens_of({"x": sample}) == estimate_tokens(dump({"x": sample}))
 
 
-def test_real_judge_is_wired_by_default() -> None:
-    """默认裁判 = `writing.analyze_a1_email`，默认抽取器只取 `level == 'error'`。"""
-    bad = "Liebe Maria,\nIch lade dich ein.\nViele Grüße,\nAnna"
-    good = "Liebe Maria,\nich lade dich ein.\nViele Grüße\nAnna"
-    rec = Recorder()
+@pytest.fixture(scope="module")
+def nlp() -> Any:
+    """真 spaCy 德语模型（沿用 `tests/test_writing_rules.py` 的 nlp fixture 惯例）；缺失 ⇒ skip。"""
+    import spacy
 
-    result = run(text=bad, chat=rec.chat([{"corrected_text": good}]))
+    try:
+        return spacy.load("de_core_news_sm")
+    except OSError:
+        pytest.skip("de_core_news_sm not installed")
 
-    assert result.converged is True, f"真实裁判下修好的文本 MUST 收敛：{result}"
-    assert result.reason == "ok"
-    assert result.text == good
-    # warning 级（如字数偏短）不构成违规 ⇒ 不得阻止收敛
+
+def test_real_judge_is_wired_at_the_assembly_point(nlp: Any, monkeypatch: Any) -> None:
+    """**装配点**（旧 pin `test_real_judge_is_wired_by_default` 的裁决改造）。
+
+    旧 pin 逐字钉住「内核默认裁判 == `writing.analyze_a1_email`」——那钉的是「业务住在机制
+    内核」。Task 1 的接缝方向相反：内核只留**可注入的缝**，业务由**产品层装配**。按计划
+    Global Constraints 的裁决规则，把它从「默认值」改为「装配点」：断言生产链路 `_run_polish`
+    传给 `run_polish_loop` 的 `judge=` 真是一个经 `analyze_a1_email(text, leitpunkte, nlp)`
+    装配、且**带 nlp** 的裁判（证据 = 裁决体 `judge_engine == "rules+spacy"` 且语法违规出现）。
+
+    **这不是放宽**：旧 pin 钉「内核自带业务」，新 pin 钉「业务在产品层装配**且真送进循环**」
+    —— 后者更强，能拦住「只改 `writing.py` 却没接到生产链路」的 dead-green。
+    """
+    from delector.nlp_engine import processor
+    from delector.routes.main import _run_polish
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_loop(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        # 模拟循环至少裁一次原文 ⇒ 触发 `_JudgeRecorder` 记下 judge_engine。
+        kwargs["judge"](kwargs["text"])
+        return LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
+    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr(processor, "get_loaded_nlp", lambda: nlp)
+
+    outcome = asyncio.run(_run_polish("Ich habe ein Hund.", "sk-stub"))
+
+    judge = captured.get("judge")
+    assert judge is not None, "端点 MUST 真的把 judge= 注入循环（否则生产上语法裁判恒不生效）"
+    verdict = judge("Ich habe ein Hund.")
+    assert verdict["judge_engine"] == "rules+spacy", "装配出的裁判 MUST 带 nlp"
+    assert any(v["rule"] == "artikel" for v in verdict["violations"]), "语法族 MUST 在装配出的裁判里生效"
+    assert outcome.judge_engine == "rules+spacy"
+
+
+def test_endpoint_assembly_degrades_to_rules_only_when_no_nlp(monkeypatch: Any) -> None:
+    """装配点对照：nlp 来源不可用 ⇒ 装配出的裁判 `judge_engine == "rules_only"`（如实降级）。"""
+    from delector.nlp_engine import processor
+    from delector.routes.main import _run_polish
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_loop(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        kwargs["judge"](kwargs["text"])
+        return LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
+    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr(processor, "get_loaded_nlp", lambda: None)
+    monkeypatch.setattr(processor, "try_load_nlp_no_download", lambda: None)
+
+    outcome = asyncio.run(_run_polish("Ich habe ein Hund.", "sk-stub"))
+
+    assert captured.get("judge") is not None
+    assert outcome.judge_engine == "rules_only"
+
+
+def test_default_violations_extractor_ignores_warnings() -> None:
+    """默认抽取器只取 `level == 'error'`（warning 是建议，不阻止收敛）。"""
     assert default_violations_of({"suggestions": [{"rule": "a1_word_count", "level": "warning"}]}) == []
 
 

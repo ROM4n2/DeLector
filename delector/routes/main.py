@@ -36,7 +36,7 @@ import tempfile
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Any, AsyncIterator, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, AsyncIterator, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -133,6 +133,9 @@ from delector.routes.syntax_hard import invalidate_rank_cache
 # 注意：本模块其余出网（TTS 兜底、fetch_remote_html）仍直接用 httpx，不在本次收口范围。
 from delector.services import llm_client, polish_loop
 from delector.services.polish_tools import POLISH_TOOL_ALLOWLIST, call_tool
+
+# 统一违规抽取器（Task 1）：端点层与裁判层共用同一形状口径。取具名符号（纯函数，无循环依赖）。
+from delector.services.writing import analyze_a1_email, collect_violations
 
 router = APIRouter()
 
@@ -2201,22 +2204,29 @@ _SSE_POLL_INTERVAL_S = 0.02
 
 
 def _a1_violations_if_letter(verdict: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """适用性闸门：**A1 书信规则只对书信体文本计数**（Unknown A 的边界）。
+    """适用性闸门（**旧语义**：非书信体 ⇒ 零违规）：A1 书信规则只对书信体计数。
 
-    今天唯一的确定性裁判是 `writing.analyze_a1_email`（歌德 A1 书信规则）；裁判集
-    扩充属 Unknown A，本计划不做。它对**非书信体**（普通作文）必然报
-    `a1_greeting_missing`（level=error）—— 那是**题材差异**，不是错误。若照单全收：
-    `v_0 = 1`，而模型润色后仍然没有称呼语 ⇒ `v_1 >= v_0` ⇒ 循环判 `no_improvement`
-    并回退 argmin = 原文 ⇒ 用户点了润色却拿回原文，功能报废。
+    旧闸门的理由：手上这套裁判（`analyze_a1_email`）报的是**书信题材**的规则 —— 对**非书信体**
+    （普通作文）它必然报 `a1_greeting_missing`(error)，那是**题材差异**不是错误；照单全收会让
+    `v_0 = 1`、`v_1 >= v_0` ⇒ `no_improvement` ⇒ 回退原文 ⇒ 用户点了润色拿回原文（功能报废）。
+    故非书信体（`greeting.valid` 为假）⇒ 返回 `[]`（闸门「无话可说」，语义等价于首轮即接受，
+    **不等于**「裁判判定无错」）。
 
-    故：称呼语不合法 ⇒ 认定「这套规则对该文本不适用」⇒ 零违规。
-    注意这**不等于**「裁判判定无错」：手上的裁判对该文本**无话可说**，语义等价于
-    今天的一次性润色（首轮即接受），而不是「零违规」的证明。
+    统一抽取器：走 `collect_violations`（新键 `violations` 优先、legacy `suggestions` 回退，
+    且只取 `level == "error"`），与裁判层同口径。
+
+    ⚠️ 注记（**本批故意不落地**）：把闸门改成**按规则族分流**（格式/字数族只对书信体计数、
+    语法族对**任意德语文本**生效）属 **Task 7（HITL）** —— 那是**产品行为变更**（非书信文本从
+    "首轮即接受"变成"真迭代"），且会让模型修不动的作文落到 `no_improvement` ⇒ argmin 回退原文
+    （ADR §10.3 记过的「用户点了润色拿回原文」失败模式）⇒ MUST 由用户拍板、不能作为本批的副产品
+    落地。见 `docs/plans/2026-10-15-a1-judge-expansion.md` Task 7。
     """
+    violations = collect_violations(verdict)
     greeting = verdict.get("greeting") if isinstance(verdict, dict) else None
-    if not isinstance(greeting, dict) or not greeting.get("valid"):
-        return []
-    return polish_loop.default_violations_of(verdict)
+    if isinstance(greeting, dict) and greeting.get("valid"):
+        return violations  # 书信体：照常计数
+    # 非书信体：整套 A1 书信规则不适用（题材差异）⇒ 闸门「无话可说」。
+    return []
 
 
 def _make_tool_audit_hook(seen: List[str]) -> Any:
@@ -2292,14 +2302,65 @@ class _PolishReplyRecorder:
             self.error_count = count
 
 
+def _make_judge(leitpunkte: Optional[List[str]], nlp: Any) -> Callable[[str], Dict[str, Any]]:
+    """装配生产链路用的 **A1 裁判**（带 nlp）：内部调 `analyze_a1_email(text, leitpunkte, nlp)`。
+
+    为什么必须由**产品层**装配、而不能用内核默认裁判：内核默认裁判是
+    `polish_loop._default_judge` = `analyze_a1_email(text, leitpunkte)`（**不带 nlp**）⇒ 语法族
+    恒不生效。能力必须在产品层装配，内核只保留「谁都能被注入」的缝（评审 RED#1 的闭环点）。
+
+    降级语义边界（如实登记，勿删）：`nlp is None` 时本裁判只跑格式族、`judge_engine="rules_only"`；
+    此时循环**照常收敛**（运行期 fail-open —— 禁止收敛会让 argmin 回退返回原文 = 功能报废）。
+    “没检查语法”不等于“语法零违规”：声明层的诚实性由裁决体的 `judge_engine` 透出
+    （`_JudgeRecorder` 捕获 → 响应体 `judge_degraded`），门禁层 fail-closed 由调用方承担。
+    **禁止**靠塞一条人造 violation 来实现降级提示。
+    """
+
+    def _judge(text: str) -> Dict[str, Any]:
+        return analyze_a1_email(text, leitpunkte, nlp)
+
+    return _judge
+
+
+class _JudgeRecorder:
+    """裁判的**录制包装**（与 `_PolishReplyRecorder` 同形）：记下每次裁决的 `judge_engine`，
+    再原样返回裁决。
+
+    为什么端点要自己录：`judge_engine` 住在裁决体里（`analyze_a1_email` 的并列字段），而循环
+    出口的 `LoopResult` 不带它 ⇒ 端点必须从裁判这一侧捕获，才能把降级状态如实透出到响应体
+    （红线 1：不得让“没检查”看起来像“检查通过”）。
+
+    `__call__` 的第二参数兼容循环的 `judge_fn(text, leitpunkte)` 调用约定（leitpunkte 已由
+    `_make_judge` 闭包绑定，这里忽略即可）。
+    """
+
+    def __init__(self, judge_fn: Callable[[str], Dict[str, Any]]) -> None:
+        self._judge_fn = judge_fn
+        # 未被裁过时的保守默认：宁报降级（rules_only）不报可用，避免“没跑却标成已跑”。
+        self.judge_engine: str = "rules_only"
+
+    def __call__(self, text: str, leitpunkte: Optional[List[str]] = None) -> Dict[str, Any]:
+        verdict = self._judge_fn(text)
+        if isinstance(verdict, dict):
+            engine = verdict.get("judge_engine")
+            if isinstance(engine, str) and engine:
+                self.judge_engine = engine
+        return verdict
+
+
 class _PolishOutcome(NamedTuple):
-    """一次润色的出口（端点据此组装响应体，流式与非流式共用一份）。"""
+    """一次润色的出口（端点据此组装响应体，流式与非流式共用一份）。
+
+    `judge_engine`（追加，Task 1）：本次运行实际装配的裁判引擎（`"rules+spacy"` / `"rules_only"`），
+    端据此算出响应体 `judge_degraded`。
+    """
 
     text: str
     notes_zh: List[str]
     error_count: int
     converged: bool
     reason: Optional[str]
+    judge_engine: str
 
 
 def _no_key_outcome(text: str) -> _PolishOutcome:
@@ -2313,6 +2374,8 @@ def _no_key_outcome(text: str) -> _PolishOutcome:
         error_count=0,
         converged=False,
         reason=REASON_NO_API_KEY,
+        # 循环没跑 ⇒ 裁判也未装配 ⇒ 保守记为降级（宁报降级不报可用）。
+        judge_engine="rules_only",
     )
 
 
@@ -2323,17 +2386,30 @@ async def _run_polish(
     on_progress: Optional[Any] = None,
     should_stop: Optional[Any] = None,
 ) -> _PolishOutcome:
-    """跑一遍润色循环：Task 4 内核 + Task 5 白名单/钩子 + 适用性闸门。"""
+    """跑一遍润色循环：Task 4 内核 + Task 5 白名单/钩子 + 适用性闸门 + **语法裁判装配**。
+
+    引擎来源（评审 RED#1 的闭环点）：先**只读**已加载模型（`get_loaded_nlp`，不触发加载/下载）；
+    没有则在线程里尝试**仅本地**加载（`try_load_nlp_no_download` 绝不 `spacy.cli.download`，
+    且同步函数放 `asyncio.to_thread` 里跑，不阻塞事件循环）。`nlp=None` ⇒ 裁判降级为
+    `rules_only`、循环照常收敛，降级状态由 `judge_engine` 如实透出（响应体 `judge_degraded`）。
+    """
     import logging
 
     seen: List[str] = []
     recorder = _PolishReplyRecorder(api_key, get_effective_api_base_url().rstrip("/"))
+    # 引擎解析：先只读 → 再线程内本地加载（无下载）。绝不阻塞事件循环、绝不触发出网。
+    nlp = _nlp_processor.get_loaded_nlp()
+    if nlp is None:
+        nlp = await asyncio.to_thread(_nlp_processor.try_load_nlp_no_download)
+    judge_recorder = _JudgeRecorder(_make_judge(None, nlp))
     try:
         loop = await polish_loop.run_polish_loop(
             text=text,
             tools=POLISH_TOOL_ALLOWLIST,
             dispatch=functools.partial(call_tool, hooks=(_make_tool_audit_hook(seen),)),
             violations_of=_a1_violations_if_letter,
+            # 必须真的注入（不能退回内核默认裁判）—— 否则生产上语法裁判恒不生效 = dead-green。
+            judge=judge_recorder,
             chat=recorder,
             budget=polish_loop.Budget(),
             on_progress=on_progress,
@@ -2358,22 +2434,29 @@ async def _run_polish(
         error_count=error_count,
         converged=loop.converged,
         reason=loop.reason,
+        judge_engine=judge_recorder.judge_engine,
     )
 
 
+def _judge_degraded(outcome: _PolishOutcome) -> bool:
+    """引擎降级标记（只增不改的响应字段）：`judge_engine != "rules+spacy"` ⇒ 语法族未启用。"""
+    return outcome.judge_engine != "rules+spacy"
+
+
 def _polish_payload(outcome: _PolishOutcome) -> Dict[str, Any]:
-    """`/api/writing/ai-polish` 的 `result`（**只增不改**：新增收敛两字段）。"""
+    """`/api/writing/ai-polish` 的 `result`（**只增不改**：追加 `judge_degraded`）。"""
     return {
         "corrected_text": outcome.text,
         "notes_zh": outcome.notes_zh,
         "error_count": outcome.error_count,
         "converged": outcome.converged,
         "unconverged_reason": None if outcome.converged else outcome.reason,
+        "judge_degraded": _judge_degraded(outcome),
     }
 
 
 def _polish_diff_payload(text: str, outcome: _PolishOutcome) -> Dict[str, Any]:
-    """`/api/writing/ai-polish/diff` 的 `result`（既有字段与顺序一律不动）。"""
+    """`/api/writing/ai-polish/diff` 的 `result`（既有字段与顺序一律不动，末尾追加 `judge_degraded`）。"""
     from delector.services.essay_diff import diff_sentences
 
     return {
@@ -2384,6 +2467,7 @@ def _polish_diff_payload(text: str, outcome: _PolishOutcome) -> Dict[str, Any]:
         "error_count": outcome.error_count,
         "converged": outcome.converged,
         "unconverged_reason": None if outcome.converged else outcome.reason,
+        "judge_degraded": _judge_degraded(outcome),
     }
 
 

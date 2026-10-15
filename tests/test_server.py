@@ -6674,6 +6674,132 @@ def test_ai_polish_letter_text_still_judged_by_a1_rules(client, monkeypatch):
     assert result["unconverged_reason"] == "no_improvement"
 
 
+# ── Task 1/2 评审 RED#1 闭环：端点级接线回归 + 引擎降级诚实性 ──────────────────
+# 书信体 + 冠词格错（"ein Hund" → "einen Hund"）的文本夹具。
+# 用**书信体**而非非书信体：RED#1 只要求"证明接缝是活的"，书信体已足够 ——
+# 且能把本用例与 Task 7（HITL）的闸门收窄彻底解耦（非书信体的语法计数属 Task 7，此处不碰）。
+# 该文本无任何**格式/字数族 error**（称呼语合法、正文首词小写、结语无逗号）
+# ⇒ 不接 nlp 时 v_0 == 0（这是本用例能判死"没接线"的前提）。
+_GRAMMAR_LETTER_TEXT = "Liebe Maria,\nich habe ein Hund.\nViele Grüße\nAnna"
+
+
+def _real_nlp_or_skip() -> Any:
+    """加载真模型（沿用 `tests/test_writing_rules.py` 的 nlp fixture 惯例）；缺失 ⇒ skip。"""
+    import spacy
+
+    try:
+        return spacy.load("de_core_news_sm")
+    except OSError:
+        pytest.skip("de_core_news_sm not installed")
+
+
+def test_ai_polish_endpoint_counts_grammar_violations_on_letter_text(client, monkeypatch):
+    """★ 评审 RED#1 闭环点：端点级接线回归 —— 生产链路 MUST 把语法裁判真的送进循环。
+
+    用**书信体 + 冠词格错**文本（书信体 ⇒ 闸门不豁免 ⇒ 语法违规照常计数）：
+    桩模型**不修**该冠词错 ⇒ v_0 == v_1 == 1 ⇒ `no_improvement`（断言形态①：语法违规真被计数）。
+    若端点**不注入** `judge=`（退回内核默认裁判，不带 nlp）⇒ 语法违规静默消失，而该书信体文本
+    又无格式 error ⇒ v_0 == v_1 == 0 ⇒ **首轮即收敛** ⇒ 本用例 MUST 红（这就是 dead-green 的判别力）。
+    """
+    nlp = _real_nlp_or_skip()
+    _stub_api_key(monkeypatch)
+    # 桩模型只改结尾措辞、**不修**冠词错 ⇒ 裁判应判「改不动」
+    chat = _ScriptedChat(
+        [{"corrected_text": "Liebe Maria,\nich habe ein Hund und freue mich.\nViele Grüße\nAnna", "notes_zh": ["x"]}]
+    )
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
+
+    result = client.post("/api/writing/ai-polish", json={"text": _GRAMMAR_LETTER_TEXT}).json()["result"]
+
+    assert result["converged"] is False, "带冠词格错的书信体文本不该被判为已收敛"
+    assert result["unconverged_reason"] == "no_improvement", (
+        "语法违规 MUST 被计数（否则端点没把语法裁判送进循环 = dead-green）"
+    )
+    assert result["judge_degraded"] is False, "引擎可用 ⇒ judge_degraded 必须为 False"
+
+
+def test_ai_polish_endpoint_reports_degraded_when_no_nlp(client, monkeypatch):
+    """引擎不可用 ⇒ 循环**照常收敛**（运行期 fail-open），但 `judge_degraded` MUST 如实为 True。
+
+    红线 1：不得让「没检查」看起来像「检查通过」⇒ 声明层 fail-closed 靠这个布尔透出。
+    """
+    _stub_api_key(monkeypatch)
+    chat = _ScriptedChat([{"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["x"]}])
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: None)
+    monkeypatch.setattr("delector.nlp_engine.processor.try_load_nlp_no_download", lambda: None)
+
+    result = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT}).json()["result"]
+
+    assert result["judge_degraded"] is True
+    # 降级不阻止收敛（fail-open）：非书信体 + 无语法裁判 ⇒ 首轮即接受
+    assert result["converged"] is True
+
+
+def test_get_loaded_nlp_is_read_only(monkeypatch):
+    """`get_loaded_nlp()` 只读已加载模型：未解析/加载失败 ⇒ None，且**绝不触发加载**。"""
+    from delector.nlp_engine import processor
+
+    monkeypatch.setattr(processor, "_nlp_resolved", False)
+    monkeypatch.setattr(processor, "_nlp_model", None)
+    calls = {"n": 0}
+
+    def _spy(name: str) -> Any:
+        calls["n"] += 1
+        raise RuntimeError("不应被调用")
+
+    monkeypatch.setattr(processor, "_load_spacy_model", _spy)
+
+    assert processor.get_loaded_nlp() is None
+    assert calls["n"] == 0, "get_loaded_nlp 不得触发任何加载"
+
+    sentinel = object()
+    monkeypatch.setattr(processor, "_nlp_resolved", True)
+    monkeypatch.setattr(processor, "_nlp_model", sentinel)
+    assert processor.get_loaded_nlp() is sentinel
+
+
+def test_try_load_nlp_no_download_loads_locally(monkeypatch):
+    """本地能加载 ⇒ 写入既有缓存（`_nlp_model` / `_nlp_resolved=True`）并返回模型。"""
+    from delector.nlp_engine import processor
+
+    sentinel = object()
+    monkeypatch.setattr(processor, "_nlp_resolved", False)
+    monkeypatch.setattr(processor, "_nlp_model", None)
+    monkeypatch.setattr(processor, "_load_spacy_model", lambda name: (sentinel, f"{name}(stub)"))
+
+    assert processor.try_load_nlp_no_download() is sentinel
+    assert processor.get_loaded_nlp() is sentinel
+
+
+def test_try_load_nlp_no_download_never_downloads(monkeypatch):
+    """★ 变异守卫：本地加载全失败 ⇒ MUST 返回 None，且**绝不**触发 `spacy.cli.download`。
+
+    把 `try_load_nlp_no_download` 改成会走 download 的版本 ⇒ 本地加载既已失败，爆炸桩
+    `spacy.cli.download` 会被命中 ⇒ 本用例红线。
+    """
+    from spacy import cli as spacy_cli
+
+    from delector.nlp_engine import processor
+
+    monkeypatch.setattr(processor, "_nlp_resolved", False)
+    monkeypatch.setattr(processor, "_nlp_model", None)
+
+    def _boom(name: str) -> Any:
+        raise RuntimeError("no local model")
+
+    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+
+    def _bomb(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("try_load_nlp_no_download 绝不能触发 spacy.cli.download（出网 + pip）")
+
+    monkeypatch.setattr(spacy_cli, "download", _bomb)
+
+    assert processor.try_load_nlp_no_download() is None, "本地失败 ⇒ 诚实返回 None（不抛、不下载）"
+    assert processor.get_loaded_nlp() is None, "失败 ⇒ 不写任何全局"
+
+
 def test_ai_polish_runs_tool_hooks_on_the_real_path(client, monkeypatch, caplog):
     """前置钩子链 MUST 在**真链路**上被跑过（不是只在单测里）：审计留痕 + 证据回喂。"""
     import logging

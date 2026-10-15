@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 import pytest
+import spacy
 
 os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
@@ -16,7 +17,16 @@ from delector.data import a1_writing_dict
 from delector.routes.main import _a1_violations_if_letter
 from delector.server import app
 from delector.services.polish_loop import default_violations_of
-from delector.services.writing import analyze_a1_email, check_a1_formular_answer
+from delector.services.writing import analyze_a1_email, check_a1_formular_answer, collect_violations
+
+
+@pytest.fixture(scope="module")
+def nlp():
+    """真 spaCy 模型（沿用 `tests/test_writing_rules.py` 的 nlp fixture 惯例）；缺失 ⇒ skip。"""
+    try:
+        return spacy.load("de_core_news_sm")
+    except OSError:
+        pytest.skip("de_core_news_sm not installed")
 
 
 def test_a1_writing_dict_dataset_integrity():
@@ -232,6 +242,31 @@ def test_a1_violations_gate_only_counts_when_text_is_a_letter():
     assert _a1_violations_if_letter(verdict_essay) == []
     # 书信体照常计数（闸门必须**有选择性**，一律返回 [] 是关掉裁判，不是闸门）
     assert len(_a1_violations_if_letter(verdict_letter)) >= 1
+
+
+def test_a1_violations_gate_does_not_count_grammar_for_non_letter_text(nlp):
+    """★ 本批「不改行为」的钉子：非书信体 + 语法错 ⇒ **MUST 仍不计数**。
+
+    这是**故意钉住的当前行为**（语法族此刻**只对书信体生效**）—— **Task 7 会显式改写它**
+    （把闸门按规则族分流：格式/字数族只对书信体、语法族对**任意德语文本**生效）。钉在这里的
+    **目的**：让「闸门被收窄」这件事**不可能被静默做掉** —— 谁把闸门改成按规则族分流，这条就红。
+
+    判别力来源：先证语法错**真实存在**于裁决体（"ein Hund" ⇒ `artikel` 违规），再证闸门此刻
+    **仍**对它返回 []（不是「没有违规可挡」的空转）。
+    """
+    verdict_essay = analyze_a1_email(_ESSAY_TEXT, nlp=nlp)
+
+    # 前提①：非书信体（称呼语不合法 ⇒ 走旧闸门的「不适用」分支）。
+    assert verdict_essay["greeting"]["valid"] is False
+
+    # 前提②：语法族**确实**报出了违规（否则这条钉子就是空转 —— 挡了个不存在的东西）。
+    essay_violations = collect_violations(verdict_essay)
+    assert any(v["rule"] == "artikel" for v in essay_violations), (
+        f"冠词格错必须被语法族捕获（夹具失效？实际={essay_violations}）"
+    )
+
+    # 钉子：闸门**此刻故意**把非书信体的全部违规掐掉（含语法族）—— 语法族只对书信体生效。
+    assert _a1_violations_if_letter(verdict_essay) == []
 
 
 def test_ai_polish_endpoint_keeps_non_letter_polish(monkeypatch):

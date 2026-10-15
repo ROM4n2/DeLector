@@ -351,3 +351,129 @@ def test_analyze_a1_email_capitalized_noun_exemption_and_expanded_valedictions()
         diag = analyze_a1_email(email)
         rules = [s["rule"] for s in diag["suggestions"]]
         assert "a1_valediction_missing" not in rules, f"{v} 应被识别为有效结语"
+
+
+# ── Task 1/2：统一违规形状 + 引擎降级标记 + 接线既有语法算力 ──────────────────
+# 统一违规形状：{"rule": str, "level": "error"|"warning", "message": str, "span": tuple|None}
+
+
+def test_collect_violations_unified_shape_and_error_only():
+    """`collect_violations` 只保留 `level=="error"` 并给出统一形状（warning 不阻止收敛）。"""
+    from delector.services.writing import collect_violations
+
+    analysis = {
+        "violations": [
+            {"rule": "a1_greeting_missing", "level": "error", "message": "缺称呼语", "span": None},
+            {"rule": "a1_word_count", "level": "warning", "message": "字数偏短", "span": None},
+            {"rule": "artikel", "level": "error", "message": "应为 einen", "span": (4, 13)},
+        ]
+    }
+    out = collect_violations(analysis)
+    assert [v["rule"] for v in out] == ["a1_greeting_missing", "artikel"], "warning 不得入违规"
+    assert set(out[0].keys()) == {"rule", "level", "message", "span"}
+    assert out[1]["span"] == (4, 13)
+
+
+def test_collect_violations_legacy_suggestions_fallback_error_only():
+    """无新键 `violations` ⇒ 回退 legacy `suggestions`，且同样只取 `level=="error"`。"""
+
+    from delector.services.writing import collect_violations
+
+    analysis = {
+        "suggestions": [
+            {"rule": "a1_greeting_missing", "level": "error", "message": "缺称呼语"},
+            {"rule": "a1_word_count", "level": "warning", "message": "字数偏短"},
+        ]
+    }
+    out = collect_violations(analysis)
+    assert [v["rule"] for v in out] == ["a1_greeting_missing"]
+    assert out[0]["span"] is None
+
+
+def test_collect_violations_prefers_new_key_over_legacy():
+    """新键 `violations` 存在时**优先**新键（legacy 不再被读）。"""
+    from delector.services.writing import collect_violations
+
+    analysis = {
+        "violations": [{"rule": "kasus", "level": "error", "message": "m", "span": (0, 3)}],
+        "suggestions": [{"rule": "a1_greeting_missing", "level": "error", "message": "legacy"}],
+    }
+    assert [v["rule"] for v in collect_violations(analysis)] == ["kasus"]
+
+
+def test_collect_violations_empty_analysis():
+    from delector.services.writing import collect_violations
+
+    assert collect_violations({}) == []
+    assert collect_violations({"violations": []}) == []
+
+
+def test_analyze_a1_email_judge_engine_rules_only_without_nlp():
+    """无 nlp ⇒ 只跑格式族，`judge_engine="rules_only"`（语法族不产违规）。"""
+    from delector.services.writing import analyze_a1_email
+
+    diag = analyze_a1_email("Liebe Maria,\nich lade dich ein.\nViele Grüße,\nAnna")
+    assert diag["judge_engine"] == "rules_only"
+    assert all(v["rule"].startswith("a1_") for v in diag["violations"]), "无 nlp 时不应产语法违规"
+
+
+def test_analyze_a1_email_judge_engine_rules_plus_spacy(nlp):
+    """nlp 可用且语法族跑过检测器 ⇒ `judge_engine="rules+spacy"`，语法违规并入 `violations`。"""
+    from delector.services.writing import analyze_a1_email
+
+    diag = analyze_a1_email("Ich habe ein Hund.", nlp=nlp)
+    assert diag["judge_engine"] == "rules+spacy"
+    gram = [v for v in diag["violations"] if v["rule"] == "artikel"]
+    assert len(gram) == 1
+    assert gram[0]["level"] == "error"
+    assert gram[0]["span"] == (9, 17)
+    assert "einen" in gram[0]["message"]
+
+
+def test_analyze_a1_email_existing_keys_unchanged(nlp):
+    """只增不改：既有的 `suggestions` / `greeting` / `valediction` 等内容逐字不动。"""
+    from delector.services.writing import analyze_a1_email
+
+    text = "Liebe Maria,\nich lade dich ein.\nViele Grüße,\nAnna"
+    diag = analyze_a1_email(text)
+    assert [(s["rule"], s["level"]) for s in diag["suggestions"]] == [
+        ("a1_word_count", "warning"),
+        ("a1_valediction_comma", "error"),
+    ]
+    assert set(diag["suggestions"][0].keys()) == {"rule", "level", "message"}
+    assert diag["greeting"]["valid"] is True and diag["greeting"]["has_comma"] is True
+    assert diag["valediction"]["valid"] is True
+    assert diag["word_count"] == 9 and diag["word_count_status"] == "too_short"
+    # 并列新键：格式族进入统一形状（无 nlp ⇒ 只格式族；键集与建议一致地多一个 span）
+    assert [v["rule"] for v in diag["violations"]] == ["a1_word_count", "a1_valediction_comma"]
+    assert all(set(v.keys()) == {"rule", "level", "message", "span"} for v in diag["violations"])
+
+
+def test_analyze_a1_email_wires_grammar_and_preposition(nlp):
+    """负样本接线：冠词-名词一致 / 介词支配格 各报 1 条（经统一抽取器可见）。"""
+    from delector.services.writing import analyze_a1_email, collect_violations
+
+    letter_bad_artikel = "Liebe Maria,\nich habe ein Hund.\nViele Grüße\nAnna"
+    v1 = collect_violations(analyze_a1_email(letter_bad_artikel, nlp=nlp))
+    assert [v["rule"] for v in v1] == ["artikel"] and v1[0]["level"] == "error"
+
+    letter_bad_kasus = "Liebe Maria,\nich fahre mit den Bus.\nViele Grüße\nAnna"
+    v2 = collect_violations(analyze_a1_email(letter_bad_kasus, nlp=nlp))
+    assert [v["rule"] for v in v2] == ["kasus"] and v2[0]["level"] == "error"
+
+
+def test_official_a1_samples_have_no_errors_under_wired_judge(nlp):
+    """硬门（D3）：官方 10 篇范文在接线后的裁判下 MUST 零**error** 级违规。
+
+    连官方范文都报错 ⇒ 规则过严 ⇒ `v` 恒 > 0 ⇒ 循环永不收敛。故这是每加一条规则都要过的门。
+    """
+    from delector.data import a1_writing_dict
+    from delector.services.writing import analyze_a1_email, collect_violations
+
+    samples = a1_writing_dict.A1_SCHREIBEN_TEIL2
+    assert len(samples) >= 10
+    for ex in samples:
+        diag = analyze_a1_email(ex["sample_email"], nlp=nlp)
+        got = collect_violations(diag)
+        assert got == [], f"官方范文被报违规（规则过严）: {ex['id']} -> {got}"
+        assert diag["judge_engine"] == "rules+spacy"
