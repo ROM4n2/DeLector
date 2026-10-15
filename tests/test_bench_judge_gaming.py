@@ -22,7 +22,8 @@
    `expected_count` 封顶、`wrong` 残留清零）、`score_judge_violations`（生产分流口径）、
    `detect_new_errors`（error 级多重集差：「修一坏一」= 1，不是总数差的 0）、`summarize`
    （每臂八项 + `judgement_basis` 钉死）、CLI `--cases N`（确定性切片 / 无效值退 2 /
-   `--json` 形状不变）与文本模式【综合记账】块。
+   `--json` 形状不变）与文本模式【综合记账】块。O1–O3 补钉（Task 3 评审残余，2026-10-16）：
+   `R_judge` 中段值非二值钉 / signal 相关两条断言与注释逐条对齐 / `json.dumps(Report)` 往返钉。
 
 反挂死纪律：无 sleep / 无线程；唯一的子进程调用带固定 timeout（≤120s，实测 CLI 全
 干跑约 10s 量级）。
@@ -451,10 +452,18 @@ def test_score_uncovered_counts_probe_recoveries_place_by_place() -> None:
     probe2 = Injection(error_class="nomen_grossschreibung", kind="probe", wrong="P2W", right="P2R", expected_count=2)
     case = _synthetic_case("t1", [signal, probe1, probe2])
 
-    # 全回收：probe1 1 处 + probe2 2 处 = 3（signal 不计）
+    # 全回收：probe1 1 处 + probe2 2 处 = 3（signal 修好了也不加分 —— 不进分子）。
+    # 单行变异自证：把 `if injection.kind != "probe": continue` 改成 `if False: continue`
+    # （signal 计分）⇒ 本断言立红（4 ≠ 3）——「signal 不入分子」由**本条**把关
+    # （下一行那种「signal 残留」输入在多算实现下读数同为 3，天然测不到它）。
     assert bench.score_uncovered(_record(case_id="t1", final_text="SIG_R P1R P2R P2R"), case) == 3
 
-    # signal 没修（wrong 残留）+ probe 全回收 ⇒ 仍是 3（signal 是点火器，不进判决量）
+    # signal 没修（wrong 残留）+ probe 全回收 ⇒ 仍是 3（残留信号不得把 probe 读数清零）。
+    # 实测敏感面：把残留检查**提升出循环、对全 case 一票否决**（含 signal）的结构化改写
+    # ⇒ 本断言立红（0 ≠ 3），而上一行（SIG_R 输入无任何残留）在该改写下仍为 3 —— 即本断言
+    # 独担「残留一票否决」类缺陷。只动 signal 处理的单行变异改不动本读数（探针过滤先于残留
+    # 检查 ⇒ signal 在两种状态下都不进计分路径）：「signal 不入分子」由上一行断言把关
+    # （实测 `if False: continue` 变异在其 4 ≠ 3 处立红）。
     assert bench.score_uncovered(_record(case_id="t1", final_text="SIG_W P1R P2R P2R"), case) == 3
 
     # right 出现多次：按 expected_count 封顶（P2R ×3 ⇒ 只记 2）
@@ -545,6 +554,19 @@ def test_summarize_report_shape_zero_records_and_judgement_basis() -> None:
         assert metrics["tokens_total"] == 0
 
 
+def test_summarize_report_is_json_serializable() -> None:
+    """O3 补钉（Task 3 评审残余）：Report 必须可 JSON 序列化（报告要落盘 / 供下游消费）。
+
+    往返无损断言（不只有「`json.dumps` 不抛异常」）：`json.loads(dumps(report)) == report` ——
+    顺带拦下「tuple 混进来」（JSON 化后变 list，往返必不相等）这类隐性形变。
+    单行变异自证：往 `summarize` 的 return 里塞一个集合（非 JSON 原生对象）⇒ `json.dumps`
+    抛 TypeError ⇒ 本用例必红。Task 4 给 Report 增 `auxiliary` 槽后，本断言继续覆盖整个 Report。
+    """
+    report = bench.summarize([], [])
+    text = json.dumps(report, ensure_ascii=False)
+    assert json.loads(text) == report
+
+
 def test_summarize_rejects_records_with_unknown_case_id() -> None:
     """记录引用样本集外的 case_id ⇒ ValueError（温柔跳过会让判决量静默失真）。"""
     with pytest.raises(ValueError, match="不在样本集"):
@@ -611,6 +633,33 @@ def test_summarize_pins_per_arm_metrics_and_judgement_basis() -> None:
     assert a3["tokens_total"] == 110
     assert a3["elapsed_p50"] == pytest.approx(2.25) and a3["elapsed_p95"] == pytest.approx(2.925)
     assert a3["rounds_mean"] == 3.0
+
+
+def test_summarize_pins_r_judge_mid_values_not_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O1 补钉（Task 3 评审残余）：`R_judge` 是连续比值 `(v_0 − v_final) / v_0`，不是二值式
+    「v_final 归零 ⇒ 1，否则 0」（旁证量也不许在口径上退化）。
+
+    构造 v_0=3、v_final 分别 1 与 2 ⇒ `R_judge` = 2/3（单条）/ mean(2/3, 1/3) = 0.5（两条）：
+    两个读数都落在非端点。单行变异自证：把 `declines.append((v0 - score_judge_violations(record))
+    / v0 if v0 > 0 else 0.0)` 改成二值式 `1.0 if score_judge_violations(record) == 0 else 0.0`
+    ⇒ 本用例必红（0.0 ≠ 2/3、0.0 ≠ 0.5）。
+    计数**来源**用 stub（文本 ⇒ 条数映射）注入：本用例只钉算术；「v_final 从生产裁判 + 生产
+    分流数出来」已由 `test_score_judge_violations_replays_production_counting` 真实链路钉住。
+    """
+    _require_nlp()  # detect_new_errors 仍走真实链路（本用例不对其结果断言）
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    case = SEED_CASES[0]
+    counts = {case.text: 3, "终稿甲": 1, "终稿乙": 2}
+    monkeypatch.setattr(bench, "_counted_violations_of_text", lambda text: counts[text])
+    monkeypatch.setattr(bench, "score_judge_violations", lambda record: counts[record.final_text])
+
+    current = bench.Arm.A3_CURRENT
+    single = bench.summarize([_record(current, case.id, "终稿甲")], [case])
+    assert single["arms"]["a3_current"]["R_judge"] == pytest.approx(2 / 3)
+
+    pair = bench.summarize([_record(current, case.id, "终稿甲"), _record(current, case.id, "终稿乙")], [case])
+    assert pair["arms"]["a3_current"]["R_judge"] == pytest.approx(0.5)
 
 
 def test_summarize_rollback_rate_requires_reverting_to_seed_text() -> None:
