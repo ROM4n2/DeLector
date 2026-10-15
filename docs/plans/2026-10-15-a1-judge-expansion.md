@@ -199,6 +199,11 @@
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "做一次可复跑的 FP 标定实验，**不接线**。① 建 `tools/bench_judge_fp.py`：对两条候选维度（情态动词框架语序 / 时间副词与时态一致性）各写一版**探测实现**（可住在脚本里，不必进 `writing.py`），在 a) 官方 10 篇 `sample_email`（正样本，期望 FP=0）与 b) 每维 ≥5 句手工定向错误句（负样本，期望能报）上逐句跑，输出原始计数表 + 误报样例全文。② 建 `tests/test_judge_fp_bench.py` 钉脚本自身行为（给固定样本 ⇒ 固定计数；不许"跑得过但数不清"）。③ 产出**带阈值的结论建议**（例如：FP 率 ≤ 某值 ⇒ 可做 error；否则 warning 或不做的理由），并**把误报样例原文带回**（不许只报比例 —— 比例无法证伪判据）。RUN：`python tools/bench_judge_fp.py` 与 `python -m pytest tests/test_judge_fp_bench.py -q`，原始输出全带回。⚠️ 若某维在正样本上就误报 ⇒ **如实结论是"不做"**，不许调样本让它好看。"
 
+**HITL 裁决（用户 2026-10-15 拍板，Step 4 已结）**：
+- **A 维（情态动词框架语序）= 不做**。依据：实测负样本 6/7（「实词夹在情态动词与末位动词之间」整族不可见 ⇒ FN），且样本外追补的 3 句逗号并列**正确**句全部误报（⇒ 若计入对照组，warning 档条件亦不成立）——**FP 与 FN 同源**，两侧都破。标定产物与数据保留在 `tools/bench_judge_fp.py` 作记录，**不接线**（后来者勿把它当"只是还没接线"）。
+- **B 维（时间副词 ↔ 时态一致性）= 接线为 `level="warning"`（advisory）**。依据：正样本 FP 0/35、负样本 7/7、对照 0/6，两档阈值均成立（样本偏小：7 错 + 6 对照 ⇒ 先 advisory，积累真实用法后再议升 error）。**不阻断收敛**：`violations_of` 只认 `level=="error"`（Task 4 已钉死的语义）。
+- **advisory 的可见性**（编排者定的最小实现）：warning 必须真能被看到，否则是 no-op ⇒ 响应体 `result` 追加 `judge_advisories: list[str]`（**只增不改**），前端渲染与本计划的 Task 7 同批。
+
 **Step Breakdown:**
 - [ ] Step 1: 建正/负样本集（负样本每维 ≥5 句，逐句标注期望）
 - [ ] Step 2: 写探测实现 + 脚本（含脚本自身测试）

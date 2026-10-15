@@ -529,3 +529,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **基础设施坑（两次）**：两次 subagent 派单被掐（10003 / 10101），第一次留了半成品 + 一条取消用例跑不完（备份 `/tmp/task8-partial.diff` 后丢弃、重派成功）。**教训：给 maker 的反挂死纪律必须写进 prompt**（所有 sleep 要有 wait_for/固定次数兜底、禁 join 线程、禁无界 while、每条用例贴实测耗时）。Task 8 的 flaky 黄卡（心跳窗口余量趋零）由我按 CRV 开方改 1 行（跨调用取 max）并 20 连跑自证 —— 偏离 maker-checker，已如实记录在提交信息。
 - **门禁**：5 套件 411 passed；`ruff check .` 全绿；`mypy --strict delector` 66 files 0；契约闸 PASS；CRLF。
 - **未做**：Task 3/4/5（三个新维度规则）、Task 6（FP 标定，HITL）、Task 7（闸门收窄 + §4.3 判据表，HITL，含前端降级提示）。**Pi 式分层重构已由用户拍板暂缓**（`docs/agents/architecture.md` 已登记）。
+
+### 2026-10-15 16:40 | codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Task 6 的 HITL 裁决落地**（用户拍板）：A 维**不做**、B 维**接线为 warning**。
+- **A 维（情态动词框架语序）不做**：实测负样本 6/7（「实词夹在情态动词与末位动词之间」整族不可见 = 结构性 FN），且样本外追补的 3 句**正确**句（逗号并列主句）全部误报 ⇒ FP 与 FN 同源、两侧都破。标定产物（`tools/bench_judge_fp.py`）保留作记录、不接线。**Why 这条要记**：本计划第一个"测了之后选择不做"的维度 —— 防止后来者看到 bench 脚本以为它只是"还没接线"。
+- **B 维（时间副词 ↔ 时态一致性）接线为 warning**：正样本 FP 0/35、负样本 7/7、对照 0/6，两档阈值均成立；样本偏小（7 错 + 6 对照）⇒ 先 advisory 不阻断收敛，积累真实用法后再议升 error。可见性靠响应体新增 `judge_advisories`（只增不改）+ Task 7 的前端渲染。
+- 更正一条**未实测口径**：提交 `39e6d79` 的消息里写「COMMON_CORRECT_SENTENCES 47 句」是我未实测的转述，**实测为 51 句** —— 以实测为准（本事件与 PR 正文为准）。
