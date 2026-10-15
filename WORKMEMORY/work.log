@@ -625,3 +625,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 独立评审 PASS：7 条对抗变异四联全红-还原（含 O1 复现 / signal 计分）；盲评两序零归属泄漏、rubric 逐字节一致；auxiliary 深等隔离（唯一写入面 rater:171）；审计钩子零 .env / 零非回环 / server 未导入。
 - 残余观察（非阻塞登记）：O-1 两新文件 EOF 缺尾换行（全仓 5 例先例）；O-2 ruff format would-reformat（仓内无该门禁）；O-3 insert_into_report 浅拷贝共享 arms 引用（双钉不改动）。O1–O3（Task 3 残余）已销账。
 - 台账：Task-4 → completed（4/6）。**下一站 = Task 5/6（HITL）：① W4 口径裁决 ② pilot 花费口径——真跑阻塞于用户拍板而非技术。**
+
+### 2026-10-16 01:06 | deepseek-v4-1-flash__hermes | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 第 8 条对照实验的两项 HITL 决策由用户拍板**（Task 5 前置）：
+- **W4 口径 = 选项 2（加附带指标）**：harness 侧包装 chat 记录「回退前最后候选」→ 新附带指标 `R_uncovered_last_candidate`（池化于有候选的记录）+ `candidates_recorded` 计数；**判决量口径仍以 final 为准、附指标不进 P1/P2**；不动生产代码；设计稿增 2026-10-16 修订段（预注册纪律：pilot 前固定）。登记为 **Task-4b**。
+- **pilot 花费口径 = 先单篇试水**：1 篇×3 臂真跑（≤10 次轻量调用）→ 报实测 token/耗时与连通性 → 用户再确认跑满 N=5（≤45 chat + ≤15 rater）。真 key 只经 load_env()（载入路径既有）；报告只出现布尔/长度。
+- Why 记：W4 从「设计层提醒」收敛为「附指标」是用户裁决的产品语义决定；试水分两步走，避免在连通性未实测前直接跑满。
