@@ -570,3 +570,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **纪律**：阈值 pilot（N=5）后固定并写回设计稿；样本集冻结；三臂全量原始输出随报告落盘；**P1 成立亦为正当产出**（届时结论是"当前裁判不足以支撑宣称"，表述必须反向收紧）。
 - **成本按 token 计、不猜价格**（主实验上限 ≈180 次 chat + 120 次 rater 调用，N=20）；harness MUST 有 `--dry-run`（stub chat）以便**无 Key 也能被 CI 测**。
 - 后续：本条要动手时走 `/dfs-plan`（harness + 测试 + 种子集三个任务），**不影响**现行 §4.3 口径（无条件「已实现」继续禁用）。
+
+### 2026-10-16 02:30 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户去睡觉，自主推进「评估报告里已定案、不需决策、无危险」的一批修正（分支 `chore/audit-fixes-hygiene`）。
+- **P1-2（.gitignore 缺口，swarm/git 管理两席都点到）**：补 `/launch.log`、`/launch.log.*`、`/lan-address.txt` 三条根级规则 + 注释写清威胁模型（便携模式/源码运行时数据目录=仓库根 ⇒ 一次 `git add -A` 会把运行态日志与**内网 IP** 提交进历史）。编排者实测三者由 NOT-IGNORED → IGNORED，且**历史从未进过这三个文件**。
+- **P2-4**：补 `.superpowers/` 根级兜底（与 `.mypy_cache/` 同款理由：原靠嵌套 .gitignore 自忽略）。
+- **P2-8**：`.env.example` 数据目录注释改正 —— 实测 `resolve_data_dir({})` = `%LOCALAPPDATA%\DeLector`（**不是仓库根**），只有 `DELECTOR_PORTABLE=1` 才回落程序目录。
+- **P2-1**：`CLAUDE.md` 加「文档路由（先读这个）」一节指向 `AGENTS.md`（此前只读 CLAUDE.md 的会话完全不知道 architecture/ops 存在）。
+- **P2-2**：`.cursorrules` 与 `.agent-rules.md` 的 `08-Inbox` → `99-Inbox`（实测 08-Inbox 不存在、99-Inbox 存在）。
+- **守卫测试**：`tests/test_server.py` 新增 `test_runtime_artifacts_protected_by_gitignore`（沿用 keystore 那条惯例 + 多一层 `git check-ignore` 实证 + 与 `desktop.py` 常量对账）。**变异自证**：删掉三条规则 ⇒ 该测试红（判别力成立）。
+- **门禁**：守卫 1 passed；`ruff check .` 全绿；`mypy --strict delector` 67 files 0；`--follow-imports=skip tests/test_server.py` 0；契约闸过。全量 `pytest` **1983 passed + 2 skipped + 2 failed** —— 已用 `git stash` 在 master 态复现同样 2 failed，证实是 `tests/conftest.py:16-19` 明文记载的「根目录有库 ⇒ 迁移闸拒绝运行 ⇒ 本地红 / CI 绿」既有分歧，与本 PR 无关（**未删用户库文件**：那属危险操作）。
+- **未做（需决策或有危险）**：P1-1 分支纪律机械闸（CI 改动；`gh` 无 workflow scope ⇒ 合并要走 SSH no-ff）、P2-7 `.gitattributes` CRLF 契约（改跨平台 checkout 行为）、P2-6 renormalize、P2-5 `git gc`、P2-3 design-system 状态定夺，以及 swarm audit 的 P0-1/P0-2/P1-1（密钥进备份）等代码级修复。

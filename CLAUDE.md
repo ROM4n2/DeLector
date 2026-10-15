@@ -1,5 +1,9 @@
 # Project Guidelines
 
+## 文档路由（先读这个）
+
+- 本仓 agent 文档入口是 `AGENTS.md`（纯路由表）：架构 / 运维 / 发版 / 文档落位规则都在那里。进入会话先读它，再按需下沉到具体文档。
+
 ## 工程规范与自动化工具路径 (Coding Vault Invariants)
 
 - **核心规范源**：`d:\Obsidian\Coding\AGENTS.md`

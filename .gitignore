@@ -22,6 +22,13 @@ credentials.json
 # 学习记录**，单个可达数 MB。上面几条 `*.db*` 都匹配不到 `.bak-<时间戳>` 后缀，
 # 故它在仓库根是「未忽略的未跟踪文件」——一次 `git add -A` 就会把用户数据提交进历史。
 *.db.bak-*
+# 桌面壳运行态产物：launch.log（+ .1 轮转备份）与 lan-address.txt 由 desktop.py 写在
+# 数据目录里；而便携模式（DELECTOR_PORTABLE=1）或源码运行时，数据目录就是仓库根
+# （data_dir_bootstrap.resolve_data_dir → program_dir()）。与上面 *.db* 同一威胁模型：
+# 一次 `git add -A` 会把运行态日志（启动堆栈/端口冲突详情）与**内网 IP 地址**提交进历史。
+/launch.log
+/launch.log.*
+/lan-address.txt
 *.apkg
 *.apk
 artifact*.html
@@ -31,6 +38,9 @@ artifact*.html
 # （内部 .gitignore 缺失或工具换版重建目录时，缓存内容会漏进 status）。
 .mypy_cache/
 .ruff_cache/
+# 与上面同理：.superpowers 目前靠自身嵌套 .gitignore（内容 `*`）自忽略；此处补根级兜底，
+# 防止工具升级/重建目录但未写回嵌套规则时，整棵工具缓存漏进 status 被 `git add -A` 收走。
+.superpowers/
 build/
 dist/
 *.spec
