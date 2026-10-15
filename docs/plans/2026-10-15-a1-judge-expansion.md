@@ -78,11 +78,11 @@
 > "统一 A1 裁判的违规形状并加引擎降级标记。现状：`analyze_a1_email` 出 `{suggestions:[{rule,level,message}]}`（纯规则），而 `detect_*` 出 `{severity,error_type,corrected_form,explanation_zh,start,end}`（spaCy span）—— 两套形状让端点层 `_a1_violations_if_letter` 只能认一套。① 在 `delector/services/writing.py` 加 `collect_violations(analysis)`：统一形状 `{rule,level,message,span}`，**新键 `violations` 优先、legacy `suggestions` 回退**，`level` 只认 `error`（warning 不阻止收敛 —— 这是 Task 4/5/6 已钉死的语义）；② `analyze_a1_email` **追加**并列字段 `violations` 与 `judge_engine`（`rules+spacy` / `rules_only`），既有键与既有断言逐字不动；③ 端点 `_a1_violations_if_letter` 改用 `collect_violations`，`_PolishOutcome`/响应体加 `judge_engine`/`judge_degraded`（只增不改，前端文案表不动）。TDD：先在 `tests/test_writing_rules.py` 写 RED（统一形状 + 回退 + level 过滤），再实现。**④（评审 RED#1，MUST）堵接缝**：`processor.py` 加只读 `get_loaded_nlp()`（不触发加载/下载）；`_run_polish` 改为**注入** `judge=_make_judge(leitpunkte, get_loaded_nlp())`；新增 `_JudgeRecorder` 接住 verdict 里的 `judge_engine`；在 `tests/test_server.py` 加**走端点**的用例（注入可用 nlp + 喂带语法错的非书信体文本 ⇒ 断言违规真被计数 且 `judge_degraded is False`）。**⑤（评审 RED#2，MUST）降级诚实性**：`judge_engine` 如实透出（可用 ⇒ `rules+spacy`；不可用 ⇒ `rules_only`）并把 `judge_degraded` 送进响应体与前端提示；**运行期 fail-open**（Android `nlp=None`，fail-closed 会让 argmin 回退返回原文 = 功能报废）、**声明/门禁层 fail-closed**（Task 7 的判据表在 `judge_degraded==true` 时不得被用作"全引擎通过"的证据）。两条用例：引擎可用 ⇒ `judge_degraded is False`；引擎不可用 ⇒ `judge_degraded is True` 且 `converged` 的语义边界写进 docstring。禁止靠塞人造 violation 实现。RUN：`python -m pytest tests/test_writing_rules.py tests/test_server.py tests/test_goethe_a1_writing.py tests/test_ai_polish_loop.py -q`（既有断言只许新增不许放宽；那条 pin 按裁决规则改造并在提交信息写明）。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：统一形状 / legacy 回退 / `level=warning` 不入违规 / **端点接线** / **降级态不返回 converged:true**）
-- [ ] Step 2: 跑并记录预期失败原文（**注意 RED 的形态是"报 0"或"字段缺失"，不是报错**）
-- [ ] Step 3: 实现 `collect_violations` + `violations`/`judge_engine` 并列字段 + `get_loaded_nlp()` + `_make_judge`/`_JudgeRecorder` + 端点注入与 `judge_degraded` 透出（GREEN）
-- [ ] Step 4: 变异自证（① 删回退分支 ⇒ 红；② 删 `level` 过滤 ⇒ warning 入违规 ⇒ 红；③ **端点不注入 judge（退回内核默认）⇒ 端点接线用例 MUST 红**；④ **`_make_judge` 去掉 fail-closed ⇒ 降级态用例 MUST 红**）
-- [ ] Step 5: 关联套件 + `ruff` + mypy 四档 + 原子提交（提交信息逐条写明那条 pin 的改造理由）
+- [x] Step 1: 写失败测试（RED：统一形状 / legacy 回退 / `level=warning` 不入违规 / **端点接线** / **降级态不返回 converged:true**）
+- [x] Step 2: 跑并记录预期失败原文（**注意 RED 的形态是"报 0"或"字段缺失"，不是报错**）
+- [x] Step 3: 实现 `collect_violations` + `violations`/`judge_engine` 并列字段 + `get_loaded_nlp()` + `_make_judge`/`_JudgeRecorder` + 端点注入与 `judge_degraded` 透出（GREEN）
+- [x] Step 4: 变异自证（① 删回退分支 ⇒ 红；② 删 `level` 过滤 ⇒ warning 入违规 ⇒ 红；③ **端点不注入 judge（退回内核默认）⇒ 端点接线用例 MUST 红**；④ **`_make_judge` 去掉 fail-closed ⇒ 降级态用例 MUST 红**）
+- [x] Step 5: 关联套件 + `ruff` + mypy 四档 + 原子提交（提交信息逐条写明那条 pin 的改造理由）
 
 ---
 
@@ -103,11 +103,11 @@
 
 **Step Breakdown:**
 - [x] **Step 0（✅ 2026-10-15 已跑，评审黄卡已消）**：官方 `A1_SCHREIBEN_TEIL2` 10 篇 `sample_email` 在两件既有算力下 **误报 0/10**（逐篇 `det=0 prep=0`；评审点名的高危句 `für Ihre 2-Zimmer-Wohnung` / `vom 15. bis 18. August` / `im Preis enthalten` 均不误报）⇒ **本任务是"接线"而非"修规则"**，硬门基线绿。执行时把这条基线**落成用例**（不是再跑一次人眼）。
-- [ ] Step 1: 写失败测试（RED：负样本两例报违规 + 官方 10 篇零违规门）
-- [ ] Step 2: 跑并记录预期失败原文（**红色是"报 0"，不是"报错"**）
-- [ ] Step 3: 实现接线（GREEN）
-- [ ] Step 4: 变异自证（关掉一致性检查 ⇒ 负样本用例红；把双格介词豁免删掉 ⇒ 官方范文门红）
-- [ ] Step 5: 关联套件 + ruff + mypy 四档 + 原子提交
+- [x] Step 1: 写失败测试（RED：负样本两例报违规 + 官方 10 篇零违规门）
+- [x] Step 2: 跑并记录预期失败原文（**红色是"报 0"，不是"报错"**）
+- [x] Step 3: 实现接线（GREEN）
+- [x] Step 4: 变异自证（关掉一致性检查 ⇒ 负样本用例红；把双格介词豁免删掉 ⇒ 官方范文门红）
+- [x] Step 5: 关联套件 + ruff + mypy 四档 + 原子提交
 
 ---
 
