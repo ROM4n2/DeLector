@@ -46,11 +46,12 @@
 > "实现种子集模块。① 五类**未被任何检测器覆盖**的 A1 错误（从句语序 / 冠词性别 / 动词变位 / 介词固定搭配 / 名词大小写）逐处**注入**到底本里，每处记 `wrong`→`right`；每篇 ≥3 处注入。② 数据自检测试 MUST 断言：a) `ERROR_CLASSES` 与 `delector/services/writing.py` 的检测器 `error_type` 集合**零交集**（从源码/常量现读，不许抄）；b) 每个 `injections[i].wrong` 在 `text` 中出现次数 == `expected_count`、在 `clean_text` 中 0 次；c) `injections[i].right` 在 `clean_text` 中恰好出现 `expected_count` 次；d) 每篇注入数 ≥3；e) 用真实 nlp（沿用既有 `nlp` fixture）跑 `analyze_a1_email` 断言**注入的错误不在 `violations`/`advisories` 里**（这是"held-out"的定义，被检测器抓到的注入必须换掉）。③ **信号注入（2026-10-15 追加，实测倒逼）**：每篇 MUST **恰好 1 处** `kind="signal"`，且 MUST 属**语法族**（对 letter / prose 都被 `violations_for` 计数）⇒ 用真实 nlp + **生产分流**逐篇断言 `len(violations_for(_text_kind(v), v)) == 1`（把"该篇会真迭代"钉成物理事实：当前全部 20 篇只注入 held-out 时实测 `v_0 == 0`，A3 会首轮即收敛 ⇒ 实验对裁判信号不可识别）；同时断言 probe 注入**不进**该计数、signal 与 probe 的区间**不重叠**。RUN：`python -m pytest tests/test_a1_seed_errors_data.py -q`。⚠️ 若某类注入被现有检测器抓到 ⇒ 换句式或换类，不许改断言。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写数据自检（RED：模块不存在 / 交集不为空 / 计数不符）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 建数据模块（GREEN）
-- [ ] Step 4: 逐条实跑 nlp 验证注入确实 held-out（贴原始输出）
-- [ ] Step 5: ruff + mypy 档 + CRLF + 原子提交
+- [x] Step 1: 写数据自检（RED：模块不存在 / 交集不为空 / 计数不符）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 建数据模块（GREEN）
+- [x] Step 4: 逐条实跑 nlp 验证注入确实 held-out（贴原始输出）
+- [x] Step 5: ruff + mypy 档 + CRLF + 原子提交
+> **收尾记录（2026-10-15，接手方 deepseek-v4-1-flash__hermes）**：变异自证 ×3 实红（3/4/4 failed）+ CRV PASS（88 passed 复跑 / 逐篇 v0 20/20==1 / ruff & mypy 全绿 / CRLF 无裸 LF）；原 TDD RED 原文未随 WIP 交付，以变异自证补偿。台账 Task-1 completed（code commit=a85edd6）。
 
 ---
 

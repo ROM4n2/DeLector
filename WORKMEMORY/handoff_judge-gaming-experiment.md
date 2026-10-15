@@ -45,3 +45,38 @@ status: open
 4. **生产分流下散文的 `a1_greeting_missing` 不计数**（格式族被 prose 过滤）—— 上一个 maker 曾用 `collect_violations` 口径误报 v0=1，**必须用 `routes.main.violations_for + _text_kind` 口径**。
 5. **既有网络型 flaky**：`tests/test_server.py::test_get_audio_tts_returns_mp3` 走 Edge TTS（单跑绿、批跑偶发 500）—— 与本实验无关，别追。
 6. **预注册纪律**：阈值 pilot 后固定回写设计稿；样本冻结；剔除文本唯一正当理由是"文本本身构造错误"且须写明；**P1 成立也是正当产出**（届时 §4.3 表述反向收紧）。
+
+---
+## 响应（2026-10-15 23:17 | deepseek-v4-1-flash__hermes）—— 已接手；Task 1 收尾完成（CRV PASS）；Task 2~6 仍待做（**status 保持 open**）
+
+读包 → 独立复核（全实跑）→ 补跑变异自证 ×3 → Task 1 结清；台账 Task-1 → completed。
+
+### 1. 独立复核（非转述；复现命令内嵌，原始输出存本机 scratch）
+- `python3 -m pytest tests/test_a1_seed_errors_data.py -q` ⇒ **88 passed in 4.40s**（每条变异还原后再跑：88 passed in 4.82s）。
+- 逐篇 v0 表重跑（`-s` 打印为测试内置）：**20/20 `v0==1`**，被计数条 `rule` == signal.error_class，probe 3~5 处/篇。
+- `ruff check .` 全绿；`mypy --strict delector` **68 files 0**；两新文件 CRLF、lone_LF=0。
+- **勘误 1 条**：signal 的 rule 分布实测为 **kasus×9 / artikel×9 / praeposition×2**（a85edd6 提交消息与包内 §二 写 9/8/3，系笔误；无功能影响，以物理重算为准）。
+
+### 2. 变异自证 ×3（补证；逐条「注入缺陷 ⇒ 守卫实红」，跑后 `git checkout --` 还原、零残留）
+- **① L1 signal 换 held-out 类**（`kasus` → `nomen_grossschreibung`；`zu der Hause`→`zu hause`）⇒ **3 failed / 85 passed**：
+  - `test_signal_is_counted_as_exactly_one_violation_under_production_routing[letter_01]`〔v_0 应为 1，实际 0（rules=[]）〕 ← **目标用例实红**
+  - `test_probe_injections_are_held_out_from_detectors[letter_01]`〔text 计数 != clean + signal 一条〕
+  - `test_every_case_has_exactly_one_signal`〔signal 不得取 held-out 类名〕
+- **② 删 L2 signal**（`mein Termin` 行）⇒ **4 failed / 84 passed**：
+  - `test_every_case_has_exactly_one_signal`〔signal 数 0 != 1〕 ← **目标用例实红**
+  - ranges / held-out / v0 三处 signal 依赖用例（均报「应有恰好 1 处 signal，实际 0」）
+- **③ L6 nomen probe 换可计数错误**（`am freitag`→`für dem Freitag`）⇒ **4 failed / 84 passed**：
+  - `test_probe_injections_are_held_out_from_detectors[letter_06]`〔text 计数 != clean + signal 一条（{praeposition:1, kasus:1} vs {kasus:1}）〕 ← **目标用例实红**
+  - `test_signal_is_counted...[letter_06]`〔v_0 应为 1，实际 2（rules=['praeposition','kasus']）〕
+  - `test_all_five_classes_actually_used_in_probes`〔unknown=['kasus']〕+ `test_string_level_consistency[letter_06]`（替换次序连带效应——防御纵深的两道额外防线）
+- **复跑指引**：三条变异均为对 `delector/data/a1_seed_errors.py` 的单行字符串替换（锚点 = 各自 `Injection(...)` 整行）；复核者按上述括号内改写、跑全测试文件、`git checkout --` 还原即可逐字复现。
+
+### 3. 簿记
+- 原子提交判定：Task 1 代码 + 测试 + 计划/设计稿修订**已在 `a85edd6` 一次性落地**（包内「三、1(c)」条件达成；WIP 仅为措辞）。本次补交收尾簿记（计划五步勾选 + INDEX + 本响应节）与 work.log 事件——**收尾簿记提交 hash 见 work.log 同日「NOTE」条目**。
+- 台账 `.vault-exec-ledger.json` Task-1 → completed（**本仓 gitignore 的本地文件，不入库**；commit_hash=a85edd6）。
+- 原 TDD RED 原文未随 WIP 交付（maker 会话被 6004 掐断于报告前）⇒ 以变异自证 ×3 补偿「测试非真空、守卫真能红」这一证明义务；RED 阶段原始输出无法事后补录，如实登记为**已观测缺口（不阻塞）**。
+- **本收尾在独立 worktree（`.worktrees/judge-gaming-closure`）完成**——主目录曾于 2026-10-15 23:11:36 被并行操作切至 `chore/swarm-audit-master`（不干扰该线；事故与处置详见 work.log 同日第三条 NOTE）。
+
+### 4. 下一步（按原包「三」清单，不变）
+Task 2（三臂 harness 骨架，AFK、`--dry-run` 零 Key 可跑）→ Task 3/4 → Task 5/6（HITL：真跑前交用户确认花费口径）。**本会话范围声明**：仅接手 + Task 1 收尾；不改生产代码路径。
+
