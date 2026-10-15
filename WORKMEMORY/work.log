@@ -553,3 +553,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **宣称方式 = 限定表述**：允许对外写「裁判已扩到 A1 语法维度：动词位置 + 格的使用三规则 error 级、时态一致性 advisory；语序经实测评审判定不做」；**无条件「已实现验证驱动 agent 循环」继续禁用** —— 判据表第 8 条（"浅裁判是否真被模型针对"的对照实验）因缺 `DEEPSEEK_API_KEY` 未做，故 §4.3 的门槛只算**部分抬升**。
 - **回退语义 = 保持**：非书信文本模型修不动 ⇒ `no_improvement` ⇒ argmin 回退**原文**（与循环语义一致，断言 + 三处 docstring + 前端人话原因码已钉住）。
 - **Why 记**：这是"测出来之后**不做**"与"允许**限定**宣称"两个反直觉结论 —— 防止后来者把 §4.3 读成"已经解禁"或把 bench 脚本里的 A 维当成"待接线"。
+
+### 2026-10-15 21:55 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**PR #137 已合入 master**（merge commit `ae8c3fd`，分支已删）—— ADR-0023 §4.3 第 ④ 步「裁判集扩充」8 任务全部落地（**未发版**，随下次发版到达）。
+- CI：head `555cd4a` 4/4 job success（合并走 SSH 本地 `no-ff`，因 `gh pr merge` 缺 `workflow` scope —— 与 #136 同因，本 PR 也改了 `.github/workflows/`）。
+- **沉淀（/dfs-save）**：`99-Inbox/2026-10-15-规则引擎硬门必须按「类」覆盖正样本：官方样本集放过了全部三类误报.md`（A-MAC 通过）。查重时**发现两条"新规则"其实已是仓内既有规则**，故按查重纪律**不造重复卡**，改为在该草稿附「新证据实例」节：① `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md`（自动化接线三证）—— 本次 dead-green 是"活性证"缺失的教科书实例；② `01-Rules/AGENT-AUDIT-CHECKLIST.md`（UNVERIFIED 由编排者逐条核销）—— 本次两类额外误报**都是把 checker 的 unverified 探针真跑才撞出来的**。待 `/dfs-inbox-consolidate` 归档时并入。
+- 门禁：全量 `pytest` **1984 passed + 2 skipped**；ruff / mypy --strict（67 files）/ 前端契约闸 / vault 预提交门禁（99.8/100）全过。台账 **8/8**。
+- **本批两条"测后不做/降级"的裁决已入 ADR §11.4**（防后来者误读 bench 脚本为"待接线"）：A 维情态框架 = 不做（FP/FN 同源）· B 维时态 = advisory。
+- 未做（ADR §11.6）：Android 真机点检（含 WebView 的 `fetch`/`ReadableStream`）· 有 Key 后回测（真轮次分布 / 真 token 计数 / §4.3 第 8 条对照实验）· Pi 式分层重构（用户已拍板暂缓）。
