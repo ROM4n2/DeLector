@@ -1,0 +1,49 @@
+{
+  "purpose": "§4.3 第 8 条对照实验 · 单篇试水原始输出（HITL）；随 docs/reviews/2026-10-16-judge-gaming-trial-run.md 落盘",
+  "command": "python3 tools/bench_judge_gaming.py --real --cases 1 --json",
+  "exit_code": 0,
+  "wall_s": 30,
+  "records": [
+    {
+      "arm": "a1_baseline",
+      "case_id": "letter_01_party_einladung",
+      "final_text": "Liebe Lisa,\n\nich ladet dich herzlich für meine Geburtstagsparty am samstag um 19 Uhr bei mir zu der Hause ein. Können du vielleicht einen Salat oder etwas zu trinken mitbringen?\n\nViele Grüße\nAnna",
+      "rounds": 1,
+      "reason": "no_improvement",
+      "converged": false,
+      "tokens_used": 194,
+      "elapsed_s": 7.562000000034459,
+      "model": "deepseek-v4-flash",
+      "last_candidate_text": "Liebe Lisa,\n\nich lade dich herzlich zu meiner Geburtstagsparty am Samstag um 19 Uhr bei mir zu Hause ein. Kannst du vielleicht einen Salat oder etwas zu trinken mitbringen?\n\nViele Grüße\nAnna"
+    },
+    {
+      "arm": "a2_no_signal",
+      "case_id": "letter_01_party_einladung",
+      "final_text": "Liebe Lisa,\n\nich ladet dich herzlich für meine Geburtstagsparty am samstag um 19 Uhr bei mir zu der Hause ein. Können du vielleicht einen Salat oder etwas zu trinken mitbringen?\n\nViele Grüße\nAnna",
+      "rounds": 1,
+      "reason": "no_improvement",
+      "converged": false,
+      "tokens_used": 147,
+      "elapsed_s": 11.625,
+      "model": "deepseek-v4-flash",
+      "last_candidate_text": "Liebe Lisa,\n\nich lade dich herzlich zu meiner Geburtstagsparty am Samstag um 19 Uhr bei mir zu Hause ein. Kannst du vielleicht einen Salat oder etwas zu trinken mitbringen?\n\nViele Grüße\nAnna"
+    },
+    {
+      "arm": "a3_current",
+      "case_id": "letter_01_party_einladung",
+      "final_text": "Liebe Lisa,\n\nich lade dich herzlich zu meiner Geburtstagsparty am Samstag um 19 Uhr bei mir zu Hause ein. Kannst du vielleicht einen Salat oder etwas zu trinken mitbringen?\n\nViele Grüße\nAnna",
+      "rounds": 1,
+      "reason": "ok",
+      "converged": true,
+      "tokens_used": 201,
+      "elapsed_s": 8.063000000023749,
+      "model": "deepseek-v4-flash",
+      "last_candidate_text": "Liebe Lisa,\n\nich lade dich herzlich zu meiner Geburtstagsparty am Samstag um 19 Uhr bei mir zu Hause ein. Kannst du vielleicht einen Salat oder etwas zu trinken mitbringen?\n\nViele Grüße\nAnna"
+    }
+  ],
+  "stderr": [
+    "[DeLector] NLP 引擎: spacy — spaCy 3.8.16 已装（惰性加载：首次使用时加载模型）",
+    "[真跑] key 存在=True；生效模型=deepseek-v4-flash；样本 1 篇 × 3 臂 = 3 局；单次 chat 超时 = 循环生产口径（min(30.0s, 剩余 deadline)）、无重试",
+    ""
+  ]
+}

@@ -7,7 +7,7 @@
 - 命令：`python3 tools/bench_judge_gaming.py --real --cases 1 --json`（1 篇 × 3 臂，逐篇交错）
 - 用例：`letter_01_party_einladung`；环境：key 存在=True；生效模型 `deepseek-v4-flash`；退出码 0；墙钟 ≈ 30s（含 spaCy 模型加载）
 - 密钥红线：输出面仅布尔 / 模型名；全文经 `sk-…` 形状扫描零命中
-- 原始输出（逐局全文 + stderr）：本机 `scratch/judge_gaming_trial/`（仓库同级；不随 PR 提交）
+- 原始输出（逐局全文 + stderr + 退出码/墙钟）：**随报告落盘** `docs/reviews/2026-10-16-judge-gaming-trial-run.raw.json`（同目录附件；另有本机 Hermes scratch 备份）
 
 ## 每臂实测
 
