@@ -238,7 +238,7 @@
 - ~~**[Unknown B] 循环真实轮次分布与 token 上界**~~ **（2026-10-15 部分收敛，见 Task 4 交付）**：
   - **token 上界已定案**：`DEFAULT_MAX_TOKENS` **保留 4096**（实测单轮最坏 691 token，2× 余量充足）；`DEFAULT_MAX_TOKENS_TOTAL = 4096`（刻意 < `4096 × 3`，使循环级预算**真会咬合**，不是真空闸）；`DEFAULT_DEADLINE_S = 18.0`（严格小于前端 `DEFAULT_TIMEOUT_MS=25000`，内层先到点）。
   - **仍待回测**：① 折算系数 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 是 **UNVERIFIED 假设**（本机 `tiktoken` / `transformers` 实测均 `ModuleNotFoundError`，拿不到真 BPE 计数）；② **真实轮次分布** —— stub 基线只能给出"收敛于第 N 轮的**条件**"，真实分布须有 Key 后回测。
-- **[Unknown C] 是否需要 function calling 的原生形态**：**已定案（2026-10-15）= JSON 契约字段**（回复里的 `tool_call` 键），不用原生 `tool_calls`。理由三条（可 stub / 与 `llm_client.chat` 的 dict 返回值同形且不动 Task 3 刚收口的 client / 零新依赖），已写进 `polish_loop.py` 模块 docstring。**待办**：按原计划把它**回写 ADR-0023 §6**（本计划不代劳 ADR）。
+- **[Unknown C] 是否需要 function calling 的原生形态**：**已定案（2026-10-15）= JSON 契约字段**（回复里的 `tool_call` 键），不用原生 `tool_calls`。理由三条（可 stub / 与 `llm_client.chat` 的 dict 返回值同形且不动 Task 3 刚收口的 client / 零新依赖），已写进 `polish_loop.py` 模块 docstring。**✅ 已回写（2026-10-15）**：ADR-0023 §6 迷雾区四条全部改为「原表述 + 现状 + 依据」表并新增 §10 实施回写（vault 提交 `139cdde`）——含 Unknown 4 闭合（Go 门禁三红灯，含执行期新发现的"硬编码 8001 且不校验身份 ⇒ 真实风险是假绿"）、新增 Unknown 5（`lookup_core_vocab` 异常路径实测未见抛出，未穷尽）。**注**：ADR 状态行已按 §4.3 保留自设门槛 —— 裁判集未扩，此刻仍 MUST NOT 宣称「已实现」。
 - **[Unknown D] `lookup_core_vocab`（`writing.py:680`）是否会抛**（ADR §8.4 标 UNVERIFIED）⇒ Task 4 的 `judge_error` 用例先按"会抛"设计，实测后收窄。
 
 ## 🚫 Out of Scope

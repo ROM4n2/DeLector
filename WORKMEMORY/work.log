@@ -485,3 +485,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 解法：把两侧事件**全部保留**并按时间排序拼接（master 的 23:35 WORK_END、00:45 NOTE 在前，本分支 02:05/02:10/02:15 三条在后），work.log 由 53 → **55 条**，0 重复头 / 0 残留冲突标记 / 纯 CRLF。协议 §1.3「事件只追加不改写」与 §5.1「轮转/移动不改写正文」均未破。
 - **发现一条既有问题（非本次引入）**：`work.log + archive/*` 的 union 里存在 7 个**重复事件头**（09-04 ~ 09-13 段，同一头出现在 2~3 个 archive 分片），来自历史上「未跟踪的 archive 分片 + 已跟踪分片」两套并存。后果：按 §5.1 的 `sort | uniq -c` 守恒核对会把这些计数差异误判成丢失/新增（我本次的第一次守恒核对就是这样报 MISMATCH 的，真因是「archive 分片此前未跟踪，`git show HEAD:` 取不到」）。
 - **核对口径修正（供后来者）**：守恒核对 MUST 以**工作树现状**为 before 快照（轮转前先 `cp` 或先算 union 存基线），**不能**用 `git show HEAD:` 当 before —— 未跟踪分片会被漏算。
+
+
+### 2026-10-15 05:20 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**ADR-0023 §6 回写完成**（vault 提交 `139cdde`，已推 master）；PR #136 的冲突已解。
+- **回写内容**：① 状态行删掉已过期的「实施未开始」，改为「§8.5 序 ①②③ 已落地」，并**显式保留 §4.3 的自设门槛** —— 裁判集一行未扩，此刻仍 MUST NOT 宣称「已实现」；② §6 迷雾区四条改为「原表述 + 现状 + 依据」表（Unknown 1 升级为第一瓶颈：适用性闸门使循环真实价值只覆盖 A1 书信体；Unknown 2 上界定案 4096/4096/18.0 + 折算系数 3.0 标注 UNVERIFIED；Unknown 3 定案 = JSON 契约字段；Unknown 4 闭合）+ **新增 Unknown 5**（`lookup_core_vocab` 10 组边界词 0 失败、`analyze_a1_email` 10 组边界输入全通过 ⇒ 未见抛出、未穷尽；`judge_error` 降级保留为防御性守卫）；③ **新增 §10 实施回写**（施行顺序 ①②③ 的落地与证据 / 两处执行期偏离 / 两条可复用教训 / 明确留白）。
+- **两条教训已进 ADR §10.6（建议晋升 `01-Rules`）**：⑴ SSE 断连收尸必须放 `try/finally` 的**同步** `cancel()` —— uvicorn 0.54 `spec_version=2.3` 下 starlette `listen_for_disconnect` **抢先**取消生成器；且**只迭代 `body_iterator` 的测试绕开了 `StreamingResponse.__call__`**，测不到这个抢先。⑵「只读」这类声称**必须带前提**并配**非真空测试**（`analyze` 的"不下载"实测为假：`processor.py:95-114` 桌面缺模型会 `spacy.cli.download`）。
+- **PR #136 冲突**：master 侧 2 条簿记提交与本分支簿记提交都改 `work.log` 末尾 ⇒ 用 merge 解，两侧事件全留（53→55 条，0 重复头 / 0 残留标记 / 纯 CRLF）；`mergeable` 已由 CONFLICTING 转 **MERGEABLE**。顺带闭合 `handoff_interactive-agent-loop.md`（status → closed + 响应节）并补登台账 Task-5 ⇒ **7/7**。
+- 计划正本那句「待回写 ADR §6」已同步为「✅ 已回写（vault `139cdde`）」，避免活文档指针漂移。
