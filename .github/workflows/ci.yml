@@ -253,3 +253,187 @@ jobs:
         # --expect-commit 传完整 GITHUB_SHA；脚本按前缀比对产物里的短 sha（详见
         # tools/verify_windows_portable.py::commit_mismatch）。
         run: python tools/verify_windows_portable.py --expect-commit ${{ github.sha }}
+
+  # ── Go↔Python 真链路集成门禁（Task 2「CI 半」）────────────────────────────────────
+  #
+  # 判据：本 job 验的是**真链路** —— Go 侧 app.Run / pythonsvc.Supervisor 真起一个
+  # uvicorn 子进程（delector.server:app），经真实 HTTP 打到 /api/tools/* 并断言
+  # writing_check 的契约键；绝不接受 stub / mock 顶替。build tag `integration`
+  # 就是把这套重用例隔离在常规 `go test ./...` 之外的带子。
+  #
+  # 为何单开 job 而非并入 `ci`：它要的东西与 `ci` 不同（Python 侧依赖齐全 + 真起服务
+  # 的耗时与失败模式），分开后「集成红」与「单测红」在 UI 上可分辨、可单独重跑。
+  #
+  # 零 SKIP 判据（2026-10-15 回炉轮：取代上一版「跳过语义」口径）：
+  #   Go 的 t.Skipf 是**成功退出**（go test 返回 0），而 agent/integration_test.go
+  #   的三处 skip 里「起服失败」「analyze 出错」都可能是**产品问题** ⇒ 放任 skip 等于
+  #   「门禁绿着丢信号」（比红更坏）。故本 job 绿 = **零 skip**：集成用例只要跳过一个，
+  #   门禁即红，并打出该用例名与 Go 的 skip 原因行（见最后一步的 -json 判据）。
+  #   MUST NOT 为了让日志好看而放宽断言，也不得改回「skip 当绿」。
+  #
+  # 判据作用域（MUST 收窄到集成用例）：跳过判据只作用于「加了 integration tag 才存在
+  #   的包」（go list 两级差集算出）。常规包里有合法的平台分支 skip ——
+  #   internal/pythonsvc 的 unix SIGTERM 单测在 ubuntu runner 上必然 skip ——
+  #   若把它的 skip 也计入，本 job 会在 Linux 上恒红。
+  #
+  # -count=1（2026-10-15 回炉轮）：Go 的测试缓存键只依赖 Go 侧输入（含
+  #   agent/go.mod），只改 delector/（Python 侧）时缓存键不变 ⇒ 命中 `ok (cached)`，
+  #   Python 服务根本不起，门禁变摆设。`-count=1` 强制每次真跑。
+  agent-integration:
+    name: Go↔Python Integration Gate (真链路, ubuntu)
+    runs-on: ubuntu-latest
+    # 卡死护栏（同 ci / windows-portable-smoke：不设时 GitHub 默认上限 360 分钟）。
+    # 算术：本机实测全量 `go test -tags integration ./...` 暖缓存 14.0s、空 GOCACHE
+    # 冷编译 25.8s（依赖仅 go-openai + cobra）；CI 冷跑再叠 checkout/setup 约 30s +
+    # pip 装 requirements.txt（含 spaCy，约 1–1.5min）+ spaCy de_core_news_sm 模型
+    # 约 30s ⇒ 标称冷启动 ≈ 3.5min；runner 拥塞按 2x ⇒ ≈ 7min。
+    # 取 20 ≈ 标称 5.7x / 拥塞情形 2.9x：宽到不会被慢 runner 误杀，又远低于 360min
+    # 默认（真挂死时 20min 即红，不会烧满六小时）。
+    timeout-minutes: 20
+    env:
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 只装 requirements.txt：uvicorn / fastapi / spacy 都在里面，正是真链路所需。
+      # **不装** requirements-desktop.txt —— 那是 Windows 桌面壳专属（pywebview /
+      # pythonnet / pystray / pillow），其文件头明令「绝不并入公共依赖面」；在 Linux
+      # 上装它既无意义，还会引入缺 GTK/WebKit 的导入异常。
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # spaCy 德语模型：delector 侧模型加载是**惰性**的（ADR-0018 §7.6，import 期
+      # 不得 spacy.load），缺模型不会让服务起不来 —— 但会让 TestGoPythonPipelineAnalyze
+      # 走 skip，或在请求内触发 spacy 自动下载而拖慢、乃至撞上 60s 超时转成 skip。
+      # 显式预下载使三条集成用例都拿到真信号，避免「日志全绿但用例根本没跑」。
+      - name: Download spaCy German model
+        run: python -m spacy download de_core_news_sm
+
+      - name: Set up Go (version from agent/go.mod)
+        uses: actions/setup-go@v7
+        with:
+          # MUST 用 go-version-file 而非硬编码：agent/go.mod 的 `go 1.26` 是唯一真相
+          # 源，硬编码版本号会在升级 Go 时与 go.mod 漂移成两个真相源。
+          go-version-file: agent/go.mod
+          # cache 是 boolean（setup-python 的才是字符串 "pip"），勿写成字符串。
+          cache: true
+          cache-dependency-path: agent/go.mod
+
+      # 显式钉住解释器并透传：DELECTOR_PYTHON 是 mustNotSkipEnv 的最高优先候选。不设
+      # 也能跑（候选链退到 python3 → python），但 CI 上显式写死可消除「PATH 上恰好有
+      # 个缺依赖的 python3」这类隐式耦合；选定结果由测试的 t.Logf 打进日志便于回溯。
+      - name: Resolve Python interpreter for the gate
+        run: echo "DELECTOR_PYTHON=$(command -v python3)" >> "$GITHUB_ENV"
+
+      # 真链路门禁本体（Go 起真实 Python 托管进程 + 真实 HTTP 契约，不做 stub）。
+      # 注：`-tags integration` 是**叠加**而非替换，常规单测照跑（本 job 是 ci job 的
+      # 超集口径），故本 job 红 ⇒ 真链路或单测二者之一断裂。
+      #
+      # ── 零 SKIP 判据（2026-10-15 回炉轮）────────────────────────────────────────────
+      #   Go 的 t.Skipf 是**成功退出**（go test 返回 0），而 integration_test.go 的三处
+      #   skip 里「起服失败」「analyze 出错」都可能是**产品问题** ⇒ 放任 skip
+      #   等于「门禁绿着丢信号」。故本步用 -json 抓事件流：集成用例出现任一
+      #   skip ⇒ 非零退出，并把该用例的 Go 原始跳过原因行（文件:行 + 理由）打出来。
+      #   判据作用域 MUST 收窄到「加了 integration tag 才存在的包」（下方 ① 用 go list
+      #   两级差集算出）：常规包里有合法的平台分支 skip —— internal/pythonsvc
+      #   的 unix SIGTERM 单测在 ubuntu runner 上必然 skip —— 若一并计入，本 job 会在 Linux 上恒红。
+      #
+      # ── -count=1（2026-10-15 回炉轮）─────────────────────────────────────────────────────
+      #   Go 测试缓存键只依赖 Go 侧输入（含 agent/go.mod），只改 delector/
+      #   （Python 侧）时缓存键不变 ⇒ 命中 `ok (cached)`：Python 服务根本不起，门禁变摆设。
+      #   `-count=1` 强制每次真跑（不得为了让日志好看而删掉）。
+      - name: Go↔Python integration gate (real service, no stub, zero skip)
+        shell: bash
+        run: |
+          cd agent
+
+          # ① 圈定零 SKIP 判据的作用域：仅「加了 integration tag 才存在的包」。
+          go list -tags integration ./... | sort > "${RUNNER_TEMP}/integ-pkgs-with-tag.txt"
+          go list ./... | sort > "${RUNNER_TEMP}/integ-pkgs-without-tag.txt"
+          comm -23 "${RUNNER_TEMP}/integ-pkgs-with-tag.txt" "${RUNNER_TEMP}/integ-pkgs-without-tag.txt" > "${RUNNER_TEMP}/integ-pkgs-only.txt"
+          echo "集成用例专属包（零 SKIP 判据作用域）："
+          cat "${RUNNER_TEMP}/integ-pkgs-only.txt"
+          if [ ! -s "${RUNNER_TEMP}/integ-pkgs-only.txt" ]; then
+            echo "::error::集成用例专属包清单为空：没有任何包只在 integration tag 下存在（tag 漂移 / 集成测试文件被删）⇒ 门禁空转"
+            exit 2
+          fi
+
+          # ② 真跑：-count=1 禁测试缓存；-json 供 ③ 判 skip —— 且其 output 事件
+          #   就是 -v 原文（`=== RUN` / `--- PASS: TestX (0.00s)`），日志即逐用例可读结果。
+          LOG="${RUNNER_TEMP}/go-integration.jsonl"
+          ERRLOG="${RUNNER_TEMP}/go-integration.stderr.log"
+          rc=0
+          go test -count=1 -json -tags integration ./... >"${LOG}" 2>"${ERRLOG}" || rc=$?
+          if [ -s "${ERRLOG}" ]; then
+            echo "----- go test stderr -----"
+            cat "${ERRLOG}"
+            echo "--------------------------"
+          fi
+          if [ "${rc}" -ne 0 ]; then
+            echo "::error::go test 退出码 ${rc}（编译失败或用例失败）⇒ 门禁红"
+            exit "${rc}"
+          fi
+
+          # ③ 零 SKIP 判定 + 集成用例 PASS 计数（PASS=0 同样是门禁空转 ⇒ 红）
+          python3 - "${LOG}" "${RUNNER_TEMP}/integ-pkgs-only.txt" <<'PY'
+          import json
+          import sys
+
+          log_path, pkgs_path = sys.argv[1], sys.argv[2]
+          with open(pkgs_path, encoding="utf-8") as fh:
+              integ_pkgs = set(ln.strip() for ln in fh if ln.strip())
+          if not integ_pkgs:
+              sys.exit("::error::集成用例专属包清单为空，门禁无从判定（空转）")
+
+          buf = {}   # (pkg, test) -> [Go 原始输出行]
+          skips, passes, fails, garbage = [], [], [], []
+          with open(log_path, encoding="utf-8") as fh:
+              for lineno, line in enumerate(fh, 1):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      ev = json.loads(line)
+                  except ValueError:
+                      garbage.append((lineno, line[:200]))
+                      continue
+                  pkg, test, act = ev.get("Package", ""), ev.get("Test", ""), ev.get("Action")
+                  if act == "output":
+                      # -json 的 output 事件即 -v 原文（=== RUN / --- PASS: TestX (0.00s) /
+                      # 文件:行: 日志），原样透传 ⇒ CI 日志就是逐用例的可读结果。
+                      text = ev.get("Output", "")
+                      sys.stdout.write(text)
+                      buf.setdefault((pkg, test), []).extend(text.splitlines())
+                  elif act == "skip" and test:
+                      skips.append((pkg, test))
+                  elif act == "pass" and test:
+                      passes.append((pkg, test))
+                  elif act == "fail" and test:
+                      fails.append((pkg, test))
+          sys.stdout.flush()
+
+          if garbage:
+              sys.exit("::error::%s 含无法解析的行，零 SKIP 判据失效（门禁拒绝放行）：%s" % (log_path, garbage[:3]))
+
+          in_skips = [s for s in skips if s[0] in integ_pkgs]
+          in_passes = [p for p in passes if p[0] in integ_pkgs]
+          in_fails = [f for f in fails if f[0] in integ_pkgs]
+          print("===== 零 SKIP 判据（作用域=%s）：集成用例 PASS=%d SKIP=%d FAIL=%d =====" % (sorted(integ_pkgs), len(in_passes), len(in_skips), len(in_fails)))
+          for pkg, test in in_skips:
+              print("::error::集成用例 %s（包=%s）被跳过 —— 跳过用例名与 Go 的 skip 原因行：" % (test, pkg))
+              for ln in buf.get((pkg, test), []):
+                  if ln.strip():
+                      print("::error::    %s" % ln.strip())
+          if in_skips:
+              sys.exit(1)
+          if not in_passes:
+              sys.exit("::error::集成用例 PASS=0 ⇒ 门禁空转（集成用例一个都没真跑），拒绝放行")
+          print("===== 零 SKIP 判据通过：集成用例全部真跑且无 skip =====")
+          PY

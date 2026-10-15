@@ -16,12 +16,15 @@ import (
 // 取消 ctx 优雅退出（Stop supervisor）。依赖缺失一律 t.Skipf（含理由），
 // 绝不因环境缺失而红（Skip 契约同 2a T7）。
 func TestRunEndToEnd(t *testing.T) {
-	mustNotSkipEnv(t)
+	// 选定解释器 MUST 透传到起服路径（app.Options.PythonCmd），杜绝"探测用一个、
+	// 起服却用另一个"的静默失败。
+	python := mustNotSkipEnv(t)
 
 	tmp := t.TempDir()
 	opts := app.Options{
-		Port:    8001,
-		DataDir: tmp,
+		Port:      8001,
+		DataDir:   tmp,
+		PythonCmd: python,
 		// PYTHONPATH / PYTHONIOENCODING / DATABASE_PATH 由 app.Run 自动注入
 		// （repoRoot 经 runtime.Caller 上溯，2a T7 同款）。
 	}
@@ -49,6 +52,12 @@ func TestRunEndToEnd(t *testing.T) {
 	}
 	t.Logf("TestRunEndToEnd OK: 真实 Python 起服务 + 工具端点 200 + 优雅退出")
 }
+
+// healthURL 是本用例专用的健康端点：TestRunEndToEnd 直连 app.Run，并显式以
+// app.Options.Port=8001 钉住端口（见上方 opts），故其端点固定在 8001，与
+// integration_test.go 的动态 baseURL 无耦合。（本 const 由本用例自持，避免与
+// 动态端口门禁共享可变符号。）
+const healthURL = "http://127.0.0.1:8001/api/tools/"
 
 // pollHealth 轮询 healthURL 直至 200 或超时；返回是否曾达 200。
 func pollHealth(t *testing.T, timeout time.Duration) bool {

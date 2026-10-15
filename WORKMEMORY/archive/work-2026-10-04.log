@@ -1,0 +1,11 @@
+### 2026-10-04 16:10 | codebuddy | DONE(sp1–sp5 全 5 项) + WORK_START(debt-clear-round)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：swarm 审计（`docs/reviews/2026-10-03-swarm-audit-master.md`）拆 5 个子计划，**本轮全部完成**。**补记**（协议 §1.7 漏写不是灾难，下一 agent 补 NOTE 即可，不回改历史）。
+- **sp1 (#93)** 角标切 `/api/cards/counts`（去 N+1）。
+- **sp2 (#96)** 量化 `/api/cards` 排序成本。**决定不加 `idx_vocab_list`**：filesort 仅占端点 8.9%（20k 档 70.2ms/790ms），远低于 30% 否决线；Python 物化+FSRS 占 84.1%。两条观察：耗时超线性（行数×50 ⇒ ×68.1）；`segment_A ≈ segment_C`（55.7 vs 54.9ms，因 temp B-tree 搬运整行 19 列负载）⇒ **削弱"加索引能省 A"的收益**。真解法在 FSRS 批量化（需 schema）/ keyset 分页（需发版）。
+- **sp3 (#97)** 前端竞态三修：`openText` 重入守卫（请求代号 + `AbortController` + 覆写前/后双守卫 + `markRead` 排序）、`openPopoverNear` 垂直夹取**含向上翻转**（不能只 `Math.min`）、列表/详情 deck 同源（`resolveDeck()` 替裸 `loadDeck`）。
+- **sp4 (#95)** 韧性四项：Go 崩溃出口 63、回滚失败留痕、**TTS 并发闸**（模块级 `Semaphore(k=4)` + 429）、**真健康端点 `/api/health`**（原 supervisor 拼 `/api/tools/` ⇒ 改默认值会"单测全过、真实 run 仍用旧探针"）。
+- **sp5 (#98)** KARTEI 去复习化：工作台词在卡盒**可见但不可复习**（消「白复习」：DSR 四列被写、`fsrs_s` 优先使卡面无变化、工作台 FSRS 也不动）。收走四个 DSR 按钮，保留 `mastered` 徽记/按钮 + 「去工作台复习」。
+编排者教训三条：①给 maker 的指令错 3 次、子代理纠正 3 次 ⇒ **双向核验不可省**；②引缓存/加闸/加限流必须自带**失效入口与位置守卫**（聚合 key 无失效 ⇒ 静默 300s；TTS 闸放错位 ⇒ 400 变 429）；③**「修 A 顺手做 B」若不查 B 的不变量，会悄悄撤销 A 的修复**（sp3 T3 reopen 了 T1 竞态）。
+⚠️ 已知取舍：sp5 的「去工作台」是**整页跳转**（脱离主站壳，无导航栏，只能浏览器后退）。
+随后启动 **WORK_START(debt-clear-round)**：清理 sp3/sp5 遗留债，分三组并行（各组独立 worktree，**PR #98 保持已验收状态不塞新债**）：A 组改 `static/js/cards.js`（目录视图 `renderCatalogGrid` 对工作台词说谎 + 跳转落点留主站壳内）、B 组改 `static/js/encounter.js`（`fetchKnownLemmas` 无 in-flight 去重 + 覆盖率行无降级标记，**需 UI 决策**）、C 组改 `tests/`+`.github/`（**7 个** `.mjs` 探针未接 pytest；且 `ci.yml` 无 `setup-node` ⇒ 靠 ubuntu runner 预装，属隐式依赖）。**全部完成后一次性发版**（static/ 已累积 #93/#97/#98 改动 ⇒ 建议 v5.14.0）。

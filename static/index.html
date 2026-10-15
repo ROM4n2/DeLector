@@ -962,6 +962,16 @@
             >
               ✨ AI 润色全文
             </button>
+            <!-- 取消槽位：只在流式润色进行中显示（writer.js 的 setPolishCancelVisible 切 .hidden）；
+                 点击 = controller.abort() ⇒ 服务端据此取消循环任务，不再继续烧配额。 -->
+            <button
+              class="btn btn-ghost hidden"
+              id="writer-ai-cancel-btn"
+              onclick="cancelAiPolish()"
+              title="中止正在进行的 AI 润色（已消耗的部分不会退回）"
+            >
+              ✕ 中止润色
+            </button>
             <button class="btn btn-ghost" onclick="analyzeWriterText(true)">
               ⚡ 实时诊断
             </button>

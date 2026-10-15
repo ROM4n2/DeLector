@@ -1,206 +1,6 @@
 # DeLector work.log（HOT 层，append-only）
 # Schema 见 PROTOCOL.md §2；轮转规则见 §5
 
-### 2026-09-18 19:10 | trae-llm__trae-code | MYPY_STRICT（250→0 清账收官 + 门禁升级）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：vault-spark 决策「技术债收口」→ Mypy strict 升级落地。spec：docs/specs/2026-09-18-mypy-strict-annotation-sweep-design.md（已批准）。
-1. 清账：4 个并行 subagent 分 Phase 2a/2b/3a/3b 补注解 ~127 处 + 主线程收口（processor 红线 1 占位恢复带理由 ignore、lexicon re-export as、main.py:509 groups 显式 List[Dict[str,Any]]、删 skip 模式 unused-ignore 17 处、test_official_vocab 纯数据守卫白名单扩 Optional/Tuple）。
-2. 验收：`mypy --strict deletor` **250→0**（53 源文件）；全量 pytest **989 passed + 1 skipped** 零回退；ruff 零告警。
-3. 门禁：ci.yml Mypy gate `mypy` → `mypy --strict deletor`（tests/tools 沿用适度档）；test_ci_hardening 守卫兼容（含 "mypy" 子串断言）。
-4. 产出：docs/plans/2026-09-18-mypy-strict-annotation-sweep.md 状态收官。
-遗留：gloss 产包仍阻塞（DEEPSEEK_API_KEY 缺失）；真用户试用三问反馈仍未启动；tests/tools strict 另立。
-
-### 2026-09-18 20:10 | trae-llm__trae-code | MYPY_STRICT_EXT（tools 另立升级完成）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：vault-spark 决策 B「只清 tools，tests 保持适度档」→ tools strict 清账落地。
-1. tools 3 文件 108→0（vault-proactive-scan.py 61 / gen_rich.py 42 / audit_official_vocab.py 5；no-untyped-call 连锁为主，补 61 处注解）。
-2. 门禁双轨：ci.yml `mypy --strict deletor tools`（strict）+ `mypy --follow-imports=skip tests`（tests 适度档，skip 避免 deletor strict ignore 在配置档 unused 冲突）；test_server.py 文件级豁免 unused-ignore（动态面 ignore 正常模式需要）。
-3. 全程踩坑：**delector 拼写连续 7 次写成 deletor**（本地/ci.yml/注释），CI 首跑 0s 失败实证 2 次——最后用 'de'+'lector' 拼接 + 文件替换解决。教训：长命令手打包名必错，改变量/拼接。
-4. 验证：两个门禁命令本地零错误；CI 35342745037 全绿（含 pytest 989+1）。
-遗留：tests strict 另立评估（1897 处，pytest 函数注解收益低）；vault-proactive-scan.py 报告 2 个疑似真实缺陷（check_frontend_consistency 空 versions 误报、check_security found_keys 未去重）待裁决。
-
-### 2026-09-18 20:40 | trae-llm__trae-code | FIX（vault-proactive-scan 两缺陷）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：agent 报告的工具缺陷裁决 → 修复（commit ac52abc）。
-1. check_security 密钥去重：found_keys list→dict（键=完整密钥），同一密钥跨文件只报首次；截断 [:8]→[:12]。
-2. check_frontend_consistency：正则全缺/缺条目时不再误报「多端不一致」，降级 WARN 列出未匹配文件。
-验证：scratch 三场景（同密钥 3 文件→1 条 / 三端全缺→warn 无 issue / 一致→PASS）；mypy --strict + ruff 零告警。
-另发现（未修）：check_security 扫描含 scratch/browsercheck/node_modules（排除列表无 node_modules），WASM 生成代码的 base64 误报 AKIA 假密钥——待定是否加排除。
-### 2026-09-21 00:00 | mimocode | WORK_START(A1-rich-convergence-grill)
-Caps: filesystem-read, shell-exec
-事件：/vault-grill + /compose-next 启动。议题=A1 富结构收敛（ADR-0013 defer：A1_WORKBENCH_SEED / GOETHE_A1_VOCAB 从主干派生）。取证完成：A1 三源（seed 682+custom22 / GOETHE 702 / official+rich 670·660），seed↔GOETHE 仅 ~391 共享 lemma，无 id 映射表。待 Frontier 拍板后建 worktree。
-### 2026-09-21 | mimocode | DECISION(A1-rich-convergence Q1-Q4)
-Caps: filesystem-read, filesystem-write
-事件：/vault-grill 前沿四轴全选推荐：Q1 成员清单+共享字段单源；Q2 字段级优先级；Q3 专有词全部进 FRAGMENTS；Q4 考纲 A1 露出 IPA。ADR-0015 已写入 vault 08-Projects/DeLector/01-ADR/0015-...。git worktree add 被沙箱拦截（主检出 registry 保护）——待用户裁决 Workspace。
-### 2026-09-21 | mimocode | DELIVERED(A1-rich-convergence)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：feature/a1-rich-convergence @ 8dd8002（worktree .worktrees/a1-rich-convergence，base master 7ac49d2）。ADR-0015 落地。门禁 pytest 1081+1 / ruff 0 / mypy --strict 0 / Go 全绿 / 探针 16/16。评审 subagent 卡死取消，关键不变量自审通过。待用户收口 merge/PR；Android 覆盖安装点检开放。
-### 2026-09-21 | mimocode | RELEASE_v5.10.0
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：PR #62 已 merge（1d08cc7）。五件套 bump 5.9.5→5.10.0 / versionCode 50905→51000（sw.js / index.html / build.gradle / README / PROJECT_OVERVIEW + CHANGELOG）；test_writer_mobile 30 全绿。bump commit 上打 tag v5.10.0 推送，待 CI Build & Publish。内容=A1 富结构收敛（ADR-0015）。Android 覆盖安装点检仍开放。
-
-### 2026-09-23 | codebuddy | WORK_START(encounter-i1-content-and-selection)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：/vault-spark 方向裁定（先 A 后 B）→ spec + plan 已出，/vault-exec 启动。范围 = 遇见区 i+1 补齐——A 内容放量（预置 4→7 篇 + 版本化增量补装，让存量设备零操作升级）+ B 就近选材（新增只读索引端点 + 前端本机算覆盖率并排序/推荐）。
-分支：feature/encounter-i1（worktree .worktrees/encounter-i1，base master 954eb1d）。6 Task。
-风险报备：ledger 原为 2026-09-20 vocab-search 计划（6/6 completed），本次 init 将覆盖该账本（旧计划完成状态以 commit 链为准，属已知限制）。
-
-### 2026-09-23 | codebuddy | DELIVERED(encounter-i1-content-and-selection) — 6/6 Task 全绿（本地分支，未 push）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：vault-spark → plan → vault-exec 全链完成。分支 `feature/encounter-i1`（worktree `.worktrees/encounter-i1`，base master 954eb1d），8 个原子提交：
-- `ae30cb4` docs（spec + plan）
-- `d46fa8e` T1 预置短文 4→7 篇 + 每包预计算 `analysis.lemma_seq`（annotate 口径：剔 is_space、留标点）
-- `f0ad2f4` T2 版本化增量补装（`PRESET_SEED_VERSION=2` + `app_settings.encounter_seed_version` + 只增 + 只补空 lemma_seq）
-- `431f427` T3 只读端点 `GET /api/encounter/texts/index`（零 spaCy、不挂本机闸、缺字段 null 不丢行）
-- `dc4b9ec` T4 前端纯函数 `static/js/enc-i1.js` + `tools/wb_enc_i1_probe.mjs`（node:vm 真源码，38 断言）
-- `9924028` T5 遇见区列表集成（徽章/排序/推荐条/索引失败降级）
-- `3349acc` T6 I-1 口径一致性端到端 + `docs(encounter)` 收官回写
-门禁（收官复跑，编排者独立验证）：分半全量 = 非 server 半 **881 passed + 2 failed（既有 `no such table: exam_trials`，非本次引入）** + server 半 **228 passed + 1 skipped** ⇒ **1109 passed + 1 skipped**（基线 1081 → +28）；ruff 零告警 / `mypy --strict delector tools` 62 files 0 error / 全 `tools/*.mjs` 零漂移。maker-checker：6 Task 逐个经 CRV，**2 轮 REVISE**（T2 红牌 R1「只补空」断言缺「其余键逐字段不变」→ 已补并变异实红；T5 黄牌 Y2 恒真弱断言 + Y1 grid 列间隙 → 已修）。
-关键不变量：**I-1**（`index.lemma_seq` 与 annotate 逐 token 序列全序列逐元素相等、分母相等、rate 逐位相等）—— 反绿变异（丢标点）7 篇全红实证。
-遗留/报备：① **未 push、未开 PR、未发版**（改动含 `static/` → 发版需走五件套 + Android 覆盖安装）；② CRV 黄牌 3 条非阻塞未修（I-1 的 known 集合未按 deck-bridge 剥冠词规则构造；`_MUTATION_TABLE` 行 500 归属重合已补注；`PROJECT_OVERVIEW:57` 尾句「叠加 v5.7.7 基线 839」与新基线并置易误读）；③ `_MUTATION_TABLE` 之外的既有黄牌：`pyproject.toml` mypy `exclude` 含裸子串 `build` ⇒ `tools/build_*.py` 目录模式漏检（既有配置缺陷，maker 已为该文件补全注解，建议单独立项修 exclude 锚定）；④ 残留 worktree `.worktrees/a1-rich-convergence`（其分支已合并）未清理。
-
-### 2026-09-24 | codebuddy | WORK_START(encounter-read-state)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：v5.11.0 发版后收尾（远端 prune 完成 + 6 个已合并本地分支删除，本地仅剩 master；`v5.11.0` Release 4 资产已确认挂载，APK 61.6MB）→ 用户裁定下一步 = 遇见区「已读状态 + 推荐顺延」（v5.11.0 推荐机制自造的新需求：推荐基于覆盖率、与读没读过无关 → 读完推荐那篇后推荐不顺延）。用户决策：**打开即已读** + **只加标记不动排序**。
-分支 `feature/encounter-read`（worktree `.worktrees/encounter-read`，base master `f8ef5f6`，注意 master 已含 PR #63 dependabot uvicorn 升级）。3 Task（纯函数+探针 / 前端集成 / 收官）。
-关键设计：存储键 **`delector_encounter_read_v1`**（依据 `cards.js:897-900` 的前缀契约：`delector_`/`wb.` 随备份导出+还原，`enc.` 是设备本地偏好 → 已读属学习进度故用 `delector_` 前缀，`cards.js` 零改动）；服务端零改动；不做跨端同步。
-
-### 2026-09-24 | codebuddy | DELIVERED(encounter-read-state) — 3/3 Task 全绿（本地分支，未 push）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：分支 `feature/encounter-read`（worktree `.worktrees/encounter-read`，base master `f8ef5f6`），5 个原子提交：`8aa763a` docs（spec+plan）→ `38969b2` T1（`static/js/enc-read.js` 零依赖纯函数 + `tools/wb_enc_read_probe.mjs` 35 断言）→ `f307f32` T2（已读标记 + 推荐顺延集成）→ `a820e37` T3（收官回写）→ `7cd1660` T3 修订。
-功能：打开短篇即记已读（localStorage `delector_encounter_read_v1`，**随备份导出/还原**）；列表卡片 `✓ 已读` + `.is-read` 轻降权（标记置于 `.encounter-card-meta` 段内，**不新增 grid 子项**）；推荐条改 `pickUnread` 跳过已读顺延（i+1 读完→「i+1 都读完了，试试《X》」；本就无 i+1→中性「试试下一篇」；全读完→「🎉 N 篇都读过了」；未背词→引导文案优先）；`ranked` 空/非数组→`hideI1Hint()`（回到 v5.11.0 行为）。
-门禁（编排者独立复跑）：分半全量 = 半 A **891 passed + 2 failed（既有 `no such table: exam_trials`）** + 半 B **228 passed + 1 skipped** ⇒ **1119 passed + 1 skipped**（v5.11.0 基线 1109 → **+10**）；ruff 零告警 / `mypy --strict delector tools` 62 files 0 error / 全 `tools/*.mjs` 零漂移。maker-checker：3 Task 逐个 CPE→CRV，**3 轮 REVISE**（T1 黄牌×2：`loadRead` 硬编码 SCHEMA_V 致 schema 漂移测不到、pytest needle 未覆盖 S3；T2 黄牌×3：`backToList`/`refreshList` **漏传 readState** 使"读完返回列表不显示已读"、空 `ranked` 误显"0 篇都读过了"、grid 硬约束无探针；T3 **红牌**：同一注释块内「以单参调用 renderTextList」与本任务刚改的三参实现自相矛盾）——**全部闭环且变异实红**。
-可复用经验：① localStorage 键**前缀即备份契约**（`delector_`/`wb.` 随备份走、`enc.` 是设备偏好），命名前先查 `cards.js:897-900`；② 「读态/进度」类状态要顺带检查**所有**列表渲染调用点（`backToList`/`refreshList` 这类旁路最易漏传）；③ 改注释时留意**同一注释块内的其它行**是否因此自相矛盾（本轮 T3 红牌即此）。
-未做：push / 开 PR / 发版（改动含 `static/` → 需五件套 + Android 覆盖安装）。
-
-### 2026-09-24 | codebuddy | RELEASE_v5.12.0（遇见区已读状态 + 推荐顺延）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：PR #65 合并（`a1c4291`，PR CI success）→ 五件套 bump v5.11.0 → v5.12.0（commit `52984f6` + `e2b3b6c`，附注 tag `v5.12.0`）；Release 四平台资产已确认挂载（APK 61.6MB）。守护测试 `test_writer_mobile.py` 30 passed。Android 需覆盖安装 v5.12.0。
-内容：打开短篇即记已读（`localStorage["delector_encounter_read_v1"]`，`delector_` 前缀 → 随备份导出/还原）+ 列表 `✓ 已读` 标记 + 推荐条跳过已读顺延（i+1 读完→降级文案 / 本就无 i+1→中性文案 / 全读完→完成态）；服务端零改动、已读本机判定不做跨端。
-
-### 2026-09-24 | codebuddy | FIX(dependabot-fastapi-ignore)＋WORK_START(toolchain-guard-truth)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件 A（已完成，commit `d25543a`）：排查 dependabot PR #48（fastapi 0.136.3→0.141.1）CI 为何红 —— **不是新 bug、也不是"可升"**：CI 日志实证装的是 `fastapi-0.141.1 + starlette-1.6.0`，触发的正是 `POST-MORTEM-V5.4.0-FASTAPI-DEPENDENCY-DRIFT` 记录的坑（starlette 1.6 起 `include_router` 后 `APIRoute.endpoint` 不再保持原函数对象引用 → 路由守卫把**全部**路由误判 missing）。处置：PR #48 已关闭（附 post-mortem 理由）；`.github/dependabot.yml` 的 pip 生态加 `ignore: fastapi/starlette`（含人工升级路径与解除前提注释）；`tests/test_ci_hardening.py` 7 passed、YAML 解析验证通过。
-事件 B（进行中）：**WORK_START(toolchain-guard-truth)** —— 把两处「假门」修真：① 路由守卫改为 `(prefix+path, methods)` 比对（解除 fastapi 升级禁区，并在真漏挂时能精确定位而非"全量 missing"）；② 修 `pyproject.toml` 的 mypy `exclude` 裸子串 `build`（静默吃掉 6 个 `tools/build_*.py`，显式清单实测 **47 errors in 4 files**）。分支 `chore/toolchain-guards`（worktree `.worktrees/toolchain-guards`，base `d25543a`），2 Task。
-
-### 2026-09-24 | codebuddy | DELIVERED(toolchain-guard-truth) — 2/2 Task 全绿（本地分支，未 push）
-Caps: filesystem-read, filesystem-write, shell-exec
-分支 `chore/toolchain-guards`（worktree，base `d25543a`），4 个原子提交：`17904a5` docs → `450700f` T1（路由守卫改 HTTP 语义键）→ `a0892b8` T2（mypy exclude 锚定 + 注解清账）→ 收官 docs。
-**T1 关键（计划两处前提被实测推翻，务必记）**：① **`route.path` 已含 `router.prefix`**（FastAPI `add_api_route` 定义时即 `self.prefix + path`）→ 计划里 `router.prefix + route.path` 会**双拼**（missing 形如 `/api/a1/api/a1/topics`）；② **fastapi ≥0.141 起 `include_router` 改为嵌套**（`app.routes` 里是无 `path` 的 `_IncludedRouter`，实测 `probe.routes` 只剩 4 条默认路由）→ 已注册侧改取 **`app.openapi()["paths"]`**（文档化 HTTP 契约），比对键 `(_semantic_path(path), METHOD)` 逐 method 展开 + `{name:int}`→`{name}` 归一。判别力反证：摘掉 `listen` 的 include → `missing` **只含 listen 5 条**（改造前"全量 115 条"）。隔离验证（`pip install --target /tmp/tc_dep "fastapi==0.141.1"`）：旧实现红 / 新实现绿；`test_server` 228+1skip；半 A 2 failed/891 passed（**与本机 pin 完全一致 ⇒ 升级无回归**）。
-**fastapi 升级禁区状态**：守卫已免疫，但 **pin（`requirements.txt`）与 `dependabot.yml` 的 `ignore` 暂不解除** —— 按「新环境全量真绿才升」的规则，正确次序 = **先修 `exam_trials` 那 2 例既有失败 → 再同笔升 pin + 撤 ignore**（同进同退，否则基线带红时撤 ignore 只会放大噪音）。
-**T2**：`pyproject.toml` 的 mypy `exclude` 裸子串 `build` → 锚定 `(^|/)build(/|$)`；`tools/` 全部 11 个 `.py` 纳入门禁（覆盖 **62 → 68** files），4 个产包脚本 **47 个 strict 注解债 → 0**（仅注解、零行为；3 处 `no-any-return` 用 `typing.cast` 修，运行时恒等）。变异：改回裸子串 → 62 files（门禁重新失明）；`ci.yml:76` 本就是 `mypy --strict delector tools` → 自动受益。
-门禁（CPE 跑 + 编排者定向复核）：分半全量 = 半 A **891 passed + 2 failed（既有 `exam_trials`）** + 半 B **228 passed + 1 skipped** ⇒ **1119 passed + 1 skipped**（与 v5.12.0 基线一致，本计划为工程债收口、无净增）；ruff 0 / `mypy --strict delector tools` **68 files 0 error** / 全 `tools/*.mjs` 零漂移 / `test_ci_hardening` 7 passed。maker-checker：2 Task 逐个 CPE→CRV，**2 轮 REVISE**（T1 黄牌 2：spec §3.1/边界表/§4 表行与 requirements/dependabot 注释口径旧；T2 黄牌 5：3 条系 CRV 主检出对比视角差 + 2 条报告措辞）—— 全部闭环。
-未做：push / PR / 发版（工程债收口不发版）；新增待办 = 修 `exam_trials` 2 例既有失败（`no such table: exam_trials`）以便后续安全升级 fastapi。
-
-### 2026-09-26 | codebuddy | WORK_START(test-db-isolation)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：用户选「修 `exam_trials` 2 例既有失败」（它是安全升 fastapi 的唯一前置）→ 按 `/vault-debug` 4 步协议排查，**根因已用受控实验坐实**。
-根因链（务必记）：① 某些测试模块在**模块级直接赋值** `os.environ["DATABASE_PATH"]`（永久、无人还原）→ ② `delector/server.py:356` 的模块级 `app = create_app()` 顶层执行 `init_db()` 时，建的是**那个被抢走的库** → ③ 后续模块的模块级 `os.environ.setdefault(...)` **失效** → ④ 受害模块（`test_goethe_a1_hoeren/lesen`）的 autouse fixture（`_m5_isolated_db_teardown`）**只做清理不建表**，其隔离 100% 依赖"setdefault 生效 + server 顶层 init_db 建过表"这个隐式前提 → ⑤ 那个库又被抢者的 fixture 在结尾 `os.remove` 掉 → ⑥ 用例请求时 sqlite **新建空库** → `no such table: exam_trials`。
-**为何只在 Windows 红**：ubuntu 上句柄未释放使 `os.remove` 抛 `OSError` 被 `except OSError: pass` 吞掉 → 库其实还在 → CI 长期 success（**跨平台都存在的顺序耦合，只是 ubuntu 掩盖了**）。
-受控实验（决定性）：注释 `test_audit_hardening.py:15-16` 的模块级赋值 → `pytest tests/test_audit_hardening.py tests/test_goethe_a1_hoeren.py -q` 从 `1 failed, 34 passed` 变 **35 passed**（还原 `IDENTICAL`）。
-**无关项澄清**：`server.app` 单例**无辜**（`database.get_db_path()` 每次调用读 env，不冻结路径）；`db_conn` 也**不自动建表**（建表只在 `init_db`）。
-修法（契约 C1–C4）：① 模块级 MUST NOT 赋值库 env；② 需要独立库的模块 → autouse fixture 内「捕获 saved → 钉 env → **`init_db()`** → yield → 清理 → 还原」；③ fixture 可删自己的库；④ 纯逻辑模块可不加夹具。外加 `tests/conftest.py` 兜底默认库（防 server 顶层 init_db 落到真实 `delector.db`）+ 新增 AST 守卫 `tests/test_test_isolation.py`（根因级防回归）。
-分支 `fix/test-db-isolation`（worktree `.worktrees/fix-test-db-isolation`，base `d25543a`），2 Task；**零生产代码改动**。
-
-### 2026-09-26 | codebuddy | DELIVERED(test-db-isolation) — 2/2 Task 全绿（本地分支，未 push）
-Caps: filesystem-read, filesystem-write, shell-exec
-分支 `fix/test-db-isolation`（worktree，base `d25543a`），3 提交：`d22225e` docs → `fe84e16` T1 → T2。
-**成果**：半 A **896 passed / 0 failed**（修复前 `2 failed, 891 passed`）——`no such table: exam_trials` 2 例彻底消失；半 B `228 passed, 1 skipped`；合计 **1124 passed + 1 skipped**（原 1119 + 修好的 2 例 + 新增守卫 3 支）。ruff 0 / mypy 62 files 0 / 全探针零漂移。
-**改动**（7+1 文件，零生产代码）：① 根 `conftest.py` 加 `setdefault` 兜底库（防 server 顶层 `init_db()` 落到真实 `delector.db`）；② 删 4 个模块（`test_audit_hardening`/`test_exam_catalog`/`test_exam_trials`/`test_server`）的**模块级** env 赋值；③ `test_goethe_a1_hoeren/lesen` 的 autouse fixture 由「只清理」升级为「捕获 saved → 钉 env → **`init_db()`** → yield → gc + 删自己的库 → 还原 saved」（自洽、与模块执行顺序无关）；④ 新增根因级 **AST 守卫 `tests/test_test_isolation.py`**（3 支：模块级 env 赋值即红 / 根 conftest 有兜底 `setdefault` / sys.path 注入未丢）；⑤ OVERVIEW 测试隔离契约**就地精确化**为 C1–C4。
-**契约（C1–C4，已写入 spec 与 OVERVIEW）**：C1 模块级 MUST NOT 直接赋值库 env；C2 需要独立库的模块 → autouse fixture「钉 env → `init_db()` → 还原」；C3 fixture 可删自己的库（用完归位故不伤人）；C4 纯逻辑模块可不加夹具。**注**：`setdefault` 是 `Call` 非赋值，C1 不禁（且被 conftest 兜底覆盖为 no-op）。
-**重要方法论（vault-debug 副产品）**：单点变异可能被**另一处修复免疫**而"不红"（本例：加回污染源不再致红，因为受害者已自洽）→ **必须做配对变异**（污染源 + 还原受害者）才能造出红/绿对比、坐实根因链。这是"变异验证要盯着**判别力**而非机械照做"的又一实例。
-遗留（记录，非阻塞）：`test_server.py` 的 `clean_db` fixture **内部**注释仍含旧机制描述（受 scope-lock 未改）。
-**下一步可做**：① push + PR 合并本分支；② 合并后即可做「升 fastapi pin + 撤 `dependabot.yml` ignore」（其唯一前置已解除；需在新依赖下重跑全量确认 0 failed）。
-
-### 2026-09-26 | codebuddy | DONE(两分支已合并入 master) + WORK_START(fastapi-upgrade)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：按用户「c（两件一起）」先**按序合并两个计划分支入 master**：
-- `chore/toolchain-guards`（守卫收口）→ fast-forward 到 `ce6d454`；
-- `fix/test-db-isolation`（测试库隔离修复）→ merge commit `180b1cd`（**自动合并零冲突**：两边改的是 `tests/test_server.py` 与 `PROJECT_OVERVIEW.md` 的不同区域）；
-- 合并后**完整复跑**：半 A `896 passed / 0 failed`、半 B `228 passed + 1 skipped`、mypy **68 files 0 error**、守卫 10 passed、判别点 35 passed、路由守卫 1 passed、ruff 0、全探针零漂移 → `git push origin master`（`ce6d454..180b1cd`）。
-随后启动 **WORK_START(fastapi-upgrade)**（分支 `chore/fastapi-upgrade`，worktree `.worktrees/fastapi-upgrade`，base `180b1cd`）—— 解除 fastapi 升级禁区：`requirements.txt` 升 `fastapi 0.136.3 → 0.141.1`（starlette 保持 1.6.0，唯一变量仍是 fastapi）+ **撤销** `.github/dependabot.yml` 的 fastapi/starlette `ignore` + spec §4 补「升级闭环」证据表。
-新依赖下真实验证（**非隔离环境**）：路由守卫（决定性）`1 passed`（旧实现同环境必红 115 条）· 半 A `896 passed / 0 failed` · 半 B `228 passed + 1 skipped` · ruff 0 · mypy 68 files 0 error · 全探针零 FAIL · `test_ci_hardening` + `test_test_isolation` 10 passed · `pip ignore: None`（已撤销且 YAML 仍可解析）。
-**新发现（留档，本次未处理）**：`android/app/build.gradle:85` 的 Chaquopy `pip` 块独立 `install "fastapi<0.100.0"` + `install "pydantic<2.0.0"` —— **Android 打包面与桌面/CI 的 fastapi/pydantic 版本本就不同源**（且无注释说明来由）。本次升级只影响桌面端与 CI，Android 行为不变；是否同步需单独核实。
-
-### 2026-09-26 12:00 | gemini-3-8-flash__antigravity | WORK_END(fastapi-upgrade)
-Caps: filesystem-read, filesystem-write, shell-exec
-任务闭环：解除 FastAPI 升级禁区，合入 master（PR #66，commit `df96237`）。
-1. 改动：`requirements.txt` 升级 `fastapi 0.136.3 → 0.141.1`（starlette 保持 1.6.0）；撤销 `.github/dependabot.yml` 对 fastapi/starlette 的 `ignore` 规则；`tests/test_test_isolation.py` 修正 tests 档 mypy 报错（list[expr] 变量被赋 tuple，`e339562`）；设计规范 `docs/specs/2026-09-24-toolchain-guard-truth-design.md` §4 补齐真实升级验证证据表。
-2. 验证：HTTP 语义路由守卫免疫（1 passed，旧实现同环境必红 115 条）；半 A 896 passed / 0 failed；半 B `test_server` 228 passed + 1 skipped；`mypy --strict delector tools` 68 files 0 error；`mypy --follow-imports=skip tests` 69 files 0 error；`ruff check .` 零告警；Go 门禁全绿；`dependabot.yml` YAML 解析通过。
-
-### 2026-09-26 12:35 | gemini-3-8-flash__antigravity | NOTE(encounter-yellow-cards)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：CRV 3 条黄牌清账，合入 master（PR #67，commit `74f703e`，分支 `fix/encounter-yellow-cards` @ `4d7247c`）。
-1. I-1 夹具生产语义对齐：`tests/test_encounter_i1_consistency.py` 改造 `_first_third_known_set`，按 `deck-bridge.js` 生产语义归一（`_strip_german_article` 剥冠词 + `.lower()` 小写），新增同源守卫 `test_article_list_matches_deck_bridge_source` 双向比对 JS 源与 Python 冠词表，新增 `test_known_lookup_is_case_insensitive_and_article_stripped` 行为测试。
-2. 变异表去重：`tests/test_encounter_seed.py` 中 `_MUTATION_TABLE` 移除 500 行归属重合条目。
-3. 文档措辞：`PROJECT_OVERVIEW.md` 修正测试基线描述。
-
-### 2026-09-26 12:50 | gemini-3-8-flash__antigravity | NOTE(android-pin-rationale)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：Android 依赖锁定理由核实留档，合入 master（PR #68，commit `4e015f5`，分支 `docs/android-pin-rationale` @ `8784a5d`）。
-1. 事实核实：`android/app/build.gradle` 中的 `fastapi<0.100.0` 与 `pydantic<2.0.0` 为 Android 端有意分离的独立打包面，源于 Chaquopy 无法编译 Rust 原生扩展（`pydantic-core`），必须锁 v1。
-2. 落地：在 `android/app/build.gradle:84-91` 详细补写分离原由与约束依据。核实结论为桌面端/CI 升级不受影响，Android 端保持不动，勿轻易顺手改动。
-
-### 2026-09-26 13:30 | codebuddy | RELEASE(v5.12.1)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：按用户指令「升个 5.12.1 吧」发版 —— **patch 级，无用户可见改动**（`git diff --stat v5.12.0..master -- static/` **为空**；i+1 就近选材 = v5.11.0、已读状态 = v5.12.0 均已发布），发版目的是把本轮工程债收口（真门禁 + 依赖升级 + 测试隔离）记入版本面。
-版本面六处同步：`static/sw.js` `delector-static-v5.12.1` / `static/index.html` `System · v5.12.1 Online` / `android/app/build.gradle` fallback `5.12.1`·`51201` / `README` badge + Tests `1124/1125` + 下载表四行（版本单元格与 URL）+ 摘要区（加 v5.12.1、删最旧 v5.9.5 保持 4 条）/ `CHANGELOG` 顶行「最新版本 v5.12.1（2026-09-26）」+ 末尾完整条目 / `PROJECT_OVERVIEW` 发布面。
-守护测试：`tests/test_writer_mobile.py` + `tests/test_server.py` = **258 passed + 1 skipped**（版本一致性 / README 下载表 / build.gradle 三条守卫全绿）；`ruff check .` 零告警。
-流水线：push master + tag `v5.12.1` → `ci.yml`(master) + `Build & Publish DeLector Releases`(tag) + `Build Agent Artifacts`(tag)。
-⚠️ 协作提示：本轮发现**另一并行会话**（签名 `gemini-3-8-flash__antigravity`）也在写本 work.log；写前必须重新读取，**禁止整文件覆盖式写入**（本次一度用过期快照覆盖掉对方 19 行，已 `git restore --source=HEAD` 复原）。
-
-### 2026-10-02 17:40 | deepseek-v4-1-flash__codebuddy | NOTE(gap-backfill-1)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：**补记 09-28 记录缺口**（协议 §1.7：漏写不是灾难，下一 agent 补 NOTE 即可，不回改历史）。
-缺口成因：本 agent 09-28~10-02 的会话未执行 §3 读序、也未同步写入本公约层，只写了自身 `.codebuddy/memory/`。以下按批次补记，逐条产物与提交可在 git 复核。
-批次一（09-28，6 seat 全量审计 ⇒ `docs/reviews/2026-09-28-swarm-audit-master.md`，0 红牌 / 6 P1）：
-- **#69 fix(deploy,db)**：`Dockerfile` CMD `server:app` → `delector.server:app`（仓库根无 `server.py` ⇒ 容器启动即死）；`_configure_sqlite_conn` 加 `PRAGMA journal_mode=WAL`。**连带把备份/还原从文件拷贝改为 SQLite backup API**——WAL 下文件级回滚必 `disk I/O error`（主库不含最新提交 + `-shm` 不可拷），`-shm` 改为只删不还原；`docker-compose.yml` 单文件挂载改 `./data` 目录 + `DELECTOR_DATA_DIR`。
-- **#70 test**：Android pydantic-v1 运行时契约守卫（gradle pin 锚点 + `delector/**` AST 扫描 v2-only API + dump `hasattr` 垫片检查）。
-- **#71 perf**：长难句 `source=all` 热请求不再读正文 + `_RANK_CACHE` 容量上限。**实测推翻该 P1 的严重度**：40 篇规模下冷 2.2s / 热 8ms（材料级缓存本就生效），故拒绝缓存聚合（会引入"新文 5 分钟内不出现"的 UX 回归）。
-
-### 2026-10-02 17:45 | deepseek-v4-1-flash__codebuddy | NOTE(gap-backfill-2)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：**补记 09-29~10-02 批次**。
-- **#75 feat(pool) ADR-0016 Phase 3**（`/dfs-exec` ledger 6/6，`8af2f17`）：统一池成为"我的词汇"的派生态。T1 `vocab_pool.project_wb_deck` 幂等投影（lemma 内容去重 / 只补空 / 不碰用户数据 / FSRS≠DSR）+ **范围闸**（只收已学 `reps>0` 或自建 `custom is True`，种子词不入池）；T2 接进 `save_wb_state` **同事务**（投影失败 ⇒ blob 也不写）；T4 只读对账 `reconcile_report`（lemma 集合/禁计数/刻意不产 `extra`）；T5 修**两个真 bug**（`_BACKUP_TABLES["vocab_cards"]` 漏 Phase 1 新列 ⇒ 备份往返**静默丢** `source`/`fsrs_*`；`restore` 未补迁移）；T6 端到端验收。**T3 经用户决定跳过**（与 wbsync 的 local-first 冲突 + 动离线保证）⇒ 该 PR 不含 `static/`。
-- **#76 fix(pool)**：身份键口径——**错在比较侧**：投影按 `lemma_key` 查库、库里存原始形态（端点是原样写 `req.lemma`）⇒ 同词大小写**并存两行** + `reconcile` 误报 missing。**否决了"端点写入归一"**（`lemma` 双用途：`cards.js` 展示 + Anki 导出 `database.py:994`，归一会把德语名词变全小写）。改为 `_pool_index` 归一映射 + `_pool_lemmas` 归一；新增两条不变量（插入后登记、UPDATE 后刷新）。
-- **#77 fix(i+1)**：`known-lemmas` 补 `OR fsrs_s > 0`——Phase 3 只把词**放进池**、消费面**看不见**（`mastered`/`repetition_count` 投影从不写）⇒ 工作台背过的词仍不算"已知"。等价性证据：工作台卡 `{s,d,due,last,reps,lapses}`，`fsrsInitS = max(W[g-1],0.1) ≥ 0.1`、其余转移 `clamp(…, S_MIN=0.001, …)` ⇒ 卡存在 ⟹ `s > 0`；DSR 复习路径不写 `fsrs_s`（已核实无污染）。
-- **#78 test(isolation)**：测试库隔离收口——共享 `tests/db_cleanup.py::remove_db_files`（三件套 + `gc` 重试 + **最终 fail loudly**）取代 17 份复制粘贴；44 处 `with get_db(`→`db_conn(`（`sqlite3.Connection` 上下文管理器只 commit/rollback、**不 close**）。决定性变异：单点回退 + 注入必失败断言 ⇒ 旧世界**静默残留**（假红/假绿），新世界立即抛点名根因的 OSError。
-- **#81/#82/#83/#84 chore(docs)**：`.gitignore` 显式忽略 `.worktrees/` 与 mypy/ruff 缓存；`docs/plans/` 归档分层（52 + 15 份进 `archive/`，本层只留在途）；新增 `docs/README.md` 为**目录约定正主**；ADR 副本拆入 `docs/adr/`；移除已失真的 `release-v2.1.md`（写着"测试 20/20"、Docker"挂载当前目录"，而 #69 早已改 `./data`）。
-
-### 2026-10-04 16:10 | codebuddy | DONE(sp1–sp5 全 5 项) + WORK_START(debt-clear-round)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：swarm 审计（`docs/reviews/2026-10-03-swarm-audit-master.md`）拆 5 个子计划，**本轮全部完成**。**补记**（协议 §1.7 漏写不是灾难，下一 agent 补 NOTE 即可，不回改历史）。
-- **sp1 (#93)** 角标切 `/api/cards/counts`（去 N+1）。
-- **sp2 (#96)** 量化 `/api/cards` 排序成本。**决定不加 `idx_vocab_list`**：filesort 仅占端点 8.9%（20k 档 70.2ms/790ms），远低于 30% 否决线；Python 物化+FSRS 占 84.1%。两条观察：耗时超线性（行数×50 ⇒ ×68.1）；`segment_A ≈ segment_C`（55.7 vs 54.9ms，因 temp B-tree 搬运整行 19 列负载）⇒ **削弱"加索引能省 A"的收益**。真解法在 FSRS 批量化（需 schema）/ keyset 分页（需发版）。
-- **sp3 (#97)** 前端竞态三修：`openText` 重入守卫（请求代号 + `AbortController` + 覆写前/后双守卫 + `markRead` 排序）、`openPopoverNear` 垂直夹取**含向上翻转**（不能只 `Math.min`）、列表/详情 deck 同源（`resolveDeck()` 替裸 `loadDeck`）。
-- **sp4 (#95)** 韧性四项：Go 崩溃出口 63、回滚失败留痕、**TTS 并发闸**（模块级 `Semaphore(k=4)` + 429）、**真健康端点 `/api/health`**（原 supervisor 拼 `/api/tools/` ⇒ 改默认值会"单测全过、真实 run 仍用旧探针"）。
-- **sp5 (#98)** KARTEI 去复习化：工作台词在卡盒**可见但不可复习**（消「白复习」：DSR 四列被写、`fsrs_s` 优先使卡面无变化、工作台 FSRS 也不动）。收走四个 DSR 按钮，保留 `mastered` 徽记/按钮 + 「去工作台复习」。
-编排者教训三条：①给 maker 的指令错 3 次、子代理纠正 3 次 ⇒ **双向核验不可省**；②引缓存/加闸/加限流必须自带**失效入口与位置守卫**（聚合 key 无失效 ⇒ 静默 300s；TTS 闸放错位 ⇒ 400 变 429）；③**「修 A 顺手做 B」若不查 B 的不变量，会悄悄撤销 A 的修复**（sp3 T3 reopen 了 T1 竞态）。
-⚠️ 已知取舍：sp5 的「去工作台」是**整页跳转**（脱离主站壳，无导航栏，只能浏览器后退）。
-随后启动 **WORK_START(debt-clear-round)**：清理 sp3/sp5 遗留债，分三组并行（各组独立 worktree，**PR #98 保持已验收状态不塞新债**）：A 组改 `static/js/cards.js`（目录视图 `renderCatalogGrid` 对工作台词说谎 + 跳转落点留主站壳内）、B 组改 `static/js/encounter.js`（`fetchKnownLemmas` 无 in-flight 去重 + 覆盖率行无降级标记，**需 UI 决策**）、C 组改 `tests/`+`.github/`（**7 个** `.mjs` 探针未接 pytest；且 `ci.yml` 无 `setup-node` ⇒ 靠 ubuntu runner 预装，属隐式依赖）。**全部完成后一次性发版**（static/ 已累积 #93/#97/#98 改动 ⇒ 建议 v5.14.0）。
-
-### 2026-10-05 00:30 | codebuddy | DONE(debt-clear-round) + RELEASE(v5.14.0)
-   > 正文超 §4 上限（4424 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-05-0030-done-debt-clear-round-release-v5-14-0.md`](WORKMEMORY/NOTES-2026-10-05-0030-done-debt-clear-round-release-v5-14-0.md)。
-### 2026-10-05 02:40 | codebuddy | DONE(debt-round2, 5/5) + DECISION(Fog-1: 内网可信)
-   > 正文超 §4 上限（5056 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-05-0240-done-debt-round2-5-5-decision-fog-1-内网可信.md`](WORKMEMORY/NOTES-2026-10-05-0240-done-debt-round2-5-5-decision-fog-1-内网可信.md)。
-### 2026-10-05 03:20 | codebuddy | RELEASE(v5.15.0) + 编排者事故(README 被打散成 844 行单字符)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：登记项收口第二轮发版 **v5.15.0**（PR #103~#107 已在 master `30148f3`）。**过程中编排者破坏了一次 README，已修复**，如实记录。
-⚠️ **编排者事故（Python 列表插入陷阱）**：用脚本给 README 插入 v5.15.0 摘要时写的是 `lines[idx:idx] = entry`，而 `entry` 是**字符串**不是列表 ⇒ Python 把长字符串**逐字符**插入，README 从 157 行变成 962 行、其中 **844 行是单字符**（`>`/` `/`✅`/`*`/`。`…）。上一轮写 CHANGELOG 时用的是 `entry.rstrip("\n").split("\n")`（正确），这次漏了。**发现方式**：插入后 `sed -n '23p'` 只回显一个 `>` 字符起疑 ⇒ 用 Python 逐行打印长度才定位。**修复**：`git show HEAD:README.md > README.md` 从 HEAD 恢复（HEAD 已含 v5.14.0 摘要，是正确基线），改用 `sed -i '22r file'` 重新插入。**代价**：README 的 badge 与下载表改动被一并回退，需重做（已重做）。**教训**：`list[i:i] = "str"` 是逐字符插入，**MUST** 写 `[entry]` 或 `entry.split("\n")`；改文档类文件**优先用 `sed r` 插入**或只改单行，不要用 Python 重写整个文件——重写一旦出错会静默毁掉全文。
-**新发现（此前 7 处已知 skip 之外的漏网）**：`delector/core/database.py:2086` 的 `test_cleanup` 用 `shutil.which("rm")` 也走 skip 模式 ⇒ 与 node 同类的"绿而非红"风险，本轮未纳入（已登记）。
-**门禁（v5.15.0 基线）**：`1299 passed + 1 skipped`（半 A `1035` + `test_server` `264`）/ 全 `tools/*.mjs` 探针 **28/28** / `ruff` 0 / `mypy` 两道（**70** + **92** files）0 error / `test_writer_mobile.py`（发版守护）**30 passed** / 三条新守卫（防漏接线 / 契约冻结 / localhost 集合 allowlist 20 条）全绿。**含 `static/` 改动**（`cards.js` +16/−6 判据单点化、`encounter.js` +87/−31 降级状态绑定）⇒ **Android 需覆盖安装生效**。
-
-### 2026-10-06 12:30 | codebuddy | DONE(Fog 2：真 bug 修复 #108) + 编排者任务书漏门禁
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：用户点名处理 Fog 2。**追根因发现 Fog 2 掩盖的是一个真 bug**，不是语义瑕疵。
-- **Fog 2 本身已失效**：其原始表述是「按 HTTP 方法判只读不可靠，若要改成方法判据必须先处理这条」——而 PR #103 已改用**精确 allowlist**，该前提不再需要。**但"标记为已规避"就收工会把真实缺陷一起留下**，故继续追进 `main.py:278`。
-- **真 bug（长期潜伏的性能缺陷 + 写放大）**：惰性迁移判据 `pj.get("version") != "3.4.0"`（`main.py:278`），而写入端 `processor.py:421`（纯 Python 回退）与 `:480`（spaCy）**两条路径都返回 `"3.5.0"`** ⇒ **判据恒真** ⇒「惰性迁移」退化成「**每次 GET 都重跑完整 spaCy 并 UPDATE articles**」。讽刺：列表路径早在 `:245` 就优化掉这个 N+1 重算（注释还写"惰性迁移唯一保留在单篇 GET"），但单篇 GET 一直全量重算 ⇒ **惰性迁移从未真正生效过**。
-- **修法（单一真相源）**：导出 `PROCESSED_JSON_VERSION = "3.5.0"`（`processor.py:29`），两条返回路径 + `main.py` 判据共用；`"3.4.0"` 字面量已从 `main.py` 彻底消失。惰性迁移语义**完整保留**（老数据首次 GET 仍迁移并升级），向后兼容已核：旧代码写的数据本就是 `3.5.0` ⇒ 修复后不再重算；更老的 3.4.0 数据 ⇒ 迁移一次后升级。
-- **两条守卫**（`tests/test_get_endpoints_with_writes.py`，7 项）：**A**＝AST 扫 `delector/routes/*.py` 断言「带写 GET 端点集合」**恰等于** `{GET /api/articles/{article_id}}`（Fog 2 的原始价值：防将来给别的 GET 加写；不能用"GET 不该有写"粗判据，因这处写是**有意的**迁移兼容）。**B**＝行为测试数**真实执行到的 SQL 首词**（monkeypatch `routes.main.db_conn` + 包装 `sqlite3.Connection.execute`）——**不是**断言版本字符串，因为**字符串对、判据错正是该 bug 能长期潜伏的原因**。
-- **maker 两次自我收窄（如实记录）**：①变异②（写入端单路径漂移）最初**没红**——B1 种子用常量拼写、天然对写入端漂移免疫 ⇒ 新增 **B1b**（种子改用 `process_german_text` 真实产出）后红在 `UPDATE 计数=1`。②**反向验证计数器非假绿**：让 B2 老数据场景不触发迁移后守卫如期变红（期望 1 次 UPDATE、实际 0 次）⇒ 计数双向可信。
-⚠️ **编排者任务书漏门禁**：只让 maker 跑 `mypy --strict delector tools`，**漏了** `mypy --follow-imports=skip tests` ⇒ CI 首次 FAILURE（`test_get_endpoints_with_writes.py:288` 5 条 `union-attr`：`isinstance(e, ast.Constant)` 只收窄**节点**、不收窄 `.value`）。**发版时我是两道都跑的，任务书却只写一道** ⇒ 教训：任务书的门禁清单 MUST 与 CI 的 job 一一对应，发版门禁有哪几道，任务书就得写哪几道。fix-round 由 maker 补最小 narrow（`and isinstance(e.value, str)`，无 `# type: ignore`、未改 mypy 配置），变异验证去掉 narrow 后 mypy 重新报同 5 条。
-**门禁**：`1042 passed`（半 A）+ `264 passed, 1 skipped`（半 B）/ 新守卫 `7 passed` / `mypy` 两道（`93` + `70` files）0 error / `ruff` 通过。**不碰 `static/` ⇒ 不触发发版**（但已发布的 v5.15.0 不含此修复，用户要等下次发版才拿到性能改善）。
-
 ### 2026-10-06 14:10 | codebuddy | DONE(Fog 4 #109) + DONE(Fog 3 Task B #110) + 更正上一条错误记录
    > 正文超 §4 上限（4334 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md`](WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md)。
 ### 2026-10-06 14:40 | codebuddy | DECISION(Fog 3 关闭：C-F 不做) — 全部 Fog 清空
@@ -650,3 +450,47 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **门禁**：`pytest -q` **1849 passed, 2 skipped**（净增 17 = 本任务 15+2）；ruff 0；mypy 四档；契约闸 PASS；Go 侧集成门禁 116 PASS / 0 SKIP。
 - **CRV 的价值（本次实证）**：两个任务**首轮都被判 REVISE**，红卡都是**判据失效型**缺陷 —— 守卫存在但换种写法就瞎（Task 3）、门禁绿但根本没有信号（Task 2）。这两类缺陷在 maker 自证（我跑过了、全绿）下**都不会被发现**。
 - ⏳ **后续**：Task 4（循环内核）→ Task 5（工具白名单）→ Task 6（契约+UI）→ 开 PR。黄牌留档：包级差集边界未写进注释 / 只防 PASS=0 不防用例变少 / 守卫按行数计数可加固为出现次数 / `DeLector.spec` 属本机 PyInstaller 产物（`.gitignore` 忽略、含 `D:/` 绝对路径）不计入交付，canonical 打包位点是 2 个。
+
+### 2026-10-15 02:05 | codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：ADR-0023 实施计划 Task 4/5/6 执行期两条设计裁决（计划正本已回写）。
+- **裁决 A：适用性闸门**。`analyze_a1_email` 是**唯一**确定性裁判（裁判集扩充 = Unknown A），对**非书信体**必然报 `a1_greeting_missing`(level=error)。若直接接进通用润色端点 ⇒ `v_0=1`，润色后仍无称呼语 ⇒ `v_1>=v_0` ⇒ 判 `no_improvement` 并回退 argmin = **原文** ⇒ 用户点了润色拿回原文，功能报废。**既有基线 `tests/test_server.py::test_ai_polish_diff_mocked` 实测就是这样红的**（非推测）。故称呼语不合法 ⇒ 零违规。**Why**：裁判"无话可说" ≠ "判定无错"，语义等价于今日一次性润色；docstring 已明写，且测试只钉"非书信体不回退原文"，不宣称零错。**欠账**：闸门对**候选**同样单向生效（模型删称呼语 ⇒ 候选也判不适用 ⇒ 零违规自动收敛），留 Unknown A 续作收口。
+- **裁决 B：收敛归属移入循环**。端点层用 recorder 录 `last_corrected_text` 兜底有漏洞：模型若在**取证轮**夹带 `corrected_text`，而收尾轮没有（循环按协议回退原文作候选）⇒ 收敛时端点返回模型没被采用的文本，与循环结论矛盾。故改为循环内「`v==0` ⇒ 返回那个零违规候选」；未收敛仍走 `min(history)` argmin（Task 4 语义未动）。
+
+### 2026-10-15 02:10 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：Task 4/5/6 交付完毕，PR **#136** 已开（`feat/interactive-agent-loop`，HARD GATE 4 未直推 master），CI run `38668055637` 触发时 in_progress。
+- **Task 4 `ff7235a`（循环内核）**：`delector/services/polish_loop.py`。二值流转 / D3 收尾终审守卫 / `v_n>=v_{n-1}` 不降即停 + argmin 回退 / judge_unreliable 哨兵 / 每轮前置 token+deadline 预算（per-call timeout = min(30, 剩余)）/ 裁判异常 errors-as-messages / 证据行数+字节双限截断 / should_stop ⇒ cancelled。**Unknown B 定案**：最坏输入 2000 字符（端点 `req.text[:2000]`）录制桩跑满 3 轮 ⇒ 单轮最坏 691 token、3 轮合计 785、保守 3×691=2073；本机**无真 tokenizer**（tiktoken/transformers 均 ModuleNotFoundError）⇒ 折算系数 3.0 显式登记 **UNVERIFIED 假设**；`DEFAULT_MAX_TOKENS` 保留 4096（2× 余量 2.97×）、`TOTAL=4096`（**< 4096×3** ⇒ 循环级预算真咬合，非真空闸）、`deadline=18.0`（< 前端 `DEFAULT_TIMEOUT_MS=25000`，该值从 `static/js/core.js` 现读，测试钉住）。
+- **Task 5 `1cb60fc`（白名单+钩子）**：恰好 `writing_check`/`analyze`/`vocab_stats`（MappingProxyType，值取 `delector.tools.<mod>.run` 真身，同进程直调不经 HTTP）；`call_tool(name, payload, *, hooks=())` 钩子串行 + fail-fast + 拒绝即返回。**CRV 首轮 REWORK 实证**：`analyze` 的"只读不下载"是无条件宣称 —— `processor.py:95-114` 桌面缺模型会真跑 `spacy.cli.download`（出网起 pip）；已改为条件式说明 + 非真空测试（模型不可用时该测试红）。打包面 4 位点已登记。
+- **Task 6 `2e61c88`（契约+UI）**：`converged`/`unconverged_reason` 只增不改；`stream: bool=False` 默认关 ⇒ 既有 JSON 行为逐字不变；SSE 逐帧 `on_progress` + 尾帧 result；**断连收尸必须放 `try/finally` 的同步 `task.cancel()`**（uvicorn 0.54 `spec_version=2.3` ⇒ starlette `listen_for_disconnect` **抢先**取消生成器，生成器内轮询几乎永远输给它，CRV 红卡实证）；无 Key 走端点层原因码 `no_api_key`（不进 REASONS）；`error_count` 沿用模型报的数（recorder）。前端：AbortController + 原生 fetch 读流、按钮"第 N/max_turns 轮"（分母取自服务端）、取消按钮（`static/index.html`，**`writer.html` 全仓不存在**）、`POLISH_REASON_COPY` 覆盖 REASONS 全量（集合相等测试钉住）、降级判据改"一帧都没收到"（中流断开不再二次烧配额）。
+- **门禁**：全量 `python -m pytest -q` ⇒ **1898 passed + 2 skipped**（基线 1768 + 130 新增）；`ruff check .` 零告警；`mypy --strict delector` 66 files 零错误；`tools/check_frontend_api_contract.py` PASS。maker-checker 双席位全程：Task 4 红卡经核对系误判（DI 参数是 scaffold 首句要求）+ `cancelled` 越界项**回写计划**结清；Task 5/6 各一轮 REWORK 后 APPROVED。
+- **已知欠账（明确不外扩）**：① 裁判集只有 A1 书信规则（Unknown A，含候选侧闸门单向生效）；② 折算系数 3.0 是假设；③ 真实轮次分布须有 Key 回测；④ Unknown C 的选定结果（JSON 契约字段 `tool_call`）**待回写 ADR-0023 §6**（本计划不代劳 ADR）。
+
+### 2026-10-15 02:15 | codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+本次交付：ADR-0023 实施计划的 Task 4/5/6 三个 Tier-2 任务（循环内核 / 工具白名单+钩子 / 端点契约+前端进度取消 toast），经 maker-checker 双席位各一轮以上评审，PR #136 已开（未直推 master）。
+- 验证方式：全量 pytest 1898 passed + 2 skipped（本地原始输出）；ruff / mypy --strict / 前端契约闸全绿；每任务均做守卫变异自证（抽掉守卫 ⇒ 对应测试红，原始输出留证）。
+- 回写检查：稳定结论已回写计划正本（Task 4 Produces 补充 / Unknown B 部分收敛 / Unknown C 定案 / Task 6 执行期定案四条）；待办已显式留白（ADR §6 回写、Unknown A 续作、真 Key 回测）；临时产物（.commit-msg.tmp / .pr-body.tmp / .tmp-tail.txt）已删除，未入库。
+- 未做（非遗漏）：PR #136 的 CI 结果未等（按惯例不阻塞轮询，待用户发话再看）；ADR-0023 §6 的 Unknown C 回写属 vault 侧动作，未代劳。
+
+### 2026-10-15 02:40 | codebuddy | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`handoff_interactive-agent-loop.md` 已接收并**闭合**（status → closed，正文追加「响应」节）。该包的 Task 3~6 + CI 半 + 开 PR 全部交付：Task 4 `ff7235a` / Task 5 `1cb60fc` / Task 6 `2e61c88`，PR **#136** CI success，台账 **7/7**（Task-5 一度漏登，本次补记）。
+- 剩余待办按用户 2026-10-15 指示**暂缓**（已在响应节列明）：Android 真机点检（含 **SSE `fetch`+`ReadableStream` 在 WebView 未验证**）、ADR-0023 §6 回写、Unknown A 子计划（裁判集扩充）、有 Key 后回测。
+- INDEX.md 的 Active handoffs 行已同步标注 closed。
+
+### 2026-10-15 02:42 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：PR #136 报 CONFLICTING（master 侧 2 条 workmemory 簿记提交 `5e103ac`/`01cc508` 与本分支的簿记提交 `4382e15` 都改 `work.log` 末尾）⇒ 用 merge（本仓合入用 `--merge`）解决，**只 `WORKMEMORY/work.log` 冲突**，`INDEX.md` 自动合并。
+- 解法：把两侧事件**全部保留**并按时间排序拼接（master 的 23:35 WORK_END、00:45 NOTE 在前，本分支 02:05/02:10/02:15 三条在后），work.log 由 53 → **55 条**，0 重复头 / 0 残留冲突标记 / 纯 CRLF。协议 §1.3「事件只追加不改写」与 §5.1「轮转/移动不改写正文」均未破。
+- **发现一条既有问题（非本次引入）**：`work.log + archive/*` 的 union 里存在 7 个**重复事件头**（09-04 ~ 09-13 段，同一头出现在 2~3 个 archive 分片），来自历史上「未跟踪的 archive 分片 + 已跟踪分片」两套并存。后果：按 §5.1 的 `sort | uniq -c` 守恒核对会把这些计数差异误判成丢失/新增（我本次的第一次守恒核对就是这样报 MISMATCH 的，真因是「archive 分片此前未跟踪，`git show HEAD:` 取不到」）。
+- **核对口径修正（供后来者）**：守恒核对 MUST 以**工作树现状**为 before 快照（轮转前先 `cp` 或先算 union 存基线），**不能**用 `git show HEAD:` 当 before —— 未跟踪分片会被漏算。
+
+
+### 2026-10-15 05:20 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**ADR-0023 §6 回写完成**（vault 提交 `139cdde`，已推 master）；PR #136 的冲突已解。
+- **回写内容**：① 状态行删掉已过期的「实施未开始」，改为「§8.5 序 ①②③ 已落地」，并**显式保留 §4.3 的自设门槛** —— 裁判集一行未扩，此刻仍 MUST NOT 宣称「已实现」；② §6 迷雾区四条改为「原表述 + 现状 + 依据」表（Unknown 1 升级为第一瓶颈：适用性闸门使循环真实价值只覆盖 A1 书信体；Unknown 2 上界定案 4096/4096/18.0 + 折算系数 3.0 标注 UNVERIFIED；Unknown 3 定案 = JSON 契约字段；Unknown 4 闭合）+ **新增 Unknown 5**（`lookup_core_vocab` 10 组边界词 0 失败、`analyze_a1_email` 10 组边界输入全通过 ⇒ 未见抛出、未穷尽；`judge_error` 降级保留为防御性守卫）；③ **新增 §10 实施回写**（施行顺序 ①②③ 的落地与证据 / 两处执行期偏离 / 两条可复用教训 / 明确留白）。
+- **两条教训已进 ADR §10.6（建议晋升 `01-Rules`）**：⑴ SSE 断连收尸必须放 `try/finally` 的**同步** `cancel()` —— uvicorn 0.54 `spec_version=2.3` 下 starlette `listen_for_disconnect` **抢先**取消生成器；且**只迭代 `body_iterator` 的测试绕开了 `StreamingResponse.__call__`**，测不到这个抢先。⑵「只读」这类声称**必须带前提**并配**非真空测试**（`analyze` 的"不下载"实测为假：`processor.py:95-114` 桌面缺模型会 `spacy.cli.download`）。
+- **PR #136 冲突**：master 侧 2 条簿记提交与本分支簿记提交都改 `work.log` 末尾 ⇒ 用 merge 解，两侧事件全留（53→55 条，0 重复头 / 0 残留标记 / 纯 CRLF）；`mergeable` 已由 CONFLICTING 转 **MERGEABLE**。顺带闭合 `handoff_interactive-agent-loop.md`（status → closed + 响应节）并补登台账 Task-5 ⇒ **7/7**。
+- 计划正本那句「待回写 ADR §6」已同步为「✅ 已回写（vault `139cdde`）」，避免活文档指针漂移。

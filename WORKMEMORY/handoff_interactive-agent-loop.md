@@ -4,7 +4,7 @@ from: codebuddy
 created: 2026-10-14 23:40
 role: IMPLEMENT | TEST | VERIFY
 required_capability: go-1.20+ / python-3.11-with-deps
-status: open
+status: closed
 ---
 # Handoff: DeLector 交互层 agent 循环实施（Task 3~6 待做）
 
@@ -39,3 +39,15 @@ status: open
 - 计划：`docs/plans/2026-10-14-interactive-agent-loop.md`（含执行期发现 + 顺序调整）
 - 决议：ADR-0023（vault）+ §9 语言边界
 - 另一份仍开放的交接包：`handoff_no-console-feedback-gaps.md`（真机双击验收 + digest 归一历史事件头）
+
+---
+
+## 响应（2026-10-15 02:40 | codebuddy）—— 本包任务已全部完成，**status: closed**
+
+读包 → 执行完剩余三项 → 开 PR。台账 `.vault-exec-ledger.json` 现为 **7/7 completed**（Task-5 一度漏登，本次补记 `1cb60fc`）。
+
+- **Task 4** `ff7235a`（CRV 一轮红卡：DI 参数「越界」经核对系误判——它正是本包风险节要求的「全部依赖注入」；`cancelled` 确属越界 ⇒ **回写计划**后结清）：`delector/services/polish_loop.py`。**风险节第 5 条要求的 `DEFAULT_MAX_TOKENS` 实测依据已给出**：最坏输入 2000 字符（端点 `req.text[:2000]`）录制桩跑满 3 轮 ⇒ 单轮最坏 691 token（139/139/2073 字符 ÷ 折算 3.0）、3 轮合计 785、保守 3×691=2073 ⇒ 保留 4096（2.97× 余量）；`TOTAL=4096 < 4096×3`（非真空闸）；`deadline=18.0 <` 前端 25s。本机**无真 tokenizer**（tiktoken/transformers 均 ModuleNotFoundError）⇒ 折算系数登记 UNVERIFIED 假设。
+- **Task 5** `1cb60fc`（CRV 首轮 REWORK 后 APPROVED）：`polish_tools.py`。红卡是**判据失效型**：`analyze` 的「只读不下载」是无条件宣称，实际 `processor.py:95-114` 桌面缺模型会真跑 `spacy.cli.download` ⇒ 改成条件式说明 + 非真空测试（模型不可用时该测试红）。
+- **Task 6** `2e61c88`（CRV 首轮 REWORK 后结清）：端点接循环 + `converged`/`unconverged_reason` 只增不改 + SSE 进度/取消 + toast + 契约闸。红卡：**断连收尸必须放 `try/finally` 的同步 `task.cancel()`** —— uvicorn 0.54 `spec_version=2.3` 下 starlette `listen_for_disconnect` **抢先**取消生成器，生成器内轮询 `is_disconnected()` 几乎永远输给它（原取消用例直接迭代 `body_iterator`，绕开了 `StreamingResponse.__call__` ⇒ 测不到）。
+- **收尾**：PR **#136**（base master，HARD GATE 4 未直推）⇒ CI `38668055637` **success**。全量 `pytest -q` **1898 passed + 2 skipped**；ruff 0；mypy `--strict delector` 66 files 0；契约闸 PASS。
+- **剩余待办（用户 2026-10-15 指示暂缓，非遗漏）**：① Android 真机点检（本批动了 `static/`，且 **SSE 的 `fetch` + `ReadableStream` 在 WebView 上未验证** —— 跑不了会降级到一次性 JSON，但降级路径本身必须真机确认）；② ADR-0023 §6 回写（Unknown B/C 定案）；③ Unknown A 子计划（裁判集扩充 —— **当前循环的实际收益面只有 A1 书信体**，闸门使非书信文本首轮即接受）；④ 有 Key 后回测真实轮次分布与真 token 计数。

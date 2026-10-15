@@ -32,10 +32,11 @@
 | 词库单一真相化 / 主干分层 / 富字段 / A1 取数（ADR-0011~0015，v5.8.0~v5.10.0） | `cold/digest-2026-09.md` · `archive/work-2026-09-15.log` ~ `archive/work-2026-09-17.log`（09-15 ~ 09-17，2026-10-11 WARM 化）· `work.log`（09-18 ~ 09-21） |
 | 遇见区 i+1 / 已读状态 + 工程债收口（v5.11.0~v5.12.1）                       | `cold/digest-2026-09.md` · `work.log`（2026-09-23 ~ 09-26）                                           |
 | 2026-09-28 起（Docker/WAL 修复、ADR-0016 统一池 Phase 3 等，未发版）        | `work.log`（HOT；09-28 起的记录缺口由 10-02 的 2 条 `NOTE(gap-backfill-1/2)` 补记；细节见 `docs/reviews/2026-09-28-swarm-audit-master.md`） |
+| ADR-0023 交互层「验证驱动 agent 循环」Task 0~6（Go 门禁三红灯 / LLM 收口 / 循环内核 / 工具白名单 / 契约+前端） | `work.log`（10-14~10-15 段）· 计划正本 `docs/plans/2026-10-14-interactive-agent-loop.md` · PR #136 |
 
 ## Active handoffs
 
-- 2026-10-14 → [`handoff_interactive-agent-loop.md`](handoff_interactive-agent-loop.md)（to: any · role: IMPLEMENT/TEST/VERIFY · status: open）— ADR-0023 交互层 agent 循环：Task 3~6 + CI 半 + 开 PR
+- 2026-10-14 → [`handoff_interactive-agent-loop.md`](handoff_interactive-agent-loop.md)（to: any · role: IMPLEMENT/TEST/VERIFY · **status: closed 2026-10-15**）— ADR-0023 交互层 agent 循环：Task 3~6 + CI 半 + 开 PR 均已交付（PR #136）；剩余待办（真机点检 / ADR §6 回写 / Unknown A）见其「响应」节
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
 ## 蒸馏登记（WORKMEMORY → vault）

@@ -13,7 +13,9 @@ os.environ.setdefault("DATABASE_PATH", "test_delector_goethe_a1_writing.db")
 from fastapi.testclient import TestClient
 
 from delector.data import a1_writing_dict
+from delector.routes.main import _a1_violations_if_letter
 from delector.server import app
+from delector.services.polish_loop import default_violations_of
 from delector.services.writing import analyze_a1_email, check_a1_formular_answer
 
 
@@ -201,6 +203,60 @@ def test_a1_writing_frontend_html_and_css():
 
     assert ".a1-formular-table" in css or ".a1-formular-card" in css
     assert ".a1-leitpunkte-box" in css or ".a1-leitpunkt-item" in css
+
+
+_ESSAY_TEXT = "Ich habe ein Hund. Er ist gut."  # 非书信体（普通作文）
+# 书信体：正文首词小写已对，但结语后带逗号 ⇒ 恰好 1 条 error 级违规
+_LETTER_TEXT = "Liebe Maria,\nich lade dich ein.\nViele Grüße,\nAnna"
+
+
+def test_a1_violations_gate_only_counts_when_text_is_a_letter():
+    """适用性闸门（**Unknown A 的边界**）：A1 书信规则只对书信体计数。
+
+    裁判集今天**只有** A1 书信规则（`analyze_a1_email`，裁判集扩充属 Unknown A，
+    本计划不做）。对非书信文本它必然报 `a1_greeting_missing`(error) —— 那是**题材
+    差异**，不是错误 ⇒ 闸门让它「无话可说」（返回 []）。
+
+    注意这**不等于**「裁判判定无错」：它只是说明手上这套规则不适用于该文本，
+    语义等价于今天的一次性润色（首轮即接受），而不是「零违规」的证明。
+    """
+    verdict_letter = analyze_a1_email(_LETTER_TEXT)
+    verdict_essay = analyze_a1_email(_ESSAY_TEXT)
+
+    assert verdict_letter["greeting"]["valid"] is True
+    assert verdict_essay["greeting"]["valid"] is False
+
+    # 无闸门时：非书信体被判「缺少称呼语」= error ⇒ v_0 = 1 ⇒ 循环会误判「改不动」
+    assert len(default_violations_of(verdict_essay)) >= 1
+    # 有闸门：规则不适用 ⇒ 零违规
+    assert _a1_violations_if_letter(verdict_essay) == []
+    # 书信体照常计数（闸门必须**有选择性**，一律返回 [] 是关掉裁判，不是闸门）
+    assert len(_a1_violations_if_letter(verdict_letter)) >= 1
+
+
+def test_ai_polish_endpoint_keeps_non_letter_polish(monkeypatch):
+    """契约断言：非书信文本**不会**被回退成原文（端点级，走真链路）。
+
+    这是把循环接进通用润色端点的**设计前提** —— 没有适用性闸门时
+    v_0 = v_1 = 1 ⇒ no_improvement ⇒ 回退原文 ⇒ 用户点了润色拿回原文。
+    """
+    polished = "Ich habe einen Hund. Er ist sehr lieb."
+
+    async def _fake_chat(**_kwargs):
+        return {"corrected_text": polished, "notes_zh": ["ein → einen (Akkusativ)"], "error_count": 1}
+
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-stub")
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", _fake_chat)
+
+    client = TestClient(app, client=("127.0.0.1", 54321))
+    res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT})
+
+    assert res.status_code == 200
+    result = res.json()["result"]
+    assert result["original"] == _ESSAY_TEXT
+    assert result["corrected"] == polished, "非书信文本不得被回退成原文"
+    assert result["converged"] is True
+    assert result["unconverged_reason"] is None
 
 
 @pytest.fixture(autouse=True, scope="module")
