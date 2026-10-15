@@ -503,3 +503,19 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **CI 红过两次，两次都不是代码**：① run `38684711849` 的 `Tests & Go Gates (ubuntu)` 挂在 **`Set up job`** 阶段 —— `actions/setup-go` 归档从 codeload 下载失败（其余三 job 全绿、本地全量 1898 passed）⇒ `gh run rerun --failed` 后 4/4 job success；② run `38684539617` 因新 push 被标 cancelled（同 sha 前缀的旧 run）。
 - 合并前自检（在被合并的 master 上）：`pytest` ai-polish 相关五套 93 passed、`test_server.py -k "ai_polish or packaging or hidden"` 23 passed、前端契约闸 PASS。**注意 master 已被 dependabot 推了两个 PR（#134 paths-filter-4 / #135 fastapi 0.143.0），本 PR 的 CI 是在 GitHub 的 merge-ref 上跑的 ⇒ 已覆盖新依赖**。
 - 仍未做（ADR §10.7 / handoff 响应节已列）：裁判集扩充（Unknown 1，第一瓶颈）、Android 真机点检（含 WebView SSE 读流未验证）、有 Key 后回测真轮次分布与真 token 计数。
+### 2026-10-15 14:05 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**双席位评审**「A1 裁判集扩充计划（`docs/plans/2026-10-15-a1-judge-expansion.md`，7 任务）+ 已落地的分层架构」，两把尺子各自给出 **局部偏离**（无通过）。
+- **尺子 1** `01-Rules/LAYERED-ARCHITECTURE.md`（实证对象 = Pi-Agent `pi-ai`/`pi-agent-core`/`pi-coding-agent` 三层）：§2 符合；**§1 无法判定**（仓内**零处**层序声明 ⇒ "违规"本身无法判定；实测两组双向耦合：`core/database.py:23` ⇄ `nlp_engine/processor.py:16`、`services/polish_tools.py:60` ⇄ `tools/writing_check.py:11`）；**§3 偏离**（`polish_loop.py:79` 顶层 import `writing.analyze_a1_email` ⇒ 物理移除上层即 import 期失败；`judge=` 注入缝只在运行期成立）；**§4 偏离**（A1 业务知识住在机制内核：`POLISH_LOOP_SYSTEM_PROMPT` 逐字书信指令 + `_default_judge` 焊死 A1 裁判）。
+- **尺子 2** `AGENT-SDK-PATTERNS` 六模式 + `AGENT-CONDUCT §10.2`：模式 1 要点 2/4/7、模式 2（errors-as-messages / 五步管道 / 钩子）、模式 3 要点 2（tool_call 拦截点 fail-closed）**符合**；**模式 1 要点 1 偏离**（内核 510 行、停止策略硬编码而非 Overlay）；**模式 3 要点 4 偏离**（SSE 的 `except llm_client.LLMError` 是**不可达分支**：`_run_polish` 已把它转 HTTPException ⇒ error 帧永不发出）；**模式 4 层 1 部分偏离**（"先触发者胜"**等价**且有前缀性证明，真缺口是"截断不可见 + 无逃生通道"）；**§10.2 偏离**（确定性层没跑时仍 `v==0 ⇒ converged=True` ⇒ 一票否决退化成"无票即通过"）。
+- **三张 RED（均针对计划本身，非已落地代码）**：R1 **接线缝缺失** —— 没有任何 Task 写"谁把 `nlp` 交给裁判"，而 `_run_polish` 从不传 `judge=`、Out-of-Scope 又禁改内核 ⇒ Task 2 加的 `nlp` 在生产恒 None ⇒ **7 任务测试可全绿而语法裁判永不生效**（dead-green），§4.3 判据表还能被打勾解除；R2 **fail-closed 缺失**（D4 只加标记，改不了 `converged` 真值；应收敛判据：`converged==true` MUST 蕴含「所有已接线确定性层都真跑过」）；R3 **超时/取消对同步调用无效**（judge 同步跑在事件循环上、dispatch 无 `wait_for`、墙钟只在轮首查、`task.cancel()` 掐不断同步函数；且循环内 `analyze` 可达 `spacy.cli.download` 出网起 pip）。
+- **编排者补跑的实测消掉一条黄卡**：官方 `A1_SCHREIBEN_TEIL2` 10 篇 `sample_email` 在两件既有算力下 **误报 0/10**（含评审点名的高危句）⇒ Task 2 是"接线"不是"修规则"，硬门基线绿。
+- 完整结论与逐条卡已呈用户；待其拍板是否按修复清单改计划。
+
+### 2026-10-15 14:10 | codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Pi 式分层重构暂缓（用户 2026-10-15 拍板）** —— 目标形态认可、执行推迟到日后单独重构。
+- **目标形态（日后要做）**：① 层间类型三态递进 `Tool`（名片：name/description/parameters）→ `AgentTool extends Tool`（工人：+execute）→ `ToolDefinition`（产品组件：+ctx/render），**只加不改**；② 依赖单向（消掉实测的两组双向耦合）；③ **层序声明**（当前零处 —— 这是 §1 判据成立的前提）；④ 业务知识（提示词/裁判）从机制内核提到产品层。判据来源 `01-Rules/LAYERED-ARCHITECTURE.md` + 2026-10-15 双席位评审。
+- **Why 现在不做**：三态递进需先有「第二个实现」才有内容（现仅一个工具面、一个裁判）——提前定接口正是 §2 反模式；且与本子计划（抬 §4.3 门槛）正交。
+- **已登记**：写进新计划 `docs/plans/2026-10-15-a1-judge-expansion.md` 的 `Out of Scope`（本计划一切改动 MUST NOT 依赖该重构）+ `Fog of War [Unknown E]`（含四个子目标与将来启动的前置顺序）。
+- **不阻塞**：三张 RED（接线缝 / fail-closed / 同步调用超时）**均可走"端点注入缝"修复，不需要这次重构**（这正是两个席位给出的"不改内核结构、允许经注入缝改变裁判语义"路径）。
