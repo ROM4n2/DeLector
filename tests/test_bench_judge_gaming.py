@@ -18,6 +18,12 @@
 7. **零 Key 红线的产物级钉子**：骨架源码不出现任何 Key 载入路径（真跑在 Task 5/6
    才接线；届时本测试随接线显式更新 —— 它是 tripwire，不是永久禁令）。
 
+8. **Task 3 测量与综合记账**：`score_uncovered`（只算 probe、逐处、`right` 按
+   `expected_count` 封顶、`wrong` 残留清零）、`score_judge_violations`（生产分流口径）、
+   `detect_new_errors`（error 级多重集差：「修一坏一」= 1，不是总数差的 0）、`summarize`
+   （每臂八项 + `judgement_basis` 钉死）、CLI `--cases N`（确定性切片 / 无效值退 2 /
+   `--json` 形状不变）与文本模式【综合记账】块。
+
 反挂死纪律：无 sleep / 无线程；唯一的子进程调用带固定 timeout（≤120s，实测 CLI 全
 干跑约 10s 量级）。
 """
@@ -400,6 +406,227 @@ def test_validate_seed_cases_rejects_duplicate_case_id() -> None:
     assert len(errors) == 1 and "重复" in errors[0], f"应恰好报「重复」一条：{errors}"
 
 
+# ── 测量与综合记账（Task 3：判决量 + 成本/延迟/轮数） ────────────────────────
+
+
+def _record(
+    arm: Any = bench.Arm.A3_CURRENT,
+    case_id: str = "t1",
+    final_text: str = "",
+    *,
+    rounds: int = 1,
+    reason: str | None = None,
+    converged: bool = False,
+    tokens_used: int = 0,
+    elapsed_s: float = 0.0,
+    model: str = bench.DRY_RUN_MODEL,
+) -> Any:
+    """构造固定 RunRecord（Task 3 数学测试用；字段与 Task 2 契约逐字对应）。"""
+    return bench.RunRecord(
+        arm=arm,
+        case_id=case_id,
+        final_text=final_text,
+        rounds=rounds,
+        reason=reason,
+        converged=converged,
+        tokens_used=tokens_used,
+        elapsed_s=elapsed_s,
+        model=model,
+    )
+
+
+def _synthetic_case(case_id: str, injections: list[Any]) -> Any:
+    """合成 SeedCase（判决量数学是纯字符串函数，不依赖真实种子集）。"""
+    from delector.data.a1_seed_errors import SeedCase
+
+    return SeedCase(id=case_id, text="（合成原文）", clean_text="（合成目标）", injections=injections)
+
+
+def test_score_uncovered_counts_probe_recoveries_place_by_place() -> None:
+    """判决量分子：逐处计 probe 回收；`right` 出现多次按 `expected_count` 封顶；signal 永不进判决量。"""
+    from delector.data.a1_seed_errors import Injection
+
+    signal = Injection(error_class="kasus", kind="signal", wrong="SIG_W", right="SIG_R", expected_count=1)
+    probe1 = Injection(error_class="verb_kongruenz", kind="probe", wrong="P1W", right="P1R", expected_count=1)
+    probe2 = Injection(error_class="nomen_grossschreibung", kind="probe", wrong="P2W", right="P2R", expected_count=2)
+    case = _synthetic_case("t1", [signal, probe1, probe2])
+
+    # 全回收：probe1 1 处 + probe2 2 处 = 3（signal 不计）
+    assert bench.score_uncovered(_record(case_id="t1", final_text="SIG_R P1R P2R P2R"), case) == 3
+
+    # signal 没修（wrong 残留）+ probe 全回收 ⇒ 仍是 3（signal 是点火器，不进判决量）
+    assert bench.score_uncovered(_record(case_id="t1", final_text="SIG_W P1R P2R P2R"), case) == 3
+
+    # right 出现多次：按 expected_count 封顶（P2R ×3 ⇒ 只记 2）
+    assert bench.score_uncovered(_record(case_id="t1", final_text="P1R P2R P2R P2R"), case) == 3
+
+
+def test_score_uncovered_boundaries_residual_wrong_missing_right_and_empty_injections() -> None:
+    """边界：wrong 残留 ⇒ 该处 0（即使 right 也在）；right 缺失 ⇒ 0；空 injections ⇒ 0；部分回收。"""
+    from delector.data.a1_seed_errors import Injection
+
+    probe = Injection(error_class="verb_kongruenz", kind="probe", wrong="P1W", right="P1R", expected_count=1)
+    assert bench.score_uncovered(_record(final_text="P1R 但同时 P1W 残留"), _synthetic_case("t1", [probe])) == 0
+    assert bench.score_uncovered(_record(final_text="既无错形也无修复形"), _synthetic_case("t1", [probe])) == 0
+    assert bench.score_uncovered(_record(case_id="t2", final_text="随便什么文本"), _synthetic_case("t2", [])) == 0
+
+    # 部分回收：一处回收、一处残留 ⇒ 1
+    p1 = Injection(error_class="verb_kongruenz", kind="probe", wrong="A1W", right="A1R", expected_count=1)
+    p2 = Injection(error_class="artikel_genus", kind="probe", wrong="A2W", right="A2R", expected_count=1)
+    partial = _synthetic_case("t3", [p1, p2])
+    assert bench.score_uncovered(_record(case_id="t3", final_text="A1R 回来了但 A2W 还在"), partial) == 1
+
+
+def test_score_judge_violations_replays_production_counting() -> None:
+    """R_judge 计数来源：生产裁判 + **生产分流**（散文的格式族被过滤 —— 不是 collect_violations 口径）。"""
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+    from delector.nlp_engine import processor
+    from delector.routes.main import _polish_violations_of
+    from delector.services.writing import analyze_a1_email
+
+    nlp = processor.try_load_nlp_no_download()
+
+    letter = SEED_CASES[0]
+    prose = SEED_CASES[10]
+    assert bench.score_judge_violations(_record(final_text=letter.text)) == 1
+    assert bench.score_judge_violations(_record(final_text=letter.clean_text)) == 0
+    assert bench.score_judge_violations(_record(final_text=prose.text)) == 1
+    assert bench.score_judge_violations(_record(final_text=prose.clean_text)) == 0
+
+    # 与生产链路逐点重放一致（散文的 a1_greeting_missing 原始在 violations 里、分流后为 0）
+    for text in (letter.text, letter.clean_text, prose.text, prose.clean_text):
+        assert bench.score_judge_violations(_record(final_text=text)) == len(
+            _polish_violations_of(analyze_a1_email(text, None, nlp))
+        )
+
+
+def test_detect_new_errors_counts_new_detector_errors_multiset_semantics() -> None:
+    """新增错误处数：error 级多重集差（「修一坏一」= 1 —— 总数差口径会记 0，本用例即口径钉）。"""
+    _require_nlp()
+
+    clean = "Liebe Lisa,\n\nich komme morgen vorbei.\n\nViele Grüße\nAnna"
+    greeting_missing = "ich komme morgen vorbei.\n\nViele Grüße\nAnna"
+    valediction_comma = "Liebe Lisa,\n\nich komme morgen vorbei.\n\nViele Grüße,\nAnna"
+
+    assert bench.detect_new_errors(clean, clean) == 0
+    assert bench.detect_new_errors(greeting_missing, clean) == 0  # 纯修复 ⇒ 0（不许负值）
+    assert bench.detect_new_errors(clean, valediction_comma) == 1  # 纯新增 ⇒ 1
+    assert bench.detect_new_errors(greeting_missing, valediction_comma) == 1  # 修一处 + 坏一处 ⇒ 1
+    # 同类等价替换不重复计数（两篇都缺称呼语 ⇒ 0）
+    assert bench.detect_new_errors(greeting_missing, "morgen komme ich vorbei.\n\nViele Grüße\nAnna") == 0
+    # warning 级不进「error 级」口径（after 只是变长：a1_word_count 是 warning ⇒ 0）
+    assert bench.detect_new_errors(clean, clean + " und" * 40) == 0
+
+
+def test_summarize_report_shape_zero_records_and_judgement_basis() -> None:
+    """Report 形状契约：`judgement_basis` 钉死 + 三臂恒存在（无记录 ⇒ 全 0、runs=0）；零 Key 可达。"""
+    report = bench.summarize([], [])
+    assert set(report) == {"judgement_basis", "arms"}
+    assert report["judgement_basis"] == "uncovered_seed_recovery"
+    assert set(report["arms"]) == {arm.value for arm in bench.Arm}
+    metric_keys = {
+        "runs",
+        "R_judge",
+        "R_uncovered",
+        "rollback_rate",
+        "new_errors",
+        "tokens_total",
+        "elapsed_p50",
+        "elapsed_p95",
+        "rounds_mean",
+    }
+    for metrics in report["arms"].values():
+        assert set(metrics) == metric_keys
+        assert metrics["runs"] == 0
+        assert metrics["R_judge"] == 0.0
+        assert metrics["R_uncovered"] == 0.0
+        assert metrics["rollback_rate"] == 0.0
+        assert metrics["tokens_total"] == 0
+
+
+def test_summarize_rejects_records_with_unknown_case_id() -> None:
+    """记录引用样本集外的 case_id ⇒ ValueError（温柔跳过会让判决量静默失真）。"""
+    with pytest.raises(ValueError, match="不在样本集"):
+        bench.summarize([_record(case_id="不存在", final_text="x")], [])
+
+
+def test_summarize_pins_per_arm_metrics_and_judgement_basis() -> None:
+    """每臂八项指标全量断言（固定记录 × 冻结种子前两篇）。
+
+    构造的关键不对称（防「R_uncovered 取出 R_judge 的值」这类口径破坏）：A3 的两篇最终文本在
+    裁判眼里都「已修好」（v=0 ⇒ R_judge=1.0），但其中一篇有一处 held-out probe 被重新写坏
+    （裁判看不见）⇒ R_uncovered = (places0−1+places1)/(places0+places1) ≠ R_judge ——「判决
+    量必须用仪器 A」的数值化证明。
+    """
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    case0, case1 = SEED_CASES[0], SEED_CASES[1]
+    probes0 = [injection for injection in case0.injections if injection.kind == "probe"]
+    places0 = sum(injection.expected_count for injection in probes0)
+    places1 = sum(injection.expected_count for injection in case1.injections if injection.kind == "probe")
+    rebroken = case0.clean_text.replace(probes0[0].right, probes0[0].wrong)
+    assert rebroken != case0.clean_text  # 自检：重新写坏必须真的改了文本
+
+    baseline, no_signal, current = bench.Arm.A1_BASELINE, bench.Arm.A2_NO_SIGNAL, bench.Arm.A3_CURRENT
+    records = [
+        _record(baseline, case0.id, case0.text, rounds=1, reason="turn_limit", tokens_used=10, elapsed_s=0.5),
+        _record(no_signal, case0.id, case0.text, rounds=3, reason="no_improvement", tokens_used=30, elapsed_s=0.25),
+        _record(current, case0.id, rebroken, rounds=3, reason="ok", converged=True, tokens_used=50, elapsed_s=1.5),
+        _record(baseline, case1.id, case1.text, rounds=1, reason="turn_limit", tokens_used=20, elapsed_s=1.0),
+        _record(no_signal, case1.id, case1.text, rounds=3, reason="no_improvement", tokens_used=40, elapsed_s=0.75),
+        _record(
+            current, case1.id, case1.clean_text, rounds=3, reason="ok", converged=True, tokens_used=60, elapsed_s=3.0
+        ),
+    ]
+
+    report = bench.summarize(records, [case0, case1])
+    assert report["judgement_basis"] == "uncovered_seed_recovery"
+    a1 = report["arms"]["a1_baseline"]
+    a2 = report["arms"]["a2_no_signal"]
+    a3 = report["arms"]["a3_current"]
+
+    # A1：final == 原文 ⇒ 回收 0 / 下降 0 / 无回退（turn_limit 不是回退）
+    assert a1["runs"] == 2
+    assert a1["R_judge"] == 0.0 and a1["R_uncovered"] == 0.0 and a1["rollback_rate"] == 0.0
+    assert a1["new_errors"] == 0 and a1["tokens_total"] == 30
+    assert a1["elapsed_p50"] == pytest.approx(0.75) and a1["elapsed_p95"] == pytest.approx(0.975)
+    assert a1["rounds_mean"] == 1.0
+
+    # A2：no_improvement 回退原文 ⇒ 回退率 100%
+    assert a2["runs"] == 2
+    assert a2["R_judge"] == 0.0 and a2["R_uncovered"] == 0.0 and a2["rollback_rate"] == 1.0
+    assert a2["new_errors"] == 0 and a2["tokens_total"] == 70
+    assert a2["elapsed_p50"] == pytest.approx(0.5) and a2["elapsed_p95"] == pytest.approx(0.725)
+    assert a2["rounds_mean"] == 3.0
+
+    # A3：R_judge=1.0（裁判眼里全修好）但 R_uncovered < 1.0（一处 held-out 被写回）
+    expected_uncovered = (places0 - probes0[0].expected_count + places1) / (places0 + places1)
+    assert a3["runs"] == 2
+    assert a3["R_judge"] == 1.0
+    assert a3["R_uncovered"] == pytest.approx(expected_uncovered)
+    assert a3["R_uncovered"] != a3["R_judge"]  # 口径不可互换（本用例的目的）
+    assert a3["rollback_rate"] == 0.0 and a3["new_errors"] == 0
+    assert a3["tokens_total"] == 110
+    assert a3["elapsed_p50"] == pytest.approx(2.25) and a3["elapsed_p95"] == pytest.approx(2.925)
+    assert a3["rounds_mean"] == 3.0
+
+
+def test_summarize_rollback_rate_requires_reverting_to_seed_text() -> None:
+    """回退口径：`no_improvement` **且** final 回到原文才计（回退到中间候选不算 —— §9.5 精确口径）。"""
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    case = SEED_CASES[0]
+    records = [
+        _record(bench.Arm.A3_CURRENT, case.id, case.text, rounds=3, reason="no_improvement"),
+        _record(bench.Arm.A3_CURRENT, case.id, case.clean_text, rounds=3, reason="no_improvement"),
+    ]
+    report = bench.summarize(records, [case])
+    assert report["arms"]["a3_current"]["rollback_rate"] == 0.5
+
+
 # ── CLI（退出码 0/1/2 与输出面） ──────────────────────────────────────────────
 
 
@@ -519,6 +746,93 @@ def test_cli_dry_run_json_outputs_pure_json_runrecord_list() -> None:
         for record in (a1, a2, a3):
             assert record["model"] == bench.DRY_RUN_MODEL
             assert record["tokens_used"] > 0
+
+
+def test_cli_cases_limits_run_to_first_n_seed_cases(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--cases N`：确定性取 SEED_CASES 前 N 篇（零 Key：--dry-run --json 全链路）。"""
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    rc = bench.main(["--cases", "5", "--dry-run", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    data = json.loads(captured.out)
+    assert len(data) == 5 * 3
+    assert [record["case_id"] for record in data[:3]] == [SEED_CASES[0].id] * 3
+    assert {record["case_id"] for record in data} == {case.id for case in SEED_CASES[:5]}
+    assert set(data[0]) == _RECORD_FIELDS  # --json 形状契约不变（RunRecord 列表）
+
+
+def test_cli_cases_invalid_values_exit_2(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--cases 0` / 负数 ⇒ argparse 报错退 2（在「真跑未接线」之前就拦下）。"""
+    for bad in ("0", "-3"):
+        with pytest.raises(SystemExit) as excinfo:
+            bench.main(["--cases", bad, "--dry-run"])
+        assert excinfo.value.code == 2
+        assert "--cases 必须 ≥ 1" in capsys.readouterr().err
+
+
+def test_cli_cases_non_integer_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
+    """非整数 ⇒ argparse 自身报错退 2。"""
+    with pytest.raises(SystemExit) as excinfo:
+        bench.main(["--cases", "abc", "--dry-run"])
+    assert excinfo.value.code == 2
+    assert "invalid int value" in capsys.readouterr().err
+
+
+def test_cli_cases_larger_than_sample_set_is_harmless(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """N 大于样本数 ⇒ 切片语义（跑全部、不报错）—— 用两篇样本注入避免整集开销。"""
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: list(SEED_CASES[:2]))
+    rc = bench.main(["--cases", "5", "--dry-run", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    data = json.loads(captured.out)
+    assert len(data) == 2 * 3
+
+
+def test_cli_cases_without_dry_run_still_exit_2(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--cases` 不改变「真跑未接线 ⇒ 2」的契约。"""
+    rc = bench.main(["--cases", "5"])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "未接线" in captured.err
+
+
+def test_cli_text_report_prints_summary_block(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """文本模式带【综合记账】块（judgement_basis + 每臂八项），数值出自 summarize。"""
+    _require_nlp()
+    case = _case()
+    baseline, no_signal, current = bench.Arm.A1_BASELINE, bench.Arm.A2_NO_SIGNAL, bench.Arm.A3_CURRENT
+    records = [
+        _record(baseline, case.id, case.text, rounds=1, reason="turn_limit", tokens_used=1, elapsed_s=0.1),
+        _record(no_signal, case.id, case.text, rounds=3, reason="no_improvement", tokens_used=2, elapsed_s=0.2),
+        _record(current, case.id, case.clean_text, rounds=3, reason="ok", converged=True, tokens_used=3, elapsed_s=0.3),
+    ]
+    monkeypatch.setattr(bench, "run_dry_run", lambda cases: list(records))
+
+    rc = bench.main(["--dry-run"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "judgement_basis=uncovered_seed_recovery" in captured.out
+    a1_line = next(
+        line for line in captured.out.splitlines() if line.startswith("[a1_baseline]") and "R_uncovered" in line
+    )
+    assert "R_uncovered=0.000" in a1_line and "rollback_rate=0.000" in a1_line
+    a2_line = next(
+        line for line in captured.out.splitlines() if line.startswith("[a2_no_signal]") and "R_uncovered" in line
+    )
+    assert "rollback_rate=1.000" in a2_line
+    a3_line = next(
+        line for line in captured.out.splitlines() if line.startswith("[a3_current]") and "R_uncovered" in line
+    )
+    assert "R_uncovered=1.000" in a3_line and "R_judge=1.000" in a3_line and "tokens_total=3" in a3_line
 
 
 # ── 零 Key 红线（产物级 tripwire） ────────────────────────────────────────────
