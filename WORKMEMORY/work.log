@@ -601,3 +601,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **处置**：① 停写 + 字节级取证（listdir / `git ls-files` / reflog）；② 证据保全至本机 scratch（变异原始输出 ×3、v0 表、计划勾选 diff）；③ 唯一脏文件（计划）已 `git checkout --` 还原，主目录恢复 clean、原样留给并行线；④ 杀掉跑在错误分支状态上的全量测试后台任务；⑤ 收尾改用**独立 worktree** `.worktrees/judge-gaming-closure` 完成（本仓 `.worktrees/` 既有约定），全程不再触碰主目录。
 - **教训（供后来者）**：本仓为**多 agent 共享单工作目录**（同日已观察到 `chore/swarm-audit-master` 审计线，操作者未确认；本仓 09-28 / 10-03 已有两轮 swarm-audit 先例）。⇒ (1) 长操作前后与**提交前** MUST `git branch --show-current` 复核；(2) 并行工作流 MUST 用 worktree / 独立克隆，勿共用工作树（本次一行 checkout 差点让收尾提交落到他人分支——在提交前 diff 复核时截获；**征兆 = 提交前 `git status` 的文件集与预期不符**）；(3) 他方切分支后，本分支内容一律可从 commit 恢复：先取证、再处置、勿慌。
 
+### 2026-10-15 23:54 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 第 8 条对照实验 Task 2（三臂 harness 骨架）交付并合入 feat**（dfs-exec Gear 2 双席位：TDD Builder + 独立 Reviewer；commit `95dc661`，仅两新文件 +1009 行）。
+- 编排核验（物理回执）：靶向 20 passed 复跑；trio 62 passed；`--dry-run --json` 纯 JSON 60 条（三臂各 20）；退出码 0/1/2 实跑；设计稿 §4「两者都无裁判方向信号」逐字落成（A1/A2 共用固定违规）。
+- 独立评审 PASS：4 条对抗变异实红（含 2 条自选角度）→ 还原零残留（两文件 hash==HEAD）；审计钩子实证零 .env / 零出网（60 次 socket 全回环 = asyncio self-pipe，已对照归因）。
+- **全量基线（本批一次）**：`pytest -q` ⇒ **2071 passed + 3 skipped**（414s，隔离 worktree 内实跑）。
+- 评审发现（非阻塞，均已登记计划 Task 2 收尾记录）：W1–W3 三处分支欠覆盖钉（随 Task 3 补）；**W4（设计层）**：恒定固定违规 ⇒ A1/A2 产出恒回退原文 ⇒ `R_uncovered(A1/A2)≡0` 退化，与「A1=一次性润色等价物」表述有张力 —— **Task 5 pilot 前须用户裁决**；W5：Task 5 RUN `--cases` 未实现（计划已加附注）。
+- 台账：Task-2 → completed（2/6，commit=95dc661，reviewer=PASS）。

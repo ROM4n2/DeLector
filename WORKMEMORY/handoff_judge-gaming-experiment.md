@@ -80,3 +80,23 @@ status: open
 ### 4. 下一步（按原包「三」清单，不变）
 Task 2（三臂 harness 骨架，AFK、`--dry-run` 零 Key 可跑）→ Task 3/4 → Task 5/6（HITL：真跑前交用户确认花费口径）。**本会话范围声明**：仅接手 + Task 1 收尾；不改生产代码路径。
 
+---
+
+## 响应 2（2026-10-15 23:54 | deepseek-v4-1-flash__hermes）—— Task 2 交付（CRV PASS）；Task 3~6 待做（**status 保持 open**）
+
+dfs-exec Gear 2 双席位交付 `95dc661`（`tools/bench_judge_gaming.py` 562 行 + `tests/test_bench_judge_gaming.py` 447 行；仅此两新文件，未触任何既有文件；已 ff 合入 feat）。
+
+### 1. 编排水位核验（物理回执；原始输出存本机 scratch）
+- 靶向复跑 **20 passed**（5.86s）；trio（+`test_ai_polish_loop`+`test_polish_tools`）**62 passed**。
+- `--dry-run --json` 纯 JSON **60 条**（a1/a2/a3 各 20；a1 rounds=1 turn_limit；a2 rounds=3 no_improvement；a3 converged=20）；退出码 0/1/2 实跑（含无 `--dry-run` ⇒ 2 + 人话提示）。
+- 设计稿 §4「A1→A2 两者都无裁判方向信号」逐字落成：A1 与 A2 共用同一固定违规函数（单变量严格；评审独立复核确认这是该条唯一严格读法）。
+- 全量基线（本批一次）：**2071 passed + 3 skipped**（414s，feat@3207dba worktree 内）。
+
+### 2. 独立评审（PASS）与欠账
+- 4 条对抗变异（含 2 条评审自选角度：validate signal 检查 / A2 泄漏方向）实红 → `git checkout --` 还原 → 文件 hash == HEAD；审计钩子证零 .env、零出网（60 次 socket 全回环 = asyncio self-pipe）。
+- **W1–W3**（非阻塞）：done 守卫 / `expected_count<1` / 种子装载异常⇒退 2 三处分支无覆盖钉 → **随 Task 3 补钉**。
+- **W4（设计层，Task 5 前须裁决）**：恒定固定违规 ⇒ A1/A2 真跑产出**恒回退原文**（评审 InstantFinish 探针实证）⇒ `R_uncovered(A1/A2)≡0`，「A2 关键分辨器」在输出面退化；与 §4 表「A1=一次性润色等价物」描述有张力。建议据 §9.5「回退掩盖」扩展口径，或调整 A2 机制后再进 pilot。
+- **W5**：Task 5 RUN 的 `--cases` 未实现（计划已加评审附注）。
+
+### 3. 下一步
+Task 3（测量与记账 + W1–W3 补钉）→ Task 4（rater）→ Task 5/6（HITL：先交用户确认花费口径 + **W4 裁决**）。本会话范围：Task 2 交付；至此台账 2/6。

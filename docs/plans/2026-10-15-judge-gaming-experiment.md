@@ -71,11 +71,12 @@
 > "建三臂 harness 骨架。① `--dry-run` 用**确定性 stub chat**（按轮次返回构造好的回复）驱动 `run_polish_loop`，使**无 Key 也能跑通全链路**；② 三臂接线照设计稿（A1 max_turns=1；A2 恒固定违规；A3 生产分流），**不许**在 A2 里暴露任何被判违规的内容（那是 A3 的自变量）；③ `--json` 输出结构化 RunRecord 列表；④ 退出码 0/1/2 照 `tools/bench_judge_fp.py` 的契约实现并被测试钉住；⑤ 密钥只经 `delector.server.load_env()`（实测可用），**任何输出/异常/日志 MUST NOT 带 key**（打印前只允许布尔或长度）。测试全走 `--dry-run`/stub，**零 Key**。RUN：`python -m pytest tests/test_bench_judge_gaming.py -q` + `python tools/bench_judge_gaming.py --dry-run`。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：三臂配置、stub 链路、退出码、`--json` 形状）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 实现骨架（GREEN）
-- [ ] Step 4: 变异自证（把 A2 改成 A3 的分流 ⇒ 单变量用例红；把 A1 的 `max_turns` 改成 3 ⇒ 阶梯用例红）
-- [ ] Step 5: `--dry-run` 原始输出 + ruff + mypy 档 + CRLF + 原子提交
+- [x] Step 1: 写失败测试（RED：三臂配置、stub 链路、退出码、`--json` 形状）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 实现骨架（GREEN）
+- [x] Step 4: 变异自证（把 A2 改成 A3 的分流 ⇒ 单变量用例红；把 A1 的 `max_turns` 改成 3 ⇒ 阶梯用例红）
+- [x] Step 5: `--dry-run` 原始输出 + ruff + mypy 档 + CRLF + 原子提交
+> **收尾记录（2026-10-15/16，deepseek-v4-1-flash__hermes）**：`95dc661` 合入 feat（仅两新文件 +1009 行）；dfs-exec Gear 2 双席位（TDD Builder + 独立 Reviewer）。编排核验：靶向 **20 passed**、trio **62 passed**、`--dry-run --json` 纯 JSON 60 条（三臂各 20）、退出码 0/1/2 实跑、变异实红 ×2（实现者）+ ×2（评审自选角度）→ 还原零残留（两文件 hash == HEAD）。设计稿 §4「两者都无裁判方向信号」逐字落成（A1/A2 共用同一固定违规）。**评审发现（非阻塞，均登记）**：W1–W3 = 三处分支欠覆盖钉（`run_arm` done 守卫 / `expected_count<1` / 种子装载异常⇒退 2），随 Task 3 补钉；**W4（设计层，Task 5 前须裁决）** = 恒定固定违规 ⇒ A1/A2 产出恒回退原文（`no_improvement`→argmin 回退；评审 InstantFinish 探针实证）⇒ `R_uncovered(A1/A2)≡0` 退化，与 §4 表「A1=一次性润色等价物」存在张力（建议据 §9.5「回退掩盖」扩展口径或调整 A2 机制）；W5 = Task 5 RUN `--cases` 未实现（见 Task 5 评审附注）。全量基线（本批一次）：**2071 passed + 3 skipped**（414s）。
 
 ---
 
@@ -135,6 +136,7 @@
 **Interfaces:**
 - Consumes: `tools/bench_judge_gaming.py`（真跑模式，`load_env()` 后的 key）· 5 篇种子用例
 - Produces: pilot 报告（**含每篇三臂的原始 RunRecord 与逐处注入回收明细**）+ **固定阈值**（`R_uncovered` 的显著性口径 / `R_judge` 差值口径 / 回退率上限）
+> **评审附注（Task 2 CRV）**：RUN 命令中的 `--cases 5` 现不存在（argparse 报 unrecognized arguments、退 2）；落地前须先实现 `--cases N`（建议随 Task 3/4 一并落）。**W4（A1/A2 恒回退原文）MUST 在 pilot 前裁决并回写设计稿**。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "跑 pilot：N=5 篇种子用例 × 3 臂，**逐篇交错执行**。① 真跑前先打印一次 `bool(key)`（**绝不打印 key**）与模型名；② 记录每篇三臂的 RunRecord 与逐处注入回收；③ 据实测**方差与 token/延迟**固定主实验阈值并回写设计稿（写清"阈值由 pilot 实测方差推出"）；④ 若 pilot 暴露 harness 缺陷 ⇒ 回炉 Task 2/3 而不是就地绕过。**HITL**：跑前把预估 token/延迟与本次花费口径交用户确认。RUN：`python tools/bench_judge_gaming.py --cases 5 --json`。"
