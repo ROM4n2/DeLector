@@ -129,6 +129,14 @@
 
 ---
 
+### Task 4b: W4 附带指标 —— 回退前最后候选回收率 [Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]（2026-10-16 用户裁决登记）
+
+**Files:** Modify: `docs/specs/2026-10-15-judge-gaming-control-experiment-design.md`（2026-10-16 修订段）· `tools/bench_judge_gaming.py` · `tests/test_bench_judge_gaming.py`
+
+**验收（已交付）**：commit `6f917b7`；47/98 passed；双变异四联（实现者）+ 评审 5 变异（4 红 1 空白 → O-4b-1）；设计稿修订段六项裁决语义逐条对齐；`delector/` 零变更；附指标（`R_uncovered_last_candidate` / `candidates_recorded`）不进判决。**背景**见设计稿 2026-10-16 修订段与 work.log 决策条目。**残余**：O-4b-1（空串候选在 summarize 层无钉）随 Task-5a 补。
+
+---
+
 ### Task 5: **pilot 实跑（N=5）+ 阈值固定回写** [Tier: 3-Critical] [Mode: HITL] [Role: TDD Builder]
 
 **Files:**

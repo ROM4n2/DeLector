@@ -632,3 +632,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **W4 口径 = 选项 2（加附带指标）**：harness 侧包装 chat 记录「回退前最后候选」→ 新附带指标 `R_uncovered_last_candidate`（池化于有候选的记录）+ `candidates_recorded` 计数；**判决量口径仍以 final 为准、附指标不进 P1/P2**；不动生产代码；设计稿增 2026-10-16 修订段（预注册纪律：pilot 前固定）。登记为 **Task-4b**。
 - **pilot 花费口径 = 先单篇试水**：1 篇×3 臂真跑（≤10 次轻量调用）→ 报实测 token/耗时与连通性 → 用户再确认跑满 N=5（≤45 chat + ≤15 rater）。真 key 只经 load_env()（载入路径既有）；报告只出现布尔/长度。
 - Why 记：W4 从「设计层提醒」收敛为「附指标」是用户裁决的产品语义决定；试水分两步走，避免在连通性未实测前直接跑满。
+
+### 2026-10-16 01:18 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, shell-exec
+事件：**全量套件终基线（Task 4 合并后）**：`pytest -q` ⇒ **2122 passed + 3 skipped**（411s，隔离 worktree 内实跑，EXIT=0；原始输出存 scratch/judge_gaming/fullsuite_feat_t4.txt）。基线演进：Task-2 起始 **2071+3** → 现 **2122+3**（+51 = Task 3/4 新增测试）。
+
+### 2026-10-16 01:35 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Task-4b（W4 附带指标：回退前最后候选回收率）交付并合入 feat**（用户裁决「选项 2」；commit `6f917b7`，3 文件 +400/-31；dfs-exec Gear 2 双席位）。
+- 交付：设计稿「2026-10-16 修订段」（预注册；doc 仅 1 hunk/7 行纯新增）+ `_ChatRecorder` 透明包装 + `RunRecord.last_candidate_text`（十键有意演进）+ summarize 附指标（池化仅含候选记录 + 零守卫）+ 文本标注「不进判决」。
+- 编排核验：47/98 复跑绿；JSON 十键、候选分布 a1=0/a2=20/a3=20；A2 candidate=1.000 vs final=0.000（回退掩盖演示数字）；编排抽查变异（后覆盖前→先到先得）实红零残留。
+- 独立评审 PASS：doc diff 仅 1 hunk 且六项裁决语义逐条对齐、delector/ 零变更；5 条变异（4 条四联实红、1 条空串判定测试空白→ O-4b-1 登记）；审计钩子 .env=0 / 非回环=0 / server 未导入；base-vs-HEAD 归一化 70 行指标 identical。
+- **O-4b-1（测试空白，非缺陷）**：summarize 层「空串候选」无钉（`is not None`→真值判断变异可全绿）——随 Task-5a 补钉。
+- 台账：Task-4b → completed（5/8）。
