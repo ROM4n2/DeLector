@@ -191,7 +191,7 @@ jobs:
 
       - name: Detect packaging-surface changes
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         # fail-open 接线：本步失败（例如基线缺失致 git exit 128）时 MUST NOT 让 job 红 —— 上面的
         # outputs 表达式会把 packaging 缺省为 'true'（按「发生变更」处理，照跑闸）。
         continue-on-error: true
