@@ -120,11 +120,12 @@
 > "实现辅助 rater。① 盲评：`order_seed` 决定 A/B 呈现顺序，rubric 里 MUST NOT 出现臂标签或"哪份是润色后"的暗示；② 结果只进 `report['auxiliary']`，并带 `"role": "auxiliary_signal_not_used_in_verdict"` 字样（有测试断言判决字段未变）；③ `--dry-run` 下跳过（不发电）；④ 复用同一个 key 加载路径，**不许**在日志/异常里带 key。测试全 stub。RUN：`python -m pytest tests/test_bench_judge_rater.py tests/test_bench_judge_gaming.py -q`。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：盲评顺序、`auxiliary` 隔离、dry-run 跳过）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 实现（GREEN）
-- [ ] Step 4: 变异自证（把 arm 标签塞进 rubric ⇒ 用例红；把 rating 写进判决字段 ⇒ 用例红）
-- [ ] Step 5: ruff + mypy 档 + CRLF + 原子提交
+- [x] Step 1: 写失败测试（RED：盲评顺序、`auxiliary` 隔离、dry-run 跳过）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 实现（GREEN）
+- [x] Step 4: 变异自证（把 arm 标签塞进 rubric ⇒ 用例红；把 rating 写进判决字段 ⇒ 用例红）
+- [x] Step 5: ruff + mypy 档 + CRLF + 原子提交
+> **收尾记录（2026-10-16，deepseek-v4-1-flash__hermes）**：`ce5339e`（销 Task 3 残余 O1–O3）+ `1134148`（主体：rater + `auxiliary` 接线，4 文件 2A+2M）合入 feat；dfs-exec Gear 2 双席位。编排核验：靶向 **51 passed**、四件套 **93 passed**；`--dry-run --json` 60 条（键集/臂分布对账）、`--cases 5` 15 条、文本模式无 auxiliary 泄漏、无参退 2；编排抽查变异（ROLE 常量改值 ⇒ isolation 用例 red）四联成立；四文件 `i/lf w/crlf`、bare LF=0。独立评审 PASS：**7 条对抗变异四联全红-还原**（奇偶对调 / arms 字段污染 / 空守卫 / 范围守卫 / auxiliary 槽 / signal 计分 / O1 二值式复现）+ 盲评审计（自建黑名单两序零归属泄漏、rubric 逐字节一致、仅 Text 1/2 盲槽、一对文本 1 次调用）+ auxiliary 深等隔离（唯一写入面 rater:171）+ 审计钩子 `.env`=0 / 非回环=0 / server 未导入。**残余观察（非阻塞）**：O-1 = 两新文件 EOF 缺尾换行（全仓 229 个 .py 中 5 例同型，3 例先于本分支）；O-2 = `ruff format --check` would-reformat（仓内无该门禁）；O-3 = `insert_into_report` 浅拷贝共享 `arms` 引用（不被改动，有测试+变异双钉）。O1–O3（Task 3 残余）已全部销账。
 
 ---
 

@@ -35,7 +35,7 @@
 | ADR-0023 交互层「验证驱动 agent 循环」Task 0~6（Go 门禁三红灯 / LLM 收口 / 循环内核 / 工具白名单 / 契约+前端） | `work.log`（10-14~10-15 段）· 计划正本 `docs/plans/2026-10-14-interactive-agent-loop.md` · PR #136 |
 
 ## Active handoffs
-- 2026-10-15 → [`handoff_judge-gaming-experiment.md`](handoff_judge-gaming-experiment.md)（to: any · role: IMPLEMENT/TEST/VERIFY · status: open）— §4.3 第 8 条对照实验：Task 1~3 已交付（maker-checker 全绿；66e1590 合入 feat），Task 4~6 待做（含真跑 HITL；W4 设计层须 pilot 前裁决）
+- 2026-10-15 → [`handoff_judge-gaming-experiment.md`](handoff_judge-gaming-experiment.md)（to: any · role: IMPLEMENT/TEST/VERIFY · status: open）— §4.3 第 8 条对照实验：Task 1~4 已交付（AFK 全清，maker-checker 全绿；1134148 合入 feat），Task 5/6 待做（HITL：真跑花费口径 + W4 裁决）
 
 - 2026-10-14 → [`handoff_interactive-agent-loop.md`](handoff_interactive-agent-loop.md)（to: any · role: IMPLEMENT/TEST/VERIFY · **status: closed 2026-10-15**）— ADR-0023 交互层 agent 循环：Task 3~6 + CI 半 + 开 PR 均已交付（PR #136）；剩余待办（真机点检 / ADR §6 回写 / Unknown A）见其「响应」节
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header

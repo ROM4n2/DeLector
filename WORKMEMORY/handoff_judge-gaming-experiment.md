@@ -120,3 +120,26 @@ Task 3（测量与记账 + W1–W3 补钉）→ Task 4（rater）→ Task 5/6（
 
 ### 3. 下一步
 Task 4（rater + `auxiliary` 接线 + O1–O3 销账）→ Task 5/6（HITL：先交用户确认花费口径 + **W4 裁决**）。台账：Task-3 完成（3/6）。
+
+---
+
+## 响应 4（2026-10-16 01:01 | deepseek-v4-1-flash__hermes）—— Task 4 交付（CRV PASS）；**AFK 阶段（Task 1~4）全清**；剩 Task 5/6 待 HITL（status 保持 open）
+
+双提交落地：`ce5339e`（销 Task 3 残余 O1–O3）+ `1134148`（rater + auxiliary 接线，4 文件）；已 ff 合入 feat。
+
+### 1. 编排水位核验（物理回执）
+- 范围恰 4 文件（2A+2M）；靶向 **51 passed** / 四件套 **93 passed**（编排与评审双复跑一致）。
+- CLI：--dry-run --json 60 条（纯 JSON、键集/臂分布对账）；--cases 5 → 15 条；文本模式无 auxiliary/rate_pair 泄漏；无参退 2。
+- 编排抽查变异（ROLE 常量改值 ⇒ isolation 用例 red）四联成立；四文件 `i/lf w/crlf`、bare LF=0。
+- O1–O3（Task 3 残余）销账：O1 二值式变异实红钉、O2 注释与断言对齐（复现变异落点吻合）、O3 可序列化钉。
+
+### 2. 独立评审（PASS）
+- **7 条对抗变异**四联全红-还原（含 O1 二值式复现；M6 signal 计分）。
+- 盲评审计（自建黑名单，两序零归属泄漏；rubric 逐字节一致；仅 Text 1/Text 2 盲槽；一对文本 1 次调用，低于设计稿 §8 的 2 次/对保守上界）。
+- auxiliary 深等隔离（唯一写入面 rater:171；原 report 对象不动；role 字面量）；审计钩子 `.env`=0 / 非回环=0 / server 未导入。
+- **残余观察 O-1~O-3（非阻塞）**：两新文件 EOF 缺尾换行（全仓 5 例先例）；`ruff format` would-reformat（仓内无该门禁）；浅拷贝共享 arms 引用（双钉不改动）。
+
+### 3. 下一步（**全部 HITL，待用户**）
+1. **W4 口径裁决**（pilot 前必须）：恒定固定违规 ⇒ A1/A2 真跑产出恒回退原文（`R_uncovered(A1/A2)≡0`）——维持现状+限定结论 / 增「最后候选回收率」附带指标（小开发）/ 改 A2 机制（设计大修）三选一。
+2. **pilot 花费口径**：N=5×3 臂 ≈ ≤45 次 chat + ≤15 次 rater；建议先单篇试水报告实测 token/耗时再跑满。
+3. 两裁决后 = Task 5（pilot+阈值回写）→ Task 6（主实验+报告+ADR 回写）。

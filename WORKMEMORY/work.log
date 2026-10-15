@@ -617,3 +617,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 独立评审 PASS：5 条自选角度变异四联实红零残留；口径裁决 11 项全过（含 p50/p95 与 numpy 逐位一致）；审计钩子零 .env / 零非回环 / server 未导入。
 - 残余观察（非阻塞，登记待销）：O1 R_judge 中段值无钉（旁证量）；O2 tests:458 断言强度/注释不匹配；O3 json.dumps(Report) 无钉 + Task 4 同步精确键集合。**随 Task 4 销账。**
 - 台账：Task-3 → completed（3/6，commit=66e1590）。
+
+### 2026-10-16 01:01 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 第 8 条对照实验 Task 4（盲评 rater + auxiliary 接线）交付并合入 feat**（dfs-exec Gear 2 双席位；ce5339e 销 O1–O3 + 1134148 主体）；**AFK 阶段（Task 1~4）全清**。
+- 编排核验：范围恰 4 文件（2A+2M）；靶向 51 / 四件套 93 passed；CLI 三态与泄漏扫描全过；四文件 i/lf w/crlf bare=0。
+- 独立评审 PASS：7 条对抗变异四联全红-还原（含 O1 复现 / signal 计分）；盲评两序零归属泄漏、rubric 逐字节一致；auxiliary 深等隔离（唯一写入面 rater:171）；审计钩子零 .env / 零非回环 / server 未导入。
+- 残余观察（非阻塞登记）：O-1 两新文件 EOF 缺尾换行（全仓 5 例先例）；O-2 ruff format would-reformat（仓内无该门禁）；O-3 insert_into_report 浅拷贝共享 arms 引用（双钉不改动）。O1–O3（Task 3 残余）已销账。
+- 台账：Task-4 → completed（4/6）。**下一站 = Task 5/6（HITL）：① W4 口径裁决 ② pilot 花费口径——真跑阻塞于用户拍板而非技术。**
