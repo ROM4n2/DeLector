@@ -36,6 +36,7 @@
 
 ## Active handoffs
 
+- 2026-10-14 → [`handoff_interactive-agent-loop.md`](handoff_interactive-agent-loop.md)（to: any · role: IMPLEMENT/TEST/VERIFY · **status: closed 2026-10-15**）— ADR-0023 交互层 agent 循环：Task 3~6 + CI 半 + 开 PR 均已交付（PR #136）；剩余待办（真机点检 / ADR §6 回写 / Unknown A）见其「响应」节
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
 ## 蒸馏登记（WORKMEMORY → vault）
