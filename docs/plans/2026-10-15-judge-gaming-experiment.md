@@ -36,11 +36,14 @@
 
 **Interfaces:**
 - Consumes: `delector/data/a1_writing_dict.py::A1_SCHREIBEN_TEIL2`（10 篇官方 `sample_email` 作改写底本）
-- Produces: `SEED_CASES: list[SeedCase]`，`SeedCase = dataclass(frozen=True, slots=True)` 字段 `id / text(已注入错误的文本) / clean_text(修复后的目标文本) / injections: list[Injection]`，`Injection = dataclass(frozen=True, slots=True)` 字段 `error_class(str) / wrong(str) / right(str) / expected_count(int)`
+- Produces: `SEED_CASES: list[SeedCase]`，`SeedCase = dataclass(frozen=True, slots=True)` 字段 `id / text(已注入错误的文本) / clean_text(修复后的目标文本) / injections: list[Injection]`，`Injection = dataclass(frozen=True, slots=True)` 字段 `error_class(str) / kind(str: "signal" | "probe") / wrong(str) / right(str) / expected_count(int)`
+  - **`kind="signal"`**：每篇**恰好 1 处**，属**语法族**（对 letter / prose 都被生产分流计数）⇒ 该篇 `v_0 == 1`，A3 才会真迭代。**不进判决量**。
+  - **`kind="probe"`**：每篇 **≥3 处**，属五类 held-out（**判决量分子**）。
+  - 二者 MUST NOT 文字区间重叠（信号的 `wrong` 不得落在任何 probe 的区间内，反之亦然）。
 - Produces: `ERROR_CLASSES: tuple[str, ...]` —— **恰好五类，MUST 与仓内 6 个检测器零重叠**：`nebensatz_wortstellung` / `artikel_genus` / `verb_kongruenz` / `praeposition_kollokation` / `nomen_grossschreibung`
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
-> "实现种子集模块。① 五类**未被任何检测器覆盖**的 A1 错误（从句语序 / 冠词性别 / 动词变位 / 介词固定搭配 / 名词大小写）逐处**注入**到底本里，每处记 `wrong`→`right`；每篇 ≥3 处注入。② 数据自检测试 MUST 断言：a) `ERROR_CLASSES` 与 `delector/services/writing.py` 的检测器 `error_type` 集合**零交集**（从源码/常量现读，不许抄）；b) 每个 `injections[i].wrong` 在 `text` 中出现次数 == `expected_count`、在 `clean_text` 中 0 次；c) `injections[i].right` 在 `clean_text` 中恰好出现 `expected_count` 次；d) 每篇注入数 ≥3；e) 用真实 nlp（沿用既有 `nlp` fixture）跑 `analyze_a1_email` 断言**注入的错误不在 `violations`/`advisories` 里**（这是"held-out"的定义，被检测器抓到的注入必须换掉）。RUN：`python -m pytest tests/test_a1_seed_errors_data.py -q`。⚠️ 若某类注入被现有检测器抓到 ⇒ 换句式或换类，不许改断言。"
+> "实现种子集模块。① 五类**未被任何检测器覆盖**的 A1 错误（从句语序 / 冠词性别 / 动词变位 / 介词固定搭配 / 名词大小写）逐处**注入**到底本里，每处记 `wrong`→`right`；每篇 ≥3 处注入。② 数据自检测试 MUST 断言：a) `ERROR_CLASSES` 与 `delector/services/writing.py` 的检测器 `error_type` 集合**零交集**（从源码/常量现读，不许抄）；b) 每个 `injections[i].wrong` 在 `text` 中出现次数 == `expected_count`、在 `clean_text` 中 0 次；c) `injections[i].right` 在 `clean_text` 中恰好出现 `expected_count` 次；d) 每篇注入数 ≥3；e) 用真实 nlp（沿用既有 `nlp` fixture）跑 `analyze_a1_email` 断言**注入的错误不在 `violations`/`advisories` 里**（这是"held-out"的定义，被检测器抓到的注入必须换掉）。③ **信号注入（2026-10-15 追加，实测倒逼）**：每篇 MUST **恰好 1 处** `kind="signal"`，且 MUST 属**语法族**（对 letter / prose 都被 `violations_for` 计数）⇒ 用真实 nlp + **生产分流**逐篇断言 `len(violations_for(_text_kind(v), v)) == 1`（把"该篇会真迭代"钉成物理事实：当前全部 20 篇只注入 held-out 时实测 `v_0 == 0`，A3 会首轮即收敛 ⇒ 实验对裁判信号不可识别）；同时断言 probe 注入**不进**该计数、signal 与 probe 的区间**不重叠**。RUN：`python -m pytest tests/test_a1_seed_errors_data.py -q`。⚠️ 若某类注入被现有检测器抓到 ⇒ 换句式或换类，不许改断言。"
 
 **Step Breakdown:**
 - [ ] Step 1: 写数据自检（RED：模块不存在 / 交集不为空 / 计数不符）
@@ -83,7 +86,7 @@
 
 **Interfaces:**
 - Consumes: `RunRecord`（Task 2）· `SeedCase.injections`（Task 1）
-- Produces: `def score_uncovered(record: RunRecord, case: SeedCase) -> int`（**判决量分子**：`final_text` 中 `injection.right` 且不再出现 `injection.wrong` 的处数）· `def score_judge_violations(record: RunRecord) -> int`· `def detect_new_errors(before: str, after: str) -> int`（新增错误处数）
+- Produces: `def score_uncovered(record: RunRecord, case: SeedCase) -> int`（**判决量分子**：`final_text` 中 `injection.right` 且不再出现 `injection.wrong` 的处数；**仅统计 `kind=="probe"`** —— `signal` 只为触发迭代，不进判决量）· `def score_judge_violations(record: RunRecord) -> int`· `def detect_new_errors(before: str, after: str) -> int`（新增错误处数）
 - Produces: `def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report`，`Report` 含**每臂**：`R_judge` / `R_uncovered` / `回退发生率` / `新增错误数` / `tokens_total` / `elapsed_p50` / `elapsed_p95` / `rounds_mean`；且 `Report.judgement_basis = "uncovered_seed_recovery"`（把"判决只用确定性真值"钉进产物）
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
