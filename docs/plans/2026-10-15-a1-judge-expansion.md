@@ -125,11 +125,11 @@
 > "新增主谓一致规则 `detect_subject_verb_agreement(tokens, base)`，返回与 `detect_determiner_noun_agreement` **完全同形状**的 span 列表。判据：主语 `dep=="sb"` 的 `Number` 与定式动词的 `Number` 不一致即报错（实测锚点：`Die Kinder spielt im Garten.` ⇒ `Kinder`=Plur / `spielt`=Sing ⇒ MUST 报 1 条；`Die Kinder spielen im Garten.` ⇒ MUST 报 0 条）。**FP 守卫必须先写**：① 主语含并列（`Anna und Tom`）/② 主语是集合名词（`die Familie`）/③ 主语为 `man`、不定代词 /④ 复合时态（`hat ... gemacht`，`Number` 落在助动词上）⇒ 一律**不报**（宁漏不误）。每条 FP 守卫都要有用例。RUN：`python -m pytest tests/test_writing_rules.py -q`。⚠️ 若实测发现 spaCy 的 `Number` 在常见结构上不可靠（如 `es gibt`），**不要硬做** —— 停手报告，把该维度降级登记。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：负样本报 1 条 + 4 条 FP 守卫各不报）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 实现（GREEN）
-- [ ] Step 4: 变异自证（抽掉 FP 守卫 ⇒ 对应用例红）
-- [ ] Step 5: 官方范文零违规门仍绿 + 原子提交
+- [x] Step 1: 写失败测试（RED：负样本报 1 条 + 4 条 FP 守卫各不报）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 实现（GREEN）
+- [x] Step 4: 变异自证（抽掉 FP 守卫 ⇒ 对应用例红）
+- [x] Step 5: 官方范文零违规门仍绿 + 原子提交
 
 ---
 
@@ -152,11 +152,11 @@
 > "新增动词支配格规则。① 建 `delector/data/a1_verb_case.py`，内容 = **人工登记**的 A1 高频动词→支配格映射（如 `helfen: Dat`、`danken: Dat`、`sehen: Acc`、`es gibt: Acc`…），条目数**先只收你能逐条确认的**，每个条目带一行来源注释；**禁止**用 LLM 批量生成（这是事实数据，不是文本生成）。② `detect_verb_case_government(tokens, base)`：找动词（`VERB`/`AUX`）→ 查表 → 取其宾语 NP 的 `morph.Case` 与之比对，不一致则用 `decline_determiner` 生成 `corrected_form` 并报 error（实测锚点：`Ich helfe meinen Bruder.` MUST 报 1 条；`Ich helfe meinem Bruder.` MUST 报 0）。③ FP 守卫：动词不在表内 / 反身动词 / 可分前缀动词 / 名词化动词 ⇒ 不报。④ 数据自检测试（键 ⊆ A1 lemma、值集合合法）。RUN：`python -m pytest tests/test_writing_rules.py tests/test_a1_verb_case_data.py -q`。**官方 10 篇范文零违规门（Task 2 起）必须仍绿。**"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：负样本报 1 条 + 正样本 0 条 + 数据自检 + FP 守卫）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 数据 + 规则实现（GREEN）
-- [ ] Step 4: 变异自证 + 官方范文零违规门复核
-- [ ] Step 5: 原子提交
+- [x] Step 1: 写失败测试（RED：负样本报 1 条 + 正样本 0 条 + 数据自检 + FP 守卫）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 数据 + 规则实现（GREEN）
+- [x] Step 4: 变异自证 + 官方范文零违规门复核
+- [x] Step 5: 原子提交
 
 ---
 
@@ -176,11 +176,11 @@
 > "新增主句动词位置规则（德语 V2）。实测信号：主句定式动词 MUST 落在第二位置；`Gestern habe ich gearbeitet.`（`habe` index 1）正确，`Gestern ich habe gearbeitet.`（`habe` index 2）错误。实现 `detect_verb_second_position(tokens, base)`，返回既有 span 形状。**豁免面逐条写用例**（从句 / 疑问句 / 祈使句 / 并列句 / 直接引语 / 标题式片段）—— 这些结构里 V2 不成立，漏一条豁免就会在真实文本上大批误报。区分主句/从句优先用 `dep`（`ROOT` vs `cs`/`mo` 等）而不是标点启发。RUN：`python -m pytest tests/test_writing_rules.py -q`。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：错句报 1 条 + 正句 0 条 + 6 条豁免各 0 条）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 实现（GREEN）
-- [ ] Step 4: 变异自证（抽掉任一条豁免 ⇒ 对应用例红）+ 官方范文零违规门复核
-- [ ] Step 5: 原子提交
+- [x] Step 1: 写失败测试（RED：错句报 1 条 + 正句 0 条 + 6 条豁免各 0 条）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 实现（GREEN）
+- [x] Step 4: 变异自证（抽掉任一条豁免 ⇒ 对应用例红）+ 官方范文零违规门复核
+- [x] Step 5: 原子提交
 
 ---
 
@@ -205,11 +205,11 @@
 - **advisory 的可见性**（编排者定的最小实现）：warning 必须真能被看到，否则是 no-op ⇒ 响应体 `result` 追加 `judge_advisories: list[str]`（**只增不改**），前端渲染与本计划的 Task 7 同批。
 
 **Step Breakdown:**
-- [ ] Step 1: 建正/负样本集（负样本每维 ≥5 句，逐句标注期望）
-- [ ] Step 2: 写探测实现 + 脚本（含脚本自身测试）
-- [ ] Step 3: 跑出原始计数表与误报样例
-- [ ] Step 4: **HITL**：把结论（做 error / warning / 不做）交用户拍板
-- [ ] Step 5: 按拍板结论决定是否接线（若接线 ⇒ 走 Task 2~5 同款门禁：正样本零违规 + FP 守卫 + 变异自证）+ 原子提交
+- [x] Step 1: 建正/负样本集（负样本每维 ≥5 句，逐句标注期望）
+- [x] Step 2: 写探测实现 + 脚本（含脚本自身测试）
+- [x] Step 3: 跑出原始计数表与误报样例
+- [x] Step 4: **HITL**：把结论（做 error / warning / 不做）交用户拍板
+- [x] Step 5: 按拍板结论决定是否接线（若接线 ⇒ 走 Task 2~5 同款门禁：正样本零违规 + FP 守卫 + 变异自证）+ 原子提交
 
 ---
 
@@ -234,12 +234,29 @@
 > "收窄适用性闸门的范围。现状：`_a1_violations_if_letter` 因当时裁判只有书信格式规则而做成「称呼语不合法 ⇒ 零违规」；语法维度接线后**前提变了** —— 语法与题材无关。改法：闸门改按**规则族**分流 —— ① 格式/字数族（`a1_greeting_*` / `a1_valediction_*` / `a1_word_count`）仍仅对书信体生效；② 语法族（冠词-格一致 / 介词支配格 / 动词支配格 / 主谓一致 / V2）对**任意德语文本**生效。测试 MUST 覆盖：非书信体文本带语法错误 ⇒ **真被计数**（与今日"零违规"对比，这是行为变更）；书信体文本的格式规则语义不变。③ 同时在本计划文件里落一张 **§4.3 解除判据表**（维度数 / 官方正样本零误报 / 负样本 recall / 非书信文本可判 / 降级标记可见性 各条 + 实测值），**满足与否由用户拍板**，agent 不自行解禁。RUN：`python -m pytest tests/test_goethe_a1_writing.py tests/test_server.py tests/test_ai_polish_loop.py -q` + 全量。⚠️ 本任务会改变产品行为（非书信文本从"首轮即接受"变为"真迭代"），执行前 MUST 先跑一遍 `tests/test_server.py::test_ai_polish_diff_mocked` 系用例确认既有断言仍成立。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：非书信体带语法错误 ⇒ 被计数）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 闸门按规则族分流（GREEN）
-- [ ] Step 4: 全量套件 + 契约闸 + §4.3 解除判据表落盘
-- [ ] Step 5: **改写 `tests/test_server.py::test_ai_polish_non_letter_text_is_not_rolled_back`**（评审黄卡③：它在"现状 / 仅接 nlp / 收窄闸门"**三态下都绿** ⇒ 已不守卫任何东西）为能区分行为的两条：① 非书信体 + 语法错（且桩模型不修）⇒ 断言语法违规**真被计数**；② 明确并钉住收窄后的产品语义（该修不动时是回退原文还是首轮即接受）—— 后者正是 ADR §10.3「功能忘了判就是报废」失败模式的重现，MUST 有断言，不许只留在 Fog of War。
-- [ ] Step 6: **HITL**：判据表交用户拍板（是否允许宣称"已实现"）+ 原子提交
+- [x] Step 1: 写失败测试（RED：非书信体带语法错误 ⇒ 被计数）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 闸门按规则族分流（GREEN）
+- [x] Step 4: 全量套件 + 契约闸 + §4.3 解除判据表落盘
+- [x] Step 5: **改写 `tests/test_server.py::test_ai_polish_non_letter_text_is_not_rolled_back`**（评审黄卡③：它在"现状 / 仅接 nlp / 收窄闸门"**三态下都绿** ⇒ 已不守卫任何东西）为能区分行为的两条：① 非书信体 + 语法错（且桩模型不修）⇒ 断言语法违规**真被计数**；② 明确并钉住收窄后的产品语义（该修不动时是回退原文还是首轮即接受）—— 后者正是 ADR §10.3「功能忘了判就是报废」失败模式的重现，MUST 有断言，不许只留在 Fog of War。
+- [x] Step 6: **HITL**：判据表交用户拍板（是否允许宣称"已实现"）+ 原子提交
+
+### §4.3 解除判据表（2026-10-15 实测值；签批归用户）
+
+| # | 判据 | 口径 | 实测 | 满足 |
+| --- | --- | --- | --- | --- |
+| 1 | **维度覆盖**（ADR §4.3 点名四项：动词位置 / 时态一致性 / 语序 / 格的使用） | 每项 MUST 有确定性规则且接线 | **动词位置** = `wortstellung`（主句 V2 + 8 豁免）✅ · **格的使用** = `artikel` + `kasus` + `rektion` 三条 ✅ · **时态一致性** = `tempus`（**warning/advisory**，按用户裁决）🟡 · **语序（主谓宾/情态框架）** = **经实测评审判定不做**（负样本 6/7 + 样本外正确句 3/3 误报 ⇒ FP/FN 同源）❌ | **部分**（3 error + 1 advisory + 1 明确不做） |
+| 2 | **官方正样本零误报** | 10 篇 `A1_SCHREIBEN_TEIL2.sample_email` 逐句 error 级违规 == 0 | `FP_TOTAL 0`（逐篇全 0） | ✅ |
+| 3 | **更宽的合法句硬门** | `COMMON_CORRECT_SENTENCES`（≥51 句，含类覆盖清单）零语法族违规 **且** `judge_engine == "rules+spacy"`（防降级假绿） | **51 句全绿** | ✅ |
+| 4 | **编排者独立广度扫雷** | 另取 30 句常见正确德语（焦点小词/自由第三格/前置状语/从句前置/疑问祈使/反身/可分动词…） | **FP = 0** | ✅ |
+| 5 | **负样本召回** | 每个已接线维度都有定向错误句用例（且变异自证：抽掉守卫即红） | 三新维度 + 两个既有算力各有负样本用例；变异自证 5 组以上 | ✅ |
+| 6 | **非书信文本可判** | 语法族对**任意德语文本**生效（不再要求书信体） | 已落地（闸门按规则族分流：格式族仅书信体、语法族任意文本） | ✅ |
+| 7 | **降级可见性**（不许"没检查"伪装成"检查通过"） | `judge_engine`/`judge_degraded` 忠实透出 + 前端非阻断提示 | 已落地（含 no-key 路径抑制不实文案） | ✅ |
+| 8 | **"浅裁判失效"对照实验**（奖励黑客的正面证据：模型学会通过检查 vs 真变好） | 需真实模型与 Key | **未做**（阻塞于 `DEEPSEEK_API_KEY` 缺失） | ❌ |
+
+**判据结论（供签批）**：第 1 项**部分**满足、第 8 项**未做** ⇒ 建议**只允许限定表述**，例如「裁判已扩到 A1 语法维度（动词位置 + 格的使用三规则 error 级、时态一致性 advisory；语序经实测评审判定不做）」，**不建议**解禁 §4.3 原文所禁的那句无条件"已实现"—— 因为第 8 项（浅裁判是否真被模型针对）尚无证据。
+
+**已知边界（随判据表一并登记）**：① 书信缺称呼语 ⇒ 判据 `greeting.valid` 归 prose ⇒ 格式族（含 `a1_greeting_missing`）**永远不被计数**（继承自旧闸门）；② 候选侧 kind 逐候选翻转（旧欠账，未收口）；③ 非书信文本模型修不动 ⇒ `no_improvement` ⇒ **回退原文**（有断言 + 三处 docstring，前端给人话原因码）；④ advisory 在 argmin 回退路径下可能与出口文本不对应（不进任何计数）；⑤ warning 级条目按族分居 `violations`（格式族）/ `advisories`（语法族），取全集需并集两键。
 
 ---
 
@@ -260,11 +277,11 @@
 > "补三处接缝。① `polish_loop.py` 的 `dispatch`（:412）目前**无超时**：包 `asyncio.wait_for`，超时按 errors-as-messages 返回工具失败消息（不炸循环）；② 同步裁判 `judge`（:330/:439）直接跑在事件循环上 ⇒ 移 `asyncio.to_thread`，使 (a) `task.cancel()` 真能掐断、(b) 长裁判不阻塞 `/api/health` 与其他路由；用例钉住"取消时裁判线程不再被等待"/"裁判期间 health 仍可应答"（后者可用事件循环探针）。③ 修 `main.py` 的**不可达分支**：`_run_polish`（:2342-2344）已把 `LLMError` 转成 `HTTPException(502)`，而 `_polish_event_stream`（:2439-2442）写的是 `except llm_client.LLMError` ⇒ 该分支永不命中、流内 error 帧永不发出、用户拿到通用文案而非 `e.detail` 人话。断言：注入的 chat 在流中途抛 LLMError ⇒ 用户**看得到** `e.detail`（走 error 帧或明确的状态码，二选一并在注释写明为什么）。RUN：`python -m pytest tests/test_ai_polish_loop.py tests/test_server.py -q` + 全量。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：dispatch 无超时 / 同步裁判阻塞事件循环 / error 帧不可达）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 三处实现（GREEN）
-- [ ] Step 4: 变异自证（抽掉 `wait_for` ⇒ 超时用例红；抽掉 `to_thread` ⇒ 阻塞探针红；把 except 改回 LLMError ⇒ error 帧用例红）
-- [ ] Step 5: 全量 + ruff + mypy 四档 + 原子提交
+- [x] Step 1: 写失败测试（RED：dispatch 无超时 / 同步裁判阻塞事件循环 / error 帧不可达）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 三处实现（GREEN）
+- [x] Step 4: 变异自证（抽掉 `wait_for` ⇒ 超时用例红；抽掉 `to_thread` ⇒ 阻塞探针红；把 except 改回 LLMError ⇒ error 帧用例红）
+- [x] Step 5: 全量 + ruff + mypy 四档 + 原子提交
 
 ---
 
