@@ -212,6 +212,7 @@
 
 **Files:**
 - Modify: `delector/routes/main.py`（`_a1_violations_if_letter` 的闸门范围 + **文本族感知的系统提示词装配**）
+- Modify: `static/js/writer.js`（**降级可见提示的生产者** —— 评审黄卡：Global Constraints 要求"前端 MUST 给出可见提示"，但此前**没有任何任务的 Files 覆盖 `static/`** ⇒ 该 MUST 无生产者。实现：`judge_degraded === true` 时给一句**非阻断**提示（如"语法检查未启用：本机未加载德语模型，本次仅做格式/字数检查"），不是 error toast）
 - Modify: `delector/services/polish_loop.py`（**只加一个可选参数** `system_prompt: str | None = None`（None ⇒ 用现有 A1 默认值，向后兼容）；业务提示词由产品层传入 —— 见下方"立论冲突的解法"）
 - Modify: `docs/plans/2026-10-15-a1-judge-expansion.md`（本文件：记录解除判据与实测值）
 - Test: `tests/test_goethe_a1_writing.py` + **`tests/test_server.py`（评审黄卡：该文件此前未列入 ⇒ 会让一条既有回归闸变成 dead-green，见 scaffold ③）**
@@ -281,6 +282,7 @@
 - **[Unknown B] 官方评分维度的口径**：vault 内**没有**歌德 A1 Schreiben 官方评分表（已搜，零命中）⇒ 本计划以 ADR §4.3 点名的四项 + 实测可判性为准。若日后拿到官方评分表，维度优先级需重排（可能新增"语用/语域得体"）。
 - **[Unknown C] 裁判变严对收敛率的影响**：error 级违规变多后，**官方范文仍必须 `v == 0`**（Task 2 起的硬门）；但真实用户文本的 `v` 分布会整体上移 ⇒ `max_turns=3` 是否够、`no_improvement` 是否会变成常态，须在有 Key 后回测（与 ADR §6 Unknown 2 同一笔账）。
 - **[Unknown D] B1/B2 维度**：本计划只做 A1。跨等级复用（`syntax_score` 的 7 维难度 / `detect_*` 是否可参数化到 B1）不在此评估。
+- **[Unknown F] Android 上 `try_load_nlp_no_download()` 到底能不能加载成功（真机未验证）**：`processor.py:192-198` 的**导入期** Android 分支显式 `nlp=None`，但新助手走的是 `_load_spacy_model()` 的**路径回退**（glob `{name}-*`，`processor.py:61-72`）—— 而 Android 的模型正是"裸源码目录拷进 Chaquopy"。⇒ **若回退命中，Android 也能拿到 `rules+spacy`（比预期更好）；若失败，则 `rules_only` + 可见提示**。② 已知副作用（评审黄卡）：该助手**不读** `_android_runtime`，失败时也不写全局 ⇒ Android 上模型缺失会**每次润色都重试本地加载**（无记忆、重复耗时）。**验证归属**：Android 真机点检（用户 2026-10-15 指示暂缓）；若届时确认恒失败，再决定是"加 `if _android_runtime: return None`"还是"加进程内失败记忆"。
 - **[Unknown E] Pi 式分层重构（已拍板：日后单独做，本计划不做）**：目标形态 = ① **层间类型三态递进**（`Tool` 名片 → `AgentTool extends Tool` 工人 → `ToolDefinition` 产品组件，**只加不改**）；② **依赖单向**（消掉实测到的两组双向耦合：`core ⇄ nlp_engine`、`services ⇄ tools`）；③ **层序声明**（当前仓内**零处**声明，导致 `LAYERED-ARCHITECTURE §1` 连"违规"都无法判定）；④ 把业务知识（A1 提示词 / 默认裁判）从机制内核提到产品层。**判据来源**：`01-Rules/LAYERED-ARCHITECTURE.md`（实证对象 = Pi-Agent 的 `pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 2026-10-15 双席位评审（code-reviewer/layering + sre-resilience）。**为什么现在不做**：三态递进需先有「第二个实现」才有内容（现只有一个工具面、一个裁判）——提前定接口正是 §2 反模式；且本子计划的目标是抬 §4.3 门槛，与分层重构正交。**将来启动时的前置**：先落层序声明，再做 ①②③④（顺序见评审报告）。
 
 ## 🚫 Out of Scope
