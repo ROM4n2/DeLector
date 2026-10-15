@@ -1,0 +1,12 @@
+### 2026-10-05 00:30 | codebuddy | DONE(debt-clear-round) + RELEASE(v5.14.0)
+   > 正文超 §4 上限（4424 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-05-0030-done-debt-clear-round-release-v5-14-0.md`](WORKMEMORY/NOTES-2026-10-05-0030-done-debt-clear-round-release-v5-14-0.md)。
+
+### 2026-10-05 02:40 | codebuddy | DONE(debt-round2, 5/5) + DECISION(Fog-1: 内网可信)
+   > 正文超 §4 上限（5056 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-05-0240-done-debt-round2-5-5-decision-fog-1-内网可信.md`](WORKMEMORY/NOTES-2026-10-05-0240-done-debt-round2-5-5-decision-fog-1-内网可信.md)。
+
+### 2026-10-05 03:20 | codebuddy | RELEASE(v5.15.0) + 编排者事故(README 被打散成 844 行单字符)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：登记项收口第二轮发版 **v5.15.0**（PR #103~#107 已在 master `30148f3`）。**过程中编排者破坏了一次 README，已修复**，如实记录。
+⚠️ **编排者事故（Python 列表插入陷阱）**：用脚本给 README 插入 v5.15.0 摘要时写的是 `lines[idx:idx] = entry`，而 `entry` 是**字符串**不是列表 ⇒ Python 把长字符串**逐字符**插入，README 从 157 行变成 962 行、其中 **844 行是单字符**（`>`/` `/`✅`/`*`/`。`…）。上一轮写 CHANGELOG 时用的是 `entry.rstrip("\n").split("\n")`（正确），这次漏了。**发现方式**：插入后 `sed -n '23p'` 只回显一个 `>` 字符起疑 ⇒ 用 Python 逐行打印长度才定位。**修复**：`git show HEAD:README.md > README.md` 从 HEAD 恢复（HEAD 已含 v5.14.0 摘要，是正确基线），改用 `sed -i '22r file'` 重新插入。**代价**：README 的 badge 与下载表改动被一并回退，需重做（已重做）。**教训**：`list[i:i] = "str"` 是逐字符插入，**MUST** 写 `[entry]` 或 `entry.split("\n")`；改文档类文件**优先用 `sed r` 插入**或只改单行，不要用 Python 重写整个文件——重写一旦出错会静默毁掉全文。
+**新发现（此前 7 处已知 skip 之外的漏网）**：`delector/core/database.py:2086` 的 `test_cleanup` 用 `shutil.which("rm")` 也走 skip 模式 ⇒ 与 node 同类的"绿而非红"风险，本轮未纳入（已登记）。
+**门禁（v5.15.0 基线）**：`1299 passed + 1 skipped`（半 A `1035` + `test_server` `264`）/ 全 `tools/*.mjs` 探针 **28/28** / `ruff` 0 / `mypy` 两道（**70** + **92** files）0 error / `test_writer_mobile.py`（发版守护）**30 passed** / 三条新守卫（防漏接线 / 契约冻结 / localhost 集合 allowlist 20 条）全绿。**含 `static/` 改动**（`cards.js` +16/−6 判据单点化、`encounter.js` +87/−31 降级状态绑定）⇒ **Android 需覆盖安装生效**。

@@ -1,0 +1,17 @@
+### 2026-10-02 17:40 | deepseek-v4-1-flash__codebuddy | NOTE(gap-backfill-1)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**补记 09-28 记录缺口**（协议 §1.7：漏写不是灾难，下一 agent 补 NOTE 即可，不回改历史）。
+缺口成因：本 agent 09-28~10-02 的会话未执行 §3 读序、也未同步写入本公约层，只写了自身 `.codebuddy/memory/`。以下按批次补记，逐条产物与提交可在 git 复核。
+批次一（09-28，6 seat 全量审计 ⇒ `docs/reviews/2026-09-28-swarm-audit-master.md`，0 红牌 / 6 P1）：
+- **#69 fix(deploy,db)**：`Dockerfile` CMD `server:app` → `delector.server:app`（仓库根无 `server.py` ⇒ 容器启动即死）；`_configure_sqlite_conn` 加 `PRAGMA journal_mode=WAL`。**连带把备份/还原从文件拷贝改为 SQLite backup API**——WAL 下文件级回滚必 `disk I/O error`（主库不含最新提交 + `-shm` 不可拷），`-shm` 改为只删不还原；`docker-compose.yml` 单文件挂载改 `./data` 目录 + `DELECTOR_DATA_DIR`。
+- **#70 test**：Android pydantic-v1 运行时契约守卫（gradle pin 锚点 + `delector/**` AST 扫描 v2-only API + dump `hasattr` 垫片检查）。
+- **#71 perf**：长难句 `source=all` 热请求不再读正文 + `_RANK_CACHE` 容量上限。**实测推翻该 P1 的严重度**：40 篇规模下冷 2.2s / 热 8ms（材料级缓存本就生效），故拒绝缓存聚合（会引入"新文 5 分钟内不出现"的 UX 回归）。
+
+### 2026-10-02 17:45 | deepseek-v4-1-flash__codebuddy | NOTE(gap-backfill-2)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**补记 09-29~10-02 批次**。
+- **#75 feat(pool) ADR-0016 Phase 3**（`/dfs-exec` ledger 6/6，`8af2f17`）：统一池成为"我的词汇"的派生态。T1 `vocab_pool.project_wb_deck` 幂等投影（lemma 内容去重 / 只补空 / 不碰用户数据 / FSRS≠DSR）+ **范围闸**（只收已学 `reps>0` 或自建 `custom is True`，种子词不入池）；T2 接进 `save_wb_state` **同事务**（投影失败 ⇒ blob 也不写）；T4 只读对账 `reconcile_report`（lemma 集合/禁计数/刻意不产 `extra`）；T5 修**两个真 bug**（`_BACKUP_TABLES["vocab_cards"]` 漏 Phase 1 新列 ⇒ 备份往返**静默丢** `source`/`fsrs_*`；`restore` 未补迁移）；T6 端到端验收。**T3 经用户决定跳过**（与 wbsync 的 local-first 冲突 + 动离线保证）⇒ 该 PR 不含 `static/`。
+- **#76 fix(pool)**：身份键口径——**错在比较侧**：投影按 `lemma_key` 查库、库里存原始形态（端点是原样写 `req.lemma`）⇒ 同词大小写**并存两行** + `reconcile` 误报 missing。**否决了"端点写入归一"**（`lemma` 双用途：`cards.js` 展示 + Anki 导出 `database.py:994`，归一会把德语名词变全小写）。改为 `_pool_index` 归一映射 + `_pool_lemmas` 归一；新增两条不变量（插入后登记、UPDATE 后刷新）。
+- **#77 fix(i+1)**：`known-lemmas` 补 `OR fsrs_s > 0`——Phase 3 只把词**放进池**、消费面**看不见**（`mastered`/`repetition_count` 投影从不写）⇒ 工作台背过的词仍不算"已知"。等价性证据：工作台卡 `{s,d,due,last,reps,lapses}`，`fsrsInitS = max(W[g-1],0.1) ≥ 0.1`、其余转移 `clamp(…, S_MIN=0.001, …)` ⇒ 卡存在 ⟹ `s > 0`；DSR 复习路径不写 `fsrs_s`（已核实无污染）。
+- **#78 test(isolation)**：测试库隔离收口——共享 `tests/db_cleanup.py::remove_db_files`（三件套 + `gc` 重试 + **最终 fail loudly**）取代 17 份复制粘贴；44 处 `with get_db(`→`db_conn(`（`sqlite3.Connection` 上下文管理器只 commit/rollback、**不 close**）。决定性变异：单点回退 + 注入必失败断言 ⇒ 旧世界**静默残留**（假红/假绿），新世界立即抛点名根因的 OSError。
+- **#81/#82/#83/#84 chore(docs)**：`.gitignore` 显式忽略 `.worktrees/` 与 mypy/ruff 缓存；`docs/plans/` 归档分层（52 + 15 份进 `archive/`，本层只留在途）；新增 `docs/README.md` 为**目录约定正主**；ADR 副本拆入 `docs/adr/`；移除已失真的 `release-v2.1.md`（写着"测试 20/20"、Docker"挂载当前目录"，而 #69 早已改 `./data`）。

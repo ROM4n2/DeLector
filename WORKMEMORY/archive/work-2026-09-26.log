@@ -1,0 +1,56 @@
+### 2026-09-26 | codebuddy | WORK_START(test-db-isolation)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户选「修 `exam_trials` 2 例既有失败」（它是安全升 fastapi 的唯一前置）→ 按 `/vault-debug` 4 步协议排查，**根因已用受控实验坐实**。
+根因链（务必记）：① 某些测试模块在**模块级直接赋值** `os.environ["DATABASE_PATH"]`（永久、无人还原）→ ② `delector/server.py:356` 的模块级 `app = create_app()` 顶层执行 `init_db()` 时，建的是**那个被抢走的库** → ③ 后续模块的模块级 `os.environ.setdefault(...)` **失效** → ④ 受害模块（`test_goethe_a1_hoeren/lesen`）的 autouse fixture（`_m5_isolated_db_teardown`）**只做清理不建表**，其隔离 100% 依赖"setdefault 生效 + server 顶层 init_db 建过表"这个隐式前提 → ⑤ 那个库又被抢者的 fixture 在结尾 `os.remove` 掉 → ⑥ 用例请求时 sqlite **新建空库** → `no such table: exam_trials`。
+**为何只在 Windows 红**：ubuntu 上句柄未释放使 `os.remove` 抛 `OSError` 被 `except OSError: pass` 吞掉 → 库其实还在 → CI 长期 success（**跨平台都存在的顺序耦合，只是 ubuntu 掩盖了**）。
+受控实验（决定性）：注释 `test_audit_hardening.py:15-16` 的模块级赋值 → `pytest tests/test_audit_hardening.py tests/test_goethe_a1_hoeren.py -q` 从 `1 failed, 34 passed` 变 **35 passed**（还原 `IDENTICAL`）。
+**无关项澄清**：`server.app` 单例**无辜**（`database.get_db_path()` 每次调用读 env，不冻结路径）；`db_conn` 也**不自动建表**（建表只在 `init_db`）。
+修法（契约 C1–C4）：① 模块级 MUST NOT 赋值库 env；② 需要独立库的模块 → autouse fixture 内「捕获 saved → 钉 env → **`init_db()`** → yield → 清理 → 还原」；③ fixture 可删自己的库；④ 纯逻辑模块可不加夹具。外加 `tests/conftest.py` 兜底默认库（防 server 顶层 init_db 落到真实 `delector.db`）+ 新增 AST 守卫 `tests/test_test_isolation.py`（根因级防回归）。
+分支 `fix/test-db-isolation`（worktree `.worktrees/fix-test-db-isolation`，base `d25543a`），2 Task；**零生产代码改动**。
+
+### 2026-09-26 | codebuddy | DELIVERED(test-db-isolation) — 2/2 Task 全绿（本地分支，未 push）
+Caps: filesystem-read, filesystem-write, shell-exec
+分支 `fix/test-db-isolation`（worktree，base `d25543a`），3 提交：`d22225e` docs → `fe84e16` T1 → T2。
+**成果**：半 A **896 passed / 0 failed**（修复前 `2 failed, 891 passed`）——`no such table: exam_trials` 2 例彻底消失；半 B `228 passed, 1 skipped`；合计 **1124 passed + 1 skipped**（原 1119 + 修好的 2 例 + 新增守卫 3 支）。ruff 0 / mypy 62 files 0 / 全探针零漂移。
+**改动**（7+1 文件，零生产代码）：① 根 `conftest.py` 加 `setdefault` 兜底库（防 server 顶层 `init_db()` 落到真实 `delector.db`）；② 删 4 个模块（`test_audit_hardening`/`test_exam_catalog`/`test_exam_trials`/`test_server`）的**模块级** env 赋值；③ `test_goethe_a1_hoeren/lesen` 的 autouse fixture 由「只清理」升级为「捕获 saved → 钉 env → **`init_db()`** → yield → gc + 删自己的库 → 还原 saved」（自洽、与模块执行顺序无关）；④ 新增根因级 **AST 守卫 `tests/test_test_isolation.py`**（3 支：模块级 env 赋值即红 / 根 conftest 有兜底 `setdefault` / sys.path 注入未丢）；⑤ OVERVIEW 测试隔离契约**就地精确化**为 C1–C4。
+**契约（C1–C4，已写入 spec 与 OVERVIEW）**：C1 模块级 MUST NOT 直接赋值库 env；C2 需要独立库的模块 → autouse fixture「钉 env → `init_db()` → 还原」；C3 fixture 可删自己的库（用完归位故不伤人）；C4 纯逻辑模块可不加夹具。**注**：`setdefault` 是 `Call` 非赋值，C1 不禁（且被 conftest 兜底覆盖为 no-op）。
+**重要方法论（vault-debug 副产品）**：单点变异可能被**另一处修复免疫**而"不红"（本例：加回污染源不再致红，因为受害者已自洽）→ **必须做配对变异**（污染源 + 还原受害者）才能造出红/绿对比、坐实根因链。这是"变异验证要盯着**判别力**而非机械照做"的又一实例。
+遗留（记录，非阻塞）：`test_server.py` 的 `clean_db` fixture **内部**注释仍含旧机制描述（受 scope-lock 未改）。
+**下一步可做**：① push + PR 合并本分支；② 合并后即可做「升 fastapi pin + 撤 `dependabot.yml` ignore」（其唯一前置已解除；需在新依赖下重跑全量确认 0 failed）。
+
+### 2026-09-26 | codebuddy | DONE(两分支已合并入 master) + WORK_START(fastapi-upgrade)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按用户「c（两件一起）」先**按序合并两个计划分支入 master**：
+- `chore/toolchain-guards`（守卫收口）→ fast-forward 到 `ce6d454`；
+- `fix/test-db-isolation`（测试库隔离修复）→ merge commit `180b1cd`（**自动合并零冲突**：两边改的是 `tests/test_server.py` 与 `PROJECT_OVERVIEW.md` 的不同区域）；
+- 合并后**完整复跑**：半 A `896 passed / 0 failed`、半 B `228 passed + 1 skipped`、mypy **68 files 0 error**、守卫 10 passed、判别点 35 passed、路由守卫 1 passed、ruff 0、全探针零漂移 → `git push origin master`（`ce6d454..180b1cd`）。
+随后启动 **WORK_START(fastapi-upgrade)**（分支 `chore/fastapi-upgrade`，worktree `.worktrees/fastapi-upgrade`，base `180b1cd`）—— 解除 fastapi 升级禁区：`requirements.txt` 升 `fastapi 0.136.3 → 0.141.1`（starlette 保持 1.6.0，唯一变量仍是 fastapi）+ **撤销** `.github/dependabot.yml` 的 fastapi/starlette `ignore` + spec §4 补「升级闭环」证据表。
+新依赖下真实验证（**非隔离环境**）：路由守卫（决定性）`1 passed`（旧实现同环境必红 115 条）· 半 A `896 passed / 0 failed` · 半 B `228 passed + 1 skipped` · ruff 0 · mypy 68 files 0 error · 全探针零 FAIL · `test_ci_hardening` + `test_test_isolation` 10 passed · `pip ignore: None`（已撤销且 YAML 仍可解析）。
+**新发现（留档，本次未处理）**：`android/app/build.gradle:85` 的 Chaquopy `pip` 块独立 `install "fastapi<0.100.0"` + `install "pydantic<2.0.0"` —— **Android 打包面与桌面/CI 的 fastapi/pydantic 版本本就不同源**（且无注释说明来由）。本次升级只影响桌面端与 CI，Android 行为不变；是否同步需单独核实。
+
+### 2026-09-26 12:00 | gemini-3-8-flash__antigravity | WORK_END(fastapi-upgrade)
+Caps: filesystem-read, filesystem-write, shell-exec
+任务闭环：解除 FastAPI 升级禁区，合入 master（PR #66，commit `df96237`）。
+1. 改动：`requirements.txt` 升级 `fastapi 0.136.3 → 0.141.1`（starlette 保持 1.6.0）；撤销 `.github/dependabot.yml` 对 fastapi/starlette 的 `ignore` 规则；`tests/test_test_isolation.py` 修正 tests 档 mypy 报错（list[expr] 变量被赋 tuple，`e339562`）；设计规范 `docs/specs/2026-09-24-toolchain-guard-truth-design.md` §4 补齐真实升级验证证据表。
+2. 验证：HTTP 语义路由守卫免疫（1 passed，旧实现同环境必红 115 条）；半 A 896 passed / 0 failed；半 B `test_server` 228 passed + 1 skipped；`mypy --strict delector tools` 68 files 0 error；`mypy --follow-imports=skip tests` 69 files 0 error；`ruff check .` 零告警；Go 门禁全绿；`dependabot.yml` YAML 解析通过。
+
+### 2026-09-26 12:35 | gemini-3-8-flash__antigravity | NOTE(encounter-yellow-cards)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：CRV 3 条黄牌清账，合入 master（PR #67，commit `74f703e`，分支 `fix/encounter-yellow-cards` @ `4d7247c`）。
+1. I-1 夹具生产语义对齐：`tests/test_encounter_i1_consistency.py` 改造 `_first_third_known_set`，按 `deck-bridge.js` 生产语义归一（`_strip_german_article` 剥冠词 + `.lower()` 小写），新增同源守卫 `test_article_list_matches_deck_bridge_source` 双向比对 JS 源与 Python 冠词表，新增 `test_known_lookup_is_case_insensitive_and_article_stripped` 行为测试。
+2. 变异表去重：`tests/test_encounter_seed.py` 中 `_MUTATION_TABLE` 移除 500 行归属重合条目。
+3. 文档措辞：`PROJECT_OVERVIEW.md` 修正测试基线描述。
+
+### 2026-09-26 12:50 | gemini-3-8-flash__antigravity | NOTE(android-pin-rationale)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：Android 依赖锁定理由核实留档，合入 master（PR #68，commit `4e015f5`，分支 `docs/android-pin-rationale` @ `8784a5d`）。
+1. 事实核实：`android/app/build.gradle` 中的 `fastapi<0.100.0` 与 `pydantic<2.0.0` 为 Android 端有意分离的独立打包面，源于 Chaquopy 无法编译 Rust 原生扩展（`pydantic-core`），必须锁 v1。
+2. 落地：在 `android/app/build.gradle:84-91` 详细补写分离原由与约束依据。核实结论为桌面端/CI 升级不受影响，Android 端保持不动，勿轻易顺手改动。
+
+### 2026-09-26 13:30 | codebuddy | RELEASE(v5.12.1)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按用户指令「升个 5.12.1 吧」发版 —— **patch 级，无用户可见改动**（`git diff --stat v5.12.0..master -- static/` **为空**；i+1 就近选材 = v5.11.0、已读状态 = v5.12.0 均已发布），发版目的是把本轮工程债收口（真门禁 + 依赖升级 + 测试隔离）记入版本面。
+版本面六处同步：`static/sw.js` `delector-static-v5.12.1` / `static/index.html` `System · v5.12.1 Online` / `android/app/build.gradle` fallback `5.12.1`·`51201` / `README` badge + Tests `1124/1125` + 下载表四行（版本单元格与 URL）+ 摘要区（加 v5.12.1、删最旧 v5.9.5 保持 4 条）/ `CHANGELOG` 顶行「最新版本 v5.12.1（2026-09-26）」+ 末尾完整条目 / `PROJECT_OVERVIEW` 发布面。
+守护测试：`tests/test_writer_mobile.py` + `tests/test_server.py` = **258 passed + 1 skipped**（版本一致性 / README 下载表 / build.gradle 三条守卫全绿）；`ruff check .` 零告警。
+流水线：push master + tag `v5.12.1` → `ci.yml`(master) + `Build & Publish DeLector Releases`(tag) + `Build Agent Artifacts`(tag)。
+⚠️ 协作提示：本轮发现**另一并行会话**（签名 `gemini-3-8-flash__antigravity`）也在写本 work.log；写前必须重新读取，**禁止整文件覆盖式写入**（本次一度用过期快照覆盖掉对方 19 行，已 `git restore --source=HEAD` 复原）。
