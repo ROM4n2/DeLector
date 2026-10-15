@@ -24,6 +24,7 @@ TTS 生成、完形填空生成器、备份还原……全挤在一个模块里�
 
 import asyncio
 import contextlib
+import functools
 import hashlib
 import ipaddress
 import json
@@ -35,11 +36,11 @@ import tempfile
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, List, NamedTuple, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from delector.core.database import (
@@ -130,7 +131,8 @@ from delector.routes.syntax_hard import invalidate_rank_cache
 # llm_client.chat。取**模块对象**而非 `from ... import chat`：monkeypatch 打在调用方
 # 模块上才生效（本仓既有约定，见 tests 里对 `delector.routes.main.*` 的打桩）。
 # 注意：本模块其余出网（TTS 兜底、fetch_remote_html）仍直接用 httpx，不在本次收口范围。
-from delector.services import llm_client
+from delector.services import llm_client, polish_loop
+from delector.services.polish_tools import POLISH_TOOL_ALLOWLIST, call_tool
 
 router = APIRouter()
 
@@ -186,6 +188,9 @@ class WritingCardReq(BaseModel):
 
 class AIPolishReq(BaseModel):
     text: str
+    # 默认关 ⇒ 既有 JSON 行为与既有测试逐字不变（响应体只新增 converged 两字段）。
+    # 打开后返回 SSE（逐轮进度 + 取消），见 `_polish_event_stream`。
+    stream: bool = False
 
 
 class WritingApplyReq(BaseModel):
@@ -2184,19 +2189,305 @@ def api_syntax_analyze(req: SyntaxAnalyzeReq) -> Any:
 
 # --- Writing Desk (Schreibwerkstatt) Endpoints ---
 
-SYSTEM_WRITING_POLISH_PROMPT = """你是一位精通德语学术写作与德福/歌德高级写作评分标准的资深德语教学专家。
-请对用户提交的德语作文/文本进行全面的语法纠错、用词地道化润色与结构优化。
-请尽量逐句润色，保持句子的结构与出现顺序，不要合并或拆分句子，除非确实必要。
-请严格输出如下 JSON 格式：
-{
-  "corrected_text": "润色纠错后的完整德语文本",
-  "notes_zh": [
-    "修改点说明1",
-    "修改点说明2"
-  ],
-  "error_count": 2
-}
-不要输出除 JSON 以外的任何文字。"""
+# ── AI 润色：有界循环（Task 6）——适用性闸门 / 录制包装 / SSE ─────────────────
+# 端点层原因码：循环**根本没跑**（无 API Key），不是循环的任何一种结局 ⇒ **不进**
+# `polish_loop.REASONS`（加进去会让「原因码集合 = 循环的出口」这条契约失真）。
+REASON_NO_API_KEY = "no_api_key"
+
+# SSE 的断连探活间隔。`request.is_disconnected()` 在 starlette 1.6 是**非阻塞**的
+# （内部用一个已取消的 anyio CancelScope 包住 receive()：没有排队消息就立刻返回 False），
+# 所以可以在生成器的每一圈安全轮询，不会挂住流。
+_SSE_POLL_INTERVAL_S = 0.02
+
+
+def _a1_violations_if_letter(verdict: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """适用性闸门：**A1 书信规则只对书信体文本计数**（Unknown A 的边界）。
+
+    今天唯一的确定性裁判是 `writing.analyze_a1_email`（歌德 A1 书信规则）；裁判集
+    扩充属 Unknown A，本计划不做。它对**非书信体**（普通作文）必然报
+    `a1_greeting_missing`（level=error）—— 那是**题材差异**，不是错误。若照单全收：
+    `v_0 = 1`，而模型润色后仍然没有称呼语 ⇒ `v_1 >= v_0` ⇒ 循环判 `no_improvement`
+    并回退 argmin = 原文 ⇒ 用户点了润色却拿回原文，功能报废。
+
+    故：称呼语不合法 ⇒ 认定「这套规则对该文本不适用」⇒ 零违规。
+    注意这**不等于**「裁判判定无错」：手上的裁判对该文本**无话可说**，语义等价于
+    今天的一次性润色（首轮即接受），而不是「零违规」的证明。
+    """
+    greeting = verdict.get("greeting") if isinstance(verdict, dict) else None
+    if not isinstance(greeting, dict) or not greeting.get("valid"):
+        return []
+    return polish_loop.default_violations_of(verdict)
+
+
+def _make_tool_audit_hook(seen: List[str]) -> Any:
+    """润色工具的前置钩子：**权限闸 + 审计留痕**（Task 5 的 hooks 面，每次请求新建）。
+
+    权限闸在这里再挡一次白名单（纵深防御）：`call_tool` 内部已有同名兜底，但钩子
+    是「调用之前」的唯一挂点，把「能力面」检查放在这里才不会被 dispatcher 的实现
+    细节带着走。钩子抛异常 ⇒ 该次调用被拒（errors-as-messages，不炸循环）。
+    """
+
+    def _audit(name: str, _payload: Dict[str, Any]) -> None:
+        if name not in POLISH_TOOL_ALLOWLIST:
+            raise PermissionError(f"工具 '{name}' 不在润色白名单内")
+        seen.append(name)
+
+    return _audit
+
+
+class _PolishReplyRecorder:
+    """`llm_client.chat` 的**录制包装**：从每一轮回复里捕获最后的 `notes_zh` /
+    `error_count`，再原样返回。
+
+    为什么端点要自己录、而不是直接用 `LoopResult` 的字段：`error_count` 今天的语义是
+    **模型报的数**（`tests/test_server.py::test_ai_polish_diff_mocked` 的
+    `error_count == 2` 就来自模型回复）。改成裁判口径会**静默破坏既有断言**，故原样
+    记录：模型给了就用模型的；没给回退 `len(notes_zh)`；再没有才回退 `len(violations)`。
+
+    本包装**不碰文本归属**：收敛 ⇒ 返回那个零违规候选；未收敛 ⇒ argmin 回退，这个
+    结论由循环自己给出（`polish_loop.run_polish_loop` 出口）。端点曾按
+    `last_corrected_text` 兜底，但 recorder 分不清「收尾候选轮」与「取证轮」——
+    模型在取证轮回个 `corrected_text`（协议外字段）就会被误当成采纳文本，故删掉。
+
+    `model` 由本包装自己取真身：循环在**注入 chat** 时不读配置（测试不该碰数据库），
+    传进来的 `model` 是空串。
+    """
+
+    def __init__(self, api_key: str, base_url: str) -> None:
+        self._api_key = api_key
+        self._base_url = base_url
+        self.notes_zh: List[str] = []
+        self.error_count: Optional[int] = None
+
+    async def __call__(
+        self,
+        *,
+        messages: List[Dict[str, Any]],
+        model: str,
+        timeout: float,
+        max_tokens: int,
+        response_format: Optional[Dict[str, str]] = None,
+        **_kwargs: Any,
+    ) -> Dict[str, Any]:
+        reply = await llm_client.chat(
+            messages=messages,
+            model=get_effective_api_model(),
+            timeout=timeout,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            api_key=self._api_key,
+            base_url=self._base_url,
+        )
+        self._capture(reply)
+        return reply
+
+    def _capture(self, reply: Any) -> None:
+        if not isinstance(reply, dict):
+            return
+        notes = reply.get("notes_zh")
+        if isinstance(notes, list):
+            self.notes_zh = [str(item) for item in notes]
+        count = reply.get("error_count")
+        if isinstance(count, int) and not isinstance(count, bool):
+            self.error_count = count
+
+
+class _PolishOutcome(NamedTuple):
+    """一次润色的出口（端点据此组装响应体，流式与非流式共用一份）。"""
+
+    text: str
+    notes_zh: List[str]
+    error_count: int
+    converged: bool
+    reason: Optional[str]
+
+
+def _no_key_outcome(text: str) -> _PolishOutcome:
+    """无 API Key：**不走循环**，今日语义逐字保留（文本原样 + 提示去配 Key）。"""
+    import logging
+
+    logging.warning("[writing/ai-polish] API Key not set — returning stub response.")
+    return _PolishOutcome(
+        text=text,
+        notes_zh=["请在设置中配置 DeepSeek API Key 后使用 AI 润色功能"],
+        error_count=0,
+        converged=False,
+        reason=REASON_NO_API_KEY,
+    )
+
+
+async def _run_polish(
+    text: str,
+    api_key: str,
+    *,
+    on_progress: Optional[Any] = None,
+    should_stop: Optional[Any] = None,
+) -> _PolishOutcome:
+    """跑一遍润色循环：Task 4 内核 + Task 5 白名单/钩子 + 适用性闸门。"""
+    import logging
+
+    seen: List[str] = []
+    recorder = _PolishReplyRecorder(api_key, get_effective_api_base_url().rstrip("/"))
+    try:
+        loop = await polish_loop.run_polish_loop(
+            text=text,
+            tools=POLISH_TOOL_ALLOWLIST,
+            dispatch=functools.partial(call_tool, hooks=(_make_tool_audit_hook(seen),)),
+            violations_of=_a1_violations_if_letter,
+            chat=recorder,
+            budget=polish_loop.Budget(),
+            on_progress=on_progress,
+            should_stop=should_stop,
+        )
+    except llm_client.LLMError as e:
+        logging.error(f"[writing/ai-polish] DeepSeek API error: {e.detail} | raw: {e.raw[:200]}")
+        raise HTTPException(status_code=502, detail=e.detail)
+    if seen:
+        logging.info("[writing/ai-polish] 工具调用: %s", ", ".join(seen))
+    # 文本归属由循环自己给（Task 6 修订）：收敛 ⇒ 返回那个被判为零违规的候选；
+    # 未收敛 ⇒ argmin 回退（Task 4 钉死的语义，`no_improvement` 回退原文是特性）。
+    # 端点不再兜底：recorder 分不清「收尾候选轮」与「取证轮」，按 `corrected_text`
+    # 兜底会把模型没被采用的文本当答案返回。
+    final_text = loop.text
+    error_count = recorder.error_count
+    if error_count is None:
+        error_count = len(recorder.notes_zh) if recorder.notes_zh else len(loop.violations)
+    return _PolishOutcome(
+        text=final_text,
+        notes_zh=recorder.notes_zh,
+        error_count=error_count,
+        converged=loop.converged,
+        reason=loop.reason,
+    )
+
+
+def _polish_payload(outcome: _PolishOutcome) -> Dict[str, Any]:
+    """`/api/writing/ai-polish` 的 `result`（**只增不改**：新增收敛两字段）。"""
+    return {
+        "corrected_text": outcome.text,
+        "notes_zh": outcome.notes_zh,
+        "error_count": outcome.error_count,
+        "converged": outcome.converged,
+        "unconverged_reason": None if outcome.converged else outcome.reason,
+    }
+
+
+def _polish_diff_payload(text: str, outcome: _PolishOutcome) -> Dict[str, Any]:
+    """`/api/writing/ai-polish/diff` 的 `result`（既有字段与顺序一律不动）。"""
+    from delector.services.essay_diff import diff_sentences
+
+    return {
+        "original": text,
+        "corrected": outcome.text,
+        "hunks": diff_sentences(text, outcome.text),
+        "notes_zh": outcome.notes_zh,
+        "error_count": outcome.error_count,
+        "converged": outcome.converged,
+        "unconverged_reason": None if outcome.converged else outcome.reason,
+    }
+
+
+def _sse_frame(event: Dict[str, Any]) -> bytes:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+async def _polish_event_stream(*, request: Request, text: str, with_diff: bool) -> AsyncIterator[bytes]:
+    """SSE：把循环的 `on_progress` 事件逐条吐出，最后一条是完整 `result`。
+
+    取消：循环内每一圈探活，客户端已断开 ⇒ 置停止位（让循环自己收口）+ `task.cancel()`
+    （掐断在途的那一次 chat，不再继续烧配额）后结束流。但这条轮询**赢不了**
+    starlette 的 `listen_for_disconnect`（uvicorn HTTP scope spec_version='2.3' ⇒
+    `StreamingResponse.__call__` 同时跑流与监听器，客户端断开时监听器抢先 cancel
+    生成器）⇒ 外层再用 `try/finally` 兜底同步收尸，无论谁取消生成器在途 chat 都被掐断。
+    """
+    key = get_effective_api_key()
+    if not key:
+        # 无 Key 也走 SSE 形状（客户端只解析一种帧格式）：循环没跑，直接给 stub。
+        outcome = _no_key_outcome(text)
+        payload = _polish_diff_payload(text, outcome) if with_diff else _polish_payload(outcome)
+        yield _sse_frame({"event": "result", "result": payload})
+        return
+
+    events: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+    state = {"stop": False}
+
+    async def _runner() -> _PolishOutcome:
+        return await _run_polish(text, key, on_progress=events.put_nowait, should_stop=lambda: state["stop"])
+
+    task = asyncio.ensure_future(_runner())
+    try:
+        while True:
+            if await request.is_disconnected():
+                state["stop"] = True
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+                return
+            try:
+                event = events.get_nowait()
+            except asyncio.QueueEmpty:
+                if task.done():
+                    break
+                await asyncio.sleep(_SSE_POLL_INTERVAL_S)
+                continue
+            yield _sse_frame(event)
+            if event.get("event") == "done":
+                break
+
+        try:
+            outcome = await task
+        except llm_client.LLMError as e:
+            # 流已经开了头（状态行已发出），改不了状态码 ⇒ 用一条 error 帧交代人话。
+            yield _sse_frame({"event": "error", "detail": e.detail})
+            return
+        payload = _polish_diff_payload(text, outcome) if with_diff else _polish_payload(outcome)
+        yield _sse_frame({"event": "result", "result": payload})
+    finally:
+        # 收尸：无论谁取消生成器都必须掐断在途 chat，否则 task（ensure_future 的独立
+        # Task）裸跑到自然结束会继续烧配额。取消来源有三：
+        # 1) starlette 的 `listen_for_disconnect` 抢跑 —— uvicorn HTTP scope 的
+        #    spec_version='2.3' ⇒ `StreamingResponse.__call__` 同时跑 stream_response
+        #    与监听器；客户端一断开，监听器抢先 cancel 生成器，上面「先 await
+        #    request.is_disconnected() 再 cancel」的轮询几乎永远输给它；
+        # 2) 服务器主动取消（响应体消费方提前收手）；
+        # 3) 循环自己 break/return 的正常收尾。
+        # 只做**同步**收尸（state + cancel，不 await）：取消态里再 await 会被再次
+        # 投递 CancelledError；确需 await 时放在同步 cancel 之后并用
+        # `contextlib.suppress(asyncio.CancelledError)` 包住（见上方 is_disconnected 分支）。
+        state["stop"] = True
+        task.cancel()
+
+
+@router.post("/api/writing/ai-polish")
+async def api_writing_ai_polish(req: AIPolishReq, request: Request) -> Any:
+    # P1-5 本机闸：循环有 key 时真实出网烧配额，理由同 /api/lookup/grammar。
+    _require_localhost(request)
+    text = req.text[:2000]
+    if req.stream:
+        return StreamingResponse(
+            _polish_event_stream(request=request, text=text, with_diff=False),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    key = get_effective_api_key()
+    outcome = _no_key_outcome(text) if not key else await _run_polish(text, key)
+    return {"status": "ok", "result": _polish_payload(outcome)}
+
+
+@router.post("/api/writing/ai-polish/diff")
+async def api_writing_ai_polish_diff(req: AIPolishReq, request: Request) -> Any:
+    # P1-5 本机闸（怀疑者复核时补的第五条）：内部同样走循环出网烧配额。
+    _require_localhost(request)
+    text = req.text[:2000]
+    if req.stream:
+        return StreamingResponse(
+            _polish_event_stream(request=request, text=text, with_diff=True),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    key = get_effective_api_key()
+    outcome = _no_key_outcome(text) if not key else await _run_polish(text, key)
+    return {"status": "ok", "result": _polish_diff_payload(text, outcome)}
 
 
 def _get_writer_nlp() -> Any:
@@ -2340,77 +2631,6 @@ def save_writing_card(req: WritingCardReq) -> Any:
         error_type=sp.get("error_type", ""),
     )
     return add_grammar_card(card)
-
-
-async def _ai_polish_call(text: str) -> Tuple[str, List[str], int]:
-    key = get_effective_api_key()
-    if not key:
-        import logging
-
-        logging.warning("[writing/ai-polish] API Key not set — returning stub response.")
-        return text, ["请在设置中配置 DeepSeek API Key 后使用 AI 润色功能"], 0
-
-    base_url = get_effective_api_base_url().rstrip("/")
-    model = get_effective_api_model()
-    try:
-        parsed = await llm_client.chat(
-            [
-                {"role": "system", "content": SYSTEM_WRITING_POLISH_PROMPT},
-                {"role": "user", "content": f"德语文本:\n{text}"},
-            ],
-            model=model,
-            max_tokens=llm_client.DEFAULT_MAX_TOKENS,
-            timeout=30.0,  # 收口前本端点的现值（30s），语义不变
-            response_format=llm_client.JSON_OBJECT,
-            api_key=key,
-            base_url=base_url,
-        )
-    except llm_client.LLMError as e:
-        import logging
-
-        logging.error(f"[writing/ai-polish] DeepSeek API error: {e.detail} | raw: {e.raw[:200]}")
-        raise HTTPException(status_code=502, detail=e.detail)
-    corrected_text = parsed.get("corrected_text", text)
-    notes_zh = parsed.get("notes_zh", [])
-    error_count = parsed.get("error_count", len(notes_zh))
-    return corrected_text, notes_zh, error_count
-
-
-@router.post("/api/writing/ai-polish")
-async def api_writing_ai_polish(req: AIPolishReq, request: Request) -> Dict[str, Any]:
-    # P1-5 本机闸：_ai_polish_call 有 key 时真实出网烧配额，理由同 /api/lookup/grammar。
-    _require_localhost(request)
-    text = req.text[:2000]
-    corrected_text, notes_zh, error_count = await _ai_polish_call(text)
-    return {
-        "status": "ok",
-        "result": {
-            "corrected_text": corrected_text,
-            "notes_zh": notes_zh,
-            "error_count": error_count,
-        },
-    }
-
-
-@router.post("/api/writing/ai-polish/diff")
-async def api_writing_ai_polish_diff(req: AIPolishReq, request: Request) -> Dict[str, Any]:
-    # P1-5 本机闸（怀疑者复核时补的第五条）：内部同样走 _ai_polish_call 出网烧配额。
-    _require_localhost(request)
-    from delector.services.essay_diff import diff_sentences
-
-    text = req.text[:2000]
-    corrected_text, notes_zh, error_count = await _ai_polish_call(text)
-    hunks = diff_sentences(text, corrected_text)
-    return {
-        "status": "ok",
-        "result": {
-            "original": text,
-            "corrected": corrected_text,
-            "hunks": hunks,
-            "notes_zh": notes_zh,
-            "error_count": error_count,
-        },
-    }
 
 
 @router.post("/api/essays/{essay_id}/versions")

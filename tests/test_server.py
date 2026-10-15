@@ -5,17 +5,19 @@
 # mypy: disable-error-code="unused-ignore"
 import ast
 import asyncio
+import contextlib
 import gc
 import ipaddress
 import json
 import os
 import re
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import pytest
 from db_cleanup import remove_db_files
 from fastapi.testclient import TestClient
+from starlette.responses import StreamingResponse
 
 # 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
 # 钉住的 IPv6 段），故 import 模块对象而非仅具名导入。
@@ -26,6 +28,7 @@ from delector import server
 from delector.core.database import db_conn, db_progress_conn
 from delector.core.lexicon import lemma_key
 from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
+from delector.routes.main import AIPolishReq, _polish_event_stream, api_writing_ai_polish
 from delector.server import (
     BACKUP_FORMAT_VERSION,
     BACKUP_SETTINGS_WHITELIST,
@@ -38,6 +41,7 @@ from delector.server import (
     process_german_text,
     set_setting,
 )
+from delector.services import polish_loop
 
 # 本文件搬进 tests/ 之后比仓库根深一层：凡读仓库资源（server.py / static / tools /
 # android / .github / .githooks / nlp.py / package_windows.py）一律经 ROOT。
@@ -6545,3 +6549,405 @@ def test_health_endpoint_fails_when_db_query_raises(client, monkeypatch):
         f"否则会把自己的降级实例误判为陌生端口。实际 {res.json()}"
     )
     assert "database disk image is malformed" not in res.text, f"原始异常消息泄露到了响应体：{res.text[:300]}"
+
+
+# ── AI 润色循环（Task 6）：返回契约 / 适用性闸门 / 流式进度 / 断连取消 ───────────
+_ESSAY_TEXT = "Ich habe ein Hund. Er ist gut."
+# 书信体夹具：正文首词小写已对，但结语后带逗号 ⇒ 恰好 1 条 error（裁判有话可说）。
+_LETTER_TEXT = "Liebe Maria,\nich lade dich ein.\nViele Grüße,\nAnna"
+
+
+class _ScriptedChat:
+    """`llm_client.chat` 的脚本桩：逐轮按顺序回复（脚本用完后重复最后一条）。"""
+
+    def __init__(self, script: List[Dict[str, Any]]) -> None:
+        self.script = script
+        self.calls: List[Dict[str, Any]] = []
+
+    async def __call__(self, **kwargs: Any) -> Dict[str, Any]:
+        self.calls.append(kwargs)
+        idx = len(self.calls) - 1
+        return self.script[idx] if idx < len(self.script) else self.script[-1]
+
+    def contents(self) -> List[str]:
+        """所有轮次里出现过的消息正文（用于断言「证据被回喂给了模型」）。"""
+        out: List[str] = []
+        for call in self.calls:
+            for msg in call.get("messages", []):
+                content = msg.get("content")
+                if isinstance(content, str):
+                    out.append(content)
+        return out
+
+
+def _stub_api_key(monkeypatch: Any) -> None:
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-stub")
+
+
+def _parse_sse(raw: str) -> List[Dict[str, Any]]:
+    """把 SSE 文本解析成事件列表（帧以空行分隔，只认 `data:` 行）。"""
+    events: List[Dict[str, Any]] = []
+    for frame in raw.split("\n\n"):
+        lines = [ln for ln in frame.split("\n") if ln.startswith("data:")]
+        if not lines:
+            continue
+        events.append(json.loads(lines[0][len("data:") :].strip()))
+    return events
+
+
+def test_ai_polish_response_carries_convergence_contract(client, monkeypatch):
+    """只增不改：两个端点的 `result` 新增 converged / unconverged_reason，既有字段不动。"""
+    _stub_api_key(monkeypatch)
+    chat = _ScriptedChat(
+        [{"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["ein → einen"], "error_count": 1}]
+    )
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+
+    res = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT})
+    assert res.status_code == 200
+    result = res.json()["result"]
+    assert result["corrected_text"] == "Ich habe einen Hund. Er ist gut."
+    assert result["notes_zh"] == ["ein → einen"]
+    # error_count 今天仍是**模型报的数**（既有断言 test_ai_polish_diff_mocked 的口径），
+    # 换成裁判口径会静默破坏既有契约。
+    assert result["error_count"] == 1
+    assert result["converged"] is True
+    assert result["unconverged_reason"] is None
+
+    diff = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT}).json()["result"]
+    assert diff["original"] == _ESSAY_TEXT
+    assert diff["corrected"] == "Ich habe einen Hund. Er ist gut."
+    assert diff["hunks"], "diff 端点仍要给出逐句 hunk（既有逐 hunk 采纳 UI 依赖它）"
+    assert diff["converged"] is True
+    assert diff["unconverged_reason"] is None
+
+
+def test_ai_polish_no_key_reports_endpoint_level_reason(client, monkeypatch):
+    """无 Key ⇒ 循环**根本没跑** ⇒ 端点层原因码 `no_api_key`（不进 REASONS）。"""
+    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
+    assert res.status_code == 200
+    result = res.json()["result"]
+    assert result["corrected_text"] == "Hallo."
+    assert "DeepSeek API Key" in result["notes_zh"][0]
+    assert result["error_count"] == 0
+    assert result["converged"] is False
+    assert result["unconverged_reason"] == "no_api_key"
+    assert "no_api_key" not in polish_loop.REASONS, (
+        "no_api_key 是端点层原因码（循环没跑），混进 REASONS 会让「原因码 = 循环出口」这条契约失真"
+    )
+
+
+def test_ai_polish_non_letter_text_is_not_rolled_back(client, monkeypatch):
+    """★ 产品回归闸门：非书信体不得被回退成原文。
+
+    裁判集只有 A1 书信规则（`analyze_a1_email`）；对普通作文它必然报
+    `a1_greeting_missing` ⇒ 不挂适用性闸门的话 v_0=1、v_1>=v_0 ⇒ 回退原文
+    ⇒ 用户点了润色却拿回原文，功能报废。
+    """
+    _stub_api_key(monkeypatch)
+    polished = "Ich habe einen Hund. Er ist gut und sehr lieb."
+    chat = _ScriptedChat([{"corrected_text": polished, "notes_zh": ["用词更地道"]}])
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+
+    result = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT}).json()["result"]
+
+    assert result["corrected"] == polished, "裁判对非书信体无话可说 ⇒ 首轮即接受，不得回退原文"
+    assert result["converged"] is True
+    assert result["unconverged_reason"] is None
+
+
+def test_ai_polish_letter_text_still_judged_by_a1_rules(client, monkeypatch):
+    """反向对照：书信体**不受**闸门豁免 ⇒ 改不动就照旧回退原文并给 no_improvement。
+
+    少了这条，「闸门一律返回 []」也能让上一条变绿 —— 那等于把裁判整个关掉。
+    """
+    _stub_api_key(monkeypatch)
+    # 改了用词但没修结语逗号 ⇒ v_1 == v_0 == 1 ⇒ 不降即停
+    chat = _ScriptedChat([{"corrected_text": "Liebe Maria,\nich lade dich herzlich ein.\nViele Grüße,\nAnna"}])
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+
+    result = client.post("/api/writing/ai-polish", json={"text": _LETTER_TEXT}).json()["result"]
+
+    assert result["corrected_text"] == _LETTER_TEXT, "书信体改不动 ⇒ 回退原文（闸门必须对它失效）"
+    assert result["converged"] is False
+    assert result["unconverged_reason"] == "no_improvement"
+
+
+def test_ai_polish_runs_tool_hooks_on_the_real_path(client, monkeypatch, caplog):
+    """前置钩子链 MUST 在**真链路**上被跑过（不是只在单测里）：审计留痕 + 证据回喂。"""
+    import logging
+
+    _stub_api_key(monkeypatch)
+    chat = _ScriptedChat(
+        [
+            {"tool_call": {"name": "writing_check", "payload": {"text": _ESSAY_TEXT, "leitpunkte": []}}},
+            {"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["ein → einen"]},
+        ]
+    )
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+
+    with caplog.at_level(logging.INFO):
+        res = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT})
+
+    assert res.status_code == 200
+    audited = [r.getMessage() for r in caplog.records if "writing_check" in r.getMessage()]
+    assert audited, f"审计钩子没在真链路上留下痕迹（logs={[r.getMessage()[:80] for r in caplog.records]}）"
+    assert any(c.startswith("[工具结果:writing_check]") for c in chat.contents()), (
+        "工具结果必须作为证据回喂给模型（证明 dispatch 走的是白名单真身）"
+    )
+
+
+def test_ai_polish_stream_emits_progress_then_full_result(client, monkeypatch):
+    """`stream=true` ⇒ SSE：逐轮进度事件 + 收尾 `done` + 最后一条完整 result。
+
+    TestClient 的传输层会把**整个响应**缓冲完再返回（starlette 1.6 的
+    `_TestClientTransport.handle_request` 一次性跑完 ASGI app），故这里断言的是
+    「帧序列正确」，不是「帧是增量到达的」——增量与断连由下一条用例直接驱动生成器覆盖。
+    """
+    _stub_api_key(monkeypatch)
+    chat = _ScriptedChat(
+        [
+            {"tool_call": {"name": "writing_check", "payload": {"text": _ESSAY_TEXT, "leitpunkte": []}}},
+            {"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["ein → einen"], "error_count": 1},
+        ]
+    )
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+
+    res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT, "stream": True})
+
+    assert res.status_code == 200
+    assert "text/event-stream" in res.headers["content-type"]
+    events = _parse_sse(res.text)
+    assert events, f"SSE 帧为空：{res.text[:200]!r}"
+    assert events[-1]["event"] == "result", f"最后一条必须是完整 result：{events[-1]}"
+    done = [e for e in events if e.get("event") == "done"]
+    assert done and done[-1]["converged"] is True and done[-1]["reason"] == "ok"
+    progress = [e for e in events if e.get("event") == "tool"]
+    assert progress, "取证的那一轮必须吐进度事件"
+    assert progress[0]["max_turns"] == polish_loop.MAX_TURNS_DEFAULT, "max_turns 必须由服务端给出（前端不许硬编码）"
+    assert progress[0]["round"] >= 1
+    payload = events[-1]["result"]
+    assert payload["corrected"] == "Ich habe einen Hund. Er ist gut."
+    assert payload["hunks"]
+    assert payload["converged"] is True
+    assert payload["unconverged_reason"] is None
+
+
+def test_ai_polish_stream_defaults_off_and_keeps_json(client, monkeypatch):
+    """`stream` 默认关：不传就是既有 JSON 行为（既有测试逐字不变的前提）。"""
+    _stub_api_key(monkeypatch)
+    chat = _ScriptedChat([{"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["x"]}])
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+
+    res = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT})
+
+    assert res.headers["content-type"].startswith("application/json")
+    assert res.json()["result"]["corrected_text"] == "Ich habe einen Hund. Er ist gut."
+
+
+def test_ai_polish_stream_cancels_loop_when_client_disconnects(monkeypatch):
+    """客户端中途断开 ⇒ 服务端循环任务被 `cancel()`（不泄漏、不继续烧配额）。
+
+    为什么不用 TestClient：它的传输层把整个响应缓冲完才返回（实测见上一条用例注释），
+    `request.is_disconnected()` 在响应生成期间恒为 False（httpx 的 receive() 要等
+    response_complete）⇒ 「中途断开」在 TestClient 下**物理上无法复现**。
+    故这里直接驱动端点的流式生成器，配一个「第 2 轮 chat 卡住时才报已断开」的 Request 桩；
+    其余链路（chat 桩、白名单、钩子、循环）全是真的。
+    """
+    gate = asyncio.Event()
+    entered_second_call = asyncio.Event()
+    state = {"calls": 0, "cancelled": False}
+
+    async def _chat(**kwargs: Any) -> Dict[str, Any]:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            return {"tool_call": {"name": "writing_check", "payload": {"text": _ESSAY_TEXT, "leitpunkte": []}}}
+        entered_second_call.set()
+        try:
+            await gate.wait()
+        except asyncio.CancelledError:
+            state["cancelled"] = True
+            raise
+        return {"corrected_text": _ESSAY_TEXT}
+
+    _stub_api_key(monkeypatch)
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", _chat)
+
+    class _DisconnectedRequest:
+        """仅提供端点用到的两个面：`client.host`（本机闸）与 `is_disconnected()`。"""
+
+        client = type("Client", (), {"host": "127.0.0.1"})
+
+        async def is_disconnected(self) -> bool:
+            return entered_second_call.is_set()
+
+    async def _drive() -> Dict[str, Any]:
+        resp = await api_writing_ai_polish(AIPolishReq(text=_ESSAY_TEXT, stream=True), _DisconnectedRequest())
+
+        async def _drain() -> str:
+            raw = ""
+            async for chunk in resp.body_iterator:
+                raw += chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
+            return raw
+
+        # 上限 5s：取消逻辑被抽掉时生成器会永远轮询 ⇒ 宁可**红**也不要挂住整轮门禁。
+        raw = await asyncio.wait_for(_drain(), timeout=5.0)
+        # 快照必须在**事件循环关掉之前**取：asyncio.run() 收尾会顺手 cancel 掉所有
+        # 未完成任务，那时再读 cancelled 恒为真 ⇒ 断言会变成假绿。
+        return {
+            "events": _parse_sse(raw),
+            "cancelled": state["cancelled"],
+            "calls": state["calls"],
+        }
+
+    snap = asyncio.run(_drive())
+
+    assert snap["cancelled"] is True, "断开后服务端循环 MUST 被取消（否则继续烧配额）"
+    assert snap["calls"] < polish_loop.MAX_TURNS_DEFAULT, (
+        f"取消后不该继续跑满轮次：calls={snap['calls']} / max={polish_loop.MAX_TURNS_DEFAULT}"
+    )
+    assert all(e.get("event") != "result" for e in snap["events"]), "已断开就不该再产出完整 result"
+
+
+def test_ai_polish_stream_cancels_loop_when_starlette_listener_preempts(monkeypatch):
+    """starlette 的 `listen_for_disconnect` **抢先**取消生成器 ⇒ finally 同步收尸掐断在途 chat。
+
+    与上一条用例的分工（为什么必须单开这条）：
+    - 上一条直接迭代 `resp.body_iterator`，**绕开了** `StreamingResponse.__call__`
+      ⇒ `listen_for_disconnect` 根本不参与，「监听器抢先 cancel 生成器」这条路
+      物理上测不到；
+    - 这里直接驱动 `StreamingResponse.__call__`：uvicorn 的 HTTP 协议栈（h11 /
+      httptools impl，实测源码 `spec_version='2.3'`）⇒ starlette 1.6 的 `__call__`
+      走 task-group 分支（`spec_version < (2, 4)`）：`stream_response` 与
+      `listen_for_disconnect` **同时**跑。断连从监听器那条路进来：receive 第 2 次
+      被调用 ⇒ 返回 `http.disconnect` ⇒ 监听器 break ⇒
+      `task_group.cancel_scope.cancel()` ⇒ `stream_response` 里的生成器在 await 点
+      被投递 `CancelledError` ⇒ 生成器的 `finally` 必须**同步** `task.cancel()`
+      把在途 chat 掐断；
+    - 生成器的 request 桩 `is_disconnected()` 恒 False：堵死「轮询自报断开」那条路，
+      确保取消只能来自监听器 —— 把 `finally` 里的 `task.cancel()` 抽掉，本用例必红
+      （变异自证）。
+    """
+    gate = asyncio.Event()
+    entered_second_call = asyncio.Event()
+    cancelled_seen = asyncio.Event()
+    state = {"calls": 0, "cancelled": False}
+
+    async def _chat(**kwargs: Any) -> Dict[str, Any]:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            return {"tool_call": {"name": "writing_check", "payload": {"text": _ESSAY_TEXT, "leitpunkte": []}}}
+        entered_second_call.set()
+        try:
+            await gate.wait()
+        except asyncio.CancelledError:
+            state["cancelled"] = True
+            cancelled_seen.set()
+            raise
+        return {"corrected_text": _ESSAY_TEXT}
+
+    _stub_api_key(monkeypatch)
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", _chat)
+
+    class _NeverDisconnectedRequest:
+        """生成器只用得到 `is_disconnected()`：恒 False ⇒ 取消只能来自 starlette 监听器。"""
+
+        async def is_disconnected(self) -> bool:
+            return False
+
+    async def _drive() -> Dict[str, Any]:
+        resp = StreamingResponse(
+            _polish_event_stream(request=_NeverDisconnectedRequest(), text=_ESSAY_TEXT, with_diff=False),
+            media_type="text/event-stream",
+        )
+        receive_calls = {"n": 0}
+
+        async def receive() -> Dict[str, Any]:
+            receive_calls["n"] += 1
+            if receive_calls["n"] == 1:
+                # 首条非断连消息：监听器只在拿到 http.disconnect 时才 break
+                return {"type": "http.request", "body": b"", "more_body": False}
+            # 第 2 次被调用才报断开 —— 但先等循环真的跑起来（第 2 次 chat 已卡在途），
+            # 把取消钉在「流已开头、在途 chat 进行中」这个真实窗口，避开生成器还没
+            # 起步的竞态窗口（那时取消可能整段跳过生成器体，finally 无从谈起）。
+            await entered_second_call.wait()
+            return {"type": "http.disconnect"}
+
+        sent: List[Dict[str, Any]] = []
+
+        async def send(message: Dict[str, Any]) -> None:
+            sent.append(message)
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/api/writing/ai-polish",
+            "raw_path": b"/api/writing/ai-polish",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [(b"content-type", b"application/json")],
+            "client": ("127.0.0.1", 51234),
+            "server": ("127.0.0.1", 8000),
+        }
+
+        # 取消沿 task group 回传：resp(...) 可能原样抛出 CancelledError（starlette 用
+        # create_collapsing_task_group 折叠单异常组），压掉即可 —— 断言看的是收尸效果。
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.wait_for(resp(scope, receive, send), timeout=10.0)
+
+        # finally 只同步 cancel、不 await：给事件循环节拍让取消真正传导到在途 chat。
+        # 上限 5s：finally 的 cancel 被抽掉时在途 chat 会永远卡住 ⇒ 宁可红也不挂死门禁。
+        try:
+            await asyncio.wait_for(cancelled_seen.wait(), timeout=5.0)
+            timed_out = False
+        except asyncio.TimeoutError:
+            timed_out = True
+
+        bodies = b"".join(m.get("body", b"") for m in sent if m.get("type") == "http.response.body")
+        return {
+            "started": bool(sent) and sent[0].get("type") == "http.response.start",
+            "receive_calls": receive_calls["n"],
+            "frames": _parse_sse(bodies.decode("utf-8")),
+            "cancelled": state["cancelled"],
+            "calls": state["calls"],
+            "timed_out": timed_out,
+        }
+
+    snap = asyncio.run(_drive())
+
+    assert snap["started"], "stream_response 必须真跑过（证明驱动的是 StreamingResponse.__call__ 而非裸生成器）"
+    assert snap["receive_calls"] >= 2, f"监听器必须真参与（receive 被调用次数={snap['receive_calls']}）"
+    assert not snap["timed_out"], "finally 必须收尸：在途 chat 5s 内没收到 CancelledError（cancel 被抽掉？）"
+    assert snap["cancelled"] is True, "finally MUST 同步 task.cancel()（否则在途 chat 裸跑烧配额）"
+    assert snap["calls"] < polish_loop.MAX_TURNS_DEFAULT, (
+        f"取消后不该继续跑满轮次：calls={snap['calls']} / max={polish_loop.MAX_TURNS_DEFAULT}"
+    )
+    assert all(e.get("event") != "result" for e in snap["frames"]), "已断开就不该再产出完整 result"
+
+
+def test_frontend_polish_reason_copy_covers_every_reason_code():
+    """writer.js 的中文文案 MUST 覆盖 `polish_loop.REASONS` 全部成员 + 端点层 no_api_key。
+
+    将来往 REASONS 里加码而忘了配文案 ⇒ 这里立刻红（前端否则只能弹一句空话）。
+    """
+    src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
+    block = re.search(r"const POLISH_REASON_COPY\s*=\s*\{(.*?)\n\};", src, re.S)
+    assert block, "writer.js 里找不到 POLISH_REASON_COPY 映射表"
+    keys = set(re.findall(r"^\s*([a-z_]+)\s*:", block.group(1), re.M))
+    expected = set(polish_loop.REASONS) | {"no_api_key"}
+    assert keys == expected, (
+        f"文案表与原因码集合不一致：缺 {sorted(expected - keys)}，多 {sorted(keys - expected)}"
+    )
+
+
+def test_frontend_polish_progress_takes_max_turns_from_server():
+    """进度文案的轮次分母 MUST 取自服务端事件的 `max_turns`，不许前端写死 3。"""
+    src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
+    body = src[src.index("export async function aiPolishEssay") : src.index("export async function applyPolishChanges")]
+    assert "AbortController" in body, "取消必须有 AbortController（或等价机制）"
+    assert "max_turns" in body, "轮次分母必须来自服务端事件"
+    assert "/3 轮" not in body, "不许把轮次上界硬编码成 3（内核改 MAX_TURNS_DEFAULT 这里就撒谎）"

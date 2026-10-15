@@ -243,6 +243,30 @@ def test_converges_when_violations_drop_to_zero() -> None:
     assert log == ["T0", "T1"], f"原文与收尾候选都应过裁判（D3）：{log}"
 
 
+def test_converged_zero_violation_pair_returns_candidate_not_original() -> None:
+    """并列零违规：v_0 == v_1 == 0 ⇒ 收敛且返回**候选**（不是原文）。
+
+    判别力：把出口的收敛归属改回 argmin ⇒ 本用例 MUST 红 —— `min` 在并列时取
+    **最早**条目 = 原文，等于把用户点的润色原样退回（Task 6 端点兜底删掉后，
+    这个归属只能由循环自己给出）。
+    """
+    log: list[str] = []
+    rec = Recorder()
+
+    result = run(
+        text="T0",
+        chat=rec.chat([{"corrected_text": "T1"}]),
+        judge=make_judge({"T0": 0, "T1": 0}, log),
+    )
+
+    assert result.converged is True
+    assert result.reason == "ok"
+    assert result.text == "T1", f"收敛 ⇒ 返回那个零违规候选，不是原文：{result.text}"
+    assert result.rounds == 1
+    assert result.violations == []
+    assert log == ["T0", "T1"], f"原文与收尾候选都应过裁判（D3）：{log}"
+
+
 def test_no_improvement_stops_and_rolls_back_to_argmin() -> None:
     """不降即停：v_1 >= v_0 ⇒ break + 回退到 argmin(violations) 的历史候选。"""
     log: list[str] = []

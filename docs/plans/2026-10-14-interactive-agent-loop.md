@@ -162,7 +162,7 @@
 - Consumes: `llm_client.chat(...)` · `writing_check.run(payload)`（经白名单）· `analyze_a1_email`
 - Produces: `async def run_polish_loop(*, text: str, leitpunkte: list[str] | None, tools: Mapping[str, Callable], budget: Budget) -> LoopResult`，其中 `Budget = (max_turns:int=3, max_tokens_total:int, deadline_s:float)`，`LoopResult = (text:str, converged:bool, reason:str|None, rounds:int, violations:list)`，`reason ∈ {ok, no_improvement, turn_limit, token_budget, deadline, judge_unreliable, judge_error}`
 - **Produces 的两处执行期补充（2026-10-15 定案，编排者批准）**：
-  1. **依赖注入参数**：除 `text/leitpunkte/tools/budget` 四个必填项外，另有 `chat / judge / violations_of / dispatch / clock` 五个**仅测试用**的注入点（默认回落真身）。这不是范围扩张 —— 本任务 scaffold 第一句就是「**全部依赖注入、全部 stub 测试**（严禁真实 API Key）」，没有注入点就只能靠真 Key 或 monkeypatch 全局，两者都违反仓规。
+  1. **依赖注入参数**：除 `text/leitpunkte/tools/budget` 四个必填项外，另有 `chat / judge / violations_of / dispatch / clock / on_progress / should_stop` 七个注入点（默认回落真身）。这不是范围扩张 —— 本任务 scaffold 第一句就是「**全部依赖注入、全部 stub 测试**（严禁真实 API Key）」，没有注入点就只能靠真 Key 或 monkeypatch 全局，两者都违反仓规。其中 `on_progress` / `should_stop` 是 Task 6 的 SSE 进度与取消所必需（CRV 二轮验收时提出此点，经核对属 Task 4 为 Task 6 预留的同一批参数，不构成范围扩张）。
   2. **`reason` 增加 `cancelled`**：Task 6 的取消按钮需要内核有「用户中止」的出口，否则取消只能表现为连接中断（前端拿不到人话原因）。故**在 Task 4 就地留位**，避免 Task 6 回头改内核 —— 这是有计划的范围调整，不是顺手加的。
 - **已知边界（CRV 黄卡，刻意不改）**：基线 `v_0 == 0`（原文已零 error）时**不早退** —— 润色还有用词/地道化价值，裁判只管 error 级。副作用：若首个候选反而变差，会回退到零违规的原文并报 `converged=false / no_improvement`。文案上由 Task 6 的前端兜住（文本本身是干净的）。
 
@@ -170,11 +170,11 @@
 > "按 ADR-0023 §4.2/§8.2 实现循环内核（`delector/services/polish_loop.py`），**全部依赖注入、全部 stub 测试**（严禁真实 API Key）。必须逐条实现：① 二值判断——模型输出含工具调用则执行并继续，无则**收尾请求**；② **收尾终审守卫**：无裁判裁决的收尾 MUST 被驳回并强制补一次裁判；③ 运行时策略 `v_n >= v_{n-1} ⇒ break` 并回退 `argmin(violations)` 候选，`reason='no_improvement'`；④ 哨兵 `v_n == v_{n-1} and n>=2 ⇒ reason='judge_unreliable'`；⑤ 每轮**前置**检查 `max_tokens_total` 与 `deadline_s`，超支即 break 并给原因码；⑥ 裁判异常按 errors-as-messages 单轮降级（记 `judge_error`，**不得** 500）；⑦ 证据注入前按行数+字节双限截断。测试用例 MUST 至少覆盖：不降即停、超轮次、超 token、超 deadline、裁判抛异常、无裁决不许收尾（**删掉守卫必须变红**）。RUN：`python -m pytest tests/test_ai_polish_loop.py -q`。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED，含「删守卫必红」的判别力用例）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 实现内核（GREEN）
-- [ ] Step 4: 逐条变异自证（抽掉守卫 / 抽掉预算 / 抽掉哨兵 ⇒ 必须红）
-- [ ] Step 5: 原子提交
+- [x] Step 1: 写失败测试（RED，含「删守卫必红」的判别力用例）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 实现内核（GREEN）
+- [x] Step 4: 逐条变异自证（抽掉守卫 / 抽掉预算 / 抽掉哨兵 ⇒ 必须红）
+- [x] Step 5: 原子提交
 
 ---
 
@@ -192,11 +192,11 @@
 > "建 `delector/services/polish_tools.py`：① 白名单**恰好** `writing_check` / `analyze` / `vocab_stats`（同进程直调 `.run`，**不经 HTTP**）；② `ingest` / `export` / `tts` 出现在白名单里 MUST 立即失败（写一条**断言白名单与 `TOOL_REGISTRY` 差集**的测试：差集 MUST 含这三个名字）；③ 前置钩子链（权限/审计）在调用前串行执行，钩子抛异常 ⇒ 该次调用被拒并作为消息返回（不炸循环）。RUN：`python -m pytest tests/test_polish_tools.py tests/test_ai_polish_loop.py -q` 与 `python -m pytest tests/test_ai_endpoints_localhost_gate.py -q`。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：白名单缺失/含写工具）
-- [ ] Step 2: 跑并确认失败
-- [ ] Step 3: 实现白名单 + 钩子（GREEN）
-- [ ] Step 4: 变异自证（把 `ingest` 加进白名单 ⇒ 必须红）
-- [ ] Step 5: 原子提交
+- [x] Step 1: 写失败测试（RED：白名单缺失/含写工具）
+- [x] Step 2: 跑并确认失败
+- [x] Step 3: 实现白名单 + 钩子（GREEN）
+- [x] Step 4: 变异自证（把 `ingest` 加进白名单 ⇒ 必须红）
+- [x] Step 5: 原子提交
 
 ---
 
@@ -211,15 +211,24 @@
 - Consumes: `run_polish_loop(...) -> LoopResult`
 - Produces: 响应体新增 `converged: bool` 与 `unconverged_reason: str | None`（**既有字段一律不动**）；前端 MUST 在 `converged == false` 时 toast 原因
 
+**Task 6 执行期定案（2026-10-15，编排者批准；四条都是"计划没说但必须决定"的点）**：
+
+1. **适用性闸门 `_a1_violations_if_letter`（`main.py`）**：`analyze_a1_email` 是**唯一**确定性裁判（裁判集扩充 = Unknown A，本计划不做），它对**非书信体**必然报 `a1_greeting_missing`（level=error）⇒ 直接接进通用润色端点会判 `no_improvement` 并回退 argmin = 原文 ⇒ 用户点了润色拿回原文，**功能报废**（已实证：既有基线 `test_ai_polish_diff_mocked` 就是这样红的）。故称呼语不合法 ⇒ 该裁判对本文本**不适用** ⇒ 零违规。docstring 明写：这**不等于**「裁判判定无错」，语义等价于今日的一次性润色（首轮即接受）。已知欠账：闸门对**候选**同样单向生效（模型删掉称呼语 ⇒ 候选也"不适用" ⇒ 零违规自动收敛）—— Unknown A 续作收口。
+2. **收敛归属移入循环（`polish_loop.py`）**：端点层用 recorder 录 `last_corrected_text` 兜底有漏洞（模型在取证轮夹带 `corrected_text` ⇒ 录错答案），故改为循环内「收敛 ⇒ 返回那个被判零违规的候选」；未收敛仍走 `min(history)` argmin（Task 4 钉死的语义未动）。
+3. **进度/取消用 SSE，不做假进度**：`AIPolishReq` 加 `stream: bool = False`（默认关 ⇒ 既有 JSON 行为与既有测试逐字不变）；`stream=true` ⇒ `StreamingResponse`，逐帧吐 `on_progress`（含 `round`/`max_turns`），尾帧给完整 `result`。**到点次序/断连取消**：starlette 1.6 + uvicorn 0.54 下 `StreamingResponse.__call__` 会同时跑 `listen_for_disconnect`，它**抢先**取消生成器 ⇒ 收尸必须放在 `try/finally` 的**同步** `task.cancel()` 里（`await` 轮询那条路几乎永远输给监听器，CRV 红卡实证）。
+4. **端点层原因码 `no_api_key`（不进 `REASONS`）**：无 Key 时循环根本没跑，保持今日 stub 语义（文本原样 + 提示去配 Key）+ `converged=False / unconverged_reason="no_api_key"`。`error_count` 沿用**模型报的数**（recorder 录），缺失回退 `len(notes_zh)` 再回退 `len(violations)` —— 改成裁判口径会静默破坏既有断言。
+
+**实际 Files 与计划的偏差**：`static/writer.html` **不存在**（全仓无此文件）⇒ 取消按钮 DOM 加在 `static/index.html`（`.writer-actions-top` 内、`#writer-ai-btn` 之后），`static/js/main.js` 同步导出 `cancelAiPolish`。测试实际新增：`tests/test_server.py` +11、`tests/test_goethe_a1_writing.py` +2、`tests/test_ai_polish_loop.py` +1。
+
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "给 `ai-polish` 端点加 `converged` / `unconverged_reason` 两字段（**只增不改**，`main.py:2420-2427` 既有结构保持），并在 `static/js/writer.js` 实现：逐轮进度文案（第 N/3 轮）、取消（`AbortController` 或等价机制）、`converged=false` 时 toast 原因。契约同步 MUST 跑 `python tools/check_frontend_api_contract.py`（前端契约闸，仓内既有）。注意 `01-Rules/ENDPOINT-CONTRACT-FRONTEND-SYNC`：契约改动与前端改动 MUST 同批。RUN：`python -m pytest tests/test_goethe_a1_writing.py tests/test_writer_mobile.py -q` + 契约闸 + `ruff`。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写契约失败测试（RED：`converged` 不在响应）
-- [ ] Step 2: 跑并确认失败
-- [ ] Step 3: 端点 + 前端实现（GREEN）
-- [ ] Step 4: 契约闸 + 发版守护套件
-- [ ] Step 5: 原子提交
+- [x] Step 1: 写契约失败测试（RED：`converged` 不在响应）
+- [x] Step 2: 跑并确认失败
+- [x] Step 3: 端点 + 前端实现（GREEN）
+- [x] Step 4: 契约闸 + 发版守护套件
+- [x] Step 5: 原子提交
 
 ---
 

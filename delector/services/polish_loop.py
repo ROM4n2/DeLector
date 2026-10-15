@@ -134,12 +134,20 @@ REASONS: frozenset[str] = frozenset(
 )
 
 # 系统提示词（JSON 契约的唯一说明处：模型只知道这一个协议）
+#
+# 「逐句润色 / 保持句子结构与出现顺序」这一条**不是**修辞偏好 —— 它来自
+# `SYSTEM_WRITING_POLISH_PROMPT`（一次性润色时代，2026-08-21 加入）的实测结论：
+# `/api/writing/ai-polish/diff` 的 hunk 是**按句对齐**的（`essay_diff.diff_sentences`），
+# 模型一旦合并或拆分句子，diff 就会退化成「整段删除 + 整段新增」⇒ 前端逐 hunk
+# 采纳/保留的 UI 失去可操作的粒度。循环形态下这条约束同样必须存在（收尾那一轮
+# 吐的就是 `corrected_text`），故从旧提示词原样并入。
 POLISH_LOOP_SYSTEM_PROMPT = (
     "你是德语（歌德 A1）写作润色助手。每一轮**只**回复一个 JSON 对象，不要输出任何其他文字。\n"
     "回复有且只有两种形态：\n"
     '1) 还需要证据：{"tool_call": {"name": "<工具名>", "payload": {...}}}\n'
     '2) 可以收尾：{"corrected_text": "<润色后的全文>", "notes_zh": ["<中文说明>", ...]}\n'
     "工具名必须在可用工具列表里，否则会被拒绝并把错误原样回传给你。\n"
+    "请尽量逐句润色，保持句子的结构与出现顺序，不要合并或拆分句子，除非确实必要。\n"
     "收尾前请自查 A1 硬规则：称呼语存在且以逗号结尾、逗号后正文首词小写、结语后不得加逗号。"
 )
 
@@ -330,6 +338,9 @@ async def run_polish_loop(
     tokens_used = 0
     judged_candidates = 0
     converged = False
+    # 收敛候选 `(文本, 违规清单)`：只有被判为零违规的收尾候选才配记在这里 ——
+    # 收敛时的文本归属是**它**，不是出口的 argmin（理由见出口处注释）。
+    converged_candidate: tuple[str, list[dict[str, Any]]] | None = None
     reason: str | None = None
     t0 = clock()
 
@@ -463,8 +474,11 @@ async def run_polish_loop(
 
         # ④ 收敛 / 停止策略 / 哨兵
         if v == 0:
+            # 收敛 ⇒ 把这个候选记为收敛候选：循环出口的文本归属就是**它**
+            # （为什么不能再走出口的 argmin，见出口处注释）。
             converged = True
             reason = REASON_OK
+            converged_candidate = (candidate, violations)
             break
         if prev_v is not None:
             # 哨兵：裁判不再下降（v_n == v_{n-1} 且 n>=2）⇒ 裁判不可信
@@ -482,7 +496,16 @@ async def run_polish_loop(
     if reason == REASON_TURN_LIMIT and degraded is not None:
         reason = degraded  # 轮次耗尽只是表象，真实原因是裁判一直在抛
 
-    if history:
+    if converged_candidate is not None:
+        # 收敛 ⇒ 返回那个被判为零违规的候选（`converged_candidate` 与 `converged`
+        # 同生同灭：只有上面的收敛分支会写它）。
+        # 为什么收敛不能再走 argmin：`min` 在并列时取**最早**条目 = 原文，而
+        # v_0 == v_1 == 0 是常态（适用性闸门下裁判对非书信体无话可说）⇒ argmin
+        # 会把用户点的润色原样退回，与循环自己「已收敛」的结论自相矛盾。
+        best_text, best_violations = converged_candidate
+    elif history:
+        # 未收敛 ⇒ 仍走 argmin 回退（Task 4 钉死的语义：`no_improvement` 回退
+        # 原文是特性，不是缺陷）。
         best = min(history, key=lambda item: item[1])
         best_text, _, best_violations = best
     else:

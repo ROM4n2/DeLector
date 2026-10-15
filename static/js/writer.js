@@ -1,7 +1,7 @@
 /* DeLector - Writing Desk (Schreibwerkstatt) & Grammar Polish */
 'use strict';
 
-import { api, esc, notify } from './core.js';
+import { api, esc, notify, DEFAULT_TIMEOUT_MS } from './core.js';
 import { refreshCardCounters } from './reader.js';
 import { Companion } from './companion.js';
 import * as A1Writer from './a1_writer.js';
@@ -1214,6 +1214,40 @@ export function renderPolishReview() {
   }
 }
 
+// ── AI 润色：未收敛原因码 → 中文人话 ────────────────────────────────────────
+// 键集合 MUST 与后端 `polish_loop.REASONS` **同构**（外加端点层的 no_api_key）：
+// 由 tests/test_server.py::test_frontend_polish_reason_copy_covers_every_reason_code
+// 钉住 —— 后端加原因码而前端漏配文案，那条用例立刻红。
+// `ok` 一档收敛成功时不会弹 toast（那时直接开逐 hunk 审查面板），留着只为与
+// REASONS 同构，免得哪天有人判 `converged === false` 时拿到 undefined。
+const POLISH_REASON_COPY = {
+  ok: '润色完成：已通过 A1 硬规则检查。',
+  no_api_key: '尚未配置 DeepSeek API Key，本次未改动原文。请在「设置」里填写后再润色。',
+  no_improvement: 'AI 改了几轮仍没能减少硬性错误，已保留更接近原文的一版。',
+  turn_limit: '润色轮次用尽仍未达标，已保留当前最优一版。',
+  token_budget: '本次润色超出预算上限已中止，已保留当前最优一版。',
+  deadline: '润色超时已中止，已保留当前最优一版。',
+  judge_unreliable: '自动裁判连续两轮判定相同，已停止改动并保留当前最优一版。',
+  judge_error: '自动裁判本次不可用，未套用 AI 的改动。',
+  cancelled: '你中止了本次润色，已保留当前最优一版。'
+};
+
+function polishReasonText(reason) {
+  return POLISH_REASON_COPY[reason] || ('润色未收敛：' + (reason || '未知原因'));
+}
+
+// 流式润色的在途控制器 —— 取消按钮就是 `abort()`（服务端据此取消循环任务）
+let polishAbortController = null;
+
+export function cancelAiPolish() {
+  if (polishAbortController) polishAbortController.abort();
+}
+
+function setPolishCancelVisible(visible) {
+  const cancelBtn = document.getElementById('writer-ai-cancel-btn');
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', !visible);
+}
+
 // ── DeepSeek AI Polish Entire Essay with Sentence Diff Review ───────────────
 export async function aiPolishEssay() {
   const text = editorText();
@@ -1230,6 +1264,16 @@ export async function aiPolishEssay() {
     aiBtn.innerHTML = '✨ AI 润色中...';
   }
 
+  // 超时纪律沿用 core.js 的 DEFAULT_TIMEOUT_MS（流式路径绕开 api()，但不绕开它的超时口径）
+  const controller = new AbortController();
+  polishAbortController = controller;
+  setPolishCancelVisible(true);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, DEFAULT_TIMEOUT_MS);
+
   try {
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
@@ -1242,14 +1286,45 @@ export async function aiPolishEssay() {
       loadWriterEssays();
     }
 
-    const res = await api('/api/writing/ai-polish/diff', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
+    let payload = null;
+    let lastError = null;
+    // 降级判据用外层可变标志（首帧置位）：**不看** readPolishStream 的返回值 ——
+    // 它中途抛异常（纯网络中断）时返回值赋值根本不会发生，调用方标志恒 false
+    // ⇒ 白白二次全额烧配额，与下面注释自相矛盾。
+    const recv = { any: false };
+    try {
+      await readPolishStream(text, controller, (ev) => {
+        if (ev.event === 'error') {
+          // 服务端 LLMError 帧：人话先记下，没拿到 result 时抛给用户（不静默）
+          lastError = ev.detail;
+          return;
+        }
+        if (ev.event === 'result') {
+          payload = ev.result;
+          return;
+        }
+        if (typeof ev.round === 'number') {
+          // 轮次分母取自服务端事件的 max_turns（不许前端写死 3）
+          const total = ev.max_turns || ev.round;
+          if (aiBtn) aiBtn.innerHTML = `✨ AI 润色中…（第 ${ev.round}/${total} 轮）`;
+        }
+      }, recv);
+      if (!payload) throw new Error(lastError || '润色流结束但没有返回结果');
+    } catch (err) {
+      if (timedOut) throw new Error(`请求超时（${Math.round(DEFAULT_TIMEOUT_MS / 1000)}s），请检查网络`);
+      // 降级：**一个事件都没收到**才退回一次性 JSON —— 那时服务端还没烧配额。
+      // 已经收到事件 = 配额已烧，再发一次等于烧两遍。
+      if (recv.any || controller.signal.aborted) throw err;
+      const res = await api('/api/writing/ai-polish/diff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      payload = res && res.result;
+    }
 
-    if (res && res.result) {
-      const { original, corrected, hunks, notes_zh, error_count } = res.result;
+    if (payload) {
+      const { original, corrected, hunks, notes_zh, error_count } = payload;
       polishState = {
         original: original || text,
         corrected: corrected || text,
@@ -1259,14 +1334,60 @@ export async function aiPolishEssay() {
       };
       openPolishOverlay();
       renderPolishReview();
+      // 未收敛 MUST 给一句人话（零静默失败）：文本本身仍是可用的最优一版
+      if (payload.converged === false) {
+        notify(polishReasonText(payload.unconverged_reason), { kind: 'error' });
+      }
     }
   } catch (err) {
     console.error('[Writer] AI Polish Diff failed:', err);
-    notify('AI 润色请求失败：' + (err.message || err), { kind: 'error' });
+    if (controller.signal.aborted && !timedOut) {
+      notify(polishReasonText('cancelled'), { kind: 'error' });
+    } else {
+      notify('AI 润色请求失败：' + (err.message || err), { kind: 'error' });
+    }
   } finally {
+    clearTimeout(timer);
+    polishAbortController = null;
+    setPolishCancelVisible(false);
     if (aiBtn) {
       aiBtn.disabled = false;
       aiBtn.innerHTML = origBtnText;
+    }
+  }
+}
+
+// 读 SSE：逐帧 `data: <json>` → 回调；收到第一帧即把 `recv.any` 置位
+// （调用方据此决定能否安全降级到一次性 JSON 路径）。**不返回**「是否收到过事件」：
+// 本函数中途抛异常（纯网络中断）时返回值赋值不会发生，调用方拿到的会是初始值
+// false ⇒ 误判「一个事件都没收到」⇒ 二次全额烧配额。置位必须走外层可变对象。
+async function readPolishStream(text, controller, onEvent, recv) {
+  const res = await fetch('/api/writing/ai-polish/diff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, stream: true }),
+    signal: controller.signal
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `HTTP Error ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      const dataLine = frame.split('\n').find(l => l.startsWith('data:'));
+      if (!dataLine) continue;
+      if (recv) recv.any = true;
+      onEvent(JSON.parse(dataLine.slice(5).trim()));
     }
   }
 }
