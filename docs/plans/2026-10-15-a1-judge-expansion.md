@@ -7,6 +7,9 @@
 > - **禁止 LLM 裁判**：vault `01-Rules/AGENT-CONDUCT.md:249` 的三层校验明确 LLM-as-a-Judge **只用于无法形式化定义的开放语言**、**严禁参与物理真值判断**。语法维度是可形式化的 ⇒ MUST 确定性规则。LLM 辅助若将来要加，只能落在 advisory（`level=warning`）且不得阻止收敛（见 Fog of War）。
 > - **误报（FP）是一等公民**：每条新规则 MUST 同时具备①正样本零误报 ②负样本能报 ③边界不报 三条用例；**官方 `A1_SCHREIBEN_TEIL2` 的 10 篇 `sample_email` 在扩后裁判下 `violations == 0` 是硬门**（连官方范文都报错 ⇒ 规则过严 ⇒ 循环永不可能收敛）。
 > - **静默降级 = 静默假收敛（红线 1）**：`analyze_a1_email` 现为**纯规则、不依赖 spaCy**。接入语法维度后，若运行时无 spaCy ⇒ 语法违规会**静默消失**，裁判会判出「零违规」。故裁判输出 MUST 带引擎标记（如 `judge_engine` / `degraded`），且**端点 MISS 把降级状态带到返回体**（不得让"没检查"看起来像"检查通过"）。
+> - **接线缝 MUST 显式登记（评审 RED#1）**：任何"裁判能力"的改动 MUST **同时指名"谁把它送进循环"**。本次固化 = 端点 `_run_polish` 注入 `judge=`（含 nlp 来源）。**禁止**只改 `writing.py` 就让 7 个任务的测试全绿 —— 那是 dead-green（生产路径上语法裁判恒不生效，而 §4.3 判据表还能被打勾解除）。
+> - **fail-closed（评审 RED#2）**：验收判据一句话 —— **`converged == true` MUST 蕴含「所有已接线的确定性层都真的跑过且无话可说」**。裁判降级（spaCy 缺席 / 引擎非 `rules+spacy`）时 **MUST NOT 返回"收敛成功"**，只加标记不够。⚠️ 禁止用"降级时塞一条人造 violation"实现 —— 那是把"没检查"伪装成"检测到错误"，同样违反不撒谎纪律。
+> - **既有断言冲突的裁决规则（本次新增）**：当"只增不改"与某条既有测试的 **pin 对象本身错误**（钉住的是默认值而非生产装配）冲突时，允许把该 pin **从默认值改为装配点** —— 属**强化**不是放宽，但 MUST 在提交信息里逐条写明"改的是哪条断言、为什么这是强化"。
 > - **只增不改**：`analyze_a1_email` 既有的 `suggestions` 字段与 `detect_*` 既有返回形状逐字不动，新增统一形状的并列字段；`tests/test_writing_rules.py`（34 条）与 `tests/test_goethe_a1_writing.py` 既有断言不许放宽。
 > - 测试**一律 stub**（真 `DEEPSEEK_API_KEY` 在门禁上恒 skip = 没有测试）；spaCy 相关用例沿用既有的 `nlp` fixture 惯例。
 > - 行尾 CRLF；提交信息中文 + 行号/函数锚点。
@@ -52,26 +55,31 @@
 
 **Files:**
 - Modify: `delector/services/writing.py`（新增统一抽取器与形状常量）
-- Modify: `delector/routes/main.py`（`_a1_violations_if_letter` 改走统一抽取器；返回体透出引擎标记）
-- Test: `tests/test_writing_rules.py`（追加）+ `tests/test_ai_polish_loop.py`（不动既有）
+- Modify: `delector/nlp_engine/processor.py`（**新增只读** `get_loaded_nlp()`：只读 `_nlp_resolved` / `_nlp_model`，**不触发加载、绝不触发 `spacy.cli.download`**）
+- Modify: `delector/routes/main.py`（`_a1_violations_if_letter` 改走统一抽取器；**`_run_polish` 注入 `judge=` 并接住引擎标记**；返回体透出 `judge_degraded`）
+- Test: `tests/test_writing_rules.py`（追加）+ `tests/test_server.py`（**端点级接线回归，MUST**）+ `tests/test_ai_polish_loop.py`（按下面裁决规则处理那一条 pin）
 
 **Interfaces:**
 - Consumes: `analyze_a1_email(text, leitpunkte) -> dict`（既有）；`detect_determiner_noun_agreement` / `detect_preposition_case` 的 span 形状 `{severity, error_type, corrected_form, explanation_zh, start, end}`
 - Produces: `def collect_violations(analysis: dict[str, Any]) -> list[dict[str, Any]]` —— 统一形状 `{"rule": str, "level": "error"|"warning", "message": str, "span": tuple[int, int] | None}`；**新键优先、旧键回退**（`violations` → legacy `suggestions` 的 `level=="error"` 过滤）
 - Produces: `analyze_a1_email` 追加并列字段 `violations: list[dict]` 与 `judge_engine: str`（`"rules+spacy"` / `"rules_only"`），**既有键逐字不动**
 - Produces（端点侧）: `_PolishOutcome` 追加 `judge_engine: str`；响应体 `result` 追加 `judge_degraded: bool`（**只增不改**）
+- Produces（**接线缝，评审 RED#1 的闭环点**）: `def _make_judge(leitpunkte: list[str] | None, nlp: Any | None) -> Callable[[str], dict]`（端点侧装配器；**内部接住 verdict 的 `judge_engine` 交给 `_JudgeRecorder`**）+ `class _JudgeRecorder`（与既有 `_PolishReplyRecorder` 同形，`main.py:2238-2292`）
+- Produces（**fail-closed，评审 RED#2 的闭环点**）: 上面的 `_make_judge` 在 `engine != "rules+spacy"` 时**不返回裁决**（返回非 dict 哨兵）⇒ 循环既有两条路径把它转成 `judge_unreliable`（`:454-457`）或 `judge_error`（`:333-335/:440-453`）⇒ `converged` 恒 `False`、`unconverged_reason` 有值
 
-> ⚠️ 本任务只立形状与降级标记，**不加任何新规则**（接线在 Task 2+）。
+> ⚠️ 本任务只立**形状 + 接缝 + fail-closed**，**不加任何新规则**（新规则在 Task 2+）。
+> ⚠️ **不允许**"只改 `writing.py` 就算完"：MUST 有一条**走端点**的用例证明语法违规真被计数且 `judge_degraded is False`（否则就是 dead-green）。
+> ⚠️ **既有 pin 的处置**：`tests/test_ai_polish_loop.py::test_real_judge_is_wired_by_default` 逐字钉住「内核默认裁判 = `writing.analyze_a1_email`」。本任务按 Global Constraints 的裁决规则把它**从默认值改为装配点**（断言生产链路 `_run_polish` 装配的裁判是 A1 裁判 + nlp；不是放宽 —— 旧 pin 钉的是"内核自带业务"，新 pin 钉的是"业务在产品层装配"），并在提交信息里逐条写明。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
-> "统一 A1 裁判的违规形状并加引擎降级标记。现状：`analyze_a1_email` 出 `{suggestions:[{rule,level,message}]}`（纯规则），而 `detect_*` 出 `{severity,error_type,corrected_form,explanation_zh,start,end}`（spaCy span）—— 两套形状让端点层 `_a1_violations_if_letter` 只能认一套。① 在 `delector/services/writing.py` 加 `collect_violations(analysis)`：统一形状 `{rule,level,message,span}`，**新键 `violations` 优先、legacy `suggestions` 回退**，`level` 只认 `error`（warning 不阻止收敛 —— 这是 Task 4/5/6 已钉死的语义）；② `analyze_a1_email` **追加**并列字段 `violations` 与 `judge_engine`（`rules+spacy` / `rules_only`），既有键与既有断言逐字不动；③ 端点 `_a1_violations_if_letter` 改用 `collect_violations`，`_PolishOutcome`/响应体加 `judge_engine`/`judge_degraded`（只增不改，前端文案表不动）。TDD：先在 `tests/test_writing_rules.py` 写 RED（统一形状 + 回退 + level 过滤），再实现。RUN：`python -m pytest tests/test_writing_rules.py tests/test_goethe_a1_writing.py tests/test_ai_polish_loop.py tests/test_server.py -q`（既有断言只许新增不许放宽）。"
+> "统一 A1 裁判的违规形状并加引擎降级标记。现状：`analyze_a1_email` 出 `{suggestions:[{rule,level,message}]}`（纯规则），而 `detect_*` 出 `{severity,error_type,corrected_form,explanation_zh,start,end}`（spaCy span）—— 两套形状让端点层 `_a1_violations_if_letter` 只能认一套。① 在 `delector/services/writing.py` 加 `collect_violations(analysis)`：统一形状 `{rule,level,message,span}`，**新键 `violations` 优先、legacy `suggestions` 回退**，`level` 只认 `error`（warning 不阻止收敛 —— 这是 Task 4/5/6 已钉死的语义）；② `analyze_a1_email` **追加**并列字段 `violations` 与 `judge_engine`（`rules+spacy` / `rules_only`），既有键与既有断言逐字不动；③ 端点 `_a1_violations_if_letter` 改用 `collect_violations`，`_PolishOutcome`/响应体加 `judge_engine`/`judge_degraded`（只增不改，前端文案表不动）。TDD：先在 `tests/test_writing_rules.py` 写 RED（统一形状 + 回退 + level 过滤），再实现。**④（评审 RED#1，MUST）堵接缝**：`processor.py` 加只读 `get_loaded_nlp()`（不触发加载/下载）；`_run_polish` 改为**注入** `judge=_make_judge(leitpunkte, get_loaded_nlp())`；新增 `_JudgeRecorder` 接住 verdict 里的 `judge_engine`；在 `tests/test_server.py` 加**走端点**的用例（注入可用 nlp + 喂带语法错的非书信体文本 ⇒ 断言违规真被计数 且 `judge_degraded is False`）。**⑤（评审 RED#2，MUST）fail-closed**：`_make_judge` 在 `engine != "rules+spacy"` 时**不返回裁决**（非 dict 哨兵）⇒ 循环转 `judge_unreliable`/`judge_error` ⇒ `converged` 恒 False；用例断言降级态响应体**绝不出现** `converged: true`（禁止靠塞人造 violation 实现）。RUN：`python -m pytest tests/test_writing_rules.py tests/test_server.py tests/test_goethe_a1_writing.py tests/test_ai_polish_loop.py -q`（既有断言只许新增不许放宽；那条 pin 按裁决规则改造并在提交信息写明）。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：统一形状 / legacy 回退 / `level=warning` 不入违规）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 实现 `collect_violations` + `violations`/`judge_engine` 并列字段 + 端点透出（GREEN）
-- [ ] Step 4: 变异自证（把回退分支删掉 ⇒ 相关用例红；把 `level` 过滤删掉 ⇒ warning 入违规 ⇒ 红）
-- [ ] Step 5: 关联套件 + `ruff` + mypy 四档 + 原子提交
+- [ ] Step 1: 写失败测试（RED：统一形状 / legacy 回退 / `level=warning` 不入违规 / **端点接线** / **降级态不返回 converged:true**）
+- [ ] Step 2: 跑并记录预期失败原文（**注意 RED 的形态是"报 0"或"字段缺失"，不是报错**）
+- [ ] Step 3: 实现 `collect_violations` + `violations`/`judge_engine` 并列字段 + `get_loaded_nlp()` + `_make_judge`/`_JudgeRecorder` + 端点注入与 `judge_degraded` 透出（GREEN）
+- [ ] Step 4: 变异自证（① 删回退分支 ⇒ 红；② 删 `level` 过滤 ⇒ warning 入违规 ⇒ 红；③ **端点不注入 judge（退回内核默认）⇒ 端点接线用例 MUST 红**；④ **`_make_judge` 去掉 fail-closed ⇒ 降级态用例 MUST 红**）
+- [ ] Step 5: 关联套件 + `ruff` + mypy 四档 + 原子提交（提交信息逐条写明那条 pin 的改造理由）
 
 ---
 
@@ -91,6 +99,7 @@
 > "把仓内**已有**的两件确定性语法算力接进 A1 裁判（照抄 `analyze_essay_text(text, nlp)` 的「显式传 nlp」惯例，不要在模块内自读全局 nlp）。① `analyze_a1_email(text, leitpunkte=None, nlp=None)`：`nlp` 可用时把 `detect_determiner_noun_agreement` + `detect_preposition_case` 的 span 折进 `violations`（映射 `error_type`→`rule`、`explanation_zh`→`message`、`start/end`→`span`、severity→level），`nlp is None` 时不产语法违规并把 `judge_engine` 置 `rules_only`。② **硬门（D3）**：新增用例遍历 `delector/data/a1_writing_dict.A1_SCHREIBEN_TEIL2` 的 10 篇 `sample_email`，断言在这两件算力下 **`violations == 0`**（官方范文被报违规 ⇒ 规则过严 ⇒ 必须修规则或收窄触发条件，不许改断言）。③ 负样本用例：`Ich habe ein Hund.` 与 `Ich fahre mit den Bus.` MUST 各报 1 条；边界用例：无冠词 / 双格介词（`in/auf`）/ 固定搭配 MUST **不报**（既有 `test_two_case_preposition_skipped` 等已覆盖，别删）。RUN：`python -m pytest tests/test_writing_rules.py tests/test_goethe_a1_writing.py -q`。"
 
 **Step Breakdown:**
+- [x] **Step 0（✅ 2026-10-15 已跑，评审黄卡已消）**：官方 `A1_SCHREIBEN_TEIL2` 10 篇 `sample_email` 在两件既有算力下 **误报 0/10**（逐篇 `det=0 prep=0`；评审点名的高危句 `für Ihre 2-Zimmer-Wohnung` / `vom 15. bis 18. August` / `im Preis enthalten` 均不误报）⇒ **本任务是"接线"而非"修规则"**，硬门基线绿。执行时把这条基线**落成用例**（不是再跑一次人眼）。
 - [ ] Step 1: 写失败测试（RED：负样本两例报违规 + 官方 10 篇零违规门）
 - [ ] Step 2: 跑并记录预期失败原文（**红色是"报 0"，不是"报错"**）
 - [ ] Step 3: 实现接线（GREEN）
@@ -180,7 +189,7 @@
 
 **Interfaces:**
 - Consumes: `A1_SCHREIBEN_TEIL2`（10 篇官方范文，正样本）· 自建负样本集（每维 ≥5 句手工构造的定向错误句）· 候选规则（本任务**只写探测实现，不接线**）
-- Produces: `python tools/bench_judge_fp.py` 的**原始输出**（每维 FP 率 / FN 率 / 误报样例逐条列出）+ 一份结论：每维 ∈ {**接线为 error** | **接线为 warning(advisory)** | **不做**}，附判据与阈值
+- Produces（**可证伪签名，评审黄卡已补**）: `def measure_candidates(candidates: Sequence[Candidate], positives: Sequence[str], negatives: Sequence[str]) -> Report`（`Report = {per_candidate: [{name, fp, fn, fp_samples: list[str], fn_samples: list[str]}], verdict: dict[str, str]}`）+ CLI `python tools/bench_judge_fp.py --json`（**退出码 0 = 标定完成；非 0 = 样本集自身无效**）；每维结论 ∈ {**接线为 error** | **接线为 warning(advisory)** | **不做**}，附判据与阈值
 
 > **为什么这维度必须是 HITL + Tier 3**：探针已实测 spaCy 对 `Ich muss gehen heute nach Hause.` 的**框架解析失败**（`muss` 判 `nk`、`gehen` 判 `ROOT`）⇒ 直接接线会**误报**，而误报比漏报危险（模型会去"修"一个不存在的错误 = 奖励黑客的反面）。做/不做是**产品语义决定**，必须人拍板。
 
@@ -199,15 +208,18 @@
 ### Task 7: 适用性闸门收窄（循环价值面扩到任意德语文本）+ §4.3 门槛解除判据 [Tier: 2-Standard] [Mode: HITL] [Role: TDD Builder]
 
 **Files:**
-- Modify: `delector/routes/main.py`（`_a1_violations_if_letter` 的闸门范围）
+- Modify: `delector/routes/main.py`（`_a1_violations_if_letter` 的闸门范围 + **文本族感知的系统提示词装配**）
+- Modify: `delector/services/polish_loop.py`（**只加一个可选参数** `system_prompt: str | None = None`（None ⇒ 用现有 A1 默认值，向后兼容）；业务提示词由产品层传入 —— 见下方"立论冲突的解法"）
 - Modify: `docs/plans/2026-10-15-a1-judge-expansion.md`（本文件：记录解除判据与实测值）
-- Test: `tests/test_goethe_a1_writing.py`
+- Test: `tests/test_goethe_a1_writing.py` + **`tests/test_server.py`（评审黄卡：该文件此前未列入 ⇒ 会让一条既有回归闸变成 dead-green，见 scaffold ③）**
 
 **要解决的现状（实测）**：`_a1_violations_if_letter` 目前「称呼语不合法 ⇒ 零违规」，因为当时的裁判**只有书信格式规则**。扩了语法维度后，前提变了：**语法违规与题材无关** ⇒ 语法维度对任何德语文本都该生效，只有书信格式/字数规则保留"仅书信体"闸门。这一步把循环的真实迭代价值面从「仅 A1 书信体」扩到「任意德语文本」。
 
 **Interfaces:**
-- Consumes: `collect_violations(...)`（Task 1）· 各维度规则
-- Produces: 闸门按**规则族**分流（格式族：仅书信体；语法族：任何文本）+ `docs/plans` 里的**§4.3 解除判据表**（每条判据 + 实测值 + 是否满足）
+- Consumes: `collect_violations(...)`（Task 1）· 各维度规则 · `polish_loop.run_polish_loop(system_prompt=...)`（本任务新增的可选参数）
+- Produces（**可证伪签名，评审黄卡已补**）: `def violations_for(kind: str, verdict: dict[str, Any]) -> list[dict[str, Any]]`（`kind ∈ {"letter", "prose"}`：`letter` ⇒ 格式族 + 语法族全计；`prose` ⇒ **只计语法族**）+ `def pick_system_prompt(kind: str) -> str`（文本族 → 提示词；**业务知识住在产品层**）+ `docs/plans` 里的 **§4.3 解除判据表**（每条判据 + 实测值 + 是否满足）
+
+> **立论冲突的解法（评审黄卡 #2，选 b 而非 a）**：原立论"把循环的真实迭代价值面扩到任意德语文本"与内核里**逐字 A1 书信**的 `POLISH_LOOP_SYSTEM_PROMPT`（`polish_loop.py:144-152`）直接冲突 —— 对非书信体，它会**诱导模型加一个称呼语**，而格式族规则此时已被关掉 ⇒ 污染无守卫。故选 b：**提示词按文本族参数化**，由产品层（`main.py`）装配。这同时朝 `architecture.md` 登记的"业务知识上提"方向挪了一步（与日后 Pi 式重构同向、不冲突）。⚠️ 若执行中发现该参数化会破坏 `tests/test_ai_polish_loop.py` 里钉住提示词/契约的用例，按 Global Constraints 的裁决规则处理并逐条写明。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "收窄适用性闸门的范围。现状：`_a1_violations_if_letter` 因当时裁判只有书信格式规则而做成「称呼语不合法 ⇒ 零违规」；语法维度接线后**前提变了** —— 语法与题材无关。改法：闸门改按**规则族**分流 —— ① 格式/字数族（`a1_greeting_*` / `a1_valediction_*` / `a1_word_count`）仍仅对书信体生效；② 语法族（冠词-格一致 / 介词支配格 / 动词支配格 / 主谓一致 / V2）对**任意德语文本**生效。测试 MUST 覆盖：非书信体文本带语法错误 ⇒ **真被计数**（与今日"零违规"对比，这是行为变更）；书信体文本的格式规则语义不变。③ 同时在本计划文件里落一张 **§4.3 解除判据表**（维度数 / 官方正样本零误报 / 负样本 recall / 非书信文本可判 / 降级标记可见性 各条 + 实测值），**满足与否由用户拍板**，agent 不自行解禁。RUN：`python -m pytest tests/test_goethe_a1_writing.py tests/test_server.py tests/test_ai_polish_loop.py -q` + 全量。⚠️ 本任务会改变产品行为（非书信文本从"首轮即接受"变为"真迭代"），执行前 MUST 先跑一遍 `tests/test_server.py::test_ai_polish_diff_mocked` 系用例确认既有断言仍成立。"
@@ -217,7 +229,46 @@
 - [ ] Step 2: 跑并记录预期失败原文
 - [ ] Step 3: 闸门按规则族分流（GREEN）
 - [ ] Step 4: 全量套件 + 契约闸 + §4.3 解除判据表落盘
-- [ ] Step 5: **HITL**：判据表交用户拍板（是否允许宣称"已实现"）+ 原子提交
+- [ ] Step 5: **改写 `tests/test_server.py::test_ai_polish_non_letter_text_is_not_rolled_back`**（评审黄卡③：它在"现状 / 仅接 nlp / 收窄闸门"**三态下都绿** ⇒ 已不守卫任何东西）为能区分行为的两条：① 非书信体 + 语法错（且桩模型不修）⇒ 断言语法违规**真被计数**；② 明确并钉住收窄后的产品语义（该修不动时是回退原文还是首轮即接受）—— 后者正是 ADR §10.3「功能忘了判就是报废」失败模式的重现，MUST 有断言，不许只留在 Fog of War。
+- [ ] Step 6: **HITL**：判据表交用户拍板（是否允许宣称"已实现"）+ 原子提交
+
+---
+
+### Task 8: 内核接缝加固（超时 / 线程 / 不可达分支） [Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]
+
+> **由来**：评审 RED#3 与模式 3 要点 4。**不是** Pi 式重构（那已暂缓）—— 本任务只在既有结构上补三处缝，不重画层。
+
+**Files:**
+- Modify: `delector/services/polish_loop.py`（`dispatch` 包超时；同步 `judge` 移出事件循环）
+- Modify: `delector/routes/main.py`（删/修那个**不可达**的 `except LLMError` 分支；SSE 侧错误帧语义）
+- Test: `tests/test_ai_polish_loop.py`、`tests/test_server.py`
+
+**Interfaces:**
+- Consumes: `asyncio.wait_for(...)` · `asyncio.to_thread(...)` · 既有 `DEFAULT_PER_CALL_TIMEOUT_S` / 剩余 deadline 口径
+- Produces: ① `dispatch` 调用 MUST 受 `asyncio.wait_for(timeout=min(剩余 deadline, DEFAULT_PER_CALL_TIMEOUT_S))` 约束（超时 ⇒ errors-as-messages，不炸循环）；② 同步 `judge` MUST 经 `asyncio.to_thread`（否则 `task.cancel()` 掐不断它、且会阻塞同进程的 `/api/health` 与其他路由）；③ SSE 的 LLMError 语义：要么让 `_run_polish` 原样抛出、要么在流层捕获 `HTTPException` —— **不允许存在"永不命中的 except"**
+
+**Subagent Prompt Scaffold (for /dfs-exec):**
+> "补三处接缝。① `polish_loop.py` 的 `dispatch`（:412）目前**无超时**：包 `asyncio.wait_for`，超时按 errors-as-messages 返回工具失败消息（不炸循环）；② 同步裁判 `judge`（:330/:439）直接跑在事件循环上 ⇒ 移 `asyncio.to_thread`，使 (a) `task.cancel()` 真能掐断、(b) 长裁判不阻塞 `/api/health` 与其他路由；用例钉住"取消时裁判线程不再被等待"/"裁判期间 health 仍可应答"（后者可用事件循环探针）。③ 修 `main.py` 的**不可达分支**：`_run_polish`（:2342-2344）已把 `LLMError` 转成 `HTTPException(502)`，而 `_polish_event_stream`（:2439-2442）写的是 `except llm_client.LLMError` ⇒ 该分支永不命中、流内 error 帧永不发出、用户拿到通用文案而非 `e.detail` 人话。断言：注入的 chat 在流中途抛 LLMError ⇒ 用户**看得到** `e.detail`（走 error 帧或明确的状态码，二选一并在注释写明为什么）。RUN：`python -m pytest tests/test_ai_polish_loop.py tests/test_server.py -q` + 全量。"
+
+**Step Breakdown:**
+- [ ] Step 1: 写失败测试（RED：dispatch 无超时 / 同步裁判阻塞事件循环 / error 帧不可达）
+- [ ] Step 2: 跑并记录预期失败原文
+- [ ] Step 3: 三处实现（GREEN）
+- [ ] Step 4: 变异自证（抽掉 `wait_for` ⇒ 超时用例红；抽掉 `to_thread` ⇒ 阻塞探针红；把 except 改回 LLMError ⇒ error 帧用例红）
+- [ ] Step 5: 全量 + ruff + mypy 四档 + 原子提交
+
+---
+
+## 📌 登记（进 backlog，**不**塞进本计划）
+
+> 评审发现、但属既有行为或与"抬 §4.3 门槛"无关 ⇒ 只登记，不在本计划动手。
+
+| # | 事项 | 证据 | 为什么不现在做 |
+| --- | --- | --- | --- |
+| B1 | 润色入口对**用户输入**静默截断到 2000 字符，无提示、无标记 | `main.py:2465/:2481` `req.text[:2000]`；响应体无字段 | 既有行为，与裁判集无关；应配 UI 提示或 `input_truncated` 字段 |
+| B2 | `truncate_evidence` 截断**不可见**、无逃生通道 | `polish_loop.py:222-237`（纯前缀裁剪、无标记、不落盘） | 与"零违规"叠加会放大假收敛；最小修法是尾部加确定性标记（"无标记 ⇒ 必未截断"），另立任务 |
+| B3 | 循环级 token 闸**只累计 completion**，注入证据带来的 prompt 增长不在任何闸内 | `polish_loop.py:49-55`（自认）、`:357` | 今天有界性靠 `max_turns=3`；**若将来抬轮数 MUST 先把证据计入闸**（Fog Unknown C 的前置条件） |
+| B4 | `services ⇄ tools` 双向包依赖；且 `polish_tools` 一被 import 就间接拉起白名单**明确排除**的 `tts`/`ingest`/`export` 三个模块 | `polish_tools.py:60` + `tools/__init__.py:11-27` | 属 Pi 式重构域（已暂缓）；差集守卫只挡"白名单加项"，挡不住"import 期拉起" |
 
 ---
 
@@ -232,7 +283,7 @@
 ## 🚫 Out of Scope
 
 - **不引入 LLM 裁判**（D1 / vault 规则）；Fog of War Unknown A 若将来要加，也只能是 advisory。
-- **不改循环内核**（`polish_loop.py` 的停止策略/预算/哨兵已定稿并有 25 条测试钉住）。
+- **不改循环内核结构**（`polish_loop.py` 的停止策略/预算/哨兵已定稿并有 25 条测试钉住）；**允许**经**注入缝 / 可选参数**改变裁判与提示词语义（Task 1 的 `judge=`、Task 7 的 `system_prompt=`）—— 这是评审三张 RED 的修复路径，也朝 `docs/agents/architecture.md` 登记的"业务知识上提"同向。
 - **不做 B1/B2 评分维度**；不扩到口语/写作 Teil 1。
 - **不改前端契约形状**（只可能新增一个 `judge_degraded` 布尔；不做新 UI）。
 - **不动 `TOOL_REGISTRY` 与工具白名单**（Task 5 已定稿为恰好 3 项只读）。
