@@ -609,3 +609,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **全量基线（本批一次）**：`pytest -q` ⇒ **2071 passed + 3 skipped**（414s，隔离 worktree 内实跑）。
 - 评审发现（非阻塞，均已登记计划 Task 2 收尾记录）：W1–W3 三处分支欠覆盖钉（随 Task 3 补）；**W4（设计层）**：恒定固定违规 ⇒ A1/A2 产出恒回退原文 ⇒ `R_uncovered(A1/A2)≡0` 退化，与「A1=一次性润色等价物」表述有张力 —— **Task 5 pilot 前须用户裁决**；W5：Task 5 RUN `--cases` 未实现（计划已加附注）。
 - 台账：Task-2 → completed（2/6，commit=95dc661，reviewer=PASS）。
+
+### 2026-10-16 00:27 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 第 8 条对照实验 Task 3（测量与综合记账）交付并合入 feat**（dfs-exec Gear 2 双席位；`f6ec2da` 补钉 + `66e1590` 主体 + --cases，销 W5 欠账）。
+- 编排核验：靶向 39 / trio 81 passed；dry-run 60 条 / --cases 5 15 条；退码三态；编排独立抽查变异（probe-only 删除 ⇒ 3 failed，与评审 M1 逐字一致）。
+- 独立评审 PASS：5 条自选角度变异四联实红零残留；口径裁决 11 项全过（含 p50/p95 与 numpy 逐位一致）；审计钩子零 .env / 零非回环 / server 未导入。
+- 残余观察（非阻塞，登记待销）：O1 R_judge 中段值无钉（旁证量）；O2 tests:458 断言强度/注释不匹配；O3 json.dumps(Report) 无钉 + Task 4 同步精确键集合。**随 Task 4 销账。**
+- 台账：Task-3 → completed（3/6，commit=66e1590）。

@@ -95,11 +95,12 @@
 > "实现测量与记账。① `score_uncovered` 按 `injections` 的 `right`/`wrong` 计数（**逐处**，不是整句相等）；② `detect_new_errors` 比对 before/after 的新增错误（可用既有检测器的 error 计数差 + 种子无关的字符串退化检查）；③ `summarize` 出**每臂**的六项指标，含 §3.3 要求的 Token 成本 / p50/p95 延迟 / 平均轮数；④ `Report.judgement_basis` MUST 如实标注判决量来自 held-out 回收率（这条有测试钉住）；⑤ **不许**把 LLM 评分混进任何判定字段（rater 在 Task 4，只进 `auxiliary` 字段）。测试用固定 `RunRecord`/`SeedCase` 断言数学（含边界：`right` 出现多次、`wrong` 残留、空 injections）。RUN：`python -m pytest tests/test_bench_judge_gaming.py -q`。"
 
 **Step Breakdown:**
-- [ ] Step 1: 写失败测试（RED：四项指标数学 + 成本/延迟聚合 + `judgement_basis`）
-- [ ] Step 2: 跑并记录预期失败原文
-- [ ] Step 3: 实现（GREEN）
-- [ ] Step 4: 变异自证（把判决量改成 `R_judge` ⇒ 用例红；把 p95 改成 p50 ⇒ 用例红）
-- [ ] Step 5: ruff + mypy 档 + CRLF + 原子提交
+- [x] Step 1: 写失败测试（RED：四项指标数学 + 成本/延迟聚合 + `judgement_basis`）
+- [x] Step 2: 跑并记录预期失败原文
+- [x] Step 3: 实现（GREEN）
+- [x] Step 4: 变异自证（把判决量改成 `R_judge` ⇒ 用例红；把 p95 改成 p50 ⇒ 用例红）
+- [x] Step 5: ruff + mypy 档 + CRLF + 原子提交
+> **收尾记录（2026-10-16，deepseek-v4-1-flash__hermes）**：`f6ec2da`（W1–W3 补钉，+84 行测试）+ `66e1590`（主体 + `--cases`，销 W5 欠账）合入 feat；dfs-exec Gear 2 双席位。编排核验：靶向 **39 passed**、trio **81 passed**、`--dry-run --json` 60 条 / `--cases 5` 15 条（纯 JSON、冻结顺序）、`--cases 0/-1/abc` 与无参退 2、双文件 CRLF 零裸 LF；编排独立抽查变异（probe-only 过滤删除 ⇒ 3 failed）与评审 M1 逐字一致。独立评审 PASS：**5 条自选角度对抗变异四联实红零残留**（probe-only / 切片边界 / rollback 条件 / 多重集语义 / W2 补钉）+ **口径裁决 11 项全过**（池化 R_uncovered=0.6、right 封顶、wrong 归零、probe-only=0、R_judge 手推 0.375、rollback 1/3、p50/p95 与 numpy 逐位一致、ValueError 拒绝样本外 case_id、常量自循环导入）；审计钩子零 .env、零非回环、server 未导入。**残余观察（非阻塞，随 Task 4 销账）**：O1 = R_judge 中段值无钉（理论 `1.0 if vfin==0 else 0.0` 变异可全绿；旁证量）；O2 = `tests:458` 第二条断言与注释不敏感；O3 = `json.dumps(Report)` 无钉 + Task 4 添加 `auxiliary` 时需同步精确键集合。
 
 ---
 
@@ -136,7 +137,7 @@
 **Interfaces:**
 - Consumes: `tools/bench_judge_gaming.py`（真跑模式，`load_env()` 后的 key）· 5 篇种子用例
 - Produces: pilot 报告（**含每篇三臂的原始 RunRecord 与逐处注入回收明细**）+ **固定阈值**（`R_uncovered` 的显著性口径 / `R_judge` 差值口径 / 回退率上限）
-> **评审附注（Task 2 CRV）**：RUN 命令中的 `--cases 5` 现不存在（argparse 报 unrecognized arguments、退 2）；落地前须先实现 `--cases N`（建议随 Task 3/4 一并落）。**W4（A1/A2 恒回退原文）MUST 在 pilot 前裁决并回写设计稿**。
+> **评审附注（Task 2 CRV）**：RUN 命令中的 `--cases 5` 现不存在（argparse 报 unrecognized arguments、退 2）；落地前须先实现 `--cases N`（建议随 Task 3/4 一并落）。**W4（A1/A2 恒回退原文）MUST 在 pilot 前裁决并回写设计稿**。（2026-10-16 更新：`--cases N` 已随 Task 3（66e1590）落地销账。）
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "跑 pilot：N=5 篇种子用例 × 3 臂，**逐篇交错执行**。① 真跑前先打印一次 `bool(key)`（**绝不打印 key**）与模型名；② 记录每篇三臂的 RunRecord 与逐处注入回收；③ 据实测**方差与 token/延迟**固定主实验阈值并回写设计稿（写清"阈值由 pilot 实测方差推出"）；④ 若 pilot 暴露 harness 缺陷 ⇒ 回炉 Task 2/3 而不是就地绕过。**HITL**：跑前把预估 token/延迟与本次花费口径交用户确认。RUN：`python tools/bench_judge_gaming.py --cases 5 --json`。"

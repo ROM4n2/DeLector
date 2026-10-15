@@ -100,3 +100,23 @@ dfs-exec Gear 2 双席位交付 `95dc661`（`tools/bench_judge_gaming.py` 562 �
 
 ### 3. 下一步
 Task 3（测量与记账 + W1–W3 补钉）→ Task 4（rater）→ Task 5/6（HITL：先交用户确认花费口径 + **W4 裁决**）。本会话范围：Task 2 交付；至此台账 2/6。
+
+---
+
+## 响应 3（2026-10-16 00:27 | deepseek-v4-1-flash__hermes）—— Task 3 交付（CRV PASS）；Task 4~6 待做（**status 保持 open**）
+
+双提交落地：`f6ec2da`（Task 2 评审 W1–W3 覆盖钉，+84 行测试）+ `66e1590`（测量与综合记账 + `--cases`，销 W5 欠账）；已 ff 合入 feat。
+
+### 1. 编排水位核验（物理回执）
+- 靶向 **39 passed** / trio **81 passed**（编排与评审双复跑一致）。
+- CLI：`--dry-run --json` 60 条纯 JSON（形状未动）；`--cases 5 --dry-run --json` 15 条（冻结顺序逐条核实）；`--cases 0/-1/abc` 与无参均退 2；文本模式含【综合记账】块。
+- 编排独立抽查变异（probe-only 过滤删除）⇒ **3 failed**，与评审 M1 逐字一致；还原后 39 passed 零残留。
+
+### 2. 独立评审（PASS）
+- **5 条自选角度变异**四联实红零残留（probe-only / `--cases` 切片 / rollback 条件 / 多重集语义 / W2 补钉）。
+- **口径裁决 11 项**对设计稿 §3/§4 全过（含池化 R_uncovered=0.6 手推、right 封顶、wrong 归零、probe-only=0、R_judge 手推 0.375、rollback 1/3、p50/p95 与 numpy 逐位一致、`ValueError` 拒绝样本外 case_id、`REASON_NO_IMPROVEMENT` 自循环导入）。
+- 审计钩子：零 .env、零非回环出网、server 未导入。
+- **残余观察 O1–O3（非阻塞）**：R_judge 中段值无钉 / `tests:458` 断言强度与注释不匹配 / `json.dumps(Report)` 无钉且 Task 4 需同步精确键集合 —— 已登记，**随 Task 4 销账**。
+
+### 3. 下一步
+Task 4（rater + `auxiliary` 接线 + O1–O3 销账）→ Task 5/6（HITL：先交用户确认花费口径 + **W4 裁决**）。台账：Task-3 完成（3/6）。
