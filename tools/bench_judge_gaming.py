@@ -49,6 +49,15 @@ chat → 工具分发（生产白名单）→ 证据追加 → 裁判（带 nlp�
 
 可复跑：同输入同输出（无随机；`elapsed_s` 是墙钟观测值，不参与判定）。
 
+Task-4b 附带指标（W4 裁决落地；**不进判决**）
+-------------------------------------------
+「回退前最后候选回收率」：A1/A2 的恒定固定违规迫使 `no_improvement` 收官 ⇒ final 恒回退原文
+⇒ `R_uncovered`(final) ≡ 0 掩盖了迭代产出（设计稿 2026-10-16 修订段）。`run_arm` 用
+`_ChatRecorder`（**完全透明**的 chat 包装器：原样返回 / 原样入参 / 异常原样冒泡）记录本局
+最后一次 `corrected_text` ⇒ `RunRecord.last_candidate_text`；`summarize` 每臂增
+`R_uncovered_last_candidate`（仅池化「有候选」的记录）/ `candidates_recorded`。二者 MUST NOT
+进 P1/P2 判决（判决量仍 `R_uncovered`）—— 生产代码路径零变更（包装器只住 harness）。
+
 `--cases N`（零 Key 可测）
 -------------------------
 只取 `SEED_CASES` 的**前 N 篇**（N ≥ 1；顺序即冻结顺序 ⇒ 确定性）；无效值（0 / 负 /
@@ -144,7 +153,10 @@ class RunRecord:
     - `tokens_used` / `elapsed_s` 取自循环的 `done` 进度事件（**循环自己的记账**；
       harness 不另算一份，两处数字不一致时实验记账立刻失真）；
     - `model` 取 chat 可调用对象的 `model_name` 属性（stub ⇒ `DRY_RUN_MODEL`；真跑由真
-      chat 包装器提供；缺席 ⇒ 空串，宁缺勿猜）。
+      chat 包装器提供；缺席 ⇒ 空串，宁缺勿猜）；
+    - `last_candidate_text`（Task-4b，**有意契约演进**）：本局最后一次 `corrected_text`
+      （`_ChatRecorder` 透明记录；`None` = 全程无候选）—— 附带指标的记录面，MUST NOT 进
+      P1/P2 判决（判决量仍 `R_uncovered`）。
     """
 
     arm: Arm
@@ -156,6 +168,7 @@ class RunRecord:
     tokens_used: int
     elapsed_s: float
     model: str
+    last_candidate_text: str | None
 
 
 # --------------------------------------------------------------------------- #
@@ -260,6 +273,48 @@ def _make_production_judge(nlp: Any) -> Callable[[str, list[str] | None], dict[s
 
 
 # --------------------------------------------------------------------------- #
+# Task-4b：透明 chat 包装器（附带指标的记录面）
+# --------------------------------------------------------------------------- #
+
+
+class _ChatRecorder:
+    """**完全透明**的 chat 包装器：原样转发到 `inner`，额外记录最后一个 `corrected_text`。
+
+    透明度契约（有测试逐条钉住）：
+    - 返回值：原样返回 `inner` 的回复对象（同一性；不拷贝、不改写）；
+    - 入参：messages / 其余 kwargs 一律原样透传（不修、不补、不删）；
+    - 异常：原样冒泡（不吞、不换类、不包装）；
+    - `model_name`：读时透传 `inner` 的同名属性（缺席 ⇒ 空串，与 `run_arm` 读取口径一致）。
+
+    「最后候选」口径：reply 是 dict 且 `corrected_text` 是 **str 型**时记录（**后覆盖前**；
+    空串照「含该键即记录」的口径也记录）；其余形状不改记录。初值 `None` = 全程无候选。
+    为什么记录面住 harness 而不动生产循环：实验纪律「不改生产代码路径」。
+    """
+
+    def __init__(self, inner: ChatFn) -> None:
+        self._inner = inner
+        self.last_candidate_text: str | None = None
+
+    @property
+    def inner(self) -> ChatFn:
+        """被包装的 chat（测试断言「包装器内层 == 注入 chat」的读取面）。"""
+        return self._inner
+
+    @property
+    def model_name(self) -> str:
+        """透传 inner 的 `model_name`（缺席 ⇒ 空串，与 `run_arm` 的读取口径一致）。"""
+        return str(getattr(self._inner, "model_name", ""))
+
+    async def __call__(self, **kwargs: Any) -> dict[str, Any]:
+        reply = await self._inner(**kwargs)
+        if isinstance(reply, dict):
+            candidate = reply.get("corrected_text")
+            if isinstance(candidate, str):
+                self.last_candidate_text = candidate
+        return reply
+
+
+# --------------------------------------------------------------------------- #
 # 运行（三臂接线）
 # --------------------------------------------------------------------------- #
 
@@ -270,6 +325,10 @@ def run_arm(case: SeedCase, arm: Arm, *, chat: ChatFn) -> RunRecord:
     三臂接线**完全共用**（见模块头），自变量只有 `build_arm` 的 budget / violations_of：
     `tools` 走生产白名单、`judge` 走带 nlp 的生产同款裁判、`system_prompt` 走生产同款
     选择规则；`on_progress` 只用来接住循环的 `done` 记账（tokens / elapsed）。
+
+    Task-4b：注入的 `chat` 先过 `_ChatRecorder`（透明包装器）—— 循环拿到的永远是包装器，
+    对外行为与未包装逐字一致（原样返回 / 原样入参 / 异常原样冒泡，有测试钉住）；本局最后
+    一次 `corrected_text` 记入 `RunRecord.last_candidate_text`（附带指标，不进判决）。
     """
     from delector.routes.main import _text_kind, pick_system_prompt
     from delector.services.polish_loop import run_polish_loop
@@ -280,13 +339,14 @@ def run_arm(case: SeedCase, arm: Arm, *, chat: ChatFn) -> RunRecord:
     judge = _make_production_judge(_load_nlp())
     kind = _text_kind(analyze_a1_email(case.text))
     events: list[dict[str, Any]] = []
+    recorder = _ChatRecorder(chat)
 
     result = asyncio.run(
         run_polish_loop(
             text=case.text,
             tools=POLISH_TOOL_ALLOWLIST,
             budget=config.budget,
-            chat=chat,
+            chat=recorder,
             judge=judge,
             violations_of=config.violations_of_factory(),
             system_prompt=pick_system_prompt(kind),
@@ -308,6 +368,7 @@ def run_arm(case: SeedCase, arm: Arm, *, chat: ChatFn) -> RunRecord:
         tokens_used=int(done[-1].get("tokens_used", 0)),
         elapsed_s=float(done[-1].get("elapsed", 0.0)),
         model=str(getattr(chat, "model_name", "")),
+        last_candidate_text=recorder.last_candidate_text,
     )
 
 
@@ -321,7 +382,11 @@ def run_dry_run(cases: Sequence[SeedCase]) -> list[RunRecord]:
 
 
 def record_to_dict(record: RunRecord) -> dict[str, Any]:
-    """`RunRecord` ⇒ JSON 友好 dict（`arm` 落为它的稳定字符串值）。"""
+    """`RunRecord` ⇒ JSON 友好 dict（`arm` 落为它的稳定字符串值）。
+
+    Task-4b **有意契约演进**（非回归）：第十键 `last_candidate_text`（附带指标的记录面；
+    `null` = 全程无候选）—— `--json` 的 records 列表同步 +1 键，消费方需知。
+    """
     return {
         "arm": record.arm.value,
         "case_id": record.case_id,
@@ -332,6 +397,7 @@ def record_to_dict(record: RunRecord) -> dict[str, Any]:
         "tokens_used": record.tokens_used,
         "elapsed_s": record.elapsed_s,
         "model": record.model,
+        "last_candidate_text": record.last_candidate_text,
     }
 
 
@@ -345,27 +411,45 @@ JUDGEMENT_BASIS = "uncovered_seed_recovery"
 
 #: `summarize` 的 Report 形状（JSON 友好 dict；Task 4 起含 `auxiliary` 槽，默认 None =
 #: 盲评 rater（`tools/bench_judge_rater.py`）未运行 —— 它是该槽唯一的写入面，且
-#: `judgement_basis` 与 `arms` 里的判决字段 MUST NOT 被任何后续任务改写）。
+#: `judgement_basis` 与 `arms` 里的判决字段 MUST NOT 被任何后续任务改写；Task-4b 起每臂
+#: 另含两个**附带指标**（`R_uncovered_last_candidate` / `candidates_recorded`，不进判决）。
 Report = dict[str, Any]
 
 
-def score_uncovered(record: RunRecord, case: SeedCase) -> int:
-    """判决量分子：`record.final_text` 中 **probe** 注入被回收的处数（signal 永不进判决量）。
+def _score_uncovered_text(text: str, case: SeedCase) -> int:
+    """held-out 回收的 **text 级口径**（`score_uncovered` 与 Task-4b 候选口径**逐字共用**）。
 
     逐处口径（不是整句相等），每处 probe 注入：
-    - `wrong` 在 `final_text` 中出现 ≥1 次 ⇒ 该处记 0（错形残留，即使 `right` 也出现了）；
+    - `wrong` 在 `text` 中出现 ≥1 次 ⇒ 该处记 0（错形残留，即使 `right` 也出现了）；
     - 否则记 `min(right 出现次数, expected_count)` —— `clean_text` 里 `right` 恰好出现
       `expected_count` 次 ⇒ 多出的出现属自由发挥，不额外计分。
-    `signal` 只是「点火器」（让 A3 真迭代），MUST NOT 计入本条（有测试钉住）。
+    `signal` 只是「点火器」（让 A3 真迭代），MUST NOT 计入本口径（有测试钉住）。
+
+    提为独立函数而不是两处各写一遍：final 与 last-candidate 两个口径 MUST 同源，
+    任何一处漂移（如封顶/残留条件改动）都会让「回退掩盖」的对比数字失真。
     """
     recovered = 0
     for injection in case.injections:
         if injection.kind != "probe":
             continue
-        if record.final_text.count(injection.wrong) > 0:
+        if text.count(injection.wrong) > 0:
             continue
-        recovered += min(record.final_text.count(injection.right), injection.expected_count)
+        recovered += min(text.count(injection.right), injection.expected_count)
     return recovered
+
+
+def _probe_places(case: SeedCase) -> int:
+    """一篇种子的 probe 处数（Σ `expected_count`；signal 不计）—— 回收率两个口径的共同分母。"""
+    return sum(injection.expected_count for injection in case.injections if injection.kind == "probe")
+
+
+def score_uncovered(record: RunRecord, case: SeedCase) -> int:
+    """判决量分子：`record.final_text` 中 **probe** 注入被回收的处数（signal 永不进判决量）。
+
+    实现委托 `_score_uncovered_text` —— 与 Task-4b 的 last-candidate 附带指标**逐字同源**
+    （口径：probe-only、`wrong` 残留归零、`right` 按 `expected_count` 封顶）。
+    """
+    return _score_uncovered_text(record.final_text, case)
 
 
 def _counted_violations_of_text(text: str) -> int:
@@ -450,6 +534,11 @@ def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report:
       **且** `final_text == 种子原文` 的比例（§9.5「回退掩盖」；回退到中间候选的不计）；
       `new_errors` = `detect_new_errors` 合计处数；`tokens_total` = 循环 done 事件记账合计；
       `elapsed_p50` / `elapsed_p95` = 墙钟观测值的分位（不参与任何判决）；`rounds_mean`。
+    - **Task-4b 附带指标**（进报告、**MUST NOT 进 P1/P2 判决**；设计稿 2026-10-16 修订段）：
+      `R_uncovered_last_candidate` = 「回退前最后候选」（`record.last_candidate_text`）的
+      池化回收率，**仅池化于「有候选」的记录**（Σ候选回收 / Σ有候选记录的 probe 处数；
+      口径与 `R_uncovered` 共用一个 text 级函数）；`candidates_recorded` = 有候选记录数。
+      某臂零条有候选记录 ⇒ `0.0` + `0`（不得除零）。
 
     记录引用样本集外的 `case_id` ⇒ `ValueError`（温柔跳过会让判决量静默失真）。
     """
@@ -465,6 +554,8 @@ def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report:
                 "runs": 0,
                 "R_judge": 0.0,
                 "R_uncovered": 0.0,
+                "R_uncovered_last_candidate": 0.0,
+                "candidates_recorded": 0,
                 "rollback_rate": 0.0,
                 "new_errors": 0,
                 "tokens_total": 0,
@@ -475,6 +566,9 @@ def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report:
             continue
         recovered = 0
         probes_places = 0
+        candidate_recovered = 0
+        candidate_probes_places = 0
+        candidates_recorded = 0
         declines: list[float] = []
         rollbacks = 0
         new_errors = 0
@@ -486,9 +580,13 @@ def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report:
             if case is None:
                 raise ValueError(f"RunRecord.case_id={record.case_id!r} 不在样本集：判决量无法归属")
             recovered += score_uncovered(record, case)
-            probes_places += sum(
-                injection.expected_count for injection in case.injections if injection.kind == "probe"
-            )
+            places = _probe_places(case)
+            probes_places += places
+            # Task-4b 附带指标：仅「有候选」记录进候选池化（分母同样只含这些记录的 probe 处数）。
+            if record.last_candidate_text is not None:
+                candidates_recorded += 1
+                candidate_recovered += _score_uncovered_text(record.last_candidate_text, case)
+                candidate_probes_places += places
             if case.id not in v0_cache:
                 v0_cache[case.id] = _counted_violations_of_text(case.text)
             v0 = v0_cache[case.id]
@@ -503,6 +601,10 @@ def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report:
             "runs": len(subset),
             "R_judge": sum(declines) / len(declines),
             "R_uncovered": recovered / probes_places if probes_places > 0 else 0.0,
+            "R_uncovered_last_candidate": (
+                candidate_recovered / candidate_probes_places if candidate_probes_places > 0 else 0.0
+            ),
+            "candidates_recorded": candidates_recorded,
             "rollback_rate": rollbacks / len(subset),
             "new_errors": new_errors,
             "tokens_total": tokens_total,
@@ -685,7 +787,8 @@ def _print_text_report(records: Sequence[RunRecord], report: Report) -> None:
     print()
     print(
         f"【综合记账】judgement_basis={report['judgement_basis']}"
-        "（判决量 = held-out 种子回收率 R_uncovered；R_judge 为旁证；LLM 评分不进此表）"
+        "（判决量 = held-out 种子回收率 R_uncovered；R_judge 为旁证；"
+        "R_uncovered_last_candidate / candidates_recorded 为附带指标、不进判决；LLM 评分不进此表）"
     )
     for arm in Arm:
         metrics = report["arms"][arm.value]
@@ -695,6 +798,11 @@ def _print_text_report(records: Sequence[RunRecord], report: Report) -> None:
             f"new_errors={metrics['new_errors']} tokens_total={metrics['tokens_total']} "
             f"elapsed_p50={metrics['elapsed_p50']:.3f}s elapsed_p95={metrics['elapsed_p95']:.3f}s "
             f"rounds_mean={metrics['rounds_mean']:.2f}"
+        )
+        print(
+            f"[{arm.value}] R_uncovered_last_candidate={metrics['R_uncovered_last_candidate']:.3f} "
+            f"candidates_recorded={metrics['candidates_recorded']}"
+            "（附带指标，不进 P1/P2 判决；仅池化于「有候选」记录）"
         )
     print()
     print("退出码：0=完成；1=样本集无效（空集/缺 signal/缺 probe/注入破损）；")

@@ -29,6 +29,13 @@
    rater 模块的 insert 适配器，其自身契约住 tests/test_bench_judge_rater.py）；
    `--dry-run` 全链路零网络、不触发 rater（socket 闸 + `llm_client.chat` 闸 + 源码 tripwire）。
 
+10. **Task-4b 附带指标（W4 裁决；不进判决）**：`_ChatRecorder` 完全透明（返回值同一性 /
+    入参原样 / 异常原样冒泡 —— 「包与不包逐字一致」）；`RunRecord` 第十字段
+    `last_candidate_text`（十键契约 = **有意契约演进，非回归**）；`summarize` 每臂增
+    `R_uncovered_last_candidate` / `candidates_recorded`（仅池化「有候选」记录、零候选除零
+    守卫；既有九字段与判决面逐字不变）；dry-run 语义面（A1 零候选 / A2·A3 20/20 /
+    A2 候选 1.0 vs final 0.0 / A3 皆 ≈1.0）。
+
 反挂死纪律：无 sleep / 无线程；唯一的子进程调用带固定 timeout（≤120s，实测 CLI 全
 干跑约 10s 量级）。
 """
@@ -60,6 +67,8 @@ _RECORD_FIELDS = {
     "tokens_used",
     "elapsed_s",
     "model",
+    # Task-4b 有意契约演进（非回归）：第十键 = W4 附带指标的记录面（None = 全程无候选）。
+    "last_candidate_text",
 }
 
 
@@ -129,7 +138,8 @@ def test_arm_members_are_exactly_three_with_pinned_values() -> None:
 
 
 def test_armconfig_and_runrecord_field_contracts() -> None:
-    """ArmConfig / RunRecord 的字段契约（Task 3 直接消费 RunRecord 的这 9 个字段）。"""
+    """ArmConfig / RunRecord 的字段契约。RunRecord 的 10 个字段 = Task 3 的 9 个 + Task-4b
+    **有意契约演进**（`last_candidate_text`：W4 附带指标的记录面；非回归，随实现同步）。"""
     cfg_fields = {f.name for f in dataclasses.fields(bench.ArmConfig)}
     assert {"arm", "arm_label", "budget", "violations_of_factory"} <= cfg_fields
     assert {f.name for f in dataclasses.fields(bench.RunRecord)} == _RECORD_FIELDS
@@ -273,7 +283,10 @@ def test_run_arm_wiring_is_single_variable(monkeypatch: pytest.MonkeyPatch) -> N
     assert {call["text"] for call in captured} == {case.text}
     assert len({id(call["tools"]) for call in captured}) == 1
     assert len({call["system_prompt"] for call in captured}) == 1
-    assert all(call["chat"] is stub_chat for call in captured)
+    # Task-4b 有意演进：run_arm 把注入 chat 包进透明 `_ChatRecorder`（附带指标的记录面）⇒
+    # 透传同一性改断言「包装器内层 == 注入 chat」（包装器自身的透明度住专项用例）。
+    assert all(isinstance(call["chat"], bench._ChatRecorder) for call in captured)
+    assert all(call["chat"].inner is stub_chat for call in captured)
     verdicts = [call["judge"](case.text, None) for call in captured]
     assert verdicts[0] == verdicts[1] == verdicts[2], "三臂必须共用同一裁判（同输入同裁决）"
     # 自变量面（阶梯）
@@ -304,6 +317,12 @@ def test_run_arm_ladder_end_to_end_zero_key() -> None:
     assert (r3.rounds, r3.reason, r3.converged) == (3, "ok", True)
     assert r3.final_text == case.clean_text
 
+    # Task-4b：最后候选记录面（经透明包装器）—— A1 唯一一轮被工具取证耗尽 ⇒ 全程无候选；
+    # A2/A3 第 3 轮给出收尾回复（corrected_text = clean_text）⇒ 候选入记录（后覆盖前）。
+    assert r1.last_candidate_text is None
+    assert r2.last_candidate_text == case.clean_text
+    assert r3.last_candidate_text == case.clean_text
+
     for record in (r1, r2, r3):
         assert record.tokens_used > 0
         assert record.elapsed_s >= 0.0
@@ -311,13 +330,14 @@ def test_run_arm_ladder_end_to_end_zero_key() -> None:
 
     # 确定性（同输入同输出；elapsed_s 是墙钟观测值，不入断言）
     again = bench.run_arm(case, bench.Arm.A3_CURRENT, chat=bench.build_dry_run_chat(case))
-    assert (again.final_text, again.rounds, again.reason, again.converged, again.tokens_used) == (
-        r3.final_text,
-        r3.rounds,
-        r3.reason,
-        r3.converged,
-        r3.tokens_used,
-    )
+    assert (
+        again.final_text,
+        again.rounds,
+        again.reason,
+        again.converged,
+        again.tokens_used,
+        again.last_candidate_text,
+    ) == (r3.final_text, r3.rounds, r3.reason, r3.converged, r3.tokens_used, r3.last_candidate_text)
 
 
 def test_run_arm_raises_when_loop_never_emits_done(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -338,6 +358,97 @@ def test_run_arm_raises_when_loop_never_emits_done(monkeypatch: pytest.MonkeyPat
     case = _case()
     with pytest.raises(RuntimeError, match="拒绝伪造"):
         bench.run_arm(case, bench.Arm.A3_CURRENT, chat=bench.build_dry_run_chat(case))
+
+
+# ── Task-4b：透明 chat 包装器（W4 附带指标的面） ──────────────────────────────
+
+
+def test_chat_recorder_is_fully_transparent_including_exception_path() -> None:
+    """Task-4b：`_ChatRecorder` 完全透明 —— 返回值同一性 / 入参原样（同一对象）/ 异常原样冒泡。
+
+    「包与不包逐字一致」的可测面：同一 inner、同一调用，直接调用与经包装器调用拿到**同一个**
+    回复对象、inner 收到同一组入参对象；inner 抛出的异常**同一对象**穿透包装器（不换类、不
+    包装、不吞）。
+    """
+    messages: list[dict[str, Any]] = [{"role": "user", "content": "原文"}]
+    reply: dict[str, Any] = {"tool_call": {"name": "writing_check", "payload": {"text": "甲"}}}
+    calls: list[dict[str, Any]] = []
+
+    async def inner(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return reply
+
+    direct = asyncio.run(inner(messages=messages, model=None, timeout=1.0, max_tokens=16))
+    recorder = bench._ChatRecorder(inner)
+    wrapped = asyncio.run(recorder(messages=messages, model=None, timeout=1.0, max_tokens=16))
+
+    assert wrapped is direct is reply  # 不拷贝、不改写：同一对象逐字穿透
+    assert len(calls) == 2 and calls[0] == calls[1]
+    assert calls[1]["messages"] is messages  # 不修 messages（同一列表对象）
+    assert recorder.inner is inner  # 包装器内层 == 注入 chat（接线测试同款读取面）
+    assert recorder.model_name == ""  # inner 缺席 model_name ⇒ 空串（与 run_arm 读取口径一致）
+
+    setattr(inner, "model_name", "m-4b")
+    assert bench._ChatRecorder(inner).model_name == "m-4b"  # 有则逐字透传
+
+    boom = RuntimeError("inner 异常：原样冒泡（不吞、不换类、不包装）")
+
+    async def raising(**kwargs: Any) -> Any:
+        raise boom
+
+    with pytest.raises(RuntimeError) as excinfo:
+        asyncio.run(bench._ChatRecorder(raising)())
+    assert excinfo.value is boom  # 同一异常对象穿透（逐字一致）
+
+
+def test_chat_recorder_remembers_last_corrected_text_candidate() -> None:
+    """记录口径：dict 含 str 型 `corrected_text` ⇒ 记为「最后候选」（后覆盖前）；其余回复不改记录。
+
+    透明度顺带再钉一条：脚本里每一种形状（工具轮 / 候选 / 非 dict 坏格式 / 无键）都原样穿透。
+    """
+    scripted: list[Any] = [
+        {"tool_call": {"name": "writing_check", "payload": {"text": "甲"}}},  # 工具轮：无候选
+        {"corrected_text": "候选甲", "notes_zh": []},
+        "非 dict 回复（坏格式，循环自己会处理）",  # 非 dict：不改记录
+        {"corrected_text": "候选乙", "notes_zh": ["覆盖前值"]},  # 后覆盖前
+        {"notes_zh": ["只有说明：没有 corrected_text 键"]},  # 无键：不改记录
+    ]
+    cursor = 0
+
+    async def inner(**kwargs: Any) -> Any:
+        nonlocal cursor
+        item = scripted[cursor]
+        cursor += 1
+        return item
+
+    recorder = bench._ChatRecorder(inner)
+    assert recorder.last_candidate_text is None  # 初值 = 全程无候选（None）
+    replies = [asyncio.run(recorder()) for _ in scripted]
+    assert replies == scripted  # 逐条原样穿透（透明度）
+    assert recorder.last_candidate_text == "候选乙"  # 后覆盖前；工具轮/坏格式/无键都不改记录
+
+
+def test_chat_recorder_records_only_str_corrected_text() -> None:
+    """`corrected_text` 的记录条件 = str 型（含空串：照预注册口径「含该键即记录」）；
+    非 str 不记录（字段契约是 `str | None`，非文本不是候选）。"""
+
+    def make_inner(item: Any) -> Any:
+        async def inner(**kwargs: Any) -> Any:
+            return item
+
+        return inner
+
+    empty = bench._ChatRecorder(make_inner({"corrected_text": ""}))
+    asyncio.run(empty())
+    assert empty.last_candidate_text == ""  # 空串（str 型）照口径记录
+
+    none_value = bench._ChatRecorder(make_inner({"corrected_text": None}))
+    asyncio.run(none_value())
+    assert none_value.last_candidate_text is None  # 非 str ⇒ 不记录
+
+    int_value = bench._ChatRecorder(make_inner({"corrected_text": 123}))
+    asyncio.run(int_value())
+    assert int_value.last_candidate_text is None  # 非 str ⇒ 不记录
 
 
 # ── 样本集校验（退出码 1 的归口） ─────────────────────────────────────────────
@@ -426,8 +537,9 @@ def _record(
     tokens_used: int = 0,
     elapsed_s: float = 0.0,
     model: str = bench.DRY_RUN_MODEL,
+    last_candidate_text: str | None = None,
 ) -> Any:
-    """构造固定 RunRecord（Task 3 数学测试用；字段与 Task 2 契约逐字对应）。"""
+    """构造固定 RunRecord（Task 3 数学测试用；字段与契约逐字对应 —— Task-4b 增第十字段）。"""
     return bench.RunRecord(
         arm=arm,
         case_id=case_id,
@@ -438,6 +550,7 @@ def _record(
         tokens_used=tokens_used,
         elapsed_s=elapsed_s,
         model=model,
+        last_candidate_text=last_candidate_text,
     )
 
 
@@ -536,7 +649,8 @@ def test_detect_new_errors_counts_new_detector_errors_multiset_semantics() -> No
 def test_summarize_report_shape_zero_records_and_judgement_basis() -> None:
     """Report 形状契约：`judgement_basis` 钉死 + 三臂恒存在（无记录 ⇒ 全 0、runs=0）+
     `auxiliary` 槽默认 None（Task 4：rater 未运行的形态；唯一写入者 = 盲评 rater 的
-    insert 适配器 —— 预期内耦合，随 Task 4 落地同步）；零 Key 可达。"""
+    insert 适配器 —— 预期内耦合，随 Task 4 落地同步）；每臂 **11 项**（Task-4b 增两附带
+    指标：`R_uncovered_last_candidate` / `candidates_recorded`，零记录 ⇒ 0.0 / 0）；零 Key 可达。"""
     report = bench.summarize([], [])
     assert set(report) == {"judgement_basis", "arms", "auxiliary"}
     assert report["auxiliary"] is None
@@ -546,6 +660,8 @@ def test_summarize_report_shape_zero_records_and_judgement_basis() -> None:
         "runs",
         "R_judge",
         "R_uncovered",
+        "R_uncovered_last_candidate",
+        "candidates_recorded",
         "rollback_rate",
         "new_errors",
         "tokens_total",
@@ -558,6 +674,8 @@ def test_summarize_report_shape_zero_records_and_judgement_basis() -> None:
         assert metrics["runs"] == 0
         assert metrics["R_judge"] == 0.0
         assert metrics["R_uncovered"] == 0.0
+        assert metrics["R_uncovered_last_candidate"] == 0.0
+        assert metrics["candidates_recorded"] == 0
         assert metrics["rollback_rate"] == 0.0
         assert metrics["tokens_total"] == 0
 
@@ -602,10 +720,38 @@ def test_summarize_pins_per_arm_metrics_and_judgement_basis() -> None:
     baseline, no_signal, current = bench.Arm.A1_BASELINE, bench.Arm.A2_NO_SIGNAL, bench.Arm.A3_CURRENT
     records = [
         _record(baseline, case0.id, case0.text, rounds=1, reason="turn_limit", tokens_used=10, elapsed_s=0.5),
-        _record(no_signal, case0.id, case0.text, rounds=3, reason="no_improvement", tokens_used=30, elapsed_s=0.25),
-        _record(current, case0.id, rebroken, rounds=3, reason="ok", converged=True, tokens_used=50, elapsed_s=1.5),
+        _record(
+            no_signal,
+            case0.id,
+            case0.text,
+            rounds=3,
+            reason="no_improvement",
+            tokens_used=30,
+            elapsed_s=0.25,
+            last_candidate_text=case0.clean_text,  # Task-4b：被回退掩盖的候选面
+        ),
+        _record(
+            current,
+            case0.id,
+            rebroken,
+            rounds=3,
+            reason="ok",
+            converged=True,
+            tokens_used=50,
+            elapsed_s=1.5,
+            last_candidate_text=case0.clean_text,  # Task-4b：候选口径的演示面
+        ),
         _record(baseline, case1.id, case1.text, rounds=1, reason="turn_limit", tokens_used=20, elapsed_s=1.0),
-        _record(no_signal, case1.id, case1.text, rounds=3, reason="no_improvement", tokens_used=40, elapsed_s=0.75),
+        _record(
+            no_signal,
+            case1.id,
+            case1.text,
+            rounds=3,
+            reason="no_improvement",
+            tokens_used=40,
+            elapsed_s=0.75,
+            last_candidate_text=case1.clean_text,
+        ),
         _record(
             current, case1.id, case1.clean_text, rounds=3, reason="ok", converged=True, tokens_used=60, elapsed_s=3.0
         ),
@@ -623,6 +769,8 @@ def test_summarize_pins_per_arm_metrics_and_judgement_basis() -> None:
     assert a1["new_errors"] == 0 and a1["tokens_total"] == 30
     assert a1["elapsed_p50"] == pytest.approx(0.75) and a1["elapsed_p95"] == pytest.approx(0.975)
     assert a1["rounds_mean"] == 1.0
+    # Task-4b：A1 无候选（零候选除零守卫：0.0 + 0）
+    assert a1["candidates_recorded"] == 0 and a1["R_uncovered_last_candidate"] == 0.0
 
     # A2：no_improvement 回退原文 ⇒ 回退率 100%
     assert a2["runs"] == 2
@@ -630,6 +778,9 @@ def test_summarize_pins_per_arm_metrics_and_judgement_basis() -> None:
     assert a2["new_errors"] == 0 and a2["tokens_total"] == 70
     assert a2["elapsed_p50"] == pytest.approx(0.5) and a2["elapsed_p95"] == pytest.approx(0.725)
     assert a2["rounds_mean"] == 3.0
+    # Task-4b（W4 演示钉）：final 恒回退原文（R_uncovered = 0.0），但最后候选 = clean_text ⇒
+    # 候选口径 1.0 ——「回退掩盖迭代产出」的数值化；两口径 MUST 独立（偷换即红）。
+    assert a2["candidates_recorded"] == 2 and a2["R_uncovered_last_candidate"] == 1.0
 
     # A3：R_judge=1.0（裁判眼里全修好）但 R_uncovered < 1.0（一处 held-out 被写回）
     expected_uncovered = (places0 - probes0[0].expected_count + places1) / (places0 + places1)
@@ -641,6 +792,9 @@ def test_summarize_pins_per_arm_metrics_and_judgement_basis() -> None:
     assert a3["tokens_total"] == 110
     assert a3["elapsed_p50"] == pytest.approx(2.25) and a3["elapsed_p95"] == pytest.approx(2.925)
     assert a3["rounds_mean"] == 3.0
+    # Task-4b：仅 case0 一条有候选（= clean_text）⇒ 池化于该记录记 1.0；与 final 口径（<1.0）独立
+    assert a3["candidates_recorded"] == 1 and a3["R_uncovered_last_candidate"] == 1.0
+    assert a3["R_uncovered_last_candidate"] != a3["R_uncovered"]
 
 
 def test_summarize_pins_r_judge_mid_values_not_binary(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -682,6 +836,67 @@ def test_summarize_rollback_rate_requires_reverting_to_seed_text() -> None:
     ]
     report = bench.summarize(records, [case])
     assert report["arms"]["a3_current"]["rollback_rate"] == 0.5
+
+
+def test_summarize_last_candidate_metrics_pool_only_candidate_records() -> None:
+    """Task-4b：`R_uncovered_last_candidate` 仅池化「有候选」记录（Σ候选回收 / Σ有候选 probe 处数）；
+    `candidates_recorded` = 有候选记录数；与 final 口径（`R_uncovered`）互相独立（偷换即红）。
+
+    数字构造（synthetic；口径是纯字符串函数）：caseA 1 处 probe、caseB 2 处 probe；两条候选记录
+    分别按候选回收 1/1 与 1/2 ⇒ 池化 2/3。本断言把分母口径钉到「有候选记录」：
+    - 按记录等权 (1.0 + 0.5)/2 = 0.75 ≠ 2/3；
+    - 把无候选记录也算进分母 (1+1)/(1+2+1) = 0.5 ≠ 2/3。
+    """
+    _require_nlp()
+    from delector.data.a1_seed_errors import Injection
+
+    probe_a = Injection(error_class="verb_kongruenz", kind="probe", wrong="AW", right="AR", expected_count=1)
+    probe_b = Injection(error_class="artikel_genus", kind="probe", wrong="BW", right="BR", expected_count=2)
+    case_a = _synthetic_case("pa", [probe_a])
+    case_b = _synthetic_case("pb", [probe_b])
+
+    records = [
+        _record(bench.Arm.A3_CURRENT, "pa", "（无回收的终稿）", last_candidate_text="AR 修复形"),
+        _record(bench.Arm.A3_CURRENT, "pb", "", last_candidate_text="BR 修复形"),
+        _record(bench.Arm.A3_CURRENT, "pa", "AR 修复形"),  # 无候选记录：不进候选池化
+    ]
+    report = bench.summarize(records, [case_a, case_b])
+    a3 = report["arms"]["a3_current"]
+
+    assert a3["candidates_recorded"] == 2
+    assert a3["R_uncovered_last_candidate"] == pytest.approx(2 / 3)
+    # final 口径不受附带指标影响（判决面钉）：(0 + 0 + 1) / (1 + 2 + 1)
+    assert a3["R_uncovered"] == pytest.approx(1 / 4)
+    assert a3["R_uncovered_last_candidate"] != a3["R_uncovered"]  # 两口径不可互换
+
+    # 零候选臂的除零守卫：A1 无记录 ⇒ 恒 0.0 + candidates_recorded=0（不得除零）
+    a1 = report["arms"]["a1_baseline"]
+    assert a1["candidates_recorded"] == 0 and a1["R_uncovered_last_candidate"] == 0.0
+
+
+def test_dry_run_semantics_last_candidate_metrics() -> None:
+    """Task-4b dry-run 语义自检（全 60 局实跑）：A1 无候选（工具轮耗尽）⇒ 0；A2/A3 20/20；
+    A2 候选 1.0 而 final 0.0（回退掩盖迭代产出的演示数字）；A3 两者 ≈1.0（收敛不掩盖）。"""
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    cases = list(SEED_CASES)
+    records = bench.run_dry_run(cases)
+    report = bench.summarize(records, cases)
+
+    a1 = report["arms"]["a1_baseline"]
+    assert a1["candidates_recorded"] == 0  # A1 唯一一轮被工具取证耗尽 ⇒ 永远收不到 corrected_text
+    assert a1["R_uncovered_last_candidate"] == 0.0  # 零候选 ⇒ 除零守卫记 0.0
+
+    a2 = report["arms"]["a2_no_signal"]
+    assert a2["candidates_recorded"] == len(cases)  # 20/20：第 3 轮收尾回复给出 clean_text 候选
+    assert a2["R_uncovered"] == 0.0  # final 恒回退原文（W4 的退化面）
+    assert a2["R_uncovered_last_candidate"] == pytest.approx(1.0)  # 被回退掩盖的迭代产出
+
+    a3 = report["arms"]["a3_current"]
+    assert a3["candidates_recorded"] == len(cases)
+    assert a3["R_uncovered"] == pytest.approx(1.0)
+    assert a3["R_uncovered_last_candidate"] == pytest.approx(1.0)
 
 
 # ── CLI（退出码 0/1/2 与输出面） ──────────────────────────────────────────────
@@ -800,6 +1015,10 @@ def test_cli_dry_run_json_outputs_pure_json_runrecord_list() -> None:
         assert a1["final_text"] == case.text
         assert a2["final_text"] == case.text
         assert a3["final_text"] == case.clean_text
+        # Task-4b：JSON records 的第十键（有意契约演进）—— A1 无候选；A2/A3 候选 = clean_text
+        assert a1["last_candidate_text"] is None
+        assert a2["last_candidate_text"] == case.clean_text
+        assert a3["last_candidate_text"] == case.clean_text
         for record in (a1, a2, a3):
             assert record["model"] == bench.DRY_RUN_MODEL
             assert record["tokens_used"] > 0
@@ -863,14 +1082,34 @@ def test_cli_cases_without_dry_run_still_exit_2(capsys: pytest.CaptureFixture[st
 def test_cli_text_report_prints_summary_block(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """文本模式带【综合记账】块（judgement_basis + 每臂八项），数值出自 summarize。"""
+    """文本模式带【综合记账】块（judgement_basis + 每臂九项）+ Task-4b 附带指标展示行
+    （逐臂标注「附带指标 / 不进 P1/P2 判决」），数值出自 summarize。"""
     _require_nlp()
     case = _case()
     baseline, no_signal, current = bench.Arm.A1_BASELINE, bench.Arm.A2_NO_SIGNAL, bench.Arm.A3_CURRENT
     records = [
         _record(baseline, case.id, case.text, rounds=1, reason="turn_limit", tokens_used=1, elapsed_s=0.1),
-        _record(no_signal, case.id, case.text, rounds=3, reason="no_improvement", tokens_used=2, elapsed_s=0.2),
-        _record(current, case.id, case.clean_text, rounds=3, reason="ok", converged=True, tokens_used=3, elapsed_s=0.3),
+        _record(
+            no_signal,
+            case.id,
+            case.text,
+            rounds=3,
+            reason="no_improvement",
+            tokens_used=2,
+            elapsed_s=0.2,
+            last_candidate_text=case.clean_text,
+        ),
+        _record(
+            current,
+            case.id,
+            case.clean_text,
+            rounds=3,
+            reason="ok",
+            converged=True,
+            tokens_used=3,
+            elapsed_s=0.3,
+            last_candidate_text=case.clean_text,
+        ),
     ]
     monkeypatch.setattr(bench, "run_dry_run", lambda cases: list(records))
 
@@ -890,6 +1129,21 @@ def test_cli_text_report_prints_summary_block(
         line for line in captured.out.splitlines() if line.startswith("[a3_current]") and "R_uncovered" in line
     )
     assert "R_uncovered=1.000" in a3_line and "R_judge=1.000" in a3_line and "tokens_total=3" in a3_line
+
+    # Task-4b：附带指标展示行（逐臂；标注「附带指标 / 不进 P1/P2 判决」；A2 = 候选 1.0 vs final 0.0 演示）
+    a1_side = next(
+        line
+        for line in captured.out.splitlines()
+        if line.startswith("[a1_baseline]") and "R_uncovered_last_candidate" in line
+    )
+    assert "R_uncovered_last_candidate=0.000" in a1_side and "candidates_recorded=0" in a1_side
+    a2_side = next(
+        line
+        for line in captured.out.splitlines()
+        if line.startswith("[a2_no_signal]") and "R_uncovered_last_candidate" in line
+    )
+    assert "R_uncovered_last_candidate=1.000" in a2_side and "candidates_recorded=1" in a2_side
+    assert "附带指标" in a2_side and "不进 P1/P2 判决" in a2_side
 
 
 # ── Task 4：--dry-run 不触发 rater（不发电） ─────────────────────────────────
