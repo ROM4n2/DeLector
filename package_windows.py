@@ -340,6 +340,7 @@ def build_windows() -> None:
         "--hidden-import=delector.data.core_dict_ext",
         "--hidden-import=delector.data.prep_dict",
         "--hidden-import=delector.data.a1_dict",
+        "--hidden-import=delector.data.a1_verb_case",
         "--hidden-import=delector.data.a1_writing_dict",
         "--hidden-import=delector.data.a1_hoeren_dict",
         "--hidden-import=delector.data.a1_lesen_dict",

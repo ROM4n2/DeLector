@@ -4606,6 +4606,8 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         "official_vocab_rich",
         "a1_fragments",
         "a1_sidecar",
+        # Task 4（rektion）：a1_verb_case 被 services/writing.py 静态导入 —— 漏登记 = 打包后 ModuleNotFoundError。
+        "a1_verb_case",
     }
     # Phase 1 Task 4：8 个 routes_*.py 收进 delector.routes/ 子包，`routes_` 前缀由
     # 包路径取代（delector.routes_a1 → delector.routes.a1）。漏改打包清单 =
