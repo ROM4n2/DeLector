@@ -308,6 +308,26 @@ def test_run_arm_ladder_end_to_end_zero_key() -> None:
     )
 
 
+def test_run_arm_raises_when_loop_never_emits_done(monkeypatch: pytest.MonkeyPatch) -> None:
+    """W1 补钉（Task 2 评审欠覆盖）：循环不发 `done` 事件 ⇒ 大声失败，不许静默记 0 token。
+
+    单行变异靶点：把 run_arm 的 `raise RuntimeError(...)` 段改成 `pass` ⇒ 本用例必红
+    （`done[-1]` 会先爆 IndexError；「静默伪造 RunRecord」的路径 MUST 被拦下）。
+    """
+    _require_nlp()
+    from delector.services.polish_loop import LoopResult
+
+    async def silent_loop(**kwargs: Any) -> Any:
+        # 刻意**不**上报 done 事件：模拟循环出口契约被破坏
+        return LoopResult(text=kwargs["text"], converged=False, reason="turn_limit", rounds=0, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", silent_loop)
+
+    case = _case()
+    with pytest.raises(RuntimeError, match="拒绝伪造"):
+        bench.run_arm(case, bench.Arm.A3_CURRENT, chat=bench.build_dry_run_chat(case))
+
+
 # ── 样本集校验（退出码 1 的归口） ─────────────────────────────────────────────
 
 
@@ -334,6 +354,50 @@ def test_validate_seed_cases_accepts_frozen_set_and_rejects_broken_variants() ->
     broken_injection = dataclasses.replace(good, injections=[dataclasses.replace(signal, wrong="")])
     assert bench.validate_seed_cases([broken_injection])
     assert any("重复" in e for e in bench.validate_seed_cases([good, good]))
+
+
+def test_validate_seed_cases_rejects_expected_count_below_one() -> None:
+    """W2 补钉（Task 2 评审欠覆盖）：`expected_count < 1` 的注入 ⇒ 样本集无效。
+
+    单行变异靶点：把 `if injection.expected_count < 1:` 改成 `if False:` ⇒ 本用例必红
+    （该破损用例除这一处外全部合法 ⇒ 恰应报出这一条）。
+    """
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    good = SEED_CASES[0]
+    probe = next(i for i in good.injections if i.kind == "probe")
+    broken = dataclasses.replace(
+        good,
+        injections=[dataclasses.replace(i, expected_count=0) if i is probe else i for i in good.injections],
+    )
+    errors = bench.validate_seed_cases([broken])
+    assert len(errors) == 1 and "expected_count" in errors[0], f"应恰好报 expected_count 一条：{errors}"
+
+
+def test_validate_seed_cases_rejects_blank_case_id() -> None:
+    """W2b 补钉（Task 2 评审欠覆盖）：空 id ⇒ 样本集无效。
+
+    单行变异靶点：把 `if not case.id.strip():` 改成 `if False:` ⇒ 本用例必红。
+    """
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    broken = dataclasses.replace(SEED_CASES[0], id="")
+    errors = bench.validate_seed_cases([broken])
+    assert len(errors) == 1 and "id 为空" in errors[0], f"应恰好报「id 为空」一条：{errors}"
+
+
+def test_validate_seed_cases_rejects_duplicate_case_id() -> None:
+    """W2b 补钉（Task 2 评审欠覆盖）：重复 id ⇒ 样本集无效。
+
+    构造：两篇结构不同、id 相同的用例（「两条并行线各自加案例、合并时撞车」的典型形态）。
+    单行变异靶点：把 `elif case.id in seen_ids:` 改成 `elif False:` ⇒ 本用例必红。
+    """
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    first = SEED_CASES[0]
+    second = dataclasses.replace(SEED_CASES[1], id=first.id)
+    errors = bench.validate_seed_cases([first, second])
+    assert len(errors) == 1 and "重复" in errors[0], f"应恰好报「重复」一条：{errors}"
 
 
 # ── CLI（退出码 0/1/2 与输出面） ──────────────────────────────────────────────
@@ -365,6 +429,26 @@ def test_cli_exit_2_when_environment_unavailable(
     captured = capsys.readouterr()
     assert rc == 2
     assert "[环境不可用]" in captured.err and "stub 原因" in captured.err
+    assert captured.out == ""
+
+
+def test_cli_exit_2_when_seed_loading_raises(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """W3 补钉（Task 2 评审欠覆盖）：种子集模块装载抛异常 ⇒ 退 2（环境归口），不崩、不是 1。
+
+    单行变异靶点：把 main 里该 `except` 分支的 `return 2` 改成 `return 0` ⇒ 本用例必红。
+    """
+
+    def boom() -> list[Any]:
+        raise ImportError("种子集模块不可用（stub 原因）")
+
+    monkeypatch.setattr(bench, "load_seed_cases", boom)
+
+    rc = bench.main(["--dry-run"])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "[环境不可用]" in captured.err and "种子集模块装载失败" in captured.err and "stub 原因" in captured.err
     assert captured.out == ""
 
 
