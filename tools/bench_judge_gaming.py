@@ -7,7 +7,7 @@
 `docs/specs/2026-10-15-judge-gaming-control-experiment-design.md` §3/§4 的三臂对照
 落成**可复跑的确定性 harness**。本文件负责「按三臂跑、如实记录、综合记账」——判决量
 （held-out 种子回收率 `R_uncovered`）与 `R_judge` / 成本 / 延迟的数学在本模块（Task 3）；
-盲评 rater 在 Task 4、真跑（HITL）在 Task 5/6。**不接线、不改生产代码路径**：
+盲评 rater（Task 4）只写 `report['auxiliary']`、真跑（HITL）在 Task 5/6。**不接线、不改生产代码路径**：
 只经 `run_polish_loop` 的注入缝复用生产链路（chat / tools / budget / judge /
 violations_of / system_prompt / on_progress），不改内核语义。
 
@@ -54,7 +54,8 @@ chat → 工具分发（生产白名单）→ 证据追加 → 裁判（带 nlp�
 只取 `SEED_CASES` 的**前 N 篇**（N ≥ 1；顺序即冻结顺序 ⇒ 确定性）；无效值（0 / 负 /
 非整数）由 argparse 直接退 2。`--json` 的输出形状不变（RunRecord 列表，Task 2 契约）——
 【综合记账】只进文本模式，避免破坏机器可读面。文本模式的汇总即 `summarize` 的产物
-（`judgement_basis=uncovered_seed_recovery`；LLM 评分不进此表，rater 属 Task 4）。
+（`judgement_basis=uncovered_seed_recovery`；Task 4 起 Report 含 `auxiliary` 槽（默认 `None`），
+LLM 评分只进该槽、不进判决面；`--dry-run` 不触发 rater）。
 """
 
 from __future__ import annotations
@@ -342,7 +343,8 @@ def record_to_dict(record: RunRecord) -> dict[str, Any]:
 #: MUST NOT 被任何 LLM 评分替换（`AGENT-EVALUATION-HARNESS` §1 / `AGENT-CONDUCT` §10.2；有测试钉住）。
 JUDGEMENT_BASIS = "uncovered_seed_recovery"
 
-#: `summarize` 的 Report 形状（JSON 友好 dict；Task 4 只允许追加 `auxiliary` 键，
+#: `summarize` 的 Report 形状（JSON 友好 dict；Task 4 起含 `auxiliary` 槽，默认 None =
+#: 盲评 rater（`tools/bench_judge_rater.py`）未运行 —— 它是该槽唯一的写入面，且
 #: `judgement_basis` 与 `arms` 里的判决字段 MUST NOT 被任何后续任务改写）。
 Report = dict[str, Any]
 
@@ -438,7 +440,9 @@ def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report:
     Report 形状（JSON 友好 dict）：
 
     - `judgement_basis`：恒 `"uncovered_seed_recovery"`（有测试钉住）—— 判决只来自
-      held-out 种子回收率；`R_judge` 与未来的 LLM 盲评分都是**旁证**，MUST NOT 进判决字段；
+      held-out 种子回收率；`R_judge` 与 LLM 盲评分都是**旁证**，MUST NOT 进判决字段；
+    - `auxiliary`：恒 `None`（Task 4 盲评槽位：未运行 rater 的形态；结果由 rater 模块的
+      insert 适配器**只**写这里，判决字段不因此改变）；
     - `arms[<arm.value>]`（三臂恒存在；无记录 ⇒ 全 0 + `runs=0`）：
       `runs` = 记录数；`R_judge` = `(v_0 − v_final) / v_0` 的**均值**（v_0 = 原文被计数
       违规，v_0 == 0 ⇒ 该条 0.0）；`R_uncovered` = **池化**回收率（Σ回收处数 / Σprobe
@@ -506,7 +510,10 @@ def summarize(records: list[RunRecord], cases: list[SeedCase]) -> Report:
             "elapsed_p95": _percentile(elapsed, 95),
             "rounds_mean": sum(rounds) / len(rounds),
         }
-    return {"judgement_basis": JUDGEMENT_BASIS, "arms": arms_report}
+    # `auxiliary`：Task 4 的盲评槽位，恒 None（未运行 rater 的形态）—— rater 结果由
+    # `insert_into_report`（`tools/bench_judge_rater.py`）只写这里；本函数绝不调用
+    # rater（`--dry-run` 全链路零网络，有测试钉住）。
+    return {"judgement_basis": JUDGEMENT_BASIS, "arms": arms_report, "auxiliary": None}
 
 
 # --------------------------------------------------------------------------- #

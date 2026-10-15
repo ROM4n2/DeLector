@@ -25,10 +25,15 @@
    `--json` 形状不变）与文本模式【综合记账】块。O1–O3 补钉（Task 3 评审残余，2026-10-16）：
    `R_judge` 中段值非二值钉 / signal 相关两条断言与注释逐条对齐 / `json.dumps(Report)` 往返钉。
 
+9. **Task 4 盲评 rater 的隔离面**：Report 增 `auxiliary` 槽（默认 None；唯一写入者 = 盲评
+   rater 模块的 insert 适配器，其自身契约住 tests/test_bench_judge_rater.py）；
+   `--dry-run` 全链路零网络、不触发 rater（socket 闸 + `llm_client.chat` 闸 + 源码 tripwire）。
+
 反挂死纪律：无 sleep / 无线程；唯一的子进程调用带固定 timeout（≤120s，实测 CLI 全
 干跑约 10s 量级）。
 """
 
+import ast
 import asyncio
 import dataclasses
 import importlib.util
@@ -529,9 +534,12 @@ def test_detect_new_errors_counts_new_detector_errors_multiset_semantics() -> No
 
 
 def test_summarize_report_shape_zero_records_and_judgement_basis() -> None:
-    """Report 形状契约：`judgement_basis` 钉死 + 三臂恒存在（无记录 ⇒ 全 0、runs=0）；零 Key 可达。"""
+    """Report 形状契约：`judgement_basis` 钉死 + 三臂恒存在（无记录 ⇒ 全 0、runs=0）+
+    `auxiliary` 槽默认 None（Task 4：rater 未运行的形态；唯一写入者 = 盲评 rater 的
+    insert 适配器 —— 预期内耦合，随 Task 4 落地同步）；零 Key 可达。"""
     report = bench.summarize([], [])
-    assert set(report) == {"judgement_basis", "arms"}
+    assert set(report) == {"judgement_basis", "arms", "auxiliary"}
+    assert report["auxiliary"] is None
     assert report["judgement_basis"] == "uncovered_seed_recovery"
     assert set(report["arms"]) == {arm.value for arm in bench.Arm}
     metric_keys = {
@@ -882,6 +890,83 @@ def test_cli_text_report_prints_summary_block(
         line for line in captured.out.splitlines() if line.startswith("[a3_current]") and "R_uncovered" in line
     )
     assert "R_uncovered=1.000" in a3_line and "R_judge=1.000" in a3_line and "tokens_total=3" in a3_line
+
+
+# ── Task 4：--dry-run 不触发 rater（不发电） ─────────────────────────────────
+
+
+def test_cli_dry_run_touches_no_network_and_never_reaches_the_rater(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Task 4 契约：`--dry-run` 全链路**零网络**、不触发盲评 rater、Report 判决面不变。
+
+    三层闸都实装（实测在本机不误伤全链路）：① socket 非回环 connect/connect_ex 与非本机
+    DNS 查询 ⇒ 直接炸（回环放行是**刻意的**：asyncio 自管道走 socketpair 连回环，实测必须
+    放行；真实出口由非回环闸 + `llm_client.chat` 闸把守）；② `llm_client.chat`（应用唯一
+    出网口）⇒ 装成炸雷并断言**一次都没被调用**；③ 产物面：`--json` 输出不含 auxiliary/
+    评级字样，且 gaming 源码**在 AST 层不引用 rater 的符号**、预热链不含 llm_client
+    （文档字符串里提名字是允许的，故按 AST 判而非按子串扫）。
+    """
+    _require_nlp()
+    import socket as socket_module
+
+    import delector.services.llm_client as llm_client_module
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    real_connect = socket_module.socket.connect
+    real_connect_ex = socket_module.socket.connect_ex
+    real_getaddrinfo = socket_module.getaddrinfo
+    loopback = ("127.0.0.1", "::1", "localhost")
+
+    def guarded_connect(sock: Any, address: Any, *args: Any) -> Any:
+        if isinstance(address, tuple) and address and str(address[0]) in loopback:
+            return real_connect(sock, address, *args)
+        raise AssertionError(f"dry-run 触发了非回环连接：{address!r}")
+
+    def guarded_connect_ex(sock: Any, address: Any, *args: Any) -> Any:
+        if isinstance(address, tuple) and address and str(address[0]) in loopback:
+            return real_connect_ex(sock, address, *args)
+        raise AssertionError(f"dry-run 触发了非回环连接（connect_ex）：{address!r}")
+
+    def guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(host, str) and host not in (*loopback, ""):
+            raise AssertionError(f"dry-run 触发了非本机 DNS 查询：{host!r}")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    chat_calls: list[Any] = []
+
+    async def forbidden_chat(*args: Any, **kwargs: Any) -> Any:
+        chat_calls.append((args, kwargs))
+        raise AssertionError("dry-run 触发了真实 llm_client.chat —— 必须走注入的 stub")
+
+    monkeypatch.setattr(socket_module.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket_module.socket, "connect_ex", guarded_connect_ex)
+    monkeypatch.setattr(socket_module, "getaddrinfo", guarded_getaddrinfo)
+    monkeypatch.setattr(llm_client_module, "chat", forbidden_chat)
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: [SEED_CASES[0]])
+
+    rc = bench.main(["--dry-run", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 0, f"带三重闸的 dry-run 仍应完成（rc={rc}）stderr={captured.err}"
+    assert chat_calls == [], "dry-run 不得调用真实 chat（stub 是唯一驱动源）"
+
+    data = json.loads(captured.out)
+    assert len(data) == 3
+    assert set(data[0]) == _RECORD_FIELDS
+    assert "auxiliary" not in captured.out and "rate_pair" not in captured.out
+
+    # AST 层 tripwire：gaming 源码**不得引用/调用** rater 的符号，也不得把 llm_client
+    # 挂进预热链（`_import_chain` 只能装 `_CHAIN_MODULES` 里列的东西）——这是结构性的
+    # 「dry-run 不可能触发 rater / 真实出网口」保证（运行期的三道闸另见上方）。
+    tree = ast.parse(_SCRIPT.read_text(encoding="utf-8"))
+    referenced = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    referenced |= {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+    for needle in ("rate_pair", "insert_into_report"):
+        assert needle not in referenced, f"gaming 源码不得引用盲评 rater 的符号：{needle!r}"
+    imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
+    imported |= {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+    assert "delector.services.llm_client" not in imported
+    assert "delector.services.llm_client" not in bench._CHAIN_MODULES
 
 
 # ── 零 Key 红线（产物级 tripwire） ────────────────────────────────────────────
