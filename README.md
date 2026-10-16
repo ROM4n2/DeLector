@@ -45,6 +45,7 @@
 | 产品特性全览 | `FEATURES.md` |
 | 架构细节（技术栈 / NLP / DB / API / 前端拓扑） | `docs/agents/architecture.md` |
 | 安全守卫 / 本机环境 / 打包 / 工作惯例 | `docs/agents/ops.md` |
+| 设计系统 / 视觉 Token / 组件蓝图 | `docs/design-system.md`（token 现值以 `static/css/tokens.css` 为准） |
 | 设计与实施计划 | `docs/specs/`、`docs/plans/` |
 | 版本历史 | `CHANGELOG.md` |
 | 架构决策记录（ADR） | `docs/adr/` |

@@ -2,6 +2,10 @@
 > **版本**：v3.0 · 2026-08  
 > **视觉流派**：Gutenberg Broadsheet + Bauhaus Stationery + Atelier Zero Modern Editorial (德式经典社论、包豪斯手账工作台与现代极简杂志落地页)  
 > **核心定位**：专为德语欧标（CEFR A1–C1）长文精读、歌德/德福证书备考与语言知识内化打造的极简高密度学术研读与数据展台工作台。
+>
+> **状态**：**现行设计规范（部分章节为历史设计稿）** · **同步日期**：2026-10-16 · **口径来源**：token / 字号 / 组件现值一律以 `static/css/tokens.css` 与 `static/style.css` 为准（本文件不再另立第二份真值）。
+> - **现行**：**§4（视觉 Token）** 与 **§5（字体排印）** 已按 `static/css/tokens.css` 现状逐条同步 —— 数值以下方表格为准，改动随 `.css` 走。
+> - **历史稿（v3.0 · 2026-08，未随后续 `tokens.css` 同步）**：**§2 / §3 / §6.1 / §7 / §8.1** —— 其中的 `artifact*.html`、`#folio-track`、`syntax-grid`、`cassette-deck`、`[data-reveal]` 等在本仓**无对应实现**，仅作设计溯源与流派脉络保留，**勿当作现行组件蓝图**。
 
 ---
 
@@ -45,7 +49,7 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ### v3.0 核心设计原则
 1. **真实物理基底（Substantive Paper & Physical Grain）**：
-   杜绝生硬纯黑或千篇一律的冷白。使用含有微细纤维/噪点微质感（SVG Fractal Noise Overlay）的温润纸张色（`--paper: #FAF8F5 / #EFE7D2`），让长文阅读如沉浸于欧洲古典图书。
+   杜绝生硬纯黑或千篇一律的冷白。使用含有微细纤维/噪点微质感（SVG Fractal Noise Overlay）的温润纸张色（现行为 `--paper: #faf8f5`；`#EFE7D2` 系 Artifact 4 历史纸色、本仓 grep 零命中，见 §2），让长文阅读如沉浸于欧洲古典图书。
 2. **严谨印刷墨线（German Print Linework）**：
    用清晰、笃定的硬质线条（`1.5px solid var(--ink)` 与 `1px solid var(--rule)`）建立视觉网格体系，彻底告别模糊无边界的阴影溢出。
 3. **数据走字与元数据对齐（Editorial Ticker & Metadata Density）**：
@@ -56,6 +60,8 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ---
 
 ## 2. Artifact 1–4 设计演进与流派解构
+
+> **历史稿（v3.0 · 2026-08，设计溯源）**：下列 `artifact.html` / `artifact2.html` / `artifact3.html` / `artifact4.html` 是**视觉流派探源期的参考落地页**，**不在本仓库内**（全仓 grep 仅本文件引用，`static/` 零命中），仅记录 DeLector「Academic Modern Editorial」流派来路。
 
 | 维度 | Artifact 1 (`artifact.html`) | Artifact 2 (`artifact2.html`) | Artifact 3 (`artifact3.html`) | Artifact 4 (`artifact4.html`) |
 | :--- | :--- | :--- | :--- | :--- |
@@ -71,6 +77,8 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ---
 
 ## 3. Artifact 4 (Atelier Zero) 现代社论设计范式深度剖析
+
+> **历史稿（v3.0 · 2026-08，设计溯源）**：`artifact4.html` 为**仓库外**参考落地页（见 §2 说明），本章是对其的解构笔记。其中少数命名（如 `topbar-inner`、`marquee-track`）后来在 `static/style.css` 落地，多数类名（如 `corner tl/tr/bl/br`）**本仓无实现**。
 
 `artifact4.html` 是现代社论落地页与交互展台的集大成者。其核心创新点与技术实现可提炼为以下 6 大维度：
 
@@ -141,49 +149,68 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ## 4. 视觉 Token 全量体系
 
+> **现行（2026-10-16 同步）**：下表逐值取自 `static/css/tokens.css`（`static/style.css` 的 `:root` 与之重复定义、值一致）。**改 token 请改 `tokens.css`**，本表随之更新。
+
 ```css
 :root {
   /* ──────── 1. 纸张与表面材质 (Paper Surfaces) ──────── */
-  --paper:          #FAF8F5;   /* 主纸张背景，温润米白色 (Atelier Warm Paper: #EFE7D2) */
-  --paper-card:     #FFFFFF;   /* 纯白阅读纸张与展台卡片底色 (--bone: #F7F1DE) */
-  --paper-tint:     #F2ECE1;   /* 次级衬底、工具条底槽、台账表头 (--paper-warm: #ECE4CF) */
-  --paper-deep:     #E8E0D2;   /* 强调背景、按压凹陷底色 (--paper-dark: #DDD2B6) */
-  --paper-dark-box: #15140F;   /* 极夜黑展台容器（用于高对比度卡片块） */
+  --paper:          #faf8f5;   /* 主纸张背景，温润米白色 */
+  --paper-card:     #ffffff;   /* 纯白阅读纸张与展台卡片底色 */
+  --paper-warm:     #f7f4ec;   /* 次级衬底（温暖白） */
+  --paper-tint:     #f2ece1;   /* 次级衬底、工具条底槽、台账表头 */
+  --paper-accent:   #ede7da;   /* 强调背景 */
+  --paper-deep:     #e6ddd0;   /* 按压凹陷底色、深纸面 */
+  --stage:          #181512;   /* 极夜黑展台容器（高对比度卡片块） */
 
   /* ──────── 2. 印刷墨水与灰阶 (Ink & Pencil Gradients) ──────── */
-  --ink:            #15140F;   /* 德国铸字墨黑，主文字与主边框（1.5px 实线） */
-  --ink-soft:       #2A2620;   /* 柔墨黑，大段精读正文 */
-  --ink-mute:       #5A5448;   /* 铅笔暖灰，副标题、辅助说明文字 */
-  --ink-faint:      #8B8676;   /* 极淡灰元数据、占位符、标尺定位文字 */
+  --ink:            #15140f;   /* 德国铸字墨黑，主文字与主边框（1.5px 实线） */
+  --ink-soft:       #2a2620;   /* 柔墨黑，大段精读正文 */
+  --ink-mute:       #5a5448;   /* 铅笔暖灰，副标题、辅助说明文字 */
+  --ink-faint:      #8b8676;   /* 极淡灰元数据、占位符、标尺定位文字 */
+  --pencil:         #5c554b;   /* 铅笔灰（次要正文/标注） */
+  --muted:          #8c8477;   /* 次要说明文本 */
 
   /* ──────── 3. 分割线与网格标线 (Linework & Rules) ──────── */
   --line:           rgba(21, 20, 15, 0.16); /* 核心分割线（1px solid） */
   --line-soft:      rgba(21, 20, 15, 0.08); /* 辅助虚线与二级分割线 */
   --line-faint:     rgba(21, 20, 15, 0.05); /* 侧边轨道与极微弱边界线 */
-  --rule:           #D8D0C2;                /* 实体网格实线 */
-  --rule-dashed:    #C8BFA9;                /* 打字机卡片虚线 */
+  --rule:           #d8d0c2;                /* 实体网格实线 */
+  --rule-light:     #ebe5da;                /* 浅色分割线（旧 --rule-dashed 位） */
+  --border:         var(--rule);            /* --rule 的语义别名 */
+  --grid-dot:       rgba(21, 20, 15, 0.05); /* 点阵网格 */
 
   /* ──────── 4. 经典学术强调色 (Editorial Accents) ──────── */
-  --coral:          #ED6F5C;   /* 珊瑚朱砂红：主焦点、操作按钮、重点考点 (Goethe Accent: #C14A2B) */
-  --coral-soft:     #F08E7C;   /* 柔珊瑚红：悬浮态与微高亮 */
-  --mustard:        #E9B94A;   /* 暖芥末黄/琥珀色：发音磁带进度、复习高亮 (Amber: #D9771C) */
-  --olive:          #6E7448;   /* 冷杉绿/橄榄绿：掌握测试、良性指标、语法正解 (Moss: #3B6E3F) */
-  --ink-blue:       #2A528A;   /* 钢笔墨水蓝：原型词法指向、外链、词性标记 */
+  --coral:          #ed6f5c;   /* 珊瑚朱砂红：主焦点、操作按钮、重点考点 */
+  --coral-soft:     #f08e7c;   /* 柔珊瑚红：悬浮态与微高亮 */
+  --accent:         #c14a2b;   /* 歌德朱砂红 */
+  --accent-hover:   #a83b1f;   /* 强调色悬浮态 */
+  --mustard:        #e9b94a;   /* 暖芥末黄/琥珀色：发音磁带进度、复习高亮 */
+  --amber:          #d9771c;   /* 琥珀色 */
+  --moss:           #3b6e3f;   /* 苔绿：语法正解、良性指标 */
+  --olive:          #6e7448;   /* 冷杉绿/橄榄绿：掌握测试、良性指标、语法正解 */
+  --cherry:         #b03030;   /* 樱桃红（错误强调） */
+  --danger:         #b03030;   /* 危险色（与 --cherry 同值） */
+  --danger-strong:  #c84444;   /* 强危险色 */
 
   /* ──────── 5. 欧标马卡龙标记色阶 (CEFR Harmonized Highlighters) ──────── */
-  --hl-A1:          #E3EFFB;   --hl-A1-ink: #1D548C; /* A1 入门 (淡天蓝) */
-  --hl-A2:          #D6ECCF;   --hl-A2-ink: #20662A; /* A2 基础 (鼠尾草绿) */
-  --hl-B1:          #FDE9BD;   --hl-B1-ink: #825C00; /* B1 核心 (晨光暖黄) */
-  --hl-B2:          #FDE0D7;   --hl-B2-ink: #91261B; /* B2 高级 (浅桃珊瑚) */
-  --hl-C1:          #EFE2FA;   --hl-C1-ink: #522485; /* C1 精通 (淡薰衣草紫) */
+  --hl-A1:          #e3effb;   --hl-A1-ink: #1d548c; /* A1 入门 (淡天蓝) */
+  --hl-A2:          #d6eccf;   --hl-A2-ink: #20662a; /* A2 基础 (鼠尾草绿) */
+  --hl-B1:          #fde9bd;   --hl-B1-ink: #825c00; /* B1 核心 (晨光暖黄) */
+  --hl-B2:          #fde0d7;   --hl-B2-ink: #91261b; /* B2 高级 (浅桃珊瑚) */
+  --hl-C1:          #efe2fa;   --hl-C1-ink: #522485; /* C1 精通 (淡薰衣草紫) */
 
-  /* ──────── 6. 物理投影与阴影 (Tactile Shadows) ──────── */
+  /* ──────── 6. 便签纸材质 (Sticky Notes) ──────── */
+  --note-yellow:    #fffbe6;
+  --note-pink:      #fff0ed;
+  --note-green:     #edf7ec;
+  --note-blue:      #ecf3fb;
+
+  /* ──────── 7. 物理投影与阴影 (Tactile Shadows) ──────── */
   --shadow-sm:      0 2px 4px rgba(21, 20, 15, 0.06);
   --shadow-card:    0 14px 28px -12px rgba(21, 20, 15, 0.12);
-  --shadow-exhibit: 0 30px 60px -30px rgba(21, 20, 15, 0.18);
-  --shadow-hard:    3px 3px 0 rgba(21, 20, 15, 0.15); /* 实体硬印章投影 */
+  --shadow-hard:    3px 3px 0 var(--ink); /* 实体硬印章投影（纯墨色实投影） */
 
-  /* ──────── 7. 缓动与动画时间 (Motion & Transitions) ──────── */
+  /* ──────── 8. 缓动与动画时间 (Motion & Transitions) ──────── */
   --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1); /* 顶级杂志回弹曲线 */
   --dur-fast:       180ms;
   --dur-mid:        360ms;
@@ -191,27 +218,39 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 }
 ```
 
+> **历史稿 token（v3.0 · 2026-08，未随 `tokens.css` 同步）**：以下 token **名**与**色值**在全仓 `static/`（`static/css/tokens.css`、`static/style.css`、`static/german/`）**grep 零命中**，仅作设计溯源保留：
+> - `--bone: #F7F1DE` · `--paper-dark: #DDD2B6` · `--paper-dark-box: #15140F` · `--rule-dashed: #C8BFA9` · `--ink-blue: #2A528A` · `--shadow-exhibit`
+> - 「极夜黑展台容器」现由 `--stage: #181512` 承担；「打字机卡片虚线」现由 `--rule-light: #ebe5da` 承担。
+
+> **旧值 → 新值（本次同步，证据见文首"口径来源"与 `tokens.css`）**：
+> - `--paper-deep`：`#E8E0D2` → `#e6ddd0`
+> - `--paper-warm`（旧注释值）：`#ECE4CF` → `#f7f4ec`
+> - `--shadow-hard`：`3px 3px 0 rgba(21, 20, 15, 0.15)` → `3px 3px 0 var(--ink)`
+> - 排印栈 `--serif-display` / `--sans` / `--mono`：见 §5
+
 ---
 
 ## 5. 字体排印阶梯与版式节奏
 
+> **现行（2026-10-16 同步）**：字体栈逐值取自 `static/css/tokens.css`。旧稿比现值多出的 `'DM Serif Display'`（`--serif-display` 第 3 位）与 `'SF Mono'`（`--mono` 第 3 位）已删除；`--mono` 前两位已按 CSS 调整为 `IBM Plex Mono` 先于 `JetBrains Mono`。
+
 ```css
 :root {
   /* 1. 经典大号展示字体 (用于品牌、Hero大标、文章名、词头展示) */
-  --serif-display: 'Playfair Display', 'Instrument Serif', 'DM Serif Display', Georgia, serif;
+  --serif-display: "Playfair Display", "Instrument Serif", Georgia, serif;
 
   /* 2. 学术阅读长文字体 (德语图书级衬线体，抗视觉疲劳) */
-  --serif-body:    'DM Serif Text', 'Iowan Old Style', Georgia, serif;
+  --serif-body:    "DM Serif Text", "Iowan Old Style", Georgia, serif;
 
   /* 3. 几何与功能无衬线字体 (标题强化、按钮、导航、卡片结构) */
-  --sans-tight:    'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --sans:          'Inter', -apple-system, system-ui, sans-serif;
+  --sans-tight:    "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --sans:          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* 4. 打字机与数据台账字体 (所有数据指标、CEFR 标签、公式、走字栏) */
-  --mono:          'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  --mono:          "IBM Plex Mono", "JetBrains Mono", Consolas, monospace;
 
   /* 5. 手写心得与注疏 (随笔心得、草稿、旁白提示) */
-  --hand:          'Caveat', 'Patrick Hand', cursive;
+  --hand:          "Caveat", "Patrick Hand", cursive;
 }
 ```
 
@@ -232,6 +271,9 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ## 6. DeLector「台账（Folio）」全新重塑方案
 
 ### 6.1 现有三折页痛点诊断
+
+> **历史稿（v3.0 · 2026-08）**：`#folio-track`（3 折页横向滑轨）在本仓 `static/` **grep 零命中**，该旧台账结构已不在代码中；本节仅保留痛点分析的历史脉络。
+
 目前 DeLector 的「台账」采用 3 折页横向滑轨设计（`#folio-track` 宽度 300%，页宽 33.333%）：
 * **痛点 1**：在 1024px 以下不同设备尺寸上，滑轨 transform 计算容易产生 1-2px 的亚像素错位，导致右侧内容边缘露出或截断。
 * **痛点 2**：用户在「总览」「掌握度」「错题」三页之间需要频繁点击切换，割裂了完整的学习数据心流。
@@ -271,6 +313,8 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ```
 
 ### 6.3 台账模块重构代码实现规范
+
+> **落地情况（2026-10-16 核对）**：下图 `folio-stats-grid` / `stat-badge` / `stat-ring`（含 `solid` / `dashed` / `coral` 变体）与 `id="stat-*"` **已在 `static/index.html` + `static/style.css` 落地**（`style.css:4346` 起）。但**实际 CSS 与下方示例有差异**——现实现：`.stat-badge` 底色 `var(--paper-deep)`、边框 `1.2px solid var(--ink)`、`box-shadow: 1.5px 1.5px 0 var(--ink)`、无 `border-radius`；`.folio-stats-grid` 为 `repeat(3, minmax(0,1fr))`；`.stat-ring` 尺寸 `38px`、字号 `0.8125rem`。下方示例中的 px/rem 数字为**设计目标值**，现行以 `static/style.css` 为准。
 
 #### 1. 环形指标六宫格 (The 6-Metric Stat Plate)
 ```html
@@ -386,6 +430,9 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ## 7. 特色学术与语言学组件蓝图
 
 ### 7.1 拓扑五场域可视化展台 (Topological Field Visualizer)
+
+> **历史稿（v3.0 · 2026-08，未实现）**：`syntax-grid` / `syntax-field` / `syntax-field-head` 等类名在本仓 `static/` **grep 零命中**。实际句法组件的类名为 `.syntax-tree-container` / `.sent-syntax-btn` / `.drawer-syntax-card`（见 `static/style.css`）。本节保留为设计蓝图。
+
 德语五场域（VF 前场、LK 左句框、MF 中场、RK 右句框、NF 后场）是德语语法的核心骨架。
 
 ```
@@ -441,6 +488,9 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ```
 
 ### 7.2 复古录音磁带发音控制台 (Cassette Deck Audio Console)
+
+> **历史稿（v3.0 · 2026-08，未按此形态实现）**：`cassette-deck` / `cassette-window` / `mech-btn` 等类名在本仓 `static/` **grep 零命中**。同名构想实际落地为 `.shadow-player`（"Cassette Deck Console"，`static/style.css:2279` 起，配 `.player-left` / `.player-right`），外观与下方示例不同。
+
 内嵌于精读阅读器底部，取代漂浮黑色胶囊。
 
 ```html
@@ -544,6 +594,9 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 ## 8. 交互动效、无障碍与移动端触控规范
 
 ### 8.1 优雅进场动效 (`[data-reveal]` Protocol)
+
+> **历史稿（v3.0 · 2026-08，未实现）**：`[data-reveal]` / `--reveal-delay` / `data-revealed` 在本仓 `static/` **grep 零命中**，`static/js/` 亦无 `IntersectionObserver` 用例。本协议未落地，仅作设计蓝图（§8.2 里引用的 `.marquee-track` 则**已实现**，见 `static/style.css:4478`）。
+
 使用 `artifact4.html` 标准的 `IntersectionObserver` 进场驱动：
 ```css
 [data-reveal] {
@@ -603,4 +656,4 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ---
 
-*本规范由 DeLector 前端架构与 UI/UX 委员会统一制定并维护，作为全站组件迭代与视觉重塑的单一真实数据源 (Single Source of Truth)。*
+*本规范由 DeLector 前端架构与 UI/UX 委员会统一制定并维护，作为全站组件迭代与视觉重塑的设计纲要。**Token 与排印数值的唯一真实数据源 (Single Source of Truth) 是 `static/css/tokens.css`**——本文件 §4/§5 是其同步视图，数值以该文件为准。*
