@@ -13,9 +13,10 @@
 """
 
 import gc
+import glob
 import os
 import time
-from typing import Dict, Mapping
+from typing import Dict, Iterator, Mapping, Tuple
 
 # 首删 1 次 + 至多 _RETRY_LIMIT 次重试；每次失败后 gc.collect() 断
 # sqlite3.Connection 内部 statement 缓存的引用环 + 短 sleep 给句柄释放留时间。
@@ -69,13 +70,48 @@ def remove_db_files(*paths: str) -> None:
 # `tests/test_save_wb_state_cost.py` 的迁移闸拒绝运行 ⇒ **本地 2 红、CI 全绿**。
 # 机制：`database.DATA_DIR` 在 `DELECTOR_DATA_DIR` 缺席时兜底仓库根（database.py:36），而
 # `delector/server.py` 在**模块顶层**就 `init_db()` ⇒ 「没先钉落点就 import server」= 建库。
-ROOT_DB_NAMES = ("delector.db", "progress.db")
+#
+# 视野在 2026-10-16 扩宽（审计 P1-1）：原先只有 delector.db / progress.db 两种名字，
+# 于是测试自己的库（`conftest.py` 的默认名、各模块 fixture 钉的 `test_*.db`）**全部
+# 在守卫视野之外** —— 而 `*.db` 被 `.gitignore` 挡住 ⇒ 这类泄漏可以无限期无人发现。
+# 现在把 `test_*.db` 一并看住（支持 fnmatch 通配）。
+ROOT_DB_NAMES = ("delector.db", "progress.db", "test_*.db")
+
+
+def _iter_root_db_names(root: str) -> Iterator[Tuple[str, str]]:
+    """把 `ROOT_DB_NAMES` 的每一项展开成实际存在的库文件名：产出 `(模式, 文件名)`。
+
+    精确文件名直接产出；含通配符的项（`test_*.db`）用 glob 展开（在当前目录里）。
+    """
+    for pattern in ROOT_DB_NAMES:
+        if any(ch in pattern for ch in "*?["):
+            for path in sorted(glob.glob(os.path.join(root, pattern))):
+                if os.path.isfile(path):
+                    yield pattern, os.path.basename(path)
+        else:
+            yield pattern, pattern
+
+
+def iter_root_db_names(root: str) -> Iterator[Tuple[str, str]]:
+    """`_iter_root_db_names` 的公开门面：供其它测试模块复用**同一份**展开口径。
+
+    动机（2026-10-16 审计 P1-1 视野扩大后的口径统一）：`ROOT_DB_NAMES` 含通配项
+    （`test_*.db`）后，任何「按名字拼路径」的消费者都必须先做同样的 glob 展开；
+    各自再写一份迟早漂移 —— `tests/test_get_endpoints_with_writes.py` 的
+    `(mtime, size)` 指纹就曾按字面拼路径 ⇒ 对 `test_*.db` 的原地改写失明。
+    不复制逻辑，直接委托 `_iter_root_db_names`；私有名保留以兼容现状。
+    """
+    yield from _iter_root_db_names(root)
 
 
 def root_db_snapshot(root: str) -> Dict[str, int]:
-    """仓库根那两套库（含 `-wal` / `-shm` 侧文件）的快照：文件名 → 字节数。"""
+    """仓库根数据文件（含 `-wal` / `-shm` 侧文件）的快照：文件名 → 字节数。
+
+    `ROOT_DB_NAMES` 的每一项可以是精确文件名，也可以是通配模式（如 `test_*.db`）——
+    后者按**实际存在的文件**展开，故不会把不存在的模式写进快照。
+    """
     snapshot: Dict[str, int] = {}
-    for name in ROOT_DB_NAMES:
+    for _pattern, name in _iter_root_db_names(root):
         for suffix in ("", "-wal", "-shm"):
             path = os.path.join(root, f"{name}{suffix}")
             if os.path.isfile(path):

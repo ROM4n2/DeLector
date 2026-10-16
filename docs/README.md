@@ -13,7 +13,7 @@
 | `adr/` | **仓内 ADR 副本**：`<日期>-adr-XXXX-<主题>.md`（正式件在 Vault） | 无归档层 |
 | `reviews/` | 审计 / 评审报告（一次性、带日期） | — |
 | `agents/` | 面向 agent 的常青文档：`architecture.md`（架构与跨端契约）、`ops.md`（运维）、以及需人工/agent 逐项填写的复测清单 | — |
-| 顶层 `*.md` | 跨领域的常青规范：`design-system.md`（设计系统）、`svg-character-spec.md`（角色 SVG 规格） | — |
+| 顶层 `*.md` | 跨领域的常青规范：`design-system.md`（设计系统；token / 排印现值以 `static/css/tokens.css` 为准）、`svg-character-spec.md`（角色 SVG 规格） | — |
 
 ## 放置规则（速查）
 

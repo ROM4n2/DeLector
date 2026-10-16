@@ -1616,6 +1616,17 @@ def export_database_backup(request: Request) -> Any:
     return build_backup_payload()
 
 
+# localStorage 备份的**键名黑名单（权威闸）**：前端 cards.js 的 BACKUP_LS_EXCLUDE
+# 只是纵深第一道 —— 前端可被绕过（旧版客户端不会过滤、请求体可手改，且 `wb.` 是
+# 前缀全扫）⇒ 真正的闸必须在这里。只按键名判定，不看值：值可能是任意文本，拿值做
+# 特征（如扫 32 位 hex）会把正常备份内容误伤成可疑。
+# wb.pair.v1 里是 {host, key}：key 即 wb_sync_key（database.py 里 secrets.token_hex(16)、
+# 长期不轮换、只有手动撤销才失效），host 是内网地址。它与 database.py 的
+# BACKUP_SETTINGS_WHITELIST（导出白名单，明确排除 wb_sync_key）是**同一威胁模型的两处**：
+# 那边的注释「备份 JSON 是用户会分享、上传、丢进网盘的文件」在这里同样成立。
+_BACKUP_LS_DENYLIST = ("wb.pair.v1",)
+
+
 class PrepareBackupReq(BaseModel):
     local_storage: Dict[str, Any] = {}
 
@@ -1633,7 +1644,10 @@ def prepare_backup_download(req: PrepareBackupReq, request: Request) -> Dict[str
     """
     _require_localhost(request)
     payload = build_backup_payload()
-    payload["local_storage"] = req.local_storage or {}
+    # 凭据键在落盘前被剥掉（权威闸；前端过滤只是纵深第一道，见 _BACKUP_LS_DENYLIST）。
+    payload["local_storage"] = {
+        k: v for k, v in (req.local_storage or {}).items() if k not in _BACKUP_LS_DENYLIST
+    }
     token = _issue_pending(
         _pending_backup,
         payload,
@@ -1765,6 +1779,12 @@ class RestoreReq(BaseModel):
     exam_trials: List[Dict[str, Any]] = []
     # 遇见区短文表；加入备份/还原（缺省为空以兼容 v1/v5.1/v5.2 旧备份）
     encounter_texts: List[Dict[str, Any]] = []
+    # 听力微训 / 长难句精读成绩。这两张表早已在 _BACKUP_TABLES 里，模型却漏了字段：
+    # pydantic v2 默认 extra=ignore ⇒ 前端整份 POST 的这两键被静默丢弃，而还原对清单里
+    # 每张表无条件 DELETE ⇒ **删光零回灌**、接口仍返回 ok（用户零提示丢训练记录，
+    # 2026-10-15 swarm 审计 P0-1）。缺省为空以兼容旧备份（与上面各字段同理）。
+    listen_trials: List[Dict[str, Any]] = []
+    hard_sentence_trials: List[Dict[str, Any]] = []
     local_storage: Dict[str, Any] = {}
 
 

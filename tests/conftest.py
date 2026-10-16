@@ -37,7 +37,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 @pytest.fixture(scope="session", autouse=True)
 def _guard_repo_root_data_dirs() -> Iterator[None]:
-    """本次测试运行期间仓库根**不得**新增 / 改动 `delector.db` / `progress.db`（含侧文件）。
+    """本次测试运行期间仓库根**不得**新增 / 改动 `delector.db` / `progress.db` / `test_*.db`（含侧文件）。
+
+    注（2026-10-16 审计 P1-1）：视野随 `db_cleanup.ROOT_DB_NAMES` 扩含 `test_*.db` ——
+    测试自己的库（如根 `conftest.py` 默认的 `test_conftest_default.db`）此前全在守卫
+    视野之外，而 `*.db` 被 `.gitignore` 挡住 ⇒ 这类泄漏可以无限期无人发现。
 
     失败时给出**根因与三步修法**（不甩锅给读者）。
     """

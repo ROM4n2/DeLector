@@ -96,6 +96,24 @@ def _extract_content(data: Any) -> str:
     return content
 
 
+def _extract_usage(data: Any) -> Dict[str, int]:
+    """从 OpenAI 形状的信封里取 `usage`（⑦：prompt/completion **分别**归约为非负整数）。
+
+    缺失 / 畸形 ⇒ 两项均 0（不抛）：`usage` 是**附加计量**，它的缺席不构成失败
+    （收口前根本没有 usage 面）。归零让「无 usage」与「真 0 token」在记录里同形，
+    真值 vs 估算的**对照**由 harness 侧并列呈现（不在本模块做任何"猜"）。
+    """
+    raw = data.get("usage") if isinstance(data, dict) else None
+    out: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
+    if isinstance(raw, dict):
+        for key in ("prompt_tokens", "completion_tokens"):
+            value = raw.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+                continue
+            out[key] = int(value)
+    return out
+
+
 async def chat(
     messages: List[Dict[str, Any]],
     *,
@@ -104,6 +122,7 @@ async def chat(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     temperature: Optional[float] = None,
     response_format: Optional[Dict[str, str]] = None,
+    include_usage: bool = False,
     parse_json: bool = True,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
@@ -118,6 +137,9 @@ async def chat(
       HTTP 200、正文根本不解析 —— 探针提示词（`Sag 'OK'.`）回的就是 `OK`，不是 JSON；
       若在这里强制 `json.loads`，可用 key 会被报成「连接返回错误代码: 200 (OK)」，
       属于**顺手改坏错误语义**，故这个开关是必须的，不是可选项。
+    - `include_usage=True`（**新增、opt-in**）：把信封的 `usage`（prompt/completion 分别记）
+      合并进返回值（`{"…content 键…", "usage": {...}}`）；默认 False ⇒ 返回形状与收口前逐字
+      一致。这是为实验 harness 记录**真 token 消耗**而加的唯一透出面，不改既有任何调用方的语义。
     """
     key = api_key if api_key is not None else get_effective_api_key()
     base = (base_url if base_url is not None else get_effective_api_base_url()).rstrip("/")
@@ -144,14 +166,23 @@ async def chat(
             except Exception as exc:
                 raise LLMError(_DETAIL_RESPONSE_NOT_JSON, status_code=status, raw=_resp_text(resp)) from exc
             content = _extract_content(data)
+            usage = _extract_usage(data)
             if not parse_json:
-                return {"content": content}
+                result: Dict[str, Any] = {"content": content}
+                if include_usage:
+                    result["usage"] = usage
+                return result
             try:
                 parsed = json.loads(content)
             except Exception as exc:
                 raise LLMError(_DETAIL_CONTENT_NOT_JSON, status_code=status, raw=content) from exc
             if not isinstance(parsed, dict):
                 raise LLMError(_DETAIL_BAD_ENVELOPE, status_code=status, raw=content)
+            if include_usage:
+                # ⑦ 只**新增** usage 透出（prompt/completion 分别记），**不改既有返回形状**：
+                # 默认 `include_usage=False` 时返回逐字仍是解析后的 content 字典，既有调用方零感知
+                # （`tests/test_llm_client.py` 的 `out == {"definition_zh": ...}` 因此照旧成立）。
+                parsed = {**parsed, "usage": usage}
             return parsed
     except LLMError:
         raise

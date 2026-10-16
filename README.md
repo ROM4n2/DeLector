@@ -45,6 +45,7 @@
 | 产品特性全览 | `FEATURES.md` |
 | 架构细节（技术栈 / NLP / DB / API / 前端拓扑） | `docs/agents/architecture.md` |
 | 安全守卫 / 本机环境 / 打包 / 工作惯例 | `docs/agents/ops.md` |
+| 设计系统 / 视觉 Token / 组件蓝图 | `docs/design-system.md`（token 现值以 `static/css/tokens.css` 为准） |
 | 设计与实施计划 | `docs/specs/`、`docs/plans/` |
 | 版本历史 | `CHANGELOG.md` |
 | 架构决策记录（ADR） | `docs/adr/` |
@@ -133,12 +134,12 @@ mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
 
 ```
 DeLector/
-├── delector/          # 后端包：server.py(app 工厂) + core/(DB·安全) + nlp_engine/(spaCy·拓扑·AST) + routes/ + services/ + data/
-├── static/            # 前端零构建 ES 模块（index.html + js/ 11 模块 + german/ 背词台 + css/ tokens）
+├── delector/          # 后端包：server.py(app 工厂) + core/(DB·安全) + nlp_engine/(spaCy·拓扑·AST) + routes/ + services/ + tools/(Agent 工具) + data/
+├── static/            # 前端零构建 ES 模块（index.html + js/ 23 模块 + german/ 背词台 + css/ tokens）—— 模块数以 ls static/js/*.js 为准
 ├── android/           # Android 独立离线单机版工程 (Chaquopy + Gradle)
-├── agent/             # Phase 2 Go Agent Runtime（CLI + DAG + 工具注册，预览通道）
-├── tests/             # 117 个测试模块 + 迁移哨兵（pytest）
-├── docs/              # 文档：agents/(架构·运维) · specs/(设计) · plans/(实施计划)
+├── agent/             # Phase 2 Go Agent Runtime（CLI + DAG + 工具注册，预览通道）—— 与 AI agent 规范（AGENTS.md）无关，勿混
+├── tests/             # 测试模块（pytest）：以 ls tests/test_*.py 为准（2026-10-16 实测 125 个）+ 迁移哨兵
+├── docs/              # 文档：agents/(架构·运维) · specs/(设计) · plans/(实施计划) · adr/(仓内 ADR 副本) · reviews/(评审与评估报告)
 ├── start.py           # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
 ├── package_windows.py # Windows 绿色免安装便携版打包脚本
 ├── Dockerfile         # 容器化构建

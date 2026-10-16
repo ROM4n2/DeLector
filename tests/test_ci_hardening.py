@@ -18,9 +18,11 @@
 """
 
 import ast
+import importlib.util
 import re
 import subprocess
 from pathlib import Path
+from typing import Any, NamedTuple, Sequence
 
 import pytest
 
@@ -1377,4 +1379,424 @@ def test_windows_smoke_runs_pytest_before_build() -> None:
         f"{CI_WORKFLOW} 的 windows-portable-smoke 把 pytest 步排在了 Build **之后**：\n"
         "「测试先于构建」的顺序被破坏 —— 构建照跑、失败照常发生，提前反馈的意义荡然无存。\n"
         "修法：把 pytest 步挪回 Build Windows Portable 之前。"
+    )
+
+
+# ── 备份/还原「清单 ↔ 模型」一致性守卫（2026-10-16 A1 / P0-1：还原静默清空训练记录）──
+# 事故链（已用真实 _replace_tables 在临时库复现）：`_BACKUP_TABLES` 现读 **10 张表**，
+# 而还原请求模型 `RestoreReq` 只声明 **8 张主库表**字段；pydantic v2 默认
+# `extra=ignore` ⇒ 前端整份 POST 里 listen_trials / hard_sentence_trials 两键被**静默
+# 丢弃**；`_replace_tables` 又对清单里**每张表无条件 DELETE** ⇒ 删光零回灌，而接口仍
+# 返回 ok（用户零提示地丢掉全部听力微训 / 长难句精读记录）。
+#
+# 三处同批修，缺一处仍会静默丢数据：
+#   ① `RestoreReq` 补 listen_trials / hard_sentence_trials 两字段；
+#   ② `_replace_tables` 加前向兼容闸「键不在 payload ⇒ continue（原样保留）」——它把
+#      「日后新增备份表忘了补字段」的代价从**不可逆丢数据**降到**该表没被覆盖**；
+#   ③ 本节守卫把「清单 ↔ 字段集」钉成集合关系，让下一次「入清单忘改模型」立刻红。
+#
+# 为什么这三条落在本文件：本文件是「清单 ↔ 实现一致性」守卫的既有落点
+# （CI_REQUIRED_RUNTIMES ↔ conftest 实查项、PACKAGING_SURFACE_PATHS ↔ paths 过滤…），
+# 且计划允许「test_ci_hardening.py 或 test_server.py 择一」；test_server.py 同期另有
+# 改动面（P1-1 的 local_storage 契约），同文件并行编辑必冲突。
+#
+# 断言纪律：两份清单**现读**（import 真对象），不手抄表名 —— 手抄的清单不随功能增长，
+# 而「新表入清单、模型没跟上」正是本次事故溜到线上的原因。
+
+_TRIAL_TABLES: tuple[str, ...] = ("listen_trials", "hard_sentence_trials")
+
+
+def _fresh_db_pair(tmp_path: Path, stem: str) -> tuple[str, str]:
+    """在 tmp_path 下建一对空 schema（主库 + progress 库），返回两个**绝对**路径。
+
+    显式传 db_path ⇒ `init_db` 不跑数据目录闸（那条闸判的是仓库根 / 数据目录），
+    也不碰开发者真实库：用例只在临时目录里真跑 SQL（审计复现用的也是这条路径）。
+    """
+    from delector.core.database import init_db, init_progress_db
+
+    db_path = str(tmp_path / f"{stem}.db")
+    progress_path = str(tmp_path / f"{stem}-progress.db")
+    init_db(db_path=db_path)
+    init_progress_db(progress_path)
+    return db_path, progress_path
+
+
+def _insert_trial_rows(db_path: str) -> None:
+    """写入 2 条听力微训 + 1 条长难句精读（字段取非默认值，往返比对才有区分度）。"""
+    from delector.core.database import record_hard_sentence_trial, record_listen_trial
+
+    record_listen_trial("dictation", "article", 7, "A2", 10, 8, 0.8, 95, db_path=db_path)
+    record_listen_trial("choice", "encounter", 3, "B1", 12, 5, 0.4167, 120, db_path=db_path)
+    record_hard_sentence_trial("article", 7, 2, "B1", 0.75, 1, 64, db_path=db_path)
+
+
+def _trial_rows(db_path: str) -> dict[str, list[dict[str, Any]]]:
+    """读回两张训练表的**全列**（按 id 排序，便于整行逐字段比对内容）。"""
+    from delector.core.database import get_db
+
+    conn = get_db(db_path)
+    try:
+        return {
+            name: [dict(r) for r in conn.execute(f"SELECT * FROM {name} ORDER BY id").fetchall()]
+            for name in _TRIAL_TABLES
+        }
+    finally:
+        conn.close()
+
+
+def _pin_db_env(monkeypatch: pytest.MonkeyPatch, db_path: str, progress_path: str) -> None:
+    """把 env 钉到这对临时库：`build_backup_payload()` / `get_db()` 都按 env 解析落点。"""
+    monkeypatch.setenv("DATABASE_PATH", db_path)
+    monkeypatch.setenv("PROGRESS_DB_PATH", progress_path)
+
+
+def test_restore_payload_missing_table_key_preserves_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """payload **缺**表键 ⇒ 该表 MUST 原样保留（前向兼容闸），MUST NOT 被清空。
+
+    这是真实事故链的最后一步：pydantic 丢键后的 payload 里没有 listen_trials，而
+    `_replace_tables` 对清单里每张表**无条件 DELETE**，随后 `payload.get(name) or []`
+    为空 ⇒ continue ⇒ **删光零回灌**。用临时库真跑，不 mock。
+    """
+    from delector.core.database import _BACKUP_TABLES, _replace_tables, build_backup_payload, get_db
+
+    src, progress_src = _fresh_db_pair(tmp_path, "src")
+    _pin_db_env(monkeypatch, src, progress_src)
+    _insert_trial_rows(src)
+    before = _trial_rows(src)
+    assert len(before["listen_trials"]) == 2, "前置：种子数据没落库，本用例守的对象不对"
+
+    payload = build_backup_payload()
+    assert "listen_trials" in payload, "导出侧缺该键：本用例守的对象不对，请先修导出"
+    payload.pop("listen_trials")
+
+    conn = get_db(src)
+    try:
+        with conn:
+            _replace_tables(conn, _BACKUP_TABLES, payload)
+    finally:
+        conn.close()
+
+    after = _trial_rows(src)
+    assert after["listen_trials"] == before["listen_trials"], (
+        "payload 缺 listen_trials 键时该表被清空了 —— 这正是 P0-1：还原静默删光零回灌"
+        "（接口仍返回 ok，用户零提示地丢掉全部听力微训记录）。\n"
+        "修法：`_replace_tables` 加前向兼容闸 —— 键不在 payload 就 continue（**原样保留**），"
+        "而不是清空。"
+    )
+    assert after["hard_sentence_trials"] == before["hard_sentence_trials"], (
+        "键在场且非空的表往返后不一致：DELETE + 回灌这条路径本身坏了"
+    )
+
+    # 反向语义（闸 MUST NOT 退化成「空列表也跳过」）：键**在场但为空**仍是有意覆盖 ——
+    # 「备份里这张表就是空的」必须把目标库清空，否则用户删干净的成绩会在还原后复活。
+    payload_empty = build_backup_payload()
+    payload_empty["listen_trials"] = []
+    conn = get_db(src)
+    try:
+        with conn:
+            _replace_tables(conn, _BACKUP_TABLES, payload_empty)
+    finally:
+        conn.close()
+    assert _trial_rows(src)["listen_trials"] == [], (
+        "键在场但为空时该表没被清空：闸被写成了 `if not rows: continue` 这类把空列表也当缺键的"
+        "形态，会让「备份里的空表」永远无法覆盖目标库"
+    )
+
+
+def test_backup_restore_roundtrip_keeps_trial_tables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """导出 →（经 RestoreReq 过滤）→ 还原进**空库**（换机/重装）⇒ 两表行数与内容一致。
+
+    为什么不只测 `_replace_tables`：真实链路上多了一道 **pydantic 过滤**，
+    字段没声明 ⇒ 键被 `extra=ignore` 丢掉 ⇒ 还原删光零回灌。本用例把这道过滤接进来，
+    让"模型漏字段"这一类缺陷在测试里就能红。
+    """
+    from delector.core.database import _BACKUP_TABLES, _replace_tables, build_backup_payload, get_db
+    from delector.routes.main import RestoreReq
+
+    src, progress_src = _fresh_db_pair(tmp_path, "src")
+    _pin_db_env(monkeypatch, src, progress_src)
+    _insert_trial_rows(src)
+    before = _trial_rows(src)
+    assert before["listen_trials"] and before["hard_sentence_trials"], "前置：种子数据没落库"
+
+    exported = build_backup_payload()
+
+    # 换机/重装：目标库是全新的空库（还原语义是「真覆盖」，不是 merge）
+    dst, progress_dst = _fresh_db_pair(tmp_path, "dst")
+    _pin_db_env(monkeypatch, dst, progress_dst)
+
+    # 走真实请求模型：这正是「前端整份 POST 被 pydantic 过滤」的那一步
+    req = RestoreReq(**exported)
+    payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    for name in _TRIAL_TABLES:
+        assert payload.get(name), (
+            f"RestoreReq 过滤后 payload 里没有 {name}：前端整份 POST 的该键被模型丢弃，"
+            "还原会「删光零回灌」（P0-1）。修法：给 RestoreReq 补该字段。"
+        )
+
+    conn = get_db(dst)
+    try:
+        with conn:
+            _replace_tables(conn, _BACKUP_TABLES, payload)
+    finally:
+        conn.close()
+
+    after = _trial_rows(dst)
+    for name in _TRIAL_TABLES:
+        assert after[name] == before[name], (
+            f"{name} 备份往返后不一致：\n  导出前 {before[name]!r}\n  还原后 {after[name]!r}"
+        )
+
+
+def test_restore_req_declares_every_backup_table() -> None:
+    """备份清单里的每张表 MUST 在 `RestoreReq` 上有同名字段（现读两份清单，不手抄）。
+
+    判据是**集合差**而非逐表列举：清单随功能增长（listen_trials / hard_sentence_trials /
+    encounter_texts 都是后加的），逐表列举永远滞后一步；而漏一处的代价就是
+    「还原静默清空该表」——同类缺陷本仓已发生两次（vocab_cards 漏列 / 本次两表漏字段）。
+    """
+    from delector.core.database import _BACKUP_TABLES, _PROGRESS_TABLES
+    from delector.routes.main import RestoreReq
+
+    fields = getattr(RestoreReq, "model_fields", None)
+    if fields is None:  # pragma: no cover - pydantic v1 面（Android 运行时）字段集在 __fields__
+        fields = getattr(RestoreReq, "__fields__", {})
+    provided = set(fields)
+
+    missing = sorted(set(_BACKUP_TABLES) - provided)
+    assert missing == [], (
+        f"RestoreReq 未声明备份清单里的表：{missing}\n"
+        "pydantic v2 默认 extra=ignore ⇒ 前端整份 POST 里的同名键会被**静默丢弃**，"
+        "而还原会对这些表 DELETE 后零回灌（用户零提示地丢数据）。\n"
+        "修法：在 RestoreReq 上补 `字段名: List[Dict[str, Any]] = []`（缺省空以兼容旧备份），"
+        "而不是删掉本守卫。"
+    )
+
+    # 同理守 progress 库清单：还原对 _PROGRESS_TABLES 走同一套 _replace_tables，
+    # 漏键的失败形态与危害相同（只是数据面在另一个库）。
+    missing_progress = sorted(set(_PROGRESS_TABLES) - provided)
+    assert missing_progress == [], (
+        f"RestoreReq 未声明 progress 备份清单里的表：{missing_progress}\n"
+        "还原对 _PROGRESS_TABLES 走同一套 _replace_tables，漏键 ⇒ 该表被 DELETE 后零回灌。"
+    )
+
+
+# ── master 直推范围机械闸（P1-1：分支纪律此前没有机械闸）─────────────────────────
+# 背景：docs/reviews/2026-10-16-commit-rhythm-and-git-management-audit.md P1-1 ——
+# 2026-10-09~14 有 25 个 feat/fix/ci/test/perf 提交直推 master（含生产代码与 CI 定义），
+# 且已实发 f49d359 推红事故。修法 = 一条廉价机械闸：master 上**非 merge** 提交的改动面
+# MUST ⊆ 白名单。本闸三件：① 可测判定器 tools/check_master_commit_scope.py（纯函数 +
+# CLI 退出码 0/1/2）；② .githooks/pre-push 接线；③ 一份 workflow 新增 job（仅 push→master）。
+#
+# 断言纪律：判定器用**真调用**（非字符串在场）；CLI 退出码用注入式 git stub（零子进程 ——
+# 遵守计划「新增测试 MUST NOT 起无界子进程链」）。两条豁免 MUST 各有独立用例，且用例对
+# 豁免是**敏感**的（删豁免 ⇒ 用例红，见计划 Step 4 变异自证）。
+
+MASTER_SCOPE_SCRIPT = REPO_ROOT / "tools" / "check_master_commit_scope.py"
+PRE_PUSH_HOOK = REPO_ROOT / ".githooks" / "pre-push"
+
+#: 白名单内样本（逐条命中一条规则：目录前缀 / 精确名）。
+_ALLOWLIST_ALLOWED: tuple[str, ...] = (
+    "WORKMEMORY/work.log",
+    "docs/reviews/x.md",
+    "README.md",
+    "CHANGELOG.md",
+    "static/index.html",
+    "static/sw.js",
+    "android/app/build.gradle",
+    "delector/core/version.py",
+)
+#: 出界样本：生产代码（P1-1 里 25 个直推提交最典型的越界面）。
+_ALLOWLIST_OFFENDER = "delector/services/llm_client.py"
+#: git 默认合并提交 subject 形态（审计实测：全部为 "Merge pull request #N from …"）。
+_MERGE_SUBJECT = "Merge pull request #143 from dev/feat-x"
+_ZERO_SHA = "0" * 40
+
+
+class _FakeCommit(NamedTuple):
+    """stub 用的一条提交记录（subject + 改动面 + 是否 root）。"""
+
+    subject: str
+    files: tuple[str, ...]
+    is_root: bool = False
+
+
+class _FakeGit:
+    """注入式 git stub：零子进程，覆盖判定器用到的只读命令（rev-list / log / diff-tree）。"""
+
+    def __init__(self, commits: dict[str, _FakeCommit]) -> None:
+        self.commits = commits
+        self.calls: list[list[str]] = []
+
+    def __call__(self, args: Sequence[str]) -> str:
+        self.calls.append(list(args))
+        if args[0] == "rev-list" and "--no-merges" in args:
+            return "".join(f"{sha}\n" for sha in self.commits)
+        if args[0] == "rev-list" and "--parents" in args:
+            sha = args[-1]
+            parents = () if self.commits[sha].is_root else ("deadbeef",)
+            return " ".join((sha, *parents)) + "\n"
+        if args[0] == "log":
+            return self.commits[args[-1]].subject + "\n"
+        if args[0] == "diff-tree":
+            return "".join(f"{name}\n" for name in self.commits[args[-1]].files)
+        raise AssertionError(f"未预期的 git 调用：{args}")
+
+
+def _load_master_scope_module() -> Any:
+    """按文件路径加载判定器模块（用真对象，避免 import 期污染 sys.modules）。"""
+    if not MASTER_SCOPE_SCRIPT.exists():
+        pytest.fail(f"判定器脚本不存在：{MASTER_SCOPE_SCRIPT}（master 直推机械闸缺失）")
+    spec = importlib.util.spec_from_file_location("check_master_commit_scope", MASTER_SCOPE_SCRIPT)
+    assert spec is not None and spec.loader is not None, f"无法加载判定器脚本：{MASTER_SCOPE_SCRIPT}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_check_scope_allows_whitelisted_files() -> None:
+    """白名单内（簿记 / 文档 / 版本面）⇒ 无违规理由。"""
+    module = _load_master_scope_module()
+    assert module.check_scope(_ALLOWLIST_ALLOWED, subject="docs: 更新簿记") == []
+
+
+def test_check_scope_flags_out_of_allowlist_file() -> None:
+    """出界文件 ⇒ 判红；白名单被放宽（如改成 **）时本用例 MUST 红。"""
+    module = _load_master_scope_module()
+    reasons = module.check_scope([*_ALLOWLIST_ALLOWED, _ALLOWLIST_OFFENDER], subject="feat: 越界")
+    assert reasons, "出界文件未被判红：白名单被放宽（如改成 **）时本用例 MUST 红"
+    assert any(_ALLOWLIST_OFFENDER in reason for reason in reasons), reasons
+
+
+def test_check_scope_exempts_merge_commit() -> None:
+    """合并提交豁免：删掉 merge 豁免时本用例 MUST 红。"""
+    module = _load_master_scope_module()
+    assert module.check_scope([_ALLOWLIST_OFFENDER], subject=_MERGE_SUBJECT) == [], (
+        "合并提交未被豁免：删掉 merge 豁免时本用例 MUST 红"
+    )
+
+
+def test_check_scope_exempts_bootstrap() -> None:
+    """bootstrap 豁免（仓库最初提交 / --bootstrap）：整树入仓也不算违规。"""
+    module = _load_master_scope_module()
+    files = ["delector/server.py", "package_windows.py", "tests/test_x.py"]
+    assert module.check_scope(files, subject="Initial commit", bootstrap=True) == []
+
+
+def test_scope_script_pins_exact_allowlist() -> None:
+    """白名单 MUST 含审计 P1-1 的 8 项，且 MUST NOT 出现放行一切的通配。"""
+    module = _load_master_scope_module()
+    required = (
+        "WORKMEMORY/",
+        "docs/",
+        "README.md",
+        "CHANGELOG.md",
+        "static/index.html",
+        "static/sw.js",
+        "android/app/build.gradle",
+        "delector/core/version.py",
+    )
+    for entry in required:
+        assert entry in module.MASTER_DIRECT_ALLOWLIST, f"白名单缺 {entry!r}"
+    for wildcard in ("**", "*"):
+        assert wildcard not in module.MASTER_DIRECT_ALLOWLIST, (
+            f"白名单出现 {wildcard!r}：会放行一切，机械闸形同虚设"
+        )
+
+
+def test_cli_exit_code_pass_is_zero() -> None:
+    """退出码 0 = 通过（全部提交 ⊆ 白名单）。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("docs: ok", ("docs/a.md", "WORKMEMORY/work.log"))})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+
+
+def test_cli_exit_code_violation_is_one(capsys: pytest.CaptureFixture[str]) -> None:
+    """退出码 1 = 有违规，且 stderr 打出「sha + 出界文件」。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("feat: 越界", (_ALLOWLIST_OFFENDER, "docs/a.md"))})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 1
+    err = capsys.readouterr().err
+    assert "c1" in err and _ALLOWLIST_OFFENDER in err
+
+
+def test_cli_exit_code_environment_unavailable_is_two(capsys: pytest.CaptureFixture[str]) -> None:
+    """退出码 2 = 环境不可用（git 调用失败）。"""
+    module = _load_master_scope_module()
+
+    def broken_git(args: Sequence[str]) -> str:
+        raise module.GitError("not a git repository")
+
+    assert module.main(["--range", "aaa..bbb"], git=broken_git) == 2
+    assert "环境不可用" in capsys.readouterr().err
+
+
+def test_cli_undeterminable_range_warns_through(capsys: pytest.CaptureFixture[str]) -> None:
+    """范围不可判定（before 全零 = 首次推送）⇒ 显式警告后通过，禁止静默。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("feat: 越界", (_ALLOWLIST_OFFENDER,))})
+    assert module.main(["--range", f"{_ZERO_SHA}..bbb"], git=git) == 0
+    err = capsys.readouterr().err
+    assert "不可判定" in err and "首次推送" in err, "首次推送范围必须**显式警告后**通过，禁止静默"
+
+
+def test_cli_bootstrap_flag_skips_with_warning(capsys: pytest.CaptureFixture[str]) -> None:
+    """显式 --bootstrap ⇒ 跳过范围检查，但 MUST 打印警告（不静默）。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("feat: 越界", (_ALLOWLIST_OFFENDER,))})
+    assert module.main(["--range", "aaa..bbb", "--bootstrap"], git=git) == 0
+    assert "bootstrap" in capsys.readouterr().err.lower()
+
+
+def test_cli_root_commit_is_bootstrap_exempt(capsys: pytest.CaptureFixture[str]) -> None:
+    """仓库最初提交（root commit）⇒ 自动 bootstrap 豁免，不判红。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"root1": _FakeCommit("Initial commit", ("delector/server.py",), is_root=True)})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+    assert "最初提交" in capsys.readouterr().err
+
+
+def test_cli_restricts_range_to_first_parent_mainline() -> None:
+    """范围遍历 MUST 只取 mainline（--first-parent）——否则 PR 合并带入的分支提交会被误判违规。
+
+    实测（本机，2026-10-16）：PR #139 合并提交 dac3a8b 在 CI 口径范围 dac3a8b^1..dac3a8b 下，
+    仅 --no-merges 得 20 个提交、加 --first-parent 得 0 个。缺 --first-parent 会让本闸在每次
+    正常 PR 合并时把 master 推红（P1-1 要消灭的失败形态）。
+    """
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("docs: ok", ("docs/a.md",))})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+    revlist_calls = [call for call in git.calls if call and call[0] == "rev-list" and "--no-merges" in call]
+    assert revlist_calls, "未观察到 rev-list 调用"
+    assert all("--first-parent" in call for call in revlist_calls), (
+        f"范围遍历缺 --first-parent：{revlist_calls} —— PR 合并会被误判为直推违规、把 master 推红"
+    )
+
+
+def test_pre_push_hook_targets_master_and_prints_skip_reason() -> None:
+    """pre-push 必须针对 refs/heads/master 判定，且不适用的情形明确打印跳过原因。"""
+    text = _read_guard_file(PRE_PUSH_HOOK)
+    assert "/usr/bin/env bash" in text, "pre-push 缺 bash shebang"
+    assert "refs/heads/master" in text, "pre-push 未针对 refs/heads/master 判定"
+    assert "tools/check_master_commit_scope.py" in text, "pre-push 未接线判定器"
+    assert "跳过" in text, "pre-push 不适用的情形 MUST 明确打印跳过原因（禁止静默通过）"
+
+
+def test_ci_workflow_has_master_direct_push_scope_job() -> None:
+    """ci.yml 必须有「仅 push→master」触发的直推范围 gate job，并以 before..sha 调用判定器。"""
+    text = _read_guard_file(CI_WORKFLOW)
+    assert "master-direct-push-scope:" in text, f"{CI_WORKFLOW} 缺 master 直推范围 gate job"
+    block = _job_block(CI_WORKFLOW, "master-direct-push-scope")
+    assert "github.event_name == 'push'" in block, "job 未限定为 push 事件（PR 无 before..sha 语义）"
+    assert "github.event.before" in block and "github.sha" in block, (
+        "job 未以 before..sha 为范围调用判定器"
+    )
+    assert "tools/check_master_commit_scope.py" in block, "job 未接线判定器"
+    assert "fetch-depth: 0" in block, (
+        "job 的 checkout 未取全历史：before 基线不在本地对象库 ⇒ git 取不到范围"
+        "（与 master push 红事故同因）"
     )

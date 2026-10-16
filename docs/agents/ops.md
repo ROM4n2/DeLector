@@ -35,11 +35,13 @@
 ```text
 启动命令:  python start.py   或   start.bat
 地址:      http://localhost:8000（桌面端同时绑 0.0.0.0，同 Wi-Fi 设备可访问；敏感设置仅回环可写）
-数据库:    D:\Code\DeLector\delector.db（主库）
-           D:\Code\DeLector\progress.db（进度）
+数据库:    **不再在仓库根** —— 默认 `%LOCALAPPDATA%\DeLector\{delector.db,progress.db}`（2026-10-16 实测）；
+           仓库根若出现 `*.db` 那是测试/诊断残留（`.gitignore` 已挡，`tests/conftest.py` 的会话守卫会报）
 NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
-测试:      pytest            （719 passed + 1 skipped，全绿）
-行为探针:  node tools/<name>.mjs（10 个，发布闸要求 10/10 全绿，含 wb_queue_probe 13/13 切片护栏）
+测试:      pytest            （**现读口径**：`python -m pytest --collect-only -q | tail -1`；
+           2026-10-16 全量实测 2135 passed + 2 skipped，125 个 `tests/test_*.py` —— 勿手抄）
+行为探针:  node tools/<name>.mjs（**现读口径**：`ls tools/*.mjs | wc -l` = 29 个，发布闸要求全绿；
+           含 wb_queue_probe 13/13 切片护栏）
 打包:      python package_windows.py（Windows 便携版）；Android: cd android && ./gradlew assembleDebug
 静态检查:  ruff check .       （全仓零告警门禁，CI 的 ci.yml 已接入；旧的手工 pyflakes 命令已退役）
 ```
@@ -51,8 +53,12 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 `DELECTOR_PORTABLE=1` 保持"数据随程序目录"。两者都会让 bootstrap 不去搬仓库根那份真实库。
 
 **数据目录（部署面）**
-: 桌面端 `DATA_DIR` = 仓库根（`delector.db` / `progress.db` 并排），无 `DELECTOR_DATA_DIR` 兜底时
-  即如此，**桌面端不设该变量**。
+: 桌面端**默认 `%LOCALAPPDATA%\DeLector`**（Linux/macOS：`~/.local/share/DeLector`），由
+  `data_dir_bootstrap.resolve_data_dir()` 解析（优先级：`DELECTOR_DATA_DIR` → `DELECTOR_PORTABLE=1`
+  → 平台默认目录）——**不是仓库根**。只有显式 `DELECTOR_PORTABLE=1` 才回落到"程序所在目录"，
+  源码运行时那层就是仓库根 ⇒ `.gitignore` 另有 `/launch.log*`、`/lan-address.txt`、`*.db*` 一组兜底
+  （2026-10-16 实测：`resolve_data_dir({})` → `C:\Users\<user>\AppData\Local\DeLector`；
+  `DELECTOR_PORTABLE=1` → 仓库根。**桌面端默认不设 `DELECTOR_DATA_DIR`**）。
 : Docker 部署走 `docker-compose.yml`：挂 `./data` **目录**（WAL 的 `-wal`/`-shm` 旁文件单文件挂载会丢）
   并**无条件**设 `DELECTOR_DATA_DIR=/app/data`。
 

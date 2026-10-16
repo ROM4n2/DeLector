@@ -30,12 +30,22 @@
 
 一对文本一次调用（设计稿 §8 的「≈120 次轻量调用」是 2 次/对 的保守上界；本实现 1 次/对
 返回四项分 = 两段 × 两维 —— 更省，评分口径不变）。
+
+可执行入口（⑥）
+---------------
+`python tools/bench_judge_rater.py --pairs <json>` = **结构冒烟** CLI：零 Key、零网络，用确定性
+stub chat 跑通「读对 → 盲评请求 → 去盲 → 序列化」全管线（真模型接线属 Task 5/6，不在本任务）。
+它补的是交付物清单里"rater 有可执行入口"这一项 —— 但**绝不**冒充真盲评（输出头与 `--help`
+均标注 stub）。
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import dataclasses
+import json
+import sys
 from typing import Any, Callable, Coroutine
 
 #: Report 的形状与 `tools/bench_judge_gaming.py::summarize` 的产物同形（本模块不 import
@@ -173,3 +183,89 @@ def insert_into_report(report: Report, ratings: list[Rating]) -> Report:
         "ratings": [dataclasses.asdict(rating) for rating in ratings],
     }
     return merged
+
+
+# --------------------------------------------------------------------------- #
+# 可执行入口（⑥）：结构冒烟 CLI（零 Key、零网络；真模型由调用方注入，属 Task 5/6）
+# --------------------------------------------------------------------------- #
+
+
+def _load_pairs(path: str) -> list[dict[str, str]]:
+    """读 (id, before, after) 文本对：JSON 数组，每项含 before/after（id 可选）。
+
+    形状不合法 ⇒ ValueError（不猜、不补）：盲评的输入面宁可显式失败，也不能静默丢对。
+    """
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, list):
+        raise ValueError(f"--pairs 文件必须是 JSON 数组：{path}")
+    pairs: list[dict[str, str]] = []
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise ValueError(f"--pairs[{index}] 必须是对象（含 before/after）")
+        before = item.get("before")
+        after = item.get("after")
+        if not isinstance(before, str) or not isinstance(after, str):
+            raise ValueError(f"--pairs[{index}] 的 before/after 必须是字符串")
+        pairs.append({"id": str(item.get("id", index)), "before": before, "after": after})
+    return pairs
+
+
+class StubRatingChat:
+    """结构冒烟用的**确定性** stub chat（零 Key、零网络）：回固定的合法评分形状。
+
+    为什么它不"真评分"：本入口测的是**管线可执行**（读对 → 构造盲评请求 → 去盲映射 →
+    序列化），**不是**模型质量；真模型评分必须由调用方注入 chat（Task 5/6 接
+    `llm_client.chat`）。输出头与 `--help` 都如实标注「stub」——不冒充真盲评。
+    """
+
+    model_name = "rater-cli-stub"
+
+    async def __call__(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "text1": {"correctness": 3, "idiomatic": 3},
+            "text2": {"correctness": 3, "idiomatic": 3},
+        }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """rater 可执行入口（⑥，**结构冒烟**）：对 `--pairs` 的文本对跑盲评管线并输出评级 JSON。
+
+    零 Key、零网络（用确定性 stub chat）；真模型接线属 Task 5/6。退出码：`0` = 完成；
+    `2` = 参数 / 输入文件不可用（与 harness 的 0/1/2 惯例一致）。
+    """
+    parser = argparse.ArgumentParser(
+        description="盲评 rater 结构冒烟 CLI（零 Key、零网络；真模型由调用方注入，属 Task 5/6）。",
+    )
+    parser.add_argument(
+        "--pairs",
+        required=True,
+        metavar="PATH",
+        help="JSON 数组文件：每项含 before/after（id 可选）",
+    )
+    parser.add_argument(
+        "--order-seed",
+        type=int,
+        default=0,
+        metavar="N",
+        help="盲评呈现顺序种子（偶数 ba / 奇数 ab；逐对 +1 轮换）",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        pairs = _load_pairs(args.pairs)
+    except (OSError, ValueError) as exc:
+        print(f"[rater] 输入不可用：{exc}", file=sys.stderr)
+        return 2
+
+    chat = StubRatingChat()
+    ratings: list[dict[str, Any]] = []
+    for index, pair in enumerate(pairs):
+        rating = rate_pair(pair["before"], pair["after"], order_seed=args.order_seed + index, chat=chat)
+        ratings.append({"id": pair["id"], **dataclasses.asdict(rating)})
+    print(json.dumps({"role": AUXILIARY_ROLE, "ratings": ratings}, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

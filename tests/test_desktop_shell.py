@@ -26,6 +26,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import types
 from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
@@ -2662,3 +2663,157 @@ def test_start_entry_bad_arg_lands_in_launch_log_when_streams_are_none(
     content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
     assert "usage: start.py" in content, f"错参也必须给出用法，实际：{content!r}"
     assert "unrecognized arguments: --bogus" in content, f"错误必须点名坏参数，实际：{content!r}"
+
+
+# ── 本轮 A 系列 Task 2（P0-2）：退出路径有界 + 根除「假成功」日志 ──────────────────────
+# 真因（审计 P0-2，机制经质疑席**纠正**；勿照「uvicorn wait_for(None)」的旧说法改）：
+#   ① `start.py` 退出时 `thread.join()` 裸等（无超时）；② uvicorn 线程非 daemon；
+#   ③ `shutdown()` 的返回值被丢弃后仍无条件 print「服务已停止」（假成功）；
+#   ④ main() 返回后解释器退出时 `threading._shutdown()` 再 join 那个非 daemon 线程
+#      ⇒「已停止」已打印、进程仍挂、8000 仍占 ⇒ 下次启动 `_handle_existing_port` 命中旧实例。
+# 修法（本组用例钉死）：`build_server` 设 `timeout_graceful_shutdown`；join 带显式超时；
+# `shutdown()` 返回 False ⇒ 人话进 stderr + `sys.exit(1)`（干净退出 0 / 不干净退出 1）。
+def _stub_main_until_exit_path(
+    monkeypatch: pytest.MonkeyPatch, thread: Any, shutdown_result: bool
+) -> None:
+    """把 `start.main()` 的前置段整体换成替身，只让「退出路径」那段真代码受测。
+
+    不起真 uvicorn、不 import 真 `delector.server`（同该文件既有替身的两条理由：真起服务会
+    绑端口/拉 spaCy；`delector.server` 一 import，`database.DATA_DIR` 就按仓库根落定）。
+    端口探针 / Android 判定（顺带不起浏览器线程）/ 数据目录引导 / 建服 / 收尸全部压平。
+    """
+    import start
+    from delector.core import server_lifecycle
+
+    fake_server = types.SimpleNamespace(should_exit=False)
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: False)
+    monkeypatch.setattr(start, "is_android", lambda: True)  # 走回环、且不起浏览器线程
+    monkeypatch.setattr(start, "bootstrap_data_dir", lambda *_a, **_k: "")
+    monkeypatch.setattr(server_lifecycle, "build_server", lambda host, port, app: fake_server)
+    monkeypatch.setattr(server_lifecycle, "serve_in_thread", lambda server: thread)
+    monkeypatch.setattr(server_lifecycle, "shutdown", lambda *_a, **_k: shutdown_result)
+    monkeypatch.setitem(sys.modules, "delector.server", types.SimpleNamespace(app=object()))
+
+
+class _FinishedThread:
+    """已结束的 server 线程替身：join 立即返回、is_alive 恒 False（「服务已停」的干净态）。"""
+
+    daemon = False
+
+    def join(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    def is_alive(self) -> bool:
+        return False
+
+
+class _NeverEndingThread:
+    """「永不结束」的 server 线程替身：is_alive 恒 True；第 N 次 join 抛 KeyboardInterrupt。
+
+    第 N 次 join 抛 KeyboardInterrupt 模拟 Ctrl+C —— 真实里被信号打断的正是那一次等待。
+    每次 join 收到的 timeout 都被记录：修复后的实现每次都带显式超时；若退回裸 `join()`
+    （本次要根除的缺陷形态），记录到 None ⇒ 断言转红。**桩自身绝不无界等待**：「没给超时」
+    由断言捕获，而不是让整套用例挂死 —— 那会把可诊断的「红」变成不可诊断的「挂起」，正违反
+    本仓反挂死纪律（禁 join 无超时 / 单用例最坏 <5s）。
+    """
+
+    daemon = False
+
+    def __init__(self, interrupt_on_join: int) -> None:
+        self.join_timeouts: List[Optional[float]] = []
+        self._interrupt_on_join = interrupt_on_join
+
+    def join(self, timeout: Optional[float] = None) -> None:
+        self.join_timeouts.append(timeout)
+        if len(self.join_timeouts) >= self._interrupt_on_join:
+            raise KeyboardInterrupt
+
+    def is_alive(self) -> bool:
+        return True
+
+
+def test_start_main_reports_unclean_shutdown_on_stderr_with_exit_code_1(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`shutdown()` 如实返回 False ⇒ 不得打印「服务已停止」（假成功），错误进 stderr、退出码 1。
+
+    旧失败现场：返回值被丢弃、`print("[提示] 服务已停止。")` 无条件执行 ⇒ 用户看到「成功」，
+    进程随后挂住、8000 仍被占。这条把「停不干净 ⇒ 可见失败 + 退出码 1」钉死。
+    """
+    import start
+
+    _stub_main_until_exit_path(monkeypatch, _FinishedThread(), shutdown_result=False)
+
+    with pytest.raises(SystemExit) as exc_info:
+        start.main()
+
+    assert exc_info.value.code == 1, "停不干净必须以退出码 1 报告（干净路径才是 0）"
+    captured = capsys.readouterr()
+    assert "[提示] 服务已停止。" not in captured.out, "shutdown 失败时不得打印成功提示（假成功）"
+    assert "[错误] 服务未能干净退出（端口可能仍被占用）。" in captured.err, (
+        "「停不干净」必须进 stderr（人话、可被日志采集，不许被吞）"
+    )
+
+
+def test_start_main_keeps_stopped_notice_and_clean_return_on_successful_shutdown(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """干净路径：`main()` 正常返回（裸调语义下 ⇒ 进程退出码 0）、原提示保留、stderr 无噪音。"""
+    import start
+
+    _stub_main_until_exit_path(monkeypatch, _FinishedThread(), shutdown_result=True)
+
+    start.main()  # 不得抛 SystemExit（若抛，本用例直接红）
+
+    captured = capsys.readouterr()
+    assert "[提示] 服务已停止。" in captured.out, "干净退出必须保留既有成功提示"
+    assert captured.err == "", f"干净路径不得往 stderr 写噪音：{captured.err!r}"
+
+
+def test_start_main_exit_path_stays_bounded_when_server_thread_never_ends(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """有界性探针：线程**永不结束**时，Ctrl+C 后的「收尸→报告→退出」仍必须在有界时间内完成。
+
+    三层断言：① 每次 join 都带显式超时且与 `SHUTDOWN_GRACE_S` 同一口径（退出路径上不允许
+    存在第二个等待数字）；② 整条路径秒级结束（绝不挂死）；③ 停不干净 ⇒ 退出码 1 + stderr 错误。
+    """
+    import start
+    from delector.core import server_lifecycle
+
+    thread = _NeverEndingThread(interrupt_on_join=1)
+    _stub_main_until_exit_path(monkeypatch, thread, shutdown_result=False)
+
+    started = time.monotonic()
+    with pytest.raises(SystemExit) as exc_info:
+        start.main()
+    elapsed = time.monotonic() - started
+
+    assert exc_info.value.code == 1
+    assert thread.join_timeouts, "退出路径必须真的等待过线程"
+    assert all(t is not None for t in thread.join_timeouts), (
+        f"每次 join 都必须带显式超时（禁裸 join —— 线程不结束时它就无上界）：{thread.join_timeouts!r}"
+    )
+    assert all(t == server_lifecycle.SHUTDOWN_GRACE_S for t in thread.join_timeouts), (
+        f"join 超时必须与 shutdown() 的宽限同口径（SHUTDOWN_GRACE_S，单一来源）：{thread.join_timeouts!r}"
+    )
+    assert elapsed < 2.5, f"退出路径必须在有界时间内结束（红线：单用例最坏 <5s），实测 {elapsed:.2f}s"
+    captured = capsys.readouterr()
+    assert "[提示] 服务已停止。" not in captured.out
+    assert "[错误]" in captured.err
+
+
+def test_build_server_sets_graceful_shutdown_timeout_matching_the_shutdown_grace() -> None:
+    """`build_server` MUST 给 uvicorn 设 `timeout_graceful_shutdown`（否则在途请求可无限拖住退出）。
+
+    为什么钉「等于 `SHUTDOWN_GRACE_S`」而非硬编码：uvicorn 侧（本参数）与调用方侧（`shutdown()`
+    的 join 宽限、start.py 的轮询超时）必须共用同一个数字 —— 三处各写一个，迟早在慢机器上漂移成
+    「uvicorn 还在等、调用方已宣告停不干净」的静默错位。只组装、不启动：不绑端口、不起服务。
+    """
+    from delector.core import server_lifecycle
+
+    server = server_lifecycle.build_server("127.0.0.1", 9, object())
+
+    assert server.config.timeout_graceful_shutdown == server_lifecycle.SHUTDOWN_GRACE_S, (
+        "uvicorn 优雅退出宽限必须与 shutdown()/start.py 同一口径（SHUTDOWN_GRACE_S）"
+    )

@@ -28,9 +28,16 @@ from typing import Any, Optional, Tuple
 import httpx
 import uvicorn
 
-__all__ = ["build_server", "serve_in_thread", "shutdown", "probe_identity", "await_ready"]
+__all__ = ["SHUTDOWN_GRACE_S", "build_server", "serve_in_thread", "shutdown", "probe_identity", "await_ready"]
 
 _logger = logging.getLogger("delector")
+
+# 优雅退出的宽限（秒）。**退出路径上只允许存在这一个等待数字**，三处共用（同源单值）：
+#   ① uvicorn 侧 `timeout_graceful_shutdown`（在途请求的强制收尾上界，见 build_server）；
+#   ② `shutdown()` 的 `grace_s`（调用方等待线程结束的宽限）；
+#   ③ `start.py` 轮询等待 server 结束的每次 `join(timeout=...)`。
+# 三处各写一个数字，迟早在慢机器/长请求上漂移成「uvicorn 还在等、调用方已宣告停不干净」的错位。
+SHUTDOWN_GRACE_S = 5
 
 # 单次健康探测超时（秒）。对 spaCy 冷启动放宽：起服务的**首个**请求可能正好落在模型
 # 加载里；总窗口由 await_ready 的 deadline_s 兜底（默认 30s）。
@@ -46,8 +53,21 @@ _IDENTITY_VALUE = "delector"
 
 
 def build_server(host: str, port: int, app: Any) -> uvicorn.Server:
-    """按给定绑定地址与 ASGI app 组装一个 `uvicorn.Server`（**只组装，不启动**）。"""
-    config = uvicorn.Config(app, host=host, port=port, reload=False, log_level="info")
+    """按给定绑定地址与 ASGI app 组装一个 `uvicorn.Server`（**只组装，不启动**）。
+
+    必须显式设 `timeout_graceful_shutdown`：uvicorn 的默认（None）会**无界**等在途请求收尾，
+    而本仓存在长请求（TTS 最坏 ~78s、备份还原持写锁数十秒）—— 不设等于把「退出要等多久」
+    交给运气；设成 SHUTDOWN_GRACE_S 后，宽限耗尽 uvicorn 强制收尾，`shutdown()` 的 join
+    才有机会**在界内如实**返回 True/False，而不是永久悬住。
+    """
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        reload=False,
+        log_level="info",
+        timeout_graceful_shutdown=SHUTDOWN_GRACE_S,
+    )
     return uvicorn.Server(config)
 
 
@@ -62,8 +82,9 @@ def serve_in_thread(server: uvicorn.Server) -> threading.Thread:
     return thread
 
 
-def shutdown(server: uvicorn.Server, thread: threading.Thread, grace_s: float = 5.0) -> bool:
-    """请求 server 退出并 join 线程；`grace_s` 内没停干净则**如实返回 False**。
+def shutdown(server: uvicorn.Server, thread: threading.Thread, grace_s: float = SHUTDOWN_GRACE_S) -> bool:
+    """请求 server 退出并 join 线程；`grace_s`（默认取 SHUTDOWN_GRACE_S，与 uvicorn 侧同源）
+    内没停干净则**如实返回 False**。
 
     返回 False 表示线程仍活着（由调用方决定是否硬退出）—— 绝不假装成功：静默的
     「以为停了其实没停」正是下次启动盲判「端口被占用」的根因。

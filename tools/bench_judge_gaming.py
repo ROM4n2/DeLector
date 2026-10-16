@@ -53,13 +53,20 @@ chat → 工具分发（生产白名单）→ 证据追加 → 裁判（带 nlp�
 - 真 chat = `RealChat`，与 `routes.main._PolishReplyRecorder`（ai-polish 生产构造）**逐参
   同形**：循环传入的 model 空串被忽略、以 `get_effective_api_model()` 生效模型名出网；
   timeout / max_tokens / response_format 原样透传（单次调用有界 = 循环的
-  `min(30.0s, 剩余 deadline)`）；**无重试**；额外只加 `model_name` 读取面（`RunRecord.model`）；
+  `min(30.0s, 剩余 deadline)`）；额外只加 `model_name` / `temperature` 读取面
+  （`RunRecord.model` / `RunRecord.temperature`）；**temperature 显式钉定**（③，
+  `EXPERIMENT_TEMPERATURE`，三臂共用）并 **opt-in** 请求 `usage` 透出（⑦）；
+  对 429/5xx/传输层错做**有界重试**（②，≤2 次、指数退避 + jitter；chat 无副作用 ⇒ 幂等）；
+- 真跑前先做**连通预检**（④）：发一次最小 chat（`parse_json=False`、`max_tokens=5`），
+  失败即退 2（正式跑之前拦下"根本没通"的场景；预检本身用 stub 测，绝不真发请求）；
 - 真跑前 stderr 打印**非泄值**事实：`key 存在=<bool>` 与生效模型名（**绝不打印 key 本体**；
   任何输出 / 异常 / 日志都不带 key —— 「key 存在」布尔由 key 判定面归约而来）；
-- 失败语义（**绝不静默部分结果**）：无 Key / 运行期依赖不可用 ⇒ 前置退 2（stderr 人话）；
-  上游 `llm_client.LLMError` ⇒ 显式退 2 + stderr 人话原因（`run_real` 原样冒泡、不吞、
-  不重试、不落任何部分结果）；
-- 输出面与 `--dry-run` 一致：文本模式全量记录 + 【综合记账】；`--json` 仍为十键 RunRecord 列表。
+- 失败语义（**绝不静默**）：无 Key / 运行期依赖不可用 / 连通预检失败 ⇒ 前置退 2（stderr 人话）；
+  上游错误的处理分两档（②）：**可重试**（429/5xx/传输层）重试耗尽后把该单元标 `status="failed"`
+  并**继续**下一篇（不再全跑中止 —— 一次瞬断不再让整轮实验白跑）；**不可重试**（如 401/402）
+  仍原样冒泡 ⇒ 显式退 2（凭据/配置类错误继续跑也没意义）；
+- 输出面与 `--dry-run` 一致：文本模式全量记录 + 【综合记账】；`--json` 仍为 RunRecord 列表
+  （Task 4 起 15 键，见 `RunRecord`）。
 
 零 Key 红线的现行形态：`--dry-run` 全链路仍零 Key、零网络（socket 闸 + `llm_client.chat`
 闸 + 产物 tripwire）；`--real` 的 Key 接触面被三条钉子夹住 —— 唯一调用点（AST 计数）、
@@ -69,9 +76,28 @@ chat → 工具分发（生产白名单）→ 证据追加 → 裁判（带 nlp�
 -----------------------------------------
 `0` = 完成；`1` = 样本集无效（空集 / 缺 signal / 缺 probe / 注入字段破损 / id 重复）；
 `2` = 环境不可用或真跑失败（依赖链 import 失败 / 德语模型不可用 / 无模式旗标或两旗标同给 /
-无 Key / 上游 LLM 异常 —— 真跑的任何失败都不产出部分结果）。
+无 Key / 连通预检失败 / 存在重试耗尽被标 `failed` 的单元）；
+`3` = **成本硬闸触顶**（⑤；与 0/1/2 区分开的独立码；`--max-total-tokens` / `--max-est-cost`）。
 
-可复跑：同输入同输出（无随机；`elapsed_s` 是墙钟观测值，不参与判定）。
+可复跑：**修正旧陈述**。旧文档写「同输入同输出（无随机）」，这对 `--real` 是**假陈述**：
+DeepSeek **无 `seed` 参数** ⇒ 采样有随机性、同输入不保证同输出。确定性只成立于 `--dry-run`
+（stub 按轮次脚本）；`--real` 下 `elapsed_s` 是墙钟观测值、采样随机，均不参与判决。本实验把
+`temperature` 显式钉定为**唯一可消除的随机源**（③），但**不**声称「同输入同输出」。
+
+工程前置（Task 4 / B5 七件；本任务**不触发真跑**）
+-------------------------------------------------
+① **逐篇增量落盘 + `--resume`**：每（篇 × 臂）跑完即写一行 JSONL（`--save <path>`；含
+   `case_id` / `arm` / 完整 `RunRecord`）并 flush+fsync —— 一次瞬断最多丢当前一篇的当前臂；
+   `--resume` 重跑只补缺（已落盘单元跳过，幂等；否则一次瞬断即全损）。
+② **有界重试**：429/5xx/传输层错 ≤ `MAX_RETRIES` 次、指数退避 + jitter（chat 无副作用 ⇒ 幂等）；
+   超限把该单元标 `status="failed"` 并**继续**下一篇。
+③ **`temperature` 显式钉定并记入 `RunRecord`**（`EXPERIMENT_TEMPERATURE`）；输出头记模型名 +
+   「DeepSeek 无 `seed` ⇒ 同输入不同输出」的**事实声明**。
+④ **`--real` 连通预检**：正式跑前发一次最小 chat，失败即退 2。
+⑤ **成本硬闸**：`--max-total-tokens` / `--max-est-cost`；触顶即停并退**独立码 3**。
+⑥ rater 补可执行入口住 `tools/bench_judge_rater.py`（结构冒烟 CLI；本文件零引用，见 tripwire）。
+⑦ `llm_client.chat` **opt-in** `include_usage` ⇒ `RunRecord` 记**真** prompt/completion token，
+   并**并列**保留 `ceil(len/3.0)` 估算作对照（估算系数 `3.0` 仍标 UNVERIFIED）。
 
 Task-4b 附带指标（W4 裁决落地；**不进判决**）
 -------------------------------------------
@@ -100,7 +126,9 @@ import enum
 import importlib
 import io
 import json
+import math
 import os
+import random
 import statistics
 import sys
 from dataclasses import dataclass
@@ -127,6 +155,37 @@ DRY_RUN_MODEL = "dry-run-stub"
 
 #: `--dry-run` 前两轮取证用的工具名（必须在 `POLISH_TOOL_ALLOWLIST` 内，否则会被拒绝）。
 DRY_RUN_TOOL_SEQUENCE: tuple[str, ...] = ("writing_check", "analyze")
+
+#: ③ 实验固定的 `temperature`：三臂共用、显式钉进 payload（`--real`）并逐字记入 `RunRecord`。
+#: 为什么钉 0.0：DeepSeek **无 `seed`** ⇒ 无法保证同输入同输出；钉住 temperature 是**唯一**
+#: 可消除的采样随机源。剩下的采样随机性必须在输出头如实声明（不冒充「可复跑同输出」）。
+EXPERIMENT_TEMPERATURE: float = 0.0
+
+#: ③ 输出头的**事实声明**（对旧文档「可复跑：同输入同输出（无随机）」那句假陈述的修正）。
+NO_SEED_FACT_STATEMENT = (
+    "事实声明：DeepSeek 无 `seed` 参数 ⇒ 同输入**不保证**同输出（采样有随机性）；"
+    f"本实验已把 temperature 钉定为 {EXPERIMENT_TEMPERATURE}（唯一可消除的随机源），"
+    "但**不**声称「同输入同输出」。"
+)
+
+#: ② 有界重试：最多 2 次重试（共 3 次尝试）。只对 429/5xx/传输层错（chat 无副作用 ⇒ 幂等）。
+MAX_RETRIES = 2
+
+#: ② 指数退避的基准秒数（第 n 次重试前睡 `base * 2**n + jitter`；测试可注入 sleep/置 0）。
+RETRY_BASE_DELAY_S = 1.0
+
+#: ④ 连通预检的最小 chat 超时（s）。单次有界（反挂死红线：任何网络调用 MUST 有超时）。
+CONNECTIVITY_PRECHECK_TIMEOUT_S = 30.0
+
+#: ⑤ 成本硬闸触顶的**独立退出码**（与 0/1/2 区分开；写进 `--help` 与文本输出的退出码说明）。
+EXIT_COST_CAP = 3
+
+#: ⑤ 估算成本口径（**UNVERIFIED 假设**）：对 (prompt + completion) token 用一个**混合**单价
+#: 折算美元。为什么是"混合单价"而不是 prompt/completion 分开计价：本仓**无任何**价目表
+#: （全仓 grep 零命中），此值是为让 `--max-est-cost` 成为一个**可设的硬闸**而立的**显式假设**，
+#: 不是对 DeepSeek 真实计价的断言 —— 命名与注释都标 UNVERIFIED，`--max-total-tokens` 才是
+#: 不依赖计价假设的**主闸**。
+EST_COST_PER_1K_TOKENS_USD: float = 0.001
 
 
 class Arm(enum.Enum):
@@ -181,6 +240,12 @@ class RunRecord:
     - `last_candidate_text`（Task-4b，**有意契约演进**）：本局最后一次 `corrected_text`
       （`_ChatRecorder` 透明记录；`None` = 全程无候选）—— 附带指标的记录面，MUST NOT 进
       P1/P2 判决（判决量仍 `R_uncovered`）。
+    - Task 4 增五键（②③⑦，**有意契约演进**）：
+      `temperature` = 本局钉定的采样温度（③；`getattr(chat, "temperature", EXPERIMENT_TEMPERATURE)`）；
+      `prompt_tokens` / `completion_tokens` = **真值**（⑦；usage 透出，缺失 ⇒ 0）；
+      `estimated_completion_tokens` = `ceil(len/3.0)` 的**估算对照**（⑦；系数仍标 UNVERIFIED）；
+      `status` = `"ok"` / `"failed"`（②：重试耗尽后标 failed 并继续；failed 记录 `final_text`
+      为原文、`reason="failed"`）。
     """
 
     arm: Arm
@@ -193,6 +258,11 @@ class RunRecord:
     elapsed_s: float
     model: str
     last_candidate_text: str | None
+    temperature: float
+    prompt_tokens: int
+    completion_tokens: int
+    estimated_completion_tokens: int
+    status: str
 
 
 # --------------------------------------------------------------------------- #
@@ -297,12 +367,26 @@ def _make_production_judge(nlp: Any) -> Callable[[str, list[str] | None], dict[s
 
 
 # --------------------------------------------------------------------------- #
-# Task-4b：透明 chat 包装器（附带指标的记录面）
+# Task-4b / ⑦：透明 chat 包装器（附带指标 + 真值/估算计量的记录面）
 # --------------------------------------------------------------------------- #
+
+#: ⑦ 估算系数的**同源口径**（与 `polish_loop.CHARS_PER_TOKEN_ESTIMATE = 3.0` 逐字同值；
+#: 本模块不 import 生产模块以求 import 期零依赖，故此处复写并标 UNVERIFIED，有测试交叉钉住同值）。
+_CHARS_PER_TOKEN_ESTIMATE = 3.0
+
+
+def _estimate_tokens(text: str) -> int:
+    """`ceil(len/3.0)` 估算（**UNVERIFIED 假设**；⑦ 的对照口径，与生产 `estimate_tokens` 同源）。"""
+    return math.ceil(len(text) / _CHARS_PER_TOKEN_ESTIMATE)
+
+
+def _dump(obj: Any) -> str:
+    """确定性序列化（`sort_keys`；与 `polish_loop._dump` 同口径 ⇒ 估算可复现）。"""
+    return json.dumps(obj, ensure_ascii=False, sort_keys=True, default=str)
 
 
 class _ChatRecorder:
-    """**完全透明**的 chat 包装器：原样转发到 `inner`，额外记录最后一个 `corrected_text`。
+    """**完全透明**的 chat 包装器：原样转发到 `inner`，额外记录候选文本与 token 计量。
 
     透明度契约（有测试逐条钉住）：
     - 返回值：原样返回 `inner` 的回复对象（同一性；不拷贝、不改写）；
@@ -312,12 +396,22 @@ class _ChatRecorder:
 
     「最后候选」口径：reply 是 dict 且 `corrected_text` 是 **str 型**时记录（**后覆盖前**；
     空串照「含该键即记录」的口径也记录）；其余形状不改记录。初值 `None` = 全程无候选。
+
+    ⑦ 计量口径（每次回复累加，**不改** reply 本身）：
+    - `prompt_tokens` / `completion_tokens`：reply 带 `usage`（`llm_client.chat` 的
+      opt-in `include_usage`）时取**真值**；缺失 ⇒ 该次记 0（真值缺席不用估算冒充）；
+    - `estimated_completion_tokens`：对**每次**回复做 `ceil(len(dump(reply))/3.0)` 累加
+      （**对照口径**，无论真值是否在场都算，便于并列比对系数）。
+
     为什么记录面住 harness 而不动生产循环：实验纪律「不改生产代码路径」。
     """
 
     def __init__(self, inner: ChatFn) -> None:
         self._inner = inner
         self.last_candidate_text: str | None = None
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.estimated_completion_tokens = 0
 
     @property
     def inner(self) -> ChatFn:
@@ -335,7 +429,20 @@ class _ChatRecorder:
             candidate = reply.get("corrected_text")
             if isinstance(candidate, str):
                 self.last_candidate_text = candidate
+            self.estimated_completion_tokens += _estimate_tokens(_dump(reply))
+            usage = reply.get("usage")
+            if isinstance(usage, dict):
+                self.prompt_tokens += _usage_int(usage, "prompt_tokens")
+                self.completion_tokens += _usage_int(usage, "completion_tokens")
         return reply
+
+
+def _usage_int(usage: dict[str, Any], key: str) -> int:
+    """从 `usage` 取一个非负整数计量（缺失 / 畸形 ⇒ 0；真值缺席不猜）。"""
+    value = usage.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return 0
+    return int(value)
 
 
 # --------------------------------------------------------------------------- #
@@ -393,23 +500,23 @@ def run_arm(case: SeedCase, arm: Arm, *, chat: ChatFn) -> RunRecord:
         elapsed_s=float(done[-1].get("elapsed", 0.0)),
         model=str(getattr(chat, "model_name", "")),
         last_candidate_text=recorder.last_candidate_text,
+        # ③ 钉定的温度：真 chat 暴露 `temperature` 属性；缺席（stub）⇒ 用实验常量。
+        temperature=float(getattr(chat, "temperature", EXPERIMENT_TEMPERATURE)),
+        # ⑦ 真值（usage 透出；缺失 ⇒ 0）+ 估算对照（ceil(len/3.0)，**无论真值是否在场**）。
+        prompt_tokens=recorder.prompt_tokens,
+        completion_tokens=recorder.completion_tokens,
+        estimated_completion_tokens=recorder.estimated_completion_tokens,
+        status="ok",
     )
-
-
-def run_dry_run(cases: Sequence[SeedCase]) -> list[RunRecord]:
-    """按「逐篇轮转」次序跑完全部用例 × 三臂（设计稿 §3.2 的交错执行；输出顺序确定）。"""
-    records: list[RunRecord] = []
-    for case in cases:
-        for arm in Arm:
-            records.append(run_arm(case, arm, chat=build_dry_run_chat(case)))
-    return records
 
 
 def record_to_dict(record: RunRecord) -> dict[str, Any]:
     """`RunRecord` ⇒ JSON 友好 dict（`arm` 落为它的稳定字符串值）。
 
-    Task-4b **有意契约演进**（非回归）：第十键 `last_candidate_text`（附带指标的记录面；
-    `null` = 全程无候选）—— `--json` 的 records 列表同步 +1 键，消费方需知。
+    Task-4b + Task 4 **有意契约演进**（非回归）：第十键 `last_candidate_text`（附带指标的记录面；
+    `null` = 全程无候选）+ Task 4 的五键（`temperature` / `prompt_tokens` / `completion_tokens` /
+    `estimated_completion_tokens` / `status`）—— `--json` 的 records 列表同步为 **15 键**，消费方需知。
+    这也是 JSONL 落盘（①）每行的形状。
     """
     return {
         "arm": record.arm.value,
@@ -422,7 +529,221 @@ def record_to_dict(record: RunRecord) -> dict[str, Any]:
         "elapsed_s": record.elapsed_s,
         "model": record.model,
         "last_candidate_text": record.last_candidate_text,
+        "temperature": record.temperature,
+        "prompt_tokens": record.prompt_tokens,
+        "completion_tokens": record.completion_tokens,
+        "estimated_completion_tokens": record.estimated_completion_tokens,
+        "status": record.status,
     }
+
+
+def _record_from_dict(data: dict[str, Any]) -> RunRecord:
+    """`record_to_dict` 的逆（①：`--resume` 从 JSONL 读回既有记录）。缺键大声失败、不猜。"""
+    return RunRecord(
+        arm=Arm(data["arm"]),
+        case_id=str(data["case_id"]),
+        final_text=str(data["final_text"]),
+        rounds=int(data["rounds"]),
+        reason=data["reason"],
+        converged=bool(data["converged"]),
+        tokens_used=int(data["tokens_used"]),
+        elapsed_s=float(data["elapsed_s"]),
+        model=str(data["model"]),
+        last_candidate_text=data["last_candidate_text"],
+        temperature=float(data["temperature"]),
+        prompt_tokens=int(data["prompt_tokens"]),
+        completion_tokens=int(data["completion_tokens"]),
+        estimated_completion_tokens=int(data["estimated_completion_tokens"]),
+        status=str(data["status"]),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# ① 逐篇增量落盘（JSONL）+ ⑤ 成本硬闸 + ② 失败单元执行器
+# --------------------------------------------------------------------------- #
+
+
+class CostGate:
+    """⑤ 成本硬闸：累计 (prompt + completion) token 与估算成本，越限即 trip。
+
+    口径：每单元贡献 = `record.prompt_tokens + record.tokens_used`：
+    - `prompt_tokens` 用**真值**（⑦；usage 透出。dry-run 无 usage ⇒ 0）；
+    - completion 用循环自己的记账 `tokens_used`（真值优先、估算兜底，见 `completion_tokens_of`）
+      —— 这样 `--dry-run`（无 usage、走估算）下闸也**真的会动**（可测，不是真空闸）。
+    `--max-total-tokens` / `--max-est-cost` 为 0 ⇒ 该项不设限（默认两条都不限）。
+    """
+
+    def __init__(self, *, max_total_tokens: int = 0, max_est_cost: float = 0.0) -> None:
+        self._max_total_tokens = max_total_tokens
+        self._max_est_cost = max_est_cost
+        self.total_tokens = 0
+        self.est_cost = 0.0
+
+    def add(self, record: RunRecord) -> None:
+        """累计一个单元的 token 与估算成本。"""
+        tokens = record.prompt_tokens + record.tokens_used
+        self.total_tokens += tokens
+        self.est_cost += tokens / 1000.0 * EST_COST_PER_1K_TOKENS_USD
+
+    @property
+    def tripped(self) -> bool:
+        """是否越限（token 或成本任一触顶）。"""
+        if self._max_total_tokens > 0 and self.total_tokens >= self._max_total_tokens:
+            return True
+        return self._max_est_cost > 0 and self.est_cost >= self._max_est_cost
+
+    @property
+    def reason(self) -> str | None:
+        """触顶原因（非泄值人话；未触顶 ⇒ None）。"""
+        if self._max_total_tokens > 0 and self.total_tokens >= self._max_total_tokens:
+            return f"累计 token {self.total_tokens} ≥ 上限 {self._max_total_tokens}"
+        if self._max_est_cost > 0 and self.est_cost >= self._max_est_cost:
+            return (
+                f"估算成本 {self.est_cost:.4f}$ ≥ 上限 {self._max_est_cost}$"
+                "（单价 UNVERIFIED：本仓无价目表，见 EST_COST_PER_1K_TOKENS_USD）"
+            )
+        return None
+
+
+class JsonlRunStore:
+    """① 逐篇增量落盘：每（篇 × 臂）一行 JSONL（`record_to_dict` 形状）+ flush + fsync。
+
+    为什么每行 flush+fsync：一次瞬断最多丢**当前这一行**（否则整个实验白跑，连残值都拿不到 ——
+    这正是计划 ① 要消灭的"一次瞬断即全损"）。
+    `resume=True` 时读回既有行并据此跳过已落盘单元（`(case_id, arm)` 粒度 ⇒ 重跑**幂等**：
+    重复运行不新增任何行）。
+    """
+
+    def __init__(self, path: str, *, resume: bool = False) -> None:
+        self._path = path
+        self._records: list[RunRecord] = []
+        self._done: set[tuple[str, str]] = set()
+        if resume and os.path.exists(path):
+            for record in _read_jsonl_records(path):
+                self._records.append(record)
+                self._done.add((record.case_id, record.arm.value))
+
+    def is_done(self, case_id: str, arm: Arm) -> bool:
+        """该（篇 × 臂）单元是否已落盘（`--resume` 的跳过判据）。"""
+        return (case_id, arm.value) in self._done
+
+    def append(self, record: RunRecord) -> None:
+        """落盘一行（append + flush + fsync）并纳入内存记录集。"""
+        parent = os.path.dirname(os.path.abspath(self._path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(self._path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record_to_dict(record), ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        self._records.append(record)
+        self._done.add((record.case_id, record.arm.value))
+
+    @property
+    def records(self) -> list[RunRecord]:
+        """已落盘的全部记录（既有 + 本次新增）—— 续跑后用它出报告。"""
+        return list(self._records)
+
+
+def _read_jsonl_records(path: str) -> list[RunRecord]:
+    """读回 JSONL（跳过空行）；损坏行大声失败（不猜、不静默丢 —— 丢了会让续跑重复记账）。"""
+    records: list[RunRecord] = []
+    with open(path, encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                records.append(_record_from_dict(json.loads(text)))
+            except (KeyError, ValueError, TypeError) as exc:
+                raise ValueError(f"JSONL 第 {line_number} 行损坏（{path}）：{exc}") from exc
+    return records
+
+
+def _failed_record(case: SeedCase, arm: Arm, *, chat: ChatFn, reason: str) -> RunRecord:
+    """② 重试耗尽的失败单元记录：`status="failed"`、`final_text=原文`（未改）、`reason="failed: …"`。
+
+    为什么不抛、继续：一次瞬断不再让整轮实验白跑（计划 ②）。为什么 `final_text=原文`：该单元
+    没有产出任何新文本，"没改" 是如实记录（而不是空串/伪造文本 —— 那才会让记账失真）。
+    """
+    return RunRecord(
+        arm=arm,
+        case_id=case.id,
+        final_text=case.text,
+        rounds=0,
+        reason=f"failed: {reason}",
+        converged=False,
+        tokens_used=0,
+        elapsed_s=0.0,
+        model=str(getattr(chat, "model_name", "")),
+        last_candidate_text=None,
+        temperature=float(getattr(chat, "temperature", EXPERIMENT_TEMPERATURE)),
+        prompt_tokens=0,
+        completion_tokens=0,
+        estimated_completion_tokens=0,
+        status="failed",
+    )
+
+
+def _run_units(
+    cases: Sequence[SeedCase],
+    make_chat: Callable[[SeedCase, Arm], ChatFn],
+    *,
+    store: JsonlRunStore | None,
+    cost_gate: CostGate | None,
+    allow_fail: bool,
+) -> list[RunRecord]:
+    """单元执行器（① 增量落盘 + ② 失败继续 + ⑤ 成本闸 的**唯一收口**）。
+
+    - `store` 非空 ⇒ 跳过已落盘单元、每单元落盘一行；
+    - `allow_fail` ⇒ 捕获**可重试**错误（429/5xx/传输层）并标 failed 继续（不可重试错误原样冒泡）；
+    - `cost_gate` 非空 ⇒ 每单元后累计；越限即**停止**（返回已跑的部分记录，由调用方映射为
+      `EXIT_COST_CAP` —— 触顶即停，但已完成的部分**如实保留**，不静默丢弃）。
+    """
+    records: list[RunRecord] = []
+    stop = False
+    for case in cases:
+        if stop:
+            break
+        for arm in Arm:
+            if store is not None and store.is_done(case.id, arm):
+                continue
+            chat = make_chat(case, arm)
+            try:
+                record = run_arm(case, arm, chat=chat)
+            except Exception as exc:  # 宽捕是刻意的：只对可重试错误吞并标 failed，其余原样重抛
+                if not (allow_fail and _is_retryable_llm_error(exc)):
+                    raise
+                record = _failed_record(case, arm, chat=chat, reason=str(exc))
+            records.append(record)
+            if store is not None:
+                store.append(record)
+            if cost_gate is not None:
+                cost_gate.add(record)
+                if cost_gate.tripped:
+                    stop = True
+                    break
+    return records
+
+
+def run_dry_run(
+    cases: Sequence[SeedCase],
+    *,
+    store: JsonlRunStore | None = None,
+    cost_gate: CostGate | None = None,
+) -> list[RunRecord]:
+    """按「逐篇轮转」次序跑完全部用例 × 三臂（设计稿 §3.2 的交错执行；输出顺序确定）。
+
+    `store` / `cost_gate` 可选（① / ⑤）；dry-run 单元不会失败（stub 确定性）⇒ `allow_fail=False`。
+    每臂取**新鲜**的 stub chat（脚本计数器逐臂复位）。
+    """
+    return _run_units(
+        cases,
+        lambda case, _arm: build_dry_run_chat(case),
+        store=store,
+        cost_gate=cost_gate,
+        allow_fail=False,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -748,6 +1069,26 @@ def _effective_api_model() -> str:
     return str(get_effective_api_model())
 
 
+def _is_retryable_llm_error(exc: Exception) -> bool:
+    """② 可重试判据：429 / 5xx / **传输层**（`status_code is None`）⇒ True；其余（401/402/400…）⇒ False。
+
+    chat 无副作用 ⇒ 重试幂等。不可重试错误（凭据 / 额度 / 参数类）继续跑也没意义 ⇒ 立即冒泡。
+    """
+    from delector.services import llm_client
+
+    if not isinstance(exc, llm_client.LLMError):
+        return False
+    status = exc.status_code
+    if status is None:
+        return True
+    return status == 429 or 500 <= status < 600
+
+
+def _jitter(upper: float) -> float:
+    """② 退避的 jitter（0..upper 均匀）：抽成模块函数便于测试注入确定性值（默认不死等）。"""
+    return random.uniform(0.0, upper)
+
+
 class RealChat:
     """真跑 chat：与 `routes.main._PolishReplyRecorder`（ai-polish 生产构造）**逐参同形**。
 
@@ -758,15 +1099,28 @@ class RealChat:
                                    response_format, api_key=key, base_url=…)
 
     本类逐参一致（含「循环传入的空串 model 被忽略、以生效模型名出网」这条既有约定）；
-    唯一新增面 = `model_name` / `key_present` 两个**非泄值**读取属性（`RunRecord.model` 的取值
-    来源与真跑前的布尔报告）。无状态 ⇒ 全实验共用一枚实例（生产「每请求一枚」是为捕获该请求
-    的 notes / error_count，本类没有该捕获面；harness 侧的每局记录由 `_ChatRecorder` 承担）。
+    Task 4 增三处（各有测试钉住）：
+    - **temperature 显式钉定**（③）：构造期接受（默认 `EXPERIMENT_TEMPERATURE`），每次出网带上；
+    - **opt-in usage 透出**（⑦）：`include_usage=True` ⇒ 回复带 `usage`（真 prompt/completion token）；
+    - **有界重试**（②）：429/5xx/传输层错 ≤ `MAX_RETRIES` 次、指数退避 + jitter；不可重试错立即冒泡。
+    新增读取面 = `model_name` / `temperature` / `key_present` 三个**非泄值**属性（`RunRecord.model` /
+    `RunRecord.temperature` 的取值来源与真跑前的布尔报告）。无状态 ⇒ 全实验共用一枚实例
+    （harness 侧的每局记录由 `_ChatRecorder` 承担）。`sleep` 仅测试注入（避免真睡）。
     纪律：key / base_url 只在本实例内保存，任何输出 / 异常 / 日志都不带它们。
     """
 
-    def __init__(self, api_key: str, base_url: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        *,
+        temperature: float = EXPERIMENT_TEMPERATURE,
+        sleep: Callable[[float], Awaitable[None]] | None = None,
+    ) -> None:
         self._api_key = api_key
         self._base_url = base_url
+        self._temperature = temperature
+        self._sleep = sleep if sleep is not None else asyncio.sleep
 
     @property
     def key_present(self) -> bool:
@@ -777,6 +1131,11 @@ class RealChat:
     def model_name(self) -> str:
         """生效模型名（`RunRecord.model` 的取值来源；非泄值面）。"""
         return _effective_api_model()
+
+    @property
+    def temperature(self) -> float:
+        """钉定的采样温度（`RunRecord.temperature` 的取值来源；非泄值面）。"""
+        return self._temperature
 
     async def __call__(
         self,
@@ -791,11 +1150,11 @@ class RealChat:
         from delector.services import llm_client
 
         # 循环传入的 `model` 为空串（「注入 chat 时循环不读配置」的既有约定）⇒ 与生产一致，
-        # 以生效模型名出网；timeout / max_tokens / response_format 原样透传。
-        # 为抵抗长时间批量实验（60 局 ~7 分钟）中的瞬时公网/代理网络抖动，
-        # 允许最多 3 次轻量指数退避重试（1.0s, 2.0s, 4.0s）；重试耗尽后仍原样冒泡 LLMError。
-        last_exc: Exception | None = None
-        for attempt in range(4):
+        # 以生效模型名出网；timeout / max_tokens / response_format 原样透传。Task 4：**temperature
+        # 钉定**（③）与 **usage 透出**（⑦）一并带上。
+        # ② 有界重试：只对 429/5xx/传输层错、≤ MAX_RETRIES 次、指数退避 + jitter；不可重试错立即冒泡。
+        attempt = 0
+        while True:
             try:
                 return await llm_client.chat(
                     messages=messages,
@@ -803,42 +1162,83 @@ class RealChat:
                     timeout=max(timeout, 15.0),
                     max_tokens=max_tokens,
                     response_format=response_format,
+                    temperature=self._temperature,
+                    include_usage=True,
                     api_key=self._api_key,
                     base_url=self._base_url,
                 )
             except llm_client.LLMError as exc:
-                last_exc = exc
-                if attempt < 3:
-                    await asyncio.sleep(1.0 * (2 ** attempt))
-                    continue
-                raise
-        if last_exc is not None:
-            raise last_exc
-        raise RuntimeError("RealChat unreachable code reached")
+                if attempt >= MAX_RETRIES or not _is_retryable_llm_error(exc):
+                    raise
+                await self._sleep(RETRY_BASE_DELAY_S * (2 ** attempt) + _jitter(RETRY_BASE_DELAY_S))
+                attempt += 1
 
 
-def build_real_chat() -> RealChat:
+def build_real_chat(*, temperature: float = EXPERIMENT_TEMPERATURE) -> RealChat:
     """构造真 chat（生产同形）：key / base_url 均在构造期读取一次（同 `_PolishReplyRecorder`）。
 
-    无 Key ⇒ `RealRunUnavailable`（人话原因；`--real` 绝不静默回退到 dry 桩）。
+    无 Key ⇒ `RealRunUnavailable`（人话原因；`--real` 绝不静默回退到 dry 桩）。`temperature`
+    默认为实验钉定值（③）；`sleep` 留默认（真跑按退避真睡）。
     """
     key = _effective_api_key()
     if not key:
         raise RealRunUnavailable(_NO_KEY_REASON)
-    return RealChat(api_key=key, base_url=_effective_api_base_url().rstrip("/"))
+    return RealChat(api_key=key, base_url=_effective_api_base_url().rstrip("/"), temperature=temperature)
 
 
-def run_real(cases: Sequence[SeedCase], *, chat: ChatFn) -> list[RunRecord]:
+def run_connectivity_precheck() -> None:
+    """④ `--real` 连通预检：正式跑之前发**一次**最小 chat（`parse_json=False`、`max_tokens=5`）。
+
+    为什么单列一步：整轮真跑很贵，若 key / 网络根本不通，应在**任何样本消耗之前**快速失败。
+    成功 ⇒ 返回 None；任何 `LLMError`（含传输层）⇒ `RealRunUnavailable`（调用方退 2）。
+    单次有界（`CONNECTIVITY_PRECHECK_TIMEOUT_S`）—— 反挂死红线：任何网络调用 MUST 有超时。
+    """
+    from delector.services import llm_client
+
+    key = _effective_api_key()
+    base = _effective_api_base_url().rstrip("/")
+    model = _effective_api_model()
+
+    async def _once() -> dict[str, Any]:
+        return await llm_client.chat(
+            messages=[{"role": "user", "content": "ping"}],
+            model=model,
+            timeout=CONNECTIVITY_PRECHECK_TIMEOUT_S,
+            max_tokens=llm_client.CONNECTIVITY_MAX_TOKENS,
+            parse_json=False,
+            api_key=key,
+            base_url=base,
+        )
+
+    try:
+        asyncio.run(_once())
+    except llm_client.LLMError as exc:
+        raise RealRunUnavailable(
+            f"连通预检失败：{exc.detail}（status={exc.status_code}）；"
+            "--real 在样本消耗之前失败 ⇒ 退出 2"
+        ) from exc
+
+
+def run_real(
+    cases: Sequence[SeedCase],
+    *,
+    chat: ChatFn,
+    store: JsonlRunStore | None = None,
+    cost_gate: CostGate | None = None,
+) -> list[RunRecord]:
     """真跑：与 `run_dry_run` **同一次序**（逐篇三臂交错）跑完全部用例，驱动源 = 真 chat。
 
-    任何（篇 × 臂）的 chat 失败**原样冒泡**（调用方显式失败 → 退出码 2），绝不静默跳过 ——
-    「部分结果」会让实验记账看起来完整而实际缺局。
+    ② 失败语义：**可重试**错误（429/5xx/传输层）在 `RealChat` 内重试耗尽后，本层把该单元标
+    `status="failed"` 并**继续**下一篇（一次瞬断不再让整轮白跑）；**不可重试**错误仍原样冒泡
+    ⇒ 调用方显式退 2。① 增量落盘 / ⑤ 成本闸由共享执行器 `_run_units` 承担。
     """
-    records: list[RunRecord] = []
-    for case in cases:
-        for arm in Arm:
-            records.append(run_arm(case, arm, chat=chat))
-    return records
+    return _run_units(
+        cases,
+        lambda _case, _arm: chat,
+        store=store,
+        cost_gate=cost_gate,
+        allow_fail=True,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -950,17 +1350,22 @@ def _print_text_report(records: Sequence[RunRecord], report: Report, *, real: bo
     `real` 只影响**如实标注**的两行（模式与驱动源）：`--real` 的真跑头行 MUST NOT 复读
     dry-run 的「零 Key、不出网」字样；记录与记账面两模式同构。
     """
-    mode = "--real 真跑（真实 llm_client.chat；单次有界、无重试）" if real else "--dry-run 全链路"
+    mode = "--real 真跑（真实 llm_client.chat；有界重试；temperature 钉定）" if real else "--dry-run 全链路"
     print(f"=== bench_judge_gaming（§4.3 第 8 条对照实验 · 三臂 harness · {mode}）===")
+    models = sorted({record.model for record in records})
+    print(f"模型={models or ['（无记录）']}；temperature 钉定={EXPERIMENT_TEMPERATURE}")
+    print(NO_SEED_FACT_STATEMENT)
     if real:
         print(f"records={len(records)}（逐篇三臂交错；真 chat 驱动；记录与记账口径同 --dry-run）")
     else:
         print(f"records={len(records)}（逐篇三臂交错；stub chat 按轮次预构造；零 Key、不出网）")
     for record in records:
         print(
-            f"[{record.case_id}] {record.arm.value}: rounds={record.rounds} reason={record.reason} "
-            f"converged={record.converged} tokens={record.tokens_used} elapsed={record.elapsed_s:.3f}s "
-            f"model={record.model}"
+            f"[{record.case_id}] {record.arm.value}: status={record.status} rounds={record.rounds} "
+            f"reason={record.reason} converged={record.converged} tokens={record.tokens_used} "
+            f"prompt={record.prompt_tokens} completion={record.completion_tokens} "
+            f"est_completion={record.estimated_completion_tokens} "
+            f"elapsed={record.elapsed_s:.3f}s model={record.model} temp={record.temperature}"
         )
     print()
     for arm in Arm:
@@ -989,7 +1394,11 @@ def _print_text_report(records: Sequence[RunRecord], report: Report, *, real: bo
         )
     print()
     print("退出码：0=完成；1=样本集无效（空集/缺 signal/缺 probe/注入破损）；")
-    print("        2=环境不可用或真跑失败（依赖链 import 失败 / 德语模型不可用 / 无 Key / 上游 LLM 异常）。")
+    print(
+        "        2=环境不可用或真跑失败（依赖链 import 失败 / 德语模型不可用 / 无 Key / "
+        "连通预检失败 / 有失败单元）；"
+    )
+    print(f"        {EXIT_COST_CAP}=成本硬闸触顶（--max-total-tokens / --max-est-cost）。")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1012,7 +1421,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--real",
         action="store_true",
-        help="真跑（HITL）：载入运行时凭据逐条经 llm_client.chat 出网（会烧配额）；单次有界、无重试",
+        help="真跑（HITL）：载入运行时凭据逐条经 llm_client.chat 出网（会烧配额）；连通预检 + 有界重试",
     )
     parser.add_argument(
         "--json",
@@ -1026,10 +1435,44 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="N",
         help="只跑 SEED_CASES 的前 N 篇（N ≥ 1；顺序冻结、确定性；与 --dry-run / --real 同用）",
     )
+    parser.add_argument(
+        "--save",
+        default=None,
+        metavar="PATH",
+        help="① 逐篇增量落盘的 JSONL 路径（每（篇 × 臂）一行，flush+fsync）",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="① 从 --save 的 JSONL 续跑：已落盘单元跳过，只补缺（幂等）",
+    )
+    parser.add_argument(
+        "--max-total-tokens",
+        type=int,
+        default=0,
+        metavar="N",
+        help=f"⑤ 成本硬闸：累计 (prompt+completion) token 上限（0=不限）；触顶停并退 {EXIT_COST_CAP}",
+    )
+    parser.add_argument(
+        "--max-est-cost",
+        type=float,
+        default=0.0,
+        metavar="USD",
+        help=f"⑤ 成本硬闸：估算成本上限（美元；0=不限；单价 UNVERIFIED）；触顶停并退 {EXIT_COST_CAP}",
+    )
     args = parser.parse_args(argv)
 
     if args.cases is not None and args.cases < 1:
         parser.error(f"--cases 必须 ≥ 1（取 SEED_CASES 前 N 篇口径），收到 {args.cases}")
+
+    if args.resume and args.save is None:
+        parser.error("--resume 需要 --save PATH（续跑的落盘仓从它读回已跑单元）")
+
+    if args.max_total_tokens < 0:
+        parser.error(f"--max-total-tokens 必须 ≥ 0（0=不限），收到 {args.max_total_tokens}")
+
+    if args.max_est_cost < 0:
+        parser.error(f"--max-est-cost 必须 ≥ 0（0=不限），收到 {args.max_est_cost}")
 
     if args.dry_run and args.real:
         parser.error("--dry-run 与 --real 互斥：两种驱动源只能选一种")
@@ -1065,12 +1508,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"[环境不可用] {env_error}", file=sys.stderr)
             return 2
 
+        # ① 落盘仓（可选）：`--save` 给路径；`--resume` 从它读回已跑单元并跳过。
+        store: JsonlRunStore | None = None
+        if args.save is not None:
+            try:
+                store = JsonlRunStore(args.save, resume=args.resume)
+            except (OSError, ValueError) as exc:
+                print(f"[环境不可用] JSONL 记录仓不可用：{exc}", file=sys.stderr)
+                return 2
+        # ⑤ 成本硬闸（默认两条都不限 ⇒ 不改变既有行为）。
+        cost_gate = CostGate(max_total_tokens=args.max_total_tokens, max_est_cost=args.max_est_cost)
+
         if args.real:
-            # Task-5a 真跑接线：运行期环境载入（唯一调用点）→ 真 chat 构造（生产同形）→ 真跑。
+            # Task-5a 真跑接线：运行期环境载入（唯一调用点）→ 真 chat 构造（生产同形）
+            # → ④ 连通预检（正式跑之前）→ 真跑。
+            from delector.services import llm_client
+
             try:
                 _ensure_runtime_env()
                 real_chat = build_real_chat()
                 model_name = _effective_api_model()
+                run_connectivity_precheck()
             except RealRunUnavailable as exc:
                 print(f"[真跑不可用] {exc}", file=sys.stderr)
                 return 2
@@ -1080,32 +1538,41 @@ def main(argv: Sequence[str] | None = None) -> int:
             # 真跑前的**非泄值**事实行：只报布尔与模型名 —— 绝不打印 key 本体（红线）。
             print(
                 f"[真跑] key 存在={real_chat.key_present}；生效模型={model_name}；"
+                f"temperature 钉定={real_chat.temperature}；"
                 f"样本 {len(cases)} 篇 × 3 臂 = {len(cases) * 3} 局；"
-                "单次 chat 超时 = 循环生产口径（min(30.0s, 剩余 deadline)）、无重试",
+                "单次 chat 超时 = 循环生产口径（min(30.0s, 剩余 deadline)）、有界重试（≤2 次）",
                 file=sys.stderr,
             )
-            # `llm_client` 已在 build_real_chat 里成功 import（此处再 import 不可失败）。
-            # 只捕上游失败类型：LLMError 之外的一切照旧冒泡（harness 自身的 bug 不许被吞）。
-            from delector.services import llm_client
-
             try:
-                records = run_real(cases, chat=real_chat)
+                records = run_real(cases, chat=real_chat, store=store, cost_gate=cost_gate)
             except llm_client.LLMError as exc:
-                # 显式失败：人话原因 + 退 2（上游失败属「环境不可用」类；1 是样本集无效，不复用）。
-                # 只透 `detail`（固定人话）、不透 `raw`（可能带凭据）—— 且不产出任何部分结果。
+                # **不可重试**（或预检之外）的上游失败 ⇒ 显式退 2（1 是样本集无效，不复用）。
+                # 只透 `detail`（固定人话）、不透 `raw`（可能带凭据）。
                 print(
-                    f"[真跑失败] 上游 LLM 调用异常：{exc.detail}（status={exc.status_code}）；"
-                    "无重试、不产出部分结果（退出码 2）",
+                    f"[真跑失败] 上游 LLM 调用异常：{exc.detail}（status={exc.status_code}）；退出码 2",
                     file=sys.stderr,
                 )
                 return 2
         else:
-            records = run_dry_run(cases)
+            records = run_dry_run(cases, store=store, cost_gate=cost_gate)
 
+    if store is not None:
+        records = store.records  # 续跑：报告覆盖既有 + 本次新增
+    failed = [record for record in records if record.status != "ok"]
     if args.json:
         print(json.dumps([record_to_dict(record) for record in records], ensure_ascii=False, indent=2))
     else:
         _print_text_report(records, summarize(records, cases), real=args.real)
+    if cost_gate.tripped:
+        # ⑤ 触顶即停：已完成的部分已如实打印/落盘；用**独立退出码**区分于 0/1/2。
+        print(f"[成本硬闸] {cost_gate.reason}（退出码 {EXIT_COST_CAP}）", file=sys.stderr)
+        return EXIT_COST_CAP
+    if failed:
+        print(
+            f"[真跑告警] {len(failed)} 个单元重试耗尽被标 failed（已记录并继续下一篇）。",
+            file=sys.stderr,
+        )
+        return 2
     return 0
 
 

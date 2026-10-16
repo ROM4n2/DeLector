@@ -345,3 +345,55 @@ def test_rater_module_has_no_key_path_and_no_default_chat() -> None:
     chat_param = signature.parameters["chat"]
     assert chat_param.kind is inspect.Parameter.KEYWORD_ONLY
     assert chat_param.default is inspect.Parameter.empty
+
+
+# ── Task 4（B5）⑥：rater 可执行入口（结构冒烟 CLI；零 Key、零网络） ─────────────
+
+
+def test_rater_module_exposes_executable_main_entry() -> None:
+    """⑥ rater 有可执行入口：`main(argv)` 可调用 + 源码含 `__main__` guard（交付物清单的一项）。
+
+    `--help` 与输出头都标 stub（不冒充真盲评）；入口仍零 Key / 无默认 chat。
+    """
+    assert callable(rater.main)
+    source = _RATER_SCRIPT.read_text(encoding="utf-8")
+    assert 'if __name__ == "__main__":' in source
+    assert "raise SystemExit(main())" in source
+    assert "stub" in source  # 如实标注结构冒烟，不冒充真盲评
+
+
+def test_rater_main_runs_structural_smoke_over_pairs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """⑥ `main`：读 `--pairs` ⇒ 跑盲评管线（stub）⇒ 输出 role + ratings 的 JSON；ret 0。
+
+    逐对 `order_seed + index` 轮换（0 ⇒ ba、1 ⇒ ab）—— 由 `--order-seed` 决定起点。
+    """
+    pairs = [
+        {"id": "p0", "before": _BEFORE_TEXT, "after": _AFTER_TEXT},
+        {"id": "p1", "before": _AFTER_TEXT, "after": _BEFORE_TEXT},
+    ]
+    path = tmp_path / "pairs.json"
+    path.write_text(json.dumps(pairs, ensure_ascii=False), encoding="utf-8")
+
+    rc = rater.main(["--pairs", str(path)])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["role"] == rater.AUXILIARY_ROLE
+    assert [entry["id"] for entry in out["ratings"]] == ["p0", "p1"]
+    assert out["ratings"][0]["order"] == "ba"
+    assert out["ratings"][1]["order"] == "ab"
+
+    rc2 = rater.main(["--pairs", str(path), "--order-seed", "1"])
+    out2 = json.loads(capsys.readouterr().out)
+    assert rc2 == 0
+    assert out2["ratings"][0]["order"] == "ab"  # 起点右移一位 ⇒ 首对变 ab
+
+
+def test_rater_main_bad_input_exits_2(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """⑥ 输入不可用（文件不存在 / 形状不合法）⇒ 退 2（人话；不猜、不静默丢对）。"""
+    assert rater.main(["--pairs", str(tmp_path / "nope.json")]) == 2
+    assert "输入不可用" in capsys.readouterr().err
+
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps([{"id": "x"}]), encoding="utf-8")  # 缺 before/after
+    assert rater.main(["--pairs", str(bad)]) == 2
+    assert "输入不可用" in capsys.readouterr().err

@@ -1898,6 +1898,16 @@ def _replace_tables(
     payload: Dict[str, List[Dict[str, Any]]],
 ) -> None:
     for name, (columns, defaults) in spec.items():
+        # 前向兼容闸（2026-10-15 swarm 审计 P0-1）：payload 里**没有**这张表的键 ⇒
+        # 原样保留，而不是「先 DELETE、再零行可灌」。
+        # 为什么必须有：调用方各自声明自己认识的键（RestoreReq 是 pydantic 模型，v2 默认
+        # extra=ignore ⇒ 前端整份 POST 里**模型没声明的表**会被静默丢弃），而清单
+        # （_BACKUP_TABLES/_PROGRESS_TABLES）会随功能增长 ⇒ 没有这道闸时「新表入清单、
+        # 请求模型没跟上」的代价是**用户数据被删光且零提示**；有了它退化成「这次没覆盖」。
+        # 判据是**键的存在性**而不是 `not rows`：键在场但为空仍是有意覆盖（备份里这张表
+        # 就是空的），否则用户删干净的成绩会在还原后复活。
+        if name not in payload:
+            continue
         conn.execute(f"DELETE FROM {name}")
         rows = payload.get(name) or []
         if not rows:

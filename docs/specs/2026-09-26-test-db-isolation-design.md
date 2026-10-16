@@ -84,6 +84,11 @@ os.environ.setdefault("DATABASE_PATH", "test_conftest_default.db")
 os.environ.setdefault("PROGRESS_DB_PATH", "test_conftest_default_progress.db")
 ```
 
+> **v5.17.0 起（审计 P1-1 修订）**：上面的默认值已改为**绝对临时路径**（`tempfile.mkdtemp` 下的
+> `test_conftest_default.db` / `test_conftest_default_progress.db`；理由：相对名由 sqlite 按进程 CWD
+> 解析，「从仓库根跑 pytest」会把库写进仓库根）。`setdefault` 尊重显式值的语义**不变**；
+> 同期 `db_cleanup.ROOT_DB_NAMES` 扩含 `test_*.db`（守卫视野随之覆盖测试库）。
+
 用 `setdefault` 而非强赋值：尊重外部已设值（若 CI 显式指定库则以其为准）。conftest 由 pytest **最先** import → 它设的值成为"稳定基线"。
 
 ### 3.3 改动面（预计）

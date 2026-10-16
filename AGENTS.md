@@ -15,6 +15,7 @@
 | 当前状态 / 红线速查 / 开放待办 / 项目定位 | `WORKMEMORY/PROJECT_OVERVIEW.md` |
 | 架构细节：技术栈 / NLP 降级 / Android 互锁 / DB schema / API 全览 / 前端拓扑 / LAN 同步 / FSRS / 完形 / 切句 | `docs/agents/architecture.md` |
 | 安全守卫 / 本机环境 / 打包 / Agent 工作惯例 | `docs/agents/ops.md` |
+| 设计系统 / 视觉 Token / 组件蓝图 | `docs/design-system.md`（token 现值以 `static/css/tokens.css` 为准） |
 | 版本历史与发布记录 | `CHANGELOG.md`（版本历史正主）+ git tag / GitHub Releases |
 | 产品特性全览 / 设计与实施计划 | `FEATURES.md`；`docs/specs/`（设计稿）、`docs/plans/`（在途计划；已交付的进 `docs/plans/archive/`） |
 | 文档该放哪 / docs 目录约定（分层与归档规则） | `docs/README.md` |

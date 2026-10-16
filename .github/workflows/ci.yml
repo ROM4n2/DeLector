@@ -437,3 +437,34 @@ jobs:
               sys.exit("::error::集成用例 PASS=0 ⇒ 门禁空转（集成用例一个都没真跑），拒绝放行")
           print("===== 零 SKIP 判据通过：集成用例全部真跑且无 skip =====")
           PY
+
+  # ── master 直推范围机械闸（P1-1：分支纪律此前没有机械闸）────────────────────────
+  # 为什么：docs/agents/ops.md:202-216 自述「分支纪律没有机械闸」；2026-10-09~14 有 25 个
+  # feat/fix/ci/test/perf 提交直推 master（含生产代码与 CI 定义），且已实发 f49d359 推红
+  # 事故。规则 2026-10-14 才写进可见文档。本 job 把「master 上非 merge 提交的改动面 MUST ⊆
+  # 白名单」变成 CI 硬闸（与 .githooks/pre-push 共用同一判定器 tools/check_master_commit_scope.py）。
+  #
+  # 为什么仅 push 事件：范围 before..sha 只在 push 上有意义（PR 走 merge-base，无 before）。
+  # 为什么 fetch-depth: 0：baseline(github.event.before) 必须在本地对象库，否则 git 取不到
+  #   范围基线 —— 与 windows-smoke-changes 同一课（浅克隆下 git exit 128 把 master 推红）。
+  master-direct-push-scope:
+    name: Master Direct-Push Scope Gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    # 卡死护栏（同 ci job：一条卡死判定会给 runner 烧满默认 360 分钟）。
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # 需要 before 基线在本地对象库（浅克隆下取不到范围 ⇒ git exit 128）。
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      # 纯 stdlib：无需 pip install。退出码 0=通过、1=有违规（job 红）、2=环境不可用（job 红）。
+      - name: Enforce master direct-push scope
+        run: python tools/check_master_commit_scope.py --range "${{ github.event.before }}..${{ github.sha }}"
