@@ -12,7 +12,8 @@
 | `PROJECT_OVERVIEW.md` | 60 秒项目 primer（新 agent 第二读）                           |
 | `work.log`            | HOT 事件流（append-only，最近 50 条；第三读）                 |
 | `archive/`            | WARM 层（按日分片 `work-YYYY-MM-DD.log`，只按下方索引按需加载） |
-| `cold/`               | COLD 层（按月 digest，当前 `digest-2026-09.md`）              |
+| `cold/`               | COLD 层（按月 digest；现有 `digest-2026-09.md` · **`digest-2026-10.md`**（2026-10-16 生成，覆盖 v5.14.0~v5.17.0 / ADR-0017~0024 / 审计修正 A/B 批）） |
+| `notes/`              | 超限事件正文（`NOTES-<日期>-<时间>-<slug>.md`，协议 §1.4；2026-10-17 从顶层收拢进本目录）。⚠️ 旧事件里以**文件名**引用的 NOTES 现在位于本目录——按名检索即可命中，事件正文按追加制不回改 |
 | `handoff_*.md`        | 跨 agent 交接包（**按需出现**：仅当存在活跃交接时才存在，非常驻文件；协议 §4） |
 
 ## 主题索引（archive / digest 内容导航）
@@ -31,6 +32,7 @@
 | 听力微训 / 长难句精读工坊 + v5.7.x 真机热修（含 spaCy E050 / pydantic v1）  | `archive/work-2026-09-13.log` · `archive/work-2026-09-14.log` ~ `archive/work-2026-09-15.log`（2026-10-11 WARM 化） |
 | 词库单一真相化 / 主干分层 / 富字段 / A1 取数（ADR-0011~0015，v5.8.0~v5.10.0） | `cold/digest-2026-09.md` · `archive/work-2026-09-15.log` ~ `archive/work-2026-09-17.log`（09-15 ~ 09-17，2026-10-11 WARM 化）· `work.log`（09-18 ~ 09-21） |
 | 遇见区 i+1 / 已读状态 + 工程债收口（v5.11.0~v5.12.1）                       | `cold/digest-2026-09.md` · `work.log`（2026-09-23 ~ 09-26）                                           |
+| **2026 年 10 月全月**（v5.14.0~v5.17.0 四次发版 / ADR-0017~0024 决策链 / 裁判集扩充 / §4.3 对照实验 60 局真跑 / 审计修正 A+B 批 / `database.py` 切分） | **`cold/digest-2026-10.md`**（COLD 层蒸馏；细节回源见该文件末节「来源」） |
 | 2026-09-28 起（Docker/WAL 修复、ADR-0016 统一池 Phase 3 等，未发版）        | `work.log`（HOT；09-28 起的记录缺口由 10-02 的 2 条 `NOTE(gap-backfill-1/2)` 补记；细节见 `docs/reviews/2026-09-28-swarm-audit-master.md`） |
 | ADR-0023 交互层「验证驱动 agent 循环」Task 0~6（Go 门禁三红灯 / LLM 收口 / 循环内核 / 工具白名单 / 契约+前端） | `archive/work-2026-10-14.log` · `work.log`（10-15~10-16 段）· 计划正本 `docs/plans/2026-10-14-interactive-agent-loop.md` · PR #136 |
 | Fog 清空（2/3/4）+ v5.16.0 发版 + search 高亮递延项（2026-10-06）            | `archive/work-2026-10-06.log`（2026-10-16 WARM 化） |

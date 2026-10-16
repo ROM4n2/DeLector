@@ -1777,6 +1777,40 @@ def test_cli_restricts_range_to_first_parent_mainline() -> None:
     )
 
 
+def test_commit_files_uses_nul_separated_output_to_survive_non_ascii_paths() -> None:
+    """改动面 MUST 用 ``-z``（NUL 分隔）读取，且非 ASCII 路径仍命中白名单。
+
+    实测（本机，2026-10-16）：git 默认 ``core.quotePath=true``，含中文的路径会被输出成
+    ``"WORKMEMORY/notes/NOTES-…\\345\\206\\205….md"``（**带引号 + 八进制转义**）⇒ 前缀规则
+    因开头多一个 ``"`` 匹配不上 ⇒ **假阳性**（把合法的簿记推送判成违规、拦下推送）。
+    本用例把两条都钉住：① 取文件的命令带 ``-z``；② 非 ASCII 路径仍被判为白名单内。
+    """
+    module = _load_master_scope_module()
+    captured: list[list[str]] = []
+
+    def _recording_git(args: list[str]) -> str:
+        captured.append(list(args))
+        if args and args[0] == "diff-tree":
+            # 模拟 -z 输出：NUL 分隔、不做引号转义（含中文路径原样返回）
+            return "\x00".join(
+                [
+                    "WORKMEMORY/notes/NOTES-2026-10-05-0030-done-技术债清理.md",
+                    "WORKMEMORY/INDEX.md",
+                ]
+            )
+        return "c1"
+
+    files = module._commit_files(_recording_git, "c1")
+    assert any("\u6280\u672f\u503a" in path for path in files), f"非 ASCII 路径未被解析出来：{files}"
+    assert not any(path.startswith('"') for path in files), f"路径仍带引号（被 quotePath 转义了）：{files}"
+    diff_calls = [call for call in captured if call and call[0] == "diff-tree"]
+    assert diff_calls, "未观察到 diff-tree 调用"
+    assert all("-z" in call for call in diff_calls), (
+        f"取改动面缺 -z：{diff_calls} —— 中文路径会被 quotePath 转义成 \"…\\345…\"，前缀规则匹配不上 ⇒ 假阳性"
+    )
+    assert module.check_scope(files, subject="docs: 收拢笔记") == []
+
+
 def test_pre_push_hook_targets_master_and_prints_skip_reason() -> None:
     """pre-push 必须针对 refs/heads/master 判定，且不适用的情形明确打印跳过原因。"""
     text = _read_guard_file(PRE_PUSH_HOOK)

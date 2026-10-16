@@ -169,9 +169,17 @@ def _commit_subject(git: GitRunner, sha: str) -> str:
 
 
 def _commit_files(git: GitRunner, sha: str) -> list[str]:
-    """单条提交的改动面（``git diff-tree --no-commit-id --name-only -r``）。"""
-    out = git(["diff-tree", "--no-commit-id", "--name-only", "-r", sha])
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    """单条提交的改动面（``git diff-tree --no-commit-id --name-only -r -z``）。
+
+    ⚠️ **MUST 用 ``-z``**：git 默认 ``core.quotePath=true``，会把含**非 ASCII**的路径输出成
+    ``"WORKMEMORY/notes/NOTES-…\\345\\206\\205….md"`` 这种**带引号 + 八进制转义**的形式，
+    于是前缀规则（``WORKMEMORY/``）因开头多了一个 ``"`` 而**匹配不上** ⇒ 把合法的簿记推送
+    判成违规（**假阳性**）。2026-10-16 实测踩到：把 7 份中文文件名的 ``NOTES-*`` 收拢进
+    ``WORKMEMORY/notes/`` 时，本闸正确地**拦下了自己的主人**，但拦错了。
+    ``-z`` 用 NUL 分隔且**完全不做引号转义**，同时也能容纳路径里含换行的极端情况。
+    """
+    out = git(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", sha])
+    return [path for path in out.split("\x00") if path.strip()]
 
 
 def _is_root_commit(git: GitRunner, sha: str) -> bool:
