@@ -582,3 +582,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **守卫测试**：`tests/test_server.py` 新增 `test_runtime_artifacts_protected_by_gitignore`（沿用 keystore 那条惯例 + 多一层 `git check-ignore` 实证 + 与 `desktop.py` 常量对账）。**变异自证**：删掉三条规则 ⇒ 该测试红（判别力成立）。
 - **门禁**：守卫 1 passed；`ruff check .` 全绿；`mypy --strict delector` 67 files 0；`--follow-imports=skip tests/test_server.py` 0；契约闸过。全量 `pytest` **1983 passed + 2 skipped + 2 failed** —— 已用 `git stash` 在 master 态复现同样 2 failed，证实是 `tests/conftest.py:16-19` 明文记载的「根目录有库 ⇒ 迁移闸拒绝运行 ⇒ 本地红 / CI 绿」既有分歧，与本 PR 无关（**未删用户库文件**：那属危险操作）。
 - **未做（需决策或有危险）**：P1-1 分支纪律机械闸（CI 改动；`gh` 无 workflow scope ⇒ 合并要走 SSH no-ff）、P2-7 `.gitattributes` CRLF 契约（改跨平台 checkout 行为）、P2-6 renormalize、P2-5 `git gc`、P2-3 design-system 状态定夺，以及 swarm audit 的 P0-1/P0-2/P1-1（密钥进备份）等代码级修复。
+
+### 2026-10-16 13:10 | codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**/dfs-grill 三透镜拷问「第 8 条对照实验」后收敛，ADR-0024 归档**（vault `a1a74fe`；仓内镜像 `docs/adr/2026-10-16-adr-0024-...md`）。用户拍板：**Q1 按推荐（B+C）**；**Q2 另一 agent 已在跑 N=20**（推荐为不跑，用户知情）。
+- **核心发现（pilot 实测证实，非推断）**：原判决量 `R_uncovered(final)` 在 A1/A2 两臂**恒等于 0** —— 因为 `violations_of` 恒返固定违规 ⇒ `v>=prev_v` ⇒ `no_improvement` ⇒ argmin 回退**带错原文**。pilot 三臂：A1/A2/A3 的 `R_uncovered(final)` = 0.000/0.000/0.950，而 `R_uncovered(last_candidate)` = **0.950/0.950/0.950**（逐位相同）。⇒ ①「A1→A2 轮数效应」= 0 vs 0 零信息；② P2 的「A3 优于 A2」退化成「A3 > 0」；③ P1 宣称的「A2 是关键分辨器」分支**不可达**；④ A1 **不等于**今日一次性润色（它返回带错原文）。
+- **机制事实（代码实测）**：`polish_loop` 七个 `messages.append` 站点**无一回灌裁判 violations**；会话无状态、权重冻结；`writing_check` 工具**不带 nlp** ⇒ 语法族对模型不可见。⇒ §4.3 被引用以禁言的那句（「模型会学会通过检查」）**在本架构里没有发生机制**。
+- **ADR-0024 决策**：判决量改/并入 `R_uncovered(last_candidate)` + 预注册阴性对照 `last_candidate(A2) ≈ last_candidate(A3)`；结论边界收窄为「准入式裁判下裁判信号只影响**验收**、不影响**模型行为**」；P1 表述为「**本形态下无发生机制**」（**不得**写成「未发现 P1」，更不得据此宣称第 8 条已满足）；§4.3 维持限定表述 + 新增「无法判别」出口（禁止用再加大 N 自我续命）；「裁判结论回灌」设为**无条件**下一子计划，实验结论只影响 ADR 措辞、不影响代码路线图。
+- **给正在跑 N=20 的 agent（必读）**：无论结果如何，报告 MUST 按 ADR-0024 口径书写（判决量以 last_candidate 为主、`R_uncovered(final)` 仅作构造性记录并标注恒 0 的算术成因）；并如实登记已知未决项 —— 无 `seed` 且 `temperature` 未设未记（「同输入同输出」对 `--real` 是假陈述）、Token 成本走 `ceil(len/3.0)` 且只计 completion 不计 prompt、无逐篇落盘/续跑/重试/连通预检/成本硬闸、rater 零执行入口。
+- **下一子计划（回灌通道）硬依赖**：① 裁判 FP 必须先修完（3 类误报全在语法族，而 prose 分流下只有语法族被计数 ⇒ 误报回灌即变成「必须修」的指令；现成标定工具 `tools/bench_judge_fp.py`）；② 回灌内容 MUST 过同一道适用性闸与双限截断；③ 三角一致性（循环裁判带 nlp / `writing_check` 不带 nlp / 回灌源）先于回灌；④ 阴性对照 MUST 在动产品之前先跑成基线。
