@@ -68,16 +68,23 @@ def clean_db():
 
 
 def _make_conn_spy(monkeypatch):
-    """计数式对账探针：所有 sqlite3.connect 都从 database.sqlite3.connect 打开
+    """计数式对账探针：所有 sqlite3.connect 都从 sqlite3 模块的 connect 打开
     （含 get_db/get_progress_db 与 init 原始 connect），所有意图性关闭都汇聚到
-    database._close_db_conn。sqlite3.Connection.close 是只读属性，不能逐个包实例，
-    故以「open 总数 == close 调用总数」做泄漏判定。"""
-    import delector.core.database as db
+    `db/connection.py` 的 `_close_db_conn`。sqlite3.Connection.close 是只读属性，不能逐个
+    包实例，故以「open 总数 == close 调用总数」做泄漏判定。
+
+    patch 目标 MUST 命中 `_close_db_conn` 的**所在模块**（切分后已搬入
+    `delector/core/db/connection.py`）：`db_conn`/`db_progress_conn`/`get_wb_state`/
+    `save_wb_state` 都在该模块内按**模块全局**解析 `_close_db_conn`，打在 `database.*`
+    （只是再导出）上不会影响它们内部的查找 —— 与 `test_data_dir_migration_gate` 里
+    「patch 目标须命中函数所在模块」同款纪律。
+    """
+    import delector.core.db.connection as db_conn_mod
 
     state = {"opened": 0, "closed": 0}
 
-    orig_connect = db.sqlite3.connect
-    orig_close_conn = db._close_db_conn
+    orig_connect = db_conn_mod.sqlite3.connect
+    orig_close_conn = db_conn_mod._close_db_conn
 
     def spy_connect(path, *args, **kwargs):
         state["opened"] += 1
@@ -87,8 +94,8 @@ def _make_conn_spy(monkeypatch):
         state["closed"] += 1
         return orig_close_conn(conn)
 
-    monkeypatch.setattr(db.sqlite3, "connect", spy_connect)
-    monkeypatch.setattr(db, "_close_db_conn", spy_close_conn)
+    monkeypatch.setattr(db_conn_mod.sqlite3, "connect", spy_connect)
+    monkeypatch.setattr(db_conn_mod, "_close_db_conn", spy_close_conn)
     return state
 
 
@@ -114,13 +121,17 @@ def test_database_layer_connections_closed_deterministically(monkeypatch):
 
 def test_server_endpoints_close_every_connection(client, monkeypatch):
     """server 路由每个请求打开的主/进度库连接都必须 one-open-one-close，
-    覆盖跨双库的代表性端点（读、写、复习、统计、wb 镜像）。"""
-    import delector.core.database as db
+    覆盖跨双库的代表性端点（读、写、复习、统计、wb 镜像）。
+
+    patch 目标同 `_make_conn_spy`：命中 `_close_db_conn` 的所在模块
+    （`delector/core/db/connection.py`），而非只是再导出它的 `database`。
+    """
+    import delector.core.db.connection as db_conn_mod
 
     state = {"opened": 0, "closed": 0}
 
-    orig_connect = db.sqlite3.connect
-    orig_close_conn = db._close_db_conn
+    orig_connect = db_conn_mod.sqlite3.connect
+    orig_close_conn = db_conn_mod._close_db_conn
 
     def spy_connect(path, *args, **kwargs):
         state["opened"] += 1
@@ -130,8 +141,8 @@ def test_server_endpoints_close_every_connection(client, monkeypatch):
         state["closed"] += 1
         return orig_close_conn(conn)
 
-    monkeypatch.setattr(db.sqlite3, "connect", spy_connect)
-    monkeypatch.setattr(db, "_close_db_conn", spy_close_conn)
+    monkeypatch.setattr(db_conn_mod.sqlite3, "connect", spy_connect)
+    monkeypatch.setattr(db_conn_mod, "_close_db_conn", spy_close_conn)
 
     assert client.get("/api/articles").status_code == 200
     assert client.get("/api/wb/state").status_code == 200
@@ -665,7 +676,10 @@ def test_verify_wb_key_uses_compare_digest(monkeypatch):
         calls.append((a, b))
         return a == b
 
-    monkeypatch.setattr("delector.core.database.secrets.compare_digest", fake_compare)
+    # patch 目标 MUST 命中 verify_wb_key 的所在模块（settings.py）：切分后 verify_wb_key
+    # 已搬入 settings.py 并使用其自身的 secrets 绑定；打在 database.secrets 上不再生效
+    # （且 database 已不再 import secrets）。
+    monkeypatch.setattr("delector.core.db.settings.secrets.compare_digest", fake_compare)
     assert verify_wb_key("deadbeef", "deadbeef") is True
     assert calls, "verify_wb_key 未调用 compare_digest"
     assert verify_wb_key("deadbeef", "cafebabe") is False
@@ -794,12 +808,12 @@ def test_rollback_failure_logs_db_path_snapshot_and_cause(monkeypatch, caplog):
     静默 `pass` 等于把「半个还原比不还原更糟」这条理由自己抹掉：用户只拿到原始
     异常，既不知道自己的库可能已损坏，也没人知道该从哪个快照捞回。
     """
-    from delector.core import database as db
+    from delector.core.db import backup as db_backup
 
     def boom(snapshot, dst):
         raise OSError("磁盘满")
 
-    monkeypatch.setattr(db, "_restore_db_file", boom)
+    monkeypatch.setattr(db_backup, "_restore_db_file", boom)
 
     caplog.set_level(logging.ERROR, logger="delector")
     raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
@@ -826,7 +840,7 @@ def test_rollback_failure_logs_db_path_snapshot_and_cause(monkeypatch, caplog):
 def test_rollback_failure_does_not_abort_other_databases(monkeypatch, caplog):
     """[Instinct: Multi-Table-DB] 主库 + progress 库各留一份快照：其中一处回滚失败
     MUST NOT 中断其余回滚（保持「尽力回滚全部」语义），且失败的那处必须被点名留痕。"""
-    from delector.core import database as db
+    from delector.core.db import backup as db_backup
 
     attempted = []
 
@@ -835,7 +849,7 @@ def test_rollback_failure_does_not_abort_other_databases(monkeypatch, caplog):
         if "progress" in dst:
             raise OSError("磁盘满")
 
-    monkeypatch.setattr(db, "_restore_db_file", flaky)
+    monkeypatch.setattr(db_backup, "_restore_db_file", flaky)
 
     caplog.set_level(logging.ERROR, logger="delector")
     raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
@@ -851,9 +865,9 @@ def test_rollback_failure_does_not_abort_other_databases(monkeypatch, caplog):
 
 def test_successful_rollback_emits_no_error_log(monkeypatch, caplog):
     """回滚成功是常态，MUST NOT 产 error 级日志（否则真出故障时噪声淹没信号）。"""
-    from delector.core import database as db
+    from delector.core.db import backup as db_backup
 
-    monkeypatch.setattr(db, "_restore_db_file", lambda snapshot, dst: None)
+    monkeypatch.setattr(db_backup, "_restore_db_file", lambda snapshot, dst: None)
 
     caplog.set_level(logging.ERROR, logger="delector")
     raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
