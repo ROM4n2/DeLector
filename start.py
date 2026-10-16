@@ -151,7 +151,7 @@ def main(debug_console: bool = False, on_serving: Optional[Callable[[int], None]
     if not android:
         threading.Thread(target=open_browser, args=(port,), daemon=True).start()
 
-    from delector.core.server_lifecycle import build_server, serve_in_thread, shutdown
+    from delector.core.server_lifecycle import SHUTDOWN_GRACE_S, build_server, serve_in_thread, shutdown
     from delector.server import app
 
     server = build_server(host, port, app)
@@ -177,13 +177,26 @@ def main(debug_console: bool = False, on_serving: Optional[Callable[[int], None]
     # 原来裸 `server.run()` 的「无退出控制」，消除「壳退了服务还残留」的静默失败。
     thread = serve_in_thread(server)
     try:
-        thread.join()
+        # 轮询式等待（**每次 join 都带显式超时**，禁裸等）：语义仍是「主线程陪 server 到结束」，
+        # 但单次等待封在 SHUTDOWN_GRACE_S 内（与 shutdown() 的宽限同口径，不另发明数字）——
+        # 裸 join() 一旦线程不结束就无上界，整个退出路径会被它吞掉。Ctrl+C 打断的正是这一次
+        # join（KeyboardInterrupt 从 join 抛出），仍走下方收尸分支。
+        while True:
+            thread.join(timeout=SHUTDOWN_GRACE_S)
+            if not thread.is_alive():
+                break
     except KeyboardInterrupt:
         print("\n[提示] 收到停止信号，正在收尸...")
     # join 之后再收一次是**有意保留**的兜底：覆盖 KeyboardInterrupt 之外的退出路径。
     # `shutdown` 是幂等的（置 should_exit + join 一个已结束的线程都无副作用），重复调用安全
     # —— 勿当成"重复 shutdown 的 bug"删除。
-    shutdown(server, thread)
+    if not shutdown(server, thread):
+        # 尊重返回值（旧代码丢弃它并无条件报「已停止」＝假成功）：停不干净必须可见 —— 人话进
+        # stderr（无控制台时由流收口落 launch.log），退出码 1（干净退出才是 0）。继续静默返回
+        # 的后果：解释器退出时 threading._shutdown() 再 join 这个非 daemon 线程 ⇒ 进程挂住、
+        # 端口 8000 仍占 ⇒ 下次启动 `_handle_existing_port` 命中旧实例。
+        print("[错误] 服务未能干净退出（端口可能仍被占用）。", file=sys.stderr)
+        sys.exit(1)
     print("[提示] 服务已停止。")
 
 
