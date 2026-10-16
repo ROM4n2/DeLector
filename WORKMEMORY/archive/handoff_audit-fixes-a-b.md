@@ -4,7 +4,7 @@ from: codebuddy (GLM-5.2)
 created: 2026-10-16
 role: IMPLEMENT | TEST | VERIFY | REVIEW
 required_capability: python-3.11 / spaCy(de_core_news_sm) / 真实 DEEPSEEK_API_KEY（只在 C1 之后的真跑才用）
-status: open
+status: closed
 ---
 
 # 交接包：审计修正 A/B 两批已合入 master；C 档 8 项与「裁判结论回灌」子计划待接手
@@ -64,3 +64,19 @@ status: open
 - 自动化脚本：`python /d/Obsidian/Coding/scripts/vault_exec_state.py {init --plan-file <p> | start-task --task-id <t> | complete-task --task-id <t> --commit <sha> --reviewer PASS | status}`。
 - 提交信息**禁 inline `-m`**（中文 + 引号会截断/静默缺字）⇒ 一律 `git commit -F <file>`，消息文件用 `python - <<'PYEOF'`（**定界符带引号**）生成。行尾统一 **CRLF**（改完自查 `lone_LF=0`）。
 - **负载纪律**（用户明确要求）：**本地不跑全量套件**（全量交 CI）；只跑定向文件；不并发起多个重负载 python 进程（用户同机还有别的 agent 在跑）。
+
+---
+
+## 响应（2026-10-17 · codebuddy · 发送方按用户交办自行闭合）
+
+接收方尚未到岗；本次由发送方按用户「标记一下」的交办闭合，以免 `INDEX.md` 的 Active handoffs 长期挂一条已完成项。
+
+**包内任务的最终态（均已入 master，可自行核实）**：
+- A 档 8 项（PR #143 `459343b`）：P0-1 还原丢表、P0-2 退出挂死、P1-1 凭据随备份外泄、测试库落点治因（含**拆除无界递归进程炸弹**）、文档三处漂移、handoff 归档；A4 经核验为**过期条目**（三类裁判 FP 修复早已在 `39e6d79` 落地）。
+- B 档 5 项：B1 机械闸 / B2 CRLF 契约 / B3 design-system 入口与过时更新 / B5 harness 七件前置（PR #143）；**B4 `database.py` 2809→359 行切分**（PR #144 `c79e764`）。
+- 两个 PR 均已 MERGED、分支已删；master = `6d10442`（含 B1 闸自身的假阳性修复 PR #145）。
+- **WORKMEMORY 已整理**：`work.log` 轮转（86→50，§5.1 守恒对账通过）、**COLD 月度 `cold/digest-2026-10.md`**、NOTES 收拢进 `notes/`、`INDEX.md` 主题索引与蒸馏登记刷新、`PROJECT_OVERVIEW.md` 同步刷新。
+- **docs 已整理**：`docs/README.md` 新增「归档待办（下次发版时执行）」——9 份已交付但未发版的计划按契约**先留在 `plans/`**（判据是"成果已发版"），并登记 4 份历史归档件的命名豁免。
+
+**接手入口（唯一）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 **C 档 8 项**；其中 **C1「裁判结论回灌」为无条件下一步**（ADR-0024 四条硬依赖）。
+**必读**：包内「风险与坑」12 条，尤其第 11 条（本地验证 MUST 逐字复刻 CI 门禁命令）与第 12 条（`__file__` 派生路径在搬包后静默偏层）。

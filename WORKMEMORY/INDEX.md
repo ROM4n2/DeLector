@@ -44,13 +44,13 @@
 | 非在途面专家评估（5 报告）+ 未决项 18 项 + 审计修正 A/B 两批 + ADR-0024 + `database.py` 切分（2026-10-16） | `work.log`（10-16 段）· `docs/reviews/2026-10-16-open-items-backlog.md` · `docs/plans/2026-10-16-audit-fixes-a-series.md` · `docs/plans/2026-10-16-audit-fixes-b-series.md` · `docs/plans/2026-10-16-database-split.md` |
 
 ## Active handoffs
-- 2026-10-16 → [`handoff_audit-fixes-a-b.md`](handoff_audit-fixes-a-b.md)（to: any · role: IMPLEMENT/TEST/VERIFY/REVIEW · status: open）— 审计修正 A 档 8 项 + B 档 5 项已合入 master（#143 `459343b`；#144 待合）；**唯一待办入口 = `docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项**
 
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
 ## 已归档 handoffs
 > 协议 §4：关闭后 MUST 移入 `WORKMEMORY/archive/`；`handoff_*.md` 只保留**活跃**交接。
 - 2026-10-15 → `archive/handoff_judge-gaming-experiment.md`（**closed 2026-10-16**）— §4.3 第 8 条对照实验：60 局真跑 + 全景报告 + ADR-0024 签批 + PR #139 已合入 master。剩余边界（不是待办）：P1 本形态下无发生机制；回灌子计划见 ADR-0024 硬依赖
+- 2026-10-16 → `archive/handoff_audit-fixes-a-b.md`（**closed 2026-10-17**）— 审计修正 A 档 8 项 + B 档 5 项均已合入 master（#143 `459343b` / #144 `c79e764`）；WORKMEMORY 已轮转并生成 10 月 COLD digest；**唯一待办入口 = `docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项**
 - 2026-10-14 → `archive/handoff_interactive-agent-loop.md`（**closed 2026-10-15**）— ADR-0023 交互层循环 Task 3~6 + CI 半 + PR #136 均已交付
 
 ## 蒸馏登记（WORKMEMORY → vault）

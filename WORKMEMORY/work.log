@@ -389,3 +389,9 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：work.log 轮转（协议 §5 触发条件 86 > 75）—— 最老 36 条按事件日期移入 `archive/work-2026-10-{06,08,10,11,12,13,14}.log`，热层保留最新 50 条（727→386 行）。§5.1 并发守卫全部执行：轮转前重读基线、只移动不改字节、末条事件头一致、事件集合守恒（`sort | uniq -c` before/after **diff 无输出**）。
 同时按 §6 沉淀 4 条（全部并入既有规则、勿另立新规）：`PYTHON-PACKAGING §2`（搬包后 `__file__` 派生路径偏层 + 导出常量的值是冻结面）· `TESTING-PATTERNS §7`（重构后 patch 触达失效）· `CODING-UNIVERSAL §7`（本地验证 MUST 逐字复刻 CI 门禁命令）· `AUTOMATION-GOTCHAS §7`（嵌套子进程递归炸弹与令牌化哨兵）；草稿 4 张已入 `99-Inbox`，INDEX 蒸馏登记节已标注。
+
+### 2026-10-17 00:40 | codebuddy | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`archive/handoff_audit-fixes-a-b.md` 按用户交办**标记闭合**（status → closed，正文追加「响应」节；原包移入 `archive/`，INDEX Active handoffs 行改挂到「已归档 handoffs」）。
+说明：接收方尚未到岗，由发送方自行闭合以免 Active handoffs 长期挂已完成项；包内 A/B 两批与 WORKMEMORY/docs 整理的最终态见该包「响应」节。
+下一步（唯一入口）：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项，其中 C1「裁判结论回灌」为无条件下一步。
