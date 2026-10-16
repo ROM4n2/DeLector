@@ -17,6 +17,7 @@
 - `CHANGELOG.md`：**版本历史正主**（每次发版追加条目）。
 - `docs/plans/`：在途实施计划；已交付的进 `docs/plans/archive/`（含 `-ledger.md` 执行台账）。
 - `docs/specs/`：设计稿（`<日期>-<主题>-design.md`）；`docs/adr/`：仓内 ADR 副本（正式件在 vault `08-Projects/DeLector/01-ADR/`）。
+- `WORKMEMORY/archive/handoff_audit-fixes-a-b.md`：**最近一份交接包**（closed 2026-10-17，含 12 条风险与坑 + 2026-10-17 进展补充）—— 新 agent 接手先看它。
 - `WORKMEMORY/cold/`：COLD 层月度蒸馏（**当前 `digest-2026-10.md`**，覆盖 2026-10-02~10-16；另有 `digest-2026-09.md`）；WARM 层 `archive/` 按 INDEX 主题索引按需加载；超限事件正文在 `notes/`。
 - `.vault-exec-ledger.json`：/dfs-exec 任务台账。
 

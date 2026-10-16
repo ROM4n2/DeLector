@@ -80,3 +80,41 @@ status: closed
 
 **接手入口（唯一）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 **C 档 8 项**；其中 **C1「裁判结论回灌」为无条件下一步**（ADR-0024 四条硬依赖）。
 **必读**：包内「风险与坑」12 条，尤其第 11 条（本地验证 MUST 逐字复刻 CI 门禁命令）与第 12 条（`__file__` 派生路径在搬包后静默偏层）。
+
+## 进展补充（2026-10-17 后续 · codebuddy）
+
+> 本包仍 **closed**，但下列进展改变了**下一任的工作方式**，接手前请一并读。
+> DeLector 仓库 master 现 = `b5b1f62`。
+
+### A. 记忆与知识库体系已升级（会改变你「往哪写、怎么写」）
+
+1. **WORKMEMORY 热层拆分**：主题索引与蒸馏登记下沉到 `WORKMEMORY/INDEX-topics.md`（WARM，按需加载）；
+   `INDEX.md` 只留配置 / 文件清单 / Active handoffs（65→28 行）；超限事件正文入 `notes/`；
+   已生成 COLD 月度 `cold/digest-2026-10.md`（覆盖 92 条 10 月事件）。`PROTOCOL.md` §3 读序同步。
+2. **vault 新增 `pattern` 类**（可复用**成功做法**）：此前沉淀几乎全是事故驱动 ⇒ 首张
+   `01-Rules/REFACTOR-SAFETY-NET.md`（重构安全网：双向对账 + 逐切片 patch 扫查）。
+   写草稿时 MUST 先判定 pattern vs troubleshooting。
+3. **规则时效闸**：`scripts/vault-rule-freshness.py`（vault 侧）—— `01-Rules/` 每条 MUST 带
+   `description`（触发句）+ `verified`（复核日期）；被取代的旧结论 MUST 标 `superseded-by`。
+   直接针对本包「风险与坑」里 A4 那类过期条目。
+4. **模板双存 + 单向同步闸**：vault `Templates/workmemory/` 是真源，发布的 skill 自带副本
+   （不能打包整个知识库）；`scripts/sync-workmemory-template.py --apply / --check`，
+   并已接入夜间管线 `template-drift-gate`（只读，漂移可见但不阻断发布）。
+5. **skill 同步**：`dfs-save`（Step 2b 类型判定 + 3 条反模式）、`dfs-inbox-consolidate`（§4b
+   晋级后补字段 / 标取代 + pattern 路由）、`dfs-handoff`（Phase 3b WORKMEMORY 卫生）、
+   `dfs-bootstrap`（0.2.3 + 热层纪律 + 副本勿改）。
+
+### B. 上一轮收尾之后新增的仓库变更
+
+- `0d714ae` + PR **#145**（`6d10442`）：B1 闸**假阳性**修复 —— `git diff-tree` 对中文路径输出
+  引号 + 八进制转义 ⇒ 白名单前缀匹配不上，把合法的簿记推送判成违规。改用 `-z` + NUL 切分，
+  并加守卫（去掉 `-z` 即红）。
+- `b5b1f62`：WORKMEMORY 热层拆分（见上 A1）。
+
+### C. 仍然有效的接手入口（未变）
+
+- **唯一待办入口**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 **C 档 8 项**。
+- **无条件下一步**：**C1「裁判结论回灌（verifier-in-the-loop）」**，ADR-0024 四条硬依赖
+  （① 裁判 FP 已确认基线完成）。
+- 本包「四、风险与坑」12 条**全部仍有效** —— 尤其第 11 条「本地验证 MUST 逐字复刻 CI 门禁命令」
+  与第 12 条「`__file__` 派生路径在搬包后静默偏层」（后者已在 vault 升为通用规则 + 布局守卫）。

@@ -12,10 +12,12 @@
 | `archive/`            | WARM 层（按日分片 `work-YYYY-MM-DD.log`，只按下方索引按需加载） |
 | `cold/`               | COLD 层（按月 digest；现有 `digest-2026-09.md` · **`digest-2026-10.md`**（2026-10-16 生成，覆盖 v5.14.0~v5.17.0 / ADR-0017~0024 / 审计修正 A/B 批）） |
 | `notes/`              | 超限事件正文（`NOTES-<日期>-<时间>-<slug>.md`，协议 §1.4；2026-10-17 从顶层收拢进本目录）。⚠️ 旧事件里以**文件名**引用的 NOTES 现在位于本目录——按名检索即可命中，事件正文按追加制不回改 |
-| `handoff_*.md`        | 跨 agent 交接包（**按需出现**：仅当存在活跃交接时才存在，非常驻文件；协议 §4） |
+| `handoff_*.md`        | 跨 agent 交接包（**按需出现**：仅当存在活跃交接时才存在，非常驻文件；协议 §4）。**closed 的 MUST 移入 `archive/handoff_*.md`** 并在下方「已归档 handoffs」登记 |
 
 
 > **主题索引与蒸馏登记已下沉**：见 `INDEX-topics.md`（WARM 层，按需加载；协议 §3）。**本文件是 HOT 索引，MUST 保持极小**——只留配置、文件清单、Active handoffs、已归档 handoffs。
+
+**新 agent 先看这里**：最近一份交接包 = [`archive/handoff_audit-fixes-a-b.md`](archive/handoff_audit-fixes-a-b.md)（closed 2026-10-17，**内容仍有效**，含 12 条风险与坑 + 本日进展补充）—— C 档 8 项的完整上下文在里面。
 
 ## Active handoffs
 
