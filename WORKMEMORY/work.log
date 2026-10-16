@@ -420,3 +420,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 顺带：`git gc` 已执行（松散对象 7556→0、prune-packable 836→0、38.5s、fsck 仅 dangling blob）；`gc.auto` 未配置属实。
 下一步：C1（无条件下一步）待点名；C2 三项修复按分支 + PR 走。
 
+### 2026-10-17 01:28 | deepseek-v4.1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**仓库卫生续做（夜间低风险作业）**
+- `git worktree prune` + 清理 `.worktrees/g2` / `.worktrees/g5`：各 4K，仅含空的 `android/.gradle/nb-cache` 骨架、无 git 元数据、无未合并内容（`git branch --no-merged master` 无输出）；`.worktrees/` 保留为空根（并行约定）。`.gitignore` 的 `.worktrees/` 条目查出仅 1 条（无历史重复，无需 dedupe）。
+- **未决（留用户拍板，未删）**：`.test-db-residue-20261016-183218/`（1.5MB，10-16 18:32 由 A5「测试库落点治因」收拢）内含 7 个库，其中 `delector.db` 与 `delector.db.bak-20261016-175607` **逐字节不同**；只读鉴定：两库同为 13 表、逐表行数全同、`articles` 均 4 行、`user_version` 同 ⇒ 差异仅在文章 `created_at`（residue 2026-10-16 10:28 vs bak 2026-10-15 14:06），属同一开发库的不同时点副本而非独有数据。其余 6 个为 `test_*.db` / `rel_probe_xyz.db` 测试产物。该目录对 `git status` 不可见（内容全被 `*.db` 忽略）。
+下一步：C1（无条件下一步）待点名；C2 三项修复按分支 + PR 走。
+
