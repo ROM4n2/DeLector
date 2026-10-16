@@ -287,6 +287,7 @@ def test_init_db_runs_the_gate_before_creating_any_table(tmp_path: Path, monkeyp
     **且新位置没有落下任何 .db 文件**——后者证明拒绝发生在建表之前而非之后。
     """
     import delector.core.database as database
+    import delector.core.db.schema as schema
 
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
@@ -294,8 +295,11 @@ def test_init_db_runs_the_gate_before_creating_any_table(tmp_path: Path, monkeyp
     data_dir = tmp_path / "data"
     data_dir.mkdir()
 
-    monkeypatch.setattr(database, "DATA_DIR", str(data_dir))
-    monkeypatch.setattr(database, "_REPO_ROOT", str(repo_root))
+    # patch 目标 MUST 命中 init_db 的所在模块（schema.py）：切分后 init_db 已搬入
+    # `delector/core/db/schema.py` 并读该模块自己的 DATA_DIR / _REPO_ROOT 绑定（database
+    # 只是再导出），打在 database.* 上不会影响 init_db 内部的查找。
+    monkeypatch.setattr(schema, "DATA_DIR", str(data_dir))
+    monkeypatch.setattr(schema, "_REPO_ROOT", str(repo_root))
     monkeypatch.delenv("DELECTOR_DATA_DIR", raising=False)
     # 显式库路径不参与判据（见 init_db 内注释），故必须让它回落到 DATA_DIR 才会走闸
     monkeypatch.delenv("DATABASE_PATH", raising=False)

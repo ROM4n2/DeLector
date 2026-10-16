@@ -34,6 +34,7 @@ from typing import Any
 import pytest
 
 from delector.core import database
+from delector.core.db import settings
 
 
 def test_get_setting_logs_warning_and_returns_env_value_on_db_error(
@@ -47,7 +48,9 @@ def test_get_setting_logs_warning_and_returns_env_value_on_db_error(
     def broken_conn(db_path: Any = None) -> Any:
         raise sqlite3.OperationalError("模拟：库被锁 / 损坏")
 
-    monkeypatch.setattr(database, "db_conn", broken_conn)
+    # patch 目标 MUST 命中 get_setting 的所在模块（settings.py）：切分后 database 只是再导出，
+    # 打在 database.db_conn 上不会影响 settings.get_setting 内部的 db_conn 查找。
+    monkeypatch.setattr(settings, "db_conn", broken_conn)
     monkeypatch.setenv("DELECTOR_GUARD_TEST_KEY", "env-key-value")
     caplog.set_level(logging.DEBUG)
 
@@ -85,7 +88,7 @@ def test_get_setting_logs_when_falling_back_to_env(
 
             return _Cursor()
 
-    monkeypatch.setattr(database, "db_conn", lambda db_path=None: FakeConn())
+    monkeypatch.setattr(settings, "db_conn", lambda db_path=None: FakeConn())
     monkeypatch.setenv("DELECTOR_GUARD_ENV_FALLBACK", "from-env")
     caplog.set_level(logging.DEBUG)
 
@@ -163,7 +166,7 @@ def test_get_setting_returns_db_row_without_env_fallback(
 
             return _Cursor()
 
-    monkeypatch.setattr(database, "db_conn", lambda db_path=None: FakeConn())
+    monkeypatch.setattr(settings, "db_conn", lambda db_path=None: FakeConn())
     monkeypatch.setenv("DELECTOR_GUARD_DB_ROW_KEY", "should-not-be-used")
     caplog.set_level(logging.DEBUG)
 

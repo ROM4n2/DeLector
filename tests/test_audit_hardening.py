@@ -665,7 +665,10 @@ def test_verify_wb_key_uses_compare_digest(monkeypatch):
         calls.append((a, b))
         return a == b
 
-    monkeypatch.setattr("delector.core.database.secrets.compare_digest", fake_compare)
+    # patch 目标 MUST 命中 verify_wb_key 的所在模块（settings.py）：切分后 verify_wb_key
+    # 已搬入 settings.py 并使用其自身的 secrets 绑定；打在 database.secrets 上不再生效
+    # （且 database 已不再 import secrets）。
+    monkeypatch.setattr("delector.core.db.settings.secrets.compare_digest", fake_compare)
     assert verify_wb_key("deadbeef", "deadbeef") is True
     assert calls, "verify_wb_key 未调用 compare_digest"
     assert verify_wb_key("deadbeef", "cafebabe") is False
