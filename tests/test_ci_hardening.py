@@ -18,10 +18,11 @@
 """
 
 import ast
+import importlib.util
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple, Sequence
 
 import pytest
 
@@ -1581,4 +1582,221 @@ def test_restore_req_declares_every_backup_table() -> None:
     assert missing_progress == [], (
         f"RestoreReq 未声明 progress 备份清单里的表：{missing_progress}\n"
         "还原对 _PROGRESS_TABLES 走同一套 _replace_tables，漏键 ⇒ 该表被 DELETE 后零回灌。"
+    )
+
+
+# ── master 直推范围机械闸（P1-1：分支纪律此前没有机械闸）─────────────────────────
+# 背景：docs/reviews/2026-10-16-commit-rhythm-and-git-management-audit.md P1-1 ——
+# 2026-10-09~14 有 25 个 feat/fix/ci/test/perf 提交直推 master（含生产代码与 CI 定义），
+# 且已实发 f49d359 推红事故。修法 = 一条廉价机械闸：master 上**非 merge** 提交的改动面
+# MUST ⊆ 白名单。本闸三件：① 可测判定器 tools/check_master_commit_scope.py（纯函数 +
+# CLI 退出码 0/1/2）；② .githooks/pre-push 接线；③ 一份 workflow 新增 job（仅 push→master）。
+#
+# 断言纪律：判定器用**真调用**（非字符串在场）；CLI 退出码用注入式 git stub（零子进程 ——
+# 遵守计划「新增测试 MUST NOT 起无界子进程链」）。两条豁免 MUST 各有独立用例，且用例对
+# 豁免是**敏感**的（删豁免 ⇒ 用例红，见计划 Step 4 变异自证）。
+
+MASTER_SCOPE_SCRIPT = REPO_ROOT / "tools" / "check_master_commit_scope.py"
+PRE_PUSH_HOOK = REPO_ROOT / ".githooks" / "pre-push"
+
+#: 白名单内样本（逐条命中一条规则：目录前缀 / 精确名）。
+_ALLOWLIST_ALLOWED: tuple[str, ...] = (
+    "WORKMEMORY/work.log",
+    "docs/reviews/x.md",
+    "README.md",
+    "CHANGELOG.md",
+    "static/index.html",
+    "static/sw.js",
+    "android/app/build.gradle",
+    "delector/core/version.py",
+)
+#: 出界样本：生产代码（P1-1 里 25 个直推提交最典型的越界面）。
+_ALLOWLIST_OFFENDER = "delector/services/llm_client.py"
+#: git 默认合并提交 subject 形态（审计实测：全部为 "Merge pull request #N from …"）。
+_MERGE_SUBJECT = "Merge pull request #143 from dev/feat-x"
+_ZERO_SHA = "0" * 40
+
+
+class _FakeCommit(NamedTuple):
+    """stub 用的一条提交记录（subject + 改动面 + 是否 root）。"""
+
+    subject: str
+    files: tuple[str, ...]
+    is_root: bool = False
+
+
+class _FakeGit:
+    """注入式 git stub：零子进程，覆盖判定器用到的只读命令（rev-list / log / diff-tree）。"""
+
+    def __init__(self, commits: dict[str, _FakeCommit]) -> None:
+        self.commits = commits
+        self.calls: list[list[str]] = []
+
+    def __call__(self, args: Sequence[str]) -> str:
+        self.calls.append(list(args))
+        if args[0] == "rev-list" and "--no-merges" in args:
+            return "".join(f"{sha}\n" for sha in self.commits)
+        if args[0] == "rev-list" and "--parents" in args:
+            sha = args[-1]
+            parents = () if self.commits[sha].is_root else ("deadbeef",)
+            return " ".join((sha, *parents)) + "\n"
+        if args[0] == "log":
+            return self.commits[args[-1]].subject + "\n"
+        if args[0] == "diff-tree":
+            return "".join(f"{name}\n" for name in self.commits[args[-1]].files)
+        raise AssertionError(f"未预期的 git 调用：{args}")
+
+
+def _load_master_scope_module() -> Any:
+    """按文件路径加载判定器模块（用真对象，避免 import 期污染 sys.modules）。"""
+    if not MASTER_SCOPE_SCRIPT.exists():
+        pytest.fail(f"判定器脚本不存在：{MASTER_SCOPE_SCRIPT}（master 直推机械闸缺失）")
+    spec = importlib.util.spec_from_file_location("check_master_commit_scope", MASTER_SCOPE_SCRIPT)
+    assert spec is not None and spec.loader is not None, f"无法加载判定器脚本：{MASTER_SCOPE_SCRIPT}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_check_scope_allows_whitelisted_files() -> None:
+    """白名单内（簿记 / 文档 / 版本面）⇒ 无违规理由。"""
+    module = _load_master_scope_module()
+    assert module.check_scope(_ALLOWLIST_ALLOWED, subject="docs: 更新簿记") == []
+
+
+def test_check_scope_flags_out_of_allowlist_file() -> None:
+    """出界文件 ⇒ 判红；白名单被放宽（如改成 **）时本用例 MUST 红。"""
+    module = _load_master_scope_module()
+    reasons = module.check_scope([*_ALLOWLIST_ALLOWED, _ALLOWLIST_OFFENDER], subject="feat: 越界")
+    assert reasons, "出界文件未被判红：白名单被放宽（如改成 **）时本用例 MUST 红"
+    assert any(_ALLOWLIST_OFFENDER in reason for reason in reasons), reasons
+
+
+def test_check_scope_exempts_merge_commit() -> None:
+    """合并提交豁免：删掉 merge 豁免时本用例 MUST 红。"""
+    module = _load_master_scope_module()
+    assert module.check_scope([_ALLOWLIST_OFFENDER], subject=_MERGE_SUBJECT) == [], (
+        "合并提交未被豁免：删掉 merge 豁免时本用例 MUST 红"
+    )
+
+
+def test_check_scope_exempts_bootstrap() -> None:
+    """bootstrap 豁免（仓库最初提交 / --bootstrap）：整树入仓也不算违规。"""
+    module = _load_master_scope_module()
+    files = ["delector/server.py", "package_windows.py", "tests/test_x.py"]
+    assert module.check_scope(files, subject="Initial commit", bootstrap=True) == []
+
+
+def test_scope_script_pins_exact_allowlist() -> None:
+    """白名单 MUST 含审计 P1-1 的 8 项，且 MUST NOT 出现放行一切的通配。"""
+    module = _load_master_scope_module()
+    required = (
+        "WORKMEMORY/",
+        "docs/",
+        "README.md",
+        "CHANGELOG.md",
+        "static/index.html",
+        "static/sw.js",
+        "android/app/build.gradle",
+        "delector/core/version.py",
+    )
+    for entry in required:
+        assert entry in module.MASTER_DIRECT_ALLOWLIST, f"白名单缺 {entry!r}"
+    for wildcard in ("**", "*"):
+        assert wildcard not in module.MASTER_DIRECT_ALLOWLIST, (
+            f"白名单出现 {wildcard!r}：会放行一切，机械闸形同虚设"
+        )
+
+
+def test_cli_exit_code_pass_is_zero() -> None:
+    """退出码 0 = 通过（全部提交 ⊆ 白名单）。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("docs: ok", ("docs/a.md", "WORKMEMORY/work.log"))})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+
+
+def test_cli_exit_code_violation_is_one(capsys: pytest.CaptureFixture[str]) -> None:
+    """退出码 1 = 有违规，且 stderr 打出「sha + 出界文件」。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("feat: 越界", (_ALLOWLIST_OFFENDER, "docs/a.md"))})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 1
+    err = capsys.readouterr().err
+    assert "c1" in err and _ALLOWLIST_OFFENDER in err
+
+
+def test_cli_exit_code_environment_unavailable_is_two(capsys: pytest.CaptureFixture[str]) -> None:
+    """退出码 2 = 环境不可用（git 调用失败）。"""
+    module = _load_master_scope_module()
+
+    def broken_git(args: Sequence[str]) -> str:
+        raise module.GitError("not a git repository")
+
+    assert module.main(["--range", "aaa..bbb"], git=broken_git) == 2
+    assert "环境不可用" in capsys.readouterr().err
+
+
+def test_cli_undeterminable_range_warns_through(capsys: pytest.CaptureFixture[str]) -> None:
+    """范围不可判定（before 全零 = 首次推送）⇒ 显式警告后通过，禁止静默。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("feat: 越界", (_ALLOWLIST_OFFENDER,))})
+    assert module.main(["--range", f"{_ZERO_SHA}..bbb"], git=git) == 0
+    err = capsys.readouterr().err
+    assert "不可判定" in err and "首次推送" in err, "首次推送范围必须**显式警告后**通过，禁止静默"
+
+
+def test_cli_bootstrap_flag_skips_with_warning(capsys: pytest.CaptureFixture[str]) -> None:
+    """显式 --bootstrap ⇒ 跳过范围检查，但 MUST 打印警告（不静默）。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("feat: 越界", (_ALLOWLIST_OFFENDER,))})
+    assert module.main(["--range", "aaa..bbb", "--bootstrap"], git=git) == 0
+    assert "bootstrap" in capsys.readouterr().err.lower()
+
+
+def test_cli_root_commit_is_bootstrap_exempt(capsys: pytest.CaptureFixture[str]) -> None:
+    """仓库最初提交（root commit）⇒ 自动 bootstrap 豁免，不判红。"""
+    module = _load_master_scope_module()
+    git = _FakeGit({"root1": _FakeCommit("Initial commit", ("delector/server.py",), is_root=True)})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+    assert "最初提交" in capsys.readouterr().err
+
+
+def test_cli_restricts_range_to_first_parent_mainline() -> None:
+    """范围遍历 MUST 只取 mainline（--first-parent）——否则 PR 合并带入的分支提交会被误判违规。
+
+    实测（本机，2026-10-16）：PR #139 合并提交 dac3a8b 在 CI 口径范围 dac3a8b^1..dac3a8b 下，
+    仅 --no-merges 得 20 个提交、加 --first-parent 得 0 个。缺 --first-parent 会让本闸在每次
+    正常 PR 合并时把 master 推红（P1-1 要消灭的失败形态）。
+    """
+    module = _load_master_scope_module()
+    git = _FakeGit({"c1": _FakeCommit("docs: ok", ("docs/a.md",))})
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+    revlist_calls = [call for call in git.calls if call and call[0] == "rev-list" and "--no-merges" in call]
+    assert revlist_calls, "未观察到 rev-list 调用"
+    assert all("--first-parent" in call for call in revlist_calls), (
+        f"范围遍历缺 --first-parent：{revlist_calls} —— PR 合并会被误判为直推违规、把 master 推红"
+    )
+
+
+def test_pre_push_hook_targets_master_and_prints_skip_reason() -> None:
+    """pre-push 必须针对 refs/heads/master 判定，且不适用的情形明确打印跳过原因。"""
+    text = _read_guard_file(PRE_PUSH_HOOK)
+    assert "/usr/bin/env bash" in text, "pre-push 缺 bash shebang"
+    assert "refs/heads/master" in text, "pre-push 未针对 refs/heads/master 判定"
+    assert "tools/check_master_commit_scope.py" in text, "pre-push 未接线判定器"
+    assert "跳过" in text, "pre-push 不适用的情形 MUST 明确打印跳过原因（禁止静默通过）"
+
+
+def test_ci_workflow_has_master_direct_push_scope_job() -> None:
+    """ci.yml 必须有「仅 push→master」触发的直推范围 gate job，并以 before..sha 调用判定器。"""
+    text = _read_guard_file(CI_WORKFLOW)
+    assert "master-direct-push-scope:" in text, f"{CI_WORKFLOW} 缺 master 直推范围 gate job"
+    block = _job_block(CI_WORKFLOW, "master-direct-push-scope")
+    assert "github.event_name == 'push'" in block, "job 未限定为 push 事件（PR 无 before..sha 语义）"
+    assert "github.event.before" in block and "github.sha" in block, (
+        "job 未以 before..sha 为范围调用判定器"
+    )
+    assert "tools/check_master_commit_scope.py" in block, "job 未接线判定器"
+    assert "fetch-depth: 0" in block, (
+        "job 的 checkout 未取全历史：before 基线不在本地对象库 ⇒ git 取不到范围"
+        "（与 master push 红事故同因）"
     )

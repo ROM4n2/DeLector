@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+#
+# 推送前机械闸：master 上**非 merge** 提交的改动面 MUST ⊆ 白名单（审计 P1-1）。
+#
+# 为什么在这里：分支纪律此前**没有机械闸**（docs/agents/ops.md:202-216 自述），
+# 2026-10-09~14 有 25 个 feat/fix/ci/test/perf 提交直推 master，并已实发 f49d359 推红
+# 事故。规则 2026-10-14 才写进可见文档。本钩子把「直推 master 的实现类提交」拦在推送前。
+#
+# 启用方式（clone 后必做一次，钩子目录不随 clone 生效）：
+#   git config core.hooksPath .githooks
+#
+# Git 通过 stdin 传每行一条引用：<local_ref> <local_sha> <remote_ref> <remote_sha>。
+# 只对目标为 refs/heads/master 的引用判定；其余情形**明确打印跳过原因**（禁止静默通过）。
+# 判定逻辑在 tools/check_master_commit_scope.py（可测的纯函数 + CLI），本钩子只做接线。
+# 用 bash 而非 sh：依赖数组 / $() 等（与 .githooks/pre-commit 同款）。
+#
+# 退出码语义（与判定器对齐）：判定器 0=通过、1=有违规、2=环境不可用。
+#   * rc=1 ⇒ 阻断本次推送（退出 1）；
+#   * rc=2 ⇒ **不阻断**，但打印醒目警告（判定器环境不可用；CI 侧仍有硬闸兜底）。
+#     ——与判定器「范围不可判定时 warn-through」同精神：绝不静默。
+
+set -u
+
+ZERO_SHA='0000000000000000000000000000000000000000'
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CHECK_SCRIPT="$REPO_ROOT/tools/check_master_commit_scope.py"
+
+# 选 Python 解释器（与 .githooks/pre-commit 的探测惯例一致）。
+PYTHON_BIN=''
+for candidate in python python3 py; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
+
+checked_any=0
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -n "${remote_ref:-}" ] || continue
+
+    if [ "$remote_ref" != 'refs/heads/master' ]; then
+        printf '[pre-push] 跳过 %s：目标分支不是 refs/heads/master（本闸只守 master 直推）\n' "$remote_ref"
+        continue
+    fi
+
+    if [ "$local_sha" = "$ZERO_SHA" ]; then
+        printf '[pre-push] 跳过 %s：删除远端引用（local_sha 全零）\n' "$remote_ref"
+        continue
+    fi
+
+    if [ -z "$PYTHON_BIN" ]; then
+        printf '[pre-push] 警告：找不到 python 解释器，判定器无法运行 ⇒ 本闸本次未执行（不静默）\n'
+        continue
+    fi
+
+    if [ ! -f "$CHECK_SCRIPT" ]; then
+        printf '[pre-push] 警告：判定器缺失（%s）⇒ 本闸本次未执行（不静默）\n' "$CHECK_SCRIPT"
+        continue
+    fi
+
+    checked_any=1
+    if [ "$remote_sha" = "$ZERO_SHA" ]; then
+        printf '[pre-push] 警告：%s 为首次推送（remote_sha 全零），范围不可判定\n' "$remote_ref"
+    fi
+    printf '[pre-push] 检查 master 直推范围 %s..%s\n' "$remote_sha" "$local_sha"
+    "$PYTHON_BIN" "$CHECK_SCRIPT" --range "${remote_sha}..${local_sha}"
+    rc=$?
+    if [ "$rc" -eq 1 ]; then
+        status=1
+    elif [ "$rc" -eq 2 ]; then
+        printf '[pre-push] 警告：判定器环境不可用（rc=2）⇒ 本次不阻断；CI 的 master 直推 gate 仍会兜底\n'
+    fi
+done
+
+if [ "$checked_any" -eq 0 ]; then
+    printf '[pre-push] 未发现推往 refs/heads/master 的引用：本闸不适用，放行\n'
+fi
+
+exit "$status"
