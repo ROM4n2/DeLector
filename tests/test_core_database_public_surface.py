@@ -43,6 +43,7 @@ r"""`delector/core/database.py` 切分安全网：公开面**逐名对账**（�
 from __future__ import annotations
 
 import importlib
+from types import ModuleType
 from typing import Dict, List, Set, Tuple
 
 import delector.core.database as database
@@ -166,7 +167,7 @@ def _facade_public_names() -> Set[str]:
     return {name for name in dir(database) if not name.startswith("_")}
 
 
-def _defined_top_level_names(module: object) -> Set[str]:
+def _defined_top_level_names(module: ModuleType) -> Set[str]:
     """模块**顶层定义**的名字（def/class/Assign/AnnAssign）—— 不含 `import` 绑定的名字。
 
     只看「定义」而非 `vars()`：多个切片都会 `import HTTPException` / `PROCESSED_JSON_VERSION`，
