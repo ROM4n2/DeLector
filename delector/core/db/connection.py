@@ -37,7 +37,13 @@ from typing import Any, Dict, Iterator, Optional, Set
 # progress.db 都挂在它下面，指错一级 = 换个地方重建：桌面端没有 DELECTOR_DATA_DIR 兜底
 # （Android 由 MainActivity 注入），用户看到 "升级之后数据全没了"，本地测试照样全绿。
 # 这条语义由 tests/test_backend_package_layout.py 钉住，别改回去。
-_PKG_DIR = os.path.dirname(__file__)
+# ⚠️ `_PKG_DIR` 的值是**冻结面**：切分前它 = `dirname(database.py)` = `delector/core`，且经
+# `database.__all__` 再导出。本模块现位于 `delector/core/db/`（B4 搬入），故取**两级** dirname
+# 以保持**与切分前逐字相同的值**。消费方 `content.preset_processed_data_path()` 用
+# `dirname(_PKG_DIR) + "/data/…"` 求 `delector/data/preset_processed.json`；若这里少取一级，
+# 路径会静默多出一层 `core/` —— 本地若恰有散落文件则全绿，CI 干净 checkout 才红
+# （2026-10-16 实测踩到）。该语义由 `tests/test_backend_package_layout.py` 钉住，搬家时必须重核。
+_PKG_DIR = os.path.dirname(os.path.dirname(__file__))
 _REPO_ROOT = _PKG_DIR
 while os.path.exists(os.path.join(_REPO_ROOT, "__init__.py")):
     _REPO_ROOT = os.path.dirname(_REPO_ROOT)

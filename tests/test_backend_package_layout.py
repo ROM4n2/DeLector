@@ -60,6 +60,30 @@ def test_static_dir_resolves_to_repo_root_static():
     assert (resolved / "index.html").exists(), f"{resolved} 里没有 index.html —— 静态资源挂载错了，全站会 404。"
 
 
+def test_preset_processed_data_path_survives_module_moves():
+    """预生成数据路径必须落在**被 git 跟踪的那一份** `delector/data/preset_processed.json`。
+
+    这条与上面两条同族：该路径由 `_PKG_DIR` 回指一级求得，而 `_PKG_DIR` 锚在**模块所在的
+    目录层数**上。2026-10-16 database-split 把本函数从 `delector/core/database.py` 搬进
+    `delector/core/db/content.py`（深了一层）⇒ `dirname(_PKG_DIR)` 从 `delector/` 变成
+    `delector/core/`，路径静默多出一层 `core/`：本地若恰好有落在错误路径的散落文件则**全绿**，
+    CI 干净 checkout 直接红（`tests/test_preset_processed_data.py` 断言该文件存在）。
+    """
+    from delector.core.database import preset_processed_data_path
+
+    actual = Path(preset_processed_data_path()).resolve()
+    expected = REPO_ROOT / "delector" / "data" / "preset_processed.json"
+    assert actual == expected, (
+        f"预生成数据路径指向 {actual}，期望 {expected}。\n"
+        "该路径经 _PKG_DIR 回指一级求得：模块搬家后层数一变就会静默多/少一层，"
+        "而'文件找不到'只在干净 checkout 上暴露。"
+    )
+    assert expected.is_file(), (
+        f"{expected} 不存在：它是预置文章 spaCy 口径 processed_json 的单一真相，"
+        "用 `python tools/gen_preset_processed.py` 生成。"
+    )
+
+
 def test_no_static_dir_inside_backend_package():
     """包目录里不该出现 static/ —— 出现说明有人把资源跟着模块一起搬了。"""
     pkg = REPO_ROOT / "delector"

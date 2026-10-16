@@ -232,10 +232,14 @@ def preset_text_hash(text: str) -> str:
 
 
 def preset_processed_data_path() -> str:
-    """预生成数据文件路径（相对**包目录**定位，dev 与 PyInstaller 冻结后同一相对位置）。
+    """预生成数据文件路径（相对 ``delector/`` 包目录定位，dev 与 PyInstaller 冻结后同一相对位置）。
 
-    本模块在 ``delector/core/``：回指一级到包目录再进 ``data/``。PyInstaller onedir 下
-    ``__file__`` 指向 ``_internal/delector/core/database.pyc``，故本相对路径冻结后同样成立
+    经 ``_PKG_DIR``（= ``delector/core``，其**值**是冻结面，见 ``connection.py`` 的注释）回指一级
+    到 ``delector/`` 再进 ``data/``。⚠️ 本函数 2026-10-16 随 B4 从 ``delector/core/database.py``
+    搬进 ``delector/core/db/content.py``：**模块深了一层的那个瞬间，这条相对路径会静默多出一层
+    ``core/``**（本地有散落文件时全绿、CI 干净 checkout 直接红）—— 由
+    ``tests/test_backend_package_layout.py`` 钉住，再搬家必须同步重核。
+    PyInstaller onedir 下 ``__file__`` 指向 ``_internal/delector/core/db/content.pyc``，故本相对路径冻结后同样成立
     —— 前提是打包时用 ``--add-data ...;delector/data`` 把文件收到同一位置（见
     package_windows.py 与 build-release.yml；漏收不崩，但会**静默降级**，故打包守卫 + 产物
     验收闸兜底）。
