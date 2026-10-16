@@ -11,12 +11,17 @@ spaCy 并 UPDATE articles」——因为写入端（processor 两条返回路径
 """
 
 import ast
+import atexit
 import contextlib
 import gc
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import pytest
@@ -26,7 +31,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from db_cleanup import remove_db_files  # noqa: E402
+from db_cleanup import (  # noqa: E402
+    describe_root_db_diff,
+    iter_root_db_names,
+    remove_db_files,
+    root_db_snapshot,
+)
 
 from delector import routes, server  # noqa: E402
 from delector.core.database import db_conn as real_db_conn  # noqa: E402
@@ -34,8 +44,14 @@ from delector.core.database import init_db  # noqa: E402
 from delector.nlp_engine import processor  # noqa: E402
 from delector.nlp_engine.processor import _process_german_text_pure_python  # noqa: E402
 
-DB = "test_get_writes_delector.db"
-PROGRESS = "test_get_writes_progress.db"
+# 库路径 MUST 是**绝对路径**（审计 P1-1 治因）：裸相对文件名由 sqlite 按进程 CWD 解析，
+# 「从仓库根跑 pytest」就把库写进仓库根。这里用**显式临时目录**（`tempfile.mkdtemp`：
+# 模块级常量在夹具里用，夹具的 `tmp_path_factory` 不能喂给模块级常量），
+# 目录由 atexit 尽力清理。
+_DB_TMP_DIR = tempfile.mkdtemp(prefix="delector_get_writes_db_")
+atexit.register(shutil.rmtree, _DB_TMP_DIR, ignore_errors=True)
+DB = os.path.join(_DB_TMP_DIR, "test_get_writes_delector.db")
+PROGRESS = os.path.join(_DB_TMP_DIR, "test_get_writes_progress.db")
 
 RAW_TEXT = "Der Hund läuft schnell durch den Park."
 
@@ -150,6 +166,232 @@ def _migrated_payload() -> Dict[str, Any]:
         "sentences": [{"id": 0, "text": RAW_TEXT, "tokens": [], "topology": {}, "clause_tree": {}}],
         "stats": {"word_count": 6, "total_words": 6},
     }
+
+
+# ==========================================================================
+# 守卫 C：本模块的库落点（治因 —— 裸相对文件名 ⇒ 仓库根）
+# ==========================================================================
+# 病因（2026-10-16 审计 P1-1）：本模块曾把 `DB` / `PROGRESS` 写成裸文件名
+# （`test_get_writes_delector.db`）。裸名由 sqlite **按进程 CWD** 解析 ⇒ 「从仓库根跑
+# pytest」就把库写进仓库根。后果不只是脏：`tests/conftest.py` 的会话守卫当时只比
+# `delector.db` / `progress.db` 两种名字（`db_cleanup.ROOT_DB_NAMES`），`test_*.db`
+# 完全在视野外，而 `*.db` 被 `.gitignore` 挡住 ⇒ 泄漏可无限期无人发现。
+#
+# 修法（不是症状）：路径改为**显式临时目录的绝对路径** —— 绝对路径与 CWD 无关，
+# 从任何目录跑都落在 tmp，仓库根既不新增也不被改写。
+#
+# 为什么本文件要子进程取证：`from delector import server` 是**模块级 import**，
+# 进程内任何快照都是「泄漏之后」的状态；只有新起一个子进程、`cwd=仓库根`、并清掉
+# 库 env（模拟「开发者清空 env 后从仓库根跑」），才能从零观察落点。
+# ==========================================================================
+# 批次 = **整个模块**（不是单条）。为什么整模块：库落点有两个入口，
+#   ① 模块级 `import ... server`（收集期就 `init_db()`，用根 `conftest.py` 的默认库名）；
+#   ② 各用例的 `client` 夹具（钉本模块的 `DB` / `PROGRESS`）。
+# 只跑单条只盖住 ②，① 会漏 —— 而 ① 正是「默认值是不是绝对路径」的唯一判据。
+BATCH_TARGET = "tests/test_get_endpoints_with_writes.py"
+
+# 递归哨兵（F1）：子进程里跑的是**整个模块**，其中包含守着本行为的那两条守卫
+# ⇒ 不拦截就是「子进程再开子进程」的无界递归（探针实证：每 2~3 秒生成下一代，
+# 外层 600s timeout 只杀直接子进程，管不了自我续命的进程链）。
+# 两道防线各修一条路（互为冗余）：
+#   防线一 env 令牌：父进程把**自己的 PID** 写进子进程 env（`_run_batch_in_subprocess`），
+#     `batch_run` 夹具只跳过「令牌 == 本进程 getppid()」的**真子进程**；令牌存在但不匹配
+#     ⇒ fail-loud，绝不静默 skip —— 否则外部残留的 `DELECTOR_BATCH_CHILD` 会让两条守卫
+#     **永远 skip**（安全的假绿，但哨兵已被拆掉）。真子进程的 getppid() 就是父 pytest 的
+#     pid（本机 Windows 实测 token_match=True；父进程在 subprocess.run 期间存活 ⇒ ppid
+#     语义稳定），故真子进程不会被漏过、递归仍被拦住。
+#   防线二 `-k` 排除：子进程命令行点名排除两条守卫（防 env 被外部清掉/改写）。
+BATCH_CHILD_ENV = "DELECTOR_BATCH_CHILD"
+BATCH_GUARD_SELECTOR = "not repo_root_gains_no_db_files and not repo_root_unchanged_by_the_batch"
+
+
+def _run_batch_in_subprocess(target: str) -> "subprocess.CompletedProcess[str]":
+    """在**仓库根**为 CWD 的子进程里跑一批用例，并清空库 env（不继承父进程的绝对路径）。
+
+    清 env 是有意的：这正是「开发者本地从仓库根跑 pytest」的现实环境，
+    也是 `conftest.py` 默认值唯一会被用到的场景 —— 守卫要判的就是它。
+
+    递归防护（两道防线，见常量的注释）：`-k` 排除两条守卫 + 给子进程打
+    `BATCH_CHILD_ENV` **令牌**（令牌 = 本进程 PID；`batch_run` 夹具只对
+    「令牌 == getppid()」的真子进程 skip，其它情况 fail-loud）。子进程正常
+    8s 上下（实测），`timeout=60` 只兜底「子进程卡死」这类异常 —— 递归已由
+    两道防线阻断，timeout 不承担拦截递归的职责：靠 timeout 拦递归已证明
+    不可行，它只杀直接子进程，孙进程链会自我续命（探针实证：9s 内 4 代）。
+    """
+    env = dict(os.environ)
+    env.pop("DATABASE_PATH", None)
+    env.pop("PROGRESS_DB_PATH", None)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env[BATCH_CHILD_ENV] = str(os.getpid())
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            target,
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-k",
+            BATCH_GUARD_SELECTOR,
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+        check=False,
+    )
+
+
+_DbStat = Dict[str, Tuple[float, int]]
+
+
+def _root_db_stat_fingerprint(root: str) -> _DbStat:
+    """仓库根库文件「指纹」：名字 → (mtime, 字节数)（含 `-wal` / `-shm`）。
+
+    为什么不能只用 `root_db_snapshot`（它只记字节数）：落点错时，库被
+    `remove_db_files` 删掉再 `init_db()` 建回来，**重建后字节数可以逐字节相同**
+    （schema 幂等）—— 只看字节数的快照会漏判。mtime 分辨得出来，且"库被动过"
+    正是要禁的不变量。
+
+    展开口径 MUST 与 `root_db_snapshot` 同源：复用 `db_cleanup.iter_root_db_names`
+    （`ROOT_DB_NAMES` 的通配项如 `test_*.db` 也走 glob 展开）。曾按 `ROOT_DB_NAMES`
+    **字面**拼路径 ⇒ `test_*.db` 的 `isfile` 恒 False ⇒ 对 `test_*.db` 的原地改写
+    失明（与 `root_db_snapshot` 口径不一致）。不许自造扫描口径。
+    """
+    fingerprint: _DbStat = {}
+    for _pattern, name in iter_root_db_names(root):
+        for suffix in ("", "-wal", "-shm"):
+            path = os.path.join(root, f"{name}{suffix}")
+            if os.path.isfile(path):
+                stat = os.stat(path)
+                fingerprint[f"{name}{suffix}"] = (stat.st_mtime, stat.st_size)
+    return fingerprint
+
+
+def _describe_fingerprint_diff(before: _DbStat, after: _DbStat) -> str:
+    """指纹差异说人话（新出现 / 被改动 / 消失；被改动带上 mtime 与字节数）。"""
+    added = sorted(set(after) - set(before))
+    removed = sorted(set(before) - set(after))
+    changed = sorted(name for name in set(after) & set(before) if after[name] != before[name])
+    parts = []
+    if added:
+        parts.append(f"新出现：{', '.join(added)}")
+    if changed:
+        parts.append(
+            "被改动：" + ", ".join(f"{name}(mtime/size {before[name]} → {after[name]})" for name in changed)
+        )
+    if removed:
+        parts.append(f"消失：{', '.join(removed)}")
+    return "；".join(parts) if parts else "无差异"
+
+
+@pytest.fixture(scope="module")
+def batch_run() -> "Dict[str, Any]":
+    """跑一次那批用例，返回 `{"before": 快照, "after": 快照, "before_fp": 指纹, ...}`。
+
+    两个守卫共用同一次子进程调用（module 作用域）：子进程很贵，且两条判据
+    读的必须是**同一次运行**的前后快照/指纹，否则第二条可能把第一条的副作用算进来。
+
+    递归哨兵（F1）：本夹具会 spawn 子进程，而子进程跑的是**整个模块**（含本夹具）
+    ⇒ 子进程里若还进这里就是无界递归。`_run_batch_in_subprocess` 会把**父进程 PID**
+    作为令牌写进子进程 env；只有令牌 == 本进程 `os.getppid()`（真子进程）才 skip。
+    令牌存在但不匹配（外部残留污染）⇒ `pytest.fail` fail-loud：静默 skip 会让两条
+    守卫可被环境整体拆除（安全的假绿，仍是洞）。必须在任何 spawn / 快照动作**之前**
+    检查。（防线二是子进程命令行的 `-k` 排除，两道都在 `_run_batch_in_subprocess`
+    附近有注释。）
+    """
+    marker = os.environ.get(BATCH_CHILD_ENV)
+    if marker is not None:
+        if marker == str(os.getppid()):
+            pytest.skip("嵌套批次子进程：守卫自身不再递归（由 _run_batch_in_subprocess 以父 PID 打令牌）")
+        pytest.fail(
+            f"检测到外部残留的 {BATCH_CHILD_ENV}={marker!r}（本进程父 PID 为 {os.getppid()}）——"
+            "它不是本模块递归防护打的令牌，却会让两条守卫静默 skip（哨兵被拆的假绿）。"
+            f"请 unset {BATCH_CHILD_ENV} 后重跑。"
+        )
+    before = root_db_snapshot(ROOT)
+    before_fp = _root_db_stat_fingerprint(ROOT)
+    proc = _run_batch_in_subprocess(BATCH_TARGET)
+    after = root_db_snapshot(ROOT)
+    after_fp = _root_db_stat_fingerprint(ROOT)
+    assert proc.returncode == 0, (
+        f"子进程跑 {BATCH_TARGET} 失败（退出码 {proc.returncode}）——\n"
+        f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+    )
+    # 子进程确实跑到了用例：0 collected / 0 passed 会让下面两条守卫变成空转。
+    assert "passed" in proc.stdout, f"子进程没真正跑到用例：\n{proc.stdout}\n{proc.stderr}"
+    return {"before": before, "after": after, "before_fp": before_fp, "after_fp": after_fp}
+
+
+def test_guard_c_repo_root_gains_no_db_files(batch_run: "Dict[str, Any]") -> None:
+    """跑完那批用例 ⇒ 仓库根**不新增任何** `*.db`（`test_*.db` 也在内）。
+
+    取证口径：`root_db_snapshot` / `describe_root_db_diff`（测试侧数据库文件关注的
+    **既有唯一实现**，勿另造一套）在子进程前后的差值 —— 不比对「根目录必须空」
+    （本机可能先就有别的库 / 便携模式本来就合法）。
+
+    ⚠️ 耗时登记：本用例经 module 级 `batch_run` 夹具 spawn 一个完整 pytest 子进程
+    （实测 ~8-15s，两条守卫共用同一次调用）—— **超计划 Global 的「单用例 <5s」预算**，
+    为知情取舍：子进程取证是「模块级 import 落点」的唯一判据（进程内快照永远在泄漏
+    之后，见守卫 C 文件头），无法压进 5s。
+    """
+    before = batch_run["before"]
+    after = batch_run["after"]
+    assert set(after) - set(before) == set(), (
+        f"仓库根新增了库文件：{describe_root_db_diff(before, after)}。\n"
+        "根因：某条路径用了**裸相对文件名** —— 裸名由 sqlite 按进程 CWD 解析，"
+        "「从仓库根跑 pytest」就写进仓库根。"
+        "注意 `*.db` 被 .gitignore 挡住 ⇒ 这种泄漏可以无限期无人发现。"
+    )
+
+
+def test_guard_c_repo_root_unchanged_by_the_batch(batch_run: "Dict[str, Any]") -> None:
+    """更严的判据：仓库根库文件指纹（`(mtime, 字节数)`）**前后一致**。
+
+    为什么必须比「不新增」更严：落点错时库被 `remove_db_files` 删掉再 `init_db()`
+    建回来，**重建后字节数可以与原来完全相同**（schema 幂等）—— 只看字节数的
+    快照会漏判，mtime 不会。本机仓库根常有旧泄漏残留，它们被原地改写同样算"落点错"：
+    落点正确时，那些文件根本不会被打开。
+
+    （与上一条共用同一次 module 级子进程 —— 其耗时登记见上一条 docstring。）
+    """
+    before_fp = batch_run["before_fp"]
+    after_fp = batch_run["after_fp"]
+    assert after_fp == before_fp, (
+        "本次运行改动了仓库根的库文件 —— 落点不是绝对路径。\n"
+        f"差异：{_describe_fingerprint_diff(before_fp, after_fp)}"
+    )
+
+
+def test_guard_c_root_db_snapshot_covers_test_dbs(tmp_path: Path) -> None:
+    """守卫视野检查：`root_db_snapshot` MUST 看得见 `test_*.db`（含其 `-wal` / `-shm`）。
+
+    为什么必须钉这一条：会话守卫的判别力**完全**来自 `db_cleanup.ROOT_DB_NAMES`。
+    它曾只有 `delector.db` / `progress.db` 两种名字 ⇒ 本模块这类 `test_*.db` 泄漏
+    在守卫视野**之外**（而 `*.db` 被 `.gitignore` 挡住 ⇒ 无人发现）。本条把这个
+    视野本身钉住：把范围收回原状 ⇒ 本用例红（变异自证见提交说明）。
+
+    全部在 `tmp_path` 里造（**不在仓库根**写任何东西）：本用例只验快照口径。
+    """
+    (tmp_path / "delector.db").write_bytes(b"x" * 10)
+    (tmp_path / "test_probe_leak.db").write_bytes(b"y" * 3)
+    (tmp_path / "test_probe_leak.db-wal").write_bytes(b"z")
+    (tmp_path / "unrelated_notes.db").write_bytes(b"n" * 5)
+
+    snap = root_db_snapshot(str(tmp_path))
+
+    assert snap == {
+        "delector.db": 10,
+        "test_probe_leak.db": 3,
+        "test_probe_leak.db-wal": 1,
+    }, (
+        "root_db_snapshot 的视野不对：`delector.db` 与 `test_*.db`（含侧文件）都 MUST 在，"
+        f"非库名的 `*.db` MUST 不在。实际：{snap}"
+    )
 
 
 # ==========================================================================

@@ -649,18 +649,26 @@ def test_bootstrap_keeps_explicit_env_when_migration_fails(tmp_path: Path, monke
 # 机制：`database.DATA_DIR` 在没有 `DELECTOR_DATA_DIR` 时兜底仓库根（database.py:36），而
 # `delector/server.py` 在**模块顶层**就 `init_db()` ⇒ 「没先钉落点就 import server」= 建库。
 def test_root_db_snapshot_covers_main_and_side_files(tmp_path: Path) -> None:
-    """快照只看存在的 `delector.db` / `progress.db` 及其 `-wal` / `-shm`，别的 `.db` 不算。"""
+    """快照覆盖 `ROOT_DB_NAMES` 的全部模式：`delector.db` / `progress.db` / `test_*.db` 及其侧文件；其余 `.db` 不算。
+
+    口径更新（2026-10-16 审计 P1-1）：`ROOT_DB_NAMES` 扩含 `test_*.db` —— 原先只认
+    `delector.db` / `progress.db` 两种名字，测试自己的库（如 `conftest.py` 默认的
+    `test_conftest_default.db`）全在守卫视野之外，而 `*.db` 被 `.gitignore` 挡住
+    ⇒ 这类泄漏可以无限期无人发现。本用例此前断言快照**不含**测试库（旧口径），
+    随 `ROOT_DB_NAMES` 同批更新（扩宽理由 = 审计 P1-1）；把视野收回原状 ⇒ 本用例红。
+    """
     import db_cleanup  # tests/ 在 sys.path（pytest prepend 模式）⇒ 与其它用例同款 import
 
     assert db_cleanup.root_db_snapshot(str(tmp_path)) == {}
     (tmp_path / "delector.db").write_bytes(b"x" * 10)
     (tmp_path / "delector.db-wal").write_bytes(b"y" * 3)
     (tmp_path / "progress.db").write_bytes(b"z")
-    (tmp_path / "test_conftest_default.db").write_bytes(b"w")  # 测试库：不在守卫范围
+    (tmp_path / "test_conftest_default.db").write_bytes(b"w")  # test_*.db：P1-1 扩宽后同样在守卫范围
     assert db_cleanup.root_db_snapshot(str(tmp_path)) == {
         "delector.db": 10,
         "delector.db-wal": 3,
         "progress.db": 1,
+        "test_conftest_default.db": 1,
     }
 
 
