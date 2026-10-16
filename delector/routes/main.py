@@ -1765,6 +1765,12 @@ class RestoreReq(BaseModel):
     exam_trials: List[Dict[str, Any]] = []
     # 遇见区短文表；加入备份/还原（缺省为空以兼容 v1/v5.1/v5.2 旧备份）
     encounter_texts: List[Dict[str, Any]] = []
+    # 听力微训 / 长难句精读成绩。这两张表早已在 _BACKUP_TABLES 里，模型却漏了字段：
+    # pydantic v2 默认 extra=ignore ⇒ 前端整份 POST 的这两键被静默丢弃，而还原对清单里
+    # 每张表无条件 DELETE ⇒ **删光零回灌**、接口仍返回 ok（用户零提示丢训练记录，
+    # 2026-10-15 swarm 审计 P0-1）。缺省为空以兼容旧备份（与上面各字段同理）。
+    listen_trials: List[Dict[str, Any]] = []
+    hard_sentence_trials: List[Dict[str, Any]] = []
     local_storage: Dict[str, Any] = {}
 
 
