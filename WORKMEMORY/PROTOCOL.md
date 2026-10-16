@@ -62,10 +62,11 @@ EOF
 
 新会话的固定动作：
 
-1. 读 `INDEX.md`（文件清单 + 主题索引 + Active handoffs）——小文件，先看这里找旧工作。
+1. 读 `INDEX.md`（**HOT 索引**：配置 + 文件清单 + Active/已归档 handoffs）——MUST 保持极小。
+   主题索引与蒸馏登记已下沉到 `INDEX-topics.md`（WARM 层，按需加载）。
 2. 读 `PROJECT_OVERVIEW.md`（项目 primer，60 秒建立全局认知）。
 3. `tail -n 50 WORKMEMORY/work.log`（最近事件流）；**顺手 `grep -c '^### ' WORKMEMORY/work.log`，若计数 > `HOT_RETENTION_EVENTS × 1.5` 就先按 §5 轮转再做别的**（把轮转变成读序的第一步，别等有人想起来才做）。
-4. 查旧主题：`grep -i "<关键词>" WORKMEMORY/INDEX.md` → 按索引只加载命中的 archive 文件，禁止通读全部历史。
+4. 查旧主题：`grep -i "<关键词>" WORKMEMORY/INDEX-topics.md` → 按索引只加载命中的 archive 文件，禁止通读全部历史。（2026-10-17 起主题索引不在 `INDEX.md`，避免热层膨胀。）
 
 ## 4. 交接包（handoff_*.md）
 
