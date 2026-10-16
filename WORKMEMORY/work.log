@@ -708,3 +708,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 依据 ADR-0024：维持限定表述，无条件「已实现验证驱动 agent 循环」继续禁用。
 - 交付物：报告 `docs/reviews/2026-10-16-judge-gaming-control-experiment.md` + 原始数据 `.raw.json`；设计稿 §11 执行记录补全。
 - 待用户签批 ADR §4.3 表述后闭环台账 Task-6 与 PR #139。
+
+### 2026-10-16 23:40 | codebuddy | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**审计修正 A/B 两批收尾并交接**（用户将换 agent）。包：`WORKMEMORY/handoff_audit-fixes-a-b.md`；INDEX.md Active handoffs 已挂。
+- **断点**：master = `459343b`（#143 已 MERGED：A1/A2/A3/A5/A6/A8 + B1/B2/B3/B5）；`refactor/database-split`（#144，B4 5/5）base 已改指 master、CI 跑动中，**绿后合并**。
+- **本会话交付**：5 份评估报告（swarm audit 2P0/5P1/10P2 · 重构候选 · 结构+文档 · commit 节奏+git 管理）· 未决项登记表 18 项 · ADR-0024（判决量与结论边界）· A 档 8 项（2 P0 + 2 P1 + 文档/测试治因，含**拆除一颗无界递归进程炸弹**）· B 档 5 项（CI 机械闸 / CRLF 契约 / design-system 入口与过时更新 / harness 七件前置 / **database.py 2809→359 行切分**）。
+- **待接手（唯一入口）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 **C 档 8 项**，其中 **C1「裁判结论回灌」是无条件下一步**（ADR-0024 四条硬依赖，① 已确认基线完成）。
+- **关键坑（详见包内"风险与坑"10 条）**：进程炸弹范式（子进程 MUST 有超时 + 令牌化递归哨兵）· 本地红/CI 绿成因（根目录有库；已改名 `.bak-20261016-175607` 可恢复）· patch 触达失联（累计 12 处/5 文件，安全网只覆盖公开名）· CI 只认 base=master（栈式 PR MUST 显式改 base）· `gh` 无 workflow scope ⇒ SSH 本地 no-ff · `.gitattributes` 新契约会让 49 个 `w/lf` 文件在下次 checkout 变 CRLF（预期）。
+- **负载纪律**：本地不跑全量（交 CI）；只跑定向；不并发重负载（用户同机另有 agent）。

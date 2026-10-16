@@ -35,6 +35,7 @@
 | ADR-0023 交互层「验证驱动 agent 循环」Task 0~6（Go 门禁三红灯 / LLM 收口 / 循环内核 / 工具白名单 / 契约+前端） | `work.log`（10-14~10-15 段）· 计划正本 `docs/plans/2026-10-14-interactive-agent-loop.md` · PR #136 |
 
 ## Active handoffs
+- 2026-10-16 → [`handoff_audit-fixes-a-b.md`](handoff_audit-fixes-a-b.md)（to: any · role: IMPLEMENT/TEST/VERIFY/REVIEW · status: open）— 审计修正 A 档 8 项 + B 档 5 项已合入 master（#143 `459343b`；#144 待合）；**唯一待办入口 = `docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项**
 
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
