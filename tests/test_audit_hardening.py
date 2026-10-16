@@ -68,16 +68,23 @@ def clean_db():
 
 
 def _make_conn_spy(monkeypatch):
-    """计数式对账探针：所有 sqlite3.connect 都从 database.sqlite3.connect 打开
+    """计数式对账探针：所有 sqlite3.connect 都从 sqlite3 模块的 connect 打开
     （含 get_db/get_progress_db 与 init 原始 connect），所有意图性关闭都汇聚到
-    database._close_db_conn。sqlite3.Connection.close 是只读属性，不能逐个包实例，
-    故以「open 总数 == close 调用总数」做泄漏判定。"""
-    import delector.core.database as db
+    `db/connection.py` 的 `_close_db_conn`。sqlite3.Connection.close 是只读属性，不能逐个
+    包实例，故以「open 总数 == close 调用总数」做泄漏判定。
+
+    patch 目标 MUST 命中 `_close_db_conn` 的**所在模块**（切分后已搬入
+    `delector/core/db/connection.py`）：`db_conn`/`db_progress_conn`/`get_wb_state`/
+    `save_wb_state` 都在该模块内按**模块全局**解析 `_close_db_conn`，打在 `database.*`
+    （只是再导出）上不会影响它们内部的查找 —— 与 `test_data_dir_migration_gate` 里
+    「patch 目标须命中函数所在模块」同款纪律。
+    """
+    import delector.core.db.connection as db_conn_mod
 
     state = {"opened": 0, "closed": 0}
 
-    orig_connect = db.sqlite3.connect
-    orig_close_conn = db._close_db_conn
+    orig_connect = db_conn_mod.sqlite3.connect
+    orig_close_conn = db_conn_mod._close_db_conn
 
     def spy_connect(path, *args, **kwargs):
         state["opened"] += 1
@@ -87,8 +94,8 @@ def _make_conn_spy(monkeypatch):
         state["closed"] += 1
         return orig_close_conn(conn)
 
-    monkeypatch.setattr(db.sqlite3, "connect", spy_connect)
-    monkeypatch.setattr(db, "_close_db_conn", spy_close_conn)
+    monkeypatch.setattr(db_conn_mod.sqlite3, "connect", spy_connect)
+    monkeypatch.setattr(db_conn_mod, "_close_db_conn", spy_close_conn)
     return state
 
 
@@ -114,13 +121,17 @@ def test_database_layer_connections_closed_deterministically(monkeypatch):
 
 def test_server_endpoints_close_every_connection(client, monkeypatch):
     """server 路由每个请求打开的主/进度库连接都必须 one-open-one-close，
-    覆盖跨双库的代表性端点（读、写、复习、统计、wb 镜像）。"""
-    import delector.core.database as db
+    覆盖跨双库的代表性端点（读、写、复习、统计、wb 镜像）。
+
+    patch 目标同 `_make_conn_spy`：命中 `_close_db_conn` 的所在模块
+    （`delector/core/db/connection.py`），而非只是再导出它的 `database`。
+    """
+    import delector.core.db.connection as db_conn_mod
 
     state = {"opened": 0, "closed": 0}
 
-    orig_connect = db.sqlite3.connect
-    orig_close_conn = db._close_db_conn
+    orig_connect = db_conn_mod.sqlite3.connect
+    orig_close_conn = db_conn_mod._close_db_conn
 
     def spy_connect(path, *args, **kwargs):
         state["opened"] += 1
@@ -130,8 +141,8 @@ def test_server_endpoints_close_every_connection(client, monkeypatch):
         state["closed"] += 1
         return orig_close_conn(conn)
 
-    monkeypatch.setattr(db.sqlite3, "connect", spy_connect)
-    monkeypatch.setattr(db, "_close_db_conn", spy_close_conn)
+    monkeypatch.setattr(db_conn_mod.sqlite3, "connect", spy_connect)
+    monkeypatch.setattr(db_conn_mod, "_close_db_conn", spy_close_conn)
 
     assert client.get("/api/articles").status_code == 200
     assert client.get("/api/wb/state").status_code == 200
