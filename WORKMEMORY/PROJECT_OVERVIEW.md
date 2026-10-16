@@ -17,7 +17,7 @@
 - `CHANGELOG.md`：**版本历史正主**（每次发版追加条目）。
 - `docs/plans/`：在途实施计划；已交付的进 `docs/plans/archive/`（含 `-ledger.md` 执行台账）。
 - `docs/specs/`：设计稿（`<日期>-<主题>-design.md`）；`docs/adr/`：仓内 ADR 副本（正式件在 vault `08-Projects/DeLector/01-ADR/`）。
-- `WORKMEMORY/cold/`：COLD 层月度蒸馏（当前 `digest-2026-09.md`）；WARM 层 `archive/` 按 INDEX 主题索引按需加载。
+- `WORKMEMORY/cold/`：COLD 层月度蒸馏（**当前 `digest-2026-10.md`**，覆盖 2026-10-02~10-16；另有 `digest-2026-09.md`）；WARM 层 `archive/` 按 INDEX 主题索引按需加载；超限事件正文在 `notes/`。
 - `.vault-exec-ledger.json`：/dfs-exec 任务台账。
 
 ## 当前状态
@@ -28,6 +28,9 @@
 - **未发版（已进 master，2026-10-15）**：**ADR-0023 交互层「验证驱动 agent 循环」Task 0~6**（PR #136，7 个任务单元经 maker-checker 双席位评审）—— Go 门禁三红灯修复并接入 CI（含执行期新发现的「硬编码 8001 且不校验身份 ⇒ 真实风险是假绿」）、LLM 出网收口到 `delector/services/llm_client.py`（5 处裸 HTTP + 补 `max_tokens`）、循环内核 `delector/services/polish_loop.py`（收尾终审 / 不降即停 + argmin 回退 / 循环级 token+deadline 预算 / 零静默失败）、工具白名单 `polish_tools.py`（恰好 3 项只读 + 前置钩子）、`ai-polish` 返回契约新增 `converged`/`unconverged_reason` + SSE 逐轮进度/取消 + 未收敛 toast。**⚠️ 按 ADR-0023 §4.3 不得宣称「已实现」**：裁判集一行未扩，适用性闸门使循环的真实迭代价值目前只覆盖 A1 书信体。剩余活项：① 裁判集扩充（Unknown 1，第一瓶颈）② Android 真机点检（本批动了 `static/`，且 **SSE 的 `fetch`+`ReadableStream` 在 WebView 未验证**）③ 有 Key 后回测真实轮次分布与真 token 计数（折算系数 3.0 是 UNVERIFIED 假设）。
 - **未发版（已进 master，2026-10-15 第二批）**：**ADR-0023 §4.3 第 ④ 步「裁判集扩充」**（计划 `docs/plans/2026-10-15-a1-judge-expansion.md`，8 任务全交付，PR **#137**）。裁判从 6 条书信格式/字数浅规则扩到 A1 语法层：**动词位置**（主句 V2 + 8 豁免）· **格的使用**（冠词-名词一致 / 介词支配格 / 动词支配格，29 条人工登记动词→格表）三条 error 级；**时态一致性**接线为 **advisory**（用户拍板）；**语序（情态框架）经实测评审判定不做**（FP 与 FN 同源）。同时把**闸门按规则族分流** ⇒ 语法族对**任意德语文本**生效（循环价值面不再只覆盖 A1 书信体），并把提示词按文本族参数化。§4.3 判据表 8 条实测后经用户签批：**采用限定表述，无条件「已实现」继续禁用**（第 8 条对照实验缺 Key 未做）。**排障经验已沉淀**：vault `99-Inbox/2026-10-15-规则引擎硬门必须按「类」覆盖正样本…md`（含"三次误报类全被官方样本集放过"与两条既有规则的新实例）。
   ⚠️ 本批最值得复看的产品语义变更：**非书信文本模型修不动语法错 ⇒ `no_improvement` ⇒ 回退原文**（前端给人话原因码；用户签批保持）。
+- **未发版（已进 master，2026-10-16 第三批）**：**§4.3 第 8 条对照实验完成并签批**（计划 `docs/plans/2026-10-15-judge-gaming-experiment.md`，8/8；PR #139）。三臂配对 + 20 篇种子（每篇 1 信号 + ≥3 held-out 探针），**60 局真跑**（612s / 16,008 token）。**结论（ADR-0024，vault 正式件 + `docs/adr/2026-10-16-adr-0024-*.md` 镜像）**：阴性对照成立 —— `R_uncovered(last_candidate)` 的 **A2 ≡ A3 = 0.974（差 0.000）** ⇒ 裁判信号**只影响循环的验收、不影响模型行为**；**P1（奖励黑客）本形态下无发生机制**（非"未发现"）；§4.3 维持**限定表述**、无条件「已实现」继续禁用；「裁判结论回灌（verifier-in-the-loop）」设为**无条件**下一子计划。
+- **未发版（已进 master，2026-10-16 第四批：审计修正 A + B）**：`docs/reviews/2026-10-15-swarm-audit-master.md`（2 P0 / 5 P1 / 10 P2）等 5 份评估报告 + `docs/reviews/2026-10-16-open-items-backlog.md`（18 项登记）。**A 档 8 项**（PR #143）：P0-1 `/api/backup/restore` 静默丢训练记录（已复现）、P0-2 退出挂死 + 假成功、P1-1 凭据键随备份外泄、测试库落点治因（**并拆除一颗无界递归进程炸弹**）、文档三处漂移对齐。**B 档 5 项**：B1 master 直推机械闸（#143 + #144）、B2 `.gitattributes` CRLF 契约、B3 design-system 补入口与过时更新、B5 harness 七件前置、以及 **B4（`docs/plans/2026-10-16-database-split.md`，PR #144）：`delector/core/database.py` 2809 → 359 行切分（公开面零变化，32 个 import 点未改）**。
+- **⚠️ 调试口诀（本批两条，本地全绿、只在外部暴露）**：① **本地验证 MUST 逐字复刻 CI 门禁命令**（`mypy --strict delector tools` 与 `mypy --follow-imports=skip tests`；"单文件 + 相似 flags"不算复刻）；② **`__file__` 派生路径在模块搬家后会静默偏层**，只在干净 checkout 暴露 —— 搬包后 MUST 重核所有路径常量（守卫：`tests/test_backend_package_layout.py`）。
 - **v5.13.0 批次的其它改动（历史留档）**：
   - **i+1 已知词池打通（#72）**：`known-lemmas` 补 `OR fsrs_s > 0`（工作台已学词纳入覆盖率），列表 + 详情同口径；`deck-bridge.js` / `encounter.js` 打通 i+1 与主背词路径。
   - **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn` 取代 17 份复制粘贴，44 处句柄泄漏清扫；决定性变异证明旧实现**静默残留**（假红/假绿）。
@@ -59,7 +62,8 @@
 2. **Android 真机点检**：凡含 `static/` 改动的版本需覆盖安装验证（清单见 `docs/agents/ops.md`）；同时验证 Android 更新 chip 的两条假设（Chaquopy 能否完成公网 HTTPS、WebView 点外链是否交系统浏览器）——即门槛④。**未验证前不得把「代码已合并」记成「双端已验证」**。
 3. **README 首屏改造**（宣传线，门槛③剩余部分）：截图/GIF + 一句话价值 + 30 秒上手；当前首屏对非技术用户仍是代码仓库脸（badge 墙 + 版本摘要墙）。
 4. **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；`import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
-5. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则无自动化守卫；PWA 安装提示验证 / 192-512 PNG 图标；桌面单实例文件锁（pid+版本+数据目录 + `/api/health` 身份校验 + 顺延 8001–8010）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
+5. **C 档 8 项（当前唯一待办入口）**：`docs/reviews/2026-10-16-open-items-backlog.md`。其中 **C1「裁判结论回灌（verifier-in-the-loop）」为无条件下一步**（ADR-0024 四条硬依赖：① ~~裁判 FP 先修完~~ 已确认基线完成 ② 回灌内容 MUST 过同一道适用性闸与双限截断 ③ 定三角一致性（循环裁判带 nlp / `writing_check` **不带** nlp / 回灌源）④ 阴性对照 MUST 在动产品之前先跑成基线）。⚠️ 回灌落地后，§4.3 实验的阈值与结论**只对"准入式裁判"有效** ⇒ 必须重跑或明确分域（ADR-0024 已登记资产折旧，不留给下一任发现）。
+6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则无自动化守卫；PWA 安装提示验证 / 192-512 PNG 图标；桌面单实例文件锁（pid+版本+数据目录 + `/api/health` 身份校验 + 顺延 8001–8010）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
 
 ## 工作方式
 

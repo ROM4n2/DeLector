@@ -23,6 +23,25 @@
 3. **要交一份审计 / 评审结论** → `reviews/`。
 4. **不要再开平行目录**：历史上的 `docs/superpowers/plans/`（15 份 2026-08-18~22 的最早期计划）与 `docs/compose/spec/`（1 份 YAML frontmatter 格式的 spec）已分别并入 `plans/archive/` 与 `specs/`；`specs/` 里混放的 4 份 ADR 副本也已拆到 `adr/`。
 
+## 归档待办（下次发版时执行，2026-10-16 登记）
+
+> 判据重申：计划进 `plans/archive/` 的条件是**成果已发版**，不是"做完了"。下列 9 份已交付（台账均 100%），但都发生在 **v5.17.0（2026-10-11 发版）之后** ⇒ 目前 master 上属于**未发版**状态，按规则**先留在 `plans/`**。
+> **v5.18.0（或下一个包含它们的版本）发版时**，执行批量 `git mv` 到 `plans/archive/`（一并更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 与 INDEX 的引用路径）：
+
+| 计划（现位于 `plans/`） | 交付状态 | 入 master 的 PR |
+| --- | --- | --- |
+| `2026-10-12-release-pipeline-and-docs-consolidation.md` | WORK_END 10-12 | （随 10-12 批次） |
+| `2026-10-13-windows-no-console-desktop-polish.md` | WORK_END 10-13 | （随 10-13 批次） |
+| `2026-10-14-interactive-agent-loop.md` | Task 0~6 全交付 | #136 |
+| `2026-10-14-no-console-feedback-gaps.md` | WORK_END 10-14 | #131（真机双击验收项仍 open） |
+| `2026-10-15-a1-judge-expansion.md` | 8/8 | #137 |
+| `2026-10-15-judge-gaming-experiment.md` | 8/8（含 60 局真跑） | #139 |
+| `2026-10-16-audit-fixes-a-series.md` | 5/5 | #143 |
+| `2026-10-16-audit-fixes-b-series.md` | 4/4 | #143 |
+| `2026-10-16-database-split.md` | 5/5 | #144 |
+
+**命名豁免（历史既成事实，不改）**：`plans/archive/` 里 4 份**早于 `<日期>-` 命名规则**的文件（`workbench-scope-control-and-live-settings.md`、`workbench-progress-server-sync.md`、`workbench-core-words-mode.md`、`plan-companion-mascot.md`）**保留原名**——改名会打断既有引用（含 vault 侧），收益不足以抵风险。此后新增的归档件一律带 `<日期>-` 前缀。
+
 ## 与别处的关系
 
 - **发版历史**以根目录 `CHANGELOG.md` 为唯一正主（single source of truth）；本目录**不放**发布说明。
