@@ -384,3 +384,8 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - `#144`（B4 database.py 切分 5/5）→ `c79e764`（`gh pr merge` 直接成功；CI `Tests & Go Gates` **6m56s pass**）。
 - **master 现 = `c79e764`**；两个 feature 分支已删。
 - **CI 两连红的教训（已写进交接包「风险与坑」11/12 条）**：① 我一度只跑"单文件 + 相似 flags"的 mypy，而 CI 是 `--follow-imports=skip tests` 整目录 + `--strict delector tools` 含 tools/ ⇒ 本地验证 MUST **逐字复刻** CI 命令；② B4 搬包让 `_PKG_DIR` 静默偏一层 ⇒ `preset_processed_data_path()` 多出一层 `core/`，**本地恰有散落文件故全绿、干净 checkout 才红** ⇒ 已修回切分前同值 + 新增布局守卫 `test_preset_processed_data_path_survives_module_moves`。
+
+### 2026-10-17 00:15 | codebuddy | NOTE(HOT 轮转)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：work.log 轮转（协议 §5 触发条件 86 > 75）—— 最老 36 条按事件日期移入 `archive/work-2026-10-{06,08,10,11,12,13,14}.log`，热层保留最新 50 条（727→386 行）。§5.1 并发守卫全部执行：轮转前重读基线、只移动不改字节、末条事件头一致、事件集合守恒（`sort | uniq -c` before/after **diff 无输出**）。
+同时按 §6 沉淀 4 条（全部并入既有规则、勿另立新规）：`PYTHON-PACKAGING §2`（搬包后 `__file__` 派生路径偏层 + 导出常量的值是冻结面）· `TESTING-PATTERNS §7`（重构后 patch 触达失效）· `CODING-UNIVERSAL §7`（本地验证 MUST 逐字复刻 CI 门禁命令）· `AUTOMATION-GOTCHAS §7`（嵌套子进程递归炸弹与令牌化哨兵）；草稿 4 张已入 `99-Inbox`，INDEX 蒸馏登记节已标注。
