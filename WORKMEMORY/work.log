@@ -1,104 +1,3 @@
-# DeLector work.log（HOT 层，append-only）
-# Schema 见 PROTOCOL.md §2；轮转规则见 §5
-
-### 2026-10-06 14:10 | codebuddy | DONE(Fog 4 #109) + DONE(Fog 3 Task B #110) + 更正上一条错误记录
-   > 正文超 §4 上限（4334 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md`](WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md)。
-### 2026-10-06 14:40 | codebuddy | DECISION(Fog 3 关闭：C-F 不做) — 全部 Fog 清空
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：用户裁决 **Fog 3 关闭，不做 C-F（16 处形式统一）**。至此本轮登记项**全部清空**。
-**裁决依据**：①Fog 3 的**目标**是"守卫更可靠"，Task B（#110）已用**零行为变化**达成同等可靠性——加固后的 AST 守卫同时覆盖「函数体内直调」与「`Depends`」两种挂载形式，20 条 allowlist 继续被守护；②C-F 的唯一真行为变化是 **LAN + 非法参数 422 → 403**（编排者实测确认，语义收紧但是用户可见的）；③16 处改动最易误伤的是 **`POST /api/wb/state`——它刻意不挂本机闸**（用 `X-WB-Key`，`test_server.py:4798-4820` 会红）；④`request: Request` 形参删除有 **lint 盲区**（`pyproject.toml` 无 `[tool.ruff]`，默认规则集 E4/E7/E9/F 不含未使用形参 ⇒ 漏删不会被任何门禁拦住）。
-**同时纠正一个我曾写进文档的错误前提**：Fog 3 原文与上两条 log 都把「运行时 `dependant` 更可靠」当作收益依据。**实测否定**：`dependant` 枚举只找出 4 条（`encounter.router` 3 + `tools.router` 1，全 `Depends` 形式），**看不到函数体内调用的 16 条**；且它天然看不到函数体调用 ⇒ 就算做完 C-F，运行时方案也并非更优，只是"换一种看法"。**教训：Fog/债务的"收益论证"本身也可能是错的，应与"待修的缺陷"一样接受实测检验。**
-**本轮 Fog 清算结果**：Fog 1（LAN 写权限）→ 用户裁决「内网可信」，不加固；Fog 2（GET 惰性写）→ 追根因发现真 bug（每次 GET 全量重算 + 写放大），已修 #108；Fog 3 → 目标已由 #110 达成，C-F 不做；Fog 4 → 两条前提被推翻（`rm` 不存在、`bash` 属平台相关），交付负向守卫 #109。**登记项全部关闭，且过程中额外挖出并修掉 3 个真实缺陷**（Fog 2 的版本号漂移、AST 守卫的三个漏检洞、CI 必需运行时清单未显式化）。
-
-### 2026-10-06 15:20 | codebuddy | RELEASE(v5.16.0) + 编排者数字抄错(1048 vs 实测 1053)
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：Fog 1~4 全部收口后发版 **v5.16.0**（tag → `90f62a3`）。**无 `static/` 改动**（除 sw.js/index.html 版本字符串）⇒ 桌面端刷新即生效。
-- **v5.16.0 内容**：①#108 修掉「每次 GET 文章都重跑完整 spaCy + UPDATE articles」（惰性迁移判据写死 `3.4.0` 而写入端两条路径都写 `3.5.0` ⇒ 判据恒真，「惰性迁移」退化成「每次迁移」；修法＝`PROCESSED_JSON_VERSION` 单一真相源，语义完整保留）；②#109 CI 必需运行时清单显式化 + **两条否定式守卫**（`rm` 全仓不存在、`bash` 判为平台相关，**都不进清单**，防将来误升级为 fail）；③#110 localhost 守卫加固三个「将来会漏」的洞（字面 `router` 变量名 ⇒ 实有 14 个 router；per-router prefix ⇒ 一模块双 router 时键失真且恰好蒙对；闸调用名漏 `import ... as` 别名），allowlist 20 条逐字未动；④Fog 1 裁决**内网可信**；Fog 3 的 16 处形式统一裁决**不做**。
-⚠️ **编排者第二次犯"统计值过期"错误**：写 CHANGELOG / README / PROJECT_OVERVIEW 时，我把 **#110 那轮 maker 报告里的 1048** 当成终值写入（"1312 passed = 半 A 1048 + 半 B 264"）。但之后 **#109 又合入 5 个守卫测试**，发版前实跑半 A 是 **1053**、全量 **1317** ⇒ **三个文件全部写错**，靠发版前那一次全量门禁才发现并更正（`grep -c` 确认旧数无残留）。**这是与"head 截断漏看失败项"同类的第二次错误**：中间环节的统计值在流程推进后会过期，而我把它当成终值。**已存 memory**：发版顺序固定为「改版本点 → 跑全量门禁取实测数 → 把实测数写进文档 → commit」；多个 PR 连做时，测试数只在最后一个 PR 合完且跑完全量之后才取。
-- **README 破坏事故未复发**：本次改文档改用 `write_to_file` 写脚本到系统 temp 再执行（避免命令行 8KB 限制），且所有列表插入一律用 `.split("\n")` / `[text]` 形式（**不再用裸字符串赋值**），并在脚本末尾内置**破坏检测**（最长连续单字符行段 >10 即判异常）。三个文件实测 `longest_single_run = 1`，全部 OK。
-**门禁（v5.16.0 基线）**：`1317 passed + 1 skipped`（半 A `1053` + `test_server` `264`）/ 全 `tools/*.mjs` 探针 **28/28** / `ruff` 0 / `mypy` 两道（**93** + **70** files）0 error / `test_writer_mobile.py`（发版守护）**30 passed** / 五条守卫（防漏接线 5 · 契约冻结 5 · localhost 集合 7 · 带写 GET 白名单 7 · CI 必需运行时 21）全绿。`versionCode` = `51600`（`major*10000 + minor*100 + patch`），可覆盖安装。
-
-### 2026-10-06 16:49 | codebuddy | FIX(search高亮) 递延项"实体边界"落地，根因比预期严重（错高亮）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：清完 Fog 1~4 发完 v5.16.0 后，用户选定收掉递延项里的「检索 `_highlight` 的 HTML 实体边界」。按惯例**先复现再改**，不直接照抄选项描述里的错误前提。
-- **复现（临时 node 脚本，按括号配对切真实 `core.js:esc` + `search.js:_highlight` 真跑，224 组 text×needle 枚举）**：真缺陷存在，但**不是"高亮切在实体中间"**，而是**错高亮**——`İ`.toLowerCase() 长度 1→2（码点 1→2）导致折叠串 `hay` 与原文索引整体错位：原文「İstanbul」搜「T」高亮到字母「a」，搜「i」误高亮 `İ`。扩展到 598 组（含代理对 `𝔘`/组合字符/德语 ß·变音/XSS）共 2 类异常。
-- **根因（比"实体"更普遍）**：旧实现是「**先 esc() 再在已转义串上定位**」（`safe` / `safeNeedle`）。命中区间因此是"转义后的形态"：① `&`→`&amp;` 的边界会被切开（选项描述里的直觉）；② 更糟的是任何**大小写折叠改变长度**的字符（`İ`→`i̇`）让 `safe.toLowerCase()` 的索引与 `safe` 不再一一对应。另外 `String.slice` 按 UTF-16 计数（`𝔘` 占 2），非码点切片同样会错位。
-- **修法（顺序倒转 + 码点对齐）**：改为在**未转义原文**上定位命中，命中区间切片后**逐段** `esc()` 再包 `<mark>`；比较走**码点数组**（`[...raw]` + 逐码点 `toLowerCase`，长度变化时保留原码点——宁可漏高亮也不错高亮）。XSS 不变式更自然：`<mark>` 是唯一由本函数插入的标签，每段都过 `esc()`。
-- **守卫（行为优先，遵循红线 11「字符串存在断言是死测」）**：`tools/wb_search_probe.mjs` 新增场景 5 `highlight_hit_alignment` = 13 组 text/needle × 三条不变式（去 mark 后反转义 === 原文 ⇒ 永不切开实体/不丢字符；每个 mark 内反转义 === needle ⇒ 不许错高亮；输出无 `<script>`）+ 两条**等值**断言（「İstanbul」搜 t 必须等于 `İs<mark>t</mark>anbul`；`AT&T` 搜 `T&T` 必须等于 `A<mark>T&amp;T</mark>`）。另加两条**反回退**切片检查（旧标志 `safe`/`safeNeedle` MUST NOT 再现；MUST 含码点展开 `[...`）。`tests/test_search_ui.py` 的旧守卫 `esc(text` 断言已随实现形态改写为反回归形态守卫（XSS/对齐的实质保证交给探针），并把 `highlight_hit_alignment` 加进关键场景名清单（防"删了场景仍全绿"）。
-- **门禁**：`wb_search_probe.mjs` **10/10**（原 7 项 + 新 3 项）；全 `tools/*.mjs` 探针 **28/28**；半 A **1053** passed / 半 B `test_server` **264** passed + 1 skipped ⇒ 全量 **1317** + 1 skipped（与 v5.16.0 基线同数，因本轮是**重写**一条测试、未新增测试函数）；`ruff check .` 0；`mypy --follow-imports=skip tests` **93** files / `mypy --strict delector tools` **70** files，零错误。
-- **守卫自证（不靠"我跑过了"）**：把 `static/js/search.js` 单独 `git stash` 回退到旧实现后跑探针 ⇒ 切片检查按预期抛 `Error: _highlight 仍含旧「先 esc 再定位」实现的 safe/safeNeedle…` 且 `EXITCODE=1`；恢复后全绿。旧 `test_highlight_escapes_before_wrapping_mark` 也如预期变红（`esc(text` 不再出现），确认两处守卫都是真守卫。
-⚠️ **编排者教训（本轮第三次同类）**：给用户写选项时把缺陷描述成"高亮切在实体中间"（听起来像纯显示瑕疵、收益小），实测发现真缺陷是**高亮到无关字符**（功能性错误）。**"递延项的缺陷描述"与"债务的收益论证"一样，是待检验的前提，不是事实**——选项文案里对缺陷的断言 MUST 先复现再写。
-
-### 2026-10-08 09:49 | codebuddy | ADR-0017 产出（/dfs-grill：Android 更新可见性，不做应用内安装）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：用户提问「安卓能不能做一个可以直接更新的功能？现在还是要覆盖安装」，走 `/dfs-grill` 双镜拷问后**改变了提案的形状**，产出 ADR-0017（vault 正式件 + 仓内副本 `docs/adr/2026-10-08-adr-0017-android-update-check-notifier.md`）。
-- **两个镜头都实核了文件（非推理）**：product-ux 指出真瓶颈是「**不知道有新版**」而非"安装这个动作"；sre-resilience 实核 `AndroidManifest.xml:4-31`（无 `REQUEST_INSTALL_PACKAGES`、无 FileProvider）、`MainActivity.java:257-258`（**WebView 所有下载统一进 ExportSaver** ⇒ APK 走这条路会报"导出失败"且无安装 Intent 接续）、`build-release.yml:380`（**CI 已 pin 签名证书 `EXPECTED_SHA256`** = 现成且不与下载源同源的信任锚）。sre 还明确："只校验随包发布的 `.sha256` 是假防线——能换 APK 的人也能换那个哈希"。
-- **用户四轮拍板**：Q1-A（只做"检查+提示"，不做应用内下载/安装唤起）、Q2-A（GitHub Releases API 为唯一真相源，不可达时**不得伪装成"已是最新"**）、Q3-A（**后端端点** `/api/update/check` 代查，非前端直连）、Q4-A（启动后延迟自动检查 + TTL 缓存 + 仅落后时显示 chip；无新版或检查失败**均静默**，失败仅手动检查时给人话）。
-- **被否决项已存档理由**：B 应用内下载（增量收益仅"少开一次浏览器"，代价是权限+FileProvider+DownloadManager 分流+三条新失败路径）、C 现成侧载更新器（治不了盲区）、**D 热更新 `static/`**（与 Python 后端强耦合契约，会静默破坏跨边界契约 + 破坏 APK 内自包含的离线模型）、E 委托 LAN 桌面代理（新增信任面，且真正需要更新的场景恰恰是桌面不在线时）。
-- **拷问挖出的前置依赖（重要）**：**后端当前没有版本常量**（全仓无 `__version__`，版本散落 `static/index.html:35` / `sw.js` / `build.gradle`）。若在新端点里硬编码版本串，就是把 v5.16.0 刚修掉的"判据写死"缺陷原样再造（同 vault `POST-MORTEM-V5.5.2-VERSION-NUMBER-SCATTER`）⇒ ADR §6.1 定为落地第一步。
-- **一个显式安全决定（防将来被当漏网）**：`/api/update/check` **不挂 `_require_localhost`** —— 理由：LAN 浏览器版用户同样需要更新可见性，该端点只读、不写数据；代价（LAN 消耗主机 GitHub 配额）由 TTL 缓存 + 3s 出网超时兜住。已写进 ADR §4.3。
-- **顺带产品发现**：顶栏 `System · vX.Y.Z Online`（`static/index.html:35`）在**只绑回环的单机场景下"Online"字面撒谎**，ADR 附带默认改为真实版本 + 真实检查结果。
-- **未实施**：本次只产出决策文档，未写代码。ADR 已给端点契约草案、4 条 MUST 不变式（含「`has_update === null ⇔ error_reason !== null`」）、验收判据表与 NOT doing 清单。
-### 2026-10-08 11:12 | codebuddy | EXEC(ADR-0017 实施) /dfs-exec 六任务全绿 + 编排者三次自查纠错
-   > 正文超 §4 上限（4522 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md`](WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md)。
-### 2026-10-08 23:52 | codebuddy | STANDBY(Android 侧) 暂缓标记 + 新提案：Windows 桌面端封装为 desktop app
-Caps: filesystem-read, filesystem-write
-事件：用户决定「**先暂缓安卓**」并询问「**Windows 桌面端能否封装成 desktop**、用什么技术栈」。先做标记，再回答。
-- **⏸ 暂缓（非完成、非取消）**：ADR-0017 的代码**已合并 master**（PR #115/#116 → `ee68ec8`，master CI success），**桌面端已可用**（端点 + chip 均已上线，且桌面侧真实出网已验证）；但 **Android 侧两条假设仍未验证** ⇒ **Android 端能力不确定，不得记为"更新可见性已在 Android 验证通过"**：
-  ① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（现有手机出网是 **LAN HTTP**，不是证据）；
-  ② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无 Android SDK、只能靠 CI）。
-  **三处同标记**：本 log、`PROJECT_OVERVIEW` 待办、ADR-0017 §7.3；exec 台账 `.vault-exec-ledger.json` 的 Task 6 保持 `blocked`。防的是未来 agent（或我自己）把"代码已合并"误读成"双端已验证"。
-
-### 2026-10-09 00:10 | codebuddy | ADR-0018 产出（/dfs-grill：性能换语言提案 → 裁决"先测量、不换主体"）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：用户提案「不用 Python 做系统主体，只留生态库调德语/记忆算法，不想性能拖垮项目」。走 `/dfs-grill` 后**否掉了提案的字面形态**，产出 ADR-0018（vault 正式件 + 仓内副本 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md`）。**未改任何生产代码**。
-- **改变提案形状的两条事实**：
-  ① **"把重活给更高效语言"项目里已有且已决策** —— ADR-0008（Go Agent Runtime + Python NLP Engine 混合架构）已落地 `agent/`（Go：CLI+DAG+supervisor，拉起 uvicorn 子进程 8001）；ADR-0010 已划边界（Go=编排/并发/退避重试，Python=spaCy 形态学/lemmatization）。**方向恒为 Go→Python，主应用不调 Go** ⇒ 真正的待决问题只是"要不要把 **HTTP 主体**也搬过去"。
-  ② **"Python 性能拖垮项目"证据不足** —— 全仓唯一真基准 `tools/bench_cards_endpoint.py` **只断言结构、不钉阈值**；审计文档里的数字**不可复跑**且部分自带 UNVERIFIED；**spaCy 单价有两个矛盾值**（`syntax_hard.py:9` 写 `~42ms/句` vs 审计写 `~2.1ms/句`，**差 20 倍**，都没脚本兜底）。perf 席位实测 20k 卡 790ms（Python/FSRS 84%、排序 9%），瓶颈排序 **AI/TTS(网络) > spaCy(Cython) > SQLite > 冷启 > 前端 > HTTP/序列化** ⇒ 前两项换语言都解决不了。全仓**唯一点名 GIL** 的地方是 `ExportSaver.java:73`（大导出并发）。
-- **裁决**：D1 **先测量不换**（1 小时方案：4 场景冷启/长文/热读/卡盒 + 分层剖析 + 阈值「Python CPU>50% 且 p95>2 倍目标」）；D2 按结果选路（CPU 主导→**热点下沉 O2**；编排/并发主导→**扩展 ADR-0008 边界 O3**）；D3 **永久否决"换 HTTP 主体 O1"**（依据：spaCy 不可移除⇒NLP 退化成跨进程 IPC 多一跳、最大瓶颈不受宿主语言影响、Android 双运行时与 56.7MB 内嵌 Python 冲突），并写入**三条翻盘条件**防悄悄重开；D4 测量后先做便宜杠杆；D5 明确 **Python 不可移除**（永远讨论"边界"而非"替换"）；D6 新基准**必须钉阈值**（补上现基准只断言结构的缺口）。
-- **Fog**：测量结果本身（D2 分支取决于它，测量前不许选路）；Android 侧如何测量（本机无 Android SDK）；卡盒前端渲染占比未剖析；若走 O2 则 Android arm64 交叉编译链路未定。
-
-### 2026-10-09 12:24 | codebuddy | EXEC(ADR-0018 D1 性能测量) /dfs-exec 六任务全绿、判定门定案为 O0
-   > 正文超 §4 上限（5882 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md`](WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md)。
-### 2026-10-09 13:40 | codebuddy | FIX(门禁) master 变红：跨进程量级比较被当成不变式 + spaCy 断言取整 flake
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：`perf/measurement-baseline`（PR #117）合并进 master 后 **master CI 红**：`tests/test_cold_start_cost.py::test_segments_satisfy_physical_containment` 报 `AssertionError: app_ready_ms(95.490) 未大于 init_db_ms(209.850)`，而**本机同一份代码**是 148/245（通过）⇒ **本机通过、CI 反转**。分支 `fix/cold-start-segment-gate`，**只改测试与基准，`delector/` 生产代码零改动**。
-- **合并时序问题（第一条教训）**：PR #117 在 **CI 仍在跑时被合并**（merged 04:28:53，CI 结论约 04:30 出）⇒ 红色提交直接进了 master。**合并 MUST 等 CI 绿**。
-- **根因（实测确认，非推理）**：三段是**三个不同子进程**测的 —— probe A（独立进程）调 `init_db()` 得 `init_db_ms`；probe B（独立进程）**在 import 期已跑过一次完整 `create_app()`**，再换全新的库调第二次 `create_app()` 得 `app_ready_ms`。实测分解 `init_db()` = main DDL ≈25ms + progress DDL ≈25ms + `seed_preset_articles` ≈105ms；probe A 为该三段付**进程冷启动/首次文件 I/O**，probe B 里同样工作**已热** ⇒ **两个量不存在必然大小关系**。最小反转场景（实测）：让 probe B 第二次 `create_app()` 落在非全新库 ⇒ `app_ready_ms` 塌到 **8.75ms** ≪ `init_db_ms` ~155ms。
-- **修法**：删掉两条**跨进程**量级断言（`app_ready_ms > init_db_ms`、`model_load_ms <= import_ms`）；保留 `import_ms > app_ready_ms`（**同进程**）；新增**机器无关**自检行 `init_db_tables`/`init_db_progress_tables`/`app_ready_db_tables`/`app_ready_progress_tables`/`app_ready_fresh_db_used`（取最小轮=最保守），并**补上 probe A 的对称自检** —— 上一版只给 probe B 加自检、**guard 不对称**，probe A 若落到热库则 `init_db_ms` 可任意小而仅靠 `>0` 兜着（同类缺陷，checker 抓出）。`app_ready_fresh_db_used` 改为**独立**判新库文件是否真出现在新路径（原先由表数派生 ⇒ 同真同假、名字骗人）。口径文本（`segments_note`/docstring/契约注释/verdict）据实改写为"三段各由独立子进程测得、**不可按大小关系解读**"，verdict 的跨进程比率标注"近似归因（仅示意）"。
-- **checker 抓到的同类项**：本机`import_ms(2242) > app_ready(263)` 余量约 2000ms（来自 import 期的 spaCy 模型加载）；但**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，这条同进程断言的余量会塌到噪声级 ⇒ 已列为待收口项（详见下条）。
-- **顺带修掉一个会随机打红 CI 的 flake**：`tests/test_spacy_unit_cost.py::test_bench_verdict_names_both_legacy_values` 偶发失败（`per_sentence_ms=7.115` 时输出行 `7.11` 而断言期望 `7.12`）。**根因是测试端双重取整**（不是值不同源）：测试从**3 位小数的打印字符串**反解析回 `float` 后再 `.2f`，而 verdict 是对**原始中位数**直接 `.2f`，落在两位小数边界 `X.XX5`±0.0005 时必不一致。修法：断言换成**正则取数值 + 容差 0.005+1e-9**（恰为一次两位小数舍入的最大偏差），文案写死仍必超差 ⇒ 守卫强度不减；修复后连跑 **15/15** 通过。
-- **⚠️ 编排者教训（本轮第二次同类：本机复跑通过 ≠ 门禁可靠）**：我在 Task 4 的复跑里`app_ready(245) > init_db(148)` 同向通过，**把一条机器相关的比较当成了已验证的不变式**。同类错误在 Task 2 已出现过（跨函数相除），本轮是跨进程量级比较。**规律：凡是"两个在不同进程/不同前置状态下测得的量"的任何大小关系，默认都不是不变式**；要钉就只能钉**状态无关**的事实（文件/表是否存在、可解析性、同进程内的包含）。
-
-### 2026-10-09 13:53 | codebuddy | 后验：红 master 事故的机械证据 + 修复合并 + master CI 绿
-Caps: filesystem-read, shell-exec
-事件：为"跨进程量级比较"这条诊断补一条**决定性后验证据**（同一份代码、两种结果）。
-- **同一提交在两条 CI 上结论相反**：PR #117 的**分支 CI 失败**（run `37883798324`，`app_ready_ms(95.490) 未大于 init_db_ms(209.850)`），而**同一提交合并到 master 后的 push CI 却 success**（run `37884073719`，5m10s）⇒ 这不是"某段被打桩"，而是**机器/状态相关**，机械地印证了根因判断（probe A 与 probe B 是两个不同进程、不同前置状态的量）。
-- **修复 PR #118 已合并**（`e8c8f1f`，3 commit：`c36d420` 门禁改钉真不变式 / `5c85c13` spaCy 断言取整 flake / `82493e9` 教训入库），**master CI success**（run `37890280999`，4m6s）；分支已清理（本地/远端均无残留），工作区干净、与 origin/master 同步。
-- **ADR-0018 的 Task 6 回填亦在 master**（`204e761`）：ADR §1–§9 齐全（§7 实施记录 / §8 Fog / §9 关联），五个基准 + 五套门禁（`bench_cards_endpoint`/`bench_spacy_unit`/`bench_long_read`/`bench_cold_start`/`bench_profile_layers` + `bench_stats`）全部落地。⇒ **ADR-0018 D1 闭环**：判定门定案 **O0**（条件① 成立 85.9% / 条件② 不成立）。
-- **仍开放（同类残余，已登记 PROJECT_OVERVIEW 递延项④）**：`tests/test_cold_start_cost.py` 保留了 `import_ms > app_ready_ms`（**同进程**，安全），但其余量主要来自 import 期的 spaCy 模型加载（本机约 2000ms）；**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，余量会塌到噪声级 ⇒ 需加条件（例如仅 `nlp_path=spacy` 时断言）或改为机器无关形式。未收口。
-
-### 2026-10-09 19:52 | codebuddy | DECISION(ADR-0018 门定稿) 目标值拍板 + 修法路由 + 移除不可复跑的 42ms
-   > 正文超 §4 上限（4321 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md`](WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md)。
-### 2026-10-09 20:43 | codebuddy | CLOSE(登记项) ① 迁移闸 size 对称化 ② rank_sentences 纯函数单价补测
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：把 ADR-0018/PROJECT_OVERVIEW 里"仅登记、未动"的两个开放项**真正做完**，并把登记状态改为已完成。分支 `fix/close-registered-items`。
-- **① 数据目录迁移闸的 `isfile`/`size` 不对称（原登记于 ADR §7.7）—— 已修**：判据对称化为 `if os.path.isfile(legacy_db) and os.path.getsize(legacy_db) > 0`（"0 字节空壳不算数据"这条尺子现在**两个位置都用**）；docstring 判据清单 + 新增"为何对称化"。
-  - **checker 抓到一条红卡（正是我上一轮修复留下的同族盲区）**：条件④ 的内联注释原写"①与②互斥、**永远到不了这一行**"，而条件① 加 `size > 0` 后，**同地 + 共享库 0 字节**时会**真的到达**条件④ —— 注释被本次改动**自我证伪** ⇒ 已据实重写（保留"不得删该守卫"的理由），并**补上那条唯一实际执行路径的用例**（桌面端同地 + 共享库 0 字节 ⇒ 不误报）；另补"新位置是目录 + 旧位置非空 ⇒ 抛"。
-  - **连带改动（易漏，checker 复核为"诚实中和"）**：`tools/bench_cold_start.py` 的中和手法**原先正是靠这个洞**（预置 0 字节库），判据收紧后会失效 ⇒ 改为**摆一个非空的合法 SQLite 库**（建占位表，显式 `close()` 因为 `with sqlite3.connect(...)` 只提交事务**不关句柄**，悬着会让 Windows 的 `rmtree` 删不掉临时目录）。占位表写在 `main_db`、而 `init_db_tables` 数的是 `initdb_db` ⇒ **不污染计时**。
-  - 同步订正 `docs/agents/ops.md`：原写"size==0 空壳不拦"已**过度泛化**（新位置的 0 字节空壳现在**会**拦），改为据实表述。
-- **② `rank_sentences`/`analyze_syntax_tree` 纯函数单价（原登记为 ADR §8 Unknown 5）—— 已补测**：新增 `tools/bench_rank_sentences.py` + 27 条门禁。实测（`spacy` + `de_core_news_sm`）：`analyze_syntax_tree` 单句 **≈7~8ms/句**、`rank_sentences` 整段归一 **≈8ms/句**（长句档 11.2ms，短/长 ≈2.6×）。三条对照：相对审计 **2.1ms** ⇒ **低估约 3.6~4 倍**；相对 **42ms** ⇒ 仅其 **≈0.18 倍** ⇒ **42ms 无法由"该路径纯函数稳态"解释**；与端到端 **≈10ms/句**（`bench_long_read`）**同量级** ⇒ **端点开销占比不大，成本主体在该路径自身**。⇒ **20 倍差距仍不足以定案**，但已收窄为三候选（md 口径 / 含冷启动摊薄 / 别的语料或函数口径）。
-  - **checker 抓到一条关键 hedge 缺陷（PASS 但很值钱）**：脚本**不打印实际生效模型名**，而 `get_spacy_nlp()` 会**先试 md** ⇒ verdict 里"md 未测是补差来源"这个前提**不可复核、甚至可能为假** ⇒ 新增 `model=` 行（实测 `de_core_news_sm (md 不可用)`）并让 verdict 与之逐字一致。另新增 `p95_note=` 显式声明两条 p95 **聚合单元与样本量都不同、不可直接比较**（`analyze_p95_n=126` 是单句尾部、`rank_p95_n=7` 是整段归一），并补源码顺序断言（模型加载在计时之外 + 脚本体不含 `_material_text`，钉住"纯函数口径"）。
-- **门禁**：`test_data_dir_migration_gate` **12 passed**、`test_rank_sentences_cost` **27 passed**、半 A **1231 passed**（较本轮起点 +5）；mypy **101** + **78** files 零错误；`ruff check .` 0。基准实跑 `bench_cold_start` 正常（`health_200_ms=2610`）。
-- **登记状态收口**：ADR §1.3 / §7.3（新增"该热路径纯函数单价"行）/ §7.4（补测结果与三条对照）/ **§7.7 改写为"① 已修 / ② 已核实无害"** / **§8 Unknown 5 标已解决 + 新增 Unknown 7**（42ms 成因仍不定案，且明说**不影响任何决策**）；`PROJECT_OVERVIEW` 递延项 ①② 改标已解决；`docs/agents/ops.md` 订正。仓内副本机械重新生成。
-
-### 2026-10-10 00:32 | codebuddy | DECISION 冷启动端到端 p95 暂缓（不引入新依赖）
-Caps: filesystem-write, shell-exec
-事件：用户决定 **⑤ 冷启动端到端 p95 暂缓** —— 补测必须引入**浏览器自动化基线**（本仓无，属新依赖），**收益不大**，故不做。
-- **登记为"明确决定"而非"未做"**（防后续会话反复重开）：ADR §7.5 新增"冷启动端到端（首屏可用）"行（`unmeasured` + 暂缓理由）、§8 新增 **`Unknown 8`** 记为 ⏸ 已决定暂缓、`PROJECT_OVERVIEW` 递延项⑤ 同步。
-- **含义**：**O0 结论建立在代理口径之上**（现 2.6s 是"到 `/api/health` 200"，**不等于首屏可用**）—— 该限制已在 ADR §7.5/§8 与输出 `scenario_scope_note` 显式声明，不是隐藏假设；若将来需求变化需重开，按 ADR §7.6 的**修法路由**：端到端 >4s 走 **O0 杠杆（spaCy 惰性加载）而非 O2**。
-- 本次为**纯文档改动**（ADR 正式件 + 仓内副本 + PROJECT_OVERVIEW + work.log），**零代码改动**，不跑基准。
-
 ### 2026-10-10 | codebuddy | DECISION(ADR-0019) Windows 桌面端：不换壳、不做安装包，先零代码验证 PWA + 数据目录外置
 Caps: filesystem-write, shell-exec
 事件：用户「重拾之前的想法，能不能做个 Windows 桌面端？」⇒ 走 \\\`/dfs-grill\\\` 双镜拷问（product-ux + sre-resilience 席位 + vault 梯子检索），用户拍板 **Q1-A / Q2-A / Q3-B** ⇒ 归档 **ADR-0019**（vault 正式件 + 仓内副本，逐行同源差异 0）。
@@ -156,10 +55,6 @@ Caps: filesystem-write, shell-exec
 - **3A′（`c071c08`）**：同类**第三处** `bench_rank_sentences.py` 同法修正（含门禁升级 AST+行为级，2 组变异自证）。
 - **1A / 4A（登记口径，不改 ADR 历史决策）**：冷启动 2.0s **未达**（本机 2128ms）⇒ 记为"**本机实测 2.128s，机器依赖**"，残余是 `import spacy` 本身，不再为 125ms 投入；Win10 WebView2 ⇒ **已知限制**（检测 + 官方 Evergreen 短链已有，Win10 需先装运行时，不捆绑以免 +100–150MB）。
 - **产物重建并验收**：`dist/DeLector-v5.16.0-Windows-x64-Portable`（commit `c071c08`）⇒ 闸 **11/11 PASS**，含新增的"预置文章预生成数据文件存在"。
-
-### 2026-10-11 13:07 | mimo-v2.6-flash__claude-code | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：按 ADR-0004 Q1=A 处置 —— 删除 WORKMEMORY/corrections.md（本项目账本 0 条数据；4/5 项目本就无此文件）并同步 INDEX 文件清单行。捕获落点改为 WORK_END 可选一行「本次被纠正: <1 行>」（ADR-0004 §4.1-7，已由计划 Task B7 写进 PROTOCOL.md §2）。
 
 ### 2026-10-11 | codebuddy | MEASURE 端到端首屏 = 6s（零新依赖）⇒ ADR-0018 §8 Unknown 8 关闭
 Caps: filesystem-write, shell-exec
@@ -220,7 +115,6 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-10-11 | codebuddy | NOTE（marker 3 改名：名不副实 → 不再宣称"已就绪"）
 Caps: filesystem-write
 事件：/dfs-team 共识返工 Fix-2 —— `bootstrap_data_dir` 是 **fail-soft、永不抛**（失败只回退旧落点 + 记 ERROR）⇒ 原 marker 3 字面「数据目录已就绪（bootstrap_data_dir 完成）。」会把"回退了"读成"就绪了"。已改名（附新字面量）为：**`数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。`**。同步位点：`desktop.py`、`tests/test_desktop_shell.py::_STARTUP_STAGE_MARKERS`（规格字面量，故意漂移锁）、ADR-0018 仓内副本 + vault 正式件（两份正文逐行同源，已自证同一）。既往行一律不改（本条为追加）。
-
 
 ### 2026-10-11 | codebuddy | MEASURE 首屏分段取数（标记版）+ 意外挖出 2s 端口探测
 Caps: filesystem-read, filesystem-write, shell-exec
@@ -288,6 +182,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 
 ### 2026-10-11 | codebuddy | WORK_START(v5.17.0-release)＋WORK_END(v5.17.0-release)
    > 正文超 §4 上限（4299 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-11-0000-work-start-v5-17-0-release-work-end-v5-17-0-rele.md`](WORKMEMORY/NOTES-2026-10-11-0000-work-start-v5-17-0-release-work-end-v5-17-0-rele.md)。
+
 ### 2026-10-11 | codebuddy | NOTE Release 模板 / 仓库 About 对齐当前产品
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：用户问"Release 文案 + 仓库描述与标签是否也要更新" ⇒ 都过时了，已一并修（commit `98910ee` + 远端设置）。
@@ -404,6 +299,113 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 备注：这正是本仓"开了分支忘了删"的常态残留 —— PR 合并时加 `--delete-branch` 可避免（本次 #131/#132 用了）。
 - 本次改动属规则里的**簿记类例外**（纯追加、不改代码/门禁/测试）⇒ 按 2026-10-14 用户确认的例外直推 master。
 
+### 2026-10-06 14:10 | codebuddy | DONE(Fog 4 #109) + DONE(Fog 3 Task B #110) + 更正上一条错误记录
+   > 正文超 §4 上限（4334 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md`](WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md)。
+
+### 2026-10-06 14:40 | codebuddy | DECISION(Fog 3 关闭：C-F 不做) — 全部 Fog 清空
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户裁决 **Fog 3 关闭，不做 C-F（16 处形式统一）**。至此本轮登记项**全部清空**。
+**裁决依据**：①Fog 3 的**目标**是"守卫更可靠"，Task B（#110）已用**零行为变化**达成同等可靠性——加固后的 AST 守卫同时覆盖「函数体内直调」与「`Depends`」两种挂载形式，20 条 allowlist 继续被守护；②C-F 的唯一真行为变化是 **LAN + 非法参数 422 → 403**（编排者实测确认，语义收紧但是用户可见的）；③16 处改动最易误伤的是 **`POST /api/wb/state`——它刻意不挂本机闸**（用 `X-WB-Key`，`test_server.py:4798-4820` 会红）；④`request: Request` 形参删除有 **lint 盲区**（`pyproject.toml` 无 `[tool.ruff]`，默认规则集 E4/E7/E9/F 不含未使用形参 ⇒ 漏删不会被任何门禁拦住）。
+**同时纠正一个我曾写进文档的错误前提**：Fog 3 原文与上两条 log 都把「运行时 `dependant` 更可靠」当作收益依据。**实测否定**：`dependant` 枚举只找出 4 条（`encounter.router` 3 + `tools.router` 1，全 `Depends` 形式），**看不到函数体内调用的 16 条**；且它天然看不到函数体调用 ⇒ 就算做完 C-F，运行时方案也并非更优，只是"换一种看法"。**教训：Fog/债务的"收益论证"本身也可能是错的，应与"待修的缺陷"一样接受实测检验。**
+**本轮 Fog 清算结果**：Fog 1（LAN 写权限）→ 用户裁决「内网可信」，不加固；Fog 2（GET 惰性写）→ 追根因发现真 bug（每次 GET 全量重算 + 写放大），已修 #108；Fog 3 → 目标已由 #110 达成，C-F 不做；Fog 4 → 两条前提被推翻（`rm` 不存在、`bash` 属平台相关），交付负向守卫 #109。**登记项全部关闭，且过程中额外挖出并修掉 3 个真实缺陷**（Fog 2 的版本号漂移、AST 守卫的三个漏检洞、CI 必需运行时清单未显式化）。
+
+### 2026-10-06 15:20 | codebuddy | RELEASE(v5.16.0) + 编排者数字抄错(1048 vs 实测 1053)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：Fog 1~4 全部收口后发版 **v5.16.0**（tag → `90f62a3`）。**无 `static/` 改动**（除 sw.js/index.html 版本字符串）⇒ 桌面端刷新即生效。
+- **v5.16.0 内容**：①#108 修掉「每次 GET 文章都重跑完整 spaCy + UPDATE articles」（惰性迁移判据写死 `3.4.0` 而写入端两条路径都写 `3.5.0` ⇒ 判据恒真，「惰性迁移」退化成「每次迁移」；修法＝`PROCESSED_JSON_VERSION` 单一真相源，语义完整保留）；②#109 CI 必需运行时清单显式化 + **两条否定式守卫**（`rm` 全仓不存在、`bash` 判为平台相关，**都不进清单**，防将来误升级为 fail）；③#110 localhost 守卫加固三个「将来会漏」的洞（字面 `router` 变量名 ⇒ 实有 14 个 router；per-router prefix ⇒ 一模块双 router 时键失真且恰好蒙对；闸调用名漏 `import ... as` 别名），allowlist 20 条逐字未动；④Fog 1 裁决**内网可信**；Fog 3 的 16 处形式统一裁决**不做**。
+⚠️ **编排者第二次犯"统计值过期"错误**：写 CHANGELOG / README / PROJECT_OVERVIEW 时，我把 **#110 那轮 maker 报告里的 1048** 当成终值写入（"1312 passed = 半 A 1048 + 半 B 264"）。但之后 **#109 又合入 5 个守卫测试**，发版前实跑半 A 是 **1053**、全量 **1317** ⇒ **三个文件全部写错**，靠发版前那一次全量门禁才发现并更正（`grep -c` 确认旧数无残留）。**这是与"head 截断漏看失败项"同类的第二次错误**：中间环节的统计值在流程推进后会过期，而我把它当成终值。**已存 memory**：发版顺序固定为「改版本点 → 跑全量门禁取实测数 → 把实测数写进文档 → commit」；多个 PR 连做时，测试数只在最后一个 PR 合完且跑完全量之后才取。
+- **README 破坏事故未复发**：本次改文档改用 `write_to_file` 写脚本到系统 temp 再执行（避免命令行 8KB 限制），且所有列表插入一律用 `.split("\n")` / `[text]` 形式（**不再用裸字符串赋值**），并在脚本末尾内置**破坏检测**（最长连续单字符行段 >10 即判异常）。三个文件实测 `longest_single_run = 1`，全部 OK。
+**门禁（v5.16.0 基线）**：`1317 passed + 1 skipped`（半 A `1053` + `test_server` `264`）/ 全 `tools/*.mjs` 探针 **28/28** / `ruff` 0 / `mypy` 两道（**93** + **70** files）0 error / `test_writer_mobile.py`（发版守护）**30 passed** / 五条守卫（防漏接线 5 · 契约冻结 5 · localhost 集合 7 · 带写 GET 白名单 7 · CI 必需运行时 21）全绿。`versionCode` = `51600`（`major*10000 + minor*100 + patch`），可覆盖安装。
+
+### 2026-10-06 16:49 | codebuddy | FIX(search高亮) 递延项"实体边界"落地，根因比预期严重（错高亮）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：清完 Fog 1~4 发完 v5.16.0 后，用户选定收掉递延项里的「检索 `_highlight` 的 HTML 实体边界」。按惯例**先复现再改**，不直接照抄选项描述里的错误前提。
+- **复现（临时 node 脚本，按括号配对切真实 `core.js:esc` + `search.js:_highlight` 真跑，224 组 text×needle 枚举）**：真缺陷存在，但**不是"高亮切在实体中间"**，而是**错高亮**——`İ`.toLowerCase() 长度 1→2（码点 1→2）导致折叠串 `hay` 与原文索引整体错位：原文「İstanbul」搜「T」高亮到字母「a」，搜「i」误高亮 `İ`。扩展到 598 组（含代理对 `𝔘`/组合字符/德语 ß·变音/XSS）共 2 类异常。
+- **根因（比"实体"更普遍）**：旧实现是「**先 esc() 再在已转义串上定位**」（`safe` / `safeNeedle`）。命中区间因此是"转义后的形态"：① `&`→`&amp;` 的边界会被切开（选项描述里的直觉）；② 更糟的是任何**大小写折叠改变长度**的字符（`İ`→`i̇`）让 `safe.toLowerCase()` 的索引与 `safe` 不再一一对应。另外 `String.slice` 按 UTF-16 计数（`𝔘` 占 2），非码点切片同样会错位。
+- **修法（顺序倒转 + 码点对齐）**：改为在**未转义原文**上定位命中，命中区间切片后**逐段** `esc()` 再包 `<mark>`；比较走**码点数组**（`[...raw]` + 逐码点 `toLowerCase`，长度变化时保留原码点——宁可漏高亮也不错高亮）。XSS 不变式更自然：`<mark>` 是唯一由本函数插入的标签，每段都过 `esc()`。
+- **守卫（行为优先，遵循红线 11「字符串存在断言是死测」）**：`tools/wb_search_probe.mjs` 新增场景 5 `highlight_hit_alignment` = 13 组 text/needle × 三条不变式（去 mark 后反转义 === 原文 ⇒ 永不切开实体/不丢字符；每个 mark 内反转义 === needle ⇒ 不许错高亮；输出无 `<script>`）+ 两条**等值**断言（「İstanbul」搜 t 必须等于 `İs<mark>t</mark>anbul`；`AT&T` 搜 `T&T` 必须等于 `A<mark>T&amp;T</mark>`）。另加两条**反回退**切片检查（旧标志 `safe`/`safeNeedle` MUST NOT 再现；MUST 含码点展开 `[...`）。`tests/test_search_ui.py` 的旧守卫 `esc(text` 断言已随实现形态改写为反回归形态守卫（XSS/对齐的实质保证交给探针），并把 `highlight_hit_alignment` 加进关键场景名清单（防"删了场景仍全绿"）。
+- **门禁**：`wb_search_probe.mjs` **10/10**（原 7 项 + 新 3 项）；全 `tools/*.mjs` 探针 **28/28**；半 A **1053** passed / 半 B `test_server` **264** passed + 1 skipped ⇒ 全量 **1317** + 1 skipped（与 v5.16.0 基线同数，因本轮是**重写**一条测试、未新增测试函数）；`ruff check .` 0；`mypy --follow-imports=skip tests` **93** files / `mypy --strict delector tools` **70** files，零错误。
+- **守卫自证（不靠"我跑过了"）**：把 `static/js/search.js` 单独 `git stash` 回退到旧实现后跑探针 ⇒ 切片检查按预期抛 `Error: _highlight 仍含旧「先 esc 再定位」实现的 safe/safeNeedle…` 且 `EXITCODE=1`；恢复后全绿。旧 `test_highlight_escapes_before_wrapping_mark` 也如预期变红（`esc(text` 不再出现），确认两处守卫都是真守卫。
+⚠️ **编排者教训（本轮第三次同类）**：给用户写选项时把缺陷描述成"高亮切在实体中间"（听起来像纯显示瑕疵、收益小），实测发现真缺陷是**高亮到无关字符**（功能性错误）。**"递延项的缺陷描述"与"债务的收益论证"一样，是待检验的前提，不是事实**——选项文案里对缺陷的断言 MUST 先复现再写。
+
+### 2026-10-08 09:49 | codebuddy | ADR-0017 产出（/dfs-grill：Android 更新可见性，不做应用内安装）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户提问「安卓能不能做一个可以直接更新的功能？现在还是要覆盖安装」，走 `/dfs-grill` 双镜拷问后**改变了提案的形状**，产出 ADR-0017（vault 正式件 + 仓内副本 `docs/adr/2026-10-08-adr-0017-android-update-check-notifier.md`）。
+- **两个镜头都实核了文件（非推理）**：product-ux 指出真瓶颈是「**不知道有新版**」而非"安装这个动作"；sre-resilience 实核 `AndroidManifest.xml:4-31`（无 `REQUEST_INSTALL_PACKAGES`、无 FileProvider）、`MainActivity.java:257-258`（**WebView 所有下载统一进 ExportSaver** ⇒ APK 走这条路会报"导出失败"且无安装 Intent 接续）、`build-release.yml:380`（**CI 已 pin 签名证书 `EXPECTED_SHA256`** = 现成且不与下载源同源的信任锚）。sre 还明确："只校验随包发布的 `.sha256` 是假防线——能换 APK 的人也能换那个哈希"。
+- **用户四轮拍板**：Q1-A（只做"检查+提示"，不做应用内下载/安装唤起）、Q2-A（GitHub Releases API 为唯一真相源，不可达时**不得伪装成"已是最新"**）、Q3-A（**后端端点** `/api/update/check` 代查，非前端直连）、Q4-A（启动后延迟自动检查 + TTL 缓存 + 仅落后时显示 chip；无新版或检查失败**均静默**，失败仅手动检查时给人话）。
+- **被否决项已存档理由**：B 应用内下载（增量收益仅"少开一次浏览器"，代价是权限+FileProvider+DownloadManager 分流+三条新失败路径）、C 现成侧载更新器（治不了盲区）、**D 热更新 `static/`**（与 Python 后端强耦合契约，会静默破坏跨边界契约 + 破坏 APK 内自包含的离线模型）、E 委托 LAN 桌面代理（新增信任面，且真正需要更新的场景恰恰是桌面不在线时）。
+- **拷问挖出的前置依赖（重要）**：**后端当前没有版本常量**（全仓无 `__version__`，版本散落 `static/index.html:35` / `sw.js` / `build.gradle`）。若在新端点里硬编码版本串，就是把 v5.16.0 刚修掉的"判据写死"缺陷原样再造（同 vault `POST-MORTEM-V5.5.2-VERSION-NUMBER-SCATTER`）⇒ ADR §6.1 定为落地第一步。
+- **一个显式安全决定（防将来被当漏网）**：`/api/update/check` **不挂 `_require_localhost`** —— 理由：LAN 浏览器版用户同样需要更新可见性，该端点只读、不写数据；代价（LAN 消耗主机 GitHub 配额）由 TTL 缓存 + 3s 出网超时兜住。已写进 ADR §4.3。
+- **顺带产品发现**：顶栏 `System · vX.Y.Z Online`（`static/index.html:35`）在**只绑回环的单机场景下"Online"字面撒谎**，ADR 附带默认改为真实版本 + 真实检查结果。
+- **未实施**：本次只产出决策文档，未写代码。ADR 已给端点契约草案、4 条 MUST 不变式（含「`has_update === null ⇔ error_reason !== null`」）、验收判据表与 NOT doing 清单。
+
+### 2026-10-08 11:12 | codebuddy | EXEC(ADR-0017 实施) /dfs-exec 六任务全绿 + 编排者三次自查纠错
+   > 正文超 §4 上限（4522 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md`](WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md)。
+
+### 2026-10-08 23:52 | codebuddy | STANDBY(Android 侧) 暂缓标记 + 新提案：Windows 桌面端封装为 desktop app
+Caps: filesystem-read, filesystem-write
+事件：用户决定「**先暂缓安卓**」并询问「**Windows 桌面端能否封装成 desktop**、用什么技术栈」。先做标记，再回答。
+- **⏸ 暂缓（非完成、非取消）**：ADR-0017 的代码**已合并 master**（PR #115/#116 → `ee68ec8`，master CI success），**桌面端已可用**（端点 + chip 均已上线，且桌面侧真实出网已验证）；但 **Android 侧两条假设仍未验证** ⇒ **Android 端能力不确定，不得记为"更新可见性已在 Android 验证通过"**：
+  ① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（现有手机出网是 **LAN HTTP**，不是证据）；
+  ② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无 Android SDK、只能靠 CI）。
+  **三处同标记**：本 log、`PROJECT_OVERVIEW` 待办、ADR-0017 §7.3；exec 台账 `.vault-exec-ledger.json` 的 Task 6 保持 `blocked`。防的是未来 agent（或我自己）把"代码已合并"误读成"双端已验证"。
+
+### 2026-10-09 00:10 | codebuddy | ADR-0018 产出（/dfs-grill：性能换语言提案 → 裁决"先测量、不换主体"）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户提案「不用 Python 做系统主体，只留生态库调德语/记忆算法，不想性能拖垮项目」。走 `/dfs-grill` 后**否掉了提案的字面形态**，产出 ADR-0018（vault 正式件 + 仓内副本 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md`）。**未改任何生产代码**。
+- **改变提案形状的两条事实**：
+  ① **"把重活给更高效语言"项目里已有且已决策** —— ADR-0008（Go Agent Runtime + Python NLP Engine 混合架构）已落地 `agent/`（Go：CLI+DAG+supervisor，拉起 uvicorn 子进程 8001）；ADR-0010 已划边界（Go=编排/并发/退避重试，Python=spaCy 形态学/lemmatization）。**方向恒为 Go→Python，主应用不调 Go** ⇒ 真正的待决问题只是"要不要把 **HTTP 主体**也搬过去"。
+  ② **"Python 性能拖垮项目"证据不足** —— 全仓唯一真基准 `tools/bench_cards_endpoint.py` **只断言结构、不钉阈值**；审计文档里的数字**不可复跑**且部分自带 UNVERIFIED；**spaCy 单价有两个矛盾值**（`syntax_hard.py:9` 写 `~42ms/句` vs 审计写 `~2.1ms/句`，**差 20 倍**，都没脚本兜底）。perf 席位实测 20k 卡 790ms（Python/FSRS 84%、排序 9%），瓶颈排序 **AI/TTS(网络) > spaCy(Cython) > SQLite > 冷启 > 前端 > HTTP/序列化** ⇒ 前两项换语言都解决不了。全仓**唯一点名 GIL** 的地方是 `ExportSaver.java:73`（大导出并发）。
+- **裁决**：D1 **先测量不换**（1 小时方案：4 场景冷启/长文/热读/卡盒 + 分层剖析 + 阈值「Python CPU>50% 且 p95>2 倍目标」）；D2 按结果选路（CPU 主导→**热点下沉 O2**；编排/并发主导→**扩展 ADR-0008 边界 O3**）；D3 **永久否决"换 HTTP 主体 O1"**（依据：spaCy 不可移除⇒NLP 退化成跨进程 IPC 多一跳、最大瓶颈不受宿主语言影响、Android 双运行时与 56.7MB 内嵌 Python 冲突），并写入**三条翻盘条件**防悄悄重开；D4 测量后先做便宜杠杆；D5 明确 **Python 不可移除**（永远讨论"边界"而非"替换"）；D6 新基准**必须钉阈值**（补上现基准只断言结构的缺口）。
+- **Fog**：测量结果本身（D2 分支取决于它，测量前不许选路）；Android 侧如何测量（本机无 Android SDK）；卡盒前端渲染占比未剖析；若走 O2 则 Android arm64 交叉编译链路未定。
+
+### 2026-10-09 12:24 | codebuddy | EXEC(ADR-0018 D1 性能测量) /dfs-exec 六任务全绿、判定门定案为 O0
+   > 正文超 §4 上限（5882 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md`](WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md)。
+
+### 2026-10-09 13:40 | codebuddy | FIX(门禁) master 变红：跨进程量级比较被当成不变式 + spaCy 断言取整 flake
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`perf/measurement-baseline`（PR #117）合并进 master 后 **master CI 红**：`tests/test_cold_start_cost.py::test_segments_satisfy_physical_containment` 报 `AssertionError: app_ready_ms(95.490) 未大于 init_db_ms(209.850)`，而**本机同一份代码**是 148/245（通过）⇒ **本机通过、CI 反转**。分支 `fix/cold-start-segment-gate`，**只改测试与基准，`delector/` 生产代码零改动**。
+- **合并时序问题（第一条教训）**：PR #117 在 **CI 仍在跑时被合并**（merged 04:28:53，CI 结论约 04:30 出）⇒ 红色提交直接进了 master。**合并 MUST 等 CI 绿**。
+- **根因（实测确认，非推理）**：三段是**三个不同子进程**测的 —— probe A（独立进程）调 `init_db()` 得 `init_db_ms`；probe B（独立进程）**在 import 期已跑过一次完整 `create_app()`**，再换全新的库调第二次 `create_app()` 得 `app_ready_ms`。实测分解 `init_db()` = main DDL ≈25ms + progress DDL ≈25ms + `seed_preset_articles` ≈105ms；probe A 为该三段付**进程冷启动/首次文件 I/O**，probe B 里同样工作**已热** ⇒ **两个量不存在必然大小关系**。最小反转场景（实测）：让 probe B 第二次 `create_app()` 落在非全新库 ⇒ `app_ready_ms` 塌到 **8.75ms** ≪ `init_db_ms` ~155ms。
+- **修法**：删掉两条**跨进程**量级断言（`app_ready_ms > init_db_ms`、`model_load_ms <= import_ms`）；保留 `import_ms > app_ready_ms`（**同进程**）；新增**机器无关**自检行 `init_db_tables`/`init_db_progress_tables`/`app_ready_db_tables`/`app_ready_progress_tables`/`app_ready_fresh_db_used`（取最小轮=最保守），并**补上 probe A 的对称自检** —— 上一版只给 probe B 加自检、**guard 不对称**，probe A 若落到热库则 `init_db_ms` 可任意小而仅靠 `>0` 兜着（同类缺陷，checker 抓出）。`app_ready_fresh_db_used` 改为**独立**判新库文件是否真出现在新路径（原先由表数派生 ⇒ 同真同假、名字骗人）。口径文本（`segments_note`/docstring/契约注释/verdict）据实改写为"三段各由独立子进程测得、**不可按大小关系解读**"，verdict 的跨进程比率标注"近似归因（仅示意）"。
+- **checker 抓到的同类项**：本机`import_ms(2242) > app_ready(263)` 余量约 2000ms（来自 import 期的 spaCy 模型加载）；但**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，这条同进程断言的余量会塌到噪声级 ⇒ 已列为待收口项（详见下条）。
+- **顺带修掉一个会随机打红 CI 的 flake**：`tests/test_spacy_unit_cost.py::test_bench_verdict_names_both_legacy_values` 偶发失败（`per_sentence_ms=7.115` 时输出行 `7.11` 而断言期望 `7.12`）。**根因是测试端双重取整**（不是值不同源）：测试从**3 位小数的打印字符串**反解析回 `float` 后再 `.2f`，而 verdict 是对**原始中位数**直接 `.2f`，落在两位小数边界 `X.XX5`±0.0005 时必不一致。修法：断言换成**正则取数值 + 容差 0.005+1e-9**（恰为一次两位小数舍入的最大偏差），文案写死仍必超差 ⇒ 守卫强度不减；修复后连跑 **15/15** 通过。
+- **⚠️ 编排者教训（本轮第二次同类：本机复跑通过 ≠ 门禁可靠）**：我在 Task 4 的复跑里`app_ready(245) > init_db(148)` 同向通过，**把一条机器相关的比较当成了已验证的不变式**。同类错误在 Task 2 已出现过（跨函数相除），本轮是跨进程量级比较。**规律：凡是"两个在不同进程/不同前置状态下测得的量"的任何大小关系，默认都不是不变式**；要钉就只能钉**状态无关**的事实（文件/表是否存在、可解析性、同进程内的包含）。
+
+### 2026-10-09 13:53 | codebuddy | 后验：红 master 事故的机械证据 + 修复合并 + master CI 绿
+Caps: filesystem-read, shell-exec
+事件：为"跨进程量级比较"这条诊断补一条**决定性后验证据**（同一份代码、两种结果）。
+- **同一提交在两条 CI 上结论相反**：PR #117 的**分支 CI 失败**（run `37883798324`，`app_ready_ms(95.490) 未大于 init_db_ms(209.850)`），而**同一提交合并到 master 后的 push CI 却 success**（run `37884073719`，5m10s）⇒ 这不是"某段被打桩"，而是**机器/状态相关**，机械地印证了根因判断（probe A 与 probe B 是两个不同进程、不同前置状态的量）。
+- **修复 PR #118 已合并**（`e8c8f1f`，3 commit：`c36d420` 门禁改钉真不变式 / `5c85c13` spaCy 断言取整 flake / `82493e9` 教训入库），**master CI success**（run `37890280999`，4m6s）；分支已清理（本地/远端均无残留），工作区干净、与 origin/master 同步。
+- **ADR-0018 的 Task 6 回填亦在 master**（`204e761`）：ADR §1–§9 齐全（§7 实施记录 / §8 Fog / §9 关联），五个基准 + 五套门禁（`bench_cards_endpoint`/`bench_spacy_unit`/`bench_long_read`/`bench_cold_start`/`bench_profile_layers` + `bench_stats`）全部落地。⇒ **ADR-0018 D1 闭环**：判定门定案 **O0**（条件① 成立 85.9% / 条件② 不成立）。
+- **仍开放（同类残余，已登记 PROJECT_OVERVIEW 递延项④）**：`tests/test_cold_start_cost.py` 保留了 `import_ms > app_ready_ms`（**同进程**，安全），但其余量主要来自 import 期的 spaCy 模型加载（本机约 2000ms）；**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，余量会塌到噪声级 ⇒ 需加条件（例如仅 `nlp_path=spacy` 时断言）或改为机器无关形式。未收口。
+
+### 2026-10-09 19:52 | codebuddy | DECISION(ADR-0018 门定稿) 目标值拍板 + 修法路由 + 移除不可复跑的 42ms
+   > 正文超 §4 上限（4321 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md`](WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md)。
+
+### 2026-10-09 20:43 | codebuddy | CLOSE(登记项) ① 迁移闸 size 对称化 ② rank_sentences 纯函数单价补测
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：把 ADR-0018/PROJECT_OVERVIEW 里"仅登记、未动"的两个开放项**真正做完**，并把登记状态改为已完成。分支 `fix/close-registered-items`。
+- **① 数据目录迁移闸的 `isfile`/`size` 不对称（原登记于 ADR §7.7）—— 已修**：判据对称化为 `if os.path.isfile(legacy_db) and os.path.getsize(legacy_db) > 0`（"0 字节空壳不算数据"这条尺子现在**两个位置都用**）；docstring 判据清单 + 新增"为何对称化"。
+  - **checker 抓到一条红卡（正是我上一轮修复留下的同族盲区）**：条件④ 的内联注释原写"①与②互斥、**永远到不了这一行**"，而条件① 加 `size > 0` 后，**同地 + 共享库 0 字节**时会**真的到达**条件④ —— 注释被本次改动**自我证伪** ⇒ 已据实重写（保留"不得删该守卫"的理由），并**补上那条唯一实际执行路径的用例**（桌面端同地 + 共享库 0 字节 ⇒ 不误报）；另补"新位置是目录 + 旧位置非空 ⇒ 抛"。
+  - **连带改动（易漏，checker 复核为"诚实中和"）**：`tools/bench_cold_start.py` 的中和手法**原先正是靠这个洞**（预置 0 字节库），判据收紧后会失效 ⇒ 改为**摆一个非空的合法 SQLite 库**（建占位表，显式 `close()` 因为 `with sqlite3.connect(...)` 只提交事务**不关句柄**，悬着会让 Windows 的 `rmtree` 删不掉临时目录）。占位表写在 `main_db`、而 `init_db_tables` 数的是 `initdb_db` ⇒ **不污染计时**。
+  - 同步订正 `docs/agents/ops.md`：原写"size==0 空壳不拦"已**过度泛化**（新位置的 0 字节空壳现在**会**拦），改为据实表述。
+- **② `rank_sentences`/`analyze_syntax_tree` 纯函数单价（原登记为 ADR §8 Unknown 5）—— 已补测**：新增 `tools/bench_rank_sentences.py` + 27 条门禁。实测（`spacy` + `de_core_news_sm`）：`analyze_syntax_tree` 单句 **≈7~8ms/句**、`rank_sentences` 整段归一 **≈8ms/句**（长句档 11.2ms，短/长 ≈2.6×）。三条对照：相对审计 **2.1ms** ⇒ **低估约 3.6~4 倍**；相对 **42ms** ⇒ 仅其 **≈0.18 倍** ⇒ **42ms 无法由"该路径纯函数稳态"解释**；与端到端 **≈10ms/句**（`bench_long_read`）**同量级** ⇒ **端点开销占比不大，成本主体在该路径自身**。⇒ **20 倍差距仍不足以定案**，但已收窄为三候选（md 口径 / 含冷启动摊薄 / 别的语料或函数口径）。
+  - **checker 抓到一条关键 hedge 缺陷（PASS 但很值钱）**：脚本**不打印实际生效模型名**，而 `get_spacy_nlp()` 会**先试 md** ⇒ verdict 里"md 未测是补差来源"这个前提**不可复核、甚至可能为假** ⇒ 新增 `model=` 行（实测 `de_core_news_sm (md 不可用)`）并让 verdict 与之逐字一致。另新增 `p95_note=` 显式声明两条 p95 **聚合单元与样本量都不同、不可直接比较**（`analyze_p95_n=126` 是单句尾部、`rank_p95_n=7` 是整段归一），并补源码顺序断言（模型加载在计时之外 + 脚本体不含 `_material_text`，钉住"纯函数口径"）。
+- **门禁**：`test_data_dir_migration_gate` **12 passed**、`test_rank_sentences_cost` **27 passed**、半 A **1231 passed**（较本轮起点 +5）；mypy **101** + **78** files 零错误；`ruff check .` 0。基准实跑 `bench_cold_start` 正常（`health_200_ms=2610`）。
+- **登记状态收口**：ADR §1.3 / §7.3（新增"该热路径纯函数单价"行）/ §7.4（补测结果与三条对照）/ **§7.7 改写为"① 已修 / ② 已核实无害"** / **§8 Unknown 5 标已解决 + 新增 Unknown 7**（42ms 成因仍不定案，且明说**不影响任何决策**）；`PROJECT_OVERVIEW` 递延项 ①② 改标已解决；`docs/agents/ops.md` 订正。仓内副本机械重新生成。
+
+### 2026-10-10 00:32 | codebuddy | DECISION 冷启动端到端 p95 暂缓（不引入新依赖）
+Caps: filesystem-write, shell-exec
+事件：用户决定 **⑤ 冷启动端到端 p95 暂缓** —— 补测必须引入**浏览器自动化基线**（本仓无，属新依赖），**收益不大**，故不做。
+- **登记为"明确决定"而非"未做"**（防后续会话反复重开）：ADR §7.5 新增"冷启动端到端（首屏可用）"行（`unmeasured` + 暂缓理由）、§8 新增 **`Unknown 8`** 记为 ⏸ 已决定暂缓、`PROJECT_OVERVIEW` 递延项⑤ 同步。
+- **含义**：**O0 结论建立在代理口径之上**（现 2.6s 是"到 `/api/health` 200"，**不等于首屏可用**）—— 该限制已在 ADR §7.5/§8 与输出 `scenario_scope_note` 显式声明，不是隐藏假设；若将来需求变化需重开，按 ADR §7.6 的**修法路由**：端到端 >4s 走 **O0 杠杆（spaCy 惰性加载）而非 O2**。
+- 本次为**纯文档改动**（ADR 正式件 + 仓内副本 + PROJECT_OVERVIEW + work.log），**零代码改动**，不跑基准。
+
+### 2026-10-11 13:07 | mimo-v2.6-flash__claude-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按 ADR-0004 Q1=A 处置 —— 删除 WORKMEMORY/corrections.md（本项目账本 0 条数据；4/5 项目本就无此文件）并同步 INDEX 文件清单行。捕获落点改为 WORK_END 可选一行「本次被纠正: <1 行>」（ADR-0004 §4.1-7，已由计划 Task B7 写进 PROTOCOL.md §2）。
+
 ### 2026-10-14 20:53 | codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：按协议 §4 拆分 7 条超限事件（**已合并** `73c35b8`，PR #133），并顺带查出"某事件 56428 B"是**误报**。
@@ -486,7 +488,6 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **发现一条既有问题（非本次引入）**：`work.log + archive/*` 的 union 里存在 7 个**重复事件头**（09-04 ~ 09-13 段，同一头出现在 2~3 个 archive 分片），来自历史上「未跟踪的 archive 分片 + 已跟踪分片」两套并存。后果：按 §5.1 的 `sort | uniq -c` 守恒核对会把这些计数差异误判成丢失/新增（我本次的第一次守恒核对就是这样报 MISMATCH 的，真因是「archive 分片此前未跟踪，`git show HEAD:` 取不到」）。
 - **核对口径修正（供后来者）**：守恒核对 MUST 以**工作树现状**为 before 快照（轮转前先 `cp` 或先算 union 存基线），**不能**用 `git show HEAD:` 当 before —— 未跟踪分片会被漏算。
 
-
 ### 2026-10-15 05:20 | codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**ADR-0023 §6 回写完成**（vault 提交 `139cdde`，已推 master）；PR #136 的冲突已解。
@@ -495,7 +496,6 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **PR #136 冲突**：master 侧 2 条簿记提交与本分支簿记提交都改 `work.log` 末尾 ⇒ 用 merge 解，两侧事件全留（53→55 条，0 重复头 / 0 残留标记 / 纯 CRLF）；`mergeable` 已由 CONFLICTING 转 **MERGEABLE**。顺带闭合 `handoff_interactive-agent-loop.md`（status → closed + 响应节）并补登台账 Task-5 ⇒ **7/7**。
 - 计划正本那句「待回写 ADR §6」已同步为「✅ 已回写（vault `139cdde`）」，避免活文档指针漂移。
 
-
 ### 2026-10-15 05:25 | codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**PR #136 已合入 master**（merge commit `d919d42`，分支 `feat/interactive-agent-loop` 已删）—— ADR-0023 交互层验证驱动循环 Task 0~6 全部落地。**未发版**（不影响 v5.17.0 产物，下次发版随版本到达）。
@@ -503,6 +503,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **CI 红过两次，两次都不是代码**：① run `38684711849` 的 `Tests & Go Gates (ubuntu)` 挂在 **`Set up job`** 阶段 —— `actions/setup-go` 归档从 codeload 下载失败（其余三 job 全绿、本地全量 1898 passed）⇒ `gh run rerun --failed` 后 4/4 job success；② run `38684539617` 因新 push 被标 cancelled（同 sha 前缀的旧 run）。
 - 合并前自检（在被合并的 master 上）：`pytest` ai-polish 相关五套 93 passed、`test_server.py -k "ai_polish or packaging or hidden"` 23 passed、前端契约闸 PASS。**注意 master 已被 dependabot 推了两个 PR（#134 paths-filter-4 / #135 fastapi 0.143.0），本 PR 的 CI 是在 GitHub 的 merge-ref 上跑的 ⇒ 已覆盖新依赖**。
 - 仍未做（ADR §10.7 / handoff 响应节已列）：裁判集扩充（Unknown 1，第一瓶颈）、Android 真机点检（含 WebView SSE 读流未验证）、有 Key 后回测真轮次分布与真 token 计数。
+
 ### 2026-10-15 14:05 | codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**双席位评审**「A1 裁判集扩充计划（`docs/plans/2026-10-15-a1-judge-expansion.md`，7 任务）+ 已落地的分层架构」，两把尺子各自给出 **局部偏离**（无通过）。
@@ -667,6 +668,18 @@ Caps: filesystem-read, shell-exec
 - 报告：`docs/reviews/2026-10-16-judge-gaming-trial-run.md`；原始输出本机 `scratch/judge_gaming_trial/`。
 - **待用户确认：跑满 N=5（Task 5 正式 pilot）→ 阈值回写。**
 
+### 2026-10-16 02:30 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户去睡觉，自主推进「评估报告里已定案、不需决策、无危险」的一批修正（分支 `chore/audit-fixes-hygiene`）。
+- **P1-2（.gitignore 缺口，swarm/git 管理两席都点到）**：补 `/launch.log`、`/launch.log.*`、`/lan-address.txt` 三条根级规则 + 注释写清威胁模型（便携模式/源码运行时数据目录=仓库根 ⇒ 一次 `git add -A` 会把运行态日志与**内网 IP** 提交进历史）。编排者实测三者由 NOT-IGNORED → IGNORED，且**历史从未进过这三个文件**。
+- **P2-4**：补 `.superpowers/` 根级兜底（与 `.mypy_cache/` 同款理由：原靠嵌套 .gitignore 自忽略）。
+- **P2-8**：`.env.example` 数据目录注释改正 —— 实测 `resolve_data_dir({})` = `%LOCALAPPDATA%\DeLector`（**不是仓库根**），只有 `DELECTOR_PORTABLE=1` 才回落程序目录。
+- **P2-1**：`CLAUDE.md` 加「文档路由（先读这个）」一节指向 `AGENTS.md`（此前只读 CLAUDE.md 的会话完全不知道 architecture/ops 存在）。
+- **P2-2**：`.cursorrules` 与 `.agent-rules.md` 的 `08-Inbox` → `99-Inbox`（实测 08-Inbox 不存在、99-Inbox 存在）。
+- **守卫测试**：`tests/test_server.py` 新增 `test_runtime_artifacts_protected_by_gitignore`（沿用 keystore 那条惯例 + 多一层 `git check-ignore` 实证 + 与 `desktop.py` 常量对账）。**变异自证**：删掉三条规则 ⇒ 该测试红（判别力成立）。
+- **门禁**：守卫 1 passed；`ruff check .` 全绿；`mypy --strict delector` 67 files 0；`--follow-imports=skip tests/test_server.py` 0；契约闸过。全量 `pytest` **1983 passed + 2 skipped + 2 failed** —— 已用 `git stash` 在 master 态复现同样 2 failed，证实是 `tests/conftest.py:16-19` 明文记载的「根目录有库 ⇒ 迁移闸拒绝运行 ⇒ 本地红 / CI 绿」既有分歧，与本 PR 无关（**未删用户库文件**：那属危险操作）。
+- **未做（需决策或有危险）**：P1-1 分支纪律机械闸（CI 改动；`gh` 无 workflow scope ⇒ 合并要走 SSH no-ff）、P2-7 `.gitattributes` CRLF 契约（改跨平台 checkout 行为）、P2-6 renormalize、P2-5 `git gc`、P2-3 design-system 状态定夺，以及 swarm audit 的 P0-1/P0-2/P1-1（密钥进备份）等代码级修复。
+
 ### 2026-10-16 12:39 | gemini-3.8-flash-high | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**Task 5（Pilot N=5 实跑与阈值固化回写）交付并完成**（HITL，用户确认后执行；EXIT=0，耗时 145s，Token 2,944）。
@@ -674,6 +687,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 预注册阈值固化：主实验（N=20）判决线写回设计稿 §4（P2 配对 Wilcoxon p<0.01 且差值>=0.30；P1 判决线；W4 附带分析规则）。
 - 报告落盘：`docs/reviews/2026-10-16-judge-gaming-pilot.md` + 原始输出 `.raw.json`。
 - 台账：Task-5 → completed（7/8）。
+
+### 2026-10-16 13:10 | codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**/dfs-grill 三透镜拷问「第 8 条对照实验」后收敛，ADR-0024 归档**（vault `a1a74fe`；仓内镜像 `docs/adr/2026-10-16-adr-0024-...md`）。用户拍板：**Q1 按推荐（B+C）**；**Q2 另一 agent 已在跑 N=20**（推荐为不跑，用户知情）。
+- **核心发现（pilot 实测证实，非推断）**：原判决量 `R_uncovered(final)` 在 A1/A2 两臂**恒等于 0** —— 因为 `violations_of` 恒返固定违规 ⇒ `v>=prev_v` ⇒ `no_improvement` ⇒ argmin 回退**带错原文**。pilot 三臂：A1/A2/A3 的 `R_uncovered(final)` = 0.000/0.000/0.950，而 `R_uncovered(last_candidate)` = **0.950/0.950/0.950**（逐位相同）。⇒ ①「A1→A2 轮数效应」= 0 vs 0 零信息；② P2 的「A3 优于 A2」退化成「A3 > 0」；③ P1 宣称的「A2 是关键分辨器」分支**不可达**；④ A1 **不等于**今日一次性润色（它返回带错原文）。
+- **机制事实（代码实测）**：`polish_loop` 七个 `messages.append` 站点**无一回灌裁判 violations**；会话无状态、权重冻结；`writing_check` 工具**不带 nlp** ⇒ 语法族对模型不可见。⇒ §4.3 被引用以禁言的那句（「模型会学会通过检查」）**在本架构里没有发生机制**。
+- **ADR-0024 决策**：判决量改/并入 `R_uncovered(last_candidate)` + 预注册阴性对照 `last_candidate(A2) ≈ last_candidate(A3)`；结论边界收窄为「准入式裁判下裁判信号只影响**验收**、不影响**模型行为**」；P1 表述为「**本形态下无发生机制**」（**不得**写成「未发现 P1」，更不得据此宣称第 8 条已满足）；§4.3 维持限定表述 + 新增「无法判别」出口（禁止用再加大 N 自我续命）；「裁判结论回灌」设为**无条件**下一子计划，实验结论只影响 ADR 措辞、不影响代码路线图。
+- **给正在跑 N=20 的 agent（必读）**：无论结果如何，报告 MUST 按 ADR-0024 口径书写（判决量以 last_candidate 为主、`R_uncovered(final)` 仅作构造性记录并标注恒 0 的算术成因）；并如实登记已知未决项 —— 无 `seed` 且 `temperature` 未设未记（「同输入同输出」对 `--real` 是假陈述）、Token 成本走 `ceil(len/3.0)` 且只计 completion 不计 prompt、无逐篇落盘/续跑/重试/连通预检/成本硬闸、rater 零执行入口。
+- **下一子计划（回灌通道）硬依赖**：① 裁判 FP 必须先修完（3 类误报全在语法族，而 prose 分流下只有语法族被计数 ⇒ 误报回灌即变成「必须修」的指令；现成标定工具 `tools/bench_judge_fp.py`）；② 回灌内容 MUST 过同一道适用性闸与双限截断；③ 三角一致性（循环裁判带 nlp / `writing_check` 不带 nlp / 回灌源）先于回灌；④ 阴性对照 MUST 在动产品之前先跑成基线。
 
 ### 2026-10-16 13:31 | deepseek-v4.1-flash | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
