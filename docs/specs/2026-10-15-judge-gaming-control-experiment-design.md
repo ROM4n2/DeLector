@@ -84,9 +84,16 @@
 - A1 vs A3 = 两个变量合起来的总效果，**不得**用它单独归因。
 - 三臂 MUST 共用同一 task 模板、同一 `system_prompt` 选择规则、同一 `temperature`；**模型与参数逐字记录**；三臂**交错执行**（逐篇轮转，而不是先跑完 A1 再跑 A2）以平均掉 API 侧漂移。
 
-**判据（方向性，具体阈值 pilot 后固定）**：
-- **P2 成立** ⇐ A3 的 `R_uncovered` 优于 A1（判决量），**且** A3 优于 A2（裁判信号有独立贡献）。
-- **P1 成立** ⇐ A3 的 `R_judge` 明显优于 A1，但 `R_uncovered` 与 A1 无显著差异（或更差）。**A2 是关键分辨器**：若 A2 ≈ A3，则收益来自"多轮"而非裁判。
+**判据（方向性，具体阈值已依 2026-10-16 Pilot 实测固定）**：
+- **P2 成立** ⇐ 配对双尾 Wilcoxon 符号秩检验：
+  1. $R_{\text{uncovered}}(A3) - R_{\text{uncovered}}(A1) \ge 0.30$ 且 $p < 0.01$；
+  2. 且 $R_{\text{uncovered}}(A3) - R_{\text{uncovered}}(A2) \ge 0.30$ 且 $p < 0.01$；
+  3. 且 A3 的 `new_errors` 均值 $\le 0.20$ 处/篇。
+- **P1 成立** ⇐
+  1. $R_{\text{judge}}(A3) - R_{\text{judge}}(A1) \ge 0.50$；
+  2. 但 $R_{\text{uncovered}}(A3) - R_{\text{uncovered}}(A1) \le 0.10$ 或 Wilcoxon $p \ge 0.05$。
+- **W4 附带分析规则**：
+  若满足 P2 但附带指标 $R_{\text{uncovered\_last\_candidate}}(A1) \approx R_{\text{uncovered\_last\_candidate}}(A3)$（差异 $\le 0.10$），报告必须明确披露：“收益核心在于裁判准入闸门有效放行了正确候选，而无信号死裁判误触发了保护性回退”。
 - **附加信号（不参与判定，但要单列）**：被"误报触发的修改"比例 —— 本次裁判集扩充已抓到 3 类误报，模型若为讨好误报而改坏正确句，这是 P1 的**强化证据**，不是噪音。
 
 ## 5. 样本、统计与呈现

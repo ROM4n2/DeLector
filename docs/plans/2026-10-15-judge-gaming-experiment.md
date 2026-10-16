@@ -160,11 +160,13 @@
 > "跑 pilot：N=5 篇种子用例 × 3 臂，**逐篇交错执行**。① 真跑前先打印一次 `bool(key)`（**绝不打印 key**）与模型名；② 记录每篇三臂的 RunRecord 与逐处注入回收；③ 据实测**方差与 token/延迟**固定主实验阈值并回写设计稿（写清"阈值由 pilot 实测方差推出"）；④ 若 pilot 暴露 harness 缺陷 ⇒ 回炉 Task 2/3 而不是就地绕过。**HITL**：跑前把预估 token/延迟与本次花费口径交用户确认。RUN：`python tools/bench_judge_gaming.py --cases 5 --json`。"
 
 **Step Breakdown:**
-- [ ] Step 1: **HITL**：交用户确认 pilot 规模与花费口径
-- [ ] Step 2: 真跑 N=5×3 臂，原始输出落盘
-- [ ] Step 3: 据实测固定阈值并回写设计稿
-- [ ] Step 4: pilot 报告落 `docs/reviews/`
-- [ ] Step 5: 原子提交
+- [x] Step 1: **HITL**：交用户确认 pilot 规模与花费口径（用户已确认先试水后跑满 N=5）
+- [x] Step 2: 真跑 N=5×3 臂，原始输出落盘（`docs/reviews/2026-10-16-judge-gaming-pilot.raw.json`）
+- [x] Step 3: 据实测固定阈值并回写设计稿（已固定 P1/P2/W4 判定线回写设计稿 §4）
+- [x] Step 4: pilot 报告落 `docs/reviews/`（`docs/reviews/2026-10-16-judge-gaming-pilot.md`）
+- [x] Step 5: 原子提交
+
+> **收尾记录（2026-10-16，gemini-3.8-flash-high）**：Task 5 Pilot 实跑完成（EXIT=0，耗时 145s，Token 2,944）。数据揭示核心现象：A3 真实模型 1 轮即收敛（修复率 0.950），而 A1/A2 因死裁判恒报 1 处违规触发保护性回退导致 final 修复率 0.000，但附带指标候选修复率高达 0.950，精准验证了 W4 的回退掩盖机制。方差极小，据此在设计稿 §4 固化了 P2/P1 与 W4 附带分析判定线。原始数据已随报告落盘。台账 Task-5 completed。
 
 ---
 
