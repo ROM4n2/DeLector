@@ -31,6 +31,7 @@ from typing import Any, Dict, Iterator
 import pytest
 
 from delector.core import database
+from delector.core.db import content as db_content
 from delector.nlp_engine.processor import PROCESSED_JSON_VERSION
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -139,7 +140,10 @@ def test_missing_data_file_falls_back_visibly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """⑥ 未命中/文件缺失 ⇒ **可见** WARNING + 回退纯 Python 口径（不许静默降级）。"""
-    monkeypatch.setattr(database, "preset_processed_data_path", lambda: str(tmp_path / "nope.json"))
+    # `preset_processed_data_path` 现住 `delector/core/db/content.py`（定义模块），且
+    # `_load_preset_processed` 在 content **内部**按本模块名字调用它 —— 打桩必须打在 content 上；
+    # 打在 `database` 的同名再导出**绑定**上不会生效（B4 Task 4 的 patch 触达）。
+    monkeypatch.setattr(db_content, "preset_processed_data_path", lambda: str(tmp_path / "nope.json"))
     database._reset_preset_processed_cache()
     with caplog.at_level(logging.WARNING, logger="delector"):
         raw = database.preset_processed_json(database.PRESET_ARTICLES[0]["text"])

@@ -28,6 +28,7 @@ import pytest
 
 from delector.core import database
 from delector.core.database import get_vocab_by_cefr
+from delector.core.db import vocab as db_vocab
 from delector.data.core_dict import CORE_VOCAB_DB
 
 # 唯一契约字段集（ADR-0013 §4-1：9 → 11；ADR-0014 §6-S1：11 → 12，新增 letter；
@@ -72,10 +73,12 @@ B1_TOTAL = sum(1 for val in CORE_VOCAB_DB.values() if val[0].upper() == "B1")
 def fresh_vocab_caches():
     """隔离两级模块缓存，防跨测试泄漏。"""
     database._reset_a1_workbench_cache()
-    database._A2_VOCAB_CACHE = None
+    # A2 缓存**住** `delector/core/db/vocab.py`（定义模块）——置空必须打在它上；只改
+    # `database` 的同名再导出**绑定**不会让 vocab 的缓存失效（B4 Task 4 的 patch 触达）。
+    db_vocab._A2_VOCAB_CACHE = None
     yield
     database._reset_a1_workbench_cache()
-    database._A2_VOCAB_CACHE = None
+    db_vocab._A2_VOCAB_CACHE = None
 
 
 def _assert_contract_uniform(words: List[Dict[str, Any]], min_count: int) -> None:

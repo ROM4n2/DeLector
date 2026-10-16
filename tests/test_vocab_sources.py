@@ -20,6 +20,7 @@ import pytest
 
 from delector.core import database
 from delector.core.database import get_vocab_by_cefr
+from delector.core.db import vocab as db_vocab
 from delector.core.lexicon import official_level
 from delector.data.core_dict import CORE_VOCAB_DB
 
@@ -55,10 +56,12 @@ DEFAULT_B1_TOTAL = sum(1 for val in CORE_VOCAB_DB.values() if val[0].upper() == 
 def fresh_vocab_caches():
     """隔离模块级缓存，防跨测试泄漏（同 test_vocab_contract_uniform）。"""
     database._reset_a1_workbench_cache()
-    database._A2_VOCAB_CACHE = None
+    # A2 缓存**住** `delector/core/db/vocab.py`（定义模块）——置空必须打在它上；只改
+    # `database` 的同名再导出**绑定**不会让 vocab 的缓存失效（B4 Task 4 的 patch 触达）。
+    db_vocab._A2_VOCAB_CACHE = None
     yield
     database._reset_a1_workbench_cache()
-    database._A2_VOCAB_CACHE = None
+    db_vocab._A2_VOCAB_CACHE = None
 
 
 # ── 交付 1：lexicon.official_level ──────────────────────────────────────────
