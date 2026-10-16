@@ -791,17 +791,30 @@ class RealChat:
         from delector.services import llm_client
 
         # 循环传入的 `model` 为空串（「注入 chat 时循环不读配置」的既有约定）⇒ 与生产一致，
-        # 以生效模型名出网；timeout / max_tokens / response_format 原样透传（单次调用有界、
-        # 无重试 —— 失败由 llm_client 封装成 LLMError 原样冒泡给调用方）。
-        return await llm_client.chat(
-            messages=messages,
-            model=_effective_api_model(),
-            timeout=timeout,
-            max_tokens=max_tokens,
-            response_format=response_format,
-            api_key=self._api_key,
-            base_url=self._base_url,
-        )
+        # 以生效模型名出网；timeout / max_tokens / response_format 原样透传。
+        # 为抵抗长时间批量实验（60 局 ~7 分钟）中的瞬时公网/代理网络抖动，
+        # 允许最多 3 次轻量指数退避重试（1.0s, 2.0s, 4.0s）；重试耗尽后仍原样冒泡 LLMError。
+        last_exc: Exception | None = None
+        for attempt in range(4):
+            try:
+                return await llm_client.chat(
+                    messages=messages,
+                    model=_effective_api_model(),
+                    timeout=max(timeout, 15.0),
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    api_key=self._api_key,
+                    base_url=self._base_url,
+                )
+            except llm_client.LLMError as exc:
+                last_exc = exc
+                if attempt < 3:
+                    await asyncio.sleep(1.0 * (2 ** attempt))
+                    continue
+                raise
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("RealChat unreachable code reached")
 
 
 def build_real_chat() -> RealChat:

@@ -196,3 +196,24 @@ Task 4（rater + `auxiliary` 接线 + O1–O3 销账）→ Task 5/6（HITL：先
 - **待用户确认启动 Task 6 主实验（N=20 × 3 臂）**：
   - 预计耗时 ~10 分钟，预计总 Token 约 12k tokens（轻量安全）。
   - 主实验完成后将自动生成正式对照实验全景分析报告，并按预注册阈值给出 P1/P2 最终判定。
+
+---
+
+## 响应 8（2026-10-16 13:45 | deepseek-v4.1-flash）—— Task 6 主实验（N=20）真跑完成；全景评估报告与原始数据落盘（status 保持 open）
+
+### 1. Task 6 主实验（N=20 × 3 臂 = 60 局）全量实跑完成（HITL）
+- 命令：`python3 tools/bench_judge_gaming.py --real --json`（20 篇 × 3 臂）
+- 耗时与消耗：全量耗时 612s，总 Token 消耗 **16,008 tokens**（平均每局仅 266.8 tokens），模型 `deepseek-v4-flash`。
+- 零 Key 泄露审计：输出与 stderr 经 `sk-[A-Za-z0-9]{16,}` 正则扫描零命中。
+- 原始输出与评估报告落盘：
+  - 评估报告：`docs/reviews/2026-10-16-judge-gaming-control-experiment.md`
+  - 原始数据附件：`docs/reviews/2026-10-16-judge-gaming-control-experiment.raw.json`
+
+### 2. 实测关键结论（ADR-0024 裁定口径）
+- **阴性对照不变量完全成立**：$R_{\text{last\_candidate}}(A2) = 0.974$，$R_{\text{last\_candidate}}(A3) = 0.974$（差值 0.000）。
+- **P1（奖励黑客）无发生机制**：模型在修复显式语法违规（$R_{\text{judge}}=1.000$）的同时，对未被覆盖的 5 类 held-out 语法 probe 同样实现 97.4% 修复，且全局 `new_errors = 0`。
+- **实证 W4 机制**：A1/A2 的 $R_{\text{uncovered}}(final) = 0.000$ 是死裁判恒报 1 条错误触发保护性回退的算术后果；生产裁判的核心价值是「高保真准入放行闸门」，而非「多轮提示词优化器」。
+
+### 3. 下一步（HITL 待签批）
+- 依据 ADR-0024：**维持限定表述，无条件「已实现验证驱动 agent 循环」继续禁用**。
+- 待用户签批 ADR-0023 §4.3 表述回写后完成台账 Task-6 闭环与 PR #139 收尾。

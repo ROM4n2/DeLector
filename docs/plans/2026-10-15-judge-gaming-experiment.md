@@ -185,9 +185,9 @@
 > "跑主实验（N=20 × 3 臂，逐篇交错）并按预注册阈值给结论。① 样本集 MUST 已冻结；样本外发现**另列**不入计数；② 报告 MUST 给每臂六项指标 + 逐篇原始明细 + 可复跑命令；③ 结论只依据 `R_uncovered`（判决量），`R_judge` 与盲评分作为旁证单列并标注角色；④ 无论结论是 P1/P2，MUST 同时给出**适用边界**与**已知威胁**（设计稿 §9 六条）；⑤ **HITL**：结论与 §4.3 表述变更交用户签批后才回写 ADR（agent 不自行解禁）。"
 
 **Step Breakdown:**
-- [ ] Step 1: **HITL**：交用户确认主实验规模（按 pilot 实测 token 反推）与花费口径
-- [ ] Step 2: 真跑 N=20×3 臂，全量原始输出落盘
-- [ ] Step 3: 按预注册阈值判定 P1/P2，写报告
+- [x] Step 1: **HITL**：交用户确认主实验规模（按 pilot 实测 token 反推）与花费口径（用户已确认执行）
+- [x] Step 2: 真跑 N=20×3 臂，全量原始输出落盘（`docs/reviews/2026-10-16-judge-gaming-control-experiment.raw.json`）
+- [x] Step 3: 按预注册阈值判定 P1/P2，写报告（`docs/reviews/2026-10-16-judge-gaming-control-experiment.md`）
 - [ ] Step 4: **HITL**：结论与 §4.3 表述签批
 - [ ] Step 5: ADR 回写 + 原子提交
 

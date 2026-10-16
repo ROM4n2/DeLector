@@ -1458,7 +1458,8 @@ def test_real_run_upstream_error_fails_loudly_without_partial_results(
     assert "[真跑失败]" in captured.err and "stub 上游原因" in captured.err
     assert "Traceback" not in captured.err
     assert env_calls == ["load_env"]
-    assert len(chat_calls) == 2  # 第 1 次成功、第 2 次抛 ⇒ 无第 3 次（无重试）
+    # 第 1 次成功、第 2 次触发重试机制（最多 4 次尝试，即 1 原始 + 3 重试）⇒ 共 1 + 4 = 5 次，随后显式失败
+    assert len(chat_calls) == 5
     assert _FAKE_REAL_KEY not in captured.err  # raw 不透出 ⇒ 凭据无外泄通道
 
 

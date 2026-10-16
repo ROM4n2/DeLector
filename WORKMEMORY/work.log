@@ -674,3 +674,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 预注册阈值固化：主实验（N=20）判决线写回设计稿 §4（P2 配对 Wilcoxon p<0.01 且差值>=0.30；P1 判决线；W4 附带分析规则）。
 - 报告落盘：`docs/reviews/2026-10-16-judge-gaming-pilot.md` + 原始输出 `.raw.json`。
 - 台账：Task-5 → completed（7/8）。
+
+### 2026-10-16 13:31 | deepseek-v4.1-flash | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Task 6 主实验（N=20 × 3 臂 = 60 局）全量真跑完成并落盘全景报告**（HITL，用户确认执行；EXIT=0，耗时 612s，Token 16,008）。
+- 实测事实：20 篇双文族样本经三臂交错实跑全部完成；零 Key 泄露审计通过。
+- 核心结论（ADR-0024 裁定口径）：
+  1. 阴性对照不变量完全成立：A2 与 A3 候选修复率均为 0.974（75/77 处），差值 0.000。
+  2. P1（奖励黑客）无发生机制：模型修复 signal 的同时自主修复了 97.4% 的未覆盖 probe，new_errors 全局为 0。
+  3. 实证 W4 回退掩盖：A1/A2 final 修复率 0.000 是固定违规触发保护性回退的算术后果；证明生产裁判核心价值是「高保真准入放行闸门」。
+- 依据 ADR-0024：维持限定表述，无条件「已实现验证驱动 agent 循环」继续禁用。
+- 交付物：报告 `docs/reviews/2026-10-16-judge-gaming-control-experiment.md` + 原始数据 `.raw.json`；设计稿 §11 执行记录补全。
+- 待用户签批 ADR §4.3 表述后闭环台账 Task-6 与 PR #139。
