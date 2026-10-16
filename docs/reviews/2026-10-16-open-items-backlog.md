@@ -31,12 +31,14 @@
 
 ## B 档：需要你拍板才能动
 
+> **本轮结算（2026-10-16，计划 `docs/plans/2026-10-16-audit-fixes-b-series.md`）**：**B1 / B2 / B3 / B5 已落地**（用户授权）；**B4 已转计划** → 另开 `refactor/database-split` 分支与 PR（2809 行结构重构不混进 bugfix PR）。三处已裁决的偏离记在各自提交信息里：① B1 把 `--no-merges` 修正为 `--no-merges --first-parent`（否则 CI 会在**每次正常 PR 合并**时把 master 推红 —— 有实测铁证）；② B3 保留 `docs/design-system.md` 既有 LF 不翻转（避免 659 行全量 diff，交 B2 契约在下次 checkout 归一）；③ B5 的 `EST_COST_PER_1K_TOKENS_USD=0.001` 标 UNVERIFIED。
+
 | ID | 事项 | 要你定什么 | 依据 |
 | --- | --- | --- | --- |
 | **B1** | **P1-1 分支纪律机械闸**：pre-push hook 或 CI job 断言「master 上非 merge 提交的改动面 ⊆ {WORKMEMORY/, docs/, README.md, CHANGELOG.md, static/index.html, static/sw.js, android/app/build.gradle, delector/core/version.py}，否则 fail」 | ① 白名单口径；② 接受「合并得走 SSH 本地 `--no-ff`」（本仓 `gh` token 无 `workflow` scope，#136/#137 已演示过该路径） | `docs/reviews/2026-10-16-commit-rhythm-and-git-management-audit.md` P1-1。2026-10-09~14 有 **25 个实现类提交直推 master**，已有实发事故 `f49d359`（直推把 master 推红才回头补）；规则 2026-10-14 才进可见文档 ⇒ 此前 agent 按 `AGENTS.md` 读不到 |
 | **B2** | **P2-7 `.gitattributes` CRLF 契约**：加 `* text=auto eol=crlf`（置于 `*.go text eol=lf` **之前**，让具体规则覆盖通用规则） | 要把「行尾 CRLF 是纪律」从**本机 `core.autocrlf=true` 的副作用**升级为**仓库契约**吗？副作用：Linux/macOS clone 也会拿到 CRLF（这正是意图），但属跨平台行为变更 | 同报告 P2-7。现状：`.py/.md/.js` 无 attr，实测 `attr/` 空 + `w/crlf`；9 个跟踪文件工作区 `w/mixed`（历史干净） |
 | **B3** | **P2-3 `docs/design-system.md` 定夺**（606 行） | 二选一：① 在 `AGENTS.md` 路由表补入口并同步 token 表现在值；② 把状态改为「历史设计稿（v3.0 · 2026-08，未随 tokens.css 同步）」 | 结构 audit P2-4。现状：被 `docs/README.md:16` 列为**顶层常青规范**但全仓零入口；`--bone`/`--ink-blue`/`--paper-dark` 等 7 token 与 5 个色值在 CSS 里**逐个 grep 零命中** |
-| **B4** | **`core/database.py` 按职责切分**（2809 行 / 86 def / 9 组职责 / 32 处被 import） | 时机：报告建议 **A1 修完并补契约测试之后**再切（否则切模块会顺手丢掉「清单 ↔ 还原模型」这类不变量） | `docs/reviews/2026-10-15-refactor-candidates.md` 候选 #1；已知与 `nlp_engine/processor` 有双向耦合 |
+| **B4** ✅ **已转计划** | **`core/database.py` 按职责切分**（2809 行 / 86 def / 9 组职责 / 32 处被 import） | 前置已满足（**A1 已修完**：清单↔字段集契约测试在 `tests/test_ci_hardening.py` 落地）⇒ 本轮开工，走 `refactor/database-split` 分支；形状 = **compat façade 不动公开面**（32 个 import 点零改动）+ 先补契约测试再动骨架 | `docs/reviews/2026-10-15-refactor-candidates.md` 候选 #1；与 `nlp_engine/processor` 有已知双向耦合 |
 | **B5** | **实验 harness 工程前置**（7 件）：逐篇落盘+断点续跑 / 有界重试（429/5xx/传输层，2 次+退避+jitter）/ `temperature` 显式钉定并记入 `RunRecord` / `--real` 连通预检 / 成本硬闸 / rater 补可执行入口 / `llm_client.chat` 透出 `usage` | 只在「要重跑或续跑实验」时才值得全做；不跑的话至少做 **temperature 钉定 + usage 透出**两项（成本记账要用，现在走 `ceil(len/3.0)` 且只计 completion、不计 prompt，系数登记 UNVERIFIED） | ADR-0024 Consequences「已知未决」；`docs/reviews/2026-10-16-judge-gaming-control-experiment.md` |
 
 ---
