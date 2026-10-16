@@ -395,3 +395,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 事件：`archive/handoff_audit-fixes-a-b.md` 按用户交办**标记闭合**（status → closed，正文追加「响应」节；原包移入 `archive/`，INDEX Active handoffs 行改挂到「已归档 handoffs」）。
 说明：接收方尚未到岗，由发送方自行闭合以免 Active handoffs 长期挂已完成项；包内 A/B 两批与 WORKMEMORY/docs 整理的最终态见该包「响应」节。
 下一步（唯一入口）：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项，其中 C1「裁判结论回灌」为无条件下一步。
+### 2026-10-17 01:06 | deepseek-v4.1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**dfs-onboard 接管会话**（Hermes / DeepSeek-V4.1-Flash）。读毕 `archive/handoff_audit-fixes-a-b.md`（含响应 + 进展补充节）与 `handoff_no-console-feedback-gaps.md`；无未闭合 WORK_START。
+基线核验：master `dbc910d` CI 全绿（Tests & Go Gates 7m2s；Windows 产物冒烟按打包面检测正常 skip）；本地定向冒烟 23 passed（`test_app_version_source` 21 + `test_save_wb_state_cost` 2）；python3 3.11.8 / fastapi 0.141.1 / spacy 3.8.16 / pytest 9.1.1。
+处置（用户交办）：
+- **stray `progress.db` 隔离**：根目录曾有一份 53,248B、mtime 10-16 21:49 的库，与 `progress.db.bak-20261016-175607` **逐字节相同**、无历史记录；实测**不**触发 save_wb_state 迁移闸（该文件 2 passed）。已改名 `progress.db.dup-20261016-2149`（原件不删）。
+- **IDE 记忆层误产物仍活跃**：00:54–00:55 又新增 2 个 0 字节文件（屏幕形如 `**Goal**:`、`**本轮结算（2026-10-16，计划`；名内为不可见 U+F02A 映射字符），超出 00:49 exclude 的覆盖 ⇒ 已按既有惯例追加进 `.git/info/exclude`（本地文件不入库；文件本体保留）。根治须在 IDE/记忆层侧。
+杂项：`tests/test_*.py` 现读 126（docs 写 125）——随下次发版版本面同步一并核。
+下一步：C 档 8 项（C1 回灌为无条件下一步），待用户点名。
+
