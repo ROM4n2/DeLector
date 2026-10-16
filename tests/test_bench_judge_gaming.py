@@ -46,8 +46,15 @@
         不透 `raw`（raw 可能带凭据）；生效模型名进 `RunRecord.model`；文本/JSON 输出面与 dry-run
         同构（头行如实标注真跑模式）。
 
-    反挂死纪律：无 sleep / 无线程；唯一的子进程调用带固定 timeout（≤120s，实测 CLI 全
-    干跑约 10s 量级）。
+    12. **Task 4（B5）七件工程前置**（全 stub、零真跑）：① 逐（篇 × 臂）JSONL 增量落盘 +
+        `--resume` 幂等（重跑只补缺）；② 有界重试（429/5xx/传输层 ≤2 次、指数退避 + jitter；
+        重试耗尽标 `status="failed"` 并继续；不可重试（401）立即冒泡）；③ `temperature` 钉定并
+        入 `RunRecord` + 模型名入输出头；④ `--real` 连通预检失败 ⇒ 退 2；⑤ 成本硬闸触顶 ⇒ 独立
+        退码 3；⑥ rater 入口住 `tests/test_bench_judge_rater.py`；⑦ usage 真值入 `RunRecord`、
+        估算 `ceil(len/3.0)` 作对照。`RunRecord` 由十键扩为 **15 键**（有意契约演进）。
+
+    反挂死纪律：无真 sleep（重试测试置 `RETRY_BASE_DELAY_S=0` 且 jitter=0）/ 无线程；唯一的
+    子进程调用带固定 timeout（≤120s，实测 CLI 全干跑约 10s 量级）。
 """
 
 import ast
@@ -79,6 +86,12 @@ _RECORD_FIELDS = {
     "model",
     # Task-4b 有意契约演进（非回归）：第十键 = W4 附带指标的记录面（None = 全程无候选）。
     "last_candidate_text",
+    # Task 4（B5）有意契约演进（非回归）：②③⑦ 的五键 —— temperature / 真值 usage / 估算对照 / 状态。
+    "temperature",
+    "prompt_tokens",
+    "completion_tokens",
+    "estimated_completion_tokens",
+    "status",
 }
 
 
@@ -548,8 +561,16 @@ def _record(
     elapsed_s: float = 0.0,
     model: str = bench.DRY_RUN_MODEL,
     last_candidate_text: str | None = None,
+    temperature: float = bench.EXPERIMENT_TEMPERATURE,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    estimated_completion_tokens: int = 0,
+    status: str = "ok",
 ) -> Any:
-    """构造固定 RunRecord（Task 3 数学测试用；字段与契约逐字对应 —— Task-4b 增第十字段）。"""
+    """构造固定 RunRecord（Task 3 数学测试用；字段与契约逐字对应）。
+
+    Task-4b 增第十字段（`last_candidate_text`）；Task 4（B5）增 ②③⑦ 的五字段。
+    """
     return bench.RunRecord(
         arm=arm,
         case_id=case_id,
@@ -561,6 +582,11 @@ def _record(
         elapsed_s=elapsed_s,
         model=model,
         last_candidate_text=last_candidate_text,
+        temperature=temperature,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        estimated_completion_tokens=estimated_completion_tokens,
+        status=status,
     )
 
 
@@ -1137,7 +1163,7 @@ def test_cli_text_report_prints_summary_block(
             last_candidate_text=case.clean_text,
         ),
     ]
-    monkeypatch.setattr(bench, "run_dry_run", lambda cases: list(records))
+    monkeypatch.setattr(bench, "run_dry_run", lambda cases, **kwargs: list(records))
 
     rc = bench.main(["--dry-run"])
     captured = capsys.readouterr()
@@ -1296,6 +1322,8 @@ def _install_real_stubs(
     monkeypatch.setattr(llm_client_module, "get_effective_api_key", lambda *a, **k: key)
     monkeypatch.setattr(llm_client_module, "get_effective_api_base_url", lambda *a, **k: _FAKE_REAL_BASE + "/")
     monkeypatch.setattr(bench, "_effective_api_model", lambda: _FAKE_REAL_MODEL)
+    # ④ 连通预检默认装成 no-op：臂级用例只关心正式跑的 chat 调用；预检自身的失败面由专项用例覆盖。
+    monkeypatch.setattr(bench, "run_connectivity_precheck", lambda: None)
     chat_calls: list[dict[str, Any]] = []
 
     async def stub_chat(**kwargs: Any) -> Any:
@@ -1365,6 +1393,8 @@ def test_real_run_wires_production_shaped_chat_and_records(
             "timeout",
             "max_tokens",
             "response_format",
+            "temperature",
+            "include_usage",
             "api_key",
             "base_url",
         }
@@ -1372,6 +1402,8 @@ def test_real_run_wires_production_shaped_chat_and_records(
         assert call["api_key"] == _FAKE_REAL_KEY  # key 真进了出网口（未丢失；输出面另钉零泄漏）
         assert call["base_url"] == _FAKE_REAL_BASE  # 生产 .rstrip("/") 口径
         assert call["response_format"] == llm_client_module.JSON_OBJECT
+        assert call["temperature"] == bench.EXPERIMENT_TEMPERATURE  # ③ temperature 钉定并出网
+        assert call["include_usage"] is True  # ⑦ opt-in usage 透出
         assert 0.0 < call["timeout"] <= 30.0  # 有界：min(DEFAULT_PER_CALL_TIMEOUT_S, 剩余 deadline)
         assert 0 < call["max_tokens"] <= llm_client_module.DEFAULT_MAX_TOKENS
         assert call["messages"][0]["role"] == "system" and str(call["messages"][0]["content"]).strip()
@@ -1423,14 +1455,101 @@ def test_real_run_without_key_exits_2_before_any_chat(
     assert chat_calls == []  # 先于任何出网
 
 
-def test_real_run_upstream_error_fails_loudly_without_partial_results(
+def test_real_run_bounded_retry_backoff_retryable_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """② 有界重试：只对 429/5xx/**传输层**错；≤ `MAX_RETRIES` 次、指数退避 + jitter；不可重试立即抛。
+
+    单行变异靶点：把 `attempt >= MAX_RETRIES or not _is_retryable_llm_error(exc)` 改成
+    `attempt >= MAX_RETRIES`（无差别重试）⇒ 401 分支会重试 ⇒ 尝试次数断言立红。
+    """
+    import delector.services.llm_client as llm_client_module
+
+    monkeypatch.setattr(bench, "_jitter", lambda upper: 0.0)  # 关掉 jitter ⇒ 退避序列可断言
+    monkeypatch.setattr(bench, "RETRY_BASE_DELAY_S", 1.0)
+    monkeypatch.setattr(bench, "_effective_api_model", lambda: _FAKE_REAL_MODEL)
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    def make_chat(status: int | None, counter: list[int]) -> Any:
+        async def _chat(**kwargs: Any) -> Any:
+            counter[0] += 1
+            raise llm_client_module.LLMError(f"AI 服务异常 ({status})", status_code=status)
+
+        return _chat
+
+    # 可重试三态：429 / 503 / 传输层（status None）—— 都是 1 原始 + 2 重试 = 3 次尝试
+    for status in (429, 503, None):
+        counter = [0]
+        monkeypatch.setattr(llm_client_module, "chat", make_chat(status, counter))
+        chat = bench.RealChat("k", "http://stub.invalid", sleep=fake_sleep)
+        with pytest.raises(llm_client_module.LLMError):
+            asyncio.run(chat(messages=[{"role": "user", "content": "x"}], model="", timeout=1.0, max_tokens=8))
+        assert counter[0] == 1 + bench.MAX_RETRIES == 3, f"status={status} 应恰 3 次尝试"
+
+    # 退避 + jitter（jitter=0）⇒ 每次尝试序列 = [base*2**0, base*2**1] = [1.0, 2.0]；三种可重试态各一轮
+    assert sleeps == [1.0, 2.0] * 3, f"退避序列不对：{sleeps}"
+
+    # 不可重试（401）⇒ 只 1 次尝试、立即抛（不重试、不退避）
+    sleeps.clear()
+    counter = [0]
+    monkeypatch.setattr(llm_client_module, "chat", make_chat(401, counter))
+    chat = bench.RealChat("k", "http://stub.invalid", sleep=fake_sleep)
+    with pytest.raises(llm_client_module.LLMError):
+        asyncio.run(chat(messages=[{"role": "user", "content": "x"}], model="", timeout=1.0, max_tokens=8))
+    assert counter[0] == 1 and sleeps == [], "不可重试错误 MUST 立即冒泡（无重试、无退避）"
+
+
+def test_real_run_retryable_exhaustion_marks_failed_and_continues(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """上游 `LLMError` ⇒ 显式失败：退 2 + stderr 人话原因；**零部分结果**（stdout 全空）。
+    """② 可重试错误重试耗尽 ⇒ 标 `status="failed"` 并**继续**（不中止），但显式退 2（不静默）。
 
-    第 1 次 chat 成功、第 2 次抛 ⇒ 若实现有「静默部分结果」路径，stdout 会出现记录 —— 本断言即闸；
-    同时钉「无重试」（chat 恰 2 次）与「异常面只透 detail、不透 raw」（raw 可能带凭据 ⇒ 假 key
-    塞进 raw，断言其绝不外泄）。
+    构造：第 1 次 chat 成功（A1 收敛）、其后所有 chat 抛**传输层** `LLMError` ⇒ A1 ok、A2/A3
+    failed；stdout 含**部分结果**（不静默丢弃）、退出码 2；`raw`（含假 key）不透出。
+    """
+    _require_nlp()
+    import delector.services.llm_client as llm_client_module
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    case = SEED_CASES[0]
+    monkeypatch.setattr(bench, "_jitter", lambda upper: 0.0)
+    monkeypatch.setattr(bench, "RETRY_BASE_DELAY_S", 0.0)  # 测试不真睡
+
+    def reply_factory(n: int) -> Any:
+        if n == 1:
+            return {"corrected_text": case.clean_text, "notes_zh": []}
+        raise llm_client_module.LLMError(
+            "AI 服务连接失败（stub 传输层）", raw=f"stub raw 可能带凭据：{_FAKE_REAL_KEY}"
+        )
+
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: [case])
+    env_calls, _chat_calls = _install_real_stubs(monkeypatch, reply_factory=reply_factory)
+    capsys.readouterr()
+
+    rc = bench.main(["--real", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 2  # 有失败单元 ⇒ 显式退 2（不是静默 0）
+    data = json.loads(captured.out)  # 部分结果**如实产出**（不静默丢弃）
+    assert len(data) == 3  # 三臂都跑到（首臂失败不中断后续）
+    by_arm = {record["arm"]: record for record in data}
+    assert by_arm["a1_baseline"]["status"] == "ok"
+    assert by_arm["a2_no_signal"]["status"] == "failed"
+    assert by_arm["a3_current"]["status"] == "failed"
+    assert "重试耗尽" in captured.err
+    assert "Traceback" not in captured.err
+    assert env_calls == ["load_env"]
+    assert _FAKE_REAL_KEY not in captured.err  # raw 不透出 ⇒ 凭据无外泄通道
+
+
+def test_real_run_non_retryable_error_fails_fast_without_partial_results(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """不可重试错误（401）⇒ 立即冒泡：退 2、**零部分结果**（stdout 全空）、只 1 次尝试。
+
+    单行变异靶点：把 `_is_retryable_llm_error` 改成恒 True ⇒ 401 会被标 failed 继续、stdout
+    出现记录 ⇒ `captured.out == ""` 立红。
     """
     _require_nlp()
     import delector.services.llm_client as llm_client_module
@@ -1439,28 +1558,21 @@ def test_real_run_upstream_error_fails_loudly_without_partial_results(
     case = SEED_CASES[0]
 
     def reply_factory(n: int) -> Any:
-        if n == 1:
-            return {"corrected_text": case.clean_text, "notes_zh": []}
-        raise llm_client_module.LLMError(
-            "AI 服务连接失败（stub 上游原因）", raw=f"stub raw 可能带凭据：{_FAKE_REAL_KEY}"
-        )
+        raise llm_client_module.LLMError("AI 服务异常 (401)", status_code=401, raw=f"raw:{_FAKE_REAL_KEY}")
 
     monkeypatch.setattr(bench, "load_seed_cases", lambda: [case])
     env_calls, chat_calls = _install_real_stubs(monkeypatch, reply_factory=reply_factory)
-    # 清掉 import 期诊断行（若本用例是全进程首个触发 spaCy / llm_client 装载的用例）：只清
-    # 「main 之前」的噪声 —— main 自身的 stdout 契约（纯 JSON / 零输出）断言不受影响。
     capsys.readouterr()
 
     rc = bench.main(["--real", "--json"])
     captured = capsys.readouterr()
-    assert rc == 2  # 退码钉死：上游失败属「环境不可用」类（1 是样本集无效，不复用）
-    assert captured.out == ""  # 绝不静默部分结果
-    assert "[真跑失败]" in captured.err and "stub 上游原因" in captured.err
+    assert rc == 2
+    assert captured.out == ""  # 不可重试：不吞、不继续、不产出部分结果
+    assert "[真跑失败]" in captured.err and "401" in captured.err
     assert "Traceback" not in captured.err
+    assert len(chat_calls) == 1  # 不可重试 ⇒ 只 1 次尝试（无退避重试）
+    assert _FAKE_REAL_KEY not in captured.err
     assert env_calls == ["load_env"]
-    # 第 1 次成功、第 2 次触发重试机制（最多 4 次尝试，即 1 原始 + 3 重试）⇒ 共 1 + 4 = 5 次，随后显式失败
-    assert len(chat_calls) == 5
-    assert _FAKE_REAL_KEY not in captured.err  # raw 不透出 ⇒ 凭据无外泄通道
 
 
 def test_real_run_text_mode_reports_records_and_summary_like_dry_run(
@@ -1513,3 +1625,251 @@ def test_harness_source_confines_key_and_env_loading_to_the_real_branch() -> Non
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "load_env"
     ]
     assert len(load_env_calls) == 1, f"load_env 调用点必须恰一处（实际 {len(load_env_calls)}）"
+
+
+# ── Task 4（B5）：① 增量落盘 + --resume / ③ temperature / ④ 连通预检 / ⑤ 成本闸 / ⑦ usage ──
+
+
+def _nonblank_lines(path: Path) -> list[str]:
+    """JSONL 文件里的非空行（`--save` 落盘面）。"""
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def test_record_dict_round_trips_all_fifteen_fields() -> None:
+    """契约面：`record_to_dict` 恰好 15 键，且 `_record_from_dict` 往返无损（① JSONL 的读回面）。"""
+    record = _record(
+        case_id="rt",
+        final_text="x",
+        temperature=0.0,
+        prompt_tokens=3,
+        completion_tokens=5,
+        estimated_completion_tokens=7,
+        status="failed",
+    )
+    data = bench.record_to_dict(record)
+    assert set(data) == _RECORD_FIELDS
+    assert bench._record_from_dict(data) == record
+
+
+def test_jsonl_store_writes_one_line_per_unit_and_resume_is_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """① 逐篇增量落盘 + `--resume`：每（篇 × 臂）一行、完整 RunRecord；重跑只补缺（幂等）。
+
+    单行变异靶点：抽掉 `_run_units` 里 `if store is not None and store.is_done(...): continue`
+    ⇒ 续跑会重复落盘 ⇒ 行数断言立红。
+    """
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: list(SEED_CASES[:3]))
+    path = tmp_path / "records.jsonl"
+
+    # 第一段：只跑前 2 篇 ⇒ 6 行（2 × 3 臂），每行都是完整 RunRecord
+    assert bench.main(["--dry-run", "--save", str(path), "--cases", "2"]) == 0
+    first = _nonblank_lines(path)
+    assert len(first) == 6
+    for line in first:
+        record = json.loads(line)
+        assert set(record) == _RECORD_FIELDS
+        assert record["case_id"] and record["arm"]
+
+    # 续跑：跑到 3 篇 + --resume ⇒ 只补第 3 篇的 3 行（既有 6 行不动）
+    assert bench.main(["--dry-run", "--save", str(path), "--cases", "3", "--resume"]) == 0
+    lines = _nonblank_lines(path)
+    assert len(lines) == 9
+    assert {json.loads(line)["case_id"] for line in lines} == {case.id for case in SEED_CASES[:3]}
+
+    # 幂等：再续跑一次 ⇒ 行数不变（已跑单元全部跳过）
+    assert bench.main(["--dry-run", "--save", str(path), "--cases", "3", "--resume"]) == 0
+    assert _nonblank_lines(path) == lines
+
+
+def test_cli_resume_requires_save(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--resume` 不给 `--save` ⇒ argparse 报错退 2（没有落盘仓无从续跑）。"""
+    with pytest.raises(SystemExit) as excinfo:
+        bench.main(["--dry-run", "--resume"])
+    assert excinfo.value.code == 2
+    assert "--resume 需要 --save" in capsys.readouterr().err
+
+
+def test_chat_recorder_accumulates_usage_truth_and_estimate_independently() -> None:
+    """⑦ 计量：usage 真值（prompt/completion 分别累加）与 `ceil(len/3.0)` 估算**并列**，互不覆盖。"""
+    reply = {"corrected_text": "候选", "usage": {"prompt_tokens": 30, "completion_tokens": 12}}
+    expected_est = bench._estimate_tokens(json.dumps(reply, ensure_ascii=False, sort_keys=True))
+
+    async def inner(**kwargs: Any) -> Any:
+        return reply
+
+    recorder = bench._ChatRecorder(inner)
+    asyncio.run(recorder())
+    asyncio.run(recorder())
+    assert recorder.prompt_tokens == 60  # 真值累加（两次）
+    assert recorder.completion_tokens == 24
+    assert recorder.estimated_completion_tokens == 2 * expected_est  # 估算对照始终累加
+    assert recorder.last_candidate_text == "候选"
+
+
+def test_chat_recorder_usage_is_zero_when_absent() -> None:
+    """真值缺席（无 usage）⇒ prompt/completion = 0（**不用估算冒充真值**），估算仍照算。"""
+
+    async def inner(**kwargs: Any) -> Any:
+        return {"corrected_text": "x"}
+
+    recorder = bench._ChatRecorder(inner)
+    asyncio.run(recorder())
+    assert recorder.prompt_tokens == 0 and recorder.completion_tokens == 0
+    assert recorder.estimated_completion_tokens > 0
+
+
+def test_run_arm_records_temperature_model_usage_truth_and_estimate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """③⑦ 端到端：`RunRecord` 记 temperature（取自 chat）、model、真值 usage 与估算对照。"""
+    _require_nlp()
+    from delector.services.polish_loop import LoopResult
+
+    reply = {"corrected_text": "修复文本", "usage": {"prompt_tokens": 41, "completion_tokens": 17}}
+    expected_est = bench._estimate_tokens(json.dumps(reply, ensure_ascii=False, sort_keys=True))
+
+    async def fake_loop(**kwargs: Any) -> Any:
+        await kwargs["chat"](messages=[{"role": "user", "content": "x"}], model="", timeout=1.0, max_tokens=8)
+        kwargs["on_progress"]({"event": "done", "tokens_used": 17, "elapsed": 0.05})
+        return LoopResult(text=kwargs["text"], converged=False, reason="turn_limit", rounds=1, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", fake_loop)
+
+    class StubChat:
+        model_name = "stub-usage-3-7"
+        temperature = 0.25  # 证明 run_arm 从 chat 读 temperature（而非硬写常量 0.0）
+
+        async def __call__(self, **kwargs: Any) -> Any:
+            return reply
+
+    record = bench.run_arm(_case(), bench.Arm.A3_CURRENT, chat=StubChat())
+    assert record.model == "stub-usage-3-7"
+    assert record.temperature == 0.25
+    assert record.prompt_tokens == 41 and record.completion_tokens == 17
+    assert record.estimated_completion_tokens == expected_est  # 估算对照与真值并列
+    assert record.status == "ok"
+
+
+def test_run_arm_defaults_temperature_to_experiment_constant(monkeypatch: pytest.MonkeyPatch) -> None:
+    """③ 无 `temperature` 属性的 chat（dry-run stub）⇒ 回落到 `EXPERIMENT_TEMPERATURE`。"""
+    _require_nlp()
+    from delector.services.polish_loop import LoopResult
+
+    async def fake_loop(**kwargs: Any) -> Any:
+        kwargs["on_progress"]({"event": "done", "tokens_used": 1, "elapsed": 0.0})
+        return LoopResult(text=kwargs["text"], converged=False, reason="turn_limit", rounds=1, violations=[])
+
+    monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", fake_loop)
+    chat = bench.build_dry_run_chat(_case())  # 无 temperature 属性
+    record = bench.run_arm(_case(), bench.Arm.A1_BASELINE, chat=chat)
+    assert record.temperature == bench.EXPERIMENT_TEMPERATURE == 0.0
+
+
+def test_run_connectivity_precheck_minimal_bounded_call_or_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """④ 预检：一次最小 chat（`parse_json=False`、`max_tokens=CONNECTIVITY_MAX_TOKENS`、有超时）；
+    成功 ⇒ None；任何 `LLMError` ⇒ `RealRunUnavailable`（调用方退 2）。"""
+    import delector.services.llm_client as llm_client_module
+
+    monkeypatch.setattr(bench, "_effective_api_key", lambda: "k")
+    monkeypatch.setattr(bench, "_effective_api_base_url", lambda: "http://stub.invalid/v1/")
+    monkeypatch.setattr(bench, "_effective_api_model", lambda: _FAKE_REAL_MODEL)
+
+    seen: dict[str, Any] = {}
+
+    async def ok(**kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return {"content": "OK"}
+
+    monkeypatch.setattr(llm_client_module, "chat", ok)
+    assert bench.run_connectivity_precheck() is None
+    assert seen["parse_json"] is False
+    assert seen["max_tokens"] == llm_client_module.CONNECTIVITY_MAX_TOKENS
+    assert isinstance(seen["timeout"], float) and seen["timeout"] > 0  # 反挂死：有超时
+    assert seen["base_url"] == "http://stub.invalid/v1"  # .rstrip("/")
+
+    async def boom(**kwargs: Any) -> Any:
+        raise llm_client_module.LLMError("AI 服务连接失败", raw="x")
+
+    monkeypatch.setattr(llm_client_module, "chat", boom)
+    with pytest.raises(bench.RealRunUnavailable):
+        bench.run_connectivity_precheck()
+
+
+def test_real_connectivity_precheck_failure_exits_2_before_any_chat(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """④ 连通预检失败 ⇒ `--real` 退 2、零样本消耗（零 chat）、stdout 全空。
+
+    单行变异靶点：删 main 里的 `run_connectivity_precheck()` 调用 ⇒ 预检失败不再拦下 ⇒ 本用例红。
+    """
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: [SEED_CASES[0]])
+    env_calls, chat_calls = _install_real_stubs(monkeypatch)
+
+    def boom() -> None:
+        raise bench.RealRunUnavailable("连通预检失败（stub 原因）")
+
+    monkeypatch.setattr(bench, "run_connectivity_precheck", boom)
+    capsys.readouterr()
+
+    rc = bench.main(["--real", "--json"])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert captured.out == ""
+    assert "连通预检失败" in captured.err
+    assert chat_calls == []  # 预检失败 ⇒ 正式跑一次都没发
+    assert env_calls == ["load_env"]
+
+
+def test_cost_gate_trips_exits_3_with_partial_records(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """⑤ 成本硬闸：`--max-total-tokens` 触顶 ⇒ 停止 + **独立退出码 3**；已完成部分如实保留。
+
+    单行变异靶点：删 `CostGate` 的 `add`/`tripped` 检查 ⇒ 闸失效、触顶不停 ⇒ `len(data) < 6` 立红。
+    """
+    _require_nlp()
+    from delector.data.a1_seed_errors import SEED_CASES
+
+    monkeypatch.setattr(bench, "load_seed_cases", lambda: list(SEED_CASES[:2]))
+    rc = bench.main(["--dry-run", "--json", "--max-total-tokens", "1"])
+    captured = capsys.readouterr()
+    assert rc == bench.EXIT_COST_CAP == 3
+    data = json.loads(captured.out)  # 部分结果已如实打印（不静默丢弃）
+    assert 0 < len(data) < 6  # 触顶即停：没有跑满 2 篇 × 3 臂
+    assert "成本硬闸" in captured.err
+
+
+def test_cost_gate_does_not_trip_under_default_limits(capsys: pytest.CaptureFixture[str]) -> None:
+    """默认（两条上限都 0=不限）⇒ 成本闸不干扰正常完成（退 0、全量记录）。"""
+    _require_nlp()
+    rc = bench.main(["--dry-run", "--json", "--cases", "1"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert len(json.loads(captured.out)) == 3
+
+
+def test_cost_gate_est_cost_limit_trips_exits_3(capsys: pytest.CaptureFixture[str]) -> None:
+    """⑤ `--max-est-cost`（估算成本闸）同样触顶即停 + 退 3（与 token 闸并列的第二条硬闸）。"""
+    _require_nlp()
+    rc = bench.main(["--dry-run", "--json", "--cases", "1", "--max-est-cost", "1e-12"])
+    captured = capsys.readouterr()
+    assert rc == bench.EXIT_COST_CAP == 3
+    data = json.loads(captured.out)
+    assert 0 < len(data) < 3  # 触顶即停（1 篇 3 臂没跑完）
+    assert "成本硬闸" in captured.err and "UNVERIFIED" in captured.err
+
+
+def test_harness_estimate_coefficient_matches_production() -> None:
+    """⑦ 估算系数**同源钉**：harness 的 `ceil(len/3.0)` 与生产 `polish_loop` 逐字同值。
+
+    为什么单列：harness 刻意不 import 生产模块（import 期零依赖），故系数是**复写**的 ——
+    生产改系数而 harness 不改，会让"真值 vs 估算"对照悄悄失真；本用例即该漂移的报警。
+    """
+    from delector.services.polish_loop import CHARS_PER_TOKEN_ESTIMATE
+
+    assert bench._CHARS_PER_TOKEN_ESTIMATE == CHARS_PER_TOKEN_ESTIMATE == 3.0
