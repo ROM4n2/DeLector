@@ -1,0 +1,46 @@
+### 2026-10-12 | codebuddy | DECISION 宣传延后，先做"可被发现"的薄壳落地页（/dfs-grill Track 1 收敛，不落 ADR）
+Caps: filesystem-read, filesystem-write, shell-exec
+决策（就一个）：**小红书产品种草帖延后到门槛满足；现在只做"可被发现"——独立薄壳站点 + 内容先行，产品演示类冻结。**
+- 站点：独立仓库 + 零构建纯静态 + `github.io`（域名后置）；单页只承载"一句话价值 + 截图 + 下载"，下载指向 `releases/latest`，**版本号/资产运行时 fetch GitHub Releases API**；功能清单与更新历史一律不复述（防第三张会漂的脸——今天的版本面对账教训同族）。
+- 内容：备考方法论打头、开发理念做信任线；产品演示类等闸门。
+- 开闸门槛（全绿才发种草帖）：① ≥5 份真实三问反馈（分级/高亮+一键进卡/本地释义）；② 新手"下载 → 打开 → 读到第一篇短文"连续无协助成功；③ README 首屏含截图与 Win10 WebView2 前置；④ Android 真机覆盖安装点检通过。
+- Why：三个已知限制（Win10 需 WebView2 / 冷启动约 6s / Android 不可回滚）全砸在"第一次打开"上，未验证就铺量只会换来 install→uninstall 的 churn，先背工单而不是先拿反馈。
+- 两条执行前提：① 小红书正文外链不可点 ⇒ 站点只承接主页/私信/搜索流量，别指望笔记导流；② 截图随产品形态过期（v5.17 起已是原生窗口）⇒ 发版需同步换图，这是薄壳唯一人工维护项。
+- 未立项（本次**不**拆任务）：README 首屏改造、站点仓库初始化、反馈入口、Android 点检、选题排期。要走执行再开 `/dfs-plan`。
+
+### 2026-10-12 | codebuddy | WORK_END(release-pipeline-and-docs-consolidation)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`/dfs-exec` 三挡执行 `docs/plans/2026-10-12-release-pipeline-and-docs-consolidation.md`，6 个任务全部交付（3 个提交）。台账按计划 A3 未初始化，用 todo 手工跟踪。
+- **Task 1 [Tier 2 / Gear 2] `f66d203`**：发布链路超时护栏 —— `build-release.yml` 五 job 加 `timeout-minutes`（30/20/20/30/10）+ `package_windows.py:389` PyInstaller `subprocess` `timeout=1800` + `TimeoutExpired` → stderr 人话错误 + `sys.exit(1)`。TDD：RED 6 失败（5 job 无 timeout + TimeoutExpired 从真实调用点裸抛）→ GREEN 39 passed。CRV 验收 **PASS**（1 黄牌：新增常量注释"实测约 3–4min"无测量凭据，待有真实发布 run 时长回填或改软为"预估"）。
+- **Task 2 [Tier 2 / Gear 2] `ed3d4ee`**：Smoke 闸在构建前先跑 pytest —— `ci.yml` 于 Install 后、Build 前插 `Run pytest suite`（`run: pytest -q`）。守卫钉**顺序**而非"字符串在场"（整段挪到 Build 后字符串仍在而提前反馈的意义丧失），针脚用 `pytest -q` 精确匹配以避开安装步 `pip install pyinstaller pytest` 的死安装文本（防假绿）。CRV **PASS**（1 黄牌：注释"10 分钟构建"无源估算）。**覆盖面诚实边界**：只覆盖 Windows 全量测试；macOS/Linux 专属失败仍需 tag 后才暴露（要提前抓需跨平台 dispatch 预检 job，已列 Fog of War，未立项）。
+- **Batch 1 [Tier 1 / Gear 1] `e0587e7`**（Tasks 3–6 一次批量提交）：① FEATURES 删第二份「快速开始」（与 README 重复且版本口径已漂移：一边钉 3.11、一边写更低版本号）改一行指针，`3.10+` 与安装命令 grep 归零；② 冷启动数字补「路径 × 冷/暖」双标签（源码暖 5.4s/冷 6s vs **便携产物冷 8.5s/暖 6.9s**，纪律出处 `work.log:542`）+ Android 两条已知限制（更新 chip 能力未验证、`versionCode` 只升不降）；③ **零门槛反馈入口**（`.github/ISSUE_TEMPLATE/feedback.md` + README 下载表下直达链接）⇒ 10-12 DECISION 的开闸门槛①**从不可启动变为可启动**；④ `docs/plans/` 按「成果已发版」判据归档 **15 份**已交付计划（只留在途 1 份；已确认无测试/代码引用非 archive 路径）+ `PROJECT_OVERVIEW` 开放待办收敛为 **5 条活项**，历史裁决（ADR-0018~0021、登记项 1A~5A、红 master、冷启动 2.0s 口径、性能 O0）整体下沉 `WORKMEMORY/cold/2026-10-12-settled-todos.md`（保留裁决语境，只进不出）。
+- **门禁（本机实测）**：pytest **1778 passed + 2 skipped**（= v5.17.0 基线 1768 + macOS 红卡修复 3 + Task 1 的 6 + Task 2 的 1）；`ruff` 0；mypy **87+121+4** files 零错误；前端契约闸 PASS；发版守护 56 passed。
+- **两次自伤都被断言拦住（零损伤，方法比结果更值得记）**：① `Path.read_text()` 默认做通用换行翻译（CRLF→`\n`），切分前那句"预期纯 CRLF"断言直接失败——动 `WORKMEMORY` 这类 CRLF 文件必须 `open(newline="")`；② f-string 表达式里带 `\r\r\n` 反斜杠转义触发 **SyntaxError（解析期，脚本整体未执行）**——打印字节计数要先把值算进变量。共同教训：**改共享文档前先断言形态（行尾/行号锚点），让错误在写入前炸，而不是写入后**。
+- **仍待用户批准/外部条件**：人工前置动作 A1（删孤儿 tag `v5.1.1` + 记账，破坏性操作未获批准）；master 三个新提交尚未推送（SSH 通道时好时坏）；本计划自身按「成果已发版」判据留待下一版发布后再归档。
+
+### 2026-10-12 | codebuddy | NOTE 孤儿 tag v5.1.1 已删除（人工前置动作 A1 执行）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按 `docs/plans/2026-10-12-…` 的人工前置动作 A1（用户批准"按计划全做"），删除孤儿 tag **`v5.1.1`**（远端 + 本地 `e2cc2a2`）。
+- **删前安全断言（三条全过才动手）**：① 远端确有此 tag；② `gh release view v5.1.1` → **release not found**（从未产生 Release）；③ 版本已过期一个月，补发只会让用户看到陈旧产物 ⇒ 判定"删 + 记账"而非"补发"。
+- **事故模式记账（这不是第一次，也不会自动绝迹）**：某平台 job 红 ⇒ `publish-github-release` 因 `needs` 四平台全绿而 **skipped** ⇒ **tag 存在但无 Release**，且无任何 runbook/记账。同形态已发生三次：v5.1.1（2026-09，无人恢复、WORKMEMORY 零记录）、v5.17.0 首次 tag（2026-10-11，macOS 测试红卡，当时靠删 tag 重打恢复）。
+- **本批已堵的结构口子**：Task 1 给五 job 加超时护栏（卡死不再烧 6 小时）；Task 2 让 Windows Smoke 在构建前先跑 pytest（平台专属测试失败不再只能等 tag 后暴露）。**仍未堵的**：macOS/Linux 专属失败仍要 tag 后才暴露（跨平台预检 job 未立项）；Publish 被跳过后的恢复 runbook 仍未写（见开放待办递延项）。
+- **补发路径的文档冲突（备查）**：Vault v5.4.0 复盘实证「dispatch 到**分支** ⇒ publish 静默跳过，靠移 tag 补跑」；怀疑者据 `gh workflow run --help`（`--ref` 接受 branch or tag）推断 dispatch 到 **tag** 可满足 `if: startsWith(github.ref,'refs/tags/v')`，但**本仓从未实证** ⇒ 将来真要走这条路，**唯一判据是 `gh release list` / `--json assets`，不是 run 绿灯**。
+
+### 2026-10-12 | codebuddy | NOTE Task 1/2 的 CI 实证数据 + 一处设计反转待修
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：手动 dispatch run **`38209850232`**（master `72beae9`）**全绿**，取到 Task 1/2 的真实 runner 数据 ⇒ 可回填两张黄牌，并暴露一处需修的设计反转。
+- **Task 2 实证成立**：Smoke job 步骤序 = Install → **`Run pytest suite`（success）** → Build → Verify；Windows runner 上 `1775 passed, 5 skipped`（**542s / 9:02**）。⇒ 平台专属失败今后在打 tag 前就能在 Windows 上暴露（macOS/Linux 仍要 tag 后才暴露，Fog of War 未立项）。
+- **跨平台 skip 基线（首次建立，供将来比对）**：总数三处一致 **1780**，但通过/跳过分裂不同 —— 本机 Windows **1778 passed + 2 skipped** ／ CI ubuntu **1773 + 7 skipped** ／ CI windows-latest **1775 + 5 skipped**。⇒ 有 3–5 条测试是**平台门控**的；**"skip 变多"必须按平台比对，不能跨平台直接比**（"报数必须带标签"的同族纪律）。
+- **Task 1 上界有实测支撑**：整个 Smoke job（Install + pytest + Build + Verify）**12:18**，远低于 `build-windows` 的 30 分钟上界；其中 PyInstaller 构建段约 **2–3 分钟**。
+- ⚠️ **一处设计反转（待修，需 Tier 2）**：Task 1 的设计意图是"子进程护栏 MUST **早于** job 级护栏触发，否则 job 被平台杀掉前 subprocess 已挂起、人话错误留不下"——但实际取值 **`timeout=1800` 与 job `timeout-minutes: 30` 相同** ⇒ 真挂住时两者同时到点、job 级先杀全部进程，`TimeoutExpired` 的人话错误**可能来不及落盘**。修法：PyInstaller 子进程超时降到 **1200s（20 分钟，仍远高于实测 2–3 分钟）**，并同步常量 `PYINSTALLER_SUBPROCESS_TIMEOUT_SECONDS` 与其注释。
+- **两张黄牌可回填（建议同一次 Tier 2 里做）**：① Task 1 常量注释"实测约 3–4min" → 改引本次 run（Windows job 全程 12:18、构建段约 2–3min）；② Task 2 注释"别再花 10 分钟构建" → 实测构建段仅约 2–3 分钟，原值**高估约 3–5 倍**，改为"约 3 分钟"。
+- **CI 行为记录（非缺陷）**：连推两批时，后一批会按并发组**取消**前一批的 run；若前一批才含打包面变更，Smoke 会被 skip（本次即此路径）⇒ 需 `gh workflow run CI --ref master` 手动补跑，dispatch 下 Smoke 无条件跑（已实测）。
+
+### 2026-10-12 | codebuddy | NOTE 闭环：子进程/job 超时反转已修（80c3aa0）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：上一条 NOTE 标记的「子进程 timeout=1800 与 job timeout-minutes:30 同时到点」设计反转**已修**（Tier 2 / Gear 2：CPE 实现 → CRV 验收 PASS → 提交 `80c3aa0`）。
+- 修法：`package_windows.py` PyInstaller `timeout=1800 → 1200`（20 分钟，仍高于实测构建段 2–3 分钟 6–10 倍余量，且稳定早于 job 级 30 分钟到点）；人话文案同步。
+- **新增两道守卫（都比改动本身值钱）**：① 假绿口封堵——`hang_forever` 捕获生产代码传给 `subprocess.run` 的真实 kwargs 并断言 `timeout == 常量`（此前只用自己的常量造 `TimeoutExpired`、不断言生产值 ⇒ 生产值改成任何数都照绿；RED 实测 `assert 1800 == 1200` 精确抓住）；② 设计不变量守卫——子进程超时 MUST **严格小于** `build-windows` 的 job 级护栏（分钟数从 `BUILD_RELEASE_JOB_TIMEOUT_BOUNDS` 取、不写死数字，bounds 调整自动跟随）。
+- 两张黄牌已回填（bounds 注释改引 run 38209850232 实测；「10 分钟构建」改「约 3 分钟」，原值高估 3–5 倍）。
+- 门禁：RED 1 failed + 40 passed → GREEN 41 passed；`test_writer_mobile`+`test_app_version_source` 51 passed；`test_server` 297 passed；ruff 0；mypy win32 strict 零错误；CRLF 纯。CRV 另证明 captured 断言**不存在假绿路径**（须先过 `pytest.raises(SystemExit)`，而它只能由真实调用点的 `TimeoutExpired` 触发）。
+- 教训：**给一条链路加两道护栏时，必须验它们的"到点次序"，而不只验"各自存在"** —— 两道同时到点的护栏等于只有一道，且失效方向恰是"留不下人话错误"这种最难排查的形态。

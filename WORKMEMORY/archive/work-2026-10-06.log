@@ -8,3 +8,32 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **maker 两次自我收窄（如实记录）**：①变异②（写入端单路径漂移）最初**没红**——B1 种子用常量拼写、天然对写入端漂移免疫 ⇒ 新增 **B1b**（种子改用 `process_german_text` 真实产出）后红在 `UPDATE 计数=1`。②**反向验证计数器非假绿**：让 B2 老数据场景不触发迁移后守卫如期变红（期望 1 次 UPDATE、实际 0 次）⇒ 计数双向可信。
 ⚠️ **编排者任务书漏门禁**：只让 maker 跑 `mypy --strict delector tools`，**漏了** `mypy --follow-imports=skip tests` ⇒ CI 首次 FAILURE（`test_get_endpoints_with_writes.py:288` 5 条 `union-attr`：`isinstance(e, ast.Constant)` 只收窄**节点**、不收窄 `.value`）。**发版时我是两道都跑的，任务书却只写一道** ⇒ 教训：任务书的门禁清单 MUST 与 CI 的 job 一一对应，发版门禁有哪几道，任务书就得写哪几道。fix-round 由 maker 补最小 narrow（`and isinstance(e.value, str)`，无 `# type: ignore`、未改 mypy 配置），变异验证去掉 narrow 后 mypy 重新报同 5 条。
 **门禁**：`1042 passed`（半 A）+ `264 passed, 1 skipped`（半 B）/ 新守卫 `7 passed` / `mypy` 两道（`93` + `70` files）0 error / `ruff` 通过。**不碰 `static/` ⇒ 不触发发版**（但已发布的 v5.15.0 不含此修复，用户要等下次发版才拿到性能改善）。
+
+### 2026-10-06 14:10 | codebuddy | DONE(Fog 4 #109) + DONE(Fog 3 Task B #110) + 更正上一条错误记录
+   > 正文超 §4 上限（4334 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md`](WORKMEMORY/NOTES-2026-10-06-1410-done-fog-4-109-done-fog-3-task-b-110-更正上一条错误记录.md)。
+
+### 2026-10-06 14:40 | codebuddy | DECISION(Fog 3 关闭：C-F 不做) — 全部 Fog 清空
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户裁决 **Fog 3 关闭，不做 C-F（16 处形式统一）**。至此本轮登记项**全部清空**。
+**裁决依据**：①Fog 3 的**目标**是"守卫更可靠"，Task B（#110）已用**零行为变化**达成同等可靠性——加固后的 AST 守卫同时覆盖「函数体内直调」与「`Depends`」两种挂载形式，20 条 allowlist 继续被守护；②C-F 的唯一真行为变化是 **LAN + 非法参数 422 → 403**（编排者实测确认，语义收紧但是用户可见的）；③16 处改动最易误伤的是 **`POST /api/wb/state`——它刻意不挂本机闸**（用 `X-WB-Key`，`test_server.py:4798-4820` 会红）；④`request: Request` 形参删除有 **lint 盲区**（`pyproject.toml` 无 `[tool.ruff]`，默认规则集 E4/E7/E9/F 不含未使用形参 ⇒ 漏删不会被任何门禁拦住）。
+**同时纠正一个我曾写进文档的错误前提**：Fog 3 原文与上两条 log 都把「运行时 `dependant` 更可靠」当作收益依据。**实测否定**：`dependant` 枚举只找出 4 条（`encounter.router` 3 + `tools.router` 1，全 `Depends` 形式），**看不到函数体内调用的 16 条**；且它天然看不到函数体调用 ⇒ 就算做完 C-F，运行时方案也并非更优，只是"换一种看法"。**教训：Fog/债务的"收益论证"本身也可能是错的，应与"待修的缺陷"一样接受实测检验。**
+**本轮 Fog 清算结果**：Fog 1（LAN 写权限）→ 用户裁决「内网可信」，不加固；Fog 2（GET 惰性写）→ 追根因发现真 bug（每次 GET 全量重算 + 写放大），已修 #108；Fog 3 → 目标已由 #110 达成，C-F 不做；Fog 4 → 两条前提被推翻（`rm` 不存在、`bash` 属平台相关），交付负向守卫 #109。**登记项全部关闭，且过程中额外挖出并修掉 3 个真实缺陷**（Fog 2 的版本号漂移、AST 守卫的三个漏检洞、CI 必需运行时清单未显式化）。
+
+### 2026-10-06 15:20 | codebuddy | RELEASE(v5.16.0) + 编排者数字抄错(1048 vs 实测 1053)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：Fog 1~4 全部收口后发版 **v5.16.0**（tag → `90f62a3`）。**无 `static/` 改动**（除 sw.js/index.html 版本字符串）⇒ 桌面端刷新即生效。
+- **v5.16.0 内容**：①#108 修掉「每次 GET 文章都重跑完整 spaCy + UPDATE articles」（惰性迁移判据写死 `3.4.0` 而写入端两条路径都写 `3.5.0` ⇒ 判据恒真，「惰性迁移」退化成「每次迁移」；修法＝`PROCESSED_JSON_VERSION` 单一真相源，语义完整保留）；②#109 CI 必需运行时清单显式化 + **两条否定式守卫**（`rm` 全仓不存在、`bash` 判为平台相关，**都不进清单**，防将来误升级为 fail）；③#110 localhost 守卫加固三个「将来会漏」的洞（字面 `router` 变量名 ⇒ 实有 14 个 router；per-router prefix ⇒ 一模块双 router 时键失真且恰好蒙对；闸调用名漏 `import ... as` 别名），allowlist 20 条逐字未动；④Fog 1 裁决**内网可信**；Fog 3 的 16 处形式统一裁决**不做**。
+⚠️ **编排者第二次犯"统计值过期"错误**：写 CHANGELOG / README / PROJECT_OVERVIEW 时，我把 **#110 那轮 maker 报告里的 1048** 当成终值写入（"1312 passed = 半 A 1048 + 半 B 264"）。但之后 **#109 又合入 5 个守卫测试**，发版前实跑半 A 是 **1053**、全量 **1317** ⇒ **三个文件全部写错**，靠发版前那一次全量门禁才发现并更正（`grep -c` 确认旧数无残留）。**这是与"head 截断漏看失败项"同类的第二次错误**：中间环节的统计值在流程推进后会过期，而我把它当成终值。**已存 memory**：发版顺序固定为「改版本点 → 跑全量门禁取实测数 → 把实测数写进文档 → commit」；多个 PR 连做时，测试数只在最后一个 PR 合完且跑完全量之后才取。
+- **README 破坏事故未复发**：本次改文档改用 `write_to_file` 写脚本到系统 temp 再执行（避免命令行 8KB 限制），且所有列表插入一律用 `.split("\n")` / `[text]` 形式（**不再用裸字符串赋值**），并在脚本末尾内置**破坏检测**（最长连续单字符行段 >10 即判异常）。三个文件实测 `longest_single_run = 1`，全部 OK。
+**门禁（v5.16.0 基线）**：`1317 passed + 1 skipped`（半 A `1053` + `test_server` `264`）/ 全 `tools/*.mjs` 探针 **28/28** / `ruff` 0 / `mypy` 两道（**93** + **70** files）0 error / `test_writer_mobile.py`（发版守护）**30 passed** / 五条守卫（防漏接线 5 · 契约冻结 5 · localhost 集合 7 · 带写 GET 白名单 7 · CI 必需运行时 21）全绿。`versionCode` = `51600`（`major*10000 + minor*100 + patch`），可覆盖安装。
+
+### 2026-10-06 16:49 | codebuddy | FIX(search高亮) 递延项"实体边界"落地，根因比预期严重（错高亮）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：清完 Fog 1~4 发完 v5.16.0 后，用户选定收掉递延项里的「检索 `_highlight` 的 HTML 实体边界」。按惯例**先复现再改**，不直接照抄选项描述里的错误前提。
+- **复现（临时 node 脚本，按括号配对切真实 `core.js:esc` + `search.js:_highlight` 真跑，224 组 text×needle 枚举）**：真缺陷存在，但**不是"高亮切在实体中间"**，而是**错高亮**——`İ`.toLowerCase() 长度 1→2（码点 1→2）导致折叠串 `hay` 与原文索引整体错位：原文「İstanbul」搜「T」高亮到字母「a」，搜「i」误高亮 `İ`。扩展到 598 组（含代理对 `𝔘`/组合字符/德语 ß·变音/XSS）共 2 类异常。
+- **根因（比"实体"更普遍）**：旧实现是「**先 esc() 再在已转义串上定位**」（`safe` / `safeNeedle`）。命中区间因此是"转义后的形态"：① `&`→`&amp;` 的边界会被切开（选项描述里的直觉）；② 更糟的是任何**大小写折叠改变长度**的字符（`İ`→`i̇`）让 `safe.toLowerCase()` 的索引与 `safe` 不再一一对应。另外 `String.slice` 按 UTF-16 计数（`𝔘` 占 2），非码点切片同样会错位。
+- **修法（顺序倒转 + 码点对齐）**：改为在**未转义原文**上定位命中，命中区间切片后**逐段** `esc()` 再包 `<mark>`；比较走**码点数组**（`[...raw]` + 逐码点 `toLowerCase`，长度变化时保留原码点——宁可漏高亮也不错高亮）。XSS 不变式更自然：`<mark>` 是唯一由本函数插入的标签，每段都过 `esc()`。
+- **守卫（行为优先，遵循红线 11「字符串存在断言是死测」）**：`tools/wb_search_probe.mjs` 新增场景 5 `highlight_hit_alignment` = 13 组 text/needle × 三条不变式（去 mark 后反转义 === 原文 ⇒ 永不切开实体/不丢字符；每个 mark 内反转义 === needle ⇒ 不许错高亮；输出无 `<script>`）+ 两条**等值**断言（「İstanbul」搜 t 必须等于 `İs<mark>t</mark>anbul`；`AT&T` 搜 `T&T` 必须等于 `A<mark>T&amp;T</mark>`）。另加两条**反回退**切片检查（旧标志 `safe`/`safeNeedle` MUST NOT 再现；MUST 含码点展开 `[...`）。`tests/test_search_ui.py` 的旧守卫 `esc(text` 断言已随实现形态改写为反回归形态守卫（XSS/对齐的实质保证交给探针），并把 `highlight_hit_alignment` 加进关键场景名清单（防"删了场景仍全绿"）。
+- **门禁**：`wb_search_probe.mjs` **10/10**（原 7 项 + 新 3 项）；全 `tools/*.mjs` 探针 **28/28**；半 A **1053** passed / 半 B `test_server` **264** passed + 1 skipped ⇒ 全量 **1317** + 1 skipped（与 v5.16.0 基线同数，因本轮是**重写**一条测试、未新增测试函数）；`ruff check .` 0；`mypy --follow-imports=skip tests` **93** files / `mypy --strict delector tools` **70** files，零错误。
+- **守卫自证（不靠"我跑过了"）**：把 `static/js/search.js` 单独 `git stash` 回退到旧实现后跑探针 ⇒ 切片检查按预期抛 `Error: _highlight 仍含旧「先 esc 再定位」实现的 safe/safeNeedle…` 且 `EXITCODE=1`；恢复后全绿。旧 `test_highlight_escapes_before_wrapping_mark` 也如预期变红（`esc(text` 不再出现），确认两处守卫都是真守卫。
+⚠️ **编排者教训（本轮第三次同类）**：给用户写选项时把缺陷描述成"高亮切在实体中间"（听起来像纯显示瑕疵、收益小），实测发现真缺陷是**高亮到无关字符**（功能性错误）。**"递延项的缺陷描述"与"债务的收益论证"一样，是待检验的前提，不是事实**——选项文案里对缺陷的断言 MUST 先复现再写。

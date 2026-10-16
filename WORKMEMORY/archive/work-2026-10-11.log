@@ -1,0 +1,155 @@
+### 2026-10-11 | codebuddy | EXEC 登记项 3A/5A + 2A + 3A′ 与 1A/4A 登记口径
+Caps: filesystem-write, shell-exec
+事件：用户「按建议」⇒ 执行登记项 1A/2A/3A/4A/5A。
+- **3A（`e95f918`）**：`bench_long_read.py` 的 `proc_path` 由读**静态声明值** `NLP_ENGINE` 改为**按真实加载状态**判定（未解析如实标注 + 指向可复跑判据；**不主动触发加载**）；门禁由子串断言升级为 **AST + 行为级**（原 `"NLP_ENGINE" in src` 是 docstring 提到就能过的假门）。变异：改回静态值 ⇒ 2 failed；"未解析"假装已解析 ⇒ 行为级 failed；恢复 ⇒ 23 passed。
+- **5A（`e95f918`）**：`desktop.py` 落两枚标记 —— 进程级计时起点 + pywebview **`loaded` 事件**驱动的"真实 UI 已加载（首屏可用）"（绑定在 `_after_start` 内 ⇒ 必然晚于 `webview.start()`，且**早于** `load_url`（pywebview 内部会 `events.loaded.clear()`）⇒ 由 AST 锁钉住）。新增 `tools/first_screen_from_log.py`（纯标准库）解析 `launch.log` 算「起点→就绪 / 就绪→首屏 / **端到端首屏**」；缺 `loaded` 行 ⇒ 明写"不含首屏事件"且**非零退出**（不猜、不静默给 0）。
+- **2A（`c071c08`）**：**难度跳变消灭**。新增 `tools/gen_preset_processed.py` ⇒ `delector/data/preset_processed.json`（**455989 字节 / 4 条目 / 按文本 sha256 索引 / 含 `version=3.5.0`**）；`database.py::preset_processed_json` 命中即落 **spaCy 口径**（首次打开不再跳变），未命中/缺失 ⇒ **可见 WARNING** + 回退纯 Python（**不加载 spaCy** ⇒ 惰性不变量保持）。三个打包位点（Windows + Linux/macOS）显式 `--add-data`（共用常量 `PRESET_PROCESSED_DATA_REL`）；Android 由 `cp -r delector` 整目录覆盖（Chaquopy 是否收非 `.py` **无法本地复验** ⇒ 登记，不制造不可复现的 CI 红，由运行时 WARNING 兜底）。`verify_windows_portable.py` 增加"真产物内含该文件"断言 ⇒ **对旧产物正确 FAIL**。
+- **3A′（`c071c08`）**：同类**第三处** `bench_rank_sentences.py` 同法修正（含门禁升级 AST+行为级，2 组变异自证）。
+- **1A / 4A（登记口径，不改 ADR 历史决策）**：冷启动 2.0s **未达**（本机 2128ms）⇒ 记为"**本机实测 2.128s，机器依赖**"，残余是 `import spacy` 本身，不再为 125ms 投入；Win10 WebView2 ⇒ **已知限制**（检测 + 官方 Evergreen 短链已有，Win10 需先装运行时，不捆绑以免 +100–150MB）。
+- **产物重建并验收**：`dist/DeLector-v5.16.0-Windows-x64-Portable`（commit `c071c08`）⇒ 闸 **11/11 PASS**，含新增的"预置文章预生成数据文件存在"。
+
+### 2026-10-11 | codebuddy | MEASURE 端到端首屏 = 6s（零新依赖）⇒ ADR-0018 §8 Unknown 8 关闭
+Caps: filesystem-write, shell-exec
+事件：用户问"首屏秒数在哪里看" ⇒ 跑 `tools/first_screen_from_log.py` 读 `launch.log`，**实测已有数字**。
+- **本机冷启动端到端首屏 = 6s**（起点→服务就绪 **6s**；服务就绪→首屏 **0s**）。
+- **关闭 ADR-0018 §8 `Unknown 8`**：曾判定"要测必须引入**浏览器自动化基线**（新依赖）、收益不大 ⇒ 暂缓" —— **该前提被推翻**：用应用自身可观测性（`desktop.py` 的进程级计时起点 + pywebview `loaded` 事件）即可测，**零新依赖**。ADR-0020 §6 `Unknown 2` 同步关闭。
+- **⭐ 这条数字改了性能问题的形状**：代理口径 `health_200`（2.6s）**不是瓶颈** —— 服务就绪到首屏几乎为 0 ⇒ ~6s 花在**进程启动 + WebView2 建档 + 前端首屏负载**。按 §7.6 修法路由（端到端 >4s ⇒ O0 杠杆），服务侧 O0（惰性加载 −1.47s）已做完 ⇒ **剩余杠杆在前端首屏负载**，首要嫌疑 = `index.html:2841-2846` 的 `german/workbench.html`（**392KB**）**iframe 首屏即加载 + 5s 轮询**（frontend 席早已点出）。
+- 局限：单机单次非 p95；`loaded` 事件 13:32:39 与 13:32:43 各触发一次（取首次）。
+- 另：`work.log` 内另有 **mimo-v2.6-flash__claude-code** 的 NOTE 行（它按 ADR-0004 Q1=A 删除 `corrections.md` 并改 INDEX）—— 同一文件无法分离，随本次提交一并落盘，内容归属已在提交信息标注。
+
+### 2026-10-11 | codebuddy | WORK_END(P2 批次五项 + 复核) + NOTE(HOT 轮转)
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：全仓评估清单的 **P2 批次五项**落地（CPE subagent 执行、主线复核后提交），顺手执行到期的 HOT 轮转。
+
+**P2 五项**
+1. **workbench iframe 惰性化**：`index.html` 改 `data-src`（去静态 `src`）+ `main.js::ensureGermanWorkbench()` 幂等赋值（只在首次 `show('german')`，重设 src 会丢工作台进度）。静态首屏移除 **392,563 B**（＝本机 `os.path.getsize('static/german/workbench.html')` 实测，非抄报告）。**未做** JS 代码分割。
+2. **死绿测试改 AST**：`test_cold_start_cost` / `test_cards_endpoint_cost` 的「字面量 in src」断言改 AST（只认真实调用点 / 非 docstring 的字符串常量）。变异自证：删真实调用 ⇒ 2 红，且旧子串仍在 docstring 里 ⇒ 证明原本半恒真。
+3. **X-WB-Key 鉴权收敛**：新增 `delector/core/wb_auth.py::require_wb_key`，收编 `routes/{sync,rtc}.py` 各一份 `_verify_wb_key` + `main.py` 内联第三份；一致性用例 `(403,403,403)` / `(200,200,200)` + 全仓唯一实现 AST 守卫。住 `core/` 而非 `routes/`：`test_server` 要求 routes 每模块定义 `APIRouter`。
+4. **`desktop.py` 启动时日志轮转**：`rotate_log_if_needed`（`launch.log` > 5MB ⇒ 滚为 `launch.log.1`，只留一份），必须在 `_redirect_std_streams` **之前**（Windows 对已打开文件 `os.replace` 必失败）；**不改行格式**（`tools/first_screen_from_log.py` 依赖）。
+5. **`.env` 回落链回归锁**：sre 席「按 README 配 `.env` 无效」的前提**被推翻**（`get_effective_api_key → get_setting` 本有 `os.environ` 兜底、`load_env()` 把 `.env` 灌进去）⇒ **无生产改动**，补 2 条端到端回归锁（库空 ⇒ 回落 env；库有值 ⇒ 库值优先）。
+
+**复核（主线自跑原始输出，非抄 subagent 报告）**：`ruff check .` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK；`mypy --platform win32 --strict` 入口面 4 files OK；`check_frontend_api_contract.py` PASS；`tsc --noEmit` exit 0；`pytest -q` **1746 passed, 2 skipped**（＝非 server 1450 + `test_server` 296）。
+
+**⭐ 复核抓出一处本批新引入的半恒真（已修）**：`tests/test_german_workbench.py:69` 原断言 `'src="/german/workbench.html"' in block` —— 改成 `data-src` 后该断言**因子串撞上 `data-src=` 而恒真**（实证：无裸 `src` 的块里该子串 `in` 仍为 True），正是本批第 2 项在别处修掉的同一类陷阱 ⇒ 改为锚 `id` + 全量 `data-src=`。
+
+**HOT 轮转（`e1f34aa`）**：77 → 50（阈值 75 已过），`work.log` 纯删除（`--numstat` `0 190`，零改写）、字节守恒复核过；新建分片 09-15/09-16/09-17，`INDEX.md` 两条来源行同步。
+
+**Follow-up**：惰性化**后未复跑端到端首屏** ⇒ `6s` 仍是惰性化**前**的数字，重测需真启 `desktop.py` 后读 `tools/first_screen_from_log.py`。
+
+### 2026-10-11 | codebuddy | MEASURE 首屏复测（P2 惰性化后）：端到端仍 6s ⇒ 前端不是主项
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户复跑 `tools/first_screen_from_log.py`（读真实 `launch.log`，非我代跑），数字如下。
+- **端到端首屏仍是 6s**：起点 14:29:08 → 服务就绪 14:29:13 → 首屏已加载 14:29:14（即 **5s / 1s**）。
+- 对照惰性化前那次：6s / 0s / 端到端 6s ⇒ **端到端未变**。
+- ⭐ 两条纪律（防将来误读）：① 分段差异落在 `_append_log` 的 `%H:%M:%S`（**秒级**）±1s 量化内，且两次**各为单样本** ⇒ **不构成"惰性化省了 1s"的证据**；两次之间唯一可比量是端到端「6s → 6s」。② 该"计时起点"写在 `desktop.py::run_desktop` 内，**晚于** Python 解释器启动与 `desktop.py` 自身的模块 import ⇒ 用户双击感知的端到端**比 6s 更长**，那一段**未被测到**。
+- **⭐ 形状修正（推翻本 ADR 的旧结论）**：旧文本写"剩余杠杆在**前端首屏负载**"；实测 `就绪 → 首屏` 仅 **~1s ⇒ 前端天花板 ~1s**，主项是那 **5s 的「进程起点 → 服务就绪」** ⇒ **§7.6 路由的下一杠杆不在前端**。
+- **回写**：ADR-0018 §8 `[Unknown 8]` 复核条 + 文件头（**仓内副本 + vault 正式件**，两份差异仅头部 frontmatter/状态块，已 `diff` 复核逐行同源）、ADR-0020 §6 `[Unknown 2]` + §8 验收口径（同样两份）、`PROJECT_OVERVIEW.md` 开放待办。
+- 未做：那 5s 的**分阶段拆解**（无数据，不猜）；更早处落计时标记（若要覆盖解释器启动/import，需改 `desktop.py` 之外的口径）。
+
+### 2026-10-11 | codebuddy | NOTE（补上一条 MEASURE）：那 5s 的分段拆解本来就有数据 —— 读同一次 launch.log 的既有阶段行
+Caps: filesystem-read, filesystem-write
+事件：上一条我写"未做：那 5s 的分阶段拆解（无数据，不猜）"——**这句要改**：`launch.log` 里**既有**阶段行（desktop.py 的 8 段标记）就够拆，**无需新仪表**。读用户 2026-10-11 14:29 那次的日志：
+- `14:29:08 起点` → `14:29:11 已创建 splash 窗口` = **3s**，**一个未标记的空档**，混合了：端口/身份校验 + WebView2 运行时检测 + `bootstrap_data_dir` + **`from delector.server import app`** + `build_server` + `serve_in_thread` + 两次 `create_window` + 托盘 ⇒ **无法归因**（注意"起点"写在 `run_desktop` 内、**早于** `_run_desktop_inner`，所以服务栈 import 在这 3s 里）。
+- `14:29:11 进入 GUI 事件循环` → `14:29:13 等待服务就绪/已就绪` = **2s**（`webview.start()` 起步：WebView2 环境/窗口落地，再到 `_after_start` health 命中）。
+- `14:29:13 切主窗口/load_url` → `14:29:14 首屏` = **1s**（前端）。
+- 口径：秒级、单样本；`真实 UI 已加载` 在 14:29:14 与 14:29:16 各触发一次（工具取首次）。
+- ⇒ **下一步的杠杆是给那 3s 空档补阶段标记**（同款 `_append_log`，零新依赖），不是再动前端。已回写 ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、PROJECT_OVERVIEW。
+
+### 2026-10-11 | codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：worktree `feat/desktop-stage-markers`（基线 `ce2274b` / `cf84c80`）「desktop 启动链可归因化」三任务收官 —— 本任务（Task-3）**只改文档**，不碰生产代码。
+- **Task-1（`ce2274b`）**：`desktop.py::_run_desktop_inner` 纯 +6 行 `_append_log`（零删改/零顺序变更），把「起点 → 已创建 splash 窗口」这 ~3s 空档切成 6 段：端口与身份校验通过。/ WebView2 运行时检测通过。/ 数据目录已就绪（bootstrap_data_dir 完成）。/ 服务端模块已导入（delector.server）。/ HTTP 服务已装配（build_server 完成）。/ 本地服务线程已启动（等在就绪窗口内命中）。`tests/test_desktop_shell.py` +136 行（6 枚标记的存在 + 源码顺序 1→6 + 位置夹逼）。**变异自证**：6 枚整体下移到 `serve_in_thread` 之后保序 ⇒ 转红 `AssertionError: 必须写在下一枚锚语句（第 610 行）之前，实际在第 624 行`；备份 md5 复原 ⇒ 48 passed / 2 skipped。
+- **Task-2（`cf84c80`）**：`tests/test_first_screen_from_log.py` +88 行 —— 解析器（`tools/first_screen_from_log.py` 用**子串匹配**切锚）的**兼容性回归锁**：6 枚新标记 MUST NOT 含三条锚串（开始启动（进程级计时起点）/ 服务已就绪 / 真实 UI 已加载（首屏可用））的子串，否则**抢错锚行**（不报错、数字静默变味）；标记清单由 AST 从 `desktop.py` 同源取（不在测试里复制第二份）。**变异自证**：第 6 枚临时改为 `本地服务线程已启动（服务已就绪）。` ⇒ 锚被抢、`起点 → 服务就绪: 3s`（期望 5s）、`服务就绪 → 首屏: 3s`（期望 1s）⇒ 2 failed / 6 passed；复原 ⇒ 8 passed。
+- **Task-3（本次）**：文档回写 —— **ADR-0018 §8 `[Unknown 8]` 复核条**：那 3s 从「**一个未标记的空档 … 当前无法归因**」改为「**已加 6 枚阶段标记（Task-1 `ce2274b`）** ⇒ 空档已被切开；**真实分段有待用户重跑一次 `python desktop.py` 后用 `tools/first_screen_from_log.py` 取数；重跑前禁止声称任一段占比**」，并补解析器兼容锁（Task-2 `cf84c80`）。**ADR-0020 §6 `[Unknown 2]`**：「下一步补 3s 空档的阶段标记」→「**已补**（Task-1 `ce2274b`），待重跑取数」。以上两份 ADR 的**仓内副本 + vault 正式件**同步改（body 逐行同源，已脚本自证）。`PROJECT_OVERVIEW.md` 开放待办同口径更新。
+- 数字纪律：**只写"已标记、待重跑"**，未新增任何"某段占多少秒"的数字；原有 3s / 2s / 1s 是**标记前**历史值，原样保留。
+- **未闭合项（唯一）＝ 用户重跑一次 `python desktop.py`** 后取真实分段（6 枚标记已就位，重跑即出数）。
+
+### 2026-10-11 | codebuddy | NOTE（marker 3 改名：名不副实 → 不再宣称"已就绪"）
+Caps: filesystem-write
+事件：/dfs-team 共识返工 Fix-2 —— `bootstrap_data_dir` 是 **fail-soft、永不抛**（失败只回退旧落点 + 记 ERROR）⇒ 原 marker 3 字面「数据目录已就绪（bootstrap_data_dir 完成）。」会把"回退了"读成"就绪了"。已改名（附新字面量）为：**`数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。`**。同步位点：`desktop.py`、`tests/test_desktop_shell.py::_STARTUP_STAGE_MARKERS`（规格字面量，故意漂移锁）、ADR-0018 仓内副本 + vault 正式件（两份正文逐行同源，已自证同一）。既往行一律不改（本条为追加）。
+
+### 2026-10-11 | codebuddy | MEASURE 首屏分段取数（标记版）+ 意外挖出 2s 端口探测
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：6 枚阶段标记已随 PR #129 并入 master（`c468437`，合并前三条 check 全 SUCCESS，含 Windows 便携版真启闸）。用户重跑 `python desktop.py`（15:43）后取到**真实分段**（同一次运行内、秒级、单样本，端到端仍 **6s**）：
+- 起点 15:43:53 → `端口与身份校验通过` = **2s** ｜ → `WebView2 运行时检测通过` / `数据目录落点已定` = **0s** ｜ → `服务端模块已导入（delector.server）` = **2s** ｜ → `HTTP 服务已装配` / `本地服务线程已启动` / 两次 `create_window` / 托盘 = **0s（整段 <1s）** ｜ → `进入 GUI 事件循环` → `等待服务就绪` → `服务已就绪` = **1s + 1s** ｜ → 首屏 = **0s**。
+- **结论**：主项只有两个 —— **「端口/身份校验」2s** + **`import delector.server` 2s**（4s ≈ 2/3）。**推翻原并列候选**："WebView2 建档/建窗是主项"**不成立**，建窗/托盘/bootstrap/build_server/起线程/前端全部 <1s。
+- **⭐ 意外发现（已单独复现）**：那 2s 不是 import（`import start` 实测 0.016–0.12s），而是 `start.is_port_in_use(port)` 的 `connect_ex(("127.0.0.1", port))` —— **端口空闲时本机恒为 ~2.03s**（3 次：2.034 / 2.041 / 2.044s；且与端口号无关：8000/8001/59999/1 均 ≈2.03s，rc=10061；有监听的 445 为 0.3ms）。**对照**：同端口改 `bind()` 探测 = **0.1ms**（约 2 万倍差）。**机制假说（未证伪，不当作结论）**：本机有过滤驱动/防火墙拦掉 loopback 的 RST，connect 走完 SYN 重传退避。
+- **下一杠杆（登记，未做）**：① 改 `is_port_in_use` 的探测方式/调用时机（它是 **P0 守卫**、且是 `start.py` 与桌面端**共用**的唯一实现 ⇒ 须保"空闲继续 / 被 DeLector 占拒 / 被他人占拒"三分支语义、不许两处口径漂移）；② 或让它与 `import delector.server` 并发。两条都要单独立项 + 变异自证。
+- 已回写：ADR-0018 §8 `[Unknown 8]` 复核条（仓内 + vault，正文同源）、ADR-0020 §6 `[Unknown 2]`（仓内 + vault）、`PROJECT_OVERVIEW`。口径提醒：本次分段**只与本次同运行内相减**，不得跨运行相减。
+
+### 2026-10-11 | codebuddy | DECISION 端口探测 2s：暂缓环境判定（Clash 占用中）；守卫不动、不立项
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户下令"先不 pipeline，先做边界澄清" ⇒ 只做边界澄清（零代码改动），并把环境排查推进到"只剩最后一问"。
+- **触发条件刻画（本机，可复现）**：端口**正在监听** ⇒ connect 成功 **0.4ms**；端口**未监听**（无 socket 与已 bind 未 listen 同命）⇒ RST 延迟 **~2.03s**；**UDP 同端口 0ms（ICMP 立即到）⇒ TCP 专属**；同一端口连 5 次全 ~2.03s ⇒ **无负缓存**。12 次采样全落 2017–2057ms。
+- **已排除（逐条有命令输出）**：① ~~首包丢失 + `初始 RTO≈2s` 重传退避~~ ⇒ **已证伪**（`netsh int tcp show global`：初始 RTO = **1000**，指数退避只会给 ~1s/~3s，凑不出稳定的 2.03s）；② Defender 网络保护 ⇒ **排除**（`Get-MpPreference`：`EnableNetworkProtection = 0`，本来就是关的）；③ 第三方 LWF 过滤驱动 ⇒ **排除**（`Get-NetAdapterBinding` 全为 `ms_*`，无自定义 `*_lwf`）。**剩余嫌疑**：WFP 层（Clash 的 TUN/嗅探，**不出现在 LWF 清单里**）与 TCP 全局特性（`快速打开`/`接收段合并` 均 enabled）。
+- **选项评估（结论：不动代码）**：① 改探测方式（`bind`）—— 三场景虽与 `connect` 同结论，但**动的是 P0 守卫语义**，且 TIME_WAIT 假阳性 vs `SO_REUSEADDR` 假阴性两难未定案 ⇒ 不建议；② 把探针与 `import delector.server` **并发** —— 技术/可测性可行，但代价是"旧实例在跑"路径上也会先跑 `bootstrap_data_dir`，与 `start.py:123` 的**刻意设计**冲突；③ **先判环境** —— 若属环境层，改代码就是拿 P0 风险换一个只影响本机的 2s。
+- **⏸ 暂缓（用户）**：最后一问（**退出 Clash 后重测**）推迟 —— 用户另一 agent 正在使用 Clash。**三步可逆恢复方式**（记在 ADR-0018 §8 `[Unknown 8]`）：退出 Clash → `netsh int tcp set global fastopen=disabled` → `rsc=disabled`（每步测完恢复）。**任一让探测从 ~2s 掉到 ~1ms 即结案环境层。**
+- 已回写：ADR-0018 §8（仓内 + vault，正文同源）、ADR-0020 §6（仓内 + vault）、PROJECT_OVERVIEW。**零代码改动、零新依赖、守卫原样。**
+
+### 2026-10-11 | codebuddy | WORK_END 未测段可观测化（T1+T2+T3 落地；T4 待用户真启产物）
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：按 `docs/plans/2026-10-11-prestart-timing-instrument.md` 落地"把「进程创建 → 计时起点」未测段纳入 launch.log"。用户裁定**轻量化执行**（不走 pipeline/worktree、不启用 `.vault-exec-ledger.json` 台账）。
+- **T1（`51899fd`）**：`desktop.py` 新增 `_win_ms_since_create()`（`ctypes` + `GetProcessTimes` + `GetSystemTimeAsFileTime`，FILETIME 相减）/ `_ms_since_process_create()`（平台守卫 + fail-soft）/ `_log_prestart_elapsed()`（**另起一行**，取不到写 `?`），`run_desktop` 紧随计时起点调用。
+- **T2（`db24260`）**：`tools/first_screen_from_log.py` 增 `PRE_START_MARKER` + `_pre_start_ms`（三态：缺行 / `?` / 数字）+ `_fmt_pre_start` + 输出一行 + 精度口径脚注；**缺行不改退出码**。
+- **实测（3 次稳定）**：进程创建→首个 Python 语句 **98/99/99 ms**；`+ import desktop` **343/339/350 ms** ⇒ `import` 自身 ≈245ms ⇒ **源路径未测段 ≈0.34–0.35s** ⇒ **真实端到端 ≈6.35s**（缺口 ≈5%）⇒ 该段**无优化空间**，本任务价值 = **口径完整**。
+- **变异自证 5 条**（全"红→复原绿"，未提交文件用仓库外备份 + md5 复核）：T1 M1 拿掉 try/except ⇒ 红；T1 M2 数字写成常量 —— **初版用例竟仍绿**（注入值 123.4 格式化成 `123` 与变异同形！）⇒ 用例强化为"两次不同注入必须落出两行不同的数" ⇒ 重跑转红；T1 M3 删调用 ⇒ AST 位置锁红；T2 M1 恒返回 `"0"` ⇒ 红；T2 M2 缺行静默给 0 ⇒ 红。
+- **真实日志冒烟**：对用户 `launch.log`（15:43，改动前写的）输出 `该日志不含此项（旧版本 desktop.py）`，**EXIT=0** ✓。
+- 门禁：`pytest`（两文件）64 passed, 2 skipped；`ruff` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK。
+- **待办 T4（HITL）**：用户真启两次 —— ① `python desktop.py`；② 双击打包产物 `DeLector.exe` —— 取两条路径的未测段数值并回填文档（PyInstaller bootstrap 段大小未知）。
+- 已回写：ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、`PROJECT_OVERVIEW`。
+
+### 2026-10-11 | codebuddy | WORK_END 仓库根数据目录卫生（用户选 B；B-3 经裁决不做并登记技术债）
+Caps: filesystem-read, filesystem-write, shell-exec
+背景：仓库根在 15:45:01 出现了一套**新的** `delector.db`/`progress.db`，随后 `tests/test_save_wb_state_cost.py` 的迁移闸拒绝运行 ⇒ 本地 2 红、CI 绿。用户裁定"开做 B"。
+- **机制已定位（一行代码 + 一处接线）**：`database.py:36` `DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", _REPO_ROOT)` ⇒ 缺省兜底仓库根；而 **`delector/server.py` 在模块顶层就 `init_db()`**（conftest 注释 26-31 行印证）⇒ **"没先钉落点就 import server" = 在仓库根建库**。并发事实：应用本身干净（`desktop.py` 先 `bootstrap_data_dir` → `%LOCALAPPDATA%`；用户 15:35 那次的真实库确实落在那里，794 KB / 4 篇 / 22 词卡 = 数据未丢）。
+- **落地 B-A（`conftest.py`）**：新增会话级 autouse 守卫 `_guard_repo_root_data_dirs` + 两个纯 helper（`root_db_snapshot` / `describe_root_db_diff`）。刻意比对**快照差值**而非"断言根目录无库"——便携模式（`DELECTOR_PORTABLE=1`）下仓库根本来就是合法落点，不该误判；只有"本次运行期间新出现/被改动"才算泄漏。失败消息给**根因 + 三步修法**（不甩锅给读者）。
+- **落地 B-B（测试）**：`tests/test_desktop_data_dir_bootstrap.py` 增 3 条 —— helper 快照覆盖面、差异描述三类、**结构性判据**"凡 `init_db()` 的 tools 必须钉落点"（当前 `bench_cold_start` / `bench_save_wb_state` 2/2 合规，该判据只挡未来回归；实测其余 6 个工具不碰 DB）。
+- **B-3（conftest 全局 `setdefault("DELECTOR_DATA_DIR", tmp)`) 裁决：不做** —— 依据 `test_backend_package_layout.py:40` 与 `test_data_dir_migration_gate.py:276` 两处**已带 `pytest.skip` 兜底**的"DATA_DIR 默认=仓库根"守卫：全局钉住会把它们变成**永久 skip = 门禁削弱**；而该兜底的防护意图已由 B-A 的**响亮失败**覆盖（本仓偏好 No-Silent-Failure，不偏好静默改道）。**技术债登记**：若将来仍要全局钉，必须先把那两条改写成"子进程干净 env"形态以保住覆盖。
+- **变异自证 3 条**（全"红→复原绿"，md5 `28a3749ea04f2ca02fa50795032f4740` 复核）：① 端到端注入"在仓库根建库"的临时用例 ⇒ 守卫 teardown 报 `新出现：delector.db` 且 `1 passed, 1 error`（EXIT=1），清理后仓库根干净；② helper 忽略"新出现" ⇒ 该用例红；③ 结构性判据 pin 列表清空 ⇒ tools 用例红。
+- **全量验证**：`pytest -q` = **1761 passed, 2 skipped**（改前 `2 failed, 1756 passed, 2 skipped`）；**守卫在全量中未响** ⇒ 测试套件内无泄漏路径（15:45 那套来自套件之外）；跑完仓库根无库 ✓。`ruff` All checks passed；`mypy --strict delector tools` 87 files OK；`mypy --follow-imports=skip tests` 120 files OK。
+- 另：`C:\Users\Haoyu\AppData\Local\Temp\delector-root-db-backup-20261011\` 存着被移走的 8 个文件（用户已确认非其数据）。
+
+### 2026-10-11 | codebuddy | MEASURE 产物路径取数（T4 收官）：未测段 冷 1527ms / 暖 858ms
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户重建便携产物（= 当前 master，6 枚 P2 标记 + 未测段标记均在）后真启取数，冷/暖各一次。
+- **未测段（进程创建 → 计时起点）**：源码 `python desktop.py`（暖）**372 ms** ｜ 产物 **冷 1527 ms**、**暖 858 ms**。
+- **真实端到端**（起点→首屏 + 未测段）：源码暖 ≈ **5.4s**（5s + 0.372）｜ 产物冷 ≈ **8.5s**（7s + 1.527）、暖 ≈ **6.9s**（6s + 0.858）。
+- **可比的差只有一个**：**PyInstaller bootstrap 净增 ≈0.49s**（858 vs 372 ms，同机、两次皆暖态、毫秒级）。
+  ⚠️ **冷启动比暖态多 ≈0.67s**（1527 → 858）⇒ **报产物数必须带冷/暖标签**，否则同一个"产物路径"能报出两个差 0.67s 的数。
+  ⚠️ 段内（起点→首屏）源码 5s / 产物 6s 的差**落在 ±1s 量化步长内且各为单样本** ⇒ **不得**断言"产物内部更慢"；产物那次的 `import delector.server` 冷态 3s、暖态回到 2s（与源码暖态一致）。
+- **顺手纠正一次误读**：用户第一次给的 19:43 输出显示"该日志不含此项（旧版本 desktop.py）" —— 取证（日志块里连 6 枚 P2 标记都没有）判定那是**改动前打的旧产物**，不是仪表失灵 ⇒ 先重建再测（已写入"报数须带冷/暖标签"的同族纪律）。
+- 已回写：ADR-0018 §8（仓内 + vault）、ADR-0020 §6（仓内 + vault）、`PROJECT_OVERVIEW`。**T4 收官**；本线程（首屏口径 + 未测段可观测化）全部闭合。
+
+### 2026-10-11 | codebuddy | DECISION 发版门 = B / 搁置边界 = B（ADR-0022）+ 两条守卫落地
+Caps: filesystem-read, filesystem-write, shell-exec
+用户以 `/dfs-grill` 提问"现在值得发版吗？这些小的先不修改？"，拍板 **Q1=B（先补守卫+文案再发）、Q2=B（搁置全保留含 Defender，只写 known-issues）**。
+- **前提被纠正（决定性）**：本版不是"几条小修"，是**首个原生桌面壳 + 首次数据落点外置**（`v5.16.0:desktop.py` 不存在；`v5.16.0:start.py` 调 `bootstrap_data_dir` 0 次，现 3 次；`DEFAULT_ENTRY` 从无到 `desktop.py`）；已装用户**拿不到**那 6 条可感知修复（static 内嵌产物）。
+- **守卫①（`package_windows.py`）**：真 tag 必须 == `v`+`APP_VERSION`（预发布尾缀放行）⇒ 构建期硬失败。堵的是"漏 bump 就推 tag ⇒ 产物自称 tag、应用报旧版本 ⇒ 更新提示永远落后"，而 CI 与真启包闸**都看不见**。5 用例 + 2 变异自证。
+- **守卫②（被改写，如实记录）**：原提案"真启闸加真实迁移变体"—— 勘察真实产物发现 `_internal/delector/` 只有 `data`（无 `__init__.py`）⇒ `_package_root()` 不向上走，**旧落点 = `<pkg>/_internal/delector/core`**（既非程序目录也非 `_internal`）⇒ 变体的播种目录需先定案 ⇒ 降级为**冻结语义钉**（monkeypatch `__file__`）+ 人工覆盖安装冒烟。1 用例 + 1 变异自证。
+- **连带改写 3 条既有用例**：两条 `v9.9.9` 当 tag 的改用**预发布 tag**（保判别力）；一条"非法分隔符经净化"重构为直测 `sanitize_version()` + 新增优先级用例（`128/merge` 事故面另有独立用例）。
+- **README 健康处理（用户要求）**：去个人 Obsidian Vault 路径（隐私）；纠数据落点（外置真相 + 两个开关 + 首迁留 `.bak`）与 Windows 行（WebView2 前置、删"零依赖秒开"）；测试模块数 60+ → 117；裁掉与 CHANGELOG 重复且与上方矛盾的旧版本摘要；新增「已知限制」承载 2s 与 D1 两条 known-issues。
+- 门禁（**四档全跑**，含因改 `package_windows.py` 必跑的入口面档）：ruff / 入口面 4 files / tests 121 files / delector+tools 87 files 全绿；`test_server.py` **297 passed**。
+- 登记：R2（Android 不可回滚）、R4（release body 不读 CHANGELOG）、R5（端口探针**无 timeout** 无界调用）、Defender 搁置；递延不变。
+- 未闭合：发版本身交 `/dfs-release`（版本面 3 处 bump + CHANGELOG + tag + 产物 + Release 的 known-issues 段）；发 tag 前同 commit 手动跑 `Windows Portable Smoke`。
+
+### 2026-10-11 | codebuddy | WORK_START(v5.17.0-release)＋WORK_END(v5.17.0-release)
+   > 正文超 §4 上限（4299 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-11-0000-work-start-v5-17-0-release-work-end-v5-17-0-rele.md`](WORKMEMORY/NOTES-2026-10-11-0000-work-start-v5-17-0-release-work-end-v5-17-0-rele.md)。
+
+### 2026-10-11 | codebuddy | NOTE Release 模板 / 仓库 About 对齐当前产品
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户问"Release 文案 + 仓库描述与标签是否也要更新" ⇒ 都过时了，已一并修（commit `98910ee` + 远端设置）。
+- **Release 模板（`build-release.yml` 的 `body:`）**：改前 Windows 行仍写「解压即用，双击 `DeLector.exe` **秒级启动**」——与自家 known-issues「那 2s 不许当提速卖点」直接冲突；能力清单 8 行缺桌面壳 / 遇见区 i+1 / 全库检索 / 听力微训 / 长难句工坊 / 背词工作台与统一池 / 552-691 搭配 / 写作台 Inlay Hints / 更新 chip。改后：前言补「三形态共用同一后端」+ CHANGELOG/FEATURES 指针；四平台安装说明逐条改写；能力清单 8 → **11 行**与 `FEATURES.md` 对齐。
+- **约定落纸**：模板内加注释 + `docs/agents/ops.md` §8 —— **版本专属段落（「本版重点」/「已知限制」）逐版不同，发版后 MUST 用 `gh release edit <tag> --notes-file` 追加**（ADR-0022 R4，v5.17.0 首次实践即人工补的）。模板只放跨版本稳定内容。
+- **v5.17.0 的 Release 正文已按新模板重渲染**（本地用 `yaml.safe_load` 取模板 + `${{ github.ref_name }}` → `v5.17.0`，再拼上两段版本专属内容，39 行，四节齐全）。
+- **仓库 About（`gh repo edit`）**：描述改为「德语欧标沉浸精读 + 歌德/德福备考 · 本地优先、离线可用 | …spaCy NLP, FSRS, native desktop / portable / Android」；主页设为 Releases 页；标签 11 → **19**（新增 `fsrs` / `offline-first` / `local-first` / `pwa` / `pywebview` / `chaquopy` / `desktop-app` / `sqlite`）。
+- 门禁：`yaml.safe_load` 通过（jobs 5、body 24 行）；`test_ci_hardening` + `test_writer_mobile` 63 passed；`test_server` 相关子集 22 passed。该文件在 CI「打包面」清单内 ⇒ push master 自动点亮 `Windows Portable Smoke` 复验（无测试断言 Release 正文，已 grep 确认）。
+
+### 2026-10-11 | codebuddy | NOTE dfs-release skill 按本次发版实测升级（v0.2.0 → v0.3.0）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户指出「dfs-release 还需要优化修改一下」⇒ 该 skill 是全局用户级（`C:/Users/Haoyu/.codebuddy/skills/dfs-release`），本次 v5.17.0 发版实测出它四个真缺环，已修：
+- **生命周期止于"打 tag"** ⇒ 新增 **Stage 5 Post-Release Verification & Notes**（核资产数量/体积/签名闸；pipeline 的 Release body 是静态样板 ⇒ 须 `gh release edit` 追加版本专属两段并复核；仓库 About/描述/标签也会漂）与 **Post-Tag Failure Recovery**（红平台 ⇒ 无 Release 但 tag 在；先判 flake 还是 deterministic **并给出算术**；重切 tag 属破坏性操作须用户批准，且只有"未发布/无人下载/单向计数器未分发"三条全成立才安全）。
+- **前置门不含"门禁覆盖面"** ⇒ 新增 Gate coverage 规则：绿闸只证它真跑的东西（Windows Smoke 只构建+真启不跑 pytest ⇒ 盖不住 macOS 那类测试缺陷；四平台各自只跑自己的测试）。
+- **清单条款不现实** ⇒ "100% green 无 skip"改为「skip 必须解释并与基线比」（本机 2 skipped / macOS 7 skipped 都是合法的）；安全扫描改为"生态有才跑，没有就**登记为缺口**"。
+- **版本面枚举缺失** ⇒ 新增：枚举所有版本落点 + 单一真相源 + 守卫测试（本次实测 6+ 处，且 `test_without_github_ref_type_local_v_tag_is_adopted` 写死旧 tag 名被发版门守卫当场打红）。
+- **`scripts/changelog_gen.py` 三个真 bug**（在临时仓库自测抓到）：① `--version` 有静默默认 `0.1.0` ⇒ 改必填；② **默认就写盘且用 `entry + existing` 前插 ⇒ 会把新条目插到文档标题之上、破坏人工策展的头部** ⇒ 改为默认 dry-run + `--write` 显式 + 插到第一个既有版本标题之前；③ **`subprocess(text=True)` 不带 `encoding=` 用 GBK 解码 ⇒ 中文提交信息让 `stdout=None` ⇒ 报毫不相关的 `AttributeError: 'NoneType'`** ⇒ 显式 `encoding="utf-8", errors="replace"` + 判 None + 打印降级。自测含中文提交信息的临时仓库，4 条用例 + 1 条变异自证（抽掉 `encoding="utf-8"` 复现原崩溃路径）。
+- 反模式表新增 4 行（三平台绿就发 / 模板正文会没问题 / tag 了就完事 / 我轮询到底）。仓库侧 `docs/agents/ops.md` §8 已在前一提交写明追加约定。
