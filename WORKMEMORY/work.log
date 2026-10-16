@@ -405,3 +405,18 @@ Caps: filesystem-read, filesystem-write, shell-exec
 杂项：`tests/test_*.py` 现读 126（docs 写 125）——随下次发版版本面同步一并核。
 下一步：C 档 8 项（C1 回灌为无条件下一步），待用户点名。
 
+### 2026-10-17 01:10 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**C 档 C2 补证** —— 把 swarm audit 的 P1-3~P1-5 三条 UNVERIFIED 以代码精读 + 隧道实测补证并定级，回填 backlog；顺带抽样补证若干 P2 项 + 仓库卫生（`git gc`）。
+不做范围（MUST）：不改产品代码 / 不开分支 / 不合并 PR / 不跑全量套件（负载纪律）/ 不真跑服务与真实 API。
+（本事件与配对 WORK_END 同批补记 —— 夜间低风险作业，用户睡前授权；实际开工约 01:10。）
+
+### 2026-10-17 01:19 | deepseek-v4.1-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+做了什么：**C2 三条全部成立**（① P1-3 抓取无总截止 + 错误口径不一致 ② P1-4 supervisor 无累积重启上界、实现与 `supervisor.go:78`「总配额」注释不符、crash-loop 静默且无测试覆盖 ③ P1-5 DeepSeek 退避无 jitter、最坏单次 483.5s 复核一致），建议定级 P2（P1-5 可 P2~P3）；P1-2 独立复核成立。P2 抽样 7 项：6 确证 + 1 结案（gradle-wrapper：CI 不依赖、本地 wrapper 路径不可用）+ 1 细化（`stats_json` 确证「不自愈」）。
+验证方式：`cd agent && go test ./internal/pythonsvc/ -count=1` → ok 4.453s（8 例全绿）；`cd agent && go test ./internal/llm/ -count=1` → ok 1.259s（8/8）；反例 grep 四处 0 命中（见文档附执行记录）。
+产出物：`docs/reviews/2026-10-17-c2-verification.md`（新增）+ `docs/reviews/2026-10-16-open-items-backlog.md`（C2/C8 行回填）。
+回写检查：结论已回写 backlog 对应行；无临时产物入库；未入库任何凭据。
+顺带：`git gc` 已执行（松散对象 7556→0、prune-packable 836→0、38.5s、fsck 仅 dangling blob）；`gc.auto` 未配置属实。
+下一步：C1（无条件下一步）待点名；C2 三项修复按分支 + PR 走。
+
