@@ -2527,6 +2527,34 @@ def test_keystore_protected_by_gitignore_and_hook():
     assert "base64" in hook and "0x30" in hook, "PKCS12 Base64 检测需经 base64 解码后验文件头"
 
 
+def test_runtime_artifacts_protected_by_gitignore():
+    """桌面壳运行态产物 MUST 被 .gitignore 命中（评审 P1-2：`launch.log`/`lan-address.txt` 曾是缺口）。
+
+    威胁模型与 `*.db*` 同族：便携模式（`DELECTOR_PORTABLE=1`）或源码运行时，数据目录
+    就是仓库根（`data_dir_bootstrap.resolve_data_dir` → `program_dir()`）⇒ 一次
+    `git add -A` 会把运行态日志（启动堆栈/端口冲突详情）与**内网 IP 地址**提交进历史。
+    """
+    root = ROOT
+    import subprocess  # 本文件惯例：subprocess 只在使用处局部导入
+
+    ignore = open(os.path.join(root, ".gitignore"), encoding="utf-8").read()
+    for pat in ("/launch.log", "/launch.log.*", "/lan-address.txt"):
+        assert pat in ignore, f".gitignore 缺 {pat}"
+    # 光有规则字符串不够：必须真的匹配得上（防规则写错、或被后续规则重新包含）
+    for rel in ("launch.log", "launch.log.1", "lan-address.txt"):
+        proc = subprocess.run(
+            ["git", "check-ignore", "-q", rel], cwd=str(root), capture_output=True
+        )
+        assert proc.returncode == 0, (
+            f"{rel} 未被 .gitignore 命中（git check-ignore rc={proc.returncode}）"
+        )
+    # 产物名 MUST 与桌面壳常量一致（防改了常量却忘了改忽略规则）
+    desktop = open(os.path.join(root, "desktop.py"), encoding="utf-8").read()
+    assert 'LOG_FILE_NAME = "launch.log"' in desktop
+    assert 'LOG_BACKUP_SUFFIX = ".1"' in desktop
+    assert 'LAN_ADDRESS_FILE_NAME = "lan-address.txt"' in desktop
+
+
 def _pkcs12_b64():
     import base64
 
