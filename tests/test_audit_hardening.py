@@ -794,12 +794,12 @@ def test_rollback_failure_logs_db_path_snapshot_and_cause(monkeypatch, caplog):
     静默 `pass` 等于把「半个还原比不还原更糟」这条理由自己抹掉：用户只拿到原始
     异常，既不知道自己的库可能已损坏，也没人知道该从哪个快照捞回。
     """
-    from delector.core import database as db
+    from delector.core.db import backup as db_backup
 
     def boom(snapshot, dst):
         raise OSError("磁盘满")
 
-    monkeypatch.setattr(db, "_restore_db_file", boom)
+    monkeypatch.setattr(db_backup, "_restore_db_file", boom)
 
     caplog.set_level(logging.ERROR, logger="delector")
     raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
@@ -826,7 +826,7 @@ def test_rollback_failure_logs_db_path_snapshot_and_cause(monkeypatch, caplog):
 def test_rollback_failure_does_not_abort_other_databases(monkeypatch, caplog):
     """[Instinct: Multi-Table-DB] 主库 + progress 库各留一份快照：其中一处回滚失败
     MUST NOT 中断其余回滚（保持「尽力回滚全部」语义），且失败的那处必须被点名留痕。"""
-    from delector.core import database as db
+    from delector.core.db import backup as db_backup
 
     attempted = []
 
@@ -835,7 +835,7 @@ def test_rollback_failure_does_not_abort_other_databases(monkeypatch, caplog):
         if "progress" in dst:
             raise OSError("磁盘满")
 
-    monkeypatch.setattr(db, "_restore_db_file", flaky)
+    monkeypatch.setattr(db_backup, "_restore_db_file", flaky)
 
     caplog.set_level(logging.ERROR, logger="delector")
     raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
@@ -851,9 +851,9 @@ def test_rollback_failure_does_not_abort_other_databases(monkeypatch, caplog):
 
 def test_successful_rollback_emits_no_error_log(monkeypatch, caplog):
     """回滚成功是常态，MUST NOT 产 error 级日志（否则真出故障时噪声淹没信号）。"""
-    from delector.core import database as db
+    from delector.core.db import backup as db_backup
 
-    monkeypatch.setattr(db, "_restore_db_file", lambda snapshot, dst: None)
+    monkeypatch.setattr(db_backup, "_restore_db_file", lambda snapshot, dst: None)
 
     caplog.set_level(logging.ERROR, logger="delector")
     raised = _enter_guard_and_fail(RuntimeError("原始炸了"))
