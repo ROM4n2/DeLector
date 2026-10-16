@@ -16,7 +16,7 @@ status: open
 - **现状**：**5 份评估报告 + 18 项未决项登记表 + A 档 8 项 + B 档 5 项全部落地**；A+B 前四项已合入 master。
 - **唯一待办入口**：`docs/reviews/2026-10-16-open-items-backlog.md`（A/B 已标完成，**C 档 8 项待做**）。
 - **计划正本**（均已 100%）：`docs/plans/2026-10-16-audit-fixes-a-series.md`（5/5）· `docs/plans/2026-10-16-audit-fixes-b-series.md`（4/4）· `docs/plans/2026-10-16-database-split.md`（5/5）。
-- **分支/PR**：`#143`（A 档 + B1/B2/B3/B5）已 **MERGED** @ `459343b`；`#144`（B4 database.py 切分）base 已改指 master、CI 进行中，**绿后合并**（`refactor/database-split`）。
+- **分支/PR**：**两个 PR 均已 MERGED** —— `#143`（A 档 + B1/B2/B3/B5）@ `459343b`（SSH 本地 `--no-ff`，因它改了 `.github/` 而 `gh` 无 workflow scope）；`#144`（B4 database.py 切分）@ `c79e764`（`gh pr merge` 直接成功，因 B4 未碰 `.github/`）。**master 当前 = `c79e764`**，两个 feature 分支已删。
 
 ## 二、已完成（含可取证证据）
 
@@ -54,6 +54,8 @@ status: open
 8. **`database.py` 的残留**：只剩 `_require_localhost` 一个 `def`（**非 DB 关注点，刻意留在持久层包之外**）。要达成"纯 façade"需另开 `core/net_guard.py`（属命名/分层整理，本轮 out of scope）。
 9. **版本面待同步**：本批新增了不少测试（A1 3 条 / B1 14 条 / B4 2 条 / B5 若干）⇒ **下次发版**须按 `ops.md` 的口径同步版本面数字（当前 master **未发版**，故未动）。
 10. **vault 侧**：`99-Inbox` 还有 **2 张草稿**待 `/dfs-inbox-consolidate`（登记表 A7，已注明"并入既有规则、勿另立新规"）。
+11. **本地验证 MUST 逐字复刻 CI 的门禁命令**（本轮两连红的第二红 = 我只跑了"单文件 + 相似 flags"，而 CI 是 `mypy --follow-imports=skip tests` **整目录** + `--strict delector tools` **含 tools/**）。**不许用近似代替**：CI 的确切两条是 `mypy --strict delector tools` 与 `mypy --follow-imports=skip tests`（`.github/workflows/ci.yml:90-94`）。
+12. **`__file__` 相对路径在模块搬家后会静默偏层**（本轮 B4 的第一红，**只在干净 checkout 暴露**）：`_PKG_DIR` 的值 = `delector/core`（切分前 `dirname(database.py)`）是**冻结面**，搬进 `delector/core/db/` 后必须取**两级** dirname 才能保持同值；否则 `preset_processed_data_path()` 会多出一层 `core/`，而**本地若恰有散落文件则全绿**（本轮就是这样骗过我和两个 maker 的）。守卫：`tests/test_backend_package_layout.py::test_preset_processed_data_path_survives_module_moves`（与既有 `DATA_DIR`/`STATIC_DIR` 两条同族）。**今后任何搬包 MUST 顺带重核所有 `__file__` 派生路径**（`delector/core/db/` 内现已只有这一处，且 `_REPO_ROOT` 用的是抗搬家的"向上走到非包目录"写法）。
 
 ## 五、环境与凭据
 
