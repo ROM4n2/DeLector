@@ -1006,12 +1006,20 @@ const BACKUP_LS_PREFIX = "delector_";
 const BACKUP_LS_WORKBENCH_PREFIX = "wb.";
 // 瞬态标记：既不导出也不清除，否则还原后会重复弹一次连胜庆祝。
 const BACKUP_LS_TRANSIENT = new Set(["delector_streak_celebrated"]);
+// 凭据键排除表：wb.pair.v1 装的是 {host, key} —— key 即 wb_sync_key（长期、不轮换，
+// 只有手动撤销才失效），host 是内网地址；而备份 JSON 是用户会分享/上传网盘的文件
+// ⇒ 这个键在**导出与还原两侧**都必须过滤。
+// ⚠️ 这只是**纵深第一道**（拦正常客户端）；前端可被绕过（旧版客户端 / 手改请求）
+// ⇒ 权威闸是后端 /api/backup/prepare 的键名黑名单 _BACKUP_LS_DENYLIST（routes/main.py），
+// 它与 database.py 的 BACKUP_SETTINGS_WHITELIST（排除 wb_sync_key）是同一威胁模型的两处。
+const BACKUP_LS_EXCLUDE = new Set(["wb.pair.v1"]);
 
 function backupLocalStorageKeys() {
   const keys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k) continue;
+    if (BACKUP_LS_EXCLUDE.has(k)) continue; // 凭据键绝不进备份（导出侧第一道）
     if (k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k))
       keys.push(k);
     if (k.startsWith(BACKUP_LS_WORKBENCH_PREFIX)) keys.push(k);
@@ -1070,6 +1078,9 @@ export function uploadBackupJson(e) {
       });
       Object.entries(payload.local_storage || {}).forEach(([k, v]) => {
         if (v === null) return;
+        // 凭据键不得写回本机（还原侧第一道）：换机还原 = 把长期 key 迁移到新设备，
+        // 恶意备份还会让它指向他人主机。后端权威闸已拦，这里再防手改过的旧备份文件。
+        if (BACKUP_LS_EXCLUDE.has(k)) return;
         const isDelector =
           k.startsWith(BACKUP_LS_PREFIX) && !BACKUP_LS_TRANSIENT.has(k);
         const isWorkbench = k.startsWith(BACKUP_LS_WORKBENCH_PREFIX);

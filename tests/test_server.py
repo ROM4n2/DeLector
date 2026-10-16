@@ -1016,7 +1016,13 @@ def test_prepare_and_download_backup_is_reusable_within_ttl(client):
     第二次拿到 404，于是把 {"detail": "备份链接已失效"} 当成备份存下来：
     用户手里是一份假备份，全程无报错，比直接失败更难发现。
     """
-    ls = {"delector_voice": "de-DE-ConradNeural", "delector_companion_custom_svg": "<svg/>"}
+    # 输入刻意带上 wb.pair.v1（配对凭据：内网 host + 长期 wb_sync_key）——前端收集
+    # 侧已过滤它，这里模拟「旧版客户端 / 手改请求把它喂进来」，验证后端权威闸独立成立。
+    ls = {
+        "delector_voice": "de-DE-ConradNeural",
+        "delector_companion_custom_svg": "<svg/>",
+        "wb.pair.v1": '{"host": "192.168.1.9:8000", "key": "NOT-A-REAL-KEY-0000"}',
+    }
     prep = client.post("/api/backup/prepare", json={"local_storage": ls})
     assert prep.status_code == 200
     token = prep.json()["token"]
@@ -1028,13 +1034,57 @@ def test_prepare_and_download_backup_is_reusable_within_ttl(client):
     assert ".json" in res.headers["content-disposition"]
     body = res.json()
     assert body["version"] == BACKUP_FORMAT_VERSION
-    assert body["local_storage"] == ls  # localStorage 必须原样带上
+    # 2026-10-15 swarm 审计 P1-1：原断言 `== ls` 把「local_storage 原样透传」钉成了
+    # 契约 —— 恰好把凭据键的透传固化成"正确行为"。改为同时钉住两个方向：
+    # ① 含 wb.pair.v1 的输入 ⇒ 落盘体**不含**该键（后端按键名黑名单过滤）；
+    # ② 正常偏好键（delector_voice / delector_companion_custom_svg）仍原样带上。
+    # 这是**强化**而非放宽：旧断言只证明"带上了什么"，新断言另行证明"不该带的被拦掉"，
+    # 同时正常键的逐字往返仍被钉死（覆盖面是旧断言的超集）。
+    assert "wb.pair.v1" not in body["local_storage"]
+    assert body["local_storage"] == {k: v for k, v in ls.items() if k != "wb.pair.v1"}
     assert "articles" in body and "daily_summary" in body
 
     # TTL 内第二次必须拿到完全相同的内容 —— 这就是 Android 那条链路的实际形态
     again = client.get(f"/api/backup/download/{token}")
     assert again.status_code == 200
     assert again.text == res.text
+
+
+def test_prepare_backup_strips_wb_pair_credential_keeps_normal_keys(client):
+    """P1-1 契约守卫（后端权威闸）：wb.pair.v1 是**凭据键**，任何情况下不得进备份体。
+
+    链路：wb.pair.v1 = {host, key}，key 即 wb_sync_key（长期、不轮换；database.py 里
+    `secrets.token_hex(16)`，只有手动撤销才失效），host 是内网地址。后端 app_settings
+    侧早已用 BACKUP_SETTINGS_WHITELIST 把它排除（注释写明「备份 JSON 是用户会分享/
+    上传网盘的文件」），但 localStorage 这条侧门会被原样带出 —— cards.js 的
+    BACKUP_LS_EXCLUDE 只是纵深第一道（旧版客户端 / 手改请求可绕过）⇒ 权威闸必须在
+    后端按键名过滤。
+
+    本用例刻意不经过前端语言（直接构造请求体），与 cards.js 那两个源码守卫各自独立：
+    删掉后端 _BACKUP_LS_DENYLIST 过滤 ⇒ 本用例必红；把闸下成"值特征匹配"（如扫 32 位
+    hex）⇒ 正常键用例段也会被这条守卫纠住口径（本用例只钉键名语义）。
+    """
+    credential = '{"host": "192.168.1.9:8000", "key": "NOT-A-REAL-KEY-0000"}'
+    ls = {
+        "wb.pair.v1": credential,
+        "wb.words.v1": '{"a": 1}',  # 正常 wb.* 进度键必须照常带上（闸不得误伤）
+        "delector_voice": "de-DE-ConradNeural",
+    }
+    prep = client.post("/api/backup/prepare", json={"local_storage": ls})
+    assert prep.status_code == 200
+    res = client.get(f"/api/backup/download/{prep.json()['token']}")
+    assert res.status_code == 200
+    body = res.json()
+
+    assert "wb.pair.v1" not in body["local_storage"], (
+        "凭据键 wb.pair.v1 被原样透传进备份 JSON"
+        "（拿到文件即可对 http://<host>:8000 发 PUT /api/wb/state / 投 RTC 信令）"
+    )
+    assert "NOT-A-REAL-KEY-0000" not in res.text, (
+        "凭据**值**出现在下载体的其它角落（过滤必须按整键清理，不许只清 local_storage 的顶层）"
+    )
+    for k in ("wb.words.v1", "delector_voice"):
+        assert body["local_storage"].get(k) == ls[k], f"正常键 {k} 被误伤（黑名单只能拦凭据键）"
 
 
 def test_download_token_expires_after_ttl(client):
@@ -1122,6 +1172,44 @@ def test_frontend_export_does_not_use_blob_download():
     assert "/api/backup/download/" in export_fn
     assert "createObjectURL" not in export_fn, "blob: 下载在 Android 上是静默无操作"
     assert "local_storage" in export_fn, "localStorage 必须一起导出（字号/语音/宠物 SVG 只在那里）"
+
+
+def test_frontend_backup_export_excludes_wb_pair_credential():
+    """P1-1 纵深第一道（导出侧）：cards.js 收集备份键时必须排除 wb.pair.v1。
+
+    wb.pair.v1 = {host, key}，key 即长期 wb_sync_key（不轮换、只有手动撤销才失效）
+    ⇒ 它绝不能进「用户会分享/上传网盘」的备份 JSON。
+
+    ⚠️ **静态断言（读源码字符串），只能防文本回归、不能替代真机验收**：本仓无 JS
+    测试基建，它只证明"正确的代码形状在源码里存在"。真机行为由后端权威闸的端到端
+    用例（test_prepare_backup_strips_wb_pair_credential_keeps_normal_keys）兜底。
+    把 BACKUP_LS_EXCLUDE 从收集循环里删掉 / 排除表被改名 ⇒ 本用例必红。
+    """
+    src = open(os.path.join(ROOT, "static", "js", "cards.js"), encoding="utf-8").read()
+    m = re.search(r"const BACKUP_LS_EXCLUDE = new Set\(\[([^\]]*)\]\);", src)
+    assert m, "cards.js 必须新增 BACKUP_LS_EXCLUDE 排除表（备份凭据键，纵深第一道）"
+    assert '"wb.pair.v1"' in m.group(1), "排除表必须点名 wb.pair.v1（配对凭据：长期 wb_sync_key + 内网 host）"
+
+    start = src.index("function backupLocalStorageKeys")
+    collect_fn = src[start : src.index("export ", start)]
+    assert "BACKUP_LS_EXCLUDE.has(k)" in collect_fn, (
+        "导出侧收集键时未按 BACKUP_LS_EXCLUDE 过滤 ⇒ wb.pair.v1 会被写进备份 JSON"
+    )
+
+
+def test_frontend_backup_restore_excludes_wb_pair_credential():
+    """P1-1 纵深第一道（还原侧）：cards.js 写回备份里的 localStorage 时必须排除 wb.pair.v1。
+
+    还原侧原为「备份里有什么就写回什么」⇒ 换机还原 = 把长期凭据迁移到新设备，
+    恶意备份还能把它指向他人主机。⚠️ 静态断言局限同导出侧用例（防文本回归，
+    不替代真机）。只改导出不改还原 ⇒ 本用例必红。
+    """
+    src = open(os.path.join(ROOT, "static", "js", "cards.js"), encoding="utf-8").read()
+    start = src.index("export function uploadBackupJson")
+    restore_fn = src[start : src.index("export ", start + 1)]
+    assert "BACKUP_LS_EXCLUDE.has(k)" in restore_fn, (
+        "还原侧写回未按 BACKUP_LS_EXCLUDE 过滤 ⇒ 备份里的 wb.pair.v1 会被写回本机"
+    )
 
 
 def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
