@@ -22,6 +22,7 @@
 ## Active handoffs
 
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
+- 2026-10-18 → [`handoff_c7-workbench-html-split.md`](handoff_c7-workbench-html-split.md)（to: any · role: IMPLEMENT · status: open）— C7 `workbench.html` 拆分：含 **140 个耦合探针的实测盘点**（A91/B4/C21/D12/E12）+ 13 个 `.mjs` 探针断裂清单 + 入口路径不可改名的 5 处钉死点 + 迁移依赖顺序 + **并行文件占面契约**；计划正本 `docs/plans/2026-10-18-c7-workbench-html-split.md`
 
 ## 已归档 handoffs
 > 协议 §4：关闭后 MUST 移入 `WORKMEMORY/archive/`；`handoff_*.md` 只保留**活跃**交接。

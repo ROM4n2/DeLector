@@ -493,3 +493,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 定向用例：`tests/test_bench_token_distribution.py` 26 + `tests/test_ai_polish_loop.py` 36 = 62 例全绿；`tests/test_server.py -k test_ai_polish` 28 例全绿
 - 文件卫生：所有修改及新增文件严格 UTF-8 CRLF 且 0 lone LF；无临时残渣。
 
+### 2026-10-18 00:27 | deepseek-v4.1-flash__hermes | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7（workbench.html 拆分）交接包发出并挂 INDEX**，供另一 agent 并行开工。
+- 包：`WORKMEMORY/handoff_c7-workbench-html-split.md`（status: open · to: any · role: IMPLEMENT）；计划正本 `docs/plans/2026-10-18-c7-workbench-html-split.md`（6 Task，含 Tier/Mode 与 subagent scaffold）。INDEX.md Active handoffs 已挂。
+- **本会话新增实测（非引述）**：`static/german/workbench.html` 的耦合探针共 **140 个** —— A 类全文位置序/标记切片 **91**（`test_german_workbench.py` 77 · `test_wb_pair_persist_probe.py` 1 · **13 个 `tools/wb_*.mjs`**）· B 类行号钉 **4**（全在 `test_frontend_module_graph.py:388-433`）· C 类存在性 **21** · D 类计数/字节等价 **12** · E 类不受影响 **12**。13 个 `.mjs` 探针各自按标记切片 `workbench.html`，**一拆即全部抛错**（各探针切片行号已入包）。
+- **硬约束入包**：入口路径 `static/german/workbench.html` **不可改名/迁移**（被 5 处路由字符串钉死：`static/index.html` data-src · `static/js/main.js` ensureGermanWorkbench · `test_frontend_guards.py:42` · `test_cards_workbench_no_review_probe.py:90` · `tools/cards_workbench_no_review_probe.mjs:258`）⇒ 拆分形态 = 同路径薄壳 + `<script type="module">`。
+- **并行协调契约**：三路按文件切占面，C7 独占 workbench 前端产物族与其探针族；早前 C6 登记里的 `test_german_workbench.py` **已划归 C7 独占**，C6 只做 `test_server.py` + `test_desktop_shell.py`（此变更须在 C6 计划中注明）。
+- 迁移依赖顺序（实测）：`test_frontend_module_graph.py`（唯一 B 类）→ `test_german_workbench.py`（77 A）→ 13 个 `.mjs`（须先于产物搬迁）→ `test_workbench_tokens.py` → `test_a1_workbench_source.py`（含字节等价/幂等两条 D，牵动两个构建工具）→ `test_audit_hardening.py`/`test_exam_domain.py` → 探针包装层复跑。
+
