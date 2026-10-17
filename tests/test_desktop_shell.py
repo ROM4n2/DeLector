@@ -1957,6 +1957,8 @@ def test_import_desktop_has_no_side_effects():
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
     )
 
