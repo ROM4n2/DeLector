@@ -84,6 +84,7 @@ def check_security() -> None:
         r"|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
     )
     found_keys: dict[str, tuple[Path, int, str]] = {}
+    skipped_files = 0
     for ext in (".py", ".js", ".html", ".css", ".json", ".xml", ".md"):
         for p in ROOT.rglob(f"*{ext}"):
             ignored_dirs = (".git", "__pycache__", ".cache", "venv", ".pytest_cache", "node_modules")
@@ -100,15 +101,23 @@ def check_security() -> None:
                         # 避免一密多行刷屏；截断仅用于展示，去重键是完整密钥。
                         key = m.group(0)
                         found_keys.setdefault(key, (p.relative_to(ROOT), i + 1, key[:12] + "..."))
-            # silent-ok: 只读体检的逐文件尽力语义：单文件不可读跳过并继续；密钥防线权威层是 CI secret-scan
-            except Exception:
-                pass
+            except OSError:
+                # C9-Y3：跳过必须计数。没被读过的文件不能算进「无硬编码密钥」的结论里 ——
+                # 计数在这里，结论按计数分支（覆盖不完整就不出 PASS）。
+                skipped_files += 1
 
-    if not found_keys:
-        record_pass("SEC", "全仓库源码无任何硬编码 API Key / Token / 私钥")
-    else:
+    if skipped_files:
+        record_issue(
+            "SEC",
+            f"密钥扫描覆盖不完整：跳过 {skipped_files} 个不可读文件 ⇒ 不能断言「全仓库无硬编码密钥」",
+            "修复这些文件的可读性（权限/损坏）后重跑；密钥防线的权威判定始终是 CI job secret-scan（gitleaks）",
+        )
+
+    if found_keys:
         for f, ln, k in found_keys.values():
             record_issue("SEC", f"{f}:{ln} 疑似存在硬编码密钥 ({k})", "立即轮换密钥并移入 .env / app_settings")
+    elif not skipped_files:
+        record_pass("SEC", "全仓库源码无任何硬编码 API Key / Token / 私钥")
 
     try:
         from delector.server import _require_localhost
