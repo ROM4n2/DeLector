@@ -516,3 +516,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 已同步：`WORKMEMORY/handoff_c7-workbench-html-split.md` 协调表 + 新增「修订记录」节。C7 侧若需改这两个文件，先在包内响应节说明。
 - 其余 `static/js/**`（含 C7 将新增的 `wb-*.js`）仍归 C7 独占。
 
+### 2026-10-18 01:39 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C8 P2 批次全量闭环交付**（`docs/plans/2026-10-18-c8-p2-batch.md` Task 1~9）+ **附带交付静默降级机械闸**。分支 `fix/c8-p2-batch`，交付报告 `docs/reviews/2026-10-18-c8-delivery.md`。
+- 四批四提交，各自过独立对抗性评审 PASS（零 Red Card）：`6a60573` 后端端点三改 · `e070f97` gitignore/恒真断言/CI 密钥扫描 · `fc0c471` TTS 三连 + LAN 面板 undefined 回归 · `d06390f` 静默降级闸落地。
+- **新机械闸**（本批最持久资产）：`tools/check_silent_degradation.py` + CI job `silent-degradation`（fail-loud）。判据按机制形状（AST/tokenize）非字符串匹配；抑制必须带具体理由。首扫 32>20 触发 STOP CONDITION，实现方**未做批量豁免**；裁决后账目可审计：31 C1 = 收窄掉 8（continue 形态）+ 修掉 4 + 豁免 19。**第 5 个真事故 `main.py:1250` 落在收窄掉的 8 处内仍被修**——收窄不许成为藏事故的手段。
+- 门禁（逐字复刻 CI）：`mypy --strict delector tools` 106 文件 0 错 · `mypy --follow-imports=skip tests` 132 文件 0 错 · `ruff check .` 全过 · `go test ./...` 8 包全过 + `gofmt -l .` 净 · 定向套件 136 + 62 passed。
+- **可信教训（1/2：我的事故）**：我在 Batch D 与 Reviewer B 仍在跑时并行派了 Batch C，三进程争用同一数据目录 ⇒ Batch C 基线跑出 `333 passed / 3 errors` **污染伪影**（`sqlite3.OperationalError`，且坏掉的用例全在无关域）。已注入 steer 使其作废该基线、以串行 338 为锚。**此红线早已在记忆中，仍然犯了**——派单前 MUST 先确认机器上无其它 pytest 在跑；子代理在多个测试进程并存时给出的「绿」只能算临时结论。
+- **可信教训（2/2：新事实）**：① `gitleaks-action@v2` 依赖 Node 20，而 GitHub 已于 **2026-09-16** 从托管 runner 完整移除 Node 20 ⇒ v2 无法运行，必须用 `@v3`（已从 release note 一手证实）。② `gitleaks` 的配置是 **FAIL OPEN**：配置键拼错 ⇒ 静默忽略 ⇒ 零规则 ⇒ 带密钥也全绿。**安全闸的配置键是承重的**，接入新闸后 MUST 用变异/植入验证它真能红，不能只看首跑绿。
+- 终审产出登记为台账 **C9**：其中 **Y4 是活缺陷** —— `delector/routes/syntax_hard.py:254-255` 的 `except Exception: art_ids = []`（文章素材静默从合并排名列表整体消失、零痕迹），属「假值默认返回」类，落在新闸已登记的极限**之外**；未随本批落地。
+- 并行面：C7（workbench 拆分）由另一 agent 执行，文件占面互斥；本批中途曾主动修正 C7 交接包的占面契约（`main.js`/`api-types.js` 划归 C8）。
+
