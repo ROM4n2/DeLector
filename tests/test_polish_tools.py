@@ -20,6 +20,7 @@ import asyncio
 import functools
 import inspect
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -28,7 +29,7 @@ import spacy.cli
 from delector.nlp_engine import processor
 from delector.services.polish_loop import Budget, run_polish_loop
 from delector.services.polish_tools import POLISH_TOOL_ALLOWLIST, call_tool
-from delector.tools import TOOL_REGISTRY
+from delector.tools import TOOL_REGISTRY, writing_check
 
 # ── 三个白名单工具的**真实最小** payload（照各自 `run` 的入参契约写，不猜） ──────
 # writing_check：`delector/tools/writing_check.py:14` ⇒ `payload["text"]`，`leitpunkte` 可选。
@@ -269,6 +270,72 @@ def test_partial_is_usable_as_task4_loop_dispatch() -> None:
 
     assert seen == ["vocab_stats"], f"钩子 MUST 在循环里也生效（D5 前置钩子）：{seen}"
     assert result.rounds == 1, f"工具调用轮应正常计入：{result}"
+
+
+# ── 12. 三角一致性规范：writing_check 自查工具与裁判对齐 ────────────────────────
+def test_writing_check_triangle_consistency(monkeypatch: pytest.MonkeyPatch) -> None:
+    """三角一致性规范（Task 1 · ADR-0024 §6）：自查工具 writing_check 与回灌裁判对齐。
+
+    a) writing_check.run 返回 dict 包含 violations、suggestions 与 judge_engine；
+    b) 当 nlp 未加载 (None) 时，judge_engine == 'rules_only' 且 mode_note == '[快速模式: 不含深层语法规则]'；
+    c) 当显式传入 nlp 或已存在 loaded nlp 时，nlp 被实际使用；
+    d) violations 中的每一项符合统一 schema: rule, level, message, span。
+    """
+    sample_text = "Liebe Maria,\nich lade dich ein.\nViele Grüße\nAnna"
+
+    # b) 当 nlp 未加载时：验证降级标记与 rules_only
+    monkeypatch.setattr(processor, "get_loaded_nlp", lambda: None)
+    res_no_nlp = asyncio.run(writing_check.run({"text": sample_text}))
+
+    # a) 验证返回键
+    assert isinstance(res_no_nlp, dict)
+    assert "violations" in res_no_nlp, f"writing_check 结果 MUST 包含 violations: {sorted(res_no_nlp)}"
+    assert "suggestions" in res_no_nlp, f"writing_check 结果 MUST 包含 suggestions: {sorted(res_no_nlp)}"
+    assert "judge_engine" in res_no_nlp, f"writing_check 结果 MUST 包含 judge_engine: {sorted(res_no_nlp)}"
+
+    # b) 验证 rules_only 与 mode_note
+    assert res_no_nlp["judge_engine"] == "rules_only"
+    assert res_no_nlp.get("mode_note") == "[快速模式: 不含深层语法规则]"
+
+    # d) 验证 violations 项的 schema
+    assert len(res_no_nlp["violations"]) > 0, "样例应产生至少一条建议/违规（例如 word_count）"
+    for item in res_no_nlp["violations"]:
+        assert isinstance(item, dict)
+        assert set(item.keys()) == {"rule", "level", "message", "span"}
+        assert isinstance(item["rule"], str)
+        assert item["level"] in ("error", "warning")
+        assert isinstance(item["message"], str)
+        assert item["span"] is None or (
+            isinstance(item["span"], (tuple, list)) and len(item["span"]) == 2
+        )
+
+    # c) 当传入 mock/dummy nlp 时，验证 nlp 被实际调用
+    mock_nlp = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.sents = []
+    mock_nlp.return_value = mock_doc
+
+    # 1. 显式通过 payload["nlp"] 传入
+    res_mock = asyncio.run(writing_check.run({"text": sample_text, "nlp": mock_nlp}))
+    mock_nlp.assert_called_with(sample_text)
+    assert isinstance(res_mock, dict)
+
+    # 2. 通过 processor.get_loaded_nlp() 隐式提供
+    mock_nlp.reset_mock()
+    monkeypatch.setattr(processor, "get_loaded_nlp", lambda: mock_nlp)
+    res_loaded = asyncio.run(writing_check.run({"text": sample_text}))
+    mock_nlp.assert_called_with(sample_text)
+    assert isinstance(res_loaded, dict)
+
+    # 3. 若有真实 spaCy 模型，验证其产生 rules+spacy 且无 mode_note
+    real_nlp = processor._resolve_nlp_model()
+    if real_nlp is not None:
+        monkeypatch.setattr(processor, "get_loaded_nlp", lambda: real_nlp)
+        res_real = asyncio.run(writing_check.run({"text": sample_text}))
+        assert res_real["judge_engine"] == "rules+spacy"
+        assert "mode_note" not in res_real
+        for item in res_real["violations"]:
+            assert set(item.keys()) == {"rule", "level", "message", "span"}
 
 
 # ── 变异自证清单（改动实现 ⇒ 对应用例 MUST 变红） ────────────────────────────────
