@@ -16,13 +16,17 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 import socket
 import ssl
 import struct
 import time
+import warnings
 from typing import Dict, Iterator, Tuple
 from xml.sax.saxutils import escape
+
+logger = logging.getLogger(__name__)
 
 # 与 edge_tts.constants 保持一致（上游若更换令牌需同步）
 TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
@@ -33,6 +37,27 @@ SEC_MS_GEC_VERSION = f"1-{CHROMIUM_VERSION}"
 WIN_EPOCH = 11644473600  # Unix epoch → Windows file time epoch 的秒偏移
 # 每块 SSML 文本的字节上限（对齐 edge_tts 的 4096）
 CHUNK_BYTES = 4096
+
+# ── 重试与超时口径（C8 Task7）────────────────────────────────────────────────
+# (a) 重试：次数与原实现一致（首次 + 一次重试），但**只重试可重试失败**，且每次重试
+#     前有**有界退避** —— 原来的「任意异常立即重试」是重试风暴（对协议错误毫无意义）。
+#     预算算术：attempts=2 ⇒ 全程至多一次 sleep（attempt=0 之后），
+#     delay = min(base * 2**0, cap) = min(0.5, 2.0) = 0.5s；
+#     调用方预算（routes/main.py:1275-1281 的实测口径）：每次尝试 socket 超时上限 30s，
+#     降级到 3 个 HTTP provider 各 6s，最坏 60s 量级 ⇒ 0.5s 远低于该预算（<1%），
+#     不会把可用网络路径挤成超时。
+_RETRY_ATTEMPTS = 2
+_RETRY_BACKOFF_BASE = 0.5  # 秒；退避 = min(base * 2**attempt, cap)
+_RETRY_BACKOFF_CAP = 2.0  # 秒；上界（防将来调大 attempts 时退避失控）
+
+# (b) 超时：连接与读取分离成两个口径（原实现同一个 30s 同时管连接与读取）。
+#     - connect = 10.0s（**严格短于**原 30s）：注册缺陷是「死主机把用户挂满 30s」；
+#       10s 覆盖弱网下 TCP + TLS 握手（典型 2~5s）仍留余量。
+#     - read = 30.0s（**不低于**原 30s）：与原值持平，不让慢网络成为新回归。
+#     ⚠️ 本机无代理/弱网条件，这两个值的真实网络行为**未在本机验证**；
+#     弱网误报或仍嫌挂太久时，只改这两个常量。
+_CONNECT_TIMEOUT = 10.0
+_READ_TIMEOUT = 30.0
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -118,16 +143,44 @@ class _HandshakeError(Exception):
         self.headers = headers
 
 
+def _is_retryable(error: Exception) -> bool:
+    """失败是否值得重试：连接/传输层错误与 5xx 握手拒绝。
+
+    协议/解析层错误（4xx 拒绝、服务端未回音频等）重试不会改变结果，MUST NOT 重试。
+    """
+    if isinstance(error, _HandshakeError):
+        return 500 <= error.status_code <= 599
+    return isinstance(error, (ConnectionError, TimeoutError, ssl.SSLError, socket.gaierror))
+
+
+def _retry_backoff_sleep(attempt: int) -> None:
+    """第 `attempt` 次尝试失败后、下一次尝试前的有界退避（预算算术见上方常量注释）。"""
+    time.sleep(min(_RETRY_BACKOFF_BASE * (2 ** attempt), _RETRY_BACKOFF_CAP))
+
+
 class _WebSocket:
     """最小 WebSocket 客户端（只支持文本/二进制/close/ping-pong，客户端帧做掩码）。"""
 
-    def __init__(self, host: str, timeout: float = 30.0):
-        self._sock = socket.create_connection((host, 443), timeout=timeout)
-        self._sock.settimeout(timeout)
+    def __init__(
+        self,
+        host: str,
+        connect_timeout: float = _CONNECT_TIMEOUT,
+        read_timeout: float = _READ_TIMEOUT,
+    ):
+        self._sock = socket.create_connection((host, 443), timeout=connect_timeout)
+        self._sock.settimeout(read_timeout)  # 连接/读取是两个口径，见上方常量注释
         try:
             ctx = ssl.create_default_context()
-        except Exception:
-            # Android/Chaquopy 的默认证书路径可能不可用，退回不校验证书（仅本地 TTS 合成，非敏感通道）
+        except Exception as exc:
+            # Android/Chaquopy 的默认证书路径可能不可用，退回不校验证书（仅本地 TTS 合成，非敏感通道）。
+            # ⚠️ 该分支专为 Android 存在、**本机无法复现** ⇒ 只加可观测性（日志 + 警告），
+            # MUST NOT 删除回退本身；桌面端路径仍旧走 create_default_context（证书校验不动）。
+            logger.warning("TTS: 系统 CA 不可用，回退到不校验证书的 SSL 上下文（Android/Chaquopy 分支）: %s", exc)
+            warnings.warn(
+                "TTS: 系统 CA 不可用，回退到不校验证书的 SSL 上下文（Android/Chaquopy 分支）",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             ctx = ssl._create_unverified_context()
         self._sock = ctx.wrap_socket(self._sock, server_hostname=host)
         self._buf = b""
@@ -260,14 +313,16 @@ def synthesize(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -
     """合成整段文本，返回 MP3 字节。任一环节失败抛异常（由调用方兜底）。
 
     403 表示 Sec-MS-GEC 因设备时钟偏差被拒：取服务端 Date 头算偏移，重试一次。
+    其余失败只有**连接/传输层与 5xx** 才重试，且每次重试前走有界退避
+    （见 `_retry_backoff_sleep`）；协议/解析错误（4xx、服务端未回音频）MUST NOT 重试。
     """
     chunks = list(_split_text(text))
     if not chunks:
         raise ValueError("empty text")
 
     clock_skew = 0.0
-    last_error = None
-    for attempt in range(2):
+    last_error: Exception | None = None
+    for attempt in range(_RETRY_ATTEMPTS):
         ws = None
         try:
             path = (
@@ -308,12 +363,22 @@ def synthesize(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -
                 if server_ts:
                     clock_skew = server_ts - time.time()
                     last_error = None
+                    _retry_backoff_sleep(attempt)
                     continue
+            # 5xx 是传输级可重试拒绝；其余 4xx / 协议拒绝重试无意义 ⇒ 原样抛出。
+            if _is_retryable(e) and attempt + 1 < _RETRY_ATTEMPTS:
+                last_error = e
+                _retry_backoff_sleep(attempt)
+                continue
             raise
         except Exception as e:
             last_error = e
-            if attempt == 0:
-                continue
+            if not (_is_retryable(e) and attempt + 1 < _RETRY_ATTEMPTS):
+                # 不可重试（协议/解析错误）或已无重试额度 ⇒ 跳出循环，落到下面的 RuntimeError。
+                break
+            # 只对可重试失败退避重试。
+            _retry_backoff_sleep(attempt)
+            continue
         finally:
             if ws is not None:
                 try:

@@ -9,6 +9,7 @@ import contextlib
 import gc
 import ipaddress
 import json
+import logging
 import os
 import re
 import time
@@ -7827,3 +7828,229 @@ def test_frontend_polish_progress_takes_max_turns_from_server():
     assert "AbortController" in body, "取消必须有 AbortController（或等价机制）"
     assert "max_turns" in body, "轮次分母必须来自服务端事件"
     assert "/3 轮" not in body, "不许把轮次上界硬编码成 3（内核改 MAX_TURNS_DEFAULT 这里就撒谎）"
+
+
+# ── C8 Batch C：TTS 三连（有界退避 / 拆分超时 / SSL 回退可观测）─────────────────
+#
+# 三条口径（delector/services/tts.py）：
+#  (a) 只对连接/传输层与 5xx 重试，每次重试前有**有界退避**；协议/解析错误 MUST NOT 重试；
+#  (b) 连接超时与读取超时是两个独立值：连接 < 30s（死主机不得再挂满 30s）、读取 >= 30s；
+#  (c) Android/Chaquopy 的 SSL 不校验回退 MUST 保留、但 MUST NOT 静默
+#      （该分支本机无法真实触发：测试用替身强制走它，只断言「不再静默」这一可验证面）。
+
+_TTS_TURN_END_FRAME = (0x1, b"Path:turn.end\r\n\r\n")
+_TTS_AUDIO_HEADERS = b"Path:audio\r\nContent-Type:audio/mpeg\r\n\r\n"
+_TTS_AUDIO_FRAME = (0x2, len(_TTS_AUDIO_HEADERS).to_bytes(2, "big") + _TTS_AUDIO_HEADERS + b"MP3DATA")
+_TTS_OK_FRAMES = [_TTS_AUDIO_FRAME, _TTS_TURN_END_FRAME]
+
+
+class _FakeMiniWS:
+    """`delector.services.tts._WebSocket` 的测试替身：不发网络，按帧序列回放。
+
+    只实现 synthesize 实际用到的四个方法；帧格式与真协议一致（见 tts.py 的 recv_frame）。
+    """
+
+    def __init__(self, host: str = "speech.platform.bing.com", *args: Any, **kwargs: Any) -> None:
+        self.host = host
+        self.frames = list(_TTS_OK_FRAMES)
+        self.closed = False
+
+    def handshake(self, path: str, host: str) -> None:
+        self.path = path
+
+    def send_text(self, payload: str) -> None:
+        pass
+
+    def recv_frame(self) -> Any:
+        return self.frames.pop(0)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_tts_retries_transport_error_with_bounded_backoff(monkeypatch):
+    """(a) 连接层失败（可重试）⇒ 第二次尝试前有一次**有界**退避 sleep，且最终合成成功。"""
+    from delector.services import tts
+
+    sleeps: List[float] = []
+    monkeypatch.setattr(tts.time, "sleep", lambda seconds: sleeps.append(seconds))
+    attempts: List[int] = []
+
+    class _Flaky(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise ConnectionError("connection refused")
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(tts, "_WebSocket", _Flaky)
+    assert tts.synthesize("Hallo") == b"MP3DATA"
+    assert len(attempts) == 2, "可重试失败必须重试一次（首次 + 重试）"
+    assert sleeps, "重试前必须有退避 sleep —— 无 sleep 的立即重试正是本次修的缺陷"
+    assert sum(sleeps) <= 2.0, f"退避总时长必须有界且远低于调用方 60s 预算: {sleeps}"
+
+
+def test_tts_protocol_error_is_not_retried(monkeypatch):
+    """(a) 协议层结果（服务端零音频帧、直接 turn.end）重试不改变结果 ⇒ MUST NOT 重试。"""
+    from delector.services import tts
+
+    sleeps: List[float] = []
+    monkeypatch.setattr(tts.time, "sleep", lambda seconds: sleeps.append(seconds))
+    attempts: List[int] = []
+
+    class _NoAudio(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            super().__init__(*args, **kwargs)
+            self.frames = [_TTS_TURN_END_FRAME]
+
+    monkeypatch.setattr(tts, "_WebSocket", _NoAudio)
+    with pytest.raises(RuntimeError, match="no audio"):
+        tts.synthesize("Hallo")
+    assert len(attempts) == 1, "协议/解析错误被重试了（重试不改变结果，纯烧调用方预算）"
+    assert sleeps == [], "协议错误不得进入退避重试路径"
+
+
+def test_tts_handshake_5xx_retries_4xx_does_not(monkeypatch):
+    """(a) 5xx 握手拒绝可重试；4xx（非 403 时钟校准）是协议拒绝，原样抛出、不重试。"""
+    from delector.services import tts
+
+    sleeps: List[float] = []
+    monkeypatch.setattr(tts.time, "sleep", lambda seconds: sleeps.append(seconds))
+    attempts: List[int] = []
+
+    class _Five(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            super().__init__(*args, **kwargs)
+
+        def handshake(self, path: str, host: str) -> None:
+            if len(attempts) == 1:
+                raise tts._HandshakeError(b"HTTP/1.1 503 Service Unavailable", {})
+            super().handshake(path, host)
+
+    monkeypatch.setattr(tts, "_WebSocket", _Five)
+    assert tts.synthesize("Hallo") == b"MP3DATA"
+    assert len(attempts) == 2, "5xx 握手拒绝必须重试一次"
+    assert len(sleeps) == 1, "5xx 重试前也要走有界退避"
+
+    attempts.clear()
+    sleeps.clear()
+
+    class _Four(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            super().__init__(*args, **kwargs)
+
+        def handshake(self, path: str, host: str) -> None:
+            raise tts._HandshakeError(b"HTTP/1.1 401 Unauthorized", {})
+
+    monkeypatch.setattr(tts, "_WebSocket", _Four)
+    with pytest.raises(tts._HandshakeError):
+        tts.synthesize("Hallo")
+    assert len(attempts) == 1, "4xx 协议拒绝不得重试"
+    assert sleeps == [], "4xx 协议拒绝不得 sleep"
+
+
+def test_tts_websocket_splits_connect_and_read_timeouts(monkeypatch, recwarn):
+    """(b) 连接/读取超时是两个独立值：连接 < 30s（修「死主机挂 30s」）、读取 >= 30s（不劣化慢网）。"""
+    from delector.services import tts
+
+    recorded: Dict[str, float] = {}
+
+    class _Sock:
+        def settimeout(self, value: float) -> None:
+            recorded["read_timeout"] = value
+
+    class _Ctx:
+        def wrap_socket(self, sock: Any, server_hostname: Any = None) -> Any:
+            return sock
+
+    def _create_connection(address: Any, timeout: float = 0.0) -> _Sock:
+        recorded["connect_timeout"] = timeout
+        return _Sock()
+
+    monkeypatch.setattr(tts.socket, "create_connection", _create_connection)
+    monkeypatch.setattr(tts.ssl, "create_default_context", lambda *args, **kwargs: _Ctx())
+
+    tts._WebSocket("example.invalid")
+
+    assert recorded["connect_timeout"] < 30.0, "连接超时必须严格短于 30s（死主机不得再挂满 30s）"
+    assert recorded["read_timeout"] >= 30.0, "读取超时不得短于 30s（慢网络不是新回归）"
+    assert recorded["connect_timeout"] != recorded["read_timeout"], "连接/读取超时必须是两个独立值"
+    # 桌面路径仍走 create_default_context（证书校验不动）：不得出现 SSL 降级告警
+    assert not [w for w in recwarn.list if "证书" in str(w.message)], "桌面路径不该走降级分支"
+
+
+def test_tts_ssl_fallback_stays_but_is_no_longer_silent(monkeypatch, caplog):
+    """(c) 默认 CA 不可用 ⇒ 仍回退到不校验上下文（Android/Chaquopy 路径），但必须告警 + 记日志。
+
+    ⚠️ 该分支本机无法真实触发（无 Chaquopy / 证书缺失环境）：这里用替身强制走它，只断言
+    「不再静默」这一可在本机验证的面；回退本身 MUST NOT 被删除（见 tts.py 处的注释）。
+    """
+    from delector.services import tts
+
+    class _Sock:
+        def settimeout(self, value: float) -> None:
+            pass
+
+    class _Ctx:
+        def wrap_socket(self, sock: Any, server_hostname: Any = None) -> Any:
+            return sock
+
+    def _no_default_context(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("no CA store on this platform")
+
+    monkeypatch.setattr(tts.socket, "create_connection", lambda address, timeout=None: _Sock())
+    monkeypatch.setattr(tts.ssl, "create_default_context", _no_default_context)
+    monkeypatch.setattr(tts.ssl, "_create_unverified_context", lambda *args, **kwargs: _Ctx())
+
+    with caplog.at_level(logging.WARNING, logger="delector.services.tts"), pytest.warns(
+        RuntimeWarning, match="证书"
+    ):
+        tts._WebSocket("example.invalid")
+
+    assert any("证书" in record.getMessage() for record in caplog.records), "SSL 降级路径没有日志（静默降级）"
+
+
+# ── C8 Batch C：设置面板 LAN 渲染回归（api_key_masked 仅回环来源返回）───────────
+
+
+def test_settings_panel_guards_absent_api_key_masked_static():
+    """(i) main.js 设置面板必须按存在性守卫 api_key_masked 再做插值。
+
+    背景：GET /api/settings 对非回环来源收敛掉 `api_key_masked`（C8 Task6），
+    裸插值会让局域网客户端的设置面板渲染字面 'undefined'。
+    """
+    src = open(os.path.join(ROOT, "static", "js", "main.js"), encoding="utf-8").read()
+    start = src.index("export async function openSettingsModal()")
+    end = src.index("export function closeSettingsModal()")
+    lines = src[start:end].splitlines()
+
+    hits = [i for i, ln in enumerate(lines) if "${s.api_key_masked}" in ln]
+    assert hits, "设置面板不再插值 api_key_masked —— 回环渲染路径被误删"
+    for i in hits:
+        window = "\n".join(lines[max(0, i - 2) : i + 1])
+        assert re.search(r"s\.api_key_masked\s*\?", window), (
+            f"api_key_masked 未被存在性判断守卫（LAN 来源将渲染字面 'undefined'）: {lines[i].strip()}"
+        )
+    assert "局域网不显示" in "\n".join(lines), "缺少 LAN 来源的诚实回退文案（既不造掩码也不显示 undefined）"
+
+
+def test_settings_panel_loopback_rendering_path_kept_verbatim():
+    """(ii) 回环来源（响应仍带 api_key_masked）的渲染路径 MUST 逐字保留。"""
+    src = open(os.path.join(ROOT, "static", "js", "main.js"), encoding="utf-8").read()
+    assert "`✓ 当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`" in src, (
+        "回环渲染文案被改动/删除（桌面端会静默改文案）"
+    )
+    assert "if (s.has_api_key)" in src, "key 存在性信号（has_api_key）必须仍是渲染分支条件"
+
+
+def test_api_types_settings_typedef_marks_api_key_masked_loopback_only():
+    """api-types.js 的 Settings typedef 必须记录 api_key_masked 为仅回环来源返回。"""
+    js = open(os.path.join(ROOT, "static", "js", "api-types.js"), encoding="utf-8").read()
+    block = re.search(r"/\*\*(?:(?!\*/).)*GET /api/settings(?:(?!\*/).)*\*/", js, re.S)
+    assert block, "api-types.js 缺少 GET /api/settings 的 typedef 注释块"
+    text = block.group(0)
+    assert "[api_key_masked]" in text, "api_key_masked 未标为可选（LAN 来源响应中不含该字段）"
+    assert "回环" in text or "loopback" in text.lower(), "typedef 未记录 api_key_masked 仅回环来源返回"
