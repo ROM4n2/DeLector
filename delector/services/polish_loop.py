@@ -118,6 +118,7 @@ DEFAULT_PER_CALL_TIMEOUT_S = 30.0
 # ── 证据注入双限（**两个限都要真起作用**，各有对应用例） ──────────────────────
 EVIDENCE_MAX_LINES = 40
 EVIDENCE_MAX_BYTES = 4000
+LETTER_FORMAT_RULE_PREFIX: str = "a1_"
 
 # ── 原因码 ────────────────────────────────────────────────────────────────────
 REASON_OK = "ok"
@@ -244,6 +245,48 @@ def truncate_evidence(
         # 按字节切段后 `errors="ignore"` 丢弃尾部半个多字节字符，不产生非法 UTF-8。
         out = raw[:max_bytes].decode("utf-8", errors="ignore")
     return out
+
+
+def format_judge_feedback(
+    violations: list[dict[str, Any]],
+    *,
+    text_type: str = "letter",
+) -> str:
+    """格式化裁判违规项为提示词注入文本（带体裁适用性闸与双限截断）。
+
+    1. 适用性闸：非信件体裁（如 prose）过滤掉书信格式特有规则（a1_*）；
+    2. 结构渲染：带位置区间展示与解释；
+    3. 双限截断：经 truncate_evidence 约束行数与 UTF-8 字节数。
+    """
+    if text_type != "letter":
+        filtered = [
+            v
+            for v in violations
+            if not str(v.get("rule", "")).startswith(LETTER_FORMAT_RULE_PREFIX)
+        ]
+    else:
+        filtered = list(violations)
+
+    if not filtered:
+        return ""
+
+    header = "[裁判反馈] 检测到以下未达标项，请在下一轮修改中重点修正："
+    lines: list[str] = []
+    for v in filtered:
+        rule = str(v.get("rule", ""))
+        msg = str(v.get("message", "") or v.get("explanation_zh", ""))
+        span = v.get("span")
+        if isinstance(span, (list, tuple)) and len(span) == 2:
+            lines.append(f"- [{rule}] (位置 {span[0]}-{span[1]}): {msg}")
+        else:
+            lines.append(f"- [{rule}]: {msg}")
+
+    body = "\n".join([header] + lines)
+    return truncate_evidence(
+        body,
+        max_lines=EVIDENCE_MAX_LINES,
+        max_bytes=EVIDENCE_MAX_BYTES,
+    )
 
 
 def _dump(obj: Any) -> str:
