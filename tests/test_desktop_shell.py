@@ -2105,9 +2105,16 @@ def test_start_entry_streams_survives_missing_desktop_module(monkeypatch: pytest
     monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
     monkeypatch.setattr(server_lifecycle, "probe_identity", lambda _port: True)
 
+    original_out, original_err = sys.stdout, sys.stderr  # 收口前捕获既有流对象引用
+
     start.main()  # 不得抛：收口失败宁可不留痕，也绝不得阻断启动
 
-    assert sys.stdout is not None, "收口失败也不得把既有 stdout 弄丢（pytest 捕获流仍在）"
+    # 断言「同一对象」而非 `is not None`：`sys.stdout is not None` 在 pytest 下**恒真**
+    # （capture 插件必然装入非 None 的流）⇒ 收口若把既有流**替换**成 launch.log（仍是非
+    # None 的文件对象）它照样全绿 —— 抓不到自己要防的回归（变异自证：同一变异下旧写法绿、
+    # 本条红）。改钉对象同一性，手法同下方 `test_debug_console_keeps_existing_console_streams`。
+    assert sys.stdout is original_out, "收口失败也不得把既有 stdout 弄丢/替换（须为同一对象）"
+    assert sys.stderr is original_err, "收口失败也不得把既有 stderr 弄丢/替换（须为同一对象）"
 
 
 def test_debug_console_flag_defaults_off_and_is_accepted() -> None:
