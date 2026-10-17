@@ -12,10 +12,13 @@ Reference:
 
 from __future__ import annotations
 
+import argparse
+import io
 import json
 import math
 import statistics
-from dataclasses import dataclass
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -339,3 +342,198 @@ def load_records(path: str | Path) -> list[dict[str, Any]]:
         if isinstance(raw_list, list):
             return [item for item in raw_list if isinstance(item, dict)]
     raise ValueError(f"Unsupported record format in JSON file: {p}")
+
+
+def format_text_report(
+    token_ratios: TokenRatioReport,
+    turn_distribution: TurnDistributionReport,
+    by_genre: dict[str, TurnDistributionReport],
+    *,
+    chars_per_token_estimate: float = 3.0,
+) -> str:
+    """Format backtest results into a human-readable plain text report."""
+    lines: list[str] = [
+        "=== Token & Turn Distribution Backtest ===",
+        "",
+        "Token Ratio Analysis:",
+        f"  Samples: {token_ratios.sample_count}",
+        (
+            f"  Prompt Chars / Tokens: {token_ratios.prompt_chars_total} / {token_ratios.prompt_tokens_total} "
+            f"(mean: {token_ratios.prompt_chars_per_token_mean:.3f} chars/tok)"
+        ),
+        (
+            f"  Completion Chars / Tokens: {token_ratios.completion_chars_total} / "
+            f"{token_ratios.completion_tokens_total} "
+            f"(mean: {token_ratios.completion_chars_per_token_mean:.3f} chars/tok)"
+        ),
+        (
+            f"  Completion p50 / p95: {token_ratios.completion_chars_per_token_p50:.3f} / "
+            f"{token_ratios.completion_chars_per_token_p95:.3f} chars/tok"
+        ),
+        (
+            f"  Conservative Bound Coverage: {token_ratios.conservative_bound_coverage * 100:.1f}% "
+            f"(estimate factor: {chars_per_token_estimate:.1f})"
+        ),
+        f"  Recommended Estimate Factor: {token_ratios.recommended_estimate_factor:.3f} chars/tok",
+        "",
+        "Turn Distribution Analysis:",
+        f"  Total Runs: {turn_distribution.total_runs}",
+        "  Rounds Histogram:",
+    ]
+
+    if turn_distribution.round_counts:
+        for r_num, cnt in turn_distribution.round_counts.items():
+            pct = turn_distribution.round_percentages.get(r_num, 0.0) * 100
+            lines.append(f"    Round {r_num}: {cnt} ({pct:.1f}%)")
+    else:
+        lines.append("    (no runs)")
+
+    lines.append(
+        f"  Mean / Median Rounds: {turn_distribution.mean_rounds:.2f} / {turn_distribution.median_rounds:.2f}"
+    )
+    lines.append(
+        f"  Convergence Rate: {turn_distribution.converged_rate * 100:.1f}% "
+        f"({turn_distribution.converged_count}/{turn_distribution.total_runs})"
+    )
+    lines.append("  Termination Reasons:")
+    if turn_distribution.reasons:
+        for reason, count in turn_distribution.reasons.items():
+            lines.append(f"    {reason}: {count}")
+    else:
+        lines.append("    (none)")
+
+    lines.append(f"  Mean Tokens / Round: {turn_distribution.tokens_per_round_mean:.2f}")
+    lines.append(f"  Mean Elapsed / Round: {turn_distribution.elapsed_per_round_mean:.2f}s")
+    lines.append("")
+    lines.append("By Genre:")
+
+    if by_genre:
+        for genre, rep in by_genre.items():
+            lines.append(f"  [{genre}] ({rep.total_runs} runs)")
+            lines.append(
+                f"    Rounds: {rep.round_counts} | Mean: {rep.mean_rounds:.2f} | "
+                f"Converged: {rep.converged_rate * 100:.1f}% ({rep.converged_count}/{rep.total_runs})"
+            )
+            reasons_repr = ", ".join(f"{k}: {v}" for k, v in rep.reasons.items())
+            lines.append(f"    Reasons: {{{reasons_repr}}}")
+            lines.append(
+                f"    Tokens/Round: {rep.tokens_per_round_mean:.2f} | Elapsed/Round: {rep.elapsed_per_round_mean:.2f}s"
+            )
+    else:
+        lines.append("  (no genre data)")
+
+    return "\n".join(lines)
+
+
+def report_to_dict(
+    token_ratios: TokenRatioReport,
+    turn_distribution: TurnDistributionReport,
+    by_genre: dict[str, TurnDistributionReport],
+) -> dict[str, Any]:
+    """Convert backtest results into a JSON-serializable dictionary."""
+    return {
+        "token_ratios": asdict(token_ratios),
+        "turn_distribution": asdict(turn_distribution),
+        "by_genre": {genre: asdict(rep) for genre, rep in by_genre.items()},
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entrypoint for token & turn distribution backtest analyzer.
+
+    Exit codes:
+    - 0: success
+    - 1: corrupt data / unsupported structure / invalid JSON
+    - 2: file missing / invalid arguments
+    """
+    stdout = sys.stdout
+    if isinstance(stdout, io.TextIOWrapper):
+        try:
+            stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
+    parser = argparse.ArgumentParser(
+        description="Token & turn distribution backtest analyzer."
+    )
+    parser.add_argument(
+        "--from-records",
+        required=True,
+        metavar="PATH",
+        help="Path to JSON or JSONL execution records file",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output full report as JSON to stdout",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        metavar="PATH",
+        help="Optional path to save report (writes formatted text or JSON to file)",
+    )
+    parser.add_argument(
+        "--chars-per-token-estimate",
+        type=float,
+        default=3.0,
+        metavar="FLOAT",
+        help="Estimated characters per token ratio (default: 3.0)",
+    )
+
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+
+    if (
+        args.chars_per_token_estimate <= 0
+        or math.isnan(args.chars_per_token_estimate)
+        or math.isinf(args.chars_per_token_estimate)
+    ):
+        print("Error: --chars-per-token-estimate must be positive", file=sys.stderr)
+        return 2
+
+    try:
+        records = load_records(args.from_records)
+    except FileNotFoundError as exc:
+        print(f"Error: file missing: {exc}", file=sys.stderr)
+        return 2
+    except (json.JSONDecodeError, ValueError) as exc:
+        print(f"Error: corrupt or invalid records data: {exc}", file=sys.stderr)
+        return 1
+
+    token_ratios = analyze_token_ratios(
+        records,
+        chars_per_token_estimate=args.chars_per_token_estimate,
+    )
+    turn_distribution = analyze_turn_distribution(records)
+    by_genre = analyze_by_genre(records)
+
+    if args.json:
+        report_data = report_to_dict(token_ratios, turn_distribution, by_genre)
+        rendered = json.dumps(report_data, indent=2, ensure_ascii=False)
+    else:
+        rendered = format_text_report(
+            token_ratios,
+            turn_distribution,
+            by_genre,
+            chars_per_token_estimate=args.chars_per_token_estimate,
+        )
+
+    print(rendered)
+
+    if args.output:
+        try:
+            out_path = Path(args.output)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(rendered, encoding="utf-8")
+        except OSError as exc:
+            print(f"Error: unable to write output file: {exc}", file=sys.stderr)
+            return 2
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
