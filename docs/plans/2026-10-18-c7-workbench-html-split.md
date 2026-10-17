@@ -81,13 +81,13 @@
 > Return: 摘要 + MANDATORY 物理执行凭据（命令 + 退出码 + 用例计数 + git diff）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记录 `test_frontend_module_graph.py` 全绿基线（用例数）
-- [ ] **Step 2**: 写 `tests/wb_source.py` + 其单测（RED → GREEN）
-- [ ] **Step 3**: 改写 4 处 B 类行号钉
-- [ ] **Step 4**: 变异自证（移出 push 调用 ⇒ 变红 ⇒ 复原）
-- [ ] **Step 5**: 门禁（pytest / ruff / mypy tests）
-- [ ] **Step 6**: Physical Evidence Gate（退出码 + 计数 + diff）
-- [ ] **Step 7**: 原子提交（`refactor(c7): structuralize line-pin probes`）
+- [x] **Step 1**: 记录 `test_frontend_module_graph.py` 全绿基线（用例数）
+- [x] **Step 2**: 写 `tests/wb_source.py` + 其单测（RED → GREEN）
+- [x] **Step 3**: 改写 4 处 B 类行号钉
+- [x] **Step 4**: 变异自证（移出 push 调用 ⇒ 变红 ⇒ 复原）
+- [x] **Step 5**: 门禁（pytest / ruff / mypy tests）
+- [x] **Step 6**: Physical Evidence Gate（退出码 + 计数 + diff）
+- [x] **Step 7**: 原子提交（`refactor(c7): structuralize line-pin probes`）
 
 ---
 
