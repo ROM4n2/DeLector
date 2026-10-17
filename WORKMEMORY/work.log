@@ -545,3 +545,22 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 门禁：**全量 2325 passed / 2 skipped / 0 failed（394s）**；两闸均 exit 0；`ruff check .` 全仓净；`mypy --strict` 与 tests 靶净；改动文件 CRLF 0 lone LF。
 - **可信教训（本轮新增，适用于一切机械闸）**：① **判据收窄后 MUST 重跑变异自证**——判据一改，旧证明不再覆盖新判据；本次要求重跑，证明仍为 +4/−0 才算通过。② **编排者的裁决书本身也会出错，且错在最危险处**：本次我断言 `server.nlp`「无 `__all__`」，实际 `delector/server.py:131-132` 有 —— 若执行方盲从字面规则，**唯一那处真发现会被规则本身洗掉**。执行方改为实现意图并给出可测边界（单测钉死），编排者据此采纳。**结论：给闸下判据时，「按我说的做」与「按我想要的做」之间的偏差必须由执行方以事实指出，不能默认编排者正确。**
 
+### 2026-10-18 03:46 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C6：测试文件按被测面切分**（`docs/plans/2026-10-18-c6-test-file-split.md`，Task 0~7）。
+分支：`refactor/c6-test-file-split`（自 master `ffe1a0c`）。
+范围：`tests/test_server.py`（7614 行）+ `tests/test_desktop_shell.py`（2819 行）；`test_german_workbench.py` **已划归 C7 独占**不在本项。
+判据：**用例数守恒**（`--collect-only` 总数前后逐字相等）+ 只搬归属不改用例语义 + 零新依赖（不引入 xdist/randomly/order）。
+纪律：严格串行派单（本会话已因并行 pytest 争用吃过大亏）；本地全量必跑（搬迁的爆炸半径是整套测试）。
+不做范围（MUST）：禁触 C7 独占面（`static/**` · `tools/wb_*.mjs` · 两个 build 工具 · `test_german_workbench.py` · `test_workbench_tokens.py` · `test_a1_workbench_source.py` · `test_frontend_module_graph.py` · `test_exam_domain.py` · `test_audit_hardening.py` · `test_wb_pair_persist_probe.py`）。
+
+### 2026-10-18 06:14 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C6 测试文件按被测面切分全量闭环**（`docs/plans/2026-10-18-c6-test-file-split.md` Task 0~7）。
+- 分支 `refactor/c6-test-file-split`。**行数**：`tests/test_server.py` **7614 → 1482**（5.1×）；`tests/test_desktop_shell.py` **2828 → 699**（4.0×）。**新增 16 文件**：共享层 `tests/server_helpers.py` + 9 个 server 域文件 + 4 个 desktop 域文件。
+- **判据全程未破**：全量用例数 **2327** 从第一批到最后一批**一次未变**（每批由编排者独立 collect 核验）；**断言零改动**（逐块字节比对）；每个新文件**单独跑绿**且**顺序耦合为空**；零新依赖。
+- **白送的两处真修复**：① Task 0 修掉 `test_server.py:2501` 的空转补丁（C9 mock-drift 闸移交）——选**改打真实消费面**而非删除，因为该用例名为 `..._survives_without_spacy` 而本机**恰有 spaCy**，删掉会让它静默切到 lazy-spaCy 分支、丢掉名字承诺的覆盖；② Task 1 把 `client` fixture 下沉 `conftest.py` 时**把 `app` 的导入留在 fixture 内部**，避免 conftest 在每个 pytest 会话触发 `server` 的模块级 `init_db()`。
+- **三处工程方法值得留档**：① Task 3 的去重：Task 2 为解跨文件依赖做了逐字复制，Task 3 立即**提升为 `server_helpers.py` 唯一定义**（并跑**负对照**证明探针灵敏），避免副本随批次增殖漂移；② Task 6 建 **AST 依赖矩阵**（每个测试 → 模块级名字的传递闭包）**先发现跨文件边界再命名域**，并以**反事实实验**（import-only 变体 ⇒ 恰好 4 个测试红）证明残余文件必须保留自己那份 `_isolate_data_dir`（其元测试静态扫描本模块）；③ Task 5 撞上「被搬测试内省留在原文件的另一个测试」的三重约束死结（禁改体/禁破守恒/禁拆段），以 import 区 `__code__` 绑定解局并标注复核——**已登记根治项 F1**（改为内省生产函数，属测试语义变更，禁止混进搬迁类改动）。
+- 门禁：**全量 2325 passed / 2 skipped / 0 failed（371s）**；`mypy --strict` 107 文件 + tests 靶 149 文件均 0 错；`ruff check .` 全仓净；Go 8 包 + gofmt 净；**双闸**（mock-drift / silent-degradation）均 exit 0；20 个改动文件 0 lone LF。
+- **后续项已入计划**（非口头）：F1 探针桥根治 · F2 残余 876 行无 banner 杂项区切分 + `cards/counts` 归位 · 陈旧文档指针校正（含 `static/js/writer.js:1251` 属 C7 面禁改）。
+
