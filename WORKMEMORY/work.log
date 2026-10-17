@@ -509,6 +509,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 分工：按域分 3 批派发 TDD Builder（后端端点批 / 运维测试批 / TTS 批），每批配独立 Reviewer（maker-checker 隔离）。
 不做范围（MUST）：不改 C7 独占面（`static/german/workbench.html` · `static/js/**` · `tools/wb_*.mjs` · 两个 build 工具）；不改 AI 润色循环语义；不引入新依赖。
 
+### 2026-10-18 00:35 | codebuddy | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：接手 `handoff_c7-workbench-html-split.md`（C7 `workbench.html` 拆分，140 个耦合探针）。
+处置：沿用包内盘点与迁移顺序（先改探针后动产物；入口路径不改名；A 类不得降级为 C 类）；
+因主检出在 `fix/c8-p2-batch`（C8 在用）⇒ 改用**隔离 worktree** `D:\Code\DeLector-c7`
+（分支 `refactor/c7-workbench-html-split`，基线 cabce32；包内写的 c27cf63 已过时）。
+台账已初始化（6 任务），Task-1 已开工；进度真值源 = 计划正本 + worktree 内台账。
+Task 4/5 为 Tier 3（HITL）：动文件前先呈报变更面等确认。
+
 ### 2026-10-18 00:53 | deepseek-v4.1-flash__hermes | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**C7 交接包文件占面契约修正**（发送方主动纠错）——`static/js/main.js` 与 `static/js/api-types.js` 从 C7 独占面**移出、划归 C8**。
@@ -563,4 +572,3 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **三处工程方法值得留档**：① Task 3 的去重：Task 2 为解跨文件依赖做了逐字复制，Task 3 立即**提升为 `server_helpers.py` 唯一定义**（并跑**负对照**证明探针灵敏），避免副本随批次增殖漂移；② Task 6 建 **AST 依赖矩阵**（每个测试 → 模块级名字的传递闭包）**先发现跨文件边界再命名域**，并以**反事实实验**（import-only 变体 ⇒ 恰好 4 个测试红）证明残余文件必须保留自己那份 `_isolate_data_dir`（其元测试静态扫描本模块）；③ Task 5 撞上「被搬测试内省留在原文件的另一个测试」的三重约束死结（禁改体/禁破守恒/禁拆段），以 import 区 `__code__` 绑定解局并标注复核——**已登记根治项 F1**（改为内省生产函数，属测试语义变更，禁止混进搬迁类改动）。
 - 门禁：**全量 2325 passed / 2 skipped / 0 failed（371s）**；`mypy --strict` 107 文件 + tests 靶 149 文件均 0 错；`ruff check .` 全仓净；Go 8 包 + gofmt 净；**双闸**（mock-drift / silent-degradation）均 exit 0；20 个改动文件 0 lone LF。
 - **后续项已入计划**（非口头）：F1 探针桥根治 · F2 残余 876 行无 banner 杂项区切分 + `cards/counts` 归位 · 陈旧文档指针校正（含 `static/js/writer.js:1251` 属 C7 面禁改）。
-
