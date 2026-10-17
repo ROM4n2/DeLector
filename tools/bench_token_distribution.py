@@ -37,6 +37,22 @@ class TokenRatioReport:
     recommended_estimate_factor: float
 
 
+@dataclass(frozen=True)
+class TurnDistributionReport:
+    """Statistical summary of multi-turn agent iterations and termination reasons."""
+
+    total_runs: int
+    round_counts: dict[int, int]          # {1: count, 2: count, ...}
+    round_percentages: dict[int, float]   # {1: fraction, 2: fraction, ...} (0.0 to 1.0)
+    mean_rounds: float
+    median_rounds: float
+    converged_count: int
+    converged_rate: float                 # 0.0 to 1.0
+    reasons: dict[str, int]               # {"ok": count, "no_improvement": count, ...}
+    tokens_per_round_mean: float
+    elapsed_per_round_mean: float
+
+
 def _safe_int(val: Any, default: int = 0) -> int:
     """Defensively parse an integer without crashing on None, bool, or malformed data."""
     if val is None or isinstance(val, bool):
@@ -46,6 +62,30 @@ def _safe_int(val: Any, default: int = 0) -> int:
         return n if n >= 0 else default
     except (ValueError, TypeError):
         return default
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Defensively parse a float without crashing on None, bool, or malformed data."""
+    if val is None or isinstance(val, bool):
+        return default
+    try:
+        f = float(val)
+        return f if f >= 0.0 and not math.isnan(f) and not math.isinf(f) else default
+    except (ValueError, TypeError):
+        return default
+
+
+def _extract_genre(record: dict[str, Any]) -> str:
+    """Extract genre from text_type or infer from case_id."""
+    tt = record.get("text_type")
+    if tt is not None and str(tt).strip():
+        return str(tt).strip()
+    cid = str(record.get("case_id", "")).strip().lower()
+    if cid.startswith("letter"):
+        return "letter"
+    if cid.startswith("prose"):
+        return "prose"
+    return "unknown"
 
 
 def _percentile(values: Sequence[float], p: int) -> float:
@@ -174,6 +214,101 @@ def analyze_token_ratios(
         conservative_bound_coverage=conservative_bound_coverage,
         recommended_estimate_factor=recommended_estimate_factor,
     )
+
+
+def analyze_turn_distribution(
+    records: Sequence[dict[str, Any]],
+) -> TurnDistributionReport:
+    """Pure statistical analysis of turn iterations, convergence, and termination reasons.
+
+    Zero division protected: returns zero-filled TurnDistributionReport when records is empty.
+    """
+    if not records:
+        return TurnDistributionReport(
+            total_runs=0,
+            round_counts={},
+            round_percentages={},
+            mean_rounds=0.0,
+            median_rounds=0.0,
+            converged_count=0,
+            converged_rate=0.0,
+            reasons={},
+            tokens_per_round_mean=0.0,
+            elapsed_per_round_mean=0.0,
+        )
+
+    round_counts_map: dict[int, int] = {}
+    reasons_map: dict[str, int] = {}
+    rounds_list: list[int] = []
+    tokens_list: list[int] = []
+    elapsed_list: list[float] = []
+    converged_count = 0
+
+    for r in records:
+        raw_rounds = _safe_int(r.get("rounds"), 1)
+        rnd = raw_rounds if raw_rounds > 0 else 1
+        rounds_list.append(rnd)
+        round_counts_map[rnd] = round_counts_map.get(rnd, 0) + 1
+
+        is_converged = bool(r.get("converged", False))
+        if is_converged:
+            converged_count += 1
+
+        raw_reason = r.get("reason")
+        reason = str(raw_reason).strip() if raw_reason is not None and str(raw_reason).strip() else "unknown"
+        reasons_map[reason] = reasons_map.get(reason, 0) + 1
+
+        tok_val = r.get("tokens_used")
+        if tok_val is None:
+            tok_val = r.get("completion_tokens", 0)
+        tokens_list.append(_safe_int(tok_val, 0))
+
+        elapsed_list.append(_safe_float(r.get("elapsed_s", 0.0), 0.0))
+
+    total_runs = len(records)
+    sorted_rounds = sorted(round_counts_map.keys())
+    round_counts = {k: round_counts_map[k] for k in sorted_rounds}
+    round_percentages = {k: round_counts_map[k] / total_runs for k in sorted_rounds}
+
+    mean_rounds = sum(rounds_list) / total_runs
+    median_rounds = float(statistics.median(rounds_list))
+    converged_rate = converged_count / total_runs
+    reasons = {k: reasons_map[k] for k in sorted(reasons_map.keys())}
+
+    total_rounds = sum(rounds_list)
+    tokens_per_round_mean = sum(tokens_list) / total_rounds if total_rounds > 0 else 0.0
+    elapsed_per_round_mean = sum(elapsed_list) / total_rounds if total_rounds > 0 else 0.0
+
+    return TurnDistributionReport(
+        total_runs=total_runs,
+        round_counts=round_counts,
+        round_percentages=round_percentages,
+        mean_rounds=mean_rounds,
+        median_rounds=median_rounds,
+        converged_count=converged_count,
+        converged_rate=converged_rate,
+        reasons=reasons,
+        tokens_per_round_mean=tokens_per_round_mean,
+        elapsed_per_round_mean=elapsed_per_round_mean,
+    )
+
+
+def analyze_by_genre(
+    records: Sequence[dict[str, Any]],
+) -> dict[str, TurnDistributionReport]:
+    """Group execution records by genre (e.g. 'letter', 'prose') and analyze each subset."""
+    if not records:
+        return {}
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for r in records:
+        genre = _extract_genre(r)
+        groups.setdefault(genre, []).append(r)
+
+    return {
+        genre: analyze_turn_distribution(genre_records)
+        for genre, genre_records in sorted(groups.items())
+    }
 
 
 def load_records(path: str | Path) -> list[dict[str, Any]]:

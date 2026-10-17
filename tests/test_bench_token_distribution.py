@@ -21,7 +21,13 @@ _TOOLS_DIR = _ROOT / "tools"
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
-from bench_token_distribution import TokenRatioReport, analyze_token_ratios  # noqa: E402
+from bench_token_distribution import (  # noqa: E402
+    TokenRatioReport,
+    TurnDistributionReport,
+    analyze_by_genre,
+    analyze_token_ratios,
+    analyze_turn_distribution,
+)
 
 _FIXTURE_PATH = _ROOT / "tests" / "fixtures" / "token_backtest_sample.json"
 
@@ -166,3 +172,121 @@ def test_token_ratio_report_immutability() -> None:
     report = analyze_token_ratios([])
     with pytest.raises(Exception):  # FrozenInstanceError
         setattr(report, "sample_count", 5)
+
+
+def test_analyze_turn_distribution_fixture_sample() -> None:
+    """Verifies turn distribution statistics on the 10-record fixture."""
+    records = _load_fixture_records()
+    report = analyze_turn_distribution(records)
+
+    assert isinstance(report, TurnDistributionReport)
+    assert report.total_runs == 10
+    assert report.round_counts == {1: 5, 2: 4, 3: 1}
+    assert report.round_percentages == {1: 0.5, 2: 0.4, 3: 0.1}
+
+    # Mean & Median rounds
+    assert report.mean_rounds == pytest.approx(1.600, abs=1e-3)
+    assert report.median_rounds == pytest.approx(1.500, abs=1e-3)
+
+    # Convergence
+    assert report.converged_count == 8
+    assert report.converged_rate == pytest.approx(0.800, abs=1e-3)
+
+    # Reasons breakdown
+    assert report.reasons == {"ok": 8, "turn_limit": 1, "no_improvement": 1}
+
+    # Per-round metrics (sum of rounds = 16, sum of tokens = 4600, sum of elapsed = 53.75)
+    assert report.tokens_per_round_mean == pytest.approx(4600.0 / 16.0, abs=1e-3)
+    assert report.elapsed_per_round_mean == pytest.approx(53.75 / 16.0, abs=1e-3)
+
+
+def test_analyze_by_genre_partitions_letter_and_prose() -> None:
+    """Verifies analyze_by_genre splits records into letter and prose subgroups correctly."""
+    records = _load_fixture_records()
+    by_genre = analyze_by_genre(records)
+
+    assert set(by_genre.keys()) == {"letter", "prose"}
+
+    letter_rep = by_genre["letter"]
+    assert letter_rep.total_runs == 5
+    assert letter_rep.round_counts == {1: 2, 2: 2, 3: 1}
+    assert letter_rep.round_percentages == {1: 0.4, 2: 0.4, 3: 0.2}
+    assert letter_rep.mean_rounds == pytest.approx(1.800, abs=1e-3)
+    assert letter_rep.median_rounds == pytest.approx(2.000, abs=1e-3)
+    assert letter_rep.converged_count == 4
+    assert letter_rep.converged_rate == pytest.approx(0.800, abs=1e-3)
+    assert letter_rep.reasons == {"ok": 4, "turn_limit": 1}
+    assert letter_rep.tokens_per_round_mean == pytest.approx(2300.0 / 9.0, abs=1e-3)
+    assert letter_rep.elapsed_per_round_mean == pytest.approx(30.02 / 9.0, abs=1e-3)
+
+    prose_rep = by_genre["prose"]
+    assert prose_rep.total_runs == 5
+    assert prose_rep.round_counts == {1: 3, 2: 2}
+    assert prose_rep.round_percentages == {1: 0.6, 2: 0.4}
+    assert prose_rep.mean_rounds == pytest.approx(1.400, abs=1e-3)
+    assert prose_rep.median_rounds == pytest.approx(1.000, abs=1e-3)
+    assert prose_rep.converged_count == 4
+    assert prose_rep.converged_rate == pytest.approx(0.800, abs=1e-3)
+    assert prose_rep.reasons == {"ok": 4, "no_improvement": 1}
+    assert prose_rep.tokens_per_round_mean == pytest.approx(2300.0 / 7.0, abs=1e-3)
+    assert prose_rep.elapsed_per_round_mean == pytest.approx(23.73 / 7.0, abs=1e-3)
+
+
+def test_analyze_by_genre_explicit_text_type_and_unknown() -> None:
+    """Verifies explicit text_type takes precedence over case_id and handles unknowns."""
+    records = [
+        {"case_id": "letter_01", "text_type": "dialogue", "rounds": 1, "converged": True},
+        {"case_id": "unknown_topic_99", "rounds": 2, "converged": False, "reason": "no_improvement"},
+    ]
+    by_genre = analyze_by_genre(records)
+    assert set(by_genre.keys()) == {"dialogue", "unknown"}
+    assert by_genre["dialogue"].total_runs == 1
+    assert by_genre["unknown"].total_runs == 1
+
+
+def test_analyze_turn_distribution_empty_records() -> None:
+    """Verifies that an empty record set produces zeroed TurnDistributionReport."""
+    rep = analyze_turn_distribution([])
+    assert rep.total_runs == 0
+    assert rep.round_counts == {}
+    assert rep.round_percentages == {}
+    assert rep.mean_rounds == 0.0
+    assert rep.median_rounds == 0.0
+    assert rep.converged_count == 0
+    assert rep.converged_rate == 0.0
+    assert rep.reasons == {}
+    assert rep.tokens_per_round_mean == 0.0
+    assert rep.elapsed_per_round_mean == 0.0
+
+    assert analyze_by_genre([]) == {}
+
+
+def test_analyze_turn_distribution_malformed_and_edge_records() -> None:
+    """Verifies robust handling of malformed records, <=0 rounds, missing keys, and invalid types."""
+    records = [
+        {},  # rounds defaults to 1, tokens defaults to 0, elapsed to 0.0, converged False, reason unknown
+        {"rounds": 0, "tokens_used": -50, "elapsed_s": -1.0, "reason": None, "converged": 0},
+        {"rounds": -3, "tokens_used": None, "completion_tokens": 150, "elapsed_s": "invalid", "reason": ""},
+        {"rounds": "invalid", "tokens_used": "bad", "elapsed_s": float("nan"), "converged": True, "reason": "custom"},
+    ]
+    rep = analyze_turn_distribution(records)
+    assert rep.total_runs == 4
+    # All 4 fall back to rounds=1
+    assert rep.round_counts == {1: 4}
+    assert rep.round_percentages == {1: 1.0}
+    assert rep.mean_rounds == 1.0
+    assert rep.median_rounds == 1.0
+    assert rep.converged_count == 1
+    assert rep.converged_rate == 0.25
+    assert rep.reasons == {"unknown": 3, "custom": 1}
+    # Tokens: record 0 -> 0, record 1 -> 0, record 2 -> 150 (from completion_tokens), record 3 -> 0 = 150
+    assert rep.tokens_per_round_mean == pytest.approx(150.0 / 4.0, abs=1e-3)
+    # Elapsed: all 0.0 -> sum 0.0
+    assert rep.elapsed_per_round_mean == 0.0
+
+
+def test_turn_distribution_report_immutability() -> None:
+    """Verifies TurnDistributionReport is a frozen dataclass."""
+    rep = analyze_turn_distribution([])
+    with pytest.raises(Exception):
+        setattr(rep, "total_runs", 10)
