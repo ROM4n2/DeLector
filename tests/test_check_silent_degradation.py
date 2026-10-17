@@ -54,7 +54,7 @@ def _make_tree(
 _CLEAN_FILE = "def ok() -> int:\n    return 1\n"
 
 
-# ── C1：静默吞错（except 体只有 pass / continue）────────────────────────────────
+# ── C1：静默吞错（except 体只有 pass；Task 8b 收窄：continue 不再命中）────────────────────────────────
 
 
 _C1_PASS_SAMPLE = (
@@ -70,7 +70,7 @@ _C1_CONTINUE_SAMPLE = (
     "    for item in candidates:\n"  # 2
     "        try:\n"  # 3
     "            use(item)\n"  # 4
-    "        except ValueError:\n"  # 5  ← 命中行
+    "        except ValueError:\n"  # 5  ← 旧判据的命中行；Task 8b 收窄后不再命中（负样本）
     "            continue\n"  # 6
 )
 
@@ -89,11 +89,16 @@ def test_c1_flags_pass_only_handler() -> None:
     assert hits[0].snippet == "except Exception: pass"
 
 
-def test_c1_flags_continue_only_handler() -> None:
-    """阳性：体只有 continue（循环内跳过）⇒ C1 命中。"""
+def test_c1_ignores_continue_only_handler_after_narrowing() -> None:
+    """阴性（Task 8b 收窄）：体只有 continue（循环内逐项跳过）⇒ C1 **不再**命中。
+
+    机制：``pass`` 掐灭一条错误路径；``continue`` 是循环内逐项策略，其余迭代照常执行，
+    与「有意的逐项过滤」形态不可区分。该收窄会漏掉的缺陷类（逐项跳过掩盖系统性失败）
+    已在闸的模块头显式登记 —— 本用例与那条登记互为锁：谁想重新放宽 C1，先过这里。
+    """
     module = _load_module()
     hits = module.scan_source(_C1_CONTINUE_SAMPLE)
-    assert [(hit.criterion, hit.line) for hit in hits] == [("C1", 5)]
+    assert [hit for hit in hits if hit.criterion == "C1"] == []
 
 
 @pytest.mark.parametrize(

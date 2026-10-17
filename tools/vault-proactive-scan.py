@@ -100,6 +100,7 @@ def check_security() -> None:
                         # 避免一密多行刷屏；截断仅用于展示，去重键是完整密钥。
                         key = m.group(0)
                         found_keys.setdefault(key, (p.relative_to(ROOT), i + 1, key[:12] + "..."))
+            # silent-ok: 只读体检的逐文件尽力语义：单文件不可读跳过并继续；密钥防线权威层是 CI secret-scan
             except Exception:
                 pass
 
@@ -146,6 +147,7 @@ def check_data_and_backup() -> None:
             test_db.unlink(missing_ok=True)
             for sidecar in (f"{test_db}-wal", f"{test_db}-shm"):
                 Path(sidecar).unlink(missing_ok=True)
+        # silent-ok: 临时探测库（.cache/temp_scan_db_<pid>）收尾删除：失败只留一个缓存目录临时文件，不参与任何判定
         except Exception:
             pass
 

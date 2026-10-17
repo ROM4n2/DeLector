@@ -12,11 +12,26 @@ CI job ``silent-degradation`` 按 fail-loud 口径执行它（退出码 1 = 有�
 
 三条判据（窄口径；MUST NOT 扩成泛化的异常处理风格审查）
 --------------------------------------------------------
-C1  静默吞错：``except ...:`` 子句体**只**由 ``pass`` / ``continue`` 组成；体内出现任何
-    log / warn / raise / 带值 return ⇒ 不算（那是有痕迹的处理）。
+C1  静默吞错：``except ...:`` 子句体**只**由 ``pass`` 组成（Task 8b 收窄：``continue``
+    形态不再命中 —— 机制依据与**已知极限**见「收窄的机制依据与已知极限」一节）；体内
+    出现任何 log / warn / raise / 带值 return ⇒ 不算（那是有痕迹的处理）。
 C2  裸 ``except:``：无异常类型（连 KeyboardInterrupt / SystemExit 一并吞掉的形态）。
 C3  证书校验静默关闭：``ssl._create_unverified_context(`` / ``ssl.CERT_NONE`` / ``verify=False``，
     且**最近的封闭函数**（无函数包裹时按模块体）内没有任何 logging / warnings 调用。
+
+收窄的机制依据与已知极限（Task 8b：C1 = pass-only；决定去留时 MUST 读）
+------------------------------------------------------------------
+为什么去掉 ``continue``：``pass`` 把**一条错误路径整个掐灭** —— 异常到此为止、没有日志、
+没有返回值痕迹，调用方把「降级了」读成「一切正常」，这正是本闸要抓的形态；而 ``continue``
+是**循环内的逐项策略**：单次迭代被跳过，循环其余迭代照常执行，且跳过通常由逐项判据驱动
+（该项损坏 / 不适用）。它与「有意的逐项过滤」在 AST 形态上不可区分 —— 留在判据里只会逼着
+实现者为每一处合法的逐项过滤加豁免注释，把闸稀释成注释仪式（首扫 31 处 C1 里 8 处正是这种
+逐项跳过，且每处都能给出书面理由）。
+⚠️ 收窄的**已知极限**（C1 从此 MISS 的一类缺陷）：**逐项跳过掩盖系统性失败** —— 循环里每条
+都因同一个坏条件（判据写反 / 配置损坏 / 外部依赖整体不可用）走 ``continue``，函数返回空集合
+或「零命中」清单，调用方把「全体被跳过」读成「没有条目」。这类站点不指望 C1 兜底；发现时
+另立判据，或要求「解析了 0/N 条」这类汇总计数断言显式暴露，MUST NOT 靠重新放宽 C1 了事
+（放宽 = 再用注释仪式替代判定）。
 
 豁免约定（**绝不静默**：豁免站点也逐行打印并在行尾标注）
 --------------------------------------------------------
@@ -145,8 +160,12 @@ def _clip(text: str, limit: int = MAX_SNIPPET_CHARS) -> str:
 
 
 def _is_silent_body(body: Sequence[ast.stmt]) -> bool:
-    """C1 判定：体非空且**每条**语句都是 pass / continue（注释不算语句）。"""
-    return bool(body) and all(isinstance(stmt, (ast.Pass, ast.Continue)) for stmt in body)
+    """C1 判定：体非空且**每条**语句都是 ``pass``（注释不算语句）。
+
+    Task 8b 收窄：``continue`` 形态**不再命中**（循环内的逐项策略，其余迭代照常执行）；
+    机制依据与该判据从此会漏掉的缺陷类见模块头「收窄的机制依据与已知极限」。
+    """
+    return bool(body) and all(isinstance(stmt, ast.Pass) for stmt in body)
 
 
 def _root_name(expr: ast.expr) -> str:

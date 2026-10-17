@@ -519,6 +519,7 @@ def _reconfigure_stdout() -> None:
     if callable(reconfigure):
         try:
             reconfigure(encoding="utf-8", errors="replace")
+        # silent-ok: 显示层兜底：reconfigure 失败只意味着「保持原流」，编码问题真影响输出会响亮暴露
         except Exception:
             pass
 

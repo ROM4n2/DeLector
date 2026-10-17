@@ -28,6 +28,7 @@ import functools
 import hashlib
 import ipaddress
 import json
+import logging
 import math
 import os
 import re
@@ -1247,10 +1248,13 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
                             f.write(resp.content)
                         prune_audio_cache()
                         return cache_file
-            except Exception:
+            except Exception as exc:
+                # Task 8b 真事故⑤：逐条点名失败 provider —— 循环后的总警告点不出败者是谁。
+                # （本处是 continue 形态站点：收窄后的 C1 已不判它 —— 收窄判据不许变成藏事故的手段，
+                #   故照修不误；修复比豁免更耐久。）
+                logging.getLogger("delector").warning("TTS fallback provider 失败：%s（%s）", tts_url, exc)
                 continue
         # 兜底全部失败：固定文案上屏，内部异常只留服务端日志
-        import logging
 
         logging.getLogger("delector").warning("TTS all providers failed", exc_info=True)
         raise HTTPException(500, "语音合成失败，请稍后重试")
@@ -1275,8 +1279,9 @@ _TTS_VOICE_WHITELIST = frozenset(
 # --- TTS 并发闸：把「无界排队」换成「有界拒绝」--------------------------------
 # 为什么需要：generate_edge_tts_audio 内部走 asyncio.to_thread（默认池
 # min(32, cpu+4)），池满后 asyncio 的默认行为是**继续排队**，而不是拒绝；再叠加
-# edge_tts 无显式超时 + services/tts.py 对任意异常重试一次（socket timeout 30s
-# ⇒ 最坏 60s）+ 下面 3 个 HTTP provider 降级各 6s，单请求最坏约 76s。docker-compose
+# edge_tts 无显式超时 + services/tts.py 只对**可重试失败**（连接/传输层、5xx；403 时钟
+# 偏差重试一次）退避重试（连接 10s / 读取 30s 分离超时 + 0.5s 有界退避 ⇒ 两次尝试合计
+# ≈ 80s 量级）+ 下面 3 个 HTTP provider 降级各 6s，单请求最坏约 98s。docker-compose
 # 又把 0.0.0.0:8000 暴露给整个局域网，于是几台设备（或同一设备多个 <audio> 同时
 # 起播）就能把线程池打满、合成请求无界堆积，越合成越慢、越慢越堆积。
 #
@@ -2827,8 +2832,12 @@ def get_essay(essay_id: int) -> Dict[str, Any]:
     if isinstance(data.get("analysis_json"), str):
         try:
             data["analysis_json"] = json.loads(data["analysis_json"])
-        except Exception:
-            pass
+        except Exception as exc:
+            # Task 8b 真事故④：解析失败 MUST 留痕 —— 静默保持原始字符串会让响应形状（dict vs str）
+            # 随数据质量悄悄变化，前端拿到两种形状却无人知。
+            logging.getLogger("delector").warning(
+                "essay #%s 的 analysis_json 解析失败（按原始字符串返回）：%s", essay_id, exc
+            )
     return data
 
 

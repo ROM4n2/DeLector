@@ -51,8 +51,13 @@ DATA_DIR = os.environ.get("DELECTOR_DATA_DIR", _REPO_ROOT)
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, ".cache", "audio")
 try:
     os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
-except Exception:
-    pass
+except Exception as exc:
+    # Task 8b 真事故①：import 期失败 MUST 留痕。缓存目录建不出来 ⇒ 之后每次 TTS 合成的落盘
+    # 都会以更晚、更远的形态失败，「朗读突然不可用」将无现场可查。降级语义保留（进程照常启动），
+    # 只把原因写进 delector 日志 —— logging 未配置时 lastResort handler 会输出到 stderr，import 期同样可见。
+    logging.getLogger("delector").warning(
+        "音频缓存目录创建失败（%s）：%s —— 朗读将无缓存落点，每次合成都将重算", AUDIO_CACHE_DIR, exc
+    )
 
 PROGRESS_DB_PATH = os.path.join(DATA_DIR, "progress.db")
 
@@ -168,8 +173,12 @@ def _configure_sqlite_conn(conn: sqlite3.Connection) -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
-    except Exception:
-        pass
+    except Exception as exc:
+        # Task 8b 真事故②：PRAGMA 未生效 MUST 留痕 —— 静默退回默认值会让「WAL 不阻塞读 /
+        # busy_timeout 防锁 / synchronous 耐久性」这些调用方依赖的假设静悄悄失效。
+        logging.getLogger("delector").warning(
+            "SQLite PRAGMA 未生效（%s）：journal_mode / busy_timeout / synchronous 退回默认值，WAL 假设不成立", exc
+        )
     return conn
 
 
@@ -266,6 +275,7 @@ def _close_db_conn(conn: sqlite3.Connection) -> None:
     """
     try:
         conn.close()
+    # silent-ok: finally 中的确定性 close：失败只发生于连接已损坏时，抛出会掩盖调用方原始异常且无可恢复动作
     except Exception:
         pass
 

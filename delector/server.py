@@ -20,6 +20,7 @@ def load_env() -> None:
         import dotenv
 
         dotenv.load_dotenv(override=True)
+    # silent-ok: dotenv 是可选依赖（缺库即 ImportError）；紧随其后的手写 .env 逐行解析是明确兜底，不是降级丢失
     except Exception:
         pass
     for base_dir in [os.path.dirname(__file__), os.getcwd()]:
@@ -35,6 +36,7 @@ def load_env() -> None:
                             v = v.strip().strip("'").strip('"')
                             if k:
                                 os.environ[k] = v
+            # silent-ok: 启动期 .env 便利层：读取失败等价于「该文件未生效」，按既有环境变量 + DB 权威配置继续
             except Exception:
                 pass
 

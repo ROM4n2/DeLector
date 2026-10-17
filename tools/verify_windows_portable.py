@@ -255,6 +255,7 @@ def _reconfigure_one(stream: Any) -> None:
         return
     try:
         reconfigure(encoding="utf-8", errors="replace")
+    # silent-ok: 显示层编码兜底（流不可重配置/已关闭）——本工具结论走断言与退出码，stdout 编码不影响
     except (ValueError, OSError):
         pass
 
@@ -489,6 +490,7 @@ def _request_stop(proc: "subprocess.Popen[bytes]", mode: str) -> None:
         try:
             proc.send_signal(_CTRL_BREAK_EVENT)
             return
+        # silent-ok: 优雅信号发不出去（非 Windows/进程已退）⇒ 落入下一行 proc.terminate() 硬杀：显式次选路径，非静默丢弃
         except (OSError, ValueError):
             pass
     proc.terminate()
@@ -571,6 +573,7 @@ def kill_pids(pids: List[int]) -> None:
 def _kill_pid(pid: int) -> None:
     try:
         _kill_pid_impl(pid)
+    # silent-ok: 清孤儿进程的明文契约「绝不抛」（见 kill_pids docstring）：失败由后续断言暴露，此处不留静默结论
     except (OSError, subprocess.SubprocessError):
         pass
 

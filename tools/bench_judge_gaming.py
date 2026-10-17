@@ -1429,6 +1429,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(stdout, io.TextIOWrapper):
         try:
             stdout.reconfigure(encoding="utf-8")  # Windows 控制台默认 GBK：德语字符需 UTF-8
+        # silent-ok: 仅显示层编码（流已关闭/不可重配置）——闸结论经断言与退出码表达，与 stdout 能否切 UTF-8 无关
         except Exception:  # 已关闭/不可重配置的流（如 pytest capture）⇒ 保持原状
             pass
 

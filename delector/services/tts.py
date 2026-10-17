@@ -383,6 +383,7 @@ def synthesize(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -
             if ws is not None:
                 try:
                     ws.close()
+                # silent-ok: finally 中关闭已失败的 WS：socket 已断时 close 无操作含义，抛出还会顶替 last_error
                 except Exception:
                     pass
     raise RuntimeError(f"edge_tts_mini synthesis failed: {last_error}")

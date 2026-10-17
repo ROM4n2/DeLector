@@ -179,6 +179,7 @@ def _read_db_setting(key: str, default: str = "") -> str:
             row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             if row and row[0]:
                 return cast(str, row[0])
+    # silent-ok: 独立构词工具的 DB 兜底：.env/环境变量才是权威源，无 delector.db 即返回 default
     except Exception:
         pass
     return default
