@@ -26,7 +26,31 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const HTML = path.join(ROOT, "static", "german", "workbench.html");
+/* ---- 探针读取口（C7 Task 2）：可多文件来源 ------------------------------
+ * 现在只有 `workbench.html` 一个源文件，故 `readSources(SRC_FILES)` 与改造前的
+ * `fs.readFileSync(HTML, "utf8")` 逐字节等价（单文件时 join 不插入任何字节）。
+ * workbench.html 拆成模块后只需改 `WB_SRC_ROOT` 与 `SRC_FILES`，切片语义不动。 */
+const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static/german";
+const SRC_FILES = ["workbench.html"];
+
+function readSources(names) {
+  const parts = names.map((name) => {
+    const dir = path.isAbsolute(SRC_ROOT) ? SRC_ROOT : path.join(ROOT, SRC_ROOT);
+    const file = path.isAbsolute(name) ? name : path.join(dir, name);
+    if (!fs.existsSync(file)) {
+      process.stderr.write(`探针源文件不存在：${file}（声明搬迁后请同步 WB_SRC_ROOT / SRC_FILES）\n`);
+      process.exit(3);
+    }
+    const text = fs.readFileSync(file, "utf8");
+    if (!text.length) {
+      process.stderr.write(`探针源文件为空：${file}\n`);
+      process.exit(3);
+    }
+    return text;
+  });
+  return parts.join("\n");
+}
+
 const JSON_MODE = process.argv.includes("--json");
 
 const log = (...a) => { if (!JSON_MODE) console.error(...a); };
@@ -73,29 +97,56 @@ function matchBracket(src, openIdx) {
   throw new Error(`matchBracket: 从 ${openIdx} 起找不到配对闭括号`);
 }
 
-/** 抽取一条顶层的 `const NAME = <{...}|[...]|new X(...)>;` 声明（含结尾分号）。 */
-function extractDecl(src, name) {
-  const anchor = new RegExp(`^const\\s+${name}\\s*=`, "m");
-  const m = anchor.exec(src);
-  if (!m) throw new Error(`workbench.html 里找不到声明 const ${name}`);
-  let i = m.index + m[0].length;
-  while (i < src.length && !OPEN[src[i]]) i++;
-  const end = matchBracket(src, i);
-  const semi = src.indexOf(";", end);
-  if (semi < 0 || semi > end + 8) throw new Error(`const ${name} 声明结尾找不到分号，切歪了`);
-  return src.slice(m.index, semi + 1);
+/** 找不到声明就此**非零退出**，并打印所查声明名（No-Silent-Skip：返回空串会让
+ *  下游 `in` 断言静默假绿）。退出码 3 = 读取口失败，与「契约被破坏」的 1 区分开。 */
+function dieMissingDecl(name) {
+  process.stderr.write(
+    `探针源 ${SRC_FILES.join(", ")}（根目录 ${SRC_ROOT}）里找不到声明 ${name}\n`
+  );
+  process.exit(3);
 }
 
-/** 抽取一个完整函数声明 `function name(...) { ... }`。 */
-function extractFn(src, name) {
-  const anchor = new RegExp(`^function\\s+${name}\\s*\\(`, "m");
-  const m = anchor.exec(src);
-  if (!m) throw new Error(`workbench.html 里找不到函数 ${name}`);
-  const parenOpen = src.indexOf("(", m.index);
-  const parenClose = matchBracket(src, parenOpen);
-  const braceOpen = src.indexOf("{", parenClose);
-  const braceClose = matchBracket(src, braceOpen);
-  return src.slice(m.index, braceClose + 1);
+/** 统一切片入口：按名字定位 `const/let/var NAME =` 或 `[async] function NAME(`，
+ *  用括号配平取到声明体结尾（变量声明含结尾分号）；值为标量（不含括号）时读到语句分号。
+ *  语义与改造前各探针自抄的 extractDecl / extractDeclAny / extractDeclAny（标量口径）/
+ *  extractFn / sliceBlock / 内联 anchor 六种口径逐字一致（改前已实测：132 个顶层函数与
+ *  52 个顶层声明逐条比对，零差异）。 */
+function sliceDecl(src, name) {
+  const decl = new RegExp(`^(?:const|let|var)\\s+${name}\\s*=`, "m").exec(src);
+  const m = decl || new RegExp(`^(?:async\\s+)?function\\s+${name}\\s*\\(`, "m").exec(src);
+  if (!m) dieMissingDecl(`const/let/var/function ${name}`);
+  if (!decl) {
+    /* 函数声明：m[0] 以 `(` 结尾 ⇒ 参数表先括号配对，再取函数体花括号 */
+    const parenClose = matchBracket(src, m.index + m[0].length - 1);
+    const braceOpen = src.indexOf("{", parenClose);
+    if (braceOpen < 0) {
+      process.stderr.write(`函数 ${name} 的参数表之后找不到函数体花括号，切歪了\n`);
+      process.exit(3);
+    }
+    return src.slice(m.index, matchBracket(src, braceOpen) + 1);
+  }
+  const after = m.index + m[0].length;
+  let i = after;
+  while (i < src.length && /\s/.test(src[i])) i++;
+  if (!OPEN[src[i]]) {
+    /* 标量声明（`const SCHEMA_KEY = "wb.schema.v1";`）：值不含括号，读到语句分号。
+     * 前提：标量值内不得含 ASCII `;`（13 个探针的目标声明实测均无，含
+     * `CORE_WORD_SEED_IDS = new Set([...])`）—— 若违反，切片会在此截断 ⇒ 以语法错 /
+     * 退出码 3 报出，不会静默通过。 */
+    const tail = src.indexOf(";", after);
+    if (tail < 0) {
+      process.stderr.write(`声明 ${name} 结尾找不到分号，切歪了\n`);
+      process.exit(3);
+    }
+    return src.slice(m.index, tail + 1);
+  }
+  const end = matchBracket(src, i);
+  const semi = src.indexOf(";", end);
+  if (semi < 0 || semi > end + 8) {
+    process.stderr.write(`声明 ${name} 结尾找不到分号，切歪了（end=${end} semi=${semi}）\n`);
+    process.exit(3);
+  }
+  return src.slice(m.index, semi + 1);
 }
 
 /** 抽取一整行顶层语句（给 `const pad2 = (n) => ...;` 这类单行箭头声明用，
@@ -108,12 +159,12 @@ function extractLine(src, re, what) {
   return line;
 }
 
-const html = fs.readFileSync(HTML, "utf8");
+const html = readSources(SRC_FILES);
 
 /* renderWords 里那条过滤谓词：`S.words.filter( w => { ... } )` 的实参整段。
  * 它是 Task 3「搜索旁路 scope」的唯一落点，必须切真源码而不是重写一份判定。 */
 function extractWordsPredicate(src) {
-  const body = extractFn(src, "renderWords");
+  const body = sliceDecl(src, "renderWords");
   const at = body.indexOf("S.words.filter(");
   if (at < 0) throw new Error("renderWords 里找不到 S.words.filter(，过滤链被挪走了");
   const paren = body.indexOf("(", at + "S.words.filter".length - 1);
@@ -124,7 +175,7 @@ function extractWordsPredicate(src) {
 
 /** renderWords 里的 `const q = wordFilters.q.toLowerCase();` —— 谓词闭包依赖它。 */
 function extractWordsQLine(src) {
-  const body = extractFn(src, "renderWords");
+  const body = sliceDecl(src, "renderWords");
   const m = /^\s*const q = .*;$/m.exec(body);
   if (!m) throw new Error("renderWords 里找不到 const q = ... 行");
   const line = m[0].trim();
@@ -139,38 +190,38 @@ const PIECES = {
   /* 通用 helper（一律切真源码：wordState 的分档直接决定 wordFilters.state 那几条过滤，
    * 写个桩就等于把被测逻辑换掉了） */
   pad2: extractLine(html, /^const pad2 = .*$/m, "pad2"),
-  todayStr: extractFn(html, "todayStr"),
-  endToday: extractFn(html, "endToday"),
-  fmtMD: extractFn(html, "fmtMD"),
-  shuffle: extractFn(html, "shuffle"),
+  todayStr: sliceDecl(html, "todayStr"),
+  endToday: sliceDecl(html, "endToday"),
+  fmtMD: sliceDecl(html, "fmtMD"),
+  shuffle: sliceDecl(html, "shuffle"),
   /* 词表常量 */
-  CORE_WORD_SEED_IDS: extractDecl(html, "CORE_WORD_SEED_IDS"),
-  CORE_CUSTOM_WORDS: extractDecl(html, "CORE_CUSTOM_WORDS"),
-  SEED_WORDS: extractDecl(html, "SEED_WORDS"),
+  CORE_WORD_SEED_IDS: sliceDecl(html, "CORE_WORD_SEED_IDS"),
+  CORE_CUSTOM_WORDS: sliceDecl(html, "CORE_CUSTOM_WORDS"),
+  SEED_WORDS: sliceDecl(html, "SEED_WORDS"),
   /* 状态 + scope 判定 */
-  wordFilters: extractDecl(html, "wordFilters"),
-  wordById: extractFn(html, "wordById"),
+  wordFilters: sliceDecl(html, "wordFilters"),
+  wordById: sliceDecl(html, "wordById"),
   /* Task 5（ADR-0011）：等级判定数据驱动 —— inScopeWord 委托 isInScope，
    * 沙箱必须带上判定区全链，否则 inScopeWord 一跑就 ReferenceError。
    * 只加切片、不加护栏：13 条护栏语义零漂移。 */
-  CEFR_BY_PREFIX: extractDecl(html, "CEFR_BY_PREFIX"),
-  cefrFromId: extractFn(html, "cefrFromId"),
-  cefrOf: extractFn(html, "cefrOf"),
-  OTHER_LEVEL_SCOPES: extractDecl(html, "OTHER_LEVEL_SCOPES"),
-  SCOPE_PREDICATES: extractDecl(html, "SCOPE_PREDICATES"),
-  isInScope: extractFn(html, "isInScope"),
-  inScopeWord: extractFn(html, "inScopeWord"),
-  logToday: extractFn(html, "logToday"),
-  wordState: extractFn(html, "wordState"),
+  CEFR_BY_PREFIX: sliceDecl(html, "CEFR_BY_PREFIX"),
+  cefrFromId: sliceDecl(html, "cefrFromId"),
+  cefrOf: sliceDecl(html, "cefrOf"),
+  OTHER_LEVEL_SCOPES: sliceDecl(html, "OTHER_LEVEL_SCOPES"),
+  SCOPE_PREDICATES: sliceDecl(html, "SCOPE_PREDICATES"),
+  isInScope: sliceDecl(html, "isInScope"),
+  inScopeWord: sliceDecl(html, "inScopeWord"),
+  logToday: sliceDecl(html, "logToday"),
+  wordState: sliceDecl(html, "wordState"),
   /* 被测队列逻辑 */
-  buildReviewQueue: extractFn(html, "buildReviewQueue"),
-  injectWrongWords: extractFn(html, "injectWrongWords"),
-  refilterReviewQueueForScope: extractFn(html, "refilterReviewQueueForScope"),
-  manualExtraIds: extractDecl(html, "manualExtraIds"),
-  renormalizeQueueTail: extractFn(html, "renormalizeQueueTail"),
-  extraNewWords: extractFn(html, "extraNewWords"),
-  queueInfoText: extractFn(html, "queueInfoText"),
-  renderReview: extractFn(html, "renderReview"),
+  buildReviewQueue: sliceDecl(html, "buildReviewQueue"),
+  injectWrongWords: sliceDecl(html, "injectWrongWords"),
+  refilterReviewQueueForScope: sliceDecl(html, "refilterReviewQueueForScope"),
+  manualExtraIds: sliceDecl(html, "manualExtraIds"),
+  renormalizeQueueTail: sliceDecl(html, "renormalizeQueueTail"),
+  extraNewWords: sliceDecl(html, "extraNewWords"),
+  queueInfoText: sliceDecl(html, "queueInfoText"),
+  renderReview: sliceDecl(html, "renderReview"),
   renderWordsPredicate: WORDS_PREDICATE,
 };
 
