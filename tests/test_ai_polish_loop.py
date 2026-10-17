@@ -29,6 +29,7 @@ from delector.services.polish_loop import (
     DEFAULT_MAX_TOKENS_TOTAL,
     EVIDENCE_MAX_BYTES,
     EVIDENCE_MAX_LINES,
+    LETTER_FORMAT_RULE_PREFIX,
     MAX_TURNS_DEFAULT,
     REASONS,
     Budget,
@@ -36,6 +37,7 @@ from delector.services.polish_loop import (
     completion_tokens_of,
     default_violations_of,
     estimate_tokens,
+    format_judge_feedback,
     run_polish_loop,
     truncate_evidence,
 )
@@ -393,7 +395,7 @@ def test_finish_candidate_without_fresh_verdict_is_rejected() -> None:
     result = run(
         text="T0",
         chat=rec.chat([{"corrected_text": "T1"}]),
-        judge=make_judge({"T0": 1, "T1": 1}, log),
+        judge=make_judge({"T0": 1, "T1": 2}, log),
     )
 
     assert log[-1] == "T1", f"收尾候选 MUST 被裁（无本轮新鲜裁决不许收尾）：{log}"
@@ -725,6 +727,193 @@ def test_truncate_evidence_is_pure_and_both_limits_are_independent() -> None:
     cut_bytes = truncate_evidence(one_huge_line)
     assert len(cut_bytes.splitlines()) == 1
     assert len(cut_bytes.encode("utf-8")) <= EVIDENCE_MAX_BYTES
+
+
+def test_format_judge_feedback() -> None:
+    """裁判反馈回灌格式化器：测试适用性闸、结构渲染与双限截断。"""
+    # a) 空违规列表返回空字符串 ""
+    assert format_judge_feedback([]) == ""
+    assert format_judge_feedback([], text_type="letter") == ""
+    assert format_judge_feedback([], text_type="prose") == ""
+
+    # b) 当 text_type == "prose" 时，任何以 a1_ 开头的规则均被过滤。
+    #    若只有 a1_ 规则，返回 ""；非 a1_ 规则（如 kasus, verb_second）予以保留。
+    a1_only = [
+        {"rule": "a1_greeting", "message": "缺少问候语"},
+        {"rule": "a1_closing", "explanation_zh": "缺少结束语"},
+    ]
+    assert format_judge_feedback(a1_only, text_type="prose") == ""
+
+    mixed = [
+        {"rule": "a1_greeting", "message": "缺少问候语"},
+        {"rule": "kasus", "message": "格错误", "span": [5, 10]},
+        {"rule": "verb_second", "explanation_zh": "动词第二位"},
+    ]
+    prose_feedback = format_judge_feedback(mixed, text_type="prose")
+    assert "a1_greeting" not in prose_feedback
+    assert "kasus" in prose_feedback
+    assert "verb_second" in prose_feedback
+
+    # c) 当 text_type == "letter" 时，a1_ 格式规则被保留。
+    letter_feedback = format_judge_feedback(mixed, text_type="letter")
+    assert "a1_greeting" in letter_feedback
+    assert "kasus" in letter_feedback
+    assert "verb_second" in letter_feedback
+    # 默认 text_type 为 "letter"
+    assert format_judge_feedback(mixed) == letter_feedback
+
+    # d) 输出包含头部信息：[裁判反馈] 检测到以下未达标项，请在下一轮修改中重点修正：
+    header = "[裁判反馈] 检测到以下未达标项，请在下一轮修改中重点修正："
+    assert header in letter_feedback
+    assert letter_feedback.startswith(header)
+
+    # e) 格式化行包含规则名、位置区间（若存在）及 message/explanation
+    assert "- [kasus] (位置 5-10): 格错误" in letter_feedback
+    assert "- [verb_second]: 动词第二位" in letter_feedback
+    assert "- [a1_greeting]: 缺少问候语" in letter_feedback
+
+    # f) 双限截断：当输入有 100 条违规时，输出行数 <= 40 且 utf-8 字节数 <= 4000
+    many_violations = [
+        {
+            "rule": f"rule_{i}",
+            "message": f"违规详细信息_{i}_" + "x" * 50,
+            "span": [i, i + 5],
+        }
+        for i in range(100)
+    ]
+    truncated = format_judge_feedback(many_violations, text_type="letter")
+    trunc_lines = truncated.splitlines()
+    assert len(trunc_lines) <= 40
+    assert len(truncated.encode("utf-8")) <= 4000
+    assert len(trunc_lines) == EVIDENCE_MAX_LINES
+
+    # 验证超长单行字节截断也能在 100 条时生效
+    huge_violations = [
+        {"rule": f"r_{i}", "message": "长" * 100}
+        for i in range(100)
+    ]
+    truncated_bytes = format_judge_feedback(huge_violations, text_type="letter")
+    assert len(truncated_bytes.splitlines()) <= 40
+    assert len(truncated_bytes.encode("utf-8")) <= 4000
+
+    # 常量契约
+    assert LETTER_FORMAT_RULE_PREFIX == "a1_"
+
+
+def test_feedback_injected_into_messages_when_violations_remain() -> None:
+    """第 1 轮有违规时回灌 [裁判反馈]，模型第 2 轮修正后成功收敛 (converged=True, reason='ok')。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+    judge = make_judge({"T0": 1, "T1": 1, "T2": 0})
+    result = run(
+        text="T0",
+        chat=rec.chat(script),
+        judge=judge,
+    )
+
+    assert len(rec.calls) == 2
+    round2_messages = rec.calls[1]["messages"]
+    assert round2_messages[-1]["role"] == "user"
+    assert "[裁判反馈]" in round2_messages[-1]["content"]
+
+    assert result.converged is True
+    assert result.reason == "ok"
+    assert result.rounds == 2
+    assert result.text == "T2"
+    assert result.violations == []
+
+
+def test_feedback_retry_stops_on_repeated_stall() -> None:
+    """模型获得反馈后重试仍不改善（连续两轮违规数不降）⇒ 触发 judge_unreliable 并回退 argmin。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+    judge = make_judge({"T0": 2, "T1": 2, "T2": 2})
+    result = run(
+        text="T0",
+        chat=rec.chat(script),
+        judge=judge,
+    )
+
+    assert result.converged is False
+    assert result.reason == "judge_unreliable"
+    assert result.rounds == 2
+    assert result.text == "T0"
+
+
+def test_no_feedback_mode_stops_on_stall_and_skips_feedback_injection() -> None:
+    """feedback=False（ADR-0024 准入基线）：首个候选持平 (v >= prev_v) 即 no_improvement 退出且不注入反馈。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+    judge = make_judge({"T0": 1, "T1": 1, "T2": 0})
+    result = run(
+        text="T0",
+        chat=rec.chat(script),
+        judge=judge,
+        feedback=False,
+    )
+
+    assert result.converged is False
+    assert result.reason == "no_improvement"
+    assert result.rounds == 1
+    assert result.text == "T0"
+    assert len(rec.calls) == 1  # 不重试，首轮持平即停
+
+
+def test_feedback_respects_text_type() -> None:
+    """当 text_type='prose' 时，format_judge_feedback 过滤掉 a1_ 格式规则后再注入。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+
+    def _judge(text: str, leitpunkte: list[str] | None = None) -> dict[str, Any]:
+        if text == "T0":
+            return {
+                "word_count": 5,
+                "suggestions": [
+                    {"rule": "a1_greeting_missing", "level": "error", "message": "书信缺少称呼语"},
+                    {"rule": "spelling_mistake", "level": "error", "message": "拼写有误"},
+                ],
+            }
+        elif text == "T1":
+            return {
+                "word_count": 5,
+                "suggestions": [
+                    {"rule": "a1_valediction_missing", "level": "error", "message": "书信缺少结语"},
+                    {"rule": "spelling_mistake", "level": "error", "message": "拼写有误"},
+                ],
+            }
+        return {"word_count": 5, "suggestions": []}
+
+    result = run(
+        text="T0",
+        text_type="prose",
+        chat=rec.chat(script),
+        judge=_judge,
+    )
+
+    assert len(rec.calls) == 2
+    round2_messages = rec.calls[1]["messages"]
+    feedback_msg = round2_messages[-1]["content"]
+    assert "[裁判反馈]" in feedback_msg
+    assert "spelling_mistake" in feedback_msg
+    assert "a1_valediction_missing" not in feedback_msg
+    assert "a1_" not in feedback_msg
+
+    assert result.converged is True
+    assert result.reason == "ok"
+    assert result.rounds == 2
+    assert result.text == "T2"
 
 
 # ── Task 8 接缝加固：dispatch 超时 / 裁判移出事件循环 ──────────────────────────

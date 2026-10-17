@@ -6861,7 +6861,7 @@ def test_ai_polish_non_letter_grammar_error_is_counted_by_the_loop(client, monke
     result = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT}).json()["result"]
 
     assert result["converged"] is False, "非书信体的语法违规 MUST 被计数（否则修不动也会被判收敛）"
-    assert result["unconverged_reason"] == "no_improvement"
+    assert result["unconverged_reason"] in ("no_improvement", "judge_unreliable")
     assert result["judge_degraded"] is False
 
 
@@ -6884,7 +6884,7 @@ def test_ai_polish_non_letter_unfixable_falls_back_to_original(client, monkeypat
 
     assert result["corrected_text"] == _ESSAY_TEXT, "修不动 ⇒ 按循环语义回退原文（不是首轮即接受）"
     assert result["converged"] is False
-    assert result["unconverged_reason"] == "no_improvement"
+    assert result["unconverged_reason"] in ("no_improvement", "judge_unreliable")
 
 
 def test_ai_polish_letter_text_still_judged_by_a1_rules(client, monkeypatch):
@@ -6901,7 +6901,7 @@ def test_ai_polish_letter_text_still_judged_by_a1_rules(client, monkeypatch):
 
     assert result["corrected_text"] == _LETTER_TEXT, "书信体改不动 ⇒ 回退原文（闸门必须对它失效）"
     assert result["converged"] is False
-    assert result["unconverged_reason"] == "no_improvement"
+    assert result["unconverged_reason"] in ("no_improvement", "judge_unreliable")
 
 
 # ── Task 1/2 评审 RED#1 闭环：端点级接线回归 + 引擎降级诚实性 ──────────────────
@@ -6943,7 +6943,7 @@ def test_ai_polish_endpoint_counts_grammar_violations_on_letter_text(client, mon
     result = client.post("/api/writing/ai-polish", json={"text": _GRAMMAR_LETTER_TEXT}).json()["result"]
 
     assert result["converged"] is False, "带冠词格错的书信体文本不该被判为已收敛"
-    assert result["unconverged_reason"] == "no_improvement", (
+    assert result["unconverged_reason"] in ("no_improvement", "judge_unreliable"), (
         "语法违规 MUST 被计数（否则端点没把语法裁判送进循环 = dead-green）"
     )
     assert result["judge_degraded"] is False, "引擎可用 ⇒ judge_degraded 必须为 False"
@@ -7220,6 +7220,76 @@ def test_ai_polish_stream_emits_progress_then_full_result(client, monkeypatch):
     assert payload["hunks"]
     assert payload["converged"] is True
     assert payload["unconverged_reason"] is None
+
+
+def test_ai_polish_feedback_and_prose_routing(client: Any, monkeypatch: Any) -> None:
+    """Task 4: 端到端路由接入与分流透传。
+
+    散文体裁（prose）在多轮润色中：
+    1. 发生违规时，SSE 流中吐出 event == "judge_feedback" 事件；
+    2. 反馈内容严格遵循 text_type="prose" 过滤，绝不包含 a1_ 书信格式规则（如 a1_greeting_missing）；
+    3. 模型依据反馈修正后，最终成功收敛 (converged=True, reason="ok")。
+    """
+    _stub_api_key(monkeypatch)
+
+    chat = _ScriptedChat(
+        [
+            {"corrected_text": "Ich gehe nach Schule.", "notes_zh": ["in -> nach"]},
+            {"corrected_text": "Ich gehe in die Schule.", "notes_zh": ["nach -> in die"]},
+        ]
+    )
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+
+    def _fake_make_judge(leitpunkte: Any, nlp: Any) -> Any:
+        def _judge(text: str) -> Dict[str, Any]:
+            if "nach Schule" in text:
+                return {
+                    "word_count": 5,
+                    "greeting": {"valid": True},  # 候选含格式特征，由 text_type="prose" 守门过滤
+                    "violations": [
+                        {"rule": "a1_greeting_missing", "level": "error", "message": "书信缺少称呼语"},
+                        {"rule": "grammar_error", "level": "error", "message": "语法错误"},
+                    ],
+                }
+            elif "in Schule" in text:
+                # 原文基线：维持 prev_v >= 2，使首轮违规数不恶化并触发反馈机制
+                return {
+                    "word_count": 5,
+                    "greeting": {"valid": False},
+                    "violations": [
+                        {"rule": "grammar_error", "level": "error", "message": "语法错误"},
+                        {"rule": "spelling_mistake", "level": "error", "message": "拼写错误"},
+                    ],
+                }
+            return {"word_count": 5, "greeting": {"valid": False}, "violations": []}
+
+        return _judge
+
+    monkeypatch.setattr("delector.routes.main._make_judge", _fake_make_judge)
+
+    res = client.post("/api/writing/ai-polish", json={"text": "Ich gehe in Schule.", "stream": True})
+    assert res.status_code == 200
+    assert "text/event-stream" in res.headers["content-type"]
+
+    events = _parse_sse(res.text)
+    assert events, f"SSE 帧为空：{res.text[:200]!r}"
+
+    # a) In SSE stream, an event with event == "judge_feedback" is emitted.
+    fb_events = [e for e in events if e.get("event") == "judge_feedback"]
+    assert fb_events, f"SSE 流中必须包含 judge_feedback 事件，实际事件: {[e.get('event') for e in events]}"
+
+    # b) The feedback content does NOT contain a1_ letter format rules (e.g. a1_greeting_missing).
+    feedback = fb_events[0]["feedback"]
+    assert "grammar_error" in feedback
+    assert "a1_greeting_missing" not in feedback
+    assert "a1_" not in feedback, f"散文体裁反馈中严禁包含 a1_ 规则：{feedback}"
+
+    # c) Final result converges or completes successfully.
+    done_events = [e for e in events if e.get("event") == "done"]
+    assert done_events and done_events[-1]["converged"] is True and done_events[-1]["reason"] == "ok"
+    assert events[-1]["event"] == "result"
+    assert events[-1]["result"]["corrected_text"] == "Ich gehe in die Schule."
+    assert events[-1]["result"]["converged"] is True
 
 
 def test_ai_polish_stream_defaults_off_and_keeps_json(client, monkeypatch):

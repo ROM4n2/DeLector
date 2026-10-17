@@ -118,6 +118,7 @@ DEFAULT_PER_CALL_TIMEOUT_S = 30.0
 # ── 证据注入双限（**两个限都要真起作用**，各有对应用例） ──────────────────────
 EVIDENCE_MAX_LINES = 40
 EVIDENCE_MAX_BYTES = 4000
+LETTER_FORMAT_RULE_PREFIX: str = "a1_"
 
 # ── 原因码 ────────────────────────────────────────────────────────────────────
 REASON_OK = "ok"
@@ -246,6 +247,48 @@ def truncate_evidence(
     return out
 
 
+def format_judge_feedback(
+    violations: list[dict[str, Any]],
+    *,
+    text_type: str = "letter",
+) -> str:
+    """格式化裁判违规项为提示词注入文本（带体裁适用性闸与双限截断）。
+
+    1. 适用性闸：非信件体裁（如 prose）过滤掉书信格式特有规则（a1_*）；
+    2. 结构渲染：带位置区间展示与解释；
+    3. 双限截断：经 truncate_evidence 约束行数与 UTF-8 字节数。
+    """
+    if text_type != "letter":
+        filtered = [
+            v
+            for v in violations
+            if not str(v.get("rule", "")).startswith(LETTER_FORMAT_RULE_PREFIX)
+        ]
+    else:
+        filtered = list(violations)
+
+    if not filtered:
+        return ""
+
+    header = "[裁判反馈] 检测到以下未达标项，请在下一轮修改中重点修正："
+    lines: list[str] = []
+    for v in filtered:
+        rule = str(v.get("rule", ""))
+        msg = str(v.get("message", "") or v.get("explanation_zh", ""))
+        span = v.get("span")
+        if isinstance(span, (list, tuple)) and len(span) == 2:
+            lines.append(f"- [{rule}] (位置 {span[0]}-{span[1]}): {msg}")
+        else:
+            lines.append(f"- [{rule}]: {msg}")
+
+    body = "\n".join([header] + lines)
+    return truncate_evidence(
+        body,
+        max_lines=EVIDENCE_MAX_LINES,
+        max_bytes=EVIDENCE_MAX_BYTES,
+    )
+
+
 def _dump(obj: Any) -> str:
     """确定性序列化（`sort_keys` ⇒ 同输入同输出，token 估算才可复现）。"""
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, default=str)
@@ -330,6 +373,8 @@ async def run_polish_loop(
     violations_of: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None,
     dispatch: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
     system_prompt: str | None = None,
+    text_type: str = "letter",
+    feedback: bool = True,
     clock: Callable[[], float] = time.monotonic,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -342,6 +387,9 @@ async def run_polish_loop(
     提示词（`POLISH_LOOP_SYSTEM_PROMPT`）；产品层可按文本族传入（书信 ⇒ 默认；散文 ⇒
     不含称呼语/结语指令的变体，见 `routes.main.pick_system_prompt`）。**只换提示词文本**：
     停止策略 / 预算 / 收敛归属（Task 4 定稿）一律不动。
+
+    `feedback`（Task 5）：`True`（默认，生产形态）⇒ Verifier-in-the-Loop，持平允许重试且向模型回灌裁判违规反馈；
+    `False`（ADR-0024 准入式基线）⇒ 不降即停且不回灌反馈。
     """
     tools_map: Mapping[str, Callable[..., Awaitable[dict[str, Any]]]] = tools or {}
     judge_fn: Callable[[str, list[str] | None], dict[str, Any]] = judge if judge is not None else _default_judge
@@ -531,15 +579,37 @@ async def run_polish_loop(
             converged_candidate = (candidate, violations)
             break
         if prev_v is not None:
-            # 哨兵：裁判不再下降（v_n == v_{n-1} 且 n>=2）⇒ 裁判不可信
-            if v == prev_v and judged_candidates >= 2:
-                reason = REASON_JUDGE_UNRELIABLE
-                break
-            # 运行时策略：不降即停
-            if v >= prev_v:
-                reason = REASON_NO_IMPROVEMENT
-                break
+            if not feedback:
+                # 无回灌模式（ADR-0024 准入式基线）：不降即停
+                if v >= prev_v:
+                    reason = REASON_NO_IMPROVEMENT
+                    break
+            else:
+                # 回灌模式（Verifier-in-the-Loop）：首个候选持平允许反馈重试，连续持平判定不可信，恶化即停
+                if v == prev_v and judged_candidates >= 2:
+                    reason = REASON_JUDGE_UNRELIABLE
+                    break
+                if v > prev_v:
+                    reason = REASON_NO_IMPROVEMENT
+                    break
         prev_v = v
+
+        if feedback:
+            judge_fb = format_judge_feedback(violations, text_type=text_type)
+            if judge_fb:
+                messages.append({"role": "user", "content": judge_fb})
+                _emit(
+                    on_progress,
+                    {
+                        "round": rounds,
+                        "max_turns": budget.max_turns,
+                        "event": "judge_feedback",
+                        "violations": v,
+                        "feedback": judge_fb,
+                        "tokens_used": tokens_used,
+                        "elapsed": clock() - t0,
+                    },
+                )
 
     if reason is None:
         reason = REASON_TURN_LIMIT

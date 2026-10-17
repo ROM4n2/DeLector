@@ -47,8 +47,8 @@
 
 | ID | 事项 | 状态与硬依赖 |
 | --- | --- | --- |
-| **C1** | **下一子计划：裁判结论回灌（verifier-in-the-loop）** | **无条件下一步**（实施计划已立：`docs/plans/2026-10-17-c1-verifier-in-the-loop.md`，Task 1~6）；四条硬依赖受控（ADR-0024）：① A4 已闭（裁判 FP 修完）② 回灌内容 MUST 过适用性闸与双限截断（40 行/4000 字节）③ 定三角一致性（先于回灌）④ 阴性对照基线预锁定；资产折旧已登记 |
-| **C2** | **swarm audit P1-2 / P1-3 / P1-4 / P1-5** | P1-2 备份非一致快照（`database.py:1734-1765` 无 `BEGIN`，两库独立连接）—— 低危，`BEGIN DEFERRED` 三行可解。P1-3~P1-5 **三条均已于 2026-10-17 补证 —— 全部成立，建议定级 P2（P1-5 可 P2~P3）；无一构成阻塞**（证据与建议见 `2026-10-17-c2-verification.md`）：① 抓取无总截止 + 错误口径不一致（`core/security.py:177-237`；6 跳 × per-op 15s、无时间闸；ingest/feed → 笼统 500 vs encounter → 502 人话）② Go supervisor **无累积重启上界**且实现与 `supervisor.go:78`「总配额」注释不符、crash-loop 静默（无测试覆盖缺口已定位）③ DeepSeek 退避无 jitter、最坏单次 483.5s 复核一致（harness 侧已有 jitter 可对齐） |
+| **C1** | **下一子计划：裁判结论回灌（verifier-in-the-loop）** | **已完成交付**（`docs/plans/2026-10-17-c1-verifier-in-the-loop.md` Task 1~6 全闭环；PR 准备完毕；四大硬依赖全达标，支持 `--feedback` / `--no-feedback` 分域实验对照） |
+| **C2** | **swarm audit P1-2 / P1-3 / P1-4 / P1-5** | **已完成修复**（PR #146 已 MERGED 进 master：P1-2 备份 DEFERRED 事务一致性、P1-3 抓取总截止 30s 闸、P1-4 supervisor 连续崩溃退避与预算硬闸、P1-5 LLM 退避 jitter 消除共振尖峰；全套定向单测与 CI 全绿） |
 | **C3** | **真轮次分布与真 token 计数回测** | ADR-0023 §6 Unknown 2 未决；`polish_loop.py` 的 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 仍是 UNVERIFIED 假设。与 B5 的「usage 透出」同源 |
 | **C4** | **Android 真机点检**（含新 API 在 WebView 的 `fetch`/`ReadableStream` 表现，跑不了会降级一次性 JSON，降级路径本身要真机确认） | 你 2026-10-15 指示暂缓 |
 | **C5** | **Pi 式分层重构**（`Tool → AgentTool extends Tool → ToolDefinition` 三态递进 + 依赖单向 + 层序声明 + 业务知识上提） | 你已拍板暂缓；目标形态登记在 `docs/agents/architecture.md` |

@@ -11,7 +11,19 @@ from typing import Any, Dict
 from delector.services.writing import analyze_a1_email
 
 
-async def run(payload: Dict[str, Any]) -> Any:
-    text = payload["text"]
+async def run(payload: Dict[str, Any]) -> Dict[str, Any]:
+    text: str = payload["text"]
     leitpunkte = payload.get("leitpunkte")
-    return analyze_a1_email(text, leitpunkte)
+    nlp = payload.get("nlp")
+    if nlp is None:
+        try:
+            from delector.nlp_engine import processor as _nlp_processor
+
+            nlp = _nlp_processor.get_loaded_nlp()
+        except Exception:
+            nlp = None
+
+    verdict: Dict[str, Any] = analyze_a1_email(text, leitpunkte, nlp=nlp)
+    if verdict.get("judge_engine") == "rules_only":
+        verdict["mode_note"] = "[快速模式: 不含深层语法规则]"
+    return verdict

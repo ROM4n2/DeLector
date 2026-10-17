@@ -450,12 +450,13 @@ def _usage_int(usage: dict[str, Any], key: str) -> int:
 # --------------------------------------------------------------------------- #
 
 
-def run_arm(case: SeedCase, arm: Arm, *, chat: ChatFn) -> RunRecord:
+def run_arm(case: SeedCase, arm: Arm, *, chat: ChatFn, feedback: bool = False) -> RunRecord:
     """跑一篇种子 × 一个臂，返回 `RunRecord`（`chat` 由调用方注入 ⇒ 零 Key 可达）。
 
     三臂接线**完全共用**（见模块头），自变量只有 `build_arm` 的 budget / violations_of：
     `tools` 走生产白名单、`judge` 走带 nlp 的生产同款裁判、`system_prompt` 走生产同款
     选择规则；`on_progress` 只用来接住循环的 `done` 记账（tokens / elapsed）。
+    `feedback`（Task 5）：默认 False（维持 ADR-0024 准入式基线）；True 时开启裁判结论回灌。
 
     Task-4b：注入的 `chat` 先过 `_ChatRecorder`（透明包装器）—— 循环拿到的永远是包装器，
     对外行为与未包装逐字一致（原样返回 / 原样入参 / 异常原样冒泡，有测试钉住）；本局最后
@@ -481,6 +482,7 @@ def run_arm(case: SeedCase, arm: Arm, *, chat: ChatFn) -> RunRecord:
             judge=judge,
             violations_of=config.violations_of_factory(),
             system_prompt=pick_system_prompt(kind),
+            feedback=feedback,
             on_progress=events.append,
         )
     )
@@ -692,6 +694,7 @@ def _run_units(
     store: JsonlRunStore | None,
     cost_gate: CostGate | None,
     allow_fail: bool,
+    feedback: bool = False,
 ) -> list[RunRecord]:
     """单元执行器（① 增量落盘 + ② 失败继续 + ⑤ 成本闸 的**唯一收口**）。
 
@@ -699,6 +702,7 @@ def _run_units(
     - `allow_fail` ⇒ 捕获**可重试**错误（429/5xx/传输层）并标 failed 继续（不可重试错误原样冒泡）；
     - `cost_gate` 非空 ⇒ 每单元后累计；越限即**停止**（返回已跑的部分记录，由调用方映射为
       `EXIT_COST_CAP` —— 触顶即停，但已完成的部分**如实保留**，不静默丢弃）。
+    - `feedback` ⇒ 是否开启裁判结论回灌通道（默认 False 维持 ADR-0024 准入式基线）。
     """
     records: list[RunRecord] = []
     stop = False
@@ -710,7 +714,7 @@ def _run_units(
                 continue
             chat = make_chat(case, arm)
             try:
-                record = run_arm(case, arm, chat=chat)
+                record = run_arm(case, arm, chat=chat, feedback=feedback)
             except Exception as exc:  # 宽捕是刻意的：只对可重试错误吞并标 failed，其余原样重抛
                 if not (allow_fail and _is_retryable_llm_error(exc)):
                     raise
@@ -731,11 +735,13 @@ def run_dry_run(
     *,
     store: JsonlRunStore | None = None,
     cost_gate: CostGate | None = None,
+    feedback: bool = False,
 ) -> list[RunRecord]:
     """按「逐篇轮转」次序跑完全部用例 × 三臂（设计稿 §3.2 的交错执行；输出顺序确定）。
 
     `store` / `cost_gate` 可选（① / ⑤）；dry-run 单元不会失败（stub 确定性）⇒ `allow_fail=False`。
     每臂取**新鲜**的 stub chat（脚本计数器逐臂复位）。
+    `feedback` ⇒ 是否启用裁判结论回灌（默认 False）。
     """
     return _run_units(
         cases,
@@ -743,6 +749,7 @@ def run_dry_run(
         store=store,
         cost_gate=cost_gate,
         allow_fail=False,
+        feedback=feedback,
     )
 
 
@@ -1225,12 +1232,14 @@ def run_real(
     chat: ChatFn,
     store: JsonlRunStore | None = None,
     cost_gate: CostGate | None = None,
+    feedback: bool = False,
 ) -> list[RunRecord]:
     """真跑：与 `run_dry_run` **同一次序**（逐篇三臂交错）跑完全部用例，驱动源 = 真 chat。
 
     ② 失败语义：**可重试**错误（429/5xx/传输层）在 `RealChat` 内重试耗尽后，本层把该单元标
     `status="failed"` 并**继续**下一篇（一次瞬断不再让整轮白跑）；**不可重试**错误仍原样冒泡
     ⇒ 调用方显式退 2。① 增量落盘 / ⑤ 成本闸由共享执行器 `_run_units` 承担。
+    `feedback` ⇒ 是否启用裁判结论回灌（默认 False）。
     """
     return _run_units(
         cases,
@@ -1238,6 +1247,7 @@ def run_real(
         store=store,
         cost_gate=cost_gate,
         allow_fail=True,
+        feedback=feedback,
     )
 
 
@@ -1344,21 +1354,33 @@ def probe_environment(loader: Callable[[], Any] | None = None) -> str | None:
 # --------------------------------------------------------------------------- #
 
 
-def _print_text_report(records: Sequence[RunRecord], report: Report, *, real: bool = False) -> None:
+def _print_text_report(
+    records: Sequence[RunRecord],
+    report: Report,
+    *,
+    real: bool = False,
+    feedback: bool = False,
+) -> None:
     """文本模式：逐条原始记录（只报比例无法复核，故全量打印）+ 每臂汇聚行 + 【综合记账】（Task 3）。
 
     `real` 只影响**如实标注**的两行（模式与驱动源）：`--real` 的真跑头行 MUST NOT 复读
     dry-run 的「零 Key、不出网」字样；记录与记账面两模式同构。
     """
     mode = "--real 真跑（真实 llm_client.chat；有界重试；temperature 钉定）" if real else "--dry-run 全链路"
-    print(f"=== bench_judge_gaming（§4.3 第 8 条对照实验 · 三臂 harness · {mode}）===")
+    fb_label = (
+        "feedback=enabled（回灌模式 Verifier-in-the-Loop）"
+        if feedback
+        else "feedback=disabled（无回灌准入基线）"
+    )
+    print(f"=== bench_judge_gaming（§4.3 第 8 条对照实验 · 三臂 harness · {mode} · {fb_label}）===")
     models = sorted({record.model for record in records})
     print(f"模型={models or ['（无记录）']}；temperature 钉定={EXPERIMENT_TEMPERATURE}")
     print(NO_SEED_FACT_STATEMENT)
+    fb_status = "enabled" if feedback else "disabled"
     if real:
-        print(f"records={len(records)}（逐篇三臂交错；真 chat 驱动；记录与记账口径同 --dry-run）")
+        print(f"records={len(records)}（逐篇三臂交错；真 chat 驱动；feedback={fb_status}；记录与记账口径同 --dry-run）")
     else:
-        print(f"records={len(records)}（逐篇三臂交错；stub chat 按轮次预构造；零 Key、不出网）")
+        print(f"records={len(records)}（逐篇三臂交错；stub chat 按轮次预构造；feedback={fb_status}；零 Key、不出网）")
     for record in records:
         print(
             f"[{record.case_id}] {record.arm.value}: status={record.status} rounds={record.rounds} "
@@ -1460,7 +1482,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="USD",
         help=f"⑤ 成本硬闸：估算成本上限（美元；0=不限；单价 UNVERIFIED）；触顶停并退 {EXIT_COST_CAP}",
     )
+    parser.add_argument(
+        "--feedback",
+        action="store_true",
+        help="启用裁判结论回灌通道（Verifier-in-the-Loop）",
+    )
+    parser.add_argument(
+        "--no-feedback",
+        action="store_true",
+        help="禁用裁判结论回灌通道（默认，维持 ADR-0024 准入式基线）",
+    )
     args = parser.parse_args(argv)
+
+    if args.feedback and args.no_feedback:
+        parser.error("--feedback 与 --no-feedback 互斥：不能同时指定")
 
     if args.cases is not None and args.cases < 1:
         parser.error(f"--cases 必须 ≥ 1（取 SEED_CASES 前 N 篇口径），收到 {args.cases}")
@@ -1544,7 +1579,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             try:
-                records = run_real(cases, chat=real_chat, store=store, cost_gate=cost_gate)
+                records = run_real(
+                    cases,
+                    chat=real_chat,
+                    store=store,
+                    cost_gate=cost_gate,
+                    feedback=args.feedback,
+                )
             except llm_client.LLMError as exc:
                 # **不可重试**（或预检之外）的上游失败 ⇒ 显式退 2（1 是样本集无效，不复用）。
                 # 只透 `detail`（固定人话）、不透 `raw`（可能带凭据）。
@@ -1554,7 +1595,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 return 2
         else:
-            records = run_dry_run(cases, store=store, cost_gate=cost_gate)
+            records = run_dry_run(
+                cases,
+                store=store,
+                cost_gate=cost_gate,
+                feedback=args.feedback,
+            )
 
     if store is not None:
         records = store.records  # 续跑：报告覆盖既有 + 本次新增
@@ -1562,7 +1608,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.json:
         print(json.dumps([record_to_dict(record) for record in records], ensure_ascii=False, indent=2))
     else:
-        _print_text_report(records, summarize(records, cases), real=args.real)
+        _print_text_report(records, summarize(records, cases), real=args.real, feedback=args.feedback)
     if cost_gate.tripped:
         # ⑤ 触顶即停：已完成的部分已如实打印/落盘；用**独立退出码**区分于 0/1/2。
         print(f"[成本硬闸] {cost_gate.reason}（退出码 {EXIT_COST_CAP}）", file=sys.stderr)
