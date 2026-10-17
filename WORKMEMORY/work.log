@@ -427,3 +427,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **未决（留用户拍板，未删）**：`.test-db-residue-20261016-183218/`（1.5MB，10-16 18:32 由 A5「测试库落点治因」收拢）内含 7 个库，其中 `delector.db` 与 `delector.db.bak-20261016-175607` **逐字节不同**；只读鉴定：两库同为 13 表、逐表行数全同、`articles` 均 4 行、`user_version` 同 ⇒ 差异仅在文章 `created_at`（residue 2026-10-16 10:28 vs bak 2026-10-15 14:06），属同一开发库的不同时点副本而非独有数据。其余 6 个为 `test_*.db` / `rel_probe_xyz.db` 测试产物。该目录对 `git status` 不可见（内容全被 `*.db` 忽略）。
 下一步：C1（无条件下一步）待点名；C2 三项修复按分支 + PR 走。
 
+### 2026-10-17 13:17 | gemini-3.8-flash-high__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**响应用户指令「1删2开工3立计划」之 1 与 3**：
+1. **1删**：删除 `.test-db-residue-20261016-183218/`（1.5MB，昨夜已只读鉴定为无独有数据的测试残渣，用户指令确认删除，现已移除）。
+3. **3立计划**：起草 C1 实施计划 `docs/plans/2026-10-17-c1-verifier-in-the-loop.md`（Task 1~6，严格锚定 ADR-0024 四条硬依赖与三角一致性/适用性闸/双限截断）；回填 `docs/reviews/2026-10-16-open-items-backlog.md` C1 行。
+下一步：开工 2（C2 四项缺陷修复：P1-2, P1-3, P1-4, P1-5），切独立特性分支 `fix/c2-audit-findings`。
+
