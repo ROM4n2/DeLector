@@ -284,6 +284,7 @@ def test_writing_check_triangle_consistency(monkeypatch: pytest.MonkeyPatch) -> 
     sample_text = "Liebe Maria,\nich lade dich ein.\nViele Grüße\nAnna"
 
     # b) 当 nlp 未加载时：验证降级标记与 rules_only
+    # mock-drift-ok: 调用期经模块属性读取（tools/writing_check.py:22 _nlp_processor.get_loaded_nlp()），补丁即时生效
     monkeypatch.setattr(processor, "get_loaded_nlp", lambda: None)
     res_no_nlp = asyncio.run(writing_check.run({"text": sample_text}))
 
@@ -322,6 +323,7 @@ def test_writing_check_triangle_consistency(monkeypatch: pytest.MonkeyPatch) -> 
 
     # 2. 通过 processor.get_loaded_nlp() 隐式提供
     mock_nlp.reset_mock()
+    # mock-drift-ok: 调用期经模块属性读取（tools/writing_check.py:22 _nlp_processor.get_loaded_nlp()），补丁即时生效
     monkeypatch.setattr(processor, "get_loaded_nlp", lambda: mock_nlp)
     res_loaded = asyncio.run(writing_check.run({"text": sample_text}))
     mock_nlp.assert_called_with(sample_text)
@@ -330,6 +332,7 @@ def test_writing_check_triangle_consistency(monkeypatch: pytest.MonkeyPatch) -> 
     # 3. 若有真实 spaCy 模型，验证其产生 rules+spacy 且无 mode_note
     real_nlp = processor._resolve_nlp_model()
     if real_nlp is not None:
+        # mock-drift-ok: 调用期经模块属性读取（tools/writing_check.py:22 _nlp_processor.get_loaded_nlp()），补丁即时生效
         monkeypatch.setattr(processor, "get_loaded_nlp", lambda: real_nlp)
         res_real = asyncio.run(writing_check.run({"text": sample_text}))
         assert res_real["judge_engine"] == "rules+spacy"

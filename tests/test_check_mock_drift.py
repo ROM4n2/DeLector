@@ -4,10 +4,14 @@
 覆盖任务书 Step 4 的四件：
 1. 判据的**阳性**样本：patch 目标符号在目标生产模块内已无引用/调用点 ⇒ 候选
    （``file:line | symbol | 目标模块``），含本次事故的真形状（``<模块>.httpx`` + ``"stream"``）；
-2. **阴性**样本：符号仍被调用/引用 ⇒ MUST NOT 命中（模块内 Name 调用、模块内属性访问、
-   非生产模块目标、无法静态解析的目标）；
+2. **阴性**样本：符号仍被调用/引用、或属**自供出口**（顶层 def/class/赋值 + ``__all__``
+   声明；包 ``__init__`` + 直属子模块 + ``__all__``）⇒ MUST NOT 命中（另覆盖：非生产模块
+   目标、无法静态解析的目标）；
 3. 空理由抑制 = 违规（``mock-drift-ok:`` 后不写 REASON 不算豁免；字符串里的标记不算注释）；
 4. 退出码语义：0=通过 / 1=有未豁免候选 / 2=环境不可用（run_scan 与 CLI 两层）。
+5. **判据细化（2026-10）**：``__all__`` **自供**出口计为引用；plain import 绑定 / re-export
+   一律不计 —— 真遗留 ``tests/test_server.py:2501``（patch ``server.nlp``）的形状 MUST
+   照常命中（见口径测试）。
 另锁两条「极限」负样本：符号名非字符串字面量、字符串寻址形态 —— 都已登记为静态不可达
 （见闸模块头「极限」#1/#3），MUST NOT 在闸里变成命中（那是假精度）。
 
@@ -171,11 +175,11 @@ def test_criterion_passes_when_name_is_called_in_module(tmp_path: Path) -> None:
     )
 
 
-def test_module_definition_and_all_string_do_not_count_as_reference(tmp_path: Path) -> None:
-    """口径锁定：模块里的 `def <symbol>` 与 `__all__ = ["<symbol>"]` 都不算「引用」。
+def test_criterion_passes_when_symbol_is_own_export_via_all(tmp_path: Path) -> None:
+    """细化口径 (a)：**自供出口**（顶层 def + ``__all__`` 声明）⇒ MUST NOT 命中。
 
-    `__all__` 是字符串（导出声明），不是 Name/属性访问 —— 对应任务书「字符串注册表
-    扫描器看不见」的合法形态：它们走**带理由的豁免**，MUST NOT 在本闸里静默放行。
+    出口符号没有模块内调用点正是**预期形状**：消费方在别的模块经出口引用，实现之家
+    不调用自己导出的符号 —— 属设计，不是漂移（precision fix，非便利豁免）。
     """
     module = _load_module()
     module_source = (
@@ -189,9 +193,74 @@ def test_module_definition_and_all_string_do_not_count_as_reference(tmp_path: Pa
         tmp_path,
         {"tests/test_sample.py": _TEST_PATCHES_ATTRIBUTE, "delector/routes/encounter.py": module_source},
     )
+    out, err = io.StringIO(), io.StringIO()
+    assert module.run_scan(root, out=out, err=err) == 0
+    assert "候选 0 个" in out.getvalue()
+
+
+def test_criterion_tags_bare_reexport_without_all(tmp_path: Path) -> None:
+    """细化口径 (b)：re-export **未**列入 ``__all__`` ⇒ MUST 命中（无出口声明可依）。"""
+    module = _load_module()
+    module_source = "from elsewhere.api import stream\n"  # 1 裸 import 绑定，无 __all__
+    root = _make_tree(
+        tmp_path,
+        {"tests/test_sample.py": _TEST_PATCHES_ATTRIBUTE, "delector/routes/encounter.py": module_source},
+    )
     assert _scan_sites(module, root) == [
         (6, "stream", "delector.routes.encounter", "encounter_mod.httpx")
     ]
+
+
+def test_criterion_tags_bare_reexport_listed_in_all(tmp_path: Path) -> None:
+    """细化口径 (c)：**裸 re-export 即使列入 ``__all__``** 也 MUST 命中 —— 真遗留形状。
+
+    ``tests/test_server.py:2501``（patch ``server.nlp``）正是该形状：import 绑定他处
+    符号 + ``__all__`` 兼容条目，模块内零取值点 ⇒ 补丁空转。把 import 绑定计入引用会
+    静默洗白这条真遗留，故此边界 MUST 锁死。
+    """
+    module = _load_module()
+    module_source = (
+        '__all__ = ["stream"]\n'  # 1
+        "from elsewhere.api import stream  # 裸 re-export：模块内无取值点\n"  # 2
+    )
+    root = _make_tree(
+        tmp_path,
+        {"tests/test_sample.py": _TEST_PATCHES_ATTRIBUTE, "delector/routes/encounter.py": module_source},
+    )
+    assert _scan_sites(module, root) == [
+        (6, "stream", "delector.routes.encounter", "encounter_mod.httpx")
+    ]
+
+
+def test_criterion_passes_when_package_init_exports_submodule_via_all(tmp_path: Path) -> None:
+    """细化口径 (b)：包 ``__init__`` 经 ``__all__`` 声明**直属子模块**为公开出口 ⇒ MUST NOT 命中。
+
+    形状即 ``delector.services.tts``：补丁替换的是包属性（= 子模块对象本身），消费方在
+    调用期 ``from <pkg> import <sub>`` 取值 —— 属设计，不是漂移。
+    """
+    module = _load_module()
+    init_source = (
+        "from delector.pkg import helper\n"  # 1
+        "\n"  # 2
+        "\n"  # 3
+        '__all__ = ["helper"]\n'  # 4
+    )
+    test_source = (
+        "import delector.pkg as pkg\n"  # 1
+        "\n"  # 2
+        "\n"  # 3
+        "def test_x(monkeypatch):\n"  # 4
+        '    monkeypatch.setattr(pkg, "helper", object())\n'  # 5
+    )
+    root = _make_tree(
+        tmp_path,
+        {
+            "tests/test_sample.py": test_source,
+            "delector/pkg/__init__.py": init_source,
+            "delector/pkg/helper.py": "x = 1\n",
+        },
+    )
+    assert _scan_sites(module, root) == []
 
 
 def test_multiline_patch_reports_call_line(tmp_path: Path) -> None:

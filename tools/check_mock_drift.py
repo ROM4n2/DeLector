@@ -18,8 +18,25 @@ C8 批次的真实事故：生产 `_shelf_get`（delector/routes/encounter.py）
   1. 解析 ``<obj>`` 的来源（测试文件内的 ``import`` 别名链 → 模块；取**最长可达模块
      前缀**，故 ``encounter_mod.httpx`` 归属 ``delector.routes.encounter``）；
   2. 若该模块是**生产模块**（``delector.*`` / ``tools.*``），要求 ``<symbol>`` 在该模块
-     源码内**至少被引用/调用一次**（除其定义点外；判定按名字形状，见「极限」#4）；
+     源码内**至少被引用/调用一次**（除其定义点外；判定按名字形状，见「极限」#4），
+     **或**该符号属于模块的**自供出口**（定义见下节；2026-10 判据细化）；
   3. 否则判违规 —— 补丁目标符号已无调用点（死测 / 假绿形状）。
+
+「自供出口」口径（判据细化 —— precision fix，不是便利豁免）
+----------------------------------------------------------
+(a) 为什么导出符号「无模块内调用点」是**预期形状**：符号被模块经 ``__all__`` 声明为公开
+    出口 ⇒ 它的消费方在**别的模块**（from-import / 模块属性于调用期取值）；实现之家的
+    本模块不调用自己导出的符号。没有模块内调用点 = 设计，不是漂移。
+(b) 什么算「自供」：① 模块顶层 ``def`` / ``class`` / 赋值定义的该名字（实现之家在本模
+    块）；② 包 ``__init__`` 的**直属子模块**（``__all__`` 列出 ``<symbol>`` 且
+    ``<module>.<symbol>`` 在包内可解析为模块文件 —— 补丁替换的是包属性 = 子模块对象
+    本身）。
+(c) 为什么**只认** ``__all__`` 自供成员、plain import 绑定一律**不计**引用：真遗留
+    ``tests/test_server.py:2501``（patch ``server.nlp``）就是**裸 re-export** 形状 ——
+    ``nlp`` 被 import 进 ``server`` 又列进其 ``__all__`` 兼容表，但 ``server`` 源码内零
+    取值点（消费方直连 ``delector.nlp_engine.processor``）⇒ 补丁空转。若把 import 绑定 /
+    re-export 注释 / 跨模块属性读计入引用，这条唯一的真遗留会被**静默洗白** —— 故它们
+    在引用判定里一律不计；``__all__`` 条目也只在满足 (b) 时才算。
 
 极限（抓不到什么；决定去留 / 扩判据时 MUST 读）
 ----------------------------------------------
@@ -37,7 +54,9 @@ C8 批次的真实事故：生产 `_shelf_get`（delector/routes/encounter.py）
      字符串寻址、目标对象与生产调用路径是否同一对象）一律不判 —— 超出静态可达范围，
      做了就是假精度；
   6. 非 ``monkeypatch.setattr`` 的 mock 面（``unittest.mock.patch`` / pytest-mock /
-     其他 fixture 注入）不在扫描面。
+     其他 fixture 注入）不在扫描面；
+  7. 动态构造的 ``__all__``（拼接 / ``+=`` / 生成表达式）不识别 ⇒ 对应出口不获豁免
+     （方向更严：站点照常判红，可走带理由豁免）。
 
 豁免约定（**绝不静默**：豁免站点也逐行打印并在行尾标注）
 ----------------------------------------------------
@@ -75,6 +94,12 @@ C8 批次的真实事故：生产 `_shelf_get`（delector/routes/encounter.py）
 # 判据的固有边界（MUST 明说）：判据检测的是**形状**，不是某个 one-off；形状合规 ≠
 #   测试有效（补丁仍可能覆盖不到真实路径，那属于动态可达性的另一问题，见「极限」#5）。
 #   发现新形态时应当**另立判据并以建议形式报告**，MUST NOT 顺手扩大本条。
+#
+#   2026-10 首扫复核（35 候选裁决后回填）：上线 141 站点 / 35 候选 —— 17 处为「自供出
+#   口」（server_lifecycle 15 + services.tts 2，经判据细化直接清除）；17 处为「调用期模
+#   块属性消费」的合法形态（逐处带理由豁免）；1 处为**真遗留**：tests/test_server.py:2501
+#   （patch `server.nlp` —— 裸 re-export，patch 不影响 process_german_text 的真实取值面）。
+#   真遗留过渡豁免并点名，修正归 test_server.py 的归属工作流（C6）。
 
 from __future__ import annotations
 
@@ -116,7 +141,7 @@ class RawHit(NamedTuple):
 
 
 class Site(NamedTuple):
-    """最终候选站点：补丁目标符号在目标模块内已无引用/调用点 + 豁免判定结果。"""
+    """最终候选站点：补丁目标符号在目标模块内已无引用/调用点（且非自供出口）+ 豁免判定结果。"""
 
     path: str  # 仓库相对路径（posix 分隔）
     line: int
@@ -142,7 +167,7 @@ class ScanResult(NamedTuple):
 
     files_scanned: int
     patch_sites: int  # 生产模块目标的 monkeypatch.setattr 站点总数（含符号仍被引用的）
-    sites: list[Site]  # 候选站点（符号已无引用/调用点；含豁免与否的判定结果）
+    sites: list[Site]  # 候选站点（符号已无引用/调用点且非自供出口；含豁免与否的判定结果）
 
 
 # ── 文本工具 ─────────────────────────────────────────────────────────────────────
@@ -267,12 +292,71 @@ class _SymbolReferenceVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def _module_references_symbol(source: str, symbol: str) -> bool:
-    """目标模块源码内，除定义点外是否还有该符号的引用/调用点。"""
+# ── 出口判定：``__all__`` × 自供成员（判据细化，见模块头「自供出口」）──────────────────
+
+
+def _export_declared_names(tree: ast.Module) -> frozenset[str]:
+    """模块顶层 ``__all__ = [...]`` 声明的字符串成员（窄口径）。
+
+    仅识别**直接位于模块体**的 ``Assign``，值为字符串常量构成的 List/Tuple/Set 字面量；
+    ``__all__ +=`` / 拼接 / 生成表达式等动态形态一律不识别 —— 方向更严（不豁免），
+    见「极限」#7。
+    """
+    names: set[str] = set()
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "__all__" for t in stmt.targets):
+            continue
+        if isinstance(stmt.value, (ast.List, ast.Tuple, ast.Set)):
+            for elt in stmt.value.elts:
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                    names.add(elt.value)
+    return frozenset(names)
+
+
+def _own_member_names(tree: ast.Module) -> frozenset[str]:
+    """模块**自供**的顶层名字：``def`` / ``class`` / 赋值绑定（直接位于模块体）。
+
+    方法名、函数体内部赋值、import 绑定一律不算 —— 后者的对象在**他处**，正是本闸要
+    抓的裸 re-export 形态（见模块头「自供出口」(c)）。
+    """
+    names: set[str] = set()
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(stmt.name)
+        elif isinstance(stmt, ast.Assign):
+            names.update(t.id for t in stmt.targets if isinstance(t, ast.Name))
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            names.add(stmt.target.id)
+    return frozenset(names)
+
+
+def _exports_own_member(root: Path, module: str, tree: ast.Module, symbol: str) -> bool:
+    """``__all__`` 自供出口判定：仅当模块**自供**该符号时豁免其「无调用点」候选。
+
+    自供 = 顶层 def/class/赋值定义了该名，或该模块是包且 ``<module>.<symbol>`` 是它的
+    直属子模块。裸 re-export（只有 import 绑定 + ``__all__`` 兼容条目）MUST NOT 命中本
+    豁免 —— 真遗留 ``tests/test_server.py:2501``（patch ``server.nlp``）正是该形状。
+    """
+    if symbol not in _export_declared_names(tree):
+        return False
+    if symbol in _own_member_names(tree):
+        return True
+    module_path = _module_file(root, module)
+    if module_path is None or module_path.name != "__init__.py":
+        return False
+    return _module_file(root, f"{module}.{symbol}") is not None
+
+
+def _module_references_symbol(root: Path, module: str, symbol: str, source: str) -> bool:
+    """目标模块源码内，除定义点外是否仍有该符号的引用/调用点（含自供出口豁免）。"""
     tree = ast.parse(source)
     visitor = _SymbolReferenceVisitor(symbol)
     visitor.visit(tree)
-    return visitor.found
+    if visitor.found:
+        return True
+    return _exports_own_member(root, module, tree, symbol)
 
 
 def _module_source(root: Path, module: str, sources: dict[str, str]) -> str:
@@ -301,7 +385,7 @@ def _module_reference_cached(
     if key not in results:
         source = _module_source(root, module, sources)
         try:
-            results[key] = _module_references_symbol(source, symbol)
+            results[key] = _module_references_symbol(root, module, symbol, source)
         except SyntaxError as exc:
             raise ScanEnvironmentError(
                 f"目标模块无法解析（无法判定 ⇒ 拒绝放行）：{module}:{exc.lineno} {exc.msg}"
@@ -482,7 +566,7 @@ def run_scan(
 
     print(
         f"[mock-drift] 扫描完成：{result.files_scanned} 个 .py；生产模块补丁站点 {result.patch_sites} 个；"
-        f"其中补丁目标符号已无引用/调用点的候选 {len(result.sites)} 个"
+        f"其中补丁目标符号已无引用/调用点（且非自供出口）的候选 {len(result.sites)} 个"
         f"（已豁免 {len(result.sites) - len(violations)} 个，未豁免 {len(violations)} 个）。",
         file=stdout,
     )
@@ -493,7 +577,7 @@ def run_scan(
     if violations:
         print(
             f"[mock-drift] 违规：{len(violations)} 个未豁免站点（判据：补丁目标符号在目标模块内"
-            f"已无引用/调用点 ⇒ 死测/假绿形状；逐行清单见 stdout）⇒ 非零退出。",
+            f"已无引用/调用点（且非自供出口）⇒ 死测/假绿形状；逐行清单见 stdout）⇒ 非零退出。",
             file=stderr,
         )
         return 1
@@ -516,7 +600,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             pass
 
     parser = argparse.ArgumentParser(
-        description="mock 漂移机械闸（判据：monkeypatch.setattr 的目标符号在生产模块内已无引用/调用点）。"
+        description="mock 漂移机械闸（判据：setattr 的目标符号在生产模块内已无引用/调用点，且非自供出口）。"
     )
     parser.add_argument(
         "--root",

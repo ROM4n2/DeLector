@@ -273,6 +273,7 @@ def test_missing_rich_does_not_raise_and_yields_empty(monkeypatch):
     """
     from delector.core import lexicon
 
+    # mock-drift-ok: 消费方于调用期惰性 import 后经模块属性取值（db/vocab.py:378 lexicon.rich_of(key)），补丁即时生效
     monkeypatch.setattr(lexicon, "rich_of", lambda lemma: None)
     res = get_vocab_by_cefr(cefr="A2", scope="all")
     assert res["words"], "A2 视图不应为空"

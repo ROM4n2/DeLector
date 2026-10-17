@@ -326,8 +326,11 @@ def test_load_reads_data_module_constants(monkeypatch, fresh_a1_cache):
     """(b) 行为级：monkeypatch 数据模块常量后输出随之变化 —— 证明真读模块而非缓存。"""
     import delector.data.a1_workbench_dict as wb_dict
 
+    # mock-drift-ok: 常量是模块公开数据出口；消费方 db/vocab.py:141-143 于调用期经 a1_wb 模块属性读取，补丁即时生效
     monkeypatch.setattr(wb_dict, "A1_WORKBENCH_SEED", MINI_SEED)
+    # mock-drift-ok: 消费方 db/vocab.py:141-143 于调用期经 a1_wb 模块属性读取该常量，补丁即时生效
     monkeypatch.setattr(wb_dict, "A1_WORKBENCH_CUSTOM", MINI_CUSTOM)
+    # mock-drift-ok: 消费方 db/vocab.py:141-143 于调用期经 a1_wb 模块属性读取该常量，补丁即时生效
     monkeypatch.setattr(wb_dict, "A1_WORKBENCH_CORE_IDS", MINI_CORE_IDS)
 
     words = database._load_a1_workbench_words()
@@ -388,6 +391,7 @@ def test_bad_shape_raises(monkeypatch, fresh_a1_cache):
     """(c) 失败必须炸：常量形状坏（SEED 非列表）→ 抛 TypeError 而非静默容错。"""
     import delector.data.a1_workbench_dict as wb_dict
 
+    # mock-drift-ok: 消费方 db/vocab.py:141-143 于调用期经模块属性读取，本用例正靠此面炸出 TypeError，补丁即时生效
     monkeypatch.setattr(wb_dict, "A1_WORKBENCH_SEED", "not-a-list")
     with pytest.raises(TypeError) as ei:
         database._load_a1_workbench_words()
