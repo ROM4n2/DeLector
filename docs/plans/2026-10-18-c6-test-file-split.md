@@ -269,3 +269,19 @@
 - 不引入 `pytest-xdist` / `pytest-randomly` / `pytest-order` 等插件来「解决」顺序问题——顺序依赖被暴露时应当**显式化**，而不是靠插件随机化掩盖。
 - 不动 `delector/**`、`.github/**`、`static/**`（分属 C8 与 C7）。
 - 不新增业务用例；只允许因搬迁必需的 import 头与（若有）共享层自身的单测。
+
+---
+
+## 🆕 追加项（来自 C9 终审，C6 执行者 MUST 处理）
+
+### Task 0: 修正 `tests/test_server.py:2501` 的空转补丁（C9 移交的真发现）
+
+**发现路径**：C9 的新机械闸 `tools/check_mock_drift.py`（判据 = 测试补丁的目标符号在生产模块内已无可达引用且非自供出口）在首扫中命中此处；经 C9 复核确认为**真遗留空转补丁**，非合法形态。
+
+**实测事实**：`tests/test_server.py:2501` 对 `server`（`delector.server`）patch `nlp`。而 `delector/server.py` 的 `nlp` 是**裸外来再导出**（import 绑定 + `__all__` 兼容条目），模块自身不消费（`server.py:99-106` 注释自陈「handler 搬走后 server 自身不再消费」）。全仓**无任何消费方**读取 `server.nlp` ⇒ **该 patch 不生效**，用例实际读的是 `processor.nlp`（与补丁无关，故断言仍通过）。
+
+**MUST**：在 C6 搬迁该用例时一并处置 —— 要么删掉这条无效 patch（若用例本就不需要它），要么改为 patch 真实消费面。**禁止**只搬不改，把空转补丁带到新文件里。
+
+**当前状态**：该站点已在 C9 分支上带 `mock-drift-ok:` **过渡豁免**（理由里写明「真遗留空转、C6 修正」）。**C6 修完后 MUST 撤掉该过渡豁免**，让闸恢复对它的约束。
+
+**验证**：修完后 `python3 tools/check_mock_drift.py` 在该站点上应仅在去掉豁免时触发；移除过渡豁免后闸仍须 exit 0。
