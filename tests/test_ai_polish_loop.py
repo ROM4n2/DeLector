@@ -846,6 +846,28 @@ def test_feedback_retry_stops_on_repeated_stall() -> None:
     assert result.text == "T0"
 
 
+def test_no_feedback_mode_stops_on_stall_and_skips_feedback_injection() -> None:
+    """feedback=False（ADR-0024 准入基线）：首个候选持平 (v >= prev_v) 即 no_improvement 退出且不注入反馈。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+    judge = make_judge({"T0": 1, "T1": 1, "T2": 0})
+    result = run(
+        text="T0",
+        chat=rec.chat(script),
+        judge=judge,
+        feedback=False,
+    )
+
+    assert result.converged is False
+    assert result.reason == "no_improvement"
+    assert result.rounds == 1
+    assert result.text == "T0"
+    assert len(rec.calls) == 1  # 不重试，首轮持平即停
+
+
 def test_feedback_respects_text_type() -> None:
     """当 text_type='prose' 时，format_judge_feedback 过滤掉 a1_ 格式规则后再注入。"""
     rec = Recorder()

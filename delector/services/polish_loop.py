@@ -374,6 +374,7 @@ async def run_polish_loop(
     dispatch: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
     system_prompt: str | None = None,
     text_type: str = "letter",
+    feedback: bool = True,
     clock: Callable[[], float] = time.monotonic,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -386,6 +387,9 @@ async def run_polish_loop(
     提示词（`POLISH_LOOP_SYSTEM_PROMPT`）；产品层可按文本族传入（书信 ⇒ 默认；散文 ⇒
     不含称呼语/结语指令的变体，见 `routes.main.pick_system_prompt`）。**只换提示词文本**：
     停止策略 / 预算 / 收敛归属（Task 4 定稿）一律不动。
+
+    `feedback`（Task 5）：`True`（默认，生产形态）⇒ Verifier-in-the-Loop，持平允许重试且向模型回灌裁判违规反馈；
+    `False`（ADR-0024 准入式基线）⇒ 不降即停且不回灌反馈。
     """
     tools_map: Mapping[str, Callable[..., Awaitable[dict[str, Any]]]] = tools or {}
     judge_fn: Callable[[str, list[str] | None], dict[str, Any]] = judge if judge is not None else _default_judge
@@ -575,31 +579,37 @@ async def run_polish_loop(
             converged_candidate = (candidate, violations)
             break
         if prev_v is not None:
-            # 哨兵：裁判不再下降（v_n == v_{n-1} 且 n>=2）⇒ 裁判不可信
-            if v == prev_v and judged_candidates >= 2:
-                reason = REASON_JUDGE_UNRELIABLE
-                break
-            # 运行时策略：严格恶化才在此直接停止，持平且首个候选允许反馈重试
-            if v > prev_v:
-                reason = REASON_NO_IMPROVEMENT
-                break
+            if not feedback:
+                # 无回灌模式（ADR-0024 准入式基线）：不降即停
+                if v >= prev_v:
+                    reason = REASON_NO_IMPROVEMENT
+                    break
+            else:
+                # 回灌模式（Verifier-in-the-Loop）：首个候选持平允许反馈重试，连续持平判定不可信，恶化即停
+                if v == prev_v and judged_candidates >= 2:
+                    reason = REASON_JUDGE_UNRELIABLE
+                    break
+                if v > prev_v:
+                    reason = REASON_NO_IMPROVEMENT
+                    break
         prev_v = v
 
-        feedback = format_judge_feedback(violations, text_type=text_type)
         if feedback:
-            messages.append({"role": "user", "content": feedback})
-            _emit(
-                on_progress,
-                {
-                    "round": rounds,
-                    "max_turns": budget.max_turns,
-                    "event": "judge_feedback",
-                    "violations": v,
-                    "feedback": feedback,
-                    "tokens_used": tokens_used,
-                    "elapsed": clock() - t0,
-                },
-            )
+            judge_fb = format_judge_feedback(violations, text_type=text_type)
+            if judge_fb:
+                messages.append({"role": "user", "content": judge_fb})
+                _emit(
+                    on_progress,
+                    {
+                        "round": rounds,
+                        "max_turns": budget.max_turns,
+                        "event": "judge_feedback",
+                        "violations": v,
+                        "feedback": judge_fb,
+                        "tokens_used": tokens_used,
+                        "elapsed": clock() - t0,
+                    },
+                )
 
     if reason is None:
         reason = REASON_TURN_LIMIT

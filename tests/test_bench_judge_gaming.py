@@ -1873,3 +1873,72 @@ def test_harness_estimate_coefficient_matches_production() -> None:
     from delector.services.polish_loop import CHARS_PER_TOKEN_ESTIMATE
 
     assert bench._CHARS_PER_TOKEN_ESTIMATE == CHARS_PER_TOKEN_ESTIMATE == 3.0
+
+
+def test_bench_gaming_feedback_flags_and_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    """Task 5: harness `--feedback` / `--no-feedback` 参数化与分域对照。
+
+    a) 校验 `--feedback` 与 `--no-feedback` 互斥，不能同时指定（exit 2）；
+    b) 校验 `run_arm` 在 `feedback=True` 下驱动 Verifier-in-the-Loop（第 2 轮拿到裁判反馈）；
+    c) 校验 `run_arm` 在 `feedback=False` 下严格维持 ADR-0024 基线（A2 第 3 轮 no_improvement 退出）。
+    """
+    _require_nlp()
+    case = _case()
+
+    # a) 互斥旗标报错退 2
+    with pytest.raises(SystemExit) as excinfo:
+        bench.main(["--dry-run", "--feedback", "--no-feedback"])
+    assert excinfo.value.code == 2
+    assert "互斥" in capsys.readouterr().err
+
+    # b) feedback=True: Verifier-in-the-Loop (round 2 gets feedback)
+    recorded_messages: list[list[dict[str, Any]]] = []
+
+    async def chat_with_feedback(
+        *,
+        messages: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        msgs = list(messages or [])
+        recorded_messages.append(msgs)
+        if len(recorded_messages) == 1:
+            # 首轮给出包含违规的文本（与原文违规数一致）
+            return {"corrected_text": case.text}
+        # 次轮收到反馈后修正为 clean_text（0 违规收敛）
+        return {"corrected_text": case.clean_text}
+
+    record_fb = bench.run_arm(case, bench.Arm.A3_CURRENT, chat=chat_with_feedback, feedback=True)
+    assert record_fb.converged is True
+    assert record_fb.reason == "ok"
+    assert record_fb.rounds == 2
+    assert len(recorded_messages) == 2
+    round2_msgs = recorded_messages[1]
+    assert round2_msgs[-1]["role"] == "user"
+    assert "[裁判反馈]" in round2_msgs[-1]["content"]
+
+    # c) feedback=False: 维持 ADR-0024 准入式基线（A2 不降即停，第 3 轮 no_improvement 退出）
+    record_no_fb = bench.run_arm(
+        case,
+        bench.Arm.A2_NO_SIGNAL,
+        chat=bench.build_dry_run_chat(case),
+        feedback=False,
+    )
+    assert (record_no_fb.rounds, record_no_fb.reason, record_no_fb.converged) == (3, "no_improvement", False)
+    assert record_no_fb.final_text == case.text
+
+    # 默认 feedback=False 同样维持 ADR-0024 基线
+    record_default = bench.run_arm(
+        case,
+        bench.Arm.A2_NO_SIGNAL,
+        chat=bench.build_dry_run_chat(case),
+    )
+    assert (record_default.rounds, record_default.reason, record_default.converged) == (3, "no_improvement", False)
+
+    # 验证 CLI 报告头展示 feedback 状态
+    rc = bench.main(["--dry-run", "--cases", "1", "--feedback"])
+    assert rc == 0
+    assert "feedback=enabled" in capsys.readouterr().out
+
+    rc = bench.main(["--dry-run", "--cases", "1", "--no-feedback"])
+    assert rc == 0
+    assert "feedback=disabled" in capsys.readouterr().out
