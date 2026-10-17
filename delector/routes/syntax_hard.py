@@ -13,6 +13,7 @@ source=all 额外走**聚合层缓存**（整榜一个 key，见 _ALL_RANK_CACHE
 一过 256，逐材料条目就会被淘汰策略打穿（命中率悬崖），整榜一个 key 则与材料数无关。
 """
 
+import logging
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,6 +36,9 @@ from delector.nlp_engine.syntax_tree import (
 from delector.services.syntax_score import _detect_path, rank_sentences, score_sentence
 
 router = APIRouter(prefix="/api/syntax", tags=["syntax"])
+
+# 模块 logger：与 routes/main.py 等同挂 "delector" 树（失败/降级路径 MUST 有痕迹）。
+logger = logging.getLogger("delector")
 
 # 排名结果内存缓存：键 = "source:id"，值 = (过期时刻, items 全量)。
 # 存放**未过滤未截断**的全量 items（过滤/limit 在读取时应用），TTL 内同材料
@@ -233,11 +237,18 @@ def api_syntax_hard_sentences(
     min_score: Optional[float] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
-    """跨语料句子难度榜：source ∈ article/encounter/all；level/min_score 过滤 + limit 护栏。"""
+    """跨语料句子难度榜：source ∈ article/encounter/all；level/min_score 过滤 + limit 护栏。
+
+    source=all 在材料列表获取失败时以 `degraded` 字段点名缺席来源与原因（C9 Y4）；
+    degraded 缺省 ⇒ 没有任何来源缺席（空榜 = 该来源没有材料）。
+    """
     src = (source or "all").lower()
     if src not in ("article", "encounter", "all"):
         raise HTTPException(status_code=404, detail="未知材料来源")
     lim = max(1, min(int(limit), 100))
+    # 本次请求里「来源列表获取失败」的登记（C9 Y4：假值默认返回形状的修复）。只有 source=all
+    # 会填充：空列表 MUST NOT 折叠「没有材料」与「列表失败」两种语义。
+    degraded: List[Dict[str, str]] = []
     if src == "all":
         # 聚合层缓存（2026-10-03 Task 1）：整榜一个 key，命中直接返回，材料数再大
         # 也不会被 _RANK_CACHE_MAX_ENTRIES 的淘汰策略打穿（见 _ALL_RANK_CACHE_KEY 注释）。
@@ -247,10 +258,14 @@ def api_syntax_hard_sentences(
             merged: List[Dict[str, Any]] = []
             # 逐材料隔离：任一材料切句/分析异常只丢该材料，不炸整榜（纪律同 _rank_source）。
             # 聚合层 MUST 复用这条隔离语义，MUST NOT 放宽成"整体失败"。
+            # 但「列表获取失败」MUST NOT 折叠成空列表（C9 Y4）：那会让该来源整体从难度榜
+            # 静默消失且与"该来源没有材料"不可区分 ⇒ 失败来源进 degraded 并留 warning。
             try:
                 art_ids = _list_article_ids()
-            except Exception:
+            except Exception as exc:
                 art_ids = []
+                degraded.append({"source": "article", "error": f"{type(exc).__name__}: {exc}"})
+                logger.warning("长难句难度榜：article 材料列表获取失败，本来源整体缺席本榜：%s", exc)
             for aid in art_ids:
                 try:
                     merged.extend(_rank_source("article", aid))
@@ -258,8 +273,10 @@ def api_syntax_hard_sentences(
                     continue
             try:
                 enc_ids = _list_encounter_ids()
-            except Exception:
+            except Exception as exc:
                 enc_ids = []
+                degraded.append({"source": "encounter", "error": f"{type(exc).__name__}: {exc}"})
+                logger.warning("长难句难度榜：encounter 材料列表获取失败，本来源整体缺席本榜：%s", exc)
             for eid in enc_ids:
                 try:
                     merged.extend(_rank_source("encounter", eid))
@@ -267,9 +284,13 @@ def api_syntax_hard_sentences(
                     continue
             # 各材料内部已降序，跨材料合并后须整体按难度降序（难度榜契约）
             merged.sort(key=lambda it: it["score"], reverse=True)
-            _put_rank_cache(_ALL_RANK_CACHE_KEY, time.monotonic() + _CACHE_TTL_SEC, merged)
-            # 收尾：逐材料条目被聚合层覆盖，清掉（留着只会在后续 min() 淘汰时被误伤）
-            _drop_rank_cache_except(_ALL_RANK_CACHE_KEY)
+            # degraded 非空 ⇒ MUST NOT 写聚合缓存：缓存值只有裸 items，装不下降级标记，命中
+            # 会把"降级了"读成"一切正常"（同一类静默）；且列表失败多瞬态，写缓存等于把
+            # "来源整体缺席"钉死最长 TTL。不写 ⇒ 下一请求重试自愈；逐材料条目同样不 sweep。
+            if not degraded:
+                _put_rank_cache(_ALL_RANK_CACHE_KEY, time.monotonic() + _CACHE_TTL_SEC, merged)
+                # 收尾：逐材料条目被聚合层覆盖，清掉（留着只会在后续 min() 淘汰时被误伤）
+                _drop_rank_cache_except(_ALL_RANK_CACHE_KEY)
             agg = merged
         items = agg
     else:
@@ -279,7 +300,12 @@ def api_syntax_hard_sentences(
         items = [it for it in items if it["level"] == level_norm]
     if min_score is not None:
         items = [it for it in items if it["score"] >= min_score]
-    return {"items": items[:lim]}
+    payload: Dict[str, Any] = {"items": items[:lim]}
+    # 区分信号：degraded 存在 ⇒ 本次聚合有来源整体缺席（来源+原因在册）；缺省 ⇒ 没有来源
+    # 缺席失败，空榜才只能读作"没有材料"（成功路径响应逐字不变，契约零改动）。
+    if degraded:
+        payload["degraded"] = degraded
+    return payload
 
 
 @router.get("/hard-sentences/detail")# 同上：fastapi 装饰器为 Any
