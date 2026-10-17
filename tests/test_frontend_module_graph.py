@@ -18,6 +18,8 @@ actually resolve to a real export in the target module (transitively through
 import re
 from pathlib import Path
 
+import wb_source
+
 JS_DIR = Path("static/js")
 
 
@@ -382,55 +384,100 @@ def test_a1_engines_present_in_main_window_exposer():
 #  2. `wbsync.init()` 只在启动块 async IIFE（IDB hydrate 完成）之后才被调用；
 #  3. 有 轮询(pull/setInterval) / 切走(pushNow) / visibilitychange 三条路径；
 #  4. 用到 X-WB-Key + /api/wb/state，且 __wb 调试出口暴露 wbsync。
-# 全部走「定位行号 + 子串」而非「全文含某串」，避免死断言。
+# 读法（C7 Task 1）：全部经 `tests/wb_source.py` 按**声明体**读，不再用 `splitlines()`
+# 下标钉物理行。拆分 / 格式化造成的位置漂移不再产生假红；每条断言只钉契约，判别力
+# 严格强于原「同一物理行」钉（逐条对比见 WORKMEMORY/handoff 与本次提交的说明）：
+# 原钉是**格式事实**（一换行就红、被塞进回调却照样绿），新钉是**行为事实**。
 
 
-def _workbench_lines():
-    path = Path("static/german/workbench.html")
-    assert path.exists(), "workbench.html 缺失"
-    return path.read_text(encoding="utf-8").splitlines()
-
-
-def _line_no(lines, fragment, start=0):
-    for i in range(start, len(lines)):
-        if fragment in lines[i]:
-            return i
-    raise AssertionError(f"workbench.html 缺含 {fragment!r} 的行")
+def _workbench_src() -> str:
+    """workbench 源文本。拆分后只需在这里补文件路径（实参顺序 = 拼接顺序）。"""
+    return wb_source.read_source("static/german/workbench.html")
 
 
 def test_workbench_wbsync_save_hooks_on_each_store():
-    lines = _workbench_lines()
+    """每个 saveXxx() 都必须：落盘**之后**、任何 await **之前**、无条件推一次。
+
+    四条同时成立才算过（任一被破坏即红）：
+      ① push 在该函数**大括号配平体**内 —— 被移出函数体即红（原断言也抓得到）；
+      ② push 是函数体**顶层**语句 —— 被塞进 if 块 / 回调即红（原断言抓不到）；
+      ③ push 早于任一 await —— 等 IO 才推、关页即丢（原断言抓不到）；
+      ④ push 晚于 localStorage.setItem —— 先推后落盘、崩溃即失（原断言抓不到）。
+    """
+    src = _workbench_src()
     for fn in ("saveWords", "saveCards", "saveLog", "saveWrong", "saveSettings"):
-        i = _line_no(lines, f"function {fn}() {{")
-        assert "wbsync.push()" in lines[i], f"{fn}() 定义行未挂 wbsync.push()（保存后不推 server）"
+        body = wb_source.decl_body(src, f"function {fn}()")
+        assert "wbsync.push()" in body, f"{fn}() 函数体内没有 wbsync.push()（保存后不推 server）"
+        push_at = body.index("wbsync.push()")
+        assert wb_source.depth_at(body, push_at) == 0, (
+            f"{fn}() 的 wbsync.push() 不在函数体顶层"
+            f"（嵌进块 / 带花括号的子函数或回调 ⇒ 不是保存即推；"
+            f"无花括号的表达式体回调不产生花括号，本钉抓不到）"
+        )
+        assert wb_source.occurs_before(body, "wbsync.push()", "await"), (
+            f"{fn}() 的 wbsync.push() 排在 await 之后（等 IO 才推 ⇒ 关页就丢）"
+        )
+        assert wb_source.occurs_before(body, "localStorage.setItem", "wbsync.push()"), (
+            f"{fn}() 的 wbsync.push() 排在 localStorage.setItem 之前（先推后落盘 ⇒ 崩溃即失）"
+        )
 
 
 def test_workbench_wbsync_init_after_idb_hydrate_block():
-    lines = _workbench_lines()
-    i_async = _line_no(lines, "(async () => {")
-    assert i_async > _line_no(lines, "loadAll();"), "启动块必须是 loadAll() → async IIFE 的顺序"
-    i_init = _line_no(lines, "wbsync.init();", start=i_async)
-    assert i_init > i_async, "wbsync.init() 必须先于 async IIFE（IDB hydrate）执行会丢数据：IDB 数据可能晚到并覆盖 S"
+    """wbsync.init() 必须在启动 async IIFE **体内**、hydrate 之后、且无条件执行。
+
+    原写法只比三个行号下标（loadAll(); < (async () => { < wbsync.init();）：那是行序
+    事实，IIFE 体被改写（如 init 被移进 try）时不必然成立。新写法升为**包含关系**。
+    """
+    src = _workbench_src()
+    assert wb_source.line_of(src, "loadAll();") < wb_source.line_of(src, "(async () => {"), (
+        "启动块必须是 loadAll() → async IIFE 的顺序"
+    )
+    startup = wb_source.decl_body(src, "(async () => {")
+    assert "wbsync.init()" in startup, (
+        "wbsync.init() 不在启动 async IIFE 体内（早于 IDB hydrate ⇒ 推的是被覆盖前的旧 S）"
+    )
+    assert wb_source.occurs_before(startup, "idbHydrate()", "wbsync.init()"), (
+        "wbsync.init() 早于 idbHydrate()（hydrate 还没覆盖 S 就推 ⇒ server 镜像被旧值覆盖）"
+    )
+    init_at = startup.index("wbsync.init()")
+    assert wb_source.depth_at(startup, init_at) == 0, (
+        "wbsync.init() 不在启动 IIFE 的顶层"
+        "（嵌进带花括号的 try / 块 / 子函数或回调 ⇒ hydrate 抛错被 catch 吞掉后就永不初始化；"
+        "无花括号的表达式体回调不产生花括号，本钉抓不到）"
+    )
 
 
 def test_workbench_wbsync_trigger_paths_present():
-    lines = _workbench_lines()
-    src = "\n".join(lines)
+    src = _workbench_src()
     # 模块头、端点与鉴权头
     assert "const wbsync = " in src
     assert "X-WB-Key" in src
     assert '"/api/wb/state"' in src or "'/api/wb/state'" in src
-    # visibilitychange：回前台拉 / 离开前推
-    vis = _line_no(lines, "visibilitychange")
-    assert vis > 0
+    # visibilitychange：回前台拉 / 离开前推，且监听必须挂在 wbsync 模块**体内**
+    vis = wb_source.line_of(src, "visibilitychange")
+    assert vis > wb_source.line_of(src, "const wbsync = "), (
+        "visibilitychange 监听不在 wbsync 模块内（漂到模块外 ⇒ 拿不到 pushNow/pull 闭包）"
+    )
+    handler = wb_source.decl_body(src, 'document.addEventListener("visibilitychange"')
+    else_at = re.search(r"\belse\b", handler)
+    assert else_at, "visibilitychange 处理体没有 else 分支（必须「切走推 / 回前台拉」两条路径）"
+    hidden_branch = handler[: else_at.start()]
+    visible_branch = handler[else_at.end() :]
+    assert wb_source.occurs_before(hidden_branch, "document.hidden", "pushNow()"), (
+        "pushNow() 没有被 document.hidden 守着（每次可见性变化都推 ⇒ 无谓的写放大）"
+    )
+    assert "pull()" in visible_branch and "pushNow()" not in visible_branch, (
+        "回前台分支必须只 pull()（混进 pushNow() ⇒ 回前台反把本地值推上去覆盖远端）"
+    )
     # 轮询路径
     assert "setInterval" in src
-    # __wb 调试出口暴露 wbsync（对象字面量跨多行，扫到块结束 "};"）
-    i_debug = _line_no(lines, "window.__wb")
-    j = i_debug
-    while j < len(lines) and not lines[j].rstrip().endswith("};"):
-        j += 1
-    assert any("wbsync:" in ln for ln in lines[i_debug : j + 1]), "__wb 调试出口未暴露 wbsync"
+    # __wb 调试出口暴露 wbsync（对象字面量跨多行 ⇒ 按大括号配平取整块，不再扫到 "};"）
+    debug_obj = wb_source.decl_body(src, "window.__wb")
+    expose = re.search(r"\bwbsync\s*:\s*wbsync\b", debug_obj)
+    assert expose, "__wb 调试出口未暴露 wbsync"
+    assert wb_source.depth_at(debug_obj, expose.start()) == 0, (
+        "wbsync 不是 __wb 的顶层键（嵌进子对象 ⇒ 控制台 __wb.wbsync 取不到）"
+    )
 
 
 # ── 听力微训工坊（listen-lab.js）：非孤岛、无循环依赖、导出齐全 ────────────────
