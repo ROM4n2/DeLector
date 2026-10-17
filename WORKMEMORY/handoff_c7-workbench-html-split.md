@@ -156,3 +156,5 @@ status: open
 ## 修订记录（发送方）
 
 - **2026-10-18 00:5x｜文件占面契约修正**：`static/js/main.js` 与 `static/js/api-types.js` **从 C7 独占面移出，划归 C8**。原因：C8 的 `GET /api/settings` 来源脱敏（非回环来源不再返回 `api_key_masked`）改变了前端消费契约，`main.js` 对 LAN 客户端会渲染 `undefined`——该修复属 C8 闭环的一部分，不能跨工作流。**C7 侧若需改这两个文件，请先在包内响应节说明原因。** 其余 `static/js/**`（含新增 `wb-*.js` 模块）仍归 C7。若两侧真的同时改到同一文件，合并时以「C7 新增模块 / C8 只改 settings 渲染那一处」为界手工解冲突。
+
+- **2026-10-18｜新增 CI 闸带来的保留义务**：新增了 CI job **`mock-drift`**（`tools/check_mock_drift.py`），判据 = 「测试里 `monkeypatch.setattr` 的目标符号在生产模块内已无可达引用」。`tests/test_a1_workbench_source.py` 的 **4 处**（`:329/:330/:331/:391`，patch `wb_dict` 的 `A1_WORKBENCH_SEED` / `A1_WORKBENCH_CUSTOM` / `A1_WORKBENCH_CORE_IDS`）已加 `mock-drift-ok: <理由>` 抑制注释。**若你重写该文件的探针，MUST 保留或重建这 4 条注释**——否则新闸在该文件上会转红（判据本身不针对 workbench，是这些补丁的形态触发的）。同批还改了 `tests/test_server.py` 与 `tests/test_desktop_shell.py` 的抑制注释（各属 C6 面，不涉 C7）。
