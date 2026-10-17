@@ -49,7 +49,7 @@
 | --- | --- | --- |
 | **C1** | **下一子计划：裁判结论回灌（verifier-in-the-loop）** | **已完成交付**（`docs/plans/2026-10-17-c1-verifier-in-the-loop.md` Task 1~6 全闭环；PR 准备完毕；四大硬依赖全达标，支持 `--feedback` / `--no-feedback` 分域实验对照） |
 | **C2** | **swarm audit P1-2 / P1-3 / P1-4 / P1-5** | **已完成修复**（PR #146 已 MERGED 进 master：P1-2 备份 DEFERRED 事务一致性、P1-3 抓取总截止 30s 闸、P1-4 supervisor 连续崩溃退避与预算硬闸、P1-5 LLM 退避 jitter 消除共振尖峰；全套定向单测与 CI 全绿） |
-| **C3** | **真轮次分布与真 token 计数回测** | ADR-0023 §6 Unknown 2 未决；`polish_loop.py` 的 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 仍是 UNVERIFIED 假设。与 B5 的「usage 透出」同源 |
+| **C3** | **真轮次分布与真 token 计数回测** | 实施计划已立项（`docs/plans/2026-10-17-c3-token-and-turn-distribution-backtest.md`，Task 1~6）；闭环 ADR-0023 §6 Unknown B 与 `polish_loop.py` 中 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 的 UNVERIFIED 状态 |
 | **C4** | **Android 真机点检**（含新 API 在 WebView 的 `fetch`/`ReadableStream` 表现，跑不了会降级一次性 JSON，降级路径本身要真机确认） | 你 2026-10-15 指示暂缓 |
 | **C5** | **Pi 式分层重构**（`Tool → AgentTool extends Tool → ToolDefinition` 三态递进 + 依赖单向 + 层序声明 + 业务知识上提） | 你已拍板暂缓；目标形态登记在 `docs/agents/architecture.md` |
 | **C6** | **测试文件按被测面切分**（`tests/test_server.py` 7271 行 / `test_german_workbench.py` 3913 / `test_desktop_shell.py` 2664） | 只搬归属、不改用例；`test_server.py` 须避开 ai-polish 测试段（在途面） |
