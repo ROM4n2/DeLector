@@ -634,7 +634,12 @@ export async function openSettingsModal() {
     if (s.tts_rate) document.getElementById("set-tts-rate").value = s.tts_rate;
 
     if (s.has_api_key) {
-      statusEl.textContent = `✓ 当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`;
+      // api_key_masked 是回环来源专属字段：GET /api/settings 对非回环来源收敛掉它
+      //（delector/routes/main.py::get_app_settings）。LAN 来源按存在性分支渲染 ——
+      // 既不渲染字面 'undefined'、也不凭空造掩码；回环来源文案逐字不变。
+      statusEl.textContent = s.api_key_masked
+        ? `✓ 当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`
+        : "✓ 当前已配置 Key（局域网不显示）。留空保存表示不修改";
       statusEl.style.color = "#16a34a";
     } else {
       statusEl.textContent = "⚠️ 当前未配置 API Key（AI 深度语法剖析需配置）";
