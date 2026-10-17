@@ -9,6 +9,7 @@ import contextlib
 import gc
 import ipaddress
 import json
+import logging
 import os
 import re
 import time
@@ -1330,6 +1331,177 @@ def test_audio_cache_stats_and_clear(client, monkeypatch, tmp_path):
     # 3. Verify empty
     res_stats2 = client.get("/api/audio/cache")
     assert res_stats2.json()["file_count"] == 0
+
+
+def test_audio_cache_clear_reports_removal_failures(client, monkeypatch, tmp_path):
+    """删除失败的条目不得被静默吞掉：响应必须报出失败计数与文件名。
+
+    旧实现 `except Exception: pass` 会让「文件被别的进程锁住」这类失败在响应里
+    完全隐形——用户看到 cleared_count=1，却不知道还有一个 50KB 的条目删不掉。
+    """
+    cache_dir = tmp_path / "audio_cache"
+    cache_dir.mkdir()
+    (cache_dir / "ok.mp3").write_bytes(b"x" * 1024 * 50)
+    (cache_dir / "locked.mp3").write_bytes(b"x" * 1024 * 50)
+    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
+
+    real_remove = os.remove
+
+    def flaky_remove(path):
+        if os.path.basename(path) == "locked.mp3":
+            raise PermissionError("locked by another process")
+        return real_remove(path)
+
+    monkeypatch.setattr(os, "remove", flaky_remove)
+
+    res = client.post("/api/audio/cache/clear")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["cleared_count"] == 1
+    assert data["failed_count"] == 1
+    assert data["failed_files"] == ["locked.mp3"]
+    # 删不掉的条目必须真的留在盘上（不能是「删了却报失败」）
+    assert (cache_dir / "locked.mp3").exists()
+    assert not (cache_dir / "ok.mp3").exists()
+
+
+def test_audio_cache_clear_freed_mb_is_true_delta(client, monkeypatch, tmp_path):
+    """freed_mb 必须是「清理前 − 清理后」的真实差值，而不是清理前的静态总量。
+
+    构造一个删不掉的 1MB 文件：真实只释放 1.0MB，而旧实现会报清理前总量 2.0MB。
+    差值口径下必须是 1.0——这同时证明失败路径的占用没被虚报成已释放。
+    """
+    cache_dir = tmp_path / "audio_cache"
+    cache_dir.mkdir()
+    (cache_dir / "gone.mp3").write_bytes(b"x" * 1024 * 1024)  # 1 MB，将成功删除
+    (cache_dir / "locked.mp3").write_bytes(b"x" * 1024 * 1024)  # 1 MB，删除失败
+    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
+
+    real_remove = os.remove
+
+    def flaky_remove(path):
+        if os.path.basename(path) == "locked.mp3":
+            raise PermissionError("locked by another process")
+        return real_remove(path)
+
+    monkeypatch.setattr(os, "remove", flaky_remove)
+
+    before = client.get("/api/audio/cache").json()["total_size_mb"]
+    res = client.post("/api/audio/cache/clear")
+    assert res.status_code == 200
+    after = client.get("/api/audio/cache").json()["total_size_mb"]
+
+    assert before == 2.0 and after == 1.0
+    assert res.json()["freed_mb"] == round(before - after, 2) == 1.0
+
+
+# ── C8 Task5: encounter 出站抓取大小闸 + 诚实状态码 ────────────────────────────
+
+
+class _FakeShelfStream:
+    """`httpx.stream(...)` 的替身：可注字节分片、可注 Content-Length、可注状态码。"""
+
+    def __init__(self, chunks, status_code=200, headers=None):
+        self._chunks = chunks
+        self.status_code = status_code
+        self.headers = headers or {}
+
+    def iter_bytes(self):
+        for chunk in self._chunks:
+            yield chunk
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _mock_shelf_stream(monkeypatch, resp):
+    from delector.routes import encounter as encounter_routes
+
+    monkeypatch.setattr(encounter_routes.httpx, "stream", lambda *a, **k: resp)
+
+
+def test_encounter_pull_pack_rejects_oversized_response_with_content_length(client, monkeypatch):
+    """超 2MB 的货架响应必须被拒（Content-Length 已点破的情况）。"""
+    from delector.core.security import MAX_HTML_BYTES
+
+    big = b"x" * (MAX_HTML_BYTES + 1)
+    _mock_shelf_stream(
+        monkeypatch, _FakeShelfStream([big], headers={"content-length": str(len(big))})
+    )
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": ""},
+    )
+    assert res.status_code == 502
+    detail = res.json()["detail"]
+    assert "体积超限" in detail
+    assert "2MB" in detail
+
+
+def test_encounter_pull_pack_rejects_oversized_stream_without_content_length(client, monkeypatch):
+    """无 Content-Length 的超大流同样必须被拒：上限在**读取过程中**累计生效。"""
+    from delector.core.security import MAX_HTML_BYTES
+
+    chunk = b"x" * (512 * 1024)
+    chunks = [chunk] * (MAX_HTML_BYTES // len(chunk) + 2)  # 3MB，远超 2MB
+    _mock_shelf_stream(monkeypatch, _FakeShelfStream(chunks))  # headers 为空 ⇒ 无 content-length
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": ""},
+    )
+    assert res.status_code == 502
+    assert "体积超限" in res.json()["detail"]
+
+
+def test_encounter_pull_pack_surfaces_real_404_status_code(client, monkeypatch):
+    """404（资源不存在）必须与「连不上电脑端」区分开：真实状态码进原因。"""
+    from delector.routes import encounter as encounter_routes
+
+    _mock_shelf_stream(monkeypatch, _FakeShelfStream([b"{}"], status_code=404))
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": "nope"},
+    )
+    assert res.status_code == 502
+    detail = res.json()["detail"]
+    assert "404" in detail
+    # 不得再糊成 WiFi/防火墙提示（那会把「卡包不存在」误导成「网络不通」）
+    assert detail != encounter_routes._PULL_FAIL_HINT
+
+
+def test_encounter_pull_pack_surfaces_real_5xx_status_code(client, monkeypatch):
+    """5xx 与 404 文案必须不同：同族错误不能糊成同一句话。"""
+    _mock_shelf_stream(monkeypatch, _FakeShelfStream([b"{}"], status_code=503))
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": "nope"},
+    )
+    assert res.status_code == 502
+    detail = res.json()["detail"]
+    assert "503" in detail
+    assert "404" not in detail
+
+
+def test_encounter_pull_pack_accepts_small_response(client, monkeypatch):
+    """正常小响应照旧被接受（大小闸不得误伤正常拉取）。"""
+    body = json.dumps({"packs": [{"pack_id": "p1", "title": "Test"}]}).encode("utf-8")
+    _mock_shelf_stream(
+        monkeypatch, _FakeShelfStream([body], headers={"content-length": str(len(body))})
+    )
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": ""},
+    )
+    assert res.status_code == 200
+    assert res.json() == {"packs": [{"pack_id": "p1", "title": "Test"}]}
 
 
 # ── Phase A: Delete & Master ─────────────────────────────────────────────────
@@ -3426,6 +3598,50 @@ def test_settings_test_key_succeeds_on_loopback(client, monkeypatch):
     # 未被来源闸拦截：返回 200 且 success 为 False（提示输入 key），而非 403
     assert res.status_code == 200
     assert res.json().get("success") is False
+
+
+# GET /api/settings 回环来源的字段集合口径锚（C8 Task6）：非回环来源恰好少
+# `api_key_masked` 一项，其余逐字一致——否则桌面端会静默失去配置面板。
+_SETTINGS_LOOPBACK_KEYS = {
+    "has_api_key",
+    "api_key_masked",
+    "api_base_url",
+    "api_model",
+    "tts_voice",
+    "tts_rate",
+    "nlp_engine",
+    "nlp_engine_detail",
+}
+
+
+def test_settings_get_loopback_origin_keeps_api_key_masked_field():
+    """回环来源（127.0.0.1）的字段集合 MUST 与今日逐字一致。"""
+    loopback = TestClient(app, client=("127.0.0.1", 54321))
+    res = loopback.get("/api/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert set(data.keys()) == _SETTINGS_LOOPBACK_KEYS
+    assert "api_key_masked" in data
+
+
+def test_settings_get_non_loopback_origin_omits_api_key_masked_field():
+    """非回环来源（192.168.1.50）不得读到 api key（哪怕已掩码）。
+
+    注意这是**按来源收敛字段**，不是整门拦截：局域网手机端仍要能读 base_url /
+    model / tts_* 来渲染设置面板（前端 static/js/main.js:632-634），
+    故 MUST NOT 加 `_require_localhost`（那会让手机端直接吃 403）。
+    """
+    lan = TestClient(app, client=("192.168.1.50", 54322))
+    res = lan.get("/api/settings")
+    assert res.status_code == 200, "LAN 来源必须仍能读该端点（不得整门 403）"
+    data = res.json()
+    assert "api_key_masked" not in data
+    assert set(data.keys()) == _SETTINGS_LOOPBACK_KEYS - {"api_key_masked"}
+    # 只收敛这一项：其余字段照旧
+    assert "has_api_key" in data
+    assert "api_base_url" in data
+    assert "api_model" in data
+    assert "tts_voice" in data
 
 
 # ── v4.4 Task6: Backup source, Android spaCy loading, AI failure paths ─────────
@@ -7612,3 +7828,229 @@ def test_frontend_polish_progress_takes_max_turns_from_server():
     assert "AbortController" in body, "取消必须有 AbortController（或等价机制）"
     assert "max_turns" in body, "轮次分母必须来自服务端事件"
     assert "/3 轮" not in body, "不许把轮次上界硬编码成 3（内核改 MAX_TURNS_DEFAULT 这里就撒谎）"
+
+
+# ── C8 Batch C：TTS 三连（有界退避 / 拆分超时 / SSL 回退可观测）─────────────────
+#
+# 三条口径（delector/services/tts.py）：
+#  (a) 只对连接/传输层与 5xx 重试，每次重试前有**有界退避**；协议/解析错误 MUST NOT 重试；
+#  (b) 连接超时与读取超时是两个独立值：连接 < 30s（死主机不得再挂满 30s）、读取 >= 30s；
+#  (c) Android/Chaquopy 的 SSL 不校验回退 MUST 保留、但 MUST NOT 静默
+#      （该分支本机无法真实触发：测试用替身强制走它，只断言「不再静默」这一可验证面）。
+
+_TTS_TURN_END_FRAME = (0x1, b"Path:turn.end\r\n\r\n")
+_TTS_AUDIO_HEADERS = b"Path:audio\r\nContent-Type:audio/mpeg\r\n\r\n"
+_TTS_AUDIO_FRAME = (0x2, len(_TTS_AUDIO_HEADERS).to_bytes(2, "big") + _TTS_AUDIO_HEADERS + b"MP3DATA")
+_TTS_OK_FRAMES = [_TTS_AUDIO_FRAME, _TTS_TURN_END_FRAME]
+
+
+class _FakeMiniWS:
+    """`delector.services.tts._WebSocket` 的测试替身：不发网络，按帧序列回放。
+
+    只实现 synthesize 实际用到的四个方法；帧格式与真协议一致（见 tts.py 的 recv_frame）。
+    """
+
+    def __init__(self, host: str = "speech.platform.bing.com", *args: Any, **kwargs: Any) -> None:
+        self.host = host
+        self.frames = list(_TTS_OK_FRAMES)
+        self.closed = False
+
+    def handshake(self, path: str, host: str) -> None:
+        self.path = path
+
+    def send_text(self, payload: str) -> None:
+        pass
+
+    def recv_frame(self) -> Any:
+        return self.frames.pop(0)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_tts_retries_transport_error_with_bounded_backoff(monkeypatch):
+    """(a) 连接层失败（可重试）⇒ 第二次尝试前有一次**有界**退避 sleep，且最终合成成功。"""
+    from delector.services import tts
+
+    sleeps: List[float] = []
+    monkeypatch.setattr(tts.time, "sleep", lambda seconds: sleeps.append(seconds))
+    attempts: List[int] = []
+
+    class _Flaky(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise ConnectionError("connection refused")
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(tts, "_WebSocket", _Flaky)
+    assert tts.synthesize("Hallo") == b"MP3DATA"
+    assert len(attempts) == 2, "可重试失败必须重试一次（首次 + 重试）"
+    assert sleeps, "重试前必须有退避 sleep —— 无 sleep 的立即重试正是本次修的缺陷"
+    assert sum(sleeps) <= 2.0, f"退避总时长必须有界且远低于调用方 60s 预算: {sleeps}"
+
+
+def test_tts_protocol_error_is_not_retried(monkeypatch):
+    """(a) 协议层结果（服务端零音频帧、直接 turn.end）重试不改变结果 ⇒ MUST NOT 重试。"""
+    from delector.services import tts
+
+    sleeps: List[float] = []
+    monkeypatch.setattr(tts.time, "sleep", lambda seconds: sleeps.append(seconds))
+    attempts: List[int] = []
+
+    class _NoAudio(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            super().__init__(*args, **kwargs)
+            self.frames = [_TTS_TURN_END_FRAME]
+
+    monkeypatch.setattr(tts, "_WebSocket", _NoAudio)
+    with pytest.raises(RuntimeError, match="no audio"):
+        tts.synthesize("Hallo")
+    assert len(attempts) == 1, "协议/解析错误被重试了（重试不改变结果，纯烧调用方预算）"
+    assert sleeps == [], "协议错误不得进入退避重试路径"
+
+
+def test_tts_handshake_5xx_retries_4xx_does_not(monkeypatch):
+    """(a) 5xx 握手拒绝可重试；4xx（非 403 时钟校准）是协议拒绝，原样抛出、不重试。"""
+    from delector.services import tts
+
+    sleeps: List[float] = []
+    monkeypatch.setattr(tts.time, "sleep", lambda seconds: sleeps.append(seconds))
+    attempts: List[int] = []
+
+    class _Five(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            super().__init__(*args, **kwargs)
+
+        def handshake(self, path: str, host: str) -> None:
+            if len(attempts) == 1:
+                raise tts._HandshakeError(b"HTTP/1.1 503 Service Unavailable", {})
+            super().handshake(path, host)
+
+    monkeypatch.setattr(tts, "_WebSocket", _Five)
+    assert tts.synthesize("Hallo") == b"MP3DATA"
+    assert len(attempts) == 2, "5xx 握手拒绝必须重试一次"
+    assert len(sleeps) == 1, "5xx 重试前也要走有界退避"
+
+    attempts.clear()
+    sleeps.clear()
+
+    class _Four(_FakeMiniWS):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            attempts.append(1)
+            super().__init__(*args, **kwargs)
+
+        def handshake(self, path: str, host: str) -> None:
+            raise tts._HandshakeError(b"HTTP/1.1 401 Unauthorized", {})
+
+    monkeypatch.setattr(tts, "_WebSocket", _Four)
+    with pytest.raises(tts._HandshakeError):
+        tts.synthesize("Hallo")
+    assert len(attempts) == 1, "4xx 协议拒绝不得重试"
+    assert sleeps == [], "4xx 协议拒绝不得 sleep"
+
+
+def test_tts_websocket_splits_connect_and_read_timeouts(monkeypatch, recwarn):
+    """(b) 连接/读取超时是两个独立值：连接 < 30s（修「死主机挂 30s」）、读取 >= 30s（不劣化慢网）。"""
+    from delector.services import tts
+
+    recorded: Dict[str, float] = {}
+
+    class _Sock:
+        def settimeout(self, value: float) -> None:
+            recorded["read_timeout"] = value
+
+    class _Ctx:
+        def wrap_socket(self, sock: Any, server_hostname: Any = None) -> Any:
+            return sock
+
+    def _create_connection(address: Any, timeout: float = 0.0) -> _Sock:
+        recorded["connect_timeout"] = timeout
+        return _Sock()
+
+    monkeypatch.setattr(tts.socket, "create_connection", _create_connection)
+    monkeypatch.setattr(tts.ssl, "create_default_context", lambda *args, **kwargs: _Ctx())
+
+    tts._WebSocket("example.invalid")
+
+    assert recorded["connect_timeout"] < 30.0, "连接超时必须严格短于 30s（死主机不得再挂满 30s）"
+    assert recorded["read_timeout"] >= 30.0, "读取超时不得短于 30s（慢网络不是新回归）"
+    assert recorded["connect_timeout"] != recorded["read_timeout"], "连接/读取超时必须是两个独立值"
+    # 桌面路径仍走 create_default_context（证书校验不动）：不得出现 SSL 降级告警
+    assert not [w for w in recwarn.list if "证书" in str(w.message)], "桌面路径不该走降级分支"
+
+
+def test_tts_ssl_fallback_stays_but_is_no_longer_silent(monkeypatch, caplog):
+    """(c) 默认 CA 不可用 ⇒ 仍回退到不校验上下文（Android/Chaquopy 路径），但必须告警 + 记日志。
+
+    ⚠️ 该分支本机无法真实触发（无 Chaquopy / 证书缺失环境）：这里用替身强制走它，只断言
+    「不再静默」这一可在本机验证的面；回退本身 MUST NOT 被删除（见 tts.py 处的注释）。
+    """
+    from delector.services import tts
+
+    class _Sock:
+        def settimeout(self, value: float) -> None:
+            pass
+
+    class _Ctx:
+        def wrap_socket(self, sock: Any, server_hostname: Any = None) -> Any:
+            return sock
+
+    def _no_default_context(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("no CA store on this platform")
+
+    monkeypatch.setattr(tts.socket, "create_connection", lambda address, timeout=None: _Sock())
+    monkeypatch.setattr(tts.ssl, "create_default_context", _no_default_context)
+    monkeypatch.setattr(tts.ssl, "_create_unverified_context", lambda *args, **kwargs: _Ctx())
+
+    with caplog.at_level(logging.WARNING, logger="delector.services.tts"), pytest.warns(
+        RuntimeWarning, match="证书"
+    ):
+        tts._WebSocket("example.invalid")
+
+    assert any("证书" in record.getMessage() for record in caplog.records), "SSL 降级路径没有日志（静默降级）"
+
+
+# ── C8 Batch C：设置面板 LAN 渲染回归（api_key_masked 仅回环来源返回）───────────
+
+
+def test_settings_panel_guards_absent_api_key_masked_static():
+    """(i) main.js 设置面板必须按存在性守卫 api_key_masked 再做插值。
+
+    背景：GET /api/settings 对非回环来源收敛掉 `api_key_masked`（C8 Task6），
+    裸插值会让局域网客户端的设置面板渲染字面 'undefined'。
+    """
+    src = open(os.path.join(ROOT, "static", "js", "main.js"), encoding="utf-8").read()
+    start = src.index("export async function openSettingsModal()")
+    end = src.index("export function closeSettingsModal()")
+    lines = src[start:end].splitlines()
+
+    hits = [i for i, ln in enumerate(lines) if "${s.api_key_masked}" in ln]
+    assert hits, "设置面板不再插值 api_key_masked —— 回环渲染路径被误删"
+    for i in hits:
+        window = "\n".join(lines[max(0, i - 2) : i + 1])
+        assert re.search(r"s\.api_key_masked\s*\?", window), (
+            f"api_key_masked 未被存在性判断守卫（LAN 来源将渲染字面 'undefined'）: {lines[i].strip()}"
+        )
+    assert "局域网不显示" in "\n".join(lines), "缺少 LAN 来源的诚实回退文案（既不造掩码也不显示 undefined）"
+
+
+def test_settings_panel_loopback_rendering_path_kept_verbatim():
+    """(ii) 回环来源（响应仍带 api_key_masked）的渲染路径 MUST 逐字保留。"""
+    src = open(os.path.join(ROOT, "static", "js", "main.js"), encoding="utf-8").read()
+    assert "`✓ 当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`" in src, (
+        "回环渲染文案被改动/删除（桌面端会静默改文案）"
+    )
+    assert "if (s.has_api_key)" in src, "key 存在性信号（has_api_key）必须仍是渲染分支条件"
+
+
+def test_api_types_settings_typedef_marks_api_key_masked_loopback_only():
+    """api-types.js 的 Settings typedef 必须记录 api_key_masked 为仅回环来源返回。"""
+    js = open(os.path.join(ROOT, "static", "js", "api-types.js"), encoding="utf-8").read()
+    block = re.search(r"/\*\*(?:(?!\*/).)*GET /api/settings(?:(?!\*/).)*\*/", js, re.S)
+    assert block, "api-types.js 缺少 GET /api/settings 的 typedef 注释块"
+    text = block.group(0)
+    assert "[api_key_masked]" in text, "api_key_masked 未标为可选（LAN 来源响应中不含该字段）"
+    assert "回环" in text or "loopback" in text.lower(), "typedef 未记录 api_key_masked 仅回环来源返回"

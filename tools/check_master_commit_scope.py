@@ -287,6 +287,7 @@ def main(argv: Optional[Sequence[str]] = None, *, git: Optional[GitRunner] = Non
     if isinstance(stdout, io.TextIOWrapper):
         try:
             stdout.reconfigure(encoding="utf-8")  # Windows 控制台默认 GBK：中文需 UTF-8
+        # silent-ok: 仅显示层编码（流已关闭/不可重配置，如 pytest capture）——本闸判定与退出码不经过 stdout 编码
         except Exception:  # 已关闭 / 不可重配置的流（如 pytest capture）⇒ 保持原状
             pass
 

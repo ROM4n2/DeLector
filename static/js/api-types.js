@@ -47,9 +47,12 @@
 
 /**
  * `GET /api/settings`（delector/routes/main.py::get_app_settings）。
+ * 字段按来源收敛：`api_key_masked` **仅回环来源**（127.0.0.1 / ::1 / localhost）返回；
+ * 非回环来源（局域网手机端）响应中不含该字段 —— 前端 MUST 按存在性守卫渲染，
+ * 不得裸插值（否则 LAN 端渲染字面 `undefined`，见 static/js/main.js 设置面板）。
  * @typedef {Object} Settings
  * @property {boolean} has_api_key
- * @property {string} api_key_masked
+ * @property {string} [api_key_masked]  仅回环来源返回（LAN 来源缺失该字段）
  * @property {string} api_base_url
  * @property {string} api_model
  * @property {string} tts_voice

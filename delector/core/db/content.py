@@ -718,6 +718,7 @@ def prune_audio_cache(max_files: int = 300, cache_dir: Optional[str] = None) -> 
         for fpath, _ in files[: len(files) - max_files + 30]:
             try:
                 os.remove(fpath)
+            # silent-ok: 按数量裁剪的尽力清理：单文件删不掉（Windows 占用）只多留一个旧文件，下轮裁剪按 mtime 重算
             except Exception:
                 pass
 

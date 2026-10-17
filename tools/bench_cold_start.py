@@ -481,8 +481,10 @@ def _wait_health_200(port: int, proc: subprocess.Popen[str], start: float, timeo
                 if int(response.status) == 200:
                     response.read()
                     return (time.perf_counter() - start) * 1000.0
+        # silent-ok: 就绪轮询语义（503=库暂不可用）：继续轮询；超时后由调用方响亮失败，无静默成功
         except urllib.error.HTTPError:
             pass  # 503 = 库不可用（main.py:2612）：继续轮询，超时后由调用方响亮失败
+        # silent-ok: 就绪轮询语义（连接被拒=还没监听）：同上一捕手；超时后同样由调用方响亮失败
         except (urllib.error.URLError, ConnectionError, socket.timeout, OSError):
             pass  # 还没监听
         time.sleep(_POLL_INTERVAL_SEC)

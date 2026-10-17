@@ -9,6 +9,7 @@
 import asyncio
 import html
 import ipaddress
+import logging
 import re
 import socket
 import xml.etree.ElementTree as ET
@@ -312,59 +313,72 @@ def parse_rss_feed(xml_text: str) -> List[Dict[str, Any]]:
         found_items = [el for el in root.iter() if el.tag.split("}")[-1] == "item"]
         if found_items:
             for item in found_items:
-                title = ""
-                link = ""
-                desc = ""
-                pub_date = ""
-                for child in item:
-                    tag = child.tag.split("}")[-1]
-                    if tag == "title" and not title:
-                        title = child.text or ""
-                    elif tag == "link" and not link:
-                        link = child.text or child.get("href") or ""
-                    elif tag in ("description", "encoded", "summary") and not desc:
-                        desc = child.text or ""
-                    elif tag in ("pubDate", "date", "updated", "published") and not pub_date:
-                        pub_date = child.text or ""
-                clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
-                if title and link:
-                    items.append(
-                        {
-                            "title": html.unescape(title.strip()),
-                            "link": link.strip(),
-                            "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
-                            "pub_date": pub_date.strip(),
-                        }
-                    )
+                try:
+                    title = ""
+                    link = ""
+                    desc = ""
+                    pub_date = ""
+                    for child in item:
+                        tag = child.tag.split("}")[-1]
+                        if tag == "title" and not title:
+                            title = child.text or ""
+                        elif tag == "link" and not link:
+                            link = child.text or child.get("href") or ""
+                        elif tag in ("description", "encoded", "summary") and not desc:
+                            desc = child.text or ""
+                        elif tag in ("pubDate", "date", "updated", "published") and not pub_date:
+                            pub_date = child.text or ""
+                    clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
+                    if title and link:
+                        items.append(
+                            {
+                                "title": html.unescape(title.strip()),
+                                "link": link.strip(),
+                                "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
+                                "pub_date": pub_date.strip(),
+                            }
+                        )
+                except Exception as exc:
+                    # Task 8b 真事故③：单条坏 item MUST NOT 掐灭其余条目 —— 记下并跳过该条，
+                    # 循环继续（修复前一条坏条目即静默中止整段解析，部分结果看起来像完整结果）。
+                    logging.getLogger("delector").warning("RSS item 解析失败，跳过该条（其余条目继续解析）：%s", exc)
+                    continue
         else:
             found_entries = [el for el in root.iter() if el.tag.split("}")[-1] == "entry"]
             for entry in found_entries:
-                title = ""
-                link = ""
-                desc = ""
-                pub_date = ""
-                for child in entry:
-                    tag = child.tag.split("}")[-1]
-                    if tag == "title" and not title:
-                        title = child.text or ""
-                    elif tag == "link" and not link:
-                        link = child.get("href", "") or child.text or ""
-                    elif tag in ("summary", "content") and not desc:
-                        desc = child.text or ""
-                    elif tag in ("updated", "published", "date") and not pub_date:
-                        pub_date = child.text or ""
-                clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
-                if title and link:
-                    items.append(
-                        {
-                            "title": html.unescape(title.strip()),
-                            "link": link.strip(),
-                            "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
-                            "pub_date": pub_date.strip(),
-                        }
-                    )
-    except Exception:
-        pass
+                try:
+                    title = ""
+                    link = ""
+                    desc = ""
+                    pub_date = ""
+                    for child in entry:
+                        tag = child.tag.split("}")[-1]
+                        if tag == "title" and not title:
+                            title = child.text or ""
+                        elif tag == "link" and not link:
+                            link = child.get("href", "") or child.text or ""
+                        elif tag in ("summary", "content") and not desc:
+                            desc = child.text or ""
+                        elif tag in ("updated", "published", "date") and not pub_date:
+                            pub_date = child.text or ""
+                    clean_desc = html.unescape(re.sub(r"<[^>]+>", "", desc)).strip()
+                    if title and link:
+                        items.append(
+                            {
+                                "title": html.unescape(title.strip()),
+                                "link": link.strip(),
+                                "summary": clean_desc[:220] + ("…" if len(clean_desc) > 220 else ""),
+                                "pub_date": pub_date.strip(),
+                            }
+                        )
+                except Exception as exc:
+                    # 同上（Atom 分支）：坏 entry 跳过 + 留痕，其余 entry 照常解析。
+                    logging.getLogger("delector").warning("Atom entry 解析失败，跳过该条（其余条目继续解析）：%s", exc)
+                    continue
+    except Exception as exc:
+        # Task 8b 真事故③（外层）：整段解析中止同样 MUST 留痕，并报告已解析条数 ——
+        # 让下游能区分「完整结果」与「部分结果」，而不是把部分当天真。
+        logging.getLogger("delector").warning("RSS feed 解析中止：%s（已解析 %d 条，其余条目未处理）", exc, len(items))
     return items
 
 

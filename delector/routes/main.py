@@ -28,6 +28,7 @@ import functools
 import hashlib
 import ipaddress
 import json
+import logging
 import math
 import os
 import re
@@ -1247,10 +1248,13 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
                             f.write(resp.content)
                         prune_audio_cache()
                         return cache_file
-            except Exception:
+            except Exception as exc:
+                # Task 8b 真事故⑤：逐条点名失败 provider —— 循环后的总警告点不出败者是谁。
+                # （本处是 continue 形态站点：收窄后的 C1 已不判它 —— 收窄判据不许变成藏事故的手段，
+                #   故照修不误；修复比豁免更耐久。）
+                logging.getLogger("delector").warning("TTS fallback provider 失败：%s（%s）", tts_url, exc)
                 continue
         # 兜底全部失败：固定文案上屏，内部异常只留服务端日志
-        import logging
 
         logging.getLogger("delector").warning("TTS all providers failed", exc_info=True)
         raise HTTPException(500, "语音合成失败，请稍后重试")
@@ -1275,8 +1279,9 @@ _TTS_VOICE_WHITELIST = frozenset(
 # --- TTS 并发闸：把「无界排队」换成「有界拒绝」--------------------------------
 # 为什么需要：generate_edge_tts_audio 内部走 asyncio.to_thread（默认池
 # min(32, cpu+4)），池满后 asyncio 的默认行为是**继续排队**，而不是拒绝；再叠加
-# edge_tts 无显式超时 + services/tts.py 对任意异常重试一次（socket timeout 30s
-# ⇒ 最坏 60s）+ 下面 3 个 HTTP provider 降级各 6s，单请求最坏约 76s。docker-compose
+# edge_tts 无显式超时 + services/tts.py 只对**可重试失败**（连接/传输层、5xx；403 时钟
+# 偏差重试一次）退避重试（连接 10s / 读取 30s 分离超时 + 0.5s 有界退避 ⇒ 两次尝试合计
+# ≈ 80s 量级）+ 下面 3 个 HTTP provider 降级各 6s，单请求最坏约 98s。docker-compose
 # 又把 0.0.0.0:8000 暴露给整个局域网，于是几台设备（或同一设备多个 <audio> 同时
 # 起播）就能把线程池打满、合成请求无界堆积，越合成越慢、越慢越堆积。
 #
@@ -1359,9 +1364,20 @@ def get_audio_cache() -> Any:
 
 @router.post("/api/audio/cache/clear")
 def clear_audio_cache(request: Request) -> Dict[str, Any]:
+    """清空音频缓存。
+
+    `freed_mb` 是**清理前后两次快照的差值**（真值），不是清理前的静态总量：
+    删不掉的文件（被别的进程锁住等）会如实留在 `freed_mb` 之外，而不是被虚报成已释放。
+    删除失败**不吞**：计入 `failed_count` / `failed_files` 并落一条服务端 warning；
+    这三个既有字段（status / cleared_count / freed_mb）名与义对本端点消费方保持不变，
+    新增字段只增不减（前端 static/js/cards.js:993 读 cleared_count / freed_mb）。
+    """
+    import logging
+
     _require_localhost(request)
-    info = get_cache_info(AUDIO_CACHE_DIR)
+    info_before = get_cache_info(AUDIO_CACHE_DIR)
     cleared_count = 0
+    failed_files: List[str] = []
     if os.path.exists(AUDIO_CACHE_DIR):
         for fname in os.listdir(AUDIO_CACHE_DIR):
             fpath = os.path.join(AUDIO_CACHE_DIR, fname)
@@ -1369,9 +1385,20 @@ def clear_audio_cache(request: Request) -> Dict[str, Any]:
                 if os.path.isfile(fpath):
                     os.remove(fpath)
                     cleared_count += 1
-            except Exception:
-                pass
-    return {"status": "ok", "cleared_count": cleared_count, "freed_mb": info["total_size_mb"]}
+            except Exception as exc:
+                # 不再 `except: pass`——那条路径曾让「一个文件删不掉」在响应里完全隐形。
+                # 细节只进服务端日志；响应里给文件名与计数（本机闸后，无泄露面）。
+                logging.getLogger("delector").warning("[audio-cache] 删除失败 %s: %s", fpath, exc)
+                failed_files.append(fname)
+    info_after = get_cache_info(AUDIO_CACHE_DIR)
+    freed_bytes = int(info_before["total_size_bytes"]) - int(info_after["total_size_bytes"])
+    return {
+        "status": "ok",
+        "cleared_count": cleared_count,
+        "failed_count": len(failed_files),
+        "failed_files": failed_files,
+        "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+    }
 
 
 # --- Reading Notes & AI Assist Endpoints ---
@@ -1475,8 +1502,29 @@ class SettingsUpdate(BaseModel):
     tts_rate: Optional[str] = None
 
 
+def _is_loopback_origin(request: Request) -> bool:
+    """来源是否为本机回环（判定口径与 `_require_localhost` 逐字一致）。
+
+    ⚠️ 这里只用来**按来源收敛字段**，MUST NOT 当成整门闸：局域网手机端合法读
+    `/api/settings`（前端 static/js/main.js:632-634 靠它渲染设置面板），
+    给它 403 会把手机端的配置面板整个打掉。
+    """
+    host = ""
+    if request.client is not None:
+        host = getattr(request.client, "host", None) or ""
+    return host in ("127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1")
+
+
 @router.get("/api/settings")
-def get_app_settings() -> Dict[str, Any]:
+def get_app_settings(request: Request) -> Dict[str, Any]:
+    """读设置。**按来源收敛字段**，不是整门拦截。
+
+    回环来源（127.0.0.1 / ::1）→ 字段集合与历史逐字一致；
+    非回环来源（同 Wi-Fi 的手机/平板）→ 响应中**不含** `api_key_masked`
+    （哪怕是 first4+last4 的掩码版也不给：局域网来源本就不该看到 key 的任何面）。
+    收敛只针对 api key 这一项：手机端自己也要读 base_url / model / tts_* 渲染设置面板
+    （前端 static/js/main.js:632-634），挂 `_require_localhost` 会把手机端配置面板打掉。
+    """
     key = get_effective_api_key()
     masked = ""
     if key:
@@ -1484,7 +1532,7 @@ def get_app_settings() -> Dict[str, Any]:
             masked = key[:4] + "•" * (len(key) - 8) + key[-4:]
         else:
             masked = "••••••••"
-    return {
+    data: Dict[str, Any] = {
         "has_api_key": bool(key),
         "api_key_masked": masked,
         "api_base_url": get_effective_api_base_url(),
@@ -1495,6 +1543,10 @@ def get_app_settings() -> Dict[str, Any]:
         "nlp_engine": _nlp_processor.NLP_ENGINE,
         "nlp_engine_detail": _nlp_processor.NLP_ENGINE_DETAIL,
     }
+    if not _is_loopback_origin(request):
+        # 非回环来源：只减这一项（字段只增不减的回环侧契约见方法 docstring）。
+        data.pop("api_key_masked", None)
+    return data
 
 
 @router.post("/api/settings")
@@ -2780,8 +2832,12 @@ def get_essay(essay_id: int) -> Dict[str, Any]:
     if isinstance(data.get("analysis_json"), str):
         try:
             data["analysis_json"] = json.loads(data["analysis_json"])
-        except Exception:
-            pass
+        except Exception as exc:
+            # Task 8b 真事故④：解析失败 MUST 留痕 —— 静默保持原始字符串会让响应形状（dict vs str）
+            # 随数据质量悄悄变化，前端拿到两种形状却无人知。
+            logging.getLogger("delector").warning(
+                "essay #%s 的 analysis_json 解析失败（按原始字符串返回）：%s", essay_id, exc
+            )
     return data
 
 

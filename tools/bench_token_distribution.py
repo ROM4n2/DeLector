@@ -450,6 +450,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(stdout, io.TextIOWrapper):
         try:
             stdout.reconfigure(encoding="utf-8")
+        # silent-ok: 仅显示层编码兜底（流不可重配置）——统计结果的正确性与退出码不经过 stdout 编码路径
         except Exception:
             pass
 
