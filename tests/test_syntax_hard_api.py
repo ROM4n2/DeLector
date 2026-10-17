@@ -18,6 +18,7 @@ DATABASE_PATH/PROGRESS_DB_PATH 切到 tmp_path throwaway 文件并 init_db，同
 client=("127.0.0.1",..) 放行，默认 host("testclient") 命中 _require_localhost → 403。
 """
 
+import json
 import os
 import sys
 import threading
@@ -886,25 +887,34 @@ def test_pull_pack_endpoint_invalidates_rank_cache(client, monkeypatch):
     """POST /api/encounter/pull-pack 成功后**立即**失效聚合榜缓存（走真实端点）。
 
     pull-pack 是手机端入站的第三条 encounter 写入路径（import_encounter_pack 同一个
-    存储层函数），故 MUST 与 import-pack 同等失效。出站 httpx.get 转调本用例的假货架，
-    保持真实路由代码路径被执行（手法对齐 tests/test_encounter_pull.py:136-154）。
+    存储层函数），故 MUST 与 import-pack 同等失效。出站 httpx.stream 换成本用例的假
+    流式响应（context manager + iter_bytes，与生产调用形状一致），保持真实路由代码
+    路径被执行（手法对齐 tests/test_encounter_pull.py 的流式替身）。
     """
     syntax_hard._RANK_CACHE.clear()
     seed_id = _seed_encounter()
     assert _enc_ids_in_all(client) == {seed_id}, "前置条件：第一轮 encounter 应只有 seed 一篇"
 
     shelf_pack = _pack_fixture("t1-pull-pack")
+    body = json.dumps(shelf_pack).encode("utf-8")
 
-    class _Resp:  # 最小出站响应替身：_shelf_get 只读 status_code / json()
+    class _StreamResp:  # 最小出站替身：_shelf_get 走 with httpx.stream(...) + iter_bytes()
         status_code = 200
+        headers = {"content-length": str(len(body))}
 
-        def json(self) -> Dict[str, Any]:
-            return shelf_pack
+        def iter_bytes(self):
+            yield body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
 
     monkeypatch.setattr(
         encounter_mod.httpx,
-        "get",
-        lambda url, *a, **kw: _Resp(),
+        "stream",
+        lambda method, url, *a, **kw: _StreamResp(),
     )
 
     res = client.post(

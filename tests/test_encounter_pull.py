@@ -11,8 +11,9 @@
 - **双 TestClient**（app_shelf 桌面 / app_phone 手机），各自独立 tmp 库：路由走
   database.get_db_path()，每次调用读 os.environ，故用 _ShelvedClient 在每次请求前后
   切换 DATABASE_PATH —— 两个"实例"共享同一进程但指向不同库。
-- 出站不打真端口：monkeypatch delector.routes.encounter.httpx.get 转调 shelf 的
-  TestClient 对应路径，保持"真实 shelf 代码路径"被执行。
+- 出站不打真端口：monkeypatch delector.routes.encounter.httpx.stream 转调 shelf 的
+  TestClient 对应路径，再把真实响应适配成流式形状（生产走 with httpx.stream(...)），
+  保持"真实 shelf 代码路径 + 真实 _shelf_get 读循环"被执行。
 - env 用 setdefault（`delector/server.py:339` 有模块级单例 app，收集期首次 import 即
   按此 env 建库并被其它测试模块共用）；autouse fixture 只切 env、不删库文件。
 """
@@ -133,14 +134,44 @@ def _seed_shelf(shelf, packs):
     return ids
 
 
-def _patch_outbound_to_shelf(monkeypatch, shelf, recorder=None):
-    """把 encounter 模块的出站 httpx.get 转调到 shelf TestClient（不打真端口）。
+class _ShelfStreamResponse:
+    """`httpx.stream(...)` 上下文管理器替身：把一次**真实** shelf 响应适配成流式形状。
 
-    `recorder` 若是 list，则把每次出站的 url 记进去（供断言出站确实发生）。
+    生产 `_shelf_get` 走 `with httpx.stream("GET", url, ...) as resp` + `resp.iter_bytes()`，
+    故替身 MUST 支持 __enter__/__exit__，且暴露 status_code / headers / iter_bytes() ——
+    否则又变成「patch 了没人调用的名字」：出站会打真端口，CI 上必红。
     """
-    real_get = encounter_mod.httpx.get
 
-    def fake_get(url, *args, **kwargs):
+    def __init__(self, response, headers=None):
+        self._response = response
+        self.status_code = response.status_code
+        # headers=None ⇒ 透传真实响应头；显式传 {} 模拟服务端不声明 Content-Length。
+        self.headers = response.headers if headers is None else headers
+
+    def iter_bytes(self, chunk_size=None):
+        # 真身按块 yield；替身整块给，字节内容与总量不变，_shelf_get 的累计上限照常生效。
+        yield self._response.content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+def _patch_outbound_to_shelf(monkeypatch, shelf, recorder=None, headers=None):
+    """把 encounter 模块的出站 httpx.stream 转调到 shelf TestClient（不打真端口）。
+
+    出站替身 MUST 命中 `_shelf_get` 真正调用的形状（流式上下文管理器，而非旧的
+    httpx.get）：响应（状态码/响应头/字节）全部来自那次**真实 shelf 请求** ——
+    真实路由代码路径（含状态码传播与字节计数循环）完整被执行。
+    `recorder` 若是 list，则把每次出站的 url 记进去（供断言出站确实发生）；
+    `headers` 非 None 时覆盖响应头（传 {} 即模拟不声明 Content-Length 的货架）。
+    """
+    real_stream = encounter_mod.httpx.stream
+
+    def fake_stream(method, url, *args, **kwargs):
+        assert method == "GET", f"出站替身只接 GET，实际 {method!r}"
         if recorder is not None:
             recorder.append(url)
         # url 形如 http://192.168.1.5:8000/api/encounter/packs
@@ -148,10 +179,10 @@ def _patch_outbound_to_shelf(monkeypatch, shelf, recorder=None):
         path = parsed.path
         if parsed.query:
             path = f"{path}?{parsed.query.decode()}"
-        return shelf.get(path)
+        return _ShelfStreamResponse(shelf.get(path), headers=headers)
 
-    monkeypatch.setattr(encounter_mod.httpx, "get", fake_get)
-    return real_get
+    monkeypatch.setattr(encounter_mod.httpx, "stream", fake_stream)
+    return real_stream
 
 
 # ── T1 用例 1：货架清单（字段完整 + 无原文外泄）────────────────────────────
@@ -297,10 +328,10 @@ def test_phone_pull_pack_rejects_bad_desktop_base(phone, bad_base):
 def test_phone_pull_pack_outbound_failure_is_humanized(phone, monkeypatch):
     """出站抛 httpx.ConnectError → 502，detail 含人话引导关键词（电脑/WiFi/防火墙）。"""
 
-    def boom(url, *args, **kwargs):
+    def boom(method, url, *args, **kwargs):
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(encounter_mod.httpx, "get", boom)
+    monkeypatch.setattr(encounter_mod.httpx, "stream", boom)
     res = phone.post(
         "/api/encounter/pull-pack",
         json={"desktop_base": "http://192.168.1.5:8000", "pack_id": "shelf-1"},
@@ -310,43 +341,65 @@ def test_phone_pull_pack_outbound_failure_is_humanized(phone, monkeypatch):
     assert any(kw in detail for kw in ("电脑", "WiFi", "防火墙")), f"detail 应含人话引导，实际: {detail!r}"
 
 
-def test_phone_pull_pack_shelf_404_is_humanized(phone, monkeypatch):
-    """桌面货架 404（未知 pack_id）→ 手机侧 502 人话（非 2xx 一律人话化）。"""
+def test_phone_pull_pack_shelf_404_is_humanized(shelf, phone, monkeypatch):
+    """桌面货架 404（未知 pack_id）→ 手机侧 502 人话，且真实状态码 404 进原因。
 
-    class _Resp:
-        status_code = 404
+    「有真状态码」是本分支 C8 的修复本体（404 资源缺失 ≠ 连不上）：出站非 2xx 不得
+    再被一律糊成 WiFi/防火墙提示，故这里同时钉「人话」与「404 可区分」两件事。
+    """
+    urls: list[str] = []
+    _patch_outbound_to_shelf(monkeypatch, shelf, recorder=urls)
 
-        def json(self):
-            return {"detail": "货架上没有这个卡包"}
-
-    monkeypatch.setattr(encounter_mod.httpx, "get", lambda url, *a, **k: _Resp())
     res = phone.post(
         "/api/encounter/pull-pack",
         json={"desktop_base": "http://192.168.1.5:8000", "pack_id": "nope"},
     )
     assert res.status_code == 502, f"出站非 2xx 应为 502，实际 {res.status_code}"
-    assert "电脑" in res.json()["detail"]
+    detail = res.json()["detail"]
+    assert "电脑" in detail, f"detail 应为中文人话，实际: {detail!r}"
+    assert "404" in detail, f"真实状态码必须进原因（404 ≠ 连不上），实际: {detail!r}"
+    assert detail != encounter_mod._PULL_FAIL_HINT, "不得糊成通用 WiFi/防火墙提示"
+    assert urls == ["http://192.168.1.5:8000/api/encounter/packs/nope"], "应出站打到单包路径"
 
 
 # ── T2 用例 8b：非法 pack → 400 ─────────────────────────────────────────────
-def test_phone_pull_pack_invalid_pack_is_400(phone, monkeypatch):
-    """出站拿到的 pack 结构非法（坏 schema）→ 400。"""
+def test_phone_pull_pack_invalid_pack_is_400(shelf, phone, monkeypatch):
+    """出站拿到的 pack 结构非法（坏 schema）→ 400，且 detail 点名 schema。
+
+    真实货架路径：坏包经存储层直接落 shelf 库（货架读取不做结构校验），出站 200 的
+    流式响应仍走 _shelf_get 完整读循环 + json 解析，再由路由层 validate_pack 定性 400。
+    """
     bad_pack = _fixture_pack("bad")
     bad_pack["schema"] = "encounter-pack/OLD"
+    _seed_shelf(shelf, [bad_pack])
+    _patch_outbound_to_shelf(monkeypatch, shelf)
 
-    class _Resp:
-        status_code = 200
-
-        def json(self):
-            return bad_pack
-
-    monkeypatch.setattr(encounter_mod.httpx, "get", lambda url, *a, **k: _Resp())
     res = phone.post(
         "/api/encounter/pull-pack",
         json={"desktop_base": "http://192.168.1.5:8000", "pack_id": "bad"},
     )
     assert res.status_code == 400, f"非法 pack 应为 400，实际 {res.status_code}"
     assert "schema" in res.json()["detail"]
+
+
+# ── T2 用例 8c：货架流超 2MB（不声明 Content-Length）→ 502 体积超限 ──────────
+def test_phone_pull_pack_rejects_oversized_shelf_stream(shelf, phone, monkeypatch):
+    """超大货架流必须被读循环中止：上限不依赖（可能缺失/撒谎的）Content-Length。
+
+    显式剥离 content-length 头，让 2MB+ 的**真实货架响应**只能被读取过程的累计字节闸
+    拦下——预检与读循环两道防线分工不同：拆掉读循环这道，本用例必红。
+    """
+    from delector.core.security import MAX_HTML_BYTES
+
+    _seed_shelf(shelf, [_fixture_pack("shelf-huge", raw_text="x" * (MAX_HTML_BYTES + 4096))])
+    _patch_outbound_to_shelf(monkeypatch, shelf, headers={})  # 模拟货架不声明 Content-Length
+
+    res = phone.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://192.168.1.5:8000", "pack_id": "shelf-huge"},
+    )
+    assert res.status_code == 502, f"超大流应被中止，实际 {res.status_code}"
+    assert "体积超限" in res.json()["detail"]
 
 
 # ── T1 用例 9：货架端点局域网可读（对照写操作仍 403）────────────────────────

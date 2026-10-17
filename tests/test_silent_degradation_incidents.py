@@ -64,8 +64,14 @@ def test_audio_cache_dir_failure_is_visible_at_import_time() -> None:
         [sys.executable, "-c", script],
         capture_output=True,
         text=True,
+        # 双端显式钉 UTF-8，不依赖 runner locale：CI 的 Windows runner locale 是 cp1252，
+        # 子进程 stderr 里的中文按 locale 严格解码 ⇒ 读取线程 UnicodeDecodeError、
+        # proc.stderr 变 None（CI 红在 :74 的 TypeError）。子进程侧同样钉
+        # PYTHONIOENCODING：写什么编码就按什么编码读，任何 locale 下都可复现。
+        encoding="utf-8",
+        errors="replace",
         cwd=str(_REPO_ROOT),
-        env=os.environ.copy(),
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         timeout=120,
     )
     assert proc.returncode == 0 and "IMPORT_OK" in proc.stdout, (
