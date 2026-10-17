@@ -468,3 +468,49 @@ jobs:
       # 纯 stdlib：无需 pip install。退出码 0=通过、1=有违规（job 红）、2=环境不可用（job 红）。
       - name: Enforce master direct-push scope
         run: python tools/check_master_commit_scope.py --range "${{ github.event.before }}..${{ github.sha }}"
+
+  # ── 密钥扫描闸（pre-commit 可被 --no-verify 绕过 ⇒ CI 侧必须有牢靠兜底）──────────────
+  # 为什么要有这个 job：`.githooks/pre-commit` 已有暂存区密钥扫描，但 hook 是**本地**闸 ——
+  # `git commit --no-verify`（或未装 hook 的 clone）能整个绕过，密钥会静默入库。CI 侧此前
+  # 0 命中 `gitleaks|trufflehog|detect-secrets|GitGuardian` ⇒ 入库后没有任何兜底。本 job 补上。
+  #
+  # 扫描范围：只扫「**本次改动的提交范围**」，**不**扫全历史。gitleaks-action 在
+  #   - pull_request：按 PR 的 base^..head 扫（即 PR diff）；
+  #   - push        ：按本次推上来的提交范围扫。
+  # 【为什么必须加 if 闸】不加时 `workflow_dispatch`（本 workflow 有）会退化成不带
+  # `--log-opts` 的 `gitleaks detect` ⇒ **全历史扫描** ⇒ 历史误报会在启用当日就把 CI 弄红
+  # （一开就红的闸等于没有闸）。故用 if 把本 job 限定在 pull_request / push 两类事件。
+  # `fetch-depth: 0` 只是让范围提交在本地对象库可解析（浅克隆下 base^ 取不到 ⇒ git exit 128，
+  # 与 windows-smoke-changes 同一课），**不等于**扫全历史 —— 扫描范围由 action 的 --log-opts 决定。
+  #
+  # fail-loud：gitleaks-action 命中时 `process.exit(1)`（gitleaks 退出码 2 = 检出泄漏），
+  # 无法用「容错开关」（@actions 的 continueOnError 机制）关掉；本 job MUST NOT 声明容错键
+  # （一加就成摆设：命中也不红）。
+  # 本仓为 PUBLIC 个人账号：action 侧按 owner type=User 判定 ⇒ 无需 GITLEAKS_LICENSE。
+  #
+  # 【与任务书的一处偏离，有据可查】任务书写 `gitleaks/gitleaks-action@v2`；改用 @v3 是因为
+  # v2 跑 Node 20 运行时，而 GitHub 已于 2026-09-16 从托管 runner 移除 Node 20 ⇒ v2 当天起
+  # **无法运行**（gitleaks-action v3.0.0 release note 明载）；v3 仅把运行时升到 Node 24，
+  # inputs / outputs / behavior 完全不变（同上 release note），与本仓既有 Node 24 系 action
+  # （checkout@v7 / setup-python@v7）一致。gitleaks 二进制版本由 action 自带硬编码常量固定。
+  secret-scan:
+    name: Secret Scan (gitleaks)
+    # 只在「改动面」事件跑：workflow_dispatch 会退化成无 --log-opts 的全历史扫描（见上），故排除。
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # 卡死护栏（同 ci job：GitHub 默认单 job 上限 360 分钟，一条卡死会烧满配额）。
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # 范围扫描（base^..head）要求这些提交在本地对象库；浅克隆下 git 取不到范围。
+          fetch-depth: 0
+
+      - name: Run gitleaks on the change range
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          # PR 评论与 owner-type 判定需要 token（action 内置需要）。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 显式指向本仓允许清单（不设时 gitleaks 也会自动读仓库根的 .gitleaks.toml）。
+          GITLEAKS_CONFIG: .gitleaks.toml

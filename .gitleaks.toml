@@ -1,0 +1,36 @@
+# =============================================================================
+# gitleaks 配置（CI `secret-scan` job 与本地 `gitleaks detect` 共用）
+# =============================================================================
+#
+# 职责分工：本文件只回答「**什么不算密钥**」；「**扫哪个范围**」由 CI job 决定
+# （.github/workflows/ci.yml 的 `secret-scan`：只扫本次改动的提交范围，不扫全历史）。
+#
+# 允许清单纪律（[Instinct: Allowlist-Discipline]）：
+#   下面每一条豁免都 MUST 写明「为什么这段内容安全」。**禁止**用
+#   `paths = ['''some_dir/.*''']` 之类**整目录通配**消噪 —— 那会连目录里将来新引入的
+#   **真**密钥一并放过，闸就废了（等于把门禁拆掉换成绿勾）。
+#
+# 为什么只写 `paths` 而不重定义规则：`[extend] useDefault = true` 继承 gitleaks 内置
+# 规则集；gitleaks 把我方的 paths/regexes **追加**到内置全局允许清单之后（见 gitleaks
+# v8.24.x config.go 的 extend()：`append allowlists, not attempting to merge`），
+# 故内置对二进制 / 锁文件 / 占位符的豁免不会被本文件覆盖或清空。
+
+title = "DeLector gitleaks config"
+
+# 继承内置规则集。默认值即 true；显式写出是防「将来默认值变更 ⇒ 规则面静默缩小」
+# （规则面一缩，闸表面全绿而实际不查 —— 比红更坏）。
+[extend]
+useDefault = true
+
+# 全局允许清单。
+[allowlist]
+description = "DeLector 已知安全面：逐条豁免，每条注明理由；禁止整目录通配"
+
+# ── 豁免 1：`.env.example`（本仓**有意入库**的配置模板）────────────────────────────
+# 为什么安全：它是给人看的模板，值全是占位符（如 `DEEPSEEK_API_KEY=your_deepseek_api_key_here`、
+# `DELECTOR_DATA_DIR=` 空值），不含任何真实凭据；真实值走本地 `.env`（已被 .gitignore 忽略）。
+# 为什么用**精确文件名**而非 `.env*`：`.env` / `.env.local` 等**真实**密钥文件 MUST 仍被扫描 ——
+# 通配 `.env*` 会把它们一并放过，而那正是本闸首要要抓的目标。
+paths = [
+    '''(?:^|/)\.env\.example$''',
+]
