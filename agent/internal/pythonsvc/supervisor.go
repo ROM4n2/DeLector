@@ -126,9 +126,10 @@ func backoff(attempt int) time.Duration {
 // SIGTERM 时由 awaitExit 超时分支调用的 Kill，windows 同为 Kill），对已
 // 退出进程允许返回无害错误（调用方一律丢弃返回值）。wait/cancel 均应幂等。
 type procHandle struct {
-	wait   func() error
-	cancel func()
-	kill   func() error
+	wait      func() error
+	cancel    func()
+	kill      func() error
+	startedAt time.Time
 }
 
 // startFunc 是 Supervisor 唯一的进程启动 seam：签名刻意极薄（ctx 进、
@@ -148,8 +149,9 @@ func newProcHandle(wait func() error, cancel func(), kill func() error) *procHan
 			once.Do(func() { waitErr = wait() })
 			return waitErr
 		},
-		cancel: cancel,
-		kill:   kill,
+		cancel:    cancel,
+		kill:      kill,
+		startedAt: time.Now(),
 	}
 }
 
@@ -163,6 +165,7 @@ type Supervisor struct {
 	cfg       SupervisorConfig
 	startProc startFunc
 	failC     chan error
+	backoffFn func(int) time.Duration
 
 	mu      sync.Mutex
 	proc    *procHandle
@@ -240,14 +243,37 @@ func (s *Supervisor) Stop() {
 }
 
 // supervise 后台托管循环：阻塞等待进程退出；调用方 ctx 存活且未 Stop 时的
-// 退出视为崩溃，按 backoff 退避重启（复用 startWithRetry 配额），配额耗尽
-// 经 Failures() 上报并停止托管。
+// 退出视为崩溃，按 backoff 退避重启（受 MaxRestarts 累积上限与跨 episode 退避约束），
+// 配额耗尽经 Failures() 上报并停止托管。
 func (s *Supervisor) supervise(ctx context.Context, p *procHandle) {
+	consecutiveCrashes := 0
 	for {
 		waitErr := p.wait()
 		if s.isStopped() || ctx.Err() != nil {
 			return // Stop 或调用方 ctx 取消：正常退出路径
 		}
+
+		// 判定本次崩溃：若进程稳定运行超过阈值，重置连续崩溃计数
+		stableThreshold := s.cfg.ProbeTimeout * 2
+		if stableThreshold < 1*time.Second {
+			stableThreshold = 1 * time.Second
+		}
+		if !p.startedAt.IsZero() && time.Since(p.startedAt) > stableThreshold {
+			consecutiveCrashes = 0
+		}
+
+		consecutiveCrashes++
+		if consecutiveCrashes > s.cfg.MaxRestarts {
+			s.report(fmt.Errorf("pythonsvc: 托管进程连续崩溃 %d 次，超过最大重启配额 (%d): %w",
+				consecutiveCrashes, s.cfg.MaxRestarts, ErrBudgetExhausted))
+			return
+		}
+
+		// 跨 episode 退避：防止 crash-loop 占满 CPU 与进程表
+		if err := s.sleepBackoff(ctx, consecutiveCrashes-1); err != nil {
+			return
+		}
+
 		next, err := s.startWithRetry(ctx)
 		if err != nil {
 			// Stop 或调用方 ctx 取消与崩溃恢复竞态：startWithRetry 会以哨兵/
@@ -299,9 +325,16 @@ func (s *Supervisor) startWithRetry(ctx context.Context) (*procHandle, error) {
 		ErrBudgetExhausted, s.cfg.MaxRestarts, lastErr)
 }
 
+func (s *Supervisor) getBackoff(attempt int) time.Duration {
+	if s.backoffFn != nil {
+		return s.backoffFn(attempt)
+	}
+	return backoff(attempt)
+}
+
 // sleepBackoff 等待第 attempt 次失败的退避时长；调用方 ctx 取消时提前返回。
 func (s *Supervisor) sleepBackoff(ctx context.Context, attempt int) error {
-	timer := time.NewTimer(backoff(attempt))
+	timer := time.NewTimer(s.getBackoff(attempt))
 	defer timer.Stop()
 	select {
 	case <-timer.C:

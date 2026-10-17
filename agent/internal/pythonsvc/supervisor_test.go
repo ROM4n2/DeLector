@@ -354,6 +354,44 @@ func TestSupervisorCrashExhausted(t *testing.T) {
 	}
 }
 
+// TestSupervisorCrashLoopExhausted 验证多次连续崩溃（每次启动均成功但随后秒崩）
+// 累计达到 MaxRestarts 时，必须退出循环并在 Failures() 上报 ErrBudgetExhausted。
+func TestSupervisorCrashLoopExhausted(t *testing.T) {
+	stub := &probeStub{failFirst: 0} // 探针恒 200：每次启动探针均成功
+	srv := stub.serve()
+	defer srv.Close()
+
+	cfg := fastCfg(srv.URL)
+	cfg.MaxRestarts = 2
+	var calls int32
+	crashErr := errors.New("python: crash loop")
+	// 每次启动都成功，但 wait 立即返回 crashErr
+	script := []startScript{
+		{wait: func() error { return crashErr }, cancel: func() {}},
+	}
+	s := newStubSupervisor(cfg, script, &calls)
+	s.backoffFn = func(int) time.Duration { return 5 * time.Millisecond }
+
+	if err := s.Start(context.Background()); err != nil {
+		t.Fatalf("首次 Start 应成功: %v", err)
+	}
+	defer s.Stop()
+
+	select {
+	case err := <-s.Failures():
+		if !errors.Is(err, ErrBudgetExhausted) {
+			t.Errorf("Failures() 错误应包装 ErrBudgetExhausted 哨兵，实际: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("多次连续崩溃达到配额后未在 Failures() 上报")
+	}
+
+	// 验证总调用次数受控（首次 1 + 重启 MaxRestarts）
+	if got := atomic.LoadInt32(&calls); got > int32(cfg.MaxRestarts+1) {
+		t.Errorf("startProc 调用次数 = %d，超过了预期上限 %d", got, cfg.MaxRestarts+1)
+	}
+}
+
 // ---- Phase2b T1：supervisor 递延项（探针默认窗口 + 关闭语义平台分治）----
 
 // TestDefaultProbeTimeout 钉住探针窗口默认值 10s（Phase2b T1 由 2s 上调）：

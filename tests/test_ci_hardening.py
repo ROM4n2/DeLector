@@ -1552,6 +1552,71 @@ def test_backup_restore_roundtrip_keeps_trial_tables(
         )
 
 
+def test_build_backup_payload_uses_deferred_transaction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P1-2: build_backup_payload MUST wrap table queries in BEGIN DEFERRED ... COMMIT for read snapshot consistency."""
+    import sqlite3
+
+    from delector.core.database import build_backup_payload, get_db, get_progress_db
+
+    src, progress_src = _fresh_db_pair(tmp_path, "backup_tx")
+    _pin_db_env(monkeypatch, src, progress_src)
+
+    history: list[str] = []
+    orig_get_db = get_db
+    orig_get_progress_db = get_progress_db
+
+    class SpyingConn:
+        def __init__(self, conn: sqlite3.Connection, prefix: str) -> None:
+            self._conn = conn
+            self._prefix = prefix
+
+        def execute(self, sql: str, *params: Any) -> Any:
+            history.append(f"{self._prefix}:{sql.strip()}")
+            return self._conn.execute(sql, *params)
+
+        def commit(self) -> None:
+            history.append(f"{self._prefix}:COMMIT")
+            self._conn.commit()
+
+        def rollback(self) -> None:
+            history.append(f"{self._prefix}:ROLLBACK")
+            self._conn.rollback()
+
+        def close(self) -> None:
+            self._conn.close()
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._conn, name)
+
+    monkeypatch.setattr(
+        "delector.core.db.backup.get_db",
+        lambda *a, **kw: SpyingConn(orig_get_db(*a, **kw), "main"),
+    )
+    monkeypatch.setattr(
+        "delector.core.db.backup.get_progress_db",
+        lambda *a, **kw: SpyingConn(orig_get_progress_db(*a, **kw), "progress"),
+    )
+
+    exported = build_backup_payload()
+    assert exported["version"] == 2
+
+    main_begins = [i for i, s in enumerate(history) if s == "main:BEGIN DEFERRED"]
+    main_commits = [i for i, s in enumerate(history) if s == "main:COMMIT"]
+    prog_begins = [i for i, s in enumerate(history) if s == "progress:BEGIN DEFERRED"]
+    prog_commits = [i for i, s in enumerate(history) if s == "progress:COMMIT"]
+
+    assert main_begins and main_commits, (
+        f"main connection queries not wrapped in BEGIN DEFERRED / COMMIT: {history}"
+    )
+    assert prog_begins and prog_commits, (
+        f"progress connection queries not wrapped in BEGIN DEFERRED / COMMIT: {history}"
+    )
+    assert main_begins[0] < main_commits[0], "main COMMIT occurred before BEGIN DEFERRED"
+    assert prog_begins[0] < prog_commits[0], "progress COMMIT occurred before BEGIN DEFERRED"
+
+
 def test_restore_req_declares_every_backup_table() -> None:
     """备份清单里的每张表 MUST 在 `RestoreReq` 上有同名字段（现读两份清单，不手抄）。
 

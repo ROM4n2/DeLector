@@ -3252,6 +3252,93 @@ def test_fetch_remote_html_still_follows_public_redirects(monkeypatch):
     assert len(requested) == 2
 
 
+def test_fetch_remote_html_network_error_returns_502(monkeypatch):
+    """P1-3: 出网抓取遇到 DNS/连接失败/httpx.HTTPError 时，必须返回 502 并携带明确人话说明。"""
+    import asyncio
+    import socket as _socket
+
+    import httpx
+    from fastapi import HTTPException
+
+    import delector.core.security as security
+
+    monkeypatch.setattr(
+        _socket,
+        "getaddrinfo",
+        lambda *a, **kw: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))],
+    )
+
+    class ErrorClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, *args, **kwargs):
+            raise httpx.ConnectError("Connection refused by peer")
+
+        def stream(self, *args, **kwargs):
+            raise httpx.ConnectError("Connection refused by peer")
+
+    monkeypatch.setattr(security.httpx, "AsyncClient", ErrorClient)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(security.fetch_remote_html("https://example.com/unreachable"))
+    assert exc_info.value.status_code == 502
+    assert "连接失败" in exc_info.value.detail or "ConnectError" in exc_info.value.detail
+
+
+def test_fetch_remote_html_total_timeout_returns_502(monkeypatch):
+    """P1-3: 出网抓取总耗时超出截止时间时，必须掐断并返回 502。"""
+    import asyncio
+    import socket as _socket
+
+    from fastapi import HTTPException
+
+    import delector.core.security as security
+
+    monkeypatch.setattr(
+        _socket,
+        "getaddrinfo",
+        lambda *a, **kw: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))],
+    )
+
+    class SlowClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, *args, **kwargs):
+            await asyncio.sleep(0.5)
+            return None
+
+        def stream(self, *args, **kwargs):
+            from contextlib import asynccontextmanager
+
+            @asynccontextmanager
+            async def _slow_stream():
+                await asyncio.sleep(0.5)
+                yield None
+
+            return _slow_stream()
+
+    monkeypatch.setattr(security.httpx, "AsyncClient", SlowClient)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(security.fetch_remote_html("https://example.com/slow", total_timeout=0.05))
+    assert exc_info.value.status_code == 502
+    assert "超时" in exc_info.value.detail
+
+
 def test_tts_rejects_oversized_text(client):
     """朗读接口有长度上限：局域网可达的端点不该被超大文本打满合成与磁盘缓存。"""
     res = client.post("/api/audio/tts", json={"text": "A" * 1001})
