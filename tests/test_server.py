@@ -2498,6 +2498,7 @@ def test_module_import_survives_without_spacy(monkeypatch):
     """server 的 import 期副作用（init_db → seed_preset_articles）不能依赖 spacy。"""
     from delector import server
 
+    # mock-drift-ok: 真遗留空转（非合法形态）：server.nlp 为裸 re-export、patch 不生效（直读 processor.nlp），C6 修正
     monkeypatch.setattr(server, "nlp", None)
     seeded = server.process_german_text(server.PRESET_ARTICLES[0]["text"])
     assert seeded["sentence_count"] > 0

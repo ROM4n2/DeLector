@@ -574,6 +574,7 @@ def test_real_judge_is_wired_at_the_assembly_point(nlp: Any, monkeypatch: Any) -
 
     monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
     monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    # mock-drift-ok: 消费方于调用期经模块属性读取（routes/main.py:2580 _nlp_processor.get_loaded_nlp()），补丁即时生效
     monkeypatch.setattr(processor, "get_loaded_nlp", lambda: nlp)
 
     outcome = asyncio.run(_run_polish("Ich habe ein Hund.", "sk-stub"))
@@ -600,7 +601,9 @@ def test_endpoint_assembly_degrades_to_rules_only_when_no_nlp(monkeypatch: Any) 
 
     monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
     monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    # mock-drift-ok: 消费方于调用期经模块属性读取（routes/main.py:2580 _nlp_processor.get_loaded_nlp()），补丁即时生效
     monkeypatch.setattr(processor, "get_loaded_nlp", lambda: None)
+    # mock-drift-ok: 调用期经模块属性读取（routes/main.py:2582 _nlp_processor.try_load_nlp_no_download），补丁即时生效
     monkeypatch.setattr(processor, "try_load_nlp_no_download", lambda: None)
 
     outcome = asyncio.run(_run_polish("Ich habe ein Hund.", "sk-stub"))

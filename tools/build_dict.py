@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import re
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
@@ -168,20 +169,25 @@ SYSTEM_PROMPT = (
 def _read_db_setting(key: str, default: str = "") -> str:
     """读 app_settings 表（与运行时 get_effective_api_key 同源）。
 
-    为什么读 DB：get_setting 是 DB 优先、env 兜底，settings 弹窗存的真 key
-    在 DB 里，而 .env 里可能留着一个失效旧 key（2026-08-19 实遇 401）。
-    不 import server.py 避免触发模块顶层 init_db 的副作用。"""
-    try:
-        import sqlite3
+    两条优先级**各管一层**，不是矛盾（C9-Y2 已实读 delector/core/db/settings.py:34-52 核对）：
+    - 运行时 `get_setting` 是 **DB 优先、env 兜底** —— settings 弹窗存的真 key 在 DB 里，
+      而 .env 里可能留着一个失效旧 key（2026-08-19 实遇 401）⇒ 所以本函数值得读 DB；
+    - **本工具**（`_read_api_config`）是 **.env/环境变量优先、DB 只作第三顺位** —— 出过事的
+      正是「DB 里留着被撤销的旧 key」，故本工具以 .env 为准（见那里的 docstring）。
 
-        db_path = REPO_ROOT / "delector.db"
+    失败面（写实，不缩边）：`sqlite3.Error` 一律回落 `default` —— 不只是「没有 delector.db」：
+    库缺失（connect 会先建一个空文件，随后 SELECT 报 no such table）、缺表、库锁、损坏、
+    无权限全走这条路。回落**留痕**到 stdout：key 落空会由 `_read_api_config` 的 SystemExit
+    响亮失败，而 base_url/model 只会静默用内置默认值 —— 后者正是需要一行痕迹的原因。
+    不 import server.py 避免触发模块顶层 init_db 的副作用。"""
+    db_path = REPO_ROOT / "delector.db"
+    try:
         with sqlite3.connect(db_path) as conn:
             row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             if row and row[0]:
                 return cast(str, row[0])
-    # silent-ok: 独立构词工具的 DB 兜底：.env/环境变量才是权威源，无 delector.db 即返回 default
-    except Exception:
-        pass
+    except sqlite3.Error as exc:
+        print(f"[warn] app_settings 读取失败（{type(exc).__name__}: {exc}），回落默认值: {key}")
     return default
 
 

@@ -527,3 +527,21 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 终审产出登记为台账 **C9**：其中 **Y4 是活缺陷** —— `delector/routes/syntax_hard.py:254-255` 的 `except Exception: art_ids = []`（文章素材静默从合并排名列表整体消失、零痕迹），属「假值默认返回」类，落在新闸已登记的极限**之外**；未随本批落地。
 - 并行面：C7（workbench 拆分）由另一 agent 执行，文件占面互斥；本批中途曾主动修正 C7 交接包的占面契约（`main.js`/`api-types.js` 划归 C8）。
 
+### 2026-10-18 02:38 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C9**（`docs/plans/2026-10-18-c9-review-followups.md`）——处置 C8 终审 Y1~Y6 + 落地「mock 漂移」新闸。
+分支：`fix/c9-review-followups`（自 master `8571c42`）。
+分工：Task 1（修 Y4 活缺陷）与 Task 3（新闸）**严格串行**——本轮已因并行 pytest 争用吃过大亏（Batch C 基线被污染）。
+不做范围（MUST）：不放宽 `check_silent_degradation.py` 的任何判据；禁触 C6/C7 占面。
+背景：C8 已由 PR #149 合入（`8571c42`），CI 7 项全绿。
+
+### 2026-10-18 03:29 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C9 三步主体全量闭环**（`docs/plans/2026-10-18-c9-review-followups.md` Task 1/2/3+3b）——C8 终审 Y1~Y6 处置完毕 + **新机械闸 mock-drift 落地**。
+- **Task 1 修 Y4**（`b113219`）：`syntax_hard.py` 的 `except Exception: art_ids = []` 把「列表查询失败」折叠成「没有材料」。修法非加日志而是**让两语义可区分**：失败来源进 additive `degraded` 字段（成功路径响应逐字不变），且**降级整榜不写 300s 聚合缓存**——原实现会把一次瞬时失败钉死 5 分钟（登记时未发现的更深危害）；孪生 `enc_ids` 一并处置；逐材料 `continue` 的隔离语义刻意未动也未放宽判据。
+- **Task 3+3b 新闸 `tools/check_mock_drift.py` + CI job `mock-drift`**（`cab4049`）：判据=「测试 `monkeypatch.setattr` 的目标符号在生产模块内已无可达引用且非自供出口」。首扫 141 补丁站点 → 候选 **35 > 20 触发 STOP**，未做批量豁免；裁决后收窄到 **18**（判据精度修正：`__all__` 只保护「模块自己的成员」，裸外来再导出不获保护）→ 18 处逐条带理由豁免 → **0 未豁免**。**变异自证复现真实事故：把 `_shelf_get` 改回 `httpx.get` ⇒ 闸 exit 1 且逐字点名同 4 个测试站点，delta +4/−0**；判据收窄后重跑该证明仍成立。
+- **Task 2 清 Y1/Y2/Y3/Y5/Y6**（`1c4e840`，5 文件 +287/−19）：Y2 的裁决靠**代码**而非注释（运行时 DB 层是 DB 优先、该工具是 env 优先 ⇒ **两份 docstring 都对，错的是抑制理由**）；Y5 两处重试分类边缘各带算术（`SSLCertVerificationError` 确定性失败 ⇒ 排除，且必须排在 `SSLError` 分支**之前**，因 `isinstance` 是子类匹配；`OSError(ENETUNREACH/EHOSTUNREACH)` 属瞬时路由故障 ⇒ 纳入，已核实 win32 的 errno 常量即 WSA 码且为裸 `OSError`）；**删掉 3 条过期抑制、新增 0 条**。
+- **移交**：mock-drift 闸抓到 **1 处真·空转补丁**（`tests/test_server.py:2501` patch `server.nlp`，全仓无消费方、patch 不生效）→ 已立为 **C6 计划 Task 0**（搬迁时 MUST 处置 + 撤过渡豁免）。
+- 门禁：**全量 2325 passed / 2 skipped / 0 failed（394s）**；两闸均 exit 0；`ruff check .` 全仓净；`mypy --strict` 与 tests 靶净；改动文件 CRLF 0 lone LF。
+- **可信教训（本轮新增，适用于一切机械闸）**：① **判据收窄后 MUST 重跑变异自证**——判据一改，旧证明不再覆盖新判据；本次要求重跑，证明仍为 +4/−0 才算通过。② **编排者的裁决书本身也会出错，且错在最危险处**：本次我断言 `server.nlp`「无 `__all__`」，实际 `delector/server.py:131-132` 有 —— 若执行方盲从字面规则，**唯一那处真发现会被规则本身洗掉**。执行方改为实现意图并给出可测边界（单测钉死），编排者据此采纳。**结论：给闸下判据时，「按我说的做」与「按我想要的做」之间的偏差必须由执行方以事实指出，不能默认编排者正确。**
+

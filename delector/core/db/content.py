@@ -705,6 +705,12 @@ def get_cache_info(cache_dir: Optional[str] = None) -> Dict[str, Any]:
 
 
 def prune_audio_cache(max_files: int = 300, cache_dir: Optional[str] = None) -> None:
+    """按数量裁剪音频缓存：**尽力清理，max_files 不是硬上界**（本函数返回 None）。
+
+    只承诺「尽力」：删不掉的文件（Windows 占用 / ACL）留在原地，不重试、不回滚 ⇒ 目录可能
+    暂时或**持续**超出 max_files。C9-Y1：失败必须留痕 —— 单个瞬时占用靠下轮裁剪（按 mtime
+    重算）自愈，但系统性失败（权限 / 持久锁）会让缓存静默无界增长，故按轮汇总落一条 warning。
+    """
     target_dir = cache_dir or AUDIO_CACHE_DIR
     if not os.path.exists(target_dir):
         return
@@ -715,11 +721,18 @@ def prune_audio_cache(max_files: int = 300, cache_dir: Optional[str] = None) -> 
             files.append((fpath, os.path.getmtime(fpath)))
     if len(files) > max_files:
         files.sort(key=lambda x: x[1])
+        failed = 0
         for fpath, _ in files[: len(files) - max_files + 30]:
             try:
                 os.remove(fpath)
-            # silent-ok: 按数量裁剪的尽力清理：单文件删不掉（Windows 占用）只多留一个旧文件，下轮裁剪按 mtime 重算
-            except Exception:
-                pass
+            except OSError:
+                # 逐文件按条 log 会刷屏（一次失败可能几百条），故只计数、轮末汇总一条（见 docstring）。
+                failed += 1
+        if failed:
+            logging.getLogger("delector").warning(
+                "音频缓存裁剪：本轮 %d 个文件删除失败（占用/权限），目录可能超出 max_files=%d",
+                failed,
+                max_files,
+            )
 
 

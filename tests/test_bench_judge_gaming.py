@@ -1250,6 +1250,7 @@ def test_cli_dry_run_touches_no_network_and_never_reaches_the_rater(
     monkeypatch.setattr(socket_module.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket_module.socket, "connect_ex", guarded_connect_ex)
     monkeypatch.setattr(socket_module, "getaddrinfo", guarded_getaddrinfo)
+    # mock-drift-ok: 调用期惰性 import 后经模块属性调用（bench_judge_gaming.py:1166 llm_client.chat），补丁即时生效
     monkeypatch.setattr(llm_client_module, "chat", forbidden_chat)
     monkeypatch.setattr(bench, "load_seed_cases", lambda: [SEED_CASES[0]])
 
@@ -1332,6 +1333,7 @@ def _install_real_stubs(
             raise AssertionError("本用例不应触达真 chat（llm_client.chat 必须零调用）")
         return reply_factory(len(chat_calls))
 
+    # mock-drift-ok: 调用期惰性 import 后经模块属性调用（bench_judge_gaming.py:1166 llm_client.chat），补丁即时生效
     monkeypatch.setattr(llm_client_module, "chat", stub_chat)
     return env_calls, chat_calls
 
@@ -1482,6 +1484,7 @@ def test_real_run_bounded_retry_backoff_retryable_only(monkeypatch: pytest.Monke
     # 可重试三态：429 / 503 / 传输层（status None）—— 都是 1 原始 + 2 重试 = 3 次尝试
     for status in (429, 503, None):
         counter = [0]
+        # mock-drift-ok: 调用期惰性 import 后经模块属性调用（bench_judge_gaming.py:1166 llm_client.chat），补丁即时生效
         monkeypatch.setattr(llm_client_module, "chat", make_chat(status, counter))
         chat = bench.RealChat("k", "http://stub.invalid", sleep=fake_sleep)
         with pytest.raises(llm_client_module.LLMError):
@@ -1494,6 +1497,7 @@ def test_real_run_bounded_retry_backoff_retryable_only(monkeypatch: pytest.Monke
     # 不可重试（401）⇒ 只 1 次尝试、立即抛（不重试、不退避）
     sleeps.clear()
     counter = [0]
+    # mock-drift-ok: 调用期惰性 import 后经模块属性调用（bench_judge_gaming.py:1166 llm_client.chat），补丁即时生效
     monkeypatch.setattr(llm_client_module, "chat", make_chat(401, counter))
     chat = bench.RealChat("k", "http://stub.invalid", sleep=fake_sleep)
     with pytest.raises(llm_client_module.LLMError):
@@ -1782,6 +1786,7 @@ def test_run_connectivity_precheck_minimal_bounded_call_or_failure(monkeypatch: 
         seen.update(kwargs)
         return {"content": "OK"}
 
+    # mock-drift-ok: 调用期惰性 import 后经模块属性调用（bench_judge_gaming.py:1210 llm_client.chat），补丁即时生效
     monkeypatch.setattr(llm_client_module, "chat", ok)
     assert bench.run_connectivity_precheck() is None
     assert seen["parse_json"] is False
@@ -1792,6 +1797,7 @@ def test_run_connectivity_precheck_minimal_bounded_call_or_failure(monkeypatch: 
     async def boom(**kwargs: Any) -> Any:
         raise llm_client_module.LLMError("AI 服务连接失败", raw="x")
 
+    # mock-drift-ok: 调用期惰性 import 后经模块属性调用（bench_judge_gaming.py:1210 llm_client.chat），补丁即时生效
     monkeypatch.setattr(llm_client_module, "chat", boom)
     with pytest.raises(bench.RealRunUnavailable):
         bench.run_connectivity_precheck()

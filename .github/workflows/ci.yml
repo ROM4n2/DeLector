@@ -541,3 +541,30 @@ jobs:
       # 纯 stdlib：无需 pip install。退出码 0=通过、1=有未豁免站点（job 红）、2=环境不可用（job 红）。
       - name: Enforce no-silent-degradation criteria
         run: python3 tools/check_silent_degradation.py
+
+  # ── mock 漂移机械闸（C8 事故族的类级固化；C9 Task 3）─────────────────────────
+  # 为什么：C8 批次生产代码把 `_shelf_get` 的 `httpx.get` 改为 `httpx.stream`，而 4 个测试仍
+  #   `monkeypatch.setattr(<encounter 模块>.httpx, "get", …)` —— 补丁钉在已无调用点的符号上：
+  #   它照常执行、零报错，但测试验证的东西消失了（假绿），CI 直到真实出站才红。
+  #   判定器 tools/check_mock_drift.py（纯 stdlib，零 pip install）扫描 tests/**/*.py，解析
+  #   monkeypatch.setattr(<obj>, "<symbol>", …) 的目标模块（delector.* / tools.*），要求符号在
+  #   该模块内仍有引用/调用点；`mock-drift-ok: REASON` 注释豁免（空理由无效）。
+  # fail-loud：有未豁免站点退出码 1（job 红）；环境不可用退出码 2（同样红）。
+  #   本 job 及其每一步 MUST NOT 声明 continue-on-error（一加就成摆设）。
+  mock-drift:
+    name: Mock Drift Gate
+    runs-on: ubuntu-latest
+    # 卡死护栏（同 ci job：GitHub 默认单 job 上限 360 分钟；本闸为秒级静态扫描，10 富余）。
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      # 纯 stdlib：无需 pip install。退出码 0=通过、1=有未豁免站点（job 红）、2=环境不可用（job 红）。
+      - name: Enforce mock-drift criterion
+        run: python3 tools/check_mock_drift.py

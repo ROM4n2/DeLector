@@ -5,6 +5,8 @@
 - GET  /api/syntax/hard-sentences?source=&source_id=&level=&min_score=&limit=
       → {"items":[{sentence, score, level, dimensions, path, source, source_id, sentence_index}]}
       source ∈ article/encounter/all（默认 all）；level/min_score 过滤；limit 默认 50 上限 100
+      仅 source=all 在材料列表获取失败时追加 {"degraded":[{"source","error"}]}：失败来源整体
+      缺席可被点名；degraded 缺省 ⇒ 没有任何来源缺席（空榜 = 该来源没有材料）〔C9 Y4〕
 - GET  /api/syntax/hard-sentences/detail?source=&source_id=&sentence_index=
       → {sentence, score, level, dimensions, path, analysis{clause_tree, topology}}；越界/缺失 404
 - POST /api/syntax/hard-sentence/trials body 七字段 → {"trial_id"}
@@ -19,6 +21,7 @@ client=("127.0.0.1",..) 放行，默认 host("testclient") 命中 _require_local
 """
 
 import json
+import logging
 import os
 import sys
 import threading
@@ -334,6 +337,84 @@ def test_hard_sentences_all_resilient_to_bad_material(client, monkeypatch):
     items = res.json()["items"]
     assert items, "坏材料不应炸掉全榜"
     assert all(it["source"] == "encounter" for it in items)
+
+
+# ── C9 Y4：材料列表失败的「空 vs 失败」可区分性（假值默认返回形状）──────────────
+# 缺陷史（C8 终审 Y4，活缺陷）：`except Exception: art_ids = []` 把「文章表查询失败」折叠成
+# 「库里没有文章」⇒ 文章素材整体从合并难度榜静默消失、零痕迹。两条用例分别钉死：
+# ① 失败来源 MUST 出现在响应 degraded（来源+原因）+ warning 留痕（可区分性本身）；
+# ② 降级整榜 MUST NOT 进聚合缓存（否则缓存命中把「降级」读成「一切正常」，瞬态失败钉死 300s）。
+
+
+def test_hard_sentences_all_failed_listing_is_distinguishable(client, monkeypatch, caplog):
+    """材料列表获取失败 MUST 与「该来源没有材料」可区分：响应 degraded 点名来源与原因 + warning 留痕。
+
+    为什么信号选响应字段（而非只加日志）：本端点没有别的可观测面能让调用方（含前端）区分
+    两案，而 degraded 是**纯追加字段**——成功路径响应逐字不变（既有契约零改动），仅失败响应
+    多一个键；把失败升格成 4xx/5xx 才会破坏契约（逐材料隔离 MUST 维持 200）。
+    """
+    _seed_encounter()  # 存活来源：证明「坏来源只丢自己」的逐材料隔离语义仍在
+    fake = _fake_scored([("Einzig guter Satz.", 60.0, "B1")])
+    monkeypatch.setattr(syntax_hard, "rank_sentences", lambda text: list(fake))
+
+    def _boom() -> List[int]:
+        raise RuntimeError("文章表崩")
+
+    monkeypatch.setattr(syntax_hard, "_list_article_ids", _boom)
+    with caplog.at_level(logging.WARNING):
+        res = client.get("/api/syntax/hard-sentences", params={"source": "all"})
+    assert res.status_code == 200, "来源列表失败仍守逐材料隔离口径（200），不得升格为整体失败"
+    payload = res.json()
+    assert payload["items"], "存活来源（encounter）应仍上榜"
+    degraded = payload.get("degraded")
+    assert degraded, (
+        "文章列表获取失败后响应 MUST 带非空 degraded 点名失败来源；degraded 缺省时"
+        "「文章列表炸了」与「库里没有文章」在响应上不可区分（C9 Y4 假值默认返回）"
+    )
+    assert [d["source"] for d in degraded] == ["article"], f"degraded 应点名 article，实际 {degraded}"
+    assert "文章表崩" in degraded[0]["error"], f"degraded 应带失败原因，实际 {degraded}"
+    warned = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("article" in m and "文章表崩" in m for m in warned), (
+        f"失败 MUST 至少落一条 warning 点名来源与原因（「不再静默留空」），实际 {warned}"
+    )
+
+
+def test_hard_sentences_all_healthy_sweep_has_no_degraded_marker(client):
+    """对照面：列表全部成功时 MUST NOT 带 degraded——标记只真降级时出现，假阳性会让两案重新混同。"""
+    _seed_article()
+    res = client.get("/api/syntax/hard-sentences", params={"source": "all"})
+    assert res.status_code == 200
+    assert not res.json().get("degraded"), "成功聚合不得报 degraded（否则「空」与「失败」重新混同）"
+
+
+def test_hard_sentences_all_degraded_sweep_not_cached(client, monkeypatch):
+    """降级整榜 MUST NOT 写聚合缓存：缓存值只有裸 items，装不下 degraded 标记，命中时会把
+    「降级了」读成「一切正常」；且列表失败多为瞬态，写缓存等于把「来源整体缺席」钉死 300s。
+    不写缓存 ⇒ 失败恢复后下一次请求即自愈重新上榜（本用例钉死后半句的物理行为）。
+    """
+    _seed_article()
+    fake = _fake_scored([("Einzig guter Satz.", 60.0, "B1")])
+    monkeypatch.setattr(syntax_hard, "rank_sentences", lambda text: list(fake))
+    ok_list_articles = syntax_hard._list_article_ids
+
+    def _boom() -> List[int]:
+        raise RuntimeError("文章表崩")
+
+    monkeypatch.setattr(syntax_hard, "_list_article_ids", _boom)
+    first = client.get("/api/syntax/hard-sentences", params={"source": "all"})
+    assert syntax_hard._ALL_RANK_CACHE_KEY not in syntax_hard._RANK_CACHE, (
+        "降级整榜不得写聚合缓存：缓存命中路径拿到的是裸 items，degraded 标记会被静默吞掉"
+        "（瞬态失败还会被钉死 300s 无法自愈）"
+    )
+    assert first.json().get("degraded"), "前置条件：首轮应为降级响应"
+
+    monkeypatch.setattr(syntax_hard, "_list_article_ids", ok_list_articles)  # 瞬态失败结束
+    second = client.get("/api/syntax/hard-sentences", params={"source": "all"})
+    payload = second.json()
+    assert not payload.get("degraded"), f"恢复后不得再报 degraded，实际 {payload.get('degraded')}"
+    assert any(it["source"] == "article" for it in payload["items"]), (
+        "恢复后文章素材应自愈重新上榜：降级响应未被缓存，下一请求已重聚合"
+    )
 
 
 # ── trials 落盘与回读（不挂闸） ────────────────────────────────────────

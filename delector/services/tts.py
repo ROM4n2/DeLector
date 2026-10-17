@@ -15,6 +15,7 @@ Chaquopy 索引里也没有，APK 内 `import edge_tts` 必然失败。桌面端
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import logging
 import os
@@ -135,7 +136,16 @@ def _ssml_frame(text: str, voice: str, rate: str) -> str:
 
 
 class _HandshakeError(Exception):
-    """WebSocket 升级被拒，携带响应状态与头（用于 403 时钟校准重试）。"""
+    """WebSocket 升级被拒，携带响应状态与头（用于 403 时钟校准重试）。
+
+    错误信封的**有意不对称**（C9-Y6，别顺手「统一」）：本类在 `synthesize` 里**原样上抛**，
+    不套 `RuntimeError("edge_tts_mini synthesis failed: …")`。理由三条：
+    1) 语义不同：本类 = 「服务端**回应了**」，带 `status_code` / `headers`；包装只会把结构化
+       信息降级成一串文字，调用方再想按状态码分流就得回去解析字符串；
+    2) 承重：403 时钟校准与 5xx 退避重试都读这两个字段，包一层等于把它们从异常面上抹掉；
+    3) 契约已被测试钉死（tests/test_server.py 的 `pytest.raises(tts._HandshakeError)`）——
+       改信封是破坏性变更，不是修 bug。传输层/协议层的**无结构**失败才走 RuntimeError 包装。
+    """
 
     def __init__(self, status_line: bytes, headers: Dict[bytes, bytes]):
         super().__init__(f"handshake failed: {status_line.decode('latin-1')}")
@@ -147,10 +157,28 @@ def _is_retryable(error: Exception) -> bool:
     """失败是否值得重试：连接/传输层错误与 5xx 握手拒绝。
 
     协议/解析层错误（4xx 拒绝、服务端未回音频等）重试不会改变结果，MUST NOT 重试。
+
+    两个边缘的裁定（C9-Y5；动这里前先算代价）：
+    - `ssl.SSLCertVerificationError` ⊂ `ssl.SSLError`，但它是**确定性**失败（证书过期 /
+      域名不符 / 缺 CA）：重试期望收益恒为 0，只多付一次 TLS 握手 + 0.5s 退避 ⇒ 显式排除。
+      必须先于 SSLError 分支判定（isinstance 匹配子类，顺序即语义）。
+    - `OSError(ENETUNREACH / EHOSTUNREACH)`：路由 / VPN / 移动网络切换期的**传输层**抖动，
+      重启连接有真实成功概率；且它**不是** `ConnectionError` 子类（PEP 3151 不给这两个
+      errno 专有子类）⇒ 此前落进「不重试」，与本文档「连接/传输层可重试」的口径不符。
+      代价上限：多一次尝试（连接超时 10s 之内）+ 0.5s 退避，且只在已经失败的路径上付。
+    已知极限：`socket.create_connection` 在多地址全败且错误文案互不相同时抛
+      `OSError("Multiple exceptions: …")`（errno=None）⇒ 本函数不重试它 —— 该形态放弃区分，
+      登记在此，免得下次被当成漏覆盖再改一遍。
     """
     if isinstance(error, _HandshakeError):
         return 500 <= error.status_code <= 599
-    return isinstance(error, (ConnectionError, TimeoutError, ssl.SSLError, socket.gaierror))
+    if isinstance(error, ssl.SSLCertVerificationError):
+        return False
+    if isinstance(error, (ConnectionError, TimeoutError, ssl.SSLError, socket.gaierror)):
+        return True
+    # ENETUNREACH / EHOSTUNREACH 在 win32 下 errno 就是 WSA 码（10051 / 10065），
+    # 用 errno 常量即同时覆盖两个平台，不写平台字面量。
+    return isinstance(error, OSError) and error.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH)
 
 
 def _retry_backoff_sleep(attempt: int) -> None:
@@ -315,6 +343,8 @@ def synthesize(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -
     403 表示 Sec-MS-GEC 因设备时钟偏差被拒：取服务端 Date 头算偏移，重试一次。
     其余失败只有**连接/传输层与 5xx** 才重试，且每次重试前走有界退避
     （见 `_retry_backoff_sleep`）；协议/解析错误（4xx、服务端未回音频）MUST NOT 重试。
+    错误信封**不对称且有意**：`_HandshakeError`（服务端回应了，带状态码/头）原样抛出；
+    其余失败在重试用尽后统一包成 `RuntimeError`。理由见 `_HandshakeError` 的 docstring。
     """
     chunks = list(_split_text(text))
     if not chunks:
