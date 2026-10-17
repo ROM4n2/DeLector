@@ -2535,6 +2535,7 @@ async def _run_polish(
             judge=judge_recorder,
             chat=recorder,
             budget=polish_loop.Budget(),
+            text_type=kind,
             on_progress=on_progress,
             should_stop=should_stop,
         )
