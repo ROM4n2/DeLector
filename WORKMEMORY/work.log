@@ -502,3 +502,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **并行协调契约**：三路按文件切占面，C7 独占 workbench 前端产物族与其探针族；早前 C6 登记里的 `test_german_workbench.py` **已划归 C7 独占**，C6 只做 `test_server.py` + `test_desktop_shell.py`（此变更须在 C6 计划中注明）。
 - 迁移依赖顺序（实测）：`test_frontend_module_graph.py`（唯一 B 类）→ `test_german_workbench.py`（77 A）→ 13 个 `.mjs`（须先于产物搬迁）→ `test_workbench_tokens.py` → `test_a1_workbench_source.py`（含字节等价/幂等两条 D，牵动两个构建工具）→ `test_audit_hardening.py`/`test_exam_domain.py` → 探针包装层复跑。
 
+### 2026-10-18 00:28 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C8 P2 批次缺陷修复**（`docs/plans/2026-10-18-c8-p2-batch.md`，7 项 CONFIRMED；STALE 项已剔除）。
+分支：`fix/c8-p2-batch`。并行面：C7（workbench 拆分）已交接给另一 agent，本工作流禁触其独占文件。
+分工：按域分 3 批派发 TDD Builder（后端端点批 / 运维测试批 / TTS 批），每批配独立 Reviewer（maker-checker 隔离）。
+不做范围（MUST）：不改 C7 独占面（`static/german/workbench.html` · `static/js/**` · `tools/wb_*.mjs` · 两个 build 工具）；不改 AI 润色循环语义；不引入新依赖。
+
