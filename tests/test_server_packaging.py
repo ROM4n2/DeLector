@@ -4,78 +4,24 @@
 # unused，故文件级豁免 unused-ignore（其它错误码仍全查）。
 # mypy: disable-error-code="unused-ignore"
 import ast
-import gc
 import json
 import os
 import re
 
 import pytest
-from db_cleanup import remove_db_files
-from server_helpers import ROOT
+
+# clean_db 是夹具：用 `as 同名` 显式再导出写法（pyflakes 据此不判「导入未用」；
+# 夹具由 pytest 按名解析，静态看不见使用）。
+from server_helpers import ROOT, _calls_named, _package_windows_build_windows_fn
+from server_helpers import clean_db as clean_db
 
 from delector.core.database import db_conn
 from delector.server import init_db
 
-# --- C6 Task 2 附带（被段引用、但定义在段外的符号）：按「新文件独立可跑 + 禁止跨
-# 测试文件 import」的切分纪律以逐字副本本地化；禁反向 import test_server.py（该文件
-# 正被逐步搬空）。-----------------------------------------------------------------
-#   ① clean_db（autouse）：本文件多条用例用 db_conn("test_delector.db") 直读，与 app
-#      端点共用同一「相对路径钉定」的库，脱离本 fixture 会库错位。契约 C1/C2 见
-#      docs/specs/2026-09-26-test-db-isolation-design.md §3.1（test_exam_trials.py 同款）。
-#   ② _package_windows_build_windows_fn / _calls_named：与仍在 test_server.py 的
-#      Task 1 Hardening 段跨段共用；两段全部搬出后可一并上收 tests/server_helpers.py。
-
-
-@pytest.fixture(autouse=True)
-def clean_db():
-    # sqlite3.Connection 与内部 statement 互为引用环：`with get_db(...)` 只提交
-    # 事务不 close，文件句柄要等循环 GC 才释放。Windows 上句柄未释放时 os.remove
-    # 抛 PermissionError（被吞），旧 DB 带着上一测试的数据残留下来 → 隔离失效。
-    # 删除前先 gc.collect()，把上一测试遗留的连接环清掉，删除才确定成功。
-    # 前后双钉 env：database.get_db_path() 每次调用都读 os.environ（不是 import
-    # 时冻结），全量 pytest 时更晚收集的文件（test_audit_hardening.py 等）在
-    # 模块顶层改写 DATABASE_PATH，收集顺序若让本文件先 import、用例后执行，
-    # 默认路径就会命中未建表的别家库 → 「no such table」成片假失败。
-    saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
-    os.environ["DATABASE_PATH"] = "test_delector.db"
-    os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
-    # 连带删除 WAL 旁文件（-wal/-shm）：启用 WAL 后它们与主库同生共死，只删主库会把
-    # 陈旧 -shm 留给下个用例 → 打开即 `disk I/O error`。其它测试模块早已按三件套清理。
-    gc.collect()
-    remove_db_files("test_delector.db", "test_progress.db")
-    init_db("test_delector.db")
-    yield
-    gc.collect()
-    remove_db_files("test_delector.db", "test_progress.db")
-    for k, v in saved.items():
-        if v is None:
-            os.environ.pop(k, None)
-        else:
-            os.environ[k] = v
-
-
-def _package_windows_build_windows_fn() -> ast.FunctionDef:
-    """取出 `package_windows.py` 的 `build_windows` 函数节点（供调用点守卫共用）。"""
-    tree = ast.parse(open(os.path.join(ROOT, "package_windows.py"), encoding="utf-8").read())
-    build_fn = next(
-        (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "build_windows"),
-        None,
-    )
-    assert build_fn is not None, "package_windows.py 必须定义 build_windows()"
-    return build_fn
-
-
-def _calls_named(body: ast.AST, name: str) -> bool:
-    """`body` 内是否出现对 `name(...)` 的调用（支持裸名或属性形式）。"""
-
-    def _is_match(node: ast.AST) -> bool:
-        if not isinstance(node, ast.Call):
-            return False
-        if isinstance(node.func, ast.Name):
-            return node.func.id == name
-        return isinstance(node.func, ast.Attribute) and node.func.attr == name
-
-    return any(_is_match(node) for node in ast.walk(body))
+# --- C6 Task 3（去重）：原先按「新文件独立可跑」纪律本地化的三件（clean_db autouse /
+# _package_windows_build_windows_fn / _calls_named）已上收为 tests/server_helpers.py 的**唯一
+# 实现**，本文件按名 import（夹具导入即在本模块注册，autouse 作用域仍限本模块）。
+# 禁止再本地复制：第三份起必漂移。------------------------------------------------
 
 
 # ── v4.7.0 架构与数据完整性改造 TDD 契约 ───────────────────────────────────────
