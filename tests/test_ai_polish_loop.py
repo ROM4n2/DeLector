@@ -395,7 +395,7 @@ def test_finish_candidate_without_fresh_verdict_is_rejected() -> None:
     result = run(
         text="T0",
         chat=rec.chat([{"corrected_text": "T1"}]),
-        judge=make_judge({"T0": 1, "T1": 1}, log),
+        judge=make_judge({"T0": 1, "T1": 2}, log),
     )
 
     assert log[-1] == "T1", f"收尾候选 MUST 被裁（无本轮新鲜裁决不许收尾）：{log}"
@@ -798,6 +798,100 @@ def test_format_judge_feedback() -> None:
 
     # 常量契约
     assert LETTER_FORMAT_RULE_PREFIX == "a1_"
+
+
+def test_feedback_injected_into_messages_when_violations_remain() -> None:
+    """第 1 轮有违规时回灌 [裁判反馈]，模型第 2 轮修正后成功收敛 (converged=True, reason='ok')。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+    judge = make_judge({"T0": 1, "T1": 1, "T2": 0})
+    result = run(
+        text="T0",
+        chat=rec.chat(script),
+        judge=judge,
+    )
+
+    assert len(rec.calls) == 2
+    round2_messages = rec.calls[1]["messages"]
+    assert round2_messages[-1]["role"] == "user"
+    assert "[裁判反馈]" in round2_messages[-1]["content"]
+
+    assert result.converged is True
+    assert result.reason == "ok"
+    assert result.rounds == 2
+    assert result.text == "T2"
+    assert result.violations == []
+
+
+def test_feedback_retry_stops_on_repeated_stall() -> None:
+    """模型获得反馈后重试仍不改善（连续两轮违规数不降）⇒ 触发 judge_unreliable 并回退 argmin。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+    judge = make_judge({"T0": 2, "T1": 2, "T2": 2})
+    result = run(
+        text="T0",
+        chat=rec.chat(script),
+        judge=judge,
+    )
+
+    assert result.converged is False
+    assert result.reason == "judge_unreliable"
+    assert result.rounds == 2
+    assert result.text == "T0"
+
+
+def test_feedback_respects_text_type() -> None:
+    """当 text_type='prose' 时，format_judge_feedback 过滤掉 a1_ 格式规则后再注入。"""
+    rec = Recorder()
+    script: list[dict[str, Any]] = [
+        {"corrected_text": "T1"},
+        {"corrected_text": "T2"},
+    ]
+
+    def _judge(text: str, leitpunkte: list[str] | None = None) -> dict[str, Any]:
+        if text == "T0":
+            return {
+                "word_count": 5,
+                "suggestions": [
+                    {"rule": "a1_greeting_missing", "level": "error", "message": "书信缺少称呼语"},
+                    {"rule": "spelling_mistake", "level": "error", "message": "拼写有误"},
+                ],
+            }
+        elif text == "T1":
+            return {
+                "word_count": 5,
+                "suggestions": [
+                    {"rule": "a1_valediction_missing", "level": "error", "message": "书信缺少结语"},
+                    {"rule": "spelling_mistake", "level": "error", "message": "拼写有误"},
+                ],
+            }
+        return {"word_count": 5, "suggestions": []}
+
+    result = run(
+        text="T0",
+        text_type="prose",
+        chat=rec.chat(script),
+        judge=_judge,
+    )
+
+    assert len(rec.calls) == 2
+    round2_messages = rec.calls[1]["messages"]
+    feedback_msg = round2_messages[-1]["content"]
+    assert "[裁判反馈]" in feedback_msg
+    assert "spelling_mistake" in feedback_msg
+    assert "a1_valediction_missing" not in feedback_msg
+    assert "a1_" not in feedback_msg
+
+    assert result.converged is True
+    assert result.reason == "ok"
+    assert result.rounds == 2
+    assert result.text == "T2"
 
 
 # ── Task 8 接缝加固：dispatch 超时 / 裁判移出事件循环 ──────────────────────────

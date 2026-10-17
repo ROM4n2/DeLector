@@ -373,6 +373,7 @@ async def run_polish_loop(
     violations_of: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None,
     dispatch: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
     system_prompt: str | None = None,
+    text_type: str = "letter",
     clock: Callable[[], float] = time.monotonic,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -578,11 +579,27 @@ async def run_polish_loop(
             if v == prev_v and judged_candidates >= 2:
                 reason = REASON_JUDGE_UNRELIABLE
                 break
-            # 运行时策略：不降即停
-            if v >= prev_v:
+            # 运行时策略：严格恶化才在此直接停止，持平且首个候选允许反馈重试
+            if v > prev_v:
                 reason = REASON_NO_IMPROVEMENT
                 break
         prev_v = v
+
+        feedback = format_judge_feedback(violations, text_type=text_type)
+        if feedback:
+            messages.append({"role": "user", "content": feedback})
+            _emit(
+                on_progress,
+                {
+                    "round": rounds,
+                    "max_turns": budget.max_turns,
+                    "event": "judge_feedback",
+                    "violations": v,
+                    "feedback": feedback,
+                    "tokens_used": tokens_used,
+                    "elapsed": clock() - t0,
+                },
+            )
 
     if reason is None:
         reason = REASON_TURN_LIMIT
