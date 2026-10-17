@@ -23,7 +23,9 @@
  * 用法：
  *   node tools/wb_a1_bootstrap_probe.mjs --fixture <fixture.json> [--json]
  *   --json 时 stdout 只有一个 JSON 对象 {"fail": <int>, "total": <int>, "cases": [...]}，
- *   日志走 stderr；人类模式每个场景打印 PASS/FAIL。无 --fixture 时打印用法提示、退出码 0。
+ *   日志走 stderr；人类模式每个场景打印 PASS/FAIL。
+ *   无 --fixture 时打印用法提示、退出码 0 —— 但**源可用性先判**：源文件缺失/为空一律
+ *   exit 3（No-Silent-Skip：源缺失绝不能被「打印用法」路径吞成 exit 0）。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -32,9 +34,43 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const HTML = path.join(ROOT, "static", "german", "workbench.html");
+/* ---- 探针读取口（C7 Task 2）：可多文件来源 ------------------------------
+ * 现在只有 `workbench.html` 一个源文件，故 `readSources(SRC_FILES)` 与改造前的
+ * `fs.readFileSync(HTML, "utf8")` 逐字节等价（单文件时 join 不插入任何字节）。
+ * workbench.html 拆成模块后只需改 `WB_SRC_ROOT` 与 `SRC_FILES`，切片语义不动。 */
+const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static/german";
+const SRC_FILES = ["workbench.html"];
+
+function readSources(names) {
+  const parts = names.map((name) => {
+    const dir = path.isAbsolute(SRC_ROOT) ? SRC_ROOT : path.join(ROOT, SRC_ROOT);
+    const file = path.isAbsolute(name) ? name : path.join(dir, name);
+    if (!fs.existsSync(file)) {
+      process.stderr.write(`探针源文件不存在：${file}（声明搬迁后请同步 WB_SRC_ROOT / SRC_FILES）\n`);
+      process.exit(3);
+    }
+    const text = fs.readFileSync(file, "utf8");
+    if (!text.length) {
+      process.stderr.write(`探针源文件为空：${file}\n`);
+      process.exit(3);
+    }
+    return text;
+  });
+  return parts.join("\n");
+}
+
 const JSON_MODE = process.argv.includes("--json");
 const log = (...a) => { if (!JSON_MODE) console.error(...a); };
+
+/* ---------------------------------------------------------------------------
+ * 0a. 源可用性：**必须**先于第 0 节的 CLI 分支判定
+ *
+ * 「缺 --fixture ⇒ 打印用法并 exit 0」是一条 CLI 帮助路径；若让它先跑，源文件缺失就会
+ * 被它吞成 exit 0 —— 违反 No-Silent-Skip（探针找不到源文件 MUST 非零退出）。故把
+ * readSources() 提到参数解析之前：缺源/空源在第 0 节之前即 process.exit(3) + 打印所查
+ * 路径。成功读取时不产生任何 stdout/stderr 输出，正常路径的 JSON 契约逐字不变。
+ * ------------------------------------------------------------------------ */
+const html = readSources(SRC_FILES);
 
 /* ---------------------------------------------------------------------------
  * 0. 参数：--fixture <path>
@@ -94,38 +130,65 @@ function matchBracket(src, openIdx) {
   throw new Error(`matchBracket: 从 ${openIdx} 起找不到配对闭括号`);
 }
 
-function extractDecl(src, name) {
-  const anchor = new RegExp(`^const\\s+${name}\\s*=`, "m");
-  const m = anchor.exec(src);
-  if (!m) throw new Error(`workbench.html 里找不到声明 const ${name}`);
-  let i = m.index + m[0].length;
-  while (i < src.length && !OPEN[src[i]]) i++;
+/** 找不到声明就此**非零退出**，并打印所查声明名（No-Silent-Skip：返回空串会让
+ *  下游 `in` 断言静默假绿）。退出码 3 = 读取口失败，与「契约被破坏」的 1 区分开。 */
+function dieMissingDecl(name) {
+  process.stderr.write(
+    `探针源 ${SRC_FILES.join(", ")}（根目录 ${SRC_ROOT}）里找不到声明 ${name}\n`
+  );
+  process.exit(3);
+}
+
+/** 统一切片入口：按名字定位 `const/let/var NAME =` 或 `[async] function NAME(`，
+ *  用括号配平取到声明体结尾（变量声明含结尾分号）；值为标量（不含括号）时读到语句分号。
+ *  语义与改造前各探针自抄的 extractDecl / extractDeclAny / extractDeclAny（标量口径）/
+ *  extractFn / sliceBlock / 内联 anchor 六种口径逐字一致（改前已实测：132 个顶层函数与
+ *  52 个顶层声明逐条比对，零差异）。 */
+function sliceDecl(src, name) {
+  const decl = new RegExp(`^(?:const|let|var)\\s+${name}\\s*=`, "m").exec(src);
+  const m = decl || new RegExp(`^(?:async\\s+)?function\\s+${name}\\s*\\(`, "m").exec(src);
+  if (!m) dieMissingDecl(`const/let/var/function ${name}`);
+  if (!decl) {
+    /* 函数声明：m[0] 以 `(` 结尾 ⇒ 参数表先括号配对，再取函数体花括号 */
+    const parenClose = matchBracket(src, m.index + m[0].length - 1);
+    const braceOpen = src.indexOf("{", parenClose);
+    if (braceOpen < 0) {
+      process.stderr.write(`函数 ${name} 的参数表之后找不到函数体花括号，切歪了\n`);
+      process.exit(3);
+    }
+    return src.slice(m.index, matchBracket(src, braceOpen) + 1);
+  }
+  const after = m.index + m[0].length;
+  let i = after;
+  while (i < src.length && /\s/.test(src[i])) i++;
+  if (!OPEN[src[i]]) {
+    /* 标量声明（`const SCHEMA_KEY = "wb.schema.v1";`）：值不含括号，读到语句分号。
+     * 前提：标量值内不得含 ASCII `;`（13 个探针的目标声明实测均无，含
+     * `CORE_WORD_SEED_IDS = new Set([...])`）—— 若违反，切片会在此截断 ⇒ 以语法错 /
+     * 退出码 3 报出，不会静默通过。 */
+    const tail = src.indexOf(";", after);
+    if (tail < 0) {
+      process.stderr.write(`声明 ${name} 结尾找不到分号，切歪了\n`);
+      process.exit(3);
+    }
+    return src.slice(m.index, tail + 1);
+  }
   const end = matchBracket(src, i);
   const semi = src.indexOf(";", end);
-  if (semi < 0 || semi > end + 8) throw new Error(`const ${name} 声明结尾找不到分号，切歪了`);
+  if (semi < 0 || semi > end + 8) {
+    process.stderr.write(`声明 ${name} 结尾找不到分号，切歪了（end=${end} semi=${semi}）\n`);
+    process.exit(3);
+  }
   return src.slice(m.index, semi + 1);
 }
 
-function extractFn(src, name) {
-  // 允许 async 前缀：bootstrapA1Words 是 `async function ...`（括号配对与签名无关）。
-  const anchor = new RegExp(`^(?:async\\s+)?function\\s+${name}\\s*\\(`, "m");
-  const m = anchor.exec(src);
-  if (!m) throw new Error(`workbench.html 里找不到函数 ${name}`);
-  const parenOpen = src.indexOf("(", m.index);
-  const parenClose = matchBracket(src, parenOpen);
-  const braceOpen = src.indexOf("{", parenClose);
-  const braceClose = matchBracket(src, braceOpen);
-  return src.slice(m.index, braceClose + 1);
-}
-
-const html = fs.readFileSync(HTML, "utf8");
 const PIECES = {
-  CEFR_BY_PREFIX: extractDecl(html, "CEFR_BY_PREFIX"),
-  cefrFromId: extractFn(html, "cefrFromId"),
-  normalizeWord: extractFn(html, "normalizeWord"),
-  a1WordFromApi: extractFn(html, "a1WordFromApi"),
-  a1WordsFromInline: extractFn(html, "a1WordsFromInline"),
-  CORE_WORD_SEED_IDS: extractDecl(html, "CORE_WORD_SEED_IDS"),
+  CEFR_BY_PREFIX: sliceDecl(html, "CEFR_BY_PREFIX"),
+  cefrFromId: sliceDecl(html, "cefrFromId"),
+  normalizeWord: sliceDecl(html, "normalizeWord"),
+  a1WordFromApi: sliceDecl(html, "a1WordFromApi"),
+  a1WordsFromInline: sliceDecl(html, "a1WordsFromInline"),
+  CORE_WORD_SEED_IDS: sliceDecl(html, "CORE_WORD_SEED_IDS"),
 };
 for (const [k, v] of Object.entries(PIECES)) {
   if (!v || v.length < 30) throw new Error(`切片 ${k} 长度异常（${v && v.length}），锚点可能失配`);
@@ -295,53 +358,36 @@ const apiWords = sb(`__rows.map(a1WordFromApi)`);
  * mergeA1ServerWords** 等真实函数切片丢进 node:vm 真跑，localStorage 用可观测桩
  * （记录每次 setItem 的键与 words payload），fetch 用可控 stub（永挂 / 返回真实 rows）。
  * ------------------------------------------------------------------------ */
-/** const/let/var 声明切片：值为括号字面量（对象/数组/Set）走括号配对；为标量（字符串 /
- *  布尔）则读到语句分号。extractDecl 只支持前者，故本函数补上后者。
- *  var 声明用于把 SEED_WORDS 从 fixture 注入后覆盖同一脚本作用域时的可选场景。 */
-function extractDeclAny(src, name) {
-  const anchor = new RegExp(`^(?:const|let|var)\\s+${name}\\s*=`, "m");
-  const m = anchor.exec(src);
-  if (!m) throw new Error(`workbench.html 里找不到声明 ${name}`);
-  let i = m.index + m[0].length;
-  while (i < src.length && /\s/.test(src[i])) i++;
-  if (OPEN[src[i]]) {
-    const end = matchBracket(src, i);
-    const semi = src.indexOf(";", end);
-    if (semi < 0 || semi > end + 8) throw new Error(`const ${name} 声明结尾找不到分号，切歪了`);
-    return src.slice(m.index, semi + 1);
-  }
-  const semi = src.indexOf(";", m.index + m[0].length);
-  if (semi < 0) throw new Error(`const ${name} 声明结尾找不到分号，切歪了`);
-  return src.slice(m.index, semi + 1);
-}
+/* const/let/var 声明（值为括号字面量与标量两种）与函数声明统一走 sliceDecl()：
+ * 标量那条分支已并入 sliceDecl，故这里不再有 extractDeclAny。 */
 
 const P2 = {
-  K: extractDeclAny(html, "K"),
-  DEFAULT_SETTINGS: extractDeclAny(html, "DEFAULT_SETTINGS"),
-  S: extractDeclAny(html, "S"),
-  SCHEMA_KEY: extractDeclAny(html, "SCHEMA_KEY"),
-  A1_SRC_KEY: extractDeclAny(html, "A1_SRC_KEY"),
-  SEED_ID_ALIASES: extractDeclAny(html, "SEED_ID_ALIASES"),
+  K: sliceDecl(html, "K"),
+  DEFAULT_SETTINGS: sliceDecl(html, "DEFAULT_SETTINGS"),
+  S: sliceDecl(html, "S"),
+  SCHEMA_KEY: sliceDecl(html, "SCHEMA_KEY"),
+  A1_SRC_KEY: sliceDecl(html, "A1_SRC_KEY"),
+  SEED_ID_ALIASES: sliceDecl(html, "SEED_ID_ALIASES"),
   CORE_WORD_SEED_IDS: PIECES.CORE_WORD_SEED_IDS,
   CEFR_BY_PREFIX: PIECES.CEFR_BY_PREFIX,
-  OTHER_LEVEL_SCOPES: extractDeclAny(html, "OTHER_LEVEL_SCOPES"),
-  SCOPE_PREDICATES: extractDeclAny(html, "SCOPE_PREDICATES"),
-  A1_BOOT_PENDING: extractDeclAny(html, "A1_BOOT_PENDING"),
+  OTHER_LEVEL_SCOPES: sliceDecl(html, "OTHER_LEVEL_SCOPES"),
+  SCOPE_PREDICATES: sliceDecl(html, "SCOPE_PREDICATES"),
+  A1_BOOT_PENDING: sliceDecl(html, "A1_BOOT_PENDING"),
   cefrFromId: PIECES.cefrFromId,
-  cefrOf: extractFn(html, "cefrOf"),
-  isInScope: extractFn(html, "isInScope"),
+  cefrOf: sliceDecl(html, "cefrOf"),
+  isInScope: sliceDecl(html, "isInScope"),
   normalizeWord: PIECES.normalizeWord,
   a1WordFromApi: PIECES.a1WordFromApi,
   a1WordsFromInline: PIECES.a1WordsFromInline,
-  mergeA1ServerWords: extractFn(html, "mergeA1ServerWords"),
-  markSchemaMigrated: extractFn(html, "markSchemaMigrated"),
-  migrateSeedIdAliases: extractFn(html, "migrateSeedIdAliases"),
-  backfillCoreWords: extractFn(html, "backfillCoreWords"),
-  saveWords: extractFn(html, "saveWords"),
-  saveCards: extractFn(html, "saveCards"),
-  saveLog: extractFn(html, "saveLog"),
-  saveWrong: extractFn(html, "saveWrong"),
-  bootstrapA1Words: extractFn(html, "bootstrapA1Words"),
+  mergeA1ServerWords: sliceDecl(html, "mergeA1ServerWords"),
+  markSchemaMigrated: sliceDecl(html, "markSchemaMigrated"),
+  migrateSeedIdAliases: sliceDecl(html, "migrateSeedIdAliases"),
+  backfillCoreWords: sliceDecl(html, "backfillCoreWords"),
+  saveWords: sliceDecl(html, "saveWords"),
+  saveCards: sliceDecl(html, "saveCards"),
+  saveLog: sliceDecl(html, "saveLog"),
+  saveWrong: sliceDecl(html, "saveWrong"),
+  bootstrapA1Words: sliceDecl(html, "bootstrapA1Words"),
 };
 for (const [k, v] of Object.entries(P2)) {
   if (!v || v.length < 8) throw new Error(`切片 P2.${k} 长度异常（${v && v.length}），锚点可能失配`);
