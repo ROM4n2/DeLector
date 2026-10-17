@@ -134,7 +134,7 @@ status: open
 
 | 工作流 | 独占文件 | 禁触 |
 | --- | --- | --- |
-| **本包（C7）** | `static/german/workbench.html` · `static/js/**` · `static/css/workbench.css`（新增）· `tools/wb_*.mjs`（13）· `tools/build_workbench_seed.py` · `tools/build_embedded_audio.py` · `tests/test_german_workbench.py` · `tests/test_workbench_tokens.py` · `tests/test_a1_workbench_source.py` · `tests/test_frontend_module_graph.py` · `tests/test_exam_domain.py` · `tests/test_audit_hardening.py` · `tests/test_wb_pair_persist_probe.py` · `tests/test_probe_wiring_guard.py` · `tests/probe_runner.py` · `tests/probe_json_contract.py` | `tests/test_server.py` · `tests/test_desktop_shell.py` · `delector/**` · `.github/**` |
+| **本包（C7）** | `static/german/workbench.html` · `static/js/**`（**2026-10-18 修正：`main.js` 与 `api-types.js` 已划归 C8**——C8 的 settings 来源脱敏改了契约，其前端消费点必须同批修）· `static/css/workbench.css`（新增）· `tools/wb_*.mjs`（13）· `tools/build_workbench_seed.py` · `tools/build_embedded_audio.py` · `tests/test_german_workbench.py` · `tests/test_workbench_tokens.py` · `tests/test_a1_workbench_source.py` · `tests/test_frontend_module_graph.py` · `tests/test_exam_domain.py` · `tests/test_audit_hardening.py` · `tests/test_wb_pair_persist_probe.py` · `tests/test_probe_wiring_guard.py` · `tests/probe_runner.py` · `tests/probe_json_contract.py` | `tests/test_server.py` · `tests/test_desktop_shell.py` · `delector/**` · `.github/**` |
 | C8（后端缺陷，本侧执行） | `delector/services/tts.py` · `delector/routes/encounter.py` · `delector/routes/main.py` · `delector/core/security.py` · `.github/workflows/ci.yml` · `.gitignore` · `tests/test_desktop_shell.py` | 本包左列全部 |
 | C6（测试归属切分，本侧执行） | `tests/test_server.py` · `tests/test_desktop_shell.py` | 本包左列全部 |
 
@@ -150,3 +150,9 @@ status: open
 - 运维与文件契约：`docs/agents/ops.md`
 - 仓库入口与红线：`AGENTS.md` · `WORKMEMORY/PROJECT_OVERVIEW.md`
 - 工作记忆协议（本包格式来源）：`WORKMEMORY/PROTOCOL.md` §4
+
+---
+
+## 修订记录（发送方）
+
+- **2026-10-18 00:5x｜文件占面契约修正**：`static/js/main.js` 与 `static/js/api-types.js` **从 C7 独占面移出，划归 C8**。原因：C8 的 `GET /api/settings` 来源脱敏（非回环来源不再返回 `api_key_masked`）改变了前端消费契约，`main.js` 对 LAN 客户端会渲染 `undefined`——该修复属 C8 闭环的一部分，不能跨工作流。**C7 侧若需改这两个文件，请先在包内响应节说明原因。** 其余 `static/js/**`（含新增 `wb-*.js` 模块）仍归 C7。若两侧真的同时改到同一文件，合并时以「C7 新增模块 / C8 只改 settings 渲染那一处」为界手工解冲突。
