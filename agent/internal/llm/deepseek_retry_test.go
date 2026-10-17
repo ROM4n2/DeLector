@@ -88,3 +88,29 @@ func TestComplete_500ExhaustsRetries(t *testing.T) {
 		t.Errorf("错误应带统一前缀文案，实得: %v", err)
 	}
 }
+
+func TestLLMBackoffDefault_IncludesJitter(t *testing.T) {
+	// P1-5: 验证退避包含随机抖动，且下界不低于指数基准，上界不超过 cap + maxJitter
+	const (
+		base      = 500 * time.Millisecond
+		cap       = 8 * time.Second
+		maxJitter = 250 * time.Millisecond
+	)
+
+	samples := make(map[time.Duration]bool)
+	for i := 0; i < 50; i++ {
+		dur := llmBackoffDefault(0)
+		if dur < base || dur >= base+maxJitter {
+			t.Fatalf("attempt 0 backoff %v 越界 [%v, %v)", dur, base, base+maxJitter)
+		}
+		samples[dur] = true
+	}
+	if len(samples) <= 1 {
+		t.Errorf("50 次采样仅得到 %d 种退避值，退避缺乏随机 jitter", len(samples))
+	}
+
+	capDur := llmBackoffDefault(10)
+	if capDur < cap || capDur >= cap+maxJitter {
+		t.Errorf("超大 attempt backoff %v 越界 [%v, %v)", capDur, cap, cap+maxJitter)
+	}
+}

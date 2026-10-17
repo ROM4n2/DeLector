@@ -324,26 +324,48 @@ def _rows_to_tuples(
 
 
 def build_backup_payload() -> Dict[str, Any]:
-    """组装 v2 备份。local_storage 由前端在 /prepare 时填入——后端读不到浏览器存储。"""
+    """组装 v2 备份。local_storage 由前端在 /prepare 时填入——后端读不到浏览器存储。
+
+    P1-2 快照一致性保证：
+    在 WAL 模式下，裸 SELECT 循环可能读到跨表时间不一致的混合提交。
+    此处对主库与 progress 库分别以 BEGIN DEFERRED 显式包裹读操作并 COMMIT，
+    确保单库内部所有表读自同一一致性只读快照。
+    （注：SQLite 两独立连接之间物理上无法保证跨库原子性，单库内一致性已极大收敛窗口。）
+    """
     conn = get_db()
     try:
-        tables = {name: [dict(r) for r in conn.execute(f"SELECT * FROM {name}").fetchall()] for name in _BACKUP_TABLES}
-        placeholders = ",".join("?" for _ in BACKUP_SETTINGS_WHITELIST)
-        settings = [
-            dict(r)
-            for r in conn.execute(
-                f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
-                BACKUP_SETTINGS_WHITELIST,
-            ).fetchall()
-        ]
+        conn.execute("BEGIN DEFERRED")
+        try:
+            tables = {
+                name: [dict(r) for r in conn.execute(f"SELECT * FROM {name}").fetchall()]
+                for name in _BACKUP_TABLES
+            }
+            placeholders = ",".join("?" for _ in BACKUP_SETTINGS_WHITELIST)
+            settings = [
+                dict(r)
+                for r in conn.execute(
+                    f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
+                    BACKUP_SETTINGS_WHITELIST,
+                ).fetchall()
+            ]
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     finally:
         conn.close()
 
     pconn = get_progress_db()
     try:
-        progress = {
-            name: [dict(r) for r in pconn.execute(f"SELECT * FROM {name}").fetchall()] for name in _PROGRESS_TABLES
-        }
+        pconn.execute("BEGIN DEFERRED")
+        try:
+            progress = {
+                name: [dict(r) for r in pconn.execute(f"SELECT * FROM {name}").fetchall()] for name in _PROGRESS_TABLES
+            }
+            pconn.commit()
+        except Exception:
+            pconn.rollback()
+            raise
     finally:
         pconn.close()
 

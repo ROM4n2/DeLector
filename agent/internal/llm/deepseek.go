@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"time"
@@ -91,18 +92,24 @@ func WithTemperature(t float32) Option {
 	return func(r *req) { r.temperature = &t }
 }
 
-// llmBackoffDefault 是 LLM 调用退避纯函数，镜像 runner 的 deliverBackoff 风格：
-// 500ms 基数 × 2^attempt，封顶 8s；attempt>4 直接封顶（防移位溢出）。
+// llmBackoffDefault 是 LLM 调用退避函数，镜像 runner 的 deliverBackoff 风格并引入随机抖动：
+// 500ms 基数 × 2^attempt + 随机抖动 [0..250ms)，封顶 8s + 抖动；attempt>4 直接封顶。
+// 引入 jitter 防止多个并发 worker 在 429 限流时同步重试形成放大尖峰（P1-5）。
 func llmBackoffDefault(attempt int) time.Duration {
 	const base = 500 * time.Millisecond
 	const cap = 8 * time.Second
+	const maxJitter = 250 * time.Millisecond
+
+	var dur time.Duration
 	switch {
 	case attempt < 0:
-		attempt = 0
+		dur = base
 	case attempt > 4:
-		return cap
+		dur = cap
+	default:
+		dur = base << attempt
 	}
-	return base << attempt
+	return dur + rand.N(maxJitter)
 }
 
 // llmBackoff 是退避 seam（测试可缩短以免长 sleep）；默认即纯函数。

@@ -6,6 +6,7 @@
 # ignore），default 全仓口径下类型为 str（ignore 变为 unused）——两模式并存，关闭本模块
 # unused-ignore 检查使行内豁免在两种校验口径下都稳定。
 
+import asyncio
 import html
 import ipaddress
 import re
@@ -159,9 +160,10 @@ def clean_html_to_article(raw_html: str) -> Tuple[str, str]:
 # 公网站点间的正常跳转链远短于此；超限视为异常抓取直接中止。
 MAX_REDIRECT_HOPS = 5
 MAX_HTML_BYTES = 2 * 1024 * 1024  # 2MB
+TOTAL_FETCH_TIMEOUT_S = 30.0  # 出网抓取总截止时间（P1-3）
 
 
-async def fetch_remote_html(url: str) -> str:
+async def fetch_remote_html(url: str, *, total_timeout: float = TOTAL_FETCH_TIMEOUT_S) -> str:
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -171,17 +173,55 @@ async def fetch_remote_html(url: str) -> str:
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
     }
     current_url = url
-    # 逐跳手动跟随重定向：每一跳都在**发起请求之前**过 SSRF 闸。
-    # follow_redirects=True 的写法先打请求、后校验最终 URL——重定向到内网时
-    # 内网服务已经收到 GET（盲 SSRF），哪怕响应随后被丢弃。
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
-        for _hop in range(MAX_REDIRECT_HOPS + 1):
-            if not is_safe_public_url(current_url):
-                raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
 
-            # 使用 streaming 抓取，防止超大响应体耗尽内存
-            if hasattr(client, "stream"):
-                async with client.stream("GET", current_url, headers=headers) as resp:
+    async def _fetch_loop() -> str:
+        nonlocal current_url
+        # 逐跳手动跟随重定向：每一跳都在**发起请求之前**过 SSRF 闸。
+        # follow_redirects=True 的写法先打请求、后校验最终 URL——重定向到内网时
+        # 内网服务已经收到 GET（盲 SSRF），哪怕响应随后被丢弃。
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            for _hop in range(MAX_REDIRECT_HOPS + 1):
+                if not is_safe_public_url(current_url):
+                    raise HTTPException(400, "禁止访问内网或保留地址 (SSRF Protection)")
+
+                # 使用 streaming 抓取，防止超大响应体耗尽内存
+                if hasattr(client, "stream"):
+                    async with client.stream("GET", current_url, headers=headers) as resp:
+                        if resp.is_redirect:
+                            location = resp.headers.get("location")
+                            if not location:
+                                raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code}，缺少重定向目标)")
+                            current_url = str(httpx.URL(current_url).join(location))
+                            continue
+                        if resp.status_code != 200:
+                            raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
+
+                        content_length = resp.headers.get("content-length")
+                        if content_length and content_length.isdigit():
+                            if int(content_length) > MAX_HTML_BYTES:
+                                raise HTTPException(400, "网页体积超限，已中止抓取")
+
+                        chunks = []
+                        total = 0
+                        if hasattr(resp, "aiter_bytes"):
+                            async for chunk in resp.aiter_bytes():
+                                total += len(chunk)
+                                if total > MAX_HTML_BYTES:
+                                    raise HTTPException(400, "网页体积超限，已中止抓取")
+                                chunks.append(chunk)
+                            raw_bytes = b"".join(chunks)
+                            encoding = getattr(resp, "encoding", None) or "utf-8"
+                            try:
+                                return raw_bytes.decode(encoding, errors="replace")
+                            except Exception:
+                                return raw_bytes.decode("utf-8", errors="replace")
+                        else:
+                            text = getattr(resp, "text", "")
+                            if len(text.encode("utf-8")) > MAX_HTML_BYTES:
+                                raise HTTPException(400, "网页体积超限，已中止抓取")
+                            return text
+                else:
+                    resp = await client.get(current_url, headers=headers)
                     if resp.is_redirect:
                         location = resp.headers.get("location")
                         if not location:
@@ -190,51 +230,26 @@ async def fetch_remote_html(url: str) -> str:
                         continue
                     if resp.status_code != 200:
                         raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
-
                     content_length = resp.headers.get("content-length")
                     if content_length and content_length.isdigit():
                         if int(content_length) > MAX_HTML_BYTES:
                             raise HTTPException(400, "网页体积超限，已中止抓取")
-
-                    chunks = []
-                    total = 0
-                    if hasattr(resp, "aiter_bytes"):
-                        async for chunk in resp.aiter_bytes():
-                            total += len(chunk)
-                            if total > MAX_HTML_BYTES:
-                                raise HTTPException(400, "网页体积超限，已中止抓取")
-                            chunks.append(chunk)
-                        raw_bytes = b"".join(chunks)
-                        encoding = getattr(resp, "encoding", None) or "utf-8"
-                        try:
-                            return raw_bytes.decode(encoding, errors="replace")
-                        except Exception:
-                            return raw_bytes.decode("utf-8", errors="replace")
-                    else:
-                        text = getattr(resp, "text", "")
-                        if len(text.encode("utf-8")) > MAX_HTML_BYTES:
-                            raise HTTPException(400, "网页体积超限，已中止抓取")
-                        return text
-            else:
-                resp = await client.get(current_url, headers=headers)
-                if resp.is_redirect:
-                    location = resp.headers.get("location")
-                    if not location:
-                        raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code}，缺少重定向目标)")
-                    current_url = str(httpx.URL(current_url).join(location))
-                    continue
-                if resp.status_code != 200:
-                    raise HTTPException(400, f"无法抓取该网页 (HTTP {resp.status_code})")
-                content_length = resp.headers.get("content-length")
-                if content_length and content_length.isdigit():
-                    if int(content_length) > MAX_HTML_BYTES:
+                    text = resp.text
+                    if len(text.encode("utf-8")) > MAX_HTML_BYTES:
                         raise HTTPException(400, "网页体积超限，已中止抓取")
-                text = resp.text
-                if len(text.encode("utf-8")) > MAX_HTML_BYTES:
-                    raise HTTPException(400, "网页体积超限，已中止抓取")
-                return text  # type: ignore[no-any-return]  # --follow-imports=skip 下 httpx.Response.text 为 Any，运行时恒为 str
+                    return text  # type: ignore[no-any-return]  # --follow-imports=skip 下 httpx.Response.text 为 Any，运行时恒为 str
 
-        raise HTTPException(400, "重定向次数过多，已中止抓取")
+            raise HTTPException(400, "重定向次数过多，已中止抓取")
+
+    try:
+        async with asyncio.timeout(total_timeout):
+            return await _fetch_loop()
+    except HTTPException:
+        raise
+    except (TimeoutError, asyncio.TimeoutError) as exc:
+        raise HTTPException(502, f"远程网页抓取超时（总耗时超过 {total_timeout:.1f}s）") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"远程网页连接失败 ({type(exc).__name__}: {exc})") from exc
 
 
 # --- RSS & News Feeds Integration ---
