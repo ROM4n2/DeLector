@@ -509,3 +509,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 分工：按域分 3 批派发 TDD Builder（后端端点批 / 运维测试批 / TTS 批），每批配独立 Reviewer（maker-checker 隔离）。
 不做范围（MUST）：不改 C7 独占面（`static/german/workbench.html` · `static/js/**` · `tools/wb_*.mjs` · 两个 build 工具）；不改 AI 润色循环语义；不引入新依赖。
 
+
+### 2026-10-18 00:35 | codebuddy | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：接手 `handoff_c7-workbench-html-split.md`（C7 `workbench.html` 拆分，140 个耦合探针）。
+处置：沿用包内盘点与迁移顺序（先改探针后动产物；入口路径不改名；A 类不得降级为 C 类）；
+因主检出在 `fix/c8-p2-batch`（C8 在用）⇒ 改用**隔离 worktree** `D:\Code\DeLector-c7`
+（分支 `refactor/c7-workbench-html-split`，基线 cabce32；包内写的 c27cf63 已过时）。
+台账已初始化（6 任务），Task-1 已开工；进度真值源 = 计划正本 + worktree 内台账。
+Task 4/5 为 Tier 3（HITL）：动文件前先呈报变更面等确认。

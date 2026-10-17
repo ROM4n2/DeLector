@@ -150,3 +150,29 @@ status: open
 - 运维与文件契约：`docs/agents/ops.md`
 - 仓库入口与红线：`AGENTS.md` · `WORKMEMORY/PROJECT_OVERVIEW.md`
 - 工作记忆协议（本包格式来源）：`WORKMEMORY/PROTOCOL.md` §4
+
+---
+
+## 接手确认（2026-10-18 · codebuddy · HANDOFF_RECEIVED）
+
+接收方已读包并开工。**`status` 暂保持 open** —— 沿用本仓惯例（交接包在**工作完成时**关闭，而不是读完即关），便于它继续充当 C7 的活上下文；执行进度以下面两个真值源为准。
+
+**执行环境（重要）**：
+- 采用**隔离 worktree** `D:\Code\DeLector-c7`（分支 `cabce32`，基线 `cabce32`）—— 因为主检出当前位于
+  `fix/c8-p2-batch`（另一路 C8 工作流在用），在共享工作目录里切分支会触发本仓记过在案的
+  「并行分支切换事故」。主检出未被打扰，仍干净。
+- 交接包写的基线 `c27cf63` **已过时**：`origin/master` 现为 `cabce32`（其后有 C7 计划 / C8 计划 / C6 计划三条提交）。
+
+**进度真值源**：
+- 计划正本 `docs/plans/2026-10-18-c7-workbench-html-split.md`（6 个 Task，Tier/Mode 已标）
+- 台账 `.vault-exec-ledger.json`（worktree 内独立一份，不干扰主检出）
+
+**已核实并沿用包内结论**：
+1. 140 个耦合探针的分类与分布（A91 / B4 / C21 / D12 / E12）作为迁移顺序依据；
+2. **先改探针、后动产物**（反过来会红海一片无法归因）；
+3. 入口路径 `static/german/workbench.html` **不改名** ⇒ 目标形态 = 同路径薄壳 HTML + `<script type="module">`；
+4. **禁止把 A 类降级成 C 类**（判别力只许升不许降）；
+5. `segment()` 类工具**禁止返回空串**（找不到标记必须抛错 + 打印所查标记原文）；
+6. 并行文件占面契约：本包独占左列，**禁触** `tests/test_server.py` / `tests/test_desktop_shell.py` / `delector/**` / `.github/**`。
+
+**Task 4 / Task 5 为 Tier 3（HITL）**：动文件前会先呈报变更面并等你确认，不会自行开干。
