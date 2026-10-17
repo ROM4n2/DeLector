@@ -467,3 +467,29 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 目标：透出生产链路真实 Usage，基于真实 DeepSeek 调用数据回测标定德语 A1 文本 Token 折算比率，消除 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 的 UNVERIFIED 状态，验证真实轮次分布与循环预算上界，闭环 ADR-0023 §6 Unknown B。
 - 台账与状态：`docs/reviews/2026-10-16-open-items-backlog.md` C3 行同步更新挂载指针；待开工切换独立特性分支 `feature/c3-token-and-turn-distribution`。
 
+### 2026-10-17 17:27 | gemini-3.8-flash-high__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C3 实施计划：真轮次分布与真 Token 计数回测**（`docs/plans/2026-10-17-c3-token-and-turn-distribution-backtest.md`）。
+分支：`feature/c3-token-and-turn-distribution`
+分工：依据 dfs-exec 规范自适应三挡变速执行（Tier 2 标准 Maker-Checker / Tier 1 极速自证 / Tier 3 审计复核）。
+不做范围（MUST）：不碰外部分词库（tiktoken/transformers）；不改动 llm_client 默认入参；CI 单测严禁真实外部网络调用。
+
+### 2026-10-17 18:34 | gemini-3.8-flash-high__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C3 实施计划（真轮次分布与真 Token 计数回测）全量闭环交付**（`docs/plans/2026-10-17-c3-token-and-turn-distribution-backtest.md` Task 1~6）。
+- 分支：`feature/c3-token-and-turn-distribution`，基于 master 产生 5 颗原子提交。
+- 交付内容：
+  1. Task 1 (1daecb0): 生产端点 `_PolishReplyRecorder` 透传 `include_usage=True` 并捕获权威 usage，供 `run_polish_loop` 直连精确 token 计量。
+  2. Task 2 (f142dfe): 实现 `TokenRatioReport` 与 `analyze_token_ratios`，支持样本统计、分位数与保守性覆盖率验证。
+  3. Task 3 (c35ab3d): 实现 `TurnDistributionReport`、`analyze_turn_distribution` 与 `analyze_by_genre`，支持轮次直方图、原因码与分体裁聚合。
+  4. Task 4 (e754e01): 实现 CLI 数据导入器与分析工具 `tools/bench_token_distribution.py`（支持 JSON/JSONL 离线分析、Markdown/JSON 输出与格式化报告）。
+  5. Task 5 (4f159a4): 交付 N=60 局真跑全景统计报告 `docs/reviews/2026-10-17-c3-token-and-turn-backtest-report.md`；证实德语 A1 均值 1.50 chars/token，验证 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 100% 保守覆盖与 4096 预算充裕度；更新 `polish_loop.py` 文档注释由 UNVERIFIED 升级为 VERIFIED；闭环 ADR-0023 Unknown B 与 backlog C3。
+  6. Task 6: 全量门禁复核全绿，计划勾选完毕，推送分支并创建 PR。
+- 门禁证据（逐字复刻 CI）：
+  - `mypy --strict delector tools`: 105 文件 0 错误
+  - `mypy --follow-imports=skip tests`: 130 文件 0 错误
+  - `ruff check .`: 全仓 0 告警
+  - `cd agent && go test ./... -count=1`: 8 个包全绿；`gofmt -l .` 0 输出
+  - 定向用例：`tests/test_bench_token_distribution.py` 26 + `tests/test_ai_polish_loop.py` 36 = 62 例全绿；`tests/test_server.py -k test_ai_polish` 28 例全绿
+- 文件卫生：所有修改及新增文件严格 UTF-8 CRLF 且 0 lone LF；无临时残渣。
+
