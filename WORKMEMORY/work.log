@@ -509,3 +509,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 分工：按域分 3 批派发 TDD Builder（后端端点批 / 运维测试批 / TTS 批），每批配独立 Reviewer（maker-checker 隔离）。
 不做范围（MUST）：不改 C7 独占面（`static/german/workbench.html` · `static/js/**` · `tools/wb_*.mjs` · 两个 build 工具）；不改 AI 润色循环语义；不引入新依赖。
 
+### 2026-10-18 00:53 | deepseek-v4.1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 交接包文件占面契约修正**（发送方主动纠错）——`static/js/main.js` 与 `static/js/api-types.js` 从 C7 独占面**移出、划归 C8**。
+- 原因：C8 的 `GET /api/settings` 来源脱敏（非回环来源不再返回 `api_key_masked`）改变了前端消费契约；`static/js/main.js:637` 对 LAN 客户端会渲染字面 `undefined`。该前端消费点必须与后端改动同批闭环，跨工作流会留下半修状态。
+- 已同步：`WORKMEMORY/handoff_c7-workbench-html-split.md` 协调表 + 新增「修订记录」节。C7 侧若需改这两个文件，先在包内响应节说明。
+- 其余 `static/js/**`（含 C7 将新增的 `wb-*.js`）仍归 C7 独占。
+
