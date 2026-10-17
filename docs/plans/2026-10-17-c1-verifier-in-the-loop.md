@@ -38,9 +38,9 @@
   - 若运行环境支持轻量 NLP，探索向 `writing_check` 暴露一致的语法检测，或在工具输出中明确标注 `[快速模式: 不含深层语法规则]`，引导模型以回灌的裁判反馈为准。
 
 **Step Breakdown:**
-- [ ] Step 1: 编写契约测试，断言 `writing_check` 与 `default_violations_of` 违规条目数据结构的一致性（schema 契约）。
-- [ ] Step 2: 调整 `polish_tools.py` 与 `writing_check.py`，消除字段歧义，统一输出口径。
-- [ ] Step 3: 运行 `pytest tests/test_polish_loop.py` 验证契约。
+- [x] Step 1: 编写契约测试，断言 `writing_check` 与 `default_violations_of` 违规条目数据结构的一致性（schema 契约）。
+- [x] Step 2: 调整 `polish_tools.py` 与 `writing_check.py`，消除字段歧义，统一输出口径。
+- [x] Step 3: 运行 `pytest tests/test_polish_tools.py` 验证契约。
 
 ---
 
@@ -59,9 +59,9 @@
 - 注入消息格式定义：`[裁判反馈] 检测到以下未达标项，请在下一轮修改中重点修正：\n{evidence}`。
 
 **Step Breakdown:**
-- [ ] Step 1: RED —— 编写 `test_format_judge_feedback`：测试过滤非适用违规、测试超过 40 行或 4000 字节时的精准截断、测试空违规时的安全退出。
-- [ ] Step 2: GREEN —— 在 `polish_loop.py` 中实现 `format_judge_feedback`。
-- [ ] Step 3: REFACTOR —— 确保与 `truncate_evidence` 及 `default_violations_of` 纯函数无缝组合。
+- [x] Step 1: RED —— 编写 `test_format_judge_feedback`：测试过滤非适用违规、测试超过 40 行或 4000 字节时的精准截断、测试空违规时的安全退出。
+- [x] Step 2: GREEN —— 在 `polish_loop.py` 中实现 `format_judge_feedback`。
+- [x] Step 3: REFACTOR —— 确保与 `truncate_evidence` 及 `default_violations_of` 纯函数无缝组合。
 
 ---
 
@@ -78,12 +78,12 @@
 - 保持 argmin 保护性回退不变（保护用户不受劣质修改影响）。
 
 **Step Breakdown:**
-- [ ] Step 1: RED —— 编写测试用例：
+- [x] Step 1: RED —— 编写测试用例：
   1. 验证第 1 轮有违规时，第 2 轮模型收到的 `messages` 末尾包含 `[裁判反馈]`；
   2. 验证模型在收到反馈后修复违规，循环顺利收敛至 `REASON_OK`；
   3. 验证模型无视反馈连续不改善时，循环受控退出并触发保护性回退。
-- [ ] Step 2: GREEN —— 在 `run_polish_loop` 中串联回灌逻辑，精细化 `prev_v` 与反馈轮次状态机。
-- [ ] Step 3: 运行 `tests/test_polish_loop.py` 全量用例，确认既有 stub 测试与新逻辑全部兼容。
+- [x] Step 2: GREEN —— 在 `run_polish_loop` 中串联回灌逻辑，精细化 `prev_v` 与反馈轮次状态机。
+- [x] Step 3: 运行 `tests/test_polish_loop.py` 全量用例，确认既有 stub 测试与新逻辑全部兼容。
 
 ---
 
@@ -100,9 +100,9 @@
 - 契约验证：散文润色绝对不触发书信称呼语违规回灌。
 
 **Step Breakdown:**
-- [ ] Step 1: RED —— 在 `tests/test_server.py` 增加模拟集成测试：散文输入带语法瑕疵，验证反馈中不包含 A1 称呼语指令；验证进度流中产生合法的 feedback 事件。
-- [ ] Step 2: GREEN —— 接通 `routes/main.py` 中的参数与进度事件透传。
-- [ ] Step 3: 回归跑 `tests/test_server.py` 相关润色测试。
+- [x] Step 1: RED —— 在 `tests/test_server.py` 增加模拟集成测试：散文输入带语法瑕疵，验证反馈中不包含 A1 称呼语指令；验证进度流中产生合法的 feedback 事件。
+- [x] Step 2: GREEN —— 接通 `routes/main.py` 中的参数与进度事件透传。
+- [x] Step 3: 回归跑 `tests/test_server.py` 相关润色测试。
 
 ---
 
@@ -119,18 +119,18 @@
 - 在 `docs/reviews/` 中登记新架构下的基准记录。
 
 **Step Breakdown:**
-- [ ] Step 1: 在 harness 中实现回灌开关与参数化。
-- [ ] Step 2: 运行 `pytest tests/test_bench_judge_gaming.py` 确保 100% 通过。
-- [ ] Step 3: 更新相关文档引用。
+- [x] Step 1: 在 harness 中实现回灌开关与参数化。
+- [x] Step 2: 运行 `pytest tests/test_bench_judge_gaming.py` 确保 100% 通过。
+- [x] Step 3: 更新相关文档引用。
 
 ---
 
 ### Task 6: 门禁复核、文档与交接收尾 [Tier: 1-Solo] [Role: Cleaner]
 
 **Step Breakdown:**
-- [ ] Step 1: 逐字复刻 CI 门禁命令：
+- [x] Step 1: 逐字复刻 CI 门禁命令：
   - `mypy --strict delector tools`
   - `mypy --follow-imports=skip tests`
   - `ruff check .`
-- [ ] Step 2: 跑关联测试套件与全量定向冒烟。
-- [ ] Step 3: 确保全文件 CRLF 且无 lone LF；检查并更新 `WORKMEMORY/work.log`。
+- [x] Step 2: 跑关联测试套件与全量定向冒烟。
+- [x] Step 3: 确保全文件 CRLF 且无 lone LF；检查并更新 `WORKMEMORY/work.log`。
