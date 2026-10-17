@@ -57,13 +57,13 @@
 > 4. Ensure CRLF clean and output raw execution receipts."
 
 **Step Breakdown:**
-- [ ] **Step 1: Write the failing test (RED)** in `tests/test_server.py`.
-- [ ] **Step 2: Run test and verify it fails with expected message**.
-- [ ] **Step 3: Implement minimal production code (GREEN)** in `delector/routes/main.py`.
-- [ ] **Step 4: Run tests and verify all green**.
-- [ ] **Step 5: Refactor & Flatten with guard clauses (REFACTOR)**.
-- [ ] **Step 6: Physical Evidence Gate**: Capture raw terminal execution receipt (Command + Exit code: 0 + test pass count + git diff).
-- [ ] **Step 7: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
+- [x] **Step 1: Write the failing test (RED)** in `tests/test_server.py`.
+- [x] **Step 2: Run test and verify it fails with expected message**.
+- [x] **Step 3: Implement minimal production code (GREEN)** in `delector/routes/main.py`.
+- [x] **Step 4: Run tests and verify all green**.
+- [x] **Step 5: Refactor & Flatten with guard clauses (REFACTOR)**.
+- [x] **Step 6: Physical Evidence Gate**: Capture raw terminal execution receipt (Command + Exit code: 0 + test pass count + git diff).
+- [x] **Step 7: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
 
 ---
 
@@ -114,13 +114,13 @@
 > 5. Output raw execution receipts."
 
 **Step Breakdown:**
-- [ ] **Step 1: Write the failing test (RED)** in `tests/test_bench_token_distribution.py` + fixture.
-- [ ] **Step 2: Run test and verify it fails with expected message**.
-- [ ] **Step 3: Implement minimal production code (GREEN)** in `tools/bench_token_distribution.py`.
-- [ ] **Step 4: Run tests and verify all green**.
-- [ ] **Step 5: Refactor & Flatten with guard clauses (REFACTOR)**.
-- [ ] **Step 6: Physical Evidence Gate**: Capture raw terminal execution receipt.
-- [ ] **Step 7: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
+- [x] **Step 1: Write the failing test (RED)** in `tests/test_bench_token_distribution.py` + fixture.
+- [x] **Step 2: Run test and verify it fails with expected message**.
+- [x] **Step 3: Implement minimal production code (GREEN)** in `tools/bench_token_distribution.py`.
+- [x] **Step 4: Run tests and verify all green**.
+- [x] **Step 5: Refactor & Flatten with guard clauses (REFACTOR)**.
+- [x] **Step 6: Physical Evidence Gate**: Capture raw terminal execution receipt.
+- [x] **Step 7: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
 
 ---
 
@@ -169,13 +169,13 @@
 > 5. Output raw execution receipts."
 
 **Step Breakdown:**
-- [ ] **Step 1: Write the failing test (RED)** in `tests/test_bench_token_distribution.py`.
-- [ ] **Step 2: Run test and verify it fails with expected message**.
-- [ ] **Step 3: Implement minimal production code (GREEN)** in `tools/bench_token_distribution.py`.
-- [ ] **Step 4: Run tests and verify all green**.
-- [ ] **Step 5: Refactor & Flatten with guard clauses (REFACTOR)**.
-- [ ] **Step 6: Physical Evidence Gate**: Capture raw terminal execution receipt.
-- [ ] **Step 7: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
+- [x] **Step 1: Write the failing test (RED)** in `tests/test_bench_token_distribution.py`.
+- [x] **Step 2: Run test and verify it fails with expected message**.
+- [x] **Step 3: Implement minimal production code (GREEN)** in `tools/bench_token_distribution.py`.
+- [x] **Step 4: Run tests and verify all green**.
+- [x] **Step 5: Refactor & Flatten with guard clauses (REFACTOR)**.
+- [x] **Step 6: Physical Evidence Gate**: Capture raw terminal execution receipt.
+- [x] **Step 7: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
 
 ---
 
@@ -208,12 +208,12 @@
 > 4. Output raw execution receipts."
 
 **Step Breakdown:**
-- [ ] **Step 1: Write the failing test (RED)** in `tests/test_bench_token_distribution.py`.
-- [ ] **Step 2: Run test and verify it fails with expected message**.
-- [ ] **Step 3: Implement minimal CLI code (GREEN)** in `tools/bench_token_distribution.py`.
-- [ ] **Step 4: Run tests and verify all green**.
-- [ ] **Step 5: Physical Evidence Gate**: Capture CLI command execution receipts.
-- [ ] **Step 6: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
+- [x] **Step 1: Write the failing test (RED)** in `tests/test_bench_token_distribution.py`.
+- [x] **Step 2: Run test and verify it fails with expected message**.
+- [x] **Step 3: Implement minimal CLI code (GREEN)** in `tools/bench_token_distribution.py`.
+- [x] **Step 4: Run tests and verify all green**.
+- [x] **Step 5: Physical Evidence Gate**: Capture CLI command execution receipts.
+- [x] **Step 6: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
 
 ---
 
@@ -249,12 +249,12 @@
 > 5. Output raw execution receipts."
 
 **Step Breakdown:**
-- [ ] **Step 1: Execute backtest tool on record sets**.
-- [ ] **Step 2: Generate official review report** in `docs/reviews/2026-10-17-c3-token-and-turn-backtest-report.md`.
-- [ ] **Step 3: Update `CHARS_PER_TOKEN_ESTIMATE` docstring** in `polish_loop.py`.
-- [ ] **Step 4: Update backlog table** in `docs/reviews/2026-10-16-open-items-backlog.md`.
-- [ ] **Step 5: Physical Evidence Gate**: Capture test suite pass and report output.
-- [ ] **Step 6: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
+- [x] **Step 1: Execute backtest tool on record sets**.
+- [x] **Step 2: Generate official review report** in `docs/reviews/2026-10-17-c3-token-and-turn-backtest-report.md`.
+- [x] **Step 3: Update `CHARS_PER_TOKEN_ESTIMATE` docstring** in `polish_loop.py`.
+- [x] **Step 4: Update backlog table** in `docs/reviews/2026-10-16-open-items-backlog.md`.
+- [x] **Step 5: Physical Evidence Gate**: Capture test suite pass and report output.
+- [x] **Step 6: Git atomic commit** on `feature/c3-token-and-turn-distribution`.
 
 ---
 
@@ -265,19 +265,19 @@
 - Modify: `docs/plans/2026-10-17-c3-token-and-turn-distribution-backtest.md`
 
 **Step Breakdown:**
-- [ ] **Step 1: 逐字复刻 CI 门禁命令**：
+- [x] **Step 1: 逐字复刻 CI 门禁命令**：
   - `python3 -m mypy --strict delector tools`
   - `python3 -m mypy --follow-imports=skip tests`
   - `python3 -m ruff check .`
   - `cd agent && go test ./... -count=1 && gofmt -l .`
-- [ ] **Step 2: 跑关联测试套件与全量定向冒烟**：
+- [x] **Step 2: 跑关联测试套件与全量定向冒烟**：
   - `python3 -m pytest tests/test_bench_token_distribution.py -v`
   - `python3 -m pytest tests/test_ai_polish_loop.py -v`
   - `python3 -m pytest tests/test_server.py -k "test_ai_polish" -q`
-- [ ] **Step 3: 文件格式与卫生守卫**：
+- [x] **Step 3: 文件格式与卫生守卫**：
   - 确保全文件纯 CRLF，0 lone LF。
-- [ ] **Step 4: 追加 `WORKMEMORY/work.log` DONE 事件**。
-- [ ] **Step 5: 推送分支并创建 GitHub PR**。
+- [x] **Step 4: 追加 `WORKMEMORY/work.log` DONE 事件**。
+- [x] **Step 5: 推送分支并创建 GitHub PR**。
 
 ---
 

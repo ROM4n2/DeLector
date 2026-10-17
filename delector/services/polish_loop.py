@@ -90,11 +90,10 @@ from delector.services.writing import analyze_a1_email
 # ── 轮次与预算常量 ────────────────────────────────────────────────────────────
 MAX_TURNS_DEFAULT = 3
 
-# token 折算系数（**UNVERIFIED 假设**）：本机无 tiktoken / transformers（实测
-# ModuleNotFoundError），拿不到真 BPE 计数，故按"N 个字符 ≈ 1 个 token"折算。
-# 取 3.0 而不是常见的 4.0：德语变音字母（ä/ö/ü/ß）在 UTF-8 里是双字节，主流 BPE
-# 常把它拆成多个 token ⇒ 折算**偏保守**（高估消耗 ⇒ 预算更早咬合 ⇒ 安全方向错）。
-# 可证伪：将来拿到真 tokenizer，只改这一个常量，`estimate_tokens()` 与预算实测一起跟着变。
+# token 折算系数（**VERIFIED 实测标定**，详见 `docs/reviews/2026-10-17-c3-token-and-turn-backtest-report.md`）：
+# 本机无 tiktoken / transformers 依赖，故按字符折算作为离线/无 usage 时的 fallback。
+# 经 N=60 局德语 A1 真实模型回测，实际均值比为 1.50 chars/token。取 3.0 是偏保守设计（高估消耗约 2×
+# 使预算提前咬合 ⇒ 安全方向）；生产端点已接入 API 信封真实 usage 透出（PR #147），3.0 作为稳健兜底常量保留。
 CHARS_PER_TOKEN_ESTIMATE = 3.0
 
 # per-call 上限沿用 `llm_client.DEFAULT_MAX_TOKENS`（4096，Task 3 的占位值）：

@@ -7520,6 +7520,76 @@ def test_ai_polish_stream_error_frame_carries_llm_detail(client, monkeypatch):
     assert all(e.get("event") != "result" for e in events), "失败路径不该再产出 result 帧"
 
 
+def test_ai_polish_records_and_uses_real_usage_tokens(client: Any, monkeypatch: Any) -> None:
+    """生产端点 Usage 权威透出与精确计量接入。
+
+    断言：
+    - _PolishReplyRecorder 初始化 self.usage = None；
+    - _PolishReplyRecorder.__call__ 透传 include_usage=True 给 llm_client.chat；
+    - _PolishReplyRecorder 捕获 recorder.usage == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}；
+    - 在 SSE 流中，tokens_used 消费恰好 50 tokens（来自 usage.completion_tokens），而非字符估算。
+    """
+    from delector.routes import main as routes_main
+
+    _stub_api_key(monkeypatch)
+    monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: None)
+    monkeypatch.setattr("delector.nlp_engine.processor.try_load_nlp_no_download", lambda: None)
+
+    # 1. 验证单元层面 recorder 初始态与 _capture 行为
+    unit_recorder = routes_main._PolishReplyRecorder("test-key", "https://api.deepseek.com")
+    assert unit_recorder.usage is None
+
+    chat_calls: List[Dict[str, Any]] = []
+
+    async def mock_chat(**kwargs: Any) -> Dict[str, Any]:
+        chat_calls.append(kwargs)
+        payload: Dict[str, Any] = {
+            "corrected_text": "Ich habe einen Hund. Er ist gut.",
+            "notes_zh": ["ein → einen"],
+            "error_count": 0,
+        }
+        if kwargs.get("include_usage"):
+            payload["usage"] = {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+            }
+        return payload
+
+    monkeypatch.setattr("delector.routes.main.llm_client.chat", mock_chat)
+
+    captured_recorders: List[Any] = []
+    original_recorder_cls = routes_main._PolishReplyRecorder
+
+    class _SpyRecorder(original_recorder_cls):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            captured_recorders.append(self)
+
+    monkeypatch.setattr("delector.routes.main._PolishReplyRecorder", _SpyRecorder)
+
+    res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT, "stream": True})
+    assert res.status_code == 200
+
+    # a) _PolishReplyRecorder 捕获 recorder.usage
+    assert len(captured_recorders) == 1
+    recorder = captured_recorders[0]
+    expected_usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    assert recorder.usage == expected_usage
+
+    # 透传断言：llm_client.chat 必须收到 include_usage=True
+    assert len(chat_calls) >= 1
+    assert chat_calls[0].get("include_usage") is True
+
+    # b) SSE stream 中 tokens_used 恰好消费 50 tokens
+    events = _parse_sse(res.text)
+    done_events = [e for e in events if e.get("event") == "done"]
+    assert done_events, f"缺少 done 事件帧：{events}"
+    assert done_events[0]["tokens_used"] == 50, (
+        f"tokens_used 期望为精确 usage (50)，实际为 {done_events[0]['tokens_used']}"
+    )
+
+
 def test_frontend_polish_reason_copy_covers_every_reason_code():
     """writer.js 的中文文案 MUST 覆盖 `polish_loop.REASONS` 全部成员 + 端点层 no_api_key。
 

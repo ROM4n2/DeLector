@@ -2349,6 +2349,7 @@ class _PolishReplyRecorder:
         self._base_url = base_url
         self.notes_zh: List[str] = []
         self.error_count: Optional[int] = None
+        self.usage: Optional[Dict[str, int]] = None
 
     async def __call__(
         self,
@@ -2366,6 +2367,7 @@ class _PolishReplyRecorder:
             timeout=timeout,
             max_tokens=max_tokens,
             response_format=response_format,
+            include_usage=True,
             api_key=self._api_key,
             base_url=self._base_url,
         )
@@ -2381,6 +2383,13 @@ class _PolishReplyRecorder:
         count = reply.get("error_count")
         if isinstance(count, int) and not isinstance(count, bool):
             self.error_count = count
+        usage = reply.get("usage")
+        if isinstance(usage, dict):
+            self.usage = {
+                str(k): int(v)
+                for k, v in usage.items()
+                if isinstance(v, (int, float)) and not isinstance(v, bool)
+            }
 
 
 def _make_judge(leitpunkte: Optional[List[str]], nlp: Any) -> Callable[[str], Dict[str, Any]]:
