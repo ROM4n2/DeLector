@@ -1359,9 +1359,20 @@ def get_audio_cache() -> Any:
 
 @router.post("/api/audio/cache/clear")
 def clear_audio_cache(request: Request) -> Dict[str, Any]:
+    """清空音频缓存。
+
+    `freed_mb` 是**清理前后两次快照的差值**（真值），不是清理前的静态总量：
+    删不掉的文件（被别的进程锁住等）会如实留在 `freed_mb` 之外，而不是被虚报成已释放。
+    删除失败**不吞**：计入 `failed_count` / `failed_files` 并落一条服务端 warning；
+    这三个既有字段（status / cleared_count / freed_mb）名与义对本端点消费方保持不变，
+    新增字段只增不减（前端 static/js/cards.js:993 读 cleared_count / freed_mb）。
+    """
+    import logging
+
     _require_localhost(request)
-    info = get_cache_info(AUDIO_CACHE_DIR)
+    info_before = get_cache_info(AUDIO_CACHE_DIR)
     cleared_count = 0
+    failed_files: List[str] = []
     if os.path.exists(AUDIO_CACHE_DIR):
         for fname in os.listdir(AUDIO_CACHE_DIR):
             fpath = os.path.join(AUDIO_CACHE_DIR, fname)
@@ -1369,9 +1380,20 @@ def clear_audio_cache(request: Request) -> Dict[str, Any]:
                 if os.path.isfile(fpath):
                     os.remove(fpath)
                     cleared_count += 1
-            except Exception:
-                pass
-    return {"status": "ok", "cleared_count": cleared_count, "freed_mb": info["total_size_mb"]}
+            except Exception as exc:
+                # 不再 `except: pass`——那条路径曾让「一个文件删不掉」在响应里完全隐形。
+                # 细节只进服务端日志；响应里给文件名与计数（本机闸后，无泄露面）。
+                logging.getLogger("delector").warning("[audio-cache] 删除失败 %s: %s", fpath, exc)
+                failed_files.append(fname)
+    info_after = get_cache_info(AUDIO_CACHE_DIR)
+    freed_bytes = int(info_before["total_size_bytes"]) - int(info_after["total_size_bytes"])
+    return {
+        "status": "ok",
+        "cleared_count": cleared_count,
+        "failed_count": len(failed_files),
+        "failed_files": failed_files,
+        "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+    }
 
 
 # --- Reading Notes & AI Assist Endpoints ---
@@ -1475,8 +1497,29 @@ class SettingsUpdate(BaseModel):
     tts_rate: Optional[str] = None
 
 
+def _is_loopback_origin(request: Request) -> bool:
+    """来源是否为本机回环（判定口径与 `_require_localhost` 逐字一致）。
+
+    ⚠️ 这里只用来**按来源收敛字段**，MUST NOT 当成整门闸：局域网手机端合法读
+    `/api/settings`（前端 static/js/main.js:632-634 靠它渲染设置面板），
+    给它 403 会把手机端的配置面板整个打掉。
+    """
+    host = ""
+    if request.client is not None:
+        host = getattr(request.client, "host", None) or ""
+    return host in ("127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1")
+
+
 @router.get("/api/settings")
-def get_app_settings() -> Dict[str, Any]:
+def get_app_settings(request: Request) -> Dict[str, Any]:
+    """读设置。**按来源收敛字段**，不是整门拦截。
+
+    回环来源（127.0.0.1 / ::1）→ 字段集合与历史逐字一致；
+    非回环来源（同 Wi-Fi 的手机/平板）→ 响应中**不含** `api_key_masked`
+    （哪怕是 first4+last4 的掩码版也不给：局域网来源本就不该看到 key 的任何面）。
+    收敛只针对 api key 这一项：手机端自己也要读 base_url / model / tts_* 渲染设置面板
+    （前端 static/js/main.js:632-634），挂 `_require_localhost` 会把手机端配置面板打掉。
+    """
     key = get_effective_api_key()
     masked = ""
     if key:
@@ -1484,7 +1527,7 @@ def get_app_settings() -> Dict[str, Any]:
             masked = key[:4] + "•" * (len(key) - 8) + key[-4:]
         else:
             masked = "••••••••"
-    return {
+    data: Dict[str, Any] = {
         "has_api_key": bool(key),
         "api_key_masked": masked,
         "api_base_url": get_effective_api_base_url(),
@@ -1495,6 +1538,10 @@ def get_app_settings() -> Dict[str, Any]:
         "nlp_engine": _nlp_processor.NLP_ENGINE,
         "nlp_engine_detail": _nlp_processor.NLP_ENGINE_DETAIL,
     }
+    if not _is_loopback_origin(request):
+        # 非回环来源：只减这一项（字段只增不减的回环侧契约见方法 docstring）。
+        data.pop("api_key_masked", None)
+    return data
 
 
 @router.post("/api/settings")

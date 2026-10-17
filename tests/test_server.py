@@ -1332,6 +1332,177 @@ def test_audio_cache_stats_and_clear(client, monkeypatch, tmp_path):
     assert res_stats2.json()["file_count"] == 0
 
 
+def test_audio_cache_clear_reports_removal_failures(client, monkeypatch, tmp_path):
+    """删除失败的条目不得被静默吞掉：响应必须报出失败计数与文件名。
+
+    旧实现 `except Exception: pass` 会让「文件被别的进程锁住」这类失败在响应里
+    完全隐形——用户看到 cleared_count=1，却不知道还有一个 50KB 的条目删不掉。
+    """
+    cache_dir = tmp_path / "audio_cache"
+    cache_dir.mkdir()
+    (cache_dir / "ok.mp3").write_bytes(b"x" * 1024 * 50)
+    (cache_dir / "locked.mp3").write_bytes(b"x" * 1024 * 50)
+    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
+
+    real_remove = os.remove
+
+    def flaky_remove(path):
+        if os.path.basename(path) == "locked.mp3":
+            raise PermissionError("locked by another process")
+        return real_remove(path)
+
+    monkeypatch.setattr(os, "remove", flaky_remove)
+
+    res = client.post("/api/audio/cache/clear")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["cleared_count"] == 1
+    assert data["failed_count"] == 1
+    assert data["failed_files"] == ["locked.mp3"]
+    # 删不掉的条目必须真的留在盘上（不能是「删了却报失败」）
+    assert (cache_dir / "locked.mp3").exists()
+    assert not (cache_dir / "ok.mp3").exists()
+
+
+def test_audio_cache_clear_freed_mb_is_true_delta(client, monkeypatch, tmp_path):
+    """freed_mb 必须是「清理前 − 清理后」的真实差值，而不是清理前的静态总量。
+
+    构造一个删不掉的 1MB 文件：真实只释放 1.0MB，而旧实现会报清理前总量 2.0MB。
+    差值口径下必须是 1.0——这同时证明失败路径的占用没被虚报成已释放。
+    """
+    cache_dir = tmp_path / "audio_cache"
+    cache_dir.mkdir()
+    (cache_dir / "gone.mp3").write_bytes(b"x" * 1024 * 1024)  # 1 MB，将成功删除
+    (cache_dir / "locked.mp3").write_bytes(b"x" * 1024 * 1024)  # 1 MB，删除失败
+    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
+
+    real_remove = os.remove
+
+    def flaky_remove(path):
+        if os.path.basename(path) == "locked.mp3":
+            raise PermissionError("locked by another process")
+        return real_remove(path)
+
+    monkeypatch.setattr(os, "remove", flaky_remove)
+
+    before = client.get("/api/audio/cache").json()["total_size_mb"]
+    res = client.post("/api/audio/cache/clear")
+    assert res.status_code == 200
+    after = client.get("/api/audio/cache").json()["total_size_mb"]
+
+    assert before == 2.0 and after == 1.0
+    assert res.json()["freed_mb"] == round(before - after, 2) == 1.0
+
+
+# ── C8 Task5: encounter 出站抓取大小闸 + 诚实状态码 ────────────────────────────
+
+
+class _FakeShelfStream:
+    """`httpx.stream(...)` 的替身：可注字节分片、可注 Content-Length、可注状态码。"""
+
+    def __init__(self, chunks, status_code=200, headers=None):
+        self._chunks = chunks
+        self.status_code = status_code
+        self.headers = headers or {}
+
+    def iter_bytes(self):
+        for chunk in self._chunks:
+            yield chunk
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _mock_shelf_stream(monkeypatch, resp):
+    from delector.routes import encounter as encounter_routes
+
+    monkeypatch.setattr(encounter_routes.httpx, "stream", lambda *a, **k: resp)
+
+
+def test_encounter_pull_pack_rejects_oversized_response_with_content_length(client, monkeypatch):
+    """超 2MB 的货架响应必须被拒（Content-Length 已点破的情况）。"""
+    from delector.core.security import MAX_HTML_BYTES
+
+    big = b"x" * (MAX_HTML_BYTES + 1)
+    _mock_shelf_stream(
+        monkeypatch, _FakeShelfStream([big], headers={"content-length": str(len(big))})
+    )
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": ""},
+    )
+    assert res.status_code == 502
+    detail = res.json()["detail"]
+    assert "体积超限" in detail
+    assert "2MB" in detail
+
+
+def test_encounter_pull_pack_rejects_oversized_stream_without_content_length(client, monkeypatch):
+    """无 Content-Length 的超大流同样必须被拒：上限在**读取过程中**累计生效。"""
+    from delector.core.security import MAX_HTML_BYTES
+
+    chunk = b"x" * (512 * 1024)
+    chunks = [chunk] * (MAX_HTML_BYTES // len(chunk) + 2)  # 3MB，远超 2MB
+    _mock_shelf_stream(monkeypatch, _FakeShelfStream(chunks))  # headers 为空 ⇒ 无 content-length
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": ""},
+    )
+    assert res.status_code == 502
+    assert "体积超限" in res.json()["detail"]
+
+
+def test_encounter_pull_pack_surfaces_real_404_status_code(client, monkeypatch):
+    """404（资源不存在）必须与「连不上电脑端」区分开：真实状态码进原因。"""
+    from delector.routes import encounter as encounter_routes
+
+    _mock_shelf_stream(monkeypatch, _FakeShelfStream([b"{}"], status_code=404))
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": "nope"},
+    )
+    assert res.status_code == 502
+    detail = res.json()["detail"]
+    assert "404" in detail
+    # 不得再糊成 WiFi/防火墙提示（那会把「卡包不存在」误导成「网络不通」）
+    assert detail != encounter_routes._PULL_FAIL_HINT
+
+
+def test_encounter_pull_pack_surfaces_real_5xx_status_code(client, monkeypatch):
+    """5xx 与 404 文案必须不同：同族错误不能糊成同一句话。"""
+    _mock_shelf_stream(monkeypatch, _FakeShelfStream([b"{}"], status_code=503))
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": "nope"},
+    )
+    assert res.status_code == 502
+    detail = res.json()["detail"]
+    assert "503" in detail
+    assert "404" not in detail
+
+
+def test_encounter_pull_pack_accepts_small_response(client, monkeypatch):
+    """正常小响应照旧被接受（大小闸不得误伤正常拉取）。"""
+    body = json.dumps({"packs": [{"pack_id": "p1", "title": "Test"}]}).encode("utf-8")
+    _mock_shelf_stream(
+        monkeypatch, _FakeShelfStream([body], headers={"content-length": str(len(body))})
+    )
+
+    res = client.post(
+        "/api/encounter/pull-pack",
+        json={"desktop_base": "http://127.0.0.1:8000", "pack_id": ""},
+    )
+    assert res.status_code == 200
+    assert res.json() == {"packs": [{"pack_id": "p1", "title": "Test"}]}
+
+
 # ── Phase A: Delete & Master ─────────────────────────────────────────────────
 
 
@@ -3426,6 +3597,50 @@ def test_settings_test_key_succeeds_on_loopback(client, monkeypatch):
     # 未被来源闸拦截：返回 200 且 success 为 False（提示输入 key），而非 403
     assert res.status_code == 200
     assert res.json().get("success") is False
+
+
+# GET /api/settings 回环来源的字段集合口径锚（C8 Task6）：非回环来源恰好少
+# `api_key_masked` 一项，其余逐字一致——否则桌面端会静默失去配置面板。
+_SETTINGS_LOOPBACK_KEYS = {
+    "has_api_key",
+    "api_key_masked",
+    "api_base_url",
+    "api_model",
+    "tts_voice",
+    "tts_rate",
+    "nlp_engine",
+    "nlp_engine_detail",
+}
+
+
+def test_settings_get_loopback_origin_keeps_api_key_masked_field():
+    """回环来源（127.0.0.1）的字段集合 MUST 与今日逐字一致。"""
+    loopback = TestClient(app, client=("127.0.0.1", 54321))
+    res = loopback.get("/api/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert set(data.keys()) == _SETTINGS_LOOPBACK_KEYS
+    assert "api_key_masked" in data
+
+
+def test_settings_get_non_loopback_origin_omits_api_key_masked_field():
+    """非回环来源（192.168.1.50）不得读到 api key（哪怕已掩码）。
+
+    注意这是**按来源收敛字段**，不是整门拦截：局域网手机端仍要能读 base_url /
+    model / tts_* 来渲染设置面板（前端 static/js/main.js:632-634），
+    故 MUST NOT 加 `_require_localhost`（那会让手机端直接吃 403）。
+    """
+    lan = TestClient(app, client=("192.168.1.50", 54322))
+    res = lan.get("/api/settings")
+    assert res.status_code == 200, "LAN 来源必须仍能读该端点（不得整门 403）"
+    data = res.json()
+    assert "api_key_masked" not in data
+    assert set(data.keys()) == _SETTINGS_LOOPBACK_KEYS - {"api_key_masked"}
+    # 只收敛这一项：其余字段照旧
+    assert "has_api_key" in data
+    assert "api_base_url" in data
+    assert "api_model" in data
+    assert "tts_voice" in data
 
 
 # ── v4.4 Task6: Backup source, Android spaCy loading, AI failure paths ─────────
