@@ -30,6 +30,7 @@ from delector.core.database import (
     import_encounter_pack,
     list_encounter_texts,
 )
+from delector.core.security import MAX_HTML_BYTES
 from delector.nlp_engine import process_german_text
 
 router = APIRouter(prefix="/api/encounter", tags=["Encounter"])
@@ -361,6 +362,8 @@ def api_get_pack(pack_id: str) -> Dict[str, Any]:
 # 方向：手机服务端**出站** GET 桌面货架（Android 实例绑回环，出站不受监听限制），
 # 前端只调本机 /api/encounter/pull-pack —— 同源零跨域。
 _PULL_TIMEOUT = 5.0
+# 出站货架响应体积上限：复用安全抓取既有的 MAX_HTML_BYTES（2MB），不另造常量。
+_PULL_TOO_BIG_HINT = f"电脑端货架响应体积超限（超过 {MAX_HTML_BYTES // (1024 * 1024)}MB），已中止拉取"
 _PULL_FAIL_HINT = "连不上电脑端（检查电脑是否开着 DeLector、手机与电脑是否同一 WiFi、或退出防火墙拦截）"
 
 
@@ -375,16 +378,47 @@ def _normalize_desktop_base(raw: str) -> str:
     return base
 
 
+def _pull_status_error(status_code: int) -> HTTPException:
+    """把**真实** HTTP 状态码带进人话原因，供 `_shelf_get` 抛出。
+
+    旧实现把所有非 200 一律糊成 `_PULL_FAIL_HINT`（WiFi/防火墙），于是「卡包不存在
+    (404)」被误导成「网络不通」，用户跑去查路由和防火墙——完全错误的方向。
+    404（资源缺失）/ 5xx（服务端故障）/ 连不上（网络）必须是三种可区分的说法。
+    """
+    if status_code == 404:
+        return HTTPException(status_code=502, detail="电脑端货架上没有这个资源 (HTTP 404)")
+    return HTTPException(status_code=502, detail=f"电脑端返回错误 (HTTP {status_code})")
+
+
 def _shelf_get(url: str) -> Any:
-    """出站 GET 桌面货架：非 2xx / 连接失败 / 超时 → 502 人话；JSON 解析失败 → 502。"""
+    """出站 GET 桌面货架：连接失败 / 超时 / 非 2xx / 体积超限 / JSON 解析失败 → 502 人话。
+
+    体积上限复用 `security.MAX_HTML_BYTES`（2MB）：**流式读取 + 运行字节总量**，
+    超限立即中止——只看 `Content-Length` 不够（缺失或撒谎时等于没闸），故两道防线都留：
+    声明长度先行预检，读取过程再累计复核。非 200 时带上**真实状态码**（404 ≠ 5xx
+    ≠ 连不上），不再一律糊成同一句提示。
+    """
     try:
-        resp = httpx.get(url, timeout=_PULL_TIMEOUT)
+        with httpx.stream("GET", url, timeout=_PULL_TIMEOUT) as resp:
+            if resp.status_code != 200:
+                # 真实状态码进人话原因：404（资源缺失）≠ 5xx（服务端故障）≠ 网络不通。
+                raise _pull_status_error(resp.status_code)
+            content_length = resp.headers.get("content-length")
+            if content_length and content_length.isdigit() and int(content_length) > MAX_HTML_BYTES:
+                raise HTTPException(status_code=502, detail=_PULL_TOO_BIG_HINT)
+            chunks: List[bytes] = []
+            total = 0
+            for chunk in resp.iter_bytes():
+                # 上限在**读取过程中**生效：不依赖（可能缺失或撒谎的）Content-Length。
+                total += len(chunk)
+                if total > MAX_HTML_BYTES:
+                    raise HTTPException(status_code=502, detail=_PULL_TOO_BIG_HINT)
+                chunks.append(chunk)
+            raw = b"".join(chunks)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT) from exc
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT)
     try:
-        return resp.json()
+        return json.loads(raw)
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=_PULL_FAIL_HINT) from exc
 
