@@ -64,8 +64,8 @@
   - `assert "wbsync.push()" in lines[i]`（要求与 `function saveX() {` **同一物理行**）→ 改为 `segment(decl_body(...))` 内断言，**判别力不得下降**（原断言钉的是「同一行」这一物理事实，新写法须显著更强，例如断言 push 调用落在该函数体内且首次出现位置早于任一 `await`）。
 
 **Injected Instincts:**
-- [ ] `[Instinct: Strengthen-Not-Weaken]`: 迁移后必须新增一条**变异自证**——把 `wbsync.push()` 从该函数体移出，新断言须变红。
-- [ ] `[Instinct: Fail-Loud]`: `segment()` 找不到标记时必须抛出并打印所查标记原文，禁止返回空串（空串会让下游存在性断言静默通过）。
+- [x] `[Instinct: Strengthen-Not-Weaken]`: 迁移后必须新增一条**变异自证**——把 `wbsync.push()` 从该函数体移出，新断言须变红。
+- [x] `[Instinct: Fail-Loud]`: `segment()` 找不到标记时必须抛出并打印所查标记原文，禁止返回空串（空串会让下游存在性断言静默通过）。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 1: 探针读取层与 B 类行号钉结构化.
@@ -109,8 +109,8 @@
 - **要求**：13 个探针当前都以「读 `workbench.html` + 按标记切片」取源码（各文件行号见交接包表 3）。改造后必须**先支持多文件来源**（现在传单文件即可，拆分后只需改 `WB_SRC_ROOT` 与文件清单），且 `sliceDecl` 找不到声明时**必须非零退出并打印所查声明名**（现行为是 `"找不到声明 const X"` 抛错——保持并加退出码）。
 
 **Injected Instincts:**
-- [ ] `[Instinct: Interface-Before-Move]`: 探针读取口必须先于产物搬迁改造，否则 13 个探针在拆分瞬间同时抛错且无可归因信息。
-- [ ] `[Instinct: No-Silent-Skip]`: 探针找不到源文件 MUST 非零退出，禁止返回空 JSON 让包装层判「通过」。
+- [x] `[Instinct: Interface-Before-Move]`: 探针读取口必须先于产物搬迁改造，否则 13 个探针在拆分瞬间同时抛错且无可归因信息。
+- [x] `[Instinct: No-Silent-Skip]`: 探针找不到源文件 MUST 非零退出，禁止返回空 JSON 让包装层判「通过」。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 2: 前端 mjs 探针读取口统一.
@@ -149,8 +149,8 @@
 - Produces: `static/css/workbench.css`（内容逐字节等于被搬走的 `<style>` 内容，除首尾换行归一）
 
 **Injected Instincts:**
-- [ ] `[Instinct: Byte-Equality-Or-Explain]`: 抽取必须证明「搬走的 CSS 内容逐字节等于原内联块内容」，任何归一化（换行/缩进）都要在提交信息里写明并给出理由。
-- [ ] `[Instinct: Token-Contract]`: `tests/test_workbench_tokens.py` 是设计系统 token 契约闸，重定向后 MUST 仍能抓住「token 值被改」这一类变异。
+- [x] `[Instinct: Byte-Equality-Or-Explain]`: 抽取必须证明「搬走的 CSS 内容逐字节等于原内联块内容」，任何归一化（换行/缩进）都要在提交信息里写明并给出理由。
+- [x] `[Instinct: Token-Contract]`: `tests/test_workbench_tokens.py` 是设计系统 token 契约闸，重定向后 MUST 仍能抓住「token 值被改」这一类变异。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 3: 首次真实拆分——CSS 抽取.
@@ -191,8 +191,8 @@
 - Produces: 构建工具改为**改写数据模块**而非 HTML；`tests/test_a1_workbench_source.py` 的 `assert injected == html` 改为对数据模块的逐字节等价断言。
 
 **Injected Instincts:**
-- [ ] `[Instinct: Build-Product-Contract]`: 「内联 const 是构建产物」是本仓既有契约（`test_a1_workbench_source.py:220-251` 的字节等价 + 幂等两条 D 类）。搬迁 MUST 让这两条断言**继续约束真实产物**，不得删改为「文件存在」。
-- [ ] `[Instinct: HITL-Gate]`: 本任务会同时改动**构建工具 + 数据模块 + 契约测试**三面，属 Critical 档——先向用户呈报变更面与不可逆风险，拿到确认再动文件。
+- [x] `[Instinct: Build-Product-Contract]`: 「内联 const 是构建产物」是本仓既有契约（`test_a1_workbench_source.py:220-251` 的字节等价 + 幂等两条 D 类）。搬迁 MUST 让这两条断言**继续约束真实产物**，不得删改为「文件存在」。
+- [x] `[Instinct: HITL-Gate]`: 本任务会同时改动**构建工具 + 数据模块 + 契约测试**三面，属 Critical 档——先向用户呈报变更面与不可逆风险，拿到确认再动文件。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 4: 种子数据抽取与 A/D 类探针重定向.
