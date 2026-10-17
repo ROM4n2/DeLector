@@ -31,6 +31,7 @@ from typing import Iterator
 
 import pytest
 from db_cleanup import describe_root_db_diff, root_db_snapshot
+from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -58,3 +59,17 @@ def _guard_repo_root_data_dirs() -> Iterator[None]:
             "已经产生的文件请**移走**——它们会毒化 `tests/test_save_wb_state_cost.py` 的迁移闸，"
             "造成「本地红 / CI 绿」。冒烟纪律见 `delector/core/data_dir_bootstrap.py` 的模块 docstring。"
         )
+
+
+@pytest.fixture
+def client():
+    # 显式给出本机来源地址：备份端点有「仅 127.0.0.1」闸，
+    # TestClient 默认把 client.host 报成 "testclient"，会被闸拒掉。
+    #
+    # C6 Task 1：自 tests/test_server.py 下沉至此（分域切分的前置）。`app` 的 import
+    # 刻意留在夹具体内：conftest 顶层 import delector.server 会让任何 tests/ 会话在
+    # 收集期触发 server 模块顶层的 init_db()；惰性导入把时机保持为「用例真正请求
+    # client 时」，与下沉前的暴露面一致。语义与默认作用域逐字保持。
+    from delector.server import app
+
+    return TestClient(app, client=("127.0.0.1", 54321))

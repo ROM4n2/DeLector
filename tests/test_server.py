@@ -18,6 +18,7 @@ from typing import Any, Dict, List
 import pytest
 from db_cleanup import remove_db_files
 from fastapi.testclient import TestClient
+from server_helpers import ROOT, _insert_vocab_card
 from starlette.responses import StreamingResponse
 
 # 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、
@@ -44,11 +45,6 @@ from delector.server import (
 )
 from delector.services import polish_loop
 
-# 本文件搬进 tests/ 之后比仓库根深一层：凡读仓库资源（server.py / static / tools /
-# android / .github / .githooks / nlp.py / package_windows.py）一律经 ROOT。
-# 别再写 os.path.dirname(__file__) —— 那会指到 tests/，测试会去 tests/server.py 找文件。
-ROOT = os.path.dirname(os.path.dirname(__file__))
-
 
 @pytest.fixture
 def test_db_path():
@@ -58,13 +54,6 @@ def test_db_path():
 @pytest.fixture
 def test_progress_path():
     return "test_progress.db"
-
-
-@pytest.fixture
-def client():
-    # 显式给出本机来源地址：备份端点有「仅 127.0.0.1」闸，
-    # TestClient 默认把 client.host 报成 "testclient"，会被闸拒掉。
-    return TestClient(app, client=("127.0.0.1", 54321))
 
 
 @pytest.fixture
@@ -1817,37 +1806,6 @@ def test_due_cards_endpoint(client):
     assert "due_grammar" in data
     assert "due_count" in data
     assert data["due_count"] >= 1
-
-
-def _insert_vocab_card(**over: object) -> int:
-    """直插一行 vocab_cards（绕过建卡端点，以便精确摆出 fsrs_*/repetition_count 组合）。
-
-    最小必填列：word / lemma / definition_zh / sentence_context。
-    """
-    row: Dict[str, Any] = {
-        "word": "Haus",
-        "lemma": "Haus",
-        "definition_zh": "房子",
-        "sentence_context": "Das Haus ist alt.",
-    }
-    row.update(over)
-    with db_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO vocab_cards "
-            "(word, lemma, definition_zh, sentence_context, fsrs_s, repetition_count, mastered, due_date) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                row["word"],
-                row["lemma"],
-                row["definition_zh"],
-                row["sentence_context"],
-                row.get("fsrs_s"),
-                row.get("repetition_count", 0),
-                row.get("mastered", 0),
-                row.get("due_date"),
-            ),
-        )
-        return int(cur.lastrowid or 0)
 
 
 def _due_vocab_lemmas(client) -> list:
