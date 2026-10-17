@@ -2497,9 +2497,11 @@ def test_pure_python_pipeline_without_spacy():
 def test_module_import_survives_without_spacy(monkeypatch):
     """server 的 import 期副作用（init_db → seed_preset_articles）不能依赖 spacy。"""
     from delector import server
+    from delector.nlp_engine import processor
 
-    # mock-drift-ok: 真遗留空转（非合法形态）：server.nlp 为裸 re-export、patch 不生效（直读 processor.nlp），C6 修正
-    monkeypatch.setattr(server, "nlp", None)
+    # 补丁钉在真实取值面：process_german_text 按实现模块的模块全局 nlp 判「spacy 可用性」
+    # （`if nlp is None` 分支）；server.nlp 只是裸 re-export、patch 不生效（C9 mock-drift 真遗留）。
+    monkeypatch.setattr(processor, "nlp", None)
     seeded = server.process_german_text(server.PRESET_ARTICLES[0]["text"])
     assert seeded["sentence_count"] > 0
     assert seeded["sentences"][0]["tokens"]
