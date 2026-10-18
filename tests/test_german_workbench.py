@@ -23,6 +23,11 @@ _SERVER = (_ROOT / "delector" / "server.py").read_text(encoding="utf-8")
 # Phase 1 Task 4：通用 handler 从 server.py 搬进 delector/routes/main.py，
 # 装饰器随之从 @app.* 变 @router.*。钉端点存在性的断言要跟着改读新文件。
 _MAIN_ROUTES = (_ROOT / "delector" / "routes" / "main.py").read_text(encoding="utf-8")
+# C7 Task 4：A1 种子数据（SEED_WORDS / CORE_* / SEED_ID_ALIASES / EMBEDDED_AUDIO）
+# 已从 workbench.html 抽到 JS 数据模块，由入口页用普通 <script src> 先加载。
+# 内容类断言（解析/计数）必须读数据模块；workbench.html 只保留使用这些常量的代码。
+_SEED_JS = (_ROOT / "static" / "js" / "wb-seed-data.js").read_text(encoding="utf-8")
+_SEED_JS_SRC_TAG = '<script src="../js/wb-seed-data.js"></script>'
 
 
 def test_workbench_has_server_tts_priority():
@@ -58,8 +63,14 @@ def test_engine_select_has_server_option():
 
 
 def test_workbench_data_intact():
-    """搬运完整性：682 词种子数据与 playWord 主函数还在。"""
-    assert "const SEED_WORDS" in _WORKBENCH
+    """搬运完整性：682 词种子数据与 playWord 主函数都还在。
+
+    C7 Task 4 起种子数据的落点是 static/js/wb-seed-data.js（不再是 HTML 内联块），
+    故这里**真解析**数据模块的 SEED_WORDS 并数条数，而不是退化成「某字符串还在」。
+    """
+    at = _SEED_JS.index("const SEED_WORDS")
+    seeds = json.loads(_slice_balanced(_SEED_JS, at, "[", "]"))
+    assert len(seeds) == 682, "数据模块的 SEED_WORDS 应为 682 条，实际 %d" % len(seeds)
     assert "function playWord" in _WORKBENCH
 
 
@@ -242,16 +253,34 @@ def test_try_speech_handles_no_voice_explicitly():
 
 
 def test_embedded_audio_dict_declared_before_playword():
-    """EMBEDDED_AUDIO 字典必须在 playWord 函数之前声明。
+    """EMBEDDED_AUDIO 必须在 playWord 可见之前就位。
 
-    playWord 入口立即检测 EMBEDDED_AUDIO[word]（最高优先级路径），
-    声明在后面会导致 ReferenceError（或静默拿到 undefined 跳过内嵌路径）。
+    playWord 入口立即检测 EMBEDDED_AUDIO[word]（最高优先级路径），声明不可见会导致
+    ReferenceError（或静默拿到 undefined 跳过内嵌路径）。
 
-    变异验证：把 const EMBEDDED_AUDIO 移到 function playWord 之后 → 断言红 ✓
+    C7 Task 4 起 EMBEDDED_AUDIO 与其余种子数据一起住在 static/js/wb-seed-data.js，
+    「先于 playWord 可见」这一事实由**加载序**承担，故本条改为钉住加载序本身：
+      1. 数据模块用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
+         语义未真机验证（计划 Fog of War Unknown 2），必须保留 <script src> 回退能力；
+      2. 该 <script src> 恰好出现一次，且位置在主内联脚本（playWord 所在）之前 ——
+         普通脚本的顶层 const 落在同一全局词法环境，后续脚本才可见；
+      3. 数据模块里确实声明了 EMBEDDED_AUDIO，主脚本里确实还有 function playWord。
+
+    变异验证：把 <script src> 挪到主内联脚本之后 → 红；给它加 type 属性 → 红；
+    从数据模块删掉 EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红。
     """
-    ea_pos = _WORKBENCH.index("const EMBEDDED_AUDIO")
-    pw_pos = _WORKBENCH.index("function playWord(")
-    assert ea_pos < pw_pos, "EMBEDDED_AUDIO 必须声明在 playWord 之前，否则 playWord 入口无法访问它"
+    opening = re.findall(r"<script[^>]*wb-seed-data\.js[^>]*>", _WORKBENCH)
+    assert len(opening) == 1, "数据模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(opening), opening)
+    assert _WORKBENCH.count(_SEED_JS_SRC_TAG) == 1, "数据模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in opening[0], "数据模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
+    src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
+    main_script_at = _WORKBENCH.index('<script>\n"use strict";')
+    assert src_tag_at < main_script_at, "数据模块必须在主内联脚本之前加载，否则 playWord 看不到 EMBEDDED_AUDIO"
+
+    assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
+    pw_at = _WORKBENCH.index("function playWord(")
+    assert pw_at > main_script_at, "playWord 必须落在主内联脚本内（切片跑偏）"
 
 
 def test_embedded_audio_lookup_uses_lowercase():
@@ -314,25 +343,32 @@ def _slice_balanced(text, start_idx, open_ch, close_ch):
 
 def _core_seed_ids():
     decl = "const CORE_WORD_SEED_IDS"
-    assert decl in _WORKBENCH, "workbench.html 缺少 CORE_WORD_SEED_IDS 常量"
-    at = _WORKBENCH.index(decl)
-    head = _WORKBENCH[at : at + 120]
+    assert decl in _SEED_JS, "static/js/wb-seed-data.js 缺少 CORE_WORD_SEED_IDS 常量"
+    at = _SEED_JS.index(decl)
+    head = _SEED_JS[at : at + 120]
     assert "new Set(" in head, "CORE_WORD_SEED_IDS 必须是 new Set([...])（O(1) 查表）"
-    return json.loads(_slice_balanced(_WORKBENCH, at, "[", "]"))
+    return json.loads(_slice_balanced(_SEED_JS, at, "[", "]"))
 
 
 def _core_custom_words():
     decl = "const CORE_CUSTOM_WORDS"
-    assert decl in _WORKBENCH, "workbench.html 缺少 CORE_CUSTOM_WORDS 常量"
-    at = _WORKBENCH.index(decl)
-    return json.loads(_slice_balanced(_WORKBENCH, at, "[", "]"))
+    assert decl in _SEED_JS, "static/js/wb-seed-data.js 缺少 CORE_CUSTOM_WORDS 常量"
+    at = _SEED_JS.index(decl)
+    return json.loads(_slice_balanced(_SEED_JS, at, "[", "]"))
 
 
 def test_core_words_constants_declared_before_seed():
-    """两个核心词常量必须声明在 SEED_WORDS 之前（初始化时按序可见）。"""
-    seed_at = _WORKBENCH.index("const SEED_WORDS")
-    assert _WORKBENCH.index("const CORE_WORD_SEED_IDS") < seed_at, "CORE_WORD_SEED_IDS 必须声明在 const SEED_WORDS 之前"
-    assert _WORKBENCH.index("const CORE_CUSTOM_WORDS") < seed_at, "CORE_CUSTOM_WORDS 必须声明在 const SEED_WORDS 之前"
+    """两个核心词常量必须声明在 SEED_WORDS 之前（同一模块内按序可读）。
+
+    C7 Task 4 起三个声明都在 static/js/wb-seed-data.js 里，故本条读数据模块；
+    顺序要求的实质未变：核心词身份表必须先于种子词出现（人读与 diff 的可追溯性，
+    以及 `CORE_*` 在文件头部集中声明这一既有约定）。
+    """
+    seed_at = _SEED_JS.index("const SEED_WORDS")
+    assert _SEED_JS.index("const CORE_WORD_SEED_IDS") < seed_at, (
+        "CORE_WORD_SEED_IDS 必须声明在 const SEED_WORDS 之前"
+    )
+    assert _SEED_JS.index("const CORE_CUSTOM_WORDS") < seed_at, "CORE_CUSTOM_WORDS 必须声明在 const SEED_WORDS 之前"
 
 
 def test_core_word_seed_ids_are_213_real_seed_ids():
@@ -348,7 +384,7 @@ def test_core_word_seed_ids_are_213_real_seed_ids():
     assert "a1-0473" in ids, "缺少人工确认的模糊匹配 a1-0473（Partnerin）"
     assert "a1-0603" in ids, "缺少人工确认的模糊匹配 a1-0603（übernachten）"
     # 每个 id 必须真存在于 SEED_WORDS —— 挡住拼错/幻觉 id
-    seed_ids = set(re.findall(r'"id":"(a1-\d{4})"', _WORKBENCH))
+    seed_ids = set(re.findall(r'"id":"(a1-\d{4})"', _SEED_JS))
     assert seed_ids, "未从 SEED_WORDS 解析出任何种子词 id（切片跑偏）"
     missing = sorted(set(ids) - seed_ids)
     assert not missing, "这些核心词 id 不存在于 SEED_WORDS：%s" % missing
@@ -366,7 +402,7 @@ def test_core_custom_words_are_22_wellformed_new_words():
     expected_ids = ["core-%03d" % n for n in range(1, 23)]
     assert [w["id"] for w in words] == expected_ids, "id 必须是 core-001..core-022 连号"
 
-    seed_ids = set(re.findall(r'"id":"(a1-\d{4})"', _WORKBENCH))
+    seed_ids = set(re.findall(r'"id":"(a1-\d{4})"', _SEED_JS))
     for w in words:
         wid = w["id"]
         assert wid not in seed_ids, "%s 与种子词 id 冲突" % wid
@@ -1432,9 +1468,12 @@ def _apply_merge_words_block():
 
 
 def _seed_words():
-    """SEED_WORDS 常量的实际内容（真解析，不做模糊字符串匹配）。"""
-    at = _WORKBENCH.index("const SEED_WORDS")
-    return json.loads(_slice_balanced(_WORKBENCH, at, "[", "]"))
+    """SEED_WORDS 常量的实际内容（真解析，不做模糊字符串匹配）。
+
+    C7 Task 4 起该声明在 static/js/wb-seed-data.js。
+    """
+    at = _SEED_JS.index("const SEED_WORDS")
+    return json.loads(_slice_balanced(_SEED_JS, at, "[", "]"))
 
 
 def _norm_hw_py(hw):
@@ -1602,9 +1641,9 @@ def test_seed_id_aliases_map_removed_ids_to_kept_ones():
     变异验证（已实跑确认红）：把 value 写成一个不存在的 id → 「新 id 必须仍在」断言红；
     把 key 写成一个仍在表里的 id → 「旧 id 必须已下架」断言红。
     """
-    assert "const SEED_ID_ALIASES" in _WORKBENCH, "缺少 SEED_ID_ALIASES 常量"
-    at = _WORKBENCH.index("const SEED_ID_ALIASES")
-    aliases = json.loads(_slice_balanced(_WORKBENCH, at, "{", "}"))
+    assert "const SEED_ID_ALIASES" in _SEED_JS, "数据模块缺少 SEED_ID_ALIASES 常量"
+    at = _SEED_JS.index("const SEED_ID_ALIASES")
+    aliases = json.loads(_slice_balanced(_SEED_JS, at, "{", "}"))
     assert aliases == {"a1-0544": "a1-0034", "a1-0545": "a1-0052"}, "别名表与本次下架的两条重复词不一致：%s" % aliases
     seed_ids = {w["id"] for w in _seed_words()}
     for old, new in aliases.items():

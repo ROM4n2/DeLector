@@ -2,14 +2,19 @@
 """A1 工作台词库单一真相（Task 1 / ADR-0011）。
 
 - 单一真相 = ``delector/data/a1_workbench_dict.py``（本测试按路径加载，不复用其代码）。
-- ``static/german/workbench.html`` 内联的四个 ``const`` 是它的**构建产物**，
+- ``static/js/wb-seed-data.js`` 里声明的四个 ``const`` 是它的**构建产物**，
   由 ``tools/build_workbench_seed.py`` 注入。
+
+C7 Task 4 变更面：这四个 ``const`` 原先内联在 ``static/german/workbench.html``，
+现已抽到上述 JS 数据模块（HTML 侧只剩一个普通 ``<script src>``）。本文件因此把
+「构建产物」的落点从 HTML 改成 JS 数据模块，**两条 D 类断言的强度不变**：
 
 本测试钉住三件事（行为断言，非整文件字符串存在性）：
 1. 模块四个常量存在且条数/内容精确（682 / 213 / 22 / 别名表精确映射）；
-2. 模块 ↔ HTML 内联块**双向 JSON 等价**（数组逐条 + id 顺序；核心词集合按升序）；
-3. 注入**幂等**，且对当前 HTML **零漂移**（注入一遍与原文件字节一致）——
-   否则每次构建都产生假 diff，"HTML 是构建产物"这句话就落不了地。
+2. 模块 ↔ JS 数据模块**双向 JSON 等价**（数组逐条 + id 顺序；核心词集合按升序），
+   且这四个声明在 workbench.html 里**不再内联**（数据只有一份真相源）；
+3. 注入**幂等**，且对当前数据模块**零漂移**（注入一遍与原文件字节一致）——
+   否则每次构建都产生假 diff，"数据模块是构建产物"这句话就落不了地。
 """
 
 import importlib.util
@@ -24,6 +29,8 @@ import pytest
 from delector.core import database
 
 _ROOT = Path(__file__).resolve().parent.parent
+# 构建产物的落点（C7 Task 4 起是 JS 数据模块，不再是 workbench.html 内联块）
+SEED_DATA_JS = _ROOT / "static" / "js" / "wb-seed-data.js"
 WORKBENCH_HTML = _ROOT / "static" / "german" / "workbench.html"
 DICT_MODULE = _ROOT / "delector" / "data" / "a1_workbench_dict.py"
 BUILD_TOOL = _ROOT / "tools" / "build_workbench_seed.py"
@@ -55,15 +62,16 @@ def _slice_balanced(text: str, start: int, open_ch: str, close_ch: str) -> str:
     raise AssertionError("括号未闭合：%s ... %s" % (open_ch, close_ch))
 
 
-def _html_text() -> str:
-    return WORKBENCH_HTML.read_text(encoding="utf-8")
+def _seed_js_text() -> str:
+    assert SEED_DATA_JS.exists(), "%s 尚未创建（C7 Task 4 交付物）" % SEED_DATA_JS.relative_to(_ROOT)
+    return SEED_DATA_JS.read_text(encoding="utf-8")
 
 
-def _html_const(name: str, open_ch: str, close_ch: str):
-    """真解析 workbench.html 里的某个 `const <name> = <literal>`。"""
-    text = _html_text()
+def _product_const(name: str, open_ch: str, close_ch: str):
+    """真解析构建产物（JS 数据模块）里的某个 `const <name> = <literal>`。"""
+    text = _seed_js_text()
     decl = "const " + name
-    assert decl in text, "workbench.html 缺少 %s 常量" % decl
+    assert decl in text, "static/js/wb-seed-data.js 缺少 %s 常量" % decl
     return json.loads(_slice_balanced(text, text.index(decl), open_ch, close_ch))
 
 
@@ -165,41 +173,41 @@ def test_custom_ipa_has_no_tie_bar_residue():
     assert total == 0, "A1_WORKBENCH_CUSTOM 仍有 tie-bar 残留（实测命中 %d）" % total
 
 
-# ── 2. 模块 ↔ HTML 双向等价 ─────────────────────────────────────────────
+# ── 2. 模块 ↔ 构建产物（JS 数据模块）双向等价 ────────────────────────────
 
 
-def test_seed_module_equals_html_inline_verbatim():
+def test_seed_module_equals_js_product_verbatim():
     """种子词逐条 JSON 等价，且 id 顺序一致（顺序变了 = 页面词序变 = 行为变）。"""
     mod = _load_dict_module()
-    html_seed = _html_const("SEED_WORDS", "[", "]")
-    assert [w["id"] for w in mod.A1_WORKBENCH_SEED] == [w["id"] for w in html_seed], (
-        "模块与 HTML 的种子词 id 顺序不一致"
+    product_seed = _product_const("SEED_WORDS", "[", "]")
+    assert [w["id"] for w in mod.A1_WORKBENCH_SEED] == [w["id"] for w in product_seed], (
+        "模块与 JS 数据模块的种子词 id 顺序不一致"
     )
-    assert mod.A1_WORKBENCH_SEED == html_seed, "模块与 HTML 的种子词内容不等价"
+    assert mod.A1_WORKBENCH_SEED == product_seed, "模块与 JS 数据模块的种子词内容不等价"
 
 
-def test_custom_module_equals_html_inline_verbatim():
+def test_custom_module_equals_js_product_verbatim():
     """核心新词逐条 JSON 等价，且 id 顺序一致。"""
     mod = _load_dict_module()
-    html_custom = _html_const("CORE_CUSTOM_WORDS", "[", "]")
-    assert [w["id"] for w in mod.A1_WORKBENCH_CUSTOM] == [w["id"] for w in html_custom], (
-        "模块与 HTML 的核心新词 id 顺序不一致"
+    product_custom = _product_const("CORE_CUSTOM_WORDS", "[", "]")
+    assert [w["id"] for w in mod.A1_WORKBENCH_CUSTOM] == [w["id"] for w in product_custom], (
+        "模块与 JS 数据模块的核心新词 id 顺序不一致"
     )
-    assert mod.A1_WORKBENCH_CUSTOM == html_custom, "模块与 HTML 的核心新词内容不等价"
+    assert mod.A1_WORKBENCH_CUSTOM == product_custom, "模块与 JS 数据模块的核心新词内容不等价"
 
 
-def test_core_ids_module_equals_html_inline_sorted():
-    """核心词 id 集合等价，且 HTML 内联顺序正是升序（Set 无序，用升序钉住书写顺序）。"""
+def test_core_ids_module_equals_js_product_sorted():
+    """核心词 id 集合等价，且产物里的书写顺序正是升序（Set 无序，用升序钉住书写顺序）。"""
     mod = _load_dict_module()
-    html_core = _html_const("CORE_WORD_SEED_IDS", "[", "]")
-    assert sorted(mod.A1_WORKBENCH_CORE_IDS) == html_core, "模块与 HTML 的核心词 id 集合/顺序不一致"
+    product_core = _product_const("CORE_WORD_SEED_IDS", "[", "]")
+    assert sorted(mod.A1_WORKBENCH_CORE_IDS) == product_core, "模块与 JS 数据模块的核心词 id 集合/顺序不一致"
 
 
-def test_aliases_module_equals_html_inline():
-    """别名表与 HTML 内联块等价。"""
+def test_aliases_module_equals_js_product():
+    """别名表与 JS 数据模块里的声明等价。"""
     mod = _load_dict_module()
-    assert mod.A1_WORKBENCH_ID_ALIASES == _html_const("SEED_ID_ALIASES", "{", "}"), (
-        "模块与 HTML 的别名表不一致"
+    assert mod.A1_WORKBENCH_ID_ALIASES == _product_const("SEED_ID_ALIASES", "{", "}"), (
+        "模块与 JS 数据模块的别名表不一致"
     )
 
 
@@ -207,9 +215,17 @@ def test_aliases_module_equals_html_inline():
 
 
 def test_extract_is_faithful_to_module_constants():
-    """工具 parse_html(当前 HTML) 必须等于模块四个常量 —— --extract 是逐字搬运。"""
+    """工具 parse_source(当前数据模块) 必须等于模块四个常量 —— --extract 是逐字搬运。
+
+    附带钉住「数据只有一份真相源」：workbench.html 里不得再内联这四个声明。
+    同一条数据若存在两个落点，注入只会更新其中一个，另一处会静默腐坏成第二个真相。
+    """
+    html = WORKBENCH_HTML.read_text(encoding="utf-8")
+    for name in ("SEED_WORDS", "CORE_WORD_SEED_IDS", "CORE_CUSTOM_WORDS", "SEED_ID_ALIASES"):
+        assert "const " + name not in html, "%s 又被内联回 workbench.html 了（数据必须只有一份）" % name
+
     tool = _load_tool()
-    parsed = tool.parse_html(_html_text())
+    parsed = tool.parse_source(_seed_js_text())
     mod = _load_dict_module()
     assert parsed["seed"] == mod.A1_WORKBENCH_SEED
     assert parsed["core_ids"] == sorted(mod.A1_WORKBENCH_CORE_IDS)
@@ -217,38 +233,51 @@ def test_extract_is_faithful_to_module_constants():
     assert parsed["aliases"] == mod.A1_WORKBENCH_ID_ALIASES
 
 
-def test_injection_into_current_html_is_byte_identical():
-    """用模块反向注入当前 HTML：必须字节一致（零漂移，HTML 确为模块的构建产物）。
+def test_injection_into_data_module_is_byte_identical():
+    """用模块反向注入当前数据模块：必须字节一致（零漂移，数据模块确为模块的构建产物）。
 
-    这条同时钉住"注入不得触碰 HTML 其他任何部分"：任何多改/少改都会破坏字节一致。
+    这条同时钉住"注入不得触碰数据模块其他任何部分"：任何多改/少改（其余三个声明、
+    文件头注释、EMBEDDED_AUDIO、行尾）都会破坏字节一致。
+
+    C7 Task 4：目标文件从 workbench.html 换成 static/js/wb-seed-data.js，断言仍是
+    **逐字节等价**（不是「文件存在」），故「内联 const 是构建产物」这条契约继续约束
+    真实产物。另加一道往返：注入结果必须能**再解析**回同样的四个值 —— 渲染器与解析器
+    互为逆，挡住「字节碰巧相同但语义已歪」的假绿。
     """
     tool = _load_tool()
     mod = _load_dict_module()
-    html = _html_text()
-    injected = tool.render_html(
-        html,
+    src = _seed_js_text()
+    injected = tool.render_source(
+        src,
         seed=mod.A1_WORKBENCH_SEED,
         core_ids=mod.A1_WORKBENCH_CORE_IDS,
         custom=mod.A1_WORKBENCH_CUSTOM,
         aliases=mod.A1_WORKBENCH_ID_ALIASES,
     )
-    assert injected == html, "注入当前 HTML 产生了漂移（不是字节一致）"
+    assert injected == src, "注入当前数据模块产生了漂移（不是字节一致）"
+
+    reparsed = tool.parse_source(injected)
+    assert reparsed["seed"] == list(mod.A1_WORKBENCH_SEED), "注入结果再解析的种子词与模块不等价"
+    assert reparsed["core_ids"] == sorted(mod.A1_WORKBENCH_CORE_IDS), "注入结果再解析的核心词 id 与模块不等价"
+    assert reparsed["custom"] == list(mod.A1_WORKBENCH_CUSTOM), "注入结果再解析的核心新词与模块不等价"
+    assert reparsed["aliases"] == dict(mod.A1_WORKBENCH_ID_ALIASES), "注入结果再解析的别名表与模块不等价"
 
 
 def test_injection_is_idempotent():
     """连注两次字节一致 —— 否则每次构建都产生假 diff。"""
     tool = _load_tool()
     mod = _load_dict_module()
-    html = _html_text()
+    src = _seed_js_text()
     kwargs = dict(
         seed=mod.A1_WORKBENCH_SEED,
         core_ids=mod.A1_WORKBENCH_CORE_IDS,
         custom=mod.A1_WORKBENCH_CUSTOM,
         aliases=mod.A1_WORKBENCH_ID_ALIASES,
     )
-    once = tool.render_html(html, **kwargs)
-    twice = tool.render_html(once, **kwargs)
+    once = tool.render_source(src, **kwargs)
+    twice = tool.render_source(once, **kwargs)
     assert once == twice, "注入不幂等（第二次结果与第一次不同）"
+    assert once == src, "第一次注入就与当前数据模块不同（幂等的前提是零漂移）"
 
 
 # ── 4. 服务端消费侧（Task 2 / ADR-0011 红线 2）───────────────────────────

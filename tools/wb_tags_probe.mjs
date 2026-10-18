@@ -23,12 +23,15 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-/* ---- 探针读取口（C7 Task 2）：可多文件来源 ------------------------------
- * 现在只有 `workbench.html` 一个源文件，故 `readSources(SRC_FILES)` 与改造前的
- * `fs.readFileSync(HTML, "utf8")` 逐字节等价（单文件时 join 不插入任何字节）。
- * workbench.html 拆成模块后只需改 `WB_SRC_ROOT` 与 `SRC_FILES`，切片语义不动。 */
-const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static/german";
-const SRC_FILES = ["workbench.html"];
+/* ---- 探针读取口（C7 Task 2/4）：可多文件来源 ----------------------------
+ * 源清单按**加载序**排列：顶层声明所在的 JS 数据模块在前（C7 Task 4 把
+ * SEED_WORDS / CORE_* / SEED_ID_ALIASES / EMBEDDED_AUDIO 搬到了
+ * static/js/wb-seed-data.js），使用这些声明的 workbench.html 在后。
+ * readSources() 按序拼接，sliceDecl() 在拼接结果里按名字切片 —— 于是切片语义与
+ * 单文件时代逐字一致，且**不依赖跨文件位置序**（两个文件里没有同名声明）。
+ * 搬迁/再拆分时只需改 `WB_SRC_ROOT` 与 `SRC_FILES`。 */
+const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
+const SRC_FILES = ["js/wb-seed-data.js", "german/workbench.html"];
 
 function readSources(names) {
   const parts = names.map((name) => {
