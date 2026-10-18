@@ -10,6 +10,17 @@ BUILD_SCRIPT = ROOT / "tools" / "build_index_html.py"
 CHECK_SCRIPT = ROOT / "tools" / "check_index_html_sync.py"
 
 
+def _run(script: Path, *args: str) -> "subprocess.CompletedProcess[str]":
+    """统一以 UTF-8 读侧运行脚本（locale 无关，理由见 test_check_index_html_sync_clean）。"""
+    return subprocess.run(
+        [sys.executable, str(script), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(ROOT),
+    )
+
+
 def test_build_and_check_scripts_exist():
     assert BUILD_SCRIPT.exists(), f"构建脚本缺失: {BUILD_SCRIPT}"
     assert CHECK_SCRIPT.exists(), f"校验脚本缺失: {CHECK_SCRIPT}"
@@ -28,6 +39,29 @@ def test_check_index_html_sync_clean():
     )
     assert res.returncode == 0, f"同步校验失败:\n{res.stdout}\nSTDERR: {res.stderr}"
     assert any(k in res.stdout for k in ("通过", "PASS", "synced", "放行"))
+
+
+def test_build_index_html_check_clean():
+    """`build_index_html.py --check` 必须与同步门禁同结论（当前仓态 exit 0）。
+
+    回归锚点：读侧曾用 `read_text()`，universal newlines 把磁盘 CRLF 吃成 LF ⇒ 恒假红，
+    与 `check_index_html_sync.py` 的 PASS 自相矛盾。
+    """
+    res = _run(BUILD_SCRIPT, "--check")
+    assert res.returncode == 0, f"build --check 假红:\n{res.stdout}\nSTDERR: {res.stderr}"
+    assert "校验通过" in res.stdout
+
+
+def test_build_index_html_check_mutation_detects_drift(tmp_path):
+    """变异自证：`--check` 不是恒绿 —— 目标被改一行必须 exit 1。"""
+    target = tmp_path / "index.html"
+    res_build = _run(BUILD_SCRIPT, "--output", str(target))
+    assert res_build.returncode == 0, f"装配副本失败:\n{res_build.stderr}"
+    assert _run(BUILD_SCRIPT, "--check", "--output", str(target)).returncode == 0
+
+    target.write_bytes((target.read_bytes().decode("utf-8") + "\r\n<!-- drift -->\r\n").encode("utf-8"))
+    res_drift = _run(BUILD_SCRIPT, "--check", "--output", str(target))
+    assert res_drift.returncode == 1, "漂移未被 --check 检出 ⇒ 门禁形同虚设"
 
 
 def test_check_index_html_sync_mutation_detects_drift(tmp_path):

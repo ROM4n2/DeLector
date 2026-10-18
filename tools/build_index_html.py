@@ -78,9 +78,11 @@ def main() -> int:
         if not out_file.exists():
             print(f"[build_index_html] 目标文件缺失: {out_file}", file=sys.stderr)
             return 1
-        current = out_file.read_text(encoding="utf-8")
-        current_norm = "".join(current.splitlines(keepends=True))
-        assembled_norm = "".join(assembled.splitlines(keepends=True))
+        # 读侧 MUST 绕过 universal newlines：`read_text()` 会把磁盘上的 CRLF 静默转成 LF，
+        # 而装配物统一是 CRLF ⇒ 逐行比对恒不等 ⇒ --check 恒假红（曾与 check_index_html_sync.py
+        # 给出相反结论）。先按 read_bytes().decode() 取原文，再归一化到 LF，与门禁脚本同口径。
+        current_norm = out_file.read_bytes().decode("utf-8").replace("\r\n", "\n")
+        assembled_norm = assembled.replace("\r\n", "\n")
         if current_norm != assembled_norm:
             print(
                 "[build_index_html] static/index.html 与模板装配结果存在漂移！"
