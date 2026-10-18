@@ -3,10 +3,11 @@
  *
  * 静态正则只能证明「代码长这样」：能证明 renormalizeQueueTail() 存在、revIdx 不被赋值，
  * 证明不了「dailyNew 15→30 之后尾部真的从 10 个新词变成 25 个」。
- * 本探针把 static/german/workbench.html 里的 **真实源码**（SEED_WORDS / CORE_* 常量、
- * inScopeWord / logToday / buildReviewQueue / refilterReviewQueueForScope /
- * renormalizeQueueTail / extraNewWords / renderReview / renderWords 过滤谓词）
- * 按括号配对整段切出来，丢进 node:vm 沙箱真跑，再把结果打成 JSON 给 pytest 断言。
+ * 本探针把入口页加载的**真实模块源码**（SEED_WORDS / CORE_* 常量、inScopeWord / logToday、
+ * buildReviewQueue / refilterReviewQueueForScope / renormalizeQueueTail / extraNewWords、
+ * renderReview / renderWords 过滤谓词）按括号配对整段切出来，丢进 node:vm 沙箱真跑，
+ * 再把结果打成 JSON 给 pytest 断言。C7 Task 5 起这些声明分布在 static/js/wb-*.js 与
+ * workbench.html 里，故读取口是 SRC_FILES 清单（见下），切片仍按**名字**定位。
  *
  * 硬约束（与 tools/wb_merge_probe.mjs 同款）：
  *   - 探针里**不得重抄一份被测实现**。重抄的话实现回退了探针照样绿 —— 死测。
@@ -36,10 +37,16 @@ const ROOT = path.resolve(__dirname, "..");
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
 /* C7 Task 5（块 5 · wbscope）：wordFilters / wordState / CEFR_* / SCOPE_PREDICATES /
  * isInScope / inScopeWord 已搬到 static/js/wb-scope.js —— 它排在 workbench.html 之前
- * （sliceDecl 按**名字**切片，与单文件时代语义逐字一致）；
- * refilterReviewQueueForScope 仍住 workbench.html（会话队列手术不属判定链）。 */
+ * （sliceDecl 按**名字**切片，与单文件时代语义逐字一致）。
+ * C7 Task 5（块 6 · wbqueue）：队列构建 / 调度族（buildReviewQueue /
+ * refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords / queueInfoText /
+ * extraPractice / extraNewWords + manualExtraIds）搬到 static/js/wb-queue.js —— 排在新模块
+ * 在前、workbench.html 在后；本探针**确实真切片**这七个函数 + 豁免集（见 PIECES），
+ * 故必须登记该源，否则切片静默失配。仍住 workbench.html 的只有渲染族
+ * （renderReview / renderWords 过滤谓词）与会话内存态的声明。 */
 const SRC_FILES = [
-  "js/wb-seed-data.js", "js/wb-views.js", "js/wb-scope.js", "german/workbench.html",
+  "js/wb-seed-data.js", "js/wb-views.js", "js/wb-scope.js", "js/wb-queue.js",
+  "german/workbench.html",
 ];
 
 function readSources(names) {

@@ -566,6 +566,22 @@
      <script> 之前（TDZ 依赖已按此调整，无其它调整）。 -->
 <script src="../js/wb-scope.js"></script>
 
+<!-- C7 Task 5（块 6 · wbqueue）：复习队列构建 / 调度族（manualExtraIds +
+     buildReviewQueue / refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords /
+     queueInfoText / extraPractice / extraNewWords）抽到 static/js/wb-queue.js，同样是
+     **普通脚本**（不用 ES Module，保留 WebView 整体回退内联的能力）。加载序：
+         wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → wb-sync.js → wb-scope.js
+         → wb-queue.js → 主内联脚本
+     理由：(a) 本文件纯声明、加载期零执行（豁免集只建一个 Set 字面量），排位只看「谁
+     提供它运行期读的声明」：判定链 inScopeWord / wordById 在 wb-scope.js，故必须排在
+     wb-scope.js 之后；shuffle / logToday / endToday / S 在主内联脚本与更早模块里，这些
+     引用全发生在**函数被调用时**（启动 async IIFE 与用户点击之后），此时主内联脚本已
+     执行完，故排在其前不构成 TDZ；(b) 反向依赖也全是运行期的 —— 主内联脚本的
+     renderReview、顶栏 handlers、启动块 backfillCoreWords 都只在运行期调本模块；
+     (c) 唯一必须早于它的身份是「主内联脚本」（普通脚本的顶层 const/function 只对后续
+     脚本可见），故紧跟 wb-scope.js 与主内联脚本之间，读作「判定链 → 队列 → 渲染」。 -->
+<script src="../js/wb-queue.js"></script>
+
 <script>
 "use strict";
 /* ======================================================================
@@ -1148,104 +1164,12 @@ $("tabs").addEventListener("click", (e) => {
 let revQueue = [];      // 词 id 队列：到期卡（按 due 升序）+ 今日新词
 let revIdx = 0, flipped = false, ratedCount = 0, queueDay = null;
 
-/* 手动追加（extraNewWords）的超配额新词 id：renormalizeQueueTail 裁剪时豁免它们。
- * 内存态，与 revQueue 同生命周期：revQueue 不持久化、刷新即重建，且
- * buildReviewQueue() 整队重建时本集合一并清空（见其函数体首行），故无需持久化。
- * 声明必须排在 buildReviewQueue 之前 —— const 有 TDZ，声明在使用之后的话，
- * 将来有人把 buildReviewQueue() 挪到模块顶层更早处调用就会抛 ReferenceError。 */
-const manualExtraIds = new Set();
-
-function buildReviewQueue() {
-  /* 整队重建 = 旧队列作废，手动追加的豁免登记跟着作废。不清的话：标签页跨夜不关，
-   * 昨天手动追加、今天仍未学的词一旦被排进新队列就仍被当 pinned，
-   * 逃过 dailyNew 调低时的裁剪（docs/plans/workbench-scope-control-and-live-settings.md · Task 6）。 */
-  manualExtraIds.clear();
-  const now = Date.now(), eod = endToday();
-  /* 手动标「已稳固」的卡不参与排期 */
-  const dueIds = Object.keys(S.cards)
-    .filter(id => {
-      const w = wordById(id);
-      return S.cards[id].reps > 0 && !S.cards[id].manual && S.cards[id].due <= eod && w && inScopeWord(w);
-    })
-    .sort((a, b) => S.cards[a].due - S.cards[b].due);
-  const today = logToday();
-  const newQuota = Math.max(0, S.settings.dailyNew - (today.nw || 0));
-  const newIds = [];
-  if (newQuota > 0) {
-    const seen = new Set(dueIds);
-    let pool = S.words.filter(w => !S.cards[w.id] && !seen.has(w.id) && inScopeWord(w)).map(w => w.id);
-    if (S.settings.newOrder !== "seed") pool = shuffle(pool);  // 乱序引入，防顺序记忆依赖
-    newIds.push.apply(newIds, pool.slice(0, newQuota));
-  }
-  revQueue = dueIds.concat(newIds);
-  revIdx = 0;
-  // F4 · 错题本智能推送：把 5 个高错题词插入队列头部（去重）
-  injectWrongWords(5);
-}
-
-/* 复习中途切 scope：只静默剔除 revIdx 之后的越界词。
- * revIdx 及之前是已评价历史（「上一张」要能回看），revIdx / ratedCount / queueDay 一律不动；
- * 因为队头始终保留，revIdx < revQueue.length 恒成立，renderReview 不会误判本轮结束而重建。 */
-function refilterReviewQueueForScope() {
-  const tail = revQueue.slice(revIdx + 1).filter(id => {
-    const w = wordById(id);
-    return inScopeWord(w);
-  });
-  revQueue = revQueue.slice(0, revIdx + 1).concat(tail);
-  if (curView === "review") renderReview();
-}
-
-/* 尾部重算：只动 revIdx 之后的未评部分，已复习的一律不动、位置不丢。
- * today.nw 只计已评新词，队列中未评新词不计入，故重算不重复扣减配额。
- * revIdx >= revQueue.length（今日刷完）时 slice(0, revIdx+1) 即整队、tail 为空，
- * 补进来的词正好落在 revIdx 位置 —— 不需要特判。 */
-function renormalizeQueueTail() {
-  const head = revQueue.slice(0, revIdx + 1);
-  const tail = revQueue.slice(revIdx + 1);
-  const keptDue = tail.filter(id => S.cards[id]);              // 到期卡不受配额管
-  const newInTail = tail.filter(id => !S.cards[id]);
-  const pinned = newInTail.filter(id => manualExtraIds.has(id)); // 手动追加豁免
-  const normal = newInTail.filter(id => !manualExtraIds.has(id));
-  const quota = Math.max(0, S.settings.dailyNew - (logToday().nw || 0));
-  let next = normal.slice(0, quota);                            // 调低则裁
-  if (next.length < quota) {                                    // 调高则补
-    const inQ = new Set(revQueue);
-    let pool = S.words.filter(w => !S.cards[w.id] && !inQ.has(w.id) && inScopeWord(w)).map(w => w.id);
-    if (S.settings.newOrder !== "seed") pool = shuffle(pool);
-    next = next.concat(pool.slice(0, quota - next.length));
-  }
-  revQueue = head.concat(keptDue, next, pinned);
-  if (curView === "review") renderReview();
-}
-
-/* F4 · 错题本智能推送：根据 wrong.n（错次）+ 最近 due 时间，挑 N 个高错题词插到队列头 */
-function injectWrongWords(n) {
-  if (!S.wrong || !revQueue) return;
-  const seen = new Set(revQueue);
-  const candidates = Object.entries(S.wrong)
-    .filter(([id, w]) => {
-      if (!w || w.n <= 0 || seen.has(id)) return false;
-      const word = wordById(id);
-      return inScopeWord(word);
-    })
-    .map(([id, w]) => ({ id, n: w.n, lastT: w.t || 0 }))
-    .sort((a, b) => b.n - a.n || a.lastT - b.lastT)  // 错次高的优先；同错次取更早的
-    .slice(0, n);
-  for (let i = candidates.length - 1; i >= 0; i--) {
-    revQueue.unshift(candidates[i].id);
-  }
-}
-
-function queueInfoText() {
-  const eod = endToday();
-  let dueN = 0, overdue = 0, newN = 0;
-  for (const id of revQueue) {
-    const c = S.cards[id];
-    if (!c) newN++;
-    else if (c.due <= eod) { dueN++; if (c.due < Date.now()) overdue++; }
-  }
-  return "今日到期 " + dueN + (overdue ? "（含逾期 " + overdue + "）" : "") + " · 新词 " + newN;
-}
+/* C7 Task 5 · 块 6（wbqueue）：队列构建/调度族（manualExtraIds + buildReviewQueue /
+ * refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords / queueInfoText /
+ * extraPractice / extraNewWords）已搬到 static/js/wb-queue.js（普通脚本，先于本内联脚本
+ * 加载 ⇒ 顶层 const/function 落在同一全局词法环境，本文件仍可直接调用）。
+ * 按块纪律留在原地：revQueue / revIdx / flipped / ratedCount / queueDay（会话内存态，
+ * 与渲染/评价 handler 强耦合）与下面 renderReview 起的渲染族（第 2 小步再动）。 */
 
 function renderReview() {
   /* 首装挂起（S.words 为空）：显示加载占位，不得渲染成「今日复习任务已完成」的误导态。 */
@@ -1348,31 +1272,8 @@ function doRate(g) {
 function browsePrev() { if (revIdx > 0) { revIdx--; renderReview(); } }
 function browseNext() { if (revIdx < revQueue.length) { revIdx++; renderReview(); } }
 
-function extraPractice() {
-  const inQueue = new Set(revQueue);
-  const pool = shuffle(S.words.filter(w => S.cards[w.id] && S.cards[w.id].reps > 0 && !inQueue.has(w.id) && inScopeWord(w)))
-    .slice(0, 20).map(w => w.id);
-  if (!pool.length) { toast("没有可额外复习的已学卡片"); return; }
-  revQueue = revQueue.concat(pool);
-  toast("已追加 " + pool.length + " 张已学卡片");
-  renderReview();
-}
-
-/* 额外学新词：按当前新词顺序设置取未学词追加进今日队列；
-   首评会计入今日 nw，占明日常规配额，总学习量守恒 */
-function extraNewWords() {
-  if (queueDay !== todayStr()) { buildReviewQueue(); queueDay = todayStr(); }
-  const inQueue = new Set(revQueue);
-  const pool = S.words.filter(w => !S.cards[w.id] && !inQueue.has(w.id) && inScopeWord(w));
-  const ordered = S.settings.newOrder === "seed" ? pool : shuffle(pool);
-  const ids = ordered.slice(0, 20).map(w => w.id);
-  if (!ids.length) { toast("没有未学的新词了 🎉"); return; }
-  ids.forEach(id => manualExtraIds.add(id));
-  revQueue = revQueue.concat(ids);
-  toast("已追加 " + ids.length + " 个新词（计入今日配额）");
-  renderReview();
-}
-
+/* C7 Task 5 · 块 6：extraPractice / extraNewWords 已搬到 static/js/wb-queue.js；
+ * 下面两条按钮的 addEventListener（顶层**表达式**而非声明）按块纪律留在原地。 */
 $("cardFlip").addEventListener("click", flipCard);
 document.querySelectorAll(".rate-btn").forEach(b =>
   b.addEventListener("click", () => doRate(+b.dataset.g)));

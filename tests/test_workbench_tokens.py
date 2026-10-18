@@ -139,11 +139,20 @@ def test_workbench_scope_selector_has_a2_option():
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
     # C7：`inScopeWord` / `SCOPE_PREDICATES` 已搬到 static/js/wb-scope.js。
     # 判定后两处断言仍要求「源文本」取证，故把 JS 源拼进同一份 content（断言逐字不变）。
-    content += open(
-        os.path.join(ROOT, "static", "js", "wb-scope.js"), encoding="utf-8"
-    ).read()
+    # 拼接顺序为**模块在前、HTML 在后**（C7 Task 5 块 6 修正）：与运行期的普通脚本加载序
+    # 一致（wb-scope.js 先加载、主内联脚本在后），读法与执行序同向。
+    wb_scope_src = open(os.path.join(ROOT, "static", "js", "wb-scope.js"), encoding="utf-8").read()
+    content = wb_scope_src + content
     assert "syncA2CardsFromServer" in content, "必须定义 syncA2CardsFromServer"
-    in_scope_block = content.split("function inScopeWord")[1].split("function logToday")[0]
+    # inScopeWord 的切片改用 wb_source.decl_body 的花括号配平（C7 Task 5 块 6 修的既有弱点）：
+    # 旧写法 `split("function inScopeWord")[1].split("function logToday")[0]` 的结束界桩
+    # logToday 住在 workbench.html —— 模块拼在**后面**时界桩落在搜索空间之外，切片静默退化成
+    # 「模块剩余全文」（实测 1054 字节，且不再有任何上界）；把模块按原计划字面拼到**前面**虽能
+    # 重新找到界桩，但切片会一路吞到 HTML 里的 logToday（实测 44,559 字节，拆分前该切片只有
+    # 120 字节）—— 判别力反而下降。故锚在「inScopeWord 的函数体本身」：缺声明即抛
+    # （decl_body 自带 Fail-Loud，越界会红而不是退化成空串/全文），跨度与拆分前语义对齐，
+    # 且不受邻居声明顺序漂移影响。
+    in_scope_block = wb_source.decl_body(wb_scope_src, "function inScopeWord(w)")
     assert "isInScope(w, wordFilters.scope)" in in_scope_block, (
         "inScopeWord 必须委托 isInScope 唯一入口（ADR-0011 T5 数据驱动判定），"
         "不得保留第二处等级/范围判定副本"

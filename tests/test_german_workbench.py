@@ -69,10 +69,22 @@ _SYNC_JS_SRC_TAG = '<script src="../js/wb-sync.js"></script>'
 # wb-views.js → wb-sync.js → wb-scope.js → 主内联脚本 的顺序用**普通** <script src> 引入。
 # 凡切片落在这些声明里的断言，锚点随代码搬家 —— 改读模块源，判别力只升不降（新增
 # 「所有权」钉子：这些名字必须只剩在模块里，两边各留一份会红）。
-# 刻意**没收** refilterReviewQueueForScope / syncScopeControls（会话队列手术 / 顶栏控件
-# DOM 同步），它们留在 HTML，只调用本模块的判定入口。
+# 块 5 刻意**没收** refilterReviewQueueForScope / syncScopeControls（会话队列手术 / 顶栏控件
+# DOM 同步）；前者已在块 6（wbqueue）随整条队列构建链搬进 static/js/wb-queue.js，
+# 后者仍留 HTML。
 _SCOPE_JS = (_ROOT / "static" / "js" / "wb-scope.js").read_text(encoding="utf-8")
 _SCOPE_JS_SRC_TAG = '<script src="../js/wb-scope.js"></script>'
+# C7 Task 5（块 6 · wbqueue）：复习队列构建 / 调度族（manualExtraIds + buildReviewQueue /
+# refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords / queueInfoText /
+# extraPractice / extraNewWords）已从 workbench.html 的内联脚本抽到 static/js/wb-queue.js，
+# 入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → wb-sync.js → wb-scope.js
+# → wb-queue.js → 主内联脚本 的顺序用**普通** <script src> 引入。凡切片落在这些声明里的
+# 断言，锚点随代码搬家 —— 改读模块源，判别力只升不降（新增「所有权」钉子：这八个名字
+# 必须只剩在模块里，两边各留一份会红）。刻意留在 HTML 的是会话内存态
+# （revQueue / revIdx / flipped / ratedCount / queueDay）与渲染族（renderReview / showCard /
+# quiz* / card*），它们与 DOM 强耦合，归下一块（render）。
+_QUEUE_JS = (_ROOT / "static" / "js" / "wb-queue.js").read_text(encoding="utf-8")
+_QUEUE_JS_SRC_TAG = '<script src="../js/wb-queue.js"></script>'
 
 # 视图层里是**函数声明**的那八个（`function <name>(` 形态可双向核）。
 _VIEWS_FN_OWNED = frozenset({
@@ -127,6 +139,20 @@ _SCOPE_CONST_OWNED = frozenset({
 })
 _SCOPE_OWNED = _SCOPE_FN_OWNED | _SCOPE_CONST_OWNED
 
+# C7 Task 5 块 6（wbqueue）：队列构建 / 调度族里是**函数声明**的七个（`function <name>(` 可双向核）。
+_QUEUE_FN_OWNED = frozenset({
+    "buildReviewQueue",
+    "refilterReviewQueueForScope",
+    "renormalizeQueueTail",
+    "injectWrongWords",
+    "queueInfoText",
+    "extraPractice",
+    "extraNewWords",
+})
+# 族里是**顶层 const** 的一个（锚点带前导换行 + 等号，避开文件头 / 注释里对裸名的引用）。
+_QUEUE_CONST_OWNED = frozenset({"manualExtraIds"})
+_QUEUE_OWNED = _QUEUE_FN_OWNED | _QUEUE_CONST_OWNED
+
 
 def _host_of(name):
     """名字 → 宿主文件路径（只用于断言消息，便于一眼看出切歪去了哪个文件）。"""
@@ -136,6 +162,8 @@ def _host_of(name):
         return "static/js/wb-sync.js"
     if name in _SCOPE_OWNED:
         return "static/js/wb-scope.js"
+    if name in _QUEUE_OWNED:
+        return "static/js/wb-queue.js"
     return "static/german/workbench.html"
 
 
@@ -151,9 +179,29 @@ def _decl_src(name):
     C7 Task 5 块 5（wbscope）起覆盖判定族（见 _SCOPE_OWNED）：函数声明形态的六个核
     `function <name>(`，顶层 const 形态的四个核 `\\nconst <name> = `（带前导换行与等号，
     避开文件头注释里对 `const wordFilters` 之类写法的引用）—— 同样双向，搬回去一半就红。
-    既不在 _VIEWS_OWNED / _SYNC_OWNED / _SCOPE_OWNED 里的名字（其余顶层声明）照旧
-    返回 workbench.html。
+    C7 Task 5 块 6（wbqueue）起覆盖队列构建族（见 _QUEUE_OWNED）：函数声明形态的七个 +
+    顶层 const 形态的一个（`manualExtraIds`，同样带前导换行与等号）—— 双向，搬回去一半就红。
+    既不在 _VIEWS_OWNED / _SYNC_OWNED / _SCOPE_OWNED / _QUEUE_OWNED 里的名字
+    （其余顶层声明）照旧返回 workbench.html。
     """
+    if name in _QUEUE_OWNED:
+        # 队列构建族（C7 Task 5 块 6）：只在 wb-queue.js 里，且不得再内联回 HTML。
+        if name in _QUEUE_FN_OWNED:
+            assert ("function %s(" % name) not in _WORKBENCH, (
+                "%s() 仍留在 workbench.html —— 队列构建族声明应只在 static/js/wb-queue.js" % name
+            )
+            assert ("function %s(" % name) in _QUEUE_JS, (
+                "static/js/wb-queue.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+            )
+        else:
+            anchor = "\nconst %s = " % name
+            assert anchor not in _WORKBENCH, (
+                "const %s 仍留在 workbench.html —— 队列构建族声明应只在 static/js/wb-queue.js" % name
+            )
+            assert anchor in _QUEUE_JS, (
+                "static/js/wb-queue.js 里找不到 const %s = —— 声明被改名/删除，或搬错了宿主" % name
+            )
+        return _QUEUE_JS
     if name in _SCOPE_OWNED:
         # 判定族（C7 Task 5 块 5）：只在 wb-scope.js 里，且不得再内联回 HTML。
         if name in _SCOPE_FN_OWNED:
@@ -479,6 +527,8 @@ def test_embedded_audio_dict_declared_before_playword():
     EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红；把 wb-idb.js 挪到 wb-tts.js 之后
     → 红（本仓按「启动期依赖方向」定序，不是「谁先谁后都行」）；把 wb-views.js 挪到
     wb-tts.js 之前 → 红；把 renderWords 搬回内联脚本（视图模块留个空壳）→ 红。
+    C7 Task 5 块 6（wbqueue）已实跑补测：把 wb-queue.js 标签挪到主内联脚本之后 → 红；
+    把 wb-queue.js 挪到 wb-scope.js 之前 → 红（既定加载序）；给它加 type 属性 → 红。
     C7 Task 5 块 5（wbscope）已实跑补测：把 wb-scope.js 标签挪到主内联脚本之后 → 红；
     把 wb-scope.js 挪到 wb-sync.js 之前 → 红（既定加载序）；从 wb-scope.js 删掉
     inScopeWord 声明（搬空壳）→ 9 条红；HTML 里又留一份 const wordFilters =（半搬回）
@@ -521,12 +571,20 @@ def test_embedded_audio_dict_declared_before_playword():
     assert _WORKBENCH.count(_SCOPE_JS_SRC_TAG) == 1, "判定模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in scope_opening[0], "判定模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
+    queue_opening = re.findall(r"<script[^>]*wb-queue\.js[^>]*>", _WORKBENCH)
+    assert len(queue_opening) == 1, (
+        "队列模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(queue_opening), queue_opening)
+    )
+    assert _WORKBENCH.count(_QUEUE_JS_SRC_TAG) == 1, "队列模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in queue_opening[0], "队列模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
     src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
     idb_tag_at = _WORKBENCH.index(_IDB_JS_SRC_TAG)
     tts_tag_at = _WORKBENCH.index(_TTS_JS_SRC_TAG)
     views_tag_at = _WORKBENCH.index(_VIEWS_JS_SRC_TAG)
     sync_tag_at = _WORKBENCH.index(_SYNC_JS_SRC_TAG)
     scope_tag_at = _WORKBENCH.index(_SCOPE_JS_SRC_TAG)
+    queue_tag_at = _WORKBENCH.index(_QUEUE_JS_SRC_TAG)
     main_script_at = _WORKBENCH.index('<script>\n"use strict";')
     assert src_tag_at < idb_tag_at, "数据模块必须先于 IDB 模块加载（种子数据是 IDB 层的输入）"
     assert idb_tag_at < tts_tag_at, (
@@ -552,6 +610,16 @@ def test_embedded_audio_dict_declared_before_playword():
     assert scope_tag_at < main_script_at, (
         "判定模块必须在主内联脚本之前加载，否则 wordFilters / SCOPE_PREDICATES 这些顶层 "
         "const 在主脚本里不可见，启动期 buildReviewQueue 一跑就 ReferenceError"
+    )
+    assert scope_tag_at < queue_tag_at, (
+        "队列模块必须排在 wb-scope.js 之后（既定加载序 wb-scope → wb-queue）："
+        "buildReviewQueue / injectWrongWords 运行期读判定链 inScopeWord / wordById，"
+        "排在判定链之前就是「谁提供这些声明」的阅读顺序被写反"
+    )
+    assert queue_tag_at < main_script_at, (
+        "队列模块必须在主内联脚本之前加载：普通脚本的顶层 function / const 只对**后续**脚本"
+        "可见，排在内联脚本之后则 HTML 里 renderReview / 启动块里的 buildReviewQueue() "
+        "全是 ReferenceError"
     )
 
     assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
@@ -1119,12 +1187,15 @@ def _inscope_helper_definition():
 
 
 def _build_review_queue_body():
-    """buildReviewQueue 的函数体（切到下一个顶层 function 为止）。
+    """buildReviewQueue 的函数体（wb_source.decl_body 的花括号配平切片）。
 
+    C7 Task 5 块 6：该函数搬到 static/js/wb-queue.js —— 锚点随代码搬家（见 _decl_src），
+    并把原来的「切到下一个顶层 function 为止」升级为配平切片：只含本函数体，
+    邻居声明顺序漂移也切不歪。
     只认函数体内的 scope 过滤 —— 建完队列再在别处裁剪的实现，
     「上一张」回看历史和 queueInfoText 计数都会错，切片里看不到就红。
     """
-    body = _top_fn_segment("function buildReviewQueue()")
+    body = wb_source.decl_body(_decl_src("buildReviewQueue"), "function buildReviewQueue()")
     assert "revQueue = dueIds.concat(newIds)" in body, "切片没落在 buildReviewQueue 上"
     return body
 
@@ -1236,9 +1307,18 @@ def test_core_scope_in_review_queue():
 
 
 def _scope_refilter_body():
-    """复习中途切 scope 的静默过滤函数体。"""
-    m = re.search(r"function refilterReviewQueueForScope\(\)\s*\{.*?\n\}", _WORKBENCH, re.S)
-    assert m, "找不到复习中途切 scope 的队列重过滤函数 refilterReviewQueueForScope()"
+    """复习中途切 scope 的静默过滤函数体。
+
+    C7 Task 5 块 6：refilterReviewQueueForScope 搬到 static/js/wb-queue.js —— 锚点随代码
+    搬家（_decl_src 顺带钉双向所有权：HTML 里 `function refilterReviewQueueForScope(` 必须消失，
+    且模块里必须真有这份声明）。
+    """
+    src = _decl_src("refilterReviewQueueForScope")
+    m = re.search(r"function refilterReviewQueueForScope\(\)\s*\{.*?\n\}", src, re.S)
+    assert m, (
+        "找不到复习中途切 scope 的队列重过滤函数 refilterReviewQueueForScope()（宿主：%s）"
+        % _host_of("refilterReviewQueueForScope")
+    )
     return m.group(0)
 
 
@@ -1609,22 +1689,22 @@ def _quiz_pool_body():
 
 
 def _inject_wrong_words_body():
-    """injectWrongWords 函数体。"""
-    body = _top_fn_segment("function injectWrongWords(")
+    """injectWrongWords 函数体（配平切片；C7 Task 5 块 6 起宿主是 wb-queue.js）。"""
+    body = wb_source.decl_body(_decl_src("injectWrongWords"), "function injectWrongWords(n)")
     assert "revQueue.unshift" in body, "切片没落在 injectWrongWords 上"
     return body
 
 
 def _extra_practice_body():
-    """extraPractice 函数体。"""
-    body = _top_fn_segment("function extraPractice()")
+    """extraPractice 函数体（配平切片；C7 Task 5 块 6 起宿主是 wb-queue.js）。"""
+    body = wb_source.decl_body(_decl_src("extraPractice"), "function extraPractice()")
     assert "S.words.filter(" in body, "切片没落在 extraPractice 上"
     return body
 
 
 def _extra_new_words_body():
-    """extraNewWords 函数体。"""
-    body = _top_fn_segment("function extraNewWords()")
+    """extraNewWords 函数体（配平切片；C7 Task 5 块 6 起宿主是 wb-queue.js）。"""
+    body = wb_source.decl_body(_decl_src("extraNewWords"), "function extraNewWords()")
     assert "S.words.filter(" in body, "切片没落在 extraNewWords 上"
     return body
 
@@ -2642,10 +2722,13 @@ def _run_node_predicate(js, words):
 
 
 def _renormalize_queue_tail_body():
-    """renormalizeQueueTail 的函数体（第 0 列 `}` 边界）。"""
-    assert "function renormalizeQueueTail(" in _WORKBENCH, "缺少 renormalizeQueueTail 定义"
-    body = _top_fn_segment("function renormalizeQueueTail(")
-    return body
+    """renormalizeQueueTail 的函数体（配平切片）。
+
+    C7 Task 5 块 6：该函数搬到 static/js/wb-queue.js —— 锚点随代码搬家（_decl_src 顺带钉
+    双向所有权：HTML 里 `function renormalizeQueueTail(` 必须消失，模块里必须有定义），
+    并把原来的「切到下一个顶层 function 为止」升级为 wb_source.decl_body 配平切片。
+    """
+    return wb_source.decl_body(_decl_src("renormalizeQueueTail"), "function renormalizeQueueTail()")
 
 
 def _set_daily_new_handler():
