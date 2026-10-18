@@ -1824,15 +1824,33 @@ def test_merge_and_alias_migration_behave_under_node():
 OUT_OF_SCOPE_CLASS = "out-of-scope"
 
 
+_WORKBENCH_CSS_PATH = _ROOT / "static" / "css" / "workbench.css"
+_WORKBENCH_CSS_LINK = '<link rel="stylesheet" href="../css/workbench.css">'
+
+
 def _style_block():
-    """workbench.html 里唯一的 <style> 块内容。"""
-    blocks = re.findall(r"<style>(.*?)</style>", _WORKBENCH, re.S)
-    assert len(blocks) == 1, "预期唯一一个 <style> 块，实际 %d 个" % len(blocks)
-    return blocks[0]
+    """workbench 的样式源（static/css/workbench.css），并钉住它真被 HTML 外链引入。
+
+    C7 Task 3 把 workbench.html 的内联 <style> 抽到 static/css/workbench.css（内容
+    逐字节等价，唯一归一化 = 去掉 <style> 标签后那个换行）。抽取后「CSS 文本在 HTML
+    里」这条蕴含断了：<link> 被删或路径写错时，下面按选择器切的规则断言会全落在一份
+    **没人加载的死 CSS** 上恒绿（红线 11 的死测形态）。故先钉外链，再返回 CSS 文本。
+    反向闸同理：内联 <style> 回写会压过外链，让本函数返回的文本与页面实际生效的
+    样式脱钩 —— 一并钉住「不再有内联块」。
+    """
+    assert _WORKBENCH_CSS_LINK in _WORKBENCH, (
+        "workbench.html 必须 %s 外链引入抽出的样式" % _WORKBENCH_CSS_LINK
+    )
+    assert "<style" not in _WORKBENCH, (
+        "workbench.html 不得再内联 <style>：样式已抽到 static/css/workbench.css，"
+        "内联回写会覆盖外链且让按选择器切的规则断言落空"
+    )
+    assert _WORKBENCH_CSS_PATH.exists(), "static/css/workbench.css 必须存在"
+    return _WORKBENCH_CSS_PATH.read_text(encoding="utf-8")
 
 
 def _css_rules_matching(sel_needle):
-    """<style> 里选择器含 sel_needle 的规则，返回 [(选择器, 声明块), ...]。
+    """workbench 样式源里选择器含 sel_needle 的规则，返回 [(选择器, 声明块), ...]。
 
     必须切到每条规则**自己的**声明块 —— 整 CSS 搜 `opacity` 有 10 多处命中
     （.btn:disabled / #toast / .audio-btn / @keyframes ...），那样的断言恒真。
@@ -1949,10 +1967,15 @@ def test_out_of_scope_row_has_dim_style():
       - 有一条 .out-of-scope 规则把行淡化（opacity）；
       - 有一条 .out-of-scope 伪元素规则用 content: 生成小标，颜色取自 var(--...)。
     断言切到每条规则**自己的**声明块 —— 整 CSS 搜 `opacity` 十多处命中，恒真。
-    变异验证（已实跑）：删掉 <style> 里 .out-of-scope 两条规则 → 本条红。
+    样式源：C7 Task 3 起是 static/css/workbench.css（原 workbench.html 内联 <style>
+    逐字节搬出，仅去掉标签后那个换行）。
+    变异验证（已实跑）：删掉 static/css/workbench.css 里 .out-of-scope 两条规则 → 本条红。
     """
     rules = _css_rules_matching("." + OUT_OF_SCOPE_CLASS)
-    assert rules, "<style> 里缺少 .%s 规则 —— 行标记没有任何视觉效果，用户看不出这条不在模式内" % OUT_OF_SCOPE_CLASS
+    assert rules, (
+        "static/css/workbench.css 里缺少 .%s 规则 —— 行标记没有任何视觉效果，用户看不出这条不在模式内"
+        % OUT_OF_SCOPE_CLASS
+    )
 
     dim = [d for _, d in rules if "opacity" in d]
     assert dim, "需要一条 .%s 规则淡化该行（opacity），实际规则：%r" % (OUT_OF_SCOPE_CLASS, rules)
