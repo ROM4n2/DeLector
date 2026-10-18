@@ -1,0 +1,57 @@
+    <nav id="nav">
+      <div class="nav-brand" onclick="show('home')">
+        DeLector<span class="brand-dot">.</span>
+        <span class="nav-pin">AKADEMISCHES LESEPULT · B1–C1</span>
+      </div>
+      <div class="nav-links">
+        <button id="nav-btn-home" class="nav-tab active" onclick="show('home')">
+          <span class="nav-tab-code">ARCHIV</span>
+          <span class="nav-tab-label">德语文库</span>
+        </button>
+        <button
+          id="nav-btn-progress"
+          class="nav-tab"
+          onclick="show('progress')"
+        >
+          <span class="nav-tab-code">TAGEBUCH</span>
+          <span class="nav-tab-label">每日台账</span>
+        </button>
+        <button id="nav-btn-writer" class="nav-tab" onclick="show('writer')">
+          <span class="nav-tab-code">SCHREIBTISCH</span>
+          <span class="nav-tab-label">写作润色</span>
+        </button>
+        <button id="nav-btn-exam" class="nav-tab" onclick="show('exam')">
+          <span class="nav-tab-code">PRÜFUNG</span>
+          <span class="nav-tab-label">备考</span>
+        </button>
+        <button id="nav-btn-cards" class="nav-tab" onclick="show('cards')">
+          <span class="nav-tab-code">KARTEI</span>
+          <span class="nav-tab-label"
+            >复习卡片 (<span id="card-count" class="nav-counter">0</span>)</span
+          >
+        </button>
+        <button id="nav-btn-german" class="nav-tab" onclick="show('german')">
+          <span class="nav-tab-code">VOKABELN</span>
+          <span class="nav-tab-label">德语背词</span>
+        </button>
+        <button id="nav-btn-search" class="nav-tab" onclick="show('search')">
+          <span class="nav-tab-code">SUCHE</span>
+          <span class="nav-tab-label">🔍 检索</span>
+        </button>
+      </div>
+      <div class="nav-actions">
+        <button
+          class="btn btn-ghost nav-settings-btn"
+          onclick="openSettingsModal()"
+          title="偏好与 API 设置"
+        >
+          ⚙️ 设置
+        </button>
+        <a
+          href="/api/cards/export/apkg"
+          class="btn btn-dark nav-anki-btn"
+          title="导出为 Anki 牌组 (.apkg)"
+          >导出 Anki</a
+        >
+      </div>
+    </nav>

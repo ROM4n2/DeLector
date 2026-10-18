@@ -35,8 +35,10 @@ def assemble_index_html(skeleton_file: Path = SKELETON_PATH) -> str:
         include_path = static_dir / rel_include
         if not include_path.exists():
             raise FileNotFoundError(f"找不到 include 片段文件: {rel_include} (绝对路径: {include_path})")
-        # 递归支持嵌套包含
-        return assemble_index_html(include_path)
+        child_content = assemble_index_html(include_path)
+        while child_content.endswith(chr(13)) or child_content.endswith(chr(10)):
+            child_content = child_content[:-1]
+        return child_content
 
     assembled = INCLUDE_RE.sub(_replace_include, skeleton_content)
     # 统一确保换行符是 CRLF

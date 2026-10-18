@@ -1,0 +1,146 @@
+    <div id="companion" class="companion" role="status" aria-live="polite">
+      <div id="companion-bubble" class="companion-bubble hidden">
+        <div class="companion-bubble-de" id="companion-de"></div>
+        <div class="companion-bubble-zh" id="companion-zh"></div>
+      </div>
+      <div
+        id="companion-char"
+        class="companion-char"
+        onclick="window.Companion.onClick()"
+      ></div>
+      <button
+        id="companion-avatar"
+        class="companion-avatar"
+        aria-label="伴读角色设置与对话"
+        onclick="window.Companion.onClick()"
+      >
+        <span id="companion-avatar-icon">🦉</span>
+      </button>
+      <div id="companion-panel" class="companion-panel hidden">
+        <div class="panel-head">
+          <span class="panel-title">伴读角色设置</span>
+          <button class="panel-close" onclick="window.Companion.onClick()">
+            ✕
+          </button>
+        </div>
+        <div class="panel-row" id="panel-characters">
+          <button
+            class="panel-char-btn active"
+            data-char="owl"
+            onclick="window.Companion.setCharacter('owl')"
+            title="歌德猫头鹰"
+          >
+            🦉
+          </button>
+          <button
+            class="panel-char-btn"
+            data-char="cat"
+            onclick="window.Companion.setCharacter('cat')"
+            title="学者猫"
+          >
+            🐱
+          </button>
+          <button
+            class="panel-char-btn"
+            data-char="fox"
+            onclick="window.Companion.setCharacter('fox')"
+            title="灵动狐"
+          >
+            🦊
+          </button>
+          <button
+            class="panel-char-btn"
+            data-char="robot"
+            onclick="window.Companion.setCharacter('robot')"
+            title="包豪斯机甲"
+          >
+            🤖
+          </button>
+          <button
+            class="panel-char-btn mascot-custom-btn"
+            id="panel-btn-custom"
+            data-char="custom"
+            style="display: none"
+            onclick="window.Companion.setCharacter('custom')"
+            title="自定义角色"
+          >
+            ✦
+          </button>
+          <button
+            class="panel-char-btn panel-upload-btn"
+            onclick="window.Companion.triggerUpload('panel')"
+            title="上传自定义 SVG 角色"
+          >
+            📁
+          </button>
+          <input
+            id="panel-svg-input"
+            type="file"
+            accept=".svg,image/svg+xml"
+            style="display: none"
+            onchange="window.Companion.onFileSelected(event)"
+          />
+        </div>
+        <div class="panel-row">
+          <input
+            id="panel-name"
+            type="text"
+            maxlength="12"
+            placeholder="起个名字…"
+            oninput="window.Companion.setName(this.value)"
+          />
+        </div>
+        <div class="panel-row" id="panel-colors">
+          <button
+            class="panel-color-dot"
+            style="background: #6b4f8f"
+            onclick="window.Companion.setColor('#6b4f8f')"
+          ></button>
+          <button
+            class="panel-color-dot"
+            style="background: #d9663f"
+            onclick="window.Companion.setColor('#d9663f')"
+          ></button>
+          <button
+            class="panel-color-dot"
+            style="background: #4f8f6b"
+            onclick="window.Companion.setColor('#4f8f6b')"
+          ></button>
+          <button
+            class="panel-color-dot"
+            style="background: #4a6fa5"
+            onclick="window.Companion.setColor('#4a6fa5')"
+          ></button>
+          <input
+            type="color"
+            id="panel-color-custom"
+            class="panel-color-custom"
+            onchange="window.Companion.setColor(this.value)"
+          />
+        </div>
+        <div class="panel-row panel-actions">
+          <button
+            id="panel-say"
+            class="btn btn-secondary btn-sm"
+            onclick="window.Companion.onSay()"
+          >
+            💬 说句话
+          </button>
+          <button
+            id="panel-sound"
+            class="btn btn-ghost btn-sm"
+            onclick="window.Companion.toggleSound()"
+          >
+            🔊
+          </button>
+          <button
+            id="panel-hide"
+            class="btn btn-ghost btn-sm"
+            onclick="window.Companion.toggleEnabled()"
+            title="收起伴读悬浮球"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
