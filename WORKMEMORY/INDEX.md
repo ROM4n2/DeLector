@@ -21,11 +21,12 @@
 
 ## Active handoffs
 
+- 2026-10-18 → [`handoff_c7-followups.md`](handoff_c7-followups.md)（to: any · role: FIX/VERIFY · status: open）— C7 收尾的两项遗留：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，**别跑**）；② `wb-rate.js` 的 `doRate` 评分分支无行为断言（现只有静态所有权钉子）
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
-- 2026-10-18 → [`handoff_c7-workbench-html-split.md`](handoff_c7-workbench-html-split.md)（to: any · role: IMPLEMENT · status: open · **2026-10-18 已接手执行中**：worktree `D:\Code\DeLector-c7` / 分支 `refactor/c7-workbench-html-split` / 台账 0/6，Task-1 开工）— C7 `workbench.html` 拆分：含 **140 个耦合探针的实测盘点**（A91/B4/C21/D12/E12）+ 13 个 `.mjs` 探针断裂清单 + 入口路径不可改名的 5 处钉死点 + 迁移依赖顺序 + **并行文件占面契约**；计划正本 `docs/plans/2026-10-18-c7-workbench-html-split.md`
 
 ## 已归档 handoffs
 > 协议 §4：关闭后 MUST 移入 `WORKMEMORY/archive/`；`handoff_*.md` 只保留**活跃**交接。
+- 2026-10-18 → `archive/handoff_c7-workbench-html-split.md`（**closed 2026-10-18**）— C7 `workbench.html` 拆分全部完成：4730 → 2840 行、8 个模块、PR #152/#153（master `80dae6b`）；全量 2352 passed 与拆分前逐字相同；遗留 2 项已转 `handoff_c7-followups.md`
 - 2026-10-15 → `archive/handoff_judge-gaming-experiment.md`（**closed 2026-10-16**）— §4.3 第 8 条对照实验：60 局真跑 + 全景报告 + ADR-0024 签批 + PR #139 已合入 master。剩余边界（不是待办）：P1 本形态下无发生机制；回灌子计划见 ADR-0024 硬依赖
 - 2026-10-16 → `archive/handoff_audit-fixes-a-b.md`（**closed 2026-10-17**）— 审计修正 A 档 8 项 + B 档 5 项均已合入 master（#143 `459343b` / #144 `c79e764`）；WORKMEMORY 已轮转并生成 10 月 COLD digest；**唯一待办入口 = `docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项**
 - 2026-10-14 → `archive/handoff_interactive-agent-loop.md`（**closed 2026-10-15**）— ADR-0023 交互层循环 Task 3~6 + CI 半 + PR #136 均已交付

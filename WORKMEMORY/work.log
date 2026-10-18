@@ -590,3 +590,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 `workbench.html` **4345 → 2840 行（-35%）**；全量 **2352 passed / 3 skipped**（与合并前逐字相同 ⇒ 零用例增减）。
 门禁：mypy 107/151 · ruff · go 8 包 · gofmt · check_mock_drift · check_silent_degradation 全绿；改动文件 lone_LF=0。
 教训（已写入接续笔记）：① 搬迁类改动的验证面必须是**所有引用 workbench.html 的测试**（曾因只跑 3 个文件漏掉 2 处真回归）；② 判别力用「双向所有权钉子」；③ 跨文件锚点必须带前导换行，否则会命中模块头注释。
+
+### 2026-10-18 13:12 | codebuddy | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 主交接包闭合归档 + 两项遗留新包**。
+- `handoff_c7-workbench-html-split.md` → status=closed + 响应节（C7 全部完成：4730→2840 行、8 模块、PR #152/#153、全量 2352 passed 与拆分前逐字相同）→ 移入 `archive/`；
+- 新包 `handoff_c7-followups.md`（status: open）：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，建议加 `--i-know-this-overwrites` 护栏 + 校正自相矛盾 docstring）；② `wb-rate.js` 的 `doRate` 评分分支无行为断言（现只有静态所有权钉子，建议加 node 探针）。
+- INDEX：Active handoffs 挂新包；已归档 handoffs 挂旧包。基线 master = 80dae6b。

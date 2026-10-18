@@ -3,7 +3,7 @@ to: any
 from: deepseek-v4.1-flash__hermes
 created: 2026-10-18 00:25
 role: IMPLEMENT
-status: open
+status: closed
 ---
 # Handoff: C7 —— `static/german/workbench.html` 拆分（含 140 个耦合探针的现代化前置）
 
@@ -217,3 +217,21 @@ status: open
 ③ 入口路径未改名 ✔ ④ 13 个 `.mjs` 本 Task 未动（Task 2 才轮到），尚未验证 —— 待 Task 2 后复验。
 
 **评审**：独立 CRV 判 **PASS（无红牌）**，3 张黄牌中 Y1/Y2 已在提交内处理，Y3 即本节。
+
+---
+
+## 响应（2026-10-18 · 完成闭合 · codebuddy）
+
+**C7 全部完成**，本包按协议闭合并移入 `archive/`。
+
+**最终形态**：`static/german/workbench.html` **4730 → 2840 行（-40%）**，入口路径未改名，全部为普通 `<script src>`（零 ES Module 语义，WebView 回退路径保留）。拆出 8 个模块：
+`wb-seed-data.js`（种子数据）· `wb-tts.js`（`playWord`+7 个 `_tts*`）· `wb-idb.js`（16 声明，`loadAll`/`saveWords`/整套 IDB）· `wb-views.js`（9 渲染）· `wb-sync.js`（4 段，499 行）· `wb-scope.js`（10，147 行）· `wb-queue.js`（8，169 行）· `wb-rate.js`（9，223 行）。
+
+**交付**：PR #152（Task 1~6 主体，merge `0b5758b`）· PR #153（Task 5 剩余 5 块，merge `80dae6b`）。
+**验收**：全量 **2352 passed / 3 skipped**，与拆分前逐字相同（零用例增减）；6 块累计 **28 组变异自证**全红后逐字节复原；18 个 `wb_*.mjs` 探针全 exit 0 且行为字段逐字相等；8 项门禁（mypy 107/151 · ruff · go 8 包 · gofmt · mock-drift · silent-degradation）全绿；24 文件 0 lone LF。
+
+**交接包原列的验收判据 4 条**：① 用例数守恒 ✔（只新增 `tests/test_wb_source.py` 28 条，属计划允许项）② 每处重写附变异自证 ✔ ③ 入口路径未改名 ✔ ④ 18 个探针全 exit 0 ✔。
+
+**过程中抓到的两点（已修）**：① 只跑 C7 自己的 3 个测试文件时漏掉两处外围红（`test_audit_hardening.py` 的 `_pullFails`、`test_workbench_tokens.py` 的 `split("function inScopeWord")`）⇒ 教训：**搬迁类改动的验证面 = 所有引用该文件的测试**；② 跨文件锚点必须带前导换行，否则命中模块头注释（`decl_body` 会切出注释占位，断言等于对文档撒谎）。
+
+**遗留**：见新包 `handoff_c7-followups.md`（2 项）。
