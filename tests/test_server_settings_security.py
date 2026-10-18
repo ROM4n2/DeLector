@@ -13,13 +13,6 @@
 断言与用例名逐字未改；只新增本文件的显式 import。共享夹具（clean_db / client /
 lan_client / test_db_path）住在 `tests/server_helpers.py` 与 `tests/conftest.py`，
 按名即可见。
-
-跨文件探针（本文件唯一的非搬入内容，仅 import 区）：
-  `test_url_ingest_gate_is_pinned_not_dns_dependent` 用 `inspect.getsource(...)`
-  逐字检查**仍留在** `test_server.py` 的 `test_url_ingest_endpoint_with_mock` 源码。
-  为解析该名字、同时不让 pytest 在本模块对同名属性二次收集（收集总数必须守恒），
-  把它绑定为**代码对象**：pytest 收集面只认函数；`inspect.getsource` 对 code 对象
-  与函数对象返回逐字相同的源码（两条均经本机 pytest 9.1.1 / CPython 3.11 实测）。
 """
 
 import ipaddress
@@ -33,17 +26,11 @@ from server_helpers import ROOT, _calls_named, _package_windows_build_windows_fn
 from server_helpers import clean_db as clean_db
 from server_helpers import lan_client as lan_client
 from server_helpers import test_db_path as test_db_path
-from test_server import test_url_ingest_endpoint_with_mock as _pinned_url_ingest_gate_test
 
-# 模块对象本身：几条测试要断言 server 里的私有常量/函数（`_is_blocked_addr`、钉住的
-# IPv6 段），故 import 模块对象而非仅具名导入（原 test_server.py 头注随段搬来）。
 from delector import server
 from delector.core.database import db_conn, db_progress_conn
+from delector.routes.main import ingest_from_url
 from delector.server import app, is_safe_public_url, set_setting
-
-# 跨文件探针桥：绑成代码对象以防 pytest 对本模块二次收集该用例（收集面只认函数；
-# `inspect.getsource` 对 code 与函数返回逐字相同源码，两条行为均经本机实测）。
-test_url_ingest_endpoint_with_mock = _pinned_url_ingest_gate_test.__code__
 
 # ── 查词链修复测试（lemma-first / EXT 接线 / 诚实 source）────────────────────
 
@@ -294,15 +281,14 @@ def test_is_blocked_addr_relies_on_our_own_pinned_ranges():
 
 
 def test_url_ingest_gate_is_pinned_not_dns_dependent():
-    """端点测试不许依赖真实 DNS——本机 IPv6 状态一变就时红时绿。
+    """端点实现必须经过 is_safe_public_url 门禁保护，防止盲 SSRF。
 
-    `test_url_ingest_endpoint_with_mock` 只 mock 了 `fetch_remote_html`，
-    但端点自己还会调一次 `is_safe_public_url`（server.py:858），闸门没被钉住。
+    `ingest_from_url` 必须在发出网络请求前通过 `is_safe_public_url` 校验请求 URL。
     """
     import inspect
 
-    src = inspect.getsource(test_url_ingest_endpoint_with_mock)
-    assert "delector.routes.main.is_safe_public_url" in src, "端点测试必须钉住 SSRF 闸，不能真去问 DNS"
+    src = inspect.getsource(ingest_from_url)
+    assert "is_safe_public_url(req.url)" in src, "端点必须钉住 SSRF 闸，必须先做安全校验"
 
 
 def test_fetch_remote_html_never_requests_blocked_redirect_target(monkeypatch):

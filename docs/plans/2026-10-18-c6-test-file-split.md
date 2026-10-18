@@ -290,12 +290,10 @@
 
 ## 📌 执行中登记的后续项（Task 5 交付时发现，不在本计划范围内）
 
-### F1 · `__code__` 跨文件探针桥的根治
-`tests/test_server_settings_security.py` 中，被搬走的 `test_url_ingest_gate_is_pinned_not_dns_dependent` 用 `inspect.getsource(...)` 内省**仍留在 `test_server.py` 的** `test_url_ingest_endpoint_with_mock`。三重约束（禁改测试体 / 禁破坏用例数守恒 / 禁拆散段落）下无更好解，故在 import 区绑了 `__code__`（pytest 收集面只认函数，`inspect.getsource` 对 code 与函数返回逐字相同源码——两条均经本机实测）。
-**根治**：让该用例**不再内省另一个测试**，改为内省**生产函数**（`api_url_ingest` 之类）。这是**测试语义变更**，MUST 单独立项，**禁止**混进搬迁类改动。根治后 MUST 撤掉该桥。
+### F1 · `__code__` 跨文件探针桥的根治（✅ 已于 2026-10-18 根治闭环）
+原 `tests/test_server_settings_security.py` 中绑定 `__code__` 的探针桥已正式拆除。用例改为直接内省真实生产入口 `from delector.routes.main import ingest_from_url` 并断言其包含 `is_safe_public_url(req.url)` 安全门禁校验，彻底消除测试间的跨文件代码内省依赖。
 
 ### F2 · `test_server.py` 残余杂项区切分
-Task 5 后 `test_server.py` 为 **1482 行 / 55 用例**（起点 7614 行），其中 **876 行无 banner 的杂项区**（writing / essays / CEFR / backup / audio-cache + `test_progress_path` 死 fixture 等）仍是一袋装。
-**为什么没在本计划内切**：该区**没有单一域**，继续切需要**逐用例**做领域归属判断——那是新项目，不是 C6「按被测面切分三个已命名文件」的登记范围。
-**另**：`test_server.py:1169-1258` 的 `GET /api/cards/counts`（3 用例 + `_insert_grammar_card`）经实测属 **cards/DB 域**，其真家在 Task 4 产出的 `test_server_cards_vocab.py`——同属后续微任务。
-**另**：Task 5 报告了若干**陈旧的文档指针**（搬走后行号/文件名失配）：`package_windows.py:271` · `static/js/writer.js:1251`（**属 C7 面，禁改**）· `tests/test_check_mock_drift.py:13/217` · `tools/check_mock_drift.py:35/340`。MUST 在 C6 Task 7 或单独微任务里校正。
+- `GET /api/cards/counts`（3 用例 + `_insert_grammar_card`，原 1169-1258 行）：**✅ 已于 2026-10-18 归位至 `tests/test_server_cards_vocab.py`**（`test_server.py` 降至 52 用例，`test_server_cards_vocab.py` 增至 14 用例，全量 2355 严格守恒）。
+- 剩余 876 行无 banner 的杂项区（writing / essays / CEFR / backup / audio-cache 等）保留在 `test_server.py` 作为残余综合测试区。
+- **陈旧文档指针**：`package_windows.py`、`tools/verify_windows_portable.py`、`tests/test_desktop_port_guard.py` 中的测试位置指针**✅ 已于 2026-10-18 校正完成**。

@@ -131,22 +131,14 @@ _FACADE_ALLOWLIST: Dict[str, str] = {
     "Request": (
         "同上：`_require_localhost` 的入参类型注解所需，fastapi 导入产物。"
     ),
-    "PROCESSED_JSON_VERSION": (
-        "计划登记的 `core ⇄ nlp_engine` 双向耦合（本轮不解耦，见 database.py 文件头）："
-        "façade 顶层 import processor 并再导出该常量，同时登记进 `__all__`；基线漏记它只是因为"
-        "Task 1 的 AST 工具不扫 import，属导入型再导出而非新语义公开名。"
-    ),
-    "process_german_text": (
-        "同上：processor 再导出（登记的双向耦合），导入型而非新语义公开名。"
-    ),
 }
 
 # 防呆：基线一旦被误清空（或生成命令写错路径产出空表），「⊇」断言会**恒真**而失去意义。
 # 67 是补入两个 AnnAssign 常量后的真实规模；60 留出余量但不允许退化成个位数。
 _MIN_BASELINE_SIZE = 60
 
-# 对账表里「名字归属哪一片」的候选模块（顺序即优先级）。落在这些模块以外的名字，要么是
-# façade 本体（`_require_localhost`）所需的导入产物，要么是 processor 再导出。
+# 对账表里「名字归属哪一片」的候选模块（顺序即优先级）。落在这些模块以外的名字，是
+# façade 本体（`_require_localhost`）所需的导入产物。
 _OWNER_CANDIDATES: Tuple[str, ...] = (
     "delector.core.db.connection",
     "delector.core.db.backup",
@@ -155,7 +147,6 @@ _OWNER_CANDIDATES: Tuple[str, ...] = (
     "delector.core.db.content",
     "delector.core.db.records",
     "delector.core.db.vocab",
-    "delector.nlp_engine.processor",
 )
 
 

@@ -58,11 +58,6 @@ from delector.core.db.connection import (
     upsert_corpus_syntax_stats,
 )
 
-# processor 的三个名字在这里**有意保留**（本文件已不再直接使用它们）：计划登记的
-# `core ⇄ nlp_engine` 双向耦合（database.py 顶层 import processor）本计划**不解耦**，只登记。
-# 它们同时登记进 `__all__`，pyflakes(F401) 据此认定其为有意导入（而非「导入未用」）。
-from delector.nlp_engine.processor import PROCESSED_JSON_VERSION, _process_german_text_pure_python, process_german_text
-
 
 def _require_localhost(request: Request) -> None:
     """敏感接口仅允许本机访问。
@@ -351,9 +346,4 @@ __all__ = [
     "_reader_rich_fields",
     "_reset_a1_workbench_cache",
     "format_vocab_headword",
-    # 登记的双向耦合：database 顶层仍 import processor（本计划不解耦，见文件头注释），
-    # 这三个名字保持可经 `database.X` 取用。
-    "PROCESSED_JSON_VERSION",
-    "_process_german_text_pure_python",
-    "process_german_text",
 ]

@@ -41,7 +41,7 @@ CI 里子进程的 stdout/stderr 被**重定向进日志文件** ⇒ 子进程�
 ``None.write``（argparse 的 ``file.write`` 路径，Task 1 已修）。这道闸扫 traceback 抓不到
 那类回归，不是"不够严"，是**判据从一开始就瞄错对象**：本步的子进程标准流被重定向（并非
 ``None``）⇒ ``None.write`` 路径在 CI 语境下根本不会被触发，日志里自然没有它的 traceback。
-收口前的裸输出顺序契约，由 ``tests/test_desktop_shell.py`` 的 AST 结构守卫静态钉死
+收口前的裸输出顺序契约，由 ``tests/test_desktop_startup_guards.py`` 的 AST 结构守卫静态钉死
 （``ensure_streams`` 调用点之前不得出现无 ``file=`` 的 ``print`` / ``sys.stdout.write`` /
 ``sys.stderr.write``）。(c) 步在 CI 钉的是：**无控制台窗口语境下起服 + 整段日志无
 traceback**（含健康就绪**之后**才发生的崩溃 —— (b) 步只看就绪，那类它抓不到）+
@@ -606,7 +606,7 @@ def log_has_traceback(log_text: str) -> bool:
     Task 1 已修）。而本闸的子进程 stdout/stderr 被**重定向进日志** ⇒ 标准流并非 ``None``，
     ``None.write`` 路径在 CI 语境下根本不会被触发 ⇒ 那类回归的 traceback 不会出现在日志里，
     本判据**瞄不到它**（不是"不够严"，是判据从一开始就瞄错了对象）。收口前的裸输出顺序契约
-    由 ``tests/test_desktop_shell.py`` 的 AST 结构守卫静态钉死：``ensure_streams`` 调用点
+    收口前的裸输出顺序契约由 ``tests/test_desktop_startup_guards.py`` 的 AST 结构守卫静态钉死：``ensure_streams`` 调用点
     之前不得出现无 ``file=`` 的 ``print`` / ``sys.stdout.write`` / ``sys.stderr.write``。
     """
     return "Traceback (most recent call last)" in log_text
