@@ -313,7 +313,12 @@
 - [x] **Step 4: 用例数核验（如实报两个数，不套「守恒」）** —— 拆分动作**零新增业务断言**；**2367 → 2387**，差额 **+20** 全部来自 `tests/test_frontend_layers.py`（本计划 Global Constraints 明确允许的唯一来源）
 - [x] **Step 5: CRLF 卫生** —— `git diff --name-only master...HEAD` 的 **9 个文件**全部 0 lone LF
 - [x] **Step 6: 追加 `WORKMEMORY/work.log` DONE 事件**（3,866 字节，符合 ≤4KB 的 schema 约束）
-- [x] **Step 7: 推送分支并创建 PR**（base=master）—— **PR #160**。随后 #159 合并使本 PR 转为 `CONFLICTING`：冲突面正是本计划预判的两处且均为**追加型** —— `.github/workflows/ci.yml`（#159 加 `Frontend index.html template sync gate` 步、本分支加 `Frontend layer invariants gate` 步）与 `WORKMEMORY/work.log`（双方各追加 journal 条目）。已 `git rebase origin/master` 并**两侧都保留**；rebase 后复验：六道闸全绿 · `ruff` 全绿 · `mypy` 118/156 文件 0 错 · 定向 185 passed · 收集数 2395
+- [x] **Step 7: 推送分支并创建 PR**（base=master）—— **PR #160**。随后 #159 合并使本 PR 转为 `CONFLICTING`：冲突面正是本计划预判的两处且均为**追加型** —— `.github/workflows/ci.yml`（#159 加 `Frontend index.html template sync gate` 步、本分支加 `Frontend layer invariants gate` 步）与 `WORKMEMORY/work.log`（双方各追加 journal 条目）。已 `git rebase origin/master` 并**两侧都保留**。
+- [x] **Step 8: 交付终态复核**（本行数字为**交付时实测**，非中途快照）：
+  - **本地权威全量跑（单条串行）**：`2430 passed, 3 skipped, 0 failed in 385.46s`；收集数 **2433**
+  - 六道闸全绿 · `ruff check .` 全绿 · `mypy --strict delector tools` **118 文件 0 错** · `mypy --follow-imports=skip tests` **156 文件 0 错** · 定向 9 文件 **208 passed** · 全部改动文件 0 lone LF
+  - **CI（PR #160）**：**8 pass / 1 skipping / 0 fail**，`mergeStateStatus: CLEAN`、`mergeable: MERGEABLE`。其中 `Tests & Go Gates (ubuntu)`（6m50s）与 `Windows Portable Smoke`（12m58s）均绿；经 `gh api .../actions/jobs/<id>` 逐步骤核验，**step 15 `Frontend layer invariants gate` = success** —— 即新闸在 CI 上真的执行了（不是被静默跳过），且与 #159 的 step 14 并存（合并两侧都保住）
+  - 注：中途曾因**并发跑 pytest** 撞上 `tests/conftest.py` 的仓库根 DB 守卫而出现一次 ERROR，复跑确认为共享数据目录争用（非代码缺陷）—— **全量跑必须单条串行**
 
 ---
 
