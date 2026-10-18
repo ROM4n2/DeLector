@@ -253,15 +253,23 @@
 > Return: 摘要 + MANDATORY 物理凭据（两条变异各自的红/绿退出码 + 用例数）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记录 RED 起点（脚本不存在）
-- [ ] **Step 2**: 写闸脚本（LAYER_SPEC + scan_module + main）
-- [ ] **Step 3**: 写单测（合成夹具 + 真树集成断言）
-- [ ] **Step 4**: 变异自证 ①（注入 DOM 调用 ⇒ 红 ⇒ 复原）
-- [ ] **Step 5**: 变异自证 ②（复制端点函数回 writer.js ⇒ 红 ⇒ 复原）
-- [ ] **Step 6**: 接入 CI（`frontend-layers` job）
-- [ ] **Step 7**: 门禁 + 用例数守恒
-- [ ] **Step 8**: Physical Evidence Gate
-- [ ] **Step 9**: 原子提交（`feat(tools): add frontend layer invariants gate`）
+- [x] **Step 1**: 落地 `tools/check_frontend_layers.py`（约 500 行）—— 规则表见上；**刻意不重复** `check_frontend_api_contract.py` 已有的**路径**维度，只补**方法**维度
+- [x] **Step 2**: 关键实现口径 —— ①`strip_comments` 先剥 `//` 与 `/* */`（**保留行号与列位**），否则 L1/L2 模块头注释里逐字写着的 `document`/`fetch`/`notify` 会让闸**对自己的文档开火**（假红）；②字符串**不**剥离，并在 docstring 里写明这是保守方向（假红可改、假绿是漏洞）；③违规一律报 `文件:行号:规则:原始行`；④启动时 `_bootstrap_env()` 把 DB 路径钉进临时目录（与路由契约闸同口径，防 import `delector.server` 污染仓库根）
+- [x] **Step 3**: `tests/test_frontend_layers.py` **20 条**用例 —— 纯函数 3 条 + 合成夹具 14 条（含**两条阴性对照**：干净副本零违规、L2 允许网络）+ 真树集成 3 条（端到端 exit 0、行级归因格式、CLI 红态）
+- [x] **Step 4**: **真树变异自证 8/8 PASS** —— 往**生产文件**注入缺陷，每条都断言三件事：注入后 `exit=1` **且 stderr 报出期望的那条规则名**、复原后 `exit=0`、三文件逐字节复原一致。只断言「exit 1」不算证明（闸可能因别的原因红）：
+  | # | 变异 | 期望规则 | 结果 |
+  | --- | --- | --- | --- |
+  | ① | L1 混入 DOM | `L1 纯格式化层禁dom` | PASS |
+  | ② | L1 混入网络 | `L1 纯格式化层禁network` | PASS |
+  | ③ | L1 顶层可变状态 | `L1 纯格式化层禁mutable-state` | PASS |
+  | ④ | L2 混入 DOM | `L2 持久化访问层禁dom` | PASS |
+  | ⑤ | 反向依赖（L2 import writer.js） | `reverse-dependency` | PASS |
+  | ⑥ | 重复声明（导入名又本地声明） | `duplicate-declaration(getErrorTypeLabel)` | PASS |
+  | ⑦ | 假解耦（重定义已迁出符号） | `false-decoupling(renderWordDiff` | PASS |
+  | ⑧ | 方法不一致（`DELETE`→`POST`） | `method-mismatch(POST` | PASS |
+- [x] **Step 5**: 接入 CI —— **挂在已装依赖的 `ci` job 内**（`Frontend API contract gate` 之后、`tsc` 之前），而**不是**新建纯 stdlib job：规则⑤ 要 `delector.server` 取真实路由表，新 job 得整套重装依赖。已用 `yaml.safe_load` 复核 YAML 合法
+- [x] **Step 6**: 门禁 + 用例数 —— `ruff check .` 全绿（修掉 1×F401 + 3×E501 + 1×E741）· `mypy --strict delector tools` 116 文件 0 错 · `mypy --follow-imports=skip tests` 154 文件 0 错 · 收集数 **2367 → 2387**（+20 = 本闸自身验收面，计划允许的唯一新增断言来源）· 全部触碰文件 0 lone LF
+- [x] **Step 7**: Physical Evidence Gate + 原子提交（`feat(tools): add frontend layer invariants gate`）
 
 ---
 
