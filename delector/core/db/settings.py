@@ -21,10 +21,7 @@ import secrets
 import sqlite3
 from typing import Optional
 
-# 循环导入纪律：`database.py` 在**定义完连接访问器之后**才 re-export 本模块，
-# 故此处 import 拿到的 database 模块对象已完成到该点（db_conn 已绑定），
-# 与 `delector/core/db/backup.py` 同款成例。
-from delector.core.database import db_conn
+from delector.core.db.connection import db_conn
 
 
 def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> str:

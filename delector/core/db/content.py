@@ -30,10 +30,7 @@ from typing import Any, Dict, List, Optional
 
 import genanki
 
-# 循环导入纪律：`database.py` 在**定义完连接访问器与路径常量之后**才 re-export 本模块，
-# 故此处 import 拿到的 database 模块对象已完成到该点（下列名字均已绑定），
-# 与 `delector/core/db/backup.py` / `schema.py` / `settings.py` 同款成例。
-from delector.core.database import (
+from delector.core.db.connection import (
     _PKG_DIR,
     AUDIO_CACHE_DIR,
     db_conn,

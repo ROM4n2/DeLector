@@ -30,9 +30,7 @@ from typing import Any, Dict, Iterator, List, Tuple
 
 from fastapi import HTTPException
 
-# 循环导入纪律：`database.py` 在**定义完这四个连接访问器之后**才 re-export 本模块，
-# 故此处 import 拿到的 database 模块对象已完成到该点（四个函数均已绑定）。
-from delector.core.database import (
+from delector.core.db.connection import (
     get_db,
     get_db_path,
     get_progress_db,
