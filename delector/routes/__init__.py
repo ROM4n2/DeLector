@@ -22,6 +22,7 @@ from delector.routes import (
     a1_hoeren,
     a1_lesen,
     a2,
+    articles,
     audio,
     backup,
     cards,
@@ -37,6 +38,7 @@ from delector.routes import (
     syntax_hard,
     tools,
     update,
+    writing,
 )
 from delector.routes.sync import (
     _SYNC_INSTANCE_ID,
@@ -49,6 +51,7 @@ __all__ = [
     "a1_hoeren",
     "a1_lesen",
     "a2",
+    "articles",
     "audio",
     "backup",
     "cards",
@@ -64,6 +67,7 @@ __all__ = [
     "main",
     "tools",
     "update",
+    "writing",
     "MAX_SYNC_CACHE_ENTRIES",
     "_SYNC_INSTANCE_ID",
     "_sync_sdp_cache",
@@ -100,6 +104,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(backup.router)
     app.include_router(cards.router)
     app.include_router(audio.router)
+    app.include_router(articles.router)
+    app.include_router(writing.router)
     app.include_router(main.router)
     # tools 在 main 之后：/api/tools/{name} 是独立前缀，不与任何分域路由冲突；
     # 放最后只是保持"通用 handler 永远垫底"的注册序纪律。

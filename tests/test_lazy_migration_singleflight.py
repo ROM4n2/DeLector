@@ -69,7 +69,7 @@ def _insert_stale_article(db: str) -> int:
 
 def _spy_spy_on_processor(monkeypatch: pytest.MonkeyPatch, sleep_s: float = 0.05) -> List[Dict[str, Any]]:
     """把 routes.main.process_german_text 换成带窗口的计数 spy（返回固定已迁移 payload）。"""
-    from delector.routes import main as routes_main
+    from delector.routes import articles as routes_articles
 
     calls: List[Dict[str, Any]] = []
 
@@ -83,7 +83,7 @@ def _spy_spy_on_processor(monkeypatch: pytest.MonkeyPatch, sleep_s: float = 0.05
             "stats": {"word_count": 10, "total_words": 10},
         }
 
-    monkeypatch.setattr(routes_main, "process_german_text", fake_process)
+    monkeypatch.setattr(routes_articles, "process_german_text", fake_process)
     return calls
 
 

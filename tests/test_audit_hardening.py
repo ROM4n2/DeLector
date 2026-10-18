@@ -195,7 +195,7 @@ def test_list_articles_readonly_no_stats_recompute(client, monkeypatch):
         calls.append(raw_text)
         return {"stats": {"sentences": 99}}
 
-    monkeypatch.setattr("delector.routes.main.process_german_text", spy)
+    monkeypatch.setattr("delector.routes.articles.process_german_text", spy)
     data = client.get("/api/articles").json()
     assert calls == [], "list_articles 不应触发 stats 重算"
     row = next(x for x in data if x["title"] == "NoStats")

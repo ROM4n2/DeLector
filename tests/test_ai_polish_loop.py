@@ -562,7 +562,7 @@ def test_real_judge_is_wired_at_the_assembly_point(nlp: Any, monkeypatch: Any) -
     —— 后者更强，能拦住「只改 `writing.py` 却没接到生产链路」的 dead-green。
     """
     from delector.nlp_engine import processor
-    from delector.routes.main import _run_polish
+    from delector.routes.writing import _run_polish
 
     captured: dict[str, Any] = {}
 
@@ -573,7 +573,7 @@ def test_real_judge_is_wired_at_the_assembly_point(nlp: Any, monkeypatch: Any) -
         return LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
 
     monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
-    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_base_url", lambda: "http://stub")
     # mock-drift-ok: 消费方于调用期经模块属性读取（routes/main.py:2580 _nlp_processor.get_loaded_nlp()），补丁即时生效
     monkeypatch.setattr(processor, "get_loaded_nlp", lambda: nlp)
 
@@ -590,7 +590,7 @@ def test_real_judge_is_wired_at_the_assembly_point(nlp: Any, monkeypatch: Any) -
 def test_endpoint_assembly_degrades_to_rules_only_when_no_nlp(monkeypatch: Any) -> None:
     """装配点对照：nlp 来源不可用 ⇒ 装配出的裁判 `judge_engine == "rules_only"`（如实降级）。"""
     from delector.nlp_engine import processor
-    from delector.routes.main import _run_polish
+    from delector.routes.writing import _run_polish
 
     captured: dict[str, Any] = {}
 
@@ -600,7 +600,7 @@ def test_endpoint_assembly_degrades_to_rules_only_when_no_nlp(monkeypatch: Any) 
         return LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
 
     monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
-    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_base_url", lambda: "http://stub")
     # mock-drift-ok: 消费方于调用期经模块属性读取（routes/main.py:2580 _nlp_processor.get_loaded_nlp()），补丁即时生效
     monkeypatch.setattr(processor, "get_loaded_nlp", lambda: None)
     # mock-drift-ok: 调用期经模块属性读取（routes/main.py:2582 _nlp_processor.try_load_nlp_no_download），补丁即时生效

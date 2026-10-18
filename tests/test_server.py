@@ -94,7 +94,7 @@ def test_writing_card_sugar_endpoint(client):
 
 
 def test_ai_polish_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 200
     data = res.json()
@@ -104,7 +104,7 @@ def test_ai_polish_no_key_stub(client, monkeypatch):
 
 
 def test_ai_polish_diff_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund. Er ist gut."})
     assert res.status_code == 200
     data = res.json()
@@ -118,7 +118,7 @@ def test_ai_polish_diff_no_key_stub(client, monkeypatch):
 
 
 def test_ai_polish_diff_mocked(client, monkeypatch):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "test-api-key")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "test-api-key")
 
     mock_response_payload = {
         "choices": [
@@ -573,11 +573,11 @@ def test_url_ingest_endpoint_with_mock(client, monkeypatch):
         "<html><head><title>Hallo Berlin</title></head><body>"
         "<p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
     )
-    monkeypatch.setattr("delector.routes.main.fetch_remote_html", AsyncMock(return_value=mock_html))
+    monkeypatch.setattr("delector.routes.articles.fetch_remote_html", AsyncMock(return_value=mock_html))
     # 端点自己也过一次 SSRF 闸（server.py:858），而 fetch 被 mock 掉不代表闸被 mock 掉。
     # 不钉住这里就等于让这条测试依赖真实 DNS：本机开着 Teredo 时 dw.com 会带出
     # 2001::/32 的地址，闸门拒绝，测试变成时红时绿；CI 的 Linux runner 无 Teredo 一直绿。
-    monkeypatch.setattr("delector.routes.main.is_safe_public_url", lambda u: True)
+    monkeypatch.setattr("delector.routes.articles.is_safe_public_url", lambda u: True)
 
     res = client.post("/api/articles/ingest-url", json={"url": "https://www.dw.com/de/hallo-berlin/a-123"})
     assert res.status_code == 200
@@ -1046,13 +1046,13 @@ def test_feed_items_parsing_and_endpoint(client, monkeypatch):
       </channel>
     </rss>"""
 
-    from delector.routes import main as routes_main
+    from delector.routes import articles as routes_articles
 
     async def mock_fetch(url):
         return sample_rss_xml
 
-    monkeypatch.setattr(routes_main, "fetch_remote_html", mock_fetch)
-    monkeypatch.setattr(routes_main, "is_safe_public_url", lambda u: True)
+    monkeypatch.setattr(routes_articles, "fetch_remote_html", mock_fetch)
+    monkeypatch.setattr(routes_articles, "is_safe_public_url", lambda u: True)
 
     res = client.get("/api/feed/items?url=https://www.tagesschau.de/xml/rss2/")
     assert res.status_code == 200
@@ -1076,13 +1076,13 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
       </item>
     </rdf:RDF>"""
 
-    from delector.routes import main as routes_main
+    from delector.routes import articles as routes_articles
 
     async def mock_fetch_rdf(url):
         return sample_rdf
 
-    monkeypatch.setattr(routes_main, "fetch_remote_html", mock_fetch_rdf)
-    monkeypatch.setattr(routes_main, "is_safe_public_url", lambda u: True)
+    monkeypatch.setattr(routes_articles, "fetch_remote_html", mock_fetch_rdf)
+    monkeypatch.setattr(routes_articles, "is_safe_public_url", lambda u: True)
 
     res = client.get("/api/feed/items?url=https://rss.dw.com/rdf/rss-de-all")
 
