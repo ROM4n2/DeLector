@@ -46,6 +46,64 @@ _TTS_JS_SRC_TAG = '<script src="../js/wb-tts.js"></script>'
 # wb_source.decl_body 的大括号配平切片（只含本函数体，内部声明顺序漂移也切不歪）。
 _IDB_JS = (_ROOT / "static" / "js" / "wb-idb.js").read_text(encoding="utf-8")
 _IDB_JS_SRC_TAG = '<script src="../js/wb-idb.js"></script>'
+# C7 Task 5（块 3 · render-views）：视图渲染层的九个顶层声明（`let curView` + showView /
+# renderStats / renderA1BootLoading / renderWords / renderSettings / renderSnapshots /
+# renderPlan / renderHeaderBadge）已从 workbench.html 的内联脚本抽到 static/js/wb-views.js，
+# 入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → 主内联脚本 的顺序用
+# **普通** <script src> 引入。凡切片落在这些声明里的断言，锚点已随代码搬家 —— 改读模块源，
+# 判别力只升不降（新增「所有权」钉子：这些名字必须只剩在模块里，两边各留一份会红）。
+_VIEWS_JS = (_ROOT / "static" / "js" / "wb-views.js").read_text(encoding="utf-8")
+_VIEWS_JS_SRC_TAG = '<script src="../js/wb-views.js"></script>'
+
+# 视图层里是**函数声明**的那八个（`function <name>(` 形态可双向核）。
+_VIEWS_FN_OWNED = frozenset({
+    "showView",
+    "renderStats",
+    "renderA1BootLoading",
+    "renderWords",
+    "renderSettings",
+    "renderSnapshots",
+    "renderPlan",
+    "renderHeaderBadge",
+})
+
+# 视图层声明的名字 → 唯一合法宿主是 wb-views.js（不在此集合里的仍读 workbench.html）。
+_VIEWS_OWNED = _VIEWS_FN_OWNED | frozenset({
+    "curView",
+    "showView",
+    "renderStats",
+    "renderA1BootLoading",
+    "renderWords",
+    "renderSettings",
+    "renderSnapshots",
+    "renderPlan",
+    "renderHeaderBadge",
+})
+
+
+def _host_of(name):
+    """名字 → 宿主文件路径（只用于断言消息，便于一眼看出切歪去了哪个文件）。"""
+    return "static/js/wb-views.js" if name in _VIEWS_OWNED else "static/german/workbench.html"
+
+
+def _decl_src(name):
+    """顶层声明 `name` 的宿主源文本，并顺手钉「所有权」。
+
+    所有权钉子（C7 Task 5 块 3 新增，判别力比搬家前强一档）：
+      * 视图层声明必须仍存在于 wb-views.js（被删/改名 → 红）；
+      * 视图层声明不得再留在 workbench.html 的 `function <name>(` 形态（搬回去一半 → 红）。
+    搬家前不存在这两条 —— 那时的判据只有「HTML 里能找到这个名字」。
+    不在 _VIEWS_OWNED 里的名字（其余三十多个顶层声明）照旧返回 workbench.html。
+    """
+    if name not in _VIEWS_OWNED:
+        return _WORKBENCH
+    assert ("function %s(" % name) not in _WORKBENCH, (
+        "%s() 仍留在 workbench.html —— 视图层声明应只在 static/js/wb-views.js" % name
+    )
+    assert ("function %s(" % name) in _VIEWS_JS, (
+        "static/js/wb-views.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+    )
+    return _VIEWS_JS
 
 
 def _playword_body():
@@ -318,20 +376,23 @@ def test_embedded_audio_dict_declared_before_playword():
     ReferenceError（或静默拿到 undefined 跳过内嵌路径）。
 
     C7 Task 4 起 EMBEDDED_AUDIO 与其余种子数据一起住在 static/js/wb-seed-data.js，
-    C7 Task 5 起 playWord 搬进 static/js/wb-tts.js、存储层 + IDB 搬进 static/js/wb-idb.js，
+    C7 Task 5 起 playWord 搬进 static/js/wb-tts.js、存储层 + IDB 搬进 static/js/wb-idb.js、
+    视图渲染层搬进 static/js/wb-views.js，
     「先于 playWord / loadAll 可见」这一事实由**加载序**承担，故本条钉住加载序本身：
-      1. 三个模块都用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
-         语义未真机验证（计划 Fog of War Unknown 2），必须保留 <script src> 回退能力；
-      2. 三个 <script src> 各恰好出现一次，且顺序为
-         数据模块 → IDB 模块 → TTS 模块 → 主内联脚本
+      1. 四个模块都用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
+        语义未真机验证（计划 Fog of War Unknown 2），必须保留 <script src> 回退能力；
+      2. 四个 <script src> 各恰好出现一次，且顺序为
+         数据模块 → IDB 模块 → TTS 模块 → 视图模块 → 主内联脚本
          —— 普通脚本的顶层 const/let/function 落在同一全局词法环境，后续脚本才可见；
       3. 数据模块里确实声明了 EMBEDDED_AUDIO，TTS 模块里确实是 playWord 的定义所在，
-         IDB 模块里确实是 loadAll / IDB_* 的定义所在（且 HTML 里不再内联）。
+         IDB 模块里确实是 loadAll / IDB_* 的定义所在，视图模块里确实是 renderWords /
+         renderHeaderBadge / curView 的定义所在（且 HTML 里不再内联）。
 
     变异验证：把任一 <script src> 挪到主内联脚本之后 → 红；给它加 type 属性 → 红；
     把两个标签对调（wb-tts.js 先于 wb-seed-data.js）→ 红；从数据模块删掉
     EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红；把 wb-idb.js 挪到 wb-tts.js 之后
-    → 红（本仓按「启动期依赖方向」定序，不是「谁先谁后都行」）。
+    → 红（本仓按「启动期依赖方向」定序，不是「谁先谁后都行」）；把 wb-views.js 挪到
+    wb-tts.js 之前 → 红；把 renderWords 搬回内联脚本（视图模块留个空壳）→ 红。
     """
     opening = re.findall(r"<script[^>]*wb-seed-data\.js[^>]*>", _WORKBENCH)
     assert len(opening) == 1, "数据模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(opening), opening)
@@ -348,16 +409,27 @@ def test_embedded_audio_dict_declared_before_playword():
     assert _WORKBENCH.count(_TTS_JS_SRC_TAG) == 1, "TTS 模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in tts_opening[0], "TTS 模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
+    views_opening = re.findall(r"<script[^>]*wb-views\.js[^>]*>", _WORKBENCH)
+    assert len(views_opening) == 1, (
+        "视图模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(views_opening), views_opening)
+    )
+    assert _WORKBENCH.count(_VIEWS_JS_SRC_TAG) == 1, "视图模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in views_opening[0], "视图模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
     src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
     idb_tag_at = _WORKBENCH.index(_IDB_JS_SRC_TAG)
     tts_tag_at = _WORKBENCH.index(_TTS_JS_SRC_TAG)
+    views_tag_at = _WORKBENCH.index(_VIEWS_JS_SRC_TAG)
     main_script_at = _WORKBENCH.index('<script>\n"use strict";')
     assert src_tag_at < idb_tag_at, "数据模块必须先于 IDB 模块加载（种子数据是 IDB 层的输入）"
     assert idb_tag_at < tts_tag_at, (
         "IDB 模块必须先于 TTS 模块加载：主内联脚本第一句就是 loadAll()，"
         "其实现住在 wb-idb.js —— 加载序按启动期依赖方向定"
     )
-    assert tts_tag_at < main_script_at, "TTS 模块必须在主内联脚本之前加载，否则 _tts* 状态在主脚本里不可见"
+    assert tts_tag_at < views_tag_at, (
+        "视图模块必须排在 wb-tts.js 之后（与 wb-idb.js → wb-tts.js → wb-views.js 的既定加载序一致）"
+    )
+    assert views_tag_at < main_script_at, "视图模块必须在主内联脚本之前加载，否则 curView 在主脚本里不可见"
 
     assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
     assert "function playWord(" in _TTS_JS, "playWord 必须住在 TTS 模块里（切片跑偏）"
@@ -366,6 +438,15 @@ def test_embedded_audio_dict_declared_before_playword():
     assert "async function idbHydrate()" in _IDB_JS, "idbHydrate 必须住在 static/js/wb-idb.js"
     assert "function loadAll" not in _WORKBENCH, "loadAll 不得再内联在 workbench.html（C7 Task 5 块 2 已搬走）"
     assert "function idbOpen" not in _WORKBENCH, "IDB 层不得再内联在 workbench.html（C7 Task 5 块 2 已搬走）"
+
+    assert _VIEWS_FN_OWNED <= _VIEWS_OWNED, "_VIEWS_FN_OWNED 必须是 _VIEWS_OWNED 的子集（登记漏了）"
+    # 视图层：八个函数声明全部只剩在模块里（逐名双向核 —— 「搬回去一半」也红）。
+    for name in sorted(_VIEWS_FN_OWNED):
+        assert "function %s(" % name in _VIEWS_JS, "static/js/wb-views.js 缺少 %s()（声明被删/改名）" % name
+        assert "function %s(" % name not in _WORKBENCH, "%s() 不得再内联在 workbench.html（块 3 已搬走）" % name
+    # curView 是 `let` 不是函数，单独钉（含默认值 review —— 首屏就是复习视图）。
+    assert 'let curView = "review";' in _VIEWS_JS, "curView 必须住在 static/js/wb-views.js 且默认 review"
+    assert 'let curView = "review";' not in _WORKBENCH, "curView 不得再内联在 workbench.html（块 3 已搬走）"
 
 
 def test_embedded_audio_lookup_uses_lowercase():
@@ -1062,9 +1143,11 @@ def _fn_body(name):
     """顶层无参函数的函数体（切到第 0 列的 `}` 为止）。
 
     第 0 列缩进作边界 —— 函数内部的块级 `}` 都有缩进，所以切片不会溢出到下一个函数。
+    C7 Task 5 块 3 起按 `name` 选宿主文件（见 `_decl_src`），视图层声明读 wb-views.js。
     """
-    m = re.search(r"function %s\(\)\s*\{.*?\n\}" % re.escape(name), _WORKBENCH, re.S)
-    assert m, "找不到函数 %s()" % name
+    src = _decl_src(name)
+    m = re.search(r"function %s\(\)\s*\{.*?\n\}" % re.escape(name), src, re.S)
+    assert m, "找不到函数 %s()（宿主：%s）" % (name, _host_of(name))
     return m.group(0)
 
 
@@ -1074,13 +1157,17 @@ def _top_fn_segment(decl):
     M5-2：语义等同旧写法 `_WORKBENCH.split(decl)[1].split("\\nfunction ")[0]`，
     但加两道显式护栏——声明必须存在、其后必须有下一个 function；
     标记被改名/漂移时直接红（旧写法会静默切歪成整文件或别处）。
+    C7 Task 5 块 3 起按声明头里的函数名选宿主文件（见 `_decl_src`）。
     """
-    seg_start = _WORKBENCH.find(decl)
-    assert seg_start != -1, "找不到函数声明: %s" % decl
+    name = re.search(r"function\s+([A-Za-z_$][\w$]*)", decl)
+    assert name, "decl 里没有函数名：%r" % decl
+    src = _decl_src(name.group(1))
+    seg_start = src.find(decl)
+    assert seg_start != -1, "找不到函数声明: %s（宿主：%s）" % (decl, _host_of(name.group(1)))
     seg_start += len(decl)
-    nxt = _WORKBENCH.find("\nfunction ", seg_start)
+    nxt = src.find("\nfunction ", seg_start)
     assert nxt != -1, "%s 之后找不到下一个顶层 function（声明顺序漂移）" % decl
-    return _WORKBENCH[seg_start:nxt]
+    return src[seg_start:nxt]
 
 
 def _sole_line(body, needle, what):
