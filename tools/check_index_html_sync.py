@@ -15,7 +15,24 @@ sys.path.insert(0, str(ROOT / "tools"))
 from build_index_html import INDEX_PATH, SKELETON_PATH, assemble_index_html  # noqa: E402
 
 
+def _pin_utf8_streams() -> None:
+    """把 stdout/stderr 的**写侧**钉死为 UTF-8（写法沿用 start.py 的既有加固）。
+
+    为什么需要：本脚本 print 中文结论。若写侧跟随终端 locale（GitHub Windows runner
+    = cp1252，本机 = GBK），调用方（`pytest` 的 subprocess）按 UTF-8 读取就会解码失败；
+    而失败发生在 subprocess 的读线程内，不体现在 returncode 上，表现为「退出码 0 但
+    stdout 为 None」的假绿/假红。写侧固定后，读侧再显式 encoding="utf-8" 才能闭环。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main() -> int:
+    _pin_utf8_streams()
     if not SKELETON_PATH.exists():
         # 过渡期保护：若尚未建立 skeleton，静态单体本身即为真相源，直接放行
         print("[check_index_html_sync] 提示: static/index.skeleton.html 尚未创建，处于单体过渡态，检查放行。")

@@ -17,7 +17,15 @@ def test_build_and_check_scripts_exist():
 
 def test_check_index_html_sync_clean():
     """当前生产仓库 index.html 与各分块模板比对必须完全一致 (exit 0)。"""
-    res = subprocess.run([sys.executable, str(CHECK_SCRIPT)], capture_output=True, text=True, cwd=str(ROOT))
+    # encoding 必须显式：默认按 locale 解码（GitHub Windows runner = cp1252），而子进程写的是
+    # UTF-8 中文 ⇒ 解码崩在 subprocess 读线程内，returncode 仍为 0 但 res.stdout 变成 None。
+    res = subprocess.run(
+        [sys.executable, str(CHECK_SCRIPT)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(ROOT),
+    )
     assert res.returncode == 0, f"同步校验失败:\n{res.stdout}\nSTDERR: {res.stderr}"
     assert any(k in res.stdout for k in ("通过", "PASS", "synced", "放行"))
 

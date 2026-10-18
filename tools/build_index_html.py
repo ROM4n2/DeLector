@@ -46,7 +46,22 @@ def assemble_index_html(skeleton_file: Path = SKELETON_PATH) -> str:
     return normalized
 
 
+def _pin_utf8_streams() -> None:
+    """把 stdout/stderr 的**写侧**钉死为 UTF-8（同 check_index_html_sync.py 的加固）。
+
+    本脚本的中文结论会被 CI 与 `python tools/build_index_html.py --check` 的调用方读取，
+    写侧不固定时 locale 一换即解码失败（详见 check 脚本里的注释）。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main() -> int:
+    _pin_utf8_streams()
     parser = argparse.ArgumentParser(description="装配 static/index.html")
     parser.add_argument("--check", action="store_true", help="校验模式：仅检查 index.html 是否与装配结果一致")
     parser.add_argument("--output", type=str, default=str(INDEX_PATH), help="输出文件路径")
