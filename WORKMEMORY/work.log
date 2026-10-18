@@ -474,3 +474,20 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 解法：两处补 `# silent-ok: 仅显示层编码（流不可重配置）⇒ 保持原流；本闸结论由退出码表达`（与仓内 18 个同类站点同口径）。本地复跑判定器：20 命中 / 20 豁免 / 0 未豁免，exit 0。
 - 教训：**「照抄既有加固写法」时，抄的不仅是代码，还有它附带的门禁豁免契约**；本仓凡是 `except …: pass` 都过 C1 判据，新增一处就必须同时给出豁免理由。改完 `tools/` 记得本地跑一遍 `python tools/check_silent_degradation.py`（秒级），别等 CI。
 
+### 2026-10-19 01:20 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**writer.js 前端分层解耦（Tasks 1~5）全部交付**。分支 `refactor/writer-js-modularization`（自 master e87a4f0 切出，走独立 worktree `.worktrees/wr-js-decouple` 以避开并行分支对同一工作目录的占用）。
+- 计划：`docs/plans/2026-10-19-writer-js-modularization.md`（承接 index.html 拆分计划的 Fog of War Unknown 1）。
+- **Task 1 探针多文件读取口**：4 处读 `writer.js` 的探针改走 `tests/wb_source.py` 的 `read_source`/`decl_body`；零漂移证明（新旧读法 sha256 一致）；变异自证 **4/4**。
+- **Task 2 抽出 `wr-format.js`（L1 纯层）**：6 个符号（ERROR_TYPE_LABELS / getErrorTypeLabel / WRITER_TABS / POLISH_REASON_COPY / polishReasonText / renderWordDiff）逐字节搬出；`writer.js` 1657 → 1563 行；具名导出面冻结（用模块图测试自己的解析器比对 master：各 60 个，缺失 0 新增 0）；变异自证 2/2。
+- **Task 3 抽出 `wr-api.js`（L2 持久化层）**：17 处 `await api(...)` 调用点替换为 14 个端点函数（脚本逐处做命中计数断言）；`writer.js` → 1526 行；实参保真 17/17（括号配平扫描比对方法/路径/载荷键集合）；路由一致 14/14；错误轨保真（27 条 alert/notify/console.error 进出相同，0 丢失）。
+- **Task 4 新增 `tools/check_frontend_layers.py` 前端分层机械闸**：L1/L2 硬禁令、反向依赖、越界 import、**重复声明**（ES 链接期 SyntaxError 会拖垮整张模块图，现状只有 `node --check` 能抓而 CI 不跑它）、**HTTP 方法一致性**（路径维度已由 `check_frontend_api_contract.py` 覆盖，刻意不重复）、防假解耦；接入已装依赖的 `ci` job。配套 `tests/test_frontend_layers.py` 58 条；**真树变异自证 14/14 PASS**（每条都断言注入后 exit=1 且报出**期望的那条规则名**）。
+- **Task 4b 独立对抗式复核驱动的判据整体重写（Tier 3-Critical）**：初版闸是**正则块表**，一轮独立复核给出 11 条绕过通道（3 CRITICAL / 5 HIGH），已判据整体重写为**真词法分析（tokenize：注释 / 字符串 / 模板插值 / 正则字面量）**。最尖锐的是 **F1**：只把 `method: 'DELETE'` 的**引号换成双引号**就能让规则⑤静默失效（旧版只认单引号且默认按 `GET` 处理，而 `GET` 确实注册了）—— 我自己的变异自证恰好用了单引号，所以当时「8/8 PASS」从未覆盖该通道。**教训：自证用例与被证代码同源时，盲区是共谋的。** 重写后复核新增的 5 条通道（双引号/反引号方法、方法取自变量即 fail-closed、别名 `const _net = fetch`、副作用型 import、`./vendor/core.js` 冒充）全部变红。
+- **重写中途由测试（而非人眼）抓到的缺陷**：我漏掉了 `if __name__ == "__main__":` 入口守卫 ⇒ 闸的 CLI **静默失效**（exit=0 却无输出，即「闸永远绿」）。`tests/test_frontend_layers.py` 的端到端用例当场变红。若无该用例，此形态会直接进 PR。
+- **踩坑（全部由机械手段而非人眼发现，已登记）**：
+  1. 把探针读法**一律**扩成多文件 concat 后，android 那条 `assert "api_key" not in src.lower() or ...` 的 OR 链**第一子句被静默中和**（新模块里的 `no_api_key` 是原因码名、不是凭据）⇒ 断言仍绿但判别力下降。纪律定为「**seam 只扩到该探针真正锚定的符号将要搬到的文件**」。
+  2. `node --check` 抓到 `wr-api.js` 的 `restoreEssayVersion` 与 `writer.js` 既有视图层同名函数**重复声明** ⇒ 已改名 `restoreEssayVersionRemote`。该缺陷类此前**无任何自动化捕获者**，已固化为闸的规则④。
+  3. 两条既有探针弱点（`"max_turns" in body` / `"alert" in polish_fn` 能被**注释**满足）经变异实测暴露，已收紧为 `"ev.max_turns"` / `"alert("`。
+  4. `Path.write_text(newline='')` 会把整文件转成 LF（本次踩中 3 次、累计 2000+ 行），仓库 `.gitattributes` 是 `eol=crlf` ⇒ 必须写 `chr(13)+chr(10)` 归一；已逐次 `--fix` 并人工核 diff。
+- **门禁验证（Task 5）**：全量 **2384 passed / 3 skipped / 0 failed in 414.21s**；收集数 2367 → **2387**（+20 = 本闸自身验收面，计划允许的唯一新增断言来源）；五道闸全绿（layer_invariants · mock_drift · silent_degradation · frontend_api_contract · frontend_layers）；`ruff check .` 全绿；`mypy --strict delector tools` 116 文件 0 错；`mypy --follow-imports=skip tests` 154 文件 0 错；Go 8 包全绿 + `gofmt -l .` 0 差异；9 个改动文件 0 lone LF。
+- 并行协调：PR #159（`refactor/index-html-split`）的 CI 红由用户另派 agent 修复，本工作流**未触碰**其占面（`static/index.html` / `static/views/**` / `static/modals/**` / `static/layout/**` / `tools/build_index_html.py` / `tools/check_index_html_sync.py`）。

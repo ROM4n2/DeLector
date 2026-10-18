@@ -1,10 +1,28 @@
 /* DeLector - Writing Desk (Schreibwerkstatt) & Grammar Polish */
 'use strict';
 
-import { api, esc, notify, DEFAULT_TIMEOUT_MS } from './core.js';
+import { esc, notify, DEFAULT_TIMEOUT_MS } from './core.js';
 import { refreshCardCounters } from './reader.js';
 import { Companion } from './companion.js';
 import * as A1Writer from './a1_writer.js';
+import {
+  analyzeWritingRemote,
+  applyWritingPolish,
+  createEssayVersion,
+  createWriterEssay,
+  fetchEssayVersion,
+  fetchEssayVersions,
+  fetchWriterEssay,
+  fetchWriterEssays,
+  fetchWritingPolishDiff,
+  removeEssayVersion,
+  removeWriterEssay,
+  restoreEssayVersionRemote,
+  saveWritingGrammarCard,
+  updateWriterEssay
+} from './wr-api.js';
+import { getErrorTypeLabel, WRITER_TABS, polishReasonText, renderWordDiff } from './wr-format.js';
+export { getErrorTypeLabel };
 export {
   setExamWritingTab,
   switchWriterMode,
@@ -50,21 +68,6 @@ let polishState = {
   // Y3：no-key 抑制分支的输入（no-key 路径循环根本没跑，见 renderPolishReview 的守卫）。
   unconverged_reason: null
 };
-
-// ── Error Type Labels & Badges ──────────────────────────────────────────────
-const ERROR_TYPE_LABELS = {
-  artikel: '冠词 / 性数格一致',
-  kasus: '介词支配格错误',
-  praeposition: '固定介词搭配',
-  andere: '语法与拼写规范'
-};
-
-export function getErrorTypeLabel(type) {
-  return ERROR_TYPE_LABELS[type] || '语法考点';
-}
-
-// ── Sidebar Tab Navigation (v4.2.0) ─────────────────────────────────────────
-const WRITER_TABS = ['diag', 'problems', 'versions'];
 
 export function switchWriterPanelTab(tab) {
   WRITER_TABS.forEach(t => {
@@ -600,11 +603,7 @@ export function analyzeWriterText(immediate = false) {
   const token = ++_analyzeToken;
   const performAnalysis = async () => {
     try {
-      const a = await api('/api/writing/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      const a = await analyzeWritingRemote(text);
       if (token !== _analyzeToken) return; // 已有更新的分析请求，本次作废
       currentAnalysis = a;
       renderEditor(text, a, caretOffset);
@@ -808,7 +807,7 @@ export async function loadWriterEssays() {
   if (!listEl) return;
 
   try {
-    const rows = await api('/api/essays');
+    const rows = await fetchWriterEssays();
     if (!rows || rows.length === 0) {
       listEl.innerHTML = '<div class="writer-empty-tip">暂无保存的作文草稿。在上方输入德语文本后点击「保存作文」即可收录。</div>';
       return;
@@ -847,7 +846,7 @@ export async function loadWriterEssays() {
 // ── Open Essay Draft ────────────────────────────────────────────────────────
 export async function openWriterEssay(id) {
   try {
-    const essay = await api(`/api/essays/${id}`);
+    const essay = await fetchWriterEssay(id);
     currentEssayId = essay.id;
     selectedSpanRef = null;
 
@@ -913,25 +912,13 @@ export async function saveWriterErrorAsCard() {
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
       const content = editorText() || selectedSpanRef.sentenceText;
-      const essayRes = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      const essayRes = await createWriterEssay(title, content);
       currentEssayId = essayRes.id;
       selectedSpanRef.essay_id = currentEssayId;
       loadWriterEssays();
     }
 
-    await api('/api/writing/cards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        essay_id: currentEssayId,
-        sentence_id: selectedSpanRef.sentence_id,
-        span_index: selectedSpanRef.span_index
-      })
-    });
+    await saveWritingGrammarCard(currentEssayId, selectedSpanRef.sentence_id, selectedSpanRef.span_index);
 
     if (btn) {
       btn.textContent = '✓ 已存为 Anki 语法卡';
@@ -972,17 +959,9 @@ export async function saveWriterEssay() {
   try {
     let res;
     if (currentEssayId) {
-      res = await api(`/api/essays/${currentEssayId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      res = await updateWriterEssay(currentEssayId, title, content);
     } else {
-      res = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      res = await createWriterEssay(title, content);
       currentEssayId = res.id;
     }
 
@@ -1015,7 +994,7 @@ export async function deleteWriterEssay(id, evt) {
   if (!confirm('确定要删除这篇作文草稿吗？')) return;
 
   try {
-    await api(`/api/essays/${id}`, { method: 'DELETE' });
+    await removeWriterEssay(id);
     if (currentEssayId === id) {
       clearWriterForm();
     } else {
@@ -1025,65 +1004,6 @@ export async function deleteWriterEssay(id, evt) {
     console.error('[Writer] Delete essay failed:', err);
     alert('删除作文失败：' + (err.message || err));
   }
-}
-
-// ── Word-level LCS Diff Helper for Agent Review ─────────────────────────────
-function renderWordDiff(oldSent, newSent) {
-  if (!oldSent && !newSent) return { oldHtml: '', newHtml: '' };
-  if (!oldSent) {
-    return {
-      oldHtml: '<div class="diff-empty">(无对应原句 / 新增内容)</div>',
-      newHtml: `<div class="diff-sent diff-ins-block"><span class="diff-prefix">+</span>${esc(newSent)}</div>`
-    };
-  }
-  if (!newSent) {
-    return {
-      oldHtml: `<div class="diff-sent diff-del-block"><span class="diff-prefix">-</span>${esc(oldSent)}</div>`,
-      newHtml: '<div class="diff-empty">(建议删除此句)</div>'
-    };
-  }
-
-  const w1 = oldSent.split(/(\s+|[.,!?;:„"“'«»()—–-])/).filter(Boolean);
-  const w2 = newSent.split(/(\s+|[.,!?;:„"“'«»()—–-])/).filter(Boolean);
-  const n = w1.length;
-  const m = w2.length;
-
-  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < m; j++) {
-      if (w1[i] === w2[j]) {
-        dp[i + 1][j + 1] = dp[i][j] + 1;
-      } else {
-        dp[i + 1][j + 1] = dp[i][j] > dp[i][j + 1] ? dp[i][j] : dp[i][j + 1];
-      }
-    }
-  }
-
-  let i = n;
-  let j = m;
-  const out1 = [];
-  const out2 = [];
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && w1[i - 1] === w2[j - 1]) {
-      out1.push(esc(w1[i - 1]));
-      out2.push(esc(w2[j - 1]));
-      i--;
-      j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      out2.push(`<mark class="diff-token-ins">${esc(w2[j - 1])}</mark>`);
-      j--;
-    } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) {
-      out1.push(`<mark class="diff-token-del">${esc(w1[i - 1])}</mark>`);
-      i--;
-    }
-  }
-
-  out1.reverse();
-  out2.reverse();
-  return {
-    oldHtml: `<div class="diff-sent"><span class="diff-prefix">-</span>${out1.join('')}</div>`,
-    newHtml: `<div class="diff-sent"><span class="diff-prefix">+</span>${out2.join('')}</div>`
-  };
 }
 
 // ── AI Polish Review Modal & Diff Review State Machine ───────────────────────
@@ -1246,28 +1166,6 @@ export function renderPolishReview() {
   }
 }
 
-// ── AI 润色：未收敛原因码 → 中文人话 ────────────────────────────────────────
-// 键集合 MUST 与后端 `polish_loop.REASONS` **同构**（外加端点层的 no_api_key）：
-// 由 tests/test_server.py::test_frontend_polish_reason_copy_covers_every_reason_code
-// 钉住 —— 后端加原因码而前端漏配文案，那条用例立刻红。
-// `ok` 一档收敛成功时不会弹 toast（那时直接开逐 hunk 审查面板），留着只为与
-// REASONS 同构，免得哪天有人判 `converged === false` 时拿到 undefined。
-const POLISH_REASON_COPY = {
-  ok: '润色完成：已通过 A1 硬规则检查。',
-  no_api_key: '尚未配置 DeepSeek API Key，本次未改动原文。请在「设置」里填写后再润色。',
-  no_improvement: 'AI 改了几轮仍没能减少硬性错误，已保留更接近原文的一版。',
-  turn_limit: '润色轮次用尽仍未达标，已保留当前最优一版。',
-  token_budget: '本次润色超出预算上限已中止，已保留当前最优一版。',
-  deadline: '润色超时已中止，已保留当前最优一版。',
-  judge_unreliable: '自动裁判连续两轮判定相同，已停止改动并保留当前最优一版。',
-  judge_error: '自动裁判本次不可用，未套用 AI 的改动。',
-  cancelled: '你中止了本次润色，已保留当前最优一版。'
-};
-
-function polishReasonText(reason) {
-  return POLISH_REASON_COPY[reason] || ('润色未收敛：' + (reason || '未知原因'));
-}
-
 // 流式润色的在途控制器 —— 取消按钮就是 `abort()`（服务端据此取消循环任务）
 let polishAbortController = null;
 
@@ -1309,11 +1207,7 @@ export async function aiPolishEssay() {
   try {
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
-      const essayRes = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content: text })
-      });
+      const essayRes = await createWriterEssay(title, text);
       currentEssayId = essayRes.id;
       loadWriterEssays();
     }
@@ -1347,11 +1241,7 @@ export async function aiPolishEssay() {
       // 降级：**一个事件都没收到**才退回一次性 JSON —— 那时服务端还没烧配额。
       // 已经收到事件 = 配额已烧，再发一次等于烧两遍。
       if (recv.any || controller.signal.aborted) throw err;
-      const res = await api('/api/writing/ai-polish/diff', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      const res = await fetchWritingPolishDiff(text);
       payload = res && res.result;
     }
 
@@ -1446,24 +1336,13 @@ export async function applyPolishChanges() {
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
       const content = polishState.original;
-      const essayRes = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      const essayRes = await createWriterEssay(title, content);
       currentEssayId = essayRes.id;
     }
 
-    const res = await api('/api/writing/apply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        essay_id: currentEssayId,
-        original_text: polishState.original,
-        corrected_text: polishState.corrected,
-        accepted_indices
-      })
-    });
+    const res = await applyWritingPolish(
+      currentEssayId, polishState.original, polishState.corrected, accepted_indices
+    );
 
     setEditorText(res.content);
     currentAnalysis = res.analysis_json;
@@ -1496,7 +1375,7 @@ export async function loadEssayVersions() {
   }
 
   try {
-    const rows = await api(`/api/essays/${currentEssayId}/versions`);
+    const rows = await fetchEssayVersions(currentEssayId);
     if (!rows || rows.length === 0) {
       listEl.innerHTML = '<div class="writer-empty-tip">暂无快照记录</div>';
       return;
@@ -1542,11 +1421,7 @@ export async function saveEssayVersion() {
   const msg = (msgInput?.value || '').trim();
 
   try {
-    await api(`/api/essays/${currentEssayId}/versions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg || '手动保存' })
-    });
+    await createEssayVersion(currentEssayId, msg || '手动保存');
     if (msgInput) msgInput.value = '';
     loadEssayVersions();
   } catch (err) {
@@ -1558,7 +1433,7 @@ export async function saveEssayVersion() {
 export async function previewEssayVersion(versionId) {
   if (!currentEssayId) return;
   try {
-    const v = await api(`/api/essays/${currentEssayId}/versions/${versionId}`);
+    const v = await fetchEssayVersion(currentEssayId, versionId);
     const overlay = document.getElementById('version-preview-overlay');
     if (!overlay) return;
 
@@ -1622,9 +1497,7 @@ export async function deleteEssayVersion(versionId) {
   if (!confirm(`确定要删除版本快照 #v${versionId} 吗？当前作文内容不受影响。`)) return;
 
   try {
-    await api(`/api/essays/${currentEssayId}/versions/${versionId}`, {
-      method: 'DELETE'
-    });
+    await removeEssayVersion(currentEssayId, versionId);
     loadEssayVersions();
   } catch (err) {
     console.error('[Writer] Delete version failed:', err);
@@ -1637,11 +1510,7 @@ export async function restoreEssayVersion(versionId) {
   if (!confirm('确定要恢复到此版本快照吗？当前的未保存修改将自动保存为一个恢复前快照。')) return;
 
   try {
-    const res = await api(`/api/essays/${currentEssayId}/restore`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ version_id: versionId })
-    });
+    const res = await restoreEssayVersionRemote(currentEssayId, versionId);
 
     setEditorText(res.content);
     currentAnalysis = res.analysis_json;
