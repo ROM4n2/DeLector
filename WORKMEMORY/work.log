@@ -626,4 +626,21 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - Go agent 门禁：8 个包单元测试与基准全绿 · `gofmt -l .` 0 格式差异；
   - 编码卫生：全仓所有触碰文件 UTF-8 CRLF 校验 **0 lone LF**。
 
+### 2026-10-18 21:45 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**前端大单体 static/index.html (3,158行) 模块化拆分与同步机械闸（Tasks 1~6）全部交付**。
+- 分支 `refactor/index-html-split`，严格执行计划 `docs/plans/2026-10-18-index-html-split-and-modularization.md`。
+- **Task 1: DOM 结构探针**：编写 `tools/index_dom_probe.mjs`，精确锁定 9 视图 / 2 抽屉 / 6 模态 / 骨架，输出标准三键契约（`{failures, total, cases}`），配套 `tests/test_index_dom_probe.py` 并通过变异自证。
+- **Task 2: 无损模板拼接构建器与 CI 同步闸**：编写标准库驱动的 `tools/build_index_html.py` 与 `tools/check_index_html_sync.py`，支持递归 `@include:` 语法与 sha256 零漂移校验，接入 `.github/workflows/ci.yml`。
+- **Task 3: 通用布局与骨架抽取**：抽取 `static/layout/{head, header, nav_desktop, nav_mobile, companion}.html` 与 `static/index.skeleton.html`。
+- **Task 4: 9 大业务视图切片**：提取 `static/views/{home, encounter, reader, cards, progress, writer, exam, german, search}.html`，`index.skeleton.html` 缩减至 1,318 行。
+- **Task 5: 侧边抽屉与所有 Modals/浮层切片**：提取 `static/modals/{drawer, import_modal, settings_modal, polish_modal, version_preview_modal, player_and_tooltip, quiz_overlay, cloze_overlay}.html`，`index.skeleton.html` 骤降至 61 行极简结构清单。
+- **Task 6: 门禁验证与交付**：
+  - 用例收集守恒：`2373 tests collected` 守恒（基线 2,367 + 6 项新增探针/同步闸单测）；
+  - 全量回归测试：全量 2,371 passed / 2 skipped 全部通过（1215 + 1156，0 失败）；
+  - 四道机械门禁：`check_layer_invariants` (0 违规) · `check_mock_drift` (0 漂移) · `check_silent_degradation` (0 违规) · `check_index_html_sync` (100% 同步) 全绿；
+  - 类型与代码检查：`ruff check .` 全绿 · `mypy --strict delector tools` (117 文件 0 错) · `mypy --follow-imports=skip tests` (155 文件 0 错)；
+  - Go agent 门禁：8 个包单元测试与基准全绿 · `gofmt -l .` 0 格式差异；
+  - 编码卫生：全仓所有新增与修改文件 UTF-8 CRLF 校验 **0 lone LF**。
+
 

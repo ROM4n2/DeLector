@@ -201,8 +201,9 @@
 
 ---
 
-## Fog of War (Not Yet Specified)
+## 迷雾区与后续规划 (Fog of War)
 
+- [x] **Task 1~6: 前端大单体 static/index.html 模块化拆分与同步机械闸**（2026-10-18 已完成，PR 待合并）
 - **[Unknown 1: 前端业务脚本 (`writer.js`, `cards.js`) 内部状态与 DOM 绑定的解耦]**：
   等待本次单体模板切分落地后，基于清晰的子模板路径进一步推进 JS 纯业务逻辑下沉。
 
