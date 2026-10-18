@@ -1,0 +1,14 @@
+    <!-- ── View 6: German Vocabulary Workbench (Vokabeltrainer) ──── -->
+    <main id="view-german" class="view">
+      <!-- 首屏惰性加载：**不设静态 src**（改 data-src），只在用户首次进入本视图时由
+           main.js 的 ensureGermanWorkbench() 赋 src。原因：静态 src 会让 383KB 的
+           workbench.html 在首屏即加载并启动其内部 5s 轮询（workbench.html 的 wbsync.init
+           → 后台 pull 定时器），用户从不进背词工作台也照跑、弱网下还与正文请求抢带宽。 -->
+      <iframe
+        id="german-workbench-frame"
+        data-src="/german/workbench.html"
+        title="德语背词工作台"
+        style="width: 100%; border: none"
+        allow="autoplay"
+      ></iframe>
+    </main>

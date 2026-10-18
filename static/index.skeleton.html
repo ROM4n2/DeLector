@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<!-- @include: layout/head.html -->
+  <body>
+<!-- @include: layout/header.html -->
+
+    <!-- Top Navigation (Gutenberg Broadsheet Bar) -->
+<!-- @include: layout/nav_desktop.html -->
+
+<!-- @include: views/home.html -->
+
+<!-- @include: views/encounter.html -->
+
+<!-- @include: views/reader.html -->
+
+<!-- @include: views/cards.html -->
+
+<!-- @include: views/progress.html -->
+
+<!-- @include: views/writer.html -->
+
+    <div
+      id="writer-mobile-panel-sheet"
+      class="writer-mobile-panel-sheet"
+      onclick="closeWriterMobilePanel()"
+    ></div>
+
+    <!-- Drawer backdrop: tap to close on mobile -->
+    <div id="drawer-backdrop" onclick="closeDrawer()"></div>
+
+<!-- @include: modals/drawer.html -->
+
+<!-- @include: modals/import_modal.html -->
+
+<!-- @include: modals/settings_modal.html -->
+
+<!-- @include: modals/polish_modal.html -->
+
+<!-- @include: modals/version_preview_modal.html -->
+
+<!-- @include: modals/player_and_tooltip.html -->
+
+<!-- @include: modals/quiz_overlay.html -->
+
+<!-- @include: modals/cloze_overlay.html -->
+
+<!-- @include: views/exam.html -->
+
+<!-- @include: views/german.html -->
+
+<!-- @include: views/search.html -->
+
+    <!-- ── Mobile Android / iOS Bottom Navigation Dock ─────────── -->
+<!-- @include: layout/nav_mobile.html -->
+
+    <!-- ── Global Floating Companion Mascot Widget ─────────────── -->
+<!-- @include: layout/companion.html -->
+
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>

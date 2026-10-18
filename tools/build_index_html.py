@@ -1,0 +1,102 @@
+# -*- coding: utf-8 -*-
+"""tools/build_index_html.py —— 基于骨架和子模块无损装配 static/index.html。
+
+设计契约：
+1. 纯 Python 标准库驱动，无第三方依赖；
+2. 骨架文件默认为 static/index.skeleton.html（如果不存在则以静态 index.html 为基准）；
+3. 占位符契约：严格识别 `<!-- @include: path/to/file.html -->`，并将目标片段内容逐字插回；
+4. 换行与编码：统一规范为 CRLF 换行输出，确保与全仓 UTF-8 CRLF 卫生契约一致。
+"""
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SKELETON_PATH = ROOT / "static" / "index.skeleton.html"
+INDEX_PATH = ROOT / "static" / "index.html"
+INCLUDE_RE = re.compile(r"<!--\s*@include:\s*([^\s>]+)\s*-->")
+
+
+def assemble_index_html(skeleton_file: Path = SKELETON_PATH) -> str:
+    """从骨架文件解析并递归/单层拼接所有 include 片段。"""
+    if not skeleton_file.exists():
+        # 兼容过渡期：如果尚未建立 skeleton，直接读取既有 index.html
+        if INDEX_PATH.exists():
+            return INDEX_PATH.read_text(encoding="utf-8")
+        raise FileNotFoundError(f"缺少骨架文件或目标文件: {skeleton_file}")
+
+    skeleton_content = skeleton_file.read_text(encoding="utf-8")
+    static_dir = ROOT / "static"
+
+    def _replace_include(match: re.Match[str]) -> str:
+        rel_include = match.group(1).strip()
+        include_path = static_dir / rel_include
+        if not include_path.exists():
+            raise FileNotFoundError(f"找不到 include 片段文件: {rel_include} (绝对路径: {include_path})")
+        child_content = assemble_index_html(include_path)
+        while child_content.endswith(chr(13)) or child_content.endswith(chr(10)):
+            child_content = child_content[:-1]
+        return child_content
+
+    assembled = INCLUDE_RE.sub(_replace_include, skeleton_content)
+    # 统一确保换行符是 CRLF
+    normalized = assembled.replace("\r\n", "\n").replace("\n", "\r\n")
+    return normalized
+
+
+def _pin_utf8_streams() -> None:
+    """把 stdout/stderr 的**写侧**钉死为 UTF-8（同 check_index_html_sync.py 的加固）。
+
+    本脚本的中文结论会被 CI 与 `python tools/build_index_html.py --check` 的调用方读取，
+    写侧不固定时 locale 一换即解码失败（详见 check 脚本里的注释）。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:  # silent-ok: 仅显示层编码（流不可重配置）⇒ 保持原流；本闸结论由退出码表达
+                pass
+
+
+def main() -> int:
+    _pin_utf8_streams()
+    parser = argparse.ArgumentParser(description="装配 static/index.html")
+    parser.add_argument("--check", action="store_true", help="校验模式：仅检查 index.html 是否与装配结果一致")
+    parser.add_argument("--output", type=str, default=str(INDEX_PATH), help="输出文件路径")
+    args = parser.parse_args()
+
+    try:
+        assembled = assemble_index_html()
+    except Exception as exc:
+        print(f"[build_index_html] 错误: {exc}", file=sys.stderr)
+        return 1
+
+    out_file = Path(args.output)
+    if args.check:
+        if not out_file.exists():
+            print(f"[build_index_html] 目标文件缺失: {out_file}", file=sys.stderr)
+            return 1
+        # 读侧 MUST 绕过 universal newlines：`read_text()` 会把磁盘上的 CRLF 静默转成 LF，
+        # 而装配物统一是 CRLF ⇒ 逐行比对恒不等 ⇒ --check 恒假红（曾与 check_index_html_sync.py
+        # 给出相反结论）。先按 read_bytes().decode() 取原文，再归一化到 LF，与门禁脚本同口径。
+        current_norm = out_file.read_bytes().decode("utf-8").replace("\r\n", "\n")
+        assembled_norm = assembled.replace("\r\n", "\n")
+        if current_norm != assembled_norm:
+            print(
+                "[build_index_html] static/index.html 与模板装配结果存在漂移！"
+                "请运行 python tools/build_index_html.py 重新生成。",
+                file=sys.stderr,
+            )
+            return 1
+        print("[build_index_html] 校验通过：static/index.html 与模板骨架 100% 同步。")
+        return 0
+
+    out_file.write_text(assembled, encoding="utf-8", newline="")
+    print(f"[build_index_html] 成功生成: {out_file} ({len(assembled.splitlines())} 行)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

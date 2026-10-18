@@ -1,0 +1,92 @@
+    <!-- ── Fullscreen Cloze Exercise Modal (Lückentext / C-Test) ── -->
+    <div id="cloze-overlay" class="cloze-overlay hidden">
+      <div class="cloze-modal">
+        <div class="cloze-head">
+          <div>
+            <span class="dossier-kicker"
+              >GOETHE LÜCKENTEXT &amp; C-TEST ENGINE</span
+            >
+            <h2
+              id="cloze-title"
+              style="
+                margin: 0;
+                font-family: var(--serif-heading);
+                font-size: 1.5rem;
+                color: var(--ink);
+              "
+            >
+              完形填空实战训练
+            </h2>
+          </div>
+          <button class="drawer-close" onclick="closeClozeModal()">✕</button>
+        </div>
+
+        <!-- Cloze Mode Switcher -->
+        <div class="cloze-mode-bar">
+          <button
+            id="cloze-mode-btn-grammar"
+            class="cloze-mode-btn active"
+            onclick="switchClozeMode('grammar')"
+          >
+            🎯 语法考点挖空 (介词/连词/变位)
+          </button>
+          <button
+            id="cloze-mode-btn-vocab"
+            class="cloze-mode-btn"
+            onclick="switchClozeMode('vocab')"
+          >
+            📚 核心生词盲填 (B1/B2 实词)
+          </button>
+          <button
+            id="cloze-mode-btn-ctest"
+            class="cloze-mode-btn"
+            onclick="switchClozeMode('ctest')"
+          >
+            ⚡ 经典 C-Test 模式 (词尾截断)
+          </button>
+        </div>
+
+        <!-- Article Cloze Body -->
+        <div id="cloze-body-wrap" class="cloze-body-wrap">
+          <div id="cloze-content" class="cloze-content" lang="de"></div>
+        </div>
+
+        <!-- Score & Actions Bar -->
+        <div class="cloze-footer">
+          <div id="cloze-score-display" class="cloze-score-display hidden">
+            <span class="cloze-score-num" id="cloze-score-text">0 / 0</span>
+            <span class="cloze-score-pct" id="cloze-pct-text">0% 准确率</span>
+          </div>
+          <div
+            style="
+              display: flex;
+              gap: 0.5rem;
+              align-items: center;
+              flex-wrap: wrap;
+            "
+          >
+            <button
+              id="cloze-hint-btn"
+              class="btn btn-ghost"
+              onclick="revealClozeHints()"
+            >
+              💡 首字母提示
+            </button>
+            <button
+              id="cloze-reset-btn"
+              class="btn btn-ghost"
+              onclick="resetClozeExercise()"
+            >
+              ↺ 重做
+            </button>
+            <button
+              id="cloze-submit-btn"
+              class="btn btn-accent"
+              onclick="submitClozeExercise()"
+            >
+              ✓ 提交判分
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>

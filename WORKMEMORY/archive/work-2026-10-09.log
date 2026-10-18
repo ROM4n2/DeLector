@@ -1,0 +1,45 @@
+### 2026-10-09 00:10 | codebuddy | ADR-0018 产出（/dfs-grill：性能换语言提案 → 裁决"先测量、不换主体"）
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：用户提案「不用 Python 做系统主体，只留生态库调德语/记忆算法，不想性能拖垮项目」。走 `/dfs-grill` 后**否掉了提案的字面形态**，产出 ADR-0018（vault 正式件 + 仓内副本 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md`）。**未改任何生产代码**。
+- **改变提案形状的两条事实**：
+  ① **"把重活给更高效语言"项目里已有且已决策** —— ADR-0008（Go Agent Runtime + Python NLP Engine 混合架构）已落地 `agent/`（Go：CLI+DAG+supervisor，拉起 uvicorn 子进程 8001）；ADR-0010 已划边界（Go=编排/并发/退避重试，Python=spaCy 形态学/lemmatization）。**方向恒为 Go→Python，主应用不调 Go** ⇒ 真正的待决问题只是"要不要把 **HTTP 主体**也搬过去"。
+  ② **"Python 性能拖垮项目"证据不足** —— 全仓唯一真基准 `tools/bench_cards_endpoint.py` **只断言结构、不钉阈值**；审计文档里的数字**不可复跑**且部分自带 UNVERIFIED；**spaCy 单价有两个矛盾值**（`syntax_hard.py:9` 写 `~42ms/句` vs 审计写 `~2.1ms/句`，**差 20 倍**，都没脚本兜底）。perf 席位实测 20k 卡 790ms（Python/FSRS 84%、排序 9%），瓶颈排序 **AI/TTS(网络) > spaCy(Cython) > SQLite > 冷启 > 前端 > HTTP/序列化** ⇒ 前两项换语言都解决不了。全仓**唯一点名 GIL** 的地方是 `ExportSaver.java:73`（大导出并发）。
+- **裁决**：D1 **先测量不换**（1 小时方案：4 场景冷启/长文/热读/卡盒 + 分层剖析 + 阈值「Python CPU>50% 且 p95>2 倍目标」）；D2 按结果选路（CPU 主导→**热点下沉 O2**；编排/并发主导→**扩展 ADR-0008 边界 O3**）；D3 **永久否决"换 HTTP 主体 O1"**（依据：spaCy 不可移除⇒NLP 退化成跨进程 IPC 多一跳、最大瓶颈不受宿主语言影响、Android 双运行时与 56.7MB 内嵌 Python 冲突），并写入**三条翻盘条件**防悄悄重开；D4 测量后先做便宜杠杆；D5 明确 **Python 不可移除**（永远讨论"边界"而非"替换"）；D6 新基准**必须钉阈值**（补上现基准只断言结构的缺口）。
+- **Fog**：测量结果本身（D2 分支取决于它，测量前不许选路）；Android 侧如何测量（本机无 Android SDK）；卡盒前端渲染占比未剖析；若走 O2 则 Android arm64 交叉编译链路未定。
+
+### 2026-10-09 12:24 | codebuddy | EXEC(ADR-0018 D1 性能测量) /dfs-exec 六任务全绿、判定门定案为 O0
+   > 正文超 §4 上限（5882 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md`](WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md)。
+
+### 2026-10-09 13:40 | codebuddy | FIX(门禁) master 变红：跨进程量级比较被当成不变式 + spaCy 断言取整 flake
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`perf/measurement-baseline`（PR #117）合并进 master 后 **master CI 红**：`tests/test_cold_start_cost.py::test_segments_satisfy_physical_containment` 报 `AssertionError: app_ready_ms(95.490) 未大于 init_db_ms(209.850)`，而**本机同一份代码**是 148/245（通过）⇒ **本机通过、CI 反转**。分支 `fix/cold-start-segment-gate`，**只改测试与基准，`delector/` 生产代码零改动**。
+- **合并时序问题（第一条教训）**：PR #117 在 **CI 仍在跑时被合并**（merged 04:28:53，CI 结论约 04:30 出）⇒ 红色提交直接进了 master。**合并 MUST 等 CI 绿**。
+- **根因（实测确认，非推理）**：三段是**三个不同子进程**测的 —— probe A（独立进程）调 `init_db()` 得 `init_db_ms`；probe B（独立进程）**在 import 期已跑过一次完整 `create_app()`**，再换全新的库调第二次 `create_app()` 得 `app_ready_ms`。实测分解 `init_db()` = main DDL ≈25ms + progress DDL ≈25ms + `seed_preset_articles` ≈105ms；probe A 为该三段付**进程冷启动/首次文件 I/O**，probe B 里同样工作**已热** ⇒ **两个量不存在必然大小关系**。最小反转场景（实测）：让 probe B 第二次 `create_app()` 落在非全新库 ⇒ `app_ready_ms` 塌到 **8.75ms** ≪ `init_db_ms` ~155ms。
+- **修法**：删掉两条**跨进程**量级断言（`app_ready_ms > init_db_ms`、`model_load_ms <= import_ms`）；保留 `import_ms > app_ready_ms`（**同进程**）；新增**机器无关**自检行 `init_db_tables`/`init_db_progress_tables`/`app_ready_db_tables`/`app_ready_progress_tables`/`app_ready_fresh_db_used`（取最小轮=最保守），并**补上 probe A 的对称自检** —— 上一版只给 probe B 加自检、**guard 不对称**，probe A 若落到热库则 `init_db_ms` 可任意小而仅靠 `>0` 兜着（同类缺陷，checker 抓出）。`app_ready_fresh_db_used` 改为**独立**判新库文件是否真出现在新路径（原先由表数派生 ⇒ 同真同假、名字骗人）。口径文本（`segments_note`/docstring/契约注释/verdict）据实改写为"三段各由独立子进程测得、**不可按大小关系解读**"，verdict 的跨进程比率标注"近似归因（仅示意）"。
+- **checker 抓到的同类项**：本机`import_ms(2242) > app_ready(263)` 余量约 2000ms（来自 import 期的 spaCy 模型加载）；但**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，这条同进程断言的余量会塌到噪声级 ⇒ 已列为待收口项（详见下条）。
+- **顺带修掉一个会随机打红 CI 的 flake**：`tests/test_spacy_unit_cost.py::test_bench_verdict_names_both_legacy_values` 偶发失败（`per_sentence_ms=7.115` 时输出行 `7.11` 而断言期望 `7.12`）。**根因是测试端双重取整**（不是值不同源）：测试从**3 位小数的打印字符串**反解析回 `float` 后再 `.2f`，而 verdict 是对**原始中位数**直接 `.2f`，落在两位小数边界 `X.XX5`±0.0005 时必不一致。修法：断言换成**正则取数值 + 容差 0.005+1e-9**（恰为一次两位小数舍入的最大偏差），文案写死仍必超差 ⇒ 守卫强度不减；修复后连跑 **15/15** 通过。
+- **⚠️ 编排者教训（本轮第二次同类：本机复跑通过 ≠ 门禁可靠）**：我在 Task 4 的复跑里`app_ready(245) > init_db(148)` 同向通过，**把一条机器相关的比较当成了已验证的不变式**。同类错误在 Task 2 已出现过（跨函数相除），本轮是跨进程量级比较。**规律：凡是"两个在不同进程/不同前置状态下测得的量"的任何大小关系，默认都不是不变式**；要钉就只能钉**状态无关**的事实（文件/表是否存在、可解析性、同进程内的包含）。
+
+### 2026-10-09 13:53 | codebuddy | 后验：红 master 事故的机械证据 + 修复合并 + master CI 绿
+Caps: filesystem-read, shell-exec
+事件：为"跨进程量级比较"这条诊断补一条**决定性后验证据**（同一份代码、两种结果）。
+- **同一提交在两条 CI 上结论相反**：PR #117 的**分支 CI 失败**（run `37883798324`，`app_ready_ms(95.490) 未大于 init_db_ms(209.850)`），而**同一提交合并到 master 后的 push CI 却 success**（run `37884073719`，5m10s）⇒ 这不是"某段被打桩"，而是**机器/状态相关**，机械地印证了根因判断（probe A 与 probe B 是两个不同进程、不同前置状态的量）。
+- **修复 PR #118 已合并**（`e8c8f1f`，3 commit：`c36d420` 门禁改钉真不变式 / `5c85c13` spaCy 断言取整 flake / `82493e9` 教训入库），**master CI success**（run `37890280999`，4m6s）；分支已清理（本地/远端均无残留），工作区干净、与 origin/master 同步。
+- **ADR-0018 的 Task 6 回填亦在 master**（`204e761`）：ADR §1–§9 齐全（§7 实施记录 / §8 Fog / §9 关联），五个基准 + 五套门禁（`bench_cards_endpoint`/`bench_spacy_unit`/`bench_long_read`/`bench_cold_start`/`bench_profile_layers` + `bench_stats`）全部落地。⇒ **ADR-0018 D1 闭环**：判定门定案 **O0**（条件① 成立 85.9% / 条件② 不成立）。
+- **仍开放（同类残余，已登记 PROJECT_OVERVIEW 递延项④）**：`tests/test_cold_start_cost.py` 保留了 `import_ms > app_ready_ms`（**同进程**，安全），但其余量主要来自 import 期的 spaCy 模型加载（本机约 2000ms）；**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，余量会塌到噪声级 ⇒ 需加条件（例如仅 `nlp_path=spacy` 时断言）或改为机器无关形式。未收口。
+
+### 2026-10-09 19:52 | codebuddy | DECISION(ADR-0018 门定稿) 目标值拍板 + 修法路由 + 移除不可复跑的 42ms
+   > 正文超 §4 上限（4321 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md`](WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md)。
+
+### 2026-10-09 20:43 | codebuddy | CLOSE(登记项) ① 迁移闸 size 对称化 ② rank_sentences 纯函数单价补测
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：把 ADR-0018/PROJECT_OVERVIEW 里"仅登记、未动"的两个开放项**真正做完**，并把登记状态改为已完成。分支 `fix/close-registered-items`。
+- **① 数据目录迁移闸的 `isfile`/`size` 不对称（原登记于 ADR §7.7）—— 已修**：判据对称化为 `if os.path.isfile(legacy_db) and os.path.getsize(legacy_db) > 0`（"0 字节空壳不算数据"这条尺子现在**两个位置都用**）；docstring 判据清单 + 新增"为何对称化"。
+  - **checker 抓到一条红卡（正是我上一轮修复留下的同族盲区）**：条件④ 的内联注释原写"①与②互斥、**永远到不了这一行**"，而条件① 加 `size > 0` 后，**同地 + 共享库 0 字节**时会**真的到达**条件④ —— 注释被本次改动**自我证伪** ⇒ 已据实重写（保留"不得删该守卫"的理由），并**补上那条唯一实际执行路径的用例**（桌面端同地 + 共享库 0 字节 ⇒ 不误报）；另补"新位置是目录 + 旧位置非空 ⇒ 抛"。
+  - **连带改动（易漏，checker 复核为"诚实中和"）**：`tools/bench_cold_start.py` 的中和手法**原先正是靠这个洞**（预置 0 字节库），判据收紧后会失效 ⇒ 改为**摆一个非空的合法 SQLite 库**（建占位表，显式 `close()` 因为 `with sqlite3.connect(...)` 只提交事务**不关句柄**，悬着会让 Windows 的 `rmtree` 删不掉临时目录）。占位表写在 `main_db`、而 `init_db_tables` 数的是 `initdb_db` ⇒ **不污染计时**。
+  - 同步订正 `docs/agents/ops.md`：原写"size==0 空壳不拦"已**过度泛化**（新位置的 0 字节空壳现在**会**拦），改为据实表述。
+- **② `rank_sentences`/`analyze_syntax_tree` 纯函数单价（原登记为 ADR §8 Unknown 5）—— 已补测**：新增 `tools/bench_rank_sentences.py` + 27 条门禁。实测（`spacy` + `de_core_news_sm`）：`analyze_syntax_tree` 单句 **≈7~8ms/句**、`rank_sentences` 整段归一 **≈8ms/句**（长句档 11.2ms，短/长 ≈2.6×）。三条对照：相对审计 **2.1ms** ⇒ **低估约 3.6~4 倍**；相对 **42ms** ⇒ 仅其 **≈0.18 倍** ⇒ **42ms 无法由"该路径纯函数稳态"解释**；与端到端 **≈10ms/句**（`bench_long_read`）**同量级** ⇒ **端点开销占比不大，成本主体在该路径自身**。⇒ **20 倍差距仍不足以定案**，但已收窄为三候选（md 口径 / 含冷启动摊薄 / 别的语料或函数口径）。
+  - **checker 抓到一条关键 hedge 缺陷（PASS 但很值钱）**：脚本**不打印实际生效模型名**，而 `get_spacy_nlp()` 会**先试 md** ⇒ verdict 里"md 未测是补差来源"这个前提**不可复核、甚至可能为假** ⇒ 新增 `model=` 行（实测 `de_core_news_sm (md 不可用)`）并让 verdict 与之逐字一致。另新增 `p95_note=` 显式声明两条 p95 **聚合单元与样本量都不同、不可直接比较**（`analyze_p95_n=126` 是单句尾部、`rank_p95_n=7` 是整段归一），并补源码顺序断言（模型加载在计时之外 + 脚本体不含 `_material_text`，钉住"纯函数口径"）。
+- **门禁**：`test_data_dir_migration_gate` **12 passed**、`test_rank_sentences_cost` **27 passed**、半 A **1231 passed**（较本轮起点 +5）；mypy **101** + **78** files 零错误；`ruff check .` 0。基准实跑 `bench_cold_start` 正常（`health_200_ms=2610`）。
+- **登记状态收口**：ADR §1.3 / §7.3（新增"该热路径纯函数单价"行）/ §7.4（补测结果与三条对照）/ **§7.7 改写为"① 已修 / ② 已核实无害"** / **§8 Unknown 5 标已解决 + 新增 Unknown 7**（42ms 成因仍不定案，且明说**不影响任何决策**）；`PROJECT_OVERVIEW` 递延项 ①② 改标已解决；`docs/agents/ops.md` 订正。仓内副本机械重新生成。
+

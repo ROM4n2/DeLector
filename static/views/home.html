@@ -1,0 +1,42 @@
+    <!-- ── View 1: Home Library ───────────────────────────────── -->
+    <main id="view-home" class="view active">
+      <div class="home-hero">
+        <div class="hero-eyebrow">
+          <span class="dot"></span>
+          <span>CEFR IMMERSIVE WORKSPACE · 歌德备考</span>
+        </div>
+        <h1>
+          德语欧标<br /><span class="accent-word">沉浸研读</span>与考点剖析
+        </h1>
+        <p>
+          导入任意德语长文或备考真题，本地智能标注 CEFR
+          难度色阶（A2-C1），实时剖析歌德核心语法考点并一键沉淀为 Anki 卡片。
+        </p>
+        <div class="home-cta">
+          <button class="btn btn-accent" onclick="openModal()">
+            + 导入德语文章
+          </button>
+        </div>
+      </div>
+
+      <!-- Highlighter Legend -->
+      <div class="cefr-legend">
+        <strong>欧标色标：</strong>
+        <span class="hl-pill hl-A1">A1 入门基石</span>
+        <span class="hl-pill hl-A2">A2 进阶表达</span>
+        <span class="hl-pill hl-B1">B1 核心词汇</span>
+        <span class="hl-pill hl-B2">B2 高级搭配</span>
+        <span class="hl-pill hl-C1">C1 精通论述</span>
+      </div>
+
+      <div class="section-label">
+        <span class="section-title">文稿库 · LIBRARY</span>
+      </div>
+      <div id="article-list"></div>
+
+      <div class="encounter-entry-card" onclick="show('encounter')" role="button" tabindex="0">
+        <span class="encounter-entry-emoji">🌱</span>
+        <span class="encounter-entry-title">遇见区 i+1 短文</span>
+        <span class="encounter-entry-sub">手选分级德语短篇 · Begegnungszone</span>
+      </div>
+    </main>

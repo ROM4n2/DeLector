@@ -28,6 +28,8 @@
 | 首屏性能测量（6s / 端口探测 2s）/ 未测段可观测化 / 仓库根数据目录卫生 / ADR-0022 发版门 / v5.17.0 发版（2026-10-11） | `archive/work-2026-10-11.log`（2026-10-16 WARM 化） |
 | 薄壳落地页（宣传延后）/ release 文档合并 / 孤儿 tag 清理 / 子进程超时反转修复（2026-10-12） | `archive/work-2026-10-12.log`（2026-10-16 WARM 化） |
 | 去控制台 + 桌面化观感收尾 / 直推 master 流程缺陷复盘（2026-10-13~14）        | `archive/work-2026-10-13.log` · `archive/work-2026-10-14.log`（2026-10-16 WARM 化） |
+| C5 分层解耦 / 巨石路由拆分 + C7 收尾遗留（2026-10-15~18）                | `archive/work-2026-10-15.log` · `work.log`（10-15~10-18 段）· PR #154 / #155 / #156 / #158 |
+| `static/index.html` 拆分与同步门禁（Task 1~6）+ Windows CI 编码红灯修复（2026-10-18） | `work.log`（10-18 段）· 计划 `docs/plans/2026-10-18-index-html-split-and-modularization.md` · PR #159 |
 | 非在途面专家评估（5 报告）+ 未决项 18 项 + 审计修正 A/B 两批 + ADR-0024 + `database.py` 切分（2026-10-16） | `work.log`（10-16 段）· `docs/reviews/2026-10-16-open-items-backlog.md` · `docs/plans/2026-10-16-audit-fixes-a-series.md` · `docs/plans/2026-10-16-audit-fixes-b-series.md` · `docs/plans/2026-10-16-database-split.md` |
 
 
@@ -46,3 +48,5 @@
 | 2026-10-18 | 搬迁类改动的验证面 = 所有引用该文件的测试（并入 `CODING-UNIVERSAL §7`） | `vault://99-Inbox/2026-10-18-搬迁类改动的验证面-=-所有引用该文件的测试，不是本工作流的文件.md` |
 | 2026-10-18 | 资源校验必须先于 CLI 的用法短路（并入 `AUTOMATION-GOTCHAS §7`） | `vault://99-Inbox/2026-10-18-资源校验必须先于-cli-的「用法提示-+-exit-0」短路，否则失败被静默吞掉.md` |
 | 2026-10-18 | 构建工具 `--extract/--patch` 必须默认只读（新增 `AUTOMATION-GOTCHAS §8`） | `vault://99-Inbox/2026-10-18-构建工具的-extract-patch-必须默认只读：一次误跑就把手工维护的模块覆盖成生成物.md` |
+
+| 2026-10-18 | subprocess `text=True` 不指定 encoding：按 locale 解码崩在读线程 ⇒ 退出码 0 但 stdout 为 None（假绿，不是红） | `work.log`（10-18 PITFALL 事件；候选并入 `CODING-UNIVERSAL §11` / `AUTOMATION-GOTCHAS`） |

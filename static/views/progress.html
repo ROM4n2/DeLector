@@ -1,0 +1,448 @@
+    <!-- ── View 4: Atelier Landing Page Folio (Atelier Style Ledger) ─ -->
+    <main id="view-progress" class="view">
+      <!-- Hero Stage: 0.85fr : 1.15fr Asymmetric Grid -->
+      <section id="folio-sec-metrics" class="folio-hero-stage">
+        <!-- Left Column: Editorial Headline, German Motto & Actions -->
+        <div class="folio-hero-copy">
+          <div class="folio-hero-kicker-wrap">
+            <span class="folio-pulse"></span>
+            <span class="folio-kicker"
+              >ATELIER FÜR DEUTSCHE PHILOLOGIE · LERNFORTSCHRITT</span
+            >
+          </div>
+          <h1 class="folio-hero-title">
+            Exzellenz durch<br />
+            <em>Tägliche Hingabe.</em><span class="folio-dot">.</span>
+          </h1>
+          <p class="folio-hero-lead">
+            每日精读台账 · 记录德语语言之界限与认知之拓展。日积跬步，终至千里。
+          </p>
+
+          <!-- German Motto / Quote Card (Top Lede) -->
+          <div id="progress-motto" class="dossier-motto-section"></div>
+
+          <!-- Quick Jump & Action Strip -->
+          <div class="folio-hero-actions">
+            <button
+              class="btn btn-dark"
+              onclick="openQuizOverlay()"
+              title="启动错题与弱项专项测验"
+            >
+              <span>⚔ 专项重测 (Quiz)</span>
+            </button>
+            <button
+              class="btn btn-ghost"
+              onclick="show('home')"
+              title="进入德语外刊与文稿库"
+            >
+              <span>📚 文稿研读库</span>
+            </button>
+            <div class="folio-anchor-nav">
+              <button
+                class="folio-anchor-pill"
+                onclick="scrollToFolioSection('folio-sec-spectrum')"
+                title="跳转至欧标分布与30天轨迹"
+              >
+                § 01 谱系与轨迹 ↓
+              </button>
+              <button
+                class="folio-anchor-pill"
+                onclick="scrollToFolioSection('folio-sec-errors')"
+                title="跳转至错题攻坚账本"
+              >
+                § 02 错题攻坚 ↓
+              </button>
+              <button
+                class="folio-anchor-pill"
+                onclick="scrollToFolioSection('folio-sec-milestones')"
+                title="跳转至学术勋章展台"
+              >
+                § 03 学术勋章 ↓
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: 6 Core Ring Badges Exhibition Plate -->
+        <div class="folio-hero-plate">
+          <!-- Four Corner Marks -->
+          <span class="corner-mark tl">+</span>
+          <span class="corner-mark tr">+</span>
+          <span class="corner-mark bl">+</span>
+          <span class="corner-mark br">+</span>
+
+          <div class="folio-plate-header">
+            <div class="folio-plate-badge">
+              <span class="folio-pulse"></span>
+              <span class="folio-plate-tag">ECHTZEIT-METRIKEN · LIVE</span>
+            </div>
+            <span class="folio-plate-coord">[ PLATE Nº 01 / STATISTIK ]</span>
+          </div>
+
+          <div class="folio-stats-grid">
+            <!-- 1. 连续天数 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid coral" id="stat-streak">0</div>
+              <div class="stat-text">
+                <b>Tage Streak</b>
+                <span id="stat-streak-note">连续研读天数</span>
+              </div>
+            </div>
+            <!-- 2. 掌握词汇 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid" id="stat-mastered-vocab">0</div>
+              <div class="stat-text">
+                <b>Vokabeln</b>
+                <span id="stat-vocab-note">掌握词汇斩获</span>
+              </div>
+            </div>
+            <!-- 3. 掌握语法 -->
+            <div class="stat-badge">
+              <div class="stat-ring dashed" id="stat-mastered-grammar">0</div>
+              <div class="stat-text">
+                <b>Grammatik</b>
+                <span id="stat-grammar-note">核心语法考点</span>
+              </div>
+            </div>
+            <!-- 4. 精读篇数 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid" id="stat-articles">0</div>
+              <div class="stat-text">
+                <b>Artikel</b>
+                <span id="stat-articles-note">精读解析文章</span>
+              </div>
+            </div>
+            <!-- 5. 测验准确率 -->
+            <div class="stat-badge">
+              <div class="stat-ring dashed coral" id="stat-accuracy">0%</div>
+              <div class="stat-text">
+                <b>Genauigkeit</b>
+                <span id="stat-accuracy-note">测验综合正答率</span>
+              </div>
+            </div>
+            <!-- 6. 研读时长 -->
+            <div class="stat-badge">
+              <div class="stat-ring solid" id="stat-minutes">0</div>
+              <div class="stat-text">
+                <b>Minuten</b>
+                <span>累计专注学时</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="folio-plate-footer">
+            <span class="folio-plate-meta"
+              >DEUTSCHSTUDIEN · CONTINUOUS FEED</span
+            >
+            <span class="folio-plate-meta">AUTO-SYNCHRONISIERT</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Mascot Studio Exhibition Plate (Atelier Companion Workshop) -->
+      <section id="folio-mascot-section" class="folio-mascot-section">
+        <div id="folio-mascot-card" class="folio-mascot-card dossier-panel">
+          <!-- Four Corner Marks -->
+          <span class="corner-mark tl">+</span>
+          <span class="corner-mark tr">+</span>
+          <span class="corner-mark bl">+</span>
+          <span class="corner-mark br">+</span>
+
+          <div class="mascot-card-inner">
+            <!-- Left: Big Animated Character & Speech Bubble -->
+            <div class="mascot-stage">
+              <div id="mascot-stage-bubble" class="mascot-stage-bubble">
+                <div id="mascot-stage-de" class="mascot-bubble-de">
+                  Hallo! Ich bin dein Lernbegleiter.
+                </div>
+                <div id="mascot-stage-zh" class="mascot-bubble-zh">
+                  你好！我是你的德语研读伴读伙伴。
+                </div>
+              </div>
+              <div
+                id="mascot-stage-char"
+                class="mascot-stage-char"
+                onclick="window.Companion.onSay()"
+              ></div>
+            </div>
+
+            <!-- Right: Studio Customization & Settings Controls -->
+            <div class="mascot-studio-controls">
+              <div
+                class="dossier-panel-head"
+                style="margin-bottom: 0.75rem; padding-bottom: 0.5rem"
+              >
+                <div class="dossier-panel-title">
+                  <span class="dossier-panel-code"
+                    >§ ATELIER · BEGLEITER · MASCOT WORKSHOP</span
+                  >
+                  <h3>德语伴读研习工坊</h3>
+                </div>
+                <div class="mascot-status-tag" id="mascot-status-tag">
+                  ACTIVE · AKTIV
+                </div>
+              </div>
+
+              <div class="mascot-form-grid">
+                <div class="mascot-form-row">
+                  <label class="mascot-label">伴读伙伴选择</label>
+                  <div class="mascot-char-selector" id="studio-char-selector">
+                    <button
+                      type="button"
+                      class="mascot-choice-btn active"
+                      data-char="owl"
+                      onclick="window.Companion.setCharacter('owl')"
+                    >
+                      🦉 Eule (歌德猫头鹰)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn"
+                      data-char="cat"
+                      onclick="window.Companion.setCharacter('cat')"
+                    >
+                      🐱 Katze (学者猫)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn"
+                      data-char="fox"
+                      onclick="window.Companion.setCharacter('fox')"
+                    >
+                      🦊 Fuchs (灵动狐)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn"
+                      data-char="robot"
+                      onclick="window.Companion.setCharacter('robot')"
+                    >
+                      🤖 Roboter (包豪斯机甲)
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn mascot-custom-btn"
+                      id="studio-btn-custom"
+                      data-char="custom"
+                      style="display: none"
+                      onclick="window.Companion.setCharacter('custom')"
+                    >
+                      ✦ 自定义
+                    </button>
+                    <button
+                      type="button"
+                      class="mascot-choice-btn mascot-upload-btn"
+                      onclick="window.Companion.triggerUpload('studio')"
+                      title="上传自定义 SVG 矢量伴读角色"
+                    >
+                      📁 上传 SVG
+                    </button>
+                    <input
+                      id="studio-svg-input"
+                      type="file"
+                      accept=".svg,image/svg+xml"
+                      style="display: none"
+                      onchange="window.Companion.onFileSelected(event)"
+                    />
+                  </div>
+                </div>
+
+                <div class="mascot-form-row">
+                  <label class="mascot-label" for="studio-mascot-name"
+                    >伙伴专属昵称</label
+                  >
+                  <div class="mascot-input-group">
+                    <input
+                      type="text"
+                      id="studio-mascot-name"
+                      class="mascot-text-input"
+                      maxlength="12"
+                      placeholder="起个名字 (如: Eule, 小欧, Faust)..."
+                      oninput="window.Companion.setName(this.value)"
+                    />
+                  </div>
+                </div>
+
+                <div class="mascot-form-row">
+                  <label class="mascot-label">定制羽翼配色</label>
+                  <div class="mascot-color-swatches" id="studio-color-swatches">
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #6b4f8f"
+                      title="歌德紫"
+                      onclick="window.Companion.setColor('#6b4f8f')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #d9663f"
+                      title="朱砂橘"
+                      onclick="window.Companion.setColor('#d9663f')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #4f8f6b"
+                      title="学者绿"
+                      onclick="window.Companion.setColor('#4f8f6b')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #4a6fa5"
+                      title="包豪斯蓝"
+                      onclick="window.Companion.setColor('#4a6fa5')"
+                    ></button>
+                    <button
+                      type="button"
+                      class="mascot-color-dot"
+                      style="background: #2c2c2c"
+                      title="墨黑"
+                      onclick="window.Companion.setColor('#2c2c2c')"
+                    ></button>
+                    <label
+                      class="mascot-color-custom-btn"
+                      title="自定义 HEX 配色"
+                    >
+                      <span>🎨</span>
+                      <input
+                        type="color"
+                        id="studio-color-picker"
+                        style="
+                          opacity: 0;
+                          position: absolute;
+                          width: 100%;
+                          height: 100%;
+                          cursor: pointer;
+                        "
+                        onchange="window.Companion.setColor(this.value)"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="mascot-form-actions">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    onclick="window.Companion.onSay()"
+                  >
+                    <span>💬 试听伴读鼓励</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    id="studio-sound-btn"
+                    onclick="window.Companion.toggleSound()"
+                  >
+                    <span id="studio-sound-icon">🔊</span>
+                    <span id="studio-sound-label">发声已开启</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-accent"
+                    onclick="window.Companion.saveStudioSettings()"
+                  >
+                    <span>✓ 保存伴读设置</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dual-Row Reverse Wire Marquee Dynamic Ticker -->
+      <section class="folio-marquee-section">
+        <div class="marquee-row marquee-forward">
+          <div id="marquee-row-top" class="marquee-track"></div>
+        </div>
+        <div class="marquee-row marquee-reverse">
+          <div id="marquee-row-bottom" class="marquee-track"></div>
+        </div>
+      </section>
+
+      <!-- Dual Panel Grids -->
+      <!-- Row 1: CEFR Spectrum & 30-Day Trend Chart -->
+      <section id="folio-sec-spectrum" class="folio-grid-row">
+        <!-- Left Panel: CEFR Spectrum Matrix -->
+        <div class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code"
+                >§ 01 · SPEKTRUM · CEFR MATRIX</span
+              >
+              <h3>卡片库欧标阶梯分布</h3>
+            </div>
+            <div class="dossier-panel-meta" id="progress-total-cards">
+              GESAMT: 0 KARTEN
+            </div>
+          </div>
+          <div
+            id="progress-cefr-bar"
+            class="reader-heatbar"
+            style="margin-top: 0.75rem"
+          ></div>
+          <div id="progress-cefr-ladder" class="folio-cefr-ladder"></div>
+        </div>
+
+        <!-- Right Panel: 30-Day Trend Chart -->
+        <div class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code">§ 01 · VERLAUF · 30 TAGE</span>
+              <h3>30 天研读与卡片新增轨迹</h3>
+            </div>
+            <div class="dossier-panel-meta">TÄGLICHE CHRONIK</div>
+          </div>
+          <div class="dossier-chart-container">
+            <svg
+              id="progress-chart-svg"
+              class="dossier-chart-svg"
+              viewBox="0 0 760 110"
+              preserveAspectRatio="none"
+            ></svg>
+            <div class="dossier-chart-axis">
+              <span id="chart-axis-start">● VOR 30 TAGEN</span>
+              <span id="chart-axis-end">● HEUTE</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Row 2: Error Focus Ledger & Achievements Seals -->
+      <section id="folio-sec-errors" class="folio-grid-row">
+        <!-- Left Panel: Error Focus Ledger -->
+        <div id="progress-errors-wrap" class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code">§ 02 · ERROR LEDGER</span>
+              <h3>高频混淆与重点错题攻坚</h3>
+            </div>
+            <button
+              class="btn btn-dark"
+              style="font-size: 0.75rem; padding: 0.35rem 0.85rem"
+              onclick="openQuizOverlay()"
+            >
+              ⚔ 专项重测
+            </button>
+          </div>
+          <div id="progress-errors-list" class="dossier-errors-table"></div>
+        </div>
+
+        <!-- Right Panel: Achievements Seals -->
+        <div id="folio-sec-milestones" class="dossier-panel">
+          <div class="dossier-panel-head">
+            <div class="dossier-panel-title">
+              <span class="dossier-panel-code"
+                >§ 03 · SIEGEL &amp; MEILENSTEINE</span
+              >
+              <h3>歌德备考学术成就勋章</h3>
+            </div>
+            <div class="dossier-panel-meta">LEISTUNGSNACHWEIS</div>
+          </div>
+          <div id="progress-milestones" class="dossier-stamps-grid"></div>
+        </div>
+      </section>
+    </main>

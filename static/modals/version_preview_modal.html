@@ -1,0 +1,63 @@
+    <!-- Version Snapshot Read-Only Preview Overlay (v4.0.0) -->
+    <div
+      id="version-preview-overlay"
+      class="modal-overlay hidden"
+      onclick="if (event.target === this) closeVersionPreview();"
+    >
+      <div class="modal version-preview-box">
+        <div
+          class="modal-header"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 0.5rem">
+            <span id="version-preview-badge" class="diff-hunk-badge">#v--</span>
+            <h3
+              id="version-preview-title"
+              style="margin: 0; font-size: 1.125rem"
+            >
+              快照预览
+            </h3>
+          </div>
+          <button
+            class="drawer-close"
+            onclick="closeVersionPreview()"
+            title="关闭 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="version-preview-meta-bar">
+          <span
+            id="version-preview-time"
+            style="
+              color: var(--pencil);
+              font-size: 0.75rem;
+              font-family: var(--mono);
+            "
+          ></span>
+          <span id="version-preview-status" class="writer-status-pill"></span>
+        </div>
+        <div id="version-preview-content" class="version-preview-content"></div>
+        <div
+          class="modal-footer"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1rem;
+          "
+        >
+          <button class="btn btn-ghost" onclick="closeVersionPreview()">
+            关闭预览
+          </button>
+          <button id="version-preview-restore-btn" class="btn btn-dark">
+            ↩ 恢复到此快照
+          </button>
+        </div>
+      </div>
+    </div>

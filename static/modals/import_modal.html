@@ -1,0 +1,153 @@
+    <!-- ── Import Modal ───────────────────────────────────────── -->
+    <div
+      id="modal-overlay"
+      class="modal-overlay import-overlay"
+      onclick="if (event.target === this) closeModal();"
+    >
+      <div class="modal import-modal-box">
+        <div class="modal-header import-modal-header">
+          <div class="import-header-title">
+            <span class="import-header-code">[ INGESTION // DOKUMENT ]</span>
+            <h3>导入德语研读文献</h3>
+          </div>
+          <button
+            class="drawer-close"
+            onclick="closeModal()"
+            title="关闭 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="modal-tabs import-tabs">
+          <button
+            id="tab-btn-text"
+            class="modal-tab import-tab active"
+            onclick="switchImportTab('text')"
+          >
+            <span>❖ 粘贴长文</span>
+          </button>
+          <button
+            id="tab-btn-url"
+            class="modal-tab import-tab"
+            onclick="switchImportTab('url')"
+          >
+            <span>❖ 网页链接 (URL)</span>
+          </button>
+          <button
+            id="tab-btn-file"
+            class="modal-tab import-tab"
+            onclick="switchImportTab('file')"
+          >
+            <span>❖ 文档上传</span>
+          </button>
+          <button
+            id="tab-btn-feed"
+            class="modal-tab import-tab"
+            onclick="switchImportTab('feed')"
+          >
+            <span>📰 订阅外刊 (RSS)</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: Text -->
+        <div id="import-tab-text" class="tab-content active">
+          <div class="modal-field">
+            <label class="input-label" for="imp-title">文章标题（可选）</label>
+            <input
+              id="imp-title"
+              type="text"
+              class="modal-input"
+              placeholder="输入或自定义标题…"
+            />
+          </div>
+          <div class="modal-field">
+            <label class="input-label" for="imp-text">德语长文正文</label>
+            <textarea
+              id="imp-text"
+              class="modal-input modal-textarea"
+              placeholder="粘贴德语课文、新闻或备考长文…"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Tab 2: URL -->
+        <div id="import-tab-url" class="tab-content">
+          <div class="modal-field">
+            <label class="input-label" for="imp-url-input"
+              >德语新闻/文章链接 (URL)</label
+            >
+            <input
+              id="imp-url-input"
+              type="url"
+              class="modal-input"
+              placeholder="https://www.dw.com/de/..."
+            />
+          </div>
+          <div class="modal-field">
+            <label class="input-label" for="imp-url-title"
+              >自定义标题（可选）</label
+            >
+            <input
+              id="imp-url-title"
+              type="text"
+              class="modal-input"
+              placeholder="自定义标题（默认自动提取并清洗网页标题）"
+            />
+          </div>
+          <div class="url-hint-box">
+            <span class="url-hint-icon">✦</span>
+            <span
+              >支持自动提取与正文降噪：DW
+              德语之声、Spiegel、Tagesschau、DLF、Zeit 等主流德语媒体。</span
+            >
+          </div>
+        </div>
+
+        <!-- Tab 3: File Upload -->
+        <div id="import-tab-file" class="tab-content">
+          <div
+            id="dropzone"
+            class="dropzone"
+            onclick="document.getElementById('file-input').click()"
+          >
+            <div class="dropzone-icon">📄</div>
+            <div class="dropzone-title">点击或拖拽德语文档至此处</div>
+            <div class="dropzone-desc">
+              支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）
+            </div>
+            <input
+              id="file-input"
+              type="file"
+              accept=".txt,.md,.text,text/plain,text/markdown"
+              style="display: none"
+              onchange="handleFileSelect(event)"
+            />
+          </div>
+        </div>
+
+        <!-- Tab 4: RSS News Feeds -->
+        <div id="import-tab-feed" class="tab-content">
+          <div class="feed-sources-bar" id="feed-sources-bar">
+            <!-- Populated by JS -->
+          </div>
+          <div class="feed-items-container" id="feed-items-container">
+            <div class="feed-loading-state">
+              ⏳ 正在获取精选德语外刊与学习源…
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+          <button
+            id="import-btn"
+            class="btn btn-dark"
+            onclick="submitActiveImport()"
+          >
+            开始阅读
+          </button>
+        </div>
+      </div>
+    </div>
+

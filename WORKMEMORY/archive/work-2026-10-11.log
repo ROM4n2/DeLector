@@ -153,3 +153,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **版本面枚举缺失** ⇒ 新增：枚举所有版本落点 + 单一真相源 + 守卫测试（本次实测 6+ 处，且 `test_without_github_ref_type_local_v_tag_is_adopted` 写死旧 tag 名被发版门守卫当场打红）。
 - **`scripts/changelog_gen.py` 三个真 bug**（在临时仓库自测抓到）：① `--version` 有静默默认 `0.1.0` ⇒ 改必填；② **默认就写盘且用 `entry + existing` 前插 ⇒ 会把新条目插到文档标题之上、破坏人工策展的头部** ⇒ 改为默认 dry-run + `--write` 显式 + 插到第一个既有版本标题之前；③ **`subprocess(text=True)` 不带 `encoding=` 用 GBK 解码 ⇒ 中文提交信息让 `stdout=None` ⇒ 报毫不相关的 `AttributeError: 'NoneType'`** ⇒ 显式 `encoding="utf-8", errors="replace"` + 判 None + 打印降级。自测含中文提交信息的临时仓库，4 条用例 + 1 条变异自证（抽掉 `encoding="utf-8"` 复现原崩溃路径）。
 - 反模式表新增 4 行（三平台绿就发 / 模板正文会没问题 / tag 了就完事 / 我轮询到底）。仓库侧 `docs/agents/ops.md` §8 已在前一提交写明追加约定。
+### 2026-10-11 13:07 | mimo-v2.6-flash__claude-code | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按 ADR-0004 Q1=A 处置 —— 删除 WORKMEMORY/corrections.md（本项目账本 0 条数据；4/5 项目本就无此文件）并同步 INDEX 文件清单行。捕获落点改为 WORK_END 可选一行「本次被纠正: <1 行>」（ADR-0004 §4.1-7，已由计划 Task B7 写进 PROTOCOL.md §2）。
+
