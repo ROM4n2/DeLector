@@ -607,3 +607,23 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **C5 分层声明与 core ⇄ nlp_engine 解耦**：在 `docs/agents/architecture.md` 固化 Layer 0~5 权威层序声明与单向依赖约束；移除 `core/database.py` 顶层无引用的 `processor` 导入与 `__all__` 再导出，同步更新 `tests/test_core_database_public_surface.py` 门禁白名单，净解耦持久层对引擎层的依赖。
 - **门禁验证**：全量 **2353 passed, 2 skipped in 395.65s**（全量 2355 严格守恒）；`ruff check .` 全绿；`mypy --strict delector tools`（107 文件 0 错）；`mypy --follow-imports=skip tests`（151 文件 0 错）；`go test ./...` 8 包全绿；双机械闸（`check_mock_drift.py` / `check_silent_degradation.py`）exit 0；12 个改动文件 0 lone LF。
 
+### 2026-10-18 20:30 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C5 架构解耦与 routes/main.py 巨石拆分（Tasks 1~8）全部交付**。
+- 分支 `refactor/decoupling-and-monolith-split`，严格执行计划 `docs/plans/2026-10-18-architecture-decoupling-and-monolith-split.md`。
+- **Task 1: core/db 解耦**：切断 6 个子模块对 `database.py` 门面的反向循环依赖，直接引用基础连接与实体。
+- **Task 2: 工具层归位**：将 `polish_tools.py` 实现搬迁至 Layer 4 `delector/tools/polish.py`，保留过渡再导出垫片。
+- **Task 3: 持久层 ⇄ 引擎层解耦**：移除 `core/db/content.py` 顶层 `nlp_engine.processor` 导入，改为调用期惰性引入。
+- **Task 4: 分层架构机械门禁**：新增 `tools/check_layer_invariants.py`（AST 自动扫描层序与逆向依赖），配套 6 项测试与变异自证，接入 CI 工作流。
+- **Task 5: 切出设置与备份域**：提取 `routes/settings.py` (126 行) 与 `routes/backup.py` (282 行)。
+- **Task 6: 切出卡片与音频域**：提取 `routes/cards.py` (626 行) 与 `routes/audio.py` (185 行)。
+- **Task 7: 切出文章与写作工坊域**：提取 `routes/articles.py` (520 行) 与 `routes/writing.py` (720 行)，`routes/main.py` 彻底解体，从 3,201 行骤降至 545 行（仅剩 lookup/prep/syntax/health 残余通用路由与透明兼容导出）。
+- **门禁验证（Task 8）**：
+  - 测试收集与用例守恒：`2367 tests collected` 严格 100% 守恒（基线 2,360 + Task 4 机械闸用例 7 项）；
+  - 全量回归测试：全量 2,365 passed / 2 skipped 全部通过（分批执行耗时 204s + 195s）；
+  - 架构与质量机械闸全绿：`check_layer_invariants` (0 违规) · `check_mock_drift` (0 漂移) · `check_silent_degradation` (0 违规)；
+  - 类型与代码检查：`ruff check .` 全绿 · `mypy --strict delector tools` (115 文件 0 错) · `mypy --follow-imports=skip tests` (153 文件 0 错)；
+  - Go agent 门禁：8 个包单元测试与基准全绿 · `gofmt -l .` 0 格式差异；
+  - 编码卫生：全仓所有触碰文件 UTF-8 CRLF 校验 **0 lone LF**。
+
+
