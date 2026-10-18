@@ -124,6 +124,10 @@ jobs:
       - name: Frontend API contract gate (routes)
         run: python tools/check_frontend_api_contract.py
 
+      # ── 前端 index.html 模板装配同步门禁 ──────────────────────────────────
+      - name: Frontend index.html template sync gate
+        run: python tools/check_index_html_sync.py
+
       # 固定 typescript@5.6.3（对齐本会话实测可用版本；MUST NOT 用 latest —— 不可复现）。
       - name: Frontend API-boundary type gate (tsc)
         run: npx --yes -p typescript@5.6.3 tsc --noEmit
