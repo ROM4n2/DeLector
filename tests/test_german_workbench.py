@@ -80,11 +80,19 @@ _SCOPE_JS_SRC_TAG = '<script src="../js/wb-scope.js"></script>'
 # 入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → wb-sync.js → wb-scope.js
 # → wb-queue.js → 主内联脚本 的顺序用**普通** <script src> 引入。凡切片落在这些声明里的
 # 断言，锚点随代码搬家 —— 改读模块源，判别力只升不降（新增「所有权」钉子：这八个名字
-# 必须只剩在模块里，两边各留一份会红）。刻意留在 HTML 的是会话内存态
-# （revQueue / revIdx / flipped / ratedCount / queueDay）与渲染族（renderReview / showCard /
-# quiz* / card*），它们与 DOM 强耦合，归下一块（render）。
+# 必须只剩在模块里，两边各留一份会红）。刻意留在 HTML 的是渲染族的**薄 handler**
+# （flipCard / browsePrev / browseNext）与自测会话态（quiz / quizType）。
+# C7 Task 5 块 6 步骤 2（wbrate）：复习会话态（revQueue / revIdx / flipped / ratedCount /
+# queueDay）+ 卡片渲染 / 评分族（renderReview / showCard / doRate / renderQuizQ）也从内联
+# 脚本抽到 static/js/wb-rate.js，按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js
+# → wb-sync.js → wb-scope.js → wb-queue.js → wb-rate.js → 主内联脚本 的顺序引入。
+# 与 wb-queue.js 的分界是「碰不碰 DOM」：队列构建 / 裁剪 / 追加在 wb-queue.js，
+# 读队渲染 + 评价回写在 wb-rate.js。同样上「所有权」钉子（四个函数名双向、两行会话态
+# 声明逐字节双向）—— 搬回去一半就红。
 _QUEUE_JS = (_ROOT / "static" / "js" / "wb-queue.js").read_text(encoding="utf-8")
 _QUEUE_JS_SRC_TAG = '<script src="../js/wb-queue.js"></script>'
+_RATE_JS = (_ROOT / "static" / "js" / "wb-rate.js").read_text(encoding="utf-8")
+_RATE_JS_SRC_TAG = '<script src="../js/wb-rate.js"></script>'
 
 # 视图层里是**函数声明**的那八个（`function <name>(` 形态可双向核）。
 _VIEWS_FN_OWNED = frozenset({
@@ -153,6 +161,23 @@ _QUEUE_FN_OWNED = frozenset({
 _QUEUE_CONST_OWNED = frozenset({"manualExtraIds"})
 _QUEUE_OWNED = _QUEUE_FN_OWNED | _QUEUE_CONST_OWNED
 
+# C7 Task 5 块 6 步骤 2（wbrate）：卡片渲染 / 评分族里是**函数声明**的四个。
+_RATE_FN_OWNED = frozenset({
+    "renderReview",
+    "showCard",
+    "doRate",
+    "renderQuizQ",
+})
+# 会话内存态的五个名字住在同两行 `let` 里（flipped / ratedCount / queueDay 是同一行的
+# 并列声明符，没有各自的 `let NAME =` 形态），故整行逐字节双向钉 —— 拆行、改名、搬回去
+# 一半都会红。`revQueue` 与 `revIdx` 也一并由这两行覆盖。
+_RATE_STATE_LINES = (
+    "let revQueue = [];      // 词 id 队列：到期卡（按 due 升序）+ 今日新词",
+    "let revIdx = 0, flipped = false, ratedCount = 0, queueDay = null;",
+)
+_RATE_STATE_OWNED = frozenset({"revQueue", "revIdx", "flipped", "ratedCount", "queueDay"})
+_RATE_OWNED = _RATE_FN_OWNED
+
 
 def _host_of(name):
     """名字 → 宿主文件路径（只用于断言消息，便于一眼看出切歪去了哪个文件）。"""
@@ -164,6 +189,8 @@ def _host_of(name):
         return "static/js/wb-scope.js"
     if name in _QUEUE_OWNED:
         return "static/js/wb-queue.js"
+    if name in _RATE_OWNED:
+        return "static/js/wb-rate.js"
     return "static/german/workbench.html"
 
 
@@ -181,9 +208,21 @@ def _decl_src(name):
     避开文件头注释里对 `const wordFilters` 之类写法的引用）—— 同样双向，搬回去一半就红。
     C7 Task 5 块 6（wbqueue）起覆盖队列构建族（见 _QUEUE_OWNED）：函数声明形态的七个 +
     顶层 const 形态的一个（`manualExtraIds`，同样带前导换行与等号）—— 双向，搬回去一半就红。
-    既不在 _VIEWS_OWNED / _SYNC_OWNED / _SCOPE_OWNED / _QUEUE_OWNED 里的名字
-    （其余顶层声明）照旧返回 workbench.html。
+    C7 Task 5 块 6 步骤 2（wbrate）起覆盖渲染 / 评分族（见 _RATE_OWNED）：函数声明形态的
+    四个（renderReview / showCard / doRate / renderQuizQ）—— 同样双向；会话内存态五个名字
+    在 `_RATE_STATE_LINES` 里按整行双向钉（见 test_workbench_module_load_order）。
+    既不在 _VIEWS_OWNED / _SYNC_OWNED / _SCOPE_OWNED / _QUEUE_OWNED / _RATE_OWNED 里的
+    名字（其余顶层声明）照旧返回 workbench.html。
     """
+    if name in _RATE_OWNED:
+        # 渲染 / 评分族（C7 Task 5 块 6 步骤 2）：只在 wb-rate.js 里，且不得再内联回 HTML。
+        assert ("function %s(" % name) not in _WORKBENCH, (
+            "%s() 仍留在 workbench.html —— 渲染/评分族声明应只在 static/js/wb-rate.js" % name
+        )
+        assert ("function %s(" % name) in _RATE_JS, (
+            "static/js/wb-rate.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+        )
+        return _RATE_JS
     if name in _QUEUE_OWNED:
         # 队列构建族（C7 Task 5 块 6）：只在 wb-queue.js 里，且不得再内联回 HTML。
         if name in _QUEUE_FN_OWNED:
@@ -534,6 +573,14 @@ def test_embedded_audio_dict_declared_before_playword():
     inScopeWord 声明（搬空壳）→ 9 条红；HTML 里又留一份 const wordFilters =（半搬回）
     → 3 条红；isInScope 改成恒真 → 3 条红；SCOPE_PREDICATES.a2 改坏 → 2 条红；
     CEFR_BY_PREFIX 的 a2- 行改坏 → 1 条红（每次复原后 sha256 逐字节一致）。
+    C7 Task 5 块 6 步骤 2（wbrate）已实跑补测（3 发，均**只**打红本条，复原后 sha256 一致）：
+      · 把 wb-rate.js 里那行并列声明的会话态拆成两行（`let revIdx = 0, flipped = false;` +
+        `let ratedCount = 0, queueDay = null;`，语义不变、形态破坏）→ 红（「会话态声明行」）；
+      · HTML 复习模块里留一个 `function renderReview() {}` 空壳（半搬回）→ 红
+        （「renderReview() 不得再内联」）；
+      · 把 wb-rate.js 的 `function doRate(g) {` 改名 → 红（「wb-rate.js 缺少 doRate()」）。
+    渲染行为另有一条动态变异（删掉 renderReview 里的 rollover `buildReviewQueue();` →
+    test_review_queue_behaves_under_node 红，探针切片护栏报错）。
     """
     opening = re.findall(r"<script[^>]*wb-seed-data\.js[^>]*>", _WORKBENCH)
     assert len(opening) == 1, "数据模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(opening), opening)
@@ -578,6 +625,13 @@ def test_embedded_audio_dict_declared_before_playword():
     assert _WORKBENCH.count(_QUEUE_JS_SRC_TAG) == 1, "队列模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in queue_opening[0], "队列模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
+    rate_opening = re.findall(r"<script[^>]*wb-rate\.js[^>]*>", _WORKBENCH)
+    assert len(rate_opening) == 1, (
+        "渲染模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(rate_opening), rate_opening)
+    )
+    assert _WORKBENCH.count(_RATE_JS_SRC_TAG) == 1, "渲染模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in rate_opening[0], "渲染模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
     src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
     idb_tag_at = _WORKBENCH.index(_IDB_JS_SRC_TAG)
     tts_tag_at = _WORKBENCH.index(_TTS_JS_SRC_TAG)
@@ -585,6 +639,7 @@ def test_embedded_audio_dict_declared_before_playword():
     sync_tag_at = _WORKBENCH.index(_SYNC_JS_SRC_TAG)
     scope_tag_at = _WORKBENCH.index(_SCOPE_JS_SRC_TAG)
     queue_tag_at = _WORKBENCH.index(_QUEUE_JS_SRC_TAG)
+    rate_tag_at = _WORKBENCH.index(_RATE_JS_SRC_TAG)
     main_script_at = _WORKBENCH.index('<script>\n"use strict";')
     assert src_tag_at < idb_tag_at, "数据模块必须先于 IDB 模块加载（种子数据是 IDB 层的输入）"
     assert idb_tag_at < tts_tag_at, (
@@ -620,6 +675,16 @@ def test_embedded_audio_dict_declared_before_playword():
         "队列模块必须在主内联脚本之前加载：普通脚本的顶层 function / const 只对**后续**脚本"
         "可见，排在内联脚本之后则 HTML 里 renderReview / 启动块里的 buildReviewQueue() "
         "全是 ReferenceError"
+    )
+    assert queue_tag_at < rate_tag_at, (
+        "渲染模块必须排在 wb-queue.js 之后（既定加载序 wb-queue → wb-rate）："
+        "renderReview 运行期调 buildReviewQueue / queueInfoText，读作「判定链 → 队列构建 → "
+        "读队渲染」，排在队列构建之前就是把这条链写反"
+    )
+    assert rate_tag_at < main_script_at, (
+        "渲染模块必须在主内联脚本之前加载：普通脚本的顶层 let/function 只对**后续**脚本可见，"
+        "排在内联脚本之后则启动块与顶栏 handlers 里的 renderReview / showCard / doRate "
+        "全是 ReferenceError（flipped / revQueue 也会在 TDZ 里）"
     )
 
     assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
@@ -666,6 +731,33 @@ def test_embedded_audio_dict_declared_before_playword():
         )
         assert anchor not in _WORKBENCH, (
             "const %s 不得再内联在 workbench.html（块 5 已搬走）" % name
+        )
+
+    # 渲染 / 评分族（块 6 步骤 2）：四个函数声明 + 两行会话态 —— 逐项双向钉所有权
+    # （「搬回 HTML 留个空壳」与「改名/删声明」两种坏法都红）。
+    assert _RATE_FN_OWNED <= _RATE_OWNED, "_RATE_FN_OWNED 必须是 _RATE_OWNED 的子集（登记漏了）"
+    for name in sorted(_RATE_FN_OWNED):
+        assert "function %s(" % name in _RATE_JS, (
+            "static/js/wb-rate.js 缺少 %s()（声明被删/改名）" % name
+        )
+        assert "function %s(" % name not in _WORKBENCH, (
+            "%s() 不得再内联在 workbench.html（块 6 步骤 2 已搬走）" % name
+        )
+    # 会话态五行里 flipped / ratedCount / queueDay 是同一行的并列声明符，没有各自的
+    # `let NAME =` 形态 —— 按整行逐字节双向钉，比按名字强（拆行/改名/半搬都红）。
+    for line in _RATE_STATE_LINES:
+        assert line in _RATE_JS, (
+            "static/js/wb-rate.js 缺少会话态声明行：%r（被删/改名/拆行了？）" % line
+        )
+        assert line not in _WORKBENCH, (
+            "会话态声明行仍留在 workbench.html（块 6 步骤 2 已搬走）：%r" % line
+        )
+    # 逐名再核一遍「HTML 里任何声明形态都不许再带这五个名字」（有人把某一行拆成
+    # `let flipped = false;` 塞回内联脚本 → 红；flipCard 里的 `flipped = !flipped;`
+    # 是赋值不是声明，不会误伤）。
+    for name in sorted(_RATE_STATE_OWNED):
+        assert not re.search(r"\b(?:let|const|var)\s+[^;\n]*\b%s\b\s*=" % name, _WORKBENCH), (
+            "%s 不得再在 workbench.html 里声明（会话态只在 static/js/wb-rate.js）" % name
         )
 
 

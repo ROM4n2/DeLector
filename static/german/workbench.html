@@ -535,8 +535,8 @@
          wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → 主内联脚本
      理由：本文件是纯声明，加载期一行都不执行，但它引用的声明（$ / esc / S / wordFilters /
      planCalc / renderReview / idb* …）全住在前三个模块或主内联脚本里 —— 排在队尾就是按
-     「谁提供这些声明」排。renderReview 与 renderQuizQ 刻意留在内联脚本（分别归
-     review-queue 块与自测块，与会话内存态强耦合），详见该文件头部说明。 -->
+     「谁提供这些声明」排。renderReview 与 renderQuizQ 原本留在内联脚本，块 6 步骤 2
+     （wbrate）已连同会话内存态搬进 static/js/wb-rate.js，详见该文件头部说明。 -->
 <script src="../js/wb-views.js"></script>
 
 <!-- C7 Task 5（块 4 · wbsync）：背词进度 server 镜像同步（`const wbsync` IIFE / normHw /
@@ -581,6 +581,17 @@
      (c) 唯一必须早于它的身份是「主内联脚本」（普通脚本的顶层 const/function 只对后续
      脚本可见），故紧跟 wb-scope.js 与主内联脚本之间，读作「判定链 → 队列 → 渲染」。 -->
 <script src="../js/wb-queue.js"></script>
+
+<!-- C7 Task 5 · 块 6 步骤 2（wbrate）：卡片渲染 / 评分回写与会话内存态
+     （revQueue / revIdx / flipped / ratedCount / queueDay + renderReview / showCard /
+     doRate / renderQuizQ）抽到 static/js/wb-rate.js，同样是**普通脚本**。
+     当前全序：wb-seed-data.js -> wb-idb.js -> wb-tts.js -> wb-views.js -> wb-sync.js
+     -> wb-scope.js -> wb-queue.js -> wb-rate.js -> 主内联脚本。
+     排位理由：(a) 纯声明，加载期一行函数体都不执行；(b) renderReview 运行期调
+     wb-queue.js 的 buildReviewQueue / queueInfoText，故必须排在它之后 —— 读作
+     「判定链 -> 队列构建 -> 读队渲染」；(c) 反向依赖（启动块、顶栏 handlers、自测块
+     改 quiz）全是运行期的，无需更早。 -->
+<script src="../js/wb-rate.js"></script>
 
 <script>
 "use strict";
@@ -1161,112 +1172,23 @@ $("tabs").addEventListener("click", (e) => {
 /* ======================================================================
  * 复习模块
  * ==================================================================== */
-let revQueue = [];      // 词 id 队列：到期卡（按 due 升序）+ 今日新词
-let revIdx = 0, flipped = false, ratedCount = 0, queueDay = null;
-
 /* C7 Task 5 · 块 6（wbqueue）：队列构建/调度族（manualExtraIds + buildReviewQueue /
  * refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords / queueInfoText /
  * extraPractice / extraNewWords）已搬到 static/js/wb-queue.js（普通脚本，先于本内联脚本
  * 加载 ⇒ 顶层 const/function 落在同一全局词法环境，本文件仍可直接调用）。
- * 按块纪律留在原地：revQueue / revIdx / flipped / ratedCount / queueDay（会话内存态，
- * 与渲染/评价 handler 强耦合）与下面 renderReview 起的渲染族（第 2 小步再动）。 */
-
-function renderReview() {
-  /* 首装挂起（S.words 为空）：显示加载占位，不得渲染成「今日复习任务已完成」的误导态。 */
-  if (A1_BOOT_PENDING) { renderA1BootLoading(); return; }
-  /* 队列按天构建、会话内保持稳定：评价后不重建，保证「上一张」可回看 */
-  const today = todayStr();
-  if (queueDay !== today || revIdx >= revQueue.length) {
-    buildReviewQueue();
-    queueDay = today;
-  }
-  $("revInfo").textContent = queueInfoText();
-  renderHeaderBadge();
-  if (revIdx >= revQueue.length) {
-    $("revBoard").style.display = "none";
-    $("revEmpty").style.display = "";
-    $("revEmptyText").textContent = ratedCount > 0
-      ? "本轮完成：共评价 " + ratedCount + " 张卡片。稍后可回来继续或去自测。"
-      : "今日复习任务已完成 🎉";
-    $("btnExtra").disabled = !S.words.some(w => S.cards[w.id] && S.cards[w.id].reps > 0);
-    $("btnExtraNew").disabled = !S.words.some(w => !S.cards[w.id]);
-    return;
-  }
-  $("revBoard").style.display = "";
-  $("revEmpty").style.display = "none";
-  showCard();
-}
-
-function showCard() {
-  const w = wordById(revQueue[revIdx]);
-  flipped = false;
-  $("cardFlip").classList.remove("flipped");
-  $("cardHw").textContent = w.hw;
-  $("cardIpa").textContent = w.ipa || "";
-  // ---- 音频按钮：卡片 ----
-  const cA = $("cardAudio");
-  if (cA) {
-    cA.disabled = false; cA.classList.remove("busy","voice-bad");
-    cA.onclick = (ev) => {
-      if (ev) ev.stopPropagation();  // 不触发卡片翻面
-      cA.classList.add("busy");
-      playWord(w.hw, { engine: S.settings.tts.engine, rate: S.settings.tts.rate })
-        .then((r) => {
-          cA.classList.remove("busy");
-          if (!r.ok) {
-            cA.classList.add("voice-bad");
-            if (r.error === "no-de-voice") toast(deVoiceMissingHint());
-            else if (r.error === "speechSynthesis-unavailable") toast("当前浏览器不支持语音播放");
-            else if (r.error === "empty-word" || r.error === "tts-off"
-                     || r.error === "superseded") { /* 静默：被新播放取代，不是真正的失败 */ }
-            else toast("发音失败：" + r.error);
-          }
-        });
-    };
-    // autoPlay：需手势解锁（用户此前至少手动点过一次🔊）
-    if (S.settings.tts.autoPlay && _ttsGestureUnlocked) {
-      Promise.resolve().then(() => { if (cA && !cA.disabled) cA.click(); });
-    }
-  }
-  $("cardPos").textContent = w.pos || "—";
-  $("cardGloss").textContent = w.gloss || "—";
-  const exBox = $("cardEx"); exBox.innerHTML = "";
-  (w.ex || []).forEach(p => {
-    const div = document.createElement("div");
-    div.className = "ex";
-    const de = document.createElement("div"); de.className = "de"; de.textContent = p.de || "";
-    const zh = document.createElement("div"); zh.className = "zh"; zh.textContent = p.zh || "";
-    if (p.de) div.appendChild(de);
-    if (p.zh) div.appendChild(zh);
-    if (p.de || p.zh) exBox.appendChild(div);
-  });
-  document.querySelectorAll(".rate-btn").forEach(b => b.disabled = true);
-  $("btnPrevCard").disabled = revIdx === 0;
-  $("revProgFill").style.width = (revQueue.length ? (revIdx / revQueue.length) * 100 : 0) + "%";
-  $("revProgText").textContent = (revIdx + 1) + " / " + revQueue.length;
-}
+ * 块 6 步骤 2（wbrate）：复习会话态（revQueue / revIdx / flipped / ratedCount / queueDay）
+ * 与卡片渲染/评分族（renderReview / showCard / doRate / renderQuizQ）已搬到
+ * static/js/wb-rate.js —— 同样先于本内联脚本加载，与本文件共享同一全局词法环境：
+ * 队列构建在 wb-queue.js，读队渲染 + 评价回写在 wb-rate.js，边界即「碰不碰 DOM」。
+ * 按块纪律留在原地：flipCard / browsePrev / browseNext 三个薄 handler（flipCard 改的
+ * flipped 是 wb-rate.js 的顶层 let，同一词法环境，可直写）与下面那串 addEventListener
+ * （顶层**表达式**而非声明）。 */
 
 function flipCard() {
   if (revIdx >= revQueue.length) return;
   flipped = !flipped;
   $("cardFlip").classList.toggle("flipped", flipped);
   document.querySelectorAll(".rate-btn").forEach(b => b.disabled = !flipped);
-}
-
-function doRate(g) {
-  if (revIdx >= revQueue.length || !flipped) return;
-  const id = revQueue[revIdx];
-  const isNew = !S.cards[id] || S.cards[id].reps === 0;
-  S.cards[id] = fsrsReview(S.cards[id] || null, g, Date.now(), S.settings.retention);
-  saveCards();
-  const t = logToday();
-  t.rv++; if (isNew) t.nw++;
-  if (g === 3) t.good++; else if (g === 2) t.hard++; else { t.again++; addWrong(id, "rv-again"); }
-  saveLog();
-  ratedCount++;
-  revIdx++;
-  renderHeaderBadge();
-  renderReview();
 }
 
 function browsePrev() { if (revIdx > 0) { revIdx--; renderReview(); } }
@@ -1337,76 +1259,10 @@ function startQuiz(idsOverride) {
   renderQuizQ();
 }
 
-function renderQuizQ() {
-  quiz.answered = false;
-  $("quizFb").innerHTML = "";
-  $("btnQuizNext").style.display = "none";
-  const w = wordById(quiz.ids[quiz.idx]);
-  const total = quiz.ids.length;
-  $("quizProgFill").style.width = (quiz.idx / total) * 100 + "%";
-  $("quizProgText").textContent = (quiz.idx + 1) + " / " + total;
-  const box = $("quizQBox"); box.innerHTML = "";
-  if (quiz.type === "choice") {
-    const dir = Math.random() < 0.5 ? "de2zh" : "zh2de";
-    quiz.dir = dir;
-    const opts = buildChoiceOptions(w, dir);
-    quiz.opts = opts;
-    $("quizQLabel").textContent = "第 " + (quiz.idx + 1) + " 题 · " + (dir === "de2zh" ? "选出正确中文释义" : "选出对应德语单词");
-    const qw = document.createElement("div"); qw.className = "qword";
-    if (dir === "de2zh") {
-      qw.textContent = w.hw;
-      if (w.ipa) { const s = document.createElement("small"); s.textContent = w.ipa; qw.appendChild(s); }
-    } else qw.textContent = w.gloss;
-    box.appendChild(qw);
-    opts.forEach((o, i) => {
-      const b = document.createElement("button");
-      b.className = "qopt"; b.textContent = o.text;
-      b.onclick = () => chooseOption(i);
-      box.appendChild(b);
-    });
-  } else {
-    $("quizQLabel").textContent = "第 " + (quiz.idx + 1) + " 题 · 拼写出德语原词";
-    const info = document.createElement("div");
-    info.className = "qword";
-    info.appendChild(document.createTextNode(w.gloss || "—"));
-    if (w.pos) { const s = document.createElement("small"); s.textContent = w.pos + (w.ipa ? " · " + w.ipa : ""); info.appendChild(s); }
-    else if (w.ipa) { const s = document.createElement("small"); s.textContent = w.ipa; info.appendChild(s); }
-    if (w.ipa) {
-      const ab = document.createElement("button");
-      ab.className = "audio-btn words-audio-sm"; ab.title = "听发音（拼写辅助）"; ab.textContent = "🔊";
-      ab.style.marginLeft = "8px";
-      ab.onclick = () => {
-        ab.classList.add("busy");
-        playWord(w.hw, { engine: S.settings.tts.engine, rate: S.settings.tts.rate })
-          .then((r) => {
-            ab.classList.remove("busy");
-            if (!r.ok) {
-              ab.classList.add("voice-bad");
-              if (r.error === "no-de-voice") toast(deVoiceMissingHint());
-            }
-          });
-      };
-      info.appendChild(ab);
-    }
-    box.appendChild(info);
-    const inp = document.createElement("input");
-    inp.className = "spell-input"; inp.id = "spellInput";
-    inp.placeholder = "输入德语单词，回车提交"; inp.autocomplete = "off";
-    inp.setAttribute("autocapitalize", "off"); inp.setAttribute("spellcheck", "false");
-    inp.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") { ev.preventDefault(); checkSpell(); }
-    });
-    const submit = document.createElement("button");
-    submit.className = "btn"; submit.id = "btnSpellOk";
-    submit.style.margin = "10px auto 0"; submit.style.display = "block";
-    submit.textContent = "提交答案";
-    const hintP = document.createElement("p");
-    hintP.className = "hint"; hintP.style.marginTop = "10px";
-    hintP.textContent = "判分忽略大小写与首尾空格；ä/ö/ü/ß 可用 ae/oe/ue/ss 代替；仅差一两个字母计为基本正确。";
-    box.appendChild(inp); box.appendChild(submit); box.appendChild(hintP);
-    inp.focus();
-  }
-}
+/* C7 Task 5 · 块 6 步骤 2（wbrate）：renderQuizQ 已搬到 static/js/wb-rate.js ——
+ * 与 renderReview / showCard 同属「读会话态刷 DOM」的渲染族；自测会话态与判分链
+ * （quiz / quizType / chooseOption / checkSpell / quizNext / buildChoiceOptions）留在原地，
+ * 归自测块，不在本块范围内。 */
 
 function buildChoiceOptions(w, dir) {
   const sameLetter = shuffle(S.words.filter(x => x.id !== w.id && x.letter === w.letter &&

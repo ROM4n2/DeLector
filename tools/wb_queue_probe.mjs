@@ -42,10 +42,14 @@ const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
  * refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords / queueInfoText /
  * extraPractice / extraNewWords + manualExtraIds）搬到 static/js/wb-queue.js —— 排在新模块
  * 在前、workbench.html 在后；本探针**确实真切片**这七个函数 + 豁免集（见 PIECES），
- * 故必须登记该源，否则切片静默失配。仍住 workbench.html 的只有渲染族
- * （renderReview / renderWords 过滤谓词）与会话内存态的声明。 */
+ * 故必须登记该源，否则切片静默失配。
+ * C7 Task 5 块 6 步骤 2（wbrate）：renderReview 随会话内存态一起搬到 static/js/wb-rate.js
+ * （新增源见下）。renderReview 仍由本探针**真切片**（PIECES.renderReview），故 wb-rate.js
+ * 必须在清单里；会话态（revQueue / revIdx / ratedCount / flipped / queueDay）不切 ——
+ * 由 PRELUDE 的 `var` 提供，与搬到哪个文件无关。
+ * 仍住 workbench.html 的只有 renderWords 过滤谓词与自测 / 词库等其它族。 */
 const SRC_FILES = [
-  "js/wb-seed-data.js", "js/wb-views.js", "js/wb-scope.js", "js/wb-queue.js",
+  "js/wb-seed-data.js", "js/wb-views.js", "js/wb-scope.js", "js/wb-queue.js", "js/wb-rate.js",
   "german/workbench.html",
 ];
 
