@@ -1,10 +1,26 @@
 /* DeLector - Writing Desk (Schreibwerkstatt) & Grammar Polish */
 'use strict';
 
-import { api, esc, notify, DEFAULT_TIMEOUT_MS } from './core.js';
+import { esc, notify, DEFAULT_TIMEOUT_MS } from './core.js';
 import { refreshCardCounters } from './reader.js';
 import { Companion } from './companion.js';
 import * as A1Writer from './a1_writer.js';
+import {
+  analyzeWritingRemote,
+  applyWritingPolish,
+  createEssayVersion,
+  createWriterEssay,
+  fetchEssayVersion,
+  fetchEssayVersions,
+  fetchWriterEssay,
+  fetchWriterEssays,
+  fetchWritingPolishDiff,
+  removeEssayVersion,
+  removeWriterEssay,
+  restoreEssayVersionRemote,
+  saveWritingGrammarCard,
+  updateWriterEssay
+} from './wr-api.js';
 import { getErrorTypeLabel, WRITER_TABS, polishReasonText, renderWordDiff } from './wr-format.js';
 export { getErrorTypeLabel };
 export {
@@ -587,11 +603,7 @@ export function analyzeWriterText(immediate = false) {
   const token = ++_analyzeToken;
   const performAnalysis = async () => {
     try {
-      const a = await api('/api/writing/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      const a = await analyzeWritingRemote(text);
       if (token !== _analyzeToken) return; // 已有更新的分析请求，本次作废
       currentAnalysis = a;
       renderEditor(text, a, caretOffset);
@@ -795,7 +807,7 @@ export async function loadWriterEssays() {
   if (!listEl) return;
 
   try {
-    const rows = await api('/api/essays');
+    const rows = await fetchWriterEssays();
     if (!rows || rows.length === 0) {
       listEl.innerHTML = '<div class="writer-empty-tip">暂无保存的作文草稿。在上方输入德语文本后点击「保存作文」即可收录。</div>';
       return;
@@ -834,7 +846,7 @@ export async function loadWriterEssays() {
 // ── Open Essay Draft ────────────────────────────────────────────────────────
 export async function openWriterEssay(id) {
   try {
-    const essay = await api(`/api/essays/${id}`);
+    const essay = await fetchWriterEssay(id);
     currentEssayId = essay.id;
     selectedSpanRef = null;
 
@@ -900,25 +912,13 @@ export async function saveWriterErrorAsCard() {
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
       const content = editorText() || selectedSpanRef.sentenceText;
-      const essayRes = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      const essayRes = await createWriterEssay(title, content);
       currentEssayId = essayRes.id;
       selectedSpanRef.essay_id = currentEssayId;
       loadWriterEssays();
     }
 
-    await api('/api/writing/cards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        essay_id: currentEssayId,
-        sentence_id: selectedSpanRef.sentence_id,
-        span_index: selectedSpanRef.span_index
-      })
-    });
+    await saveWritingGrammarCard(currentEssayId, selectedSpanRef.sentence_id, selectedSpanRef.span_index);
 
     if (btn) {
       btn.textContent = '✓ 已存为 Anki 语法卡';
@@ -959,17 +959,9 @@ export async function saveWriterEssay() {
   try {
     let res;
     if (currentEssayId) {
-      res = await api(`/api/essays/${currentEssayId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      res = await updateWriterEssay(currentEssayId, title, content);
     } else {
-      res = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      res = await createWriterEssay(title, content);
       currentEssayId = res.id;
     }
 
@@ -1002,7 +994,7 @@ export async function deleteWriterEssay(id, evt) {
   if (!confirm('确定要删除这篇作文草稿吗？')) return;
 
   try {
-    await api(`/api/essays/${id}`, { method: 'DELETE' });
+    await removeWriterEssay(id);
     if (currentEssayId === id) {
       clearWriterForm();
     } else {
@@ -1215,11 +1207,7 @@ export async function aiPolishEssay() {
   try {
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
-      const essayRes = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content: text })
-      });
+      const essayRes = await createWriterEssay(title, text);
       currentEssayId = essayRes.id;
       loadWriterEssays();
     }
@@ -1253,11 +1241,7 @@ export async function aiPolishEssay() {
       // 降级：**一个事件都没收到**才退回一次性 JSON —— 那时服务端还没烧配额。
       // 已经收到事件 = 配额已烧，再发一次等于烧两遍。
       if (recv.any || controller.signal.aborted) throw err;
-      const res = await api('/api/writing/ai-polish/diff', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      const res = await fetchWritingPolishDiff(text);
       payload = res && res.result;
     }
 
@@ -1352,24 +1336,13 @@ export async function applyPolishChanges() {
     if (!currentEssayId) {
       const title = document.getElementById('writer-title')?.value.trim() || '未命名作文草稿';
       const content = polishState.original;
-      const essayRes = await api('/api/essays', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-      });
+      const essayRes = await createWriterEssay(title, content);
       currentEssayId = essayRes.id;
     }
 
-    const res = await api('/api/writing/apply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        essay_id: currentEssayId,
-        original_text: polishState.original,
-        corrected_text: polishState.corrected,
-        accepted_indices
-      })
-    });
+    const res = await applyWritingPolish(
+      currentEssayId, polishState.original, polishState.corrected, accepted_indices
+    );
 
     setEditorText(res.content);
     currentAnalysis = res.analysis_json;
@@ -1402,7 +1375,7 @@ export async function loadEssayVersions() {
   }
 
   try {
-    const rows = await api(`/api/essays/${currentEssayId}/versions`);
+    const rows = await fetchEssayVersions(currentEssayId);
     if (!rows || rows.length === 0) {
       listEl.innerHTML = '<div class="writer-empty-tip">暂无快照记录</div>';
       return;
@@ -1448,11 +1421,7 @@ export async function saveEssayVersion() {
   const msg = (msgInput?.value || '').trim();
 
   try {
-    await api(`/api/essays/${currentEssayId}/versions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg || '手动保存' })
-    });
+    await createEssayVersion(currentEssayId, msg || '手动保存');
     if (msgInput) msgInput.value = '';
     loadEssayVersions();
   } catch (err) {
@@ -1464,7 +1433,7 @@ export async function saveEssayVersion() {
 export async function previewEssayVersion(versionId) {
   if (!currentEssayId) return;
   try {
-    const v = await api(`/api/essays/${currentEssayId}/versions/${versionId}`);
+    const v = await fetchEssayVersion(currentEssayId, versionId);
     const overlay = document.getElementById('version-preview-overlay');
     if (!overlay) return;
 
@@ -1528,9 +1497,7 @@ export async function deleteEssayVersion(versionId) {
   if (!confirm(`确定要删除版本快照 #v${versionId} 吗？当前作文内容不受影响。`)) return;
 
   try {
-    await api(`/api/essays/${currentEssayId}/versions/${versionId}`, {
-      method: 'DELETE'
-    });
+    await removeEssayVersion(currentEssayId, versionId);
     loadEssayVersions();
   } catch (err) {
     console.error('[Writer] Delete version failed:', err);
@@ -1543,11 +1510,7 @@ export async function restoreEssayVersion(versionId) {
   if (!confirm('确定要恢复到此版本快照吗？当前的未保存修改将自动保存为一个恢复前快照。')) return;
 
   try {
-    const res = await api(`/api/essays/${currentEssayId}/restore`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ version_id: versionId })
-    });
+    const res = await restoreEssayVersionRemote(currentEssayId, versionId);
 
     setEditorText(res.content);
     currentAnalysis = res.analysis_json;

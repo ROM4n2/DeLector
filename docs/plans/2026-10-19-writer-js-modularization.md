@@ -135,10 +135,11 @@
 
 ### Task 3: 抽出 `static/js/wr-api.js`（持久化访问层）[Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]
 
-**Files:**
-- Create: `static/js/wr-api.js`
-- Modify: `static/js/writer.js:806-1050,1284-1395,1431-1660`（14 处 `api(...)` 调用点改为调用新模块的具名函数）
-- Test: `tests/test_frontend_module_graph.py` · `tests/test_server_ai_polish.py` · `tests/test_writer_mobile.py`
+**Files（实测收敛后的实际改动面）:**
+- Create: `static/js/wr-api.js`（120 行 / 14 个端点函数）
+- Modify: `static/js/writer.js`（**17 处** `await api(...)` 调用点，非计划预估的 14 —— 实测计数为准；1563 行 → **1526 行**）
+- Modify: `tests/`：**未改**。既有 `test_frontend_module_graph.py` 的自治图校验已覆盖新模块（glob 自动纳入）
+- **实测收敛说明**：计划里写的「14 处」是把端点种类当成了调用点数；实际调用点 17 个（`POST /api/essays` 出现 4 次等）。`internals` 端点数 = 14 个去重后端点（与 `delector/routes/writing.py` 注册的 15 条中除流式 `ai-polish` 外的全部）。
 
 **Interfaces:**
 - Consumes: `core.js::api(path, opts) -> Promise<any>`
@@ -181,14 +182,28 @@
 > Return: 摘要 + MANDATORY 物理凭据（退出码 + 用例数 + 14 个调用点的实参比对表）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记录基线（用例数 + `await api(` 计数）
-- [ ] **Step 2**: 建 `wr-api.js`（14 个端点函数）
-- [ ] **Step 3**: `writer.js` 逐点替换
-- [ ] **Step 4**: 实参逐字比对 + 端点路径复核
-- [ ] **Step 5**: 错误轨保留核验（catch/notify 逐字不变）
-- [ ] **Step 6**: 门禁 + 用例数守恒
-- [ ] **Step 7**: Physical Evidence Gate
-- [ ] **Step 8**: 原子提交（`refactor(wr): extract persistence layer to wr-api.js`）
+- [x] **Step 1**: 基线 —— `await api(` 计数 **17**（计划预估 14，实测为准）；定向套件 157 passed / 收集 2367
+- [x] **Step 2**: 建 `wr-api.js` —— 14 个端点函数，只 import `./core.js` 的 `api`；零 DOM / 零 notify / 零计时器
+- [x] **Step 3**: `writer.js` 逐点替换 17 处（脚本对每处做**命中计数断言**，不符即抛，防漏改/错改）；`writer.js` 1563 → 1526 行；`core.js` 的 `api` 已无引用，从 import 摘除
+- [x] **Step 4**: **实参保真 PASS** —— 用括号配平扫描比对 master 每处调用点与 `wr-api.js` 的（方法 / 路径 / 载荷键集合）：**17/17 一致**，唯一例外是 SSE 流式的 `{ text, stream: true }`（刻意留在 `writer.js` 用 `fetch` 直连）
+- [x] **Step 5**: **路由一致 PASS** —— 14 个端点与 `delector/routes/writing.py` 注册表逐条比对（路径参数名归一后）全部命中；后端 15 条里唯一未封装的是流式 `POST /api/writing/ai-polish`
+- [x] **Step 5b**: **错误轨保真 PASS** —— 逐行比对 master 与现状的 `alert(` / `notify(` / `console.error(` 行：**27 条对 27 条，丢失 0、新增 0**（持久化层不吞异常、不改呈现）
+- [x] **Step 6**: 门禁 —— `ruff check .` 全绿 · `mypy --strict delector tools` 115 文件 0 错 · `mypy --follow-imports=skip tests` 153 文件 0 错 · 定向 157 passed · 收集数 **2367 不变** · 三文件 0 lone LF
+- [x] **Step 7**: Physical Evidence Gate + 原子提交（`refactor(wr): extract persistence layer to wr-api.js`）
+
+**⚠️ 真缺陷（由 `node --check` 抓到，非人工发现）**：`wr-api.js` 最初把函数命名为 `restoreEssayVersion`，而 `writer.js` **已有同名的视图层编排函数**（`export async function restoreEssayVersion(versionId)`，含 confirm + 编辑器回填、经 window 暴露给 onclick）。同名导入 + 本地声明 = ES 的 **SyntaxError（重复声明）**，会让**整张模块图一起挂**（正是本仓 v4.7.0「空模块 → 链接期 SyntaxError → Android 交互全死」那类事故）。已改名为 `restoreEssayVersionRemote`（沿用既有 `analyzeWritingRemote` 的先例）并在模块内写明由来。
+
+**⚠️ 变异自证结果：现存门禁 CAUGHT 2/5，UNCAUGHT 3/5（如实登记，不粉饰）**：
+
+| 变异 | 结果 | 捕获者 |
+| --- | --- | --- |
+| M3 导入名与本地声明重名 | **CAUGHT** | `test_every_named_import_resolves_to_a_real_export` |
+| M5 抽了但留副本（`writer.js` 重新定义 `renderWordDiff`） | **CAUGHT** | `node --check`（**注意：本仓 CI 并不跑 `node --check`**） |
+| M1 L2 层混入 DOM（`wr-api.js` 注入 `document.getElementById`） | **UNCAUGHT** | 无 → Task 4 规则① |
+| M4 L1 纯层混入网络（`wr-format.js` 注入 `fetch`） | **UNCAUGHT** | 无 → Task 4 规则② |
+| M2 前端端点方法改错（`DELETE` → `POST`） | **UNCAUGHT** | 无 → Task 4 规则③（路由一致闸） |
+
+三条 UNCAUGHT 即 Task 4 闸的规则输入；M5 的现状捕获者 `node --check` 不在 CI 里，故 Task 4 另需一条**重复声明规则**（等价于把 `node --check` 的这条判别力搬进 Python 闸）。
 
 ---
 
@@ -214,6 +229,8 @@
   | `wr-api.js` | L2 持久化层 | DOM 全家、用户提示（`notify(`/`alert(`/`confirm(`）、计时器 | 仅 `./core.js` |
 - **反向依赖禁令（双向）**：L1 / L2 MUST NOT import `writer.js`（否则分层倒置，且会与 `main.js` 的导入形成环）。
 - **防「假解耦」判据**：`writer.js` MUST NOT 再定义被搬走的符号名（`wr-format.js` 的 6 个 + 14 个端点函数名）；命中即报「抽了但留副本」。
+- **规则④ 重复声明禁令（Task 3 变异 M3/M5 实测驱动的补充）**：任一本模块**导入的名字** MUST NOT 同时被本模块**本地声明**。ES 对重复声明是**链接期 SyntaxError**，会让整张模块图一起挂（本仓 v4.7.0 事故同类：空模块 → 链接期崩 → Android 交互全死）。现状唯一捕获者是 `node --check`，而**本仓 CI 不跑它** —— 故 MUST 把这条判别力搬进 Python 闸。
+- **规则⑤ 前端↔后端路由一致（Task 3 变异 M2 实测驱动的补充）**：`wr-api.js` 里每个 `api()` 调用的（方法 + 路径）MUST 在后端 `delector/routes/*.py` 的 `@router.<method>("...")` 注册表里存在（路径参数名归一后比对）。判别力：把 `method: 'DELETE'` 改成 `'POST'` ⇒ 闸必须红（实测现存门禁 UNCAUGHT）。
 
 **Injected Instincts:**
 - [x] `[Instinct: Gate-Not-Description]`: 闸的判据 MUST 独立于当前代码内容——用**合成夹具**（`tmp_path` 里造一个含 `document.` 的假 `wr-format.js`）证明它能变红，而不是「跑一遍当前树恰好绿」。
