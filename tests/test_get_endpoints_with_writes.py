@@ -115,7 +115,8 @@ def spy(monkeypatch: pytest.MonkeyPatch) -> Iterator[SqlSpy]:
         with real_db_conn(db_path) as conn:
             yield TracingConn(conn, recorder)
 
-    # main.py 是 `from ... import db_conn`，故须打在 routes.main 的命名空间上
+    # articles.py 是 `from ... import db_conn`，故须打在 routes.articles 的命名空间上（C5 搬迁）
+    monkeypatch.setattr(routes.articles, "db_conn", traced_db_conn)
     monkeypatch.setattr(routes.main, "db_conn", traced_db_conn)
     yield recorder
 
@@ -629,19 +630,24 @@ def probe2(conn: object) -> dict:
 
 def test_guards_use_single_source_version_constant() -> None:
     """单一真相源：`routes/main.py` MUST NOT 再持有 processed_json 版本字面量。"""
+    # 单一真相源：articles.py 与 main.py MUST NOT 再持有写死版本字面量
+    articles_src = open(
+        os.path.join(ROOT, "delector", "routes", "articles.py"), encoding="utf-8"
+    ).read()
     main_src = open(
         os.path.join(ROOT, "delector", "routes", "main.py"), encoding="utf-8"
     ).read()
-    tree = ast.parse(main_src)
-    literals = {
-        n.value
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value == "3.4.0"
-    }
-    assert not literals, "main.py 又出现了写死的 processed_json 版本字面量（判据会再漂移）"
+    for src, fname in [(articles_src, "articles.py"), (main_src, "main.py")]:
+        tree = ast.parse(src)
+        literals = {
+            n.value
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value == "3.4.0"
+        }
+        assert not literals, f"{fname} 又出现了写死的 processed_json 版本字面量（判据会再漂移）"
 
     # 判据 MUST 引用常量
-    assert "PROCESSED_JSON_VERSION" in main_src
+    assert "PROCESSED_JSON_VERSION" in articles_src or "PROCESSED_JSON_VERSION" in main_src
     exported = processor.PROCESSED_JSON_VERSION
     assert isinstance(exported, str) and exported
 

@@ -304,28 +304,32 @@ def test_main_routes_converged_on_single_client() -> None:
     GREEN、本守卫 RED；把已收口调用改回裸 HTTP 时两者都红（那种漏网老判据能抓到）。
     故这里换成三条结构判据。
     """
-    path = os.path.join(ROOT, "delector", "routes", "main.py")
-    with open(path, encoding="utf-8") as fh:
-        src = fh.read()
-    code = _code_without_comments(src)
+    # C5 架构解耦：原 main.py 已拆解为 domain routers (audio, articles, writing, settings, main)
+    # 扫描这 5 个模块的合并源码，确保 5 处 LLM 调用与 1 处 TTS 兜底结构契约不变
+    router_files = ["audio.py", "articles.py", "writing.py", "settings.py", "main.py"]
+    merged_src = ""
+    for rfname in router_files:
+        rpath = os.path.join(ROOT, "delector", "routes", rfname)
+        with open(rpath, encoding="utf-8") as fh:
+            merged_src += fh.read() + "\n"
+    code = _code_without_comments(merged_src)
 
-    # ① 裸 httpx 出口必须恰好 1 处，且必须是白名单里的那一处。
-    httpx_hits = [(n, ln) for n, ln in enumerate(src.splitlines(), start=1) if "httpx.AsyncClient(" in ln]
+    # ① 裸 httpx 出口必须恰好 1 处，且必须是白名单里的那一处（audio.py 中的 TTS 兜底）。
+    httpx_hits = [(n, ln) for n, ln in enumerate(merged_src.splitlines(), start=1) if "httpx.AsyncClient(" in ln]
     assert len(httpx_hits) == 1, (
-        "main.py 的裸 httpx.AsyncClient 必须恰好 1 处（TTS 兜底）；"
+        "路由层的裸 httpx.AsyncClient 必须恰好 1 处（TTS 兜底）；"
         f"实际 {len(httpx_hits)} 处，行号 {[n for n, _ in httpx_hits]}"
     )
     line_no, line = httpx_hits[0]
     assert _TTS_FALLBACK_HTTPX_MARKER in line, (
-        f"main.py 第 {line_no} 行是唯一剩下的裸 httpx 出口，但内容不是白名单里的 TTS 兜底"
-        f"（白名单登记行号 {_TTS_FALLBACK_HTTPX_LINE}，行号会因无关编辑漂移，仅作定位）：{line.strip()}"
+        f"路由层第 {line_no} 行是唯一剩下的裸 httpx 出口，但内容不是白名单里的 TTS 兜底: {line.strip()}"
     )
 
     # ② 剥注释后的代码区 MUST NOT 出现 /chat/completions（任何拼接写法都算）。
-    assert "/chat/completions" not in code, "main.py 代码区仍有裸写的 /chat/completions 出口（收口未完成）"
+    assert "/chat/completions" not in code, "路由代码区仍有裸写的 /chat/completions 出口（收口未完成）"
 
     # ③ 5 处调用点 MUST 全在（== 不是 >=：任一处退回裸 HTTP 都要立刻红）。
     assert code.count("llm_client.chat(") == _EXPECTED_CONVERGED_CALLS, (
-        f"main.py 必须恰好 {_EXPECTED_CONVERGED_CALLS} 处走 llm_client.chat，"
+        f"路由层必须恰好 {_EXPECTED_CONVERGED_CALLS} 处走 llm_client.chat，"
         f"实际 {code.count('llm_client.chat(')} 处"
     )

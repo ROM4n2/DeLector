@@ -177,12 +177,12 @@ def test_get_essay_corrupt_analysis_json_leaves_trace(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """损坏的 analysis_json ⇒ 形状契约不回归（仍返原始串）+ MUST 留 warning。"""
-    routes_main = importlib.import_module("delector.routes.main")
+    routes_writing = importlib.import_module("delector.routes.writing")
     row = {"id": 7, "analysis_json": "{not-json", "title": "t", "content": "c"}
-    monkeypatch.setattr(routes_main, "db_conn", lambda *a, **kw: _FakeDbConn(row))
+    monkeypatch.setattr(routes_writing, "db_conn", lambda *a, **kw: _FakeDbConn(row))
 
     with caplog.at_level(logging.WARNING, logger="delector"):
-        data = routes_main.get_essay(7)
+        data = routes_writing.get_essay(7)
 
     assert data["analysis_json"] == "{not-json", "损坏的 analysis_json 仍按原始字符串返回（响应形状契约不回归）"
     assert any("analysis_json" in msg for msg in _delector_warnings(caplog)), (
