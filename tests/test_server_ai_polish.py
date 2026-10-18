@@ -1023,7 +1023,7 @@ def test_frontend_polish_reason_copy_covers_every_reason_code():
 
     将来往 REASONS 里加码而忘了配文案 ⇒ 这里立刻红（前端否则只能弹一句空话）。
     """
-    src = read_source("static/js/writer.js")
+    src = read_source("static/js/wr-format.js", "static/js/writer.js")
     block = re.search(r"const POLISH_REASON_COPY\s*=\s*\{(.*?)\n\};", src, re.S)
     assert block, "writer.js 里找不到 POLISH_REASON_COPY 映射表"
     keys = set(re.findall(r"^\s*([a-z_]+)\s*:", block.group(1), re.M))

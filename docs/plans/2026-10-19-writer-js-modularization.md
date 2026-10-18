@@ -117,14 +117,19 @@
 > Return: 摘要 + MANDATORY 物理凭据（退出码 + 用例数 + 导出面 diff 为空 + 源码逐字节比对输出）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记录基线用例数
-- [ ] **Step 2**: 建 `wr-format.js`（源码逐字节等价）
-- [ ] **Step 3**: `writer.js` 接线（import，删本地定义）
-- [ ] **Step 4**: 导出面冻结核验（master vs 现状 diff 为空）
-- [ ] **Step 5**: 探针实参扩展 + 变异自证
-- [ ] **Step 6**: 门禁 + 用例数守恒
-- [ ] **Step 7**: Physical Evidence Gate
-- [ ] **Step 8**: 原子提交（`refactor(wr): extract pure format layer to wr-format.js`）
+- [x] **Step 1**: 基线 —— 5 文件定向套件 `150 passed in 30.31s`；全量 `2367 tests collected`
+- [x] **Step 2**: 建 `wr-format.js` —— 由确定性切片脚本产出（对 4 个行区间各做内容断言，切歪即抛），**4/4 块逐字节等价**（只允许两类已枚举差异：5 处 `export ` 前缀 + 1 处失效文档指针 `tests/test_server.py` → `tests/test_server_ai_polish.py`）
+- [x] **Step 3**: `writer.js` 接线 —— 1657 行 → **1563 行**（-94）；`import { getErrorTypeLabel, WRITER_TABS, polishReasonText, renderWordDiff } from './wr-format.js';` + `export { getErrorTypeLabel };`；反向检查确认 6 个符号在 `writer.js` **零残留定义**（假解耦检查通过）
+- [x] **Step 4**: 导出面冻结核验 —— 用 `test_frontend_module_graph.py` 自己的 `_parse_own_exports` + `_parse_named_reexports` 解析 master 与现状：**各 60 个，缺失 0、新增 0**。另用 `node --check`（复制为 `.mjs`）确认两文件都是合法 ESM
+- [x] **Step 5**: 探针实参扩展 —— **只有 `POLISH_REASON_COPY` 那一处**扩为 `read_source("static/js/wr-format.js", "static/js/writer.js")`；另 3 处（`judge_advisories` / `ev.max_turns` / android `aiPolishEssay`）**回到单文件读**。原因见下方「只扩必要执行面」纪律
+- [x] **Step 6**: 变异自证 2/2 —— ①在 `wr-format.js` 删 `POLISH_REASON_COPY` 键 ⇒ 文案探针 exit 1；②把 `getErrorTypeLabel` 从 `wr-format.js` 导出里去掉 ⇒ `test_every_named_import_resolves_to_a_real_export` exit 1；复原后均 exit 0、字节一致
+- [x] **Step 7**: 门禁 + 用例数守恒 —— `ruff check .` 全绿 · `mypy --strict delector tools` 115 文件 0 错 · `mypy --follow-imports=skip tests` 153 文件 0 错 · 定向 150 passed · 收集数 2367 **严格不变**
+- [x] **Step 8**: Physical Evidence Gate + 原子提交（`refactor(wr): extract pure format layer to wr-format.js`）
+
+**⚠️ 「只扩必要执行面」纪律（本次实测确立，非计划预设）**：把 4 处探针的读法**一律**扩成多文件 concat 后，`tests/test_server_android_fallback.py` 的
+`assert "api_key" not in writer_src.lower() or ...` 这条 OR 链的**第一子句被静默中和**——
+新模块里的 `no_api_key` 是**原因码名**（不是凭据），却让 `"api_key" in src` 永真，于是整条 OR 退化到只剩后两个子句。断言仍绿，**判别力却悄悄降了**（正是本仓红线 11 的「死测」形态）。
+故纪律定为：**seam 只扩到「该探针真正锚定的符号将要搬到」的文件**；其余保持单文件读。多文件 concat 是「让搬家不破探针」的手段，不是「顺手拓宽」的理由。
 
 ---
 
