@@ -137,6 +137,11 @@ def test_workbench_scope_selector_has_a2_option():
     """
     assert os.path.exists(WORKBENCH_HTML_PATH)
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+    # C7：`inScopeWord` / `SCOPE_PREDICATES` 已搬到 static/js/wb-scope.js。
+    # 判定后两处断言仍要求「源文本」取证，故把 JS 源拼进同一份 content（断言逐字不变）。
+    content += open(
+        os.path.join(ROOT, "static", "js", "wb-scope.js"), encoding="utf-8"
+    ).read()
     assert "syncA2CardsFromServer" in content, "必须定义 syncA2CardsFromServer"
     in_scope_block = content.split("function inScopeWord")[1].split("function logToday")[0]
     assert "isInScope(w, wordFilters.scope)" in in_scope_block, (

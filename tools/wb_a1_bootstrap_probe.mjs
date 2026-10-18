@@ -42,12 +42,19 @@ const ROOT = path.resolve(__dirname, "..");
  *   · C7 Task 5 块 2 把 loadAll / saveWords / IDB_* / idb* 搬到了 static/js/wb-idb.js
  *     （本探针的 P2.saveWords 切片随之前移，切片语义一字未改）；
  *   · C7 Task 5 块 4 把 migrateSeedIdAliases（连同 wbsync / normHw / applyMerge）搬到了
- *     static/js/wb-sync.js（P2.migrateSeedIdAliases 切片随之前移，语义一字未改）。
+ *     static/js/wb-sync.js（P2.migrateSeedIdAliases 切片随之前移，语义一字未改）；
+ *   · C7 Task 5 块 5 把 scope / CEFR 等级判定族（CEFR_BY_PREFIX / cefrFromId / cefrOf /
+ *     OTHER_LEVEL_SCOPES / SCOPE_PREDICATES / isInScope / inScopeWord / wordFilters /
+ *     wordState / wordStateKey）搬到了 static/js/wb-scope.js（PIECES.CEFR_BY_PREFIX /
+ *     PIECES.cefrFromId / P2 里的 cefrOf、OTHER_LEVEL_SCOPES、SCOPE_PREDICATES、isInScope
+ *     切片随之前移，切片语义一字未改）。
  * readSources() 按序拼接，sliceDecl() 在拼接结果里按名字切片 —— 于是切片语义与
  * 单文件时代逐字一致，且**不依赖跨文件位置序**（各文件里没有同名声明）。
  * 搬迁/再拆分时只需改 `WB_SRC_ROOT` 与 `SRC_FILES`。 */
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
-const SRC_FILES = ["js/wb-seed-data.js", "js/wb-idb.js", "js/wb-sync.js", "german/workbench.html"];
+const SRC_FILES = [
+  "js/wb-seed-data.js", "js/wb-idb.js", "js/wb-sync.js", "js/wb-scope.js", "german/workbench.html",
+];
 
 function readSources(names) {
   const parts = names.map((name) => {

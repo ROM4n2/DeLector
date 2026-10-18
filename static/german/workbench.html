@@ -551,6 +551,21 @@
      启动 async IIFE 里 wbsync.init() 必须在 IDB hydrate 之后执行，见主脚本内说明。 -->
 <script src="../js/wb-sync.js"></script>
 
+<!-- C7 Task 5（块 5 · wbscope）：词表 scope / CEFR 等级判定（CEFR_BY_PREFIX / cefrFromId /
+     cefrOf / OTHER_LEVEL_SCOPES / SCOPE_PREDICATES / isInScope / inScopeWord / wordFilters /
+     wordState / wordStateKey）抽到 static/js/wb-scope.js，同样是**普通脚本**（不用 ES Module，
+     保留 WebView 整体回退内联的能力）。加载序：
+         wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → wb-sync.js → wb-scope.js
+         → 主内联脚本
+     理由：(a) 本文件纯声明、加载期零执行（SCOPE_PREDICATES 的值是箭头函数，只在被调用时
+     才求值；wordFilters 只建字面量），故不存在「排前面就撞 TDZ」的问题 —— 位置由阅读顺序
+     决定：紧贴主内联脚本，读作「判定链在最后交给你」；(b) 反向依赖全是运行期的 ——
+     wb-views.js 的 renderWords / renderHeaderBadge、主内联脚本的 buildReviewQueue /
+     backfillCoreWords / 顶栏 #scopeSeg handler 都在启动或用户操作后才读本模块的判定入口；
+     (c) 唯一必须早于它的身份是「主内联脚本」：顶层 const 只对后续脚本可见，故必须排在
+     <script> 之前（TDZ 依赖已按此调整，无其它调整）。 -->
+<script src="../js/wb-scope.js"></script>
+
 <script>
 "use strict";
 /* ======================================================================
@@ -945,74 +960,9 @@ function saveSettings() { localStorage.setItem(K.set, JSON.stringify(S.settings)
 
 function wordById(id) { return S.words.find(w => w.id === id) || null; }
 function cardOf(id) { return S.cards[id] || null; }
-/* ======================================================================
- * Task 5 · 等级判定数据驱动（ADR-0011 决策 3 / §5-#4 判定唯一入口）
- *  - cefrOf：全文件唯一的等级推导口径，与 normalizeWord 共用同一张前缀表
- *    （CEFR_BY_PREFIX + cefrFromId），禁止第二套推导；
- *  - SCOPE_PREDICATES：每档一条声明式谓词，新增等级 = 加一行配置；
- *  - isInScope：scope 判定唯一入口；inScopeWord 只是它的单参薄封装
- *    （旧名兼容全部既有调用点）。
- * ==================================================================== */
-const CEFR_BY_PREFIX = [["a1-", "A1"], ["a2-", "A2"], ["b1-", "B1"]];
-
-/** id 前缀 → 等级；无已知前缀（reader card-* / core-* 自定义词）返回 null。 */
-function cefrFromId(id) {
-  for (const [prefix, level] of CEFR_BY_PREFIX) {
-    if (String(id || "").startsWith(prefix)) return level;
-  }
-  return null;
-}
-
-/** 词的 CEFR 等级：显式 cefr 字段优先，否则按 id 前缀推导（与 normalizeWord 同口径）。 */
-function cefrOf(w) {
-  if (!w) return null;
-  return w.cefr || cefrFromId(w.id);
-}
-
-/* all 档的排除规则由配置生成，不手写 OR 链：
- *  - OTHER_LEVEL_SCOPES：会随 sync 并入 S.words 的其他已开放等级，新增等级在此
- *    追加其 scope 名即可。T6（ADR-0011）开 B1 档 + syncB1CardsFromServer 落库后
- *    b1 正式列入 —— 「A1 全量」不再混入 B1 形态词；
- *  - 精读生词：custom 且带 reader 标记。这是改造前 all 分支的收窄口径，刻意比
- *    reader 谓词窄 —— 仅 card- 前缀命中、不带 custom 的词在 all 档仍然可见。 */
-const OTHER_LEVEL_SCOPES = ["a2", "b1"];
-/* 标签分工（词条 tags 数组）：
- *  - 等级标签 a1 / a2 / b1：课程等级身份，一条课程词恰属一个等级；词库「全部标签」
- *    下拉据此筛出「某一等级全量」（用户需求：不局限 core 也能单看 A1 / A2 / B1）。
- *  - 语义标签 core：核心词标记，与等级标签共存（A1 核心词 = a1 + core）；
- *  - 语义标签 reader：精读生词来源标记，连同 card- 前缀 id 一起被 reader 档谓词识别。
- * 每档一条声明式谓词（下表即数据驱动入口），新增等级 = 加一行配置。 */
-const SCOPE_PREDICATES = {
-  core: w => (w.tags || []).includes("core"),
-  /* reader 谓词收窄：去掉 w.custom 兜底 —— 否则任何自定义词（含 22 条 A1 核心补缺词
-   * core-*）都会被当成精读生词，同时出现在「A1 全量」与「精读生词」两档。
-   * 精读生词真实身份信号 = reader 标记 或 card- 前缀 id（syncReaderCardsFromServer 落库形态）。 */
-  reader: w => !!((w.tags || []).includes("reader") || String(w.id || "").startsWith("card-")),
-  a2: w => cefrOf(w) === "A2" || (w.tags || []).includes("a2"),
-  /* b1 谓词：T6（ADR-0011）已开入口 —— 顶栏 #scopeSeg 有 B1 档位按钮 +
-   * 切换处 syncB1CardsFromServer 落库，不再是预留谓词 */
-  b1: w => cefrOf(w) === "B1" || (w.tags || []).includes("b1"),
-  all: w => !OTHER_LEVEL_SCOPES.some(s => SCOPE_PREDICATES[s](w)) && !(w.custom && (w.tags || []).includes("reader")),
-};
-
-/* 多级核心词档扩展位（预留 · R8 交付 3）：
- * 后端 delector.core.lexicon.core_ids_by_level() 现仅 A1 有核心词名单，
- * A2/B1/B2 为空集占位。将来开放某级核心词档 = 三步纯数据改动，无需改判定逻辑：
- *   ① 后端 core_ids_by_level() 登记该级 id 集；
- *   ② 顶栏 #scopeSeg 增加一个 data-scope 档位按钮；
- *   ③ 在 SCOPE_PREDICATES 本表增加一行谓词（本表即数据驱动入口）。
- * 本次刻意不新增按钮/谓词，避免死代码与档位数护栏漂移。 */
-
-/** scope 判定唯一入口。未注册的 scope 沿用改造前的兜底语义（恒真）。 */
-function isInScope(w, scope) {
-  const pred = SCOPE_PREDICATES[scope];
-  return pred ? !!pred(w) : true;
-}
-
-/* 核心词模式判定 helper：全局唯一 truth source 是 isInScope(w, wordFilters.scope) */
-function inScopeWord(w) {
-  return !w || isInScope(w, wordFilters.scope);
-}
+/* C7 Task 5（块 5 · wbscope）：等级判定数据驱动族（CEFR_BY_PREFIX / cefrFromId / cefrOf /
+ * OTHER_LEVEL_SCOPES / SCOPE_PREDICATES / isInScope / inScopeWord）已搬到
+ * static/js/wb-scope.js —— 入口页用普通 <script src> 在主内联脚本之前加载。 */
 function logToday() {
   const k = todayStr();
   if (!S.log[k]) S.log[k] = { rv: 0, good: 0, hard: 0, again: 0, nw: 0, qz: 0, qzOk: 0 };
@@ -1883,23 +1833,8 @@ function lineChartSVG(rows) {
  * 词库管理模块
  * ==================================================================== */
 let editingId = null; // null=新增
-/* scope: "all"=全部词 | "core"=仅核心词（按 core tag 过滤，默认 all） */
-const wordFilters = { q: "", letter: "", tag: "", diff: "", state: "", scope: "all" };
-
-function wordState(w) {
-  const c = S.cards[w.id];
-  if (!c || c.reps === 0) return { cls: "new", text: "未学" };
-  if (c.manual === "solid") return { cls: "solid", text: "手动稳固" };
-  if (c.s >= 21) return { cls: "solid", text: "稳固 · " + fmtMD(c.due) };
-  if (c.due <= endToday()) return { cls: "due", text: "待复习 · " + fmtMD(c.due) };
-  return { cls: "learn", text: "S" + (c.s < 10 ? c.s.toFixed(1) : Math.round(c.s)) + "d · " + fmtMD(c.due) };
-}
-
-function wordStateKey(w) {
-  const c = S.cards[w.id];
-  if (!c || c.reps === 0) return "new";
-  return c.manual === "solid" ? "solid" : "learn";
-}
+/* C7 Task 5（块 5 · wbscope）：词表过滤态 wordFilters 与状态分档 wordState / wordStateKey
+ * 已搬到 static/js/wb-scope.js（判定链与它读的过滤态同住一个模块）。 */
 
 /* 手动设置单词状态（联动 FSRS 调度）：
    new=未学习(清进度) / learn=已学习(恢复调度，无卡则入今日队列) / solid=已稳固(不再排期) */
