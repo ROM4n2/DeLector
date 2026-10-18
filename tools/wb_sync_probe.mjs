@@ -35,7 +35,10 @@ const fail = (msg) => {
  * `fs.readFileSync(HTML, "utf8")` 逐字节等价（单文件时 join 不插入任何字节）。
  * workbench.html 拆成模块后只需改 `WB_SRC_ROOT` 与 `SRC_FILES`，切片语义不动。 */
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static/german";
-const SRC_FILES = ["workbench.html"];
+/* C7 Task 5（块 4 · wbsync）：`const wbsync` IIFE 已搬到 static/js/wb-sync.js ——
+ * 源清单按加载序排（声明所在模块在前、使用它的 workbench.html 在后），拼接后 sliceDecl()
+ * 按**名字**切片，与单文件时代语义逐字一致，且不依赖跨文件位置序。 */
+const SRC_FILES = ["../js/wb-sync.js", "workbench.html"];
 
 function readSources(names) {
   const parts = names.map((name) => {

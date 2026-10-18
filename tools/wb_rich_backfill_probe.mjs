@@ -30,11 +30,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 /* ---- 探针读取口（C7 Task 2）：可多文件来源 ------------------------------
- * 现在只有 `workbench.html` 一个源文件，故 `readSources(SRC_FILES)` 与改造前的
- * `fs.readFileSync(HTML, "utf8")` 逐字节等价（单文件时 join 不插入任何字节）。
- * workbench.html 拆成模块后只需改 `WB_SRC_ROOT` 与 `SRC_FILES`，切片语义不动。 */
+ * C7 Task 5（块 5 · wbscope）：本探针切的 CEFR_BY_PREFIX / cefrFromId 已搬到
+ * static/js/wb-scope.js，故源清单变成**两个文件**（新模块在前、workbench.html 在后）；
+ * `sliceDecl` 按**名字**在拼接结果里切片，切片语义与单文件时代逐字一致。 */
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static/german";
-const SRC_FILES = ["workbench.html"];
+const SRC_FILES = ["../js/wb-scope.js", "workbench.html"];
 
 function readSources(names) {
   const parts = names.map((name) => {

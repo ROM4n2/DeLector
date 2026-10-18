@@ -582,3 +582,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 **全量**：`2352 passed, 3 skipped`（484s）；用例数守恒 = 基线 + 28（仅 `tests/wb_source.py` 自测，逐文件核对 105/19/124/302/9/14 全部不变）。
 **登记的风险**：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，HEAD 既有行为，已还原、未修）；② `wb_queue_probe` 的 `slices`（切片字符长度）对产物结构敏感（Task 3 变过一次，Task 4/5 未再变）；③ 另有 5 个 `wb_*.mjs` 未上统一读取口（Task 5 剩余块需一并改）；④ 两处格式敏感锚点（`extractLine(pad2)` / `STARTUP_SEG`）待 Task 5 结构化。
 **验收判据核对**：① 用例数守恒 ✔（+28 为允许项）② 每处重写附变异自证 ✔ ③ 入口路径未改名 ✔ ④ 18 个探针全 exit 0 ✔
+
+### 2026-10-18 12:40 | codebuddy | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 Task 5 剩余 5 块全部完成**（分支 `refactor/c7-workbench-blocks`，6 提交）。
+产物：`wb-idb.js`(16) · `wb-views.js`(9) · `wb-sync.js`(4 段) · `wb-scope.js`(10) · `wb-queue.js`(8) · `wb-rate.js`(9 声明/223 行)。
+`workbench.html` **4345 → 2840 行（-35%）**；全量 **2352 passed / 3 skipped**（与合并前逐字相同 ⇒ 零用例增减）。
+门禁：mypy 107/151 · ruff · go 8 包 · gofmt · check_mock_drift · check_silent_degradation 全绿；改动文件 lone_LF=0。
+教训（已写入接续笔记）：① 搬迁类改动的验证面必须是**所有引用 workbench.html 的测试**（曾因只跑 3 个文件漏掉 2 处真回归）；② 判别力用「双向所有权钉子」；③ 跨文件锚点必须带前导换行，否则会命中模块头注释。

@@ -3,10 +3,11 @@
  *
  * 静态正则只能证明「代码长这样」：能证明 renormalizeQueueTail() 存在、revIdx 不被赋值，
  * 证明不了「dailyNew 15→30 之后尾部真的从 10 个新词变成 25 个」。
- * 本探针把 static/german/workbench.html 里的 **真实源码**（SEED_WORDS / CORE_* 常量、
- * inScopeWord / logToday / buildReviewQueue / refilterReviewQueueForScope /
- * renormalizeQueueTail / extraNewWords / renderReview / renderWords 过滤谓词）
- * 按括号配对整段切出来，丢进 node:vm 沙箱真跑，再把结果打成 JSON 给 pytest 断言。
+ * 本探针把入口页加载的**真实模块源码**（SEED_WORDS / CORE_* 常量、inScopeWord / logToday、
+ * buildReviewQueue / refilterReviewQueueForScope / renormalizeQueueTail / extraNewWords、
+ * renderReview / renderWords 过滤谓词）按括号配对整段切出来，丢进 node:vm 沙箱真跑，
+ * 再把结果打成 JSON 给 pytest 断言。C7 Task 5 起这些声明分布在 static/js/wb-*.js 与
+ * workbench.html 里，故读取口是 SRC_FILES 清单（见下），切片仍按**名字**定位。
  *
  * 硬约束（与 tools/wb_merge_probe.mjs 同款）：
  *   - 探针里**不得重抄一份被测实现**。重抄的话实现回退了探针照样绿 —— 死测。
@@ -34,7 +35,23 @@ const ROOT = path.resolve(__dirname, "..");
  * 单文件时代逐字一致，且**不依赖跨文件位置序**（两个文件里没有同名声明）。
  * 搬迁/再拆分时只需改 `WB_SRC_ROOT` 与 `SRC_FILES`。 */
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
-const SRC_FILES = ["js/wb-seed-data.js", "german/workbench.html"];
+/* C7 Task 5（块 5 · wbscope）：wordFilters / wordState / CEFR_* / SCOPE_PREDICATES /
+ * isInScope / inScopeWord 已搬到 static/js/wb-scope.js —— 它排在 workbench.html 之前
+ * （sliceDecl 按**名字**切片，与单文件时代语义逐字一致）。
+ * C7 Task 5（块 6 · wbqueue）：队列构建 / 调度族（buildReviewQueue /
+ * refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords / queueInfoText /
+ * extraPractice / extraNewWords + manualExtraIds）搬到 static/js/wb-queue.js —— 排在新模块
+ * 在前、workbench.html 在后；本探针**确实真切片**这七个函数 + 豁免集（见 PIECES），
+ * 故必须登记该源，否则切片静默失配。
+ * C7 Task 5 块 6 步骤 2（wbrate）：renderReview 随会话内存态一起搬到 static/js/wb-rate.js
+ * （新增源见下）。renderReview 仍由本探针**真切片**（PIECES.renderReview），故 wb-rate.js
+ * 必须在清单里；会话态（revQueue / revIdx / ratedCount / flipped / queueDay）不切 ——
+ * 由 PRELUDE 的 `var` 提供，与搬到哪个文件无关。
+ * 仍住 workbench.html 的只有 renderWords 过滤谓词与自测 / 词库等其它族。 */
+const SRC_FILES = [
+  "js/wb-seed-data.js", "js/wb-views.js", "js/wb-scope.js", "js/wb-queue.js", "js/wb-rate.js",
+  "german/workbench.html",
+];
 
 function readSources(names) {
   const parts = names.map((name) => {

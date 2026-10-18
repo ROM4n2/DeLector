@@ -37,6 +37,246 @@ _SEED_JS_SRC_TAG = '<script src="../js/wb-seed-data.js"></script>'
 # 随代码搬家 —— 改读模块源，仍是「同一模块内的相对位置」断言，判别力只升不降。
 _TTS_JS = (_ROOT / "static" / "js" / "wb-tts.js").read_text(encoding="utf-8")
 _TTS_JS_SRC_TAG = '<script src="../js/wb-tts.js"></script>'
+# C7 Task 5（块 2 · seed-persist）：存储层 loadAll()/saveWords() 与 IndexedDB 全套
+# （IDB_* 六个状态 + idbOpen/idbPut/idbGet/idbSnapshot/idbListSnapshots/
+#  idbRestoreSnapshot/idbDeleteSnapshot/idbHydrate）已从 workbench.html 的内联脚本抽到
+# static/js/wb-idb.js，入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → 主内联脚本
+# 的顺序用**普通** <script src> 引入。凡切片落在 loadAll / saveWords 函数体里的断言，
+# 其锚点随代码搬家 —— 改读模块源，并把「切到下一个顶层 function 为止」升级为
+# wb_source.decl_body 的大括号配平切片（只含本函数体，内部声明顺序漂移也切不歪）。
+_IDB_JS = (_ROOT / "static" / "js" / "wb-idb.js").read_text(encoding="utf-8")
+_IDB_JS_SRC_TAG = '<script src="../js/wb-idb.js"></script>'
+# C7 Task 5（块 3 · render-views）：视图渲染层的九个顶层声明（`let curView` + showView /
+# renderStats / renderA1BootLoading / renderWords / renderSettings / renderSnapshots /
+# renderPlan / renderHeaderBadge）已从 workbench.html 的内联脚本抽到 static/js/wb-views.js，
+# 入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → 主内联脚本 的顺序用
+# **普通** <script src> 引入。凡切片落在这些声明里的断言，锚点已随代码搬家 —— 改读模块源，
+# 判别力只升不降（新增「所有权」钉子：这些名字必须只剩在模块里，两边各留一份会红）。
+_VIEWS_JS = (_ROOT / "static" / "js" / "wb-views.js").read_text(encoding="utf-8")
+_VIEWS_JS_SRC_TAG = '<script src="../js/wb-views.js"></script>'
+# C7 Task 5（块 4 · wbsync）：进度 server 镜像同步族（`const wbsync` IIFE + normHw /
+# applyMerge / migrateSeedIdAliases）已从 workbench.html 的内联脚本抽到 static/js/wb-sync.js，
+# 入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → wb-sync.js → 主内联脚本
+# 的顺序用**普通** <script src> 引入。凡切片落在这些声明里的断言，锚点随代码搬家 ——
+# 改读模块源，并把「切到下一个顶层 function 为止」升级为 wb_source.decl_body 的配平切片
+# （只含本函数体，邻居顺序漂移也切不歪），判别力只升不降。
+_SYNC_JS = (_ROOT / "static" / "js" / "wb-sync.js").read_text(encoding="utf-8")
+_SYNC_JS_SRC_TAG = '<script src="../js/wb-sync.js"></script>'
+# C7 Task 5（块 5 · wbscope）：词表 scope / CEFR 等级判定族（`const CEFR_BY_PREFIX` /
+# cefrFromId / cefrOf / `const OTHER_LEVEL_SCOPES` / `const SCOPE_PREDICATES` / isInScope /
+# inScopeWord / `const wordFilters` / wordState / wordStateKey）已从 workbench.html 的内联
+# 脚本抽到 static/js/wb-scope.js，入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js →
+# wb-views.js → wb-sync.js → wb-scope.js → 主内联脚本 的顺序用**普通** <script src> 引入。
+# 凡切片落在这些声明里的断言，锚点随代码搬家 —— 改读模块源，判别力只升不降（新增
+# 「所有权」钉子：这些名字必须只剩在模块里，两边各留一份会红）。
+# 块 5 刻意**没收** refilterReviewQueueForScope / syncScopeControls（会话队列手术 / 顶栏控件
+# DOM 同步）；前者已在块 6（wbqueue）随整条队列构建链搬进 static/js/wb-queue.js，
+# 后者仍留 HTML。
+_SCOPE_JS = (_ROOT / "static" / "js" / "wb-scope.js").read_text(encoding="utf-8")
+_SCOPE_JS_SRC_TAG = '<script src="../js/wb-scope.js"></script>'
+# C7 Task 5（块 6 · wbqueue）：复习队列构建 / 调度族（manualExtraIds + buildReviewQueue /
+# refilterReviewQueueForScope / renormalizeQueueTail / injectWrongWords / queueInfoText /
+# extraPractice / extraNewWords）已从 workbench.html 的内联脚本抽到 static/js/wb-queue.js，
+# 入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → wb-sync.js → wb-scope.js
+# → wb-queue.js → 主内联脚本 的顺序用**普通** <script src> 引入。凡切片落在这些声明里的
+# 断言，锚点随代码搬家 —— 改读模块源，判别力只升不降（新增「所有权」钉子：这八个名字
+# 必须只剩在模块里，两边各留一份会红）。刻意留在 HTML 的是渲染族的**薄 handler**
+# （flipCard / browsePrev / browseNext）与自测会话态（quiz / quizType）。
+# C7 Task 5 块 6 步骤 2（wbrate）：复习会话态（revQueue / revIdx / flipped / ratedCount /
+# queueDay）+ 卡片渲染 / 评分族（renderReview / showCard / doRate / renderQuizQ）也从内联
+# 脚本抽到 static/js/wb-rate.js，按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js
+# → wb-sync.js → wb-scope.js → wb-queue.js → wb-rate.js → 主内联脚本 的顺序引入。
+# 与 wb-queue.js 的分界是「碰不碰 DOM」：队列构建 / 裁剪 / 追加在 wb-queue.js，
+# 读队渲染 + 评价回写在 wb-rate.js。同样上「所有权」钉子（四个函数名双向、两行会话态
+# 声明逐字节双向）—— 搬回去一半就红。
+_QUEUE_JS = (_ROOT / "static" / "js" / "wb-queue.js").read_text(encoding="utf-8")
+_QUEUE_JS_SRC_TAG = '<script src="../js/wb-queue.js"></script>'
+_RATE_JS = (_ROOT / "static" / "js" / "wb-rate.js").read_text(encoding="utf-8")
+_RATE_JS_SRC_TAG = '<script src="../js/wb-rate.js"></script>'
+
+# 视图层里是**函数声明**的那八个（`function <name>(` 形态可双向核）。
+_VIEWS_FN_OWNED = frozenset({
+    "showView",
+    "renderStats",
+    "renderA1BootLoading",
+    "renderWords",
+    "renderSettings",
+    "renderSnapshots",
+    "renderPlan",
+    "renderHeaderBadge",
+})
+
+# 视图层声明的名字 → 唯一合法宿主是 wb-views.js（不在此集合里的仍读 workbench.html）。
+_VIEWS_OWNED = _VIEWS_FN_OWNED | frozenset({
+    "curView",
+    "showView",
+    "renderStats",
+    "renderA1BootLoading",
+    "renderWords",
+    "renderSettings",
+    "renderSnapshots",
+    "renderPlan",
+    "renderHeaderBadge",
+})
+
+
+_SYNC_FN_OWNED = frozenset({
+    "normHw",
+    "applyMerge",
+    "migrateSeedIdAliases",
+})
+# 同步模块里的名字 → 唯一合法宿主是 wb-sync.js（`wbsync` 是 const IIFE，单独钉）。
+_SYNC_OWNED = _SYNC_FN_OWNED | frozenset({"wbsync"})
+
+# C7 Task 5 块 5（wbscope）：判定族里是**函数声明**的六个（`function <name>(` 形态可双向核）。
+_SCOPE_FN_OWNED = frozenset({
+    "cefrFromId",
+    "cefrOf",
+    "isInScope",
+    "inScopeWord",
+    "wordState",
+    "wordStateKey",
+})
+# 判定族里是**顶层 const** 的四个（锚点带前导换行 + 等号：文件头注释里也引用了
+# `const wordFilters` / `const SCOPE_PREDICATES` 这类写法，裸名会切到注释上）。
+_SCOPE_CONST_OWNED = frozenset({
+    "CEFR_BY_PREFIX",
+    "OTHER_LEVEL_SCOPES",
+    "SCOPE_PREDICATES",
+    "wordFilters",
+})
+_SCOPE_OWNED = _SCOPE_FN_OWNED | _SCOPE_CONST_OWNED
+
+# C7 Task 5 块 6（wbqueue）：队列构建 / 调度族里是**函数声明**的七个（`function <name>(` 可双向核）。
+_QUEUE_FN_OWNED = frozenset({
+    "buildReviewQueue",
+    "refilterReviewQueueForScope",
+    "renormalizeQueueTail",
+    "injectWrongWords",
+    "queueInfoText",
+    "extraPractice",
+    "extraNewWords",
+})
+# 族里是**顶层 const** 的一个（锚点带前导换行 + 等号，避开文件头 / 注释里对裸名的引用）。
+_QUEUE_CONST_OWNED = frozenset({"manualExtraIds"})
+_QUEUE_OWNED = _QUEUE_FN_OWNED | _QUEUE_CONST_OWNED
+
+# C7 Task 5 块 6 步骤 2（wbrate）：卡片渲染 / 评分族里是**函数声明**的四个。
+_RATE_FN_OWNED = frozenset({
+    "renderReview",
+    "showCard",
+    "doRate",
+    "renderQuizQ",
+})
+# 会话内存态的五个名字住在同两行 `let` 里（flipped / ratedCount / queueDay 是同一行的
+# 并列声明符，没有各自的 `let NAME =` 形态），故整行逐字节双向钉 —— 拆行、改名、搬回去
+# 一半都会红。`revQueue` 与 `revIdx` 也一并由这两行覆盖。
+_RATE_STATE_LINES = (
+    "let revQueue = [];      // 词 id 队列：到期卡（按 due 升序）+ 今日新词",
+    "let revIdx = 0, flipped = false, ratedCount = 0, queueDay = null;",
+)
+_RATE_STATE_OWNED = frozenset({"revQueue", "revIdx", "flipped", "ratedCount", "queueDay"})
+_RATE_OWNED = _RATE_FN_OWNED
+
+
+def _host_of(name):
+    """名字 → 宿主文件路径（只用于断言消息，便于一眼看出切歪去了哪个文件）。"""
+    if name in _VIEWS_OWNED:
+        return "static/js/wb-views.js"
+    if name in _SYNC_OWNED:
+        return "static/js/wb-sync.js"
+    if name in _SCOPE_OWNED:
+        return "static/js/wb-scope.js"
+    if name in _QUEUE_OWNED:
+        return "static/js/wb-queue.js"
+    if name in _RATE_OWNED:
+        return "static/js/wb-rate.js"
+    return "static/german/workbench.html"
+
+
+def _decl_src(name):
+    """顶层声明 `name` 的宿主源文本，并顺手钉「所有权」。
+
+    所有权钉子（C7 Task 5 块 3 新增，判别力比搬家前强一档）：
+      * 视图层声明必须仍存在于 wb-views.js（被删/改名 → 红）；
+      * 视图层声明不得再留在 workbench.html 的 `function <name>(` 形态（搬回去一半 → 红）。
+    搬家前不存在这两条 —— 那时的判据只有「HTML 里能找到这个名字」。
+    C7 Task 5 块 4（wbsync）起同一套所有权钉子也覆盖同步族（见 _SYNC_OWNED）：
+    它们必须只剩在 static/js/wb-sync.js，HTML 里连 `function <name>(` 都不许有。
+    C7 Task 5 块 5（wbscope）起覆盖判定族（见 _SCOPE_OWNED）：函数声明形态的六个核
+    `function <name>(`，顶层 const 形态的四个核 `\\nconst <name> = `（带前导换行与等号，
+    避开文件头注释里对 `const wordFilters` 之类写法的引用）—— 同样双向，搬回去一半就红。
+    C7 Task 5 块 6（wbqueue）起覆盖队列构建族（见 _QUEUE_OWNED）：函数声明形态的七个 +
+    顶层 const 形态的一个（`manualExtraIds`，同样带前导换行与等号）—— 双向，搬回去一半就红。
+    C7 Task 5 块 6 步骤 2（wbrate）起覆盖渲染 / 评分族（见 _RATE_OWNED）：函数声明形态的
+    四个（renderReview / showCard / doRate / renderQuizQ）—— 同样双向；会话内存态五个名字
+    在 `_RATE_STATE_LINES` 里按整行双向钉（见 test_workbench_module_load_order）。
+    既不在 _VIEWS_OWNED / _SYNC_OWNED / _SCOPE_OWNED / _QUEUE_OWNED / _RATE_OWNED 里的
+    名字（其余顶层声明）照旧返回 workbench.html。
+    """
+    if name in _RATE_OWNED:
+        # 渲染 / 评分族（C7 Task 5 块 6 步骤 2）：只在 wb-rate.js 里，且不得再内联回 HTML。
+        assert ("function %s(" % name) not in _WORKBENCH, (
+            "%s() 仍留在 workbench.html —— 渲染/评分族声明应只在 static/js/wb-rate.js" % name
+        )
+        assert ("function %s(" % name) in _RATE_JS, (
+            "static/js/wb-rate.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+        )
+        return _RATE_JS
+    if name in _QUEUE_OWNED:
+        # 队列构建族（C7 Task 5 块 6）：只在 wb-queue.js 里，且不得再内联回 HTML。
+        if name in _QUEUE_FN_OWNED:
+            assert ("function %s(" % name) not in _WORKBENCH, (
+                "%s() 仍留在 workbench.html —— 队列构建族声明应只在 static/js/wb-queue.js" % name
+            )
+            assert ("function %s(" % name) in _QUEUE_JS, (
+                "static/js/wb-queue.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+            )
+        else:
+            anchor = "\nconst %s = " % name
+            assert anchor not in _WORKBENCH, (
+                "const %s 仍留在 workbench.html —— 队列构建族声明应只在 static/js/wb-queue.js" % name
+            )
+            assert anchor in _QUEUE_JS, (
+                "static/js/wb-queue.js 里找不到 const %s = —— 声明被改名/删除，或搬错了宿主" % name
+            )
+        return _QUEUE_JS
+    if name in _SCOPE_OWNED:
+        # 判定族（C7 Task 5 块 5）：只在 wb-scope.js 里，且不得再内联回 HTML。
+        if name in _SCOPE_FN_OWNED:
+            assert ("function %s(" % name) not in _WORKBENCH, (
+                "%s() 仍留在 workbench.html —— 判定族声明应只在 static/js/wb-scope.js" % name
+            )
+            assert ("function %s(" % name) in _SCOPE_JS, (
+                "static/js/wb-scope.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+            )
+        else:
+            anchor = "\nconst %s = " % name
+            assert anchor not in _WORKBENCH, (
+                "const %s 仍留在 workbench.html —— 判定族声明应只在 static/js/wb-scope.js" % name
+            )
+            assert anchor in _SCOPE_JS, (
+                "static/js/wb-scope.js 里找不到 const %s = —— 声明被改名/删除，或搬错了宿主" % name
+            )
+        return _SCOPE_JS
+    if name in _SYNC_FN_OWNED and name not in _VIEWS_OWNED:
+        # 同步族（C7 Task 5 块 4）同理：只在 wb-sync.js 里，且不得再内联回 HTML。
+        assert ("function %s(" % name) not in _WORKBENCH, (
+            "%s() 仍留在 workbench.html —— 同步族声明应只在 static/js/wb-sync.js" % name
+        )
+        assert ("function %s(" % name) in _SYNC_JS, (
+            "static/js/wb-sync.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+        )
+        return _SYNC_JS
+    if name not in _VIEWS_OWNED:
+        return _WORKBENCH
+    assert ("function %s(" % name) not in _WORKBENCH, (
+        "%s() 仍留在 workbench.html —— 视图层声明应只在 static/js/wb-views.js" % name
+    )
+    assert ("function %s(" % name) in _VIEWS_JS, (
+        "static/js/wb-views.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+    )
+    return _VIEWS_JS
 
 
 def _playword_body():
@@ -309,37 +549,216 @@ def test_embedded_audio_dict_declared_before_playword():
     ReferenceError（或静默拿到 undefined 跳过内嵌路径）。
 
     C7 Task 4 起 EMBEDDED_AUDIO 与其余种子数据一起住在 static/js/wb-seed-data.js，
-    C7 Task 5 起 playWord 搬进 static/js/wb-tts.js，「先于 playWord 可见」这一事实
-    由**加载序**承担，故本条钉住加载序本身：
-      1. 两个模块都用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
-         语义未真机验证（计划 Fog of War Unknown 2），必须保留 <script src> 回退能力；
-      2. 两个 <script src> 各恰好出现一次，且顺序为 数据模块 → TTS 模块 → 主内联脚本
-         —— 普通脚本的顶层 const/let 落在同一全局词法环境，后续脚本才可见；
-      3. 数据模块里确实声明了 EMBEDDED_AUDIO，TTS 模块里确实是 playWord 的定义所在。
+    C7 Task 5 起 playWord 搬进 static/js/wb-tts.js、存储层 + IDB 搬进 static/js/wb-idb.js、
+    视图渲染层搬进 static/js/wb-views.js，
+    「先于 playWord / loadAll 可见」这一事实由**加载序**承担，故本条钉住加载序本身：
+      1. 四个模块都用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
+        语义未真机验证（计划 Fog of War Unknown 2），必须保留 <script src> 回退能力；
+      2. 四个 <script src> 各恰好出现一次，且顺序为
+         数据模块 → IDB 模块 → TTS 模块 → 视图模块 → 主内联脚本
+         —— 普通脚本的顶层 const/let/function 落在同一全局词法环境，后续脚本才可见；
+      3. 数据模块里确实声明了 EMBEDDED_AUDIO，TTS 模块里确实是 playWord 的定义所在，
+         IDB 模块里确实是 loadAll / IDB_* 的定义所在，视图模块里确实是 renderWords /
+         renderHeaderBadge / curView 的定义所在（且 HTML 里不再内联）。
 
     变异验证：把任一 <script src> 挪到主内联脚本之后 → 红；给它加 type 属性 → 红；
     把两个标签对调（wb-tts.js 先于 wb-seed-data.js）→ 红；从数据模块删掉
-    EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红。
+    EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红；把 wb-idb.js 挪到 wb-tts.js 之后
+    → 红（本仓按「启动期依赖方向」定序，不是「谁先谁后都行」）；把 wb-views.js 挪到
+    wb-tts.js 之前 → 红；把 renderWords 搬回内联脚本（视图模块留个空壳）→ 红。
+    C7 Task 5 块 6（wbqueue）已实跑补测：把 wb-queue.js 标签挪到主内联脚本之后 → 红；
+    把 wb-queue.js 挪到 wb-scope.js 之前 → 红（既定加载序）；给它加 type 属性 → 红。
+    C7 Task 5 块 5（wbscope）已实跑补测：把 wb-scope.js 标签挪到主内联脚本之后 → 红；
+    把 wb-scope.js 挪到 wb-sync.js 之前 → 红（既定加载序）；从 wb-scope.js 删掉
+    inScopeWord 声明（搬空壳）→ 9 条红；HTML 里又留一份 const wordFilters =（半搬回）
+    → 3 条红；isInScope 改成恒真 → 3 条红；SCOPE_PREDICATES.a2 改坏 → 2 条红；
+    CEFR_BY_PREFIX 的 a2- 行改坏 → 1 条红（每次复原后 sha256 逐字节一致）。
+    C7 Task 5 块 6 步骤 2（wbrate）已实跑补测（3 发，均**只**打红本条，复原后 sha256 一致）：
+      · 把 wb-rate.js 里那行并列声明的会话态拆成两行（`let revIdx = 0, flipped = false;` +
+        `let ratedCount = 0, queueDay = null;`，语义不变、形态破坏）→ 红（「会话态声明行」）；
+      · HTML 复习模块里留一个 `function renderReview() {}` 空壳（半搬回）→ 红
+        （「renderReview() 不得再内联」）；
+      · 把 wb-rate.js 的 `function doRate(g) {` 改名 → 红（「wb-rate.js 缺少 doRate()」）。
+    渲染行为另有一条动态变异（删掉 renderReview 里的 rollover `buildReviewQueue();` →
+    test_review_queue_behaves_under_node 红，探针切片护栏报错）。
     """
     opening = re.findall(r"<script[^>]*wb-seed-data\.js[^>]*>", _WORKBENCH)
     assert len(opening) == 1, "数据模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(opening), opening)
     assert _WORKBENCH.count(_SEED_JS_SRC_TAG) == 1, "数据模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in opening[0], "数据模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
+    idb_opening = re.findall(r"<script[^>]*wb-idb\.js[^>]*>", _WORKBENCH)
+    assert len(idb_opening) == 1, "IDB 模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(idb_opening), idb_opening)
+    assert _WORKBENCH.count(_IDB_JS_SRC_TAG) == 1, "IDB 模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in idb_opening[0], "IDB 模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
     tts_opening = re.findall(r"<script[^>]*wb-tts\.js[^>]*>", _WORKBENCH)
     assert len(tts_opening) == 1, "TTS 模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(tts_opening), tts_opening)
     assert _WORKBENCH.count(_TTS_JS_SRC_TAG) == 1, "TTS 模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in tts_opening[0], "TTS 模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
+    views_opening = re.findall(r"<script[^>]*wb-views\.js[^>]*>", _WORKBENCH)
+    assert len(views_opening) == 1, (
+        "视图模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(views_opening), views_opening)
+    )
+    assert _WORKBENCH.count(_VIEWS_JS_SRC_TAG) == 1, "视图模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in views_opening[0], "视图模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
+    sync_opening = re.findall(r"<script[^>]*wb-sync\.js[^>]*>", _WORKBENCH)
+    assert len(sync_opening) == 1, (
+        "同步模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(sync_opening), sync_opening)
+    )
+    assert _WORKBENCH.count(_SYNC_JS_SRC_TAG) == 1, "同步模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in sync_opening[0], "同步模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
+    scope_opening = re.findall(r"<script[^>]*wb-scope\.js[^>]*>", _WORKBENCH)
+    assert len(scope_opening) == 1, (
+        "判定模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(scope_opening), scope_opening)
+    )
+    assert _WORKBENCH.count(_SCOPE_JS_SRC_TAG) == 1, "判定模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in scope_opening[0], "判定模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
+    queue_opening = re.findall(r"<script[^>]*wb-queue\.js[^>]*>", _WORKBENCH)
+    assert len(queue_opening) == 1, (
+        "队列模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(queue_opening), queue_opening)
+    )
+    assert _WORKBENCH.count(_QUEUE_JS_SRC_TAG) == 1, "队列模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in queue_opening[0], "队列模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
+    rate_opening = re.findall(r"<script[^>]*wb-rate\.js[^>]*>", _WORKBENCH)
+    assert len(rate_opening) == 1, (
+        "渲染模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(rate_opening), rate_opening)
+    )
+    assert _WORKBENCH.count(_RATE_JS_SRC_TAG) == 1, "渲染模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in rate_opening[0], "渲染模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
     src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
+    idb_tag_at = _WORKBENCH.index(_IDB_JS_SRC_TAG)
     tts_tag_at = _WORKBENCH.index(_TTS_JS_SRC_TAG)
+    views_tag_at = _WORKBENCH.index(_VIEWS_JS_SRC_TAG)
+    sync_tag_at = _WORKBENCH.index(_SYNC_JS_SRC_TAG)
+    scope_tag_at = _WORKBENCH.index(_SCOPE_JS_SRC_TAG)
+    queue_tag_at = _WORKBENCH.index(_QUEUE_JS_SRC_TAG)
+    rate_tag_at = _WORKBENCH.index(_RATE_JS_SRC_TAG)
     main_script_at = _WORKBENCH.index('<script>\n"use strict";')
-    assert src_tag_at < tts_tag_at, "数据模块必须先于 TTS 模块加载，否则 playWord 看不到 EMBEDDED_AUDIO"
-    assert tts_tag_at < main_script_at, "TTS 模块必须在主内联脚本之前加载，否则 _tts* 状态在主脚本里不可见"
+    assert src_tag_at < idb_tag_at, "数据模块必须先于 IDB 模块加载（种子数据是 IDB 层的输入）"
+    assert idb_tag_at < tts_tag_at, (
+        "IDB 模块必须先于 TTS 模块加载：主内联脚本第一句就是 loadAll()，"
+        "其实现住在 wb-idb.js —— 加载序按启动期依赖方向定"
+    )
+    assert tts_tag_at < views_tag_at, (
+        "视图模块必须排在 wb-tts.js 之后（与 wb-idb.js → wb-tts.js → wb-views.js 的既定加载序一致）"
+    )
+    assert views_tag_at < main_script_at, "视图模块必须在主内联脚本之前加载，否则 curView 在主脚本里不可见"
+    assert views_tag_at < sync_tag_at, (
+        "同步模块必须排在 wb-views.js 之后：applyMerge 运行期要用 renderHeaderBadge / showView，"
+        "排在队尾 = 与「谁提供这些声明」的阅读顺序一致"
+    )
+    assert sync_tag_at < main_script_at, (
+        "同步模块必须在主内联脚本之前加载，否则启动块里的 wbsync.init() / saveXxx 里的 "
+        "wbsync.push() 会撞 ReferenceError（普通脚本顶层 const 后续脚本才可见）"
+    )
+    assert sync_tag_at < scope_tag_at, (
+        "判定模块必须排在 wb-sync.js 之后（既定加载序 wb-views → wb-sync → wb-scope，"
+        "本模块纯声明、与 sync 无依赖，排尾只为「谁提供这些声明」的阅读顺序）"
+    )
+    assert scope_tag_at < main_script_at, (
+        "判定模块必须在主内联脚本之前加载，否则 wordFilters / SCOPE_PREDICATES 这些顶层 "
+        "const 在主脚本里不可见，启动期 buildReviewQueue 一跑就 ReferenceError"
+    )
+    assert scope_tag_at < queue_tag_at, (
+        "队列模块必须排在 wb-scope.js 之后（既定加载序 wb-scope → wb-queue）："
+        "buildReviewQueue / injectWrongWords 运行期读判定链 inScopeWord / wordById，"
+        "排在判定链之前就是「谁提供这些声明」的阅读顺序被写反"
+    )
+    assert queue_tag_at < main_script_at, (
+        "队列模块必须在主内联脚本之前加载：普通脚本的顶层 function / const 只对**后续**脚本"
+        "可见，排在内联脚本之后则 HTML 里 renderReview / 启动块里的 buildReviewQueue() "
+        "全是 ReferenceError"
+    )
+    assert queue_tag_at < rate_tag_at, (
+        "渲染模块必须排在 wb-queue.js 之后（既定加载序 wb-queue → wb-rate）："
+        "renderReview 运行期调 buildReviewQueue / queueInfoText，读作「判定链 → 队列构建 → "
+        "读队渲染」，排在队列构建之前就是把这条链写反"
+    )
+    assert rate_tag_at < main_script_at, (
+        "渲染模块必须在主内联脚本之前加载：普通脚本的顶层 let/function 只对**后续**脚本可见，"
+        "排在内联脚本之后则启动块与顶栏 handlers 里的 renderReview / showCard / doRate "
+        "全是 ReferenceError（flipped / revQueue 也会在 TDZ 里）"
+    )
 
     assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
     assert "function playWord(" in _TTS_JS, "playWord 必须住在 TTS 模块里（切片跑偏）"
     assert "function playWord" not in _WORKBENCH, "playWord 不得再内联在 workbench.html（C7 Task 5 已搬走）"
+    assert "function loadAll() {" in _IDB_JS, "loadAll 必须住在 static/js/wb-idb.js（切片跑偏）"
+    assert "async function idbHydrate()" in _IDB_JS, "idbHydrate 必须住在 static/js/wb-idb.js"
+    assert "function loadAll" not in _WORKBENCH, "loadAll 不得再内联在 workbench.html（C7 Task 5 块 2 已搬走）"
+    assert "function idbOpen" not in _WORKBENCH, "IDB 层不得再内联在 workbench.html（C7 Task 5 块 2 已搬走）"
+
+    assert _VIEWS_FN_OWNED <= _VIEWS_OWNED, "_VIEWS_FN_OWNED 必须是 _VIEWS_OWNED 的子集（登记漏了）"
+    # 视图层：八个函数声明全部只剩在模块里（逐名双向核 —— 「搬回去一半」也红）。
+    for name in sorted(_VIEWS_FN_OWNED):
+        assert "function %s(" % name in _VIEWS_JS, "static/js/wb-views.js 缺少 %s()（声明被删/改名）" % name
+        assert "function %s(" % name not in _WORKBENCH, "%s() 不得再内联在 workbench.html（块 3 已搬走）" % name
+    # curView 是 `let` 不是函数，单独钉（含默认值 review —— 首屏就是复习视图）。
+    assert 'let curView = "review";' in _VIEWS_JS, "curView 必须住在 static/js/wb-views.js 且默认 review"
+    assert 'let curView = "review";' not in _WORKBENCH, "curView 不得再内联在 workbench.html（块 3 已搬走）"
+
+    # 同步族（块 4）：wbsync 是 const IIFE，三个函数是 function 声明 —— 双向钉所有权。
+    # 锚点带前导换行：文件头注释里也引用了 `const wbsync = (() => { … })();`，
+    # 行首形式只命中真声明（否则「声明被删」也能靠注释蒙过去）。
+    assert "\nconst wbsync = (() => {" in _SYNC_JS, "wbsync 必须住在 static/js/wb-sync.js（const IIFE）"
+    assert "const wbsync = " not in _WORKBENCH, "wbsync 不得再内联在 workbench.html（块 4 已搬走）"
+    for name in sorted(_SYNC_FN_OWNED):
+        assert "function %s(" % name in _SYNC_JS, "static/js/wb-sync.js 缺少 %s()（声明被删/改名）" % name
+        assert "function %s(" % name not in _WORKBENCH, "%s() 不得再内联在 workbench.html（块 4 已搬走）" % name
+
+    # 判定族（块 5）：六个函数声明 + 四个顶层 const —— 逐名双向钉所有权
+    # （「搬回 HTML 留个空壳」与「改名/删声明」两种坏法都红）。
+    assert _SCOPE_FN_OWNED <= _SCOPE_OWNED, "_SCOPE_FN_OWNED 必须是 _SCOPE_OWNED 的子集（登记漏了）"
+    assert _SCOPE_CONST_OWNED <= _SCOPE_OWNED, "_SCOPE_CONST_OWNED 必须是 _SCOPE_OWNED 的子集（登记漏了）"
+    for name in sorted(_SCOPE_FN_OWNED):
+        assert "function %s(" % name in _SCOPE_JS, (
+            "static/js/wb-scope.js 缺少 %s()（声明被删/改名）" % name
+        )
+        assert "function %s(" % name not in _WORKBENCH, (
+            "%s() 不得再内联在 workbench.html（块 5 已搬走）" % name
+        )
+    for name in sorted(_SCOPE_CONST_OWNED):
+        anchor = "\nconst %s = " % name
+        assert anchor in _SCOPE_JS, (
+            "static/js/wb-scope.js 缺少 const %s =（声明被删/改名）" % name
+        )
+        assert anchor not in _WORKBENCH, (
+            "const %s 不得再内联在 workbench.html（块 5 已搬走）" % name
+        )
+
+    # 渲染 / 评分族（块 6 步骤 2）：四个函数声明 + 两行会话态 —— 逐项双向钉所有权
+    # （「搬回 HTML 留个空壳」与「改名/删声明」两种坏法都红）。
+    assert _RATE_FN_OWNED <= _RATE_OWNED, "_RATE_FN_OWNED 必须是 _RATE_OWNED 的子集（登记漏了）"
+    for name in sorted(_RATE_FN_OWNED):
+        assert "function %s(" % name in _RATE_JS, (
+            "static/js/wb-rate.js 缺少 %s()（声明被删/改名）" % name
+        )
+        assert "function %s(" % name not in _WORKBENCH, (
+            "%s() 不得再内联在 workbench.html（块 6 步骤 2 已搬走）" % name
+        )
+    # 会话态五行里 flipped / ratedCount / queueDay 是同一行的并列声明符，没有各自的
+    # `let NAME =` 形态 —— 按整行逐字节双向钉，比按名字强（拆行/改名/半搬都红）。
+    for line in _RATE_STATE_LINES:
+        assert line in _RATE_JS, (
+            "static/js/wb-rate.js 缺少会话态声明行：%r（被删/改名/拆行了？）" % line
+        )
+        assert line not in _WORKBENCH, (
+            "会话态声明行仍留在 workbench.html（块 6 步骤 2 已搬走）：%r" % line
+        )
+    # 逐名再核一遍「HTML 里任何声明形态都不许再带这五个名字」（有人把某一行拆成
+    # `let flipped = false;` 塞回内联脚本 → 红；flipCard 里的 `flipped = !flipped;`
+    # 是赋值不是声明，不会误伤）。
+    for name in sorted(_RATE_STATE_OWNED):
+        assert not re.search(r"\b(?:let|const|var)\s+[^;\n]*\b%s\b\s*=" % name, _WORKBENCH), (
+            "%s 不得再在 workbench.html 里声明（会话态只在 static/js/wb-rate.js）" % name
+        )
 
 
 def test_embedded_audio_lookup_uses_lowercase():
@@ -531,20 +950,16 @@ def test_core_custom_words_headwords_match_source_export():
 
 
 def _load_all_body():
-    """loadAll 函数体（到下一个顶层 function / async function 为止）。
+    """loadAll 函数体（不含签名行与外层花括号），按花括号配平切出。
 
-    ADR-0014 §6-S2 起首装建表从 loadAll 抽到 a1WordsFromInline()，loadAll 自身不再内联
-    建表；它后面紧跟的是 async function bootstrapA1Words，故边界必须同时识别两种前缀，
-    否则切片会漂移进后续函数体（把 bootstrap 里的 backfillCoreWords 误当 loadAll 内容）。
-    切片标识用 loadAll 独有的首装挂起标记 A1_BOOT_PENDING，锚点漂移即红。
+    C7 Task 5（块 2）起 loadAll 住在 static/js/wb-idb.js。切片从「切到下一个顶层
+    function / async function 为止」升级为 wb_source.decl_body 的配平切片 —— 判别力
+    只升不降（原写法把声明之后的**邻居**也包进切片：正向断言仍可过，反向断言
+    `"SEED_WORDS.map(" not in body` / `"a1WordsFromInline" not in body` 会因为邻居漂进来
+    而变宽松；配平切片只含本函数体）。锚点仍是 loadAll 独有的首装挂起标记 A1_BOOT_PENDING，
+    锚点漂移即红（decl_body 找不到声明直接抛）。
     """
-    decl = "function loadAll()"
-    start = _WORKBENCH.find(decl)
-    assert start != -1, "找不到函数声明: %s" % decl
-    start += len(decl)
-    m = re.search(r"\n(?:async\s+)?function\s+\w", _WORKBENCH[start:])
-    assert m, "loadAll 之后找不到下一个顶层 function（声明顺序漂移）"
-    body = _WORKBENCH[start : start + m.start()]
+    body = wb_source.decl_body(_IDB_JS, "function loadAll()")
     assert "A1_BOOT_PENDING" in body, "切片没落在 loadAll 上（缺少首装挂起标记）"
     return body
 
@@ -778,8 +1193,9 @@ def test_core_scope_filter_in_words_view():
               把 scope 检查从谓词里挪走 → 谓词断言红；
               把 `return false` 改成 `return true` → 过滤方向断言红。
     """
-    m = re.search(r"const wordFilters\s*=\s*\{[^}]*\}", _WORKBENCH)
-    assert m, "找不到 wordFilters 定义"
+    # C7 Task 5 块 5：wordFilters 住在 static/js/wb-scope.js（_decl_src 顺带钉双向所有权）。
+    m = re.search(r"const wordFilters\s*=\s*\{[^}]*\}", _decl_src("wordFilters"))
+    assert m, "找不到 wordFilters 定义（宿主：%s）" % _host_of("wordFilters")
     assert re.search(r"scope:\s*[\"']all[\"']", m.group(0)), (
         "wordFilters 必须有 scope 字段且默认为 'all'（默认展示全部词）"
     )
@@ -848,23 +1264,30 @@ _INSCOPE_WORD_CALL = r"\binScopeWord\s*\("
 
 
 def _inscope_helper_definition():
-    """全局 helper inScopeWord 的定义体。"""
+    """全局 helper inScopeWord 的定义体。
+
+    C7 Task 5 块 5：inScopeWord 搬到 static/js/wb-scope.js —— 锚点随代码搬家
+    （_decl_src 顺带钉双向所有权：HTML 里 `function inScopeWord(` 必须消失）。
+    """
     m = re.search(
         r"function\s+inScopeWord\s*\(\s*w\s*\)\s*\{.*?\n\}",
-        _WORKBENCH,
+        _decl_src("inScopeWord"),
         re.S,
     )
-    assert m, "workbench.html 缺少模块级 inScopeWord helper"
+    assert m, "缺少模块级 inScopeWord helper（宿主：%s）" % _host_of("inScopeWord")
     return m.group(0)
 
 
 def _build_review_queue_body():
-    """buildReviewQueue 的函数体（切到下一个顶层 function 为止）。
+    """buildReviewQueue 的函数体（wb_source.decl_body 的花括号配平切片）。
 
+    C7 Task 5 块 6：该函数搬到 static/js/wb-queue.js —— 锚点随代码搬家（见 _decl_src），
+    并把原来的「切到下一个顶层 function 为止」升级为配平切片：只含本函数体，
+    邻居声明顺序漂移也切不歪。
     只认函数体内的 scope 过滤 —— 建完队列再在别处裁剪的实现，
     「上一张」回看历史和 queueInfoText 计数都会错，切片里看不到就红。
     """
-    body = _top_fn_segment("function buildReviewQueue()")
+    body = wb_source.decl_body(_decl_src("buildReviewQueue"), "function buildReviewQueue()")
     assert "revQueue = dueIds.concat(newIds)" in body, "切片没落在 buildReviewQueue 上"
     return body
 
@@ -976,9 +1399,18 @@ def test_core_scope_in_review_queue():
 
 
 def _scope_refilter_body():
-    """复习中途切 scope 的静默过滤函数体。"""
-    m = re.search(r"function refilterReviewQueueForScope\(\)\s*\{.*?\n\}", _WORKBENCH, re.S)
-    assert m, "找不到复习中途切 scope 的队列重过滤函数 refilterReviewQueueForScope()"
+    """复习中途切 scope 的静默过滤函数体。
+
+    C7 Task 5 块 6：refilterReviewQueueForScope 搬到 static/js/wb-queue.js —— 锚点随代码
+    搬家（_decl_src 顺带钉双向所有权：HTML 里 `function refilterReviewQueueForScope(` 必须消失，
+    且模块里必须真有这份声明）。
+    """
+    src = _decl_src("refilterReviewQueueForScope")
+    m = re.search(r"function refilterReviewQueueForScope\(\)\s*\{.*?\n\}", src, re.S)
+    assert m, (
+        "找不到复习中途切 scope 的队列重过滤函数 refilterReviewQueueForScope()（宿主：%s）"
+        % _host_of("refilterReviewQueueForScope")
+    )
     return m.group(0)
 
 
@@ -1040,9 +1472,11 @@ def _fn_body(name):
     """顶层无参函数的函数体（切到第 0 列的 `}` 为止）。
 
     第 0 列缩进作边界 —— 函数内部的块级 `}` 都有缩进，所以切片不会溢出到下一个函数。
+    C7 Task 5 块 3 起按 `name` 选宿主文件（见 `_decl_src`），视图层声明读 wb-views.js。
     """
-    m = re.search(r"function %s\(\)\s*\{.*?\n\}" % re.escape(name), _WORKBENCH, re.S)
-    assert m, "找不到函数 %s()" % name
+    src = _decl_src(name)
+    m = re.search(r"function %s\(\)\s*\{.*?\n\}" % re.escape(name), src, re.S)
+    assert m, "找不到函数 %s()（宿主：%s）" % (name, _host_of(name))
     return m.group(0)
 
 
@@ -1052,13 +1486,17 @@ def _top_fn_segment(decl):
     M5-2：语义等同旧写法 `_WORKBENCH.split(decl)[1].split("\\nfunction ")[0]`，
     但加两道显式护栏——声明必须存在、其后必须有下一个 function；
     标记被改名/漂移时直接红（旧写法会静默切歪成整文件或别处）。
+    C7 Task 5 块 3 起按声明头里的函数名选宿主文件（见 `_decl_src`）。
     """
-    seg_start = _WORKBENCH.find(decl)
-    assert seg_start != -1, "找不到函数声明: %s" % decl
+    name = re.search(r"function\s+([A-Za-z_$][\w$]*)", decl)
+    assert name, "decl 里没有函数名：%r" % decl
+    src = _decl_src(name.group(1))
+    seg_start = src.find(decl)
+    assert seg_start != -1, "找不到函数声明: %s（宿主：%s）" % (decl, _host_of(name.group(1)))
     seg_start += len(decl)
-    nxt = _WORKBENCH.find("\nfunction ", seg_start)
+    nxt = src.find("\nfunction ", seg_start)
     assert nxt != -1, "%s 之后找不到下一个顶层 function（声明顺序漂移）" % decl
-    return _WORKBENCH[seg_start:nxt]
+    return src[seg_start:nxt]
 
 
 def _sole_line(body, needle, what):
@@ -1343,22 +1781,22 @@ def _quiz_pool_body():
 
 
 def _inject_wrong_words_body():
-    """injectWrongWords 函数体。"""
-    body = _top_fn_segment("function injectWrongWords(")
+    """injectWrongWords 函数体（配平切片；C7 Task 5 块 6 起宿主是 wb-queue.js）。"""
+    body = wb_source.decl_body(_decl_src("injectWrongWords"), "function injectWrongWords(n)")
     assert "revQueue.unshift" in body, "切片没落在 injectWrongWords 上"
     return body
 
 
 def _extra_practice_body():
-    """extraPractice 函数体。"""
-    body = _top_fn_segment("function extraPractice()")
+    """extraPractice 函数体（配平切片；C7 Task 5 块 6 起宿主是 wb-queue.js）。"""
+    body = wb_source.decl_body(_decl_src("extraPractice"), "function extraPractice()")
     assert "S.words.filter(" in body, "切片没落在 extraPractice 上"
     return body
 
 
 def _extra_new_words_body():
-    """extraNewWords 函数体。"""
-    body = _top_fn_segment("function extraNewWords()")
+    """extraNewWords 函数体（配平切片；C7 Task 5 块 6 起宿主是 wb-queue.js）。"""
+    body = wb_source.decl_body(_decl_src("extraNewWords"), "function extraNewWords()")
     assert "S.words.filter(" in body, "切片没落在 extraNewWords 上"
     return body
 
@@ -1484,7 +1922,8 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
     assert "S.words.filter(w => w.custom)" in export_block, "同步导出必须只取 custom: true 的词"
     assert "customWords: custom" in export_block, "同步导出对象必须带 customWords 字段"
 
-    merge = _WORKBENCH.split("function applyMerge(")[1].split('$("btnResetProgress")')[0]
+    # C7 Task 5 块 4：applyMerge 搬到 static/js/wb-sync.js —— 切片改读模块源（配平切片）。
+    merge = _apply_merge_body()
     assert "Object.assign(cur, w)" in merge, (
         "applyMerge 必须用 Object.assign 覆盖旧自定义词，确保 tags（含 core）被更新"
     )
@@ -1503,15 +1942,28 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
 
 
 def _normhw_body():
-    """normHw 函数体（定义到下一个顶层 function 为止）。"""
-    assert "function normHw(" in _WORKBENCH, "缺少 normHw 归一函数"
-    return _top_fn_segment("function normHw(")
+    """normHw 函数体（花括号配平切片 —— 只含本函数体）。
+
+    C7 Task 5 块 4 起 normHw 住在 static/js/wb-sync.js（_decl_src 顺带钉所有权），
+    原「切到下一个顶层 function 为止」换成 wb_source.decl_body：邻居声明顺序漂移
+    不再影响切片，且不会再吃到下一个函数上方的注释。
+    """
+    body = wb_source.decl_body(_decl_src("normHw"), "function normHw(hw)")
+    assert "return String(hw" in body, "切片没落在 normHw 上（缺少归一返回）"
+    return body
 
 
 def _apply_merge_body():
-    """applyMerge 函数体（到 btnResetProgress 绑定为止，与 Task 5 断言同切法）。"""
-    assert "function applyMerge(data, opts)" in _WORKBENCH, "缺少 applyMerge 定义"
-    return _WORKBENCH.split("function applyMerge(data, opts)")[1].split('$("btnResetProgress")')[0]
+    """applyMerge 函数体（花括号配平切片 —— 只含本函数体）。
+
+    C7 Task 5 块 4 起 applyMerge 住在 static/js/wb-sync.js。原切法
+    「`function applyMerge(data, opts)` → `$("btnResetProgress")`」依赖两条**物理位置**
+    标记（前者在 HTML 里被删、后者是 HTML 里的按钮绑定），搬家后切不出东西；改用配平切片
+    后断言仍钉在同一段实现上（且不再把紧随其后的其它声明/注释算进来，判别力只升不降）。
+    """
+    body = wb_source.decl_body(_decl_src("applyMerge"), "function applyMerge(data, opts)")
+    assert "const inWords" in body, "切片没落在 applyMerge 上（缺少单词合并段）"
+    return body
 
 
 def _apply_merge_words_block():
@@ -1542,9 +1994,15 @@ def _norm_hw_py(hw):
 
 
 def _alias_migration_body():
-    """migrateSeedIdAliases 函数体（定义到下一个顶层 function 为止）。"""
-    assert "function migrateSeedIdAliases(" in _WORKBENCH, "缺少 migrateSeedIdAliases 定义"
-    return _top_fn_segment("function migrateSeedIdAliases(")
+    """migrateSeedIdAliases 函数体（花括号配平切片 —— 只含本函数体）。
+
+    C7 Task 5 块 4 起该声明住在 static/js/wb-sync.js，且是文件里**最后**一段 ——
+    原「切到下一个顶层 function 为止」在这里失去下界（后面没有函数了，会切到文件尾），
+    故改为 wb_source.decl_body：切片边界由花括号配平决定，不依赖邻居。
+    """
+    body = wb_source.decl_body(_decl_src("migrateSeedIdAliases"), "function migrateSeedIdAliases()")
+    assert "SEED_ID_ALIASES" in body, "切片没落在 migrateSeedIdAliases 上（缺少别名表引用）"
+    return body
 
 
 def test_merge_normhw_preserves_case_and_strips_article():
@@ -1779,9 +2237,15 @@ def _bootstrap_a1_body():
 
 
 def _save_words_body():
-    """saveWords 函数体（声明 → 下一个顶层 function 为止）。"""
-    assert "function saveWords(" in _WORKBENCH, "缺少 saveWords 定义"
-    return _top_fn_segment("function saveWords(")
+    """saveWords 函数体（不含签名行与外层花括号），按花括号配平切出。
+
+    C7 Task 5（块 2）起 saveWords 住在 static/js/wb-idb.js。与 _load_all_body 同理，
+    切片从「切到下一个顶层 function 为止」（在模块里会一路吃到后面的 IDB_* 状态与 banner
+    注释）升级为配平切片，判别力只升不降。
+    """
+    body = wb_source.decl_body(_IDB_JS, "function saveWords()")
+    assert "wbsync.push()" in body, "切片没落在 saveWords 上（缺少落盘后推 server）"
+    return body
 
 
 def test_a1_boot_pending_guards_all_startup_savewords():
@@ -2350,10 +2814,13 @@ def _run_node_predicate(js, words):
 
 
 def _renormalize_queue_tail_body():
-    """renormalizeQueueTail 的函数体（第 0 列 `}` 边界）。"""
-    assert "function renormalizeQueueTail(" in _WORKBENCH, "缺少 renormalizeQueueTail 定义"
-    body = _top_fn_segment("function renormalizeQueueTail(")
-    return body
+    """renormalizeQueueTail 的函数体（配平切片）。
+
+    C7 Task 5 块 6：该函数搬到 static/js/wb-queue.js —— 锚点随代码搬家（_decl_src 顺带钉
+    双向所有权：HTML 里 `function renormalizeQueueTail(` 必须消失，模块里必须有定义），
+    并把原来的「切到下一个顶层 function 为止」升级为 wb_source.decl_body 配平切片。
+    """
+    return wb_source.decl_body(_decl_src("renormalizeQueueTail"), "function renormalizeQueueTail()")
 
 
 def _set_daily_new_handler():
@@ -3292,24 +3759,43 @@ _CEFR_OF_EXPECTED = ["A1", "A1", "A2", "B1", None, None]
 
 
 def _js_top_function(name):
-    """按括号配平切出顶层 `function name(...) { ... }` 的完整源码。"""
-    m = re.search(r"^function\s+%s\s*\(" % re.escape(name), _WORKBENCH, re.M)
-    assert m, "workbench.html 里找不到顶层函数 %s" % name
-    open_at = _WORKBENCH.index("{", m.start())
-    body = _slice_balanced(_WORKBENCH, open_at, "{", "}")
-    return _WORKBENCH[m.start() : open_at + len(body)]
+    """按括号配平切出顶层 `function name(...) { ... }` 的完整源码。
+
+    C7 Task 5 块 5：判定族的函数声明住在 static/js/wb-scope.js —— 宿主按 `_decl_src`
+    选（顺带钉双向所有权），切法本身一字未改。
+    """
+    src = _decl_src(name)
+    m = re.search(r"^function\s+%s\s*\(" % re.escape(name), src, re.M)
+    assert m, "宿主 %s 里找不到顶层函数 %s" % (_host_of(name), name)
+    open_at = src.index("{", m.start())
+    body = _slice_balanced(src, open_at, "{", "}")
+    return src[m.start() : open_at + len(body)]
 
 
 def _js_top_const(name):
-    """按括号配平切出顶层 `const name = ...` 的完整声明源码（不含结尾分号）。"""
-    m = re.search(r"^const\s+%s\s*=" % re.escape(name), _WORKBENCH, re.M)
-    assert m, "workbench.html 里找不到顶层常量 %s" % name
+    """按括号配平切出顶层 `const name = ...` 的完整声明源码（不含结尾分号）。
+
+    C7 Task 5 块 5：同上，宿主按 `_decl_src` 选。
+    """
+    src = _decl_src(name)
+    m = re.search(r"^const\s+%s\s*=" % re.escape(name), src, re.M)
+    assert m, "宿主 %s 里找不到顶层常量 %s" % (_host_of(name), name)
     i = m.end()
-    while _WORKBENCH[i] not in "[{(":
+    while src[i] not in "[{(":
         i += 1
-    open_ch = _WORKBENCH[i]
-    val = _slice_balanced(_WORKBENCH, i, open_ch, {"[": "]", "{": "}", "(": ")"}[open_ch])
-    return _WORKBENCH[m.start() : i + len(val)]
+    open_ch = src[i]
+    val = _slice_balanced(src, i, open_ch, {"[": "]", "{": "}", "(": ")"}[open_ch])
+    return src[m.start() : i + len(val)]
+
+
+def _workbench_corpus():
+    """workbench 的**全部**源码（六个模块 + 入口页 HTML）拼接后的语料。
+
+    C7 Task 5 块 5（wbscope）起判定族单独成模块，于是「全文件只许出现一次」这类
+    唯一性断言里的「全文件」从 workbench.html 升级为「HTML + 它加载的全部 wb-*.js」——
+    判别力只升不降：原来是「HTML 内不许有第二份判定副本」，现在是「连模块里也不许有」。
+    """
+    return "\n".join([_SEED_JS, _IDB_JS, _TTS_JS, _VIEWS_JS, _SYNC_JS, _SCOPE_JS, _WORKBENCH])
 
 
 def _scope_judgment_region():
@@ -3397,6 +3883,16 @@ def test_scope_predicates_four_way_snapshot():
         _CEFR_OF_EXPECTED,
     )
     assert out["b1"] == ["b1-essen"], "b1 预留谓词应只放行 B1 形态词：%r" % out["b1"]
+    # 前缀表逐行核（C7 Task 5 块 5 搬家时补的配置级钉子，判别力比只有行为快照强一档）：
+    # 本 fixture 的 a1-0001 / a2-haus **带显式 cefr 字段**，cefrOf 会走 `w.cefr` 短路，
+    # 于是「a2- 行被配成别的等级」这种坏法在行为快照里照样绿（仍是 A2）—— 可真实数据里
+    # 没有 cefr 字段的 A2 词会被推导成错等级。故对 CEFR_BY_PREFIX 逐行核一次。
+    prefix_table = _js_top_const("CEFR_BY_PREFIX")
+    for level in ("a1", "a2", "b1"):
+        assert '["%s-", "%s"]' % (level, level.upper()) in prefix_table, (
+            "CEFR_BY_PREFIX 缺少/配错 %r 行：无显式 cefr 字段的该级词会被推导成错等级（表：%r）"
+            % (level + "-", prefix_table)
+        )
 
 
 def test_scope_judgment_single_entry():
@@ -3418,6 +3914,7 @@ def test_scope_judgment_single_entry():
     assert not re.search(_SCOPE_IS_CORE, helper), "薄封装里不许重抄 scope === 'core' 判定"
 
     region = _scope_judgment_region()
+    corpus = _workbench_corpus()
     for token in (
         'includes("a2")',
         'includes("b1")',
@@ -3426,14 +3923,14 @@ def test_scope_judgment_single_entry():
         'cefrOf(w) === "A2"',
         'cefrOf(w) === "B1"',
     ):
-        whole, inside = _WORKBENCH.count(token), region.count(token)
-        assert whole > 0, "判定特征串 %r 全文件找不到 —— 判定区被挪走了？" % token
+        whole, inside = corpus.count(token), region.count(token)
+        assert whole > 0, "判定特征串 %r 全量源码里找不到 —— 判定区被挪走了？" % token
         assert whole == inside, (
-            "等级判定特征串 %r 出现在判定区之外（全文件 %d 处，判定区内 %d 处）—— "
+            "等级判定特征串 %r 出现在判定区之外（全量源码 %d 处，判定区内 %d 处）—— "
             "存在第二份等级判定副本，违反 ADR-0011 §5-#4 判定唯一入口" % (token, whole, inside)
         )
     for gone in ('startsWith("a2-")', 'startsWith("b1-")', 'w.cefr === "A2"', 'w.cefr === "B1"'):
-        assert gone not in _WORKBENCH, "三路 OR 冗余未消除：全文件仍含 %r" % gone
+        assert gone not in corpus, "三路 OR 冗余未消除：全量源码仍含 %r" % gone
 
 
 # --------------------------------------------------------------------------

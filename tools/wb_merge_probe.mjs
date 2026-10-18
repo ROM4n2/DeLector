@@ -27,7 +27,14 @@ const ROOT = path.resolve(__dirname, "..");
  * 单文件时代逐字一致，且**不依赖跨文件位置序**（两个文件里没有同名声明）。
  * 搬迁/再拆分时只需改 `WB_SRC_ROOT` 与 `SRC_FILES`。 */
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
-const SRC_FILES = ["js/wb-seed-data.js", "german/workbench.html"];
+/* C7 Task 5（块 4 · wbsync）：normHw / applyMerge / migrateSeedIdAliases 已搬到
+ * static/js/wb-sync.js —— 源清单按加载序排（声明所在模块在前、使用它的
+ * workbench.html 在后），拼接后 sliceDecl() 按**名字**切片，与单文件时代语义逐字一致。
+ * C7 Task 5（块 5 · wbscope）：CEFR_BY_PREFIX / cefrFromId（normalizeWord 依赖的等级
+ * 推导）已搬到 static/js/wb-scope.js，同一读法 —— 新模块在前、workbench.html 在后。 */
+const SRC_FILES = [
+  "js/wb-seed-data.js", "js/wb-sync.js", "js/wb-scope.js", "german/workbench.html",
+];
 
 function readSources(names) {
   const parts = names.map((name) => {

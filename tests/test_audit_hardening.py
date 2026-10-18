@@ -772,14 +772,16 @@ def test_m53_front_p2_debounce_and_pull_backoff_structural():
 
     root = Path(__file__).resolve().parent.parent
     a1_lesen = (root / "static" / "js" / "a1_lesen.js").read_text(encoding="utf-8")
-    wb = (root / "static" / "german" / "workbench.html").read_text(encoding="utf-8")
+    # C7：wbsync 的 pull 退避与 RTC 重连逻辑已搬到 static/js/wb-sync.js（HTML 内 0 处），
+    # 断言源随实现迁移；断言文本逐字不变。
+    wb_sync = (root / "static" / "js" / "wb-sync.js").read_text(encoding="utf-8")
 
     assert "if (_examTimer) clearInterval(_examTimer)" in a1_lesen, "计时器必须防叠"
-    assert "_pullFails" in wb and "_pullSkip" in wb, "pull 需指数退避状态"
-    assert "_pullSkip = Math.min(2 ** (_pullFails - 1), 6)" in wb, "退避需 5s→30s 上限"
-    seg = wb.split("function rtcOnStateChange()")[1].split("function rtcScheduleRetry")[0]
+    assert "_pullFails" in wb_sync and "_pullSkip" in wb_sync, "pull 需指数退避状态"
+    assert "_pullSkip = Math.min(2 ** (_pullFails - 1), 6)" in wb_sync, "退避需 5s→30s 上限"
+    seg = wb_sync.split("function rtcOnStateChange()")[1].split("function rtcScheduleRetry")[0]
     assert 'rtcScheduleRetry(st === "disconnected")' in seg, "disconnected 瞬态不得累计失败"
-    assert "function rtcScheduleRetry(skipCount)" in wb, "退避计数需可跳过参数"
+    assert "function rtcScheduleRetry(skipCount)" in wb_sync, "退避计数需可跳过参数"
 
 
 # ── 还原回滚失败必须留痕（P0：库可能半残却无人知情）─────────────────────────
