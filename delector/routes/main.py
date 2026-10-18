@@ -133,10 +133,10 @@ from delector.routes.syntax_hard import invalidate_rank_cache
 # 模块上才生效（本仓既有约定，见 tests 里对 `delector.routes.main.*` 的打桩）。
 # 注意：本模块其余出网（TTS 兜底、fetch_remote_html）仍直接用 httpx，不在本次收口范围。
 from delector.services import llm_client, polish_loop
-from delector.services.polish_tools import POLISH_TOOL_ALLOWLIST, call_tool
 
 # 统一违规抽取器（Task 1）：端点层与裁判层共用同一形状口径。取具名符号（纯函数，无循环依赖）。
 from delector.services.writing import analyze_a1_email, collect_violations
+from delector.tools.polish import POLISH_TOOL_ALLOWLIST, call_tool
 
 router = APIRouter()
 

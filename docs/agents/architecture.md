@@ -376,7 +376,7 @@ Layer 0 [纯数据出口]: delector.data (静态字典、预生成 JSON 数据�
 | 依赖路径 | 状态 | 处置记录 |
 | --- | --- | --- |
 | `core/database.py` ⇄ `nlp_engine/processor.py` | **已解耦 (2026-10-18)** | 清理 `database.py` 顶层无引用的再导出，测试公开面闸门验证净解耦 |
-| `services/polish_tools.py` ⇄ `tools/writing_check.py` | **在途演化** | `polish_tools` 属于工具调度装配，后续计划上提或与 `tools` 合并收敛 |
+| `services/polish_tools.py` ⇄ `tools/writing_check.py` | **已解耦 (2026-10-18)** | 任务级白名单与调度执行器已归位至 Layer 4 `delector.tools.polish`，services 保留兼容再导出 |
 | 机制与业务混合（`polish_loop` 内置 A1 提示词） | **已具备注入点** | 运行时已支持注入自定义 judge/prompt，待进一步纯化默认值导入 |
 
 ---
