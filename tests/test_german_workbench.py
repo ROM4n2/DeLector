@@ -1,8 +1,8 @@
 """German workbench 集成的静态契约。
 
 三层钉子：
-1. workbench.html 自身的音频补丁（tryServer 优先于 tryOnline、走 GET 端点、
-   file:// 下跳过、iframe 里跳过 PWA）
+1. 工作台的音频补丁（tryServer 优先于 tryOnline、走 GET 端点、file:// 下跳过；
+   C7 Task 5 起这些代码在 static/js/wb-tts.js，其余仍在 workbench.html，如 iframe 里跳过 PWA）
 2. DeLector 外壳的接入（view-german + iframe + nav tab + dock button）
 3. server.py 的 GET /api/audio/tts 端点存在性
 
@@ -14,6 +14,8 @@
 import json
 import re
 from pathlib import Path
+
+import wb_source
 
 _ROOT = Path(__file__).parent.parent
 _WORKBENCH = (_ROOT / "static" / "german" / "workbench.html").read_text(encoding="utf-8")
@@ -28,26 +30,63 @@ _MAIN_ROUTES = (_ROOT / "delector" / "routes" / "main.py").read_text(encoding="u
 # 内容类断言（解析/计数）必须读数据模块；workbench.html 只保留使用这些常量的代码。
 _SEED_JS = (_ROOT / "static" / "js" / "wb-seed-data.js").read_text(encoding="utf-8")
 _SEED_JS_SRC_TAG = '<script src="../js/wb-seed-data.js"></script>'
+# C7 Task 5（块 1 · tts-audio）：单词发音子系统（7 个 `_tts*` 状态声明 + playWord）已从
+# workbench.html 的内联脚本抽到独立模块，入口页按 wb-seed-data.js → wb-tts.js → 主内联
+# 脚本 的顺序用**普通** <script src> 引入（不是 ES Module，保留 WebView 回退能力）。
+# 凡「切片落在 playWord / tryServer / tryOnline / trySpeech / _tts* 里」的断言，其锚点已
+# 随代码搬家 —— 改读模块源，仍是「同一模块内的相对位置」断言，判别力只升不降。
+_TTS_JS = (_ROOT / "static" / "js" / "wb-tts.js").read_text(encoding="utf-8")
+_TTS_JS_SRC_TAG = '<script src="../js/wb-tts.js"></script>'
+
+
+def _playword_body():
+    """playWord 函数体（不含签名行与外层花括号），按花括号配平切出。
+
+    C7 Task 5 起 playWord 住在 static/js/wb-tts.js。刻意用 wb_source.decl_body 而非
+    「切到下一个 const 为止」：配平切片只含本函数体，内部声明顺序漂移也切不歪，
+    且 `wb_source.depth_at(body, pos) == 0` 正好表达「这是 playWord 的顶层语句」——
+    比原来「整个 HTML 里 index(a) < index(b)」强一档（原写法对「被塞进某个回调」无感）。
+    """
+    body = wb_source.decl_body(_TTS_JS, "function playWord(hw, opts)")
+    assert "const tryServer" in body and "const tryOnline" in body, "decl_body 切片没落在 playWord 上"
+    return body
 
 
 def test_workbench_has_server_tts_priority():
-    """tryServer 必须在 tryOnline 之前定义（playWord 内 server 优先于在线链）。"""
-    server_pos = _WORKBENCH.index("const tryServer")
-    online_pos = _WORKBENCH.index("const tryOnline")
+    """tryServer 必须在 tryOnline 之前定义（playWord 内 server 优先于在线链）。
+
+    C7 Task 5 起 playWord 在 static/js/wb-tts.js，故切到模块内的 playWord 函数体再比位置。
+    较原断言**升一档**：原 `_WORKBENCH.index(a) < _WORKBENCH.index(b)` 只要求两者在 4700 行
+    里先后出现（各自散在别处也算过），这里额外要求两条链路都是 playWord 的**顶层语句**。
+    """
+    body = _playword_body()
+    server_pos = body.index("const tryServer")
+    online_pos = body.index("const tryOnline")
     assert server_pos < online_pos, "tryServer 必须定义在 tryOnline 之前"
+    assert wb_source.depth_at(body, server_pos) == 0, "tryServer 必须是 playWord 的顶层声明（不得塞进回调）"
+    assert wb_source.depth_at(body, online_pos) == 0, "tryOnline 必须是 playWord 的顶层声明（不得塞进回调）"
 
 
 def test_server_tts_uses_get_endpoint():
     """tryServer 走 <audio src> + GET 查询串，不走 fetch + blob。"""
-    block = _WORKBENCH.split("const tryServer")[1].split("const tryOnline")[0]
+    block = _playword_body().split("const tryServer")[1].split("const tryOnline")[0]
     assert "/api/audio/tts?text=" in block, "server TTS 必须用 GET 查询串 URL"
     assert "fetch(" not in block, "server TTS 不应走 fetch（<audio src> 直接用即可）"
 
 
 def test_server_tts_skipped_off_http():
-    """file:// / content:// 下跳过 server TTS（零延迟，不等 6s 超时）。"""
-    assert "_ttsServerReachable" in _WORKBENCH
-    assert "location.protocol.startsWith('http')" in _WORKBENCH
+    """file:// / content:// 下跳过 server TTS（零延迟，不等 6s 超时）。
+
+    C7 Task 5 起该声明在 static/js/wb-tts.js。原断言是两条互不相干的整文件 `in` 检查
+    （`_ttsServerReachable` 与 `startsWith('http')` 各自在 4700 行里命中即可，删掉初始化也能过）
+    —— 这里升级为「同一条声明语句」：前者必须**直接由**后者初始化，且以 `;` 界定语句，
+    对换行/缩进不敏感（不是物理行钉）。
+    """
+    decl = _TTS_JS.split("let _ttsServerReachable")[1].split(";")[0]
+    assert "location.protocol.startsWith('http')" in decl, (
+        "_ttsServerReachable 必须直接由 location.protocol.startsWith('http') 初始化（否则 file:// "
+        "下会白等 server TTS 超时）；实际声明片段：%r" % decl
+    )
 
 
 def test_pwa_guarded_in_iframe():
@@ -67,11 +106,16 @@ def test_workbench_data_intact():
 
     C7 Task 4 起种子数据的落点是 static/js/wb-seed-data.js（不再是 HTML 内联块），
     故这里**真解析**数据模块的 SEED_WORDS 并数条数，而不是退化成「某字符串还在」。
+
+    C7 Task 5 起 playWord 落在 static/js/wb-tts.js。断言从「HTML 里含 function playWord」
+    升级为「模块里有完整签名 **且** HTML 里不再内联」—— 后者正是本次搬家的目标，
+    回退成内联脚本时必红。
     """
     at = _SEED_JS.index("const SEED_WORDS")
     seeds = json.loads(_slice_balanced(_SEED_JS, at, "[", "]"))
     assert len(seeds) == 682, "数据模块的 SEED_WORDS 应为 682 条，实际 %d" % len(seeds)
-    assert "function playWord" in _WORKBENCH
+    assert "function playWord(hw, opts) {" in _TTS_JS, "playWord 主函数必须住在 static/js/wb-tts.js"
+    assert "function playWord" not in _WORKBENCH, "playWord 不得再内联在 workbench.html（C7 Task 5 已搬走）"
 
 
 def test_view_german_embeds_workbench():
@@ -140,15 +184,20 @@ def test_backup_covers_workbench_state():
 
 def _playword_cleanup_block():
     """playWord 入口那段「停掉上一次播放」的互斥清理（到 finalResolve 为止）。"""
-    body = _WORKBENCH.split("function playWord(hw, opts)")[1]
+    body = _playword_body()
     return body.split("互斥：立即停掉上一次播放")[1].split("const finalResolve")[0]
 
 
 def _tts_shared_audio_blocks():
     """共用全局 _ttsAudio 单例的两条链路。**不含 trySpeech** —— 它走
-    speechSynthesis、不碰 _ttsAudio，attempt 守卫对它没有意义。"""
-    server = _WORKBENCH.split("const tryServer")[1].split("const trySpeech")[0]
-    online = _WORKBENCH.split("const tryOnline")[1].split("主调用链（server TTS 优先")[0]
+    speechSynthesis、不碰 _ttsAudio，attempt 守卫对它没有意义。
+
+    切片作用在 playWord 的函数体上（C7 Task 5 起该函数体在 static/js/wb-tts.js），
+    再按链路的起止标记二次切分，语义与拆分前一致。
+    """
+    body = _playword_body()
+    server = body.split("const tryServer")[1].split("const trySpeech")[0]
+    online = body.split("const tryOnline")[1].split("主调用链（server TTS 优先")[0]
     assert "_ttsAudio.src =" in server and "_ttsAudio.src =" in online, "切片没落在音频链路上"
     return {"tryServer": server, "tryOnline": online}
 
@@ -197,8 +246,9 @@ def test_every_shared_audio_handler_guards_attempt_id():
     # 数到 0 说明切片跑偏，否定式的守卫断言就会在空串上恒真。
     for chain, n in per_chain.items():
         assert n >= 3, f"{chain} 里只找到 {n} 个异步回调，切片可能跑偏了"
-    # myAttempt 必须在两条链路定义之前就绑定好
-    assert _WORKBENCH.index("const myAttempt = ++_ttsAttemptId") < _WORKBENCH.index("const tryServer")
+    # myAttempt 必须在两条链路定义之前就绑定好（C7 Task 5 起在 playWord 函数体内比较）
+    body = _playword_body()
+    assert body.index("const myAttempt = ++_ttsAttemptId") < body.index("const tryServer")
 
 
 # ── v4.6.6 β 契约：pickDeVoice 三级优先 + trySpeech 离线兜底 ──────────────
@@ -240,7 +290,7 @@ def test_try_speech_handles_no_voice_explicitly():
     仅在 voices 列表本身为空（voiceschanged 尚未触发）时才会命中这条；
     只要 voices 非空，pickDeVoice 第三级兜底确保不会返回 null。
     """
-    block = _WORKBENCH.split("const trySpeech")[1].split("const tryOnline")[0]
+    block = _playword_body().split("const trySpeech")[1].split("const tryOnline")[0]
     assert "no-de-voice" in block, "trySpeech 缺少 no-de-voice 显式错误路径"
     # 确认是在 !voice 检查里返回，而不是直接用 voice 造成 TypeError
     voice_check_pos = block.find("if (!voice)")
@@ -259,28 +309,37 @@ def test_embedded_audio_dict_declared_before_playword():
     ReferenceError（或静默拿到 undefined 跳过内嵌路径）。
 
     C7 Task 4 起 EMBEDDED_AUDIO 与其余种子数据一起住在 static/js/wb-seed-data.js，
-    「先于 playWord 可见」这一事实由**加载序**承担，故本条改为钉住加载序本身：
-      1. 数据模块用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
+    C7 Task 5 起 playWord 搬进 static/js/wb-tts.js，「先于 playWord 可见」这一事实
+    由**加载序**承担，故本条钉住加载序本身：
+      1. 两个模块都用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
          语义未真机验证（计划 Fog of War Unknown 2），必须保留 <script src> 回退能力；
-      2. 该 <script src> 恰好出现一次，且位置在主内联脚本（playWord 所在）之前 ——
-         普通脚本的顶层 const 落在同一全局词法环境，后续脚本才可见；
-      3. 数据模块里确实声明了 EMBEDDED_AUDIO，主脚本里确实还有 function playWord。
+      2. 两个 <script src> 各恰好出现一次，且顺序为 数据模块 → TTS 模块 → 主内联脚本
+         —— 普通脚本的顶层 const/let 落在同一全局词法环境，后续脚本才可见；
+      3. 数据模块里确实声明了 EMBEDDED_AUDIO，TTS 模块里确实是 playWord 的定义所在。
 
-    变异验证：把 <script src> 挪到主内联脚本之后 → 红；给它加 type 属性 → 红；
-    从数据模块删掉 EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红。
+    变异验证：把任一 <script src> 挪到主内联脚本之后 → 红；给它加 type 属性 → 红；
+    把两个标签对调（wb-tts.js 先于 wb-seed-data.js）→ 红；从数据模块删掉
+    EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红。
     """
     opening = re.findall(r"<script[^>]*wb-seed-data\.js[^>]*>", _WORKBENCH)
     assert len(opening) == 1, "数据模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(opening), opening)
     assert _WORKBENCH.count(_SEED_JS_SRC_TAG) == 1, "数据模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in opening[0], "数据模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
+    tts_opening = re.findall(r"<script[^>]*wb-tts\.js[^>]*>", _WORKBENCH)
+    assert len(tts_opening) == 1, "TTS 模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(tts_opening), tts_opening)
+    assert _WORKBENCH.count(_TTS_JS_SRC_TAG) == 1, "TTS 模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in tts_opening[0], "TTS 模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
     src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
+    tts_tag_at = _WORKBENCH.index(_TTS_JS_SRC_TAG)
     main_script_at = _WORKBENCH.index('<script>\n"use strict";')
-    assert src_tag_at < main_script_at, "数据模块必须在主内联脚本之前加载，否则 playWord 看不到 EMBEDDED_AUDIO"
+    assert src_tag_at < tts_tag_at, "数据模块必须先于 TTS 模块加载，否则 playWord 看不到 EMBEDDED_AUDIO"
+    assert tts_tag_at < main_script_at, "TTS 模块必须在主内联脚本之前加载，否则 _tts* 状态在主脚本里不可见"
 
     assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
-    pw_at = _WORKBENCH.index("function playWord(")
-    assert pw_at > main_script_at, "playWord 必须落在主内联脚本内（切片跑偏）"
+    assert "function playWord(" in _TTS_JS, "playWord 必须住在 TTS 模块里（切片跑偏）"
+    assert "function playWord" not in _WORKBENCH, "playWord 不得再内联在 workbench.html（C7 Task 5 已搬走）"
 
 
 def test_embedded_audio_lookup_uses_lowercase():
@@ -293,8 +352,9 @@ def test_embedded_audio_lookup_uses_lowercase():
 
     变异验证：把 word.toLowerCase() 删掉 → 断言红 ✓
     """
-    # 取 playWord 函数体内、tryServer 定义之前的 EMBEDDED_AUDIO 处理块
-    pw_body = _WORKBENCH.split("function playWord(hw, opts)")[1].split("const tryServer")[0]
+    # 取 playWord 函数体（C7 Task 5 起在 static/js/wb-tts.js）内、tryServer 定义之前的
+    # EMBEDDED_AUDIO 处理块
+    pw_body = _playword_body().split("const tryServer")[0]
     # 区块必须有 EMBEDDED_AUDIO 查词（否则切片跑偏）
     assert "EMBEDDED_AUDIO" in pw_body, "切片未落在 playWord 的 EMBEDDED_AUDIO 检测区"
     # 必须用 toLowerCase() 归一（变量名不限，只要 .toLowerCase() 在查词前）
