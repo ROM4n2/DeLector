@@ -35,14 +35,17 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 /* ---- 探针读取口（C7 Task 2/4）：可多文件来源 ----------------------------
- * 源清单按**加载序**排列：顶层声明所在的 JS 数据模块在前（C7 Task 4 把
- * SEED_WORDS / CORE_* / SEED_ID_ALIASES / EMBEDDED_AUDIO 搬到了
- * static/js/wb-seed-data.js），使用这些声明的 workbench.html 在后。
+ * 源清单按**加载序**排列：顶层声明所在的 JS 模块在前，使用这些声明的
+ * workbench.html 在后。
+ *   · C7 Task 4 把 SEED_WORDS / CORE_* / SEED_ID_ALIASES / EMBEDDED_AUDIO 搬到了
+ *     static/js/wb-seed-data.js；
+ *   · C7 Task 5 块 2 把 loadAll / saveWords / IDB_* / idb* 搬到了 static/js/wb-idb.js
+ *     （本探针的 P2.saveWords 切片随之前移，切片语义一字未改）。
  * readSources() 按序拼接，sliceDecl() 在拼接结果里按名字切片 —— 于是切片语义与
- * 单文件时代逐字一致，且**不依赖跨文件位置序**（两个文件里没有同名声明）。
+ * 单文件时代逐字一致，且**不依赖跨文件位置序**（各文件里没有同名声明）。
  * 搬迁/再拆分时只需改 `WB_SRC_ROOT` 与 `SRC_FILES`。 */
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
-const SRC_FILES = ["js/wb-seed-data.js", "german/workbench.html"];
+const SRC_FILES = ["js/wb-seed-data.js", "js/wb-idb.js", "german/workbench.html"];
 
 function readSources(names) {
   const parts = names.map((name) => {

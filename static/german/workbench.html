@@ -508,10 +508,23 @@
      同一全局词法环境，故后续内联脚本可直接引用。
      改数据请改 delector/data/a1_workbench_dict.py 并重跑 tools/build_workbench_seed.py。 -->
 <script src="../js/wb-seed-data.js"></script>
+<!-- C7 Task 5（块 2 · seed-persist）：存储层 loadAll()/saveWords() 与 IndexedDB 全套
+     （IDB_* 状态 + idbOpen/idbPut/idbGet/idbSnapshot/idbListSnapshots/idbRestoreSnapshot/
+     idbDeleteSnapshot/idbHydrate）抽到 static/js/wb-idb.js，同样是**普通脚本**（不用 ES Module，
+     保留 WebView 整体回退内联的能力）。加载序：
+         wb-seed-data.js → wb-idb.js → wb-tts.js → 主内联脚本
+     理由：(a) 普通脚本的顶层 const/let/function 落在同一全局词法环境，后续脚本才可见，故三者
+     都必须早于主内联脚本；(b) 主内联脚本第一句就是 loadAll()，而 loadAll / idbHydrate 的实现
+     住在 wb-idb.js —— 启动期就要用的模块排在 wb-tts.js 之前，读加载序即读启动期依赖方向；
+     playWord 只在用户点击时才被调用，晚一点无妨；(c) wb-idb.js 与 wb-tts.js 互不依赖
+     （IDB 层不碰 _tts*，TTS 层不碰 IDB_*），两者换序不改变行为，这里选按依赖方向排，
+     避免「谁先谁后都行」的模糊地带。 -->
+<script src="../js/wb-idb.js"></script>
 
 <!-- C7 Task 5（块 1 · tts-audio）：单词发音子系统（_tts* 状态 + playWord）抽到
-     static/js/wb-tts.js，同样是**普通脚本**（不用 ES Module），加载序即本段顺序：
-     wb-seed-data.js -> wb-tts.js -> 主内联脚本。playWord 运行期才被调用，
+     static/js/wb-tts.js，同样是**普通脚本**（不用 ES Module），当前全序为：
+     wb-seed-data.js -> wb-idb.js -> wb-tts.js -> 主内联脚本（wb-idb.js 插在中段的理由见上）。
+     playWord 运行期才被调用，
      _tts* 是顶层 let/const，落在同一全局词法环境，故主脚本仍可直接读写。 -->
 <script src="../js/wb-tts.js"></script>
 
@@ -790,34 +803,6 @@ function mergeA1ServerWords(incoming) {
   return changed;
 }
 
-function loadAll() {
-  try { S.words = JSON.parse(localStorage.getItem(K.words) || "null") || null; } catch (e) { S.words = null; }
-  A1_BOOT_PENDING = false;
-  if (!Array.isArray(S.words)) {
-    // 首装：不再当场建表 —— 由 bootstrapA1Words() 优先拉服务端 A1 视图（失败回退内联）。
-    // 此处仅置空表 + 挂起标记，等异步结果再覆盖；期间 UI 显示「正在加载 A1 词库…」。
-    S.words = [];
-    A1_BOOT_PENDING = true;
-  } else {
-    // Task 4：localStorage 存量词对象读出后、进 S.words 被消费前逐条在内存归一
-    // （无论是否已标记——远端镜像可能把旧形状词拉回来）。任一条失败 → 整体放弃，S.words 保留原样。
-    const normalized = normalizeAllWords(S.words);
-    if (normalized) S.words = normalized;
-  }
-  const load = (key, fallback) => {
-    try { const v = JSON.parse(localStorage.getItem(key) || "null"); return v == null ? fallback : v; }
-    catch (e) { return fallback; }
-  };
-  S.cards = load(K.cards, {});
-  S.log = load(K.log, {});
-  S.wrong = load(K.wrong, {});
-  S.settings = Object.assign({}, DEFAULT_SETTINGS, load(K.set, {}));
-  /* 首装挂起时 S.words 为空：migrateWordSchema() 会把空表落盘并写 schema 标记，
-   * 造成「关页 → 下次读回 [] → 不再进首装分支」的永久空表。故挂起时跳过，
-   * 由 bootstrapA1Words() 在词表就绪后再调用。存量词表分支（非挂起）照旧。 */
-  if (!A1_BOOT_PENDING) migrateWordSchema();
-}
-
 /** 首装 A1 词库：API 优先 → 内联兜底 → 写 localStorage 缓存（ADR-0014 §6-S2）。
  *  触发条件（验收修复黄牌②，「首装一次」与「兜底可重试」并存，并修复存量 A1 富字段不回填）：
  *    ① A1_BOOT_PENDING —— 本次 loadAll 判定 localStorage 无词表（首次 / 被清空）→ 走建表分支；
@@ -966,11 +951,6 @@ function migrateSeedIdAliases() {
   if (kept.length !== S.words.length) { S.words = kept; changed = true; }
   return changed;
 }
-/* 落盘闸 + 缓存写入（ADR-0014 §6-S2 验收修复红牌①）：首装挂起期词表为空时绝不写
- * wb.words.v1，防任何新增调用点把 [] 写进缓存造成「关页 → 下次读回 [] → 不再进首装」
- * 的永久空表。首装成功路径在 bootstrapA1Words() 里已先置 A1_BOOT_PENDING=false 再
- * saveWords()，故此闸只挡「空表 + 挂起」这一种组合，绝不误挡首装成功路径。 */
-function saveWords() { if (A1_BOOT_PENDING && S.words.length === 0) return; localStorage.setItem(K.words, JSON.stringify(S.words)); idbPut("words", S.words); wbsync.push(); }
 function saveCards() { localStorage.setItem(K.cards, JSON.stringify(S.cards)); idbPut("cards", S.cards); wbsync.push(); }
 function saveLog() { localStorage.setItem(K.log, JSON.stringify(S.log)); idbPut("log", S.log); wbsync.push(); }
 function saveWrong() { localStorage.setItem(K.wrong, JSON.stringify(S.wrong)); idbPut("wrong", S.wrong); wbsync.push(); }
@@ -1303,168 +1283,6 @@ const wbsync = (() => {
     rtc: { connect: rtcConnect, supported: rtcSupported, send: rtcSendEnvelope, close: rtcClose,
            degraded: rtcDegraded } };
 })();
-
-/* ======================================================================
- * F2 · IndexedDB 迁移 + 自动备份（双写期：localStorage + IDB 并行写）
- *  - 突破 5MB 限制支持万词库
- *  - 每日首次启动自动 snapshot，保留最近 7 条
- *  - 设置页加「历史版本」面板，预览/恢复/删除
- *  - IDB 不可用时静默降级到 localStorage（不影响功能）
- * ==================================================================== */
-const IDB_NAME = "wb";
-const IDB_VER = 1;
-const IDB_STORES = ["words", "cards", "log", "wrong", "settings", "snapshots"];
-let _idb = null;       // IDBDatabase 实例
-let _idbReady = false;
-let _idbFailed = false;
-
-function idbOpen() {
-  return new Promise((resolve) => {
-    if (_idbReady && _idb) return resolve(_idb);
-    if (_idbFailed) return resolve(null);
-    if (typeof indexedDB === "undefined") { _idbFailed = true; return resolve(null); }
-    try {
-      const req = indexedDB.open(IDB_NAME, IDB_VER);
-      req.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        for (const s of IDB_STORES) {
-          if (!db.objectStoreNames.contains(s)) {
-            db.createObjectStore(s, s === "snapshots" ? { keyPath: "ts", autoIncrement: true } : { keyPath: "key" });
-          }
-        }
-      };
-      req.onsuccess = (e) => { _idb = e.target.result; _idbReady = true; resolve(_idb); };
-      req.onerror = () => { _idbFailed = true; resolve(null); };
-    } catch (e) { _idbFailed = true; resolve(null); }
-  });
-}
-
-async function idbPut(store, value) {
-  // 单条记录：用 key="main" 存（words/cards/log/wrong/settings 都是单对象）
-  const db = await idbOpen();
-  if (!db) return;
-  try {
-    return new Promise((resolve) => {
-      const tx = db.transaction(store, "readwrite");
-      tx.objectStore(store).put({ key: "main", value });
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => resolve(false);
-    });
-  } catch (e) { /* 静默 */ }
-}
-
-async function idbGet(store) {
-  const db = await idbOpen();
-  if (!db) return null;
-  try {
-    return new Promise((resolve) => {
-      const tx = db.transaction(store, "readonly");
-      const req = tx.objectStore(store).get("main");
-      req.onsuccess = () => resolve(req.result ? req.result.value : null);
-      req.onerror = () => resolve(null);
-    });
-  } catch (e) { return null; }
-}
-
-async function idbSnapshot() {
-  const db = await idbOpen();
-  if (!db) return null;
-  const snap = {
-    ts: Date.now(),
-    words: S.words,
-    cards: S.cards,
-    log: S.log,
-    wrong: S.wrong,
-    settings: S.settings,
-  };
-  try {
-    return new Promise((resolve) => {
-      const tx = db.transaction("snapshots", "readwrite");
-      tx.objectStore("snapshots").add(snap);
-      tx.oncomplete = async () => {
-        // 清理超过 7 条的旧快照
-        const all = await idbListSnapshots();
-        if (all && all.length > 7) {
-          const tx2 = db.transaction("snapshots", "readwrite");
-          for (let i = 0; i < all.length - 7; i++) {
-            tx2.objectStore("snapshots").delete(all[i].ts);
-          }
-        }
-        resolve(snap.ts);
-      };
-      tx.onerror = () => resolve(null);
-    });
-  } catch (e) { return null; }
-}
-
-async function idbListSnapshots() {
-  const db = await idbOpen();
-  if (!db) return [];
-  try {
-    return new Promise((resolve) => {
-      const tx = db.transaction("snapshots", "readonly");
-      const req = tx.objectStore("snapshots").getAll();
-      req.onsuccess = () => resolve((req.result || []).sort((a, b) => b.ts - a.ts));
-      req.onerror = () => resolve([]);
-    });
-  } catch (e) { return []; }
-}
-
-async function idbRestoreSnapshot(ts) {
-  const db = await idbOpen();
-  if (!db) return null;
-  try {
-    return new Promise((resolve) => {
-      const tx = db.transaction("snapshots", "readonly");
-      const req = tx.objectStore("snapshots").get(ts);
-      req.onsuccess = async () => {
-        const snap = req.result;
-        if (!snap) return resolve(null);
-        // 双写恢复到 localStorage + IDB（不直接覆盖 S，避免运行时状态紊乱；刷新后从 localStorage 读）
-        localStorage.setItem(K.words, JSON.stringify(snap.words || []));
-        localStorage.setItem(K.cards, JSON.stringify(snap.cards || {}));
-        localStorage.setItem(K.log, JSON.stringify(snap.log || {}));
-        localStorage.setItem(K.wrong, JSON.stringify(snap.wrong || {}));
-        localStorage.setItem(K.set, JSON.stringify(snap.settings || {}));
-        resolve(snap);
-      };
-      req.onerror = () => resolve(null);
-    });
-  } catch (e) { return null; }
-}
-
-async function idbDeleteSnapshot(ts) {
-  const db = await idbOpen();
-  if (!db) return false;
-  try {
-    return new Promise((resolve) => {
-      const tx = db.transaction("snapshots", "readwrite");
-      tx.objectStore("snapshots").delete(ts);
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => resolve(false);
-    });
-  } catch (e) { return false; }
-}
-
-/** 启动时从 IDB 覆盖 localStorage 数据（如果 IDB 更新） */
-async function idbHydrate() {
-  const db = await idbOpen();
-  if (!db) return false;
-  let updated = false;
-  for (const store of ["words", "cards", "log", "wrong", "settings"]) {
-    const v = await idbGet(store);
-    if (v != null) {
-      const lsKey = store === "words" ? K.words : store === "cards" ? K.cards : store === "log" ? K.log : store === "wrong" ? K.wrong : K.set;
-      const lsVal = localStorage.getItem(lsKey);
-      const idbVal = JSON.stringify(v);
-      if (lsVal !== idbVal) {
-        localStorage.setItem(lsKey, idbVal);
-        updated = true;
-      }
-    }
-  }
-  return updated;
-}
 
 function wordById(id) { return S.words.find(w => w.id === id) || null; }
 function cardOf(id) { return S.cards[id] || null; }

@@ -37,6 +37,15 @@ _SEED_JS_SRC_TAG = '<script src="../js/wb-seed-data.js"></script>'
 # 随代码搬家 —— 改读模块源，仍是「同一模块内的相对位置」断言，判别力只升不降。
 _TTS_JS = (_ROOT / "static" / "js" / "wb-tts.js").read_text(encoding="utf-8")
 _TTS_JS_SRC_TAG = '<script src="../js/wb-tts.js"></script>'
+# C7 Task 5（块 2 · seed-persist）：存储层 loadAll()/saveWords() 与 IndexedDB 全套
+# （IDB_* 六个状态 + idbOpen/idbPut/idbGet/idbSnapshot/idbListSnapshots/
+#  idbRestoreSnapshot/idbDeleteSnapshot/idbHydrate）已从 workbench.html 的内联脚本抽到
+# static/js/wb-idb.js，入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → 主内联脚本
+# 的顺序用**普通** <script src> 引入。凡切片落在 loadAll / saveWords 函数体里的断言，
+# 其锚点随代码搬家 —— 改读模块源，并把「切到下一个顶层 function 为止」升级为
+# wb_source.decl_body 的大括号配平切片（只含本函数体，内部声明顺序漂移也切不歪）。
+_IDB_JS = (_ROOT / "static" / "js" / "wb-idb.js").read_text(encoding="utf-8")
+_IDB_JS_SRC_TAG = '<script src="../js/wb-idb.js"></script>'
 
 
 def _playword_body():
@@ -309,22 +318,30 @@ def test_embedded_audio_dict_declared_before_playword():
     ReferenceError（或静默拿到 undefined 跳过内嵌路径）。
 
     C7 Task 4 起 EMBEDDED_AUDIO 与其余种子数据一起住在 static/js/wb-seed-data.js，
-    C7 Task 5 起 playWord 搬进 static/js/wb-tts.js，「先于 playWord 可见」这一事实
-    由**加载序**承担，故本条钉住加载序本身：
-      1. 两个模块都用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
+    C7 Task 5 起 playWord 搬进 static/js/wb-tts.js、存储层 + IDB 搬进 static/js/wb-idb.js，
+    「先于 playWord / loadAll 可见」这一事实由**加载序**承担，故本条钉住加载序本身：
+      1. 三个模块都用**普通脚本**引入（不得带 type=…）：Android/WebView 的 ES Module
          语义未真机验证（计划 Fog of War Unknown 2），必须保留 <script src> 回退能力；
-      2. 两个 <script src> 各恰好出现一次，且顺序为 数据模块 → TTS 模块 → 主内联脚本
-         —— 普通脚本的顶层 const/let 落在同一全局词法环境，后续脚本才可见；
-      3. 数据模块里确实声明了 EMBEDDED_AUDIO，TTS 模块里确实是 playWord 的定义所在。
+      2. 三个 <script src> 各恰好出现一次，且顺序为
+         数据模块 → IDB 模块 → TTS 模块 → 主内联脚本
+         —— 普通脚本的顶层 const/let/function 落在同一全局词法环境，后续脚本才可见；
+      3. 数据模块里确实声明了 EMBEDDED_AUDIO，TTS 模块里确实是 playWord 的定义所在，
+         IDB 模块里确实是 loadAll / IDB_* 的定义所在（且 HTML 里不再内联）。
 
     变异验证：把任一 <script src> 挪到主内联脚本之后 → 红；给它加 type 属性 → 红；
     把两个标签对调（wb-tts.js 先于 wb-seed-data.js）→ 红；从数据模块删掉
-    EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红。
+    EMBEDDED_AUDIO 声明 → 红；把标签复制两份 → 红；把 wb-idb.js 挪到 wb-tts.js 之后
+    → 红（本仓按「启动期依赖方向」定序，不是「谁先谁后都行」）。
     """
     opening = re.findall(r"<script[^>]*wb-seed-data\.js[^>]*>", _WORKBENCH)
     assert len(opening) == 1, "数据模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(opening), opening)
     assert _WORKBENCH.count(_SEED_JS_SRC_TAG) == 1, "数据模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in opening[0], "数据模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
+    idb_opening = re.findall(r"<script[^>]*wb-idb\.js[^>]*>", _WORKBENCH)
+    assert len(idb_opening) == 1, "IDB 模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(idb_opening), idb_opening)
+    assert _WORKBENCH.count(_IDB_JS_SRC_TAG) == 1, "IDB 模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in idb_opening[0], "IDB 模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
     tts_opening = re.findall(r"<script[^>]*wb-tts\.js[^>]*>", _WORKBENCH)
     assert len(tts_opening) == 1, "TTS 模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(tts_opening), tts_opening)
@@ -332,14 +349,23 @@ def test_embedded_audio_dict_declared_before_playword():
     assert "type=" not in tts_opening[0], "TTS 模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
     src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
+    idb_tag_at = _WORKBENCH.index(_IDB_JS_SRC_TAG)
     tts_tag_at = _WORKBENCH.index(_TTS_JS_SRC_TAG)
     main_script_at = _WORKBENCH.index('<script>\n"use strict";')
-    assert src_tag_at < tts_tag_at, "数据模块必须先于 TTS 模块加载，否则 playWord 看不到 EMBEDDED_AUDIO"
+    assert src_tag_at < idb_tag_at, "数据模块必须先于 IDB 模块加载（种子数据是 IDB 层的输入）"
+    assert idb_tag_at < tts_tag_at, (
+        "IDB 模块必须先于 TTS 模块加载：主内联脚本第一句就是 loadAll()，"
+        "其实现住在 wb-idb.js —— 加载序按启动期依赖方向定"
+    )
     assert tts_tag_at < main_script_at, "TTS 模块必须在主内联脚本之前加载，否则 _tts* 状态在主脚本里不可见"
 
     assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
     assert "function playWord(" in _TTS_JS, "playWord 必须住在 TTS 模块里（切片跑偏）"
     assert "function playWord" not in _WORKBENCH, "playWord 不得再内联在 workbench.html（C7 Task 5 已搬走）"
+    assert "function loadAll() {" in _IDB_JS, "loadAll 必须住在 static/js/wb-idb.js（切片跑偏）"
+    assert "async function idbHydrate()" in _IDB_JS, "idbHydrate 必须住在 static/js/wb-idb.js"
+    assert "function loadAll" not in _WORKBENCH, "loadAll 不得再内联在 workbench.html（C7 Task 5 块 2 已搬走）"
+    assert "function idbOpen" not in _WORKBENCH, "IDB 层不得再内联在 workbench.html（C7 Task 5 块 2 已搬走）"
 
 
 def test_embedded_audio_lookup_uses_lowercase():
@@ -531,20 +557,16 @@ def test_core_custom_words_headwords_match_source_export():
 
 
 def _load_all_body():
-    """loadAll 函数体（到下一个顶层 function / async function 为止）。
+    """loadAll 函数体（不含签名行与外层花括号），按花括号配平切出。
 
-    ADR-0014 §6-S2 起首装建表从 loadAll 抽到 a1WordsFromInline()，loadAll 自身不再内联
-    建表；它后面紧跟的是 async function bootstrapA1Words，故边界必须同时识别两种前缀，
-    否则切片会漂移进后续函数体（把 bootstrap 里的 backfillCoreWords 误当 loadAll 内容）。
-    切片标识用 loadAll 独有的首装挂起标记 A1_BOOT_PENDING，锚点漂移即红。
+    C7 Task 5（块 2）起 loadAll 住在 static/js/wb-idb.js。切片从「切到下一个顶层
+    function / async function 为止」升级为 wb_source.decl_body 的配平切片 —— 判别力
+    只升不降（原写法把声明之后的**邻居**也包进切片：正向断言仍可过，反向断言
+    `"SEED_WORDS.map(" not in body` / `"a1WordsFromInline" not in body` 会因为邻居漂进来
+    而变宽松；配平切片只含本函数体）。锚点仍是 loadAll 独有的首装挂起标记 A1_BOOT_PENDING，
+    锚点漂移即红（decl_body 找不到声明直接抛）。
     """
-    decl = "function loadAll()"
-    start = _WORKBENCH.find(decl)
-    assert start != -1, "找不到函数声明: %s" % decl
-    start += len(decl)
-    m = re.search(r"\n(?:async\s+)?function\s+\w", _WORKBENCH[start:])
-    assert m, "loadAll 之后找不到下一个顶层 function（声明顺序漂移）"
-    body = _WORKBENCH[start : start + m.start()]
+    body = wb_source.decl_body(_IDB_JS, "function loadAll()")
     assert "A1_BOOT_PENDING" in body, "切片没落在 loadAll 上（缺少首装挂起标记）"
     return body
 
@@ -1779,9 +1801,15 @@ def _bootstrap_a1_body():
 
 
 def _save_words_body():
-    """saveWords 函数体（声明 → 下一个顶层 function 为止）。"""
-    assert "function saveWords(" in _WORKBENCH, "缺少 saveWords 定义"
-    return _top_fn_segment("function saveWords(")
+    """saveWords 函数体（不含签名行与外层花括号），按花括号配平切出。
+
+    C7 Task 5（块 2）起 saveWords 住在 static/js/wb-idb.js。与 _load_all_body 同理，
+    切片从「切到下一个顶层 function 为止」（在模块里会一路吃到后面的 IDB_* 状态与 banner
+    注释）升级为配平切片，判别力只升不降。
+    """
+    body = wb_source.decl_body(_IDB_JS, "function saveWords()")
+    assert "wbsync.push()" in body, "切片没落在 saveWords 上（缺少落盘后推 server）"
+    return body
 
 
 def test_a1_boot_pending_guards_all_startup_savewords():

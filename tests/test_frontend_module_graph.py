@@ -391,8 +391,15 @@ def test_a1_engines_present_in_main_window_exposer():
 
 
 def _workbench_src() -> str:
-    """workbench 源文本。拆分后只需在这里补文件路径（实参顺序 = 拼接顺序）。"""
-    return wb_source.read_source("static/german/workbench.html")
+    """workbench 源文本。拆分后只需在这里补文件路径（实参顺序 = 拼接顺序）。
+
+    C7 Task 5 块 2（seed-persist）起 `saveWords` / `loadAll` / 整套 IDB 声明住在
+    `static/js/wb-idb.js`（入口页用普通 <script src> 在主内联脚本之前加载）。
+    故这里读**两个文件**：声明所在模块在前、使用它的 HTML 在后 —— `decl_body` /
+    `line_of` / `occurs_before` 全都作用在这份拼出来的「虚拟单文件」上，断言写法与
+    判别力不变（Pin1 的四条、Pin2 的包含关系与 depth==0 一条未减）。
+    """
+    return wb_source.read_source("static/js/wb-idb.js", "static/german/workbench.html")
 
 
 def test_workbench_wbsync_save_hooks_on_each_store():
