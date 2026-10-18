@@ -22,7 +22,7 @@ Task 3 把 `from delector.server import app` / `build_server` / `serve_in_thread
 `_stub_server_chain` 把 `_show_window` 整个桩掉 ⇒ **build_server 陷阱永不可达**：端口空闲
 时它不红（该调没调到也看不见），端口被占时 `not in events` 恒真（vacuous，删不删校验都绿）。
 修法：流程级用例改经**假 webview** 驱动 `_show_window` → `_after_start`（范式同
-`tests/test_desktop_shell.py` 的录制替身），让陷阱重新可达、重新具备判别力。
+`tests/server_helpers.py` 的录制替身），让陷阱重新可达、重新具备判别力。
 
 **变异自证**：把 `_run_desktop_inner` 里的校验调用删掉 ⇒
 `test_run_desktop_inner_does_not_build_server_when_port_is_taken` 立即转红

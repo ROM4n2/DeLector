@@ -344,25 +344,39 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 
 ---
 
-## 分层缺口与「Pi 式分层重构」（**已拍板：日后做，现在不做**）
+## 分层架构声明与单向依赖规范
 
-> 触发：2026-10-15 按 `01-Rules/LAYERED-ARCHITECTURE.md`（实证对象 = Pi-Agent 的
-> `pi-ai` / `pi-agent-core` / `pi-coding-agent` 三层）对「交互层验证驱动 agent 循环」做了双席位评审。
-> **本节只登记方向，实施推迟**（用户 2026-10-15 拍板）；动手前先补下面的第 ③ 条。
+> 依据 `01-Rules/LAYERED-ARCHITECTURE.md`，DeLector 后端采用严格的单向分层结构。
+> 任何跨层调用与模块新增 MUST 遵循下述层序声明（由底层向顶层单向流动）。
 
-**实测到的缺层证据（别当推测）**：
+### 1. 权威层序声明 (Layer Hierarchy)
 
-| # | 缺什么 | 实测 |
+```
+Layer 5 [运行装配层]: delector.routes, delector.server, static
+          │  ▲ (只能由外向内依赖)
+Layer 4 [工具接口层]: delector.tools (向 Agent/Go/API 暴露的统一工具名片与执行封装)
+          │
+Layer 3 [领域服务层]: delector.services (llm_client, writing 裁判, tts, exam_catalog, polish_loop)
+          │
+Layer 2 [处理引擎层]: delector.nlp_engine (processor, linguistics, syntax_tree)
+          │
+Layer 1 [核心底座层]: delector.core (db 持久层, lexicon, security, utils)
+          │
+Layer 0 [纯数据出口]: delector.data (静态字典、预生成 JSON 数据、基础 schema)
+```
+
+### 2. 单向导入约束规则 (RFC 2119)
+
+1. **[MUST] 绝对单向流向**：低层模块严禁以顶层 `import` 引用高层模块。例如 `core` 禁止引用 `nlp_engine`/`services`；`nlp_engine` 禁止引用 `services`/`tools`；`services` 核心禁止反向依赖 `tools`。
+2. **[MUST] 业务与机制解耦**：机制引擎（如 `polish_loop`）应当保持通用无业务状态，具体业务规则（如 A1 写作评判提示词与特定裁判函数）通过依赖注入或装配层（Layer 5）传入。
+3. **[MUST] 接口与实现防反向循环**：`tools/` 封装底层服务时，`services/` 本身不得直接导入 `tools/`。白名单与工具查找应在装配期由 Layer 5 或注入字典确定。
+
+### 3. 解耦演进状态跟踪
+
+| 依赖路径 | 状态 | 处置记录 |
 | --- | --- | --- |
-| ① | 层间类型三态递进缺失 | 我们没有 `Tool`（名片）→ `AgentTool extends Tool`（工人）→ `ToolDefinition`（产品组件）的递进；工具在三处同名不同物：`TOOL_REGISTRY` / `POLISH_TOOL_ALLOWLIST` / payload dict |
-| ② | 依赖方向不单向 | 两组双向耦合：`core/database.py:23` ⇄ `nlp_engine/processor.py:16`；`services/polish_tools.py:60` ⇄ `tools/writing_check.py:11`（`tools/tts_tool.py:7` 同向） |
-| ③ | **层序未声明** | 仓内**零处**声明「哪层可 import 谁」⇒ `LAYERED-ARCHITECTURE §1` 连「违规」都无法判定（这是重构的**前置**，5 行文档的事） |
-| ④ | 业务知识与机制同层 | A1 业务住在机制内核：`services/polish_loop.py` 的 `POLISH_LOOP_SYSTEM_PROMPT`（逐字 A1 书信指令）与 `_default_judge`（焊死 A1 裁判）；按 §4 应提到产品层（`routes/`） |
-
-**目标形态**：`data` → `core`/`nlp_engine` → `services.llm_client`（模型适配）→ `services.polish_loop`（机制内核，**零业务**，提示词与裁判全部注入）→ `services.writing`（业务裁判）→ `routes` + `static`（产品运行层：装配 + HTTP + SSE + 契约）。依赖**单向**，业务只在最上层。
-
-**为什么现在不做**：三态递进要先有「第二个实现」才有内容（现只有一个工具面、一个裁判）——提前定接口是 §2 反模式；且当时在途的子计划（裁判集扩充）与分层重构正交。
-
-**未删的历史事实**：`polish_loop` 的 `judge=` / `chat=` / `dispatch=` 等注入缝是**真实的**，可替换性在**运行期**成立；缺的是**导入期**（`polish_loop.py` 顶层 `from delector.services.writing import analyze_a1_email`）与默认值里的业务耦合 —— 所以「§3 可独立使用测试」目前过不了。
+| `core/database.py` ⇄ `nlp_engine/processor.py` | **已解耦 (2026-10-18)** | 清理 `database.py` 顶层无引用的再导出，测试公开面闸门验证净解耦 |
+| `services/polish_tools.py` ⇄ `tools/writing_check.py` | **在途演化** | `polish_tools` 属于工具调度装配，后续计划上提或与 `tools` 合并收敛 |
+| 机制与业务混合（`polish_loop` 内置 A1 提示词） | **已具备注入点** | 运行时已支持注入自定义 judge/prompt，待进一步纯化默认值导入 |
 
 ---

@@ -109,7 +109,7 @@ DEFAULT_ENTRY = "desktop.py"
 
 # ── 预置文章预生成数据（子计划 2A）──────────────────────────────────────────────
 # 数据文件的**仓库相对路径**（= 产物内相对路径）。用单一常量 + 字面量串表达，既作
-# `--add-data` 的 src/dest，也让 `tests/test_server.py` 的打包守卫能对**同一字面量**做断言。
+# `--add-data` 的 src/dest，也让 `tests/test_server_settings_security.py` 的打包守卫能对**同一字面量**做断言。
 # 为什么 MUST 显式 --add-data：`--hidden-import` 只收 .py，收不到这个 .json；漏收不崩，但
 # 运行时会静默降级成纯 Python 口径（「列表预览与详情跳变」复发），而本地 pytest 全绿。
 PRESET_PROCESSED_DATA_REL = "delector/data/preset_processed.json"
@@ -268,7 +268,7 @@ def release_readme(version: str, commit: str = "unknown", built_at: str = "") ->
 
     为什么抽成纯函数：入口从"起服务 + 开默认浏览器"改为"打开桌面窗口"后，文案若不同步，用户会照着
     README 找一个已不存在的启动方式 —— 属"文档漂移"类静默失败。抽出来后守卫测试可直接断言文本
-    （tests/test_server.py::test_windows_portable_readme_matches_desktop_entry）。
+    （tests/test_server_settings_security.py::test_windows_portable_readme_matches_desktop_entry）。
 
     顶部那行是人读构建指纹（见 readme_fingerprint_line）：用户靠它分辨自己双击的是哪个构建。
     """
