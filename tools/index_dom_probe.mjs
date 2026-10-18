@@ -174,20 +174,56 @@ if (html.includes('id="companion"') && html.includes('id="companion-panel"')) {
 
 // ── 5. 输出判定结论 ───────────────────────────────────────────────────────
 const ok = errors.length === 0;
+
+// 标准三键契约：{ failures, total, cases: [{name, ok}] }
+const cases = [];
+
+// 9 大视图
+for (const id of EXPECTED_VIEWS) {
+  cases.push({
+    name: `view:${id}`,
+    ok: Boolean(blocks.views[id]),
+  });
+}
+
+// 2 大抽屉
+for (const id of EXPECTED_ASIDES) {
+  cases.push({
+    name: `aside:${id}`,
+    ok: Boolean(blocks.asides[id]),
+  });
+}
+
+// 6 大模态
+for (const id of EXPECTED_MODALS) {
+  cases.push({
+    name: `modal:${id}`,
+    ok: Boolean(blocks.modals[id]),
+  });
+}
+
+// 4 基础骨架
+cases.push({ name: "layout:topbar", ok: blocks.topbar });
+cases.push({ name: "layout:nav_desktop", ok: blocks.nav_desktop });
+cases.push({ name: "layout:nav_mobile", ok: blocks.nav_mobile });
+cases.push({ name: "layout:companion", ok: blocks.companion });
+
+const total = cases.length;
+const failures = cases.filter((c) => !c.ok).length;
+
 const payload = {
-  ok,
-  target: path.relative(ROOT, targetPath),
-  errors,
-  blocks,
+  failures,
+  total,
+  cases,
 };
 
 if (JSON_MODE) {
   console.log(JSON.stringify(payload, null, 2));
 } else {
   if (ok) {
-    console.log(`[PASS] ${payload.target}: DOM 结构验证通过 (9 视图 / 2 抽屉 / 6 模态 / 骨架完整)`);
+    console.log(`[PASS] ${targetPath}: DOM 结构验证通过 (9 视图 / 2 抽屉 / 6 模态 / 骨架完整)`);
   } else {
-    console.error(`[FAIL] ${payload.target}: 发现 ${errors.length} 处 DOM 结构错误:`);
+    console.error(`[FAIL] ${targetPath}: 发现 ${errors.length} 处 DOM 结构错误:`);
     for (const err of errors) {
       console.error(`  - ${err}`);
     }

@@ -30,50 +30,48 @@ def test_probe_script_exists():
 
 
 def test_index_dom_probe_clean_run():
-    """生产环境 static/index.html 运行探针必须 exit 0，且包含全量契约节点。"""
+    """生产环境 static/index.html 运行探针必须 exit 0，且输出标准三键契约。"""
     res = _run_probe()
     assert res.returncode == 0, f"探针报错: {res.stderr}\nSTDOUT: {res.stdout}"
     data = json.loads(res.stdout)
-    assert data["ok"] is True
-    assert data["errors"] == []
+    assert data["failures"] == 0
+    assert data["total"] == 21
+    case_names = {c["name"] for c in data["cases"]}
 
     # 验证 9 大视图已全量识别
-    views = data["blocks"]["views"]
     expected_views = {
-        "view-home",
-        "view-encounter",
-        "view-reader",
-        "view-cards",
-        "view-progress",
-        "view-writer",
-        "view-exam",
-        "view-german",
-        "view-search",
+        "view:view-home",
+        "view:view-encounter",
+        "view:view-reader",
+        "view:view-cards",
+        "view:view-progress",
+        "view:view-writer",
+        "view:view-exam",
+        "view:view-german",
+        "view:view-search",
     }
-    assert set(views.keys()) == expected_views
+    assert expected_views.issubset(case_names)
 
     # 验证 2 大 aside 抽屉
-    asides = data["blocks"]["asides"]
-    expected_asides = {"writer-panel", "drawer"}
-    assert set(asides.keys()) == expected_asides
+    expected_asides = {"aside:writer-panel", "aside:drawer"}
+    assert expected_asides.issubset(case_names)
 
     # 验证 6 大模态覆盖层
-    modals = data["blocks"]["modals"]
     expected_modals = {
-        "modal-overlay",
-        "settings-overlay",
-        "polish-overlay",
-        "version-preview-overlay",
-        "quiz-overlay",
-        "cloze-overlay",
+        "modal:modal-overlay",
+        "modal:settings-overlay",
+        "modal:polish-overlay",
+        "modal:version-preview-overlay",
+        "modal:quiz-overlay",
+        "modal:cloze-overlay",
     }
-    assert set(modals.keys()) == expected_modals
+    assert expected_modals.issubset(case_names)
 
     # 验证关键结构组件闭合
-    assert data["blocks"]["nav_desktop"] is True
-    assert data["blocks"]["nav_mobile"] is True
-    assert data["blocks"]["companion"] is True
-    assert data["blocks"]["topbar"] is True
+    assert "layout:nav_desktop" in case_names
+    assert "layout:nav_mobile" in case_names
+    assert "layout:companion" in case_names
+    assert "layout:topbar" in case_names
 
 
 def test_index_dom_probe_mutation_detects_broken_view(tmp_path):
@@ -88,5 +86,6 @@ def test_index_dom_probe_mutation_detects_broken_view(tmp_path):
     res = _run_probe(custom_html_path=str(mutated_file))
     assert res.returncode == 1
     data = json.loads(res.stdout)
-    assert data["ok"] is False
-    assert any("view-home" in err for err in data["errors"])
+    assert data["failures"] > 0
+    failed_names = [c["name"] for c in data["cases"] if not c["ok"]]
+    assert any("view-home" in name for name in failed_names)
