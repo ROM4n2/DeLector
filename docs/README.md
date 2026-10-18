@@ -25,7 +25,9 @@
 
 ## 归档待办（下次发版时执行，2026-10-16 登记）
 
-> 判据重申：计划进 `plans/archive/` 的条件是**成果已发版**，不是"做完了"。下列 9 份已交付（台账均 100%），但都发生在 **v5.17.0（2026-10-11 发版）之后** ⇒ 目前 master 上属于**未发版**状态，按规则**先留在 `plans/`**。
+> 判据重申：计划进 `plans/archive/` 的条件是**成果已发版**，不是"做完了"。下列 **18 份**已交付，但全部发生在 **v5.17.0（2026-10-11 发版）之后** ⇒ 目前 master 上属于**未发版**状态，按规则**先留在 `plans/`**。
+>
+> ⚠️ **MUST NOT 因为「已交付」就提前归档**——2026-10-19 曾有 agent 提出按交付状态批量 `git mv`，与本判据冲突，已纠正。归档是一次发版动作，不是一次交付动作。
 > **v5.18.0（或下一个包含它们的版本）发版时**，执行批量 `git mv` 到 `plans/archive/`（一并更新 `WORKMEMORY/PROJECT_OVERVIEW.md` 与 INDEX 的引用路径）：
 
 | 计划（现位于 `plans/`） | 交付状态 | 入 master 的 PR |
@@ -39,6 +41,15 @@
 | `2026-10-16-audit-fixes-a-series.md` | 5/5 | #143 |
 | `2026-10-16-audit-fixes-b-series.md` | 4/4 | #143 |
 | `2026-10-16-database-split.md` | 5/5 | #144 |
+| `2026-10-17-c1-verifier-in-the-loop.md` | Task 1~6 全闭环（裁判回灌，四硬依赖达标） | #147 |
+| `2026-10-17-c3-token-and-turn-distribution-backtest.md` | 全交付（闭环 ADR-0023 §6 Unknown B） | #148 |
+| `2026-10-18-architecture-decoupling-and-monolith-split.md` | Task 1~8 | #158 |
+| `2026-10-18-c6-test-file-split.md` | 全交付（test_server 7614→1393 / desktop 2828→699） | #151 |
+| `2026-10-18-c7-workbench-html-split.md` | Task 1~6（4730→2840 行） | #152 · #153 |
+| `2026-10-18-c8-p2-batch.md` | Task 1~9 | #149 |
+| `2026-10-18-c9-review-followups.md` | 全交付（Y4 活缺陷 + mock 漂移闸） | #150 |
+| `2026-10-18-index-html-split-and-modularization.md` | Task 1~6 | #159 |
+| `2026-10-19-writer-js-modularization.md` | Task 1~5 + 4b（分层闸，复核后重写） | #160 |
 
 **命名豁免（历史既成事实，不改）**：`plans/archive/` 里 4 份**早于 `<日期>-` 命名规则**的文件（`workbench-scope-control-and-live-settings.md`、`workbench-progress-server-sync.md`、`workbench-core-words-mode.md`、`plan-companion-mascot.md`）**保留原名**——改名会打断既有引用（含 vault 侧），收益不足以抵风险。此后新增的归档件一律带 `<日期>-` 前缀。
 

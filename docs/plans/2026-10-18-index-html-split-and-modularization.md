@@ -204,8 +204,7 @@
 ## 迷雾区与后续规划 (Fog of War)
 
 - [x] **Task 1~6: 前端大单体 static/index.html 模块化拆分与同步机械闸**（2026-10-18 已完成，PR 待合并）
-- **[Unknown 1: 前端业务脚本 (`writer.js`, `cards.js`) 内部状态与 DOM 绑定的解耦]**：
-  等待本次单体模板切分落地后，基于清晰的子模板路径进一步推进 JS 纯业务逻辑下沉。
+- [x] **[Unknown 1: 前端业务脚本 (`writer.js`, `cards.js`) 内部状态与 DOM 绑定的解耦]**—— **`writer.js` 已由 `docs/plans/2026-10-19-writer-js-modularization.md` 交付**（PR #160）：切出 L1 纯层 `wr-format.js` 与 L2 持久化层 `wr-api.js`，`writer.js` 1657→1526 行，并新增前端分层机械闸 `tools/check_frontend_layers.py` 把边界钉成 CI 契约。**剩余面转登记**：`cards.js`（1335 行）/ `reader.js`（1403 行）的同构切分 —— 见该计划 Fog of War Unknown 2。
 
 ---
 
