@@ -2,12 +2,13 @@
 to: any
 from: codebuddy
 created: 2026-10-18 13:10
+closed: 2026-10-18 17:30
 role: FIX | VERIFY
-status: open
+status: closed
 ---
-# Handoff: C7 收尾的两项遗留（`--extract` 地雷 · `doRate` 行为覆盖）
+# Handoff: C7 收尾的两项遗留（`--extract` 地雷 · `doRate` 行为覆盖）[CLOSED]
 
-> C7（`workbench.html` 拆分）已全部交付并合并（PR #152 / #153，master `80dae6b`）。本包只含**两项独立、互不耦合**的遗留，可分开做、也可并行。
+> C7（`workbench.html` 拆分）已全部交付并合并（PR #152 / #153，master `80dae6b`）。本包所含**两项独立、互不耦合**的遗留已全部交付并合并入 master（PR #155 / #156）。
 
 ---
 
@@ -53,9 +54,25 @@ status: open
 
 ---
 
-## 风险与坑
+## 响应与闭环记录 (2026-10-18)
 
-1. **别再跑 `--extract`**（在第一项修好之前）——这是本包存在的首要原因。
-2. 两项都可独立 PR，**不要**混进同一个提交。
-3. 第二项新增的是**行为用例**（非等价迁移），用例数会涨；本仓惯例要求 PR 里写明 +N 的理由。
-4. 提交纪律：`git commit -F <file>`，禁 `-m`；禁 `--no-verify`；实现类必须走分支 + PR，不直推 master。
+两项遗留均已通过独立分支与 PR 交付并合入 master，全量测试与 CI 门禁全绿：
+
+### 一、`--extract` 覆写护栏（PR #155 · commit `b1bff1f`）
+1. `tools/build_workbench_seed.py`：默认执行 `--extract` 时检查目标 Python 模块是否存在，已存在时拒绝覆写并返回退出码 2；必须显式传入 `--i-know-this-overwrites` 护栏参数才允许覆写；校正模块 docstring 与 `_MODULE_HEADER`，消除自相矛盾说明。
+2. `tests/test_a1_workbench_source.py`：
+   - 新增 `test_a1_workbench_dict_is_projection_module_not_flat_literal_artifact` 守卫（变异自证通过：删掉 `from delector.data.a1_sidecar import` 即红）；
+   - 新增 `test_extract_without_override_flag_refuses_to_overwrite_existing_module` 拒绝行为验证；
+   - 新增 `test_extract_with_override_flag_proceeds_in_temp_dir` 护栏放行验证。
+3. 验证：默认跑 `--extract` 退出码 2 且 `a1_workbench_dict.py` 字节未改；全量用例数 +3（2355 → 2358）。
+
+### 二、`doRate` 行为覆盖动态探针与接线（PR #156 · commit `1cbc4f3`）
+1. `tools/wb_rate_probe.mjs`：
+   - 真实切取 `static/js/wb-rate.js` 中 `doRate(g)` 函数体（带 `t.good++` / `t.hard++` / `t.again++` / `addWrong` 等 token 切片护栏）；
+   - 在 `node:vm` 沙箱中驱动测试 5 组真实行为场景（良好 3 累加/写盘、困难 2 复习卡累加、遗忘 1 错词登记、未翻面拦截、越界拦截）；
+   - 输出标准三键契约 `{ failures, total, cases }`，通过 `test_probe_json_contract.py`；
+   - 变异自证通过（改动评分分支逻辑，探针与测试立刻报红并精准指出失败场景）。
+2. `tests/test_wb_rate_probe.py`：
+   - 提供 pytest wrapper，接入 CI 流水线；
+   - 通过 `test_probe_wiring_guard.py` 漏接线守卫。
+3. 验证：全量用例数 +2（2358 → 2360），全套门禁全绿。

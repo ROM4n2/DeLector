@@ -21,11 +21,11 @@
 
 ## Active handoffs
 
-- 2026-10-18 → [`handoff_c7-followups.md`](handoff_c7-followups.md)（to: any · role: FIX/VERIFY · status: open）— C7 收尾的两项遗留：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，**别跑**）；② `wb-rate.js` 的 `doRate` 评分分支无行为断言（现只有静态所有权钉子）
 - 2026-10-14 → [`handoff_no-console-feedback-gaps.md`](handoff_no-console-feedback-gaps.md)（to: any · role: VERIFY/TEST · status: open）— 真机双击验收 + digest 归一历史 header
 
 ## 已归档 handoffs
 > 协议 §4：关闭后 MUST 移入 `WORKMEMORY/archive/`；`handoff_*.md` 只保留**活跃**交接。
+- 2026-10-18 → `archive/handoff_c7-followups.md`（**closed 2026-10-18**）— C7 两项收尾遗留全闭环：① `--extract` 加 `--i-know-this-overwrites` 护栏 + 守卫（PR #155）；② `wb-rate.js` `doRate` 补充 node 动态行为探针与接线（PR #156）；全量 2360 passed 门禁全绿
 - 2026-10-18 → `archive/handoff_c7-workbench-html-split.md`（**closed 2026-10-18**）— C7 `workbench.html` 拆分全部完成：4730 → 2840 行、8 个模块、PR #152/#153（master `80dae6b`）；全量 2352 passed 与拆分前逐字相同；遗留 2 项已转 `handoff_c7-followups.md`
 - 2026-10-15 → `archive/handoff_judge-gaming-experiment.md`（**closed 2026-10-16**）— §4.3 第 8 条对照实验：60 局真跑 + 全景报告 + ADR-0024 签批 + PR #139 已合入 master。剩余边界（不是待办）：P1 本形态下无发生机制；回灌子计划见 ADR-0024 硬依赖
 - 2026-10-16 → `archive/handoff_audit-fixes-a-b.md`（**closed 2026-10-17**）— 审计修正 A 档 8 项 + B 档 5 项均已合入 master（#143 `459343b` / #144 `c79e764`）；WORKMEMORY 已轮转并生成 10 月 COLD digest；**唯一待办入口 = `docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项**
