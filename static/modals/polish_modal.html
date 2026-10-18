@@ -1,0 +1,74 @@
+    <!-- ── AI Polish Review Overlay ─────────────────────────────── -->
+    <div
+      id="polish-overlay"
+      class="modal-overlay hidden"
+      onclick="if (event.target === this) closePolishOverlay();"
+    >
+      <div class="modal polish-modal-box">
+        <div
+          class="modal-header"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+          "
+        >
+          <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
+            >✨ AI 润色审查 (AI-Politur Review)</span
+          >
+          <button
+            class="drawer-close"
+            onclick="closePolishOverlay()"
+            title="关闭 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="polish-toolbar">
+          <div id="polish-hunk-summary" class="polish-summary-badge">
+            共 0 处改动 · 默认已全选
+          </div>
+          <div class="polish-quick-actions">
+            <button
+              class="btn btn-ghost btn-xs"
+              onclick="acceptAllPolishHunks()"
+            >
+              ✓ 全部接受
+            </button>
+            <button
+              class="btn btn-ghost btn-xs"
+              onclick="rejectAllPolishHunks()"
+            >
+              ✕ 全部拒绝
+            </button>
+          </div>
+        </div>
+
+        <div id="polish-diff-list" class="polish-diff-list">
+          <!-- Dynamic Hunk Diff Blocks -->
+        </div>
+
+        <div id="polish-notes" class="polish-notes-container hidden">
+          <!-- AI Polish Notes -->
+        </div>
+
+        <div class="modal-footer polish-modal-footer">
+          <button class="btn btn-ghost" onclick="closePolishOverlay()">
+            取消
+          </button>
+          <button
+            id="btn-apply-polish"
+            class="btn btn-dark"
+            onclick="applyPolishChanges()"
+          >
+            ✓ 应用所选更改
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Tooltip for Inline IDE Editor Errors (v4.0.0) -->
+    <div id="ide-error-tooltip" class="ide-error-tooltip hidden"></div>
+
