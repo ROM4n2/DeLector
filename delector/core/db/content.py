@@ -40,11 +40,6 @@ from delector.core.db.connection import (
 # `set_setting` 住 Task-3 切出的 `db/settings.py`：本片 `seed_preset_encounter_texts` 成功后
 # 写版本号用它。直接从 settings 模块导入（不绕 database 的 re-export，避免受其位置影响）。
 from delector.core.db.settings import set_setting
-from delector.nlp_engine.processor import (
-    PROCESSED_JSON_VERSION,
-    _process_german_text_pure_python,
-    process_german_text,
-)
 
 
 def list_encounter_texts(level: Optional[str] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -170,8 +165,17 @@ PRESET_ARTICLES = [
 ]
 
 
-def ingest_article(title: str, text: str, db_path: Optional[str] = None, source_url: Optional[str] = None) -> int:
-    processed = process_german_text(text)
+def ingest_article(
+    title: str,
+    text: str,
+    db_path: Optional[str] = None,
+    source_url: Optional[str] = None,
+    processed: Optional[Dict[str, Any]] = None,
+) -> int:
+    if processed is None:
+        from delector.nlp_engine.processor import process_german_text
+
+        processed = process_german_text(text)
     target_path = get_db_path(db_path)
     with db_conn(target_path) as conn:
         cur = conn.execute(
@@ -204,6 +208,8 @@ def _preset_processed_json_lite(text: str) -> str:
     代价（诚实登记）：回退生效时，列表里的难度预览在文章被首次打开前是纯 Python 口径（略粗），
     打开即升级为 spaCy 全量口径 ⇒ 存在「A2 → A1」跳变。构建期预生成数据正是为消除该跳变。
     """
+    from delector.nlp_engine.processor import _process_german_text_pure_python
+
     processed = _process_german_text_pure_python(text)
     processed.pop("version", None)
     return json.dumps(processed, ensure_ascii=False)
@@ -300,6 +306,8 @@ def preset_processed_json(text: str) -> str:
     未命中 / 文件缺失 ⇒ 记一条 WARNING（可见的降级提示）后回退 ``_preset_processed_json_lite``
     （纯 Python 口径、**不带 version**，靠惰性迁移在首次打开时升级）。
     """
+    from delector.nlp_engine.processor import PROCESSED_JSON_VERSION
+
     text_hash = preset_text_hash(text)
     entry = _load_preset_processed().get(text_hash)
     if isinstance(entry, dict) and entry.get("version") == PROCESSED_JSON_VERSION:

@@ -246,5 +246,29 @@ def test_facade_has_no_unregistered_extra_names() -> None:
         "这多半意味着往 façade 里夹带了未登记的新公开名（re-export 别名 / 误绑变量）。\n"
         "修法二选一（**不许放宽断言方向**）：\n"
         "  · 若是真实的新公开面 ⇒ 补进 `BASELINE_PUBLIC_NAMES`（并同步 tools 生成口径）；\n"
-        "  · 若是 import 产物 / 导入型再导出 ⇒ 登记进 `_FACADE_ALLOWLIST` 并写清理由。"
+        "  · 若是 import 产物 / 导入型再导出 ⇒ 登记进 `_FACADE_ALLOWLIST` 并写清理由。"\
     )
+
+
+def test_core_db_has_no_top_level_nlp_engine_imports() -> None:
+    """Layer 1 [core.db] 顶层严禁导入 Layer 2 [nlp_engine]（C5 分层依赖守卫）。"""
+    import ast
+    from pathlib import Path
+
+    db_dir = Path(__file__).resolve().parent.parent / "delector" / "core" / "db"
+    violations: List[str] = []
+
+    for py_file in db_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Import):
+                for alias in stmt.names:
+                    if alias.name.startswith("delector.nlp_engine"):
+                        violations.append(f"{py_file.name}: import {alias.name}")
+            elif isinstance(stmt, ast.ImportFrom):
+                mod = stmt.module or ""
+                if mod.startswith("delector.nlp_engine"):
+                    violations.append(f"{py_file.name}: from {mod} import ...")
+
+    assert violations == [], f"core/db/ 发现顶层逆向导入 nlp_engine: {violations}"
+
