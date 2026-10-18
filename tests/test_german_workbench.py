@@ -54,6 +54,14 @@ _IDB_JS_SRC_TAG = '<script src="../js/wb-idb.js"></script>'
 # 判别力只升不降（新增「所有权」钉子：这些名字必须只剩在模块里，两边各留一份会红）。
 _VIEWS_JS = (_ROOT / "static" / "js" / "wb-views.js").read_text(encoding="utf-8")
 _VIEWS_JS_SRC_TAG = '<script src="../js/wb-views.js"></script>'
+# C7 Task 5（块 4 · wbsync）：进度 server 镜像同步族（`const wbsync` IIFE + normHw /
+# applyMerge / migrateSeedIdAliases）已从 workbench.html 的内联脚本抽到 static/js/wb-sync.js，
+# 入口页按 wb-seed-data.js → wb-idb.js → wb-tts.js → wb-views.js → wb-sync.js → 主内联脚本
+# 的顺序用**普通** <script src> 引入。凡切片落在这些声明里的断言，锚点随代码搬家 ——
+# 改读模块源，并把「切到下一个顶层 function 为止」升级为 wb_source.decl_body 的配平切片
+# （只含本函数体，邻居顺序漂移也切不歪），判别力只升不降。
+_SYNC_JS = (_ROOT / "static" / "js" / "wb-sync.js").read_text(encoding="utf-8")
+_SYNC_JS_SRC_TAG = '<script src="../js/wb-sync.js"></script>'
 
 # 视图层里是**函数声明**的那八个（`function <name>(` 形态可双向核）。
 _VIEWS_FN_OWNED = frozenset({
@@ -81,9 +89,22 @@ _VIEWS_OWNED = _VIEWS_FN_OWNED | frozenset({
 })
 
 
+_SYNC_FN_OWNED = frozenset({
+    "normHw",
+    "applyMerge",
+    "migrateSeedIdAliases",
+})
+# 同步模块里的名字 → 唯一合法宿主是 wb-sync.js（`wbsync` 是 const IIFE，单独钉）。
+_SYNC_OWNED = _SYNC_FN_OWNED | frozenset({"wbsync"})
+
+
 def _host_of(name):
     """名字 → 宿主文件路径（只用于断言消息，便于一眼看出切歪去了哪个文件）。"""
-    return "static/js/wb-views.js" if name in _VIEWS_OWNED else "static/german/workbench.html"
+    if name in _VIEWS_OWNED:
+        return "static/js/wb-views.js"
+    if name in _SYNC_OWNED:
+        return "static/js/wb-sync.js"
+    return "static/german/workbench.html"
 
 
 def _decl_src(name):
@@ -93,8 +114,20 @@ def _decl_src(name):
       * 视图层声明必须仍存在于 wb-views.js（被删/改名 → 红）；
       * 视图层声明不得再留在 workbench.html 的 `function <name>(` 形态（搬回去一半 → 红）。
     搬家前不存在这两条 —— 那时的判据只有「HTML 里能找到这个名字」。
-    不在 _VIEWS_OWNED 里的名字（其余三十多个顶层声明）照旧返回 workbench.html。
+    C7 Task 5 块 4（wbsync）起同一套所有权钉子也覆盖同步族（见 _SYNC_OWNED）：
+    它们必须只剩在 static/js/wb-sync.js，HTML 里连 `function <name>(` 都不许有。
+    既不在 _VIEWS_OWNED 也不在 _SYNC_OWNED 里的名字（其余三十多个顶层声明）照旧
+    返回 workbench.html。
     """
+    if name in _SYNC_FN_OWNED and name not in _VIEWS_OWNED:
+        # 同步族（C7 Task 5 块 4）同理：只在 wb-sync.js 里，且不得再内联回 HTML。
+        assert ("function %s(" % name) not in _WORKBENCH, (
+            "%s() 仍留在 workbench.html —— 同步族声明应只在 static/js/wb-sync.js" % name
+        )
+        assert ("function %s(" % name) in _SYNC_JS, (
+            "static/js/wb-sync.js 里找不到 %s() —— 声明被改名/删除，或搬错了宿主" % name
+        )
+        return _SYNC_JS
     if name not in _VIEWS_OWNED:
         return _WORKBENCH
     assert ("function %s(" % name) not in _WORKBENCH, (
@@ -416,10 +449,18 @@ def test_embedded_audio_dict_declared_before_playword():
     assert _WORKBENCH.count(_VIEWS_JS_SRC_TAG) == 1, "视图模块必须用普通脚本恰好引入一次（标签被改写？）"
     assert "type=" not in views_opening[0], "视图模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
 
+    sync_opening = re.findall(r"<script[^>]*wb-sync\.js[^>]*>", _WORKBENCH)
+    assert len(sync_opening) == 1, (
+        "同步模块的 <script src> 应恰好一处，实际 %d 处：%s" % (len(sync_opening), sync_opening)
+    )
+    assert _WORKBENCH.count(_SYNC_JS_SRC_TAG) == 1, "同步模块必须用普通脚本恰好引入一次（标签被改写？）"
+    assert "type=" not in sync_opening[0], "同步模块必须用普通脚本引入（不得带 type=），以保留 WebView 回退能力"
+
     src_tag_at = _WORKBENCH.index(_SEED_JS_SRC_TAG)
     idb_tag_at = _WORKBENCH.index(_IDB_JS_SRC_TAG)
     tts_tag_at = _WORKBENCH.index(_TTS_JS_SRC_TAG)
     views_tag_at = _WORKBENCH.index(_VIEWS_JS_SRC_TAG)
+    sync_tag_at = _WORKBENCH.index(_SYNC_JS_SRC_TAG)
     main_script_at = _WORKBENCH.index('<script>\n"use strict";')
     assert src_tag_at < idb_tag_at, "数据模块必须先于 IDB 模块加载（种子数据是 IDB 层的输入）"
     assert idb_tag_at < tts_tag_at, (
@@ -430,6 +471,14 @@ def test_embedded_audio_dict_declared_before_playword():
         "视图模块必须排在 wb-tts.js 之后（与 wb-idb.js → wb-tts.js → wb-views.js 的既定加载序一致）"
     )
     assert views_tag_at < main_script_at, "视图模块必须在主内联脚本之前加载，否则 curView 在主脚本里不可见"
+    assert views_tag_at < sync_tag_at, (
+        "同步模块必须排在 wb-views.js 之后：applyMerge 运行期要用 renderHeaderBadge / showView，"
+        "排在队尾 = 与「谁提供这些声明」的阅读顺序一致"
+    )
+    assert sync_tag_at < main_script_at, (
+        "同步模块必须在主内联脚本之前加载，否则启动块里的 wbsync.init() / saveXxx 里的 "
+        "wbsync.push() 会撞 ReferenceError（普通脚本顶层 const 后续脚本才可见）"
+    )
 
     assert "const EMBEDDED_AUDIO" in _SEED_JS, "数据模块缺少 EMBEDDED_AUDIO 声明"
     assert "function playWord(" in _TTS_JS, "playWord 必须住在 TTS 模块里（切片跑偏）"
@@ -447,6 +496,15 @@ def test_embedded_audio_dict_declared_before_playword():
     # curView 是 `let` 不是函数，单独钉（含默认值 review —— 首屏就是复习视图）。
     assert 'let curView = "review";' in _VIEWS_JS, "curView 必须住在 static/js/wb-views.js 且默认 review"
     assert 'let curView = "review";' not in _WORKBENCH, "curView 不得再内联在 workbench.html（块 3 已搬走）"
+
+    # 同步族（块 4）：wbsync 是 const IIFE，三个函数是 function 声明 —— 双向钉所有权。
+    # 锚点带前导换行：文件头注释里也引用了 `const wbsync = (() => { … })();`，
+    # 行首形式只命中真声明（否则「声明被删」也能靠注释蒙过去）。
+    assert "\nconst wbsync = (() => {" in _SYNC_JS, "wbsync 必须住在 static/js/wb-sync.js（const IIFE）"
+    assert "const wbsync = " not in _WORKBENCH, "wbsync 不得再内联在 workbench.html（块 4 已搬走）"
+    for name in sorted(_SYNC_FN_OWNED):
+        assert "function %s(" % name in _SYNC_JS, "static/js/wb-sync.js 缺少 %s()（声明被删/改名）" % name
+        assert "function %s(" % name not in _WORKBENCH, "%s() 不得再内联在 workbench.html（块 4 已搬走）" % name
 
 
 def test_embedded_audio_lookup_uses_lowercase():
@@ -1593,7 +1651,8 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
     assert "S.words.filter(w => w.custom)" in export_block, "同步导出必须只取 custom: true 的词"
     assert "customWords: custom" in export_block, "同步导出对象必须带 customWords 字段"
 
-    merge = _WORKBENCH.split("function applyMerge(")[1].split('$("btnResetProgress")')[0]
+    # C7 Task 5 块 4：applyMerge 搬到 static/js/wb-sync.js —— 切片改读模块源（配平切片）。
+    merge = _apply_merge_body()
     assert "Object.assign(cur, w)" in merge, (
         "applyMerge 必须用 Object.assign 覆盖旧自定义词，确保 tags（含 core）被更新"
     )
@@ -1612,15 +1671,28 @@ def test_core_sync_export_import_round_trips_custom_core_tags():
 
 
 def _normhw_body():
-    """normHw 函数体（定义到下一个顶层 function 为止）。"""
-    assert "function normHw(" in _WORKBENCH, "缺少 normHw 归一函数"
-    return _top_fn_segment("function normHw(")
+    """normHw 函数体（花括号配平切片 —— 只含本函数体）。
+
+    C7 Task 5 块 4 起 normHw 住在 static/js/wb-sync.js（_decl_src 顺带钉所有权），
+    原「切到下一个顶层 function 为止」换成 wb_source.decl_body：邻居声明顺序漂移
+    不再影响切片，且不会再吃到下一个函数上方的注释。
+    """
+    body = wb_source.decl_body(_decl_src("normHw"), "function normHw(hw)")
+    assert "return String(hw" in body, "切片没落在 normHw 上（缺少归一返回）"
+    return body
 
 
 def _apply_merge_body():
-    """applyMerge 函数体（到 btnResetProgress 绑定为止，与 Task 5 断言同切法）。"""
-    assert "function applyMerge(data, opts)" in _WORKBENCH, "缺少 applyMerge 定义"
-    return _WORKBENCH.split("function applyMerge(data, opts)")[1].split('$("btnResetProgress")')[0]
+    """applyMerge 函数体（花括号配平切片 —— 只含本函数体）。
+
+    C7 Task 5 块 4 起 applyMerge 住在 static/js/wb-sync.js。原切法
+    「`function applyMerge(data, opts)` → `$("btnResetProgress")`」依赖两条**物理位置**
+    标记（前者在 HTML 里被删、后者是 HTML 里的按钮绑定），搬家后切不出东西；改用配平切片
+    后断言仍钉在同一段实现上（且不再把紧随其后的其它声明/注释算进来，判别力只升不降）。
+    """
+    body = wb_source.decl_body(_decl_src("applyMerge"), "function applyMerge(data, opts)")
+    assert "const inWords" in body, "切片没落在 applyMerge 上（缺少单词合并段）"
+    return body
 
 
 def _apply_merge_words_block():
@@ -1651,9 +1723,15 @@ def _norm_hw_py(hw):
 
 
 def _alias_migration_body():
-    """migrateSeedIdAliases 函数体（定义到下一个顶层 function 为止）。"""
-    assert "function migrateSeedIdAliases(" in _WORKBENCH, "缺少 migrateSeedIdAliases 定义"
-    return _top_fn_segment("function migrateSeedIdAliases(")
+    """migrateSeedIdAliases 函数体（花括号配平切片 —— 只含本函数体）。
+
+    C7 Task 5 块 4 起该声明住在 static/js/wb-sync.js，且是文件里**最后**一段 ——
+    原「切到下一个顶层 function 为止」在这里失去下界（后面没有函数了，会切到文件尾），
+    故改为 wb_source.decl_body：切片边界由花括号配平决定，不依赖邻居。
+    """
+    body = wb_source.decl_body(_decl_src("migrateSeedIdAliases"), "function migrateSeedIdAliases()")
+    assert "SEED_ID_ALIASES" in body, "切片没落在 migrateSeedIdAliases 上（缺少别名表引用）"
+    return body
 
 
 def test_merge_normhw_preserves_case_and_strips_article():

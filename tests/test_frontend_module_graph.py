@@ -395,11 +395,18 @@ def _workbench_src() -> str:
 
     C7 Task 5 块 2（seed-persist）起 `saveWords` / `loadAll` / 整套 IDB 声明住在
     `static/js/wb-idb.js`（入口页用普通 <script src> 在主内联脚本之前加载）。
-    故这里读**两个文件**：声明所在模块在前、使用它的 HTML 在后 —— `decl_body` /
+    C7 Task 5 块 4（wbsync）起 `const wbsync` IIFE（含 push/pushNow/pull/init）住在
+    `static/js/wb-sync.js` —— Pin1 的「落盘后推一次」与 Pin2 的「hydrate 后初始化」
+    都跨了文件（写调用在 wb-idb.js / HTML，被调方在 wb-sync.js）。
+    故这里读**三个文件**：声明所在模块在前、使用它的 HTML 在后 —— `decl_body` /
     `line_of` / `occurs_before` 全都作用在这份拼出来的「虚拟单文件」上，断言写法与
-    判别力不变（Pin1 的四条、Pin2 的包含关系与 depth==0 一条未减）。
+    判别力不变，且两条钉子各自**新增**一条跨文件断言（wbsync 必须真的提供 push / init：
+    否则 saveXxx 末尾那行与启动块里的 init() 是 TypeError，不是「存了就推」/「hydrate
+    完就同步」）。Pin1 的四条、Pin2 的包含关系与 depth==0 一条未减。
     """
-    return wb_source.read_source("static/js/wb-idb.js", "static/german/workbench.html")
+    return wb_source.read_source(
+        "static/js/wb-sync.js", "static/js/wb-idb.js", "static/german/workbench.html"
+    )
 
 
 def test_workbench_wbsync_save_hooks_on_each_store():
@@ -427,6 +434,16 @@ def test_workbench_wbsync_save_hooks_on_each_store():
         assert wb_source.occurs_before(body, "localStorage.setItem", "wbsync.push()"), (
             f"{fn}() 的 wbsync.push() 排在 localStorage.setItem 之前（先推后落盘 ⇒ 崩溃即失）"
         )
+    # 跨文件（C7 Task 5 块 4）：调用点写在这里、被调方住在 static/js/wb-sync.js。
+    # 只有对端**真的把 push 暴露出来**，上面那四条的「推一次」才成立 —— 名字被改名或从
+    # 返回对象里删掉时，运行期是 TypeError（存了也不推），静态四条却照样绿。
+    # 锚点带前导换行：`const wbsync = ` 也出现在本模块**文件头注释**里（说明它是什么），
+    # 裸串会切到注释内部的 `{ … }` 占位上，断言就变成对文档撒谎。行首形式只命中真声明。
+    wbsync_body = wb_source.decl_body(src, "\nconst wbsync = ")
+    assert re.search(r"\bpush:\s*push\b", wbsync_body), (
+        "static/js/wb-sync.js 的 wbsync 返回对象里没有 push —— saveXxx() 末尾的 "
+        "wbsync.push() 会是 TypeError（保存后根本不推 server）"
+    )
 
 
 def test_workbench_wbsync_init_after_idb_hydrate_block():
@@ -451,6 +468,19 @@ def test_workbench_wbsync_init_after_idb_hydrate_block():
         "wbsync.init() 不在启动 IIFE 的顶层"
         "（嵌进带花括号的 try / 块 / 子函数或回调 ⇒ hydrate 抛错被 catch 吞掉后就永不初始化；"
         "无花括号的表达式体回调不产生花括号，本钉抓不到）"
+    )
+    # 跨文件（C7 Task 5 块 4）：init 必须由 wb-sync.js 的 wbsync 返回对象暴露，
+    # 且 init 本体真的把同步启动起来（调 boot()）—— 只暴露一个空壳 init 同样是死同步。
+    # 同上：锚点带前导换行，避开文件头注释里对 `const wbsync = (() => { … })();` 的引用。
+    wbsync_body = wb_source.decl_body(src, "\nconst wbsync = ")
+    assert re.search(r"\binit:\s*init\b", wbsync_body), (
+        "static/js/wb-sync.js 的 wbsync 返回对象里没有 init —— 启动块里的 wbsync.init() "
+        "会是 TypeError（IDB hydrate 完成后同步永不启动）"
+    )
+    init_body = wb_source.decl_body(wbsync_body, "function init()")
+    assert "boot()" in init_body, (
+        "wbsync 的 init() 没有调 boot() —— 空壳 init 会让 wbsync.init() 变成无操作"
+        "（拉取/轮询/推送三条路径都不起来）"
     )
 
 

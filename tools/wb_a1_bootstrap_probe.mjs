@@ -40,12 +40,14 @@ const ROOT = path.resolve(__dirname, "..");
  *   · C7 Task 4 把 SEED_WORDS / CORE_* / SEED_ID_ALIASES / EMBEDDED_AUDIO 搬到了
  *     static/js/wb-seed-data.js；
  *   · C7 Task 5 块 2 把 loadAll / saveWords / IDB_* / idb* 搬到了 static/js/wb-idb.js
- *     （本探针的 P2.saveWords 切片随之前移，切片语义一字未改）。
+ *     （本探针的 P2.saveWords 切片随之前移，切片语义一字未改）；
+ *   · C7 Task 5 块 4 把 migrateSeedIdAliases（连同 wbsync / normHw / applyMerge）搬到了
+ *     static/js/wb-sync.js（P2.migrateSeedIdAliases 切片随之前移，语义一字未改）。
  * readSources() 按序拼接，sliceDecl() 在拼接结果里按名字切片 —— 于是切片语义与
  * 单文件时代逐字一致，且**不依赖跨文件位置序**（各文件里没有同名声明）。
  * 搬迁/再拆分时只需改 `WB_SRC_ROOT` 与 `SRC_FILES`。 */
 const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
-const SRC_FILES = ["js/wb-seed-data.js", "js/wb-idb.js", "german/workbench.html"];
+const SRC_FILES = ["js/wb-seed-data.js", "js/wb-idb.js", "js/wb-sync.js", "german/workbench.html"];
 
 function readSources(names) {
   const parts = names.map((name) => {
@@ -406,11 +408,120 @@ if (!/A1_BOOT_PENDING && S\.words\.length === 0/.test(P2.saveWords)) {
   throw new Error("saveWords 切片里没有「挂起 + 空表」兜底闸，切歪或实现回退了");
 }
 
-const STARTUP_SEG = html.split("loadAll();")[1].split("(async () => {")[0];
-const HYDRATE_SEG = html.split("(async () => {")[1].split("if (updated) {")[1].split("console.log")[0];
+/* ---------------------------------------------------------------------------
+ * 2. 启动序锚点（C7 Task 5 块 4：由「标记切片」升级为「声明名 + 结构断言」）
+ *
+ * 旧写法：`html.split("loadAll();")[1].split("(async () => {")[0]` /
+ *         `html.split("(async () => {")[1].split("if (updated) {")[1].split("console.log")[0]`
+ * 三处硬伤：
+ *   · 标记缺失时 split() 只返回 1 段 ⇒ [1] 是 undefined ⇒ 下游 TypeError，
+ *     栈里看不出「哪个锚点漂了」，也没走约定的退出码；
+ *   · 标记**出现多次**时静默取第一/第二段 —— 拿到错误片段照样可能通过后面的正则；
+ *   · 「到 console.log 为止」把边界钉在一条**无关语句**上（它只是恰好在分支末尾）。
+ * 现在：`(async () => {` 与 `if (updated) {` 各按花括号配平取**体的内部**（与旧切片同口径，
+ * 不含外层花括号），同步启动段取「首处独占一行的顶层 loadAll(); → 启动 IIFE 之前」，
+ * 并**断言这段确实是启动段**（必须含 bootstrapA1Words() 调用）。
+ * 任一锚点缺失 / 重复 / 切歪 ⇒ exit 3 + 打印所查标记（No-Silent-Skip）。
+ * ------------------------------------------------------------------------ */
+function dieAnchor(label, needle, why) {
+  process.stderr.write(
+    `探针锚点失配（${label}）：${why}；标记 ${JSON.stringify(needle)}；` +
+      `源 ${SRC_FILES.join(", ")}（根目录 ${SRC_ROOT}）\n`
+  );
+  process.exit(3);
+}
+
+/** 按 `needle`（必须以开括号结尾）定位其花括号体，返回**体的内部**（不含外层花括号）。
+ *  `at` 给定时从该下标起切（调用方已用独占一行的形式定位过，避免与 `setInterval(async
+ *  () => {` 这类行内出现混淆）；`at` 缺省则取首处。
+ *  needle 缺失 / 其后不是 `{` / 花括号不配平 ⇒ exit 3。 */
+function sliceBlockBody(src, needle, label, at) {
+  const start = at === undefined ? src.indexOf(needle) : at;
+  if (start < 0 || src.slice(start, start + needle.length) !== needle) {
+    dieAnchor(label, needle, "找不到标记或给定位置不是该标记");
+  }
+  const braceOpen = start + needle.length - 1;
+  if (src[braceOpen] !== "{") dieAnchor(label, needle, "标记末字符不是 '{'（切片口径要求）");
+  return src.slice(braceOpen + 1, matchBracket(src, braceOpen));
+}
+
+/** needle 在 src 里必须恰好出现一次 —— 否则「取第几段」本身就是歧义，直接报失配。 */
+function sliceUnique(src, needle, label) {
+  const seen = src.split(needle).length - 1;
+  if (seen !== 1) dieAnchor(label, needle, `出现 ${seen} 处（应恰好一处）`);
+}
+
+/** 「独占一行的独立语句」定位（对 CRLF / LF 都不敏感）：行首**且**行尾都匹配的次数。
+ *  用途：把 `(async () => {` 与行内的 `setInterval(async () => {` 区分开 —— 前者是
+ *  顶层语句起首，后者前面是 `setInterval` 而不是换行。0 处 ⇒ exit 3。 */
+function findOwnLine(src, stmt, label) {
+  let from = 0;
+  let count = 0;
+  let first = -1;
+  for (;;) {
+    const at = src.indexOf(stmt, from);
+    if (at < 0) break;
+    const bol = at === 0 || src[at - 1] === "\n";
+    const tail = at + stmt.length;
+    const eol = tail >= src.length || src[tail] === "\n" || src[tail] === "\r";
+    if (bol && eol) {
+      count += 1;
+      if (first < 0) first = at;
+    }
+    from = at + 1;
+  }
+  if (count === 0) dieAnchor(label, stmt, "找不到独占一行的该语句");
+  return { first, count };
+}
+
+const STARTUP_IIFE_NEEDLE = "(async () => {";
+const startupIifeHit = findOwnLine(html, STARTUP_IIFE_NEEDLE, "启动 async IIFE");
+if (startupIifeHit.count !== 1) {
+  dieAnchor("启动 async IIFE", STARTUP_IIFE_NEEDLE, `独占一行出现 ${startupIifeHit.count} 处（应恰好一处）`);
+}
+const STARTUP_IIFE_AT = startupIifeHit.first;
+const STARTUP_IIFE_BODY = sliceBlockBody(html, STARTUP_IIFE_NEEDLE, "启动 async IIFE", STARTUP_IIFE_AT);
+/* 结构断言：它就是「立即调用的 async 箭头」—— 配平体之后必须紧跟 `();`，
+ * 否则拿到的是「某个 async 回调的形参位置」而不是启动块。 */
+const startupIifeClose = matchBracket(html, STARTUP_IIFE_AT + STARTUP_IIFE_NEEDLE.length - 1);
+if (!html.startsWith(")();", startupIifeClose + 1)) {
+  dieAnchor("启动 async IIFE", STARTUP_IIFE_NEEDLE, "配平体之后不是 `)();`（不是立即调用的 IIFE）");
+}
+/* 锚点自检：这段必须是「IDB hydrate → 起同步」的启动 IIFE，否则下面两段的语义就变了。 */
+for (const [needle, what] of [
+  ["idbHydrate()", "IDB hydrate"],
+  ["wbsync.init()", "镜像同步启动"],
+]) {
+  if (!STARTUP_IIFE_BODY.includes(needle)) {
+    dieAnchor("启动 async IIFE", STARTUP_IIFE_NEEDLE, `体里找不到 ${what} 的 ${needle}`);
+  }
+}
+
+/* 同步启动段：首处**独占一行**的顶层 loadAll(); 起、到启动 IIFE 之前。
+ * 独占一行的形式把「注释里提到的 loadAll();」排除在外（wb-idb.js 的文档注释里就有两处
+ * 「loadAll()」字样，但它们不独占一行 —— 这正是旧 split 切法会切歪的地方）。 */
+const LOAD_ALL_NEEDLE = "loadAll();";
+const loadAllHit = findOwnLine(html, LOAD_ALL_NEEDLE, "同步启动段");
+const loadAllAt = loadAllHit.first;
+if (loadAllAt > STARTUP_IIFE_AT) {
+  dieAnchor("同步启动段", LOAD_ALL_NEEDLE, "首处独占一行的位置晚于启动 async IIFE（启动序被改写）");
+}
+const STARTUP_SEG = html.slice(loadAllAt + LOAD_ALL_NEEDLE.length, STARTUP_IIFE_AT);
+if (!/bootstrapA1Words\(\)/.test(STARTUP_SEG)) {
+  dieAnchor("同步启动段", LOAD_ALL_NEEDLE, "切片里没有 bootstrapA1Words() 调用 ⇒ 起点不是启动段");
+}
+
+/* hydrate 重载分支：启动 IIFE 体内 `if (updated) {` 的配平体内部。 */
+const HYDRATE_NEEDLE = "if (updated) {";
+sliceUnique(STARTUP_IIFE_BODY, HYDRATE_NEEDLE, "hydrate 重载分支");
+const HYDRATE_SEG = sliceBlockBody(STARTUP_IIFE_BODY, HYDRATE_NEEDLE, "hydrate 重载分支");
+if (!HYDRATE_SEG.includes("loadAll();")) {
+  dieAnchor("hydrate 重载分支", HYDRATE_NEEDLE, "切片里没有 loadAll();（IDB 更新后必须重新加载 S）");
+}
+
 for (const [name, seg] of [["同步启动段", STARTUP_SEG], ["hydrate 重载段", HYDRATE_SEG]]) {
   if (!/migrateSeedIdAliases\(\)/.test(seg) || !/backfillCoreWords\(\)/.test(seg)) {
-    throw new Error(`${name} 切片里找不到 migrateSeedIdAliases / backfillCoreWords，锚点漂移`);
+    dieAnchor(name, "migrateSeedIdAliases() / backfillCoreWords()", "切片里找不到这两个调用");
   }
 }
 
