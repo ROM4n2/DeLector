@@ -26,16 +26,13 @@ import asyncio
 import contextlib
 import functools
 import hashlib
-import ipaddress
 import json
 import logging
 import math
 import os
 import re
-import socket
 import tempfile
 import threading
-import time
 from datetime import datetime, timedelta
 from typing import Any, AsyncIterator, Callable, Dict, List, NamedTuple, Optional, Tuple
 
@@ -45,42 +42,22 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from delector.core.database import (
-    _BACKUP_TABLES,
-    _PROGRESS_TABLES,
     AUDIO_CACHE_DIR,
-    BACKUP_SETTINGS_IMPORT_WHITELIST,
-    BACKUP_TOKEN_TTL_SEC,
-    _db_snapshot_guard,
-    _issue_pending,
-    _pending_backup,
-    _pending_wb,
-    _replace_tables,
     _require_localhost,
-    _take_pending,
     add_prep_saved,
-    build_backup_payload,
     db_conn,
     db_progress_conn,
     export_anki_deck,
     get_all_corpus_syntax_stats,
     get_cache_info,
-    get_db,
     get_effective_api_base_url,
     get_effective_api_key,
     get_effective_api_model,
     get_prep_saved,
-    get_progress_db,
-    get_setting,
     get_vocab_by_cefr,
-    get_wb_state,
-    get_wb_sync_key,
     ingest_article,
     log_study_event,
-    migrate_a1_records_to_exam_trials,
     prune_audio_cache,
-    regenerate_wb_sync_key,
-    save_wb_state,
-    set_setting,
     upsert_corpus_syntax_stats,
 )
 from delector.core.lexicon import lookup_core_vocab, primary_source
@@ -96,8 +73,6 @@ from delector.core.version import APP_VERSION
 
 # X-WB-Key 鉴权单一实现（信令 sync/rtc + 本模块的 PUT /api/wb/state 共用一份，
 # 杜绝「改一处漏一处 = 鉴权绕过」）。只依赖 database，不成环。
-from delector.core.wb_auth import require_wb_key
-
 # 惰性加载后 NLP_ENGINE / NLP_ENGINE_DETAIL 会在**首次真正需要 NLP 时**被回填（成功仍 "spacy"、
 # 失败改 "spacy(加载失败)"）。若像旧写法那样 `from ... import NLP_ENGINE` 按值取，字符串被**按值
 # 拷贝**，回填对 route 不可见 ⇒ /api/settings 永远报导入期声明值（v5.7.6 真机确诊同类坑）。
@@ -119,19 +94,18 @@ from delector.nlp_engine.processor import (
 )
 from delector.nlp_engine.syntax_tree import analyze_syntax_tree
 
-# 直接指到子模块而非 `from delector.routes import …`：本模块由 routes/__init__.py 导入，
-# 走包子属性会撞上半初始化状态。
-from delector.routes.sync import _SYNC_INSTANCE_ID
-
-# 材料写入/删除后失效长难句聚合榜缓存（source=all 整榜，TTL 300s）。只导入失效入口
-# （纯 dict pop + 锁），不引 syntax_hard 的其余重依赖；syntax_hard 本身不 import
-# routes.*，故此处顶层导入无环。
-from delector.routes.syntax_hard import invalidate_rank_cache
-
 # LLM 出网唯一收口（Task 3）：本模块 5 处重复的 httpx + /chat/completions 全部改调
 # llm_client.chat。取**模块对象**而非 `from ... import chat`：monkeypatch 打在调用方
 # 模块上才生效（本仓既有约定，见 tests 里对 `delector.routes.main.*` 的打桩）。
 # 注意：本模块其余出网（TTS 兜底、fetch_remote_html）仍直接用 httpx，不在本次收口范围。
+from delector.routes.backup import RestoreReq as RestoreReq
+
+# 直接指到子模块而非 `from delector.routes import …`：本模块由 routes/__init__.py 导入，
+# 走包子属性会撞上半初始化状态。
+# 材料写入/删除后失效长难句聚合榜缓存（source=all 整榜，TTL 300s）。只导入失效入口
+# （纯 dict pop + 锁），不引 syntax_hard 的其余重依赖；syntax_hard 本身不 import
+# routes.*，故此处顶层导入无环。
+from delector.routes.syntax_hard import invalidate_rank_cache
 from delector.services import llm_client, polish_loop
 
 # 统一违规抽取器（Task 1）：端点层与裁判层共用同一形状口径。取具名符号（纯函数，无循环依赖）。
@@ -1493,111 +1467,6 @@ async def note_assist(req: NoteAssistReq, request: Request) -> Any:
         raise HTTPException(status_code=502, detail=e.detail)
 
 
-# --- Settings & Configuration API ---
-class SettingsUpdate(BaseModel):
-    api_key: Optional[str] = None
-    api_base_url: Optional[str] = None
-    api_model: Optional[str] = None
-    tts_voice: Optional[str] = None
-    tts_rate: Optional[str] = None
-
-
-def _is_loopback_origin(request: Request) -> bool:
-    """来源是否为本机回环（判定口径与 `_require_localhost` 逐字一致）。
-
-    ⚠️ 这里只用来**按来源收敛字段**，MUST NOT 当成整门闸：局域网手机端合法读
-    `/api/settings`（前端 static/js/main.js:632-634 靠它渲染设置面板），
-    给它 403 会把手机端的配置面板整个打掉。
-    """
-    host = ""
-    if request.client is not None:
-        host = getattr(request.client, "host", None) or ""
-    return host in ("127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1")
-
-
-@router.get("/api/settings")
-def get_app_settings(request: Request) -> Dict[str, Any]:
-    """读设置。**按来源收敛字段**，不是整门拦截。
-
-    回环来源（127.0.0.1 / ::1）→ 字段集合与历史逐字一致；
-    非回环来源（同 Wi-Fi 的手机/平板）→ 响应中**不含** `api_key_masked`
-    （哪怕是 first4+last4 的掩码版也不给：局域网来源本就不该看到 key 的任何面）。
-    收敛只针对 api key 这一项：手机端自己也要读 base_url / model / tts_* 渲染设置面板
-    （前端 static/js/main.js:632-634），挂 `_require_localhost` 会把手机端配置面板打掉。
-    """
-    key = get_effective_api_key()
-    masked = ""
-    if key:
-        if len(key) > 8:
-            masked = key[:4] + "•" * (len(key) - 8) + key[-4:]
-        else:
-            masked = "••••••••"
-    data: Dict[str, Any] = {
-        "has_api_key": bool(key),
-        "api_key_masked": masked,
-        "api_base_url": get_effective_api_base_url(),
-        "api_model": get_effective_api_model(),
-        "tts_voice": get_setting("TTS_VOICE", "de-DE-KatjaNeural"),
-        "tts_rate": get_setting("TTS_RATE", "+0%"),
-        # live 读（非导入期快照）：模型惰性加载后，成功/失败状态在首次使用时才回填，见顶部注释。
-        "nlp_engine": _nlp_processor.NLP_ENGINE,
-        "nlp_engine_detail": _nlp_processor.NLP_ENGINE_DETAIL,
-    }
-    if not _is_loopback_origin(request):
-        # 非回环来源：只减这一项（字段只增不减的回环侧契约见方法 docstring）。
-        data.pop("api_key_masked", None)
-    return data
-
-
-@router.post("/api/settings")
-def update_app_settings(settings: SettingsUpdate, request: Request) -> Dict[str, Any]:
-    _require_localhost(request)
-    if settings.api_key is not None and settings.api_key.strip() != "":
-        set_setting("DEEPSEEK_API_KEY", settings.api_key.strip())
-    if settings.api_base_url is not None and settings.api_base_url.strip() != "":
-        set_setting("API_BASE_URL", settings.api_base_url.strip())
-    if settings.api_model is not None and settings.api_model.strip() != "":
-        set_setting("API_MODEL", settings.api_model.strip())
-    if settings.tts_voice is not None and settings.tts_voice.strip() != "":
-        set_setting("TTS_VOICE", settings.tts_voice.strip())
-    if settings.tts_rate is not None and settings.tts_rate.strip() != "":
-        set_setting("TTS_RATE", settings.tts_rate.strip())
-    return {"success": True, "message": "偏好与 API 设置已保存！"}
-
-
-@router.post("/api/settings/test-key")
-async def test_api_key(settings: SettingsUpdate, request: Request) -> Dict[str, Any]:
-    _require_localhost(request)
-    key = settings.api_key.strip() if (settings.api_key and settings.api_key.strip()) else get_effective_api_key()
-    if not key:
-        return {"success": False, "error": "请先输入 API Key"}
-    base_url = (settings.api_base_url.strip() if settings.api_base_url else get_effective_api_base_url()).rstrip("/")
-    model = settings.api_model.strip() if settings.api_model else get_effective_api_model()
-
-    start_t = time.time()
-    try:
-        await llm_client.chat(
-            [{"role": "user", "content": "Sag 'OK'."}],
-            model=model,
-            # 连通性自检：沿用收口前的现值（5），它只要证明"能连上"，不是生成路径
-            max_tokens=llm_client.CONNECTIVITY_MAX_TOKENS,
-            timeout=10.0,  # 收口前本端点的现值（10s），语义不变
-            # 收口前本端点**只认 HTTP 200**，正文根本不解析（探针真实回的是 `OK`，
-            # 不是 JSON）⇒ 不开 content 解析，否则可用 key 会被报成"连接失败"。
-            parse_json=False,
-            api_key=key,
-            base_url=base_url,
-        )
-    except llm_client.LLMError as e:
-        # 现状两条文案保持原样：传输层失败 ⇒「连接失败: <原文>」；HTTP 非 200 ⇒
-        # 「连接返回错误代码: <码> (<正文前 100 字符>)」。e.raw 就是收口前的那两处原料。
-        if e.status_code is None:
-            return {"success": False, "error": f"连接失败: {e.raw}"}
-        return {"success": False, "error": f"连接返回错误代码: {e.status_code} ({e.raw[:100]})"}
-    latency = int((time.time() - start_t) * 1000)
-    return {"success": True, "latency_ms": latency, "message": f"连接成功！响应延迟: {latency}ms"}
-
-
 # --- Study Guide Export (Markdown) ---
 @router.get("/api/articles/{article_id}/export-guide")
 def export_study_guide(article_id: int) -> Any:
@@ -1652,261 +1521,6 @@ def export_study_guide(article_id: int) -> Any:
         media_type="text/markdown; charset=utf-8",
         headers=_attachment_headers(f"study_guide_{article_id}.md"),
     )
-
-
-# --- Backup & Restore Endpoints ---
-
-
-@router.get("/api/backup/export")
-def export_database_backup(request: Request) -> Any:
-    """原始导出端点，保留给脚本/桌面直连使用。
-
-    UI 走 /prepare + /download —— 只有那条路径能带上 localStorage，
-    也只有它在 Android WebView 里真的能下载（blob: 到不了 DownloadListener）。
-    """
-    _require_localhost(request)
-    return build_backup_payload()
-
-
-# localStorage 备份的**键名黑名单（权威闸）**：前端 cards.js 的 BACKUP_LS_EXCLUDE
-# 只是纵深第一道 —— 前端可被绕过（旧版客户端不会过滤、请求体可手改，且 `wb.` 是
-# 前缀全扫）⇒ 真正的闸必须在这里。只按键名判定，不看值：值可能是任意文本，拿值做
-# 特征（如扫 32 位 hex）会把正常备份内容误伤成可疑。
-# wb.pair.v1 里是 {host, key}：key 即 wb_sync_key（database.py 里 secrets.token_hex(16)、
-# 长期不轮换、只有手动撤销才失效），host 是内网地址。它与 database.py 的
-# BACKUP_SETTINGS_WHITELIST（导出白名单，明确排除 wb_sync_key）是**同一威胁模型的两处**：
-# 那边的注释「备份 JSON 是用户会分享、上传、丢进网盘的文件」在这里同样成立。
-_BACKUP_LS_DENYLIST = ("wb.pair.v1",)
-
-
-class PrepareBackupReq(BaseModel):
-    local_storage: Dict[str, Any] = {}
-
-
-@router.post("/api/backup/prepare")
-def prepare_backup_download(req: PrepareBackupReq, request: Request) -> Dict[str, Any]:
-    """前端提交 localStorage → 后端合成完整备份 → 返回一个 TTL 内有效的下载 token。
-
-    为什么要两步：导航只能是 GET，所以 POST 的响应无法触发浏览器下载；
-    而 Android WebView 只在「真 http URL + Content-Disposition」时才走原生下载桥。
-
-    token 不是「一次性」的，而是 TTL 内可重复取：Android 上同一个 URL 会被取
-    两次（WebView 嗅探一次、App 侧落盘再取一次），单次有效会让第二次拿到 404
-    错误体并把它存成备份。安全性靠 _require_localhost + 128 位随机 token 保证。
-    """
-    _require_localhost(request)
-    payload = build_backup_payload()
-    # 凭据键在落盘前被剥掉（权威闸；前端过滤只是纵深第一道，见 _BACKUP_LS_DENYLIST）。
-    payload["local_storage"] = {
-        k: v for k, v in (req.local_storage or {}).items() if k not in _BACKUP_LS_DENYLIST
-    }
-    token = _issue_pending(
-        _pending_backup,
-        payload,
-        f"delector_backup_{datetime.now().strftime('%Y-%m-%d')}.json",
-    )
-    return {"token": token, "filename": _pending_backup["filename"], "expires_in": BACKUP_TOKEN_TTL_SEC}
-
-
-@router.get("/api/backup/download/{token}")
-def download_prepared_backup(token: str, request: Request) -> Any:
-    _require_localhost(request)
-    payload, filename = _take_pending(_pending_backup, token)
-    return Response(
-        content=json.dumps(payload, ensure_ascii=False, indent=2),
-        media_type="application/json",
-        headers=_attachment_headers(filename),
-    )
-
-
-# ── Workbench backup (同理，Android WebView 对 blob: URL 静默失败) ────────
-
-
-class WbBackupReq(BaseModel):
-    filename: str = "workbench-backup.json"
-    payload: Dict[str, Any] = {}
-
-
-@router.post("/api/wb/backup/prepare")
-def wb_prepare_backup(req: WbBackupReq, request: Request) -> Dict[str, Any]:
-    _require_localhost(request)
-    token = _issue_pending(_pending_wb, req.payload, req.filename)
-    return {"token": token, "filename": req.filename, "expires_in": BACKUP_TOKEN_TTL_SEC}
-
-
-@router.get("/api/wb/backup/download/{token}")
-def wb_download_backup(token: str, request: Request) -> Any:
-    _require_localhost(request)
-    payload, filename = _take_pending(_pending_wb, token)
-    return Response(
-        content=json.dumps(payload, ensure_ascii=False, indent=2),
-        media_type="application/json",
-        headers=_attachment_headers(filename),
-    )
-
-
-# ── Workbench 进度 server 镜像同步（wb_state）─────────────────────────────
-#
-# GET /api/wb/state      读镜像。放行局域网：手机/平板拉取不需 key——
-#                        「只有能 push 的客户端才需要密钥」是够用的信任模型。
-# PUT /api/wb/state      写镜像。须带 X-WB-Key（32 位 hex），否则 403。
-# GET /api/wb/state/key  取 key。仅本机 127.0.0.1（_require_localhost）。
-
-
-class WbStateReq(BaseModel):
-    payload: Dict[str, Any] = {}
-
-
-@router.get("/api/wb/state")
-def wb_get_state() -> Any:
-    return get_wb_state()
-
-
-@router.put("/api/wb/state")
-def wb_put_state(req: WbStateReq, request: Request) -> Dict[str, Any]:
-    require_wb_key(request)
-    updated_at = save_wb_state(req.payload or {})
-    return {"ok": True, "updated_at": updated_at}
-
-
-@router.get("/api/wb/state/key")
-def wb_get_state_key(request: Request) -> Dict[str, Any]:
-    _require_localhost(request)
-    return {"key": get_wb_sync_key()}
-
-
-@router.post("/api/wb/state/key")
-def wb_regenerate_state_key(request: Request) -> Dict[str, Any]:
-    """重新生成同步密钥（= 撤销配对）：旧 key 立即失效。仅本机可调。"""
-    _require_localhost(request)
-    return {"key": regenerate_wb_sync_key()}
-
-
-@router.get("/api/wb/lan-info")
-def wb_lan_info() -> Dict[str, Any]:
-    """局域网可读主机信息：配对 UI 提示「把 IP 填进手机」用。不含任何机密。
-
-    lan_ip 是尽力而为的探测（本机多网卡时取第一个私有 IPv4），探测不到返回空串，
-    UI 应退化为手填地址。instance_id 与 /api/wb/sync/info 同源，用于识别是否同一实例。
-    """
-    lan_ip = ""
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = info[4][0]
-            try:
-                addr = ipaddress.ip_address(ip)
-            except ValueError:
-                continue
-            if addr.is_private and not addr.is_loopback:
-                lan_ip = str(ip)
-                break
-    except Exception:
-        lan_ip = ""
-    return {
-        "hostname": socket.gethostname(),
-        "port": 8000,
-        "lan_ip": lan_ip,
-        "instance_id": _SYNC_INSTANCE_ID,
-    }
-
-
-class RestoreReq(BaseModel):
-    version: Optional[int] = 1
-    articles: List[Dict[str, Any]] = []
-    vocab_cards: List[Dict[str, Any]] = []
-    grammar_cards: List[Dict[str, Any]] = []
-    reading_notes: List[Dict[str, Any]] = []
-    prep_saved: List[Dict[str, Any]] = []
-    essays: List[Dict[str, Any]] = []
-    essay_versions: List[Dict[str, Any]] = []
-    # v1 备份没有以下字段，缺省为空即可被读入（向后兼容是硬要求：
-    # 迁移用户手里拿的恰恰是 v3.9.1 导出的 v1 文件）
-    app_settings: List[Dict[str, Any]] = []
-    study_log: List[Dict[str, Any]] = []
-    quiz_log: List[Dict[str, Any]] = []
-    daily_summary: List[Dict[str, Any]] = []
-    a1_hoeren_records: List[Dict[str, Any]] = []
-    a1_lesen_records: List[Dict[str, Any]] = []
-    # v5.2 泛化成绩表；v1/v5.1 备份没有此字段，缺省为空（向后兼容同上）
-    exam_trials: List[Dict[str, Any]] = []
-    # 遇见区短文表；加入备份/还原（缺省为空以兼容 v1/v5.1/v5.2 旧备份）
-    encounter_texts: List[Dict[str, Any]] = []
-    # 听力微训 / 长难句精读成绩。这两张表早已在 _BACKUP_TABLES 里，模型却漏了字段：
-    # pydantic v2 默认 extra=ignore ⇒ 前端整份 POST 的这两键被静默丢弃，而还原对清单里
-    # 每张表无条件 DELETE ⇒ **删光零回灌**、接口仍返回 ok（用户零提示丢训练记录，
-    # 2026-10-15 swarm 审计 P0-1）。缺省为空以兼容旧备份（与上面各字段同理）。
-    listen_trials: List[Dict[str, Any]] = []
-    hard_sentence_trials: List[Dict[str, Any]] = []
-    local_storage: Dict[str, Any] = {}
-
-
-@router.post("/api/backup/restore")
-def restore_database_backup(req: RestoreReq, request: Request) -> Dict[str, Any]:
-    """真覆盖还原：事务内清库再灌，而非按 id merge。
-
-    为什么不是 merge：merge 需要重新映射 article_id 外键
-    （vocab_cards / grammar_cards / reading_notes 都引用它），是一整套 id
-    重映射逻辑与相应的正确性风险；而「换机/重装后还原」场景的目标库一定是空的，
-    两者行为一致。按钮标签写的是「还原备份」，真覆盖才符合字面语义。
-    """
-    _require_localhost(request)
-    payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
-
-    with _db_snapshot_guard():
-        conn = get_db()
-        try:
-            with conn:
-                _replace_tables(conn, _BACKUP_TABLES, payload)
-                # app_settings 的覆盖**只作用于可导入白名单键**：整表 DELETE 会连带
-                # 抹掉 DEEPSEEK_API_KEY（它从不进备份，抹了就再也灌不回来）；
-                # API_BASE_URL/API_MODEL 也不导入——恶意备份可把它们指向攻击者服务器，
-                # 使下一次 AI 调用把真实 DEEPSEEK_API_KEY 发过去（密钥外泄）。
-                conn.executemany(
-                    "DELETE FROM app_settings WHERE key = ?",
-                    [(k,) for k in BACKUP_SETTINGS_IMPORT_WHITELIST],
-                )
-                conn.executemany(
-                    "INSERT INTO app_settings (key, value) VALUES (?, ?)",
-                    [
-                        (s["key"], s.get("value"))
-                        for s in (payload.get("app_settings") or [])
-                        if s.get("key") in BACKUP_SETTINGS_IMPORT_WHITELIST
-                    ],
-                )
-        finally:
-            conn.close()
-
-        pconn = get_progress_db()
-        try:
-            with pconn:
-                _replace_tables(pconn, _PROGRESS_TABLES, payload)
-        finally:
-            pconn.close()
-
-        # v5.1 及更早的备份里 A1 成绩只存在旧表（exam_trials 尚未存在）；
-        # 透传读路径已切到泛化表，还原后必须把旧表行迁过来，否则历史"看着
-        # 还原成功却读不出来"。迁移按行数对账幂等：v2 备份（两表行数已齐）
-        # 到这里就是零写入 no-op。
-        migrate_a1_records_to_exam_trials()
-
-        # ADR-0016 Phase 3 / Task 5（restore-then-migrate，Migration-Idempotency §4）：
-        # wb_state 镜像**不进备份**（不在 _BACKUP_TABLES），换机还原后 vocab_cards 可能
-        # 缺已学词。用当前 wb 快照把可投影词条**只补空 / 幂等**地补回统一池。
-        # - 同一 _db_snapshot_guard() 内：投影抛错 ⇒ 与 restore 一起整体回滚（不留半成品）；
-        # - 惰性导入/调用（避免顶层拉重依赖）；空 payload ⇒ 无输入，自然 no-op；
-        # - MUST NOT 吞异常：project_wb_deck 抛错必须向上冒泡。
-        wb_payload = get_wb_state()
-        if wb_payload:
-            from delector.core.vocab_pool import project_wb_deck
-
-            proj_conn = get_db()
-            try:
-                with proj_conn:
-                    project_wb_deck(proj_conn, wb_payload)
-            finally:
-                proj_conn.close()
-
-    return {"status": "ok", "message": "全量备份恢复成功"}
 
 
 # ── v3.0 / v3.8: FSRS Spaced Repetition Review & Cloze Exercise Engine ────────
