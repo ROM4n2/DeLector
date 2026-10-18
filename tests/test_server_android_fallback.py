@@ -3,6 +3,7 @@ import re
 
 import pytest
 from server_helpers import ROOT
+from wb_source import decl_body, read_source
 
 # --- Android / Chaquopy runtime: spacy is absent, everything must fall back to pure Python ---
 
@@ -611,16 +612,16 @@ def test_android_spacy_extract_packages_static():
 
 def test_frontend_ai_error_paths_reuse_api_and_show_alert():
     """前端 AI 错误必须走 api() 抛异常 → catch → alert/状态提示，不静默成功，不吞异常。"""
-    writer_src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
+    writer_src = read_source("static/js/writer.js")
     reader_src = open(os.path.join(ROOT, "static", "js", "reader.js"), encoding="utf-8").read()
     core_src = open(os.path.join(ROOT, "static", "js", "core.js"), encoding="utf-8").read()
     # core api() 必须在非 ok 时抛 Error
     assert "throw new Error" in core_src, "core.js api() 必须抛异常"
     # writer aiPolishEssay 必须有 try/catch 且 catch 中有 alert
-    polish_fn = writer_src[writer_src.index("export async function aiPolishEssay") :]
-    polish_fn = polish_fn[: polish_fn.index("export async function applyPolishChanges")]
+    polish_fn = decl_body(writer_src, "export async function aiPolishEssay()")
     assert "try" in polish_fn and "catch" in polish_fn, "aiPolishEssay 缺 try/catch"
-    assert "alert" in polish_fn, "aiPolishEssay 失败时必须 alert"
+    # 收紧为 `alert(`：裸 `alert` 会被「失败时要 alert 提示」这类注释满足（判别力只升不降）。
+    assert "alert(" in polish_fn, "aiPolishEssay 失败时必须真的调用 alert("
     # 不写 API Key 到 DOM/localStorage
     assert (
         "api_key" not in writer_src.lower()

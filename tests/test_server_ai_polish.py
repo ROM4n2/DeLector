@@ -18,14 +18,13 @@ import。共享夹具（clean_db / client）住在 `tests/server_helpers.py` 与
 import asyncio
 import contextlib
 import json
-import os
 import re
 from typing import Any, Dict, List
 
 import pytest
-from server_helpers import ROOT
 from server_helpers import clean_db as clean_db
 from starlette.responses import StreamingResponse
+from wb_source import decl_body, read_source
 
 from delector.routes.main import AIPolishReq, _polish_event_stream, api_writing_ai_polish
 from delector.services import polish_loop
@@ -506,11 +505,14 @@ def test_writer_js_surfaces_degraded_hint_and_advisories_without_toast():
     什么都没检查）⇒ 降级提示里"本次仅做格式/字数检查"不实 ⇒ `unconverged_reason ==
     "no_api_key"` 时 MUST 抑制该提示（no-key 已有自己的 toast / notes 文案，抑制不丢信息）。
     """
-    src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
+    src = read_source("static/js/writer.js")
     assert "judge_advisories" in src, "writer.js MUST 消费 judge_advisories（advisory 可见性）"
     assert "judge_degraded" in src, "writer.js MUST 消费 judge_degraded（降级可见性）"
 
-    render_block = src[src.index("export function renderPolishReview") : src.index("// ── AI 润色：未收敛原因码")]
+    # 结构性取体（替代「切到下一条横幅注释」）：那条横幅会随被抽出的纯层一起搬家，
+    # 而 decl_body 按花括号配平取 renderPolishReview 的函数体 —— 判别力只升不降
+    # （旧写法把「函数尾」到「下一条横幅」之间的所有缝隙也算进块内）。
+    render_block = decl_body(src, "export function renderPolishReview()")
     assert "polishState.judge_advisories" in render_block, "advisory MUST 在 renderPolishReview 里逐条呈现"
     assert "polishState.judge_degraded" in render_block, "降级提示 MUST 在 renderPolishReview 里呈现"
     assert "语法检查未启用" in render_block, "降级提示 MUST 是一句可见的人话（非阻断，不是 toast）"
@@ -1021,7 +1023,7 @@ def test_frontend_polish_reason_copy_covers_every_reason_code():
 
     将来往 REASONS 里加码而忘了配文案 ⇒ 这里立刻红（前端否则只能弹一句空话）。
     """
-    src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
+    src = read_source("static/js/writer.js")
     block = re.search(r"const POLISH_REASON_COPY\s*=\s*\{(.*?)\n\};", src, re.S)
     assert block, "writer.js 里找不到 POLISH_REASON_COPY 映射表"
     keys = set(re.findall(r"^\s*([a-z_]+)\s*:", block.group(1), re.M))
@@ -1033,8 +1035,11 @@ def test_frontend_polish_reason_copy_covers_every_reason_code():
 
 def test_frontend_polish_progress_takes_max_turns_from_server():
     """进度文案的轮次分母 MUST 取自服务端事件的 `max_turns`，不许前端写死 3。"""
-    src = open(os.path.join(ROOT, "static", "js", "writer.js"), encoding="utf-8").read()
-    body = src[src.index("export async function aiPolishEssay") : src.index("export async function applyPolishChanges")]
+    src = read_source("static/js/writer.js")
+    body = decl_body(src, "export async function aiPolishEssay()")
     assert "AbortController" in body, "取消必须有 AbortController（或等价机制）"
-    assert "max_turns" in body, "轮次分母必须来自服务端事件"
+    # `"max_turns" in body` 曾被注释里那句「轮次分母取自服务端事件的 max_turns」满足
+    # ——变异实测（把 `ev.max_turns || ev.round` 换成字面量 3）当时**不会变红**。
+    # 故收紧为「必须真的读 `ev.max_turns` 字段」：只出现在注释里不算。
+    assert "ev.max_turns" in body, "轮次分母必须真的读服务端事件字段 ev.max_turns（注释里提一句不算）"
     assert "/3 轮" not in body, "不许把轮次上界硬编码成 3（内核改 MAX_TURNS_DEFAULT 这里就撒谎）"

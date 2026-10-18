@@ -34,11 +34,16 @@
 ### Task 1: 探针多文件读取口 + `POLISH_REASON_COPY` 探针改造 [Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]
 *(前置中的前置：Task 2 会移动 `POLISH_REASON_COPY`，必须先让读它的探针学会跨文件读)*
 
-**Files:**
-- Modify: `tests/test_server_ai_polish.py:1019-1031`（`test_frontend_polish_reason_copy_covers_every_reason_code`）
-- Modify: `tests/test_server_ai_polish.py:1034-1040`（`test_frontend_polish_progress_takes_max_turns_from_server`）
-- Modify: `tests/test_audit_hardening.py:415,496`、`tests/test_server_android_fallback.py:614`（读法统一为 `read_source`，当前仅传 `static/js/writer.js`，**行为逐字不变**）
-- Test: `tests/test_server_ai_polish.py` · `tests/test_audit_hardening.py` · `tests/test_server_android_fallback.py`
+**Files（实测收敛后的实际改动面）:**
+- Modify: `tests/test_server_ai_polish.py:26,505-517`（`test_writer_js_surfaces_degraded_hint_and_advisories_without_toast` 的 `render_block` 取体）
+- Modify: `tests/test_server_ai_polish.py:1026`（`test_frontend_polish_reason_copy_covers_every_reason_code`）
+- Modify: `tests/test_server_ai_polish.py:1038-1041`（`test_frontend_polish_progress_takes_max_turns_from_server`）
+- Modify: `tests/test_server_android_fallback.py:6,615-621`（`test_frontend_ai_error_paths_reuse_api_and_show_alert`）
+- Test: `tests/test_server_ai_polish.py` · `tests/test_server_android_fallback.py`（基线 150 用例，跑 4 文件 + `test_writer_mobile.py` 组合）
+- **实测收敛说明（计划外的事实，照实登记）**：原计划列出的 `tests/test_audit_hardening.py:415,496` 经实测**不受 Task 2/3 搬迁影响**（那两处锚的 `alert('请输入德语作文内容后再保存。')` 与 `_analyzeToken` 都留在 `writer.js` 的 DOM 层），故**未改**——不制造无收益的改动面。真正受影响的只有上列 4 个站点。
+- **两处顺带修强（变异实测暴露的既有弱点，非本次搬迁引入）**：
+  - `assert "max_turns" in body` 曾被函数体内**注释**里那句「轮次分母取自服务端事件的 max_turns」满足 —— 变异实测（把 `ev.max_turns || ev.round` 换成字面量 `3`）当时**不会变红**。收紧为 `assert "ev.max_turns" in body`。
+  - `assert "alert" in polish_fn` 同理会被含 "alert" 的注释满足。收紧为 `assert "alert(" in polish_fn`。
 
 **Interfaces:**
 - Consumes: `tests/wb_source.py::read_source(*rel_paths) -> str`（多路径按实参顺序用 `\n` 拼接）
@@ -62,13 +67,13 @@
 > Return: 摘要 + MANDATORY 物理执行凭据（命令 + 退出码 + 用例计数 + 零漂移比对输出）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记录 3 个探针文件的全绿基线与用例数
-- [ ] **Step 2**: 4 处读法改为 `read_source()`（RED → GREEN）
-- [ ] **Step 3**: 零漂移比对（新旧键集合逐字相等）
-- [ ] **Step 4**: 变异自证（删键 ⇒ 变红 ⇒ 复原）
-- [ ] **Step 5**: 门禁（pytest / ruff / mypy tests）
-- [ ] **Step 6**: Physical Evidence Gate（退出码 + 计数 + diff）
-- [ ] **Step 7**: 原子提交（`refactor(wr): route writer.js probes through the multi-file source seam`）
+- [x] **Step 1**: 记录基线 —— 5 文件定向套件 `150 passed in 29.77s`；全量 `2367 tests collected`
+- [x] **Step 2**: 4 处读法改为 `read_source()` / `decl_body()`（GREEN）
+- [x] **Step 3**: 零漂移比对 —— 旧读法 vs `read_source` 均 `len=55642`、sha256 前 16 位同为 `220c1af085b3417b`、`old == new` 为 True
+- [x] **Step 4**: 变异自证 4/4 —— 删 `POLISH_REASON_COPY` 键 / 去掉 `ev.max_turns` 读取 / 把 `judge_advisories` 移出 `renderPolishReview` / 去掉 `alert(` 调用，注入后 exit=1、复原后 exit=0，`writer.js` 字节复原一致
+- [x] **Step 5**: 门禁 —— `ruff check .` All checks passed；`mypy --follow-imports=skip tests` 153 文件 0 错；`mypy --strict delector tools` 115 文件 0 错；CRLF 0 lone LF（中途被 `write_text(newline='')` 破坏 1045/681 行，已 `--fix` 复原并人工核 diff 仅含预期行）
+- [x] **Step 6**: Physical Evidence Gate（退出码 + 用例计数 + diff stat `2 files changed, 18 insertions(+), 12 deletions(-)`）
+- [x] **Step 7**: 原子提交（`refactor(wr): route writer.js probes through the multi-file source seam`）
 
 ---
 
