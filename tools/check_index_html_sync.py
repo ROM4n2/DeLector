@@ -27,7 +27,7 @@ def _pin_utf8_streams() -> None:
         if stream and hasattr(stream, "reconfigure"):
             try:
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
+            except Exception:  # silent-ok: 仅显示层编码（流不可重配置）⇒ 保持原流；本闸结论由退出码表达
                 pass
 
 
