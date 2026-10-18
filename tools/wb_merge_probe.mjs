@@ -19,7 +19,34 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const HTML = path.join(ROOT, "static", "german", "workbench.html");
+/* ---- 探针读取口（C7 Task 2/4）：可多文件来源 ----------------------------
+ * 源清单按**加载序**排列：顶层声明所在的 JS 数据模块在前（C7 Task 4 把
+ * SEED_WORDS / CORE_* / SEED_ID_ALIASES / EMBEDDED_AUDIO 搬到了
+ * static/js/wb-seed-data.js），使用这些声明的 workbench.html 在后。
+ * readSources() 按序拼接，sliceDecl() 在拼接结果里按名字切片 —— 于是切片语义与
+ * 单文件时代逐字一致，且**不依赖跨文件位置序**（两个文件里没有同名声明）。
+ * 搬迁/再拆分时只需改 `WB_SRC_ROOT` 与 `SRC_FILES`。 */
+const SRC_ROOT = process.env.WB_SRC_ROOT ?? "static";
+const SRC_FILES = ["js/wb-seed-data.js", "german/workbench.html"];
+
+function readSources(names) {
+  const parts = names.map((name) => {
+    const dir = path.isAbsolute(SRC_ROOT) ? SRC_ROOT : path.join(ROOT, SRC_ROOT);
+    const file = path.isAbsolute(name) ? name : path.join(dir, name);
+    if (!fs.existsSync(file)) {
+      process.stderr.write(`探针源文件不存在：${file}（声明搬迁后请同步 WB_SRC_ROOT / SRC_FILES）\n`);
+      process.exit(3);
+    }
+    const text = fs.readFileSync(file, "utf8");
+    if (!text.length) {
+      process.stderr.write(`探针源文件为空：${file}\n`);
+      process.exit(3);
+    }
+    return text;
+  });
+  return parts.join("\n");
+}
+
 const SOURCE_JSON = "D:/Ran/Goethe_A1/delector_custom_words.json";
 const JSON_MODE = process.argv.includes("--json");
 
@@ -67,52 +94,76 @@ function matchBracket(src, openIdx) {
   throw new Error(`matchBracket: 从 ${openIdx} 起找不到配对闭括号`);
 }
 
-/** 抽取一条顶层声明，如 `const SEED_ID_ALIASES = {...};`（含结尾分号）。 */
-function extractDecl(src, name) {
-  const anchor = new RegExp(`^const\\s+${name}\\s*=`, "m");
-  const m = anchor.exec(src);
-  if (!m) throw new Error(`workbench.html 里找不到声明 const ${name}`);
-  let i = m.index + m[0].length;
-  while (i < src.length && !OPEN[src[i]]) i++;
-  const end = matchBracket(src, i);
-  let tail = end + 1;
-  while (tail < src.length && /[\s)\]]/.test(src[tail])) {
-    if (src[tail] === ")" || src[tail] === "]") tail++; else break;
+/** 找不到声明就此**非零退出**，并打印所查声明名（No-Silent-Skip：返回空串会让
+ *  下游 `in` 断言静默假绿）。退出码 3 = 读取口失败，与「契约被破坏」的 1 区分开。 */
+function dieMissingDecl(name) {
+  process.stderr.write(
+    `探针源 ${SRC_FILES.join(", ")}（根目录 ${SRC_ROOT}）里找不到声明 ${name}\n`
+  );
+  process.exit(3);
+}
+
+/** 统一切片入口：按名字定位 `const/let/var NAME =` 或 `[async] function NAME(`，
+ *  用括号配平取到声明体结尾（变量声明含结尾分号）；值为标量（不含括号）时读到语句分号。
+ *  语义与改造前各探针自抄的 extractDecl / extractDeclAny / extractDeclAny（标量口径）/
+ *  extractFn / sliceBlock / 内联 anchor 六种口径逐字一致（改前已实测：132 个顶层函数与
+ *  52 个顶层声明逐条比对，零差异）。 */
+function sliceDecl(src, name) {
+  const decl = new RegExp(`^(?:const|let|var)\\s+${name}\\s*=`, "m").exec(src);
+  const m = decl || new RegExp(`^(?:async\\s+)?function\\s+${name}\\s*\\(`, "m").exec(src);
+  if (!m) dieMissingDecl(`const/let/var/function ${name}`);
+  if (!decl) {
+    /* 函数声明：m[0] 以 `(` 结尾 ⇒ 参数表先括号配对，再取函数体花括号 */
+    const parenClose = matchBracket(src, m.index + m[0].length - 1);
+    const braceOpen = src.indexOf("{", parenClose);
+    if (braceOpen < 0) {
+      process.stderr.write(`函数 ${name} 的参数表之后找不到函数体花括号，切歪了\n`);
+      process.exit(3);
+    }
+    return src.slice(m.index, matchBracket(src, braceOpen) + 1);
   }
+  const after = m.index + m[0].length;
+  let i = after;
+  while (i < src.length && /\s/.test(src[i])) i++;
+  if (!OPEN[src[i]]) {
+    /* 标量声明（`const SCHEMA_KEY = "wb.schema.v1";`）：值不含括号，读到语句分号。
+     * 前提：标量值内不得含 ASCII `;`（13 个探针的目标声明实测均无，含
+     * `CORE_WORD_SEED_IDS = new Set([...])`）—— 若违反，切片会在此截断 ⇒ 以语法错 /
+     * 退出码 3 报出，不会静默通过。 */
+    const tail = src.indexOf(";", after);
+    if (tail < 0) {
+      process.stderr.write(`声明 ${name} 结尾找不到分号，切歪了\n`);
+      process.exit(3);
+    }
+    return src.slice(m.index, tail + 1);
+  }
+  const end = matchBracket(src, i);
   const semi = src.indexOf(";", end);
-  return src.slice(m.index, (semi >= 0 && semi < end + 8 ? semi : end) + 1);
+  if (semi < 0 || semi > end + 8) {
+    process.stderr.write(`声明 ${name} 结尾找不到分号，切歪了（end=${end} semi=${semi}）\n`);
+    process.exit(3);
+  }
+  return src.slice(m.index, semi + 1);
 }
 
-/** 抽取一个完整函数声明 `function name(...) { ... }`。 */
-function extractFn(src, name) {
-  const anchor = new RegExp(`^function\\s+${name}\\s*\\(`, "m");
-  const m = anchor.exec(src);
-  if (!m) throw new Error(`workbench.html 里找不到函数 ${name}`);
-  const parenOpen = src.indexOf("(", m.index);
-  const parenClose = matchBracket(src, parenOpen);
-  const braceOpen = src.indexOf("{", parenClose);
-  const braceClose = matchBracket(src, braceOpen);
-  return src.slice(m.index, braceClose + 1);
-}
-
-const html = fs.readFileSync(HTML, "utf8");
+const html = readSources(SRC_FILES);
 const PIECES = {
-  CORE_WORD_SEED_IDS: extractDecl(html, "CORE_WORD_SEED_IDS"),
-  CORE_CUSTOM_WORDS: extractDecl(html, "CORE_CUSTOM_WORDS"),
-  SEED_WORDS: extractDecl(html, "SEED_WORDS"),
-  SEED_ID_ALIASES: extractDecl(html, "SEED_ID_ALIASES"),
-  migrateSeedIdAliases: extractFn(html, "migrateSeedIdAliases"),
-  normHw: extractFn(html, "normHw"),
-  applyMerge: extractFn(html, "applyMerge"),
+  CORE_WORD_SEED_IDS: sliceDecl(html, "CORE_WORD_SEED_IDS"),
+  CORE_CUSTOM_WORDS: sliceDecl(html, "CORE_CUSTOM_WORDS"),
+  SEED_WORDS: sliceDecl(html, "SEED_WORDS"),
+  SEED_ID_ALIASES: sliceDecl(html, "SEED_ID_ALIASES"),
+  migrateSeedIdAliases: sliceDecl(html, "migrateSeedIdAliases"),
+  normHw: sliceDecl(html, "normHw"),
+  applyMerge: sliceDecl(html, "applyMerge"),
   /* Task 4（ADR-0011）：词对象契约归一 + 存量迁移 */
   /* Task 5：normalizeWord 的 cefr 推导抽到 CEFR_BY_PREFIX + cefrFromId 公共 helper，
    * 沙箱必须一并带上（只加切片，护栏语义零漂移）。 */
-  CEFR_BY_PREFIX: extractDecl(html, "CEFR_BY_PREFIX"),
-  cefrFromId: extractFn(html, "cefrFromId"),
-  normalizeWord: extractFn(html, "normalizeWord"),
-  normalizeAllWords: extractFn(html, "normalizeAllWords"),
-  migrateWordSchema: extractFn(html, "migrateWordSchema"),
-  markSchemaMigrated: extractFn(html, "markSchemaMigrated"),
+  CEFR_BY_PREFIX: sliceDecl(html, "CEFR_BY_PREFIX"),
+  cefrFromId: sliceDecl(html, "cefrFromId"),
+  normalizeWord: sliceDecl(html, "normalizeWord"),
+  normalizeAllWords: sliceDecl(html, "normalizeAllWords"),
+  migrateWordSchema: sliceDecl(html, "migrateWordSchema"),
+  markSchemaMigrated: sliceDecl(html, "markSchemaMigrated"),
 };
 for (const [k, v] of Object.entries(PIECES)) {
   if (!v || v.length < 40) throw new Error(`切片 ${k} 长度异常（${v && v.length}），锚点可能失配`);

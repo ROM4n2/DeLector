@@ -64,8 +64,8 @@
   - `assert "wbsync.push()" in lines[i]`（要求与 `function saveX() {` **同一物理行**）→ 改为 `segment(decl_body(...))` 内断言，**判别力不得下降**（原断言钉的是「同一行」这一物理事实，新写法须显著更强，例如断言 push 调用落在该函数体内且首次出现位置早于任一 `await`）。
 
 **Injected Instincts:**
-- [ ] `[Instinct: Strengthen-Not-Weaken]`: 迁移后必须新增一条**变异自证**——把 `wbsync.push()` 从该函数体移出，新断言须变红。
-- [ ] `[Instinct: Fail-Loud]`: `segment()` 找不到标记时必须抛出并打印所查标记原文，禁止返回空串（空串会让下游存在性断言静默通过）。
+- [x] `[Instinct: Strengthen-Not-Weaken]`: 迁移后必须新增一条**变异自证**——把 `wbsync.push()` 从该函数体移出，新断言须变红。
+- [x] `[Instinct: Fail-Loud]`: `segment()` 找不到标记时必须抛出并打印所查标记原文，禁止返回空串（空串会让下游存在性断言静默通过）。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 1: 探针读取层与 B 类行号钉结构化.
@@ -81,13 +81,13 @@
 > Return: 摘要 + MANDATORY 物理执行凭据（命令 + 退出码 + 用例计数 + git diff）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记录 `test_frontend_module_graph.py` 全绿基线（用例数）
-- [ ] **Step 2**: 写 `tests/wb_source.py` + 其单测（RED → GREEN）
-- [ ] **Step 3**: 改写 4 处 B 类行号钉
-- [ ] **Step 4**: 变异自证（移出 push 调用 ⇒ 变红 ⇒ 复原）
-- [ ] **Step 5**: 门禁（pytest / ruff / mypy tests）
-- [ ] **Step 6**: Physical Evidence Gate（退出码 + 计数 + diff）
-- [ ] **Step 7**: 原子提交（`refactor(c7): structuralize line-pin probes`）
+- [x] **Step 1**: 记录 `test_frontend_module_graph.py` 全绿基线（用例数）
+- [x] **Step 2**: 写 `tests/wb_source.py` + 其单测（RED → GREEN）
+- [x] **Step 3**: 改写 4 处 B 类行号钉
+- [x] **Step 4**: 变异自证（移出 push 调用 ⇒ 变红 ⇒ 复原）
+- [x] **Step 5**: 门禁（pytest / ruff / mypy tests）
+- [x] **Step 6**: Physical Evidence Gate（退出码 + 计数 + diff）
+- [x] **Step 7**: 原子提交（`refactor(c7): structuralize line-pin probes`）
 
 ---
 
@@ -109,8 +109,8 @@
 - **要求**：13 个探针当前都以「读 `workbench.html` + 按标记切片」取源码（各文件行号见交接包表 3）。改造后必须**先支持多文件来源**（现在传单文件即可，拆分后只需改 `WB_SRC_ROOT` 与文件清单），且 `sliceDecl` 找不到声明时**必须非零退出并打印所查声明名**（现行为是 `"找不到声明 const X"` 抛错——保持并加退出码）。
 
 **Injected Instincts:**
-- [ ] `[Instinct: Interface-Before-Move]`: 探针读取口必须先于产物搬迁改造，否则 13 个探针在拆分瞬间同时抛错且无可归因信息。
-- [ ] `[Instinct: No-Silent-Skip]`: 探针找不到源文件 MUST 非零退出，禁止返回空 JSON 让包装层判「通过」。
+- [x] `[Instinct: Interface-Before-Move]`: 探针读取口必须先于产物搬迁改造，否则 13 个探针在拆分瞬间同时抛错且无可归因信息。
+- [x] `[Instinct: No-Silent-Skip]`: 探针找不到源文件 MUST 非零退出，禁止返回空 JSON 让包装层判「通过」。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 2: 前端 mjs 探针读取口统一.
@@ -149,8 +149,8 @@
 - Produces: `static/css/workbench.css`（内容逐字节等于被搬走的 `<style>` 内容，除首尾换行归一）
 
 **Injected Instincts:**
-- [ ] `[Instinct: Byte-Equality-Or-Explain]`: 抽取必须证明「搬走的 CSS 内容逐字节等于原内联块内容」，任何归一化（换行/缩进）都要在提交信息里写明并给出理由。
-- [ ] `[Instinct: Token-Contract]`: `tests/test_workbench_tokens.py` 是设计系统 token 契约闸，重定向后 MUST 仍能抓住「token 值被改」这一类变异。
+- [x] `[Instinct: Byte-Equality-Or-Explain]`: 抽取必须证明「搬走的 CSS 内容逐字节等于原内联块内容」，任何归一化（换行/缩进）都要在提交信息里写明并给出理由。
+- [x] `[Instinct: Token-Contract]`: `tests/test_workbench_tokens.py` 是设计系统 token 契约闸，重定向后 MUST 仍能抓住「token 值被改」这一类变异。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 3: 首次真实拆分——CSS 抽取.
@@ -191,8 +191,8 @@
 - Produces: 构建工具改为**改写数据模块**而非 HTML；`tests/test_a1_workbench_source.py` 的 `assert injected == html` 改为对数据模块的逐字节等价断言。
 
 **Injected Instincts:**
-- [ ] `[Instinct: Build-Product-Contract]`: 「内联 const 是构建产物」是本仓既有契约（`test_a1_workbench_source.py:220-251` 的字节等价 + 幂等两条 D 类）。搬迁 MUST 让这两条断言**继续约束真实产物**，不得删改为「文件存在」。
-- [ ] `[Instinct: HITL-Gate]`: 本任务会同时改动**构建工具 + 数据模块 + 契约测试**三面，属 Critical 档——先向用户呈报变更面与不可逆风险，拿到确认再动文件。
+- [x] `[Instinct: Build-Product-Contract]`: 「内联 const 是构建产物」是本仓既有契约（`test_a1_workbench_source.py:220-251` 的字节等价 + 幂等两条 D 类）。搬迁 MUST 让这两条断言**继续约束真实产物**，不得删改为「文件存在」。
+- [x] `[Instinct: HITL-Gate]`: 本任务会同时改动**构建工具 + 数据模块 + 契约测试**三面，属 Critical 档——先向用户呈报变更面与不可逆风险，拿到确认再动文件。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 4: 种子数据抽取与 A/D 类探针重定向.
@@ -259,6 +259,7 @@
 - **[Unknown 1: Task 5 的切分边界]**：每候选子系统的**锚点密度**未逐块测量。切分顺序与粒度 MUST 等 Task 3/4 完成后按实测锚点数决定——不投机拆任务。（判据草案：优先抽「A 类锚点为 0 且 D 类计数为 0」的子系统。）
 - **[Unknown 2: WebView / Android 上的 ES Module 加载行为]**：本仓前例——SSE 的 `fetch` + `ReadableStream` 在 Android WebView 上的表现**从未真机验证**（C4 面）。`<script type="module">` 若在 Chaquopy WebView 上不可用，需回退 `<script src>` + 全局命名空间方案。**该验证属 C4，不在本计划内**，但拆分方案 MUST 保留回退路径（即：模块间不得依赖仅 ES Module 才有的语义，如顶层 `import` 循环引用）。
 - **[Unknown 3: 拆分后单文件行数/加载扇出是否成为新问题]**：4730 行 → N 个文件的收益未经测量（本仓 `bench_*` 有现成工具可量首屏）。若拆后首屏回退显著，需重新评估。
+- **[Unknown 4: 裸箭头表达式体回调不被 `depth_at` 覆盖]**：`tests/wb_source.py` 的 `depth_at` 按**花括号净深度**判定「是否顶层语句」，`setTimeout(() => wbsync.push(), 0)` 这类**无花括号的表达式体回调**不产生花括号 ⇒ 深度仍为 0 ⇒ 抓不到「被塞进回调」。相对原「同一物理行」钉：判别力**无净损失，仅未升**（原钉对该形态同样抓不到）。Task 3/4 迁移 wbsync 相关 A 类锚点时 MUST 把断言消息写成「嵌进块 / 带花括号的子函数或回调」，不得泛称「嵌进块/回调」。（待办：若后续要覆盖该形态，需引入表达式体箭头识别，属新工具，不在本计划内。）
 
 ---
 

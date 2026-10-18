@@ -509,6 +509,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 分工：按域分 3 批派发 TDD Builder（后端端点批 / 运维测试批 / TTS 批），每批配独立 Reviewer（maker-checker 隔离）。
 不做范围（MUST）：不改 C7 独占面（`static/german/workbench.html` · `static/js/**` · `tools/wb_*.mjs` · 两个 build 工具）；不改 AI 润色循环语义；不引入新依赖。
 
+### 2026-10-18 00:35 | codebuddy | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：接手 `handoff_c7-workbench-html-split.md`（C7 `workbench.html` 拆分，140 个耦合探针）。
+处置：沿用包内盘点与迁移顺序（先改探针后动产物；入口路径不改名；A 类不得降级为 C 类）；
+因主检出在 `fix/c8-p2-batch`（C8 在用）⇒ 改用**隔离 worktree** `D:\Code\DeLector-c7`
+（分支 `refactor/c7-workbench-html-split`，基线 cabce32；包内写的 c27cf63 已过时）。
+台账已初始化（6 任务），Task-1 已开工；进度真值源 = 计划正本 + worktree 内台账。
+Task 4/5 为 Tier 3（HITL）：动文件前先呈报变更面等确认。
+
 ### 2026-10-18 00:53 | deepseek-v4.1-flash__hermes | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**C7 交接包文件占面契约修正**（发送方主动纠错）——`static/js/main.js` 与 `static/js/api-types.js` 从 C7 独占面**移出、划归 C8**。
@@ -564,3 +573,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 门禁：**全量 2325 passed / 2 skipped / 0 failed（371s）**；`mypy --strict` 107 文件 + tests 靶 149 文件均 0 错；`ruff check .` 全仓净；Go 8 包 + gofmt 净；**双闸**（mock-drift / silent-degradation）均 exit 0；20 个改动文件 0 lone LF。
 - **后续项已入计划**（非口头）：F1 探针桥根治 · F2 残余 876 行无 banner 杂项区切分 + `cards/counts` 归位 · 陈旧文档指针校正（含 `static/js/writer.js:1251` 属 C7 面禁改）。
 
+### 2026-10-18 07:20 | codebuddy | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 `workbench.html` 拆分（Task 1~6）交付**，分支 `refactor/c7-workbench-html-split`（基于 master `1098706`，rebase 后 8 提交）。
+**产物**：`tests/wb_source.py`（探针读取公共层，28 自测）· 13 个 `tools/wb_*.mjs` 统一多文件读取口（`SRC_ROOT`/`SRC_FILES`/`sliceDecl`，缺声明即 exit 3 + stdout 0B）· `static/css/workbench.css`（317 行，字节等价除末尾换行）· `static/js/wb-seed-data.js`（种子数据，构建工具改向）· `static/js/wb-tts.js`（`playWord` + 7 个 `_tts*`，逐字搬走）。
+**Task 5 只做第 1 块**（tts-audio，refs/decl 3.75 最低）；剩余 5 块已按实测密度登记：seed-persist 9.0 / render-views 15.8 / wbsync 19.2 / scope-filter 28.6 / review-queue 39.0（计划 Task 5 Step 1 下落表）。
+**门禁（逐字复刻 CI）**：`mypy --strict delector tools` 105 files 0 · `mypy --follow-imports=skip tests` 132 files 0 · `ruff check .` 0 · `go test ./...` ok · `gofmt -l` 空 · 新闸 `check_mock_drift` / `check_silent_degradation` 均 exit 0（且 `test_a1_workbench_source.py` 的 4 处 `mock-drift-ok` 抑制注释在 Task 4 重写后完好）。
+**全量**：`2352 passed, 3 skipped`（484s）；用例数守恒 = 基线 + 28（仅 `tests/wb_source.py` 自测，逐文件核对 105/19/124/302/9/14 全部不变）。
+**登记的风险**：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，HEAD 既有行为，已还原、未修）；② `wb_queue_probe` 的 `slices`（切片字符长度）对产物结构敏感（Task 3 变过一次，Task 4/5 未再变）；③ 另有 5 个 `wb_*.mjs` 未上统一读取口（Task 5 剩余块需一并改）；④ 两处格式敏感锚点（`extractLine(pad2)` / `STARTUP_SEG`）待 Task 5 结构化。
+**验收判据核对**：① 用例数守恒 ✔（+28 为允许项）② 每处重写附变异自证 ✔ ③ 入口路径未改名 ✔ ④ 18 个探针全 exit 0 ✔

@@ -4,10 +4,51 @@
 import os
 import re
 
+import wb_source
+
 ROOT = os.path.dirname(os.path.dirname(__file__))
 TOKENS_CSS_PATH = os.path.join(ROOT, "static", "css", "tokens.css")
 STYLE_CSS_PATH = os.path.join(ROOT, "static", "style.css")
 WORKBENCH_HTML_PATH = os.path.join(ROOT, "static", "german", "workbench.html")
+WORKBENCH_CSS_PATH = os.path.join(ROOT, "static", "css", "workbench.css")
+
+# C7 Task 3：workbench.html 的内联 <style> 已抽到 static/css/workbench.css
+# （内容逐字节等价，唯一归一化 = 去掉 `<style>` 标签后那个换行）。
+#
+# 抽取引入了一个**此前不存在**的失效模式，必须在读取侧堵掉：内联时代「CSS 文本在
+# HTML 里」本身就蕴含「这段 CSS 会被加载」；抽成外链文件后，这条蕴含断了 —— 一旦
+# <link> 被删 / 路径写错，下面每条 token 断言都在一份**没人加载的死 CSS** 上恒绿，
+# 正是本仓红线 11 记过的死测形态。故凡读样式内容的探针一律走 `_workbench_css()`：
+# 它先钉住 HTML 真的外链了该 CSS，再返回 CSS 文本。
+WORKBENCH_CSS_LINK = '<link rel="stylesheet" href="../css/workbench.css">'
+
+
+def _workbench_css():
+    """workbench 的样式源（static/css/workbench.css），并钉住它真被 HTML 外链引入。"""
+    html = wb_source.read_source("static/german/workbench.html")
+    assert WORKBENCH_CSS_LINK in html, (
+        "workbench.html 必须 <link> 引入 ../css/workbench.css —— 否则本文件所有 token "
+        "断言都落在一份没人加载的死 CSS 上（恒绿）"
+    )
+    # 反向闸：内联回写会让「抽取」静默失效 —— 内联块的优先级压过外链，而下面的规则
+    # 切片只看外链文件，届时真红变假绿。旧断言「恰好一个 <style> 块」在此退役。
+    assert "<style" not in html, (
+        "workbench.html 不得再内联 <style>：样式已抽到 static/css/workbench.css，"
+        "内联回写会覆盖外链且让本文件的样式断言落空"
+    )
+    assert os.path.exists(WORKBENCH_CSS_PATH), "static/css/workbench.css 必须存在"
+    return wb_source.read_source("static/css/workbench.css")
+
+
+def _workbench_style_corpus():
+    """样式断言的完整语料 = 抽出的 CSS + 宿主 HTML。
+
+    「font-family 不得硬编码 Segoe UI」这类**反向**断言，抽取前扫的是整份
+    workbench.html（内联 <style> + 行内 style="..." 属性都在视野里）。抽取后样式分落
+    两处，只扫 CSS 会静默丢掉对**行内 style 属性**的覆盖 —— 那是判别力净损失。故合并
+    两处，语料与抽取前等价（多出的只有那行 <link>，不含任何 font-family 声明）。
+    """
+    return _workbench_css() + "\n" + wb_source.read_source("static/german/workbench.html")
 
 
 def test_tokens_css_exists_and_contains_core_tokens():
@@ -49,14 +90,15 @@ def test_workbench_html_imports_tokens_and_maps_editorial_vars():
     assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
     content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
 
-    # 1. 检查 tokens.css 引入
+    # 1. 检查 tokens.css 引入（仍在 HTML 的 head 里 —— 引入关系不随样式抽取而动）
     assert '<link rel="stylesheet" href="../css/tokens.css">' in content or re.search(
         r'<link\s+rel=["\']stylesheet["\']\s+href=["\']\.\./css/tokens\.css["\']', content
     ), "workbench.html 必须在 head 中引入 ../css/tokens.css"
 
-    # 2. 检查 :root 映射
-    root_match = re.search(r":root\s*\{([^}]+)\}", content)
-    assert root_match, "workbench.html 必须包含 :root 样式声明"
+    # 2. 检查 :root 映射（:root 是样式内容，已随抽取搬到 static/css/workbench.css）
+    css = _workbench_css()
+    root_match = re.search(r":root\s*\{([^}]+)\}", css)
+    assert root_match, "static/css/workbench.css 必须包含 :root 样式声明"
     root_block = root_match.group(1)
 
     assert "--bg: var(--paper" in root_block or "--bg:var(--paper" in root_block, "--bg 应映射到 var(--paper"
@@ -107,23 +149,25 @@ def test_workbench_scope_selector_has_a2_option():
 
 def test_workbench_editorial_typography_contract():
     """验证 workbench.html 遵循全局字体体系与 960px 画布排版规范。"""
-    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
-    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+    css = _workbench_css()
 
     # 1. body 必须使用 var(--sans, ...)
-    body_match = re.search(r"(?<![,\w])body\s*\{([^}]+)\}", content)
-    assert body_match, "workbench.html 必须包含 body 样式声明"
+    body_match = re.search(r"(?<![,\w])body\s*\{([^}]+)\}", css)
+    assert body_match, "static/css/workbench.css 必须包含 body 样式声明"
     body_css = body_match.group(1)
     assert re.search(r"font-family\s*:\s*var\(--sans", body_css), "body 必须使用 var(--sans, ...)"
 
     # 2. font-family 声明中不得硬编码 "Microsoft YaHei" 或 "Segoe UI"
-    assert not re.search(r"font-family\s*:\s*[^;}]*(?:Microsoft YaHei|Segoe UI)", content, re.IGNORECASE), (
-        "workbench.html 不得在 font-family 声明中硬编码 'Microsoft YaHei' 或 'Segoe UI'"
+    #    反向断言扫**完整语料**（CSS + HTML 行内 style 属性）—— 抽取前它扫的是整份
+    #    workbench.html，只扫 CSS 会丢掉对行内 style="font-family: Segoe UI" 的覆盖。
+    corpus = _workbench_style_corpus()
+    assert not re.search(r"font-family\s*:\s*[^;}]*(?:Microsoft YaHei|Segoe UI)", corpus, re.IGNORECASE), (
+        "workbench 不得在 font-family 声明中硬编码 'Microsoft YaHei' 或 'Segoe UI'"
     )
 
     # 3. .wrap 画布排版：max-width 应为 960px（或 var(--wrap-max, 960px)），而非旧的 1060px
-    wrap_match = re.search(r"\.wrap\s*\{([^}]+)\}", content)
-    assert wrap_match, "workbench.html 必须包含 .wrap 样式规则"
+    wrap_match = re.search(r"\.wrap\s*\{([^}]+)\}", css)
+    assert wrap_match, "static/css/workbench.css 必须包含 .wrap 样式规则"
     wrap_css = wrap_match.group(1)
     assert "1060px" not in wrap_css, ".wrap 不应再使用旧的 max-width: 1060px"
     assert re.search(r"max-width\s*:\s*(?:var\(--wrap-max,\s*960px\)|960px)", wrap_css), (
@@ -133,17 +177,16 @@ def test_workbench_editorial_typography_contract():
 
 def test_workbench_editorial_navigation_contract():
     """验证 workbench.html 的出版物风格轻量化导航与顶栏重塑契约。"""
-    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
-    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+    css = _workbench_css()
 
     # 1. header.top h1 必须使用衬线字体 var(--serif, ...)
-    h1_match = re.search(r"header\.top\s+h1\s*\{([^}]+)\}", content)
+    h1_match = re.search(r"header\.top\s+h1\s*\{([^}]+)\}", css)
     assert h1_match, "必须包含 header.top h1 样式声明"
     h1_css = h1_match.group(1)
     assert re.search(r"font-family\s*:\s*var\(--serif", h1_css), "header.top h1 必须使用 var(--serif, ...)"
 
     # 2. nav.tabs 不得使用旧版厚重卡片容器样式（border-radius:var(--radius) 或 box-shadow:var(--shadow)）
-    tabs_match = re.search(r"(?<![.\w])nav\.tabs\s*\{([^}]+)\}", content)
+    tabs_match = re.search(r"(?<![.\w])nav\.tabs\s*\{([^}]+)\}", css)
     assert tabs_match, "必须包含 nav.tabs 样式声明"
     tabs_css = tabs_match.group(1)
     assert "border-radius:var(--radius)" not in tabs_css and "border-radius: var(--radius)" not in tabs_css, (
@@ -154,7 +197,7 @@ def test_workbench_editorial_navigation_contract():
     )
 
     # 3. nav.tabs button.active 必须用下划线 border-bottom 与 var(--accent)，不得用实心背景
-    active_match = re.search(r"nav\.tabs\s+button\.active\s*\{([^}]+)\}", content)
+    active_match = re.search(r"nav\.tabs\s+button\.active\s*\{([^}]+)\}", css)
     assert active_match, "必须包含 nav.tabs button.active 样式声明"
     active_css = active_match.group(1)
     assert re.search(r"border-bottom\s*:\s*2px\s+solid\s+var\(--accent\)", active_css) or (
@@ -166,13 +209,17 @@ def test_workbench_editorial_navigation_contract():
 
 
 def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
-    """验证 Zettelkasten 实体学术卡片箱与矿物植物印章式评分座契约。"""
-    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
-    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+    """验证 Zettelkasten 实体学术卡片箱与矿物植物印章式评分座契约。
+
+    C7 Task 3 后样式源是 static/css/workbench.css（HTML 只留 <link>）。取样式一律走
+    `_workbench_css()`：它先钉住 HTML 真外链了该文件、且不再内联 <style>，再返回 CSS
+    文本 —— 否则下面每条「规则切片 + 属性值」断言都会落在一份没人加载的死 CSS 上恒绿。
+    """
+    css = _workbench_css()
 
     # 1. .face background 必须使用 var(--panel)
-    face_match = re.search(r"(?<![.\w])\.face\s*\{([^}]+)\}", content)
-    assert face_match, "workbench.html 必须包含 .face 样式规则"
+    face_match = re.search(r"(?<![.\w])\.face\s*\{([^}]+)\}", css)
+    assert face_match, "static/css/workbench.css 必须包含 .face 样式规则"
     face_css = face_match.group(1)
     assert (
         "background:var(--panel)" in face_css
@@ -181,22 +228,22 @@ def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
     ), ".face 必须使用 background: var(--panel)"
 
     # 2. .face .hw 必须使用 var(--serif
-    hw_match = re.search(r"\.face\s+\.hw\s*\{([^}]+)\}", content)
-    assert hw_match, "workbench.html 必须包含 .face .hw 样式规则"
+    hw_match = re.search(r"\.face\s+\.hw\s*\{([^}]+)\}", css)
+    assert hw_match, "static/css/workbench.css 必须包含 .face .hw 样式规则"
     hw_css = hw_match.group(1)
     assert re.search(r"font-family\s*:\s*var\(--serif", hw_css), ".face .hw 必须使用 var(--serif, ...)"
 
     # 3. .rate-btn 基础与状态样式断言：消除实心大白字 color: #fff
-    rate_match = re.search(r"(?<![.\w])\.rate-btn\s*\{([^}]+)\}", content)
-    assert rate_match, "workbench.html 必须包含 .rate-btn 基础样式规则"
+    rate_match = re.search(r"(?<![.\w])\.rate-btn\s*\{([^}]+)\}", css)
+    assert rate_match, "static/css/workbench.css 必须包含 .rate-btn 基础样式规则"
     rate_css = rate_match.group(1)
     assert "color:#fff" not in rate_css and "color: #fff" not in rate_css and "color:#ffffff" not in rate_css.lower(), (
         ".rate-btn 基础样式不得使用实心白字 color: #fff"
     )
 
     # 4. .rate-btn[data-g="3"] 必须使用 var(--good-soft 且不得包含 color: #fff
-    btn3_match = re.search(r'\.rate-btn\[data-g=["\']3["\']\]\s*\{([^}]+)\}', content)
-    assert btn3_match, "workbench.html 必须包含 .rate-btn[data-g='3'] 样式规则"
+    btn3_match = re.search(r'\.rate-btn\[data-g=["\']3["\']\]\s*\{([^}]+)\}', css)
+    assert btn3_match, "static/css/workbench.css 必须包含 .rate-btn[data-g='3'] 样式规则"
     btn3_css = btn3_match.group(1)
     assert "var(--good-soft" in btn3_css, ".rate-btn[data-g='3'] 必须使用 var(--good-soft"
     assert "color:#fff" not in btn3_css and "color: #fff" not in btn3_css, (
@@ -204,8 +251,8 @@ def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
     )
 
     # 5. .rate-btn[data-g="1"] 必须使用 var(--again-soft 且不得包含 color: #fff
-    btn1_match = re.search(r'\.rate-btn\[data-g=["\']1["\']\]\s*\{([^}]+)\}', content)
-    assert btn1_match, "workbench.html 必须包含 .rate-btn[data-g='1'] 样式规则"
+    btn1_match = re.search(r'\.rate-btn\[data-g=["\']1["\']\]\s*\{([^}]+)\}', css)
+    assert btn1_match, "static/css/workbench.css 必须包含 .rate-btn[data-g='1'] 样式规则"
     btn1_css = btn1_match.group(1)
     assert "var(--again-soft" in btn1_css, ".rate-btn[data-g='1'] 必须使用 var(--again-soft"
     assert "color:#fff" not in btn1_css and "color: #fff" not in btn1_css, (
@@ -214,9 +261,13 @@ def test_workbench_zettelkasten_card_and_stamp_buttons_contract():
 
 
 def test_workbench_editorial_secondary_views_contract():
-    """验证自测题与词库辅助视图 Editorial 风格细化契约。"""
-    assert os.path.exists(WORKBENCH_HTML_PATH), "static/german/workbench.html 必须存在"
-    content = open(WORKBENCH_HTML_PATH, encoding="utf-8").read()
+    """验证自测题与词库辅助视图 Editorial 风格细化契约。
+
+    C7 Task 3 后样式源是 static/css/workbench.css（HTML 只留 <link>）。取样式一律走
+    `_workbench_css()`：它先钉住 HTML 真外链了该文件、且不再内联 <style>，再返回 CSS
+    文本 —— 否则下面每条「规则切片 + 属性值」断言都会落在一份没人加载的死 CSS 上恒绿。
+    """
+    css = _workbench_css()
 
     # 1. 断言 .qword, .spell-input, .kpi .v, table.wtab .hw 使用 var(--serif 而非 raw Georgia,serif
     for selector_re in (
@@ -225,20 +276,20 @@ def test_workbench_editorial_secondary_views_contract():
         r"\.kpi\s+\.v\s*\{([^}]+)\}",
         r"table\.wtab\s+\.hw\s*\{([^}]+)\}",
     ):
-        m = re.search(selector_re, content)
+        m = re.search(selector_re, css)
         assert m, f"找不到选择器样式：{selector_re}"
         rule_css = m.group(1)
         assert "Georgia,serif" not in rule_css, f"{selector_re} 不得硬编码 Georgia,serif"
         assert "var(--serif" in rule_css, f"{selector_re} 必须使用 var(--serif, ...)"
 
     # 2. 断言 table.wtab .ipa 使用 var(--mono
-    ipa_m = re.search(r"table\.wtab\s+\.ipa\s*\{([^}]+)\}", content)
+    ipa_m = re.search(r"table\.wtab\s+\.ipa\s*\{([^}]+)\}", css)
     assert ipa_m, "找不到 table.wtab .ipa 样式规则"
     ipa_css = ipa_m.group(1)
     assert "var(--mono" in ipa_css, "table.wtab .ipa 必须使用 var(--mono, ...)"
 
     # 3. 断言 .qopt 具有 8px 圆角
-    qopt_m = re.search(r"(?<![.\w])\.qopt\s*\{([^}]+)\}", content)
+    qopt_m = re.search(r"(?<![.\w])\.qopt\s*\{([^}]+)\}", css)
     assert qopt_m, "找不到 .qopt 基础样式规则"
     qopt_css = qopt_m.group(1)
     assert re.search(r"border-radius\s*:\s*8px", qopt_css), ".qopt 必须包含 border-radius: 8px"
