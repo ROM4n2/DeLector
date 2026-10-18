@@ -279,12 +279,12 @@
 - Modify: `WORKMEMORY/work.log` · `docs/plans/2026-10-19-writer-js-modularization.md`（Fog of War 核销）
 
 **Step Breakdown:**
-- [ ] **Step 1: 逐字复刻 CI 门禁命令**：`python3 -m ruff check .`；`python3 -m mypy --strict delector tools`；`python3 -m mypy --follow-imports=skip tests`；`python3 tools/check_layer_invariants.py`；`python3 tools/check_mock_drift.py`；`python3 tools/check_silent_degradation.py`；`python3 tools/check_frontend_layers.py`；`cd agent && go test ./... -count=1 && gofmt -l .`
-- [ ] **Step 2: 全量 pytest**（拆前端产物触及 5 个测试文件，定向套件不足以证明无回归）
-- [ ] **Step 3: 模块图自治校验**：`python3 -m pytest tests/test_frontend_module_graph.py -v`（新模块自动入 glob）
-- [ ] **Step 4: 用例数守恒核验**：拆分前后全量用例数必须相等 + 新增闸用例数（记录两个数）
-- [ ] **Step 5: CRLF 卫生**（0 lone LF，全量触碰文件）
-- [ ] **Step 6: 追加 `WORKMEMORY/work.log` DONE 事件**
+- [x] **Step 1: 逐字复刻 CI 门禁命令** —— 五道 Python 闸全绿：`check_layer_invariants` · `check_mock_drift` · `check_silent_degradation` · `check_frontend_api_contract` · `check_frontend_layers`；`ruff check .` All checks passed；`mypy --strict delector tools` **116 文件 0 错**；`mypy --follow-imports=skip tests` **154 文件 0 错**；`cd agent && go test ./... -count=1` **8 包全绿** + `gofmt -l .` **0 差异**
+- [x] **Step 2: 全量 pytest** —— **2384 passed, 3 skipped, 0 failed in 414.21s**
+- [x] **Step 3: 模块图自治校验** —— 新模块自动入 `glob("*.js")`；`test_every_named_import_resolves_to_a_real_export` 等 15 条用例全绿
+- [x] **Step 4: 用例数核验（如实报两个数，不套「守恒」）** —— 拆分动作**零新增业务断言**；**2367 → 2387**，差额 **+20** 全部来自 `tests/test_frontend_layers.py`（本计划 Global Constraints 明确允许的唯一来源）
+- [x] **Step 5: CRLF 卫生** —— `git diff --name-only master...HEAD` 的 **9 个文件**全部 0 lone LF
+- [x] **Step 6: 追加 `WORKMEMORY/work.log` DONE 事件**（3,866 字节，符合 ≤4KB 的 schema 约束）
 - [ ] **Step 7: 推送分支并创建 PR**（base=master）
 
 ---
