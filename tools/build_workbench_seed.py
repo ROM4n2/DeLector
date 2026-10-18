@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 """A1 工作台词库双向构建工具（ADR-0011 / Task 1）。
 
-单一真相
---------
-``delector/data/a1_workbench_dict.py`` 是 A1 工作台词库的**唯一真相**；
-``static/js/wb-seed-data.js`` 里声明的四个常量是它的**构建产物**（C7 Task 4 起，
-这四个常量从 ``static/german/workbench.html`` 抽到该数据模块 —— 该 HTML 已不含它们）。
+单一真相与投影结构
+------------------
+``delector/data/a1_workbench_dict.py`` 是 A1 工作台词库 membership 的**投影入口**（ADR-0015 T2）；
+其词条内容/身份真源在 ``a1_sidecar``（id·letter·hw·ipa·ex）与 ``a1_fragments``（lemma 富字段）。
+``static/js/wb-seed-data.js`` 里声明的四个常量是该 Python 投影模块的**构建产物**（C7 Task 4 起，
+这四个常量从 ``static/german/workbench.html`` 抽到该数据模块）。
 
-两种模式
+构建模式
 --------
-``--extract``    JS 数据模块 → Python 数据模块（bootstrap）：把 ``static/js/wb-seed-data.js``
-                 里的 ``SEED_WORDS`` / ``CORE_WORD_SEED_IDS`` / ``CORE_CUSTOM_WORDS`` /
-                 ``SEED_ID_ALIASES`` 抽成 Python 模块常量。字段、id、顺序一律不改（逐字等价）。
-默认（无参）      Python 数据模块 → JS 数据模块注入：以模块为准重写四个 JS 声明。
+默认（无参）      Python 数据模块 → JS 数据模块注入：以模块为准重写四个 JS 声明（正常维护流）。
+``--extract``    JS 数据模块 → Python 数据模块（bootstrap 专用）：把 ``static/js/wb-seed-data.js``
+                 里的常量抽成纯字面量 Python 模块。
+                 ⚠️ 危险操作：该操作会将 a1_workbench_dict.py 的 45 行 membership 投影入口覆盖为
+                 760+ 行扁平字面量，故受 `--i-know-this-overwrites` 护栏保护，默认拒绝执行。
 
 零漂移与幂等
 ------------
@@ -34,10 +36,8 @@
 命令
 ----
     export PYTHONIOENCODING=utf-8
-    python tools/build_workbench_seed.py --extract   # JS 数据模块 → Python 数据模块
-    python tools/build_workbench_seed.py             # Python 数据模块 → JS 数据模块（幂等）
-
-禁止手工改 ``delector/data/a1_workbench_dict.py`` —— 要改就重跑本脚本。
+    python tools/build_workbench_seed.py                                    # 正常：Python 模块 → JS 模块注入（幂等）
+    python tools/build_workbench_seed.py --extract --i-know-this-overwrites # bootstrap 专用：带护栏覆写
 """
 
 from __future__ import annotations
@@ -145,22 +145,10 @@ def _chunk_id_lines(ids: Sequence[str], indent: str = "    ") -> List[str]:
 
 
 _MODULE_HEADER = '''# -*- coding: utf-8 -*-
-"""A1 工作台词库（workbench 静态种子）—— 由工具生成，请勿手工编辑。
+"""A1 工作台词库（workbench 静态种子）—— 由工具生成，仅供 bootstrap/恢复参考。
 
-单一真相（Single Source of Truth）
-    本模块即 A1 工作台词库的真源头。static/js/wb-seed-data.js 里声明的
-    const SEED_WORDS / CORE_WORD_SEED_IDS / CORE_CUSTOM_WORDS / SEED_ID_ALIASES
-    是本模块的**构建产物**（由 tools/build_workbench_seed.py 注入）。
-
-生成命令（Reproducible Command）
-    export PYTHONIOENCODING=utf-8
-    python tools/build_workbench_seed.py --extract   # JS 数据模块 -> 本模块
-    python tools/build_workbench_seed.py             # 本模块 -> JS 数据模块（幂等）
-
-幂等与确定性（Determinism & Immutability）
-    纯数据模块：导入期零副作用、零网络、零文件 IO（项目红线 9）。
-    内容由 --extract 从 workbench.html 一次性抽出，字段/id/顺序逐字保留；
-    **禁止手工改内容** —— 改则重跑 --extract，再跑默认模式把 HTML 重新注入。
+注意：生产环境当前采用 ADR-0015 T2 的 membership 动态投影入口形态（import 自 a1_sidecar）。
+本扁平字面量形态由 tools/build_workbench_seed.py --extract --i-know-this-overwrites 生成。
 """
 from typing import Any, Dict, FrozenSet, List
 '''
@@ -272,8 +260,7 @@ def _run_extract(js_path: Path, module_path: Path) -> int:
     parsed = parse_source(_read_raw_text(js_path))
     module_path.parent.mkdir(parents=True, exist_ok=True)
     source = render_module(parsed["seed"], parsed["core_ids"], parsed["custom"], parsed["aliases"])
-    with open(module_path, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(source)
+    _write_raw_text(module_path, source)
     print(
         "[build_workbench_seed] extract: seed=%d core_ids=%d custom=%d aliases=%d -> %s"
         % (len(parsed["seed"]), len(parsed["core_ids"]), len(parsed["custom"]), len(parsed["aliases"]), module_path)
@@ -300,7 +287,16 @@ def _run_inject(js_path: Path, module_path: Path) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="A1 工作台词库双向构建工具（JS 数据模块 <-> Python 数据模块）。")
-    parser.add_argument("--extract", action="store_true", help="JS 数据模块 -> Python 数据模块（bootstrap；逐字等价）")
+    parser.add_argument(
+        "--extract",
+        action="store_true",
+        help="JS 数据模块 -> Python 数据模块（bootstrap 专用；覆写危险，默认拒绝）",
+    )
+    parser.add_argument(
+        "--i-know-this-overwrites",
+        action="store_true",
+        help="确认覆写 Python 数据模块（解除 --extract 的安全护栏）",
+    )
     parser.add_argument("--js", default=str(DEFAULT_JS), help="JS 数据模块路径（static/js/wb-seed-data.js）")
     parser.add_argument("--module", default=str(DEFAULT_MODULE), help="Python 数据模块路径")
     args = parser.parse_args(argv)
@@ -308,6 +304,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     js_path = Path(args.js)
     module_path = Path(args.module)
     if args.extract:
+        if module_path.exists() and not args.i_know_this_overwrites:
+            sys.stderr.write(
+                "[build_workbench_seed] 拒绝执行：目标 Python 模块 %s 已存在！\n"
+                "该文件实际是手工维护的 membership 投影入口（ADR-0015 T2，import 自 a1_sidecar），\n"
+                "直接 --extract 会将其覆写为 760+ 行字面量生成物，破坏原有投影结构。\n"
+                "若仅为初次 bootstrap 或确需覆写，必须显式附加 --i-know-this-overwrites 护栏参数。\n"
+                % module_path
+            )
+            return 2
         return _run_extract(js_path, module_path)
     return _run_inject(js_path, module_path)
 

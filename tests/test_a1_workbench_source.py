@@ -445,3 +445,56 @@ def test_output_snapshot_matches_pre_refactor(fresh_a1_cache):
     got = words[:10] + words[-22:-12]  # 前 10 条种子词 + 前 10 条自定义词
     projected = [{k: w[k] for k in _SNAPSHOT_FIELDS} for w in got]
     assert projected == EXPECTED_SNAPSHOT
+
+
+# ── 5. 投影入口形态与 --extract 护栏（handoff_c7-followups）─────────────────────
+
+
+def test_a1_workbench_dict_is_projection_module_not_flat_literal_artifact():
+    """a1_workbench_dict.py 必须是 membership 投影入口，严禁被生成物覆盖成扁平字面量。
+
+    契约（ADR-0015 T2）：
+    - 内容/身份单源在 a1_sidecar，必须显式 import 它；
+    - 严禁被 build_workbench_seed.py --extract 覆盖为 760+ 行字面量（正常为 ~45 行）。
+    """
+    text = DICT_MODULE.read_text(encoding="utf-8")
+    assert "from delector.data.a1_sidecar import" in text, (
+        "a1_workbench_dict.py 丢失了 a1_sidecar 导入 —— 疑似被 --extract 扁平生成物覆写！"
+    )
+    assert "WORKBENCH_MEMBERSHIP" in text, "a1_workbench_dict.py 缺少 WORKBENCH_MEMBERSHIP"
+    line_count = len(text.splitlines())
+    assert line_count < 100, (
+        "a1_workbench_dict.py 行数为 %d（期望 <100 行投影入口）：已被生成物覆盖！" % line_count
+    )
+
+
+def test_extract_without_override_flag_refuses_to_overwrite_existing_module(capsys):
+    """build_workbench_seed.py --extract 对已存在文件默认必须拒绝执行（退出码非 0 且文件未改动）。"""
+    tool = _load_tool()
+    mtime_before = DICT_MODULE.stat().st_mtime_ns
+    rc = tool.main(["--extract"])
+    captured = capsys.readouterr()
+    assert rc != 0, "--extract 缺少 --i-know-this-overwrites 时应当拒绝并返回非 0 退出码"
+    assert "拒绝执行" in captured.err
+    assert "--i-know-this-overwrites" in captured.err
+    assert DICT_MODULE.stat().st_mtime_ns == mtime_before, "--extract 不得修改已存在的模块"
+
+
+def test_extract_with_override_flag_proceeds_in_temp_dir(tmp_path):
+    """带 --i-know-this-overwrites 时允许完成 extract 动作（隔离在临时目录测试，不碰主库）。"""
+    tool = _load_tool()
+    temp_mod = tmp_path / "temp_dict.py"
+    temp_mod.write_text("# existing dummy\n", encoding="utf-8")
+
+    # 未带 flag：拒绝
+    rc_refuse = tool.main(["--extract", "--module", str(temp_mod)])
+    assert rc_refuse != 0
+    assert temp_mod.read_text(encoding="utf-8") == "# existing dummy\n"
+
+    # 带 flag：执行生成
+    rc_ok = tool.main(["--extract", "--i-know-this-overwrites", "--module", str(temp_mod)])
+    assert rc_ok == 0
+    content = temp_mod.read_text(encoding="utf-8")
+    assert "A1_WORKBENCH_SEED" in content
+    assert len(content.splitlines()) > 500
+
