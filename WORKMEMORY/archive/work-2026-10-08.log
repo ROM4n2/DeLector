@@ -8,3 +8,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **一个显式安全决定（防将来被当漏网）**：`/api/update/check` **不挂 `_require_localhost`** —— 理由：LAN 浏览器版用户同样需要更新可见性，该端点只读、不写数据；代价（LAN 消耗主机 GitHub 配额）由 TTL 缓存 + 3s 出网超时兜住。已写进 ADR §4.3。
 - **顺带产品发现**：顶栏 `System · vX.Y.Z Online`（`static/index.html:35`）在**只绑回环的单机场景下"Online"字面撒谎**，ADR 附带默认改为真实版本 + 真实检查结果。
 - **未实施**：本次只产出决策文档，未写代码。ADR 已给端点契约草案、4 条 MUST 不变式（含「`has_update === null ⇔ error_reason !== null`」）、验收判据表与 NOT doing 清单。
+### 2026-10-08 11:12 | codebuddy | EXEC(ADR-0017 实施) /dfs-exec 六任务全绿 + 编排者三次自查纠错
+   > 正文超 §4 上限（4522 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md`](WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md)。
+
+### 2026-10-08 23:52 | codebuddy | STANDBY(Android 侧) 暂缓标记 + 新提案：Windows 桌面端封装为 desktop app
+Caps: filesystem-read, filesystem-write
+事件：用户决定「**先暂缓安卓**」并询问「**Windows 桌面端能否封装成 desktop**、用什么技术栈」。先做标记，再回答。
+- **⏸ 暂缓（非完成、非取消）**：ADR-0017 的代码**已合并 master**（PR #115/#116 → `ee68ec8`，master CI success），**桌面端已可用**（端点 + chip 均已上线，且桌面侧真实出网已验证）；但 **Android 侧两条假设仍未验证** ⇒ **Android 端能力不确定，不得记为"更新可见性已在 Android 验证通过"**：
+  ① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（现有手机出网是 **LAN HTTP**，不是证据）；
+  ② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无 Android SDK、只能靠 CI）。
+  **三处同标记**：本 log、`PROJECT_OVERVIEW` 待办、ADR-0017 §7.3；exec 台账 `.vault-exec-ledger.json` 的 Task 6 保持 `blocked`。防的是未来 agent（或我自己）把"代码已合并"误读成"双端已验证"。
+

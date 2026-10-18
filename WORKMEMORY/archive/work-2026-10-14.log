@@ -37,3 +37,41 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 删后远端只剩 `master`（`git ls-remote --heads origin` 复核）；它们的提交都已通过 PR 进 master，**删的只是分支指针，不是历史**（如需回溯按 PR 号或 tag 找）。
 - 备注：这正是本仓"开了分支忘了删"的常态残留 —— PR 合并时加 `--delete-branch` 可避免（本次 #131/#132 用了）。
 - 本次改动属规则里的**簿记类例外**（纯追加、不改代码/门禁/测试）⇒ 按 2026-10-14 用户确认的例外直推 master。
+### 2026-10-14 20:53 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：按协议 §4 拆分 7 条超限事件（**已合并** `73c35b8`，PR #133），并顺带查出"某事件 56428 B"是**误报**。
+- **拆分**：7 条超限（4299–5882 B）正文搬入 `WORKMEMORY/NOTES-*.md`，事件体只留一行指针；结果事件数 74 不变、最大 4026 B、超限 0、work.log 606 行、纯 CRLF、前言保留。写盘前有「NOTES 正文 + 新 work.log == 原文」的逐行反推断言（第一版脚本丢过文件前言，被它拦下）。
+- **真因（比"太大"严重）**：vault 巡检的事件边界正则严格等于协议 §2（`### YYYY-MM-DD HH:MM | agent | <裸 EVENT_TYPE>`），而本仓 **73/74 条历史 header 不合规**——写成 `WORK_START(计划名)`（载荷混进类型位）或省了 HH:MM。后果是**静默的**：解析器认不出边界 ⇒ 几十个事件被并成一条，报出来是"56428 B 事件"而非"头不合规"。同类分布在 lover-instance(5) / qingjian(3)。
+- **已在 vault 侧修**（`a18cd3e` 已推 master）：① 边界判定改宽容式（时间可选、类型可带载荷）；② "头不合规"**单列为 advisory**（把静默漂移变可见）；③ 顺带补 `topic/agent-architecture` / `topic/multi-agent` 两条路由（原落 `CODING-UNIVERSAL` fallback）；④ 写库入口加内层双引号转义 + 写入前 YAML 自检（原先 `source` 含 ASCII 双引号会产出不可解析的 frontmatter 而写库**静默成功**）。
+- ⏳ **待用户决定**：是否回改这 73 条历史 header。建议**不补缺失的时间**（等于编造）；只做"把载荷移进正文"这类可无损归一，或保持现状（现有 advisory 盯着）。**新写事件一律按 §2 写裸 `EVENT_TYPE`、时间必填**——本条即按此写。
+
+### 2026-10-14 21:09 | codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+本次被纠正: ① 实现任务直推 master（应开分支 + PR）；② 簿记类必须显式写进分支规矩的例外（我原先只写了发版类）；③ 历史 header 归一与其它项目 WORKMEMORY 按你指示**推迟到 digest**，不自行处理。
+- 本会话三块交付：① 「去控制台 + 桌面化观感」6 任务 + 门禁缺口修复（PR #131 已合，全量 1832 passed + 2 skipped）；② 分支纪律成文（ops.md 第 12 条 / PROTOCOL.md 铁律第 8 条，PR #130 与 #132 已合）；③ Vault 工具链三修（巡检解析器静默失效 / agent 类路由 / 写库入口 frontmatter 自检，coding-vault a18cd3e）。
+- 未做（明确推迟，非遗漏）：skill 侧「分支隔离」步骤（你指示暂缓）；73 条历史 header 归一（等 digest）；know-her / skill-dev 的 WORKMEMORY（不管）。
+- 回写检查：稳定结论已入 vault 与 ops.md / PROTOCOL.md；临时产物（pytest 日志、PR 正文暂存）都在系统临时目录，未入库。
+
+### 2026-10-14 21:17 | codebuddy | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+交接包已写：`WORKMEMORY/handoff_no-console-feedback-gaps.md`（to: any · role: VERIFY/TEST · status: open）—— 真机双击验收 + digest 归一历史 header 两项延后事项按协议 §4 落盘，并同步更新 `INDEX.md` 的 Active handoffs。
+
+### 2026-10-14 23:05 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：ADR-0023（vault `dc4fc7f` 含新增 §9）与实施计划（`docs/plans/2026-10-14-interactive-agent-loop.md`，commit `604a98b`）均已落盘；台账按 `/dfs-plan` Phase 3 初始化完毕，**但按用户指示不启动执行**。
+- **计划**：6 任务（Go 门禁红灯① → 红灯②+CI → LLM client 收口 → 循环内核 → 工具白名单 → 契约+UI），全部带 Tier/Mode 标签、Files、Consumes/Produces、Subagent Scaffold、TDD Step Breakdown；Fog of War 4 条（裁判集扩充分派给下一个子计划，不投机拆任务）。**Branch 声明：`feat/interactive-agent-loop`**（尚未创建）。
+- **台账**：`init --plan-file docs/plans/2026-10-14-interactive-agent-loop.md` ⇒ 登记 6 任务全部 `pending`、`active_task_id=None`。**旧台账（10-10 desktop-shell，6/6 完成）已被覆盖**，备份在系统临时目录 `vault-exec-ledger-2026-10-10.bak`（3173 B）。
+- **ADR 追加 §9「语言边界的再确认」**（回答"agent 开发是否 Python 基础 / Go 能不能用"）：本项目 agent 已是**双语言**——交互层循环 Python（裁判与交付面都在 Python 侧 ⇒ 换 Go 会失去裁判）、批处理层 Go **已在跑**（`agent/go.mod`：go 1.26 + go-openai + cobra）、native-agent（Go 零框架 harness，0 行代码，未启动）。判据沿用 ADR-0021（换语言至多消 ≈21% 缺陷；代价=两套 runtime+IPC / 产物自省削弱 / 原生段不可 recover）。新增可复用判据：**先问「裁判在哪、交付物在哪」，再问「用哪种语言」**。
+- ⏳ **下一步（待用户下令）**：`git checkout -b feat/interactive-agent-loop` 后 `/dfs-exec`；Task 2 标 HITL（动 CI 定义）需人工确认。
+
+### 2026-10-14 23:35 | codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+本次被纠正: 无（本批按计划与推荐执行；两处偏离由我主动申报并经确认：① 顺序改为 Task 0→Task 2 代码半→Task 1；② 计划外触碰 agent/run_integration_test.go）。
+事件：执行 ADR-0023 实施计划的**前三个任务单元**，集成门禁由「静默测别人的服务 + 恒红断言 + 单名解释器探测」变为**整体转绿**。分支 `feat/interactive-agent-loop`（**未开 PR**，Task 3~6 未做）。
+- **Task 0** `b76d45a`（CRV PASS）：身份校验（探 `/api/health`，接受 200/503 只读身份，对齐 Python 侧 `probe_identity`）+ 起服失败即 fail-fast（不再向被占端口发业务请求）+ 动态端口。**修的是一类假绿**（外来服务答得对时门禁会替它背书）；RED 实测 `Errno 10048 ×29` + 外来服务回 500。
+- **Task 2 代码半** `42e8420`（CRV PASS）：解释器探测由 `LookPath("python")` 单名改为候选链 `$DELECTOR_PYTHON`→`python3`→`python` + 逐个实测 `import uvicorn, fastapi`（15s 短超时）+ 透传到起服 argv[0]（四个调用点全查）。CI 半属 HITL，未做。
+- **Task 1** `64f7abf`（CRV PASS）：门禁 5 由「恰好 2 行」（假设空库，被 `create_app()` 的 7 篇预置短文污染、恒红）改为**前后快照相对断言**（净增恰好 2 行且标题匹配）；`level==A1` 作用域由整表收窄到净增行。
+- **门禁现状**：`cd agent && go test -tags integration ./...` ⇒ **116 PASS / 0 FAIL / 0 SKIP**；`go build`/`go vet`/`go vet -tags integration`/`go test` 全 0；gofmt 空；纯 LF。
+- **台账**：2/7（Task-0、Task-1 完成；Task-2 IN_PROGRESS 待 CI 半；Task-3/4/5/6 pending）。
+- ⏳ **续跑入口**：`WORKMEMORY/handoff_interactive-agent-loop.md`。顺序：CI 半（HITL）→ Task 3 → 4 → 5 → 6 → 开 PR。
+

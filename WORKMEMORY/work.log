@@ -1,202 +1,3 @@
-### 2026-10-08 11:12 | codebuddy | EXEC(ADR-0017 实施) /dfs-exec 六任务全绿 + 编排者三次自查纠错
-   > 正文超 §4 上限（4522 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md`](WORKMEMORY/NOTES-2026-10-08-1112-exec-adr-0017-实施-dfs-exec-六任务全绿-编排者三次自查纠错.md)。
-
-### 2026-10-08 23:52 | codebuddy | STANDBY(Android 侧) 暂缓标记 + 新提案：Windows 桌面端封装为 desktop app
-Caps: filesystem-read, filesystem-write
-事件：用户决定「**先暂缓安卓**」并询问「**Windows 桌面端能否封装成 desktop**、用什么技术栈」。先做标记，再回答。
-- **⏸ 暂缓（非完成、非取消）**：ADR-0017 的代码**已合并 master**（PR #115/#116 → `ee68ec8`，master CI success），**桌面端已可用**（端点 + chip 均已上线，且桌面侧真实出网已验证）；但 **Android 侧两条假设仍未验证** ⇒ **Android 端能力不确定，不得记为"更新可见性已在 Android 验证通过"**：
-  ① Chaquopy 上 httpx 能否完成到公网 `api.github.com` 的 **HTTPS**（现有手机出网是 **LAN HTTP**，不是证据）；
-  ② Android WebView 点击 chip 外链是否被交给系统浏览器（若被吞需改 `MainActivity` 的 URL 拦截，而 Java 本机无 Android SDK、只能靠 CI）。
-  **三处同标记**：本 log、`PROJECT_OVERVIEW` 待办、ADR-0017 §7.3；exec 台账 `.vault-exec-ledger.json` 的 Task 6 保持 `blocked`。防的是未来 agent（或我自己）把"代码已合并"误读成"双端已验证"。
-
-### 2026-10-09 00:10 | codebuddy | ADR-0018 产出（/dfs-grill：性能换语言提案 → 裁决"先测量、不换主体"）
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：用户提案「不用 Python 做系统主体，只留生态库调德语/记忆算法，不想性能拖垮项目」。走 `/dfs-grill` 后**否掉了提案的字面形态**，产出 ADR-0018（vault 正式件 + 仓内副本 `docs/adr/2026-10-09-adr-0018-performance-measurement-before-runtime-swap.md`）。**未改任何生产代码**。
-- **改变提案形状的两条事实**：
-  ① **"把重活给更高效语言"项目里已有且已决策** —— ADR-0008（Go Agent Runtime + Python NLP Engine 混合架构）已落地 `agent/`（Go：CLI+DAG+supervisor，拉起 uvicorn 子进程 8001）；ADR-0010 已划边界（Go=编排/并发/退避重试，Python=spaCy 形态学/lemmatization）。**方向恒为 Go→Python，主应用不调 Go** ⇒ 真正的待决问题只是"要不要把 **HTTP 主体**也搬过去"。
-  ② **"Python 性能拖垮项目"证据不足** —— 全仓唯一真基准 `tools/bench_cards_endpoint.py` **只断言结构、不钉阈值**；审计文档里的数字**不可复跑**且部分自带 UNVERIFIED；**spaCy 单价有两个矛盾值**（`syntax_hard.py:9` 写 `~42ms/句` vs 审计写 `~2.1ms/句`，**差 20 倍**，都没脚本兜底）。perf 席位实测 20k 卡 790ms（Python/FSRS 84%、排序 9%），瓶颈排序 **AI/TTS(网络) > spaCy(Cython) > SQLite > 冷启 > 前端 > HTTP/序列化** ⇒ 前两项换语言都解决不了。全仓**唯一点名 GIL** 的地方是 `ExportSaver.java:73`（大导出并发）。
-- **裁决**：D1 **先测量不换**（1 小时方案：4 场景冷启/长文/热读/卡盒 + 分层剖析 + 阈值「Python CPU>50% 且 p95>2 倍目标」）；D2 按结果选路（CPU 主导→**热点下沉 O2**；编排/并发主导→**扩展 ADR-0008 边界 O3**）；D3 **永久否决"换 HTTP 主体 O1"**（依据：spaCy 不可移除⇒NLP 退化成跨进程 IPC 多一跳、最大瓶颈不受宿主语言影响、Android 双运行时与 56.7MB 内嵌 Python 冲突），并写入**三条翻盘条件**防悄悄重开；D4 测量后先做便宜杠杆；D5 明确 **Python 不可移除**（永远讨论"边界"而非"替换"）；D6 新基准**必须钉阈值**（补上现基准只断言结构的缺口）。
-- **Fog**：测量结果本身（D2 分支取决于它，测量前不许选路）；Android 侧如何测量（本机无 Android SDK）；卡盒前端渲染占比未剖析；若走 O2 则 Android arm64 交叉编译链路未定。
-
-### 2026-10-09 12:24 | codebuddy | EXEC(ADR-0018 D1 性能测量) /dfs-exec 六任务全绿、判定门定案为 O0
-   > 正文超 §4 上限（5882 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md`](WORKMEMORY/NOTES-2026-10-09-1224-exec-adr-0018-d1-性能测量-dfs-exec-六任务全绿-判定门定案为-o0.md)。
-
-### 2026-10-09 13:40 | codebuddy | FIX(门禁) master 变红：跨进程量级比较被当成不变式 + spaCy 断言取整 flake
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：`perf/measurement-baseline`（PR #117）合并进 master 后 **master CI 红**：`tests/test_cold_start_cost.py::test_segments_satisfy_physical_containment` 报 `AssertionError: app_ready_ms(95.490) 未大于 init_db_ms(209.850)`，而**本机同一份代码**是 148/245（通过）⇒ **本机通过、CI 反转**。分支 `fix/cold-start-segment-gate`，**只改测试与基准，`delector/` 生产代码零改动**。
-- **合并时序问题（第一条教训）**：PR #117 在 **CI 仍在跑时被合并**（merged 04:28:53，CI 结论约 04:30 出）⇒ 红色提交直接进了 master。**合并 MUST 等 CI 绿**。
-- **根因（实测确认，非推理）**：三段是**三个不同子进程**测的 —— probe A（独立进程）调 `init_db()` 得 `init_db_ms`；probe B（独立进程）**在 import 期已跑过一次完整 `create_app()`**，再换全新的库调第二次 `create_app()` 得 `app_ready_ms`。实测分解 `init_db()` = main DDL ≈25ms + progress DDL ≈25ms + `seed_preset_articles` ≈105ms；probe A 为该三段付**进程冷启动/首次文件 I/O**，probe B 里同样工作**已热** ⇒ **两个量不存在必然大小关系**。最小反转场景（实测）：让 probe B 第二次 `create_app()` 落在非全新库 ⇒ `app_ready_ms` 塌到 **8.75ms** ≪ `init_db_ms` ~155ms。
-- **修法**：删掉两条**跨进程**量级断言（`app_ready_ms > init_db_ms`、`model_load_ms <= import_ms`）；保留 `import_ms > app_ready_ms`（**同进程**）；新增**机器无关**自检行 `init_db_tables`/`init_db_progress_tables`/`app_ready_db_tables`/`app_ready_progress_tables`/`app_ready_fresh_db_used`（取最小轮=最保守），并**补上 probe A 的对称自检** —— 上一版只给 probe B 加自检、**guard 不对称**，probe A 若落到热库则 `init_db_ms` 可任意小而仅靠 `>0` 兜着（同类缺陷，checker 抓出）。`app_ready_fresh_db_used` 改为**独立**判新库文件是否真出现在新路径（原先由表数派生 ⇒ 同真同假、名字骗人）。口径文本（`segments_note`/docstring/契约注释/verdict）据实改写为"三段各由独立子进程测得、**不可按大小关系解读**"，verdict 的跨进程比率标注"近似归因（仅示意）"。
-- **checker 抓到的同类项**：本机`import_ms(2242) > app_ready(263)` 余量约 2000ms（来自 import 期的 spaCy 模型加载）；但**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，这条同进程断言的余量会塌到噪声级 ⇒ 已列为待收口项（详见下条）。
-- **顺带修掉一个会随机打红 CI 的 flake**：`tests/test_spacy_unit_cost.py::test_bench_verdict_names_both_legacy_values` 偶发失败（`per_sentence_ms=7.115` 时输出行 `7.11` 而断言期望 `7.12`）。**根因是测试端双重取整**（不是值不同源）：测试从**3 位小数的打印字符串**反解析回 `float` 后再 `.2f`，而 verdict 是对**原始中位数**直接 `.2f`，落在两位小数边界 `X.XX5`±0.0005 时必不一致。修法：断言换成**正则取数值 + 容差 0.005+1e-9**（恰为一次两位小数舍入的最大偏差），文案写死仍必超差 ⇒ 守卫强度不减；修复后连跑 **15/15** 通过。
-- **⚠️ 编排者教训（本轮第二次同类：本机复跑通过 ≠ 门禁可靠）**：我在 Task 4 的复跑里`app_ready(245) > init_db(148)` 同向通过，**把一条机器相关的比较当成了已验证的不变式**。同类错误在 Task 2 已出现过（跨函数相除），本轮是跨进程量级比较。**规律：凡是"两个在不同进程/不同前置状态下测得的量"的任何大小关系，默认都不是不变式**；要钉就只能钉**状态无关**的事实（文件/表是否存在、可解析性、同进程内的包含）。
-
-### 2026-10-09 13:53 | codebuddy | 后验：红 master 事故的机械证据 + 修复合并 + master CI 绿
-Caps: filesystem-read, shell-exec
-事件：为"跨进程量级比较"这条诊断补一条**决定性后验证据**（同一份代码、两种结果）。
-- **同一提交在两条 CI 上结论相反**：PR #117 的**分支 CI 失败**（run `37883798324`，`app_ready_ms(95.490) 未大于 init_db_ms(209.850)`），而**同一提交合并到 master 后的 push CI 却 success**（run `37884073719`，5m10s）⇒ 这不是"某段被打桩"，而是**机器/状态相关**，机械地印证了根因判断（probe A 与 probe B 是两个不同进程、不同前置状态的量）。
-- **修复 PR #118 已合并**（`e8c8f1f`，3 commit：`c36d420` 门禁改钉真不变式 / `5c85c13` spaCy 断言取整 flake / `82493e9` 教训入库），**master CI success**（run `37890280999`，4m6s）；分支已清理（本地/远端均无残留），工作区干净、与 origin/master 同步。
-- **ADR-0018 的 Task 6 回填亦在 master**（`204e761`）：ADR §1–§9 齐全（§7 实施记录 / §8 Fog / §9 关联），五个基准 + 五套门禁（`bench_cards_endpoint`/`bench_spacy_unit`/`bench_long_read`/`bench_cold_start`/`bench_profile_layers` + `bench_stats`）全部落地。⇒ **ADR-0018 D1 闭环**：判定门定案 **O0**（条件① 成立 85.9% / 条件② 不成立）。
-- **仍开放（同类残余，已登记 PROJECT_OVERVIEW 递延项④）**：`tests/test_cold_start_cost.py` 保留了 `import_ms > app_ready_ms`（**同进程**，安全），但其余量主要来自 import 期的 spaCy 模型加载（本机约 2000ms）；**若 spaCy 不可用走纯 Python 回退，模型加载只剩几毫秒**，余量会塌到噪声级 ⇒ 需加条件（例如仅 `nlp_path=spacy` 时断言）或改为机器无关形式。未收口。
-
-### 2026-10-09 19:52 | codebuddy | DECISION(ADR-0018 门定稿) 目标值拍板 + 修法路由 + 移除不可复跑的 42ms
-   > 正文超 §4 上限（4321 B），已拆分至 [`WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md`](WORKMEMORY/NOTES-2026-10-09-1952-decision-adr-0018-门定稿-目标值拍板-修法路由-移除不可复跑的-42ms.md)。
-
-### 2026-10-09 20:43 | codebuddy | CLOSE(登记项) ① 迁移闸 size 对称化 ② rank_sentences 纯函数单价补测
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：把 ADR-0018/PROJECT_OVERVIEW 里"仅登记、未动"的两个开放项**真正做完**，并把登记状态改为已完成。分支 `fix/close-registered-items`。
-- **① 数据目录迁移闸的 `isfile`/`size` 不对称（原登记于 ADR §7.7）—— 已修**：判据对称化为 `if os.path.isfile(legacy_db) and os.path.getsize(legacy_db) > 0`（"0 字节空壳不算数据"这条尺子现在**两个位置都用**）；docstring 判据清单 + 新增"为何对称化"。
-  - **checker 抓到一条红卡（正是我上一轮修复留下的同族盲区）**：条件④ 的内联注释原写"①与②互斥、**永远到不了这一行**"，而条件① 加 `size > 0` 后，**同地 + 共享库 0 字节**时会**真的到达**条件④ —— 注释被本次改动**自我证伪** ⇒ 已据实重写（保留"不得删该守卫"的理由），并**补上那条唯一实际执行路径的用例**（桌面端同地 + 共享库 0 字节 ⇒ 不误报）；另补"新位置是目录 + 旧位置非空 ⇒ 抛"。
-  - **连带改动（易漏，checker 复核为"诚实中和"）**：`tools/bench_cold_start.py` 的中和手法**原先正是靠这个洞**（预置 0 字节库），判据收紧后会失效 ⇒ 改为**摆一个非空的合法 SQLite 库**（建占位表，显式 `close()` 因为 `with sqlite3.connect(...)` 只提交事务**不关句柄**，悬着会让 Windows 的 `rmtree` 删不掉临时目录）。占位表写在 `main_db`、而 `init_db_tables` 数的是 `initdb_db` ⇒ **不污染计时**。
-  - 同步订正 `docs/agents/ops.md`：原写"size==0 空壳不拦"已**过度泛化**（新位置的 0 字节空壳现在**会**拦），改为据实表述。
-- **② `rank_sentences`/`analyze_syntax_tree` 纯函数单价（原登记为 ADR §8 Unknown 5）—— 已补测**：新增 `tools/bench_rank_sentences.py` + 27 条门禁。实测（`spacy` + `de_core_news_sm`）：`analyze_syntax_tree` 单句 **≈7~8ms/句**、`rank_sentences` 整段归一 **≈8ms/句**（长句档 11.2ms，短/长 ≈2.6×）。三条对照：相对审计 **2.1ms** ⇒ **低估约 3.6~4 倍**；相对 **42ms** ⇒ 仅其 **≈0.18 倍** ⇒ **42ms 无法由"该路径纯函数稳态"解释**；与端到端 **≈10ms/句**（`bench_long_read`）**同量级** ⇒ **端点开销占比不大，成本主体在该路径自身**。⇒ **20 倍差距仍不足以定案**，但已收窄为三候选（md 口径 / 含冷启动摊薄 / 别的语料或函数口径）。
-  - **checker 抓到一条关键 hedge 缺陷（PASS 但很值钱）**：脚本**不打印实际生效模型名**，而 `get_spacy_nlp()` 会**先试 md** ⇒ verdict 里"md 未测是补差来源"这个前提**不可复核、甚至可能为假** ⇒ 新增 `model=` 行（实测 `de_core_news_sm (md 不可用)`）并让 verdict 与之逐字一致。另新增 `p95_note=` 显式声明两条 p95 **聚合单元与样本量都不同、不可直接比较**（`analyze_p95_n=126` 是单句尾部、`rank_p95_n=7` 是整段归一），并补源码顺序断言（模型加载在计时之外 + 脚本体不含 `_material_text`，钉住"纯函数口径"）。
-- **门禁**：`test_data_dir_migration_gate` **12 passed**、`test_rank_sentences_cost` **27 passed**、半 A **1231 passed**（较本轮起点 +5）；mypy **101** + **78** files 零错误；`ruff check .` 0。基准实跑 `bench_cold_start` 正常（`health_200_ms=2610`）。
-- **登记状态收口**：ADR §1.3 / §7.3（新增"该热路径纯函数单价"行）/ §7.4（补测结果与三条对照）/ **§7.7 改写为"① 已修 / ② 已核实无害"** / **§8 Unknown 5 标已解决 + 新增 Unknown 7**（42ms 成因仍不定案，且明说**不影响任何决策**）；`PROJECT_OVERVIEW` 递延项 ①② 改标已解决；`docs/agents/ops.md` 订正。仓内副本机械重新生成。
-
-### 2026-10-10 00:32 | codebuddy | DECISION 冷启动端到端 p95 暂缓（不引入新依赖）
-Caps: filesystem-write, shell-exec
-事件：用户决定 **⑤ 冷启动端到端 p95 暂缓** —— 补测必须引入**浏览器自动化基线**（本仓无，属新依赖），**收益不大**，故不做。
-- **登记为"明确决定"而非"未做"**（防后续会话反复重开）：ADR §7.5 新增"冷启动端到端（首屏可用）"行（`unmeasured` + 暂缓理由）、§8 新增 **`Unknown 8`** 记为 ⏸ 已决定暂缓、`PROJECT_OVERVIEW` 递延项⑤ 同步。
-- **含义**：**O0 结论建立在代理口径之上**（现 2.6s 是"到 `/api/health` 200"，**不等于首屏可用**）—— 该限制已在 ADR §7.5/§8 与输出 `scenario_scope_note` 显式声明，不是隐藏假设；若将来需求变化需重开，按 ADR §7.6 的**修法路由**：端到端 >4s 走 **O0 杠杆（spaCy 惰性加载）而非 O2**。
-- 本次为**纯文档改动**（ADR 正式件 + 仓内副本 + PROJECT_OVERVIEW + work.log），**零代码改动**，不跑基准。
-
-### 2026-10-11 13:07 | mimo-v2.6-flash__claude-code | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：按 ADR-0004 Q1=A 处置 —— 删除 WORKMEMORY/corrections.md（本项目账本 0 条数据；4/5 项目本就无此文件）并同步 INDEX 文件清单行。捕获落点改为 WORK_END 可选一行「本次被纠正: <1 行>」（ADR-0004 §4.1-7，已由计划 Task B7 写进 PROTOCOL.md §2）。
-
-### 2026-10-14 20:53 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：按协议 §4 拆分 7 条超限事件（**已合并** `73c35b8`，PR #133），并顺带查出"某事件 56428 B"是**误报**。
-- **拆分**：7 条超限（4299–5882 B）正文搬入 `WORKMEMORY/NOTES-*.md`，事件体只留一行指针；结果事件数 74 不变、最大 4026 B、超限 0、work.log 606 行、纯 CRLF、前言保留。写盘前有「NOTES 正文 + 新 work.log == 原文」的逐行反推断言（第一版脚本丢过文件前言，被它拦下）。
-- **真因（比"太大"严重）**：vault 巡检的事件边界正则严格等于协议 §2（`### YYYY-MM-DD HH:MM | agent | <裸 EVENT_TYPE>`），而本仓 **73/74 条历史 header 不合规**——写成 `WORK_START(计划名)`（载荷混进类型位）或省了 HH:MM。后果是**静默的**：解析器认不出边界 ⇒ 几十个事件被并成一条，报出来是"56428 B 事件"而非"头不合规"。同类分布在 lover-instance(5) / qingjian(3)。
-- **已在 vault 侧修**（`a18cd3e` 已推 master）：① 边界判定改宽容式（时间可选、类型可带载荷）；② "头不合规"**单列为 advisory**（把静默漂移变可见）；③ 顺带补 `topic/agent-architecture` / `topic/multi-agent` 两条路由（原落 `CODING-UNIVERSAL` fallback）；④ 写库入口加内层双引号转义 + 写入前 YAML 自检（原先 `source` 含 ASCII 双引号会产出不可解析的 frontmatter 而写库**静默成功**）。
-- ⏳ **待用户决定**：是否回改这 73 条历史 header。建议**不补缺失的时间**（等于编造）；只做"把载荷移进正文"这类可无损归一，或保持现状（现有 advisory 盯着）。**新写事件一律按 §2 写裸 `EVENT_TYPE`、时间必填**——本条即按此写。
-
-### 2026-10-14 21:09 | codebuddy | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec
-本次被纠正: ① 实现任务直推 master（应开分支 + PR）；② 簿记类必须显式写进分支规矩的例外（我原先只写了发版类）；③ 历史 header 归一与其它项目 WORKMEMORY 按你指示**推迟到 digest**，不自行处理。
-- 本会话三块交付：① 「去控制台 + 桌面化观感」6 任务 + 门禁缺口修复（PR #131 已合，全量 1832 passed + 2 skipped）；② 分支纪律成文（ops.md 第 12 条 / PROTOCOL.md 铁律第 8 条，PR #130 与 #132 已合）；③ Vault 工具链三修（巡检解析器静默失效 / agent 类路由 / 写库入口 frontmatter 自检，coding-vault a18cd3e）。
-- 未做（明确推迟，非遗漏）：skill 侧「分支隔离」步骤（你指示暂缓）；73 条历史 header 归一（等 digest）；know-her / skill-dev 的 WORKMEMORY（不管）。
-- 回写检查：稳定结论已入 vault 与 ops.md / PROTOCOL.md；临时产物（pytest 日志、PR 正文暂存）都在系统临时目录，未入库。
-
-### 2026-10-14 21:17 | codebuddy | HANDOFF
-Caps: filesystem-read, filesystem-write, shell-exec
-交接包已写：`WORKMEMORY/handoff_no-console-feedback-gaps.md`（to: any · role: VERIFY/TEST · status: open）—— 真机双击验收 + digest 归一历史 header 两项延后事项按协议 §4 落盘，并同步更新 `INDEX.md` 的 Active handoffs。
-
-### 2026-10-14 23:05 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：ADR-0023（vault `dc4fc7f` 含新增 §9）与实施计划（`docs/plans/2026-10-14-interactive-agent-loop.md`，commit `604a98b`）均已落盘；台账按 `/dfs-plan` Phase 3 初始化完毕，**但按用户指示不启动执行**。
-- **计划**：6 任务（Go 门禁红灯① → 红灯②+CI → LLM client 收口 → 循环内核 → 工具白名单 → 契约+UI），全部带 Tier/Mode 标签、Files、Consumes/Produces、Subagent Scaffold、TDD Step Breakdown；Fog of War 4 条（裁判集扩充分派给下一个子计划，不投机拆任务）。**Branch 声明：`feat/interactive-agent-loop`**（尚未创建）。
-- **台账**：`init --plan-file docs/plans/2026-10-14-interactive-agent-loop.md` ⇒ 登记 6 任务全部 `pending`、`active_task_id=None`。**旧台账（10-10 desktop-shell，6/6 完成）已被覆盖**，备份在系统临时目录 `vault-exec-ledger-2026-10-10.bak`（3173 B）。
-- **ADR 追加 §9「语言边界的再确认」**（回答"agent 开发是否 Python 基础 / Go 能不能用"）：本项目 agent 已是**双语言**——交互层循环 Python（裁判与交付面都在 Python 侧 ⇒ 换 Go 会失去裁判）、批处理层 Go **已在跑**（`agent/go.mod`：go 1.26 + go-openai + cobra）、native-agent（Go 零框架 harness，0 行代码，未启动）。判据沿用 ADR-0021（换语言至多消 ≈21% 缺陷；代价=两套 runtime+IPC / 产物自省削弱 / 原生段不可 recover）。新增可复用判据：**先问「裁判在哪、交付物在哪」，再问「用哪种语言」**。
-- ⏳ **下一步（待用户下令）**：`git checkout -b feat/interactive-agent-loop` 后 `/dfs-exec`；Task 2 标 HITL（动 CI 定义）需人工确认。
-
-### 2026-10-14 23:35 | codebuddy | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec
-本次被纠正: 无（本批按计划与推荐执行；两处偏离由我主动申报并经确认：① 顺序改为 Task 0→Task 2 代码半→Task 1；② 计划外触碰 agent/run_integration_test.go）。
-事件：执行 ADR-0023 实施计划的**前三个任务单元**，集成门禁由「静默测别人的服务 + 恒红断言 + 单名解释器探测」变为**整体转绿**。分支 `feat/interactive-agent-loop`（**未开 PR**，Task 3~6 未做）。
-- **Task 0** `b76d45a`（CRV PASS）：身份校验（探 `/api/health`，接受 200/503 只读身份，对齐 Python 侧 `probe_identity`）+ 起服失败即 fail-fast（不再向被占端口发业务请求）+ 动态端口。**修的是一类假绿**（外来服务答得对时门禁会替它背书）；RED 实测 `Errno 10048 ×29` + 外来服务回 500。
-- **Task 2 代码半** `42e8420`（CRV PASS）：解释器探测由 `LookPath("python")` 单名改为候选链 `$DELECTOR_PYTHON`→`python3`→`python` + 逐个实测 `import uvicorn, fastapi`（15s 短超时）+ 透传到起服 argv[0]（四个调用点全查）。CI 半属 HITL，未做。
-- **Task 1** `64f7abf`（CRV PASS）：门禁 5 由「恰好 2 行」（假设空库，被 `create_app()` 的 7 篇预置短文污染、恒红）改为**前后快照相对断言**（净增恰好 2 行且标题匹配）；`level==A1` 作用域由整表收窄到净增行。
-- **门禁现状**：`cd agent && go test -tags integration ./...` ⇒ **116 PASS / 0 FAIL / 0 SKIP**；`go build`/`go vet`/`go vet -tags integration`/`go test` 全 0；gofmt 空；纯 LF。
-- **台账**：2/7（Task-0、Task-1 完成；Task-2 IN_PROGRESS 待 CI 半；Task-3/4/5/6 pending）。
-- ⏳ **续跑入口**：`WORKMEMORY/handoff_interactive-agent-loop.md`。顺序：CI 半（HITL）→ Task 3 → 4 → 5 → 6 → 开 PR。
-
-### 2026-10-15 00:45 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：计划 2026-10-14 再进一步 —— Task 2 CI 半与 Task 3 均完成（各经一轮 REVISE 回炉），台账 **4/7**。
-- **Task 2 CI 半** `f96a8d2`：新增 job `agent-integration`；回炉修两张红卡 —— ① Skip ⇒ job 静默绿（改 `go test -count=1 -json` + 两级 `go list` 差集的**零 SKIP** 判据，判据自身失效也 fail-closed）；② Go 测试缓存会在只改 Python 时复用旧 `ok`（加 `-count=1`）。
-- **Task 3** `9e17399`：LLM 出网收口到 `delector/services/llm_client.py`（5 处裸 HTTP → 单一 client，补 `max_tokens`，超时 30/15/20/10/30 原值保留）；回炉修红卡（可用 key 被误报连接失败 ⇒ `parse_json` 开关）、收口守卫升为结构判据（双变异自证：老判据对换拼接写法永久失明）、新模块登记进 2 个 canonical 打包位点 + 守卫集合。
-- **门禁**：`pytest -q` **1849 passed, 2 skipped**（净增 17 = 本任务 15+2）；ruff 0；mypy 四档；契约闸 PASS；Go 侧集成门禁 116 PASS / 0 SKIP。
-- **CRV 的价值（本次实证）**：两个任务**首轮都被判 REVISE**，红卡都是**判据失效型**缺陷 —— 守卫存在但换种写法就瞎（Task 3）、门禁绿但根本没有信号（Task 2）。这两类缺陷在 maker 自证（我跑过了、全绿）下**都不会被发现**。
-- ⏳ **后续**：Task 4（循环内核）→ Task 5（工具白名单）→ Task 6（契约+UI）→ 开 PR。黄牌留档：包级差集边界未写进注释 / 只防 PASS=0 不防用例变少 / 守卫按行数计数可加固为出现次数 / `DeLector.spec` 属本机 PyInstaller 产物（`.gitignore` 忽略、含 `D:/` 绝对路径）不计入交付，canonical 打包位点是 2 个。
-
-### 2026-10-15 02:05 | codebuddy | DECISION
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：ADR-0023 实施计划 Task 4/5/6 执行期两条设计裁决（计划正本已回写）。
-- **裁决 A：适用性闸门**。`analyze_a1_email` 是**唯一**确定性裁判（裁判集扩充 = Unknown A），对**非书信体**必然报 `a1_greeting_missing`(level=error)。若直接接进通用润色端点 ⇒ `v_0=1`，润色后仍无称呼语 ⇒ `v_1>=v_0` ⇒ 判 `no_improvement` 并回退 argmin = **原文** ⇒ 用户点了润色拿回原文，功能报废。**既有基线 `tests/test_server.py::test_ai_polish_diff_mocked` 实测就是这样红的**（非推测）。故称呼语不合法 ⇒ 零违规。**Why**：裁判"无话可说" ≠ "判定无错"，语义等价于今日一次性润色；docstring 已明写，且测试只钉"非书信体不回退原文"，不宣称零错。**欠账**：闸门对**候选**同样单向生效（模型删称呼语 ⇒ 候选也判不适用 ⇒ 零违规自动收敛），留 Unknown A 续作收口。
-- **裁决 B：收敛归属移入循环**。端点层用 recorder 录 `last_corrected_text` 兜底有漏洞：模型若在**取证轮**夹带 `corrected_text`，而收尾轮没有（循环按协议回退原文作候选）⇒ 收敛时端点返回模型没被采用的文本，与循环结论矛盾。故改为循环内「`v==0` ⇒ 返回那个零违规候选」；未收敛仍走 `min(history)` argmin（Task 4 语义未动）。
-
-### 2026-10-15 02:10 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：Task 4/5/6 交付完毕，PR **#136** 已开（`feat/interactive-agent-loop`，HARD GATE 4 未直推 master），CI run `38668055637` 触发时 in_progress。
-- **Task 4 `ff7235a`（循环内核）**：`delector/services/polish_loop.py`。二值流转 / D3 收尾终审守卫 / `v_n>=v_{n-1}` 不降即停 + argmin 回退 / judge_unreliable 哨兵 / 每轮前置 token+deadline 预算（per-call timeout = min(30, 剩余)）/ 裁判异常 errors-as-messages / 证据行数+字节双限截断 / should_stop ⇒ cancelled。**Unknown B 定案**：最坏输入 2000 字符（端点 `req.text[:2000]`）录制桩跑满 3 轮 ⇒ 单轮最坏 691 token、3 轮合计 785、保守 3×691=2073；本机**无真 tokenizer**（tiktoken/transformers 均 ModuleNotFoundError）⇒ 折算系数 3.0 显式登记 **UNVERIFIED 假设**；`DEFAULT_MAX_TOKENS` 保留 4096（2× 余量 2.97×）、`TOTAL=4096`（**< 4096×3** ⇒ 循环级预算真咬合，非真空闸）、`deadline=18.0`（< 前端 `DEFAULT_TIMEOUT_MS=25000`，该值从 `static/js/core.js` 现读，测试钉住）。
-- **Task 5 `1cb60fc`（白名单+钩子）**：恰好 `writing_check`/`analyze`/`vocab_stats`（MappingProxyType，值取 `delector.tools.<mod>.run` 真身，同进程直调不经 HTTP）；`call_tool(name, payload, *, hooks=())` 钩子串行 + fail-fast + 拒绝即返回。**CRV 首轮 REWORK 实证**：`analyze` 的"只读不下载"是无条件宣称 —— `processor.py:95-114` 桌面缺模型会真跑 `spacy.cli.download`（出网起 pip）；已改为条件式说明 + 非真空测试（模型不可用时该测试红）。打包面 4 位点已登记。
-- **Task 6 `2e61c88`（契约+UI）**：`converged`/`unconverged_reason` 只增不改；`stream: bool=False` 默认关 ⇒ 既有 JSON 行为逐字不变；SSE 逐帧 `on_progress` + 尾帧 result；**断连收尸必须放 `try/finally` 的同步 `task.cancel()`**（uvicorn 0.54 `spec_version=2.3` ⇒ starlette `listen_for_disconnect` **抢先**取消生成器，生成器内轮询几乎永远输给它，CRV 红卡实证）；无 Key 走端点层原因码 `no_api_key`（不进 REASONS）；`error_count` 沿用模型报的数（recorder）。前端：AbortController + 原生 fetch 读流、按钮"第 N/max_turns 轮"（分母取自服务端）、取消按钮（`static/index.html`，**`writer.html` 全仓不存在**）、`POLISH_REASON_COPY` 覆盖 REASONS 全量（集合相等测试钉住）、降级判据改"一帧都没收到"（中流断开不再二次烧配额）。
-- **门禁**：全量 `python -m pytest -q` ⇒ **1898 passed + 2 skipped**（基线 1768 + 130 新增）；`ruff check .` 零告警；`mypy --strict delector` 66 files 零错误；`tools/check_frontend_api_contract.py` PASS。maker-checker 双席位全程：Task 4 红卡经核对系误判（DI 参数是 scaffold 首句要求）+ `cancelled` 越界项**回写计划**结清；Task 5/6 各一轮 REWORK 后 APPROVED。
-- **已知欠账（明确不外扩）**：① 裁判集只有 A1 书信规则（Unknown A，含候选侧闸门单向生效）；② 折算系数 3.0 是假设；③ 真实轮次分布须有 Key 回测；④ Unknown C 的选定结果（JSON 契约字段 `tool_call`）**待回写 ADR-0023 §6**（本计划不代劳 ADR）。
-
-### 2026-10-15 02:15 | codebuddy | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec
-本次交付：ADR-0023 实施计划的 Task 4/5/6 三个 Tier-2 任务（循环内核 / 工具白名单+钩子 / 端点契约+前端进度取消 toast），经 maker-checker 双席位各一轮以上评审，PR #136 已开（未直推 master）。
-- 验证方式：全量 pytest 1898 passed + 2 skipped（本地原始输出）；ruff / mypy --strict / 前端契约闸全绿；每任务均做守卫变异自证（抽掉守卫 ⇒ 对应测试红，原始输出留证）。
-- 回写检查：稳定结论已回写计划正本（Task 4 Produces 补充 / Unknown B 部分收敛 / Unknown C 定案 / Task 6 执行期定案四条）；待办已显式留白（ADR §6 回写、Unknown A 续作、真 Key 回测）；临时产物（.commit-msg.tmp / .pr-body.tmp / .tmp-tail.txt）已删除，未入库。
-- 未做（非遗漏）：PR #136 的 CI 结果未等（按惯例不阻塞轮询，待用户发话再看）；ADR-0023 §6 的 Unknown C 回写属 vault 侧动作，未代劳。
-
-### 2026-10-15 02:40 | codebuddy | HANDOFF_RECEIVED
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：`handoff_interactive-agent-loop.md` 已接收并**闭合**（status → closed，正文追加「响应」节）。该包的 Task 3~6 + CI 半 + 开 PR 全部交付：Task 4 `ff7235a` / Task 5 `1cb60fc` / Task 6 `2e61c88`，PR **#136** CI success，台账 **7/7**（Task-5 一度漏登，本次补记）。
-- 剩余待办按用户 2026-10-15 指示**暂缓**（已在响应节列明）：Android 真机点检（含 **SSE `fetch`+`ReadableStream` 在 WebView 未验证**）、ADR-0023 §6 回写、Unknown A 子计划（裁判集扩充）、有 Key 后回测。
-- INDEX.md 的 Active handoffs 行已同步标注 closed。
-
-### 2026-10-15 02:42 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：PR #136 报 CONFLICTING（master 侧 2 条 workmemory 簿记提交 `5e103ac`/`01cc508` 与本分支的簿记提交 `4382e15` 都改 `work.log` 末尾）⇒ 用 merge（本仓合入用 `--merge`）解决，**只 `WORKMEMORY/work.log` 冲突**，`INDEX.md` 自动合并。
-- 解法：把两侧事件**全部保留**并按时间排序拼接（master 的 23:35 WORK_END、00:45 NOTE 在前，本分支 02:05/02:10/02:15 三条在后），work.log 由 53 → **55 条**，0 重复头 / 0 残留冲突标记 / 纯 CRLF。协议 §1.3「事件只追加不改写」与 §5.1「轮转/移动不改写正文」均未破。
-- **发现一条既有问题（非本次引入）**：`work.log + archive/*` 的 union 里存在 7 个**重复事件头**（09-04 ~ 09-13 段，同一头出现在 2~3 个 archive 分片），来自历史上「未跟踪的 archive 分片 + 已跟踪分片」两套并存。后果：按 §5.1 的 `sort | uniq -c` 守恒核对会把这些计数差异误判成丢失/新增（我本次的第一次守恒核对就是这样报 MISMATCH 的，真因是「archive 分片此前未跟踪，`git show HEAD:` 取不到」）。
-- **核对口径修正（供后来者）**：守恒核对 MUST 以**工作树现状**为 before 快照（轮转前先 `cp` 或先算 union 存基线），**不能**用 `git show HEAD:` 当 before —— 未跟踪分片会被漏算。
-
-### 2026-10-15 05:20 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：**ADR-0023 §6 回写完成**（vault 提交 `139cdde`，已推 master）；PR #136 的冲突已解。
-- **回写内容**：① 状态行删掉已过期的「实施未开始」，改为「§8.5 序 ①②③ 已落地」，并**显式保留 §4.3 的自设门槛** —— 裁判集一行未扩，此刻仍 MUST NOT 宣称「已实现」；② §6 迷雾区四条改为「原表述 + 现状 + 依据」表（Unknown 1 升级为第一瓶颈：适用性闸门使循环真实价值只覆盖 A1 书信体；Unknown 2 上界定案 4096/4096/18.0 + 折算系数 3.0 标注 UNVERIFIED；Unknown 3 定案 = JSON 契约字段；Unknown 4 闭合）+ **新增 Unknown 5**（`lookup_core_vocab` 10 组边界词 0 失败、`analyze_a1_email` 10 组边界输入全通过 ⇒ 未见抛出、未穷尽；`judge_error` 降级保留为防御性守卫）；③ **新增 §10 实施回写**（施行顺序 ①②③ 的落地与证据 / 两处执行期偏离 / 两条可复用教训 / 明确留白）。
-- **两条教训已进 ADR §10.6（建议晋升 `01-Rules`）**：⑴ SSE 断连收尸必须放 `try/finally` 的**同步** `cancel()` —— uvicorn 0.54 `spec_version=2.3` 下 starlette `listen_for_disconnect` **抢先**取消生成器；且**只迭代 `body_iterator` 的测试绕开了 `StreamingResponse.__call__`**，测不到这个抢先。⑵「只读」这类声称**必须带前提**并配**非真空测试**（`analyze` 的"不下载"实测为假：`processor.py:95-114` 桌面缺模型会 `spacy.cli.download`）。
-- **PR #136 冲突**：master 侧 2 条簿记提交与本分支簿记提交都改 `work.log` 末尾 ⇒ 用 merge 解，两侧事件全留（53→55 条，0 重复头 / 0 残留标记 / 纯 CRLF）；`mergeable` 已由 CONFLICTING 转 **MERGEABLE**。顺带闭合 `handoff_interactive-agent-loop.md`（status → closed + 响应节）并补登台账 Task-5 ⇒ **7/7**。
-- 计划正本那句「待回写 ADR §6」已同步为「✅ 已回写（vault `139cdde`）」，避免活文档指针漂移。
-
-### 2026-10-15 05:25 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：**PR #136 已合入 master**（merge commit `d919d42`，分支 `feat/interactive-agent-loop` 已删）—— ADR-0023 交互层验证驱动循环 Task 0~6 全部落地。**未发版**（不影响 v5.17.0 产物，下次发版随版本到达）。
-- **合并路径有坑（值得记住）**：`gh pr merge --merge --delete-branch` 被 API 拒绝 —— `GraphQL: refusing to allow an OAuth App to create or update workflow .github/workflows/ci.yml without workflow scope`。原因：**gh 的 OAuth token 无 `workflow` scope**，而本 PR 改了 CI 定义（Task 2 CI 半）。⇒ 改用**本地 `--no-ff` 合并 + SSH 推送**（SSH key 不受该 scope 限制），推上去后 GitHub 自动把 PR #136 标成 `MERGED`（mergeCommit 与本地一致）。**教训：含 `.github/workflows/**` 改动的 PR，在这台机器的 gh 上是合不动的，别在那儿反复试。**
-- **CI 红过两次，两次都不是代码**：① run `38684711849` 的 `Tests & Go Gates (ubuntu)` 挂在 **`Set up job`** 阶段 —— `actions/setup-go` 归档从 codeload 下载失败（其余三 job 全绿、本地全量 1898 passed）⇒ `gh run rerun --failed` 后 4/4 job success；② run `38684539617` 因新 push 被标 cancelled（同 sha 前缀的旧 run）。
-- 合并前自检（在被合并的 master 上）：`pytest` ai-polish 相关五套 93 passed、`test_server.py -k "ai_polish or packaging or hidden"` 23 passed、前端契约闸 PASS。**注意 master 已被 dependabot 推了两个 PR（#134 paths-filter-4 / #135 fastapi 0.143.0），本 PR 的 CI 是在 GitHub 的 merge-ref 上跑的 ⇒ 已覆盖新依赖**。
-- 仍未做（ADR §10.7 / handoff 响应节已列）：裁判集扩充（Unknown 1，第一瓶颈）、Android 真机点检（含 WebView SSE 读流未验证）、有 Key 后回测真轮次分布与真 token 计数。
-
-### 2026-10-15 14:05 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：**双席位评审**「A1 裁判集扩充计划（`docs/plans/2026-10-15-a1-judge-expansion.md`，7 任务）+ 已落地的分层架构」，两把尺子各自给出 **局部偏离**（无通过）。
-- **尺子 1** `01-Rules/LAYERED-ARCHITECTURE.md`（实证对象 = Pi-Agent `pi-ai`/`pi-agent-core`/`pi-coding-agent` 三层）：§2 符合；**§1 无法判定**（仓内**零处**层序声明 ⇒ "违规"本身无法判定；实测两组双向耦合：`core/database.py:23` ⇄ `nlp_engine/processor.py:16`、`services/polish_tools.py:60` ⇄ `tools/writing_check.py:11`）；**§3 偏离**（`polish_loop.py:79` 顶层 import `writing.analyze_a1_email` ⇒ 物理移除上层即 import 期失败；`judge=` 注入缝只在运行期成立）；**§4 偏离**（A1 业务知识住在机制内核：`POLISH_LOOP_SYSTEM_PROMPT` 逐字书信指令 + `_default_judge` 焊死 A1 裁判）。
-- **尺子 2** `AGENT-SDK-PATTERNS` 六模式 + `AGENT-CONDUCT §10.2`：模式 1 要点 2/4/7、模式 2（errors-as-messages / 五步管道 / 钩子）、模式 3 要点 2（tool_call 拦截点 fail-closed）**符合**；**模式 1 要点 1 偏离**（内核 510 行、停止策略硬编码而非 Overlay）；**模式 3 要点 4 偏离**（SSE 的 `except llm_client.LLMError` 是**不可达分支**：`_run_polish` 已把它转 HTTPException ⇒ error 帧永不发出）；**模式 4 层 1 部分偏离**（"先触发者胜"**等价**且有前缀性证明，真缺口是"截断不可见 + 无逃生通道"）；**§10.2 偏离**（确定性层没跑时仍 `v==0 ⇒ converged=True` ⇒ 一票否决退化成"无票即通过"）。
-- **三张 RED（均针对计划本身，非已落地代码）**：R1 **接线缝缺失** —— 没有任何 Task 写"谁把 `nlp` 交给裁判"，而 `_run_polish` 从不传 `judge=`、Out-of-Scope 又禁改内核 ⇒ Task 2 加的 `nlp` 在生产恒 None ⇒ **7 任务测试可全绿而语法裁判永不生效**（dead-green），§4.3 判据表还能被打勾解除；R2 **fail-closed 缺失**（D4 只加标记，改不了 `converged` 真值；应收敛判据：`converged==true` MUST 蕴含「所有已接线确定性层都真跑过」）；R3 **超时/取消对同步调用无效**（judge 同步跑在事件循环上、dispatch 无 `wait_for`、墙钟只在轮首查、`task.cancel()` 掐不断同步函数；且循环内 `analyze` 可达 `spacy.cli.download` 出网起 pip）。
-- **编排者补跑的实测消掉一条黄卡**：官方 `A1_SCHREIBEN_TEIL2` 10 篇 `sample_email` 在两件既有算力下 **误报 0/10**（含评审点名的高危句）⇒ Task 2 是"接线"不是"修规则"，硬门基线绿。
-- 完整结论与逐条卡已呈用户；待其拍板是否按修复清单改计划。
-
-### 2026-10-15 14:10 | codebuddy | DECISION
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：**Pi 式分层重构暂缓（用户 2026-10-15 拍板）** —— 目标形态认可、执行推迟到日后单独重构。
-- **目标形态（日后要做）**：① 层间类型三态递进 `Tool`（名片：name/description/parameters）→ `AgentTool extends Tool`（工人：+execute）→ `ToolDefinition`（产品组件：+ctx/render），**只加不改**；② 依赖单向（消掉实测的两组双向耦合）；③ **层序声明**（当前零处 —— 这是 §1 判据成立的前提）；④ 业务知识（提示词/裁判）从机制内核提到产品层。判据来源 `01-Rules/LAYERED-ARCHITECTURE.md` + 2026-10-15 双席位评审。
-- **Why 现在不做**：三态递进需先有「第二个实现」才有内容（现仅一个工具面、一个裁判）——提前定接口正是 §2 反模式；且与本子计划（抬 §4.3 门槛）正交。
-- **已登记**：写进新计划 `docs/plans/2026-10-15-a1-judge-expansion.md` 的 `Out of Scope`（本计划一切改动 MUST NOT 依赖该重构）+ `Fog of War [Unknown E]`（含四个子目标与将来启动的前置顺序）。
-- **不阻塞**：三张 RED（接线缝 / fail-closed / 同步调用超时）**均可走"端点注入缝"修复，不需要这次重构**（这正是两个席位给出的"不改内核结构、允许经注入缝改变裁判语义"路径）。
-
-### 2026-10-15 15:10 | codebuddy | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：ADR-0023 §4.3 续作（A1 裁判集扩充，计划 `docs/plans/2026-10-15-a1-judge-expansion.md`，8 任务）在分支 `feat/a1-judge-expansion` 上推进到 **3/8**（Task 1+2 合并交付 `88856ab`；Task 8 `deede44`）。
-- **开工前的双席位评审**（用户指示，按 `01-Rules/LAYERED-ARCHITECTURE` + `AGENT-SDK-PATTERNS`）：两席位均判「局部偏离」，核心是 **RED#1 接线缝缺失** —— 计划 7 个任务没写"谁把 `nlp` 交给裁判"，而 `_run_polish` 从不传 `judge=`、Out-of-Scope 又禁改内核 ⇒ **语法裁判在生产恒不生效而 7 任务测试可全绿**（dead-green），§4.3 判据表还能被打勾解除。据此把 Task 1/2 合并为**原子变更**（能力与接缝同批落地）。
-- **我对评审的两处反裁决（都有实测依据，已写进计划）**：① RED#2 的"降级即禁止收敛"**不采用** —— 实测 `processor.py:192-198` Android 显式 `nlp=None`，若禁止收敛则 `argmin` 回退返回**原文** = ADR §10.3 的功能报废回归；改为**运行期 fail-open + 显式标记 / 声明门禁层 fail-closed**。② maker 一度把 `_a1_violations_if_letter` 提前改成按规则族分流 —— 那是 **Task 7 的 HITL 行为变更**（语法违规开始计数后，模型修不动的作文会回退原文），已退回并加一条**非真空钉子**钉住「本批不改该行为」。
-- **Task 8（接缝加固）**：dispatch 加 `min(per-call, 剩余 deadline)` 超时（调用前重算剩余）、同步 `judge` 移 `asyncio.to_thread`（否则长裁判阻塞 `/api/health` 且 `task.cancel()` 掐不断）、修 `_polish_event_stream` 那个**永不命中**的 `except llm_client.LLMError`（`_run_polish` 早已把它转成 HTTPException）⇒ 改为捕 HTTPException 发 error 帧，`e.detail` 人话才到得了用户。
-- **基础设施坑（两次）**：两次 subagent 派单被掐（10003 / 10101），第一次留了半成品 + 一条取消用例跑不完（备份 `/tmp/task8-partial.diff` 后丢弃、重派成功）。**教训：给 maker 的反挂死纪律必须写进 prompt**（所有 sleep 要有 wait_for/固定次数兜底、禁 join 线程、禁无界 while、每条用例贴实测耗时）。Task 8 的 flaky 黄卡（心跳窗口余量趋零）由我按 CRV 开方改 1 行（跨调用取 max）并 20 连跑自证 —— 偏离 maker-checker，已如实记录在提交信息。
-- **门禁**：5 套件 411 passed；`ruff check .` 全绿；`mypy --strict delector` 66 files 0；契约闸 PASS；CRLF。
-- **未做**：Task 3/4/5（三个新维度规则）、Task 6（FP 标定，HITL）、Task 7（闸门收窄 + §4.3 判据表，HITL，含前端降级提示）。**Pi 式分层重构已由用户拍板暂缓**（`docs/agents/architecture.md` 已登记）。
-
-### 2026-10-15 16:40 | codebuddy | DECISION
-Caps: filesystem-read, filesystem-write, shell-exec
-事件：**Task 6 的 HITL 裁决落地**（用户拍板）：A 维**不做**、B 维**接线为 warning**。
-- **A 维（情态动词框架语序）不做**：实测负样本 6/7（「实词夹在情态动词与末位动词之间」整族不可见 = 结构性 FN），且样本外追补的 3 句**正确**句（逗号并列主句）全部误报 ⇒ FP 与 FN 同源、两侧都破。标定产物（`tools/bench_judge_fp.py`）保留作记录、不接线。**Why 这条要记**：本计划第一个"测了之后选择不做"的维度 —— 防止后来者看到 bench 脚本以为它只是"还没接线"。
-- **B 维（时间副词 ↔ 时态一致性）接线为 warning**：正样本 FP 0/35、负样本 7/7、对照 0/6，两档阈值均成立；样本偏小（7 错 + 6 对照）⇒ 先 advisory 不阻断收敛，积累真实用法后再议升 error。可见性靠响应体新增 `judge_advisories`（只增不改）+ Task 7 的前端渲染。
-- 更正一条**未实测口径**：提交 `39e6d79` 的消息里写「COMMON_CORRECT_SENTENCES 47 句」是我未实测的转述，**实测为 51 句** —— 以实测为准（本事件与 PR 正文为准）。
-
 ### 2026-10-15 18:20 | codebuddy | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**A1 裁判集扩充计划（`docs/plans/2026-10-15-a1-judge-expansion.md`，8 任务）技术面全部落地，台账 8/8**（分支 `feat/a1-judge-expansion`，待开 PR）。
@@ -643,4 +444,33 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - Go agent 门禁：8 个包单元测试与基准全绿 · `gofmt -l .` 0 格式差异；
   - 编码卫生：全仓所有新增与修改文件 UTF-8 CRLF 校验 **0 lone LF**。
 
+
+
+
+### 2026-10-18 23:26 | hy4-preview__codebuddy | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Windows CI 红灯 `test_check_index_html_sync_clean` —— subprocess 读线程解码失败 ⇒ 退出码 0 但 stdout 为 None**。
+- 现象：PR #159 / run 39138738975 的 `Windows Portable Smoke` 挂 `TypeError: argument of type 'NoneType' is not iterable`；ubuntu job 同测试全绿（2367 passed / 1 failed，只 Windows 红）。
+- 根因（本机已逐字复现，报错与 CI 一致 `byte 0x9d position 55`）：`subprocess.run(text=True)` 不指定 encoding 时按 **locale** 解码（GitHub Windows runner = cp1252，本机 = cp936），而子进程因 CI 注入 `PYTHONIOENCODING=utf-8` 写的是 UTF-8 中文 ⇒ 解码崩在 subprocess 的 `_readerthread` 里。**线程内异常不进 returncode**，于是 `res.returncode == 0` 通过、`res.stdout` 却是 None ⇒ 断言处炸 TypeError。
+- 解法（两侧都要钉死，缺一不可）：读侧测试显式 `encoding="utf-8"`；写侧脚本 `sys.stdout/stderr.reconfigure(encoding="utf-8", errors="replace")`（沿用 `start.py` 既有加固）。
+- 教训（可蒸馏）：**判定"子进程成功了"不能只看 returncode**；`text=True` 未带 encoding 的调用在任何 locale≠UTF-8 的机器上都是定时炸弹，且失败形态是"假绿 + None 输出"，不是红。
+
+### 2026-10-18 23:26 | hy4-preview__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**CI 红灯修复 + 附带修 `build_index_html.py --check` 恒假红**，分支 `refactor/index-html-split`（PR #159），两个提交 `78bcb9e` / `4d85f50` 已推送。
+- 不做范围：不动 `static/` 内容、不改 index.html 装配逻辑、不碰 CI workflow 步骤、不修其它 `text=True` 未带 encoding 的存量调用（仅登记为隐患）。
+- 附带缺陷（执行验证时发现，非 CI 链路）：`python tools/build_index_html.py --check` **恒报漂移**，而 `check_index_html_sync.py` 报 PASS —— 前者用 `read_text()` 触发 universal newlines，把磁盘 CRLF 吃成 LF 后与 CRLF 装配物比对。修法：改 `read_bytes().decode()` + 归一化到 LF，与门禁脚本同口径（用户 2026-10-18 拍板"一并修（同 PR）"）。
+- 新增测试：`test_build_index_html_check_clean`（锁死清洁仓态不假红）+ `test_build_index_html_check_mutation_detects_drift`（真变异：`--output` 副本注入一行 ⇒ 必须 exit 1，防恒绿死测）。
+- 验证：`pytest tests/test_check_index_html_sync.py` 5 passed；两入口现同结论（均 PASS）；`ruff check .` 全绿；`mypy --strict delector tools` 117 文件 0 错；`mypy --follow-imports=skip tests` 155 文件 0 错。CI 重跑 run 39140181210（未轮询，结果待用户确认）。
+- 簿记：`work.log` 已按 §5 轮转，77 → 50 条（最老 27 条按事件日期移入 `archive/work-2026-10-{08,09,10,11,14,15}.log`），轮转前后 `### ` 事件头集合 diff 为空 = 守恒。
+
+
+
+### 2026-10-18 23:47 | hy4-preview__codebuddy | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修完红灯又踩第二颗：`No Silent Degradation Gate` 把我新加的 `except Exception: pass` 判为未豁免站点**。
+- 现象：`76976a6` 之前的 run 39140474277 —— Windows job 已转绿（`Windows Portable Smoke` ✓ 13m13s，证明 UTF-8 修复生效），却新红了 7 秒的 `No Silent Degradation Gate`。
+- 根因：`tools/check_silent_degradation.py` 的 C1 判据扫 `delector/**` + `tools/**` 的 `except …: pass`，**必须**带 `silent-ok: <理由>` 注释才豁免；我照抄 `start.py` 的编码加固时，原站点有豁免注释、我新加的两处没有 ⇒ 20 站点中 2 个未豁免 ⇒ exit 1。
+- 解法：两处补 `# silent-ok: 仅显示层编码（流不可重配置）⇒ 保持原流；本闸结论由退出码表达`（与仓内 18 个同类站点同口径）。本地复跑判定器：20 命中 / 20 豁免 / 0 未豁免，exit 0。
+- 教训：**「照抄既有加固写法」时，抄的不仅是代码，还有它附带的门禁豁免契约**；本仓凡是 `except …: pass` 都过 C1 判据，新增一处就必须同时给出豁免理由。改完 `tools/` 记得本地跑一遍 `python tools/check_silent_degradation.py`（秒级），别等 CI。
 
