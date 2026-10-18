@@ -131,34 +131,34 @@ def _make_non_json_content_client():
     "factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client]
 )
 def test_note_assist_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-402-timeout")
+    monkeypatch.setattr("delector.routes.articles.get_effective_api_key", lambda *a, **k: "«redacted:sk-…»")
     monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
     res = client.post("/api/ai/note-assist", json={"sentence": "Guten Tag.", "selected_text": "Guten Tag"})
     assert res.status_code == 502, f"AI 失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
     # 不得泄露 API Key
-    assert "sk-test-402-timeout" not in res.text
+    assert "«redacted:sk-…»" not in res.text
 
 
 @pytest.mark.parametrize(
     "factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client]
 )
 def test_ai_polish_diff_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-polish")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "«redacted:sk-…»")
     monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
     res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund."})
     assert res.status_code == 502, f"AI 润色失败应返回 502，实际 {res.status_code}: {res.text[:200]}"
-    assert "sk-test-polish" not in res.text
+    assert "«redacted:sk-…»" not in res.text
 
 
 @pytest.mark.parametrize(
     "factory", [_make_402_client, _make_timeout_client, _make_non_json_client, _make_non_json_content_client]
 )
 def test_ai_polish_ai_failure_returns_502(client, monkeypatch, factory):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-test-polish2")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "«redacted:sk-…»")
     monkeypatch.setattr("delector.routes.main.httpx.AsyncClient", factory())
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 502
-    assert "sk-test-polish2" not in res.text
+    assert "«redacted:sk-…»" not in res.text
 
 
 @pytest.mark.parametrize("factory", [_make_402_client, _make_timeout_client, _make_non_json_client])
@@ -172,7 +172,8 @@ def test_grammar_lookup_ai_failure_returns_502(client, monkeypatch, factory):
 
 def test_ai_no_key_stub_still_succeeds(client, monkeypatch):
     """无 key 时仍返回 200 stub（与网络失败的 502 区分）。"""
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.articles.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/ai/note-assist", json={"sentence": "Hallo.", "selected_text": "Hallo"})
     assert res.status_code == 200
     assert res.json().get("_stub") is True
@@ -211,7 +212,7 @@ class _ScriptedChat:
 
 
 def _stub_api_key(monkeypatch: Any) -> None:
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-stub")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "sk-stub")
 
 
 def _parse_sse(raw: str) -> List[Dict[str, Any]]:
@@ -231,7 +232,7 @@ def test_ai_polish_response_carries_convergence_contract(client, monkeypatch):
     chat = _ScriptedChat(
         [{"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["ein → einen"], "error_count": 1}]
     )
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
 
     res = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT})
     assert res.status_code == 200
@@ -254,7 +255,7 @@ def test_ai_polish_response_carries_convergence_contract(client, monkeypatch):
 
 def test_ai_polish_no_key_reports_endpoint_level_reason(client, monkeypatch):
     """无 Key ⇒ 循环**根本没跑** ⇒ 端点层原因码 `no_api_key`（不进 REASONS）。"""
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 200
     result = res.json()["result"]
@@ -280,7 +281,7 @@ def test_ai_polish_non_letter_grammar_error_is_counted_by_the_loop(client, monke
     nlp = _real_nlp_or_skip()
     _stub_api_key(monkeypatch)
     chat = _ScriptedChat([{"corrected_text": "Ich habe ein Hund. Er ist sehr lieb.", "notes_zh": ["x"]}])
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
     monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
 
     result = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT}).json()["result"]
@@ -302,7 +303,7 @@ def test_ai_polish_non_letter_unfixable_falls_back_to_original(client, monkeypat
     nlp = _real_nlp_or_skip()
     _stub_api_key(monkeypatch)
     chat = _ScriptedChat([{"corrected_text": "Ich habe ein Hund. Er ist sehr lieb.", "notes_zh": ["x"]}])
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
     monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
 
     result = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT}).json()["result"]
@@ -320,7 +321,7 @@ def test_ai_polish_letter_text_still_judged_by_a1_rules(client, monkeypatch):
     _stub_api_key(monkeypatch)
     # 改了用词但没修结语逗号 ⇒ v_1 == v_0 == 1 ⇒ 不降即停
     chat = _ScriptedChat([{"corrected_text": "Liebe Maria,\nich lade dich herzlich ein.\nViele Grüße,\nAnna"}])
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
 
     result = client.post("/api/writing/ai-polish", json={"text": _LETTER_TEXT}).json()["result"]
 
@@ -362,7 +363,7 @@ def test_ai_polish_endpoint_counts_grammar_violations_on_letter_text(client, mon
     chat = _ScriptedChat(
         [{"corrected_text": "Liebe Maria,\nich habe ein Hund und freue mich.\nViele Grüße\nAnna", "notes_zh": ["x"]}]
     )
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
     monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
 
     result = client.post("/api/writing/ai-polish", json={"text": _GRAMMAR_LETTER_TEXT}).json()["result"]
@@ -381,7 +382,7 @@ def test_ai_polish_endpoint_reports_degraded_when_no_nlp(client, monkeypatch):
     """
     _stub_api_key(monkeypatch)
     chat = _ScriptedChat([{"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["x"]}])
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
     monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: None)
     monkeypatch.setattr("delector.nlp_engine.processor.try_load_nlp_no_download", lambda: None)
 
@@ -407,12 +408,12 @@ def test_ai_polish_endpoint_surfaces_advisories_without_blocking_convergence(cli
 
     # 桩模型「不修任何东西」：候选 = 原文 ⇒ 本用例只观察判定不受 advisory 影响。
     chat_with = _ScriptedChat([{"corrected_text": text_with, "notes_zh": []}])
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat_with)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat_with)
     monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: nlp)
     res_with = client.post("/api/writing/ai-polish", json={"text": text_with}).json()["result"]
 
     chat_without = _ScriptedChat([{"corrected_text": text_without, "notes_zh": []}])
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat_without)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat_without)
     res_without = client.post("/api/writing/ai-polish", json={"text": text_without}).json()["result"]
 
     assert res_with["judge_advisories"], "B 维 advisory MUST 到达响应体（否则 warning 是 no-op）"
@@ -433,7 +434,7 @@ def test_ai_polish_endpoint_surfaces_advisories_without_blocking_convergence(cli
 
 def test_ai_polish_response_carries_judge_advisories_contract(client, monkeypatch):
     """响应契约（只增不改）：无 Key 路径也要带 `judge_advisories: []`（前端消费不炸）。"""
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "")
 
     result = client.post("/api/writing/ai-polish", json={"text": "Hallo."}).json()["result"]
 
@@ -478,7 +479,7 @@ def test_run_polish_passes_text_family_aware_system_prompt(monkeypatch):
         return polish_loop.LoopResult(text=kwargs["text"], converged=True, reason="ok", rounds=0, violations=[])
 
     monkeypatch.setattr("delector.services.polish_loop.run_polish_loop", _fake_loop)
-    monkeypatch.setattr("delector.routes.main.get_effective_api_base_url", lambda: "http://stub")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_base_url", lambda: "http://stub")
     monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: None)
     monkeypatch.setattr("delector.nlp_engine.processor.try_load_nlp_no_download", lambda: None)
 
@@ -598,7 +599,7 @@ def test_ai_polish_runs_tool_hooks_on_the_real_path(client, monkeypatch, caplog)
             {"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["ein → einen"]},
         ]
     )
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
 
     with caplog.at_level(logging.INFO):
         res = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT})
@@ -625,7 +626,7 @@ def test_ai_polish_stream_emits_progress_then_full_result(client, monkeypatch):
             {"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["ein → einen"], "error_count": 1},
         ]
     )
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
 
     res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT, "stream": True})
 
@@ -663,7 +664,7 @@ def test_ai_polish_feedback_and_prose_routing(client: Any, monkeypatch: Any) -> 
             {"corrected_text": "Ich gehe in die Schule.", "notes_zh": ["nach -> in die"]},
         ]
     )
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
 
     def _fake_make_judge(leitpunkte: Any, nlp: Any) -> Any:
         def _judge(text: str) -> Dict[str, Any]:
@@ -690,7 +691,7 @@ def test_ai_polish_feedback_and_prose_routing(client: Any, monkeypatch: Any) -> 
 
         return _judge
 
-    monkeypatch.setattr("delector.routes.main._make_judge", _fake_make_judge)
+    monkeypatch.setattr("delector.routes.writing._make_judge", _fake_make_judge)
 
     res = client.post("/api/writing/ai-polish", json={"text": "Ich gehe in Schule.", "stream": True})
     assert res.status_code == 200
@@ -721,7 +722,7 @@ def test_ai_polish_stream_defaults_off_and_keeps_json(client, monkeypatch):
     """`stream` 默认关：不传就是既有 JSON 行为（既有测试逐字不变的前提）。"""
     _stub_api_key(monkeypatch)
     chat = _ScriptedChat([{"corrected_text": "Ich habe einen Hund. Er ist gut.", "notes_zh": ["x"]}])
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", chat)
 
     res = client.post("/api/writing/ai-polish", json={"text": _ESSAY_TEXT})
 
@@ -755,7 +756,7 @@ def test_ai_polish_stream_cancels_loop_when_client_disconnects(monkeypatch):
         return {"corrected_text": _ESSAY_TEXT}
 
     _stub_api_key(monkeypatch)
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", _chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", _chat)
 
     class _DisconnectedRequest:
         """仅提供端点用到的两个面：`client.host`（本机闸）与 `is_disconnected()`。"""
@@ -831,7 +832,7 @@ def test_ai_polish_stream_cancels_loop_when_starlette_listener_preempts(monkeypa
         return {"corrected_text": _ESSAY_TEXT}
 
     _stub_api_key(monkeypatch)
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", _chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", _chat)
 
     class _NeverDisconnectedRequest:
         """生成器只用得到 `is_disconnected()`：恒 False ⇒ 取消只能来自 starlette 监听器。"""
@@ -933,7 +934,7 @@ def test_ai_polish_stream_error_frame_carries_llm_detail(client, monkeypatch):
     async def _chat(**kwargs: Any) -> Dict[str, Any]:
         raise llm_client.LLMError("DeepSeek 服务暂时不可用 (503)")
 
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", _chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", _chat)
 
     res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT, "stream": True})
 
@@ -954,14 +955,14 @@ def test_ai_polish_records_and_uses_real_usage_tokens(client: Any, monkeypatch: 
     - _PolishReplyRecorder 捕获 recorder.usage == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}；
     - 在 SSE 流中，tokens_used 消费恰好 50 tokens（来自 usage.completion_tokens），而非字符估算。
     """
-    from delector.routes import main as routes_main
+    from delector.routes import writing as routes_writing
 
     _stub_api_key(monkeypatch)
     monkeypatch.setattr("delector.nlp_engine.processor.get_loaded_nlp", lambda: None)
     monkeypatch.setattr("delector.nlp_engine.processor.try_load_nlp_no_download", lambda: None)
 
     # 1. 验证单元层面 recorder 初始态与 _capture 行为
-    unit_recorder = routes_main._PolishReplyRecorder("test-key", "https://api.deepseek.com")
+    unit_recorder = routes_writing._PolishReplyRecorder("test-key", "https://api.deepseek.com")
     assert unit_recorder.usage is None
 
     chat_calls: List[Dict[str, Any]] = []
@@ -981,17 +982,17 @@ def test_ai_polish_records_and_uses_real_usage_tokens(client: Any, monkeypatch: 
             }
         return payload
 
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", mock_chat)
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", mock_chat)
 
     captured_recorders: List[Any] = []
-    original_recorder_cls = routes_main._PolishReplyRecorder
+    original_recorder_cls = routes_writing._PolishReplyRecorder
 
     class _SpyRecorder(original_recorder_cls):  # type: ignore[misc, valid-type]
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
             captured_recorders.append(self)
 
-    monkeypatch.setattr("delector.routes.main._PolishReplyRecorder", _SpyRecorder)
+    monkeypatch.setattr("delector.routes.writing._PolishReplyRecorder", _SpyRecorder)
 
     res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT, "stream": True})
     assert res.status_code == 200

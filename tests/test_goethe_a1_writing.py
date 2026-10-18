@@ -290,8 +290,8 @@ def test_ai_polish_endpoint_keeps_non_letter_polish(monkeypatch):
     async def _fake_chat(**_kwargs):
         return {"corrected_text": polished, "notes_zh": ["ein → einen (Akkusativ)"], "error_count": 1}
 
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "sk-stub")
-    monkeypatch.setattr("delector.routes.main.llm_client.chat", _fake_chat)
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "sk-stub")
+    monkeypatch.setattr("delector.routes.writing.llm_client.chat", _fake_chat)
 
     client = TestClient(app, client=("127.0.0.1", 54321))
     res = client.post("/api/writing/ai-polish/diff", json={"text": _ESSAY_TEXT})

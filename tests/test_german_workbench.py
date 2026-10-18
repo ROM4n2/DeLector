@@ -24,7 +24,7 @@ _CSS = (_ROOT / "static" / "style.css").read_text(encoding="utf-8")
 _SERVER = (_ROOT / "delector" / "server.py").read_text(encoding="utf-8")
 # Phase 1 Task 4：通用 handler 从 server.py 搬进 delector/routes/main.py，
 # 装饰器随之从 @app.* 变 @router.*。钉端点存在性的断言要跟着改读新文件。
-_MAIN_ROUTES = (_ROOT / "delector" / "routes" / "main.py").read_text(encoding="utf-8")
+_AUDIO_ROUTES = (_ROOT / "delector" / "routes" / "audio.py").read_text(encoding="utf-8")
 # C7 Task 4：A1 种子数据（SEED_WORDS / CORE_* / SEED_ID_ALIASES / EMBEDDED_AUDIO）
 # 已从 workbench.html 抽到 JS 数据模块，由入口页用普通 <script src> 先加载。
 # 内容类断言（解析/计数）必须读数据模块；workbench.html 只保留使用这些常量的代码。
@@ -403,9 +403,9 @@ def test_mobile_dock_offset_for_german_view():
 
 
 def test_get_audio_tts_route_registered():
-    """delector/routes/main.py 有 GET /api/audio/tts 路由（区别于既有 POST 的函数名）。"""
-    assert '@router.get("/api/audio/tts")' in _MAIN_ROUTES
-    assert "async def audio_tts_get(" in _MAIN_ROUTES
+    """delector/routes/audio.py 有 GET /api/audio/tts 路由（区别于既有 POST 的函数名）。"""
+    assert '@router.get("/api/audio/tts")' in _AUDIO_ROUTES
+    assert "async def audio_tts_get(" in _AUDIO_ROUTES
 
 
 def test_backup_covers_workbench_state():

@@ -80,9 +80,13 @@ def lan_client(app) -> Iterator[TestClient]:
 def local_client(app, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """显式本机来源；同时把 effective key 摘空 ⇒ 走既有「未配 key」stub 分支，
     保证用例绝不真实出网（stub 掉 AI 调用）。"""
+    from delector.routes import articles as routes_articles
     from delector.routes import main as routes_main
+    from delector.routes import writing as routes_writing
 
     monkeypatch.setattr(routes_main, "get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr(routes_articles, "get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr(routes_writing, "get_effective_api_key", lambda *a, **k: "")
     yield TestClient(app, client=("127.0.0.1", 54321))
 
 

@@ -18,9 +18,7 @@ r"""考试 / 训练记录读写（exam_trials / a1_* / listen_trials / hard_sent
 
 from typing import Any, Dict, List, Optional
 
-# 循环导入纪律：`database.py` 在**定义完连接访问器 / 事件日志之后**才 re-export 本模块，
-# 故此处 import 拿到的 database 模块对象已完成到该点（下列名字均已绑定）。
-from delector.core.database import db_conn, db_progress_conn, log_study_event
+from delector.core.db.connection import db_conn, db_progress_conn, log_study_event
 
 
 def record_exam_trial(

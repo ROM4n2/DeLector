@@ -94,7 +94,7 @@ def test_writing_card_sugar_endpoint(client):
 
 
 def test_ai_polish_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish", json={"text": "Hallo."})
     assert res.status_code == 200
     data = res.json()
@@ -104,7 +104,7 @@ def test_ai_polish_no_key_stub(client, monkeypatch):
 
 
 def test_ai_polish_diff_no_key_stub(client, monkeypatch):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/writing/ai-polish/diff", json={"text": "Ich habe ein Hund. Er ist gut."})
     assert res.status_code == 200
     data = res.json()
@@ -118,7 +118,7 @@ def test_ai_polish_diff_no_key_stub(client, monkeypatch):
 
 
 def test_ai_polish_diff_mocked(client, monkeypatch):
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "test-api-key")
+    monkeypatch.setattr("delector.routes.writing.get_effective_api_key", lambda *a, **k: "test-api-key")
 
     mock_response_payload = {
         "choices": [
@@ -573,11 +573,11 @@ def test_url_ingest_endpoint_with_mock(client, monkeypatch):
         "<html><head><title>Hallo Berlin</title></head><body>"
         "<p>Ich lebe seit zwei Jahren in Berlin und lerne jeden Tag Deutsch.</p></body></html>"
     )
-    monkeypatch.setattr("delector.routes.main.fetch_remote_html", AsyncMock(return_value=mock_html))
+    monkeypatch.setattr("delector.routes.articles.fetch_remote_html", AsyncMock(return_value=mock_html))
     # 端点自己也过一次 SSRF 闸（server.py:858），而 fetch 被 mock 掉不代表闸被 mock 掉。
     # 不钉住这里就等于让这条测试依赖真实 DNS：本机开着 Teredo 时 dw.com 会带出
     # 2001::/32 的地址，闸门拒绝，测试变成时红时绿；CI 的 Linux runner 无 Teredo 一直绿。
-    monkeypatch.setattr("delector.routes.main.is_safe_public_url", lambda u: True)
+    monkeypatch.setattr("delector.routes.articles.is_safe_public_url", lambda u: True)
 
     res = client.post("/api/articles/ingest-url", json={"url": "https://www.dw.com/de/hallo-berlin/a-123"})
     assert res.status_code == 200
@@ -698,7 +698,7 @@ def test_audio_tts_endpoint_with_mock(client, monkeypatch, tmp_path):
     fake_mp3 = tmp_path / "fake_de.mp3"
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00mock_audio_data")
 
-    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
+    monkeypatch.setattr("delector.routes.audio.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
 
     res = client.post("/api/audio/tts", json={"text": "Hallo Berlin!", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 200
@@ -715,7 +715,7 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     import sys
     import types
 
-    from delector.routes import main as routes_main
+    from delector.routes import audio as routes_audio
 
     # 1. 堵死 edge_tts 导入（模拟安卓）：sys.modules[name]=None 时 import 抛 ImportError
     monkeypatch.setitem(sys.modules, "edge_tts", None)
@@ -724,7 +724,7 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     fake_mini = types.ModuleType("delector.services.tts")
     fake_mp3 = b"ID3\x03\x00\x00\x00\x00\x00\x00mock_edge_mini_audio"
     fake_mini.synthesize = lambda text, voice, rate: fake_mp3  # type: ignore[attr-defined]  # 构造假模块顶替 sys.modules，刻意在 ModuleType 上动态挂属性
-    # routes/main.py 的 generate_edge_tts_audio 延迟导入写的是
+    # routes/audio.py 的 generate_edge_tts_audio 延迟导入写的是
     # `from delector.services import tts as edge_tts_mini`，找的是
     # sys.modules["delector.services.tts"] —— 顶替该键生效。
     monkeypatch.setitem(sys.modules, "delector.services.tts", fake_mini)
@@ -738,9 +738,9 @@ def test_tts_falls_back_to_stdlib_mini_client_when_edge_tts_missing(client, monk
     # 3. 独立缓存目录，避免污染
     cache_dir = tmp_path / "mini_cache"
     cache_dir.mkdir()
-    monkeypatch.setattr(routes_main, "AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr(routes_audio, "AUDIO_CACHE_DIR", str(cache_dir))
 
-    path = asyncio.run(routes_main.generate_edge_tts_audio("Wie geht es dir?", "de-DE-KatjaNeural", "+0%"))
+    path = asyncio.run(routes_audio.generate_edge_tts_audio("Wie geht es dir?", "de-DE-KatjaNeural", "+0%"))
     with open(path, "rb") as f:
         assert f.read() == fake_mp3
 
@@ -793,7 +793,7 @@ def test_audio_cache_stats_and_clear(client, monkeypatch, tmp_path):
     (cache_dir / "sample1.mp3").write_bytes(b"x" * 1024 * 50)  # 50 KB
     (cache_dir / "sample2.mp3").write_bytes(b"x" * 1024 * 50)  # 50 KB
 
-    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr("delector.routes.audio.AUDIO_CACHE_DIR", str(cache_dir))
 
     # 1. Get cache stats
     res_stats = client.get("/api/audio/cache")
@@ -822,7 +822,7 @@ def test_audio_cache_clear_reports_removal_failures(client, monkeypatch, tmp_pat
     cache_dir.mkdir()
     (cache_dir / "ok.mp3").write_bytes(b"x" * 1024 * 50)
     (cache_dir / "locked.mp3").write_bytes(b"x" * 1024 * 50)
-    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr("delector.routes.audio.AUDIO_CACHE_DIR", str(cache_dir))
 
     real_remove = os.remove
 
@@ -854,7 +854,7 @@ def test_audio_cache_clear_freed_mb_is_true_delta(client, monkeypatch, tmp_path)
     cache_dir.mkdir()
     (cache_dir / "gone.mp3").write_bytes(b"x" * 1024 * 1024)  # 1 MB，将成功删除
     (cache_dir / "locked.mp3").write_bytes(b"x" * 1024 * 1024)  # 1 MB，删除失败
-    monkeypatch.setattr("delector.routes.main.AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr("delector.routes.audio.AUDIO_CACHE_DIR", str(cache_dir))
 
     real_remove = os.remove
 
@@ -1046,13 +1046,13 @@ def test_feed_items_parsing_and_endpoint(client, monkeypatch):
       </channel>
     </rss>"""
 
-    from delector.routes import main as routes_main
+    from delector.routes import articles as routes_articles
 
     async def mock_fetch(url):
         return sample_rss_xml
 
-    monkeypatch.setattr(routes_main, "fetch_remote_html", mock_fetch)
-    monkeypatch.setattr(routes_main, "is_safe_public_url", lambda u: True)
+    monkeypatch.setattr(routes_articles, "fetch_remote_html", mock_fetch)
+    monkeypatch.setattr(routes_articles, "is_safe_public_url", lambda u: True)
 
     res = client.get("/api/feed/items?url=https://www.tagesschau.de/xml/rss2/")
     assert res.status_code == 200
@@ -1076,13 +1076,13 @@ def test_feed_items_rdf_parsing(client, monkeypatch):
       </item>
     </rdf:RDF>"""
 
-    from delector.routes import main as routes_main
+    from delector.routes import articles as routes_articles
 
     async def mock_fetch_rdf(url):
         return sample_rdf
 
-    monkeypatch.setattr(routes_main, "fetch_remote_html", mock_fetch_rdf)
-    monkeypatch.setattr(routes_main, "is_safe_public_url", lambda u: True)
+    monkeypatch.setattr(routes_articles, "fetch_remote_html", mock_fetch_rdf)
+    monkeypatch.setattr(routes_articles, "is_safe_public_url", lambda u: True)
 
     res = client.get("/api/feed/items?url=https://rss.dw.com/rdf/rss-de-all")
 
@@ -1159,7 +1159,7 @@ def test_settings_test_key_without_key(client, monkeypatch):
     # 密闭性：本机 .env 若配了真实 DEEPSEEK_API_KEY，会被 load_env() 灌进
     # app_settings，端点于是拿到真 key 去打真实 DeepSeek（既烧 token，又让
     # 「无 key 应失败」的断言从红翻绿）。这里强制 effective key 为空。
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.settings.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/settings/test-key", json={"api_key": ""})
     assert res.status_code == 200
     data = res.json()

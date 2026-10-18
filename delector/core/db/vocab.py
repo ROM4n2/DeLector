@@ -19,9 +19,7 @@ r"""词汇契约与富字段（A1 工作台词库、12 字段词对象契约、r
 import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-# 循环导入纪律：`database.py` 在**定义完连接访问器之后**才 re-export 本模块，
-# 故此处 import 拿到的 database 模块对象已完成到该点（下列名字均已绑定）。
-from delector.core.database import db_conn, get_db_path
+from delector.core.db.connection import db_conn, get_db_path
 
 _A1_WORKBENCH_WORDS_CACHE: Optional[List[Dict[str, Any]]] = None
 _A2_VOCAB_CACHE: Optional[List[Dict[str, Any]]] = None

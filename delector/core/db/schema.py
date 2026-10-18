@@ -25,10 +25,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-# 循环导入纪律：`database.py` 在**定义完连接访问器与预置种子函数之后**才 re-export
-# 本模块，故此处 import 拿到的 database 模块对象已完成到该点（下列名字均已绑定），
-# 与 `delector/core/db/backup.py` 同款成例。
-from delector.core.database import (
+from delector.core.db.connection import (
     _INITIALIZED_PROGRESS_DBS,
     _REPO_ROOT,
     DATA_DIR,
@@ -39,8 +36,8 @@ from delector.core.database import (
     get_db_path,
     get_progress_db_path,
     preflight_data_dir,
-    seed_preset_articles,
 )
+from delector.core.db.content import seed_preset_articles
 
 
 def init_progress_db(db_path: Optional[str] = None) -> None:

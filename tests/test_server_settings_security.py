@@ -596,7 +596,7 @@ def test_settings_post_succeeds_on_loopback(client):
 def test_settings_test_key_succeeds_on_loopback(client, monkeypatch):
     """回环来源的 test-key 不应被 403 拦截（空 key 时返回 success=False 而非 403）。"""
     # 同上：切断本机 .env 真 key，避免真实外呼（密闭性 + 不烧 token）。
-    monkeypatch.setattr("delector.routes.main.get_effective_api_key", lambda *a, **k: "")
+    monkeypatch.setattr("delector.routes.settings.get_effective_api_key", lambda *a, **k: "")
     res = client.post("/api/settings/test-key", json={"api_key": ""})
     # 未被来源闸拦截：返回 200 且 success 为 False（提示输入 key），而非 403
     assert res.status_code == 200
@@ -746,7 +746,6 @@ def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
     import asyncio
     import sys
 
-    from delector.routes import main as routes_main
 
     # 模拟 edge_tts 缺失
     monkeypatch.setitem(sys.modules, "edge_tts", None)
@@ -777,9 +776,11 @@ def test_task1_tts_fallback_chain_on_mini_failure(monkeypatch):
         async def get(self, url, *args, **kwargs):
             return MockHttpxResp()
 
-    monkeypatch.setattr(routes_main.httpx, "AsyncClient", MockAsyncClient)
+    from delector.routes import audio as routes_audio
 
-    audio_file = asyncio.run(routes_main.generate_edge_tts_audio("Guten Morgen", voice="de-DE-KatjaNeural"))
+    monkeypatch.setattr(routes_audio.httpx, "AsyncClient", MockAsyncClient)
+
+    audio_file = asyncio.run(routes_audio.generate_edge_tts_audio("Guten Morgen", voice="de-DE-KatjaNeural"))
     assert os.path.exists(audio_file)
     assert os.path.getsize(audio_file) > 200
 
@@ -905,7 +906,6 @@ def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
         async def __aexit__(self, *args):
             pass
 
-        # 刻意的类体内局部导入：装饰器只被本 mock 类的 stream 用到
         from contextlib import asynccontextmanager  # type: ignore[misc]
 
         @asynccontextmanager
@@ -915,15 +915,17 @@ def test_task1_fetch_remote_html_max_bytes_limit(monkeypatch):
             else:
                 yield BigStreamResp()
 
+    from delector.core import security as core_security
+
     # 1. 响应头 Content-Length 超过 2MB
-    monkeypatch.setattr(routes_main.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("header"))
+    monkeypatch.setattr(core_security.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("header"))
     with pytest.raises(HTTPException) as exc1:
         asyncio.run(routes_main.fetch_remote_html("https://example.com/big-header"))
     assert exc1.value.status_code == 400
     assert "体积超限" in exc1.value.detail
 
     # 2. 实际传输流数据超过 2MB
-    monkeypatch.setattr(routes_main.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("stream"))
+    monkeypatch.setattr(core_security.httpx, "AsyncClient", lambda *args, **kwargs: StreamMockClient("stream"))
     with pytest.raises(HTTPException) as exc2:
         asyncio.run(routes_main.fetch_remote_html("https://example.com/big-stream"))
     assert exc2.value.status_code == 400
