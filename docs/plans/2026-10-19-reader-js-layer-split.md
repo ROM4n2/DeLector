@@ -102,9 +102,9 @@
 ### Task 2: 抽出 `static/js/rd-syntax.js`（L1 纯层，339 行闭包） [Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder]
 
 **Files:**
-- Create: `static/js/rd-syntax.js`
-- Modify: `static/js/reader.js:15-19,89-111,969-1118,1203-1363`
+- Create: `static/js/rd-syntax.js`（**本任务只产出新模块，不碰 `reader.js`**）
 - Test: `tests/test_reader_layer_split.py`（新）
+- **步骤划分修正（2026-10-19，编排时发现）**：原计划把「删 `reader.js` 的原定义」也放进本任务 ⇒ 本任务落盘后 `reader.js` 会处于**断引用**状态（定义没了、import 还没加），造成大范围假红、且该步不可独立验证。已改为：**删定义 + import + re-export + 5 个消费者改向**全部归 Task 3。这样每一步落地后树都自洽（Task 2 后 `rd-syntax.js` 可被闸独立判绿，`reader.js` 一行未动）。
 
 **Interfaces:**
 - Consumes: `core.js::{esc, jsAttr, normalizeCefrPct}` —— **三个都必须 import**。`esc` 是 HTML 转义（5 条 `String.replace`）；`jsAttr` 是 JS 属性位转义（数值位刻意不用它，见 reader.js:9-14 的增长注释）；`normalizeCefrPct` 归一 CEFR 百分比。⚠️ **闸无法发现未定义标识符** —— 少 import 一个不会变红，只会让模块带未定义名上线（评审发现）。
@@ -137,11 +137,11 @@
 > Return: 摘要 + 物理凭据（等价证明输出 + 闸退出码 + 行数）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记基线（行数 / 导出数 / 用例数）
-- [ ] **Step 2**: 确定性切片脚本产出 `rd-syntax.js`
-- [ ] **Step 3**: 逐字节等价证明（9/9 块）
-- [ ] **Step 4**: 闭包复验（无 reader.js 符号泄漏）
-- [ ] **Step 5**: 闸转绿（Task 1 的红灯消解）
+- [ ] **Step 1**: 记基线（`wc -l static/js/reader.js` = 1403 / `grep -c '^export ' static/js/reader.js` = 40 / 用例数）
+- [ ] **Step 2**: 确定性切片脚本产出 `rd-syntax.js` —— 按 D2 的 9 个行区间各做**内容断言**后切出（区间含尾随空行，须处理）；头部 `import { esc, jsAttr, normalizeCefrPct } from './core.js';`；**仅 3 处**加 `export ` 前缀（15/16/17）
+- [ ] **Step 3**: 逐字节等价证明（9/9 块：搬走文本 == 原处文本 + 3 处前缀）
+- [ ] **Step 4**: 闭包复验（token 级：新模块不得引用任何 `reader.js` 模块符号；`reader.js` 本任务**一行未动**是可核事实）
+- [ ] **Step 5**: 闸转绿（Task 1 的 `missing-layer-module` 红灯消解；`test_frontend_layers.py` 从 7 failed → 全绿）
 - [ ] **Step 6**: Physical Evidence Gate + 原子提交（`refactor(rd): extract pure syntax renderers to rd-syntax.js`）
 
 ---
