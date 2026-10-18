@@ -572,3 +572,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **三处工程方法值得留档**：① Task 3 的去重：Task 2 为解跨文件依赖做了逐字复制，Task 3 立即**提升为 `server_helpers.py` 唯一定义**（并跑**负对照**证明探针灵敏），避免副本随批次增殖漂移；② Task 6 建 **AST 依赖矩阵**（每个测试 → 模块级名字的传递闭包）**先发现跨文件边界再命名域**，并以**反事实实验**（import-only 变体 ⇒ 恰好 4 个测试红）证明残余文件必须保留自己那份 `_isolate_data_dir`（其元测试静态扫描本模块）；③ Task 5 撞上「被搬测试内省留在原文件的另一个测试」的三重约束死结（禁改体/禁破守恒/禁拆段），以 import 区 `__code__` 绑定解局并标注复核——**已登记根治项 F1**（改为内省生产函数，属测试语义变更，禁止混进搬迁类改动）。
 - 门禁：**全量 2325 passed / 2 skipped / 0 failed（371s）**；`mypy --strict` 107 文件 + tests 靶 149 文件均 0 错；`ruff check .` 全仓净；Go 8 包 + gofmt 净；**双闸**（mock-drift / silent-degradation）均 exit 0；20 个改动文件 0 lone LF。
 - **后续项已入计划**（非口头）：F1 探针桥根治 · F2 残余 876 行无 banner 杂项区切分 + `cards/counts` 归位 · 陈旧文档指针校正（含 `static/js/writer.js:1251` 属 C7 面禁改）。
+
+### 2026-10-18 07:20 | codebuddy | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 `workbench.html` 拆分（Task 1~6）交付**，分支 `refactor/c7-workbench-html-split`（基于 master `1098706`，rebase 后 8 提交）。
+**产物**：`tests/wb_source.py`（探针读取公共层，28 自测）· 13 个 `tools/wb_*.mjs` 统一多文件读取口（`SRC_ROOT`/`SRC_FILES`/`sliceDecl`，缺声明即 exit 3 + stdout 0B）· `static/css/workbench.css`（317 行，字节等价除末尾换行）· `static/js/wb-seed-data.js`（种子数据，构建工具改向）· `static/js/wb-tts.js`（`playWord` + 7 个 `_tts*`，逐字搬走）。
+**Task 5 只做第 1 块**（tts-audio，refs/decl 3.75 最低）；剩余 5 块已按实测密度登记：seed-persist 9.0 / render-views 15.8 / wbsync 19.2 / scope-filter 28.6 / review-queue 39.0（计划 Task 5 Step 1 下落表）。
+**门禁（逐字复刻 CI）**：`mypy --strict delector tools` 105 files 0 · `mypy --follow-imports=skip tests` 132 files 0 · `ruff check .` 0 · `go test ./...` ok · `gofmt -l` 空 · 新闸 `check_mock_drift` / `check_silent_degradation` 均 exit 0（且 `test_a1_workbench_source.py` 的 4 处 `mock-drift-ok` 抑制注释在 Task 4 重写后完好）。
+**全量**：`2352 passed, 3 skipped`（484s）；用例数守恒 = 基线 + 28（仅 `tests/wb_source.py` 自测，逐文件核对 105/19/124/302/9/14 全部不变）。
+**登记的风险**：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，HEAD 既有行为，已还原、未修）；② `wb_queue_probe` 的 `slices`（切片字符长度）对产物结构敏感（Task 3 变过一次，Task 4/5 未再变）；③ 另有 5 个 `wb_*.mjs` 未上统一读取口（Task 5 剩余块需一并改）；④ 两处格式敏感锚点（`extractLine(pad2)` / `STARTUP_SEG`）待 Task 5 结构化。
+**验收判据核对**：① 用例数守恒 ✔（+28 为允许项）② 每处重写附变异自证 ✔ ③ 入口路径未改名 ✔ ④ 18 个探针全 exit 0 ✔
