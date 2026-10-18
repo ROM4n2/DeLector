@@ -25,42 +25,35 @@ TTS 生成、完形填空生成器、备份还原……全挤在一个模块里�
 import asyncio
 import contextlib
 import functools
-import hashlib
 import json
 import logging
-import math
-import os
 import re
-import tempfile
 import threading
-from datetime import datetime, timedelta
-from typing import Any, AsyncIterator, Callable, Dict, List, NamedTuple, Optional, Tuple
+from datetime import datetime
+from typing import Any, AsyncIterator, Callable, Dict, List, NamedTuple, Optional
 
-import httpx
+import httpx as httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from delector.core.database import (
-    AUDIO_CACHE_DIR,
+    AUDIO_CACHE_DIR as AUDIO_CACHE_DIR,
+)
+from delector.core.database import (
     _require_localhost,
     add_prep_saved,
     db_conn,
-    db_progress_conn,
-    export_anki_deck,
     get_all_corpus_syntax_stats,
-    get_cache_info,
     get_effective_api_base_url,
     get_effective_api_key,
     get_effective_api_model,
     get_prep_saved,
-    get_vocab_by_cefr,
     ingest_article,
     log_study_event,
-    prune_audio_cache,
     upsert_corpus_syntax_stats,
 )
-from delector.core.lexicon import lookup_core_vocab, primary_source
+from delector.core.lexicon import lookup_core_vocab
 from delector.core.security import (
     PRESET_FEEDS,
     clean_html_to_article,
@@ -94,17 +87,47 @@ from delector.nlp_engine.processor import (
 )
 from delector.nlp_engine.syntax_tree import analyze_syntax_tree
 
-# LLM 出网唯一收口（Task 3）：本模块 5 处重复的 httpx + /chat/completions 全部改调
-# llm_client.chat。取**模块对象**而非 `from ... import chat`：monkeypatch 打在调用方
-# 模块上才生效（本仓既有约定，见 tests 里对 `delector.routes.main.*` 的打桩）。
-# 注意：本模块其余出网（TTS 兜底、fetch_remote_html）仍直接用 httpx，不在本次收口范围。
-from delector.routes.backup import RestoreReq as RestoreReq
-
 # 直接指到子模块而非 `from delector.routes import …`：本模块由 routes/__init__.py 导入，
 # 走包子属性会撞上半初始化状态。
 # 材料写入/删除后失效长难句聚合榜缓存（source=all 整榜，TTL 300s）。只导入失效入口
 # （纯 dict pop + 锁），不引 syntax_hard 的其余重依赖；syntax_hard 本身不 import
 # routes.*，故此处顶层导入无环。
+from delector.routes.audio import (
+    _TTS_CONCURRENCY_LIMIT as _TTS_CONCURRENCY_LIMIT,
+)
+from delector.routes.audio import (
+    _TTS_SEMAPHORE as _TTS_SEMAPHORE,
+)
+from delector.routes.audio import (
+    generate_edge_tts_audio as generate_edge_tts_audio,
+)
+
+# LLM 出网唯一收口（Task 3）：本模块 5 处重复的 httpx + /chat/completions 全部改调
+# llm_client.chat。取**模块对象**而非 `from ... import chat`：monkeypatch 打在调用方
+# 模块上才生效（本仓既有约定，见 tests 里对 `delector.routes.main.*` 的打桩）。
+# 注意：本模块其余出网（TTS 兜底、fetch_remote_html）仍直接用 httpx，不在本次收口范围。
+from delector.routes.backup import RestoreReq as RestoreReq
+from delector.routes.cards import (
+    GrammarCardReq as GrammarCardReq,
+)
+from delector.routes.cards import (
+    VocabCardReq as VocabCardReq,
+)
+from delector.routes.cards import (
+    add_grammar_card as add_grammar_card,
+)
+from delector.routes.cards import (
+    calculate_fsrs as calculate_fsrs,
+)
+from delector.routes.cards import (
+    calculate_sm2 as calculate_sm2,
+)
+from delector.routes.cards import (
+    get_cards as get_cards,
+)
+from delector.routes.cards import (
+    get_fsrs_next_intervals as get_fsrs_next_intervals,
+)
 from delector.routes.syntax_hard import invalidate_rank_cache
 from delector.services import llm_client, polish_loop
 
@@ -119,29 +142,6 @@ class IngestReq(BaseModel):
     title: Optional[str] = "Untitled"
     # 局域网可达 + spaCy 全文重算，必须有上限（防超大文本打满 NLP 与磁盘）
     raw_text: str = Field(..., max_length=100_000)
-
-
-class VocabCardReq(BaseModel):
-    article_id: Optional[int] = None
-    word: str
-    lemma: str
-    pos: Optional[str] = ""
-    gender: Optional[str] = ""
-    plural: Optional[str] = ""
-    cefr_level: Optional[str] = "A1"
-    definition_zh: str
-    sentence_context: str
-
-
-class GrammarCardReq(BaseModel):
-    article_id: Optional[int] = None
-    sentence_context: str
-    grammar_name: str
-    cefr_level: str
-    explanation_zh: str
-    rule_formula: Optional[str] = ""
-    corrected_form: Optional[str] = ""
-    error_type: Optional[str] = ""
 
 
 class WritingAnalyzeReq(BaseModel):
@@ -619,762 +619,6 @@ def api_add_prep_saved(req: PrepSavedReq) -> Dict[str, Any]:
     return {"status": "ok"}
 
 
-# ── FSRS (Free Spaced Repetition Scheduler) DSR Engine ────────────────────────
-
-
-def _calc_fsrs_step(
-    grade: int,
-    rep: int = 0,
-    interval: int = 1,
-    ef: float = 2.5,
-    elapsed_days: Optional[int] = None,
-    target_retention: float = 0.90,
-) -> Tuple[int, int, float, str]:
-    """
-    Core single-step FSRS mathematical state transition based on DSR model:
-    grade: 1 (Forgot/Again), 2 (Hard), 3 (Good), 4 (Easy)
-    """
-    grade = max(1, min(4, int(grade)))
-    target_retention = max(0.70, min(0.98, float(target_retention)))
-
-    if rep <= 0:
-        # Initial review calibration
-        s0_map = {1: 0.5, 2: 1.8, 3: 3.6, 4: 8.5}
-        d0 = max(1.0, min(10.0, 8.0 - (grade - 1) * 1.8))
-        s_prime = s0_map.get(grade, 3.6)
-        d_prime = d0
-        new_rep = 1 if grade >= 2 else 0
-    else:
-        # Subsequent review transition
-        s = max(0.1, float(interval))
-        d = max(1.0, min(10.0, float(ef)))
-        t = max(1.0, float(elapsed_days if elapsed_days is not None else interval))
-
-        # Retrievability power-law decay
-        r = (1.0 + (19.0 / 81.0) * (t / s)) ** (-0.5)
-        r = max(0.01, min(0.99, r))
-
-        # Difficulty update with mean reversion to D0(3) = 4.4
-        d0_3 = 4.4
-        delta_d = -(grade - 3) * 0.8
-        d_prime = max(1.0, min(10.0, 0.1 * d0_3 + 0.9 * (d + delta_d)))
-
-        if grade == 1:
-            # Lapse / Forgot
-            new_rep = 0
-            s_prime = max(0.4, min(s, 0.6 * (d_prime**-0.3) * ((s + 1.0) ** 0.4)))
-        else:
-            # Successful recall
-            new_rep = rep + 1
-            penalty_map = {2: 0.6, 3: 1.0, 4: 1.4}
-            penalty = penalty_map.get(grade, 1.0)
-            factor = math.exp(1.0) * (11.0 - d_prime) * (s**-0.2) * (math.exp((1.0 - r) * 0.9) - 1.0) * penalty
-            s_prime = max(0.4, s * (1.0 + factor))
-
-    # Calculate scheduled interval based on target retention
-    if abs(target_retention - 0.90) < 1e-6:
-        scheduled_days = s_prime
-    else:
-        scheduled_days = s_prime * (81.0 / 19.0) * (target_retention ** (-2.0) - 1.0)
-
-    new_interval = max(1, int(round(scheduled_days + 1e-9)))
-    new_ef = round(d_prime, 2)
-    due_date = (datetime.now() + timedelta(days=new_interval)).strftime("%Y-%m-%d")
-    return new_rep, new_interval, new_ef, due_date
-
-
-def get_fsrs_next_intervals(
-    rep: int = 0, interval: int = 1, ef: float = 2.5, elapsed_days: Optional[int] = None, target_retention: float = 0.90
-) -> Dict[int, int]:
-    """
-    Precalculate scheduled intervals for all 4 rating grades (1: Again, 2: Hard, 3: Good, 4: Easy).
-    """
-    return {g: _calc_fsrs_step(g, rep, interval, ef, elapsed_days, target_retention)[1] for g in (1, 2, 3, 4)}
-
-
-def calculate_fsrs(
-    grade: int,
-    rep: int = 0,
-    interval: int = 1,
-    ef: float = 2.5,
-    elapsed_days: Optional[int] = None,
-    target_retention: float = 0.90,
-) -> Tuple[int, int, float, str, Dict[int, int]]:
-    """
-    Calculate next FSRS schedule state.
-    Returns: (new_rep, new_interval, new_ef, due_date, next_intervals)
-    """
-    new_rep, new_interval, new_ef, due_date = _calc_fsrs_step(grade, rep, interval, ef, elapsed_days, target_retention)
-    next_intervals = get_fsrs_next_intervals(new_rep, new_interval, new_ef, target_retention=target_retention)
-    return new_rep, new_interval, new_ef, due_date, next_intervals
-
-
-def calculate_sm2(grade: int, rep: int = 0, interval: int = 1, ef: float = 2.5) -> Tuple[int, int, float, str]:
-    """
-    Backward-compatible SM-2 wrapper over modern FSRS scheduler.
-    Returns: (new_rep, new_interval, new_ef, due_date)
-    """
-    new_rep, new_interval, new_ef, due_date, _ = calculate_fsrs(grade, rep, interval, ef)
-    return new_rep, new_interval, new_ef, due_date
-
-
-@router.post("/api/cards/vocab")
-def add_vocab_card(req: VocabCardReq) -> Dict[str, Any]:
-    # ADR-0016 Phase 2（懒物化）：词条进统一池时按主干 provenance 落定 `source`
-    # （official/manual/ai；主干未收录的自定义词 = user）。全部前端存词入口
-    # （reader / a1_cards / a1_hoeren / search）都打本端点 ⇒ 一处覆盖。
-    source = primary_source(req.lemma or req.word)
-    with db_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO vocab_cards "
-            "(article_id, word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                req.article_id,
-                req.word,
-                req.lemma,
-                req.pos,
-                req.gender,
-                req.plural or "",
-                req.cefr_level,
-                req.definition_zh,
-                req.sentence_context,
-                source,
-            ),
-        )
-        card_id = cur.lastrowid
-    log_study_event("add_card", card_id, req.word)
-    return {"status": "ok", "id": card_id, "word": req.word, "plural": req.plural or ""}
-
-
-@router.post("/api/cards/grammar")
-def add_grammar_card(req: GrammarCardReq) -> Dict[str, Any]:
-    with db_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO grammar_cards "
-            "(article_id, sentence_context, grammar_name, cefr_level, explanation_zh, "
-            "rule_formula, corrected_form, error_type) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                req.article_id,
-                req.sentence_context,
-                req.grammar_name,
-                req.cefr_level,
-                req.explanation_zh,
-                req.rule_formula or "",
-                req.corrected_form or "",
-                req.error_type or "",
-            ),
-        )
-        card_id = cur.lastrowid
-    log_study_event("add_card", card_id, req.grammar_name)
-    return {"status": "ok", "id": card_id}
-
-
-@router.get("/api/cards")
-def get_cards() -> Dict[str, Any]:
-    with db_conn() as conn:
-        v = [
-            dict(r)
-            for r in conn.execute(
-                "SELECT * FROM vocab_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
-            ).fetchall()
-        ]
-        g = [
-            dict(r)
-            for r in conn.execute(
-                "SELECT * FROM grammar_cards ORDER BY mastered ASC, wrong_count DESC, id DESC"
-            ).fetchall()
-        ]
-        for card in v + g:
-            card["next_intervals"] = get_fsrs_next_intervals(
-                card.get("repetition_count") or 0, card.get("interval_days") or 1, card.get("ease_factor") or 2.5
-            )
-        return {"vocab_cards": v, "grammar_cards": g}
-
-
-@router.get("/api/cards/counts")
-def get_card_counts() -> Dict[str, int]:
-    """只要「有多少张卡」时的轻量计数端点（替代「为了拿计数而拉全量卡片」这一用法）。
-
-    **它替代的用法**：前端角标（`refreshCardCounters`）过去为了显示一个 ``length`` 而请求
-    ``GET /api/cards`` —— 那条路径是 ``SELECT *`` 全表 + **逐卡** ``get_fsrs_next_intervals``
-    递推（O(N) 行物化 + O(N) 次递推），而它挂在 7 个「每次存卡后」的调用点上 ⇒ 存 N 张卡是
-    **O(N²)** 的写路径放大。本端点把它压成每表 1 次聚合、共 2 次查询。
-
-    **与 `GET /api/cards` 的分工**：后者**仍然保留且契约逐字不变** —— `cards.js` 消费它做
-    **全量**卡盒渲染（逐卡字段 + ``next_intervals``）。凡「要卡面」继续走 `/api/cards`；
-    只有「只要数字」的角标走本端点。
-
-    实现 MUST 保持的三条性质：
-    - **单扫条件聚合**：照 ``get_progress_stats`` 的既有写法 ``COUNT(*)`` + ``SUM(mastered = 1)``，
-      每表 1 次查询；MUST NOT ``SELECT *``、MUST NOT 跑 ``get_fsrs_next_intervals``、MUST NOT 读正文。
-    - **诚实留零**：空表时 ``SUM(mastered = 1)`` 返回 ``NULL`` ⇒ 用 ``or 0`` 折成 ``0``，
-      MUST NOT 让 ``null`` 流到前端（会渲染成字面量 ``null张卡``）。
-    - **纯只读 GET**：不触发任何写或迁移。
-
-    鉴权与 ``GET /api/cards`` 同级（局域网只读、非敏感）⇒ **不设本机闸**。
-    """
-    with db_conn() as conn:
-        vc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM vocab_cards").fetchone()
-        gc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM grammar_cards").fetchone()
-    vocab_total = vc["total"] or 0
-    grammar_total = gc["total"] or 0
-    return {
-        "vocab_total": vocab_total,
-        "vocab_mastered": vc["mastered"] or 0,
-        "grammar_total": grammar_total,
-        "grammar_mastered": gc["mastered"] or 0,
-        "total": vocab_total + grammar_total,
-    }
-
-
-@router.get("/api/cards/known-lemmas")
-def get_known_lemmas() -> Dict[str, Any]:
-    """i+1 覆盖率用的「已学」词原形列表（跨背词路径打通，2026-09-28 swarm 审计 P1）。
-
-    取**已学过**的主卡，三条来源任一成立即算已知——**三者量纲不同、不可互相替代**：
-    1. `mastered = 1`：用户在**卡盒**手动置「已掌握」；
-    2. `repetition_count > 0`：在**卡盒**（DSR 复习）复习过至少一次；
-    3. `fsrs_s > 0`：在**背词工作台**（FSRS）评级过至少一次。统一池投影（`vocab_pool.py`）
-       是**唯一按工作台卡语义写入 `fsrs_s` 的写入者**（只从工作台卡的 `s` 写入；备份还原
-       `_replace_tables` 仅把备份中的 `fsrs_s` 原样回灌，不引入 DSR 语义，其合法来源仍是投影）。
-
-    ⚠️ **关于「`fsrs_s > 0` 等价于工作台 `reps > 0`」——该等价性仅对本仓工作台**自造**的卡成立，
-    对导入 / 外部推送的卡不成立**（2026-10-03 P0 数据真相审计 Task 4 据实降级）：
-
-    - **成立的那一半**：本仓工作台自造的卡确实恒含 `s`。`fsrsReview` 的返回体硬编码
-      `{s, d, due, last, reps, lapses}`，首评 `s = fsrsInitS(g) = max(FSRS_W[g-1], 0.1) ≥ 0.1`，
-      其余三条转移（`fsrsRecallS` / `fsrsForgetS` / `fsrsShortTermS`）一律 `clamp(…, S_MIN, …)`
-      且 `S_MIN = 0.001`（见 workbench.html）⇒ 恒 `s ≥ 0.001 > 0`；手动「稳固」亦写含 `s` 的
-      字面量。此时确有 `reps > 0 ⟺ s > 0`，故与 deck-bridge.js 的「已学习」口径一致。
-    - **不成立的那一半**：`PUT /api/wb/state` 的 payload 是**裸 `Dict[str, Any]`、无任何形状校验**
-      （`WbStateReq`，`main.py` 的 `wb_put_state` 直接 `save_wb_state(req.payload or {})`），
-      而可达的**零校验入口**都能把**缺 `s`** 的卡灌进来：
-      （a）`applyOverwrite`（workbench.html：`S.cards = data.cards || {}`，整库覆盖，导入文件是
-      用户可见的正式功能）；（b）`wb_put_state`（局域网同步的裸 payload）；（c）`loadAll` 裸读
-      localStorage；（d）`applyMerge`（workbench.html：`S.cards[id] = b`，**整卡赋值、不校验
-      `s`**，按 `last` 取新）——它被**四处**复用：合并导入分支（`btnImportSync` 的合并模式，
-      与 `applyOverwrite` 的覆盖模式并列）、局域网 B 端 `dc.onmessage`、后台轮询
-      `wbsync.pull`、BroadcastChannel `rtcOnMessage`。故导入 / 外部推送的卡**可以** `reps > 0`
-      而无 `s`
-      ⇒ 投影的 `_desired_fields` 取不到 `s` ⇒ `fsrs_s` 落 NULL ⇒ `fsrs_s > 0` 为假
-      ⇒ **该词在 deck-bridge 的「已学」口径下算已学，却在 i+1 覆盖率里被漏计**。
-      端到端契约见 `tests/test_unified_pool_e2e.py::test_group6_known_lemmas_learned_notion`
-      （① 含 `s` ⇒ 计入；② 有 `reps` 缺 `s` ⇒ **当前不计入，即漏计**）。是否收紧投影范围闸
-      **未决**——它会改变 `tests/test_vocab_pool_projection.py` 里一条把现状钉成契约的断言
-      （`test_scope_gate_conservation_inserted_plus_skipped` 以 `{"a1-0004": {"reps": 2}}`
-      这张「有 `reps` 而缺 `s`」的卡断言 `inserted`，收紧后它将转为 `skipped`），属**产品/契约
-      决策**而非可由实现自行判定的技术细节；此类未决项登记在 ADR-0016
-      （`docs/adr/2026-09-29-adr-0016-unified-vocab-pool-architecture.md`）§5「已定 / 待确认」
-      一节，该节**尚未**收录本条。本端点不做判断，只把现状钉成显式契约。
-    - **另一条已知缺口**（与 `vocab_pool.py::_is_projectable` 的注意栏同一说明、措辞对齐）：
-      `custom is True` 的自建词**不查卡**即入池，尚无 FSRS 卡时 `fsrs_s` 为 NULL ⇒
-      **与 reader 普通卡不可区分**（故 `fsrs_s IS NULL` 不能推出「来自 reader」），
-      这类词同样不计「已学」。
-
-    承项目既有约定：**仅仅加入卡盒（入卡未复习）不算已知**（加入词 ≠ 已知，见 deck-bridge.js
-    的 A6 注释）—— 上述三条之外的入卡行（`repetition_count = 0` / `mastered = 0` / `fsrs_s` 空）
-    一律不计。用 `fsrs_s > 0` 而非 `IS NOT NULL`：后者在「行有 fsrs 列但值退化（0 / 空串）」时
-    更宽，`> 0` 才是「真有工作台卡」的语义。
-
-    词头归一（剥冠词 + 小写）由前端 mergeKnownLemmas 负责（与 deck 路径共用同一归一），
-    此处只回原形去重。局域网只读、非敏感，与既有 `GET /api/cards` 同级不挂本机闸。
-    """
-    with db_conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT lemma FROM vocab_cards "
-            "WHERE mastered = 1 OR repetition_count > 0 OR fsrs_s > 0"
-        ).fetchall()
-    return {"lemmas": [r["lemma"] for r in rows if r["lemma"]]}
-
-
-@router.get("/api/cards/vocab")
-def get_cards_vocab(cefr: str = "A1", scope: str = "core", sources: Optional[str] = None) -> Any:
-    scope_norm = (scope or "core").lower().strip()
-    if scope_norm not in ("core", "all", "reader"):
-        raise HTTPException(400, "scope must be 'core', 'all', or 'reader'")
-    # sources：逗号分隔的来源名（如 "official"）；空/缺省 -> None（走默认分支，逐字不变）。
-    sources_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
-    return get_vocab_by_cefr(cefr=cefr, scope=scope_norm, sources=sources_set)
-
-
-# --- Phase A: Delete & Master ---
-
-
-@router.delete("/api/cards/{card_type}/{card_id}")
-def delete_card(card_type: str, card_id: int, request: Request) -> Dict[str, Any]:
-    _require_localhost(request)
-    if card_type not in ("vocab", "grammar"):
-        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
-    tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
-    with db_conn() as conn:
-        row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, f"Card {card_id} not found")
-        conn.execute(f"DELETE FROM {tbl} WHERE id = ?", (card_id,))
-    log_study_event("delete_card", card_id, f"{card_type}:{card_id}")
-    return {"status": "ok", "deleted_id": card_id, "card_type": card_type}
-
-
-class MasterReq(BaseModel):
-    mastered: bool
-
-
-@router.patch("/api/cards/{card_type}/{card_id}/master")
-def toggle_master(card_type: str, card_id: int, req: MasterReq) -> Dict[str, Any]:
-    if card_type not in ("vocab", "grammar"):
-        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
-    tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
-    now_ts = datetime.now().isoformat() if req.mastered else None
-    with db_conn() as conn:
-        row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, f"Card {card_id} not found")
-        conn.execute(
-            f"UPDATE {tbl} SET mastered = ?, mastered_at = ? WHERE id = ?", (1 if req.mastered else 0, now_ts, card_id)
-        )
-    if req.mastered:
-        log_study_event("master_card", card_id, f"{card_type}:{card_id}")
-    return {"status": "ok", "id": card_id, "mastered": req.mastered}
-
-
-# --- Phase B: Quiz Record ---
-
-
-class QuizRecordReq(BaseModel):
-    card_id: int
-    card_type: str  # 'vocab' | 'grammar'
-    mode: str  # 'flashcard' | 'dictation' | 'choice'
-    correct: bool
-
-
-@router.post("/api/quiz/record")
-def record_quiz(req: QuizRecordReq) -> Dict[str, Any]:
-    if req.card_type not in ("vocab", "grammar"):
-        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
-    tbl = "vocab_cards" if req.card_type == "vocab" else "grammar_cards"
-    with db_conn() as conn:
-        row = conn.execute(f"SELECT id FROM {tbl} WHERE id = ?", (req.card_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, f"Card {req.card_id} not found")
-        if req.correct:
-            conn.execute(f"UPDATE {tbl} SET correct_count = correct_count + 1 WHERE id = ?", (req.card_id,))
-        else:
-            conn.execute(f"UPDATE {tbl} SET wrong_count = wrong_count + 1 WHERE id = ?", (req.card_id,))
-    with db_progress_conn() as conn:
-        conn.execute(
-            "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
-            (req.card_id, req.card_type, req.mode, 1 if req.correct else 0),
-        )
-        today = datetime.now().strftime("%Y-%m-%d")
-        conn.execute("INSERT OR IGNORE INTO daily_summary (date) VALUES (?)", (today,))
-        conn.execute(
-            "UPDATE daily_summary SET quiz_sessions = quiz_sessions + 1, "
-            "study_minutes = study_minutes + 1 WHERE date = ?",
-            (today,),
-        )
-    return {"status": "ok"}
-
-
-# --- Phase C: Progress Stats ---
-
-
-class ReadLogReq(BaseModel):
-    article_id: int
-    title: Optional[str] = ""
-
-
-@router.post("/api/progress/log-read")
-def log_article_read(req: ReadLogReq) -> Dict[str, Any]:
-    log_study_event("read_article", req.article_id, req.title or "", minutes=8)
-    return {"status": "ok"}
-
-
-@router.get("/api/progress/stats")
-def get_progress_stats() -> Dict[str, Any]:
-    from datetime import timedelta
-
-    # --- main db ---
-    with db_conn() as conn:
-        # 单扫条件聚合：COUNT + SUM(条件) 一次出总量与已掌握，替代 4 次全表 COUNT
-        vc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM vocab_cards").fetchone()
-        gc = conn.execute("SELECT COUNT(*) AS total, SUM(mastered = 1) AS mastered FROM grammar_cards").fetchone()
-        total_vocab = vc["total"]
-        total_grammar = gc["total"]
-        mastered_vocab = vc["mastered"] or 0
-        mastered_grammar = gc["mastered"] or 0
-        total_articles = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-
-        # CEFR breakdown (both tables combined)：UNION ALL 聚合，一次遍历两表
-        cefr_counts: Dict[str, int] = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0}
-        for row in conn.execute(
-            "SELECT COALESCE(cefr_level, 'A1') AS lvl, COUNT(*) AS cnt FROM ("
-            "  SELECT cefr_level FROM vocab_cards"
-            "  UNION ALL SELECT cefr_level FROM grammar_cards"
-            ") GROUP BY lvl"
-        ):
-            if row["lvl"] in cefr_counts:
-                cefr_counts[row["lvl"]] += row["cnt"]
-
-        # Quiz accuracy from card tables
-        vc_row = conn.execute("SELECT SUM(correct_count) as c, SUM(wrong_count) as w FROM vocab_cards").fetchone()
-        gc_row = conn.execute("SELECT SUM(correct_count) as c, SUM(wrong_count) as w FROM grammar_cards").fetchone()
-        total_correct = (vc_row["c"] or 0) + (gc_row["c"] or 0)
-        total_wrong = (vc_row["w"] or 0) + (gc_row["w"] or 0)
-        total_attempts = total_correct + total_wrong
-        accuracy_pct = round(total_correct / total_attempts * 100, 1) if total_attempts > 0 else 0.0
-
-        # Top error-prone cards (wrong_count > 2× correct_count, limit 5)
-        top_errors = []
-        for row in conn.execute(
-            "SELECT id, word, definition_zh, wrong_count, correct_count FROM vocab_cards "
-            "WHERE wrong_count > 0 ORDER BY (wrong_count * 1.0 / MAX(correct_count+1, 1)) DESC LIMIT 5"
-        ):
-            top_errors.append(dict(row))
-
-    # --- progress db ---
-    with db_progress_conn() as conn:
-        # 30-day daily trend：一次范围查 + Python 补零（替代 30 次单日往返）
-        today = datetime.now().date()
-        first_day = (today - timedelta(days=29)).isoformat()
-        summary_rows = conn.execute(
-            "SELECT * FROM daily_summary WHERE date BETWEEN ? AND ?",
-            (first_day, today.isoformat()),
-        ).fetchall()
-        by_date = {r["date"]: dict(r) for r in summary_rows}
-        trend = []
-        for i in range(29, -1, -1):
-            d = (today - timedelta(days=i)).isoformat()
-            if d in by_date:
-                trend.append(by_date[d])
-            else:
-                trend.append(
-                    {
-                        "date": d,
-                        "cards_added": 0,
-                        "cards_mastered": 0,
-                        "articles_read": 0,
-                        "quiz_sessions": 0,
-                        "study_minutes": 0,
-                    }
-                )
-
-        # Streak：1 次 DISTINCT 范围查 + Python 回溯（替代 365 次单日查询）。
-        # 语义保持现状：today 无记录即 0；有则从 today 起回溯连续天数。
-        active_days = {
-            r[0]
-            for r in conn.execute(
-                "SELECT DISTINCT substr(logged_at, 1, 10) FROM study_log WHERE logged_at >= ?",
-                ((today - timedelta(days=365)).isoformat(),),
-            )
-        }
-        streak = 0
-        check_date = today
-        while check_date.isoformat() in active_days:
-            streak += 1
-            check_date = check_date - timedelta(days=1)
-
-        total_quiz_sessions = conn.execute("SELECT SUM(quiz_sessions) FROM daily_summary").fetchone()[0] or 0
-        total_study_minutes = conn.execute("SELECT SUM(study_minutes) FROM daily_summary").fetchone()[0] or 0
-
-    total_cards = total_vocab + total_grammar
-    total_mastered = mastered_vocab + mastered_grammar
-
-    # Milestones
-    milestones = [
-        {
-            "id": "first_card",
-            "title": "初临纸页",
-            "desc": "制作了第一张卡片",
-            "icon": "🌱",
-            "unlocked": total_cards >= 1,
-        },
-        {
-            "id": "first_article",
-            "title": "开卷有益",
-            "desc": "研读了第一篇德语文章",
-            "icon": "📖",
-            "unlocked": total_articles >= 1,
-        },
-        {
-            "id": "master_10",
-            "title": "小试牛刀",
-            "desc": "斩获 10 张已掌握卡片",
-            "icon": "⚔️",
-            "unlocked": total_mastered >= 10,
-        },
-        {
-            "id": "master_50",
-            "title": "千锤百炼",
-            "desc": "斩获 50 张已掌握卡片",
-            "icon": "🛡️",
-            "unlocked": total_mastered >= 50,
-        },
-        {
-            "id": "master_100",
-            "title": "百词斩将",
-            "desc": "斩获 100 张已掌握卡片",
-            "icon": "🏆",
-            "unlocked": total_mastered >= 100,
-        },
-        {
-            "id": "master_200",
-            "title": "词海无涯",
-            "desc": "斩获 200 张已掌握卡片",
-            "icon": "👑",
-            "unlocked": total_mastered >= 200,
-        },
-        {"id": "streak_3", "title": "三日不绝", "desc": "连续打卡 3 天", "icon": "🔥", "unlocked": streak >= 3},
-        {"id": "streak_7", "title": "一周常胜", "desc": "连续打卡 7 天", "icon": "⚡", "unlocked": streak >= 7},
-        {"id": "streak_30", "title": "月光苦读者", "desc": "连续打卡 30 天", "icon": "🌙", "unlocked": streak >= 30},
-    ]
-
-    return {
-        "total_cards": total_cards,
-        "total_vocab": total_vocab,
-        "total_grammar": total_grammar,
-        "total_mastered": total_mastered,
-        "mastered_vocab": mastered_vocab,
-        "mastered_grammar": mastered_grammar,
-        "total_articles": total_articles,
-        "streak": streak,
-        "total_quiz_sessions": total_quiz_sessions,
-        "total_study_minutes": total_study_minutes,
-        "total_attempts": total_attempts,
-        "accuracy_pct": accuracy_pct,
-        "cefr_counts": cefr_counts,
-        "top_errors": top_errors,
-        "trend": trend,
-        "milestones": milestones,
-    }
-
-
-@router.get("/api/cards/export/apkg")
-def export_apkg() -> Any:
-    tmp = tempfile.gettempdir()
-    path = os.path.join(tmp, "DeLector_Deck.apkg")
-    export_anki_deck(path)
-    return FileResponse(
-        path,
-        filename="DeLector_Deck.apkg",
-        media_type="application/octet-stream",
-        headers=_attachment_headers("DeLector_Deck.apkg"),
-    )
-
-
-# --- Edge Neural TTS Audio Endpoints ---
-class TTSReq(BaseModel):
-    text: str
-    voice: Optional[str] = "de-DE-KatjaNeural"
-    rate: Optional[str] = "+0%"
-
-
-# 朗读输入上限：局域网可达端点，防超大文本打满合成队列与磁盘缓存（场景是词/句级）
-MAX_TTS_TEXT_LEN = 1000
-
-
-async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> str:
-    clean_text = text.strip()
-    if not clean_text:
-        raise HTTPException(400, "Text cannot be empty")
-    if len(clean_text) > MAX_TTS_TEXT_LEN:
-        raise HTTPException(400, f"朗读文本过长（最多 {MAX_TTS_TEXT_LEN} 字符）")
-
-    cache_key = hashlib.sha256(f"{voice}_{rate}_{clean_text}".encode("utf-8")).hexdigest()
-    cache_file = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.mp3")
-
-    if os.path.exists(cache_file) and os.path.getsize(cache_file) > 100:
-        return cache_file
-
-    try:
-        try:
-            import edge_tts
-
-            communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
-            await communicate.save(cache_file)
-        except ImportError:
-            # Android/Chaquopy 没有 edge_tts 的 wheel（aiohttp 等依赖缺）→ 用 stdlib 版客户端
-            # （services.tts 复刻同一 WebSocket+Sec-MS-GEC 协议，零依赖；原名 edge_tts_mini）
-            from delector.services import tts as edge_tts_mini
-
-            audio_data = await asyncio.to_thread(edge_tts_mini.synthesize, clean_text, voice, rate)
-            with open(cache_file, "wb") as f:
-                f.write(audio_data)
-    except Exception:
-        # Multi-provider pure-Python httpx fallback (accessible in mainland China)
-        from urllib.parse import quote
-
-        q = quote(clean_text[:250])
-        candidate_urls = [
-            f"https://dict.youdao.com/dictvoice?audio={q}&le=de",
-            f"https://fanyi.baidu.com/gettts?lan=de&text={q}&spd=3&source=web",
-            f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=de&client=tw-ob",
-        ]
-        for tts_url in candidate_urls:
-            try:
-                async with httpx.AsyncClient(timeout=6.0) as client:
-                    resp = await client.get(
-                        tts_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-                    )
-                    if resp.status_code == 200 and len(resp.content) > 200:
-                        with open(cache_file, "wb") as f:
-                            f.write(resp.content)
-                        prune_audio_cache()
-                        return cache_file
-            except Exception as exc:
-                # Task 8b 真事故⑤：逐条点名失败 provider —— 循环后的总警告点不出败者是谁。
-                # （本处是 continue 形态站点：收窄后的 C1 已不判它 —— 收窄判据不许变成藏事故的手段，
-                #   故照修不误；修复比豁免更耐久。）
-                logging.getLogger("delector").warning("TTS fallback provider 失败：%s（%s）", tts_url, exc)
-                continue
-        # 兜底全部失败：固定文案上屏，内部异常只留服务端日志
-
-        logging.getLogger("delector").warning("TTS all providers failed", exc_info=True)
-        raise HTTPException(500, "语音合成失败，请稍后重试")
-
-    # 主路径（edge_tts 或 edge_tts_mini）成功：落地缓存后返回
-    prune_audio_cache()
-    return cache_file
-
-
-_TTS_RATE_RE = re.compile(r"^[+-]\d+%$")
-# 发音人白名单：与设置面板 / 朗读器可选项一一对应。voice 直接喂给后端 TTS 客户端，
-# 任意串不得到达合成层（既挡非法输入，也让新语言/新名字的接入必须走 UI 白名单）。
-_TTS_VOICE_WHITELIST = frozenset(
-    {
-        "de-DE-KatjaNeural",
-        "de-DE-ConradNeural",
-        "de-DE-AmalaNeural",
-        "de-DE-KillianNeural",
-    }
-)
-
-# --- TTS 并发闸：把「无界排队」换成「有界拒绝」--------------------------------
-# 为什么需要：generate_edge_tts_audio 内部走 asyncio.to_thread（默认池
-# min(32, cpu+4)），池满后 asyncio 的默认行为是**继续排队**，而不是拒绝；再叠加
-# edge_tts 无显式超时 + services/tts.py 只对**可重试失败**（连接/传输层、5xx；403 时钟
-# 偏差重试一次）退避重试（连接 10s / 读取 30s 分离超时 + 0.5s 有界退避 ⇒ 两次尝试合计
-# ≈ 80s 量级）+ 下面 3 个 HTTP provider 降级各 6s，单请求最坏约 98s。docker-compose
-# 又把 0.0.0.0:8000 暴露给整个局域网，于是几台设备（或同一设备多个 <audio> 同时
-# 起播）就能把线程池打满、合成请求无界堆积，越合成越慢、越慢越堆积。
-#
-# 取值 4：**无遥测，保守取值；如需调整看这里**。够局域网默认的 1~2 台设备同时朗读
-# （每台同时只有一段在播），又能在池被打满前早早把超出的请求拒掉。改大前先看
-# 真实并发峰值，别拍脑袋。
-#
-# 两条纪律：
-# 1. MUST 是**模块级**对象。每请求新建一个 Semaphore ⇒ 每个请求都拿到满额令牌，
-#    限流彻底形同虚设（这是限流实现最常见的自欺）。
-# 2. 拿不到就**立刻 429**，MUST NOT 排队等——等下去只是把无界排队换个地方发生。
-# 3. 闸在 _serve_tts **入参校验之后、合成之前**（详见那里的注释）：保住 400 语义，
-#    也不让注定失败的请求白吃名额。
-_TTS_CONCURRENCY_LIMIT = 4
-_TTS_SEMAPHORE = asyncio.Semaphore(_TTS_CONCURRENCY_LIMIT)
-
-# 429 的对外文案：给「稍后重试」的人话，不带 traceback / 内部路径 / 第三方异常
-# （细节只进服务端日志，理由同 _serve_tts 的 500 分支）。
-_TTS_BUSY_DETAIL = "TTS 并发已满，请稍后重试"
-
-
-@contextlib.asynccontextmanager
-async def _tts_slot() -> AsyncIterator[None]:
-    """占用一个 TTS 名额；拿不到立刻抛 429（不等待）。"""
-    if _TTS_SEMAPHORE.locked():
-        raise HTTPException(status_code=429, detail=_TTS_BUSY_DETAIL)
-    await _TTS_SEMAPHORE.acquire()
-    try:
-        yield
-    finally:
-        _TTS_SEMAPHORE.release()
-
-
-async def _serve_tts(text: str, voice: str, rate: str) -> Any:
-    """POST 与 GET 两个路由共享的 TTS 服务逻辑。"""
-    if not _TTS_RATE_RE.match(rate or ""):
-        raise HTTPException(status_code=400, detail="rate must look like '+0%', '-10%' or '+50%'")
-    if (voice or "") not in _TTS_VOICE_WHITELIST:
-        raise HTTPException(status_code=400, detail="unsupported voice")
-    # 并发闸放在**这两行校验之后**、真正合成之前：
-    # 1. 保住 400 语义——用户填错 voice/rate 是他自己的错，跟并发无关。报成 429
-    #    「并发已满，请稍后重试」会让人反复重试一个注定 400 的请求，而重试又把
-    #    本就不够的名额继续占着，自我加剧。错误语义 MUST NOT 被闸压改变。
-    # 2. 也不让注定失败的请求白吃名额——名额要留给真的在合成的请求。
-    # 闸之前那段只是同步正则/集合查询，耗时可忽略，绕开它不影响限流的严格性：
-    # 要限的是 generate_edge_tts_audio 的在飞数量，而它整个都在闸内。
-    async with _tts_slot():
-        try:
-            audio_path = await generate_edge_tts_audio(text, voice, rate)
-            return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
-        except HTTPException:
-            raise
-        except Exception:
-            # 细节只进服务端日志：内部路径/第三方异常对 LAN 客户端无意义且是信息泄露
-            import logging
-
-            logging.getLogger("delector").exception("TTS synthesis failed")
-            raise HTTPException(500, "语音合成失败，请稍后重试")
-
-
-@router.post("/api/audio/tts")
-async def get_audio_tts(req: TTSReq) -> Any:
-    # 并发闸在 _serve_tts 内部（校验之后、合成之前）⇒ 两个入口都自动覆盖，
-    # 也不怕哪天新增第三个入口忘了加闸。
-    return await _serve_tts(req.text, req.voice or "de-DE-KatjaNeural", req.rate or "+0%")
-
-
-@router.get("/api/audio/tts")
-async def audio_tts_get(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> Any:
-    """GET 版 TTS：供 <audio src="/api/audio/tts?text=..."> 直接用。
-    与 POST 共享同一缓存池（cache key 仍为 sha256(f"{voice}_{rate}_{clean_text}")）。"""
-    # <audio src> 走的正是这个入口；闸在 _serve_tts 里，所以同样被限流。
-    return await _serve_tts(text, voice, rate)
-
-
-@router.get("/api/audio/cache")
-def get_audio_cache() -> Any:
-    return get_cache_info(AUDIO_CACHE_DIR)
-
-
-@router.post("/api/audio/cache/clear")
-def clear_audio_cache(request: Request) -> Dict[str, Any]:
-    """清空音频缓存。
-
-    `freed_mb` 是**清理前后两次快照的差值**（真值），不是清理前的静态总量：
-    删不掉的文件（被别的进程锁住等）会如实留在 `freed_mb` 之外，而不是被虚报成已释放。
-    删除失败**不吞**：计入 `failed_count` / `failed_files` 并落一条服务端 warning；
-    这三个既有字段（status / cleared_count / freed_mb）名与义对本端点消费方保持不变，
-    新增字段只增不减（前端 static/js/cards.js:993 读 cleared_count / freed_mb）。
-    """
-    import logging
-
-    _require_localhost(request)
-    info_before = get_cache_info(AUDIO_CACHE_DIR)
-    cleared_count = 0
-    failed_files: List[str] = []
-    if os.path.exists(AUDIO_CACHE_DIR):
-        for fname in os.listdir(AUDIO_CACHE_DIR):
-            fpath = os.path.join(AUDIO_CACHE_DIR, fname)
-            try:
-                if os.path.isfile(fpath):
-                    os.remove(fpath)
-                    cleared_count += 1
-            except Exception as exc:
-                # 不再 `except: pass`——那条路径曾让「一个文件删不掉」在响应里完全隐形。
-                # 细节只进服务端日志；响应里给文件名与计数（本机闸后，无泄露面）。
-                logging.getLogger("delector").warning("[audio-cache] 删除失败 %s: %s", fpath, exc)
-                failed_files.append(fname)
-    info_after = get_cache_info(AUDIO_CACHE_DIR)
-    freed_bytes = int(info_before["total_size_bytes"]) - int(info_after["total_size_bytes"])
-    return {
-        "status": "ok",
-        "cleared_count": cleared_count,
-        "failed_count": len(failed_files),
-        "failed_files": failed_files,
-        "freed_mb": round(freed_bytes / (1024 * 1024), 2),
-    }
-
-
 # --- Reading Notes & AI Assist Endpoints ---
 class ReadingNoteReq(BaseModel):
     sentence_id: Optional[int] = None
@@ -1521,130 +765,6 @@ def export_study_guide(article_id: int) -> Any:
         media_type="text/markdown; charset=utf-8",
         headers=_attachment_headers(f"study_guide_{article_id}.md"),
     )
-
-
-# ── v3.0 / v3.8: FSRS Spaced Repetition Review & Cloze Exercise Engine ────────
-
-
-class CardReviewReq(BaseModel):
-    grade: int  # 1: Forgot, 2: Hard, 3: Good, 4: Easy
-    card_type: Optional[str] = None
-
-
-@router.post("/api/cards/{card_type}/{card_id}/review")
-def review_card_sm2(card_type: str, card_id: int, req: CardReviewReq) -> Dict[str, Any]:
-    if card_type not in ("vocab", "grammar"):
-        raise HTTPException(400, "card_type must be 'vocab' or 'grammar'")
-    tbl = "vocab_cards" if card_type == "vocab" else "grammar_cards"
-    with db_conn() as conn:
-        row = conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (card_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, f"Card {card_id} not found")
-
-        rep = row["repetition_count"] if "repetition_count" in row.keys() and row["repetition_count"] is not None else 0
-        interval = row["interval_days"] if "interval_days" in row.keys() and row["interval_days"] is not None else 1
-        ef = row["ease_factor"] if "ease_factor" in row.keys() and row["ease_factor"] is not None else 2.5
-
-        elapsed = None
-        if "due_date" in row.keys() and row["due_date"]:
-            try:
-                due_dt = datetime.strptime(str(row["due_date"])[:10], "%Y-%m-%d")
-                sched_dt = due_dt - timedelta(days=interval)
-                today_dt = datetime.now()
-                elapsed = max(1, (today_dt - sched_dt).days)
-            except Exception:
-                elapsed = None
-
-        new_rep, new_interval, new_ef, due_date, next_intervals = calculate_fsrs(
-            req.grade, rep, interval, ef, elapsed_days=elapsed
-        )
-
-        is_correct = req.grade >= 2
-        correct_incr = 1 if is_correct else 0
-        wrong_incr = 1 if not is_correct else 0
-
-        conn.execute(
-            f"""
-            UPDATE {tbl}
-            SET repetition_count = ?, interval_days = ?, ease_factor = ?, due_date = ?,
-                correct_count = correct_count + ?, wrong_count = wrong_count + ?
-            WHERE id = ?
-        """,
-            (new_rep, new_interval, new_ef, due_date, correct_incr, wrong_incr, card_id),
-        )
-
-        # UPDATE 后所有被改列都是内存里已算好的值：直接拼回响应，免整行回查
-        updated = dict(row)
-        updated.update(
-            {
-                "repetition_count": new_rep,
-                "interval_days": new_interval,
-                "ease_factor": new_ef,
-                "due_date": due_date,
-                "correct_count": (row["correct_count"] or 0) + correct_incr,
-                "wrong_count": (row["wrong_count"] or 0) + wrong_incr,
-            }
-        )
-        updated["next_intervals"] = next_intervals
-
-    with db_progress_conn() as pconn:
-        pconn.execute(
-            "INSERT INTO quiz_log (card_id, card_type, mode, correct) VALUES (?, ?, ?, ?)",
-            (card_id, card_type, "fsrs_review", 1 if is_correct else 0),
-        )
-    log_study_event("quiz_session", card_id, f"fsrs:{card_type}:{card_id}")
-    return updated
-
-
-@router.get("/api/cards/due")
-def get_due_cards() -> Dict[str, Any]:
-    today = datetime.now().strftime("%Y-%m-%d")
-    with db_conn() as conn:
-        v = [
-            dict(r)
-            for r in conn.execute(
-                # 排除「工作台投影且卡盒无进度」的行：投影侧（core/vocab_pool.py）只写
-                # fsrs_* 、不写 due_date ⇒ due_date 为 NULL ⇒ 旧谓词把工作台背过的词全收进
-                # 「今日到期」，卡面还显示「0 正 / 0 误」（对用户说谎）。判据并置两套语义：
-                # fsrs_s（工作台 FSRS 侧，唯一按工作台卡语义写入者即 vocab_pool.py）说明
-                # 「该行有工作台 FSRS 卡」，repetition_count（卡盒 DSR 侧）== 0 说明「卡盒没进度」。
-                # 卡盒 DSR 复习（review_card_sm2）不写 fsrs_*，故本谓词不会误伤纯卡盒行；
-                # MUST NOT 依赖 mastered（已在上面的 WHERE 里）。
-                #
-                # **口径 MUST 与姊妹端点 /api/cards/known-lemmas 一致：用 `fsrs_s > 0`，
-                # MUST NOT 用 `IS NOT NULL`。** 后者更宽 —— 备份还原（core/database.py）
-                # 原样回灌 fsrs_s 且该列非 STRICT，legacy / 手改备份里的 0 或 "" 都能落盘；这类行
-                # 会既不被 known-lemmas 算「已学」（它要 > 0）、又被本谓词排除 ⇒ 两头不可见。
-                # COALESCE(fsrs_s, 0) 只是把 NULL 显式读作「无值」：**SQL 三值逻辑下
-                # `NULL > 0` 是 NULL、`NOT(NULL)` 仍是 NULL ⇒ WHERE 会把该行整行丢掉**
-                # （曾真发生过：裸 `> 0` 会把所有 reader 普通卡误杀出 due_vocab）。COALESCE 后
-                # `> 0` 对每个存储类的真值与姊妹端点逐行一致（NULL→假、0→假、其余同 `> 0`）。
-                #
-                # **已知缺口（本谓词不覆盖）**：自建但尚未在工作台评级过的词条，
-                # `_is_projectable`（core/vocab_pool.py）对 `custom is True` 立即 True、不查卡 ⇒
-                # `_desired_fields` 拿到 card={} ⇒ fsrs_s 为 NULL ⇒ 与 reader 普通卡不可区分 ⇒
-                # 仍会涌入「今日到期」。真修它需改投影写入语义（= 编造 FSRS 状态，违反 FSRS≠DSR），
-                # 越出本任务范围；见 ADR-0016 收尾 + tests/test_server.py 用例⑥。
-                "SELECT * FROM vocab_cards WHERE mastered = 0 "
-                "AND (due_date IS NULL OR due_date <= ?) "
-                "AND NOT (COALESCE(fsrs_s, 0) > 0 AND repetition_count = 0) "
-                "ORDER BY wrong_count DESC, id ASC",
-                (today,),
-            ).fetchall()
-        ]
-        g = [
-            dict(r)
-            for r in conn.execute(
-                "SELECT * FROM grammar_cards WHERE mastered = 0 "
-                "AND (due_date IS NULL OR due_date <= ?) ORDER BY wrong_count DESC, id ASC",
-                (today,),
-            ).fetchall()
-        ]
-        for card in v + g:
-            card["next_intervals"] = get_fsrs_next_intervals(
-                card.get("repetition_count") or 0, card.get("interval_days") or 1, card.get("ease_factor") or 2.5
-            )
-        return {"due_vocab": v, "due_grammar": g, "due_count": len(v) + len(g), "today": today}
 
 
 def generate_cloze_exercise(text: str, mode: str = "grammar", article_id: Optional[int] = None) -> Dict[str, Any]:

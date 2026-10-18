@@ -213,7 +213,7 @@ def test_tts_fallback_provider_failures_name_the_provider(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
     """三个兜底 provider 全失败 ⇒ 每条失败 MUST 点名具体 provider；修复前循环内零痕迹。"""
-    routes_main = importlib.import_module("delector.routes.main")
+    routes_audio = importlib.import_module("delector.routes.audio")
 
     # 1) 主路径全堵死：edge_tts 缺席（sys.modules[name]=None ⇒ import 抛 ImportError），
     #    edge_tts_mini 客户端也失败 ⇒ 必然落到三 provider 兜底循环。
@@ -230,15 +230,15 @@ def test_tts_fallback_provider_failures_name_the_provider(
     monkeypatch.setattr(delector.services, "tts", fake_mini, raising=False)
 
     # 2) 三个 HTTP 兜底 provider 全部失败。
-    monkeypatch.setattr(routes_main.httpx, "AsyncClient", _AllProvidersDownClient)
+    monkeypatch.setattr(routes_audio.httpx, "AsyncClient", _AllProvidersDownClient)
     # 3) 缓存目录指向 tmp：本路径不应落盘，指向 tmp 防任何意外写入。
     cache_dir = tmp_path / "tts_cache"
     cache_dir.mkdir()
-    monkeypatch.setattr(routes_main, "AUDIO_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr(routes_audio, "AUDIO_CACHE_DIR", str(cache_dir))
 
     with caplog.at_level(logging.WARNING, logger="delector"):
         with pytest.raises(HTTPException) as excinfo:
-            asyncio.run(routes_main.generate_edge_tts_audio("Hallo Welt", "de-DE-KatjaNeural", "+0%"))
+            asyncio.run(routes_audio.generate_edge_tts_audio("Hallo Welt", "de-DE-KatjaNeural", "+0%"))
 
     assert excinfo.value.status_code == 500, "全失败仍 MUST 上抛 HTTPException(500)（对外文案契约不变）"
     warnings_text = "\n".join(_delector_warnings(caplog))

@@ -207,8 +207,8 @@ def test_review_has_no_post_update_requery():
     （UPDATE 后所有列都是内存已算值，回查纯浪费）。"""
     from pathlib import Path
 
-    # Phase 1 Task 4：handler 已从 server.py 搬到 delector/routes/main.py
-    src = (Path(__file__).resolve().parent.parent / "delector" / "routes" / "main.py").read_text(encoding="utf-8")
+    # Phase 1 Task 4：handler 已从 server.py 搬到 delector/routes/main.py；C5 归位至 routes/cards.py
+    src = (Path(__file__).resolve().parent.parent / "delector" / "routes" / "cards.py").read_text(encoding="utf-8")
     start = src.index("def review_card_sm2(")
     end = src.index('@router.get("/api/cards/due")')
     body = src[start:end]
@@ -632,7 +632,7 @@ def test_tts_rejects_unknown_voice_before_synthesis(client, monkeypatch):
         calls.append(voice)
         raise HTTPException(500, "should-not-be-reached")
 
-    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", fake_gen)
+    monkeypatch.setattr("delector.routes.audio.generate_edge_tts_audio", fake_gen)
     res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "evil-voice"})
     assert res.status_code == 400
     assert calls == []
@@ -644,7 +644,7 @@ def test_tts_unexpected_error_hides_internal_detail(client, monkeypatch):
     async def fake_gen(text, voice, rate):
         raise RuntimeError("C:\\secret\\inner\\path boom")
 
-    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", fake_gen)
+    monkeypatch.setattr("delector.routes.audio.generate_edge_tts_audio", fake_gen)
     res = client.post("/api/audio/tts", json={"text": "Hallo", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 500
     detail = res.text

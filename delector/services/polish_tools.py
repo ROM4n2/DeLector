@@ -6,6 +6,7 @@
 为了保持外部导入（打包脚本、历史测试）完全兼容，本模块透明再导出全部公共符号。
 """
 
+# layer-ok: 历史过渡再导出垫片，实现已归位至 Layer 4 delector.tools.polish，保留本文件避免外部依赖中断
 from delector.tools.polish import (
     POLISH_TOOL_ALLOWLIST,
     Hook,

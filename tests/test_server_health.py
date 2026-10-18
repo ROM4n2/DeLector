@@ -34,10 +34,10 @@ def tts_gate(monkeypatch, tmp_path):
     用来验证「闸满不会压掉入参校验的 400 语义」——这条收益 MUST 有测试钉住，
     否则把闸挪回路由入口（校验之前）就没人拦了。
     """
-    from delector.routes import main as routes_main
+    from delector.routes import audio as routes_audio
 
-    assert 1 <= routes_main._TTS_CONCURRENCY_LIMIT <= 8, (
-        f"TTS 并发上限必须是有界的（当前 {routes_main._TTS_CONCURRENCY_LIMIT}）："
+    assert 1 <= routes_audio._TTS_CONCURRENCY_LIMIT <= 8, (
+        f"TTS 并发上限必须是有界的（当前 {routes_audio._TTS_CONCURRENCY_LIMIT}）："
         "无界 ⇒ 线程池打满后请求无界堆积，等于根本没设闸"
     )
 
@@ -45,7 +45,7 @@ def tts_gate(monkeypatch, tmp_path):
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00gate_audio")
 
     # 换掉模块级那把闸（monkeypatch 负责还原，避免污染其它用例）
-    monkeypatch.setattr(routes_main, "_TTS_SEMAPHORE", asyncio.Semaphore(1))
+    monkeypatch.setattr(routes_audio, "_TTS_SEMAPHORE", asyncio.Semaphore(1))
 
     async def scenario(method: str, second_override: Any = None) -> Any:
         import httpx
@@ -58,7 +58,7 @@ def tts_gate(monkeypatch, tmp_path):
             await release.wait()
             return str(fake_mp3)
 
-        monkeypatch.setattr(routes_main, "generate_edge_tts_audio", _blocking_tts)
+        monkeypatch.setattr(routes_audio, "generate_edge_tts_audio", _blocking_tts)
 
         async def one(client: Any, override: Any = None) -> Any:
             if method == "get":
@@ -153,7 +153,7 @@ def test_tts_single_request_not_blocked_by_gate(client, monkeypatch, tmp_path):
 
     fake_mp3 = tmp_path / "single.mp3"
     fake_mp3.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00single_audio")
-    monkeypatch.setattr("delector.routes.main.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
+    monkeypatch.setattr("delector.routes.audio.generate_edge_tts_audio", AsyncMock(return_value=str(fake_mp3)))
 
     res = client.post("/api/audio/tts", json={"text": "Guten Tag", "voice": "de-DE-KatjaNeural"})
     assert res.status_code == 200, f"单请求不该被并发闸误伤，实际 {res.status_code}：{res.text[:200]}"

@@ -472,12 +472,12 @@ def test_card_counts_does_not_run_fsrs_next_intervals(client, monkeypatch):
 
     端点改成 ``SELECT *`` 再取 ``len`` ⇒ 桩被调用 ⇒ 本用例必红。
     """
-    from delector.routes import main as routes_main
+    from delector.routes import cards as routes_cards
 
     def _boom(*args: object, **kwargs: object):
         raise AssertionError("计数端点调用了 get_fsrs_next_intervals：它只数个数，不该逐卡递推 FSRS")
 
-    monkeypatch.setattr(routes_main, "get_fsrs_next_intervals", _boom)
+    monkeypatch.setattr(routes_cards, "get_fsrs_next_intervals", _boom)
     _insert_vocab_card(word="Haus", lemma="haus", mastered=1)
 
     res = client.get("/api/cards/counts")
