@@ -61,6 +61,34 @@ def js_dir(tmp_path: Path) -> Path:
     return d
 
 
+def _write_module(path: Path, text: str) -> None:
+    """写模块夹具：统一 CRLF（仓库契约），并避免 `newline=''` 把整文件转成 LF。"""
+    cr, lf = chr(13), chr(10)
+    path.write_text(text.replace(cr + lf, lf).replace(lf, cr + lf), encoding="utf-8", newline="")
+
+
+@pytest.fixture()
+def rule5_dir(tmp_path: Path) -> Path:
+    """规则⑤ 专用最小树：`wr-api.js` 里**只有一个**受测调用。
+
+    为什么不用真文件：真文件有 14 个调用，配一个最小路由集会让**别的**调用如实报
+    `route-path-unregistered`，把断言面搅浑（曾据此写出过假失败的断言）。要测的是
+    「这一个调用怎么判」，就该只放这一个。
+    """
+    d = tmp_path / "js"
+    d.mkdir()
+    _write_module(d / "wr-format.js", "import { esc } from './core.js';\nexport const WRITER_TABS = ['a'];\n")
+    _write_module(d / "writer.js", "export {};\n")
+    _write_module(
+        d / "wr-api.js",
+        "import { api } from './core.js';\n"
+        "export async function probe() {\n"
+        "  return api('/api/essays');\n"
+        "}\n",
+    )
+    return d
+
+
 def run_gate(js_dir_arg: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(GATE), "--js-dir", str(js_dir_arg), "--skip-route-parity"],
@@ -214,6 +242,275 @@ def test_comment_mention_does_not_trip_the_gate(gate: Any, js_dir: Path) -> None
     assert "fetch" in head, "模块头注释应当逐字提到被禁词（本用例的前提）"
     assert rules_of(gate, js_dir) == []
 
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "import { renderEditor } from './writer.js';",
+        "import writer from './writer.js';",
+        "import * as w from './writer.js';",
+        "import './writer.js';",
+    ],
+    ids=["named", "default", "namespace", "side-effect"],
+)
+def test_rule3_catches_every_import_form(gate: Any, js_dir: Path, import_line: str) -> None:
+    """单向层序 MUST 对**所有** import 形态成立。
+
+    副作用型 `import './writer.js'` 没有任何绑定名 —— 早先的解析只认带 `from` 的三种形态，
+    等于给「低层偷偷 import 视图层」留了后门（本用例即该洞的回归钉子）。
+    """
+    inject(js_dir / "wr-api.js", "import { api } from './core.js';",
+           "import { api } from './core.js';\n" + import_line)
+    rules = rules_of(gate, js_dir)
+    assert "reverse-dependency" in rules, (import_line, rules)
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "import { something } from './cards.js';",
+        "import cards from './cards.js';",
+        "import * as cards from './cards.js';",
+        "import './cards.js';",
+    ],
+    ids=["named", "default", "namespace", "side-effect"],
+)
+def test_rule3b_allowlist_catches_every_import_form(gate: Any, js_dir: Path, import_line: str) -> None:
+    inject(js_dir / "wr-format.js", "import { esc } from './core.js';",
+           "import { esc } from './core.js';\n" + import_line)
+    assert any("越界import" in r for r in rules_of(gate, js_dir)), import_line
+
+
+# ══ 2b. 复核驱动的绕过通道回归钉子（F1~F11）══════════════════════════════════
+# 下列每条都对应一轮独立对抗式复核里**当时真的绕过了**闸的输入；不是假想用例。
+# 规则⑤ 的用例一律用 `rule5_dir`（最小受测树）—— 拿真文件配最小路由集会让**别的**
+# 调用如实报红，把断言面搅浑。
+
+
+def test_rule5_method_quote_forms_all_red(gate: Any, rule5_dir: Path) -> None:
+    """F1：`method:` 写双引号/反引号时旧版静默按 GET 处理 ⇒ 假绿。三种引号都必须判红。"""
+    pairs = {("/api/essays/{}/versions/{}", "GET"), ("/api/essays/{}/versions/{}", "DELETE")}
+    for quote in ('"', "'", "`"):
+        _write_module(
+            rule5_dir / "wr-api.js",
+            "import { api } from './core.js';\n"
+            "export async function probe() {\n"
+            "  return api(`/api/essays/${essayId}/versions/${versionId}`, "
+            "{ method: " + quote + "POST" + quote + " });\n"
+            "}\n",
+        )
+        rules = [v.rule for v in gate.collect_violations(rule5_dir, pairs)]
+        assert any(r.startswith("method-mismatch(POST") for r in rules), (quote, rules)
+
+
+@pytest.mark.parametrize(
+    "opts",
+    ["{ method: MUT }", "{ method }"],
+    ids=["variable", "shorthand"],
+)
+def test_rule5_unparsable_method_fails_closed(gate: Any, rule5_dir: Path, opts: str) -> None:
+    """F1：取不到字面量方法值 MUST 判失败（`unverifiable-method`），不许猜一个 GET 蒙过去。
+
+    简写 `{ method }` 同样是「写了 method 却没有值」，MUST 一并 fail-closed。
+    """
+    inject(rule5_dir / "wr-api.js", "  return api('/api/essays');",
+           "  return api('/api/essays', " + opts + ");")
+    rules = [v.rule for v in gate.collect_violations(rule5_dir, {("/api/essays", "GET")})]
+    assert "unverifiable-method" in rules, rules
+
+
+def test_rule5_no_line_window_bleed(gate: Any, rule5_dir: Path) -> None:
+    """F2：旧版按「首行 + 后 4 行」取窗口 ⇒ 会把邻近调用的方法串到本调用上（假红）。
+
+    这里让一个 GET-only 调用紧邻一个无关的 POST 调用：前者 MUST NOT 被判红。
+    """
+    _write_module(
+        rule5_dir / "wr-api.js",
+        "import { api } from './core.js';\n"
+        "export async function probe() {\n"
+        "  const other = api('/api/essays', { method: 'POST' });\n"
+        "  const v = await api('/api/essays/1/versions/2');\n"
+        "  return other && v;\n"
+        "}\n",
+    )
+    pairs = {("/api/essays", "GET"), ("/api/essays", "POST"), ("/api/essays/{}/versions/{}", "GET")}
+    rules = [v.rule for v in gate.collect_violations(rule5_dir, pairs)]
+    assert not any(r.startswith("method-mismatch") for r in rules), rules
+
+
+@pytest.mark.parametrize(
+    "snippet,rule_part",
+    [
+        ("  const _net = fetch;", "禁network"),
+        ("  notify?.('x');", "禁toast"),
+        ("  g['setTimeout'](fn, 0);", "禁timer"),
+        ("  const g2 = globalThis;", None),  # 阴性对照：globalThis 自身不在块表里
+    ],
+    ids=["alias", "optional-chain", "subscript-string", "negative-control"],
+)
+def test_rule1_alias_optional_chain_and_subscript(
+    gate: Any, js_dir: Path, snippet: str, rule_part: Any
+) -> None:
+    """F3：旧版禁令要求「函数调用形态」⇒ 别名 / 可选链 / 下标取用全部逃逸。"""
+    inject(js_dir / "wr-format.js", "export function getErrorTypeLabel(type) {",
+           "export function getErrorTypeLabel(type) {\n" + snippet)
+    rules = rules_of(gate, js_dir)
+    if rule_part is None:
+        assert not any("禁" in r for r in rules), (snippet, rules)
+    else:
+        assert any(rule_part in r for r in rules), (snippet, rules)
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        # 以下都是**被扫描的 JS 代码字符串**（夹具数据），不是 Python 的 eval 调用 ——
+        # 它们只会被喂给闸的词法分析器，绝不执行。
+        "  el.appendChild(document.body);",
+        "  new WebSocket('ws://x');",
+        "  eval('1+1');",
+        "  top.location.href = '/';",
+        "  parent.postMessage('x', '*');",
+    ],
+    ids=["appendChild", "WebSocket", "eval", "location", "postMessage"],
+)
+def test_rule1_dom_and_dynamic_sinks_red(gate: Any, js_dir: Path, snippet: str) -> None:
+    """F4：块表补的 DOM 汇点 / 动态求值 / 跨窗通信 —— 每条都必须能红。"""
+    inject(js_dir / "wr-format.js", "export function getErrorTypeLabel(type) {",
+           "export function getErrorTypeLabel(type) {\n" + snippet)
+    assert any("禁" in r for r in rules_of(gate, js_dir)), snippet
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "import{b2}from'./writer.js';",
+        "export {renderEditor} from './writer.js';",
+        "import('./writer.js');",
+        "import './writer.js'; import './writer.js';",
+    ],
+    ids=["no-whitespace", "export-from", "dynamic-import", "two-on-one-line"],
+)
+def test_rule3_import_forms_that_old_regex_missed(gate: Any, js_dir: Path, import_line: str) -> None:
+    """F5：旧版单行 `^` 锚正则漏掉的无空白 / export-from / 动态 import / 同行两个。"""
+    inject(js_dir / "wr-api.js", "import { api } from './core.js';",
+           "import { api } from './core.js';\n" + import_line)
+    assert "reverse-dependency" in rules_of(gate, js_dir), import_line
+
+
+def test_rule3b_vendor_path_is_not_a_disguise(gate: Any, js_dir: Path) -> None:
+    """F5：旧版只比 basename ⇒ `./vendor/core.js` 冒充 `./core.js`。现必须判红。"""
+    inject(js_dir / "wr-format.js", "import { esc } from './core.js';",
+           "import { esc } from './vendor/core.js';")
+    assert any("越界import(vendor/core.js)" in r for r in rules_of(gate, js_dir))
+
+
+@pytest.mark.parametrize(
+    "import_line,decl_line",
+    [
+        ("import * as A1Writer from './core.js';", "const A1Writer = 1;"),
+        ("import writerMod from './core.js';", "function writerMod() {}"),
+    ],
+    ids=["namespace", "default"],
+)
+def test_rule4_namespace_and_default_bindings_are_tracked(
+    gate: Any, js_dir: Path, import_line: str, decl_line: str
+) -> None:
+    """F6：旧版只收具名 `{…}` 绑定 ⇒ 命名空间/默认导入重名逃逸（正是会挂整图的那类）。"""
+    inject(js_dir / "wr-format.js", "import { esc } from './core.js';",
+           "import { esc } from './core.js';\n" + import_line)
+    inject(js_dir / "wr-format.js", "export const WRITER_TABS",
+           decl_line + "\nexport const WRITER_TABS")
+    rules = rules_of(gate, js_dir)
+    assert any(r.startswith("duplicate-declaration(") for r in rules), rules
+
+
+def test_rule4_comma_declarator_list_is_tracked(gate: Any, js_dir: Path) -> None:
+    """F6：`const other = 1, esc = 2;` 的第二个名字旧版收不到（esc 是导入名 ⇒ 链接期报错）。"""
+    inject(js_dir / "wr-format.js", "export const WRITER_TABS",
+           "const other = 1, esc = 2;\nexport const WRITER_TABS")
+    rules = rules_of(gate, js_dir)
+    assert any(r.startswith("duplicate-declaration(esc)") for r in rules), rules
+
+
+def test_rule6_generator_redefinition_red(gate: Any, js_dir: Path) -> None:
+    """F6：`export function* name(){}` 旧版漏判。"""
+    inject(js_dir / "writer.js", "export { getErrorTypeLabel };",
+           "export { getErrorTypeLabel };\nexport function* renderWordDiff(a, b) { yield a; }")
+    rules = rules_of(gate, js_dir)
+    assert any(r.startswith("false-decoupling(renderWordDiff") for r in rules), rules
+
+
+def test_rule5_fetch_calls_are_checked(gate: Any, rule5_dir: Path) -> None:
+    """F8：`wr-api.js` 的另一条真实调用面 `fetch(` 旧版完全没查。"""
+    _write_module(
+        rule5_dir / "wr-api.js",
+        "export async function probe() {\n"
+        "  return fetch('/api/nope', { method: 'DELETE' });\n"
+        "}\n",
+    )
+    rules = [v.rule for v in gate.collect_violations(rule5_dir, {("/api/essays", "GET")})]
+    assert "route-path-unregistered" in rules, rules
+
+
+@pytest.mark.parametrize(
+    "inject_line,expected_rule",
+    [
+        ("  return api(endpoint);", "unverifiable-path"),
+        ("  return api('/api/essays/' + id);", None),
+        ("  return api('/api/essays', { method: 'delete' });", None),
+    ],
+    ids=["variable-path", "concatenated-literal", "lowercase-method"],
+)
+def test_rule5_path_and_method_normalization(
+    gate: Any, rule5_dir: Path, inject_line: str, expected_rule: Any
+) -> None:
+    """F9：路径非字面量 ⇒ fail-closed；`+` 拼接按既有闸口径折算 `{}`；方法统一 upper。"""
+    inject(rule5_dir / "wr-api.js", "  return api('/api/essays');", inject_line)
+    pairs = {("/api/essays", "GET"), ("/api/essays", "DELETE"), ("/api/essays/{}", "GET")}
+    rules = [v.rule for v in gate.collect_violations(rule5_dir, pairs)]
+    if expected_rule is None:
+        assert not rules, rules
+    else:
+        assert expected_rule in rules, rules
+
+
+def test_rule1_mid_line_top_level_let_red(gate: Any, js_dir: Path) -> None:
+    """F10：旧版 `mutable-state` 只在列 0 生效 ⇒ `const A = 1; let x = 2;` 逃逸。"""
+    inject(js_dir / "wr-format.js", "export const WRITER_TABS",
+           "const A = 1; let scratch = 2;\nexport const WRITER_TABS")
+    assert any("禁mutable-state" in r for r in rules_of(gate, js_dir))
+
+
+def test_regex_literal_does_not_mask_real_code(gate: Any, js_dir: Path) -> None:
+    """F7：旧版用正则剥注释 ⇒ 正则字面量里的 `/*` 会被当成块注释起始，把真实代码吃掉。"""
+    inject(js_dir / "wr-format.js", "export function getErrorTypeLabel(type) {",
+           "export function getErrorTypeLabel(type) {\n"
+           "  const STAR = /a\\/*b/;\n"
+           "  document.getElementById('smuggled');")
+    assert any("禁dom" in r for r in rules_of(gate, js_dir))
+
+
+def test_real_file_comment_and_regex_handling(gate: Any) -> None:
+    """F7 的回归钉子：真文件里那个含引号的正则字面量 MUST NOT 让真实注释逃过剥离。
+
+    双侧断言：① 块注释正文在剥注释结果里消失；② 正则字面量原文被原样保留。
+    """
+    src = (JS_DIR / "wr-format.js").read_text(encoding="utf-8")
+    stripped = gate.strip_comments(src)
+    assert stripped.count("\n") == src.count("\n"), "行数必须不变（行号才可信）"
+    assert "MUST NOT 触碰 DOM" in src and "MUST NOT 触碰 DOM" not in stripped
+    assert "分层契约" in src and "分层契约" not in stripped
+    regex_line = next(x for x in src.splitlines() if "oldSent.split(" in x)
+    assert regex_line in stripped, "正则字面量所在行被误剥"
+
+
+def test_violations_are_deduped_per_file_line_rule(gate: Any, js_dir: Path) -> None:
+    """F11：同一 (文件,行,规则) 只报一次，不因多模式命中而重复刷屏。"""
+    inject(js_dir / "wr-format.js", "export function getErrorTypeLabel(type) {",
+           "export function getErrorTypeLabel(type) {\n  document.getElementById('x');")
+    rules = rules_of(gate, js_dir)
+    assert len(rules) == len(set(rules)), rules
 
 # ══ 3. 真树集成 + 端到端退出码 ═══════════════════════════════════════════════
 

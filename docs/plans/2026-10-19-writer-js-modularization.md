@@ -270,6 +270,34 @@
 - [x] **Step 5**: 接入 CI —— **挂在已装依赖的 `ci` job 内**（`Frontend API contract gate` 之后、`tsc` 之前），而**不是**新建纯 stdlib job：规则⑤ 要 `delector.server` 取真实路由表，新 job 得整套重装依赖。已用 `yaml.safe_load` 复核 YAML 合法
 - [x] **Step 6**: 门禁 + 用例数 —— `ruff check .` 全绿（修掉 1×F401 + 3×E501 + 1×E741）· `mypy --strict delector tools` 116 文件 0 错 · `mypy --follow-imports=skip tests` 154 文件 0 错 · 收集数 **2367 → 2387**（+20 = 本闸自身验收面，计划允许的唯一新增断言来源）· 全部触碰文件 0 lone LF
 - [x] **Step 7**: Physical Evidence Gate + 原子提交（`feat(tools): add frontend layer invariants gate`）
+- [x] **Step 8（自查补充，非计划预设）**: 规则③/③b 的 import 形态覆盖漏了**副作用型** `import './writer.js';`（无 `from` 从句、无绑定名）—— 那等于给「低层偷偷 import 视图层」留了后门。已抽出 `_import_targets()` 统一覆盖具名/默认/命名空间/副作用四形态，并补 8 条参数化回归用例（`named`/`default`/`namespace`/`side-effect` × 规则③ 与 ③b）。用例数 20 → **28**
+
+---
+
+### Task 4b: 独立对抗式复核与**判据整体重写** [Tier: 3-Critical] [Mode: AFK] [Role: TDD Builder]
+*(触发原因：Step 1~8 交付后，一轮独立复核证明初版正则块表可被多种方式绕过 —— 闸**看起来权威但能被游戏**，是本仓最忌的形态)*
+
+**复核结论（初版 `exit=0` 即「未被捕获」）**：11 条发现，其中 **3 条 CRITICAL / 5 条 HIGH**。最尖锐的一条是 **F1**：把 `method: 'DELETE'` 改成 `method: "POST"`（**仅换引号**）就能让规则⑤静默失效 —— 旧版只认单引号，取不到就默认成 `GET`，而 `GET` 在后端确实注册了 ⇒ 假绿。**我的变异自证恰好用了单引号**，所以当时「8/8 PASS」并没有覆盖这个通道；这正是「自证用例与被证代码同源」的经典盲区。
+
+**重写后的架构变化：正则块表 → 真词法分析（`tokenize`）**。修复清单：
+
+| 编号 | 初版的洞 | 现在的判据 |
+| --- | --- | --- |
+| F1 | 方法只认单引号，取不到就默认 `GET` | 三种引号都认；`method:` 出现却取不到字面量 ⇒ `unverifiable-method`（**fail-closed**） |
+| F2 | 按「首行 + 后 4 行」取窗口 ⇒ 邻居方法串色（假红） | 括号配平取实参 + 顶层逗号切实参 |
+| F3 | 禁令要求「函数调用形态」⇒ 别名 / `?.` / `g['setTimeout']` 全逃 | 按**标识符 token** 判 + 扫字符串内容 |
+| F4 | 块表太窄 ⇒ `appendChild` / `WebSocket` / `eval` / `location` / `postMessage` 全逃 | 块表补齐 DOM 汇点属性与动态/跨窗通道（**如实标注：块表不可能穷尽**） |
+| F5 | import 单行 `^` 锚正则 ⇒ 无空白 / 多行 / `export … from` / 动态 `import(` / 同行两个 / `./vendor/core.js` 冒充 全逃 | token 级判 + 比**整条相对路径** |
+| F6 | 漏命名空间/默认绑定、漏逗号声明的第二个名字、漏 `function*` | 三种绑定形态 + 逗号声明列表 + 生成器 |
+| F7 | 用正则剥注释 ⇒ 遇正则字面量里的引号误开字符串态，**真实注释未被剥离**，且正则字面量可掩蔽真实代码 | 真词法分析；另加一条双侧断言（注释必须消失、正则原文必须保留） |
+| F8 | 规则⑤ 完全不查 `fetch(` | `api(` 与 `fetch(` 一起查 |
+| F9 | 路径/方法规范化不足 | 路径非字面量 ⇒ `unverifiable-path`；`+` 拼接按既有路由闸同口径折算 `{}`；方法统一 `.upper()` |
+| F10 | `mutable-state` 只在列 0 生效 | 按**花括号净深度 0** 判 |
+| F11 | 同一行多模式命中会重复报 | 按 (文件,行,规则) 去重 |
+
+**另一个由测试而非由人抓到的缺陷**：重写时我漏掉了 `if __name__ == "__main__":` 入口守卫 ⇒ 闸的 CLI **静默失效**（`exit=0` 却什么都不打印）。`tests/test_frontend_layers.py` 的端到端用例当场变红。若没有那条用例，这个「闸永远绿」的形态会直接进 PR。
+
+**收尾凭据**：`tests/test_frontend_layers.py` **58 条**（F1~F11 各有回归钉子，全部用**真文件复制的夹具**或**最小受测树**）；真树变异自证 **14/14 PASS**（含双引号/反引号方法、失败关闭、别名、副作用 import、vendor 冒充五条复核新增通道）；`ruff` 全绿。
 
 ---
 
@@ -285,7 +313,7 @@
 - [x] **Step 4: 用例数核验（如实报两个数，不套「守恒」）** —— 拆分动作**零新增业务断言**；**2367 → 2387**，差额 **+20** 全部来自 `tests/test_frontend_layers.py`（本计划 Global Constraints 明确允许的唯一来源）
 - [x] **Step 5: CRLF 卫生** —— `git diff --name-only master...HEAD` 的 **9 个文件**全部 0 lone LF
 - [x] **Step 6: 追加 `WORKMEMORY/work.log` DONE 事件**（3,866 字节，符合 ≤4KB 的 schema 约束）
-- [ ] **Step 7: 推送分支并创建 PR**（base=master）
+- [x] **Step 7: 推送分支并创建 PR**（base=master）—— **PR #160**。随后 #159 合并使本 PR 转为 `CONFLICTING`：冲突面正是本计划预判的两处且均为**追加型** —— `.github/workflows/ci.yml`（#159 加 `Frontend index.html template sync gate` 步、本分支加 `Frontend layer invariants gate` 步）与 `WORKMEMORY/work.log`（双方各追加 journal 条目）。已 `git rebase origin/master` 并**两侧都保留**；rebase 后复验：六道闸全绿 · `ruff` 全绿 · `mypy` 118/156 文件 0 错 · 定向 185 passed · 收集数 2395
 
 ---
 
