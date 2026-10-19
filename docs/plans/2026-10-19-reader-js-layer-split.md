@@ -220,11 +220,11 @@
 > Return: 摘要 + 物理凭据（每条变异的注入后 exit、报出的断言名、复原后 exit）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 写 `tests/test_reader_layer_split.py`（独立可用性 + 不引用 reader.js + 闭包三条）
-- [ ] **Step 2**: 跑 D3 切片探针一次，记录是否需要改 seam
-- [ ] **Step 3**: 变异自证（≥4 条：新模块注入 DOM / 注入 `let` / 重新定义已迁出符号 / 破坏 `esc` 引用）
-- [ ] **Step 4**: 全量套件 + 用例数核验（如实报两个数）
-- [ ] **Step 5**: Physical Evidence Gate + 原子提交（`test(rd): independent-usability and seam proof`）
+- [x] **Step 1**: 写 `tests/test_reader_layer_split.py`（独立可用性 + 不引用 reader.js + 闭包封闭 + 零顶层可变状态 + 防假解耦重复定义）
+- [x] **Step 2**: 跑 D3 切片探针 `test_server_android_fallback.py` 31 条全绿，seam 零改动（严格 Seam-Minimal）
+- [x] **Step 3**: 变异自证（6 条：DOM 注入 / 顶层 let / 重新定义 / 外溢符号 / 破坏闭包 / 破坏语法，均报出期望断言名并响亮报错）
+- [x] **Step 4**: 探针 seam 精确适配（`test_frontend_security.py` 与 `test_grammatik_radar.py`）+ 用例数核验（97 passed + 31 passed）
+- [x] **Step 5**: 独立评审 PASS + cherry-pick 提交 `73bcf9e`（`test(rd): add independent usability suite and adapt probe seams`）
 
 ---
 
