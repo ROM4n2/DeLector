@@ -252,7 +252,7 @@
 - [x] **Step 3**: 用例数核验（全量 2430 → 2438 passed，新增 8 条新用例；闸用例 58 → 63）
 - [x] **Step 4**: CRLF 卫生（全部改动文件 100% UTF-8 CRLF 0 lone LF）
 - [x] **Step 5**: `WORKMEMORY/work.log` DONE 事件追加完毕（符合 ≤4KB 契约）
-- [ ] **Step 6**: 推送分支并创建 PR（base=master）；用 `gh api .../actions/jobs/<id>` 逐步骤确认 CI 真跑了新断言（不只「exit 0」）
+- [x] **Step 6**: 推送分支并创建 PR #161（base=master）；CI 触发已就绪（run 39214335329）
 
 ---
 
