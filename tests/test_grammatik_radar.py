@@ -46,10 +46,14 @@ def test_radar_panel_present_in_syntax_drawer():
 
 def test_reader_syntax_ghost_pill_explicit_trigger():
     reader_js = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")
+    rd_syntax_js = (ROOT / "static" / "js" / "rd-syntax.js").read_text(encoding="utf-8")
 
-    # 1. Assert computeArticleSyntaxStats is exported and defined
-    assert "export function computeArticleSyntaxStats(" in reader_js, (
-        "computeArticleSyntaxStats must be exported in static/js/reader.js"
+    # 1. Assert computeArticleSyntaxStats is defined in rd-syntax.js and re-exported in reader.js
+    assert "export function computeArticleSyntaxStats(" in rd_syntax_js, (
+        "computeArticleSyntaxStats must be defined in static/js/rd-syntax.js"
+    )
+    assert "computeArticleSyntaxStats" in reader_js and "export {" in reader_js, (
+        "computeArticleSyntaxStats must be re-exported in static/js/reader.js"
     )
 
     # 2. Assert _syntaxHoverTimer is completely eliminated
@@ -65,10 +69,16 @@ def test_reader_syntax_ghost_pill_explicit_trigger():
 
 def test_render_radar_svg_and_radar_panel_integration():
     reader_js = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")
+    rd_syntax_js = (ROOT / "static" / "js" / "rd-syntax.js").read_text(encoding="utf-8")
     style_css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
 
     # 1. Assert renderRadarSvg and saveAndRenderSyntaxRadar are exported
-    assert "export function renderRadarSvg(" in reader_js, "renderRadarSvg must be exported from static/js/reader.js"
+    assert "export function renderRadarSvg(" in rd_syntax_js, (
+        "renderRadarSvg must be defined in static/js/rd-syntax.js"
+    )
+    assert "renderRadarSvg" in reader_js and "export {" in reader_js, (
+        "renderRadarSvg must be re-exported from static/js/reader.js"
+    )
     assert "export async function saveAndRenderSyntaxRadar(" in reader_js, (
         "saveAndRenderSyntaxRadar must be exported from static/js/reader.js"
     )
@@ -98,12 +108,10 @@ def test_render_radar_svg_and_radar_panel_integration():
     import subprocess
 
     # Extract renderRadarSvg and a mock esc function to run in pure Node.js
-    radar_fn_start = reader_js.find("export function renderRadarSvg(")
-    assert radar_fn_start != -1, "renderRadarSvg definition must exist"
-    radar_fn_end = reader_js.find("export async function saveAndRenderSyntaxRadar(", radar_fn_start)
-    assert radar_fn_end != -1, "saveAndRenderSyntaxRadar must follow renderRadarSvg"
-    radar_fn_code = reader_js[radar_fn_start:radar_fn_end].replace(
-        "export function renderRadarSvg", "function renderRadarSvg"
+    radar_fn_start = rd_syntax_js.find("export function renderRadarSvg(")
+    assert radar_fn_start != -1, "renderRadarSvg definition must exist in static/js/rd-syntax.js"
+    radar_fn_code = rd_syntax_js[radar_fn_start:].replace(
+        "export function renderRadarSvg", "function renderRadarSvg", 1
     )
 
     test_js = f"""
