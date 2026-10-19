@@ -137,12 +137,12 @@
 > Return: 摘要 + 物理凭据（等价证明输出 + 闸退出码 + 行数）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 记基线（`wc -l static/js/reader.js` = 1403 / `grep -c '^export ' static/js/reader.js` = 40 / 用例数）
-- [ ] **Step 2**: 确定性切片脚本产出 `rd-syntax.js` —— 按 D2 的 9 个行区间各做**内容断言**后切出（区间含尾随空行，须处理）；头部 `import { esc, jsAttr, normalizeCefrPct } from './core.js';`；**仅 3 处**加 `export ` 前缀（15/16/17）
-- [ ] **Step 3**: 逐字节等价证明（9/9 块：搬走文本 == 原处文本 + 3 处前缀）
-- [ ] **Step 4**: 闭包复验（token 级：新模块不得引用任何 `reader.js` 模块符号；`reader.js` 本任务**一行未动**是可核事实）
-- [ ] **Step 5**: 闸转绿（Task 1 的 `missing-layer-module` 红灯消解；`test_frontend_layers.py` 从 7 failed → 全绿）
-- [ ] **Step 6**: Physical Evidence Gate + 原子提交（`refactor(rd): extract pure syntax renderers to rd-syntax.js`）
+- [x] **Step 1**: 记基线（`wc -l static/js/reader.js` = 1403 / `grep -c '^export ' static/js/reader.js` = 40 / 用例数 56 passed + 7 expected-RED）
+- [x] **Step 2**: 确定性切片脚本产出 `rd-syntax.js` —— 按 D2 的 9 个行区间各做**内容断言**后切出（区间含尾随空行已干净处理）；头部 `import { esc, jsAttr, normalizeCefrPct } from './core.js';`；**仅 3 处**加 `export ` 前缀（15/16/17）
+- [x] **Step 3**: 逐字节等价证明（9/9 块：搬走文本 == 原处文本 + 3 处前缀，339 行完全吻合）
+- [x] **Step 4**: 闭包复验（token 级：新模块引用的 reader.js 符号数为 0；`reader.js` 本任务**一行未动**：diff 为空，1403 行 40 导出完全保留）
+- [x] **Step 5**: 闸转绿（Task 1 的 `missing-layer-module` 红灯消解，`check_frontend_layers.py` exit 0 PASS；`test_frontend_layers.py` 63 passed, 0 failed）
+- [x] **Step 6**: Physical Evidence Gate + 独立评审 PASS + cherry-pick 提交 `d17ec3f`（`refactor(rd): extract pure syntax renderers to rd-syntax.js`）
 
 ---
 
