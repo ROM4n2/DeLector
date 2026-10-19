@@ -50,6 +50,9 @@
 | 设计系统 / 视觉 Token / 组件蓝图 | `docs/design-system.md`（token 现值以 `static/css/tokens.css` 为准） |
 | 设计与实施计划 | `docs/specs/`、`docs/plans/` |
 | 版本历史 | `CHANGELOG.md` |
+| 贡献指南 | `CONTRIBUTING.md` |
+| 行为准则 | `CODE_OF_CONDUCT.md` |
+| 安全策略 | `SECURITY.md` |
 | 架构决策记录（ADR） | `docs/adr/` |
 
 ---

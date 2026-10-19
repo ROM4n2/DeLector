@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 使用反馈（零门槛）
+    url: https://github.com/ROM4n2/DeLector/issues/new?template=feedback.md
+    about: 想吐槽、顺手/别扭随时说，不用懂技术、不用复现步骤
+  - name: 📖 架构与运维指南
+    url: https://github.com/ROM4n2/DeLector/tree/master/docs/agents
+    about: 查阅 DeLector 架构细节、技术栈与安全守卫
