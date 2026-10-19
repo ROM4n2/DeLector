@@ -9,8 +9,11 @@
 分层声明（`LAYER_SPEC`）
 ----------------------
   L1 `static/js/wr-format.js`  纯格式化 / 领域文案层
-  L1 `static/js/rd-syntax.js`  纯格式化层（阅读器语法统计与渲染；模块由 Task 2 产出）
-  L2 `static/js/wr-api.js`     持久化访问层（网络是它的本职）
+  L1 `static/js/rd-syntax.js`  纯格式化层（阅读器语法统计与渲染）
+  L1 `static/js/wb-queue.js`   纯格式化层（复习队列构建 / 调度族）
+  L1 `static/js/wb-scope.js`   纯格式化层（词表 scope / CEFR 等级判定）
+  L2 `static/js/wr-api.js`     持久化访问层（写作台网络访问）
+  L2 `static/js/rd-api.js`     持久化访问层（阅读器网络访问；模块由 Task 2 产出）
 
 规则清单
 --------
@@ -24,9 +27,9 @@
   ④  重复声明：导入绑定名（三种形态都算）MUST NOT 又在**顶层**声明。ES 对重复声明是
       **链接期 SyntaxError**，会让整张模块图一起挂（本仓 v4.7.0 同类事故）。只判顶层，
       因为函数内的同名声明是**合法遮蔽**，判它会造假红。
-  ⑤  调用一致性：`wr-api.js` 里每个 `api(...)` / `fetch(...)` 的 (路径, 方法) MUST 命中
-      后端注册表。**路径**维度另有闸（`check_frontend_api_contract.py`，用真实路由表），
-      本闸只补**方法**维度；但**解析不出来就判失败**（fail-closed）：路径非字面量 ⇒
+  ⑤  调用一致性：L2 模块（`wr-api.js`、`rd-api.js` 等）里每个 `api(...)` / `fetch(...)`
+      的 (路径, 方法) MUST 命中后端注册表。**路径**维度另有闸（`check_frontend_api_contract.py`，
+      用真实路由表），本闸只补**方法**维度；但**解析不出来就判失败**（fail-closed）：路径非字面量 ⇒
       `unverifiable-path`，`method:` 出现却取不到字面量值（双引号/反引号/取自变量/简写）
       ⇒ `unverifiable-method`。MUST NOT 猜一个 GET 蒙过去。
   ⑥  防假解耦：`writer.js` MUST NOT 在**顶层**重新定义已迁出到 L1/L2 的符号
@@ -301,15 +304,35 @@ LAYER_SPEC: Dict[str, LayerSpec] = {
         ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
         allowed_imports=("./core.js",),
     ),
+    "wb-queue.js": LayerSpec(
+        layer="L1 纯格式化层",
+        ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
+        allowed_imports=(),
+    ),
+    "wb-scope.js": LayerSpec(
+        layer="L1 纯格式化层",
+        ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
+        allowed_imports=(),
+    ),
     "wr-api.js": LayerSpec(
+        layer="L2 持久化访问层",
+        ban_rules=("dom", "toast", "timer", "dynamic-eval"),
+        allowed_imports=("./core.js",),
+    ),
+    "rd-api.js": LayerSpec(
         layer="L2 持久化访问层",
         ban_rules=("dom", "toast", "timer", "dynamic-eval"),
         allowed_imports=("./core.js",),
     ),
 }
 
-# rd-syntax.js 同属 L1 纯层，其硬契约含「零顶层 let/var」⇒ 一并纳管（只收紧，不放松）。
-MUTABLE_STATE_MODULES: Tuple[str, ...] = ("wr-format.js", "rd-syntax.js")
+# L1 纯层硬契约含「零顶层 let/var」⇒ 一并纳管（只收紧，不放松）。
+MUTABLE_STATE_MODULES: Tuple[str, ...] = (
+    "wr-format.js",
+    "rd-syntax.js",
+    "wb-queue.js",
+    "wb-scope.js",
+)
 MUTABLE_KEYWORDS = frozenset({"let", "var"})
 
 VIEW_MODULES: Tuple[str, ...] = ("writer.js",)
@@ -782,32 +805,39 @@ def _norm_path(p: str) -> str:
 
 
 def check_call_parity(js_dir: Path, route_pairs: Set[Tuple[str, str]]) -> List[Violation]:
-    path = js_dir / "wr-api.js"
-    if not path.exists():
-        return []
-    raw, toks = read_js(path)
     out: List[Violation] = []
-    for c in scan_api_calls(toks):
-        if c.path is None:
-            out.append(
-                Violation("static/js/wr-api.js", c.lineno, "unverifiable-path", raw_line_of(raw, c.lineno))
+    for name, spec in LAYER_SPEC.items():
+        if not (spec.layer.startswith("L2") or spec.layer == "L2 持久化访问层"):
+            continue
+        path = js_dir / name
+        if not path.exists():
+            continue
+        raw, toks = read_js(path)
+        rel_path = f"static/js/{name}"
+        for c in scan_api_calls(toks):
+            if c.path is None:
+                out.append(
+                    Violation(rel_path, c.lineno, "unverifiable-path", raw_line_of(raw, c.lineno))
+                )
+                continue
+            if c.method_seen and c.method is None:
+                out.append(
+                    Violation(rel_path, c.lineno, "unverifiable-method", raw_line_of(raw, c.lineno))
+                )
+                continue
+            method = c.method or "GET"
+            norm = _norm_path(c.path)
+            if (norm, method) in route_pairs:
+                continue
+            same_path = sorted({m for p, m in route_pairs if p == norm})
+            rule = (
+                f"method-mismatch({method}!={'/'.join(same_path)})" if same_path else "route-path-unregistered"
             )
-            continue
-        if c.method_seen and c.method is None:
-            out.append(
-                Violation("static/js/wr-api.js", c.lineno, "unverifiable-method", raw_line_of(raw, c.lineno))
-            )
-            continue
-        method = c.method or "GET"
-        norm = _norm_path(c.path)
-        if (norm, method) in route_pairs:
-            continue
-        same_path = sorted({m for p, m in route_pairs if p == norm})
-        rule = (
-            f"method-mismatch({method}!={'/'.join(same_path)})" if same_path else "route-path-unregistered"
-        )
-        out.append(Violation("static/js/wr-api.js", c.lineno, rule, raw_line_of(raw, c.lineno)))
+            out.append(Violation(rel_path, c.lineno, rule, raw_line_of(raw, c.lineno)))
     return out
+
+
+check_api_call_consistency = check_call_parity
 
 
 # ══ 规则⑥：防假解耦 ══════════════════════════════════════════════════════════
