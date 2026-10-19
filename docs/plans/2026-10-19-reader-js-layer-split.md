@@ -179,13 +179,13 @@
 > Return: 摘要 + 物理凭据（导出面 diff、node --check 退出码、错误轨行数）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 重名交集检查（0 交集；否则改名并记录）
-- [ ] **Step 2**: `reader.js` 删定义 + import + re-export
-- [ ] **Step 3**: 5 个消费者改向（逐个核未漏）
-- [ ] **Step 4**: 导出面冻结核验（40 = 40）+ `node --check`
-- [ ] **Step 5**: 错误轨保真（行集合相等）
-- [ ] **Step 6**: 门禁 + 用例数 + Physical Evidence Gate
-- [ ] **Step 7**: 原子提交（`refactor(rd): wire reader.js to the pure syntax layer`）
+- [x] **Step 1**: 重名交集检查（`rd-syntax.js` 导出名 ∩ `reader.js` 顶层声明名 = ∅，0 交集，无需重命名）
+- [x] **Step 2**: `reader.js` 删定义（339行）+ import（9个）+ re-export（6个已导出符号，其余3个私有符号不re-export）
+- [x] **Step 3**: 5 个内部消费者改向（`renderReaderHeatbar`、`loadArticles`、`_openReaderBody`、`openSyntaxDrawerForSentence`、`saveAndRenderSyntaxRadar` 逐个核验调用一致）
+- [x] **Step 4**: 导出面冻结核验（40 == 40，无新增无缺失）+ `node --check` 与 ESM runtime link exit 0
+- [x] **Step 5**: 错误轨保真（10/10 `notify`/`alert`/`console.error` 行集合进出逐字相等）
+- [x] **Step 6**: 门禁 + 用例数 + Physical Evidence Gate（`check_frontend_layers` PASS, `test_frontend_layers` 63 passed, `test_frontend_module_graph` 14 passed）
+- [x] **Step 7**: 独立评审 PASS + cherry-pick 提交 `14fd129`（`refactor(rd): wire reader.js to the pure syntax layer`）
 
 ---
 
