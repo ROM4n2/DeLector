@@ -43,10 +43,12 @@ const fail = (problems) => {
 
 const readerJs = fs.readFileSync(path.join(ROOT, "static", "js", "reader.js"), "utf8");
 
-/* 剥 import/export（同 wb_cards_vocab_unwrap_probe.mjs 的转换器口径） */
+/* 剥 import/export（同 wb_cards_vocab_unwrap_probe.mjs 与 enc 系列探针的转换器口径） */
 const transformed = readerJs
+  .replace(/^import\s*\{[\s\S]*?\}\s*from\s*["'][^"']+["'];?[ \t]*$/gm, "")
   .replace(/^import[^\n]*from[^\n]*;[^\S\n]*$/gm, "")
-  .replace(/^export\s+(?=(?:async\s+)?function\b|\blet\b|\bconst\b|\bvar\b|\bclass\b)/gm, "");
+  .replace(/^export\s+(?=(?:async\s+)?function\b|\blet\b|\bconst\b|\bvar\b|\bclass\b)/gm, "")
+  .replace(/^export\s*\{[\s\S]*?\};?[ \t]*$/gm, "");
 const stripProblems = [];
 if (/^import\b/m.test(transformed)) stripProblems.push("reader.js 剥离后仍有 import 行（探针转换器跟不上源码形态）");
 if (/^\s*export\b/m.test(transformed)) stripProblems.push("reader.js 剥离后仍有 export（探针转换器跟不上源码形态）");
