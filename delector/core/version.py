@@ -12,7 +12,7 @@ android/app/build.gradle 的 fallback（DELECTOR_VERSION_NAME / DELECTOR_VERSION
 __all__ = ["APP_VERSION", "version_code"]
 
 # 与 android/app/build.gradle:8 的 versionName fallback 同口径：不带 'v' 前缀。
-APP_VERSION: str = "5.17.0"
+APP_VERSION: str = "5.18.0"
 
 # 每段版本号只有两位空间（minor/patch < 100），故步进 100 / 10000。
 _MINOR_STEP = 100

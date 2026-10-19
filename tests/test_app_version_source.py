@@ -26,7 +26,7 @@ def test_app_version_matches_gradle_fallback():
     写死字面量是为了 bump 时让这条测试变红、逼人同步；同时断言无 'v' 前缀，
     因为它要与 build.gradle:8 的 "5.17.0" 逐字对齐（带 v 会让 code 解析先炸）。
     """
-    assert APP_VERSION == "5.17.0", f"APP_VERSION 应为 '5.17.0'（无 v 前缀），实际 {APP_VERSION!r}"
+    assert APP_VERSION == "5.18.0", f"APP_VERSION 应为 '5.18.0'（无 v 前缀），实际 {APP_VERSION!r}"
     assert not APP_VERSION.startswith("v"), "APP_VERSION 不带 'v' 前缀，与 build.gradle fallback 口径一致"
 
 
@@ -39,7 +39,7 @@ def test_version_code_encodes_major_minor_patch():
 
 def test_version_code_default_uses_app_version():
     """无参调用回落到 APP_VERSION，保证默认口径与真相源同源。"""
-    assert version_code() == version_code(APP_VERSION) == 51700, (
+    assert version_code() == version_code(APP_VERSION) == 51800, (
         f"version_code() 默认值应等于 version_code(APP_VERSION)={version_code(APP_VERSION)}"
     )
 

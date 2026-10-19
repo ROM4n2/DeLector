@@ -503,3 +503,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **Task 4 独立可用性验收 + 探针 seam 精确适配 + 变异自证**：新增 `tests/test_reader_layer_split.py`（独立 `node --check`、零 reader.js 符号泄漏、闭包封闭性、零顶层可变状态、防假解耦重复定义）；按 `monolith-split-readiness` Seam-Minimal 原则精确重定向 `test_frontend_security.py` 与 `test_grammatik_radar.py` 探针至 `RD_SYNTAX`，`test_server_android_fallback.py` 31 条全绿 0 改动；6 条对抗式物理变异自证全部命中期望规则名并响亮报错；独立评审 PASS（cherry-pick `73bcf9e`）。
 - **清理与探针工具加固**：发现 `tools/cards_count_probe.mjs` 转换器正则未支持跨行 import 与 export 块，已就地加固正则支持；153 个测试文件串行全绿（2438 passed / 3 skipped）。
 - **门禁全景验证（Task 5）**：六道 Python 机械闸全绿（check_frontend_layers · check_layer_invariants · check_mock_drift · check_silent_degradation · check_frontend_api_contract · check_index_html_sync）；`ruff check .` 全绿；`mypy --strict delector tools` 118 文件 0 错；`mypy --follow-imports=skip tests` 157 文件 0 错；Go 8 包全绿；所有改动文件 100% UTF-8 CRLF 0 lone LF。
+
+### 2026-10-19 15:45 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**DeLector 正式发布 v5.18.0 版本并完成全生命周期收归**。
+- 依据：`dfs-release` 规范与 `docs/README.md` 归档约定。
+- 版本面：`delector/core/version.py: APP_VERSION = "5.18.0"`（单一真相源）；`android/app/build.gradle`（5.18.0 / versionCode 51800）；`static/sw.js`（`CACHE_NAME = "delector-static-v5.18.0"`）；`static/layout/header.html`（`System · v5.18.0` 并经 `build_index_html.py` 重新生成 `static/index.html`）；`README.md`（badge + 2438/2441 passed + 下载表 4 平台链接）；`FEATURES.md`（更新里程碑与全览表）；`CHANGELOG.md` 追加 v5.18.0 详尽变更日志（四大核心主线、已知限制与回滚方案）。
+- 历史计划归档：批量将 `docs/plans/` 下自 v5.17.0 以来交付的 **19 份实施计划**（含 C1~C9、架构解耦、index/writer/reader 前端拆分）`git mv` 归档至 `docs/plans/archive/`，`docs/README.md` 归档待办表同步核销清空。
+- 门禁全景：六道 Python 机械闸全绿 · `ruff` 零告警 · `mypy` 118+157 文件全绿 · Go 8 包全绿 · 153 个测试文件 2438 passed / 3 skipped · 全仓改动文件 100% UTF-8 CRLF 0 lone LF。

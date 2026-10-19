@@ -2,9 +2,51 @@
 
 > 本项目**版本历史的正主（single source of truth）**：每次发版在此追加条目。
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
-> 开发决策细节见 `docs/plans/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
+> 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.17.0（2026-10-11）**
+**最新版本：v5.18.0（2026-10-19）**
+
+### 🏗️ 架构与前端单体彻底解耦 + 交互式智能体闭环 + 六道自动化机械闸（PR #131~#161）
+
+自 v5.17.0（`f359ea6`，2026-10-11）起 **128 个提交、25 个 PR** 汇聚为本里程碑版本。主要涵盖三大维度：**核心业务与架构分层解耦**、**交互式智能体循环与裁判闭环**、以及**六道自动化质量守卫机械闸矩阵**。全量测试规模从 1,768 扩展至 **2,438 passed + 3 skipped（净增 670 个测试）**。
+
+**① 交互式智能体闭环与裁判系统（ADR-0023 / ADR-0024，#136 / #137 / #139 / #147 / #148）**
+- **循环内核流转**：实现 `delector/services/polish_loop.py`，模型驱动流转、收尾终审、不降即停（argmin 回退）、循环级 token 与 deadline 硬预算控制，出网收口至 `llm_client.py` 并支持取消与 SSE 进度。
+- **A1 裁判集扩充与真题回测**：裁判集从浅层格式规则扩展至语法层（主谓一致 `numerus`、动词支配格 `rektion`、主句倒装 V2 `wortstellung`、冠词词形 `artikel` 等）；实施 60 局配对真跑对照实验，标定真 token 与轮次分布。
+- **裁判结论回灌（Verifier-in-the-loop）**：将确定性裁判结论精准格式化并回灌给生成模型，闭环动态改进。
+
+**② 单体后端架构分层解耦（ADR-0018 路线，#144 / #158）**
+- **数据库巨石拆分（#144）**：2,809 行的 `database.py` 解耦为纯 façade，底层拆为 `connection`、`backup`、`settings`、`records`、`content`、`vocab` 等领域子模块，公开导出面 100% 保持向前兼容。
+- **路由巨石拆分（#158）**：`routes/main.py` 拆解为 `articles`、`writing`、`cards`、`audio`、`settings`、`backup` 等 6 个领域独立路由，解除底层 `content.py` 针对 NLP 引擎的顶层强耦合。
+
+**③ 前端单体模块化与零构建静态装配（#152 / #153 / #159 / #160 / #161）**
+- **工作台模块化（#152 / #153）**：4,730 行的 `workbench.html` 解构为 views、idb、sync、tts、queue 等领域纯模块，收拢 140 处探针读取口。
+- **静态 SPA 模板装配（#159）**：`static/index.html` 拆解为 `layout/`、`views/`、`modals/` 独立组件，采用原生 Python 零构建组装工具 `tools/build_index_html.py` 与轻量 CI 同步闸 `check_index_html_sync.py`，杜绝首屏白闪与运行时打包器依赖。
+- **核心逻辑纯函数分层提取（#160 / #161）**：
+  - `writer.js` 拆解出 `wr-format.js`（L1 纯格式化层）与 `wr-api.js`（L2 持久化层），60 个具名导出面绝对冻结。
+  - `reader.js` 拆解出 `rd-syntax.js`（L1 纯语法/拓扑解析闭包），40 个具名导出面绝对冻结，内部 5 大消费者调用保真。
+
+**④ 自动化机械闸矩阵（6 道静态/动态 CI 守护）**
+- **分层契约闸（`check_frontend_layers.py`）**：真词法分析（tokenizer）严格校验 L1/L2 禁令（禁 DOM/网络/弹窗/定时器/顶层可变状态）、反向依赖、越界 import、ESM 链接期重复声明与 HTTP 方法一致性。
+- **反向依赖闸（`check_layer_invariants.py`）**：严格守卫全仓架构单向依赖层序。
+- **Mock 漂移闸（`check_mock_drift.py`）**：静态检测已失效或被搬迁的测试打桩目标。
+- **禁止静默降级闸（`check_silent_degradation.py`）**：杜绝裸 `except: pass` 吞异常事故。
+- **前端 API 契约闸（`check_frontend_api_contract.py`）**：校验前端请求路径与后端路由定义的双向匹配。
+- **模板同步闸（`check_index_html_sync.py`）**：保证分块模板与最终单文件 HTML 强一致。
+
+**已知限制（Known Limitations）**
+- **冷启动与端口探测延迟**：~2s 端口/身份校验（Win10/11 TCP 探测机制）属显式安全保障，冷启动耗时维持约 2~3s。
+- **Android 端暂缓实机点检（C4）**：SSE 流式交互与模块化多文件在部分老旧 Android WebView 运行时的兼容性需真机安装验证（用户已指示暂缓，底层保留纯标准回退机制）。
+- **Android 不可回滚**：`versionCode` 由 `51700` 升级至 `51800`，只升不降。
+
+**回滚方案 (Rollback)**
+- **代码 / 产物**：可降级安装 `v5.17.0` 客户端便携包或 APK；git 可 `revert` 本次发版 commit。
+- **数据存储**：数据依然安全持久化于 `%LOCALAPPDATA%\DeLector`（或 Android 应用私有目录）。
+- **数据库 Schema**：本版对 SQLite 库结构保持完全向后兼容，未执行破坏性结构重命名，旧版客户端可直接读取当前数据库。
+
+---
+
+**历史版本：v5.17.0（2026-10-11）**
 
 ### 🖥️ 首个原生桌面壳 + 首次数据落点外置 + 发版门（PR #111~#129）
 
