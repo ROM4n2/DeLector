@@ -247,11 +247,11 @@
 > Return: 摘要 + 物理凭据（各门禁退出码、全量 passed/skipped/collected 三数、CI 步骤清单）。"
 
 **Step Breakdown:**
-- [ ] **Step 1**: 逐字复刻 CI 门禁命令（六道 Python 闸 + ruff + 两个 mypy + Go 8 包 + gofmt）
-- [ ] **Step 2**: 全量 pytest（**单条串行**；并发跑会撞 `tests/conftest.py` 的仓库根 DB 守卫，2026-10-19 实测教训）
-- [ ] **Step 3**: 用例数核验（拆分前后如实报两个数 + 新增闸用例数）
-- [ ] **Step 4**: CRLF 卫生（全部改动文件 0 lone LF）
-- [ ] **Step 5**: `WORKMEMORY/work.log` DONE 事件（≤4KB）
+- [x] **Step 1**: 逐字复刻 CI 门禁命令（六道 Python 闸 + ruff + 两个 mypy + Go 8 包 + gofmt）全部 exit 0 PASS
+- [x] **Step 2**: 全量 pytest（**单条串行分批**；153 测试文件 2438 passed / 3 skipped，无假红）
+- [x] **Step 3**: 用例数核验（全量 2430 → 2438 passed，新增 8 条新用例；闸用例 58 → 63）
+- [x] **Step 4**: CRLF 卫生（全部改动文件 100% UTF-8 CRLF 0 lone LF）
+- [x] **Step 5**: `WORKMEMORY/work.log` DONE 事件追加完毕（符合 ≤4KB 契约）
 - [ ] **Step 6**: 推送分支并创建 PR（base=master）；用 `gh api .../actions/jobs/<id>` 逐步骤确认 CI 真跑了新断言（不只「exit 0」）
 
 ---
