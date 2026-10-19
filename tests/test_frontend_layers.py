@@ -6,7 +6,7 @@
   1. **纯函数单测**（`strip_comments` 等）—— 与仓库内容无关的判据本身。
   2. **合成夹具**（`tmp_path` 造模块）—— 证明每条规则**能变红**，而不是「跑当前树恰好绿」。
      这是「闸是规范，不是描述」的落地方式。
-  3. **真树派生变异**（复制生产 `wr-format.js`/`wr-api.js`/`writer.js` 到 tmp 后注入缺陷）
+  3. **真树派生变异**（复制生产 `wr-format.js`/`wr-api.js`/`writer.js`/`rd-syntax.js` 到 tmp 后注入缺陷）
      —— 证明规则作用在**真实文件**上仍能变红，且**不动生产文件**（复制而非就地改：
      就地改一旦断言抛出会把变异留在仓库里，那才是真事故）。
 
@@ -32,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 JS_DIR = REPO_ROOT / "static" / "js"
 GATE = REPO_ROOT / "tools" / "check_frontend_layers.py"
 
-_LAYER_MODULES = ("wr-format.js", "wr-api.js", "writer.js")
+_LAYER_MODULES = ("wr-format.js", "wr-api.js", "writer.js", "rd-syntax.js")
 
 
 def _load_gate() -> Any:
@@ -53,11 +53,17 @@ def gate() -> Any:
 
 @pytest.fixture()
 def js_dir(tmp_path: Path) -> Path:
-    """把生产中三个被纳管模块**复制**到 tmp（真内容，不就地改）。"""
+    """把生产中已被纳管的模块**复制**到 tmp（真内容，不就地改）。
+
+    `rd-syntax.js` 是「先注册、后落盘」（计划 Task 1/Task 2）⇒ 只复制**存在**的模块，
+    缺文件时跳过；「声明的模块不存在」另由 `missing-layer-module` 用例专门覆盖。
+    """
     d = tmp_path / "js"
     d.mkdir()
     for name in _LAYER_MODULES:
-        shutil.copyfile(JS_DIR / name, d / name)
+        src = JS_DIR / name
+        if src.exists():
+            shutil.copyfile(src, d / name)
     return d
 
 
@@ -78,6 +84,9 @@ def rule5_dir(tmp_path: Path) -> Path:
     d = tmp_path / "js"
     d.mkdir()
     _write_module(d / "wr-format.js", "import { esc } from './core.js';\nexport const WRITER_TABS = ['a'];\n")
+    # 同理：`LAYER_SPEC` 里声明的模块都必须在树里存在，否则每条断言都会被
+    # `missing-layer-module` 搅浑（本树只测规则⑤）。
+    _write_module(d / "rd-syntax.js", "import { esc } from './core.js';\nexport const CEFR_LEVELS = ['A1'];\n")
     _write_module(d / "writer.js", "export {};\n")
     _write_module(
         d / "wr-api.js",
@@ -230,7 +239,7 @@ def test_missing_declared_module_red(gate: Any, tmp_path: Path) -> None:
     d = tmp_path / "empty"
     d.mkdir()
     rules = rules_of(gate, d)
-    assert rules.count("missing-layer-module") == 2, rules
+    assert rules.count("missing-layer-module") == len(gate.LAYER_SPEC), rules
 
 
 def test_comment_mention_does_not_trip_the_gate(gate: Any, js_dir: Path) -> None:
@@ -511,6 +520,67 @@ def test_violations_are_deduped_per_file_line_rule(gate: Any, js_dir: Path) -> N
            "export function getErrorTypeLabel(type) {\n  document.getElementById('x');")
     rules = rules_of(gate, js_dir)
     assert len(rules) == len(set(rules)), rules
+
+# ══ 2c. rd-syntax.js：Task 1 先注册、Task 2 才落盘的 L1 模块 ══════════════════
+# 计划 `2026-10-19-reader-js-layer-split.md` Task 1（Gate-Before-Code）：闸先声明目标形态，
+# 模块后建。下列注入用例在 `rd-syntax.js` 落盘前必然失败 —— 夹具复制的真实文件还不存在
+# （`_inject_into_rd_syntax` 找不到锚点），那正是「声明先于代码」要的红灯；Task 2 产出该
+# 文件后自动转绿，无需改动本文件。
+
+_RD_SYNTAX = "rd-syntax.js"
+# 锚点取自计划 Task 2 的 Produces（与 `reader.js:89` 现状逐字相同，落盘后必然命中一次）
+_RD_SYNTAX_ANCHOR = "export function renderMiniBar(stats) {"
+
+
+def _rd_syntax_rules(gate: Any, js_dir_arg: Path) -> list[str]:
+    """只取归到 `static/js/rd-syntax.js` 名下的规则 —— 光比规则名无法排除「红的是别人」。"""
+    return [
+        v.rule
+        for v in gate.collect_violations(js_dir_arg, None)
+        if v.rel_path == f"static/js/{_RD_SYNTAX}"
+    ]
+
+
+def _inject_into_rd_syntax(js_dir_arg: Path, snippet: str) -> None:
+    """把片段插到**顶层**锚点之前（顶层 `let` 才落在花括号净深度 0）。"""
+    inject(js_dir_arg / _RD_SYNTAX, _RD_SYNTAX_ANCHOR, snippet + "\n" + _RD_SYNTAX_ANCHOR)
+
+
+def test_rd_syntax_declaration_equals_wr_format(gate: Any) -> None:
+    """No-Narrowing：新 L1 模块与 `wr-format.js` 是**同一个** L1 定义（逐字相同）。
+
+    该断言不依赖模块是否落盘，故 Task 1 当场即绿 —— 它是「MUST NOT 为了绿灯放宽任何
+    一条规则」的机械钉子。
+    """
+    new, baseline = gate.LAYER_SPEC[_RD_SYNTAX], gate.LAYER_SPEC["wr-format.js"]
+    assert new.layer == baseline.layer
+    assert new.ban_rules == baseline.ban_rules
+    assert new.allowed_imports == baseline.allowed_imports == ("./core.js",)
+    assert _RD_SYNTAX in gate.MUTABLE_STATE_MODULES
+
+
+@pytest.mark.parametrize(
+    "snippet,rule_part",
+    [
+        ("document.getElementById('x');", "禁dom"),
+        ("fetch('/x');", "禁network"),
+        ("setTimeout(() => {}, 0);", "禁timer"),
+    ],
+    ids=["dom", "network", "timer"],
+)
+def test_rd_syntax_l1_bans_red(gate: Any, js_dir: Path, snippet: str, rule_part: str) -> None:
+    """注入 DOM 标识符 / 网络调用 / 计时器 ⇒ 归到 `rd-syntax.js` 名下的 L1 禁令必须变红。"""
+    _inject_into_rd_syntax(js_dir, snippet)
+    hits = _rd_syntax_rules(gate, js_dir)
+    assert any(rule_part in r for r in hits), (snippet, hits)
+
+
+def test_rd_syntax_l1_top_level_let_red(gate: Any, js_dir: Path) -> None:
+    """L1 MUST NOT 有顶层可变状态：模块级 `let` 与 `wr-format.js` 同口径判红。"""
+    _inject_into_rd_syntax(js_dir, "let scratch = 1;")
+    hits = _rd_syntax_rules(gate, js_dir)
+    assert any("禁mutable-state" in r for r in hits), hits
+
 
 # ══ 3. 真树集成 + 端到端退出码 ═══════════════════════════════════════════════
 

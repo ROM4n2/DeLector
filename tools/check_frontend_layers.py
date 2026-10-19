@@ -9,6 +9,7 @@
 分层声明（`LAYER_SPEC`）
 ----------------------
   L1 `static/js/wr-format.js`  纯格式化 / 领域文案层
+  L1 `static/js/rd-syntax.js`  纯格式化层（阅读器语法统计与渲染；模块由 Task 2 产出）
   L2 `static/js/wr-api.js`     持久化访问层（网络是它的本职）
 
 规则清单
@@ -295,6 +296,11 @@ LAYER_SPEC: Dict[str, LayerSpec] = {
         ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
         allowed_imports=("./core.js",),
     ),
+    "rd-syntax.js": LayerSpec(
+        layer="L1 纯格式化层",
+        ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
+        allowed_imports=("./core.js",),
+    ),
     "wr-api.js": LayerSpec(
         layer="L2 持久化访问层",
         ban_rules=("dom", "toast", "timer", "dynamic-eval"),
@@ -302,7 +308,8 @@ LAYER_SPEC: Dict[str, LayerSpec] = {
     ),
 }
 
-MUTABLE_STATE_MODULES: Tuple[str, ...] = ("wr-format.js",)
+# rd-syntax.js 同属 L1 纯层，其硬契约含「零顶层 let/var」⇒ 一并纳管（只收紧，不放松）。
+MUTABLE_STATE_MODULES: Tuple[str, ...] = ("wr-format.js", "rd-syntax.js")
 MUTABLE_KEYWORDS = frozenset({"let", "var"})
 
 VIEW_MODULES: Tuple[str, ...] = ("writer.js",)

@@ -15,6 +15,7 @@ ROOT = Path(__file__).parent.parent
 CORE = (ROOT / "static" / "js" / "core.js").read_text(encoding="utf-8")
 CARDS = (ROOT / "static" / "js" / "cards.js").read_text(encoding="utf-8")
 READER = (ROOT / "static" / "js" / "reader.js").read_text(encoding="utf-8")
+RD_SYNTAX = (ROOT / "static" / "js" / "rd-syntax.js").read_text(encoding="utf-8")
 MAIN = (ROOT / "static" / "js" / "main.js").read_text(encoding="utf-8")
 HOEREN = (ROOT / "static" / "js" / "a1_hoeren.js").read_text(encoding="utf-8")
 LESEN = (ROOT / "static" / "js" / "a1_lesen.js").read_text(encoding="utf-8")
@@ -39,7 +40,7 @@ def test_reader_js_no_esc_inside_js_string_literals():
     assert ".replace(/'/g" not in READER
     assert "deleteArticle(${Number(a.id)}, ${jsAttr(a.title)})" in READER
     assert "inspectSubWord(${jsAttr(k.word)}" in READER
-    assert "saveClauseAsGrammarCard(${jsAttr(clauseLabel)}" in READER
+    assert "saveClauseAsGrammarCard(${jsAttr(clauseLabel)}" in RD_SYNTAX
 
 
 def test_main_js_feed_ingest_quotes_are_entity_safe():
@@ -72,10 +73,11 @@ def test_reader_js_xss_sinks_are_neutralised():
     替换 esc/Number 为 passthrough → 反向锚点复现 → 测试红。
     替换回归（git revert static/js/reader.js 的修改）→ 正向锚点消失 → 测试红。
     """
-    # renderMiniBar: recommended_level 白名单收敛 + est_reading_minutes Number 强制
-    assert "safeCefr(stats.recommended_level)" in READER
-    assert "Number(stats.est_reading_minutes)" in READER
+    # renderMiniBar: recommended_level 白名单收敛 + est_reading_minutes Number 强制（现位于 rd-syntax.js）
+    assert "safeCefr(stats.recommended_level)" in RD_SYNTAX
+    assert "Number(stats.est_reading_minutes)" in RD_SYNTAX
     # 反向：旧的 raw interpolation 不能存在
+    assert 'stats.recommended_level || "A1"' not in RD_SYNTAX
     assert 'stats.recommended_level || "A1"' not in READER
 
     # loadArticles: a.id → Number, created_at → esc
@@ -96,16 +98,16 @@ def test_reader_js_xss_sinks_are_neutralised():
     # heatbar: cnt → Number
     assert "Number(counts[lvl])" in READER
 
-    # renderFelderSpectrum: sentId → Number
-    assert "openSyntaxDrawerForSentence(${Number(sentId)})" in READER
+    # renderFelderSpectrum: sentId → Number（现位于 rd-syntax.js）
+    assert "openSyntaxDrawerForSentence(${Number(sentId)})" in RD_SYNTAX
 
-    # clause tree: typeCls strip + tokenIds sanitized + sentId → Number
-    assert '.replace(/[^a-z0-9_-]/g, "")' in READER
-    assert ".map(Number).filter(Number.isFinite)" in READER
+    # clause tree: typeCls strip + tokenIds sanitized + sentId → Number（现位于 rd-syntax.js）
+    assert '.replace(/[^a-z0-9_-]/g, "")' in RD_SYNTAX
+    assert ".map(Number).filter(Number.isFinite)" in RD_SYNTAX
     assert (
         "saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, "
         "${jsAttr(clauseText)}, ${Number(sentId)})"
-    ) in READER
+    ) in RD_SYNTAX
 
     # renderReaderHeatbar badge: safeCefr
     assert "safeCefr(stats.recommended_level)" in READER
