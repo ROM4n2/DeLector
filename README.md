@@ -20,12 +20,14 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> ✅ **v5.18.0 架构与前端单体彻底解耦 + 交互式智能体闭环 + 六道自动化机械闸（2026-10-19）**：本版收敛了自 v5.17.0 以来 114 个提交与 24 个 PR。**① 交互式智能体闭环（ADR-0023 / PR #136）**——接入模型驱动流转、确定性裁判终审、AI 润色与对齐。**② A1 裁判集扩充与对照实验（ADR-0024 / PR #137, #139, #147, #148）**——扩充主谓一致、动词支配格、主句 V2 等语法维度，完成 60 局配对真跑，标定真 token 与轮次分布。**③ 单体架构彻底分层解耦（PR #144, #158）**——`database.py` 拆为领域子模块，`routes/main.py` 拆为 6 个领域路由。**④ 前端组件化与零构建组装（PR #152, #153, #159, #160, #161）**——`workbench.html` 模块化、`index.html` 拆解为 layout/views/modals 并由轻量同步闸守护；`writer.js`（`wr-format.js`/`wr-api.js`）与 `reader.js`（`rd-syntax.js`）纯逻辑闭包提取并冻结导出面。**⑤ 自动化机械闸矩阵**——新增分层契约闸（词法分词器）、反向依赖闸、Mock 漂移闸、禁止静默降级闸等 6 道守卫。门禁 **2438 passed + 3 skipped**（净增 670 条测试），探针 **31/31** 零漂移。
-> ✅ **v5.17.0 首个原生桌面壳 + 首次数据落点外置（2026-10-11）**：本版载荷**不是"几条小修"**。**①首发原生桌面窗口**——`pywebview`（走系统 Edge WebView2）+ `pystray` 托盘 + splash + 统一退出收尸；同批修掉两个 P0（时序死锁与真实 UI 塞入 splash 小窗）。**②数据落点外置**到 `%LOCALAPPDATA%\DeLector`，修掉覆盖升级丢数据摩擦。**③更新可见性上线**——顶栏落后 chip + `/api/update/check`。**④六条已装用户拿不到的修复**。**⑤spaCy 模型惰性加载**。**⑥CI 真启产物闸与发版门守卫**。门禁 1768 passed + 2 skipped。
-> ✅ **v5.16.0 修掉长期潜伏的性能缺陷 + 三处守卫加固（2026-10-06）**：Fog 1~4 全部收口。**① 每次 GET 文章都重跑完整 spaCy 根因修复**。**② CI 必需运行时清单显式化**。**③ localhost 守卫加固**。门禁 1317 passed + 1 skipped。
-> 
-> 📱 **Android 用户注意**：改动含 `static/` 的版本（如 v5.8.0 / v5.9.0）需**覆盖安装**才生效。
-> 📜 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)。
+> 🚀 **v5.18.0 最新版本亮点（2026-10-19）**：
+> - **单体架构彻底分层解耦**：后端核心 `database.py` 拆解为纯 façade 与领域子模块，`routes/main.py` 拆为 6 个领域独立路由；前端 `workbench.html` 模块化，`writer.js`（`wr-format.js` / `wr-api.js`）与 `reader.js`（`rd-syntax.js`）纯逻辑闭包提取并绝对冻结具名导出面。
+> - **零构建 SPA 静态装配**：`static/index.html` 拆解为 `layout/`、`views/`、`modals/` 独立模板组件，由轻量同步机械闸守护，兼顾开发模块化与零打包首屏防闪烁。
+> - **交互式智能体循环与裁判闭环**：接入模型驱动流转、确定性裁判终审、AI 润色与对齐；A1 裁判集扩充至语法层（主谓一致、动词支配格、主句倒装 V2、冠词词形等）并完成 60 局配对真题回测。
+> - **自动化机械闸矩阵**：新增分层契约闸（词法分词器）、反向依赖闸、Mock 漂移闸、禁止静默降级闸等 6 道自动化防线。全量测试扩展至 **2,438 passed + 3 skipped（净增 670 个测试）**，探针 **31/31** 保持零漂移。
+>
+> 📱 **Android 用户注意**：改动含 `static/` 的版本需**覆盖安装**才生效。
+> 📜 完整版本变更细节见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -134,13 +136,16 @@ mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
 
 ```
 DeLector/
-├── delector/          # 后端包：server.py(app 工厂) + core/(DB·安全) + nlp_engine/(spaCy·拓扑·AST) + routes/ + services/ + tools/(Agent 工具) + data/
-├── static/            # 前端零构建 ES 模块（index.html + js/ 23 模块 + german/ 背词台 + css/ tokens）—— 模块数以 ls static/js/*.js 为准
+├── delector/          # 后端核心包：server.py + core/(DB·安全·版本) + nlp_engine/(spaCy·拓扑·AST) + routes/(领域路由) + services/(LLM·TTS) + tools/ + data/
+├── static/            # 前端零构建体系：index.html + layout/ + views/ + modals/ + js/(34 模块) + german/(工作台) + css/(视觉 tokens)
 ├── android/           # Android 独立离线单机版工程 (Chaquopy + Gradle)
-├── agent/             # Phase 2 Go Agent Runtime（CLI + DAG + 工具注册，预览通道）—— 与 AI agent 规范（AGENTS.md）无关，勿混
-├── tests/             # 测试模块（pytest）：以 ls tests/test_*.py 为准（2026-10-16 实测 125 个）+ 迁移哨兵
-├── docs/              # 文档：agents/(架构·运维) · specs/(设计) · plans/(实施计划) · adr/(仓内 ADR 副本) · reviews/(评审与评估报告)
+├── agent/             # Phase 2 Go Agent Runtime（CLI + DAG + 工具注册，预览通道）
+├── tests/             # 自动化测试套件：153 个测试文件 (2,438 passed) + 行为探针与迁移哨兵
+├── tools/             # 架构守卫工具链：六道机械闸 (分层契约/层序/Mock漂移/禁止静默降级/API契约/HTML同步) + 构建装配工具
+├── docs/              # 仓库文档中枢：agents/(架构·运维) · specs/(设计) · plans/archive/(已归档计划) · adr/ · reviews/
+├── WORKMEMORY/        # 共享工作记忆系统：PROJECT_OVERVIEW.md · work.log · PROTOCOL.md
 ├── start.py           # 跨平台智能启动脚本（Android 回环 / 桌面 0.0.0.0）
+├── desktop.py         # Windows 原生桌面壳（pywebview + 托盘 + splash）
 ├── package_windows.py # Windows 绿色免安装便携版打包脚本
 ├── Dockerfile         # 容器化构建
 ├── docker-compose.yml # Compose 编排
@@ -153,7 +158,17 @@ DeLector/
 
 ## 🗺️ 版本历史 (Version History)
 
-最近 3 版的摘要见上方「多平台下载发布包」一节；**完整版本历史的正主是 [CHANGELOG.md](CHANGELOG.md)**（此处不再复制第二份）。
+本项目遵循语义化版本规范。完整版本历史、发版演进与回滚方案见 **[CHANGELOG.md](CHANGELOG.md)**。
+
+| 版本 | 发布日期 | 里程碑概要 |
+| :--- | :--- | :--- |
+| **v5.18.0** | 2026-10-19 | 单体架构与前端视图全面解耦（database/routes 拆解 · index.html/writer.js/reader.js 模块化）· 交互式智能体循环（ADR-0023 / 裁判终审 / AI 润色）· 裁判集扩充与真题回测（ADR-0024）· 六道自动化机械闸矩阵落地 · 2438 passed（净增 670 用例） |
+| **v5.17.0** | 2026-10-11 | 首个原生桌面壳（pywebview + 系统托盘 + 统一退出收尸）· 数据落点外置 `%LOCALAPPDATA%\DeLector` · 更新可见性（顶栏 chip + `/api/update/check`）· 发版门守卫（tag == `v`+`APP_VERSION`）· 真启产物闸 / 前端跨边界契约闸 · spaCy 惰性加载 |
+| **v5.16.0** | 2026-10-06 | 惰性迁移性能缺陷根治（消除单篇 GET spaCy N+1 重算）· CI 必需运行时清单显式化 · localhost 守卫加固 |
+| **v5.15.0** | 2026-10-05 | 降级标记并发串味修复 · 工作台单点化来源判据 · localhost 受保护路由集合与探针 `--json` 契约冻结守卫 |
+| **v5.14.0** | 2026-10-05 | 卡盒去复习化（修复「白复习」P0）· 听力微训与长难句精读工坊 · 5 维难度评分与 CEFR 估算 |
+
+> 📜 历史更多版本记录（v1.0 ~ v5.13）请回溯 [CHANGELOG.md](CHANGELOG.md)。
 
 ## ⚠️ 已知限制 (Known Limits)
 
