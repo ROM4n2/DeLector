@@ -2,9 +2,9 @@ __pycache__/
 *.pyc
 
 # 敏感配置与密钥（通用基线，与 bootstrap.ps1 $requiredIgnores 同步）
-config.yaml
-config.yml
-config.local.yaml
+/config.yaml
+/config.yml
+/config.local.yaml
 .env.*
 *.pem
 *.key
