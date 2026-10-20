@@ -28,7 +28,6 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 import sys
@@ -45,6 +44,7 @@ from tools.check_frontend_layers import (  # noqa: E402
     load_backend_route_patterns,
     local_declarations,
     read_js,
+    tokenize,
 )
 
 RD_API_REL = "static/js/rd-api.js"
@@ -73,6 +73,142 @@ def _rd_api_tokens():
     path = REPO_ROOT / RD_API_REL
     assert path.exists(), f"{RD_API_REL} must exist"
     return read_js(path)
+
+
+def _exported_names(toks) -> set[str]:
+    """token 级导出面（导出名，不是本地名）。
+
+    为什么不能用 `^export` 正则：`export { a as b }` 块里的名字对列 0 正则是
+    **隐形**的，而块内 `as` 右边才是真正的导出名。rd-api.js 那 14 个 `*Remote`
+    别名当初就是这种形态，用正则守卫等于没守 —— 把整块别名加回来照样全绿。
+
+    覆盖：`export [async] function|const|let|var|class X`、`export { a, b as c }`、
+    `export * from '…'`（返回哨兵 `*`，调用方应判红）。
+    """
+    names: set[str] = set()
+    n = len(toks)
+    for i, t in enumerate(toks):
+        if t.kind != "id" or t.text != "export":
+            continue
+        j = i + 1
+        if j >= n:
+            continue
+        # export [async] function|const|let|var|class NAME
+        k = j
+        if toks[k].kind == "id" and toks[k].text == "async":
+            k += 1
+        if k < n and toks[k].kind == "id" and toks[k].text in ("function", "const", "let", "var", "class"):
+            k += 1
+            while k < n and toks[k].kind == "punct" and toks[k].text == "*":
+                k += 1
+            if k < n and toks[k].kind == "id":
+                names.add(toks[k].text)
+            continue
+        # export { a, b as c }
+        if toks[j].kind == "punct" and toks[j].text == "{":
+            depth = 0
+            item: list[tuple[str, str]] = []
+            items: list[list[tuple[str, str]]] = []
+            k = j
+            while k < n:
+                tk = toks[k]
+                if tk.kind == "punct" and tk.text == "{":
+                    depth += 1
+                    if depth == 1:
+                        k += 1
+                        continue
+                elif tk.kind == "punct" and tk.text == "}":
+                    depth -= 1
+                    if depth == 0:
+                        items.append(item)
+                        break
+                if depth == 1:
+                    if tk.kind == "punct" and tk.text == ",":
+                        items.append(item)
+                        item = []
+                    elif tk.kind in ("id", "str"):
+                        item.append((tk.kind, tk.text))
+                k += 1
+            for it in items:
+                ids = [x[1] for x in it if x[0] == "id"]
+                strs = [x[1] for x in it if x[0] == "str"]
+                if ids:
+                    # a as b -> 导出名是 b
+                    names.add(ids[2] if len(ids) >= 3 and ids[1] == "as" else ids[0])
+                elif strs:
+                    # export { "x" as y } 里的字符串名不是合法标识符，按原样记
+                    names.add(strs[0])
+            continue
+        # export * from '…'
+        if toks[j].kind == "punct" and toks[j].text == "*":
+            names.add("*")
+    return names
+
+
+def _imported_names_from(toks, target: str) -> set[str]:
+    """该模块从 `target` 模块 import 进来的**源名**集合（`a as b` 取 a）。
+
+    必须按 import 语句逐条匹配 specifier：把「任何 import 了 rd-api.js 的模块
+    的全部绑定名」并进来，会让 `import { esc } from './core.js'` 里的 `esc`
+    也被算成「有人用了」—— 死导出守卫就被自己的宽松算法废掉了。
+    """
+    names: set[str] = set()
+    n = len(toks)
+    for i, t in enumerate(toks):
+        if t.kind != "id" or t.text != "import":
+            continue
+        j = i + 1
+        spec = None
+        braces: list[tuple[str, str]] = []
+        depth = 0
+        while j < n:
+            tk = toks[j]
+            if tk.kind == "punct" and tk.text == ";":
+                break
+            if tk.kind == "punct" and tk.text == "{":
+                depth += 1
+                j += 1
+                continue
+            if tk.kind == "punct" and tk.text == "}":
+                depth -= 1
+                j += 1
+                continue
+            if depth > 0 and tk.kind in ("id", "str"):
+                braces.append((tk.kind, tk.text))
+            elif tk.kind == "id" and tk.text == "from":
+                if j + 1 < n and toks[j + 1].kind == "str":
+                    spec = toks[j + 1].text
+                break
+            elif tk.kind == "str" and depth == 0:
+                spec = tk.text  # 副作用型 import './x.js'
+                j += 1
+                continue
+            j += 1
+        if spec is None:
+            continue
+        if spec.strip().lstrip("./").split("?")[0] != target:
+            continue
+        # 逐个 item：a / a as b ── 取源名 a
+        item: list[str] = []
+        for kind, text in braces:
+            if kind != "id":
+                continue
+            if text == "as":
+                continue
+            item.append(text)
+            # 遇到下一个名字前，item 形如 [a] 或 [a, b]（as 被跳过、b 是本地名）
+        # 重新按顺序解析，避免把本地名当源名
+        ids = [text for kind, text in braces if kind == "id"]
+        idx = 0
+        while idx < len(ids):
+            src = ids[idx]
+            if idx + 2 < len(ids) and ids[idx + 1] == "as":
+                names.add(src)
+                idx += 3
+            else:
+                names.add(src)
+                idx += 1
+    return names
 
 
 def _copy_js_tree(tmp_path: Path) -> Path:
@@ -159,10 +295,8 @@ def test_rd_api_export_surface_is_exactly_the_endpoints() -> None:
     _raw, toks = _rd_api_tokens()
     declared = local_declarations(toks, top_level_only=True)
 
-    # 只统计 export 出来的：函数声明 + export const 别名都算「导出面」
-    raw = (REPO_ROOT / RD_API_REL).read_text(encoding="utf-8")
-    exported = set(re.findall(r"^export\s+(?:async\s+)?function\s+(\w+)", raw, re.M))
-    exported |= set(re.findall(r"^export\s+const\s+(\w+)", raw, re.M))
+    # token 级解析：`export { a as b }` 的导出名是 b，列 0 正则对它完全隐形。
+    exported = _exported_names(toks)
 
     assert exported == EXPECTED_ENDPOINTS, (
         f"rd-api.js export surface drifted.\n"
@@ -182,19 +316,17 @@ def test_rd_api_has_no_dead_exports() -> None:
     针对「留下没人用的出口」这个**形态**。别名、兼容层、遗留包装都逃不掉。
     """
     js_dir = REPO_ROOT / "static" / "js"
-    raw_api = (REPO_ROOT / RD_API_REL).read_text(encoding="utf-8")
-    exported = set(re.findall(r"^export\s+(?:async\s+)?function\s+(\w+)", raw_api, re.M))
-    exported |= set(re.findall(r"^export\s+const\s+(\w+)", raw_api, re.M))
+    _raw_api, toks_api = _rd_api_tokens()
+    exported = _exported_names(toks_api)
 
     imported_anywhere: set[str] = set()
     for js_file in js_dir.glob("*.js"):
         if js_file.name == "rd-api.js":
             continue
         _raw, toks = read_js(js_file)
-        for _lineno, spec_path, _form in import_targets(toks):
-            if spec_path.strip().lstrip("./").split("?")[0] != "rd-api.js":
-                continue
-            imported_anywhere |= import_bindings(toks)
+        # 按 specifier 逐条匹配：只要「这个文件 import 了 rd-api.js」就算，
+        # 但只计**来自 rd-api.js 的那条语句**的源名（见函数 docstring）。
+        imported_anywhere |= _imported_names_from(toks, "rd-api.js")
 
     dead = exported - imported_anywhere
     assert dead == set(), (
@@ -308,6 +440,55 @@ def test_mutation_proof_method_mismatch_trips_rule5(tmp_path: Path) -> None:
     )
     assert _violations_for_rd_api(js_dir, "method-mismatch"), (
         "expected a method-mismatch violation"
+    )
+
+
+def test_regression_reexport_alias_block_is_detected() -> None:
+    """回归：整块 `export { a as b }` 别名必须被导出面守卫看见。
+
+    这是一条**由独立评审打出来的真实绕过**：两条守卫最初用 `^export` 列 0 正则
+    抽导出名，于是把下面这 14 个别名整块加回 `rd-api.js`，守卫、`node --check`
+    与分层闸**全部保持绿色** —— 而块内名字对正则是隐形的，`as` 右边才是导出名。
+
+    该形态必须红。用 token 级解析后，别名会进 `exported` 集合，于是
+    「恰好 14 个端点」与「零死导出」两条同时抓住它。
+    """
+    raw = (REPO_ROOT / RD_API_REL).read_text(encoding="utf-8")
+    NL = chr(10)
+    alias_block = (
+        NL
+        + "export {" + NL
+        + "  removeArticle as deleteArticleRemote," + NL
+        + "  fetchArticles as fetchArticlesRemote," + NL
+        + "  fetchArticle as fetchArticleRemote," + NL
+        + "  fetchSyntaxStats as fetchSyntaxStatsRemote" + NL
+        + "};" + NL
+    )
+    mutated = raw + alias_block
+    toks = tokenize(mutated)
+
+    exported = _exported_names(toks)
+    extra = exported - EXPECTED_ENDPOINTS
+    assert extra == {
+        "deleteArticleRemote",
+        "fetchArticlesRemote",
+        "fetchArticleRemote",
+        "fetchSyntaxStatsRemote",
+    }, f"token-level export parsing must see the `as` right-hand names, got extras: {sorted(extra)}"
+
+    # 这些别名无人 import ⇒ 零死导出守卫同样必须看见它们
+    imported = _imported_names_from(tokenize((REPO_ROOT / READER_REL).read_text(encoding="utf-8")), "rd-api.js")
+    assert extra - imported == extra, "aliases are not imported anywhere, so they must be dead"
+
+
+def test_regression_indented_export_const_is_detected() -> None:
+    """回归：行首带缩进的 `  export const x = ...` 也必须被看见（列 0 正则的另一漏洞）。"""
+    raw = (REPO_ROOT / RD_API_REL).read_text(encoding="utf-8")
+    NL = chr(10)
+    mutated = raw + NL + "  export const fetchArticlesRemote = fetchArticles;" + NL
+    exported = _exported_names(tokenize(mutated))
+    assert "fetchArticlesRemote" in exported, (
+        "an indented export must not escape the export-surface guard"
     )
 
 

@@ -44,7 +44,7 @@
   - Create: `static/js/rd-api.js`
 - **目标**：
   - 实现 12 个端点纯异步调用函数：
-    1. `deleteArticleRemote(id)`: `DELETE /api/articles/{id}`
+    1. `removeArticle(id)`: `DELETE /api/articles/{id}`（原名 `deleteArticleRemote`，Task 3b 收口时改名）
     2. `fetchArticlesRemote()`: `GET /api/articles`
     3. `fetchArticleRemote(id)`: `GET /api/articles/{id}`
     4. `lookupVocabRemote(payload)`: `POST /api/lookup/vocab`
@@ -121,3 +121,30 @@ Task 3 落盘后复核发现两处必须收口的问题，均已修复（commit 
 | Task 4 独立可用性 + 变异自证 | `f5d70c6` | 新文件 12 用例全绿；补上闸的真实缺口：`MUTABLE_STATE_MODULES` 缺 `rd-api.js` 与 `wr-api.js` ⇒ 计划里的「L2 零顶层可变状态」此前**从未被执行**；死导出守卫经变异自证（加回 `fetchArticlesRemote` ⇒ 两条用例打红并报出该名） |
 
 **Task 4 抓到的第二个闸缺口（值得记）**：`collect_violations(js_dir, None)` 会**整条跳过规则⑤**。我最初的两条路由变异用例正是传了 `None`，于是 `route-path-unregistered` / `method-mismatch` 永远是空的绿 —— 直到用例本身先红、逼我把真实路由表传进去。**「变异自证全部通过」可能只是「变异根本没被检查」**：这次是「变异用例自己红」救了场，而不是「变异自证通过」。
+
+---
+
+## 🔎 第二轮独立评审（Task 4 守卫被绕过，2026-10-20）
+
+已补的这两个提交由编排者自做，按纪律补派独立评审。结论 **REVISE**，且是**真绕过**：
+
+**F1（阻断）**：两条导出面守卫用 `^export` 列 0 正则抽导出名，于是把下面整块加回 `rd-api.js`，**守卫、`node --check` 与分层闸全部保持绿色**：
+
+```js
+export {
+  removeArticle as deleteArticleRemote,
+  fetchArticles as fetchArticlesRemote, /* … 14 个全部 */
+};
+```
+
+根因：`export { a as b }` 的**导出名是 `as` 右边那个**，块内名字对列 0 正则完全隐形 —— 而 RD 模块当初那 14 个别名正是这种形态。**我上一轮写的守卫，对我自己点名要防的那次事故的复活形态是失效的。**
+
+**处置**：两条守卫改用 **token 级**导出面解析（`_exported_names`：覆盖 `export [async] fn|const|… NAME`、`export { a, b as c }` 取 `as` 右侧、`export *` 返回哨兵），并把这条绕过**固化成两条回归用例**（整块 `as` 别名 + 缩进 `export const`）。重放评审的原始绕过 ⇒ 两条守卫同时打红并逐个报出 4 个别名。
+
+**F2（精度，已修）**：死导出守卫原先把「任何 import 了 rd-api.js 的模块的全部绑定名」并进来，导致 `import { esc } from './core.js'` 里的 `esc` 也被算成「有人用了」。改为按 specifier 逐条匹配、只取源名。
+
+**F3（措辞）**：「三条用例在本 commit 之前是红的」只在**同时**把 `_violations_for_rd_api` 回退成 `None` 时成立；仅回退闸本体只有 1 条红。已在本节说明，不修改代码。
+
+**F4（文档漂移，已修）**：上面 Task 2 端点清单仍写着 `deleteArticleRemote(id)`，已改为 `removeArticle(id)` 并注明原命名。
+
+**教训（同一天第二次踩同型）**：「变异自证全绿」只是关于**变异集合**的证据。上一轮我用 `const` 形态做变异、被 `as` 形态绕过；更早一次是「按 git grep 命中行分类」而非按断言分类。**写守卫时必须穷举该语言允许的全部语法形态，并且至少让一个不回作者预期的人去试图绕过它。**
