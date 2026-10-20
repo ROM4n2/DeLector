@@ -181,3 +181,11 @@ export {
 重放全部六种形态（`export {a as b}` / `as "string"` / `export default` 函数 / `export default` 对象 / 解构导出 / `export * as ns`）：**全部 CAUGHT**，各自报出走私进来的符号名。
 
 **这条判据选择的普适教训**：当守卫要回答的是「这个模块对外暴露了什么」这类**引擎已有确定答案**的问题时，MUST 问引擎；手写解析器只适合回答引擎不给的问题（比如「这个导出是否有人 import」）。
+
+## 交付闭环
+
+PR **#164** squash 合并 `77ce9a3`（2026-10-20 08:36）。CI 8 项（7 pass + 1 skipped）。
+
+合并前独立 Reviewer 判 **REVISE** 的 F1 —— 导出面守卫用列 0 `^export` 正则，`export { a as b }` 的别名对正则隐形（把 14 个别名整块加回 `rd-api.js` 仍全绿）—— 已改为 **token 级**解析并补 2 条回归用例；重放原始绕过时两条守卫同时打红、逐个报出 4 个别名。
+
+交付物：`static/js/rd-api.js` 14 个端点函数（L2，零顶层可变状态）；`reader.js` 40 个具名导出逐字不变、错误轨 10/10；`tests/test_reader_api_split.py` 14 passed；`tools/check_frontend_layers.py` 规则 ⑤ 改用真实后端路由表（原实现传 `None` 会让整条规则静默跳过）。

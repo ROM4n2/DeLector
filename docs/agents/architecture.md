@@ -379,4 +379,36 @@ Layer 0 [纯数据出口]: delector.data (静态字典、预生成 JSON 数据�
 | `services/polish_tools.py` ⇄ `tools/writing_check.py` | **已解耦 (2026-10-18)** | 任务级白名单与调度执行器已归位至 Layer 4 `delector.tools.polish`，services 保留兼容再导出 |
 | 机制与业务混合（`polish_loop` 内置 A1 提示词） | **已具备注入点** | 运行时已支持注入自定义 judge/prompt，待进一步纯化默认值导入 |
 
+## 前端模块分层契约（`tools/check_frontend_layers.py`）
+
+上面的 Layer 0~5 是**后端** Python 包的层序。前端另有一套独立契约，由
+`tools/check_frontend_layers.py` 机械执行 —— **层的权威清单与规则语义以该文件的
+模块 docstring 为准，本文件不复制表**（复制必然漂移；2026-10-16 那轮「文档三处漂移」
+的教训）。此处只登记**入口与不变式**：
+
+- **L1 纯层**（禁 DOM / 网络 / 提示 / 计时器 / 动态求值）：`wr-format.js` · `rd-syntax.js` · `wb-queue.js` · `wb-scope.js` · **`cd-state.js`**（cards 的纯状态容器）。
+- **L2 持久化访问层**（禁 DOM / 提示 / 计时器 / 动态求值，只准 `import ./core.js`）：`wr-api.js` · `rd-api.js`。
+- **不受分层但受单条契约约束**：`cards.js` —— 顶层 `let`/`var` 数量 MUST 为 0（规则 ⑦），状态只许长在 `cardState` 里。这条是 2026-10-20 首次把**视图层**纳入机械约束。
+
+前端解耦时另有三条**行为不变式**，由测试而非本闸守护（改这些测试前先看计划文档）：
+
+| 不变式 | 守护位置 |
+| --- | --- |
+| **导出面冻结**（`reader.js` 40 个具名导出、`cards.js` 36 个 + 1 条 barrel 逐字不变） | `tests/test_frontend_module_graph.py` · `tests/test_reader_api_split.py`（token 级解析，`export { a as b }` 的别名同样计数） |
+| **错误轨守恒**（`notify(` / `alert(` / `console.error(` 行内容进出相等：`reader.js` 10/10、`cards.js` 12/12） | `tests/test_frontend_layers.py` |
+| **防假解耦**（被迁出符号 MUST NOT 在源文件保留同名重复定义） | 本闸规则 ⑥ |
+
+**判据形态纪律**（历轮对抗复核换来的，勿退回旧写法）：一律 **token 级**、**整条相对路径**、**花括号净深度 0**（不依赖「列 0」）；解析不出来即 **fail-closed**，MUST NOT 猜一个 `GET` 蒙过去。
+
+### 探针 / 闸的切片锚点（踩坑登记）
+
+`tools/*_probe.mjs` 与守卫脚本大量使用「按锚点正则定位再括号配平切片」。这条链有两个**静默失效**模式，都已在 2026-10-20 被实测咬到：
+
+1. **锚点只到函数名 ⇒ 切片里没有函数体**。跑在短切片上的断言恒真 —— `ia_dom_mount_probe.mjs` 曾有 **4 条**守卫处于这种状态（`a1` 分流段 / `a1-toolbar` / `A1Cards.` / `setCardSegment` 的 `'a1'`），与任何重构都无关地死了很久。
+2. **`[^{]*` 一类的「吃掉参数表」写法遇到解构参数 `f({a} = {})` 会在参数的花括号处停下** ⇒ 同样切出无函数体的片段。修好第 1 条后曾一度以为解决，实测仍死。
+
+正确写法：锚点 → 找 `(` → 括号配平到配对 `)` → 跳过空白 → **要求下一个字符必须是 `{`** → 再配平函数体；任一步失败 MUST **具名报错**，MUST NOT 返回短切片。同一原则适用于注入式变异测试的锚点 —— 锚点命中数 MUST `assert == 1`，命中 0 时 MUST 报「锚点已失效，请重定向」，不得让它伪装成「规则判红」。
+
+另两条同源纪律：静态层已红时 MUST NOT 再跑 `node:vm` 层（否则空源撞出的 `ReferenceError` 会把真实具名问题埋掉，PR #166）；沙箱里 MUST NOT 同时存在手写桩与「真实源码切片」两个真相源（后者守卫一旦被移除就会静默回落到桩）。
+
 ---

@@ -539,3 +539,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **Task 6**：6 条变异从「手工做一次」变成**永久用例**（`test_cards_state_split.py` 6 → 12），每条断言期望的规则名/失败文本。
 - **门禁（本分支实测）**：六道 Python 机械闸全 exit 0 · `ruff` 全绿 · `mypy --strict delector tools` 118 文件 0 错 · `mypy --follow-imports=skip tests` 159 文件 0 错 · Go 8 包全绿 + gofmt 0 差异 · 全量 **155 个测试文件 8 批串行全绿：2509 passed + 3 skipped**（基线 2441 ⇒ 净增 71）· 13 个改动文件全部 0 lone LF。
 - **委派纪律观察**：本计划中三次出现子代理落在**错误血统**上并据此产出与事实相反的汇报（「零 cardState 引用」实为 Task 4 已加 3 处；「`_CARDS_ANCHOR` 指向顶层 let」实为 Task 3b 已改）。故后续派单均在 brief 里强制「先 merge 目标分支并核实 HEAD = 指定提交」。
+
+### 2026-10-20 21:40 | qwen3.8-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**#165 合并闭环 + 交付后追加 #166 + 前端分层契约补进文档**。本批纯文档/簿记（直推 `master`，改动面全在 `MASTER_DIRECT_ALLOWLIST` 的 `WORKMEMORY/` 与 `docs/`）。
+- **#165** squash 为 `2e7b503`（14 提交 / +1435-185）；**#166** squash 为 `07139ac`。合并后物理复核：`git show origin/master:static/js/cards.js | grep -c "^let "` → **0**；工作树与 master 零差异后移除。
+- **#166 修的是诊断污染**：静态层已红时探针仍跑 `node:vm`，`transformed` 为空串 ⇒ `loadA1Data()` 必 `ReferenceError`，**人造错误排在真实具名问题之后**，把人引向渲染链。修法 `preVmProblems` 闸住 vm 层（快照刻意取在转换自检之后），跳过以 `dynamic.vmRan` 显式自陈。
+- **双向钉子（本批最值得复看的判据设计）**：只加「不许跑」会留反向退化 —— 原有三条断言只读静态常量、不依赖 vm 结果，所以「干脆永不跑 vm」也能全绿。故既有用例补 `vmRan is True`。两头变异自证：→`if (true)` 新用例红在「不得出现 `vm 真跑抛错`」那条断言上（非误伤）；→`if (false)` 既有用例红。探针 sha256 两次复原逐位一致。
+- **补文档真缺口**：`docs/agents/architecture.md` 通篇只声明后端 Layer 0~5，**前端分层零入口**。新增「前端模块分层契约」节：刻意不复制层的表（权威清单在 `check_frontend_layers.py` 的 docstring，复制必漂移 = 2026-10-16「文档三处漂移」那课），只登记入口 + 三条行为不变式（导出面冻结 / 错误轨守恒 / 防假解耦）+ 判据形态纪律（token 级 · 整条相对路径 · 净深度 0 · fail-closed）+ 探针切片锚点的两型静默失效。
+- 计划补闭环：cards 计划加 Task 7 凭据与 #166 后续；reader-api 计划加交付闭环（#164 `77ce9a3` + F1 token 级修复的绕过重放结论）。
+- **基线重算（master `07139ac`，8 批串行全绿）**：收集 **2513** = **2511 passed + 2 skipped** · `static/js` **36** · `tests/test_*.py` **155** · 探针 **31** · `mypy --strict delector tools` 118 / `--follow-imports=skip tests` 159 files 零错误。`PROJECT_OVERVIEW.md` 已刷新并新增红线 **13**。
+- ⚠️ **master CI 红的真因是闸缺陷，非纪律违规**（登记为开放待办第 **7** 条）：`check_master_commit_scope.py` 用 `--no-merges --first-parent` 划「直推」，而 **squash 合并的提交恰是「非 merge + 父提交 = 上一个 master tip」** ⇒ 被当直推，审的其实是整个 PR 的文件集。实测 #165/#166 PR 事件全绿、合并后 master push 判红。修法 MUST 区分「PR 合并」与「人工直推」，且 MUST NOT 退化成「标题带 `(#NNN)` 就放行」（谁写 `(#1)` 就能绕过整道闸，而本闸因审计 P1-1 的 25 个直推提交而存在）；解析不出来时 fail-closed。该闸只看本次推送范围 ⇒ 纯文档推上去 latest CI 即转绿，**无需动 `07139ac`**。
+- **NOTE（协议第 7 条补缺口，不回改历史）**：`work.log` 里 2026-10-17 13:35 / 17:27 与 2026-10-18 00:28 / 02:38 / 03:46 共 **5 条 WORK_START 无配对 WORK_END**（唯一的 END 在 10-18 23:26 属另一 agent）。后续 DONE 与已合并 PR 证明那批工作已落地，判为**标记未收尾而非任务未完成**；本条只登记，不代其补 END。

@@ -305,3 +305,45 @@ control                             6 passed
 | M6 | 探针丢掉 `cd-state.js` 接缝 | 输出含容器名、且**无** `    at ` 栈帧（区分具名失败与裸 ReferenceError） |
 
 隔离纪律：M1~M3 把 `static/js` 复制到 tmp、在副本上变异、写回后断言与真实文件**字节相等且 sha256 不变**；M4/M5 只在内存中变异（`_probe_source`），从不碰真模块；M6 复制探针与 js 树。
+
+### Task 7 全量门禁与交付 · PR **#165**（squash 合并 `2e7b503`，2026-10-20）
+
+分支 `refactor/cards-state-container`（独立 worktree），14 个提交，`+1435 / -185`。
+
+```
+六道 Python 机械闸                全部 exit 0
+ruff check .                      All checks passed
+mypy --strict delector tools      118 files, 0 issues
+mypy --follow-imports=skip tests  159 files, 0 issues
+go test ./... (8 包) + gofmt      全绿 / 0 差异
+全量 155 个测试文件 · 8 批串行     2509 passed + 3 skipped
+13 个改动文件                     0 lone LF
+```
+
+CI：7 pass + 2 条件跳过（`Windows Portable Smoke`、`Master Direct-Push Scope Gate`），`mergeable=MERGEABLE`。
+
+**合并后 master 复核**：`git show origin/master:static/js/cards.js | grep -c "^let "` → **0**；`cd-state.js` 在位。工作树与 master 内容零差异后移除。
+
+### 交付后追加（PR **#166**，squash 合并 `07139ac`）
+
+改 `ia_dom_mount_probe.mjs` 时顺带暴露的既有缺陷，单独走一个小 PR 修掉。
+
+**静态层已红时，探针仍照样跑 `node:vm` 层** —— 此时 `transformed` 是空串，`loadA1Data()` 必然 `ReferenceError`，于是真实的具名问题后面追打一条**人造错误**：
+
+```
+  - id="a1-toolbar" 全文件出现 0 次（必须恰好 1 次）
+  - a1_cards.js vm 真跑抛错：evalmachine.<anonymous>:1 | loadA1Data() | ^   ← 人造
+```
+
+退出码不受影响（都是 1），但诊断被污染且人造错误排在末位 —— 读的人会顺着它去查渲染链，而不是去查静态契约。
+
+修法：`const preVmProblems = problems.length > 0;` 闸住 vm 层，快照**刻意取在转换自检之后**（转换层问题同样意味着源不可信）；跳过状态以 `dynamic.vmRan` 显式暴露，不伪装成跑过。`git diff -w --stat` = 纯增量 11 行（58 行位移全是缩进，无一行删除逻辑）。
+
+**双向钉子**（只加「不许跑」会留下反向退化空间）：
+
+| 用例 | 防的退化 |
+| --- | --- |
+| 新增 `test_ia_probe_does_not_run_vm_after_static_failure`（tmp 隔离副本，真实树只读） | 静态层已红仍跑 vm ⇒ 人造错误埋掉真实问题 |
+| 既有用例补 `vmRan is True` | 「干脆永不跑 vm」—— 原有三条断言只读静态常量、压根不依赖 vm 结果，会静默放过这种退化 |
+
+变异自证：守卫改 `if (true)` ⇒ 新用例红在「不得出现 `vm 真跑抛错`」那条断言上（非误伤）；改 `if (false)` ⇒ 既有用例红。两次变异后探针 sha256 逐位复原。
