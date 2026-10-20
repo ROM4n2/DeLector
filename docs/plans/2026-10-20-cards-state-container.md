@@ -256,3 +256,52 @@ control                             6 passed
 ```
 
 **这条形态值得记**：变更检测若靠「先把其余字段弄脏」，脏集**必须是全集** —— 否则「写回初值」这个动作天然隐形。这不是实现 bug，是守卫强度问题，而它只在被变异打中时才暴露。
+
+### Task 3（+3b）`cards.js` 改向 · commit `60975fb` + `10d5d26`
+
+**闸首次转绿**：`1 + 15` → **exit 0 PASS**；`grep -c "^let " cards.js` = **0**；导出面 36 + barrel ×1 不变；错误轨 **12 → 12** 守恒。
+
+**五个陷阱全部守住**（逐条粘贴验证）：`stepDeckState` 留在 `setTimeout(160)` 内；`setCardSegment` 的 DOM/render 顺序不变；`renderDeckStage` 的渲染期夹取保持内联；`quizState` 零重绑（32 处全为字段读写）；`_prepLoading` 的 Promise 锁序列原样。
+
+**计划自身的缺陷（已修）**：Task 1 新增的两条变异用例把注入锚点钉在 `let cardSegment = "due";` 上，而 Task 3 正是要删这行 ⇒ 两条用例挂在「锚点命中 0 次」，**不是挂在闸上**。根因：写计划时统计「12 处旧状态名站点」用的是 **Task 1 之前**的树，漏掉了 Task 1 自己新造的 2 处。
+- 修法：锚点改到 `export function setCardSegment(seg) {`（被 `main.js` 具名导入 ⇒ 改名会同时打断模块图测试，不会无声消失）；并加 `_assert_cards_anchor()` 专属诊断 —— 锚点失效时报「注入锚点已失效…请重定向 \_CARDS_ANCHOR」，不与「闸判红」共用话术。
+- 判别力证明：把闸的 ⑦ 遍历弄坏 ⇒ `test_cards_extra_top_level_let_red` 红、负向用例保持绿；复原后 98 passed。
+
+> **形态沉淀**：Task N 新增的变异锚点，本身就成了 Task M 必须重定向的站点。计划的「站点普查」必须按**最终状态**算，不能按起始状态算。
+
+### Task 4（+5b 修正）探针加桩 · commit `d5eb0e5` → `0599885`
+
+**计划写「四个探针加桩」，实测只有 2 个失败**（`cards_catalog_tag` / `ia_dom_mount` 不碰状态）。按 Seam-Minimal 只改 2 个。
+
+**评审逼出的一处重大发现：`ia_dom_mount_probe` 里有 4 条守卫一直是死的。**
+
+`sliceBlock(cardsJs, /export\s+function\s+renderCardsGrid/, …)` 只切到函数**名** ⇒ `renderGridBody` 只剩签名、没有函数体 ⇒ 跑在其上的四条检查（`a1` 分流段 / `a1-toolbar` / `A1Cards.` / `setCardSegment` 的 `'a1'`）**全在检查一个不含体的字符串**。同名缺陷在三个探针里都存在（`sliceFunction` 用 `indexOf("{")`）。
+
+| 注入 | 旧探针 | 新探针 |
+| --- | --- | --- |
+| `renderCardsGrid` 里 `cardState.catalog.segment === 'a1'` | **exit 0 PASS（死）** | exit 1，报出该分流段 |
+| `getElementById('a1-toolbar')` | 0 PASS | 1 |
+| `A1Cards.render(...)` | 0 PASS | 1 |
+| `setCardSegment` 里的 `'a1'` 分支 | 0 PASS | 1 |
+
+**第一次修复本身又重现了同类缺陷（评审打回）**：把 `` 改成 `[^{]*` 后，遇到**解构参数** `f({ seg = 'due' } = {})` 会在参数的花括号处停下 ⇒ 切片又无函数体。同一份解构源码下：旧实现切出 **46** 字符（仅签名），修好后 **360**（全函数体）；`renderCardsGrid` 33 → **3053**。
+- 最终实现：锚点 → 找 `(` → `matchBracket` 到配对 `)` → 跳过空白 → **要求下一个字符必须是 `{`** → 再配平函数体；任一步失败都**具名报错**、绝不返回短切片。
+
+**第二处 REVISE**：`d5eb0e5` 的手写桩与 `3a2d49c` 的真实切片接缝**并存**（一个沙箱两个真相源）。桩当前是惰性的，但**接缝的文本守卫一旦被移除，探针会静默回落到桩并通过** —— 老假绿模式复活。已删桩，只留真实 `cd-state.js` 切片接缝，并加簇形状守卫（`catalog/deck/quiz/prep/toast` 缺一即具名失败）。
+
+**第三处（不阻塞）**：`cards_catalog_tag_probe.mjs` 有同一个 `indexOf("{")` 缺陷。实测它表现为**假红**（报「切片缺 card-stats-tag」）而非静默假绿 —— 因为该探针自带切片护栏。故降级为 Task 6 的附带对齐项，不单开一轮。
+
+### Task 6 变异自证套件 · commit `7763c26`
+
+6 条变异从「各任务手工做一次」变成**永久用例**（`tests/test_cards_state_split.py` 6 → **12 passed**），每条断言**期望的规则名或失败文本**，不接受裸「非零退出」：
+
+| 用例 | 抓什么 | 断言 |
+| --- | --- | --- |
+| M1 | 闸规则 ⑦ 被删/短路 ⇒ `cards.js` 的 15 个钉子静默归零 | `零顶层可变状态契约禁mutable-state` + 注入行原文 |
+| M2 | 容器碰 DOM | `L1 纯状态容器禁dom` |
+| M3 | `allowed_imports=()` 被放宽 | `L1 纯状态容器越界import(core.js)` |
+| M4 | `enterSegment` 丢掉 `flipped` 复位 | §2 同一断言 helper 抛错 |
+| M5 | `stepDeckState` 被加夹取 | `stepDeckState(-1) 从 0 出发必须得到 -1` |
+| M6 | 探针丢掉 `cd-state.js` 接缝 | 输出含容器名、且**无** `    at ` 栈帧（区分具名失败与裸 ReferenceError） |
+
+隔离纪律：M1~M3 把 `static/js` 复制到 tmp、在副本上变异、写回后断言与真实文件**字节相等且 sha256 不变**；M4/M5 只在内存中变异（`_probe_source`），从不碰真模块；M6 复制探针与 js 树。
