@@ -288,6 +288,7 @@ for (const fn of ["setExamModule", "setExamWritingTab", "setA1CardViewMode"]) {
 /* ---- 第 3 层：node:vm 真跑 a1_cards.js（渲染目标行为级断言） ------------- */
 let transformed = "";
 let vmError = null;
+let vmRan = false;
 if (!problems.length) {
   transformed = a1CardsJs
     .replace(/^import[^\n]*from[^\n]*;[^\S\n]*$/gm, "")
@@ -402,64 +403,73 @@ const ctx = buildCtx(docStub);
 const mainCardsEl = docStub.registry.get("cards-container");
 const examToggleEl = docStub.registry.get("exam-cards-view-toggle");
 
-try {
-  vm.runInContext(transformed, ctx, { filename: "a1_cards.stripped.js" });
+/* 静态层或转换自检已红时不再真跑 vm 层：transformed 此时是空串（或明知
+   不可信），loadA1Data 必然未定义，追打的那条 ReferenceError 会把真正的
+   具名问题埋在人造错误后面（历史行为：一条 loadA1Data is not defined 跟
+   在真实问题之后，读的人会去查渲染链而不是查静态契约）。
+   快照 MUST 取在转换自检之后：转换层问题同样意味着这份源不可信。 */
+const preVmProblems = problems.length > 0;
+if (!preVmProblems) {
+  try {
+    vmRan = true;
+    vm.runInContext(transformed, ctx, { filename: "a1_cards.stripped.js" });
 
-  /* 种数据：loadA1Data 走桩 fetch 灌满缓存，后续 setA1Mode 同步渲染 */
-  await vm.runInContext("loadA1Data()", ctx);
-  await tick(); await tick();
+    /* 种数据：loadA1Data 走桩 fetch 灌满缓存，后续 setA1Mode 同步渲染 */
+    await vm.runInContext("loadA1Data()", ctx);
+    await tick(); await tick();
 
-  /* 场景 1：词表默认牌盒模式 —— 必须写进 exam-cards-container */
-  vm.runInContext("setA1CardViewMode('deck'); setA1Mode('vocab');", ctx);
-  const deckTarget = String(vm.runInContext("document.getElementById('exam-cards-container').innerHTML", ctx));
-  if (!deckTarget.includes("deck-stage"))
-    problems.push("setA1Mode('vocab') 后 exam-cards-container 没渲染出牌盒（deck-stage 缺失）");
-  if (!deckTarget.includes("Haus"))
-    problems.push("牌盒渲染没带上种子词 Haus（渲染目标指对了但数据没跟上）");
-  if (mainCardsEl.innerHTML !== "")
-    problems.push("renderA1 把词卡写进了主站 #cards-container（备考域渲染目标回退，回退必红场景）");
-  if (!examToggleEl.classOps.some(([op, c]) => op === "remove" && c === "hidden"))
-    problems.push("setA1Mode('vocab') 未给 #exam-cards-view-toggle 摘 hidden（备考域 toggle 显隐没接上）");
+    /* 场景 1：词表默认牌盒模式 —— 必须写进 exam-cards-container */
+    vm.runInContext("setA1CardViewMode('deck'); setA1Mode('vocab');", ctx);
+    const deckTarget = String(vm.runInContext("document.getElementById('exam-cards-container').innerHTML", ctx));
+    if (!deckTarget.includes("deck-stage"))
+      problems.push("setA1Mode('vocab') 后 exam-cards-container 没渲染出牌盒（deck-stage 缺失）");
+    if (!deckTarget.includes("Haus"))
+      problems.push("牌盒渲染没带上种子词 Haus（渲染目标指对了但数据没跟上）");
+    if (mainCardsEl.innerHTML !== "")
+      problems.push("renderA1 把词卡写进了主站 #cards-container（备考域渲染目标回退，回退必红场景）");
+    if (!examToggleEl.classOps.some(([op, c]) => op === "remove" && c === "hidden"))
+      problems.push("setA1Mode('vocab') 未给 #exam-cards-view-toggle 摘 hidden（备考域 toggle 显隐没接上）");
 
-  /* 场景 2：目录模式 —— 同样必须写进 exam-cards-container */
-  vm.runInContext("setA1CardViewMode('grid');", ctx);
-  const gridTarget = String(vm.runInContext("document.getElementById('exam-cards-container').innerHTML", ctx));
-  if (!gridTarget.includes("cards-grid"))
-    problems.push("setA1CardViewMode('grid') 后 exam-cards-container 没渲染出目录网格");
-  if (mainCardsEl.innerHTML !== "")
-    problems.push("grid 模式下 renderA1 仍写主站 #cards-container");
+    /* 场景 2：目录模式 —— 同样必须写进 exam-cards-container */
+    vm.runInContext("setA1CardViewMode('grid');", ctx);
+    const gridTarget = String(vm.runInContext("document.getElementById('exam-cards-container').innerHTML", ctx));
+    if (!gridTarget.includes("cards-grid"))
+      problems.push("setA1CardViewMode('grid') 后 exam-cards-container 没渲染出目录网格");
+    if (mainCardsEl.innerHTML !== "")
+      problems.push("grid 模式下 renderA1 仍写主站 #cards-container");
 
-  /* 场景 3：hoeren 模式 —— 备考域内听力容器显隐正常、词表容器让位 */
-  vm.runInContext("setA1Mode('hoeren');", ctx);
-  const hoerenEl = docStub.registry.get("a1-hoeren-container");
-  const examCardsEl = docStub.registry.get("exam-cards-container");
-  if (!hoerenEl.classOps.some(([op, c]) => op === "remove" && c === "hidden"))
-    problems.push("setA1Mode('hoeren') 未摘掉 a1-hoeren-container 的 hidden");
-  if (!examCardsEl.classOps.some(([op, c]) => op === "add" && c === "hidden"))
-    problems.push("setA1Mode('hoeren') 未藏起 exam-cards-container");
-  vm.runInContext("setA1Mode('vocab');", ctx);
-  if (!hoerenEl._classes.has("hidden"))
-    problems.push("切回 vocab 后 a1-hoeren-container 未重新隐藏");
+    /* 场景 3：hoeren 模式 —— 备考域内听力容器显隐正常、词表容器让位 */
+    vm.runInContext("setA1Mode('hoeren');", ctx);
+    const hoerenEl = docStub.registry.get("a1-hoeren-container");
+    const examCardsEl = docStub.registry.get("exam-cards-container");
+    if (!hoerenEl.classOps.some(([op, c]) => op === "remove" && c === "hidden"))
+      problems.push("setA1Mode('hoeren') 未摘掉 a1-hoeren-container 的 hidden");
+    if (!examCardsEl.classOps.some(([op, c]) => op === "add" && c === "hidden"))
+      problems.push("setA1Mode('hoeren') 未藏起 exam-cards-container");
+    vm.runInContext("setA1Mode('vocab');", ctx);
+    if (!hoerenEl._classes.has("hidden"))
+      problems.push("切回 vocab 后 a1-hoeren-container 未重新隐藏");
 
-  /* 场景 4（冷缓存懒加载，回退必红）：全新沙箱、从未 loadA1Data ——
-     setA1Mode('vocab') 必须自己触发 loadA1Data（原 cards.js 'a1' 段的
-     fetch 链路随分流段迁走，这个守卫只能由 a1_cards.js 自管）。实现回退
-     （只渲染空态、不再拉数据）时 exam-cards-container 里就是空态页而没有
-     种子词，本场景必红。 */
-  const doc2 = makeDocumentStub();
-  const ctx2 = buildCtx(doc2);
-  vm.runInContext(transformed, ctx2, { filename: "a1_cards.stripped.js#2" });
-  vm.runInContext("setA1CardViewMode('deck'); setA1Mode('vocab');", ctx2);
-  await tick(); await tick(); await tick();
-  const fetches2 = JSON.parse(vm.runInContext("JSON.stringify(__fetches)", ctx2));
-  const coldTarget = String(vm.runInContext("document.getElementById('exam-cards-container').innerHTML", ctx2));
-  if (!fetches2.some((u) => u.includes("/api/a1/vocab")))
-    problems.push("冷缓存 setA1Mode('vocab') 未触发 /api/a1/vocab 拉取（题库懒加载守卫丢失）");
-  if (!coldTarget.includes("deck-stage") || !coldTarget.includes("Haus"))
-    problems.push("冷缓存拉取完成后 exam-cards-container 未重渲染出牌盒（懒加载→渲染链断）");
-} catch (e) {
-  vmError = e;
-  problems.push(`a1_cards.js vm 真跑抛错：${e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e}`);
+    /* 场景 4（冷缓存懒加载，回退必红）：全新沙箱、从未 loadA1Data ——
+       setA1Mode('vocab') 必须自己触发 loadA1Data（原 cards.js 'a1' 段的
+       fetch 链路随分流段迁走，这个守卫只能由 a1_cards.js 自管）。实现回退
+       （只渲染空态、不再拉数据）时 exam-cards-container 里就是空态页而没有
+       种子词，本场景必红。 */
+    const doc2 = makeDocumentStub();
+    const ctx2 = buildCtx(doc2);
+    vm.runInContext(transformed, ctx2, { filename: "a1_cards.stripped.js#2" });
+    vm.runInContext("setA1CardViewMode('deck'); setA1Mode('vocab');", ctx2);
+    await tick(); await tick(); await tick();
+    const fetches2 = JSON.parse(vm.runInContext("JSON.stringify(__fetches)", ctx2));
+    const coldTarget = String(vm.runInContext("document.getElementById('exam-cards-container').innerHTML", ctx2));
+    if (!fetches2.some((u) => u.includes("/api/a1/vocab")))
+      problems.push("冷缓存 setA1Mode('vocab') 未触发 /api/a1/vocab 拉取（题库懒加载守卫丢失）");
+    if (!coldTarget.includes("deck-stage") || !coldTarget.includes("Haus"))
+      problems.push("冷缓存拉取完成后 exam-cards-container 未重渲染出牌盒（懒加载→渲染链断）");
+  } catch (e) {
+    vmError = e;
+    problems.push(`a1_cards.js vm 真跑抛错：${e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e}`);
+  }
 }
 
 /* ---- 裁决 ---------------------------------------------------------------- */
@@ -480,6 +490,7 @@ const out = {
     mainCardsContainerUntouched: mainCardsEl.innerHTML === "",
     hoerenContainerWired: true,
     coldCacheLazyLoad: true,
+    vmRan,
     vmError: vmError ? String(vmError) : null,
   },
 };

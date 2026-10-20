@@ -284,6 +284,56 @@ def test_exam_module_mount_probe():
     assert out["dynamic"]["mainCardsContainerUntouched"], "探针动态场景：renderA1 不得把词卡写进主站 #cards-container"
     assert out["dynamic"]["vocabDeckTarget"] == "exam-cards-container"
     assert out["dynamic"]["vocabGridTarget"] == "exam-cards-container"
+    # 反向钉子：干净树上 vm 层 MUST 真跑过。否则「干脆永不跑 vm」这种退化
+    # 也能让上面三条断言通过 —— 那三条只读静态常量，压根不依赖 vm 结果。
+    assert out["dynamic"]["vmRan"] is True, "干净树上 node:vm 层未被真跑（vmRan=false）"
+
+
+def test_ia_probe_does_not_run_vm_after_static_failure(tmp_path):
+    """静态层已红时不得再真跑 vm 层。
+
+    历史行为：静态层报错后 `transformed` 仍是空串，探针照样 `loadA1Data()`，
+    于是真正的具名问题后面会追打一条
+
+        a1_cards.js vm 真跑抛错：evalmachine.<anonymous>:1 | loadA1Data() | ^
+
+    读的人会顺着这条人造错误去查渲染链，而不是去查静态契约。本用例钉住
+    「静态层已红 ⇒ vm 层不跑 ⇒ 只剩真实具名问题」。
+
+    在隔离副本上做（真实树只读）：探针用 `ROOT = dirname(本文件)/..` 定位，
+    所以把探针与 static/ 平移到 tmp 下即可整体替换被测树。
+    """
+    if not shutil.which("node"):
+        import pytest
+
+        pytest.skip("node 不在 PATH 上，跳过动态探针")
+
+    root = tmp_path / "proj"
+    (root / "tools").mkdir(parents=True)
+    (root / "static").mkdir(parents=True)
+    shutil.copy2(_ROOT / "tools" / "ia_dom_mount_probe.mjs", root / "tools" / "ia_dom_mount_probe.mjs")
+    shutil.copy2(_ROOT / "static" / "index.html", root / "static" / "index.html")
+    shutil.copytree(_ROOT / "static" / "js", root / "static" / "js")
+
+    # 注入静态层破坏：把必备面板 id 改名（锚点必须唯一命中，否则本用例自己失效）
+    html_path = root / "static" / "index.html"
+    html = html_path.read_text(encoding="utf-8")
+    assert html.count("a1-toolbar") >= 1, "注入锚点已失效（index.html 里找不到 a1-toolbar），请重定向本用例"
+    html_path.write_text(html.replace("a1-toolbar", "a1-toolbar-RENAMED", 1), encoding="utf-8")
+
+    res = subprocess.run(
+        ["node", str(root / "tools" / "ia_dom_mount_probe.mjs"), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(root),
+    )
+    assert res.returncode != 0, "静态层已破坏但探针仍退出 0：\n%s\n%s" % (res.stdout, res.stderr)
+    report = res.stderr
+    assert 'id="a1-toolbar"' in report, "真实具名问题没被报出来：\n%s" % report
+    assert "vm 真跑抛错" not in report, "静态层已红却仍真跑了 vm 层（人造错误会埋掉真实问题）：\n%s" % report
+    assert "loadA1Data is not defined" not in report, "仍出现人造 ReferenceError：\n%s" % report
 
 
 # ── Task 3：exam catalog 目录化（前端数据补强接线） ─────────────────────────
