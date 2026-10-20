@@ -9,13 +9,15 @@
  * ⇒ 对一条 fsrs_s=25（用户在背词工作台背了 5 次）的工作台词，卡面显示
  *   「⏳ 待复习 · 0 正 / 0 误」—— 正/误是**卡盒 DSR 侧**统计，对工作台词恒为 0（说谎）。
  *
- * 本探针按括号配对把 static/js/cards.js 里**真实的** cardStatsTag + renderDeckStage
- * 两个函数整段切出来，丢进 node:vm 沙箱真跑，只桩 document / esc / jsAttr，
+ * 本探针按括号配对把 static/js/cards.js 里**真实的** isWorkbenchSourced + cardStatsTag +
+ * renderDeckStage 三个函数整段切出来，连同 static/js/cd-state.js 的 cardState 容器切片
+ * 一起丢进 node:vm 沙箱真跑（状态与实现都来自真源码，探针内无手写替身），只桩
+ * document / esc / jsAttr，
  * 读回 renderDeckStage 写进容器的那份**真 innerHTML**，再从里面正则抠出
  * <span class="card-stats-tag"> 的真实文案做断言。
  *
  * 硬约束（与 wb_queue_probe.mjs / wb_cards_vocab_unwrap_probe.mjs 同款）：
- *   - 探针里**不得重抄一份被测实现**。被测逻辑一律来自 cards.js 真源码切片；
+ *   - 探针里**不得重抄一份被测实现**。被测逻辑一律来自 cards.js / cd-state.js 真源码切片；
  *     本文件只提供 UI 桩与夹具数据。文案的「期望值」是**断言常量**，不是实现。
  *   - 切片护栏：切片必须同时含 `card-stats-tag` 与 `correct_count` 两个标志性
  *     token，且必须**不含** re-export / import 行 —— 切歪直接退出码 1，
@@ -91,13 +93,38 @@ function matchBracket(src, openIdx) {
   throw new Error(`matchBracket: 从 ${openIdx} 起找不到配对闭括号`);
 }
 
-/** 按 `function 名字(` 定位函数体，切出从 `function` 到配对 `}` 的整段。 */
-function sliceFunction(src, declNeedle) {
+/** 切 `export const x = {…}` 这类**对象字面量**声明：没有参数表，首个 `{` 就是字面量。 */
+function sliceObjectDecl(src, declNeedle) {
   const at = src.indexOf(declNeedle);
-  if (at < 0) throw new Error(`cards.js 里找不到声明 ${declNeedle}（实现回退或改名了）`);
+  if (at < 0) throw new Error(`源码里找不到声明 ${declNeedle}（实现回退或改名了）`);
   const brace = src.indexOf("{", at);
-  if (brace < 0) throw new Error(`${declNeedle} 后找不到函数体开括号`);
+  if (brace < 0) throw new Error(`${declNeedle} 后找不到对象字面量开括号`);
   const end = matchBracket(src, brace);
+  return src.slice(at, end + 1).replace(/^export\s+/, "");
+}
+
+/** 切 `function 名字(…) {…}`：先配对**参数表**，再要求下一个非空白字符是函数体 `{`。
+ *
+ *  老实现直接 `src.indexOf("{", at)` 取首个开括号 —— 参数表里一旦出现解构
+ *  （`function f({ seg = 'due' } = {})`），首个 `{` 就是参数里的解构花括号，配对到那个
+ *  `}` 就收尾，切片退化成**签名**，函数体一个字都不在切片里 ⇒ 全部断言变死断言
+ *  （给 setCardSegment 加解构默认参数 + 真 `'a1'` 分支，探针照样 exit 0）。
+ *  任一步失败一律 throw，由上层 catch 走 fail() 具名退出，不许静默返回短切片。
+ */
+function sliceFunctionBody(src, declNeedle) {
+  const at = src.indexOf(declNeedle);
+  if (at < 0) throw new Error(`源码里找不到声明 ${declNeedle}（实现回退或改名了）`);
+  const paren = src.indexOf("(", at);
+  if (paren < 0) throw new Error(`${declNeedle} 后找不到参数表开括号（函数体定位失败）`);
+  const paramsEnd = matchBracket(src, paren);
+  let j = paramsEnd + 1;
+  while (j < src.length && /\s/.test(src[j])) j++;
+  if (src[j] !== "{") {
+    throw new Error(
+      `${declNeedle} 的参数表后不是函数体开括号（实际为 ${JSON.stringify(src[j] ?? "<EOF>")}，函数体定位失败）`,
+    );
+  }
+  const end = matchBracket(src, j);
   // 剥掉 `export ` 前缀：node:vm 的 Script 不是 ES module，带 export 会 SyntaxError
   // （口径同 wb_cards_vocab_unwrap_probe.mjs 的转换器）。
   return src.slice(at, end + 1).replace(/^export\s+/, "");
@@ -116,10 +143,10 @@ try {
   /* renderDeckStage 自子计划 5 Task 1 起会调 isWorkbenchSourced（决定工作台词
    * 收不收 DSR 复习按钮），该函数 MUST 一并进沙箱，否则本探针的卡面渲染会撞
    * ReferenceError。这是**补齐切片**（渲染路径多了一个依赖），不改动任何断言。 */
-  stateFn = sliceFunction(cdStateJs, "export const cardState = ");
-  predicateFn = sliceFunction(cardsJs, "function isWorkbenchSourced(");
-  statsFn = sliceFunction(cardsJs, "function cardStatsTag(");
-  renderFn = sliceFunction(cardsJs, "export function renderDeckStage(");
+  stateFn = sliceObjectDecl(cdStateJs, "export const cardState = ");
+  predicateFn = sliceFunctionBody(cardsJs, "function isWorkbenchSourced(");
+  statsFn = sliceFunctionBody(cardsJs, "function cardStatsTag(");
+  renderFn = sliceFunctionBody(cardsJs, "export function renderDeckStage(");
 } catch (e) {
   fail([`源码切片失败：${e.message}`]);
 }
@@ -137,6 +164,12 @@ if (/\brepetition_count\b/.test(statsFn))
   stripProblems.push("cardStatsTag 里引用了 repetition_count（工作台 s 与 DSR 复习次数语义不同，MUST NOT 混用）");
 if (!/const cardState = \{/.test(transformed))
   stripProblems.push("切片缺 cd-state.js 的 cardState 容器（状态搬走后探针必须跟着搬，否则渲染切片 ReferenceError）");
+/* 容器在、簇被降级/改名同样是假绿：渲染切片读到 `cardState.deck.index` 会拿到
+ * undefined 并在沙箱里抛裸 TypeError（没有可读的契约结论）。故按簇名再验一次形状。 */
+const STATE_CLUSTERS = ["catalog", "deck", "quiz", "prep", "toast"];
+const missingClusters = STATE_CLUSTERS.filter((c) => !new RegExp(`\\b${c}\\s*:\\s*\\{`).test(stateFn));
+if (stateFn && missingClusters.length)
+  stripProblems.push(`cd-state.js 切片的 cardState 缺状态簇 ${JSON.stringify(missingClusters)}（容器被降级/改名，渲染切片会读到 undefined）`);
 if (stripProblems.length) fail(stripProblems);
 
 /* ---------------------------------------------------------------------------
@@ -163,24 +196,9 @@ function buildCtx() {
     jsAttr: (v) => JSON.stringify(v == null ? "" : v),
     attachDeckSwipeListener() {},
     state: {},
-    /* cardState 桩：五簇与 static/js/cd-state.js 同形、初值逐字相同（那片是 cards.js
-     * 模块级状态的唯一真源，本桩只是它在 node:vm 沙箱里的替身）。本探针的切片
-     * （isWorkbenchSourced / cardStatsTag / renderDeckStage）只读 deck.index 与
-     * deck.flipped；其余簇保留是为了让沙箱的模块级环境与真源同形 —— 少一簇就是
-     * 在探针里悄悄改掉了被测环境。桩缺失 ⇒ 切片撞 ReferenceError: cardState is
-     * not defined 并 exit 1，绝不静默跳过。 */
-    cardState: {
-      catalog: {
-        segment: "due", // 'due' | 'pending' | 'mastered' | 'prep'
-        viewMode: "deck", // 'deck' | 'grid'
-        cards: { vocab_cards: [], grammar_cards: [] },
-        dueCards: { due_vocab: [], due_grammar: [], due_count: 0 },
-      },
-      deck: { index: 0, flipped: false, lastFlipTime: 0, reviewInFlight: false },
-      quiz: { mode: "flashcard", queue: [], index: 0, correct: 0, wrong: 0, isFlipped: false, allVocab: [] },
-      prep: { cache: null, loading: null, caseFilter: "", searchQuery: "", searchTimer: null },
-      toast: { undoTimer: null },
-    },
+    /* cardState 的唯一来源是上面从 cd-state.js 切出的 stateFn（随 transformed 进沙箱）。
+     * 这里 MUST NOT 再手写一份同形桩：两份真源并存时，一旦切片护栏被删，探针就会拿
+     * 桩的形状判行为而悄悄变绿。 */
   };
   const ctx = vm.createContext(sandbox);
   // 状态容器已随 transformed 进沙箱；deckIndex/deckFlipped 桩随搬家一并删除。
