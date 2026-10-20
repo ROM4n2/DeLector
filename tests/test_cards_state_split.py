@@ -11,14 +11,20 @@
 2. test_enter_segment_writes_exactly_three_fields
    `enterSegment` 逐字复刻 `setCardSegment` 的三写（segment / index / flipped），
    其余字段一个都不许动。**必须先把容器写脏再切段**：初值是 0/false 时
-   「漏写一个复位」在纯前后 diff 里是隐形的。
-3. test_step_deck_state_does_not_clamp
+   「漏写一个复位」在纯前后 diff 里是隐形的。写脏走 `__dirtyAll()` 递归遍历
+   **全部 24 个叶子**并逐个注入哨兵 —— 手列清单漏掉的那 11 个叶子，其「被写回
+   初值」与初始状态无差别，同样是隐形的。
+3. test_step_deck_state_changes_exactly_two_fields
+   `stepDeckState` 与 `enterSegment` 同等待遇：改动路径集合 MUST 恰好是
+   {deck.index, deck.flipped}。少了这条，给 `stepDeck` 顺手加第三个写
+   （例如 `deck.lastFlipTime`）在其余全部用例里都是绿的。
+4. test_step_deck_state_does_not_clamp
    `stepDeck` 今天**没有任何夹取**，边界靠按钮 `disabled` 挡 + `renderDeckStage`
    渲染期纠正（`if (deckIndex >= deck.length) deckIndex = Math.max(0, ...)`）。
    这条用例是「顺手加固」的哨兵：任何 clamp 实现都会在这里红。
-4. test_step_deck_state_resets_flip
+5. test_step_deck_state_resets_flip
    移动卡位必须复位翻面（`stepDeck` 的第二写）。
-5. test_cd_state_declares_no_top_level_mutable
+6. test_cd_state_declares_no_top_level_mutable
    token 级：顶层 `let`/`var` == 0、import == 0（L1 纯层，`allowed_imports=()`）。
 
 **执行方式**：`cd-state.js` 不 import 任何模块 ⇒ 它是本仓少数能被 node **真跑**的模块
@@ -89,6 +95,32 @@ EXPECTED_INITIAL: Dict[Tuple[str, ...], Any] = {
 _PROBE_PRELUDE = """
 const snap = () => JSON.parse(JSON.stringify(cardState));
 const out = {};
+let __dirtySeq = 0;
+const __dirtyPaths = [];
+function __dirtyAll(node, path) {
+  for (const key of Object.keys(node)) {
+    const here = path ? path + '.' + key : key;
+    const value = node[key];
+    if (Array.isArray(value)) {
+      // 数组按叶子处理：塞一个哨兵元素，写回 [] 才看得出差别。
+      __dirtySeq += 1;
+      __dirtyPaths.push(here);
+      value.push({ __dirty__: here, seq: __dirtySeq });
+    } else if (value !== null && typeof value === 'object') {
+      __dirtyAll(value, here);
+    } else {
+      // 标量叶子：布尔取反，数字/字符串/初值 null 一律换成路径可辨认的哨兵，
+      // 保证「写回初值」必然表现为一个 changed path。
+      __dirtySeq += 1;
+      __dirtyPaths.push(here);
+      if (typeof value === 'boolean') node[key] = !value;
+      else if (typeof value === 'number') node[key] = 900000 + __dirtySeq;
+      else if (typeof value === 'string') node[key] = '__dirty__:' + here + '#' + __dirtySeq;
+      else if (value === null) node[key] = '__dirty__:' + here + '#' + __dirtySeq;
+      else throw new Error('unhandled leaf at ' + here + ': ' + typeof value);
+    }
+  }
+}
 """
 
 
@@ -181,40 +213,71 @@ def test_cd_state_shape_and_initial_values(tmp_path: Path) -> None:
 
 # ══ 2. enterSegment：三写不变量 ══════════════════════════════════════════════
 
-_DIRTY_BODY = """
-cardState.catalog.viewMode = 'grid';
-cardState.catalog.cards.vocab_cards.push({ id: 'dirty' });
-cardState.catalog.dueCards.due_count = 42;
-cardState.deck.index = 7;
-cardState.deck.flipped = true;
-cardState.deck.lastFlipTime = 1234;
-cardState.deck.reviewInFlight = true;
-cardState.quiz.index = 3;
-cardState.quiz.isFlipped = true;
-cardState.prep.cache = { groups: ['dirty'] };
-cardState.prep.caseFilter = 'Dat';
-cardState.prep.searchTimer = 7;
-cardState.toast.undoTimer = 9;
-"""
+#: 探针里「把容器写脏」的统一前置：`__dirtyAll()` 递归遍历**全部叶子**并注入哨兵。
+#: 两个访问器用例共用同一份，避免两处纪律再次走偏（手列清单已被证伪：13/24）。
+_DIRTY_ALL = (
+    "out.pristine = snap();\n"
+    "__dirtyAll(cardState, '');\n"
+    "out.dirty = snap();\n"
+    "out.dirtyPaths = __dirtyPaths;\n"
+)
+
+
+def _assert_dirty_covers_all_leaves(out: Dict[str, Any]) -> None:
+    """写脏步骤自检：覆盖率 == `EXPECTED_INITIAL`，且每个哨兵都与初值有别。
+
+    两个失明点都在这里钉死：
+    - 漏写一个叶子 ⇒ 该字段「写回初值」在前后 diff 里隐形（`prep.searchQuery = ""`
+      / `quiz.correct = 0` 就是这么溜过去的）；
+    - 哨兵恰好等于初值 ⇒ 同样隐形（脏了，但脏得看不出来）。
+    """
+    pristine = {path: _fingerprint(v) for path, v in _flatten(out["pristine"]).items()}
+    dirtied = {path: _fingerprint(v) for path, v in _flatten(out["dirty"]).items()}
+
+    assert sorted(pristine) == sorted(EXPECTED_INITIAL), (
+        "写脏前的容器与本文件的期望表不一致\n"
+        f"  缺失: {sorted(set(EXPECTED_INITIAL) - set(pristine))}\n"
+        f"  多余: {sorted(set(pristine) - set(EXPECTED_INITIAL))}"
+    )
+    assert sorted(dirtied) == sorted(EXPECTED_INITIAL), (
+        "写脏后叶子集合漂移（递归遍历漏掉/新增了字段）\n"
+        f"  缺失: {sorted(set(EXPECTED_INITIAL) - set(dirtied))}\n"
+        f"  多余: {sorted(set(dirtied) - set(EXPECTED_INITIAL))}"
+    )
+
+    reported = sorted(tuple(p.split(".")) for p in out["dirtyPaths"])
+    assert len(out["dirtyPaths"]) == len(EXPECTED_INITIAL), (
+        f"写脏路径数 {len(out['dirtyPaths'])} != 叶子数 {len(EXPECTED_INITIAL)}"
+        "（有重复或遗漏 —— 手列清单就是这个下场）"
+    )
+    assert reported == sorted(EXPECTED_INITIAL), (
+        "写脏步骤 MUST 覆盖全部 24 个叶子（漏掉的字段写回初值会隐形）\n"
+        f"  漏写: {sorted(set(EXPECTED_INITIAL) - set(reported))}\n"
+        f"  多写: {sorted(set(reported) - set(EXPECTED_INITIAL))}"
+    )
+
+    indistinct = sorted(path for path in pristine if pristine[path] == dirtied[path])
+    assert indistinct == [], (
+        f"这些叶子的哨兵与初值无差别（写回初值仍会隐形）: {indistinct}"
+    )
 
 
 def test_enter_segment_writes_exactly_three_fields(tmp_path: Path) -> None:
     """`enterSegment('prep')` 只允许写 catalog.segment / deck.index / deck.flipped 三处。
 
-    先写脏整个容器：初值全为 0/false 时，「漏写 deck.flipped = false」在前后 diff 中
-    完全隐形（false → false），该不变量就等于没人守。
+    先把**全部 24 个叶子**写成哨兵（`__dirtyAll` 递归，不手列）再切段：初值全是
+    0/false/""/null 时，「漏写一个复位」或「多写一个恰好等于初值的字段」在前后
+    diff 里都完全隐形，该不变量就等于没人守。
     """
-    out = _probe(
-        tmp_path,
-        _DIRTY_BODY + "out.before = snap();\nenterSegment('prep');\nout.after = snap();\n",
-    )
+    out = _probe(tmp_path, _DIRTY_ALL + "enterSegment('prep');\nout.after = snap();\n")
     after = out["after"]
+    _assert_dirty_covers_all_leaves(out)
 
     assert after["catalog"]["segment"] == "prep", "enterSegment 必须写 catalog.segment"
     assert after["deck"]["index"] == 0, "enterSegment 必须把 deck.index 复位为 0"
     assert after["deck"]["flipped"] is False, "enterSegment 必须把 deck.flipped 复位为 false"
 
-    changed = _changed_paths(out["before"], after)
+    changed = _changed_paths(out["dirty"], after)
     assert changed == [
         ("catalog", "segment"),
         ("deck", "flipped"),
@@ -222,7 +285,38 @@ def test_enter_segment_writes_exactly_three_fields(tmp_path: Path) -> None:
     ], f"enterSegment 只许写这三处，实际改动: {changed}"
 
 
-# ══ 3. stepDeckState：不得夹取 ═══════════════════════════════════════════════
+# ══ 3. stepDeckState：改动面恰好两处 ═════════════════════════════════════════
+
+
+def test_step_deck_state_changes_exactly_two_fields(tmp_path: Path) -> None:
+    """`stepDeckState(2)` 的改动路径集合 MUST 恰好是 {deck.index, deck.flipped}。
+
+    与 `enterSegment` 同等纪律。只断言「index 数值对、flipped 变 false」是不够的：
+    给 `stepDeck` 顺手加第三个写（`deck.lastFlipTime = Date.now()`，或写回初值的
+    `deck.reviewInFlight = false`）在其余用例里全绿 —— 这条正是为「顺手多写一处」准备的。
+    """
+    out = _probe(
+        tmp_path,
+        _DIRTY_ALL
+        + "cardState.deck.index = 4;\n"
+        "cardState.deck.flipped = true;\n"
+        "out.before = snap();\n"
+        "stepDeckState(2);\n"
+        "out.after = snap();\n",
+    )
+    after = out["after"]
+    _assert_dirty_covers_all_leaves(out)
+
+    assert after["deck"]["index"] == 6, f"deck.index 应 4+2=6，实际 {after['deck']['index']!r}"
+    assert after["deck"]["flipped"] is False, "stepDeckState 必须把 deck.flipped 置 false"
+
+    changed = _changed_paths(out["before"], after)
+    assert changed == [("deck", "flipped"), ("deck", "index")], (
+        f"stepDeckState 只许写 deck.index / deck.flipped 两处，实际改动: {changed}"
+    )
+
+
+# ══ 4. stepDeckState：不得夹取 ═══════════════════════════════════════════════
 
 
 def test_step_deck_state_does_not_clamp(tmp_path: Path) -> None:
@@ -252,7 +346,7 @@ def test_step_deck_state_does_not_clamp(tmp_path: Path) -> None:
     )
 
 
-# ══ 4. stepDeckState：复位翻面 ═══════════════════════════════════════════════
+# ══ 5. stepDeckState：复位翻面 ═══════════════════════════════════════════════
 
 
 def test_step_deck_state_resets_flip(tmp_path: Path) -> None:
@@ -270,7 +364,7 @@ def test_step_deck_state_resets_flip(tmp_path: Path) -> None:
     assert after["deck"]["index"] == 6, f"deck.index 应 4+2=6，实际 {after['deck']['index']!r}"
 
 
-# ══ 5. L1 纯层：零顶层可变状态、零 import ═══════════════════════════════════
+# ══ 6. L1 纯层：零顶层可变状态、零 import ═══════════════════════════════════
 
 
 def test_cd_state_declares_no_top_level_mutable() -> None:
