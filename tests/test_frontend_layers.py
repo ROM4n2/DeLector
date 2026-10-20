@@ -890,8 +890,26 @@ def test_cd_state_top_level_let_red(gate: Any, js_dir: Path) -> None:
 # ══ 2h. cards.js：首次纳入「零顶层可变状态」（不属任何分层）═══════════════════
 
 # `_CARDS` / `_CARDS_PLACEHOLDER` 定义在文件上半部（夹具树必须有占位：规则⑦ 缺文件即红）。
-# 注入锚点：原文第一个顶层 `let`（第 29 行），改用例时逐字命中一次。
-_CARDS_ANCHOR = 'let cardSegment = "due";'
+# 注入锚点：`cards.js` 里一个**导出声明的首行**。三条理由：
+#   1) 它**不是**模块级状态 —— Task 3 已把顶层 `let` 全部收进 `cd-state.js`；锚在任何
+#      旧 `let` 行上，Task 3 一落地测试就死在「读锚点」而不是「闸判据」，变异自证假死。
+#   2) 它被 `main.js` 具名导入 ⇒ 改名会同时打断模块图测试，锚点不会无声消失。
+#   3) 全文件逐字命中一次，且注入点位于顶层（前面是模块级导出，后面是函数体）。
+_CARDS_ANCHOR = "export function setCardSegment(seg) {"
+
+
+def _assert_cards_anchor(path: Path) -> None:
+    """锚点漂移 MUST 大声失败：与「闸判红」共用话术会把测试老化误读成规则回归。"""
+    n = path.read_text(encoding="utf-8").count(_CARDS_ANCHOR)
+    assert n == 1, (
+        f"{_CARDS}: 注入锚点已失效（命中 {n} 次）—— 符号被改名/搬迁了，请重定向 _CARDS_ANCHOR"
+    )
+
+
+def _inject_into_cards(path: Path, new: str) -> None:
+    """先验锚点（带专属诊断），再走通用 `inject`（保留它自己的 `count == 1` 断言）。"""
+    _assert_cards_anchor(path)
+    inject(path, _CARDS_ANCHOR, new)
 
 
 def _copy_cards(js_dir_arg: Path) -> Path:
@@ -932,23 +950,30 @@ def test_cards_every_top_level_let_is_named(gate: Any, js_dir: Path) -> None:
 
 
 def test_cards_extra_top_level_let_red(gate: Any, js_dir: Path) -> None:
-    """变异自证：加回一个顶层 `let` ⇒ 闸红且点名该行（闸不是「跑当前树恰好红」）。"""
-    _copy_cards(js_dir)
-    inject(js_dir / _CARDS, _CARDS_ANCHOR, "let probeState = 1;\n" + _CARDS_ANCHOR)
+    """变异自证：加回一个顶层 `let` ⇒ 闸红且**点名该行**（闸不是「跑当前树恰好红」）。"""
+    dst = _copy_cards(js_dir)
+    text = dst.read_text(encoding="utf-8")
+    # 期望行号由锚点自己数出（不信闸的分词）：注入在锚点**之前** ⇒ 注入行占锚点原行号。
+    anchor_line = text.split(_CARDS_ANCHOR, 1)[0].count("\n") + 1
+    _inject_into_cards(dst, "let probeState = 1;\n" + _CARDS_ANCHOR)
     hits = [v for v in _cards_violations(gate, js_dir) if "probeState" in v.raw]
     assert len(hits) == 1, hits
-    assert hits[0].rule.endswith("禁mutable-state"), hits
+    assert hits[0].lineno == anchor_line, (hits[0].lineno, anchor_line, hits)
+    assert hits[0].rule == "零顶层可变状态契约禁mutable-state", hits
 
 
 def test_cards_function_scoped_let_is_not_flagged(gate: Any, js_dir: Path) -> None:
     """阴性对照：函数体内的 `let` 是合法遮蔽，判它会造假红（规则只认净深度 0）。"""
-    _copy_cards(js_dir)
-    inject(
-        js_dir / _CARDS,
-        _CARDS_ANCHOR,
-        _CARDS_ANCHOR + "\nfunction _probe() { let inner = 1; return inner; }",
+    dst = _copy_cards(js_dir)
+    before = _cards_violations(gate, js_dir)
+    _inject_into_cards(
+        dst,
+        "function _probe() { let inner = 1; return inner; }\n" + _CARDS_ANCHOR,
     )
-    assert not [v for v in _cards_violations(gate, js_dir) if "inner" in v.raw]
+    after = _cards_violations(gate, js_dir)
+    assert not [v for v in after if "inner" in v.raw], after
+    # 「零新增」是整条规则的性质，不只是「没点名 inner」：违规集合必须逐条不变。
+    assert after == before, (before, after)
 
 
 def test_cards_missing_module_fails_loud(gate: Any, js_dir: Path) -> None:
