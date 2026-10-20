@@ -596,3 +596,26 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **6 条 `WORK_START` 现已全部配对**（2026-10-17 01:10 那条本就由本人 01:19 的 WORK_END 闭合；其余 5 条由本次代收尾闭合）。协议第 2 条「发现未闭合 WORK_START 先询问」在本案的处置：这 5 条是两天前、且分属两个其它 harness 的标记，其 DONE 事件自带验证凭据（全量 passed 数 / 逐字复刻 CI / 独立对抗评审 PASS）、PR 全部已合并（**#147 / #148 / #149 / #150 / #151**）、计划全部已进 `archive/` ⇒ 判为「标记未收尾」而非「任务未完成」，按第 7 条补记闭合、不阻塞当轮用户指令。**未代任何 agent 宣称重跑其验证**。
 - **反向孤儿一条**：`2026-10-18 23:26 | hy4-preview__codebuddy | WORK_END`（CI 红灯修复 + 修 `build_index_html.py --check` 恒假红，分支 `refactor/index-html-split` / PR #159）**没有配对的 WORK_START** —— 该 agent 未写开工标记。**不伪造一条 WORK_START 去凑对称**（那是编造历史），仅在此登记，供后来者解释 `WORK_START=6 / WORK_END=7` 的计数差。
 - 轮转检查：`grep -c '^### ' work.log` = **65**，`HOT_RETENTION_EVENTS` = 50 ⇒ 65 < 50×1.5 = 75，**本轮不需轮转**（按 §3 第 3 步的口径判，不是"看起来长了就搬"）。
+
+### 2026-10-21 03:00 | qwen3.8-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复 master 直推范围机械闸误判 GitHub squash/rebase 合并**。分支 `fix/master-scope-gate-squash-merge`（独立 worktree）。
+- **根因分析**：`tools/check_master_commit_scope.py` 使用 `--no-merges --first-parent` 划定「直推审查范围」，该规则当初为防 merge-commit 被判直推而设；但 GitHub 的 squash 和 rebase 合并产出的是**单父提交**，因此被当成人类直推，检查其全量改动面，导致 #165 / #166 合并后 master push 触发 `Master Direct-Push Scope Gate` 判红。
+- **实测数据支撑（master 1315 提交）**：
+  - committer == `GitHub <noreply@github.com>`: 180 条（154 条多父 merge，26 条单父 squash/rebase）。26 条单父中，24 条无 `(#NNN)` 后缀（Dependabot 依赖升级）。若按标题正则判会漏掉 24/26 = 92%。
+  - committer == 人类: 1135 条（1113 条单父直推审查对象，22 条多父 merge）。人类单父中标题以 `Merge ` 开头者为 0。
+- **修法设计（严格 TDD）**：
+  1. 新增 `_is_github_integrated(committer_name, committer_email)` 纯谓词（name 精确匹配 "GitHub"，email 忽略大小写匹配 "noreply@github.com"）；
+  2. `run_check` 中整合 `git log -1 --format=%s%x00%cn%x00%ce%x00%P` 单次调用获取 commit 元数据，大声打印 GitHub 集成 PR 合并豁免；
+  3. **封死既有单父伪造路径**：要求 `_is_merge_subject(subject) and is_merge_commit`（≥2 父才认 merge 标题），防范人类提交标题伪造成 Merge 绕过检查。
+- **TDD 与四重变异证明**：
+  - 新增 6 条测试，`tests/test_ci_hardening.py` **66 passed**；
+  - M1（删 github_integrated 豁免）⇒ A/B 变红；
+  - M2（退回只看 subject 忽略 is_merge_commit）⇒ D（单父伪造 merge 标题）变红；
+  - M3（放宽接受任意 committer）⇒ C（人类违规直推）变红；
+  - M4（收窄要求 subject 带 `(#NNN)`）⇒ B（Dependabot）变红。
+- **真实历史验收**：
+  - 修复前 `2e7b503..07139ac` exit 1，修复后 exit 0 且大声输出豁免原因；
+  - 真实人类文档直推 `99b678a..8bbc844` 保持 exit 0；
+  - 真实历史 26 条 GitHub 单父提交 100% 判定为 integrated；抽样 30 条人类代码提交 100% 判定为 not integrated。
+- **基线与门禁**：全量测试 2519 collected（2517 passed + 2 skipped）；六道机械闸全部 exit 0；`ruff` / `mypy --strict delector tools` / `mypy tests` 全绿；CRLF 0 lone LF。
