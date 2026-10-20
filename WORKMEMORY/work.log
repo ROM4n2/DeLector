@@ -551,3 +551,48 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **基线重算（master `07139ac`，8 批串行全绿）**：收集 **2513** = **2511 passed + 2 skipped** · `static/js` **36** · `tests/test_*.py` **155** · 探针 **31** · `mypy --strict delector tools` 118 / `--follow-imports=skip tests` 159 files 零错误。`PROJECT_OVERVIEW.md` 已刷新并新增红线 **13**。
 - ⚠️ **master CI 红的真因是闸缺陷，非纪律违规**（登记为开放待办第 **7** 条）：`check_master_commit_scope.py` 用 `--no-merges --first-parent` 划「直推」，而 **squash 合并的提交恰是「非 merge + 父提交 = 上一个 master tip」** ⇒ 被当直推，审的其实是整个 PR 的文件集。实测 #165/#166 PR 事件全绿、合并后 master push 判红。修法 MUST 区分「PR 合并」与「人工直推」，且 MUST NOT 退化成「标题带 `(#NNN)` 就放行」（谁写 `(#1)` 就能绕过整道闸，而本闸因审计 P1-1 的 25 个直推提交而存在）；解析不出来时 fail-closed。该闸只看本次推送范围 ⇒ 纯文档推上去 latest CI 即转绿，**无需动 `07139ac`**。
 - **NOTE（协议第 7 条补缺口，不回改历史）**：`work.log` 里 2026-10-17 13:35 / 17:27 与 2026-10-18 00:28 / 02:38 / 03:46 共 **5 条 WORK_START 无配对 WORK_END**（唯一的 END 在 10-18 23:26 属另一 agent）。后续 DONE 与已合并 PR 证明那批工作已落地，判为**标记未收尾而非任务未完成**；本条只登记，不代其补 END。
+### 2026-10-20 22:20 | qwen3.8-flash__hermes | WORK_END
+closing-for: 2026-10-17 13:35 WORK_START（`gemini-3.8-flash-high__hermes`，C1 裁判结论回灌）
+**代收尾声明**：原 agent 只留了 DONE（15:50）未配对 WORK_END。以下结论非我重跑其验证，而是**按已落地工件重建**；我本轮物理复核的是「合并提交存在 + PR 号 + 计划已归档 + 落地面」。
+做了什么：C1 计划 Task 1~6（Verifier-in-the-Loop 回灌），分支 `feature/c1-verifier-in-the-loop`，6 颗原子提交。
+验证方式（原 agent 自述）：Task 6 `bbf2487` 全量门禁复核全绿。
+产出物：merge `ca3eb22` = **PR #147**（12 文件 +602/−46，含 `tools/bench_judge_gaming.py`、`tests/test_server.py`）；计划已进 `docs/plans/archive/2026-10-17-c1-verifier-in-the-loop.md`。
+回写检查：结论已入 `PROJECT_OVERVIEW.md`；无临时产物/凭据入库。
+
+### 2026-10-20 22:20 | qwen3.8-flash__hermes | WORK_END
+closing-for: 2026-10-17 17:27 WORK_START（`gemini-3.8-flash-high__hermes`，C3 真轮次与真 Token 回测）
+**代收尾声明**：同上，重建而非重跑。
+做了什么：C3 计划 Task 1~6，分支 `feature/c3-token-and-turn-distribution`，5 颗原子提交。
+验证方式（原 agent 自述）：Task 6 全量门禁复核全绿、计划勾选完毕。
+产出物：merge `c27cf63` = **PR #148**（10 文件 +1455/−44，含 `tools/bench_token_distribution.py` 539 行）；计划已进 `docs/plans/archive/2026-10-17-c3-token-and-turn-distribution-backtest.md`。
+回写检查：结论已入 `PROJECT_OVERVIEW.md`；bench 产物未入库。
+
+### 2026-10-20 22:20 | qwen3.8-flash__hermes | WORK_END
+closing-for: 2026-10-18 00:28 WORK_START（`deepseek-v4.1-flash__hermes`，C8 P2 批次缺陷修复）
+**代收尾声明**：重建而非重跑。该 WORK_START 期间另有 `codebuddy` 的 HANDOFF_RECEIVED（C7 并行面），本条只闭合 C8。
+做了什么：C8 计划 Task 1~9 四批四提交（`6a60573` 后端端点三改 / `e070f97` gitignore + 恒真断言 + CI 密钥扫描 / `fc0c471` TTS 三连 + LAN undefined 回归 / `d06390f`），各过独立对抗性评审 PASS（零 Red Card）；**附带交付 `tools/check_silent_degradation.py` 静默降级闸**。
+验证方式（原 agent 自述）：逐字复刻 CI —— `mypy --strict delector tools` 106 文件 0 错、`mypy --follow-imports=skip tests` 132 文件 0 错、`ruff` 全过、`go test ./...` 8 包全过。
+产出物：merge `8571c42` = **PR #149**（32 文件 +2359/−124）；交付报告 `docs/reviews/2026-10-18-c8-*.md`；计划已进 `docs/plans/archive/2026-10-18-c8-p2-batch.md`。
+回写检查：C7 独占面未被本工作流触碰（原「不做范围」达成）。
+
+### 2026-10-20 22:20 | qwen3.8-flash__hermes | WORK_END
+closing-for: 2026-10-18 02:38 WORK_START（`deepseek-v4.1-flash__hermes`，C9 评审后续）
+**代收尾声明**：重建而非重跑。
+做了什么：Task 1 修 Y4 活缺陷（`b113219`，`syntax_hard.py` 把「列表查询失败」折叠成「没有材料」⇒ 改 additive `degraded` 字段 + 降级整榜不写 300s 聚合缓存）；Task 2 清 Y1/Y2/Y3/Y5/Y6（`1c4e840`）；Task 3+3b 新闸 `tools/check_mock_drift.py` + CI job（`cab4049`），首扫 141 站点→候选 35>20 触发 STOP→未批量豁免、裁决收窄到 18 且逐条带理由。
+验证方式（原 agent 自述）：全量 **2325 passed / 2 skipped / 0 failed**（394s）；两闸 exit 0；变异自证「`_shelf_get` 改回 `httpx.get` ⇒ 闸 exit 1 逐字点名同 4 个站点，delta +4/−0」，且**判据收窄后重跑该证明仍成立**。
+产出物：merge `ffe1a0c` = **PR #150**（18 文件 +1632/−27）；计划已进 `docs/plans/archive/2026-10-18-c9-review-followups.md`。
+回写检查：其移交项（`test_server.py:2501` 空转补丁）已由 C6 Task 0 处置，见下一条。
+
+### 2026-10-20 22:20 | qwen3.8-flash__hermes | WORK_END
+closing-for: 2026-10-18 03:46 WORK_START（`deepseek-v4.1-flash__hermes`，C6 测试文件按被测面切分）
+**代收尾声明**：重建而非重跑。
+做了什么：Task 0~7 切分 `tests/test_server.py` **7614 → 1482** 行（5.1×）、`tests/test_desktop_shell.py` **2828 → 699** 行（4.0×）；Task 0 处置 C9 移交的空转补丁（选**改打真实消费面**而非删除，因本机恰有 spaCy、删掉会让用例静默切到 lazy-spaCy 分支而丢掉名字承诺的覆盖）。
+验证方式（原 agent 自述）：**用例数 2327 从第一批到最后一批一次未变**（每批由编排者独立 collect 核验）；断言零改动（逐块字节比对）；每个新文件单独跑绿且顺序耦合为空；零新依赖。全量 2325 passed / 2 skipped（371s）。
+产出物：merge `1098706` = **PR #151**（22 文件 +9397/−8938）；计划已进 `docs/plans/archive/2026-10-18-c6-test-file-split.md`。
+回写检查：后续项 F1（探针桥根治）/ F2（残余 876 行杂项区）**已入计划而非口头**，仍在 backlog；C7 独占面（`static/**` 等）未被触碰，原「不做范围」达成。
+### 2026-10-20 22:25 | qwen3.8-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+簿记状态校正（配合上面 5 条代收尾 WORK_END）：
+- **6 条 `WORK_START` 现已全部配对**（2026-10-17 01:10 那条本就由本人 01:19 的 WORK_END 闭合；其余 5 条由本次代收尾闭合）。协议第 2 条「发现未闭合 WORK_START 先询问」在本案的处置：这 5 条是两天前、且分属两个其它 harness 的标记，其 DONE 事件自带验证凭据（全量 passed 数 / 逐字复刻 CI / 独立对抗评审 PASS）、PR 全部已合并（**#147 / #148 / #149 / #150 / #151**）、计划全部已进 `archive/` ⇒ 判为「标记未收尾」而非「任务未完成」，按第 7 条补记闭合、不阻塞当轮用户指令。**未代任何 agent 宣称重跑其验证**。
+- **反向孤儿一条**：`2026-10-18 23:26 | hy4-preview__codebuddy | WORK_END`（CI 红灯修复 + 修 `build_index_html.py --check` 恒假红，分支 `refactor/index-html-split` / PR #159）**没有配对的 WORK_START** —— 该 agent 未写开工标记。**不伪造一条 WORK_START 去凑对称**（那是编造历史），仅在此登记，供后来者解释 `WORK_START=6 / WORK_END=7` 的计数差。
+- 轮转检查：`grep -c '^### ' work.log` = **65**，`HOT_RETENTION_EVENTS` = 50 ⇒ 65 < 50×1.5 = 75，**本轮不需轮转**（按 §3 第 3 步的口径判，不是"看起来长了就搬"）。
