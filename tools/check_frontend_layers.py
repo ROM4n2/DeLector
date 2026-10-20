@@ -332,6 +332,10 @@ MUTABLE_STATE_MODULES: Tuple[str, ...] = (
     "rd-syntax.js",
     "wb-queue.js",
     "wb-scope.js",
+    # L2 持久化层同样承载「零顶层可变状态」契约（计划 Task 2 Global Constraints）。
+    # 原本只有 wr-api.js 未被纳管 ⇒ rd-api.js 一并收紧，避免 L2 成为可变状态的法外之地。
+    "wr-api.js",
+    "rd-api.js",
 )
 MUTABLE_KEYWORDS = frozenset({"let", "var"})
 
