@@ -30,9 +30,10 @@
 - **未发版（已进 master，2026-10-20）：前端单体继续解耦 + 分层闸纳管面扩展**（PR **#161** / **#164** / **#165** / **#166**，计划 `docs/plans/2026-10-19-reader-js-layer-split.md` · `2026-10-19-reader-api-layer-split.md` · `2026-10-20-cards-state-container.md`，设计稿 `docs/specs/2026-10-20-cards-state-view-decoupling-design.md`）。`reader.js` 抽出 `rd-syntax.js`（纯语法层）与 `rd-api.js`（L2 持久化层，14 个端点函数）；`cards.js` 的 **15 个模块级可变状态**收进 `cd-state.js` 纯状态容器，视图层顶层 `let` **15 → 0**（首次把视图层纳入机械约束，闸规则 ⑦）。导出面全程冻结（`reader.js` 40 个具名、`cards.js` 36 个 + 1 条 barrel 逐字不变），错误轨守恒（`reader.js` 10/10、`cards.js` 12/12）。
   ⚠️ **本批真正的产出不是解耦，是挖出两条与重构无关的既有静默失效**：① `ia_dom_mount_probe.mjs` 有 **4 条守卫一直是死的**（切片锚点只到函数名 ⇒ 切片里没有函数体 ⇒ 断言恒真），② 探针静态层已红时仍照样跑 `node:vm`，空源撞出的 `ReferenceError` 排在真实具名问题**后面**、把诊断引向渲染链（#166 修）。两者形态相同：**判据看着在跑，实际恒真**。纪律已写进 `docs/agents/architecture.md`「前端模块分层契约」节，动探针/守卫前必读。
   ⚠️ **计划写法教训（已在计划里更正）**：变异用例的注入锚点必须按**最终状态树**普查 —— Task 1 新造的锚点钉在 `let cardSegment = "due";` 上，而那正是 Task 3 要删的行，于是两条用例挂在「锚点命中 0 次」而不是挂在闸上。另：同一主机上并行子代理曾三次落在**错误血统**的 worktree 上并据此给出与事实相反的汇报，故后续派单一律要求「先 merge 目标分支并核实 HEAD」。
-- **现测基线（2026-10-20，master `07139ac`；本次实测重算）**：全量 155 个文件 · 8 批串行全绿 = 收集 **2513**（**2511 passed + 2 skipped**）· `static/js` **36** 个模块 · `tests/test_*.py` **155** 个文件 · `tools/*.mjs` 探针 **31** 个 · `ruff` 零告警 · `mypy --strict delector tools`（**118** files）/ `mypy --follow-imports=skip tests`（**159** files）零错误 · 六道机械闸全 exit 0。
+- **现测基线（2026-10-21，分支 `fix/master-scope-gate-squash-merge`；本次实测重算）**：全量 155 个文件 · 8 批串行全绿 = 收集 **2519**（**2517 passed + 2 skipped**，净增 6 条 master-scope 健全性与变异自证测试）· `static/js` **36** 个模块 · `tests/test_*.py` **155** 个文件 · `tools/*.mjs` 探针 **31** 个 · `ruff` 零告警 · `mypy --strict delector tools`（**118** files）/ `mypy --follow-imports=skip tests`（**159** files）零错误 · 六道机械闸全 exit 0。
   - 重算：`python3 -m pytest tests/ --collect-only -q | tail -1`；`ls static/js/*.js | wc -l`；`ls tests/test_*.py | wc -l`；`ls tools/*.mjs | wc -l`。
   - ⚠️ 全量 MUST **分批串行**跑（本主机并行 python 会争抢数据目录守卫导致假红）。
+- **现测基线（2026-10-20，master `07139ac`；历史发版前基线）**：全量 155 个文件 · 8 批串行全绿 = 收集 **2513**（**2511 passed + 2 skipped**）· `static/js` **36** 个模块 · `tests/test_*.py` **155** 个文件 · `tools/*.mjs` 探针 **31** 个 · `ruff` 零告警 · `mypy --strict delector tools`（**118** files）/ `mypy --follow-imports=skip tests`（**159** files）零错误 · 六道机械闸全 exit 0。
 - **现测基线（2026-10-19，master `4646a67` 发版基线；由本次发版实测）**：收集 **2441** 用例（**2438 passed + 3 skipped**，全量单条串行分批全绿）·`ruff check .` 零告警 · `mypy --strict delector tools`（**118** files）· `mypy --follow-imports=skip tests`（**157** files）· 入口面 `--platform win32 --strict`（**4** files）零错误 · `tools/*.mjs` 探针 **31** 个 · `static/js` **34** 个模块 · `tests/test_*.py` **153** 个文件。**六道机械闸**：`check_layer_invariants` · `check_mock_drift` · `check_silent_degradation` · `check_frontend_api_contract` · `check_frontend_layers` · `check_index_html_sync` 全 exit 0。
   - 重算：`python3 -m pytest tests/ --collect-only -q | tail -1`；`python3 -m mypy --strict delector tools | tail -1`；`ls tools/*.mjs | wc -l`；`ls static/js/*.js | wc -l`。
   - ⚠️ **本行已不是当前值**（v5.18.0 发版快照，收集 2441）。当前值看**上面那条「现测基线（2026-10-20）」**。v5.17.0 的 1768 passed 同理是历史快照 —— 读到时 MUST 以 2026-10-20 那条为准，MUST NOT 拿旧值做判断。
@@ -76,9 +77,12 @@
 4. **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；`import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
 5. **C 档 8 项（当前唯一待办入口）**：`docs/reviews/2026-10-16-open-items-backlog.md`。其中 **C1「裁判结论回灌（verifier-in-the-loop）」为无条件下一步**（ADR-0024 四条硬依赖：① ~~裁判 FP 先修完~~ 已确认基线完成 ② 回灌内容 MUST 过同一道适用性闸与双限截断 ③ 定三角一致性（循环裁判带 nlp / `writing_check` **不带** nlp / 回灌源）④ 阴性对照 MUST 在动产品之前先跑成基线）。⚠️ 回灌落地后，§4.3 实验的阈值与结论**只对"准入式裁判"有效** ⇒ 必须重跑或明确分域（ADR-0024 已登记资产折旧，不留给下一任发现）。
 6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则无自动化守卫；PWA 安装提示验证 / 192-512 PNG 图标；桌面单实例文件锁（pid+版本+数据目录 + `/api/health` 身份校验 + 顺延 8001–8010）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
-7. **`check_master_commit_scope.py` 把 squash 合并误判成直推（当前 master CI 红的真因，非纪律违规）**：squash 合并产出的提交是**非 merge、父提交 = 上一个 master tip** ⇒ 落进 `--no-merges --first-parent` 的「直推」口径，于是它审的改动面其实是**整个 PR 的文件集**。实测：#165 与 #166 两条 PR 事件全绿、合并后 master push 的 `Master Direct-Push Scope Gate` 判红（#166 出界文件 `tests/test_exam_domain.py` · `tools/ia_dom_mount_probe.mjs`）。
-   - ⚠️ **修法必须能区分「PR 合并」与「人工直推」，且 MUST NOT 退化成「凡带 `(#NNN)` 标题就放行」** —— 那等于让人在提交标题里写 `(#1)` 就能绕过整道闸（本闸存在的理由正是审计 P1-1：25 个含生产代码的提交曾直推 master）。候选判据：合并提交的 PR 编号回查 `gh`/API 的 `merge_commit_sha` 集合；或改由「同一 PR 的所有 sha 是否都经由 pull_request 事件验证过」判定。判据解析不出来时 MUST fail-closed。
-   - 附带事实：该闸只看本次推送范围（`github.event.before..github.sha`），所以历史红不会阻塞后续推送 —— 但**latest master CI badge 会是红的**，得靠下一次 push 覆盖。
+7. **`check_master_commit_scope.py` 把 squash 合并误判成直推【已闭环 (2026-10-21)】**：
+   - 根因：`--no-merges --first-parent` 只能识别多父的 merge-commit 型合并；GitHub squash/rebase 合并产出的单父提交被误划入直推审查对象，导致 #165 / #166 在 PR CI 全绿合并后被 master 直推闸拦截（因整个 PR 改动面不在白名单）。
+   - 修法（分支 `fix/master-scope-gate-squash-merge`）：以 `committer == "GitHub <noreply@github.com>"` 判定 GitHub 集成合并（merge / squash / rebase 三种合并方式均盖该章，本地 git commit 不会生成）。同时封死原有仅凭 `Merge pull request #...` 标题即可绕过检查的单父伪造路径（要求 `is_merge_commit` 即 ≥2 父）。
+   - 实测证据：master 1315 提交中 GitHub 代写 180 条（154 merge + 26 squash/rebase 单父），其中 24 条无 `(#NNN)` 后缀（Dependabot），若按标题规则判会漏掉 92%；人类单父中标题以 `Merge ` 开头者为 0。
+   - 证明：6 条 TDD 测试（新增 6 条，66 passed）+ 四重变异证明（M1 删豁免红、M2 恢复标题绕过红、M3 宽判红、M4 标题强绑定红）全部咬合；真实历史 26 条 GitHub 单父提交 100% 豁免，30 条人类改动代码提交 100% 拦截；真实历史回溯 `2e7b503..07139ac` 修复前 exit 1、修复后 exit 0。
+
 
 ## 工作方式
 

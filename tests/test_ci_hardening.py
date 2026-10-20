@@ -1683,11 +1683,14 @@ _ZERO_SHA = "0" * 40
 
 
 class _FakeCommit(NamedTuple):
-    """stub 用的一条提交记录（subject + 改动面 + 是否 root）。"""
+    """stub 用的一条提交记录（subject + 改动面 + 是否 root / committer / parents）。"""
 
     subject: str
     files: tuple[str, ...]
     is_root: bool = False
+    committer_name: str = "Developer"
+    committer_email: str = "dev@example.com"
+    parents: tuple[str, ...] = ("deadbeef",)
 
 
 class _FakeGit:
@@ -1703,10 +1706,18 @@ class _FakeGit:
             return "".join(f"{sha}\n" for sha in self.commits)
         if args[0] == "rev-list" and "--parents" in args:
             sha = args[-1]
-            parents = () if self.commits[sha].is_root else ("deadbeef",)
+            c = self.commits[sha]
+            parents = () if c.is_root else c.parents
             return " ".join((sha, *parents)) + "\n"
         if args[0] == "log":
-            return self.commits[args[-1]].subject + "\n"
+            sha = args[-1]
+            c = self.commits[sha]
+            fmt = next((a for a in args if a.startswith("--format=")), "")
+            if "%x00" in fmt:
+                parents = () if c.is_root else c.parents
+                parents_str = " ".join(parents)
+                return f"{c.subject}\x00{c.committer_name}\x00{c.committer_email}\x00{parents_str}\n"
+            return c.subject + "\n"
         if args[0] == "diff-tree":
             return "".join(f"{name}\n" for name in self.commits[args[-1]].files)
         raise AssertionError(f"未预期的 git 调用：{args}")
@@ -1738,11 +1749,49 @@ def test_check_scope_flags_out_of_allowlist_file() -> None:
 
 
 def test_check_scope_exempts_merge_commit() -> None:
-    """合并提交豁免：删掉 merge 豁免时本用例 MUST 红。"""
+    """真实合并提交豁免（is_merge_commit=True）：删掉 merge 豁免时本用例 MUST 红。"""
     module = _load_master_scope_module()
-    assert module.check_scope([_ALLOWLIST_OFFENDER], subject=_MERGE_SUBJECT) == [], (
-        "合并提交未被豁免：删掉 merge 豁免时本用例 MUST 红"
+    assert (
+        module.check_scope(
+            [_ALLOWLIST_OFFENDER],
+            subject=_MERGE_SUBJECT,
+            is_merge_commit=True,
+        )
+        == []
+    ), "合并提交未被豁免：删掉 merge 豁免时本用例 MUST 红"
+
+
+def test_check_scope_rejects_merge_subject_spoof_on_single_parent() -> None:
+    """合并形标题 + 单父（is_merge_commit=False）+ 出界文件 ⇒ 必须被判红。
+
+    为什么严格更安全：防止直推生产代码时通过在 commit 标题写 'Merge pull request #...'
+    绕过 master 直推白名单检查（关闭既有伪造路径）。
+    """
+    module = _load_master_scope_module()
+    reasons = module.check_scope(
+        [_ALLOWLIST_OFFENDER],
+        subject=_MERGE_SUBJECT,
+        is_merge_commit=False,
     )
+    assert reasons, "伪造合并标题在单父提交上必须被判红"
+
+
+def test_check_scope_exempts_github_integrated() -> None:
+    """E 纯函数：github_integrated=True 时无论改动面是什么均豁免。"""
+    module = _load_master_scope_module()
+    assert (
+        module.check_scope(
+            [_ALLOWLIST_OFFENDER],
+            subject="fix(x): something",
+            github_integrated=True,
+        )
+        == []
+    )
+    assert module.check_scope(
+        [_ALLOWLIST_OFFENDER],
+        subject="fix(x): something",
+        github_integrated=False,
+    ), "github_integrated=False 且出界文件必须判红"
 
 
 def test_check_scope_exempts_bootstrap() -> None:
@@ -1787,6 +1836,82 @@ def test_cli_exit_code_violation_is_one(capsys: pytest.CaptureFixture[str]) -> N
     assert module.main(["--range", "aaa..bbb"], git=git) == 1
     err = capsys.readouterr().err
     assert "c1" in err and _ALLOWLIST_OFFENDER in err
+
+
+def test_cli_exempts_github_squash_merge(capsys: pytest.CaptureFixture[str]) -> None:
+    """A squash 形（单父 + committer GitHub + subject 带 (#NNN) + 出界文件）⇒ exit 0 且 stderr 打出豁免。"""
+    module = _load_master_scope_module()
+    git = _FakeGit(
+        {
+            "c_squash": _FakeCommit(
+                subject="fix(probe): stop running the vm layer after the static layer already failed (#166)",
+                files=(_ALLOWLIST_OFFENDER,),
+                committer_name="GitHub",
+                committer_email="noreply@github.com",
+                parents=("parent1",),
+            )
+        }
+    )
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+    err = capsys.readouterr().err
+    assert "c_squash" in err and "GitHub" in err and "noreply@github.com" in err
+
+
+def test_cli_exempts_github_dependabot_merge(capsys: pytest.CaptureFixture[str]) -> None:
+    """B Dependabot 形（单父 + committer GitHub + subject 不带 (#NNN) + 出界文件）⇒ exit 0。证明非按标题判。"""
+    module = _load_master_scope_module()
+    git = _FakeGit(
+        {
+            "c_dep": _FakeCommit(
+                subject="bump foo from 1.0.0 to 1.0.1",
+                files=(_ALLOWLIST_OFFENDER,),
+                committer_name="GitHub",
+                committer_email="noreply@github.com",
+                parents=("parent1",),
+            )
+        }
+    )
+    assert module.main(["--range", "aaa..bbb"], git=git) == 0
+    err = capsys.readouterr().err
+    assert "c_dep" in err and "GitHub" in err
+
+
+def test_cli_flags_human_direct_push_violation(capsys: pytest.CaptureFixture[str]) -> None:
+    """C 人类单父直推 + 出界文件 ⇒ exit 1。"""
+    module = _load_master_scope_module()
+    git = _FakeGit(
+        {
+            "c_human": _FakeCommit(
+                subject="feat(client): direct push to master",
+                files=(_ALLOWLIST_OFFENDER,),
+                committer_name="Developer",
+                committer_email="dev@example.com",
+                parents=("parent1",),
+            )
+        }
+    )
+    assert module.main(["--range", "aaa..bbb"], git=git) == 1
+    err = capsys.readouterr().err
+    assert "c_human" in err and _ALLOWLIST_OFFENDER in err
+
+
+def test_cli_rejects_merge_subject_spoof(capsys: pytest.CaptureFixture[str]) -> None:
+    """D 伪造：subject 'Merge pull request #1 from evil' + 单父 + 人类 committer + 出界文件 ⇒ exit 1。"""
+    module = _load_master_scope_module()
+    git = _FakeGit(
+        {
+            "c_spoof": _FakeCommit(
+                subject="Merge pull request #1 from evil",
+                files=(_ALLOWLIST_OFFENDER,),
+                committer_name="Attacker",
+                committer_email="attacker@example.com",
+                parents=("parent1",),
+            )
+        }
+    )
+    assert module.main(["--range", "aaa..bbb"], git=git) == 1
+    err = capsys.readouterr().err
+    assert "c_spoof" in err and _ALLOWLIST_OFFENDER in err
 
 
 def test_cli_exit_code_environment_unavailable_is_two(capsys: pytest.CaptureFixture[str]) -> None:
