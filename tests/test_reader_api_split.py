@@ -161,6 +161,37 @@ def _exported_names(toks) -> set[str]:
     return names
 
 
+def _runtime_export_names(js_dir: Path) -> set[str]:
+    """**运行时真值**：让 node 真正 import 该模块，返回它看到的导出名集合。
+
+    这是本文件里唯一不可被语法形态绕过的一条 —— 静态解析要把「该语言允许的
+    所有导出写法」枚举穷尽（具名声明 / 块 / `as` / 字符串名 / `default` /
+    `*` / `* as ns` / 解构……），而引擎天然全知道。三轮对抗评审连着打穿两次
+    静态解析，所以主守卫改用运行时，静态解析退为「不许漏报」的辅助断言。
+    """
+    probe = js_dir / "_probe_exports.mjs"
+    probe.write_text(
+        "import * as m from './rd-api.js';" + chr(10)
+        + "process.stdout.write(JSON.stringify(Object.keys(m)));" + chr(10),
+        encoding="utf-8",
+    )
+    try:
+        proc = subprocess.run(
+            ["node", str(probe)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(js_dir),
+        )
+    finally:
+        probe.unlink(missing_ok=True)
+    assert proc.returncode == 0, "node failed to import rd-api.js: " + proc.stderr
+    import json
+
+    return set(json.loads(proc.stdout))
+
+
 def _imported_names_from(toks, target: str) -> set[str]:
     """该模块从 `target` 模块 import 进来的**源名**集合（`a as b` 取 a）。
 
@@ -302,28 +333,28 @@ def test_rd_api_does_not_reference_reader_js() -> None:
 
 
 def test_rd_api_export_surface_is_exactly_the_endpoints() -> None:
-    """导出面必须严格等于 14 个端点函数，不允许任何别名/包装膨胀。
+    """导出面必须严格等于 14 个端点函数 —— 以**运行时**为准。
 
     回归背景：Task 3 首版产出 28 个导出（14 个真函数 + 14 个零引用的
-    `*Remote` 别名），违反计划的「14 个端点函数」规格。这条用例把规格
-    钉成断言，别名再回来就红。
+    `*Remote` 别名）。三轮对抗评审又连着证明：任何**静态**导出面解析都会漏掉
+    若干合法写法（`export { a as b }` / `as "string"` / `export default` /
+    解构导出），于是「别名加回来」可以做到守卫、`node --check`、分层闸全绿。
+    引擎不会漏 —— 所以主判据改成真正 import 一次再数。
     """
-    _raw, toks = _rd_api_tokens()
-    declared = local_declarations(toks, top_level_only=True)
+    js_dir = REPO_ROOT / "static" / "js"
+    runtime = _runtime_export_names(js_dir)
 
-    # token 级解析：`export { a as b }` 的导出名是 b，列 0 正则对它完全隐形。
-    exported = _exported_names(toks)
-
-    assert exported == EXPECTED_ENDPOINTS, (
-        f"rd-api.js export surface drifted.\n"
-        f"  missing: {sorted(EXPECTED_ENDPOINTS - exported)}\n"
-        f"  extra:   {sorted(exported - EXPECTED_ENDPOINTS)}"
+    assert runtime == EXPECTED_ENDPOINTS, (
+        "rd-api.js runtime export surface drifted. missing=%s extra=%s"
+        % (sorted(EXPECTED_ENDPOINTS - runtime), sorted(runtime - EXPECTED_ENDPOINTS))
     )
-    # 交叉校验：声明式导出（非哨兵）必须在顶层声明集合里真实存在，
-    # 防「解析出一堆不存在的名字」把守卫变成空转。
-    sentinels = {n for n in exported if n.startswith("*") or n == "default"}
-    assert (exported - sentinels) <= declared, (
-        f"exported names not found among top-level declarations: {sorted((exported - sentinels) - declared)}"
+
+    # 辅助断言：静态解析**不许漏报**。它允许多报（多报由上面的运行时判据兜住），
+    # 但一旦它看不见运行时看得见的东西，说明「枚举语法形态」这一步又漏了。
+    static = _exported_names(_rd_api_tokens()[1])
+    missed = runtime - static
+    assert missed == set(), (
+        f"static export parsing misses names the engine reports: {sorted(missed)}"
     )
 
 
@@ -331,28 +362,23 @@ def test_rd_api_has_no_dead_exports() -> None:
     """机制级守卫：rd-api.js 的每个导出都必须被 static/js 下至少一个模块真实 import。
 
     比「导出名白名单」更强的地方 —— 它不针对某一次事故的具体名字，而是
-    针对「留下没人用的出口」这个**形态**。别名、兼容层、遗留包装都逃不掉。
+    针对「留下没人用的出口」这个**形态**。导出名取自**运行时**（引擎不会漏），
+    导入名按 specifier 逐条静态匹配。
     """
     js_dir = REPO_ROOT / "static" / "js"
-    _raw_api, toks_api = _rd_api_tokens()
-    exported = _exported_names(toks_api)
+    exported = _runtime_export_names(js_dir)
 
     imported_anywhere: set[str] = set()
     for js_file in js_dir.glob("*.js"):
         if js_file.name == "rd-api.js":
             continue
         _raw, toks = read_js(js_file)
-        # 按 specifier 逐条匹配：只要「这个文件 import 了 rd-api.js」就算，
-        # 但只计**来自 rd-api.js 的那条语句**的源名（见函数 docstring）。
         imported_anywhere |= _imported_names_from(toks, "rd-api.js")
 
     dead = exported - imported_anywhere
     assert dead == set(), (
         f"rd-api.js has dead exports (nobody imports them): {sorted(dead)}"
     )
-
-
-# ══ 5. 零顶层可变状态 ═══════════════════════════════════════════════════════
 
 
 def test_rd_api_has_no_mutable_module_state() -> None:
