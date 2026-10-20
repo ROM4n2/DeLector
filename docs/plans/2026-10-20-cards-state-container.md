@@ -224,3 +224,35 @@
 3. **静默失效**：MSM-only 模块缺失时原为 `if not path.exists(): continue` ⇒ 若 `cards.js` 改名，15 处钉子**无声消失**。改为报 `missing-mutable-state-module`；两个最小夹具补 `cards.js` 占位（移除占位会令 4 条**无关**用例因规则泄漏而红，已实测）。
 
 **编排者独立复验**：真实树 `1 + 15`；旧标签全仓 0 残留；临时改名 `cards.js` ⇒ 闸报 `missing-mutable-state-module:只受零顶层可变状态契约约束的模块不存在：cards.js`（2 处：该条 + 已知的 `cd-state.js`）；复原后回到 15；`pytest tests/test_frontend_layers.py` = **1 failed（仅 `test_gate_script_exits_zero_on_real_tree`，计划内已知红）/ 97 passed**。
+
+### Task 2（+2b）建 `cd-state.js` · commit `ee58daf` + `67d75d3`
+
+**闸分解**：`1 + 15` → **`0 + 15`**（`cd-state.js` 零违规、`missing-layer-module` 消失；`cards.js` 的 15 处原样留给 Task 3）。
+
+**独立评审 PASS，且初值是机械证明的**：评审写了 `node compare_init.mjs` —— 程序化提取 `cards.js` 全部顶层 `let`、求值字面量、与容器做**类型严格**深比较：
+
+```
+cards.js top-level `let` count = 15
+lets NOT mapped to container: []   → 1:1，没漏没造
+VERDICT: all 15 initial values type-identical
+```
+
+类型敏感已实测：`flipped→0`、`loading→false`、`undoTimer→0`、`due_count→"0"`、`quiz.mode→false` 各自都会红。**「15 字段 vs 24 叶子」确认是纯嵌套**（3 个对象值的 `let` 展开 12 个叶子），无凭空字段。
+
+**评审用变异证明的两个测试洞（已由 Task 2b 补，并被我独立复验）**：
+
+| 洞 | 证明 | 补法 |
+| --- | --- | --- |
+| **A 守卫不对称** | 给 `stepDeckState` 加第三个写 `deck.lastFlipTime = Date.now()` ⇒ **5 条全绿** | 新增 `test_step_deck_state_changes_exactly_two_fields`，断言改动路径集**恰为** `{deck.index, deck.flipped}` |
+| **B 脏集不全** | `enterSegment` 的「先弄脏」只覆盖 13/24 叶子 ⇒ 写回**初值**（`prep.searchQuery = ""` / `quiz.correct = 0`）**全绿** | 脏化改为递归遍历**全部 24 叶子**并注入可区分哨兵，且断言叶子集 == 期望集、无重复无遗漏 |
+
+**编排者独立复验（不采信汇报）**：三个变异各自**只红对应那一条**，control 复原后 `6 passed`：
+
+```
+a. stepDeckState +3rd write          exit=1 red=['test_step_deck_state_changes_exactly_two_fields']
+b. enterSegment 写回初值 searchQuery    exit=1 red=['test_enter_segment_writes_exactly_three_fields']
+c. enterSegment 写回初值 quiz.correct   exit=1 red=['test_enter_segment_writes_exactly_three_fields']
+control                             6 passed
+```
+
+**这条形态值得记**：变更检测若靠「先把其余字段弄脏」，脏集**必须是全集** —— 否则「写回初值」这个动作天然隐形。这不是实现 bug，是守卫强度问题，而它只在被变异打中时才暴露。
