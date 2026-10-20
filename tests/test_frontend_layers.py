@@ -32,7 +32,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 JS_DIR = REPO_ROOT / "static" / "js"
 GATE = REPO_ROOT / "tools" / "check_frontend_layers.py"
 
-_LAYER_MODULES = ("wr-format.js", "wr-api.js", "writer.js", "rd-syntax.js")
+_LAYER_MODULES = (
+    "wr-format.js",
+    "wr-api.js",
+    "writer.js",
+    "rd-syntax.js",
+    "wb-queue.js",
+    "wb-scope.js",
+    "rd-api.js",
+)
 
 
 def _load_gate() -> Any:
@@ -87,6 +95,8 @@ def rule5_dir(tmp_path: Path) -> Path:
     # 同理：`LAYER_SPEC` 里声明的模块都必须在树里存在，否则每条断言都会被
     # `missing-layer-module` 搅浑（本树只测规则⑤）。
     _write_module(d / "rd-syntax.js", "import { esc } from './core.js';\nexport const CEFR_LEVELS = ['A1'];\n")
+    _write_module(d / "wb-queue.js", "export {};\n")
+    _write_module(d / "wb-scope.js", "export {};\n")
     _write_module(d / "writer.js", "export {};\n")
     _write_module(
         d / "wr-api.js",
@@ -95,6 +105,7 @@ def rule5_dir(tmp_path: Path) -> Path:
         "  return api('/api/essays');\n"
         "}\n",
     )
+    _write_module(d / "rd-api.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
     return d
 
 
@@ -580,6 +591,198 @@ def test_rd_syntax_l1_top_level_let_red(gate: Any, js_dir: Path) -> None:
     _inject_into_rd_syntax(js_dir, "let scratch = 1;")
     hits = _rd_syntax_rules(gate, js_dir)
     assert any("禁mutable-state" in r for r in hits), hits
+
+
+# ══ 2d. rd-api.js：Task 1 先注册、Task 2 才落盘的 L2 持久化层 ══════════════════
+# 计划 `2026-10-19-reader-api-layer-split.md` Task 1（Gate-Before-Code）：闸先声明目标形态，
+# 模块后建。下列注入用例在 `rd-api.js` 落盘前必然失败 —— 夹具复制的真实文件还不存在
+# （`_inject_into_rd_api` 找不到锚点），那正是「声明先于代码」要的红灯；Task 2 产出该
+# 文件后自动转绿，无需改动本文件。
+
+_RD_API = "rd-api.js"
+# 锚点取自计划 Task 2 的 Produces（落盘后首个具名远程导出）
+_RD_API_ANCHOR = "export async function removeArticle(id) {"
+
+
+def _rd_api_rules(gate: Any, js_dir_arg: Path) -> list[str]:
+    """只取归到 `static/js/rd-api.js` 名下的规则。"""
+    return [
+        v.rule
+        for v in gate.collect_violations(js_dir_arg, None)
+        if v.rel_path == f"static/js/{_RD_API}"
+    ]
+
+
+def _inject_into_rd_api(js_dir_arg: Path, snippet: str) -> None:
+    """把片段插到锚点之前。"""
+    inject(js_dir_arg / _RD_API, _RD_API_ANCHOR, snippet + "\n" + _RD_API_ANCHOR)
+
+
+def test_rd_api_declaration_equals_wr_api(gate: Any) -> None:
+    """No-Narrowing: 新 L2 模块与 `wr-api.js` 是同一个 L2 定义（逐字相同）。
+
+    该断言不依赖模块是否落盘，故 Task 1 当场即绿。
+    """
+    new, baseline = gate.LAYER_SPEC[_RD_API], gate.LAYER_SPEC["wr-api.js"]
+    assert new.layer == baseline.layer
+    assert new.ban_rules == baseline.ban_rules
+    assert new.allowed_imports == baseline.allowed_imports == ("./core.js",)
+
+
+@pytest.mark.parametrize(
+    "snippet,rule_part",
+    [
+        ("document.getElementById('x');", "禁dom"),
+        ("notify('x');", "禁toast"),
+        ("setTimeout(() => {}, 0);", "禁timer"),
+    ],
+    ids=["dom", "toast", "timer"],
+)
+def test_rd_api_l2_bans_red(gate: Any, js_dir: Path, snippet: str, rule_part: str) -> None:
+    """L2 禁令：DOM / 提示 / 计时器必须判红。"""
+    _inject_into_rd_api(js_dir, snippet)
+    hits = _rd_api_rules(gate, js_dir)
+    assert any(rule_part in r for r in hits), (snippet, hits)
+
+
+def test_rd_api_l2_network_is_allowed(gate: Any, js_dir: Path) -> None:
+    """阴性对照：网络是 L2 的本职，注入 `fetch(` 不得变红。"""
+    _inject_into_rd_api(js_dir, "fetch('/api/articles');")
+    hits = _rd_api_rules(gate, js_dir)
+    assert not any("禁network" in r for r in hits), hits
+
+
+def test_rd_api_reverse_dependency_red(gate: Any, js_dir: Path) -> None:
+    """反向依赖：L2 不得 import 视图层。"""
+    _inject_into_rd_api(js_dir, "import { renderEditor } from './writer.js';")
+    hits = _rd_api_rules(gate, js_dir)
+    assert "reverse-dependency" in hits, hits
+
+
+def test_rd_api_import_allowlist_red(gate: Any, js_dir: Path) -> None:
+    """import 白名单：L2 仅允许 ./core.js，引入其他模块必须判红。"""
+    _inject_into_rd_api(js_dir, "import { something } from './cards.js';")
+    hits = _rd_api_rules(gate, js_dir)
+    assert any("越界import" in r for r in hits), hits
+
+
+# ══ 2e. wb-queue.js 与 wb-scope.js：已存在的 L1 纯层模块 ═══════════════════════
+
+_WB_QUEUE = "wb-queue.js"
+_WB_SCOPE = "wb-scope.js"
+_WB_QUEUE_ANCHOR = "const manualExtraIds = new Set();"
+_WB_SCOPE_ANCHOR = "const CEFR_BY_PREFIX = ["
+
+
+def _wb_module_rules(gate: Any, js_dir_arg: Path, mod_name: str) -> list[str]:
+    return [
+        v.rule
+        for v in gate.collect_violations(js_dir_arg, None)
+        if v.rel_path == f"static/js/{mod_name}"
+    ]
+
+
+def test_wb_queue_and_scope_declarations(gate: Any) -> None:
+    """wb-queue.js 与 wb-scope.js 的分层定义：L1 纯层，零外部 import，禁止顶层可变状态。"""
+    for mod in (_WB_QUEUE, _WB_SCOPE):
+        spec = gate.LAYER_SPEC[mod]
+        assert spec.layer == "L1 纯格式化层"
+        assert spec.ban_rules == ("dom", "network", "toast", "timer", "dynamic-eval")
+        assert spec.allowed_imports == ()
+        assert mod in gate.MUTABLE_STATE_MODULES
+
+
+@pytest.mark.parametrize(
+    "snippet,rule_part",
+    [
+        ("document.getElementById('x');", "禁dom"),
+        ("fetch('/x');", "禁network"),
+        ("notify('x');", "禁toast"),
+        ("setTimeout(() => {}, 0);", "禁timer"),
+    ],
+    ids=["dom", "network", "toast", "timer"],
+)
+def test_wb_queue_l1_bans_red(gate: Any, js_dir: Path, snippet: str, rule_part: str) -> None:
+    inject(js_dir / _WB_QUEUE, _WB_QUEUE_ANCHOR, snippet + "\n" + _WB_QUEUE_ANCHOR)
+    hits = _wb_module_rules(gate, js_dir, _WB_QUEUE)
+    assert any(rule_part in r for r in hits), (snippet, hits)
+
+
+def test_wb_queue_top_level_let_red(gate: Any, js_dir: Path) -> None:
+    inject(js_dir / _WB_QUEUE, _WB_QUEUE_ANCHOR, "let scratch = 1;\n" + _WB_QUEUE_ANCHOR)
+    hits = _wb_module_rules(gate, js_dir, _WB_QUEUE)
+    assert any("禁mutable-state" in r for r in hits), hits
+
+
+def test_wb_queue_disallows_all_imports_red(gate: Any, js_dir: Path) -> None:
+    inject(js_dir / _WB_QUEUE, _WB_QUEUE_ANCHOR, "import { esc } from './core.js';\n" + _WB_QUEUE_ANCHOR)
+    hits = _wb_module_rules(gate, js_dir, _WB_QUEUE)
+    assert any("越界import" in r for r in hits), hits
+
+
+@pytest.mark.parametrize(
+    "snippet,rule_part",
+    [
+        ("document.getElementById('x');", "禁dom"),
+        ("fetch('/x');", "禁network"),
+        ("notify('x');", "禁toast"),
+        ("setTimeout(() => {}, 0);", "禁timer"),
+    ],
+    ids=["dom", "network", "toast", "timer"],
+)
+def test_wb_scope_l1_bans_red(gate: Any, js_dir: Path, snippet: str, rule_part: str) -> None:
+    inject(js_dir / _WB_SCOPE, _WB_SCOPE_ANCHOR, snippet + "\n" + _WB_SCOPE_ANCHOR)
+    hits = _wb_module_rules(gate, js_dir, _WB_SCOPE)
+    assert any(rule_part in r for r in hits), (snippet, hits)
+
+
+def test_wb_scope_top_level_let_red(gate: Any, js_dir: Path) -> None:
+    inject(js_dir / _WB_SCOPE, _WB_SCOPE_ANCHOR, "let scratch = 1;\n" + _WB_SCOPE_ANCHOR)
+    hits = _wb_module_rules(gate, js_dir, _WB_SCOPE)
+    assert any("禁mutable-state" in r for r in hits), hits
+
+
+def test_wb_scope_disallows_all_imports_red(gate: Any, js_dir: Path) -> None:
+    inject(js_dir / _WB_SCOPE, _WB_SCOPE_ANCHOR, "import { esc } from './core.js';\n" + _WB_SCOPE_ANCHOR)
+    hits = _wb_module_rules(gate, js_dir, _WB_SCOPE)
+    assert any("越界import" in r for r in hits), hits
+
+
+# ══ 2f. 规则⑤ 泛化到所有 L2 模块 ═══════════════════════════════════════════════
+
+
+def test_rule5_generalized_checks_rd_api_unregistered_path(gate: Any, rule5_dir: Path) -> None:
+    """规则⑤ 泛化：rd-api.js 中调用未注册路径被识别并归因到 rd-api.js。"""
+    _write_module(
+        rule5_dir / "rd-api.js",
+        "import { api } from './core.js';\n"
+        "export async function probe() {\n"
+        "  return api('/api/articles/unregistered', { method: 'DELETE' });\n"
+        "}\n",
+    )
+    violations = [
+        v for v in gate.collect_violations(rule5_dir, {("/api/essays", "GET")})
+        if v.rel_path == "static/js/rd-api.js"
+    ]
+    assert len(violations) == 1
+    assert violations[0].rule == "route-path-unregistered"
+
+
+def test_rule5_generalized_checks_rd_api_method_mismatch(gate: Any, rule5_dir: Path) -> None:
+    """规则⑤ 泛化：rd-api.js 中方法不匹配被识别并归因到 rd-api.js。"""
+    _write_module(
+        rule5_dir / "rd-api.js",
+        "import { api } from './core.js';\n"
+        "export async function probe() {\n"
+        "  return api(`/api/articles/${id}`, { method: 'POST' });\n"
+        "}\n",
+    )
+    pairs = {("/api/essays", "GET"), ("/api/articles/{}", "DELETE")}
+    violations = [
+        v for v in gate.collect_violations(rule5_dir, pairs)
+        if v.rel_path == "static/js/rd-api.js"
+    ]
+    assert any(v.rule.startswith("method-mismatch(POST!=DELETE)") for v in violations), violations
 
 
 # ══ 3. 真树集成 + 端到端退出码 ═══════════════════════════════════════════════

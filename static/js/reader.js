@@ -1,9 +1,16 @@
 /* DeLector - Reader View, Token Inspector & Sticky Notes */
 "use strict";
 
-import { state, esc, jsAttr, api, normalizeCefrPct, notify } from "./core.js";
+import { state, esc, jsAttr, normalizeCefrPct, notify } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
+import {
+  removeArticle, fetchArticles, fetchArticle,
+  lookupVocab, lookupGrammar,
+  saveVocabCard, saveGrammarCard, fetchCardCounts,
+  fetchArticleNotes, saveArticleNote, removeNote, fetchNoteAssist,
+  saveSyntaxStats, fetchSyntaxStats
+} from './rd-api.js';
 import {
   CEFR_LEVELS, safeCefr, safeTokens,
   renderMiniBar, renderFelderSpectrum, renderDetailedFelderGrid,
@@ -124,7 +131,7 @@ export async function deleteArticle(id, title) {
     return;
   }
   try {
-    await api("/api/articles/" + id, { method: "DELETE" });
+    await removeArticle(id);
     await loadArticles();
   } catch (err) {
     notify("删除文章失败: " + (err.message || err), { kind: 'error' });
@@ -136,7 +143,7 @@ export async function loadArticles() {
   if (!el) return;
   el.innerHTML = '<div class="empty-state">加载中…</div>';
   try {
-    const data = await api("/api/articles");
+    const data = await fetchArticles();
     if (!data.length) {
       el.innerHTML =
         '<div class="empty-state">暂无文稿，点击上方按钮导入德语文章</div>';
@@ -189,7 +196,7 @@ export async function openReader(id) {
 }
 
 async function _openReaderBody(id, token) {
-  const a = await api("/api/articles/" + id);
+  const a = await fetchArticle(id);
   if (!a || a.id !== Number(id)) return;
   if (token !== _readerOpenToken) return; // 期间用户已打开另一篇，丢弃本次
   state.currentArticle = a;
@@ -373,15 +380,10 @@ export function inspect(tokenId, sentId) {
   document.getElementById("grammar-result").classList.add("hidden");
   openDrawer("vocab");
 
-  api("/api/lookup/vocab", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // 带上 spaCy 词元：查词链按 lemma 优先，geht→gehen / Häuser→Haus 才能命中
-    body: JSON.stringify({
-      sentence: sent.text,
-      target_word: token.text,
-      lemma: token.lemma || token.text,
-    }),
+  lookupVocab({
+    sentence: sent.text,
+    target_word: token.text,
+    lemma: token.lemma || token.text,
   })
     .then((res) => {
       if (res && state.selectedToken?.text === token.text) {
@@ -555,13 +557,9 @@ export async function analyzeGrammar() {
   btn.textContent = "分析中…";
   btn.disabled = true;
   try {
-    state.grammarData = await api("/api/lookup/grammar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sentence: state.selectedSent.text,
-        target_phrase: state.selectedToken.text,
-      }),
+    state.grammarData = await lookupGrammar({
+      sentence: state.selectedSent.text,
+      target_phrase: state.selectedToken.text,
     });
     const lvl = state.grammarData.cefr_level || "B1";
     document.getElementById("g-name").textContent =
@@ -598,20 +596,16 @@ export async function saveVocab() {
     state.selectedToken.lemma ||
     state.selectedToken.text;
   try {
-    await api("/api/cards/vocab", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        article_id: state.currentArticle.id,
-        word: state.selectedToken.text,
-        lemma: state.selectedToken.lemma,
-        pos: state.selectedToken.pos,
-        gender: state.selectedToken.gender,
-        cefr_level: state.selectedToken.cefr_level || "A1",
-        definition_zh: def,
-        sentence_context: state.selectedSent ? state.selectedSent.text : "",
-        plural: state.selectedToken.plural || "",
-      }),
+    await saveVocabCard({
+      article_id: state.currentArticle.id,
+      word: state.selectedToken.text,
+      lemma: state.selectedToken.lemma,
+      pos: state.selectedToken.pos,
+      gender: state.selectedToken.gender,
+      cefr_level: state.selectedToken.cefr_level || "A1",
+      definition_zh: def,
+      sentence_context: state.selectedSent ? state.selectedSent.text : "",
+      plural: state.selectedToken.plural || "",
     });
     if (btn) {
       btn.textContent = "✓ 已保存";
@@ -650,18 +644,14 @@ export async function savePrepCollocation(index, btn) {
   const def = `${p.bedeutung_zh.replace("(sich)", "").trim()} (+${p.kasus})`;
   if (btn) btn.disabled = true;
   try {
-    await api("/api/cards/vocab", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        article_id: state.currentArticle.id,
-        word: head,
-        lemma: lemma,
-        pos: state.selectedToken.pos,
-        cefr_level: state.selectedToken.cefr_level || "B1",
-        definition_zh: def,
-        sentence_context: p.beispiel,
-      }),
+    await saveVocabCard({
+      article_id: state.currentArticle.id,
+      word: head,
+      lemma: lemma,
+      pos: state.selectedToken.pos,
+      cefr_level: state.selectedToken.cefr_level || "B1",
+      definition_zh: def,
+      sentence_context: p.beispiel,
     });
     if (btn) btn.textContent = "✓";
     refreshCardCounters();
@@ -684,17 +674,13 @@ export async function saveGrammar() {
     btn.textContent = "保存中…";
   }
   try {
-    await api("/api/cards/grammar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        article_id: state.currentArticle.id,
-        sentence_context: state.selectedSent ? state.selectedSent.text : "",
-        grammar_name: state.grammarData.grammar_name,
-        cefr_level: state.grammarData.cefr_level || "B1",
-        explanation_zh: state.grammarData.explanation_zh,
-        rule_formula: state.grammarData.rule_formula,
-      }),
+    await saveGrammarCard({
+      article_id: state.currentArticle.id,
+      sentence_context: state.selectedSent ? state.selectedSent.text : "",
+      grammar_name: state.grammarData.grammar_name,
+      cefr_level: state.grammarData.cefr_level || "B1",
+      explanation_zh: state.grammarData.explanation_zh,
+      rule_formula: state.grammarData.rule_formula,
     });
     if (btn) {
       btn.textContent = "✓ 已加入语法卡";
@@ -715,7 +701,7 @@ export async function refreshCardCounters() {
   try {
     // 只要「有多少张卡」⇒ 打轻量计数端点，MUST NOT 拉 /api/cards 全量再取 length
     // （那是 SELECT * + 逐卡 FSRS 递推，挂在 7 个存卡后调用点上 = O(N²) 写放大）。
-    const data = await api("/api/cards/counts");
+    const data = await fetchCardCounts();
     // total 缺失（代理截断等）时抛错走下方 catch 保留旧值，MUST NOT 显示 undefined。
     const total = data && data.total;
     if (!Number.isFinite(total)) throw new Error("cards/counts 缺少 total");
@@ -729,7 +715,7 @@ export async function refreshCardCounters() {
 // ── Notes & Selections ───────────────────────────────────────────────────────
 export async function loadArticleNotes(articleId) {
   try {
-    currentArticleNotes = await api(`/api/articles/${articleId}/notes`);
+    currentArticleNotes = await fetchArticleNotes(articleId);
   } catch {
     currentArticleNotes = [];
   }
@@ -812,15 +798,11 @@ export async function applyHighlight(color) {
   const tooltip = document.getElementById("selection-tooltip");
   if (tooltip) tooltip.classList.add("hidden");
 
-  await api(`/api/articles/${state.currentArticle.id}/notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sentence_id: state.activeSelectedSentId || 1,
-      selected_text: state.activeSelectedRangeText,
-      color: color,
-      note_content: "",
-    }),
+  await saveArticleNote(state.currentArticle.id, {
+    sentence_id: state.activeSelectedSentId || 1,
+    selected_text: state.activeSelectedRangeText,
+    color: color,
+    note_content: "",
   });
 
   await loadArticleNotes(state.currentArticle.id);
@@ -872,13 +854,9 @@ export async function aiNoteAssist() {
   const sentText = sent ? sent.text : state.activeSelectedRangeText;
 
   try {
-    const res = await api("/api/ai/note-assist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sentence: sentText,
-        selected_text: state.activeSelectedRangeText,
-      }),
+    const res = await fetchNoteAssist({
+      sentence: sentText,
+      selected_text: state.activeSelectedRangeText,
     });
 
     if (res._stub) {
@@ -908,18 +886,14 @@ export async function saveCurrentNote() {
   const noteText = document.getElementById("note-text-input").value.trim();
 
   if (state.activeEditingNoteId) {
-    await api(`/api/notes/${state.activeEditingNoteId}`, { method: "DELETE" });
+    await removeNote(state.activeEditingNoteId);
   }
 
-  await api(`/api/articles/${state.currentArticle.id}/notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sentence_id: state.activeSelectedSentId || 1,
-      selected_text: state.activeSelectedRangeText,
-      color: "yellow",
-      note_content: noteText,
-    }),
+  await saveArticleNote(state.currentArticle.id, {
+    sentence_id: state.activeSelectedSentId || 1,
+    selected_text: state.activeSelectedRangeText,
+    color: "yellow",
+    note_content: noteText,
   });
 
   document.getElementById("save-note-btn").textContent = "✓ 已保存";
@@ -930,7 +904,7 @@ export async function saveCurrentNote() {
 export async function deleteCurrentNote() {
   if (!state.activeEditingNoteId || !state.currentArticle) return;
   if (!confirm("确定删除此条随笔便签吗？")) return;
-  await api(`/api/notes/${state.activeEditingNoteId}`, { method: "DELETE" });
+  await removeNote(state.activeEditingNoteId);
   closeDrawer();
   await loadArticleNotes(state.currentArticle.id);
 }
@@ -1013,17 +987,13 @@ export async function saveClauseAsGrammarCard(
   const sent = state.currentArticle?.sentences?.find((s) => s.id === sentId);
   if (!sent || !state.currentArticle) return;
   try {
-    await api("/api/cards/grammar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        article_id: state.currentArticle.id,
-        sentence_context: sent.text,
-        grammar_name: label || "德语从句句法",
-        cefr_level: "B1",
-        explanation_zh: `【${label}】\n句式公式：${formula || "德语经典拓扑结构"}\n例句分析：${textSnippet}`,
-        rule_formula: formula || "Satzbau",
-      }),
+    await saveGrammarCard({
+      article_id: state.currentArticle.id,
+      sentence_context: sent.text,
+      grammar_name: label || "德语从句句法",
+      cefr_level: "B1",
+      explanation_zh: `【${label}】\n句式公式：${formula || "德语经典拓扑结构"}\n例句分析：${textSnippet}`,
+      rule_formula: formula || "Satzbau",
     });
     refreshCardCounters();
     notify(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`, { kind: 'success' });
@@ -1039,16 +1009,12 @@ export async function saveAndRenderSyntaxRadar(articleId, stats) {
   if (!svgEl) return;
 
   // 1. Fire-and-forget background save
-  api("/api/syntax/stats", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ article_id: Number(articleId), stats }),
-  }).catch(() => {});
+  saveSyntaxStats({ article_id: Number(articleId), stats }).catch(() => {});
 
   // 2. Fetch corpus historical stats
   let hist = null;
   try {
-    hist = await api("/api/syntax/stats");
+    hist = await fetchSyntaxStats();
   } catch (e) {
     hist = null;
   }

@@ -132,6 +132,7 @@ function buildCtx(handler) {
     sandbox.__fetches.push(String(url));
     return handler(String(url));
   };
+  sandbox.fetchCardCounts = async () => sandbox.api("/api/cards/counts");
   const ctx = vm.createContext(sandbox);
   vm.runInContext("var __fetches = [];", ctx, { filename: "counts-prelude.js" });
   return ctx;
