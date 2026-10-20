@@ -40,6 +40,24 @@ _LAYER_MODULES = (
     "wb-queue.js",
     "wb-scope.js",
     "rd-api.js",
+    "cd-state.js",
+)
+
+# `cd-state.js` 由「Task 2」落盘（本任务只注册）。夹具树里必须有**占位**文件：
+# 否则 `missing-layer-module` 会漏进别的规则的 `assert not rules`，读起来像是
+# 该规则的失败。锚点 `_CD_STATE_ANCHOR` 刻意取自设计稿 §6.1 的真实首行，
+# 落盘后仍逐字命中一次，夹具无需改动。
+_CD_STATE = "cd-state.js"
+_CD_STATE_ANCHOR = "export const cardState = {"
+_CD_STATE_PLACEHOLDER = (
+    "// Task 1 占位：cd-state.js 由后续任务落盘；本文件只为「声明的模块都存在」。\n"
+    "export const cardState = {\n"
+    "  catalog: { segment: \"due\", viewMode: \"deck\" },\n"
+    "  deck: { index: 0, flipped: false },\n"
+    "  quiz: {},\n"
+    "  prep: {},\n"
+    "  toast: {},\n"
+    "};\n"
 )
 
 
@@ -65,6 +83,8 @@ def js_dir(tmp_path: Path) -> Path:
 
     `rd-syntax.js` 是「先注册、后落盘」（计划 Task 1/Task 2）⇒ 只复制**存在**的模块，
     缺文件时跳过；「声明的模块不存在」另由 `missing-layer-module` 用例专门覆盖。
+    但 `cd-state.js` 缺文件时必须补**占位**：本夹具的其余用例断言「零违规」，
+    一个 `missing-layer-module` 漏进去就会伪装成别的规则的失败。
     """
     d = tmp_path / "js"
     d.mkdir()
@@ -72,6 +92,8 @@ def js_dir(tmp_path: Path) -> Path:
         src = JS_DIR / name
         if src.exists():
             shutil.copyfile(src, d / name)
+    if not (d / _CD_STATE).exists():
+        _write_module(d / _CD_STATE, _CD_STATE_PLACEHOLDER)
     return d
 
 
@@ -106,6 +128,7 @@ def rule5_dir(tmp_path: Path) -> Path:
         "}\n",
     )
     _write_module(d / "rd-api.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
+    _write_module(d / _CD_STATE, _CD_STATE_PLACEHOLDER)
     return d
 
 
@@ -783,6 +806,131 @@ def test_rule5_generalized_checks_rd_api_method_mismatch(gate: Any, rule5_dir: P
         if v.rel_path == "static/js/rd-api.js"
     ]
     assert any(v.rule.startswith("method-mismatch(POST!=DELETE)") for v in violations), violations
+
+
+# ══ 2g. cd-state.js：Task 1 先注册、Task 2 才落盘的 L1 纯状态容器 ══════════════
+# 计划 `2026-10-20-cards-state-container.md` Task 1（Gate-Before-Code）：闸先声明目标形态，
+# 模块（Task 2）后建。占位文件由 `js_dir` 夹具补齐（见 `_CD_STATE_PLACEHOLDER`），
+# 故下列注入用例当场即可断言；真树闸的 `missing-layer-module` 由第 3 节端到端用例留证。
+
+_CD_STATE_LAYER = "L1 纯状态容器"
+
+
+def _cd_state_rules(gate: Any, js_dir_arg: Path) -> list[str]:
+    """只取归到 `static/js/cd-state.js` 名下的规则。"""
+    return [
+        v.rule
+        for v in gate.collect_violations(js_dir_arg, None)
+        if v.rel_path == f"static/js/{_CD_STATE}"
+    ]
+
+
+def _inject_into_cd_state(js_dir_arg: Path, snippet: str) -> None:
+    """把片段插到**顶层**锚点之前（顶层 `let` 才落在花括号净深度 0）。"""
+    inject(js_dir_arg / _CD_STATE, _CD_STATE_ANCHOR, snippet + "\n" + _CD_STATE_ANCHOR)
+
+
+def test_cd_state_declaration_is_registered_l1_state_container(gate: Any) -> None:
+    """声明即规范：L1 纯状态容器，五类禁令齐全，且**零 import 白名单**。"""
+    spec = gate.LAYER_SPEC[_CD_STATE]
+    assert spec.layer == _CD_STATE_LAYER
+    assert spec.ban_rules == ("dom", "network", "toast", "timer", "dynamic-eval")
+    assert spec.allowed_imports == ()
+    assert _CD_STATE in gate.MUTABLE_STATE_MODULES
+
+
+@pytest.mark.parametrize(
+    "snippet,rule_part",
+    [
+        ("document.getElementById('x');", "禁dom"),
+        ("fetch('/x');", "禁network"),
+        ("notify('x');", "禁toast"),
+        ("setTimeout(() => {}, 0);", "禁timer"),
+        # 字符串夹具（不是在本进程里 eval）：只为验证闸能识别 dynamic-eval 汇点。
+        ("eval('1');", "禁dynamic-eval"),
+    ],
+    ids=["dom", "network", "toast", "timer", "dynamic-eval"],
+)
+def test_cd_state_l1_bans_red(gate: Any, js_dir: Path, snippet: str, rule_part: str) -> None:
+    """状态容器 MUST NOT 触碰 DOM / 网络 / 提示 / 计时器 / 动态求值。"""
+    _inject_into_cd_state(js_dir, snippet)
+    hits = _cd_state_rules(gate, js_dir)
+    assert any(rule_part in r for r in hits), (snippet, hits)
+
+
+def test_cd_state_disallows_all_imports_red(gate: Any, js_dir: Path) -> None:
+    """`allowed_imports=()`：连 `./core.js` 都不许 —— 容器零依赖才谈得上纯状态层。"""
+    _inject_into_cd_state(js_dir, "import { esc } from './core.js';")
+    hits = _cd_state_rules(gate, js_dir)
+    assert any("越界import" in r for r in hits), hits
+
+
+def test_cd_state_top_level_let_red(gate: Any, js_dir: Path) -> None:
+    """纯状态容器自己 MUST NOT 有顶层可变状态（状态只许在 `cardState` 对象里）。"""
+    _inject_into_cd_state(js_dir, "let scratch = 1;")
+    hits = _cd_state_rules(gate, js_dir)
+    assert any("禁mutable-state" in r for r in hits), hits
+
+
+# ══ 2h. cards.js：首次纳入「零顶层可变状态」（不属任何分层）═══════════════════
+
+_CARDS = "cards.js"
+# 注入锚点：原文第一个顶层 `let`（第 29 行），改用例时逐字命中一次。
+_CARDS_ANCHOR = 'let cardSegment = "due";'
+
+
+def _copy_cards(js_dir_arg: Path) -> Path:
+    """把生产 `cards.js` **复制**到夹具树后注入 —— 不动生产文件。"""
+    dst = js_dir_arg / _CARDS
+    shutil.copyfile(JS_DIR / _CARDS, dst)
+    return dst
+
+
+def _cards_violations(gate: Any, js_dir_arg: Path) -> list[Any]:
+    return [
+        v
+        for v in gate.collect_violations(js_dir_arg, None)
+        if v.rel_path == f"static/js/{_CARDS}"
+    ]
+
+
+def test_cards_declares_zero_top_level_state_contract(gate: Any) -> None:
+    """`cards.js` 只受这一条契约：不进 `LAYER_SPEC`（否则会对视图层误开 DOM/网络禁令）。"""
+    assert _CARDS in gate.MUTABLE_STATE_MODULES
+    assert _CARDS not in gate.LAYER_SPEC
+
+
+def test_cards_every_top_level_let_is_named(gate: Any, js_dir: Path) -> None:
+    """真树派生：**每一个**顶层 `let` 都被逐行点名（当前 15 处，Task 3 后两侧同归 0）。
+
+    期望值由「行首 `let `」独立数出 —— 不信闸自己的分词，否则是自证。
+    """
+    text = (JS_DIR / _CARDS).read_text(encoding="utf-8")
+    expected = [i for i, line in enumerate(text.splitlines(), 1) if line.startswith("let ")]
+    _copy_cards(js_dir)
+    violations = _cards_violations(gate, js_dir)
+    assert [v.lineno for v in violations] == expected, (len(expected), violations)
+    assert {v.rule for v in violations} <= {"L1 零顶层可变状态契约禁mutable-state"}, violations
+
+
+def test_cards_extra_top_level_let_red(gate: Any, js_dir: Path) -> None:
+    """变异自证：加回一个顶层 `let` ⇒ 闸红且点名该行（闸不是「跑当前树恰好红」）。"""
+    _copy_cards(js_dir)
+    inject(js_dir / _CARDS, _CARDS_ANCHOR, "let probeState = 1;\n" + _CARDS_ANCHOR)
+    hits = [v for v in _cards_violations(gate, js_dir) if "probeState" in v.raw]
+    assert len(hits) == 1, hits
+    assert hits[0].rule.endswith("禁mutable-state"), hits
+
+
+def test_cards_function_scoped_let_is_not_flagged(gate: Any, js_dir: Path) -> None:
+    """阴性对照：函数体内的 `let` 是合法遮蔽，判它会造假红（规则只认净深度 0）。"""
+    _copy_cards(js_dir)
+    inject(
+        js_dir / _CARDS,
+        _CARDS_ANCHOR,
+        _CARDS_ANCHOR + "\nfunction _probe() { let inner = 1; return inner; }",
+    )
+    assert not [v for v in _cards_violations(gate, js_dir) if "inner" in v.raw]
 
 
 # ══ 3. 真树集成 + 端到端退出码 ═══════════════════════════════════════════════
