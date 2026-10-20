@@ -496,7 +496,8 @@ def test_reader_writer_cards_stale_guards():
     w = Path("static/js/writer.js").read_text(encoding="utf-8")
     assert "_analyzeToken" in w and "token !== _analyzeToken" in w
     c = Path("static/js/cards.js").read_text(encoding="utf-8")
-    assert 'cardSegment !== "prep"' in c, "prep 矩阵渲染守卫缺失"
+    # 段名已搬进 cardState.catalog.segment（cd-state.js 簇 1）；形状与语义不变。
+    assert 'cardState.catalog.segment !== "prep"' in c, "prep 矩阵渲染守卫缺失"
 
 
 def test_player_blob_url_revoked_on_all_exits():

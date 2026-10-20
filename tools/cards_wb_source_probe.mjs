@@ -104,6 +104,11 @@ function sliceFunction(src, declNeedle) {
 }
 
 const cardsJs = fs.readFileSync(path.join(ROOT, "static", "js", "cards.js"), "utf8");
+/* 状态容器：cards.js 的模块级状态已搬进 cd-state.js（Task 4）。渲染切片引用的
+ * `cardState` MUST 取自**真源码切片**，不许手写桩 —— 手写桩一旦字段漂移，探针就会
+ * 拿与生产不同的状态形状判行为（假绿），或直接 ReferenceError（本探针曾如此）。 */
+const cdStateJs = fs.readFileSync(path.join(ROOT, "static", "js", "cd-state.js"), "utf8");
+let stateFn = "";
 let predicateFn = "";
 let statsFn = "";
 let renderFn = "";
@@ -111,13 +116,14 @@ try {
   /* renderDeckStage 自子计划 5 Task 1 起会调 isWorkbenchSourced（决定工作台词
    * 收不收 DSR 复习按钮），该函数 MUST 一并进沙箱，否则本探针的卡面渲染会撞
    * ReferenceError。这是**补齐切片**（渲染路径多了一个依赖），不改动任何断言。 */
+  stateFn = sliceFunction(cdStateJs, "export const cardState = ");
   predicateFn = sliceFunction(cardsJs, "function isWorkbenchSourced(");
   statsFn = sliceFunction(cardsJs, "function cardStatsTag(");
   renderFn = sliceFunction(cardsJs, "export function renderDeckStage(");
 } catch (e) {
   fail([`源码切片失败：${e.message}`]);
 }
-const transformed = predicateFn + "\n\n" + statsFn + "\n\n" + renderFn;
+const transformed = stateFn + "\n\n" + predicateFn + "\n\n" + statsFn + "\n\n" + renderFn;
 
 /* 切片护栏：切歪 / 回退 ⇒ 直接红，不许假绿 */
 const stripProblems = [];
@@ -129,6 +135,8 @@ if (/^\s*import\b/m.test(transformed))
   stripProblems.push("切片里混入 import 行（切片边界算错了）");
 if (/\brepetition_count\b/.test(statsFn))
   stripProblems.push("cardStatsTag 里引用了 repetition_count（工作台 s 与 DSR 复习次数语义不同，MUST NOT 混用）");
+if (!/const cardState = \{/.test(transformed))
+  stripProblems.push("切片缺 cd-state.js 的 cardState 容器（状态搬走后探针必须跟着搬，否则渲染切片 ReferenceError）");
 if (stripProblems.length) fail(stripProblems);
 
 /* ---------------------------------------------------------------------------
@@ -175,7 +183,7 @@ function buildCtx() {
     },
   };
   const ctx = vm.createContext(sandbox);
-  vm.runInContext("var deckIndex = 0; var deckFlipped = false;", ctx, { filename: "cards-wb-source-prelude.js" });
+  // 状态容器已随 transformed 进沙箱；deckIndex/deckFlipped 桩随搬家一并删除。
   vm.runInContext(transformed, ctx, { filename: "cards.stripped.js" });
   return { ctx, container };
 }

@@ -80,7 +80,13 @@ function matchBracket(src, openIdx) {
   throw new Error("找不到配对闭括号");
 }
 
-/** JS 块切片：锚点正则不得吞掉首个 `{`，切片= 锚点起、配对闭括号止。 */
+/** JS 块切片：锚点起、配对闭括号止。
+ *  ⚠️ 锚点必须**连参数表一起吃掉**（`\b[^{]*`），把首个开括号留给函数体的 `{`。
+ *  只吃到函数名的锚点（`/export\s+function\s+foo\b/`）会让切片退化成签名
+ *  `export function foo()` —— 首个 OPEN 是 `(`，配对到 `)` 就收尾，函数体一个字都不在
+ *  切片里 ⇒ 该切片上的所有检查全是死断言（本文件三条曾同时中此坑：
+ *  setCardSegment / renderCardsGrid / switchWriterMode，改名前也照样绿）。
+ */
 function sliceBlock(src, anchorRe, label) {
   const m = anchorRe.exec(src);
   if (!m) { problems.push(`找不到 ${label}（锚点丢了或实现被删）`); return ""; }
@@ -195,14 +201,16 @@ for (const frag of GONE_FROM_HTML) {
 }
 
 /* ---- 第 2 层：JS 挂载链静态断言 ----------------------------------------- */
-const setSegmentBody = sliceBlock(cardsJs, /export\s+function\s+setCardSegment\b/, "cards.js setCardSegment");
+const setSegmentBody = sliceBlock(cardsJs, /export\s+function\s+setCardSegment\b[^{]*/, "cards.js setCardSegment");
 if (setSegmentBody && /['"]a1['"]/.test(setSegmentBody))
   problems.push("cards.js setCardSegment 仍处理 'a1' 段（备考域已接管入口）");
 
-const renderGridBody = sliceBlock(cardsJs, /export\s+function\s+renderCardsGrid\b/, "cards.js renderCardsGrid");
+const renderGridBody = sliceBlock(cardsJs, /export\s+function\s+renderCardsGrid\b[^{]*/, "cards.js renderCardsGrid");
 if (renderGridBody) {
-  if (/cardSegment\s*===?\s*['"]a1['"]/.test(renderGridBody))
-    problems.push("cards.js renderCardsGrid 仍保留 cardSegment === 'a1' 分流段");
+  /* 段名已从裸 `cardSegment` 搬进 cardState.catalog.segment —— 只认旧名的正则改完后
+   * 永远失配（真回归也绿）。此处必须咬住现形态。 */
+  if (/cardState\.catalog\.segment\s*===?\s*['"]a1['"]/.test(renderGridBody))
+    problems.push("cards.js renderCardsGrid 仍保留 cardState.catalog.segment === 'a1' 分流段");
   if (renderGridBody.includes("a1-toolbar"))
     problems.push("cards.js renderCardsGrid 仍操作 a1-toolbar（工具栏已归备考域）");
   if (renderGridBody.includes("A1Cards."))
@@ -217,7 +225,7 @@ if (!/export\s*\{[^}]*setExamWritingTab[^}]*\}\s*from\s*["']\.\/a1_writer\.js["'
 if (!/export\s+(async\s+)?function\s+setExamWritingTab\b/.test(a1WriterJs))
   problems.push("a1_writer.js 缺 export setExamWritingTab（exam 写作页签切换无宿主）");
 
-const switchModeBody = sliceBlock(a1WriterJs, /export\s+function\s+switchWriterMode\b/, "a1_writer.js switchWriterMode");
+const switchModeBody = sliceBlock(a1WriterJs, /export\s+function\s+switchWriterMode\b[^{]*/, "a1_writer.js switchWriterMode");
 if (switchModeBody && /\bformular\b|\bemail\b/i.test(switchModeBody))
   problems.push("a1_writer.js switchWriterMode 仍处理 formular/email（A1 写作已迁备考域）");
 

@@ -104,6 +104,11 @@ function sliceFunction(src, declNeedle) {
 }
 
 const cardsJs = fs.readFileSync(path.join(ROOT, "static", "js", "cards.js"), "utf8");
+/* 状态容器：cards.js 的模块级状态已搬进 cd-state.js（Task 4）。渲染切片引用的
+ * `cardState` MUST 取自**真源码切片**，不许手写桩 —— 手写桩一旦字段漂移，探针就会
+ * 拿与生产不同的状态形状判行为（假绿），或直接 ReferenceError（本探针曾如此）。 */
+const cdStateJs = fs.readFileSync(path.join(ROOT, "static", "js", "cd-state.js"), "utf8");
+let stateFn = "";
 const indexHtml = fs.readFileSync(path.join(ROOT, "static", "index.html"), "utf8");
 
 /** 去掉块注释、行注释与 HTML 注释（判据逐字比对 MUST NOT 被注释里的示例干扰；
@@ -120,6 +125,7 @@ let predicateFn = "";
 let statsFn = "";
 let renderFn = "";
 try {
+  stateFn = sliceFunction(cdStateJs, "export const cardState = ");
   statsFn = sliceFunction(cardsJs, "function cardStatsTag(");
   renderFn = sliceFunction(cardsJs, "export function renderDeckStage(");
 } catch (e) {
@@ -133,7 +139,7 @@ try {
 } catch {
   predicateMissing = true;
 }
-const transformed = [predicateFn, statsFn, renderFn].filter(Boolean).join("\n\n");
+const transformed = [stateFn, predicateFn, statsFn, renderFn].filter(Boolean).join("\n\n");
 
 /* 切片护栏：切歪 / 回退 ⇒ 直接红，不许假绿 */
 const stripProblems = [];
@@ -149,6 +155,8 @@ if (/^[ \t]*import\b/m.test(transformed))
   stripProblems.push("切片里混入 import 行（切片边界算错了）");
 if (!/\bmastered\b/.test(renderFn))
   stripProblems.push("renderDeckStage 切片缺 mastered（mastered 徽记/按钮被吞了？）");
+if (!/const cardState = \{/.test(transformed))
+  stripProblems.push("切片缺 cd-state.js 的 cardState 容器（状态搬走后探针必须跟着搬，否则渲染切片 ReferenceError）");
 if (stripProblems.length) fail(stripProblems);
 
 /* ---------------------------------------------------------------------------
@@ -196,9 +204,7 @@ function buildCtx() {
     },
   };
   const ctx = vm.createContext(sandbox);
-  vm.runInContext("var deckIndex = 0; var deckFlipped = false;", ctx, {
-    filename: "cards-workbench-no-review-prelude.js",
-  });
+  // 状态容器已随 transformed 进沙箱；deckIndex/deckFlipped 桩随搬家一并删除。
   vm.runInContext(transformed, ctx, { filename: "cards.stripped.js" });
   return { ctx, container };
 }
