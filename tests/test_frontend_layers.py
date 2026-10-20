@@ -601,7 +601,7 @@ def test_rd_syntax_l1_top_level_let_red(gate: Any, js_dir: Path) -> None:
 
 _RD_API = "rd-api.js"
 # 锚点取自计划 Task 2 的 Produces（落盘后首个具名远程导出）
-_RD_API_ANCHOR = "export async function deleteArticleRemote(id) {"
+_RD_API_ANCHOR = "export async function removeArticle(id) {"
 
 
 def _rd_api_rules(gate: Any, js_dir_arg: Path) -> list[str]:

@@ -17,12 +17,8 @@
 import { api } from './core.js';
 
 // ── 文章 CRUD ─────────────────────────────────────────────────────────────
-export async function deleteArticleRemote(id) {
-  return api('/api/articles/' + id, { method: 'DELETE' });
-}
-
 export async function removeArticle(id) {
-  return deleteArticleRemote(id);
+  return api('/api/articles/' + id, { method: 'DELETE' });
 }
 
 export async function fetchArticles() {
@@ -108,18 +104,3 @@ export async function saveSyntaxStats(payload) {
 export async function fetchSyntaxStats() {
   return api('/api/syntax/stats');
 }
-
-// ── 别名兼容（对齐 docs/plans/2026-10-19-reader-api-layer-split.md） ─────────
-export const fetchArticlesRemote = fetchArticles;
-export const fetchArticleRemote = fetchArticle;
-export const lookupVocabRemote = lookupVocab;
-export const lookupGrammarRemote = lookupGrammar;
-export const saveVocabCardRemote = saveVocabCard;
-export const saveGrammarCardRemote = saveGrammarCard;
-export const fetchCardCountsRemote = fetchCardCounts;
-export const fetchArticleNotesRemote = fetchArticleNotes;
-export const saveArticleNoteRemote = saveArticleNote;
-export const deleteArticleNoteRemote = removeNote;
-export const aiNoteAssistRemote = fetchNoteAssist;
-export const saveSyntaxStatsRemote = saveSyntaxStats;
-export const fetchSyntaxStatsRemote = fetchSyntaxStats;
