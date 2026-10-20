@@ -524,3 +524,18 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **流程披露（含自我更正）**：Task 3 的独立 Reviewer 连续三次未按要求产出终态。Task 3b/Task 4 由**编排者本人**执行并以物理凭据自证，偏离「编排者不改 Tier 2 代码」纪律。⚠️ **当时归因为「委派通道当日不可用」是错的**：那条委派结果两小时后才回传，实际 **138 秒**就完成并提交（`5d30d6f`）；我在它提交前查了 worktree（当时确未改动），随后还删了分支。**通道没坏，是我把「采样太早」读成了「没有发生」** —— 这条形态值得记：判断「某机制失效」前 MUST 先确认观察窗口覆盖了对方的工作周期，否则删掉的可能是活的成果。
 - **意外交叉验证**：孤儿提交 `5d30d6f`（子代理实现）与我方 `64a64d1` 整树 `git diff --quiet` **完全一致**，连 `_RD_API_ANCHOR` 重定向这条连带修正都相同。两条独立路径收敛到逐字节相同输出 —— 不能替代正式复核，但为自证提供了独立旁证。
 - **门禁（本分支实测）**：六道 Python 机械闸全 exit 0 · `ruff check .` 全绿 · `mypy --strict delector tools` 118 文件 0 错 · `mypy --follow-imports=skip tests` 158 文件 0 错 · Go 8 包全绿 + `gofmt -l .` 0 差异 · 全量 **154 个测试文件 8 批串行全绿：2479 passed + 3 skipped**（基线 2441 ⇒ 净增 41）· 全部改动文件 100% UTF-8 CRLF 0 lone LF。
+
+### 2026-10-20 19:30 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**cards.js 状态收口（Task 1~7）全部交付**。分支 `refactor/cards-state-container`（独立 worktree）。计划 `docs/plans/2026-10-20-cards-state-container.md`、设计稿 `docs/specs/2026-10-20-cards-state-view-decoupling-design.md`。
+- **Task 1 闸立规（RED 先行）**：`cd-state.js` 进 `LAYER_SPEC`（L1，`allowed_imports=()`）；`cards.js` 进 `MUTABLE_STATE_MODULES` —— **首次**被「零顶层可变状态」覆盖。RED = 1 `missing-layer-module` + **15** `禁mutable-state`，无第三类。
+- **实施中发现计划前提写错**：`check_layer_bans` 的顶层 `let` 扫描**嵌在 `LAYER_SPEC` 循环内** ⇒ 光加成员产生**零违规**。故提取 `top_level_mutable_tokens()` 并新增规则 **⑦**（仅受可变状态约束、不在 LAYER_SPEC 的模块）。两条反事实证明必要：放 LAYER_SPEC 会炸 231 处（216 连带红）；去掉 ⑦ 则 `cards.js` 违规归 0。
+- **Task 1b（评审驱动）**：① `③b` 一名两义（import 白名单 vs 可变状态）⇒ 新遍历改编号 ⑦；② `MUTABLE_STATE_ONLY_LAYER` 原为 `"L1 零顶层可变状态契约"`，把视图模块标成 L1 ⇒ 去掉层声明；③ **静默失效**：MSM-only 模块缺失时原为 `if not path.exists(): continue` ⇒ `cards.js` 改名会让 15 个钉子无声消失。改为报 `missing-mutable-state-module`。
+- **Task 2 建 `cd-state.js`**：五簇（catalog/deck/quiz/prep/toast）+ `enterSegment`（3 写）+ `stepDeckState`（2 写，**无夹取**）。初值经评审用 `node compare_init.mjs` **机械证明**逐字一致（15 个 let 全部 1:1 映射，类型严格；`lets NOT mapped: []`）。
+- **Task 2b（测试强度）**：评审用变异证明两个洞 —— ① `stepDeckState` 无「改动路径集」断言 ⇒ 加第三个写全绿；② `enterSegment` 的脏集只覆盖 13/24 叶子 ⇒ **写回初值**（`prep.searchQuery=""` / `quiz.correct=0`）全绿。改为递归弄脏全部 24 叶子并注入可区分哨兵。编排者独立复验：三个变异各自只红对应那一条。
+- **Task 3 `cards.js` 改向**：15 → **0** 顶层 let；闸首次转绿；导出面 36 + barrel 不变；错误轨 12 → 12。五陷阱全守住（`stepDeckState` 留在 `setTimeout(160)` 内 / `setCardSegment` 的 DOM 顺序 / `renderDeckStage` 渲染期夹取保持内联 / `quizState` 零重绑 / `_prepLoading` 的 Promise 锁序列）。
+- **计划自身缺陷（Task 3b）**：Task 1 新造的两条变异用例把锚点钉在 Task 3 要删的那行 `let cardSegment = "due";` 上 ⇒ 挂在「锚点命中 0 次」而非闸上。**根因：站点普查用的是 Task 1 之前的树**。锚点改到 `export function setCardSegment(seg) {`（受 `main.js` 导入契约保护），并加专属诊断话术。
+- **Task 4/5b 探针 —— 挖出既有缺陷**：`ia_dom_mount_probe` 的 `sliceBlock` 只切到函数**名** ⇒ 切片不含函数体 ⇒ **4 条守卫一直是死的**（`a1` 分流段 / `a1-toolbar` / `A1Cards.` / `setCardSegment` 的 `'a1'`）。实测：同样注入 `a1` 分支，旧探针 exit **0**，新探针 exit **1**。**且第一次修复本身又重现同类缺陷** —— `[^{]*` 遇解构参数 `f({seg}={})` 会在参数花括号处停下；最终改为「`(` → matchBracket → 要求下一个字符是 `{`」，失败则具名报错。另删掉与真实切片接缝**并存的手写桩**（一个沙箱两个真相源，接缝守卫一旦移除就会静默回落到桩）。
+- **Task 6**：6 条变异从「手工做一次」变成**永久用例**（`test_cards_state_split.py` 6 → 12），每条断言期望的规则名/失败文本。
+- **门禁（本分支实测）**：六道 Python 机械闸全 exit 0 · `ruff` 全绿 · `mypy --strict delector tools` 118 文件 0 错 · `mypy --follow-imports=skip tests` 159 文件 0 错 · Go 8 包全绿 + gofmt 0 差异 · 全量 **155 个测试文件 8 批串行全绿：2509 passed + 3 skipped**（基线 2441 ⇒ 净增 71）· 13 个改动文件全部 0 lone LF。
+- **委派纪律观察**：本计划中三次出现子代理落在**错误血统**上并据此产出与事实相反的汇报（「零 cardState 引用」实为 Task 4 已加 3 处；「`_CARDS_ANCHOR` 指向顶层 let」实为 Task 3b 已改）。故后续派单均在 brief 里强制「先 merge 目标分支并核实 HEAD = 指定提交」。

@@ -12,8 +12,11 @@
   L1 `static/js/rd-syntax.js`  纯格式化层（阅读器语法统计与渲染）
   L1 `static/js/wb-queue.js`   纯格式化层（复习队列构建 / 调度族）
   L1 `static/js/wb-scope.js`   纯格式化层（词表 scope / CEFR 等级判定）
+  L1 `static/js/cd-state.js`   纯状态容器（cards 的 15 个模块级状态；模块由 Task 2 产出）
   L2 `static/js/wr-api.js`     持久化访问层（写作台网络访问）
   L2 `static/js/rd-api.js`     持久化访问层（阅读器网络访问；模块由 Task 2 产出）
+  ——  `static/js/cards.js`      不在任何分层，但受「零顶层 let/var」单条契约约束（见
+                                `MUTABLE_STATE_MODULES`；计划 2026-10-20 Task 1 首次纳管）
 
 规则清单
 --------
@@ -34,6 +37,11 @@
       ⇒ `unverifiable-method`。MUST NOT 猜一个 GET 蒙过去。
   ⑥  防假解耦：`writer.js` MUST NOT 在**顶层**重新定义已迁出到 L1/L2 的符号
       （含 `function*`；`export {…}` 再导出不算声明）。
+  ⑦  零顶层可变状态契约（不属于任何分层的模块，如 `cards.js`）：顶层 `let`/`var`
+      MUST NOT 出现（状态一律收进状态容器）。这类模块不在 `LAYER_SPEC`（①②③b 不适用），
+      只受这一条契约约束；但**文件缺席即判失败**（`missing-mutable-state-module`）——
+      它是该契约的唯一载体，静默跳过等于「改名/删除即让钉子凭空消失」（本仓禁止的
+      silent-failure 类）。
 
 判定纪律
 --------
@@ -314,6 +322,14 @@ LAYER_SPEC: Dict[str, LayerSpec] = {
         ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
         allowed_imports=(),
     ),
+    # cards 状态容器（计划 `2026-10-20-cards-state-container.md` Task 1，Gate-Before-Code）：
+    # 纯状态层 MUST NOT 触碰 DOM / 网络 / 提示 / 计时器，且 MUST NOT import 任何模块
+    # （`allowed_imports=()` —— 状态容器不依赖任何东西，才谈得上「谁都能读、写入面一份清单」）。
+    "cd-state.js": LayerSpec(
+        layer="L1 纯状态容器",
+        ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
+        allowed_imports=(),
+    ),
     "wr-api.js": LayerSpec(
         layer="L2 持久化访问层",
         ban_rules=("dom", "toast", "timer", "dynamic-eval"),
@@ -336,8 +352,17 @@ MUTABLE_STATE_MODULES: Tuple[str, ...] = (
     # 原本只有 wr-api.js 未被纳管 ⇒ rd-api.js 一并收紧，避免 L2 成为可变状态的法外之地。
     "wr-api.js",
     "rd-api.js",
+    # 纯状态容器自己同样零顶层 `let`（状态只许在 `cardState` 对象里，见设计稿 §6.1）。
+    "cd-state.js",
+    # 视图层首次纳管（计划 2026-10-20 Task 1）：`cards.js` 的 15 个模块级 `let` 收进
+    # `cd-state.js` 后，本规则成为「状态不许再长回视图层」的机械钉子。
+    # 它不在 `LAYER_SPEC`（不做 DOM/网络禁令），只受这一条契约约束。
+    "cards.js",
 )
 MUTABLE_KEYWORDS = frozenset({"let", "var"})
+# 只受「零顶层可变状态」约束、却不属于任何分层的模块（如 `cards.js`）的规则前缀。
+# 刻意**不带 L1/L2 字样**：`cards.js` 是视图层，不在任何分层里，标成「L1」是假标签。
+MUTABLE_STATE_ONLY_LAYER = "零顶层可变状态契约"
 
 VIEW_MODULES: Tuple[str, ...] = ("writer.js",)
 FALSE_DECOUPLING_HOST = "writer.js"
@@ -428,6 +453,22 @@ def _dedupe(violations: Sequence[Violation]) -> List[Violation]:
 
 
 # ══ 规则①②：标识符 + 字符串内容 + 顶层可变状态 ═══════════════════════════════
+def top_level_mutable_tokens(toks: Sequence[Tok]) -> List[Tok]:
+    """花括号**净深度 0** 处的 `let`/`var`（不依赖「列 0」，见文件末尾 F10）。"""
+    out: List[Tok] = []
+    depth = 0
+    for t in toks:
+        if t.kind == "punct":
+            if t.text == "{":
+                depth += 1
+            elif t.text == "}":
+                depth = max(0, depth - 1)
+            continue
+        if t.kind == "id" and depth == 0 and t.text in MUTABLE_KEYWORDS:
+            out.append(t)
+    return out
+
+
 def check_layer_bans(js_dir: Path) -> List[Violation]:
     out: List[Violation] = []
     for name, spec in LAYER_SPEC.items():
@@ -468,21 +509,38 @@ def check_layer_bans(js_dir: Path) -> List[Violation]:
                     )
         # ③ 顶层可变状态：花括号**净深度 0** 处的 let/var
         if name in MUTABLE_STATE_MODULES:
-            depth = 0
-            for t in toks:
-                if t.kind == "punct":
-                    if t.text == "{":
-                        depth += 1
-                    elif t.text == "}":
-                        depth = max(0, depth - 1)
-                    continue
-                if t.kind == "id" and depth == 0 and t.text in MUTABLE_KEYWORDS:
-                    out.append(
-                        Violation(
-                            f"static/js/{name}", t.line, f"{spec.layer}禁mutable-state",
-                            raw_line_of(raw, t.line),
-                        )
+            for t in top_level_mutable_tokens(toks):
+                out.append(
+                    Violation(
+                        f"static/js/{name}", t.line, f"{spec.layer}禁mutable-state",
+                        raw_line_of(raw, t.line),
                     )
+                )
+    # ⑦ 只受「零顶层可变状态」约束、却不在 `LAYER_SPEC` 的模块（`cards.js`）：
+    # 它们不是分层模块 ⇒ 不适用 `missing-layer-module`；但**缺席 MUST NOT 静默跳过**：
+    # 本规则是 `cards.js` 那批模块级状态唯一的机械钉子，改名/删除若无声通过，钉子就
+    # 凭空消失了（本仓禁止的 silent-failure 类）。故缺席报 `missing-mutable-state-module`。
+    for name in MUTABLE_STATE_MODULES:
+        if name in LAYER_SPEC:
+            continue
+        path = js_dir / name
+        if not path.exists():
+            out.append(
+                Violation(
+                    f"static/js/{name}", 1, "missing-mutable-state-module",
+                    f"只受零顶层可变状态契约约束的模块不存在：{name}",
+                )
+            )
+            continue
+        raw, toks = read_js(path)
+        for t in top_level_mutable_tokens(toks):
+            out.append(
+                Violation(
+                    f"static/js/{name}", t.line,
+                    f"{MUTABLE_STATE_ONLY_LAYER}禁mutable-state",
+                    raw_line_of(raw, t.line),
+                )
+            )
     return out
 
 

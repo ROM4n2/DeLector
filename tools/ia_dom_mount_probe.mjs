@@ -80,13 +80,52 @@ function matchBracket(src, openIdx) {
   throw new Error("找不到配对闭括号");
 }
 
-/** JS 块切片：锚点正则不得吞掉首个 `{`，切片= 锚点起、配对闭括号止。 */
+/** 表达式/对象字面量切片：锚点起、首个配对的 `{…}` 止（只用于 `Object.assign(window, {…})`
+ *  这类**没有参数表**的锚点；有参数表的一律走 sliceFunctionBody）。
+ */
 function sliceBlock(src, anchorRe, label) {
   const m = anchorRe.exec(src);
   if (!m) { problems.push(`找不到 ${label}（锚点丢了或实现被删）`); return ""; }
   let i = m.index + m[0].length;
   while (i < src.length && !OPEN[src[i]]) i++;
-  const end = matchBracket(src, i);
+  if (i >= src.length) { problems.push(`${label} 的块定位失败（找不到开括号）`); return ""; }
+  let end;
+  try { end = matchBracket(src, i); }
+  catch (e) { problems.push(`${label} 的块定位失败（括号不配对：${e.message}）`); return ""; }
+  return src.slice(m.index, end + 1);
+}
+
+/** 函数体切片：锚点起 → **跳过参数表** → 函数体配对 `}` 止。
+ *
+ *  锚点 MUST NOT 依赖「首个 `{` 就是函数体」。历史坑：锚点写成 `\b[^{]*` 再取首个
+ *  开括号，参数表里一旦出现解构（`function f({ seg = 'due' } = {})`），首个 `{` 就是
+ *  参数里的解构花括号，配对到那个 `}` 就收尾 —— 切片退化成**签名**，函数体一个字都
+ *  不在切片里，该切片上的所有检查全是死断言（给 setCardSegment 加个解构默认参数 +
+ *  真 `'a1'` 分支，探针照样 exit 0）。
+ *
+ *  故此处显式分三步，任一步失败都推**具名** problem（不许返回短切片静默降级）：
+ *    1) 锚点命中后定位参数表开括号 `(`，用 matchBracket 找到配对的 `)`；
+ *    2) 跳过空白，要求下一个字符恰是函数体开括号 `{`；
+ *    3) 从该 `{` 配对到 `}`，切片 = 锚点到 `}`。
+ *  空函数体（`function f() {}`）是合法形态，不额外设长度下限。
+ */
+function sliceFunctionBody(src, anchorRe, label) {
+  const m = anchorRe.exec(src);
+  if (!m) { problems.push(`找不到 ${label}（锚点丢了或实现被删）`); return ""; }
+  const paren = src.indexOf("(", m.index + m[0].length);
+  if (paren < 0) { problems.push(`${label} 的函数体定位失败（锚点后找不到参数表开括号）`); return ""; }
+  let paramsEnd;
+  try { paramsEnd = matchBracket(src, paren); }
+  catch (e) { problems.push(`${label} 的函数体定位失败（参数表括号不配对：${e.message}）`); return ""; }
+  let j = paramsEnd + 1;
+  while (j < src.length && /\s/.test(src[j])) j++;
+  if (src[j] !== "{") {
+    problems.push(`${label} 的函数体定位失败（参数表后不是函数体开括号，实际为 ${JSON.stringify(src[j] ?? "<EOF>")}）`);
+    return "";
+  }
+  let end;
+  try { end = matchBracket(src, j); }
+  catch (e) { problems.push(`${label} 的函数体定位失败（函数体括号不配对：${e.message}）`); return ""; }
   return src.slice(m.index, end + 1);
 }
 
@@ -195,14 +234,16 @@ for (const frag of GONE_FROM_HTML) {
 }
 
 /* ---- 第 2 层：JS 挂载链静态断言 ----------------------------------------- */
-const setSegmentBody = sliceBlock(cardsJs, /export\s+function\s+setCardSegment\b/, "cards.js setCardSegment");
+const setSegmentBody = sliceFunctionBody(cardsJs, /export\s+function\s+setCardSegment\b/, "cards.js setCardSegment");
 if (setSegmentBody && /['"]a1['"]/.test(setSegmentBody))
   problems.push("cards.js setCardSegment 仍处理 'a1' 段（备考域已接管入口）");
 
-const renderGridBody = sliceBlock(cardsJs, /export\s+function\s+renderCardsGrid\b/, "cards.js renderCardsGrid");
+const renderGridBody = sliceFunctionBody(cardsJs, /export\s+function\s+renderCardsGrid\b/, "cards.js renderCardsGrid");
 if (renderGridBody) {
-  if (/cardSegment\s*===?\s*['"]a1['"]/.test(renderGridBody))
-    problems.push("cards.js renderCardsGrid 仍保留 cardSegment === 'a1' 分流段");
+  /* 段名已从裸 `cardSegment` 搬进 cardState.catalog.segment —— 只认旧名的正则改完后
+   * 永远失配（真回归也绿）。此处必须咬住现形态。 */
+  if (/cardState\.catalog\.segment\s*===?\s*['"]a1['"]/.test(renderGridBody))
+    problems.push("cards.js renderCardsGrid 仍保留 cardState.catalog.segment === 'a1' 分流段");
   if (renderGridBody.includes("a1-toolbar"))
     problems.push("cards.js renderCardsGrid 仍操作 a1-toolbar（工具栏已归备考域）");
   if (renderGridBody.includes("A1Cards."))
@@ -217,14 +258,14 @@ if (!/export\s*\{[^}]*setExamWritingTab[^}]*\}\s*from\s*["']\.\/a1_writer\.js["'
 if (!/export\s+(async\s+)?function\s+setExamWritingTab\b/.test(a1WriterJs))
   problems.push("a1_writer.js 缺 export setExamWritingTab（exam 写作页签切换无宿主）");
 
-const switchModeBody = sliceBlock(a1WriterJs, /export\s+function\s+switchWriterMode\b/, "a1_writer.js switchWriterMode");
+const switchModeBody = sliceFunctionBody(a1WriterJs, /export\s+function\s+switchWriterMode\b/, "a1_writer.js switchWriterMode");
 if (switchModeBody && /\bformular\b|\bemail\b/i.test(switchModeBody))
   problems.push("a1_writer.js switchWriterMode 仍处理 formular/email（A1 写作已迁备考域）");
 
 if (a1CardsJs.includes('querySelector(".cards-view-toggle")'))
   problems.push("a1_cards.js 仍查询主站 .cards-view-toggle（应改查 #exam-cards-view-toggle）");
 
-const showBody = sliceBlock(mainJs, /export\s+function\s+show\(view\)/, "main.js show");
+const showBody = sliceFunctionBody(mainJs, /export\s+function\s+show\b/, "main.js show");
 if (showBody) {
   if (showBody.includes('if (view !== "cards")'))
     problems.push('main.js show() 仍用 view !== "cards" 守卫停考计时器（备考域宿主已改 view-exam）');

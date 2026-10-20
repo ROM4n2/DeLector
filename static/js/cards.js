@@ -5,6 +5,7 @@ import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
+import { cardState, enterSegment, stepDeckState } from "./cd-state.js";
 export {
   setA1Mode,
   filterA1Topic,
@@ -26,34 +27,23 @@ export {
 } from "./a1_cards.js";
 export * from "./a1_cards.js";
 
-let cardSegment = "due"; // 'due' | 'pending' | 'mastered' | 'prep'
-let cardViewMode = "deck"; // 'deck' | 'grid'
-let deckIndex = 0;
-let deckFlipped = false;
-let cachedCards = { vocab_cards: [], grammar_cards: [] };
-let cachedDueCards = { due_vocab: [], due_grammar: [], due_count: 0 };
-let undoToastTimer = null;
-let _lastFlipTime = 0;
-
 // a1_cards.js 是独立模块，读不到本模块作用域。这两个 getter 给它提供
 // 只读访问，避免循环 import 具名 state（getCachedVocabLemmas 判定已入
 // FSRS 盒的词元）。A1 的牌盒/目录判定已由 a1_cards.js 自管的
 // a1ViewMode 接管（ADR-0005 Task 2），getCardViewMode 不再被它消费，
 // 仅保留给主站 toggle 状态查询。
 export function getCardViewMode() {
-  return cardViewMode;
+  return cardState.catalog.viewMode;
 }
 
 export function getCachedVocabLemmas() {
   return new Set(
-    (cachedCards.vocab_cards || []).map(c => (c.lemma || c.word || '').toLowerCase())
+    (cardState.catalog.cards.vocab_cards || []).map(c => (c.lemma || c.word || '').toLowerCase())
   );
 }
 
 export function setCardSegment(seg) {
-  cardSegment = seg;
-  deckIndex = 0;
-  deckFlipped = false;
+  enterSegment(seg);
   ['due', 'pending', 'mastered', 'prep'].forEach(s => {
     const btn = document.getElementById('seg-' + s);
     if (btn) btn.classList.toggle('active', s === seg);
@@ -62,7 +52,7 @@ export function setCardSegment(seg) {
 }
 
 export function setCardViewMode(mode) {
-  cardViewMode = mode;
+  cardState.catalog.viewMode = mode;
   document
     .getElementById("mode-btn-deck")
     ?.classList.toggle("active", mode === "deck");
@@ -79,15 +69,15 @@ export async function loadCards() {
       api("/api/cards"),
       api("/api/cards/due"),
     ]);
-    cachedCards = allCards;
-    cachedDueCards = dueCards;
+    cardState.catalog.cards = allCards;
+    cardState.catalog.dueCards = dueCards;
   } catch (e) {
-    cachedCards = { vocab_cards: [], grammar_cards: [] };
-    cachedDueCards = { due_vocab: [], due_grammar: [], due_count: 0 };
+    cardState.catalog.cards = { vocab_cards: [], grammar_cards: [] };
+    cardState.catalog.dueCards = { due_vocab: [], due_grammar: [], due_count: 0 };
   }
 
-  const vAll = cachedCards.vocab_cards || [];
-  const gAll = cachedCards.grammar_cards || [];
+  const vAll = cardState.catalog.cards.vocab_cards || [];
+  const gAll = cardState.catalog.cards.grammar_cards || [];
   const totalPending =
     vAll.filter((c) => !c.mastered).length +
     gAll.filter((c) => !c.mastered).length;
@@ -98,7 +88,7 @@ export async function loadCards() {
   const sd = document.getElementById("seg-due-count");
   const sp = document.getElementById("seg-pending-count");
   const sm = document.getElementById("seg-mastered-count");
-  if (sd) sd.textContent = cachedDueCards.due_count || 0;
+  if (sd) sd.textContent = cardState.catalog.dueCards.due_count || 0;
   if (sp) sp.textContent = totalPending;
   if (sm) sm.textContent = totalMastered;
 
@@ -107,9 +97,9 @@ export async function loadCards() {
 
 export async function refreshDueCount() {
   try {
-    cachedDueCards = await api("/api/cards/due");
+    cardState.catalog.dueCards = await api("/api/cards/due");
     const sd = document.getElementById("seg-due-count");
-    if (sd) sd.textContent = cachedDueCards.due_count || 0;
+    if (sd) sd.textContent = cardState.catalog.dueCards.due_count || 0;
   } catch (e) {}
 }
 
@@ -119,14 +109,14 @@ export function renderCardsGrid() {
   // seg-a1 按钮同步删除，本函数不再认识 'a1' 这个段。
   document.getElementById('prep-filter-bar')?.classList.add('hidden');
 
-  // 介词矩阵段跟其余三段的数据源完全无关（不是 cachedCards 的过滤视图），
+  // 介词矩阵段跟其余三段的数据源完全无关（不是 cardState.catalog.cards 的过滤视图），
   // 所以在算 vList/gList 之前就分流，免得白跑一遍过滤。
-  if (cardSegment === "prep") {
+  if (cardState.catalog.segment === "prep") {
     document.getElementById("prep-filter-bar")?.classList.remove("hidden");
     // 牌盒/目录切换在这一段没有意义：两个模式渲染同一个矩阵，
     // 点了只是白付一次 691 行重排。
     document.querySelector(".cards-view-toggle")?.classList.add("hidden");
-    if (_prepMatrixCache) renderPrepMatrix();
+    if (cardState.prep.cache) renderPrepMatrix();
     else loadPrepMatrix().then(renderPrepMatrix);
     return;
   }
@@ -136,15 +126,15 @@ export function renderCardsGrid() {
   let vList = [];
   let gList = [];
 
-  if (cardSegment === "due") {
-    vList = cachedDueCards.due_vocab || [];
-    gList = cachedDueCards.due_grammar || [];
-  } else if (cardSegment === "mastered") {
-    vList = (cachedCards.vocab_cards || []).filter((c) => !!c.mastered);
-    gList = (cachedCards.grammar_cards || []).filter((c) => !!c.mastered);
+  if (cardState.catalog.segment === "due") {
+    vList = cardState.catalog.dueCards.due_vocab || [];
+    gList = cardState.catalog.dueCards.due_grammar || [];
+  } else if (cardState.catalog.segment === "mastered") {
+    vList = (cardState.catalog.cards.vocab_cards || []).filter((c) => !!c.mastered);
+    gList = (cardState.catalog.cards.grammar_cards || []).filter((c) => !!c.mastered);
   } else {
-    vList = (cachedCards.vocab_cards || []).filter((c) => !c.mastered);
-    gList = (cachedCards.grammar_cards || []).filter((c) => !c.mastered);
+    vList = (cardState.catalog.cards.vocab_cards || []).filter((c) => !c.mastered);
+    gList = (cardState.catalog.cards.grammar_cards || []).filter((c) => !c.mastered);
   }
 
   const container = document.getElementById("cards-container");
@@ -152,15 +142,15 @@ export function renderCardsGrid() {
 
   if (vList.length === 0 && gList.length === 0) {
     const emptyIcon =
-      cardSegment === "due" ? "🎉" : cardSegment === "mastered" ? "🛡️" : "🎴";
+      cardState.catalog.segment === "due" ? "🎉" : cardState.catalog.segment === "mastered" ? "🛡️" : "🎴";
     const emptyTitle =
-      cardSegment === "due"
+      cardState.catalog.segment === "due"
         ? "今日复习任务已全部达成！"
-        : cardSegment === "mastered"
+        : cardState.catalog.segment === "mastered"
           ? "尚无已掌握归档卡片"
           : "待复习卡片库空空如也";
     const emptyDesc =
-      cardSegment === "due"
+      cardState.catalog.segment === "due"
         ? "太棒了！艾宾浩斯记忆排程显示今日暂无到期卡片。您可以切换至「待复习全量」主动温故或进入文库精读新文章。"
         : "在阅读器中点击生词或语法考点，即可一键收录。";
 
@@ -178,7 +168,7 @@ export function renderCardsGrid() {
     return;
   }
 
-  if (cardViewMode === "deck") {
+  if (cardState.catalog.viewMode === "deck") {
     renderDeckStage(vList, gList);
   } else {
     renderCatalogGrid(vList, gList);
@@ -253,8 +243,8 @@ export function renderDeckStage(vList, gList) {
     ...gList.map((c) => ({ ...c, _type: "grammar" })),
   ];
 
-  if (deckIndex >= deck.length) deckIndex = Math.max(0, deck.length - 1);
-  const card = deck[deckIndex];
+  if (cardState.deck.index >= deck.length) cardState.deck.index = Math.max(0, deck.length - 1);
+  const card = deck[cardState.deck.index];
   const total = deck.length;
   const isVocab = card._type === "vocab";
 
@@ -303,7 +293,7 @@ export function renderDeckStage(vList, gList) {
     <div class="deck-stage" id="deck-stage">
       <div class="deck-meta-bar">
         <span>🎴 3D 扑克翻牌盒 · POKER FLIP STACK</span>
-        <span class="deck-counter-badge">KARTE ${deckIndex + 1} / ${total}</span>
+        <span class="deck-counter-badge">KARTE ${cardState.deck.index + 1} / ${total}</span>
       </div>
 
       <div class="deck-stack-wrap" id="deck-stack-wrap">
@@ -311,7 +301,7 @@ export function renderDeckStage(vList, gList) {
         ${total > 1 ? '<div class="deck-card-layer deck-card-layer-2"></div>' : ""}
 
         <!-- 3D Flipping Card Container -->
-        <div class="deck-active-card ${deckFlipped ? "is-flipped" : ""}" id="deck-active-card">
+        <div class="deck-active-card ${cardState.deck.flipped ? "is-flipped" : ""}" id="deck-active-card">
 
           <!-- 🎴 FRONT FACE (正面) -->
           <div class="deck-card-face card-front" onclick="toggleDeckFlip(event)">
@@ -407,13 +397,13 @@ export function renderDeckStage(vList, gList) {
 
       <!-- Navigation Stepper Bar -->
       <div class="deck-nav-controls">
-        <button class="deck-btn-nav" id="deck-btn-prev" onclick="stepDeck(-1)" ${deckIndex === 0 ? "disabled" : ""}>
+        <button class="deck-btn-nav" id="deck-btn-prev" onclick="stepDeck(-1)" ${cardState.deck.index === 0 ? "disabled" : ""}>
           ‹ 上一张 (A)
         </button>
         <button class="btn btn-dark" id="deck-btn-flip-ctrl" style="font-size:0.75rem;padding:0.45rem 1.25rem;" onclick="toggleDeckFlip(event)">
-          ${deckFlipped ? "↶ 翻回正面 (Space)" : "🔀 翻至背面 (Space)"}
+          ${cardState.deck.flipped ? "↶ 翻回正面 (Space)" : "🔀 翻至背面 (Space)"}
         </button>
-        <button class="deck-btn-nav" id="deck-btn-next" onclick="stepDeck(1)" ${deckIndex >= total - 1 ? "disabled" : ""}>
+        <button class="deck-btn-nav" id="deck-btn-next" onclick="stepDeck(1)" ${cardState.deck.index >= total - 1 ? "disabled" : ""}>
           下一张 (D) ›
         </button>
       </div>
@@ -426,11 +416,9 @@ export function renderDeckStage(vList, gList) {
 // P0-4：评分请求的重入闸。曾四个评分按钮无 disabled、本函数无重入闸 ⇒ 连点会
 // 触发两次 POST ⇒ 后端每次基于当前行重算并 UPDATE ⇒ FSRS 双推进 + 跳两张卡
 // （学习数据写脏且不可回滚）。前端飞行闸是第一道也是最实际的一道防线。
-let _reviewInFlight = false;
-
 export async function submitCardReview(type, id, grade) {
-  if (_reviewInFlight) return; // 重入闸：请求飞行期间的连点直接丢弃
-  _reviewInFlight = true;
+  if (cardState.deck.reviewInFlight) return; // 重入闸：请求飞行期间的连点直接丢弃
+  cardState.deck.reviewInFlight = true;
   // 请求飞行期间禁用全部评分按钮（照 writer.js:saveWriterEssay 的既有模式）
   const ratingBtns = Array.from(document.querySelectorAll(".deck-sm2-rating-bar .sm2-btn"));
   ratingBtns.forEach((b) => { b.disabled = true; });
@@ -451,7 +439,7 @@ export async function submitCardReview(type, id, grade) {
     console.error("Failed to submit review:", e);
     notify(`记忆评分提交失败: ${(e && e.message) || e}`, { kind: "error" });
   } finally {
-    _reviewInFlight = false;
+    cardState.deck.reviewInFlight = false;
     ratingBtns.forEach((b) => { b.disabled = false; });
   }
 }
@@ -459,17 +447,17 @@ export async function submitCardReview(type, id, grade) {
 export function toggleDeckFlip(e) {
   if (e) e.stopPropagation();
   const now = Date.now();
-  if (now - _lastFlipTime < 200) return; // 防 Android 双击事件抖动
-  _lastFlipTime = now;
+  if (now - cardState.deck.lastFlipTime < 200) return; // 防 Android 双击事件抖动
+  cardState.deck.lastFlipTime = now;
   if (navigator.vibrate) navigator.vibrate(15);
-  deckFlipped = !deckFlipped;
+  cardState.deck.flipped = !cardState.deck.flipped;
   const cardEl = document.getElementById("deck-active-card");
   if (cardEl) {
-    cardEl.classList.toggle("is-flipped", deckFlipped);
+    cardEl.classList.toggle("is-flipped", cardState.deck.flipped);
   }
   const flipBtn = document.getElementById("deck-btn-flip-ctrl");
   if (flipBtn) {
-    flipBtn.textContent = deckFlipped
+    flipBtn.textContent = cardState.deck.flipped
       ? "↶ 翻回正面 (Space)"
       : "🔀 翻至背面 (Space)";
   }
@@ -483,8 +471,7 @@ export function stepDeck(direction) {
     );
   }
   setTimeout(() => {
-    deckIndex += direction;
-    deckFlipped = false;
+    stepDeckState(direction);
     renderCardsGrid();
   }, 160);
 }
@@ -504,23 +491,23 @@ function attachDeckSwipeListener() {
 
   const onTouchMove = (e) => {
     if (!isDragging) return;
-    if (deckFlipped) return; // 背面有评分按钮，不处理滑动
+    if (cardState.deck.flipped) return; // 背面有评分按钮，不处理滑动
     currentX = e.type.includes("touch") ? e.touches[0].clientX : e.clientX;
     const diff = currentX - startX;
-    cardEl.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg) ${deckFlipped ? "rotateY(180deg)" : ""}`;
+    cardEl.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg) ${cardState.deck.flipped ? "rotateY(180deg)" : ""}`;
   };
 
   const onTouchEnd = () => {
     if (!isDragging) return;
     isDragging = false;
-    if (deckFlipped) return; // 背面不触发翻页
+    if (cardState.deck.flipped) return; // 背面不触发翻页
     const diff = currentX - startX;
     if (diff < -70) {
       stepDeck(1);
     } else if (diff > 70) {
       stepDeck(-1);
     } else {
-      cardEl.style.transform = deckFlipped ? "rotateY(180deg)" : "";
+      cardEl.style.transform = cardState.deck.flipped ? "rotateY(180deg)" : "";
     }
   };
 
@@ -645,27 +632,17 @@ export function showUndoToast(msg) {
     toast.className = "undo-toast";
     document.body.appendChild(toast);
   }
-  if (undoToastTimer) clearTimeout(undoToastTimer);
+  if (cardState.toast.undoTimer) clearTimeout(cardState.toast.undoTimer);
 
   toast.innerHTML = `<span>${msg}</span>`;
   toast.classList.remove("hidden");
 
-  undoToastTimer = setTimeout(() => {
+  cardState.toast.undoTimer = setTimeout(() => {
     toast.classList.add("hidden");
   }, 3500);
 }
 
 // ── Quiz Engine ──────────────────────────────────────────────────────────────
-let quizState = {
-  mode: "flashcard",
-  queue: [],
-  index: 0,
-  correct: 0,
-  wrong: 0,
-  isFlipped: false,
-  allVocab: [],
-};
-
 export function openQuizOverlay() {
   const overlay = document.getElementById("quiz-overlay");
   if (!overlay) return;
@@ -682,15 +659,15 @@ export function closeQuizOverlay() {
 }
 
 export async function startQuiz(mode) {
-  quizState.mode = mode;
-  quizState.correct = 0;
-  quizState.wrong = 0;
-  quizState.index = 0;
-  quizState.isFlipped = false;
+  cardState.quiz.mode = mode;
+  cardState.quiz.correct = 0;
+  cardState.quiz.wrong = 0;
+  cardState.quiz.index = 0;
+  cardState.quiz.isFlipped = false;
 
   const data = await api("/api/cards");
   const vocab = data.vocab_cards || [];
-  quizState.allVocab = vocab;
+  cardState.quiz.allVocab = vocab;
 
   if (vocab.length === 0) {
     alert("卡片库中暂无词汇卡，请先在文章阅读中收集词汇！");
@@ -706,7 +683,7 @@ export async function startQuiz(mode) {
     return wB - wA;
   });
 
-  quizState.queue = pool.slice(0, 15);
+  cardState.quiz.queue = pool.slice(0, 15);
 
   document.getElementById("quiz-step-mode")?.classList.add("hidden");
   document.getElementById("quiz-step-done")?.classList.add("hidden");
@@ -716,7 +693,7 @@ export async function startQuiz(mode) {
 }
 
 export function renderCurrentQuizCard() {
-  const { queue, index, mode, correct, wrong } = quizState;
+  const { queue, index, mode, correct, wrong } = cardState.quiz;
   if (index >= queue.length) {
     finishQuiz();
     return;
@@ -744,7 +721,7 @@ export function renderCurrentQuizCard() {
   if (mode === "flashcard") {
     const wrap = document.getElementById("quiz-flashcard-wrap");
     wrap?.classList.remove("hidden");
-    quizState.isFlipped = false;
+    cardState.quiz.isFlipped = false;
 
     const front = wrap.querySelector(".quiz-card-front");
     const back = wrap.querySelector(".quiz-card-back");
@@ -805,7 +782,7 @@ export function renderCurrentQuizCard() {
     if (bEl)
       bEl.textContent = `${card.cefr_level || "A1"} · ${card.pos || "WORT"}`;
 
-    const otherDefs = quizState.allVocab
+    const otherDefs = cardState.quiz.allVocab
       .filter(
         (c) =>
           c.id !== card.id &&
@@ -836,8 +813,8 @@ export function renderCurrentQuizCard() {
 }
 
 export function flipFlashcard() {
-  if (quizState.isFlipped) return;
-  quizState.isFlipped = true;
+  if (cardState.quiz.isFlipped) return;
+  cardState.quiz.isFlipped = true;
   const wrap = document.getElementById("quiz-flashcard-wrap");
   if (!wrap) return;
   wrap.querySelector(".quiz-card-front")?.classList.add("hidden");
@@ -846,9 +823,9 @@ export function flipFlashcard() {
 }
 
 export async function submitFlashcard(isCorrect) {
-  const card = quizState.queue[quizState.index];
-  if (isCorrect) quizState.correct++;
-  else quizState.wrong++;
+  const card = cardState.quiz.queue[cardState.quiz.index];
+  if (isCorrect) cardState.quiz.correct++;
+  else cardState.quiz.wrong++;
 
   api("/api/quiz/record", {
     method: "POST",
@@ -861,12 +838,12 @@ export async function submitFlashcard(isCorrect) {
     }),
   }).catch(() => {});
 
-  quizState.index++;
+  cardState.quiz.index++;
   renderCurrentQuizCard();
 }
 
 export function checkDictation() {
-  const card = quizState.queue[quizState.index];
+  const card = cardState.quiz.queue[cardState.quiz.index];
   const inputEl = document.getElementById("quiz-dict-input");
   const fbEl = document.getElementById("quiz-dict-feedback");
   const nextBtn = document.getElementById("quiz-dict-next");
@@ -879,12 +856,12 @@ export function checkDictation() {
   const isMatch = val.toLowerCase() === card.word.trim().toLowerCase();
 
   if (isMatch) {
-    quizState.correct++;
+    cardState.quiz.correct++;
     fbEl.className = "quiz-dict-feedback correct";
     fbEl.innerHTML = `✓ 拼写正确！<b>${esc(card.word)}</b>`;
     playGermanAudio(card.word);
   } else {
-    quizState.wrong++;
+    cardState.quiz.wrong++;
     fbEl.className = "quiz-dict-feedback wrong";
     fbEl.innerHTML = `✗ 正确拼写为：<b>${esc(card.word)}</b> (你的回答：${esc(val)})`;
   }
@@ -904,7 +881,7 @@ export function checkDictation() {
 }
 
 export function advanceQuiz() {
-  quizState.index++;
+  cardState.quiz.index++;
   renderCurrentQuizCard();
 }
 
@@ -912,14 +889,14 @@ export function submitChoice(chosenIdx, correctIdx) {
   const btns = document.querySelectorAll(".quiz-choice-btn");
   btns.forEach((b) => (b.disabled = true));
 
-  const card = quizState.queue[quizState.index];
+  const card = cardState.quiz.queue[cardState.quiz.index];
   const isCorrect = chosenIdx === correctIdx;
 
   if (btns[correctIdx]) btns[correctIdx].classList.add("is-correct");
   if (!isCorrect && btns[chosenIdx]) btns[chosenIdx].classList.add("is-wrong");
 
-  if (isCorrect) quizState.correct++;
-  else quizState.wrong++;
+  if (isCorrect) cardState.quiz.correct++;
+  else cardState.quiz.wrong++;
 
   api("/api/quiz/record", {
     method: "POST",
@@ -933,7 +910,7 @@ export function submitChoice(chosenIdx, correctIdx) {
   }).catch(() => {});
 
   setTimeout(() => {
-    quizState.index++;
+    cardState.quiz.index++;
     renderCurrentQuizCard();
   }, 1000);
 }
@@ -943,16 +920,16 @@ export function finishQuiz() {
   const donePanel = document.getElementById("quiz-step-done");
   if (donePanel) donePanel.classList.remove("hidden");
 
-  const total = quizState.correct + quizState.wrong;
-  const pct = total > 0 ? Math.round((quizState.correct / total) * 100) : 0;
+  const total = cardState.quiz.correct + cardState.quiz.wrong;
+  const pct = total > 0 ? Math.round((cardState.quiz.correct / total) * 100) : 0;
 
   const dCor = document.getElementById("done-correct");
   const dWrg = document.getElementById("done-wrong");
   const dAcc = document.getElementById("done-accuracy");
   const dEnc = document.getElementById("done-encourage");
 
-  if (dCor) dCor.textContent = quizState.correct;
-  if (dWrg) dWrg.textContent = quizState.wrong;
+  if (dCor) dCor.textContent = cardState.quiz.correct;
+  if (dWrg) dWrg.textContent = cardState.quiz.wrong;
   if (dAcc) dAcc.textContent = `${pct}% 准确率`;
 
   const mottos = [
@@ -1099,11 +1076,7 @@ export function uploadBackupJson(e) {
 // 整个 552 词 / 691 条的矩阵一次拉完（约 100 KB JSON），之后过滤与搜索全在本地。
 // 为什么不做服务端分页/搜索：数据是静态词库，进程内已缓存，往返一次省下的带宽
 // 换不回每次敲键都打一趟网络的手感。
-let _prepMatrixCache = null; // {groups: [...]} —— 懒加载一次，会话内存活
-let _prepLoading = null; // 正在飞的那次请求（并发点击共用，不重复发）
-let _prepCaseFilter = ""; // '' | 'Dat' | 'Akk' | 'Gen'
-let _prepSearchQuery = "";
-let _prepSearchTimer = null;
+
 // 本次会话已入卡的 lemma|praep|kasus。按钮的 disabled 状态活不过一次重渲染
 // （过滤、搜索、切回本段都会整块重建 innerHTML），只靠它就等于「敲一下键
 // 就能把已存的行变回可点」，于是同一条搭配能无声地重复入卡 ——
@@ -1115,12 +1088,12 @@ function _prepKey(lemma, praep, kasus) {
 }
 
 export async function loadPrepMatrix() {
-  if (_prepMatrixCache) return _prepMatrixCache;
-  if (_prepLoading) return _prepLoading; // 并发进入只发一次
-  _prepLoading = (async () => {
+  if (cardState.prep.cache) return cardState.prep.cache;
+  if (cardState.prep.loading) return cardState.prep.loading; // 并发进入只发一次
+  cardState.prep.loading = (async () => {
     try {
       const data = await api("/api/prep/matrix");
-      _prepMatrixCache = data;
+      cardState.prep.cache = data;
       // 从服务端加载已入卡状态，替代空 Set
       try {
         const savedData = await api("/api/prep/saved");
@@ -1138,17 +1111,17 @@ export async function loadPrepMatrix() {
     } catch {
       // 失败**不**落缓存：缓存一个空结构会把一次网络抖动变成整个会话的
       // 「词库尚未生成」，只有刷新页面才能恢复，而 APK 里 WebView 就是唯一
-      // 客户端，恢复路径等于重启 App。重试风暴由 _prepLoading 挡住。
+      // 客户端，恢复路径等于重启 App。重试风暴由 cardState.prep.loading 挡住。
       return null;
     } finally {
-      _prepLoading = null;
+      cardState.prep.loading = null;
     }
   })();
-  return _prepLoading;
+  return cardState.prep.loading;
 }
 
 export function filterPrepCase(kasus) {
-  _prepCaseFilter = kasus;
+  cardState.prep.caseFilter = kasus;
   // 按 data-kasus 而不是按下标认高亮：下标写法在有人调整 HTML 里 pill 顺序时
   // 会静默高亮错的那颗，而这种错没有测试能抓到。
   document
@@ -1163,9 +1136,9 @@ export function searchPrepCollocations(q) {
   // 去抖 150ms：每次击键都要把命中集整块 innerHTML 重写一遍，而单字母查询
   // 才是常态（'e' 命中 639 / 691 行）。桌面上一次约 45ms，安卓 WebView 单线程
   // 慢 4–8 倍 → 每键 200–400ms 同步主线程工作，打一个长词就是九连击。
-  clearTimeout(_prepSearchTimer);
-  _prepSearchTimer = setTimeout(() => {
-    _prepSearchQuery = q.trim().toLowerCase();
+  clearTimeout(cardState.prep.searchTimer);
+  cardState.prep.searchTimer = setTimeout(() => {
+    cardState.prep.searchQuery = q.trim().toLowerCase();
     renderPrepMatrix();
   }, 150);
 }
@@ -1174,18 +1147,18 @@ function renderPrepMatrix() {
   // 段守卫：loadPrepMatrix().then(renderPrepMatrix) 没有取消机制，用户在 93KB
   // 响应落地前切走的话，691 行会渲进「今日到期」的容器里，而过滤栏已经隐藏，
   // 连筛都筛不掉。
-  if (cardSegment !== "prep") return;
+  if (cardState.catalog.segment !== "prep") return;
   const container = document.getElementById("cards-container");
   if (!container) return;
-  const groups = (_prepMatrixCache && _prepMatrixCache.groups) || [];
-  const q = _prepSearchQuery;
+  const groups = (cardState.prep.cache && cardState.prep.cache.groups) || [];
+  const q = cardState.prep.searchQuery;
 
   const matched = groups
     .map((g) => {
       const cases = {};
       let total = 0;
       Object.entries(g.cases).forEach(([kasus, entries]) => {
-        if (_prepCaseFilter && kasus !== _prepCaseFilter) return;
+        if (cardState.prep.caseFilter && kasus !== cardState.prep.caseFilter) return;
         // 子串匹配即可覆盖 552 词规模：搜 freuen 命中 freuen auf，
         // 搜 "sich freuen" 也命中（反身前缀在这里现拼），不必上德语分词。
         // 两侧都转小写：当前词库全是小写动词/形容词，可一旦将来进了名词搭配
@@ -1204,12 +1177,12 @@ function renderPrepMatrix() {
   if (!matched.length) {
     // 三种空态要说三句不同的话：拉取失败说网络（别把传输故障说成词库缺失，
     // 那会让人去查数据集）、有过滤条件说没命中、都没有才是词库真空。
-    const failed = !_prepMatrixCache;
+    const failed = !cardState.prep.cache;
     container.innerHTML = `
       <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
         <div style="font-size:2.5rem;margin-bottom:0.5rem;">${failed ? "📡" : "🧭"}</div>
         <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);">
-          ${failed ? "介词矩阵加载失败" : q || _prepCaseFilter ? "没有命中的搭配" : "介词搭配库尚未生成"}
+          ${failed ? "介词矩阵加载失败" : q || cardState.prep.caseFilter ? "没有命中的搭配" : "介词搭配库尚未生成"}
         </div>
         ${
           failed

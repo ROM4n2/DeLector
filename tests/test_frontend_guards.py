@@ -83,12 +83,14 @@ def test_core_has_global_error_fallback_with_throttle():
 
 # ── P0-4：评分请求防重入（FSRS 双推进 + 跳两张卡） ────────────────────────────
 def test_submit_card_review_has_reentry_gate_and_disabled_buttons():
+    # 飞行标志已搬进 cardState.deck.reviewInFlight（cd-state.js 簇 2）。断言形状逐字不动，
+    # 只换标识符：本条抓的是「入口有闸 + 成对置位/复位 + disabled + finally」四件事。
     body = _extract_function(CARDS, "export async function submitCardReview(")
 
-    assert "if (_reviewInFlight) return" in body, (
+    assert "if (cardState.deck.reviewInFlight) return" in body, (
         "函数入口必须有重入闸：连点期间的新请求直接丢弃"
     )
-    assert "_reviewInFlight = true" in body and "_reviewInFlight = false" in body, (
+    assert "cardState.deck.reviewInFlight = true" in body and "cardState.deck.reviewInFlight = false" in body, (
         "飞行标志必须成对置位/复位"
     )
     assert "disabled = true" in body, "请求飞行期间评分按钮必须 disabled（照 writer.js 既有模式）"

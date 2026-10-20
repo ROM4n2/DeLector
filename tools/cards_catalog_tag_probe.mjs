@@ -89,13 +89,32 @@ function matchBracket(src, openIdx) {
   throw new Error(`matchBracket: 从 ${openIdx} 起找不到配对闭括号`);
 }
 
-/** 按 `function 名字(` 定位函数体，切出从 `function` 到配对 `}` 的整段。 */
-function sliceFunction(src, declNeedle) {
+/** 切 `function 名字(…) {…}`：先配对**参数表**，再要求下一个非空白字符是函数体 `{`。
+ *
+ *  老实现直接 `src.indexOf("{", at)` 取首个开括号 —— 参数表里一旦出现解构
+ *  （`function renderCatalogGrid({ seg = 'due' } = {}, cards)`），首个 `{` 就是参数里的
+ *  解构花括号，配对到那个 `}` 就收尾，切片退化成**签名**，函数体一个字都不在切片里
+ *  ⇒ 本探针的三条断言全部变死断言。
+ *  （口径与 tools/cards_wb_source_probe.mjs / tools/cards_workbench_no_review_probe.mjs
+ *  的 `sliceFunctionBody` 完全一致；三处并存是探针各自独立的既定风格。）
+ *  今天解构参数还不存在，所以这是「未来重构时的静默洞」而不是当前假绿：真出现解构时
+ *  老实现会因切片缺 card-stats-tag 而 exit 1（假红/噪声），不是假绿。
+ *  任一步失败一律 throw，由上层 catch 走 fail() 具名退出，不许静默返回短切片。
+ */
+function sliceFunctionBody(src, declNeedle) {
   const at = src.indexOf(declNeedle);
   if (at < 0) throw new Error(`cards.js 里找不到声明 ${declNeedle}（实现回退或改名了）`);
-  const brace = src.indexOf("{", at);
-  if (brace < 0) throw new Error(`${declNeedle} 后找不到函数体开括号`);
-  const end = matchBracket(src, brace);
+  const paren = src.indexOf("(", at);
+  if (paren < 0) throw new Error(`${declNeedle} 后找不到参数表开括号（函数体定位失败）`);
+  const paramsEnd = matchBracket(src, paren);
+  let j = paramsEnd + 1;
+  while (j < src.length && /\s/.test(src[j])) j++;
+  if (src[j] !== "{") {
+    throw new Error(
+      `${declNeedle} 的参数表后不是函数体开括号（实际为 ${JSON.stringify(src[j] ?? "<EOF>")}，函数体定位失败）`,
+    );
+  }
+  const end = matchBracket(src, j);
   // 剥掉 `export ` 前缀：node:vm 的 Script 不是 ES module，带 export 会 SyntaxError。
   return src.slice(at, end + 1).replace(/^export\s+/, "");
 }
@@ -109,9 +128,9 @@ let predicateFn = "";
 let statsFn = "";
 let gridFn = "";
 try {
-  predicateFn = sliceFunction(cardsJs, "function isWorkbenchSourced(");
-  statsFn = sliceFunction(cardsJs, "function cardStatsTag(");
-  gridFn = sliceFunction(cardsJs, "export function renderCatalogGrid(");
+  predicateFn = sliceFunctionBody(cardsJs, "function isWorkbenchSourced(");
+  statsFn = sliceFunctionBody(cardsJs, "function cardStatsTag(");
+  gridFn = sliceFunctionBody(cardsJs, "export function renderCatalogGrid(");
 } catch (e) {
   fail([`源码切片失败：${e.message}`]);
 }
