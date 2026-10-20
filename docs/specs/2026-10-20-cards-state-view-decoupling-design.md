@@ -160,21 +160,31 @@ ReferenceError: localStorage is not defined
 
 ### 6.1 `static/js/cd-state.js`（约 120 行）
 
+> **初值 MUST 逐字取自原文件**，MUST NOT 按「看起来合理」重写。本稿初版把 `segment` 写成 `'vocab'`、`viewMode` 写成 `'grid'`，实际是 `"due"` / `"deck"` —— 这类错误会静默改变首屏行为。
+
 ```js
 /* DeLector - Cards 状态容器（L1 纯层：零 DOM / 零网络 / 零提示 / 零定时器） */
 'use strict';
 
 export const cardState = {
-  // 簇 1 卡册浏览
-  catalog: { segment: 'vocab', viewMode: 'grid', cards: null, dueCards: null },
-  // 簇 2 翻牌卡组
+  // 簇 1 卡册浏览 —— 初值逐字取自 cards.js:29-34，不许改写
+  catalog: {
+    segment: "due",                                   // 'due' | 'pending' | 'mastered' | 'prep'
+    viewMode: "deck",                                 // 'deck' | 'grid'
+    cards: { vocab_cards: [], grammar_cards: [] },
+    dueCards: { due_vocab: [], due_grammar: [], due_count: 0 },
+  },
+  // 簇 2 翻牌卡组 —— 初值取自 cards.js:31-32,35,429
   deck: { index: 0, flipped: false, lastFlipTime: 0, reviewInFlight: false },
-  // 簇 3 测验（对象就地可变，与现状一致）
-  quiz: null,
-  // 簇 4 介词矩阵
-  prep: { cache: null, loading: false, caseFilter: 'all', searchQuery: '', searchTimer: 0 },
-  // 簇 5 瞬时 UI
-  toast: { undoTimer: 0 },
+  // 簇 3 测验 —— 初值取自 cards.js:659-666（对象就地可变，与现状一致）
+  quiz: {
+    mode: "flashcard", queue: [], index: 0,
+    correct: 0, wrong: 0, isFlipped: false, allVocab: [],
+  },
+  // 簇 4 介词矩阵 —— 初值取自 cards.js:1102-1106（loading 是**正在飞的那次请求**，不是布尔）
+  prep: { cache: null, loading: null, caseFilter: "", searchQuery: "", searchTimer: null },
+  // 簇 5 瞬时 UI —— cards.js:35
+  toast: { undoTimer: null },
 };
 
 /** 切段：必须同时复位卡位与翻面（`setCardSegment` 的三写不变量收口于此）。 */
