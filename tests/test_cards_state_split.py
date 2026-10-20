@@ -26,6 +26,18 @@
    移动卡位必须复位翻面（`stepDeck` 的第二写）。
 6. test_cd_state_declares_no_top_level_mutable
    token 级：顶层 `let`/`var` == 0、import == 0（L1 纯层，`allowed_imports=()`）。
+7. 六条**变异自证**（`test_mutation_*`，计划 Task 6）
+   前面几个任务各自手工做过一次「拆掉机制 ⇒ 用例变红」的验证；这里把它们固化成常驻
+   用例 —— 否则「不变量确实有人守」这件事只活在某次会话的记录里，下一个人删掉
+   `deck.flipped` 复位时，§2 的断言是否真的会红，只能靠再猜一次。
+   纪律：每条断言**期望的规则名/断言文本**，不接受「exit 非 0」；每条只碰 tmp 副本，
+   真实树一个字节都不许动（`_gate_with_mutation` 每次调用都逐字节对账）。
+   M1 cards.js 顶层 `let` ⇒ 闸报 `零顶层可变状态契约禁mutable-state`（点名注入行）
+   M2 cd-state.js 的 `document.` ⇒ 闸报 `L1 纯状态容器禁dom`
+   M3 cd-state.js 的 `import { esc } from './core.js'` ⇒ 闸报 `L1 纯状态容器越界import(core.js)`
+   M4 删掉 `enterSegment` 的 `deck.flipped = false` ⇒ §2 用例红且点名该字段
+   M5 给 `stepDeckState` 加 `Math.max(0, …)` 夹取 ⇒ §4 用例红且点名「夹取是行为变更」
+   M6 探针丢掉 cd-state.js 接缝 ⇒ 具名 exit 1（含容器名），不是裸 ReferenceError
 
 **执行方式**：`cd-state.js` 不 import 任何模块 ⇒ 它是本仓少数能被 node **真跑**的模块
 （`cards.js` 不行：`player.js:77` 在模块求值期就碰 `localStorage`）。故行为断言全部走
@@ -34,23 +46,29 @@ node ESM 探针而不是正则读源码 —— 正则看不出夹取，也看不
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Callable, Dict, List, Tuple, cast
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.check_frontend_layers import (  # noqa: E402
+    collect_violations,
     import_targets,
     read_js,
     top_level_mutable_tokens,
 )
 
 CD_STATE_REL = "static/js/cd-state.js"
+JS_DIR_REL = "static/js"
 
 CLUSTERS = ("catalog", "deck", "quiz", "prep", "toast")
 
@@ -124,16 +142,24 @@ function __dirtyAll(node, path) {
 """
 
 
-def _probe(tmp_path: Path, body: str) -> Dict[str, Any]:
-    """把 cd-state.js 原文复制成 `.mjs` 到临时目录，在 node 里真跑 body，回传 `out`。
+def _cd_state_source() -> str:
+    """真实 `cd-state.js` 的原文（按字节解码，不经过换行转换）。"""
+    path = REPO_ROOT / CD_STATE_REL
+    assert path.exists(), f"{CD_STATE_REL} must exist"
+    return path.read_bytes().decode("utf-8")
+
+
+def _probe_source(
+    tmp_path: Path, source: str, body: str, label: str = CD_STATE_REL
+) -> Dict[str, Any]:
+    """把给定源码写成 `.mjs` 到临时目录，在 node 里真跑 body，回传 `out`。
 
     为什么复制而不是直接 import 原文件：扩展名是 `.js` 且 `static/js/` 下没有
     `package.json` 的 `"type": "module"` ⇒ node 会按 CJS 解析该文件，`export` 直接
-    SyntaxError。它不 import 任何模块，所以「复制原文」不改变任何被测语义。
+    SyntaxError。它不 import 任何模块，所以「复制原文」不改变任何被测语义 ——
+    §7 的变异用例正是靠这一点，把**同一份断言**指向带变异的副本。
     """
-    src = REPO_ROOT / CD_STATE_REL
-    assert src.exists(), f"{CD_STATE_REL} must exist"
-    (tmp_path / "cd-state.mjs").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "cd-state.mjs").write_bytes(source.encode("utf-8"))
 
     driver = tmp_path / "probe.mjs"
     driver.write_text(
@@ -151,8 +177,13 @@ def _probe(tmp_path: Path, body: str) -> Dict[str, Any]:
         errors="replace",
         cwd=str(tmp_path),
     )
-    assert proc.returncode == 0, f"node probe failed on {CD_STATE_REL}:\n{proc.stderr}"
+    assert proc.returncode == 0, f"node probe failed on {label}:\n{proc.stderr}"
     return cast(Dict[str, Any], json.loads(proc.stdout))
+
+
+def _probe(tmp_path: Path, body: str) -> Dict[str, Any]:
+    """真实 `cd-state.js` 上的探针（§1-§5 行为用例的统一入口）。"""
+    return _probe_source(tmp_path, _cd_state_source(), body)
 
 
 def _flatten(value: Any, prefix: Tuple[str, ...] = ()) -> Dict[Tuple[str, ...], Any]:
@@ -262,14 +293,12 @@ def _assert_dirty_covers_all_leaves(out: Dict[str, Any]) -> None:
     )
 
 
-def test_enter_segment_writes_exactly_three_fields(tmp_path: Path) -> None:
-    """`enterSegment('prep')` 只允许写 catalog.segment / deck.index / deck.flipped 三处。
+def _assert_enter_segment_contract(out: Dict[str, Any]) -> None:
+    """§2 用例的**全部判据**（`test_mutation_enter_segment_dropped_flipped_write` 复用同一份）。
 
-    先把**全部 24 个叶子**写成哨兵（`__dirtyAll` 递归，不手列）再切段：初值全是
-    0/false/""/null 时，「漏写一个复位」或「多写一个恰好等于初值的字段」在前后
-    diff 里都完全隐形，该不变量就等于没人守。
+    抽出来不是为了少写两行：变异自证要证明的是「§2 的这些断言会红」，若变异用例另写
+    一套判据，它证明的只是「另一套判据会红」。
     """
-    out = _probe(tmp_path, _DIRTY_ALL + "enterSegment('prep');\nout.after = snap();\n")
     after = out["after"]
     _assert_dirty_covers_all_leaves(out)
 
@@ -283,6 +312,17 @@ def test_enter_segment_writes_exactly_three_fields(tmp_path: Path) -> None:
         ("deck", "flipped"),
         ("deck", "index"),
     ], f"enterSegment 只许写这三处，实际改动: {changed}"
+
+
+def test_enter_segment_writes_exactly_three_fields(tmp_path: Path) -> None:
+    """`enterSegment('prep')` 只允许写 catalog.segment / deck.index / deck.flipped 三处。
+
+    先把**全部 24 个叶子**写成哨兵（`__dirtyAll` 递归，不手列）再切段：初值全是
+    0/false/""/null 时，「漏写一个复位」或「多写一个恰好等于初值的字段」在前后
+    diff 里都完全隐形，该不变量就等于没人守。
+    """
+    out = _probe(tmp_path, _DIRTY_ALL + "enterSegment('prep');\nout.after = snap();\n")
+    _assert_enter_segment_contract(out)
 
 
 # ══ 3. stepDeckState：改动面恰好两处 ═════════════════════════════════════════
@@ -319,6 +359,19 @@ def test_step_deck_state_changes_exactly_two_fields(tmp_path: Path) -> None:
 # ══ 4. stepDeckState：不得夹取 ═══════════════════════════════════════════════
 
 
+def _assert_step_deck_no_clamp(out: Dict[str, Any]) -> None:
+    """§4 用例的全部判据（`test_mutation_step_deck_state_clamp` 复用同一份）。"""
+    assert out["before"]["deck"]["index"] == 0
+    assert out["afterNegative"]["deck"]["index"] == -1, (
+        "stepDeckState(-1) 从 0 出发必须得到 -1（夹取到 0 是行为变更，不是加固）："
+        f"实际 {out['afterNegative']['deck']['index']!r}"
+    )
+    assert out["afterPositive"]["deck"]["index"] == 100, (
+        "stepDeckState(+1) 从 99 出发必须得到 100（夹取到 99 是行为变更）："
+        f"实际 {out['afterPositive']['deck']['index']!r}"
+    )
+
+
 def test_step_deck_state_does_not_clamp(tmp_path: Path) -> None:
     """越界必须如实越界：`stepDeck` 无夹取，夹取在 `renderDeckStage` 渲染期。
 
@@ -334,16 +387,7 @@ def test_step_deck_state_does_not_clamp(tmp_path: Path) -> None:
         "stepDeckState(1);\n"
         "out.afterPositive = snap();\n",
     )
-
-    assert out["before"]["deck"]["index"] == 0
-    assert out["afterNegative"]["deck"]["index"] == -1, (
-        "stepDeckState(-1) 从 0 出发必须得到 -1（夹取到 0 是行为变更，不是加固）："
-        f"实际 {out['afterNegative']['deck']['index']!r}"
-    )
-    assert out["afterPositive"]["deck"]["index"] == 100, (
-        "stepDeckState(+1) 从 99 出发必须得到 100（夹取到 99 是行为变更）："
-        f"实际 {out['afterPositive']['deck']['index']!r}"
-    )
+    _assert_step_deck_no_clamp(out)
 
 
 # ══ 5. stepDeckState：复位翻面 ═══════════════════════════════════════════════
@@ -383,3 +427,255 @@ def test_cd_state_declares_no_top_level_mutable() -> None:
 
     targets = [spec for _lineno, spec, _form in import_targets(toks)]
     assert targets == [], f"{CD_STATE_REL} 是 L1 纯层（allowed_imports=()），不许 import: {targets}"
+
+
+# ══ 7. 变异自证：每条不变量「拆掉机制就会红」 ═════════════════════════════════
+#
+# 前面几个任务各自**手工**做过一次「拆掉机制 ⇒ 用例变红」的验证（计划 Task 6）。手工
+# 自证的半衰期是一次会话：结论留在记录里，判据不留在 CI 里。这一节把六次验证固化，
+# 判据是「期望的规则名 / 期望的断言文本」，**不是** exit 非 0 —— 后者在探针因无关原因
+# 崩掉时同样成立（本仓的「有故障、没结论」类）。
+#
+# 两条硬纪律：
+#   1) 每条只碰 `tmp_path` 里的副本。真实树被改成「变异后忘了复原」是本套件最坏的
+#      失败模式（用例还绿着，树已经坏了），故 `_gate_with_mutation` 每次调用都逐字节
+#      对账一次，M4/M5/M6 各自再对账一次 sha256。
+#   2) 断言必须**点名**：注入的行 / 被删的那个字段 / 容器的名字。只断言「红了」的
+#      变异用例，在断言的判别力退化（例如某天被改成 `assert out`）时仍然全绿。
+
+
+def _eol_of(src: str) -> str:
+    """源码用的行尾（本仓静态文件是 CRLF；变异跟随原文，别在副本里掺出 lone LF）。"""
+    return "\r\n" if "\r\n" in src else "\n"
+
+
+def _sha256_of(rel: str) -> str:
+    return hashlib.sha256((REPO_ROOT / rel).read_bytes()).hexdigest()
+
+
+def _violations_naming(rendered: List[str], rule: str, needle: str) -> List[str]:
+    """同时命中**规则名**与**对象文本**的违规行（只有规则名不算点名）。"""
+    return [line for line in rendered if rule in line and needle in line]
+
+
+def _gate_with_mutation(tmp_path: Path, module: str, mutate: Callable[[str], str]) -> List[str]:
+    """把整棵 `static/js` 复制到 tmp、只变异副本、在副本上跑闸，回传 render() 后的违规行。
+
+    复制而不是原地改：`static/js` 是真实树，本套件 MUST NOT 碰它（用例写错路径也只
+    弄脏 tmp）。收尾把副本写回**原始字节**并与真实文件逐字节对账 —— 「变异只发生在
+    副本里」不是口头承诺，每次调用都自证一遍。
+    """
+    src_dir = REPO_ROOT / JS_DIR_REL
+    rel = f"{JS_DIR_REL}/{module}"
+    before = _sha256_of(rel)
+    real = src_dir / module
+
+    js_dir = tmp_path / "js"
+    shutil.copytree(src_dir, js_dir)
+
+    original = real.read_bytes().decode("utf-8")
+    mutated = mutate(original)
+    assert mutated != original, f"变异没生效：{module} 的锚点已漂移（用例失效，不是实现变好）"
+
+    target = js_dir / module
+    target.write_bytes(mutated.encode("utf-8"))
+    rendered = [v.render() for v in collect_violations(js_dir)]
+
+    target.write_bytes(original.encode("utf-8"))
+    assert target.read_bytes() == real.read_bytes(), f"{module} 副本未逐字节复原"
+    assert _sha256_of(rel) == before, f"{rel} 真实文件被改动了（变异 MUST 只发生在副本里）"
+    return rendered
+
+
+def test_mutation_cards_js_top_level_let_is_caught(tmp_path: Path) -> None:
+    """M1：`cards.js` 顶层重新长出 `let` ⇒ 闸 MUST 报 `零顶层可变状态契约禁mutable-state`。
+
+    钉的是 `check_layer_bans` 的 **⑦**（只受可变状态契约约束、却不在 `LAYER_SPEC` 的
+    模块）。⑦ 被删或被短路时，`cards.js` 那 15 处既有的可变状态钉子会**无声归零** ——
+    这正是 Task 1 修掉的结构缺陷，也是本套件存在的理由。断言必须点名注入的那一行：
+    只对规则名的话，「规则名对、但报到别的 `let` 上」也会溜过去。
+    """
+    injected = "let __mutation_top_level_state = 0;"
+    rendered = _gate_with_mutation(
+        tmp_path, "cards.js", lambda src: _eol_of(src).join([injected, src])
+    )
+
+    hits = _violations_naming(rendered, "零顶层可变状态契约禁mutable-state", injected)
+    assert hits, (
+        "cards.js 顶层长出 `let` 后，闸 MUST 报 `零顶层可变状态契约禁mutable-state` "
+        f"并点名注入行；实际违规 {len(rendered)} 处: {rendered}"
+    )
+    assert len(rendered) == 1, (
+        f"注入一行顶层 `let` 应恰好产生 1 处违规（不连坐），实际 {len(rendered)} 处: {rendered}"
+    )
+
+
+def test_mutation_cd_state_document_is_caught(tmp_path: Path) -> None:
+    """M2：`cd-state.js` 里出现 `document.` ⇒ 闸 MUST 报 `L1 纯状态容器禁dom`。
+
+    L1 纯层是「谁都能 import、谁都能读」的前提；状态容器一旦碰 DOM，它就不再能在
+    node 里被真跑（本文件 §1-§5 的全部行为断言都建立在这一点上）。
+    """
+    injected = "const __mutation_dom_read = document.title;"
+    rendered = _gate_with_mutation(
+        tmp_path, "cd-state.js", lambda src: _eol_of(src).join([injected, src])
+    )
+
+    hits = _violations_naming(rendered, "L1 纯状态容器禁dom", injected)
+    assert hits, (
+        "cd-state.js 碰 `document` 后，闸 MUST 报 `L1 纯状态容器禁dom` "
+        f"并点名注入行；实际违规 {len(rendered)} 处: {rendered}"
+    )
+    assert len(rendered) == 1, f"注入一行 DOM 读取应恰好 1 处违规，实际: {rendered}"
+
+
+def test_mutation_cd_state_out_of_scope_import_is_caught(tmp_path: Path) -> None:
+    """M3：`cd-state.js` 出现 `import { esc } from './core.js'` ⇒ MUST 报 `越界import`。
+
+    `allowed_imports=()` 是「容器不依赖任何东西」的机械表达。`./core.js` 是 L1 兄弟层
+    的合法 import（`wr-format.js` 就允许），所以这条**只能**靠白名单为空来挡 ——
+    正是「看起来无害、其实越界」的那类漂移。
+    """
+    injected = "import { esc } from './core.js';"
+    rendered = _gate_with_mutation(
+        tmp_path, "cd-state.js", lambda src: _eol_of(src).join([injected, src])
+    )
+
+    hits = _violations_naming(
+        rendered, "L1 纯状态容器越界import(core.js)", injected
+    )
+    assert hits, (
+        "cd-state.js 越界 import 后，闸 MUST 报 `L1 纯状态容器越界import(core.js)` "
+        f"并点名注入行；实际违规 {len(rendered)} 处: {rendered}"
+    )
+    assert len(rendered) == 1, f"注入一行越界 import 应恰好 1 处违规，实际: {rendered}"
+
+
+def test_mutation_enter_segment_dropped_flipped_write_is_caught(tmp_path: Path) -> None:
+    """M4：删掉 `enterSegment` 的 `cardState.deck.flipped = false` ⇒ §2 用例 MUST 红。
+
+    「这行有人守」今天只是某次会话里手工删过一次看过的结论。此处把同一行在**副本**里
+    删掉，再把 §2 的**同一份断言**（`_assert_enter_segment_contract`）跑一遍：必须抛
+    AssertionError，且文本点名被删的那次写。落到「实际改动: […]」那种泛化措辞不算通过
+    —— 它只说改动面少了一处，说不出少的是哪一处（何况字段名不在其中）。
+    """
+    before = _sha256_of(CD_STATE_REL)
+    source = _cd_state_source()
+    eol = _eol_of(source)
+    anchor = f"  cardState.deck.index = 0;{eol}  cardState.deck.flipped = false;{eol}"
+    assert source.count(anchor) == 1, (
+        f"锚点应唯一（enterSegment 的三写），实际命中 {source.count(anchor)} 处：变异会误伤"
+    )
+    mutated = source.replace(anchor, f"  cardState.deck.index = 0;{eol}")
+
+    out = _probe_source(
+        tmp_path,
+        mutated,
+        _DIRTY_ALL + "enterSegment('prep');\nout.after = snap();\n",
+        label=f"{CD_STATE_REL}（副本：删掉 deck.flipped 复位）",
+    )
+    with pytest.raises(AssertionError) as excinfo:
+        _assert_enter_segment_contract(out)
+
+    text = str(excinfo.value)
+    assert "enterSegment 必须把 deck.flipped 复位为 false" in text, (
+        "删掉 deck.flipped 复位后，§2 的用例 MUST 以**点名该字段**的断言红，"
+        f"实际红在: {text!r}"
+    )
+    assert _sha256_of(CD_STATE_REL) == before, f"{CD_STATE_REL} 真实文件被改动了"
+
+
+def test_mutation_step_deck_state_clamp_is_caught(tmp_path: Path) -> None:
+    """M5：给 `stepDeckState` 加 `Math.max(0, …)` 夹取 ⇒ §4 用例 MUST 红。
+
+    「顺手加固」是设计稿 §6.1 点名警告的行为变更（初稿的 `advanceDeck(delta, total)`
+    自带夹取）。§4 的判据靠「越界必须如实越界」成立；此处加回夹取，验证那条断言真的
+    在守 —— 而不是被 §3 的「改动面恰好两处」顺带盖住（夹取仍是两写，改动面不变，
+    §3 对它**完全失明**）。
+    """
+    before = _sha256_of(CD_STATE_REL)
+    source = _cd_state_source()
+    anchor = "  cardState.deck.index += delta;"
+    assert source.count(anchor) == 1, f"锚点应唯一，实际命中 {source.count(anchor)} 处"
+    mutated = source.replace(
+        anchor, "  cardState.deck.index = Math.max(0, cardState.deck.index + delta);"
+    )
+
+    out = _probe_source(
+        tmp_path,
+        mutated,
+        "out.before = snap();\n"
+        "stepDeckState(-1);\n"
+        "out.afterNegative = snap();\n"
+        "cardState.deck.index = 99;\n"
+        "stepDeckState(1);\n"
+        "out.afterPositive = snap();\n",
+        label=f"{CD_STATE_REL}（副本：stepDeckState 夹取到 0）",
+    )
+    with pytest.raises(AssertionError) as excinfo:
+        _assert_step_deck_no_clamp(out)
+
+    text = str(excinfo.value)
+    assert "stepDeckState(-1) 从 0 出发必须得到 -1" in text, (
+        "加了夹取后，§4 的用例 MUST 以「越界被夹取是行为变更」的断言红，"
+        f"实际红在: {text!r}"
+    )
+    assert _sha256_of(CD_STATE_REL) == before, f"{CD_STATE_REL} 真实文件被改动了"
+
+
+def _run_node(script: Path, cwd: Path) -> "subprocess.CompletedProcess[str]":
+    return subprocess.run(
+        ["node", str(script), "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(cwd),
+    )
+
+
+def test_mutation_probe_without_cd_state_seam_is_caught(tmp_path: Path) -> None:
+    """M6：探针丢掉 cd-state.js 接缝 ⇒ 具名 exit 1（含容器名），不是裸 ReferenceError。
+
+    计划 Task 6 的原写法是「删掉 `ia_dom_mount_probe` 的 `cardState` 桩」。那根桩在
+    Task 5 已连同「手写同形桩」一起删除（两份真源并存本身就是假绿风险），所以等价的
+    现存变异对象是**唯一形态**的接缝：`stateFn = sliceObjectDecl(cdStateJs, …)`。
+    删掉它，`transformed` 里就没有 `cardState` 容器 —— 探针 MUST 自己说出
+    `切片缺 cd-state.js 的 cardState 容器`，而不是让渲染切片在沙箱里抛裸 ReferenceError
+    （后者是「有故障、没结论」：探针不知道自己在守护什么，读者也不知道该修哪）。
+    """
+    rel = "tools/cards_wb_source_probe.mjs"
+    probe_before = _sha256_of(rel)
+    js_before = _sha256_of(f"{JS_DIR_REL}/cards.js")
+    state_before = _sha256_of(CD_STATE_REL)
+
+    source = (REPO_ROOT / rel).read_bytes().decode("utf-8")
+    seam = 'stateFn = sliceObjectDecl(cdStateJs, "export const cardState = ");'
+    assert source.count(seam) == 1, f"{rel} 的 cd-state 接缝已漂移（命中 {source.count(seam)} 处）"
+    mutated = source.replace(seam, "/* M6 变异：cd-state.js 接缝已删除 */")
+
+    # 探针按 `__dirname/..` 解析 ROOT ⇒ 副本必须带一棵同形的 static/js。
+    root = tmp_path / "probe_root"
+    shutil.copytree(REPO_ROOT / JS_DIR_REL, root / JS_DIR_REL)
+    (root / "tools").mkdir(parents=True)
+    probe = root / rel
+
+    # 基线：同一份副本不变异必须 exit 0，否则下面那句 exit≠0 归因不成立。
+    probe.write_bytes(source.encode("utf-8"))
+    baseline = _run_node(probe, root)
+    assert baseline.returncode == 0, f"副本基线必须绿（否则 M6 归因不成立）:\n{baseline.stderr}"
+
+    probe.write_bytes(mutated.encode("utf-8"))
+    broken = _run_node(probe, root)
+    combined = (broken.stdout or "") + (broken.stderr or "")
+
+    assert broken.returncode != 0, f"删掉 cd-state 接缝后探针仍 exit 0（接缝无人守）:\n{combined}"
+    assert "cd-state.js 的 cardState 容器" in combined, (
+        f"探针 MUST 以**容器名**报错，实际输出: {combined!r}"
+    )
+    assert "    at " not in combined, (
+        f"删掉接缝后 MUST 是具名契约失败，不是未捕获异常的栈（有故障、没结论）: {combined!r}"
+    )
+    assert _sha256_of(rel) == probe_before, f"{rel} 真实文件被改动了"
+    assert _sha256_of(f"{JS_DIR_REL}/cards.js") == js_before
+    assert _sha256_of(CD_STATE_REL) == state_before
