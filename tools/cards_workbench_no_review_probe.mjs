@@ -176,6 +176,24 @@ function buildCtx() {
     jsAttr: (v) => JSON.stringify(v == null ? "" : v),
     attachDeckSwipeListener() {},
     state: {},
+    /* cardState 桩：五簇与 static/js/cd-state.js 同形、初值逐字相同（那片是 cards.js
+     * 模块级状态的唯一真源，本桩只是它在 node:vm 沙箱里的替身）。本探针的切片
+     * （isWorkbenchSourced / cardStatsTag / renderDeckStage）只读 deck.index 与
+     * deck.flipped；其余簇保留是为了让沙箱的模块级环境与真源同形 —— 少一簇就是
+     * 在探针里悄悄改掉了被测环境。桩缺失 ⇒ 切片撞 ReferenceError: cardState is
+     * not defined 并 exit 1，绝不静默跳过。 */
+    cardState: {
+      catalog: {
+        segment: "due", // 'due' | 'pending' | 'mastered' | 'prep'
+        viewMode: "deck", // 'deck' | 'grid'
+        cards: { vocab_cards: [], grammar_cards: [] },
+        dueCards: { due_vocab: [], due_grammar: [], due_count: 0 },
+      },
+      deck: { index: 0, flipped: false, lastFlipTime: 0, reviewInFlight: false },
+      quiz: { mode: "flashcard", queue: [], index: 0, correct: 0, wrong: 0, isFlipped: false, allVocab: [] },
+      prep: { cache: null, loading: null, caseFilter: "", searchQuery: "", searchTimer: null },
+      toast: { undoTimer: null },
+    },
   };
   const ctx = vm.createContext(sandbox);
   vm.runInContext("var deckIndex = 0; var deckFlipped = false;", ctx, {
