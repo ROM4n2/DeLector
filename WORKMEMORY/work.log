@@ -511,3 +511,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 版本面：`delector/core/version.py: APP_VERSION = "5.18.0"`（单一真相源）；`android/app/build.gradle`（5.18.0 / versionCode 51800）；`static/sw.js`（`CACHE_NAME = "delector-static-v5.18.0"`）；`static/layout/header.html`（`System · v5.18.0` 并经 `build_index_html.py` 重新生成 `static/index.html`）；`README.md`（badge + 2438/2441 passed + 下载表 4 平台链接）；`FEATURES.md`（更新里程碑与全览表）；`CHANGELOG.md` 追加 v5.18.0 详尽变更日志（四大核心主线、已知限制与回滚方案）。
 - 历史计划归档：批量将 `docs/plans/` 下自 v5.17.0 以来交付的 **19 份实施计划**（含 C1~C9、架构解耦、index/writer/reader 前端拆分）`git mv` 归档至 `docs/plans/archive/`，`docs/README.md` 归档待办表同步核销清空。
 - 门禁全景：六道 Python 机械闸全绿 · `ruff` 零告警 · `mypy` 118+157 文件全绿 · Go 8 包全绿 · 153 个测试文件 2438 passed / 3 skipped · 全仓改动文件 100% UTF-8 CRLF 0 lone LF。
+
+### 2026-10-20 16:20 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**reader.js L2 持久化层抽离（`rd-api.js`）+ 前端分层闸纳管面扩展** 全部交付。分支 `refactor/reader-api-layer-split`（自 master `496bef7` 切出，独立 worktree）。计划：`docs/plans/2026-10-19-reader-api-layer-split.md`。
+- **Task 1 闸扩充（Gate-as-Spec，RED 先行）**：`LAYER_SPEC` 注册 `rd-api.js`（L2）+ `wb-queue.js`/`wb-scope.js`（L1，`allowed_imports=()`）；规则⑤ 由硬编码 `wr-api.js` 改为遍历所有 L2 模块。RED 凭据 exit 1 + `rd-api.js:1:missing-layer-module`。独立评审 PASS（7 条变异全拦截，No-Narrowing 逐项核对）。
+- **Task 2 抽出 `static/js/rd-api.js`**：14 个端点函数，L2 契约（禁 DOM/弹窗/定时器/动态求值 + 零顶层可变状态 + 仅 import `./core.js`）；规则⑤ 方法维度 14/14 命中后端路由。独立评审 PASS（4 条变异各自精准打红）。
+- **Task 3 `reader.js` 接线**：18 处 `api()` → 0 处残留；`api` 从 core 导入移除；导入面 14/14 可达；**导出面 40 == 40 冻结**；错误轨 **10/10** 逐字守恒；5 个探针/消费面全绿。
+- **评审发现的真缺陷（已收口）**：`rd-api.js` 首版导出 **28** 个而 `reader.js` 只 import **14** —— 另一半是零引用的 `*Remote` 别名；且 `removeArticle` 是薄包装而兄弟是 `const` 别名。已删 13 别名 + 1 包装、真实现改名 `removeArticle`，导出数 **28 → 14**。**教训：出口面按规格收口，别名不是兼容层而是债**（该模块只有 `reader.js` 一个消费者，不存在外部兼容需求）。
+- **连带踩坑（符号改名打翻探针锚点）**：`tests/test_frontend_layers.py` 的 `_RD_API_ANCHOR` 钉着 `export async function deleteArticleRemote(id) {`，改名后 6 条注入式用例全部报「锚点命中 0 次」而红 —— 红的是**找不到注入缝**，不是行为回归。**改名前 MUST grep 全部锚点；只看红色数量会误判成回归**。
+- **Task 4 独立可用性 + 变异自证（12 用例）**：独立 `node --check`、import 白名单、不引用 reader.js 符号、导出面严格 14、**零死导出机制级守卫**、零顶层可变状态、防重复声明；6 条变异自证。**抓到两个闸缺口**：① `MUTABLE_STATE_MODULES` 缺 `rd-api.js` 与 `wr-api.js` ⇒ 计划里的「L2 零顶层可变状态」此前从未被执行（已补）；② `collect_violations(js_dir, None)` 会**整条跳过规则⑤** ⇒ 我最初的路由/方法两条变异用例永远是「空的绿」，直到用例自己先红才暴露。**教训：变异自证全部通过，可能只是变异根本没被检查。**
+- **流程披露**：Task 3 的独立 Reviewer 连续三次未产出终态（首次 3.7s 中断；第二次 owner 进程运行一小时后退出且无结果；第三次派单后子代理 worktree 完全未被改动）。Task 3b/Task 4 由**编排者本人**执行并以物理凭据自证，偏离「编排者不改 Tier 2 代码」纪律；原因与处置已写入计划「评审修正」节。
+- **门禁（本分支实测）**：六道 Python 机械闸全 exit 0 · `ruff check .` 全绿 · `mypy --strict delector tools` 118 文件 0 错 · `mypy --follow-imports=skip tests` 158 文件 0 错 · Go 8 包全绿 + `gofmt -l .` 0 差异 · 全量 **154 个测试文件 8 批串行全绿：2479 passed + 3 skipped**（基线 2441 ⇒ 净增 41）· 全部改动文件 100% UTF-8 CRLF 0 lone LF。
