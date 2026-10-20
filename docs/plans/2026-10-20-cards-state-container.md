@@ -203,3 +203,24 @@
 - **不动 `a1_cards.js` / `static/german/**` / 后端任何文件**。
 - **不做 `cards.js` 的 API 调用面改动**；不改任何端点或请求形状。
 - **不新增业务断言**；新增测试只允许出现在 `tests/test_frontend_layers.py` 与 `tests/test_cards_state_split.py`。
+
+---
+
+## ✅ 执行凭据
+
+### Task 1（+1b）闸立规 · commit `c290fed` + `482ca2f`
+
+**RED（计划预期）**：`exit 1 · 16 处违规` = 1 × `cd-state.js:1:missing-layer-module` + **15** × `cards.js:<line>:零顶层可变状态契约禁mutable-state`，无第三类。15 行号 = `29,30,31,32,33,34,35,36,429,659,1102,1103,1104,1105,1106`（独立词法器复算集合相等；12 个嵌套 `let` 未被误报）。
+
+**实施中发现计划未预见的结构问题（已证必要）**：`check_layer_bans` 的顶层 `let` 扫描原本**嵌在 `LAYER_SPEC` 循环内**，因此「把 `cards.js` 加进 `MUTABLE_STATE_MODULES`」**产生零违规**。故提取 `top_level_mutable_tokens()` 并新增「仅受可变状态约束」的独立遍历（规则 ⑦）。两条反事实证明：
+- 把 `cards.js` 放进 `LAYER_SPEC` ⇒ **231 处违规**（152 dom / 40 network / 15 toast / 5 timer / 15 mutable / 4 越界 import），216 处连带红 ⇒ 留在外面是正确判断；
+- 去掉新遍历 ⇒ `cards.js` 违规归 **0** ⇒ 重构是达成计划自身判据的必要条件。
+
+**独立评审 PASS**：12 例等价性对照（内联 vs 提取实现）全部同计数/同行号/同规则串；既有两个模块的违规顺序不变；`top_level_mutable_tokens` 置空会同时静默 ③ 与 ⑦（单一真相源）；测试 diff **零条非头部删行**。
+
+**评审驱动的三条收口（`482ca2f`）**：
+1. `③b` 一名两义（import 白名单 vs 可变状态）⇒ 新遍历改编号 **⑦**，import 侧 ③b 不动；
+2. `MUTABLE_STATE_ONLY_LAYER` 原为 `"L1 零顶层可变状态契约"`，把**视图模块** `cards.js` 标成 L1 ⇒ 改为 `"零顶层可变状态契约"`（无层声明），并加断言钉住「不得以 L1/L2 开头」；
+3. **静默失效**：MSM-only 模块缺失时原为 `if not path.exists(): continue` ⇒ 若 `cards.js` 改名，15 处钉子**无声消失**。改为报 `missing-mutable-state-module`；两个最小夹具补 `cards.js` 占位（移除占位会令 4 条**无关**用例因规则泄漏而红，已实测）。
+
+**编排者独立复验**：真实树 `1 + 15`；旧标签全仓 0 残留；临时改名 `cards.js` ⇒ 闸报 `missing-mutable-state-module:只受零顶层可变状态契约约束的模块不存在：cards.js`（2 处：该条 + 已知的 `cd-state.js`）；复原后回到 15；`pytest tests/test_frontend_layers.py` = **1 failed（仅 `test_gate_script_exits_zero_on_real_tree`，计划内已知红）/ 97 passed**。
