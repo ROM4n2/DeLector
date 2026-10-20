@@ -37,6 +37,11 @@
       ⇒ `unverifiable-method`。MUST NOT 猜一个 GET 蒙过去。
   ⑥  防假解耦：`writer.js` MUST NOT 在**顶层**重新定义已迁出到 L1/L2 的符号
       （含 `function*`；`export {…}` 再导出不算声明）。
+  ⑦  零顶层可变状态契约（不属于任何分层的模块，如 `cards.js`）：顶层 `let`/`var`
+      MUST NOT 出现（状态一律收进状态容器）。这类模块不在 `LAYER_SPEC`（①②③b 不适用），
+      只受这一条契约约束；但**文件缺席即判失败**（`missing-mutable-state-module`）——
+      它是该契约的唯一载体，静默跳过等于「改名/删除即让钉子凭空消失」（本仓禁止的
+      silent-failure 类）。
 
 判定纪律
 --------
@@ -356,7 +361,8 @@ MUTABLE_STATE_MODULES: Tuple[str, ...] = (
 )
 MUTABLE_KEYWORDS = frozenset({"let", "var"})
 # 只受「零顶层可变状态」约束、却不属于任何分层的模块（如 `cards.js`）的规则前缀。
-MUTABLE_STATE_ONLY_LAYER = "L1 零顶层可变状态契约"
+# 刻意**不带 L1/L2 字样**：`cards.js` 是视图层，不在任何分层里，标成「L1」是假标签。
+MUTABLE_STATE_ONLY_LAYER = "零顶层可变状态契约"
 
 VIEW_MODULES: Tuple[str, ...] = ("writer.js",)
 FALSE_DECOUPLING_HOST = "writer.js"
@@ -510,13 +516,21 @@ def check_layer_bans(js_dir: Path) -> List[Violation]:
                         raw_line_of(raw, t.line),
                     )
                 )
-    # ③b 只受「零顶层可变状态」约束、却不在 `LAYER_SPEC` 的模块（`cards.js`）：
-    # 文件缺失时**不报** `missing-layer-module`（它们不是分层模块，夹具树里缺席是合法的）。
+    # ⑦ 只受「零顶层可变状态」约束、却不在 `LAYER_SPEC` 的模块（`cards.js`）：
+    # 它们不是分层模块 ⇒ 不适用 `missing-layer-module`；但**缺席 MUST NOT 静默跳过**：
+    # 本规则是 `cards.js` 那批模块级状态唯一的机械钉子，改名/删除若无声通过，钉子就
+    # 凭空消失了（本仓禁止的 silent-failure 类）。故缺席报 `missing-mutable-state-module`。
     for name in MUTABLE_STATE_MODULES:
         if name in LAYER_SPEC:
             continue
         path = js_dir / name
         if not path.exists():
+            out.append(
+                Violation(
+                    f"static/js/{name}", 1, "missing-mutable-state-module",
+                    f"只受零顶层可变状态契约约束的模块不存在：{name}",
+                )
+            )
             continue
         raw, toks = read_js(path)
         for t in top_level_mutable_tokens(toks):

@@ -60,6 +60,16 @@ _CD_STATE_PLACEHOLDER = (
     "};\n"
 )
 
+# `cards.js` 同理必须有占位：规则⑦ 现在「缺文件即判失败」（`missing-mutable-state-module`），
+# 缺占位同样会漏进别的规则的 `assert not rules`，读起来像那条规则出错。占位刻意零顶层
+# `let`/`var` —— 占位自己不得是违规。
+_CARDS = "cards.js"
+_CARDS_PLACEHOLDER = (
+    "// Task 1 占位：cards.js 的模块级状态由 Task 3 收进 cd-state.js；本文件只为\n"
+    "// 「受零顶层可变状态契约约束的模块存在」。零顶层 let/var。\n"
+    "export {};\n"
+)
+
 
 def _load_gate() -> Any:
     """按路径加载被守卫脚本（`tools/` 不是 package，不能直接 import）。"""
@@ -84,7 +94,8 @@ def js_dir(tmp_path: Path) -> Path:
     `rd-syntax.js` 是「先注册、后落盘」（计划 Task 1/Task 2）⇒ 只复制**存在**的模块，
     缺文件时跳过；「声明的模块不存在」另由 `missing-layer-module` 用例专门覆盖。
     但 `cd-state.js` 缺文件时必须补**占位**：本夹具的其余用例断言「零违规」，
-    一个 `missing-layer-module` 漏进去就会伪装成别的规则的失败。
+    一个 `missing-layer-module` 漏进去就会伪装成别的规则的失败。`cards.js` 同理
+    （规则⑦ 现在缺文件即报 `missing-mutable-state-module`，不是静默跳过）。
     """
     d = tmp_path / "js"
     d.mkdir()
@@ -94,6 +105,8 @@ def js_dir(tmp_path: Path) -> Path:
             shutil.copyfile(src, d / name)
     if not (d / _CD_STATE).exists():
         _write_module(d / _CD_STATE, _CD_STATE_PLACEHOLDER)
+    if not (d / _CARDS).exists():
+        _write_module(d / _CARDS, _CARDS_PLACEHOLDER)
     return d
 
 
@@ -129,6 +142,8 @@ def rule5_dir(tmp_path: Path) -> Path:
     )
     _write_module(d / "rd-api.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
     _write_module(d / _CD_STATE, _CD_STATE_PLACEHOLDER)
+    # 规则⑦：受「零顶层可变状态」约束的模块缺席同样会刷 `missing-mutable-state-module`。
+    _write_module(d / _CARDS, _CARDS_PLACEHOLDER)
     return d
 
 
@@ -874,7 +889,7 @@ def test_cd_state_top_level_let_red(gate: Any, js_dir: Path) -> None:
 
 # ══ 2h. cards.js：首次纳入「零顶层可变状态」（不属任何分层）═══════════════════
 
-_CARDS = "cards.js"
+# `_CARDS` / `_CARDS_PLACEHOLDER` 定义在文件上半部（夹具树必须有占位：规则⑦ 缺文件即红）。
 # 注入锚点：原文第一个顶层 `let`（第 29 行），改用例时逐字命中一次。
 _CARDS_ANCHOR = 'let cardSegment = "due";'
 
@@ -898,6 +913,9 @@ def test_cards_declares_zero_top_level_state_contract(gate: Any) -> None:
     """`cards.js` 只受这一条契约：不进 `LAYER_SPEC`（否则会对视图层误开 DOM/网络禁令）。"""
     assert _CARDS in gate.MUTABLE_STATE_MODULES
     assert _CARDS not in gate.LAYER_SPEC
+    # 标签只说契约，不冒充分层：`cards.js` 是视图层，报成「L1 禁…」会让读者以为它在 L1。
+    assert gate.MUTABLE_STATE_ONLY_LAYER == "零顶层可变状态契约"
+    assert not gate.MUTABLE_STATE_ONLY_LAYER.startswith(("L1", "L2"))
 
 
 def test_cards_every_top_level_let_is_named(gate: Any, js_dir: Path) -> None:
@@ -910,7 +928,7 @@ def test_cards_every_top_level_let_is_named(gate: Any, js_dir: Path) -> None:
     _copy_cards(js_dir)
     violations = _cards_violations(gate, js_dir)
     assert [v.lineno for v in violations] == expected, (len(expected), violations)
-    assert {v.rule for v in violations} <= {"L1 零顶层可变状态契约禁mutable-state"}, violations
+    assert {v.rule for v in violations} <= {"零顶层可变状态契约禁mutable-state"}, violations
 
 
 def test_cards_extra_top_level_let_red(gate: Any, js_dir: Path) -> None:
@@ -931,6 +949,30 @@ def test_cards_function_scoped_let_is_not_flagged(gate: Any, js_dir: Path) -> No
         _CARDS_ANCHOR + "\nfunction _probe() { let inner = 1; return inner; }",
     )
     assert not [v for v in _cards_violations(gate, js_dir) if "inner" in v.raw]
+
+
+def test_cards_missing_module_fails_loud(gate: Any, js_dir: Path) -> None:
+    """规则⑦：`cards.js` 缺席 MUST NOT 被静默跳过（改名/删除即让钉子凭空消失）。
+
+    这条契约是 `cards.js` 模块级状态**唯一**的机械钉子。旧实现 `if not path.exists(): continue`
+    ⇒ 文件改名后闸静默变绿、零输出，正是本仓禁止的 silent-failure。现：缺席报
+    `missing-mutable-state-module`、点名文件，闸随之 exit 1。
+    """
+    (js_dir / _CARDS).unlink()
+
+    violations = [
+        v for v in gate.collect_violations(js_dir, None)
+        if v.rule == "missing-mutable-state-module"
+    ]
+    assert len(violations) == 1, violations
+    assert violations[0].rel_path == f"static/js/{_CARDS}"
+    assert _CARDS in violations[0].raw, "诊断必须点名缺席的文件"
+
+    res = run_gate(js_dir)
+    assert res.returncode == 1, res.stderr
+    assert f"static/js/{_CARDS}:1:missing-mutable-state-module" in res.stderr
+    # 只有这一条：缺席不得顺带刷出别的规则的噪音（否则归因又变浑）。
+    assert res.stderr.count("  - ") == 1, res.stderr
 
 
 # ══ 3. 真树集成 + 端到端退出码 ═══════════════════════════════════════════════
