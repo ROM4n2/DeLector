@@ -82,8 +82,14 @@ def _exported_names(toks) -> set[str]:
     **隐形**的，而块内 `as` 右边才是真正的导出名。rd-api.js 那 14 个 `*Remote`
     别名当初就是这种形态，用正则守卫等于没守 —— 把整块别名加回来照样全绿。
 
-    覆盖：`export [async] function|const|let|var|class X`、`export { a, b as c }`、
-    `export * from '…'`（返回哨兵 `*`，调用方应判红）。
+    覆盖（由两轮对抗评审逐条打出来的完整形态集）：
+      - `export [async] function|const|let|var|class X`
+      - `export { a, b as c }`          → 取 `as` 右侧
+      - `export { a as "b" }`           → **ES2022 字符串导出名**，取引号内文本
+      - `export default …`              → 哨兵 `"default"`（default 也是一条导出）
+      - `export * from '…'` / `export * as ns from '…'`
+                                        → 哨兵 `"*"` / `"*ns"`
+    调用方把哨兵一律当「多余导出」判红。
     """
     names: set[str] = set()
     n = len(toks)
@@ -103,6 +109,17 @@ def _exported_names(toks) -> set[str]:
                 k += 1
             if k < n and toks[k].kind == "id":
                 names.add(toks[k].text)
+            continue
+        # export default …（函数/类/表达式一律记一条名为 "default" 的导出）
+        if toks[j].kind == "id" and toks[j].text == "default":
+            names.add("default")
+            continue
+        # export * as ns from '…'
+        if toks[j].kind == "punct" and toks[j].text == "*":
+            if j + 2 < n and toks[j + 1].kind == "id" and toks[j + 1].text == "as":
+                names.add("*" + toks[j + 2].text)
+            else:
+                names.add("*")
             continue
         # export { a, b as c }
         if toks[j].kind == "punct" and toks[j].text == "{":
@@ -130,18 +147,17 @@ def _exported_names(toks) -> set[str]:
                         item.append((tk.kind, tk.text))
                 k += 1
             for it in items:
-                ids = [x[1] for x in it if x[0] == "id"]
-                strs = [x[1] for x in it if x[0] == "str"]
-                if ids:
-                    # a as b -> 导出名是 b
-                    names.add(ids[2] if len(ids) >= 3 and ids[1] == "as" else ids[0])
-                elif strs:
-                    # export { "x" as y } 里的字符串名不是合法标识符，按原样记
-                    names.add(strs[0])
+                if not it:
+                    continue
+                # `as` 是关键字 id；它右侧那个 token（id 或 str）才是导出名。
+                as_at = next((idx for idx, (kind, text) in enumerate(it)
+                              if kind == "id" and text == "as"), None)
+                if as_at is not None and as_at + 1 < len(it):
+                    names.add(it[as_at + 1][1])
+                else:
+                    # 无 `as`：首个 token 即导出名（可能是 id，也可能是字符串名）
+                    names.add(it[0][1])
             continue
-        # export * from '…'
-        if toks[j].kind == "punct" and toks[j].text == "*":
-            names.add("*")
     return names
 
 
@@ -303,9 +319,11 @@ def test_rd_api_export_surface_is_exactly_the_endpoints() -> None:
         f"  missing: {sorted(EXPECTED_ENDPOINTS - exported)}\n"
         f"  extra:   {sorted(exported - EXPECTED_ENDPOINTS)}"
     )
-    # 交叉校验：正则解析与词法解析必须一致（防一边漂移掩盖另一边）
-    assert exported <= declared, (
-        f"regex-exported names not found by the tokenizer: {sorted(exported - declared)}"
+    # 交叉校验：声明式导出（非哨兵）必须在顶层声明集合里真实存在，
+    # 防「解析出一堆不存在的名字」把守卫变成空转。
+    sentinels = {n for n in exported if n.startswith("*") or n == "default"}
+    assert (exported - sentinels) <= declared, (
+        f"exported names not found among top-level declarations: {sorted((exported - sentinels) - declared)}"
     )
 
 
@@ -490,6 +508,55 @@ def test_regression_indented_export_const_is_detected() -> None:
     assert "fetchArticlesRemote" in exported, (
         "an indented export must not escape the export-surface guard"
     )
+
+
+def test_regression_string_export_name_is_detected() -> None:
+    """回归：ES2022 字符串导出名 `export { a as "b" }` 必须被看见。
+
+    第二轮对抗评审实测：14 个别名全部写成字符串名后，导出数在运行时确实是 28，
+    而两条守卫、`node --check` 与分层闸**全部保持绿色**。原解析器只收集 id，
+    `a as "b"` 得到 `[removeArticle, as]`（长度 2 < 3）于是回退到本地名 ——
+    字符串导出名永远进不了 `exported`。
+    """
+    raw = (REPO_ROOT / RD_API_REL).read_text(encoding="utf-8")
+    NL = chr(10)
+    mutated = (
+        raw
+        + NL + 'export { removeArticle as "deleteArticleRemote" };' + NL
+        + NL + 'export { fetchArticles as "fetchArticlesRemote" };' + NL
+    )
+    exported = _exported_names(tokenize(mutated))
+    assert {"deleteArticleRemote", "fetchArticlesRemote"} <= exported, (
+        f"string export names must be parsed, got: {sorted(exported)}"
+    )
+    assert (exported - EXPECTED_ENDPOINTS) >= {"deleteArticleRemote", "fetchArticlesRemote"}
+
+
+def test_regression_export_default_is_detected() -> None:
+    """回归：`export default …` 也是一条导出，不得隐形。
+
+    第二轮对抗评审实测：`export default function deleteArticleRemote(id){…}`
+    在运行时让导出数变 15，而所有守卫保持绿色（`default` 不匹配任何已知分支）。
+    """
+    raw = (REPO_ROOT / RD_API_REL).read_text(encoding="utf-8")
+    NL = chr(10)
+    for form in (
+        "export default function deleteArticleRemote(id) { return removeArticle(id); }",
+        "export default { deleteArticleRemote: removeArticle };",
+    ):
+        exported = _exported_names(tokenize(raw + NL + form + NL))
+        assert "default" in exported, f"`{form[:40]}…` must register a 'default' export"
+        assert (exported - EXPECTED_ENDPOINTS) >= {"default"}, (
+            "a default export is an extra surface entry, so the 14-endpoint guard must redden"
+        )
+
+
+def test_regression_star_as_namespace_is_detected() -> None:
+    """回归：`export * as ns from …` 必须被看见（星号再导出是整块未知面）。"""
+    raw = (REPO_ROOT / RD_API_REL).read_text(encoding="utf-8")
+    NL = chr(10)
+    exported = _exported_names(tokenize(raw + NL + "export * as ns from './core.js';" + NL))
+    assert any(n.startswith("*") for n in exported), f"expected a '*' sentinel, got {sorted(exported)}"
 
 
 def test_mutation_proof_syntax_error_trips_node_check(tmp_path: Path) -> None:
