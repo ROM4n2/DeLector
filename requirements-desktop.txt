@@ -19,4 +19,4 @@
 pywebview==6.2.1
 pystray==0.19.5
 pythonnet==3.2.1
-pillow==12.3.0
+pillow==13.0.0
