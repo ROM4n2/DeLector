@@ -26,11 +26,16 @@
 ## 归档待办（下次发版时执行）
 
 > 判据重申：计划进 `plans/archive/` 的条件是**成果已发版**，不是"做完了"。
-> **v5.18.0 已正式发版（2026-10-19）**：原在途的 19 份计划（含 10-12 至 10-19 全部已合入 PR 的计划）已全部批量 `git mv` 归档进 `docs/plans/archive/`。当前 `plans/` 下无在途未结计划。
+> **v5.18.0 已正式发版（2026-10-19）**：原在途的 19 份计划（含 10-12 至 10-19 全部已合入 PR 的计划）已全部批量 `git mv` 归档进 `docs/plans/archive/`。
+> **当前 `plans/` 有 2 份在途计划 —— 均已闭环交付但尚未发版**（v5.18.0 之后才合入 master）。按上述判据，它们**留在 `plans/` 不进 archive**；下次发版时随批次一并 `git mv`。
 
 | 计划 | 交付状态 | 归档去向 |
 | --- | --- | --- |
 | `2026-10-12` ~ `2026-10-19` 共 19 份计划（含 C1~C9、架构解耦、index/writer/reader 前端模块化） | 全部闭环交付（PR #131~#161） | 已随 v5.18.0 发版归档至 `docs/plans/archive/` |
+| `2026-10-19-reader-api-layer-split.md` | **已交付未发版**：PR #164 已合并（`reader.js` → `rd-api.js` L2，14 端点函数；40 导出与错误轨 10/10 守恒） | 待下次发版 |
+| `2026-10-20-cards-state-container.md` | **已交付未发版**：PR #165 已合并（15 个模块级状态收进 `cd-state.js`，视图层顶层 `let` 15→0）；其连带修复 PR #166 亦已合并 | 待下次发版 |
+
+**发版批次判据（避免下次发版时漏搬或早搬）**：凡已合入 master、且其 PR 编号**晚于最近一次 tag** 的计划，均属「已交付未发版」⇒ 留在 `plans/` 等下次发版。当前最近 tag = `v5.18.0`，实测指向 `aae45a9`（`Merge pull request #162 from ROM4n2/chore/release-v5-18-0`，2026-10-19）；故 PR #164 / #165 对应的下表两行仍在途（#163 为纯文档、#161 早于该 tag 已归档）。
 
 **命名豁免（历史既成事实，不改）**：`plans/archive/` 里 4 份**早于 `<日期>-` 命名规则**的文件（`workbench-scope-control-and-live-settings.md`、`workbench-progress-server-sync.md`、`workbench-core-words-mode.md`、`plan-companion-mascot.md`）**保留原名**——改名会打断既有引用（含 vault 侧），收益不足以抵风险。此后新增的归档件一律带 `<日期>-` 前缀。
 

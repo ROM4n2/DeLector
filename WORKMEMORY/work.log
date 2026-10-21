@@ -619,3 +619,13 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 真实人类文档直推 `99b678a..8bbc844` 保持 exit 0；
   - 真实历史 26 条 GitHub 单父提交 100% 判定为 integrated；抽样 30 条人类代码提交 100% 判定为 not integrated。
 - **基线与门禁**：全量测试 2519 collected（2517 passed + 2 skipped）；六道机械闸全部 exit 0；`ruff` / `mypy --strict delector tools` / `mypy tests` 全绿；CRLF 0 lone LF。
+
+### 2026-10-21 04:10 | qwen3.8-flash__hermes | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+决策：**归档环节：两份在途计划本轮不移进 `archive/`，只登记进「归档待办」。**
+- 判据来自 `docs/README.md:20-21,:28` 正主规则 —— 计划进 `plans/archive/` 的条件是**「成果已发版」**，**不是**「做完了」。
+- 实测核实：最近 tag `v5.18.0` 指向 **`aae45a9`**（`Merge pull request #162 from ROM4n2/chore/release-v5-18-0`，2026-10-19）。`2026-10-19-reader-api-layer-split.md`（PR #164，#162 之后）与 `2026-10-20-cards-state-container.md`（PR #165）**均晚于该 tag ⇒ 已交付未发版**，故留在 `plans/`。
+- why：早搬会让「plans/ = 在途」这个语义失效，而 `plans/` 恰恰是下一任 agent 判断"还有什么没做完"的唯一入口；把已交付未发版的计划搬走，等于把"这部分改动尚未随版本到达用户"这件事藏起来。
+- 已改：`docs/README.md` 归档待办节 —— 删掉失真的「当前 `plans/` 下无在途未结计划」，补两行登记 + **发版批次判据**（凡已合入且 PR 号晚于最近 tag 的计划均属"已交付未发版"）。
+- 断链检查：全仓（排除他人 worktree）指向这两份计划的引用共 11 处（`static/js/cd-state.js` · `static/js/rd-api.js` · `tests/test_frontend_layers.py` · `tests/test_reader_api_split.py` · `tests/test_cards_state_split.py` · `tools/check_frontend_layers.py` · `docs/reviews/2026-10-20-rd-api-export-guard-escape.md` 等）**全部指向在途路径、仍然有效**；指向 `plans/archive/` 的同名路径为 **0**。
+- ⚠️ 我在本事件起草时误写过「tag 对应 master `4646a67` 前后」——那是从 `PROJECT_OVERVIEW` 的基线行抄来的**二手说法**；物理核实后修正为 `aae45a9`。教训：tag 指向 MUST 用 `git log -n1 <tag>` 取，不从别处抄。
