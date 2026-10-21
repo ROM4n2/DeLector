@@ -638,3 +638,17 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 子代理重测的数字与本轮早期不同（1316 提交 / GitHub 181 / 单父 27，锚 `bfb66ad`，vs 我早先 1315/180/26 锚 `07139ac`）：差 1 恰为**我们自己那次 squash 合并 #171**，属预期漂移；它是实测而非抄我的数，这点值得肯定。
 - ⚠️ **未 push vault**：`origin/master` 落后 11 个提交（其中 **10 个是他人此前累积未推的**、第 11 个是本次）——推上去会连带发布他人的 10 个提交，故留给 vault owner 决定。
 - 遗留观察（**无规则可依，故不动**）：`01-Rules/TESTING-PATTERNS.md` 实测 **49.5KB**、6 段附录，是全库最大规则文件（次大 `AGENT-CONDUCT.md` 35.4KB）；但 `DOC-GOVERNANCE.md` / `VAULT-STRUCTURE.md` 里**没有任何体量或附录阈值** ⇒ 重排只能算口味、不是合规，未做。
+
+### 2026-10-21 23:10 | qwen3.8-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**分支与工作树清理**。本地 `14 → 1`（仅 master）、worktree `4 → 1`、松散对象 **1527 → 0**（`git gc` 普通模式，**未加 `--prune=now`**），`git fsck` exit 0。远端 `9 → 3`，但**归因要分开**：我删的是 **4 条已合并 PR 分支**（#163/#165/#166/#171）；另 **2 条 dependabot 分支是并行 agent 合并 #167/#169 时自行删除的**，不是我清的；剩下的 master + 2 条（#168/#170）仍在等 PR。
+- ⚠️ **本事件最值得留档的是判据本身：squash 工作流下，三个常规机械判据全部误判，不可用作删除依据。**
+  - `git branch --no-merged master` 把 **14 条全列成"未合并"** —— squash 提交的父提交是上一个 master tip，分支提交不是它的祖先。
+  - `git cherry master <branch>` 对 3 条功能分支给出 `0 未等价`（对）与 `14 未等价`（`refactor/cards-state-container`，错）；`git merge-tree` 对 11 条子代理分支报 10 条"有差异" —— 因为 cherry-pick 时**有意解决过冲突**，分歧是设计产物不是丢失。
+  - 逐提交 subject 比对也失效：GitHub squash 会把 `(#166)` 追加进标题，精确匹配全部落空。
+- **最终采用的四条有效判据**（逐条实跑，全绿才删）：① 功能分支的**树**与其 squash 提交**逐字一致**（`git diff <branch> <squash_sha>` 为空）；② 每条分支上**不存在 master 缺的文件**（`git diff --diff-filter=D <branch> master`）；③ `WORKMEMORY/work.log` 是追加式文件、`--diff-filter` 看不见其内容级丢失 ⇒ 单独比**事件头集合**，14 条分支**独占事件头均为 0**；④ 三个在册 worktree 逐个 `git -C <wt> status --short` 查**未提交**成果（父仓 status 与 `--no-merged` 都照不到它），均为空。
+- 顺序按技能铁律：**先卸 worktree（叶优先，防 Windows `Filename too long`）再删分支**，否则 `cannot delete branch ... used by worktree`。
+- 他人资产核验：4 条远端分支删除前逐条查 PR 状态，全部 `MERGED` 带时间戳（#163/#165/#166/#171）；2 条 dependabot 分支当时带**开着的 PR**（#168/#170）⇒ 保留。执行期间另两个 agent 用 merge-commit 方式合了 #167/#169，与本仓清理**无交集**；本地随后 `--ff-only` 同步到 `faba48b`。
+- `.gitignore` 里 `worktrees` 命中 3 次，逐行核为**仅 1 条真规则**（第 77 行）+ 2 行注释 ⇒ 记忆里那个「每次建工作树都重复追加」的缺陷在本仓当前状态下**未发生**，不动（且 `.gitignore` 不在直推白名单，改它要开 PR）。
+- `.worktrees/subagent-sa-0-425e71cd` 经 `ls -a` 判为**无 `.git` 文件的空目录**（未注册垃圾，非他人活工作树 —— 没用 `git -C` 判，它会回落父仓给出假绿）⇒ `rmdir`（只能删空目录，非空即失败=安全）。`.worktrees/` 根目录按仓内约定保留。
+- 可恢复性：14 个分支 tip 的对象经 `git cat-file -e` 逐个确认**仍在库中**，`gc` 未 prune ⇒ 90 天内 `git branch <name> <sha>` 可原样复原。
