@@ -629,3 +629,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 已改：`docs/README.md` 归档待办节 —— 删掉失真的「当前 `plans/` 下无在途未结计划」，补两行登记 + **发版批次判据**（凡已合入且 PR 号晚于最近 tag 的计划均属"已交付未发版"）。
 - 断链检查：全仓（排除他人 worktree）指向这两份计划的引用共 11 处（`static/js/cd-state.js` · `static/js/rd-api.js` · `tests/test_frontend_layers.py` · `tests/test_reader_api_split.py` · `tests/test_cards_state_split.py` · `tools/check_frontend_layers.py` · `docs/reviews/2026-10-20-rd-api-export-guard-escape.md` 等）**全部指向在途路径、仍然有效**；指向 `plans/archive/` 的同名路径为 **0**。
 - ⚠️ 我在本事件起草时误写过「tag 对应 master `4646a67` 前后」——那是从 `PROJECT_OVERVIEW` 的基线行抄来的**二手说法**；物理核实后修正为 `aae45a9`。教训：tag 指向 MUST 用 `git log -n1 <tag>` 取，不从别处抄。
+
+### 2026-10-21 22:30 | qwen3.8-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**本轮四条耐久工程经验已下沉 Coding Vault**（`D:/Obsidian/Coding` commit **`4befb32`**，5 文件 +83/−8）。此条只做跨仓可追溯性登记，**不在本仓复述规则正文**（vault 是那些知识的正主；本仓对应面见 `docs/agents/architecture.md`「前端模块分层契约」与红线第 13 条）。
+- 落位（**全部为 patch 既有规则文件，未新建文件、未新建 ADR**）：`01-Rules/TESTING-PATTERNS.md` 新增 §3.1 切片算法契约（三段式 + 具名报错）/ `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md` 新增 §3.1 判别力证双向 / `01-Rules/GIT-CONVENTIONS.md` 新增 §2.1 committer 判据 / `05-Tools/Subagents/SUBAGENT-DISPATCH-GUIDE.md` 新增 §6 派单血统纪律 / `11-Agents/logs/2026-10.md` 审计登记。
+- **我自己复核过的凭据**（不接受子代理自述）：提交实体恰为上述 5 文件；他人 3 个在途文件仍为未提交状态（**未被卷入**）；`vault-quality-check --strict` **exit 0**（Score 100）；`vault-healthcheck` **exit 0**（wikilink 1187/1187，0 broken）。子代理报的 GATE2 红（43 处）经我复现：**全在 `package/skills/**`、0 处提及本次 5 文件** ⇒ 既有、与本次无关。补充定性：该闸是**模板包**体检器，预期由 `scripts/vault-publish-template.py` 以临时导出目录调用；`package/` 是发布产物，其中 skills 的反引号 `01-Rules/…` 路径按 `CONVENTIONS.md` 是**有意占位**（模板接收方自建、质量门禁自动豁免）⇒ 不是活缺陷。
+- 子代理重测的数字与本轮早期不同（1316 提交 / GitHub 181 / 单父 27，锚 `bfb66ad`，vs 我早先 1315/180/26 锚 `07139ac`）：差 1 恰为**我们自己那次 squash 合并 #171**，属预期漂移；它是实测而非抄我的数，这点值得肯定。
+- ⚠️ **未 push vault**：`origin/master` 落后 11 个提交（其中 **10 个是他人此前累积未推的**、第 11 个是本次）——推上去会连带发布他人的 10 个提交，故留给 vault owner 决定。
+- 遗留观察（**无规则可依，故不动**）：`01-Rules/TESTING-PATTERNS.md` 实测 **49.5KB**、6 段附录，是全库最大规则文件（次大 `AGENT-CONDUCT.md` 35.4KB）；但 `DOC-GOVERNANCE.md` / `VAULT-STRUCTURE.md` 里**没有任何体量或附录阈值** ⇒ 重排只能算口味、不是合规，未做。
