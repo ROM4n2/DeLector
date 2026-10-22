@@ -23,15 +23,20 @@ POSIX 的 `flock` 锁的是 inode：若 `os.replace` 的目标写成 `paths.lock
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import json
 import logging
 import os
+import queue
+import subprocess
 import sys
-from dataclasses import replace
+import threading
+import time
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, List, Optional, Tuple, cast
+from typing import IO, Callable, List, Optional, Tuple, cast
 
 import pytest
 
@@ -506,3 +511,212 @@ def test_unserializable_record_releases_fd_and_allows_reacquire(
     again = try_acquire(paths, _record(tmp_path))
     assert isinstance(again, LockHandle), "锁必须真的被释放：后续取锁应成功，而不是撞上自己悬空的 fd"
     again.release()
+
+
+# ── 跨进程（真 spawn）──
+#
+# 为什么必须另开这一节
+# -------------------
+# 上面所有用例都跑在**一个进程**里：互斥性只经「同进程两次 `os.open` 得到两个内核句柄」间接验证，
+# 这盖不住两件只有真进程才能验的事：
+#   ① 锁在**另一个 OS 进程**手里时，本进程必须被真的挡住（不是句柄不同，而是内核拒绝）；
+#   ② 子进程被 `terminate()` 后，锁必须**随进程退出自愈** —— 本模块刻意不做 pid 探活，
+#      唯一依赖就是「OS 释放已死进程的锁」，这条承诺此前一条测试都没钉。
+# Windows 没有 fork，`python -c` + spawn 是唯一可移植路径，正好也是产品真实形态
+# （`start.py` 在用户双击时就是这么跑起来的）。
+#
+# 反脆弱约定（都踩过）：
+#   - 等待子进程的 `HELD` 用**队列 + 硬上界**，不用裸 sleep 轮询；
+#   - `finally` 必收尸：`terminate()` → `wait(10)` → `kill()` 兜底 → `wait(10)`，绝不留下裸 sleep 的子进程；
+#   - 任何断言失败都把子进程 stdout/stderr 原文塞进消息：否则「子进程其实没拿到锁」会被读成父进程的 bug。
+
+#: 子进程等锁期间在 `HELD` 之后保持持有的时长：远大于父进程全部动作，靠 `terminate()` 结束（不是靠它自己退出）。
+_CHILD_HOLD_SECONDS = 30
+#: 等 `HELD` 的上界。子进程 import 本仓库代码约 0.3s，10s 是「本机不可能慢成这样」的余量。
+_HELD_TIMEOUT = 10.0
+#: 收尸上界：`terminate()` 之后的 `wait()` 与 `kill()` 兜底的 `wait()` 都用它。
+_TERMINATE_TIMEOUT = 10.0
+#: 队列 EOF 哨兵：泵线程读到流结束就投它，让「子进程提前死了」立刻变成可诊断失败而不是干等 10s。
+_CHILD_EOF = ""
+
+_CHILD_SCRIPT = r'''
+import os
+import sys
+import time
+
+from delector.core.instance_lock import LockHandle, LockPaths, LockRecord, try_acquire
+
+base = sys.argv[1]
+paths = LockPaths(
+    lock=os.path.join(base, "instance.lock"),
+    meta=os.path.join(base, "instance.json"),
+)
+record = LockRecord(
+    pid=os.getpid(),
+    version="5.19.0",
+    port=8000,
+    data_dir=base,
+    acquired_at="2026-10-21T12:00:00+08:00",
+)
+handle = try_acquire(paths, record)
+if not isinstance(handle, LockHandle):
+    # 子进程自己没拿到锁：父进程后面「被挡住」就可能是假的，必须显式失败并把身份打到 stderr。
+    sys.stderr.write("CHILD_NOT_HOLDER %r\n" % (handle,))
+    sys.stderr.flush()
+    raise SystemExit(3)
+print("HELD %d" % os.getpid(), flush=True)
+time.sleep(@@HOLD_SECONDS@@)
+handle.release()
+'''.replace("@@HOLD_SECONDS@@", str(_CHILD_HOLD_SECONDS))
+
+
+def _pump_lines(stream: "IO[str]", sink: "queue.Queue[str]") -> None:
+    """后台泵：把子进程 stdout 逐行投进队列，流结束投 EOF 哨兵。
+
+    为什么不用 `communicate(timeout=...)`：它要等**进程退出**才返回，而子进程故意持有 30s，
+    必然先超时；而裸 `readline()` 在子进程卡死时会永久阻塞。队列 + 上界是唯一两头都咬住的做法。
+    """
+    try:
+        for line in stream:
+            sink.put(line)
+    finally:
+        sink.put(_CHILD_EOF)
+
+
+@dataclass
+class _ChildProcess:
+    """真子进程句柄：等待带上界，收尸幂等（`finally` 之后仍可再调 `stop()`）。"""
+
+    proc: "subprocess.Popen[str]"
+    lines: "queue.Queue[str]"
+    pump: "threading.Thread"
+    captured: List[str] = field(default_factory=list)
+
+    def await_held(self, timeout: float = _HELD_TIMEOUT) -> int:
+        """等到 `HELD <pid>`，返回子进程 pid；超时或子进程早退都抛带 stdout/stderr 原文的断言。"""
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError(self.describe(f"子进程 {timeout:.0f}s 内未打印 HELD"))
+            try:
+                line = self.lines.get(timeout=remaining)
+            except queue.Empty:
+                raise AssertionError(self.describe(f"子进程 {timeout:.0f}s 内未打印 HELD")) from None
+            if line == _CHILD_EOF:
+                raise AssertionError(self.describe("子进程未打印 HELD 就退出了"))
+            self.captured.append(line)
+            if line.startswith("HELD "):
+                return int(line.split()[1])
+
+    def stop(self) -> None:
+        """terminate → wait → kill 兜底。幂等：进程已退出时只剩 `join`。"""
+        if self.proc.poll() is None:
+            # `poll()` 判活与 `terminate()` 之间存在窗口：子进程可能刚好在此间退出，
+            # Windows 上 `terminate()` 会抛 OSError/PermissionError。若在 `finally` 里抛出，
+            # 会顶掉真正的 AssertionError（「子进程未打印 HELD」），故这里的收尸异常一律吞掉。
+            with contextlib.suppress(OSError):
+                self.proc.terminate()
+        try:
+            self.proc.wait(timeout=_TERMINATE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait(timeout=_TERMINATE_TIMEOUT)
+        self.pump.join(timeout=_TERMINATE_TIMEOUT)
+        if self.pump.is_alive():
+            # join 超时不能静默丢弃：否则后续排空队列可能少行，describe() 消息残缺却不说。
+            self.captured.append("<pump 未在窗口内结束，输出可能不完整>")
+
+    def collect_output(self) -> Tuple[str, str]:
+        """收尸并返回子进程 stdout/stderr 原文（`stop()` 之后 stderr 已到 EOF，读不会阻塞）。"""
+        self.stop()
+        while True:
+            try:
+                line = self.lines.get_nowait()
+            except queue.Empty:
+                break
+            if line != _CHILD_EOF:
+                self.captured.append(line)
+        stderr_text = ""
+        if self.proc.stderr is not None:
+            stderr_text = self.proc.stderr.read() or ""
+        return "".join(self.captured), stderr_text
+
+    def describe(self, reason: str) -> str:
+        """把失败原因和子进程原文拼成一条消息，并顺手收尸（断言失败也不留僵尸）。"""
+        stdout_text, stderr_text = self.collect_output()
+        return f"{reason}\n--- child stdout ---\n{stdout_text}\n--- child stderr ---\n{stderr_text}"
+
+
+def _spawn_child(tmp_path: Path) -> _ChildProcess:
+    """起真子进程跑内联脚本；`cwd` + `PYTHONPATH` 双写，保证它 import 到**本仓库**的代码。"""
+    repo_root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ)
+    inherited = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = os.pathsep.join([str(repo_root)] + ([inherited] if inherited else []))
+    # 子进程只 print ASCII，但显式钉住编码，免得继承到奇怪 locale 时 print 抛 UnicodeError。
+    env["PYTHONIOENCODING"] = "utf-8"
+    proc = subprocess.Popen(
+        [sys.executable, "-c", _CHILD_SCRIPT, str(tmp_path)],
+        cwd=str(repo_root),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    lines: "queue.Queue[str]" = queue.Queue()
+    if proc.stdout is None:  # stdout=PIPE 保证不为 None；显式收窄给类型检查器看
+        raise AssertionError("stdout=PIPE 却拿到 None")
+    pump = threading.Thread(target=_pump_lines, args=(proc.stdout, lines), daemon=True)
+    pump.start()
+    return _ChildProcess(proc=proc, lines=lines, pump=pump)
+
+
+def test_subprocess_holder_blocks_parent_and_os_release_heals(tmp_path: Path) -> None:
+    """真子进程持有锁 ⇒ 父进程被挡住且读到子进程身份；子进程被杀 ⇒ 父进程立刻能取锁。
+
+    变异自证（计划 Task 3 Step 2）：把 `_acquire_os_lock` 改成直接 `return True`（跳过 OS 锁）后，
+    本用例必然转红 —— 那时父进程也能「取到」锁，`blocked` 会是 `LockHandle` 而不是子进程的记录。
+    """
+    paths = _paths(tmp_path)
+    child = _spawn_child(tmp_path)
+    try:
+        child_pid = child.await_held()
+
+        blocked = try_acquire(paths, _record(tmp_path, port=8002))
+        if isinstance(blocked, LockHandle):
+            blocked.release()
+            raise AssertionError(
+                child.describe("子进程持有锁时父进程必须被挡住（返回 LockRecord），实际又拿到了锁句柄")
+            )
+        assert blocked.pid == child_pid, child.describe(
+            f"返回的持有者 pid 必须是子进程 pid {child_pid}，实际 {blocked.pid}"
+        )
+        # 记录必须来自子进程**回写**的 meta（父进程的候选记录是 port=8002），否则 pid 巧合也对不上语义。
+        assert blocked.port == 8000, child.describe("持有者记录必须来自子进程回写的 meta（port=8000）")
+
+        child.stop()
+
+        healed = try_acquire(paths, _record(tmp_path, port=8000))
+        if not isinstance(healed, LockHandle):
+            raise AssertionError(
+                child.describe(f"子进程退出后父进程必须能取锁，实际拿到 {type(healed).__name__}")
+            )
+        try:
+            # 反向自证：降级句柄（`_fd == -1`）同样是 `LockHandle`，单靠 `isinstance` 无法区分
+            # 「真拿到锁」与「降级放过」。故用另一条 record 再抢一次：真锁必须挡住本进程自己，
+            # 且返回的持有者 pid 必须是本进程 —— 这才能证明 `healed` 是真锁而非降级句柄。
+            contender = try_acquire(paths, _record(tmp_path, port=8003))
+            if isinstance(contender, LockHandle):
+                contender.release()
+                raise AssertionError(
+                    child.describe("healed 必须是真的锁：第二条 record 竟也取到锁句柄（说明 healed 只是降级放过）")
+                )
+            assert contender.pid == os.getpid(), child.describe(
+                f"持锁者应为本进程 pid {os.getpid()}，实际 {contender.pid}"
+            )
+        finally:
+            healed.release()
+    finally:
+        child.stop()
