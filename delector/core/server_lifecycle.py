@@ -68,6 +68,14 @@ def build_server(host: str, port: int, app: Any) -> uvicorn.Server:
         log_level="info",
         timeout_graceful_shutdown=SHUTDOWN_GRACE_S,
     )
+    # 把**真实**监听端口挂到 `app.state`：`GET /api/wb/lan-info` 读它拼给手机端。
+    # 此前那里写死 8000 —— 端口顺延后手机拿到的是一个错地址且没有任何提示。
+    # 用 `getattr` 保护而不是直接 `app.state`：`app` 也可能是测试替身或非 FastAPI 的 ASGI
+    # 应用，那种场景下记录端口只是可选能力，绝不能因此让建服失败（**不静默**：没记录时
+    # lan-info 会退回默认 8000，行为与本改动前一致）。
+    state = getattr(app, "state", None)
+    if state is not None:
+        setattr(state, "server_port", port)
     return uvicorn.Server(config)
 
 

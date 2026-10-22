@@ -109,3 +109,44 @@ def test_wb_lan_info_does_not_leak_sync_key(lan_client, client):
     r = lan_client.get("/api/wb/lan-info")
     assert "X-WB-Key" not in r.text
     assert client.get("/api/wb/state/key").status_code == 200
+
+
+# ── lan-info 的 port 必须来自真实监听端口（Task 8：端口顺延后手机才拿得到对地址）──
+
+
+def test_wb_lan_info_reports_the_real_listening_port(client):
+    """`build_server` 写入 `app.state.server_port` ⇒ lan-info 报的是**那个**端口，不是写死的 8000。
+
+    端口的唯一真相在 `build_server`（顺延由 `claim_instance` 决定）。写死 8000 的后果不是
+    "少个字段"：手机端会按错端口去连、超时后提示"配对失败"，而主机日志里一切正常。
+    """
+    sentinel = 8007
+    setattr(client.app.state, "server_port", sentinel)
+    try:
+        body = client.get("/api/wb/lan-info").json()
+    finally:
+        delattr(client.app.state, "server_port")
+    assert body["port"] == sentinel, f"必须报真实监听端口，实际 {body['port']}"
+
+
+def test_wb_lan_info_falls_back_to_8000_when_port_unknown(client):
+    """没有 `server_port` 时退回 8000：TestClient / Android 的既有行为不得改变。"""
+    client.app.state.__dict__.pop("server_port", None)
+    body = client.get("/api/wb/lan-info").json()
+    assert body["port"] == 8000, f"缺省必须是 8000，实际 {body['port']}"
+
+
+def test_build_server_records_port_on_app_state():
+    """`build_server` 必须把入参端口挂到 `app.state.server_port`（上面两条的前提）。
+
+    只断言端点读 state 而不断言写入方，等于把"谁来写"留给下一任猜：没人写 ⇒ 端点永远
+    退回 8000，而端点的两条用例（手动 setattr）照样全绿。
+    """
+    from delector.core.server_lifecycle import build_server
+    from delector.server import app
+
+    build_server("127.0.0.1", 8007, app)
+    try:
+        assert app.state.server_port == 8007
+    finally:
+        delattr(app.state, "server_port")
