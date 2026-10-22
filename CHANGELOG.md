@@ -4,9 +4,30 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.18.0（2026-10-19）**
+**最新版本：v5.19.0（2026-10-22）**
 
-### 🏗️ 架构与前端单体彻底解耦 + 交互式智能体闭环 + 六道自动化机械闸（PR #131~#161）
+### 🖥️ 桌面单实例锁 + 端口顺延 + 前端继续解耦（PR #172 · #164~#166）
+
+自 v5.18.0（`4646a67`，2026-10-19）起本版收敛两个主题：**「同一台机器只能有一个 DeLector」成为 OS 级事实**，以及前端单体继续分层。全量测试 2,438 → **2,584 passed + 2 skipped（净增 146）**。
+
+**① 桌面单实例（判据从「端口」换成「锁」）**
+- **OS 文件锁**：`%LOCALAPPDATA%\DeLector\instance.lock`（POSIX `~/.local/share/DeLector/instance.lock`），同目录 `instance.json` 记 `pid / 版本 / 端口 / 数据目录 / 抢锁时刻`。此前判据是「8000 上有没有东西」——那只说明端口被占，不说明占用者是谁。
+- **锁与元数据分两个文件**：POSIX `flock` 锁的是 **inode**；若对同一文件 `os.replace`，旧 fd 锁着已 unlink 的旧 inode，下一个进程能抢到锁 ⇒ 锁静默失效。故 `instance.lock` 只做锁目标、永不替换。
+- **唯一判定点** `start.claim_instance`：`start.main()`（脚本 / `--server-only`）与桌面壳共用，归因优先级 `unknown > version_mismatch > data_dir_mismatch > same`，杜绝「壳说没有、服务说有两个」。
+- **第二腿**：锁降级时（只读目录 / 无锁原语 / 文件打不开）先对被占候选端口做 `/api/health` 身份探测 —— 否则会为同一个库起第二个服务。真锁在手时一律不探测。
+- 桌面壳退出码 **3** 扩展到六种冲突情形；文案只含人话（版本 / pid / 端口 / 数据目录 / 日志路径），traceback 只进 `launch.log`。
+
+**② 端口顺延与真实端口**
+- 候选 `8000, 8002–8010`（**8001 是 Go supervisor 保留端口**，显式指定也拒绝）；自动模式顺延并留一条含新旧端口的日志，显式 `--port` **不顺延**（已对外承诺的地址不能偷偷换）。
+- `GET /api/wb/lan-info` 改报 `app.state.server_port`（`build_server` 写入的真实端口）。此前写死 8000 —— 顺延后手机会按错端口配对、超时后提示失败，而主机日志一切正常。
+
+**③ 前端单体继续解耦（#164~#166）**
+- `reader.js` 抽出 `rd-syntax.js`（纯语法层）与 `rd-api.js`（L2 持久化层，14 个端点函数）；`cards.js` 的 15 个模块级可变状态收进纯状态容器 `cd-state.js`，视图层顶层 `let` 15 → 0。导出面全程冻结（`reader.js` 40 个具名、`cards.js` 36 个 + 1 条 barrel）。
+- 本批真正的产出是挖出两条**与重构无关的既有静默失效**：`ia_dom_mount_probe.mjs` 有 4 条守卫一直恒真（切片锚点只到函数名）；探针静态层已红时仍跑 `node:vm`，空源撞出的 `ReferenceError` 排在真实问题后面。纪律已写进 `docs/agents/architecture.md`「前端模块分层契约」。
+
+**回滚**：单实例锁可用 `DELECTOR_DATA_DIR` 指到临时目录隔离验证；如遇异常启动问题，删除 `%LOCALAPPDATA%\DeLector\instance.lock` 无效（锁随进程退出自动释放），应确认是否有残留 `DeLector.exe`。
+
+### v5.18.0 · 🏗️ 架构与前端单体彻底解耦 + 交互式智能体闭环 + 六道自动化机械闸（PR #131~#161）
 
 自 v5.17.0（`f359ea6`，2026-10-11）起 **128 个提交、25 个 PR** 汇聚为本里程碑版本。主要涵盖三大维度：**核心业务与架构分层解耦**、**交互式智能体循环与裁判闭环**、以及**六道自动化质量守卫机械闸矩阵**。全量测试规模从 1,768 扩展至 **2,438 passed + 3 skipped（净增 670 个测试）**。
 
