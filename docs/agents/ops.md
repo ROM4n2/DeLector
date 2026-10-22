@@ -52,6 +52,19 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 在任务实跑时发生）。**dev 验证请走两个显式出口之一**：把 `DELECTOR_DATA_DIR` 指向临时目录，或设
 `DELECTOR_PORTABLE=1` 保持"数据随程序目录"。两者都会让 bootstrap 不去搬仓库根那份真实库。
 
+**单实例锁（排障入口）**
+: 同一台机器只允许一个 DeLector：`%LOCALAPPDATA%\DeLector\instance.lock`（POSIX
+  `~/.local/share/DeLector/instance.lock`）由 OS 文件锁守着，同目录 `instance.json` 记
+  `pid / 版本 / 端口 / 数据目录 / 抢锁时刻`。判据永远是**锁**，不是"端口上有没有东西"。
+  - 双击没反应 / 提示"已在运行"：先看 `launch.log` 里的 `拒绝启动（<reason>）`；
+    `same` = 同版本同目录的实例还活着（去开它给的地址），`version_mismatch` /
+    `data_dir_mismatch` = 另一份安装或另一份数据目录在跑，按提示先退出它。
+  - **不要手工删 `instance.lock`**：进程死掉时 OS 已经放锁，删文件既无效也可能与正在启动的
+    实例抢同一个路径。真正该确认的是有没有残留 `DeLector.exe` 进程。
+  - 端口：候选 `8000, 8002–8010`（**8001 留给 Go supervisor**）。自动模式顺延；显式
+    `--port` 不顺延，被占就退出码 3。手机会拿到 `app.state.server_port` 的真实端口
+    （`/api/wb/lan-info`），不是写死的 8000。
+
 **数据目录（部署面）**
 : 桌面端**默认 `%LOCALAPPDATA%\DeLector`**（Linux/macOS：`~/.local/share/DeLector`），由
   `data_dir_bootstrap.resolve_data_dir()` 解析（优先级：`DELECTOR_DATA_DIR` → `DELECTOR_PORTABLE=1`

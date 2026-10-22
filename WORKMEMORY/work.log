@@ -683,3 +683,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 顺带纳入的真缺陷：`delector/routes/backup.py:179` 把 `"port": 8000` 写死进 `/api/wb/lan-info`，顺延后手机端会拿到错地址且无提示 ⇒ 改读 `app.state.server_port`（由 `build_server` 写入，默认 8000 保 Android/TestClient 行为）。
 - 守卫影响：`tests/test_desktop_data_dir_bootstrap.py:402` 白名单加 `delector.core.instance_lock`；因该守卫取**全模块最小行号**（`start.py:39` 恒为最小），新增导入不会触发它——加白名单是为意图显式，注释已写清。另补窄守卫证明该模块不 import `database`。
 - 未提交任何文件（用户未要求）；分支 `feat/desktop-single-instance` 尚未创建。
+
+
+### 2026-10-22 | deepseek-v4.1-flash__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**桌面单实例锁 + 端口顺延**在分支 `feat/desktop-single-instance` 完成 Task 1~9（TDD，逐任务提交）。
+- 交付面：`delector/core/instance_lock.py`（锁记录 + 平台原语 + 三态 `try_acquire`）· `start.claim_instance`（唯一判定点）· `start.main()` 与 `desktop.py` 接线 · `/api/wb/lan-info` 真实端口 · 文档三处。
+- 两处**必须在评审中挡下**的缺陷（都由对抗评审发现，不是测试发现的）：
+  1. `try_acquire` 原实现把任何 `OSError` 当「他人持有」⇒ NFS/SMB 上 `flock` 返 `ENOLCK` 会被报成「已有实例在跑」且零 WARNING；改为 `_HELD_ERRNOS` 白名单，其余 errno 降级 + 响亮告警。
+  2. `desktop.py` 的「第二腿」接线（`identity_probe=_identity_probe`）曾**无任何用例覆盖**：删掉它 102 条全绿，后果是锁降级机器上会为同一个库起第二个服务。补 main 级用例后，删该 kwarg 即红（实测 stderr 打出「8000 被占用，改用 8002」）。
+- 一条**既有**测试缺陷被暴露：`test_desktop_shell.py` 有 2 条用例靠 patch `start.is_port_in_use` 拦启动，判定点换成锁之后它们的桩失效 ⇒ `start.main()` 真去起服务并**挂死**（pytest 超时 124）。已改到新判定点。
+- 两次重写测试守卫的形状（不是放宽）：`_stage_stmt_span` 需穿透 `try` 容器（Task 7 用 try/finally 放锁 ⇒ 锚点下沉一层，且容器自身会因子树包含调用而误命中）；`_stage_marker_statements` 同理。两处共用 `tests/server_helpers.py::stmts_through_try`。
+- `check_mock_drift` 新增 3 处豁免：patch `LockPaths.for_platform` 的消费方在 `start.py`（跨模块调用期类属性查找），闸的判据只看目标模块内部引用 ⇒ 属误报；豁免理由逐行可审。
+- 待办：Task 10（全量 pytest + 六道闸 + 真双启动手测 + PR）。

@@ -344,6 +344,39 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 
 ---
 
+## 桌面单实例与端口顺延（2026-10-22）
+
+**问题**：同一台机器上双击两次 = 两个进程抢同一个 SQLite 库；8000 被陌生程序占住 = 直接起不来。
+**判据**：一个 OS 级文件锁，**不是**"端口上有没有东西"（端口被占可能只是别的程序）。
+
+| 项 | 值 |
+| --- | --- |
+| 锁文件 | `%LOCALAPPDATA%\DeLector\instance.lock`（POSIX：`~/.local/share/DeLector/instance.lock`） |
+| 元数据 | 同目录 `instance.json`（pid / 版本 / 端口 / 数据目录 / 抢锁时刻） |
+| 唯一判定点 | `start.claim_instance(env, requested_port=None, identity_probe=None)` |
+| 端口候选 | `8000, 8002–8010` —— **8001 是 Go supervisor 保留端口**（`agent/internal/pythonsvc/doc.go`） |
+| 显式 `--port` | **不顺延**；被占 ⇒ `AlreadyRunning(reason="port_busy")` + 退出码 3 |
+| 归因优先级 | `unknown` > `version_mismatch` > `data_dir_mismatch` > `same` |
+
+**为什么锁与元数据是两个文件**：POSIX `flock` 锁的是 **inode** 而非路径。若对同一个文件
+`os.replace`，旧 fd 锁着已 unlink 的旧 inode，下一个进程打开新 inode 就能加锁 ⇒ **锁静默失效**。
+故 `instance.lock` 只做锁目标、永不替换；`instance.json` 走临时文件 + `os.replace`。
+
+**为什么要有"第二腿"（身份探测）**：锁降级时（只读目录 / 无锁原语 / 文件打不开）没有权威判据，
+此时「8000 被占」既可能是陌生程序、也可能是另一个 DeLector。前者该顺延，后者顺延就会**起第二个
+服务改同一个库**。故降级时先对候选端口做 `/api/health` 身份探测（`start._identity_probe`），
+命中即判 `same`；**真锁在手时一律不探测**（锁是唯一判据，多花一次 HTTP 只是白等）。
+
+**调用点**：`start.main()`（脚本 / `--server-only`）、`desktop.py::_check_port_or_fail`（桌面壳）
+共用同一个判定点；三处各写一套就会漂成"壳说没有、服务说有两个"。
+
+**退出码**：桌面壳 0 正常 / 1 就绪超时或异常 / 2 缺 WebView2 / 3 端口或实例冲突；
+`--server-only` 走 `start.main()`，`same` 时打开已有页面并返回 0。
+
+**排障**：`launch.log` 里搜 `拒绝启动（<reason>）`；锁文件残留不会阻塞启动（进程死 ⇒ OS 自动放锁），
+但 `instance.json` 可能停留在上一次的端口值 —— 判据永远以锁为准，不以 meta 为准。
+
+
 ## 分层架构声明与单向依赖规范
 
 > 依据 `01-Rules/LAYERED-ARCHITECTURE.md`，DeLector 后端采用严格的单向分层结构。
