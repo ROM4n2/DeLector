@@ -390,7 +390,12 @@
 
 | plan text | what was actually built | why |
 | --- | --- | --- |
-| （待执行时填写） | | |
+| 执行顺序 Task 4 → Task 5 | **Task 5 先于 Task 4** | `test_start_py_bootstrap_precedes_every_delector_import` 取全模块最小行号：`start.py` 顶层一旦新增 `delector.core.instance_lock` 导入，最小值就从 `main()` 内的 309 掉到 ~44 ⇒ Task 4 必须先拿到 Task 5 的白名单放行，否则它的「全绿」验收物理上不可达。 |
+| Task 6 Interfaces：`main(argv, on_serving)` | `main(debug_console, on_serving)`（**未改签名**） | 计划该行是笔误：仓库实际签名与全部调用方都是 `debug_console` 版本，按「签名不变」执行。 |
+| Task 7「`_check_port_or_fail` 移除或改为薄包装」 | 保留函数名，改成 `claim_instance` 的薄封装（出参 dict 交出 port/lock） | 两处 AST 守卫以该函数名为锚（`test_desktop_window_lifecycle.py` 的阶段标记夹逼、`test_desktop_port_guard.py` 的跨函数顺序）。改名会让守卫**找不到锚点**，属"判据失效"而非"实现变更"。 |
+| （未写）`APP_VERSION` 的取法 | `start.py::_app_version()` 惰性导入，且**定义在 `main()` 之后** | 同上那条顺序守卫：`delector.core.version` 不在 `_BOOTSTRAP_SAFE_IMPORTS` 白名单，模块级导入会让最小值下移。**已登记技术债**：把 `delector.core.version` 加进白名单，让该 helper 回到 `claim_instance` 旁边（当前规避手法依赖行号算术，脆弱）。 |
+| Task 9 只提「四处文档编辑」 | 另改两个测试的文件形状（**不放宽断言**） | ① `tests/server_helpers.py` 新增 `stmts_through_try`：Task 7 用 `try/finally` 放锁后阶段标记下沉一层，且容器自身会因子树包含调用而误命中锚点；② `tests/test_desktop_shell.py` 两条用例原靠 patch `is_port_in_use` 拦启动，判定点换成锁后桩失效 ⇒ 真起服务**挂死**（实测 pytest 超时 124），改到 `claim_instance`。 |
+| （未写）`check_mock_drift` | 3 处 `mock-drift-ok` 豁免 | 闸判据只看"目标模块内部是否还引用该符号"，而 `LockPaths.for_platform` 的消费方在 `start.py::claim_instance`（跨模块、调用期类属性查找）⇒ 属误报。豁免行逐行可审。 |
 
 ---
 
