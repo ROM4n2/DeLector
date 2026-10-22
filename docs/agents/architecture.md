@@ -9,14 +9,14 @@
 
 | 层               | 技术                                                       | 关键文件                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 后端             | Python 3.10+, FastAPI, spaCy, genanki                      | `server.py`（挂载路由与静态资源）, `routes_a1.py`（A1 考纲路由）, `routes_sync.py`（WebRTC 同步路由）, `routes_rtc.py`（WebRTC 信令中继）— 以上模块均已收进 `delector/` 包（Phase 2，文件名不变，见仓库目录结构），`linguistics.py`/`core_dict.py`/`writing_rules.py`/`syntax_tree.py`/`prep_dict.py`/`database.py` 等同在其内；根目录只留 `start.py`/`package_windows.py`/`conftest.py`。                                                                                                                                                                                                                                                                                                                                                                                             |
+| 后端             | Python 3.10+, FastAPI, spaCy, genanki                      | `delector/server.py`（`create_app()` 装配：中间件 → `routes.register_routes(app)` → `init_db` → 静态挂载；`server.py:329`）, `delector/routes/`（**v5.18 起按领域拆分**：`routes/__init__.py:register_routes` 统一 include，`main.router` 必须放在最后；旧名 `routes_a1.py`/`routes_sync.py`/`routes_rtc.py` 现为 `routes/a1.py`/`sync.py`/`rtc.py`），`linguistics.py`/`core_dict.py`/`writing_rules.py`/`syntax_tree.py`/`prep_dict.py`/`database.py` 等同在其内；根目录只留 `start.py`/`package_windows.py`/`conftest.py`。                                                                                                                                                                                                                                                                                                                                                                                             |
 | 词法/形态学      | 556+ 不规则动词三态表 + 复合词递归拆解                     | `linguistics.py`（1236 行）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 离线核心词库     | 歌德 A1–B2，0ms 查词                                       | `core_dict.py`（516 行），`a1_dict.py`（A1 702 词与口语卡），`a1_writing_dict.py`（A1 写作题库）                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 介词搭配数据集   | 动词/形容词 + 固定介词 + 格                                | `prep_dict.py`（生成物），入口 `lookup_prep_collocations()`，源 `tools/build_prep.py`                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | 写作润色规则引擎 | 冠词/格位一致 + 介词支配格 + A1 填表与短电邮诊断           | `writing_rules.py`，入口 `analyze_essay_text()`, `analyze_a1_email()`, `check_a1_formular_answer()`                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 拓扑句法         | VF/LK/MF/RK/NF 五场域 + 从句 AST                           | `syntax_tree.py`（1238 行）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 启动器           | 端口探测、局域网 IP、平台判定                              | `start.py`（端口探测 / 局域网 IP / 平台判定 / 优雅退出；**行数不写**，旧值 86 行已过时——2026-10-16 实测 245 行）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| 前端             | 原生 ES Modules（无框架、零构建），PWA                     | `static/index.html`, `static/js/`（**23 个模块，以 `ls static/js/*.js | wc -l` 为准**——旧值"10 个模块"漏掉 `listen-lab` / `hard-sentences` / `enc-i1` / `search` / `update` 等整块，2026-10-16 更正）, `static/style.css`                                                                                                                                                                                                                                                                                                                                                     |
+| 前端             | 原生 ES Modules（无框架、零构建），PWA                     | `static/index.html`, `static/js/`（**36 个模块，以 `ls static/js/*.js | wc -l` 为准**——2026-10-21 实测；v5.18 后端/前端解耦后从 23 增至 36。旧值"10 个模块"漏掉 `listen-lab` / `hard-sentences` / `enc-i1` / `search` / `update` 等整块，2026-10-16 更正）, `static/style.css`                                                                                                                                                                                                                                                                                                                                                     |
 | 数据库           | SQLite × 2                                                 | `delector.db`（主库）, `progress.db`（学习进度）——**默认落在 `%LOCALAPPDATA%\DeLector\`**（不是仓库根；见 `ops.md` 的部署面）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 音频缓存         | 本地 `.cache/audio/` MP3                                   | Edge Neural TTS（桌面 edge-tts；Android 无 wheel 时走 stdlib 版 `edge_tts_mini.py`）+ 有道/百度兜底                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 桌面打包         | PyInstaller                                                | `package_windows.py`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -283,7 +283,7 @@ GET    /api/wb/lan-info                         {hostname, port, lan_ip, instanc
 - **持久配对凭证 + 撤销**：`POST /api/wb/state/key` 重新生成密钥（仅本机）→ 旧 key 立即 403。
   前端 `wbsync.pair.revoke()` 撤销后**必须换用服务端下发的新 key**：否则主机会被自己作废的 key
   卡死（`pushNow` 开头 `if (!_key) return` 短路，连本机都推不动）。
-- **信令中继** `routes_rtc.py`：`POST/GET /api/wb/rtc/signal`，邮箱 id 取配对密钥的 sha256 摘要
+- **信令中继** `delector/routes/rtc.py`（旧名 `routes_rtc.py`）：`POST/GET /api/wb/rtc/signal`，邮箱 id 取配对密钥的 sha256 摘要
   （不用短码、也不留密钥明文）；带 `sender` 隔离回声、带 `after` 游标防重放。
 - **前端** `wbsync.rtc`：角色由「是否已配对」决定（已配对侧发 offer、宿主侧应答，免协商、不打架）；
   信封沿用 HTTP PUT 的 `{payload:...}` 形状——两种通道一套契约，少一处不一致的余地；
@@ -343,6 +343,39 @@ R(t, S) = (1 + (19/81) * (t / S))^(-0.5)
 匹配不到，于是**每个句号都变成一个独立的"句子"**。要改切句逻辑请只改这一处。
 
 ---
+
+## 桌面单实例与端口顺延（2026-10-22）
+
+**问题**：同一台机器上双击两次 = 两个进程抢同一个 SQLite 库；8000 被陌生程序占住 = 直接起不来。
+**判据**：一个 OS 级文件锁，**不是**"端口上有没有东西"（端口被占可能只是别的程序）。
+
+| 项 | 值 |
+| --- | --- |
+| 锁文件 | `%LOCALAPPDATA%\DeLector\instance.lock`（POSIX：`~/.local/share/DeLector/instance.lock`） |
+| 元数据 | 同目录 `instance.json`（pid / 版本 / 端口 / 数据目录 / 抢锁时刻） |
+| 唯一判定点 | `start.claim_instance(env, requested_port=None, identity_probe=None)` |
+| 端口候选 | `8000, 8002–8010` —— **8001 是 Go supervisor 保留端口**（`agent/internal/pythonsvc/doc.go`） |
+| 显式 `--port` | **不顺延**；被占 ⇒ `AlreadyRunning(reason="port_busy")` + 退出码 3 |
+| 归因优先级 | `unknown` > `version_mismatch` > `data_dir_mismatch` > `same` |
+
+**为什么锁与元数据是两个文件**：POSIX `flock` 锁的是 **inode** 而非路径。若对同一个文件
+`os.replace`，旧 fd 锁着已 unlink 的旧 inode，下一个进程打开新 inode 就能加锁 ⇒ **锁静默失效**。
+故 `instance.lock` 只做锁目标、永不替换；`instance.json` 走临时文件 + `os.replace`。
+
+**为什么要有"第二腿"（身份探测）**：锁降级时（只读目录 / 无锁原语 / 文件打不开）没有权威判据，
+此时「8000 被占」既可能是陌生程序、也可能是另一个 DeLector。前者该顺延，后者顺延就会**起第二个
+服务改同一个库**。故降级时先对候选端口做 `/api/health` 身份探测（`start._identity_probe`），
+命中即判 `same`；**真锁在手时一律不探测**（锁是唯一判据，多花一次 HTTP 只是白等）。
+
+**调用点**：`start.main()`（脚本 / `--server-only`）、`desktop.py::_check_port_or_fail`（桌面壳）
+共用同一个判定点；三处各写一套就会漂成"壳说没有、服务说有两个"。
+
+**退出码**：桌面壳 0 正常 / 1 就绪超时或异常 / 2 缺 WebView2 / 3 端口或实例冲突；
+`--server-only` 走 `start.main()`，`same` 时打开已有页面并返回 0。
+
+**排障**：`launch.log` 里搜 `拒绝启动（<reason>）`；锁文件残留不会阻塞启动（进程死 ⇒ OS 自动放锁），
+但 `instance.json` 可能停留在上一次的端口值 —— 判据永远以锁为准，不以 meta 为准。
+
 
 ## 分层架构声明与单向依赖规范
 

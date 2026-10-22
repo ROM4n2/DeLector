@@ -257,6 +257,28 @@ def _calls(node: ast.AST) -> Iterator[ast.Call]:
             yield child
 
 
+def stmts_through_try(body: List[ast.stmt]) -> Iterator[ast.stmt]:
+    """把 `try` / `finally` 当**透明容器**展开，只透出真正的执行语句。
+
+    两个"为什么"（Task 7 首次踩到，两条都会让守卫静默失效）：
+    1. **必须展开**：`desktop.py::_run_desktop_inner` 自 Task 7 起用 `try/finally` 包住主体
+       （放锁），原本在函数顶层被锚定的语句下沉了一层（`_show_window` 还在内层 try 里）——
+       不展开就"找不到锚点/少一枚标记"。
+    2. **必须跳过容器自身**：`_calls` 走整棵子树，容器会把任何被它包住的调用算成自己命中 ⇒
+       锚点退化成"整个 try 块"，夹逼/归属断言随之失去判别力。
+    刻意**不**递归进 `if` / `for`：那会让锚点漂到条件分支里的无关语句上。
+    """
+    for stmt in body:
+        if isinstance(stmt, ast.Try):
+            yield from stmts_through_try(stmt.body)
+            yield from stmts_through_try(stmt.orelse)
+            yield from stmts_through_try(stmt.finalbody)
+            for handler in stmt.handlers:
+                yield from stmts_through_try(handler.body)
+            continue
+        yield stmt
+
+
 def _call_label(call: ast.Call) -> Optional[str]:
     """调用的"可读名"：`a.b()` → attr `b`；`f()` → id `f`；其余返回 None。"""
     func = call.func

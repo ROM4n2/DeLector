@@ -439,25 +439,50 @@ def test_desktop_server_only_entry_captures_warning_before_delegation(
     assert "[警告]" in content and "--port 9000" in content
 
 
+def _stub_claim_already_running(
+    monkeypatch: pytest.MonkeyPatch, start: Any, tmp_path: Path, port: int = 8000
+) -> None:
+    """把 `start.claim_instance` 钉成「已有一个同版本实例在跑」。
+
+    Task 6 之后 `main()` 的早退判据是**锁**（`claim_instance`），不再是 `is_port_in_use(8000)`。
+    不换注入点的话，`is_port_in_use` 的桩再也拦不住启动 ⇒ 用例会真去起服务并**挂死**。
+    """
+    from delector.core.instance_lock import LockRecord
+    from delector.core.version import APP_VERSION
+
+    record = LockRecord(
+        pid=4321,
+        version=APP_VERSION,
+        port=port,
+        data_dir=str(tmp_path),
+        acquired_at="2026-10-22T09:00:00+08:00",
+    )
+    monkeypatch.setattr(
+        start, "claim_instance", lambda *a, **k: start.AlreadyRunning(record=record, reason="same")
+    )
+
+
 def test_start_main_entry_ensures_streams_before_existing_port_notice(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """start.py 单独作为入口时，端口占用提示之前必须自行完成流收口。"""
+    """start.py 单独作为入口时，「已在运行」提示之前必须自行完成流收口。"""
     import start
     from delector.core import server_lifecycle
 
     monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(start, "is_android", lambda: True)
-    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
     monkeypatch.setattr(server_lifecycle, "probe_identity", lambda _port: True)
+    _stub_claim_already_running(monkeypatch, start, tmp_path)
 
     _run_with_missing_streams(monkeypatch, start.main)
 
     content = (tmp_path / "launch.log").read_text(encoding="utf-8")
-    assert "[提示] DeLector 已在端口 8000 运行" in content
+    assert "[提示] DeLector 已在运行" in content, f"提示必须先完成收口再输出，实际日志：{content!r}"
 
 
-def test_start_entry_streams_survives_missing_desktop_module(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_entry_streams_survives_missing_desktop_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Android APK 里没有 `desktop.py` ⇒ 入口收口必须**静默放弃**，绝不得冒异常。
 
     为什么必须有这条：APK 的 Python 源集只有 `start.py` + `delector/`（build-release.yml
@@ -475,8 +500,10 @@ def test_start_entry_streams_survives_missing_desktop_module(monkeypatch: pytest
 
     monkeypatch.setitem(sys.modules, "desktop", None)  # ⇒ `import desktop` 抛 ImportError
     monkeypatch.setattr(start, "is_android", lambda: True)  # 不起浏览器线程
-    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
     monkeypatch.setattr(server_lifecycle, "probe_identity", lambda _port: True)
+    # Task 6：早退判据是锁（`claim_instance`）而非 `is_port_in_use`；不换注入点 ⇒ 本用例会真去
+    # 起服务并挂死（`is_port_in_use` 的桩拦不住新代码）。
+    _stub_claim_already_running(monkeypatch, start, tmp_path)
 
     original_out, original_err = sys.stdout, sys.stderr  # 收口前捕获既有流对象引用
 

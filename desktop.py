@@ -66,8 +66,9 @@ BIND_HOST = "0.0.0.0"
 # 一次模型加载（有机器依赖，慢盘上可达数秒）⇒ 取 60s 兜底，宁慢勿"静默判未就绪"。
 READY_DEADLINE_S = 60.0
 
-# 默认端口：桌面窗口路径用它；`--server-only` 复用 `start.main()` 时**固定**用它
-# —— 该路径不接受 `--port`（见 dispatch 的显式警告），此常量是其真实端口的单一真相。
+# 历史默认端口：仍是自动模式的**首选**端口（候选表首项，见 `start.PORT_CANDIDATES`）。
+# `--port` 的默认值自 Task 7 起是 `None`（自动），本常量只用于「用户显式给的就是这个」的判定
+# 与既有地址文件/测试的锚点 —— 端口真相的单一来源已是 `start.claim_instance`。
 DEFAULT_PORT = 8000
 
 # ── AppUserModelID（Win32 任务栏身份）────────────────────────────────────────
@@ -870,97 +871,178 @@ def _show_window(server_handoff: Any, port: int, log_path: str) -> int:
     return result[0]
 
 
-def _check_port_or_fail(port: int, log_path: str) -> bool:
-    """桌面建服**之前**的端口/身份校验（P0-1：防旧实例冒充新构建）。
+def _identity_probe(port: int) -> bool:
+    """第二腿：锁**降级**时回答「这个端口上是不是 DeLector」（`claim_instance` 的入参）。
 
-    缺陷背景：此前直接 `build_server` + `serve_in_thread`，没有任何校验。uvicorn
-    绑定失败走 `sys.exit` ⇒ 被 `threading.excepthook` 静默忽略 ⇒ server 线程真死；
-    而 `await_ready` 对**旧实例**照样返回 200+身份 ⇒ 照常亮主窗口 ⇒ 用户以为升级了，
-    实际是旧进程在服务。三分支：
-    - 端口空闲 ⇒ True，正常继续；
-    - 被占且身份是 DeLector ⇒ 弹窗 + 日志 + False（拒绝启动）。**刻意不做**"连过去"
-      的窗口复用——那会把复杂度带回 P0 时序雷区，拒绝启动是诚实且最简单的处理；
-    - 被占但不是 DeLector ⇒ 弹窗 + 日志 + False。
-    所有失败路径必须**弹窗 + 日志**（调用方据此非零退出），不许只写日志。
+    惰性 import 源模块属性而非把函数对象绑到本模块：测试要能 monkeypatch
+    `delector.core.server_lifecycle.probe_identity` 就生效（绑死会在 import 期焊住旧对象）。
+    锁是唯一判据，只有没抢到真锁（只读目录 / 无锁原语）时本函数才会被调到。
     """
-    # 惰性 import：复用 start.py 的既有判定与 server_lifecycle 的既有身份探测，
-    # 不另写一套（两处判法一旦漂移，桌面端与 `--server-only` 就会对同一端口给出不同结论）。
-    import start
     from delector.core.server_lifecycle import probe_identity
 
-    if not start.is_port_in_use(port):
-        return True
-    if probe_identity(port):
-        _append_log(
-            log_path, f"端口 {port} 已有 DeLector 在运行：拒绝启动（防旧实例冒充新构建）。"
+    # 显式落到 bool 局部变量：入口面 mypy 闸带 `--follow-imports=skip`（见 `.github/workflows/ci.yml`）
+    # ⇒ 被跳过的模块符号是 `Any`，直接 return 会报 `no-any-return`（该红只在 CI 出现）。
+    identity: bool = probe_identity(port)
+    return identity
+
+
+def _describe_holder(
+    record: Any, reason: str, log_path: str, requested_port: Optional[int]
+) -> Tuple[str, str]:
+    """把 `AlreadyRunning` 翻成（弹窗标题, 正文）—— 弹窗与 launch.log 共用同一句话。
+
+    文案约束（ADR-0020 §4 + 本计划的全局约束）：只给人话（版本 / pid / 端口 / 数据目录 /
+    日志路径），**禁含** traceback 与内部标识符；`record.port <= 0` 时**不得**写出"端口 0"
+    —— 那是"已抢锁、端口尚未回写"的哨兵值，不是可访问的地址。
+    """
+    # 惰性 import：桌面壳的模块顶层已在 bootstrap 语义之外，但保持与 start.py 同款取法，
+    # 避免版本号在 import 期被焊成常量（发版脚本可能改写它）。
+    from delector.core.version import APP_VERSION
+
+    if reason == "port_busy":
+        # `port_busy` 的 record 是 UNKNOWN_RECORD（port=0）⇒ 真实端口只能来自调用方。
+        busy = requested_port if requested_port else record.port
+        return (
+            "端口被占用",
+            f"端口 {busy} 被其他程序占用，DeLector 无法启动。"
+            f"请关闭占用该端口的程序后重试。详情见 {log_path}",
         )
-        _message_box(
+    if reason == "no_free_port":
+        return (
+            "端口被占用",
+            "端口 8000–8010 全部被其他程序占用，DeLector 无法启动。"
+            f"请关闭占用端口的程序后重试。详情见 {log_path}",
+        )
+    if reason == "version_mismatch":
+        return (
+            "DeLector 版本冲突",
+            f"这台上已有一个 DeLector 在运行，但版本不同（正在运行 v{record.version}，"
+            f"本程序 v{APP_VERSION}）。请先退出旧版本再启动。详情见 {log_path}",
+        )
+    if reason == "data_dir_mismatch":
+        return (
+            "数据目录冲突",
+            f"已有一个 DeLector 在运行，但它使用的是另一份数据目录（{record.data_dir}）。"
+            f"两者同时运行会让学习进度分裂在两份库里。请先退出它。详情见 {log_path}",
+        )
+    if reason == "same" and record.port > 0:
+        # 只列**已知**字段：锁降级时身份探测只能确认"端口上是 DeLector"，读不到 meta ⇒
+        # version="unknown"、pid=0。照抄进弹窗就是"vunknown，进程 0"——比不说更糟。
+        known: List[str] = []
+        if record.version and record.version != "unknown":
+            known.append(f"v{record.version}")
+        if record.pid > 0:
+            known.append(f"进程 {record.pid}")
+        known.append(f"端口 {record.port}")
+        return (
             "DeLector 已在运行",
-            f"已有 DeLector 在运行（端口 {port}）。若要使用新版本，请先退出旧实例。",
+            f"已有 DeLector 在运行（{'，'.join(known)}）。"
+            f"若要使用它，请打开 http://127.0.0.1:{record.port}。详情见 {log_path}",
         )
-        return False
-    _append_log(log_path, f"端口 {port} 被其他程序占用：拒绝启动。")
-    _message_box(
-        "端口被占用",
-        f"端口 {port} 被其他程序占用，DeLector 无法启动。请关闭占用该端口的程序后重试。",
+    # 兜底：`unknown`，或 `same` 但端口未知。不猜版本也不猜端口 —— 那两个字段此刻是占位值。
+    return (
+        "DeLector 已在运行",
+        "已有一个 DeLector 在运行，但读不到它的版本与端口。若刚刚双击过图标，请稍等几秒再试；"
+        f"若持续如此，请先结束残留进程。详情见 {log_path}",
     )
-    return False
 
 
-def _run_desktop_inner(port: int, log_path: str) -> int:
-    """桌面壳主体：端口/身份校验 → 检测运行时 → 定数据落点 → 起窗口；**任何**路径都先收尸。
+def _check_port_or_fail(port: Optional[int], log_path: str, claim_out: Dict[str, Any]) -> bool:
+    """桌面建服**之前**的单实例判定（P0-1 的落点；判定本体收敛在 `start.claim_instance`）。
+
+    返回 True ⇒ 已拿到锁、端口已选定；`claim_out["port"]` / `claim_out["lock"]` 已填好，
+    调用方 MUST 在用完后 `lock.release()`。返回 False ⇒ 已有实例 / 端口不可用：**已弹窗 +
+    已落 launch.log**，调用方应返回 3。
+
+    为什么用出参 dict 而不是返回元组：`server_handoff` 已用同一范式；且本函数的调用形状
+    `if not _check_port_or_fail(...)` 被 `tests/test_desktop_window_lifecycle.py` 的阶段标记
+    夹逼守卫钉住（改成赋值语句会让那条守卫找不到锚点）。
+
+    为什么不再自己探端口/身份：判据必须与 `--server-only`、脚本入口**同一份**。两处各写一套
+    就会漂成"壳说没有、服务说有两个"——那种缺陷不报错，只让两个窗口抢同一个库。
+    """
+    # 惰性 import start：复用同一份判定，并顺带拿到它在启动期才需要的模块（与本文件既有惯例一致）。
+    import start
+
+    decision = start.claim_instance(os.environ, requested_port=port, identity_probe=_identity_probe)
+    if isinstance(decision, start.AlreadyRunning):
+        title, detail = _describe_holder(decision.record, decision.reason, log_path, port)
+        _append_log(log_path, f"拒绝启动（{decision.reason}）：{detail}")
+        _message_box(title, detail)
+        return False
+    claim_out["port"] = decision.port
+    claim_out["lock"] = decision.lock
+    return True
+
+
+def _run_desktop_inner(port: Optional[int], log_path: str) -> int:
+    """桌面壳主体：单实例判定 → 检测运行时 → 定数据落点 → 起窗口；**任何**路径都先收尸。
 
     Task 3：建服/起服（`from delector.server import app` / `build_server` / `serve_in_thread`）
     已搬进 `_after_start`（`webview.start()` 调度的事件循环内）——重活推迟到 splash 可见之后，
-    消灭 4~6.5s 零反馈。此处只留循环外的快速校验与落点；服务由 `_after_start` 落进
+    消灭 4~6.5s 零反馈。此处只留循环外的快速判定与落点；服务由 `_after_start` 落进
     `server_handoff`，在本函数 `finally` 里读出并 `coordinated_shutdown` 收尸。
+
+    Task 7：建服前的判定换成 `start.claim_instance`（锁是唯一判据），端口也由它选定 ——
+    `port is None` = 自动（8000 起顺延到 8010），整数 = 用户显式指定（**不**顺延）。
+    拿到的那把锁 MUST 在**所有**返回路径上释放：否则同进程重试（测试、壳的"失败后重开"）
+    会撞上自己的锁，被判成"已有实例在运行"——一条指向错误方向的假红。
     """
-    # P0-1：建服**最早处**先校验端口/身份（要早、要响、要简单）。
-    # 校验失败 ⇒ 已弹窗 + 已落日志 ⇒ 退出码 3（2 已被"缺 WebView2"占用）。
-    if not _check_port_or_fail(port, log_path):
+    # P0-1：建服**最早处**先做单实例判定（要早、要响、要简单）。
+    # 冲突 ⇒ 已弹窗 + 已落日志 ⇒ 退出码 3（2 已被"缺 WebView2"占用）。
+    claim: Dict[str, Any] = {}
+    if not _check_port_or_fail(port, log_path, claim):
         return 3
     _append_log(log_path, "端口与身份校验通过。")
 
-    if not ensure_webview2_runtime():
-        _append_log(log_path, "未检测到 WebView2 运行时：提示安装并退出。")
-        _message_box("缺少 WebView2 运行时", webview2_missing_message())
-        return 2
-    _append_log(log_path, "WebView2 运行时检测通过。")
-
-    # ⚠️ 必须在 `from delector.server import app` **之前**：那一行一跑，`database` 已按仓库根把
-    # DATA_DIR 落定，之后再设 DELECTOR_DATA_DIR 就晚了（与 start.py 同款接线）。
-    # （Task 3：那行 import 连同 build_server / serve_in_thread 已搬进 `_after_start`——重活推迟
-    #  到 splash 可见之后；但顺序约束不变：此处先落定 DATA_DIR，`_after_start` 才 import server。）
-    bootstrap_data_dir(os.environ)
-    _append_log(log_path, "数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。")
-    # 桌面态 LAN 可用时同样落一份地址（托盘「显示局域网地址」读它；--windowed 无控制台）。
-    # 放在 bootstrap 之后：env 里的数据目录落点已定，文件与库、launch.log 同处一地。
-    write_lan_address(port, os.environ, log_path)
-
-    # 服务交接容器：`_after_start`（webview.start 调度的事件循环内）建好服务后把 server/thread
-    # 写进来；`webview.start()` 返回（窗口全关）后由此处读出并收尸。空 dict 由本函数创建、经
-    # `_show_window` 透传——`_after_start` 跑在后台线程，无法直接 return 给主线程。
-    server_handoff: Dict[str, Any] = {}
+    resolved_port: int = claim["port"]
+    lock: Any = claim["lock"]
     try:
-        return _show_window(server_handoff, port, log_path)
+        if not ensure_webview2_runtime():
+            _append_log(log_path, "未检测到 WebView2 运行时：提示安装并退出。")
+            _message_box("缺少 WebView2 运行时", webview2_missing_message())
+            return 2
+        _append_log(log_path, "WebView2 运行时检测通过。")
+
+        # ⚠️ 必须在 `from delector.server import app` **之前**：那一行一跑，`database` 已按仓库根把
+        # DATA_DIR 落定，之后再设 DELECTOR_DATA_DIR 就晚了（与 start.py 同款接线）。
+        # （Task 3：那行 import 连同 build_server / serve_in_thread 已搬进 `_after_start`——重活推迟
+        #  到 splash 可见之后；但顺序约束不变：此处先落定 DATA_DIR，`_after_start` 才 import server。）
+        bootstrap_data_dir(os.environ)
+        _append_log(log_path, "数据目录落点已定（bootstrap_data_dir 已返回，不代表迁移已落稳）。")
+        # 桌面态 LAN 可用时同样落一份地址（托盘「显示局域网地址」读它；--windowed 无控制台）。
+        # 放在 bootstrap 之后：env 里的数据目录落点已定，文件与库、launch.log 同处一地。
+        # MUST 用**判定后的**端口：顺延时把 8000 写进地址文件等于给手机一个连不上的地址。
+        write_lan_address(resolved_port, os.environ, log_path)
+
+        # 服务交接容器：`_after_start`（webview.start 调度的事件循环内）建好服务后把 server/thread
+        # 写进来；`webview.start()` 返回（窗口全关）后由此处读出并收尸。空 dict 由本函数创建、经
+        # `_show_window` 透传——`_after_start` 跑在后台线程，无法直接 return 给主线程。
+        server_handoff: Dict[str, Any] = {}
+        try:
+            return _show_window(server_handoff, resolved_port, log_path)
+        finally:
+            # 关窗 / 异常 / Ctrl+C 全部经此收尸（与托盘「退出」同一路径），绝不留残留服务。
+            # server/thread 由 `_after_start` 落进 handoff；建服前即失败/退出的极端边界下可能缺失，
+            # 绝不让 None 冲进 coordinated_shutdown（那会在 shutdown 里 AttributeError）。
+            server = server_handoff.get("server")
+            thread = server_handoff.get("thread")
+            if server is None or thread is None:
+                _append_log(log_path, "无已启动服务可收尸（建服阶段之前即失败或退出）。")
+            else:
+                coordinated_shutdown(server, thread, log_path)
     finally:
-        # 关窗 / 异常 / Ctrl+C 全部经此收尸（与托盘「退出」同一路径），绝不留残留服务。
-        # server/thread 由 `_after_start` 落进 handoff；建服前即失败/退出的极端边界下可能缺失，
-        # 绝不让 None 冲进 coordinated_shutdown（那会在 shutdown 里 AttributeError）。
-        server = server_handoff.get("server")
-        thread = server_handoff.get("thread")
-        if server is None or thread is None:
-            _append_log(log_path, "无已启动服务可收尸（建服阶段之前即失败或退出）。")
-        else:
-            coordinated_shutdown(server, thread, log_path)
+        # 缺 WebView2（返回 2）/ 正常关闭（返回 0）/ 异常：三条路径都放锁。
+        # 冲突路径在上方早早 return，那时还没拿到锁，不在此处。
+        lock.release()
 
 
-def run_desktop(port: int = DEFAULT_PORT, debug_console: bool = False) -> int:
-    """启动桌面壳：返回**进程退出码**。
+def run_desktop(port: Optional[int] = None, debug_console: bool = False) -> int:
+    """启动桌面壳：返回**进程退出码**。`port=None` = 自动（8000 起顺延），整数 = 显式指定。
 
     **所有**退出路径（关窗 / 托盘退出 / 异常 / Ctrl+C）都会先 `shutdown(server, thread)`：
-    干净退出返回 0；就绪超时返回 1；缺 WebView2 返回 2；端口被占（DeLector 或其他程序）
-    返回 3（建服前的端口/身份校验，见 `_check_port_or_fail`）；收尸超时则经
+    干净退出返回 0；就绪超时返回 1；缺 WebView2 返回 2；端口或实例冲突返回 3
+    （建服前的单实例判定，见 `_check_port_or_fail`）；收尸超时则经
     `coordinated_shutdown` 硬退出（`os._exit(1)`），不留残留进程。
     """
     log_path = resolve_log_path(os.environ)
@@ -995,7 +1077,14 @@ def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
         prog="desktop.py",
         description="DeLector Windows 桌面壳（pywebview 窗口 + pystray 托盘，ADR-0020）。",
     )
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"本地服务端口（默认 {DEFAULT_PORT}）")
+    # 默认 None = 自动：8000 被占就顺延到 8002–8010（8001 是 supervisor 保留端口）。
+    # 显式给定时**不**顺延 —— 调用方（快捷方式 / 反代 / hosts）已经对外承诺了那个地址。
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="本地服务端口（默认自动：8000，被占则顺延到 8002–8010；显式指定时不顺延）",
+    )
     parser.add_argument(
         "--server-only",
         action="store_true",
@@ -1046,13 +1135,13 @@ def run_server_only(debug_console: bool = False) -> int:
     return 0
 
 
-def dispatch(server_only: bool, port: int, debug_console: bool = False) -> int:
+def dispatch(server_only: bool, port: Optional[int], debug_console: bool = False) -> int:
     """入口分派（可测的纯接线）：`--server-only` ⇒ 既有服务；否则 ⇒ 桌面窗口。
 
-    ⚠️ `--server-only` **复用** `start.main()`（固定端口，见 `run_server_only` 的理由）：该路径
-    不接受 `--port`。用户若在此组合下显式给了非默认端口，必须**显式告知**它不生效 —— 静默丢弃会被
-    误读成"端口没换成功"，正是本任务要消除的一类静默失败（只给 `start.main()` 加一个**可选回调**
-    参数、不加 `port` 参数，故不引入 port-identity / LAN 面回归）。
+    ⚠️ `--server-only` **复用** `start.main()`（其端口由 `claim_instance` 决定），本入口不把
+    `--port` 传下去。用户若在此组合下显式给了端口，必须**显式告知**它不生效 —— 静默丢弃会被
+    误读成"端口没换成功"，正是本任务要消除的一类静默失败。
+    `port is None`（默认自动）不算显式指定，不该为它报警。
     """
     if not server_only:
         if debug_console:
@@ -1064,9 +1153,9 @@ def dispatch(server_only: bool, port: int, debug_console: bool = False) -> int:
     rotate_log_if_needed(log_path)
     ensure_streams(log_path, debug_console)
     # 守卫式压平（最大缩进 2 层）：下面这条警告是"不静默"的落点，理由见上方 docstring。
-    if port != DEFAULT_PORT:
+    if port is not None and port != DEFAULT_PORT:
         print(
-            f"[警告] --server-only 复用既有服务，固定端口 {DEFAULT_PORT}："
+            f"[警告] --server-only 复用既有服务，端口由服务自行选定（8000 起顺延）："
             f"你传入的 --port {port} 不会生效。",
             file=sys.stderr,
         )

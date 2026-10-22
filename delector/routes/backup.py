@@ -155,8 +155,13 @@ def wb_regenerate_state_key(request: Request) -> Dict[str, Any]:
 
 
 @router.get("/api/wb/lan-info")
-def wb_lan_info() -> Dict[str, Any]:
+def wb_lan_info(request: Request) -> Dict[str, Any]:
     """局域网可读主机信息：配对 UI 提示「把 IP 填进手机」用。不含任何机密。
+
+    `port` 取自 `app.state.server_port`（`build_server` 写入的真实监听端口）—— 此前写死
+    8000，端口顺延后手机会拿到一个连不上的地址。**刻意不用** `request.url.port`：那个值
+    来自 `Host` 头，可被客户端伪造，会把「手机该填什么」交到请求方手里。默认 8000 保
+    TestClient / Android 的既有行为不变。
 
     lan_ip 是尽力而为的探测（本机多网卡时取第一个私有 IPv4），探测不到返回空串，
     UI 应退化为手填地址。instance_id 与 /api/wb/sync/info 同源，用于识别是否同一实例。
@@ -174,9 +179,10 @@ def wb_lan_info() -> Dict[str, Any]:
                 break
     except Exception:
         lan_ip = ""
+    state = getattr(getattr(request, "app", None), "state", None)
     return {
         "hostname": socket.gethostname(),
-        "port": 8000,
+        "port": getattr(state, "server_port", 8000),
         "lan_ip": lan_ip,
         "instance_id": _SYNC_INSTANCE_ID,
     }

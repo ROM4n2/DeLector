@@ -10,9 +10,11 @@
   * 真起 uvicorn（最小 FastAPI app）+ 动态空闲端口，绝不碰生产 8000。
 """
 
+import os
 import socket
 import threading
 import time
+from pathlib import Path
 from typing import Any, List, Tuple
 
 import pytest
@@ -189,14 +191,43 @@ def test_await_ready_false_when_nothing_on_port():
 
 
 # ── start.main：端口被占时不再盲复用 ──────────────────────────────────────────
-def test_main_exits_when_port_held_by_foreign_program(monkeypatch, capsys):
-    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
-    monkeypatch.setattr("delector.core.server_lifecycle.probe_identity", lambda *_a, **_k: False)
-    monkeypatch.setattr(start, "open_browser", lambda _port: pytest.fail("不得为无关程序打开页面"))
+def _pin_lock_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """把锁落点钉到 `tmp_path`（理由同 `tests/test_start.py` 的同名助手）。
 
-    with pytest.raises(SystemExit):
+    `start.main()` 现在会**真去取锁**（`claim_instance`），不钉落点就等于：跑一次测试往本机
+    真实的 `%LOCALAPPDATA%\\DeLector` 里写一把锁与一份 `instance.json`，并让结果取决于
+    「开发机上此刻是否真有 DeLector 在跑」—— 那是随机器漂移的假红/假绿。
+    """
+    from delector.core import instance_lock
+
+    paths = instance_lock.LockPaths(
+        lock=str(tmp_path / "instance.lock"),
+        meta=str(tmp_path / "instance.json"),
+    )
+    # 调用点在被测模块 start.py::claim_instance（**调用期**经 `LockPaths.for_platform(env)`
+    # 做类属性查找），故本补丁即时生效；instance_lock 自身不调用它。
+    # mock-drift-ok: 消费方是 start.py::claim_instance（同进程调用期类属性查找），补丁即时生效
+    monkeypatch.setattr(instance_lock.LockPaths, "for_platform", staticmethod(lambda env: paths))
+    return paths
+
+
+def test_main_exits_when_all_candidate_ports_are_busy(tmp_path, monkeypatch, capsys):
+    """全部候选端口被占 ⇒ `no_free_port` ⇒ 退出码 1，且文案说的是「端口不可用」。
+
+    这条**实际**验的语义（旧名 `test_main_exits_when_port_held_by_foreign_program` 名不符实）：
+    注入点只有 `is_port_in_use` ⇒ 8000–8010 全被占 ⇒ `claim_instance` 落 `no_free_port`。
+    它**不**验「端口上的占用者是谁」：本用例里真锁是拿到了的 ⇒ 锁是唯一判据 ⇒ `claim_instance`
+    根本不做身份探测（那条链路由 `tests/test_start.py` 的 main 级用例钉住）。故原先注入
+    `server_lifecycle.probe_identity` 是**死代码**（从来不会被调用），已删除。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
+    monkeypatch.setattr(start, "open_browser", lambda _port: pytest.fail("端口不可用时不得打开页面"))
+
+    with pytest.raises(SystemExit) as excinfo:
         start.main()
 
+    assert excinfo.value.code == 1, f"没有可用端口必须以退出码 1 结束，实际 {excinfo.value.code!r}"
     out = capsys.readouterr().out
     assert "8000" in out, f"报错必须点名端口，实际输出：{out!r}"
     # 否定断言：被**无关程序**占用时不得吐出「复用」语义文案（如「已在运行」）。只钉
@@ -206,14 +237,43 @@ def test_main_exits_when_port_held_by_foreign_program(monkeypatch, capsys):
     )
 
 
-def test_main_reuses_existing_delector_without_exiting(monkeypatch):
+def test_main_reuses_existing_delector_without_exiting(tmp_path, monkeypatch):
+    """已有同版本、同数据目录的实例 ⇒ 打开对方页面并正常返回（不起第二个服务）。
+
+    Task 6 把判定点从「`is_port_in_use(8000)` 早退」换成 `claim_instance`：一个 DeLector 在跑
+    的**判据**自此是「锁被持有且身份相同」，而不是「8000 上有东西在听」。故本用例的**注入点**
+    随之从 `is_port_in_use` 移到真锁（模拟另一个实例持锁），断言（开浏览器、不退出、不起服务）
+    一字未动 —— 钉的仍是同一条产品行为。
+    """
+    from delector.core import instance_lock
+    from delector.core.data_dir_bootstrap import resolve_data_dir
+    from delector.core.version import APP_VERSION
+
+    paths = _pin_lock_dir(tmp_path, monkeypatch)
+    holder = instance_lock.try_acquire(
+        paths,
+        instance_lock.LockRecord(
+            pid=4321,
+            version=APP_VERSION,
+            port=8000,
+            data_dir=resolve_data_dir(os.environ),
+            acquired_at="2026-10-21T00:00:00",
+        ),
+    )
+    assert isinstance(holder, instance_lock.LockHandle), "前提失败：模拟实例没能拿到锁"
+
     opened: List[int] = []
-    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
-    monkeypatch.setattr("delector.core.server_lifecycle.probe_identity", lambda *_a, **_k: True)
     monkeypatch.setattr(start, "is_android", lambda: False)
     monkeypatch.setattr(start, "open_browser", lambda port: opened.append(port))
+    # `same` 分支现在会先用 `_identity_probe` 复核对方端口（ADR-0020 §6.4）：这里替身回「是
+    # DeLector」，本用例钉的仍是「识别为同一实例 ⇒ 开页面 + 正常返回」这条产品行为。
+    # 不 patch 就会去真实探测 127.0.0.1:8000（本机无监听）⇒ 判「无响应」⇒ 假红。
+    monkeypatch.setattr(start, "_identity_probe", lambda port: True)
 
-    start.main()  # 识别为 DeLector：不得抛 SystemExit、不得起第二个服务
+    try:
+        start.main()  # 识别为同一实例：不得抛 SystemExit、不得起第二个服务
+    finally:
+        holder.release()
 
     assert opened == [8000], "识别为 DeLector 时应保持既有行为：打开浏览器指向已有服务"
 

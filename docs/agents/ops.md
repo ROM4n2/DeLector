@@ -52,6 +52,19 @@ NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的�
 在任务实跑时发生）。**dev 验证请走两个显式出口之一**：把 `DELECTOR_DATA_DIR` 指向临时目录，或设
 `DELECTOR_PORTABLE=1` 保持"数据随程序目录"。两者都会让 bootstrap 不去搬仓库根那份真实库。
 
+**单实例锁（排障入口）**
+: 同一台机器只允许一个 DeLector：`%LOCALAPPDATA%\DeLector\instance.lock`（POSIX
+  `~/.local/share/DeLector/instance.lock`）由 OS 文件锁守着，同目录 `instance.json` 记
+  `pid / 版本 / 端口 / 数据目录 / 抢锁时刻`。判据永远是**锁**，不是"端口上有没有东西"。
+  - 双击没反应 / 提示"已在运行"：先看 `launch.log` 里的 `拒绝启动（<reason>）`；
+    `same` = 同版本同目录的实例还活着（去开它给的地址），`version_mismatch` /
+    `data_dir_mismatch` = 另一份安装或另一份数据目录在跑，按提示先退出它。
+  - **不要手工删 `instance.lock`**：进程死掉时 OS 已经放锁，删文件既无效也可能与正在启动的
+    实例抢同一个路径。真正该确认的是有没有残留 `DeLector.exe` 进程。
+  - 端口：候选 `8000, 8002–8010`（**8001 留给 Go supervisor**）。自动模式顺延；显式
+    `--port` 不顺延，被占就退出码 3。手机会拿到 `app.state.server_port` 的真实端口
+    （`/api/wb/lan-info`），不是写死的 8000。
+
 **数据目录（部署面）**
 : 桌面端**默认 `%LOCALAPPDATA%\DeLector`**（Linux/macOS：`~/.local/share/DeLector`），由
   `data_dir_bootstrap.resolve_data_dir()` 解析（优先级：`DELECTOR_DATA_DIR` → `DELECTOR_PORTABLE=1`
@@ -220,6 +233,27 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
     而**本仓文档里一行都没有** ⇒ 按 `AGENTS.md` 路由做 bootstrap 的 agent 根本读不到它。
     **机械对照**：发版门（`tag == v+APP_VERSION`）是机械闸，所以那类错误会被构建当场抓住（同轮就抓到过一条
     写死旧 tag 名的测试）；分支纪律**没有机械闸** ⇒ 只能靠"写进可见文档" + 推送前自问一句「我现在在哪个分支」。
+13. **三类「看起来是缺陷、其实不是」的假红 + 一类「本地假绿」**（每类都烧过一整轮排查；先按下面取证，再决定要不要改）：
+    - **行尾假阳性**：`core.autocrlf=true` 是**本机系统级**设置，工作区 CRLF / 索引 LF 是预期。
+      2026-10-21 实测 `git ls-files --eol` 有 **6 个 `i/lf w/mixed`**（3 份 `WORKMEMORY/archive/work-2026-09-*.log`、
+      `delector/nlp_engine/linguistics.py`、`delector/services/syntax_score.py` 等）。**MUST NOT 据此批量
+      `git add --renormalize` 或整体重排**：blob 本来就是 `i/lf`（历史干净），差异只在工作区；先 `git ls-files --eol`
+      取证，再判断是不是真问题。
+    - **终端编码不是服务端缺陷**：本机 Python 重定向/管道输出是 GBK(cp936)，`print("✓")` 会在**产物已写出之后**
+      抛 `UnicodeEncodeError`（交互式跑不出来，最坏情况是唯一的校验静默没跑）。跑任何会打非 ASCII 的脚本前设
+      `PYTHONIOENCODING=utf-8`（本次全量实测即如此）。同理：**含非 ASCII 的 JSON 不要用 shell `curl` 发**，
+      会被终端编码改写后变成 body 解析错；验证 HTTP 契约走 `TestClient` / 客户端库。
+    - **退出码 0 ≠ 正确**：本仓所有已知静默失效（空图表、计数器翻倍、拒单、标签丢失、探针恒真）都曾经全绿通过。
+      自报口径：`pytest` 的 passed 数（不是"没报错"）、探针自带的切片/簇形状护栏、六道机械闸、`--check` 类脚本的
+      非空 diff、以及 `WORKMEMORY/PROJECT_OVERVIEW.md` 的「现测基线」。**判据本身是否在跑也要证**（变异自证用例）。
+    - **本地假绿：门禁命令漏一个 flag ⇒ 只有 CI 红**（2026-10-22 实例）。四档 mypy 的参数**各不相同**，
+      「`--platform win32 --strict` 对了」不代表「`--follow-imports=skip` 也对了」：
+      `ci.yml` 的入口面那档是 `mypy --platform win32 --strict --follow-imports=skip desktop.py package_windows.py conftest.py start.py`。
+      漏 `--follow-imports=skip` 时被跳过的模块会被**真正解析**（有类型）⇒ 全绿；带上它则符号退化成 `Any`，
+      「把 import 进来的调用/常量直接 `return`」立刻变成 `no-any-return`（本次三处：`start.py` 的
+      `_identity_probe` / `_app_version`、`desktop.py` 的 `_identity_probe`）。修法不是加 `type: ignore`，
+      而是**显式落到带注解的局部变量再 return**。**纪律：复跑门禁 Must 直接从 `ci.yml` 复制 `run:` 那一行**，
+      不凭记忆重打；改动入口面文件（`start.py` / `desktop.py` / `conftest.py` / `package_windows.py`）时尤其。
 
 ---
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pytest
+from server_helpers import stmts_through_try
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "first_screen_from_log.py"
@@ -150,6 +151,10 @@ def _stage_marker_statements(func: ast.FunctionDef) -> List[ast.stmt]:
             len(stmts),
         )
         return stmts[:cut]
+    # `_run_desktop_inner`：Task 7 起主体被 `try/finally` 包住（放锁），①~③ 因此下沉一层。
+    # 用共享的 `stmts_through_try` 展开容器（只展开 `try`、不进 `if/for`：WebView2 失败分支的
+    # 日志嵌在 `if` 内，不属于这 6 枚）。不展开 ⇒ 只数到 1 枚，本文件的 6 枚断言会红。
+    return list(stmts_through_try(func.body))
     return list(func.body)
 
 
