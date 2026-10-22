@@ -233,7 +233,7 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
     而**本仓文档里一行都没有** ⇒ 按 `AGENTS.md` 路由做 bootstrap 的 agent 根本读不到它。
     **机械对照**：发版门（`tag == v+APP_VERSION`）是机械闸，所以那类错误会被构建当场抓住（同轮就抓到过一条
     写死旧 tag 名的测试）；分支纪律**没有机械闸** ⇒ 只能靠"写进可见文档" + 推送前自问一句「我现在在哪个分支」。
-13. **三类「看起来是缺陷、其实不是」的假红**（每类都烧过一整轮排查；先按下面取证，再决定要不要改）：
+13. **三类「看起来是缺陷、其实不是」的假红 + 一类「本地假绿」**（每类都烧过一整轮排查；先按下面取证，再决定要不要改）：
     - **行尾假阳性**：`core.autocrlf=true` 是**本机系统级**设置，工作区 CRLF / 索引 LF 是预期。
       2026-10-21 实测 `git ls-files --eol` 有 **6 个 `i/lf w/mixed`**（3 份 `WORKMEMORY/archive/work-2026-09-*.log`、
       `delector/nlp_engine/linguistics.py`、`delector/services/syntax_score.py` 等）。**MUST NOT 据此批量
@@ -246,6 +246,14 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
     - **退出码 0 ≠ 正确**：本仓所有已知静默失效（空图表、计数器翻倍、拒单、标签丢失、探针恒真）都曾经全绿通过。
       自报口径：`pytest` 的 passed 数（不是"没报错"）、探针自带的切片/簇形状护栏、六道机械闸、`--check` 类脚本的
       非空 diff、以及 `WORKMEMORY/PROJECT_OVERVIEW.md` 的「现测基线」。**判据本身是否在跑也要证**（变异自证用例）。
+    - **本地假绿：门禁命令漏一个 flag ⇒ 只有 CI 红**（2026-10-22 实例）。四档 mypy 的参数**各不相同**，
+      「`--platform win32 --strict` 对了」不代表「`--follow-imports=skip` 也对了」：
+      `ci.yml` 的入口面那档是 `mypy --platform win32 --strict --follow-imports=skip desktop.py package_windows.py conftest.py start.py`。
+      漏 `--follow-imports=skip` 时被跳过的模块会被**真正解析**（有类型）⇒ 全绿；带上它则符号退化成 `Any`，
+      「把 import 进来的调用/常量直接 `return`」立刻变成 `no-any-return`（本次三处：`start.py` 的
+      `_identity_probe` / `_app_version`、`desktop.py` 的 `_identity_probe`）。修法不是加 `type: ignore`，
+      而是**显式落到带注解的局部变量再 return**。**纪律：复跑门禁 Must 直接从 `ci.yml` 复制 `run:` 那一行**，
+      不凭记忆重打；改动入口面文件（`start.py` / `desktop.py` / `conftest.py` / `package_windows.py`）时尤其。
 
 ---
 
