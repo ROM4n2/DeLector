@@ -5,6 +5,7 @@ Auto-detects port availability, LAN IP, and launches default browser.
 """
 
 import argparse
+import logging
 import os
 import socket
 import sys
@@ -12,7 +13,9 @@ import threading
 import time
 import webbrowser
 from contextlib import AbstractContextManager, nullcontext
-from typing import Callable, Optional
+from dataclasses import dataclass, replace
+from datetime import datetime
+from typing import Callable, Mapping, Optional
 
 # 为什么必须在最顶部就把 stdout/stderr 重配成 utf-8（本仓既有写法，见 package_windows.py 顶部）：
 # 下面那条启动横幅用 print() 打中文，而**被重定向到文件的 stdout 在 Windows 上默认按 locale/ANSI
@@ -36,7 +39,20 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 # 那一瞬就按"当时的 env"算出 DATA_DIR，之后再设 DELECTOR_DATA_DIR 毫无作用 —— 于是数据
 # 仍落在程序目录里，用户"解压新版覆盖旧目录 / 删掉旧目录"= 学习记录全空且零提示
 # （ADR-0019 Q2-A / Q3-B）。真正的调用在 `main()` 开头的第一个语句处（见那里的注释）。
-from delector.core.data_dir_bootstrap import bootstrap_data_dir
+from delector.core.data_dir_bootstrap import bootstrap_data_dir, resolve_data_dir
+
+# 单实例锁模块排在 bootstrap 导入**之后**（spec §3.2 要求抢锁先于搬库；这里只借位置表达
+# 「同属启动前哨」）。放模块顶层是安全的：它只吃 stdlib、不在模块级 import `delector.database`
+# —— 由 `tests/test_desktop_data_dir_bootstrap.py::test_instance_lock_module_does_not_import_database`
+# 钉住，那条用例正是 `_BOOTSTRAP_SAFE_IMPORTS` 放行它的唯一凭据。
+from delector.core.instance_lock import (
+    UNKNOWN_RECORD,
+    LockHandle,
+    LockPaths,
+    LockRecord,
+    try_acquire,
+    write_record,
+)
 
 
 def _ensure_entry_streams(debug_console: bool) -> None:
@@ -93,6 +109,195 @@ def get_bind_host() -> str:
     POST /api/settings（可改写 API Key 与 base_url）暴露给整个局域网。
     """
     return "127.0.0.1" if is_android() else "0.0.0.0"
+
+
+# ── 单实例判定（spec 2026-10-21 §3.2）──────────────────────────────────────────
+#
+# 为什么判定必须收敛到**一个**函数：`main()`、桌面壳（`desktop.py`）与日后的 supervisor 都要问
+# 同一句「这台机器上是不是已经有一个 DeLector 在跑、它是谁」。判据各抄一份就会漂成「壳说没有、
+# 服务说有两个」—— 那类缺陷不报错、只让用户看到两个窗口抢同一个库，且事后无法归因。
+
+#: 端口候选。8000 是历史默认；**8001 刻意不在表里** —— 它是 Go supervisor 的保留端口
+#: （`agent/internal/pythonsvc/doc.go:9-10`），抢到它等于和 supervisor 争同一个监听点。
+PORT_CANDIDATES: tuple[int, ...] = (8000, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010)
+
+#: 全局硬约束「8001 是 Go supervisor 的保留端口，MUST 永不选中」的实现点。仅靠 `PORT_CANDIDATES`
+#: 不含它只挡住了**自动顺延**；显式 `requested_port=8001`（壳 / supervisor / 用户传参）照样会被
+#: 直接返回 —— 那就是和 supervisor 争同一个监听点，两个进程里必有一个起不来且原因看日志都像
+#: 「端口神秘被占」。故显式值也要过这道闸。
+SUPERVISOR_RESERVED_PORT: int = 8001
+
+
+@dataclass(frozen=True)
+class Ready:
+    """本进程即那个实例：`port` 已选定、`lock` 已持有（调用方退出/失败时 MUST `lock.release()`）。"""
+
+    port: int
+    lock: LockHandle
+
+
+@dataclass(frozen=True)
+class AlreadyRunning:
+    """已有实例在跑（或端口被占）：`reason` 说明凭什么这么判，`record` 是对方身份。
+
+    ⚠️ 上层 MUST 按 `reason` 分派，MUST NOT 按 `record` 分派：`no_free_port` / `port_busy`
+    没有可归因的对方实例，`record` 只能复用 `UNKNOWN_RECORD`（pid=0/port=0 的占位值）——
+    拿它当「对方是谁」去读，会把「端口全占」讲成「有个身份不明的实例在跑」。
+    """
+
+    record: LockRecord
+    reason: str
+
+
+def _held_reason(record: LockRecord, data_dir: str) -> str:
+    """锁被持有时归因，顺序即优先级：`unknown` > `version_mismatch` > `data_dir_mismatch` > `same`。
+
+    为什么 `unknown` 排最前：`pid == 0` 是 `UNKNOWN_RECORD` 的形态（meta 缺失 / 半截 / 读不动）。
+    此时 `version` 与 `data_dir` 都是占位值，拿它们继续比会得出「版本不同」这种**假结论**，
+    上层照着提示「请升级对方」——用户升级完依旧起不来，而他手里的两个解释都是错的。
+
+    `port <= 0` 也是同一档：抢到锁到回写端口之间有一个**合法的中间态**（`claim_instance` 先以
+    `port=0` 占位抢锁，选定端口后才回写）。别人恰好读到这一刻，pid / 版本 / 目录全都对得上，
+    但端口还是占位的 `0` —— 若照 `same` 归因，上层会拼出 `http://127.0.0.1:0` 这种指不到任何
+    东西的地址。故端口未回写一律视为「身份未知」，宁可让用户重试，也不给假地址。
+    """
+    if record.pid == 0 or record.port <= 0:
+        return "unknown"
+    if record.version != _app_version():
+        return "version_mismatch"
+    # 规范化后再比：`D:\DeLector\data` 与 `d:\delector\data\` 是同一个目录。纯字符串比较会把
+    # 「同一份库」误判成 `data_dir_mismatch`，上层于是提示「另一份库的实例在跑」—— 用户照做
+    # 只会关掉本该复用的那一个。`normcase` 在 POSIX 上是恒等，故不影响大小写敏感平台。
+    if os.path.normcase(os.path.normpath(record.data_dir)) != os.path.normcase(os.path.normpath(data_dir)):
+        return "data_dir_mismatch"
+    return "same"
+
+
+def _pick_port(probe: Callable[[int], bool], requested: Optional[int]) -> Optional[int]:
+    """选定端口；无可用端口返回 `None`。
+
+    显式 `requested` **只试它、不顺延**：调用方（壳 / supervisor / 用户）已经对外承诺了那个
+    地址（地址文件、反代、hosts），偷偷换一个端口等于让承诺的地址永远连不上；宁可报
+    `port_busy` 让上层去决定。反之遍历候选时必须顺延，否则「8000 被别的程序占」就直接起不来。
+    """
+    if requested is not None:
+        # 显式指定也 MUST 过保留端口闸：8001 是 Go supervisor 的监听点（见 `SUPERVISOR_RESERVED_PORT`），
+        # 抢到它等于和 supervisor 争同一个端口。按「不可用」处理，让上层落 `port_busy` —— 那正是
+        # 事实：这个端口对本进程永远不可用，与此刻有没有人在听无关，故**不调 probe**。
+        if requested == SUPERVISOR_RESERVED_PORT:
+            return None
+        return None if probe(requested) else requested
+    for port in PORT_CANDIDATES:
+        if not probe(port):
+            return port
+    return None
+
+
+def _note(message: str) -> None:
+    """启动期提示：stderr 可用就照旧（与既有风格一致），被收口成 None 时退到 logger，绝不静默。
+
+    为什么不能只 `print(..., file=sys.stderr)`：`--windowed`/`pythonw` 桌面壳下 `sys.stderr`
+    是 **None**，CPython 对 `file=None` 的 `print` 是**直接丢弃**（不报错、不落任何地方）——
+    于是「端口被占用改用了别的端口」「元数据回写失败」这类只能靠日志归因的提示在桌面端
+    100% 消失，用户只看到地址变了却零线索。
+    """
+    if sys.stderr is not None:
+        print(message, file=sys.stderr)
+        return
+    logging.getLogger("delector").warning(message)
+
+
+def _android_ready(env: Mapping[str, str]) -> Ready:
+    """Android 的短路结果：不取锁、不探端口。
+
+    两个理由：① Android 的数据落点由宿主（`MainActivity`）注入 `DELECTOR_DATA_DIR`，本进程
+    替它猜一个锁目录只会造出一把与真实实例无关的锁；② 监听口由 WebView 侧约定，候选顺延在
+    移动端没有意义。返回的句柄是**降级句柄**（`_fd == -1`，`release()` 是幂等空操作），
+    这样调用方仍可统一写 `lock.release()`，不必为移动端分支记第二套约定。
+    """
+    port = PORT_CANDIDATES[0]
+    record = LockRecord(
+        pid=os.getpid(),
+        version=_app_version(),
+        port=port,
+        data_dir=resolve_data_dir(env),
+        # 这条记录不会被写盘（没有锁文件），时间戳留空以避免伪造「何时抢到锁」的痕迹。
+        acquired_at="",
+    )
+    return Ready(port=port, lock=LockHandle(paths=LockPaths.for_platform(env), record=record))
+
+
+def claim_instance(
+    env: Mapping[str, str],
+    requested_port: Optional[int] = None,
+    probe: Optional[Callable[[int], bool]] = None,
+) -> Ready | AlreadyRunning:
+    """单实例判定的唯一入口：先抢锁、再选端口。
+
+    顺序为什么不能反（计划 Task 4 GREEN 的硬要求）：先探端口再抢锁，等于在「另一个实例正在
+    监听」的噪声里判断可用性 —— 顺延时会把对方实例的端口当成「被陌生人占用」，报错话术与
+    真实原因不符；更糟的是探测与抢锁之间的窗口里可能又冒出第三个进程。
+    """
+    if is_android():
+        return _android_ready(env)
+
+    # `probe` 必须在**函数体内**求值：写成默认参数 `probe=is_port_in_use` 会在 import 期把当时的
+    # 函数对象焊死，测试 monkeypatch `start.is_port_in_use` 就完全失效（判据看着在跑、实际恒真）。
+    probe_fn: Callable[[int], bool] = probe or is_port_in_use
+    # 落点先解析：它既是判据（和对方的 data_dir 比），也要写进自己的记录供下一个进程读。
+    data_dir = resolve_data_dir(env)
+    paths = LockPaths.for_platform(env)
+
+    # 端口此刻还不知道 ⇒ 先以 `port=0` 抢锁（记录里 0 只表示「还没定」），选定端口后回写。
+    acquired = try_acquire(
+        paths,
+        LockRecord(
+            pid=os.getpid(),
+            version=_app_version(),
+            port=0,
+            data_dir=data_dir,
+            acquired_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+        ),
+    )
+    if isinstance(acquired, LockRecord):
+        # 被持有 ⇒ 读到的就是对方身份（读不出时 `try_acquire` 已收敛成 `UNKNOWN_RECORD`）。
+        return AlreadyRunning(record=acquired, reason=_held_reason(acquired, data_dir))
+
+    handle = acquired
+    # 从这里到 `return Ready(...)` 之间的每一步都可能抛：`_pick_port` 的 `probe` 是外部注入的
+    # （生产实现 `is_port_in_use` 在 fd 耗尽时会抛 `OSError`），`write_record` 也可能是
+    # `TypeError`/`ValueError` 之外的异常。异常穿出而不释放 fd ⇒ 锁被一个已经失败的进程
+    # 攥着 ⇒ 同进程后续 claim（以及用户重开）全被判「已在运行」的**假红**。
+    # `BaseException` 而非 `Exception`：`KeyboardInterrupt` 同样必须放锁，否则 Ctrl+C 之后
+    # 进程还没退出就再也起不来了。
+    try:
+        port = _pick_port(probe_fn, requested_port)
+        if port is None:
+            # 早退**必须**先释放锁：残留的锁会让下一次启动（含同进程的下一条用例）被判成
+            # 「已有实例在运行」—— 症状是本进程明明退出了，用户每次重开都被告知"已在运行"。
+            handle.release()
+            reason = "port_busy" if requested_port is not None else "no_free_port"
+            return AlreadyRunning(record=UNKNOWN_RECORD, reason=reason)
+
+        if requested_port is None and port != PORT_CANDIDATES[0]:
+            # No Silent Fallback：默认端口被别的程序占走时，用户看到的地址会变 —— 必须自己说出来，
+            # 否则「为什么我在 8000 打不开」只能靠猜。
+            _note(f"[提示] 端口 {PORT_CANDIDATES[0]} 被占用，改用 {port}。")
+
+        record = replace(handle.record, port=port)
+        try:
+            write_record(handle, record)
+        except OSError as exc:
+            # 回写失败只影响「别人看到哪个端口」，不影响互斥、也不影响本进程将要监听的那个端口
+            # ⇒ 留痕后继续（与 instance_lock.try_acquire 的降级口径一致），不把启动挡在门外。
+            _note(f"[警告] 单实例元数据回写失败（{exc}）：其他实例可能读到旧端口。")
+        # 句柄里的 record 也要跟上：`Ready.lock.record.port` 是调用方唯一能读到的"我占了哪个口"。
+        handle.record = record
+        return Ready(port=port, lock=handle)
+    except BaseException:
+        # `release()` 幂等，故与上面 `port is None` 分支的显式释放不冲突。
+        handle.release()
+        raise
 
 
 def open_browser(port: int) -> None:
@@ -222,6 +427,20 @@ def _handle_existing_port(port: int, android: bool) -> None:
     print(f"[错误] 端口 {port} 已被其他程序占用，无法启动 DeLector。")
     print("       请关闭占用该端口的程序，或结束残留的 DeLector 进程后重试。")
     sys.exit(1)
+
+
+def _app_version() -> str:
+    """取应用版本号（`claim_instance` 判「对方版本是否不同」的唯一来源）。
+
+    这个函数**必须定义在 `main()` 之后**，理由与 `_handle_existing_port` 的惰性 import 同款：
+    `tests/test_desktop_data_dir_bootstrap.py::test_start_py_bootstrap_precedes_every_delector_import`
+    按**全模块最小行号**判「bootstrap 调用早于任何 `delector.*` 导入」，而 `delector.core.version`
+    不在 `_BOOTSTRAP_SAFE_IMPORTS` 白名单里 ⇒ 这段 import 一旦落在 `main()` 之前，守卫就转红。
+    `version` 是纯 stdlib 叶模块，惰性导入零成本，也不会碰 `database`。
+    """
+    from delector.core.version import APP_VERSION
+
+    return APP_VERSION
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
