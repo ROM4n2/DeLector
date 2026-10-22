@@ -23,15 +23,28 @@ POSIX 的 `flock` 锁的是 inode：若 `os.replace` 的目标写成 `paths.lock
 
 from __future__ import annotations
 
+import errno
 import json
+import logging
 import os
+import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import List, Optional, Tuple, cast
+from typing import Callable, List, Optional, Tuple, cast
 
 import pytest
 
-from delector.core.instance_lock import LockPaths, LockRecord, read_record, write_record
+from delector.core import instance_lock
+from delector.core.instance_lock import (
+    UNKNOWN_RECORD,
+    LockHandle,
+    LockPaths,
+    LockRecord,
+    read_record,
+    try_acquire,
+    write_record,
+)
 
 
 def _paths(tmp_path: Path) -> LockPaths:
@@ -189,3 +202,307 @@ def test_read_record_accepts_bom_prefixed_meta(tmp_path: Path) -> None:
         data_dir=r"D:\学习资料\DeLector",
         acquired_at="2026-10-21T12:00:00+08:00",
     )
+
+
+# ── 跨进程锁原语 ──
+#
+# 为什么用「两次独立 os.open」而不是 fork：
+# Windows 没有 fork，且 msvcrt.locking / fcntl.flock 的互斥性都绑定在**内核句柄**上，
+# 同进程内两次独立 open 得到的正是两个句柄 —— 覆盖的失败面与真子进程相同（Task 3 再验真进程）。
+# 若只对同一个 fd 重复调用，锁永远「成功」，这两个用例会退化成永不失败的空断言。
+
+
+def _record(tmp_path: Path, port: int = 8000) -> LockRecord:
+    return LockRecord(
+        pid=os.getpid(),
+        version="5.19.0",
+        port=port,
+        data_dir=str(tmp_path),
+        acquired_at="2026-10-21T12:00:00+08:00",
+    )
+
+
+def test_second_acquire_returns_holder_record(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    record = _record(tmp_path)
+
+    first = try_acquire(paths, record)
+    assert isinstance(first, LockHandle), f"首次取锁必须拿到 LockHandle，实际是 {type(first).__name__}"
+    assert first.record.pid == os.getpid()
+    assert first.record.version == "5.19.0"
+
+    second = try_acquire(paths, record)
+    assert isinstance(second, LockRecord), f"锁被持有时必须返回对方的 LockRecord，实际是 {type(second).__name__}"
+    assert second == first.record
+
+    first.release()
+
+
+def test_release_is_idempotent_and_allows_reacquire(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    record = _record(tmp_path)
+
+    first = try_acquire(paths, record)
+    assert isinstance(first, LockHandle)
+    first.release()
+    first.release()  # 幂等：退出路径可能被调用两次（finally + 上下文管理器）
+
+    again = try_acquire(paths, record)
+    assert isinstance(again, LockHandle), "release() 之后必须能重新取到锁"
+    again.release()
+
+
+def test_held_lock_with_missing_meta_returns_unknown_record(tmp_path: Path) -> None:
+    """锁被持有但 meta 被删（升级残留 / 手工清理）是合法中间态：必须降级成版本未知，不抛异常。"""
+    paths = _paths(tmp_path)
+    record = _record(tmp_path)
+
+    handle = try_acquire(paths, record)
+    assert isinstance(handle, LockHandle)
+    try:
+        os.unlink(paths.meta)
+        second = try_acquire(paths, record)
+    finally:
+        handle.release()
+
+    assert isinstance(second, LockRecord), f"meta 缺失时必须返回 unknown 记录，实际是 {type(second).__name__}"
+    assert second == UNKNOWN_RECORD
+    assert second.pid == 0
+
+
+def test_write_record_does_not_void_the_lock(tmp_path: Path) -> None:
+    """回归哨兵：回写 meta 若误写到 paths.lock（os.replace），锁会指向旧 inode 而静默失效。"""
+    paths = _paths(tmp_path)
+    handle = try_acquire(paths, _record(tmp_path, port=8000))
+    assert isinstance(handle, LockHandle)
+
+    updated = replace(handle.record, port=8002)
+    write_record(handle, updated)
+
+    second = try_acquire(paths, updated)
+    try:
+        assert isinstance(second, LockRecord), "回写 meta 之后锁必须仍然有效（否则单实例静默失效）"
+        assert second == updated
+    finally:
+        handle.release()
+
+
+# ── 降级响亮度 / errno 归属 / seek(0) / 回写失败不穿出 ──
+#
+# 为什么这四条必须存在
+# -------------------
+# `except OSError: return False` 把「原语坏了」读成「别人持有锁」：NFS/SMB 上 `flock` 返 `ENOLCK`
+# 时既不降级也不打 WARNING，用户只会看到「已有实例在运行」。同理 `write_record` 未包 try 会在
+# Windows 并发读时把 `WinError 32` 抛穿 `try_acquire` 并留下悬空锁 fd。下面四个失败面各钉一条。
+#
+# 平台分支交代：两条原语**都在本机跑**（`msvcrt` 分支与 `fcntl` 分支都走假模块，不靠 skipif），
+# 只有「seek(0) 的作用」这一条本质是 Windows 语义（POSIX 锁的是整个 inode、与 fd offset 无关），
+# 故只写 Windows 分支并在用例内显式说明。
+
+#: (原语模块名, 该模块的加锁函数)。本机 `_acquire_os_lock` 实际分派到的那条排在首位 ——
+#: 必须**真跑**，不许被 `pytest.mark.skipif` 静默跳掉。
+_PRIMITIVES: List[Tuple[str, Callable[[int], Optional[bool]]]] = [
+    ("msvcrt", instance_lock._acquire_windows_lock),
+    ("fcntl", instance_lock._acquire_posix_lock),
+]
+_HOST_PRIMITIVE_NAME = "msvcrt" if sys.platform == "win32" else "fcntl"
+_PRIMITIVES_UNDER_TEST: List[Tuple[str, Callable[[int], Optional[bool]]]] = sorted(
+    _PRIMITIVES, key=lambda item: item[0] != _HOST_PRIMITIVE_NAME
+)
+
+
+def _fake_primitive_module(name: str, exc: OSError) -> SimpleNamespace:
+    """假原语模块：名为 `name` 的模块里，唯一的加锁函数直接抛 `exc`（另带调用方会读的常量）。"""
+
+    def _raise(*_args: object) -> None:
+        raise exc
+
+    if name == "msvcrt":
+        return SimpleNamespace(locking=_raise, LK_NBLCK=2)
+    return SimpleNamespace(flock=_raise, LOCK_EX=2, LOCK_NB=4)
+
+
+def test_missing_primitive_warns_exactly_once_and_never_fails_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """降级必须响亮但只喊一次：`_PRIMITIVE_MISSING_WARNED` 此前完全没有回归保护。"""
+    paths = _paths(tmp_path)
+    record = _record(tmp_path)
+    monkeypatch.setattr(instance_lock, "_load_primitive", lambda name: None)
+    monkeypatch.setattr(instance_lock, "_PRIMITIVE_MISSING_WARNED", False)
+
+    with caplog.at_level(logging.WARNING, logger="delector"):
+        first = try_acquire(paths, record)
+        second = try_acquire(paths, record)
+
+    assert isinstance(first, LockHandle), "原语缺失只能降级成句柄，不能抛也不能返回对方记录"
+    assert first._fd == -1
+    assert isinstance(second, LockHandle), "第二次同样降级成句柄"
+    assert second._fd == -1
+
+    warnings = [item for item in caplog.records if item.levelno == logging.WARNING]
+    if len(warnings) != 1:
+        raise AssertionError(f"降级 WARNING 应恰好 1 条，实际 {len(warnings)} 条：{[i.getMessage() for i in warnings]}")
+    # WARNING 必须点明「不是真互斥」，否则读日志的人会以为单实例仍成立。
+    assert "本次不是真互斥" in warnings[0].getMessage()
+
+
+@pytest.mark.parametrize(
+    "module_name, acquire",
+    _PRIMITIVES_UNDER_TEST,
+    ids=[name for name, _ in _PRIMITIVES_UNDER_TEST],
+)
+def test_non_held_errno_degrades_but_held_errno_is_false(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    module_name: str,
+    acquire: Callable[[int], Optional[bool]],
+) -> None:
+    """`ENOLCK`（NFS/SMB 无锁支持）不是「被持有」，必须降级成 `None` 并留 WARNING；`EACCES` 才是。"""
+    fd = os.open(tmp_path / "instance.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        monkeypatch.setattr(
+            instance_lock,
+            "_load_primitive",
+            lambda name: _fake_primitive_module(module_name, OSError(errno.ENOLCK, "no locks available")),
+        )
+        with caplog.at_level(logging.WARNING, logger="delector"):
+            assert acquire(fd) is None, "ENOLCK 是原语不可用，必须降级成 None 而不是『被持有』"
+        assert any("本次不是真互斥" in item.getMessage() for item in caplog.records), (
+            "非持有类 errno 必须留下 WARNING；静默归成『被持有』就是把故障藏起来"
+        )
+
+        caplog.clear()
+        monkeypatch.setattr(
+            instance_lock,
+            "_load_primitive",
+            lambda name: _fake_primitive_module(module_name, OSError(errno.EACCES, "resource busy")),
+        )
+        with caplog.at_level(logging.WARNING, logger="delector"):
+            assert acquire(fd) is False, "EACCES/EAGAIN 才是『别人持有』，且不应产生降级 WARNING"
+        assert caplog.records == [], "『被持有』是正常判定结果，不该刷降级日志"
+    finally:
+        os.close(fd)
+
+
+def test_windows_lock_pulls_fd_offset_back_to_zero(tmp_path: Path) -> None:
+    """删掉 `os.lseek(fd, 0, SEEK_SET)` 时本用例转红：那时 B 会锁到 byte 5，与 A 的 byte 0 不冲突。
+
+    POSIX 的 `flock` 锁的是整个 inode、与 fd offset 无关，等价断言在那边恒真（假模块也证明不了
+    offset 无关性），故只写 Windows 分支；在非 win32 主机上运行时显式跳过并说明原因。
+    """
+    if sys.platform != "win32":
+        pytest.skip("msvcrt 区间锁语义专属：POSIX flock 锁整个 inode，offset 断言在那边恒真")
+
+    lock_path = tmp_path / "instance.lock"
+    fd_a = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    fd_b = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        assert instance_lock._acquire_windows_lock(fd_a) is True
+        os.lseek(fd_b, 5, os.SEEK_SET)
+        # 实现必须把 offset 拉回 0，否则 B 会锁在 byte 5、与 A 的区间不冲突，从而误判为成功。
+        assert instance_lock._acquire_windows_lock(fd_b) is False
+    finally:
+        os.close(fd_b)
+        os.close(fd_a)
+
+
+def test_write_record_failure_does_not_escape_try_acquire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """回写失败只影响「别人看到谁」，不影响互斥：不得抛，也不得丢掉已持有的锁。"""
+    paths = _paths(tmp_path)
+    record = _record(tmp_path)
+
+    def _boom(handle: object, new_record: LockRecord) -> None:
+        raise OSError(errno.EIO, "模拟回写失败")
+
+    monkeypatch.setattr(instance_lock, "write_record", _boom)
+
+    with caplog.at_level(logging.WARNING, logger="delector"):
+        handle = try_acquire(paths, record)
+
+    assert isinstance(handle, LockHandle), "回写失败不得把异常穿出 try_acquire（会留下悬空锁 fd）"
+    assert handle._fd >= 0, "锁已经拿到，句柄必须带着真 fd"
+    assert any("本次不是真互斥" in item.getMessage() for item in caplog.records), "回写失败必须留痕"
+
+    try:
+        second = try_acquire(paths, record)
+    finally:
+        handle.release()
+
+    assert isinstance(second, LockRecord), "第一次拿到的锁必须仍然有效（第二次应撞上持有者而不是重新上锁）"
+
+
+def test_acquire_creates_parent_dir_of_both_lock_and_meta(tmp_path: Path) -> None:
+    """锁与 meta 分处两个目录时两个父目录都要建：只建 meta 父目录 ⇒ `os.open` 抛 ENOENT ⇒ 降级。
+
+    现有用例的 `LockPaths` 全部由 `_paths()` 造（同目录），把这条修复退回只建 meta 父目录时
+    28 条仍全绿 —— 故这里显式拆成 `a/` 与 `b/` 两个待建目录。
+    """
+    paths = LockPaths(
+        lock=str(tmp_path / "a" / "instance.lock"),
+        meta=str(tmp_path / "b" / "instance.json"),
+    )
+
+    handle = try_acquire(paths, _record(tmp_path))
+    assert isinstance(handle, LockHandle), f"不同目录也必须取到句柄，实际是 {type(handle).__name__}"
+    try:
+        assert handle._fd >= 0, "不同目录也必须拿到真锁（降级至 _fd == -1 说明 lock 的父目录没建）"
+    finally:
+        handle.release()
+
+
+def test_non_held_errno_does_not_consume_missing_primitive_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """`ENOLCK` 是「原语存在但加锁被拒」，不是「原语缺失」：不得冒充，也不得吃掉那次唯一告警。
+
+    `_PRIMITIVE_MISSING_WARNED` 被误置真时，同进程后续**真·原语缺失**会零 warning（二阶静默），
+    故这里用例开始先显式归零，不依赖执行顺序。
+    """
+    paths = _paths(tmp_path)
+    monkeypatch.setattr(instance_lock, "_PRIMITIVE_MISSING_WARNED", False)
+    monkeypatch.setattr(
+        instance_lock,
+        "_load_primitive",
+        lambda name: _fake_primitive_module(_HOST_PRIMITIVE_NAME, OSError(errno.ENOLCK, "no locks available")),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="delector"):
+        handle = try_acquire(paths, _record(tmp_path))
+
+    assert isinstance(handle, LockHandle), "加锁被拒只能降级成句柄，不能抛也不能返回对方记录"
+    assert handle._fd == -1
+    messages = [item.getMessage() for item in caplog.records]
+    assert any("本次不是真互斥" in message for message in messages), "加锁被拒必须留一条含真实 errno 的 WARNING"
+    assert not any("无可用的文件锁原语" in message for message in messages), (
+        "ENOLCK 不是原语缺失：再喊一条『无可用的文件锁原语』既是假陈述，也会让后续真缺失静默"
+    )
+    assert instance_lock._PRIMITIVE_MISSING_WARNED is False, "加锁被拒不得置『原语缺失已告警』旗标"
+
+
+def test_unserializable_record_releases_fd_and_allows_reacquire(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """记录不可序列化（`TypeError`）时：不抛、响亮降级，且锁 fd 必须真被收尸（否则本次进程再也取不到锁）。"""
+    paths = _paths(tmp_path)
+    bad = LockRecord(
+        pid=1,
+        version=cast(str, object()),
+        port=8000,
+        data_dir=str(tmp_path),
+        acquired_at="2026-10-21T12:00:00+08:00",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="delector"):
+        degraded = try_acquire(paths, bad)
+
+    assert isinstance(degraded, LockHandle), "序列化失败不得把异常穿出 try_acquire（模块承诺启动期不抛）"
+    assert degraded._fd == -1, "已释放锁的句柄必须是降级句柄"
+    assert any("本次不是真互斥" in item.getMessage() for item in caplog.records), "显式点名必须留痕"
+
+    again = try_acquire(paths, _record(tmp_path))
+    assert isinstance(again, LockHandle), "锁必须真的被释放：后续取锁应成功，而不是撞上自己悬空的 fd"
+    again.release()
