@@ -744,3 +744,41 @@ def test_main_does_not_open_browser_when_same_instance_port_is_silent(
     assert "已在运行" in out and "无响应" in out, (
         f"必须说清「在跑但该端口无响应」，而不是静默或只开页面，实际输出={out!r}"
     )
+
+
+# ── 黄卡 Y1：`_fail` / `_say` 的「stdout 为 None」分支回归锁 ─────────────────────
+def test_fail_logs_when_stdout_is_none(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    """`sys.stdout is None`（`pythonw`/窗口化便携版常态）时 `_fail` MUST 退到 logger 并退出码 1。
+
+    若被「简化」成裸 `print(message)`，`sys.stdout is None` 下 `print` 是静默 no-op
+    （CPython 对 `file=None` 直接丢弃、不报错）⇒ 窗口化版本所有启动失败回到「双击没反应」，
+    而 capsys 下 stdout 永不为 None，既有用例全部照绿 —— 故须显式 patch 成 None 钉住。
+    """
+    monkeypatch.setattr(start.sys, "stdout", None)
+    monkeypatch.setattr(start.sys, "stderr", None)  # 与 pythonw 一致：两条流都收口
+
+    with caplog.at_level(logging.WARNING, logger="delector"):
+        with pytest.raises(SystemExit) as excinfo:
+            start._fail("[错误] 端口不可用")
+
+    assert excinfo.value.code == 1, f"启动失败必须退出码 1，实际 {excinfo.value.code!r}"
+    assert "[错误] 端口不可用" in caplog.text, (
+        f"无 stdout 时失败文案必须进 logger（No Silent Failure），实际日志={caplog.text!r}"
+    )
+
+
+def test_say_logs_when_stdout_is_none(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    """`sys.stdout is None` 时 `_say` MUST 退到 logger，不抛异常、不静默丢弃提示。"""
+    monkeypatch.setattr(start.sys, "stdout", None)
+    monkeypatch.setattr(start.sys, "stderr", None)
+
+    with caplog.at_level(logging.WARNING, logger="delector"):
+        start._say("[提示] 已在运行")  # 不得抛异常
+
+    assert "[提示] 已在运行" in caplog.text, (
+        f"无 stdout 时用户提示必须进 logger，实际日志={caplog.text!r}"
+    )

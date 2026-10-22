@@ -617,11 +617,10 @@ def _handle_existing_port(port: int, android: bool) -> None:
       浏览器指向已有实例，然后返回（不重复起服务）。
     - 不是 DeLector ⇒ 明确报错并退出，**绝不**为无关程序打开页面（ADR-0020 §6.4）。
 
-    **当前 `main()` 不再调用它**（Task 6 起按 `AlreadyRunning.reason` 分派，见
-    `_report_already_running`）：单实例判定已收敛到 `claim_instance`，而"端口被陌生程序占"
-    与该函数回答的问题不是同一件事。保留是因为它仍是「仅凭端口判断占用者是谁」这条路径的
-    既有实现 —— 桌面壳/工具若只需要一次 `probe_identity` 分派（不持有锁），落点还是这里；
-    删掉等于把那段判断（含 503 也算自己人）散回各处。
+    **当前无生产调用者**：`main()` 自 Task 6 起按 `AlreadyRunning.reason` 分派（见
+    `_report_already_running`），桌面壳走自己的 `_check_port_or_fail`（`desktop.py:873-921`），
+    故本函数唯一引用者是 `tests/test_desktop_shell.py`。Task 7 把桌面壳改用 `claim_instance`
+    后应删除此函数或改薄包装 —— 现在保留只是暂不删，避免提前改动桌面端行为。
 
     这里用**惰性 import** 而非文件顶部导入：本函数定义在 main() 之后，其 import 语句
     的行号才大于 main() 里 `bootstrap_data_dir(...)` 的调用行号 —— 否则会撞上
