@@ -70,6 +70,10 @@ def _stub_environment(
         mod, "_message_box", lambda title, detail: events.append(("box", title, detail))
     )
     monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path))
+    # Task 7：判定点换成 `claim_instance` 后会**真去取锁** ⇒ 必须钉落点，否则每跑一条用例就往
+    # 真实 `%LOCALAPPDATA%\DeLector` 写一把锁与一份 instance.json，且结果取决于开发机上此刻
+    # 是否真有 DeLector 在跑（随机器漂移的假红/假绿）。
+    _pin_lock_dir(monkeypatch, tmp_path)
 
     import start
     from delector.core import server_lifecycle
@@ -77,6 +81,45 @@ def _stub_environment(
     monkeypatch.setattr(start, "is_port_in_use", lambda port: occupied)
     monkeypatch.setattr(start, "get_local_ip", lambda: "127.0.0.1")
     monkeypatch.setattr(server_lifecycle, "probe_identity", lambda port, **_k: identity)
+
+
+def _pin_lock_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
+    """把锁落点钉到 `tmp_path`（理由见 `_stub_environment` 里那段注释）。"""
+    from delector.core import instance_lock
+
+    paths = instance_lock.LockPaths(
+        lock=str(tmp_path / "instance.lock"),
+        meta=str(tmp_path / "instance.json"),
+    )
+    # 调用点不在本模块内：start.py::claim_instance 于**调用期**经 `LockPaths.for_platform(env)`
+    # 做类属性查找，故本补丁即时生效；instance_lock 自身不调用它。
+    # mock-drift-ok: 符号消费方在被测模块 start.py::claim_instance（调用期类属性查找），补丁即时生效
+    monkeypatch.setattr(instance_lock.LockPaths, "for_platform", staticmethod(lambda env: paths))
+    return paths
+
+
+def _hold_lock(paths: Any, data_dir: str, version: str, port: int = 8000) -> Any:
+    """模拟「另一个 DeLector 正持锁」：走**真** `try_acquire`，不是伪造返回值。
+
+    伪造返回值会让「锁被判据读成对方记录」这条链失去意义（能把 bug 造进实现里而自证通过）；
+    真持锁还顺带证明 Windows/POSIX 上同进程第二个句柄确实冲突。
+    """
+    from delector.core import instance_lock
+
+    holder = instance_lock.try_acquire(
+        paths,
+        instance_lock.LockRecord(
+            pid=4242,
+            version=version,
+            port=port,
+            data_dir=data_dir,
+            acquired_at="2026-10-22T09:00:00+08:00",
+        ),
+    )
+    assert isinstance(holder, instance_lock.LockHandle), (
+        "模拟「另一个实例持锁」失败（前提变了：同进程第二次取锁应当被挡）"
+    )
+    return holder
 
 
 def _stub_fake_server_module(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -200,27 +243,173 @@ def test_run_desktop_inner_does_not_build_server_when_port_is_taken(
     assert ("build_server", 8000) not in events, "旧实例在跑 ⇒ 绝不能再建第二个服务"
 
 
-def test_port_taken_by_delector_pops_dialog_and_logs(
+def test_same_instance_pops_dialog_with_version_pid_and_port(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """失败路径必须**弹窗 + 日志**（不许只写日志）：文案点明"已有 DeLector 在运行"。"""
+    """失败路径必须**弹窗 + 日志**（不许只写日志）：文案点明"已有 DeLector 在运行"。
+
+    Task 7：判据从「端口上有没有东西」换成「锁被谁持有」。故这里不再 patch 端口/身份，而是
+    让另一个实例**真持锁**（同版本、同数据目录）⇒ `reason == "same"`。标题、正文的三要素
+    （版本 / pid / 端口）缺一都转红：用户要靠端口去找那个窗口，靠版本判断是不是旧构建。
+    """
+    from delector.core.version import APP_VERSION
+
     mod = _mod()
     events: List[Any] = []
     _stub_environment(monkeypatch, mod, tmp_path, events, occupied=True, identity=True)
     _stub_server_chain(monkeypatch, mod, events)
     _install_fake_webview(monkeypatch, mod)
     log_path = tmp_path / "launch.log"
+    holder = _hold_lock(
+        _pin_lock_dir(monkeypatch, tmp_path), data_dir=str(tmp_path), version=APP_VERSION, port=8000
+    )
+    try:
+        code = mod._run_desktop_inner(8000, str(log_path))
+    finally:
+        holder.release()
 
-    mod._run_desktop_inner(8000, str(log_path))
-
+    assert code == 3, "已有同版本实例 ⇒ 拒绝启动（退出码 3）"
     boxes = [e for e in events if e[0] == "box"]
     assert boxes, "必须弹窗（用户唯一可见的失败反馈）"
-    assert "DeLector" in boxes[0][1], "弹窗标题必须点名 DeLector 已在运行"
-    assert "端口 8000" in boxes[0][2], "弹窗必须写明端口号"
-    assert "退出旧实例" in boxes[0][2], "弹窗必须给出行动指引（退出旧实例）"
+    assert "DeLector 已在运行" in boxes[0][1], f"弹窗标题必须点名已在运行，实际 {boxes[0][1]!r}"
+    body = boxes[0][2]
+    assert f"v{APP_VERSION}" in body, "弹窗必须写明对方版本"
+    assert "4242" in body, "弹窗必须写明对方进程号（用户据此在任务管理器里找到它）"
+    assert "端口 8000" in body, "弹窗必须写明端口号"
+    assert "http://127.0.0.1:8000" in body, "弹窗必须给出可直接打开的地址"
 
     content = log_path.read_text(encoding="utf-8")
-    assert "8000" in content and "DeLector" in content, "拒绝原因必须落 launch.log"
+    assert "same" in content and "8000" in content, "拒绝原因必须落 launch.log"
+
+
+def test_version_mismatch_dialog_names_both_versions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """版本不同 ⇒ 文案必须**同时**给出对方与本程序的版本（否则用户不知道该升级哪边）。"""
+    from delector.core.version import APP_VERSION
+
+    mod = _mod()
+    events: List[Any] = []
+    _stub_environment(monkeypatch, mod, tmp_path, events, occupied=False, identity=False)
+    _stub_server_chain(monkeypatch, mod, events)
+    _install_fake_webview(monkeypatch, mod)
+    log_path = tmp_path / "launch.log"
+    holder = _hold_lock(
+        _pin_lock_dir(monkeypatch, tmp_path), data_dir=str(tmp_path), version="0.0.1", port=8000
+    )
+    try:
+        code = mod._run_desktop_inner(None, str(log_path))
+    finally:
+        holder.release()
+
+    assert code == 3
+    assert ("build_server", 8000) not in events
+    body = [e for e in events if e[0] == "box"][0][2]
+    assert "v0.0.1" in body and f"v{APP_VERSION}" in body, f"必须给出双方版本，实际：{body!r}"
+
+
+def test_degraded_lock_uses_identity_probe_before_falling_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """第二腿（Task 7 的关键漏口）：锁降级时 8000 上已有 DeLector ⇒ **不得**顺延起第二个服务。
+
+    锁降级（只读目录 / 无锁原语）时没有权威判据，若只按「端口被占」顺延到 8002，两个进程就会
+    同时改同一个库。这里让 `_acquire_os_lock` 恒返 None（降级），8000 被占且身份探测为真 ⇒
+    必须判成 `same` 并拒绝启动。删掉 `_check_port_or_fail` 里的 `identity_probe=_identity_probe`
+    或 `_identity_probe` 本身，本用例转红。
+    """
+    from delector.core import instance_lock
+
+    mod = _mod()
+    events: List[Any] = []
+    _stub_environment(monkeypatch, mod, tmp_path, events, occupied=True, identity=True)
+    _stub_server_chain(monkeypatch, mod, events)
+    _install_fake_webview(monkeypatch, mod)
+    monkeypatch.setattr(instance_lock, "_acquire_os_lock", lambda fd: None)
+    log_path = tmp_path / "launch.log"
+
+    code = mod._run_desktop_inner(None, str(log_path))
+
+    assert code == 3, "降级锁 + 端口上确有一个 DeLector ⇒ 必须拒绝启动，绝不能顺延"
+    assert not any(e[0] == "build_server" for e in events), "绝不许为同一个库起第二个服务"
+    body = [e for e in events if e[0] == "box"][0][2]
+    assert "已有 DeLector 在运行" in body, f"文案必须说明是已有实例，实际：{body!r}"
+    # 降级路径读不到 meta ⇒ version="unknown"、pid=0；占位值绝不能出现在人话里。
+    assert "unknown" not in body and "进程 0" not in body, f"文案不得含占位值，实际：{body!r}"
+    assert "端口 8000" in body, "必须点名探测到的真实端口"
+
+
+def test_auto_mode_falls_back_to_8002_when_8000_is_foreign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """自动模式（`port=None`）：8000 被陌生程序占 ⇒ 顺延到 8002 并照常建服。"""
+    mod = _mod()
+    events: List[Any] = []
+    _stub_environment(monkeypatch, mod, tmp_path, events, occupied=False, identity=False)
+    _stub_server_chain(monkeypatch, mod, events)
+    _install_fake_webview(monkeypatch, mod)
+
+    import start
+
+    monkeypatch.setattr(start, "is_port_in_use", lambda port: port == 8000)
+
+    code = mod._run_desktop_inner(None, str(tmp_path / "launch.log"))
+
+    assert code == 0
+    assert ("build_server", 8002) in events, f"必须顺延到 8002 建服，实际事件：{events}"
+
+
+def test_explicit_port_does_not_fall_through(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """显式 `--port 8000` 被占 ⇒ 报错退出，**不**顺延（调用方已对外承诺那个地址）。"""
+    mod = _mod()
+    events: List[Any] = []
+    _stub_environment(monkeypatch, mod, tmp_path, events, occupied=False, identity=False)
+    _stub_server_chain(monkeypatch, mod, events)
+    _install_fake_webview(monkeypatch, mod)
+
+    import start
+
+    monkeypatch.setattr(start, "is_port_in_use", lambda port: port == 8000)
+
+    code = mod._run_desktop_inner(8000, str(tmp_path / "launch.log"))
+
+    assert code == 3, "显式端口被占 ⇒ 退出码 3，绝不偷偷换端口"
+    assert not any(e[0] == "build_server" for e in events)
+    body = [e for e in events if e[0] == "box"][0][2]
+    assert "端口 8000" in body, f"文案必须点名是哪个端口，实际：{body!r}"
+
+
+def test_all_exit_paths_release_the_instance_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """**所有**返回路径都必须放锁：否则同进程重试（壳的"失败后重开"、测试）会撞上自己的锁。
+
+    覆盖两条：正常返回 0、缺 WebView2 返回 2。
+    """
+    from delector.core import instance_lock
+
+    mod = _mod()
+
+    for return_code, ensure_webview in ((0, True), (2, False)):
+        events: List[Any] = []
+        case_dir = tmp_path / f"case-{return_code}"
+        case_dir.mkdir()
+        _stub_environment(monkeypatch, mod, case_dir, events, occupied=False, identity=False)
+        _stub_server_chain(monkeypatch, mod, events)
+        _install_fake_webview(monkeypatch, mod)
+        monkeypatch.setattr(mod, "ensure_webview2_runtime", lambda flag=ensure_webview: flag)
+        paths = _pin_lock_dir(monkeypatch, case_dir)
+
+        assert mod._run_desktop_inner(None, str(case_dir / "launch.log")) == return_code
+
+        again = instance_lock.try_acquire(
+            paths,
+            instance_lock.LockRecord(pid=1, version="x", port=8000, data_dir="", acquired_at=""),
+        )
+        assert isinstance(again, instance_lock.LockHandle), (
+            f"退出码 {return_code} 的路径没有放锁：同进程重试会被判成『已有实例在运行』"
+        )
+        again.release()
 
 
 # ── 分支③：被占但不是 DeLector ⇒ 弹窗 + 日志 + 退出码 3 ───────────────────────

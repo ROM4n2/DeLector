@@ -204,6 +204,9 @@ def _pin_lock_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
         lock=str(tmp_path / "instance.lock"),
         meta=str(tmp_path / "instance.json"),
     )
+    # 调用点在被测模块 start.py::claim_instance（**调用期**经 `LockPaths.for_platform(env)`
+    # 做类属性查找），故本补丁即时生效；instance_lock 自身不调用它。
+    # mock-drift-ok: 消费方是 start.py::claim_instance（同进程调用期类属性查找），补丁即时生效
     monkeypatch.setattr(instance_lock.LockPaths, "for_platform", staticmethod(lambda env: paths))
     return paths
 

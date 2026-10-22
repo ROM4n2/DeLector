@@ -30,6 +30,7 @@ from server_helpers import (
     _parse_desktop,
     _RecordingCtypes,
     _stub_server_build,
+    stmts_through_try,
 )
 from server_helpers import _isolate_data_dir as _isolate_data_dir
 
@@ -279,9 +280,16 @@ def _stage_log_entries(func_name: str) -> List[Tuple[int, str]]:
 
 
 def _stage_stmt_span(func_name: str, predicate: Any) -> Tuple[int, int]:
-    """`func_name` 里首个满足 `predicate` 的顶层语句的（起始行, 结束行）。找不到即报错。"""
+    """`func_name` 里首个满足 `predicate` 的语句的（起始行, 结束行）。找不到即报错。
+
+    Task 7 适配：端口判定整段被 `try:`（放锁）包住 ⇒ `ensure_webview2_runtime` 与
+    `_show_window` 从「函数顶层语句」变成「顶层 `try` 体里的语句」。故候选集合 = 函数顶层
+    语句 **+ 一层** `ast.Try` 的 body / handlers / orelse / finalbody —— 只下潜一层是有意的：
+    夹逼断言的语义是"标记夹在相邻两条语句之间"，下潜到任意深度会让锚点漂到内层无关语句上，
+    反而失去判别力。
+    """
     fn = _funcs_by_name(_parse_desktop())[func_name]
-    for stmt in fn.body:
+    for stmt in stmts_through_try(fn.body):
         if predicate(stmt):
             return stmt.lineno, stmt.end_lineno or stmt.lineno
     raise AssertionError(f"{func_name} 里找不到满足断言的语句（谓词={predicate!r}）")
