@@ -399,20 +399,45 @@ def _is_bootstrap_call(node: ast.AST) -> bool:
     return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "bootstrap_data_dir"
 
 
+#: 允许**先于** `bootstrap_data_dir` 被导入的 `delector.*` 模块（刻意显式枚举，两个分支共用）。
+#:
+#: - `delector.core.data_dir_bootstrap`：bootstrap 自身，必须**先**被导入才能被调用。
+#: - `delector.core.instance_lock`：抢锁必须先于 bootstrap（spec §3.2：抢不到锁就不该搬库）。
+#:   它能进这张表的**唯一凭据**是「不 import `delector.database`」—— 由
+#:   `test_instance_lock_module_does_not_import_database` 钉住；否则它在设 env 之前
+#:   把 `database` 拉起来，`DATA_DIR` 就被冻结在旧位置。
+#:
+#: 为什么加白名单（而不是靠守卫本来就不会红）：`test_start_py_bootstrap_precedes_every_delector_import`
+#: 判的是**全模块最小行号**，而 `start.py:39` 的 `data_dir_bootstrap` 导入恒为最小值 ⇒
+#: 新增 `instance_lock` 导入**不会**让那条守卫变红。放行纯粹是**意图显式**：下一个人看到
+#: `instance_lock` 排在 bootstrap 之前，能在这里查到「这是批准过的例外」，而不是顺手写歪的顺序。
+#:
+#: 维护提示：**MUST NOT** 把那条顺序守卫改成「逐行比较」—— 它会连带要求挪动 `probe_identity`
+#: 的惰性导入，超出本计划范围。
+_BOOTSTRAP_SAFE_IMPORTS = frozenset({"delector.core.data_dir_bootstrap", "delector.core.instance_lock"})
+
+
 def _is_delector_import(node: ast.AST) -> bool:
-    """`delector.*` 的导入——排除 bootstrap 自身（它必须**先**被导入才能被调用）。"""
+    """`delector.*` 的导入——排除白名单 `_BOOTSTRAP_SAFE_IMPORTS` 里批准过的例外。"""
     if isinstance(node, ast.ImportFrom):
         module = node.module or ""
-        return module.startswith("delector") and module != "delector.core.data_dir_bootstrap"
+        return module.startswith("delector") and module not in _BOOTSTRAP_SAFE_IMPORTS
     if isinstance(node, ast.Import):
-        return any(a.name.startswith("delector") and a.name != "delector.core.data_dir_bootstrap" for a in node.names)
+        return any(a.name.startswith("delector") and a.name not in _BOOTSTRAP_SAFE_IMPORTS for a in node.names)
     return False
 
 
 def _mentions_database(node: ast.AST) -> bool:
-    """该导入是否指向 `database` 模块（只看最后一段，兼容 `import a.b.database` 两种写法）。"""
+    """该导入是否指向 `database` 模块（只看最后一段，三种写法都要抓）。
+
+    覆盖 `import delector.database` / `from delector.database import x` /
+    `from delector import database`：最后一种模块名落在 alias 上，只查 `node.module` 会漏
+    ⇒ 那正是「看着在跑、实际恒真」的静默失效（`PROJECT_OVERVIEW.md` 红线 13 同型）。
+    """
     if isinstance(node, ast.ImportFrom):
-        return (node.module or "").split(".")[-1] == "database"
+        if (node.module or "").split(".")[-1] == "database":
+            return True
+        return any(a.name.split(".")[-1] == "database" for a in node.names)
     if isinstance(node, ast.Import):
         return any(a.name.split(".")[-1] == "database" for a in node.names)
     return False
@@ -486,6 +511,23 @@ def test_bootstrap_module_does_not_import_database_at_module_level():
 
     offenders = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)) and _mentions_database(n)]
     assert not offenders, "data_dir_bootstrap 不得在模块级导入 database（会抢在设 env 之前冻结 DATA_DIR）"
+
+
+def test_instance_lock_module_does_not_import_database():
+    """`instance_lock` 同样**不得**在模块级 import `database`：它是 bootstrap 的「前哨」。
+
+    `start.py` 要**先**抢占单实例锁、**后**才 `bootstrap_data_dir`（spec §3.2：抢不到锁就
+    不该去搬库）。这条顺序只有在锁模块自己不碰 `database` 时才安全 —— 一旦它在模块顶层
+    （或经由 `from delector import database` 这类写法）把 `database` 拉起来，`DATA_DIR` 就
+    在设 env 之前落定了，bootstrap 随后改 env 毫无作用：与 bootstrap 自身那条用例同构的
+    「测试全绿、用户照旧丢数据」失败。故本用例是 `_BOOTSTRAP_SAFE_IMPORTS` 放行
+    `delector.core.instance_lock` 的**唯一凭据**：白名单放人，这条钉住他真干净。
+    """
+    path = REPO_ROOT / "delector" / "core" / "instance_lock.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+
+    offenders = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)) and _mentions_database(n)]
+    assert not offenders, "instance_lock 不得在模块级导入 database（会抢在 bootstrap 设 env 之前冻结 DATA_DIR）"
 
 
 def test_legacy_dir_matches_database_repo_root():
