@@ -880,7 +880,10 @@ def _identity_probe(port: int) -> bool:
     """
     from delector.core.server_lifecycle import probe_identity
 
-    return probe_identity(port)
+    # 显式落到 bool 局部变量：入口面 mypy 闸带 `--follow-imports=skip`（见 `.github/workflows/ci.yml`）
+    # ⇒ 被跳过的模块符号是 `Any`，直接 return 会报 `no-any-return`（该红只在 CI 出现）。
+    identity: bool = probe_identity(port)
+    return identity
 
 
 def _describe_holder(

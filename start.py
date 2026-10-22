@@ -607,7 +607,11 @@ def _identity_probe(port: int) -> bool:
     """
     from delector.core.server_lifecycle import probe_identity
 
-    return probe_identity(port)
+    # 显式落到 bool 局部变量：入口面 mypy 闸带 `--follow-imports=skip`
+    # （`.github/workflows/ci.yml`），被跳过的模块符号退化成 `Any` ⇒ 直接 `return`
+    # 会报 `no-any-return`（本地不带该 flag 时是绿的，故这是**只在 CI 暴露**的那类红）。
+    identity: bool = probe_identity(port)
+    return identity
 
 
 def _handle_existing_port(port: int, android: bool) -> None:
@@ -650,7 +654,9 @@ def _app_version() -> str:
     """
     from delector.core.version import APP_VERSION
 
-    return APP_VERSION
+    # 同 `_identity_probe`：`--follow-imports=skip` 下 `APP_VERSION` 是 `Any`，必须显式收窄。
+    version: str = APP_VERSION
+    return version
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
