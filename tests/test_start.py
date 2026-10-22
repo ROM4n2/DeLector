@@ -14,6 +14,8 @@ Task4 追加：`claim_instance` —— 单实例判定的**唯一**入口（spec
 """
 
 import logging
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -353,7 +355,7 @@ def test_claim_instance_treats_equivalent_paths_as_same(tmp_path: Path, monkeypa
 def test_claim_instance_on_android_never_takes_the_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Android 短路：`Ready(8000)` 且**不**创建任何锁文件（降级句柄 `_fd == -1`）。
+    """Android 短路：`Ready(8000)` 且**不**创建任何锁文件（降级句柄 `is_degraded`）。
 
     Android 的数据落点由宿主注入，本进程替它猜一个锁目录只会造出一把与真实实例无关的锁。
     """
@@ -364,7 +366,7 @@ def test_claim_instance_on_android_never_takes_the_lock(
 
     assert isinstance(result, start.Ready), f"Android 应直接给 Ready，实际 {result!r}"
     assert result.port == start.PORT_CANDIDATES[0]
-    assert result.lock._fd == -1, "Android 必须是降级句柄（release() 为空操作）"
+    assert result.lock.is_degraded, "Android 必须是降级句柄（release() 为空操作）"
     assert not Path(paths.lock).exists(), f"Android MUST NOT 创建锁文件：{paths.lock}"
 
 
@@ -412,3 +414,333 @@ def test_claim_instance_notes_reach_logger_when_stderr_is_none(
         )
     finally:
         result.lock.release()
+
+
+# ── Task 6：main() 接线（claim → 端口 → bootstrap → serve；finally 放锁）────────────
+def _patch_serving(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[tuple[str, int]], types.SimpleNamespace]:
+    """把 uvicorn 装配链换成替身：既断言 `main()` 的接线，又不真起服务、不拉 spaCy。
+
+    与 `tests/test_start_lifecycle.py` 同款手法（patch `server_lifecycle` 的四个入口 +
+    `sys.modules` 里放一个假 `delector.server`）—— 那里验的是生命周期语义，这里验的是
+    「claim 的结果有没有被真的接到 build_server / on_serving 上」。
+    """
+    from delector.core import server_lifecycle
+
+    built: list[tuple[str, int]] = []
+    fake_server = types.SimpleNamespace(should_exit=False)
+
+    def _build(host: str, port: int, app: object) -> object:
+        built.append((host, port))
+        return fake_server
+
+    class _FinishedThread:
+        """替身线程：join 立即返回、is_alive 恒 False。"""
+
+        daemon = False
+
+        def join(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setitem(sys.modules, "delector.server", types.SimpleNamespace(app=object()))
+    monkeypatch.setattr(server_lifecycle, "build_server", _build)
+    monkeypatch.setattr(server_lifecycle, "serve_in_thread", lambda server: _FinishedThread())
+    monkeypatch.setattr(server_lifecycle, "shutdown", lambda *_a, **_k: True)
+    return built, fake_server
+
+
+def test_main_exits_without_importing_server_when_lock_held_by_other_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """锁被另一版本持有 ⇒ 退出码 1、**不** import `delector.server`、**不**搬库、不写地址。
+
+    为什么钉「不 import `delector.server`」而不是只钉退出码：那一行一跑，`database` 就按
+    当时的 env 把 DATA_DIR 落定，还会拉起 spaCy —— 一个注定要退出的进程没理由付这笔账，
+    而且「判出已有实例 ⇒ 绝不动它的库」正是本设计的不变量。
+    实现方式：往 `sys.modules` 塞一个**属性访问即炸**的哨兵模块；`from delector.server
+    import app` 一旦执行就会撞上它（不是靠"恰好没导入"这种弱断言）。
+    """
+
+    class _ServerSentinel(types.ModuleType):
+        def __getattr__(self, name: str) -> object:
+            raise AssertionError(f"判出「已在运行」时不得 import delector.server（触发了 {name}）")
+
+    data_dir = str(tmp_path / "data")
+    monkeypatch.setenv("DELECTOR_DATA_DIR", data_dir)
+    _, holder = _hold_lock(tmp_path, monkeypatch, version="0.0.1-legacy", data_dir=data_dir)
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    monkeypatch.setattr(start, "open_browser", lambda port: pytest.fail("版本不同 ⇒ 不得为它打开页面"))
+    monkeypatch.setattr(
+        start, "bootstrap_data_dir", lambda *_a, **_k: pytest.fail("已有实例在跑时不得动它的库")
+    )
+    monkeypatch.setitem(sys.modules, "delector.server", _ServerSentinel("delector.server"))
+
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            start.main()
+    finally:
+        holder.release()
+
+    assert excinfo.value.code == 1, f"实例冲突必须以退出码 1 结束，实际 {excinfo.value.code!r}"
+    captured = capsys.readouterr()
+    text = captured.out + captured.err
+    assert "0.0.1-legacy" in text and APP_VERSION in text, (
+        f"文案必须同时给出双方版本，用户才知道该升级哪一个；实际输出={text!r}"
+    )
+    assert "Traceback" not in text, f"面向用户的文案不得含堆栈：{text!r}"
+
+
+def test_main_serves_on_fallback_port_when_8000_is_taken_by_foreign_program(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """8000 被无关程序占 ⇒ 服务必须建在 claim 选定的 8002 上（`on_serving` 也拿到 8002）。
+
+    这里是**接线**断言：`Ready.port` 必须一路传到横幅 / 浏览器 / `build_server` / `on_serving`；
+    任何一处仍写死 8000，用户/壳拿到的地址就与实际监听点不一致。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+    built, _ = _patch_serving(monkeypatch)
+    ready = start.Ready(
+        port=8002,
+        lock=instance_lock.LockHandle(
+            paths=instance_lock.LockPaths(
+                lock=str(tmp_path / "instance.lock"), meta=str(tmp_path / "instance.json")
+            ),
+            record=instance_lock.UNKNOWN_RECORD,
+        ),
+    )
+    monkeypatch.setattr(start, "claim_instance", lambda *_a, **_k: ready)
+    monkeypatch.setattr(start, "is_android", lambda: True)  # 只绑回环、且不起浏览器线程
+    monkeypatch.setattr(start, "bootstrap_data_dir", lambda *_a, **_k: "")
+    served: list[int] = []
+
+    start.main(on_serving=served.append)
+
+    assert served == [8002], f"on_serving 必须收到顺延后的端口，实际 {served}"
+    assert built == [("127.0.0.1", 8002)], f"build_server 必须建在顺延端口上，实际 {built}"
+
+
+def test_main_opens_browser_for_same_instance_and_returns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """锁被**同一**实例持有 ⇒ 打印人话 + 打开对方端口，然后正常返回（不 sys.exit、不起服务）。"""
+    data_dir = str(tmp_path / "data")
+    monkeypatch.setenv("DELECTOR_DATA_DIR", data_dir)
+    _, holder = _hold_lock(tmp_path, monkeypatch, version=APP_VERSION, data_dir=data_dir, port=8006)
+    built, _ = _patch_serving(monkeypatch)
+    opened: list[int] = []
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    monkeypatch.setattr(start, "open_browser", lambda port: opened.append(port))
+    # `same` 分支开页面前会用 `_identity_probe` 复核对方端口（ADR-0020 §6.4）。这里替身回「是
+    # DeLector」：本用例钉的是「识别为同一实例 ⇒ 打开对方端口并返回」，不钉复核逻辑
+    # （复核为假的分支由 `test_main_does_not_open_browser_when_same_instance_port_is_silent` 钉）。
+    # 不 patch 就会去打真实的 127.0.0.1:8006（本机无监听）⇒ 判「无响应」⇒ 用例假红。
+    monkeypatch.setattr(start, "_identity_probe", lambda port: True)
+    monkeypatch.setattr(
+        start, "bootstrap_data_dir", lambda *_a, **_k: pytest.fail("已有实例在跑时不得动它的库")
+    )
+
+    try:
+        start.main()  # 不得抛 SystemExit（退出码 0 的语义就是"正常返回"）
+    finally:
+        holder.release()
+
+    assert opened == [8006], f"必须打开**对方**的端口（不是写死的 8000），实际 {opened}"
+    assert built == [], f"识别为同一实例时绝不能再建第二个 server，实际 {built}"
+    out = capsys.readouterr().out
+    assert "8006" in out and "424242" in out, f"人话里必须点名端口与 pid，实际输出={out!r}"
+
+
+def test_main_reports_unavailable_ports_without_claiming_an_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """8000–8010 全被占 ⇒ 退出码 1，且文案说的是「端口不可用」而**不是**「已有实例在运行」。
+
+    两件事必须区分：端口被陌生程序占住，跟「另一个 DeLector 在跑」完全无关；讲混了用户会去
+    关一个并不存在的窗口，而真正的元凶（别的软件）永远没被提到。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: True)
+    monkeypatch.setattr(start, "open_browser", lambda port: pytest.fail("端口不可用时不得打开页面"))
+
+    with pytest.raises(SystemExit) as excinfo:
+        start.main()
+
+    assert excinfo.value.code == 1, f"没有可用端口必须以退出码 1 结束，实际 {excinfo.value.code!r}"
+    captured = capsys.readouterr()
+    text = captured.out + captured.err
+    assert "8000" in text, f"文案必须点名被占的端口，实际 {text!r}"
+    assert "已在" not in text, f"端口不可用 ≠ 已有 DeLector 在运行，实际 {text!r}"
+    assert "端口不可用" in text, f"必须说清是哪一类失败，实际 {text!r}"
+
+
+def test_main_releases_instance_lock_after_keyboard_interrupt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`main()` 因 Ctrl+C 返回后，锁 MUST 已释放（同进程可再次取到）。
+
+    这条挡的是「同进程反复调 `main()`」的**假红**：不释放 ⇒ 第二次启动被判「已在运行」，
+    所有后续用例连带变红，而缺陷其实只在一处。
+    """
+    from delector.core import server_lifecycle
+
+    paths = _pin_lock_dir(tmp_path, monkeypatch)
+    _patch_serving(monkeypatch)
+
+    class _InterruptOnJoin:
+        daemon = False
+
+        def join(self, *_args: object, **_kwargs: object) -> None:
+            raise KeyboardInterrupt
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(server_lifecycle, "serve_in_thread", lambda server: _InterruptOnJoin())
+    monkeypatch.setattr(start, "is_port_in_use", lambda _port: False)
+    # 刻意**不**patch `is_android`：Android 短路返回的是降级句柄（release 是空操作），
+    # 那样这条用例就永远绿、根本证明不了「finally 放锁」—— 必须先让本进程真的把锁攥在手里。
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    monkeypatch.setattr(start, "open_browser", lambda port: None)
+    monkeypatch.setattr(start, "bootstrap_data_dir", lambda *_a, **_k: "")
+
+    start.main()
+
+    assert Path(paths.meta).exists(), "前提失败：main() 没真取锁（meta 未被回写），本用例证明不了放锁"
+    reacquired = instance_lock.try_acquire(paths, instance_lock.UNKNOWN_RECORD)
+    assert isinstance(reacquired, instance_lock.LockHandle), (
+        "main() 退出路径（含 KeyboardInterrupt）MUST 在 finally 放锁，否则同进程二次启动全是假红"
+    )
+    reacquired.release()
+
+
+def test_claim_instance_identity_probe_on_degraded_lock_reports_same(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """锁降级（`LockHandle.is_degraded`）时，被占的候选端口若探到 DeLector ⇒ 判 `same`，**绝不顺延**。
+
+    锁降级的成因（只读目录 / 权限 / 无原语）恰恰也是「另一个 DeLector 抢不到锁」的成因 ⇒
+    此时"候选端口被占"不等于"陌生程序"：直接顺延就会起**第二个服务**，正是本计划要消灭的缺陷。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(instance_lock, "_acquire_os_lock", lambda fd: None)  # 原语不可用 ⇒ 降级句柄
+    probed: list[int] = []
+
+    def identity(port: int) -> bool:
+        probed.append(port)
+        return port == 8000
+
+    result = start.claim_instance(
+        {"DELECTOR_DATA_DIR": str(tmp_path / "data")},
+        probe=lambda port: port == 8000,
+        identity_probe=identity,
+    )
+
+    assert isinstance(result, start.AlreadyRunning), f"8000 上是 DeLector ⇒ 不该顺延，实际 {result!r}"
+    assert result.reason == "same", f"线上已探到 DeLector 身份 ⇒ 应为 same，实际 {result.reason!r}"
+    assert result.record.port == 8000, "必须把探到的端口填进 record，上层才能打开已有页面"
+    assert probed == [8000], f"只该探**被占**的候选端口，实际 {probed}"
+
+
+def test_claim_instance_skips_identity_probe_when_lock_is_real(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """拿到**真锁**时 MUST NOT 调身份探测：锁是唯一判据，探测只是第二腿。
+
+    反证：「锁在我手里 ⇒ 8000 上的不是我」是硬事实；此时再去看 8000 上是谁，等于给
+    陌生程序一个冒充 DeLector 的机会（也让启动白白多付一次 HTTP 往返）。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+
+    def identity(port: int) -> bool:
+        # 用 raise 而不是 `pytest.fail`：后者在 typeshed 里的返回类型不是 NoReturn，
+        # 会让 `-> bool` 撞上 mypy 的 missing-return（这里断言失败与抛异常等价）。
+        raise AssertionError(f"拿到真锁时不得调身份探测（锁是唯一判据），却探了 {port}")
+
+    result = start.claim_instance(
+        {"DELECTOR_DATA_DIR": str(tmp_path / "data")},
+        probe=lambda port: True,
+        identity_probe=identity,
+    )
+
+    assert isinstance(result, start.AlreadyRunning), f"全部候选被占 ⇒ AlreadyRunning，实际 {result!r}"
+    assert result.reason == "no_free_port"
+
+
+# ── 返修轮：main() 级身份探测接线 ────────────────────────────────────────────────
+def test_main_consults_identity_probe_when_instance_lock_is_degraded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """锁降级 ⇒ `main()` MUST 把 `_identity_probe` 交给 `claim_instance`。
+
+    为什么这条必须是 `main()` 级：`claim_instance(..., identity_probe=...)` 的实参写在 `main()`
+    里，`claim_instance` 自己的用例（`test_claim_instance_identity_probe_on_degraded_lock_reports_same`）
+    是直接传参的 —— 它钉得住 `claim_instance` 的语义，**钉不住 `main()` 有没有把这条腿接上**。
+    删掉那个 kwarg，那些用例全绿，而线上行为退化成：锁降级时 8000 上的 DeLector 不被识别 ⇒
+    顺延到 8002 ⇒ 两个进程同时改同一个库。
+
+    现场（锁降级 + 8000 上有 DeLector）：
+      * `instance_lock._acquire_os_lock` ⇒ `None`（原语缺失 / 加锁被拒 ⇒ 降级句柄）
+      * `is_port_in_use` 只对 8000 为真（其余候选空闲）
+      * `_identity_probe` 只对 8000 为真（线上真有一个 DeLector 在跑）
+    变异自证：删掉 `identity_probe=_identity_probe` ⇒ 8000 被当「陌生程序占端口」而顺延到 8002
+    ⇒ 走进 `bootstrap_data_dir`（此处被 patch 成 `pytest.fail`）⇒ 本用例转红。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+    monkeypatch.setenv("DELECTOR_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(instance_lock, "_acquire_os_lock", lambda fd: None)  # 降级句柄
+    monkeypatch.setattr(start, "is_port_in_use", lambda port: port == 8000)
+    monkeypatch.setattr(start, "_identity_probe", lambda port: port == 8000)
+    built, _ = _patch_serving(monkeypatch)
+    opened: list[int] = []
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    monkeypatch.setattr(start, "open_browser", lambda port: opened.append(port))
+    monkeypatch.setattr(
+        start, "bootstrap_data_dir", lambda *_a, **_k: pytest.fail("已在运行 ⇒ 不得动库")
+    )
+
+    start.main()  # 不得抛 SystemExit：识别为既有实例是正常返回
+
+    assert built == [], f"已在运行 ⇒ 绝不能再建第二个 server（那正是本用例要消灭的双实例），实际 {built}"
+    assert opened == [8000], f"应打开线上探到的 8000（不是顺延算出来的端口），实际 {opened}"
+    out = capsys.readouterr().out
+    assert "已在运行" in out, f"必须告诉用户已有实例在跑，实际输出={out!r}"
+
+
+def test_main_does_not_open_browser_when_same_instance_port_is_silent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """`same` 但对方端口不响应 `/api/health` ⇒ 提示 + **不**开页面。
+
+    不变式（ADR-0020 §6.4）：绝不为一个不响应 `/api/health` 的端口打开页面。`record` 可能来自
+    上一次运行留下的陈旧 meta（`write_record` 失败只 WARNING），此时 `record.port` 上未必真有
+    DeLector —— 照旧开页面等于把用户扔到一个打不开的地址，且他无从判断「到底在不在跑」。
+    """
+    data_dir = str(tmp_path / "data")
+    monkeypatch.setenv("DELECTOR_DATA_DIR", data_dir)
+    _, holder = _hold_lock(tmp_path, monkeypatch, version=APP_VERSION, data_dir=data_dir, port=8006)
+    built, _ = _patch_serving(monkeypatch)
+    opened: list[int] = []
+    monkeypatch.setattr(start, "is_android", lambda: False)
+    monkeypatch.setattr(start, "open_browser", lambda port: opened.append(port))
+    monkeypatch.setattr(start, "_identity_probe", lambda port: False)  # 该端口上没人应答
+    monkeypatch.setattr(
+        start, "bootstrap_data_dir", lambda *_a, **_k: pytest.fail("已有实例在跑时不得动它的库")
+    )
+
+    try:
+        start.main()  # 不得起第二个服务，也不得 SystemExit（暂态，退出码仍是 0）
+    finally:
+        holder.release()
+
+    assert opened == [], f"端口不响应 /api/health 时绝不开页面，实际 {opened}"
+    assert built == [], f"识别为同一实例时不能再建 server，实际 {built}"
+    out = capsys.readouterr().out
+    assert "已在运行" in out and "无响应" in out, (
+        f"必须说清「在跑但该端口无响应」，而不是静默或只开页面，实际输出={out!r}"
+    )

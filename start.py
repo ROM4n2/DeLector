@@ -15,7 +15,7 @@ import webbrowser
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Callable, Mapping, Optional
+from typing import Callable, Mapping, Optional, Sequence
 
 # 为什么必须在最顶部就把 stdout/stderr 重配成 utf-8（本仓既有写法，见 package_windows.py 顶部）：
 # 下面那条启动横幅用 print() 打中文，而**被重定向到文件的 stdout 在 Windows 上默认按 locale/ANSI
@@ -50,6 +50,7 @@ from delector.core.instance_lock import (
     LockHandle,
     LockPaths,
     LockRecord,
+    read_record,
     try_acquire,
     write_record,
 )
@@ -160,6 +161,10 @@ def _held_reason(record: LockRecord, data_dir: str) -> str:
     `port=0` 占位抢锁，选定端口后才回写）。别人恰好读到这一刻，pid / 版本 / 目录全都对得上，
     但端口还是占位的 `0` —— 若照 `same` 归因，上层会拼出 `http://127.0.0.1:0` 这种指不到任何
     东西的地址。故端口未回写一律视为「身份未知」，宁可让用户重试，也不给假地址。
+
+    ⚠️ 这一档的**常态成因是对方正在启动**（它要逐个探 10 个候选端口，最坏 ~20s），而不是
+    「上一个死进程留下的残骸」。故上层文案 MUST NOT 断言「残留进程」—— 那会让用户去杀掉一个
+    完全健康的实例（见 `_report_already_running` 的兜底分支）。
     """
     if record.pid == 0 or record.port <= 0:
         return "unknown"
@@ -173,12 +178,20 @@ def _held_reason(record: LockRecord, data_dir: str) -> str:
     return "same"
 
 
-def _pick_port(probe: Callable[[int], bool], requested: Optional[int]) -> Optional[int]:
+def _pick_port(
+    probe: Callable[[int], bool],
+    requested: Optional[int],
+    busy_sink: Optional[list[int]] = None,
+) -> Optional[int]:
     """选定端口；无可用端口返回 `None`。
 
     显式 `requested` **只试它、不顺延**：调用方（壳 / supervisor / 用户）已经对外承诺了那个
     地址（地址文件、反代、hosts），偷偷换一个端口等于让承诺的地址永远连不上；宁可报
     `port_busy` 让上层去决定。反之遍历候选时必须顺延，否则「8000 被别的程序占」就直接起不来。
+
+    `busy_sink`：把**探测为被占用**的端口按序收集起来，供身份探测（第二腿）复用。为什么不另写
+    一个循环再探一次：`is_port_in_use` 单次真实成本 ~2s（ADR-0018 Unknown 8），最坏情形下重探
+    一遍等于把启动时延翻倍；端口占用状态本身就是这次探测的结果，没有第二次获取的必要。
     """
     if requested is not None:
         # 显式指定也 MUST 过保留端口闸：8001 是 Go supervisor 的监听点（见 `SUPERVISOR_RESERVED_PORT`），
@@ -186,10 +199,16 @@ def _pick_port(probe: Callable[[int], bool], requested: Optional[int]) -> Option
         # 事实：这个端口对本进程永远不可用，与此刻有没有人在听无关，故**不调 probe**。
         if requested == SUPERVISOR_RESERVED_PORT:
             return None
-        return None if probe(requested) else requested
+        if not probe(requested):
+            return requested
+        if busy_sink is not None:
+            busy_sink.append(requested)
+        return None
     for port in PORT_CANDIDATES:
         if not probe(port):
             return port
+        if busy_sink is not None:
+            busy_sink.append(port)
     return None
 
 
@@ -227,16 +246,50 @@ def _android_ready(env: Mapping[str, str]) -> Ready:
     return Ready(port=port, lock=LockHandle(paths=LockPaths.for_platform(env), record=record))
 
 
+def _identity_holder(
+    handle: LockHandle,
+    data_dir: str,
+    busy: Sequence[int],
+    identity_probe: Callable[[int], bool],
+) -> Optional[AlreadyRunning]:
+    """第二腿：锁降级时，在**被占的候选端口**上找 DeLector 身份；找到就返回 `AlreadyRunning`。
+
+    为什么必须有这一腿：锁降级的成因（目录只读 / 权限不足 / 无锁原语）恰好也是「另一个
+    DeLector 同样抢不到锁」的成因。此时「候选端口被占」≠「陌生程序」——若直接顺延，就会
+    起**第二个服务**、两个进程改同一个库，正是本计划要消灭的缺陷。
+
+    为什么"找到"不一定是 `same`：端口上是 DeLector，但它可能来自另一个版本 / 另一份库
+    （meta 里写着自己是谁）。归因仍走 `_held_reason`（同一套优先级，不接受第二套口径）；
+    唯一例外是 meta 读不出（`UNKNOWN_RECORD`，pid==0/port==0 的占位值）——**线上已经探到
+    DeLector 身份**，此时再按占位值讲「版本不同」就是假话，故收敛为 `same`。
+    """
+    for port in busy:
+        if not identity_probe(port):
+            continue
+        # meta 可能是别人（或上一次运行）留下的：读得出就带上版本/目录，读不出就是占位记录；
+        # 两种情况下端口都以**探到的**为准 —— 那是唯一可验证的事实。
+        record = replace(read_record(handle.paths) or UNKNOWN_RECORD, port=port)
+        reason = _held_reason(record, data_dir)
+        return AlreadyRunning(record=record, reason="same" if reason == "unknown" else reason)
+    return None
+
+
 def claim_instance(
     env: Mapping[str, str],
     requested_port: Optional[int] = None,
     probe: Optional[Callable[[int], bool]] = None,
+    identity_probe: Optional[Callable[[int], bool]] = None,
 ) -> Ready | AlreadyRunning:
     """单实例判定的唯一入口：先抢锁、再选端口。
 
     顺序为什么不能反（计划 Task 4 GREEN 的硬要求）：先探端口再抢锁，等于在「另一个实例正在
     监听」的噪声里判断可用性 —— 顺延时会把对方实例的端口当成「被陌生人占用」，报错话术与
     真实原因不符；更糟的是探测与抢锁之间的窗口里可能又冒出第三个进程。
+
+    `identity_probe`（可选）：锁**降级**时（`LockHandle.is_degraded`）的第二腿 —— 此时锁没有权威，
+    「候选端口被占」既可能是陌生程序、也可能是另一个同样抢不到锁的 DeLector。对**被跳过的**
+    端口逐个问它，答是 ⇒ 判 `AlreadyRunning`（绝不顺延起第二个服务）。拿到**真锁**时一律不调：
+    锁是唯一判据（见 `tests/test_start.py::test_claim_instance_skips_identity_probe_when_lock_is_real`）。
     """
     if is_android():
         return _android_ready(env)
@@ -270,8 +323,23 @@ def claim_instance(
     # 攥着 ⇒ 同进程后续 claim（以及用户重开）全被判「已在运行」的**假红**。
     # `BaseException` 而非 `Exception`：`KeyboardInterrupt` 同样必须放锁，否则 Ctrl+C 之后
     # 进程还没退出就再也起不来了。
+    # 句柄是否**降级**（`is_degraded`：目录建不出来 / 文件打不开 / 无锁原语）决定了「端口被占」该怎么读：
+    # 真锁在手 ⇒ 锁是唯一判据，被占的端口一定是别人的（**不**调身份探测，避免多一次 HTTP 往返，
+    # 也避免让陌生程序有机会冒充自己）；降级 ⇒ 锁没有权威，必须补上第二腿（见 `_identity_holder`）。
+    # 读 `LockHandle.is_degraded` 而不是跨模块点 `handle._fd`：`_fd` 是 instance_lock 的私实现细节
+    # （将来换成 HANDLE/句柄对象就变），降级这件事必须由那个模块自己回答。
+    degraded = handle.is_degraded
+    identity_fn: Optional[Callable[[int], bool]] = identity_probe if degraded else None
+    busy: list[int] = []
     try:
-        port = _pick_port(probe_fn, requested_port)
+        port = _pick_port(probe_fn, requested_port, busy if identity_fn is not None else None)
+        # 身份判定 MUST 早于「用上刚选到的空闲端口」：降级锁下 8000 上的 DeLector 只是抢不到锁，
+        # 顺延到 8002 就会变成两个服务同时改一个库 —— 那正是本计划要消灭的缺陷。故先看被跳过的
+        # 那些端口上是不是自己人，是则整体放弃启动（而不是"占个别的口先跑起来"）。
+        holder = None if identity_fn is None else _identity_holder(handle, data_dir, busy, identity_fn)
+        if holder is not None:
+            handle.release()
+            return holder
         if port is None:
             # 早退**必须**先释放锁：残留的锁会让下一次启动（含同进程的下一条用例）被判成
             # 「已有实例在运行」—— 症状是本进程明明退出了，用户每次重开都被告知"已在运行"。
@@ -335,74 +403,211 @@ def print_banner(port: int, android: bool) -> None:
     print("  按 Ctrl+C 停止服务\n")
 
 
+def _say(message: str) -> None:
+    """面向用户的启动文案：stdout 可用就照旧，被收口成 None（`pythonw`/窗口化）时退到 logger。
+
+    与 `_note` 的差别只在**默认落点**：`_note` 面向排障（stderr / 日志），`_say` 面向用户
+    （正常输出）。两者都必须对 `sys.stdout is None` 免疫 —— 否则桌面端「已在运行」这类
+    唯一线索会被 `print(..., file=None)` 静默丢弃。
+    """
+    if sys.stdout is not None:
+        print(message)
+        return
+    logging.getLogger("delector").warning(message)
+
+
+def _fail(message: str) -> None:
+    """启动失败：正常控制台下**只**写 stdout，然后退出码 1。
+
+    为什么不再同时写 stdout 与 stderr：正常控制台里两条流都指向同一个屏幕 ⇒ 用户会看到同一行
+    错误**两遍**（第一遍是噪音，第二遍让人以为是两个不同的错）。排障需要的是「被收口」时仍在——
+    `sys.stdout` 为 None（`pythonw` / `--windowed` 桌面壳）才退到 `_note`（stderr / 日志）那条路。
+    同一个字符串，不另拟文案；两路都不会静默丢弃，故「为什么没起来」始终留痕。
+    """
+    if sys.stdout is not None:
+        print(message)
+    else:
+        _note(message)
+    sys.exit(1)
+
+
+def _describe_holder(record: LockRecord) -> str:
+    """把对方身份拼成一段人话（只列**已知**字段，绝不给占位值）。"""
+    parts: list[str] = []
+    if record.version and record.version != UNKNOWN_RECORD.version:
+        parts.append(f"v{record.version}")
+    if record.pid > 0:
+        parts.append(f"pid {record.pid}")
+    # `port <= 0` 是「端口还没回写」的占位值：写出来会得到 `端口 0` 这种指不到任何东西的地址。
+    if record.port > 0:
+        parts.append(f"端口 {record.port}")
+    return "，".join(parts)
+
+
+def _report_already_running(decision: AlreadyRunning, android: bool) -> None:
+    """`AlreadyRunning` 的分派点：**按 `reason` 分派**（`record` 只用来读身份字段）。
+
+    按 `record` 分派会出错：`port_busy` / `no_free_port` 根本没有可归因的对方实例，`record`
+    只能是 `UNKNOWN_RECORD`（pid=0/port=0 的占位值）—— 拿它当「对方是谁」，就会把「端口全被
+    别的软件占着」讲成「有个身份不明的 DeLector 在跑」，用户于是去关一个并不存在的窗口。
+
+    三种结局：
+    - `same` ⇒ 人话 + （非 Android）**先复核**对方端口确实响应 `/api/health` 再打开页面，
+      **正常返回**（退出码 0：用户看到的就是既有实例）。
+    - `port_busy` / `no_free_port` ⇒ 说「端口不可用」并退出 1。**刻意不提**「已在运行」：
+      那不是同一件事（见上）。
+    - 其余（`unknown` / `version_mismatch` / `data_dir_mismatch`）⇒ 说明差异后退出 1：
+      用户要做的是关掉/升级旧实例，盲目顺延只会得到两个进程改同一个库。
+    """
+    record = decision.record
+    reason = decision.reason
+    if reason == "same":
+        detail = _describe_holder(record)
+        # 不变式：**绝不为一个不响应 `/api/health` 的端口打开页面**（ADR-0020 §6.4）。
+        # `record` 可能是上一次运行留下的陈旧 meta（`write_record` 失败只 WARNING ⇒ 端口仍是旧值），
+        # 此时 `record.port` 上未必真有一个 DeLector；照旧开页面等于把用户扔到一个打不开的地址，
+        # 且用户无法判断"是不是已经在跑"。故开页面之前用 `_identity_probe` 复核一次。
+        # 退出码仍为 0（正常返回，不 `sys.exit`）：对方确实存在且持锁（`same` 的判据是锁，不是端口），
+        # 端口无响应只是**暂态**（它可能正在逐个探候选端口，最坏 ~20s）—— 以 1 结束会让桌面壳 /
+        # supervisor 把"本该复用的实例"当成启动失败并反复重启，反过来对健康实例造成启动风暴。
+        if not android and not _identity_probe(record.port):
+            _say(
+                f"[提示] DeLector 已在运行（{detail}），但该端口无响应"
+                "（可能正在启动或已退出）。请稍等几秒后重试。"
+            )
+            return
+        _say(f"[提示] DeLector 已在运行（{detail}），正在打开已有页面...")
+        if not android:
+            open_browser(record.port)
+        return
+    if reason == "port_busy":
+        _fail("[错误] 端口不可用：指定的端口已被其他程序占用，无法启动 DeLector。")
+        return
+    if reason == "no_free_port":
+        first, last = PORT_CANDIDATES[0], PORT_CANDIDATES[-1]
+        _fail(f"[错误] 端口不可用：{first}–{last} 全部被其他程序占用，无法启动 DeLector。请关闭占用端口的程序后重试。")
+        return
+    if reason == "version_mismatch":
+        _fail(
+            f"[错误] 这台机器上已有一个 DeLector 在运行，但版本不同"
+            f"（正在运行 v{record.version}，本程序 v{_app_version()}）。请关闭它后再启动。"
+        )
+        return
+    if reason == "data_dir_mismatch":
+        _fail(
+            f"[错误] 这台机器上已有一个 DeLector 在运行，但它使用的是另一份数据目录"
+            f"（{record.data_dir}）。请关闭它后再启动。"
+        )
+        return
+    # 兜底落在 `unknown`：锁被持有但身份读不出来（meta 缺失 / 半截 / 端口未回写）。
+    # 不猜版本也不猜端口 —— 那两个字段此刻都是占位值，说出来只会误导。
+    # 文案 MUST NOT 断言「残留进程」：`port == 0` 的常态成因是对方**正在启动**（逐个探候选端口，
+    # 最坏 ~20s）—— 照「残留」讲，用户会去杀掉一个健康实例，本进程照样起不来（锁仍被持有）。
+    _fail(
+        "[错误] 这台机器上已有一个 DeLector 在运行，但读不到它的版本与端口信息"
+        "（实例信息缺失或损坏）。若刚刚双击过图标，请稍等几秒再试；"
+        "若持续如此，请先关闭正在运行的 DeLector 再重新启动。"
+    )
+
+
 def main(debug_console: bool = False, on_serving: Optional[Callable[[int], None]] = None) -> None:
     _ensure_entry_streams(debug_console)
-    port = 8000
     android = is_android()
-    if is_port_in_use(port):
-        # 不再盲复用：先分辨占用者是不是 DeLector 自己（ADR-0020 §6.4），否则会为
-        # 一个无关程序打开页面。判定与动作封装在 _handle_existing_port（惰性 import）。
-        _handle_existing_port(port, android)
+    # 单一判定点（spec §3.2）：抢锁 → 选端口 → 归因。`identity_probe` 只在**锁降级**时被用到
+    # （见 `claim_instance` 的 `degraded` 分支）：真锁在手时锁是唯一判据，不额外发 HTTP 探测。
+    decision = claim_instance(os.environ, identity_probe=_identity_probe)
+    if isinstance(decision, AlreadyRunning):
+        # 已有实例 / 端口不可用 / 身份存疑：这里 MUST 早退，且**早于** bootstrap_data_dir ——
+        # 别人的库不能动（Windows 上改名会被占用挡住），`delector.server` 也不必 import。
+        _report_already_running(decision, android)
         return
 
-    # ⚠️ 必须在 `from delector.server import app` **之前**执行：那一行一跑，`database`
-    # 已按仓库根把 DATA_DIR 落定，此时再设 DELECTOR_DATA_DIR 就晚了。
-    # 放在端口占用早退**之后**是刻意的：已有实例在跑时不动它的库（Windows 上改名会被占用挡住）。
-    bootstrap_data_dir(os.environ)
-
-    host = get_bind_host()
-    print_banner(port, android)
-
-    if not android:
-        threading.Thread(target=open_browser, args=(port,), daemon=True).start()
-
-    from delector.core.server_lifecycle import SHUTDOWN_GRACE_S, build_server, serve_in_thread, shutdown
-    from delector.server import app
-
-    server = build_server(host, port, app)
-    # Task 5：端口校验已过（is_port_in_use 早退在更上方）、`uvicorn.Server` 已组装 ⇒ 调用方
-    # （desktop `--server-only`）据此写对外可见的地址文件。写入 MUST 晚于"确认本进程将持有
-    # 该端口"：端口被占 / 启动失败时根本到不了这里，故绝不留下指向错误目标的地址。
-    if on_serving is not None:
-        on_serving(port)
+    ready = decision
+    # 端口从此只来自 `ready.port`：横幅、浏览器、build_server、on_serving 全部用它。
+    port = ready.port
+    # `finally` 放锁是**硬要求**（不是"顺手清理"）：锁是文件级的，同进程里反复调 `main()` 的测试
+    # 若漏放，后面的用例会被判「已在运行」而集体假红；真实用户侧则表现为 Ctrl+C 之后再也起不来
+    # （进程还在退出中，锁仍被自己的 fd 攥着）。
     try:
-        # 禁用信号处理：Android Chaquopy 在子线程里跑 server，而 signal.signal 只允许
-        # 在 Python 主线程调用。注意 uvicorn 的 API 随版本迁移（0.52 起只有
-        # capture_signals，install_signal_handlers 已不存在）——两代都覆盖，
-        # 否则「防护」会静默失效成一条没人调用的实例属性（mypy 抓到这个失效）。
-        if threading.current_thread() is not threading.main_thread():
-            # 用 setattr(名字字符串) 覆盖两代 API：按名字赋值绕开静态属性检查（不同 uvicorn
-            # 版本声明的属性不一样，直接点属性访问会被 mypy 判 attr-defined/method-assign），
-            # 行为与直接属性赋值逐字一致 —— 不必写 `# type: ignore`（禁新增豁免）。
-            setattr(server, "install_signal_handlers", lambda: None)  # 旧 uvicorn API
-            setattr(server, "capture_signals", _noop_signal_context)  # 新 uvicorn API
-    except Exception:
-        pass
-    # 非 daemon 线程里跑 server，主线程 join 等待；Ctrl+C 时先收尸再退出 —— 这替代了
-    # 原来裸 `server.run()` 的「无退出控制」，消除「壳退了服务还残留」的静默失败。
-    thread = serve_in_thread(server)
-    try:
-        # 轮询式等待（**每次 join 都带显式超时**，禁裸等）：语义仍是「主线程陪 server 到结束」，
-        # 但单次等待封在 SHUTDOWN_GRACE_S 内（与 shutdown() 的宽限同口径，不另发明数字）——
-        # 裸 join() 一旦线程不结束就无上界，整个退出路径会被它吞掉。Ctrl+C 打断的正是这一次
-        # join（KeyboardInterrupt 从 join 抛出），仍走下方收尸分支。
-        while True:
-            thread.join(timeout=SHUTDOWN_GRACE_S)
-            if not thread.is_alive():
-                break
-    except KeyboardInterrupt:
-        print("\n[提示] 收到停止信号，正在收尸...")
-    # join 之后再收一次是**有意保留**的兜底：覆盖 KeyboardInterrupt 之外的退出路径。
-    # `shutdown` 是幂等的（置 should_exit + join 一个已结束的线程都无副作用），重复调用安全
-    # —— 勿当成"重复 shutdown 的 bug"删除。
-    if not shutdown(server, thread):
-        # 尊重返回值（旧代码丢弃它并无条件报「已停止」＝假成功）：停不干净必须可见 —— 人话进
-        # stderr（无控制台时由流收口落 launch.log），退出码 1（干净退出才是 0）。继续静默返回
-        # 的后果：解释器退出时 threading._shutdown() 再 join 这个非 daemon 线程 ⇒ 进程挂住、
-        # 端口 8000 仍占 ⇒ 下次启动 `_handle_existing_port` 命中旧实例。
-        print("[错误] 服务未能干净退出（端口可能仍被占用）。", file=sys.stderr)
-        sys.exit(1)
-    print("[提示] 服务已停止。")
+        # ⚠️ 必须在 `from delector.server import app` **之前**执行：那一行一跑，`database`
+        # 已按仓库根把 DATA_DIR 落定，此时再设 DELECTOR_DATA_DIR 就晚了。
+        bootstrap_data_dir(os.environ)
+
+        host = get_bind_host()
+        print_banner(port, android)
+
+        if not android:
+            threading.Thread(target=open_browser, args=(port,), daemon=True).start()
+
+        from delector.core.server_lifecycle import SHUTDOWN_GRACE_S, build_server, serve_in_thread, shutdown
+        from delector.server import app
+
+        server = build_server(host, port, app)
+        # Task 5：端口校验已过（由 `claim_instance` 选定，被占的端口根本不会被返回）、
+        # `uvicorn.Server` 已组装 ⇒ 调用方（desktop `--server-only`）据此写对外可见的地址文件。
+        # 写入 MUST 晚于"确认本进程将持有该端口"：端口不可用 / 启动失败时根本到不了这里，
+        # 故绝不留下指向错误目标的地址。
+        if on_serving is not None:
+            on_serving(port)
+        try:
+            # 禁用信号处理：Android Chaquopy 在子线程里跑 server，而 signal.signal 只允许
+            # 在 Python 主线程调用。注意 uvicorn 的 API 随版本迁移（0.52 起只有
+            # capture_signals，install_signal_handlers 已不存在）——两代都覆盖，
+            # 否则「防护」会静默失效成一条没人调用的实例属性（mypy 抓到这个失效）。
+            if threading.current_thread() is not threading.main_thread():
+                # 用 setattr(名字字符串) 覆盖两代 API：按名字赋值绕开静态属性检查（不同 uvicorn
+                # 版本声明的属性不一样，直接点属性访问会被 mypy 判 attr-defined/method-assign），
+                # 行为与直接属性赋值逐字一致 —— 不必写 `# type: ignore`（禁新增豁免）。
+                setattr(server, "install_signal_handlers", lambda: None)  # 旧 uvicorn API
+                setattr(server, "capture_signals", _noop_signal_context)  # 新 uvicorn API
+        except Exception:
+            pass
+        # 非 daemon 线程里跑 server，主线程 join 等待；Ctrl+C 时先收尸再退出 —— 这替代了
+        # 原来裸 `server.run()` 的「无退出控制」，消除「壳退了服务还残留」的静默失败。
+        thread = serve_in_thread(server)
+        try:
+            # 轮询式等待（**每次 join 都带显式超时**，禁裸等）：语义仍是「主线程陪 server 到结束」，
+            # 但单次等待封在 SHUTDOWN_GRACE_S 内（与 shutdown() 的宽限同口径，不另发明数字）——
+            # 裸 join() 一旦线程不结束就无上界，整个退出路径会被它吞掉。Ctrl+C 打断的正是这一次
+            # join（KeyboardInterrupt 从 join 抛出），仍走下方收尸分支。
+            while True:
+                thread.join(timeout=SHUTDOWN_GRACE_S)
+                if not thread.is_alive():
+                    break
+        except KeyboardInterrupt:
+            print("\n[提示] 收到停止信号，正在收尸...")
+        # join 之后再收一次是**有意保留**的兜底：覆盖 KeyboardInterrupt 之外的退出路径。
+        # `shutdown` 是幂等的（置 should_exit + join 一个已结束的线程都无副作用），重复调用安全
+        # —— 勿当成"重复 shutdown 的 bug"删除。
+        if not shutdown(server, thread):
+            # 尊重返回值（旧代码丢弃它并无条件报「已停止」＝假成功）：停不干净必须可见 —— 人话进
+            # stderr（无控制台时由流收口落 launch.log），退出码 1（干净退出才是 0）。继续静默返回
+            # 的后果：解释器退出时 threading._shutdown() 再 join 这个非 daemon 线程 ⇒ 进程挂住、
+            # 端口仍占 ⇒ 下次启动会撞上一个连自己都关不掉的实例。
+            print("[错误] 服务未能干净退出（端口可能仍被占用）。", file=sys.stderr)
+            sys.exit(1)
+        print("[提示] 服务已停止。")
+    finally:
+        # `release()` 幂等（降级句柄是空操作 ⇒ Android 分支同样安全）。放在最外层 `finally`
+        # 而不是 shutdown 之后：`bootstrap_data_dir` / `build_server` / `on_serving` 任一步抛，
+        # 锁都必须被放开 —— 一个已经失败的进程攥着锁，等于用户每次重开都被告知「已在运行」。
+        ready.lock.release()
+
+
+def _identity_probe(port: int) -> bool:
+    """第二腿：回答「这个端口上是不是 DeLector」（`claim_instance` 的 `identity_probe` 实参）。
+
+    只在**锁降级**时才会被调用（见 `claim_instance` 的 `degraded` 分支）：真锁在手时锁是唯一
+    判据，不该为陌生程序留一次「冒充自己」的机会，也不该白付一次 HTTP 往返。
+
+    惰性 import 的理由与 `_handle_existing_port` 同款：`delector.core.server_lifecycle` 不在
+    `_BOOTSTRAP_SAFE_IMPORTS` 白名单里，模块级导入会撞
+    `tests/test_desktop_data_dir_bootstrap.py::test_start_py_bootstrap_precedes_every_delector_import`
+    （该闸钉「bootstrap 调用早于任何 `delector.*` 导入」）。
+    """
+    from delector.core.server_lifecycle import probe_identity
+
+    return probe_identity(port)
 
 
 def _handle_existing_port(port: int, android: bool) -> None:
@@ -411,6 +616,12 @@ def _handle_existing_port(port: int, android: bool) -> None:
     - 是 DeLector（`probe_identity` 为真，含库坏时的 503）⇒ 保持既有行为：提示 + 打开
       浏览器指向已有实例，然后返回（不重复起服务）。
     - 不是 DeLector ⇒ 明确报错并退出，**绝不**为无关程序打开页面（ADR-0020 §6.4）。
+
+    **当前 `main()` 不再调用它**（Task 6 起按 `AlreadyRunning.reason` 分派，见
+    `_report_already_running`）：单实例判定已收敛到 `claim_instance`，而"端口被陌生程序占"
+    与该函数回答的问题不是同一件事。保留是因为它仍是「仅凭端口判断占用者是谁」这条路径的
+    既有实现 —— 桌面壳/工具若只需要一次 `probe_identity` 分派（不持有锁），落点还是这里；
+    删掉等于把那段判断（含 503 也算自己人）散回各处。
 
     这里用**惰性 import** 而非文件顶部导入：本函数定义在 main() 之后，其 import 语句
     的行号才大于 main() 里 `bootstrap_data_dir(...)` 的调用行号 —— 否则会撞上

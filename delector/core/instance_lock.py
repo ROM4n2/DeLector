@@ -104,6 +104,11 @@ class LockHandle:
     record: LockRecord
     _fd: int = -1
 
+    @property
+    def is_degraded(self) -> bool:
+        """本次没有真互斥（原语缺失 / 目录不可建 / 文件打不开）：仍拿到句柄，但不是锁。"""
+        return self._fd < 0
+
     def release(self) -> None:
         """幂等释放：关闭 fd（OS 随之解锁）。降级句柄（`_fd == -1`）为空操作。"""
         fd = self._fd
