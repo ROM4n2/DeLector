@@ -138,3 +138,33 @@ def test_resolve_version_accepts_tag_that_matches(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
     monkeypatch.setenv("GITHUB_REF_NAME", f"v{APP_VERSION}")
     assert package_windows.resolve_version() == f"v{APP_VERSION}"
+
+
+def test_vault_proactive_scan_version_regexes_match_surfaces() -> None:
+    """守卫 tools/vault-proactive-scan.py 中的三条版本提取正则与实际文件一致。
+
+    防范前端或 Gradle 结构调整导致三端版本校验静默失效或缺失。
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+
+    # 1. index.html
+    idx = (root / "static" / "index.html").read_text(encoding="utf-8")
+    m_idx = re.search(r"System · (v[\d\.]+)", idx)
+    assert m_idx is not None, "vault-proactive-scan 的 index.html 正则未命中"
+    assert m_idx.group(1) == f"v{APP_VERSION}"
+
+    # 2. sw.js
+    sw = (root / "static" / "sw.js").read_text(encoding="utf-8")
+    m_sw = re.search(r"delector-static-(v[\d\.]+)", sw)
+    assert m_sw is not None, "vault-proactive-scan 的 sw.js 正则未命中"
+    assert m_sw.group(1) == f"v{APP_VERSION}"
+
+    # 3. build.gradle
+    gr = (root / "android" / "app" / "build.gradle").read_text(encoding="utf-8")
+    m_gr = re.search(r'DELECTOR_VERSION_NAME"\)\s*\?:\s*"([\d\.]+)"', gr)
+    assert m_gr is not None, "vault-proactive-scan 的 build.gradle 正则未命中"
+    assert m_gr.group(1) == APP_VERSION
+
