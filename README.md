@@ -12,9 +12,24 @@
 </p>
 
 <p align="center">
-  <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的下一代学术级伴读与句法剖析系统。</b><br/>
-  融合<b>歌德 A1 全真听说读写考场工坊</b>、<b>德语伴读宠物（Eule & 伙伴）</b>、<b>Atelier 落地页画册台账</b>、<b>拓扑五场域</b>、<b>AST 从句语法树</b>、<b>内联 IDE 写作工坊</b>与<b>FSRS 现代认知记忆排程</b>。
+  <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的学术级伴读与句法剖析系统。</b><br/>
+  一键拆解<b>拓扑五场域（VF/LK/MF/RK/NF）</b>与 <b>AST 从句语法树</b>，内置<b>歌德 A1 全真考场</b>与 <b>FSRS 记忆排程</b>。
 </p>
+
+---
+
+## ⚡ 30 秒极速上手 (Quick Start)
+
+> **普通用户（免装 Python，开箱即用）**：
+> - 🪟 **Windows**：前往下方 [多平台下载](#-多平台下载发布包-downloads) 取得 ZIP，解压后双击 `DeLector.exe` 即可运行独立桌面客户端（无需配环境，数据保存在本地用户目录）。
+> - 📱 **Android**：下载 APK 安装包，内嵌 Python 与 spaCy 离线模型，单机脱网可用。
+>
+> **开发者 / 源码运行**：
+> ```bash
+> pip install -r requirements.txt          # 安装依赖（推荐 Python 3.11）
+> python -m spacy download de_core_news_md # 下载德语离线模型
+> python start.py                          # 启动服务并自动打开浏览器 http://localhost:8000
+> ```
 
 ---
 

@@ -253,7 +253,13 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
       「把 import 进来的调用/常量直接 `return`」立刻变成 `no-any-return`（本次三处：`start.py` 的
       `_identity_probe` / `_app_version`、`desktop.py` 的 `_identity_probe`）。修法不是加 `type: ignore`，
       而是**显式落到带注解的局部变量再 return**。**纪律：复跑门禁 Must 直接从 `ci.yml` 复制 `run:` 那一行**，
-      不凭记忆重打；改动入口面文件（`start.py` / `desktop.py` / `conftest.py` / `package_windows.py`）时尤其。
+      「start.py / desktop.py / conftest.py / package_windows.py」）时尤其。
+14. **IDE 记忆层误产物（0 字节含 PUA 字符文件）处置**：
+    DeLector 仓库根会周期性出现「IDE 记忆层」误产物：0 字节文件，文件名源自文档引用块行、含不可见 PUA 字符（U+F02A = 原文 ** 的映射）。处置惯例：把受影响文件名逐条补进 `.git/info/exclude`（文件本体保留不删），根治须在 IDE/记忆层侧，严禁误提交至远端。
+15. **单工作区多 Agent 并发与测试环境护栏**：
+    - **解释器区分**：跑测试/脚本必须使用 `python3`（3.11.8，含 spacy/fastapi 等依赖）；本机 `python` 指向 3.14（无依赖）。
+    - **Go 集成门禁隔离**：`go test -tags integration` 用 `exec.LookPath("python")`，直接跑会恒 skip；需 PATH 注入 `python.cmd` shim 指向 3.11。真跑 `TestEncounterRealChain` 须注意断言需扣除 `create_app()` 预置的 7 篇短文。
+    - **多 Agent 目录隔离**：多 Agent 并行作业时，长操作前后及提交前 MUST 核对 `git branch --show-current` 与 `git status`；并行任务一律在 `.worktrees/` 下隔离，禁止原地切换分支扰动其他 Agent。
 
 ---
 

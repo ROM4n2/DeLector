@@ -1,7 +1,7 @@
 # PROJECT_OVERVIEW — DeLector（60 秒 primer）
 
 > 首次生成：2026-09-04（bootstrap 会话从 AGENTS.md / README / ADR-0005 提炼）。
-> 维护约定：交接或重大里程碑后由当前 agent 就地更新，不追加副本；**细节下沉 `WORKMEMORY/cold/digest-YYYY-MM.md`**（按月 COLD 蒸馏）——本文件只留「全局认知 + 当前状态要点 + 红线 + 待办」。
+> 维护约定：交接或重大里程碑后由当前 agent 就地更新，不追加副本；细节下沉 `WORKMEMORY/cold/digest-YYYY-MM.md`。
 
 ## 一句话定位
 
@@ -23,38 +23,18 @@
 
 ## 当前状态
 
-- **最新发布 v5.19.0（2026-10-22）** —— **桌面单实例锁 + 端口顺延 + 前端继续解耦**。判据从「端口上有没有东西」换成 OS 文件锁（`%LOCALAPPDATA%\DeLector\instance.lock` + `instance.json` 分离，避免 POSIX `os.replace` 让锁静默失效）；唯一判定点 `start.claim_instance`，`start.main()` 与桌面壳共用；端口候选 `8000, 8002–8010`（8001 留给 Go supervisor），自动顺延 / 显式 `--port` 不顺延；锁降级时以 `/api/health` 身份探测作第二腿；`/api/wb/lan-info` 报真实端口。桌面壳退出码新增 3 = 端口或实例冲突（六种 `reason` 各有获批文案）。同版含 `reader.js`→`rd-syntax`/`rd-api` 与 `cards.js`→`cd-state` 的前端解耦。全量 **2584 passed + 2 skipped**。详见 `CHANGELOG.md` 与 `docs/agents/architecture.md`「桌面单实例与端口顺延」。
-- **历史发布 v5.18.0（2026-10-19）** —— **单体架构与前端视图全面解耦**（`database.py` 拆解为领域模块、`routes/main.py` 拆为 6 个领域路由；`workbench.html` 模块化、`index.html` 拆解为 layout/views/modals 并由轻量同步闸守护；`writer.js`/`reader.js` 纯逻辑闭包提取并冻结导出面）**+ 交互式智能体闭环**（ADR-0023 / 确定性裁判终审 / AI 润色与对齐）**+ A1 裁判集扩充与真题配对回测**（ADR-0024 / 60 局真跑标定真 token 与轮次分布）**+ 六道自动化机械闸矩阵落地**（分层契约闸 · 反向依赖闸 · Mock 漂移闸 · 禁止静默降级闸等）。全量测试从 v5.17.0 的 1,768 增长至 **2,438 passed + 3 skipped**（净增 670 条测试），探针 **31/31** 零漂移。
-- **历史发布 v5.17.0（2026-10-11）** —— **首个原生桌面壳**（`pywebview` 走系统 WebView2 + `pystray` 托盘 + splash + 统一退出收尸；`v5.16.0` 里 `desktop.py` 根本不存在）**+ 首次数据落点外置**（默认 `%LOCALAPPDATA%\DeLector` + 一次性迁移，修掉唯一真会丢东西的摩擦「升级时解压覆盖 = 学习记录全空且零提示」）**+ 更新可见性上桌面端**（chip + `/api/update/check`）**+ 发版门守卫**（tag 必须 == `v`+`APP_VERSION`）**+ 真启产物闸 / 前端跨边界契约闸**（PR #111~#129，111 个提交；完整条目见 `CHANGELOG.md` 含回滚段）。已装用户拿不到那 6 条可感知修复（`static/` 内嵌在产物里），随本版到达。**known-issues 已明文进发行说明**：~2s 端口/身份校验（本版新引入，不当提速卖点）、`launch.log` 已知整行丢失（≈3%，整行非半行）、Android `versionCode` 不可回滚（`51700`）、Win10 需先装 WebView2。
-- **上一版 v5.16.0（2026-10-06）** —— **修掉长期潜伏的性能缺陷 + 三处守卫加固**（PR #108/#109/#110）。**每次 GET 文章都重跑完整 spaCy**（Fog 2 根因：判据写死 `"3.4.0"` 而写入端两条路径都写 `"3.5.0"` ⇒ 判据恒真 ⇒ 惰性迁移退化成每次迁移；修法＝`PROCESSED_JSON_VERSION` 单一真相源，语义完整保留）。**CI 必需运行时清单显式化**（`rm` 全仓不存在、`bash` 判为平台相关，两者均不进清单）。**localhost 守卫加固**（关掉三个「将来会漏」的洞：字面 `router` 变量名、per-router prefix、闸调用别名；allowlist 20 条逐字未动）。**安全 posture：内网可信**（不加固 LAN 写端点）。Fog 3 的 16 处形式统一经裁决不做（其收益论证已被实测推翻）。
-- **测试 / 门禁基线（截至 v5.17.0）**：全量 **1768 passed + 2 skipped**（分半：非 server **1471** + `test_server` **297**）；`ruff check .` 零告警；`mypy --follow-imports=skip tests`（**121** files）、`mypy --strict delector tools`（**87** files）、入口面 `--platform win32 --strict`（**4** files：`desktop.py package_windows.py conftest.py start.py`）零错误；`tools/*.mjs` 探针 **29/29** 零漂移；`test_writer_mobile.py`（发版守护）**30 passed**；**六条守卫**：`test_probe_wiring_guard.py`（防漏接线 5）、`test_probe_json_contract.py`（契约冻结 5）、`test_localhost_guard.py`（受保护路由集合 20 条 allowlist 7）、`test_get_endpoints_with_writes.py`（带写 GET 白名单 7）、`test_ci_hardening.py`（CI 必需运行时清单 33）、`test_app_version_source.py`（发版门 tag↔`APP_VERSION` 等 21）。
-- **未发版（已进 master，2026-10-20）：前端单体继续解耦 + 分层闸纳管面扩展**（PR **#161** / **#164** / **#165** / **#166**，计划 `docs/plans/2026-10-19-reader-js-layer-split.md` · `2026-10-19-reader-api-layer-split.md` · `2026-10-20-cards-state-container.md`，设计稿 `docs/specs/2026-10-20-cards-state-view-decoupling-design.md`）。`reader.js` 抽出 `rd-syntax.js`（纯语法层）与 `rd-api.js`（L2 持久化层，14 个端点函数）；`cards.js` 的 **15 个模块级可变状态**收进 `cd-state.js` 纯状态容器，视图层顶层 `let` **15 → 0**（首次把视图层纳入机械约束，闸规则 ⑦）。导出面全程冻结（`reader.js` 40 个具名、`cards.js` 36 个 + 1 条 barrel 逐字不变），错误轨守恒（`reader.js` 10/10、`cards.js` 12/12）。
-  ⚠️ **本批真正的产出不是解耦，是挖出两条与重构无关的既有静默失效**：① `ia_dom_mount_probe.mjs` 有 **4 条守卫一直是死的**（切片锚点只到函数名 ⇒ 切片里没有函数体 ⇒ 断言恒真），② 探针静态层已红时仍照样跑 `node:vm`，空源撞出的 `ReferenceError` 排在真实具名问题**后面**、把诊断引向渲染链（#166 修）。两者形态相同：**判据看着在跑，实际恒真**。纪律已写进 `docs/agents/architecture.md`「前端模块分层契约」节，动探针/守卫前必读。
-  ⚠️ **计划写法教训（已在计划里更正）**：变异用例的注入锚点必须按**最终状态树**普查 —— Task 1 新造的锚点钉在 `let cardSegment = "due";` 上，而那正是 Task 3 要删的行，于是两条用例挂在「锚点命中 0 次」而不是挂在闸上。另：同一主机上并行子代理曾三次落在**错误血统**的 worktree 上并据此给出与事实相反的汇报，故后续派单一律要求「先 merge 目标分支并核实 HEAD」。
-- **现测基线（2026-10-22 18:30，分支 `feat/desktop-single-instance` @ `58b8f57`；单实例锁交付实测，**当前值**）**：全量 **2586 收集 = 2584 passed + 2 skipped**（单进程串行 **580s**，前置 `PYTHONIOENCODING=utf-8`）· **156** 个 `tests/test_*.py` · `static/js` **36** · `tools/*.mjs` **31** · `ruff check .` 零告警 · `mypy --strict delector tools`（**119** files）/ `mypy --follow-imports=skip tests`（**160** files）/ 入口面 `--platform win32 --strict --follow-imports=skip`（**4** files）零错误 · 六道机械闸全 exit 0 · PR #172 CI 全绿（含 Windows Portable Smoke）。LOC：后端+入口 `*.py` **40,001** / tests **61,312** / `static/js` **16,801**。
-  - ⚠️ 入口面那档 MUST 带 `--follow-imports=skip`（漏了会本地假绿，见 `docs/agents/ops.md` 第 13 条第四类）。
-- **历史基线（2026-10-21 23:38，master `85fb029`；已被上一行取代）**：全量 **2519 收集 = 2517 passed + 2 skipped**（`python -m pytest tests/ -q`，单进程串行 **513s**，前置 `PYTHONIOENCODING=utf-8`）· 155 个 `tests/test_*.py` · `static/js` **36** · `tools/*.mjs` **31** · `ruff check .` 零告警 · `mypy --strict delector tools`（**118** files）/ `mypy --follow-imports=skip tests`（**159** files）零错误 · `cd agent && go test ./...`（8 包）全绿 · 六道机械闸全 exit 0。**该基线含 dependabot 的 `fastapi 0.144.0` / `starlette 1.8.0` 升级（#168/#170）⇒ 两个 minor bump 在本机无回归**（此前该升级只报过 CI，未见本地全量结论）。LOC：后端+入口 `*.py` **39,577** / tests **59,429** / `static/js` **16,800**。
-- **现测基线（2026-10-21，分支 `fix/master-scope-gate-squash-merge`；本次实测重算）**：全量 155 个文件 · 8 批串行全绿 = 收集 **2519**（**2517 passed + 2 skipped**，净增 6 条 master-scope 健全性与变异自证测试）· `static/js` **36** 个模块 · `tests/test_*.py` **155** 个文件 · `tools/*.mjs` 探针 **31** 个 · `ruff` 零告警 · `mypy --strict delector tools`（**118** files）/ `mypy --follow-imports=skip tests`（**159** files）零错误 · 六道机械闸全 exit 0。
-  - 重算：`python3 -m pytest tests/ --collect-only -q | tail -1`；`ls static/js/*.js | wc -l`；`ls tests/test_*.py | wc -l`；`ls tools/*.mjs | wc -l`。
-  - ⚠️ 全量 MUST **分批串行**跑（本主机并行 python 会争抢数据目录守卫导致假红）。
-- **现测基线（2026-10-20，master `07139ac`；历史发版前基线）**：全量 155 个文件 · 8 批串行全绿 = 收集 **2513**（**2511 passed + 2 skipped**）· `static/js` **36** 个模块 · `tests/test_*.py` **155** 个文件 · `tools/*.mjs` 探针 **31** 个 · `ruff` 零告警 · `mypy --strict delector tools`（**118** files）/ `mypy --follow-imports=skip tests`（**159** files）零错误 · 六道机械闸全 exit 0。
-- **现测基线（2026-10-19，master `4646a67` 发版基线；由本次发版实测）**：收集 **2441** 用例（**2438 passed + 3 skipped**，全量单条串行分批全绿）·`ruff check .` 零告警 · `mypy --strict delector tools`（**118** files）· `mypy --follow-imports=skip tests`（**157** files）· 入口面 `--platform win32 --strict`（**4** files）零错误 · `tools/*.mjs` 探针 **31** 个 · `static/js` **34** 个模块 · `tests/test_*.py` **153** 个文件。**六道机械闸**：`check_layer_invariants` · `check_mock_drift` · `check_silent_degradation` · `check_frontend_api_contract` · `check_frontend_layers` · `check_index_html_sync` 全 exit 0。
-  - 重算：`python3 -m pytest tests/ --collect-only -q | tail -1`；`python3 -m mypy --strict delector tools | tail -1`；`ls tools/*.mjs | wc -l`；`ls static/js/*.js | wc -l`。
-  - ⚠️ **本行已不是当前值**（v5.18.0 发版快照，收集 2441）。当前值看**上面那条「现测基线（2026-10-21 23:38，master `85fb029`）」**。v5.17.0 的 1768 passed 同理是历史快照 —— 读到时 MUST 以当前那条为准，MUST NOT 拿旧值做判断。
-- **未发版（分支 `feat/desktop-single-instance`，2026-10-22）**：**桌面单实例锁 + 端口顺延**（计划 `docs/plans/2026-10-21-desktop-single-instance.md`，10 任务）。判据从「端口上有没有东西」换成 OS 文件锁（`%LOCALAPPDATA%\DeLector\instance.lock` + `instance.json` 分离，避免 POSIX `os.replace` 让锁静默失效）；唯一判定点 `start.claim_instance`，`start.main()` 与桌面壳共用；端口候选 `8000, 8002–8010`（8001 留给 Go supervisor），自动顺延 / 显式 `--port` 不顺延；锁降级时以 `/api/health` 身份探测作第二腿（否则会为同一个库起第二个服务）；`/api/wb/lan-info` 改为报真实端口。桌面壳退出码新增 3 = 端口或实例冲突（六种 `reason` 各有获批的人话文案）。细节见 `docs/agents/architecture.md`「桌面单实例与端口顺延」。
-- **未发版（已进 master，2026-10-15）**：**ADR-0023 交互层「验证驱动 agent 循环」Task 0~6**（PR #136，7 个任务单元经 maker-checker 双席位评审）—— Go 门禁三红灯修复并接入 CI（含执行期新发现的「硬编码 8001 且不校验身份 ⇒ 真实风险是假绿」）、LLM 出网收口到 `delector/services/llm_client.py`（5 处裸 HTTP + 补 `max_tokens`）、循环内核 `delector/services/polish_loop.py`（收尾终审 / 不降即停 + argmin 回退 / 循环级 token+deadline 预算 / 零静默失败）、工具白名单 `polish_tools.py`（恰好 3 项只读 + 前置钩子）、`ai-polish` 返回契约新增 `converged`/`unconverged_reason` + SSE 逐轮进度/取消 + 未收敛 toast。**⚠️ 按 ADR-0023 §4.3 不得宣称「已实现」**：裁判集一行未扩，适用性闸门使循环的真实迭代价值目前只覆盖 A1 书信体。剩余活项：① 裁判集扩充（Unknown 1，第一瓶颈）② Android 真机点检（本批动了 `static/`，且 **SSE 的 `fetch`+`ReadableStream` 在 WebView 未验证**）③ 有 Key 后回测真实轮次分布与真 token 计数（折算系数 3.0 是 UNVERIFIED 假设）。
-- **未发版（已进 master，2026-10-15 第二批）**：**ADR-0023 §4.3 第 ④ 步「裁判集扩充」**（计划 `docs/plans/2026-10-15-a1-judge-expansion.md`，8 任务全交付，PR **#137**）。裁判从 6 条书信格式/字数浅规则扩到 A1 语法层：**动词位置**（主句 V2 + 8 豁免）· **格的使用**（冠词-名词一致 / 介词支配格 / 动词支配格，29 条人工登记动词→格表）三条 error 级；**时态一致性**接线为 **advisory**（用户拍板）；**语序（情态框架）经实测评审判定不做**（FP 与 FN 同源）。同时把**闸门按规则族分流** ⇒ 语法族对**任意德语文本**生效（循环价值面不再只覆盖 A1 书信体），并把提示词按文本族参数化。§4.3 判据表 8 条实测后经用户签批：**采用限定表述，无条件「已实现」继续禁用**（第 8 条对照实验缺 Key 未做）。**排障经验已沉淀**：vault `99-Inbox/2026-10-15-规则引擎硬门必须按「类」覆盖正样本…md`（含"三次误报类全被官方样本集放过"与两条既有规则的新实例）。
-  ⚠️ 本批最值得复看的产品语义变更：**非书信文本模型修不动语法错 ⇒ `no_improvement` ⇒ 回退原文**（前端给人话原因码；用户签批保持）。
-- **未发版（已进 master，2026-10-16 第三批）**：**§4.3 第 8 条对照实验完成并签批**（计划 `docs/plans/2026-10-15-judge-gaming-experiment.md`，8/8；PR #139）。三臂配对 + 20 篇种子（每篇 1 信号 + ≥3 held-out 探针），**60 局真跑**（612s / 16,008 token）。**结论（ADR-0024，vault 正式件 + `docs/adr/2026-10-16-adr-0024-*.md` 镜像）**：阴性对照成立 —— `R_uncovered(last_candidate)` 的 **A2 ≡ A3 = 0.974（差 0.000）** ⇒ 裁判信号**只影响循环的验收、不影响模型行为**；**P1（奖励黑客）本形态下无发生机制**（非"未发现"）；§4.3 维持**限定表述**、无条件「已实现」继续禁用；「裁判结论回灌（verifier-in-the-loop）」设为**无条件**下一子计划。
-- **未发版（已进 master，2026-10-16 第四批：审计修正 A + B）**：`docs/reviews/2026-10-15-swarm-audit-master.md`（2 P0 / 5 P1 / 10 P2）等 5 份评估报告 + `docs/reviews/2026-10-16-open-items-backlog.md`（18 项登记）。**A 档 8 项**（PR #143）：P0-1 `/api/backup/restore` 静默丢训练记录（已复现）、P0-2 退出挂死 + 假成功、P1-1 凭据键随备份外泄、测试库落点治因（**并拆除一颗无界递归进程炸弹**）、文档三处漂移对齐。**B 档 5 项**：B1 master 直推机械闸（#143 + #144）、B2 `.gitattributes` CRLF 契约、B3 design-system 补入口与过时更新、B5 harness 七件前置、以及 **B4（`docs/plans/2026-10-16-database-split.md`，PR #144）：`delector/core/database.py` 2809 → 359 行切分（公开面零变化，32 个 import 点未改）**。
-- **⚠️ 调试口诀（本批两条，本地全绿、只在外部暴露）**：① **本地验证 MUST 逐字复刻 CI 门禁命令**（`mypy --strict delector tools` 与 `mypy --follow-imports=skip tests`；"单文件 + 相似 flags"不算复刻）；② **`__file__` 派生路径在模块搬家后会静默偏层**，只在干净 checkout 暴露 —— 搬包后 MUST 重核所有路径常量（守卫：`tests/test_backend_package_layout.py`）。
-- **v5.13.0 批次的其它改动（历史留档）**：
-  - **i+1 已知词池打通（#72）**：`known-lemmas` 补 `OR fsrs_s > 0`（工作台已学词纳入覆盖率），列表 + 详情同口径；`deck-bridge.js` / `encounter.js` 打通 i+1 与主背词路径。
-  - **测试库隔离收口（#78）**：共享 `tests/db_cleanup.py::remove_db_files` + `db_conn` 取代 17 份复制粘贴，44 处句柄泄漏清扫；决定性变异证明旧实现**静默残留**（假红/假绿）。
-  - **Docker/WAL 修复（#69）**：`Dockerfile` CMD 改 `delector.server:app` + `PRAGMA journal_mode=WAL`；备份/还原改 SQLite backup API（WAL 下文件级拷贝必 `disk I/O error`）。
-  - **docs 约定 + 三层记忆（#81–#85）**：`docs/plans/` 归档分层（52+15 份进 `archive/`）、`docs/README.md` 立为**目录约定正主**、ADR 副本拆入 `docs/adr/`、移除失真的 `release-v2.1.md`；HOT/WARM/COLD 三层真正跑起来（逾期轮转 + 首份九月 digest + primer 瘦身）。
-  - 另有：**#70** Android pydantic-v1 运行时契约守卫、**#71** 长难句 `source=all` 热请求不再读正文 + `_RANK_CACHE` 容量上限（实测推翻原 P1 严重度）、**#76** 统一池身份键口径修正（归一在**比较侧**，不改动双用途 `lemma`）、依赖 `starlette 1.7.0` / `uvicorn >=0.54.0`。
-- **产品能力（截至 v5.14.0）**：精读（分词 + 语法雷达）+ 词汇/卡片工作台（FSRS；A1/A2/B1 + 核心/生词档，**工作台与主背词共享统一池**）+ 备考域（A1 读写听说、听力微训、长难句精读）+ 遇见区分级短文（7 篇，已背词高亮 + i+1 就近选材 + 已读状态 + 已知词池与主路径同口径）+ 检索（词条/例句/搭配/语料）+ 写作润色台 + LAN 静默同步。各功能细节见 `FEATURES.md` 与 `WORKMEMORY/cold/digest-2026-09.md`。
+- **最新发布 v5.19.0（2026-10-22）** —— **桌面单实例锁 + 端口顺延 + 前端继续解耦**。
+  - 判定逻辑升级为 OS 文件锁（`%LOCALAPPDATA%\DeLector\instance.lock` 保持锁目标，`instance.json` 走原子替换，避免 POSIX `os.replace` 使锁静默失效）；唯一判定点 `start.claim_instance`。
+  - 端口候选为 `8000, 8002–8010`（8001 为 Go supervisor 保留端口），自动顺延；锁降级时以 `/api/health` 身份探测作第二腿；`/api/wb/lan-info` 报真实端口。
+  - 前端架构解耦：`reader.js` 抽出纯语法层 `rd-syntax.js` 与持久化层 `rd-api.js`；`cards.js` 模块状态收进纯状态容器 `cd-state.js`。
+  - 详见 `CHANGELOG.md` 与 `docs/agents/architecture.md`「桌面单实例与端口顺延」。
+- **现测基线（2026-10-22 18:30，分支 `feat/desktop-single-instance` @ `58b8f57`，当前有效值）**：
+  - 全量用例：**2586 收集 = 2584 passed + 2 skipped**（单进程串行 580s，前置 `PYTHONIOENCODING=utf-8`）。
+  - 文件规模：`tests/test_*.py` **156** 个 · `static/js` **36** 个 · `tools/*.mjs` **31** 个探针。
+  - 静态门禁：`ruff check .` 零告警 · `mypy --strict delector tools`（119 files）/ `mypy --follow-imports=skip tests`（160 files）/ 入口面 `--platform win32 --strict --follow-imports=skip`（4 files）零错误 · 六道机械闸全 exit 0 · CI 全绿。
+  - 代码行数：后端+入口 `*.py` 40,001 / tests 61,312 / `static/js` 16,801。
+  - ⚠️ 守卫纪律：入口面门禁必须带 `--follow-imports=skip`；全量测试 MUST 分批串行执行（防数据目录资源争抢假红）。
+- **历史里程碑归档**：v5.18.0 及更早版本演进、历史基线快照与已交付任务详见 `WORKMEMORY/cold/digest-2026-10.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 
@@ -78,15 +58,10 @@
 
 1. **真实用户试用 + 宣传开闸门槛（2026-10-12 DECISION，`/dfs-grill` Track 1 收敛、不落 ADR）**：产品种草帖**延后**到四条门槛全绿 —— ① **≥5 份真实三问反馈**（入口已随 2026-10-12 批次落地：`.github/ISSUE_TEMPLATE/feedback.md` + README 下载表下直达链接；零门槛：不强制 `bug(scope):` 前缀、三道判断题、可选吐槽）② 新手「下载 → 打开 → 读到第一篇短文」连续无协助成功 ③ README 首屏含截图/GIF 与 Win10 WebView2 前置（见第 3 条）④ Android 真机点检通过（见第 2 条）。**内容先行不受限**：备考方法论 / 开发理念类帖子现在就能发；**产品演示类冻结至门槛绿**。宣传载体已定：**独立薄壳站点**（独立仓库 + 零构建纯静态 + `github.io`，版本运行时取 GitHub Releases API、不复述功能清单），域名后置。
 2. **Android 真机点检**：凡含 `static/` 改动的版本需覆盖安装验证（清单见 `docs/agents/ops.md`）；同时验证 Android 更新 chip 的两条假设（Chaquopy 能否完成公网 HTTPS、WebView 点外链是否交系统浏览器）——即门槛④。**未验证前不得把「代码已合并」记成「双端已验证」**。
-3. **README 首屏改造**（宣传线，门槛③剩余部分）：截图/GIF + 一句话价值 + 30 秒上手；当前首屏对非技术用户仍是代码仓库脸（badge 墙 + 版本摘要墙）。
+3. **README 首屏改造**（宣传线，门槛③已部分交付）：首屏已重构为「一句话价值 + 30 秒上手（普通用户双击运行 vs 开发者三步启动）」，待后续根据真实截图进一步美化。
 4. **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；`import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
 5. **C 档 8 项（当前唯一待办入口）**：`docs/reviews/2026-10-16-open-items-backlog.md`。其中 **C1「裁判结论回灌（verifier-in-the-loop）」为无条件下一步**（ADR-0024 四条硬依赖：① ~~裁判 FP 先修完~~ 已确认基线完成 ② 回灌内容 MUST 过同一道适用性闸与双限截断 ③ 定三角一致性（循环裁判带 nlp / `writing_check` **不带** nlp / 回灌源）④ 阴性对照 MUST 在动产品之前先跑成基线）。⚠️ 回灌落地后，§4.3 实验的阈值与结论**只对"准入式裁判"有效** ⇒ 必须重跑或明确分域（ADR-0024 已登记资产折旧，不留给下一任发现）。
-6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则无自动化守卫；PWA 安装提示验证 / 192-512 PNG 图标；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
-7. **`check_master_commit_scope.py` 把 squash 合并误判成直推【已闭环 (2026-10-21)】**：
-   - 根因：`--no-merges --first-parent` 只能识别多父的 merge-commit 型合并；GitHub squash/rebase 合并产出的单父提交被误划入直推审查对象，导致 #165 / #166 在 PR CI 全绿合并后被 master 直推闸拦截（因整个 PR 改动面不在白名单）。
-   - 修法（分支 `fix/master-scope-gate-squash-merge`）：以 `committer == "GitHub <noreply@github.com>"` 判定 GitHub 集成合并（merge / squash / rebase 三种合并方式均盖该章，本地 git commit 不会生成）。同时封死原有仅凭 `Merge pull request #...` 标题即可绕过检查的单父伪造路径（要求 `is_merge_commit` 即 ≥2 父）。
-   - 实测证据：master 1315 提交中 GitHub 代写 180 条（154 merge + 26 squash/rebase 单父），其中 24 条无 `(#NNN)` 后缀（Dependabot），若按标题规则判会漏掉 92%；人类单父中标题以 `Merge ` 开头者为 0。
-   - 证明：6 条 TDD 测试（新增 6 条，66 passed）+ 四重变异证明（M1 删豁免红、M2 恢复标题绕过红、M3 宽判红、M4 标题强绑定红）全部咬合；真实历史 26 条 GitHub 单父提交 100% 豁免，30 条人类改动代码提交 100% 拦截；真实历史回溯 `2e7b503..07139ac` 修复前 exit 1、修复后 exit 0。
+6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则**已于 tests/test_app_version_source.py 补齐自动化守卫**；PWA 安装提示验证 / 192-512 PNG 图标；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
 
 
 ## 工作方式
