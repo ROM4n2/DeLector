@@ -763,3 +763,17 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.66s**。
   - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**根因排障修复伴学请求/回复截断锁死，并实现全桌面自适应用户可调尺寸抽屉**。
+- **交付面**：
+  1. `da1f5ae`:
+     - **后端 Token 预算与超时修复**：将 `DEFAULT_MAX_TOKENS` 提升至 4096、`DEFAULT_DEADLINE_S` 提升至 35s，根治因高密度德语语法/词卡导致 JSON 被截断的 `Unterminated string` 报错；增强离线导学上下文响应。
+     - **前端状态机死锁与静默丢包修复**：`cp-drawer.js` 补齐 `finally` 重置 `inFlight = false`，杜绝请求异常后永久失能；`askCompanionFromSelection` 增设级联容错抓取，不再因微小选区抖动静默退出。
+     - **全桌面可拖拽自适应抽屉**：增加 `#drawer-resize-handle` 墨线拖动手柄，支持无级调节（340px ~ 75vw），双击在预设档位轮转（420px -> 600px -> 50vw），偏好持久化至 `localStorage`，大屏媒体查询默认放宽。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.17s**。
+  - 真实 DeepSeek 模型端到端联调：复杂从句拓扑长文本与词卡生成 100% 完整解析，零报错截断。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
