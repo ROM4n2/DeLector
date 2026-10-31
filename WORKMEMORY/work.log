@@ -724,3 +724,15 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 静态类型与风格：`mypy --strict` 零 issues · `ruff check` 零告警。
   - 写作与核心卡盒回归：`pytest tests/test_writing_rules.py tests/test_frontend_api_contract.py tests/test_cards_*.py` **143 passed in 39.09s**。
 - **状态**：台账 Task 1~6 已全部 COMPLETED，Task 7 进入用户终审阶段。
+
+### 2026-10-31 17:15 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学 Agent 视口难句断链修复、Markdown DOM 渲染与主抽屉方案 A 深度统一**。
+- **交付面**：
+  1. `b311bca`: 划词工具条（`selection-tooltip`）增加 `[🦉 问伴学]` 直连按钮；实现 Zero-innerHTML 纯 DOM 结构化流式 Markdown 渲染器（`renderSafeMarkdownToElement`）。
+  2. `9a14e0f`: 修复后端丢弃视口上下文的根本缺陷，将 `context`（难句/篇章/CEFR）直接注入 Agent 循环 System Prompt，并在前端实现 `restoreSentenceSpaces` 基于原句真实空格重构。
+  3. `952117a`: 践行**方案 A 深度统一**：将伴学抽屉与现有主抽屉 `#drawer` 100% 融合，作为第 5 个专属 Tab（`[🦉 伴学导学]`），共用便利贴黄色背景、顶部胶带（`tape-top`）、Tab 栏与 `body.drawer-open` 正文平移避让机制，移除独立外层抽屉 DOM 与冗余样式。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学测试：`pytest tests/test_companion_*.py` **16 passed in 1.93s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
