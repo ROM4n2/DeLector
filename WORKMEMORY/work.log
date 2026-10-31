@@ -927,3 +927,17 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - Python 测试全绿：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **49 passed in 7.19s**。
   - 四道机械门禁 100% 全绿：`check_frontend_layers`, `frontend-api-contract`, `check_index_html_sync`, `check_companion_contract`。
   - 静态分析：`mypy --strict` 零缺陷 · `ruff check` 零告警。
+
+### 2026-10-31 22:50 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复伴学 Agent 工具调用端口脱节（8001 -> 8000）、假绿显示与单标点输出问题（PR #177，Commit `fc18754`）**。
+- **根因深度定位与排除**：
+  1. **端口脱节致命断层**：Go 伴学 Agent 默认将 Python NLP 微服务地址硬编码为 `http://127.0.0.1:8001`（历史遗留配置），而当前 `python start.py` 统一启动器主 Web 服务监听在 `8000` 端口。当模型调用 `analyze` 或 `vocab_stats` 时，Go Agent 请求 `8001` 遭遇端口拒绝（`connectex: actively refused`），导致工具执行全部抛出网络异常。
+  2. **前端假绿完成欺骗**：`cp-drawer.js` 对 `tool_end` 事件无脑拼接 `✓ <tool> 完成: `，未校验 `result.status === 'error'`，导致工具底层崩溃在前端却呈现为“完成”，掩盖了物理故障。
+  3. **模型恐慌单字符回复**：DeepSeek 收到两份 localhost 网络连通性失败的报错后，因未被引导如何处置工具故障，向用户输出了单个困惑标点 `？`。
+- **全链路纵深加固**：
+  - **端口打通**：`GoAgentSupervisor` 将 Web 主端口（默认 8000）显式作为 `--python-url` 参数与 `DELECTOR_PYTHON_URL` 环境变量传给 Go 子进程；Go 默认回退值统一同步为 `8000`。
+  - **真实状态呈现**：`cp-drawer.js` 校验 `isError`，工具异常时变红并显示具体原因（`✗ <tool> 异常: ...`）；Go 端在 `Event` 补齐 `Summary` 描述。
+  - **提示词与输出防护**：系统提示词强制要求模型无论工具成功与否均需基于语言学知识输出深度解析；Go 循环在最终仅含 `？`、`?` 或空内容时触发自愈防护。
+- **合规交付**：
+  - 通过专用特性分支 `fix/companion-tool-port-and-response` 与 GitHub PR #177 严格合并，100% 遵守 master 直推保护纪律。
