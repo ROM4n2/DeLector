@@ -885,3 +885,17 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - Python 伴学与客户端全景：`pytest tests/test_companion_*.py tests/test_llm_client.py -v` **39 passed in 6.20s**。
   - 四道机械门禁：`check_frontend_layers` PASS · `check_frontend_api_contract` PASS · `check_index_html_sync` PASS · `check_companion_contract` PASS。
   - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
+
+### 2026-10-31 22:00 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**一键化启动器落地：Go 伴学 Agent 全生命周期自动托管收尸（3/3 任务全绿闭环）**。
+- **痛点彻底终结**：
+  - 彻底摆脱以往需要双终端分别启动 Go Agent (8002) 与 Python (8000) 的繁琐操作；
+  - 仅需单一入口 `python start.py`，启动器自动探测本地二进制（`agent/delector.exe`）或系统 `go` 运行时，以守护子进程在后台无感拉起 Go 伴学 Agent；
+  - 严格退出与收尸链（Commit `adc819c`）：挂接主进程退出与 `finally` 资源回收，`terminate` + 5s 优雅宽限 + 兜底 `kill`，杜绝孤儿进程与端口霸占；
+  - 环境自适应与移动端隔离：未安装 Go 或 Android Chaquopy 平台下静默安全降级为 Python 内核，并支持 `--no-agent` 显式禁用。
+- **物理验证收据**：
+  - Go 单测全景：`cd agent && go test ./...` **147 passed in 9 packages**。
+  - Python 单元与集成测试：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **48 passed in 6.11s**。
+  - 四道机械门禁：`check_frontend_layers` PASS · `check_frontend_api_contract` PASS · `check_index_html_sync` PASS · `check_companion_contract` PASS。
+  - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
