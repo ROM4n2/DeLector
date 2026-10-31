@@ -31,3 +31,12 @@ def test_companion_modules_zero_violations() -> None:
     violations = collect_violations(js_dir, route_pairs=None)
     companion_violations = [v for v in violations if "cp-state.js" in v.file or "cp-api.js" in v.file]
     assert companion_violations == [], f"伴学模块分层违规: {[v.render() for v in companion_violations]}"
+
+
+def test_companion_sse_contract_bidirectional_alignment() -> None:
+    """双向断言探针: Python 后端产出事件与 JS 前端消费分支必须 100% 对齐 SPEC_EVENTS."""
+    from tools.check_companion_contract import main as check_contract_main
+
+    exit_code = check_contract_main()
+    assert exit_code == 0
+
