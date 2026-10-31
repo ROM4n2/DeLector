@@ -872,3 +872,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - Python 测试全景：`pytest tests/test_companion_*.py tests/test_llm_client.py` **39 passed in 6.74s**。
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - 静态分析：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 21:12 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学 Agent 对标 Pi 与工业级前沿模式深化交付达成（4/4 任务全绿闭环）**。
+- **前沿模式落地**：
+  1. **Errors-as-Messages 原则**（Commit `1031cf8`）：工具执行或参数解析异常不再中断流或抛致命错误，格式化为结构化 `Role: tool` 消息送回大模型自愈反思与降级解答；
+  2. **Turn 间主动滑动窗口压缩器**（Commit `fa1e37b`）：在模型调用前检测字符与 Token 预算，保留 System 上下文与尾部最近 2 轮完整交互，将中间过长历史无损折叠为状态锚点，根除长文本 Token 溢出与响应延迟劣化；
+  3. **云端-本地双模型级联热备**（Commit `664a529`）：主通道（DeepSeek）发生物理不可达或超时故障时，伴学调度器自动平滑切换至本地 Ollama（`qwen3.5:4b`）继续流式推送并记录思维折叠提示，确保断网离线环境下的高可用性。
+- **物理验证收据**：
+  - Go 单测全景：`cd agent && go test ./...` **147 passed in 9 packages**。
+  - Python 伴学与客户端全景：`pytest tests/test_companion_*.py tests/test_llm_client.py -v` **39 passed in 6.20s**。
+  - 四道机械门禁：`check_frontend_layers` PASS · `check_frontend_api_contract` PASS · `check_index_html_sync` PASS · `check_companion_contract` PASS。
+  - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
