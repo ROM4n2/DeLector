@@ -5,6 +5,12 @@ import { state, api, esc, jsAttr, notify } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import {
+  initCompanionDrawer,
+  toggleCompanionDrawer,
+  openCompanionDrawer,
+  closeCompanionDrawer,
+} from "./cp-drawer.js";
+import {
   loadArticles,
   deleteArticle,
   openReader,
@@ -1127,8 +1133,14 @@ Object.assign(window, {
   // Player
   ShadowPlayer,
 
-  // Companion Mascot System
+  // Companion Mascot System & Study Agent
   Companion,
+  CompanionDrawer: {
+    init: initCompanionDrawer,
+    toggle: toggleCompanionDrawer,
+    open: openCompanionDrawer,
+    close: closeCompanionDrawer,
+  },
 
   // Encounter Zone (遇见区) view hooks (inline onclick handlers in index.html)
   encounterOpenText: openText,
@@ -1203,6 +1215,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEditorListeners();
   ShadowPlayer.init();
   Companion.init();
+  initCompanionDrawer();
   // 顶栏更新 chip：落后时才可见；自动路径在无新版/拿不准/失败时零可见变化。
   initUpdateCheck();
 });
