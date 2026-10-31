@@ -829,3 +829,25 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 伴学与 LLM Client 单测：`pytest tests/test_llm_client.py tests/test_companion_*.py` **36 passed in 2.33s**。
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 19:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**三层防御彻底治愈 [异常: 上游模型调用失败: AI 服务返回内容非 JSON]**。
+- **交付面**：
+  1. `362f305`:
+     - **L1 解析层（`llm_client.py`）**：
+       - `_clean_and_parse_json()` 全面注入 `strict=False`，彻底支持字符串内部物理换行符（ASCII 0x0A）、制表符与控制字符；
+       - 增加尾随逗号自动清洗正则（`re.sub(r",\s*([}\]])", r"", candidate)`）。
+     - **L2 循环容错降级（`companion_agent.py`）**：
+       - 当上游模型完全未按格式输出外层 JSON（但已产出详尽纯 Markdown 答案）时，不再作为致命崩溃抛弃答案，而是无损提取 `<think>` 思考链并将纯文本解答自愈注入 `reply_zh`，交付完整导学解答，前端零报错。
+     - **L3 提示词物理换行纠偏（`companion_agent.py`）**：
+       - 修正 `COMPANION_AGENT_SYSTEM_PROMPT` 历史字面量 `
+` 为真实换行 `
+`，补强多轮对话单 JSON 约束。
+     - **回归测试锁死**：
+       - `tests/test_llm_client.py` 新增真实物理换行符与尾随逗号解析测试；
+       - `tests/test_companion_agent_loop.py` 新增纯 Markdown 模型回包自愈测试。
+- **物理验证收据**：
+  - 伴学与 LLM Client 单测：`pytest tests/test_llm_client.py tests/test_companion_*.py` **38 passed in 2.35s**。
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
