@@ -11078,53 +11078,36 @@ body.drawer-open .companion {
   border-radius: 0 4px 4px 0;
 }
 
-/* ── Companion Thought Accordion (CoT 深度思考折叠坞) ────────── */
+/* ── Companion Thought Accordion (1A: Claude 无框极简微墨线流) ────────── */
 .companion-thought-box {
-  margin-bottom: 0.6rem;
-  border-radius: 6px;
-  border: 1px solid var(--rule, #dcd6cd);
-  background: var(--paper-warm, #f8f5ee);
-  overflow: hidden;
-  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 1px 3px rgba(26, 23, 20, 0.04);
-}
-
-.companion-thought-box.is-thinking {
-  border-color: var(--coral, #b44322);
-  background: #fdfbf7;
-}
-
-.companion-thought-box.is-completed {
-  border-color: var(--rule-light, #e5e0d8);
-  background: var(--paper-tint, #f5f0e6);
-}
-
-.companion-thought-box.is-error {
-  border-color: var(--coral, #b44322);
-  background: #fff5f2;
+  margin-bottom: 0.55rem;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
 }
 
 .companion-thought-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.45rem 0.65rem;
+  padding: 0.15rem 0;
   cursor: pointer;
   user-select: none;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-family: var(--sans, sans-serif);
-  color: var(--pencil, #555555);
-  transition: background-color 0.15s;
+  color: var(--pencil, #666666);
+  transition: color 0.15s ease;
 }
 
 .companion-thought-header:hover {
-  background: rgba(0, 0, 0, 0.03);
+  color: var(--ink, #1a1a1a);
 }
 
 .thought-header-left {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .thought-badge-icon {
@@ -11143,8 +11126,8 @@ body.drawer-open .companion {
 }
 
 .thought-pulse-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--coral, #b44322);
   animation: thoughtInkPulse 1.2s infinite ease-in-out;
@@ -11157,14 +11140,14 @@ body.drawer-open .companion {
 }
 
 .thought-title {
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.01em;
 }
 
 .thought-header-right {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .thought-timer {
@@ -11178,19 +11161,29 @@ body.drawer-open .companion {
   font-size: 0.75rem;
   transition: transform 0.2s ease;
   transform: rotate(-90deg);
+  opacity: 0.6;
 }
 
 .companion-thought-box.is-expanded .thought-toggle-arrow {
   transform: rotate(0deg);
+  opacity: 0.9;
 }
 
+/* Claude 式学术单侧微墨线 (Academic Hairline) */
 .companion-thought-body {
   display: none;
-  padding: 0.4rem 0.7rem 0.6rem 0.7rem;
-  border-top: 1px dashed var(--rule-light, #e0dbd1);
-  font-size: 0.76rem;
+  margin-top: 0.3rem;
+  margin-left: 0.3rem;
+  padding: 0.2rem 0 0.2rem 0.75rem;
+  border-left: 2px solid var(--rule, #dcd6cd);
+  font-size: 0.75rem;
   font-family: var(--sans, sans-serif);
   color: var(--pencil, #666666);
+  transition: border-color 0.2s ease;
+}
+
+.companion-thought-box.is-thinking .companion-thought-body {
+  border-left-color: var(--coral, #b44322);
 }
 
 .companion-thought-box.is-expanded .companion-thought-body {
@@ -11200,40 +11193,52 @@ body.drawer-open .companion {
 .thought-steps-list {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  margin-bottom: 0.4rem;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
 }
 
 .thought-step {
-  padding: 0.15rem 0.3rem;
-  border-radius: 3px;
+  padding: 0.1rem 0;
   color: var(--pencil-light, #888888);
-  font-size: 0.74rem;
-  transition: color 0.2s, background-color 0.2s;
+  font-size: 0.73rem;
+  line-height: 1.4;
+  transition: color 0.2s ease;
 }
 
 .thought-step.is-active {
-  color: var(--ink, #1a1a1a);
+  color: var(--coral, #b44322);
   font-weight: 600;
-  background: rgba(180, 67, 34, 0.06);
 }
 
 .thought-step.is-done {
-  color: var(--forest, #2d6a4f);
+  color: var(--pencil, #666666);
 }
 
 .thought-real-content {
-  margin-top: 0.45rem;
-  padding: 0.4rem 0.5rem;
-  background: var(--paper-tint, #f0eae1);
-  border-left: 2px solid var(--rule, #cbc4b8);
-  border-radius: 0 4px 4px 0;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0;
   font-family: var(--sans, sans-serif);
   font-style: italic;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--pencil, #444444);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ── 客户端自适应打字机光标 (Adaptive Typewriter Cursor) ────────── */
+.companion-typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  background-color: var(--coral, #b44322);
+  margin-left: 2px;
+  vertical-align: -0.1em;
+  animation: typingCursorBlink 0.8s infinite ease-in-out;
+}
+
+@keyframes typingCursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .companion-tool-chip {

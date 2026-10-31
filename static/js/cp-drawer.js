@@ -571,6 +571,15 @@ export function submitPrompt(userText) {
       }
     : null;
 
+  const typewriter = new AdaptiveTypewriter(textBodyEl, {
+    onProgress: () => {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    },
+    onComplete: () => {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+  });
+
   streamCompanionChat({
     messages: companionState.messages,
     context: activeContext,
@@ -595,16 +604,19 @@ export function submitPrompt(userText) {
       } else if (event === 'delta') {
         thoughtCtrl.finish();
         fullStreamText = data.text || '';
-        renderSafeMarkdownToElement(textBodyEl, fullStreamText);
+        typewriter.enqueue(fullStreamText);
       } else if (event === 'proposal') {
         renderProposalCard(proposalsContainerEl, data.proposal);
       } else if (event === 'done') {
         thoughtCtrl.finish();
         companionState.inFlight = false;
         if (sendBtnEl) sendBtnEl.disabled = false;
-        renderSafeMarkdownToElement(textBodyEl, fullStreamText);
+        if (!typewriter.isTyping && fullStreamText) {
+          renderSafeMarkdownToElement(textBodyEl, fullStreamText);
+        }
         companionState.messages.push({ role: 'assistant', content: fullStreamText });
       } else if (event === 'error') {
+        typewriter.cancel();
         thoughtCtrl.fail('研读中断');
         companionState.inFlight = false;
         if (sendBtnEl) sendBtnEl.disabled = false;
@@ -614,6 +626,7 @@ export function submitPrompt(userText) {
       bodyEl.scrollTop = bodyEl.scrollHeight;
     }
   }).catch((err) => {
+    typewriter.cancel();
     thoughtCtrl.fail('连接中断');
     textBodyEl.textContent = '[连接失败: ' + err.message + ']';
     textBodyEl.style.color = 'var(--coral, #b44322)';
@@ -623,6 +636,108 @@ export function submitPrompt(userText) {
     if (sendBtnEl) sendBtnEl.disabled = false;
     bodyEl.scrollTop = bodyEl.scrollHeight;
   });
+}
+
+/**
+ * 客户端自适应弹性打字机平滑队列 (2B -> 架构平滑演进至 C)
+ * 具备动态弹性调速：字数多则平滑自适应加速，字数少则自然书写，附带微光墨水光标
+ */
+export class AdaptiveTypewriter {
+  constructor(container, options = {}) {
+    this.container = container;
+    this.onProgress = options.onProgress || null;
+    this.onComplete = options.onComplete || null;
+    this.targetText = '';
+    this.renderedLength = 0;
+    this.animId = null;
+    this.isTyping = false;
+
+    this.cursorEl = document.createElement('span');
+    this.cursorEl.className = 'companion-typing-cursor';
+  }
+
+  enqueue(text) {
+    if (!text) return;
+    this.targetText = text;
+    if (!this.isTyping) {
+      this.isTyping = true;
+      this.tick();
+    }
+  }
+
+  append(chunk) {
+    if (!chunk) return;
+    this.targetText += chunk;
+    if (!this.isTyping) {
+      this.isTyping = true;
+      this.tick();
+    }
+  }
+
+  tick() {
+    const remaining = this.targetText.length - this.renderedLength;
+    if (remaining <= 0) {
+      this.flush();
+      return;
+    }
+
+    let step = 3;
+    if (remaining > 1000) {
+      step = 36;
+    } else if (remaining > 500) {
+      step = 22;
+    } else if (remaining > 200) {
+      step = 12;
+    } else if (remaining > 60) {
+      step = 6;
+    } else {
+      step = 2;
+    }
+
+    this.renderedLength = Math.min(this.targetText.length, this.renderedLength + step);
+    const currentSlice = this.targetText.slice(0, this.renderedLength);
+
+    renderSafeMarkdownToElement(this.container, currentSlice);
+
+    if (this.renderedLength < this.targetText.length) {
+      this.container.appendChild(this.cursorEl);
+    }
+
+    if (this.onProgress) {
+      this.onProgress(this.renderedLength, this.targetText.length);
+    }
+
+    this.animId = requestAnimationFrame(() => this.tick());
+  }
+
+  flush() {
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    if (this.targetText) {
+      this.renderedLength = this.targetText.length;
+      renderSafeMarkdownToElement(this.container, this.targetText);
+    }
+    if (this.cursorEl.parentNode) {
+      this.cursorEl.remove();
+    }
+    this.isTyping = false;
+    if (this.onComplete) {
+      this.onComplete();
+    }
+  }
+
+  cancel() {
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    this.isTyping = false;
+    if (this.cursorEl.parentNode) {
+      this.cursorEl.remove();
+    }
+  }
 }
 
 function createThoughtAccordion() {
@@ -646,7 +761,7 @@ function createThoughtAccordion() {
 
   const titleEl = document.createElement('span');
   titleEl.className = 'thought-title';
-  titleEl.textContent = 'Eule 正在深度研读...';
+  titleEl.textContent = 'Eule 正在推演句子结构...';
 
   leftWrap.appendChild(iconEl);
   leftWrap.appendChild(titleEl);
@@ -749,7 +864,7 @@ function createThoughtAccordion() {
 
       if (dotEl.parentNode) dotEl.remove();
       iconEl.textContent = '✓';
-      titleEl.textContent = `已完成深度研读 (耗时 ${totalSec} 秒)`;
+      titleEl.textContent = `深度推演完成 (${totalSec} 秒)`;
       timerEl.textContent = '';
       stepEls.forEach((el) => {
         el.className = 'thought-step is-done';
