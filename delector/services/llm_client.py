@@ -20,9 +20,10 @@ Task 4 循环预算的前置欠账。
 """
 
 import json
+import re
 from typing import Any, Dict, List, Optional
 
-import httpx
+import httpx as httpx
 
 from delector.core.database import get_effective_api_base_url, get_effective_api_key
 
@@ -83,6 +84,81 @@ def _resp_text(resp: Any) -> str:
     """取响应正文（桩对象可能没有 `.text`，缺失当空串 —— 与收口前的宽容取值一致）。"""
     text = getattr(resp, "text", "")
     return text if isinstance(text, str) else str(text)
+
+
+def _clean_and_parse_json(content: str) -> Any:
+    """健壮解析上游 LLM 返回的 JSON 内容。
+
+    防御真实大模型多见输出形式：
+    1. 干净 JSON（快路径）
+    2. 带 <think>...</think> 思考链标签（如 DeepSeek-R1 / Reasoner）
+    3. Markdown 代码块包裹：```json ... ``` 或 ``` ... ```
+    4. 带有对话前缀/后缀的外围大括号匹配 { ... }
+    """
+    stripped = content.strip()
+    if not stripped:
+        raise json.JSONDecodeError("Empty content", doc=content, pos=0)
+
+    # 1. 快路径：完全标准的 JSON 文本
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. 提取 <think>...</think>（保留思考过程）并剔除
+    extracted_think = ""
+    think_match = re.search(r"<think>([\s\S]*?)</think>", stripped, flags=re.DOTALL)
+    if think_match:
+        extracted_think = think_match.group(1).strip()
+        stripped = re.sub(r"<think>[\s\S]*?</think>", "", stripped, flags=re.DOTALL).strip()
+
+    # 尝试在剥离 think 标签后直接解析
+    if stripped:
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
+                parsed["thought"] = extracted_think
+            return parsed
+        except json.JSONDecodeError:
+            pass
+
+    # 3. 剥离 Markdown 代码块 ```json ... ``` 或 ``` ... ```
+    fence_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", stripped, flags=re.DOTALL)
+    if fence_match:
+        candidate = fence_match.group(1).strip()
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
+                parsed["thought"] = extracted_think
+            return parsed
+        except json.JSONDecodeError:
+            pass
+
+    # 4. 寻找最外层大括号 { ... }
+    first_brace = stripped.find("{")
+    last_brace = stripped.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        candidate = stripped[first_brace : last_brace + 1].strip()
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
+                parsed["thought"] = extracted_think
+            return parsed
+        except json.JSONDecodeError:
+            pass
+
+    # 5. 寻找最外层中括号 [ ... ]（以防上游返回数组）
+    first_bracket = stripped.find("[")
+    last_bracket = stripped.rfind("]")
+    if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
+        candidate = stripped[first_bracket : last_bracket + 1].strip()
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    # 兜底：由标准 json.loads 抛出原始异常供外层捕获包装
+    return json.loads(content)
 
 
 def _extract_content(data: Any) -> str:
@@ -173,7 +249,7 @@ async def chat(
                     result["usage"] = usage
                 return result
             try:
-                parsed = json.loads(content)
+                parsed = _clean_and_parse_json(content)
             except Exception as exc:
                 raise LLMError(_DETAIL_CONTENT_NOT_JSON, status_code=status, raw=content) from exc
             if not isinstance(parsed, dict):

@@ -34,8 +34,17 @@ def test_companion_context_endpoint(companion_app: FastAPI) -> None:
     assert "date" in data["context"]
 
 
-def test_companion_chat_sse_stream(companion_app: FastAPI) -> None:
-    """POST /api/companion/chat 产生合法的 text/event-stream 流式帧."""
+def test_companion_chat_sse_stream(companion_app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /api/companion/chat 产生合法的 text/event-stream 流式帧 (桩隔离，不出网)."""
+    async def _mock_chat(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "thought": "测试语法结构推演",
+            "reply_de": "Hallo!",
+            "reply_zh": "这是测试解答。",
+        }
+
+    monkeypatch.setattr("delector.services.companion_agent.llm_client.chat", _mock_chat)
+
     client = TestClient(companion_app)
     req_body = {
         "messages": [{"role": "user", "content": "Hallo Eule!"}],

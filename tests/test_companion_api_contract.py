@@ -29,7 +29,7 @@ def test_companion_modules_zero_violations() -> None:
     assert (js_dir / "cp-api.js").is_file()
 
     violations = collect_violations(js_dir, route_pairs=None)
-    companion_violations = [v for v in violations if "cp-state.js" in v.file or "cp-api.js" in v.file]
+    companion_violations = [v for v in violations if "cp-state.js" in v.rel_path or "cp-api.js" in v.rel_path]
     assert companion_violations == [], f"伴学模块分层违规: {[v.render() for v in companion_violations]}"
 
 
