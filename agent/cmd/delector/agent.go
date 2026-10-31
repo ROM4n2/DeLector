@@ -18,7 +18,7 @@ import (
 
 const (
 	defaultAgentPort          = 8002
-	defaultAgentPythonURL     = "http://127.0.0.1:8001"
+	defaultAgentPythonURL     = "http://127.0.0.1:8000"
 	defaultAgentBaseURL       = "https://api.deepseek.com"
 	defaultAgentModel         = "deepseek-chat"
 	defaultAgentFallbackURL   = "http://127.0.0.1:11434/v1"
@@ -49,6 +49,9 @@ func newAgentCmd() *cobra.Command {
 			}
 			if model == defaultAgentModel && os.Getenv("API_MODEL") != "" {
 				model = os.Getenv("API_MODEL")
+			}
+			if pythonURL == defaultAgentPythonURL && os.Getenv("DELECTOR_PYTHON_URL") != "" {
+				pythonURL = os.Getenv("DELECTOR_PYTHON_URL")
 			}
 
 			cfg := openai.DefaultConfig(key)
