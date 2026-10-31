@@ -4,7 +4,7 @@
  * 将伴学导学作为主抽屉 (#drawer) 的第 5 个专属 Tab 深度集成。
  * 遵循 docs/design-system.md 与 Zero-innerHTML 铁律:
  * 纯原生 DOM 构建 (createElement / textContent / appendChild)，彻底杜绝 XSS 隐患。
- * 包含纯 DOM 结构化 Markdown 渲染器（支持标题、代码块、列表、引用、加粗、行内代码）。
+ * 包含纯 DOM 结构化 Markdown 渲染器（支持标题、表格、代码块、列表、引用、加粗、行内代码）。
  */
 'use strict';
 
@@ -17,6 +17,31 @@ let bodyEl = null;
 let inputEl = null;
 let sendBtnEl = null;
 let abortController = null;
+
+/** 检测 Markdown 表格分隔行 (|---|---| 或 |:---|:---:|---:|) */
+function isTableSeparator(line) {
+  return /^\s*\|?(\s*:?-+:?\s*\|)+\s*(:?-+:?\s*)?$/.test(line);
+}
+
+/** 分割 Markdown 表格行单元格 */
+function splitTableRow(line) {
+  let cells = line.trim().split('|');
+  if (line.trim().startsWith('|')) cells.shift();
+  if (line.trim().endsWith('|')) cells.pop();
+  return cells.map((c) => c.trim());
+}
+
+/** 解析表格对齐方式 */
+function parseAlignments(sepLine) {
+  const cells = splitTableRow(sepLine);
+  return cells.map((c) => {
+    const left = c.startsWith(':');
+    const right = c.endsWith(':');
+    if (left && right) return 'center';
+    if (right) return 'right';
+    return 'left';
+  });
+}
 
 /** 解析单行文本的行内样式 (bold, italic, code, del) 并构建纯 DOM 节点 */
 function appendInlineFormattedText(targetEl, text) {
@@ -48,7 +73,7 @@ function appendInlineFormattedText(targetEl, text) {
 
 /**
  * 纯 DOM 构建的安全 Markdown 渲染器 (Zero-innerHTML 铁律，彻底杜绝 XSS 注入)
- * 支持标题、围栏代码块、无序/有序列表、引用块、行内加粗/代码
+ * 支持标题、表格、围栏代码块、无序/有序列表、引用块、行内加粗/代码
  */
 export function renderSafeMarkdownToElement(container, markdown) {
   while (container.firstChild) {
@@ -107,7 +132,49 @@ export function renderSafeMarkdownToElement(container, markdown) {
       continue;
     }
 
-    // 3. 标题 (#, ##, ###, ####)
+    // 3. Markdown 表格 (| 场 | 功能 | 典型内容 | + |---|---|---|)
+    if (rawLine.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      if (currentList) {
+        container.appendChild(currentList);
+        currentList = null;
+        currentListType = null;
+      }
+      const headerCells = splitTableRow(rawLine);
+      const aligns = parseAlignments(lines[i + 1]);
+      i++; // 跳过分隔行
+
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const headerTr = document.createElement('tr');
+
+      for (let c = 0; c < headerCells.length; c++) {
+        const th = document.createElement('th');
+        if (aligns[c]) th.style.textAlign = aligns[c];
+        appendInlineFormattedText(th, headerCells[c]);
+        headerTr.appendChild(th);
+      }
+      thead.appendChild(headerTr);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      while (i + 1 < lines.length && lines[i + 1].trim().includes('|')) {
+        i++;
+        const rowCells = splitTableRow(lines[i]);
+        const tr = document.createElement('tr');
+        for (let c = 0; c < headerCells.length; c++) {
+          const td = document.createElement('td');
+          if (aligns[c]) td.style.textAlign = aligns[c];
+          appendInlineFormattedText(td, rowCells[c] || '');
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      container.appendChild(table);
+      continue;
+    }
+
+    // 4. 标题 (#, ##, ###, ####)
     const headerMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
     if (headerMatch) {
       if (currentList) {
@@ -123,7 +190,7 @@ export function renderSafeMarkdownToElement(container, markdown) {
       continue;
     }
 
-    // 4. 引用块 (> ...)
+    // 5. 引用块 (> ...)
     if (trimmed.startsWith('>')) {
       if (currentList) {
         container.appendChild(currentList);
@@ -136,7 +203,7 @@ export function renderSafeMarkdownToElement(container, markdown) {
       continue;
     }
 
-    // 5. 无序列表 (- ... 或 * ...)
+    // 6. 无序列表 (- ... 或 * ...)
     const ulMatch = trimmed.match(/^[-*]\s+(.+)$/);
     if (ulMatch) {
       if (!currentList || currentListType !== 'ul') {
@@ -150,7 +217,7 @@ export function renderSafeMarkdownToElement(container, markdown) {
       continue;
     }
 
-    // 6. 有序列表 (1. ... 或 2. ...)
+    // 7. 有序列表 (1. ... 或 2. ...)
     const olMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
     if (olMatch) {
       if (!currentList || currentListType !== 'ol') {
@@ -164,7 +231,7 @@ export function renderSafeMarkdownToElement(container, markdown) {
       continue;
     }
 
-    // 7. 普通段落
+    // 8. 普通段落
     if (currentList) {
       container.appendChild(currentList);
       currentList = null;
@@ -189,7 +256,15 @@ export function renderSafeMarkdownToElement(container, markdown) {
   }
 }
 
-/** 刷新抽屉顶部视口研读语境条 */
+/** 动态同步底部快捷操作选项卡显示状态（有句子时弹跳出，无句子时收起） */
+function updateQuickActionChips(hasText) {
+  const chips = document.querySelectorAll('.companion-quick-chip.context-required');
+  chips.forEach((c) => {
+    c.classList.toggle('is-visible', hasText);
+  });
+}
+
+/** 刷新抽屉顶部视口研读语境条与手机端句子步进器 */
 export function renderContextBar() {
   if (!contextBarEl) {
     contextBarEl = document.getElementById('companion-context-bar');
@@ -201,6 +276,8 @@ export function renderContextBar() {
   }
 
   const text = companionState.activeContext.selectedText;
+  const sents = window.state?.currentArticle?.sentences || [];
+
   if (text) {
     contextBarEl.style.display = 'flex';
     const icon = document.createElement('span');
@@ -213,19 +290,79 @@ export function renderContextBar() {
     clearBtn.className = 'companion-context-clear';
     clearBtn.title = '解除难句绑定';
     clearBtn.textContent = '✕';
-    clearBtn.addEventListener('click', () => {
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       setCompanionContext('', companionState.activeContext.articleTitle, companionState.activeContext.cefrLevel);
       renderContextBar();
     });
 
     contextBarEl.appendChild(icon);
     contextBarEl.appendChild(textSpan);
+
+    // 手机端/精读模式：直接提供上下句无缝步进导航 (◀ 句 3/18 ▶)
+    if (sents.length > 0) {
+      let currentIdx = sents.findIndex(
+        (s) => s.text === text || s.id === window.state?.activeSelectedSentId
+      );
+      if (currentIdx === -1 && text) {
+        currentIdx = sents.findIndex((s) => s.text.replace(/\s+/g, '') === text.replace(/\s+/g, ''));
+      }
+
+      const navWrap = document.createElement('div');
+      navWrap.className = 'companion-sent-nav';
+
+      const prevBtn = document.createElement('button');
+      prevBtn.className = 'companion-nav-btn';
+      prevBtn.title = '上一句 (手机快捷点选)';
+      prevBtn.textContent = '◀';
+      prevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const targetIdx = currentIdx > 0 ? currentIdx - 1 : sents.length - 1;
+        const targetSent = sents[targetIdx];
+        if (targetSent) {
+          if (window.state) {
+            window.state.activeSelectedSentId = targetSent.id;
+            window.state.activeSelectedRangeText = targetSent.text;
+          }
+          setCompanionContext(targetSent.text, window.state?.currentArticle?.title, window.state?.currentArticle?.cefr_level);
+          renderContextBar();
+        }
+      });
+
+      const indicator = document.createElement('span');
+      indicator.className = 'companion-nav-indicator';
+      indicator.textContent = (currentIdx >= 0 ? (currentIdx + 1) : '-') + '/' + sents.length;
+
+      const nextBtn = document.createElement('button');
+      nextBtn.className = 'companion-nav-btn';
+      nextBtn.title = '下一句 (手机快捷点选)';
+      nextBtn.textContent = '▶';
+      nextBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const targetIdx = (currentIdx >= 0 && currentIdx < sents.length - 1) ? currentIdx + 1 : 0;
+        const targetSent = sents[targetIdx];
+        if (targetSent) {
+          if (window.state) {
+            window.state.activeSelectedSentId = targetSent.id;
+            window.state.activeSelectedRangeText = targetSent.text;
+          }
+          setCompanionContext(targetSent.text, window.state?.currentArticle?.title, window.state?.currentArticle?.cefr_level);
+          renderContextBar();
+        }
+      });
+
+      navWrap.appendChild(prevBtn);
+      navWrap.appendChild(indicator);
+      navWrap.appendChild(nextBtn);
+      contextBarEl.appendChild(navWrap);
+    }
+
     contextBarEl.appendChild(clearBtn);
   } else {
     contextBarEl.style.display = 'flex';
     const hint = document.createElement('span');
     hint.className = 'companion-context-hint';
-    hint.textContent = '💡 提示：在文章中划词或点击句子，即可让 Eule 针对性问诊。';
+    hint.textContent = '💡 提示：点击正文中 🦉伴学 或词汇，即可让 Eule 针对性问诊。';
 
     const grabBtn = document.createElement('button');
     grabBtn.className = 'companion-context-grab-btn';
@@ -237,6 +374,8 @@ export function renderContextBar() {
     contextBarEl.appendChild(hint);
     contextBarEl.appendChild(grabBtn);
   }
+
+  updateQuickActionChips(Boolean(text));
 }
 
 /** 同步当前阅读器选区或活动难句 */
@@ -263,7 +402,7 @@ export function syncCurrentContext() {
       return;
     }
   }
-  alert('未检测到当前选中文本。请在文章中用鼠标划词选中，或点击句子后重试。');
+  alert('未检测到当前选中文本。请在文章中点击句旁的 [🦉 伴学]，或点击单词后重试。');
 }
 
 /** 初始化抽屉 DOM 挂载（挂载到主抽屉 #drawer 的 companion-section） */
@@ -366,6 +505,17 @@ export function handleSend() {
 
 export function submitPrompt(userText) {
   if (companionState.inFlight) return;
+  if (!userText || !userText.trim()) return;
+
+  // 守卫：针对需要句子的快捷提问，若无句子则阻止发送并提醒
+  if (
+    !companionState.activeContext.selectedText &&
+    (userText.includes('选中文本') || userText.includes('这个句子') || userText.includes('拓扑结构'))
+  ) {
+    alert('请先在文章中点击句旁的 [🦉 伴学] 绑定德语难句，再执行针对性问诊！');
+    return;
+  }
+
   if (!bodyEl) initCompanionDrawer();
   if (!bodyEl) return;
 

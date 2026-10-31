@@ -242,6 +242,7 @@ async function _openReaderBody(id, token) {
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
         <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">🌳 句法</button>
+        <button class="sent-companion-btn" onclick="event.stopPropagation(); openCompanionForSentence(${Number(sent.id)})" title="向伴学 Eule 咨询此难句">🦉 伴学</button>
       </span>
       <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;
@@ -305,6 +306,8 @@ export function inspect(tokenId, sentId) {
   const token = sent.tokens.find((t) => t.id === tokenId);
   state.selectedToken = token;
   state.selectedSent = sent;
+  state.activeSelectedSentId = sent.id;
+  state.activeSelectedRangeText = sent.text;
   state.grammarData = null;
 
   // Highlight separable partner and self if linked
@@ -1034,6 +1037,24 @@ export function openSyntaxDrawerForSentence(sentId) {
   }
 
   openDrawer("syntax");
+}
+
+export function openCompanionForSentence(sentId) {
+  const sent = state.currentArticle?.sentences?.find((s) => s.id === sentId);
+  if (!sent) return;
+  state.selectedSent = sent;
+  state.activeSelectedSentId = sent.id;
+  state.activeSelectedRangeText = sent.text;
+
+  if (window.CompanionDrawer) {
+    window.CompanionDrawer.open({
+      selectedText: sent.text,
+      articleTitle: state.currentArticle?.title || "",
+      cefrLevel: state.currentArticle?.cefr_level || "B1",
+    });
+  } else {
+    openDrawer("companion");
+  }
 }
 
 export function highlightClauseTokens(tokenIds) {
