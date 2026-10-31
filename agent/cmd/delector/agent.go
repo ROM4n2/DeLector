@@ -20,7 +20,7 @@ const (
 	defaultAgentPort          = 8002
 	defaultAgentPythonURL     = "http://127.0.0.1:8000"
 	defaultAgentBaseURL       = "https://api.deepseek.com"
-	defaultAgentModel         = "deepseek-chat"
+	defaultAgentModel         = "deepseek-flash"
 	defaultAgentFallbackURL   = "http://127.0.0.1:11434/v1"
 	defaultAgentFallbackModel = "qwen3.5:4b"
 )
@@ -47,7 +47,7 @@ func newAgentCmd() *cobra.Command {
 			if baseURL == defaultAgentBaseURL && os.Getenv("API_BASE_URL") != "" {
 				baseURL = os.Getenv("API_BASE_URL")
 			}
-			if model == defaultAgentModel && os.Getenv("API_MODEL") != "" {
+			if (model == defaultAgentModel || model == "deepseek-chat") && os.Getenv("API_MODEL") != "" {
 				model = os.Getenv("API_MODEL")
 			}
 			if pythonURL == defaultAgentPythonURL && os.Getenv("DELECTOR_PYTHON_URL") != "" {
