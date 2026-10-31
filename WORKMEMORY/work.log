@@ -899,3 +899,18 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - Python 单元与集成测试：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **48 passed in 6.11s**。
   - 四道机械门禁：`check_frontend_layers` PASS · `check_frontend_api_contract` PASS · `check_index_html_sync` PASS · `check_companion_contract` PASS。
   - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
+
+### 2026-10-31 22:20 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复 Go 伴学 Agent 静默吞错 Bug 与 Python Web 设置动态同步（Commit `5c3e46e`）**。
+- **痛点根本解决**：
+  1. **数据共通与凭证同步**：此前 Web 设置页（SQLite settings 表）保存的 `DEEPSEEK_API_KEY`、`API_BASE_URL`、`API_MODEL` 未传递给 Go 守护进程，导致 Go Agent 以空 Key 发起请求遭上游 401 拒绝。现已在 `GoAgentSupervisor` 进程启动 `env` 注入以及 FastAPI 反代时通过 `X-API-Key`、`X-Base-URL`、`X-Model` 动态透传，支持免重启即时生效（凭证遵循零泄露脱敏纪律）。
+  2. **SSE 帧头缺失修复**：修复 Go 端 `server.go` 漏发 `event: <type>
+` 导致客户端事件状态机卡死在 `delta` 从而吞没 `error` 和 `done` 事件的致命缺陷。
+  3. **客户端防御式容错**：`cp-api.js` 支持优先从 JSON 内部读取 `parsed.event`。
+  4. **失败诊断友好化**：主备模型均不可达时输出完整因果诊断，界面以红色字样即时呈现，彻底终结“只剩半句思考词后静默”的历史。
+- **物理验证收据**：
+  - Go 测试全绿：`cd agent && go test ./...` **147 passed in 9 packages**。
+  - Python 测试全绿：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **49 passed in 7.05s**。
+  - 四道机械门禁 100% 全绿：`check_frontend_layers`, `frontend-api-contract`, `check_index_html_sync`, `check_companion_contract`。
+  - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
