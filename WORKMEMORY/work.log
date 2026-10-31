@@ -991,3 +991,19 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 物理实测 Supervisor 启动健康耗时：**2.45s 成功就绪**（不再超时）；
   - 测试通过：Go 169 passed、Python 68 passed、四道门禁全绿；
   - 变更已推送至分支 `feat/companion-provider-registry-and-pi-compaction`（Commit `e83b716`，PR #179）。
+
+
+### 2026-11-01 00:35 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复前端抽屉正文 delta 增量覆盖导致最终只剩单字/句号缺陷（Commit `7f4a781`）**。
+- **根因分析**：
+  - 在 `static/js/cp-drawer.js:614` 中，监听 `event === 'delta'` 时错误执行了 `fullStreamText = data.text || ''` 与 `typewriter.enqueue(fullStreamText)`；
+  - 由于后端 SSE `delta` 事件推送的是增量字符 chunk（单字或局部词组），前端未执行 `+=` 累加，而是直接无脑赋值覆盖全文变量；
+  - 导致随着大模型流式输出，每个新字直接抹掉前面的所有文字，打字机不断被清空重置；模型最后一个 chunk 输出标点符号（如 `。` 或 `.`）时，最终抽屉便只剩下一个孤独的句号。
+- **修复措施**：
+  - 将 `fullStreamText = data.text || ''` 修复为 `fullStreamText += chunk` 累加并使用 `typewriter.append(chunk)` 挂入自适应打字机队列；
+  - 在 `event === 'done'` 时调用 `typewriter.flush()` 确保全量完整文本落地并沉淀进对话上下文历史。
+- **验证收据**：
+  - `node -c static/js/cp-drawer.js` 语法校验 0 错误；
+  - 前端四道机械门禁 100% PASS；
+  - 已推送至 PR #179（Commit `7f4a781`）。
