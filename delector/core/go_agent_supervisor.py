@@ -157,6 +157,7 @@ class GoAgentSupervisor:
                     get_effective_api_base_url,
                     get_effective_api_key,
                     get_effective_api_model,
+                    get_effective_reasoning_effort,
                 )
 
                 eff_key = get_effective_api_key()
@@ -168,6 +169,9 @@ class GoAgentSupervisor:
                 eff_model = get_effective_api_model()
                 if eff_model:
                     env["API_MODEL"] = eff_model
+                eff_effort = get_effective_reasoning_effort()
+                if eff_effort:
+                    env["DELECTOR_REASONING_EFFORT"] = eff_effort
             except Exception as s_err:
                 _logger.debug("读取数据库配置同步至 Go 伴学 Agent 失败 (%s)", s_err)
 

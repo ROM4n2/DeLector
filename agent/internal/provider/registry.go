@@ -115,12 +115,13 @@ func (r *Registry) ResolveModel(providerID string, model string) ModelSpec {
 		normModel = "default"
 	}
 	return ModelSpec{
-		Name:                normModel,
-		ProviderID:          ProviderIDCustom,
-		ContextWindow:       CustomContextWindow,
-		MaxOutputTokens:     CustomMaxOutputTokens,
-		SupportsToolCalling: true,
-		SupportsThinking:    false,
-		CompactionRatio:     DefaultCompactionRatio,
+		Name:                   normModel,
+		ProviderID:             ProviderIDCustom,
+		ContextWindow:          CustomContextWindow,
+		MaxOutputTokens:        CustomMaxOutputTokens,
+		SupportsToolCalling:    true,
+		SupportsThinking:       false,
+		DefaultReasoningEffort: ReasoningEffortNone,
+		CompactionRatio:        DefaultCompactionRatio,
 	}
 }

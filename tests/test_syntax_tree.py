@@ -243,3 +243,15 @@ def test_empty_and_edge_inputs():
 
     text_empty = analyze_syntax_tree("")
     assert text_empty["sentence_count"] == 0
+
+
+def test_modal_verb_bracket_not_misclassified_as_subjunctive():
+    """Verify that 'soll ... kommen' is correctly classified as Modalverb-Klammer,
+    not as Konjunktiv-Klammer, even though 'kommen' shares form with Konjunktiv I plural.
+    """
+    text = "Am Samstag soll es in zahlreichen Städten Deutschlands zu Protesten kommen."
+    res = analyze_syntax_tree(text)
+    tree = build_clause_tree(text)
+    assert tree.get("bracket_structure") == "Hauptsatz + Modalverb-Klammer"
+    sent_topo = res["sentences"][0]["topology"]
+    assert sent_topo["bracket_structure"] == "Modalverb-Klammer"

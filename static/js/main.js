@@ -13,6 +13,10 @@ import {
   submitPrompt,
   syncCurrentContext,
   renderContextBar,
+  setReasoningEffort,
+  newSession,
+  switchSession,
+  refreshSessionSelect,
 } from "./cp-drawer.js";
 import {
   loadArticles,
@@ -25,6 +29,7 @@ import {
   openDrawer,
   closeDrawer,
   setupDrawerResize,
+  cycleDrawerMobileSize,
   analyzeGrammar,
   saveVocab,
   saveGrammar,
@@ -644,6 +649,8 @@ export async function openSettingsModal() {
       s.api_base_url || "https://api.deepseek.com";
     document.getElementById("set-model-name").value =
       s.api_model || "deepseek-v4-flash";
+    const effortEl = document.getElementById("set-reasoning-effort");
+    if (effortEl) effortEl.value = s.reasoning_effort || "medium";
     if (s.tts_voice)
       document.getElementById("set-tts-voice").value = s.tts_voice;
     if (s.tts_rate) document.getElementById("set-tts-rate").value = s.tts_rate;
@@ -728,6 +735,7 @@ export async function saveAppSettings() {
   const key = document.getElementById("set-api-key").value.trim();
   const baseUrl = document.getElementById("set-base-url").value.trim();
   const model = document.getElementById("set-model-name").value.trim();
+  const effort = document.getElementById("set-reasoning-effort")?.value;
   const voice = document.getElementById("set-tts-voice").value;
   const rate = document.getElementById("set-tts-rate").value;
 
@@ -738,6 +746,7 @@ export async function saveAppSettings() {
     const body = {
       api_base_url: baseUrl,
       api_model: model,
+      reasoning_effort: effort,
       tts_voice: voice,
       tts_rate: rate,
     };
@@ -748,6 +757,10 @@ export async function saveAppSettings() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
+    if (effort) {
+      setReasoningEffort(effort);
+    }
 
     if (voice && window.ShadowPlayer) {
       ShadowPlayer.setVoice(voice);
@@ -1003,6 +1016,7 @@ Object.assign(window, {
   switchDrawerTab,
   openDrawer,
   closeDrawer,
+  cycleDrawerMobileSize,
   analyzeGrammar,
   saveVocab,
   saveGrammar,
@@ -1157,6 +1171,10 @@ Object.assign(window, {
     sendPrompt: (prompt) => submitPrompt(prompt),
     syncContext: syncCurrentContext,
     renderContextBar,
+    setReasoningEffort,
+    newSession,
+    switchSession,
+    refreshSessionSelect,
   },
 
   // Encounter Zone (遇见区) view hooks (inline onclick handlers in index.html)

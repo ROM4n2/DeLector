@@ -1,9 +1,9 @@
 package companion_test
 
 import (
-	"testing"
 	"github.com/ROM4n2/DeLector/agent/internal/companion"
 	"github.com/sashabaranov/go-openai"
+	"testing"
 )
 
 func TestReproUserPromptLostInToolCompaction(t *testing.T) {

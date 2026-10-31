@@ -567,81 +567,178 @@ export function closeDrawer() {
     .forEach((el) => el.classList.remove("sel"));
 }
 
+export function cycleDrawerMobileSize() {
+  const drawer = document.getElementById("drawer");
+  if (!drawer) return;
+  const currentH = drawer.getBoundingClientRect().height;
+  const winH = window.innerHeight;
+  const ratio = currentH / winH;
+  let target = "65vh";
+  let icon = "⤢";
+  if (ratio < 0.50) {
+    target = "65vh";
+    icon = "⤢";
+  } else if (ratio < 0.80) {
+    target = "92vh";
+    icon = "⤓";
+  } else {
+    target = "38vh";
+    icon = "⤒";
+  }
+  document.documentElement.style.setProperty("--drawer-mobile-height", target);
+  const btn = document.getElementById("drawer-size-btn");
+  if (btn) btn.textContent = icon;
+  try {
+    localStorage.setItem("delector_drawer_mobile_height", target);
+  } catch (_) {}
+}
+
+export function updateDrawerSizeToggleIcon() {
+  const btn = document.getElementById("drawer-size-btn");
+  const drawer = document.getElementById("drawer");
+  if (!btn || !drawer) return;
+  const ratio = drawer.getBoundingClientRect().height / window.innerHeight;
+  if (ratio >= 0.80) {
+    btn.textContent = "⤓";
+    btn.title = "精简抽屉 (38vh)";
+  } else if (ratio <= 0.45) {
+    btn.textContent = "⤒";
+    btn.title = "展开抽屉 (65vh)";
+  } else {
+    btn.textContent = "⤢";
+    btn.title = "全屏抽屉 (92vh)";
+  }
+}
+
 export function setupDrawerResize() {
   const handle = document.getElementById("drawer-resize-handle");
+  const mobileHandle = document.getElementById("drawer-mobile-handle");
   const drawer = document.getElementById("drawer");
-  if (!handle || !drawer) return;
+  if (!drawer) return;
 
-  // 1. 初始化读取本地持久化偏好
+  // 1. 初始化读取本地持久化偏好 (宽与高)
   try {
     const savedWidth = localStorage.getItem("delector_drawer_width");
     if (savedWidth) {
       document.documentElement.style.setProperty("--drawer-width", savedWidth);
     }
+    const savedMobileHeight = localStorage.getItem("delector_drawer_mobile_height");
+    if (savedMobileHeight) {
+      document.documentElement.style.setProperty("--drawer-mobile-height", savedMobileHeight);
+    }
   } catch (_) {
     // 忽略 localStorage 权限限制
   }
 
-  let isDragging = false;
-  let startX = 0;
-  let startWidth = 0;
+  // 桌面端横向拖拽调节宽度
+  if (handle) {
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
 
-  const onPointerDown = (e) => {
-    isDragging = true;
-    startX = e.clientX;
-    const computedWidth = drawer.getBoundingClientRect().width;
-    startWidth = computedWidth;
+    const onPointerDown = (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = drawer.getBoundingClientRect().width;
+      document.body.classList.add("drawer-resizing");
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      e.preventDefault();
+    };
 
-    document.body.classList.add("drawer-resizing");
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    e.preventDefault();
-  };
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      const delta = startX - e.clientX;
+      const minW = 340;
+      const maxW = Math.min(window.innerWidth * 0.75, 1200);
+      const newWidth = Math.min(Math.max(minW, startWidth + delta), maxW);
+      const pxVal = `${Math.round(newWidth)}px`;
+      document.documentElement.style.setProperty("--drawer-width", pxVal);
+    };
 
-  const onPointerMove = (e) => {
-    if (!isDragging) return;
-    const delta = startX - e.clientX;
-    const minW = 340;
-    const maxW = Math.min(window.innerWidth * 0.75, 1200);
-    const newWidth = Math.min(Math.max(minW, startWidth + delta), maxW);
-    const pxVal = `${Math.round(newWidth)}px`;
+    const onPointerUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      document.body.classList.remove("drawer-resizing");
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      try {
+        const currentVal = document.documentElement.style.getPropertyValue("--drawer-width");
+        if (currentVal) {
+          localStorage.setItem("delector_drawer_width", currentVal);
+        }
+      } catch (_) {}
+    };
 
-    document.documentElement.style.setProperty("--drawer-width", pxVal);
-  };
-
-  const onPointerUp = () => {
-    if (!isDragging) return;
-    isDragging = false;
-    document.body.classList.remove("drawer-resizing");
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-
-    try {
-      const currentVal = document.documentElement.style.getPropertyValue("--drawer-width");
-      if (currentVal) {
-        localStorage.setItem("delector_drawer_width", currentVal);
+    // 双击快捷预设宽度轮转 (420px -> 600px -> 50vw -> 420px)
+    handle.addEventListener("dblclick", () => {
+      const currentW = drawer.getBoundingClientRect().width;
+      let target = "420px";
+      if (currentW < 500) {
+        target = "600px";
+      } else if (currentW < 750) {
+        target = "50vw";
+      } else {
+        target = "420px";
       }
-    } catch (_) {}
-  };
+      document.documentElement.style.setProperty("--drawer-width", target);
+      try {
+        localStorage.setItem("delector_drawer_width", target);
+      } catch (_) {}
+    });
 
-  // 2. 双击快捷预设宽度轮转 (420px -> 600px -> 50vw -> 420px)
-  handle.addEventListener("dblclick", () => {
-    const currentW = drawer.getBoundingClientRect().width;
-    let target = "420px";
-    if (currentW < 500) {
-      target = "600px";
-    } else if (currentW < 750) {
-      target = "50vw";
-    } else {
-      target = "420px";
-    }
-    document.documentElement.style.setProperty("--drawer-width", target);
-    try {
-      localStorage.setItem("delector_drawer_width", target);
-    } catch (_) {}
-  });
+    handle.addEventListener("pointerdown", onPointerDown);
+  }
 
-  handle.addEventListener("pointerdown", onPointerDown);
+  // 手机端 / 安卓端顶部手柄纵向拖拽调节高度
+  if (mobileHandle) {
+    let isMobileDragging = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    const onMobilePointerDown = (e) => {
+      isMobileDragging = true;
+      startY = e.clientY;
+      startHeight = drawer.getBoundingClientRect().height;
+      document.body.classList.add("drawer-resizing");
+      window.addEventListener("pointermove", onMobilePointerMove, { passive: false });
+      window.addEventListener("pointerup", onMobilePointerUp);
+      window.addEventListener("pointercancel", onMobilePointerUp);
+      e.preventDefault();
+    };
+
+    const onMobilePointerMove = (e) => {
+      if (!isMobileDragging) return;
+      const delta = startY - e.clientY;
+      const minH = window.innerHeight * 0.28;
+      const maxH = window.innerHeight * 0.94;
+      const newHeight = Math.min(Math.max(minH, startHeight + delta), maxH);
+      const vhVal = `${Math.round((newHeight / window.innerHeight) * 100)}vh`;
+      document.documentElement.style.setProperty("--drawer-mobile-height", vhVal);
+      updateDrawerSizeToggleIcon();
+    };
+
+    const onMobilePointerUp = () => {
+      if (!isMobileDragging) return;
+      isMobileDragging = false;
+      document.body.classList.remove("drawer-resizing");
+      window.removeEventListener("pointermove", onMobilePointerMove);
+      window.removeEventListener("pointerup", onMobilePointerUp);
+      window.removeEventListener("pointercancel", onMobilePointerUp);
+      try {
+        const currentH = document.documentElement.style.getPropertyValue("--drawer-mobile-height");
+        if (currentH) {
+          localStorage.setItem("delector_drawer_mobile_height", currentH);
+        }
+      } catch (_) {}
+    };
+
+    mobileHandle.addEventListener("pointerdown", onMobilePointerDown);
+    mobileHandle.addEventListener("dblclick", cycleDrawerMobileSize);
+  }
+
+  // 挂载全局方法
+  window.cycleDrawerMobileSize = cycleDrawerMobileSize;
 }
 
 // ── Grammar AI ───────────────────────────────────────────────────────────────

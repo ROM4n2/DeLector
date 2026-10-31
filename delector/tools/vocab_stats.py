@@ -77,6 +77,22 @@ async def run(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     # --- Guard Clauses：畸形 payload 快速失败（ADR-0009 纯函数纪律） ---
     raw_tokens = payload.get("tokens")
+    if raw_tokens is None and "text" in payload:
+        raw_text = str(payload.get("text", "")).strip()
+        if raw_text:
+            try:
+                from delector.nlp_engine.processor import process_german_text
+
+                nlp_res = process_german_text(raw_text)
+                extracted_tokens: List[Dict[str, Any]] = []
+                for s in nlp_res.get("sentences", []):
+                    for t in s.get("tokens", []):
+                        lemma = t.get("lemma")
+                        if lemma and lemma not in ("--", "-"):
+                            extracted_tokens.append({"lemma": str(lemma), "text": t.get("text", "")})
+                raw_tokens = extracted_tokens
+            except Exception:
+                pass
     if raw_tokens is None:
         raw_tokens = []
     if not isinstance(raw_tokens, list):

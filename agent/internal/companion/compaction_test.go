@@ -9,6 +9,56 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+func TestCompactContextUnderBudget(t *testing.T) {
+	msgs := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: "You are a German tutor."},
+		{Role: openai.ChatMessageRoleUser, Content: "Hallo!"},
+		{Role: openai.ChatMessageRoleAssistant, Content: "Guten Tag! Wie kann ich helfen?"},
+	}
+
+	compacted := companion.CompactContext(msgs, 4000)
+	if len(compacted) != len(msgs) {
+		t.Fatalf("expected length %d, got %d", len(msgs), len(compacted))
+	}
+}
+
+func TestCompactContextFolding(t *testing.T) {
+	longText := strings.Repeat("Sehr lange deutsche Erklärung über Grammatik und Syntax. ", 40) // ~2400 chars
+
+	msgs := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: "System Prompt with Study Context"},
+		// Middle turns to be compacted
+		{Role: openai.ChatMessageRoleUser, Content: "Erste Frage: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "Erste Antwort: " + longText},
+		{Role: openai.ChatMessageRoleUser, Content: "Zweite Frage: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "Zweite Antwort: " + longText},
+		// Recent 2 turns to be preserved (4 messages)
+		{Role: openai.ChatMessageRoleUser, Content: "Dritte Frage: Was bedeutet das Wort?"},
+		{Role: openai.ChatMessageRoleAssistant, Content: "Dritte Antwort: Es bedeutet XYZ."},
+		{Role: openai.ChatMessageRoleUser, Content: "Vierte Frage: Bitte gib mir ein Beispiel."},
+		{Role: openai.ChatMessageRoleAssistant, Content: "Vierte Antwort: Hier ist ein Beispielsatz."},
+	}
+
+	compacted := companion.CompactContext(msgs, 3000)
+
+	// Invariant: System prompt (1) + Summary anchor (1) + Last 2 turns (4 messages) = 6 messages
+	if len(compacted) != 6 {
+		t.Fatalf("expected 6 messages after compaction, got %d", len(compacted))
+	}
+
+	if compacted[0].Content != "System Prompt with Study Context" {
+		t.Errorf("system prompt was not preserved at index 0")
+	}
+
+	if !strings.Contains(compacted[1].Content, "前序上下文压缩锚点") {
+		t.Errorf("expected summary system message at index 1, got %s", compacted[1].Content)
+	}
+
+	if compacted[len(compacted)-1].Content != "Vierte Antwort: Hier ist ein Beispielsatz." {
+		t.Errorf("last message was not preserved")
+	}
+}
+
 func TestCompactMessagesWithinBudget(t *testing.T) {
 	msgs := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: "You are a German tutor."},

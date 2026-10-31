@@ -70,8 +70,13 @@ func CompactMessagesDynamic(messages []openai.ChatCompletionMessage, spec provid
 	return compactHistory(messages)
 }
 
-// CompactMessages 执行 Turn 间主动滑动窗口上下文压缩（向后兼容字符预算接口）
-func CompactMessages(messages []openai.ChatCompletionMessage, maxChars int) []openai.ChatCompletionMessage {
+// CompactContext executes turn-level sliding window context compaction based on character budget.
+// Invariants:
+// 1. Keep system prompt at index 0.
+// 2. Keep last 2 turns (active conversation block) intact.
+// 3. If total character count exceeds maxChars, fold intermediate older turns into a single summary system message.
+// 4. If under maxChars or not enough turns, return messages unmodified.
+func CompactContext(messages []openai.ChatCompletionMessage, maxChars int) []openai.ChatCompletionMessage {
 	if maxChars <= 0 {
 		maxChars = DefaultContextMaxChars
 	}
@@ -90,6 +95,11 @@ func CompactMessages(messages []openai.ChatCompletionMessage, maxChars int) []op
 	}
 
 	return compactHistory(messages)
+}
+
+// CompactMessages 保留历史别名兼容
+func CompactMessages(messages []openai.ChatCompletionMessage, maxChars int) []openai.ChatCompletionMessage {
+	return CompactContext(messages, maxChars)
 }
 
 func compactHistory(messages []openai.ChatCompletionMessage) []openai.ChatCompletionMessage {

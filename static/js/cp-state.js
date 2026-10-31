@@ -31,6 +31,13 @@ export const companionState = {
   // 待处理或已处理的提议列表: [{ id, action, title, payload, status: 'pending'|'accepted'|'discarded' }]
   proposals: [],
 
+  // 当前激活的持久化会话 ID 与列表
+  currentSessionId: null,
+  sessions: [],
+
+  // 思考强度设置: 'none' | 'low' | 'medium' | 'high'
+  reasoningEffort: 'medium',
+
   // 视口收获的上下文: { selectedText, articleTitle, cefrLevel }
   activeContext: {
     selectedText: '',

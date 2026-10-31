@@ -106,3 +106,7 @@ def get_effective_api_base_url(db_path: Optional[str] = None) -> str:
 
 def get_effective_api_model(db_path: Optional[str] = None) -> str:
     return get_setting("API_MODEL", "deepseek-v4-flash", db_path=db_path)
+
+
+def get_effective_reasoning_effort(db_path: Optional[str] = None) -> str:
+    return get_setting("REASONING_EFFORT", "medium", db_path=db_path)

@@ -1007,3 +1007,65 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - `node -c static/js/cp-drawer.js` 语法校验 0 错误；
   - 前端四道机械门禁 100% PASS；
   - 已推送至 PR #179（Commit `7f4a781`）。
+
+
+### 2026-11-01 01:15 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**闭环 dfs-debug：修复 CompanionDrawer.setReasoningEffort 未导出、Proposal 确认卡片消失及 vocab_stats 空结果缺陷**。
+- **根因分析与分流（dfs-debug 4-Step 规约）**：
+  1. `setReasoningEffort is not a function`: `static/modals/drawer.html` 绑定的 inline `onclick="window.CompanionDrawer?.setReasoningEffort('...')"`，而 `static/js/main.js` 的 `CompanionDrawer` 导出对象与 `static/js/cp-drawer.js` 均未定义并导出该方法，导致点击胶囊时抛出未捕获 TypeError；
+  2. Proposal 确认卡片消失: Go `loop.go` 下发的 SSE `proposal` 事件为平铺结构，缺少 `data.proposal` 嵌套对象，导致前端 `renderProposalCard` 保护条件直接退出；且字段名使用了 `definition_zh`/`sentence_context`，旧前端仅读取 `c.reading`/`c.context_sentence`；
+  3. `vocab_stats` 返回空结果: Go 工具声明为 `text` 入参，而 Python `vocab_stats.py` 原先仅支持 `tokens` 列表，入参未被分词导致 `tokens_total: 0`。
+- **彻底根治方案**：
+  1. `static/js/cp-drawer.js` 与 `main.js` 全量导出 `setReasoningEffort(effort)`，并在抽屉初始化时加载 `/api/settings` 回显同步；
+  2. `agent/internal/companion/loop.go` 与 `tools.go` 补齐 `Proposal *Proposal` 结构，前端 `cp-drawer.js` 做双模自适应提取；
+  3. `delector/tools/vocab_stats.py` 适配 `text` 入参并使用本地 spaCy 分词还原；
+  4. `tools/check_companion_contract.py` 扩充第 4 道机械检查，强制静态审计 `main.js window.CompanionDrawer` 导出 API 的自闭环与完整性。
+- **验证收据**：
+  - 前端 4 道门禁（层级、路由、模板同步、伴学契约）全绿 PASS；
+  - Node 语法校验与缺失接口专项 Repro 脚本由 RED 转为 100% GREEN；
+  - Python 56 passed、Go 169 passed（10 个包全绿）。
+
+### 2026-11-01 02:45 | auto-gemini-3.8-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：按 A→B 演进路线（Phase A 业务持久化与画像 + Phase B 单体解耦与中间件化），全面完成伴学 Harness 重构。
+
+### 2026-11-01 03:40 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学 Harness 9 项实施任务 100% 闭环交付**（计划：`docs/plans/2026-11-01-companion-harness-persistence-and-refactor.md`，规范：`docs/specs/2026-11-01-companion-harness-persistence-and-middleware-design.md`，台账：`.vault-exec-ledger.json` 9/9 COMPLETED）。
+- **执行纪律落实**：严格践行用户“不重合任务并行派发子代理”纪律，并行派出 3 组子代理独立交付 Python 后端服务、前端纯 DOM 拆分与 Go TurnPipeline 中间件，主会话无冲突合并并由机械闸兜底。
+- **Phase A 业务资产与画像交付**：
+  - Task 1: SQLite 三表（`companion_sessions`, `companion_messages`, `companion_proposals`）与 CRUD 落地于 `delector/core/db/companion.py`；
+  - Task 3: 领域探针 `get_learner_profile`（FSRS 负荷与等级画像）与 `query_dictionary`（本地权威词典与配价表）落地，空库/异常宽进严出；Go 原生 Tool Calling Schema 注册同步完成；
+  - Task 6: 前端会话持久化与会话切换器 UI（Session Switcher）落地，支持自动回显、历史会话切换、时序重放与独立新会话创建。
+- **Phase B 单体解耦与中间件化交付**：
+  - Task 2: 后端路由瘦身：抽取 `CompanionSessionService` 与 `CompanionProposalService`，`delector/routes/companion.py` 压缩至 117 行薄路由，彻底移出直接 SQL；
+  - Task 4 & 5: 前端巨石解耦：抽离 `cp-drawer-markdown.js`（100% 零 innerHTML 纯 DOM 语法树）、`cp-drawer-capsule.js`（浮动胶囊与视口追踪）与 `cp-drawer-proposals.js`（Proposal 确认与状态机防重）；
+  - Task 7: Go Runtime 单体解耦：抽离 `compaction.go`（Pi 式动态 60% 压缩）、`tool_calls.go`（ToolCall 聚合与回传）与 `prompts.go`（系统提示与 Prompt Nudge）；`DefaultMaxTurns = 6`；
+  - Task 8: 引入 `TurnPipeline` 洋葱中间件与 `tracer.go` 物理 JSONL 追踪（`companion_trace.jsonl`）。
+- **门禁验证凭据（100% GREEN）**：
+  - Go 运行时：`go test -race -v ./...` 全仓 185 passed in 10 packages；`delector.exe` 构建干净；
+  - Python 服务：`pytest tests/test_companion_*.py` 62 passed；全量核心回归 87 passed；
+  - 前端机械闸：`check_frontend_layers.py`（分层契约）、`check_frontend_api_contract.py`（端点一致性）、`check_companion_contract.py`（伴学双向契约）、`check_index_html_sync.py`（模板同步）全通过。
+
+### 2026-11-01 04:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复领域工具路由分发别名缺失、句法树虚拟式误判与思考强度胶囊 UI 交互失效**。
+- **排障一（query_dictionary unknown tool）**：Go Agent 使用的工具名为 `query_dictionary` 与 `get_learner_profile`，Python `TOOL_REGISTRY` 仅注册了 `dictionary` 与 `learner_profile`；已在 `delector/tools/__init__.py` 补齐双向别名，`tests/test_companion_domain_tools.py` 新增 127.0.0.1 本机端点分发断言。
+- **排障二（Konjunktiv-Klammer 句法语法误判）**：`syntax_tree.py` 将 `SUBJUNCTIVE_FORMS` 包含了 `kommen` 等与不定式同形的复数虚拟式，且在 RK 检查虚拟式时未过滤 `tag_ == 'VVINF'`，导致 `soll ... kommen`（直陈式情态框）被误标为虚拟式框；新增 `_is_subjunctive_token`，强制排除不定式、分词与 `Mood=Ind` 直陈式，输出精准回归为 `Modalverb-Klammer`。
+- **排障三（思考强度点击无反应）**：`cp-drawer.js` 模块化解耦时漏掉了胶囊 `.active` 类的切换与设置持久化；补齐 DOM pill 状态切换、设置弹窗下拉框同步与 `updateReasoningEffort()` 异步写库，初始化自动回显。
+- **凭据**：全仓 185 Go 单测通过，79 项核心 Python 用例通过，4 道前端机械闸全绿。
+
+### 2026-11-01 04:35 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**安卓移动端工作台抽屉（Bottom Sheet）UI 体验与可调节尺寸全面优化**。
+- **动态高度调节机制**：移除原本在移动端硬编码写死的 `height: 55vh !important`，改为由 CSS 变量 `--drawer-mobile-height` 统一接管（默认 65vh，支持 28vh ~ 94vh 自由拖拽与持久化记忆）。
+- **拖拽与手势手柄**：在抽屉顶部新增 Android 标准 Material 风格拖拽手柄 `.drawer-mobile-handle` 与可拉伸药丸指示条 `.drawer-mobile-pill`，支持移动端 touch/pointer 实时上下拖拽调整高度，松开自动保存到 `localStorage`。
+- **一键快捷三档切换**：在抽屉头部右侧操作区新增快捷切换按钮 `.drawer-size-btn`（双击拖拽手柄亦可触发），提供三档智能轮转：
+  - 📖 **精简阅读模式（38vh）**：露出大篇幅德语原文，适合边读边对照；
+  - ⚖ **经典半屏模式（65vh）**：平衡伴学交互与词汇/句法拓扑卡片呈现；
+  - 🧠 **全屏沉浸模式（92vh）**：最大化展示长文本导读、深度思考过程与复杂句法树。
+- **安卓小屏体验精致化**：
+  - 头部与标签栏紧凑重排，`.drawer-tabs` 启用弹性自适应平滑横向滚动，避免标签挤压折行；
+  - 抽屉底部接入 `padding-bottom: env(safe-area-inset-bottom, 12px)`，完美避让安卓手势白条/虚拟按键。
+- **物理凭据**：`static/index.html` 重新生成（3260 行），4 道前端机械闸（分层、路由、SSE 契约、模板同步）100% PASS。

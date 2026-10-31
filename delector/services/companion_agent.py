@@ -13,12 +13,16 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
 import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Mapping, Optional
+
+import httpx
 
 from delector.core.database import get_effective_api_key, get_effective_api_model
 from delector.services import llm_client
@@ -415,3 +419,117 @@ async def run_companion_agent_loop(
         token_count=total_tokens,
         reason=REASON_TURN_LIMIT,
     )
+
+
+def _sse_frame(event_type: str, data: Dict[str, Any]) -> bytes:
+    """标准 SSE 数据帧格式: event: <type>\ndata: <json>\n\n."""
+    payload_str = json.dumps(data, ensure_ascii=False)
+    return f"event: {event_type}\ndata: {payload_str}\n\n".encode("utf-8")
+
+
+async def companion_event_stream(
+    messages: List[Dict[str, Any]],
+    request: Optional[Any] = None,
+    context: Optional[Dict[str, Any]] = None,
+) -> AsyncIterator[bytes]:
+    """流式产出伴学 Agent 事件帧，带客户端断连主动取消守卫."""
+    events: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+    state = {"stop": False}
+
+    async def _runner() -> Any:
+        return await run_companion_agent_loop(
+            messages,
+            context=context,
+            on_event=events.put_nowait,
+            deadline_s=DEFAULT_DEADLINE_S,
+            should_stop=lambda: state["stop"],
+        )
+
+    task = asyncio.ensure_future(_runner())
+    try:
+        while True:
+            if request is not None and hasattr(request, "is_disconnected"):
+                if await request.is_disconnected():
+                    state["stop"] = True
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+                    return
+
+            try:
+                event = events.get_nowait()
+            except asyncio.QueueEmpty:
+                if task.done():
+                    break
+                await asyncio.sleep(0.05)
+                continue
+
+            event_name = str(event.get("event", "delta"))
+            yield _sse_frame(event_name, event)
+            if event_name == "done":
+                break
+
+        if task.done() and not task.cancelled():
+            exc = task.exception()
+            if exc is not None:
+                yield _sse_frame(
+                    "error",
+                    {"code": "stream_error", "message_zh": f"流式处理异常: {exc}"},
+                )
+    finally:
+        state["stop"] = True
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+async def dispatch_companion_stream(
+    messages: List[Dict[str, Any]],
+    request: Optional[Any] = None,
+    context: Optional[Dict[str, Any]] = None,
+) -> AsyncIterator[bytes]:
+    """优先委托 Go Agent Runtime（方案 A 统管中枢）；未启动时平滑回退 Python 本地内核."""
+    go_url = os.getenv("DELECTOR_GO_AGENT_URL", "http://127.0.0.1:8002").strip()
+    if go_url:
+        try:
+            req_payload = {
+                "messages": messages,
+                "context": context or {},
+            }
+            from delector.core.db.settings import (
+                get_effective_api_base_url,
+                get_effective_api_key,
+                get_effective_api_model,
+            )
+
+            headers: Dict[str, str] = {}
+            eff_key = get_effective_api_key()
+            if eff_key:
+                headers["X-API-Key"] = eff_key
+            eff_base = get_effective_api_base_url()
+            if eff_base:
+                headers["X-Base-URL"] = eff_base
+            eff_model = get_effective_api_model()
+            if eff_model:
+                headers["X-Model"] = eff_model
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{go_url.rstrip('/')}/api/companion/chat",
+                    json=req_payload,
+                    headers=headers,
+                ) as resp:
+                    if resp.status_code == 200:
+                        async for chunk in resp.aiter_bytes():
+                            if request is not None and hasattr(request, "is_disconnected"):
+                                if await request.is_disconnected():
+                                    return
+                            if chunk:
+                                yield chunk
+                        return
+        except (httpx.ConnectError, httpx.TimeoutException, OSError):
+            pass
+
+    async for frame in companion_event_stream(messages, request=request, context=context):
+        yield frame

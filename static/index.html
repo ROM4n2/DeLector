@@ -1228,6 +1228,9 @@
     <!-- ── Sticky Note Slide-over Drawer ──────────────────────── -->
     <aside id="drawer">
       <div id="drawer-resize-handle" class="drawer-resize-handle" title="按住左边缘拖拽调节抽屉宽度，双击快速切换预设宽度"></div>
+      <div id="drawer-mobile-handle" class="drawer-mobile-handle" title="按住拖拽调节抽屉高度，双击快速切换全屏/半屏/精简">
+        <div class="drawer-mobile-pill"></div>
+      </div>
       <div class="tape-top"></div>
       <div class="drawer-header">
         <div class="drawer-tabs">
@@ -1272,13 +1275,23 @@
             ✦ 全部
           </button>
         </div>
-        <button
-          class="drawer-close"
-          onclick="closeDrawer()"
-          title="关闭工作台 (Esc)"
-        >
-          ✕
-        </button>
+        <div class="drawer-actions">
+          <button
+            id="drawer-size-btn"
+            class="drawer-size-btn"
+            onclick="window.cycleDrawerMobileSize?.()"
+            title="调节抽屉高度 (半屏 / 全屏 / 精简)"
+          >
+            ⤢
+          </button>
+          <button
+            class="drawer-close"
+            onclick="closeDrawer()"
+            title="关闭工作台 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div class="drawer-body">
@@ -1579,6 +1592,12 @@
 
         <!-- Section 4: Companion Agent Section (伴学导学) -->
         <div id="drawer-companion-section" class="drawer-companion-section hidden">
+          <div class="companion-session-bar" id="companion-session-bar">
+            <select id="companion-session-select" class="companion-session-select" onchange="window.CompanionDrawer?.switchSession(this.value)" title="选择或切换历史会话">
+              <option value="">新伴学会话</option>
+            </select>
+            <button type="button" class="companion-new-chat-btn" onclick="window.CompanionDrawer?.newSession()" title="新建独立对话">＋ 新对话</button>
+          </div>
           <div id="companion-context-bar" class="companion-context-bar"></div>
           <div id="companion-drawer-body" class="companion-chat-stream">
             <div class="companion-message assistant">
@@ -1586,6 +1605,14 @@
             </div>
           </div>
           <div class="companion-drawer-footer">
+            <div class="companion-thinking-toolbar" id="companion-thinking-toolbar">
+              <span class="companion-thinking-label">思考强度:</span>
+              <div class="companion-thinking-pills">
+                <button type="button" class="thinking-pill" data-effort="low" onclick="window.CompanionDrawer?.setReasoningEffort('low')">⚡ 极速</button>
+                <button type="button" class="thinking-pill active" data-effort="medium" onclick="window.CompanionDrawer?.setReasoningEffort('medium')">⚖ 平衡</button>
+                <button type="button" class="thinking-pill" data-effort="high" onclick="window.CompanionDrawer?.setReasoningEffort('high')">🧠 深度</button>
+              </div>
+            </div>
             <div id="companion-quick-actions" class="companion-quick-actions">
               <button class="companion-quick-chip chip-utility" onclick="window.CompanionDrawer?.syncContext()">🎯 抓取当前句</button>
               <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('请帮我分析选中文本的主从句拓扑结构与核心动词位置。')">从句拓扑问诊</button>
@@ -1910,6 +1937,19 @@
                 >
                   deepseek-v4-flash (推荐)
                 </button>
+              </div>
+            </div>
+
+            <div class="modal-field" style="margin-top: 0.75rem;">
+              <label class="input-label" for="set-reasoning-effort">思考强度 (Reasoning Effort)</label>
+              <select id="set-reasoning-effort" class="modal-input">
+                <option value="none">关闭思考 (None) - 仅常规输出</option>
+                <option value="low">⚡ 极速 (Low) - 快速要点推演</option>
+                <option value="medium" selected>⚖ 平衡 (Medium) - 标准语法场域分析</option>
+                <option value="high">🧠 深度 (High) - 德福/歌德长难句深挖</option>
+              </select>
+              <div class="hint-text">
+                调节 DeepSeek 与思维链模型的深度推演强度。
               </div>
             </div>
           </div>

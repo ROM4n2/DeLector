@@ -4,12 +4,32 @@
  * 将伴学导学作为主抽屉 (#drawer) 的第 5 个专属 Tab 深度集成。
  * 遵循 docs/design-system.md 与 Zero-innerHTML 铁律:
  * 纯原生 DOM 构建 (createElement / textContent / appendChild)，彻底杜绝 XSS 隐患。
- * 包含纯 DOM 结构化 Markdown 渲染器（支持标题、表格、代码块、列表、引用、加粗、行内代码）。
+ * 模块化拆分结构：
+ * - cp-drawer-markdown.js: 纯 DOM 结构化 Markdown 渲染器。
+ * - cp-drawer-capsule.js: 萌宠浮动胶囊拖拽/点击交互控制器。
+ * - cp-drawer-proposals.js: 生词与语法卡片入库提议交互卡片。
  */
 'use strict';
 
 import { companionState, setCompanionContext } from './cp-state.js';
-import { streamCompanionChat, executeProposal } from './cp-api.js';
+import {
+  streamCompanionChat,
+  executeProposal,
+  fetchCompanionSessions,
+  createCompanionSession,
+  fetchCompanionHistory,
+  fetchCompanionProposals,
+  fetchAppSettings,
+  updateReasoningEffort
+} from './cp-api.js';
+import { renderSafeMarkdownToElement } from './cp-drawer-markdown.js';
+import { initFloatingCapsule } from './cp-drawer-capsule.js';
+import { renderProposalCard, renderProposalList } from './cp-drawer-proposals.js';
+
+// Re-export modular components for caller backwards compatibility
+export { renderSafeMarkdownToElement } from './cp-drawer-markdown.js';
+export { initFloatingCapsule } from './cp-drawer-capsule.js';
+export { renderProposalCard, renderProposalList } from './cp-drawer-proposals.js';
 
 let drawerEl = null;
 let contextBarEl = null;
@@ -17,243 +37,171 @@ let bodyEl = null;
 let inputEl = null;
 let sendBtnEl = null;
 let abortController = null;
+let currentReasoningEffort = 'medium';
+let sessionSelectEl = null;
 
-/** 检测 Markdown 表格分隔行 (|---|---| 或 |:---|:---:|---:|) */
-function isTableSeparator(line) {
-  return /^\s*\|?(\s*:?-+:?\s*\|)+\s*(:?-+:?\s*)?$/.test(line);
+export async function refreshSessionSelect(articleId) {
+  sessionSelectEl = document.getElementById('companion-session-select');
+  if (!sessionSelectEl) return;
+  try {
+    const res = await fetchCompanionSessions(articleId);
+    if (res && res.sessions) {
+      companionState.sessions = res.sessions;
+      renderSessionOptions();
+    }
+  } catch (err) {
+    console.warn('[CompanionDrawer] Failed to fetch sessions:', err);
+  }
 }
 
-/** 分割 Markdown 表格行单元格 */
-function splitTableRow(line) {
-  let cells = line.trim().split('|');
-  if (line.trim().startsWith('|')) cells.shift();
-  if (line.trim().endsWith('|')) cells.pop();
-  return cells.map((c) => c.trim());
+function renderSessionOptions() {
+  if (!sessionSelectEl) sessionSelectEl = document.getElementById('companion-session-select');
+  if (!sessionSelectEl) return;
+
+  while (sessionSelectEl.firstChild) {
+    sessionSelectEl.removeChild(sessionSelectEl.firstChild);
+  }
+
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '＋ 新建会话';
+  sessionSelectEl.appendChild(defaultOpt);
+
+  const sessions = companionState.sessions || [];
+  for (const s of sessions) {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `${s.title} (${new Date(s.created_at).toLocaleDateString()})`;
+    if (s.id === companionState.currentSessionId) {
+      opt.selected = true;
+    }
+    sessionSelectEl.appendChild(opt);
+  }
 }
 
-/** 解析表格对齐方式 */
-function parseAlignments(sepLine) {
-  const cells = splitTableRow(sepLine);
-  return cells.map((c) => {
-    const left = c.startsWith(':');
-    const right = c.endsWith(':');
-    if (left && right) return 'center';
-    if (right) return 'right';
-    return 'left';
-  });
+export async function newSession(articleId) {
+  try {
+    const aid = articleId || companionState.activeContext?.articleTitle || null;
+    const res = await createCompanionSession(aid, '伴学研读 ' + new Date().toLocaleTimeString());
+    if (res && res.session) {
+      companionState.currentSessionId = res.session.id;
+      companionState.messages = [];
+      companionState.proposals = [];
+      await refreshSessionSelect(aid);
+      clearMessageArea();
+      renderWelcomeMessage();
+    }
+  } catch (err) {
+    console.error('[CompanionDrawer] Failed to create session:', err);
+  }
 }
 
-/** 解析单行文本的行内样式 (bold, italic, code, del) 并构建纯 DOM 节点 */
-function appendInlineFormattedText(targetEl, text) {
-  if (!text) return;
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|~~[^~]+~~)/g);
-  for (const part of parts) {
-    if (!part) continue;
-    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-      const strong = document.createElement('strong');
-      strong.textContent = part.slice(2, -2);
-      targetEl.appendChild(strong);
-    } else if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
-      const code = document.createElement('code');
-      code.textContent = part.slice(1, -1);
-      targetEl.appendChild(code);
-    } else if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
-      const em = document.createElement('em');
-      em.textContent = part.slice(1, -1);
-      targetEl.appendChild(em);
-    } else if (part.startsWith('~~') && part.endsWith('~~') && part.length >= 4) {
-      const del = document.createElement('del');
-      del.textContent = part.slice(2, -2);
-      targetEl.appendChild(del);
-    } else {
-      targetEl.appendChild(document.createTextNode(part));
+export async function switchSession(sessionId) {
+  if (!sessionId) {
+    await newSession();
+    return;
+  }
+  companionState.currentSessionId = sessionId;
+  clearMessageArea();
+  try {
+    const histRes = await fetchCompanionHistory(sessionId);
+    const messages = (histRes && histRes.messages) || [];
+    companionState.messages = messages.map(m => ({
+      role: m.role,
+      content: m.content,
+      thought: m.thought
+    }));
+
+    const propRes = await fetchCompanionProposals(sessionId);
+    const proposals = (propRes && propRes.proposals) || [];
+    companionState.proposals = proposals;
+
+    renderHistoricalMessages(messages, proposals);
+  } catch (err) {
+    console.error('[CompanionDrawer] Failed to switch session:', err);
+  }
+}
+
+function clearMessageArea() {
+  if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
+  if (bodyEl) {
+    while (bodyEl.firstChild) {
+      bodyEl.removeChild(bodyEl.firstChild);
     }
   }
+}
+
+function renderWelcomeMessage() {
+  if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
+  if (!bodyEl) return;
+  const msgEl = document.createElement('div');
+  msgEl.className = 'companion-message assistant';
+  const textEl = document.createElement('div');
+  textEl.textContent = 'Hallo! 我是你的研读伙伴 Eule。选中德语难句点击我，我可以为你深入剖析拓扑结构、语用褒贬或批量制作闪卡。';
+  msgEl.appendChild(textEl);
+  bodyEl.appendChild(msgEl);
+}
+
+function renderHistoricalMessages(messages, proposals) {
+  if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
+  if (!bodyEl) return;
+
+  if (messages.length === 0) {
+    renderWelcomeMessage();
+    return;
+  }
+
+  for (const msg of messages) {
+    const msgEl = document.createElement('div');
+    msgEl.className = `companion-message ${msg.role}`;
+    const textEl = document.createElement('div');
+    if (msg.role === 'assistant') {
+      renderSafeMarkdownToElement(textEl, msg.content || '');
+    } else {
+      textEl.textContent = msg.content || '';
+    }
+    msgEl.appendChild(textEl);
+    bodyEl.appendChild(msgEl);
+  }
+
+  if (proposals.length > 0) {
+    const propContainer = document.createElement('div');
+    propContainer.className = 'companion-proposals-history';
+    renderProposalList(propContainer, proposals, async (proposal, action) => {
+      if (action === 'confirm' || action === 'accept') {
+        return await executeProposal(proposal.id, proposal.action, proposal.payload);
+      }
+    });
+    bodyEl.appendChild(propContainer);
+  }
+  bodyEl.scrollTop = bodyEl.scrollHeight;
 }
 
 /**
- * 纯 DOM 构建的安全 Markdown 渲染器 (Zero-innerHTML 铁律，彻底杜绝 XSS 注入)
- * 支持标题、表格、围栏代码块、无序/有序列表、引用块、行内加粗/代码
+ * 设置思维链推演深度 (low / medium / high)
+ * @param {string} effort
+ * @returns {string}
  */
-export function renderSafeMarkdownToElement(container, markdown) {
-  while (container.firstChild) {
-    container.removeChild(container.firstChild);
+export function setReasoningEffort(effort) {
+  currentReasoningEffort = effort || 'medium';
+  if (companionState) {
+    companionState.reasoningEffort = currentReasoningEffort;
   }
-  if (!markdown) return;
-
-  const lines = markdown.split('\n');
-  let currentList = null;
-  let currentListType = null;
-  let inCodeBlock = false;
-  let codeBuffer = [];
-  let codeLang = '';
-
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i];
-    const trimmed = rawLine.trim();
-
-    // 1. 代码块围栏 (```)
-    if (trimmed.startsWith('```')) {
-      if (inCodeBlock) {
-        const pre = document.createElement('pre');
-        const code = document.createElement('code');
-        if (codeLang) code.className = 'language-' + codeLang;
-        code.textContent = codeBuffer.join('\n');
-        pre.appendChild(code);
-        container.appendChild(pre);
-        inCodeBlock = false;
-        codeBuffer = [];
-        codeLang = '';
-      } else {
-        if (currentList) {
-          container.appendChild(currentList);
-          currentList = null;
-          currentListType = null;
-        }
-        inCodeBlock = true;
-        codeLang = trimmed.slice(3).trim();
-        codeBuffer = [];
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeBuffer.push(rawLine);
-      continue;
-    }
-
-    // 2. 空行 -> 关闭当前列表
-    if (!trimmed) {
-      if (currentList) {
-        container.appendChild(currentList);
-        currentList = null;
-        currentListType = null;
-      }
-      continue;
-    }
-
-    // 3. Markdown 表格 (| 场 | 功能 | 典型内容 | + |---|---|---|)
-    if (rawLine.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
-      if (currentList) {
-        container.appendChild(currentList);
-        currentList = null;
-        currentListType = null;
-      }
-      const headerCells = splitTableRow(rawLine);
-      const aligns = parseAlignments(lines[i + 1]);
-      i++; // 跳过分隔行
-
-      const table = document.createElement('table');
-      const thead = document.createElement('thead');
-      const headerTr = document.createElement('tr');
-
-      for (let c = 0; c < headerCells.length; c++) {
-        const th = document.createElement('th');
-        if (aligns[c]) th.style.textAlign = aligns[c];
-        appendInlineFormattedText(th, headerCells[c]);
-        headerTr.appendChild(th);
-      }
-      thead.appendChild(headerTr);
-      table.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      while (i + 1 < lines.length && lines[i + 1].trim().includes('|')) {
-        i++;
-        const rowCells = splitTableRow(lines[i]);
-        const tr = document.createElement('tr');
-        for (let c = 0; c < headerCells.length; c++) {
-          const td = document.createElement('td');
-          if (aligns[c]) td.style.textAlign = aligns[c];
-          appendInlineFormattedText(td, rowCells[c] || '');
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
-      }
-      table.appendChild(tbody);
-      container.appendChild(table);
-      continue;
-    }
-
-    // 4. 标题 (#, ##, ###, ####)
-    const headerMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
-    if (headerMatch) {
-      if (currentList) {
-        container.appendChild(currentList);
-        currentList = null;
-        currentListType = null;
-      }
-      const level = headerMatch[1].length;
-      const tag = level <= 2 ? 'h4' : level === 3 ? 'h5' : 'h6';
-      const headingEl = document.createElement(tag);
-      appendInlineFormattedText(headingEl, headerMatch[2]);
-      container.appendChild(headingEl);
-      continue;
-    }
-
-    // 5. 引用块 (> ...)
-    if (trimmed.startsWith('>')) {
-      if (currentList) {
-        container.appendChild(currentList);
-        currentList = null;
-        currentListType = null;
-      }
-      const bq = document.createElement('blockquote');
-      appendInlineFormattedText(bq, trimmed.slice(1).trim());
-      container.appendChild(bq);
-      continue;
-    }
-
-    // 6. 无序列表 (- ... 或 * ...)
-    const ulMatch = trimmed.match(/^[-*]\s+(.+)$/);
-    if (ulMatch) {
-      if (!currentList || currentListType !== 'ul') {
-        if (currentList) container.appendChild(currentList);
-        currentList = document.createElement('ul');
-        currentListType = 'ul';
-      }
-      const li = document.createElement('li');
-      appendInlineFormattedText(li, ulMatch[1]);
-      currentList.appendChild(li);
-      continue;
-    }
-
-    // 7. 有序列表 (1. ... 或 2. ...)
-    const olMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
-    if (olMatch) {
-      if (!currentList || currentListType !== 'ol') {
-        if (currentList) container.appendChild(currentList);
-        currentList = document.createElement('ol');
-        currentListType = 'ol';
-      }
-      const li = document.createElement('li');
-      appendInlineFormattedText(li, olMatch[2]);
-      currentList.appendChild(li);
-      continue;
-    }
-
-    // 8. 普通段落
-    if (currentList) {
-      container.appendChild(currentList);
-      currentList = null;
-      currentListType = null;
-    }
-
-    const p = document.createElement('p');
-    appendInlineFormattedText(p, trimmed);
-    container.appendChild(p);
+  // 1. 同步 UI 思考强度胶囊 active 状态
+  const pills = document.querySelectorAll('.thinking-pill');
+  pills.forEach((p) => {
+    p.classList.toggle('active', p.dataset.effort === currentReasoningEffort);
+  });
+  // 2. 同步设置弹窗中的下拉框
+  const select = document.getElementById('set-reasoning-effort');
+  if (select && select.value !== currentReasoningEffort) {
+    select.value = currentReasoningEffort;
   }
-
-  // 收尾
-  if (currentList) {
-    container.appendChild(currentList);
-  }
-  if (inCodeBlock && codeBuffer.length > 0) {
-    const pre = document.createElement('pre');
-    const code = document.createElement('code');
-    code.textContent = codeBuffer.join('\n');
-    pre.appendChild(code);
-    container.appendChild(pre);
-  }
+  // 3. 异步持久化到后端设置
+  updateReasoningEffort(currentReasoningEffort).catch((err) => {
+    console.warn('[CompanionDrawer] Failed to persist reasoning effort:', err);
+  });
+  return currentReasoningEffort;
 }
 
 /** 动态同步底部快捷操作选项卡显示状态（有句子时弹跳出，无句子时收起） */
@@ -425,7 +373,19 @@ export function initCompanionDrawer() {
     sendBtnEl.addEventListener('click', handleSend);
   }
 
+  // 初始化全局伴学浮动胶囊拖拽/点击行为
+  initFloatingCapsule();
+
   renderContextBar();
+  refreshSessionSelect();
+
+  // 恢复持久化保存的思考强度配置
+  fetchAppSettings().then((res) => {
+    if (res && res.reasoning_effort) {
+      setReasoningEffort(res.reasoning_effort);
+    }
+  }).catch(() => {});
+
   return container;
 }
 
@@ -581,6 +541,8 @@ export function submitPrompt(userText) {
   });
 
   streamCompanionChat({
+    session_id: companionState.currentSessionId,
+    reasoning_effort: currentReasoningEffort,
     messages: companionState.messages,
     context: activeContext,
     signal: abortController.signal,
@@ -615,7 +577,11 @@ export function submitPrompt(userText) {
         fullStreamText += chunk;
         typewriter.append(chunk);
       } else if (event === 'proposal') {
-        renderProposalCard(proposalsContainerEl, data.proposal);
+        renderProposalCard(proposalsContainerEl, data.proposal, async (proposal, action) => {
+          if (action === 'confirm' || action === 'accept') {
+            return await executeProposal(proposal.id, proposal.action, proposal.payload);
+          }
+        });
       } else if (event === 'done') {
         thoughtCtrl.finish();
         companionState.inFlight = false;
@@ -750,7 +716,7 @@ export class AdaptiveTypewriter {
   }
 }
 
-function createThoughtAccordion() {
+export function createThoughtAccordion() {
   const boxEl = document.createElement('div');
   boxEl.className = 'companion-thought-box is-thinking is-expanded';
 
@@ -875,7 +841,7 @@ function createThoughtAccordion() {
       const totalSec = ((performance.now() - t0) / 1000).toFixed(1);
       boxEl.classList.remove('is-thinking');
       boxEl.classList.add('is-completed');
-      boxEl.classList.remove('is-expanded'); // Auto-collapse to focus on answer
+      boxEl.classList.remove('is-expanded');
 
       if (dotEl.parentNode) dotEl.remove();
       iconEl.textContent = '✓';
@@ -904,84 +870,27 @@ function createThoughtAccordion() {
   };
 }
 
-function renderProposalCard(container, proposal) {
-  if (!container || !proposal) return;
+export const CompanionDrawer = {
+  setReasoningEffort,
+  init: initCompanionDrawer,
+  toggle: toggleCompanionDrawer,
+  open: openCompanionDrawer,
+  close: closeCompanionDrawer,
+  handleSend,
+  sendPrompt: (prompt) => submitPrompt(prompt),
+  submitPrompt,
+  syncContext: syncCurrentContext,
+  syncCurrentContext,
+  renderContextBar,
+  renderProposalCard,
+  renderProposalList,
+  renderSafeMarkdownToElement,
+  initFloatingCapsule,
+  newSession,
+  switchSession,
+  refreshSessionSelect,
+};
 
-  const cardEl = document.createElement('div');
-  cardEl.className = 'companion-proposal-card';
-
-  const titleEl = document.createElement('div');
-  titleEl.className = 'companion-proposal-title';
-  titleEl.textContent = '📝 提议：' + (proposal.title || '生成卡片');
-  cardEl.appendChild(titleEl);
-
-  const contentEl = document.createElement('div');
-  contentEl.className = 'companion-proposal-content';
-
-  const cards = (proposal.payload && proposal.payload.cards) || [];
-  for (const c of cards) {
-    const itemEl = document.createElement('div');
-    itemEl.style.fontSize = '0.85rem';
-    itemEl.style.padding = '0.25rem 0';
-    itemEl.style.borderBottom = '1px dashed var(--rule, #dcd6cd)';
-
-    const boldWord = document.createElement('strong');
-    boldWord.textContent = c.word || '';
-    itemEl.appendChild(boldWord);
-    itemEl.appendChild(document.createTextNode(': ' + (c.reading || '')));
-
-    if (c.context_sentence) {
-      const sentEl = document.createElement('div');
-      sentEl.style.fontSize = '0.78rem';
-      sentEl.style.color = 'var(--pencil, #666)';
-      sentEl.textContent = '„' + c.context_sentence + '“';
-      itemEl.appendChild(sentEl);
-    }
-    contentEl.appendChild(itemEl);
-  }
-  cardEl.appendChild(contentEl);
-
-  const actionsEl = document.createElement('div');
-  actionsEl.className = 'companion-proposal-actions';
-
-  const confirmBtn = document.createElement('button');
-  confirmBtn.className = 'companion-btn-confirm';
-  confirmBtn.textContent = '确认添加入库';
-
-  const discardBtn = document.createElement('button');
-  discardBtn.className = 'companion-btn-discard';
-  discardBtn.textContent = '放弃';
-
-  confirmBtn.addEventListener('click', async () => {
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = '正在入库...';
-    try {
-      const res = await executeProposal(proposal.id, proposal.action, proposal.payload);
-      confirmBtn.style.display = 'none';
-      discardBtn.style.display = 'none';
-      const statusDiv = document.createElement('div');
-      statusDiv.style.color = 'var(--ink, #1a1a1a)';
-      statusDiv.style.fontWeight = 'bold';
-      statusDiv.style.marginTop = '0.4rem';
-      statusDiv.textContent = '✓ 已成功添加 ' + (res.created_count || cards.length) + ' 张生词卡至复习流';
-      cardEl.appendChild(statusDiv);
-    } catch (err) {
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = '重试';
-      alert('入库失败: ' + err.message);
-    }
-  });
-
-  discardBtn.addEventListener('click', () => {
-    cardEl.style.opacity = '0.5';
-    cardEl.style.pointerEvents = 'none';
-    discardBtn.textContent = '已放弃';
-    confirmBtn.style.display = 'none';
-  });
-
-  actionsEl.appendChild(confirmBtn);
-  actionsEl.appendChild(discardBtn);
-  cardEl.appendChild(actionsEl);
-
-  container.appendChild(cardEl);
+if (typeof window !== 'undefined') {
+  window.CompanionDrawer = Object.assign(window.CompanionDrawer || {}, CompanionDrawer);
 }

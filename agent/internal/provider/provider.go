@@ -38,14 +38,24 @@ const (
 )
 
 // ModelSpec 封装特定模型的静态硬件上下文配额与特性能力。
+type ReasoningEffort string
+
+const (
+	ReasoningEffortNone   ReasoningEffort = "none"
+	ReasoningEffortLow    ReasoningEffort = "low"
+	ReasoningEffortMedium ReasoningEffort = "medium"
+	ReasoningEffortHigh   ReasoningEffort = "high"
+)
+
 type ModelSpec struct {
-	Name                string  // 模型标识（如 deepseek-flash, qwen3.5:4b）
-	ProviderID          string  // 归属供应商 ID（如 deepseek, ollama）
-	ContextWindow       int     // 最大上下文窗口大小（Token 数）
-	MaxOutputTokens     int     // 最大单次输出 Token 配额
-	SupportsToolCalling bool    // 是否支持原生 Tool Calling
-	SupportsThinking    bool    // 是否原生支持深度思考链（Reasoning / Thinking）
-	CompactionRatio     float64 // 上下文压缩流控水位线（默认 0.60 即 60%）
+	Name                   string          // 模型标识（如 deepseek-flash, qwen3.5:4b）
+	ProviderID             string          // 归属供应商 ID（如 deepseek, ollama）
+	ContextWindow          int             // 最大上下文窗口大小（Token 数）
+	MaxOutputTokens        int             // 最大单次输出 Token 配额
+	SupportsToolCalling    bool            // 是否支持原生 Tool Calling
+	SupportsThinking       bool            // 是否原生支持深度思考链（Reasoning / Thinking）
+	DefaultReasoningEffort ReasoningEffort // 默认思考强度（low/medium/high）
+	CompactionRatio        float64         // 上下文压缩流控水位线（默认 0.60 即 60%）
 }
 
 // Provider 抽象多模型供应商统一协议与客户端构造。
@@ -90,13 +100,14 @@ func (p *deepseekProvider) ResolveModelSpec(model string) ModelSpec {
 
 	// 2026 最新官方主力模型与兼容别名统一遵循 1M 上下文与 384k 输出规约
 	return ModelSpec{
-		Name:                model,
-		ProviderID:          ProviderIDDeepSeek,
-		ContextWindow:       DeepSeekContextWindow,
-		MaxOutputTokens:     DeepSeekMaxOutputTokens,
-		SupportsToolCalling: true,
-		SupportsThinking:    true,
-		CompactionRatio:     DefaultCompactionRatio,
+		Name:                   model,
+		ProviderID:             ProviderIDDeepSeek,
+		ContextWindow:          DeepSeekContextWindow,
+		MaxOutputTokens:        DeepSeekMaxOutputTokens,
+		SupportsToolCalling:    true,
+		SupportsThinking:       true,
+		DefaultReasoningEffort: ReasoningEffortMedium,
+		CompactionRatio:        DefaultCompactionRatio,
 	}
 }
 
@@ -147,13 +158,14 @@ func (p *ollamaProvider) ResolveModelSpec(model string) ModelSpec {
 	}
 
 	return ModelSpec{
-		Name:                model,
-		ProviderID:          ProviderIDOllama,
-		ContextWindow:       OllamaContextWindow,
-		MaxOutputTokens:     OllamaMaxOutputTokens,
-		SupportsToolCalling: true,
-		SupportsThinking:    false,
-		CompactionRatio:     DefaultCompactionRatio,
+		Name:                   model,
+		ProviderID:             ProviderIDOllama,
+		ContextWindow:          OllamaContextWindow,
+		MaxOutputTokens:        OllamaMaxOutputTokens,
+		SupportsToolCalling:    true,
+		SupportsThinking:       false,
+		DefaultReasoningEffort: ReasoningEffortNone,
+		CompactionRatio:        DefaultCompactionRatio,
 	}
 }
 
@@ -204,24 +216,26 @@ func (p *openrouterProvider) ResolveModelSpec(model string) ModelSpec {
 	// 针对 OpenRouter 上托管的 DeepSeek 系列透传 1M 上下文规格
 	if strings.Contains(strings.ToLower(model), "deepseek") {
 		return ModelSpec{
-			Name:                model,
-			ProviderID:          ProviderIDOpenRouter,
-			ContextWindow:       DeepSeekContextWindow,
-			MaxOutputTokens:     DeepSeekMaxOutputTokens,
-			SupportsToolCalling: true,
-			SupportsThinking:    true,
-			CompactionRatio:     DefaultCompactionRatio,
+			Name:                   model,
+			ProviderID:             ProviderIDOpenRouter,
+			ContextWindow:          DeepSeekContextWindow,
+			MaxOutputTokens:        DeepSeekMaxOutputTokens,
+			SupportsToolCalling:    true,
+			SupportsThinking:       true,
+			DefaultReasoningEffort: ReasoningEffortMedium,
+			CompactionRatio:        DefaultCompactionRatio,
 		}
 	}
 
 	return ModelSpec{
-		Name:                model,
-		ProviderID:          ProviderIDOpenRouter,
-		ContextWindow:       131072,
-		MaxOutputTokens:     8192,
-		SupportsToolCalling: true,
-		SupportsThinking:    false,
-		CompactionRatio:     DefaultCompactionRatio,
+		Name:                   model,
+		ProviderID:             ProviderIDOpenRouter,
+		ContextWindow:          131072,
+		MaxOutputTokens:        8192,
+		SupportsToolCalling:    true,
+		SupportsThinking:       false,
+		DefaultReasoningEffort: ReasoningEffortNone,
+		CompactionRatio:        DefaultCompactionRatio,
 	}
 }
 
@@ -288,14 +302,25 @@ func (p *customProvider) ResolveModelSpec(model string) ModelSpec {
 		model = p.DefaultModel()
 	}
 
+	supportsThinking := strings.Contains(strings.ToLower(model), "deepseek") ||
+		strings.Contains(strings.ToLower(model), "r1") ||
+		strings.Contains(strings.ToLower(model), "reasoner") ||
+		strings.Contains(strings.ToLower(model), "thinking")
+
+	defaultEffort := ReasoningEffortNone
+	if supportsThinking {
+		defaultEffort = ReasoningEffortMedium
+	}
+
 	return ModelSpec{
-		Name:                model,
-		ProviderID:          p.id,
-		ContextWindow:       CustomContextWindow,
-		MaxOutputTokens:     CustomMaxOutputTokens,
-		SupportsToolCalling: true,
-		SupportsThinking:    false,
-		CompactionRatio:     DefaultCompactionRatio,
+		Name:                   model,
+		ProviderID:             p.id,
+		ContextWindow:          CustomContextWindow,
+		MaxOutputTokens:        CustomMaxOutputTokens,
+		SupportsToolCalling:    true,
+		SupportsThinking:       supportsThinking,
+		DefaultReasoningEffort: defaultEffort,
+		CompactionRatio:        DefaultCompactionRatio,
 	}
 }
 

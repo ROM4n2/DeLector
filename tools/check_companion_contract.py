@@ -81,8 +81,30 @@ def main() -> int:
     if drift_from_spec:
         errors.append(f"与规范契约 SPEC_EVENTS 存在漂移: {sorted(drift_from_spec)}")
 
+    # 4. 机械校验 main.js window.CompanionDrawer 导出接口完整性（防 onclick 死绑定与未导出缺陷）
+    main_js_file = ROOT / "static" / "js" / "main.js"
+    if main_js_file.is_file():
+        main_content = main_js_file.read_text(encoding="utf-8")
+        required_drawer_methods = [
+            "init",
+            "toggle",
+            "open",
+            "close",
+            "handleSend",
+            "sendPrompt",
+            "syncContext",
+            "renderContextBar",
+            "setReasoningEffort",
+            "newSession",
+            "switchSession",
+            "refreshSessionSelect",
+        ]
+        for meth in required_drawer_methods:
+            if f"{meth}:" not in main_content and f"{meth}," not in main_content:
+                errors.append(f"main.js window.CompanionDrawer 缺少对外暴露接口: {meth}")
+
     if errors:
-        print("[check_companion_contract] FAIL: 伴学 SSE 双向契约不匹配!")
+        print("[check_companion_contract] FAIL: 伴学双向契约校验失败!")
         for err in errors:
             print(f"  - {err}")
         return 1
