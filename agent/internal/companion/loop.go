@@ -269,7 +269,9 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		for _, tc := range callsList {
 			name := tc.Function.Name
 			var payload map[string]any
+			var parseErr error
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &payload); err != nil {
+				parseErr = err
 				payload = map[string]any{"raw": tc.Function.Arguments}
 			}
 
@@ -278,6 +280,30 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 				Tool:    name,
 				Payload: payload,
 			})
+
+			if parseErr != nil {
+				// Pi-Agent Errors-as-Messages: 参数解析失败直接作为 Tool 错误消息反馈
+				toolRes := map[string]any{
+					"status":     "error",
+					"error_code": "INVALID_TOOL_ARGUMENTS",
+					"tool":       name,
+					"message":    fmt.Sprintf("工具参数 JSON 解析失败: %v", parseErr),
+					"raw":        tc.Function.Arguments,
+					"hint":       "请确保为该工具传入合法 JSON 格式的对象参数。",
+				}
+				_ = emit(Event{
+					Event:  EventToolEnd,
+					Tool:   name,
+					Result: toolRes,
+				})
+				resBytes, _ := json.Marshal(toolRes)
+				chatMessages = append(chatMessages, openai.ChatCompletionMessage{
+					Role:       openai.ChatMessageRoleTool,
+					ToolCallID: tc.ID,
+					Content:    string(resBytes),
+				})
+				continue
+			}
 
 			if name == "propose_vocab_cards" {
 				title, _ := payload["title"].(string)
@@ -307,7 +333,14 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 				// 本地 Python 诊断工具（analyze / writing_check / vocab_stats）
 				toolRes, toolErr := a.runner.RunTool(ctx, name, payload)
 				if toolErr != nil {
-					toolRes = map[string]any{"error": toolErr.Error()}
+					// Pi-Agent Errors-as-Messages 原则：工具错误转化为结构化消息送回模型自愈
+					toolRes = map[string]any{
+						"status":     "error",
+						"error_code": "TOOL_EXECUTION_FAILED",
+						"tool":       name,
+						"message":    toolErr.Error(),
+						"hint":       "工具执行暂时失败。请向学习者说明情况并给出基于已有上下文的专业解答，或调整参数重试。",
+					}
 				}
 
 				_ = emit(Event{

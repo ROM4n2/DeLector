@@ -2,9 +2,11 @@ package companion_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ROM4n2/DeLector/agent/internal/companion"
@@ -14,10 +16,14 @@ import (
 // fakeToolRunner 模拟 Python 微服务的本地工具执行
 type fakeToolRunner struct {
 	calls []string
+	err   error
 }
 
 func (f *fakeToolRunner) RunTool(_ context.Context, name string, _ map[string]any) (map[string]any, error) {
 	f.calls = append(f.calls, name)
+	if f.err != nil {
+		return nil, f.err
+	}
 	if name == "analyze" {
 		return map[string]any{
 			"status":  "ok",
@@ -187,4 +193,77 @@ func TestCompanionLoopToolCallingAndProposal(t *testing.T) {
 	if !hasToolStart || !hasToolEnd {
 		t.Error("missing tool_start or tool_end event")
 	}
+}
+
+func TestCompanionLoopToolErrorSelfHealing(t *testing.T) {
+	turn := 0
+	var receivedToolMsg string
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher := w.(http.Flusher)
+
+		turn++
+		if turn == 1 {
+			// 第一轮：模型调用 writing_check 工具
+			callChunk := `{"id":"c1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_err_1","type":"function","function":{"name":"writing_check","arguments":"{\"text\":\"Ich habe hunger\"}"}}]},"index":0}]}`
+			fmt.Fprintf(w, "data: %s\n\n", callChunk)
+			flusher.Flush()
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+		} else {
+			// 第二轮：模型收到 Errors-as-Messages 工具错误回传后自愈回答
+			contentChunk := `{"id":"c2","choices":[{"delta":{"content":"微服务暂时不可用，但我发现 Hunger 必须大写：Ich habe Hunger。"},"index":0}]}`
+			fmt.Fprintf(w, "data: %s\n\n", contentChunk)
+			flusher.Flush()
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+
+	cfg := openai.DefaultConfig("mock-key")
+	cfg.BaseURL = ts.URL
+	client := openai.NewClientWithConfig(cfg)
+
+	// 工具模拟返回网络重置异常
+	runner := &fakeToolRunner{err: errors.New("connection reset by peer")}
+	agent := companion.NewCompanionAgent(client, runner, "deepseek-chat")
+
+	var events []companion.Event
+	emit := func(ev companion.Event) error {
+		events = append(events, ev)
+		return nil
+	}
+
+	req := companion.Request{
+		Messages: []companion.Message{{Role: "user", Content: "检查这句德语"}},
+	}
+
+	outcome, err := agent.RunLoop(context.Background(), req, emit)
+	if err != nil {
+		t.Fatalf("RunLoop should self-heal and not fail: %v", err)
+	}
+
+	if outcome.Status != "ok" {
+		t.Errorf("status = %s, want ok", outcome.Status)
+	}
+	if !strings.Contains(outcome.Text, "Ich habe Hunger") {
+		t.Errorf("expected self-healed text, got %s", outcome.Text)
+	}
+
+	// 验证 EventToolEnd 是否携带错误结果且未中断链路
+	hasErrorResult := false
+	for _, ev := range events {
+		if ev.Event == companion.EventToolEnd {
+			if ev.Result != nil && ev.Result["error_code"] == "TOOL_EXECUTION_FAILED" {
+				hasErrorResult = true
+			}
+		}
+	}
+	if !hasErrorResult {
+		t.Errorf("expected EventToolEnd to contain structured error_code TOOL_EXECUTION_FAILED, but it didn't")
+	}
+	_ = receivedToolMsg
 }
