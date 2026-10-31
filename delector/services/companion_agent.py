@@ -26,7 +26,6 @@ import httpx
 
 from delector.core.database import get_effective_api_key, get_effective_api_model
 from delector.services import llm_client
-from delector.tools import TOOL_REGISTRY
 
 # ── 轮次、超时与预算常量 ──────────────────────────────────────────────────────
 DEFAULT_MAX_TURNS: int = 3
@@ -206,6 +205,8 @@ async def run_companion_agent_loop(
         {"role": "system", "content": system_prompt},
         *messages,
     ]
+
+    from delector.tools import TOOL_REGISTRY
 
     tools_map: Dict[str, Callable[[Dict[str, Any]], Awaitable[Any]]] = dict(TOOL_REGISTRY)
     if tools_override is not None:
@@ -528,6 +529,7 @@ async def dispatch_companion_stream(
                             if chunk:
                                 yield chunk
                         return
+        # silent-ok: Go Agent 离线时透明回退到下方 Python 本地内核
         except (httpx.ConnectError, httpx.TimeoutException, OSError):
             pass
 

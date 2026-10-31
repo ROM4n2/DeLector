@@ -103,7 +103,7 @@ def _clean_and_parse_json(content: str) -> Any:
     # 1. 快路径：完全标准的 JSON 文本（允许真实物理换行符）
     try:
         return json.loads(stripped, strict=False)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError:  # silent-ok: 阶梯解析候选失败，顺延至下一级 markdown/think 剥离策略
         pass
 
     # 2. 提取 <think>...</think>（保留思考过程）并剔除
@@ -120,7 +120,7 @@ def _clean_and_parse_json(content: str) -> Any:
             if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
                 parsed["thought"] = extracted_think
             return parsed
-        except json.JSONDecodeError:
+        except json.JSONDecodeError:  # silent-ok: 剥离 think 后的候选解析失败，顺延至代码块提取策略
             pass
 
     # 3. 剥离 Markdown 代码块 ```json ... ``` 或 ``` ... ```
@@ -132,7 +132,7 @@ def _clean_and_parse_json(content: str) -> Any:
             if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
                 parsed["thought"] = extracted_think
             return parsed
-        except json.JSONDecodeError:
+        except json.JSONDecodeError:  # silent-ok: 代码块候选解析失败，顺延至外围大括号提取策略
             pass
 
     # 4. 寻找最外层大括号 { ... }
@@ -146,7 +146,7 @@ def _clean_and_parse_json(content: str) -> Any:
             if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
                 parsed["thought"] = extracted_think
             return parsed
-        except json.JSONDecodeError:
+        except json.JSONDecodeError:  # silent-ok: 大括号候选解析失败，顺延至数组中括号提取策略
             pass
 
     # 5. 寻找最外层中括号 [ ... ]（以防上游返回数组）
@@ -157,7 +157,7 @@ def _clean_and_parse_json(content: str) -> Any:
         candidate_clean = re.sub(r",\s*([}\]])", r"\1", candidate)
         try:
             return json.loads(candidate_clean, strict=False)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError:  # silent-ok: 数组候选解析失败，最终回退到原文本由标准解析器响亮抛错
             pass
 
     # 兜底：由标准 json.loads 抛出原始异常供外层捕获包装

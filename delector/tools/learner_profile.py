@@ -117,7 +117,7 @@ def get_learner_profile(payload: Optional[Dict[str, Any]] = None) -> Dict[str, A
         if conn is not None:
             try:
                 conn.close()
-            except Exception:
+            except Exception:  # silent-ok: finally 中的确定性 close：失败只发生于连接已损坏时，无后续动作
                 pass
 
 

@@ -243,6 +243,16 @@ __all__ = [
     "DATA_DIR",
     "AUDIO_CACHE_DIR",
     "PROGRESS_DB_PATH",
+    # ├─ 伴学会话持久化片（Task 1）
+    "init_companion_tables",
+    "create_session",
+    "get_session",
+    "list_sessions",
+    "append_message",
+    "get_messages",
+    "create_proposal",
+    "get_proposals",
+    "update_proposal_status",
     # ├─ 连接 / 路径片（Task 5）：非 `__all__` 名（下划线前缀 / 内部访问器）在此显式登记，
     #    使 pyflakes 认定它们是**有意再导出**而非「导入未用」。
     "_PKG_DIR",

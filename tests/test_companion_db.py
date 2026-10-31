@@ -2,16 +2,18 @@
 Unit tests for companion SQLite persistence (sessions, messages, proposals).
 """
 import sqlite3
+
 import pytest
+
 from delector.core.db.companion import (
-    init_companion_tables,
-    create_session,
-    get_session,
-    list_sessions,
     append_message,
-    get_messages,
     create_proposal,
+    create_session,
+    get_messages,
     get_proposals,
+    get_session,
+    init_companion_tables,
+    list_sessions,
     update_proposal_status,
 )
 
@@ -63,6 +65,7 @@ def test_list_sessions(conn):
 
     all_sessions = list_sessions(conn, article_id=None)
     assert len(all_sessions) == 3
+    assert {s["id"] for s in all_sessions} == {s1["id"], s2["id"], s3["id"]}
 
 
 def test_append_and_get_messages(conn):

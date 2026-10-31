@@ -25,6 +25,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from delector.core.db.companion import init_companion_tables
 from delector.core.db.connection import (
     _INITIALIZED_PROGRESS_DBS,
     _REPO_ROOT,
@@ -38,7 +39,6 @@ from delector.core.db.connection import (
     preflight_data_dir,
 )
 from delector.core.db.content import seed_preset_articles
-from delector.core.db.companion import init_companion_tables
 
 
 def init_progress_db(db_path: Optional[str] = None) -> None:

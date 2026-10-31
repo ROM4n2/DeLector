@@ -85,7 +85,7 @@ class GoAgentSupervisor:
                         "--python-url",
                         self.python_url,
                     ], self.agent_dir
-            except Exception:
+            except Exception:  # silent-ok: 预编译二进制构建失败时透明回退到 go run 源码执行
                 pass
 
             return [
@@ -111,7 +111,7 @@ class GoAgentSupervisor:
                 data = resp.json()
                 if isinstance(data, dict):
                     return bool(data.get("status") == "ok")
-        except Exception:
+        except Exception:  # silent-ok: 就绪轮询探测：端口未监听或连接被拒属预期非就绪态，返回 False
             pass
         return False
 
@@ -149,7 +149,7 @@ class GoAgentSupervisor:
                                     v = v.strip().strip("'").strip('"')
                                     if k and k not in env:
                                         env[k] = v
-                    except Exception:
+                    except Exception:  # silent-ok: .env 文件损坏或不可读时不阻断主配置加载
                         pass
 
             try:
@@ -227,7 +227,7 @@ class GoAgentSupervisor:
             try:
                 proc.kill()
                 proc.wait(timeout=1.0)
-            except Exception:
+            except Exception:  # silent-ok: 强杀后进程可能已消亡或处于僵尸态，收尸完成无需再抛
                 pass
         except Exception as exc:
             _logger.warning("收尸 Go 伴学 Agent 异常: %s", exc)

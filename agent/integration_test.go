@@ -142,6 +142,9 @@ func repoRoot() string {
 func startRealSupervisor(t *testing.T, python string) *pythonsvc.Supervisor {
 	t.Helper()
 	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "data")
+	_ = os.MkdirAll(dataDir, 0o755)
+	_ = os.WriteFile(filepath.Join(dataDir, "delector.db"), []byte("SQLite format 3\x00"), 0o644)
 	port := resolvePort(t)
 	baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 	healthURL := baseURL + "/api/tools/"

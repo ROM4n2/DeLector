@@ -38,7 +38,7 @@ def _resolve_lookup_lemma() -> Optional[Callable[[str], Any]]:
         fn = getattr(core_ling, "lookup_lemma", None)
         if callable(fn):
             return cast(Callable[[str], Any], fn)
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError):  # silent-ok: 阶梯探测词法分析函数，失败顺延至 nlp_engine 策略
         pass
 
     # 2. delector.nlp_engine.linguistics
@@ -53,7 +53,7 @@ def _resolve_lookup_lemma() -> Optional[Callable[[str], Any]]:
         fn = getattr(nlp_ling, "lookup_lemma", None)
         if callable(fn):
             return cast(Callable[[str], Any], fn)
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError):  # silent-ok: 阶梯探测词法分析函数，失败顺延至核心词库策略
         pass
 
     # 3. Fallback: core lexicon lookup_core_vocab
@@ -61,7 +61,7 @@ def _resolve_lookup_lemma() -> Optional[Callable[[str], Any]]:
         from delector.core.lexicon import lookup_core_vocab
 
         return cast(Callable[[str], Any], lookup_core_vocab)
-    except ImportError:
+    except ImportError:  # silent-ok: 词库缺失时返回 None，由外层触发词典空结果标准响应
         pass
 
     return None
@@ -84,7 +84,7 @@ def _resolve_lookup_prep_collocations() -> Optional[Callable[[str], Any]]:
         fn = getattr(core_prep, "lookup_prep_collocations", None)
         if callable(fn):
             return cast(Callable[[str], Any], fn)
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError):  # silent-ok: 阶梯探测介词搭配函数，失败顺延至 nlp 搭配策略
         pass
 
     # 2. Fallback: delector.nlp_engine.linguistics.lookup_prep_collocations
@@ -99,7 +99,7 @@ def _resolve_lookup_prep_collocations() -> Optional[Callable[[str], Any]]:
         fn = getattr(nlp_prep, "lookup_prep_collocations", None)
         if callable(fn):
             return cast(Callable[[str], Any], fn)
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError):  # silent-ok: 搭配函数全部未注册时安全降级为 None
         pass
 
     return None
