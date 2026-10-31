@@ -140,9 +140,10 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		default:
 		}
 
+		compactedMsgs := CompactMessages(chatMessages, DefaultContextMaxChars)
 		streamReq := openai.ChatCompletionRequest{
 			Model:      a.model,
-			Messages:   chatMessages,
+			Messages:   compactedMsgs,
 			Tools:      tools,
 			ToolChoice: "auto",
 			Stream:     true,
