@@ -736,3 +736,17 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - 伴学测试：`pytest tests/test_companion_*.py` **16 passed in 1.93s**。
   - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 17:40 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学交互全面精细化：Markdown 拓扑表格渲染、弹跳动态 Chip、移动端单触步进导航与 Tab 布局修复**。
+- **交付面**：
+  1. `bcbc4f9`: 
+     - **动态弹跳操作项**：依赖句子的快捷问诊（从句拓扑/核心生词/语用褒贬）在无句子时收起；一旦绑定句子触发 `@keyframes chipBouncePop` 活泼弹跳动效逐个跃出；未绑定句子点击时拦截并友好引导。
+     - **Tab 布局与字数精简**：五 Tab 对齐为四字对称（`📖 词汇`、`🌳 句法`、`📝 便签`、`🦉 伴学`、`✦ 全部`），开启 `overflow-x: auto` 零滚动条自适应，彻底解决“伴学导读”截断。
+     - **移动端全场景选句突破**：正文句法旁增加 `[🦉 伴学]` 专属直达单触徽章（触屏默认亮起免悬浮）；伴学语境条内置 `[ ◀ 上一句 ] [ 句 N/M ] [ 下一句 ▶ ]` 极速步进器，完全摆脱手机触屏拖选文本的痛点。
+     - **纯 DOM 结构化 Markdown 表格渲染**：解析 `| 场 | 功能 | 典型内容 |` 与 `:---:` 对齐语法，原生构建学术墨线复古排版表格（`table`/`thead`/`tbody`），零 innerHTML 杜绝 XSS。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - Node.js 虚拟 DOM 表格结构断言：`[ 'H5', 'TABLE' ]`、`[ 'THEAD', 'TBODY' ]` 100% 结构化验证通过。
+  - 伴学测试：`pytest tests/test_companion_*.py` **16 passed in 2.18s**。
