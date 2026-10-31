@@ -851,3 +851,24 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 伴学与 LLM Client 单测：`pytest tests/test_llm_client.py tests/test_companion_*.py` **38 passed in 2.35s**。
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 20:20 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**方案 A 落地：由 Go Agent 模块全面接管伴学导学智能体编排（ADR-0025 闭环）**。
+- **决策演进**：
+  - 彻底终结“系统提示词伪 JSON 强行约束”架构缺陷（彻底避免 JSON RFC 8259 崩溃与长超时网络空闲断连）；
+  - 将伴学 Agent 全面交由 Go 原生模块（`agent/internal/companion`）统管，兑现纯 Go 后端驱动 AI Agent 编排体系；
+  - 纯 Markdown 正文流与原生思考链（ReasoningContent）即时下发，诊断工具（analyze / writing_check / vocab_stats）与制卡提议（propose_vocab_cards）由原生 Tool Calling 驱动并反馈闭环。
+- **交付清单**：
+  1. `docs/adr/2026-10-31-adr-0025-companion-agent-native-tool-calling-and-streaming.md` (ADR-0025 决议通过)；
+  2. `docs/plans/2026-10-31-companion-native-tool-calling-streaming.md` (6/6 任务全面达成)；
+  3. `agent/internal/companion/tools.go` (OpenAI 兼容 Tool Schemas 与 SSE Event 契约)；
+  4. `agent/internal/companion/loop.go` (原生 Tool Calling Stream 双通道有界调度器)；
+  5. `agent/internal/companion/server.go` (HTTP SSE Handler，支持 /api/companion/chat 与 /api/companion/health)；
+  6. `agent/cmd/delector/agent.go` (新增 `delector agent` CLI 子命令)；
+  7. `delector/routes/companion.py` (FastAPI 路由网关透明反代 Go Agent SSE 帧，无缝回退本地)。
+- **物理验证收据**：
+  - Go 测试全景：`cd agent && go test ./...` **143 passed in 9 packages**。
+  - Python 测试全景：`pytest tests/test_companion_*.py tests/test_llm_client.py` **39 passed in 6.74s**。
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 静态分析：`mypy --strict` 零 issues · `ruff check` 零告警。
