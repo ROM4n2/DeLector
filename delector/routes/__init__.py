@@ -26,6 +26,7 @@ from delector.routes import (
     audio,
     backup,
     cards,
+    companion,
     corpus,
     encounter,
     exam,
@@ -55,6 +56,7 @@ __all__ = [
     "audio",
     "backup",
     "cards",
+    "companion",
     "corpus",
     "encounter",
     "exam",
@@ -106,6 +108,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(audio.router)
     app.include_router(articles.router)
     app.include_router(writing.router)
+    app.include_router(companion.router)
     app.include_router(main.router)
     # tools 在 main 之后：/api/tools/{name} 是独立前缀，不与任何分域路由冲突；
     # 放最后只是保持"通用 handler 永远垫底"的注册序纪律。
