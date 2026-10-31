@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from delector.core.database import _require_localhost, get_db
+from delector.core.database import _require_localhost, get_db, log_study_event
 from delector.services.companion_agent import (
     DEFAULT_DEADLINE_S,
     run_companion_agent_loop,
@@ -164,17 +164,30 @@ def api_companion_execute_proposal(req: ProposalExecReq) -> Dict[str, Any]:
             word = str(c.get("word", "")).strip()
             if not word:
                 continue
-            reading = str(c.get("reading", "")).strip()
-            sentence = str(c.get("context_sentence", "")).strip()
+            lemma = str(c.get("lemma") or word).strip()
+            pos = str(c.get("pos") or "").strip()
+            gender = str(c.get("gender") or "").strip()
+            plural = str(c.get("plural") or "").strip()
+            cefr_level = str(c.get("cefr_level") or "B1").strip()
+            definition_zh = str(c.get("definition_zh") or c.get("reading") or "").strip() or word
+            sentence = str(c.get("sentence_context") or c.get("context_sentence") or "").strip()
 
-            conn.execute(
+            cur = conn.execute(
                 """
-                INSERT INTO vocab_cards (word, reading, context_sentence, source)
-                VALUES (?, ?, ?, 'companion')
+                INSERT INTO vocab_cards (
+                    word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence_context, source
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'companion')
                 """,
-                (word, reading, sentence),
+                (word, lemma, pos, gender, plural, cefr_level, definition_zh, sentence),
             )
             created_count += 1
+            card_id = cur.lastrowid
+            if card_id:
+                try:
+                    log_study_event("add_card", card_id, word, db_path=None)
+                except Exception:
+                    pass
         conn.commit()
 
     return {

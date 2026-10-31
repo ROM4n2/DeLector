@@ -534,9 +534,7 @@ export function submitPrompt(userText) {
   const asstMsgEl = document.createElement('div');
   asstMsgEl.className = 'companion-message assistant';
 
-  const thoughtEl = document.createElement('div');
-  thoughtEl.className = 'companion-thought';
-  thoughtEl.style.display = 'none';
+  const thoughtCtrl = createThoughtAccordion();
 
   const toolContainerEl = document.createElement('div');
   toolContainerEl.className = 'companion-tool-container';
@@ -550,7 +548,7 @@ export function submitPrompt(userText) {
   const proposalsContainerEl = document.createElement('div');
   proposalsContainerEl.className = 'companion-proposals-container';
 
-  asstMsgEl.appendChild(thoughtEl);
+  asstMsgEl.appendChild(thoughtCtrl.boxEl);
   asstMsgEl.appendChild(toolContainerEl);
   asstMsgEl.appendChild(textBodyEl);
   asstMsgEl.appendChild(proposalsContainerEl);
@@ -579,8 +577,7 @@ export function submitPrompt(userText) {
     signal: abortController.signal,
     onEvent: (event, data) => {
       if (event === 'thought') {
-        thoughtEl.style.display = 'block';
-        thoughtEl.textContent = data.text || '';
+        thoughtCtrl.setRealThought(data.text || '');
       } else if (event === 'tool_start') {
         toolContainerEl.style.display = 'block';
         const chip = document.createElement('span');
@@ -596,16 +593,19 @@ export function submitPrompt(userText) {
           }
         }
       } else if (event === 'delta') {
+        thoughtCtrl.finish();
         fullStreamText = data.text || '';
         renderSafeMarkdownToElement(textBodyEl, fullStreamText);
       } else if (event === 'proposal') {
         renderProposalCard(proposalsContainerEl, data.proposal);
       } else if (event === 'done') {
+        thoughtCtrl.finish();
         companionState.inFlight = false;
         if (sendBtnEl) sendBtnEl.disabled = false;
         renderSafeMarkdownToElement(textBodyEl, fullStreamText);
         companionState.messages.push({ role: 'assistant', content: fullStreamText });
       } else if (event === 'error') {
+        thoughtCtrl.fail('研读中断');
         companionState.inFlight = false;
         if (sendBtnEl) sendBtnEl.disabled = false;
         textBodyEl.textContent = '[异常: ' + (data.message_zh || '处理失败') + ']';
@@ -614,13 +614,161 @@ export function submitPrompt(userText) {
       bodyEl.scrollTop = bodyEl.scrollHeight;
     }
   }).catch((err) => {
+    thoughtCtrl.fail('连接中断');
     textBodyEl.textContent = '[连接失败: ' + err.message + ']';
     textBodyEl.style.color = 'var(--coral, #b44322)';
   }).finally(() => {
+    thoughtCtrl.cleanup();
     companionState.inFlight = false;
     if (sendBtnEl) sendBtnEl.disabled = false;
     bodyEl.scrollTop = bodyEl.scrollHeight;
   });
+}
+
+function createThoughtAccordion() {
+  const boxEl = document.createElement('div');
+  boxEl.className = 'companion-thought-box is-thinking is-expanded';
+
+  // 1. Header (Clickable toggle)
+  const headerEl = document.createElement('div');
+  headerEl.className = 'companion-thought-header';
+  headerEl.title = '点击展开/折叠推演思维链';
+
+  const leftWrap = document.createElement('div');
+  leftWrap.className = 'thought-header-left';
+
+  const iconEl = document.createElement('span');
+  iconEl.className = 'thought-badge-icon';
+
+  const dotEl = document.createElement('span');
+  dotEl.className = 'thought-pulse-dot';
+  iconEl.appendChild(dotEl);
+
+  const titleEl = document.createElement('span');
+  titleEl.className = 'thought-title';
+  titleEl.textContent = 'Eule 正在深度研读...';
+
+  leftWrap.appendChild(iconEl);
+  leftWrap.appendChild(titleEl);
+
+  const rightWrap = document.createElement('div');
+  rightWrap.className = 'thought-header-right';
+
+  const timerEl = document.createElement('span');
+  timerEl.className = 'thought-timer';
+  timerEl.textContent = '0.0s';
+
+  const arrowEl = document.createElement('span');
+  arrowEl.className = 'thought-toggle-arrow';
+  arrowEl.textContent = '▾';
+
+  rightWrap.appendChild(timerEl);
+  rightWrap.appendChild(arrowEl);
+
+  headerEl.appendChild(leftWrap);
+  headerEl.appendChild(rightWrap);
+
+  // 2. Body
+  const thoughtBodyEl = document.createElement('div');
+  thoughtBodyEl.className = 'companion-thought-body';
+
+  const stepsListEl = document.createElement('div');
+  stepsListEl.className = 'thought-steps-list';
+
+  const stepTexts = [
+    '① 校验视口上下文与德语原句边界',
+    '② 检索五场域 (Felderstruktur) 拓扑规则',
+    '③ 校验动词框架 (Verbalklammer) 与从句层级',
+    '④ 提炼核心生词卡与学情建议'
+  ];
+
+  const stepEls = stepTexts.map((txt, idx) => {
+    const s = document.createElement('div');
+    s.className = 'thought-step' + (idx === 0 ? ' is-active' : '');
+    s.textContent = txt;
+    stepsListEl.appendChild(s);
+    return s;
+  });
+
+  const realContentEl = document.createElement('div');
+  realContentEl.className = 'thought-real-content';
+  realContentEl.style.display = 'none';
+
+  thoughtBodyEl.appendChild(stepsListEl);
+  thoughtBodyEl.appendChild(realContentEl);
+
+  boxEl.appendChild(headerEl);
+  boxEl.appendChild(thoughtBodyEl);
+
+  headerEl.addEventListener('click', () => {
+    boxEl.classList.toggle('is-expanded');
+  });
+
+  const t0 = performance.now();
+  let finished = false;
+  const timerId = setInterval(() => {
+    if (finished) return;
+    const elapsedSec = (performance.now() - t0) / 1000;
+    timerEl.textContent = `${elapsedSec.toFixed(1)}s`;
+
+    if (elapsedSec >= 1.2 && stepEls[0].classList.contains('is-active')) {
+      stepEls[0].className = 'thought-step is-done';
+      stepEls[0].textContent = '✓ 视口研读难句与上下文已锁定';
+      stepEls[1].className = 'thought-step is-active';
+    }
+    if (elapsedSec >= 2.8 && stepEls[1].classList.contains('is-active')) {
+      stepEls[1].className = 'thought-step is-done';
+      stepEls[1].textContent = '✓ 拓扑五场域映射分析完成';
+      stepEls[2].className = 'thought-step is-active';
+    }
+    if (elapsedSec >= 4.8 && stepEls[2].classList.contains('is-active')) {
+      stepEls[2].className = 'thought-step is-done';
+      stepEls[2].textContent = '✓ 动词框架与从句层级定式检验';
+      stepEls[3].className = 'thought-step is-active';
+    }
+  }, 100);
+
+  return {
+    boxEl,
+    setRealThought: (text) => {
+      if (!text) return;
+      realContentEl.style.display = 'block';
+      realContentEl.textContent = text;
+      stepEls.forEach((el) => {
+        el.className = 'thought-step is-done';
+      });
+    },
+    finish: () => {
+      if (finished) return;
+      finished = true;
+      clearInterval(timerId);
+      const totalSec = ((performance.now() - t0) / 1000).toFixed(1);
+      boxEl.classList.remove('is-thinking');
+      boxEl.classList.add('is-completed');
+      boxEl.classList.remove('is-expanded'); // Auto-collapse to focus on answer
+
+      if (dotEl.parentNode) dotEl.remove();
+      iconEl.textContent = '✓';
+      titleEl.textContent = `已完成深度研读 (耗时 ${totalSec} 秒)`;
+      timerEl.textContent = '';
+      stepEls.forEach((el) => {
+        el.className = 'thought-step is-done';
+      });
+    },
+    fail: (msg) => {
+      if (finished) return;
+      finished = true;
+      clearInterval(timerId);
+      boxEl.classList.remove('is-thinking');
+      boxEl.classList.add('is-error');
+      if (dotEl.parentNode) dotEl.remove();
+      iconEl.textContent = '!';
+      titleEl.textContent = msg || '研读中断';
+    },
+    cleanup: () => {
+      clearInterval(timerId);
+    }
+  };
 }
 
 function renderProposalCard(container, proposal) {
