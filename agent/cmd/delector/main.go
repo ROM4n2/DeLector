@@ -35,7 +35,7 @@ func newRootCmd() *cobra.Command {
 		Use:   "delector",
 		Short: "DeLector Go Agent Runtime（DAG 编排 + Python NLP 微服务）",
 	}
-	rootCmd.AddCommand(newVersionCmd(), newRunCmd(), newJobCmd())
+	rootCmd.AddCommand(newVersionCmd(), newRunCmd(), newJobCmd(), newAgentCmd())
 	return rootCmd
 }
 
