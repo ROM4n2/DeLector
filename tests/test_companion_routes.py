@@ -137,3 +137,41 @@ def test_companion_proposal_execute_success(
     res_data = resp.json()
     assert res_data.get("status") == "ok"
     assert res_data.get("created_count") == 1
+
+
+def test_companion_chat_proxies_to_go_agent_when_available(
+    companion_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """当 DELECTOR_GO_AGENT_URL 就绪时，FastAPI 路由优先流式反代 Go Agent SSE 帧。"""
+    import httpx
+
+    class _MockGoTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            content = (
+                b"data: {\"event\": \"delta\", \"text\": \"From Go Agent\"}\n\n"
+                b"data: {\"event\": \"done\", \"reason\": \"ok\"}\n\n"
+            )
+            return httpx.Response(200, content=content, headers={"content-type": "text/event-stream"})
+
+    # 替换 httpx.AsyncClient 的 transport
+    orig_async_client = httpx.AsyncClient
+
+    def _mock_async_client(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = _MockGoTransport()
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", _mock_async_client)
+    monkeypatch.setenv("DELECTOR_GO_AGENT_URL", "http://127.0.0.1:8002")
+
+    client = TestClient(companion_app)
+    req_body = {
+        "messages": [{"role": "user", "content": "Hallo!"}],
+    }
+
+    with client.stream("POST", "/api/companion/chat", json=req_body) as response:
+        assert response.status_code == 200
+        lines = [line for line in response.iter_lines() if line]
+        combined = "\n".join(lines)
+        assert "From Go Agent" in combined
+        assert "done" in combined

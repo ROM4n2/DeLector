@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 from datetime import date
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -130,11 +132,46 @@ async def _companion_event_stream(
             await task
 
 
+async def _dispatch_companion_stream(
+    messages: List[Dict[str, Any]],
+    request: Request,
+    context: Optional[Dict[str, Any]] = None,
+) -> AsyncIterator[bytes]:
+    """优先委托 Go Agent Runtime（方案 A 统管中枢）；未启动时平滑回退 Python 本地内核."""
+    go_url = os.getenv("DELECTOR_GO_AGENT_URL", "http://127.0.0.1:8002").strip()
+    if go_url:
+        try:
+            req_payload = {
+                "messages": messages,
+                "context": context or {},
+            }
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{go_url.rstrip('/')}/api/companion/chat",
+                    json=req_payload,
+                ) as resp:
+                    if resp.status_code == 200:
+                        async for chunk in resp.aiter_bytes():
+                            if await request.is_disconnected():
+                                return
+                            if chunk:
+                                yield chunk
+                        return
+        except (httpx.ConnectError, httpx.TimeoutException, OSError):
+            # Go Agent 未启动或连接受挫时，平滑降级由 Python 本地内核继续服务
+            pass
+
+    # 兜底：本地 Python 内核流式分发
+    async for frame in _companion_event_stream(messages, request, context=context):
+        yield frame
+
+
 @router.post("/chat")
 async def api_companion_chat(req: CompanionChatReq, request: Request) -> StreamingResponse:
-    """伴学会话流式交互端点."""
+    """伴学会话流式交互端点（Go Agent 优先反代与 Python 本地双轨流式）."""
     return StreamingResponse(
-        _companion_event_stream(req.messages, request, context=req.context),
+        _dispatch_companion_stream(req.messages, request, context=req.context),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
