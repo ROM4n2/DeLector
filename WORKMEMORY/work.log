@@ -914,3 +914,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - Python 测试全绿：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **49 passed in 7.05s**。
   - 四道机械门禁 100% 全绿：`check_frontend_layers`, `frontend-api-contract`, `check_index_html_sync`, `check_companion_contract`。
   - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
+
+### 2026-10-31 22:30 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**主干合并与分支收敛完成：feat/unified-agent-launcher 完整并入 master（Commit `b79dfb8`）**。
+- **合并与分支整肃**：
+  1. `master` 快进追平上游 `origin/master` (`18df65b`)；
+  2. `feat/unified-agent-launcher`（包含 Go 伴学 Agent 全套架构、Pi 模式深化、Supervisor 一键自动托管、动态设置同步与吞错修复）通过标准合并策略并入 `master`；
+  3. 干净清理 3 个已合入的历史分支：`feat/companion-study-agent`、`feat/unified-agent-launcher`、`test/proactive-scan-version-guard`；本地分支拓扑彻底收敛归一。
+- **主干全景物理验证**：
+  - Go 测试全绿：`cd agent && go test ./...` **147 passed in 9 packages**。
+  - Python 测试全绿：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **49 passed in 7.19s**。
+  - 四道机械门禁 100% 全绿：`check_frontend_layers`, `frontend-api-contract`, `check_index_html_sync`, `check_companion_contract`。
+  - 静态分析：`mypy --strict` 零缺陷 · `ruff check` 零告警。
