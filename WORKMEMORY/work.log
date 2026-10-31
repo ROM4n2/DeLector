@@ -954,3 +954,23 @@ Caps: filesystem-read, filesystem-write, shell-exec
   4. **回归锁定与自愈沉淀（Step 4）**：
      - 永久单元回归测试 `compaction_regression_test.go` 进入 Go 测试套件（148 passed）；
      - 经验已通过 A-MAC 门禁沉淀至知识库 `99-Inbox/2026-10-31-agent-compaction-user-prompt-stripping-and-thought-stream-flicker.md`。
+
+
+### 2026-11-01 00:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**依据 dfs-plan 与 dfs-exec 协议全面落地 2026 最新 DeepSeek 规约、模型供应商抽象架构与 Pi 范式 60% 上下文流控（Branch `feat/companion-provider-registry-and-pi-compaction`）**。
+- **2026 最新 DeepSeek 官方规约物理核验**：
+  - 实时抓取官方文档确认：主力生产模型为 `deepseek-flash` (DeepSeek-V4.1-Flash-1017) 与 `deepseek-v4-pro`，向下兼容 `deepseek-chat`；
+  - 官方上下文长度实为 **1M tokens**（1,048,576 tokens），单次最大输出 384k tokens；原生支持 `thinking` 模式。
+- **多模型供应商抽象与注册中心（Task 2）**：
+  - 在 `agent/internal/provider` 创建 `Provider`、`ModelSpec` 与线程安全 `Registry`，内置 DeepSeek (1M tokens/384k 输出)、Ollama (32k tokens)、OpenRouter 与自定义供应商，预留未来多供应商扩展接口；
+  - 规格单测 100% 覆盖并包含变异测试，物理收据 18 passed。
+- **Python NLP 工具返回值高信噪比蒸馏（Task 1）**：
+  - 在 `delector/tools/analyze.py` 实现 `distill_analysis_for_agent` 投影器，剥离冗余 spaCy 内部指针，保留五场域原文、句子类型与核心词元；
+  - 目标难句序列化体积由 13,576 字符降至 1,820 字符（骨架 <800 字符），纯载荷压缩达 86.6%，单测 17 passed。
+- **Pi 式动态上下文 Token 估算与 60% 阈值流控（Task 3）**：
+  - 彻底废除固定字符截断逻辑，依据 `ModelSpec.ContextWindow * 0.60` 动态计算压缩水位线；
+  - 在 1M 上下文模型下未达 600k tokens 保持完整零压缩；超限时折叠前序历史为锚点，倒数第 2 条 User 之后的活跃交互块严格免疫折叠。
+- **伴学 Loop 与全链路装配验证（Task 4）**：
+  - `CompanionAgent` 注入 Provider Registry，自适应解析模型并动态流控；
+  - 全量回归：Go 169 passed in 10 packages，Python 68 passed in 7.34s，前端四道机械门禁 100% PASS。
