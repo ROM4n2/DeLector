@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -85,3 +86,26 @@ def test_supervisor_stop_terminates_and_waits() -> None:
     mock_proc.terminate.assert_called_once()
     mock_proc.wait.assert_called_once_with(timeout=1.0)
     assert supervisor.proc is None
+
+
+def test_supervisor_start_injects_settings_env() -> None:
+    supervisor = GoAgentSupervisor(port=8002)
+
+    mock_proc = MagicMock(spec=subprocess.Popen)
+    mock_proc.poll.return_value = None
+
+    with patch.object(supervisor, "find_command", return_value=(["mock_agent"], Path("agent"))), \
+         patch("subprocess.Popen", return_value=mock_proc) as mock_popen, \
+         patch.object(supervisor, "is_healthy", side_effect=[False, True]), \
+         patch("delector.core.db.settings.get_effective_api_key", return_value="sk-test-key"), \
+         patch("delector.core.db.settings.get_effective_api_base_url", return_value="https://api.test.com"), \
+         patch("delector.core.db.settings.get_effective_api_model", return_value="test-model"):
+
+        success = supervisor.start(deadline_s=1.0)
+        assert success is True
+        mock_popen.assert_called_once()
+        _, kwargs = mock_popen.call_args
+        env = kwargs.get("env", {})
+        assert env.get("DEEPSEEK_API_KEY") == "sk-test-key"
+        assert env.get("API_BASE_URL") == "https://api.test.com"
+        assert env.get("API_MODEL") == "test-model"

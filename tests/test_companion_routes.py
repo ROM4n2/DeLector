@@ -143,14 +143,17 @@ def test_companion_chat_proxies_to_go_agent_when_available(
     companion_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """当 DELECTOR_GO_AGENT_URL 就绪时，FastAPI 路由优先流式反代 Go Agent SSE 帧。"""
+    """当 DELECTOR_GO_AGENT_URL 就绪时，FastAPI 路由优先流式反代 Go Agent SSE 帧并同步设置."""
     import httpx
+
+    captured_headers: dict[str, str] = {}
 
     class _MockGoTransport(httpx.AsyncBaseTransport):
         async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
             content = (
-                b"data: {\"event\": \"delta\", \"text\": \"From Go Agent\"}\n\n"
-                b"data: {\"event\": \"done\", \"reason\": \"ok\"}\n\n"
+                b"event: delta\ndata: {\"event\": \"delta\", \"text\": \"From Go Agent\"}\n\n"
+                b"event: done\ndata: {\"event\": \"done\", \"reason\": \"ok\"}\n\n"
             )
             return httpx.Response(200, content=content, headers={"content-type": "text/event-stream"})
 
@@ -163,6 +166,7 @@ def test_companion_chat_proxies_to_go_agent_when_available(
 
     monkeypatch.setattr("httpx.AsyncClient", _mock_async_client)
     monkeypatch.setenv("DELECTOR_GO_AGENT_URL", "http://127.0.0.1:8002")
+    monkeypatch.setattr("delector.core.db.settings.get_effective_api_key", lambda: "sk-synced-test-key")
 
     client = TestClient(companion_app)
     req_body = {
@@ -175,3 +179,4 @@ def test_companion_chat_proxies_to_go_agent_when_available(
         combined = "\n".join(lines)
         assert "From Go Agent" in combined
         assert "done" in combined
+        assert captured_headers.get("x-api-key") == "sk-synced-test-key"

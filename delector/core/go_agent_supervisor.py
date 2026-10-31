@@ -100,11 +100,32 @@ class GoAgentSupervisor:
             return False
 
         try:
+            env = os.environ.copy()
+            try:
+                from delector.core.db.settings import (
+                    get_effective_api_base_url,
+                    get_effective_api_key,
+                    get_effective_api_model,
+                )
+
+                eff_key = get_effective_api_key()
+                if eff_key:
+                    env["DEEPSEEK_API_KEY"] = eff_key
+                eff_base = get_effective_api_base_url()
+                if eff_base:
+                    env["API_BASE_URL"] = eff_base
+                eff_model = get_effective_api_model()
+                if eff_model:
+                    env["API_MODEL"] = eff_model
+            except Exception as s_err:
+                _logger.debug("读取数据库配置同步至 Go 伴学 Agent 失败 (%s)", s_err)
+
             _logger.info("正在拉起 Go 伴学子进程: %s (cwd=%s)", " ".join(cmd), cwd)
             # 子进程标准流丢弃或由系统管理，避免缓冲区死锁
             self.proc = subprocess.Popen(
                 cmd,
                 cwd=cwd,
+                env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

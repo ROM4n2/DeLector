@@ -44,6 +44,13 @@ func newAgentCmd() *cobra.Command {
 				cmd.PrintErrln("[WARN] DEEPSEEK_API_KEY 环境变量未配置，伴学 Agent 调用真实模型将报错")
 			}
 
+			if baseURL == defaultAgentBaseURL && os.Getenv("API_BASE_URL") != "" {
+				baseURL = os.Getenv("API_BASE_URL")
+			}
+			if model == defaultAgentModel && os.Getenv("API_MODEL") != "" {
+				model = os.Getenv("API_MODEL")
+			}
+
 			cfg := openai.DefaultConfig(key)
 			if baseURL != "" {
 				cfg.BaseURL = baseURL

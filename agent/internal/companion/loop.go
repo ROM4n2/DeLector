@@ -47,6 +47,9 @@ type Message struct {
 type Request struct {
 	Messages []Message    `json:"messages"`
 	Context  StudyContext `json:"context,omitempty"`
+	APIKey   string       `json:"api_key,omitempty"`
+	BaseURL  string       `json:"base_url,omitempty"`
+	Model    string       `json:"model,omitempty"`
 }
 
 // Proposal 对应用户需显式确认的写操作提议。
@@ -140,6 +143,19 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		totalTokens int
 	)
 
+	activeClient := a.client
+	activeModel := a.model
+	if req.APIKey != "" {
+		cfg := openai.DefaultConfig(req.APIKey)
+		if req.BaseURL != "" {
+			cfg.BaseURL = req.BaseURL
+		}
+		activeClient = openai.NewClientWithConfig(cfg)
+	}
+	if req.Model != "" {
+		activeModel = req.Model
+	}
+
 	// 2. 有界循环：最多 DEFAULT_MAX_TURNS 轮
 	for turn := 1; turn <= DefaultMaxTurns; turn++ {
 		select {
@@ -151,15 +167,23 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 
 		compactedMsgs := CompactMessages(chatMessages, DefaultContextMaxChars)
 		streamReq := openai.ChatCompletionRequest{
-			Model:      a.model,
+			Model:      activeModel,
 			Messages:   compactedMsgs,
 			Tools:      tools,
 			ToolChoice: "auto",
 			Stream:     true,
 		}
 
-		stream, err := a.client.CreateChatCompletionStream(ctx, streamReq)
+		if activeClient == nil {
+			errStr := "未配置任何可用的 LLM 模型客户端或 API Key"
+			_ = emit(Event{Event: EventError, Code: "missing_client", MessageZH: errStr})
+			_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
+			return &Outcome{Status: "error", Text: errStr, Reason: "error"}, fmt.Errorf("%s", errStr)
+		}
+
+		stream, err := activeClient.CreateChatCompletionStream(ctx, streamReq)
 		if err != nil && a.fallbackClient != nil {
+			primaryErr := err
 			_ = emit(Event{
 				Event: EventThought,
 				Text:  "主通道不可达，正在级联切换至备用模型...",
@@ -169,6 +193,12 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 				fallbackReq.Model = a.fallbackModel
 			}
 			stream, err = a.fallbackClient.CreateChatCompletionStream(ctx, fallbackReq)
+			if err != nil {
+				errStr := fmt.Sprintf("主通道失败 (%v)；备用模型 (%s) 不可达 (%v)", primaryErr, fallbackReq.Model, err)
+				_ = emit(Event{Event: EventError, Code: "upstream_error", MessageZH: errStr})
+				_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
+				return &Outcome{Status: "error", Text: errStr, Reason: "error"}, err
+			}
 		}
 		if err != nil {
 			errStr := fmt.Sprintf("调用模型失败: %v", err)

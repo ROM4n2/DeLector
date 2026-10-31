@@ -81,7 +81,8 @@ export async function streamCompanionChat(options) {
         const rawJson = line.slice(5).trim();
         try {
           const parsed = JSON.parse(rawJson);
-          onEvent(currentEvent, parsed);
+          const eventType = (parsed && parsed.event) || currentEvent;
+          onEvent(eventType, parsed);
         } catch (_) {
           // 容错忽略非 JSON 帧
         }
@@ -95,13 +96,17 @@ export async function streamCompanionChat(options) {
     let currentEvent = 'delta';
     for (const rawLine of lines) {
       const line = rawLine.trim();
+      if (!line) {
+        continue;
+      }
       if (line.startsWith('event:')) {
         currentEvent = line.slice(6).trim();
       } else if (line.startsWith('data:')) {
         const rawJson = line.slice(5).trim();
         try {
           const parsed = JSON.parse(rawJson);
-          onEvent(currentEvent, parsed);
+          const eventType = (parsed && parsed.event) || currentEvent;
+          onEvent(eventType, parsed);
         } catch (_) {
           // 容错忽略非 JSON 帧
         }

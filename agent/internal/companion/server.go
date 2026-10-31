@@ -52,6 +52,16 @@ func (sh *ServerHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.APIKey == "" {
+		req.APIKey = r.Header.Get("X-API-Key")
+	}
+	if req.BaseURL == "" {
+		req.BaseURL = r.Header.Get("X-Base-URL")
+	}
+	if req.Model == "" {
+		req.Model = r.Header.Get("X-Model")
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
@@ -71,8 +81,8 @@ func (sh *ServerHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		// 遵循 SSE 标准：data: <json>\n\n
-		_, writeErr := fmt.Fprintf(w, "data: %s\n\n", string(dataBytes))
+		// 遵循 SSE 标准：event: <type>\ndata: <json>\n\n
+		_, writeErr := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Event, string(dataBytes))
 		if writeErr == nil {
 			flusher.Flush()
 		}

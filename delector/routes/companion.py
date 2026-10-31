@@ -145,11 +145,29 @@ async def _dispatch_companion_stream(
                 "messages": messages,
                 "context": context or {},
             }
+            from delector.core.db.settings import (
+                get_effective_api_base_url,
+                get_effective_api_key,
+                get_effective_api_model,
+            )
+
+            headers: Dict[str, str] = {}
+            eff_key = get_effective_api_key()
+            if eff_key:
+                headers["X-API-Key"] = eff_key
+            eff_base = get_effective_api_base_url()
+            if eff_base:
+                headers["X-Base-URL"] = eff_base
+            eff_model = get_effective_api_model()
+            if eff_model:
+                headers["X-Model"] = eff_model
+
             async with httpx.AsyncClient(timeout=60.0) as client:
                 async with client.stream(
                     "POST",
                     f"{go_url.rstrip('/')}/api/companion/chat",
                     json=req_payload,
+                    headers=headers,
                 ) as resp:
                     if resp.status_code == 200:
                         async for chunk in resp.aiter_bytes():

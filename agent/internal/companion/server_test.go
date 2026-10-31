@@ -77,8 +77,12 @@ func TestCompanionServerChatSSE(t *testing.T) {
 	// 逐行消费 SSE 帧并验证格式
 	scanner := bufio.NewScanner(rr.Body)
 	var events []companion.Event
+	var eventHeaders []string
 	for scanner.Scan() {
 		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventHeaders = append(eventHeaders, strings.TrimPrefix(line, "event: "))
+		}
 		if strings.HasPrefix(line, "data: ") {
 			payload := strings.TrimPrefix(line, "data: ")
 			var ev companion.Event
@@ -104,5 +108,20 @@ func TestCompanionServerChatSSE(t *testing.T) {
 	}
 	if !hasDone {
 		t.Error("missing done event")
+	}
+
+	// 验证 SSE event 帧头正确下发
+	foundDeltaHeader := false
+	foundDoneHeader := false
+	for _, h := range eventHeaders {
+		if h == "delta" {
+			foundDeltaHeader = true
+		}
+		if h == "done" {
+			foundDoneHeader = true
+		}
+	}
+	if !foundDeltaHeader || !foundDoneHeader {
+		t.Errorf("missing SSE event headers: %v", eventHeaders)
 	}
 }
