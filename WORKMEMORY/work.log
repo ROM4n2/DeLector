@@ -706,3 +706,21 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 本地 master 曾与远端分叉（`5979b64` 被 squash 压平后不再是祖先）：先证「本地无 origin 缺失内容」再 `reset --hard origin/master`，不盲目对齐。
 - 验证：全量 **2584 passed + 2 skipped / 578s**；ruff 零告警；mypy 三档（119/160/4）零错误；六道闸 exit 0；`build_index_html.py --check` 通过；PR CI 全绿。
 - 遗留：Android 用户需覆盖安装（本版含 static/ 改动）；发布资产清单待流水线结束后核对。
+
+
+### 2026-10-31 16:30 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**德语伴学智能体（Companion Study Agent）全量落地**（分支 `feat/companion-study-agent`）。
+- **交付面**：
+  1. `41ab073` Task 1: 伴学 Agent 循环内核 `delector/services/companion_agent.py`（有界 MAX_TURNS=3、15s 硬超时、白名单工具调用、HITL Proposal 提议制、离线安全降级）。
+  2. `1e9fb51` Task 2: 后端路由与 SSE 流式端点 `delector/routes/companion.py`（Starlette 断连探活、`_require_localhost` 403 本地写保护、学情上下文）。
+  3. `a6081bf` Task 3: 前端分层与纯状态容器 `static/js/cp-state.js` (L1) 与 `static/js/cp-api.js` (L2)；`tools/check_frontend_layers.py` 严格纳管。
+  4. `80f1a1f` Task 4: 抽屉 UI 与德式排版 `static/js/cp-drawer.js`、`static/style.css`（Zero-innerHTML 纯 DOM 驱动，思维链、工具 Chip、Proposal 结构化交互卡片）。
+  5. `a76ac89` Task 5: 宠物主控接线 `static/js/companion.js` 与 `static/js/main.js`（视口难句捕获 `harvestStudyContext`、抽屉联动）。
+  6. `b045c53` Task 6: 双向 SSE 事件契约门禁 `tools/check_companion_contract.py`（静态校验 7 种 SSE 事件 100% 对齐）。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学专项测试：`pytest tests/test_companion_*.py` **15 passed in 1.84s**。
+  - 静态类型与风格：`mypy --strict` 零 issues · `ruff check` 零告警。
+  - 写作与核心卡盒回归：`pytest tests/test_writing_rules.py tests/test_frontend_api_contract.py tests/test_cards_*.py` **143 passed in 39.09s**。
+- **状态**：台账 Task 1~6 已全部 COMPLETED，Task 7 进入用户终审阶段。
