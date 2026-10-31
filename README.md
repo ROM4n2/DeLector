@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.19.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.20.0-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -35,22 +35,21 @@
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> 🚀 **v5.19.0 最新版本亮点（2026-10-22）**：
-> - **桌面单实例锁**：同一台机器只允许一个 DeLector —— 判据是 OS 文件锁（`%LOCALAPPDATA%\DeLector\instance.lock`）而不是「端口上有没有东西」。双击第二次会直接告诉你「已在运行（版本 / 进程 / 端口）」，不再出现两个窗口抢同一个学习数据库。
-> - **端口自动顺延**：8000 被其它程序占用时自动落到 8002–8010（8001 留给 Go supervisor），并在日志里写明换了哪个端口；显式 `--port` 仍按你指定的来，不顺延。
-> - **手机配对拿到真实端口**：`/api/wb/lan-info` 改为上报真实监听端口 —— 顺延后手机端不再按错的 8000 去连。
-> - **前端单体继续解耦**：`reader.js` 抽出 `rd-syntax.js`（纯语法层）与 `rd-api.js`（持久化层），`cards.js` 的 15 个模块级可变状态收进纯状态容器 `cd-state.js`；导出面全程冻结。
-> - 全量测试 **2,584 passed + 2 skipped（净增 146 个测试）**，探针 **31/31** 零漂移，六道机械闸全绿。
+> 🚀 **v5.20.0 最新版本亮点（2026-11-01）**：
+> - **Go 伴学导学 Agent 运行时**：统一承担编排、原生 Tool Calling、流式通信、模型级联和有界多轮控制（Pi 式动态 60% 压缩 + TurnPipeline 洋葱中间件 + 物理度量追溯）。
+> - **SQLite 业务持久化与领域画像探针**：新增 `companion_sessions`、`companion_messages`、`companion_proposals` 三表；内置 `get_learner_profile`（FSRS 复习画像）与 `query_dictionary`（权威德汉词典与配价搭配）。
+> - **跨端解耦与薄路由**：抽取 Service 层，路由收缩至 117 行；前端抽屉拆分为 Markdown、胶囊与提议三模块，100% 零 `innerHTML` 绝缘 XSS。
+> - **安卓移动端体验升级**：抽屉彻底解除固定高度，支持上下拖拽调节高度（28vh ~ 94vh）与一键精简/半屏/全屏三档切换，自适应避让系统手势区。
 >
-> 📱 **Android 用户注意**：改动含 `static/` 的版本需**覆盖安装**才生效。
+> 📱 **Android 用户注意**：含 `static/` 改动的版本需**覆盖安装**才生效。
 > 📜 完整版本变更细节见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.19.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；**需 Win10+ 与 WebView2 运行时**（Win11 自带；Win10 装不上时的表现见「已知限制」）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.19.0)     |
-| 🍎 **macOS**       | `v5.19.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.19.0)  |
-| 🐧 **Linux x64**   | `v5.19.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.19.0)  |
-| 📱 **Android**     | `v5.19.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.19.0) |
+| 🪟 **Windows x64** | `v5.20.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；**需 Win10+ 与 WebView2 运行时**（Win11 自带；Win10 装不上时的表现见「已知限制」）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.0)     |
+| 🍎 **macOS**       | `v5.20.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.0)  |
+| 🐧 **Linux x64**   | `v5.20.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.0)  |
+| 📱 **Android**     | `v5.20.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.0) |
 
 ---
 
@@ -181,6 +180,7 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
+| **v5.20.0** | 2026-11-01 | 伴学导学 Agent 运行时（Go 编排 · 原生 Tool Calling · Pi 式动态 60% 压缩 · TurnPipeline 中间件 · 物理 trace）· SQLite 会话持久化与画像探针（FSRS 负荷 · 离线词典）· 前端纯 DOM 解耦 · 移动端抽屉上下拖拽可调尺寸与三档预设 · 2670+ passed |
 | **v5.19.0** | 2026-10-22 | 桌面单实例锁（OS 文件锁判据，双击第二次不再起第二个进程）· 端口自动顺延 8000→8002–8010（8001 留给 supervisor）· `lan-info` 上报真实端口 · 前端 `reader.js`/`cards.js` 继续解耦（`rd-syntax`/`rd-api`/`cd-state`）· 2584 passed |
 | **v5.18.0** | 2026-10-19 | 单体架构与前端视图全面解耦（database/routes 拆解 · index.html/writer.js/reader.js 模块化）· 交互式智能体循环（ADR-0023 / 裁判终审 / AI 润色）· 裁判集扩充与真题回测（ADR-0024）· 六道自动化机械闸矩阵落地 · 2438 passed（净增 670 用例） |
 | **v5.17.0** | 2026-10-11 | 首个原生桌面壳（pywebview + 系统托盘 + 统一退出收尸）· 数据落点外置 `%LOCALAPPDATA%\DeLector` · 更新可见性（顶栏 chip + `/api/update/check`）· 发版门守卫（tag == `v`+`APP_VERSION`）· 真启产物闸 / 前端跨边界契约闸 · spaCy 惰性加载 |

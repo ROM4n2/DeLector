@@ -23,18 +23,13 @@
 
 ## 当前状态
 
-- **最新发布 v5.19.0（2026-10-22）** —— **桌面单实例锁 + 端口顺延 + 前端继续解耦**。
-  - 判定逻辑升级为 OS 文件锁（`%LOCALAPPDATA%\DeLector\instance.lock` 保持锁目标，`instance.json` 走原子替换，避免 POSIX `os.replace` 使锁静默失效）；唯一判定点 `start.claim_instance`。
-  - 端口候选为 `8000, 8002–8010`（8001 为 Go supervisor 保留端口），自动顺延；锁降级时以 `/api/health` 身份探测作第二腿；`/api/wb/lan-info` 报真实端口。
-  - 前端架构解耦：`reader.js` 抽出纯语法层 `rd-syntax.js` 与持久化层 `rd-api.js`；`cards.js` 模块状态收进纯状态容器 `cd-state.js`。
-  - 详见 `CHANGELOG.md` 与 `docs/agents/architecture.md`「桌面单实例与端口顺延」。
-- **现测基线（2026-10-22 18:30，分支 `feat/desktop-single-instance` @ `58b8f57`，当前有效值）**：
-  - 全量用例：**2586 收集 = 2584 passed + 2 skipped**（单进程串行 580s，前置 `PYTHONIOENCODING=utf-8`）。
-  - 文件规模：`tests/test_*.py` **156** 个 · `static/js` **36** 个 · `tools/*.mjs` **31** 个探针。
-  - 静态门禁：`ruff check .` 零告警 · `mypy --strict delector tools`（119 files）/ `mypy --follow-imports=skip tests`（160 files）/ 入口面 `--platform win32 --strict --follow-imports=skip`（4 files）零错误 · 六道机械闸全 exit 0 · CI 全绿。
-  - 代码行数：后端+入口 `*.py` 40,001 / tests 61,312 / `static/js` 16,801。
-  - ⚠️ 守卫纪律：入口面门禁必须带 `--follow-imports=skip`；全量测试 MUST 分批串行执行（防数据目录资源争抢假红）。
-- **历史里程碑归档**：v5.18.0 及更早版本演进、历史基线快照与已交付任务详见 `WORKMEMORY/cold/digest-2026-10.md`。
+- **最新发布 v5.20.0（2026-11-01）** —— **伴学导学 Agent 运行时 + SQLite 业务持久化 + 洋葱中间件与安卓可调工作台**。
+  - 架构演化：Go Runtime 统一承担 Agent 编排、Tool Calling、流式通信、模型级联和运行时控制（Pi 式动态 60% 压缩 + TurnPipeline 洋葱中间件 + 物理度量追溯）。
+  - 业务资产持久化：新增 `companion_sessions`、`companion_messages`、`companion_proposals` 三表；内置 `get_learner_profile`（FSRS 复习画像）与 `query_dictionary`（权威德汉词典与配价搭配）。
+  - 跨端解耦与薄路由：抽取 Service 层，路由瘦身至 117 行；前端抽屉拆分为 Markdown、胶囊与提议三模块，100% 零 `innerHTML` 绝缘 XSS。
+  - 安卓体验：抽屉彻底解除固定高度，支持上下拖拽调节高度（28vh ~ 94vh）与一键精简/半屏/全屏三档切换，自适应避让系统手势区。
+  - 详见 `CHANGELOG.md` 与 `docs/specs/2026-11-01-companion-harness-persistence-and-middleware-design.md`。
+- **历史里程碑归档**：v5.19.0（单实例锁与端口顺延）、v5.18.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 
