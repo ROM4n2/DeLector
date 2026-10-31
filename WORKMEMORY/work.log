@@ -777,3 +777,18 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.17s**。
   - 真实 DeepSeek 模型端到端联调：复杂从句拓扑长文本与词卡生成 100% 完整解析，零报错截断。
   - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复生词卡 Proposal 入库 500 报错，全量落地方案 A 思维链折叠坞 (CoT Thought Accordion)**。
+- **交付面**：
+  1. `a71aabe`:
+     - **修复生词卡 Proposal 入库 Schema 报错**：在 `delector/routes/companion.py` 中将 Proposal 提取参数精确映射至 `vocab_cards` 表真实字段（`lemma`, `definition_zh`, `sentence_context`），纠正 `reading` 伪字段引发的 500 异常；补齐单元测试真实字段约束；触发 `log_study_event`。
+     - **方案 A 思维链手风琴折叠坞**：在 `static/js/cp-drawer.js` 与 `static/style.css` 中落地 `createThoughtAccordion()`：
+       - 发送即刻激活：墨线纸质风格折叠盒，带 `0.0s` 实时递增秒表与微脉冲墨滴动画；
+       - 动态阶段透视步进：自动流转四阶段状态（锁定视口 ➔ 拓扑五场域映射 ➔ 动词框定式检验 ➔ 导学方案生成）；
+       - 答复到来平滑收拢：标题变为 `✓ 已完成深度研读 (耗时 X.X 秒)`，自动折叠保持视觉聚焦于正式解答，点击随时展开查看模型真实 `thought` 原文。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.51s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
