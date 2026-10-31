@@ -102,6 +102,24 @@ def test_vocab_stats_tool_via_http():
     }
 
 
+def test_vocab_stats_tool_with_raw_text():
+    resp = client.post(
+        "/api/tools/vocab_stats",
+        json={
+            "payload": {
+                "text": "Am Samstag soll es in zahlreichen Städten Deutschlands zu Protesten kommen.",
+                "levels": ["A1", "A2"],
+            }
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["tokens_total"] > 0
+    assert data["known_count"] > 0
+    assert data["known_rate"] > 0.0
+    assert isinstance(data["unknown_ranked"], list)
+
+
 # ---------- tool.run 单元（网络/外网依赖脱敏） ----------
 def test_ingest_run(monkeypatch):
     async def fake_fetch(url):

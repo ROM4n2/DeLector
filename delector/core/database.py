@@ -171,6 +171,7 @@ from delector.core.db.settings import (  # noqa: E402, I001  # 需排在连接�
     get_effective_api_base_url,
     get_effective_api_key,
     get_effective_api_model,
+    get_effective_reasoning_effort,
     get_setting,
     get_wb_sync_key,
     regenerate_wb_sync_key,
@@ -224,6 +225,19 @@ from delector.core.db.vocab import (  # noqa: E402, I001  # 需排在连接访�
     get_vocab_by_cefr,
 )
 
+# ── 伴学会话持久化切片显式 re-export ────────────────────────────────────────────────
+from delector.core.db.companion import (  # noqa: E402, I001
+    init_companion_tables,
+    create_session,
+    get_session,
+    list_sessions,
+    append_message,
+    get_messages,
+    create_proposal,
+    get_proposals,
+    update_proposal_status,
+)
+
 
 __all__ = [
     "DATA_DIR",
@@ -261,6 +275,7 @@ __all__ = [
     "get_effective_api_key",
     "get_effective_api_base_url",
     "get_effective_api_model",
+    "get_effective_reasoning_effort",
     "PRESET_ARTICLES",
     "ingest_article",
     "seed_preset_articles",

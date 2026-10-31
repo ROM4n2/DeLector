@@ -20,19 +20,20 @@ const (
 	defaultAgentPort          = 8002
 	defaultAgentPythonURL     = "http://127.0.0.1:8000"
 	defaultAgentBaseURL       = "https://api.deepseek.com"
-	defaultAgentModel         = "deepseek-chat"
+	defaultAgentModel         = "deepseek-flash"
 	defaultAgentFallbackURL   = "http://127.0.0.1:11434/v1"
 	defaultAgentFallbackModel = "qwen3.5:4b"
 )
 
 func newAgentCmd() *cobra.Command {
 	var (
-		port          int
-		pythonURL     string
-		baseURL       string
-		model         string
-		fallbackURL   string
-		fallbackModel string
+		port            int
+		pythonURL       string
+		baseURL         string
+		model           string
+		reasoningEffort string
+		fallbackURL     string
+		fallbackModel   string
 	)
 
 	cmd := &cobra.Command{
@@ -47,11 +48,18 @@ func newAgentCmd() *cobra.Command {
 			if baseURL == defaultAgentBaseURL && os.Getenv("API_BASE_URL") != "" {
 				baseURL = os.Getenv("API_BASE_URL")
 			}
-			if model == defaultAgentModel && os.Getenv("API_MODEL") != "" {
+			if (model == defaultAgentModel || model == "deepseek-chat") && os.Getenv("API_MODEL") != "" {
 				model = os.Getenv("API_MODEL")
 			}
 			if pythonURL == defaultAgentPythonURL && os.Getenv("DELECTOR_PYTHON_URL") != "" {
 				pythonURL = os.Getenv("DELECTOR_PYTHON_URL")
+			}
+
+			if reasoningEffort == "" && os.Getenv("DELECTOR_REASONING_EFFORT") != "" {
+				reasoningEffort = os.Getenv("DELECTOR_REASONING_EFFORT")
+			}
+			if reasoningEffort == "" && os.Getenv("REASONING_EFFORT") != "" {
+				reasoningEffort = os.Getenv("REASONING_EFFORT")
 			}
 
 			cfg := openai.DefaultConfig(key)
@@ -109,6 +117,7 @@ func newAgentCmd() *cobra.Command {
 	cmd.Flags().StringVar(&pythonURL, "python-url", defaultAgentPythonURL, "Python NLP 微服务地址（默认 http://127.0.0.1:8001）")
 	cmd.Flags().StringVar(&baseURL, "base-url", defaultAgentBaseURL, "OpenAI/DeepSeek API 根地址")
 	cmd.Flags().StringVar(&model, "model", defaultAgentModel, "对话模型名称（默认 deepseek-chat）")
+	cmd.Flags().StringVar(&reasoningEffort, "reasoning-effort", "", "思考强度档位（low / medium / high）")
 	cmd.Flags().StringVar(&fallbackURL, "fallback-url", defaultAgentFallbackURL, "备用模型（如本地 Ollama）API 根地址")
 	cmd.Flags().StringVar(&fallbackModel, "fallback-model", defaultAgentFallbackModel, "备用模型名称（默认 qwen3.5:4b）")
 

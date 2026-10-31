@@ -516,6 +516,32 @@ SUBJUNCTIVE_FORMS: Set[str] = {
 }
 
 
+def _is_subjunctive_token(t: Any) -> bool:
+    """精准判断是否为虚拟式（Konjunktiv I / II）谓语动词。
+
+    严格语言学纪律：
+    1. 不定式（VVINF, VAINF, VMINF 或 VerbForm=Inf）绝非虚拟式谓语，
+       必须排除与原形同形的不定式（如 kommen, gehen, bleiben）。
+    2. 分词（VVPP, VAPP, VMPP 或 VerbForm=Part）绝非独立虚拟式谓语。
+    3. 若形态分析明确标注为直陈式 Mood=Ind（如 soll, hat, ist），绝不能判定为虚拟式。
+    4. 仅当形态标记包含 Sub，或有限动词形态命中 SUBJUNCTIVE_FORMS 且未标记 Ind 时，才视为虚拟式。
+    """
+    tag = getattr(t, "tag_", "")
+    if tag.endswith("INF") or "Inf" in getattr(t, "morph", {}).get("VerbForm", []):
+        return False
+    if tag.endswith("PP") or "Part" in getattr(t, "morph", {}).get("VerbForm", []):
+        return False
+    morph_mood = getattr(t, "morph", {}).get("Mood", [])
+    if "Ind" in morph_mood and "Sub" not in morph_mood:
+        return False
+    if "Sub" in morph_mood:
+        return True
+    text_lower = getattr(t, "text", "").lower()
+    if text_lower in SUBJUNCTIVE_FORMS and (tag.endswith("FIN") or not tag):
+        return True
+    return False
+
+
 # ==============================================================================
 # 2. Token Formatting Helper
 # ==============================================================================
@@ -950,9 +976,7 @@ def analyze_sentence_topology(
         t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in (lk_tokens + rk_tokens)
     )
     has_sep_pfx = any(t.tag_ == "PTKVZ" for t in rk_tokens)
-    has_subjunctive = any(
-        t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", []) for t in (lk_tokens + rk_tokens)
-    )
+    has_subjunctive = any(_is_subjunctive_token(t) for t in (lk_tokens + rk_tokens))
 
     if has_werden and has_participle:
         bracket_desc = "Passiv-Klammer (Vorgangspassiv)"
@@ -1073,7 +1097,7 @@ def _classify_single_clause(tokens: List[Token], head: Token, node_id: str, is_r
     )
     has_modal = any(t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in tokens)
 
-    subj_tokens = [t for t in tokens if t.text.lower() in SUBJUNCTIVE_FORMS or "Sub" in t.morph.get("Mood", [])]
+    subj_tokens = [t for t in tokens if _is_subjunctive_token(t)]
     is_subjunctive = len(subj_tokens) > 0
 
     is_passive = (has_werden and has_participle) or (has_modal and has_participle and has_werden)

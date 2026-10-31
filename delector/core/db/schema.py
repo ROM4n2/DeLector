@@ -38,6 +38,7 @@ from delector.core.db.connection import (
     preflight_data_dir,
 )
 from delector.core.db.content import seed_preset_articles
+from delector.core.db.companion import init_companion_tables
 
 
 def init_progress_db(db_path: Optional[str] = None) -> None:
@@ -394,6 +395,8 @@ def init_db(db_path: Optional[str] = None) -> None:
             SELECT id, content, analysis_json, '初始快照' FROM essays
             WHERE id NOT IN (SELECT DISTINCT essay_id FROM essay_versions);
         """)
+
+        init_companion_tables(conn)
 
     init_progress_db()
     seed_preset_articles(target_path)

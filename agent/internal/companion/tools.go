@@ -20,6 +20,7 @@ const (
 // Event 封装一次 SSE 下发的规范数据载荷，保持与 cp-api.js 和 check_companion_contract 100% 对齐。
 type Event struct {
 	Event     EventType      `json:"event"`
+	ID        string         `json:"id,omitempty"`
 	Text      string         `json:"text,omitempty"`
 	Stage     string         `json:"stage,omitempty"`
 	Tool      string         `json:"tool,omitempty"`
@@ -27,6 +28,7 @@ type Event struct {
 	Result    map[string]any `json:"result,omitempty"`
 	Action    string         `json:"action,omitempty"`
 	Title     string         `json:"title,omitempty"`
+	Proposal  *Proposal      `json:"proposal,omitempty"`
 	Turns     int            `json:"turns,omitempty"`
 	Tokens    int            `json:"tokens,omitempty"`
 	Reason    string         `json:"reason,omitempty"`
@@ -87,6 +89,39 @@ func CompanionTools() []openai.Tool {
 						},
 					},
 					"required": []string{"text"},
+				},
+			},
+		},
+		{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "get_learner_profile",
+				Description: "查询当前学习者的德语水平画像、已知词汇总量（FSRS 间隔复习数据库中已掌握词数）、复习负荷及高频易错词根。",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"include_weak_roots": map[string]any{
+							"type":        "boolean",
+							"description": "是否包含薄弱词根列表，默认为 true",
+						},
+					},
+				},
+			},
+		},
+		{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "query_dictionary",
+				Description: "查询 DeLector 本地离线德汉权威词典与动词配价表（德汉释义、动词支配格、前置介词搭配等），严禁编造不存在的搭配。",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"lemma": map[string]any{
+							"type":        "string",
+							"description": "德语单词原型或原形词元（如 anfallen, Buch）",
+						},
+					},
+					"required": []string{"lemma"},
 				},
 			},
 		},

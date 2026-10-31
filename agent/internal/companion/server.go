@@ -61,6 +61,9 @@ func (sh *ServerHandler) handleChat(w http.ResponseWriter, r *http.Request) {
 	if req.Model == "" {
 		req.Model = r.Header.Get("X-Model")
 	}
+	if req.ReasoningEffort == "" {
+		req.ReasoningEffort = r.Header.Get("X-Reasoning-Effort")
+	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {

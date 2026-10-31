@@ -954,3 +954,118 @@ Caps: filesystem-read, filesystem-write, shell-exec
   4. **回归锁定与自愈沉淀（Step 4）**：
      - 永久单元回归测试 `compaction_regression_test.go` 进入 Go 测试套件（148 passed）；
      - 经验已通过 A-MAC 门禁沉淀至知识库 `99-Inbox/2026-10-31-agent-compaction-user-prompt-stripping-and-thought-stream-flicker.md`。
+
+
+### 2026-11-01 00:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**依据 dfs-plan 与 dfs-exec 协议全面落地 2026 最新 DeepSeek 规约、模型供应商抽象架构与 Pi 范式 60% 上下文流控（Branch `feat/companion-provider-registry-and-pi-compaction`）**。
+- **2026 最新 DeepSeek 官方规约物理核验**：
+  - 实时抓取官方文档确认：主力生产模型为 `deepseek-flash` (DeepSeek-V4.1-Flash-1017) 与 `deepseek-v4-pro`，向下兼容 `deepseek-chat`；
+  - 官方上下文长度实为 **1M tokens**（1,048,576 tokens），单次最大输出 384k tokens；原生支持 `thinking` 模式。
+- **多模型供应商抽象与注册中心（Task 2）**：
+  - 在 `agent/internal/provider` 创建 `Provider`、`ModelSpec` 与线程安全 `Registry`，内置 DeepSeek (1M tokens/384k 输出)、Ollama (32k tokens)、OpenRouter 与自定义供应商，预留未来多供应商扩展接口；
+  - 规格单测 100% 覆盖并包含变异测试，物理收据 18 passed。
+- **Python NLP 工具返回值高信噪比蒸馏（Task 1）**：
+  - 在 `delector/tools/analyze.py` 实现 `distill_analysis_for_agent` 投影器，剥离冗余 spaCy 内部指针，保留五场域原文、句子类型与核心词元；
+  - 目标难句序列化体积由 13,576 字符降至 1,820 字符（骨架 <800 字符），纯载荷压缩达 86.6%，单测 17 passed。
+- **Pi 式动态上下文 Token 估算与 60% 阈值流控（Task 3）**：
+  - 彻底废除固定字符截断逻辑，依据 `ModelSpec.ContextWindow * 0.60` 动态计算压缩水位线；
+  - 在 1M 上下文模型下未达 600k tokens 保持完整零压缩；超限时折叠前序历史为锚点，倒数第 2 条 User 之后的活跃交互块严格免疫折叠。
+- **伴学 Loop 与全链路装配验证（Task 4）**：
+  - `CompanionAgent` 注入 Provider Registry，自适应解析模型并动态流控；
+  - 全量回归：Go 169 passed in 10 packages，Python 68 passed in 7.34s，前端四道机械门禁 100% PASS。
+
+
+### 2026-11-01 00:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**根治 Go Agent 启动 5.0s 超时与 Python 兜底连通性失败缺陷（Commit `e83b716`）**。
+- **根因深度定位**：
+  1. **冷编译超时杀进程**：Windows 环境下若未预编译 `agent/delector.exe`，Supervisor 回退调用 `go run ./cmd/delector`。在 Windows NTFS 与安全软件下，Go 首次编译耗时 ~6-8s；而此前硬编码 `deadline_s = 5.0s`，导致进程编译尚未完成即被 Supervisor 超时强杀（SIGTERM），输出 `Go 伴学 Agent 启动超时 (5.0s)，正在终止子进程` 并回退 Python 本地内核；
+  2. **启动时序与 .env 注入脱节**：`start.py` 原先在启动 Go Supervisor 之后才 import `server.py`（从而晚执行 `load_env()`），导致 Supervisor 启动子进程时未能提前从 `.env` 注入 `DEEPSEEK_API_KEY`；
+  3. **Python 兜底抛出连接失败**：当 Go 被杀回退至 Python `companion_agent` 时，由于 API Key 为空，`llm_client` 组装 `Authorization: Bearer ` 头，被 httpx 判定为 Illegal header 抛出异常，进而显示为「AI 服务连接失败」。
+- **彻底根治方案**：
+  - **自动预编译缓存**：`GoAgentSupervisor.find_command()` 发现缺少独立二进制但有 `go` 时，自动执行一次 `go build -o delector.exe ./cmd/delector`。构建完成后仅需 ~50ms 启动，健康检查在 2.4s 内彻底完成（100% 免疫冷启动编译延迟）；
+  - **超时阈值放宽**：`DEFAULT_STARTUP_DEADLINE_S` 从 5.0s 放宽至 15.0s；
+  - **早期加载 .env**：`start.py` 在 `main()` 入口处执行 `_load_env_early()`，Supervisor 在 `start()` 时亦主动扫描仓库根与 agent 目录的 `.env` 补全环境变量。
+- **验证与交付**：
+  - 物理实测 Supervisor 启动健康耗时：**2.45s 成功就绪**（不再超时）；
+  - 测试通过：Go 169 passed、Python 68 passed、四道门禁全绿；
+  - 变更已推送至分支 `feat/companion-provider-registry-and-pi-compaction`（Commit `e83b716`，PR #179）。
+
+
+### 2026-11-01 00:35 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复前端抽屉正文 delta 增量覆盖导致最终只剩单字/句号缺陷（Commit `7f4a781`）**。
+- **根因分析**：
+  - 在 `static/js/cp-drawer.js:614` 中，监听 `event === 'delta'` 时错误执行了 `fullStreamText = data.text || ''` 与 `typewriter.enqueue(fullStreamText)`；
+  - 由于后端 SSE `delta` 事件推送的是增量字符 chunk（单字或局部词组），前端未执行 `+=` 累加，而是直接无脑赋值覆盖全文变量；
+  - 导致随着大模型流式输出，每个新字直接抹掉前面的所有文字，打字机不断被清空重置；模型最后一个 chunk 输出标点符号（如 `。` 或 `.`）时，最终抽屉便只剩下一个孤独的句号。
+- **修复措施**：
+  - 将 `fullStreamText = data.text || ''` 修复为 `fullStreamText += chunk` 累加并使用 `typewriter.append(chunk)` 挂入自适应打字机队列；
+  - 在 `event === 'done'` 时调用 `typewriter.flush()` 确保全量完整文本落地并沉淀进对话上下文历史。
+- **验证收据**：
+  - `node -c static/js/cp-drawer.js` 语法校验 0 错误；
+  - 前端四道机械门禁 100% PASS；
+  - 已推送至 PR #179（Commit `7f4a781`）。
+
+
+### 2026-11-01 01:15 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**闭环 dfs-debug：修复 CompanionDrawer.setReasoningEffort 未导出、Proposal 确认卡片消失及 vocab_stats 空结果缺陷**。
+- **根因分析与分流（dfs-debug 4-Step 规约）**：
+  1. `setReasoningEffort is not a function`: `static/modals/drawer.html` 绑定的 inline `onclick="window.CompanionDrawer?.setReasoningEffort('...')"`，而 `static/js/main.js` 的 `CompanionDrawer` 导出对象与 `static/js/cp-drawer.js` 均未定义并导出该方法，导致点击胶囊时抛出未捕获 TypeError；
+  2. Proposal 确认卡片消失: Go `loop.go` 下发的 SSE `proposal` 事件为平铺结构，缺少 `data.proposal` 嵌套对象，导致前端 `renderProposalCard` 保护条件直接退出；且字段名使用了 `definition_zh`/`sentence_context`，旧前端仅读取 `c.reading`/`c.context_sentence`；
+  3. `vocab_stats` 返回空结果: Go 工具声明为 `text` 入参，而 Python `vocab_stats.py` 原先仅支持 `tokens` 列表，入参未被分词导致 `tokens_total: 0`。
+- **彻底根治方案**：
+  1. `static/js/cp-drawer.js` 与 `main.js` 全量导出 `setReasoningEffort(effort)`，并在抽屉初始化时加载 `/api/settings` 回显同步；
+  2. `agent/internal/companion/loop.go` 与 `tools.go` 补齐 `Proposal *Proposal` 结构，前端 `cp-drawer.js` 做双模自适应提取；
+  3. `delector/tools/vocab_stats.py` 适配 `text` 入参并使用本地 spaCy 分词还原；
+  4. `tools/check_companion_contract.py` 扩充第 4 道机械检查，强制静态审计 `main.js window.CompanionDrawer` 导出 API 的自闭环与完整性。
+- **验证收据**：
+  - 前端 4 道门禁（层级、路由、模板同步、伴学契约）全绿 PASS；
+  - Node 语法校验与缺失接口专项 Repro 脚本由 RED 转为 100% GREEN；
+  - Python 56 passed、Go 169 passed（10 个包全绿）。
+
+### 2026-11-01 02:45 | auto-gemini-3.8-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：按 A→B 演进路线（Phase A 业务持久化与画像 + Phase B 单体解耦与中间件化），全面完成伴学 Harness 重构。
+
+### 2026-11-01 03:40 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学 Harness 9 项实施任务 100% 闭环交付**（计划：`docs/plans/2026-11-01-companion-harness-persistence-and-refactor.md`，规范：`docs/specs/2026-11-01-companion-harness-persistence-and-middleware-design.md`，台账：`.vault-exec-ledger.json` 9/9 COMPLETED）。
+- **执行纪律落实**：严格践行用户“不重合任务并行派发子代理”纪律，并行派出 3 组子代理独立交付 Python 后端服务、前端纯 DOM 拆分与 Go TurnPipeline 中间件，主会话无冲突合并并由机械闸兜底。
+- **Phase A 业务资产与画像交付**：
+  - Task 1: SQLite 三表（`companion_sessions`, `companion_messages`, `companion_proposals`）与 CRUD 落地于 `delector/core/db/companion.py`；
+  - Task 3: 领域探针 `get_learner_profile`（FSRS 负荷与等级画像）与 `query_dictionary`（本地权威词典与配价表）落地，空库/异常宽进严出；Go 原生 Tool Calling Schema 注册同步完成；
+  - Task 6: 前端会话持久化与会话切换器 UI（Session Switcher）落地，支持自动回显、历史会话切换、时序重放与独立新会话创建。
+- **Phase B 单体解耦与中间件化交付**：
+  - Task 2: 后端路由瘦身：抽取 `CompanionSessionService` 与 `CompanionProposalService`，`delector/routes/companion.py` 压缩至 117 行薄路由，彻底移出直接 SQL；
+  - Task 4 & 5: 前端巨石解耦：抽离 `cp-drawer-markdown.js`（100% 零 innerHTML 纯 DOM 语法树）、`cp-drawer-capsule.js`（浮动胶囊与视口追踪）与 `cp-drawer-proposals.js`（Proposal 确认与状态机防重）；
+  - Task 7: Go Runtime 单体解耦：抽离 `compaction.go`（Pi 式动态 60% 压缩）、`tool_calls.go`（ToolCall 聚合与回传）与 `prompts.go`（系统提示与 Prompt Nudge）；`DefaultMaxTurns = 6`；
+  - Task 8: 引入 `TurnPipeline` 洋葱中间件与 `tracer.go` 物理 JSONL 追踪（`companion_trace.jsonl`）。
+- **门禁验证凭据（100% GREEN）**：
+  - Go 运行时：`go test -race -v ./...` 全仓 185 passed in 10 packages；`delector.exe` 构建干净；
+  - Python 服务：`pytest tests/test_companion_*.py` 62 passed；全量核心回归 87 passed；
+  - 前端机械闸：`check_frontend_layers.py`（分层契约）、`check_frontend_api_contract.py`（端点一致性）、`check_companion_contract.py`（伴学双向契约）、`check_index_html_sync.py`（模板同步）全通过。
+
+### 2026-11-01 04:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复领域工具路由分发别名缺失、句法树虚拟式误判与思考强度胶囊 UI 交互失效**。
+- **排障一（query_dictionary unknown tool）**：Go Agent 使用的工具名为 `query_dictionary` 与 `get_learner_profile`，Python `TOOL_REGISTRY` 仅注册了 `dictionary` 与 `learner_profile`；已在 `delector/tools/__init__.py` 补齐双向别名，`tests/test_companion_domain_tools.py` 新增 127.0.0.1 本机端点分发断言。
+- **排障二（Konjunktiv-Klammer 句法语法误判）**：`syntax_tree.py` 将 `SUBJUNCTIVE_FORMS` 包含了 `kommen` 等与不定式同形的复数虚拟式，且在 RK 检查虚拟式时未过滤 `tag_ == 'VVINF'`，导致 `soll ... kommen`（直陈式情态框）被误标为虚拟式框；新增 `_is_subjunctive_token`，强制排除不定式、分词与 `Mood=Ind` 直陈式，输出精准回归为 `Modalverb-Klammer`。
+- **排障三（思考强度点击无反应）**：`cp-drawer.js` 模块化解耦时漏掉了胶囊 `.active` 类的切换与设置持久化；补齐 DOM pill 状态切换、设置弹窗下拉框同步与 `updateReasoningEffort()` 异步写库，初始化自动回显。
+- **凭据**：全仓 185 Go 单测通过，79 项核心 Python 用例通过，4 道前端机械闸全绿。
+
+### 2026-11-01 04:35 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**安卓移动端工作台抽屉（Bottom Sheet）UI 体验与可调节尺寸全面优化**。
+- **动态高度调节机制**：移除原本在移动端硬编码写死的 `height: 55vh !important`，改为由 CSS 变量 `--drawer-mobile-height` 统一接管（默认 65vh，支持 28vh ~ 94vh 自由拖拽与持久化记忆）。
+- **拖拽与手势手柄**：在抽屉顶部新增 Android 标准 Material 风格拖拽手柄 `.drawer-mobile-handle` 与可拉伸药丸指示条 `.drawer-mobile-pill`，支持移动端 touch/pointer 实时上下拖拽调整高度，松开自动保存到 `localStorage`。
+- **一键快捷三档切换**：在抽屉头部右侧操作区新增快捷切换按钮 `.drawer-size-btn`（双击拖拽手柄亦可触发），提供三档智能轮转：
+  - 📖 **精简阅读模式（38vh）**：露出大篇幅德语原文，适合边读边对照；
+  - ⚖ **经典半屏模式（65vh）**：平衡伴学交互与词汇/句法拓扑卡片呈现；
+  - 🧠 **全屏沉浸模式（92vh）**：最大化展示长文本导读、深度思考过程与复杂句法树。
+- **安卓小屏体验精致化**：
+  - 头部与标签栏紧凑重排，`.drawer-tabs` 启用弹性自适应平滑横向滚动，避免标签挤压折行；
+  - 抽屉底部接入 `padding-bottom: env(safe-area-inset-bottom, 12px)`，完美避让安卓手势白条/虚拟按键。
+- **物理凭据**：`static/index.html` 重新生成（3260 行），4 道前端机械闸（分层、路由、SSE 契约、模板同步）100% PASS。

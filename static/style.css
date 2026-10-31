@@ -1370,6 +1370,19 @@ body.drawer-resizing #drawer {
   transition: none !important;
 }
 
+/* 移动端手柄与尺寸调整按钮（桌面端默认隐藏） */
+.drawer-mobile-handle,
+.drawer-size-btn {
+  display: none;
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 @media (min-width: 1440px) {
   :root {
     --drawer-width: min(480px, 45vw);
@@ -5897,7 +5910,9 @@ body.drawer-open .shadow-player {
   #drawer {
     width: 100% !important;
     max-width: 100vw !important;
-    height: 72vh !important;
+    height: var(--drawer-mobile-height, 65vh) !important;
+    max-height: 94vh !important;
+    min-height: 28vh !important;
     top: auto !important;
     bottom: 0 !important;
     left: 0 !important;
@@ -5906,11 +5921,88 @@ body.drawer-open .shadow-player {
     border-top: 2px solid var(--ink) !important;
     box-shadow: 0 -8px 24px rgba(26, 23, 20, 0.2) !important;
     transform: translateY(100%);
-    border-radius: 12px 12px 0 0;
+    border-radius: 14px 14px 0 0;
     /* Allow inner vertical scroll without propagating to page */
     touch-action: pan-y;
     overscroll-behavior: contain;
     z-index: 1100 !important;
+    padding-bottom: env(safe-area-inset-bottom, 12px);
+    transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), height 0.22s ease;
+  }
+
+  body.drawer-resizing #drawer {
+    transition: none !important;
+  }
+
+  /* 移动端隐藏桌面侧边拉手，显示顶部拖拽手柄条 */
+  .drawer-resize-handle {
+    display: none !important;
+  }
+
+  .drawer-mobile-handle {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 18px;
+    padding: 6px 0 2px;
+    cursor: row-resize;
+    touch-action: none;
+    user-select: none;
+    background: transparent;
+    flex-shrink: 0;
+  }
+
+  .drawer-mobile-pill {
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(26, 23, 20, 0.28);
+    transition: background 0.15s ease, width 0.15s ease;
+  }
+
+  .drawer-mobile-handle:hover .drawer-mobile-pill,
+  .drawer-mobile-handle:active .drawer-mobile-pill,
+  body.drawer-resizing .drawer-mobile-pill {
+    background: var(--coral, #b44322);
+    width: 50px;
+  }
+
+  .drawer-size-btn {
+    display: grid !important;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid rgba(26, 23, 20, 0.18);
+    background: rgba(26, 23, 20, 0.05);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0;
+    transition: all 0.12s ease;
+  }
+
+  .drawer-size-btn:hover,
+  .drawer-size-btn:active {
+    background: rgba(26, 23, 20, 0.12);
+  }
+
+  /* 移动端更紧凑的抽屉头部与标签横向平滑滚动 */
+  .drawer-header {
+    padding: 0.35rem 0.85rem 0.5rem !important;
+  }
+
+  .drawer-tabs {
+    flex: 1 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .drawer-tab-btn {
+    padding: 6px 9px !important;
+    font-size: 0.72rem !important;
   }
 
   #drawer.open {
@@ -5936,11 +6028,6 @@ body.drawer-open .shadow-player {
   body.drawer-open {
     --reader-usable-width: 100vw;
     --reader-content-width: min(760px, 100vw);
-  }
-
-  /* sheet 降到 55vh，露出更多文章文字 */
-  #drawer {
-    height: 55vh !important;
   }
 
   /* 3D Poker Card on Mobile */
@@ -11304,6 +11391,96 @@ body.drawer-open .companion {
   flex-direction: column;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+
+.companion-session-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1.25rem;
+  background: var(--note-yellow);
+  border-bottom: 1px solid var(--border-color, #e0dacf);
+}
+
+.companion-session-select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #d5ccbe);
+  background: #fff;
+  color: var(--text-color, #2b2b2b);
+  cursor: pointer;
+}
+
+.companion-new-chat-btn {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #d5ccbe);
+  background: var(--bg-secondary, #faf7f0);
+  color: var(--text-color, #2b2b2b);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.companion-new-chat-btn:hover {
+  background: #fff;
+  border-color: var(--accent-color, #2d5a88);
+  color: var(--accent-color, #2d5a88);
+}
+
+.companion-thinking-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.1rem 0;
+  font-size: 0.76rem;
+}
+
+.companion-thinking-label {
+  font-weight: 600;
+  color: var(--pencil, #666666);
+  font-size: 0.74rem;
+  user-select: none;
+}
+
+.companion-thinking-pills {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(26, 23, 20, 0.08);
+  border-radius: 12px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.thinking-pill {
+  border: none;
+  background: transparent;
+  color: var(--pencil, #666666);
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  font-weight: 500;
+}
+
+.thinking-pill:hover {
+  color: var(--ink, #1a1a1a);
+}
+
+.thinking-pill.active {
+  background: var(--paper-card, #ffffff);
+  color: var(--coral, #b44322);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .companion-quick-actions {

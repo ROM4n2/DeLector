@@ -10,8 +10,10 @@ TOOL_REGISTRY：tool 名 → run 协程，routes/tools.py 据此分发。
 
 from delector.tools import (
     analyze,
+    dictionary,
     export,
     ingest,
+    learner_profile,
     tts_tool,
     vocab_stats,
     writing_check,
@@ -24,13 +26,21 @@ TOOL_REGISTRY = {
     "export": export.run,
     "tts": tts_tool.run,
     "vocab_stats": vocab_stats.run,
+    "dictionary": dictionary.run,
+    "query_dictionary": dictionary.run,
+    "learner_profile": learner_profile.run,
+    "get_learner_profile": learner_profile.run,
 }
 
 __all__ = [
     "TOOL_REGISTRY",
     "analyze",
+    "dictionary",
     "export",
+    "get_learner_profile",
     "ingest",
+    "learner_profile",
+    "query_dictionary",
     "tts_tool",
     "vocab_stats",
     "writing_check",

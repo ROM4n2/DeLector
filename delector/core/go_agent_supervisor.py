@@ -25,7 +25,7 @@ _logger = logging.getLogger("delector.agent_supervisor")
 
 DEFAULT_GO_AGENT_PORT: int = 8002
 DEFAULT_PYTHON_PORT: int = 8000
-DEFAULT_STARTUP_DEADLINE_S: float = 5.0
+DEFAULT_STARTUP_DEADLINE_S: float = 15.0
 DEFAULT_SHUTDOWN_GRACE_S: float = 5.0
 HEALTH_POLL_INTERVAL_S: float = 0.2
 
@@ -65,6 +65,29 @@ class GoAgentSupervisor:
         # 2. 次优探测系统 PATH 是否安装了 go CLI
         go_bin = shutil.which("go")
         if go_bin and (self.agent_dir / "go.mod").exists():
+            # 自动预编译二进制，规避 Windows 平台每次 go run 冷编译造成的启动超时
+            target_bin_name = "delector.exe" if os.name == "nt" else "delector"
+            target_bin = self.agent_dir / target_bin_name
+            try:
+                build_proc = subprocess.run(
+                    [go_bin, "build", "-o", str(target_bin), "./cmd/delector"],
+                    cwd=str(self.agent_dir),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=15.0,
+                )
+                if build_proc.returncode == 0 and target_bin.is_file() and os.access(target_bin, os.X_OK):
+                    return [
+                        str(target_bin),
+                        "agent",
+                        "--port",
+                        str(self.port),
+                        "--python-url",
+                        self.python_url,
+                    ], self.agent_dir
+            except Exception:
+                pass
+
             return [
                 go_bin,
                 "run",
@@ -112,11 +135,29 @@ class GoAgentSupervisor:
 
         try:
             env = os.environ.copy()
+            # 自动补充读取仓库根与 agent 目录下的 .env，确保凭证与配置能透传至 Go Agent
+            for base_dir in [str(self.root_dir), str(self.agent_dir), os.getcwd()]:
+                env_file = Path(base_dir) / ".env"
+                if env_file.is_file():
+                    try:
+                        with open(env_file, "r", encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if line and not line.startswith("#") and "=" in line:
+                                    k, v = line.split("=", 1)
+                                    k = k.strip()
+                                    v = v.strip().strip("'").strip('"')
+                                    if k and k not in env:
+                                        env[k] = v
+                    except Exception:
+                        pass
+
             try:
                 from delector.core.db.settings import (
                     get_effective_api_base_url,
                     get_effective_api_key,
                     get_effective_api_model,
+                    get_effective_reasoning_effort,
                 )
 
                 eff_key = get_effective_api_key()
@@ -128,6 +169,9 @@ class GoAgentSupervisor:
                 eff_model = get_effective_api_model()
                 if eff_model:
                     env["API_MODEL"] = eff_model
+                eff_effort = get_effective_reasoning_effort()
+                if eff_effort:
+                    env["DELECTOR_REASONING_EFFORT"] = eff_effort
             except Exception as s_err:
                 _logger.debug("读取数据库配置同步至 Go 伴学 Agent 失败 (%s)", s_err)
 

@@ -12,6 +12,7 @@ from delector.core.database import (
     get_effective_api_base_url,
     get_effective_api_key,
     get_effective_api_model,
+    get_effective_reasoning_effort,
     get_setting,
     set_setting,
 )
@@ -25,6 +26,7 @@ class SettingsUpdate(BaseModel):
     api_key: Optional[str] = None
     api_base_url: Optional[str] = None
     api_model: Optional[str] = None
+    reasoning_effort: Optional[str] = None
     tts_voice: Optional[str] = None
     tts_rate: Optional[str] = None
 
@@ -64,6 +66,7 @@ def get_app_settings(request: Request) -> Dict[str, Any]:
         "api_key_masked": masked,
         "api_base_url": get_effective_api_base_url(),
         "api_model": get_effective_api_model(),
+        "reasoning_effort": get_effective_reasoning_effort(),
         "tts_voice": get_setting("TTS_VOICE", "de-DE-KatjaNeural"),
         "tts_rate": get_setting("TTS_RATE", "+0%"),
         # live 读（非导入期快照）：模型惰性加载后，成功/失败状态在首次使用时才回填，见顶部注释。
@@ -85,6 +88,8 @@ def update_app_settings(settings: SettingsUpdate, request: Request) -> Dict[str,
         set_setting("API_BASE_URL", settings.api_base_url.strip())
     if settings.api_model is not None and settings.api_model.strip() != "":
         set_setting("API_MODEL", settings.api_model.strip())
+    if settings.reasoning_effort is not None and settings.reasoning_effort.strip() != "":
+        set_setting("REASONING_EFFORT", settings.reasoning_effort.strip())
     if settings.tts_voice is not None and settings.tts_voice.strip() != "":
         set_setting("TTS_VOICE", settings.tts_voice.strip())
     if settings.tts_rate is not None and settings.tts_rate.strip() != "":

@@ -27,6 +27,38 @@ export async function executeProposal(proposalId, action, payload) {
   });
 }
 
+export async function fetchAppSettings() {
+  return api('/api/settings');
+}
+
+export async function updateReasoningEffort(effort) {
+  return api('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reasoning_effort: effort })
+  });
+}
+
+export async function fetchCompanionSessions() {
+  return api('/api/companion/sessions');
+}
+
+export async function createCompanionSession(articleId, title) {
+  return api('/api/companion/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ article_id: articleId || null, title: title || '新伴学会话' })
+  });
+}
+
+export async function fetchCompanionHistory(sessionId) {
+  return api(`/api/companion/sessions/${sessionId}/messages`);
+}
+
+export async function fetchCompanionProposals(sessionId) {
+  return api(`/api/companion/sessions/${sessionId}/proposals`);
+}
+
 /**
  * 消费伴学流式会话端点，解析强类型 SSE 事件
  * @param {Object} options
@@ -41,13 +73,29 @@ export async function streamCompanionChat(options) {
   const onEvent = options.onEvent || (() => {});
   const signal = options.signal || null;
 
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'text/event-stream'
+  };
+  if (options.reasoning_effort) {
+    headers['X-Reasoning-Effort'] = options.reasoning_effort;
+  }
+  if (options.session_id) {
+    headers['X-Session-ID'] = options.session_id;
+  }
+
+  const reqBody = { messages, context };
+  if (options.session_id) {
+    reqBody.session_id = options.session_id;
+  }
+  if (options.reasoning_effort) {
+    reqBody.reasoning_effort = options.reasoning_effort;
+  }
+
   const response = await fetch('/api/companion/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream'
-    },
-    body: JSON.stringify({ messages, context }),
+    headers: headers,
+    body: JSON.stringify(reqBody),
     signal: signal
   });
 

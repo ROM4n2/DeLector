@@ -3,18 +3,80 @@ package companion
 import (
 	"fmt"
 
+	"github.com/ROM4n2/DeLector/agent/internal/provider"
 	"github.com/sashabaranov/go-openai"
 )
 
 // DefaultContextMaxChars 默认伴学会话上下文字符预算上限（约 8000-10000 tokens）
 const DefaultContextMaxChars = 32000
 
-// CompactMessages 执行 Turn 间主动滑动窗口上下文压缩（Pi-Agent 流控范式）
-// 核心铁律：
-// 1. 首部 System Prompt（messages[0]）永远保留；
-// 2. 当前正在进行的活跃交互块（从最后一条 User 消息开始的所有消息，包含 User、Assistant ToolCalls、Tool Results）永远保留，绝不可折叠，防止割裂 Tool 链或丢失用户意图；
-// 3. 仅对发生在该活跃交互之前的历史对话（messages[1 : lastUserIdx]）执行结构化 Compaction 折叠为状态锚点。
-func CompactMessages(messages []openai.ChatCompletionMessage, maxChars int) []openai.ChatCompletionMessage {
+// EstimateTokens 估算一组 ChatCompletionMessage 的 Token 占用量（Pi 流控标准轻量估算法）
+func EstimateTokens(messages []openai.ChatCompletionMessage) int {
+	tokens := 0
+	for _, m := range messages {
+		tokens += 4 // 消息协议包装 overhead
+		tokens += estimateStringTokens(m.Content)
+		tokens += estimateStringTokens(m.ReasoningContent)
+		for _, tc := range m.ToolCalls {
+			tokens += 10 // ToolCall 协议 overhead
+			tokens += estimateStringTokens(tc.Function.Name)
+			tokens += estimateStringTokens(tc.Function.Arguments)
+		}
+	}
+	tokens += 2 // Assistant 回复引导
+	return tokens
+}
+
+func estimateStringTokens(s string) int {
+	if len(s) == 0 {
+		return 0
+	}
+	runeCount := 0
+	for _, r := range s {
+		if r > 127 {
+			runeCount += 2 // 非 ASCII / CJK / 德语变音字符加权
+		} else {
+			runeCount += 1
+		}
+	}
+	return (runeCount + 2) / 3
+}
+
+// CompactMessagesDynamic 执行基于模型硬件规格（ModelSpec）与 Pi 范式 60% 水位线的动态上下文流控压缩。
+// 规则：
+// 1. 首部 System Prompt 永远保留；
+// 2. 活跃交互块（倒数第 2 条 User 提示词起至末尾的全部消息，含活跃 Tool 链）永远完整保留；
+// 3. 仅当总 Token 估算超过 ContextWindow * CompactionRatio（默认 60%）时，才将更早的历史轮次折叠为结构化状态锚点。
+func CompactMessagesDynamic(messages []openai.ChatCompletionMessage, spec provider.ModelSpec) []openai.ChatCompletionMessage {
+	if len(messages) <= 3 {
+		return messages
+	}
+
+	ratio := spec.CompactionRatio
+	if ratio <= 0 || ratio >= 1.0 {
+		ratio = provider.DefaultCompactionRatio
+	}
+	window := spec.ContextWindow
+	if window <= 0 {
+		window = provider.CustomContextWindow
+	}
+	threshold := int(float64(window) * ratio)
+
+	currentTokens := EstimateTokens(messages)
+	if currentTokens <= threshold {
+		return messages
+	}
+
+	return compactHistory(messages)
+}
+
+// CompactContext executes turn-level sliding window context compaction based on character budget.
+// Invariants:
+// 1. Keep system prompt at index 0.
+// 2. Keep last 2 turns (active conversation block) intact.
+// 3. If total character count exceeds maxChars, fold intermediate older turns into a single summary system message.
+// 4. If under maxChars or not enough turns, return messages unmodified.
+func CompactContext(messages []openai.ChatCompletionMessage, maxChars int) []openai.ChatCompletionMessage {
 	if maxChars <= 0 {
 		maxChars = DefaultContextMaxChars
 	}
@@ -32,6 +94,15 @@ func CompactMessages(messages []openai.ChatCompletionMessage, maxChars int) []op
 		return messages
 	}
 
+	return compactHistory(messages)
+}
+
+// CompactMessages 保留历史别名兼容
+func CompactMessages(messages []openai.ChatCompletionMessage, maxChars int) []openai.ChatCompletionMessage {
+	return CompactContext(messages, maxChars)
+}
+
+func compactHistory(messages []openai.ChatCompletionMessage) []openai.ChatCompletionMessage {
 	// 从后往前寻找最近保留的交互起点（最多保留最近 2 轮问答，即从倒数第 2 条 User 消息开始）
 	tailUserIdx := -1
 	userCount := 0
