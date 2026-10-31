@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """rd-api.js（L2 持久化访问层）独立可用性验收与变异自证。
 
-依据 docs/plans/2026-10-19-reader-api-layer-split.md Task 4：
+依据 docs/plans/archive/2026-10-19-reader-api-layer-split.md Task 4：
   1. test_rd_api_is_an_independent_module:
      - 独立通过 node --check（隔离临时目录内改名为 .mjs）。
      - import 白名单严格等于 {"./core.js"}。

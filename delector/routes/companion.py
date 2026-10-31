@@ -2,7 +2,7 @@
 """伴学智能体 HTTP 路由与 SSE 流式端点 (Task 2).
 
 依据: docs/specs/2026-11-01-companion-harness-persistence-and-middleware-design.md
-      docs/plans/2026-11-01-companion-harness-persistence-and-refactor.md
+      docs/plans/archive/2026-11-01-companion-harness-persistence-and-refactor.md
 """
 
 from __future__ import annotations

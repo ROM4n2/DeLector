@@ -403,4 +403,4 @@
 
 仓库内**没有** `scripts/vault_exec_state.py`（该脚本不在本仓）。交接方式：
 `/dfs-exec` 按 `.vault-exec-ledger.json` 既有 schema（`version/plan_file/tasks[id,title,status,...]`）写入，
-`plan_file` = `docs/plans/2026-10-21-desktop-single-instance.md`，共 10 个任务。
+`plan_file` = `docs/plans/archive/2026-10-21-desktop-single-instance.md`，共 10 个任务。

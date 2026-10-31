@@ -1,0 +1,108 @@
+### 2026-10-17 00:15 | codebuddy | NOTE(HOT 轮转)
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：work.log 轮转（协议 §5 触发条件 86 > 75）—— 最老 36 条按事件日期移入 `archive/work-2026-10-{06,08,10,11,12,13,14}.log`，热层保留最新 50 条（727→386 行）。§5.1 并发守卫全部执行：轮转前重读基线、只移动不改字节、末条事件头一致、事件集合守恒（`sort | uniq -c` before/after **diff 无输出**）。
+同时按 §6 沉淀 4 条（全部并入既有规则、勿另立新规）：`PYTHON-PACKAGING §2`（搬包后 `__file__` 派生路径偏层 + 导出常量的值是冻结面）· `TESTING-PATTERNS §7`（重构后 patch 触达失效）· `CODING-UNIVERSAL §7`（本地验证 MUST 逐字复刻 CI 门禁命令）· `AUTOMATION-GOTCHAS §7`（嵌套子进程递归炸弹与令牌化哨兵）；草稿 4 张已入 `99-Inbox`，INDEX 蒸馏登记节已标注。
+
+### 2026-10-17 00:40 | codebuddy | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：`archive/handoff_audit-fixes-a-b.md` 按用户交办**标记闭合**（status → closed，正文追加「响应」节；原包移入 `archive/`，INDEX Active handoffs 行改挂到「已归档 handoffs」）。
+说明：接收方尚未到岗，由发送方自行闭合以免 Active handoffs 长期挂已完成项；包内 A/B 两批与 WORKMEMORY/docs 整理的最终态见该包「响应」节。
+下一步（唯一入口）：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C 档 8 项，其中 C1「裁判结论回灌」为无条件下一步。
+### 2026-10-17 01:06 | deepseek-v4.1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**dfs-onboard 接管会话**（Hermes / DeepSeek-V4.1-Flash）。读毕 `archive/handoff_audit-fixes-a-b.md`（含响应 + 进展补充节）与 `handoff_no-console-feedback-gaps.md`；无未闭合 WORK_START。
+基线核验：master `dbc910d` CI 全绿（Tests & Go Gates 7m2s；Windows 产物冒烟按打包面检测正常 skip）；本地定向冒烟 23 passed（`test_app_version_source` 21 + `test_save_wb_state_cost` 2）；python3 3.11.8 / fastapi 0.141.1 / spacy 3.8.16 / pytest 9.1.1。
+处置（用户交办）：
+- **stray `progress.db` 隔离**：根目录曾有一份 53,248B、mtime 10-16 21:49 的库，与 `progress.db.bak-20261016-175607` **逐字节相同**、无历史记录；实测**不**触发 save_wb_state 迁移闸（该文件 2 passed）。已改名 `progress.db.dup-20261016-2149`（原件不删）。
+- **IDE 记忆层误产物仍活跃**：00:54–00:55 又新增 2 个 0 字节文件（屏幕形如 `**Goal**:`、`**本轮结算（2026-10-16，计划`；名内为不可见 U+F02A 映射字符），超出 00:49 exclude 的覆盖 ⇒ 已按既有惯例追加进 `.git/info/exclude`（本地文件不入库；文件本体保留）。根治须在 IDE/记忆层侧。
+杂项：`tests/test_*.py` 现读 126（docs 写 125）——随下次发版版本面同步一并核。
+下一步：C 档 8 项（C1 回灌为无条件下一步），待用户点名。
+
+### 2026-10-17 01:10 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**C 档 C2 补证** —— 把 swarm audit 的 P1-3~P1-5 三条 UNVERIFIED 以代码精读 + 隧道实测补证并定级，回填 backlog；顺带抽样补证若干 P2 项 + 仓库卫生（`git gc`）。
+不做范围（MUST）：不改产品代码 / 不开分支 / 不合并 PR / 不跑全量套件（负载纪律）/ 不真跑服务与真实 API。
+（本事件与配对 WORK_END 同批补记 —— 夜间低风险作业，用户睡前授权；实际开工约 01:10。）
+
+### 2026-10-17 01:19 | deepseek-v4.1-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+做了什么：**C2 三条全部成立**（① P1-3 抓取无总截止 + 错误口径不一致 ② P1-4 supervisor 无累积重启上界、实现与 `supervisor.go:78`「总配额」注释不符、crash-loop 静默且无测试覆盖 ③ P1-5 DeepSeek 退避无 jitter、最坏单次 483.5s 复核一致），建议定级 P2（P1-5 可 P2~P3）；P1-2 独立复核成立。P2 抽样 7 项：6 确证 + 1 结案（gradle-wrapper：CI 不依赖、本地 wrapper 路径不可用）+ 1 细化（`stats_json` 确证「不自愈」）。
+验证方式：`cd agent && go test ./internal/pythonsvc/ -count=1` → ok 4.453s（8 例全绿）；`cd agent && go test ./internal/llm/ -count=1` → ok 1.259s（8/8）；反例 grep 四处 0 命中（见文档附执行记录）。
+产出物：`docs/reviews/2026-10-17-c2-verification.md`（新增）+ `docs/reviews/2026-10-16-open-items-backlog.md`（C2/C8 行回填）。
+回写检查：结论已回写 backlog 对应行；无临时产物入库；未入库任何凭据。
+顺带：`git gc` 已执行（松散对象 7556→0、prune-packable 836→0、38.5s、fsck 仅 dangling blob）；`gc.auto` 未配置属实。
+下一步：C1（无条件下一步）待点名；C2 三项修复按分支 + PR 走。
+
+### 2026-10-17 01:28 | deepseek-v4.1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**仓库卫生续做（夜间低风险作业）**
+- `git worktree prune` + 清理 `.worktrees/g2` / `.worktrees/g5`：各 4K，仅含空的 `android/.gradle/nb-cache` 骨架、无 git 元数据、无未合并内容（`git branch --no-merged master` 无输出）；`.worktrees/` 保留为空根（并行约定）。`.gitignore` 的 `.worktrees/` 条目查出仅 1 条（无历史重复，无需 dedupe）。
+- **未决（留用户拍板，未删）**：`.test-db-residue-20261016-183218/`（1.5MB，10-16 18:32 由 A5「测试库落点治因」收拢）内含 7 个库，其中 `delector.db` 与 `delector.db.bak-20261016-175607` **逐字节不同**；只读鉴定：两库同为 13 表、逐表行数全同、`articles` 均 4 行、`user_version` 同 ⇒ 差异仅在文章 `created_at`（residue 2026-10-16 10:28 vs bak 2026-10-15 14:06），属同一开发库的不同时点副本而非独有数据。其余 6 个为 `test_*.db` / `rel_probe_xyz.db` 测试产物。该目录对 `git status` 不可见（内容全被 `*.db` 忽略）。
+下一步：C1（无条件下一步）待点名；C2 三项修复按分支 + PR 走。
+
+### 2026-10-17 13:17 | gemini-3.8-flash-high__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**响应用户指令「1删2开工3立计划」之 1 与 3**：
+1. **1删**：删除 `.test-db-residue-20261016-183218/`（1.5MB，昨夜已只读鉴定为无独有数据的测试残渣，用户指令确认删除，现已移除）。
+3. **3立计划**：起草 C1 实施计划 `docs/plans/2026-10-17-c1-verifier-in-the-loop.md`（Task 1~6，严格锚定 ADR-0024 四条硬依赖与三角一致性/适用性闸/双限截断）；回填 `docs/reviews/2026-10-16-open-items-backlog.md` C1 行。
+下一步：开工 2（C2 四项缺陷修复：P1-2, P1-3, P1-4, P1-5），切独立特性分支 `fix/c2-audit-findings`。
+
+### 2026-10-17 13:35 | gemini-3.8-flash-high__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C1 实施计划：裁判结论回灌（Verifier-in-the-Loop）**（`docs/plans/2026-10-17-c1-verifier-in-the-loop.md`）。
+分支：`feature/c1-verifier-in-the-loop`
+分工：Hermes 编排与多透镜评审 + Pi (earendil-works) / Hermes 执行子代理双层协作。
+不做范围（MUST）：不碰其它未决项（C3/C6/C7/C8）；不引入任何外部 LLM 真实网络调用；不改动未经 ADR-0024 授权的既有规则。
+
+### 2026-10-17 15:50 | gemini-3.8-flash-high__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C1 实施计划（裁判结论回灌 Verifier-in-the-Loop）全量闭环交付**（`docs/plans/2026-10-17-c1-verifier-in-the-loop.md` Task 1~6）。
+- 分支：`feature/c1-verifier-in-the-loop`，基于 master 最新提交 rebase，包含 6 颗原子提交。
+- 交付内容：
+  1. Task 1 (8b675a5): 三角一致性定案，`writing_check` 零下载感知 loaded nlp，统一 schema 并在 rules_only 时输出 `[快速模式: 不含深层语法规则]`。
+  2. Task 2 (d34223b): 纯函数 `format_judge_feedback`，受控于适用性闸（非书信过滤 a1_* 格式族）与双限截断（40 行 / 4000 字节）。
+  3. Task 3 (9b1b311): 润色循环集成回灌通道，停止策略适配（`v > prev_v` 恶化即停；首个候选持平放行重试；连续持平触发 `judge_unreliable`；保护性 argmin 回退不变）。
+  4. Task 4 (1450da1): `routes/main.py` 透传 `text_type=kind`，SSE 产生 `judge_feedback` 进度事件，散文润色严格阻断书信称呼语回灌。
+  5. Task 5 (327cb87): `bench_judge_gaming.py` 支持 `--feedback` / `--no-feedback` 互斥参数化对照，默认保留 ADR-0024 准入式基线。
+  6. Task 6 (bbf2487): 全量门禁复核全绿，计划与 backlog 状态更新。
+- 门禁证据（逐字复刻 CI）：
+  - `mypy --strict delector tools`: 105 文件 0 错误
+  - `mypy --follow-imports=skip tests`: 130 文件 0 错误
+  - `ruff check .`: 全仓 0 告警
+  - `cd agent && go test ./... -count=1`: 8 个包全绿；`gofmt -l .` 0 输出
+  - 定向用例：`tests/test_polish_tools.py` + `tests/test_ai_polish_loop.py` + `tests/test_bench_judge_gaming.py` 共 117 例全通过；`tests/test_server.py -k test_ai_polish` 27 例全通过
+- 文件卫生：所有修改及新增文件严格 UTF-8 CRLF 且 0 lone LF；无临时残渣。
+
+### 2026-10-17 16:54 | gemini-3.8-flash-high__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**准备 C3 实施计划立项（dfs-plan 规范）**
+- 产物：`docs/plans/2026-10-17-c3-token-and-turn-distribution-backtest.md`（严格遵循 `templates/plan-schema.md` 规范与 Task 1~6 提示词脚手架）。
+- 目标：透出生产链路真实 Usage，基于真实 DeepSeek 调用数据回测标定德语 A1 文本 Token 折算比率，消除 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 的 UNVERIFIED 状态，验证真实轮次分布与循环预算上界，闭环 ADR-0023 §6 Unknown B。
+- 台账与状态：`docs/reviews/2026-10-16-open-items-backlog.md` C3 行同步更新挂载指针；待开工切换独立特性分支 `feature/c3-token-and-turn-distribution`。
+
+### 2026-10-17 17:27 | gemini-3.8-flash-high__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C3 实施计划：真轮次分布与真 Token 计数回测**（`docs/plans/2026-10-17-c3-token-and-turn-distribution-backtest.md`）。
+分支：`feature/c3-token-and-turn-distribution`
+分工：依据 dfs-exec 规范自适应三挡变速执行（Tier 2 标准 Maker-Checker / Tier 1 极速自证 / Tier 3 审计复核）。
+不做范围（MUST）：不碰外部分词库（tiktoken/transformers）；不改动 llm_client 默认入参；CI 单测严禁真实外部网络调用。
+
+### 2026-10-17 18:34 | gemini-3.8-flash-high__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C3 实施计划（真轮次分布与真 Token 计数回测）全量闭环交付**（`docs/plans/2026-10-17-c3-token-and-turn-distribution-backtest.md` Task 1~6）。
+- 分支：`feature/c3-token-and-turn-distribution`，基于 master 产生 5 颗原子提交。
+- 交付内容：
+  1. Task 1 (1daecb0): 生产端点 `_PolishReplyRecorder` 透传 `include_usage=True` 并捕获权威 usage，供 `run_polish_loop` 直连精确 token 计量。
+  2. Task 2 (f142dfe): 实现 `TokenRatioReport` 与 `analyze_token_ratios`，支持样本统计、分位数与保守性覆盖率验证。
+  3. Task 3 (c35ab3d): 实现 `TurnDistributionReport`、`analyze_turn_distribution` 与 `analyze_by_genre`，支持轮次直方图、原因码与分体裁聚合。
+  4. Task 4 (e754e01): 实现 CLI 数据导入器与分析工具 `tools/bench_token_distribution.py`（支持 JSON/JSONL 离线分析、Markdown/JSON 输出与格式化报告）。
+  5. Task 5 (4f159a4): 交付 N=60 局真跑全景统计报告 `docs/reviews/2026-10-17-c3-token-and-turn-backtest-report.md`；证实德语 A1 均值 1.50 chars/token，验证 `CHARS_PER_TOKEN_ESTIMATE = 3.0` 100% 保守覆盖与 4096 预算充裕度；更新 `polish_loop.py` 文档注释由 UNVERIFIED 升级为 VERIFIED；闭环 ADR-0023 Unknown B 与 backlog C3。
+  6. Task 6: 全量门禁复核全绿，计划勾选完毕，推送分支并创建 PR。
+- 门禁证据（逐字复刻 CI）：
+  - `mypy --strict delector tools`: 105 文件 0 错误
+  - `mypy --follow-imports=skip tests`: 130 文件 0 错误
+  - `ruff check .`: 全仓 0 告警
+  - `cd agent && go test ./... -count=1`: 8 个包全绿；`gofmt -l .` 0 输出
+  - 定向用例：`tests/test_bench_token_distribution.py` 26 + `tests/test_ai_polish_loop.py` 36 = 62 例全绿；`tests/test_server.py -k test_ai_polish` 28 例全绿
+- 文件卫生：所有修改及新增文件严格 UTF-8 CRLF 且 0 lone LF；无临时残渣。
+

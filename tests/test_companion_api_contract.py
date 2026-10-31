@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """伴学前端模块契约与分层机械检查 (Task 3).
 
-依据: docs/plans/2026-10-31-companion-study-agent.md Task 3.
+依据: docs/plans/archive/2026-10-31-companion-study-agent.md Task 3.
 """
 
 from __future__ import annotations

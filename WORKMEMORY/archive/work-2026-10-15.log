@@ -92,3 +92,76 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **B 维（时间副词 ↔ 时态一致性）接线为 warning**：正样本 FP 0/35、负样本 7/7、对照 0/6，两档阈值均成立；样本偏小（7 错 + 6 对照）⇒ 先 advisory 不阻断收敛，积累真实用法后再议升 error。可见性靠响应体新增 `judge_advisories`（只增不改）+ Task 7 的前端渲染。
 - 更正一条**未实测口径**：提交 `39e6d79` 的消息里写「COMMON_CORRECT_SENTENCES 47 句」是我未实测的转述，**实测为 51 句** —— 以实测为准（本事件与 PR 正文为准）。
 
+### 2026-10-15 18:20 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**A1 裁判集扩充计划（`docs/plans/2026-10-15-a1-judge-expansion.md`，8 任务）技术面全部落地，台账 8/8**（分支 `feat/a1-judge-expansion`，待开 PR）。
+- **交付面**：`88856ab` Task 1+2（违规形状统一 + 接线既有两件算力 + 端点注入缝 + 官方范文零违规门）· `39e6d79` Task 3/4/5（`numerus` / `rektion`+29 条人工词表 / `wortstellung` + 加宽后的 51 句永久硬门）· `209cc24` Task 6（FP 标定工具，冻结记录）· `cf9ea76` Task 6 收尾 + Task 7（B 维 warning/advisory + 闸门按规则族分流 + 提示词参数化 + 前端非阻断提示）· `deede44` Task 8（dispatch 超时 / 同步裁判移出事件循环 / 修不可达 except）。
+- **HITL 裁决（用户）**：A 维（情态框架语序）**不做** —— 实测负样本 6/7 + 样本外 3 句正确句全误报 ⇒ FP/FN 同源；B 维（时态一致性）**接线为 warning** —— 正样本 FP 0/35、负样本 7/7、对照 0/6。
+- **本计划最有价值的产出不是规则，而是三次"误报类"返工**：① `öffnen/bezahlen/schmecken` 被当严格 Acc ⇒ 合法自由第三格被报；② V2 把**主语 NP 内修饰**（`Meine sehr große Familie…`）当独立前置成分；③ V2 漏豁免**焦点小词**（`Auch…`/`Nur…`）+ rektion 把自由第三格当违规。三次都**先写成用例跑红再修**，并把硬门从"官方 10 篇"扩到 **51 句 + 类覆盖清单**（编排者另做 30 句广度扫雷 FP=0 后定稿）。**Why 要记**：官方范文门放过了这三类 —— "正样本不够宽"本身就是一类系统性风险。
+- **判据面**：§4.3 解除判据表已入计划（8 条判据：维度覆盖**部分满足**、官方范文零误报 ✅、51 句硬门 ✅、30 句扫雷 ✅、负样本召回 ✅、非书信可判 ✅、降级可见性 ✅、**"浅裁判是否被模型针对"的对照实验未做**（阻塞于 `DEEPSEEK_API_KEY`）⇒ 建议**只允许限定表述**，不建议解禁 §4.3 原文所禁的无条件"已实现"）。
+- **基础设施坑（本会话共 5 次子代理中断：10003×2 / 10006×3 / 10101）**：Task 8 首次留半成品 + 挂死用例（备份后丢弃重派）；Task 6 前两次零落盘；最后一次死在报告前但改动已落盘 ⇒ 由我逐条核到行号并复跑门禁后代提交。**两条实操教训**：⑴ 给 maker 的 prompt MUST 写反挂死纪律（所有 sleep 要有 wait_for/固定次数兜底、禁 join 线程、禁无界 while、每条用例贴实测耗时）；⑵ 提交信息**禁用 `python -c "...'''...'''"` 形式**（反引号会被 bash 当命令替换吞掉正文 —— Task 6 那次就丢了正文，已用 heredoc 重建并在消息尾部注明）。
+- **未做**：Android 真机点检（含新 API 的 WebView 表现）、有 Key 后的真实轮次分布与真 token 计数回测、Pi 式分层重构（用户已拍板暂缓，登记在 `docs/agents/architecture.md`）。
+
+### 2026-10-15 19:05 | codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 门槛的宣称方式与回退语义由用户签批**（计划 `docs/plans/2026-10-15-a1-judge-expansion.md` 的 §4.3 判据表尾已记）。
+- **宣称方式 = 限定表述**：允许对外写「裁判已扩到 A1 语法维度：动词位置 + 格的使用三规则 error 级、时态一致性 advisory；语序经实测评审判定不做」；**无条件「已实现验证驱动 agent 循环」继续禁用** —— 判据表第 8 条（"浅裁判是否真被模型针对"的对照实验）因缺 `DEEPSEEK_API_KEY` 未做，故 §4.3 的门槛只算**部分抬升**。
+- **回退语义 = 保持**：非书信文本模型修不动 ⇒ `no_improvement` ⇒ argmin 回退**原文**（与循环语义一致，断言 + 三处 docstring + 前端人话原因码已钉住）。
+- **Why 记**：这是"测出来之后**不做**"与"允许**限定**宣称"两个反直觉结论 —— 防止后来者把 §4.3 读成"已经解禁"或把 bench 脚本里的 A 维当成"待接线"。
+
+### 2026-10-15 21:55 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**PR #137 已合入 master**（merge commit `ae8c3fd`，分支已删）—— ADR-0023 §4.3 第 ④ 步「裁判集扩充」8 任务全部落地（**未发版**，随下次发版到达）。
+- CI：head `555cd4a` 4/4 job success（合并走 SSH 本地 `no-ff`，因 `gh pr merge` 缺 `workflow` scope —— 与 #136 同因，本 PR 也改了 `.github/workflows/`）。
+- **沉淀（/dfs-save）**：`99-Inbox/2026-10-15-规则引擎硬门必须按「类」覆盖正样本：官方样本集放过了全部三类误报.md`（A-MAC 通过）。查重时**发现两条"新规则"其实已是仓内既有规则**，故按查重纪律**不造重复卡**，改为在该草稿附「新证据实例」节：① `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md`（自动化接线三证）—— 本次 dead-green 是"活性证"缺失的教科书实例；② `01-Rules/AGENT-AUDIT-CHECKLIST.md`（UNVERIFIED 由编排者逐条核销）—— 本次两类额外误报**都是把 checker 的 unverified 探针真跑才撞出来的**。待 `/dfs-inbox-consolidate` 归档时并入。
+- 门禁：全量 `pytest` **1984 passed + 2 skipped**；ruff / mypy --strict（67 files）/ 前端契约闸 / vault 预提交门禁（99.8/100）全过。台账 **8/8**。
+- **本批两条"测后不做/降级"的裁决已入 ADR §11.4**（防后来者误读 bench 脚本为"待接线"）：A 维情态框架 = 不做（FP/FN 同源）· B 维时态 = advisory。
+- 未做（ADR §11.6）：Android 真机点检（含 WebView 的 `fetch`/`ReadableStream`）· 有 Key 后回测（真轮次分布 / 真 token 计数 / §4.3 第 8 条对照实验）· Pi 式分层重构（用户已拍板暂缓）。
+
+### 2026-10-15 22:30 | codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 第 8 条对照实验设计稿已落盘**（`docs/specs/2026-10-15-judge-gaming-control-experiment-design.md`，**未执行**，阻塞于 `DEEPSEEK_API_KEY`）。
+- **设计要点（三处非显然的决定）**：① **三臂配对** —— A1 基线（1 轮，等价今日一次性润色）/ **A2 迭代无裁判**（`violations_of` 恒返回同一条固定违规 ⇒ 迫使 3 轮但不给方向）/ A3 现状。**A2 是关键分辨器**：没有它就无法区分"多轮迭代有用"与"裁判信号有用" —— 这正是"浅裁判 + 循环 = 奖励黑客"命题的真正对手而不是"不做循环"。② **held-out 仪器**：用仓内 6 个检测器**都不覆盖**的五类 A1 经典错误（从句语序/冠词性别/动词变位/介词搭配/名词大小写）做种子注入，测"未被计数的错误修复率" —— 模型若只学"通过检查"，这个量不会动。③ 另记两个**反向指标**（`回退发生率` / `新增错误数`），后者正对本批实证过的 3 类裁判误报：**被误报触发的修改是 P1 的强化证据，不是噪音**。
+- **纪律**：阈值 pilot（N=5）后固定并写回设计稿；样本集冻结；三臂全量原始输出随报告落盘；**P1 成立亦为正当产出**（届时结论是"当前裁判不足以支撑宣称"，表述必须反向收紧）。
+- **成本按 token 计、不猜价格**（主实验上限 ≈180 次 chat + 120 次 rater 调用，N=20）；harness MUST 有 `--dry-run`（stub chat）以便**无 Key 也能被 CI 测**。
+- 后续：本条要动手时走 `/dfs-plan`（harness + 测试 + 种子集三个任务），**不影响**现行 §4.3 口径（无条件「已实现」继续禁用）。
+
+### 2026-10-15 23:10 | codebuddy | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 第 8 条对照实验**中途交接（用户换 agent）。包：`WORKMEMORY/handoff_judge-gaming-experiment.md`；INDEX.md Active handoffs 已挂。
+- **断点**：分支 `feat/judge-gaming-experiment`（= master 9d6ce78 + 本包提交）；台账 **0/6，Task-1 IN_PROGRESS**。
+- **Task 1 代码已完成但未验收**：种子集 20 篇（每篇 1 signal + 3~5 probe，全部 held-out）+ 信号注入（生产分流 v0=1，20/20 编排者逐篇实测）；88 passed；ruff/mypy 绿。**缺**：变异自证 3 条 + CRV 验收 + 原子提交（包内"三、1"有精确清单）。
+- **关键机制事实（已写进设计稿）**：`polish_loop` **不把裁判结论回灌模型**（模型只能主动调 writing_check 自查）⇒ 用户拍板测**现状形态**；"裁判结论回灌"登记为下一子计划。
+- 用户签批过的口径（勿回退）：§4.3 限定表述 / 回退语义保持 / A 维不做、B 维 advisory / Pi 式重构暂缓。
+
+### 2026-10-15 23:18 | deepseek-v4-1-flash__hermes | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：接手 `handoff_judge-gaming-experiment.md`（§4.3 第 8 条对照实验；用户指派换 agent）。读序完成（INDEX → PROJECT_OVERVIEW → work.log 尾 50 行）；包内「三、1」即收尾路径。
+- **接手方独立复核（全实跑，非转述）**：分支 `feat/judge-gaming-experiment` @ `a85edd6`（已推、与 origin 同步）；`pytest tests/test_a1_seed_errors_data.py -q` ⇒ **88 passed**（4.40s）；逐篇 v0 表重跑 **20/20 `v0==1`**（被计数条 rule == signal.error_class）；`ruff check .` 绿；`mypy --strict delector` 68 files 0；两新文件 CRLF、lone_LF=0。
+- **勘误**：signal 的 rule 分布实测 **kasus×9 / artikel×9 / praeposition×2**（a85edd6 提交消息与包内 §二 写 9/8/3，系笔误；以物理重算为准）。
+- 状态：Task 1 收尾（变异 ×3 + CRV）→ 见下条；Task 2~6 仍待做，包 **status 保持 open**。
+
+### 2026-10-15 23:18 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Task 1 收尾完成 —— 变异自证 ×3 全实红 + CRV PASS**。收尾簿记提交 `887282c`（计划 Task 1 五步勾选 + INDEX 行更新 + 交接响应节；work.log 事件为本条所在提交）。
+- **变异证据（跑完即 `git checkout --` 还原，零残留）**：① L1 signal 换 held-out 类（`kasus`→`nomen_grossschreibung`，`zu der Hause`→`zu hause`）⇒ 3 failed/85 passed：`test_signal_is_counted...[letter_01]`「v_0 应为 1，实际 0（rules=[]）」+ held-out 差分 + 信号恰一处守卫；② 删 L2 signal ⇒ 4 failed/84 passed：「signal 数 0 != 1」+ 三处 signal 依赖用例；③ L6 nomen probe 换可计数错误（`am freitag`→`für dem Freitag`）⇒ 4 failed/84 passed：held-out[letter_06]「text 计数 != clean + signal 一条」+ v0[letter_06]「实际 2（rules=['praeposition','kasus']）」+ 五类覆盖 + string 层（次序连带，防御纵深）。
+- **CRV 裁定 = PASS**：88 passed 复跑（4.40s；还原后 4.82s）/ 逐篇 v0 20/20==1 / ruff 0 / mypy --strict delector 68 files 0 / CRLF lone_LF=0；**补偿条**：原 TDD RED 原文未随 WIP 交付（maker 被 6004 掐断），以变异 ×3 实红钉「用例非真空」。
+- 台账 Task-1 → completed（commit_hash=a85edd6；`.vault-exec-ledger.json` 为 gitignore 本地文件）。
+- 下一步：Task 2（三臂 harness 骨架，AFK、`--dry-run` 零 Key）——待用户指令；主目录被并行线占用期间，后续建议继续走 worktree 隔离。
+
+### 2026-10-15 23:18 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**并行分支切换事故与处置（本仓共享单工作目录，2026-10-15 23:11:36）**。
+- **现象**：接手会话进行中，工作区被他方操作从 `feat/judge-gaming-experiment` 切到新建分支 `chore/swarm-audit-master`（reflog：`9d6ce78 HEAD@{2026-10-15 23:11:36 +0800}: checkout: moving from feat/judge-gaming-experiment to chore/swarm-audit-master`）；工作树内 `handoff_judge-gaming-experiment.md`、INDEX 的 Active handoffs 行、work.log / 设计稿的 a85edd6 版内容随之被替换为 9d6ce78 版本。**分支本体与全部提交对象无损**（已 `git show a85edd6:...` 逐件复核：种子集 761 行 / 测试 400 行 / 交接包头部 / INDEX judge 行均在）。
+- **处置**：① 停写 + 字节级取证（listdir / `git ls-files` / reflog）；② 证据保全至本机 scratch（变异原始输出 ×3、v0 表、计划勾选 diff）；③ 唯一脏文件（计划）已 `git checkout --` 还原，主目录恢复 clean、原样留给并行线；④ 杀掉跑在错误分支状态上的全量测试后台任务；⑤ 收尾改用**独立 worktree** `.worktrees/judge-gaming-closure` 完成（本仓 `.worktrees/` 既有约定），全程不再触碰主目录。
+- **教训（供后来者）**：本仓为**多 agent 共享单工作目录**（同日已观察到 `chore/swarm-audit-master` 审计线，操作者未确认；本仓 09-28 / 10-03 已有两轮 swarm-audit 先例）。⇒ (1) 长操作前后与**提交前** MUST `git branch --show-current` 复核；(2) 并行工作流 MUST 用 worktree / 独立克隆，勿共用工作树（本次一行 checkout 差点让收尾提交落到他人分支——在提交前 diff 复核时截获；**征兆 = 提交前 `git status` 的文件集与预期不符**）；(3) 他方切分支后，本分支内容一律可从 commit 恢复：先取证、再处置、勿慌。
+
+### 2026-10-15 23:54 | deepseek-v4-1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**§4.3 第 8 条对照实验 Task 2（三臂 harness 骨架）交付并合入 feat**（dfs-exec Gear 2 双席位：TDD Builder + 独立 Reviewer；commit `95dc661`，仅两新文件 +1009 行）。
+- 编排核验（物理回执）：靶向 20 passed 复跑；trio 62 passed；`--dry-run --json` 纯 JSON 60 条（三臂各 20）；退出码 0/1/2 实跑；设计稿 §4「两者都无裁判方向信号」逐字落成（A1/A2 共用固定违规）。
+- 独立评审 PASS：4 条对抗变异实红（含 2 条自选角度）→ 还原零残留（两文件 hash==HEAD）；审计钩子实证零 .env / 零出网（60 次 socket 全回环 = asyncio self-pipe，已对照归因）。
+- **全量基线（本批一次）**：`pytest -q` ⇒ **2071 passed + 3 skipped**（414s，隔离 worktree 内实跑）。
+- 评审发现（非阻塞，均已登记计划 Task 2 收尾记录）：W1–W3 三处分支欠覆盖钉（随 Task 3 补）；**W4（设计层）**：恒定固定违规 ⇒ A1/A2 产出恒回退原文 ⇒ `R_uncovered(A1/A2)≡0` 退化，与「A1=一次性润色等价物」表述有张力 —— **Task 5 pilot 前须用户裁决**；W5：Task 5 RUN `--cases` 未实现（计划已加附注）。
+- 台账：Task-2 → completed（2/6，commit=95dc661，reviewer=PASS）。
+
