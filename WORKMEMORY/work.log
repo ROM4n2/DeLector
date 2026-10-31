@@ -792,3 +792,21 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.51s**。
   - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:40 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**彻底终结思维链嵌套方框 (Containeritis)，落地 1A Claude 式微墨线流与 2B->C 自适应打字机队列**。
+- **交付面**：
+  1. `b5fc9f4`:
+     - **1A Claude 式纯净微墨线思维链**：
+       - 彻底剔除 `.companion-thought-box` 的封闭边框、背景矩形与卡片阴影，杜绝“圆角套圆角”容器综合征；
+       - 未展开/思考态：仅由一行通透微墨线字 `● Eule 正在推演句子结构... 3.2s ▾` 构成；
+       - 展开态：仅依托左侧单向细墨线（`border-left: 2px solid var(--rule)`）做优雅缩进与步骤旁注，与 DeLector 德式纸质印刷系统 100% 同构；完成态平滑收拢为一行精致小字 `✓ 深度推演完成 (X.X 秒)`。
+     - **2B->C 客户端自适应弹性打字机平滑队列**：
+       - 新增 `AdaptiveTypewriter` 类，解决回包“一口气突兀瞬爆”问题；
+       - 动态弹性调速：短文优雅微风（~40 字/秒），长文检测积压平滑加速（1.5~2.5 秒内排完）；
+       - 附带微脉冲红墨水闪烁光标（`.companion-typing-cursor`），结束自动淡出；保留 `append()` 接口为未来范式 C 真实 SSE 逐 Token 直出无缝铺路。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 1.96s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
