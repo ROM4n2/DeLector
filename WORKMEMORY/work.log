@@ -810,3 +810,22 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 1.96s**。
   - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:55 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**依据 dfs-debug 四步法彻底根治 [异常: 上游模型调用失败: AI 服务返回内容非 JSON]**。
+- **交付面**：
+  1. `95b771d`:
+     - **根因分析**：上游 DeepSeek-R1 / Reasoning / 经 Markdown 提示词引导的模型输出时，常出现带有 ```json 代码块包裹、<think> 思考链混入 content 头部或前后客套自然语言的情况；原 `llm_client.py` 裸执行 `json.loads(content)` 导致 `JSONDecodeError` 冒泡打断交互流。
+     - **阶梯式自愈解析器**：在 `delector/services/llm_client.py` 落地 `_clean_and_parse_json()`：
+       - 快路径标准 JSON 解析；
+       - 正则提取 `<think>` 标签，剔除思考标签并将思考过程无损转存入 `parsed["thought"]`；
+       - 正则剥离 ```` ```(?:json)? ... ``` ```` 外部代码块；
+       - 外围大括号 `{ ... }` 贪婪定界，剔除前后客套文本；
+       - 彻底非 JSON 时由标准 `json.loads` 抛错维持安全边界。
+     - **单元测试锁死**：`tests/test_llm_client.py` 增补 3 项覆盖测试；`test_companion_routes.py` 补齐桩隔离。
+     - **A-MAC 知识库沉淀**：已沉淀至 Obsidian Coding Vault `99-Inbox/2026-10-31-llm-结构化输出-markdown-块与-think-标签自愈解析规范.md`。
+- **物理验证收据**：
+  - 伴学与 LLM Client 单测：`pytest tests/test_llm_client.py tests/test_companion_*.py` **36 passed in 2.33s**。
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
