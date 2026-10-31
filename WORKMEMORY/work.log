@@ -954,3 +954,56 @@ Caps: filesystem-read, filesystem-write, shell-exec
   4. **回归锁定与自愈沉淀（Step 4）**：
      - 永久单元回归测试 `compaction_regression_test.go` 进入 Go 测试套件（148 passed）；
      - 经验已通过 A-MAC 门禁沉淀至知识库 `99-Inbox/2026-10-31-agent-compaction-user-prompt-stripping-and-thought-stream-flicker.md`。
+
+
+### 2026-11-01 00:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**依据 dfs-plan 与 dfs-exec 协议全面落地 2026 最新 DeepSeek 规约、模型供应商抽象架构与 Pi 范式 60% 上下文流控（Branch `feat/companion-provider-registry-and-pi-compaction`）**。
+- **2026 最新 DeepSeek 官方规约物理核验**：
+  - 实时抓取官方文档确认：主力生产模型为 `deepseek-flash` (DeepSeek-V4.1-Flash-1017) 与 `deepseek-v4-pro`，向下兼容 `deepseek-chat`；
+  - 官方上下文长度实为 **1M tokens**（1,048,576 tokens），单次最大输出 384k tokens；原生支持 `thinking` 模式。
+- **多模型供应商抽象与注册中心（Task 2）**：
+  - 在 `agent/internal/provider` 创建 `Provider`、`ModelSpec` 与线程安全 `Registry`，内置 DeepSeek (1M tokens/384k 输出)、Ollama (32k tokens)、OpenRouter 与自定义供应商，预留未来多供应商扩展接口；
+  - 规格单测 100% 覆盖并包含变异测试，物理收据 18 passed。
+- **Python NLP 工具返回值高信噪比蒸馏（Task 1）**：
+  - 在 `delector/tools/analyze.py` 实现 `distill_analysis_for_agent` 投影器，剥离冗余 spaCy 内部指针，保留五场域原文、句子类型与核心词元；
+  - 目标难句序列化体积由 13,576 字符降至 1,820 字符（骨架 <800 字符），纯载荷压缩达 86.6%，单测 17 passed。
+- **Pi 式动态上下文 Token 估算与 60% 阈值流控（Task 3）**：
+  - 彻底废除固定字符截断逻辑，依据 `ModelSpec.ContextWindow * 0.60` 动态计算压缩水位线；
+  - 在 1M 上下文模型下未达 600k tokens 保持完整零压缩；超限时折叠前序历史为锚点，倒数第 2 条 User 之后的活跃交互块严格免疫折叠。
+- **伴学 Loop 与全链路装配验证（Task 4）**：
+  - `CompanionAgent` 注入 Provider Registry，自适应解析模型并动态流控；
+  - 全量回归：Go 169 passed in 10 packages，Python 68 passed in 7.34s，前端四道机械门禁 100% PASS。
+
+
+### 2026-11-01 00:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**根治 Go Agent 启动 5.0s 超时与 Python 兜底连通性失败缺陷（Commit `e83b716`）**。
+- **根因深度定位**：
+  1. **冷编译超时杀进程**：Windows 环境下若未预编译 `agent/delector.exe`，Supervisor 回退调用 `go run ./cmd/delector`。在 Windows NTFS 与安全软件下，Go 首次编译耗时 ~6-8s；而此前硬编码 `deadline_s = 5.0s`，导致进程编译尚未完成即被 Supervisor 超时强杀（SIGTERM），输出 `Go 伴学 Agent 启动超时 (5.0s)，正在终止子进程` 并回退 Python 本地内核；
+  2. **启动时序与 .env 注入脱节**：`start.py` 原先在启动 Go Supervisor 之后才 import `server.py`（从而晚执行 `load_env()`），导致 Supervisor 启动子进程时未能提前从 `.env` 注入 `DEEPSEEK_API_KEY`；
+  3. **Python 兜底抛出连接失败**：当 Go 被杀回退至 Python `companion_agent` 时，由于 API Key 为空，`llm_client` 组装 `Authorization: Bearer ` 头，被 httpx 判定为 Illegal header 抛出异常，进而显示为「AI 服务连接失败」。
+- **彻底根治方案**：
+  - **自动预编译缓存**：`GoAgentSupervisor.find_command()` 发现缺少独立二进制但有 `go` 时，自动执行一次 `go build -o delector.exe ./cmd/delector`。构建完成后仅需 ~50ms 启动，健康检查在 2.4s 内彻底完成（100% 免疫冷启动编译延迟）；
+  - **超时阈值放宽**：`DEFAULT_STARTUP_DEADLINE_S` 从 5.0s 放宽至 15.0s；
+  - **早期加载 .env**：`start.py` 在 `main()` 入口处执行 `_load_env_early()`，Supervisor 在 `start()` 时亦主动扫描仓库根与 agent 目录的 `.env` 补全环境变量。
+- **验证与交付**：
+  - 物理实测 Supervisor 启动健康耗时：**2.45s 成功就绪**（不再超时）；
+  - 测试通过：Go 169 passed、Python 68 passed、四道门禁全绿；
+  - 变更已推送至分支 `feat/companion-provider-registry-and-pi-compaction`（Commit `e83b716`，PR #179）。
+
+
+### 2026-11-01 00:35 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复前端抽屉正文 delta 增量覆盖导致最终只剩单字/句号缺陷（Commit `7f4a781`）**。
+- **根因分析**：
+  - 在 `static/js/cp-drawer.js:614` 中，监听 `event === 'delta'` 时错误执行了 `fullStreamText = data.text || ''` 与 `typewriter.enqueue(fullStreamText)`；
+  - 由于后端 SSE `delta` 事件推送的是增量字符 chunk（单字或局部词组），前端未执行 `+=` 累加，而是直接无脑赋值覆盖全文变量；
+  - 导致随着大模型流式输出，每个新字直接抹掉前面的所有文字，打字机不断被清空重置；模型最后一个 chunk 输出标点符号（如 `。` 或 `.`）时，最终抽屉便只剩下一个孤独的句号。
+- **修复措施**：
+  - 将 `fullStreamText = data.text || ''` 修复为 `fullStreamText += chunk` 累加并使用 `typewriter.append(chunk)` 挂入自适应打字机队列；
+  - 在 `event === 'done'` 时调用 `typewriter.flush()` 确保全量完整文本落地并沉淀进对话上下文历史。
+- **验证收据**：
+  - `node -c static/js/cp-drawer.js` 语法校验 0 错误；
+  - 前端四道机械门禁 100% PASS；
+  - 已推送至 PR #179（Commit `7f4a781`）。

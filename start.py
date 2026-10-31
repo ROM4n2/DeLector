@@ -510,11 +510,31 @@ def _report_already_running(decision: AlreadyRunning, android: bool) -> None:
     )
 
 
+def _load_env_early() -> None:
+    """在启动初期加载 .env，确保环境配置提前注入 os.environ."""
+    for base_dir in [os.path.dirname(__file__), os.getcwd()]:
+        env_file = os.path.join(base_dir, ".env")
+        if os.path.isfile(env_file):
+            try:
+                with open(env_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip().strip("'").strip('"')
+                            if k and k not in os.environ:
+                                os.environ[k] = v
+            except Exception:
+                pass
+
+
 def main(
     debug_console: bool = False,
     on_serving: Optional[Callable[[int], None]] = None,
     no_agent: bool = False,
 ) -> None:
+    _load_env_early()
     _ensure_entry_streams(debug_console)
     android = is_android()
     # 单一判定点（spec §3.2）：抢锁 → 选端口 → 归因。`identity_probe` 只在**锁降级**时被用到
@@ -543,7 +563,7 @@ def main(
                 from delector.core.go_agent_supervisor import GoAgentSupervisor
 
                 agent_sup = GoAgentSupervisor(port=8002, python_port=port)
-                if agent_sup.start(deadline_s=5.0):
+                if agent_sup.start():
                     print("[伴学] Go Agent 伴学服务已自动托管启动 (http://127.0.0.1:8002)")
                 else:
                     print("[伴学] 未检测到 Go 环境或启动超时，伴学功能由 Python 内核自适应兜底")

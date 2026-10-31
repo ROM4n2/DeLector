@@ -8,12 +8,13 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ROM4n2/DeLector/agent/internal/provider"
 	"github.com/sashabaranov/go-openai"
 )
 
 const (
 	DefaultMaxTurns = 3
-	DefaultModel    = "deepseek-chat"
+	DefaultModel    = "deepseek-flash"
 
 	CompanionSystemPrompt = `你是 DeLector 德语研读系统的伴学导学伙伴「Eule」（猫头鹰博士）。
 你的任务是为备考歌德/德福的德语学习者提供针对性的语用深挖、句法结构问诊与生词卡提议。
@@ -80,6 +81,7 @@ type CompanionAgent struct {
 	client         *openai.Client
 	runner         ToolRunner
 	model          string
+	registry       *provider.Registry
 	fallbackClient *openai.Client
 	fallbackModel  string
 }
@@ -90,10 +92,27 @@ func NewCompanionAgent(client *openai.Client, runner ToolRunner, model string) *
 		model = DefaultModel
 	}
 	return &CompanionAgent{
-		client: client,
-		runner: runner,
-		model:  model,
+		client:   client,
+		runner:   runner,
+		model:    model,
+		registry: provider.NewDefaultRegistry(),
 	}
+}
+
+// WithRegistry 挂载自定义模型供应商注册中心。
+func (a *CompanionAgent) WithRegistry(reg *provider.Registry) *CompanionAgent {
+	if reg != nil {
+		a.registry = reg
+	}
+	return a
+}
+
+// Registry 获取当前模型供应商注册中心。
+func (a *CompanionAgent) Registry() *provider.Registry {
+	if a.registry == nil {
+		a.registry = provider.NewDefaultRegistry()
+	}
+	return a.registry
 }
 
 // WithFallback 为伴学智能体挂载备用模型客户端（如本地 Ollama 级联热备）。
@@ -146,15 +165,32 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 
 	activeClient := a.client
 	activeModel := a.model
-	if req.APIKey != "" {
-		cfg := openai.DefaultConfig(req.APIKey)
-		if req.BaseURL != "" {
-			cfg.BaseURL = req.BaseURL
-		}
-		activeClient = openai.NewClientWithConfig(cfg)
-	}
 	if req.Model != "" {
 		activeModel = req.Model
+	}
+
+	reg := a.Registry()
+	spec := reg.ResolveModel(activeModel, req.BaseURL)
+
+	if req.APIKey != "" {
+		p, ok := reg.Get(spec.ProviderID)
+		if ok && p != nil {
+			var err error
+			activeClient, err = p.CreateClient(req.APIKey, req.BaseURL)
+			if err != nil {
+				cfg := openai.DefaultConfig(req.APIKey)
+				if req.BaseURL != "" {
+					cfg.BaseURL = req.BaseURL
+				}
+				activeClient = openai.NewClientWithConfig(cfg)
+			}
+		} else {
+			cfg := openai.DefaultConfig(req.APIKey)
+			if req.BaseURL != "" {
+				cfg.BaseURL = req.BaseURL
+			}
+			activeClient = openai.NewClientWithConfig(cfg)
+		}
 	}
 
 	// 2. 有界循环：最多 DEFAULT_MAX_TURNS 轮
@@ -166,7 +202,7 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		default:
 		}
 
-		compactedMsgs := CompactMessages(chatMessages, DefaultContextMaxChars)
+		compactedMsgs := CompactMessagesDynamic(chatMessages, spec)
 		streamReq := openai.ChatCompletionRequest{
 			Model:      activeModel,
 			Messages:   compactedMsgs,

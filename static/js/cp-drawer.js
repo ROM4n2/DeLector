@@ -611,15 +611,17 @@ export function submitPrompt(userText) {
         }
       } else if (event === 'delta') {
         thoughtCtrl.finish();
-        fullStreamText = data.text || '';
-        typewriter.enqueue(fullStreamText);
+        const chunk = data.text || '';
+        fullStreamText += chunk;
+        typewriter.append(chunk);
       } else if (event === 'proposal') {
         renderProposalCard(proposalsContainerEl, data.proposal);
       } else if (event === 'done') {
         thoughtCtrl.finish();
         companionState.inFlight = false;
         if (sendBtnEl) sendBtnEl.disabled = false;
-        if (!typewriter.isTyping && fullStreamText) {
+        typewriter.flush();
+        if (fullStreamText) {
           renderSafeMarkdownToElement(textBodyEl, fullStreamText);
         }
         companionState.messages.push({ role: 'assistant', content: fullStreamText });
