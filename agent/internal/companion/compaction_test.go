@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ROM4n2/DeLector/agent/internal/companion"
+	"github.com/ROM4n2/DeLector/agent/internal/provider"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -56,5 +57,74 @@ func TestCompactMessagesExceedingBudget(t *testing.T) {
 
 	if compacted[len(compacted)-1].Content != "Vierte Antwort: Hier ist ein Beispielsatz." {
 		t.Errorf("last message was not preserved")
+	}
+}
+
+func TestEstimateTokens(t *testing.T) {
+	msgs := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: "You are a helpful tutor."},
+		{Role: openai.ChatMessageRoleUser, Content: "Erkläre mir bitte die Relativsätze im Deutschen mit Beispielen."},
+	}
+	tok := companion.EstimateTokens(msgs)
+	if tok <= 0 {
+		t.Fatalf("expected positive token count, got %d", tok)
+	}
+	if tok < 15 || tok > 50 {
+		t.Errorf("unexpected token estimate for sample text: %d", tok)
+	}
+}
+
+func TestCompactMessagesDynamicWith1MContextDeepSeek(t *testing.T) {
+	longText := strings.Repeat("Deutsche Grammatik ist systematisch und faszinierend. ", 100) // ~5400 chars, ~1500 tokens
+	msgs := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: "System Prompt"},
+		{Role: openai.ChatMessageRoleUser, Content: "Q1: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "A1: " + longText},
+		{Role: openai.ChatMessageRoleUser, Content: "Q2: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "A2: " + longText},
+		{Role: openai.ChatMessageRoleUser, Content: "Q3: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "A3: " + longText},
+	}
+
+	deepseekSpec := provider.ModelSpec{
+		Name:            "deepseek-flash",
+		ProviderID:      "deepseek",
+		ContextWindow:   1048576, // 1M tokens
+		CompactionRatio: 0.60,    // 600k tokens threshold
+	}
+
+	// 5000 tokens is << 600,000 tokens: MUST NOT compact!
+	compacted := companion.CompactMessagesDynamic(msgs, deepseekSpec)
+	if len(compacted) != len(msgs) {
+		t.Fatalf("expected no compaction under 1M context (length %d), got %d", len(msgs), len(compacted))
+	}
+}
+
+func TestCompactMessagesDynamicSmallContextTriggersAt60Percent(t *testing.T) {
+	longText := strings.Repeat("Langer deutscher Text zur Syntaxanalyse. ", 50) // ~2000 chars, ~600 tokens
+	msgs := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: "System Prompt"},
+		{Role: openai.ChatMessageRoleUser, Content: "Q1: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "A1: " + longText},
+		{Role: openai.ChatMessageRoleUser, Content: "Q2: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "A2: " + longText},
+		{Role: openai.ChatMessageRoleUser, Content: "Active Q3: " + longText},
+		{Role: openai.ChatMessageRoleAssistant, Content: "Active A3: " + longText},
+	}
+
+	smallSpec := provider.ModelSpec{
+		Name:            "toy-model",
+		ProviderID:      "toy",
+		ContextWindow:   1000, // 1000 tokens, 60% = 600 tokens
+		CompactionRatio: 0.60,
+	}
+
+	// Total tokens > 1500 tokens >> 600 tokens threshold: MUST trigger compaction!
+	compacted := companion.CompactMessagesDynamic(msgs, smallSpec)
+	if len(compacted) >= len(msgs) {
+		t.Fatalf("expected compaction triggered for small model exceeding 60%% threshold, got length %d", len(compacted))
+	}
+	if !strings.Contains(compacted[1].Content, "前序上下文压缩锚点") {
+		t.Errorf("expected anchor message at index 1, got %s", compacted[1].Content)
 	}
 }
