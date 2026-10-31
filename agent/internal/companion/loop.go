@@ -73,9 +73,11 @@ type ToolRunner interface {
 
 // CompanionAgent 统管伴学 Agent 的原生 Tool Calling 循环与流式分发。
 type CompanionAgent struct {
-	client *openai.Client
-	runner ToolRunner
-	model  string
+	client         *openai.Client
+	runner         ToolRunner
+	model          string
+	fallbackClient *openai.Client
+	fallbackModel  string
 }
 
 // NewCompanionAgent 构造伴学智能体实例。
@@ -88,6 +90,13 @@ func NewCompanionAgent(client *openai.Client, runner ToolRunner, model string) *
 		runner: runner,
 		model:  model,
 	}
+}
+
+// WithFallback 为伴学智能体挂载备用模型客户端（如本地 Ollama 级联热备）。
+func (a *CompanionAgent) WithFallback(fallbackClient *openai.Client, fallbackModel string) *CompanionAgent {
+	a.fallbackClient = fallbackClient
+	a.fallbackModel = fallbackModel
+	return a
 }
 
 // RunLoop 执行原生 Tool Calling 与流式推送有界循环。
@@ -150,6 +159,17 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		}
 
 		stream, err := a.client.CreateChatCompletionStream(ctx, streamReq)
+		if err != nil && a.fallbackClient != nil {
+			_ = emit(Event{
+				Event: EventThought,
+				Text:  "主通道不可达，正在级联切换至备用模型...",
+			})
+			fallbackReq := streamReq
+			if a.fallbackModel != "" {
+				fallbackReq.Model = a.fallbackModel
+			}
+			stream, err = a.fallbackClient.CreateChatCompletionStream(ctx, fallbackReq)
+		}
 		if err != nil {
 			errStr := fmt.Sprintf("调用模型失败: %v", err)
 			_ = emit(Event{Event: EventError, Code: "upstream_error", MessageZH: errStr})

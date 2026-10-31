@@ -17,18 +17,22 @@ import (
 )
 
 const (
-	defaultAgentPort      = 8002
-	defaultAgentPythonURL = "http://127.0.0.1:8001"
-	defaultAgentBaseURL   = "https://api.deepseek.com"
-	defaultAgentModel     = "deepseek-chat"
+	defaultAgentPort          = 8002
+	defaultAgentPythonURL     = "http://127.0.0.1:8001"
+	defaultAgentBaseURL       = "https://api.deepseek.com"
+	defaultAgentModel         = "deepseek-chat"
+	defaultAgentFallbackURL   = "http://127.0.0.1:11434/v1"
+	defaultAgentFallbackModel = "qwen3.5:4b"
 )
 
 func newAgentCmd() *cobra.Command {
 	var (
-		port      int
-		pythonURL string
-		baseURL   string
-		model     string
+		port          int
+		pythonURL     string
+		baseURL       string
+		model         string
+		fallbackURL   string
+		fallbackModel string
 	)
 
 	cmd := &cobra.Command{
@@ -48,6 +52,15 @@ func newAgentCmd() *cobra.Command {
 
 			pyClient := pythonsvc.NewClient(pythonURL, nil)
 			agent := companion.NewCompanionAgent(client, pyClient, model)
+
+			if fallbackURL != "" {
+				fbCfg := openai.DefaultConfig("ollama-local")
+				fbCfg.BaseURL = fallbackURL
+				fbClient := openai.NewClientWithConfig(fbCfg)
+				agent.WithFallback(fbClient, fallbackModel)
+				cmd.Printf("[delector] Mounted fallback model %s at %s\n", fallbackModel, fallbackURL)
+			}
+
 			handler := companion.NewHandler(agent)
 
 			addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -86,6 +99,8 @@ func newAgentCmd() *cobra.Command {
 	cmd.Flags().StringVar(&pythonURL, "python-url", defaultAgentPythonURL, "Python NLP 微服务地址（默认 http://127.0.0.1:8001）")
 	cmd.Flags().StringVar(&baseURL, "base-url", defaultAgentBaseURL, "OpenAI/DeepSeek API 根地址")
 	cmd.Flags().StringVar(&model, "model", defaultAgentModel, "对话模型名称（默认 deepseek-chat）")
+	cmd.Flags().StringVar(&fallbackURL, "fallback-url", defaultAgentFallbackURL, "备用模型（如本地 Ollama）API 根地址")
+	cmd.Flags().StringVar(&fallbackModel, "fallback-model", defaultAgentFallbackModel, "备用模型名称（默认 qwen3.5:4b）")
 
 	return cmd
 }
