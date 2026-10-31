@@ -115,6 +115,7 @@ def _build_offline_response(messages: List[Dict[str, Any]]) -> str:
 async def run_companion_agent_loop(
     messages: List[Dict[str, Any]],
     *,
+    context: Optional[Dict[str, Any]] = None,
     on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
     deadline_s: float = DEFAULT_DEADLINE_S,
     max_turns: int = DEFAULT_MAX_TURNS,
@@ -153,9 +154,28 @@ async def run_companion_agent_loop(
             reason=REASON_OFFLINE,
         )
 
-    # 2. 初始化对话记录
+    # 2. 构建注入研读视口上下文的系统提示
+    system_prompt = COMPANION_AGENT_SYSTEM_PROMPT
+    if context and any(bool(v) for v in context.values()):
+        ctx_lines: List[str] = []
+        if context.get("selected_text"):
+            ctx_lines.append(f"【当前视口研读难句 / 选中文本】:\n„{context['selected_text']}“")
+        if context.get("article_title"):
+            ctx_lines.append(f"【所属文章/篇章】: {context['article_title']}")
+        if context.get("cefr_level"):
+            ctx_lines.append(f"【目标难度级别】: {context['cefr_level']}")
+        if ctx_lines:
+            system_prompt += (
+                "\n\n========================================\n"
+                "【学员当前正在精读的视口上下文 (Study Viewport Context)】:\n"
+                + "\n".join(ctx_lines)
+                + "\n注意: 当学员询问'这个句子'、'这句话'、'拓扑结构'、'生词'或进行语法语用分析时，"
+                "均默认针对上述【当前视口研读难句】展开，直接进行深入、专业的分析，切勿向学员反问或索要句子！\n"
+                "========================================"
+            )
+
     active_messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": COMPANION_AGENT_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         *messages,
     ]
 

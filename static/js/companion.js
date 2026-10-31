@@ -615,6 +615,17 @@ export const Companion = {
         selectedText = sent.text.trim();
       }
     }
+    // 4. 若选中文本因 span 紧贴缺失空格，且能定位到当前句，自动恢复德语词间空格
+    if (selectedText && !selectedText.includes(' ') && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
+      const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
+      if (sent && sent.text) {
+        if (typeof window.restoreSentenceSpaces === 'function') {
+          selectedText = window.restoreSentenceSpaces(selectedText, sent.text);
+        } else if (sent.text.replace(/\s+/g, '') === selectedText.replace(/\s+/g, '')) {
+          selectedText = sent.text.trim();
+        }
+      }
+    }
     let articleTitle = '';
     if (window.state && window.state.currentArticle && window.state.currentArticle.title) {
       articleTitle = window.state.currentArticle.title;

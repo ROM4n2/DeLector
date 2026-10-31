@@ -76,6 +76,7 @@ def get_companion_context() -> Dict[str, Any]:
 async def _companion_event_stream(
     messages: List[Dict[str, Any]],
     request: Request,
+    context: Optional[Dict[str, Any]] = None,
 ) -> AsyncIterator[bytes]:
     """流式产出伴学 Agent 事件帧，带客户端断连主动取消守卫."""
     events: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
@@ -84,6 +85,7 @@ async def _companion_event_stream(
     async def _runner() -> Any:
         return await run_companion_agent_loop(
             messages,
+            context=context,
             on_event=events.put_nowait,
             deadline_s=DEFAULT_DEADLINE_S,
             should_stop=lambda: state["stop"],
@@ -132,7 +134,7 @@ async def _companion_event_stream(
 async def api_companion_chat(req: CompanionChatReq, request: Request) -> StreamingResponse:
     """伴学会话流式交互端点."""
     return StreamingResponse(
-        _companion_event_stream(req.messages, request),
+        _companion_event_stream(req.messages, request, context=req.context),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

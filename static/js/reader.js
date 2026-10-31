@@ -750,6 +750,41 @@ export async function loadArticleNotes(articleId) {
   });
 }
 
+/** 针对跨 span 选区缺失空格的问题，借助原句文本恢复德语单词间真实空格 */
+export function restoreSentenceSpaces(selectedText, fullSentenceText) {
+  if (!selectedText || !fullSentenceText) return selectedText;
+  if (selectedText.includes(" ")) return selectedText;
+  const sClean = selectedText.replace(/\s+/g, "");
+  const fClean = fullSentenceText.replace(/\s+/g, "");
+  if (sClean === fClean || sClean === fClean.replace(/[.?!;:]+$/, "")) {
+    return fullSentenceText;
+  }
+  let fIdx = 0;
+  while (fIdx < fullSentenceText.length) {
+    if (fullSentenceText[fIdx] === sClean[0]) {
+      let tempF = fIdx;
+      let tempS = 0;
+      while (tempF < fullSentenceText.length && tempS < sClean.length) {
+        if (/\s/.test(fullSentenceText[tempF])) {
+          tempF++;
+          continue;
+        }
+        if (fullSentenceText[tempF] === sClean[tempS]) {
+          tempF++;
+          tempS++;
+        } else {
+          break;
+        }
+      }
+      if (tempS === sClean.length) {
+        return fullSentenceText.slice(fIdx, tempF);
+      }
+    }
+    fIdx++;
+  }
+  return selectedText;
+}
+
 export function setupSelectionTooltip() {
   const content = document.getElementById("reader-content");
   const tooltip = document.getElementById("selection-tooltip");
@@ -771,7 +806,12 @@ export function setupSelectionTooltip() {
             const foundSent = state.currentArticle?.sentences?.find((s) =>
               s.tokens.some((t) => t.id === tokId),
             );
-            if (foundSent) state.activeSelectedSentId = foundSent.id;
+            if (foundSent) {
+              state.activeSelectedSentId = foundSent.id;
+              if (foundSent.text) {
+                state.activeSelectedRangeText = restoreSentenceSpaces(text, foundSent.text);
+              }
+            }
             break;
           }
           node = node.parentNode;

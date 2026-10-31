@@ -256,3 +256,38 @@ def test_loop_client_cancellation() -> None:
     )
 
     assert outcome.reason == REASON_CANCELLED
+
+
+def test_loop_injects_viewport_study_context() -> None:
+    """验证传入视口难句与研读上下文时，系统提示词中正确注入难句且对齐问诊。"""
+    captured_messages: List[Dict[str, Any]] = []
+
+    async def mock_inspect_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        msgs = kwargs.get("messages", [])
+        captured_messages.extend(msgs)
+        return {
+            "reply_de": "Der Satz ist formell.",
+            "reply_zh": "该句为标准官方客套通知，语气客观克制。",
+        }
+
+    sample_sentence = "Sie können den Artikel leider nicht mehr aufrufen."
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "这个句子的语用正式度如何？"}],
+            context={
+                "selected_text": sample_sentence,
+                "article_title": "Spiegel Online B1",
+                "cefr_level": "B1",
+            },
+            chat_fn=mock_inspect_chat,
+        )
+    )
+
+    assert outcome.status == "ok"
+    assert len(captured_messages) > 0
+    system_msg = next((m for m in captured_messages if m.get("role") == "system"), None)
+    assert system_msg is not None
+    assert sample_sentence in str(system_msg.get("content", ""))
+    assert "Spiegel Online B1" in str(system_msg.get("content", ""))
+    assert "B1" in str(system_msg.get("content", ""))
+
