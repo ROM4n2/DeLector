@@ -14,11 +14,11 @@ def test_supervisor_command_discovery_with_binary(tmp_path: Any) -> None:
     binary = agent_dir / "delector.exe"
     binary.write_text("dummy binary")
 
-    supervisor = GoAgentSupervisor(port=8002, root_dir=tmp_path)
+    supervisor = GoAgentSupervisor(port=8002, root_dir=tmp_path, python_port=8000)
     cmd, cwd = supervisor.find_command()
     assert cmd is not None
     assert str(binary) in cmd[0]
-    assert cmd[1:] == ["agent", "--port", "8002"]
+    assert cmd[1:] == ["agent", "--port", "8002", "--python-url", "http://127.0.0.1:8000"]
     assert cwd == agent_dir
 
 
@@ -28,11 +28,11 @@ def test_supervisor_command_discovery_with_go_cli(tmp_path: Any) -> None:
     (agent_dir / "go.mod").write_text("module test\n")
 
     with patch("shutil.which", return_value="C:\\Go\\bin\\go.exe"):
-        supervisor = GoAgentSupervisor(port=8002, root_dir=tmp_path)
+        supervisor = GoAgentSupervisor(port=8002, root_dir=tmp_path, python_port=8000)
         cmd, cwd = supervisor.find_command()
         assert cmd is not None
         assert "go.exe" in cmd[0]
-        assert cmd[1:] == ["run", "./cmd/delector", "agent", "--port", "8002"]
+        assert cmd[1:] == ["run", "./cmd/delector", "agent", "--port", "8002", "--python-url", "http://127.0.0.1:8000"]
         assert cwd == agent_dir
 
 

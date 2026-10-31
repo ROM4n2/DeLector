@@ -24,6 +24,7 @@ import httpx
 _logger = logging.getLogger("delector.agent_supervisor")
 
 DEFAULT_GO_AGENT_PORT: int = 8002
+DEFAULT_PYTHON_PORT: int = 8000
 DEFAULT_STARTUP_DEADLINE_S: float = 5.0
 DEFAULT_SHUTDOWN_GRACE_S: float = 5.0
 HEALTH_POLL_INTERVAL_S: float = 0.2
@@ -36,12 +37,13 @@ class GoAgentSupervisor:
         self,
         port: int = DEFAULT_GO_AGENT_PORT,
         root_dir: Optional[Path] = None,
-        python_url: str = "http://127.0.0.1:8001",
+        python_url: Optional[str] = None,
+        python_port: int = DEFAULT_PYTHON_PORT,
     ) -> None:
         self.port = port
         self.root_dir = root_dir or Path(__file__).resolve().parents[2]
         self.agent_dir = self.root_dir / "agent"
-        self.python_url = python_url
+        self.python_url = python_url or f"http://127.0.0.1:{python_port}"
         self.proc: Optional[subprocess.Popen[Any]] = None
 
     def find_command(self) -> Tuple[Optional[List[str]], Path]:
@@ -51,7 +53,14 @@ class GoAgentSupervisor:
         for name in candidate_names:
             bin_path = self.agent_dir / name
             if bin_path.is_file() and os.access(bin_path, os.X_OK):
-                return [str(bin_path), "agent", "--port", str(self.port)], self.agent_dir
+                return [
+                    str(bin_path),
+                    "agent",
+                    "--port",
+                    str(self.port),
+                    "--python-url",
+                    self.python_url,
+                ], self.agent_dir
 
         # 2. 次优探测系统 PATH 是否安装了 go CLI
         go_bin = shutil.which("go")
@@ -63,6 +72,8 @@ class GoAgentSupervisor:
                 "agent",
                 "--port",
                 str(self.port),
+                "--python-url",
+                self.python_url,
             ], self.agent_dir
 
         # 3. 未找到 Go 运行环境

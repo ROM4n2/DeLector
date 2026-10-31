@@ -32,6 +32,7 @@ type Event struct {
 	Reason    string         `json:"reason,omitempty"`
 	Code      string         `json:"code,omitempty"`
 	MessageZH string         `json:"message_zh,omitempty"`
+	Summary   string         `json:"summary,omitempty"`
 }
 
 // CompanionTools 返回伴学导学 Agent 允许调用的标准 OpenAI Function Schema 描述清单。

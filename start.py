@@ -542,7 +542,7 @@ def main(
             try:
                 from delector.core.go_agent_supervisor import GoAgentSupervisor
 
-                agent_sup = GoAgentSupervisor(port=8002)
+                agent_sup = GoAgentSupervisor(port=8002, python_port=port)
                 if agent_sup.start(deadline_s=5.0):
                     print("[伴学] Go Agent 伴学服务已自动托管启动 (http://127.0.0.1:8002)")
                 else:

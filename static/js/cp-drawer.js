@@ -598,7 +598,15 @@ export function submitPrompt(userText) {
         const chips = toolContainerEl.querySelectorAll('.companion-tool-chip');
         for (const c of chips) {
           if (c.dataset.tool === data.tool) {
-            c.textContent = '✓ ' + data.tool + ' 完成: ' + (data.summary || '');
+            const isError = Boolean(data.result && (data.result.status === 'error' || data.result.error_code));
+            if (isError) {
+              c.classList.add('companion-tool-chip--error');
+              c.style.borderColor = 'var(--coral, #b44322)';
+              c.style.color = 'var(--coral, #b44322)';
+              c.textContent = '✗ ' + data.tool + ' 异常: ' + (data.summary || (data.result && data.result.message) || '失败');
+            } else {
+              c.textContent = '✓ ' + data.tool + ' 完成: ' + (data.summary || '已获取语言学上下文');
+            }
           }
         }
       } else if (event === 'delta') {
