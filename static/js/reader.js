@@ -825,6 +825,20 @@ export function openNoteDrawerFromSelection() {
   openDrawer("note");
 }
 
+export function askCompanionFromSelection() {
+  if (!state.activeSelectedRangeText) return;
+  const tooltip = document.getElementById("selection-tooltip");
+  if (tooltip) tooltip.classList.add("hidden");
+
+  if (window.CompanionDrawer) {
+    window.CompanionDrawer.open({
+      selectedText: state.activeSelectedRangeText,
+      articleTitle: state.currentArticle ? state.currentArticle.title : "",
+      cefrLevel: state.currentArticle?.cefr_level || "B1",
+    });
+  }
+}
+
 export function openNoteDrawerForExisting(noteId) {
   const note = currentArticleNotes.find((n) => n.id === noteId);
   if (!note) return;

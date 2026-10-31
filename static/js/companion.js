@@ -597,21 +597,38 @@ export const Companion = {
 
   harvestStudyContext() {
     let selectedText = '';
+    // 1. 优先读取当前 DOM 原生选区
     if (window.getSelection) {
       const sel = window.getSelection().toString().trim();
       if (sel && sel.length > 0 && sel.length < 500) {
         selectedText = sel;
       }
     }
-    let articleTitle = '';
-    const titleEl = document.querySelector('.article-title, #reader-article-title, .reader-header-title');
-    if (titleEl) {
-      articleTitle = titleEl.textContent.trim();
+    // 2. 其次读取 reader 的 activeSelectedRangeText
+    if (!selectedText && window.state && window.state.activeSelectedRangeText) {
+      selectedText = window.state.activeSelectedRangeText.trim();
     }
+    // 3. 再次读取当前正在点检的句子 (activeSelectedSentId)
+    if (!selectedText && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
+      const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
+      if (sent && sent.text) {
+        selectedText = sent.text.trim();
+      }
+    }
+    let articleTitle = '';
+    if (window.state && window.state.currentArticle && window.state.currentArticle.title) {
+      articleTitle = window.state.currentArticle.title;
+    } else {
+      const titleEl = document.querySelector('.article-title, #reader-article-title, .reader-header-title');
+      if (titleEl) {
+        articleTitle = titleEl.textContent.trim();
+      }
+    }
+    const cefrLevel = (window.state && window.state.currentArticle && window.state.currentArticle.cefr_level) || 'B1';
     return {
       selectedText,
       articleTitle,
-      cefrLevel: 'B1'
+      cefrLevel
     };
   },
 
