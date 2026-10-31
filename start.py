@@ -15,7 +15,7 @@ import webbrowser
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Callable, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 # 为什么必须在最顶部就把 stdout/stderr 重配成 utf-8（本仓既有写法，见 package_windows.py 顶部）：
 # 下面那条启动横幅用 print() 打中文，而**被重定向到文件的 stdout 在 Windows 上默认按 locale/ANSI
@@ -510,7 +510,11 @@ def _report_already_running(decision: AlreadyRunning, android: bool) -> None:
     )
 
 
-def main(debug_console: bool = False, on_serving: Optional[Callable[[int], None]] = None) -> None:
+def main(
+    debug_console: bool = False,
+    on_serving: Optional[Callable[[int], None]] = None,
+    no_agent: bool = False,
+) -> None:
     _ensure_entry_streams(debug_console)
     android = is_android()
     # 单一判定点（spec §3.2）：抢锁 → 选端口 → 归因。`identity_probe` 只在**锁降级**时被用到
@@ -528,10 +532,23 @@ def main(debug_console: bool = False, on_serving: Optional[Callable[[int], None]
     # `finally` 放锁是**硬要求**（不是"顺手清理"）：锁是文件级的，同进程里反复调 `main()` 的测试
     # 若漏放，后面的用例会被判「已在运行」而集体假红；真实用户侧则表现为 Ctrl+C 之后再也起不来
     # （进程还在退出中，锁仍被自己的 fd 攥着）。
+    agent_sup: Optional[Any] = None
     try:
         # ⚠️ 必须在 `from delector.server import app` **之前**执行：那一行一跑，`database`
         # 已按仓库根把 DATA_DIR 落定，此时再设 DELECTOR_DATA_DIR 就晚了。
         bootstrap_data_dir(os.environ)
+
+        if not android and not no_agent:
+            try:
+                from delector.core.go_agent_supervisor import GoAgentSupervisor
+
+                agent_sup = GoAgentSupervisor(port=8002)
+                if agent_sup.start(deadline_s=5.0):
+                    print("[伴学] Go Agent 伴学服务已自动托管启动 (http://127.0.0.1:8002)")
+                else:
+                    print("[伴学] 未检测到 Go 环境或启动超时，伴学功能由 Python 内核自适应兜底")
+            except Exception as a_err:
+                print(f"[伴学] 伴学服务托管尝试跳过 ({a_err})，由 Python 内核兜底")
 
         host = get_bind_host()
         print_banner(port, android)
@@ -588,6 +605,11 @@ def main(debug_console: bool = False, on_serving: Optional[Callable[[int], None]
             sys.exit(1)
         print("[提示] 服务已停止。")
     finally:
+        if agent_sup is not None:
+            try:
+                agent_sup.stop()
+            except Exception:
+                pass
         # `release()` 幂等（降级句柄是空操作 ⇒ Android 分支同样安全）。放在最外层 `finally`
         # 而不是 shutdown 之后：`bootstrap_data_dir` / `build_server` / `on_serving` 任一步抛，
         # 锁都必须被放开 —— 一个已经失败的进程攥着锁，等于用户每次重开都被告知「已在运行」。
@@ -660,12 +682,17 @@ def _app_version() -> str:
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
-    """解析跨平台入口的调试控制台运行时开关。"""
+    """解析跨平台入口的调试控制台与伴学守护运行时开关。"""
     parser = argparse.ArgumentParser(prog="start.py", description="DeLector 跨平台启动器。")
     parser.add_argument(
         "--debug-console",
         action="store_true",
         help="调试时挂回控制台，不把缺失的标准流收口到 launch.log",
+    )
+    parser.add_argument(
+        "--no-agent",
+        action="store_true",
+        help="禁用自动拉起 Go 伴学 Agent 子进程，强制由 Python 内核服务",
     )
     return parser.parse_args(argv)
 
@@ -677,4 +704,4 @@ if __name__ == "__main__":
     # 本就不是 None，收口失败也不得阻断启动）。debug 开关从原始 argv 探。
     _ensure_entry_streams("--debug-console" in sys.argv[1:])
     _args = _parse_args(sys.argv[1:])
-    main(debug_console=_args.debug_console)
+    main(debug_console=_args.debug_console, no_agent=_args.no_agent)
