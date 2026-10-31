@@ -974,3 +974,20 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **伴学 Loop 与全链路装配验证（Task 4）**：
   - `CompanionAgent` 注入 Provider Registry，自适应解析模型并动态流控；
   - 全量回归：Go 169 passed in 10 packages，Python 68 passed in 7.34s，前端四道机械门禁 100% PASS。
+
+
+### 2026-11-01 00:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**根治 Go Agent 启动 5.0s 超时与 Python 兜底连通性失败缺陷（Commit `e83b716`）**。
+- **根因深度定位**：
+  1. **冷编译超时杀进程**：Windows 环境下若未预编译 `agent/delector.exe`，Supervisor 回退调用 `go run ./cmd/delector`。在 Windows NTFS 与安全软件下，Go 首次编译耗时 ~6-8s；而此前硬编码 `deadline_s = 5.0s`，导致进程编译尚未完成即被 Supervisor 超时强杀（SIGTERM），输出 `Go 伴学 Agent 启动超时 (5.0s)，正在终止子进程` 并回退 Python 本地内核；
+  2. **启动时序与 .env 注入脱节**：`start.py` 原先在启动 Go Supervisor 之后才 import `server.py`（从而晚执行 `load_env()`），导致 Supervisor 启动子进程时未能提前从 `.env` 注入 `DEEPSEEK_API_KEY`；
+  3. **Python 兜底抛出连接失败**：当 Go 被杀回退至 Python `companion_agent` 时，由于 API Key 为空，`llm_client` 组装 `Authorization: Bearer ` 头，被 httpx 判定为 Illegal header 抛出异常，进而显示为「AI 服务连接失败」。
+- **彻底根治方案**：
+  - **自动预编译缓存**：`GoAgentSupervisor.find_command()` 发现缺少独立二进制但有 `go` 时，自动执行一次 `go build -o delector.exe ./cmd/delector`。构建完成后仅需 ~50ms 启动，健康检查在 2.4s 内彻底完成（100% 免疫冷启动编译延迟）；
+  - **超时阈值放宽**：`DEFAULT_STARTUP_DEADLINE_S` 从 5.0s 放宽至 15.0s；
+  - **早期加载 .env**：`start.py` 在 `main()` 入口处执行 `_load_env_early()`，Supervisor 在 `start()` 时亦主动扫描仓库根与 agent 目录的 `.env` 补全环境变量。
+- **验证与交付**：
+  - 物理实测 Supervisor 启动健康耗时：**2.45s 成功就绪**（不再超时）；
+  - 测试通过：Go 169 passed、Python 68 passed、四道门禁全绿；
+  - 变更已推送至分支 `feat/companion-provider-registry-and-pi-compaction`（Commit `e83b716`，PR #179）。
