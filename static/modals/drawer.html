@@ -1,5 +1,6 @@
     <!-- ── Sticky Note Slide-over Drawer ──────────────────────── -->
     <aside id="drawer">
+      <div id="drawer-resize-handle" class="drawer-resize-handle" title="按住左边缘拖拽调节抽屉宽度，双击快速切换预设宽度"></div>
       <div class="tape-top"></div>
       <div class="drawer-header">
         <div class="drawer-tabs">
@@ -7,27 +8,39 @@
             id="d-tab-vocab"
             class="drawer-tab-btn active"
             onclick="switchDrawerTab('vocab')"
+            title="词汇考点"
           >
-            📖 词汇考点
+            📖 词汇
           </button>
           <button
             id="d-tab-syntax"
             class="drawer-tab-btn"
             onclick="switchDrawerTab('syntax')"
+            title="句法拓扑"
           >
-            🌳 句法拓扑
+            🌳 句法
           </button>
           <button
             id="d-tab-note"
             class="drawer-tab-btn"
             onclick="switchDrawerTab('note')"
+            title="随笔便签"
           >
-            📝 随笔便签
+            📝 便签
+          </button>
+          <button
+            id="d-tab-companion"
+            class="drawer-tab-btn"
+            onclick="switchDrawerTab('companion')"
+            title="伴学导读"
+          >
+            🦉 伴学
           </button>
           <button
             id="d-tab-all"
             class="drawer-tab-btn"
             onclick="switchDrawerTab('all')"
+            title="全部内容"
           >
             ✦ 全部
           </button>
@@ -334,6 +347,36 @@
             >
               🗑️
             </button>
+          </div>
+        </div>
+
+        <!-- Section 4: Companion Agent Section (伴学导学) -->
+        <div id="drawer-companion-section" class="drawer-companion-section hidden">
+          <div id="companion-context-bar" class="companion-context-bar"></div>
+          <div id="companion-drawer-body" class="companion-chat-stream">
+            <div class="companion-message assistant">
+              <div>Hallo! 我是你的研读伙伴 Eule。选中德语难句点击我，我可以为你深入剖析拓扑结构、语用褒贬或批量制作闪卡。</div>
+            </div>
+          </div>
+          <div class="companion-drawer-footer">
+            <div id="companion-quick-actions" class="companion-quick-actions">
+              <button class="companion-quick-chip chip-utility" onclick="window.CompanionDrawer?.syncContext()">🎯 抓取当前句</button>
+              <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('请帮我分析选中文本的主从句拓扑结构与核心动词位置。')">从句拓扑问诊</button>
+              <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('请帮我提取选中文本中的核心 B1/B2 动词与动介搭配，并提议制成生词卡。')">提取核心生词</button>
+              <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('这个句子在德语母语者的语用习惯中具有怎样的情感色彩与正式度？')">深挖语用褒贬</button>
+            </div>
+            <div class="companion-input-row">
+              <input
+                id="companion-input"
+                type="text"
+                class="companion-input"
+                placeholder="输入德语学习疑问或指令..."
+                onkeydown="if(event.key==='Enter')window.CompanionDrawer?.handleSend()"
+              />
+              <button id="companion-send-btn" class="companion-send-btn" onclick="window.CompanionDrawer?.handleSend()">
+                发送
+              </button>
+            </div>
           </div>
         </div>
       </div>

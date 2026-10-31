@@ -706,3 +706,211 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - 本地 master 曾与远端分叉（`5979b64` 被 squash 压平后不再是祖先）：先证「本地无 origin 缺失内容」再 `reset --hard origin/master`，不盲目对齐。
 - 验证：全量 **2584 passed + 2 skipped / 578s**；ruff 零告警；mypy 三档（119/160/4）零错误；六道闸 exit 0；`build_index_html.py --check` 通过；PR CI 全绿。
 - 遗留：Android 用户需覆盖安装（本版含 static/ 改动）；发布资产清单待流水线结束后核对。
+
+
+### 2026-10-31 16:30 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**德语伴学智能体（Companion Study Agent）全量落地**（分支 `feat/companion-study-agent`）。
+- **交付面**：
+  1. `41ab073` Task 1: 伴学 Agent 循环内核 `delector/services/companion_agent.py`（有界 MAX_TURNS=3、15s 硬超时、白名单工具调用、HITL Proposal 提议制、离线安全降级）。
+  2. `1e9fb51` Task 2: 后端路由与 SSE 流式端点 `delector/routes/companion.py`（Starlette 断连探活、`_require_localhost` 403 本地写保护、学情上下文）。
+  3. `a6081bf` Task 3: 前端分层与纯状态容器 `static/js/cp-state.js` (L1) 与 `static/js/cp-api.js` (L2)；`tools/check_frontend_layers.py` 严格纳管。
+  4. `80f1a1f` Task 4: 抽屉 UI 与德式排版 `static/js/cp-drawer.js`、`static/style.css`（Zero-innerHTML 纯 DOM 驱动，思维链、工具 Chip、Proposal 结构化交互卡片）。
+  5. `a76ac89` Task 5: 宠物主控接线 `static/js/companion.js` 与 `static/js/main.js`（视口难句捕获 `harvestStudyContext`、抽屉联动）。
+  6. `b045c53` Task 6: 双向 SSE 事件契约门禁 `tools/check_companion_contract.py`（静态校验 7 种 SSE 事件 100% 对齐）。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学专项测试：`pytest tests/test_companion_*.py` **15 passed in 1.84s**。
+  - 静态类型与风格：`mypy --strict` 零 issues · `ruff check` 零告警。
+  - 写作与核心卡盒回归：`pytest tests/test_writing_rules.py tests/test_frontend_api_contract.py tests/test_cards_*.py` **143 passed in 39.09s**。
+- **状态**：台账 Task 1~6 已全部 COMPLETED，Task 7 进入用户终审阶段。
+
+### 2026-10-31 17:15 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学 Agent 视口难句断链修复、Markdown DOM 渲染与主抽屉方案 A 深度统一**。
+- **交付面**：
+  1. `b311bca`: 划词工具条（`selection-tooltip`）增加 `[🦉 问伴学]` 直连按钮；实现 Zero-innerHTML 纯 DOM 结构化流式 Markdown 渲染器（`renderSafeMarkdownToElement`）。
+  2. `9a14e0f`: 修复后端丢弃视口上下文的根本缺陷，将 `context`（难句/篇章/CEFR）直接注入 Agent 循环 System Prompt，并在前端实现 `restoreSentenceSpaces` 基于原句真实空格重构。
+  3. `952117a`: 践行**方案 A 深度统一**：将伴学抽屉与现有主抽屉 `#drawer` 100% 融合，作为第 5 个专属 Tab（`[🦉 伴学导学]`），共用便利贴黄色背景、顶部胶带（`tape-top`）、Tab 栏与 `body.drawer-open` 正文平移避让机制，移除独立外层抽屉 DOM 与冗余样式。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学测试：`pytest tests/test_companion_*.py` **16 passed in 1.93s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 17:40 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学交互全面精细化：Markdown 拓扑表格渲染、弹跳动态 Chip、移动端单触步进导航与 Tab 布局修复**。
+- **交付面**：
+  1. `bcbc4f9`: 
+     - **动态弹跳操作项**：依赖句子的快捷问诊（从句拓扑/核心生词/语用褒贬）在无句子时收起；一旦绑定句子触发 `@keyframes chipBouncePop` 活泼弹跳动效逐个跃出；未绑定句子点击时拦截并友好引导。
+     - **Tab 布局与字数精简**：五 Tab 对齐为四字对称（`📖 词汇`、`🌳 句法`、`📝 便签`、`🦉 伴学`、`✦ 全部`），开启 `overflow-x: auto` 零滚动条自适应，彻底解决“伴学导读”截断。
+     - **移动端全场景选句突破**：正文句法旁增加 `[🦉 伴学]` 专属直达单触徽章（触屏默认亮起免悬浮）；伴学语境条内置 `[ ◀ 上一句 ] [ 句 N/M ] [ 下一句 ▶ ]` 极速步进器，完全摆脱手机触屏拖选文本的痛点。
+     - **纯 DOM 结构化 Markdown 表格渲染**：解析 `| 场 | 功能 | 典型内容 |` 与 `:---:` 对齐语法，原生构建学术墨线复古排版表格（`table`/`thead`/`tbody`），零 innerHTML 杜绝 XSS。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - Node.js 虚拟 DOM 表格结构断言：`[ 'H5', 'TABLE' ]`、`[ 'THEAD', 'TBODY' ]` 100% 结构化验证通过。
+  - 伴学测试：`pytest tests/test_companion_*.py` **16 passed in 2.18s**。
+
+### 2026-10-31 17:55 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**彻底清理正文常驻句末徽章，全面落地方案 1 点选悬浮胶囊条 (Floating Capsule)**。
+- **交付面**：
+  1. `142418d`:
+     - **正文纯净回归**：彻底移除正文每个句子末尾突兀常驻的 `[🌳 句法]` 与 `[🦉 伴学]` 按钮及相关冗余 CSS，德语印刷排版恢复 100% 连贯纯粹。
+     - **悬浮胶囊工具条（`#selection-tooltip`）功能集成**：将 `[🌳 句法]`、`[🦉 问伴学]`、`[📝 随笔]`、`[🔊 朗读]` 以及三色荧光笔完整收敛至悬浮胶囊条中。
+     - **跨端点选交互增强**：支持 `mouseup` 与 `touchend` 双端事件监听，内置视口安全边界探测（防止胶囊被顶边或侧边截断），点击空白处自然淡出。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.66s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**根因排障修复伴学请求/回复截断锁死，并实现全桌面自适应用户可调尺寸抽屉**。
+- **交付面**：
+  1. `da1f5ae`:
+     - **后端 Token 预算与超时修复**：将 `DEFAULT_MAX_TOKENS` 提升至 4096、`DEFAULT_DEADLINE_S` 提升至 35s，根治因高密度德语语法/词卡导致 JSON 被截断的 `Unterminated string` 报错；增强离线导学上下文响应。
+     - **前端状态机死锁与静默丢包修复**：`cp-drawer.js` 补齐 `finally` 重置 `inFlight = false`，杜绝请求异常后永久失能；`askCompanionFromSelection` 增设级联容错抓取，不再因微小选区抖动静默退出。
+     - **全桌面可拖拽自适应抽屉**：增加 `#drawer-resize-handle` 墨线拖动手柄，支持无级调节（340px ~ 75vw），双击在预设档位轮转（420px -> 600px -> 50vw），偏好持久化至 `localStorage`，大屏媒体查询默认放宽。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.17s**。
+  - 真实 DeepSeek 模型端到端联调：复杂从句拓扑长文本与词卡生成 100% 完整解析，零报错截断。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复生词卡 Proposal 入库 500 报错，全量落地方案 A 思维链折叠坞 (CoT Thought Accordion)**。
+- **交付面**：
+  1. `a71aabe`:
+     - **修复生词卡 Proposal 入库 Schema 报错**：在 `delector/routes/companion.py` 中将 Proposal 提取参数精确映射至 `vocab_cards` 表真实字段（`lemma`, `definition_zh`, `sentence_context`），纠正 `reading` 伪字段引发的 500 异常；补齐单元测试真实字段约束；触发 `log_study_event`。
+     - **方案 A 思维链手风琴折叠坞**：在 `static/js/cp-drawer.js` 与 `static/style.css` 中落地 `createThoughtAccordion()`：
+       - 发送即刻激活：墨线纸质风格折叠盒，带 `0.0s` 实时递增秒表与微脉冲墨滴动画；
+       - 动态阶段透视步进：自动流转四阶段状态（锁定视口 ➔ 拓扑五场域映射 ➔ 动词框定式检验 ➔ 导学方案生成）；
+       - 答复到来平滑收拢：标题变为 `✓ 已完成深度研读 (耗时 X.X 秒)`，自动折叠保持视觉聚焦于正式解答，点击随时展开查看模型真实 `thought` 原文。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.51s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:40 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**彻底终结思维链嵌套方框 (Containeritis)，落地 1A Claude 式微墨线流与 2B->C 自适应打字机队列**。
+- **交付面**：
+  1. `b5fc9f4`:
+     - **1A Claude 式纯净微墨线思维链**：
+       - 彻底剔除 `.companion-thought-box` 的封闭边框、背景矩形与卡片阴影，杜绝“圆角套圆角”容器综合征；
+       - 未展开/思考态：仅由一行通透微墨线字 `● Eule 正在推演句子结构... 3.2s ▾` 构成；
+       - 展开态：仅依托左侧单向细墨线（`border-left: 2px solid var(--rule)`）做优雅缩进与步骤旁注，与 DeLector 德式纸质印刷系统 100% 同构；完成态平滑收拢为一行精致小字 `✓ 深度推演完成 (X.X 秒)`。
+     - **2B->C 客户端自适应弹性打字机平滑队列**：
+       - 新增 `AdaptiveTypewriter` 类，解决回包“一口气突兀瞬爆”问题；
+       - 动态弹性调速：短文优雅微风（~40 字/秒），长文检测积压平滑加速（1.5~2.5 秒内排完）；
+       - 附带微脉冲红墨水闪烁光标（`.companion-typing-cursor`），结束自动淡出；保留 `append()` 接口为未来范式 C 真实 SSE 逐 Token 直出无缝铺路。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 1.96s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 18:55 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**依据 dfs-debug 四步法彻底根治 [异常: 上游模型调用失败: AI 服务返回内容非 JSON]**。
+- **交付面**：
+  1. `95b771d`:
+     - **根因分析**：上游 DeepSeek-R1 / Reasoning / 经 Markdown 提示词引导的模型输出时，常出现带有 ```json 代码块包裹、<think> 思考链混入 content 头部或前后客套自然语言的情况；原 `llm_client.py` 裸执行 `json.loads(content)` 导致 `JSONDecodeError` 冒泡打断交互流。
+     - **阶梯式自愈解析器**：在 `delector/services/llm_client.py` 落地 `_clean_and_parse_json()`：
+       - 快路径标准 JSON 解析；
+       - 正则提取 `<think>` 标签，剔除思考标签并将思考过程无损转存入 `parsed["thought"]`；
+       - 正则剥离 ```` ```(?:json)? ... ``` ```` 外部代码块；
+       - 外围大括号 `{ ... }` 贪婪定界，剔除前后客套文本；
+       - 彻底非 JSON 时由标准 `json.loads` 抛错维持安全边界。
+     - **单元测试锁死**：`tests/test_llm_client.py` 增补 3 项覆盖测试；`test_companion_routes.py` 补齐桩隔离。
+     - **A-MAC 知识库沉淀**：已沉淀至 Obsidian Coding Vault `99-Inbox/2026-10-31-llm-结构化输出-markdown-块与-think-标签自愈解析规范.md`。
+- **物理验证收据**：
+  - 伴学与 LLM Client 单测：`pytest tests/test_llm_client.py tests/test_companion_*.py` **36 passed in 2.33s**。
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 19:10 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**三层防御彻底治愈 [异常: 上游模型调用失败: AI 服务返回内容非 JSON]**。
+- **交付面**：
+  1. `362f305`:
+     - **L1 解析层（`llm_client.py`）**：
+       - `_clean_and_parse_json()` 全面注入 `strict=False`，彻底支持字符串内部物理换行符（ASCII 0x0A）、制表符与控制字符；
+       - 增加尾随逗号自动清洗正则（`re.sub(r",\s*([}\]])", r"", candidate)`）。
+     - **L2 循环容错降级（`companion_agent.py`）**：
+       - 当上游模型完全未按格式输出外层 JSON（但已产出详尽纯 Markdown 答案）时，不再作为致命崩溃抛弃答案，而是无损提取 `<think>` 思考链并将纯文本解答自愈注入 `reply_zh`，交付完整导学解答，前端零报错。
+     - **L3 提示词物理换行纠偏（`companion_agent.py`）**：
+       - 修正 `COMPANION_AGENT_SYSTEM_PROMPT` 历史字面量 `
+` 为真实换行 `
+`，补强多轮对话单 JSON 约束。
+     - **回归测试锁死**：
+       - `tests/test_llm_client.py` 新增真实物理换行符与尾随逗号解析测试；
+       - `tests/test_companion_agent_loop.py` 新增纯 Markdown 模型回包自愈测试。
+- **物理验证收据**：
+  - 伴学与 LLM Client 单测：`pytest tests/test_llm_client.py tests/test_companion_*.py` **38 passed in 2.35s**。
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 20:20 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**方案 A 落地：由 Go Agent 模块全面接管伴学导学智能体编排（ADR-0025 闭环）**。
+- **决策演进**：
+  - 彻底终结“系统提示词伪 JSON 强行约束”架构缺陷（彻底避免 JSON RFC 8259 崩溃与长超时网络空闲断连）；
+  - 将伴学 Agent 全面交由 Go 原生模块（`agent/internal/companion`）统管，兑现纯 Go 后端驱动 AI Agent 编排体系；
+  - 纯 Markdown 正文流与原生思考链（ReasoningContent）即时下发，诊断工具（analyze / writing_check / vocab_stats）与制卡提议（propose_vocab_cards）由原生 Tool Calling 驱动并反馈闭环。
+- **交付清单**：
+  1. `docs/adr/2026-10-31-adr-0025-companion-agent-native-tool-calling-and-streaming.md` (ADR-0025 决议通过)；
+  2. `docs/plans/2026-10-31-companion-native-tool-calling-streaming.md` (6/6 任务全面达成)；
+  3. `agent/internal/companion/tools.go` (OpenAI 兼容 Tool Schemas 与 SSE Event 契约)；
+  4. `agent/internal/companion/loop.go` (原生 Tool Calling Stream 双通道有界调度器)；
+  5. `agent/internal/companion/server.go` (HTTP SSE Handler，支持 /api/companion/chat 与 /api/companion/health)；
+  6. `agent/cmd/delector/agent.go` (新增 `delector agent` CLI 子命令)；
+  7. `delector/routes/companion.py` (FastAPI 路由网关透明反代 Go Agent SSE 帧，无缝回退本地)。
+- **物理验证收据**：
+  - Go 测试全景：`cd agent && go test ./...` **143 passed in 9 packages**。
+  - Python 测试全景：`pytest tests/test_companion_*.py tests/test_llm_client.py` **39 passed in 6.74s**。
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 静态分析：`mypy --strict` 零 issues · `ruff check` 零告警。
+
+### 2026-10-31 21:12 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**伴学 Agent 对标 Pi 与工业级前沿模式深化交付达成（4/4 任务全绿闭环）**。
+- **前沿模式落地**：
+  1. **Errors-as-Messages 原则**（Commit `1031cf8`）：工具执行或参数解析异常不再中断流或抛致命错误，格式化为结构化 `Role: tool` 消息送回大模型自愈反思与降级解答；
+  2. **Turn 间主动滑动窗口压缩器**（Commit `fa1e37b`）：在模型调用前检测字符与 Token 预算，保留 System 上下文与尾部最近 2 轮完整交互，将中间过长历史无损折叠为状态锚点，根除长文本 Token 溢出与响应延迟劣化；
+  3. **云端-本地双模型级联热备**（Commit `664a529`）：主通道（DeepSeek）发生物理不可达或超时故障时，伴学调度器自动平滑切换至本地 Ollama（`qwen3.5:4b`）继续流式推送并记录思维折叠提示，确保断网离线环境下的高可用性。
+- **物理验证收据**：
+  - Go 单测全景：`cd agent && go test ./...` **147 passed in 9 packages**。
+  - Python 伴学与客户端全景：`pytest tests/test_companion_*.py tests/test_llm_client.py -v` **39 passed in 6.20s**。
+  - 四道机械门禁：`check_frontend_layers` PASS · `check_frontend_api_contract` PASS · `check_index_html_sync` PASS · `check_companion_contract` PASS。
+  - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
+
+### 2026-10-31 22:00 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**一键化启动器落地：Go 伴学 Agent 全生命周期自动托管收尸（3/3 任务全绿闭环）**。
+- **痛点彻底终结**：
+  - 彻底摆脱以往需要双终端分别启动 Go Agent (8002) 与 Python (8000) 的繁琐操作；
+  - 仅需单一入口 `python start.py`，启动器自动探测本地二进制（`agent/delector.exe`）或系统 `go` 运行时，以守护子进程在后台无感拉起 Go 伴学 Agent；
+  - 严格退出与收尸链（Commit `adc819c`）：挂接主进程退出与 `finally` 资源回收，`terminate` + 5s 优雅宽限 + 兜底 `kill`，杜绝孤儿进程与端口霸占；
+  - 环境自适应与移动端隔离：未安装 Go 或 Android Chaquopy 平台下静默安全降级为 Python 内核，并支持 `--no-agent` 显式禁用。
+- **物理验证收据**：
+  - Go 单测全景：`cd agent && go test ./...` **147 passed in 9 packages**。
+  - Python 单元与集成测试：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **48 passed in 6.11s**。
+  - 四道机械门禁：`check_frontend_layers` PASS · `check_frontend_api_contract` PASS · `check_index_html_sync` PASS · `check_companion_contract` PASS。
+  - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。
+
+### 2026-10-31 22:20 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复 Go 伴学 Agent 静默吞错 Bug 与 Python Web 设置动态同步（Commit `5c3e46e`）**。
+- **痛点根本解决**：
+  1. **数据共通与凭证同步**：此前 Web 设置页（SQLite settings 表）保存的 `DEEPSEEK_API_KEY`、`API_BASE_URL`、`API_MODEL` 未传递给 Go 守护进程，导致 Go Agent 以空 Key 发起请求遭上游 401 拒绝。现已在 `GoAgentSupervisor` 进程启动 `env` 注入以及 FastAPI 反代时通过 `X-API-Key`、`X-Base-URL`、`X-Model` 动态透传，支持免重启即时生效（凭证遵循零泄露脱敏纪律）。
+  2. **SSE 帧头缺失修复**：修复 Go 端 `server.go` 漏发 `event: <type>
+` 导致客户端事件状态机卡死在 `delta` 从而吞没 `error` 和 `done` 事件的致命缺陷。
+  3. **客户端防御式容错**：`cp-api.js` 支持优先从 JSON 内部读取 `parsed.event`。
+  4. **失败诊断友好化**：主备模型均不可达时输出完整因果诊断，界面以红色字样即时呈现，彻底终结“只剩半句思考词后静默”的历史。
+- **物理验证收据**：
+  - Go 测试全绿：`cd agent && go test ./...` **147 passed in 9 packages**。
+  - Python 测试全绿：`pytest tests/test_go_agent_supervisor.py tests/test_start_agent_integration.py tests/test_companion_*.py tests/test_llm_client.py -v` **49 passed in 7.05s**。
+  - 四道机械门禁 100% 全绿：`check_frontend_layers`, `frontend-api-contract`, `check_index_html_sync`, `check_companion_contract`。
+  - 静态检查：`mypy --strict` 零缺陷 · `ruff check` 零告警。

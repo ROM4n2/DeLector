@@ -340,6 +340,16 @@ LAYER_SPEC: Dict[str, LayerSpec] = {
         ban_rules=("dom", "toast", "timer", "dynamic-eval"),
         allowed_imports=("./core.js",),
     ),
+    "cp-state.js": LayerSpec(
+        layer="L1 纯状态容器",
+        ban_rules=("dom", "network", "toast", "timer", "dynamic-eval"),
+        allowed_imports=(),
+    ),
+    "cp-api.js": LayerSpec(
+        layer="L2 持久化访问层",
+        ban_rules=("dom", "toast", "timer", "dynamic-eval"),
+        allowed_imports=("./core.js",),
+    ),
 }
 
 # L1 纯层硬契约含「零顶层 let/var」⇒ 一并纳管（只收紧，不放松）。
@@ -352,8 +362,10 @@ MUTABLE_STATE_MODULES: Tuple[str, ...] = (
     # 原本只有 wr-api.js 未被纳管 ⇒ rd-api.js 一并收紧，避免 L2 成为可变状态的法外之地。
     "wr-api.js",
     "rd-api.js",
+    "cp-api.js",
     # 纯状态容器自己同样零顶层 `let`（状态只许在 `cardState` 对象里，见设计稿 §6.1）。
     "cd-state.js",
+    "cp-state.js",
     # 视图层首次纳管（计划 2026-10-20 Task 1）：`cards.js` 的 15 个模块级 `let` 收进
     # `cd-state.js` 后，本规则成为「状态不许再长回视图层」的机械钉子。
     # 它不在 `LAYER_SPEC`（不做 DOM/网络禁令），只受这一条契约约束。
@@ -953,12 +965,16 @@ def _bootstrap_env() -> None:
     `delector.server` 会经 create_app() 建库/播种，不隔离就会往仓库根写 DB。）
     """
     import os
+    import sqlite3
     import tempfile
 
     tmp = tempfile.mkdtemp(prefix="cpe_frontend_layers_")
     os.environ["DELECTOR_DATA_DIR"] = tmp
     os.environ["DATABASE_PATH"] = os.path.join(tmp, "delector.db")
     os.environ["PROGRESS_DB_PATH"] = os.path.join(tmp, "progress.db")
+    target_db = os.path.join(tmp, "delector.db")
+    with sqlite3.connect(target_db) as conn:
+        conn.execute("CREATE TABLE _bootstrap (id INT)")
 
 
 def _reconfigure_stdout() -> None:

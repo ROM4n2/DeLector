@@ -168,6 +168,52 @@ def test_non_json_content_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     assert excinfo.value.raw == "THIS IS NOT JSON"
 
 
+def test_markdown_code_block_json_content_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """模型输出用 ```json 包裹时的健壮自愈解析。"""
+    wrapped = "```json\n{\"definition_zh\": \"你好\", \"pos\": \"noun\"}\n```"
+    _install_mock_transport(monkeypatch, lambda request: _ok(wrapped))
+
+    out = _chat(messages=_MSGS, model="m", max_tokens=8, timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
+    assert out["definition_zh"] == "你好"
+    assert out["pos"] == "noun"
+
+
+def test_think_tag_reasoning_is_extracted_and_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DeepSeek-R1 / Reasoner 带有 <think> 标签时的思考链提取与 JSON 健壮解析。"""
+    content = "<think>\n详细分析德语从句五场域拓扑\n</think>\n{\"reply_zh\": \"主从复合句\"}"
+    _install_mock_transport(monkeypatch, lambda request: _ok(content))
+
+    out = _chat(messages=_MSGS, model="m", max_tokens=8, timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
+    assert out["thought"] == "详细分析德语从句五场域拓扑"
+    assert out["reply_zh"] == "主从复合句"
+
+
+def test_conversational_wrapped_json_content_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """模型在 JSON 外夹带客套前缀/后缀文本时的健壮解析。"""
+    content = "分析结果如下：\n{\"word\": \"Buch\", \"gender\": \"n\"}\n祝学习愉快！"
+    _install_mock_transport(monkeypatch, lambda request: _ok(content))
+
+    out = _chat(messages=_MSGS, model="m", max_tokens=8, timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
+    assert out["word"] == "Buch"
+    assert out["gender"] == "n"
+
+
+def test_json_with_literal_newlines_and_trailing_commas_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """模型输出字符串内含有真实物理换行符 (ASCII 0x0A) 及尾随逗号时的自愈解析。"""
+    raw_with_literal_newlines = (
+        "{\n"
+        '  "thought": "逐步思考",\n'
+        '  "reply_zh": "# 难句分析\\n1. 第一点\\n2. 第二点",\n'
+        '  "items": [1, 2, ],\n'
+        "}"
+    )
+    _install_mock_transport(monkeypatch, lambda request: _ok(raw_with_literal_newlines))
+
+    out = _chat(messages=_MSGS, model="m", max_tokens=8, timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
+    assert out["thought"] == "逐步思考"
+    assert "第一点" in out["reply_zh"]
+
+
 def test_malformed_envelope_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """信封缺 `choices[0].message.content` ⇒ 响应格式异常（不能是 KeyError 冒泡）。"""
     _install_mock_transport(monkeypatch, lambda request: httpx.Response(200, json={"error": {"message": "x"}}))

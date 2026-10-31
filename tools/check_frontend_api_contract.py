@@ -505,12 +505,17 @@ def find_unknown(
 # ── 主流程 ───────────────────────────────────────────────────────────────────
 def _bootstrap_env() -> None:
     """导入 delector 之前把库/缓存路径钉进临时目录，避免污染仓库根的真实 DB。"""
+    import os  # noqa: PLC0415
+    import sqlite3  # noqa: PLC0415
     import tempfile  # noqa: PLC0415
 
     tmp = tempfile.mkdtemp(prefix="cpe_frontend_contract_")
     os.environ["DELECTOR_DATA_DIR"] = tmp
     os.environ["DATABASE_PATH"] = os.path.join(tmp, "delector.db")
     os.environ["PROGRESS_DB_PATH"] = os.path.join(tmp, "progress.db")
+    target_db = os.path.join(tmp, "delector.db")
+    with sqlite3.connect(target_db) as conn:
+        conn.execute("CREATE TABLE _bootstrap (id INT)")
 
 
 def _reconfigure_stdout() -> None:

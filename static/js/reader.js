@@ -241,7 +241,6 @@ async function _openReaderBody(id, token) {
     const sentWrapper = `
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
-        <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">🌳 句法</button>
       </span>
       <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;
@@ -305,6 +304,8 @@ export function inspect(tokenId, sentId) {
   const token = sent.tokens.find((t) => t.id === tokenId);
   state.selectedToken = token;
   state.selectedSent = sent;
+  state.activeSelectedSentId = sent.id;
+  state.activeSelectedRangeText = sent.text;
   state.grammarData = null;
 
   // Highlight separable partner and self if linked
@@ -512,15 +513,18 @@ export function switchDrawerTab(tab) {
   const tabVocab = document.getElementById("d-tab-vocab");
   const tabSyntax = document.getElementById("d-tab-syntax");
   const tabNote = document.getElementById("d-tab-note");
+  const tabCompanion = document.getElementById("d-tab-companion");
   const tabAll = document.getElementById("d-tab-all");
   if (tabVocab) tabVocab.classList.toggle("active", tab === "vocab");
   if (tabSyntax) tabSyntax.classList.toggle("active", tab === "syntax");
   if (tabNote) tabNote.classList.toggle("active", tab === "note");
+  if (tabCompanion) tabCompanion.classList.toggle("active", tab === "companion");
   if (tabAll) tabAll.classList.toggle("active", tab === "all");
 
   const vocabWrap = document.getElementById("drawer-vocab-wrap");
   const syntaxSec = document.getElementById("drawer-syntax-section");
   const noteSec = document.getElementById("drawer-note-section");
+  const companionSec = document.getElementById("drawer-companion-section");
 
   if (vocabWrap)
     vocabWrap.classList.toggle("hidden", tab !== "vocab" && tab !== "all");
@@ -528,12 +532,24 @@ export function switchDrawerTab(tab) {
     syntaxSec.classList.toggle("hidden", tab !== "syntax" && tab !== "all");
   if (noteSec)
     noteSec.classList.toggle("hidden", tab !== "note" && tab !== "all");
+  if (companionSec)
+    companionSec.classList.toggle("hidden", tab !== "companion");
 
   const bodyEl = document.querySelector(".drawer-body");
-  if (bodyEl) bodyEl.scrollTop = 0;
+  if (bodyEl) {
+    bodyEl.classList.toggle("drawer-companion-active", tab === "companion");
+    if (tab !== "companion") {
+      bodyEl.scrollTop = 0;
+    }
+  }
 
   if (tab === "note" && noteSec) {
     document.getElementById("note-text-input")?.focus();
+  } else if (tab === "companion" && companionSec) {
+    document.getElementById("companion-input")?.focus();
+    if (window.CompanionDrawer?.renderContextBar) {
+      window.CompanionDrawer.renderContextBar();
+    }
   }
 }
 
@@ -549,6 +565,83 @@ export function closeDrawer() {
   document
     .querySelectorAll(".tok.sel")
     .forEach((el) => el.classList.remove("sel"));
+}
+
+export function setupDrawerResize() {
+  const handle = document.getElementById("drawer-resize-handle");
+  const drawer = document.getElementById("drawer");
+  if (!handle || !drawer) return;
+
+  // 1. 初始化读取本地持久化偏好
+  try {
+    const savedWidth = localStorage.getItem("delector_drawer_width");
+    if (savedWidth) {
+      document.documentElement.style.setProperty("--drawer-width", savedWidth);
+    }
+  } catch (_) {
+    // 忽略 localStorage 权限限制
+  }
+
+  let isDragging = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  const onPointerDown = (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    const computedWidth = drawer.getBoundingClientRect().width;
+    startWidth = computedWidth;
+
+    document.body.classList.add("drawer-resizing");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    e.preventDefault();
+  };
+
+  const onPointerMove = (e) => {
+    if (!isDragging) return;
+    const delta = startX - e.clientX;
+    const minW = 340;
+    const maxW = Math.min(window.innerWidth * 0.75, 1200);
+    const newWidth = Math.min(Math.max(minW, startWidth + delta), maxW);
+    const pxVal = `${Math.round(newWidth)}px`;
+
+    document.documentElement.style.setProperty("--drawer-width", pxVal);
+  };
+
+  const onPointerUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.classList.remove("drawer-resizing");
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+
+    try {
+      const currentVal = document.documentElement.style.getPropertyValue("--drawer-width");
+      if (currentVal) {
+        localStorage.setItem("delector_drawer_width", currentVal);
+      }
+    } catch (_) {}
+  };
+
+  // 2. 双击快捷预设宽度轮转 (420px -> 600px -> 50vw -> 420px)
+  handle.addEventListener("dblclick", () => {
+    const currentW = drawer.getBoundingClientRect().width;
+    let target = "420px";
+    if (currentW < 500) {
+      target = "600px";
+    } else if (currentW < 750) {
+      target = "50vw";
+    } else {
+      target = "420px";
+    }
+    document.documentElement.style.setProperty("--drawer-width", target);
+    try {
+      localStorage.setItem("delector_drawer_width", target);
+    } catch (_) {}
+  });
+
+  handle.addEventListener("pointerdown", onPointerDown);
 }
 
 // ── Grammar AI ───────────────────────────────────────────────────────────────
@@ -750,12 +843,47 @@ export async function loadArticleNotes(articleId) {
   });
 }
 
+/** 针对跨 span 选区缺失空格的问题，借助原句文本恢复德语单词间真实空格 */
+export function restoreSentenceSpaces(selectedText, fullSentenceText) {
+  if (!selectedText || !fullSentenceText) return selectedText;
+  if (selectedText.includes(" ")) return selectedText;
+  const sClean = selectedText.replace(/\s+/g, "");
+  const fClean = fullSentenceText.replace(/\s+/g, "");
+  if (sClean === fClean || sClean === fClean.replace(/[.?!;:]+$/, "")) {
+    return fullSentenceText;
+  }
+  let fIdx = 0;
+  while (fIdx < fullSentenceText.length) {
+    if (fullSentenceText[fIdx] === sClean[0]) {
+      let tempF = fIdx;
+      let tempS = 0;
+      while (tempF < fullSentenceText.length && tempS < sClean.length) {
+        if (/\s/.test(fullSentenceText[tempF])) {
+          tempF++;
+          continue;
+        }
+        if (fullSentenceText[tempF] === sClean[tempS]) {
+          tempF++;
+          tempS++;
+        } else {
+          break;
+        }
+      }
+      if (tempS === sClean.length) {
+        return fullSentenceText.slice(fIdx, tempF);
+      }
+    }
+    fIdx++;
+  }
+  return selectedText;
+}
+
 export function setupSelectionTooltip() {
   const content = document.getElementById("reader-content");
   const tooltip = document.getElementById("selection-tooltip");
   if (!content || !tooltip) return;
 
-  content.addEventListener("mouseup", () => {
+  const updateTooltipPos = () => {
     setTimeout(() => {
       const sel = window.getSelection();
       const text = sel ? sel.toString().trim() : "";
@@ -771,26 +899,60 @@ export function setupSelectionTooltip() {
             const foundSent = state.currentArticle?.sentences?.find((s) =>
               s.tokens.some((t) => t.id === tokId),
             );
-            if (foundSent) state.activeSelectedSentId = foundSent.id;
+            if (foundSent) {
+              state.activeSelectedSentId = foundSent.id;
+              if (foundSent.text) {
+                state.activeSelectedRangeText = restoreSentenceSpaces(text, foundSent.text);
+              }
+            }
             break;
           }
           node = node.parentNode;
         }
 
-        tooltip.style.left = `${rect.left + rect.width / 2}px`;
-        tooltip.style.top = `${rect.top - 8}px`;
+        const safeLeft = Math.max(120, Math.min(window.innerWidth - 120, rect.left + rect.width / 2));
+        const safeTop = rect.top < 60 ? rect.bottom + 12 : rect.top - 8;
+        tooltip.style.left = `${safeLeft}px`;
+        tooltip.style.top = `${safeTop}px`;
         tooltip.classList.remove("hidden");
       } else {
         tooltip.classList.add("hidden");
       }
-    }, 50);
-  });
+    }, 60);
+  };
+
+  content.addEventListener("mouseup", updateTooltipPos);
+  content.addEventListener("touchend", updateTooltipPos);
 
   document.addEventListener("mousedown", (e) => {
     if (!tooltip.contains(e.target) && !content.contains(e.target)) {
       tooltip.classList.add("hidden");
     }
   });
+
+  document.addEventListener("touchstart", (e) => {
+    if (!tooltip.contains(e.target) && !content.contains(e.target)) {
+      tooltip.classList.add("hidden");
+    }
+  }, { passive: true });
+}
+
+export function openSyntaxDrawerFromSelection() {
+  const tooltip = document.getElementById("selection-tooltip");
+  if (tooltip) tooltip.classList.add("hidden");
+
+  let sentId = state.activeSelectedSentId;
+  if (!sentId && state.selectedSent) {
+    sentId = state.selectedSent.id;
+  }
+  if (!sentId && state.currentArticle?.sentences?.length) {
+    sentId = state.currentArticle.sentences[0].id;
+  }
+  if (sentId) {
+    openSyntaxDrawerForSentence(sentId);
+  } else {
+    openDrawer("syntax");
+  }
 }
 
 export async function applyHighlight(color) {
@@ -823,6 +985,37 @@ export function openNoteDrawerFromSelection() {
   document.getElementById("del-note-btn").classList.add("hidden");
 
   openDrawer("note");
+}
+
+export function askCompanionFromSelection() {
+  const tooltip = document.getElementById("selection-tooltip");
+  if (tooltip) tooltip.classList.add("hidden");
+
+  let text = state.activeSelectedRangeText;
+  if (!text) {
+    const sel = window.getSelection();
+    text = sel ? sel.toString().trim() : "";
+  }
+  if (!text && state.selectedSent) {
+    text = state.selectedSent.text;
+  }
+  if (!text && state.activeSelectedSentId && state.currentArticle?.sentences) {
+    const s = state.currentArticle.sentences.find((s) => s.id === state.activeSelectedSentId);
+    if (s) text = s.text;
+  }
+  if (!text && state.currentArticle?.sentences?.length) {
+    text = state.currentArticle.sentences[0].text;
+  }
+
+  if (window.CompanionDrawer) {
+    window.CompanionDrawer.open({
+      selectedText: text || "",
+      articleTitle: state.currentArticle ? state.currentArticle.title : "",
+      cefrLevel: state.currentArticle?.cefr_level || "B1",
+    });
+  } else {
+    openDrawer("companion");
+  }
 }
 
 export function openNoteDrawerForExisting(noteId) {
@@ -965,6 +1158,24 @@ export function openSyntaxDrawerForSentence(sentId) {
   }
 
   openDrawer("syntax");
+}
+
+export function openCompanionForSentence(sentId) {
+  const sent = state.currentArticle?.sentences?.find((s) => s.id === sentId);
+  if (!sent) return;
+  state.selectedSent = sent;
+  state.activeSelectedSentId = sent.id;
+  state.activeSelectedRangeText = sent.text;
+
+  if (window.CompanionDrawer) {
+    window.CompanionDrawer.open({
+      selectedText: sent.text,
+      articleTitle: state.currentArticle?.title || "",
+      cefrLevel: state.currentArticle?.cefr_level || "B1",
+    });
+  } else {
+    openDrawer("companion");
+  }
 }
 
 export function highlightClauseTokens(tokenIds) {

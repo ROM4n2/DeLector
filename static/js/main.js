@@ -5,6 +5,16 @@ import { state, api, esc, jsAttr, notify } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import {
+  initCompanionDrawer,
+  toggleCompanionDrawer,
+  openCompanionDrawer,
+  closeCompanionDrawer,
+  handleSend,
+  submitPrompt,
+  syncCurrentContext,
+  renderContextBar,
+} from "./cp-drawer.js";
+import {
   loadArticles,
   deleteArticle,
   openReader,
@@ -14,6 +24,7 @@ import {
   switchDrawerTab,
   openDrawer,
   closeDrawer,
+  setupDrawerResize,
   analyzeGrammar,
   saveVocab,
   saveGrammar,
@@ -24,6 +35,10 @@ import {
   applyHighlight,
   openNoteDrawerFromSelection,
   openNoteDrawerForExisting,
+  openSyntaxDrawerFromSelection,
+  askCompanionFromSelection,
+  openCompanionForSentence,
+  restoreSentenceSpaces,
   aiNoteAssist,
   saveCurrentNote,
   deleteCurrentNote,
@@ -999,6 +1014,10 @@ Object.assign(window, {
   applyHighlight,
   openNoteDrawerFromSelection,
   openNoteDrawerForExisting,
+  openSyntaxDrawerFromSelection,
+  askCompanionFromSelection,
+  openCompanionForSentence,
+  restoreSentenceSpaces,
   aiNoteAssist,
   saveCurrentNote,
   deleteCurrentNote,
@@ -1127,8 +1146,18 @@ Object.assign(window, {
   // Player
   ShadowPlayer,
 
-  // Companion Mascot System
+  // Companion Mascot System & Study Agent
   Companion,
+  CompanionDrawer: {
+    init: initCompanionDrawer,
+    toggle: toggleCompanionDrawer,
+    open: openCompanionDrawer,
+    close: closeCompanionDrawer,
+    handleSend,
+    sendPrompt: (prompt) => submitPrompt(prompt),
+    syncContext: syncCurrentContext,
+    renderContextBar,
+  },
 
   // Encounter Zone (遇见区) view hooks (inline onclick handlers in index.html)
   encounterOpenText: openText,
@@ -1200,9 +1229,11 @@ document.addEventListener("DOMContentLoaded", () => {
   applyTypography();
   setupDropzone();
   setupSelectionTooltip();
+  setupDrawerResize();
   setupEditorListeners();
   ShadowPlayer.init();
   Companion.init();
+  initCompanionDrawer();
   // 顶栏更新 chip：落后时才可见；自动路径在无新版/拿不准/失败时零可见变化。
   initUpdateCheck();
 });

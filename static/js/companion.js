@@ -564,12 +564,27 @@ export const Companion = {
     this.say({ de: "Danke! Ich bin bereit!", zh: "谢谢！我已经准备好了！" });
   },
 
-  onClick() {
+  onClick(evt) {
     if (navigator.vibrate) navigator.vibrate(15);
     if (!this.enabled) {
       this.toggleEnabled();
       return;
     }
+    // Shift 或 Alt 辅助键唤起外观选角面板
+    if (evt && (evt.shiftKey || evt.altKey)) {
+      this.togglePanel();
+      return;
+    }
+    // 默认点击唤起德语伴学抽屉
+    if (window.CompanionDrawer) {
+      const ctx = this.harvestStudyContext();
+      window.CompanionDrawer.toggle(ctx);
+      return;
+    }
+    this.togglePanel();
+  },
+
+  togglePanel() {
     this.panelOpen = !this.panelOpen;
     const panel = document.getElementById('companion-panel');
     if (panel) {
@@ -578,6 +593,54 @@ export const Companion = {
     if (this.panelOpen) {
       this.syncPanel();
     }
+  },
+
+  harvestStudyContext() {
+    let selectedText = '';
+    // 1. 优先读取当前 DOM 原生选区
+    if (window.getSelection) {
+      const sel = window.getSelection().toString().trim();
+      if (sel && sel.length > 0 && sel.length < 500) {
+        selectedText = sel;
+      }
+    }
+    // 2. 其次读取 reader 的 activeSelectedRangeText
+    if (!selectedText && window.state && window.state.activeSelectedRangeText) {
+      selectedText = window.state.activeSelectedRangeText.trim();
+    }
+    // 3. 再次读取当前正在点检的句子 (activeSelectedSentId)
+    if (!selectedText && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
+      const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
+      if (sent && sent.text) {
+        selectedText = sent.text.trim();
+      }
+    }
+    // 4. 若选中文本因 span 紧贴缺失空格，且能定位到当前句，自动恢复德语词间空格
+    if (selectedText && !selectedText.includes(' ') && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
+      const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
+      if (sent && sent.text) {
+        if (typeof window.restoreSentenceSpaces === 'function') {
+          selectedText = window.restoreSentenceSpaces(selectedText, sent.text);
+        } else if (sent.text.replace(/\s+/g, '') === selectedText.replace(/\s+/g, '')) {
+          selectedText = sent.text.trim();
+        }
+      }
+    }
+    let articleTitle = '';
+    if (window.state && window.state.currentArticle && window.state.currentArticle.title) {
+      articleTitle = window.state.currentArticle.title;
+    } else {
+      const titleEl = document.querySelector('.article-title, #reader-article-title, .reader-header-title');
+      if (titleEl) {
+        articleTitle = titleEl.textContent.trim();
+      }
+    }
+    const cefrLevel = (window.state && window.state.currentArticle && window.state.currentArticle.cefr_level) || 'B1';
+    return {
+      selectedText,
+      articleTitle,
+      cefrLevel
+    };
   },
 
   onSay() {

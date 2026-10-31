@@ -139,11 +139,30 @@
       <span class="tooltip-sep"></span>
       <button
         class="tooltip-action-btn"
+        onclick="openSyntaxDrawerFromSelection()"
+        title="展开德语拓扑五场域与从句树"
+      >
+        🌳 句法
+      </button>
+      <button
+        class="tooltip-action-btn"
+        onclick="askCompanionFromSelection()"
+        title="向伴学助手 Eule 咨询此难句"
+      >
+        🦉 问伴学
+      </button>
+      <button
+        class="tooltip-action-btn"
         onclick="openNoteDrawerFromSelection()"
+        title="记录随笔便签"
       >
         📝 随笔
       </button>
-      <button class="tooltip-action-btn" onclick="playSelectedAudio()">
+      <button
+        class="tooltip-action-btn"
+        onclick="playSelectedAudio()"
+        title="真人朗读发音"
+      >
         🔊 朗读
       </button>
     </div>
