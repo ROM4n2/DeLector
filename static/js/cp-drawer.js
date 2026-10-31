@@ -829,8 +829,9 @@ function createThoughtAccordion() {
 
   const t0 = performance.now();
   let finished = false;
+  let realThoughtBuffer = '';
   const timerId = setInterval(() => {
-    if (finished) return;
+    if (finished || realThoughtBuffer) return;
     const elapsedSec = (performance.now() - t0) / 1000;
     timerEl.textContent = `${elapsedSec.toFixed(1)}s`;
 
@@ -849,14 +850,18 @@ function createThoughtAccordion() {
       stepEls[2].textContent = '✓ 动词框架与从句层级定式检验';
       stepEls[3].className = 'thought-step is-active';
     }
-  }, 100);
+  }, 500);
 
   return {
     boxEl,
-    setRealThought: (text) => {
-      if (!text) return;
+    setRealThought: (chunk) => {
+      if (!chunk) return;
+      if (!realThoughtBuffer) {
+        stepsListEl.style.display = 'none';
+      }
+      realThoughtBuffer += chunk;
       realContentEl.style.display = 'block';
-      realContentEl.textContent = text;
+      realContentEl.textContent = realThoughtBuffer;
       stepEls.forEach((el) => {
         el.className = 'thought-step is-done';
       });
@@ -874,6 +879,9 @@ function createThoughtAccordion() {
       iconEl.textContent = '✓';
       titleEl.textContent = `深度推演完成 (${totalSec} 秒)`;
       timerEl.textContent = '';
+      if (realThoughtBuffer) {
+        stepsListEl.style.display = 'none';
+      }
       stepEls.forEach((el) => {
         el.className = 'thought-step is-done';
       });

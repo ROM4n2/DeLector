@@ -417,7 +417,7 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 	}
 
 	cleanedText := strings.TrimSpace(fullContent.String())
-	if cleanedText == "?" || cleanedText == "？" || cleanedText == "" {
+	if cleanedText == "?" || cleanedText == "？" || cleanedText == "." || cleanedText == "。" || cleanedText == "..." || cleanedText == "" {
 		fallbackText := "已完成对当前句子的多维度语言学推演与分析。请参阅上方提取的语法拓扑信息，如需针对特定成分深入探讨，可随时追问。"
 		_ = emit(Event{
 			Event: EventDelta,
