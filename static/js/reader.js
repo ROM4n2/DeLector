@@ -241,8 +241,6 @@ async function _openReaderBody(id, token) {
     const sentWrapper = `
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
-        <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">🌳 句法</button>
-        <button class="sent-companion-btn" onclick="event.stopPropagation(); openCompanionForSentence(${Number(sent.id)})" title="向伴学 Eule 咨询此难句">🦉 伴学</button>
       </span>
       <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;
@@ -808,7 +806,7 @@ export function setupSelectionTooltip() {
   const tooltip = document.getElementById("selection-tooltip");
   if (!content || !tooltip) return;
 
-  content.addEventListener("mouseup", () => {
+  const updateTooltipPos = () => {
     setTimeout(() => {
       const sel = window.getSelection();
       const text = sel ? sel.toString().trim() : "";
@@ -835,20 +833,49 @@ export function setupSelectionTooltip() {
           node = node.parentNode;
         }
 
-        tooltip.style.left = `${rect.left + rect.width / 2}px`;
-        tooltip.style.top = `${rect.top - 8}px`;
+        const safeLeft = Math.max(120, Math.min(window.innerWidth - 120, rect.left + rect.width / 2));
+        const safeTop = rect.top < 60 ? rect.bottom + 12 : rect.top - 8;
+        tooltip.style.left = `${safeLeft}px`;
+        tooltip.style.top = `${safeTop}px`;
         tooltip.classList.remove("hidden");
       } else {
         tooltip.classList.add("hidden");
       }
-    }, 50);
-  });
+    }, 60);
+  };
+
+  content.addEventListener("mouseup", updateTooltipPos);
+  content.addEventListener("touchend", updateTooltipPos);
 
   document.addEventListener("mousedown", (e) => {
     if (!tooltip.contains(e.target) && !content.contains(e.target)) {
       tooltip.classList.add("hidden");
     }
   });
+
+  document.addEventListener("touchstart", (e) => {
+    if (!tooltip.contains(e.target) && !content.contains(e.target)) {
+      tooltip.classList.add("hidden");
+    }
+  }, { passive: true });
+}
+
+export function openSyntaxDrawerFromSelection() {
+  const tooltip = document.getElementById("selection-tooltip");
+  if (tooltip) tooltip.classList.add("hidden");
+
+  let sentId = state.activeSelectedSentId;
+  if (!sentId && state.selectedSent) {
+    sentId = state.selectedSent.id;
+  }
+  if (!sentId && state.currentArticle?.sentences?.length) {
+    sentId = state.currentArticle.sentences[0].id;
+  }
+  if (sentId) {
+    openSyntaxDrawerForSentence(sentId);
+  } else {
+    openDrawer("syntax");
+  }
 }
 
 export async function applyHighlight(color) {
