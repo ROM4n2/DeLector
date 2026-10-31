@@ -90,18 +90,19 @@ def _clean_and_parse_json(content: str) -> Any:
     """健壮解析上游 LLM 返回的 JSON 内容。
 
     防御真实大模型多见输出形式：
-    1. 干净 JSON（快路径）
+    1. 干净 JSON（快路径，开启 strict=False 允许未转义控制字符如换行/Tab）
     2. 带 <think>...</think> 思考链标签（如 DeepSeek-R1 / Reasoner）
     3. Markdown 代码块包裹：```json ... ``` 或 ``` ... ```
     4. 带有对话前缀/后缀的外围大括号匹配 { ... }
+    5. 尾随逗号与格式清洗
     """
     stripped = content.strip()
     if not stripped:
         raise json.JSONDecodeError("Empty content", doc=content, pos=0)
 
-    # 1. 快路径：完全标准的 JSON 文本
+    # 1. 快路径：完全标准的 JSON 文本（允许真实物理换行符）
     try:
-        return json.loads(stripped)
+        return json.loads(stripped, strict=False)
     except json.JSONDecodeError:
         pass
 
@@ -115,7 +116,7 @@ def _clean_and_parse_json(content: str) -> Any:
     # 尝试在剥离 think 标签后直接解析
     if stripped:
         try:
-            parsed = json.loads(stripped)
+            parsed = json.loads(stripped, strict=False)
             if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
                 parsed["thought"] = extracted_think
             return parsed
@@ -127,7 +128,7 @@ def _clean_and_parse_json(content: str) -> Any:
     if fence_match:
         candidate = fence_match.group(1).strip()
         try:
-            parsed = json.loads(candidate)
+            parsed = json.loads(candidate, strict=False)
             if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
                 parsed["thought"] = extracted_think
             return parsed
@@ -139,8 +140,9 @@ def _clean_and_parse_json(content: str) -> Any:
     last_brace = stripped.rfind("}")
     if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
         candidate = stripped[first_brace : last_brace + 1].strip()
+        candidate_clean = re.sub(r",\s*([}\]])", r"\1", candidate)
         try:
-            parsed = json.loads(candidate)
+            parsed = json.loads(candidate_clean, strict=False)
             if isinstance(parsed, dict) and extracted_think and not parsed.get("thought"):
                 parsed["thought"] = extracted_think
             return parsed
@@ -152,13 +154,14 @@ def _clean_and_parse_json(content: str) -> Any:
     last_bracket = stripped.rfind("]")
     if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
         candidate = stripped[first_bracket : last_bracket + 1].strip()
+        candidate_clean = re.sub(r",\s*([}\]])", r"\1", candidate)
         try:
-            return json.loads(candidate)
+            return json.loads(candidate_clean, strict=False)
         except json.JSONDecodeError:
             pass
 
     # 兜底：由标准 json.loads 抛出原始异常供外层捕获包装
-    return json.loads(content)
+    return json.loads(content, strict=False)
 
 
 def _extract_content(data: Any) -> str:

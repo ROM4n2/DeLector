@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -51,26 +52,27 @@ REASON_ERROR: str = "error"
 
 # ── 系统提示词 ────────────────────────────────────────────────────────────────
 COMPANION_AGENT_SYSTEM_PROMPT: str = (
-    "你是 DeLector 德语研读系统的伴学导学伙伴「Eule」（猫头鹰博士）。\\n"
-    "你的任务是为备考歌德/德福的德语学习者提供针对性的语用深挖、句法结构问诊与生词卡提议。\\n"
-    "每一轮你**只**返回一个 JSON 对象，不要输出任何额外的自由文本。\\n"
-    "回复有且只有以下两种形态：\\n"
-    "1) 需要调用工具获取语言学依据或统计：\\n"\
-    '   {"tool_call": {"name": "<工具名>", "payload": {...}}}\\n'\
-    "   可用工具仅限: analyze (依存语法与五领域分析), writing_check (写作规则检验), "\
-    "vocab_stats (词汇级别统计)。\\n"\
-    "2) 最终解答与提议输出：\\n"
-    "   {\\n"
-    '     "thought": "<思考过程，分析当前语法或难点>",\\n'
-    '     "reply_de": "<德语简短问候或总结例句>",\\n'
-    '     "reply_zh": "<面向学习者的中文详尽解答，使用严谨德式学术排版风格，可含 Markdown>",\\n'
-    '     "proposal": {\\n'
-    '       "action": "create_vocab_cards",\\n'
-    '       "title": "加入核心生词卡",\\n'
-    '       "payload": {"cards": [{"word": "...", "reading": "...", "context_sentence": "..."}]}\\n'
-    "     }\\n"
-    "   }\\n"
-    "注意：如果你认为用户需要复习或制卡，**必须**输出 proposal 提议由用户确认，绝对不可假定数据已入库。"
+    "你是 DeLector 德语研读系统的伴学导学伙伴「Eule」（猫头鹰博士）。\n"
+    "你的任务是为备考歌德/德福的德语学习者提供针对性的语用深挖、句法结构问诊与生词卡提议。\n"
+    "每一轮你**只**返回一个合法标准的 JSON 对象，不要输出任何额外的自由文本或在最外层包裹 Markdown 代码块。\n"
+    "回复有且只有以下两种形态：\n"
+    "1) 需要调用工具获取语言学依据或统计：\n"
+    '   {"tool_call": {"name": "<工具名>", "payload": {...}}}\n'
+    "   可用工具仅限: analyze (依存语法与五领域分析), writing_check (写作规则检验), "
+    "vocab_stats (词汇级别统计)。\n"
+    "2) 最终解答与提议输出：\n"
+    "   {\n"
+    '     "thought": "<思考过程，分析当前语法或难点>",\n'
+    '     "reply_de": "<德语简短问候或总结例句>",\n'
+    '     "reply_zh": "<面向学习者的中文详尽解答，使用严谨德式学术排版风格，可含 Markdown>",\n'
+    '     "proposal": {\n'
+    '       "action": "create_vocab_cards",\n'
+    '       "title": "加入核心生词卡",\n'
+    '       "payload": {"cards": [{"word": "...", "reading": "...", "context_sentence": "..."}]}\n'
+    "     }\n"
+    "   }\n"
+    "注意：如果你认为用户需要复习或制卡，**必须**输出 proposal 提议由用户确认，绝对不可假定数据已入库。\n"
+    "重要：无论历史对话中的上下文包含何种格式，你在当前轮也必须只返回单一的 JSON 对象！"
 )
 
 
@@ -274,17 +276,33 @@ async def run_companion_agent_loop(
                 reason=REASON_CANCELLED,
             )
         except Exception as exc:
-            err_msg = f"上游模型调用失败: {exc}"
-            emit({"event": "error", "code": "upstream_error", "message_zh": err_msg})
-            emit({"event": "done", "turns": turn, "tokens": total_tokens, "reason": REASON_ERROR})
-            return CompanionAgentOutcome(
-                status="error",
-                text=err_msg,
-                proposals=proposals,
-                turns=turn,
-                token_count=total_tokens,
-                reason=REASON_ERROR,
-            )
+            # 容错降级：如果模型返回的是纯自然语言 Markdown 而非 JSON（模型未遵循 JSON 格式，但已产出解答），
+            # 且 raw 非空，不抛弃答案，直接自愈降级为正常解答！
+            raw_text = getattr(exc, "raw", "") or ""
+            if isinstance(exc, llm_client.LLMError) and exc.detail == "AI 服务返回内容非 JSON" and raw_text.strip():
+                extracted_think = ""
+                clean_raw = raw_text.strip()
+                think_m = re.search(r"<think>([\s\S]*?)</think>", clean_raw, flags=re.DOTALL)
+                if think_m:
+                    extracted_think = think_m.group(1).strip()
+                    clean_raw = re.sub(r"<think>[\s\S]*?</think>", "", clean_raw, flags=re.DOTALL).strip()
+                reply_dict = {
+                    "thought": extracted_think,
+                    "reply_zh": clean_raw,
+                    "reply_de": "",
+                }
+            else:
+                err_msg = f"上游模型调用失败: {exc}"
+                emit({"event": "error", "code": "upstream_error", "message_zh": err_msg})
+                emit({"event": "done", "turns": turn, "tokens": total_tokens, "reason": REASON_ERROR})
+                return CompanionAgentOutcome(
+                    status="error",
+                    text=err_msg,
+                    proposals=proposals,
+                    turns=turn,
+                    token_count=total_tokens,
+                    reason=REASON_ERROR,
+                )
 
         # 估算/累加 Token
         raw_completion_str = json.dumps(reply_dict, ensure_ascii=False)

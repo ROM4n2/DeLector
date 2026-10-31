@@ -198,6 +198,22 @@ def test_conversational_wrapped_json_content_is_parsed(monkeypatch: pytest.Monke
     assert out["gender"] == "n"
 
 
+def test_json_with_literal_newlines_and_trailing_commas_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """模型输出字符串内含有真实物理换行符 (ASCII 0x0A) 及尾随逗号时的自愈解析。"""
+    raw_with_literal_newlines = (
+        "{\n"
+        '  "thought": "逐步思考",\n'
+        '  "reply_zh": "# 难句分析\\n1. 第一点\\n2. 第二点",\n'
+        '  "items": [1, 2, ],\n'
+        "}"
+    )
+    _install_mock_transport(monkeypatch, lambda request: _ok(raw_with_literal_newlines))
+
+    out = _chat(messages=_MSGS, model="m", max_tokens=8, timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
+    assert out["thought"] == "逐步思考"
+    assert "第一点" in out["reply_zh"]
+
+
 def test_malformed_envelope_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """信封缺 `choices[0].message.content` ⇒ 响应格式异常（不能是 KeyError 冒泡）。"""
     _install_mock_transport(monkeypatch, lambda request: httpx.Response(200, json={"error": {"message": "x"}}))

@@ -291,3 +291,34 @@ def test_loop_injects_viewport_study_context() -> None:
     assert "Spiegel Online B1" in str(system_msg.get("content", ""))
     assert "B1" in str(system_msg.get("content", ""))
 
+
+def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """当模型返回纯自然语言 Markdown（未按格式输出 JSON）时，循环自愈降级并交付答案，不抛异常崩溃。"""
+    from delector.services import llm_client
+
+    async def _mock_plain_markdown_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        plain_text = (
+            "<think>\n分析从句位置\n</think>\n"
+            "# 德语难句分析\n这是一个典型的主从复合句，从句位于末尾。"
+        )
+        raise llm_client.LLMError("AI 服务返回内容非 JSON", status_code=200, raw=plain_text)
+
+    monkeypatch.setattr("delector.services.companion_agent.llm_client.chat", _mock_plain_markdown_chat)
+    monkeypatch.setattr("delector.services.companion_agent.get_effective_api_key", lambda: "fake-key")
+
+    events: List[Dict[str, Any]] = []
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "帮我分析这句话"}],
+            on_event=events.append,
+        )
+    )
+
+    assert outcome.status == "ok"
+    assert "典型的主从复合句" in outcome.text
+    event_types = [e["event"] for e in events]
+    assert "thought" in event_types
+    assert "delta" in event_types
+    assert "done" in event_types
+    assert "error" not in event_types
+
