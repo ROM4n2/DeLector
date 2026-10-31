@@ -941,3 +941,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - **提示词与输出防护**：系统提示词强制要求模型无论工具成功与否均需基于语言学知识输出深度解析；Go 循环在最终仅含 `？`、`?` 或空内容时触发自愈防护。
 - **合规交付**：
   - 通过专用特性分支 `fix/companion-tool-port-and-response` 与 GitHub PR #177 严格合并，100% 遵守 master 直推保护纪律。
+
+### 2026-10-31 23:15 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**基于 dfs-debug 协议彻底排查并根治伴学思考流跳动与句号输出缺陷（PR #178，Commit `5eb9e35`）**。
+- **4 步系统排障与根因闭环**：
+  1. **证据与物理复现（Step 1）**：建立 `compaction_regression_test.go`，复现当工具返回大文本（>4000 字符）时，`CompactMessages` 将活跃 User 提问错误划入历史区并剔除的红灯现象（FAIL exit 1）。
+  2. **知识库检索（Step 2）**：检索 `CONTEXT-ENGINEERING.md` 与 `ADR-0001`，确立前缀与活跃尾部不可侵犯原则。
+  3. **根因精准修复（Step 3）**：
+     - **句号根因修复**：`CompactMessages` 严格保护从最后活跃 User 提示词开始的完整 Tool 链（活跃交互块绝对不可被压缩），压缩预算从 4,000 上调至 32,000 字符，彻底终结模型第二轮因丢失用户指令而仅输出 `。` 的缺陷；
+     - **文字跳动根因修复**：`cp-drawer.js` 建立 `realThoughtBuffer` 增量拼接缓冲区，修复把 Token Chunk 当作 Full Text 覆盖导致的 30Hz 闪烁，并在真实思考流到达时停用并隐藏模拟步骤定时器。
+  4. **回归锁定与自愈沉淀（Step 4）**：
+     - 永久单元回归测试 `compaction_regression_test.go` 进入 Go 测试套件（148 passed）；
+     - 经验已通过 A-MAC 门禁沉淀至知识库 `99-Inbox/2026-10-31-agent-compaction-user-prompt-stripping-and-thought-stream-flicker.md`。
