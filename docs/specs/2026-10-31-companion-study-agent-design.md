@@ -2,7 +2,7 @@
 
 > **性质**：设计稿（`docs/specs/`），不是实施计划。实施前需另立 `docs/plans/` 计划。  
 > **状态**：APPROVED（2026-10-31，用户拍板采纳「以 B 态验证驱动伴学为当前过渡抓手，以协议中立与契约解耦直通长期 C 态」演进路线）。  
-> **实施计划**：待立案（`docs/plans/2026-10-31-companion-study-agent.md`）。  
+> **实施计划**：待立案（`docs/plans/archive/2026-10-31-companion-study-agent.md`）。  
 > **上游约束**：  
 > - ADR-0008（Go Agent Runtime + Python NLP Engine 混合架构全景）  
 > - ADR-0010 §5（交互请求不加 Go 代理跳，交互层留 Python）  

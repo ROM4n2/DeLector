@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """伴学路由与 SSE 流式契约测试 (Task 2).
 
-依据: docs/plans/2026-10-31-companion-study-agent.md Task 2.
+依据: docs/plans/archive/2026-10-31-companion-study-agent.md Task 2.
 """
 
 from __future__ import annotations

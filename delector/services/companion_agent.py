@@ -2,7 +2,7 @@
 """伴学宠物智能体循环内核 (Companion Study Agent Core Loop).
 
 依据: docs/specs/2026-10-31-companion-study-agent-design.md
-      docs/plans/2026-10-31-companion-study-agent.md Task 1
+      docs/plans/archive/2026-10-31-companion-study-agent.md Task 1
 遵循 ADR-0023 架构规范:
 1. 有界循环: MAX_TURNS=3, 硬超时 deadline_s=15.0s, Token 消耗硬上界;
 2. 模型决策驱动的白名单工具调用 (JSON 契约 tool_call);

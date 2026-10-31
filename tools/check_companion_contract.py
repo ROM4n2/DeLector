@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """tools/check_companion_contract.py —— 伴学 Agent SSE 事件双向契约静态断言门禁.
 
-依据: docs/plans/2026-10-31-companion-study-agent.md Task 6.
+依据: docs/plans/archive/2026-10-31-companion-study-agent.md Task 6.
 双向校验:
   1. Python 后端 (companion_agent.py) 产出的所有 SSE 事件必须被前端 (cp-drawer.js) 处理。
   2. 前端 (cp-drawer.js) 处理的所有 SSE 事件必须在后端契约集合中存在。

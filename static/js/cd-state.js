@@ -1,6 +1,6 @@
 /* DeLector - Cards State Container (L1 Pure Layer)
  *
- * cards.js 的 15 个模块级可变状态收口于此（计划 docs/plans/2026-10-20-cards-state-container.md
+ * cards.js 的 15 个模块级可变状态收口于此（计划 docs/plans/archive/2026-10-20-cards-state-container.md
  * Task 2；设计稿 docs/specs/2026-10-20-cards-state-view-decoupling-design.md §6.1）。
  *
  * 分层契约（由 tools/check_frontend_layers.py 机械强制，`LAYER_SPEC["cd-state.js"]`）：

@@ -1,0 +1,90 @@
+### 2026-10-18 00:27 | deepseek-v4.1-flash__hermes | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7（workbench.html 拆分）交接包发出并挂 INDEX**，供另一 agent 并行开工。
+- 包：`WORKMEMORY/handoff_c7-workbench-html-split.md`（status: open · to: any · role: IMPLEMENT）；计划正本 `docs/plans/2026-10-18-c7-workbench-html-split.md`（6 Task，含 Tier/Mode 与 subagent scaffold）。INDEX.md Active handoffs 已挂。
+- **本会话新增实测（非引述）**：`static/german/workbench.html` 的耦合探针共 **140 个** —— A 类全文位置序/标记切片 **91**（`test_german_workbench.py` 77 · `test_wb_pair_persist_probe.py` 1 · **13 个 `tools/wb_*.mjs`**）· B 类行号钉 **4**（全在 `test_frontend_module_graph.py:388-433`）· C 类存在性 **21** · D 类计数/字节等价 **12** · E 类不受影响 **12**。13 个 `.mjs` 探针各自按标记切片 `workbench.html`，**一拆即全部抛错**（各探针切片行号已入包）。
+- **硬约束入包**：入口路径 `static/german/workbench.html` **不可改名/迁移**（被 5 处路由字符串钉死：`static/index.html` data-src · `static/js/main.js` ensureGermanWorkbench · `test_frontend_guards.py:42` · `test_cards_workbench_no_review_probe.py:90` · `tools/cards_workbench_no_review_probe.mjs:258`）⇒ 拆分形态 = 同路径薄壳 + `<script type="module">`。
+- **并行协调契约**：三路按文件切占面，C7 独占 workbench 前端产物族与其探针族；早前 C6 登记里的 `test_german_workbench.py` **已划归 C7 独占**，C6 只做 `test_server.py` + `test_desktop_shell.py`（此变更须在 C6 计划中注明）。
+- 迁移依赖顺序（实测）：`test_frontend_module_graph.py`（唯一 B 类）→ `test_german_workbench.py`（77 A）→ 13 个 `.mjs`（须先于产物搬迁）→ `test_workbench_tokens.py` → `test_a1_workbench_source.py`（含字节等价/幂等两条 D，牵动两个构建工具）→ `test_audit_hardening.py`/`test_exam_domain.py` → 探针包装层复跑。
+
+### 2026-10-18 00:28 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C8 P2 批次缺陷修复**（`docs/plans/2026-10-18-c8-p2-batch.md`，7 项 CONFIRMED；STALE 项已剔除）。
+分支：`fix/c8-p2-batch`。并行面：C7（workbench 拆分）已交接给另一 agent，本工作流禁触其独占文件。
+分工：按域分 3 批派发 TDD Builder（后端端点批 / 运维测试批 / TTS 批），每批配独立 Reviewer（maker-checker 隔离）。
+不做范围（MUST）：不改 C7 独占面（`static/german/workbench.html` · `static/js/**` · `tools/wb_*.mjs` · 两个 build 工具）；不改 AI 润色循环语义；不引入新依赖。
+
+### 2026-10-18 00:35 | codebuddy | HANDOFF_RECEIVED
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：接手 `handoff_c7-workbench-html-split.md`（C7 `workbench.html` 拆分，140 个耦合探针）。
+处置：沿用包内盘点与迁移顺序（先改探针后动产物；入口路径不改名；A 类不得降级为 C 类）；
+因主检出在 `fix/c8-p2-batch`（C8 在用）⇒ 改用**隔离 worktree** `D:\Code\DeLector-c7`
+（分支 `refactor/c7-workbench-html-split`，基线 cabce32；包内写的 c27cf63 已过时）。
+台账已初始化（6 任务），Task-1 已开工；进度真值源 = 计划正本 + worktree 内台账。
+Task 4/5 为 Tier 3（HITL）：动文件前先呈报变更面等确认。
+
+### 2026-10-18 00:53 | deepseek-v4.1-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 交接包文件占面契约修正**（发送方主动纠错）——`static/js/main.js` 与 `static/js/api-types.js` 从 C7 独占面**移出、划归 C8**。
+- 原因：C8 的 `GET /api/settings` 来源脱敏（非回环来源不再返回 `api_key_masked`）改变了前端消费契约；`static/js/main.js:637` 对 LAN 客户端会渲染字面 `undefined`。该前端消费点必须与后端改动同批闭环，跨工作流会留下半修状态。
+- 已同步：`WORKMEMORY/handoff_c7-workbench-html-split.md` 协调表 + 新增「修订记录」节。C7 侧若需改这两个文件，先在包内响应节说明。
+- 其余 `static/js/**`（含 C7 将新增的 `wb-*.js`）仍归 C7 独占。
+
+### 2026-10-18 01:39 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C8 P2 批次全量闭环交付**（`docs/plans/2026-10-18-c8-p2-batch.md` Task 1~9）+ **附带交付静默降级机械闸**。分支 `fix/c8-p2-batch`，交付报告 `docs/reviews/2026-10-18-c8-delivery.md`。
+- 四批四提交，各自过独立对抗性评审 PASS（零 Red Card）：`6a60573` 后端端点三改 · `e070f97` gitignore/恒真断言/CI 密钥扫描 · `fc0c471` TTS 三连 + LAN 面板 undefined 回归 · `d06390f` 静默降级闸落地。
+- **新机械闸**（本批最持久资产）：`tools/check_silent_degradation.py` + CI job `silent-degradation`（fail-loud）。判据按机制形状（AST/tokenize）非字符串匹配；抑制必须带具体理由。首扫 32>20 触发 STOP CONDITION，实现方**未做批量豁免**；裁决后账目可审计：31 C1 = 收窄掉 8（continue 形态）+ 修掉 4 + 豁免 19。**第 5 个真事故 `main.py:1250` 落在收窄掉的 8 处内仍被修**——收窄不许成为藏事故的手段。
+- 门禁（逐字复刻 CI）：`mypy --strict delector tools` 106 文件 0 错 · `mypy --follow-imports=skip tests` 132 文件 0 错 · `ruff check .` 全过 · `go test ./...` 8 包全过 + `gofmt -l .` 净 · 定向套件 136 + 62 passed。
+- **可信教训（1/2：我的事故）**：我在 Batch D 与 Reviewer B 仍在跑时并行派了 Batch C，三进程争用同一数据目录 ⇒ Batch C 基线跑出 `333 passed / 3 errors` **污染伪影**（`sqlite3.OperationalError`，且坏掉的用例全在无关域）。已注入 steer 使其作废该基线、以串行 338 为锚。**此红线早已在记忆中，仍然犯了**——派单前 MUST 先确认机器上无其它 pytest 在跑；子代理在多个测试进程并存时给出的「绿」只能算临时结论。
+- **可信教训（2/2：新事实）**：① `gitleaks-action@v2` 依赖 Node 20，而 GitHub 已于 **2026-09-16** 从托管 runner 完整移除 Node 20 ⇒ v2 无法运行，必须用 `@v3`（已从 release note 一手证实）。② `gitleaks` 的配置是 **FAIL OPEN**：配置键拼错 ⇒ 静默忽略 ⇒ 零规则 ⇒ 带密钥也全绿。**安全闸的配置键是承重的**，接入新闸后 MUST 用变异/植入验证它真能红，不能只看首跑绿。
+- 终审产出登记为台账 **C9**：其中 **Y4 是活缺陷** —— `delector/routes/syntax_hard.py:254-255` 的 `except Exception: art_ids = []`（文章素材静默从合并排名列表整体消失、零痕迹），属「假值默认返回」类，落在新闸已登记的极限**之外**；未随本批落地。
+- 并行面：C7（workbench 拆分）由另一 agent 执行，文件占面互斥；本批中途曾主动修正 C7 交接包的占面契约（`main.js`/`api-types.js` 划归 C8）。
+
+### 2026-10-18 02:38 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C9**（`docs/plans/2026-10-18-c9-review-followups.md`）——处置 C8 终审 Y1~Y6 + 落地「mock 漂移」新闸。
+分支：`fix/c9-review-followups`（自 master `8571c42`）。
+分工：Task 1（修 Y4 活缺陷）与 Task 3（新闸）**严格串行**——本轮已因并行 pytest 争用吃过大亏（Batch C 基线被污染）。
+不做范围（MUST）：不放宽 `check_silent_degradation.py` 的任何判据；禁触 C6/C7 占面。
+背景：C8 已由 PR #149 合入（`8571c42`），CI 7 项全绿。
+
+### 2026-10-18 03:29 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C9 三步主体全量闭环**（`docs/plans/2026-10-18-c9-review-followups.md` Task 1/2/3+3b）——C8 终审 Y1~Y6 处置完毕 + **新机械闸 mock-drift 落地**。
+- **Task 1 修 Y4**（`b113219`）：`syntax_hard.py` 的 `except Exception: art_ids = []` 把「列表查询失败」折叠成「没有材料」。修法非加日志而是**让两语义可区分**：失败来源进 additive `degraded` 字段（成功路径响应逐字不变），且**降级整榜不写 300s 聚合缓存**——原实现会把一次瞬时失败钉死 5 分钟（登记时未发现的更深危害）；孪生 `enc_ids` 一并处置；逐材料 `continue` 的隔离语义刻意未动也未放宽判据。
+- **Task 3+3b 新闸 `tools/check_mock_drift.py` + CI job `mock-drift`**（`cab4049`）：判据=「测试 `monkeypatch.setattr` 的目标符号在生产模块内已无可达引用且非自供出口」。首扫 141 补丁站点 → 候选 **35 > 20 触发 STOP**，未做批量豁免；裁决后收窄到 **18**（判据精度修正：`__all__` 只保护「模块自己的成员」，裸外来再导出不获保护）→ 18 处逐条带理由豁免 → **0 未豁免**。**变异自证复现真实事故：把 `_shelf_get` 改回 `httpx.get` ⇒ 闸 exit 1 且逐字点名同 4 个测试站点，delta +4/−0**；判据收窄后重跑该证明仍成立。
+- **Task 2 清 Y1/Y2/Y3/Y5/Y6**（`1c4e840`，5 文件 +287/−19）：Y2 的裁决靠**代码**而非注释（运行时 DB 层是 DB 优先、该工具是 env 优先 ⇒ **两份 docstring 都对，错的是抑制理由**）；Y5 两处重试分类边缘各带算术（`SSLCertVerificationError` 确定性失败 ⇒ 排除，且必须排在 `SSLError` 分支**之前**，因 `isinstance` 是子类匹配；`OSError(ENETUNREACH/EHOSTUNREACH)` 属瞬时路由故障 ⇒ 纳入，已核实 win32 的 errno 常量即 WSA 码且为裸 `OSError`）；**删掉 3 条过期抑制、新增 0 条**。
+- **移交**：mock-drift 闸抓到 **1 处真·空转补丁**（`tests/test_server.py:2501` patch `server.nlp`，全仓无消费方、patch 不生效）→ 已立为 **C6 计划 Task 0**（搬迁时 MUST 处置 + 撤过渡豁免）。
+- 门禁：**全量 2325 passed / 2 skipped / 0 failed（394s）**；两闸均 exit 0；`ruff check .` 全仓净；`mypy --strict` 与 tests 靶净；改动文件 CRLF 0 lone LF。
+- **可信教训（本轮新增，适用于一切机械闸）**：① **判据收窄后 MUST 重跑变异自证**——判据一改，旧证明不再覆盖新判据；本次要求重跑，证明仍为 +4/−0 才算通过。② **编排者的裁决书本身也会出错，且错在最危险处**：本次我断言 `server.nlp`「无 `__all__`」，实际 `delector/server.py:131-132` 有 —— 若执行方盲从字面规则，**唯一那处真发现会被规则本身洗掉**。执行方改为实现意图并给出可测边界（单测钉死），编排者据此采纳。**结论：给闸下判据时，「按我说的做」与「按我想要的做」之间的偏差必须由执行方以事实指出，不能默认编排者正确。**
+
+### 2026-10-18 03:46 | deepseek-v4.1-flash__hermes | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+目标：**执行 C6：测试文件按被测面切分**（`docs/plans/2026-10-18-c6-test-file-split.md`，Task 0~7）。
+分支：`refactor/c6-test-file-split`（自 master `ffe1a0c`）。
+范围：`tests/test_server.py`（7614 行）+ `tests/test_desktop_shell.py`（2819 行）；`test_german_workbench.py` **已划归 C7 独占**不在本项。
+判据：**用例数守恒**（`--collect-only` 总数前后逐字相等）+ 只搬归属不改用例语义 + 零新依赖（不引入 xdist/randomly/order）。
+纪律：严格串行派单（本会话已因并行 pytest 争用吃过大亏）；本地全量必跑（搬迁的爆炸半径是整套测试）。
+不做范围（MUST）：禁触 C7 独占面（`static/**` · `tools/wb_*.mjs` · 两个 build 工具 · `test_german_workbench.py` · `test_workbench_tokens.py` · `test_a1_workbench_source.py` · `test_frontend_module_graph.py` · `test_exam_domain.py` · `test_audit_hardening.py` · `test_wb_pair_persist_probe.py`）。
+
+### 2026-10-18 06:14 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C6 测试文件按被测面切分全量闭环**（`docs/plans/2026-10-18-c6-test-file-split.md` Task 0~7）。
+- 分支 `refactor/c6-test-file-split`。**行数**：`tests/test_server.py` **7614 → 1482**（5.1×）；`tests/test_desktop_shell.py` **2828 → 699**（4.0×）。**新增 16 文件**：共享层 `tests/server_helpers.py` + 9 个 server 域文件 + 4 个 desktop 域文件。
+- **判据全程未破**：全量用例数 **2327** 从第一批到最后一批**一次未变**（每批由编排者独立 collect 核验）；**断言零改动**（逐块字节比对）；每个新文件**单独跑绿**且**顺序耦合为空**；零新依赖。
+- **白送的两处真修复**：① Task 0 修掉 `test_server.py:2501` 的空转补丁（C9 mock-drift 闸移交）——选**改打真实消费面**而非删除，因为该用例名为 `..._survives_without_spacy` 而本机**恰有 spaCy**，删掉会让它静默切到 lazy-spaCy 分支、丢掉名字承诺的覆盖；② Task 1 把 `client` fixture 下沉 `conftest.py` 时**把 `app` 的导入留在 fixture 内部**，避免 conftest 在每个 pytest 会话触发 `server` 的模块级 `init_db()`。
+- **三处工程方法值得留档**：① Task 3 的去重：Task 2 为解跨文件依赖做了逐字复制，Task 3 立即**提升为 `server_helpers.py` 唯一定义**（并跑**负对照**证明探针灵敏），避免副本随批次增殖漂移；② Task 6 建 **AST 依赖矩阵**（每个测试 → 模块级名字的传递闭包）**先发现跨文件边界再命名域**，并以**反事实实验**（import-only 变体 ⇒ 恰好 4 个测试红）证明残余文件必须保留自己那份 `_isolate_data_dir`（其元测试静态扫描本模块）；③ Task 5 撞上「被搬测试内省留在原文件的另一个测试」的三重约束死结（禁改体/禁破守恒/禁拆段），以 import 区 `__code__` 绑定解局并标注复核——**已登记根治项 F1**（改为内省生产函数，属测试语义变更，禁止混进搬迁类改动）。
+- 门禁：**全量 2325 passed / 2 skipped / 0 failed（371s）**；`mypy --strict` 107 文件 + tests 靶 149 文件均 0 错；`ruff check .` 全仓净；Go 8 包 + gofmt 净；**双闸**（mock-drift / silent-degradation）均 exit 0；20 个改动文件 0 lone LF。
+- **后续项已入计划**（非口头）：F1 探针桥根治 · F2 残余 876 行无 banner 杂项区切分 + `cards/counts` 归位 · 陈旧文档指针校正（含 `static/js/writer.js:1251` 属 C7 面禁改）。
+
+### 2026-10-18 07:20 | codebuddy | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 `workbench.html` 拆分（Task 1~6）交付**，分支 `refactor/c7-workbench-html-split`（基于 master `1098706`，rebase 后 8 提交）。
+**产物**：`tests/wb_source.py`（探针读取公共层，28 自测）· 13 个 `tools/wb_*.mjs` 统一多文件读取口（`SRC_ROOT`/`SRC_FILES`/`sliceDecl`，缺声明即 exit 3 + stdout 0B）· `static/css/workbench.css`（317 行，字节等价除末尾换行）· `static/js/wb-seed-data.js`（种子数据，构建工具改向）· `static/js/wb-tts.js`（`playWord` + 7 个 `_tts*`，逐字搬走）。
+**Task 5 只做第 1 块**（tts-audio，refs/decl 3.75 最低）；剩余 5 块已按实测密度登记：seed-persist 9.0 / render-views 15.8 / wbsync 19.2 / scope-filter 28.6 / review-queue 39.0（计划 Task 5 Step 1 下落表）。
+**门禁（逐字复刻 CI）**：`mypy --strict delector tools` 105 files 0 · `mypy --follow-imports=skip tests` 132 files 0 · `ruff check .` 0 · `go test ./...` ok · `gofmt -l` 空 · 新闸 `check_mock_drift` / `check_silent_degradation` 均 exit 0（且 `test_a1_workbench_source.py` 的 4 处 `mock-drift-ok` 抑制注释在 Task 4 重写后完好）。
+**全量**：`2352 passed, 3 skipped`（484s）；用例数守恒 = 基线 + 28（仅 `tests/wb_source.py` 自测，逐文件核对 105/19/124/302/9/14 全部不变）。
+**登记的风险**：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，HEAD 既有行为，已还原、未修）；② `wb_queue_probe` 的 `slices`（切片字符长度）对产物结构敏感（Task 3 变过一次，Task 4/5 未再变）；③ 另有 5 个 `wb_*.mjs` 未上统一读取口（Task 5 剩余块需一并改）；④ 两处格式敏感锚点（`extractLine(pad2)` / `STARTUP_SEG`）待 Task 5 结构化。
+**验收判据核对**：① 用例数守恒 ✔（+28 为允许项）② 每处重写附变异自证 ✔ ③ 入口路径未改名 ✔ ④ 18 个探针全 exit 0 ✔
+

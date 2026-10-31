@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """伴学 Agent 循环内核有界性与契约测试 (Task 1).
 
-依据: docs/plans/2026-10-31-companion-study-agent.md Task 1.
+依据: docs/plans/archive/2026-10-31-companion-study-agent.md Task 1.
 """
 
 from __future__ import annotations

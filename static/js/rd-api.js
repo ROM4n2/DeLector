@@ -1,7 +1,7 @@
 /* DeLector - Reader Desk: 持久化访问层（L2）
  *
  * 分层契约（由 tools/check_frontend_layers.py 机械强制；见
- * docs/plans/2026-10-19-reader-api-layer-split.md Task 2）：
+ * docs/plans/archive/2026-10-19-reader-api-layer-split.md Task 2）：
  *   MUST NOT 触碰 DOM（document / window / navigator / localStorage /
  *   getElementById / querySelector / innerHTML / addEventListener）；
  *   MUST NOT 弹用户提示（notify / alert / confirm）—— 失败怎么呈现是视图层的事；

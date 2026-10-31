@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """伴学 Agent 多模型供应商抽象与全链路集成测试 (Task 4).
 
-依据: docs/plans/2026-10-31-companion-provider-abstraction-and-pi-compaction.md Task 4.
+依据: docs/plans/archive/2026-10-31-companion-provider-abstraction-and-pi-compaction.md Task 4.
 """
 
 from __future__ import annotations

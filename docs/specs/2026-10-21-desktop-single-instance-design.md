@@ -2,7 +2,7 @@
 
 > **性质**：设计稿（`docs/specs/`），不是实施计划。落地时另立 `docs/plans/` 计划。
 > **状态**：APPROVED（2026-10-21，用户批准；同日修正 §3.1 为「锁/元数据双文件」，理由见该节引用块）。
-> **实施计划**：`docs/plans/2026-10-21-desktop-single-instance.md`。
+> **实施计划**：`docs/plans/archive/2026-10-21-desktop-single-instance.md`。
 > **上游**：ADR-0019 §6.4 第 4 条（`docs/adr/2026-10-10-adr-0019-windows-desktop-pwa-first-and-data-dir-externalization.md:141`，
 > 原文：`%LOCALAPPDATA%\DeLector\instance.lock`（pid + 版本 + 数据目录）；探测改为验证 `/api/health` 带
 > DeLector 标识，不匹配则顺延 `8001–8010` —— **单实例靠文件锁而非端口探测**）。该条当年只登记、未实施。
