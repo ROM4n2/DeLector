@@ -750,3 +750,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
   - Node.js 虚拟 DOM 表格结构断言：`[ 'H5', 'TABLE' ]`、`[ 'THEAD', 'TBODY' ]` 100% 结构化验证通过。
   - 伴学测试：`pytest tests/test_companion_*.py` **16 passed in 2.18s**。
+
+### 2026-10-31 17:55 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**彻底清理正文常驻句末徽章，全面落地方案 1 点选悬浮胶囊条 (Floating Capsule)**。
+- **交付面**：
+  1. `142418d`:
+     - **正文纯净回归**：彻底移除正文每个句子末尾突兀常驻的 `[🌳 句法]` 与 `[🦉 伴学]` 按钮及相关冗余 CSS，德语印刷排版恢复 100% 连贯纯粹。
+     - **悬浮胶囊工具条（`#selection-tooltip`）功能集成**：将 `[🌳 句法]`、`[🦉 问伴学]`、`[📝 随笔]`、`[🔊 朗读]` 以及三色荧光笔完整收敛至悬浮胶囊条中。
+     - **跨端点选交互增强**：支持 `mouseup` 与 `touchend` 双端事件监听，内置视口安全边界探测（防止胶囊被顶边或侧边截断），点击空白处自然淡出。
+- **物理验证收据**：
+  - 四道机械门禁：`check_frontend_layers.py` PASS · `check_frontend_api_contract.py` PASS · `check_index_html_sync.py` PASS · `check_companion_contract.py` PASS。
+  - 伴学单测：`pytest tests/test_companion_*.py` **16 passed in 2.66s**。
+  - 静态检查：`mypy --strict` 零 issues · `ruff check` 零告警。
