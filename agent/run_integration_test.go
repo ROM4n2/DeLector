@@ -5,8 +5,6 @@ package integration_test
 import (
 	"context"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,7 +21,6 @@ func TestRunEndToEnd(t *testing.T) {
 	python := mustNotSkipEnv(t)
 
 	tmp := t.TempDir()
-	_ = os.WriteFile(filepath.Join(tmp, "delector.db"), []byte("SQLite format 3\x00"), 0o644)
 	opts := app.Options{
 		Port:      8001,
 		DataDir:   tmp,
