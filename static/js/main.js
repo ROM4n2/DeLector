@@ -9,6 +9,10 @@ import {
   toggleCompanionDrawer,
   openCompanionDrawer,
   closeCompanionDrawer,
+  handleSend,
+  submitPrompt,
+  syncCurrentContext,
+  renderContextBar,
 } from "./cp-drawer.js";
 import {
   loadArticles,
@@ -1144,6 +1148,10 @@ Object.assign(window, {
     toggle: toggleCompanionDrawer,
     open: openCompanionDrawer,
     close: closeCompanionDrawer,
+    handleSend,
+    sendPrompt: (prompt) => submitPrompt(prompt),
+    syncContext: syncCurrentContext,
+    renderContextBar,
   },
 
   // Encounter Zone (遇见区) view hooks (inline onclick handlers in index.html)

@@ -1,6 +1,7 @@
 /* DeLector - Companion Drawer UI Component
  *
- * 依据: docs/specs/2026-10-31-companion-study-agent-design.md §3.1-§3.4
+ * 依据: 方案 A 深度统一设计
+ * 将伴学导学作为主抽屉 (#drawer) 的第 5 个专属 Tab 深度集成。
  * 遵循 docs/design-system.md 与 Zero-innerHTML 铁律:
  * 纯原生 DOM 构建 (createElement / textContent / appendChild)，彻底杜绝 XSS 隐患。
  * 包含纯 DOM 结构化 Markdown 渲染器（支持标题、代码块、列表、引用、加粗、行内代码）。
@@ -189,8 +190,12 @@ export function renderSafeMarkdownToElement(container, markdown) {
 }
 
 /** 刷新抽屉顶部视口研读语境条 */
-function renderContextBar() {
+export function renderContextBar() {
+  if (!contextBarEl) {
+    contextBarEl = document.getElementById('companion-context-bar');
+  }
   if (!contextBarEl) return;
+
   while (contextBarEl.firstChild) {
     contextBarEl.removeChild(contextBarEl.firstChild);
   }
@@ -241,6 +246,7 @@ export function syncCurrentContext() {
     if (ctx.selectedText) {
       setCompanionContext(ctx.selectedText, ctx.articleTitle, ctx.cefrLevel);
       renderContextBar();
+      if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
       if (bodyEl) {
         const hintDiv = document.createElement('div');
         hintDiv.className = 'companion-message assistant';
@@ -260,119 +266,32 @@ export function syncCurrentContext() {
   alert('未检测到当前选中文本。请在文章中用鼠标划词选中，或点击句子后重试。');
 }
 
-/** 初始化抽屉 DOM 挂载 */
+/** 初始化抽屉 DOM 挂载（挂载到主抽屉 #drawer 的 companion-section） */
 export function initCompanionDrawer() {
-  if (drawerEl) return drawerEl;
+  const container = document.getElementById('drawer-companion-section');
+  drawerEl = document.getElementById('drawer');
+  contextBarEl = document.getElementById('companion-context-bar');
+  bodyEl = document.getElementById('companion-drawer-body');
+  inputEl = document.getElementById('companion-input');
+  sendBtnEl = document.getElementById('companion-send-btn');
 
-  drawerEl = document.createElement('aside');
-  drawerEl.id = 'companion-drawer';
-  drawerEl.className = 'companion-drawer';
-  drawerEl.setAttribute('aria-label', 'DeLector 伴学助手抽屉');
-
-  // Header
-  const headerEl = document.createElement('div');
-  headerEl.className = 'companion-drawer-header';
-
-  const titleEl = document.createElement('div');
-  titleEl.className = 'companion-drawer-title';
-  const iconSpan = document.createElement('span');
-  iconSpan.textContent = '🦉';
-  const textSpan = document.createElement('span');
-  textSpan.textContent = 'Eule · 德语伴学导学伙伴';
-  titleEl.appendChild(iconSpan);
-  titleEl.appendChild(textSpan);
-
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'companion-drawer-close';
-  closeBtn.id = 'companion-drawer-close';
-  closeBtn.title = '收起抽屉';
-  closeBtn.textContent = '✕';
-  closeBtn.addEventListener('click', closeCompanionDrawer);
-
-  headerEl.appendChild(titleEl);
-  headerEl.appendChild(closeBtn);
-
-  // Context Bar (视口语境提示条)
-  contextBarEl = document.createElement('div');
-  contextBarEl.className = 'companion-context-bar';
-  contextBarEl.id = 'companion-context-bar';
-
-  // Body
-  bodyEl = document.createElement('div');
-  bodyEl.className = 'companion-drawer-body';
-  bodyEl.id = 'companion-drawer-body';
-
-  const welcomeMsg = document.createElement('div');
-  welcomeMsg.className = 'companion-message assistant';
-  const welcomeText = document.createElement('div');
-  welcomeText.textContent =
-    'Hallo! 我是你的研读伙伴 Eule。选中德语难句点击我，我可以为你深入剖析拓扑结构、语用褒贬或批量制作闪卡。';
-  welcomeMsg.appendChild(welcomeText);
-  bodyEl.appendChild(welcomeMsg);
-
-  // Footer
-  const footerEl = document.createElement('div');
-  footerEl.className = 'companion-drawer-footer';
-
-  const quickActionsEl = document.createElement('div');
-  quickActionsEl.className = 'companion-quick-actions';
-  quickActionsEl.id = 'companion-quick-actions';
-
-  const actions = [
-    { act: 'sync', label: '🎯 抓取当前句', prompt: null },
-    { act: 'syntax', label: '从句拓扑问诊', prompt: '请帮我分析选中文本的主从句拓扑结构与核心动词位置。' },
-    { act: 'vocab', label: '提取核心生词', prompt: '请帮我提取选中文本中的核心 B1/B2 动词与动介搭配，并提议制成生词卡。' },
-    { act: 'pragmatics', label: '深挖语用褒贬', prompt: '这个句子在德语母语者的语用习惯中具有怎样的情感色彩与正式度？' }
-  ];
-
-  for (const a of actions) {
-    const btn = document.createElement('button');
-    btn.className = 'companion-quick-chip';
-    btn.textContent = a.label;
-    if (a.act === 'sync') {
-      btn.addEventListener('click', () => syncCurrentContext());
-    } else {
-      btn.addEventListener('click', () => submitPrompt(a.prompt));
-    }
-    quickActionsEl.appendChild(btn);
+  if (inputEl && !inputEl._companionBound) {
+    inputEl._companionBound = true;
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleSend();
+    });
+  }
+  if (sendBtnEl && !sendBtnEl._companionBound) {
+    sendBtnEl._companionBound = true;
+    sendBtnEl.addEventListener('click', handleSend);
   }
 
-  const inputRowEl = document.createElement('div');
-  inputRowEl.className = 'companion-input-row';
-
-  inputEl = document.createElement('input');
-  inputEl.type = 'text';
-  inputEl.className = 'companion-input';
-  inputEl.id = 'companion-input';
-  inputEl.placeholder = '输入德语学习疑问或指令...';
-  inputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleSend();
-  });
-
-  sendBtnEl = document.createElement('button');
-  sendBtnEl.className = 'companion-send-btn';
-  sendBtnEl.id = 'companion-send-btn';
-  sendBtnEl.textContent = '发送';
-  sendBtnEl.addEventListener('click', handleSend);
-
-  inputRowEl.appendChild(inputEl);
-  inputRowEl.appendChild(sendBtnEl);
-
-  footerEl.appendChild(quickActionsEl);
-  footerEl.appendChild(inputRowEl);
-
-  drawerEl.appendChild(headerEl);
-  drawerEl.appendChild(contextBarEl);
-  drawerEl.appendChild(bodyEl);
-  drawerEl.appendChild(footerEl);
-
-  document.body.appendChild(drawerEl);
   renderContextBar();
-  return drawerEl;
+  return container;
 }
 
 export function openCompanionDrawer(contextPayload) {
-  if (!drawerEl) initCompanionDrawer();
+  initCompanionDrawer();
   if (contextPayload) {
     setCompanionContext(
       contextPayload.selectedText,
@@ -381,41 +300,63 @@ export function openCompanionDrawer(contextPayload) {
     );
   }
   companionState.isOpen = true;
-  drawerEl.classList.add('is-open');
+
+  if (typeof window.openDrawer === 'function') {
+    window.openDrawer('companion');
+  } else {
+    document.getElementById('drawer')?.classList.add('open');
+    document.body.classList.add('drawer-open');
+    if (typeof window.switchDrawerTab === 'function') {
+      window.switchDrawerTab('companion');
+    }
+  }
   renderContextBar();
 
   if (contextPayload && contextPayload.selectedText) {
-    const hintDiv = document.createElement('div');
-    hintDiv.className = 'companion-message assistant';
-    hintDiv.style.borderLeft = '3px solid var(--coral, #b44322)';
+    if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
+    if (bodyEl) {
+      const hintDiv = document.createElement('div');
+      hintDiv.className = 'companion-message assistant';
+      hintDiv.style.borderLeft = '3px solid var(--coral, #b44322)';
 
-    const label = document.createElement('div');
-    label.textContent = '已绑定视口难句：';
-    const quote = document.createElement('em');
-    quote.textContent = '„' + contextPayload.selectedText + '“';
+      const label = document.createElement('div');
+      label.textContent = '已绑定视口难句：';
+      const quote = document.createElement('em');
+      quote.textContent = '„' + contextPayload.selectedText + '“';
 
-    hintDiv.appendChild(label);
-    hintDiv.appendChild(quote);
-    bodyEl.appendChild(hintDiv);
-    bodyEl.scrollTop = bodyEl.scrollHeight;
+      hintDiv.appendChild(label);
+      hintDiv.appendChild(quote);
+      bodyEl.appendChild(hintDiv);
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
   }
 }
 
 export function closeCompanionDrawer() {
-  if (!drawerEl) return;
   companionState.isOpen = false;
-  drawerEl.classList.remove('is-open');
+  if (typeof window.closeDrawer === 'function') {
+    window.closeDrawer();
+  } else {
+    document.getElementById('drawer')?.classList.remove('open');
+    document.body.classList.remove('drawer-open');
+  }
 }
 
 export function toggleCompanionDrawer(contextPayload) {
-  if (companionState.isOpen) {
+  const drawer = document.getElementById('drawer');
+  const isCompanionOpen =
+    drawer?.classList.contains('open') &&
+    document.getElementById('d-tab-companion')?.classList.contains('active');
+
+  if (isCompanionOpen) {
     closeCompanionDrawer();
   } else {
     openCompanionDrawer(contextPayload);
   }
 }
 
-function handleSend() {
+export function handleSend() {
+  if (!inputEl) inputEl = document.getElementById('companion-input');
   if (!inputEl) return;
   const text = inputEl.value.trim();
   if (!text) return;
@@ -423,9 +364,10 @@ function handleSend() {
   submitPrompt(text);
 }
 
-function submitPrompt(userText) {
+export function submitPrompt(userText) {
   if (companionState.inFlight) return;
   if (!bodyEl) initCompanionDrawer();
+  if (!bodyEl) return;
 
   // 1. 渲染用户消息
   const userMsgEl = document.createElement('div');
@@ -464,6 +406,7 @@ function submitPrompt(userText) {
   bodyEl.scrollTop = bodyEl.scrollHeight;
 
   companionState.inFlight = true;
+  if (!sendBtnEl) sendBtnEl = document.getElementById('companion-send-btn');
   if (sendBtnEl) sendBtnEl.disabled = true;
 
   abortController = new AbortController();

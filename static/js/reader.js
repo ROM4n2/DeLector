@@ -512,15 +512,18 @@ export function switchDrawerTab(tab) {
   const tabVocab = document.getElementById("d-tab-vocab");
   const tabSyntax = document.getElementById("d-tab-syntax");
   const tabNote = document.getElementById("d-tab-note");
+  const tabCompanion = document.getElementById("d-tab-companion");
   const tabAll = document.getElementById("d-tab-all");
   if (tabVocab) tabVocab.classList.toggle("active", tab === "vocab");
   if (tabSyntax) tabSyntax.classList.toggle("active", tab === "syntax");
   if (tabNote) tabNote.classList.toggle("active", tab === "note");
+  if (tabCompanion) tabCompanion.classList.toggle("active", tab === "companion");
   if (tabAll) tabAll.classList.toggle("active", tab === "all");
 
   const vocabWrap = document.getElementById("drawer-vocab-wrap");
   const syntaxSec = document.getElementById("drawer-syntax-section");
   const noteSec = document.getElementById("drawer-note-section");
+  const companionSec = document.getElementById("drawer-companion-section");
 
   if (vocabWrap)
     vocabWrap.classList.toggle("hidden", tab !== "vocab" && tab !== "all");
@@ -528,12 +531,24 @@ export function switchDrawerTab(tab) {
     syntaxSec.classList.toggle("hidden", tab !== "syntax" && tab !== "all");
   if (noteSec)
     noteSec.classList.toggle("hidden", tab !== "note" && tab !== "all");
+  if (companionSec)
+    companionSec.classList.toggle("hidden", tab !== "companion");
 
   const bodyEl = document.querySelector(".drawer-body");
-  if (bodyEl) bodyEl.scrollTop = 0;
+  if (bodyEl) {
+    bodyEl.classList.toggle("drawer-companion-active", tab === "companion");
+    if (tab !== "companion") {
+      bodyEl.scrollTop = 0;
+    }
+  }
 
   if (tab === "note" && noteSec) {
     document.getElementById("note-text-input")?.focus();
+  } else if (tab === "companion" && companionSec) {
+    document.getElementById("companion-input")?.focus();
+    if (window.CompanionDrawer?.renderContextBar) {
+      window.CompanionDrawer.renderContextBar();
+    }
   }
 }
 

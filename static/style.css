@@ -1499,6 +1499,35 @@ body.focus-mode .tok.focus-active {
   box-sizing: border-box;
 }
 
+.drawer-body.drawer-companion-active {
+  padding: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.drawer-companion-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--note-yellow);
+}
+
+.drawer-companion-section.hidden {
+  display: none !important;
+}
+
+.companion-chat-stream {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
 .drawer-body::-webkit-scrollbar {
   width: 6px;
 }
@@ -10812,72 +10841,18 @@ body.drawer-open .companion {
   .enc-read-mark { margin-right: 0.35rem; }
 }
 
-/* ── Companion Study Agent Drawer (docs/design-system.md) ──────────────── */
-.companion-drawer {
-  position: fixed;
-  top: 0;
-  right: -420px;
-  width: 380px;
-  max-width: 90vw;
-  height: 100vh;
-  background: var(--paper, #faf8f5);
-  border-left: 2px solid var(--ink, #1a1a1a);
-  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
-  z-index: 1050;
-  display: flex;
-  flex-direction: column;
-  transition: right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-  font-family: var(--font-body, inherit);
-  color: var(--ink, #1a1a1a);
-}
-
-.companion-drawer.is-open {
-  right: 0;
-}
-
-.companion-drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1.5px solid var(--rule, #e5e0d8);
-  background: var(--paper-warm, #f7f4ec);
-}
-
-.companion-drawer-title {
-  font-family: var(--font-serif, "Cinzel", Georgia, serif);
-  font-weight: 700;
-  font-size: 1.05rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.companion-drawer-close {
-  background: none;
-  border: 1px solid var(--rule, #e5e0d8);
-  border-radius: 4px;
-  cursor: pointer;
-  padding: 4px 8px;
-  font-size: 0.9rem;
-  color: var(--pencil, #555555);
-}
-
-.companion-drawer-close:hover {
-  border-color: var(--ink, #1a1a1a);
-  color: var(--ink, #1a1a1a);
-}
-
+/* ── Companion Study Agent Section in Main Drawer (#drawer) ──────────────── */
 .companion-context-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.45rem 0.85rem;
-  background: var(--paper-tint, #f2ece1);
-  border-bottom: 1px dashed var(--rule, #dcd6cd);
+  padding: 0.45rem 1rem;
+  background: rgba(26, 23, 20, 0.05);
+  border-bottom: 1.5px dashed rgba(26, 23, 20, 0.18);
   font-size: 0.82rem;
   color: var(--ink, #1a1a1a);
+  flex-shrink: 0;
 }
 
 .companion-context-text {
@@ -11169,22 +11144,4 @@ body.drawer-open .companion {
   padding: 0 0.9rem;
   cursor: pointer;
   font-weight: 600;
-}
-
-@media (max-width: 768px) {
-  .companion-drawer {
-    right: 0;
-    top: auto;
-    bottom: -80vh;
-    width: 100vw;
-    max-width: 100vw;
-    height: 75vh;
-    border-left: none;
-    border-top: 2px solid var(--ink, #1a1a1a);
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
-    transition: bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .companion-drawer.is-open {
-    bottom: 0;
-  }
 }
