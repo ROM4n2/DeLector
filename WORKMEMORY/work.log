@@ -1069,3 +1069,9 @@ Caps: filesystem-read, filesystem-write, shell-exec
   - 头部与标签栏紧凑重排，`.drawer-tabs` 启用弹性自适应平滑横向滚动，避免标签挤压折行；
   - 抽屉底部接入 `padding-bottom: env(safe-area-inset-bottom, 12px)`，完美避让安卓手势白条/虚拟按键。
 - **物理凭据**：`static/index.html` 重新生成（3260 行），4 道前端机械闸（分层、路由、SSE 契约、模板同步）100% PASS。
+
+### 2026-11-01 04:50 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**v5.20.0 正式发版**（PR #179 Squash 合入 master → 版本面 11 个文件同步 bump → 自动化机械门禁全绿 → 标签 v5.20.0 推进）。
+- **版本面同步**：`version.py` 5.20.0 / `build.gradle` 5.20.0+52000 / `sw.js` CACHE_NAME / `layout/header.html`（源）+ 重生成 `index.html` / `tests/test_app_version_source.py` 5.20.0+52000 / README（badge·亮点·下载表·版本历史）/ CHANGELOG 新条目 / FEATURES / SECURITY / PROJECT_OVERVIEW。
+- **全量回归凭据**：Go Companion 30 passed (`-race`)；全仓 185 passed；Python 核心测试 79 passed；版本真相源 22 passed；前端 4 道机械门禁（`check_frontend_layers.py`, `check_frontend_api_contract.py`, `check_companion_contract.py`, `check_index_html_sync.py`）100% PASS。

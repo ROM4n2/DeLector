@@ -4,9 +4,40 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.19.0（2026-10-22）**
+**最新版本：v5.20.0（2026-11-01）**
 
-### 🖥️ 桌面单实例锁 + 端口顺延 + 前端继续解耦（PR #172 · #164~#166）
+### 🦉 伴学导学 Agent 运行时 + SQLite 业务持久化 + 洋葱中间件与安卓可调工作台（PR #179）
+
+自 v5.19.0（2026-10-22）起，完成 DeLector 伴学 Agent 全新架构演化。由 Go Runtime 统一承担 Agent 编排、Tool Calling、流式通信、模型级联和运行时控制，Python/FastAPI 承担 Web 网关、本地 NLP 与 SQLite 学习资产持久化。全量测试规模扩展至 **2,670+ passed**，并通过 4 道前端机械闸与 Go `-race` 全量并发校验。
+
+**① 业务持久化与领域画像探针（Phase A）**
+- **SQLite 会话三表存储**：在 `delector/core/db/companion.py` 建立 `companion_sessions`、`companion_messages`、`companion_proposals` 三表，支持会话创建、历史检索、消息流式归档与 Proposal 确认状态流转。
+- **领域原生探针工具**：
+  - `get_learner_profile`：实时查询 FSRS 间隔复习数据库，提炼掌握词数、复习到期负荷、CEFR 动态等级与薄弱词根，支持空库自愈；
+  - `query_dictionary`：深度查询本地德汉离线权威词典与动词支配格/介词搭配表；
+  - 原生 Tool Calling Schema 注入 Go Agent Runtime，实现可靠无幻觉领域工具调用。
+- **前端会话持久化与会话切换器**：伴学抽屉头部接入会话下拉选择器（Session Select）与“＋ 新对话”按钮，支持离线会话恢复、时序平滑重放与独立对话流。
+
+**② 单体解耦与中间件化（Phase B）**
+- **后端服务抽取与薄路由**：抽取 `CompanionSessionService` 与 `CompanionProposalService`，`delector/routes/companion.py` 瘦身至 117 行纯粹薄路由，移出所有直接 SQL，Proposal 执行具备防重放幂等保护。
+- **前端工作台抽屉巨石解耦**：抽离 `cp-drawer-markdown.js`（100% 零 innerHTML 原生 DOM 语法树，绝缘 XSS）、`cp-drawer-capsule.js`（浮动胶囊与视口追踪）与 `cp-drawer-proposals.js`（提议卡片状态机渲染）。
+- **Go 运行时单体解耦与洋葱中间件**：抽离 `compaction.go`、`tool_calls.go`、`prompts.go`；建立 `TurnPipeline` 洋葱模型，内置 `ContextGuardMiddleware`（Pi 架构 60% 动态上下文压缩）与 `TraceLoggingMiddleware`（`companion_trace.jsonl` 物理度量追溯）。
+- **思考强度控制**：贯通 DeepSeek `medium` 与 Ollama `none` 默认规格，前端支持“极速/平衡/深度”胶囊动态切换与持久化回显。
+
+**③ 移动端/安卓工作台抽屉体验升级**
+- **可调节高度机制**：移除硬编码 `55vh`，改由 `--drawer-mobile-height` 统一管理（支持 28vh ~ 94vh 自由缩放）。
+- **Material 风格顶部抓手**：引入顶部拖拽药丸手柄条，支持触屏平滑手势上下拉伸，高度实时记忆。
+- **一键三档尺寸轮转**：新增头部切换按钮，支持精简（38vh）、半屏（65vh）、全屏（92vh）顺畅切换；接入 `env(safe-area-inset-bottom)` 避让安卓底部手势栏。
+
+**④ 语言学与契约缺陷根治**
+- **情态框与虚拟式框精准判据**：修复 `syntax_tree.py` 将 `soll ... kommen` 因不定式同形误判为 „Konjunktiv-Klammer“ 的语言学缺陷，硬性过滤不定式与直陈式形态，回归精准 `Modalverb-Klammer`。
+- **工具名称契约对齐**：统一 Go Schema 与 Python `TOOL_REGISTRY` 调度别名（`query_dictionary` / `get_learner_profile`）。
+
+**回滚说明**：伴学数据完全复用 SQLite，降级或回滚代码不破坏现有词库及学习进度。
+
+---
+
+### v5.19.0 · 🖥️ 桌面单实例锁 + 端口顺延 + 前端继续解耦（PR #172 · #164~#166）
 
 自 v5.18.0（`4646a67`，2026-10-19）起本版收敛两个主题：**「同一台机器只能有一个 DeLector」成为 OS 级事实**，以及前端单体继续分层。全量测试 2,438 → **2,584 passed + 2 skipped（净增 146）**。
 
