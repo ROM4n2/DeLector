@@ -507,13 +507,16 @@ export function submitPrompt(userText) {
   if (companionState.inFlight) return;
   if (!userText || !userText.trim()) return;
 
-  // 守卫：针对需要句子的快捷提问，若无句子则阻止发送并提醒
+  // 守卫：针对需要句子的快捷提问，若无句子则先尝试自动同步视口句子
   if (
     !companionState.activeContext.selectedText &&
     (userText.includes('选中文本') || userText.includes('这个句子') || userText.includes('拓扑结构'))
   ) {
-    alert('请先在文章中点击句旁的 [🦉 伴学] 绑定德语难句，再执行针对性问诊！');
-    return;
+    syncCurrentContext();
+    if (!companionState.activeContext.selectedText) {
+      alert('请先在文章中划选或点击单词绑定德语难句，再执行针对性问诊！');
+      return;
+    }
   }
 
   if (!bodyEl) initCompanionDrawer();
@@ -611,10 +614,12 @@ export function submitPrompt(userText) {
       bodyEl.scrollTop = bodyEl.scrollHeight;
     }
   }).catch((err) => {
-    companionState.inFlight = false;
-    if (sendBtnEl) sendBtnEl.disabled = false;
     textBodyEl.textContent = '[连接失败: ' + err.message + ']';
     textBodyEl.style.color = 'var(--coral, #b44322)';
+  }).finally(() => {
+    companionState.inFlight = false;
+    if (sendBtnEl) sendBtnEl.disabled = false;
+    bodyEl.scrollTop = bodyEl.scrollHeight;
   });
 }
 

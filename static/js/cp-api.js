@@ -88,4 +88,24 @@ export async function streamCompanionChat(options) {
       }
     }
   }
+
+  // 尾包处理：流结束时若 buffer 还有剩余行
+  if (buffer.trim()) {
+    const lines = buffer.split('\n');
+    let currentEvent = 'delta';
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (line.startsWith('event:')) {
+        currentEvent = line.slice(6).trim();
+      } else if (line.startsWith('data:')) {
+        const rawJson = line.slice(5).trim();
+        try {
+          const parsed = JSON.parse(rawJson);
+          onEvent(currentEvent, parsed);
+        } catch (_) {
+          // 容错忽略非 JSON 帧
+        }
+      }
+    }
+  }
 }

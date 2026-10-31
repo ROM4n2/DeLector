@@ -25,11 +25,11 @@ from delector.tools import TOOL_REGISTRY
 
 # ── 轮次、超时与预算常量 ──────────────────────────────────────────────────────
 DEFAULT_MAX_TURNS: int = 3
-DEFAULT_DEADLINE_S: float = 15.0
-DEFAULT_MAX_TOKENS: int = 2048
-DEFAULT_MAX_TOKENS_TOTAL: int = 2048
+DEFAULT_DEADLINE_S: float = 35.0
+DEFAULT_MAX_TOKENS: int = 4096
+DEFAULT_MAX_TOKENS_TOTAL: int = 8192
 CHARS_PER_TOKEN_ESTIMATE: float = 3.0
-DEFAULT_PER_CALL_TIMEOUT_S: float = 10.0
+DEFAULT_PER_CALL_TIMEOUT_S: float = 25.0
 
 # 伴学 Agent 只读/诊断工具白名单
 ALLOWED_TOOLS: frozenset[str] = frozenset(
@@ -93,7 +93,10 @@ def estimate_tokens(text: str) -> int:
     return max(1, int(len(text) / CHARS_PER_TOKEN_ESTIMATE))
 
 
-def _build_offline_response(messages: List[Dict[str, Any]]) -> str:
+def _build_offline_response(
+    messages: List[Dict[str, Any]],
+    context: Optional[Dict[str, Any]] = None,
+) -> str:
     """离线或未配 Key 时的确定性回复."""
     last_user_msg = ""
     for m in reversed(messages):
@@ -101,14 +104,33 @@ def _build_offline_response(messages: List[Dict[str, Any]]) -> str:
             last_user_msg = str(m.get("content", ""))
             break
 
+    selected_text = ""
+    if context and isinstance(context, dict):
+        selected_text = str(context.get("selected_text") or "").strip()
+
     if "hallo" in last_user_msg.lower() or "你好" in last_user_msg:
         return (
             "Hallo! Ich bin Eule, dein Lernbegleiter. "
             "你好！我是你的德语研读伴读伙伴 Eule。当前处于离线模式，你可以正常进行生词复习、语法分析与阅读批注。"
         )
+
+    if selected_text:
+        return (
+            "【伴学助手·离线导学提示】\n\n"
+            f"当前已为你锁定目标句子：\n> **„{selected_text}“**\n\n"
+            "⚠️ **当前处于离线模式（未检测到云端大模型 API Key 配置）**。\n\n"
+            "你可以通过以下方式继续研读此句：\n"
+            "1. **拓扑分析**：在选区胶囊工具条中点击 `[🌳 句法]`，"
+            "直接查看本地确定性五场域（Felderstruktur）依存语法分析；\n"
+            "2. **生词查阅**：点击句中任一单词即可调取本地词典、发音与词形变位；\n"
+            "3. **启用 AI 伴学**：在系统右上方设置中配置有效 API Key（支持 DeepSeek 等服务），"
+            "即可激活深度句法问诊与生词卡生成。"
+        )
+
     return (
-        "【伴学助手·离线提示】当前未检测到云端大模型 API Key 配置。"
+        "【伴学助手·离线提示】当前未检测到云端大模型 API Key 配置。\n\n"
         "你可以继续使用系统的确定性语法拓扑分析、FSRS 卡盒复习与本地词库检索功能。"
+        "如需启用伴学导学与深度问答，请在设置中配置有效 API Key。"
     )
 
 
@@ -135,7 +157,7 @@ async def run_companion_agent_loop(
     # 1. 离线/未配置 Key 门禁
     effective_key = get_effective_api_key()
     if chat_fn is None and not effective_key:
-        offline_text = _build_offline_response(messages)
+        offline_text = _build_offline_response(messages, context=context)
         emit({"event": "delta", "text": offline_text})
         emit(
             {

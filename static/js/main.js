@@ -24,6 +24,7 @@ import {
   switchDrawerTab,
   openDrawer,
   closeDrawer,
+  setupDrawerResize,
   analyzeGrammar,
   saveVocab,
   saveGrammar,
@@ -1228,6 +1229,7 @@ document.addEventListener("DOMContentLoaded", () => {
   applyTypography();
   setupDropzone();
   setupSelectionTooltip();
+  setupDrawerResize();
   setupEditorListeners();
   ShadowPlayer.init();
   Companion.init();

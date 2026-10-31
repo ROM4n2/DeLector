@@ -567,6 +567,83 @@ export function closeDrawer() {
     .forEach((el) => el.classList.remove("sel"));
 }
 
+export function setupDrawerResize() {
+  const handle = document.getElementById("drawer-resize-handle");
+  const drawer = document.getElementById("drawer");
+  if (!handle || !drawer) return;
+
+  // 1. 初始化读取本地持久化偏好
+  try {
+    const savedWidth = localStorage.getItem("delector_drawer_width");
+    if (savedWidth) {
+      document.documentElement.style.setProperty("--drawer-width", savedWidth);
+    }
+  } catch (_) {
+    // 忽略 localStorage 权限限制
+  }
+
+  let isDragging = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  const onPointerDown = (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    const computedWidth = drawer.getBoundingClientRect().width;
+    startWidth = computedWidth;
+
+    document.body.classList.add("drawer-resizing");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    e.preventDefault();
+  };
+
+  const onPointerMove = (e) => {
+    if (!isDragging) return;
+    const delta = startX - e.clientX;
+    const minW = 340;
+    const maxW = Math.min(window.innerWidth * 0.75, 1200);
+    const newWidth = Math.min(Math.max(minW, startWidth + delta), maxW);
+    const pxVal = `${Math.round(newWidth)}px`;
+
+    document.documentElement.style.setProperty("--drawer-width", pxVal);
+  };
+
+  const onPointerUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.classList.remove("drawer-resizing");
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+
+    try {
+      const currentVal = document.documentElement.style.getPropertyValue("--drawer-width");
+      if (currentVal) {
+        localStorage.setItem("delector_drawer_width", currentVal);
+      }
+    } catch (_) {}
+  };
+
+  // 2. 双击快捷预设宽度轮转 (420px -> 600px -> 50vw -> 420px)
+  handle.addEventListener("dblclick", () => {
+    const currentW = drawer.getBoundingClientRect().width;
+    let target = "420px";
+    if (currentW < 500) {
+      target = "600px";
+    } else if (currentW < 750) {
+      target = "50vw";
+    } else {
+      target = "420px";
+    }
+    document.documentElement.style.setProperty("--drawer-width", target);
+    try {
+      localStorage.setItem("delector_drawer_width", target);
+    } catch (_) {}
+  });
+
+  handle.addEventListener("pointerdown", onPointerDown);
+}
+
 // ── Grammar AI ───────────────────────────────────────────────────────────────
 export async function analyzeGrammar() {
   const btn = document.getElementById("analyze-btn");
@@ -911,16 +988,33 @@ export function openNoteDrawerFromSelection() {
 }
 
 export function askCompanionFromSelection() {
-  if (!state.activeSelectedRangeText) return;
   const tooltip = document.getElementById("selection-tooltip");
   if (tooltip) tooltip.classList.add("hidden");
 
+  let text = state.activeSelectedRangeText;
+  if (!text) {
+    const sel = window.getSelection();
+    text = sel ? sel.toString().trim() : "";
+  }
+  if (!text && state.selectedSent) {
+    text = state.selectedSent.text;
+  }
+  if (!text && state.activeSelectedSentId && state.currentArticle?.sentences) {
+    const s = state.currentArticle.sentences.find((s) => s.id === state.activeSelectedSentId);
+    if (s) text = s.text;
+  }
+  if (!text && state.currentArticle?.sentences?.length) {
+    text = state.currentArticle.sentences[0].text;
+  }
+
   if (window.CompanionDrawer) {
     window.CompanionDrawer.open({
-      selectedText: state.activeSelectedRangeText,
+      selectedText: text || "",
       articleTitle: state.currentArticle ? state.currentArticle.title : "",
       cefrLevel: state.currentArticle?.cefr_level || "B1",
     });
+  } else {
+    openDrawer("companion");
   }
 }
 
