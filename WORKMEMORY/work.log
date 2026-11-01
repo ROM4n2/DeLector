@@ -767,3 +767,18 @@ Caps: filesystem-read, filesystem-write, shell-exec, dfs-debug, reader-syntax-sy
   - `inspect()` 引入 `state.activeDrawerTab` 记忆守卫：若用户已处于非词汇 Tab（如句法、便签），保持当前 Tab，不强行打断研读心流；
   - 新增永久回归测试 `tests/test_reader_syntax_sync.py`；沉淀排障草稿至 Obsidian Coding Vault `99-Inbox/`。
   - PR #194 通过全量 14 项 CI 任务（Run #41299362616 耗时 ~3.5min 全绿），squash-merge 合入 master（commit `857b363`）。
+
+### 2026-11-01 19:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, release-governance, multi-platform-packaging
+事件：**DeLector v5.20.2 正式发布（PR #195 全绿合并，GitHub Releases 资产全部就绪）**。
+- **发版物料一致性同步 (PR #195)**：
+  - `delector/core/version.py` 更新为 `5.20.2`；
+  - `android/app/build.gradle` 更新为 `releaseVersionName = "5.20.2"`，`releaseVersionCode = 52002`；
+  - `static/sw.js` 更新缓存版本为 `delector-static-v5.20.2`；
+  - `static/layout/header.html` 与 `static/index.html` 更新为 `System · v5.20.2`；
+  - `CHANGELOG.md`、`README.md`、`FEATURES.md`、`SECURITY.md` 与 `WORKMEMORY/PROJECT_OVERVIEW.md` 同步更新；
+  - PR #195 通过 14 项 CI 任务（Run #41300679712 全绿），squash-merge 合入 master（commit `a97793d`）。
+- **Tag 与多平台发布流**：
+  - 创建并推送标签 `v5.20.2`；
+  - 触发多平台构建发布工作流（Run #41301061240 与 Run #41301060963），包含轻量烟测加速后全部在 4 分钟内顺利编译构建通过；
+  - GitHub Releases 资产已完整发布：`DeLector-v5.20.2-Windows-x64-Portable.zip`、`DeLector-v5.20.2-macOS.tar.gz`、`DeLector-v5.20.2-Linux-x64.tar.gz`、`DeLector-v5.20.2-Android.apk`。
