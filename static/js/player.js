@@ -363,6 +363,10 @@ export const ShadowPlayer = {
       0,
       Math.min(state.currentArticle.sentences.length - 1, idx),
     );
+    const targetSent = state.currentArticle.sentences[this.currentSentIdx];
+    if (targetSent && window.renderSyntaxViewForSentence) {
+      window.renderSyntaxViewForSentence(targetSent.id);
+    }
     if (this.isPlaying) {
       if (this.pauseTimer) {
         clearTimeout(this.pauseTimer);
