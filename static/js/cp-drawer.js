@@ -137,6 +137,7 @@ function renderWelcomeMessage() {
   const msgEl = document.createElement('div');
   msgEl.className = 'companion-message assistant';
   const textEl = document.createElement('div');
+  textEl.className = 'companion-text-body';
   textEl.textContent = 'Hallo! 我是你的研读伙伴 Eule。选中德语难句点击我，我可以为你深入剖析拓扑结构、语用褒贬或批量制作闪卡。';
   msgEl.appendChild(textEl);
   bodyEl.appendChild(msgEl);
