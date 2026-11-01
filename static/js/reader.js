@@ -66,6 +66,42 @@ export function adjustFontSize(delta) {
   applyTypography();
 }
 
+// ── CEFR 词阶透视模式（ADR-0026 决策 2C） ────────────────────────────────────
+// 三档：immersive（默认，基石词零铺色）/ exam（只留 B2·C1 考点）/ heatmap（全量色阶）。
+// 模式只切换 `#reader-content` 上的 class，绝不重渲染正文 —— 阅读位置与已选词不丢。
+export const CEFR_VISION_MODES = ["immersive", "exam", "heatmap"];
+const CEFR_VISION_KEY = "delector_cefr_vision_mode";
+
+const storedVisionMode = localStorage.getItem(CEFR_VISION_KEY);
+let cefrVisionMode = CEFR_VISION_MODES.includes(storedVisionMode)
+  ? storedVisionMode
+  : "immersive";
+
+export function setCefrVisionMode(mode) {
+  if (!CEFR_VISION_MODES.includes(mode)) return cefrVisionMode;
+  if (mode !== cefrVisionMode) {
+    cefrVisionMode = mode;
+    localStorage.setItem(CEFR_VISION_KEY, mode);
+  }
+  applyCefrVisionMode();
+  return cefrVisionMode;
+}
+
+export function applyCefrVisionMode() {
+  const content = document.getElementById("reader-content");
+  if (content) {
+    CEFR_VISION_MODES.forEach((mode) => {
+      content.classList.toggle(`cefr-mode-${mode}`, mode === cefrVisionMode);
+    });
+  }
+
+  document.querySelectorAll(".cefr-mode-pill .typo-btn").forEach((btn) => {
+    const isActive = btn.dataset.cefrMode === cefrVisionMode;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
 // ── CEFR Focus Mode ─────────────────────────────────────────────────────────
 export function toggleCefrFocus(level) {
   if (state.currentFocusedLevel === level) {
@@ -237,13 +273,15 @@ async function _openReaderBody(id, token) {
       })
       .join("");
 
-    const topoHtml = renderFelderSpectrum(sent.topology, sent.id);
+    // ADR-0026 决策 1A：正文 `<p>` 只允许 Phrasing Content。
+    // 任何块级节点（例如旧版的行内五场域 topology strip）都会被 HTML5 解析器
+    // 强制闭合前置 `<p>`，把整段德语长文肢解成单句碎行。
+    // 拓扑五场域分析统一收敛到右侧抽屉（openSyntaxDrawerForSentence）。
     const sentWrapper = `
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
         <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">🌳 句法</button>
       </span>
-      <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;
 
     currentSentences.push(sentWrapper);
@@ -263,6 +301,7 @@ async function _openReaderBody(id, token) {
 
   ShadowPlayer.reset();
   applyTypography();
+  applyCefrVisionMode();
   await loadArticleNotes(id);
 
   // Setup separable verb hover linking
@@ -1212,18 +1251,6 @@ export function downloadStudyGuide() {
 }
 
 // ── Satzbau & Felder-Modell Engine ──────────────────────────────────────────
-
-export function toggleSentenceTopology(sentId) {
-  const el = document.getElementById(`sent-topology-${sentId}`);
-  if (!el) return;
-  const isHidden = el.classList.contains("hidden");
-  document
-    .querySelectorAll(".sentence-topology-strip")
-    .forEach((s) => s.classList.add("hidden"));
-  if (isHidden) {
-    el.classList.remove("hidden");
-  }
-}
 
 export function openSyntaxDrawerForSentence(sentId) {
   const sent = state.currentArticle?.sentences?.find((s) => s.id === sentId);
