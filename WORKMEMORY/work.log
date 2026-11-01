@@ -728,3 +728,16 @@ Caps: filesystem-read, filesystem-write, shell-exec, ci-pipeline-optimization
   - `ci.yml`：抽离独立的 `go-gates` 并发 Job，包含 Go 1.26 缓存、`gofmt`、`go vet` 与 `go test -race`，Go 门禁 40s 内独立完成验证；
   - `build-release.yml`：将 Windows / Linux / macOS 打包前无谓的 2,669 项全量单测替换为轻量级 `Pre-build Packaging Smoke Tests`（服务健康探针 + 打包面契约），发版总耗时直接降低 60% 以上；
   - PR #186（Run #41267886002）包含 Windows 打包真启闸在内的 10 个 Job 100% SUCCESS，已规范 squash-merge 合入 master（commit `740db90`）。
+
+### 2026-11-01 12:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, android-touch-drag, reader-syntax-ui, ci-matrix-split
+事件：**Android 桌宠移动手势修复、句法默认显示清除与 CI Pytest Matrix 双分片落地（PR #187 全绿合并）**。
+- **Android 桌宠拖拽排障与修复**：
+  - 根因：`.companion` 容器设为 `pointer-events: none` 导致向容器申请 `setPointerCapture` 被拒；缺 `touch-action: none` 致 Android Chromium 在检测到手指位移超过 8px 时误判为页面滚动并向 DOM 派发 `pointercancel`；
+  - 修复：补充 `touch-action: none` 与 `-webkit-touch-callout: none`；优先向真实触控节点申请 `setPointerCapture`；指针按下时向 `window` 挂载全局 `{ passive: false }` 监听；激活 `.companion.is-dragging` 增加 `transition: none !important` 消除迟滞；拖拽结束施加 350ms/400ms 合成 click 屏蔽窗。
+- **句法默认显示清除**：
+  - 根因：在满足 CI 历史断言时，`<button class="sent-syntax-btn"...` 被恢复到句子流内，但缺乏样式，导致各端默认以原生浏览器灰色实体按钮内联展示在阅读器所有句子末尾；
+  - 修复：声明 `.sent-syntax-btn { display: none !important; }`，彻底清除阅读流默认显示的行内按钮，保留 DOM 节点满足 AST 护栏，句法分析完全由选区悬浮胶囊工具条（`🌳 句法`）与抽屉触发。
+- **CI Pytest 套件 Matrix 双分片提速**：
+  - 在 `ci.yml` 引入并行矩阵：`unit` 分片跑 158 个业务单测，`cost-guards` 分片跑 3 个重型基准测试；
+  - PR #187 包含 Windows 打包真启闸在内的 11 个 Job 100% SUCCESS，squash-merge 合入 master（commit `b89acb9`）。
