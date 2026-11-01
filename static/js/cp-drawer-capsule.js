@@ -100,13 +100,25 @@ export function initFloatingCapsule(options) {
     initialTop = rect.top;
     activePointerId = e.pointerId;
 
-    if (typeof capsuleEl.setPointerCapture === 'function' && e.pointerId != null) {
+    // 优先在真实触控 target 上执行 pointerCapture，避免容器 pointer-events: none 造成拒绝
+    const captureEl =
+      target && typeof target.setPointerCapture === 'function'
+        ? target
+        : typeof capsuleEl.setPointerCapture === 'function'
+          ? capsuleEl
+          : null;
+    if (captureEl && e.pointerId != null) {
       try {
-        capsuleEl.setPointerCapture(e.pointerId);
+        captureEl.setPointerCapture(e.pointerId);
       } catch (_) {
         // 容错静默
       }
     }
+
+    // 全局挂载 move 与 up，确保移动端手指滑动超出 72px 元素时不丢弃事件
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp, { passive: false });
+    window.addEventListener('pointercancel', onPointerUp, { passive: false });
   }
 
   function onPointerMove(e) {
@@ -125,7 +137,9 @@ export function initFloatingCapsule(options) {
     }
 
     if (isDragging) {
-      e.preventDefault();
+      if (e.cancelable) {
+        e.preventDefault();
+      }
       const currentLeft = initialLeft + dx;
       const currentTop = initialTop + dy;
       const clamped = clampPosition(currentLeft, currentTop);
@@ -141,11 +155,21 @@ export function initFloatingCapsule(options) {
     if (!isPointerDown) return;
     if (activePointerId != null && e.pointerId !== activePointerId) return;
 
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
+
     isPointerDown = false;
 
-    if (typeof capsuleEl.releasePointerCapture === 'function' && activePointerId != null) {
+    const captureEl =
+      e.target && typeof e.target.releasePointerCapture === 'function'
+        ? e.target
+        : typeof capsuleEl.releasePointerCapture === 'function'
+          ? capsuleEl
+          : null;
+    if (captureEl && activePointerId != null) {
       try {
-        capsuleEl.releasePointerCapture(activePointerId);
+        captureEl.releasePointerCapture(activePointerId);
       } catch (_) {
         // 容错静默
       }
@@ -166,11 +190,14 @@ export function initFloatingCapsule(options) {
         opts.onReposition(pos);
       }
 
-      // 防误触：拖拽释放后的短时间内屏蔽 click 事件触发
+      // 防误触：移动端手势释放后会有最高 300ms 延迟合成 click 事件，统一屏蔽
       justDragged = true;
+      if (window.Companion && typeof window.Companion._suppressClick === 'function') {
+        window.Companion._suppressClick(400);
+      }
       setTimeout(() => {
         justDragged = false;
-      }, 120);
+      }, 350);
     } else {
       // 纯点击
       if (typeof opts.onClick === 'function') {
@@ -182,6 +209,9 @@ export function initFloatingCapsule(options) {
   function onClick(e) {
     if (justDragged) {
       e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+      }
       e.preventDefault();
     }
   }
@@ -192,18 +222,15 @@ export function initFloatingCapsule(options) {
   }
 
   // 绑定事件
-  capsuleEl.addEventListener('pointerdown', onPointerDown);
-  capsuleEl.addEventListener('pointermove', onPointerMove);
-  capsuleEl.addEventListener('pointerup', onPointerUp);
-  capsuleEl.addEventListener('pointercancel', onPointerUp);
+  capsuleEl.addEventListener('pointerdown', onPointerDown, { passive: true });
   capsuleEl.addEventListener('click', onClick, true);
   window.addEventListener('resize', onResize);
 
   function destroy() {
     capsuleEl.removeEventListener('pointerdown', onPointerDown);
-    capsuleEl.removeEventListener('pointermove', onPointerMove);
-    capsuleEl.removeEventListener('pointerup', onPointerUp);
-    capsuleEl.removeEventListener('pointercancel', onPointerUp);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
     capsuleEl.removeEventListener('click', onClick, true);
     window.removeEventListener('resize', onResize);
     delete capsuleEl._floatingCapsuleController;

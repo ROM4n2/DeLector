@@ -41,6 +41,13 @@ jobs:
     # 一条永不返回的测试会把 runner 烧满六小时才红——提交者早改去下一件事了。
     # 取 15：文件头自陈"PR 反馈预期 < 8min"，实测单次约 2.5–3.5min，留足余量。
     timeout-minutes: 15
+    strategy:
+      matrix:
+        suite:
+          - name: unit
+            args: "--ignore=tests/test_cards_endpoint_cost.py --ignore=tests/test_cold_start_cost.py --ignore=tests/test_articles_list_cost.py"
+          - name: cost-guards
+            args: "tests/test_cards_endpoint_cost.py tests/test_cold_start_cost.py tests/test_articles_list_cost.py"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -144,7 +151,7 @@ jobs:
 
       # 全量门禁：Python 测试套件一个不漏
       - name: Run full pytest suite
-        run: pytest -q
+        run: pytest -q ${{ matrix.suite.args }}
 
   # ── Go 智能体运行时门禁（解耦并行，25s 极速自证）─────────────────────────────────
   go-gates:

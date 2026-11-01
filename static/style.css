@@ -7244,9 +7244,17 @@ body.drawer-open .shadow-player {
   flex-direction: column;
   align-items: flex-end;
   pointer-events: none;
+  touch-action: none;
   transition:
     right 0.25s cubic-bezier(0.16, 1, 0.3, 1),
     bottom 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.companion.is-dragging {
+  transition: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto !important;
 }
 
 .companion.ontop {
@@ -7276,11 +7284,20 @@ body.drawer-open .shadow-player {
   height: 72px;
   cursor: pointer;
   pointer-events: auto;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
   animation: companionIdle 4s infinite ease-in-out;
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15));
   transition: transform 0.15s;
-  user-select: none;
 }
+
+.companion-avatar {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 
 .companion-char:hover {
   transform: scale(1.1);
@@ -10372,6 +10389,9 @@ body.drawer-open .companion {
 }
 
 /* ── 句法与伴学统一收敛至选区悬浮胶囊工具条 (#selection-tooltip) ── */
+.sent-syntax-btn {
+  display: none !important;
+}
 
 
 /* ── 遇见区 encounter (P0)：自 index.html #view-encounter 内联 <style> 迁入 ──
