@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
   <img src="https://img.shields.io/badge/Tests-2584%2F2586%20Passed-2EA44F?style=flat-square" alt="Pytest" />
-  <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
@@ -196,4 +196,4 @@ DeLector/
 
 ## 📄 许可证 (License)
 
-本项目采用 [MIT License](LICENSE) 开源许可证。欢迎提 PR 或 Issue 参与共建！
+本项目采用 [Apache License 2.0](LICENSE) 开源许可证。欢迎提 PR 或 Issue 参与共建！

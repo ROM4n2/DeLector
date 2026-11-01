@@ -92,3 +92,5 @@ python -m pytest tests/ -q
    - 遵循 Conventional Commits：`type(scope): 描述`。
    - PR 模板中的各项检查项必须如实勾选并附带真实的本地门禁终端输出末行截屏/文本。
    - 实施计划与配套代码**必须放在同一个分支、同一个 PR 中原子交付**。
+3. **开源授权契约**：
+   - 凡向本项目提交的任何 Pull Request，除非作者在提交中作出显式例外说明，均默认依据 [Apache License 2.0](LICENSE) 条款进行授权贡献。
