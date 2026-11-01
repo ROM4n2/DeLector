@@ -754,3 +754,16 @@ Caps: filesystem-read, filesystem-write, shell-exec, ci-pipeline-optimization, r
   - Windows Portable Smoke（PR #190）：剔除无谓的 2,670+ 全量测试重复执行，收敛为 4 个跨平台打包烟测，Windows 测试耗时从 868s 骤降至 5s；
   - 单元测试 4 路均衡并发矩阵（PR #192, #193）：全仓 167 个测试文件拆解为 6 个并行 Runner：`unit-1` (a-c, 37 files)、`unit-2` (d-g, 50 files)、`unit-3` (h-r, 30 files)、`unit-4` (s-z, 42 files)、`integration-heavy` (5 files)、`cost-guards` (3 files)；
   - 完备性覆盖：167 个用例 100% 覆盖且零重叠；最长单片测试时间由 164s 降至 ~50s，整体并发流水线从 4+ 分钟全面压缩至 1.5 ~ 2 分钟内收敛。
+
+### 2026-11-01 19:00 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, dfs-debug, reader-syntax-sync
+事件：**阅读器单词点击状态机与句法拓扑抽屉实时联动同步修复 (PR #194 全绿合并)**。
+- **问题根因定位 (DFS-DEBUG Track 2)**：
+  - 点击单词触发 `inspect(tokenId, sentId)` 时，虽更新了 `state.selectedSent`，但从未调用句法拓扑渲染逻辑（`#syntax-sent-quote` 与五场域 Grid 始终保持未更新态）；
+  - `inspect()` 硬编码调用 `openDrawer("vocab")`，导致即使抽屉处于「🌳 句法」Tab，点击单词也会被暴力跳回「📖 词汇」Tab；
+  - `switchDrawerTab("syntax")` 仅切换 CSS 类，缺少对当前选中句的主动渲染；播放器 `seekSentence` 切句未联动通知句法。
+- **外科手术式修复**：
+  - 抽离 `renderSyntaxViewForSentence(sentId)`，在 `inspect(tokenId, sentId)`、`switchDrawerTab("syntax")` 与 `ShadowPlayer.seekSentence` 中全面联动调用；
+  - `inspect()` 引入 `state.activeDrawerTab` 记忆守卫：若用户已处于非词汇 Tab（如句法、便签），保持当前 Tab，不强行打断研读心流；
+  - 新增永久回归测试 `tests/test_reader_syntax_sync.py`；沉淀排障草稿至 Obsidian Coding Vault `99-Inbox/`。
+  - PR #194 通过全量 14 项 CI 任务（Run #41299362616 耗时 ~3.5min 全绿），squash-merge 合入 master（commit `857b363`）。
