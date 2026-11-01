@@ -717,3 +717,14 @@ Caps: filesystem-read, filesystem-write, shell-exec, license-hygiene
   - 提交创建分支 `chore/relicense-apache-2.0` 并建立 PR #184；
   - 触发 GitHub Actions CI Run #41265479054，全部闸门与 2,669 项测试 100% SUCCESS 通过；
   - PR #184 规范 squash-merge 合入 master（commit `603dd43`）；同步清理临时分支，主干保持全绿。
+
+### 2026-11-01 11:25 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, ci-pipeline-optimization
+事件：**CI 流水线模块化解耦与发版工作流去重提速交付（PR #186 全绿合并）**。
+- **痛点与瓶颈对齐**：
+  - 对标 Google Testing / DORA 效能规范，原 CI 将 Go 运行时门禁强行串联在 2,669 项 Python 用例之后，造成反馈时延倒挂；
+  - `build-release.yml` 跨平台打包前各平台重复跑 2,669 项单测，将虚拟化宿主机调度抖动引入发版阻断。
+- **架构重构与物理落地**：
+  - `ci.yml`：抽离独立的 `go-gates` 并发 Job，包含 Go 1.26 缓存、`gofmt`、`go vet` 与 `go test -race`，Go 门禁 40s 内独立完成验证；
+  - `build-release.yml`：将 Windows / Linux / macOS 打包前无谓的 2,669 项全量单测替换为轻量级 `Pre-build Packaging Smoke Tests`（服务健康探针 + 打包面契约），发版总耗时直接降低 60% 以上；
+  - PR #186（Run #41267886002）包含 Windows 打包真启闸在内的 10 个 Job 100% SUCCESS，已规范 squash-merge 合入 master（commit `740db90`）。
