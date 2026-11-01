@@ -1,7 +1,7 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.20.1-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.20.2-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
@@ -42,21 +42,21 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> 🚀 **v5.20.1 最新版本亮点（2026-11-01）**：
-> - **Android 移动端桌宠手势修复**：全面补充 `touch-action: none` 与全局指针追踪监听，彻底修复 Android 触屏上萌宠无法拖拽移动与释放后误触选角面板的问题。
-> - **正文句法默认显示清除**：清除正文句子末尾内联的实体按钮，统一收敛至选区悬浮胶囊工具条（`🌳 句法`）与侧边抽屉。
-> - **CI 门禁 Matrix 双分片提速**：并行化 Python 全量测试，大幅缩减构建验证耗时。
-> - **Apache License 2.0 正式生效**：全仓完成许可证规范切换。
+> 🚀 **v5.20.2 最新版本亮点（2026-11-01）**：
+> - **自然段排版重塑与基线清零 (ADR-0026)**：彻底消除正文内联块级节点造成的逐句碎行；沉浸模式下 A1/A2 词底色清零，消除 80% 彩色视觉噪声。
+> - **三档视力透视胶囊**：新增「沉浸 / 考点 / 热力」三档视力透视切换与 `localStorage` 记忆持久化。
+> - **单词点击/切句与句法抽屉实时联动 (DFS-DEBUG)**：点击单词自动同步当前句拓扑与从句树，保持当前「🌳 句法」Tab 聚焦不强跳；伴读播放器切句时句法同步自动步进。
+> - **CI 极限提速**：全仓 167 个测试文件拆解为 6 路并行矩阵，流水线压缩至 1.5 ~ 2 分钟极速收敛。
 
 > 📱 **Android 用户注意**：含 `static/` 改动的版本需**覆盖安装**才生效。
 > 📜 完整版本变更细节见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.20.1` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；**需 Win10+ 与 WebView2 运行时**（Win11 自带；Win10 装不上时的表现见「已知限制」）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.1)     |
-| 🍎 **macOS**       | `v5.20.1` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.1)  |
-| 🐧 **Linux x64**   | `v5.20.1` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.1)  |
-| 📱 **Android**     | `v5.20.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.1) |
+| 🪟 **Windows x64** | `v5.20.2` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；**需 Win10+ 与 WebView2 运行时**（Win11 自带；Win10 装不上时的表现见「已知限制」）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.2)     |
+| 🍎 **macOS**       | `v5.20.2` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.2)  |
+| 🐧 **Linux x64**   | `v5.20.2` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.2)  |
+| 📱 **Android**     | `v5.20.2` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.20.2) |
 
 ---
 
@@ -173,6 +173,7 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
+| **v5.20.2** | 2026-11-01 | 阅读器连续段落排版重塑 (ADR-0026) · CEFR 词阶视觉降噪与三档透视胶囊 · 单词点击/切句句法抽屉实时联动同步 (DFS-DEBUG) · CI 6 路并行矩阵极限提速 |
 | **v5.20.1** | 2026-11-01 | Android 移动端桌宠拖拽手势修复 · 句法默认显示清除（收敛至选区悬浮胶囊工具条）· CI Pytest Matrix 双分片并发提速 · Apache License 2.0 正式生效 |
 | **v5.20.0** | 2026-11-01 | 伴学导学 Agent 运行时（Go 编排 · 原生 Tool Calling · Pi 式动态 60% 压缩 · TurnPipeline 中间件 · 物理 trace）· SQLite 会话持久化与画像探针（FSRS 负荷 · 离线词典）· 前端纯 DOM 解耦 · 移动端抽屉上下拖拽可调尺寸与三档预设 · 2670+ passed |
 | **v5.19.0** | 2026-10-22 | 桌面单实例锁（OS 文件锁判据，双击第二次不再起第二个进程）· 端口自动顺延 8000→8002–8010（8001 留给 supervisor）· `lan-info` 上报真实端口 · 前端 `reader.js`/`cards.js` 继续解耦（`rd-syntax`/`rd-api`/`cd-state`）· 2584 passed |
