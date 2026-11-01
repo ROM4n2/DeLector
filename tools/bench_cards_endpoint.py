@@ -275,6 +275,7 @@ def _samples_ms(fn: Callable[[], Any], rounds: int) -> List[float]:
     刻意只采样本、不做统计：中位数与 p95 必须来自**同一批**样本，否则二者之差（尾部
     有多厚）就混进了两次测量的抖动，不再是同一条分布的性质。
     """
+    fn()  # 预热 1 次让页面缓存命中稳定，吸收宿主机冷启动瞬态抖动
     samples: List[float] = []
     for _ in range(rounds):
         t0 = time.perf_counter()
