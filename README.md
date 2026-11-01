@@ -18,18 +18,25 @@
 
 ---
 
-## ⚡ 30 秒极速上手 (Quick Start)
+## 🚀 快速启动 (Quick Start)
 
 > **普通用户（免装 Python，开箱即用）**：
 > - 🪟 **Windows**：前往下方 [多平台下载](#-多平台下载发布包-downloads) 取得 ZIP，解压后双击 `DeLector.exe` 即可运行独立桌面客户端（无需配环境，数据保存在本地用户目录）。
 > - 📱 **Android**：下载 APK 安装包，内嵌 Python 与 spaCy 离线模型，单机脱网可用。
+
+**开发者 / 源码运行**：
+
+```bash
+pip install -r requirements.txt          # 安装 Python 依赖（推荐 Python 3.11）
+python -m spacy download de_core_news_md # 下载德语 NLP 模型
+python start.py                          # 一键启动并自动打开浏览器 http://localhost:8000
+python desktop.py                        # Windows 桌面壳（原生窗口 + 托盘 + 启动 splash）
+docker compose up -d --build             # 或 Docker 容器化一键部署
+```
+
+> 开发者首次启用提交前密钥扫描（每个克隆都要做一次）：`git config core.hooksPath .githooks`
 >
-> **开发者 / 源码运行**：
-> ```bash
-> pip install -r requirements.txt          # 安装依赖（推荐 Python 3.11）
-> python -m spacy download de_core_news_md # 下载德语离线模型
-> python start.py                          # 启动服务并自动打开浏览器 http://localhost:8000
-> ```
+> 📖 Windows 分支 / Docker 细节 / 环境变量 / 打包 / 安全守卫等完整说明见 [docs/agents/ops.md](docs/agents/ops.md)。
 
 ---
 
@@ -103,21 +110,7 @@
 
 ---
 
-## 🚀 快速启动指南 (Quick Start)
-
-```bash
-pip install -r requirements.txt          # 安装 Python 依赖
-python -m spacy download de_core_news_md # 下载德语 NLP 模型
-python start.py                          # 或 Windows 双击 start.bat —— 一键启动并打开浏览器
-python desktop.py                        # Windows 桌面壳（原生窗口 + 托盘 + 启动 splash）
-docker compose up -d --build             # 或 Docker 容器化一键部署
-```
-
-> 开发者首次启用提交前密钥扫描（每个克隆都要做一次）：`git config core.hooksPath .githooks`
->
-> 📖 Windows 分支 / Docker 细节 / 环境变量 / 打包 / 安全守卫等完整说明见 [docs/agents/ops.md](docs/agents/ops.md)。
-
-### 📦 数据目录与旧版迁移（桌面端 / Docker 均必读）
+## 📦 数据目录与旧版迁移（桌面端 / Docker 均必读）
 
 **桌面端默认把数据放在用户目录、不随程序目录**：Windows 为 `%LOCALAPPDATA%\DeLector`，
 macOS / Linux 为 `~/.local/share/DeLector`；文件是 `delector.db` 与 `progress.db`。两个开关：
