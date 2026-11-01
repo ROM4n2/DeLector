@@ -23,13 +23,12 @@
 
 ## 当前状态
 
-- **最新发布 v5.20.1（2026-11-01）** —— **Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速**。
-  - 架构演化：Go Runtime 统一承担 Agent 编排、Tool Calling、流式通信、模型级联和运行时控制（Pi 式动态 60% 压缩 + TurnPipeline 洋葱中间件 + 物理度量追溯）。
-  - 业务资产持久化：新增 `companion_sessions`、`companion_messages`、`companion_proposals` 三表；内置 `get_learner_profile`（FSRS 复习画像）与 `query_dictionary`（权威德汉词典与配价搭配）。
-  - 跨端解耦与薄路由：抽取 Service 层，路由瘦身至 117 行；前端抽屉拆分为 Markdown、胶囊与提议三模块，100% 零 `innerHTML` 绝缘 XSS。
-  - 安卓体验：抽屉彻底解除固定高度，支持上下拖拽调节高度（28vh ~ 94vh）与一键精简/半屏/全屏三档切换，自适应避让系统手势区。
-  - 详见 `CHANGELOG.md` 与 `docs/specs/2026-11-01-companion-harness-persistence-and-middleware-design.md`。
-- **历史里程碑归档**：v5.19.0（单实例锁与端口顺延）、v5.18.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
+- **最新发布 v5.20.2（2026-11-01）** —— **自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速**。
+  - 阅读排版：正文 `<p>` 彻底移除块级预埋节点，根除长文逐句碎行；五场域拓扑分析完全收敛至右侧抽屉。
+  - 词阶降噪与透视胶囊：默认沉浸模式清零 A1/A2 实心背景，保留 C1 考点点缀，新增「沉浸/考点/热力」三档视力透视与 `localStorage` 记忆。
+  - 句法联动同步修复：点击单词或切句自动同步句法拓扑，保持「🌳 句法」Tab 聚焦不强跳；伴读播放器切句时句法同步步进。
+  - CI 极限加速：Windows 烟测耗时由 14.5m 降至 2.5m，167 个测试文件拆为 6 路并行矩阵，整条流水线在 1.5 ~ 2 分钟内收敛。
+- **历史里程碑归档**：v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 
