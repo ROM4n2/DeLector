@@ -44,8 +44,10 @@ jobs:
     strategy:
       matrix:
         suite:
-          - name: unit-fast
-            args: "--ignore=tests/test_cards_endpoint_cost.py --ignore=tests/test_cold_start_cost.py --ignore=tests/test_articles_list_cost.py --ignore=tests/test_server_settings_security.py --ignore=tests/test_frontend_layers.py --ignore=tests/test_bench_judge_gaming.py --ignore=tests/test_server.py --ignore=tests/test_syntax_hard_api.py"
+          - name: unit-1
+            args: "tests/test_[a-g]*.py --ignore=tests/test_articles_list_cost.py --ignore=tests/test_bench_judge_gaming.py --ignore=tests/test_cards_endpoint_cost.py --ignore=tests/test_cold_start_cost.py --ignore=tests/test_frontend_layers.py"
+          - name: unit-2
+            args: "tests/test_[h-z]*.py --ignore=tests/test_server.py --ignore=tests/test_server_settings_security.py --ignore=tests/test_syntax_hard_api.py"
           - name: integration-heavy
             args: "tests/test_server_settings_security.py tests/test_frontend_layers.py tests/test_bench_judge_gaming.py tests/test_server.py tests/test_syntax_hard_api.py"
           - name: cost-guards
