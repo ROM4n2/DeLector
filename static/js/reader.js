@@ -348,6 +348,9 @@ export function inspect(tokenId, sentId) {
   state.activeSelectedRangeText = sent.text;
   state.grammarData = null;
 
+  // 联动更新当前句的句法拓扑与从句树 (AST)，保证点击单词或切换下一句时句法保持同步
+  renderSyntaxViewForSentence(sentId);
+
   // Highlight separable partner and self if linked
   if (token.separable) {
     el?.classList.add("linked-separable");
@@ -419,7 +422,15 @@ export function inspect(tokenId, sentId) {
   document.getElementById("d-sent").textContent = sent.text;
   document.getElementById("save-vocab-btn").textContent = "+ 加入 Anki 词汇卡";
   document.getElementById("grammar-result").classList.add("hidden");
-  openDrawer("vocab");
+
+  const drawer = document.getElementById("drawer");
+  const isDrawerOpen = drawer?.classList.contains("open");
+  if (isDrawerOpen && state.activeDrawerTab && state.activeDrawerTab !== "vocab") {
+    // 保持用户当前已选的抽屉 Tab（如句法、便签、伴学），不强行跳回词汇
+    openDrawer(state.activeDrawerTab);
+  } else {
+    openDrawer("vocab");
+  }
 
   lookupVocab({
     sentence: sent.text,
@@ -550,6 +561,7 @@ export function inspectSubWord(word, defZh, gender) {
 
 // ── Drawer & Tabs ────────────────────────────────────────────────────────────
 export function switchDrawerTab(tab) {
+  state.activeDrawerTab = tab;
   const tabVocab = document.getElementById("d-tab-vocab");
   const tabSyntax = document.getElementById("d-tab-syntax");
   const tabNote = document.getElementById("d-tab-note");
@@ -583,7 +595,12 @@ export function switchDrawerTab(tab) {
     }
   }
 
-  if (tab === "note" && noteSec) {
+  if (tab === "syntax") {
+    const sentId = state.activeSelectedSentId || state.selectedSent?.id;
+    if (sentId) {
+      renderSyntaxViewForSentence(sentId);
+    }
+  } else if (tab === "note" && noteSec) {
     document.getElementById("note-text-input")?.focus();
   } else if (tab === "companion" && companionSec) {
     document.getElementById("companion-input")?.focus();
@@ -1252,10 +1269,12 @@ export function downloadStudyGuide() {
 
 // ── Satzbau & Felder-Modell Engine ──────────────────────────────────────────
 
-export function openSyntaxDrawerForSentence(sentId) {
+export function renderSyntaxViewForSentence(sentId) {
   const sent = state.currentArticle?.sentences?.find((s) => s.id === sentId);
   if (!sent) return;
   state.selectedSent = sent;
+  state.activeSelectedSentId = sent.id;
+  state.activeSelectedRangeText = sent.text;
 
   const quoteEl = document.getElementById("syntax-sent-quote");
   if (quoteEl) quoteEl.textContent = sent.text;
@@ -1275,6 +1294,10 @@ export function openSyntaxDrawerForSentence(sentId) {
   if (treeContainer) {
     treeContainer.innerHTML = renderClauseTreeNode(sent.clause_tree, 0, sentId);
   }
+}
+
+export function openSyntaxDrawerForSentence(sentId) {
+  renderSyntaxViewForSentence(sentId);
 
   // Grammatik-Radar (路线 C): 计算文章句法统计并联动异步持久化与渲染
   if (state.currentArticle?.sentences && state.currentArticle?.id) {
