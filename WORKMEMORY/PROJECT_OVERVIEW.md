@@ -23,7 +23,7 @@
 
 ## 当前状态
 
-- **最新发布 v5.20.0（2026-11-01）** —— **伴学导学 Agent 运行时 + SQLite 业务持久化 + 洋葱中间件与安卓可调工作台**。
+- **最新发布 v5.20.1（2026-11-01）** —— **Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速**。
   - 架构演化：Go Runtime 统一承担 Agent 编排、Tool Calling、流式通信、模型级联和运行时控制（Pi 式动态 60% 压缩 + TurnPipeline 洋葱中间件 + 物理度量追溯）。
   - 业务资产持久化：新增 `companion_sessions`、`companion_messages`、`companion_proposals` 三表；内置 `get_learner_profile`（FSRS 复习画像）与 `query_dictionary`（权威德汉词典与配价搭配）。
   - 跨端解耦与薄路由：抽取 Service 层，路由瘦身至 117 行；前端抽屉拆分为 Markdown、胶囊与提议三模块，100% 零 `innerHTML` 绝缘 XSS。

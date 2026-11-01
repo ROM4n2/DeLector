@@ -4,7 +4,19 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.20.0（2026-11-01）**
+**最新版本：v5.20.1（2026-11-01）**
+
+### 📱 Android 桌宠拖拽手势修复 + 句法默认显示清除 + CI Pytest Matrix 矩阵提速（v5.20.1）
+
+本版本为紧急缺陷修复与效能增强版本：
+- **Android 移动端桌宠手势修复**：全面补充 `touch-action: none`、`-webkit-touch-callout: none` 与 `window` 全局指针追踪，修复 Android 触屏上萌宠由于移动端系统手势抢占导致的无法拖拽移动缺陷；补充 350ms/400ms 延迟合成 click 屏蔽窗，防止拖拽释放误触选角面板。
+- **正文句法默认显示清除**：清除正文每个句子末尾内联的灰色实体按钮，统一收敛至选区悬浮胶囊工具条（`🌳 句法`）与侧边抽屉，保留阅读流整洁。
+- **CI Pytest 套件 Matrix 并行分片**：将 2670+ 全量测试拆分为 `unit`（业务逻辑单测）与 `cost-guards`（基准压测）独立 Runner 并发执行，大幅缩减全量验证反馈耗时。
+- **开源许可证切换**：全仓正式生效 Apache License Version 2.0。
+
+---
+
+**v5.20.0（2026-11-01）**
 
 ### 🦉 伴学导学 Agent 运行时 + SQLite 业务持久化 + 洋葱中间件与安卓可调工作台（PR #179）
 
