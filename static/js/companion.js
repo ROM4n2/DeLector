@@ -564,7 +564,16 @@ export const Companion = {
     this.say({ de: "Danke! Ich bin bereit!", zh: "谢谢！我已经准备好了！" });
   },
 
+  _suppressClickUntil: 0,
+
+  _suppressClick(ms) {
+    this._suppressClickUntil = Date.now() + (ms || 350);
+  },
+
   onClick(evt) {
+    if (this._suppressClickUntil && Date.now() < this._suppressClickUntil) {
+      return;
+    }
     if (navigator.vibrate) navigator.vibrate(15);
     if (!this.enabled) {
       this.toggleEnabled();
