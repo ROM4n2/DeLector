@@ -57,6 +57,10 @@
   --hl-C1: #efe2fa;
   --hl-C1-ink: #522485;
 
+  /* CEFR 词阶透视（ADR-0026）：沉浸模式下 B1/B2 只留极细下沿标记，C1 保留柔和点缀 */
+  --cefr-edge-weak: rgba(21, 20, 15, 0.14);
+  --cefr-edge-exam: rgba(145, 38, 27, 0.55);
+
   /* Sticky Notes */
   --note-yellow: #fffbe6;
   --note-pink: #fff0ed;

@@ -301,6 +301,35 @@
               A+
             </button>
           </div>
+          <div class="typo-pill cefr-mode-pill" role="group" aria-label="词阶透视模式">
+            <button
+              id="btn-cefr-immersive"
+              class="typo-btn active"
+              data-cefr-mode="immersive"
+              onclick="setCefrVisionMode('immersive')"
+              title="沉浸精读：基石词零铺色，仅标注 C1 难词"
+            >
+              沉浸
+            </button>
+            <button
+              id="btn-cefr-exam"
+              class="typo-btn"
+              data-cefr-mode="exam"
+              onclick="setCefrVisionMode('exam')"
+              title="考点聚焦：仅标注 B2 / C1 考纲难词"
+            >
+              考点
+            </button>
+            <button
+              id="btn-cefr-heatmap"
+              class="typo-btn"
+              data-cefr-mode="heatmap"
+              onclick="setCefrVisionMode('heatmap')"
+              title="全景热力：显示全量 CEFR 难度色阶"
+            >
+              热力
+            </button>
+          </div>
         </div>
       </div>
 

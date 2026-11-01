@@ -85,6 +85,10 @@
   --hl-C1: #efe2fa;
   --hl-C1-ink: #522485;
 
+  /* CEFR 词阶透视（ADR-0026）：沉浸模式下 B1/B2 只留极细下沿标记，C1 保留柔和点缀 */
+  --cefr-edge-weak: rgba(21, 20, 15, 0.14);
+  --cefr-edge-exam: rgba(145, 38, 27, 0.55);
+
   /* Sticky Notes */
   --note-yellow: #fffbe6;
   --note-pink: #fff0ed;
@@ -1277,24 +1281,76 @@ body.focus-mode .tok.focus-active {
   background: rgba(233, 132, 37, 0.2);
 }
 
-.tok.A1 {
+/* ── CEFR 词阶透视：三档模式（ADR-0026 决策 2C） ─────────────────────────────
+   分级初衷是「难度预警」，不是「给每个词上色」。德语散文里 A1/A2 基础词（冠词、
+   代词、介词、连词）占 70%~80%，无差别上色后背景噪声压过正文，形成碎花布效应。
+   故默认档＝沉浸精读：基石词零铺色，进阶词只留一道极细下沿，难词留一处柔和点缀。
+   `.tok.sel`（划词选中）与 hover 反馈永远拥有最高优先级。 */
+
+/* 沉浸精读（默认）：A1/A2 完全不铺色 */
+.tok.A1,
+.tok.A2 {
+  background: transparent;
+}
+
+/* B1/B2：不铺色，只在下沿留一道极淡的墨线，作为可感知但不打扰的难度刻度 */
+.tok.B1,
+.tok.B2 {
+  background: transparent;
+
+  box-shadow: inset 0 -1px 0 var(--cefr-edge-weak);
+}
+
+/* C1：考纲核心难词，保留唯一的柔和点缀色 */
+.tok.C1 {
+  background: var(--hl-C1);
+}
+
+/* 考点聚焦：只留 B2 / C1，其余全部归零 */
+#reader-content.cefr-mode-exam .tok.A1,
+#reader-content.cefr-mode-exam .tok.A2,
+#reader-content.cefr-mode-exam .tok.B1 {
+  background: transparent;
+
+  box-shadow: none;
+}
+
+#reader-content.cefr-mode-exam .tok.B2 {
+  background: transparent;
+
+  box-shadow: inset 0 -2px 0 var(--cefr-edge-exam);
+}
+
+/* 全景热力：恢复全量 CEFR 彩色图谱，供考前地毯式扫读 */
+#reader-content.cefr-mode-heatmap .tok.A1 {
   background: var(--hl-A1);
 }
 
-.tok.A2 {
+#reader-content.cefr-mode-heatmap .tok.A2 {
   background: var(--hl-A2);
 }
 
-.tok.B1 {
+#reader-content.cefr-mode-heatmap .tok.B1 {
   background: var(--hl-B1);
+
+  box-shadow: none;
 }
 
-.tok.B2 {
+#reader-content.cefr-mode-heatmap .tok.B2 {
   background: var(--hl-B2);
+
+  box-shadow: none;
 }
 
-.tok.C1 {
+#reader-content.cefr-mode-heatmap .tok.C1 {
   background: var(--hl-C1);
+}
+
+/* 交互反馈压过一切静态词阶色（含全景热力档） */
+#reader-content .reader-p .tok:hover {
+  background: rgba(233, 132, 37, 0.2);
+
+  box-shadow: none;
 }
 
 .tok.sel {
@@ -1304,7 +1360,7 @@ body.focus-mode .tok.focus-active {
 
   border-radius: 3px;
 
-  box-shadow: 0 0 0 2px var(--ink);
+  box-shadow: 0 0 0 2px var(--ink) !important;
 }
 
 /* ── Sticky Note Drawer (Analysis Hub) ───── */
@@ -6609,29 +6665,8 @@ body.drawer-open .shadow-player {
   position: relative;
 }
 
-/* Inline Collapsible Topology Strip */
-.sentence-topology-strip {
-  display: block;
-  margin: 0.625rem 0 0.875rem 0;
-  padding: 0.625rem 0.875rem;
-  background: rgba(248, 246, 240, 0.95);
-  border: 1px solid var(--border, #e2ded4);
-  border-left: 3px solid var(--accent, #2980b9);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  animation: slideDownTopo 0.2s ease-out;
-}
-
-@keyframes slideDownTopo {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* ADR-0026 决策 1A：正文行内拓扑 strip 已移除（块级节点会强制闭合 <p>，
+   把段落肢解成单句碎行）。拓扑分析统一在右侧抽屉渲染。 */
 
 .felder-spectrum-bar {
   display: flex;
