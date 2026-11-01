@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   ci:
-    name: Tests & Go Gates (ubuntu)
+    name: Python Tests & Mechanical Gates (ubuntu)
     runs-on: ubuntu-latest
     # 卡死护栏：不设时 GitHub Actions 对单个 job 的默认上限是 360 分钟（6 小时），
     # 一条永不返回的测试会把 runner 烧满六小时才红——提交者早改去下一件事了。
@@ -145,6 +145,15 @@ jobs:
       # 全量门禁：Python 测试套件一个不漏
       - name: Run full pytest suite
         run: pytest -q
+
+  # ── Go 智能体运行时门禁（解耦并行，25s 极速自证）─────────────────────────────────
+  go-gates:
+    name: Go Gates (agent runtime, race detector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       - name: Set up Go 1.26
         uses: actions/setup-go@v7

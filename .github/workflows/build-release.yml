@@ -37,9 +37,9 @@ jobs:
           pip install -r requirements-desktop.txt
           python -m spacy download de_core_news_sm
 
-      - name: Run Tests
+      - name: Run Packaging Smoke Tests
         run: |
-          pytest -v
+          pytest tests/test_server_packaging.py tests/test_server_health.py tests/test_verify_windows_portable.py -q
 
       # 构建 / 验包 / 压缩 拆成三步（顺序即契约，MUST NOT 调换）：
       #   1. 构建：只产 dist/DeLector-<ver>-Windows-x64-Portable；
@@ -74,8 +74,8 @@ jobs:
 
   build-linux:
     name: Build Linux x64 Portable
-    timeout-minutes: 20
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -93,9 +93,9 @@ jobs:
           pip install pyinstaller pytest
           python -m spacy download de_core_news_sm
 
-      - name: Run Tests
+      - name: Run Packaging Smoke Tests
         run: |
-          pytest -v
+          pytest tests/test_server_packaging.py tests/test_server_health.py -q
 
       - name: Build Linux Portable
         run: |
@@ -173,8 +173,8 @@ jobs:
 
   build-macos:
     name: Build macOS Portable
-    timeout-minutes: 20
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -192,9 +192,9 @@ jobs:
           pip install pyinstaller pytest
           python -m spacy download de_core_news_sm
 
-      - name: Run Tests
+      - name: Run Packaging Smoke Tests
         run: |
-          pytest -v
+          pytest tests/test_server_packaging.py tests/test_server_health.py -q
 
       - name: Build macOS Portable
         run: |
