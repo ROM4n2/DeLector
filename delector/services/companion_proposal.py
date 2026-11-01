@@ -130,7 +130,7 @@ class CompanionProposalService:
                 if card_id:
                     try:
                         log_study_event("add_card", card_id, word, db_path=self.db_path)
-                    except Exception:
+                    except Exception:  # silent-ok: 学习事件埋点写入失败不回滚生词卡真实事务
                         pass
             conn.commit()
 

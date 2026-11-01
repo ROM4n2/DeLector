@@ -100,7 +100,10 @@ def distill_analysis_for_agent(raw_res: Dict[str, Any]) -> Dict[str, Any]:
             "tokens": tokens,
         })
 
-    return {"sentences": sentences}
+    return {
+        "sentences": sentences,
+        "stats": raw_res.get("stats", {}),
+    }
 
 
 async def run(payload: Dict[str, Any]) -> Dict[str, Any]:

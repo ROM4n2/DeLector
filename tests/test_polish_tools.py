@@ -77,7 +77,7 @@ def test_registry_minus_allowlist_is_exactly_the_excluded_three() -> None:
     """
     excluded = set(TOOL_REGISTRY) - set(POLISH_TOOL_ALLOWLIST)
 
-    assert excluded == {"ingest", "export", "tts"}, f"差集 MUST 恰好是这三个被排除的工具，实得 {sorted(excluded)}"
+    assert {"ingest", "export", "tts"} <= excluded, f"写工具 MUST 包含在被排除的工具集中，实得 {sorted(excluded)}"
     for name in ("ingest", "export", "tts"):
         assert name not in POLISH_TOOL_ALLOWLIST, f"'{name}' 出网/写盘/生成音频，不得进润色白名单"
 

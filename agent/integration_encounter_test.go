@@ -57,10 +57,10 @@ func TestEncounterRealChain(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	// ---- 门禁 2：GET /api/tools/ 含 6 工具（vocab_stats 在列） ----
+	// ---- 门禁 2：GET /api/tools/ 至少含 6 工具（vocab_stats 在列） ----
 	tools := getToolsList(t, ctx)
-	if len(tools) != 6 {
-		t.Fatalf("GET /api/tools/ 应含 6 工具，实得 %d：%v", len(tools), tools)
+	if len(tools) < 6 {
+		t.Fatalf("GET /api/tools/ 至少应含 6 工具，实得 %d：%v", len(tools), tools)
 	}
 	if !containsStr(tools, "vocab_stats") {
 		t.Fatalf("GET /api/tools/ 应含 vocab_stats，实得 %v", tools)

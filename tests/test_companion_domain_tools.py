@@ -419,6 +419,7 @@ def test_query_dictionary_async_run():
 def test_api_tools_route_query_dictionary_and_learner_profile():
     """Verify POST /api/tools/{tool_name} dispatches correctly for companion tools."""
     from fastapi.testclient import TestClient
+
     from delector.server import app
 
     client = TestClient(app, client=("127.0.0.1", 54321))

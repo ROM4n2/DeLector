@@ -33,7 +33,7 @@ class CompanionSessionService:
     def _ensure_tables(self, conn: sqlite3.Connection) -> None:
         try:
             init_companion_tables(conn)
-        except Exception:
+        except Exception:  # silent-ok: 幂等初始化伴学表，并发重试或已存在时无需中断
             pass
 
     def get_or_create_session(
@@ -142,7 +142,7 @@ class CompanionSessionService:
                 if row:
                     total = row["total"] or 0
                     mastered = row["mastered"] or 0
-            except Exception:
+            except Exception:  # silent-ok: 空库或生词卡表尚未就绪时安全回退至零统计值
                 pass
         return {
             "date": today_str,

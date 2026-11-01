@@ -41,6 +41,8 @@ _LAYER_MODULES = (
     "wb-scope.js",
     "rd-api.js",
     "cd-state.js",
+    "cp-api.js",
+    "cp-state.js",
 )
 
 # `cd-state.js` 由「Task 2」落盘（本任务只注册）。夹具树里必须有**占位**文件：
@@ -141,6 +143,8 @@ def rule5_dir(tmp_path: Path) -> Path:
         "}\n",
     )
     _write_module(d / "rd-api.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
+    _write_module(d / "cp-api.js", "import { api } from './core.js';\nexport async function dummy() {}\n")
+    _write_module(d / "cp-state.js", "export {};\n")
     _write_module(d / _CD_STATE, _CD_STATE_PLACEHOLDER)
     # 规则⑦：受「零顶层可变状态」约束的模块缺席同样会刷 `missing-mutable-state-module`。
     _write_module(d / _CARDS, _CARDS_PLACEHOLDER)

@@ -91,7 +91,7 @@ async def run(payload: Dict[str, Any]) -> Dict[str, Any]:
                         if lemma and lemma not in ("--", "-"):
                             extracted_tokens.append({"lemma": str(lemma), "text": t.get("text", "")})
                 raw_tokens = extracted_tokens
-            except Exception:
+            except Exception:  # silent-ok: spaCy 分词异常时安全降级为空 token 列表，由后续统一报错逻辑校验
                 pass
     if raw_tokens is None:
         raw_tokens = []

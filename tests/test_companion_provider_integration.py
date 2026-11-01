@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 import pytest
@@ -45,14 +45,14 @@ def test_companion_deepseek_2026_model_header_forwarding(
     class MockStreamResponse:
         status_code = 200
 
-        async def aiter_bytes(self):  # type: ignore[no-untyped-def]
+        async def aiter_bytes(self) -> AsyncIterator[bytes]:
             for line in sse_lines:
                 yield line
 
-        async def __aenter__(self):  # type: ignore[no-untyped-def]
+        async def __aenter__(self) -> MockStreamResponse:
             return self
 
-        async def __aexit__(self, *args):  # type: ignore[no-untyped-def]
+        async def __aexit__(self, *args: Any) -> None:
             pass
 
     class MockAsyncClient:
@@ -64,10 +64,10 @@ def test_companion_deepseek_2026_model_header_forwarding(
             captured_headers = kwargs.get("headers", {})
             return MockStreamResponse()
 
-        async def __aenter__(self):  # type: ignore[no-untyped-def]
+        async def __aenter__(self) -> MockAsyncClient:
             return self
 
-        async def __aexit__(self, *args):  # type: ignore[no-untyped-def]
+        async def __aexit__(self, *args: Any) -> None:
             pass
 
     monkeypatch.setattr(httpx, "AsyncClient", MockAsyncClient)
@@ -102,14 +102,14 @@ def test_companion_ollama_provider_header_forwarding(
     class MockStreamResponse:
         status_code = 200
 
-        async def aiter_bytes(self):  # type: ignore[no-untyped-def]
-            yield b"event: delta\ndata: {\"event\":\"delta\",\"text\":\"[Ollama Local]\"}\n\n"
-            yield b"event: done\ndata: {\"event\":\"done\",\"turns\":1,\"reason\":\"stop\"}\n\n"
+        async def aiter_bytes(self) -> AsyncIterator[bytes]:
+            yield b'event: delta\ndata: {"event":"delta","text":"[Ollama Local]"}\n\n'
+            yield b'event: done\ndata: {"event":"done","turns":1,"reason":"stop"}\n\n'
 
-        async def __aenter__(self):  # type: ignore[no-untyped-def]
+        async def __aenter__(self) -> MockStreamResponse:
             return self
 
-        async def __aexit__(self, *args):  # type: ignore[no-untyped-def]
+        async def __aexit__(self, *args: Any) -> None:
             pass
 
     class MockAsyncClient:
@@ -121,10 +121,10 @@ def test_companion_ollama_provider_header_forwarding(
             captured_headers = kwargs.get("headers", {})
             return MockStreamResponse()
 
-        async def __aenter__(self):  # type: ignore[no-untyped-def]
+        async def __aenter__(self) -> MockAsyncClient:
             return self
 
-        async def __aexit__(self, *args):  # type: ignore[no-untyped-def]
+        async def __aexit__(self, *args: Any) -> None:
             pass
 
     monkeypatch.setattr(httpx, "AsyncClient", MockAsyncClient)
