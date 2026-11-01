@@ -741,3 +741,16 @@ Caps: filesystem-read, filesystem-write, shell-exec, android-touch-drag, reader-
 - **CI Pytest 套件 Matrix 双分片提速**：
   - 在 `ci.yml` 引入并行矩阵：`unit` 分片跑 158 个业务单测，`cost-guards` 分片跑 3 个重型基准测试；
   - PR #187 包含 Windows 打包真启闸在内的 11 个 Job 100% SUCCESS，squash-merge 合入 master（commit `b89acb9`）。
+
+### 2026-11-01 18:35 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, ci-pipeline-optimization, reader-continuous-flow, cefr-vision-modes
+事件：**阅读器自然段连贯排版重塑 (ADR-0026)、三档 CEFR 视力透视胶囊与 CI 矩阵极限提速交付 (PR #190, #191, #192, #193 全绿合并)**。
+- **阅读器连续段落重塑与基线清零 (PR #191)**：
+  - 彻底根除正文 `<p>` 嵌套 `<div class="sentence-topology-strip">` 违反 HTML5 Phrasing Content 规范导致的浏览器逐句碎行问题；五场域拓扑分析完全收敛至右侧抽屉；
+  - 落地 ADR-0026：默认沉浸模式下 A1/A2 词底色清零（透明），B1/B2 弱化为微底纹，消除 80% 视觉色块噪声；C1 考点保留柔和点缀；
+  - 控制条引入「沉浸 / 考点 / 热力」三档视力透视胶囊，支持 `localStorage` 状态持久化记忆；
+  - 新增 `tests/test_reader_continuous_flow.py` 严格守护 `<p>` 内零块级节点契约。
+- **CI 流水线极限提速 (PR #190, #192, #193)**：
+  - Windows Portable Smoke（PR #190）：剔除无谓的 2,670+ 全量测试重复执行，收敛为 4 个跨平台打包烟测，Windows 测试耗时从 868s 骤降至 5s；
+  - 单元测试 4 路均衡并发矩阵（PR #192, #193）：全仓 167 个测试文件拆解为 6 个并行 Runner：`unit-1` (a-c, 37 files)、`unit-2` (d-g, 50 files)、`unit-3` (h-r, 30 files)、`unit-4` (s-z, 42 files)、`integration-heavy` (5 files)、`cost-guards` (3 files)；
+  - 完备性覆盖：167 个用例 100% 覆盖且零重叠；最长单片测试时间由 164s 降至 ~50s，整体并发流水线从 4+ 分钟全面压缩至 1.5 ~ 2 分钟内收敛。
