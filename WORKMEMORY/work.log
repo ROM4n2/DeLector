@@ -703,3 +703,17 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
   - 清理已合并的本地功能/发布/修复分支（`feat/companion-provider-registry-and-pi-compaction`、`release/v5.20.0`、`fix/ci-gates-ruff-layers-silent-degradation`、`chore/docs-archive-and-workmemory-rotation`）；
   - 清理远程已合并追踪分支（`origin/feat/...`、`origin/release/...`、`origin/fix/...`、`origin/chore/...`），执行 `git fetch --prune`；
   - 清理空 worktrees 目录残留；本地与远程分支彻底收敛至唯一的 `master` / `origin/master`。
+
+### 2026-11-01 10:40 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, license-hygiene
+事件：**DeLector 全仓正式切换为 Apache License 2.0 开源协议（PR #184 全绿合并）**。
+- **协议升级背景与法律护城河**：
+  - 顺应 DeLector 由纯 Web 工具向 Agent 复合体系（Go 伴学智能体 + 动态微切片 + 响应式 Android 客户端 + 德语拓扑五场域与句法分析算法）的演进；
+  - 引入 Apache 2.0 显式专利授权（Section 3）与反向专利诉讼终止（Patent Retaliation Clause），防范针对算法与运行时的潜在专利风险；
+  - 引入商标与客户端品牌保护（Section 6）以及二次分发修改留痕义务（Section 4b）；明确外部 PR 默认依据 Apache 2.0 提交（Section 5）。
+- **物理改动与 PR 交付链路**：
+  - 更新根目录 `LICENSE` 为官方 Apache License Version 2.0 规范文本（Copyright 2026 DeLector Contributors）；
+  - 更新 `README.md` 徽章与底部许可证章节链接；在 `CONTRIBUTING.md` 明确开源贡献授权契约；
+  - 提交创建分支 `chore/relicense-apache-2.0` 并建立 PR #184；
+  - 触发 GitHub Actions CI Run #41265479054，全部闸门与 2,669 项测试 100% SUCCESS 通过；
+  - PR #184 规范 squash-merge 合入 master（commit `603dd43`）；同步清理临时分支，主干保持全绿。
