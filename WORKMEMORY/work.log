@@ -690,3 +690,16 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - **排障三（No Silent Degradation 21 处未豁免站点）**：逐站核验 supervisor 进程拉起、LLM 阶梯 JSON 解析、词典级联回退与会话持久化等 21 处合规吞异常逻辑，补充 `# silent-ok: <REASON>` 具名豁免，`tools/check_silent_degradation.py` 0 违规通过。
 - **排障四（Go↔Python Integration Gate 断言与隔离环境）**：`integration_encounter_test.go` 历史硬编码 `len(tools) != 6` 随新领域工具接入而误报；调整为 `len(tools) < 6` 弹性下限断言；并在 `startRealSupervisor` 补充临时测试目录隔离数据库文件占位消除迁移预检阻塞。
 - **物理凭据**：`ruff check .` PASS，`check_layer_invariants.py` PASS，`check_silent_degradation.py` PASS，Go 全仓 185 passed (`-race`)，Go 集成测试 3 项全真链路 PASS，Python 回归 101 passed，前端 4 道机械门禁全绿。
+
+### 2026-11-01 09:30 | auto-gemini-3.8-flash__hermes | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+事件：**PR #181 全绿合入 master 与全仓 Git 分支深度收敛与清理**。
+- **CI 闸门 100% 全绿与 PR #181 合入**：
+  - 针对公共数据库导出面白名单、前端分层测试夹具、阅读器 XSS 消毒显式句法按钮、Supervisor 跨平台探针权限与工具契约等断言完成针对性修复与验证；
+  - 触发 GitHub Actions Run #41259217518 全部 7 项 Job 100% SUCCESS 通过，PR #181 规范 squash-merge 合入 master（commit `32ec5d7`）；
+  - master 分支触发的完整流水线 Run #41259824446 全量 2,669 项 Python 测试与 Go race 测试 100% SUCCESS 通过。
+- **全仓 Git 分支深度清理**：
+  - 清理已并入 master 的 6 个本地子代理独立分支（`hermes-subagent/subagent-sa-0-*`、`hermes-subagent/subagent-sa-1-*`、`hermes-subagent/subagent-sa-2-*`）；
+  - 清理已合并的本地功能/发布/修复分支（`feat/companion-provider-registry-and-pi-compaction`、`release/v5.20.0`、`fix/ci-gates-ruff-layers-silent-degradation`、`chore/docs-archive-and-workmemory-rotation`）；
+  - 清理远程已合并追踪分支（`origin/feat/...`、`origin/release/...`、`origin/fix/...`、`origin/chore/...`），执行 `git fetch --prune`；
+  - 清理空 worktrees 目录残留；本地与远程分支彻底收敛至唯一的 `master` / `origin/master`。
