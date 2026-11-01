@@ -241,6 +241,7 @@ async function _openReaderBody(id, token) {
     const sentWrapper = `
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
+        <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">🌳 句法</button>
       </span>
       <div id="sent-topology-${Number(sent.id)}" class="sentence-topology-strip hidden">${topoHtml}</div>
     `;

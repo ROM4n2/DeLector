@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -11,8 +12,10 @@ from delector.core.go_agent_supervisor import GoAgentSupervisor
 def test_supervisor_command_discovery_with_binary(tmp_path: Any) -> None:
     agent_dir = tmp_path / "agent"
     agent_dir.mkdir()
-    binary = agent_dir / "delector.exe"
+    binary_name = "delector.exe" if os.name == "nt" else "delector"
+    binary = agent_dir / binary_name
     binary.write_text("dummy binary")
+    binary.chmod(0o755)
 
     supervisor = GoAgentSupervisor(port=8002, root_dir=tmp_path, python_port=8000)
     cmd, cwd = supervisor.find_command()

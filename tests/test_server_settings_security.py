@@ -614,6 +614,7 @@ _SETTINGS_LOOPBACK_KEYS = {
     "tts_rate",
     "nlp_engine",
     "nlp_engine_detail",
+    "reasoning_effort",
 }
 
 

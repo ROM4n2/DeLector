@@ -61,6 +61,17 @@
   /* Layout */
   --drawer-width: min(420px, 92vw);
   --drawer-gap: 2rem;
+  --drawer-mobile-height: 65vh;
+
+  /* Semantic aliases */
+  --accent-color: var(--accent);
+  --bg-secondary: var(--paper-warm);
+  --border-color: var(--border);
+  --text-color: var(--ink);
+  --forest: var(--moss);
+  --pencil-light: var(--muted);
+  --font-mono: var(--mono);
+  --font-serif: var(--serif);
 
   /* CEFR Pastel Highlighters */
   --hl-A1: #e3effb;

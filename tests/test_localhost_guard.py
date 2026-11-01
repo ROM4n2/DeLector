@@ -33,6 +33,7 @@ PROTECTED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/audio/cache/clear"),
         ("POST", "/api/backup/prepare"),
         ("POST", "/api/backup/restore"),
+        ("POST", "/api/companion/proposal/execute"),
         ("POST", "/api/encounter/import-pack"),
         ("POST", "/api/encounter/pull-pack"),
         ("POST", "/api/encounter/texts"),

@@ -131,6 +131,16 @@ _FACADE_ALLOWLIST: Dict[str, str] = {
     "Request": (
         "同上：`_require_localhost` 的入参类型注解所需，fastapi 导入产物。"
     ),
+    "append_message": "伴学会话持久化片（Task 1）导入再导出",
+    "create_proposal": "伴学会话持久化片（Task 1）导入再导出",
+    "create_session": "伴学会话持久化片（Task 1）导入再导出",
+    "get_effective_reasoning_effort": "伴学思考强度配置导入再导出",
+    "get_messages": "伴学会话持久化片（Task 1）导入再导出",
+    "get_proposals": "伴学会话持久化片（Task 1）导入再导出",
+    "get_session": "伴学会话持久化片（Task 1）导入再导出",
+    "init_companion_tables": "伴学会话持久化片（Task 1）导入再导出",
+    "list_sessions": "伴学会话持久化片（Task 1）导入再导出",
+    "update_proposal_status": "伴学会话持久化片（Task 1）导入再导出",
 }
 
 # 防呆：基线一旦被误清空（或生成命令写错路径产出空表），「⊇」断言会**恒真**而失去意义。
@@ -147,6 +157,7 @@ _OWNER_CANDIDATES: Tuple[str, ...] = (
     "delector.core.db.content",
     "delector.core.db.records",
     "delector.core.db.vocab",
+    "delector.core.db.companion",
 )
 
 
