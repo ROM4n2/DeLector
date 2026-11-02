@@ -801,3 +801,6 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 ### 2026-11-03 01:45 | kimi-k3.1-pro__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 实测澄清「关闭伴读后点不开」不是现行 bug：真实浏览器（DOM click，视口 0x0）走 #panel-hide 关闭后 #companion-avatar display:flex 且 pointer-events=auto，点击即 enabled=true、char 恢复 block；该行为由 4de1ddf 把 pointer-events:none 收窄到 is-german-view 带来。设置页与研习工坊均无独立伴读开关，恢复入口就是该头像。提议失败路径加固：execute_proposal 对空 cards / 无有效 word 一律 ValueError（保持 pending、零写卡），路由 400；前端提案卡片对 create_vocab_card* 且无有效词条时禁用确认并显示「无可入库词条」，拒绝仍可用。验证：pytest 84 passed、探针 130 checks / 26 场景、三闸 PASS、go test 全绿、ruff 通过。注意：tests 子集运行时仓库根 test_*.db 被测试自建自删会触发 conftest 守卫误报，整套 8 文件跑则绿。
+
+### 2026-11-03 | Trae-Agent | NOTE
+修复两处测试回归：① 重生成 delector/data/preset_processed.json（process_german_text 输出口径漂移：stats 键序与 version 字段），test_preset_processed_data 7 passed；② 清理仓库根游离 delector.db/progress.db（*.db 已 gitignore 但残留触发数据目录迁移预检），test_save_wb_state_cost 与 test_tempus_advisory 恢复通过。localhost 守卫测试已绿（proposal/reject 已在白名单）。未推送、未建 PR。

@@ -575,14 +575,14 @@
           },
           {
             "clause_tree": {
-              "bracket_structure": "Hauptsatz + Konjunktiv II Klammer",
+              "bracket_structure": "Hauptsatz + Modalverb-Klammer",
               "children": [],
               "connector": "",
               "features": {
                 "has_modal": true,
                 "is_passive": false,
-                "is_subjunctive": true,
-                "mood": "Konjunktiv II",
+                "is_subjunctive": false,
+                "mood": "Indikativ",
                 "tense": "Präsens",
                 "voice": "Aktiv"
               },
@@ -3724,7 +3724,7 @@
           },
           {
             "clause_tree": {
-              "bracket_structure": "Hauptsatz + Konjunktiv II Klammer",
+              "bracket_structure": "Hauptsatz + Modalverb-Klammer",
               "children": [
                 {
                   "bracket_structure": "Hauptsatz-Klammer (V2)",
@@ -3892,8 +3892,8 @@
               "features": {
                 "has_modal": true,
                 "is_passive": false,
-                "is_subjunctive": true,
-                "mood": "Konjunktiv I",
+                "is_subjunctive": false,
+                "mood": "Indikativ",
                 "tense": "Präsens",
                 "voice": "Aktiv"
               },
@@ -3915,7 +3915,7 @@
                 19
               ],
               "topology": {
-                "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+                "bracket_structure": "Einfache Verbklammer",
                 "clause_type": "hauptsatz",
                 "field_texts": {
                   "linke_klammer": "habe",
@@ -4211,7 +4211,7 @@
               }
             ],
             "topology": {
-              "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+              "bracket_structure": "Einfache Verbklammer",
               "clause_type": "auto",
               "field_texts": {
                 "linke_klammer": "habe",
@@ -4407,14 +4407,14 @@
               "bracket_structure": "Hauptsatz + Zustandspassiv (sein + Partizip II)",
               "children": [
                 {
-                  "bracket_structure": "Hauptsatz + Konjunktiv II Klammer",
+                  "bracket_structure": "Hauptsatz + Modalverb-Klammer",
                   "children": [],
                   "connector": "",
                   "features": {
                     "has_modal": true,
                     "is_passive": false,
-                    "is_subjunctive": true,
-                    "mood": "Konjunktiv I",
+                    "is_subjunctive": false,
+                    "mood": "Indikativ",
                     "tense": "Präsens",
                     "voice": "Aktiv"
                   },
@@ -4438,7 +4438,7 @@
                     35
                   ],
                   "topology": {
-                    "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+                    "bracket_structure": "Einfache Verbklammer",
                     "clause_type": "hauptsatz",
                     "field_texts": {
                       "linke_klammer": "habe",
@@ -4673,8 +4673,8 @@
               "features": {
                 "has_modal": true,
                 "is_passive": true,
-                "is_subjunctive": true,
-                "mood": "Konjunktiv I",
+                "is_subjunctive": false,
+                "mood": "Indikativ",
                 "tense": "Präteritum",
                 "voice": "Zustandspassiv"
               },
@@ -5585,14 +5585,14 @@
           },
           {
             "clause_tree": {
-              "bracket_structure": "Hauptsatz + Konjunktiv II Klammer",
+              "bracket_structure": "Hauptsatz + Modalverb-Klammer",
               "children": [],
               "connector": "",
               "features": {
                 "has_modal": true,
                 "is_passive": false,
-                "is_subjunctive": true,
-                "mood": "Konjunktiv I",
+                "is_subjunctive": false,
+                "mood": "Indikativ",
                 "tense": "Präsens",
                 "voice": "Aktiv"
               },
@@ -5618,7 +5618,7 @@
                 49
               ],
               "topology": {
-                "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+                "bracket_structure": "Einfache Verbklammer",
                 "clause_type": "hauptsatz",
                 "field_texts": {
                   "linke_klammer": "habe",
@@ -6034,7 +6034,7 @@
               }
             ],
             "topology": {
-              "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+              "bracket_structure": "Einfache Verbklammer",
               "clause_type": "auto",
               "field_texts": {
                 "linke_klammer": "habe",
@@ -9879,14 +9879,14 @@
           },
           {
             "clause_tree": {
-              "bracket_structure": "Hauptsatz + Konjunktiv II Klammer",
+              "bracket_structure": "Hauptsatz-Klammer (V2)",
               "children": [],
               "connector": "",
               "features": {
                 "has_modal": false,
                 "is_passive": false,
-                "is_subjunctive": true,
-                "mood": "Konjunktiv II",
+                "is_subjunctive": false,
+                "mood": "Indikativ",
                 "tense": "Präsens",
                 "voice": "Aktiv"
               },
@@ -9908,7 +9908,7 @@
                 11
               ],
               "topology": {
-                "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+                "bracket_structure": "Zweiteilige Verbklammer",
                 "clause_type": "hauptsatz",
                 "field_texts": {
                   "linke_klammer": "heiße",
@@ -10206,7 +10206,7 @@
               }
             ],
             "topology": {
-              "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+              "bracket_structure": "Zweiteilige Verbklammer",
               "clause_type": "auto",
               "field_texts": {
                 "linke_klammer": "heiße",
@@ -12682,7 +12682,7 @@
                 61
               ],
               "topology": {
-                "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+                "bracket_structure": "Einfache Verbklammer",
                 "clause_type": "hauptsatz",
                 "field_texts": {
                   "linke_klammer": "gehe",
@@ -13128,7 +13128,7 @@
               }
             ],
             "topology": {
-              "bracket_structure": "Konjunktiv-Klammer (Irrealis / Höflichkeit)",
+              "bracket_structure": "Einfache Verbklammer",
               "clause_type": "auto",
               "field_texts": {
                 "linke_klammer": "gehe",
@@ -13440,7 +13440,7 @@
       "version": "3.5.0"
     }
   },
-  "generated_at": "2026-10-10T23:50:10",
+  "generated_at": "2026-11-03T01:45:37",
   "model": "de_core_news_sm",
   "processed_json_version": "3.5.0",
   "runtime": "spaCy 3.8.16 + de_core_news_sm",
