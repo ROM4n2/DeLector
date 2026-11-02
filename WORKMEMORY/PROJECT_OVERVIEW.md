@@ -54,7 +54,7 @@
 2. **Android 真机点检**：凡含 `static/` 改动的版本需覆盖安装验证（清单见 `docs/agents/ops.md`）；同时验证 Android 更新 chip 的两条假设（Chaquopy 能否完成公网 HTTPS、WebView 点外链是否交系统浏览器）——即门槛④。**未验证前不得把「代码已合并」记成「双端已验证」**。
 3. **README 首屏改造**（宣传线，门槛③已部分交付）：首屏已重构为「一句话价值 + 30 秒上手（普通用户双击运行 vs 开发者三步启动）」，待后续根据真实截图进一步美化。
 4. **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；`import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
-5. **C 档已交付（2026-10-19 回填）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C1~C9 均已交付（PR #143~#160，含 C9 终审与 mock 漂移闸 #150）；**C4 Android 真机点检仍暂缓**（见第 2 条，非交付缺口）。⚠️ ADR-0024 回灌已落地后，§4.3 实验的阈值与结论**只对"准入式裁判"有效** ⇒ 必须重跑或明确分域（ADR-0024 已登记资产折旧，不留给下一任发现）。
+5. **C 档已交付（2026-10-19 回填）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C1~C9 均已交付（PR #143~#160，含 C9 终审与 mock 漂移闸 #150）；**C4 Android 真机点检仍暂缓**（见第 2 条，非交付缺口）。⚠️ ADR-0024 资产折旧：回灌（C1，PR #147，2026-10-17）已落地 ⇒ §4.3 实验（N=20 报告）的阈值与结论**只对"准入式裁判 + 无回灌"历史形态有效**。**已明确分域**（2026-11-03：`docs/reviews/2026-10-16-judge-gaming-control-experiment.md` 顶部适用域声明）；重跑阻塞于 `DEEPSEEK_API_KEY` 缺失与 ADR-0024 D-2 四件工程前置（未跑，重跑前报告仅作历史形态基线）。
 6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则**已于 tests/test_app_version_source.py 补齐自动化守卫**；PWA 安装提示验证 / 192-512 PNG 图标；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。
 
 
