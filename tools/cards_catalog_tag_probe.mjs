@@ -123,18 +123,22 @@ function sliceFunctionBody(src, declNeedle) {
 const lf = (s) => s.replace(/\r\n/g, "\n");
 
 const cardsJs = fs.readFileSync(path.join(ROOT, "static", "js", "cards.js"), "utf8");
+/* 目录网格释义走 cd-state.js 的 formatCardDefinition（缺释义显示「待补充」），必须随切片进沙箱。 */
+const cdStateJs = fs.readFileSync(path.join(ROOT, "static", "js", "cd-state.js"), "utf8");
 
 let predicateFn = "";
 let statsFn = "";
+let definitionFn = "";
 let gridFn = "";
 try {
   predicateFn = sliceFunctionBody(cardsJs, "function isWorkbenchSourced(");
   statsFn = sliceFunctionBody(cardsJs, "function cardStatsTag(");
+  definitionFn = sliceFunctionBody(cdStateJs, "export function formatCardDefinition(");
   gridFn = sliceFunctionBody(cardsJs, "export function renderCatalogGrid(");
 } catch (e) {
   fail([`源码切片失败：${e.message}`]);
 }
-const transformed = predicateFn + "\n\n" + statsFn + "\n\n" + gridFn;
+const transformed = predicateFn + "\n\n" + statsFn + "\n\n" + definitionFn + "\n\n" + gridFn;
 
 /* 切片护栏：切歪 / 回退 ⇒ 直接红，不许静默假绿（项目红线 11） */
 const stripProblems = [];

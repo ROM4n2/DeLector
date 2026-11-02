@@ -174,6 +174,46 @@ export function renderProposalList(container, proposals, onAction) {
   }
   if (!Array.isArray(proposals) || proposals.length === 0) return;
 
+  // 批量操作：仅在存在 2 条以上待处理提议时出现，逐条复用同一 onAction 链路。
+  const pending = proposals.filter((p) => !p.status || p.status === 'pending');
+  if (pending.length >= 2 && typeof onAction === 'function') {
+    const bar = document.createElement('div');
+    bar.className = 'companion-proposal-batch-bar';
+
+    const confirmAllBtn = document.createElement('button');
+    confirmAllBtn.className = 'companion-btn-confirm';
+    confirmAllBtn.textContent = `全部确认 (${pending.length})`;
+
+    const rejectAllBtn = document.createElement('button');
+    rejectAllBtn.className = 'companion-btn-discard';
+    rejectAllBtn.textContent = '全部拒绝';
+
+    const runBatch = async (action) => {
+      confirmAllBtn.disabled = true;
+      rejectAllBtn.disabled = true;
+      const failed = [];
+      for (const proposal of pending) {
+        try {
+          await onAction(proposal, action);
+          proposal.status = action === 'confirm' ? 'accepted' : 'rejected';
+        } catch (err) {
+          console.error('Batch proposal action failed:', err);
+          failed.push(proposal.id || proposal.title || '未知提议');
+        }
+      }
+      renderProposalList(container, proposals, onAction);
+      if (failed.length > 0) {
+        alert('部分提议处理失败: ' + failed.join(', '));
+      }
+    };
+
+    confirmAllBtn.addEventListener('click', () => runBatch('confirm'));
+    rejectAllBtn.addEventListener('click', () => runBatch('reject'));
+    bar.appendChild(confirmAllBtn);
+    bar.appendChild(rejectAllBtn);
+    container.appendChild(bar);
+  }
+
   for (const proposal of proposals) {
     renderProposalCard(container, proposal, onAction);
   }

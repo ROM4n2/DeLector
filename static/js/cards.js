@@ -5,7 +5,7 @@ import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
-import { cardState, enterSegment, stepDeckState } from "./cd-state.js";
+import { cardState, enterSegment, stepDeckState, formatCardDefinition } from "./cd-state.js";
 export {
   setA1Mode,
   filterA1Topic,
@@ -352,7 +352,7 @@ export function renderDeckStage(vList, gList) {
 
             <!-- Back Center Body -->
             <div class="deck-back-body">
-              <div class="deck-def-text">${esc(isVocab ? card.definition_zh : card.explanation_zh)}</div>
+              <div class="deck-def-text">${esc(isVocab ? formatCardDefinition(card) : card.explanation_zh)}</div>
               ${!isVocab && card.rule_formula ? `<div class="grammar-memo-formula" style="margin-bottom:0.875rem;">${esc(card.rule_formula)}</div>` : ""}
               ${card.sentence_context ? `<div class="deck-sent-quote">${esc(card.sentence_context)}</div>` : ""}
             </div>
@@ -559,7 +559,7 @@ export function renderCatalogGrid(vList, gList) {
             <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, ${jsAttr(c.word)})" title="删除此卡片">✕</button>
           </div>
         </div>
-        <div class="memo-def">${esc(c.definition_zh)}</div>
+        <div class="memo-def">${esc(formatCardDefinition(c))}</div>
         <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos || "WORT")}${c.gender ? " · " + esc(c.gender) : ""}</div>
         <div class="memo-sent">${esc(c.sentence_context)}</div>
         <div class="card-footer-actions">
@@ -738,7 +738,7 @@ export function renderCurrentQuizCard() {
     if (wEl) wEl.textContent = card.word;
     if (bEl)
       bEl.textContent = `${card.cefr_level || "A1"} · ${card.pos || "WORT"}`;
-    if (dEl) dEl.textContent = card.definition_zh;
+    if (dEl) dEl.textContent = formatCardDefinition(card);
     if (sEl) sEl.textContent = card.sentence_context || "";
 
     playGermanAudio(card.word);
@@ -752,7 +752,7 @@ export function renderCurrentQuizCard() {
     const fbEl = document.getElementById("quiz-dict-feedback");
     const nextBtn = document.getElementById("quiz-dict-next");
 
-    if (defEl) defEl.textContent = card.definition_zh;
+    if (defEl) defEl.textContent = formatCardDefinition(card);
     if (hintEl) {
       const masked = (card.sentence_context || "").replace(
         new RegExp(card.word, "gi"),

@@ -51,3 +51,9 @@ export function stepDeckState(delta) {
   cardState.deck.index += delta;
   cardState.deck.flipped = false;
 }
+
+/** 缺中文释义时的统一展示口径（只读派生，不改数据）：空值一律显示「待补充」。 */
+export function formatCardDefinition(card) {
+  const text = card && typeof card.definition_zh === 'string' ? card.definition_zh.trim() : '';
+  return text || '待补充';
+}

@@ -42,6 +42,7 @@ const CP_DRAWER_SRC = read("static/js/cp-drawer.js");
 const CP_API_SRC = read("static/js/cp-api.js");
 const CP_PROPOSALS_SRC = read("static/js/cp-drawer-proposals.js");
 const CD_STATE_SRC = read("static/js/cd-state.js");
+const CARDS_SRC = read("static/js/cards.js");
 const MAIN_SRC = read("static/js/main.js");
 const READER_SRC = read("static/js/reader.js");
 const WRITER_SRC = read("static/js/writer.js");
@@ -100,6 +101,7 @@ function makeEl(id) {
     id: id || "",
     children: [],
     style: {},
+    dataset: {},
     className: "",
     textContent: "",
     innerHTML: "",
@@ -177,6 +179,9 @@ const documentStub = {
   },
   createElement(tag) {
     return makeEl(tag);
+  },
+  createTextNode(text) {
+    return { nodeValue: String(text), textContent: String(text) };
   },
   body: makeEl("body"),
   documentElement: makeEl("html"),
@@ -320,6 +325,7 @@ async function main() {
     {},
     "cp-drawer-proposals-stub"
   );
+  const realProposals = await instantiate(CP_PROPOSALS_SRC, {}, "cp-drawer-proposals-real.js");
   const cpDrawer = await instantiate(
     CP_DRAWER_SRC,
     {
@@ -611,6 +617,81 @@ async function main() {
     "G4 卡盒提议指令未要求模型给出 definition_zh 中文释义"
   );
 
+  /* G5. 缺释义统一展示 + 批量确认/全部拒绝 */
+  const { formatCardDefinition } = cdState.namespace;
+  check(formatCardDefinition({ definition_zh: "" }) === "待补充", "G5 空释义未显示待补充");
+  check(formatCardDefinition({ definition_zh: "  " }) === "待补充", "G5 空白释义未显示待补充");
+  check(formatCardDefinition({}) === "待补充", "G5 缺字段未显示待补充");
+  check(formatCardDefinition({ definition_zh: " 狗 " }) === "狗", "G5 正常释义被误改");
+  check(
+    (CARDS_SRC.match(/formatCardDefinition\(/g) || []).length >= 4,
+    "G5 卡盒网格/卡背/复习卡面未统一使用 formatCardDefinition"
+  );
+
+  const { renderProposalList, renderProposalCard } = realProposals.namespace;
+  const singleHost = makeEl("single-host");
+  renderProposalCard(
+    singleHost,
+    {
+      id: "p-single",
+      title: "T",
+      payload: { cards: [{ word: "der Witwer", reading: "[ˈvɪtvɐ]" }] },
+      status: "pending",
+    },
+    async () => {}
+  );
+  const singleContent = singleHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-content"
+  );
+  const singleText = singleContent.children[0].children
+    .map((n) => n.textContent || n.nodeValue || "")
+    .join("");
+  check(singleText.includes("待补充"), "G5 提案卡片缺释义未显示待补充");
+
+  const host = makeEl("batch-host");
+  const proposals = [
+    { id: "p1", action: "create_vocab_cards", title: "A", payload: { cards: [] }, status: "pending" },
+    { id: "p2", action: "create_vocab_cards", title: "B", payload: { cards: [] }, status: "pending" },
+  ];
+  const calls = [];
+  renderProposalList(host, proposals, async (p, action) => {
+    calls.push(p.id + ":" + action);
+  });
+  const bar = host.children.find((c) => c.className === "companion-proposal-batch-bar");
+  check(Boolean(bar), "G5 多条 pending 提议未出现批量操作条");
+  await bar.children[1].listeners.click();
+  check(calls.join(",") === "p1:reject,p2:reject", "G5 全部拒绝未逐条走 onAction");
+  check(proposals.every((p) => p.status === "rejected"), "G5 全部拒绝后状态未置 rejected");
+  check(
+    !host.children.some((c) => c.className === "companion-proposal-batch-bar"),
+    "G5 全部拒绝后批量条未消失"
+  );
+
+  const confirmHost = makeEl("confirm-host");
+  const proposals2 = [
+    { id: "p3", action: "create_vocab_cards", title: "C", payload: { cards: [] }, status: "pending" },
+    { id: "p4", action: "create_vocab_cards", title: "D", payload: { cards: [] }, status: "pending" },
+  ];
+  const confirmCalls = [];
+  renderProposalList(confirmHost, proposals2, async (p, action) => {
+    confirmCalls.push(p.id + ":" + action);
+  });
+  const bar2 = confirmHost.children.find((c) => c.className === "companion-proposal-batch-bar");
+  await bar2.children[0].listeners.click();
+  check(confirmCalls.join(",") === "p3:confirm,p4:confirm", "G5 全部确认未逐条走 onAction");
+  check(proposals2.every((p) => p.status === "accepted"), "G5 全部确认后状态未置 accepted");
+
+  const oneHost = makeEl("one-host");
+  renderProposalList(
+    oneHost,
+    [{ id: "p5", title: "E", payload: { cards: [] }, status: "pending" }],
+    async () => {}
+  );
+  check(
+    !oneHost.children.some((c) => c.className === "companion-proposal-batch-bar"),
+    "G5 单条 pending 不应出现批量条"
+  );
+
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
@@ -781,6 +862,8 @@ async function main() {
       "card-current-context": "pass",
       "card-partition": "pass",
       "card-empty-degrade": "pass",
+      "definition-fallback-ui": "pass",
+      "proposal-batch-actions": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",
