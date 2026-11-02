@@ -840,3 +840,22 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-03 06:43 | kimi-k3__trae | NOTE
 Caps: filesystem-read, shell-exec
 补记上一条的遗漏验证：并入 `a10bc69` 与新增 PWA 图标测试后，master 全量 `python -m pytest -q` 实测 **2704 passed / 2 skipped（493.07s，0 failed）**（较 05:24 基线 +2 正是新增 manifest 用例）。此前「未复跑全量」的保留说明作废，以本条实测为准。
+
+### 2026-11-03 07:33 | glm-5.3-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+任务：README 首屏截图（宣传门槛③，spark 评估选定）+ Tests 徽章漂移修正（2584/2586 → 2704/2706，2026-11-03 06:43 work.log 实测 2704 passed / 2 skipped）。
+计划：DELECTOR_DATA_DIR 指向临时目录隔离启动真实服务 → 浏览器实拍阅读器/卡盒首屏 → docs/images/ 入库 + README 嵌入 → 补截图存在性守卫测试 → 三闸 + build_index_html --check + ruff + 定向 pytest。
+不做范围：不改生产代码；不碰 Go agent；不做 GIF；不推送/不建 PR（用户约束）；不触碰 mcm-2027（已结项停泊）。
+分支说明：守卫测试属实现面，按协议 §1.8 走分支 + 本地 merge（merge 提交豁免 master 直推闸）；README/docs 在直推白名单内。另登记：origin/master..master 现存 14 个历史直推违规 sha（本会话之前遗留），pre-push 闸会在未来推送时拦下，处置由用户决定，本会话不重写历史。
+
+### 2026-11-03 07:49 | glm-5.3-flash__trae | NOTE (milestone)
+spark 评估选定项已交付：宣传门槛③「README 首屏截图」补齐 + Tests 徽章漂移修正。
+- 实测（非推断）：DELECTOR_DATA_DIR 临时目录隔离 + 端口 8123 启动真实服务，CDP 实拍两张图入库（docs/images/readme-home-hero.jpg 131694B、readme-reader-b1.jpg 133841B）；Merge 2ca78f6 ← branch commit 2a96eb0。
+- 验证：test_writer_mobile.py 31 passed（含新增 test_readme_first_screen_images_exist）；三闸 PASS（layer/mock/silent 全部无未豁免）；build_index_html --check PASS；ruff clean；git diff --check 无实质告警。
+- 徽章口径：2704/2706 = 2026-11-03 06:43 work.log 全量实测 2704 passed + 2 skipped（沿用旧徽章 passed/total 口径，total 含 skipped）。
+- 台账纠偏：PROJECT_OVERVIEW 第 5 条「D-2 四件工程前置阻塞」表述已过期 —— 实测 c385ea7 已落地四件（JsonlRunStore 续跑 / EXPERIMENT_TEMPERATURE=0.0 / run_connectivity_precheck / CostGate，均有测试），已改为「仅阻塞于 DEEPSEEK_API_KEY」。
+- 经验沉淀：①本机无 Chrome，chrome-devtools MCP 不可用；TRAE browseruse 工具可驱动自带浏览器，但 browser_take_screenshot 的 filename 参数不落盘（只有自动 shot-*.jpg 可用），引用截图需从 %TRAE%\trae-browser-screenshots\<attach-id>\ 取 JPG。②browser_click 对 offscreen 元素点击会被钳位丢失，先 scrollIntoView 再取新 ref。③视口 960x571 下词汇侧栏为抽屉不常开，README 主图用「光谱条+高亮正文+影读条」组合即可成立。
+- 新发现（登记待用户决策，不在本会话处理）：origin/master..master 存在 14 个历史直推违规 sha（含 5a4fcd7/502f050 等，改动文件超出 master 直推白名单），pre-push 闸将来推送 master 时必拦；合规出路是推 feature 分支走 PR 合并，或用户明确豁免。本会话新改动已按 §1.8 走分支+本地 merge，未新增违规。
+
+### 2026-11-03 07:49 | glm-5.3-flash__trae | WORK_END
+Status: DONE —— 门槛③截图交付 + 徽章纠偏 + 台账 D-2 纠偏；提交 2a96eb0（分支）/ 2ca78f6（merge）/ 簿记见本提交。遗留阻塞不变：真机（④）、DEEPSEEK_API_KEY（D-2 重跑 + gloss 富化）、≥5 真实反馈（①）、新手无协助流程（②）。
