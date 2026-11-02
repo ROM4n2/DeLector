@@ -159,7 +159,8 @@ def test_proposal_service_execute_success(test_db: str) -> None:
             "cards": [
                 {
                     "word": "der Hund",
-                    "reading": "狗",
+                    "reading": "[hʊnt]",
+                    "definition_zh": "狗",
                     "context_sentence": "Der Hund bellt.",
                     "lemma": "Hund",
                     "pos": "noun",
@@ -194,6 +195,40 @@ def test_proposal_service_execute_success(test_db: str) -> None:
     assert row["definition_zh"] == "狗"
 
 
+def test_proposal_service_never_stores_reading_as_definition(test_db: str) -> None:
+    """只有 reading（读音/音标）时，definition_zh 必须留空，绝不用音标冒充中文释义。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="der Witwer",
+        payload={
+            "cards": [
+                {
+                    "word": "der Witwer",
+                    "reading": "[ˈvɪtvɐ]",
+                    "context_sentence": "Der Witwer trauert.",
+                }
+            ]
+        },
+    )
+
+    res = prop_svc.execute_proposal(prop["id"], "create_vocab_cards", prop["payload"])
+    assert res["status"] == "ok"
+    assert res["created_count"] == 1
+
+    conn = sqlite3.connect(test_db)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM vocab_cards WHERE word = ?", ("der Witwer",)).fetchone()
+    conn.close()
+    assert row is not None
+    assert row["definition_zh"] == ""
+    assert row["definition_zh"] != "[ˈvɪtvɐ]"
+
+
 def test_proposal_service_execute_single_card_action(test_db: str) -> None:
     session_svc = CompanionSessionService(db_path=test_db)
     session = session_svc.get_or_create_session()
@@ -204,7 +239,12 @@ def test_proposal_service_execute_single_card_action(test_db: str) -> None:
         session_id=sid,
         action="create_vocab_card",
         title="die Katze",
-        payload={"word": "die Katze", "reading": "猫", "sentence_context": "Die Katze schläft."},
+        payload={
+            "word": "die Katze",
+            "definition_zh": "猫",
+            "reading": "[ˈkaːtsə]",
+            "sentence_context": "Die Katze schläft.",
+        },
     )
 
     res = prop_svc.execute_proposal(

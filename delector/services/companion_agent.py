@@ -72,10 +72,12 @@ COMPANION_AGENT_SYSTEM_PROMPT: str = (
     '     "proposal": {\n'
     '       "action": "create_vocab_cards",\n'
     '       "title": "加入核心生词卡",\n'
-    '       "payload": {"cards": [{"word": "...", "reading": "...", "context_sentence": "..."}]}\n'
+    '       "payload": {"cards": [{"word": "...", "definition_zh": "...", "reading": "...", '
+    '"context_sentence": "..."}]}\n'
     "     }\n"
     "   }\n"
     "注意：如果你认为用户需要复习或制卡，**必须**输出 proposal 提议由用户确认，绝对不可假定数据已入库。\n"
+    "提议卡片必须给出 definition_zh（中文释义）；reading 仅用于读音/音标且可省略，绝不能用音标充当释义。\n"
     "若上下文包含【当前写作草稿】且用户要求检查写作，必须调用 writing_check 工具"
     "并把草稿全文作为 text 参数；不得凭空编造检查结果。\n"
     "学习负荷/复习压力/水平估计类问题必须调用 get_learner_profile；"

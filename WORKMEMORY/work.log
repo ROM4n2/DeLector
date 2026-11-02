@@ -782,3 +782,11 @@ Caps: filesystem-read, filesystem-write, shell-exec, release-governance, multi-p
   - 创建并推送标签 `v5.20.2`；
   - 触发多平台构建发布工作流（Run #41301061240 与 Run #41301060963），包含轻量烟测加速后全部在 4 分钟内顺利编译构建通过；
   - GitHub Releases 资产已完整发布：`DeLector-v5.20.2-Windows-x64-Portable.zip`、`DeLector-v5.20.2-macOS.tar.gz`、`DeLector-v5.20.2-Linux-x64.tar.gz`、`DeLector-v5.20.2-Android.apk`。
+
+### 2026-11-03 00:55 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+卡盒 propose_vocab_cards + HITL 收尾：本地提交 4de1ddf（22 文件，未 push、未建 PR）。真实浏览器 + 临时 DB 副本实测：提议 -> 确认 accepted / vocab_cards 143->148；另一提议放弃 -> rejected / 无新增。修复「用户关闭伴读后头像被 pointer-events:none 误伤」：main.js 按 view 精确切 is-german-view，style.css 仅 german 禁点，german 硬禁用不变。验证：前端探针 109 checks / 23 场景、pytest 80 passed、go test ./... 全绿、check_companion_contract / check_frontend_layers / build_index_html --check 全 PASS、ruff 通过。坑：浏览器旧缓存 CSS 导致复测误报，硬刷新后通过；浮标在视口外时物理点击失败，DOM click 兜底。
+
+### 2026-11-03 01:19 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+definition_zh 回退错位修复：execute_proposal 不再把 reading 当中文释义，缺省留空；提案卡片缺释义显示「待补充」；Python/Go prompt 与 Go tool schema 明确要求 definition_zh，reading 仅作读音。历史只读审计（真实库，未改数据）：source=companion 共 19 条，4 条 definition_zh 无中文字符（id 125-128，内容为分音节/读音形式），IPA 样 0 条、空释义 0 条。E2E 证据（临时 DB 副本）：prop_f81e2518 accepted，vocab 148->153，网格可见 die Trauer 及中文释义；prop_fd0fde67 rejected，vocab 保持 153。验证：pytest 81 passed、探针 111 checks / 23 场景、go test ./... 全绿、三道闸 PASS、ruff 通过。坑：浏览器桥新标签视口 0x0，改用 CDP 在同一真实页面驱动并 Emulation.setDeviceMetricsOverride 恢复 1280x800。

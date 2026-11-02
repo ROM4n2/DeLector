@@ -40,6 +40,7 @@ const COMPANION_SRC = read("static/js/companion.js");
 const CP_STATE_SRC = read("static/js/cp-state.js");
 const CP_DRAWER_SRC = read("static/js/cp-drawer.js");
 const CP_API_SRC = read("static/js/cp-api.js");
+const CP_PROPOSALS_SRC = read("static/js/cp-drawer-proposals.js");
 const CD_STATE_SRC = read("static/js/cd-state.js");
 const MAIN_SRC = read("static/js/main.js");
 const READER_SRC = read("static/js/reader.js");
@@ -601,6 +602,14 @@ async function main() {
     "G4 无可用词条时未降级提示"
   );
   check(CP_DRAWER_SRC.includes("propose_vocab_cards"), "G4 卡盒入口未指向 propose_vocab_cards");
+  check(
+    CP_PROPOSALS_SRC.includes("definition_zh") && CP_PROPOSALS_SRC.includes("待补充"),
+    "G4 提案卡片未按 definition_zh 渲染释义或缺少「待补充」降级"
+  );
+  check(
+    CP_DRAWER_SRC.includes("definition_zh 中文释义"),
+    "G4 卡盒提议指令未要求模型给出 definition_zh 中文释义"
+  );
 
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(

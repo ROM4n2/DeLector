@@ -477,7 +477,9 @@ export function sendCardProposal() {
     return;
   }
   submitPrompt(
-    '请基于【当前卡盒词条】调用 propose_vocab_cards 工具，提议 3~5 个相关的 B1/B2 德语生词卡，并附简短释义与例句；所有卡片都必须等我确认后才能入库。'
+    '请基于【当前卡盒词条】调用 propose_vocab_cards 工具，提议 3~5 个相关的 B1/B2 德语生词卡，' +
+      '每张卡必须含 definition_zh 中文释义与例句（reading 仅用于读音/音标，不得充当释义）；' +
+      '所有卡片都必须等我确认后才能入库。'
   );
 }
 

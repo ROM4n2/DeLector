@@ -42,7 +42,9 @@ export function renderProposalCard(container, proposal, onAction) {
     const boldWord = document.createElement('strong');
     boldWord.textContent = c.word || '';
     itemEl.appendChild(boldWord);
-    itemEl.appendChild(document.createTextNode(': ' + (c.reading || '')));
+    // definition_zh 才是中文释义；reading 是读音/音标，缺释义时显式标记「待补充」。
+    const definition = typeof c.definition_zh === 'string' ? c.definition_zh.trim() : '';
+    itemEl.appendChild(document.createTextNode(': ' + (definition || '待补充')));
 
     if (c.context_sentence) {
       const sentEl = document.createElement('div');

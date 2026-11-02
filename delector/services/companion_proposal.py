@@ -125,7 +125,9 @@ class CompanionProposalService:
                 gender = str(c.get("gender") or "").strip()
                 plural = str(c.get("plural") or "").strip()
                 cefr_level = str(c.get("cefr_level") or "B1").strip()
-                definition_zh = str(c.get("definition_zh") or c.get("reading") or "").strip() or word
+                # definition_zh 只接受真正的中文释义：reading 是读音/音标，缺省时留空，
+                # 由前端提案卡片与卡盒 UI 显式标记「待补充」，绝不用音标冒充释义。
+                definition_zh = str(c.get("definition_zh") or "").strip()
                 sentence = str(c.get("sentence_context") or c.get("context_sentence") or "").strip()
 
                 cur = conn.execute(
