@@ -239,6 +239,11 @@ function updateQuickActionChips(hasText, view, hasDraft) {
   writerChips.forEach((c) => {
     c.classList.toggle('is-visible', writerContext);
   });
+  const progressContext = view === 'progress';
+  const progressChips = document.querySelectorAll('.companion-quick-chip.progress-required');
+  progressChips.forEach((c) => {
+    c.classList.toggle('is-visible', progressContext);
+  });
 }
 
 /** 刷新抽屉顶部视口研读语境条与手机端句子步进器 */
@@ -398,6 +403,46 @@ export function renderContextBar() {
   }
 
   updateQuickActionChips(Boolean(text), view, Boolean(draft));
+}
+
+/** 写作台输入时静默刷新草稿上下文（不追加聊天消息）。 */
+export function refreshWriterDraftContext() {
+  if (getActiveView() !== 'writer') return;
+  if (!window.Companion || typeof window.Companion.harvestStudyContext !== 'function') return;
+  const ctx = window.Companion.harvestStudyContext();
+  setCompanionContext(
+    ctx.selectedText,
+    ctx.articleTitle,
+    ctx.cefrLevel,
+    ctx.view,
+    ctx.contextSource,
+    ctx.draftText
+  );
+  renderContextBar();
+}
+
+/** 进度页专属：学习负荷 / 复习压力画像。 */
+export function sendProgressProfile() {
+  if (getActiveView() !== 'progress') return;
+  submitPrompt(
+    '请调用 get_learner_profile 工具，总结我的学习负荷、复习压力、已掌握词量与当前水平估计，并给出可执行的调整建议。'
+  );
+}
+
+/** 进度页专属：对输入框中的德语文本做 CEFR 词汇等级分布。 */
+export function sendProgressVocabStats() {
+  if (getActiveView() !== 'progress') return;
+  const input = document.getElementById('companion-input');
+  const text = (input && input.value ? input.value : '').trim();
+  if (!text) {
+    alert('请先在输入框粘贴需要统计的德语文本，再点击「词汇等级」。');
+    input?.focus();
+    return;
+  }
+  input.value = '';
+  submitPrompt(
+    '请调用 vocab_stats 工具统计以下德语文本的 CEFR 词汇等级分布，并解释已知/未知词比例：\n\n' + text
+  );
 }
 
 /** 同步当前阅读器选区或活动难句 */
@@ -1030,6 +1075,9 @@ export const CompanionDrawer = {
   submitPrompt,
   syncContext: syncCurrentContext,
   syncCurrentContext,
+  refreshWriterDraftContext,
+  sendProgressProfile,
+  sendProgressVocabStats,
   renderContextBar,
   renderProposalCard,
   renderProposalList,

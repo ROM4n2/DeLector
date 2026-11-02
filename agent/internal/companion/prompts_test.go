@@ -22,6 +22,9 @@ func TestBuildSystemPrompt(t *testing.T) {
 	if strings.Contains(promptEmpty, "【当前学习视口上下文】") {
 		t.Errorf("did not expect context block when activeContext is empty")
 	}
+	if !strings.Contains(promptEmpty, "get_learner_profile") {
+		t.Errorf("expected progress profile tool in base prompt")
+	}
 
 	// Case 2: Formatted context
 	ctx := companion.StudyContext{

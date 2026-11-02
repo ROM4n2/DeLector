@@ -53,7 +53,7 @@ def test_companion_context_probe_scenarios_pinned():
     )
     out = json.loads(res.stdout)
     assert out.get("ok") is True
-    assert out.get("checks", 0) >= 70, f"探针断言数过低（{out.get('checks')}），疑被掏空恒真化"
+    assert out.get("checks", 0) >= 80, f"探针断言数过低（{out.get('checks')}），疑被掏空恒真化"
 
     expected = {
         "reader-live-selection",
@@ -65,6 +65,8 @@ def test_companion_context_probe_scenarios_pinned():
         "reader-path-regression",
         "writer-draft-context",
         "writer-draft-gate",
+        "writer-draft-live-refresh",
+        "progress-partition",
         "main-wiring",
         "scope-key",
         "session-scope-reset",

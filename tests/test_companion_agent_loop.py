@@ -343,6 +343,56 @@ def test_loop_writing_check_receives_draft_text() -> None:
     assert captured_payload.get("text") == draft
 
 
+def test_loop_progress_tools_receive_inputs() -> None:
+    """进度页两个既有工具：get_learner_profile 空画像查询 + vocab_stats 文本入参。"""
+    captured: List[tuple[str, Dict[str, Any]]] = []
+    sample_text = "Die Transformation der modernen Arbeitswelt verändert vieles."
+    step = 0
+
+    async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        nonlocal step
+        step += 1
+        if step == 1:
+            return {
+                "tool_call": {
+                    "name": "get_learner_profile",
+                    "payload": {"include_weak_roots": True},
+                }
+            }
+        if step == 2:
+            return {
+                "tool_call": {
+                    "name": "vocab_stats",
+                    "payload": {"text": sample_text},
+                }
+            }
+        return {"reply_zh": "已汇总学习负荷与词汇等级。"}
+
+    async def fake_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
+        captured.append(("get_learner_profile", payload))
+        return {"status": "ok", "total_known_words": 120, "fsrs_due_count": 18}
+
+    async def fake_vocab(payload: Dict[str, Any]) -> Dict[str, Any]:
+        captured.append(("vocab_stats", payload))
+        return {"tokens_total": 8, "known_rate": 0.75, "level_hint": "B1"}
+
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "我的学习负荷和这段词汇等级怎么样？"}],
+            context={"view": "progress", "context_source": "none"},
+            chat_fn=mock_chat,
+            tools_override={
+                "get_learner_profile": fake_profile,
+                "vocab_stats": fake_vocab,
+            },
+        )
+    )
+
+    assert outcome.status == "ok"
+    assert captured[0] == ("get_learner_profile", {"include_weak_roots": True})
+    assert captured[1] == ("vocab_stats", {"text": sample_text})
+
+
 def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
     """当模型返回纯自然语言 Markdown（未按格式输出 JSON）时，循环自愈降级并交付答案，不抛异常崩溃。"""
     from delector.services import llm_client

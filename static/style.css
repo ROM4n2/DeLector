@@ -11605,12 +11605,14 @@ body.drawer-open .companion {
 }
 
 .companion-quick-chip.context-required,
-.companion-quick-chip.writer-draft-required {
+.companion-quick-chip.writer-draft-required,
+.companion-quick-chip.progress-required {
   display: none;
 }
 
 .companion-quick-chip.context-required.is-visible,
-.companion-quick-chip.writer-draft-required.is-visible {
+.companion-quick-chip.writer-draft-required.is-visible,
+.companion-quick-chip.progress-required.is-visible {
   display: inline-flex;
   align-items: center;
   animation: chipBouncePop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;

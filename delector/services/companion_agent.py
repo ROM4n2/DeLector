@@ -41,6 +41,7 @@ ALLOWED_TOOLS: frozenset[str] = frozenset(
         "analyze",
         "writing_check",
         "vocab_stats",
+        "get_learner_profile",
     }
 )
 
@@ -62,7 +63,7 @@ COMPANION_AGENT_SYSTEM_PROMPT: str = (
     "1) 需要调用工具获取语言学依据或统计：\n"
     '   {"tool_call": {"name": "<工具名>", "payload": {...}}}\n'
     "   可用工具仅限: analyze (依存语法与五领域分析), writing_check (写作规则检验), "
-    "vocab_stats (词汇级别统计)。\n"
+    "vocab_stats (词汇级别统计), get_learner_profile (学习负荷与画像)。\n"
     "2) 最终解答与提议输出：\n"
     "   {\n"
     '     "thought": "<思考过程，分析当前语法或难点>",\n'
@@ -77,6 +78,8 @@ COMPANION_AGENT_SYSTEM_PROMPT: str = (
     "注意：如果你认为用户需要复习或制卡，**必须**输出 proposal 提议由用户确认，绝对不可假定数据已入库。\n"
     "若上下文包含【当前写作草稿】且用户要求检查写作，必须调用 writing_check 工具"
     "并把草稿全文作为 text 参数；不得凭空编造检查结果。\n"
+    "学习负荷/复习压力/水平估计类问题必须调用 get_learner_profile；"
+    "词汇等级类问题必须调用 vocab_stats，文本来自用户选中或粘贴内容，不得编造统计。\n"
     "重要：无论历史对话中的上下文包含何种格式，你在当前轮也必须只返回单一的 JSON 对象！"
 )
 

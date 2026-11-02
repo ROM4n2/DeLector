@@ -42,6 +42,7 @@ const CP_DRAWER_SRC = read("static/js/cp-drawer.js");
 const CP_API_SRC = read("static/js/cp-api.js");
 const MAIN_SRC = read("static/js/main.js");
 const READER_SRC = read("static/js/reader.js");
+const WRITER_SRC = read("static/js/writer.js");
 const STYLE_SRC = read("static/style.css");
 
 /* ---- 真源码护栏：本轮关键实现片段必须逐字存在 ----------------------------- */
@@ -60,9 +61,13 @@ const MUST = [
   "draft_text",
   "contextSource = 'writer-draft'",
   "writer-draft-required",
+  "progress-required",
+  "sendProgressProfile",
+  "sendProgressVocabStats",
+  "refreshWriterDraftContext",
 ];
 for (const m of MUST) {
-  const srcs = [COMPANION_SRC, CP_STATE_SRC, CP_DRAWER_SRC, CP_API_SRC, MAIN_SRC, READER_SRC];
+  const srcs = [COMPANION_SRC, CP_STATE_SRC, CP_DRAWER_SRC, CP_API_SRC, MAIN_SRC, READER_SRC, WRITER_SRC];
   if (!srcs.some((s) => s.includes(m))) {
     fail(`真源码里缺 "${m}" —— 文件被换/被删/探针切歪`);
   }
@@ -128,6 +133,7 @@ function makeEl(id) {
       el.listeners = el.listeners || {};
       el.listeners[type] = fn;
     },
+    focus() {},
     get firstChild() {
       return el.children.length ? el.children[0] : null;
     },
@@ -140,8 +146,11 @@ for (const v of VIEWS) registry.set("view-" + v, makeEl("view-" + v));
 registry.set("companion-context-bar", makeEl("companion-context-bar"));
 const writerEditor = makeEl("ide-editor");
 registry.set("ide-editor", writerEditor);
+const companionInput = makeEl("companion-input");
+registry.set("companion-input", companionInput);
 const chips = [makeEl("chip-1"), makeEl("chip-2"), makeEl("chip-3")];
 const writerChips = [makeEl("writer-chip")];
+const progressChips = [makeEl("progress-chip-1"), makeEl("progress-chip-2")];
 
 const contextBar = registry.get("companion-context-bar");
 const documentStub = {
@@ -150,6 +159,7 @@ const documentStub = {
   },
   querySelectorAll(selector) {
     if (selector.includes(".companion-quick-chip.writer-draft-required")) return writerChips;
+    if (selector.includes(".companion-quick-chip.progress-required")) return progressChips;
     if (selector.includes(".companion-quick-chip.context-required")) return chips;
     return [];
   },
@@ -316,13 +326,19 @@ async function main() {
   const cpApi = await instantiate(CP_API_SRC, { "./core.js": async () => stubCore }, "cp-api.js");
 
   const { Companion: C, getCompanionScopeKey } = companion.namespace;
+  context.window.Companion = C;
   const {
     companionState,
     setCompanionContext,
     resetCompanionContextForView,
     resetCompanionSessionScope,
   } = cpState.namespace;
-  const { renderContextBar, openCompanionDrawer } = cpDrawer.namespace;
+  const {
+    renderContextBar,
+    openCompanionDrawer,
+    refreshWriterDraftContext,
+    sendProgressVocabStats,
+  } = cpDrawer.namespace;
 
   // cp-drawer 模块加载时会把真实 CompanionDrawer 合并进 window；这里重新装回探针 spy，
   // 才能观察 Companion.onClick 是否真的调用了 toggle。
@@ -450,6 +466,62 @@ async function main() {
   for (const chip of writerChips) {
     check(!chip.classList.contains("is-visible"), "G2 无草稿时检查草稿入口仍可见");
   }
+
+  /* G3. 进度页：能力分区、无数据降级、写作草稿静默刷新 */
+  setView("progress");
+  setSelection("");
+  setState({});
+  ctx = C.harvestStudyContext();
+  check(ctx.view === "progress", "G3 进度页 view 未识别");
+  check(ctx.selectedText === "" && ctx.draftText === "", "G3 进度页不应硬塞文本上下文");
+  check(ctx.contextSource === "none", "G3 进度页来源应保持 none");
+
+  setCompanionContext("", "", "", "progress", "none", "");
+  renderContextBar();
+  for (const chip of progressChips) {
+    check(chip.classList.contains("is-visible"), "G3 进度页专属入口未显示");
+  }
+  for (const chip of chips) {
+    check(!chip.classList.contains("is-visible"), "G3 进度页仍显示阅读器快捷问句");
+  }
+  for (const chip of writerChips) {
+    check(!chip.classList.contains("is-visible"), "G3 进度页仍显示写作检查入口");
+  }
+
+  setView("cards");
+  setCompanionContext("", "", "", "cards", "none", "");
+  renderContextBar();
+  for (const chip of progressChips) {
+    check(!chip.classList.contains("is-visible"), "G3 非进度页仍显示进度专属入口");
+  }
+
+  setView("writer");
+  writerEditor.textContent = DRAFT;
+  refreshWriterDraftContext();
+  check(companionState.activeContext.draftText === DRAFT, "G3 写作输入未刷新草稿上下文");
+  for (const chip of writerChips) {
+    check(chip.classList.contains("is-visible"), "G3 写作输入后检查入口未刷新");
+  }
+  check(
+    WRITER_SRC.includes("refreshWriterDraftContext"),
+    "G3 writer.js 未接线草稿输入刷新"
+  );
+  check(
+    CP_DRAWER_SRC.includes("get_learner_profile"),
+    "G3 学习负荷入口未指向 get_learner_profile"
+  );
+  check(
+    CP_DRAWER_SRC.includes("vocab_stats"),
+    "G3 词汇等级入口未指向 vocab_stats"
+  );
+  setView("progress");
+  companionInput.value = "";
+  context.__probe.alerts.length = 0;
+  sendProgressVocabStats();
+  check(
+    context.__probe.alerts.some((m) => m.includes("请先在输入框粘贴")),
+    "G3 词汇等级无文本时未降级提示"
+  );
 
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
@@ -590,6 +662,8 @@ async function main() {
       "reader-path-regression": "pass",
       "writer-draft-context": "pass",
       "writer-draft-gate": "pass",
+      "writer-draft-live-refresh": "pass",
+      "progress-partition": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",
