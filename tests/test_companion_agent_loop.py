@@ -292,6 +292,29 @@ def test_loop_injects_viewport_study_context() -> None:
     assert "B1" in str(system_msg.get("content", ""))
 
 
+def test_loop_injects_view_and_context_source() -> None:
+    """view / context_source 必须进入 Python 回退路径的系统提示词。"""
+    captured_messages: List[Dict[str, Any]] = []
+
+    async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        captured_messages.extend(kwargs.get("messages", []))
+        return {"reply_zh": "已读取页面上下文。"}
+
+    asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "当前在哪一页？"}],
+            context={"view": "cards", "context_source": "none"},
+            chat_fn=mock_chat,
+        )
+    )
+
+    system_msg = next((m for m in captured_messages if m.get("role") == "system"), None)
+    assert system_msg is not None
+    content = str(system_msg.get("content", ""))
+    assert "【当前页面】: cards" in content
+    assert "【上下文来源】: none" in content
+
+
 def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
     """当模型返回纯自然语言 Markdown（未按格式输出 JSON）时，循环自愈降级并交付答案，不抛异常崩溃。"""
     from delector.services import llm_client

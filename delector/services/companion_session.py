@@ -40,26 +40,42 @@ class CompanionSessionService:
         self,
         article_id: Optional[str] = None,
         title: str = "新伴学会话",
+        scope_key: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """查询关联文章（或全局）的最新活跃会话；若不存在则创建新会话。"""
+        """查询指定 scope / 文章 / 全局的最新活跃会话；若不存在则创建新会话。"""
         norm_article_id = article_id.strip() if article_id else None
+        norm_scope_key = scope_key.strip() if scope_key else None
         title = title.strip() or "新伴学会话"
 
         with get_db(self.db_path) as conn:
             try:
-                sessions = list_sessions(conn, article_id=norm_article_id, limit=20)
+                if norm_scope_key is not None:
+                    sessions = list_sessions(conn, scope_key=norm_scope_key, limit=20)
+                else:
+                    sessions = list_sessions(conn, article_id=norm_article_id, limit=20)
             except sqlite3.OperationalError:
                 self._ensure_tables(conn)
-                sessions = list_sessions(conn, article_id=norm_article_id, limit=20)
+                if norm_scope_key is not None:
+                    sessions = list_sessions(conn, scope_key=norm_scope_key, limit=20)
+                else:
+                    sessions = list_sessions(conn, article_id=norm_article_id, limit=20)
 
-            if norm_article_id is not None:
+            if norm_scope_key is not None:
+                if sessions:
+                    return sessions[0]
+            elif norm_article_id is not None:
                 if sessions:
                     return sessions[0]
             else:
                 for s in sessions:
                     if s.get("article_id") is None:
                         return s
-            return create_session(conn, article_id=norm_article_id, title=title)
+            return create_session(
+                conn,
+                article_id=norm_article_id,
+                title=title,
+                scope_key=norm_scope_key,
+            )
 
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """按 ID 查询伴学会话元数据。"""
@@ -120,15 +136,27 @@ class CompanionSessionService:
         self,
         article_id: Optional[str] = None,
         limit: int = 20,
+        scope_key: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """查询指定文章或全局的最新活跃伴学会话。"""
+        """查询指定 scope / 文章或全局的最新活跃伴学会话。"""
         norm_article_id = article_id.strip() if article_id else None
+        norm_scope_key = scope_key.strip() if scope_key else None
         with get_db(self.db_path) as conn:
             try:
-                return list_sessions(conn, article_id=norm_article_id, limit=limit)
+                return list_sessions(
+                    conn,
+                    article_id=norm_article_id,
+                    scope_key=norm_scope_key,
+                    limit=limit,
+                )
             except sqlite3.OperationalError:
                 self._ensure_tables(conn)
-                return list_sessions(conn, article_id=norm_article_id, limit=limit)
+                return list_sessions(
+                    conn,
+                    article_id=norm_article_id,
+                    scope_key=norm_scope_key,
+                    limit=limit,
+                )
 
     def get_context_summary(self) -> Dict[str, Any]:
         """返回当前学习与视口上下文摘要 (生词总量与已掌握数)。"""

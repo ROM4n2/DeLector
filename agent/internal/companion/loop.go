@@ -20,10 +20,12 @@ const (
 
 // StudyContext 承载学习者前端当前视口上下文。
 type StudyContext struct {
-	ArticleTitle string `json:"article_title,omitempty"`
-	CEFRLevel    string `json:"cefr_level,omitempty"`
-	SelectedText string `json:"selected_text,omitempty"`
-	SentenceID   string `json:"sentence_id,omitempty"`
+	ArticleTitle  string `json:"article_title,omitempty"`
+	CEFRLevel     string `json:"cefr_level,omitempty"`
+	SelectedText  string `json:"selected_text,omitempty"`
+	SentenceID    string `json:"sentence_id,omitempty"`
+	View          string `json:"view,omitempty"`
+	ContextSource string `json:"context_source,omitempty"`
 }
 
 // Message 表示多轮对话中的一条消息。
@@ -138,7 +140,8 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 
 	// 1. 构建初始对话消息列表
 	systemContent := CompanionSystemPrompt
-	if req.Context.SelectedText != "" || req.Context.ArticleTitle != "" {
+	if req.Context.SelectedText != "" || req.Context.ArticleTitle != "" ||
+		req.Context.View != "" || req.Context.ContextSource != "" {
 		systemContent += "\n\n【当前学习视口上下文】"
 		if req.Context.ArticleTitle != "" {
 			systemContent += fmt.Sprintf("\n- 文章: %s", req.Context.ArticleTitle)
@@ -148,6 +151,12 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		}
 		if req.Context.SelectedText != "" {
 			systemContent += fmt.Sprintf("\n- 当前聚焦句子: %s", req.Context.SelectedText)
+		}
+		if req.Context.View != "" {
+			systemContent += fmt.Sprintf("\n- 当前页面: %s", req.Context.View)
+		}
+		if req.Context.ContextSource != "" {
+			systemContent += fmt.Sprintf("\n- 上下文来源: %s", req.Context.ContextSource)
 		}
 	}
 

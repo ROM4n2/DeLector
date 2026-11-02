@@ -49,6 +49,31 @@ def extract_frontend_events(js_path: Path) -> set[str]:
     return set(pattern.findall(content))
 
 
+def _check_request_contract(errors: list[str]) -> None:
+    """校验加法式请求字段在 Python / 前端 / Go 三处一致，且响应头被前端消费。"""
+    py_req = ROOT / "delector" / "routes" / "companion.py"
+    js_api = ROOT / "static" / "js" / "cp-api.js"
+    go_ctx = ROOT / "agent" / "internal" / "companion" / "loop.go"
+
+    py_text = py_req.read_text(encoding="utf-8") if py_req.is_file() else ""
+    js_text = js_api.read_text(encoding="utf-8") if js_api.is_file() else ""
+    go_text = go_ctx.read_text(encoding="utf-8") if go_ctx.is_file() else ""
+
+    for field in ("view", "context_source", "scope_key"):
+        if f"{field}: Optional[str]" not in py_text:
+            errors.append(f"CompanionChatReq 缺少可选字段: {field}")
+        if f"reqBody.{field}" not in js_text:
+            errors.append(f"cp-api.js 请求体未携带字段: {field}")
+    for field in ("view", "context_source"):
+        if f'json:"{field},omitempty"' not in go_text:
+            errors.append(f"Go StudyContext 缺少 JSON 字段: {field}")
+
+    if "X-Session-ID" not in js_text:
+        errors.append("cp-api.js 未读取响应头 X-Session-ID")
+    if "onSessionId" not in js_text:
+        errors.append("cp-api.js 未提供 onSessionId 回填回调")
+
+
 def main() -> int:
     _pin_utf8_streams()
     py_file = ROOT / "delector" / "services" / "companion_agent.py"
@@ -81,7 +106,11 @@ def main() -> int:
     if drift_from_spec:
         errors.append(f"与规范契约 SPEC_EVENTS 存在漂移: {sorted(drift_from_spec)}")
 
-    # 4. 机械校验 main.js window.CompanionDrawer 导出接口完整性（防 onclick 死绑定与未导出缺陷）
+    # 4. 请求契约：view / context_source / scope_key 必须同时出现在
+    #    FastAPI 请求模型、前端请求体、Go StudyContext；X-Session-ID 必须被前端读取。
+    _check_request_contract(errors)
+
+    # 5. 机械校验 main.js window.CompanionDrawer 导出接口完整性（防 onclick 死绑定与未导出缺陷）
     main_js_file = ROOT / "static" / "js" / "main.js"
     if main_js_file.is_file():
         main_content = main_js_file.read_text(encoding="utf-8")
@@ -110,7 +139,10 @@ def main() -> int:
         return 1
 
     events_str = ", ".join(sorted(SPEC_EVENTS))
-    print(f"[check_companion_contract] PASS: 伴学双向 SSE 契约完美对齐 ({len(SPEC_EVENTS)} 种事件: {events_str})。")
+    print(
+        f"[check_companion_contract] PASS: 伴学双向 SSE 契约完美对齐 "
+        f"({len(SPEC_EVENTS)} 种事件: {events_str})；请求字段 view/context_source/scope_key 三端一致。"
+    )
     return 0
 
 

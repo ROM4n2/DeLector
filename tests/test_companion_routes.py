@@ -139,6 +139,82 @@ def test_companion_proposal_execute_success(
     assert res_data.get("created_count") == 1
 
 
+def test_companion_chat_scope_isolation_and_session_header(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """scope_key 隔离会话；无 session_id 时用响应头 X-Session-ID 稳定命中同一会话。"""
+    db_file = tmp_path / "scope_isolation.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+
+    captured_contexts: list[Any] = []
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        captured_contexts.append(kwargs.get("context"))
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+
+    client = TestClient(companion_app)
+
+    def _chat(scope_key: str, extra: dict[str, Any] | None = None) -> str:
+        body = {"messages": [{"role": "user", "content": "Hallo"}], "scope_key": scope_key}
+        body.update(extra or {})
+        with client.stream("POST", "/api/companion/chat", json=body) as response:
+            assert response.status_code == 200
+            sid = response.headers.get("x-session-id")
+            assert sid
+            list(response.iter_lines())
+        return sid
+
+    sid_cards_1 = _chat("view:cards", {"view": "cards", "context_source": "none"})
+    sid_cards_2 = _chat("view:cards")
+    sid_progress = _chat("view:progress")
+
+    assert sid_cards_1 == sid_cards_2
+    assert sid_progress != sid_cards_1
+    assert captured_contexts[0] == {"view": "cards", "context_source": "none"}
+
+    scoped = client.get("/api/companion/sessions/scoped/view:cards")
+    assert scoped.status_code == 200
+    scoped_ids = [s["id"] for s in scoped.json()["sessions"]]
+    assert scoped_ids == [sid_cards_1]
+
+
+def test_companion_chat_without_new_fields_keeps_legacy_context(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """不填 view/context_source/scope_key 时，context 原样透传（缺省路径不变）。"""
+    db_file = tmp_path / "legacy_context.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        captured["context"] = kwargs.get("context")
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+
+    client = TestClient(companion_app)
+    body = {
+        "messages": [{"role": "user", "content": "Hallo"}],
+        "context": {"selected_text": "Der Satz.", "article_title": "T", "cefr_level": "B1"},
+    }
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    assert captured["context"] == {
+        "selected_text": "Der Satz.",
+        "article_title": "T",
+        "cefr_level": "B1",
+    }
+
+
 def test_companion_chat_proxies_to_go_agent_when_available(
     companion_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,

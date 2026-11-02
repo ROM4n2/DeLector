@@ -16,6 +16,7 @@ def init_companion_tables(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS companion_sessions (
             id TEXT PRIMARY KEY,
             article_id TEXT,
+            scope_key TEXT,
             title TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -23,10 +24,23 @@ def init_companion_tables(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    # 加法式迁移：老库没有 scope_key 列时补列，并把存量会话归入全局 scope。
+    columns = {row[1] for row in cursor.execute("PRAGMA table_info(companion_sessions)").fetchall()}
+    if "scope_key" not in columns:
+        cursor.execute("ALTER TABLE companion_sessions ADD COLUMN scope_key TEXT")
+    cursor.execute(
+        "UPDATE companion_sessions SET scope_key = 'view:global' WHERE scope_key IS NULL"
+    )
     cursor.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_companion_sessions_article
         ON companion_sessions(article_id, updated_at DESC);
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_companion_sessions_scope
+        ON companion_sessions(scope_key, updated_at DESC);
         """
     )
 
@@ -79,6 +93,7 @@ def create_session(
     conn: sqlite3.Connection,
     article_id: Optional[str] = None,
     title: str = "新伴学会话",
+    scope_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """创建新的伴学会话。"""
     session_id = f"ses_{uuid.uuid4().hex[:16]}"
@@ -86,15 +101,16 @@ def create_session(
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO companion_sessions (id, article_id, title, created_at, updated_at, is_archived)
-        VALUES (?, ?, ?, ?, ?, 0)
+        INSERT INTO companion_sessions (id, article_id, scope_key, title, created_at, updated_at, is_archived)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
         """,
-        (session_id, article_id, title, now, now),
+        (session_id, article_id, scope_key, title, now, now),
     )
     conn.commit()
     return {
         "id": session_id,
         "article_id": article_id,
+        "scope_key": scope_key,
         "title": title,
         "created_at": now,
         "updated_at": now,
@@ -109,7 +125,7 @@ def get_session(
     cursor = conn.cursor()
     row = cursor.execute(
         """
-        SELECT id, article_id, title, created_at, updated_at, is_archived
+        SELECT id, article_id, scope_key, title, created_at, updated_at, is_archived
         FROM companion_sessions
         WHERE id = ?
         """,
@@ -124,13 +140,25 @@ def list_sessions(
     conn: sqlite3.Connection,
     article_id: Optional[str] = None,
     limit: int = 20,
+    scope_key: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """查询指定文章或全局的伴学会话列表。"""
+    """查询指定 scope、文章或全局的伴学会话列表。"""
     cursor = conn.cursor()
-    if article_id:
+    if scope_key:
         rows = cursor.execute(
             """
-            SELECT id, article_id, title, created_at, updated_at, is_archived
+            SELECT id, article_id, scope_key, title, created_at, updated_at, is_archived
+            FROM companion_sessions
+            WHERE scope_key = ? AND is_archived = 0
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (scope_key, limit),
+        ).fetchall()
+    elif article_id:
+        rows = cursor.execute(
+            """
+            SELECT id, article_id, scope_key, title, created_at, updated_at, is_archived
             FROM companion_sessions
             WHERE article_id = ? AND is_archived = 0
             ORDER BY updated_at DESC
@@ -141,7 +169,7 @@ def list_sessions(
     else:
         rows = cursor.execute(
             """
-            SELECT id, article_id, title, created_at, updated_at, is_archived
+            SELECT id, article_id, scope_key, title, created_at, updated_at, is_archived
             FROM companion_sessions
             WHERE is_archived = 0
             ORDER BY updated_at DESC
