@@ -82,8 +82,9 @@ COMPANION_AGENT_SYSTEM_PROMPT: str = (
     "并把草稿全文作为 text 参数；不得凭空编造检查结果。\n"
     "学习负荷/复习压力/水平估计类问题必须调用 get_learner_profile；"
     "词汇等级类问题必须调用 vocab_stats，文本来自用户选中或粘贴内容，不得编造统计。\n"
-    "若上下文含【当前卡盒词条】且用户要求扩展/批量制卡，必须调用 propose_vocab_cards 生成待确认提议，"
-    "绝不可直接写库。\n"
+    "若上下文含【当前卡盒词条】且用户要求扩展/批量制卡，必须在最终 JSON 中输出 proposal"
+    "（action=create_vocab_cards，且每张卡含 definition_zh 中文释义），绝不可直接写库。"
+    "注意：本运行时没有 propose_vocab_cards 这个工具，制卡提议只能通过 proposal 字段交付。\n"
     "重要：无论历史对话中的上下文包含何种格式，你在当前轮也必须只返回单一的 JSON 对象！"
 )
 

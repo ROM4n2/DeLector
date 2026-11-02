@@ -441,6 +441,17 @@ def test_loop_card_context_injection_and_proposal_payload_preserved() -> None:
     assert prop["payload"]["cards"][0]["definition_zh"] == "夜晚"
 
 
+def test_python_prompt_never_requires_forbidden_tool_call() -> None:
+    """Python 回退内核没有 propose_vocab_cards 工具，提示词不得要求 tool_call 制卡。"""
+    from delector.services.companion_agent import ALLOWED_TOOLS, COMPANION_AGENT_SYSTEM_PROMPT
+
+    assert "propose_vocab_cards" not in ALLOWED_TOOLS
+    assert "调用 propose_vocab_cards" not in COMPANION_AGENT_SYSTEM_PROMPT
+    assert "本运行时没有 propose_vocab_cards 这个工具" in COMPANION_AGENT_SYSTEM_PROMPT
+    assert '"proposal"' in COMPANION_AGENT_SYSTEM_PROMPT
+    assert "definition_zh" in COMPANION_AGENT_SYSTEM_PROMPT
+
+
 def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
     """当模型返回纯自然语言 Markdown（未按格式输出 JSON）时，循环自愈降级并交付答案，不抛异常崩溃。"""
     from delector.services import llm_client
