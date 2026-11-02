@@ -268,6 +268,31 @@ export const PHRASES = {
   ]
 };
 
+// ── 当前视图识别（Agent 上下文来源隔离的唯一判据） ──────────────────────────
+const ACTIVE_VIEW_IDS = ['reader', 'home', 'cards', 'progress', 'writer', 'exam', 'search', 'encounter', 'german'];
+
+/** 返回当前激活的 view（无激活视图时返回空串）。 */
+export function getActiveView() {
+  if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return '';
+  for (const view of ACTIVE_VIEW_IDS) {
+    const el = document.getElementById('view-' + view);
+    if (el && el.classList && el.classList.contains('active')) return view;
+  }
+  return '';
+}
+
+/** 返回当前页面/文章的会话 scope key：article:<id> 或 view:<name>。 */
+export function getCompanionScopeKey() {
+  const view = getActiveView();
+  const articleId = window.state && window.state.currentArticle
+    ? window.state.currentArticle.id
+    : null;
+  if (view === 'reader' && articleId !== null && articleId !== undefined && articleId !== '') {
+    return 'article:' + articleId;
+  }
+  return 'view:' + (view || 'global');
+}
+
 // ── SVG Sanitizer & Custom Character Processing ────────────────────────────
 export function sanitizeSvg(rawSvg) {
   if (typeof rawSvg !== 'string' || !rawSvg.trim()) {
@@ -571,6 +596,10 @@ export const Companion = {
   },
 
   onClick(evt) {
+    // 统一入口准入：german 工作台（iframe 全屏）真正禁用伴学入口。
+    if (getActiveView() === 'german') {
+      return;
+    }
     if (this._suppressClickUntil && Date.now() < this._suppressClickUntil) {
       return;
     }
@@ -605,50 +634,62 @@ export const Companion = {
   },
 
   harvestStudyContext() {
+    const view = getActiveView();
     let selectedText = '';
-    // 1. 优先读取当前 DOM 原生选区
+    let contextSource = 'none';
+
+    // 1. 实时 DOM 选区：所有页面唯一允许的即时来源
     if (window.getSelection) {
       const sel = window.getSelection().toString().trim();
       if (sel && sel.length > 0 && sel.length < 500) {
         selectedText = sel;
+        contextSource = 'live-selection';
       }
     }
-    // 2. 其次读取 reader 的 activeSelectedRangeText
-    if (!selectedText && window.state && window.state.activeSelectedRangeText) {
-      selectedText = window.state.activeSelectedRangeText.trim();
-    }
-    // 3. 再次读取当前正在点检的句子 (activeSelectedSentId)
-    if (!selectedText && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
-      const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
-      if (sent && sent.text) {
-        selectedText = sent.text.trim();
+
+    // 2. 只有阅读器允许读取阅读器状态（其它页面 MUST NOT 复用上一篇的残留）
+    let articleTitle = '';
+    let cefrLevel = '';
+    if (view === 'reader') {
+      if (!selectedText && window.state && window.state.activeSelectedRangeText) {
+        selectedText = window.state.activeSelectedRangeText.trim();
+        contextSource = 'reader-state';
       }
-    }
-    // 4. 若选中文本因 span 紧贴缺失空格，且能定位到当前句，自动恢复德语词间空格
-    if (selectedText && !selectedText.includes(' ') && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
-      const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
-      if (sent && sent.text) {
-        if (typeof window.restoreSentenceSpaces === 'function') {
-          selectedText = window.restoreSentenceSpaces(selectedText, sent.text);
-        } else if (sent.text.replace(/\s+/g, '') === selectedText.replace(/\s+/g, '')) {
+      if (!selectedText && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
+        const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
+        if (sent && sent.text) {
           selectedText = sent.text.trim();
+          contextSource = 'reader-state';
         }
       }
-    }
-    let articleTitle = '';
-    if (window.state && window.state.currentArticle && window.state.currentArticle.title) {
-      articleTitle = window.state.currentArticle.title;
-    } else {
-      const titleEl = document.querySelector('.article-title, #reader-article-title, .reader-header-title');
-      if (titleEl) {
-        articleTitle = titleEl.textContent.trim();
+      // 3. 若选中文本因 span 紧贴缺失空格，且能定位到当前句，自动恢复德语词间空格
+      if (selectedText && !selectedText.includes(' ') && window.state && window.state.activeSelectedSentId && window.state.currentArticle?.sentences) {
+        const sent = window.state.currentArticle.sentences.find(s => s.id === window.state.activeSelectedSentId);
+        if (sent && sent.text) {
+          if (typeof window.restoreSentenceSpaces === 'function') {
+            selectedText = window.restoreSentenceSpaces(selectedText, sent.text);
+          } else if (sent.text.replace(/\s+/g, '') === selectedText.replace(/\s+/g, '')) {
+            selectedText = sent.text.trim();
+          }
+        }
       }
+      if (window.state && window.state.currentArticle && window.state.currentArticle.title) {
+        articleTitle = window.state.currentArticle.title;
+      } else {
+        const titleEl = document.querySelector('.article-title, #reader-article-title, .reader-header-title');
+        if (titleEl) {
+          articleTitle = titleEl.textContent.trim();
+        }
+      }
+      cefrLevel = (window.state && window.state.currentArticle && window.state.currentArticle.cefr_level) || 'B1';
     }
-    const cefrLevel = (window.state && window.state.currentArticle && window.state.currentArticle.cefr_level) || 'B1';
+
     return {
       selectedText,
       articleTitle,
-      cefrLevel
+      cefrLevel,
+      view,
+      contextSource
     };
   },
 
