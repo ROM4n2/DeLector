@@ -38,14 +38,15 @@ export const companionState = {
   // 思考强度设置: 'none' | 'low' | 'medium' | 'high'
   reasoningEffort: 'medium',
 
-  // 视口收获的上下文: { selectedText, articleTitle, cefrLevel, view, contextSource, draftText }
+  // 视口收获的上下文: { selectedText, articleTitle, cefrLevel, view, contextSource, draftText, cardContext }
   activeContext: {
     selectedText: '',
     articleTitle: '',
     cefrLevel: 'B1',
     view: '',
     contextSource: 'none',
-    draftText: ''
+    draftText: '',
+    cardContext: ''
   }
 };
 
@@ -58,14 +59,23 @@ export function resetCompanionSession() {
   companionState.proposals = [];
 }
 
-/** 更新当前阅读上下文（view / contextSource / draftText 由调用方显式给出） */
-export function setCompanionContext(selectedText, articleTitle, cefrLevel, view, contextSource, draftText) {
+/** 更新当前阅读上下文（view / contextSource / draftText / cardContext 由调用方显式给出） */
+export function setCompanionContext(
+  selectedText,
+  articleTitle,
+  cefrLevel,
+  view,
+  contextSource,
+  draftText,
+  cardContext
+) {
   companionState.activeContext.selectedText = selectedText || '';
   companionState.activeContext.articleTitle = articleTitle || '';
   companionState.activeContext.cefrLevel = cefrLevel || '';
   companionState.activeContext.view = view || '';
   companionState.activeContext.contextSource = contextSource || 'none';
   companionState.activeContext.draftText = draftText || '';
+  companionState.activeContext.cardContext = cardContext || '';
 }
 
 /** 视图切换时清空上下文，避免抽屉页签复用上一篇阅读器的旧值 */

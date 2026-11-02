@@ -27,6 +27,7 @@ type StudyContext struct {
 	View          string `json:"view,omitempty"`
 	ContextSource string `json:"context_source,omitempty"`
 	DraftText     string `json:"draft_text,omitempty"`
+	CardContext   string `json:"card_context,omitempty"`
 }
 
 // Message 表示多轮对话中的一条消息。
@@ -143,7 +144,7 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 	systemContent := CompanionSystemPrompt
 	if req.Context.SelectedText != "" || req.Context.ArticleTitle != "" ||
 		req.Context.View != "" || req.Context.ContextSource != "" ||
-		req.Context.DraftText != "" {
+		req.Context.DraftText != "" || req.Context.CardContext != "" {
 		systemContent += "\n\n【当前学习视口上下文】"
 		if req.Context.ArticleTitle != "" {
 			systemContent += fmt.Sprintf("\n- 文章: %s", req.Context.ArticleTitle)
@@ -162,6 +163,9 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		}
 		if req.Context.DraftText != "" {
 			systemContent += fmt.Sprintf("\n- 当前写作草稿: %s", req.Context.DraftText)
+		}
+		if req.Context.CardContext != "" {
+			systemContent += fmt.Sprintf("\n- %s", req.Context.CardContext)
 		}
 	}
 

@@ -7305,6 +7305,10 @@ body.drawer-open .shadow-player {
 .companion.is-disabled .companion-avatar {
   display: flex !important;
   opacity: 0.6;
+}
+
+/* 只有 german 工作台（iframe 全屏）彻底禁用入口；用户手动收起伴读时头像必须可点回。 */
+.companion.is-disabled.is-german-view .companion-avatar {
   pointer-events: none;
 }
 
@@ -11606,13 +11610,15 @@ body.drawer-open .companion {
 
 .companion-quick-chip.context-required,
 .companion-quick-chip.writer-draft-required,
-.companion-quick-chip.progress-required {
+.companion-quick-chip.progress-required,
+.companion-quick-chip.card-proposal-required {
   display: none;
 }
 
 .companion-quick-chip.context-required.is-visible,
 .companion-quick-chip.writer-draft-required.is-visible,
-.companion-quick-chip.progress-required.is-visible {
+.companion-quick-chip.progress-required.is-visible,
+.companion-quick-chip.card-proposal-required.is-visible {
   display: inline-flex;
   align-items: center;
   animation: chipBouncePop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;

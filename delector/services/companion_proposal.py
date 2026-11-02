@@ -37,6 +37,7 @@ class CompanionProposalService:
         title: str,
         payload: Dict[str, Any],
         message_id: Optional[str] = None,
+        proposal_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """记录伴学提议条目（默认状态为 pending）。"""
         with get_db(self.db_path) as conn:
@@ -47,7 +48,18 @@ class CompanionProposalService:
                 title=title,
                 payload=payload,
                 message_id=message_id,
+                proposal_id=proposal_id,
             )
+
+    def reject_proposal(self, proposal_id: str) -> Dict[str, Any]:
+        """将 pending 提议标记为 rejected；不写任何卡片。"""
+        with get_db(self.db_path) as conn:
+            rejected = update_proposal_status(conn, proposal_id, "rejected")
+        return {
+            "status": "ok" if rejected else "not_found",
+            "proposal_id": proposal_id,
+            "rejected": rejected,
+        }
 
     def list_proposals(
         self,

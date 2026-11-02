@@ -27,6 +27,14 @@ export async function executeProposal(proposalId, action, payload) {
   });
 }
 
+export async function rejectProposal(proposalId) {
+  return api('/api/companion/proposal/reject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ proposal_id: proposalId })
+  });
+}
+
 export async function fetchAppSettings() {
   return api('/api/settings');
 }
@@ -106,6 +114,9 @@ export async function streamCompanionChat(options) {
   }
   if (options.draft_text) {
     reqBody.draft_text = options.draft_text;
+  }
+  if (options.card_context) {
+    reqBody.card_context = options.card_context;
   }
   if (options.scope_key) {
     reqBody.scope_key = options.scope_key;

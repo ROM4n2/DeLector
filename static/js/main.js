@@ -14,6 +14,8 @@ import {
   submitPrompt,
   syncCurrentContext,
   refreshWriterDraftContext,
+  refreshCardBoxContext,
+  sendCardProposal,
   sendProgressProfile,
   sendProgressVocabStats,
   renderContextBar,
@@ -243,6 +245,8 @@ export function show(view) {
   // German workbench 用 iframe 全屏，伴读宠物会盖住底部按钮（尤其 Android）
   const compEl = document.getElementById("companion");
   if (compEl) {
+    // is-german-view 只负责“彻底禁点”；用户主动收起伴读仍保留 is-disabled 但可点回。
+    compEl.classList.toggle("is-german-view", view === "german");
     if (view === "german") {
       compEl.classList.add("is-disabled");
     } else if (Companion.enabled) {
@@ -1190,6 +1194,8 @@ Object.assign(window, {
     sendPrompt: (prompt) => submitPrompt(prompt),
     syncContext: syncCurrentContext,
     refreshWriterDraftContext,
+    refreshCardBoxContext,
+    sendCardProposal,
     sendProgressProfile,
     sendProgressVocabStats,
     renderContextBar,

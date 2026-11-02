@@ -258,6 +258,53 @@ def test_proposal_service_unsupported_action(test_db: str) -> None:
         prop_svc.execute_proposal("prop_xyz", "unsupported_action", {})
 
 
+def test_proposal_service_create_reuses_sse_proposal_id(test_db: str) -> None:
+    """聊天流里的 proposal id 必须原样复用，前端确认/拒绝才能命中同一行。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="扩展 die Eule 相关生词",
+        payload={"cards": [{"word": "die Nacht", "definition_zh": "夜晚"}]},
+        proposal_id="prop_chat_01",
+    )
+    assert prop["id"] == "prop_chat_01"
+    assert [p["id"] for p in prop_svc.list_proposals(sid)] == ["prop_chat_01"]
+
+
+def test_proposal_service_reject_does_not_write_cards(test_db: str) -> None:
+    """拒绝只流转状态：rejected；绝不向 vocab_cards 写卡，重复拒绝不再生效。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="扩展 die Eule 相关生词",
+        payload={"cards": [{"word": "das Insekt", "definition_zh": "昆虫"}]},
+    )
+
+    res = prop_svc.reject_proposal(prop["id"])
+    assert res["rejected"] is True
+    assert res["status"] == "ok"
+
+    assert [p["id"] for p in prop_svc.list_proposals(sid, status="rejected")] == [prop["id"]]
+    assert prop_svc.list_proposals(sid, status="pending") == []
+
+    conn = sqlite3.connect(test_db)
+    count = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    conn.close()
+    assert count == 0
+
+    again = prop_svc.reject_proposal(prop["id"])
+    assert again["rejected"] is False
+    assert again["status"] == "not_found"
+
+
 def test_routes_sessions_and_history_endpoints(test_db: str) -> None:
     """Verifies GET/POST /api/companion/sessions and history endpoints."""
     from fastapi import FastAPI

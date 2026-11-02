@@ -16,6 +16,7 @@ import { getActiveView, getCompanionScopeKey } from './companion.js';
 import {
   streamCompanionChat,
   executeProposal,
+  rejectProposal,
   fetchCompanionSessions,
   createCompanionSession,
   fetchCompanionHistory,
@@ -179,9 +180,7 @@ function renderHistoricalMessages(messages, proposals) {
     const propContainer = document.createElement('div');
     propContainer.className = 'companion-proposals-history';
     renderProposalList(propContainer, proposals, async (proposal, action) => {
-      if (action === 'confirm' || action === 'accept') {
-        return await executeProposal(proposal.id, proposal.action, proposal.payload);
-      }
+      return await handleProposalAction(proposal, action);
     });
     bodyEl.appendChild(propContainer);
   }
@@ -244,6 +243,26 @@ function updateQuickActionChips(hasText, view, hasDraft) {
   progressChips.forEach((c) => {
     c.classList.toggle('is-visible', progressContext);
   });
+  const cardsContext = view === 'cards';
+  const cardsChips = document.querySelectorAll('.companion-quick-chip.card-proposal-required');
+  cardsChips.forEach((c) => {
+    c.classList.toggle('is-visible', cardsContext);
+  });
+}
+
+/** HITL 提议动作：确认写库并刷新卡盒；拒绝只流转状态、绝不写卡。 */
+async function handleProposalAction(proposal, action) {
+  if (!proposal || !proposal.id) {
+    throw new Error('提议缺少有效 ID');
+  }
+  if (action === 'reject' || action === 'discard') {
+    return await rejectProposal(proposal.id);
+  }
+  const res = await executeProposal(proposal.id, proposal.action, proposal.payload);
+  if (res && Number(res.created_count) > 0 && typeof window.loadCards === 'function') {
+    window.loadCards();
+  }
+  return res;
 }
 
 /** 刷新抽屉顶部视口研读语境条与手机端句子步进器 */
@@ -259,6 +278,7 @@ export function renderContextBar() {
 
   const text = companionState.activeContext.selectedText;
   const draft = companionState.activeContext.draftText;
+  const cardContext = companionState.activeContext.cardContext;
   const view = companionState.activeContext.view || getActiveView();
   const viewLabel = COMPANION_VIEW_LABELS[view] || '当前页面';
   const sents = window.state?.currentArticle?.sentences || [];
@@ -374,6 +394,15 @@ export function renderContextBar() {
     textSpan.textContent = '已绑定当前草稿（' + draft.length + ' 字符）';
     contextBarEl.appendChild(icon);
     contextBarEl.appendChild(textSpan);
+  } else if (view === 'cards' && cardContext) {
+    contextBarEl.style.display = 'flex';
+    const icon = document.createElement('span');
+    icon.textContent = '🃏';
+    const textSpan = document.createElement('span');
+    textSpan.className = 'companion-context-text';
+    textSpan.textContent = '已绑定当前卡盒词条';
+    contextBarEl.appendChild(icon);
+    contextBarEl.appendChild(textSpan);
   } else {
     contextBarEl.style.display = 'flex';
     const hint = document.createElement('span');
@@ -416,9 +445,40 @@ export function refreshWriterDraftContext() {
     ctx.cefrLevel,
     ctx.view,
     ctx.contextSource,
-    ctx.draftText
+    ctx.draftText,
+    ctx.cardContext
   );
   renderContextBar();
+}
+
+/** 卡盒当前词条：发送/打开前刷新，供 propose_vocab_cards 使用。 */
+export function refreshCardBoxContext() {
+  if (getActiveView() !== 'cards') return;
+  if (!window.Companion || typeof window.Companion.harvestStudyContext !== 'function') return;
+  const ctx = window.Companion.harvestStudyContext();
+  setCompanionContext(
+    ctx.selectedText,
+    ctx.articleTitle,
+    ctx.cefrLevel,
+    ctx.view,
+    ctx.contextSource,
+    ctx.draftText,
+    ctx.cardContext
+  );
+  renderContextBar();
+}
+
+/** 卡盒页专属：基于当前卡面词条批量提议生词卡（HITL）。 */
+export function sendCardProposal() {
+  if (getActiveView() !== 'cards') return;
+  refreshCardBoxContext();
+  if (!companionState.activeContext.cardContext) {
+    alert('当前卡盒没有可用词条。请切换到卡面视图并确保当前分区有卡片后再试。');
+    return;
+  }
+  submitPrompt(
+    '请基于【当前卡盒词条】调用 propose_vocab_cards 工具，提议 3~5 个相关的 B1/B2 德语生词卡，并附简短释义与例句；所有卡片都必须等我确认后才能入库。'
+  );
 }
 
 /** 进度页专属：学习负荷 / 复习压力画像。 */
@@ -456,7 +516,8 @@ export function syncCurrentContext() {
         ctx.cefrLevel,
         ctx.view,
         ctx.contextSource,
-        ctx.draftText
+        ctx.draftText,
+        ctx.cardContext
       );
       renderContextBar();
       if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
@@ -549,11 +610,12 @@ export function openCompanionDrawer(contextPayload) {
       contextPayload.cefrLevel,
       view,
       contextSource,
-      contextPayload.draftText
+      contextPayload.draftText,
+      contextPayload.cardContext
     );
   } else {
     // 无显式上下文时也必须清掉旧值，避免抽屉页签复用上一篇的阅读器上下文。
-    setCompanionContext('', '', '', view, 'none', '');
+    setCompanionContext('', '', '', view, 'none', '', '');
   }
   companionState.isOpen = true;
 
@@ -637,7 +699,22 @@ export function submitPrompt(userText) {
       latest.cefrLevel,
       latest.view,
       latest.contextSource,
-      latest.draftText
+      latest.draftText,
+      latest.cardContext
+    );
+  }
+
+  // 卡盒：发送前刷新当前卡面词条，避免用户先开抽屉、后翻卡导致上下文过期。
+  if (activeView === 'cards' && window.Companion?.harvestStudyContext) {
+    const latest = window.Companion.harvestStudyContext();
+    setCompanionContext(
+      latest.selectedText,
+      latest.articleTitle,
+      latest.cefrLevel,
+      latest.view,
+      latest.contextSource,
+      latest.draftText,
+      latest.cardContext
     );
   }
 
@@ -732,6 +809,7 @@ export function submitPrompt(userText) {
     view: companionState.activeContext.view,
     context_source: companionState.activeContext.contextSource,
     draft_text: companionState.activeContext.draftText,
+    card_context: companionState.activeContext.cardContext,
     scope_key: getCompanionScopeKey(),
     signal: abortController.signal,
     onSessionId: (sessionId) => {
@@ -771,11 +849,7 @@ export function submitPrompt(userText) {
         fullStreamText += chunk;
         typewriter.append(chunk);
       } else if (event === 'proposal') {
-        renderProposalCard(proposalsContainerEl, data.proposal, async (proposal, action) => {
-          if (action === 'confirm' || action === 'accept') {
-            return await executeProposal(proposal.id, proposal.action, proposal.payload);
-          }
-        });
+        renderProposalCard(proposalsContainerEl, data.proposal, handleProposalAction);
       } else if (event === 'done') {
         thoughtCtrl.finish();
         companionState.inFlight = false;
@@ -1076,6 +1150,8 @@ export const CompanionDrawer = {
   syncContext: syncCurrentContext,
   syncCurrentContext,
   refreshWriterDraftContext,
+  refreshCardBoxContext,
+  sendCardProposal,
   sendProgressProfile,
   sendProgressVocabStats,
   renderContextBar,

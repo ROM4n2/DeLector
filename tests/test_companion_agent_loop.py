@@ -393,6 +393,54 @@ def test_loop_progress_tools_receive_inputs() -> None:
     assert captured[1] == ("vocab_stats", {"text": sample_text})
 
 
+def test_loop_card_context_injection_and_proposal_payload_preserved() -> None:
+    """卡盒上下文进入系统提示词；propose_vocab_cards 提议参数原样保留，不直接入库。"""
+    captured_messages: List[Dict[str, Any]] = []
+    card_context = "【当前卡盒词条】\n分段: due\n词: die Eule\n词元: Eule\n释义: 猫头鹰"
+
+    async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        captured_messages.extend(kwargs.get("messages", []))
+        return {
+            "reply_zh": "已生成待确认的生词卡提议。",
+            "proposal": {
+                "action": "create_vocab_cards",
+                "title": "扩展 die Eule 相关生词",
+                "payload": {
+                    "cards": [
+                        {
+                            "word": "die Nacht",
+                            "lemma": "Nacht",
+                            "definition_zh": "夜晚",
+                            "sentence_context": "Die Eule jagt in der Nacht.",
+                        }
+                    ]
+                },
+            },
+        }
+
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "基于当前卡盒词条扩展生词"}],
+            context={"view": "cards", "context_source": "card-current", "card_context": card_context},
+            chat_fn=mock_chat,
+        )
+    )
+
+    system_msg = next((m for m in captured_messages if m.get("role") == "system"), None)
+    assert system_msg is not None
+    long_system_prompt = str(system_msg.get("content", ""))
+    assert "【当前卡盒词条】" in long_system_prompt
+    assert "die Eule" in long_system_prompt
+
+    assert outcome.status == "ok"
+    assert len(outcome.proposals) == 1
+    prop = outcome.proposals[0]
+    assert prop["action"] == "create_vocab_cards"
+    assert prop["title"] == "扩展 die Eule 相关生词"
+    assert prop["payload"]["cards"][0]["word"] == "die Nacht"
+    assert prop["payload"]["cards"][0]["definition_zh"] == "夜晚"
+
+
 def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
     """当模型返回纯自然语言 Markdown（未按格式输出 JSON）时，循环自愈降级并交付答案，不抛异常崩溃。"""
     from delector.services import llm_client

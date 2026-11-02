@@ -195,6 +195,94 @@ func TestCompanionLoopToolCallingAndProposal(t *testing.T) {
 	}
 }
 
+func TestCompanionLoopCardProposalFromCardContext(t *testing.T) {
+	turn := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher := w.(http.Flusher)
+
+		turn++
+		if turn == 1 {
+			// 第一轮：基于卡盒上下文调用 propose_vocab_cards，参数必须原样进入提议
+			callChunk := `{"id":"p1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_p1","type":"function","function":{"name":"propose_vocab_cards","arguments":"{\"title\":\"扩展 die Eule 相关生词\",\"cards\":[{\"word\":\"die Nacht\",\"definition_zh\":\"夜晚\",\"sentence_context\":\"Die Eule jagt in der Nacht.\"}]}"}}]},"index":0}]}`
+			fmt.Fprintf(w, "data: %s\n\n", callChunk)
+			flusher.Flush()
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+		} else {
+			contentChunk := `{"id":"p2","choices":[{"delta":{"content":"已生成待确认的生词卡提议。"},"index":0}]}`
+			fmt.Fprintf(w, "data: %s\n\n", contentChunk)
+			flusher.Flush()
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+
+	cfg := openai.DefaultConfig("mock-key")
+	cfg.BaseURL = ts.URL
+	client := openai.NewClientWithConfig(cfg)
+
+	runner := &fakeToolRunner{}
+	agent := companion.NewCompanionAgent(client, runner, "deepseek-chat")
+
+	var events []companion.Event
+	emit := func(ev companion.Event) error {
+		events = append(events, ev)
+		return nil
+	}
+
+	cardContext := "【当前卡盒词条】\n分段: due\n词: die Eule\n词元: Eule\n释义: 猫头鹰"
+	req := companion.Request{
+		Messages: []companion.Message{{Role: "user", Content: "基于当前卡盒词条扩展生词"}},
+		Context: companion.StudyContext{
+			View:          "cards",
+			ContextSource: "card-current",
+			CardContext:   cardContext,
+		},
+	}
+
+	outcome, err := agent.RunLoop(context.Background(), req, emit)
+	if err != nil {
+		t.Fatalf("RunLoop failed: %v", err)
+	}
+
+	if len(outcome.Proposals) != 1 {
+		t.Fatalf("expected 1 proposal, got %d", len(outcome.Proposals))
+	}
+	prop := outcome.Proposals[0]
+	if prop.Action != "create_vocab_cards" {
+		t.Errorf("action = %s, want create_vocab_cards", prop.Action)
+	}
+	if prop.Title != "扩展 die Eule 相关生词" {
+		t.Errorf("title = %s", prop.Title)
+	}
+	cards, ok := prop.Payload["cards"].([]any)
+	if !ok || len(cards) != 1 {
+		t.Fatalf("expected 1 proposed card, got %v", prop.Payload["cards"])
+	}
+	card, _ := cards[0].(map[string]any)
+	if card["word"] != "die Nacht" || card["definition_zh"] != "夜晚" {
+		t.Errorf("proposal card payload lost fields: %v", card)
+	}
+
+	hasProposal := false
+	for _, ev := range events {
+		if ev.Event == companion.EventProposal && ev.ID == prop.ID {
+			hasProposal = true
+		}
+	}
+	if !hasProposal {
+		t.Error("missing proposal event")
+	}
+
+	// propose_vocab_cards 是待确认提议，绝不能直接调用本地写入工具。
+	if len(runner.calls) != 0 {
+		t.Errorf("propose_vocab_cards must not execute a write tool, got %v", runner.calls)
+	}
+}
+
 func TestCompanionLoopToolErrorSelfHealing(t *testing.T) {
 	turn := 0
 	var receivedToolMsg string

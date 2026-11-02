@@ -40,6 +40,7 @@ const COMPANION_SRC = read("static/js/companion.js");
 const CP_STATE_SRC = read("static/js/cp-state.js");
 const CP_DRAWER_SRC = read("static/js/cp-drawer.js");
 const CP_API_SRC = read("static/js/cp-api.js");
+const CD_STATE_SRC = read("static/js/cd-state.js");
 const MAIN_SRC = read("static/js/main.js");
 const READER_SRC = read("static/js/reader.js");
 const WRITER_SRC = read("static/js/writer.js");
@@ -65,6 +66,11 @@ const MUST = [
   "sendProgressProfile",
   "sendProgressVocabStats",
   "refreshWriterDraftContext",
+  "card-proposal-required",
+  "sendCardProposal",
+  "card_context",
+  "contextSource = 'card-current'",
+  "is-german-view",
 ];
 for (const m of MUST) {
   const srcs = [COMPANION_SRC, CP_STATE_SRC, CP_DRAWER_SRC, CP_API_SRC, MAIN_SRC, READER_SRC, WRITER_SRC];
@@ -151,6 +157,7 @@ registry.set("companion-input", companionInput);
 const chips = [makeEl("chip-1"), makeEl("chip-2"), makeEl("chip-3")];
 const writerChips = [makeEl("writer-chip")];
 const progressChips = [makeEl("progress-chip-1"), makeEl("progress-chip-2")];
+const cardChips = [makeEl("card-chip")];
 
 const contextBar = registry.get("companion-context-bar");
 const documentStub = {
@@ -160,6 +167,7 @@ const documentStub = {
   querySelectorAll(selector) {
     if (selector.includes(".companion-quick-chip.writer-draft-required")) return writerChips;
     if (selector.includes(".companion-quick-chip.progress-required")) return progressChips;
+    if (selector.includes(".companion-quick-chip.card-proposal-required")) return cardChips;
     if (selector.includes(".companion-quick-chip.context-required")) return chips;
     return [];
   },
@@ -273,13 +281,19 @@ async function main() {
     {},
     "player-stub"
   );
-  const companion = await instantiate(COMPANION_SRC, { "./player.js": async () => stubPlayer }, "companion.js");
+  const cdState = await instantiate(CD_STATE_SRC, {}, "cd-state.js");
+  const companion = await instantiate(
+    COMPANION_SRC,
+    { "./player.js": async () => stubPlayer, "./cd-state.js": async () => cdState },
+    "companion.js"
+  );
   const cpState = await instantiate(CP_STATE_SRC, {}, "cp-state.js");
 
   const stubApi = await instantiate(
     [
       "export async function streamCompanionChat() {}",
       "export async function executeProposal() {}",
+      "export async function rejectProposal() {}",
       "export async function fetchCompanionSessions() { return { sessions: [] }; }",
       "export async function createCompanionSession() { return { session: { id: 'x' } }; }",
       "export async function fetchCompanionHistory() { return { messages: [] }; }",
@@ -327,6 +341,7 @@ async function main() {
 
   const { Companion: C, getCompanionScopeKey } = companion.namespace;
   context.window.Companion = C;
+  const { cardState } = cdState.namespace;
   const {
     companionState,
     setCompanionContext,
@@ -338,6 +353,7 @@ async function main() {
     openCompanionDrawer,
     refreshWriterDraftContext,
     sendProgressVocabStats,
+    sendCardProposal,
   } = cpDrawer.namespace;
 
   // cp-drawer 模块加载时会把真实 CompanionDrawer 合并进 window；这里重新装回探针 spy，
@@ -523,6 +539,69 @@ async function main() {
     "G3 词汇等级无文本时未降级提示"
   );
 
+  /* G4. 卡盒页：当前卡面词条 → cardContext，卡盒专属入口分区，无词条降级 */
+  setView("cards");
+  setSelection("");
+  setState({});
+  cardState.catalog.viewMode = "deck";
+  cardState.catalog.segment = "due";
+  cardState.catalog.dueCards.due_vocab = [
+    {
+      id: 7,
+      word: "die Eule",
+      lemma: "Eule",
+      definition_zh: "猫头鹰",
+      pos: "noun",
+      gender: "feminine",
+      cefr_level: "B1",
+      sentence_context: "Die Eule schläft am Tag.",
+    },
+  ];
+  cardState.catalog.dueCards.due_grammar = [];
+  cardState.deck.index = 0;
+
+  ctx = C.harvestStudyContext();
+  check(ctx.view === "cards", "G4 卡盒页 view 未识别");
+  check(ctx.contextSource === "card-current", "G4 卡盒词条来源未标为 card-current");
+  check(ctx.cardContext.includes("die Eule"), "G4 未采集到当前卡面词条");
+  check(ctx.cardContext.includes("猫头鹰"), "G4 卡盒词条释义丢失");
+  check(ctx.selectedText === "" && ctx.draftText === "", "G4 卡盒词条污染了 selectedText/draftText");
+
+  setCompanionContext("", "", "", "cards", "card-current", "", ctx.cardContext);
+  renderContextBar();
+  const cardBar = contextBar.children.find((c) => c.className === "companion-context-text");
+  check(
+    Boolean(cardBar && cardBar.textContent.includes("已绑定当前卡盒词条")),
+    "G4 卡盒 context bar 未显示"
+  );
+  for (const chip of cardChips) {
+    check(chip.classList.contains("is-visible"), "G4 卡盒关联生词提议入口未显示");
+  }
+  for (const chip of chips) {
+    check(!chip.classList.contains("is-visible"), "G4 卡盒页仍显示阅读器快捷问句");
+  }
+  for (const chip of writerChips) {
+    check(!chip.classList.contains("is-visible"), "G4 卡盒页仍显示写作检查入口");
+  }
+
+  /* G4-b. grid 视图无当前卡面 → 不回退成旧词条 */
+  cardState.catalog.viewMode = "grid";
+  ctx = C.harvestStudyContext();
+  check(ctx.cardContext === "", "G4 grid 视图不应采集卡盒词条");
+  check(ctx.contextSource === "none", "G4 grid 视图来源应保持 none");
+  cardState.catalog.viewMode = "deck";
+
+  /* G4-c. 无可用词条：入口仍可点，但必须显式降级提示，不静默无响应 */
+  cardState.catalog.dueCards.due_vocab = [];
+  cardState.deck.index = 0;
+  context.__probe.alerts.length = 0;
+  sendCardProposal();
+  check(
+    context.__probe.alerts.some((m) => m.includes("当前卡盒没有可用词条")),
+    "G4 无可用词条时未降级提示"
+  );
+  check(CP_DRAWER_SRC.includes("propose_vocab_cards"), "G4 卡盒入口未指向 propose_vocab_cards");
+
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
@@ -589,12 +668,38 @@ async function main() {
   check(readerCtx && readerCtx.view === "reader", "K 阅读器入口回归：view 错误");
   check(readerCtx && readerCtx.selectedText === "Der zweite Satz.", "K 阅读器入口回归：选区丢失");
 
-  /* L. disabled 状态下头像必须不可点（CSS 指针事件） */
-  const disabledAvatar = STYLE_SRC.match(/\.companion\.is-disabled\s+\.companion-avatar\s*\{[^}]*\}/);
-  check(
-    Boolean(disabledAvatar && disabledAvatar[0].includes("pointer-events: none")),
-    "L disabled 状态下头像仍可点击"
+  /* L. german 工作台入口彻底禁点；用户手动收起伴读必须可点回 */
+  const germanAvatar = STYLE_SRC.match(
+    /\.companion\.is-disabled\.is-german-view\s+\.companion-avatar\s*\{[^}]*\}/
   );
+  check(
+    Boolean(germanAvatar && germanAvatar[0].includes("pointer-events: none")),
+    "L german 工作台头像未禁点"
+  );
+  const userDisabledAvatar = STYLE_SRC.match(/\.companion\.is-disabled\s+\.companion-avatar\s*\{[^}]*\}/);
+  check(
+    Boolean(userDisabledAvatar && !userDisabledAvatar[0].includes("pointer-events: none")),
+    "L 用户关闭伴读后头像仍被禁点，无法点回"
+  );
+  check(
+    MAIN_SRC.includes('classList.toggle("is-german-view", view === "german")'),
+    "L main.js 未按 view 精确挂 is-german-view"
+  );
+
+  // 行为层：german 下 onClick 直接早退，不允许借“重新启用”绕过禁用。
+  setView("german");
+  C.enabled = false;
+  context.__probe.companionToggle.length = 0;
+  C.onClick({});
+  check(C.enabled === false, "L german 下点击竟然重新启用了伴读");
+  check(context.__probe.companionToggle.length === 0, "L german 下点击仍唤起了抽屉");
+
+  // 行为层：用户主动关闭后，在非 german 页面点击浮标应重新启用伴读。
+  setView("cards");
+  C.enabled = false;
+  C.onClick({});
+  check(C.enabled === true, "L 用户关闭伴读后点击浮标未能重新启用");
+  C.enabled = true;
 
   /* M. cp-api：请求携带新字段，并读取 X-Session-ID 回填 */
   const sse = 'event: delta\ndata: {"event":"delta","text":"hi"}\n\nevent: done\ndata: {"event":"done"}\n\n';
@@ -664,12 +769,17 @@ async function main() {
       "writer-draft-gate": "pass",
       "writer-draft-live-refresh": "pass",
       "progress-partition": "pass",
+      "card-current-context": "pass",
+      "card-partition": "pass",
+      "card-empty-degrade": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",
       "entry-gate": "pass",
       "drawer-tab-gate": "pass",
       "avatar-disabled-css": "pass",
+      "german-entry-lock": "pass",
+      "user-reenable": "pass",
       "cp-api-session-header": "pass",
     },
   };

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -34,6 +35,7 @@ class CompanionChatReq(BaseModel):
     view: Optional[str] = None
     context_source: Optional[str] = None
     draft_text: Optional[str] = None
+    card_context: Optional[str] = None
     scope_key: Optional[str] = None
 
 
@@ -41,6 +43,10 @@ class ProposalExecReq(BaseModel):
     proposal_id: str
     action: str
     payload: Dict[str, Any]
+
+
+class ProposalRejectReq(BaseModel):
+    proposal_id: str
 
 
 class SessionCreateReq(BaseModel):
@@ -119,9 +125,14 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
         context_payload["context_source"] = req.context_source
     if req.draft_text:
         context_payload["draft_text"] = req.draft_text
+    if req.card_context:
+        context_payload["card_context"] = req.card_context
 
     async def _wrapped_stream() -> AsyncIterator[bytes]:
         full_text, full_thought = [], []
+        proposals_payload: List[Dict[str, Any]] = []
+        seen_proposal_ids: set[str] = set()
+
         async for chunk in dispatch_companion_stream(req.messages, request=request, context=context_payload):
             yield chunk
             for line in chunk.decode("utf-8", errors="replace").splitlines():
@@ -132,9 +143,47 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
                             full_text.append(ev.get("text", ""))
                         elif ev.get("event") == "thought":
                             full_thought.append(ev.get("text", ""))
+                        elif ev.get("event") == "proposal":
+                            prop = ev.get("proposal")
+                            if not isinstance(prop, dict):
+                                prop = {
+                                    "id": ev.get("id"),
+                                    "action": ev.get("action"),
+                                    "title": ev.get("title"),
+                                    "payload": ev.get("payload"),
+                                }
+                            pid = str(prop.get("id") or "")
+                            if pid and pid in seen_proposal_ids:
+                                continue
+                            if pid:
+                                seen_proposal_ids.add(pid)
+                            proposals_payload.append(prop)
+
+        assistant_message_id: Optional[str] = None
         if user_text or full_text:
             with contextlib.suppress(Exception):
-                _session_svc.save_turn(sid, user_text, "".join(full_text), thought="".join(full_thought))
+                _user_msg, assistant_msg = _session_svc.save_turn(
+                    sid,
+                    user_text,
+                    "".join(full_text),
+                    thought="".join(full_thought),
+                )
+                assistant_message_id = assistant_msg.get("id")
+
+        # 生产 chat 路径补齐 proposal 落库；复用 SSE 里的 proposal id，
+        # 确保前端确认/拒绝能命中同一数据库行。
+        for prop in proposals_payload:
+            try:
+                _proposal_svc.create_proposal(
+                    session_id=sid,
+                    action=str(prop.get("action") or "create_vocab_cards"),
+                    title=str(prop.get("title") or "加入核心生词卡"),
+                    payload=prop.get("payload") if isinstance(prop.get("payload"), dict) else {},
+                    message_id=assistant_message_id,
+                    proposal_id=str(prop.get("id") or "") or None,
+                )
+            except Exception as exc:  # silent-ok: 落库失败不阻断已完成的 SSE 流，但必须留痕
+                logging.getLogger("delector").warning("伴学 proposal 落库失败: %s", exc)
 
     return StreamingResponse(
         _wrapped_stream(),
@@ -150,3 +199,12 @@ def api_companion_execute_proposal(req: ProposalExecReq) -> Dict[str, Any]:
         return _proposal_svc.execute_proposal(req.proposal_id, req.action, req.payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/proposal/reject", dependencies=[Depends(_require_localhost)])
+def api_companion_reject_proposal(req: ProposalRejectReq) -> Dict[str, Any]:
+    """用户拒绝 Proposal：只流转状态，不写任何卡片（受 127.0.0.1 本机闸保护）。"""
+    result = _proposal_svc.reject_proposal(req.proposal_id)
+    if not result.get("rejected"):
+        raise HTTPException(status_code=404, detail="proposal not found or already resolved")
+    return result

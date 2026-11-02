@@ -151,6 +151,7 @@ export function renderProposalCard(container, proposal, onAction) {
       applyStatus('rejected');
     } catch (err) {
       console.error('Proposal rejection failed:', err);
+      alert('拒绝提议失败: ' + (err.message || '未知错误'));
     }
   });
 
