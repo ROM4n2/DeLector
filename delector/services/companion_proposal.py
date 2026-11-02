@@ -102,15 +102,21 @@ class CompanionProposalService:
             except sqlite3.OperationalError:
                 row = None
 
+            if row is not None and row["status"] == "accepted":
+                # 幂等返回：提议此前已确认执行，不再重复落盘
+                return {
+                    "status": "ok",
+                    "proposal_id": proposal_id,
+                    "action": action,
+                    "created_count": 0,
+                }
+
+            # 空/畸形提议不允许被确认成「已入库」：没有任何有效词条时直接报错，
+            # 状态保持 pending，避免前端把空提议标成 accepted 却一张卡都没写。
+            if not any(isinstance(c, dict) and str(c.get("word", "")).strip() for c in cards):
+                raise ValueError("提议中没有可入库的词条")
+
             if row is not None:
-                if row["status"] == "accepted":
-                    # 幂等返回：提议此前已确认执行，不再重复落盘
-                    return {
-                        "status": "ok",
-                        "proposal_id": proposal_id,
-                        "action": action,
-                        "created_count": 0,
-                    }
                 update_proposal_status(conn, proposal_id, "accepted")
 
             created_count = 0

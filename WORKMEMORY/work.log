@@ -797,3 +797,7 @@ definition_zh 回退错位修复：execute_proposal 不再把 reading 当中文�
 ### 2026-11-03 01:36 | kimi-k3.1-pro__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 缺释义展示口径统一：cd-state.js 新增纯函数 formatCardDefinition（空/空白 -> 待补充），cards.js 卡背、目录网格、复习 flashcard 与 dictation 卡面全部改走它，只读展示不改库。新增提案列表批量条：pending>=2 时出现「全部确认 / 全部拒绝」，逐条复用 onAction，失败列名 alert；探针用真实 cp-drawer-proposals.js 在 vm DOM 桩里跑通待补充与批量两条行为断言（124 checks / 25 场景）。评估后放弃 home/search/exam/encounter 页面级接入：无现成工具或与 live-selection/writing_check 重复，改动大增量低。历史数据修复仅新增 tools/repair_companion_definition_zh_draft.py 草案（默认 dry-run，--apply 必须配 --backup，未执行）。坑：cards.js 一切片探针因新依赖 formatCardDefinition 报 ReferenceError，三个探针已同步切 cd-state.js 真源码；test_server_cards_vocab 单独跑受前次夹具删除影响，整批复跑 49 passed。
+
+### 2026-11-03 01:45 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+实测澄清「关闭伴读后点不开」不是现行 bug：真实浏览器（DOM click，视口 0x0）走 #panel-hide 关闭后 #companion-avatar display:flex 且 pointer-events=auto，点击即 enabled=true、char 恢复 block；该行为由 4de1ddf 把 pointer-events:none 收窄到 is-german-view 带来。设置页与研习工坊均无独立伴读开关，恢复入口就是该头像。提议失败路径加固：execute_proposal 对空 cards / 无有效 word 一律 ValueError（保持 pending、零写卡），路由 400；前端提案卡片对 create_vocab_card* 且无有效词条时禁用确认并显示「无可入库词条」，拒绝仍可用。验证：pytest 84 passed、探针 130 checks / 26 场景、三闸 PASS、go test 全绿、ruff 通过。注意：tests 子集运行时仓库根 test_*.db 被测试自建自删会触发 conftest 守卫误报，整套 8 文件跑则绿。

@@ -292,6 +292,45 @@ def test_proposal_service_execute_idempotence(test_db: str) -> None:
     assert count == 1
 
 
+def test_proposal_service_execute_rejects_empty_cards(test_db: str) -> None:
+    """空 cards 列表不得被确认成 accepted：报错、状态保持 pending、零写卡。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="暂无可制卡语料",
+        payload={"cards": []},
+    )
+
+    with pytest.raises(ValueError, match="没有可入库的词条"):
+        prop_svc.execute_proposal(prop["id"], "create_vocab_cards", prop["payload"])
+
+    assert [p["status"] for p in prop_svc.list_proposals(sid)] == ["pending"]
+    conn = sqlite3.connect(test_db)
+    count = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    conn.close()
+    assert count == 0
+
+
+def test_proposal_service_execute_rejects_card_without_word(test_db: str) -> None:
+    """cards 里没有任何有效 word 同样视为畸形提议，不得写库或置 accepted。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="畸形提议",
+        payload={"cards": [{"definition_zh": "狗"}, "not-a-dict"]},
+    )
+
+    with pytest.raises(ValueError, match="没有可入库的词条"):
+        prop_svc.execute_proposal(prop["id"], "create_vocab_cards", prop["payload"])
+    assert [p["status"] for p in prop_svc.list_proposals(sid)] == ["pending"]
+
+
 def test_proposal_service_unsupported_action(test_db: str) -> None:
     prop_svc = CompanionProposalService(db_path=test_db)
     with pytest.raises(ValueError, match="不支持的提议动作类型"):

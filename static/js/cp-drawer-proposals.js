@@ -125,6 +125,15 @@ export function renderProposalCard(container, proposal, onAction) {
   // 初始状态判定
   applyStatus(proposal.status || 'pending');
 
+  // 失败路径：空/畸形提议不允许确认入库，给出可见原因；拒绝仍然可用。
+  const isCardAction = String(proposal.action || '').startsWith('create_vocab_card');
+  const hasValidCards = cards.some((c) => c && typeof c.word === 'string' && c.word.trim());
+  if (isCardAction && !hasValidCards && (!proposal.status || proposal.status === 'pending')) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '无可入库词条';
+    confirmBtn.title = '该提议没有有效词条，无法确认入库';
+  }
+
   // 5. 事件绑定
   confirmBtn.addEventListener('click', async () => {
     confirmBtn.disabled = true;

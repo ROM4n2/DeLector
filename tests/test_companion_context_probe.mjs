@@ -692,6 +692,55 @@ async function main() {
     "G5 单条 pending 不应出现批量条"
   );
 
+  /* G6. 失败路径：空/畸形提议不可确认，正常提议不受影响 */
+  const emptyHost = makeEl("empty-host");
+  renderProposalCard(
+    emptyHost,
+    { id: "p-empty", action: "create_vocab_cards", title: "空", payload: { cards: [] }, status: "pending" },
+    async () => {}
+  );
+  const emptyActions = emptyHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-actions"
+  );
+  check(emptyActions.children[0].disabled === true, "G6 空提议确认按钮未禁用");
+  check(
+    emptyActions.children[0].textContent.includes("无可入库词条"),
+    "G6 空提议未给出可见原因"
+  );
+  check(emptyActions.children[1].disabled === false, "G6 空提议仍应允许放弃");
+
+  const badHost = makeEl("bad-host");
+  renderProposalCard(
+    badHost,
+    { id: "p-bad", action: "create_vocab_cards", title: "坏", payload: {}, status: "pending" },
+    async () => {}
+  );
+  const badActions = badHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-actions"
+  );
+  check(badActions.children[0].disabled === true, "G6 畸形 payload 确认按钮未禁用");
+
+  const okHost = makeEl("ok-host");
+  renderProposalCard(
+    okHost,
+    {
+      id: "p-ok",
+      action: "create_vocab_cards",
+      title: "好",
+      payload: { cards: [{ word: "der Hund", definition_zh: "狗" }] },
+      status: "pending",
+    },
+    async () => {}
+  );
+  const okActions = okHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-actions"
+  );
+  check(okActions.children[0].disabled === false, "G6 正常提议确认按钮被误禁用");
+  check(
+    okActions.children[0].textContent === "确认添加入库",
+    "G6 正常提议确认按钮文案被误改"
+  );
+
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
@@ -864,6 +913,7 @@ async function main() {
       "card-empty-degrade": "pass",
       "definition-fallback-ui": "pass",
       "proposal-batch-actions": "pass",
+      "proposal-failure-paths": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",

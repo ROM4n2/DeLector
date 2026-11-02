@@ -414,6 +414,37 @@ def test_companion_proposal_reject_marks_status_without_writing_cards(
     assert again.status_code == 404
 
 
+def test_companion_proposal_execute_empty_cards_returns_400(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """空提议 execute 返回 400，且提议保持 pending（不得被标成 accepted）。"""
+    from delector.services.companion_proposal import CompanionProposalService
+    from delector.services.companion_session import CompanionSessionService
+
+    db_file = tmp_path / "empty_cards.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    session_svc = CompanionSessionService(db_path=str(db_file))
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+    prop_svc = CompanionProposalService(db_path=str(db_file))
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="暂无可制卡语料",
+        payload={"cards": []},
+    )
+
+    client = TestClient(companion_app, client=("127.0.0.1", 50000))
+    resp = client.post(
+        "/api/companion/proposal/execute",
+        json={"proposal_id": prop["id"], "action": "create_vocab_cards", "payload": {"cards": []}},
+    )
+    assert resp.status_code == 400
+    assert "没有可入库的词条" in resp.json()["detail"]
+    assert [p["status"] for p in prop_svc.list_proposals(sid)] == ["pending"]
+
+
 def test_companion_proposal_reject_localhost_gate(companion_app: FastAPI) -> None:
     """POST /api/companion/proposal/reject 仅限 localhost。"""
     client = TestClient(companion_app, client=("192.168.1.100", 50000))
