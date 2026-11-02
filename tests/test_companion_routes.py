@@ -182,6 +182,29 @@ def test_companion_chat_scope_isolation_and_session_header(
     assert scoped_ids == [sid_cards_1]
 
 
+def test_companion_sessions_global_list_and_scoped_default_unchanged(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """全局列表覆盖所有 scope；scoped 端点缺省行为不变（仍只回本 scope）。"""
+    from delector.services.companion_session import CompanionSessionService
+
+    db_file = tmp_path / "global_sessions.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    svc = CompanionSessionService(db_path=str(db_file))
+    article = svc.get_or_create_session(article_id="3", scope_key="article:3")
+    cards = svc.get_or_create_session(scope_key="view:cards")
+
+    client = TestClient(companion_app)
+    all_sessions = client.get("/api/companion/sessions").json()["sessions"]
+    ids = {s["id"] for s in all_sessions}
+    assert {article["id"], cards["id"]} <= ids
+
+    scoped = client.get("/api/companion/sessions/scoped/view:cards").json()["sessions"]
+    assert [s["id"] for s in scoped] == [cards["id"]]
+
+
 def test_companion_chat_without_new_fields_keeps_legacy_context(
     companion_app: FastAPI,
     tmp_path: Any,

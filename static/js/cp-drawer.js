@@ -11,7 +11,7 @@
  */
 'use strict';
 
-import { companionState, setCompanionContext } from './cp-state.js';
+import { companionState, setCompanionContext, resetCompanionContextForView } from './cp-state.js';
 import { getActiveView, getCompanionScopeKey } from './companion.js';
 import {
   streamCompanionChat,
@@ -46,7 +46,9 @@ export async function refreshSessionSelect(scopeKey) {
   sessionSelectEl = document.getElementById('companion-session-select');
   if (!sessionSelectEl) return;
   try {
-    const res = await fetchCompanionSessions(scopeKey || getCompanionScopeKey());
+    // 全局历史入口：一次拉全量会话，再按 scope 分组；当前 scope 仍排在最前。
+    // 后端 /api/companion/sessions 不带 scope_key 时本来就返回全部 scope，旧 scoped 端点不变。
+    const res = await fetchCompanionSessions();
     if (res && res.sessions) {
       companionState.sessions = res.sessions;
       renderSessionOptions();
@@ -69,15 +71,33 @@ function renderSessionOptions() {
   defaultOpt.textContent = '＋ 新建会话';
   sessionSelectEl.appendChild(defaultOpt);
 
+  const currentScope = getCompanionScopeKey();
   const sessions = companionState.sessions || [];
-  for (const s of sessions) {
+  const current = sessions.filter((s) => (s.scope_key || '') === currentScope);
+  const others = sessions.filter((s) => (s.scope_key || '') !== currentScope).slice(0, 8);
+
+  const addOption = (parent, s, withScope) => {
     const opt = document.createElement('option');
     opt.value = s.id;
-    opt.textContent = `${s.title} (${new Date(s.created_at).toLocaleDateString()})`;
+    const scopeSuffix = withScope ? ` · ${s.scope_key || 'view:global'}` : '';
+    opt.textContent = `${s.title}${scopeSuffix} (${new Date(s.created_at).toLocaleDateString()})`;
     if (s.id === companionState.currentSessionId) {
       opt.selected = true;
     }
-    sessionSelectEl.appendChild(opt);
+    parent.appendChild(opt);
+  };
+
+  if (current.length > 0) {
+    const group = document.createElement('optgroup');
+    group.label = '当前页面';
+    for (const s of current) addOption(group, s, false);
+    sessionSelectEl.appendChild(group);
+  }
+  if (others.length > 0) {
+    const group = document.createElement('optgroup');
+    group.label = '其它会话（跨页面）';
+    for (const s of others) addOption(group, s, true);
+    sessionSelectEl.appendChild(group);
   }
 }
 
@@ -128,6 +148,22 @@ export async function switchSession(sessionId) {
     companionState.proposals = proposals;
 
     renderHistoricalMessages(messages, proposals);
+
+    // 跨 scope 恢复：历史照读，但当前页面上下文必须重置并显式告知，
+    // 绝不把其它文章/页面的句子静默当成当前上下文。
+    const selected = (companionState.sessions || []).find((s) => s.id === sessionId);
+    const selectedScope = selected && selected.scope_key;
+    if (selectedScope && selectedScope !== getCompanionScopeKey()) {
+      resetCompanionContextForView(getActiveView());
+      renderContextBar();
+      if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
+      if (bodyEl) {
+        const notice = document.createElement('div');
+        notice.className = 'companion-message assistant companion-scope-notice';
+        notice.textContent = `已切换到「${selectedScope}」的历史会话；当前页面上下文未绑定，不会沿用其它页面的句子。`;
+        bodyEl.appendChild(notice);
+      }
+    }
   } catch (err) {
     console.error('[CompanionDrawer] Failed to switch session:', err);
   }

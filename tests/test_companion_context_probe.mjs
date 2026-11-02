@@ -153,6 +153,8 @@ function makeEl(id) {
 const registry = new Map();
 for (const v of VIEWS) registry.set("view-" + v, makeEl("view-" + v));
 registry.set("companion-context-bar", makeEl("companion-context-bar"));
+registry.set("companion-session-select", makeEl("companion-session-select"));
+registry.set("companion-drawer-body", makeEl("companion-drawer-body"));
 const writerEditor = makeEl("ide-editor");
 registry.set("ide-editor", writerEditor);
 const companionInput = makeEl("companion-input");
@@ -240,7 +242,7 @@ const context = vm.createContext({
     context.__probe.alerts.push(String(message));
   },
 });
-context.__probe = { alerts: [], companionToggle: [], openDrawerCalls: [], apiCalls: [] };
+context.__probe = { alerts: [], companionToggle: [], openDrawerCalls: [], apiCalls: [], sessionFetchCalls: [], sessionsFixture: [] };
 
 function setView(view) {
   for (const v of VIEWS) {
@@ -300,7 +302,7 @@ async function main() {
       "export async function streamCompanionChat() {}",
       "export async function executeProposal() {}",
       "export async function rejectProposal() {}",
-      "export async function fetchCompanionSessions() { return { sessions: [] }; }",
+      "export async function fetchCompanionSessions(scopeKey) { globalThis.__probe.sessionFetchCalls.push(scopeKey || null); return { sessions: globalThis.__probe.sessionsFixture || [] }; }",
       "export async function createCompanionSession() { return { session: { id: 'x' } }; }",
       "export async function fetchCompanionHistory() { return { messages: [] }; }",
       "export async function fetchCompanionProposals() { return { proposals: [] }; }",
@@ -361,6 +363,8 @@ async function main() {
     refreshWriterDraftContext,
     sendProgressVocabStats,
     sendCardProposal,
+    refreshSessionSelect,
+    switchSession,
   } = cpDrawer.namespace;
 
   // cp-drawer 模块加载时会把真实 CompanionDrawer 合并进 window；这里重新装回探针 spy，
@@ -741,6 +745,56 @@ async function main() {
     "G6 正常提议确认按钮文案被误改"
   );
 
+  /* G7. 全局历史分组 + 跨 scope 上下文重置 */
+  setView("cards");
+  context.__probe.sessionsFixture = [
+    { id: "ses_cards", title: "卡盒会话", scope_key: "view:cards", created_at: "2026-11-01" },
+    { id: "ses_article", title: "阅读会话", scope_key: "article:3", created_at: "2026-11-02" },
+  ];
+  context.__probe.sessionFetchCalls.length = 0;
+  await refreshSessionSelect("view:cards");
+  const selectEl = registry.get("companion-session-select");
+  check(
+    context.__probe.sessionFetchCalls.at(-1) === null,
+    "G7 全局历史未走全量查询（仍按 scope 过滤）"
+  );
+  const groups = selectEl.children.filter((c) => typeof c.label === "string" && c.label);
+  check(groups.length === 2, "G7 未按 scope 分成两组");
+  check(groups[0] && groups[0].label === "当前页面", "G7 第一组不是当前页面");
+  check(
+    groups[0] && groups[0].children[0] && groups[0].children[0].value === "ses_cards",
+    "G7 当前 scope 会话未排在当前页面组"
+  );
+  check(groups[1] && groups[1].label.includes("其它会话"), "G7 缺少其它会话组");
+  check(
+    groups[1] && groups[1].children[0] && groups[1].children[0].value === "ses_article",
+    "G7 其它 scope 会话未进入其它会话组"
+  );
+  check(
+    groups[1] && groups[1].children[0] && groups[1].children[0].textContent.includes("article:3"),
+    "G7 其它会话未标注来源 scope"
+  );
+  check(selectEl.children[0].textContent === "＋ 新建会话", "G7 新建会话入口被挤走");
+
+  setCompanionContext("Alter Satz.", "Der Spiegel", "C1", "cards", "reader-state");
+  await switchSession("ses_article");
+  check(companionState.currentSessionId === "ses_article", "G7 跨 scope 未切到目标会话");
+  check(companionState.activeContext.selectedText === "", "G7 跨 scope 未清空旧句子");
+  check(companionState.activeContext.contextSource === "none", "G7 跨 scope 未归一 contextSource");
+  check(
+    registry
+      .get("companion-drawer-body")
+      .children.some((c) => String(c.className).includes("companion-scope-notice")),
+    "G7 跨 scope 未给出显式提示"
+  );
+
+  setCompanionContext("Karte Satz", "", "", "cards", "live-selection");
+  await switchSession("ses_cards");
+  check(
+    companionState.activeContext.selectedText === "Karte Satz",
+    "G7 同 scope 切换不应清空当前上下文"
+  );
+
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
@@ -914,6 +968,8 @@ async function main() {
       "definition-fallback-ui": "pass",
       "proposal-batch-actions": "pass",
       "proposal-failure-paths": "pass",
+      "session-global-groups": "pass",
+      "session-cross-scope-reset": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",
