@@ -832,3 +832,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-03 05:45 | kimi-k3__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 ADR-0024 开放待办第 5 条「明确分域」已执行（提交 91cc47a，纯文档，未推送）：N=20 主实验报告顶部补适用域声明——其阈值与结论只对「准入式裁判 + 无回灌」历史形态有效，2026-10-17 C1 回灌落地（PR #147，merge ca3eb22）后不得引用于当前生产形态；重跑前置登记为 ADR-0024 D-2 四件 + DEEPSEEK_API_KEY（本机缺失，未跑）。PROJECT_OVERVIEW 开放待办第 5 条同步改为「已明确分域」。未跑实验、未改代码；N=20 报告原始数据与结论本身未动一字。
+
+### 2026-11-03 06:28 | kimi-k3__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+自主续派两项，均未推送未建 PR。① 集成缺口收口：`18202b2`（测试库 tmp_path 化）此前只在分支 `test/db-fixture-tmp-path`，master 并不包含（`git log master..分支` 仅此一条、`git diff master...分支` 显示改动仍在）。以 cherry-pick 落到 master（`a10bc69`，保留原作者与提交信息）；受影响 9 个 server 测试文件 247 passed（57.8s）。说明：cherry-pick 后未复跑全量（此前基线全量 2702 passed / 2 skipped 为 master 原态），但改动仅测试夹具，且服务器域测试全绿。② 递延项 PWA 图标：manifest 原先以单张内联 SVG 声明 `192x192 512x512`，不满足安装提示的可解码位图要求。生成 `static/icon-192.png` / `static/icon-512.png`（深底 #1a1714 + 红字 #c84b31，与 SVG 同源），manifest 改为两条 PNG + SVG `sizes:any` 备用；新增 `tests/test_pwa_manifest.py`（尺寸一致、根相对路径，因静态目录挂在 `/`）。实测 TestClient：`/manifest.json` 200 application/json、`/icon-192.png` 200 image/png、`/icon-512.png` 200 image/png；`test_pwa_manifest/test_check_index_html_sync/test_backend_package_layout` 11 passed；ruff 通过。提交 `5a4fcd7`。Android 真机安装提示仍未点检，不记为已验证。待办清单已同步标注图标已补齐。
