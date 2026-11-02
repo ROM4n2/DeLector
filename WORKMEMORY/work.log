@@ -828,3 +828,7 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-03 05:24 | kimi-k3__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 续派完成 03:41 中断的测试隔离改造（分支 test/db-fixture-tmp-path，提交 18202b2，未推送未建 PR）。中断时全量 1 failed + 165 errors，根因三条：① server_helpers.py 残留旧版 test_db_path（返回相对路径 "test_delector.db"）按模块属性后定义覆盖规则遮蔽新版 tmp_path 夹具；② clean_db 改依赖 test_db_path 后，10 个 import 它的模块中 7 个未按仓规显式 import test_db_path（夹具按名注册才在本模块可见），收集即 fixture not found；③ 44 处字面量 db_conn("test_delector.db")/db_progress_conn("test_progress.db")/init_db/set_setting 会连到仓库根另一个库。处置：删旧版、test_progress_path 唯一实现上收 server_helpers、7 模块补注册、字面量全迁夹具变量（包裹测试签名补参，_snapshot_vocab_cards 改显式传 db_path），test_server.py 死夹具删除。按计划未动：test_unified_pool_e2e.py（自管 env）、4 个模块顶部 os.environ.setdefault 的文件、test_companion_* 的 tmp_path 派生处。验证：受影响 9 文件 247 passed（56.5s）；全量 python -m pytest -q = 2702 passed / 2 skipped（496.10s，与 02:46 基线同量级）；ruff 全过。坑（已沉淀）：pytest 夹具同名遮蔽不看装饰器先后，模块命名空间后定义生效——同名夹具只允许一份存在。
+
+### 2026-11-03 05:45 | kimi-k3__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+ADR-0024 开放待办第 5 条「明确分域」已执行（提交 91cc47a，纯文档，未推送）：N=20 主实验报告顶部补适用域声明——其阈值与结论只对「准入式裁判 + 无回灌」历史形态有效，2026-10-17 C1 回灌落地（PR #147，merge ca3eb22）后不得引用于当前生产形态；重跑前置登记为 ADR-0024 D-2 四件 + DEEPSEEK_API_KEY（本机缺失，未跑）。PROJECT_OVERVIEW 开放待办第 5 条同步改为「已明确分域」。未跑实验、未改代码；N=20 报告原始数据与结论本身未动一字。
