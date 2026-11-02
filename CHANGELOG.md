@@ -17,6 +17,12 @@
 - **体验修复**：用户手动关闭伴读后可通过头像浮标重新开启；german 禁用样式不再误伤其它 disabled 形态。
 - **验证**：全量 `pytest tests` 2700+ passed、前端探针 140+ checks、`go test ./...` 全绿，真实浏览器 + 真实模型跑通「提议 → 确认 → 入盒」与「提议 → 放弃」。
 
+### 📲 PWA 安装图标补齐（未发布）
+
+- `manifest.json` 新增 192x192 / 512x512 PNG 位图图标（保留内联 SVG 作 `sizes:any` 备用）；此前单张 SVG 声明 `192x192 512x512`，不满足浏览器安装提示对可解码位图的规格要求。
+- 新增 `tests/test_pwa_manifest.py` 守卫：PNG 实际尺寸与声明一致、图标路径为站点根相对（静态目录挂在 `/`，带 `/static` 前缀会 404）。
+- 实测（TestClient）：`/manifest.json` 200 application/json、`/icon-192.png` 200 image/png、`/icon-512.png` 200 image/png。Android 真机安装提示仍待点检。
+
 ---
 
 ### 📖 自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速（v5.20.2）
