@@ -804,3 +804,7 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 
 ### 2026-11-03 | Trae-Agent | NOTE
 修复两处测试回归：① 重生成 delector/data/preset_processed.json（process_german_text 输出口径漂移：stats 键序与 version 字段），test_preset_processed_data 7 passed；② 清理仓库根游离 delector.db/progress.db（*.db 已 gitignore 但残留触发数据目录迁移预检），test_save_wb_state_cost 与 test_tempus_advisory 恢复通过。localhost 守卫测试已绿（proposal/reject 已在白名单）。未推送、未建 PR。
+
+### 2026-11-03 02:06 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+preset_processed.json 27 行差异排查结论：不是测试污染。仓库唯一写入路径是 tools/gen_preset_processed.py（open(...,"w") 覆盖 delector/data/preset_processed.json），应用运行时只读，tests 无任何调用。证据：跑 test_preset_processed_data/test_backend_package_layout 前后 blob 不变；companion+cards 16 文件 140 passed 前后 blob 不变；全量 python -m pytest tests（2700 passed, 2 skipped, 571.89s）前后 blob 同为 d15c9fe 且 git status --short 为空。差异性质：生成器按当前 spaCy 口径重建预置文章分析缓存（clause_tree.bracket_structure 变化），属真实数据更新而非测试副产物；排查期间已被另一提交 53ea81c 收录，工作区已干净。生成器对同输入同模型确定（sort_keys），跨 spaCy 版本会产生分析差异，且是整文件覆盖——只影响这份生成物，不触及用户 vocab_cards/数据库。同类隐患清单：全量跑完没有任何被跟踪文件被改写（空清单）；早前 conftest 守卫报的是仓库根 test_*.db（gitignore 的未跟踪测试产物），不属此类。未改代码，仅簿记。
