@@ -191,6 +191,10 @@ async def run_companion_agent_loop(
             ctx_lines.append(f"【所属文章/篇章】: {context['article_title']}")
         if context.get("cefr_level"):
             ctx_lines.append(f"【目标难度级别】: {context['cefr_level']}")
+        if context.get("view"):
+            ctx_lines.append(f"【当前页面】: {context['view']}")
+        if context.get("context_source"):
+            ctx_lines.append(f"【上下文来源】: {context['context_source']}")
         if ctx_lines:
             system_prompt += (
                 "\n\n========================================\n"

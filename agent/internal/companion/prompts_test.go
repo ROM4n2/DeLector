@@ -25,9 +25,11 @@ func TestBuildSystemPrompt(t *testing.T) {
 
 	// Case 2: Formatted context
 	ctx := companion.StudyContext{
-		ArticleTitle: "Spiegel Magazin",
-		SelectedText: "Das ist ein Beispielsatz.",
-		CEFRLevel:    "B2",
+		ArticleTitle:  "Spiegel Magazin",
+		SelectedText:  "Das ist ein Beispielsatz.",
+		CEFRLevel:     "B2",
+		View:          "cards",
+		ContextSource: "live-selection",
 	}
 	activeCtx := companion.FormatStudyContext(ctx)
 	promptWithCtx := companion.BuildSystemPrompt(activeCtx, spec)
@@ -42,6 +44,12 @@ func TestBuildSystemPrompt(t *testing.T) {
 	}
 	if !strings.Contains(promptWithCtx, "B2") {
 		t.Errorf("expected CEFR level in prompt")
+	}
+	if !strings.Contains(promptWithCtx, "当前页面: cards") {
+		t.Errorf("expected view in prompt")
+	}
+	if !strings.Contains(promptWithCtx, "上下文来源: live-selection") {
+		t.Errorf("expected context source in prompt")
 	}
 
 	// Case 3: Raw unformatted context string

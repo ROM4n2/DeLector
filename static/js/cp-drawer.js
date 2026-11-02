@@ -12,6 +12,7 @@
 'use strict';
 
 import { companionState, setCompanionContext } from './cp-state.js';
+import { getActiveView, getCompanionScopeKey } from './companion.js';
 import {
   streamCompanionChat,
   executeProposal,
@@ -40,11 +41,11 @@ let abortController = null;
 let currentReasoningEffort = 'medium';
 let sessionSelectEl = null;
 
-export async function refreshSessionSelect(articleId) {
+export async function refreshSessionSelect(scopeKey) {
   sessionSelectEl = document.getElementById('companion-session-select');
   if (!sessionSelectEl) return;
   try {
-    const res = await fetchCompanionSessions(articleId);
+    const res = await fetchCompanionSessions(scopeKey || getCompanionScopeKey());
     if (res && res.sessions) {
       companionState.sessions = res.sessions;
       renderSessionOptions();
@@ -81,13 +82,22 @@ function renderSessionOptions() {
 
 export async function newSession(articleId) {
   try {
-    const aid = articleId || companionState.activeContext?.articleTitle || null;
-    const res = await createCompanionSession(aid, '伴学研读 ' + new Date().toLocaleTimeString());
+    const view = getActiveView();
+    const currentArticleId = view === 'reader' && window.state?.currentArticle
+      ? window.state.currentArticle.id
+      : null;
+    const aid = articleId || currentArticleId || null;
+    const scopeKey = getCompanionScopeKey();
+    const res = await createCompanionSession(
+      aid,
+      '伴学研读 ' + new Date().toLocaleTimeString(),
+      scopeKey
+    );
     if (res && res.session) {
       companionState.currentSessionId = res.session.id;
       companionState.messages = [];
       companionState.proposals = [];
-      await refreshSessionSelect(aid);
+      await refreshSessionSelect(scopeKey);
       clearMessageArea();
       renderWelcomeMessage();
     }
@@ -205,11 +215,24 @@ export function setReasoningEffort(effort) {
   return currentReasoningEffort;
 }
 
-/** 动态同步底部快捷操作选项卡显示状态（有句子时弹跳出，无句子时收起） */
-function updateQuickActionChips(hasText) {
+const COMPANION_VIEW_LABELS = {
+  reader: '阅读器',
+  home: '文库',
+  cards: '卡盒',
+  progress: '学情',
+  writer: '写作台',
+  exam: '备考',
+  search: '检索',
+  encounter: '遇见区',
+  german: '德语工作台'
+};
+
+/** 动态同步底部快捷操作选项卡显示状态（仅阅读器且绑定句子时可用） */
+function updateQuickActionChips(hasText, view) {
+  const readerContext = Boolean(hasText) && view === 'reader';
   const chips = document.querySelectorAll('.companion-quick-chip.context-required');
   chips.forEach((c) => {
-    c.classList.toggle('is-visible', hasText);
+    c.classList.toggle('is-visible', readerContext);
   });
 }
 
@@ -225,6 +248,8 @@ export function renderContextBar() {
   }
 
   const text = companionState.activeContext.selectedText;
+  const view = companionState.activeContext.view || getActiveView();
+  const viewLabel = COMPANION_VIEW_LABELS[view] || '当前页面';
   const sents = window.state?.currentArticle?.sentences || [];
 
   if (text) {
@@ -233,7 +258,7 @@ export function renderContextBar() {
     icon.textContent = '📌';
     const textSpan = document.createElement('span');
     textSpan.className = 'companion-context-text';
-    textSpan.textContent = '已绑定难句: „' + text + '“';
+    textSpan.textContent = (view === 'reader' ? '已绑定难句: „' : '已绑定文本: „') + text + '“';
 
     const clearBtn = document.createElement('button');
     clearBtn.className = 'companion-context-clear';
@@ -241,7 +266,13 @@ export function renderContextBar() {
     clearBtn.textContent = '✕';
     clearBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      setCompanionContext('', companionState.activeContext.articleTitle, companionState.activeContext.cefrLevel);
+      setCompanionContext(
+        '',
+        companionState.activeContext.articleTitle,
+        companionState.activeContext.cefrLevel,
+        view,
+        'none'
+      );
       renderContextBar();
     });
 
@@ -249,7 +280,8 @@ export function renderContextBar() {
     contextBarEl.appendChild(textSpan);
 
     // 手机端/精读模式：直接提供上下句无缝步进导航 (◀ 句 3/18 ▶)
-    if (sents.length > 0) {
+    // 句子步进只属于阅读器；其它页面的 live-selection 不得借用上一篇的句子列表。
+    if (view === 'reader' && sents.length > 0) {
       let currentIdx = sents.findIndex(
         (s) => s.text === text || s.id === window.state?.activeSelectedSentId
       );
@@ -273,7 +305,13 @@ export function renderContextBar() {
             window.state.activeSelectedSentId = targetSent.id;
             window.state.activeSelectedRangeText = targetSent.text;
           }
-          setCompanionContext(targetSent.text, window.state?.currentArticle?.title, window.state?.currentArticle?.cefr_level);
+          setCompanionContext(
+            targetSent.text,
+            window.state?.currentArticle?.title,
+            window.state?.currentArticle?.cefr_level,
+            'reader',
+            'reader-state'
+          );
           renderContextBar();
         }
       });
@@ -295,7 +333,13 @@ export function renderContextBar() {
             window.state.activeSelectedSentId = targetSent.id;
             window.state.activeSelectedRangeText = targetSent.text;
           }
-          setCompanionContext(targetSent.text, window.state?.currentArticle?.title, window.state?.currentArticle?.cefr_level);
+          setCompanionContext(
+            targetSent.text,
+            window.state?.currentArticle?.title,
+            window.state?.currentArticle?.cefr_level,
+            'reader',
+            'reader-state'
+          );
           renderContextBar();
         }
       });
@@ -311,20 +355,28 @@ export function renderContextBar() {
     contextBarEl.style.display = 'flex';
     const hint = document.createElement('span');
     hint.className = 'companion-context-hint';
-    hint.textContent = '💡 提示：点击正文中 🦉伴学 或词汇，即可让 Eule 针对性问诊。';
-
-    const grabBtn = document.createElement('button');
-    grabBtn.className = 'companion-context-grab-btn';
-    grabBtn.textContent = '🎯 抓取当前句';
-    grabBtn.addEventListener('click', () => {
-      syncCurrentContext();
-    });
+    if (view === 'reader') {
+      hint.textContent = '📄 阅读器 · 未绑定句子：划选正文或点击 🦉伴学，即可让 Eule 针对性问诊。';
+    } else {
+      hint.textContent =
+        '📄 ' + viewLabel + ' · 未绑定句子：本页仅支持自由问答，阅读器专属问诊请在阅读页使用。';
+    }
 
     contextBarEl.appendChild(hint);
-    contextBarEl.appendChild(grabBtn);
+
+    // “抓取当前句”只在阅读器有意义；其它页面没有可抓取的视口句子。
+    if (view === 'reader') {
+      const grabBtn = document.createElement('button');
+      grabBtn.className = 'companion-context-grab-btn';
+      grabBtn.textContent = '🎯 抓取当前句';
+      grabBtn.addEventListener('click', () => {
+        syncCurrentContext();
+      });
+      contextBarEl.appendChild(grabBtn);
+    }
   }
 
-  updateQuickActionChips(Boolean(text));
+  updateQuickActionChips(Boolean(text), view);
 }
 
 /** 同步当前阅读器选区或活动难句 */
@@ -332,7 +384,13 @@ export function syncCurrentContext() {
   if (window.Companion && window.Companion.harvestStudyContext) {
     const ctx = window.Companion.harvestStudyContext();
     if (ctx.selectedText) {
-      setCompanionContext(ctx.selectedText, ctx.articleTitle, ctx.cefrLevel);
+      setCompanionContext(
+        ctx.selectedText,
+        ctx.articleTitle,
+        ctx.cefrLevel,
+        ctx.view,
+        ctx.contextSource
+      );
       renderContextBar();
       if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
       if (bodyEl) {
@@ -340,7 +398,7 @@ export function syncCurrentContext() {
         hintDiv.className = 'companion-message assistant';
         hintDiv.style.borderLeft = '3px solid var(--coral, #b44322)';
         const lbl = document.createElement('div');
-        lbl.textContent = '✓ 已同步视口难句：';
+        lbl.textContent = ctx.view === 'reader' ? '✓ 已同步视口难句：' : '✓ 已同步当前页面文本：';
         const q = document.createElement('em');
         q.textContent = '„' + ctx.selectedText + '“';
         hintDiv.appendChild(lbl);
@@ -351,7 +409,12 @@ export function syncCurrentContext() {
       return;
     }
   }
-  alert('未检测到当前选中文本。请在文章中点击句旁的 [🦉 伴学]，或点击单词后重试。');
+  const view = getActiveView();
+  alert(
+    view === 'reader'
+      ? '未检测到当前选中文本。请在文章中点击句旁的 [🦉 伴学]，或点击单词后重试。'
+      : '当前页面未检测到选中文本；阅读器专属问诊请在阅读页使用。'
+  );
 }
 
 /** 初始化抽屉 DOM 挂载（挂载到主抽屉 #drawer 的 companion-section） */
@@ -391,13 +454,28 @@ export function initCompanionDrawer() {
 }
 
 export function openCompanionDrawer(contextPayload) {
+  // 统一入口准入：german 工作台禁止打开伴学抽屉。
+  if (getActiveView() === 'german') return;
   initCompanionDrawer();
+  const view = (contextPayload && contextPayload.view) || getActiveView();
   if (contextPayload) {
+    const contextSource =
+      contextPayload.contextSource ||
+      (contextPayload.selectedText
+        ? view === 'reader'
+          ? 'reader-state'
+          : 'live-selection'
+        : 'none');
     setCompanionContext(
       contextPayload.selectedText,
       contextPayload.articleTitle,
-      contextPayload.cefrLevel
+      contextPayload.cefrLevel,
+      view,
+      contextSource
     );
+  } else {
+    // 无显式上下文时也必须清掉旧值，避免抽屉页签复用上一篇的阅读器上下文。
+    setCompanionContext('', '', '', view, 'none');
   }
   companionState.isOpen = true;
 
@@ -420,7 +498,7 @@ export function openCompanionDrawer(contextPayload) {
       hintDiv.style.borderLeft = '3px solid var(--coral, #b44322)';
 
       const label = document.createElement('div');
-      label.textContent = '已绑定视口难句：';
+      label.textContent = view === 'reader' ? '已绑定视口难句：' : '已绑定当前页面文本：';
       const quote = document.createElement('em');
       quote.textContent = '„' + contextPayload.selectedText + '“';
 
@@ -546,7 +624,16 @@ export function submitPrompt(userText) {
     reasoning_effort: currentReasoningEffort,
     messages: companionState.messages,
     context: activeContext,
+    view: companionState.activeContext.view,
+    context_source: companionState.activeContext.contextSource,
+    scope_key: getCompanionScopeKey(),
     signal: abortController.signal,
+    onSessionId: (sessionId) => {
+      if (sessionId && companionState.currentSessionId !== sessionId) {
+        companionState.currentSessionId = sessionId;
+        refreshSessionSelect(getCompanionScopeKey()).catch(() => {});
+      }
+    },
     onEvent: (event, data) => {
       if (event === 'thought') {
         thoughtCtrl.setRealThought(data.text || '');

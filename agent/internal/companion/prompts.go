@@ -27,7 +27,8 @@ const (
 
 // FormatStudyContext 格式化前端视口上下文为 Markdown 文本块。
 func FormatStudyContext(ctx StudyContext) string {
-	if ctx.SelectedText == "" && ctx.ArticleTitle == "" && ctx.CEFRLevel == "" {
+	if ctx.SelectedText == "" && ctx.ArticleTitle == "" && ctx.CEFRLevel == "" &&
+		ctx.View == "" && ctx.ContextSource == "" {
 		return ""
 	}
 	var sb strings.Builder
@@ -40,6 +41,12 @@ func FormatStudyContext(ctx StudyContext) string {
 	}
 	if ctx.SelectedText != "" {
 		sb.WriteString(fmt.Sprintf("\n- 当前聚焦句子: %s", ctx.SelectedText))
+	}
+	if ctx.View != "" {
+		sb.WriteString(fmt.Sprintf("\n- 当前页面: %s", ctx.View))
+	}
+	if ctx.ContextSource != "" {
+		sb.WriteString(fmt.Sprintf("\n- 上下文来源: %s", ctx.ContextSource))
 	}
 	return sb.String()
 }

@@ -99,6 +99,56 @@ def test_append_and_get_messages(conn):
     assert msgs[1]["id"] == m2["id"]
 
 
+def test_scope_key_additive_migration_and_legacy_history_readable():
+    """老库没有 scope_key 列：init 必须补列，旧会话归入 view:global 且历史可读。"""
+    legacy = sqlite3.connect(":memory:")
+    legacy.row_factory = sqlite3.Row
+    legacy.execute(
+        """
+        CREATE TABLE companion_sessions (
+            id TEXT PRIMARY KEY,
+            article_id TEXT,
+            title TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_archived INTEGER DEFAULT 0
+        )
+        """
+    )
+    legacy.execute(
+        "INSERT INTO companion_sessions (id, article_id, title) VALUES ('ses_legacy', 'art_old', '旧会话')"
+    )
+    legacy.commit()
+
+    init_companion_tables(legacy)
+
+    columns = {row[1] for row in legacy.execute("PRAGMA table_info(companion_sessions)").fetchall()}
+    assert "scope_key" in columns
+
+    row = legacy.execute(
+        "SELECT scope_key FROM companion_sessions WHERE id = 'ses_legacy'"
+    ).fetchone()
+    assert row["scope_key"] == "view:global"
+
+    fetched = get_session(legacy, "ses_legacy")
+    assert fetched is not None
+    assert fetched["title"] == "旧会话"
+    legacy.close()
+
+
+def test_scope_key_filter_and_creation(conn):
+    """scope_key 为加法字段：写入/查询按 scope 隔离，旧 article_id 查询仍可用。"""
+    s1 = create_session(conn, article_id="art_1", title="Article", scope_key="article:art_1")
+    s2 = create_session(conn, article_id=None, title="Cards", scope_key="view:cards")
+
+    assert s1["scope_key"] == "article:art_1"
+    assert s2["scope_key"] == "view:cards"
+
+    assert [s["id"] for s in list_sessions(conn, scope_key="article:art_1")] == [s1["id"]]
+    assert [s["id"] for s in list_sessions(conn, scope_key="view:cards")] == [s2["id"]]
+    assert [s["id"] for s in list_sessions(conn, article_id="art_1")] == [s1["id"]]
+
+
 def test_proposals_lifecycle(conn):
     s = create_session(conn, article_id="art_1", title="Proposal Chat")
     sid = s["id"]

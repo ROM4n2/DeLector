@@ -3,7 +3,7 @@
 
 import { state, esc, jsAttr, normalizeCefrPct, notify } from "./core.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
-import { Companion } from "./companion.js";
+import { Companion, getActiveView } from "./companion.js";
 import {
   removeArticle, fetchArticles, fetchArticle,
   lookupVocab, lookupGrammar,
@@ -561,6 +561,8 @@ export function inspectSubWord(word, defZh, gender) {
 
 // ── Drawer & Tabs ────────────────────────────────────────────────────────────
 export function switchDrawerTab(tab) {
+  // 统一入口准入：german 工作台禁止进入伴学页签。
+  if (tab === "companion" && getActiveView() === "german") return;
   state.activeDrawerTab = tab;
   const tabVocab = document.getElementById("d-tab-vocab");
   const tabSyntax = document.getElementById("d-tab-syntax");

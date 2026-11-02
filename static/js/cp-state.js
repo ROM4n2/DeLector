@@ -38,11 +38,13 @@ export const companionState = {
   // 思考强度设置: 'none' | 'low' | 'medium' | 'high'
   reasoningEffort: 'medium',
 
-  // 视口收获的上下文: { selectedText, articleTitle, cefrLevel }
+  // 视口收获的上下文: { selectedText, articleTitle, cefrLevel, view, contextSource }
   activeContext: {
     selectedText: '',
     articleTitle: '',
-    cefrLevel: 'B1'
+    cefrLevel: 'B1',
+    view: '',
+    contextSource: 'none'
   }
 };
 
@@ -55,9 +57,22 @@ export function resetCompanionSession() {
   companionState.proposals = [];
 }
 
-/** 更新当前阅读上下文 */
-export function setCompanionContext(selectedText, articleTitle, cefrLevel) {
+/** 更新当前阅读上下文（view / contextSource 由调用方显式给出） */
+export function setCompanionContext(selectedText, articleTitle, cefrLevel, view, contextSource) {
   companionState.activeContext.selectedText = selectedText || '';
   companionState.activeContext.articleTitle = articleTitle || '';
-  companionState.activeContext.cefrLevel = cefrLevel || 'B1';
+  companionState.activeContext.cefrLevel = cefrLevel || '';
+  companionState.activeContext.view = view || '';
+  companionState.activeContext.contextSource = contextSource || 'none';
+}
+
+/** 视图切换时清空上下文，避免抽屉页签复用上一篇阅读器的旧值 */
+export function resetCompanionContextForView(view) {
+  setCompanionContext('', '', '', view || '', 'none');
+}
+
+/** 视图 / 文章 scope 切换时丢弃旧会话指针，后续请求由后端按新 scope 取/建会话 */
+export function resetCompanionSessionScope() {
+  companionState.currentSessionId = null;
+  companionState.sessions = [];
 }

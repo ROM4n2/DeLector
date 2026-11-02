@@ -39,15 +39,22 @@ export async function updateReasoningEffort(effort) {
   });
 }
 
-export async function fetchCompanionSessions() {
+export async function fetchCompanionSessions(scopeKey) {
+  if (scopeKey) {
+    return api(`/api/companion/sessions/scoped/${scopeKey}`);
+  }
   return api('/api/companion/sessions');
 }
 
-export async function createCompanionSession(articleId, title) {
+export async function createCompanionSession(articleId, title, scopeKey) {
   return api('/api/companion/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ article_id: articleId || null, title: title || '新伴学会话' })
+    body: JSON.stringify({
+      article_id: articleId || null,
+      title: title || '新伴学会话',
+      scope_key: scopeKey || null
+    })
   });
 }
 
@@ -91,6 +98,15 @@ export async function streamCompanionChat(options) {
   if (options.reasoning_effort) {
     reqBody.reasoning_effort = options.reasoning_effort;
   }
+  if (options.view) {
+    reqBody.view = options.view;
+  }
+  if (options.context_source) {
+    reqBody.context_source = options.context_source;
+  }
+  if (options.scope_key) {
+    reqBody.scope_key = options.scope_key;
+  }
 
   const response = await fetch('/api/companion/chat', {
     method: 'POST',
@@ -101,6 +117,14 @@ export async function streamCompanionChat(options) {
 
   if (!response.ok) {
     throw new Error('HTTP ' + response.status + ': 伴学智能体服务不可用');
+  }
+
+  // 首次由后端自动建会话时，用响应头回填前端 currentSessionId。
+  const responseSessionId = response.headers && response.headers.get
+    ? response.headers.get('X-Session-ID')
+    : null;
+  if (responseSessionId && typeof options.onSessionId === 'function') {
+    options.onSessionId(responseSessionId);
   }
 
   const reader = response.body.getReader();

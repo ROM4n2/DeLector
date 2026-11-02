@@ -63,6 +63,20 @@ def test_session_service_get_or_create_existing(test_db: str) -> None:
     assert s2["title"] == "首个会话"
 
 
+def test_session_service_scope_isolation(test_db: str) -> None:
+    """不同 scope 不会互相取到会话；同 scope 重复取到同一个会话。"""
+    svc = CompanionSessionService(db_path=test_db)
+    article_s = svc.get_or_create_session(article_id="art_scope", scope_key="article:art_scope")
+    cards_s = svc.get_or_create_session(scope_key="view:cards")
+
+    assert article_s["id"] != cards_s["id"]
+    again = svc.get_or_create_session(article_id="art_scope", scope_key="article:art_scope")
+    assert again["id"] == article_s["id"]
+
+    assert [s["id"] for s in svc.list_recent_sessions(scope_key="article:art_scope")] == [article_s["id"]]
+    assert [s["id"] for s in svc.list_recent_sessions(scope_key="view:cards")] == [cards_s["id"]]
+
+
 def test_session_service_save_turn_and_history(test_db: str) -> None:
     svc = CompanionSessionService(db_path=test_db)
     session = svc.get_or_create_session(article_id="art_03")

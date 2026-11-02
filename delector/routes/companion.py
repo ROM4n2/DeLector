@@ -30,6 +30,10 @@ class CompanionChatReq(BaseModel):
     context: Optional[Dict[str, Any]] = None
     session_id: Optional[str] = None
     article_id: Optional[str] = None
+    # 加法式字段：缺省时行为与第一阶段完全一致。
+    view: Optional[str] = None
+    context_source: Optional[str] = None
+    scope_key: Optional[str] = None
 
 
 class ProposalExecReq(BaseModel):
@@ -41,6 +45,7 @@ class ProposalExecReq(BaseModel):
 class SessionCreateReq(BaseModel):
     article_id: Optional[str] = None
     title: str = "新伴学会话"
+    scope_key: Optional[str] = None
 
 
 @router.get("/context")
@@ -51,18 +56,36 @@ def get_companion_context() -> Dict[str, Any]:
 
 @router.get("/sessions")
 def api_list_sessions(
-    article_id: Optional[str] = Query(None), limit: int = Query(20)
+    article_id: Optional[str] = Query(None),
+    scope_key: Optional[str] = Query(None),
+    limit: int = Query(20),
 ) -> Dict[str, Any]:
-    """查询指定文章或全局的最新活跃伴学会话列表."""
-    return {"status": "ok", "sessions": _session_svc.list_recent_sessions(article_id=article_id, limit=limit)}
+    """查询指定文章、指定 scope 或全局的最新活跃伴学会话列表."""
+    return {
+        "status": "ok",
+        "sessions": _session_svc.list_recent_sessions(
+            article_id=article_id, scope_key=scope_key, limit=limit
+        ),
+    }
 
 
 @router.post("/sessions")
 def api_create_session(req: SessionCreateReq) -> Dict[str, Any]:
-    """创建或获取关联指定文章的伴学会话."""
+    """创建或获取关联指定文章 / scope 的伴学会话."""
     return {
         "status": "ok",
-        "session": _session_svc.get_or_create_session(article_id=req.article_id, title=req.title),
+        "session": _session_svc.get_or_create_session(
+            article_id=req.article_id, title=req.title, scope_key=req.scope_key
+        ),
+    }
+
+
+@router.get("/sessions/scoped/{scope_key}")
+def api_list_scoped_sessions(scope_key: str, limit: int = Query(20)) -> Dict[str, Any]:
+    """按 scope_key 查询最新活跃伴学会话（供前端会话切换器按页面隔离）。"""
+    return {
+        "status": "ok",
+        "sessions": _session_svc.list_recent_sessions(scope_key=scope_key, limit=limit),
     }
 
 
@@ -82,12 +105,21 @@ def api_list_proposals(session_id: str, status: Optional[str] = Query(None)) -> 
 @router.post("/chat")
 async def api_companion_chat(req: CompanionChatReq, request: Request) -> StreamingResponse:
     """伴学会话流式交互端点 (多轮 Turn 自动沉淀入库)."""
-    sid = req.session_id or _session_svc.get_or_create_session(article_id=req.article_id)["id"]
+    sid = req.session_id or _session_svc.get_or_create_session(
+        article_id=req.article_id, scope_key=req.scope_key
+    )["id"]
     user_text = next((m.get("content", "") for m in reversed(req.messages) if m.get("role") == "user"), "")
+
+    # 加法式透传：view / context_source 与旧 context 合并；缺省时 context 原样不变。
+    context_payload = dict(req.context or {})
+    if req.view:
+        context_payload["view"] = req.view
+    if req.context_source:
+        context_payload["context_source"] = req.context_source
 
     async def _wrapped_stream() -> AsyncIterator[bytes]:
         full_text, full_thought = [], []
-        async for chunk in dispatch_companion_stream(req.messages, request=request, context=req.context):
+        async for chunk in dispatch_companion_stream(req.messages, request=request, context=context_payload):
             yield chunk
             for line in chunk.decode("utf-8", errors="replace").splitlines():
                 if line.startswith("data: "):

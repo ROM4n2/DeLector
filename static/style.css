@@ -7305,6 +7305,7 @@ body.drawer-open .shadow-player {
 .companion.is-disabled .companion-avatar {
   display: flex !important;
   opacity: 0.6;
+  pointer-events: none;
 }
 
 .companion-svg {

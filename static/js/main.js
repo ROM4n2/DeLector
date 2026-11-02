@@ -2,6 +2,7 @@
 "use strict";
 
 import { state, api, esc, jsAttr, notify } from "./core.js";
+import { resetCompanionContextForView, resetCompanionSessionScope } from "./cp-state.js";
 import { ShadowPlayer, playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import {
@@ -201,6 +202,16 @@ function ensureGermanWorkbench() {
 // ── View Router ─────────────────────────────────────────────────────────────
 export function show(view) {
   if (view === "articles") view = "home";
+
+  // 视图切换即上下文失效：清空伴学上下文与阅读器选区残留，
+  // 防止抽屉页签 / 非阅读器页面复用上一篇阅读器的旧句子。
+  resetCompanionContextForView(view);
+  resetCompanionSessionScope();
+  state.activeSelectedRangeText = "";
+  state.activeSelectedSentId = null;
+  state.selectedToken = null;
+  state.selectedSent = null;
+
   document
     .querySelectorAll(".view")
     .forEach((el) => el.classList.remove("active"));
