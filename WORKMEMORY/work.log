@@ -790,3 +790,6 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 ### 2026-11-03 01:19 | kimi-k3.1-pro__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 definition_zh 回退错位修复：execute_proposal 不再把 reading 当中文释义，缺省留空；提案卡片缺释义显示「待补充」；Python/Go prompt 与 Go tool schema 明确要求 definition_zh，reading 仅作读音。历史只读审计（真实库，未改数据）：source=companion 共 19 条，4 条 definition_zh 无中文字符（id 125-128，内容为分音节/读音形式），IPA 样 0 条、空释义 0 条。E2E 证据（临时 DB 副本）：prop_f81e2518 accepted，vocab 148->153，网格可见 die Trauer 及中文释义；prop_fd0fde67 rejected，vocab 保持 153。验证：pytest 81 passed、探针 111 checks / 23 场景、go test ./... 全绿、三道闸 PASS、ruff 通过。坑：浏览器桥新标签视口 0x0，改用 CDP 在同一真实页面驱动并 Emulation.setDeviceMetricsOverride 恢复 1280x800。
+
+### 2026-11-03 | Trae-Agent | MILESTONE
+修复卡盒提议「音标冒充中文释义」缺陷：companion_proposal.py 不再用 reading 回退 definition_zh；Go/Python system prompt 与 tool schema 明确 definition_zh 必填、reading 仅读音；前端提案卡缺释义时显示「待补充」。新增 test_proposal_service_never_stores_reading_as_definition。实测：pytest companion 48 passed、go test 全绿、前端探针全 PASS、contract PASS、ruff PASS。未推送、未建 PR。
