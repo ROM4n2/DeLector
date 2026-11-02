@@ -11,6 +11,7 @@ lan_client）住在 `tests/server_helpers.py` 与 `tests/conftest.py`，按名�
 
 from server_helpers import clean_db as clean_db
 from server_helpers import lan_client as lan_client
+from server_helpers import test_db_path as test_db_path
 
 # ── 局域网 CORS（docs/plans/archive/2026-09-03-lan-silent-sync-stage-a.md Task 1）──
 # 手机 APP 的 WebView 页面 origin 是它自己的 127.0.0.1:8000（Chaquopy 本地 server），

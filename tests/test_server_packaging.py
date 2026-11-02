@@ -14,6 +14,7 @@ import pytest
 # 夹具由 pytest 按名解析，静态看不见使用）。
 from server_helpers import ROOT, _calls_named, _package_windows_build_windows_fn
 from server_helpers import clean_db as clean_db
+from server_helpers import test_db_path as test_db_path
 
 from delector.core.database import db_conn
 from delector.server import init_db
@@ -90,7 +91,7 @@ def test_backup_covers_essays_and_essay_versions_roundtrip(client):
     assert any(v["message"] == "Restored version" for v in res_v_get.json())
 
 
-def test_backup_grammar_cards_preserves_error_type_and_corrected_form(client):
+def test_backup_grammar_cards_preserves_error_type_and_corrected_form(client, test_db_path):
     """grammar_cards 备份必须保留 corrected_form 和 error_type 字段。"""
     payload = {
         "version": 2,
@@ -112,7 +113,7 @@ def test_backup_grammar_cards_preserves_error_type_and_corrected_form(client):
     }
     assert client.post("/api/backup/restore", json=payload).status_code == 200
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM grammar_cards WHERE id = 777").fetchone())
     assert row["corrected_form"] == "in dem Buch"
     assert row["error_type"] == "kasus"
@@ -164,9 +165,9 @@ def test_sync_sdp_cache_capacity_and_size_limit(client):
     assert res_huge.status_code == 400
 
 
-def test_db_busy_timeout_and_concurrency_guard():
+def test_db_busy_timeout_and_concurrency_guard(test_db_path):
     """SQLite 连接必须启用 WAL + busy_timeout + synchronous=NORMAL 守卫，避免并发读写锁库。"""
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         jmode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
         sync_mode = conn.execute("PRAGMA synchronous").fetchone()[0]
@@ -175,17 +176,17 @@ def test_db_busy_timeout_and_concurrency_guard():
     assert sync_mode in (1, 2)  # NORMAL or FULL
 
 
-def test_vocab_cards_has_unified_pool_columns(client):
+def test_vocab_cards_has_unified_pool_columns(client, test_db_path):
     """ADR-0016 Phase 1：vocab_cards 具备统一池列（source + FSRS-6），新卡默认 source='user'。
 
     本轮为**加性** schema（无人读写）——只钉"列在、默认值对"，为 Phase 2 的派生投影打底。
     """
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(vocab_cards)").fetchall()}
     assert {"source", "fsrs_s", "fsrs_d", "fsrs_lapses"} <= cols, (
         f"vocab_cards 缺统一池列（ADR-0016 Phase 1），实际列：{sorted(cols)}"
     )
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         conn.execute(
             "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context) VALUES (?, ?, ?, ?)",
             ("Haus", "Haus", "房子", "Das Haus."),
@@ -243,7 +244,7 @@ def test_source_class_maps_provenance_to_pool_values():
     assert LX.source_class(["ai", "manual", "official"]) == "official"
 
 
-def test_add_vocab_card_sets_source_from_lexicon(client):
+def test_add_vocab_card_sets_source_from_lexicon(client, test_db_path):
     """`POST /api/cards/vocab` 按主干 provenance 落定 source（懒物化，ADR-0016 Phase 2）。"""
     from delector.core import lexicon as LX
 
@@ -256,13 +257,13 @@ def test_add_vocab_card_sets_source_from_lexicon(client):
         "/api/cards/vocab",
         json={"word": "zzzquux", "lemma": "zzzquux", "definition_zh": "造词", "sentence_context": "Zzz quux."},
     )
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         rows = {r["lemma"]: r["source"] for r in conn.execute("SELECT lemma, source FROM vocab_cards").fetchall()}
     assert rows["ab"] == "official"  # 主干收录 → 官方
     assert rows["zzzquux"] == "user"  # 主干未收录的自定义词
 
 
-def test_known_lemmas_endpoint_reflects_studied_cards_only(client):
+def test_known_lemmas_endpoint_reflects_studied_cards_only(client, test_db_path):
     """GET /api/cards/known-lemmas：只回「已学」主卡原形（三条来源任一成立即算已知）。
 
     2026-09-28 swarm 审计 P1：i+1 已知词池原只读背词工作台 deck，主路径（/api/cards）
@@ -272,7 +273,7 @@ def test_known_lemmas_endpoint_reflects_studied_cards_only(client):
     3. fsrs_s>0（在背词工作台 FSRS 学过至少一次，统一池投影写入）——第三条为 2026-09-28 补入。
     **仅加入卡盒**（mastered=0 且 repetition_count=0 且 fsrs_s 空）**不算**已知（承项目既有约定）。
     """
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         for word, mastered, reps in (("Abfahrt", 0, 0), ("Haus", 0, 2), ("Baum", 1, 0)):
             conn.execute(
                 "INSERT INTO vocab_cards (word, lemma, definition_zh, sentence_context, "

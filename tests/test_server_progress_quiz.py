@@ -17,6 +17,8 @@ import os
 
 from server_helpers import ROOT, _insert_vocab_card
 from server_helpers import clean_db as clean_db
+from server_helpers import test_db_path as test_db_path
+from server_helpers import test_progress_path as test_progress_path
 
 from delector.core.database import db_conn, db_progress_conn
 
@@ -53,7 +55,7 @@ def test_delete_nonexistent_card_returns_404(client):
     assert res.status_code == 404
 
 
-def test_master_vocab_card(client):
+def test_master_vocab_card(client, test_db_path, test_progress_path):
     """Mastering a card marks it and logs to progress DB."""
     res = client.post(
         "/api/cards/vocab",
@@ -72,12 +74,12 @@ def test_master_vocab_card(client):
     assert patch_res.status_code == 200
     assert patch_res.json()["mastered"] is True
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = conn.execute("SELECT mastered, mastered_at FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["mastered"] == 1
         assert row["mastered_at"] is not None
 
-    with db_progress_conn("test_progress.db") as conn:
+    with db_progress_conn(test_progress_path) as conn:
         row = conn.execute(
             "SELECT event_type FROM study_log WHERE ref_id=? AND event_type='master_card'", (card_id,)
         ).fetchone()
@@ -85,7 +87,7 @@ def test_master_vocab_card(client):
         assert row["event_type"] == "master_card"
 
 
-def test_unmaster_card(client):
+def test_unmaster_card(client, test_db_path):
     """Unmastering resets mastered flag."""
     res = client.post(
         "/api/cards/vocab",
@@ -103,7 +105,7 @@ def test_unmaster_card(client):
     client.patch(f"/api/cards/vocab/{card_id}/master", json={"mastered": True})
     client.patch(f"/api/cards/vocab/{card_id}/master", json={"mastered": False})
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = conn.execute("SELECT mastered FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["mastered"] == 0
 
@@ -111,7 +113,7 @@ def test_unmaster_card(client):
 # ── Phase B: Quiz Record ──────────────────────────────────────────────────────
 
 
-def test_quiz_record_correct(client):
+def test_quiz_record_correct(client, test_db_path, test_progress_path):
     """Correct answer increments correct_count and logs to quiz_log."""
     res = client.post(
         "/api/cards/vocab",
@@ -131,17 +133,17 @@ def test_quiz_record_correct(client):
     )
     assert quiz_res.status_code == 200
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = conn.execute("SELECT correct_count, wrong_count FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["correct_count"] == 1
         assert row["wrong_count"] == 0
 
-    with db_progress_conn("test_progress.db") as conn:
+    with db_progress_conn(test_progress_path) as conn:
         row = conn.execute("SELECT correct FROM quiz_log WHERE card_id=?", (card_id,)).fetchone()
         assert row["correct"] == 1
 
 
-def test_quiz_record_wrong(client):
+def test_quiz_record_wrong(client, test_db_path):
     """Wrong answer increments wrong_count."""
     res = client.post(
         "/api/cards/vocab",
@@ -160,7 +162,7 @@ def test_quiz_record_wrong(client):
         "/api/quiz/record", json={"card_id": card_id, "card_type": "vocab", "mode": "dictation", "correct": False}
     )
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = conn.execute("SELECT correct_count, wrong_count FROM vocab_cards WHERE id=?", (card_id,)).fetchone()
         assert row["wrong_count"] == 1
         assert row["correct_count"] == 0
@@ -404,7 +406,7 @@ def test_due_cards_grammar_branch_untouched(client):
     assert any(c["grammar_name"] == "Akkusativ" for c in data["due_grammar"])
 
 
-def test_due_cards_still_includes_custom_workbench_word_never_rated(client):
+def test_due_cards_still_includes_custom_workbench_word_never_rated(client, test_db_path):
     """⑥ **已知缺口**：工作台自建词（``custom: True``）但从未在工作台评级过 ⇒ 投影行的
     ``fsrs_s`` 为 NULL ⇒ 与 reader 普通卡不可区分 ⇒ **仍在** ``due_vocab``。
 
@@ -427,7 +429,7 @@ def test_due_cards_still_includes_custom_workbench_word_never_rated(client):
     res = client.put("/api/wb/state", json={"payload": payload}, headers={"X-WB-Key": key})
     assert res.status_code == 200, res.text
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = ?", ("neuschule",)).fetchone())
     assert row["fsrs_s"] is None, f"自建未评级词投影后 fsrs_s 应为 NULL（缺口前提）：{row}"
 

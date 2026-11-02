@@ -15,6 +15,7 @@ import os
 
 from server_helpers import ROOT, _insert_vocab_card
 from server_helpers import clean_db as clean_db
+from server_helpers import test_db_path as test_db_path
 
 from delector.core.database import db_conn
 from delector.core.lexicon import lemma_key
@@ -271,7 +272,7 @@ def _known_lemma_keys(client) -> set:
     return {lemma_key(lem) for lem in r.json()["lemmas"]}
 
 
-def test_known_lemmas_includes_fsrs_projected_word(client):
+def test_known_lemmas_includes_fsrs_projected_word(client, test_db_path):
     """① 工作台背过的词经统一池投影（只写 fsrs_s）后必须算已知（修复前必红）。
 
     真实路径：PUT /api/wb/state → project_wb_deck 写 fsrs_s（不写 repetition_count / mastered）。
@@ -284,7 +285,7 @@ def test_known_lemmas_includes_fsrs_projected_word(client):
     assert res.status_code == 200, res.text
 
     # 前提：投影确实把该词写进了池，且只写 fsrs_s（未写 rep / mastered）。
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = 'haus'").fetchone())
     assert row["fsrs_s"] == 2.3065, f"投影必须把卡的 s 写进 fsrs_s：{row}"
     assert row["repetition_count"] == 0 and row["mastered"] == 0, "FSRS≠DSR：投影不得写 rep / mastered"
@@ -309,7 +310,7 @@ def test_known_lemmas_excludes_unstudied_seed_word(client):
     assert "baum" not in keys, f"无卡、非自建的 Baum（未学冷种子）不得算已知：{keys}"
 
 
-def test_known_lemmas_excludes_added_but_unreviewed_card(client):
+def test_known_lemmas_excludes_added_but_unreviewed_card(client, test_db_path):
     """③ 仅在卡盒入卡（reader 存词）不算已知 —— 既有约定「加入 ≠ 已知」不回归。
 
     POST /api/cards/vocab 写入的行：repetition_count=0、mastered=0、fsrs_s 为空。
@@ -327,7 +328,7 @@ def test_known_lemmas_excludes_added_but_unreviewed_card(client):
     )
     assert res.status_code == 200, res.text
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE lemma = 'lesen'").fetchone())
     assert row["repetition_count"] == 0 and row["mastered"] == 0, "前提：入卡未复习"
     assert row["fsrs_s"] is None, "reader 入卡不得带 fsrs_s"
@@ -335,7 +336,7 @@ def test_known_lemmas_excludes_added_but_unreviewed_card(client):
     assert "lesen" not in _known_lemma_keys(client), "仅入卡未复习不得算已知"
 
 
-def test_known_lemmas_includes_dsr_reviewed_card(client):
+def test_known_lemmas_includes_dsr_reviewed_card(client, test_db_path):
     """④ 卡盒（DSR）复习过的词仍算已知（旧语义不回归）。"""
     res = client.post(
         "/api/cards/vocab",
@@ -349,13 +350,13 @@ def test_known_lemmas_includes_dsr_reviewed_card(client):
         },
     )
     card_id = res.json()["id"]
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         conn.execute("UPDATE vocab_cards SET repetition_count = 1 WHERE id = ?", (card_id,))
 
     assert "gehen" in _known_lemma_keys(client), "卡盒复习过（repetition_count>0）的词仍应算已知"
 
 
-def test_known_lemmas_includes_mastered_card(client):
+def test_known_lemmas_includes_mastered_card(client, test_db_path):
     """⑤ 手动置「已掌握」(mastered=1) 的词仍算已知（旧语义不回归）。"""
     res = client.post(
         "/api/cards/vocab",
@@ -369,13 +370,13 @@ def test_known_lemmas_includes_mastered_card(client):
         },
     )
     card_id = res.json()["id"]
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         conn.execute("UPDATE vocab_cards SET mastered = 1 WHERE id = ?", (card_id,))
 
     assert "schreiben" in _known_lemma_keys(client), "mastered=1 的词仍应算已知"
 
 
-def test_known_lemmas_excludes_zero_fsrs_row(client):
+def test_known_lemmas_excludes_zero_fsrs_row(client, test_db_path):
     """⑥ 边界：fsrs_s = 0 的行不得算已知（钉住 `> 0` 而非 `IS NOT NULL`）。
 
     `IS NOT NULL` 在「行有 fsrs 列但值退化（0 / 空串）」时更宽；只有 `> 0` 才等价于
@@ -395,7 +396,7 @@ def test_known_lemmas_excludes_zero_fsrs_row(client):
     )
     card_id = res.json()["id"]
     # 手工构造退化行：fsrs_s 有列但值为 0（并非「真有卡」）。
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         conn.execute("UPDATE vocab_cards SET fsrs_s = 0 WHERE id = ?", (card_id,))
 
     assert "alt" not in _known_lemma_keys(client), "fsrs_s=0 不是『真有卡』，不得算已知"

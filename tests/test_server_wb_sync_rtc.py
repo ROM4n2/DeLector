@@ -17,6 +17,7 @@ import re
 from fastapi.testclient import TestClient
 from server_helpers import clean_db as clean_db
 from server_helpers import lan_client as lan_client
+from server_helpers import test_db_path as test_db_path
 
 from delector import server
 from delector.core.database import db_conn
@@ -299,7 +300,7 @@ def test_wb_state_cross_device_write(client, lan_client):
     assert lan_client.put("/api/wb/state", json={"payload": payload}).status_code == 403
 
 
-def test_wb_state_survives_reinit(client):
+def test_wb_state_survives_reinit(client, test_db_path):
     """真文件落盘锁定：save_wb_state → init_db 重开同一库文件 → 数据仍在。
 
     clean_db 是「每次测试前删库重建」，单靠它证明不了落盘。这里在同一个
@@ -308,7 +309,7 @@ def test_wb_state_survives_reinit(client):
     """
     payload = {"cards": {"c9": {"reps": 3, "last": 42}}, "words": [{"id": "u-9"}]}
     server.save_wb_state(payload)
-    init_db("test_delector.db")
+    init_db(test_db_path)
     assert server.get_wb_state() == payload
     # 经 HTTP 也读得到同一份（重开后的文件）
     key = client.get("/api/wb/state/key").json()["key"]
@@ -320,7 +321,7 @@ def test_wb_state_survives_reinit(client):
 # ── ADR-0016 Phase 3 / Task 2：wb 镜像写入与统一池投影同事务（Migration-Idempotency §2/§3）──
 
 
-def test_wb_state_put_projects_into_vocab_pool(client):
+def test_wb_state_put_projects_into_vocab_pool(client, test_db_path):
     """接线生效：PUT /api/wb/state 落盘的同时把 wb 快照幂等投影进统一池 vocab_cards。
 
     证明 Task 1 的 ``project_wb_deck`` 已接进写镜像路径：PUT 后 vocab_cards 出现该
@@ -343,7 +344,7 @@ def test_wb_state_put_projects_into_vocab_pool(client):
     assert r.status_code == 200
     assert r.json().get("updated_at")
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = conn.execute(
             "SELECT word, definition_zh, fsrs_s, fsrs_d, fsrs_lapses "
             "FROM vocab_cards WHERE word = ?",
@@ -356,7 +357,7 @@ def test_wb_state_put_projects_into_vocab_pool(client):
     assert row["definition_zh"] == "出发；发车"
 
 
-def test_wb_state_put_projection_idempotent_three_phase(client):
+def test_wb_state_put_projection_idempotent_three_phase(client, test_db_path):
     """Migration-Idempotency §3 三段时序：PUT → 追加新词 → 再 PUT 只新增新词，旧词不重复。
 
     第二次 PUT 的 payload 仍含旧词条（wb 快照是全量镜像），投影必须按内容去重，
@@ -367,7 +368,7 @@ def test_wb_state_put_projection_idempotent_three_phase(client):
     # reps=1 ⇒ 已学，满足范围闸「可投影」前提（Projection 只收自建/已学）
     payload1 = {"words": [word_a], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
     assert client.put("/api/wb/state", json={"payload": payload1}, headers={"X-WB-Key": key}).status_code == 200
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         n1 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
     assert n1 == 1, "首次 PUT 应投影出 1 行"
 
@@ -378,14 +379,14 @@ def test_wb_state_put_projection_idempotent_three_phase(client):
         "cards": {"a1-0001": {"s": 3.5, "reps": 1}, "a1-0002": {"s": 2.0, "reps": 1}},
     }
     assert client.put("/api/wb/state", json={"payload": payload2}, headers={"X-WB-Key": key}).status_code == 200
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         n2 = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
         dup_a = conn.execute("SELECT COUNT(*) FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchone()[0]
     assert n2 == 2, "再 PUT 只应新增 1 行，旧词条不得被重复插入"
     assert dup_a == 1, "同一条 wb 词条二次投影不得产生重复行（幂等）"
 
 
-def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch):
+def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch, test_db_path):
     """Task 2 核心：投影失败 ⇒ 同一事务整体回滚，wb 镜像 blob 也不写（无「半写」）。
 
     用桩把 ``project_wb_deck`` 换成抛异常：PUT 必须失败（500），且 wb_state 表
@@ -400,7 +401,7 @@ def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch)
     base_payload = {"words": [{"id": "a1-0001", "hw": "der Abfahrt"}], "cards": {"a1-0001": {"s": 3.5, "reps": 1}}}
     assert client.put("/api/wb/state", json={"payload": base_payload}, headers={"X-WB-Key": key}).status_code == 200
     before = server.get_wb_state()
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         before_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
 
     def _boom(conn, payload):
@@ -418,6 +419,6 @@ def test_wb_state_put_rolls_back_blob_when_projection_fails(client, monkeypatch)
 
     # blob 必须未被更新（同事务回滚）
     assert server.get_wb_state() == before, "投影失败时 wb_state 镜像 blob 不得被写入"
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         after_ts = conn.execute("SELECT updated_at FROM wb_state WHERE id = 1").fetchone()[0]
     assert after_ts == before_ts, "投影失败时 wb_state.updated_at 不得变化（半写）"
