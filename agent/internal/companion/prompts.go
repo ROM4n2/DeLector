@@ -20,6 +20,7 @@ const (
 - 请使用自然流畅、严谨的 Markdown 德式学术排版风格直接回答学习者的问题。
 - 无论工具执行成功与否（即使工具调用遇到异常或空结果），你都必须依靠自身深厚的德语语言学知识给出完整、严谨、多维度（拓扑场、句框、核心动词位置、语用）的深度解析，严禁仅输出问号、标点符号、错误日志或空白。
 - 如果需要生词制卡提议，请显式调用 propose_vocab_cards 工具，系统会渲染为确认卡片。
+- 若上下文含【当前写作草稿】且学习者要求检查写作，必须调用 writing_check 工具并把草稿全文作为 text 参数；不得凭空编造检查结果。
 - 回答保持精炼、深入，结合学习者正在阅读的德语上下文。`
 
 	DefaultPromptNudge = "已完成对当前句子的多维度语言学推演与分析。请参阅上方提取的语法拓扑信息，如需针对特定成分深入探讨，可随时追问。"
@@ -28,7 +29,7 @@ const (
 // FormatStudyContext 格式化前端视口上下文为 Markdown 文本块。
 func FormatStudyContext(ctx StudyContext) string {
 	if ctx.SelectedText == "" && ctx.ArticleTitle == "" && ctx.CEFRLevel == "" &&
-		ctx.View == "" && ctx.ContextSource == "" {
+		ctx.View == "" && ctx.ContextSource == "" && ctx.DraftText == "" {
 		return ""
 	}
 	var sb strings.Builder
@@ -47,6 +48,9 @@ func FormatStudyContext(ctx StudyContext) string {
 	}
 	if ctx.ContextSource != "" {
 		sb.WriteString(fmt.Sprintf("\n- 上下文来源: %s", ctx.ContextSource))
+	}
+	if ctx.DraftText != "" {
+		sb.WriteString(fmt.Sprintf("\n- 当前写作草稿: %s", ctx.DraftText))
 	}
 	return sb.String()
 }

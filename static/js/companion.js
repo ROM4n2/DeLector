@@ -293,6 +293,22 @@ export function getCompanionScopeKey() {
   return 'view:' + (view || 'global');
 }
 
+/** 读取写作台当前草稿（与 writer.js 的 editorText 同口径：TreeWalker 只取文本节点）。 */
+function readWriterDraftText() {
+  const el = document.getElementById('ide-editor');
+  if (!el) return '';
+  if (typeof document.createTreeWalker === 'function' && typeof NodeFilter !== 'undefined') {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let text = '';
+    let node;
+    while ((node = walker.nextNode())) {
+      text += node.nodeValue;
+    }
+    return text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  return (el.textContent || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // ── SVG Sanitizer & Custom Character Processing ────────────────────────────
 export function sanitizeSvg(rawSvg) {
   if (typeof rawSvg !== 'string' || !rawSvg.trim()) {
@@ -684,12 +700,22 @@ export const Companion = {
       cefrLevel = (window.state && window.state.currentArticle && window.state.currentArticle.cefr_level) || 'B1';
     }
 
+    // 4. 写作台草稿：与 reader 的 selected_text 分离，用 draftText 单独承载。
+    let draftText = '';
+    if (view === 'writer') {
+      draftText = readWriterDraftText();
+      if (draftText && contextSource === 'none') {
+        contextSource = 'writer-draft';
+      }
+    }
+
     return {
       selectedText,
       articleTitle,
       cefrLevel,
       view,
-      contextSource
+      contextSource,
+      draftText
     };
   },
 

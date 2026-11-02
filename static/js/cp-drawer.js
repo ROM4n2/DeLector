@@ -227,12 +227,17 @@ const COMPANION_VIEW_LABELS = {
   german: '德语工作台'
 };
 
-/** 动态同步底部快捷操作选项卡显示状态（仅阅读器且绑定句子时可用） */
-function updateQuickActionChips(hasText, view) {
+/** 动态同步底部快捷操作选项卡显示状态（阅读器按选区，写作台按草稿） */
+function updateQuickActionChips(hasText, view, hasDraft) {
   const readerContext = Boolean(hasText) && view === 'reader';
+  const writerContext = Boolean(hasDraft) && view === 'writer';
   const chips = document.querySelectorAll('.companion-quick-chip.context-required');
   chips.forEach((c) => {
     c.classList.toggle('is-visible', readerContext);
+  });
+  const writerChips = document.querySelectorAll('.companion-quick-chip.writer-draft-required');
+  writerChips.forEach((c) => {
+    c.classList.toggle('is-visible', writerContext);
   });
 }
 
@@ -248,6 +253,7 @@ export function renderContextBar() {
   }
 
   const text = companionState.activeContext.selectedText;
+  const draft = companionState.activeContext.draftText;
   const view = companionState.activeContext.view || getActiveView();
   const viewLabel = COMPANION_VIEW_LABELS[view] || '当前页面';
   const sents = window.state?.currentArticle?.sentences || [];
@@ -271,7 +277,8 @@ export function renderContextBar() {
         companionState.activeContext.articleTitle,
         companionState.activeContext.cefrLevel,
         view,
-        'none'
+        'none',
+        companionState.activeContext.draftText
       );
       renderContextBar();
     });
@@ -310,7 +317,8 @@ export function renderContextBar() {
             window.state?.currentArticle?.title,
             window.state?.currentArticle?.cefr_level,
             'reader',
-            'reader-state'
+            'reader-state',
+            companionState.activeContext.draftText
           );
           renderContextBar();
         }
@@ -338,7 +346,8 @@ export function renderContextBar() {
             window.state?.currentArticle?.title,
             window.state?.currentArticle?.cefr_level,
             'reader',
-            'reader-state'
+            'reader-state',
+            companionState.activeContext.draftText
           );
           renderContextBar();
         }
@@ -351,12 +360,24 @@ export function renderContextBar() {
     }
 
     contextBarEl.appendChild(clearBtn);
+  } else if (view === 'writer' && draft) {
+    contextBarEl.style.display = 'flex';
+    const icon = document.createElement('span');
+    icon.textContent = '✍️';
+    const textSpan = document.createElement('span');
+    textSpan.className = 'companion-context-text';
+    textSpan.textContent = '已绑定当前草稿（' + draft.length + ' 字符）';
+    contextBarEl.appendChild(icon);
+    contextBarEl.appendChild(textSpan);
   } else {
     contextBarEl.style.display = 'flex';
     const hint = document.createElement('span');
     hint.className = 'companion-context-hint';
     if (view === 'reader') {
       hint.textContent = '📄 阅读器 · 未绑定句子：划选正文或点击 🦉伴学，即可让 Eule 针对性问诊。';
+    } else if (view === 'writer') {
+      hint.textContent =
+        '📝 写作台 · 尚未检测到草稿：先在编辑器输入正文，再点「✍️ 检查草稿」。';
     } else {
       hint.textContent =
         '📄 ' + viewLabel + ' · 未绑定句子：本页仅支持自由问答，阅读器专属问诊请在阅读页使用。';
@@ -376,20 +397,21 @@ export function renderContextBar() {
     }
   }
 
-  updateQuickActionChips(Boolean(text), view);
+  updateQuickActionChips(Boolean(text), view, Boolean(draft));
 }
 
 /** 同步当前阅读器选区或活动难句 */
 export function syncCurrentContext() {
   if (window.Companion && window.Companion.harvestStudyContext) {
     const ctx = window.Companion.harvestStudyContext();
-    if (ctx.selectedText) {
+    if (ctx.selectedText || ctx.draftText) {
       setCompanionContext(
         ctx.selectedText,
         ctx.articleTitle,
         ctx.cefrLevel,
         ctx.view,
-        ctx.contextSource
+        ctx.contextSource,
+        ctx.draftText
       );
       renderContextBar();
       if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
@@ -398,9 +420,15 @@ export function syncCurrentContext() {
         hintDiv.className = 'companion-message assistant';
         hintDiv.style.borderLeft = '3px solid var(--coral, #b44322)';
         const lbl = document.createElement('div');
-        lbl.textContent = ctx.view === 'reader' ? '✓ 已同步视口难句：' : '✓ 已同步当前页面文本：';
+        if (ctx.view === 'writer' && !ctx.selectedText) {
+          lbl.textContent = '✓ 已同步写作台草稿：';
+        } else {
+          lbl.textContent = ctx.view === 'reader' ? '✓ 已同步视口难句：' : '✓ 已同步当前页面文本：';
+        }
         const q = document.createElement('em');
-        q.textContent = '„' + ctx.selectedText + '“';
+        q.textContent = ctx.selectedText
+          ? '„' + ctx.selectedText + '“'
+          : '（' + ctx.draftText.length + ' 字符）';
         hintDiv.appendChild(lbl);
         hintDiv.appendChild(q);
         bodyEl.appendChild(hintDiv);
@@ -410,6 +438,10 @@ export function syncCurrentContext() {
     }
   }
   const view = getActiveView();
+  if (view === 'writer') {
+    alert('写作台尚未检测到草稿。请先在编辑器输入正文，再使用「✍️ 检查草稿」。');
+    return;
+  }
   alert(
     view === 'reader'
       ? '未检测到当前选中文本。请在文章中点击句旁的 [🦉 伴学]，或点击单词后重试。'
@@ -471,11 +503,12 @@ export function openCompanionDrawer(contextPayload) {
       contextPayload.articleTitle,
       contextPayload.cefrLevel,
       view,
-      contextSource
+      contextSource,
+      contextPayload.draftText
     );
   } else {
     // 无显式上下文时也必须清掉旧值，避免抽屉页签复用上一篇的阅读器上下文。
-    setCompanionContext('', '', '', view, 'none');
+    setCompanionContext('', '', '', view, 'none', '');
   }
   companionState.isOpen = true;
 
@@ -490,7 +523,7 @@ export function openCompanionDrawer(contextPayload) {
   }
   renderContextBar();
 
-  if (contextPayload && contextPayload.selectedText) {
+  if (contextPayload && (contextPayload.selectedText || contextPayload.draftText)) {
     if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
     if (bodyEl) {
       const hintDiv = document.createElement('div');
@@ -500,7 +533,9 @@ export function openCompanionDrawer(contextPayload) {
       const label = document.createElement('div');
       label.textContent = view === 'reader' ? '已绑定视口难句：' : '已绑定当前页面文本：';
       const quote = document.createElement('em');
-      quote.textContent = '„' + contextPayload.selectedText + '“';
+      quote.textContent = contextPayload.selectedText
+        ? '„' + contextPayload.selectedText + '“'
+        : '（' + contextPayload.draftText.length + ' 字符草稿）';
 
       hintDiv.appendChild(label);
       hintDiv.appendChild(quote);
@@ -545,6 +580,31 @@ export function handleSend() {
 export function submitPrompt(userText) {
   if (companionState.inFlight) return;
   if (!userText || !userText.trim()) return;
+
+  const activeView = getActiveView();
+
+  // 写作台：发送前刷新草稿上下文，保证“先打开抽屉、后输入正文”也能拿到最新草稿。
+  if (activeView === 'writer' && window.Companion?.harvestStudyContext) {
+    const latest = window.Companion.harvestStudyContext();
+    setCompanionContext(
+      latest.selectedText,
+      latest.articleTitle,
+      latest.cefrLevel,
+      latest.view,
+      latest.contextSource,
+      latest.draftText
+    );
+  }
+
+  // 守卫：写作检查在无草稿时显式降级，不让模型凭空编造检查结果。
+  if (
+    activeView === 'writer' &&
+    !companionState.activeContext.draftText &&
+    /草稿|writing_check|写作检查|检查.*写作/.test(userText)
+  ) {
+    alert('写作台尚未检测到草稿。请先在编辑器输入正文，再执行写作检查。');
+    return;
+  }
 
   // 守卫：针对需要句子的快捷提问，若无句子则先尝试自动同步视口句子
   if (
@@ -626,6 +686,7 @@ export function submitPrompt(userText) {
     context: activeContext,
     view: companionState.activeContext.view,
     context_source: companionState.activeContext.contextSource,
+    draft_text: companionState.activeContext.draftText,
     scope_key: getCompanionScopeKey(),
     signal: abortController.signal,
     onSessionId: (sessionId) => {

@@ -1002,6 +1002,9 @@ document.addEventListener("keydown", (e) => {
 
 // ── Mount All Interactive Handlers to Window for HTML Compatibility ─────────
 Object.assign(window, {
+  // Shared reactive state（companion.js / cp-drawer.js 的 reader-state 上下文依赖此出口）
+  state,
+
   // Navigation & Core
   show,
   openModal,

@@ -30,6 +30,7 @@ func TestBuildSystemPrompt(t *testing.T) {
 		CEFRLevel:     "B2",
 		View:          "cards",
 		ContextSource: "live-selection",
+		DraftText:     "Ich habe hunger.",
 	}
 	activeCtx := companion.FormatStudyContext(ctx)
 	promptWithCtx := companion.BuildSystemPrompt(activeCtx, spec)
@@ -50,6 +51,9 @@ func TestBuildSystemPrompt(t *testing.T) {
 	}
 	if !strings.Contains(promptWithCtx, "上下文来源: live-selection") {
 		t.Errorf("expected context source in prompt")
+	}
+	if !strings.Contains(promptWithCtx, "当前写作草稿: Ich habe hunger.") {
+		t.Errorf("expected draft text in prompt")
 	}
 
 	// Case 3: Raw unformatted context string

@@ -53,10 +53,13 @@ const MUST = [
   "view === 'reader'",
   "export function resetCompanionContextForView(view)",
   "export function resetCompanionSessionScope()",
-  "updateQuickActionChips(Boolean(text), view)",
+  "updateQuickActionChips(Boolean(text), view, Boolean(draft))",
   "resetCompanionContextForView(view)",
   "scope_key",
   "onSessionId",
+  "draft_text",
+  "contextSource = 'writer-draft'",
+  "writer-draft-required",
 ];
 for (const m of MUST) {
   const srcs = [COMPANION_SRC, CP_STATE_SRC, CP_DRAWER_SRC, CP_API_SRC, MAIN_SRC, READER_SRC];
@@ -135,7 +138,10 @@ function makeEl(id) {
 const registry = new Map();
 for (const v of VIEWS) registry.set("view-" + v, makeEl("view-" + v));
 registry.set("companion-context-bar", makeEl("companion-context-bar"));
+const writerEditor = makeEl("ide-editor");
+registry.set("ide-editor", writerEditor);
 const chips = [makeEl("chip-1"), makeEl("chip-2"), makeEl("chip-3")];
+const writerChips = [makeEl("writer-chip")];
 
 const contextBar = registry.get("companion-context-bar");
 const documentStub = {
@@ -143,6 +149,7 @@ const documentStub = {
     return registry.get(id);
   },
   querySelectorAll(selector) {
+    if (selector.includes(".companion-quick-chip.writer-draft-required")) return writerChips;
     if (selector.includes(".companion-quick-chip.context-required")) return chips;
     return [];
   },
@@ -361,13 +368,14 @@ async function main() {
   check(ctx.articleTitle === "" && ctx.cefrLevel === "", "D cards 空上下文仍带旧文章元数据");
 
   /* E. 切页 reset 清空 activeContext */
-  setCompanionContext("Alter Satz.", "Der Spiegel", "C1", "reader", "reader-state");
+  setCompanionContext("Alter Satz.", "Der Spiegel", "C1", "reader", "reader-state", "Alter Entwurf.");
   resetCompanionContextForView("cards");
   check(companionState.activeContext.selectedText === "", "E reset 未清空 selectedText");
   check(companionState.activeContext.articleTitle === "", "E reset 未清空 articleTitle");
   check(companionState.activeContext.cefrLevel === "", "E reset 未清空 cefrLevel");
   check(companionState.activeContext.view === "cards", "E reset 未记录新 view");
   check(companionState.activeContext.contextSource === "none", "E reset 未归一 contextSource");
+  check(companionState.activeContext.draftText === "", "E reset 未清空 draftText");
 
   /* F. 非阅读器无上下文：context bar 显示当前页面且快捷问句隐藏 */
   setView("cards");
@@ -401,6 +409,48 @@ async function main() {
     check(chip.classList.contains("is-visible"), "G 阅读器绑定句子后快捷问句未恢复可见");
   }
 
+  /* G2. 写作台草稿上下文：与 selected_text 分离，来源标记区分 selection / draft */
+  const DRAFT = "Ich habe hunger und gehe in der Schule.";
+  setView("writer");
+  setSelection("");
+  writerEditor.textContent = DRAFT;
+  ctx = C.harvestStudyContext();
+  check(ctx.view === "writer", "G2 写作台 view 未识别");
+  check(ctx.contextSource === "writer-draft", "G2 草稿来源未标为 writer-draft");
+  check(ctx.draftText === DRAFT, "G2 未采集到写作草稿");
+  check(ctx.selectedText === "", "G2 草稿污染了 selectedText");
+
+  setSelection("hunger");
+  ctx = C.harvestStudyContext();
+  check(ctx.contextSource === "live-selection", "G2 写作台实时选区来源错误");
+  check(ctx.selectedText === "hunger", "G2 写作台实时选区丢失");
+  check(ctx.draftText === DRAFT, "G2 实时选区场景丢失 draftText");
+
+  setView("cards");
+  ctx = C.harvestStudyContext();
+  check(ctx.draftText === "", "G2 非写作页泄漏了写作草稿");
+
+  setView("writer");
+  setCompanionContext("", "", "", "writer", "writer-draft", DRAFT);
+  renderContextBar();
+  const draftBar = contextBar.children.find((c) => c.className === "companion-context-text");
+  check(Boolean(draftBar && draftBar.textContent.includes("已绑定当前草稿")), "G2 草稿 context bar 未显示");
+  for (const chip of writerChips) {
+    check(chip.classList.contains("is-visible"), "G2 写作台检查草稿入口未显示");
+  }
+  for (const chip of chips) {
+    check(!chip.classList.contains("is-visible"), "G2 写作台仍显示阅读器快捷问句");
+  }
+
+  writerEditor.textContent = "";
+  setCompanionContext("", "", "", "writer", "none", "");
+  renderContextBar();
+  const writerHint = contextBar.children.find((c) => c.className === "companion-context-hint");
+  check(Boolean(writerHint && writerHint.textContent.includes("尚未检测到草稿")), "G2 无草稿时未降级提示");
+  for (const chip of writerChips) {
+    check(!chip.classList.contains("is-visible"), "G2 无草稿时检查草稿入口仍可见");
+  }
+
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
@@ -413,6 +463,10 @@ async function main() {
   check(
     MAIN_SRC.includes("state.activeSelectedSentId = null"),
     "H main.js show() 未清理阅读器选区残留 activeSelectedSentId"
+  );
+  check(
+    MAIN_SRC.includes("// Shared reactive state") && MAIN_SRC.includes("state,"),
+    "H main.js 未把 state 暴露到 window（reader-state 上下文会失效）"
   );
 
   /* I. scope key：阅读器按文章，其它页面按 view */
@@ -502,6 +556,7 @@ async function main() {
     messages: [{ role: "user", content: "Hallo" }],
     view: "cards",
     context_source: "none",
+    draft_text: "Ich habe hunger.",
     scope_key: "view:cards",
     onSessionId: (sid) => {
       gotSid = sid;
@@ -511,6 +566,7 @@ async function main() {
   check(gotSid === "ses_auto", "M 未回填响应头 X-Session-ID");
   check(captured && captured.body.view === "cards", "M 请求体未携带 view");
   check(captured && captured.body.context_source === "none", "M 请求体未携带 context_source");
+  check(captured && captured.body.draft_text === "Ich habe hunger.", "M 请求体未携带 draft_text");
   check(captured && captured.body.scope_key === "view:cards", "M 请求体未携带 scope_key");
   check(apiEvents.includes("delta") && apiEvents.includes("done"), "M SSE 解析回归");
 
@@ -532,6 +588,8 @@ async function main() {
       "reset-on-switch": "pass",
       "drawer-context-gate": "pass",
       "reader-path-regression": "pass",
+      "writer-draft-context": "pass",
+      "writer-draft-gate": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",

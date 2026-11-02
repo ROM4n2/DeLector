@@ -215,6 +215,42 @@ def test_companion_chat_without_new_fields_keeps_legacy_context(
     }
 
 
+def test_companion_chat_forwards_draft_text(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """draft_text 可选字段必须原样进入 context，供 writing_check 使用。"""
+    db_file = tmp_path / "writer_draft.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    captured: dict[str, Any] = {}
+    draft = "Ich habe hunger und gehe in der Schule."
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        captured["context"] = kwargs.get("context")
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+
+    client = TestClient(companion_app)
+    body = {
+        "messages": [{"role": "user", "content": "检查当前草稿"}],
+        "view": "writer",
+        "context_source": "writer-draft",
+        "draft_text": draft,
+        "scope_key": "view:writer",
+    }
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    assert captured["context"] == {
+        "view": "writer",
+        "context_source": "writer-draft",
+        "draft_text": draft,
+    }
+
+
 def test_companion_chat_proxies_to_go_agent_when_available(
     companion_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,

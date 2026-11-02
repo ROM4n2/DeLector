@@ -75,6 +75,8 @@ COMPANION_AGENT_SYSTEM_PROMPT: str = (
     "     }\n"
     "   }\n"
     "注意：如果你认为用户需要复习或制卡，**必须**输出 proposal 提议由用户确认，绝对不可假定数据已入库。\n"
+    "若上下文包含【当前写作草稿】且用户要求检查写作，必须调用 writing_check 工具"
+    "并把草稿全文作为 text 参数；不得凭空编造检查结果。\n"
     "重要：无论历史对话中的上下文包含何种格式，你在当前轮也必须只返回单一的 JSON 对象！"
 )
 
@@ -195,6 +197,8 @@ async def run_companion_agent_loop(
             ctx_lines.append(f"【当前页面】: {context['view']}")
         if context.get("context_source"):
             ctx_lines.append(f"【上下文来源】: {context['context_source']}")
+        if context.get("draft_text"):
+            ctx_lines.append(f"【当前写作草稿】:\n„{context['draft_text']}“")
         if ctx_lines:
             system_prompt += (
                 "\n\n========================================\n"

@@ -33,6 +33,7 @@ class CompanionChatReq(BaseModel):
     # 加法式字段：缺省时行为与第一阶段完全一致。
     view: Optional[str] = None
     context_source: Optional[str] = None
+    draft_text: Optional[str] = None
     scope_key: Optional[str] = None
 
 
@@ -116,6 +117,8 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
         context_payload["view"] = req.view
     if req.context_source:
         context_payload["context_source"] = req.context_source
+    if req.draft_text:
+        context_payload["draft_text"] = req.draft_text
 
     async def _wrapped_stream() -> AsyncIterator[bytes]:
         full_text, full_thought = [], []

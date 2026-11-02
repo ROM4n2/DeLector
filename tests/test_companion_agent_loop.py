@@ -293,8 +293,9 @@ def test_loop_injects_viewport_study_context() -> None:
 
 
 def test_loop_injects_view_and_context_source() -> None:
-    """view / context_source 必须进入 Python 回退路径的系统提示词。"""
+    """view / context_source / draft_text 必须进入 Python 回退路径的系统提示词。"""
     captured_messages: List[Dict[str, Any]] = []
+    draft = "Ich habe hunger und gehe in der Schule."
 
     async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         captured_messages.extend(kwargs.get("messages", []))
@@ -302,8 +303,8 @@ def test_loop_injects_view_and_context_source() -> None:
 
     asyncio.run(
         run_companion_agent_loop(
-            [{"role": "user", "content": "当前在哪一页？"}],
-            context={"view": "cards", "context_source": "none"},
+            [{"role": "user", "content": "检查当前草稿"}],
+            context={"view": "writer", "context_source": "writer-draft", "draft_text": draft},
             chat_fn=mock_chat,
         )
     )
@@ -311,8 +312,35 @@ def test_loop_injects_view_and_context_source() -> None:
     system_msg = next((m for m in captured_messages if m.get("role") == "system"), None)
     assert system_msg is not None
     content = str(system_msg.get("content", ""))
-    assert "【当前页面】: cards" in content
-    assert "【上下文来源】: none" in content
+    assert "【当前页面】: writer" in content
+    assert "【上下文来源】: writer-draft" in content
+    assert "【当前写作草稿】" in content
+    assert draft in content
+
+
+def test_loop_writing_check_receives_draft_text() -> None:
+    """写作检查工具入参必须使用草稿文本，而不是空对象/占位符。"""
+    draft = "Ich habe hunger und gehe in der Schule."
+    captured_payload: Dict[str, Any] = {}
+
+    async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return {"tool_call": {"name": "writing_check", "payload": {"text": draft}}}
+
+    async def fake_writing_check(payload: Dict[str, Any]) -> Dict[str, Any]:
+        captured_payload.update(payload)
+        return {"error_count": 2, "errors": []}
+
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "检查当前草稿"}],
+            context={"view": "writer", "context_source": "writer-draft", "draft_text": draft},
+            chat_fn=mock_chat,
+            tools_override={"writing_check": fake_writing_check},
+        )
+    )
+
+    assert outcome.status == "ok"
+    assert captured_payload.get("text") == draft
 
 
 def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:

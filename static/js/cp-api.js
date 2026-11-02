@@ -104,6 +104,9 @@ export async function streamCompanionChat(options) {
   if (options.context_source) {
     reqBody.context_source = options.context_source;
   }
+  if (options.draft_text) {
+    reqBody.draft_text = options.draft_text;
+  }
   if (options.scope_key) {
     reqBody.scope_key = options.scope_key;
   }
