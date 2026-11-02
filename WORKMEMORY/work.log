@@ -820,3 +820,7 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 ### 2026-11-03 02:46 | kimi-k3.1-pro__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 推送前文档与技术债收尾：FEATURES.md 新增「五·附 伴学 Agent」条目（scope 隔离、页面级能力、HITL 双分支与批量、definition_zh/reading 口径、待补充、全局历史、入口 gate）；docs/agents/architecture.md 补 companion 三表 schema、/api/companion 路由全览、cp-*.js 与 cd-state.js 前端拓扑。技术债：refreshSessionSelect 形参已安全删除（全仓仅 cp-drawer 两处调用与探针一处，全部改无参）；readCardBoxContext 与 cards.js 分段构成重复决定不改（去重需动卡组渲染，违背本轮不改行为，收益不抵风险）；sendCardProposal 改运行时中立措辞「提议…（propose_vocab_cards）」，不再要求工具调用。验证：全量 pytest 2702 passed / 2 skipped（571.62s）、探针 143 checks、三闸 PASS、go test 全绿、ruff 通过。
+
+### 2026-11-03 02:51 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+纯文档台账漂移清理（未改代码）：① docs/plans/2026-11-01-reader-immersive...md 已按 docs/README 惯例 git mv 至 plans/archive/（PR #191 已合、v5.20.2 已发布；全仓无该路径其它引用），并在 docs/README 归档表补行、把「最近 tag」由 v5.20.0 更正为 v5.20.2；② FEATURES.md Roadmap「桌面单实例（文件锁）」由 📝登记 改为 ✅已交付（v5.19.0，2026-10-22）；③ open-items-backlog C9 行尾「Y1/Y2/Y3/Y5/Y6 跑中」改为已完成并注明 PR #150（合并 ffe1a0c），与表头 C1~C9 全交付口径一致；④ PROJECT_OVERVIEW 开放待办第 5 条由「C 档 8 项待办 / C1 为下一步」改为「C1~C9 均已交付、C4 Android 暂缓」。三闸 + build_index_html --check 全 PASS，git diff --check 无告警。未确认项：无（本批均凭 git log / tag / 既有文档交叉验证）。
