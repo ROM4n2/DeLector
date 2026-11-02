@@ -816,3 +816,7 @@ Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 ### 2026-11-03 02:34 | kimi-k3.1-pro__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
 伴学批次收口（70b6433..HEAD 自审）：全量 python -m pytest tests = 2701 passed / 2 skipped（563.74s，较上基线 +1 为新增提示词契约测试），go test ./... 全绿、探针 143 checks / 28 场景、三闸 PASS、ruff 通过、build_index_html --check 同步，测试后 git status 仅剩本批有意改动文件。必修 1 项：Python 回退内核提示词要求「调用 propose_vocab_cards」但 ALLOWED_TOOLS 无此工具（会被白名单拒绝），已改为「最终 JSON 输出 proposal」并加 test_python_prompt_never_requires_forbidden_tool_call 钉住。建议项：refreshSessionSelect(scopeKey) 形参已不再使用（留签名兼容）；readCardBoxContext 与 cards.js 分段卡组构成有重复；前端 sendCardProposal 仍写「调用工具」，Python 回退会自愈但可改中立措辞；FEATURES/architecture 未逐条同步（本次只更 CHANGELOG Unreleased）。可不改：历史 4 条释义错位数据（有 dry-run 草案）、choice 选项不接待补充。安全/数据：execute/reject 均 localhost 守卫且入 guard 清单，无真实数据写入路径，日志不含提议内容；7 种 SSE 事件与可选字段缺省行为保持向后兼容。推送判断：内容可推，但仓库 master-commit-scope 钩子限制实现类直推，应走 feature 分支 + PR/merge。
+
+### 2026-11-03 02:46 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+推送前文档与技术债收尾：FEATURES.md 新增「五·附 伴学 Agent」条目（scope 隔离、页面级能力、HITL 双分支与批量、definition_zh/reading 口径、待补充、全局历史、入口 gate）；docs/agents/architecture.md 补 companion 三表 schema、/api/companion 路由全览、cp-*.js 与 cd-state.js 前端拓扑。技术债：refreshSessionSelect 形参已安全删除（全仓仅 cp-drawer 两处调用与探针一处，全部改无参）；readCardBoxContext 与 cards.js 分段构成重复决定不改（去重需动卡组渲染，违背本轮不改行为，收益不抵风险）；sendCardProposal 改运行时中立措辞「提议…（propose_vocab_cards）」，不再要求工具调用。验证：全量 pytest 2702 passed / 2 skipped（571.62s）、探针 143 checks、三闸 PASS、go test 全绿、ruff 通过。

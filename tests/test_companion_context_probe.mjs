@@ -752,7 +752,7 @@ async function main() {
     { id: "ses_article", title: "阅读会话", scope_key: "article:3", created_at: "2026-11-02" },
   ];
   context.__probe.sessionFetchCalls.length = 0;
-  await refreshSessionSelect("view:cards");
+  await refreshSessionSelect();
   const selectEl = registry.get("companion-session-select");
   check(
     context.__probe.sessionFetchCalls.at(-1) === null,

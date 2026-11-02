@@ -42,7 +42,7 @@ let abortController = null;
 let currentReasoningEffort = 'medium';
 let sessionSelectEl = null;
 
-export async function refreshSessionSelect(scopeKey) {
+export async function refreshSessionSelect() {
   sessionSelectEl = document.getElementById('companion-session-select');
   if (!sessionSelectEl) return;
   try {
@@ -118,7 +118,7 @@ export async function newSession(articleId) {
       companionState.currentSessionId = res.session.id;
       companionState.messages = [];
       companionState.proposals = [];
-      await refreshSessionSelect(scopeKey);
+      await refreshSessionSelect();
       clearMessageArea();
       renderWelcomeMessage();
     }
@@ -513,7 +513,7 @@ export function sendCardProposal() {
     return;
   }
   submitPrompt(
-    '请基于【当前卡盒词条】调用 propose_vocab_cards 工具，提议 3~5 个相关的 B1/B2 德语生词卡，' +
+    '请基于【当前卡盒词条】提议 3~5 个相关的 B1/B2 德语生词卡（propose_vocab_cards），' +
       '每张卡必须含 definition_zh 中文释义与例句（reading 仅用于读音/音标，不得充当释义）；' +
       '所有卡片都必须等我确认后才能入库。'
   );
@@ -853,7 +853,7 @@ export function submitPrompt(userText) {
     onSessionId: (sessionId) => {
       if (sessionId && companionState.currentSessionId !== sessionId) {
         companionState.currentSessionId = sessionId;
-        refreshSessionSelect(getCompanionScopeKey()).catch(() => {});
+        refreshSessionSelect().catch(() => {});
       }
     },
     onEvent: (event, data) => {
