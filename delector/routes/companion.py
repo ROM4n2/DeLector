@@ -174,11 +174,13 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
         # 确保前端确认/拒绝能命中同一数据库行。
         for prop in proposals_payload:
             try:
+                raw_payload = prop.get("payload")
+                payload_dict: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
                 _proposal_svc.create_proposal(
                     session_id=sid,
                     action=str(prop.get("action") or "create_vocab_cards"),
                     title=str(prop.get("title") or "加入核心生词卡"),
-                    payload=prop.get("payload") if isinstance(prop.get("payload"), dict) else {},
+                    payload=payload_dict,
                     message_id=assistant_message_id,
                     proposal_id=str(prop.get("id") or "") or None,
                 )
