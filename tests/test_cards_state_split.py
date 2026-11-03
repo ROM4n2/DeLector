@@ -163,7 +163,7 @@ def _probe_source(
 
     driver = tmp_path / "probe.mjs"
     driver.write_text(
-        "import { cardState, enterSegment, stepDeckState } from './cd-state.mjs';\n"
+        "import { cardState, enterSegment, stepDeckState, getCachedVocabLemmas } from './cd-state.mjs';\n"
         + _PROBE_PRELUDE
         + body
         + "\nprocess.stdout.write(JSON.stringify(out));\n",
@@ -679,3 +679,22 @@ def test_mutation_probe_without_cd_state_seam_is_caught(tmp_path: Path) -> None:
     assert _sha256_of(rel) == probe_before, f"{rel} 真实文件被改动了"
     assert _sha256_of(f"{JS_DIR_REL}/cards.js") == js_before
     assert _sha256_of(CD_STATE_REL) == state_before
+
+
+def test_get_cached_vocab_lemmas_behavior(tmp_path: Path) -> None:
+    """getCachedVocabLemmas：lemma 优先、word 回退、小写归一、空数组安全、不改 state。"""
+    body = """
+    cardState.catalog.cards.vocab_cards = [
+      { lemma: 'Hund', word: 'der Hund' },
+      { lemma: '', word: 'Katze' },
+    ];
+    const before = JSON.stringify(cardState.catalog.cards);
+    out.lemmas = Array.from(getCachedVocabLemmas()).sort();
+    out.unchanged = JSON.stringify(cardState.catalog.cards) === before;
+    cardState.catalog.cards.vocab_cards = [];
+    out.emptySize = getCachedVocabLemmas().size;
+    """
+    out = _probe(tmp_path, body)
+    assert out["lemmas"] == ["hund", "katze"]
+    assert out["unchanged"] is True
+    assert out["emptySize"] == 0

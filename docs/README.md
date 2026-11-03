@@ -40,8 +40,9 @@
 | `2026-10-31-companion-provider-abstraction-and-pi-compaction.md` | v5.20.0（#179，provider 注册表 + 动态上下文压缩） | `docs/plans/archive/` |
 | `2026-10-31-unified-agent-launcher.md` | v5.20.0 | `docs/plans/archive/` |
 | `2026-11-01-companion-harness-persistence-and-refactor.md` | v5.20.0（#179，SQLite 会话/消息/Proposal 三表 + 洋葱中间件） | `docs/plans/archive/` |
+| `2026-11-01-reader-immersive-continuous-flow-and-cefr-noise-reduction.md` | v5.20.2（#191，ADR-0026 正文连续段落流 + CEFR 三档视力透视） | `docs/plans/archive/` |
 
-> 发版批次判据（与上方一致）：计划归 `plans/archive/` 的充要条件是「对应成果已随某 tag 发版」。最近 tag 现为 `v5.20.0`（2026-11-01）；凡已合入 master 且 PR 编号晚于上一 tag 的计划即「已交付未发版」，等下次发版随批次 `git mv`。
+> 发版批次判据（与上方一致）：计划归 `plans/archive/` 的充要条件是「对应成果已随某 tag 发版」。最近 tag 现为 `v5.20.2`（2026-11-01）；凡已合入 master 且 PR 编号晚于上一 tag 的计划即「已交付未发版」，等下次发版随批次 `git mv`。
 
 **命名豁免（历史既成事实，不改）**：`plans/archive/` 里 4 份**早于 `<日期>-` 命名规则**的文件（`workbench-scope-control-and-live-settings.md`、`workbench-progress-server-sync.md`、`workbench-core-words-mode.md`、`plan-companion-mascot.md`）**保留原名**——改名会打断既有引用（含 vault 侧），收益不足以抵风险。此后新增的归档件一律带 `<日期>-` 前缀。
 

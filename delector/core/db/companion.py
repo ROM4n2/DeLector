@@ -261,9 +261,14 @@ def create_proposal(
     title: str,
     payload: Dict[str, Any],
     message_id: Optional[str] = None,
+    proposal_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """记录单项提议（生词卡/完形填空），初始状态为 pending。"""
-    prop_id = f"prop_{uuid.uuid4().hex[:16]}"
+    """记录单项提议（生词卡/完形填空），初始状态为 pending。
+
+    proposal_id 可选：聊天流里的 Go 提议自带 id，落库必须复用同一 id，
+    否则前端确认/拒绝会对不上数据库行。
+    """
+    prop_id = proposal_id or f"prop_{uuid.uuid4().hex[:16]}"
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     payload_json = json.dumps(payload, ensure_ascii=False)
     cursor = conn.cursor()

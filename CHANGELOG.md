@@ -6,6 +6,25 @@
 
 **最新版本：v5.20.2（2026-11-01）**
 
+**未发布（Unreleased，2026-11-03）**
+
+### 🦉 伴学 Agent 页面级能力分区、HITL 生词提议闭环与跨页历史恢复
+
+- **上下文与视图隔离**：伴学请求新增可选 `view / context_source / scope_key / draft_text / card_context`，按 `article:<id>` 与 `view:<name>` 隔离会话；非阅读器不再复用旧阅读器句子，german 工作台入口彻底禁用（其它页面可正常唤起）。
+- **页面级能力**：写作台接入 `writing_check`（无草稿降级）、进度页接入 `get_learner_profile` / `vocab_stats`、卡盒基于当前卡面词条走 `propose_vocab_cards` 批量提议；快捷入口按页分区，无可用上下文时显式降级。
+- **HITL 提议闭环**：聊天产生的 proposal 统一落库（复用 SSE id），新增 `/api/companion/proposal/reject`（localhost 守卫）；确认才写卡、拒绝只流转状态；支持「全部确认 / 全部拒绝」；空与畸形提议禁止入库，缺 `definition_zh` 不再回退为音标，缺释义在提案与卡盒各卡面统一显示「待补充」。
+- **跨页连续性**：会话切换器新增「当前页面 / 其它会话」全局分组，跨 scope 恢复历史时显式重置当前页面上下文并提示。
+- **体验修复**：用户手动关闭伴读后可通过头像浮标重新开启；german 禁用样式不再误伤其它 disabled 形态。
+- **验证**：全量 `pytest tests` 2700+ passed、前端探针 140+ checks、`go test ./...` 全绿，真实浏览器 + 真实模型跑通「提议 → 确认 → 入盒」与「提议 → 放弃」。
+
+### 📲 PWA 安装图标补齐（未发布）
+
+- `manifest.json` 新增 192x192 / 512x512 PNG 位图图标（保留内联 SVG 作 `sizes:any` 备用）；此前单张 SVG 声明 `192x192 512x512`，不满足浏览器安装提示对可解码位图的规格要求。
+- 新增 `tests/test_pwa_manifest.py` 守卫：PNG 实际尺寸与声明一致、图标路径为站点根相对（静态目录挂在 `/`，带 `/static` 前缀会 404）。
+- 实测（TestClient）：`/manifest.json` 200 application/json、`/icon-192.png` 200 image/png、`/icon-512.png` 200 image/png。Android 真机安装提示仍待点检。
+
+---
+
 ### 📖 自然段排版重塑 + CEFR 视力透视胶囊 + 句法抽屉实时联动同步与 CI 极限加速（v5.20.2）
 
 本版本为阅读体验与工程效能的重大质量提升与缺陷修复版本：

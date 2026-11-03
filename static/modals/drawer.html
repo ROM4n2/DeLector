@@ -391,6 +391,10 @@
               <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('请帮我分析选中文本的主从句拓扑结构与核心动词位置。')">从句拓扑问诊</button>
               <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('请帮我提取选中文本中的核心 B1/B2 动词与动介搭配，并提议制成生词卡。')">提取核心生词</button>
               <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('这个句子在德语母语者的语用习惯中具有怎样的情感色彩与正式度？')">深挖语用褒贬</button>
+              <button class="companion-quick-chip writer-draft-required" onclick="window.CompanionDrawer?.sendPrompt('请调用 writing_check 工具检查当前写作草稿的拼写、大小写、标点与从句逗号，并给出简短修改建议。')">✍️ 检查草稿</button>
+              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressProfile()">🧠 学习负荷</button>
+              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressVocabStats()">📊 词汇等级</button>
+              <button class="companion-quick-chip card-proposal-required" onclick="window.CompanionDrawer?.sendCardProposal()">🃏 关联生词提议</button>
             </div>
             <div class="companion-input-row">
               <input

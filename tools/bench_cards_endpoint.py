@@ -314,7 +314,9 @@ def _bench_scale(
     d = median_ms(d_samples)
     d_p95 = p95_ms(d_samples)
 
-    filesort_ms = b - c
+    # 排序成本是非负物理量：满载/噪声下 B<C 的差值必须钳到 0，
+    # 不能让负的「占比」流进输出（那会随机打红 filesort_pct 的解析与区间断言）。
+    filesort_ms = max(0.0, b - c)
     return {
         "n_vocab": n_vocab,
         "n_grammar": n_grammar,

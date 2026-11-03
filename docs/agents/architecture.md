@@ -151,6 +151,14 @@ essays          id, title, content, analysis_json, cefr_level,
                 error_count, sentence_count, created_at, updated_at
                 -- v3.11 写作台草稿库；analysis_json = {"version","cefr","error_count",
                 -- "sentences":[{text, spans:[{error_type,corrected_form,explanation_zh,start,end}]}]}
+companion_sessions    id, article_id, scope_key, title, created_at, updated_at, is_archived
+                -- 伴学会话；scope_key = article:<id> / view:<name> / view:global，
+                -- 会话按 scope 隔离（切页不丢数据，只是按 scope 过滤展示）
+companion_messages    id, session_id, role, content, thought, reasoning_effort,
+                token_usage_json, created_at
+companion_proposals   id, session_id, message_id, action, title, payload_json,
+                status, resolved_at, created_at
+                -- HITL 提议；status = pending / accepted / rejected，id 与 SSE proposal 一致
 ```
 
 ### `progress.db` — 学习进度库
@@ -236,6 +244,20 @@ POST   /api/wb/state/key                        重新生成配对密钥（= 撤
 POST   /api/wb/rtc/signal                       WebRTC 信令中继：按配对密钥建邮箱，投递 SDP/ICE（须 X-WB-Key）
 GET    /api/wb/rtc/signal                       拉取对端信令：?client=<本端id>&after=<游标>，只回「别人发的」
 GET    /api/wb/lan-info                         {hostname, port, lan_ip, instance_id}：配对 UI 提示填 IP（局域网可读）
+
+-- 伴学 Agent（delector/routes/companion.py）--
+POST   /api/companion/chat                      SSE 流式会话（7 种事件；可选 view / context_source /
+                                                scope_key / draft_text / card_context，缺省行为不变；
+                                                聊天产生的 proposal 统一落库并复用 SSE id）
+GET    /api/companion/sessions                  全量会话（含所有 scope；前端全局历史分组用）
+POST   /api/companion/sessions                  按 article_id / scope_key 取或建会话
+GET    /api/companion/sessions/scoped/{scope_key} 仅当前 scope 会话（缺省过滤行为不变）
+GET    /api/companion/sessions/{id}/messages    会话消息历史（/history 别名）
+GET    /api/companion/sessions/{id}/proposals   会话提议列表（可按 status 过滤）
+POST   /api/companion/proposal/execute          确认提议写 vocab_cards（仅 127.0.0.1，幂等；
+                                                空 cards / 无有效 word 返回 400，保持 pending）
+POST   /api/companion/proposal/reject           拒绝提议仅置 rejected（仅 127.0.0.1，不写卡）
+GET    /api/companion/context                   学情上下文摘要（生词总量与已掌握数）
 ```
 
 **路由重要约束**：`app.mount("/", StaticFiles(...))` 是 catch-all 路由，
@@ -250,7 +272,9 @@ GET    /api/wb/lan-info                         {hostname, port, lan_ip, instanc
 | `main.js`      | 路由调度 `show()`, 导入模态窗, RSS 订阅 `selectFeedSource` / `ingestFeedItem`, 设置弹窗, 全局热键与 `window` 导出 |
 | `core.js`      | `api()` 请求封装, `esc()`, `normalizeCefrPct()` 整数归一化, `state` 全局共享状态                                  |
 | `player.js`    | `ShadowPlayer` 影子跟读与控制板, Edge Neural TTS + Web Speech 离线发音回退                                        |
-| `companion.js` | 德语伴读宠物（Eule & 伙伴）引擎 `Companion`, 4 款矢量 SVG 角色, A1–B1 地道短语库, 8s 冷却语音发声与情绪动效       |
+| `companion.js` | 德语伴读宠物（Eule & 伙伴）引擎 `Companion`, 4 款矢量 SVG 角色, A1–B1 地道短语库, 8s 冷却语音发声与情绪动效；`getActiveView()` / `getCompanionScopeKey()` / `harvestStudyContext()` 采集分视图上下文，german 视图入口 gate |
+| `cp-*.js`      | 伴学抽屉：写作草稿与卡盒词条上下文、按 scope 分组（当前页面 / 其它会话）的会话切换器、HITL 提议卡片与「全部确认 / 全部拒绝」、空提议禁用确认 |
+| `cd-state.js`  | 卡盒状态容器（catalog/deck/quiz/prep/toast）+ `formatCardDefinition()`（缺 `definition_zh` 时统一显示「待补充」；`reading` 仅作读音，不充当释义） |
 | `reader.js`    | 文章渲染 `openReader()`, 词法悬停抽屉 `inspect()`, CEFR 热力条与聚焦, 便签增删 `aiNoteAssist()`                   |
 | `cards.js`     | 3D 拟真卡片翻转盒 `renderDeckStage()`, FSRS 认知间隔复习 `submitCardReview()`, Quiz 测验引擎                      |
 | `folio.js`     | Leporello 三折页台账 `loadProgress()`, 30 天留存墨线折线图, 歌德箴言轮播                                          |

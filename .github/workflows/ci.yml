@@ -82,6 +82,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pytest
+          # Pillow 仅供 tests/test_pwa_manifest.py 的 PNG 尺寸守卫使用，属测试期依赖，
+          # 不进 requirements.txt（避免混入 Android 运行时打包面）。
+          pip install pillow
 
       # Ruff 静态门禁（2026-09-13 ruff-cleanup）。
       # ruff 是开发期工具：CI 内单独安装，**不进 requirements.txt**（混入运行时依赖

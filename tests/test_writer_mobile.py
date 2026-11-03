@@ -157,6 +157,22 @@ def test_readme_download_table_points_at_current_version():
         assert link.group(1) == version, f"下载链接={link.group(1)} vs APP_VERSION={version}：{row[:60]}"
 
 
+def test_readme_first_screen_images_exist():
+    """README 首屏引用的截图文件必须真实存在于仓库。
+
+    首屏截图是宣传门槛③的交付物（「README 首屏含截图/GIF 与 Win10 WebView2
+    前置」）。图片链接失效不会让任何构建报错，只会让 README 首屏裂图 ——
+    和下载表指错版本同类：静默腐烂，所以必须红灯守卫。断言引用文件存在且
+    非空；同时要求首屏至少保留一张截图，防止守卫在截图被整块删掉后假绿。
+    """
+    refs = re.findall(r'<img src="(docs/images/[^"]+)"', README)
+    assert len(refs) >= 1, "README 首屏截图区块被整体删除：门槛③ 交付物丢失，如确需下线请同步改本守卫"
+    for ref in refs:
+        img = ROOT / ref
+        assert img.is_file(), f"README 首屏引用的截图不存在：{ref}"
+        assert img.stat().st_size > 1024, f"截图疑似空文件/占位图（<1KB）：{ref}"
+
+
 def test_android_reunpacks_static_assets_on_version_change():
     """APK 覆盖安装不清 getFilesDir()，而 copyAssetFile() 见目标已存在就跳过，
     于是升级后旧前端永远不被覆盖 —— 只有卸载重装才好（v4.4.5 修的就是这个）。

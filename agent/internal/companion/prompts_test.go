@@ -22,6 +22,9 @@ func TestBuildSystemPrompt(t *testing.T) {
 	if strings.Contains(promptEmpty, "【当前学习视口上下文】") {
 		t.Errorf("did not expect context block when activeContext is empty")
 	}
+	if !strings.Contains(promptEmpty, "get_learner_profile") {
+		t.Errorf("expected progress profile tool in base prompt")
+	}
 
 	// Case 2: Formatted context
 	ctx := companion.StudyContext{
@@ -30,6 +33,8 @@ func TestBuildSystemPrompt(t *testing.T) {
 		CEFRLevel:     "B2",
 		View:          "cards",
 		ContextSource: "live-selection",
+		DraftText:     "Ich habe hunger.",
+		CardContext:   "【当前卡盒词条】\n词: die Eule",
 	}
 	activeCtx := companion.FormatStudyContext(ctx)
 	promptWithCtx := companion.BuildSystemPrompt(activeCtx, spec)
@@ -50,6 +55,12 @@ func TestBuildSystemPrompt(t *testing.T) {
 	}
 	if !strings.Contains(promptWithCtx, "上下文来源: live-selection") {
 		t.Errorf("expected context source in prompt")
+	}
+	if !strings.Contains(promptWithCtx, "当前写作草稿: Ich habe hunger.") {
+		t.Errorf("expected draft text in prompt")
+	}
+	if !strings.Contains(promptWithCtx, "【当前卡盒词条】") || !strings.Contains(promptWithCtx, "die Eule") {
+		t.Errorf("expected card context in prompt")
 	}
 
 	// Case 3: Raw unformatted context string

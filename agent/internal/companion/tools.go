@@ -155,6 +155,10 @@ func CompanionTools() []openai.Tool {
 										"type":        "string",
 										"description": "精准中文释义与词性",
 									},
+									"reading": map[string]any{
+										"type":        "string",
+										"description": "读音/音标（可选，不是中文释义，不得用来代替 definition_zh）",
+									},
 									"sentence_context": map[string]any{
 										"type":        "string",
 										"description": "在原句中的上下文例句",

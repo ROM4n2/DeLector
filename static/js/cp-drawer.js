@@ -11,11 +11,12 @@
  */
 'use strict';
 
-import { companionState, setCompanionContext } from './cp-state.js';
+import { companionState, setCompanionContext, resetCompanionContextForView } from './cp-state.js';
 import { getActiveView, getCompanionScopeKey } from './companion.js';
 import {
   streamCompanionChat,
   executeProposal,
+  rejectProposal,
   fetchCompanionSessions,
   createCompanionSession,
   fetchCompanionHistory,
@@ -41,11 +42,13 @@ let abortController = null;
 let currentReasoningEffort = 'medium';
 let sessionSelectEl = null;
 
-export async function refreshSessionSelect(scopeKey) {
+export async function refreshSessionSelect() {
   sessionSelectEl = document.getElementById('companion-session-select');
   if (!sessionSelectEl) return;
   try {
-    const res = await fetchCompanionSessions(scopeKey || getCompanionScopeKey());
+    // 全局历史入口：一次拉全量会话，再按 scope 分组；当前 scope 仍排在最前。
+    // 后端 /api/companion/sessions 不带 scope_key 时本来就返回全部 scope，旧 scoped 端点不变。
+    const res = await fetchCompanionSessions();
     if (res && res.sessions) {
       companionState.sessions = res.sessions;
       renderSessionOptions();
@@ -68,15 +71,33 @@ function renderSessionOptions() {
   defaultOpt.textContent = '＋ 新建会话';
   sessionSelectEl.appendChild(defaultOpt);
 
+  const currentScope = getCompanionScopeKey();
   const sessions = companionState.sessions || [];
-  for (const s of sessions) {
+  const current = sessions.filter((s) => (s.scope_key || '') === currentScope);
+  const others = sessions.filter((s) => (s.scope_key || '') !== currentScope).slice(0, 8);
+
+  const addOption = (parent, s, withScope) => {
     const opt = document.createElement('option');
     opt.value = s.id;
-    opt.textContent = `${s.title} (${new Date(s.created_at).toLocaleDateString()})`;
+    const scopeSuffix = withScope ? ` · ${s.scope_key || 'view:global'}` : '';
+    opt.textContent = `${s.title}${scopeSuffix} (${new Date(s.created_at).toLocaleDateString()})`;
     if (s.id === companionState.currentSessionId) {
       opt.selected = true;
     }
-    sessionSelectEl.appendChild(opt);
+    parent.appendChild(opt);
+  };
+
+  if (current.length > 0) {
+    const group = document.createElement('optgroup');
+    group.label = '当前页面';
+    for (const s of current) addOption(group, s, false);
+    sessionSelectEl.appendChild(group);
+  }
+  if (others.length > 0) {
+    const group = document.createElement('optgroup');
+    group.label = '其它会话（跨页面）';
+    for (const s of others) addOption(group, s, true);
+    sessionSelectEl.appendChild(group);
   }
 }
 
@@ -97,7 +118,7 @@ export async function newSession(articleId) {
       companionState.currentSessionId = res.session.id;
       companionState.messages = [];
       companionState.proposals = [];
-      await refreshSessionSelect(scopeKey);
+      await refreshSessionSelect();
       clearMessageArea();
       renderWelcomeMessage();
     }
@@ -127,6 +148,22 @@ export async function switchSession(sessionId) {
     companionState.proposals = proposals;
 
     renderHistoricalMessages(messages, proposals);
+
+    // 跨 scope 恢复：历史照读，但当前页面上下文必须重置并显式告知，
+    // 绝不把其它文章/页面的句子静默当成当前上下文。
+    const selected = (companionState.sessions || []).find((s) => s.id === sessionId);
+    const selectedScope = selected && selected.scope_key;
+    if (selectedScope && selectedScope !== getCompanionScopeKey()) {
+      resetCompanionContextForView(getActiveView());
+      renderContextBar();
+      if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
+      if (bodyEl) {
+        const notice = document.createElement('div');
+        notice.className = 'companion-message assistant companion-scope-notice';
+        notice.textContent = `已切换到「${selectedScope}」的历史会话；当前页面上下文未绑定，不会沿用其它页面的句子。`;
+        bodyEl.appendChild(notice);
+      }
+    }
   } catch (err) {
     console.error('[CompanionDrawer] Failed to switch session:', err);
   }
@@ -179,9 +216,7 @@ function renderHistoricalMessages(messages, proposals) {
     const propContainer = document.createElement('div');
     propContainer.className = 'companion-proposals-history';
     renderProposalList(propContainer, proposals, async (proposal, action) => {
-      if (action === 'confirm' || action === 'accept') {
-        return await executeProposal(proposal.id, proposal.action, proposal.payload);
-      }
+      return await handleProposalAction(proposal, action);
     });
     bodyEl.appendChild(propContainer);
   }
@@ -227,13 +262,43 @@ const COMPANION_VIEW_LABELS = {
   german: '德语工作台'
 };
 
-/** 动态同步底部快捷操作选项卡显示状态（仅阅读器且绑定句子时可用） */
-function updateQuickActionChips(hasText, view) {
+/** 动态同步底部快捷操作选项卡显示状态（阅读器按选区，写作台按草稿） */
+function updateQuickActionChips(hasText, view, hasDraft) {
   const readerContext = Boolean(hasText) && view === 'reader';
+  const writerContext = Boolean(hasDraft) && view === 'writer';
   const chips = document.querySelectorAll('.companion-quick-chip.context-required');
   chips.forEach((c) => {
     c.classList.toggle('is-visible', readerContext);
   });
+  const writerChips = document.querySelectorAll('.companion-quick-chip.writer-draft-required');
+  writerChips.forEach((c) => {
+    c.classList.toggle('is-visible', writerContext);
+  });
+  const progressContext = view === 'progress';
+  const progressChips = document.querySelectorAll('.companion-quick-chip.progress-required');
+  progressChips.forEach((c) => {
+    c.classList.toggle('is-visible', progressContext);
+  });
+  const cardsContext = view === 'cards';
+  const cardsChips = document.querySelectorAll('.companion-quick-chip.card-proposal-required');
+  cardsChips.forEach((c) => {
+    c.classList.toggle('is-visible', cardsContext);
+  });
+}
+
+/** HITL 提议动作：确认写库并刷新卡盒；拒绝只流转状态、绝不写卡。 */
+async function handleProposalAction(proposal, action) {
+  if (!proposal || !proposal.id) {
+    throw new Error('提议缺少有效 ID');
+  }
+  if (action === 'reject' || action === 'discard') {
+    return await rejectProposal(proposal.id);
+  }
+  const res = await executeProposal(proposal.id, proposal.action, proposal.payload);
+  if (res && Number(res.created_count) > 0 && typeof window.loadCards === 'function') {
+    window.loadCards();
+  }
+  return res;
 }
 
 /** 刷新抽屉顶部视口研读语境条与手机端句子步进器 */
@@ -248,6 +313,8 @@ export function renderContextBar() {
   }
 
   const text = companionState.activeContext.selectedText;
+  const draft = companionState.activeContext.draftText;
+  const cardContext = companionState.activeContext.cardContext;
   const view = companionState.activeContext.view || getActiveView();
   const viewLabel = COMPANION_VIEW_LABELS[view] || '当前页面';
   const sents = window.state?.currentArticle?.sentences || [];
@@ -271,7 +338,8 @@ export function renderContextBar() {
         companionState.activeContext.articleTitle,
         companionState.activeContext.cefrLevel,
         view,
-        'none'
+        'none',
+        companionState.activeContext.draftText
       );
       renderContextBar();
     });
@@ -310,7 +378,8 @@ export function renderContextBar() {
             window.state?.currentArticle?.title,
             window.state?.currentArticle?.cefr_level,
             'reader',
-            'reader-state'
+            'reader-state',
+            companionState.activeContext.draftText
           );
           renderContextBar();
         }
@@ -338,7 +407,8 @@ export function renderContextBar() {
             window.state?.currentArticle?.title,
             window.state?.currentArticle?.cefr_level,
             'reader',
-            'reader-state'
+            'reader-state',
+            companionState.activeContext.draftText
           );
           renderContextBar();
         }
@@ -351,12 +421,33 @@ export function renderContextBar() {
     }
 
     contextBarEl.appendChild(clearBtn);
+  } else if (view === 'writer' && draft) {
+    contextBarEl.style.display = 'flex';
+    const icon = document.createElement('span');
+    icon.textContent = '✍️';
+    const textSpan = document.createElement('span');
+    textSpan.className = 'companion-context-text';
+    textSpan.textContent = '已绑定当前草稿（' + draft.length + ' 字符）';
+    contextBarEl.appendChild(icon);
+    contextBarEl.appendChild(textSpan);
+  } else if (view === 'cards' && cardContext) {
+    contextBarEl.style.display = 'flex';
+    const icon = document.createElement('span');
+    icon.textContent = '🃏';
+    const textSpan = document.createElement('span');
+    textSpan.className = 'companion-context-text';
+    textSpan.textContent = '已绑定当前卡盒词条';
+    contextBarEl.appendChild(icon);
+    contextBarEl.appendChild(textSpan);
   } else {
     contextBarEl.style.display = 'flex';
     const hint = document.createElement('span');
     hint.className = 'companion-context-hint';
     if (view === 'reader') {
       hint.textContent = '📄 阅读器 · 未绑定句子：划选正文或点击 🦉伴学，即可让 Eule 针对性问诊。';
+    } else if (view === 'writer') {
+      hint.textContent =
+        '📝 写作台 · 尚未检测到草稿：先在编辑器输入正文，再点「✍️ 检查草稿」。';
     } else {
       hint.textContent =
         '📄 ' + viewLabel + ' · 未绑定句子：本页仅支持自由问答，阅读器专属问诊请在阅读页使用。';
@@ -376,20 +467,95 @@ export function renderContextBar() {
     }
   }
 
-  updateQuickActionChips(Boolean(text), view);
+  updateQuickActionChips(Boolean(text), view, Boolean(draft));
+}
+
+/** 写作台输入时静默刷新草稿上下文（不追加聊天消息）。 */
+export function refreshWriterDraftContext() {
+  if (getActiveView() !== 'writer') return;
+  if (!window.Companion || typeof window.Companion.harvestStudyContext !== 'function') return;
+  const ctx = window.Companion.harvestStudyContext();
+  setCompanionContext(
+    ctx.selectedText,
+    ctx.articleTitle,
+    ctx.cefrLevel,
+    ctx.view,
+    ctx.contextSource,
+    ctx.draftText,
+    ctx.cardContext
+  );
+  renderContextBar();
+}
+
+/** 卡盒当前词条：发送/打开前刷新，供 propose_vocab_cards 使用。 */
+export function refreshCardBoxContext() {
+  if (getActiveView() !== 'cards') return;
+  if (!window.Companion || typeof window.Companion.harvestStudyContext !== 'function') return;
+  const ctx = window.Companion.harvestStudyContext();
+  setCompanionContext(
+    ctx.selectedText,
+    ctx.articleTitle,
+    ctx.cefrLevel,
+    ctx.view,
+    ctx.contextSource,
+    ctx.draftText,
+    ctx.cardContext
+  );
+  renderContextBar();
+}
+
+/** 卡盒页专属：基于当前卡面词条批量提议生词卡（HITL）。 */
+export function sendCardProposal() {
+  if (getActiveView() !== 'cards') return;
+  refreshCardBoxContext();
+  if (!companionState.activeContext.cardContext) {
+    alert('当前卡盒没有可用词条。请切换到卡面视图并确保当前分区有卡片后再试。');
+    return;
+  }
+  submitPrompt(
+    '请基于【当前卡盒词条】提议 3~5 个相关的 B1/B2 德语生词卡（propose_vocab_cards），' +
+      '每张卡必须含 definition_zh 中文释义与例句（reading 仅用于读音/音标，不得充当释义）；' +
+      '所有卡片都必须等我确认后才能入库。'
+  );
+}
+
+/** 进度页专属：学习负荷 / 复习压力画像。 */
+export function sendProgressProfile() {
+  if (getActiveView() !== 'progress') return;
+  submitPrompt(
+    '请调用 get_learner_profile 工具，总结我的学习负荷、复习压力、已掌握词量与当前水平估计，并给出可执行的调整建议。'
+  );
+}
+
+/** 进度页专属：对输入框中的德语文本做 CEFR 词汇等级分布。 */
+export function sendProgressVocabStats() {
+  if (getActiveView() !== 'progress') return;
+  const input = document.getElementById('companion-input');
+  const text = (input && input.value ? input.value : '').trim();
+  if (!text) {
+    alert('请先在输入框粘贴需要统计的德语文本，再点击「词汇等级」。');
+    input?.focus();
+    return;
+  }
+  input.value = '';
+  submitPrompt(
+    '请调用 vocab_stats 工具统计以下德语文本的 CEFR 词汇等级分布，并解释已知/未知词比例：\n\n' + text
+  );
 }
 
 /** 同步当前阅读器选区或活动难句 */
 export function syncCurrentContext() {
   if (window.Companion && window.Companion.harvestStudyContext) {
     const ctx = window.Companion.harvestStudyContext();
-    if (ctx.selectedText) {
+    if (ctx.selectedText || ctx.draftText) {
       setCompanionContext(
         ctx.selectedText,
         ctx.articleTitle,
         ctx.cefrLevel,
         ctx.view,
-        ctx.contextSource
+        ctx.contextSource,
+        ctx.draftText,
+        ctx.cardContext
       );
       renderContextBar();
       if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
@@ -398,9 +564,15 @@ export function syncCurrentContext() {
         hintDiv.className = 'companion-message assistant';
         hintDiv.style.borderLeft = '3px solid var(--coral, #b44322)';
         const lbl = document.createElement('div');
-        lbl.textContent = ctx.view === 'reader' ? '✓ 已同步视口难句：' : '✓ 已同步当前页面文本：';
+        if (ctx.view === 'writer' && !ctx.selectedText) {
+          lbl.textContent = '✓ 已同步写作台草稿：';
+        } else {
+          lbl.textContent = ctx.view === 'reader' ? '✓ 已同步视口难句：' : '✓ 已同步当前页面文本：';
+        }
         const q = document.createElement('em');
-        q.textContent = '„' + ctx.selectedText + '“';
+        q.textContent = ctx.selectedText
+          ? '„' + ctx.selectedText + '“'
+          : '（' + ctx.draftText.length + ' 字符）';
         hintDiv.appendChild(lbl);
         hintDiv.appendChild(q);
         bodyEl.appendChild(hintDiv);
@@ -410,6 +582,10 @@ export function syncCurrentContext() {
     }
   }
   const view = getActiveView();
+  if (view === 'writer') {
+    alert('写作台尚未检测到草稿。请先在编辑器输入正文，再使用「✍️ 检查草稿」。');
+    return;
+  }
   alert(
     view === 'reader'
       ? '未检测到当前选中文本。请在文章中点击句旁的 [🦉 伴学]，或点击单词后重试。'
@@ -471,11 +647,13 @@ export function openCompanionDrawer(contextPayload) {
       contextPayload.articleTitle,
       contextPayload.cefrLevel,
       view,
-      contextSource
+      contextSource,
+      contextPayload.draftText,
+      contextPayload.cardContext
     );
   } else {
     // 无显式上下文时也必须清掉旧值，避免抽屉页签复用上一篇的阅读器上下文。
-    setCompanionContext('', '', '', view, 'none');
+    setCompanionContext('', '', '', view, 'none', '', '');
   }
   companionState.isOpen = true;
 
@@ -490,7 +668,7 @@ export function openCompanionDrawer(contextPayload) {
   }
   renderContextBar();
 
-  if (contextPayload && contextPayload.selectedText) {
+  if (contextPayload && (contextPayload.selectedText || contextPayload.draftText)) {
     if (!bodyEl) bodyEl = document.getElementById('companion-drawer-body');
     if (bodyEl) {
       const hintDiv = document.createElement('div');
@@ -500,7 +678,9 @@ export function openCompanionDrawer(contextPayload) {
       const label = document.createElement('div');
       label.textContent = view === 'reader' ? '已绑定视口难句：' : '已绑定当前页面文本：';
       const quote = document.createElement('em');
-      quote.textContent = '„' + contextPayload.selectedText + '“';
+      quote.textContent = contextPayload.selectedText
+        ? '„' + contextPayload.selectedText + '“'
+        : '（' + contextPayload.draftText.length + ' 字符草稿）';
 
       hintDiv.appendChild(label);
       hintDiv.appendChild(quote);
@@ -545,6 +725,46 @@ export function handleSend() {
 export function submitPrompt(userText) {
   if (companionState.inFlight) return;
   if (!userText || !userText.trim()) return;
+
+  const activeView = getActiveView();
+
+  // 写作台：发送前刷新草稿上下文，保证“先打开抽屉、后输入正文”也能拿到最新草稿。
+  if (activeView === 'writer' && window.Companion?.harvestStudyContext) {
+    const latest = window.Companion.harvestStudyContext();
+    setCompanionContext(
+      latest.selectedText,
+      latest.articleTitle,
+      latest.cefrLevel,
+      latest.view,
+      latest.contextSource,
+      latest.draftText,
+      latest.cardContext
+    );
+  }
+
+  // 卡盒：发送前刷新当前卡面词条，避免用户先开抽屉、后翻卡导致上下文过期。
+  if (activeView === 'cards' && window.Companion?.harvestStudyContext) {
+    const latest = window.Companion.harvestStudyContext();
+    setCompanionContext(
+      latest.selectedText,
+      latest.articleTitle,
+      latest.cefrLevel,
+      latest.view,
+      latest.contextSource,
+      latest.draftText,
+      latest.cardContext
+    );
+  }
+
+  // 守卫：写作检查在无草稿时显式降级，不让模型凭空编造检查结果。
+  if (
+    activeView === 'writer' &&
+    !companionState.activeContext.draftText &&
+    /草稿|writing_check|写作检查|检查.*写作/.test(userText)
+  ) {
+    alert('写作台尚未检测到草稿。请先在编辑器输入正文，再执行写作检查。');
+    return;
+  }
 
   // 守卫：针对需要句子的快捷提问，若无句子则先尝试自动同步视口句子
   if (
@@ -626,12 +846,14 @@ export function submitPrompt(userText) {
     context: activeContext,
     view: companionState.activeContext.view,
     context_source: companionState.activeContext.contextSource,
+    draft_text: companionState.activeContext.draftText,
+    card_context: companionState.activeContext.cardContext,
     scope_key: getCompanionScopeKey(),
     signal: abortController.signal,
     onSessionId: (sessionId) => {
       if (sessionId && companionState.currentSessionId !== sessionId) {
         companionState.currentSessionId = sessionId;
-        refreshSessionSelect(getCompanionScopeKey()).catch(() => {});
+        refreshSessionSelect().catch(() => {});
       }
     },
     onEvent: (event, data) => {
@@ -665,11 +887,7 @@ export function submitPrompt(userText) {
         fullStreamText += chunk;
         typewriter.append(chunk);
       } else if (event === 'proposal') {
-        renderProposalCard(proposalsContainerEl, data.proposal, async (proposal, action) => {
-          if (action === 'confirm' || action === 'accept') {
-            return await executeProposal(proposal.id, proposal.action, proposal.payload);
-          }
-        });
+        renderProposalCard(proposalsContainerEl, data.proposal, handleProposalAction);
       } else if (event === 'done') {
         thoughtCtrl.finish();
         companionState.inFlight = false;
@@ -969,6 +1187,11 @@ export const CompanionDrawer = {
   submitPrompt,
   syncContext: syncCurrentContext,
   syncCurrentContext,
+  refreshWriterDraftContext,
+  refreshCardBoxContext,
+  sendCardProposal,
+  sendProgressProfile,
+  sendProgressVocabStats,
   renderContextBar,
   renderProposalCard,
   renderProposalList,

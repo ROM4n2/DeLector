@@ -59,12 +59,12 @@ def _check_request_contract(errors: list[str]) -> None:
     js_text = js_api.read_text(encoding="utf-8") if js_api.is_file() else ""
     go_text = go_ctx.read_text(encoding="utf-8") if go_ctx.is_file() else ""
 
-    for field in ("view", "context_source", "scope_key"):
+    for field in ("view", "context_source", "draft_text", "card_context", "scope_key"):
         if f"{field}: Optional[str]" not in py_text:
             errors.append(f"CompanionChatReq 缺少可选字段: {field}")
         if f"reqBody.{field}" not in js_text:
             errors.append(f"cp-api.js 请求体未携带字段: {field}")
-    for field in ("view", "context_source"):
+    for field in ("view", "context_source", "draft_text", "card_context"):
         if f'json:"{field},omitempty"' not in go_text:
             errors.append(f"Go StudyContext 缺少 JSON 字段: {field}")
 
@@ -122,6 +122,11 @@ def main() -> int:
             "handleSend",
             "sendPrompt",
             "syncContext",
+            "refreshWriterDraftContext",
+            "refreshCardBoxContext",
+            "sendCardProposal",
+            "sendProgressProfile",
+            "sendProgressVocabStats",
             "renderContextBar",
             "setReasoningEffort",
             "newSession",
@@ -141,7 +146,8 @@ def main() -> int:
     events_str = ", ".join(sorted(SPEC_EVENTS))
     print(
         f"[check_companion_contract] PASS: 伴学双向 SSE 契约完美对齐 "
-        f"({len(SPEC_EVENTS)} 种事件: {events_str})；请求字段 view/context_source/scope_key 三端一致。"
+        f"({len(SPEC_EVENTS)} 种事件: {events_str})；"
+        f"请求字段 view/context_source/draft_text/card_context/scope_key 三端一致。"
     )
     return 0
 

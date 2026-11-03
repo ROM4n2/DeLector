@@ -37,6 +37,7 @@ class CompanionProposalService:
         title: str,
         payload: Dict[str, Any],
         message_id: Optional[str] = None,
+        proposal_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """记录伴学提议条目（默认状态为 pending）。"""
         with get_db(self.db_path) as conn:
@@ -47,7 +48,18 @@ class CompanionProposalService:
                 title=title,
                 payload=payload,
                 message_id=message_id,
+                proposal_id=proposal_id,
             )
+
+    def reject_proposal(self, proposal_id: str) -> Dict[str, Any]:
+        """将 pending 提议标记为 rejected；不写任何卡片。"""
+        with get_db(self.db_path) as conn:
+            rejected = update_proposal_status(conn, proposal_id, "rejected")
+        return {
+            "status": "ok" if rejected else "not_found",
+            "proposal_id": proposal_id,
+            "rejected": rejected,
+        }
 
     def list_proposals(
         self,
@@ -90,15 +102,21 @@ class CompanionProposalService:
             except sqlite3.OperationalError:
                 row = None
 
+            if row is not None and row["status"] == "accepted":
+                # 幂等返回：提议此前已确认执行，不再重复落盘
+                return {
+                    "status": "ok",
+                    "proposal_id": proposal_id,
+                    "action": action,
+                    "created_count": 0,
+                }
+
+            # 空/畸形提议不允许被确认成「已入库」：没有任何有效词条时直接报错，
+            # 状态保持 pending，避免前端把空提议标成 accepted 却一张卡都没写。
+            if not any(isinstance(c, dict) and str(c.get("word", "")).strip() for c in cards):
+                raise ValueError("提议中没有可入库的词条")
+
             if row is not None:
-                if row["status"] == "accepted":
-                    # 幂等返回：提议此前已确认执行，不再重复落盘
-                    return {
-                        "status": "ok",
-                        "proposal_id": proposal_id,
-                        "action": action,
-                        "created_count": 0,
-                    }
                 update_proposal_status(conn, proposal_id, "accepted")
 
             created_count = 0
@@ -113,7 +131,9 @@ class CompanionProposalService:
                 gender = str(c.get("gender") or "").strip()
                 plural = str(c.get("plural") or "").strip()
                 cefr_level = str(c.get("cefr_level") or "B1").strip()
-                definition_zh = str(c.get("definition_zh") or c.get("reading") or "").strip() or word
+                # definition_zh 只接受真正的中文释义：reading 是读音/音标，缺省时留空，
+                # 由前端提案卡片与卡盒 UI 显式标记「待补充」，绝不用音标冒充释义。
+                definition_zh = str(c.get("definition_zh") or "").strip()
                 sentence = str(c.get("sentence_context") or c.get("context_sentence") or "").strip()
 
                 cur = conn.execute(

@@ -148,9 +148,15 @@ function stripComments(src) {
 
 let predicateFn = "";
 let statsFn = "";
+let definitionFn = "";
+let deckFn = "";
 let renderFn = "";
 try {
   stateFn = sliceObjectDecl(cdStateJs, "export const cardState = ");
+  /* 卡背释义走 cd-state.js 的 formatCardDefinition（缺释义显示「待补充」），必须随切片进沙箱。 */
+  definitionFn = sliceFunctionBody(cdStateJs, "export function formatCardDefinition(");
+  /* 卡组构成已收口到 cd-state.js 的 buildDeckFromLists，渲染切片同样依赖它。 */
+  deckFn = sliceFunctionBody(cdStateJs, "export function buildDeckFromLists(");
   statsFn = sliceFunctionBody(cardsJs, "function cardStatsTag(");
   renderFn = sliceFunctionBody(cardsJs, "export function renderDeckStage(");
 } catch (e) {
@@ -164,7 +170,7 @@ try {
 } catch {
   predicateMissing = true;
 }
-const transformed = [stateFn, predicateFn, statsFn, renderFn].filter(Boolean).join("\n\n");
+const transformed = [stateFn, predicateFn, statsFn, definitionFn, deckFn, renderFn].filter(Boolean).join("\n\n");
 
 /* 切片护栏：切歪 / 回退 ⇒ 直接红，不许假绿 */
 const stripProblems = [];

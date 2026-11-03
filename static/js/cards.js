@@ -5,7 +5,14 @@ import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
-import { cardState, enterSegment, stepDeckState } from "./cd-state.js";
+import {
+  cardState,
+  enterSegment,
+  stepDeckState,
+  formatCardDefinition,
+  selectSegmentLists,
+  buildDeckFromLists,
+} from "./cd-state.js";
 export {
   setA1Mode,
   filterA1Topic,
@@ -27,19 +34,12 @@ export {
 } from "./a1_cards.js";
 export * from "./a1_cards.js";
 
-// a1_cards.js 是独立模块，读不到本模块作用域。这两个 getter 给它提供
-// 只读访问，避免循环 import 具名 state（getCachedVocabLemmas 判定已入
-// FSRS 盒的词元）。A1 的牌盒/目录判定已由 a1_cards.js 自管的
-// a1ViewMode 接管（ADR-0005 Task 2），getCardViewMode 不再被它消费，
-// 仅保留给主站 toggle 状态查询。
+// a1_cards.js 是独立模块，读不到本模块作用域。getCachedVocabLemmas 已上移至
+// cd-state.js（L1 纯层）， cards.js 只保留 re-export 以维持既有公开面，
+// 同时消除 cards.js ↔ a1_cards.js 的 import 环。getCardViewMode 仅保留给主站 toggle 查询。
+export { getCachedVocabLemmas } from "./cd-state.js";
 export function getCardViewMode() {
   return cardState.catalog.viewMode;
-}
-
-export function getCachedVocabLemmas() {
-  return new Set(
-    (cardState.catalog.cards.vocab_cards || []).map(c => (c.lemma || c.word || '').toLowerCase())
-  );
 }
 
 export function setCardSegment(seg) {
@@ -123,19 +123,7 @@ export function renderCardsGrid() {
   document.getElementById("prep-filter-bar")?.classList.add("hidden");
   document.querySelector(".cards-view-toggle")?.classList.remove("hidden");
 
-  let vList = [];
-  let gList = [];
-
-  if (cardState.catalog.segment === "due") {
-    vList = cardState.catalog.dueCards.due_vocab || [];
-    gList = cardState.catalog.dueCards.due_grammar || [];
-  } else if (cardState.catalog.segment === "mastered") {
-    vList = (cardState.catalog.cards.vocab_cards || []).filter((c) => !!c.mastered);
-    gList = (cardState.catalog.cards.grammar_cards || []).filter((c) => !!c.mastered);
-  } else {
-    vList = (cardState.catalog.cards.vocab_cards || []).filter((c) => !c.mastered);
-    gList = (cardState.catalog.cards.grammar_cards || []).filter((c) => !c.mastered);
-  }
+  const { vList, gList } = selectSegmentLists(cardState.catalog);
 
   const container = document.getElementById("cards-container");
   if (!container) return;
@@ -238,10 +226,7 @@ export function renderDeckStage(vList, gList) {
   const container = document.getElementById("cards-container");
   if (!container) return;
 
-  const deck = [
-    ...vList.map((c) => ({ ...c, _type: "vocab" })),
-    ...gList.map((c) => ({ ...c, _type: "grammar" })),
-  ];
+  const deck = buildDeckFromLists(vList, gList);
 
   if (cardState.deck.index >= deck.length) cardState.deck.index = Math.max(0, deck.length - 1);
   const card = deck[cardState.deck.index];
@@ -352,7 +337,7 @@ export function renderDeckStage(vList, gList) {
 
             <!-- Back Center Body -->
             <div class="deck-back-body">
-              <div class="deck-def-text">${esc(isVocab ? card.definition_zh : card.explanation_zh)}</div>
+              <div class="deck-def-text">${esc(isVocab ? formatCardDefinition(card) : card.explanation_zh)}</div>
               ${!isVocab && card.rule_formula ? `<div class="grammar-memo-formula" style="margin-bottom:0.875rem;">${esc(card.rule_formula)}</div>` : ""}
               ${card.sentence_context ? `<div class="deck-sent-quote">${esc(card.sentence_context)}</div>` : ""}
             </div>
@@ -559,7 +544,7 @@ export function renderCatalogGrid(vList, gList) {
             <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, ${jsAttr(c.word)})" title="删除此卡片">✕</button>
           </div>
         </div>
-        <div class="memo-def">${esc(c.definition_zh)}</div>
+        <div class="memo-def">${esc(formatCardDefinition(c))}</div>
         <div class="memo-meta">${esc(c.lemma)} · ${esc(c.pos || "WORT")}${c.gender ? " · " + esc(c.gender) : ""}</div>
         <div class="memo-sent">${esc(c.sentence_context)}</div>
         <div class="card-footer-actions">
@@ -738,7 +723,7 @@ export function renderCurrentQuizCard() {
     if (wEl) wEl.textContent = card.word;
     if (bEl)
       bEl.textContent = `${card.cefr_level || "A1"} · ${card.pos || "WORT"}`;
-    if (dEl) dEl.textContent = card.definition_zh;
+    if (dEl) dEl.textContent = formatCardDefinition(card);
     if (sEl) sEl.textContent = card.sentence_context || "";
 
     playGermanAudio(card.word);
@@ -752,7 +737,7 @@ export function renderCurrentQuizCard() {
     const fbEl = document.getElementById("quiz-dict-feedback");
     const nextBtn = document.getElementById("quiz-dict-next");
 
-    if (defEl) defEl.textContent = card.definition_zh;
+    if (defEl) defEl.textContent = formatCardDefinition(card);
     if (hintEl) {
       const masked = (card.sentence_context || "").replace(
         new RegExp(card.word, "gi"),
@@ -792,16 +777,24 @@ export function renderCurrentQuizCard() {
       .map((c) => c.definition_zh);
 
     otherDefs.sort(() => Math.random() - 0.5);
-    const options = [card.definition_zh, ...otherDefs.slice(0, 3)];
+    // 正确答案选项与 flashcard/dictation 同口径走 formatCardDefinition：缺
+    // definition_zh 的卡（HITL 提议允许入盒）此前会渲染出空白按钮。选项对象化
+    // （isCorrect 随对象乱序），正确索引不依赖 indexOf 文本比对，避免同文案
+    // 干扰项或「待补充」字面量误标。
+    const options = [
+      { text: formatCardDefinition(card), isCorrect: true },
+      ...otherDefs.slice(0, 3).map((d) => ({ text: d, isCorrect: false })),
+    ];
     options.sort(() => Math.random() - 0.5);
+    const correctIdx = options.findIndex((o) => o.isCorrect);
 
     if (optContainer) {
       optContainer.innerHTML = options
         .map(
           (opt, idx) => `
-        <button class="quiz-choice-btn" onclick="submitChoice(${idx}, ${options.indexOf(card.definition_zh)})">
+        <button class="quiz-choice-btn" onclick="submitChoice(${idx}, ${correctIdx})">
           <span style="font-family:var(--mono);margin-right:0.5rem;color:var(--pencil);">${String.fromCharCode(65 + idx)}.</span>
-          ${esc(opt)}
+          ${esc(opt.text)}
         </button>
       `,
         )

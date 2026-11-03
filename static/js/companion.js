@@ -2,6 +2,7 @@
 'use strict';
 
 import { ShadowPlayer, playGermanAudio } from './player.js';
+import { cardState, selectSegmentLists, buildDeckFromLists } from './cd-state.js';
 
 // ── SVG Character Templates (Standardized classes & dynamic CSS vars) ───────
 export const CHARACTERS = {
@@ -291,6 +292,49 @@ export function getCompanionScopeKey() {
     return 'article:' + articleId;
   }
   return 'view:' + (view || 'global');
+}
+
+/** 读取卡盒当前卡面词条（仅 deck 视图；grid 无选中态，返回空）。 */
+function readCardBoxContext() {
+  const catalog = cardState && cardState.catalog;
+  if (!catalog || catalog.viewMode !== 'deck') return '';
+  const { vList, gList } = selectSegmentLists(catalog);
+  const deck = buildDeckFromLists(vList, gList);
+  const idx = cardState.deck && Number.isFinite(cardState.deck.index) ? cardState.deck.index : 0;
+  const card = deck[idx];
+  if (!card) return '';
+  const segment = catalog.segment || 'due';
+  const lines = ['【当前卡盒词条】', `分段: ${segment}`];
+  if (card._type === 'vocab') {
+    if (card.word) lines.push(`词: ${card.word}`);
+    if (card.lemma) lines.push(`词元: ${card.lemma}`);
+    if (card.definition_zh) lines.push(`释义: ${card.definition_zh}`);
+    if (card.cefr_level || card.pos || card.gender) {
+      lines.push(`词性/等级: ${[card.pos, card.gender, card.cefr_level].filter(Boolean).join(' · ')}`);
+    }
+  } else if (card.grammar_name) {
+    lines.push(`语法考点: ${card.grammar_name}`);
+    if (card.explanation_zh) lines.push(`说明: ${card.explanation_zh}`);
+    if (card.cefr_level) lines.push(`等级: ${card.cefr_level}`);
+  }
+  if (card.sentence_context) lines.push(`例句: ${card.sentence_context}`);
+  return lines.join('\n');
+}
+
+/** 读取写作台当前草稿（与 writer.js 的 editorText 同口径：TreeWalker 只取文本节点）。 */
+function readWriterDraftText() {
+  const el = document.getElementById('ide-editor');
+  if (!el) return '';
+  if (typeof document.createTreeWalker === 'function' && typeof NodeFilter !== 'undefined') {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let text = '';
+    let node;
+    while ((node = walker.nextNode())) {
+      text += node.nodeValue;
+    }
+    return text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  return (el.textContent || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // ── SVG Sanitizer & Custom Character Processing ────────────────────────────
@@ -684,12 +728,32 @@ export const Companion = {
       cefrLevel = (window.state && window.state.currentArticle && window.state.currentArticle.cefr_level) || 'B1';
     }
 
+    // 4. 写作台草稿：与 reader 的 selected_text 分离，用 draftText 单独承载。
+    let draftText = '';
+    if (view === 'writer') {
+      draftText = readWriterDraftText();
+      if (draftText && contextSource === 'none') {
+        contextSource = 'writer-draft';
+      }
+    }
+
+    // 5. 卡盒当前词条：与 selected_text / draftText 分离，用 cardContext 单独承载。
+    let cardContext = '';
+    if (view === 'cards') {
+      cardContext = readCardBoxContext();
+      if (cardContext && contextSource === 'none') {
+        contextSource = 'card-current';
+      }
+    }
+
     return {
       selectedText,
       articleTitle,
       cefrLevel,
       view,
-      contextSource
+      contextSource,
+      draftText,
+      cardContext
     };
   },
 

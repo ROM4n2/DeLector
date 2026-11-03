@@ -608,6 +608,23 @@ def test_listen_lab_no_circular_dependency():
     assert not cycles, f"listen-lab.js 存在循环依赖：{cycles}"
 
 
+def test_cards_and_a1_no_circular_dependency():
+    """cards.js ↔ a1_cards.js 的 import 环必须已断开（getCachedVocabLemmas 上移 cd-state.js）。"""
+    modules = _load_modules()
+    for target in ("cards.js", "a1_cards.js"):
+        cycles = _cycles_through(modules, target)
+        assert not cycles, f"{target} 存在循环依赖：{cycles}"
+
+
+def test_cards_reexports_cached_vocab_lemmas():
+    """cards.js 删除本地实现后必须保留 re-export，既有公开面不断链。"""
+    src = (JS_DIR / "cards.js").read_text(encoding="utf-8")
+    assert 'export { getCachedVocabLemmas } from "./cd-state.js";' in src
+    a1_src = (JS_DIR / "a1_cards.js").read_text(encoding="utf-8")
+    assert 'from "./cd-state.js"' in a1_src
+    assert 'from "./cards.js"' not in a1_src
+
+
 # ── 长难句精读工坊（hard-sentences.js）：非孤岛、无循环依赖、导出齐全 ────────
 # Task 5（红线 11 契约探针配套）：hard-sentences.js 由 main.js `import * as
 # HardSentences` 命名空间接线（main.js:163，window 挂载于 :1096）。若它变成孤岛

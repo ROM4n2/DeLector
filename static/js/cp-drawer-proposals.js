@@ -42,13 +42,17 @@ export function renderProposalCard(container, proposal, onAction) {
     const boldWord = document.createElement('strong');
     boldWord.textContent = c.word || '';
     itemEl.appendChild(boldWord);
-    itemEl.appendChild(document.createTextNode(': ' + (c.reading || '')));
+    // definition_zh 才是中文释义；reading 是读音/音标，缺释义时显式标记「待补充」。
+    const definition = typeof c.definition_zh === 'string' ? c.definition_zh.trim() : '';
+    itemEl.appendChild(document.createTextNode(': ' + (definition || '待补充')));
 
-    if (c.context_sentence) {
+    // 例句字段双读：Go propose_vocab_cards 用 sentence_context，旧 Python proposal 用 context_sentence。
+    const sentence = c.context_sentence || c.sentence_context;
+    if (sentence) {
       const sentEl = document.createElement('div');
       sentEl.style.fontSize = '0.78rem';
       sentEl.style.color = 'var(--pencil, #666)';
-      sentEl.textContent = '„' + c.context_sentence + '“';
+      sentEl.textContent = '„' + sentence + '“';
       itemEl.appendChild(sentEl);
     }
     contentEl.appendChild(itemEl);
@@ -123,6 +127,15 @@ export function renderProposalCard(container, proposal, onAction) {
   // 初始状态判定
   applyStatus(proposal.status || 'pending');
 
+  // 失败路径：空/畸形提议不允许确认入库，给出可见原因；拒绝仍然可用。
+  const isCardAction = String(proposal.action || '').startsWith('create_vocab_card');
+  const hasValidCards = cards.some((c) => c && typeof c.word === 'string' && c.word.trim());
+  if (isCardAction && !hasValidCards && (!proposal.status || proposal.status === 'pending')) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '无可入库词条';
+    confirmBtn.title = '该提议没有有效词条，无法确认入库';
+  }
+
   // 5. 事件绑定
   confirmBtn.addEventListener('click', async () => {
     confirmBtn.disabled = true;
@@ -151,6 +164,7 @@ export function renderProposalCard(container, proposal, onAction) {
       applyStatus('rejected');
     } catch (err) {
       console.error('Proposal rejection failed:', err);
+      alert('拒绝提议失败: ' + (err.message || '未知错误'));
     }
   });
 
@@ -170,6 +184,46 @@ export function renderProposalList(container, proposals, onAction) {
     container.removeChild(container.firstChild);
   }
   if (!Array.isArray(proposals) || proposals.length === 0) return;
+
+  // 批量操作：仅在存在 2 条以上待处理提议时出现，逐条复用同一 onAction 链路。
+  const pending = proposals.filter((p) => !p.status || p.status === 'pending');
+  if (pending.length >= 2 && typeof onAction === 'function') {
+    const bar = document.createElement('div');
+    bar.className = 'companion-proposal-batch-bar';
+
+    const confirmAllBtn = document.createElement('button');
+    confirmAllBtn.className = 'companion-btn-confirm';
+    confirmAllBtn.textContent = `全部确认 (${pending.length})`;
+
+    const rejectAllBtn = document.createElement('button');
+    rejectAllBtn.className = 'companion-btn-discard';
+    rejectAllBtn.textContent = '全部拒绝';
+
+    const runBatch = async (action) => {
+      confirmAllBtn.disabled = true;
+      rejectAllBtn.disabled = true;
+      const failed = [];
+      for (const proposal of pending) {
+        try {
+          await onAction(proposal, action);
+          proposal.status = action === 'confirm' ? 'accepted' : 'rejected';
+        } catch (err) {
+          console.error('Batch proposal action failed:', err);
+          failed.push(proposal.id || proposal.title || '未知提议');
+        }
+      }
+      renderProposalList(container, proposals, onAction);
+      if (failed.length > 0) {
+        alert('部分提议处理失败: ' + failed.join(', '));
+      }
+    };
+
+    confirmAllBtn.addEventListener('click', () => runBatch('confirm'));
+    rejectAllBtn.addEventListener('click', () => runBatch('reject'));
+    bar.appendChild(confirmAllBtn);
+    bar.appendChild(rejectAllBtn);
+    container.appendChild(bar);
+  }
 
   for (const proposal of proposals) {
     renderProposalCard(container, proposal, onAction);

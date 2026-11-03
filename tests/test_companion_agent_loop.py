@@ -293,8 +293,9 @@ def test_loop_injects_viewport_study_context() -> None:
 
 
 def test_loop_injects_view_and_context_source() -> None:
-    """view / context_source 必须进入 Python 回退路径的系统提示词。"""
+    """view / context_source / draft_text 必须进入 Python 回退路径的系统提示词。"""
     captured_messages: List[Dict[str, Any]] = []
+    draft = "Ich habe hunger und gehe in der Schule."
 
     async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         captured_messages.extend(kwargs.get("messages", []))
@@ -302,8 +303,8 @@ def test_loop_injects_view_and_context_source() -> None:
 
     asyncio.run(
         run_companion_agent_loop(
-            [{"role": "user", "content": "当前在哪一页？"}],
-            context={"view": "cards", "context_source": "none"},
+            [{"role": "user", "content": "检查当前草稿"}],
+            context={"view": "writer", "context_source": "writer-draft", "draft_text": draft},
             chat_fn=mock_chat,
         )
     )
@@ -311,8 +312,144 @@ def test_loop_injects_view_and_context_source() -> None:
     system_msg = next((m for m in captured_messages if m.get("role") == "system"), None)
     assert system_msg is not None
     content = str(system_msg.get("content", ""))
-    assert "【当前页面】: cards" in content
-    assert "【上下文来源】: none" in content
+    assert "【当前页面】: writer" in content
+    assert "【上下文来源】: writer-draft" in content
+    assert "【当前写作草稿】" in content
+    assert draft in content
+
+
+def test_loop_writing_check_receives_draft_text() -> None:
+    """写作检查工具入参必须使用草稿文本，而不是空对象/占位符。"""
+    draft = "Ich habe hunger und gehe in der Schule."
+    captured_payload: Dict[str, Any] = {}
+
+    async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return {"tool_call": {"name": "writing_check", "payload": {"text": draft}}}
+
+    async def fake_writing_check(payload: Dict[str, Any]) -> Dict[str, Any]:
+        captured_payload.update(payload)
+        return {"error_count": 2, "errors": []}
+
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "检查当前草稿"}],
+            context={"view": "writer", "context_source": "writer-draft", "draft_text": draft},
+            chat_fn=mock_chat,
+            tools_override={"writing_check": fake_writing_check},
+        )
+    )
+
+    assert outcome.status == "ok"
+    assert captured_payload.get("text") == draft
+
+
+def test_loop_progress_tools_receive_inputs() -> None:
+    """进度页两个既有工具：get_learner_profile 空画像查询 + vocab_stats 文本入参。"""
+    captured: List[tuple[str, Dict[str, Any]]] = []
+    sample_text = "Die Transformation der modernen Arbeitswelt verändert vieles."
+    step = 0
+
+    async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        nonlocal step
+        step += 1
+        if step == 1:
+            return {
+                "tool_call": {
+                    "name": "get_learner_profile",
+                    "payload": {"include_weak_roots": True},
+                }
+            }
+        if step == 2:
+            return {
+                "tool_call": {
+                    "name": "vocab_stats",
+                    "payload": {"text": sample_text},
+                }
+            }
+        return {"reply_zh": "已汇总学习负荷与词汇等级。"}
+
+    async def fake_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
+        captured.append(("get_learner_profile", payload))
+        return {"status": "ok", "total_known_words": 120, "fsrs_due_count": 18}
+
+    async def fake_vocab(payload: Dict[str, Any]) -> Dict[str, Any]:
+        captured.append(("vocab_stats", payload))
+        return {"tokens_total": 8, "known_rate": 0.75, "level_hint": "B1"}
+
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "我的学习负荷和这段词汇等级怎么样？"}],
+            context={"view": "progress", "context_source": "none"},
+            chat_fn=mock_chat,
+            tools_override={
+                "get_learner_profile": fake_profile,
+                "vocab_stats": fake_vocab,
+            },
+        )
+    )
+
+    assert outcome.status == "ok"
+    assert captured[0] == ("get_learner_profile", {"include_weak_roots": True})
+    assert captured[1] == ("vocab_stats", {"text": sample_text})
+
+
+def test_loop_card_context_injection_and_proposal_payload_preserved() -> None:
+    """卡盒上下文进入系统提示词；propose_vocab_cards 提议参数原样保留，不直接入库。"""
+    captured_messages: List[Dict[str, Any]] = []
+    card_context = "【当前卡盒词条】\n分段: due\n词: die Eule\n词元: Eule\n释义: 猫头鹰"
+
+    async def mock_chat(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        captured_messages.extend(kwargs.get("messages", []))
+        return {
+            "reply_zh": "已生成待确认的生词卡提议。",
+            "proposal": {
+                "action": "create_vocab_cards",
+                "title": "扩展 die Eule 相关生词",
+                "payload": {
+                    "cards": [
+                        {
+                            "word": "die Nacht",
+                            "lemma": "Nacht",
+                            "definition_zh": "夜晚",
+                            "sentence_context": "Die Eule jagt in der Nacht.",
+                        }
+                    ]
+                },
+            },
+        }
+
+    outcome = asyncio.run(
+        run_companion_agent_loop(
+            [{"role": "user", "content": "基于当前卡盒词条扩展生词"}],
+            context={"view": "cards", "context_source": "card-current", "card_context": card_context},
+            chat_fn=mock_chat,
+        )
+    )
+
+    system_msg = next((m for m in captured_messages if m.get("role") == "system"), None)
+    assert system_msg is not None
+    long_system_prompt = str(system_msg.get("content", ""))
+    assert "【当前卡盒词条】" in long_system_prompt
+    assert "die Eule" in long_system_prompt
+
+    assert outcome.status == "ok"
+    assert len(outcome.proposals) == 1
+    prop = outcome.proposals[0]
+    assert prop["action"] == "create_vocab_cards"
+    assert prop["title"] == "扩展 die Eule 相关生词"
+    assert prop["payload"]["cards"][0]["word"] == "die Nacht"
+    assert prop["payload"]["cards"][0]["definition_zh"] == "夜晚"
+
+
+def test_python_prompt_never_requires_forbidden_tool_call() -> None:
+    """Python 回退内核没有 propose_vocab_cards 工具，提示词不得要求 tool_call 制卡。"""
+    from delector.services.companion_agent import ALLOWED_TOOLS, COMPANION_AGENT_SYSTEM_PROMPT
+
+    assert "propose_vocab_cards" not in ALLOWED_TOOLS
+    assert "调用 propose_vocab_cards" not in COMPANION_AGENT_SYSTEM_PROMPT
+    assert "本运行时没有 propose_vocab_cards 这个工具" in COMPANION_AGENT_SYSTEM_PROMPT
+    assert '"proposal"' in COMPANION_AGENT_SYSTEM_PROMPT
+    assert "definition_zh" in COMPANION_AGENT_SYSTEM_PROMPT
 
 
 def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:

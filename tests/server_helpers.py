@@ -90,8 +90,13 @@ def _insert_vocab_card(**over: object) -> int:
 # ── 跨域夹具（C6 Task 3：自 `test_server.py` / `test_server_packaging.py` 上收的唯一实现）──
 
 
+@pytest.fixture
+def test_db_path(tmp_path):
+    return str(tmp_path / "test_delector.db")
+
+
 @pytest.fixture(autouse=True)
-def clean_db():
+def clean_db(test_db_path, tmp_path):
     # sqlite3.Connection 与内部 statement 互为引用环：`with get_db(...)` 只提交
     # 事务不 close，文件句柄要等循环 GC 才释放。Windows 上句柄未释放时 os.remove
     # 抛 PermissionError（被吞），旧 DB 带着上一测试的数据残留下来 → 隔离失效。
@@ -100,19 +105,22 @@ def clean_db():
     # 时冻结），全量 pytest 时更晚收集的文件（test_audit_hardening.py 等）在
     # 模块顶层改写 DATABASE_PATH，收集顺序若让本文件先 import、用例后执行，
     # 默认路径就会命中未建表的别家库 → 「no such table」成片假失败。
+    # 路径钉到 tmp_path：杜绝仓库根泄漏（clean_db 此前用相对路径 test_delector.db，
+    # 会被 tests/conftest.py 的 root-db 守卫判红）。
     from delector.server import init_db
 
+    progress_path = str(tmp_path / "test_progress.db")
     saved = {k: os.environ.get(k) for k in ("DATABASE_PATH", "PROGRESS_DB_PATH")}
-    os.environ["DATABASE_PATH"] = "test_delector.db"
-    os.environ["PROGRESS_DB_PATH"] = "test_progress.db"
+    os.environ["DATABASE_PATH"] = test_db_path
+    os.environ["PROGRESS_DB_PATH"] = progress_path
     # 连带删除 WAL 旁文件（-wal/-shm）：启用 WAL 后它们与主库同生共死，只删主库会把
     # 陈旧 -shm 留给下个用例 → 打开即 `disk I/O error`。其它测试模块早已按三件套清理。
     gc.collect()
-    remove_db_files("test_delector.db", "test_progress.db")
-    init_db("test_delector.db")
+    remove_db_files(test_db_path, progress_path)
+    init_db(test_db_path)
     yield
     gc.collect()
-    remove_db_files("test_delector.db", "test_progress.db")
+    remove_db_files(test_db_path, progress_path)
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
@@ -131,8 +139,8 @@ def lan_client():
 
 
 @pytest.fixture
-def test_db_path():
-    return "test_delector.db"
+def test_progress_path(tmp_path):
+    return str(tmp_path / "test_progress.db")
 
 
 def _package_windows_build_windows_fn() -> ast.FunctionDef:

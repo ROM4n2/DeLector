@@ -585,6 +585,8 @@ export function analyzeWriterText(immediate = false) {
   if (isComposing) return;
   const text = editorText();
   updateWriterStats(text);
+  // 抽屉已打开时，输入/清空草稿后立即刷新「✍️ 检查草稿」入口与语境条。
+  window.CompanionDrawer?.refreshWriterDraftContext?.();
 
   if (!text.trim()) {
     clearWriterForm();

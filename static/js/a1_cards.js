@@ -5,7 +5,7 @@ import { state, api, esc, jsAttr } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { refreshCardCounters } from "./reader.js";
 import { Companion } from "./companion.js";
-import { getCachedVocabLemmas } from "./cards.js";
+import { getCachedVocabLemmas } from "./cd-state.js";
 import { initA1Hoeren, stopHoerenExam } from "./a1_hoeren.js";
 import { initA1Lesen, stopLesenExam } from "./a1_lesen.js";
 

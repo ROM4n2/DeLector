@@ -159,7 +159,8 @@ def test_proposal_service_execute_success(test_db: str) -> None:
             "cards": [
                 {
                     "word": "der Hund",
-                    "reading": "狗",
+                    "reading": "[hʊnt]",
+                    "definition_zh": "狗",
                     "context_sentence": "Der Hund bellt.",
                     "lemma": "Hund",
                     "pos": "noun",
@@ -194,6 +195,40 @@ def test_proposal_service_execute_success(test_db: str) -> None:
     assert row["definition_zh"] == "狗"
 
 
+def test_proposal_service_never_stores_reading_as_definition(test_db: str) -> None:
+    """只有 reading（读音/音标）时，definition_zh 必须留空，绝不用音标冒充中文释义。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="der Witwer",
+        payload={
+            "cards": [
+                {
+                    "word": "der Witwer",
+                    "reading": "[ˈvɪtvɐ]",
+                    "context_sentence": "Der Witwer trauert.",
+                }
+            ]
+        },
+    )
+
+    res = prop_svc.execute_proposal(prop["id"], "create_vocab_cards", prop["payload"])
+    assert res["status"] == "ok"
+    assert res["created_count"] == 1
+
+    conn = sqlite3.connect(test_db)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM vocab_cards WHERE word = ?", ("der Witwer",)).fetchone()
+    conn.close()
+    assert row is not None
+    assert row["definition_zh"] == ""
+    assert row["definition_zh"] != "[ˈvɪtvɐ]"
+
+
 def test_proposal_service_execute_single_card_action(test_db: str) -> None:
     session_svc = CompanionSessionService(db_path=test_db)
     session = session_svc.get_or_create_session()
@@ -204,7 +239,12 @@ def test_proposal_service_execute_single_card_action(test_db: str) -> None:
         session_id=sid,
         action="create_vocab_card",
         title="die Katze",
-        payload={"word": "die Katze", "reading": "猫", "sentence_context": "Die Katze schläft."},
+        payload={
+            "word": "die Katze",
+            "definition_zh": "猫",
+            "reading": "[ˈkaːtsə]",
+            "sentence_context": "Die Katze schläft.",
+        },
     )
 
     res = prop_svc.execute_proposal(
@@ -252,10 +292,96 @@ def test_proposal_service_execute_idempotence(test_db: str) -> None:
     assert count == 1
 
 
+def test_proposal_service_execute_rejects_empty_cards(test_db: str) -> None:
+    """空 cards 列表不得被确认成 accepted：报错、状态保持 pending、零写卡。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="暂无可制卡语料",
+        payload={"cards": []},
+    )
+
+    with pytest.raises(ValueError, match="没有可入库的词条"):
+        prop_svc.execute_proposal(prop["id"], "create_vocab_cards", prop["payload"])
+
+    assert [p["status"] for p in prop_svc.list_proposals(sid)] == ["pending"]
+    conn = sqlite3.connect(test_db)
+    count = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    conn.close()
+    assert count == 0
+
+
+def test_proposal_service_execute_rejects_card_without_word(test_db: str) -> None:
+    """cards 里没有任何有效 word 同样视为畸形提议，不得写库或置 accepted。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="畸形提议",
+        payload={"cards": [{"definition_zh": "狗"}, "not-a-dict"]},
+    )
+
+    with pytest.raises(ValueError, match="没有可入库的词条"):
+        prop_svc.execute_proposal(prop["id"], "create_vocab_cards", prop["payload"])
+    assert [p["status"] for p in prop_svc.list_proposals(sid)] == ["pending"]
+
+
 def test_proposal_service_unsupported_action(test_db: str) -> None:
     prop_svc = CompanionProposalService(db_path=test_db)
     with pytest.raises(ValueError, match="不支持的提议动作类型"):
         prop_svc.execute_proposal("prop_xyz", "unsupported_action", {})
+
+
+def test_proposal_service_create_reuses_sse_proposal_id(test_db: str) -> None:
+    """聊天流里的 proposal id 必须原样复用，前端确认/拒绝才能命中同一行。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="扩展 die Eule 相关生词",
+        payload={"cards": [{"word": "die Nacht", "definition_zh": "夜晚"}]},
+        proposal_id="prop_chat_01",
+    )
+    assert prop["id"] == "prop_chat_01"
+    assert [p["id"] for p in prop_svc.list_proposals(sid)] == ["prop_chat_01"]
+
+
+def test_proposal_service_reject_does_not_write_cards(test_db: str) -> None:
+    """拒绝只流转状态：rejected；绝不向 vocab_cards 写卡，重复拒绝不再生效。"""
+    session_svc = CompanionSessionService(db_path=test_db)
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+
+    prop_svc = CompanionProposalService(db_path=test_db)
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="扩展 die Eule 相关生词",
+        payload={"cards": [{"word": "das Insekt", "definition_zh": "昆虫"}]},
+    )
+
+    res = prop_svc.reject_proposal(prop["id"])
+    assert res["rejected"] is True
+    assert res["status"] == "ok"
+
+    assert [p["id"] for p in prop_svc.list_proposals(sid, status="rejected")] == [prop["id"]]
+    assert prop_svc.list_proposals(sid, status="pending") == []
+
+    conn = sqlite3.connect(test_db)
+    count = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    conn.close()
+    assert count == 0
+
+    again = prop_svc.reject_proposal(prop["id"])
+    assert again["rejected"] is False
+    assert again["status"] == "not_found"
 
 
 def test_routes_sessions_and_history_endpoints(test_db: str) -> None:

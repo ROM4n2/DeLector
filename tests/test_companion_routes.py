@@ -182,6 +182,29 @@ def test_companion_chat_scope_isolation_and_session_header(
     assert scoped_ids == [sid_cards_1]
 
 
+def test_companion_sessions_global_list_and_scoped_default_unchanged(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """全局列表覆盖所有 scope；scoped 端点缺省行为不变（仍只回本 scope）。"""
+    from delector.services.companion_session import CompanionSessionService
+
+    db_file = tmp_path / "global_sessions.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    svc = CompanionSessionService(db_path=str(db_file))
+    article = svc.get_or_create_session(article_id="3", scope_key="article:3")
+    cards = svc.get_or_create_session(scope_key="view:cards")
+
+    client = TestClient(companion_app)
+    all_sessions = client.get("/api/companion/sessions").json()["sessions"]
+    ids = {s["id"] for s in all_sessions}
+    assert {article["id"], cards["id"]} <= ids
+
+    scoped = client.get("/api/companion/sessions/scoped/view:cards").json()["sessions"]
+    assert [s["id"] for s in scoped] == [cards["id"]]
+
+
 def test_companion_chat_without_new_fields_keeps_legacy_context(
     companion_app: FastAPI,
     tmp_path: Any,
@@ -213,6 +236,243 @@ def test_companion_chat_without_new_fields_keeps_legacy_context(
         "article_title": "T",
         "cefr_level": "B1",
     }
+
+
+def test_companion_chat_forwards_draft_text(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """draft_text 可选字段必须原样进入 context，供 writing_check 使用。"""
+    db_file = tmp_path / "writer_draft.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    captured: dict[str, Any] = {}
+    draft = "Ich habe hunger und gehe in der Schule."
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        captured["context"] = kwargs.get("context")
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+
+    client = TestClient(companion_app)
+    body = {
+        "messages": [{"role": "user", "content": "检查当前草稿"}],
+        "view": "writer",
+        "context_source": "writer-draft",
+        "draft_text": draft,
+        "scope_key": "view:writer",
+    }
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    assert captured["context"] == {
+        "view": "writer",
+        "context_source": "writer-draft",
+        "draft_text": draft,
+    }
+
+
+def test_companion_chat_forwards_card_context(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """card_context 可选字段必须原样进入 context，供 propose_vocab_cards 使用。"""
+    db_file = tmp_path / "card_context.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    captured: dict[str, Any] = {}
+    card_context = "【当前卡盒词条】\n分段: due\n词: die Eule\n词元: Eule\n释义: 猫头鹰"
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        captured["context"] = kwargs.get("context")
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+
+    client = TestClient(companion_app)
+    body = {
+        "messages": [{"role": "user", "content": "基于当前卡盒词条扩展生词"}],
+        "view": "cards",
+        "context_source": "card-current",
+        "card_context": card_context,
+        "scope_key": "view:cards",
+    }
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    assert captured["context"] == {
+        "view": "cards",
+        "context_source": "card-current",
+        "card_context": card_context,
+    }
+
+
+def test_companion_chat_persists_proposal_for_query(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """生产 chat 路径产生的 proposal 必须落库，GET /sessions/{id}/proposals 可查。"""
+    db_file = tmp_path / "chat_proposals.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+
+    proposal = {
+        "id": "prop_chat_01",
+        "action": "create_vocab_cards",
+        "title": "扩展 die Eule 相关生词",
+        "payload": {"cards": [{"word": "die Nacht", "definition_zh": "夜晚"}]},
+    }
+    proposal_chunk = (
+        b'event: proposal\ndata: '
+        + json.dumps({"event": "proposal", "proposal": proposal}, ensure_ascii=False).encode("utf-8")
+        + b"\n\n"
+    )
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        yield proposal_chunk
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+
+    client = TestClient(companion_app)
+    body = {
+        "messages": [{"role": "user", "content": "基于当前卡盒词条扩展生词"}],
+        "view": "cards",
+        "context_source": "card-current",
+        "scope_key": "view:cards",
+    }
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        assert response.status_code == 200
+        sid = response.headers.get("x-session-id")
+        list(response.iter_lines())
+
+    assert sid
+    resp = client.get(f"/api/companion/sessions/{sid}/proposals")
+    assert resp.status_code == 200
+    proposals = resp.json()["proposals"]
+    assert [p["id"] for p in proposals] == ["prop_chat_01"]
+    assert proposals[0]["status"] == "pending"
+    assert proposals[0]["action"] == "create_vocab_cards"
+    assert proposals[0]["payload"]["cards"][0]["word"] == "die Nacht"
+
+
+def test_companion_proposal_reject_marks_status_without_writing_cards(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """拒绝提议：状态流转为 rejected，不写任何卡片；重复拒绝返回 404。"""
+    import sqlite3
+
+    db_file = tmp_path / "reject_proposal.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    conn = sqlite3.connect(db_file)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS vocab_cards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            word TEXT NOT NULL,
+            lemma TEXT NOT NULL,
+            pos TEXT,
+            gender TEXT,
+            plural TEXT,
+            cefr_level TEXT,
+            definition_zh TEXT NOT NULL,
+            sentence_context TEXT NOT NULL,
+            source TEXT DEFAULT 'companion',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            mastered INTEGER DEFAULT 0,
+            wrong_count INTEGER DEFAULT 0
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        proposal = {
+            "id": "prop_chat_reject",
+            "action": "create_vocab_cards",
+            "title": "扩展 die Eule 相关生词",
+            "payload": {"cards": [{"word": "das Insekt", "definition_zh": "昆虫"}]},
+        }
+        yield (
+            b'event: proposal\ndata: '
+            + json.dumps({"event": "proposal", "proposal": proposal}, ensure_ascii=False).encode("utf-8")
+            + b"\n\n"
+        )
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+
+    client = TestClient(companion_app, client=("127.0.0.1", 50000))
+    body = {
+        "messages": [{"role": "user", "content": "基于当前卡盒词条扩展生词"}],
+        "scope_key": "view:cards",
+    }
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        assert response.status_code == 200
+        sid = response.headers.get("x-session-id")
+        list(response.iter_lines())
+    assert sid
+
+    resp = client.post("/api/companion/proposal/reject", json={"proposal_id": "prop_chat_reject"})
+    assert resp.status_code == 200
+    assert resp.json()["rejected"] is True
+
+    rejected = client.get(
+        f"/api/companion/sessions/{sid}/proposals", params={"status": "rejected"}
+    ).json()["proposals"]
+    assert [p["id"] for p in rejected] == ["prop_chat_reject"]
+
+    conn = sqlite3.connect(db_file)
+    count = conn.execute("SELECT COUNT(*) FROM vocab_cards").fetchone()[0]
+    conn.close()
+    assert count == 0
+
+    again = client.post("/api/companion/proposal/reject", json={"proposal_id": "prop_chat_reject"})
+    assert again.status_code == 404
+
+
+def test_companion_proposal_execute_empty_cards_returns_400(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """空提议 execute 返回 400，且提议保持 pending（不得被标成 accepted）。"""
+    from delector.services.companion_proposal import CompanionProposalService
+    from delector.services.companion_session import CompanionSessionService
+
+    db_file = tmp_path / "empty_cards.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    session_svc = CompanionSessionService(db_path=str(db_file))
+    sid = session_svc.get_or_create_session(scope_key="view:cards")["id"]
+    prop_svc = CompanionProposalService(db_path=str(db_file))
+    prop = prop_svc.create_proposal(
+        session_id=sid,
+        action="create_vocab_cards",
+        title="暂无可制卡语料",
+        payload={"cards": []},
+    )
+
+    client = TestClient(companion_app, client=("127.0.0.1", 50000))
+    resp = client.post(
+        "/api/companion/proposal/execute",
+        json={"proposal_id": prop["id"], "action": "create_vocab_cards", "payload": {"cards": []}},
+    )
+    assert resp.status_code == 400
+    assert "没有可入库的词条" in resp.json()["detail"]
+    assert [p["status"] for p in prop_svc.list_proposals(sid)] == ["pending"]
+
+
+def test_companion_proposal_reject_localhost_gate(companion_app: FastAPI) -> None:
+    """POST /api/companion/proposal/reject 仅限 localhost。"""
+    client = TestClient(companion_app, client=("192.168.1.100", 50000))
+    resp = client.post("/api/companion/proposal/reject", json={"proposal_id": "prop_test_01"})
+    assert resp.status_code == 403
 
 
 def test_companion_chat_proxies_to_go_agent_when_available(

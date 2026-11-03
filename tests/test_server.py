@@ -32,28 +32,23 @@ from delector.server import (
 )
 
 
-@pytest.fixture
-def test_progress_path():
-    return "test_progress.db"
-
-
 def test_cefr_lookup():
     assert get_cefr_level("gehen") == "A1"
     assert get_cefr_level("beeinträchtigen") in ("B2", "C1")
 
 
-def test_grammar_cards_migration_adds_columns():
+def test_grammar_cards_migration_adds_columns(test_db_path):
     import sqlite3
 
-    conn = sqlite3.connect("test_delector.db")
+    conn = sqlite3.connect(test_db_path)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(grammar_cards)")}
     assert "corrected_form" in cols and "error_type" in cols, f"缺列: {cols}"
 
 
-def test_essays_table_created():
+def test_essays_table_created(test_db_path):
     import sqlite3
 
-    conn = sqlite3.connect("test_delector.db")
+    conn = sqlite3.connect(test_db_path)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(essays)")}
     assert {"id", "title", "content", "analysis_json", "cefr_level", "error_count", "created_at"} <= cols
 
@@ -649,7 +644,7 @@ def test_backup_export_and_restore_roundtrip(client):
     assert res_verify.json()["title"] == "Backup Test Article"
 
 
-def test_backup_restore_covers_encounter_texts(client):
+def test_backup_restore_covers_encounter_texts(client, test_db_path):
     """vault-team 评审 ②：备份/还原必须覆盖遇见区短文表（encounter_texts）——
     缺失时"看着还原成功"，换机后遇见区却全空。
 
@@ -679,7 +674,7 @@ def test_backup_restore_covers_encounter_texts(client):
     assert any(x.get("id") == tid for x in data["encounter_texts"])
 
     # 3) 目标库删光该表行（模拟还原前数据丢失/被清）。
-    conn = sqlite3.connect("test_delector.db")
+    conn = sqlite3.connect(test_db_path)
     conn.execute("DELETE FROM encounter_texts")
     conn.commit()
     conn.close()

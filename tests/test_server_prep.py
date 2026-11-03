@@ -12,6 +12,7 @@ lan_client）住在 `tests/server_helpers.py` 与 `tests/conftest.py`，按名�
 
 from server_helpers import clean_db as clean_db
 from server_helpers import lan_client as lan_client
+from server_helpers import test_db_path as test_db_path
 
 from delector.nlp_engine.linguistics import PREP_COLLOCATIONS
 

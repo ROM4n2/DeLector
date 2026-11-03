@@ -23,6 +23,7 @@ from server_helpers import ROOT
 from server_helpers import clean_db as clean_db
 from server_helpers import lan_client as lan_client
 from server_helpers import test_db_path as test_db_path
+from server_helpers import test_progress_path as test_progress_path
 
 from delector import server
 from delector.core.database import db_conn, db_progress_conn
@@ -57,7 +58,7 @@ def _vocab_card_with_srs(card_id=501):
     }
 
 
-def test_restore_preserves_srs_state(client):
+def test_restore_preserves_srs_state(client, test_db_path):
     """还原必须带回全部 SM-2/FSRS 字段。
 
     旧实现的 INSERT 列表不含这 8 列，且用 INSERT OR REPLACE，
@@ -67,7 +68,7 @@ def test_restore_preserves_srs_state(client):
     res = client.post("/api/backup/restore", json={"version": 2, "vocab_cards": [card]})
     assert res.status_code == 200
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 501").fetchone())
     for col in (
         "mastered",
@@ -93,7 +94,7 @@ def test_export_includes_srs_columns(client):
     assert exported["due_date"] == "2026-12-24"
 
 
-def test_progress_db_roundtrips(client):
+def test_progress_db_roundtrips(client, test_progress_path):
     """progress.db 三张表进备份——连胜/测验历史/趋势全靠它。"""
     payload = {
         "version": 2,
@@ -123,7 +124,7 @@ def test_progress_db_roundtrips(client):
     }
     assert client.post("/api/backup/restore", json=payload).status_code == 200
 
-    with db_progress_conn("test_progress.db") as conn:
+    with db_progress_conn(test_progress_path) as conn:
         assert conn.execute("SELECT COUNT(*) FROM study_log").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM quiz_log").fetchone()[0] == 1
         summary = dict(conn.execute("SELECT * FROM daily_summary").fetchone())
@@ -135,10 +136,10 @@ def test_progress_db_roundtrips(client):
     assert exported["quiz_log"][0]["mode"] == "recall"
 
 
-def test_export_whitelists_settings_and_never_leaks_api_key(client):
+def test_export_whitelists_settings_and_never_leaks_api_key(client, test_db_path):
     """备份 JSON 会被分享/上传——API key 绝不能在里面。"""
-    set_setting("DEEPSEEK_API_KEY", "sk-should-never-be-exported", db_path="test_delector.db")
-    set_setting("TTS_VOICE", "de-DE-ConradNeural", db_path="test_delector.db")
+    set_setting("DEEPSEEK_API_KEY", "sk-should-never-be-exported", db_path=test_db_path)
+    set_setting("TTS_VOICE", "de-DE-ConradNeural", db_path=test_db_path)
 
     data = client.get("/api/backup/export").json()
     keys = {s["key"] for s in data["app_settings"]}
@@ -149,14 +150,14 @@ def test_export_whitelists_settings_and_never_leaks_api_key(client):
     assert "sk-should-never-be-exported" not in json.dumps(data)
 
 
-def test_restore_does_not_wipe_api_key(client):
+def test_restore_does_not_wipe_api_key(client, test_db_path):
     """还原是真覆盖，但覆盖范围必须止于白名单键。
 
     整表 DELETE app_settings 会连带抹掉 DEEPSEEK_API_KEY——它从不进备份，
     抹了就再也灌不回来，用户得重新配一遍 key。
     """
-    set_setting("DEEPSEEK_API_KEY", "sk-must-survive-restore", db_path="test_delector.db")
-    set_setting("TTS_VOICE", "de-DE-KatjaNeural", db_path="test_delector.db")
+    set_setting("DEEPSEEK_API_KEY", "sk-must-survive-restore", db_path=test_db_path)
+    set_setting("TTS_VOICE", "de-DE-KatjaNeural", db_path=test_db_path)
 
     res = client.post(
         "/api/backup/restore",
@@ -167,13 +168,13 @@ def test_restore_does_not_wipe_api_key(client):
     )
     assert res.status_code == 200
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         rows = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM app_settings").fetchall()}
     assert rows["DEEPSEEK_API_KEY"] == "sk-must-survive-restore"
     assert rows["TTS_VOICE"] == "de-DE-ConradNeural"
 
 
-def test_restore_accepts_v1_backup(client):
+def test_restore_accepts_v1_backup(client, test_db_path):
     """读 v1 是硬要求：迁移用户手里拿的恰恰是 v3.9.1 导出的 v1 文件。
 
     v1 没有 app_settings / progress 三表 / local_storage 字段，
@@ -209,7 +210,7 @@ def test_restore_accepts_v1_backup(client):
     }
     assert client.post("/api/backup/restore", json=v1).status_code == 200
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 77").fetchone())
     assert row["definition_zh"] == "旧的"
     assert row["ease_factor"] == 2.5  # schema 默认值
@@ -217,7 +218,7 @@ def test_restore_accepts_v1_backup(client):
     assert row["mastered"] == 0
 
 
-def test_failed_restore_rolls_back_both_databases():
+def test_failed_restore_rolls_back_both_databases(test_db_path):
     """还原中途失败必须整体回滚，不能留下「已清库而备份没灌进去」的状态。
 
     两个 db 是独立文件、无法共处一个事务：主库先清空并提交，
@@ -228,7 +229,7 @@ def test_failed_restore_rolls_back_both_databases():
     服务端异常原样抛给调用方，拿不到 500 响应。
     """
     client = TestClient(app, client=("127.0.0.1", 54321), raise_server_exceptions=False)
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
     assert before > 0, "预置文章应存在，否则这个测试证明不了什么"
 
@@ -250,7 +251,7 @@ def test_failed_restore_rolls_back_both_databases():
     res = client.post("/api/backup/restore", json=bad)
     assert res.status_code >= 500
 
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         leaked = conn.execute("SELECT COUNT(*) FROM articles WHERE id = 900").fetchone()[0]
     assert after == before, "主库未被回滚：还原失败却把原有文章清掉了"
@@ -595,19 +596,19 @@ def test_backup_loopback_still_succeeds(client):
 #    （restore-then-migrate，Migration-Idempotency §4）。
 
 
-def _snapshot_vocab_cards() -> "list[dict]":
+def _snapshot_vocab_cards(db_path: str) -> "list[dict]":
     """抽 vocab_cards 全量快照（按 id 排序）供逐字比对。"""
-    with db_conn("test_delector.db") as conn:
+    with db_conn(db_path) as conn:
         return [dict(r) for r in conn.execute("SELECT * FROM vocab_cards ORDER BY id").fetchall()]
 
 
-def test_backup_restore_preserves_pool_semantic_columns(client):
+def test_backup_restore_preserves_pool_semantic_columns(client, test_db_path):
     """① 往返无损（核心）：source / fsrs_* 必须逐字度过「备份(准备/下载)→还原」往返。
 
     旧列清单漏了这 4 列，_replace_tables 只写清单内列 ⇒ 还原把 source 静默打回默认
     'user'、fsrs_* 清空。
     """
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         conn.execute(
             "INSERT INTO vocab_cards "
             "(word, lemma, definition_zh, sentence_context, source, fsrs_s, fsrs_d, fsrs_lapses) "
@@ -626,7 +627,7 @@ def test_backup_restore_preserves_pool_semantic_columns(client):
 
     # 还原同一份 ⇒ 这 4 列逐字保留。
     assert client.post("/api/backup/restore", json=payload).status_code == 200
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE word = 'Wanderlust'").fetchone())
     assert row["source"] == "official", f"source 往返被丢：{row['source']!r}"
     assert row["fsrs_s"] == 1.5, f"fsrs_s 往返被丢：{row['fsrs_s']!r}"
@@ -634,7 +635,7 @@ def test_backup_restore_preserves_pool_semantic_columns(client):
     assert row["fsrs_lapses"] == 3, f"fsrs_lapses 往返被丢：{row['fsrs_lapses']!r}"
 
 
-def test_backup_restore_old_backup_defaults_new_columns(client):
+def test_backup_restore_old_backup_defaults_new_columns(client, test_db_path):
     """② 旧备份向后兼容：不含这 4 键的 v2 payload 不得报错，列落建表默认值。"""
     old = {
         "version": 2,
@@ -656,7 +657,7 @@ def test_backup_restore_old_backup_defaults_new_columns(client):
         ],
     }
     assert client.post("/api/backup/restore", json=old).status_code == 200
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = dict(conn.execute("SELECT * FROM vocab_cards WHERE id = 71").fetchone())
     assert row["source"] == "user"
     assert row["fsrs_s"] is None
@@ -672,7 +673,7 @@ def _wb_learned_word_payload() -> dict:
     }
 
 
-def test_backup_restore_reprojects_wb_deck(client):
+def test_backup_restore_reprojects_wb_deck(client, test_db_path):
     """③ 还原后补投影（restore-then-migrate）：wb_state 不进备份，但已学词必须补回统一池。
 
     换机还原只带回 vocab_cards；若某已学词不在备份的 vocab_cards 里（旧导出漏词），
@@ -687,7 +688,7 @@ def test_backup_restore_reprojects_wb_deck(client):
     backup["vocab_cards"] = []
 
     assert client.post("/api/backup/restore", json=backup).status_code == 200
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         row = conn.execute(
             "SELECT fsrs_s, fsrs_d, fsrs_lapses FROM vocab_cards WHERE word = ?",
             ("der Abfahrt",),
@@ -699,7 +700,7 @@ def test_backup_restore_reprojects_wb_deck(client):
     assert got["fsrs_lapses"] == 1
 
 
-def test_backup_restore_reprojection_idempotent(client):
+def test_backup_restore_reprojection_idempotent(client, test_db_path):
     """④ 投影幂等：连做两次还原 → 该词行不重复、值不变。"""
     key = client.get("/api/wb/state/key").json()["key"]
     put = client.put("/api/wb/state", json={"payload": _wb_learned_word_payload()}, headers={"X-WB-Key": key})
@@ -710,13 +711,13 @@ def test_backup_restore_reprojection_idempotent(client):
 
     assert client.post("/api/backup/restore", json=backup).status_code == 200
     assert client.post("/api/backup/restore", json=backup).status_code == 200
-    with db_conn("test_delector.db") as conn:
+    with db_conn(test_db_path) as conn:
         rows = conn.execute("SELECT * FROM vocab_cards WHERE word = ?", ("der Abfahrt",)).fetchall()
     assert len(rows) == 1, f"重复还原不得产生重复行，实际 {len(rows)} 行"
     assert dict(rows[0])["fsrs_s"] == 3.5, "重复还原不得改动既有值"
 
 
-def test_backup_restore_projection_failure_rolls_back(client, monkeypatch):
+def test_backup_restore_projection_failure_rolls_back(client, monkeypatch, test_db_path):
     """⑤ 失败整体回滚（关键）：投影抛错 ⇒ 还原失败，且库内容与还原前逐字一致。
 
     投影在 _db_snapshot_guard() 内且不吞异常：一旦抛错两个库都从快照整体写回，
@@ -726,7 +727,7 @@ def test_backup_restore_projection_failure_rolls_back(client, monkeypatch):
     put = client.put("/api/wb/state", json={"payload": _wb_learned_word_payload()}, headers={"X-WB-Key": key})
     assert put.status_code == 200
 
-    before = _snapshot_vocab_cards()
+    before = _snapshot_vocab_cards(test_db_path)
     assert before, "还原前应有 vocab_cards 内容，否则证明不了回滚"
 
     def _boom(_conn, _payload):
@@ -741,4 +742,4 @@ def test_backup_restore_projection_failure_rolls_back(client, monkeypatch):
     res = fail_client.post("/api/backup/restore", json=backup)
     assert res.status_code >= 500, "投影抛错应冒泡成 500，而非被吞掉"
 
-    assert _snapshot_vocab_cards() == before, "还原失败必须整体回滚，vocab_cards 不得残留半成品"
+    assert _snapshot_vocab_cards(test_db_path) == before, "还原失败必须整体回滚，vocab_cards 不得残留半成品"
