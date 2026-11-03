@@ -34,19 +34,12 @@ export {
 } from "./a1_cards.js";
 export * from "./a1_cards.js";
 
-// a1_cards.js 是独立模块，读不到本模块作用域。这两个 getter 给它提供
-// 只读访问，避免循环 import 具名 state（getCachedVocabLemmas 判定已入
-// FSRS 盒的词元）。A1 的牌盒/目录判定已由 a1_cards.js 自管的
-// a1ViewMode 接管（ADR-0005 Task 2），getCardViewMode 不再被它消费，
-// 仅保留给主站 toggle 状态查询。
+// a1_cards.js 是独立模块，读不到本模块作用域。getCachedVocabLemmas 已上移至
+// cd-state.js（L1 纯层）， cards.js 只保留 re-export 以维持既有公开面，
+// 同时消除 cards.js ↔ a1_cards.js 的 import 环。getCardViewMode 仅保留给主站 toggle 查询。
+export { getCachedVocabLemmas } from "./cd-state.js";
 export function getCardViewMode() {
   return cardState.catalog.viewMode;
-}
-
-export function getCachedVocabLemmas() {
-  return new Set(
-    (cardState.catalog.cards.vocab_cards || []).map(c => (c.lemma || c.word || '').toLowerCase())
-  );
 }
 
 export function setCardSegment(seg) {

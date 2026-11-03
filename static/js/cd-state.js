@@ -83,3 +83,10 @@ export function buildDeckFromLists(vList, gList) {
     ...gList.map((c) => ({ ...c, _type: 'grammar' })),
   ];
 }
+
+/** 已入 FSRS 卡盒的词元集合（lemma 优先、word 回退、小写归一；只读，不修改 state）。 */
+export function getCachedVocabLemmas() {
+  return new Set(
+    (cardState.catalog.cards.vocab_cards || []).map((c) => (c.lemma || c.word || '').toLowerCase())
+  );
+}
