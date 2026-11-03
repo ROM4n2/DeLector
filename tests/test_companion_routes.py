@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 from typing import Any
@@ -14,7 +15,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from delector.routes.companion import _SSEEventAccumulator
+from delector.routes.companion import (
+    CompanionChatReq,
+    _SSEEventAccumulator,
+    api_companion_chat,
+)
 from delector.routes.companion import router as companion_router
 
 
@@ -195,6 +200,87 @@ def test_companion_chat_sse_fragmentation_preserves_events_and_persistence(
     assert proposal_calls[1]["payload"] == other_proposal["payload"]
 
 
+@pytest.mark.parametrize("disconnect_mode", ["generator-close", "task-cancel"])
+def test_companion_chat_generator_close_persists_partial_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    disconnect_mode: str,
+) -> None:
+    """GeneratorExit 与 CancelledError 都保留已转发事件，且不吞取消。"""
+    proposal = {
+        "id": "prop_interrupted_01",
+        "action": "create_vocab_cards",
+        "title": "加入 die Eule",
+        "payload": {"cards": [{"word": "die Eule", "definition_zh": "猫头鹰"}]},
+    }
+    frames = [
+        'event: thought\ndata: {"event":"thought","text":"分析语序"}\n\n'.encode("utf-8"),
+        b'event: delta\ndata: {"event":"delta","text":"Hallo Eule."}\n\n',
+        (
+            'event: proposal\ndata: {"event":"proposal","proposal":'
+            + json.dumps(proposal, ensure_ascii=False)
+            + "}\n\n"
+        ).encode("utf-8"),
+    ]
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        for frame in frames:
+            yield frame
+        await asyncio.Event().wait()
+
+    save_calls: list[dict[str, Any]] = []
+    proposal_calls: list[dict[str, Any]] = []
+
+    def _fake_save_turn(session_id: str, user: str, assistant: str, thought: str = ""):
+        save_calls.append(
+            {"session_id": session_id, "user": user, "assistant": assistant, "thought": thought}
+        )
+        return {"id": "user-msg"}, {"id": "assistant-msg"}
+
+    def _fake_create_proposal(**kwargs: Any):
+        proposal_calls.append(kwargs)
+        return {"id": kwargs.get("proposal_id")}
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+    monkeypatch.setattr("delector.routes.companion._session_svc.save_turn", _fake_save_turn)
+    monkeypatch.setattr("delector.routes.companion._proposal_svc.create_proposal", _fake_create_proposal)
+
+    class _Request:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    async def _drive() -> list[bytes]:
+        response = await api_companion_chat(
+            CompanionChatReq(
+                session_id="session-interrupted",
+                messages=[{"role": "user", "content": "Hallo"}],
+            ),
+            _Request(),
+        )
+        iterator = response.body_iterator
+        received = [await iterator.__anext__() for _ in frames]
+        if disconnect_mode == "generator-close":
+            await iterator.aclose()
+        else:
+            pending = asyncio.create_task(iterator.__anext__())
+            await asyncio.sleep(0)
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+        return received
+
+    assert asyncio.run(_drive()) == frames
+    assert save_calls == [
+        {
+            "session_id": "session-interrupted",
+            "user": "Hallo",
+            "assistant": "Hallo Eule.",
+            "thought": "分析语序",
+        }
+    ]
+    assert [call["proposal_id"] for call in proposal_calls] == ["prop_interrupted_01"]
+    assert proposal_calls[0]["message_id"] == "assistant-msg"
+
+
 def test_companion_proposal_execute_localhost_gate(companion_app: FastAPI) -> None:
     """POST /api/companion/proposal/execute 仅限 localhost 执行 (403 闸)."""
     # TestClient 默认 client.host 为 "testclient"，非 127.0.0.1
@@ -272,6 +358,7 @@ def test_companion_chat_scope_isolation_and_session_header(
     monkeypatch.setenv("DATABASE_PATH", str(db_file))
 
     captured_contexts: list[Any] = []
+    history_length_headers: list[str | None] = []
 
     async def _fake_dispatch(*args: Any, **kwargs: Any):
         captured_contexts.append(kwargs.get("context"))
@@ -288,6 +375,7 @@ def test_companion_chat_scope_isolation_and_session_header(
             assert response.status_code == 200
             sid = response.headers.get("x-session-id")
             assert sid
+            history_length_headers.append(response.headers.get("x-history-length"))
             list(response.iter_lines())
         return sid
 
@@ -297,6 +385,7 @@ def test_companion_chat_scope_isolation_and_session_header(
 
     assert sid_cards_1 == sid_cards_2
     assert sid_progress != sid_cards_1
+    assert history_length_headers == ["0", "2", "0"]
     assert captured_contexts[0] == {"view": "cards", "context_source": "none"}
 
     scoped = client.get("/api/companion/sessions/scoped/view:cards")
