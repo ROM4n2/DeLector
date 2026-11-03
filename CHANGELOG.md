@@ -17,6 +17,14 @@
 - **体验修复**：用户手动关闭伴读后可通过头像浮标重新开启；german 禁用样式不再误伤其它 disabled 形态。
 - **验证**：全量 `pytest tests` 2700+ passed、前端探针 140+ checks、`go test ./...` 全绿，真实浏览器 + 真实模型跑通「提议 → 确认 → 入盒」与「提议 → 放弃」。
 
+### 🐞 卡盒测验 choice 模式缺释义空白选项修复（未发布）
+
+- 选择题的正确答案选项此前用裸 `card.definition_zh` 渲染，缺释义卡（HITL 提议允许入盒、其余卡面统一显示「待补充」）会渲染出**空白按钮**，与同函数 flashcard / dictation 分支口径不一致；现正确项与两个分支同走 `formatCardDefinition`，缺释义显示「待补充」。
+- 选项对象化后乱序（`isCorrect` 随对象携带），正确索引不再依赖 `indexOf` 文本比对，同文案干扰项或「待补充」字面量都不会误标正确项。
+- 新增行为探针 `tools/cards_quiz_choice_probe.mjs`（切片真源码进 node:vm 沙箱，10 场景，含 onclick 正确项索引映射验证）+ `tests/test_cards_quiz_choice_probe.py` 接线；变异实证：revert 修复后探针 exit 1 且 B1/B2/C1/C2/D2 具名红。
+
+---
+
 ### 📲 PWA 安装图标补齐（未发布）
 
 - `manifest.json` 新增 192x192 / 512x512 PNG 位图图标（保留内联 SVG 作 `sizes:any` 备用）；此前单张 SVG 声明 `192x192 512x512`，不满足浏览器安装提示对可解码位图的规格要求。
