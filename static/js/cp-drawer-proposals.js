@@ -46,11 +46,13 @@ export function renderProposalCard(container, proposal, onAction) {
     const definition = typeof c.definition_zh === 'string' ? c.definition_zh.trim() : '';
     itemEl.appendChild(document.createTextNode(': ' + (definition || '待补充')));
 
-    if (c.context_sentence) {
+    // 例句字段双读：Go propose_vocab_cards 用 sentence_context，旧 Python proposal 用 context_sentence。
+    const sentence = c.context_sentence || c.sentence_context;
+    if (sentence) {
       const sentEl = document.createElement('div');
       sentEl.style.fontSize = '0.78rem';
       sentEl.style.color = 'var(--pencil, #666)';
-      sentEl.textContent = '„' + c.context_sentence + '“';
+      sentEl.textContent = '„' + sentence + '“';
       itemEl.appendChild(sentEl);
     }
     contentEl.appendChild(itemEl);

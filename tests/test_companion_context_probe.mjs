@@ -810,6 +810,45 @@ async function main() {
     "G7 同 scope 切换不应清空当前上下文"
   );
 
+  /* G8. 例句字段双读：Go sentence_context 与旧 context_sentence 都必须显示 */
+  const goHost = makeEl("go-host");
+  renderProposalCard(
+    goHost,
+    {
+      id: "p-go",
+      action: "create_vocab_cards",
+      title: "Go",
+      payload: {
+        cards: [{ word: "die Nacht", definition_zh: "夜晚", sentence_context: "Die Eule jagt in der Nacht." }],
+      },
+      status: "pending",
+    },
+    async () => {}
+  );
+  const goContent = goHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-content"
+  );
+  const goText = goContent.children[0].children.map((n) => n.textContent || n.nodeValue || "").join("");
+  check(goText.includes("Die Eule jagt in der Nacht."), "G8 Go sentence_context 例句未显示");
+
+  const pyHost = makeEl("py-host");
+  renderProposalCard(
+    pyHost,
+    {
+      id: "p-py",
+      action: "create_vocab_cards",
+      title: "Py",
+      payload: { cards: [{ word: "der Hund", definition_zh: "狗", context_sentence: "Der Hund bellt." }] },
+      status: "pending",
+    },
+    async () => {}
+  );
+  const pyContent = pyHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-content"
+  );
+  const pyText = pyContent.children[0].children.map((n) => n.textContent || n.nodeValue || "").join("");
+  check(pyText.includes("Der Hund bellt."), "G8 旧 context_sentence 例句回退失效");
+
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
@@ -985,6 +1024,7 @@ async function main() {
       "proposal-failure-paths": "pass",
       "session-global-groups": "pass",
       "session-cross-scope-reset": "pass",
+      "proposal-sentence-fields": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",
