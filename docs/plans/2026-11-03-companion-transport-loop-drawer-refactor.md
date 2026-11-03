@@ -143,4 +143,6 @@
 
 | plan text | what was actually built | why |
 | --- | --- | --- |
-| 执行后填写 | 执行后填写 | 执行后填写 |
+| Task 1 缓冲分帧与分片矩阵 | 同计划交付，另补 CRLF/混合空行、多行 data 与 proposal 去重变异反例 | 独立审查发现 CRLF 回溯会把单个换行误判为空行 |
+| Task 2 helper 等价接线与阶段拆分 | 7 个 helper 全部接线；聚合 helper 改为 map 形式；另加 HEAD 字面 golden 与空 callsList 路径 | map 形式保持旧内联语义；独立 golden 防止接线后 helper 与 RunLoop 同源假绿 |
+| Task 3 同文件事件控制器，按判据决定是否拆 `cp-turn.js` | `createCompanionTurnController` 同文件落地；`submitPrompt` 197→147 行；不拆新文件 | 控制器仍耦合多个私有 DOM/状态协作者，拆文件只增加参数透传且无复用方 |
