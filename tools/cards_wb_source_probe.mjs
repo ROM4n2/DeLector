@@ -139,6 +139,7 @@ let stateFn = "";
 let predicateFn = "";
 let statsFn = "";
 let definitionFn = "";
+let deckFn = "";
 let renderFn = "";
 try {
   /* renderDeckStage 自子计划 5 Task 1 起会调 isWorkbenchSourced（决定工作台词
@@ -147,13 +148,15 @@ try {
   stateFn = sliceObjectDecl(cdStateJs, "export const cardState = ");
   /* 卡背释义走 cd-state.js 的 formatCardDefinition（缺释义显示「待补充」），同样必须进沙箱。 */
   definitionFn = sliceFunctionBody(cdStateJs, "export function formatCardDefinition(");
+  /* 卡组构成已收口到 cd-state.js 的 buildDeckFromLists，渲染切片同样依赖它。 */
+  deckFn = sliceFunctionBody(cdStateJs, "export function buildDeckFromLists(");
   predicateFn = sliceFunctionBody(cardsJs, "function isWorkbenchSourced(");
   statsFn = sliceFunctionBody(cardsJs, "function cardStatsTag(");
   renderFn = sliceFunctionBody(cardsJs, "export function renderDeckStage(");
 } catch (e) {
   fail([`源码切片失败：${e.message}`]);
 }
-const transformed = stateFn + "\n\n" + definitionFn + "\n\n" + predicateFn + "\n\n" + statsFn + "\n\n" + renderFn;
+const transformed = stateFn + "\n\n" + definitionFn + "\n\n" + deckFn + "\n\n" + predicateFn + "\n\n" + statsFn + "\n\n" + renderFn;
 
 /* 切片护栏：切歪 / 回退 ⇒ 直接红，不许假绿 */
 const stripProblems = [];

@@ -2,7 +2,7 @@
 'use strict';
 
 import { ShadowPlayer, playGermanAudio } from './player.js';
-import { cardState } from './cd-state.js';
+import { cardState, selectSegmentLists, buildDeckFromLists } from './cd-state.js';
 
 // ── SVG Character Templates (Standardized classes & dynamic CSS vars) ───────
 export const CHARACTERS = {
@@ -298,26 +298,12 @@ export function getCompanionScopeKey() {
 function readCardBoxContext() {
   const catalog = cardState && cardState.catalog;
   if (!catalog || catalog.viewMode !== 'deck') return '';
-  const segment = catalog.segment || 'due';
-  let vList = [];
-  let gList = [];
-  if (segment === 'due') {
-    vList = (catalog.dueCards && catalog.dueCards.due_vocab) || [];
-    gList = (catalog.dueCards && catalog.dueCards.due_grammar) || [];
-  } else if (segment === 'mastered') {
-    vList = ((catalog.cards && catalog.cards.vocab_cards) || []).filter(c => !!c.mastered);
-    gList = ((catalog.cards && catalog.cards.grammar_cards) || []).filter(c => !!c.mastered);
-  } else {
-    vList = ((catalog.cards && catalog.cards.vocab_cards) || []).filter(c => !c.mastered);
-    gList = ((catalog.cards && catalog.cards.grammar_cards) || []).filter(c => !c.mastered);
-  }
-  const deck = [
-    ...vList.map(c => ({ ...c, _type: 'vocab' })),
-    ...gList.map(c => ({ ...c, _type: 'grammar' }))
-  ];
+  const { vList, gList } = selectSegmentLists(catalog);
+  const deck = buildDeckFromLists(vList, gList);
   const idx = cardState.deck && Number.isFinite(cardState.deck.index) ? cardState.deck.index : 0;
   const card = deck[idx];
   if (!card) return '';
+  const segment = catalog.segment || 'due';
   const lines = ['【当前卡盒词条】', `分段: ${segment}`];
   if (card._type === 'vocab') {
     if (card.word) lines.push(`词: ${card.word}`);

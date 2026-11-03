@@ -627,6 +627,21 @@ async function main() {
   check(formatCardDefinition({ definition_zh: "  " }) === "待补充", "G5 空白释义未显示待补充");
   check(formatCardDefinition({}) === "待补充", "G5 缺字段未显示待补充");
   check(formatCardDefinition({ definition_zh: " 狗 " }) === "狗", "G5 正常释义被误改");
+  const { selectSegmentLists, buildDeckFromLists } = cdState.namespace;
+  const sharedDeck = buildDeckFromLists([{ id: 1 }], [{ id: 2 }]);
+  check(
+    sharedDeck.length === 2 && sharedDeck[0]._type === "vocab" && sharedDeck[1]._type === "grammar",
+    "G5 公共卡组构成顺序或 _type 漂移"
+  );
+  const masteredLists = selectSegmentLists({
+    segment: "mastered",
+    cards: { vocab_cards: [{ id: 1, mastered: 1 }, { id: 2, mastered: 0 }], grammar_cards: [] },
+    dueCards: {},
+  });
+  check(
+    masteredLists.vList.length === 1 && masteredLists.vList[0].id === 1,
+    "G5 mastered 分段取卡逻辑错误"
+  );
   check(
     (CARDS_SRC.match(/formatCardDefinition\(/g) || []).length >= 4,
     "G5 卡盒网格/卡背/复习卡面未统一使用 formatCardDefinition"

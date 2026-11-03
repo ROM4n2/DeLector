@@ -5,7 +5,14 @@ import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
-import { cardState, enterSegment, stepDeckState, formatCardDefinition } from "./cd-state.js";
+import {
+  cardState,
+  enterSegment,
+  stepDeckState,
+  formatCardDefinition,
+  selectSegmentLists,
+  buildDeckFromLists,
+} from "./cd-state.js";
 export {
   setA1Mode,
   filterA1Topic,
@@ -123,19 +130,7 @@ export function renderCardsGrid() {
   document.getElementById("prep-filter-bar")?.classList.add("hidden");
   document.querySelector(".cards-view-toggle")?.classList.remove("hidden");
 
-  let vList = [];
-  let gList = [];
-
-  if (cardState.catalog.segment === "due") {
-    vList = cardState.catalog.dueCards.due_vocab || [];
-    gList = cardState.catalog.dueCards.due_grammar || [];
-  } else if (cardState.catalog.segment === "mastered") {
-    vList = (cardState.catalog.cards.vocab_cards || []).filter((c) => !!c.mastered);
-    gList = (cardState.catalog.cards.grammar_cards || []).filter((c) => !!c.mastered);
-  } else {
-    vList = (cardState.catalog.cards.vocab_cards || []).filter((c) => !c.mastered);
-    gList = (cardState.catalog.cards.grammar_cards || []).filter((c) => !c.mastered);
-  }
+  const { vList, gList } = selectSegmentLists(cardState.catalog);
 
   const container = document.getElementById("cards-container");
   if (!container) return;
@@ -238,10 +233,7 @@ export function renderDeckStage(vList, gList) {
   const container = document.getElementById("cards-container");
   if (!container) return;
 
-  const deck = [
-    ...vList.map((c) => ({ ...c, _type: "vocab" })),
-    ...gList.map((c) => ({ ...c, _type: "grammar" })),
-  ];
+  const deck = buildDeckFromLists(vList, gList);
 
   if (cardState.deck.index >= deck.length) cardState.deck.index = Math.max(0, deck.length - 1);
   const card = deck[cardState.deck.index];
@@ -792,16 +784,24 @@ export function renderCurrentQuizCard() {
       .map((c) => c.definition_zh);
 
     otherDefs.sort(() => Math.random() - 0.5);
-    const options = [card.definition_zh, ...otherDefs.slice(0, 3)];
+    // 正确答案选项与 flashcard/dictation 同口径走 formatCardDefinition：缺
+    // definition_zh 的卡（HITL 提议允许入盒）此前会渲染出空白按钮。选项对象化
+    // （isCorrect 随对象乱序），正确索引不依赖 indexOf 文本比对，避免同文案
+    // 干扰项或「待补充」字面量误标。
+    const options = [
+      { text: formatCardDefinition(card), isCorrect: true },
+      ...otherDefs.slice(0, 3).map((d) => ({ text: d, isCorrect: false })),
+    ];
     options.sort(() => Math.random() - 0.5);
+    const correctIdx = options.findIndex((o) => o.isCorrect);
 
     if (optContainer) {
       optContainer.innerHTML = options
         .map(
           (opt, idx) => `
-        <button class="quiz-choice-btn" onclick="submitChoice(${idx}, ${options.indexOf(card.definition_zh)})">
+        <button class="quiz-choice-btn" onclick="submitChoice(${idx}, ${correctIdx})">
           <span style="font-family:var(--mono);margin-right:0.5rem;color:var(--pencil);">${String.fromCharCode(65 + idx)}.</span>
-          ${esc(opt)}
+          ${esc(opt.text)}
         </button>
       `,
         )

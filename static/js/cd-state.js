@@ -57,3 +57,29 @@ export function formatCardDefinition(card) {
   const text = card && typeof card.definition_zh === 'string' ? card.definition_zh.trim() : '';
   return text || '待补充';
 }
+
+/** 按分段取词/语法卡列表：due 用到期缓存，mastered 取已掌握，其余（pending 等）取未掌握。 */
+export function selectSegmentLists(catalog) {
+  const segment = (catalog && catalog.segment) || 'due';
+  let vList = [];
+  let gList = [];
+  if (segment === 'due') {
+    vList = (catalog.dueCards && catalog.dueCards.due_vocab) || [];
+    gList = (catalog.dueCards && catalog.dueCards.due_grammar) || [];
+  } else if (segment === 'mastered') {
+    vList = ((catalog.cards && catalog.cards.vocab_cards) || []).filter((c) => !!c.mastered);
+    gList = ((catalog.cards && catalog.cards.grammar_cards) || []).filter((c) => !!c.mastered);
+  } else {
+    vList = ((catalog.cards && catalog.cards.vocab_cards) || []).filter((c) => !c.mastered);
+    gList = ((catalog.cards && catalog.cards.grammar_cards) || []).filter((c) => !c.mastered);
+  }
+  return { vList, gList };
+}
+
+/** 组成翻牌卡组：词汇在前、语法在后，保留 `_type` 标记（cards.js 与伴学卡盒上下文共用）。 */
+export function buildDeckFromLists(vList, gList) {
+  return [
+    ...vList.map((c) => ({ ...c, _type: 'vocab' })),
+    ...gList.map((c) => ({ ...c, _type: 'grammar' })),
+  ];
+}
