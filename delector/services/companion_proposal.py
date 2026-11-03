@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from delector.core.database import get_db, log_study_event
@@ -21,7 +23,13 @@ from delector.core.db.companion import (
     update_proposal_status,
 )
 
-_SUPPORTED_ACTIONS = {"create_vocab_cards", "create_vocab_card"}
+_SUPPORTED_ACTIONS = {
+    "create_vocab_cards",
+    "create_vocab_card",
+    "apply_writing_revision",
+    "set_weekly_goal",
+}
+_MULTI_ACTIONS = {"apply_writing_revision", "set_weekly_goal"}
 
 
 class CompanionProposalService:
@@ -70,15 +78,118 @@ class CompanionProposalService:
         with get_db(self.db_path) as conn:
             return db_get_proposals(conn, session_id=session_id, status=status)
 
+    def _execute_multi_action(
+        self,
+        proposal_id: str,
+        action: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """执行写作修订或周目标写入；校验、业务写入与状态流转同事务。"""
+        with get_db(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT status FROM companion_proposals WHERE id = ?",
+                (proposal_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("提议不存在")
+            if row["status"] == "accepted":
+                return {
+                    "status": "ok",
+                    "proposal_id": proposal_id,
+                    "action": action,
+                    "created_count": 0,
+                }
+            if row["status"] == "rejected":
+                raise ValueError("提议已拒绝，不能再次确认")
+
+            if action == "set_weekly_goal":
+                goal = str(payload.get("goal") or "").strip()
+                if not goal:
+                    raise ValueError("学习目标不能为空")
+                conn.execute(
+                    """
+                    INSERT INTO app_settings (key, value, updated_at)
+                    VALUES ('companion_weekly_goal', ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (goal,),
+                )
+                result: Dict[str, Any] = {"goal": goal}
+            else:
+                essay_id = payload.get("essay_id")
+                if not isinstance(essay_id, int) or isinstance(essay_id, bool) or essay_id <= 0:
+                    raise ValueError("缺少有效 essay_id")
+                original = str(payload.get("original_text") or "").strip()
+                revised = str(payload.get("revised_text") or "").strip()
+                if not original:
+                    raise ValueError("原句不能为空")
+                if not revised:
+                    raise ValueError("改写文本不能为空")
+                if original == revised:
+                    raise ValueError("改写文本不能与原句相同")
+                essay = conn.execute(
+                    "SELECT content FROM essays WHERE id = ?",
+                    (essay_id,),
+                ).fetchone()
+                if essay is None:
+                    raise ValueError("作文不存在")
+                content = str(essay["content"])
+                if content.count(original) != 1:
+                    raise ValueError("原句在当前作文中不存在或不唯一")
+                updated = content.replace(original, revised, 1)
+
+                from delector.nlp_engine import processor as nlp_processor
+                from delector.services.writing import analyze_essay_text
+
+                analysis = analyze_essay_text(updated[:5000], getattr(nlp_processor, "nlp", None))
+                conn.execute(
+                    """
+                    UPDATE essays
+                    SET content = ?, analysis_json = ?, cefr_level = ?, error_count = ?,
+                        sentence_count = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        updated,
+                        json.dumps(analysis, ensure_ascii=False),
+                        analysis.get("cefr", {}).get("recommended_level"),
+                        analysis["error_count"],
+                        len(analysis["sentences"]),
+                        datetime.utcnow().isoformat(),
+                        essay_id,
+                    ),
+                )
+                result = {"content": updated, "analysis_json": analysis}
+
+            conn.execute(
+                """
+                UPDATE companion_proposals
+                SET status = 'accepted', resolved_at = ?
+                WHERE id = ? AND status = 'pending'
+                """,
+                (datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), proposal_id),
+            )
+            conn.commit()
+
+        return {
+            "status": "ok",
+            "proposal_id": proposal_id,
+            "action": action,
+            "created_count": 1,
+            **result,
+        }
+
     def execute_proposal(
         self,
         proposal_id: str,
         action: str,
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """原子流转提议状态为 accepted，并将卡片持久化至 vocab_cards（防重放幂等保护）。"""
+        """原子流转提议状态为 accepted，并执行对应写入（防重放幂等保护）。"""
         if action not in _SUPPORTED_ACTIONS:
             raise ValueError(f"不支持的提议动作类型: {action}")
+        if action in _MULTI_ACTIONS:
+            return self._execute_multi_action(proposal_id, action, payload)
 
         # 归一化提取待落盘卡片列表
         cards = payload.get("cards")
@@ -110,6 +221,8 @@ class CompanionProposalService:
                     "action": action,
                     "created_count": 0,
                 }
+            if row is not None and row["status"] == "rejected":
+                raise ValueError("提议已拒绝，不能再次确认")
 
             # 空/畸形提议不允许被确认成「已入库」：没有任何有效词条时直接报错，
             # 状态保持 pending，避免前端把空提议标成 accepted 却一张卡都没写。

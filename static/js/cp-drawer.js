@@ -294,8 +294,28 @@ async function handleProposalAction(proposal, action) {
   if (action === 'reject' || action === 'discard') {
     return await rejectProposal(proposal.id);
   }
+  if (proposal.action === 'apply_writing_revision') {
+    const writerState = typeof window.getWriterRevisionState === 'function'
+      ? window.getWriterRevisionState()
+      : null;
+    const original = String(proposal.payload && proposal.payload.original_text || '').trim();
+    if (!writerState || !writerState.essay_id || !writerState.content) {
+      throw new Error('请先保存作文，再应用修订');
+    }
+    if (!original || writerState.content.split(original).length !== 2) {
+      throw new Error('原句在当前草稿中不存在或不唯一');
+    }
+    const res = await executeProposal(proposal.id, proposal.action, {
+      ...proposal.payload,
+      essay_id: writerState.essay_id
+    });
+    if (res && res.content && typeof window.applyCompanionRevision === 'function') {
+      window.applyCompanionRevision(res.content);
+    }
+    return res;
+  }
   const res = await executeProposal(proposal.id, proposal.action, proposal.payload);
-  if (res && Number(res.created_count) > 0 && typeof window.loadCards === 'function') {
+  if (String(proposal.action || '').startsWith('create_vocab_card') && res && Number(res.created_count) > 0 && typeof window.loadCards === 'function') {
     window.loadCards();
   }
   return res;
@@ -519,6 +539,32 @@ export function sendCardProposal() {
   );
 }
 
+/** 写作台专属：为选中原句生成逐条可确认/拒绝的修订提议。 */
+export function sendWriterRevisionProposal() {
+  if (getActiveView() !== 'writer') return;
+  refreshWriterDraftContext();
+  const original = String(companionState.activeContext.selectedText || '').trim();
+  const writerState = typeof window.getWriterRevisionState === 'function'
+    ? window.getWriterRevisionState()
+    : null;
+  if (!original) {
+    alert('请先在编辑器中选中需要修订的完整句子。');
+    return;
+  }
+  if (!writerState || !writerState.essay_id) {
+    alert('请先保存作文，再生成修订提议。');
+    return;
+  }
+  if (writerState.content.split(original).length !== 2) {
+    alert('选中原句必须恰好出现在当前草稿中一次。');
+    return;
+  }
+  submitPrompt(
+    '请调用 propose_writing_revision，为以下选中原句生成一条待确认修订提议。' +
+      'original_text 必须逐字保留原句，revised_text 给出完整改写，不得直接修改作文：\n\n' + original
+  );
+}
+
 /** 进度页专属：学习负荷 / 复习压力画像。 */
 export function sendProgressProfile() {
   if (getActiveView() !== 'progress') return;
@@ -540,6 +586,14 @@ export function sendProgressVocabStats() {
   input.value = '';
   submitPrompt(
     '请调用 vocab_stats 工具统计以下德语文本的 CEFR 词汇等级分布，并解释已知/未知词比例：\n\n' + text
+  );
+}
+
+/** 进度页专属：生成可确认写入的周学习目标。 */
+export function sendProgressWeeklyGoal() {
+  if (getActiveView() !== 'progress') return;
+  submitPrompt(
+    '请先调用 get_learner_profile 了解我的学习负荷，再调用 propose_weekly_goal 生成一个具体、可执行、可衡量的本周学习目标；必须等我确认后才能写入。'
   );
 }
 
@@ -1218,8 +1272,10 @@ export const CompanionDrawer = {
   refreshWriterDraftContext,
   refreshCardBoxContext,
   sendCardProposal,
+  sendWriterRevisionProposal,
   sendProgressProfile,
   sendProgressVocabStats,
+  sendProgressWeeklyGoal,
   renderContextBar,
   renderProposalCard,
   renderProposalList,

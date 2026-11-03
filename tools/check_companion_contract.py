@@ -74,6 +74,23 @@ def _check_request_contract(errors: list[str]) -> None:
         errors.append("cp-api.js 未提供 onSessionId 回填回调")
 
 
+def _check_multi_action_contract(errors: list[str]) -> None:
+    """多动作 HITL 必须在生成、执行与前端渲染三面同时存在。"""
+    expected = {
+        ROOT / "delector" / "services" / "companion_proposal.py": ("apply_writing_revision", "set_weekly_goal"),
+        ROOT / "agent" / "internal" / "companion" / "tools.go": ("propose_writing_revision", "propose_weekly_goal"),
+        ROOT / "agent" / "internal" / "companion" / "loop.go": ("apply_writing_revision", "set_weekly_goal"),
+        ROOT / "static" / "js" / "cp-drawer-proposals.js": ("apply_writing_revision", "set_weekly_goal"),
+        ROOT / "static" / "js" / "cp-drawer.js": ("sendWriterRevisionProposal", "sendProgressWeeklyGoal"),
+        ROOT / "static" / "js" / "main.js": ("getWriterRevisionState", "applyCompanionRevision"),
+    }
+    for path, needles in expected.items():
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        for needle in needles:
+            if needle not in text:
+                errors.append(f"多动作 HITL 契约缺少 {needle}: {path.relative_to(ROOT)}")
+
+
 def main() -> int:
     _pin_utf8_streams()
     py_file = ROOT / "delector" / "services" / "companion_agent.py"
@@ -109,6 +126,7 @@ def main() -> int:
     # 4. 请求契约：view / context_source / scope_key 必须同时出现在
     #    FastAPI 请求模型、前端请求体、Go StudyContext；X-Session-ID 必须被前端读取。
     _check_request_contract(errors)
+    _check_multi_action_contract(errors)
 
     # 5. 机械校验 main.js window.CompanionDrawer 导出接口完整性（防 onclick 死绑定与未导出缺陷）
     main_js_file = ROOT / "static" / "js" / "main.js"
@@ -127,6 +145,8 @@ def main() -> int:
             "sendCardProposal",
             "sendProgressProfile",
             "sendProgressVocabStats",
+            "sendWriterRevisionProposal",
+            "sendProgressWeeklyGoal",
             "renderContextBar",
             "setReasoningEffort",
             "newSession",

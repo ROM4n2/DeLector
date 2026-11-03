@@ -283,15 +283,28 @@ func (a *CompanionAgent) executeToolCalls(ctx context.Context, tc *TurnContext, 
 			continue
 		}
 
-		if name == "propose_vocab_cards" {
+		action := ""
+		defaultTitle := ""
+		switch name {
+		case "propose_vocab_cards":
+			action = "create_vocab_cards"
+			defaultTitle = "加入核心生词卡"
+		case "propose_writing_revision":
+			action = "apply_writing_revision"
+			defaultTitle = "修订选中句子"
+		case "propose_weekly_goal":
+			action = "set_weekly_goal"
+			defaultTitle = "本周学习目标"
+		}
+		if action != "" {
 			title, _ := payload["title"].(string)
 			if title == "" {
-				title = "加入核心生词卡"
+				title = defaultTitle
 			}
 			propID := fmt.Sprintf("prop_%d", time.Now().UnixNano())
 			prop := Proposal{
 				ID:      propID,
-				Action:  "create_vocab_cards",
+				Action:  action,
 				Title:   title,
 				Payload: payload,
 			}

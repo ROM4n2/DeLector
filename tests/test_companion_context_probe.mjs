@@ -67,6 +67,10 @@ const MUST = [
   "progress-required",
   "sendProgressProfile",
   "sendProgressVocabStats",
+  "sendWriterRevisionProposal",
+  "sendProgressWeeklyGoal",
+  "apply_writing_revision",
+  "set_weekly_goal",
   "refreshWriterDraftContext",
   "card-proposal-required",
   "sendCardProposal",
@@ -75,7 +79,7 @@ const MUST = [
   "is-german-view",
 ];
 for (const m of MUST) {
-  const srcs = [COMPANION_SRC, CP_STATE_SRC, CP_DRAWER_SRC, CP_API_SRC, MAIN_SRC, READER_SRC, WRITER_SRC];
+  const srcs = [COMPANION_SRC, CP_STATE_SRC, CP_DRAWER_SRC, CP_API_SRC, CP_PROPOSALS_SRC, MAIN_SRC, READER_SRC, WRITER_SRC];
   if (!srcs.some((s) => s.includes(m))) {
     fail(`真源码里缺 "${m}" —— 文件被换/被删/探针切歪`);
   }
@@ -293,6 +297,12 @@ const context = vm.createContext({
     openDrawer() {
       context.__probe.openDrawerCalls.push(true);
     },
+    getWriterRevisionState() {
+      return context.__probe.writerRevisionState;
+    },
+    applyCompanionRevision(content) {
+      context.__probe.revisionApplyCalls.push(content);
+    },
   },
   alert(message) {
     context.__probe.alerts.push(String(message));
@@ -310,6 +320,9 @@ context.__probe = {
   proposalCalls: [],
   rejectProposalCalls: [],
   executeProposalCalls: [],
+  executeProposalResult: null,
+  revisionApplyCalls: [],
+  writerRevisionState: null,
   rafCallbacks: new Map(),
   cancelledRafIds: [],
   intervalCallbacks: new Map(),
@@ -385,7 +398,7 @@ async function main() {
       "  globalThis.__probe.streamCalls.push({ options, request, promise, resolve, reject });",
       "  return promise;",
       "}",
-      "export async function executeProposal(id, action, payload) { globalThis.__probe.executeProposalCalls.push({ id, action, payload }); return { created_count: 0 }; }",
+      "export async function executeProposal(id, action, payload) { globalThis.__probe.executeProposalCalls.push({ id, action, payload }); return globalThis.__probe.executeProposalResult || { created_count: 0 }; }",
       "export async function rejectProposal(id) { globalThis.__probe.rejectProposalCalls.push(id); return { status: 'rejected' }; }",
       "export async function fetchCompanionSessions(scopeKey) { globalThis.__probe.sessionFetchCalls.push(scopeKey || null); return { sessions: globalThis.__probe.sessionsFixture || [] }; }",
       "export async function createCompanionSession() { return { session: { id: 'x' } }; }",
@@ -466,6 +479,8 @@ async function main() {
     refreshWriterDraftContext,
     sendProgressVocabStats,
     sendCardProposal,
+    sendWriterRevisionProposal,
+    sendProgressWeeklyGoal,
     refreshSessionSelect,
     switchSession,
   } = cpDrawer.namespace;
@@ -952,6 +967,124 @@ async function main() {
   const pyText = pyContent.children[0].children.map((n) => n.textContent || n.nodeValue || "").join("");
   check(pyText.includes("Der Hund bellt."), "G8 旧 context_sentence 例句回退失效");
 
+  /* G9. 多动作 HITL：修订/周目标渲染、fail-closed 与页面快捷入口 */
+  const revisionHost = makeEl("revision-host");
+  renderProposalCard(
+    revisionHost,
+    {
+      id: "p-revision",
+      action: "apply_writing_revision",
+      title: "修订选中句子",
+      payload: { original_text: "Der Hund bellt.", revised_text: "Der kleine Hund bellt laut." },
+      status: "pending",
+    },
+    async () => {}
+  );
+  const revisionText = renderedText(revisionHost);
+  check(revisionText.includes("Der Hund bellt."), "G9 修订提议未显示原句");
+  check(revisionText.includes("Der kleine Hund bellt laut."), "G9 修订提议未显示改写文本");
+
+  const goalHost = makeEl("goal-host");
+  renderProposalCard(
+    goalHost,
+    {
+      id: "p-goal",
+      action: "set_weekly_goal",
+      title: "本周学习目标",
+      payload: { goal: "本周完成 20 张卡片复习" },
+      status: "pending",
+    },
+    async () => {}
+  );
+  check(renderedText(goalHost).includes("本周完成 20 张卡片复习"), "G9 周目标提议未显示目标正文");
+
+  const badGoalHost = makeEl("bad-goal-host");
+  renderProposalCard(
+    badGoalHost,
+    { id: "p-bad-goal", action: "set_weekly_goal", title: "空目标", payload: { goal: " " }, status: "pending" },
+    async () => {}
+  );
+  const badGoalActions = badGoalHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-actions"
+  );
+  check(badGoalActions.children[0].disabled === true, "G9 空周目标确认按钮未禁用");
+  check(badGoalActions.children[1].disabled === false, "G9 空周目标仍应允许拒绝");
+
+  const badRevisionHost = makeEl("bad-revision-host");
+  renderProposalCard(
+    badRevisionHost,
+    {
+      id: "p-bad-revision",
+      action: "apply_writing_revision",
+      title: "畸形修订",
+      payload: { original_text: "Alt.", revised_text: "" },
+      status: "pending",
+    },
+    async () => {}
+  );
+  const badRevisionActions = badRevisionHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-actions"
+  );
+  check(badRevisionActions.children[0].disabled === true, "G9 畸形修订确认按钮未禁用");
+
+  const rejectedRevisionHost = makeEl("rejected-revision-host");
+  renderProposalCard(
+    rejectedRevisionHost,
+    {
+      id: "p-rejected-revision",
+      action: "apply_writing_revision",
+      title: "已拒绝修订",
+      payload: { original_text: "Alt.", revised_text: "Neu." },
+      status: "rejected",
+    },
+    async () => {}
+  );
+  const rejectedRevisionActions = rejectedRevisionHost.children[0].children.find(
+    (c) => c.className === "companion-proposal-actions"
+  );
+  check(rejectedRevisionActions.children[0].style.display === "none", "G9 拒绝后确认按钮仍可点击");
+  check(rejectedRevisionActions.children[1].style.display === "none", "G9 拒绝后拒绝按钮仍可点击");
+
+  context.__probe.streamCalls.length = 0;
+  setView("writer");
+  setSelection("Der Hund bellt.");
+  writerEditor.textContent = "Der Hund bellt. Die Katze schläft.";
+  context.__probe.writerRevisionState = {
+    essay_id: 7,
+    content: "Der Hund bellt. Die Katze schläft.",
+  };
+  check(typeof sendWriterRevisionProposal === "function", "G9 缺少写作修订快捷动作");
+  if (typeof sendWriterRevisionProposal === "function") {
+    sendWriterRevisionProposal();
+    check(context.__probe.streamCalls.length === 1, "G9 写作修订快捷动作未启动流式请求");
+    const revisionCall = context.__probe.streamCalls[0];
+    check(
+      revisionCall && revisionCall.request.messages[0].content.includes("propose_writing_revision"),
+      "G9 写作修订提示词未指定 propose_writing_revision"
+    );
+    check(
+      revisionCall && revisionCall.request.messages[0].content.includes("Der Hund bellt."),
+      "G9 写作修订提示词缺少选中原句"
+    );
+    revisionCall.options.onEvent("done", {});
+    revisionCall.resolve({});
+    await settleStream(revisionCall);
+  }
+
+  context.__probe.streamCalls.length = 0;
+  setView("progress");
+  setSelection("");
+  check(typeof sendProgressWeeklyGoal === "function", "G9 缺少周目标快捷动作");
+  if (typeof sendProgressWeeklyGoal === "function") {
+    sendProgressWeeklyGoal();
+    check(context.__probe.streamCalls.length === 1, "G9 周目标快捷动作未启动流式请求");
+    const goalCall = context.__probe.streamCalls[0];
+    check(
+      goalCall && goalCall.request.messages.at(-1).content.includes("propose_weekly_goal"),
+      "G9 周目标提示词未指定 propose_weekly_goal"
+    );
+  }
+
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
@@ -1287,6 +1420,30 @@ async function main() {
     context.__probe.rejectProposalCalls.join(",") === "prop_stream",
     "N proposal 回调未接到真实 rejectProposal"
   );
+
+  context.__probe.writerRevisionState = {
+    essay_id: 7,
+    content: "Der Hund bellt. Die Katze schläft.",
+  };
+  context.__probe.executeProposalResult = {
+    created_count: 1,
+    content: "Der kleine Hund bellt laut. Die Katze schläft.",
+  };
+  const streamRevision = {
+    id: "prop_stream_revision",
+    action: "apply_writing_revision",
+    title: "修订选中句子",
+    payload: { original_text: "Der Hund bellt.", revised_text: "Der kleine Hund bellt laut." },
+  };
+  await proposalCall.onAction(streamRevision, "confirm");
+  const revisionExecute = context.__probe.executeProposalCalls.at(-1);
+  check(revisionExecute.id === "prop_stream_revision", "N 修订确认未命中同一 proposal.id");
+  check(revisionExecute.payload.essay_id === 7, "N 修订确认未补入当前 essay_id");
+  check(
+    context.__probe.revisionApplyCalls.at(-1) === "Der kleine Hund bellt laut. Die Katze schläft.",
+    "N 修订确认后未刷新写作草稿"
+  );
+  context.__probe.executeProposalResult = null;
   happy.options.onEvent("done", {});
   check(companionState.inFlight === false, "N done 后仍停留 inFlight");
   check(companionSendBtn.disabled === false, "N done 后 send 按钮未恢复");
@@ -1470,6 +1627,8 @@ async function main() {
       "session-global-groups": "pass",
       "session-cross-scope-reset": "pass",
       "proposal-sentence-fields": "pass",
+      "proposal-multi-action": "pass",
+      "writer-revision-apply": "pass",
       "main-wiring": "pass",
       "scope-key": "pass",
       "session-scope-reset": "pass",

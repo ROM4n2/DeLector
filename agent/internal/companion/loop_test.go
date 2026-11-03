@@ -287,6 +287,67 @@ func TestCompanionLoopCardProposalFromCardContext(t *testing.T) {
 	}
 }
 
+func TestCompanionLoopMultiActionProposals(t *testing.T) {
+	tests := []struct {
+		name       string
+		toolName   string
+		arguments  string
+		wantAction string
+		payloadKey string
+	}{
+		{
+			name:       "writing revision",
+			toolName:   "propose_writing_revision",
+			arguments:  `{"title":"修订选中句子","original_text":"Der Hund bellt.","revised_text":"Der kleine Hund bellt."}`,
+			wantAction: "apply_writing_revision",
+			payloadKey: "revised_text",
+		},
+		{
+			name:       "weekly goal",
+			toolName:   "propose_weekly_goal",
+			arguments:  `{"title":"本周学习目标","goal":"本周复习 20 张卡片"}`,
+			wantAction: "set_weekly_goal",
+			payloadKey: "goal",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := &fakeToolRunner{}
+			result := runScriptedLoop(t, companion.Request{
+				Messages: []companion.Message{{Role: "user", Content: tt.name}},
+			}, runner, []scriptedLoopTurn{
+				{toolCalls: []openai.ToolCall{equivalenceToolCall(0, "call_multi_action", tt.toolName, tt.arguments)}},
+				{content: "已生成待确认提议。"},
+			})
+			if result.err != nil {
+				t.Fatalf("RunLoop failed: %v", result.err)
+			}
+			if len(result.outcome.Proposals) != 1 {
+				t.Fatalf("expected 1 proposal, got %d", len(result.outcome.Proposals))
+			}
+			prop := result.outcome.Proposals[0]
+			if prop.ID == "" || prop.Action != tt.wantAction {
+				t.Errorf("proposal id/action = %q/%q, want non-empty/%q", prop.ID, prop.Action, tt.wantAction)
+			}
+			if _, ok := prop.Payload[tt.payloadKey]; !ok {
+				t.Errorf("proposal payload missing %q: %v", tt.payloadKey, prop.Payload)
+			}
+			if len(runner.calls) != 0 {
+				t.Errorf("proposal tool must not execute a write tool, got %v", runner.calls)
+			}
+			foundEvent := false
+			for _, ev := range result.events {
+				if ev.Event == companion.EventProposal && ev.ID == prop.ID && ev.Action == tt.wantAction {
+					foundEvent = true
+				}
+			}
+			if !foundEvent {
+				t.Errorf("missing matching proposal event for %s", tt.wantAction)
+			}
+		})
+	}
+}
+
 func TestCompanionLoopToolErrorSelfHealing(t *testing.T) {
 	turn := 0
 	var receivedToolMsg string

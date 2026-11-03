@@ -10,17 +10,19 @@ import (
 
 func TestCompanionToolsSchemas(t *testing.T) {
 	tools := companion.CompanionTools()
-	if len(tools) != 6 {
-		t.Fatalf("expected 6 companion tools, got %d", len(tools))
+	if len(tools) != 8 {
+		t.Fatalf("expected 8 companion tools, got %d", len(tools))
 	}
 
 	expectedNames := map[string]bool{
-		"analyze":             false,
-		"writing_check":       false,
-		"vocab_stats":         false,
-		"propose_vocab_cards": false,
-		"get_learner_profile": false,
-		"query_dictionary":    false,
+		"analyze":                  false,
+		"writing_check":            false,
+		"vocab_stats":              false,
+		"propose_vocab_cards":      false,
+		"propose_writing_revision": false,
+		"propose_weekly_goal":      false,
+		"get_learner_profile":      false,
+		"query_dictionary":         false,
 	}
 
 	for _, tool := range tools {
