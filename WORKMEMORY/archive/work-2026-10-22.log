@@ -1,0 +1,34 @@
+### 2026-10-22 | deepseek-v4.1-flash__opencode | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**桌面单实例 + 端口顺延** 走完 DFS-SPARK → 用户批准 spec → DFS-PLAN 产物落盘。
+- 产物：`docs/specs/2026-10-21-desktop-single-instance-design.md`（APPROVED，5+2 节，零占位符）+ `docs/plans/2026-10-21-desktop-single-instance.md`（10 任务，TDD，全部带 Subagent Prompt Scaffold / Produces / 退出码与端口哨兵）+ `.vault-exec-ledger.json` 重置为该计划（10 pending）。
+- 决策（与对话初判相反，已在 spec §0 标注）：① 锁 = **全局** `%LOCALAPPDATA%\DeLector\`（ADR-0019 §6.4），非 per-data-dir；② 顺延 = **8000, 8002–8010**（8001 是 Go supervisor 保留端口，`agent/internal/pythonsvc/doc.go:9-10`）；③ 身份探测降为锁不可用时的第二腿（否则启动期竞争会把「自己正在启动」误判成端口被占，`start.py:203`）。
+- plan 阶段新发现的硬约束（已回写 spec §3.1）：**锁与元数据必须分两个文件**。POSIX `flock` 锁 inode 而非路径，若对同一文件 `os.replace`，旧 fd 锁的是已 unlink 的旧 inode、下一个进程可抢到锁 ⇒ 锁静默失效。故 `instance.lock` 只做锁目标、永不替换，`instance.json` 走临时文件+`os.replace`。
+- 顺带纳入的真缺陷：`delector/routes/backup.py:179` 把 `"port": 8000` 写死进 `/api/wb/lan-info`，顺延后手机端会拿到错地址且无提示 ⇒ 改读 `app.state.server_port`（由 `build_server` 写入，默认 8000 保 Android/TestClient 行为）。
+- 守卫影响：`tests/test_desktop_data_dir_bootstrap.py:402` 白名单加 `delector.core.instance_lock`；因该守卫取**全模块最小行号**（`start.py:39` 恒为最小），新增导入不会触发它——加白名单是为意图显式，注释已写清。另补窄守卫证明该模块不 import `database`。
+- 未提交任何文件（用户未要求）；分支 `feat/desktop-single-instance` 尚未创建。
+
+
+### 2026-10-22 | deepseek-v4.1-flash__codebuddy | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**桌面单实例锁 + 端口顺延**在分支 `feat/desktop-single-instance` 完成 Task 1~9（TDD，逐任务提交）。
+- 交付面：`delector/core/instance_lock.py`（锁记录 + 平台原语 + 三态 `try_acquire`）· `start.claim_instance`（唯一判定点）· `start.main()` 与 `desktop.py` 接线 · `/api/wb/lan-info` 真实端口 · 文档三处。
+- 两处**必须在评审中挡下**的缺陷（都由对抗评审发现，不是测试发现的）：
+  1. `try_acquire` 原实现把任何 `OSError` 当「他人持有」⇒ NFS/SMB 上 `flock` 返 `ENOLCK` 会被报成「已有实例在跑」且零 WARNING；改为 `_HELD_ERRNOS` 白名单，其余 errno 降级 + 响亮告警。
+  2. `desktop.py` 的「第二腿」接线（`identity_probe=_identity_probe`）曾**无任何用例覆盖**：删掉它 102 条全绿，后果是锁降级机器上会为同一个库起第二个服务。补 main 级用例后，删该 kwarg 即红（实测 stderr 打出「8000 被占用，改用 8002」）。
+- 一条**既有**测试缺陷被暴露：`test_desktop_shell.py` 有 2 条用例靠 patch `start.is_port_in_use` 拦启动，判定点换成锁之后它们的桩失效 ⇒ `start.main()` 真去起服务并**挂死**（pytest 超时 124）。已改到新判定点。
+- 两次重写测试守卫的形状（不是放宽）：`_stage_stmt_span` 需穿透 `try` 容器（Task 7 用 try/finally 放锁 ⇒ 锚点下沉一层，且容器自身会因子树包含调用而误命中）；`_stage_marker_statements` 同理。两处共用 `tests/server_helpers.py::stmts_through_try`。
+- `check_mock_drift` 新增 3 处豁免：patch `LockPaths.for_platform` 的消费方在 `start.py`（跨模块调用期类属性查找），闸的判据只看目标模块内部引用 ⇒ 属误报；豁免理由逐行可审。
+- 待办：Task 10（全量 pytest + 六道闸 + 真双启动手测 + PR）。
+
+### 2026-10-22 | deepseek-v4.1-flash__codebuddy | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**v5.19.0 发版**。PR #172（单实例锁，squash `b8ae976`）→ 发版 PR #173（版本面五件套，squash `1b33d4c`）→ tag `v5.19.0` 已推，`Build & Publish DeLector Releases` 与 `Build Agent Artifacts` 均被 tag 触发。
+- **发版判断口径实测**：`git diff --stat v5.18.0..origin/master -- static/` 非空（cards.js/cd-state.js/rd-api.js/reader.js，来自 10-20 那批未发版的前端解耦）⇒ 有用户可见面，发版成立。**注意口径是代理指标**：本批真正的用户可见面（单实例 + 端口顺延）全在后端与桌面壳，static/ 判据这次恰好由前一未发版批次满足 —— 若只看本 PR 会误判成「无需发版」。
+- 版本面 11 个文件：`version.py` 5.19.0 / `build.gradle` 5.19.0+51900 / `sw.js` CACHE_NAME / `layout/header.html`（源）+ 重生成 `index.html` / README（badge·亮点·下载表 4 行·版本历史）/ CHANGELOG 新条目 / FEATURES / SECURITY / PROJECT_OVERVIEW / **`tests/test_app_version_source.py` 的两处字面量（5.19.0 与 51900）** —— 最后一处最容易漏：它是「bump 时逼人同步」的守卫，不同步就是自锁。
+- **直推闸的边界（本仓实况）**：`MASTER_DIRECT_ALLOWLIST` 只含 `WORKMEMORY/ docs/ README.md CHANGELOG.md static/index.html static/sw.js android/app/build.gradle delector/core/version.py`。发版还牵动 `FEATURES.md` / `SECURITY.md` / `static/layout/header.html` / 版本守卫测试 ⇒ **纯发版走直推必被 pre-push 拒**（禁 `--no-verify`），故发版也走 PR。记忆里「发版类可直推 master」这条需按此收窄。
+- 本地 master 曾与远端分叉（`5979b64` 被 squash 压平后不再是祖先）：先证「本地无 origin 缺失内容」再 `reset --hard origin/master`，不盲目对齐。
+- 验证：全量 **2584 passed + 2 skipped / 578s**；ruff 零告警；mypy 三档（119/160/4）零错误；六道闸 exit 0；`build_index_html.py --check` 通过；PR CI 全绿。
+- 遗留：Android 用户需覆盖安装（本版含 static/ 改动）；发布资产清单待流水线结束后核对。
+
+

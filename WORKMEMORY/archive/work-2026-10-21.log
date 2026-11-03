@@ -1,0 +1,77 @@
+### 2026-10-21 03:00 | qwen3.8-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修复 master 直推范围机械闸误判 GitHub squash/rebase 合并**。分支 `fix/master-scope-gate-squash-merge`（独立 worktree）。
+- **根因分析**：`tools/check_master_commit_scope.py` 使用 `--no-merges --first-parent` 划定「直推审查范围」，该规则当初为防 merge-commit 被判直推而设；但 GitHub 的 squash 和 rebase 合并产出的是**单父提交**，因此被当成人类直推，检查其全量改动面，导致 #165 / #166 合并后 master push 触发 `Master Direct-Push Scope Gate` 判红。
+- **实测数据支撑（master 1315 提交）**：
+  - committer == `GitHub <noreply@github.com>`: 180 条（154 条多父 merge，26 条单父 squash/rebase）。26 条单父中，24 条无 `(#NNN)` 后缀（Dependabot 依赖升级）。若按标题正则判会漏掉 24/26 = 92%。
+  - committer == 人类: 1135 条（1113 条单父直推审查对象，22 条多父 merge）。人类单父中标题以 `Merge ` 开头者为 0。
+- **修法设计（严格 TDD）**：
+  1. 新增 `_is_github_integrated(committer_name, committer_email)` 纯谓词（name 精确匹配 "GitHub"，email 忽略大小写匹配 "noreply@github.com"）；
+  2. `run_check` 中整合 `git log -1 --format=%s%x00%cn%x00%ce%x00%P` 单次调用获取 commit 元数据，大声打印 GitHub 集成 PR 合并豁免；
+  3. **封死既有单父伪造路径**：要求 `_is_merge_subject(subject) and is_merge_commit`（≥2 父才认 merge 标题），防范人类提交标题伪造成 Merge 绕过检查。
+- **TDD 与四重变异证明**：
+  - 新增 6 条测试，`tests/test_ci_hardening.py` **66 passed**；
+  - M1（删 github_integrated 豁免）⇒ A/B 变红；
+  - M2（退回只看 subject 忽略 is_merge_commit）⇒ D（单父伪造 merge 标题）变红；
+  - M3（放宽接受任意 committer）⇒ C（人类违规直推）变红；
+  - M4（收窄要求 subject 带 `(#NNN)`）⇒ B（Dependabot）变红。
+- **真实历史验收**：
+  - 修复前 `2e7b503..07139ac` exit 1，修复后 exit 0 且大声输出豁免原因；
+  - 真实人类文档直推 `99b678a..8bbc844` 保持 exit 0；
+  - 真实历史 26 条 GitHub 单父提交 100% 判定为 integrated；抽样 30 条人类代码提交 100% 判定为 not integrated。
+- **基线与门禁**：全量测试 2519 collected（2517 passed + 2 skipped）；六道机械闸全部 exit 0；`ruff` / `mypy --strict delector tools` / `mypy tests` 全绿；CRLF 0 lone LF。
+
+### 2026-10-21 04:10 | qwen3.8-flash__hermes | DECISION
+Caps: filesystem-read, filesystem-write, shell-exec
+决策：**归档环节：两份在途计划本轮不移进 `archive/`，只登记进「归档待办」。**
+- 判据来自 `docs/README.md:20-21,:28` 正主规则 —— 计划进 `plans/archive/` 的条件是**「成果已发版」**，**不是**「做完了」。
+- 实测核实：最近 tag `v5.18.0` 指向 **`aae45a9`**（`Merge pull request #162 from ROM4n2/chore/release-v5-18-0`，2026-10-19）。`2026-10-19-reader-api-layer-split.md`（PR #164，#162 之后）与 `2026-10-20-cards-state-container.md`（PR #165）**均晚于该 tag ⇒ 已交付未发版**，故留在 `plans/`。
+- why：早搬会让「plans/ = 在途」这个语义失效，而 `plans/` 恰恰是下一任 agent 判断"还有什么没做完"的唯一入口；把已交付未发版的计划搬走，等于把"这部分改动尚未随版本到达用户"这件事藏起来。
+- 已改：`docs/README.md` 归档待办节 —— 删掉失真的「当前 `plans/` 下无在途未结计划」，补两行登记 + **发版批次判据**（凡已合入且 PR 号晚于最近 tag 的计划均属"已交付未发版"）。
+- 断链检查：全仓（排除他人 worktree）指向这两份计划的引用共 11 处（`static/js/cd-state.js` · `static/js/rd-api.js` · `tests/test_frontend_layers.py` · `tests/test_reader_api_split.py` · `tests/test_cards_state_split.py` · `tools/check_frontend_layers.py` · `docs/reviews/2026-10-20-rd-api-export-guard-escape.md` 等）**全部指向在途路径、仍然有效**；指向 `plans/archive/` 的同名路径为 **0**。
+- ⚠️ 我在本事件起草时误写过「tag 对应 master `4646a67` 前后」——那是从 `PROJECT_OVERVIEW` 的基线行抄来的**二手说法**；物理核实后修正为 `aae45a9`。教训：tag 指向 MUST 用 `git log -n1 <tag>` 取，不从别处抄。
+
+### 2026-10-21 22:30 | qwen3.8-flash__hermes | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**本轮四条耐久工程经验已下沉 Coding Vault**（`D:/Obsidian/Coding` commit **`4befb32`**，5 文件 +83/−8）。此条只做跨仓可追溯性登记，**不在本仓复述规则正文**（vault 是那些知识的正主；本仓对应面见 `docs/agents/architecture.md`「前端模块分层契约」与红线第 13 条）。
+- 落位（**全部为 patch 既有规则文件，未新建文件、未新建 ADR**）：`01-Rules/TESTING-PATTERNS.md` 新增 §3.1 切片算法契约（三段式 + 具名报错）/ `01-Rules/AUTOMATION-VERIFICATION-THREE-PROOFS.md` 新增 §3.1 判别力证双向 / `01-Rules/GIT-CONVENTIONS.md` 新增 §2.1 committer 判据 / `05-Tools/Subagents/SUBAGENT-DISPATCH-GUIDE.md` 新增 §6 派单血统纪律 / `11-Agents/logs/2026-10.md` 审计登记。
+- **我自己复核过的凭据**（不接受子代理自述）：提交实体恰为上述 5 文件；他人 3 个在途文件仍为未提交状态（**未被卷入**）；`vault-quality-check --strict` **exit 0**（Score 100）；`vault-healthcheck` **exit 0**（wikilink 1187/1187，0 broken）。子代理报的 GATE2 红（43 处）经我复现：**全在 `package/skills/**`、0 处提及本次 5 文件** ⇒ 既有、与本次无关。补充定性：该闸是**模板包**体检器，预期由 `scripts/vault-publish-template.py` 以临时导出目录调用；`package/` 是发布产物，其中 skills 的反引号 `01-Rules/…` 路径按 `CONVENTIONS.md` 是**有意占位**（模板接收方自建、质量门禁自动豁免）⇒ 不是活缺陷。
+- 子代理重测的数字与本轮早期不同（1316 提交 / GitHub 181 / 单父 27，锚 `bfb66ad`，vs 我早先 1315/180/26 锚 `07139ac`）：差 1 恰为**我们自己那次 squash 合并 #171**，属预期漂移；它是实测而非抄我的数，这点值得肯定。
+- ⚠️ **未 push vault**：`origin/master` 落后 11 个提交（其中 **10 个是他人此前累积未推的**、第 11 个是本次）——推上去会连带发布他人的 10 个提交，故留给 vault owner 决定。
+- 遗留观察（**无规则可依，故不动**）：`01-Rules/TESTING-PATTERNS.md` 实测 **49.5KB**、6 段附录，是全库最大规则文件（次大 `AGENT-CONDUCT.md` 35.4KB）；但 `DOC-GOVERNANCE.md` / `VAULT-STRUCTURE.md` 里**没有任何体量或附录阈值** ⇒ 重排只能算口味、不是合规，未做。
+
+### 2026-10-21 23:10 | qwen3.8-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**分支与工作树清理**。本地 `14 → 1`（仅 master）、worktree `4 → 1`、松散对象 **1527 → 0**（`git gc` 普通模式，**未加 `--prune=now`**），`git fsck` exit 0。远端 `9 → 3`，但**归因要分开**：我删的是 **4 条已合并 PR 分支**（#163/#165/#166/#171）；另 **2 条 dependabot 分支是并行 agent 合并 #167/#169 时自行删除的**，不是我清的；剩下的 master + 2 条（#168/#170）仍在等 PR。
+- ⚠️ **本事件最值得留档的是判据本身：squash 工作流下，三个常规机械判据全部误判，不可用作删除依据。**
+  - `git branch --no-merged master` 把 **14 条全列成"未合并"** —— squash 提交的父提交是上一个 master tip，分支提交不是它的祖先。
+  - `git cherry master <branch>` 对 3 条功能分支给出 `0 未等价`（对）与 `14 未等价`（`refactor/cards-state-container`，错）；`git merge-tree` 对 11 条子代理分支报 10 条"有差异" —— 因为 cherry-pick 时**有意解决过冲突**，分歧是设计产物不是丢失。
+  - 逐提交 subject 比对也失效：GitHub squash 会把 `(#166)` 追加进标题，精确匹配全部落空。
+- **最终采用的四条有效判据**（逐条实跑，全绿才删）：① 功能分支的**树**与其 squash 提交**逐字一致**（`git diff <branch> <squash_sha>` 为空）；② 每条分支上**不存在 master 缺的文件**（`git diff --diff-filter=D <branch> master`）；③ `WORKMEMORY/work.log` 是追加式文件、`--diff-filter` 看不见其内容级丢失 ⇒ 单独比**事件头集合**，14 条分支**独占事件头均为 0**；④ 三个在册 worktree 逐个 `git -C <wt> status --short` 查**未提交**成果（父仓 status 与 `--no-merged` 都照不到它），均为空。
+- 顺序按技能铁律：**先卸 worktree（叶优先，防 Windows `Filename too long`）再删分支**，否则 `cannot delete branch ... used by worktree`。
+- 他人资产核验：4 条远端分支删除前逐条查 PR 状态，全部 `MERGED` 带时间戳（#163/#165/#166/#171）；2 条 dependabot 分支当时带**开着的 PR**（#168/#170）⇒ 保留。执行期间另两个 agent 用 merge-commit 方式合了 #167/#169，与本仓清理**无交集**；本地随后 `--ff-only` 同步到 `faba48b`。
+- `.gitignore` 里 `worktrees` 命中 3 次，逐行核为**仅 1 条真规则**（第 77 行）+ 2 行注释 ⇒ 记忆里那个「每次建工作树都重复追加」的缺陷在本仓当前状态下**未发生**，不动（且 `.gitignore` 不在直推白名单，改它要开 PR）。
+- `.worktrees/subagent-sa-0-425e71cd` 经 `ls -a` 判为**无 `.git` 文件的空目录**（未注册垃圾，非他人活工作树 —— 没用 `git -C` 判，它会回落父仓给出假绿）⇒ `rmdir`（只能删空目录，非空即失败=安全）。`.worktrees/` 根目录按仓内约定保留。
+- 可恢复性：14 个分支 tip 的对象经 `git cat-file -e` 逐个确认**仍在库中**，`gc` 未 prune ⇒ 90 天内 `git branch <name> <sha>` 可原样复原。
+
+
+### 2026-10-21 14:46 | hy4-preview__codebuddy | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**合并两个未合并的 dependabot 依赖更新分支到 master**（用户 2026-10-21 指令）。
+- 分支：`dependabot/pip/starlette-1.8.0`（PR #170，starlette 1.7.0→1.8.0，requirements.txt 行 9）+ `dependabot/pip/fastapi-0.143.3`（PR #168，fastapi 0.143.0→0.144.0，行 8）。两个分支各自仅改 requirements.txt 一行，互不相同行、无功能冲突。
+- 合并方式：本地 `git merge --no-ff`（本仓 `gh pr merge` 缺 workflow scope，不能走）。第二个 merge 因第一行 starlette 已被第一个改动、上下文不匹配 → 冲突，手动解成 `fastapi==0.144.0 / starlette==1.8.0` 两者新值。
+- pre-push 钩子放行：两个 merge commit 改动面仅 requirements.txt ⊆ 白名单。push 后 GitHub 自动把 #168/#170 标 MERGED。
+- 待验证：fastapi 0.144 / starlette 1.8 是 minor bump，项目规矩「先跑全量 pytest（含路由守卫）→ 再改 pin」。已触发 master CI（run 39619531940）；升级是否引入回归取决于全量门禁，结果待用户确认。
+
+### 2026-10-21 23:45 | deepseek-v4.1-flash__opencode | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**DFS-ONBOARD 复接手（re-onboard = 验证，不重建架构图）**。分支 `master` @ `85fb029`，开工前后各查一次分支，均为 `master`（无中途换树）。
+- **基线实测（本会话唯一新增真值）**：`PYTHONIOENCODING=utf-8 python -m pytest tests/ -q` ⇒ **2517 passed + 2 skipped in 513.06s**，与 PROJECT_OVERVIEW 的 2519 收集逐字一致。`ruff check .` 零告警；`mypy --strict delector tools` 118 files / `--follow-imports=skip tests` 159 files 均 0 issues；`cd agent && go test ./...` 8 包全绿；六道机械闸（layer_invariants · mock_drift · silent_degradation · frontend_api_contract · frontend_layers · index_html_sync）**全部 exit 0**；`static/js` 36 · `tests/test_*.py` 155 · `tools/*.mjs` 31。LOC：后端+入口 39,577 / tests 59,429 / `static/js` 16,800。
+- **顺手闭合上一条「待验证」**：#168/#170 的 `fastapi 0.144.0` / `starlette 1.8.0`（均为 minor bump）在本机全量 2517 passed 下**无回归**。此前只有 CI 结论、无本地全量证据。
+- **`.agent-context.md` 按 Pre-generation Guard 不重建**：`git log --all -- .agent-context.md` ⇒ 最近一次是 `0709717`「删除过时的 .agent-context.md（与 AGENTS/PROJECT_OVERVIEW 重复且基线停在 559）」——属**有意删除**。等价机器可读锚点 = `WORKMEMORY/PROJECT_OVERVIEW.md`「现测基线」+ `AGENTS.md` 路由表，故本会话只更新前者。
+- **锚点漂移已就地修（3 处，全部为 `architecture.md` 的失效 file 引用，未重画架构）**：① 技术栈表仍写顶层 `routes_a1.py`/`routes_sync.py`/`routes_rtc.py`（v5.18 后实为 `delector/routes/{a1,sync,rtc}.py`）→ 改为真实路径 + `routes/__init__.py:register_routes` 的 include 顺序；② `static/js` 模块数 23 → **36**（实测）；③ 信令中继小节 `routes_rtc.py` → `delector/routes/rtc.py`。
+- **三条锚点抽查（`file:line` 仍有效）**：`delector/server.py:352` 静态挂载仍是 `create_app()` 最后一步（红线②成立）· `delector/nlp_engine/syntax_tree.py:1444 split_sentences_pure_python` 仍是唯一实现（红线⑩）· `delector/core/database.py:62 _require_localhost` 仍在（红线⑦）。
+- **新增红线（已写 `docs/agents/ops.md` 工作惯例第 13 条，三类假红）**：① 行尾假阳性——`git ls-files --eol` 实测 **6 个 `i/lf w/mixed`**（3 份 archive work log + `linguistics.py` + `syntax_score.py` 等），blob 干净、差异只在工作区，**MUST NOT** 批量 renormalize/重排；② 终端编码——本机重定向输出是 GBK，非 ASCII 会在产物写出**之后**炸，MUST 先设 `PYTHONIOENCODING=utf-8`，且含非 ASCII 的 JSON 不要用 shell `curl` 验契约；③ exit 0 ≠ 正确——自报口径是 passed 数 / 探针护栏 / 六道闸 / 基线行，且判据本身要有变异自证。
+- 未发现未闭合 `WORK_START`；开放待办原样结转（C 档 8 项，其中 **C1 裁判结论回灌为无条件下一步**；Android 真机点检；README 首屏）。本会话未提交任何改动。
+
+

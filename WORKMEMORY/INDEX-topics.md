@@ -31,7 +31,8 @@
 | C5 分层解耦 / 巨石路由拆分 + C7 收尾遗留（2026-10-15~18）                | `archive/work-2026-10-15.log` · `archive/work-2026-10-16.log` · `archive/work-2026-10-17.log` · `archive/work-2026-10-18.log`（2026-11-01 轮转 WARM 化）· PR #154 / #155 / #156 / #158 |
 | `static/index.html` 拆分与同步门禁（Task 1~6）+ Windows CI 编码红灯修复（2026-10-18） | `archive/work-2026-10-18.log` · 计划 `docs/plans/archive/2026-10-18-index-html-split-and-modularization.md` · PR #159 |
 | 非在途面专家评估（5 报告）+ 未决项 18 项 + 审计修正 A/B 两批 + ADR-0024 + `database.py` 切分（2026-10-16） | `work.log`（10-16 段）· `docs/reviews/2026-10-16-open-items-backlog.md` · `docs/plans/2026-10-16-audit-fixes-a-series.md` · `docs/plans/2026-10-16-audit-fixes-b-series.md` · `docs/plans/2026-10-16-database-split.md` |
-| 2026-10-18 20:30 ~ 11-01 发版周期（v5.18.0~v5.20.0：reader/cards 解耦、桌面单实例 #172、companion Agent 运行时、SQLite 持久化、洋葱中间件、安卓抽屉升级） | `work.log`（HOT；2026-11-01 轮转后保留 50 事件，覆盖 10-18 20:30 ~ 11-01 04:35） |
+| 2026-10-18 13:12 ~ 2026-11-01 00:35 发版周期与伴学/运行时决策链 | `archive/work-2026-10-18.log` · `archive/work-2026-10-19.log` · `archive/work-2026-10-20.log` · `archive/work-2026-10-21.log` · `archive/work-2026-10-22.log` · `archive/work-2026-10-31.log` · `archive/work-2026-11-01.log`（2026-11-03 轮转 WARM 化） |
+| 2026-11-01 01:15 起（v5.20.x 后续、伴学边界与本地验证） | `work.log`（HOT；2026-11-03 轮转后保留 50 事件） |
 
 
 ## 蒸馏登记（WORKMEMORY → vault）

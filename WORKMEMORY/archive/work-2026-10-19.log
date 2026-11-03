@@ -1,0 +1,38 @@
+### 2026-10-19 01:20 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**writer.js 前端分层解耦（Tasks 1~5）全部交付**。分支 `refactor/writer-js-modularization`（自 master e87a4f0 切出，走独立 worktree `.worktrees/wr-js-decouple` 以避开并行分支对同一工作目录的占用）。
+- 计划：`docs/plans/2026-10-19-writer-js-modularization.md`（承接 index.html 拆分计划的 Fog of War Unknown 1）。
+- **Task 1 探针多文件读取口**：4 处读 `writer.js` 的探针改走 `tests/wb_source.py` 的 `read_source`/`decl_body`；零漂移证明（新旧读法 sha256 一致）；变异自证 **4/4**。
+- **Task 2 抽出 `wr-format.js`（L1 纯层）**：6 个符号（ERROR_TYPE_LABELS / getErrorTypeLabel / WRITER_TABS / POLISH_REASON_COPY / polishReasonText / renderWordDiff）逐字节搬出；`writer.js` 1657 → 1563 行；具名导出面冻结（用模块图测试自己的解析器比对 master：各 60 个，缺失 0 新增 0）；变异自证 2/2。
+- **Task 3 抽出 `wr-api.js`（L2 持久化层）**：17 处 `await api(...)` 调用点替换为 14 个端点函数（脚本逐处做命中计数断言）；`writer.js` → 1526 行；实参保真 17/17（括号配平扫描比对方法/路径/载荷键集合）；路由一致 14/14；错误轨保真（27 条 alert/notify/console.error 进出相同，0 丢失）。
+- **Task 4 新增 `tools/check_frontend_layers.py` 前端分层机械闸**：L1/L2 硬禁令、反向依赖、越界 import、**重复声明**（ES 链接期 SyntaxError 会拖垮整张模块图，现状只有 `node --check` 能抓而 CI 不跑它）、**HTTP 方法一致性**（路径维度已由 `check_frontend_api_contract.py` 覆盖，刻意不重复）、防假解耦；接入已装依赖的 `ci` job。配套 `tests/test_frontend_layers.py` 58 条；**真树变异自证 14/14 PASS**（每条都断言注入后 exit=1 且报出**期望的那条规则名**）。
+- **Task 4b 独立对抗式复核驱动的判据整体重写（Tier 3-Critical）**：初版闸是**正则块表**，一轮独立复核给出 11 条绕过通道（3 CRITICAL / 5 HIGH），已判据整体重写为**真词法分析（tokenize：注释 / 字符串 / 模板插值 / 正则字面量）**。最尖锐的是 **F1**：只把 `method: 'DELETE'` 的**引号换成双引号**就能让规则⑤静默失效（旧版只认单引号且默认按 `GET` 处理，而 `GET` 确实注册了）—— 我自己的变异自证恰好用了单引号，所以当时「8/8 PASS」从未覆盖该通道。**教训：自证用例与被证代码同源时，盲区是共谋的。** 重写后复核新增的 5 条通道（双引号/反引号方法、方法取自变量即 fail-closed、别名 `const _net = fetch`、副作用型 import、`./vendor/core.js` 冒充）全部变红。
+- **重写中途由测试（而非人眼）抓到的缺陷**：我漏掉了 `if __name__ == "__main__":` 入口守卫 ⇒ 闸的 CLI **静默失效**（exit=0 却无输出，即「闸永远绿」）。`tests/test_frontend_layers.py` 的端到端用例当场变红。若无该用例，此形态会直接进 PR。
+- **踩坑（全部由机械手段而非人眼发现，已登记）**：
+  1. 把探针读法**一律**扩成多文件 concat 后，android 那条 `assert "api_key" not in src.lower() or ...` 的 OR 链**第一子句被静默中和**（新模块里的 `no_api_key` 是原因码名、不是凭据）⇒ 断言仍绿但判别力下降。纪律定为「**seam 只扩到该探针真正锚定的符号将要搬到的文件**」。
+  2. `node --check` 抓到 `wr-api.js` 的 `restoreEssayVersion` 与 `writer.js` 既有视图层同名函数**重复声明** ⇒ 已改名 `restoreEssayVersionRemote`。该缺陷类此前**无任何自动化捕获者**，已固化为闸的规则④。
+  3. 两条既有探针弱点（`"max_turns" in body` / `"alert" in polish_fn` 能被**注释**满足）经变异实测暴露，已收紧为 `"ev.max_turns"` / `"alert("`。
+  4. `Path.write_text(newline='')` 会把整文件转成 LF（本次踩中 3 次、累计 2000+ 行），仓库 `.gitattributes` 是 `eol=crlf` ⇒ 必须写 `chr(13)+chr(10)` 归一；已逐次 `--fix` 并人工核 diff。
+- **门禁验证（Task 5）**：全量 **2384 passed / 3 skipped / 0 failed in 414.21s**；收集数 2367 → **2387**（+20 = 本闸自身验收面，计划允许的唯一新增断言来源）；五道闸全绿（layer_invariants · mock_drift · silent_degradation · frontend_api_contract · frontend_layers）；`ruff check .` 全绿；`mypy --strict delector tools` 116 文件 0 错；`mypy --follow-imports=skip tests` 154 文件 0 错；Go 8 包全绿 + `gofmt -l .` 0 差异；9 个改动文件 0 lone LF。
+- 并行协调：PR #159（`refactor/index-html-split`）的 CI 红由用户另派 agent 修复，本工作流**未触碰**其占面（`static/index.html` / `static/views/**` / `static/modals/**` / `static/layout/**` / `tools/build_index_html.py` / `tools/check_index_html_sync.py`）。
+
+### 2026-10-19 15:10 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**reader.js 前端纯语法/拓扑解析逻辑与 UI 渲染分层解耦（Tasks 1~5）全部交付**。分支 `refactor/reader-js-layer-split`（走独立 worktree `.worktrees/reader-js-split`）。
+- 计划：`docs/plans/2026-10-19-reader-js-layer-split.md`（按 PR #160 模板执行第二个纯前端解耦样本）。
+- **Task 1 注册分层闸（Gate-as-Spec，RED first）**：`tools/check_frontend_layers.py` 注册 `rd-syntax.js`（L1 纯层，契约与 `wr-format.js` 逐字节一致）；留存红灯凭据（exit 1 + `missing-layer-module`）；新增 5 条分层测试用例（58 → 63 passed）；独立评审 PASS（cherry-pick `4701c1f`）。
+- **评审修正事实性错误**：独立评审在仓外复现 crux 时，从 token 流穷举抓到计划原文两处事实错误（1. 新模块真外部依赖是 `esc` + `jsAttr` + `normalizeCefrPct` 三者，少一个就会带未定义名上线而闸抓不到；2. 仅 3 处需 `export ` 前缀而非 5 处），已就地修正计划与导入白名单，并修正步骤划分（Task 2 只建新模块，删定义归 Task 3）。
+- **Task 2 抽出 `rd-syntax.js`（L1 纯层，339 行闭包）**：9 个区间符号（CEFR_LEVELS / safeCefr / safeTokens / renderMiniBar / renderFelderSpectrum / renderDetailedFelderGrid / renderClauseTreeNode / computeArticleSyntaxStats / renderRadarSvg）按 D2 区间逐字节搬迁；顶层 let/var 为 0；分层闸转绿（exit 0 PASS）；独立评审 PASS（cherry-pick `d17ec3f`）。
+- **Task 3 `reader.js` 接线 + 导出面冻结 + 消费者改向**：`reader.js` 1403 → 1074 行（净减 329 行）；具名导出面绝对冻结（严格 40 == 40，缺失 0 新增 0）；5 个内部消费者改向解析正常；重名交集检查 0 冲突；错误轨保真（10/10 notify/alert/console.error 进出逐字相等）；独立评审 PASS（cherry-pick `14fd129`）。
+- **Task 4 独立可用性验收 + 探针 seam 精确适配 + 变异自证**：新增 `tests/test_reader_layer_split.py`（独立 `node --check`、零 reader.js 符号泄漏、闭包封闭性、零顶层可变状态、防假解耦重复定义）；按 `monolith-split-readiness` Seam-Minimal 原则精确重定向 `test_frontend_security.py` 与 `test_grammatik_radar.py` 探针至 `RD_SYNTAX`，`test_server_android_fallback.py` 31 条全绿 0 改动；6 条对抗式物理变异自证全部命中期望规则名并响亮报错；独立评审 PASS（cherry-pick `73bcf9e`）。
+- **清理与探针工具加固**：发现 `tools/cards_count_probe.mjs` 转换器正则未支持跨行 import 与 export 块，已就地加固正则支持；153 个测试文件串行全绿（2438 passed / 3 skipped）。
+- **门禁全景验证（Task 5）**：六道 Python 机械闸全绿（check_frontend_layers · check_layer_invariants · check_mock_drift · check_silent_degradation · check_frontend_api_contract · check_index_html_sync）；`ruff check .` 全绿；`mypy --strict delector tools` 118 文件 0 错；`mypy --follow-imports=skip tests` 157 文件 0 错；Go 8 包全绿；所有改动文件 100% UTF-8 CRLF 0 lone LF。
+
+### 2026-10-19 15:45 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**DeLector 正式发布 v5.18.0 版本并完成全生命周期收归**。
+- 依据：`dfs-release` 规范与 `docs/README.md` 归档约定。
+- 版本面：`delector/core/version.py: APP_VERSION = "5.18.0"`（单一真相源）；`android/app/build.gradle`（5.18.0 / versionCode 51800）；`static/sw.js`（`CACHE_NAME = "delector-static-v5.18.0"`）；`static/layout/header.html`（`System · v5.18.0` 并经 `build_index_html.py` 重新生成 `static/index.html`）；`README.md`（badge + 2438/2441 passed + 下载表 4 平台链接）；`FEATURES.md`（更新里程碑与全览表）；`CHANGELOG.md` 追加 v5.18.0 详尽变更日志（四大核心主线、已知限制与回滚方案）。
+- 历史计划归档：批量将 `docs/plans/` 下自 v5.17.0 以来交付的 **19 份实施计划**（含 C1~C9、架构解耦、index/writer/reader 前端拆分）`git mv` 归档至 `docs/plans/archive/`，`docs/README.md` 归档待办表同步核销清空。
+- 门禁全景：六道 Python 机械闸全绿 · `ruff` 零告警 · `mypy` 118+157 文件全绿 · Go 8 包全绿 · 153 个测试文件 2438 passed / 3 skipped · 全仓改动文件 100% UTF-8 CRLF 0 lone LF。
+

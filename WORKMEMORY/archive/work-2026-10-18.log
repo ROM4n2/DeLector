@@ -96,3 +96,85 @@ Caps: filesystem-read, filesystem-write, shell-exec
 门禁：mypy 107/151 · ruff · go 8 包 · gofmt · check_mock_drift · check_silent_degradation 全绿；改动文件 lone_LF=0。
 教训（已写入接续笔记）：① 搬迁类改动的验证面必须是**所有引用 workbench.html 的测试**（曾因只跑 3 个文件漏掉 2 处真回归）；② 判别力用「双向所有权钉子」；③ 跨文件锚点必须带前导换行，否则会命中模块头注释。
 
+### 2026-10-18 13:12 | codebuddy | HANDOFF
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C7 主交接包闭合归档 + 两项遗留新包**。
+- `handoff_c7-workbench-html-split.md` → status=closed + 响应节（C7 全部完成：4730→2840 行、8 模块、PR #152/#153、全量 2352 passed 与拆分前逐字相同）→ 移入 `archive/`；
+- 新包 `handoff_c7-followups.md`（status: open）：① `--extract` 会覆写 `delector/data/a1_workbench_dict.py`（45 行手工投影 → 764 行生成物，建议加 `--i-know-this-overwrites` 护栏 + 校正自相矛盾 docstring）；② `wb-rate.js` 的 `doRate` 评分分支无行为断言（现只有静态所有权钉子，建议加 node 探针）。
+- INDEX：Active handoffs 挂新包；已归档 handoffs 挂旧包。基线 master = 80dae6b。
+### 2026-10-18 16:05 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C6 后续项（F1/F2/指针校正）与 C5 分层架构规范及初解耦闭环**。
+- 分支 `refactor/c6-followups-and-architecture`。
+- **F1 探针桥根治**：彻底移除 `tests/test_server_settings_security.py` 的 `__code__` 探针桥与跨测试导入，改为内省真实生产入口 `from delector.routes.main import ingest_from_url` 并断言其包含 `is_safe_public_url(req.url)` 安全门禁校验，彻底消除测试间的跨文件代码内省依赖。
+- **F2 计数用例归位**：`GET /api/cards/counts` 3 个用例及 `_insert_grammar_card` 从 `test_server.py` 归位至 `tests/test_server_cards_vocab.py`；`test_server.py` 缩减至 1393 行 / 52 用例，`test_server_cards_vocab.py` 增至 14 用例。
+- **陈旧文档与测试指针校正**：更新 `package_windows.py:112/271`、`tools/verify_windows_portable.py:44/609`、`tests/test_desktop_port_guard.py:25` 中的测试模块位置指针。
+- **C5 分层声明与 core ⇄ nlp_engine 解耦**：在 `docs/agents/architecture.md` 固化 Layer 0~5 权威层序声明与单向依赖约束；移除 `core/database.py` 顶层无引用的 `processor` 导入与 `__all__` 再导出，同步更新 `tests/test_core_database_public_surface.py` 门禁白名单，净解耦持久层对引擎层的依赖。
+- **门禁验证**：全量 **2353 passed, 2 skipped in 395.65s**（全量 2355 严格守恒）；`ruff check .` 全绿；`mypy --strict delector tools`（107 文件 0 错）；`mypy --follow-imports=skip tests`（151 文件 0 错）；`go test ./...` 8 包全绿；双机械闸（`check_mock_drift.py` / `check_silent_degradation.py`）exit 0；12 个改动文件 0 lone LF。
+
+### 2026-10-18 20:30 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**C5 架构解耦与 routes/main.py 巨石拆分（Tasks 1~8）全部交付**。
+- 分支 `refactor/decoupling-and-monolith-split`，严格执行计划 `docs/plans/2026-10-18-architecture-decoupling-and-monolith-split.md`。
+- **Task 1: core/db 解耦**：切断 6 个子模块对 `database.py` 门面的反向循环依赖，直接引用基础连接与实体。
+- **Task 2: 工具层归位**：将 `polish_tools.py` 实现搬迁至 Layer 4 `delector/tools/polish.py`，保留过渡再导出垫片。
+- **Task 3: 持久层 ⇄ 引擎层解耦**：移除 `core/db/content.py` 顶层 `nlp_engine.processor` 导入，改为调用期惰性引入。
+- **Task 4: 分层架构机械门禁**：新增 `tools/check_layer_invariants.py`（AST 自动扫描层序与逆向依赖），配套 6 项测试与变异自证，接入 CI 工作流。
+- **Task 5: 切出设置与备份域**：提取 `routes/settings.py` (126 行) 与 `routes/backup.py` (282 行)。
+- **Task 6: 切出卡片与音频域**：提取 `routes/cards.py` (626 行) 与 `routes/audio.py` (185 行)。
+- **Task 7: 切出文章与写作工坊域**：提取 `routes/articles.py` (520 行) 与 `routes/writing.py` (720 行)，`routes/main.py` 彻底解体，从 3,201 行骤降至 545 行（仅剩 lookup/prep/syntax/health 残余通用路由与透明兼容导出）。
+- **门禁验证（Task 8）**：
+  - 测试收集与用例守恒：`2367 tests collected` 严格 100% 守恒（基线 2,360 + Task 4 机械闸用例 7 项）；
+  - 全量回归测试：全量 2,365 passed / 2 skipped 全部通过（分批执行耗时 204s + 195s）；
+  - 架构与质量机械闸全绿：`check_layer_invariants` (0 违规) · `check_mock_drift` (0 漂移) · `check_silent_degradation` (0 违规)；
+  - 类型与代码检查：`ruff check .` 全绿 · `mypy --strict delector tools` (115 文件 0 错) · `mypy --follow-imports=skip tests` (153 文件 0 错)；
+  - Go agent 门禁：8 个包单元测试与基准全绿 · `gofmt -l .` 0 格式差异；
+  - 编码卫生：全仓所有触碰文件 UTF-8 CRLF 校验 **0 lone LF**。
+
+### 2026-10-18 21:45 | deepseek-v4.1-flash__hermes | DONE
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**前端大单体 static/index.html (3,158行) 模块化拆分与同步机械闸（Tasks 1~6）全部交付**。
+- 分支 `refactor/index-html-split`，严格执行计划 `docs/plans/2026-10-18-index-html-split-and-modularization.md`。
+- **Task 1: DOM 结构探针**：编写 `tools/index_dom_probe.mjs`，精确锁定 9 视图 / 2 抽屉 / 6 模态 / 骨架，输出标准三键契约（`{failures, total, cases}`），配套 `tests/test_index_dom_probe.py` 并通过变异自证。
+- **Task 2: 无损模板拼接构建器与 CI 同步闸**：编写标准库驱动的 `tools/build_index_html.py` 与 `tools/check_index_html_sync.py`，支持递归 `@include:` 语法与 sha256 零漂移校验，接入 `.github/workflows/ci.yml`。
+- **Task 3: 通用布局与骨架抽取**：抽取 `static/layout/{head, header, nav_desktop, nav_mobile, companion}.html` 与 `static/index.skeleton.html`。
+- **Task 4: 9 大业务视图切片**：提取 `static/views/{home, encounter, reader, cards, progress, writer, exam, german, search}.html`，`index.skeleton.html` 缩减至 1,318 行。
+- **Task 5: 侧边抽屉与所有 Modals/浮层切片**：提取 `static/modals/{drawer, import_modal, settings_modal, polish_modal, version_preview_modal, player_and_tooltip, quiz_overlay, cloze_overlay}.html`，`index.skeleton.html` 骤降至 61 行极简结构清单。
+- **Task 6: 门禁验证与交付**：
+  - 用例收集守恒：`2373 tests collected` 守恒（基线 2,367 + 6 项新增探针/同步闸单测）；
+  - 全量回归测试：全量 2,371 passed / 2 skipped 全部通过（1215 + 1156，0 失败）；
+  - 四道机械门禁：`check_layer_invariants` (0 违规) · `check_mock_drift` (0 漂移) · `check_silent_degradation` (0 违规) · `check_index_html_sync` (100% 同步) 全绿；
+  - 类型与代码检查：`ruff check .` 全绿 · `mypy --strict delector tools` (117 文件 0 错) · `mypy --follow-imports=skip tests` (155 文件 0 错)；
+  - Go agent 门禁：8 个包单元测试与基准全绿 · `gofmt -l .` 0 格式差异；
+  - 编码卫生：全仓所有新增与修改文件 UTF-8 CRLF 校验 **0 lone LF**。
+
+
+
+
+### 2026-10-18 23:26 | hy4-preview__codebuddy | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**Windows CI 红灯 `test_check_index_html_sync_clean` —— subprocess 读线程解码失败 ⇒ 退出码 0 但 stdout 为 None**。
+- 现象：PR #159 / run 39138738975 的 `Windows Portable Smoke` 挂 `TypeError: argument of type 'NoneType' is not iterable`；ubuntu job 同测试全绿（2367 passed / 1 failed，只 Windows 红）。
+- 根因（本机已逐字复现，报错与 CI 一致 `byte 0x9d position 55`）：`subprocess.run(text=True)` 不指定 encoding 时按 **locale** 解码（GitHub Windows runner = cp1252，本机 = cp936），而子进程因 CI 注入 `PYTHONIOENCODING=utf-8` 写的是 UTF-8 中文 ⇒ 解码崩在 subprocess 的 `_readerthread` 里。**线程内异常不进 returncode**，于是 `res.returncode == 0` 通过、`res.stdout` 却是 None ⇒ 断言处炸 TypeError。
+- 解法（两侧都要钉死，缺一不可）：读侧测试显式 `encoding="utf-8"`；写侧脚本 `sys.stdout/stderr.reconfigure(encoding="utf-8", errors="replace")`（沿用 `start.py` 既有加固）。
+- 教训（可蒸馏）：**判定"子进程成功了"不能只看 returncode**；`text=True` 未带 encoding 的调用在任何 locale≠UTF-8 的机器上都是定时炸弹，且失败形态是"假绿 + None 输出"，不是红。
+
+### 2026-10-18 23:26 | hy4-preview__codebuddy | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**CI 红灯修复 + 附带修 `build_index_html.py --check` 恒假红**，分支 `refactor/index-html-split`（PR #159），两个提交 `78bcb9e` / `4d85f50` 已推送。
+- 不做范围：不动 `static/` 内容、不改 index.html 装配逻辑、不碰 CI workflow 步骤、不修其它 `text=True` 未带 encoding 的存量调用（仅登记为隐患）。
+- 附带缺陷（执行验证时发现，非 CI 链路）：`python tools/build_index_html.py --check` **恒报漂移**，而 `check_index_html_sync.py` 报 PASS —— 前者用 `read_text()` 触发 universal newlines，把磁盘 CRLF 吃成 LF 后与 CRLF 装配物比对。修法：改 `read_bytes().decode()` + 归一化到 LF，与门禁脚本同口径（用户 2026-10-18 拍板"一并修（同 PR）"）。
+- 新增测试：`test_build_index_html_check_clean`（锁死清洁仓态不假红）+ `test_build_index_html_check_mutation_detects_drift`（真变异：`--output` 副本注入一行 ⇒ 必须 exit 1，防恒绿死测）。
+- 验证：`pytest tests/test_check_index_html_sync.py` 5 passed；两入口现同结论（均 PASS）；`ruff check .` 全绿；`mypy --strict delector tools` 117 文件 0 错；`mypy --follow-imports=skip tests` 155 文件 0 错。CI 重跑 run 39140181210（未轮询，结果待用户确认）。
+- 簿记：`work.log` 已按 §5 轮转，77 → 50 条（最老 27 条按事件日期移入 `archive/work-2026-10-{08,09,10,11,14,15}.log`），轮转前后 `### ` 事件头集合 diff 为空 = 守恒。
+
+
+
+### 2026-10-18 23:47 | hy4-preview__codebuddy | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+事件：**修完红灯又踩第二颗：`No Silent Degradation Gate` 把我新加的 `except Exception: pass` 判为未豁免站点**。
+- 现象：`76976a6` 之前的 run 39140474277 —— Windows job 已转绿（`Windows Portable Smoke` ✓ 13m13s，证明 UTF-8 修复生效），却新红了 7 秒的 `No Silent Degradation Gate`。
+- 根因：`tools/check_silent_degradation.py` 的 C1 判据扫 `delector/**` + `tools/**` 的 `except …: pass`，**必须**带 `silent-ok: <理由>` 注释才豁免；我照抄 `start.py` 的编码加固时，原站点有豁免注释、我新加的两处没有 ⇒ 20 站点中 2 个未豁免 ⇒ exit 1。
+- 解法：两处补 `# silent-ok: 仅显示层编码（流不可重配置）⇒ 保持原流；本闸结论由退出码表达`（与仓内 18 个同类站点同口径）。本地复跑判定器：20 命中 / 20 豁免 / 0 未豁免，exit 0。
+- 教训：**「照抄既有加固写法」时，抄的不仅是代码，还有它附带的门禁豁免契约**；本仓凡是 `except …: pass` 都过 C1 判据，新增一处就必须同时给出豁免理由。改完 `tools/` 记得本地跑一遍 `python tools/check_silent_degradation.py`（秒级），别等 CI。
+
