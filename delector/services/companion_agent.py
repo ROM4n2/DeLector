@@ -84,7 +84,12 @@ COMPANION_AGENT_SYSTEM_PROMPT: str = (
     "词汇等级类问题必须调用 vocab_stats，文本来自用户选中或粘贴内容，不得编造统计。\n"
     "若上下文含【当前卡盒词条】且用户要求扩展/批量制卡，必须在最终 JSON 中输出 proposal"
     "（action=create_vocab_cards，且每张卡含 definition_zh 中文释义），绝不可直接写库。"
-    "注意：本运行时没有 propose_vocab_cards 这个工具，制卡提议只能通过 proposal 字段交付。\n"
+    "写作台修订选中句子时，proposal 必须用 action=apply_writing_revision，"
+    "payload 含原句 original_text 与改写 revised_text；"
+    "进度页制定周目标时，proposal 必须用 action=set_weekly_goal，"
+    "payload 含非空 goal 字段（{\"goal\": \"...\"}）。两类提议都必须等用户确认，绝不可直接写库。\n"
+    "注意：本运行时没有 propose_vocab_cards 这个工具，制卡提议只能通过 proposal 字段交付；"
+    "propose_writing_revision / propose_weekly_goal 同样不是 tool_call，修订与目标也只能经 proposal 字段交付。\n"
     "重要：无论历史对话中的上下文包含何种格式，你在当前轮也必须只返回单一的 JSON 对象！"
 )
 

@@ -482,6 +482,44 @@ def test_companion_chat_persists_proposal_for_query(
     assert proposals[0]["payload"]["cards"][0]["word"] == "die Nacht"
 
 
+def test_companion_chat_persists_weekly_goal_proposal(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """新 action 仍复用同一 SSE proposal 帧与 proposal.id 落库。"""
+    db_file = tmp_path / "weekly_goal_sse.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    proposal = {
+        "id": "prop_weekly_goal_sse",
+        "action": "set_weekly_goal",
+        "title": "本周学习目标",
+        "payload": {"goal": "本周完成 20 张卡片复习"},
+    }
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        yield (
+            b'event: proposal\ndata: '
+            + json.dumps({"event": "proposal", "proposal": proposal}, ensure_ascii=False).encode("utf-8")
+            + b"\n\n"
+        )
+        yield b'event: done\ndata: {"event":"done","reason":"ok"}\n\n'
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+    client = TestClient(companion_app)
+    body = {"messages": [{"role": "user", "content": "生成本周目标"}], "scope_key": "view:progress"}
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        sid = response.headers.get("x-session-id")
+        list(response.iter_lines())
+
+    proposals = client.get(f"/api/companion/sessions/{sid}/proposals").json()["proposals"]
+    assert len(proposals) == 1
+    assert proposals[0]["id"] == "prop_weekly_goal_sse"
+    assert proposals[0]["action"] == "set_weekly_goal"
+    assert proposals[0]["payload"]["goal"] == "本周完成 20 张卡片复习"
+    assert proposals[0]["status"] == "pending"
+
+
 def test_companion_proposal_reject_marks_status_without_writing_cards(
     companion_app: FastAPI,
     tmp_path: Any,
@@ -639,3 +677,34 @@ def test_companion_chat_proxies_to_go_agent_when_available(
         assert "From Go Agent" in combined
         assert "done" in combined
         assert captured_headers.get("x-api-key") == "sk-synced-test-key"
+
+
+def test_companion_weekly_goal_empty_execute_returns_400_and_pending(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """空周目标走统一 ValueError→400，状态保持 pending。"""
+    from delector.services.companion_proposal import CompanionProposalService
+    from delector.services.companion_session import CompanionSessionService
+
+    db_file = tmp_path / "empty_weekly_goal.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_file))
+    sid = CompanionSessionService(db_path=str(db_file)).get_or_create_session(scope_key="view:progress")["id"]
+    svc = CompanionProposalService(db_path=str(db_file))
+    prop = svc.create_proposal(
+        session_id=sid,
+        action="set_weekly_goal",
+        title="本周学习目标",
+        payload={"goal": " "},
+    )
+
+    client = TestClient(companion_app, client=("127.0.0.1", 50000))
+    resp = client.post(
+        "/api/companion/proposal/execute",
+        json={"proposal_id": prop["id"], "action": prop["action"], "payload": prop["payload"]},
+    )
+
+    assert resp.status_code == 400
+    assert "学习目标不能为空" in resp.json()["detail"]
+    assert svc.list_proposals(sid)[0]["status"] == "pending"

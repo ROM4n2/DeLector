@@ -6,6 +6,12 @@
  */
 'use strict';
 
+function proposalConfirmText(action) {
+  if (action === 'apply_writing_revision') return '确认应用修订';
+  if (action === 'set_weekly_goal') return '确认写入目标';
+  return '确认添加入库';
+}
+
 /**
  * 渲染单个提议交互卡片
  * @param {HTMLElement} container - 挂载卡片的父容器
@@ -32,30 +38,51 @@ export function renderProposalCard(container, proposal, onAction) {
   const contentEl = document.createElement('div');
   contentEl.className = 'companion-proposal-content';
 
-  const cards = (proposal.payload && proposal.payload.cards) || [];
-  for (const c of cards) {
-    const itemEl = document.createElement('div');
-    itemEl.style.fontSize = '0.85rem';
-    itemEl.style.padding = '0.25rem 0';
-    itemEl.style.borderBottom = '1px dashed var(--rule, #dcd6cd)';
-
-    const boldWord = document.createElement('strong');
-    boldWord.textContent = c.word || '';
-    itemEl.appendChild(boldWord);
-    // definition_zh 才是中文释义；reading 是读音/音标，缺释义时显式标记「待补充」。
-    const definition = typeof c.definition_zh === 'string' ? c.definition_zh.trim() : '';
-    itemEl.appendChild(document.createTextNode(': ' + (definition || '待补充')));
-
-    // 例句字段双读：Go propose_vocab_cards 用 sentence_context，旧 Python proposal 用 context_sentence。
-    const sentence = c.context_sentence || c.sentence_context;
-    if (sentence) {
-      const sentEl = document.createElement('div');
-      sentEl.style.fontSize = '0.78rem';
-      sentEl.style.color = 'var(--pencil, #666)';
-      sentEl.textContent = '„' + sentence + '“';
-      itemEl.appendChild(sentEl);
+  const action = String(proposal.action || '');
+  const payload = proposal.payload && typeof proposal.payload === 'object' ? proposal.payload : {};
+  if (action === 'apply_writing_revision') {
+    for (const [label, key] of [['原句', 'original_text'], ['建议改写', 'revised_text']]) {
+      const itemEl = document.createElement('div');
+      itemEl.style.fontSize = '0.85rem';
+      itemEl.style.padding = '0.25rem 0';
+      const labelEl = document.createElement('strong');
+      labelEl.textContent = label + '：';
+      itemEl.appendChild(labelEl);
+      itemEl.appendChild(document.createTextNode(String(payload[key] || '')));
+      contentEl.appendChild(itemEl);
     }
-    contentEl.appendChild(itemEl);
+  } else if (action === 'set_weekly_goal') {
+    const goalEl = document.createElement('div');
+    goalEl.style.fontSize = '0.85rem';
+    goalEl.style.padding = '0.25rem 0';
+    goalEl.textContent = String(payload.goal || '');
+    contentEl.appendChild(goalEl);
+  } else {
+    const cards = payload.cards || [];
+    for (const c of cards) {
+      const itemEl = document.createElement('div');
+      itemEl.style.fontSize = '0.85rem';
+      itemEl.style.padding = '0.25rem 0';
+      itemEl.style.borderBottom = '1px dashed var(--rule, #dcd6cd)';
+
+      const boldWord = document.createElement('strong');
+      boldWord.textContent = c.word || '';
+      itemEl.appendChild(boldWord);
+      // definition_zh 才是中文释义；reading 是读音/音标，缺释义时显式标记「待补充」。
+      const definition = typeof c.definition_zh === 'string' ? c.definition_zh.trim() : '';
+      itemEl.appendChild(document.createTextNode(': ' + (definition || '待补充')));
+
+      // 例句字段双读：Go propose_vocab_cards 用 sentence_context，旧 Python proposal 用 context_sentence。
+      const sentence = c.context_sentence || c.sentence_context;
+      if (sentence) {
+        const sentEl = document.createElement('div');
+        sentEl.style.fontSize = '0.78rem';
+        sentEl.style.color = 'var(--pencil, #666)';
+        sentEl.textContent = '„' + sentence + '“';
+        itemEl.appendChild(sentEl);
+      }
+      contentEl.appendChild(itemEl);
+    }
   }
   cardEl.appendChild(contentEl);
 
@@ -69,7 +96,7 @@ export function renderProposalCard(container, proposal, onAction) {
 
   const confirmBtn = document.createElement('button');
   confirmBtn.className = 'companion-btn-confirm';
-  confirmBtn.textContent = '确认添加入库';
+  confirmBtn.textContent = proposalConfirmText(action);
 
   const rejectBtn = document.createElement('button');
   rejectBtn.className = 'companion-btn-discard';
@@ -114,7 +141,7 @@ export function renderProposalCard(container, proposal, onAction) {
       // pending
       confirmBtn.disabled = false;
       confirmBtn.style.display = '';
-      confirmBtn.textContent = '确认添加入库';
+      confirmBtn.textContent = proposalConfirmText(action);
       rejectBtn.disabled = false;
       rejectBtn.style.display = '';
       rejectBtn.textContent = '放弃';
@@ -128,12 +155,19 @@ export function renderProposalCard(container, proposal, onAction) {
   applyStatus(proposal.status || 'pending');
 
   // 失败路径：空/畸形提议不允许确认入库，给出可见原因；拒绝仍然可用。
-  const isCardAction = String(proposal.action || '').startsWith('create_vocab_card');
-  const hasValidCards = cards.some((c) => c && typeof c.word === 'string' && c.word.trim());
-  if (isCardAction && !hasValidCards && (!proposal.status || proposal.status === 'pending')) {
+  const isCardAction = action.startsWith('create_vocab_card');
+  const hasValidCards = (payload.cards || []).some((c) => c && typeof c.word === 'string' && c.word.trim());
+  const hasValidRevision = Boolean(
+    String(payload.original_text || '').trim() &&
+      String(payload.revised_text || '').trim() &&
+      String(payload.original_text || '').trim() !== String(payload.revised_text || '').trim()
+  );
+  const hasValidGoal = Boolean(String(payload.goal || '').trim());
+  const isPending = !proposal.status || proposal.status === 'pending';
+  if (isPending && ((isCardAction && !hasValidCards) || (action === 'apply_writing_revision' && !hasValidRevision) || (action === 'set_weekly_goal' && !hasValidGoal))) {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = '无可入库词条';
-    confirmBtn.title = '该提议没有有效词条，无法确认入库';
+    confirmBtn.textContent = isCardAction ? '无可入库词条' : action === 'apply_writing_revision' ? '无有效修订' : '无有效目标';
+    confirmBtn.title = '该提议缺少有效内容，无法确认';
   }
 
   // 5. 事件绑定

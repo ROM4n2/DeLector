@@ -172,5 +172,45 @@ func CompanionTools() []openai.Tool {
 				},
 			},
 		},
+		{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "propose_writing_revision",
+				Description: "为写作台选中原句生成待确认的改写建议，不得直接修改作文。",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"title": map[string]any{"type": "string", "description": "修订提议标题"},
+						"original_text": map[string]any{
+							"type":        "string",
+							"description": "学习者选中的原句，必须逐字保留",
+						},
+						"revised_text": map[string]any{
+							"type":        "string",
+							"description": "建议改写后的完整句子",
+						},
+					},
+					"required": []string{"original_text", "revised_text"},
+				},
+			},
+		},
+		{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "propose_weekly_goal",
+				Description: "生成一个具体、可执行、可衡量的周学习目标，须经学习者确认后写入。",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"title": map[string]any{"type": "string", "description": "目标提议标题"},
+						"goal": map[string]any{
+							"type":        "string",
+							"description": "周学习目标正文",
+						},
+					},
+					"required": []string{"goal"},
+				},
+			},
+		},
 	}
 }

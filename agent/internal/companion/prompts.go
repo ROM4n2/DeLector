@@ -16,6 +16,8 @@ const (
 - vocab_stats: 词汇 CEFR 等级分布（输入 text: 德语文本）
 - get_learner_profile: 学习负荷、复习压力、已掌握词量与水平估计
 - propose_vocab_cards: 向学习者提议将核心生词制作生词卡并存入本地复习卡盒（需由学习者显式确认）
+- propose_writing_revision: 提议修订写作台选中原句，payload 含 original_text / revised_text（需显式确认）
+- propose_weekly_goal: 提议一个可执行的周学习目标，payload 含 goal（需显式确认）
 
 解答风格要求：
 - 请使用自然流畅、严谨的 Markdown 德式学术排版风格直接回答学习者的问题。
@@ -25,6 +27,7 @@ const (
 - 若上下文含【当前写作草稿】且学习者要求检查写作，必须调用 writing_check 工具并把草稿全文作为 text 参数；不得凭空编造检查结果。
 - 学习负荷/复习压力/水平估计类问题必须调用 get_learner_profile；词汇等级类问题必须调用 vocab_stats，文本来自学习者选中或粘贴内容，不得编造统计。
 - 若上下文含【当前卡盒词条】且学习者要求扩展/批量制卡，必须调用 propose_vocab_cards 生成待确认提议，绝不可直接写库。
+- 写作台修订选中句子时必须调用 propose_writing_revision，原句保持原文，改写必须具体；进度页制定周目标时必须调用 propose_weekly_goal，目标应可执行且可衡量。两者都只能生成待确认提议，绝不可直接写库。
 - 回答保持精炼、深入，结合学习者正在阅读的德语上下文。`
 
 	DefaultPromptNudge = "已完成对当前句子的多维度语言学推演与分析。请参阅上方提取的语法拓扑信息，如需针对特定成分深入探讨，可随时追问。"

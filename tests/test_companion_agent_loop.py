@@ -452,6 +452,17 @@ def test_python_prompt_never_requires_forbidden_tool_call() -> None:
     assert "definition_zh" in COMPANION_AGENT_SYSTEM_PROMPT
 
 
+def test_python_prompt_supports_multi_action_proposals() -> None:
+    """Python 回退提示词必须允许修订与周目标走既有 proposal 字段。"""
+    from delector.services.companion_agent import COMPANION_AGENT_SYSTEM_PROMPT
+
+    assert "apply_writing_revision" in COMPANION_AGENT_SYSTEM_PROMPT
+    assert "original_text" in COMPANION_AGENT_SYSTEM_PROMPT
+    assert "revised_text" in COMPANION_AGENT_SYSTEM_PROMPT
+    assert "set_weekly_goal" in COMPANION_AGENT_SYSTEM_PROMPT
+    assert '"goal"' in COMPANION_AGENT_SYSTEM_PROMPT
+
+
 def test_loop_graceful_recovery_when_model_outputs_plain_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
     """当模型返回纯自然语言 Markdown（未按格式输出 JSON）时，循环自愈降级并交付答案，不抛异常崩溃。"""
     from delector.services import llm_client

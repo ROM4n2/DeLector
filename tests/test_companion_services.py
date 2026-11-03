@@ -466,3 +466,135 @@ def test_chat_endpoint_saves_turns_to_session(test_db: str, monkeypatch: pytest.
     assert history[1]["role"] == "assistant"
     assert "这是伴学解答" in history[1]["content"]
     assert "深层句法依存推演" in history[1]["thought"]
+
+
+def _init_multi_action_tables(db_path: str) -> None:
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS essays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            analysis_json TEXT NOT NULL,
+            cefr_level TEXT,
+            error_count INTEGER DEFAULT 0,
+            sentence_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_weekly_goal_execute_is_idempotent(test_db: str) -> None:
+    _init_multi_action_tables(test_db)
+    sid = CompanionSessionService(db_path=test_db).get_or_create_session(scope_key="view:progress")["id"]
+    svc = CompanionProposalService(db_path=test_db)
+    prop = svc.create_proposal(
+        session_id=sid,
+        action="set_weekly_goal",
+        title="本周学习目标",
+        payload={"goal": "本周完成 20 张卡片复习"},
+        proposal_id="prop_weekly_goal_idempotency",
+    )
+
+    first = svc.execute_proposal(prop["id"], prop["action"], prop["payload"])
+    second = svc.execute_proposal(prop["id"], prop["action"], prop["payload"])
+
+    assert first["created_count"] == 1
+    assert second["created_count"] == 0
+    conn = sqlite3.connect(test_db)
+    row = conn.execute("SELECT value FROM app_settings WHERE key = 'companion_weekly_goal'").fetchone()
+    conn.close()
+    assert row[0] == "本周完成 20 张卡片复习"
+
+
+def test_writing_revision_execute_updates_essay_once(test_db: str) -> None:
+    _init_multi_action_tables(test_db)
+    sid = CompanionSessionService(db_path=test_db).get_or_create_session(scope_key="view:writer")["id"]
+    conn = sqlite3.connect(test_db)
+    essay_id = conn.execute(
+        "INSERT INTO essays (title, content, analysis_json) VALUES (?, ?, ?)",
+        ("Draft", "Der Hund bellt. Die Katze schläft.", "{}"),
+    ).lastrowid
+    conn.commit()
+    conn.close()
+    svc = CompanionProposalService(db_path=test_db)
+    prop = svc.create_proposal(
+        session_id=sid,
+        action="apply_writing_revision",
+        title="修订选中句子",
+        payload={
+            "essay_id": essay_id,
+            "original_text": "Der Hund bellt.",
+            "revised_text": "Der kleine Hund bellt laut.",
+        },
+        proposal_id="prop_writing_revision_idempotency",
+    )
+
+    first = svc.execute_proposal(prop["id"], prop["action"], prop["payload"])
+    second = svc.execute_proposal(prop["id"], prop["action"], prop["payload"])
+
+    assert first["created_count"] == 1
+    assert first["content"] == "Der kleine Hund bellt laut. Die Katze schläft."
+    assert second["created_count"] == 0
+    conn = sqlite3.connect(test_db)
+    content = conn.execute("SELECT content FROM essays WHERE id = ?", (essay_id,)).fetchone()[0]
+    conn.close()
+    assert content == "Der kleine Hund bellt laut. Die Katze schläft."
+
+
+def test_rejected_multi_action_cannot_be_confirmed(test_db: str) -> None:
+    _init_multi_action_tables(test_db)
+    sid = CompanionSessionService(db_path=test_db).get_or_create_session(scope_key="view:progress")["id"]
+    svc = CompanionProposalService(db_path=test_db)
+    prop = svc.create_proposal(
+        session_id=sid,
+        action="set_weekly_goal",
+        title="本周学习目标",
+        payload={"goal": "每天复习 10 分钟"},
+    )
+    assert svc.reject_proposal(prop["id"])["rejected"] is True
+
+    with pytest.raises(ValueError, match="已拒绝"):
+        svc.execute_proposal(prop["id"], prop["action"], prop["payload"])
+
+    assert svc.list_proposals(sid)[0]["status"] == "rejected"
+    conn = sqlite3.connect(test_db)
+    count = conn.execute("SELECT COUNT(*) FROM app_settings WHERE key = 'companion_weekly_goal'").fetchone()[0]
+    conn.close()
+    assert count == 0
+
+
+@pytest.mark.parametrize(
+    ("action", "payload", "message"),
+    [
+        ("set_weekly_goal", {"goal": "  "}, "学习目标不能为空"),
+        ("apply_writing_revision", {"essay_id": 1, "original_text": "Alt.", "revised_text": ""}, "改写文本不能为空"),
+        ("apply_writing_revision", {"original_text": "Alt.", "revised_text": "Neu."}, "essay_id"),
+    ],
+)
+def test_multi_action_malformed_payload_stays_pending(
+    test_db: str, action: str, payload: dict[str, Any], message: str
+) -> None:
+    _init_multi_action_tables(test_db)
+    sid = CompanionSessionService(db_path=test_db).get_or_create_session()["id"]
+    svc = CompanionProposalService(db_path=test_db)
+    prop = svc.create_proposal(session_id=sid, action=action, title="畸形提议", payload=payload)
+
+    with pytest.raises(ValueError, match=message):
+        svc.execute_proposal(prop["id"], action, payload)
+
+    assert svc.list_proposals(sid)[0]["status"] == "pending"

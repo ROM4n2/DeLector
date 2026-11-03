@@ -117,6 +117,22 @@ export function setEditorText(text) {
   updateWriterStats(text);
 }
 
+/** 伴学修订提议的当前持久化目标，避免把 essay_id 暴露给模型。 */
+export function getWriterRevisionState() {
+  return { essay_id: currentEssayId, content: editorText() };
+}
+
+/** 确认修订后刷新编辑器与诊断，不新建第二套应用路径。 */
+export function applyCompanionRevision(content) {
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new Error('修订结果为空');
+  }
+  setEditorText(content);
+  selectedSpanRef = null;
+  resetErrorDetailView();
+  analyzeWriterText(true);
+}
+
 export function clearEditorText() {
   const el = document.getElementById('ide-editor');
   if (el) el.innerHTML = '';
