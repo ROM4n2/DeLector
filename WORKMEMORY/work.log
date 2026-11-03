@@ -333,3 +333,9 @@ Status: DONE —— v5.21.1 patch 发版准备已完成并开 PR #200（https://
 文件定案：CHANGELOG/FEATURES 在开工时已无未提交 diff，v5.21.0 内容随 6d5fd0d 入库，不重复提交；work.log 未提交的 PR #199 实现/验证/交接记录全部保留。choice 条目复核已有原代理 WORK_END，仅追加 NOTE，不代闭合。CHANGELOG 新增独立 v5.21.1 条目，SSE 跨 chunk 丢消息/proposal 明确记 fix，Go/JS 收敛明确记行为不变 refactor。
 验证：以 20:09 NOTE 为准——全量 2720 passed / 2 skipped、定向 59 passed、探针 274 checks / 34 场景、三闸/契约/builder/ruff/diff 全绿，Go 普通与 race 各 10/10 包通过。PR 初始 CI run 41633649970 回读为 3 成功 / 10 运行中 / 2 跳过 / 0 失败，未等待最终结果。
 回写检查：版本面、README 2720/2722 徽章、FEATURES、SECURITY、PROJECT_OVERVIEW、docs/README 已同步；PR #199 计划已归档；无临时产物、变异或密钥入库。Android 真机点检未做，live-selection 未在真实浏览器验证。
+
+### 2026-11-03 23:40 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+任务 4（伴学 SSE 断流/重连）已交付未合并 PR #203（https://github.com/ROM4n2/DeLector/pull/203），四个提交按文档/后端/前端/测试拆分：8b3c20e、ec467a8、4f63f21、b17b513；未直推 master、未打 tag。根因是 Starlette disconnect listener 在 yield 点取消响应生成器，循环后的 save_turn/create_proposal 被跳过；修复为先解析完整帧再原样转发、finally 同步保存断点，新增 X-History-Length 权威基线，前端凭 X-Session-ID 拉历史恢复，不重放模型请求。turn generation 与持久化计数防止同文旧轮、既有 scope、新旧流及乐观 user 串轮；七类 SSE 事件和帧语义不变，主动断连不后台续跑。
+验证：新旧探针先红后绿；后端禁用落库、前端缩减重试及破坏权威基线的变异均实红，还原复绿。最终 pytest 2731 passed/2 skipped；伴学 27 passed、真源码探针 335 checks/39 scenarios；全部前端探针 35/35；go vet 与 go test -race -count=1 各 10/10 包；Ruff、mypy、机械闸、七事件契约全绿；独立 reviewer 四轮边界复核最终 CLEAN PASS。PR 初始 CI run 41665396652 为 5 pass/7 pending/2 skipped/0 failed。真实浏览器与 Android 断网点检未做。
+知识库 healthcheck 已从 D:\Obsidian\Coding 正确执行：关键项全 PASS、1563/1563 wikilinks 正常；仅 DeLector 归档 5 条历史非标事件头 notice 保留，不改历史。任务 3 的原始「14 项 M 级候选」在当前交接、项目记忆、仓内文档与知识库均未检索到；为免把新造清单冒充原表，逐项复核暂停，待用户提供原表后继续。
