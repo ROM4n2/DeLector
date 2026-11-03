@@ -42,6 +42,16 @@ def _rule_body(selector_regex, must_contain=None):
     )
 
 
+def test_companion_blink_scales_around_svg_eye_centers():
+    eye = _rule_body(r"\.char-eye\s*\{", "charBlink")
+    assert re.search(r"transform-box:\s*view-box\s*;", eye), (
+        "眼球内联 transform-origin 使用 SVG viewBox 坐标；fill-box 会在闭眼缩放时把它误解为 bbox 相对坐标并产生位移"
+    )
+    blink = _rule_body(r"@keyframes\s+charBlink\s*\{")
+    assert "transform: scaleY(1)" in blink
+    assert "transform: scaleY(0.1)" in blink, "必须保留眨眼闭合帧，不能用禁用动画绕过原点修复"
+
+
 def test_mobile_writer_has_panel_sheet_controls():
     assert 'id="writer-mobile-panel-trigger"' in INDEX
     assert 'id="writer-mobile-panel-sheet"' in INDEX
