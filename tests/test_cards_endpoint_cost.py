@@ -208,16 +208,41 @@ def test_bench_output_has_segment(label: str, tmp_path: Path) -> None:
 
 
 def test_bench_output_reports_parsable_filesort_pct(tmp_path: Path) -> None:
-    """③ 输出含可解析的 filesort 占比，且落在物理可能的开区间 (0, 100]。
+    """③ 输出含可解析的 filesort 占比，且落在物理可能的闭区间 [0, 100]。
 
-    下界 `> 0` 是本文件防恒真的核心：段 B 一旦被改成 `SELECT id`，B − C 转负，
-    占比跌出区间 ⇒ 红。详见模块 docstring。
+    下界 `>= 0`：产出侧把 B−C 钳到 0（负百分比无物理意义），故这里只挡越界与解析失败；
+    段 B 被改成 `SELECT id` 的退化由 `test_bench_segments_show_ordering_cost_is_real` 把守。
     """
     out = _run_bench(tmp_path)
     matches = FILESORT_RE.findall(out)
     assert matches, f"输出里找不到 `filesort_pct=NN.N%` 这一行\n{out}"
     pct = float(matches[-1])
-    assert 0.0 < pct <= 100.0, f"filesort 占比 {pct}% 超出物理可能区间 (0, 100]——分段定义多半被改坏了\n{out}"
+    # 下界允许 0：满载噪声下 B−C 会被产出侧钳到 0（max(0.0, b-c)），这不是段定义退化。
+    # 段 B 被改成 SELECT id 的真退化仍由 test_bench_segments_show_ordering_cost_is_real
+    # 的 b > a / b > c 把守，放宽这里不会掩盖那个回归点。
+    assert 0.0 <= pct <= 100.0, f"filesort 占比 {pct}% 超出物理可能区间 [0, 100]——分段定义多半被改坏了\n{out}"
+
+
+def test_bench_scale_clamps_negative_filesort_to_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """构造 B < C 的计时输入：负的排序差必须被钳到 0，而不是产出负百分比。"""
+    import sqlite3
+
+    sys.path.insert(0, str(ROOT / "tools"))
+    import bench_cards_endpoint as bench
+
+    db = tmp_path / "bench_negative.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE vocab_cards (id INTEGER, mastered INTEGER, wrong_count INTEGER)")
+    conn.close()
+
+    timings = iter([1.0, 0.5, 2.0])  # a=1.0, b=0.5, c=2.0（B < C，模拟满载噪声）
+    monkeypatch.setattr(bench, "_median_ms", lambda fn, rounds: next(timings))
+    monkeypatch.setattr(bench, "_samples_ms", lambda fn, rounds: [5.0])
+
+    result = bench._bench_scale(str(db), 0, 0, 1, lambda: None)
+    assert result["filesort_ms"] == 0.0
+    assert result["filesort_pct"] == 0.0
+    assert result["filesort_pct_of_sqlite"] == 0.0
 
 
 def test_bench_segments_show_ordering_cost_is_real(tmp_path: Path) -> None:
