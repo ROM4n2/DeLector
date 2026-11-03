@@ -877,3 +877,38 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-03 14:28 | kimi-k3.1-pro__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 flaky 根因修复：test_cards_endpoint_cost.py::test_bench_output_reports_parsable_filesort_pct 在满载时 B−C 为负（实测 -1.2%），正则不匹配负数导致 assert []。归属判定为产出侧：filesort_pct 是「排序占端点耗时比例」，负值无物理意义，故 tools/bench_cards_endpoint.py 的 filesort_ms 改为 max(0.0, b-c)；测试侧仅把下界放宽到 >=0，段 B 退化为 SELECT id 的真回归仍由 test_bench_segments_show_ordering_cost_is_real 的 b>a/b>c 把守，不掩盖问题。新增 test_bench_scale_clamps_negative_filesort_to_zero：monkeypatch 计时输入 B<C，断言 filesort_ms/filesort_pct/filesort_pct_of_sqlite 均为 0.0。验证：test_cards_endpoint_cost.py 14 passed、ruff 通过；全量 python -m pytest tests = 2711 passed / 2 skipped / 0 failed（611.32s），该用例不再随机变红。
+
+### 2026-11-03 14:48 | kimi-k3.1-pro__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+任务：修复桌宠眨眼错位并重截 README。先以真实浏览器定格常态/眨眼帧，采集 SVG/DOM rect、transform 与动画矩阵证据，再修根因并覆盖桌面、窄屏、德语禁用态验证；随后按原路径替换 README 全部两张产品截图，确保睁眼常态帧与版式匹配。
+分支/回合：基于 7e54a8d428e40e352dc0ee1d42e7c3e2de4dfaa2 创建独立 worktree/分支，完成后只报告本地提交供 cherry-pick，不自行 merge 到 master；若并行 PR #196 任务改动同文件，收尾同步其最新分支并重跑本任务验证。
+不做范围：不修改或提交 CHANGELOG.md / FEATURES.md；不 push、不建 PR、不动 PR #196；不以禁用眨眼/隐藏眼睛绕过；不代闭合其他任务台账。
+并行声明：存在一条不属于本任务的未闭合 WORK_START（2026-11-03 12:55「choice 模式缺释义修复」），本任务不代其闭合。
+
+### 2026-11-03 15:27 | kimi-k3.1-pro__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+Status: DONE ——「修复桌宠眨眼错位并重截 README」完成。根因经真实浏览器 0%/96% 定格证实：`.char-eye` 的 `transform-box: fill-box` 把 SVG viewBox 像素原点误作眼球 bbox 相对原点，owl 两眼在 72px 浮标中闭眼时下移 20.736px；改为 `view-box` 后同帧偏差约 0.000006px，保留 scaleY 眨眼。新增回归守卫（旧代码红/修复后绿）。1440×900 四角色 + 390×844 窄屏共 10 组检查最大中心误差 0.0000171px；真实德语禁用态 SVG 隐藏、42×42 头像显示且禁点。
+产出：worktree `.worktrees/companion-blink-readme`，分支 `fix/companion-blink-readme`；初始基于 7e54a8d，最终已 rebase 到目标分支最新 30d7803。修复提交 `8e27f7b83dd4365b5ff809bcb079a54b62155a81`，README 两张原路径睁眼截图提交 `fb4f78d2d6d2f7a3ec63095e03cd7f9f47eef261`；供目标分支 cherry-pick，未 merge、未 push、未建 PR、未动 PR #196。
+验证：post-rebase 浏览器上述 10 组 PASS；README 以 960×571 CSS 视口 ×1.5 DPR、charBlink=0ms 暂停帧重截并目检，两张均 1440×857 JPEG、无气泡/裁切；`python3 -m pytest tests/test_writer_mobile.py tests/test_pwa_manifest.py -q` = 34 passed；ruff 通过；最终 diff 仅 style.css、test_writer_mobile.py、两张图片，工作区干净，未改/未提交 CHANGELOG.md 与 FEATURES.md。
+回写检查：临时插桩已从 companion.js 完整移除；Debug Server/隔离服务已停止；调试记录、NDJSON/env、临时脚本、证据图与临时数据库文件均已删除，未入库。旧 choice 任务 WORK_START 仍由所属任务自行处理，本任务未代闭合。
+
+### 2026-11-03 17:07 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+旧条目登记：2026-11-03 12:55「choice 模式缺释义修复」WORK_START 无配对 END；其所属任务已完成，依据为 work.log 13:50/14:10/14:28 的实现与验证记录及提交 e7bd1cb936cdc4001195e701650af7fd98aafcd7（fix(cards): 测验 choice 模式缺释义卡改走「待补充」口径，根除空白选项）。仅登记，不代写 WORK_END；本任务不代闭合。
+
+### 2026-11-03 17:07 | kimi-k3.1-pro__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：SSE 传输边界 / Go RunLoop 接线 / submitPrompt 收敛。按用户指定顺序先写 docs/plans/ 计划，再逐项以复现/等价性/行为探针驱动重构，每项独立提交、独立全量验证并阶段报告。
+分支：refactor/companion-boundaries，独立 worktree .worktrees/companion-boundaries；不 push、不建 PR。
+不做范围：不碰 version.py / build.gradle / sw.js / index.html / CHANGELOG.md / README.md 等发版面；不代闭合旧 WORK_START；不改变七类 SSE 契约；不顺手重构无关代码；若发现内联逻辑自身 bug 或显著风险先报告。
+
+### 2026-11-03 17:54 | kimi-k3.1-pro__trae | NOTE (Task 1 milestone)
+Caps: filesystem-read, filesystem-write, shell-exec
+SSE 传输边界完成并本地提交 1e33428。旧实现 json-middle 复现红：assistant 期望 Hallo Eule. 实际 Eule.；缓冲累积器按空行分帧后 2/3/N/逐字节/固定种子随机分片 5/5 绿，字节转发守恒，save_turn 每轮一次，同 id proposal 去重且不同 id 不误删。独立审查发现 CRLF 回溯缺陷，补多行 data/混合空行反例与变异验证后 CLEAN PASS。最终全量 2719 passed/3 skipped；35 前端探针、三闸、go test ./...、go test -race ./...、ruff、build_index_html --check 全绿。未 push、未建 PR、未触发版面文件。
+
+### 2026-11-03 15:58 | glm-5.3-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+Status: DONE ——「choice 模式缺释义空白选项修复」已入库 master。修复本体（cards.js choice 分支改 formatCardDefinition + 选项对象化 isCorrect 乱序）、行为探针 tools/cards_quiz_choice_probe.mjs、接线 tests/test_cards_quiz_choice_probe.py，均实测已在 master 树（git ls-tree/git show 验证），系 12:55 WORK_START 后的未提交改动被并行会话吸收进 PR #196（e140286）入库；具体吸收 commit 未逐一定位（推断在 6a0568c refactor(cards) 批次），CHANGELOG/FEATURES 口径同步为本会话余量提交 e7bd1cb（本地 master 领先 origin 1，未推送）。
+实测验证：新探针 10/10 绿；变异实证 revert 修复后 exit 1 且 B1/B2/C1/C2/D2 具名红；全量 pytest 2707 passed / 2 skipped（705.48s）；最终态定向 12 passed；三闸 layer/mock/silent 全 0 未豁免；ruff 通过。
+并发事实：kimi-k3.1-pro__trae 14:48-15:27 眨眼修复 worktree 任务的 WORK_START/WORK_END（已 DONE）当时未提交，随本簿记提交一并入库——该任务自陈已完成，此为落档非代闭合；其声明「不代闭合本任务」已知悉，本条即本任务自闭合。
+未做：未推送、未建 PR、未改历史；quiz 出题队列过滤策略未改（只修显示口径，维持上批裁决）。
