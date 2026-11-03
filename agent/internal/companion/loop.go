@@ -140,55 +140,6 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		emit = func(Event) error { return nil }
 	}
 
-	// 1. 构建初始对话消息列表
-	systemContent := CompanionSystemPrompt
-	if req.Context.SelectedText != "" || req.Context.ArticleTitle != "" ||
-		req.Context.View != "" || req.Context.ContextSource != "" ||
-		req.Context.DraftText != "" || req.Context.CardContext != "" {
-		systemContent += "\n\n【当前学习视口上下文】"
-		if req.Context.ArticleTitle != "" {
-			systemContent += fmt.Sprintf("\n- 文章: %s", req.Context.ArticleTitle)
-		}
-		if req.Context.CEFRLevel != "" {
-			systemContent += fmt.Sprintf("\n- 目标级别: %s", req.Context.CEFRLevel)
-		}
-		if req.Context.SelectedText != "" {
-			systemContent += fmt.Sprintf("\n- 当前聚焦句子: %s", req.Context.SelectedText)
-		}
-		if req.Context.View != "" {
-			systemContent += fmt.Sprintf("\n- 当前页面: %s", req.Context.View)
-		}
-		if req.Context.ContextSource != "" {
-			systemContent += fmt.Sprintf("\n- 上下文来源: %s", req.Context.ContextSource)
-		}
-		if req.Context.DraftText != "" {
-			systemContent += fmt.Sprintf("\n- 当前写作草稿: %s", req.Context.DraftText)
-		}
-		if req.Context.CardContext != "" {
-			systemContent += fmt.Sprintf("\n- %s", req.Context.CardContext)
-		}
-	}
-
-	chatMessages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: systemContent,
-		},
-	}
-	for _, m := range req.Messages {
-		chatMessages = append(chatMessages, openai.ChatCompletionMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		})
-	}
-
-	tools := CompanionTools()
-	var (
-		proposals   []Proposal
-		fullContent strings.Builder
-		totalTokens int
-	)
-
 	activeClient := a.client
 	activeModel := a.model
 	if req.Model != "" {
@@ -197,6 +148,16 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 
 	reg := a.Registry()
 	spec := reg.ResolveModel(activeModel, req.BaseURL)
+
+	// 1. 构建初始对话消息列表
+	chatMessages := buildTurnPrompt(req, spec)
+
+	tools := CompanionTools()
+	var (
+		proposals   []Proposal
+		fullContent strings.Builder
+		totalTokens int
+	)
 
 	if req.APIKey != "" {
 		p, ok := reg.Get(spec.ProviderID)
@@ -241,257 +202,18 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 		}
 
 		coreFn := func() error {
-			streamReq := openai.ChatCompletionRequest{
-				Model:      activeModel,
-				Messages:   tc.Messages,
-				Tools:      tools,
-				ToolChoice: "auto",
-				Stream:     true,
-			}
-
-			if activeClient == nil {
-				errStr := "未配置任何可用的 LLM 模型客户端或 API Key"
-				_ = emit(Event{Event: EventError, Code: "missing_client", MessageZH: errStr})
-				_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
-				if fullContent.Len() == 0 {
-					fullContent.WriteString(errStr)
-				}
-				return fmt.Errorf("%s", errStr)
-			}
-
-			stream, err := activeClient.CreateChatCompletionStream(ctx, streamReq)
-			if err != nil && a.fallbackClient != nil {
-				primaryErr := err
-				_ = emit(Event{
-					Event: EventThought,
-					Text:  "主通道不可达，正在级联切换至备用模型...",
-				})
-				fallbackReq := streamReq
-				if a.fallbackModel != "" {
-					fallbackReq.Model = a.fallbackModel
-				}
-				stream, err = a.fallbackClient.CreateChatCompletionStream(ctx, fallbackReq)
-				if err != nil {
-					errStr := fmt.Sprintf("主通道失败 (%v)；备用模型 (%s) 不可达 (%v)", primaryErr, fallbackReq.Model, err)
-					_ = emit(Event{Event: EventError, Code: "upstream_error", MessageZH: errStr})
-					_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
-					if fullContent.Len() == 0 {
-						fullContent.WriteString(errStr)
-					}
-					return err
-				}
-			}
+			received, err := a.receiveTurn(ctx, tc, turn, activeClient, activeModel, tools, emit, &fullContent)
 			if err != nil {
-				errStr := fmt.Sprintf("调用模型失败: %v", err)
-				_ = emit(Event{Event: EventError, Code: "upstream_error", MessageZH: errStr})
-				_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
-				if fullContent.Len() == 0 {
-					fullContent.WriteString(errStr)
-				}
 				return err
 			}
-
-			var (
-				turnContent   strings.Builder
-				turnReasoning strings.Builder
-				turnToolCalls = make(map[int]*openai.ToolCall)
-				hadReasoning  = false
-			)
-
-			for {
-				response, recvErr := stream.Recv()
-				if errors.Is(recvErr, io.EOF) {
-					break
-				}
-				if recvErr != nil {
-					stream.Close()
-					errStr := fmt.Sprintf("流式读取异常: %v", recvErr)
-					_ = emit(Event{Event: EventError, Code: "stream_error", MessageZH: errStr})
-					_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
-					if fullContent.Len() == 0 {
-						fullContent.WriteString(errStr)
-					}
-					return recvErr
-				}
-
-				if len(response.Choices) == 0 {
-					continue
-				}
-				delta := response.Choices[0].Delta
-
-				// 思考链推送（DeepSeek-R1 / Reasoner 原生字段）
-				if delta.ReasoningContent != "" {
-					hadReasoning = true
-					turnReasoning.WriteString(delta.ReasoningContent)
-					_ = emit(Event{
-						Event: EventThought,
-						Text:  delta.ReasoningContent,
-						Stage: "思考推导",
-					})
-				}
-
-				// 纯 Markdown 正文流推送（零 JSON 封装）
-				if delta.Content != "" {
-					turnContent.WriteString(delta.Content)
-					fullContent.WriteString(delta.Content)
-					_ = emit(Event{
-						Event: EventDelta,
-						Text:  delta.Content,
-					})
-				}
-
-				// 原生 Tool Calls 增量分片聚合
-				for _, tcCall := range delta.ToolCalls {
-					idx := 0
-					if tcCall.Index != nil {
-						idx = *tcCall.Index
-					}
-					existing, ok := turnToolCalls[idx]
-					if !ok {
-						newCall := tcCall
-						turnToolCalls[idx] = &newCall
-					} else {
-						if tcCall.ID != "" {
-							existing.ID = tcCall.ID
-						}
-						if tcCall.Function.Name != "" {
-							existing.Function.Name += tcCall.Function.Name
-						}
-						if tcCall.Function.Arguments != "" {
-							existing.Function.Arguments += tcCall.Function.Arguments
-						}
-					}
-				}
-			}
-			stream.Close()
-
 			// 3. 判断本轮是否有工具调用
-			if len(turnToolCalls) == 0 {
+			if len(received.toolCalls) == 0 {
 				tc.HadToolExecution = false
 				return nil
 			}
 
 			// 4. 执行本轮工具调用
-			tc.HadToolExecution = true
-			assistantMsg := openai.ChatCompletionMessage{
-				Role: openai.ChatMessageRoleAssistant,
-			}
-			if turnContent.Len() > 0 {
-				assistantMsg.Content = turnContent.String()
-			}
-			if hadReasoning {
-				assistantMsg.ReasoningContent = turnReasoning.String()
-			}
-
-			var callsList []openai.ToolCall
-			for i := 0; i < len(turnToolCalls); i++ {
-				if c, ok := turnToolCalls[i]; ok {
-					callsList = append(callsList, *c)
-				}
-			}
-			assistantMsg.ToolCalls = callsList
-			tc.Messages = append(tc.Messages, assistantMsg)
-
-			for _, tcCall := range callsList {
-				name := tcCall.Function.Name
-				var payload map[string]any
-				var parseErr error
-				if err := json.Unmarshal([]byte(tcCall.Function.Arguments), &payload); err != nil {
-					parseErr = err
-					payload = map[string]any{"raw": tcCall.Function.Arguments}
-				}
-
-				_ = emit(Event{
-					Event:   EventToolStart,
-					Tool:    name,
-					Payload: payload,
-				})
-
-				if parseErr != nil {
-					// Pi-Agent Errors-as-Messages: 参数解析失败直接作为 Tool 错误消息反馈
-					toolRes := map[string]any{
-						"status":     "error",
-						"error_code": "INVALID_TOOL_ARGUMENTS",
-						"tool":       name,
-						"message":    fmt.Sprintf("工具参数 JSON 解析失败: %v", parseErr),
-						"raw":        tcCall.Function.Arguments,
-						"hint":       "请确保为该工具传入合法 JSON 格式的对象参数。",
-					}
-					_ = emit(Event{
-						Event:  EventToolEnd,
-						Tool:   name,
-						Result: toolRes,
-					})
-					resBytes, _ := json.Marshal(toolRes)
-					tc.Messages = append(tc.Messages, openai.ChatCompletionMessage{
-						Role:       openai.ChatMessageRoleTool,
-						ToolCallID: tcCall.ID,
-						Content:    string(resBytes),
-					})
-					continue
-				}
-
-				if name == "propose_vocab_cards" {
-					title, _ := payload["title"].(string)
-					if title == "" {
-						title = "加入核心生词卡"
-					}
-					propID := fmt.Sprintf("prop_%d", time.Now().UnixNano())
-					prop := Proposal{
-						ID:      propID,
-						Action:  "create_vocab_cards",
-						Title:   title,
-						Payload: payload,
-					}
-					proposals = append(proposals, prop)
-					_ = emit(Event{
-						Event:    EventProposal,
-						ID:       propID,
-						Action:   prop.Action,
-						Title:    prop.Title,
-						Payload:  prop.Payload,
-						Proposal: &prop,
-					})
-
-					// 提议工具直接反馈成功标记
-					tc.Messages = append(tc.Messages, openai.ChatCompletionMessage{
-						Role:       openai.ChatMessageRoleTool,
-						ToolCallID: tcCall.ID,
-						Content:    `{"status":"ok","message":"proposal presented to user"}`,
-					})
-				} else {
-					// 本地 Python 诊断工具（analyze / writing_check / vocab_stats）
-					toolRes, toolErr := a.runner.RunTool(ctx, name, payload)
-					if toolErr != nil {
-						// Pi-Agent Errors-as-Messages 原则：工具错误转化为结构化消息送回模型自愈
-						toolRes = map[string]any{
-							"status":     "error",
-							"error_code": "TOOL_EXECUTION_FAILED",
-							"tool":       name,
-							"message":    toolErr.Error(),
-							"hint":       "工具执行暂时失败。请向学习者说明情况并给出基于已有上下文的专业解答，或调整参数重试。",
-						}
-					}
-
-					summary := "完成数据提取"
-					if toolErr != nil {
-						summary = fmt.Sprintf("执行受阻: %v", toolErr)
-					}
-					_ = emit(Event{
-						Event:   EventToolEnd,
-						Tool:    name,
-						Result:  toolRes,
-						Summary: summary,
-					})
-
-					resBytes, _ := json.Marshal(toolRes)
-					tc.Messages = append(tc.Messages, openai.ChatCompletionMessage{
-						Role:       openai.ChatMessageRoleTool,
-						ToolCallID: tcCall.ID,
-						Content:    string(resBytes),
-					})
-				}
-			}
+			proposals = append(proposals, a.executeToolCalls(ctx, tc, received, emit)...)
 			return nil
 		}
 
@@ -502,48 +224,287 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 
 		if !tc.HadToolExecution {
 			// 模型未调用任何工具，已完成回答
-			_ = emit(Event{
-				Event:  EventDone,
-				Turns:  turn,
-				Tokens: totalTokens,
-				Reason: "ok",
-			})
-			return &Outcome{
-				Status:     "ok",
-				Text:       fullContent.String(),
-				Proposals:  proposals,
-				Turns:      turn,
-				TokenCount: totalTokens,
-				Reason:     "ok",
-			}, nil
+			return finalize(emit, &fullContent, proposals, turn, totalTokens, "ok"), nil
 		}
 
 		chatMessages = tc.Messages
 	}
 
-	cleanedText := strings.TrimSpace(fullContent.String())
-	if cleanedText == "?" || cleanedText == "？" || cleanedText == "." || cleanedText == "。" || cleanedText == "..." || cleanedText == "" {
-		fallbackText := "已完成对当前句子的多维度语言学推演与分析。请参阅上方提取的语法拓扑信息，如需针对特定成分深入探讨，可随时追问。"
+	return finalize(emit, &fullContent, proposals, DefaultMaxTurns, totalTokens, "turn_limit"), nil
+}
+
+func (a *CompanionAgent) executeToolCalls(ctx context.Context, tc *TurnContext, received *receivedTurn, emit func(Event) error) []Proposal {
+	tc.HadToolExecution = true
+	assistantMsg := openai.ChatCompletionMessage{
+		Role: openai.ChatMessageRoleAssistant,
+	}
+	if received.content.Len() > 0 {
+		assistantMsg.Content = received.content.String()
+	}
+	if received.hadReasoning {
+		assistantMsg.ReasoningContent = received.reasoning.String()
+	}
+
+	callsList := FilterValidToolCalls(received.toolCalls)
+	assistantMsg.ToolCalls = callsList
+	tc.Messages = append(tc.Messages, assistantMsg)
+
+	var proposals []Proposal
+	for _, tcCall := range callsList {
+		name := tcCall.Function.Name
+		var payload map[string]any
+		var parseErr error
+		if err := json.Unmarshal([]byte(tcCall.Function.Arguments), &payload); err != nil {
+			parseErr = err
+			payload = map[string]any{"raw": tcCall.Function.Arguments}
+		}
+
 		_ = emit(Event{
-			Event: EventDelta,
-			Text:  fallbackText,
+			Event:   EventToolStart,
+			Tool:    name,
+			Payload: payload,
 		})
-		fullContent.Reset()
-		fullContent.WriteString(fallbackText)
+
+		if parseErr != nil {
+			// Pi-Agent Errors-as-Messages: 参数解析失败直接作为 Tool 错误消息反馈
+			resJSON := FormatToolArgErrorMessage(name, tcCall.Function.Arguments, parseErr)
+			var toolRes map[string]any
+			_ = json.Unmarshal([]byte(resJSON), &toolRes)
+			_ = emit(Event{
+				Event:  EventToolEnd,
+				Tool:   name,
+				Result: toolRes,
+			})
+			tc.Messages = append(tc.Messages, openai.ChatCompletionMessage{
+				Role:       openai.ChatMessageRoleTool,
+				ToolCallID: tcCall.ID,
+				Content:    resJSON,
+			})
+			continue
+		}
+
+		if name == "propose_vocab_cards" {
+			title, _ := payload["title"].(string)
+			if title == "" {
+				title = "加入核心生词卡"
+			}
+			propID := fmt.Sprintf("prop_%d", time.Now().UnixNano())
+			prop := Proposal{
+				ID:      propID,
+				Action:  "create_vocab_cards",
+				Title:   title,
+				Payload: payload,
+			}
+			proposals = append(proposals, prop)
+			_ = emit(Event{
+				Event:    EventProposal,
+				ID:       propID,
+				Action:   prop.Action,
+				Title:    prop.Title,
+				Payload:  prop.Payload,
+				Proposal: &prop,
+			})
+
+			// 提议工具直接反馈成功标记
+			tc.Messages = append(tc.Messages, openai.ChatCompletionMessage{
+				Role:       openai.ChatMessageRoleTool,
+				ToolCallID: tcCall.ID,
+				Content:    `{"status":"ok","message":"proposal presented to user"}`,
+			})
+		} else {
+			// 本地 Python 诊断工具（analyze / writing_check / vocab_stats）
+			toolRes, toolErr := a.runner.RunTool(ctx, name, payload)
+			if toolErr != nil {
+				// Pi-Agent Errors-as-Messages 原则：工具错误转化为结构化消息送回模型自愈
+				resJSON := FormatToolErrorMessage(name, toolErr)
+				toolRes = nil
+				_ = json.Unmarshal([]byte(resJSON), &toolRes)
+			}
+
+			summary := "完成数据提取"
+			if toolErr != nil {
+				summary = fmt.Sprintf("执行受阻: %v", toolErr)
+			}
+			_ = emit(Event{
+				Event:   EventToolEnd,
+				Tool:    name,
+				Result:  toolRes,
+				Summary: summary,
+			})
+
+			resBytes, _ := json.Marshal(toolRes)
+			tc.Messages = append(tc.Messages, openai.ChatCompletionMessage{
+				Role:       openai.ChatMessageRoleTool,
+				ToolCallID: tcCall.ID,
+				Content:    string(resBytes),
+			})
+		}
+	}
+	return proposals
+}
+
+type receivedTurn struct {
+	content      strings.Builder
+	reasoning    strings.Builder
+	toolCalls    map[int]*openai.ToolCall
+	hadReasoning bool
+}
+
+func (a *CompanionAgent) receiveTurn(
+	ctx context.Context,
+	tc *TurnContext,
+	turn int,
+	activeClient *openai.Client,
+	activeModel string,
+	tools []openai.Tool,
+	emit func(Event) error,
+	fullContent *strings.Builder,
+) (*receivedTurn, error) {
+	streamReq := openai.ChatCompletionRequest{
+		Model:      activeModel,
+		Messages:   tc.Messages,
+		Tools:      tools,
+		ToolChoice: "auto",
+		Stream:     true,
+	}
+
+	if activeClient == nil {
+		errStr := "未配置任何可用的 LLM 模型客户端或 API Key"
+		_ = emit(Event{Event: EventError, Code: "missing_client", MessageZH: errStr})
+		_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
+		if fullContent.Len() == 0 {
+			fullContent.WriteString(errStr)
+		}
+		return nil, fmt.Errorf("%s", errStr)
+	}
+
+	stream, err := activeClient.CreateChatCompletionStream(ctx, streamReq)
+	if err != nil && a.fallbackClient != nil {
+		primaryErr := err
+		_ = emit(Event{
+			Event: EventThought,
+			Text:  "主通道不可达，正在级联切换至备用模型...",
+		})
+		fallbackReq := streamReq
+		if a.fallbackModel != "" {
+			fallbackReq.Model = a.fallbackModel
+		}
+		stream, err = a.fallbackClient.CreateChatCompletionStream(ctx, fallbackReq)
+		if err != nil {
+			errStr := fmt.Sprintf("主通道失败 (%v)；备用模型 (%s) 不可达 (%v)", primaryErr, fallbackReq.Model, err)
+			_ = emit(Event{Event: EventError, Code: "upstream_error", MessageZH: errStr})
+			_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
+			if fullContent.Len() == 0 {
+				fullContent.WriteString(errStr)
+			}
+			return nil, err
+		}
+	}
+	if err != nil {
+		errStr := fmt.Sprintf("调用模型失败: %v", err)
+		_ = emit(Event{Event: EventError, Code: "upstream_error", MessageZH: errStr})
+		_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
+		if fullContent.Len() == 0 {
+			fullContent.WriteString(errStr)
+		}
+		return nil, err
+	}
+
+	received := &receivedTurn{toolCalls: make(map[int]*openai.ToolCall)}
+	for {
+		response, recvErr := stream.Recv()
+		if errors.Is(recvErr, io.EOF) {
+			break
+		}
+		if recvErr != nil {
+			stream.Close()
+			errStr := fmt.Sprintf("流式读取异常: %v", recvErr)
+			_ = emit(Event{Event: EventError, Code: "stream_error", MessageZH: errStr})
+			_ = emit(Event{Event: EventDone, Turns: turn, Reason: "error"})
+			if fullContent.Len() == 0 {
+				fullContent.WriteString(errStr)
+			}
+			return nil, recvErr
+		}
+
+		if len(response.Choices) == 0 {
+			continue
+		}
+		delta := response.Choices[0].Delta
+
+		// 思考链推送（DeepSeek-R1 / Reasoner 原生字段）
+		if delta.ReasoningContent != "" {
+			received.hadReasoning = true
+			received.reasoning.WriteString(delta.ReasoningContent)
+			_ = emit(Event{
+				Event: EventThought,
+				Text:  delta.ReasoningContent,
+				Stage: "思考推导",
+			})
+		}
+
+		// 纯 Markdown 正文流推送（零 JSON 封装）
+		if delta.Content != "" {
+			received.content.WriteString(delta.Content)
+			fullContent.WriteString(delta.Content)
+			_ = emit(Event{
+				Event: EventDelta,
+				Text:  delta.Content,
+			})
+		}
+
+		// 原生 Tool Calls 增量分片聚合
+		for _, tcCall := range delta.ToolCalls {
+			received.toolCalls = AggregateToolCalls(received.toolCalls, tcCall)
+		}
+	}
+	stream.Close()
+	return received, nil
+}
+
+func buildTurnPrompt(req Request, spec provider.ModelSpec) []openai.ChatCompletionMessage {
+	systemContent := BuildSystemPrompt(FormatStudyContext(req.Context), spec)
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: systemContent,
+		},
+	}
+	for _, message := range req.Messages {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    message.Role,
+			Content: message.Content,
+		})
+	}
+	return messages
+}
+
+func finalize(emit func(Event) error, fullContent *strings.Builder, proposals []Proposal, turns, totalTokens int, reason string) *Outcome {
+	if reason == "turn_limit" {
+		cleanedText := strings.TrimSpace(fullContent.String())
+		if cleanedText == "?" || cleanedText == "？" || cleanedText == "." || cleanedText == "。" || cleanedText == "..." || cleanedText == "" {
+			fallbackText := BuildPromptNudge()
+			_ = emit(Event{
+				Event: EventDelta,
+				Text:  fallbackText,
+			})
+			fullContent.Reset()
+			fullContent.WriteString(fallbackText)
+		}
 	}
 
 	_ = emit(Event{
 		Event:  EventDone,
-		Turns:  DefaultMaxTurns,
+		Turns:  turns,
 		Tokens: totalTokens,
-		Reason: "turn_limit",
+		Reason: reason,
 	})
 	return &Outcome{
 		Status:     "ok",
 		Text:       fullContent.String(),
 		Proposals:  proposals,
-		Turns:      DefaultMaxTurns,
+		Turns:      turns,
 		TokenCount: totalTokens,
-		Reason:     "turn_limit",
-	}, nil
+		Reason:     reason,
+	}
 }

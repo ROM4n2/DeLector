@@ -2,27 +2,31 @@ package companion_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ROM4n2/DeLector/agent/internal/companion"
+	"github.com/ROM4n2/DeLector/agent/internal/provider"
 	"github.com/sashabaranov/go-openai"
 )
 
 // fakeToolRunner 模拟 Python 微服务的本地工具执行
 type fakeToolRunner struct {
-	calls []string
-	err   error
+	calls  []string
+	err    error
+	result map[string]any
 }
 
 func (f *fakeToolRunner) RunTool(_ context.Context, name string, _ map[string]any) (map[string]any, error) {
 	f.calls = append(f.calls, name)
 	if f.err != nil {
-		return nil, f.err
+		return f.result, f.err
 	}
 	if name == "analyze" {
 		return map[string]any{
@@ -354,4 +358,466 @@ func TestCompanionLoopToolErrorSelfHealing(t *testing.T) {
 		t.Errorf("expected EventToolEnd to contain structured error_code TOOL_EXECUTION_FAILED, but it didn't")
 	}
 	_ = receivedToolMsg
+}
+
+type scriptedLoopTurn struct {
+	content   string
+	toolCalls []openai.ToolCall
+}
+
+type scriptedLoopResult struct {
+	outcome  *companion.Outcome
+	err      error
+	events   []companion.Event
+	requests []openai.ChatCompletionRequest
+	spec     provider.ModelSpec
+}
+
+func runScriptedLoop(t *testing.T, req companion.Request, runner companion.ToolRunner, turns []scriptedLoopTurn) scriptedLoopResult {
+	t.Helper()
+	if len(turns) == 0 {
+		t.Fatal("scripted loop requires at least one turn")
+	}
+
+	var requests []openai.ChatCompletionRequest
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var chatReq openai.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&chatReq); err != nil {
+			t.Errorf("decode chat request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requests = append(requests, chatReq)
+		turnIndex := len(requests) - 1
+		if turnIndex >= len(turns) {
+			turnIndex = len(turns) - 1
+		}
+		turn := turns[turnIndex]
+
+		delta := make(map[string]any)
+		if turn.content != "" {
+			delta["content"] = turn.content
+		}
+		if turn.toolCalls != nil {
+			delta["tool_calls"] = turn.toolCalls
+		}
+		chunk, err := json.Marshal(map[string]any{
+			"id": fmt.Sprintf("turn-%d", len(requests)),
+			"choices": []any{map[string]any{
+				"delta": delta,
+				"index": 0,
+			}},
+		})
+		if err != nil {
+			t.Errorf("marshal SSE chunk: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "data: %s\n\n", chunk)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+
+	cfg := openai.DefaultConfig("mock-key")
+	cfg.BaseURL = ts.URL
+	agent := companion.NewCompanionAgent(openai.NewClientWithConfig(cfg), runner, "deepseek-chat")
+	activeModel := req.Model
+	if activeModel == "" {
+		activeModel = "deepseek-chat"
+	}
+
+	var events []companion.Event
+	outcome, err := agent.RunLoop(context.Background(), req, func(ev companion.Event) error {
+		events = append(events, ev)
+		return nil
+	})
+	return scriptedLoopResult{
+		outcome:  outcome,
+		err:      err,
+		events:   events,
+		requests: requests,
+		spec:     agent.Registry().ResolveModel(activeModel, req.BaseURL),
+	}
+}
+
+func equivalenceToolCall(index int, id, name, arguments string) openai.ToolCall {
+	return openai.ToolCall{
+		Index: &index,
+		ID:    id,
+		Type:  openai.ToolTypeFunction,
+		Function: openai.FunctionCall{
+			Name:      name,
+			Arguments: arguments,
+		},
+	}
+}
+
+const equivalencePromptNudgeGolden = "已完成对当前句子的多维度语言学推演与分析。请参阅上方提取的语法拓扑信息，如需针对特定成分深入探讨，可随时追问。"
+
+func TestRunLoopEquivalenceSystemPrompt(t *testing.T) {
+	tests := []struct {
+		name         string
+		ctx          companion.StudyContext
+		contextBlock string
+	}{
+		{
+			name: "card context prefix",
+			ctx: companion.StudyContext{
+				ArticleTitle:  "Spiegel Magazin",
+				CEFRLevel:     "B2",
+				SelectedText:  "Die Eule jagt.",
+				View:          "cards",
+				ContextSource: "card-current",
+				DraftText:     "Ich habe Hunger.",
+				CardContext:   "【当前卡盒词条】\n词: die Eule",
+			},
+			contextBlock: `【当前学习视口上下文】
+- 文章: Spiegel Magazin
+- 目标级别: B2
+- 当前聚焦句子: Die Eule jagt.
+- 当前页面: cards
+- 上下文来源: card-current
+- 当前写作草稿: Ich habe Hunger.
+- 【当前卡盒词条】
+词: die Eule`,
+		},
+		{
+			name:         "CEFR only",
+			ctx:          companion.StudyContext{CEFRLevel: "C1"},
+			contextBlock: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runScriptedLoop(t, companion.Request{
+				Messages: []companion.Message{{Role: "user", Content: "Hallo"}},
+				Context:  tt.ctx,
+			}, &fakeToolRunner{}, []scriptedLoopTurn{{content: "Fertig."}})
+			if result.err != nil {
+				t.Fatalf("RunLoop failed: %v", result.err)
+			}
+			if len(result.requests) != 1 || len(result.requests[0].Messages) == 0 {
+				t.Fatalf("captured requests = %+v", result.requests)
+			}
+
+			got := result.requests[0].Messages[0].Content
+			helperWant := companion.BuildSystemPrompt(companion.FormatStudyContext(tt.ctx), result.spec)
+			if got != helperWant {
+				t.Errorf("system prompt mismatch\n--- RunLoop actual ---\n%s\n--- helper expected ---\n%s", got, helperWant)
+			}
+			goldenWant := companion.CompanionSystemPrompt
+			if tt.contextBlock != "" {
+				goldenWant += "\n\n" + tt.contextBlock
+			}
+			if got != goldenWant {
+				t.Errorf("system prompt HEAD golden mismatch\n--- RunLoop actual ---\n%s\n--- HEAD golden ---\n%s", got, goldenWant)
+			}
+		})
+	}
+}
+
+func TestRunLoopEquivalenceToolStartAggregation(t *testing.T) {
+	tests := []struct {
+		name   string
+		calls  []openai.ToolCall
+		golden []companion.Event
+	}{
+		{
+			name: "normal",
+			calls: []openai.ToolCall{
+				equivalenceToolCall(0, "call_a", "analyze", `{"text":"Der Hund bellt."}`),
+			},
+			golden: []companion.Event{{
+				Event:   companion.EventToolStart,
+				Tool:    "analyze",
+				Payload: map[string]any{"text": "Der Hund bellt."},
+			}},
+		},
+		{
+			name: "out of order",
+			calls: []openai.ToolCall{
+				equivalenceToolCall(1, "call_b", "vocab_stats", `{"text":"Der Hund bellt."}`),
+				equivalenceToolCall(0, "call_a", "analyze", `{"text":"Der Hund bellt."}`),
+			},
+			golden: []companion.Event{
+				{
+					Event:   companion.EventToolStart,
+					Tool:    "analyze",
+					Payload: map[string]any{"text": "Der Hund bellt."},
+				},
+				{
+					Event:   companion.EventToolStart,
+					Tool:    "vocab_stats",
+					Payload: map[string]any{"text": "Der Hund bellt."},
+				},
+			},
+		},
+		{
+			name: "negative index",
+			calls: []openai.ToolCall{
+				equivalenceToolCall(-1, "call_negative", "analyze", `{"text":"Der Hund bellt."}`),
+			},
+			golden: []companion.Event{},
+		},
+		{
+			name: "sparse index",
+			calls: []openai.ToolCall{
+				equivalenceToolCall(2, "call_sparse", "analyze", `{"text":"Der Hund bellt."}`),
+			},
+			golden: []companion.Event{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runScriptedLoop(t, companion.Request{
+				Messages: []companion.Message{{Role: "user", Content: "Analysieren"}},
+			}, &fakeToolRunner{}, []scriptedLoopTurn{
+				{toolCalls: tt.calls},
+				{content: "Fertig."},
+			})
+			if result.err != nil {
+				t.Fatalf("RunLoop failed: %v", result.err)
+			}
+			if len(result.requests) != 2 {
+				t.Fatalf("request count = %d, want 2 (second request must be reached)", len(result.requests))
+			}
+			if result.outcome.Reason != "ok" {
+				t.Fatalf("outcome reason = %q, want ok", result.outcome.Reason)
+			}
+
+			expectedCalls := make(map[int]*openai.ToolCall)
+			for _, call := range tt.calls {
+				expectedCalls = companion.AggregateToolCalls(expectedCalls, call)
+			}
+			expectedList := companion.FilterValidToolCalls(expectedCalls)
+			helperWant := make([]companion.Event, 0, len(expectedList))
+			for _, call := range expectedList {
+				var payload map[string]any
+				if err := json.Unmarshal([]byte(call.Function.Arguments), &payload); err != nil {
+					t.Fatalf("decode expected tool payload: %v", err)
+				}
+				helperWant = append(helperWant, companion.Event{
+					Event:   companion.EventToolStart,
+					Tool:    call.Function.Name,
+					Payload: payload,
+				})
+			}
+
+			got := make([]companion.Event, 0)
+			for _, ev := range result.events {
+				if ev.Event == companion.EventToolStart {
+					got = append(got, ev)
+				}
+			}
+			if !reflect.DeepEqual(got, helperWant) {
+				t.Errorf("tool_start mismatch\nRunLoop actual: %#v\nhelper expected: %#v", got, helperWant)
+			}
+			if !reflect.DeepEqual(got, tt.golden) {
+				t.Errorf("tool_start HEAD golden mismatch\nRunLoop actual: %#v\nHEAD golden: %#v", got, tt.golden)
+			}
+		})
+	}
+}
+
+func TestRunLoopEquivalenceEmptyCallsListUntilTurnLimit(t *testing.T) {
+	turns := make([]scriptedLoopTurn, companion.DefaultMaxTurns)
+	for i := range turns {
+		turns[i].toolCalls = []openai.ToolCall{
+			equivalenceToolCall(-1, fmt.Sprintf("call_negative_%d", i), "analyze", `{"text":"Der Hund bellt."}`),
+		}
+	}
+	result := runScriptedLoop(t, companion.Request{
+		Messages: []companion.Message{{Role: "user", Content: "Analysieren"}},
+	}, &fakeToolRunner{}, turns)
+	if result.err != nil {
+		t.Fatalf("RunLoop failed: %v", result.err)
+	}
+	if len(result.requests) != companion.DefaultMaxTurns {
+		t.Errorf("request count = %d, want %d", len(result.requests), companion.DefaultMaxTurns)
+	}
+	if result.outcome.Reason != "turn_limit" {
+		t.Errorf("outcome reason = %q, want turn_limit", result.outcome.Reason)
+	}
+	if result.outcome.Text != equivalencePromptNudgeGolden {
+		t.Errorf("turn-limit outcome text = %q, HEAD golden = %q", result.outcome.Text, equivalencePromptNudgeGolden)
+	}
+	var fallbackDeltas []string
+	for _, ev := range result.events {
+		if ev.Event == companion.EventDelta {
+			fallbackDeltas = append(fallbackDeltas, ev.Text)
+		}
+	}
+	if !reflect.DeepEqual(fallbackDeltas, []string{equivalencePromptNudgeGolden}) {
+		t.Errorf("turn-limit delta events = %#v, HEAD golden [%q]", fallbackDeltas, equivalencePromptNudgeGolden)
+	}
+}
+
+func TestRunLoopEquivalencePromptNudgeAtTurnLimit(t *testing.T) {
+	turns := make([]scriptedLoopTurn, companion.DefaultMaxTurns)
+	for i := range turns {
+		turns[i].toolCalls = []openai.ToolCall{
+			equivalenceToolCall(0, fmt.Sprintf("call_%d", i), "analyze", `{"text":"Der Hund bellt."}`),
+		}
+	}
+	result := runScriptedLoop(t, companion.Request{
+		Messages: []companion.Message{{Role: "user", Content: "Analysieren"}},
+	}, &fakeToolRunner{}, turns)
+	if result.err != nil {
+		t.Fatalf("RunLoop failed: %v", result.err)
+	}
+	if result.outcome.Reason != "turn_limit" {
+		t.Fatalf("outcome reason = %q, want turn_limit", result.outcome.Reason)
+	}
+
+	helperWant := companion.BuildPromptNudge()
+	if result.outcome.Text != helperWant {
+		t.Errorf("turn-limit outcome text = %q, helper nudge = %q", result.outcome.Text, helperWant)
+	}
+	if result.outcome.Text != equivalencePromptNudgeGolden {
+		t.Errorf("turn-limit outcome text = %q, HEAD golden = %q", result.outcome.Text, equivalencePromptNudgeGolden)
+	}
+	var fallbackDeltas []string
+	for _, ev := range result.events {
+		if ev.Event == companion.EventDelta {
+			fallbackDeltas = append(fallbackDeltas, ev.Text)
+		}
+	}
+	if !reflect.DeepEqual(fallbackDeltas, []string{helperWant}) {
+		t.Errorf("turn-limit delta events = %#v, helper nudge [%q]", fallbackDeltas, helperWant)
+	}
+	if !reflect.DeepEqual(fallbackDeltas, []string{equivalencePromptNudgeGolden}) {
+		t.Errorf("turn-limit delta events = %#v, HEAD golden [%q]", fallbackDeltas, equivalencePromptNudgeGolden)
+	}
+}
+
+func TestRunLoopEquivalenceInvalidToolArguments(t *testing.T) {
+	const rawArguments = `{"text":`
+	const goldenJSON = `{"error_code":"INVALID_TOOL_ARGUMENTS","hint":"请确保为该工具传入合法 JSON 格式的对象参数。","message":"工具参数 JSON 解析失败: unexpected end of JSON input","raw":"{\"text\":","status":"error","tool":"analyze"}`
+	call := equivalenceToolCall(0, "call_bad_args", "analyze", rawArguments)
+	result := runScriptedLoop(t, companion.Request{
+		Messages: []companion.Message{{Role: "user", Content: "Analysieren"}},
+	}, &fakeToolRunner{}, []scriptedLoopTurn{
+		{toolCalls: []openai.ToolCall{call}},
+		{content: "Ich antworte ohne gültige Tool-Daten."},
+	})
+	if result.err != nil {
+		t.Fatalf("RunLoop failed: %v", result.err)
+	}
+	if len(result.requests) != 2 {
+		t.Fatalf("request count = %d, want 2", len(result.requests))
+	}
+
+	var payload map[string]any
+	parseErr := json.Unmarshal([]byte(rawArguments), &payload)
+	if parseErr == nil {
+		t.Fatal("test arguments unexpectedly valid")
+	}
+	helperJSON := companion.FormatToolArgErrorMessage(call.Function.Name, rawArguments, parseErr)
+	messages := result.requests[1].Messages
+	gotMessage := messages[len(messages)-1]
+	if gotMessage.Role != openai.ChatMessageRoleTool || gotMessage.ToolCallID != call.ID || gotMessage.Content != goldenJSON {
+		t.Errorf("invalid-argument tool message HEAD golden mismatch = %#v\nwant role=%q tool_call_id=%q content=%s", gotMessage, openai.ChatMessageRoleTool, call.ID, goldenJSON)
+	}
+	if gotMessage.Content != helperJSON {
+		t.Errorf("invalid-argument tool message helper mismatch = %#v\nhelper content=%s", gotMessage, helperJSON)
+	}
+
+	goldenResult := map[string]any{
+		"status":     "error",
+		"error_code": "INVALID_TOOL_ARGUMENTS",
+		"tool":       "analyze",
+		"message":    "工具参数 JSON 解析失败: unexpected end of JSON input",
+		"raw":        rawArguments,
+		"hint":       "请确保为该工具传入合法 JSON 格式的对象参数。",
+	}
+	goldenEvent := companion.Event{Event: companion.EventToolEnd, Tool: "analyze", Result: goldenResult}
+	var helperResult map[string]any
+	if err := json.Unmarshal([]byte(helperJSON), &helperResult); err != nil {
+		t.Fatalf("decode helper error JSON: %v", err)
+	}
+	helperEvent := companion.Event{Event: companion.EventToolEnd, Tool: call.Function.Name, Result: helperResult}
+	var gotEvents []companion.Event
+	for _, ev := range result.events {
+		if ev.Event == companion.EventToolEnd {
+			gotEvents = append(gotEvents, ev)
+		}
+	}
+	if !reflect.DeepEqual(gotEvents, []companion.Event{helperEvent}) {
+		t.Errorf("invalid-argument tool_end = %#v\nhelper expected: %#v", gotEvents, []companion.Event{helperEvent})
+	}
+	if !reflect.DeepEqual(gotEvents, []companion.Event{goldenEvent}) {
+		t.Errorf("invalid-argument tool_end HEAD golden mismatch = %#v\nHEAD golden: %#v", gotEvents, []companion.Event{goldenEvent})
+	}
+}
+
+func TestRunLoopEquivalenceToolExecutionFailure(t *testing.T) {
+	const goldenJSON = `{"error_code":"TOOL_EXECUTION_FAILED","hint":"工具执行暂时失败。请向学习者说明情况并给出基于已有上下文的专业解答，或调整参数重试。","message":"connection reset by peer","status":"error","tool":"analyze"}`
+	toolErr := errors.New("connection reset by peer")
+	call := equivalenceToolCall(0, "call_failed", "analyze", `{"text":"Der Hund bellt."}`)
+	result := runScriptedLoop(t, companion.Request{
+		Messages: []companion.Message{{Role: "user", Content: "Analysieren"}},
+	}, &fakeToolRunner{
+		err:    toolErr,
+		result: map[string]any{"stale": "must not leak into the structured error"},
+	}, []scriptedLoopTurn{
+		{toolCalls: []openai.ToolCall{call}},
+		{content: "Ich antworte trotz des Tool-Fehlers."},
+	})
+	if result.err != nil {
+		t.Fatalf("RunLoop failed: %v", result.err)
+	}
+	if len(result.requests) != 2 {
+		t.Fatalf("request count = %d, want 2", len(result.requests))
+	}
+
+	helperJSON := companion.FormatToolErrorMessage(call.Function.Name, toolErr)
+	messages := result.requests[1].Messages
+	gotMessage := messages[len(messages)-1]
+	if gotMessage.Role != openai.ChatMessageRoleTool || gotMessage.ToolCallID != call.ID || gotMessage.Content != goldenJSON {
+		t.Errorf("execution-error tool message HEAD golden mismatch = %#v\nwant role=%q tool_call_id=%q content=%s", gotMessage, openai.ChatMessageRoleTool, call.ID, goldenJSON)
+	}
+	if gotMessage.Content != helperJSON {
+		t.Errorf("execution-error tool message helper mismatch = %#v\nhelper content=%s", gotMessage, helperJSON)
+	}
+
+	goldenResult := map[string]any{
+		"status":     "error",
+		"error_code": "TOOL_EXECUTION_FAILED",
+		"tool":       "analyze",
+		"message":    "connection reset by peer",
+		"hint":       "工具执行暂时失败。请向学习者说明情况并给出基于已有上下文的专业解答，或调整参数重试。",
+	}
+	goldenEvent := companion.Event{
+		Event:   companion.EventToolEnd,
+		Tool:    "analyze",
+		Result:  goldenResult,
+		Summary: "执行受阻: connection reset by peer",
+	}
+	var helperResult map[string]any
+	if err := json.Unmarshal([]byte(helperJSON), &helperResult); err != nil {
+		t.Fatalf("decode helper error JSON: %v", err)
+	}
+	helperEvent := companion.Event{
+		Event:   companion.EventToolEnd,
+		Tool:    call.Function.Name,
+		Result:  helperResult,
+		Summary: fmt.Sprintf("执行受阻: %v", toolErr),
+	}
+	var gotEvents []companion.Event
+	for _, ev := range result.events {
+		if ev.Event == companion.EventToolEnd {
+			gotEvents = append(gotEvents, ev)
+		}
+	}
+	if !reflect.DeepEqual(gotEvents, []companion.Event{helperEvent}) {
+		t.Errorf("execution-error tool_end = %#v\nhelper expected: %#v", gotEvents, []companion.Event{helperEvent})
+	}
+	if !reflect.DeepEqual(gotEvents, []companion.Event{goldenEvent}) {
+		t.Errorf("execution-error tool_end HEAD golden mismatch = %#v\nHEAD golden: %#v", gotEvents, []companion.Event{goldenEvent})
+	}
 }
