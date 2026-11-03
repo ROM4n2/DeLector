@@ -4,9 +4,9 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.20.2（2026-11-01）**
+**最新版本：v5.21.0（2026-11-03）**
 
-**未发布（Unreleased，2026-11-03）**
+**v5.21.0（2026-11-03）**
 
 ### 🦉 伴学 Agent 页面级能力分区、HITL 生词提议闭环与跨页历史恢复
 
@@ -17,7 +17,7 @@
 - **体验修复**：用户手动关闭伴读后可通过头像浮标重新开启；german 禁用样式不再误伤其它 disabled 形态。
 - **验证**：全量 `pytest tests` 2700+ passed、前端探针 140+ checks、`go test ./...` 全绿，真实浏览器 + 真实模型跑通「提议 → 确认 → 入盒」与「提议 → 放弃」。
 
-### 🐞 卡盒测验 choice 模式缺释义空白选项修复（未发布）
+### 🐞 卡盒测验 choice 模式缺释义空白选项修复
 
 - 选择题的正确答案选项此前用裸 `card.definition_zh` 渲染，缺释义卡（HITL 提议允许入盒、其余卡面统一显示「待补充」）会渲染出**空白按钮**，与同函数 flashcard / dictation 分支口径不一致；现正确项与两个分支同走 `formatCardDefinition`，缺释义显示「待补充」。
 - 选项对象化后乱序（`isCorrect` 随对象携带），正确索引不再依赖 `indexOf` 文本比对，同文案干扰项或「待补充」字面量都不会误标正确项。
@@ -25,11 +25,27 @@
 
 ---
 
-### 📲 PWA 安装图标补齐（未发布）
+### 📲 PWA 安装图标补齐
 
 - `manifest.json` 新增 192x192 / 512x512 PNG 位图图标（保留内联 SVG 作 `sizes:any` 备用）；此前单张 SVG 声明 `192x192 512x512`，不满足浏览器安装提示对可解码位图的规格要求。
 - 新增 `tests/test_pwa_manifest.py` 守卫：PNG 实际尺寸与声明一致、图标路径为站点根相对（静态目录挂在 `/`，带 `/static` 前缀会 404）。
 - 实测（TestClient）：`/manifest.json` 200 application/json、`/icon-192.png` 200 image/png、`/icon-512.png` 200 image/png。Android 真机安装提示仍待点检。
+
+### 🦉 桌宠眨眼眼球错位修复与 README 产品图刷新（PR #197）
+
+- **根因**：`.char-eye` 的 `transform-box: fill-box` 把按 SVG viewBox 编写的 `transform-origin` 误解为眼球 bbox 相对坐标，96% 闭眼帧产生 `(72-40)×0.9×0.72=20.736px` 位移。
+- **修复**：改用 `transform-box: view-box`，围绕既有眼球中心缩放并保留眨眼动效；修复后同帧中心误差约 `0.000006px`，桌面四角色与窄屏 10 组检查最大误差 `0.0000171px`。
+- **截图**：README 首页与 B1 阅读器图片按原路径替换为 1440×857 JPEG，均在 `charBlink currentTime=0` 睁眼帧暂停后截取，无气泡或导航/播放条遮挡。
+
+**已知限制（Known Limitations）**
+- **Android 真机点检未做**：本版包含 `static/`、PWA 与伴学跨页改动，不得视为 Android 已完成实机验收；安装提示、更新 chip 与 WebView 行为仍需真机复核。
+- **`live-selection` 未在真实浏览器验证**：实时选区上下文已有 Node 沙盒探针与 Go/Python 契约测试，但尚未在真实浏览器完成选取 → 伴学链路验收。
+
+**回滚（Rollback）**
+- **代码 / 产物**：桌面可回退至 `v5.20.2` 发布包；Android `versionCode` 由 `52002` 升至 `52100`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。
+- **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式，回滚代码不影响既有学习资产。
+- **Schema**：`companion_sessions.scope_key` 与对应索引均为加法式迁移，存量会话回填 `view:global`，无破坏性删列或重命名；旧版仍可读取同一 SQLite 数据库。
+- **配置 / 发布通道**：无新增配置或密钥要求；git 可 revert 本版提交，Android 版本计数不得复用或回拨。
 
 ---
 
