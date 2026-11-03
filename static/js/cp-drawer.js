@@ -39,8 +39,27 @@ let bodyEl = null;
 let inputEl = null;
 let sendBtnEl = null;
 let abortController = null;
+let activeTurnGeneration = 0;
 let currentReasoningEffort = 'medium';
 let sessionSelectEl = null;
+let persistedHistorySessionId = null;
+let persistedHistoryCount = 0;
+
+function setPersistedHistoryCount(sessionId, count) {
+  if (!sessionId) return;
+  persistedHistorySessionId = sessionId;
+  persistedHistoryCount = count;
+}
+
+function getPersistedHistoryCount(sessionId) {
+  if (!sessionId) return 0;
+  // 状态被重置或切换到未跟踪会话时，以当前已加载历史为基线；
+  // 同一 session 的乐观 user 不计入，只有 done/成功恢复才推进该计数。
+  if (persistedHistorySessionId !== sessionId || companionState.messages.length < persistedHistoryCount) {
+    setPersistedHistoryCount(sessionId, companionState.messages.length);
+  }
+  return persistedHistoryCount;
+}
 
 export async function refreshSessionSelect() {
   sessionSelectEl = document.getElementById('companion-session-select');
@@ -784,9 +803,10 @@ function createCompanionTurnController({
   typewriter
 }) {
   let fullStreamText = '';
+  let completed = false;
 
   return {
-    handleEvent(event, data) {
+    handleEvent(event, data, turnGeneration, sessionId, persistedCount) {
       if (event === 'thought') {
         thoughtCtrl.setRealThought(data.text || '');
       } else if (event === 'tool_start') {
@@ -819,36 +839,95 @@ function createCompanionTurnController({
       } else if (event === 'proposal') {
         renderProposalCard(proposalsContainerEl, data.proposal, handleProposalAction);
       } else if (event === 'done') {
+        completed = true;
         thoughtCtrl.finish();
-        companionState.inFlight = false;
-        if (sendBtnEl) sendBtnEl.disabled = false;
+        const ownsTurn = turnGeneration === activeTurnGeneration;
+        if (ownsTurn) {
+          setPersistedHistoryCount(sessionId, persistedCount + 2);
+          companionState.inFlight = false;
+          if (sendBtnEl) sendBtnEl.disabled = false;
+        }
         typewriter.flush();
         if (fullStreamText) {
           renderSafeMarkdownToElement(textBodyEl, fullStreamText);
         }
-        companionState.messages.push({ role: 'assistant', content: fullStreamText });
+        if (ownsTurn) {
+          companionState.messages.push({ role: 'assistant', content: fullStreamText });
+        }
       } else if (event === 'error') {
         typewriter.cancel();
         thoughtCtrl.fail('研读中断');
-        companionState.inFlight = false;
-        if (sendBtnEl) sendBtnEl.disabled = false;
+        if (turnGeneration === activeTurnGeneration) {
+          companionState.inFlight = false;
+          if (sendBtnEl) sendBtnEl.disabled = false;
+        }
         textBodyEl.textContent = '[异常: ' + (data.message_zh || '处理失败') + ']';
         textBodyEl.style.color = 'var(--coral, #b44322)';
       }
       bodyEl.scrollTop = bodyEl.scrollHeight;
     },
 
-    handleStreamError(err) {
+    async handleStreamError(err, sessionId, userText, minimumRecoveredMessages, turnGeneration) {
+      if (completed || turnGeneration !== activeTurnGeneration) return;
       typewriter.cancel();
       thoughtCtrl.fail('连接中断');
+
+      let recoveredMessages = null;
+      if (sessionId) {
+        // 取消响应与后端 finally 落库可能相差一个网络来回；顺序短重试，不重发模型请求。
+        for (let attempt = 0; attempt < 3 && !recoveredMessages; attempt += 1) {
+          try {
+            const histRes = await fetchCompanionHistory(sessionId);
+            const messages = (histRes && histRes.messages) || [];
+            const userMsg = messages[messages.length - 2];
+            const assistantMsg = messages[messages.length - 1];
+            if (
+              messages.length >= minimumRecoveredMessages &&
+              userMsg?.role === 'user' &&
+              userMsg.content === userText &&
+              assistantMsg?.role === 'assistant' &&
+              assistantMsg.content
+            ) {
+              recoveredMessages = messages;
+            }
+          } catch (recoveryErr) {
+            console.warn('[CompanionDrawer] Failed to recover interrupted turn:', recoveryErr);
+            break;
+          }
+        }
+      }
+
+      if (
+        recoveredMessages &&
+        companionState.currentSessionId === sessionId &&
+        turnGeneration === activeTurnGeneration
+      ) {
+        setPersistedHistoryCount(sessionId, recoveredMessages.length);
+        companionState.messages = recoveredMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          thought: m.thought
+        }));
+        const assistantMsg = recoveredMessages[recoveredMessages.length - 1];
+        renderSafeMarkdownToElement(textBodyEl, assistantMsg.content);
+        const notice = document.createElement('div');
+        notice.className = 'companion-resume-notice';
+        notice.textContent = '连接中断，已恢复断点前的回答。';
+        textBodyEl.appendChild(notice);
+        return;
+      }
+
+      if (completed || turnGeneration !== activeTurnGeneration) return;
       textBodyEl.textContent = '[连接失败: ' + err.message + ']';
       textBodyEl.style.color = 'var(--coral, #b44322)';
     },
 
-    cleanup() {
+    cleanup(turnGeneration) {
       thoughtCtrl.cleanup();
-      companionState.inFlight = false;
-      if (sendBtnEl) sendBtnEl.disabled = false;
+      if (turnGeneration === activeTurnGeneration) {
+        companionState.inFlight = false;
+        if (sendBtnEl) sendBtnEl.disabled = false;
+      }
       bodyEl.scrollTop = bodyEl.scrollHeight;
     }
   };
@@ -913,6 +992,8 @@ export function submitPrompt(userText) {
   if (!bodyEl) initCompanionDrawer();
   if (!bodyEl) return;
 
+  let persistedCountAtStart = getPersistedHistoryCount(companionState.currentSessionId);
+
   // 1. 渲染用户消息
   const userMsgEl = document.createElement('div');
   userMsgEl.className = 'companion-message user';
@@ -947,6 +1028,8 @@ export function submitPrompt(userText) {
   bodyEl.appendChild(asstMsgEl);
   bodyEl.scrollTop = bodyEl.scrollHeight;
 
+  const turnGeneration = ++activeTurnGeneration;
+  let minimumRecoveredMessages = persistedCountAtStart + 2;
   companionState.inFlight = true;
   if (!sendBtnEl) sendBtnEl = document.getElementById('companion-send-btn');
   if (sendBtnEl) sendBtnEl.disabled = true;
@@ -977,8 +1060,9 @@ export function submitPrompt(userText) {
     typewriter
   });
 
+  let streamSessionId = companionState.currentSessionId;
   streamCompanionChat({
-    session_id: companionState.currentSessionId,
+    session_id: streamSessionId,
     reasoning_effort: currentReasoningEffort,
     messages: companionState.messages,
     context: activeContext,
@@ -988,17 +1072,37 @@ export function submitPrompt(userText) {
     card_context: companionState.activeContext.cardContext,
     scope_key: getCompanionScopeKey(),
     signal: abortController.signal,
-    onSessionId: (sessionId) => {
-      if (sessionId && companionState.currentSessionId !== sessionId) {
-        companionState.currentSessionId = sessionId;
-        refreshSessionSelect().catch(() => {});
+    onSessionId: (sessionId, historyLength) => {
+      if (sessionId) {
+        streamSessionId = sessionId;
+        if (turnGeneration === activeTurnGeneration && Number.isInteger(historyLength) && historyLength >= 0) {
+          persistedCountAtStart = historyLength;
+          minimumRecoveredMessages = historyLength + 2;
+          setPersistedHistoryCount(sessionId, historyLength);
+        }
+        if (turnGeneration === activeTurnGeneration && companionState.currentSessionId !== sessionId) {
+          companionState.currentSessionId = sessionId;
+          refreshSessionSelect().catch(() => {});
+        }
       }
     },
-    onEvent: (event, data) => turnController.handleEvent(event, data)
+    onEvent: (event, data) => turnController.handleEvent(
+      event,
+      data,
+      turnGeneration,
+      streamSessionId,
+      persistedCountAtStart
+    )
   }).catch((err) => {
-    turnController.handleStreamError(err);
+    return turnController.handleStreamError(
+      err,
+      streamSessionId,
+      userText,
+      minimumRecoveredMessages,
+      turnGeneration
+    );
   }).finally(() => {
-    turnController.cleanup();
+    turnController.cleanup(turnGeneration);
   });
 }
 

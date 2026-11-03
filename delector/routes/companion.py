@@ -162,61 +162,72 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
         seen_proposal_ids: set[str] = set()
         sse_events = _SSEEventAccumulator()
 
-        async for chunk in dispatch_companion_stream(req.messages, request=request, context=context_payload):
-            yield chunk
-            for ev in sse_events.feed(chunk):
-                if ev.get("event") == "delta":
-                    full_text.append(ev.get("text", ""))
-                elif ev.get("event") == "thought":
-                    full_thought.append(ev.get("text", ""))
-                elif ev.get("event") == "proposal":
-                    prop = ev.get("proposal")
-                    if not isinstance(prop, dict):
-                        prop = {
-                            "id": ev.get("id"),
-                            "action": ev.get("action"),
-                            "title": ev.get("title"),
-                            "payload": ev.get("payload"),
-                        }
-                    pid = str(prop.get("id") or "")
-                    if pid and pid in seen_proposal_ids:
-                        continue
-                    if pid:
-                        seen_proposal_ids.add(pid)
-                    proposals_payload.append(prop)
+        try:
+            async for chunk in dispatch_companion_stream(req.messages, request=request, context=context_payload):
+                # 先解析再转发：即便客户端在 yield 点断开，最后一帧也已进入本轮快照。
+                for ev in sse_events.feed(chunk):
+                    if ev.get("event") == "delta":
+                        full_text.append(ev.get("text", ""))
+                    elif ev.get("event") == "thought":
+                        full_thought.append(ev.get("text", ""))
+                    elif ev.get("event") == "proposal":
+                        prop = ev.get("proposal")
+                        if not isinstance(prop, dict):
+                            prop = {
+                                "id": ev.get("id"),
+                                "action": ev.get("action"),
+                                "title": ev.get("title"),
+                                "payload": ev.get("payload"),
+                            }
+                        pid = str(prop.get("id") or "")
+                        if pid and pid in seen_proposal_ids:
+                            continue
+                        if pid:
+                            seen_proposal_ids.add(pid)
+                        proposals_payload.append(prop)
+                yield chunk
+        finally:
+            # Starlette 的 disconnect listener 会直接在 yield 点关闭生成器；
+            # 正常结束与取消路径都必须保留已解析的断点，取消异常本身继续传播。
+            assistant_message_id: Optional[str] = None
+            if user_text or full_text:
+                with contextlib.suppress(Exception):
+                    _user_msg, assistant_msg = _session_svc.save_turn(
+                        sid,
+                        user_text,
+                        "".join(full_text),
+                        thought="".join(full_thought),
+                    )
+                    assistant_message_id = assistant_msg.get("id")
 
-        assistant_message_id: Optional[str] = None
-        if user_text or full_text:
-            with contextlib.suppress(Exception):
-                _user_msg, assistant_msg = _session_svc.save_turn(
-                    sid,
-                    user_text,
-                    "".join(full_text),
-                    thought="".join(full_thought),
-                )
-                assistant_message_id = assistant_msg.get("id")
+            # 生产 chat 路径补齐 proposal 落库；复用 SSE 里的 proposal id，
+            # 确保前端确认/拒绝能命中同一数据库行。
+            for prop in proposals_payload:
+                try:
+                    raw_payload = prop.get("payload")
+                    payload_dict: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
+                    _proposal_svc.create_proposal(
+                        session_id=sid,
+                        action=str(prop.get("action") or "create_vocab_cards"),
+                        title=str(prop.get("title") or "加入核心生词卡"),
+                        payload=payload_dict,
+                        message_id=assistant_message_id,
+                        proposal_id=str(prop.get("id") or "") or None,
+                    )
+                except Exception as exc:  # silent-ok: 落库失败不阻断已完成的 SSE 流，但必须留痕
+                    logging.getLogger("delector").warning("伴学 proposal 落库失败: %s", exc)
 
-        # 生产 chat 路径补齐 proposal 落库；复用 SSE 里的 proposal id，
-        # 确保前端确认/拒绝能命中同一数据库行。
-        for prop in proposals_payload:
-            try:
-                raw_payload = prop.get("payload")
-                payload_dict: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
-                _proposal_svc.create_proposal(
-                    session_id=sid,
-                    action=str(prop.get("action") or "create_vocab_cards"),
-                    title=str(prop.get("title") or "加入核心生词卡"),
-                    payload=payload_dict,
-                    message_id=assistant_message_id,
-                    proposal_id=str(prop.get("id") or "") or None,
-                )
-            except Exception as exc:  # silent-ok: 落库失败不阻断已完成的 SSE 流，但必须留痕
-                logging.getLogger("delector").warning("伴学 proposal 落库失败: %s", exc)
-
+    # 本轮起点由后端权威历史给出：session_id 缺省时也可能复用既有 scope 会话。
+    history_length = len(_session_svc.get_history(sid))
     return StreamingResponse(
         _wrapped_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "X-Session-ID": sid},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Session-ID": sid,
+            "X-History-Length": str(history_length),
+        },
     )
 
 

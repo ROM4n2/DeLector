@@ -315,6 +315,9 @@ context.__probe = {
   apiCalls: [],
   sessionFetchCalls: [],
   sessionsFixture: [],
+  historyFetchCalls: [],
+  historyFixture: [],
+  historyResponses: [],
   streamCalls: [],
   markdownCalls: [],
   proposalCalls: [],
@@ -402,7 +405,12 @@ async function main() {
       "export async function rejectProposal(id) { globalThis.__probe.rejectProposalCalls.push(id); return { status: 'rejected' }; }",
       "export async function fetchCompanionSessions(scopeKey) { globalThis.__probe.sessionFetchCalls.push(scopeKey || null); return { sessions: globalThis.__probe.sessionsFixture || [] }; }",
       "export async function createCompanionSession() { return { session: { id: 'x' } }; }",
-      "export async function fetchCompanionHistory() { return { messages: [] }; }",
+      "export async function fetchCompanionHistory(sessionId) {",
+      "  globalThis.__probe.historyFetchCalls.push(sessionId);",
+      "  const queued = globalThis.__probe.historyResponses;",
+      "  const messages = queued.length ? queued.shift() : globalThis.__probe.historyFixture;",
+      "  return { messages: messages || [] };",
+      "}",
       "export async function fetchCompanionProposals() { return { proposals: [] }; }",
       "export async function fetchAppSettings() { return {}; }",
       "export async function updateReasoningEffort() { return {}; }",
@@ -1194,7 +1202,10 @@ async function main() {
       ok: true,
       headers: {
         get(name) {
-          return String(name).toLowerCase() === "x-session-id" ? "ses_auto" : null;
+          const header = String(name).toLowerCase();
+          if (header === "x-session-id") return "ses_auto";
+          if (header === "x-history-length") return "2";
+          return null;
         },
       },
       body: {
@@ -1211,6 +1222,7 @@ async function main() {
     };
   };
   let gotSid = null;
+  let gotHistoryLength = null;
   const apiEvents = [];
   await cpApi.namespace.streamCompanionChat({
     messages: [{ role: "user", content: "Hallo" }],
@@ -1218,12 +1230,14 @@ async function main() {
     context_source: "none",
     draft_text: "Ich habe hunger.",
     scope_key: "view:cards",
-    onSessionId: (sid) => {
+    onSessionId: (sid, historyLength) => {
       gotSid = sid;
+      gotHistoryLength = historyLength;
     },
     onEvent: (event) => apiEvents.push(event),
   });
   check(gotSid === "ses_auto", "M 未回填响应头 X-Session-ID");
+  check(gotHistoryLength === 2, "M 未回填响应头 X-History-Length");
   check(captured && captured.body.view === "cards", "M 请求体未携带 view");
   check(captured && captured.body.context_source === "none", "M 请求体未携带 context_source");
   check(captured && captured.body.draft_text === "Ich habe hunger.", "M 请求体未携带 draft_text");
@@ -1256,6 +1270,9 @@ async function main() {
     companionSendBtn.disabled = false;
     streamCalls.length = 0;
     context.__probe.markdownCalls.length = 0;
+    context.__probe.historyFetchCalls.length = 0;
+    context.__probe.historyFixture = [];
+    context.__probe.historyResponses = [];
     context.__probe.proposalCalls.length = 0;
     context.__probe.rejectProposalCalls.length = 0;
     context.__probe.executeProposalCalls.length = 0;
@@ -1274,9 +1291,7 @@ async function main() {
     } catch {
       // reject 场景由后续 DOM / finally 断言验证，不能在这里把预期异常当探针异常。
     }
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
   }
 
   function renderedText(el) {
@@ -1531,6 +1546,148 @@ async function main() {
   check(companionState.messages.length === 1, "N Promise reject 错误追加 assistant");
   checkCleanOutput("N Promise reject 链");
 
+  prepareSubmit("reader");
+  companionState.currentSessionId = null;
+  submitPrompt("Resume bitte");
+  const resumed = streamCalls[0];
+  resumed.options.onSessionId("ses_resume_header");
+  resumed.options.onEvent("delta", { text: "Unvollständig" });
+  context.__probe.historyResponses = [
+    [],
+    [
+      { role: "user", content: "Resume bitte" },
+      { role: "assistant", content: "Unvollständig", thought: "Satzanalyse" },
+    ],
+  ];
+  resumed.reject(new Error("Socket lost"));
+  await settleStream(resumed);
+  const resumedText = drawerBody.children[1].children[2];
+  check(
+    context.__probe.historyFetchCalls.join(",") === "ses_resume_header,ses_resume_header",
+    "N 断流后未用 X-Session-ID 重读历史直到当前轮就绪"
+  );
+  check(streamCalls.length === 1, "N 断流恢复重新发起了模型请求");
+  check(companionState.currentSessionId === "ses_resume_header", "N 恢复后 session 指针漂移");
+  check(companionState.messages.length === 2, "N 断流恢复未恰好补齐一条 assistant");
+  check(
+    companionState.messages[1]?.role === "assistant" &&
+      companionState.messages[1]?.content === "Unvollständig",
+    "N 断流恢复的 assistant 内容错误"
+  );
+  check(
+    context.__probe.markdownCalls.at(-1)?.text === "Unvollständig",
+    "N 断流恢复未把部分回答交给 Markdown 渲染"
+  );
+  check(renderedText(resumedText).includes("已恢复"), "N 断流恢复缺少可见提示");
+  check(companionState.inFlight === false && !companionSendBtn.disabled, "N 断流恢复后发送状态未复位");
+  checkCleanOutput("N 断流恢复链");
+
+  prepareSubmit("reader");
+  companionState.currentSessionId = null;
+  submitPrompt("Resume bitte");
+  const existingScopeTurn = streamCalls[0];
+  const existingScopeHistory = [
+    { role: "user", content: "Resume bitte" },
+    { role: "assistant", content: "Antwort aus altem Scope" },
+  ];
+  existingScopeTurn.options.onSessionId("ses_existing_scope", 2);
+  existingScopeTurn.options.onEvent("delta", { text: "Neue Scope-Antwort" });
+  context.__probe.historyResponses = [
+    existingScopeHistory,
+    [...existingScopeHistory, { role: "user", content: "Resume bitte" }, { role: "assistant", content: "Neue Scope-Antwort" }],
+  ];
+  existingScopeTurn.reject(new Error("Existing scope socket lost"));
+  await settleStream(existingScopeTurn);
+  check(context.__probe.historyFetchCalls.length === 2, "N null session 复用既有 scope 时误收旧消息对");
+  check(companionState.messages.length === 4, "N 既有 scope 恢复后消息数错误");
+  check(
+    companionState.messages.at(-1)?.content === "Neue Scope-Antwort",
+    "N 既有 scope 未按响应头历史基线恢复新回答"
+  );
+  checkCleanOutput("N 既有 scope 恢复链");
+
+  prepareSubmit("reader");
+  const repeatedPromptHistory = [
+    { role: "user", content: "Resume bitte" },
+    { role: "assistant", content: "Alte Antwort" },
+  ];
+  companionState.messages = repeatedPromptHistory.map((m) => ({ ...m }));
+  submitPrompt("Resume bitte");
+  const repeatedPrompt = streamCalls[0];
+  repeatedPrompt.options.onEvent("delta", { text: "Neue Antwort" });
+  context.__probe.historyResponses = [
+    repeatedPromptHistory,
+    [...repeatedPromptHistory, { role: "user", content: "Resume bitte" }, { role: "assistant", content: "Neue Antwort" }],
+  ];
+  repeatedPrompt.reject(new Error("Socket lost again"));
+  await settleStream(repeatedPrompt);
+  check(context.__probe.historyFetchCalls.length === 2, "N 同文旧轮被误当成本轮断点");
+  check(companionState.messages.length === 4, "N 同文重问恢复后消息数错误");
+  check(
+    companionState.messages.at(-1)?.content === "Neue Antwort",
+    "N 同文重问恢复了旧回答而不是新断点"
+  );
+  checkCleanOutput("N 同文重问恢复链");
+
+  prepareSubmit("reader");
+  submitPrompt("A turn");
+  const oldTurn = streamCalls[0];
+  oldTurn.options.onEvent("delta", { text: "A answer" });
+  oldTurn.options.onEvent("done", {});
+  submitPrompt("B turn");
+  const newTurn = streamCalls[1];
+  const oldTurnText = drawerBody.children[1].children[2];
+  newTurn.options.onEvent("delta", { text: "B answer" });
+  context.__probe.historyResponses = [[
+    { role: "user", content: "A turn" },
+    { role: "assistant", content: "A answer" },
+  ]];
+  const markdownBeforeOldReject = context.__probe.markdownCalls.length;
+  oldTurn.reject(new Error("Late old transport failure"));
+  await settleStream(oldTurn);
+  check(companionState.messages.length === 3, "N 旧流恢复擦掉了新轮 user 消息");
+  check(companionState.messages.at(-1)?.content === "B turn", "N 旧流恢复覆盖了新轮末尾消息");
+  check(companionState.inFlight === true, "N 旧流 finally 解锁了仍在运行的新轮");
+  check(companionSendBtn.disabled === true, "N 旧流 finally 重新启用了新轮发送按钮");
+  check(
+    context.__probe.markdownCalls.length === markdownBeforeOldReject,
+    "N 旧流恢复重复渲染了已完成的旧回答"
+  );
+  check(
+    oldTurnText.textContent === "A answer" && !oldTurnText.textContent.includes("连接失败"),
+    "N 旧流迟到 reject 覆盖了已完成气泡"
+  );
+  newTurn.options.onEvent("done", {});
+  newTurn.resolve({});
+  await settleStream(newTurn);
+  check(companionState.messages.length === 4, "N 新轮完成后 assistant 数量错误");
+  check(companionState.messages.at(-1)?.content === "B answer", "N 新轮回答未正确沉淀");
+  check(companionState.inFlight === false && !companionSendBtn.disabled, "N 新轮结束后发送锁未复位");
+  checkCleanOutput("N 新旧流所有权链");
+
+  prepareSubmit("reader");
+  submitPrompt("Unsaved first turn");
+  const unsavedFirst = streamCalls[0];
+  unsavedFirst.reject(new Error("Request never reached server"));
+  await settleStream(unsavedFirst);
+  check(companionState.messages.length === 1, "N 未落库首轮的前置状态错误");
+  submitPrompt("Second turn");
+  const secondAfterUnsaved = streamCalls[1];
+  secondAfterUnsaved.options.onEvent("delta", { text: "Recovered second" });
+  context.__probe.historyResponses = [[
+    { role: "user", content: "Second turn" },
+    { role: "assistant", content: "Recovered second" },
+  ]];
+  secondAfterUnsaved.reject(new Error("Second socket lost"));
+  await settleStream(secondAfterUnsaved);
+  check(companionState.messages.length === 2, "N 乐观 user 被误计入持久化基线导致无法恢复");
+  check(
+    companionState.messages.at(-1)?.content === "Recovered second",
+    "N 首轮未落库后次轮断点未恢复"
+  );
+  check(streamCalls.length === 2, "N 首轮未落库后的恢复重发了额外模型请求");
+  checkCleanOutput("N 未落库首轮后的恢复链");
+
   prepareSubmit("writer");
   const latestDraft = "Ich habe einen neuen Entwurf geschrieben.";
   setCompanionContext("", "", "", "writer", "writer-draft", "ALTER ENTWURF", "");
@@ -1641,6 +1798,11 @@ async function main() {
       "submit-stream-happy-path": "pass",
       "submit-stream-error-event": "pass",
       "submit-stream-reject": "pass",
+      "submit-stream-resume": "pass",
+      "submit-stream-resume-existing-scope": "pass",
+      "submit-stream-resume-stale": "pass",
+      "submit-stream-turn-ownership": "pass",
+      "submit-stream-recover-after-unsaved": "pass",
       "submit-writer-latest-context": "pass",
       "submit-cards-latest-context": "pass",
       "submit-input-guards": "pass",
