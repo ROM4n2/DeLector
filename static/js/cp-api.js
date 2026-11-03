@@ -137,8 +137,15 @@ export async function streamCompanionChat(options) {
   const responseSessionId = response.headers && response.headers.get
     ? response.headers.get('X-Session-ID')
     : null;
+  const rawHistoryLength = response.headers && response.headers.get
+    ? response.headers.get('X-History-Length')
+    : null;
+  const parsedHistoryLength = Number.parseInt(rawHistoryLength, 10);
+  const responseHistoryLength = Number.isFinite(parsedHistoryLength) && parsedHistoryLength >= 0
+    ? parsedHistoryLength
+    : null;
   if (responseSessionId && typeof options.onSessionId === 'function') {
-    options.onSessionId(responseSessionId);
+    options.onSessionId(responseSessionId, responseHistoryLength);
   }
 
   const reader = response.body.getReader();
