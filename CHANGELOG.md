@@ -4,7 +4,33 @@
 > 桌面 / Android 四平台发布资产见 [GitHub Releases](https://github.com/ROM4n2/DeLector/releases)；
 > 开发决策细节见 `docs/plans/archive/` 与 Obsidian Vault `08-Projects/DeLector/01-ADR/`。
 
-**最新版本：v5.21.0（2026-11-03）**
+**最新版本：v5.21.1（2026-11-03）**
+
+**v5.21.1（2026-11-03）**
+
+### 🐞 伴学 SSE 跨 chunk 分帧修复（PR #199）
+
+- **用户可见 bug**：SSE 帧被网络切分到多个 chunk 时，旧实现按 chunk 边界解析，导致 assistant 消息与 proposal 静默丢失、对应轮次不落库；这不是内部重构或性能优化，而是传输边界缺陷修复。
+- **修复**：改为缓冲累积原始字节，仅在空行闭合完整 SSE 帧后解析；覆盖 2/3/N 段、逐字节、固定种子随机分片、CRLF/混合空行与多行 `data`。客户端原始字节转发保持不变，`save_turn` 每轮只执行一次，同 id proposal 去重且不同 id 不误删。
+- **回归验证**：跨 chunk 分片、delta / thought / proposal 不丢不重与持久化守恒测试均通过；PR #199 全量 `python -m pytest tests` 为 **2719 passed / 3 skipped**。
+
+### ♻️ Go RunLoop 与 submitPrompt 内部重构（行为不变）
+
+- **Go helper 接线与 `RunLoop` 拆分**：7 个既有 helper 全部进入生产路径，拆出 `buildTurnPrompt` / `receiveTurn` / `executeToolCalls` / `finalize`，`RunLoop` 从 412 行降至 97 行；以旧实现字面 golden、第二请求与空 `callsList` 路径钉住既有行为，未顺手改变 CEFR-only 或异常 tool-call index 语义。
+- **`submitPrompt` 事件控制器**：在同文件收敛七类事件、异常中断与 `finally` 清理，函数从 197 行降至 147 行；公开签名、请求字段、DOM/消息状态和事件顺序均不变，未为拆文件而拆出 `cp-turn.js`。
+- **探针先行与变异验证**：重构前先在旧 `submitPrompt` 上取得 252 checks / 34 场景全绿，补齐 `tool_end` 错误分支反例后最终为 **274 checks / 34 场景**；删除 `done` 的 assistant 入史语句、反转 `isError` 两类变异均实测变红，还原后复绿。全部 **35/35** 前端探针、七事件契约、`go test ./...` 与 race 检查通过。
+
+**已知限制（Known Limitations）**
+- **Android 真机点检未做**：本版包含伴学前端与版本面改动，不得视为 Android 已完成实机验收；覆盖安装、更新 chip 与 WebView 行为仍需真机复核。
+- **`live-selection` 未在真实浏览器验证**：实时选区上下文已有 Node 沙盒探针与 Go/Python 契约测试，但尚未在真实浏览器完成选取 → 伴学链路验收。
+
+**回滚（Rollback）**
+- **代码 / 产物**：桌面可回退至 `v5.21.0` 发布包；Android `versionCode` 由 `52100` 升至 `52101`，只能卸载重装旧 APK（会清应用私有数据，须先备份）。
+- **数据位置 / 格式**：本版未搬移数据目录、未改变数据文件格式，回滚代码不影响既有学习资产。
+- **Schema**：本版无数据库 Schema 迁移，旧版可继续读取同一 SQLite 数据库。
+- **配置 / 发布通道**：无新增配置或密钥要求；git 可 revert 本版提交，Android 版本计数不得复用或回拨。
+
+---
 
 **v5.21.0（2026-11-03）**
 

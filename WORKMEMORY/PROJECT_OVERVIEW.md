@@ -23,11 +23,11 @@
 
 ## 当前状态
 
-- **最新发布 v5.21.0（2026-11-03）** —— **伴学 Agent 页面级能力与 HITL 生词提议闭环 + 卡盒释义统一 + PWA 图标与桌宠眨眼修复**。
-  - 伴学跨页通用化：请求按 `article:<id>` / `view:<name>` 隔离，写作台、进度页与卡盒接入页面级工具；跨 scope 历史可恢复且显式重置当前页面上下文。
-  - HITL 提议闭环：proposal 统一落库，确认才写卡、拒绝只流转状态；缺 `definition_zh` 在提案、卡盒各卡面与测验 choice 选项统一显示「待补充」。
-  - PWA 与视觉修复：补齐 192/512 PNG 安装图标；桌宠眼球缩放改用 SVG `view-box` 坐标原点，消除眨眼位移；README 两张产品图更新为睁眼常态帧。
-- **历史里程碑归档**：v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
+- **最新发布 v5.21.1（2026-11-03）** —— **伴学 SSE 跨 chunk 分帧修复 + Go RunLoop 与 submitPrompt 行为不变重构**。
+  - SSE 传输修复：网络分片不再导致 assistant 消息与 proposal 静默丢失、不落库；完整帧闭合后解析，原始字节转发与每轮单次持久化保持不变。
+  - 内部边界收敛：7 个 Go helper 进入生产路径，`RunLoop` 412→97 行；`submitPrompt` 以同文件事件控制器收敛七类事件，公开契约与行为不变。
+  - 验证：伴学探针最终 274 checks / 34 场景；PR #199 全量 2719 passed / 3 skipped，v5.21.1 发版分支全量 2720 passed / 2 skipped；Go 与 JS 变异均实测变红，还原后复绿。
+- **历史里程碑归档**：v5.21.0（伴学页面级能力与 HITL 闭环）、v5.20.2（阅读排版与 CEFR 透视）、v5.20.1（Android 拖拽与 Apache 2.0）、v5.20.0（伴学 Agent 运行时）、v5.19.0 及更早版本演进详见 `CHANGELOG.md` 与 `WORKMEMORY/cold/digest-2026-10.md`。
 
 ## 红线速查（详情见 `docs/agents/architecture.md` / `ops.md`）
 
@@ -51,7 +51,7 @@
 
 1. **真实用户试用 + 宣传开闸门槛（2026-10-12 DECISION，`/dfs-grill` Track 1 收敛、不落 ADR）**：产品种草帖**延后**到四条门槛全绿 —— ① **≥5 份真实三问反馈**（入口已随 2026-10-12 批次落地：`.github/ISSUE_TEMPLATE/feedback.md` + README 下载表下直达链接；零门槛：不强制 `bug(scope):` 前缀、三道判断题、可选吐槽）② 新手「下载 → 打开 → 读到第一篇短文」连续无协助成功 ③ README 首屏含截图/GIF 与 Win10 WebView2 前置（见第 3 条）④ Android 真机点检通过（见第 2 条）。**内容先行不受限**：备考方法论 / 开发理念类帖子现在就能发；**产品演示类冻结至门槛绿**。宣传载体已定：**独立薄壳站点**（独立仓库 + 零构建纯静态 + `github.io`，版本运行时取 GitHub Releases API、不复述功能清单），域名后置。
 2. **Android 真机点检**：凡含 `static/` 改动的版本需覆盖安装验证（清单见 `docs/agents/ops.md`）；同时验证 Android 更新 chip 的两条假设（Chaquopy 能否完成公网 HTTPS、WebView 点外链是否交系统浏览器）——即门槛④。**未验证前不得把「代码已合并」记成「双端已验证」**。
-3. **README 首屏改造**（宣传线，**门槛③已交付，2026-11-03**）：首屏为「一句话价值 + 实拍双图 + 30 秒上手（普通用户双击运行 vs 开发者三步启动）」；真机截图已入库（`docs/images/readme-home-hero.jpg` 文稿库 hero、`readme-reader-b1.jpg` B1 沉浸阅读器：CEFR 光谱 + 考点高亮 + 影读播放条），存在性守卫 `test_readme_first_screen_images_exist` 红灯防裂图；Tests 徽章同步至 2712/2714（2026-11-03 全量实测 2712 passed / 2 skipped）。WebView2 前置已在下载表注明。
+3. **README 首屏改造**（宣传线，**门槛③已交付，2026-11-03**）：首屏为「一句话价值 + 实拍双图 + 30 秒上手（普通用户双击运行 vs 开发者三步启动）」；真机截图已入库（`docs/images/readme-home-hero.jpg` 文稿库 hero、`readme-reader-b1.jpg` B1 沉浸阅读器：CEFR 光谱 + 考点高亮 + 影读播放条），存在性守卫 `test_readme_first_screen_images_exist` 红灯防裂图；Tests 徽章同步至 2720/2722（2026-11-03 v5.21.1 发版分支全量实测 2720 passed / 2 skipped）。WebView2 前置已在下载表注明。
 4. **预置包 LLM gloss 富化**：阻塞于 `DEEPSEEK_API_KEY` 缺失；`import_encounter_pack` 按 `pack_id` 幂等**不更新**既有行。
 5. **C 档已交付（2026-10-19 回填）**：`docs/reviews/2026-10-16-open-items-backlog.md` 的 C1~C9 均已交付（PR #143~#160，含 C9 终审与 mock 漂移闸 #150）；**C4 Android 真机点检仍暂缓**（见第 2 条，非交付缺口）。⚠️ ADR-0024 资产折旧：回灌（C1，PR #147，2026-10-17）已落地 ⇒ §4.3 实验（N=20 报告）的阈值与结论**只对"准入式裁判 + 无回灌"历史形态有效**。**已明确分域**（2026-11-03：`docs/reviews/2026-10-16-judge-gaming-control-experiment.md` 顶部适用域声明）；ADR-0024 D-2 四件工程前置**已于 2026-11-03 落地**（commit `c385ea7`：逐篇落盘+续跑 / temperature 钉定 / --real 连通预检 / 成本硬闸，均带测试）；重跑当前**仅阻塞于 `DEEPSEEK_API_KEY` 缺失**（未跑，重跑前报告仅作历史形态基线）。
 6. **递延项（未立项）**：tests `--strict`；`tools/vault-proactive-scan.py` 三条版本正则**已于 tests/test_app_version_source.py 补齐自动化守卫**；PWA 安装提示验证 / 192-512 PNG 图标（**图标已于 2026-11-03 补齐**：`static/icon-192.png`、`static/icon-512.png` + manifest 位图条目 + 尺寸守卫测试；安装提示仍待真机验证）；**桌面单实例与端口顺延已于 2026-10-22 交付**（见「当前状态」，勿再当待办）；发布链路 runbook（Publish 被跳过 / 孤儿 tag 的恢复路径：Vault v5.4.0 复盘 + **v5.1.1 孤儿 tag 在案**；`gh workflow run --ref <tag>` 理论可补发但**本仓未实证**，判据只能是 release 资产清单）。

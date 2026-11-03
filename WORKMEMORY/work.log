@@ -912,3 +912,34 @@ Status: DONE ——「choice 模式缺释义空白选项修复」已入库 maste
 实测验证：新探针 10/10 绿；变异实证 revert 修复后 exit 1 且 B1/B2/C1/C2/D2 具名红；全量 pytest 2707 passed / 2 skipped（705.48s）；最终态定向 12 passed；三闸 layer/mock/silent 全 0 未豁免；ruff 通过。
 并发事实：kimi-k3.1-pro__trae 14:48-15:27 眨眼修复 worktree 任务的 WORK_START/WORK_END（已 DONE）当时未提交，随本簿记提交一并入库——该任务自陈已完成，此为落档非代闭合；其声明「不代闭合本任务」已知悉，本条即本任务自闭合。
 未做：未推送、未建 PR、未改历史；quiz 出题队列过滤策略未改（只修显示口径，维持上批裁决）。
+
+### 2026-11-03 18:49 | kimi-k3.1-pro__trae | NOTE (Task 2 milestone)
+Caps: filesystem-read, filesystem-write, shell-exec
+Go RunLoop 接线完成并本地提交 7c8fbfd。接线前等价对照实测 4 个差异：CardContext 前缀/CEFR-only/negative index/sparse index；后三者现状疑似健壮性缺陷，本任务登记但不改语义，仅修未上线 helper。7 个 helper 全部进入 loop.go 生产路径，拆出 buildTurnPrompt/receiveTurn/executeToolCalls/finalize；RunLoop 412→97 行、decision tokens 66→14。独立审查指出同源假绿后补 HEAD 字面 golden 与空 callsList turn_limit 路径，主线程 CEFR 变异实测红于 loop_test.go:517，还原后绿，复审 CLEAN PASS。最终 python -m pytest tests=2719 passed/3 skipped，35 前端探针/三闸/ruff/契约/index 全绿；go test ./...、race、vet、count=100 全绿。未 push、未建 PR。
+
+### 2026-11-03 19:23 | kimi-k3.1-pro__trae | PITFALL
+Caps: filesystem-read, filesystem-write, shell-exec
+现象：同一 worktree 后台全量 pytest 与前台伴学子集并行时，子集 26 passed 后会话守卫报 test_audit_delector.db/test_audit_progress.db 消失。根因：两个测试流程共享仓库根 DB 文件与清理夹具，并非被测代码回归。解法：本仓 Python 测试一律串行；等待后台结果，若受污染则串行重跑全量/子集，不手工删库、不把并行结果当有效验证。
+
+### 2026-11-03 19:35 | kimi-k3.1-pro__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+Status: DONE ——「SSE 传输边界 / Go RunLoop 接线 / submitPrompt 收敛」三项均按计划完成，各独立提交、独立验证、独立审查。提交：1e33428d291f81de30ea1380e5ea1d34c54cc536（SSE 缓冲分帧）、7c8fbfd3265dfb0dc8f54081be0b5c9bf4c30ed8（7 helper 接线，RunLoop 412→97 行）、50395d6e901ec45c220fbd9b39a2f25a01334e98（同文件事件控制器，submitPrompt 197→147 行；不拆 cp-turn.js）。计划 docs/plans/2026-11-03-companion-transport-loop-drawer-refactor.md 已填偏差表。
+验证：每项最终 python -m pytest tests 均 2719 passed/3 skipped；35 前端探针全绿，伴学探针由 147 增至 274 checks/34 场景；三闸、七事件契约、go test ./...、race、go vet、ruff、build_index_html --check、git diff --check 全绿。Go 与 JS 变异均实际红后还原复绿，独立 reviewer/最终边界审计 CLEAN PASS。并行 pytest 曾触发根 DB 守卫竞争，后台全量仍全绿，受影响子集串行复跑 26 passed 闭合。
+范围/回写：分支 refactor/companion-boundaries，worktree 干净；未 push、未建 PR；未触 version.py/build.gradle/sw.js/index.html/CHANGELOG/README/static/modals/drawer.html；旧 12:55 WORK_START 未代闭合。无临时插桩、变异或测试产物入库，无密钥字面量。
+
+### 2026-11-03 19:41 | kimi-k3.1-pro__trae | NOTE (PR handoff)
+Caps: filesystem-read, filesystem-write, shell-exec
+refactor/companion-boundaries 已推送 origin 并设 upstream，本地/远端 SHA 均 50395d6e901ec45c220fbd9b39a2f25a01334e98；未 force、未 --no-verify、未直推 master。PR #199 以 master 为 base 创建（非 draft）：https://github.com/ROM4n2/DeLector/pull/199 。回读 state=OPEN、mergeStateStatus=UNSTABLE（初始 checks pending）；CI run 41629402030 初始 9 项 pending、4 项 pass（packaging detect/secret scan/mock drift/no silent degradation）、2 项 skipped，无失败项，未合并。并行工作区未改 CHANGELOG/FEATURES 等文件。
+
+### 2026-11-03 19:52 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+复核补充：2026-11-03 12:55「choice 模式缺释义修复」WORK_START 当前已有 2026-11-03 15:58 glm-5.3-flash__trae 的 WORK_END（并行追加导致其排在 17:54 事件之后），不再属于未闭合条目。所属任务已完成，依据为 PR #196 合并提交 e140286、master 提交 e7bd1cb 及 work.log 既有验证记录；本任务未参与该次验证，不代写或补写 WORK_END，也不回改 17:07 的历史 NOTE。
+
+### 2026-11-03 19:52 | kimi-k3.1-pro__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：定案并行文档与 PR #199 工作记忆，补 v5.21.1 CHANGELOG，按版本面清单准备 patch 发版分支和 PR。
+不做范围：不合并 PR、不直推 master、不打 tag、不创建 Release；不代闭合其他 WORK_START；不改无关文件；Android 真机点检与真实浏览器 live-selection 仍如实记为未验证。
+
+### 2026-11-03 20:09 | kimi-k3.1-pro__trae | NOTE (v5.21.1 local gates)
+Caps: filesystem-read, filesystem-write, shell-exec
+本分支实测：全量 python -m pytest tests -q = 2720 passed / 2 skipped（620.85s）；版本面+writer_mobile+index 定向 59 passed；GUI skip 原因定向 21 passed / 2 skipped，两项均因 DELECTOR_GUI_TEST 未设、需真实桌面会话。伴学真源码探针 274 checks / 34 场景全绿；三闸未豁免均 0，前端 API 契约 129 调用点/114 可静态检查全匹配，伴学七事件契约 PASS；builder 100% 同步、ruff、git diff --check 全绿。Go 普通与 -race 各 10/10 包通过（均 -count=1）。README 徽章按本分支实测改为 2720/2722；CHANGELOG 保留 PR #199 历史 2719/3 口径。Android 真机点检未做，live-selection 未在真实浏览器验证。

@@ -1,13 +1,13 @@
 # DeLector · 德语欧标沉浸精读与考点剖析工作台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v5.21.0-blue?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v5.21.1-blue?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-2712%2F2714%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-2720%2F2722%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
@@ -47,21 +47,21 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ## 📦 多平台下载发布包 (Downloads)
 
-> 🚀 **v5.21.0 最新版本亮点（2026-11-03）**：
-> - **伴学 Agent 页面级能力与 HITL 闭环**：写作台、进度页、卡盒按视图接入专用工具；生词提议须确认才入库，支持跨页历史恢复。
-> - **卡盒释义口径统一**：缺 `definition_zh` 在提案、卡盒各卡面与测验 choice 选项统一显示「待补充」，不再出现空白选项。
-> - **PWA 与桌宠视觉修复**：补齐 192/512 PNG 安装图标；修复眼球缩放原点坐标系不一致导致的眨眼位移。
-> - **README 产品图刷新**：首页与 B1 阅读器截图均替换为无遮挡的睁眼常态帧。
+> 🚀 **v5.21.1 最新版本亮点（2026-11-03）**：
+> - **伴学 SSE 跨 chunk 分帧修复**：修复网络分片导致的 assistant 消息与 proposal 静默丢失、不落库问题，完整帧闭合后才解析。
+> - **传输与持久化守恒**：覆盖逐字节、随机分片、CRLF 与多行 `data`；原始字节转发不变，每轮只落库一次，proposal 不丢不重。
+> - **内部重构行为不变**：Go helper 全面接线并拆分 `RunLoop`，`submitPrompt` 收敛为事件控制器；七类事件、请求字段与 DOM/消息状态保持既有契约。
+> - **探针与变异验证**：伴学探针最终 274 checks / 34 场景，本分支全量 2720 passed / 2 skipped；Go 与 JS 变异均实测变红，还原后复绿。
 
 > 📱 **Android 用户注意**：含 `static/` 改动的版本需**覆盖安装**才生效。
 > 📜 完整版本变更细节见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 平台               | 版本                   | 说明                                                                                                                                                                                                                                                       | 下载通道                                                                                    |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 🪟 **Windows x64** | `v5.21.0` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；**需 Win10+ 与 WebView2 运行时**（Win11 自带；Win10 装不上时的表现见「已知限制」）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.0)     |
-| 🍎 **macOS**       | `v5.21.0` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.0)  |
-| 🐧 **Linux x64**   | `v5.21.0` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.0)  |
-| 📱 **Android**     | `v5.21.0` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.0) |
+| 🪟 **Windows x64** | `v5.21.1` | 原生桌面窗口 + 系统托盘，免装 Python，解压双击 `DeLector.exe`；**需 Win10+ 与 WebView2 运行时**（Win11 自带；Win10 装不上时的表现见「已知限制」）；首次启动把数据放到 `%LOCALAPPDATA%\DeLector`                                                                                                                                                                        | [下载 ZIP 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.1)     |
+| 🍎 **macOS**       | `v5.21.1` | 解压运行 `start` 脚本，全自动启动服务与默认浏览器                                                                                                                                                                                   | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.1)  |
+| 🐧 **Linux x64**   | `v5.21.1` | 全发行版通用，解压运行 `start` 即可使用                                                                                                                                                                                             | [下载 TAR.GZ 包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.1)  |
+| 📱 **Android**     | `v5.21.1` | 内嵌 Python 运行时与 spaCy 离线模型，单机独立运行；**支持 arm64-v8a**，CI 钉死签名 keystore 并验签（可覆盖升级）。 | [下载 APK 安装包 (GitHub Releases)](https://github.com/ROM4n2/DeLector/releases/tag/v5.21.1) |
 
 ---
 
@@ -178,6 +178,7 @@ DeLector/
 
 | 版本 | 发布日期 | 里程碑概要 |
 | :--- | :--- | :--- |
+| **v5.21.1** | 2026-11-03 | 伴学 SSE 跨 chunk 分帧修复 · Go RunLoop 与 submitPrompt 行为不变重构 · 274 checks / 34 场景 |
 | **v5.21.0** | 2026-11-03 | 伴学 Agent 页面级能力与 HITL 生词提议 · 跨页历史恢复 · 卡盒缺释义统一 · PWA 位图图标 · 桌宠眨眼原点修复 |
 | **v5.20.2** | 2026-11-01 | 阅读器连续段落排版重塑 (ADR-0026) · CEFR 词阶视觉降噪与三档透视胶囊 · 单词点击/切句句法抽屉实时联动同步 (DFS-DEBUG) · CI 6 路并行矩阵极限提速 |
 | **v5.20.1** | 2026-11-01 | Android 移动端桌宠拖拽手势修复 · 句法默认显示清除（收敛至选区悬浮胶囊工具条）· CI Pytest Matrix 双分片并发提速 · Apache License 2.0 正式生效 |
