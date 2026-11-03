@@ -859,3 +859,13 @@ spark 评估选定项已交付：宣传门槛③「README 首屏截图」补齐 
 
 ### 2026-11-03 07:49 | glm-5.3-flash__trae | WORK_END
 Status: DONE —— 门槛③截图交付 + 徽章纠偏 + 台账 D-2 纠偏；提交 2a96eb0（分支）/ 2ca78f6（merge）/ 簿记见本提交。遗留阻塞不变：真机（④）、DEEPSEEK_API_KEY（D-2 重跑 + gloss 富化）、≥5 真实反馈（①）、新手无协助流程（②）。
+
+### 2026-11-03 12:55 | glm-5.3-flash__trae | WORK_START
+Caps: filesystem-read, filesystem-write, shell-exec
+任务：修复卡盒测验 choice 模式缺释义空白选项缺陷（spark 评估选定，上批 02:34 自审登记的「choice 选项不接待补充」）。renderCurrentQuizCard 的 choice 分支用裸 card.definition_zh 当正确答案选项文本，缺释义卡（HITL 提议允许入盒、其余卡面统一显示「待补充」）会渲染出空白按钮，违反 FEATURES.md 释义口径；同分支 flashcard/dictation 均已走 formatCardDefinition。
+计划：分支 fix/quiz-choice-definition-fallback；cards.js choice 分支正确项改 formatCardDefinition + 对象化选项（isCorrect 随对象乱序，不靠 indexOf 文本比对）；新增行为探针 tools/cards_quiz_choice_probe.mjs（标准 {failures,total,cases} 契约，切片真源码进 node:vm）+ tests/test_cards_quiz_choice_probe.py 接线；FEATURES/CHANGELOG 口径同步。
+不做范围：不改 quiz 出题队列过滤策略（缺释义卡仍参与测验，只修显示口径）；不动 readCardBoxContext 重复（上批已裁决）；不推送、不建 PR（用户约束）。
+
+### 2026-11-03 13:50 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-automation
+代码遗留清零：① 历史 4 条 definition_zh 错位数据（id 125-128，原文为 auf die Stra-ße ge-hen / bas-teln / for-dern... / bis zu-letzt，皆分音节非中文释义）已用 repair_companion_definition_zh_draft.py --apply 置空；执行前 sqlite backup 到 delector.before-definition-repair-20261103.db，脚本另存 delector.repair-script-backup-20261103.db（均 %LOCALAPPDATA%\DeLector 下，回滚=停用应用后整库覆盖回去），仅 4 行受影响，vocab 总数 143 不变、mastered/due_date/repetition_count 等学习字段未动。复查（真实浏览器 + 修复后 DB 副本）：卡盒网格、卡背、复习 flashcard 均显示「待补充」，choice 选项同样降级且其它选项释义正常。② choice 缺释义展示由并行改动落地（formatCardDefinition + isCorrect 对象化），配 tools/cards_quiz_choice_probe.mjs 与 tests/test_cards_quiz_choice_probe.py 验证。③ 卡组构成收口：cd-state.js 新增 selectSegmentLists/buildDeckFromLists，cards.js 与 companion.readCardBoxContext 共用，删除约 15 行重复；三个切片探针同步补 buildDeckFromLists 依赖。验证：cards+quiz 51 passed、探针 145 checks、三闸 PASS、go test 全绿、ruff 通过；全量 pytest 首轮 1 failed/2706 passed（未复现），次轮 2707 passed / 2 skipped 全绿。
