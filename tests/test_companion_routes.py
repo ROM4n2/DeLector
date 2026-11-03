@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 import json
+import random
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from delector.routes.companion import _SSEEventAccumulator
 from delector.routes.companion import router as companion_router
 
 
@@ -70,6 +72,127 @@ def test_companion_chat_sse_stream(companion_app: FastAPI, monkeypatch: pytest.M
         event_types = [e["event"] for e in events]
         assert "done" in event_types
         assert any(e["event"] in ("delta", "thought") for e in events)
+
+
+@pytest.mark.parametrize(
+    "blank_line",
+    [b"\r\n\r\n", b"\r\n\n", b"\n\r\n"],
+    ids=["crlf", "crlf-lf", "lf-crlf"],
+)
+def test_sse_accumulator_crlf_multiline_waits_for_blank_line(blank_line: bytes) -> None:
+    """CRLF 只是单个换行；多行 data 必须等真正空行到达后一次解析."""
+    accumulator = _SSEEventAccumulator()
+    incomplete_frame = (
+        b"event: delta\r\n"
+        b'data: {"event":"delta",\r\n'
+        b'data: "text":"Hallo"}'
+    )
+
+    assert accumulator.feed(incomplete_frame) == []
+    assert accumulator.feed(blank_line) == [{"event": "delta", "text": "Hallo"}]
+
+
+@pytest.mark.parametrize("strategy", ["json-middle", "three", "n", "byte", "random"])
+def test_companion_chat_sse_fragmentation_preserves_events_and_persistence(
+    companion_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    strategy: str,
+) -> None:
+    """任意网络分片不得改变转发字节、事件聚合或持久化次数."""
+
+    def _frame(event: str, payload: dict[str, Any]) -> bytes:
+        body = {"event": event, **payload}
+        return (
+            f"event: {event}\ndata: ".encode("utf-8")
+            + json.dumps(body, ensure_ascii=False).encode("utf-8")
+            + b"\n\n"
+        )
+
+    proposal = {
+        "id": "prop_fragmented_01",
+        "action": "create_vocab_cards",
+        "title": "加入核心生词卡",
+        "payload": {"cards": [{"word": "die Eule", "definition_zh": "猫头鹰"}]},
+    }
+    other_proposal = {**proposal, "id": "prop_fragmented_02"}
+    stream = b"".join(
+        [
+            _frame("thought", {"text": "分析语序"}),
+            _frame("delta", {"text": "Hallo "}),
+            _frame("delta", {"text": "Eule."}),
+            _frame("proposal", {"proposal": proposal}),
+            _frame("proposal", {"proposal": proposal}),
+            _frame("proposal", {"proposal": other_proposal}),
+            _frame("done", {"reason": "ok"}),
+        ]
+    )
+
+    if strategy == "json-middle":
+        marker = b'"text": "Hallo '
+        cut = stream.index(marker) + len(marker) + 1
+        chunks = [stream[:cut], stream[cut:]]
+    elif strategy == "three":
+        first, second = len(stream) // 3, 2 * len(stream) // 3
+        chunks = [stream[:first], stream[first:second], stream[second:]]
+    elif strategy == "n":
+        chunks = [stream[offset : offset + 17] for offset in range(0, len(stream), 17)]
+    elif strategy == "byte":
+        chunks = [stream[offset : offset + 1] for offset in range(len(stream))]
+    else:
+        rng = random.Random(20261103)
+        chunks = []
+        offset = 0
+        while offset < len(stream):
+            size = rng.randint(1, 23)
+            chunks.append(stream[offset : offset + size])
+            offset += size
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        for chunk in chunks:
+            yield chunk
+
+    save_calls: list[dict[str, Any]] = []
+    proposal_calls: list[dict[str, Any]] = []
+
+    def _fake_save_turn(session_id: str, user: str, assistant: str, thought: str = ""):
+        save_calls.append(
+            {"session_id": session_id, "user": user, "assistant": assistant, "thought": thought}
+        )
+        return {"id": "user-msg"}, {"id": "assistant-msg"}
+
+    def _fake_create_proposal(**kwargs: Any):
+        proposal_calls.append(kwargs)
+        return {"id": kwargs.get("proposal_id")}
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+    monkeypatch.setattr("delector.routes.companion._session_svc.save_turn", _fake_save_turn)
+    monkeypatch.setattr("delector.routes.companion._proposal_svc.create_proposal", _fake_create_proposal)
+
+    client = TestClient(companion_app)
+    body = {
+        "session_id": "session-fragmented",
+        "messages": [{"role": "user", "content": "Hallo"}],
+    }
+    with client.stream("POST", "/api/companion/chat", json=body) as response:
+        assert response.status_code == 200
+        assert b"".join(response.iter_bytes()) == stream
+
+    assert save_calls == [
+        {
+            "session_id": "session-fragmented",
+            "user": "Hallo",
+            "assistant": "Hallo Eule.",
+            "thought": "分析语序",
+        }
+    ]
+    assert [call["proposal_id"] for call in proposal_calls] == [
+        "prop_fragmented_01",
+        "prop_fragmented_02",
+    ]
+    assert proposal_calls[0]["session_id"] == "session-fragmented"
+    assert proposal_calls[0]["message_id"] == "assistant-msg"
+    assert proposal_calls[0]["payload"] == proposal["payload"]
+    assert proposal_calls[1]["payload"] == other_proposal["payload"]
 
 
 def test_companion_proposal_execute_localhost_gate(companion_app: FastAPI) -> None:

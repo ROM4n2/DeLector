@@ -53,7 +53,7 @@ def test_companion_context_probe_scenarios_pinned():
     )
     out = json.loads(res.stdout)
     assert out.get("ok") is True
-    assert out.get("checks", 0) >= 80, f"探针断言数过低（{out.get('checks')}），疑被掏空恒真化"
+    assert out.get("checks", 0) >= 220, f"探针断言数过低（{out.get('checks')}），疑被掏空恒真化"
 
     expected = {
         "reader-live-selection",
@@ -74,6 +74,12 @@ def test_companion_context_probe_scenarios_pinned():
         "drawer-tab-gate",
         "avatar-disabled-css",
         "cp-api-session-header",
+        "submit-stream-happy-path",
+        "submit-stream-error-event",
+        "submit-stream-reject",
+        "submit-writer-latest-context",
+        "submit-cards-latest-context",
+        "submit-input-guards",
     }
     scenarios = out.get("scenarios") or {}
     assert expected <= set(scenarios), f"探针缺少关键场景：{sorted(expected - set(scenarios))}"

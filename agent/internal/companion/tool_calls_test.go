@@ -28,7 +28,7 @@ func TestAggregateToolCallsSingleAndStreamingChunks(t *testing.T) {
 		},
 	}
 
-	var calls []openai.ToolCall
+	calls := make(map[int]*openai.ToolCall)
 	calls = companion.AggregateToolCalls(calls, chunk1)
 	calls = companion.AggregateToolCalls(calls, chunk2)
 
@@ -71,7 +71,7 @@ func TestAggregateToolCallsParallelAndOutOfOrder(t *testing.T) {
 		},
 	}
 
-	var calls []openai.ToolCall
+	calls := make(map[int]*openai.ToolCall)
 	// Receive index 1 first, then index 0
 	calls = companion.AggregateToolCalls(calls, chunkB)
 	calls = companion.AggregateToolCalls(calls, chunkA)

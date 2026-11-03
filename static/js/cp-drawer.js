@@ -722,6 +722,84 @@ export function handleSend() {
   submitPrompt(text);
 }
 
+function createCompanionTurnController({
+  thoughtCtrl,
+  toolContainerEl,
+  textBodyEl,
+  proposalsContainerEl,
+  typewriter
+}) {
+  let fullStreamText = '';
+
+  return {
+    handleEvent(event, data) {
+      if (event === 'thought') {
+        thoughtCtrl.setRealThought(data.text || '');
+      } else if (event === 'tool_start') {
+        toolContainerEl.style.display = 'block';
+        const chip = document.createElement('span');
+        chip.className = 'companion-tool-chip';
+        chip.dataset.tool = data.tool || '';
+        chip.textContent = data.label || ('正在调用 ' + data.tool + '...');
+        toolContainerEl.appendChild(chip);
+      } else if (event === 'tool_end') {
+        const chips = toolContainerEl.querySelectorAll('.companion-tool-chip');
+        for (const c of chips) {
+          if (c.dataset.tool === data.tool) {
+            const isError = Boolean(data.result && (data.result.status === 'error' || data.result.error_code));
+            if (isError) {
+              c.classList.add('companion-tool-chip--error');
+              c.style.borderColor = 'var(--coral, #b44322)';
+              c.style.color = 'var(--coral, #b44322)';
+              c.textContent = '✗ ' + data.tool + ' 异常: ' + (data.summary || (data.result && data.result.message) || '失败');
+            } else {
+              c.textContent = '✓ ' + data.tool + ' 完成: ' + (data.summary || '已获取语言学上下文');
+            }
+          }
+        }
+      } else if (event === 'delta') {
+        thoughtCtrl.finish();
+        const chunk = data.text || '';
+        fullStreamText += chunk;
+        typewriter.append(chunk);
+      } else if (event === 'proposal') {
+        renderProposalCard(proposalsContainerEl, data.proposal, handleProposalAction);
+      } else if (event === 'done') {
+        thoughtCtrl.finish();
+        companionState.inFlight = false;
+        if (sendBtnEl) sendBtnEl.disabled = false;
+        typewriter.flush();
+        if (fullStreamText) {
+          renderSafeMarkdownToElement(textBodyEl, fullStreamText);
+        }
+        companionState.messages.push({ role: 'assistant', content: fullStreamText });
+      } else if (event === 'error') {
+        typewriter.cancel();
+        thoughtCtrl.fail('研读中断');
+        companionState.inFlight = false;
+        if (sendBtnEl) sendBtnEl.disabled = false;
+        textBodyEl.textContent = '[异常: ' + (data.message_zh || '处理失败') + ']';
+        textBodyEl.style.color = 'var(--coral, #b44322)';
+      }
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    },
+
+    handleStreamError(err) {
+      typewriter.cancel();
+      thoughtCtrl.fail('连接中断');
+      textBodyEl.textContent = '[连接失败: ' + err.message + ']';
+      textBodyEl.style.color = 'var(--coral, #b44322)';
+    },
+
+    cleanup() {
+      thoughtCtrl.cleanup();
+      companionState.inFlight = false;
+      if (sendBtnEl) sendBtnEl.disabled = false;
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+  };
+}
+
 export function submitPrompt(userText) {
   if (companionState.inFlight) return;
   if (!userText || !userText.trim()) return;
@@ -820,7 +898,6 @@ export function submitPrompt(userText) {
   if (sendBtnEl) sendBtnEl.disabled = true;
 
   abortController = new AbortController();
-  let fullStreamText = '';
 
   const activeContext = companionState.activeContext.selectedText
     ? {
@@ -837,6 +914,13 @@ export function submitPrompt(userText) {
     onComplete: () => {
       bodyEl.scrollTop = bodyEl.scrollHeight;
     }
+  });
+  const turnController = createCompanionTurnController({
+    thoughtCtrl,
+    toolContainerEl,
+    textBodyEl,
+    proposalsContainerEl,
+    typewriter
   });
 
   streamCompanionChat({
@@ -856,67 +940,11 @@ export function submitPrompt(userText) {
         refreshSessionSelect().catch(() => {});
       }
     },
-    onEvent: (event, data) => {
-      if (event === 'thought') {
-        thoughtCtrl.setRealThought(data.text || '');
-      } else if (event === 'tool_start') {
-        toolContainerEl.style.display = 'block';
-        const chip = document.createElement('span');
-        chip.className = 'companion-tool-chip';
-        chip.dataset.tool = data.tool || '';
-        chip.textContent = data.label || ('正在调用 ' + data.tool + '...');
-        toolContainerEl.appendChild(chip);
-      } else if (event === 'tool_end') {
-        const chips = toolContainerEl.querySelectorAll('.companion-tool-chip');
-        for (const c of chips) {
-          if (c.dataset.tool === data.tool) {
-            const isError = Boolean(data.result && (data.result.status === 'error' || data.result.error_code));
-            if (isError) {
-              c.classList.add('companion-tool-chip--error');
-              c.style.borderColor = 'var(--coral, #b44322)';
-              c.style.color = 'var(--coral, #b44322)';
-              c.textContent = '✗ ' + data.tool + ' 异常: ' + (data.summary || (data.result && data.result.message) || '失败');
-            } else {
-              c.textContent = '✓ ' + data.tool + ' 完成: ' + (data.summary || '已获取语言学上下文');
-            }
-          }
-        }
-      } else if (event === 'delta') {
-        thoughtCtrl.finish();
-        const chunk = data.text || '';
-        fullStreamText += chunk;
-        typewriter.append(chunk);
-      } else if (event === 'proposal') {
-        renderProposalCard(proposalsContainerEl, data.proposal, handleProposalAction);
-      } else if (event === 'done') {
-        thoughtCtrl.finish();
-        companionState.inFlight = false;
-        if (sendBtnEl) sendBtnEl.disabled = false;
-        typewriter.flush();
-        if (fullStreamText) {
-          renderSafeMarkdownToElement(textBodyEl, fullStreamText);
-        }
-        companionState.messages.push({ role: 'assistant', content: fullStreamText });
-      } else if (event === 'error') {
-        typewriter.cancel();
-        thoughtCtrl.fail('研读中断');
-        companionState.inFlight = false;
-        if (sendBtnEl) sendBtnEl.disabled = false;
-        textBodyEl.textContent = '[异常: ' + (data.message_zh || '处理失败') + ']';
-        textBodyEl.style.color = 'var(--coral, #b44322)';
-      }
-      bodyEl.scrollTop = bodyEl.scrollHeight;
-    }
+    onEvent: (event, data) => turnController.handleEvent(event, data)
   }).catch((err) => {
-    typewriter.cancel();
-    thoughtCtrl.fail('连接中断');
-    textBodyEl.textContent = '[连接失败: ' + err.message + ']';
-    textBodyEl.style.color = 'var(--coral, #b44322)';
+    turnController.handleStreamError(err);
   }).finally(() => {
-    thoughtCtrl.cleanup();
-    companionState.inFlight = false;
-    if (sendBtnEl) sendBtnEl.disabled = false;
-    bodyEl.scrollTop = bodyEl.scrollHeight;
+    turnController.cleanup();
   });
 }
 
