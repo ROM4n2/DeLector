@@ -943,3 +943,10 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-03 20:09 | kimi-k3.1-pro__trae | NOTE (v5.21.1 local gates)
 Caps: filesystem-read, filesystem-write, shell-exec
 本分支实测：全量 python -m pytest tests -q = 2720 passed / 2 skipped（620.85s）；版本面+writer_mobile+index 定向 59 passed；GUI skip 原因定向 21 passed / 2 skipped，两项均因 DELECTOR_GUI_TEST 未设、需真实桌面会话。伴学真源码探针 274 checks / 34 场景全绿；三闸未豁免均 0，前端 API 契约 129 调用点/114 可静态检查全匹配，伴学七事件契约 PASS；builder 100% 同步、ruff、git diff --check 全绿。Go 普通与 -race 各 10/10 包通过（均 -count=1）。README 徽章按本分支实测改为 2720/2722；CHANGELOG 保留 PR #199 历史 2719/3 口径。Android 真机点检未做，live-selection 未在真实浏览器验证。
+
+### 2026-11-03 20:12 | kimi-k3.1-pro__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+Status: DONE —— v5.21.1 patch 发版准备已完成并开 PR #200（https://github.com/ROM4n2/DeLector/pull/200），发版提交 d94e61287d21ccc21d7569a48caeaa3c328e06ca；未合并、未直推 master、未打 tag、未创建 Release。
+文件定案：CHANGELOG/FEATURES 在开工时已无未提交 diff，v5.21.0 内容随 6d5fd0d 入库，不重复提交；work.log 未提交的 PR #199 实现/验证/交接记录全部保留。choice 条目复核已有原代理 WORK_END，仅追加 NOTE，不代闭合。CHANGELOG 新增独立 v5.21.1 条目，SSE 跨 chunk 丢消息/proposal 明确记 fix，Go/JS 收敛明确记行为不变 refactor。
+验证：以 20:09 NOTE 为准——全量 2720 passed / 2 skipped、定向 59 passed、探针 274 checks / 34 场景、三闸/契约/builder/ruff/diff 全绿，Go 普通与 race 各 10/10 包通过。PR 初始 CI run 41633649970 回读为 3 成功 / 10 运行中 / 2 跳过 / 0 失败，未等待最终结果。
+回写检查：版本面、README 2720/2722 徽章、FEATURES、SECURITY、PROJECT_OVERVIEW、docs/README 已同步；PR #199 计划已归档；无临时产物、变异或密钥入库。Android 真机点检未做，live-selection 未在真实浏览器验证。
