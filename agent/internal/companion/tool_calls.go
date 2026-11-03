@@ -7,50 +7,39 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-// AggregateToolCalls aggregates a streaming delta tool call chunk into a slice of tool calls.
-// It accumulates indices, ID, Type, Function Name, and Function Arguments.
-func AggregateToolCalls(calls []openai.ToolCall, tc openai.ToolCall) []openai.ToolCall {
+// AggregateToolCalls aggregates streaming delta tool call chunks by their original indices.
+func AggregateToolCalls(calls map[int]*openai.ToolCall, tc openai.ToolCall) map[int]*openai.ToolCall {
+	if calls == nil {
+		calls = make(map[int]*openai.ToolCall)
+	}
 	idx := 0
 	if tc.Index != nil {
 		idx = *tc.Index
 	}
-	if idx < 0 {
-		idx = 0
-	}
-
-	for len(calls) <= idx {
-		calls = append(calls, openai.ToolCall{
-			Type: openai.ToolTypeFunction,
-		})
-	}
-
-	target := &calls[idx]
-	if tc.Index != nil {
-		i := *tc.Index
-		target.Index = &i
+	existing, ok := calls[idx]
+	if !ok {
+		newCall := tc
+		calls[idx] = &newCall
+		return calls
 	}
 	if tc.ID != "" {
-		target.ID = tc.ID
-	}
-	if tc.Type != "" {
-		target.Type = tc.Type
+		existing.ID = tc.ID
 	}
 	if tc.Function.Name != "" {
-		target.Function.Name += tc.Function.Name
+		existing.Function.Name += tc.Function.Name
 	}
 	if tc.Function.Arguments != "" {
-		target.Function.Arguments += tc.Function.Arguments
+		existing.Function.Arguments += tc.Function.Arguments
 	}
-
 	return calls
 }
 
-// FilterValidToolCalls filters out uninitialized or empty tool calls from the aggregated list.
-func FilterValidToolCalls(calls []openai.ToolCall) []openai.ToolCall {
+// FilterValidToolCalls materializes the contiguous call prefix used by the chat message contract.
+func FilterValidToolCalls(calls map[int]*openai.ToolCall) []openai.ToolCall {
 	var valid []openai.ToolCall
-	for _, tc := range calls {
-		if tc.ID != "" || tc.Function.Name != "" {
-			valid = append(valid, tc)
+	for i := 0; i < len(calls); i++ {
+		if call, ok := calls[i]; ok {
+			valid = append(valid, *call)
 		}
 	}
 	return valid

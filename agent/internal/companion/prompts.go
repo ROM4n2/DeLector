@@ -32,7 +32,7 @@ const (
 
 // FormatStudyContext 格式化前端视口上下文为 Markdown 文本块。
 func FormatStudyContext(ctx StudyContext) string {
-	if ctx.SelectedText == "" && ctx.ArticleTitle == "" && ctx.CEFRLevel == "" &&
+	if ctx.SelectedText == "" && ctx.ArticleTitle == "" &&
 		ctx.View == "" && ctx.ContextSource == "" && ctx.DraftText == "" &&
 		ctx.CardContext == "" {
 		return ""
@@ -58,7 +58,7 @@ func FormatStudyContext(ctx StudyContext) string {
 		sb.WriteString(fmt.Sprintf("\n- 当前写作草稿: %s", ctx.DraftText))
 	}
 	if ctx.CardContext != "" {
-		sb.WriteString("\n" + ctx.CardContext)
+		sb.WriteString("\n- " + ctx.CardContext)
 	}
 	return sb.String()
 }
@@ -71,7 +71,7 @@ func BuildSystemPrompt(activeContext string, modelSpec provider.ModelSpec) strin
 		if !strings.HasPrefix(trimmed, "【当前学习视口上下文】") && !strings.Contains(trimmed, "【当前学习视口上下文】") {
 			prompt += "\n\n【当前学习视口上下文】\n" + trimmed
 		} else {
-			prompt += "\n\n" + trimmed
+			prompt += "\n\n" + activeContext
 		}
 	}
 	return prompt

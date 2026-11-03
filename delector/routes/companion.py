@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import re
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -24,6 +25,33 @@ from delector.services.companion_session import CompanionSessionService
 router = APIRouter(prefix="/api/companion", tags=["companion"])
 _session_svc = CompanionSessionService()
 _proposal_svc = CompanionProposalService()
+_SSE_FRAME_BOUNDARY = re.compile(rb"(?:\r\n|\r(?!\n)|\n){2}")
+
+
+class _SSEEventAccumulator:
+    """跨网络 chunk 累积 SSE 帧；只有空行闭合的帧才可解析."""
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def feed(self, chunk: bytes) -> List[Dict[str, Any]]:
+        self._buffer.extend(chunk)
+        events: List[Dict[str, Any]] = []
+        while match := _SSE_FRAME_BOUNDARY.search(self._buffer):
+            frame = bytes(self._buffer[: match.start()])
+            del self._buffer[: match.end()]
+            data_lines = []
+            for line in frame.splitlines():
+                if line.startswith(b"data:"):
+                    value = line[5:]
+                    data_lines.append(value[1:] if value.startswith(b" ") else value)
+            if not data_lines:
+                continue
+            with contextlib.suppress(Exception):
+                event = json.loads(b"\n".join(data_lines).decode("utf-8", errors="replace"))
+                if isinstance(event, dict):
+                    events.append(event)
+        return events
 
 
 class CompanionChatReq(BaseModel):
@@ -132,32 +160,30 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
         full_text, full_thought = [], []
         proposals_payload: List[Dict[str, Any]] = []
         seen_proposal_ids: set[str] = set()
+        sse_events = _SSEEventAccumulator()
 
         async for chunk in dispatch_companion_stream(req.messages, request=request, context=context_payload):
             yield chunk
-            for line in chunk.decode("utf-8", errors="replace").splitlines():
-                if line.startswith("data: "):
-                    with contextlib.suppress(Exception):
-                        ev = json.loads(line[6:].strip())
-                        if ev.get("event") == "delta":
-                            full_text.append(ev.get("text", ""))
-                        elif ev.get("event") == "thought":
-                            full_thought.append(ev.get("text", ""))
-                        elif ev.get("event") == "proposal":
-                            prop = ev.get("proposal")
-                            if not isinstance(prop, dict):
-                                prop = {
-                                    "id": ev.get("id"),
-                                    "action": ev.get("action"),
-                                    "title": ev.get("title"),
-                                    "payload": ev.get("payload"),
-                                }
-                            pid = str(prop.get("id") or "")
-                            if pid and pid in seen_proposal_ids:
-                                continue
-                            if pid:
-                                seen_proposal_ids.add(pid)
-                            proposals_payload.append(prop)
+            for ev in sse_events.feed(chunk):
+                if ev.get("event") == "delta":
+                    full_text.append(ev.get("text", ""))
+                elif ev.get("event") == "thought":
+                    full_thought.append(ev.get("text", ""))
+                elif ev.get("event") == "proposal":
+                    prop = ev.get("proposal")
+                    if not isinstance(prop, dict):
+                        prop = {
+                            "id": ev.get("id"),
+                            "action": ev.get("action"),
+                            "title": ev.get("title"),
+                            "payload": ev.get("payload"),
+                        }
+                    pid = str(prop.get("id") or "")
+                    if pid and pid in seen_proposal_ids:
+                        continue
+                    if pid:
+                        seen_proposal_ids.add(pid)
+                    proposals_payload.append(prop)
 
         assistant_message_id: Optional[str] = None
         if user_text or full_text:
