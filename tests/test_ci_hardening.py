@@ -467,6 +467,23 @@ def test_android_emulator_abi_includes_x86_64():
     )
 
 
+def test_emulator_workflow_is_isolated_from_release():
+    """模拟器 APK 必须有独立构建入口，且绝不复用 release 的产物路径/命名。"""
+    path = REPO_ROOT / ".github" / "workflows" / "android-emulator.yml"
+    if not path.exists():
+        pytest.fail(f"缺少模拟器构建 workflow：{path}（模拟器变体将无法产出 APK）")
+    workflow = path.read_text(encoding="utf-8")
+    assert "workflow_dispatch" in workflow, "模拟器构建必须手动触发，不得进 tag 发版链路"
+    assert "tags:" not in workflow and "push:" not in workflow, (
+        "模拟器构建不得挂 push / tag 触发：它会把 runner 分钟数烧在非发版场景"
+    )
+    assert "assembleEmulator" in workflow, "必须构建 emulator 变体（assembleEmulator）"
+    assert "DeLector-emulator-apk" in workflow, "产物 artifact 必须用模拟器专属名称"
+    assert "dist/DeLector-" not in workflow, (
+        "模拟器构建不得写 dist/DeLector-*：那些路径属发版产物，混用会让 release 抓错包"
+    )
+
+
 # pydantic v2 才有、v1 没有的名字：导入 / 装饰器 / 类属性 / 方法调用命中即 v1 下必炸。
 _PYDANTIC_V2_ONLY = {
     # 导入名（from pydantic import X）
