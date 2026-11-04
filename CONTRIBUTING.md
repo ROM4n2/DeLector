@@ -79,6 +79,8 @@ cd agent && go vet ./... && gofmt -l . && go test -race ./... && cd ..
 python -m pytest tests/ -q
 ```
 
+CI 闸门本身的时长、并发、缓存与新增 job 门槛见 [CI 闸门速度与并发预算](docs/agents/ci-speed-budget.md)。不得为提速删除真实检查，只能消除重复执行与无效开销。
+
 ---
 
 ## 🤝 分支与 PR 提交流程

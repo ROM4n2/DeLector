@@ -151,18 +151,9 @@ export async function streamCompanionChat(options) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
+  let currentEvent = 'delta';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    let currentEvent = 'delta';
+  function parseLines(lines) {
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (!line) {
@@ -183,27 +174,20 @@ export async function streamCompanionChat(options) {
     }
   }
 
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    parseLines(lines);
+  }
+
   // 尾包处理：流结束时若 buffer 还有剩余行
   if (buffer.trim()) {
-    const lines = buffer.split('\n');
-    let currentEvent = 'delta';
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) {
-        continue;
-      }
-      if (line.startsWith('event:')) {
-        currentEvent = line.slice(6).trim();
-      } else if (line.startsWith('data:')) {
-        const rawJson = line.slice(5).trim();
-        try {
-          const parsed = JSON.parse(rawJson);
-          const eventType = (parsed && parsed.event) || currentEvent;
-          onEvent(eventType, parsed);
-        } catch (_) {
-          // 容错忽略非 JSON 帧
-        }
-      }
-    }
+    parseLines(buffer.split('\n'));
   }
 }

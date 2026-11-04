@@ -345,3 +345,9 @@ Caps: filesystem-read, filesystem-write, shell-exec
 用户批准的三项架构修复已按①Go SSE三端契约→②探针场景防删除→③断点快照事务化交付，未合并 PR #206（https://github.com/ROM4n2/DeLector/pull/206），未直推 master、未打 tag。实现提交分别为 689eea1（Go常量名→wire value逐项校验+生产emit覆盖）、f687dec（42场景真实插桩与逐项下界）、a94b442（user/assistant/proposals单事务，路由只组装）；本簿记另作独立文档提交。公开 save_turn 与 DB commit=True 缺省行为不变，断流无需 done 仍保存，proposal-only 与 X-History-Length 不变。
 RED/变异：Go事件改错与交换值均使总闸退出1，未emit隔离反例成立；42场景×本体/begin标记共84种删除在主工作区复验全部失败（78契约拒绝、6场景依赖运行期失败），无假绿；第二个append注入在旧实现留下user-only，新实现零残行，主工作区把user append改为commit=True后复现残行并还原复绿。各项独立 reviewer 与最终联合审查均 CLEAN PASS。
 最终验证：python -m pytest tests -q = 2741 passed/2 skipped（743.73s）；Go vet、go test -count=1与-race -count=1各10/10包；全部前端探针35/35，伴学探针335 checks/42 scenarios（此前口头39系计数错误）；Ruff、mypy、TypeScript、三闸、三端契约与index同步全绿。PR #206 初始 CI run 41773287477 = 5 pass/7 pending/2 skipped/0 failed。
+
+### 2026-11-04 13:32 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+CI速度规范与#4 SSE行解析收敛已交付未合并 PR #207（https://github.com/ROM4n2/DeLector/pull/207），未直推代码到master、未打tag。规范提交c29fcb9落docs/agents/ci-speed-budget.md并登记docs/README与CONTRIBUTING；实现85e7cfc把主chunk/尾包统一到parseLines，测试328027b新增23项SSE帧行为断言，伴学探针达358 checks/43 scenarios。currentEvent跨chunk保持是用户点名修复的唯一observable bug；onEvent签名、onSessionId、X-History-Length、AbortSignal、HTTP错误与多个data逐行回调不变。
+CI实测（run 41773483635，读取2026-11-04 12:41:53+08）：总墙钟278s含排队、job跨度230s、13执行job/2跳过/峰值13、累计914s、最长unit-1 229s；pip与Go缓存均restored successfully，pytest分片无重叠。Ruff/mypy在六个matrix重复累计89s，保留单份约15s可省约74s runner时间（墙钟不得宣称必省，理论上限约19s），仅登记TODO-CI-01；Windows Smoke无本样本实测，登记先测后收紧至≤15分钟，本轮未改workflow。
+验证：扩展探针先发现currentEvent跨chunk旧实现RED，修复后358/43全绿；事件保持、尾包、非JSON、多行处理、data.event优先级、onEvent签名6处独立变异均具名RED并还原复绿。全量pytest 2741 passed/2 skipped（761.01s）；前端探针35/35；Go vet、普通与race各10/10包；Ruff、mypy、TypeScript、三闸与契约全绿，独立reviewer CLEAN PASS。推送时SSH443与HTTPS均超时，备用SSH22成功，未改git config。
