@@ -392,3 +392,11 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-04 23:11 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 PR #214 由用户自行合并，本轮只做收尾、未重复合并。核对：gh pr view 214 = MERGED，merge commit cf7039f0b997567a99e9213af8c36f1179208918（mergedAt 2026-11-04T15:04:37Z）。main 对应 run 41853984078（push，head cf7039f）status completed / conclusion success（createdAt 15:04:40Z、updatedAt 15:08:43Z），其中 Windows Portable Smoke (build + 真启闸) 作业 conclusion success。改动确认在 main：origin/master 的 .github/workflows/ci.yml:315 为 `timeout-minutes: 10`，tests/test_ci_hardening.py:789 为 `def test_windows_smoke_verify_step_has_bounded_timeout`。清理：远端 ci/smoke-verify-step-timeout 此前已不存在（git ls-remote 无输出）；.worktrees/ci-smoke-timeout 以 git worktree remove 移除（exit 0，Test-Path 为 False，无占用残留）；本地分支删前 merge-base --is-ancestor 对 origin/master 返回 0，git branch -d 删除成功（was 8591969）。本地 master 已 ff 至 cf7039f，与 origin/master 一致；主工作区仅余用户 Android Studio 生成的未提交改动（android/app/build.gradle、gradle-wrapper.properties、.idea/、local.properties），一字未碰。未改任何代码或 workflow，TODO-CI-02 的 B/C 待办状态未动。
+
+### 2026-11-05 01:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+TODO-CI-04 实施完成到未合并 PR #216（ci/cost-guards-split，head b1cbfb6，MERGEABLE）。计划 docs/plans/2026-11-05-ci-cost-guards-split.md：A 拆 cost 分片、B 前端探针去重、C 合并三闸抵消并发，D 什么都不做对照；排除 xdist / 摊进 unit 分片 / 减轮数。
+改动：cost 三文件拆为 cost-guards（articles+cards）与 cost-cold-start（cold）；4 条前端探针 6→1 到 unit-2（Node 安装保留：根 conftest 在 CI 下要求每个 pytest job 有 node）；silent/mock/layer 三 job 合并 static-invariants（timeout 2、无 continue-on-error、步骤名保留）；守卫钉住并集 / 单一宿主 / 三步接线，三处具名变异 RED。
+实测（口径分离）：Python 门禁关键路径中位 158s→108s（-32%）；cost-guards 中位 157s→93s，已非瓶颈（cost pytest 83s→64s + cold 28s）；新瓶颈是 unit 分片 77–108s。runner 累计中位 975.5s→1002s（+26s / +2.7%，cost 环境复制两份的代价，如实记录）。墙钟由 Windows Smoke 支配，不下结论。峰值并发 13→12。
+CI：run 41871021385 attempt 1–3 绿（样本）；终版 b1cbfb6 的 run 41876516460 pr checks 全 pass（含 Windows Smoke 3m34s）；Master Direct-Push Scope Gate 在 PR 上按设计跳过。中途两次失败（ruff F841、旧 job 名接线守卫）已修，属过程偏差。独立 reviewer APPROVED；两张 Yellow（时长注释口径、旧 job 名注释）已在 7650ddf / b1cbfb6 回修。该 run 的 cost-cold-start / unit-4 曾出现约 20 分钟 runner 侧停摆后自行恢复，与 TODO-CI-02 记录的 hang 同形态，未改代码。
+未验证/未做：PR 未合并，post-change push 样本缺失（只有 pre-change push 基线）；unit 分片波动成为新关键路径上限，本轮未处置。
