@@ -389,6 +389,84 @@ def test_dockerfile_uvicorn_entrypoint_points_to_real_module():
 ANDROID_GRADLE = REPO_ROOT / "android" / "app" / "build.gradle"
 DELECTOR_DIR = REPO_ROOT / "delector"
 
+
+def _gradle_block(text: str, header_re: str) -> str:
+    """返回 Groovy 块 `header { ... }` 的内部文本（按花括号配对，取最外层）。
+
+    只服务于 build.gradle 这种**注释与字符串里都没有裸花括号**的文件；一旦该文件
+    出现花括号字面量，本函数会失配并显式 fail，而不是静默给出半截文本。
+    """
+    match = re.search(header_re, text)
+    if match is None:
+        pytest.fail(f"build.gradle 里找不到块头 {header_re!r}")
+    open_brace = text.find("{", match.start())
+    depth = 0
+    for index in range(open_brace, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace + 1 : index]
+    pytest.fail(f"块 {header_re!r} 的花括号不配对")
+
+
+def _build_type_body(name: str) -> str:
+    """取 `buildTypes { ... }` 里某个 buildType 的内部文本。"""
+    text = _read_guard_file(ANDROID_GRADLE)
+    build_types = _gradle_block(text, r"\bbuildTypes\s*\{")
+    return _gradle_block(build_types, rf"\b{re.escape(name)}\s*\{{")
+
+
+def _abi_filters(body: str) -> list[str]:
+    """解析块内**唯一的** abiFilters 声明，返回带引号的 ABI 列表。"""
+    declarations = re.findall(r"\babiFilters\s+([^\n]+)", body)
+    assert len(declarations) == 1, (
+        f"块内应恰好有一条 abiFilters 声明，实际 {len(declarations)} 条：{declarations}"
+    )
+    return re.findall(r'"([^"]+)"', declarations[0])
+
+
+def test_android_release_abi_is_arm64_only():
+    """release 变体的 abiFilters 只允许 arm64-v8a（x86_64 会显著撑大正式包）。
+
+    这条闸拦的是「为了模拟器顺手把 x86_64 塞进 release」：spaCy 原生栈按 ABI
+    各占 21–29MB，实测双 ABI 的 debug APK 已达 87.87 MiB（2026-11-04 探针）。
+    """
+    text = _read_guard_file(ANDROID_GRADLE)
+    default_config = _gradle_block(text, r"\bdefaultConfig\s*\{")
+    assert "abiFilters" not in default_config, (
+        "abiFilters 不得留在 defaultConfig：AGP 会把各变体的 ABI 集合合并，"
+        "x86_64 会渗进 release。请下移到 buildTypes 的 release/emulator 各自声明。"
+    )
+    assert "productFlavors" not in text, (
+        "不得引入 product flavor：它会把 assembleDebug 产物改名为 app-<flavor>-debug.apk，"
+        "打断 CI 写死的 android/app/build/outputs/apk/debug/app-debug.apk。"
+    )
+
+    release_abis = _abi_filters(_build_type_body("release"))
+    assert release_abis == ["arm64-v8a"], (
+        f"release 的 abiFilters 只允许 ['arm64-v8a']，实际 {release_abis}。"
+        "x86_64 属模拟器变体，不许进正式包。"
+    )
+
+
+def test_android_emulator_abi_includes_x86_64():
+    """emulator 变体必须同时含 arm64-v8a 与 x86_64，且与正式包可共存。"""
+    body = _build_type_body("emulator")
+    emulator_abis = _abi_filters(body)
+    assert "x86_64" in emulator_abis, f"emulator 变体必须含 x86_64，实际 {emulator_abis}"
+    assert "arm64-v8a" in emulator_abis, f"emulator 变体应保留 arm64-v8a，实际 {emulator_abis}"
+    assert 'applicationIdSuffix ".emulator"' in body, (
+        "emulator 变体必须用 applicationIdSuffix 与正式包区分，否则无法并存安装"
+    )
+    assert "debuggable true" in body, "emulator 变体应可调试"
+    assert "signingConfig signingConfigs.debug" in body, (
+        "emulator 变体必须复用 debug 签名，否则本地无 keystore 时无法安装"
+    )
+
+
 # pydantic v2 才有、v1 没有的名字：导入 / 装饰器 / 类属性 / 方法调用命中即 v1 下必炸。
 _PYDANTIC_V2_ONLY = {
     # 导入名（from pydantic import X）
