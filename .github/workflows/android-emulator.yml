@@ -68,12 +68,12 @@ jobs:
 
       - name: Build emulator APK
         working-directory: ./android
-        run: gradle assembleEmulator --stacktrace
+        run: gradle assembleEmulatorDebug --stacktrace
 
       # 体积与 ABI 证据：模拟器包必须真含 x86_64，否则「能装进模拟器」只是名义上的。
       - name: Verify emulator APK contents
         run: |
-          APK="android/app/build/outputs/apk/emulator/app-emulator.apk"
+          APK="android/app/build/outputs/apk/emulator/debug/app-emulator-debug.apk"
           test -f "$APK" || { echo "::error::未找到 $APK"; exit 1; }
           size_bytes=$(stat -c %s "$APK")
           echo "模拟器 APK：${size_bytes} bytes（$(awk "BEGIN{printf \"%.2f\", $size_bytes/1048576}") MiB）"
@@ -86,6 +86,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: DeLector-emulator-apk
-          path: android/app/build/outputs/apk/emulator/app-emulator.apk
+          path: android/app/build/outputs/apk/emulator/debug/app-emulator-debug.apk
           if-no-files-found: error
           retention-days: 30
