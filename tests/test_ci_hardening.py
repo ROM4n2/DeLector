@@ -744,6 +744,87 @@ def test_ci_job_has_bounded_timeout() -> None:
     )
 
 
+# ── Windows Smoke「真启闸」步骤级超时（2026-11-04 hang 取证后收窄）─────────────
+# 背景：2026-11-04 run 41833602180 attempt 1 的 smoke job 卡在 Verify 步 30 分钟被
+# job 级 timeout 取消，且该 job 日志 GitHub 未保留（API 404）。脚本内部所有等待都有
+# 硬上限（健康 120s / 终止 10s / 端口 10s / 硬杀 15s），最坏路径约 6 分钟；正常
+# 实测仅 27s。10 分钟 ≈ 最坏路径的 1.7 倍 —— 是**判据线**，不是护栏。
+#
+# job 级 30 分钟 MUST 保留：它是兜底护栏，两者并存。守卫必须同时钉住「步骤级存在且
+# ≤10」和「job 级仍是 30」，防止有人只留 job 级、把判据退化成护栏式宽值。
+
+MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES = 10
+SMOKE_JOB_TIMEOUT_MINUTES = 30
+
+
+def _smoke_verify_step_block() -> str:
+    """截出 `windows-portable-smoke` 中 `Verify Windows Portable` 步骤的 YAML 块。
+
+    按缩进切分：步骤从 6 空格的 `- name:` 起，到下一个 6 空格的 `- ` 或 job 块末尾。
+    这样 `timeout-minutes` 必须写在该步骤自己身上才算数（job 级 4 空格的同名字段不匹配）。
+    """
+    lines = _ci_job_block("windows-portable-smoke").splitlines()
+    try:
+        start = next(
+            i
+            for i, line in enumerate(lines)
+            if line.lstrip().startswith("- name:") and "Verify Windows Portable" in line
+        )
+    except StopIteration:
+        pytest.fail(
+            f"{CI_WORKFLOW} 的 windows-portable-smoke 找不到 `Verify Windows Portable` 步骤：\n"
+            "该步骤真启打包产物并验包，是 Windows 打包面的最后一道闸；删掉它等于去掉真启验包。"
+            "\n修法：恢复该步骤，并在其下加 `timeout-minutes: "
+            f"{MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}`。"
+        )
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("      - "):
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_windows_smoke_verify_step_has_bounded_timeout() -> None:
+    """真启闸必须有步骤级 timeout ≤10，且 job 级 30 分钟护栏仍在。"""
+    step = _smoke_verify_step_block()
+    assert "python tools/verify_windows_portable.py" in step, (
+        "匹配到的 Verify 步骤里没有 `python tools/verify_windows_portable.py`，"
+        "守卫可能截错了块；请检查步骤名或 run 命令是否被改写。"
+    )
+
+    match = re.search(r"^\s{8}timeout-minutes:\s*(\d+)\s*$", step, re.MULTILINE)
+    assert match, (
+        f"{CI_WORKFLOW} 的 `Verify Windows Portable` 步骤没有步骤级 timeout-minutes：\n"
+        "缺少它时，一次静默卡死会一路烧到 job 级护栏 30 分钟才失败，"
+        "且被取消的 job 日志可能整份丢失（2026-11-04 已发生），事后无法定位。"
+        f"\n修法：给该步骤加 `timeout-minutes: {MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}`"
+        "（正常实测 27s、脚本内最坏约 6 分钟，10 分钟约为最坏路径的 1.7 倍）。"
+    )
+
+    minutes = int(match.group(1))
+    assert 0 < minutes <= MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES, (
+        f"`Verify Windows Portable` 的步骤级 timeout-minutes = {minutes}，"
+        f"超过判据上界 {MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}：\n"
+        "写成接近 job 级 30 的值等于把判据退化成护栏，静默卡死仍会烧满。"
+        "\n修法：回到 10；确需更长时先拿分段实测证明慢在哪，而不是放宽判据。"
+    )
+
+    job_match = re.search(r"^    timeout-minutes:\s*(\d+)\s*$", _ci_job_block("windows-portable-smoke"), re.MULTILINE)
+    assert job_match, (
+        "windows-portable-smoke 的 job 级 timeout-minutes 被删掉了：\n"
+        "步骤级 10 分钟是判据，job 级 30 分钟是兜底护栏，二者必须并存；"
+        "只留步骤级时，一旦有更早的步骤卡死就没有最后一道上界。"
+    )
+    assert int(job_match.group(1)) == SMOKE_JOB_TIMEOUT_MINUTES, (
+        f"windows-portable-smoke 的 job 级 timeout-minutes = {job_match.group(1)}，"
+        f"期望 {SMOKE_JOB_TIMEOUT_MINUTES}：\n"
+        "job 级只作护栏，不应被步骤级判据顶替或放宽；"
+        "若确要改它，先改本守卫与 ci-speed-budget.md 的书面依据。"
+    )
+
+
 # ── Node 工具链显式化守卫（2026-10-05 清债轮 C 组）──────────────────────────────
 # 背景：`tests/` 下有一批 wrapper 会 `node tools/*.mjs` 真跑 .mjs 行为探针（把前端真源码
 # 切进 node:vm 沙箱执行）。但 ci.yml 此前**从不安装 node**，也没提过 setup-node ——
