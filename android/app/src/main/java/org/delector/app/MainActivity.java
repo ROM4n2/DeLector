@@ -204,6 +204,14 @@ public class MainActivity extends AppCompatActivity {
         // 2. Setup WebView & Native TTS
         webView = new WebView(this);
         webView.setVisibility(View.GONE);
+
+        // 只让 debug 包可被 `chrome://inspect` 连上：release 必须保持关闭，
+        // 否则任何能连 adb 的机器都拿到了页面状态与 JS 执行权。
+        // 用 BuildConfig.DEBUG 而不是裸 true —— 后者会连 release 一起打开，
+        // 且没有任何运行期症状，只有 tests/test_android_webview_policy.py 的静态断言能拦住。
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
         nativeTTS = new NativeTTSBridge();
         webView.addJavascriptInterface(nativeTTS, "AndroidNativeTTS");
 
