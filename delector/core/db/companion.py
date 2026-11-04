@@ -188,8 +188,9 @@ def append_message(
     thought: str = "",
     reasoning_effort: str = "medium",
     token_usage: Optional[Dict[str, Any]] = None,
+    commit: bool = True,
 ) -> Dict[str, Any]:
-    """向指定会话追加一条结构化消息，并刷新会话的 updated_at。"""
+    """向指定会话追加一条结构化消息；commit=False 时由调用方统一提交。"""
     msg_id = f"msg_{uuid.uuid4().hex[:16]}"
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     usage_json = json.dumps(token_usage or {}, ensure_ascii=False)
@@ -219,7 +220,8 @@ def append_message(
         """,
         (now, session_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return {
         "id": msg_id,
         "session_id": session_id,
@@ -262,6 +264,7 @@ def create_proposal(
     payload: Dict[str, Any],
     message_id: Optional[str] = None,
     proposal_id: Optional[str] = None,
+    commit: bool = True,
 ) -> Dict[str, Any]:
     """记录单项提议（生词卡/完形填空），初始状态为 pending。
 
@@ -280,7 +283,8 @@ def create_proposal(
         """,
         (prop_id, session_id, message_id, action, title, payload_json, now),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return {
         "id": prop_id,
         "session_id": session_id,
