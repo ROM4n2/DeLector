@@ -357,3 +357,8 @@ Caps: filesystem-read, filesystem-write, shell-exec
 Android WebView 两处收窄任务交付到未合并 PR #209（fix/android-webview-external-links，基于 5cb1e07）。① debug 开关：MainActivity 仅在 BuildConfig.DEBUG 分支调 WebView.setWebContentsDebuggingEnabled(true)，release 保持关闭；② 外链真 bug：此前 WebViewClient 未覆写 shouldOverrideUrlLoading，target="_blank" 更新 chip 被吞。现覆写两个重载统一委派 handleExternalNavigation，判定抽为零 Android 依赖纯函数 WebUrlPolicy.shouldOpenExternally（回环 127.0.0.1/localhost/::1/0.0.0.0、相对路径、file://、非法 URL 留 WebView；非回环 http(s) 与 mailto 交 ACTION_VIEW；javascript:/data:/blob:/about:/未知 scheme 不外跳），startActivity 以 catch(Throwable) 包裹后仍 return true，无浏览器不崩且不替换成错误页。
 测试选型：静态断言 + javac 直跑，不引 JUnit/Robolectric（仓内无该基建、本轮不装 SDK、CI pytest 矩阵只装 Python/Node）。WebUrlPolicyTest 25 checks；Python 门禁 5 tests。变异 7 处均实测 RED 后还原复绿：回环判定反转 9 例红、scheme null 守卫反转致 4 条相对路径抛 NPE、mailto 分支停用、scheme 小写化删除、DEBUG 守卫改 if(true)、catch 收窄、WebResourceRequest 重载改名。全量 pytest 2744 passed/4 skipped（561.59s）；前端探针 32/32；四道前端机械闸 PASS；git diff --check 0。真机、模拟器、chrome://inspect 均未点检，CHANGELOG/FEATURES 只写"已修复，真机与模拟器均未点检"。提交拆为 build/fix/test/docs 四笔。
 
+### 2026-11-04 16:55 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+CI 加速第一刀（去重）交付到未合并 PR #210（ci/static-checks-dedup，基于 bd993f9）。Ruff/mypy 六步原在 matrix 公共 steps，六个 pytest 分片各装各跑；实测六份累计 92s（单份均值 15.3s）。改法：六步加 `if: matrix.suite.name == 'unit-2'`，只留最短分片一份；不新开 job（峰值并发保持 13，不破预算）、不碰关键路径 unit-1/unit-4/cost-guards、不删缓存。三样本实测（PR #209 178s / master push 241s / PR #210 224s）：**墙钟未变快**，unit-1 的 pytest 段在 129–186s 间波动，幅度大于静态检查省下的 10s；可确证收益是六分片静态累计 92s→14s（-78s runner 时间）。结论口径写在 docs/agents/ci-speed-budget.md §1.3：只报累计节省，不报墙钟提速。防死绿：tests/test_ci_hardening.py 新增去重守卫（六步同条件、唯一宿主、宿主须在 matrix），三处变异实测 RED 后还原复绿。提交 ci/test/docs 三笔，PR #210 未合并。
+
+

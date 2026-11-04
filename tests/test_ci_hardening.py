@@ -261,6 +261,63 @@ def test_desktop_entry_mypy_gate_includes_start_entry() -> None:
     )
 
 
+# ── 静态检查去重守卫（2026-11-04，TODO-CI-01）──────────────────────────────────
+# 背景：Ruff/mypy 六步原先在 matrix 公共 steps 里，六个 pytest 分片各装各跑一遍；
+# 实测累计 92s、单份约 15s，属纯重复。2026-11 收敛为只在一个分片执行。
+# 下面这条钉住"仍然只有一份、宿主分片仍在矩阵里、六个步骤都带同一条件"：
+# 防止后续有人把静态检查复制回公共 steps（重复成本会静默回归），
+# 也防止宿主分片改名/删除后条件恒假、检查静默消失（死绿比慢更坏）。
+
+STATIC_GATE_STEP_NAMES = (
+    "Install Ruff",
+    "Ruff lint gate",
+    "Install Mypy",
+    "Mypy type gate (strict)",
+    "Mypy type gate (tests, config baseline)",
+    "Mypy type gate (desktop entry surface, strict)",
+)
+
+
+def _ci_step_blocks() -> dict[str, str]:
+    """把 ci job 的 steps 按 `- name:` 切成 {步骤名: 块文本}。"""
+    block = _ci_job_block("ci").replace("\r\n", "\n")
+    chunks = re.split(r"\n      - name: ", block)
+    steps: dict[str, str] = {}
+    for chunk in chunks[1:]:
+        steps[chunk.splitlines()[0].strip()] = chunk
+    return steps
+
+
+def test_static_gates_run_in_exactly_one_shard():
+    """Ruff/mypy 六步必须只在一份分片执行，且宿主分片真实存在于 matrix。"""
+    steps = _ci_step_blocks()
+    shards: set[str] = set()
+
+    for name in STATIC_GATE_STEP_NAMES:
+        assert name in steps, (
+            f"{CI_WORKFLOW} 缺少静态检查步骤 {name!r}：真实检查被删，不得用提速名义砍掉"
+        )
+        match = re.search(
+            r"^\s*if:\s*matrix\.suite\.name\s*==\s*'([^']+)'\s*$",
+            steps[name],
+            re.MULTILINE,
+        )
+        assert match, (
+            f"{name!r} 没有 `if: matrix.suite.name == '<分片>'` 守卫："
+            "静态检查会重新落到六个分片各跑一遍（实测六份累计 92s，单份约 15s）"
+        )
+        shards.add(match.group(1))
+
+    assert len(shards) == 1, f"六个静态步骤必须挂同一个分片，实际: {sorted(shards)}"
+
+    shard = next(iter(shards))
+    matrix_names = re.findall(r"^\s*- name:\s*(\S+)\s*$", _ci_job_block("ci"), re.MULTILINE)
+    assert shard in matrix_names, (
+        f"静态检查宿主分片 {shard!r} 不在 matrix 里（现有: {matrix_names}）："
+        "条件永远为假，Ruff/mypy 会静默不跑（死绿比慢更坏）"
+    )
+
+
 def test_mypy_config_locks_adoption_flags_and_stays_out_of_runtime_deps():
     """[tool.mypy] 必须锁住档位关键项；mypy 不得混入运行时依赖。"""
     text = _read_guard_file(MYPY_CONFIG)
