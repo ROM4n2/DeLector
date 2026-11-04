@@ -22,15 +22,16 @@ git config core.hooksPath .githooks
 安装 Python 核心与开发依赖：
 
 ```bash
-pip install -r requirements.txt
-python -m spacy download de_core_news_md
+uv venv --python 3.11
+uv pip install -r requirements.lock.txt
+uv run --no-project python -m spacy download de_core_news_md
 ```
 
 启动本地服务调试：
 
 ```bash
-python start.py    # 启动 Web 服务并自动打开浏览器
-python desktop.py  # 启动 Windows 原生桌面窗口 (需 pywebview)
+uv run --no-project python start.py    # 启动 Web 服务并自动打开浏览器
+uv run --no-project python desktop.py  # 启动 Windows 原生桌面窗口（pywebview 已含在 lock 中）
 ```
 
 ---
