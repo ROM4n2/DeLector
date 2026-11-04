@@ -6,6 +6,13 @@
 
 **最新版本：v5.21.1（2026-11-03）**
 
+### 🛠️ 未发版 (Unreleased)
+
+#### 📱 Android WebView 可调试性与外链修复
+
+- **Debug 构建可被 `chrome://inspect` 连接**：`MainActivity` 仅在 `BuildConfig.DEBUG` 分支调用 `WebView.setWebContentsDebuggingEnabled(true)`，release 保持关闭；`tests/test_android_webview_policy.py` 用静态断言锁住"必须被 DEBUG 守卫、只允许一次"，裸调 `true` 会立即变红。**已修复，真机与模拟器均未点检**：`chrome://inspect` 的实际连接未验证。
+- **更新 chip 外链点击无响应已修复**：此前 `WebViewClient` 未覆写 `shouldOverrideUrlLoading`，`target="_blank"` 的 GitHub Releases 链接被 WebView 自己吞掉。现覆写两个重载并统一委派给 `handleExternalNavigation`：站内回环（`127.0.0.1` / `localhost` / `::1` / `0.0.0.0`）、相对路径、`file://` 留在 WebView；其它 `http(s)` 与 `mailto:` 交系统 App；无可用 App 时静默吞掉并记日志，不崩、不把工作台替换成错误页。判定抽为零 Android 依赖纯函数 `WebUrlPolicy.shouldOpenExternally(url)`，`tests/test_android_webview_policy.py` 以 javac 直编直跑 25 条行为断言，另含静态守卫。**已修复，真机与模拟器均未点检**：外链是否真的唤起系统浏览器未验证。
+
 **v5.21.1（2026-11-03）**
 
 ### 🐞 伴学 SSE 跨 chunk 分帧修复（PR #199）
