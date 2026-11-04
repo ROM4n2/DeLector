@@ -32,10 +32,11 @@
 **开发者 / 源码运行**：
 
 ```bash
-pip install -r requirements.txt          # 安装 Python 依赖（推荐 Python 3.11）
-python -m spacy download de_core_news_md # 下载德语 NLP 模型
-python start.py                          # 一键启动并自动打开浏览器 http://localhost:8000
-python desktop.py                        # Windows 桌面壳（原生窗口 + 托盘 + 启动 splash）
+uv venv --python 3.11                    # 创建项目级 .venv（依赖不再装进全局解释器）
+uv pip install -r requirements.lock.txt  # 按锁定清单安装依赖（含桌面壳依赖）
+uv run --no-project python -m spacy download de_core_news_md  # 可选：德语 NLP 模型（缺省自动下载 sm）
+uv run --no-project python start.py      # 一键启动并自动打开浏览器 http://localhost:8000
+uv run --no-project python desktop.py    # Windows 桌面壳（原生窗口 + 托盘 + 启动 splash）
 docker compose up -d --build             # 或 Docker 容器化一键部署
 ```
 
