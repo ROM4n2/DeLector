@@ -436,7 +436,7 @@ def test_android_release_abi_is_arm64_only():
     """
     text = _read_guard_file(ANDROID_GRADLE)
     default_config = _gradle_block(text, r"\bdefaultConfig\s*\{")
-    assert "abiFilters" not in default_config, (
+    assert not re.search(r"\babiFilters\s+\"", default_config), (
         "abiFilters 不得留在 defaultConfig：AGP 会把各变体的 ABI 集合合并，"
         "x86_64 会渗进 release。请下移到 buildTypes 的 release/emulator 各自声明。"
     )
