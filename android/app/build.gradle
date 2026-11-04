@@ -60,11 +60,9 @@ android {
         versionName releaseVersionName
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        ndk {
-            // 只出 arm64-v8a：spaCy 的原生栈按 ABI 各占 ~21-29MB，三个全打是 106MB。
-            // armeabi-v7a（32 位老机型）与 x86_64（模拟器）为控制体积放弃。
-            abiFilters "arm64-v8a"
-        }
+        // ABI 不在 defaultConfig 声明：AGP 会把 defaultConfig 与各 buildType 的
+        // abiFilters 做集合并集，放在这里会把 emulator 的 x86_64 渗进 release。
+        // 各变体的取值见下方 buildTypes（2026-11-04 新增 emulator 变体）。
 
         python {
             version "3.10"
@@ -103,9 +101,34 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 真机 debug 包仍只出 arm64-v8a（与 release 体积口径一致）。
+            ndk {
+                abiFilters "arm64-v8a"
+            }
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // 正式包**只允许** arm64-v8a：spaCy 原生栈按 ABI 各占 ~21-29MB，
+            // 双 ABI 的 debug 包 2026-11-04 实测 87.87 MiB，release 不能跟着涨。
+            // 机械闸：tests/test_ci_hardening.py::test_android_release_abi_is_arm64_only。
+            ndk {
+                abiFilters "arm64-v8a"
+            }
+        }
+        // 模拟器变体：完整应用（不裁剪 spaCy / NLP），仅额外带上 x86_64。
+        // 为什么用 buildType 而不是 product flavor：flavor 会把 assembleDebug 的产物
+        // 改名为 app-<flavor>-debug.apk，直接打断 CI 写死的 app-debug.apk 路径。
+        emulator {
+            // 与正式包不同 applicationId ⇒ 可与正式包并存安装；
+            // 代价：不能覆盖安装正式包，也读不到正式包的私有数据（沙箱按 applicationId 隔离）。
+            applicationIdSuffix ".emulator"
+            debuggable true
+            signingConfig signingConfigs.debug
+            ndk {
+                abiFilters "arm64-v8a", "x86_64"
+            }
         }
     }
     compileOptions {
