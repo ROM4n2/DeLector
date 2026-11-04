@@ -97,9 +97,10 @@
 | cost-guards job / pytest | 151s / 113.4s | **143s / 107.9s** |
 | 峰值并发 | 13 | 13 |
 
-- **关键路径口径**：与本仓库无 smoke 的基线 run `41793803081`（Python span 175s、墙钟 178s）相比，若本 PR 也不触发 Windows Smoke，墙钟应约 **148s**（-30s，约 -17%）。
+- **关键路径口径**：与本仓库无 smoke 的基线 run `41793803081`（Python span 175s、墙钟 178s）相比，若本 PR 也不触发 Windows Smoke，墙钟应约 **148–180s**（视 `cost-guards` 抢 runner 的排队而定；见下条第二样本）。
 - 新关键路径是 `cost-guards`：3 个 cost 基准文件本身 107.9s，加上环境准备约 35s = 143s。unit 分片已全部回落到 89–107s，不再是瓶颈。
 - **不要把本 PR 的原始墙钟（242s）当作提速依据**：只要 PR 改动 `.github/workflows/*`，`Detect packaging-surface changes` 就会触发 Windows Portable Smoke（本次 230s），墙钟由 smoke 支配。可比的只有「Python 门禁关键路径」。
+- 第二个样本 run [`41813339091`](https://github.com/ROM4n2/DeLector/actions/runs/41813339091)（head `6967ded`，success）给出波动区间：原始墙钟 228s（smoke 210s），Python span **177s** —— 该样本 `cost-guards` 抢 runner 排队晚 20s 才起步（10:19:18 对其它 10:18:58），其自身 157s / pytest 118.9s 未变；unit-4 pytest 80s 是本样本最慢 unit 段。结论：**分片重配平把 unit 分片从 155.6s 压到 55–80s，但 cost-guards 已成为唯一瓶颈，span 在 145–177s 间由排队抖动决定**，不是重配平回归。
 - 已放弃的两条杠杆（不要重试）：
   - `pytest-xdist`：cost 用例本身就是计时/基准断言，并行 worker 会直接污染结果；integration-heavy 会起真实服务与端口，并行化不稳。分片已经用 6 个 runner 并行，xdist 只会把「计时门禁」变成 flaky 源。
   - 把 cost 基准文件摊到 unit 分片：能让 6 个 job 更平，但会把计时门禁混进普通测试进程，牺牲专项分片的隔离语义；本轮按约束不碰真实检查。
