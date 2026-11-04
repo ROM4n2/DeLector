@@ -60,9 +60,8 @@ android {
         versionName releaseVersionName
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        // ABI 不在 defaultConfig 声明：AGP 会把 defaultConfig 与各 buildType 的
-        // abiFilters 做集合并集，放在这里会把 emulator 的 x86_64 渗进 release。
-        // 各变体的取值见下方 buildTypes（2026-11-04 新增 emulator 变体）。
+        // ABI 不在 defaultConfig 声明：各渠道的取值见下方 productFlavors
+        // （Chaquopy 只认 defaultConfig + flavor，不认 buildType，理由见那里）。
 
         python {
             version "3.10"
@@ -100,34 +99,46 @@ android {
         }
     }
 
-    buildTypes {
-        debug {
-            // 真机 debug 包仍只出 arm64-v8a（与 release 体积口径一致）。
+    // ABI 必须按 **product flavor** 声明，不能放 buildType：
+    // Chaquopy 的 PythonPlugin.getAbis 只读 android.defaultConfig.ndk.abiFilters
+    // 与各 productFlavors 的 abiFilters，**完全不看 buildType**。放在 buildType 里
+    // 会直接报 "Chaquopy requires ndk.abiFilters"（2026-11-04 CI 实测）。
+    // 代价：flavor 会把产物路径改成 apk/<flavor>/<buildType>/app-<flavor>-<buildType>.apk，
+    // CI 抓取路径已同步更新并由 tests/test_server_android_fallback.py 钉住。
+    flavorDimensions "channel"
+    productFlavors {
+        // 正式渠道：真机 / 商店包，只出 arm64-v8a。
+        device {
+            dimension "channel"
             ndk {
                 abiFilters "arm64-v8a"
             }
         }
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // 正式包**只允许** arm64-v8a：spaCy 原生栈按 ABI 各占 ~21-29MB，
-            // 双 ABI 的 debug 包 2026-11-04 实测 87.87 MiB，release 不能跟着涨。
-            // 机械闸：tests/test_ci_hardening.py::test_android_release_abi_is_arm64_only。
-            ndk {
-                abiFilters "arm64-v8a"
-            }
-        }
-        // 模拟器变体：完整应用（不裁剪 spaCy / NLP），仅额外带上 x86_64。
-        // 为什么用 buildType 而不是 product flavor：flavor 会把 assembleDebug 的产物
-        // 改名为 app-<flavor>-debug.apk，直接打断 CI 写死的 app-debug.apk 路径。
+        // 模拟器渠道：完整应用（不裁剪 spaCy / NLP），额外带上 x86_64。
         emulator {
+            dimension "channel"
             // 与正式包不同 applicationId ⇒ 可与正式包并存安装；
             // 代价：不能覆盖安装正式包，也读不到正式包的私有数据（沙箱按 applicationId 隔离）。
             applicationIdSuffix ".emulator"
-            debuggable true
-            signingConfig signingConfigs.debug
             ndk {
                 abiFilters "arm64-v8a", "x86_64"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // 只保留 device 的 release 变体：assembleRelease 仍只产出一个正式 APK，
+    // 不让模拟器包混进发版产物集合。
+    androidComponents {
+        beforeVariants(selector().withBuildType("release")) { variantBuilder ->
+            if (variantBuilder.name == "emulatorRelease") {
+                variantBuilder.enable = false
             }
         }
     }
