@@ -118,13 +118,8 @@ def test_android_never_downloads_model_at_import():
     assert "ENGINE=pure_python" in out
 
 
-def test_spacy_model_candidates_prefer_md():
-    """README 与 Dockerfile 都装 md（带词向量、标注更准），sm 只是兜底。"""
-    from delector.nlp_engine import processor as nlp
-
-    assert nlp.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
-    # 自动下载走小模型：md 约 45MB，首启动拉它太慢
-    assert nlp.AUTO_DOWNLOAD_MODEL == "de_core_news_sm"
+# 模型档位契约已移到 tests/test_nlp_model_sm_only.py（ADR-0027：只支持 sm），
+# 避免同一口径在两个文件各钉一份。
 
 
 def test_load_spacy_model_falls_back_to_module_load(monkeypatch):

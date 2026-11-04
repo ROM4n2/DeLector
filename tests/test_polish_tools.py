@@ -361,8 +361,8 @@ def test_writing_check_triangle_consistency(monkeypatch: pytest.MonkeyPatch) -> 
 #        于是 `out = call(...)` 这一行就炸 —— 根本走不到 `tokens_total==1` /
 #        `known_count==1`。另注：`later_seen == [payload]` 这条**不会**红（payload 与
 #        快照是同一个对象、两边同值），所以别指望它兜住这条变异。
-# ⑦ 让运行时模型不可用（实测手法：把 `processor.SPACY_MODEL_CANDIDATES` 改成装不上的
-#        名字 ⇒ 候选全失败 ⇒ 落进 `spacy.cli.download` 兜底路径）
+# ⑦ 让运行时模型不可用（实测手法：把 `processor.SPACY_MODEL_NAME` 改成装不上的
+#        名字 ⇒ 加载失败 ⇒ 落进 `spacy.cli.download` 兜底路径）
 #      ⇒ test_analyze_runtime_model_is_available_without_download 红（实测 `1 failed`：
 #        `tests/test_polish_tools.py:102: Failed`，即 `pytest.fail`，下载桩被触发并把
 #        `de_core_news_sm` 记进 `download_calls`）。

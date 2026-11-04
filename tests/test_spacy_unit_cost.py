@@ -28,8 +28,8 @@
 - **正值断言**（`> 0`）：计时段若被改坏（空跑、`samples` 恒空、`median([])` 兜
   底 0），值会塌成 0 ⇒ 红。
 - **`model=` / `engine=` 用严格正则枚举**：脚本不得塞入自由文本（如
-  `model=见日志`），`de_core_news_md` / `de_core_news_sm` / `pure-python` 之外
-  一律红；`spacy` / `pure_python` 之外一律红。这同时守住 [Instinct:
+  `model=见日志`），`de_core_news_sm` / `pure-python` 之外一律红；`spacy` /
+  `pure_python` 之外一律红。这同时守住 [Instinct:
   Model-Availability]：降级必须**如实打印**，不得静默跳过也不得硬失败。
 - **句长档位序**（`bucket_long_ms > bucket_short_ms`）：三档句长是本基准的
   自变量，长句不比短句贵说明分档被写反或语料被掏空 ⇒ 红。
@@ -77,10 +77,8 @@ BARE_MS_SCAN_TARGETS = (ROOT / "delector" / "routes" / "syntax_hard.py",)
 
 # 契约数值行（脚本 MUST 逐条打印，且值为正）。
 NUM_KEYS = ("model_load_ms", "warmup_ms", "per_sentence_ms", "per_token_us", "sentences", "tokens", "rounds")
-# 契约枚举行：model 三选一（允许 `(md 不可用)` 之类的降级后缀），engine 二选一。
-MODEL_RE: Pattern[str] = re.compile(
-    r"^model=(de_core_news_md|de_core_news_sm|pure-python)(?:\s+\(.*\))?$", re.MULTILINE
-)
+# 契约枚举行：model 二选一（`de_core_news_sm` / `pure-python`；ADR-0027 只支持 sm）。
+MODEL_RE: Pattern[str] = re.compile(r"^model=(de_core_news_sm|pure-python)(?:\s+\(.*\))?$", re.MULTILINE)
 ENGINE_RE: Pattern[str] = re.compile(r"^engine=(spacy|pure_python)$", re.MULTILINE)
 # 句长三档：短/中/长。
 BUCKETS = ("short", "mid", "long")
