@@ -43,19 +43,17 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
+        # 分片成员是显式清单，见 tools/ci_shards.py（唯一事实来源）。
+        # 不能用 `glob + --ignore`：bash 会先把 glob 展开成显式文件路径，而 pytest
+        # 的 --ignore 对显式传入的文件无效 —— 旧写法下 unit-1 实际多跑了 113 个
+        # cost/integration 用例（日志 721 passed，意图应为 608），既重复又不互斥。
         suite:
           - name: unit-1
-            args: "tests/test_[a-c]*.py --ignore=tests/test_articles_list_cost.py --ignore=tests/test_bench_judge_gaming.py --ignore=tests/test_cards_endpoint_cost.py --ignore=tests/test_cold_start_cost.py"
           - name: unit-2
-            args: "tests/test_[d-g]*.py --ignore=tests/test_frontend_layers.py"
           - name: unit-3
-            args: "tests/test_[h-r]*.py"
           - name: unit-4
-            args: "tests/test_[s-z]*.py --ignore=tests/test_server.py --ignore=tests/test_server_settings_security.py --ignore=tests/test_syntax_hard_api.py"
           - name: integration-heavy
-            args: "tests/test_server_settings_security.py tests/test_frontend_layers.py tests/test_bench_judge_gaming.py tests/test_server.py tests/test_syntax_hard_api.py"
           - name: cost-guards
-            args: "tests/test_cards_endpoint_cost.py tests/test_cold_start_cost.py tests/test_articles_list_cost.py"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -89,10 +87,9 @@ jobs:
       # ── 静态检查去重（2026-11-04，TODO-CI-01）───────────────────────────────
       # 下面 6 步原先在 matrix 公共 steps 里，六个 pytest 分片各装各跑一遍；实测
       # 六份累计 92s（单份约 15s），而它们的覆盖面与分片用例集合无关，属纯重复。
-      # 现只保留一份，挂在 `unit-2`。为什么是 unit-2：它是本矩阵最短的分片
-      # （实测 92s，+15s 后仍远低于关键路径 unit-1 的 170s）。若把闸门塞进
-      # unit-1/unit-4/cost-guards（170s/173s/164s），墙钟收益会被关键路径吃掉
-      # ——不要为“看起来优化”把门禁挪进最慢的分片。
+      # 现只保留一份，挂在 `unit-2`。为什么是 unit-2：tools/ci_shards.py 的配平清单
+      # 刻意把它的 pytest 负载压得比其它三个 unit 分片低（静态检查实测约 14s，
+      # 加进去后仍低于关键路径）。不要为“看起来优化”把门禁挪进最慢的分片。
       # 宿主分片被改名或删除时，tests/test_ci_hardening.py 的去重守卫会变红，
       # 静态检查不会静默消失。
       #
@@ -176,9 +173,11 @@ jobs:
       - name: Frontend API-boundary type gate (tsc)
         run: npx --yes -p typescript@5.6.3 tsc --noEmit
 
-      # 全量门禁：Python 测试套件一个不漏
+      # 全量门禁：Python 测试套件一个不漏。分片清单见 tools/ci_shards.py（显式列表，
+      # 保证六个分片完整且互斥）。改动分片后必须同步更新 tools/ci_shard_weights.json
+      # 并跑 tests/test_ci_hardening.py 的分区/配平守卫。
       - name: Run full pytest suite
-        run: pytest -q ${{ matrix.suite.args }}
+        run: pytest -q $(python tools/ci_shards.py ${{ matrix.suite.name }})
 
   # ── Go 智能体运行时门禁（解耦并行，25s 极速自证）─────────────────────────────────
   go-gates:
