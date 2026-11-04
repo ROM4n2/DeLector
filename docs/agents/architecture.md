@@ -47,8 +47,9 @@
 
 **模型档位**：`SPACY_MODEL_NAME = "de_core_news_sm"` 是唯一事实源（ADR-0027，2026-11-04 定案）。
 不存在 md 候选或 md 优先分支；`syntax_tree.get_spacy_nlp()` 复用同一常量。自动下载只在
-**非 Android** 且本地 sm 加载失败时触发，下载的也是 sm。要评估 md 精度必须先做 ADR-0027
-的 OPEN 项（一次性对照实验，未执行）。
+**非 Android** 且本地 sm 加载失败时触发，下载的也是 sm。md 精度已由 ADR-0027 的 111 句
+对照实验评估，结论维持 sm（证据见该 ADR §6）；若要重新评估，须先修评分器对解析噪声的
+敏感性（该 ADR §7，OPEN）。
 
 `_load_spacy_model()` 有三级回退，缺一不可：`spacy.load(名称)` →
 `importlib.import_module(名称).load()` → 按数据目录绝对路径加载。原因见 Android 一节。
