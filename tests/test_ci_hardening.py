@@ -322,7 +322,8 @@ def test_static_gates_run_in_exactly_one_shard():
 
 # ── 纯 stdlib 机械闸合并守卫（2026-11-05，TODO-CI-04）─────────────────────────
 # 背景：silent-degradation / mock-drift / layer-invariants 三个 job 各只跑一个秒级
-# 判定器，却各占一台 runner、各付一次 checkout + setup-python（每个 7–8s）。
+# 判定器，却各占一台 runner、各付一次 checkout + setup-python（实测 job 11–13s，
+# 其中判定器本身 1–3s）。
 # ci-speed-budget §3.3 明确要求「只为一个断言单开 job」应并入现有机械闸；本轮
 # 为抵消 cost 分片拆分新增的 1 个 job（峰值并发预算 ≤13），把它们合并成一个 job。
 # 守卫钉住：三个判定器仍逐步执行、无 continue-on-error、job 级超时仍按轻量闸预算。
@@ -357,7 +358,8 @@ def test_mechanical_stdlib_gates_run_in_one_job() -> None:
     assert match, f"{MECHANICAL_GATES_JOB} 没有 timeout-minutes（会退回 360 分钟默认值）"
     assert 0 < int(match.group(1)) <= 2, (
         f"{MECHANICAL_GATES_JOB} 的 timeout-minutes = {match.group(1)}："
-        "轻量机械闸预算为 2 分钟（实测各 7–8s），超过即为无意义等待"
+        "轻量机械闸预算为 2 分钟（三个脚本实测 3/1/1s，job 含 checkout+setup 11–13s），"
+        "超过即为无意义等待"
     )
 
 

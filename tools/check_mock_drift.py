@@ -8,7 +8,8 @@ C8 批次的真实事故：生产 `_shelf_get`（delector/routes/encounter.py）
 `monkeypatch.setattr(encounter_mod.httpx, "get", …)` —— 补丁**钉在了一个已无调用点的
 符号**上：它照常执行、零报错，但生产已不再调用被替换的符号 ⇒ 补丁空转，测试从
 「验证真实路径」退化为「假绿」。CI 直到真实网络调用打出站才红 —— 属反馈最晚的一类失败。
-本闸把这一**形状**做成可测判定器：CI job ``mock-drift`` 按 fail-loud 口径执行它
+本闸把这一**形状**做成可测判定器：CI job ``static-invariants``（step
+``Enforce mock-drift criterion``）按 fail-loud 口径执行它
 （退出码 1 = 有未豁免站点）。结构照 ``tools/check_silent_degradation.py``（纯 stdlib、
 0/1/2 退出码、``--report-only`` 只看清单不判红）。
 
