@@ -280,6 +280,26 @@ public class MainActivity extends AppCompatActivity {
                     checkAndReloadServer();
                 }
             }
+
+            /**
+             * 所有导航的统一出口：站内（回环 / 相对路径 / file://）留在 WebView，
+             * 外站 http(s) 与 mailto: 交给系统 App。判定本身在 WebUrlPolicy。
+             *
+             * 两个重载都要覆写：API 24+ 走 WebResourceRequest，旧路径（以及
+             * target="_blank" 在未开多窗口支持时）会落到 String 版本。
+             */
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) {
+                    return false;
+                }
+                return handleExternalNavigation(request.getUrl().toString());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return handleExternalNavigation(url);
+            }
         });
 
         root.addView(webView, new FrameLayout.LayoutParams(
@@ -330,6 +350,26 @@ public class MainActivity extends AppCompatActivity {
 
         // 4. Background Initialization (Assets Extraction + Python Server Launch)
         new Thread(this::initAndStartServer).start();
+    }
+
+    /**
+     * 外链的实际交付点。返回 true 表示这次导航已被消费，WebView 不再加载。
+     *
+     * 判定在 WebUrlPolicy（纯 Java、可单测），这里只负责"交给谁"。
+     * Intent 解析失败（设备没装浏览器 / 邮件 App）时静默吞掉并记日志：此时返回 false
+     * 会让 WebView 去加载一个它本来就打不开的地址，把工作台替换成错误页 ——
+     * 比"点了没反应"更糟，而且会打断正在进行的阅读状态。
+     */
+    private boolean handleExternalNavigation(String url) {
+        if (!WebUrlPolicy.shouldOpenExternally(url)) {
+            return false;
+        }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Throwable t) {
+            Log.w("DeLector", "没有可处理该链接的应用: " + url, t);
+        }
+        return true;
     }
 
     private void initAndStartServer() {
