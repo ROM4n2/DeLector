@@ -48,6 +48,13 @@ dist/
 android/app/src/main/python/
 android/app/src/main/assets/static/
 
+# Android 本机专属文件（2026-11-04）：local.properties 含 sdk.dir 绝对路径、
+# .idea/ 是 Android Studio 的本地工程状态、*.iml 是 IDE 模块文件。CI 一律不用，
+# 一次 `git add -A` 却会把它们连同本机路径提交进历史。
+android/.idea/
+android/local.properties
+*.iml
+
 
 # AI 批量生成词库的批次缓存（tools/build_dict.py）
 tools/raw/
