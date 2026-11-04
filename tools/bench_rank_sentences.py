@@ -80,7 +80,7 @@ spaCy 才标 ``nlp_path=spacy``；否则标 ``pure``，此时本基准测的是�
     rank_per_token_us=N.NN
     sentences=N / tokens=N / rounds=N
     nlp_path=<spacy|pure>
-    model=<实际生效模型名>                    # de_core_news_md / de_core_news_sm (md 不可用) / pure-python
+    model=<实际生效模型名>                    # de_core_news_sm / pure-python（ADR-0027 只支持 sm）
     p95_note=<两条 p95 不可直接比较/相除的声明>
     samples_analyze_ms=<逗号分隔>             # 原始样本（可审计）
     verdict=<可判定结论>
@@ -300,12 +300,12 @@ def _nlp_path(nlp: Any, processor: ModuleType) -> Tuple[str, str]:
     return path, f"syntax_tree={tree_path};processor={proc_path}({proc_state})"
 
 
-# 降级标注里用短名（`de_core_news_md` → `md`），与工程师口头/文档口径一致（照抄 bench_spacy_unit）。
+# 降级标注里用短名（`de_core_news_sm` → `sm`），与工程师口头/文档口径一致（照抄 bench_spacy_unit）。
 MODEL_LABEL_PREFIX = "de_core_news_"
 
 
 def _short_model_name(name: str) -> str:
-    """``de_core_news_md`` → ``md``：降级标注用的短名。"""
+    """``de_core_news_sm`` → ``sm``：降级标注用的短名。"""
     if name.startswith(MODEL_LABEL_PREFIX):
         return name[len(MODEL_LABEL_PREFIX) :]
     return name
@@ -333,14 +333,14 @@ def _model_label(detail: str, engine: str, candidates: Tuple[str, ...]) -> str:
 
     为什么需要这行（② 席位红线）
     ----------------------------
-    `get_spacy_nlp()`（`syntax_tree.py`）**先试 ``de_core_news_md``、失败才退 ``sm``** ⇒
-    脚本很可能本来就在 md 上测，而此前从不打印模型名 ⇒ verdict 里"md 口径未测"的前提
-    **不可复核**。故必须如实打印本行，并让 verdict 的模型表述与之一致。
+    此前脚本从不打印模型名，而 verdict 里"md 口径未测"的前提**不可复核**。ADR-0027
+    已定案只支持 `sm`（`syntax_tree.get_spacy_nlp()` 复用 `processor.SPACY_MODEL_NAME`），
+    故本行用于钉住"本环境确实是 sm"，并让 verdict 的模型表述与之一致。
 
     ``engine`` 传的是本脚本的 ``nlp_path``（两层判据的合取）而非 ``processor.NLP_ENGINE``：
     被测的是 ``analyze_syntax_tree``（走 ``syntax_tree.get_spacy_nlp()``），只有 nlp_path 报
     spaCy 时该路径才真用 spaCy 模型 ⇒ 模型名必须与 nlp_path 一致，否则会出现
-    ``nlp_path=pure`` 却 ``model=de_core_news_md`` 的自相矛盾。
+    ``nlp_path=pure`` 却 ``model=de_core_news_sm`` 的自相矛盾。
     """
     if engine != "spacy":
         return "pure-python"
@@ -388,16 +388,11 @@ def _verdict(analyze_median_ms: float, rank_median_ms: float, nlp_path: str, mod
         "（完整管线，**另一个函数**），同样不可直接比较 —— 比值只能读作跨口径差，"
         "不能读作『某旧值偏乐观/悲观 N 倍』"
     )
-    # 模型口径：据 model= 行**如实**表述（② 席位红线 —— 不许隐含"本环境不是 md"）。
-    if model.startswith("de_core_news_md"):
+    # 模型口径：据 model= 行**如实**表述（② 席位红线 —— 不许隐含"本环境不是 sm"）。
+    if model.startswith("de_core_news_sm"):
         md_clause = (
-            f"本环境实测为 **md**（model={model}，见 model= 行）⇒ 『md 口径未测』这条补差来源"
-            f"**已被排除**，缺口不能再归因于词向量"
-        )
-    elif model.startswith("de_core_news_sm"):
-        md_clause = (
-            f"本环境实测为 **sm**（model={model}，见 model= 行），md（带词向量）口径**未测** ⇒ "
-            f"缺口仍可能来自 md 与 sm 的模型差"
+            f"本环境实测为 **sm**（model={model}，见 model= 行）；md 已定案不再支持（ADR-0027），"
+            f"『md 口径』是历史且不可复现的口径 ⇒ 缺口**不能**再归因于 md/sm 模型差"
         )
     else:
         md_clause = (
@@ -466,7 +461,7 @@ def main() -> int:
         model = _model_label(
             _resolved_model_detail(nlp, str(processor.NLP_ENGINE_DETAIL)),
             nlp_path,
-            tuple(processor.SPACY_MODEL_CANDIDATES),
+            (processor.SPACY_MODEL_NAME,),
         )
 
         items = _corpus_items()

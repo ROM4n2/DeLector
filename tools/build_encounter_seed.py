@@ -217,7 +217,7 @@ def _require_spacy_model() -> None:
         raise SystemExit(
             "[build_encounter_seed] spaCy 德语模型不可用，已退化为纯 Python 路径：\n"
             f"  {processor.NLP_ENGINE_DETAIL}\n"
-            "离线产包需要 spaCy 模型（de_core_news_md / de_core_news_sm）。\n"
+            "离线产包需要 spaCy 模型（de_core_news_sm，ADR-0027 定案只支持 sm）。\n"
             "安装示例：python -m spacy download de_core_news_sm"
         )
     # 打印实际生效引擎，便于复现时确认。
