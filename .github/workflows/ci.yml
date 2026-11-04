@@ -86,14 +86,26 @@ jobs:
           # 不进 requirements.txt（避免混入 Android 运行时打包面）。
           pip install pillow
 
+      # ── 静态检查去重（2026-11-04，TODO-CI-01）───────────────────────────────
+      # 下面 6 步原先在 matrix 公共 steps 里，六个 pytest 分片各装各跑一遍；实测
+      # 六份累计 92s（单份约 15s），而它们的覆盖面与分片用例集合无关，属纯重复。
+      # 现只保留一份，挂在 `unit-2`。为什么是 unit-2：它是本矩阵最短的分片
+      # （实测 92s，+15s 后仍远低于关键路径 unit-1 的 170s）。若把闸门塞进
+      # unit-1/unit-4/cost-guards（170s/173s/164s），墙钟收益会被关键路径吃掉
+      # ——不要为“看起来优化”把门禁挪进最慢的分片。
+      # 宿主分片被改名或删除时，tests/test_ci_hardening.py 的去重守卫会变红，
+      # 静态检查不会静默消失。
+      #
       # Ruff 静态门禁（2026-09-13 ruff-cleanup）。
       # ruff 是开发期工具：CI 内单独安装，**不进 requirements.txt**（混入运行时依赖
       # 会增大 Android 打包面体积与漂移面）。放在 spaCy 模型下载与全量测试之前——
       # lint 是秒级检查，先失败先反馈，省下长测试的等待。
       - name: Install Ruff
+        if: matrix.suite.name == 'unit-2'
         run: pip install ruff
 
       - name: Ruff lint gate
+        if: matrix.suite.name == 'unit-2'
         run: ruff check .
 
       # Mypy 类型门禁（2026-09-13 mypy-cleanup 起步；2026-09-18 strict 清账升级）。
@@ -103,12 +115,15 @@ jobs:
       # 保持适度档（pytest 测试函数注解收益低，另立评估），--follow-imports=skip
       # 只查 tests 自身（避免 delector 的 strict ignore 在配置档下 unused 冲突）。
       - name: Install Mypy
+        if: matrix.suite.name == 'unit-2'
         run: pip install mypy
 
       - name: Mypy type gate (strict)
+        if: matrix.suite.name == 'unit-2'
         run: mypy --strict delector tools
 
       - name: Mypy type gate (tests, config baseline)
+        if: matrix.suite.name == 'unit-2'
         run: mypy --follow-imports=skip tests
 
       # Mypy 类型门禁（新入口裸露面，2026-10-10 windows-desktop-shell 收口）。
@@ -120,6 +135,7 @@ jobs:
       # 下变 unused-ignore 而**卡住**（禁新增豁免）⇒ 一直未纳入；2026-10 用 setattr 按名赋值覆盖两代
       # uvicorn 信号 API、去掉那两处 ignore 后并入本条（ADR-0021 替代投资#2）。
       - name: Mypy type gate (desktop entry surface, strict)
+        if: matrix.suite.name == 'unit-2'
         # MUST 带 `--platform win32`：desktop.py 是本项目 **Windows 专属**入口，源码用
         # `ctypes.windll` 与 `winreg.*`；mypy **默认按运行平台**（CI 是 ubuntu）挑 typeshed，
         # Linux 下这两个模块没有 windll / OpenKey / KEY_READ / QueryValueEx / CloseKey 等属性
