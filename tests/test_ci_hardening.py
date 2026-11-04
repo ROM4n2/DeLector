@@ -412,6 +412,13 @@ def _gradle_block(text: str, header_re: str) -> str:
     pytest.fail(f"块 {header_re!r} 的花括号不配对")
 
 
+def _flavor_body(name: str) -> str:
+    """取 `productFlavors { ... }` 里某个 flavor 的内部文本。"""
+    text = _read_guard_file(ANDROID_GRADLE)
+    flavors = _gradle_block(text, r"\bproductFlavors\s*\{")
+    return _gradle_block(flavors, rf"\b{re.escape(name)}\s*\{{")
+
+
 def _build_type_body(name: str) -> str:
     """取 `buildTypes { ... }` 里某个 buildType 的内部文本。"""
     text = _read_guard_file(ANDROID_GRADLE)
@@ -428,42 +435,48 @@ def _abi_filters(body: str) -> list[str]:
     return re.findall(r'"([^"]+)"', declarations[0])
 
 
-def test_android_release_abi_is_arm64_only():
-    """release 变体的 abiFilters 只允许 arm64-v8a（x86_64 会显著撑大正式包）。
+def test_android_device_flavor_abi_is_arm64_only():
+    """正式 device 渠道的 abiFilters 只允许 arm64-v8a（x86_64 会撑大正式包）。
 
-    这条闸拦的是「为了模拟器顺手把 x86_64 塞进 release」：spaCy 原生栈按 ABI
-    各占 21–29MB，实测双 ABI 的 debug APK 已达 87.87 MiB（2026-11-04 探针）。
+    这条闸拦的是「为了模拟器顺手把 x86_64 塞进 device」：spaCy 原生栈按 ABI
+    各占 21–29MB，双 ABI 的 debug APK 2026-11-04 实测 87.87 MiB。
     """
     text = _read_guard_file(ANDROID_GRADLE)
     default_config = _gradle_block(text, r"\bdefaultConfig\s*\{")
     assert not re.search(r"\babiFilters\s+\"", default_config), (
-        "abiFilters 不得留在 defaultConfig：AGP 会把各变体的 ABI 集合合并，"
-        "x86_64 会渗进 release。请下移到 buildTypes 的 release/emulator 各自声明。"
+        "abiFilters 不得留在 defaultConfig：它会被所有 flavor 继承，"
+        "x86_64 会渗进 device。请下移到 productFlavors 各自声明。"
     )
-    assert "productFlavors" not in text, (
-        "不得引入 product flavor：它会把 assembleDebug 产物改名为 app-<flavor>-debug.apk，"
-        "打断 CI 写死的 android/app/build/outputs/apk/debug/app-debug.apk。"
-    )
-
-    release_abis = _abi_filters(_build_type_body("release"))
-    assert release_abis == ["arm64-v8a"], (
-        f"release 的 abiFilters 只允许 ['arm64-v8a']，实际 {release_abis}。"
-        "x86_64 属模拟器变体，不许进正式包。"
+    assert "productFlavors" in text, (
+        "ABI 必须按 product flavor 声明：Chaquopy 的 getAbis 只读 defaultConfig 与 "
+        "productFlavors，完全不看 buildType，放在 buildType 会直接构建失败。"
     )
 
+    device_abis = _abi_filters(_flavor_body("device"))
+    assert device_abis == ["arm64-v8a"], (
+        f"device 的 abiFilters 只允许 ['arm64-v8a']，实际 {device_abis}。"
+        "x86_64 属模拟器渠道，不许进正式包。"
+    )
 
-def test_android_emulator_abi_includes_x86_64():
-    """emulator 变体必须同时含 arm64-v8a 与 x86_64，且与正式包可共存。"""
-    body = _build_type_body("emulator")
+    release_body = _build_type_body("release")
+    assert not re.search(r"\babiFilters\s+\"", release_body), (
+        "release buildType 不得声明 abiFilters：Chaquopy 不读 buildType，"
+        "这里写了也无效，只会让人误以为 ABI 被改过。"
+    )
+    assert "variantBuilder.enable = false" in text, (
+        "必须禁用 emulatorRelease，否则 assembleRelease 也会产出模拟器包，"
+        "发版产物集合不再只有一个正式 APK。"
+    )
+
+
+def test_android_emulator_flavor_abi_includes_x86_64():
+    """emulator 渠道必须同时含 arm64-v8a 与 x86_64，且与正式包可共存。"""
+    body = _flavor_body("emulator")
     emulator_abis = _abi_filters(body)
-    assert "x86_64" in emulator_abis, f"emulator 变体必须含 x86_64，实际 {emulator_abis}"
-    assert "arm64-v8a" in emulator_abis, f"emulator 变体应保留 arm64-v8a，实际 {emulator_abis}"
+    assert "x86_64" in emulator_abis, f"emulator 必须含 x86_64，实际 {emulator_abis}"
+    assert "arm64-v8a" in emulator_abis, f"emulator 应保留 arm64-v8a，实际 {emulator_abis}"
     assert 'applicationIdSuffix ".emulator"' in body, (
-        "emulator 变体必须用 applicationIdSuffix 与正式包区分，否则无法并存安装"
-    )
-    assert "debuggable true" in body, "emulator 变体应可调试"
-    assert "signingConfig signingConfigs.debug" in body, (
-        "emulator 变体必须复用 debug 签名，否则本地无 keystore 时无法安装"
+        "emulator 必须用 applicationIdSuffix 与正式包区分，否则无法并存安装"
     )
 
 

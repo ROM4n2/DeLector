@@ -231,8 +231,11 @@ def test_release_workflow_gates_apk_signature():
     """
     workflow = open(os.path.join(ROOT, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
     assert "keytool -printcert -jarfile" in workflow, "缺少 APK 证书指纹断言"
-    assert "app/build/outputs/apk/debug/app-debug.apk" in workflow, (
-        "APK 路径必须写死到 debug 变体，find *.apk 会随机抓到别的变体"
+    assert "app/build/outputs/apk/device/debug/app-device-debug.apk" in workflow, (
+        "APK 路径必须写死到 device flavor + debug 变体，find *.apk 会随机抓到 emulator 变体"
+    )
+    assert "apk/emulator/" not in workflow, (
+        "发版 workflow 不得引用 emulator 变体路径：会抓错包，把带 x86_64 的模拟器包发出去"
     )
     assert 'find android/app/build/outputs/apk/ -name "*.apk"' not in workflow
     assert "$RUNNER_TEMP/delector-debug.jks" in workflow, "keystore 必须解到 $RUNNER_TEMP，不能落在工作树里"
@@ -260,7 +263,7 @@ def test_android_workflow_build_and_signature_contract():
     assert "java-version: '17'" in wf or 'java-version: "17"' in wf, "工作流必须保留 JDK 17"
     assert "setup-java" in wf, "工作流必须使用 setup-java"
     # Android 构建命令（复用已有 JDK/缓存/签名，不新增平行流程）
-    assert "gradle assembleDebug" in wf or "gradle assemble" in wf, "工作流必须执行 Gradle assemble 任务"
+    assert "gradle assembleDeviceDebug" in wf, "工作流必须只构建设备渠道（assembleDeviceDebug）"
     assert "Sync Python Backend, Model, and Assets into Android Project" in wf, "Gradle 构建必须在资产生成之后执行"
     # keytool 验签
     assert "keytool -printcert -jarfile" in wf, "缺少 keytool -printcert -jarfile 验签"
