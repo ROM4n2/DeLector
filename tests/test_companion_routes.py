@@ -157,21 +157,32 @@ def test_companion_chat_sse_fragmentation_preserves_events_and_persistence(
             yield chunk
 
     save_calls: list[dict[str, Any]] = []
-    proposal_calls: list[dict[str, Any]] = []
 
-    def _fake_save_turn(session_id: str, user: str, assistant: str, thought: str = ""):
+    def _fake_save_turn_snapshot(
+        session_id: str,
+        user: str,
+        assistant: str,
+        thought: str = "",
+        proposals: list[dict[str, Any]] | None = None,
+        save_messages: bool = True,
+        **kwargs: Any,
+    ):
         save_calls.append(
-            {"session_id": session_id, "user": user, "assistant": assistant, "thought": thought}
+            {
+                "session_id": session_id,
+                "user": user,
+                "assistant": assistant,
+                "thought": thought,
+                "proposals": proposals or [],
+                "save_messages": save_messages,
+            }
         )
         return {"id": "user-msg"}, {"id": "assistant-msg"}
 
-    def _fake_create_proposal(**kwargs: Any):
-        proposal_calls.append(kwargs)
-        return {"id": kwargs.get("proposal_id")}
-
     monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
-    monkeypatch.setattr("delector.routes.companion._session_svc.save_turn", _fake_save_turn)
-    monkeypatch.setattr("delector.routes.companion._proposal_svc.create_proposal", _fake_create_proposal)
+    monkeypatch.setattr(
+        "delector.routes.companion._session_svc.save_turn_snapshot", _fake_save_turn_snapshot
+    )
 
     client = TestClient(companion_app)
     body = {
@@ -182,22 +193,18 @@ def test_companion_chat_sse_fragmentation_preserves_events_and_persistence(
         assert response.status_code == 200
         assert b"".join(response.iter_bytes()) == stream
 
-    assert save_calls == [
-        {
-            "session_id": "session-fragmented",
-            "user": "Hallo",
-            "assistant": "Hallo Eule.",
-            "thought": "分析语序",
-        }
-    ]
-    assert [call["proposal_id"] for call in proposal_calls] == [
+    assert len(save_calls) == 1
+    assert save_calls[0]["session_id"] == "session-fragmented"
+    assert save_calls[0]["user"] == "Hallo"
+    assert save_calls[0]["assistant"] == "Hallo Eule."
+    assert save_calls[0]["thought"] == "分析语序"
+    assert save_calls[0]["save_messages"] is True
+    assert [prop["id"] for prop in save_calls[0]["proposals"]] == [
         "prop_fragmented_01",
         "prop_fragmented_02",
     ]
-    assert proposal_calls[0]["session_id"] == "session-fragmented"
-    assert proposal_calls[0]["message_id"] == "assistant-msg"
-    assert proposal_calls[0]["payload"] == proposal["payload"]
-    assert proposal_calls[1]["payload"] == other_proposal["payload"]
+    assert save_calls[0]["proposals"][0]["payload"] == proposal["payload"]
+    assert save_calls[0]["proposals"][1]["payload"] == other_proposal["payload"]
 
 
 @pytest.mark.parametrize("disconnect_mode", ["generator-close", "task-cancel"])
@@ -228,21 +235,32 @@ def test_companion_chat_generator_close_persists_partial_turn(
         await asyncio.Event().wait()
 
     save_calls: list[dict[str, Any]] = []
-    proposal_calls: list[dict[str, Any]] = []
 
-    def _fake_save_turn(session_id: str, user: str, assistant: str, thought: str = ""):
+    def _fake_save_turn_snapshot(
+        session_id: str,
+        user: str,
+        assistant: str,
+        thought: str = "",
+        proposals: list[dict[str, Any]] | None = None,
+        save_messages: bool = True,
+        **kwargs: Any,
+    ):
         save_calls.append(
-            {"session_id": session_id, "user": user, "assistant": assistant, "thought": thought}
+            {
+                "session_id": session_id,
+                "user": user,
+                "assistant": assistant,
+                "thought": thought,
+                "proposals": proposals or [],
+                "save_messages": save_messages,
+            }
         )
         return {"id": "user-msg"}, {"id": "assistant-msg"}
 
-    def _fake_create_proposal(**kwargs: Any):
-        proposal_calls.append(kwargs)
-        return {"id": kwargs.get("proposal_id")}
-
     monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
-    monkeypatch.setattr("delector.routes.companion._session_svc.save_turn", _fake_save_turn)
-    monkeypatch.setattr("delector.routes.companion._proposal_svc.create_proposal", _fake_create_proposal)
+    monkeypatch.setattr(
+        "delector.routes.companion._session_svc.save_turn_snapshot", _fake_save_turn_snapshot
+    )
 
     class _Request:
         async def is_disconnected(self) -> bool:
@@ -269,16 +287,92 @@ def test_companion_chat_generator_close_persists_partial_turn(
         return received
 
     assert asyncio.run(_drive()) == frames
-    assert save_calls == [
-        {
-            "session_id": "session-interrupted",
-            "user": "Hallo",
-            "assistant": "Hallo Eule.",
-            "thought": "分析语序",
-        }
-    ]
-    assert [call["proposal_id"] for call in proposal_calls] == ["prop_interrupted_01"]
-    assert proposal_calls[0]["message_id"] == "assistant-msg"
+    assert len(save_calls) == 1
+    assert save_calls[0]["session_id"] == "session-interrupted"
+    assert save_calls[0]["user"] == "Hallo"
+    assert save_calls[0]["assistant"] == "Hallo Eule."
+    assert save_calls[0]["thought"] == "分析语序"
+    assert save_calls[0]["save_messages"] is True
+    assert [prop["id"] for prop in save_calls[0]["proposals"]] == ["prop_interrupted_01"]
+
+
+def test_companion_chat_proposal_only_does_not_create_empty_turn(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """无 user/delta 时沿用 proposal-only 落库，但不伪造两条空消息。"""
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "proposal_only.db"))
+    proposal = {
+        "id": "prop_only_without_turn",
+        "action": "create_vocab_cards",
+        "title": "die Eule",
+        "payload": {"cards": [{"word": "die Eule"}]},
+    }
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        yield (
+            b'event: proposal\ndata: '
+            + json.dumps({"event": "proposal", "proposal": proposal}).encode("utf-8")
+            + b"\n\n"
+        )
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+    client = TestClient(companion_app)
+    with client.stream(
+        "POST",
+        "/api/companion/chat",
+        json={"messages": [], "scope_key": "view:cards"},
+    ) as response:
+        sid = response.headers["x-session-id"]
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    history = client.get(f"/api/companion/sessions/{sid}/history").json()["messages"]
+    proposals = client.get(f"/api/companion/sessions/{sid}/proposals").json()["proposals"]
+    assert history == []
+    assert [prop["id"] for prop in proposals] == ["prop_only_without_turn"]
+    assert proposals[0]["message_id"] is None
+
+
+def test_companion_chat_snapshot_failure_logs_and_preserves_stream(
+    companion_app: FastAPI,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """含 proposal 的快照失败只留日志并整体放弃，不改变 SSE 字节。"""
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "snapshot_failure.db"))
+    chunk = (
+        b'event: delta\ndata: {"event":"delta","text":"Hallo"}\n\n'
+        b'event: proposal\ndata: {"event":"proposal","proposal":'
+        b'{"id":"prop_snapshot_failure","action":"create_vocab_cards",'
+        b'"title":"die Eule","payload":{"cards":[]}}}\n\n'
+    )
+
+    async def _fake_dispatch(*args: Any, **kwargs: Any):
+        yield chunk
+
+    def _fail_snapshot(*args: Any, **kwargs: Any):
+        raise RuntimeError("injected proposal persistence failure")
+
+    monkeypatch.setattr("delector.routes.companion.dispatch_companion_stream", _fake_dispatch)
+    monkeypatch.setattr("delector.routes.companion._session_svc.save_turn_snapshot", _fail_snapshot)
+    caplog.set_level("WARNING", logger="delector")
+    client = TestClient(companion_app)
+    with client.stream(
+        "POST",
+        "/api/companion/chat",
+        json={
+            "session_id": "session-snapshot-failure",
+            "messages": [{"role": "user", "content": "Hallo"}],
+        },
+    ) as response:
+        assert response.status_code == 200
+        assert b"".join(response.iter_bytes()) == chunk
+
+    assert "proposal" in caplog.text
+    assert "injected proposal persistence failure" in caplog.text
 
 
 def test_companion_proposal_execute_localhost_gate(companion_app: FastAPI) -> None:
@@ -569,6 +663,8 @@ def test_companion_chat_persists_proposal_for_query(
     assert proposals[0]["status"] == "pending"
     assert proposals[0]["action"] == "create_vocab_cards"
     assert proposals[0]["payload"]["cards"][0]["word"] == "die Nacht"
+    history = client.get(f"/api/companion/sessions/{sid}/history").json()["messages"]
+    assert proposals[0]["message_id"] == history[1]["id"]
 
 
 def test_companion_chat_persists_weekly_goal_proposal(

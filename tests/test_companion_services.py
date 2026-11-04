@@ -105,6 +105,58 @@ def test_session_service_save_turn_and_history(test_db: str) -> None:
     assert history[1]["id"] == a_msg["id"]
 
 
+def test_save_turn_rolls_back_user_when_assistant_append_fails(
+    test_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from delector.services import companion_session
+
+    svc = CompanionSessionService(db_path=test_db)
+    sid = svc.get_or_create_session()["id"]
+    real_append_message = companion_session.append_message
+
+    def _fail_assistant(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        if kwargs.get("role") == "assistant":
+            raise RuntimeError("injected assistant append failure")
+        return real_append_message(*args, **kwargs)
+
+    monkeypatch.setattr(companion_session, "append_message", _fail_assistant)
+    with pytest.raises(RuntimeError, match="injected assistant append failure"):
+        svc.save_turn(sid, "Hallo", "Eule")
+
+    assert [message["role"] for message in svc.get_history(sid)] == []
+
+
+def test_save_turn_snapshot_rolls_back_messages_when_proposal_fails(
+    test_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from delector.services import companion_session
+
+    svc = CompanionSessionService(db_path=test_db)
+    sid = svc.get_or_create_session()["id"]
+
+    def _fail_proposal(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("injected proposal failure")
+
+    monkeypatch.setattr(companion_session, "create_proposal", _fail_proposal)
+    with pytest.raises(RuntimeError, match="injected proposal failure"):
+        svc.save_turn_snapshot(
+            sid,
+            "Hallo",
+            "Eule",
+            proposals=[
+                {
+                    "id": "prop_atomic_failure",
+                    "action": "create_vocab_cards",
+                    "title": "die Eule",
+                    "payload": {"cards": [{"word": "die Eule"}]},
+                }
+            ],
+        )
+
+    assert svc.get_history(sid) == []
+    assert CompanionProposalService(db_path=test_db).list_proposals(sid) == []
+
+
 def test_session_service_list_recent_sessions(test_db: str) -> None:
     svc = CompanionSessionService(db_path=test_db)
     s1 = svc.get_or_create_session(article_id="art_10", title="会话1")
