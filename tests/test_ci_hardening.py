@@ -398,7 +398,7 @@ def _gradle_block(text: str, header_re: str) -> str:
     """
     match = re.search(header_re, text)
     if match is None:
-        pytest.fail(f"build.gradle 里找不到块头 {header_re!r}")
+        raise AssertionError(f"build.gradle 里找不到块头 {header_re!r}")
     open_brace = text.find("{", match.start())
     depth = 0
     for index in range(open_brace, len(text)):
@@ -409,7 +409,7 @@ def _gradle_block(text: str, header_re: str) -> str:
             depth -= 1
             if depth == 0:
                 return text[open_brace + 1 : index]
-    pytest.fail(f"块 {header_re!r} 的花括号不配对")
+    raise AssertionError(f"块 {header_re!r} 的花括号不配对")
 
 
 def _flavor_body(name: str) -> str:
