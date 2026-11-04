@@ -37,7 +37,7 @@
 地址:      http://localhost:8000（桌面端同时绑 0.0.0.0，同 Wi-Fi 设备可访问；敏感设置仅回环可写）
 数据库:    **不再在仓库根** —— 默认 `%LOCALAPPDATA%\DeLector\{delector.db,progress.db}`（2026-10-16 实测）；
            仓库根若出现 `*.db` 那是测试/诊断残留（`.gitignore` 已挡，`tests/conftest.py` 的会话守卫会报）
-NLP 模型:  优先 de_core_news_md，缺失则 de_core_news_sm（本机装的是 sm）
+NLP 模型:  de_core_news_sm（唯一档位；ADR-0027 定案，无 md 候选或 md 回退）
 测试:      pytest            （**现读口径**：`python -m pytest --collect-only -q | tail -1`；
            2026-10-16 全量实测 2135 passed + 2 skipped，125 个 `tests/test_*.py` —— 勿手抄）
 行为探针:  node tools/<name>.mjs（**现读口径**：`ls tools/*.mjs | wc -l` = 29 个，发布闸要求全绿；

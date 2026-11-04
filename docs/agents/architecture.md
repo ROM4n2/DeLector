@@ -45,9 +45,10 @@
 判断当前跑的是哪条：`GET /api/settings` 的 `nlp_engine`（`spacy` / `pure_python`）与
 `nlp_engine_detail`，或启动时 stdout 的 `[DeLector] NLP 引擎: ...`（Android 上走 `adb logcat`）。
 
-**模型加载顺序**：`SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")`，
-md 优先（带词向量、标注更准），sm 兜底。自动下载只在**非 Android** 且两个都加载失败时触发，
-且只下 sm（md 约 45MB，首启动拉它太慢）。
+**模型档位**：`SPACY_MODEL_NAME = "de_core_news_sm"` 是唯一事实源（ADR-0027，2026-11-04 定案）。
+不存在 md 候选或 md 优先分支；`syntax_tree.get_spacy_nlp()` 复用同一常量。自动下载只在
+**非 Android** 且本地 sm 加载失败时触发，下载的也是 sm。要评估 md 精度必须先做 ADR-0027
+的 OPEN 项（一次性对照实验，未执行）。
 
 `_load_spacy_model()` 有三级回退，缺一不可：`spacy.load(名称)` →
 `importlib.import_module(名称).load()` → 按数据目录绝对路径加载。原因见 Android 一节。
