@@ -19,8 +19,10 @@
 
 import ast
 import importlib.util
+import json
 import re
 import subprocess
+from collections import Counter
 from pathlib import Path
 from typing import Any, NamedTuple, Sequence
 
@@ -2080,4 +2082,137 @@ def test_ci_workflow_has_master_direct_push_scope_job() -> None:
     assert "fetch-depth: 0" in block, (
         "job 的 checkout 未取全历史：before 基线不在本地对象库 ⇒ git 取不到范围"
         "（与 master push 红事故同因）"
+    )
+
+
+# ── pytest 分片完整性/配平守卫（2026-11-04，关键路径压缩）────────────────────────
+# 背景：旧 matrix 写 `tests/test_[a-c]*.py --ignore=...`。bash 会先把 glob 展开成
+# **显式文件路径**，而 pytest 的 `--ignore` 只作用于目录递归 ⇒ 被 ignore 的文件照跑。
+# 实测（run 41793803081）unit-1 因此 721 passed（按意图应为 608），unit-2 / unit-4
+# 同样重复执行 cost/integration 子集：分片既不完整也不互斥，还白烧 runner 时间。
+# 现分片成员集中在 tools/ci_shards.py（唯一事实来源），下面四条钉住：
+#   ① 全部 tests/test_*.py 恰好出现在一个分片（新增文件必须显式归位）；
+#   ② 专项分片（cost-guards / integration-heavy）不被普通分片重复收录；
+#   ③ 四个 unit 分片按实测时长配平（unit-2 另扣静态门禁 14s）；
+#   ④ workflow 不得退回 glob + --ignore 写法（那是本轮要修的根因）。
+
+CI_SHARDS_TOOL = REPO_ROOT / "tools" / "ci_shards.py"
+CI_SHARD_WEIGHTS = REPO_ROOT / "tools" / "ci_shard_weights.json"
+
+COST_GUARD_TESTS = frozenset(
+    {
+        "tests/test_articles_list_cost.py",
+        "tests/test_cards_endpoint_cost.py",
+        "tests/test_cold_start_cost.py",
+    }
+)
+INTEGRATION_TESTS = frozenset(
+    {
+        "tests/test_bench_judge_gaming.py",
+        "tests/test_frontend_layers.py",
+        "tests/test_server.py",
+        "tests/test_server_settings_security.py",
+        "tests/test_syntax_hard_api.py",
+    }
+)
+UNIT_SHARDS = ("unit-1", "unit-2", "unit-3", "unit-4")
+# unit-2 额外执行 6 个 Ruff/mypy 步骤；PR #210 实测约 14s（六步合计）
+STATIC_GATE_STEP_SECONDS = 14.0
+
+
+def _load_shard_plan() -> Any:
+    """按文件路径加载 tools/ci_shards.py（tools 不是包，避免依赖 sys.path 形状）。"""
+    spec = importlib.util.spec_from_file_location("ci_shards_plan", CI_SHARDS_TOOL)
+    assert spec is not None and spec.loader is not None, f"无法加载分片计划：{CI_SHARDS_TOOL}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ci_shards_partition_every_test_file_exactly_once() -> None:
+    """全部 tests/test_*.py 必须恰好被一个分片收录；matrix 名称与计划一致。"""
+    plan = _load_shard_plan()
+    all_tests = {p.relative_to(REPO_ROOT).as_posix() for p in REPO_ROOT.glob("tests/test_*.py")}
+
+    counts: Counter[str] = Counter()
+    for shard in plan.SHARDS:
+        for test_file in plan.resolve_shard(shard):
+            counts[test_file] += 1
+
+    duplicated = sorted(f for f, n in counts.items() if n > 1)
+    missing = sorted(all_tests - set(counts))
+    unknown = sorted(set(counts) - all_tests)
+    assert not duplicated, (
+        "以下测试文件被多个分片重复执行（runner 时间翻倍且互相掩盖失败）：\n"
+        + "\n".join(duplicated)
+    )
+    assert not missing, (
+        "以下测试文件没有被任何分片执行（漏测）：\n"
+        + "\n".join(missing)
+        + "\n新增 tests/test_*.py 后，请把它加入 tools/ci_shards.py 的对应分片。"
+    )
+    assert not unknown, (
+        "分片计划列出了不存在的测试文件：\n" + "\n".join(unknown)
+    )
+
+    matrix_names = re.findall(r"^\s*- name:\s*(\S+)\s*$", _ci_job_block("ci"), re.MULTILINE)
+    assert set(matrix_names) == set(plan.SHARDS), (
+        "ci.yml 的 matrix 分片名与 tools/ci_shards.py 不一致："
+        f"matrix={sorted(matrix_names)}，plan={sorted(plan.SHARDS)}"
+    )
+
+
+def test_ci_shards_keep_dedicated_suites_isolated() -> None:
+    """cost-guards / integration-heavy 的成员必须独占，不能被普通分片重复收录。"""
+    plan = _load_shard_plan()
+
+    assert set(plan.resolve_shard("cost-guards")) == COST_GUARD_TESTS, (
+        "cost-guards 分片的成员被改动：它必须恰好覆盖 " + "、".join(sorted(COST_GUARD_TESTS))
+    )
+    assert set(plan.resolve_shard("integration-heavy")) == INTEGRATION_TESTS, (
+        "integration-heavy 分片的成员被改动：它必须恰好覆盖 " + "、".join(sorted(INTEGRATION_TESTS))
+    )
+    for shard in UNIT_SHARDS:
+        overlap = set(plan.resolve_shard(shard)) & (COST_GUARD_TESTS | INTEGRATION_TESTS)
+        assert not overlap, (
+            f"{shard} 重复收录了专项分片的用例 {sorted(overlap)}："
+            "这会让慢用例跑两遍，把该分片重新顶成关键路径"
+        )
+
+
+def test_ci_shards_are_balanced_by_measured_duration() -> None:
+    """四个 unit 分片的实测时长（含 unit-2 静态门禁）必须落在均值 ±25% 内。"""
+    plan = _load_shard_plan()
+    weights = json.loads(CI_SHARD_WEIGHTS.read_text(encoding="utf-8"))
+
+    effective = {}
+    for shard in UNIT_SHARDS:
+        total = sum(weights.get(f, 0.1) for f in plan.resolve_shard(shard))
+        if shard == "unit-2":
+            total += STATIC_GATE_STEP_SECONDS
+        effective[shard] = total
+
+    mean = sum(effective.values()) / len(effective)
+    low, high = mean * 0.75, mean * 1.25
+    outliers = {s: round(v, 1) for s, v in effective.items() if not (low <= v <= high)}
+    assert not outliers, (
+        "unit 分片负载失衡（单位：本机实测秒，unit-2 已加静态门禁 "
+        f"{STATIC_GATE_STEP_SECONDS:g}s）：{outliers}；均值 {mean:.1f}s，允许 "
+        f"{low:.1f}–{high:.1f}s。请按实测时长重新分配 tools/ci_shards.py，"
+        "并更新 tools/ci_shard_weights.json。"
+    )
+
+
+def test_ci_workflow_runs_explicit_shard_plan() -> None:
+    """ci.yml 必须调用分片计划；不得退回 glob + `--ignore`（根因是 --ignore 对显式文件无效）。"""
+    text = _read_guard_file(CI_WORKFLOW)
+
+    assert "tools/ci_shards.py" in text, "ci.yml 未调用 tools/ci_shards.py 的分片计划"
+    assert "${{ matrix.suite.args }}" not in text, "ci.yml 仍在用 matrix.suite.args（应改用显式清单）"
+    assert "tests/test_[a-c]*.py" not in text, (
+        "ci.yml 出现了 glob 分片写法：bash 展开后 `--ignore` 对显式文件无效，"
+        "会重新引入重复执行（旧 unit-1 实测 721 passed，意图 608）"
+    )
+    assert "pytest -q $(python tools/ci_shards.py ${{ matrix.suite.name }})" in text, (
+        "pytest 步骤必须按 matrix.suite.name 取显式清单"
     )
