@@ -76,11 +76,9 @@ token/lemma/morph/CEFR 反查/可分动词回扫/统计；而本脚本实测的�
 
 模型可用性降级（`[Instinct: Model-Availability]`）
 -------------------------------------------------
-``processor.SPACY_MODEL_CANDIDATES`` 是 ``(md, sm)``：md 装不上时 processor 会
-自动退到 sm，故 ``model=`` 一行在非首选模型生效时**如实标注**
-``de_core_news_sm (md 不可用)``；spaCy/模型全不可用（Android、离线）时走纯
-Python 降级路径，照样打印 ``engine=pure_python`` + ``model=pure-python`` 与该
-路径的单价 —— **不静默跳过，也不硬失败**，因为降级路径本身的单价对 Android 面
+``processor.SPACY_MODEL_NAME`` 只有一个取值 `de_core_news_sm`（ADR-0027 定案只支持 sm）。
+模型不可用时走纯 Python 降级路径，照样打印 ``engine=pure_python`` + ``model=pure-python``
+与该路径的单价 —— **不静默跳过，也不硬失败**，因为降级路径本身的单价对 Android 面
 是有意义的成本输入。
 
 用法
@@ -97,7 +95,7 @@ Python 降级路径，照样打印 ``engine=pure_python`` + ``model=pure-python`
     warmup_ms=N.NN                # 第一次 process_german_text（含模型惰性加载 + 组件 lazy init）
     per_sentence_ms=N.NN          # 稳态：单次 process_german_text 的中位耗时
     per_token_us=N.NN             # 稳态：每 token 微秒
-    model=<name>                  # de_core_news_md / de_core_news_sm / pure-python
+    model=<name>                  # de_core_news_sm / pure-python（ADR-0027 只支持 sm）
     engine=<spacy|pure_python>    # 对应 processor.NLP_ENGINE
     sentences=N                   # 语料句数
     tokens=N                      # 语料 token 总数
@@ -199,7 +197,7 @@ CORPUS_LONG: Tuple[str, ...] = (
 CORPUS: Dict[str, Tuple[str, ...]] = {"short": CORPUS_SHORT, "mid": CORPUS_MID, "long": CORPUS_LONG}
 BUCKET_ORDER = ("short", "mid", "long")
 
-# 降级标注里用短名（`de_core_news_md` → `md`），与工程师口头/文档口径一致。
+# 降级标注里用短名（`de_core_news_sm` → `sm`），与工程师口头/文档口径一致。
 MODEL_LABEL_PREFIX = "de_core_news_"
 
 
@@ -261,7 +259,7 @@ def _count_tokens(result: Dict[str, Any]) -> int:
 
 
 def _short_model_name(name: str) -> str:
-    """``de_core_news_md`` → ``md``：降级标注用的短名。"""
+    """``de_core_news_sm`` → ``sm``：标注用的短名。"""
     if name.startswith(MODEL_LABEL_PREFIX):
         return name[len(MODEL_LABEL_PREFIX) :]
     return name
@@ -270,9 +268,8 @@ def _short_model_name(name: str) -> str:
 def _model_label(detail: str, engine: str, candidates: Tuple[str, ...]) -> str:
     """从 ``processor.NLP_ENGINE_DETAIL`` 反解实际生效的模型名（含降级标注）。
 
-    processor 按 ``SPACY_MODEL_CANDIDATES`` 顺序取第一个能加载的，故实际名 ≠ 首选
-    名就意味着首选名不可用 —— 这正是 ``(md 不可用)`` 标注的来源（不是猜的，是
-    processor 自己试过并失败后的结果）。
+    processor 只加载 ``SPACY_MODEL_NAME``（ADR-0027）；调用方传单元素元组，
+    因此 ``(md 不可用)`` 之类的多候选后缀不会再出现，只有可能的 ``(自动下载)`` 标注。
     """
     if engine != "spacy":
         return "pure-python"
@@ -297,7 +294,6 @@ def _verdict(
     model_load_ms: float,
     short_ms: float,
     long_ms: float,
-    md_missing: bool,
 ) -> str:
     """点名对照 42ms 与 2.1ms 的可判定结论（[Instinct: No-Silent-Conclusion]）。
 
@@ -382,7 +378,7 @@ def _verdict(
     # 三个候选一律并列、一律不作断言：本脚本只测了其中一种口径，没有裁定权。
     candidates = (
         "历史值 20 倍差距的候选口径（并列，均非定案结论）："
-        f"候选①：{hard} 是 md（带词向量，显著更贵）口径；"
+        f"候选①：{hard} 是早期 md 环境（带词向量，显著更贵）口径 —— ADR-0027 已定案只支持 sm，该口径不可复现；"
         f"候选②：{hard} 含冷启动摊薄（见上，需独立句子数证据）；"
         f"候选③：{hard} 是整篇一次性处理 + DB 写入口径（本脚本测的是逐句单独调用）"
     )
@@ -399,8 +395,6 @@ def _verdict(
             "；降级路径边界：本环境 spaCy/模型不可用，以上单价是**纯 Python 降级路径**成本"
             "（Android 无模型面），不能替 spaCy 定性 —— 仍需在有模型的机器上复跑本脚本"
         )
-    if md_missing:
-        tail += f"；候选①的口径边界：本机未装 md => 本次无法排除 {hard} 是 md（带词向量，显著更贵）的口径"
     return f"{head}：{side}；{mech}；{evidence}；{candidates}；{amort}；{length}；{pending}{tail}"
 
 
@@ -432,7 +426,7 @@ def main() -> int:
         # NLP_ENGINE_DETAIL 只说「将惰性加载」，不含实际生效的模型名。
         engine = str(processor.NLP_ENGINE)
         detail = str(processor.NLP_ENGINE_DETAIL)
-        model = _model_label(detail, engine, tuple(processor.SPACY_MODEL_CANDIDATES))
+        model = _model_label(detail, engine, (processor.SPACY_MODEL_NAME,))
 
         # 稳态段：逐句单独调用（一次调用 = 一句，与两个旧值的「/句」口径对齐）。
         samples: List[float] = []
@@ -468,8 +462,6 @@ def main() -> int:
             if 0.0 < per_sentence_ms < LEGACY_SYNTAX_HARD_MS
             else 0.0
         )
-        md_missing = "不可用" in model
-
         print("=== bench_spacy_unit ===")
         print(f"engine_detail={detail}")
         print(f"model_load_ms={model_load_ms:.2f}")
@@ -489,9 +481,7 @@ def main() -> int:
             print(f"tokens_per_bucket_{bucket}={bucket_tokens[bucket]}")
         print(f"first_vs_steady_ratio={ratio_first_steady:.1f}x")
         print(f"cold_amortized_sentences_to_42ms={amortized_n:.0f}")
-        verdict = _verdict(
-            engine, model, per_sentence_ms, warmup_ms, model_load_ms, short_ms, long_ms, md_missing
-        )
+        verdict = _verdict(engine, model, per_sentence_ms, warmup_ms, model_load_ms, short_ms, long_ms)
         print(f"verdict={verdict}")
         return 0
     finally:

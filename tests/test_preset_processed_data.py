@@ -158,7 +158,7 @@ def test_stored_entry_matches_live_output_when_model_matches() -> None:
 
     生成器与服务端共用同一个 `process_german_text`（见 tools/gen_preset_processed.py）；本断言
     是它的**行为**补强：若生成器改用别的函数 / 旧版模型 / 手工拼 JSON，运行时同源时必红。
-    运行时签名（spaCy 版本 + 模型名）与生成时不同（换机、CI 装到别的版本、本机装 md）属**预期**
+    运行时签名（spaCy 版本 + 模型名）与生成时不同（换机、CI 装到别的版本）属**预期**
     差异，skip 而非 fail —— `requirements` 是 `spacy>=3.8.16`（上不封顶），跨版本逐字比对会抖动。
     """
     from delector.nlp_engine import processor

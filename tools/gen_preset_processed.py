@@ -61,12 +61,10 @@ def _pin_isolated_env(tmpdir: str) -> None:
 
 
 def _resolved_model(processor: Any) -> str:
-    """从 processor 的引擎详情里反解**实际生效**的德语模型包名（拿不到回空串）。"""
+    """反解**实际生效**的德语模型包名（ADR-0027 只支持 sm；拿不到回空串）。"""
     detail = str(getattr(processor, "NLP_ENGINE_DETAIL", ""))
-    for candidate in processor.SPACY_MODEL_CANDIDATES:
-        if candidate in detail:
-            return str(candidate)
-    return ""
+    model = str(getattr(processor, "SPACY_MODEL_NAME", ""))
+    return model if model and model in detail else ""
 
 
 def _build_payload() -> Dict[str, Any]:

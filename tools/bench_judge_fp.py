@@ -85,10 +85,10 @@ if _REPO_ROOT not in sys.path:
 #: 四分类标签：TP=期望报且报；FN=期望报却漏；FP=期望不报却报；TN=期望不报且没报。
 OutcomeLabel = Literal["TP", "TN", "FP", "FN"]
 
-#: 模型候选顺序**复制自** processor.SPACY_MODEL_CANDIDATES（不 import：本脚本
-#: 不应拉起 delector 的依赖链；顺序不一致会让标定口径和产品漂移，改这里时必须
-#: 同步 `delector/nlp_engine/processor.py:23`）。
-MODEL_CANDIDATES: Tuple[str, ...] = ("de_core_news_md", "de_core_news_sm")
+#: 模型名与 processor.SPACY_MODEL_NAME 同口径（ADR-0027 只支持 sm）。不 import
+#: processor：本脚本不应拉起 delector 的依赖链；改这里时必须同步
+#: `delector/nlp_engine/processor.py` 的 SPACY_MODEL_NAME，否则标定口径会和产品漂移。
+MODEL_NAME = "de_core_news_sm"
 
 #: verdict 的建议阈值（**脚本算"条件是否成立"，不替人裁决**）：
 #: error 档 = 零误报（正样本句 + 对照组句）且零漏报；warning 档 = 各容忍少量。
@@ -210,15 +210,12 @@ def _load_nlp() -> Any:
     except ImportError as exc:  # 裸外泄会拿到未捕获异常的 rc=1，与"样本集无效"撞语义 ⇒ 归一为 RuntimeError
         raise RuntimeError(f"spaCy 未安装（本脚本不自动安装、不触发下载）：{exc}") from exc
 
-    errors: List[str] = []
-    for name in MODEL_CANDIDATES:
-        try:
-            _NLP = spacy.load(name)
-            _NLP_MODEL_NAME = name
-            return _NLP
-        except Exception as exc:  # 该候选加载失败 ⇒ 继续试下一个；全部失败才抛 RuntimeError
-            errors.append(f"{name}: {exc}")
-    raise RuntimeError("德语模型加载失败（不自动下载；请先安装 de_core_news_sm）：" + " | ".join(errors))
+    try:
+        _NLP = spacy.load(MODEL_NAME)
+        _NLP_MODEL_NAME = MODEL_NAME
+        return _NLP
+    except Exception as exc:  # 模型缺失 ⇒ 抛 RuntimeError；**绝不**换别的模型或下载
+        raise RuntimeError(f"德语模型加载失败（不自动下载；请先安装 {MODEL_NAME}）：{exc}") from exc
 
 
 def get_loaded_model_name() -> str:

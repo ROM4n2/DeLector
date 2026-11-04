@@ -337,8 +337,7 @@ _NLP: Any = None
 
 #: 「模型不可用」的统一人话原因（`_load_nlp` 抛出与 `probe_environment` 返回共用一份）。
 _MODEL_UNAVAILABLE_REASON = (
-    "德语模型不可用：de_core_news_md / de_core_news_sm 均无法本地加载"
-    "（本脚本绝不自动下载；请先安装 de_core_news_sm）"
+    "德语模型不可用：de_core_news_sm 无法本地加载（ADR-0027 只支持 sm；本脚本绝不自动下载）"
 )
 
 

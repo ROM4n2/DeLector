@@ -24,7 +24,7 @@ git config core.hooksPath .githooks
 ```bash
 uv venv --python 3.11
 uv pip install -r requirements.lock.txt
-uv run --no-project python -m spacy download de_core_news_md
+uv run --no-project python -m spacy download de_core_news_sm
 ```
 
 启动本地服务调试：

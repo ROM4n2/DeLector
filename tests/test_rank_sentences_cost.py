@@ -497,9 +497,9 @@ def test_model_line_present_and_parsable(bench_out: str) -> None:
     """⑨' `model=` 必出、可解析为**非空**字符串（实际生效模型口径必须可复核）。
 
     ② 席位红线：脚本此前**从不**打印实际生效的模型名，而 verdict 里"md（带词向量）口径
-    未测"这一措辞隐含"本环境不是 md"。可 `get_spacy_nlp()`（``syntax_tree.py``）先试
-    ``de_core_news_md``、失败才退 ``de_core_news_sm`` ⇒ 本环境**很可能本来就在 md 上测**，
-    这个前提此前**不可复核**。故必须照抄 ``bench_spacy_unit.py`` 的口径打印 ``model=``。
+    未测"这一措辞隐含"本环境不是 md"。ADR-0027 已定案只支持 sm（`syntax_tree.get_spacy_nlp()`
+    复用 `processor.SPACY_MODEL_NAME`），故必须照抄 ``bench_spacy_unit.py`` 的口径打印
+    ``model=``，让"本环境是 sm"可复核。
     """
     match = re.search(r"^model=(.+)$", bench_out, re.MULTILINE)
     assert match is not None, f"输出缺少 `model=<实际生效模型名>` 行\n{bench_out}"
