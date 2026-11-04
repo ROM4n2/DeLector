@@ -2405,3 +2405,79 @@ def test_ci_workflow_runs_explicit_shard_plan() -> None:
     assert "pytest -q $(python tools/ci_shards.py ${{ matrix.suite.name }})" in text, (
         "pytest 步骤必须按 matrix.suite.name 取显式清单"
     )
+
+
+# ── Android 本机配置隔离（2026-11-04）─────────────────────────────────────────
+# 背景：`android/app/build.gradle` 一度被写死本机 Python 的 Windows 绝对路径
+# （C:\Users\...\python.exe）。ci.yml 里没有 gradle 步骤 ⇒ PR 全绿；但
+# build-release.yml 与 android-emulator.yml 的 Ubuntu runner 不存在该路径，
+# 于是"PR 绿、发版日炸"。本机解释器改放 android/local.properties 的可选键
+# python.buildPython（该文件已被 .gitignore 忽略，不会入库）。
+
+ANDROID_APP_BUILD_GRADLE = REPO_ROOT / "android" / "app" / "build.gradle"
+ROOT_GITIGNORE = REPO_ROOT / ".gitignore"
+
+# 同时用真实 git 语义校验忽略规则：文件不存在时 check-ignore 仍按规则匹配。
+LOCAL_ONLY_ANDROID_PATHS = (
+    "android/local.properties",
+    "android/.idea/gradle.xml",
+)
+
+# 盘符绝对路径：C:\Users\... 或 D:/Android/... 之类。前置断言排除 https://
+# 这类带字母前缀的伪匹配（"s:/" 前是字母，不入选）。
+_DRIVE_ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
+
+
+def test_android_build_gradle_has_no_machine_absolute_paths() -> None:
+    """build.gradle 不得含任何机器绝对路径，buildPython 也不得写字符串字面量。"""
+    text = _read_guard_file(ANDROID_APP_BUILD_GRADLE)
+
+    offenders = [
+        f"{lineno}: {line.strip()}"
+        for lineno, line in enumerate(text.splitlines(), 1)
+        if _DRIVE_ABSOLUTE_PATH.search(line)
+    ]
+    assert not offenders, (
+        "android/app/build.gradle 出现机器绝对路径（盘符路径）：\n"
+        + "\n".join(offenders)
+        + "\nUbuntu runner 上不存在该路径，build-release.yml / android-emulator.yml 的 "
+        "gradle 构建会失败，而 ci.yml 不含 gradle 步骤 ⇒ PR 仍然全绿。"
+        "本机解释器请写进 android/local.properties 的 python.buildPython 键。"
+    )
+
+    # 即便路径不是盘符形式，buildPython 也不许写字符串字面量：
+    # 只能来自 local.properties 的变量，否则换一台机器就不可复现。
+    assert not re.search(r"buildPython\s+[\"']", text), (
+        "android/app/build.gradle 的 buildPython 写成了字符串字面量；"
+        "它必须来自 android/local.properties 的 python.buildPython 键（文件缺失时保持不设置）。"
+    )
+
+
+def test_local_only_android_files_are_gitignored() -> None:
+    """.idea/、local.properties、*.iml 必须被根 .gitignore 忽略（含 git 语义复核）。"""
+    text = _read_guard_file(ROOT_GITIGNORE)
+    rules = {
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+    required = {"android/.idea/", "android/local.properties", "*.iml"}
+    missing = required - rules
+    assert not missing, (
+        f".gitignore 缺少本机专属 Android 文件的忽略规则：{sorted(missing)}。"
+        "android/local.properties 含 sdk.dir 绝对路径、android/.idea/ 是 IDE 本地状态，"
+        "一次 `git add -A` 就会把它们提交进历史。"
+    )
+
+    for path in LOCAL_ONLY_ANDROID_PATHS:
+        result = subprocess.run(
+            ["git", "check-ignore", "--no-index", "-q", path],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, (
+            f"git check-ignore 判定 {path} 未被忽略（exit {result.returncode}）："
+            "本机 SDK 绝对路径 / IDE 状态会被误提交。"
+        )
