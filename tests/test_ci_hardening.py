@@ -391,6 +391,114 @@ def test_dockerfile_uvicorn_entrypoint_points_to_real_module():
 ANDROID_GRADLE = REPO_ROOT / "android" / "app" / "build.gradle"
 DELECTOR_DIR = REPO_ROOT / "delector"
 
+
+def _gradle_block(text: str, header_re: str) -> str:
+    """返回 Groovy 块 `header { ... }` 的内部文本（按花括号配对，取最外层）。
+
+    只服务于 build.gradle 这种**注释与字符串里都没有裸花括号**的文件；一旦该文件
+    出现花括号字面量，本函数会失配并显式 fail，而不是静默给出半截文本。
+    """
+    match = re.search(header_re, text)
+    if match is None:
+        raise AssertionError(f"build.gradle 里找不到块头 {header_re!r}")
+    open_brace = text.find("{", match.start())
+    depth = 0
+    for index in range(open_brace, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace + 1 : index]
+    raise AssertionError(f"块 {header_re!r} 的花括号不配对")
+
+
+def _flavor_body(name: str) -> str:
+    """取 `productFlavors { ... }` 里某个 flavor 的内部文本。"""
+    text = _read_guard_file(ANDROID_GRADLE)
+    flavors = _gradle_block(text, r"\bproductFlavors\s*\{")
+    return _gradle_block(flavors, rf"\b{re.escape(name)}\s*\{{")
+
+
+def _build_type_body(name: str) -> str:
+    """取 `buildTypes { ... }` 里某个 buildType 的内部文本。"""
+    text = _read_guard_file(ANDROID_GRADLE)
+    build_types = _gradle_block(text, r"\bbuildTypes\s*\{")
+    return _gradle_block(build_types, rf"\b{re.escape(name)}\s*\{{")
+
+
+def _abi_filters(body: str) -> list[str]:
+    """解析块内**唯一的** abiFilters 声明，返回带引号的 ABI 列表。"""
+    declarations = re.findall(r"\babiFilters\s+([^\n]+)", body)
+    assert len(declarations) == 1, (
+        f"块内应恰好有一条 abiFilters 声明，实际 {len(declarations)} 条：{declarations}"
+    )
+    return re.findall(r'"([^"]+)"', declarations[0])
+
+
+def test_android_device_flavor_abi_is_arm64_only():
+    """正式 device 渠道的 abiFilters 只允许 arm64-v8a（x86_64 会撑大正式包）。
+
+    这条闸拦的是「为了模拟器顺手把 x86_64 塞进 device」：spaCy 原生栈按 ABI
+    各占 21–29MB，双 ABI 的 debug APK 2026-11-04 实测 87.87 MiB。
+    """
+    text = _read_guard_file(ANDROID_GRADLE)
+    default_config = _gradle_block(text, r"\bdefaultConfig\s*\{")
+    assert not re.search(r"\babiFilters\s+\"", default_config), (
+        "abiFilters 不得留在 defaultConfig：它会被所有 flavor 继承，"
+        "x86_64 会渗进 device。请下移到 productFlavors 各自声明。"
+    )
+    assert "productFlavors" in text, (
+        "ABI 必须按 product flavor 声明：Chaquopy 的 getAbis 只读 defaultConfig 与 "
+        "productFlavors，完全不看 buildType，放在 buildType 会直接构建失败。"
+    )
+
+    device_abis = _abi_filters(_flavor_body("device"))
+    assert device_abis == ["arm64-v8a"], (
+        f"device 的 abiFilters 只允许 ['arm64-v8a']，实际 {device_abis}。"
+        "x86_64 属模拟器渠道，不许进正式包。"
+    )
+
+    release_body = _build_type_body("release")
+    assert not re.search(r"\babiFilters\s+\"", release_body), (
+        "release buildType 不得声明 abiFilters：Chaquopy 不读 buildType，"
+        "这里写了也无效，只会让人误以为 ABI 被改过。"
+    )
+    assert "variantBuilder.enable = false" in text, (
+        "必须禁用 emulatorRelease，否则 assembleRelease 也会产出模拟器包，"
+        "发版产物集合不再只有一个正式 APK。"
+    )
+
+
+def test_android_emulator_flavor_abi_includes_x86_64():
+    """emulator 渠道必须同时含 arm64-v8a 与 x86_64，且与正式包可共存。"""
+    body = _flavor_body("emulator")
+    emulator_abis = _abi_filters(body)
+    assert "x86_64" in emulator_abis, f"emulator 必须含 x86_64，实际 {emulator_abis}"
+    assert "arm64-v8a" in emulator_abis, f"emulator 应保留 arm64-v8a，实际 {emulator_abis}"
+    assert 'applicationIdSuffix ".emulator"' in body, (
+        "emulator 必须用 applicationIdSuffix 与正式包区分，否则无法并存安装"
+    )
+
+
+def test_emulator_workflow_is_isolated_from_release():
+    """模拟器 APK 必须有独立构建入口，且绝不复用 release 的产物路径/命名。"""
+    path = REPO_ROOT / ".github" / "workflows" / "android-emulator.yml"
+    if not path.exists():
+        pytest.fail(f"缺少模拟器构建 workflow：{path}（模拟器变体将无法产出 APK）")
+    workflow = path.read_text(encoding="utf-8")
+    assert "workflow_dispatch" in workflow, "模拟器构建必须手动触发，不得进 tag 发版链路"
+    assert "tags:" not in workflow and "push:" not in workflow, (
+        "模拟器构建不得挂 push / tag 触发：它会把 runner 分钟数烧在非发版场景"
+    )
+    assert "assembleEmulator" in workflow, "必须构建 emulator 变体（assembleEmulator）"
+    assert "DeLector-emulator-apk" in workflow, "产物 artifact 必须用模拟器专属名称"
+    assert "dist/DeLector-" not in workflow, (
+        "模拟器构建不得写 dist/DeLector-*：那些路径属发版产物，混用会让 release 抓错包"
+    )
+
+
 # pydantic v2 才有、v1 没有的名字：导入 / 装饰器 / 类属性 / 方法调用命中即 v1 下必炸。
 _PYDANTIC_V2_ONLY = {
     # 导入名（from pydantic import X）

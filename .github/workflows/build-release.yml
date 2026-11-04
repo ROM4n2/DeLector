@@ -392,15 +392,18 @@ jobs:
           DELECTOR_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           DELECTOR_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          gradle assembleDebug --stacktrace
+          # 只构建设备渠道（device flavor）。assembleDebug 会连 emulator flavor 一起构建，
+          # 把 x86_64 包和模拟器构建时间带进发版链路。
+          gradle assembleDeviceDebug --stacktrace
 
       - name: Locate and Rename APK
         run: |
           mkdir -p dist
-          # 写死 debug 变体的输出路径：原来的 find -name "*.apk" 在有多个变体
-          # （或残留产物）时会随机抓一个，且 -exec cp 多次命中会互相覆盖，
-          # 最后打包进 Release 的是哪一个不确定。
-          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          # 写死 device flavor + debug buildType 的输出路径：原来的 find -name "*.apk"
+          # 在有多个变体（或残留产物）时会随机抓一个，且 -exec cp 多次命中会互相覆盖，
+          # 最后打包进 Release 的是哪一个不确定。引入 emulator flavor 后这条更重要：
+          # 抓错就会把带 x86_64、applicationId 带 .emulator 后缀的包发出去。
+          APK="android/app/build/outputs/apk/device/debug/app-device-debug.apk"
           test -f "$APK" || { echo "::error::未找到 $APK"; exit 1; }
           cp "$APK" "dist/DeLector-${{ github.ref_name }}-Android.apk"
 

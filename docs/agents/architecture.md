@@ -61,10 +61,19 @@ md 优先（带词向量、标注更准），sm 兜底。自动下载只在**非
 | 项                          | 值                                   | 为什么不能随便改                                                                                                     |
 | --------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | `python { version "3.10" }` | cp310                                | Chaquopy 仓库里 spaCy 原生栈只有 cp310 的 wheel                                                                      |
-| `minSdk 24`                 | android_24                           | 同上，wheel 的平台标签是 android_24                                                                                  |
+| `minSdk 24`                 | `android_24` 只是**上界**            | Chaquopy 解析器用 `variant.minSdkVersion`（24）构造平台标签，但 vendored `packaging.tags` 会从 24 **逐级向下展开到 16** ⇒ 标 `android_21` 的 wheel 同样可被选中。2026-11-04 探针实证：`chaquopy-libgfortran` / `chaquopy-openblas` 的 `android_21_x86_64` 轮子被真实安装。不要把 `android_24` 理解成"只认 24" |
 | `spacy==3.8.7`              | 来自 `https://chaquo.com/pypi-13.1/` | Chaquopy 自己的 native 仓库，连带 thinc 8.3.4 / blis 1.2.1 / numpy 1.26.2 / cymem / preshed / srsly / murmurhash     |
 | CI 宿主机 spaCy             | pin `>=3.8,<3.9`                     | `de_core_news_sm` 声明 `>=3.8.0,<3.9.0`，宿主机版本漂了会**构建成功但真机加载失败**（CI 里已有 assert 拦）           |
-| `abiFilters "arm64-v8a"`    | 仅 64 位 ARM                         | spaCy 原生栈按 ABI 各占 21–29MB；三 ABI 是 106.3MB，只保 arm64 是 56.7MB。放弃 armeabi-v7a 与 x86_64（模拟器装不上） |
+| `abiFilters`（按 flavor 声明） | device：仅 `arm64-v8a`；emulator：`arm64-v8a + x86_64` | spaCy 原生栈按 ABI 各占 21–29MB；三 ABI 是 106.3MB，只保 arm64 约 57MB。**必须按 product flavor 声明**：Chaquopy 的 `getAbis` 只读 `defaultConfig` 与 `productFlavors`（不读 buildType）；放在 `defaultConfig` 会被所有渠道继承，x86_64 会渗进 device。`applicationIdSuffix ".emulator"` ⇒ 与正式包并存、但不能覆盖安装正式包、读不到正式包私有数据 |
+
+> 模拟器渠道（`emulator` product flavor）于 2026-11-04 加入。**必须用 flavor 而不是 buildType**：
+> Chaquopy 的 `getAbis` 只读 `defaultConfig.ndk.abiFilters` 与 `productFlavors`，放到 buildType 会直接报
+> `Chaquopy requires ndk.abiFilters`（CI 实测）。机械闸见
+> `tests/test_ci_hardening.py::test_android_device_flavor_abi_is_arm64_only` /
+> `test_android_emulator_flavor_abi_includes_x86_64`。构建入口是
+> `.github/workflows/android-emulator.yml`（仅手动触发，产物名 `DeLector-emulator-apk`，不碰发版路径）。
+> **真机与模拟器均未点检**：目前只证明依赖可解析、APK 含 `lib/x86_64/` 与
+> `requirements-x86_64.imy`（双 ABI debug 包实测 87.87 MiB），尚未做 AVD `adb install` 与运行时语法标注验证。
 
 **两个 Chaquopy 行为坑（都会导致模型静默加载失败）**：
 
