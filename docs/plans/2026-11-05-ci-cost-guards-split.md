@@ -26,7 +26,7 @@
 | --- | --- | --- | --- | --- | --- |
 | A | **拆分 cost 分片为两个专项分片**：`cost-guards`（articles + cards）、`cost-cold-start`（cold_start），两个独立 runner | cost 文件自身是结构性/比值断言（`test_cold_start_cost.py` 明确拒绝绝对毫秒；`test_cards_endpoint_cost.py` 用 `per_row_us` 比值、留 3.2× 余量）；CI 实跑 job 时长 | 关键路径 pytest 83s → 约 45–50s；job 约 126s → 约 85s | 新增 1 个 job（峰值并发 14 > 预算 13）；专项分片语义要由守卫重新钉住 | **采纳**，用 C 抵消并发 |
 | B | **4 条前端探针从 6 个分片去重到 1 份**（与 TODO-CI-01 同款） | CI step 时间戳（cost-guards 4 条合计 5s）；6 份累计 30s | `cost-guards` 减 5s；runner 累计约 -25s | Node 安装**不能**一起去重：`conftest.py::pytest_sessionstart` 在 CI 下对每个 pytest job 都要求 node 存在 | **采纳**（仅去重 4 条探针，Node 保留） |
-| C | **把 3 个纯 stdlib 机械闸 job 合并为 1 个 job**（silent / mock / layer） | 各 job 7–8s；§3.3 明确要求单断言闸并入现有机械闸 | 省 2 个并发 job（抵消 A 的 +1，峰值 13→12）；runner 累计约 -20s | 失败定位从 job 级降到 step 级；无 continue-on-error 时必须逐步红 | **采纳** |
+| C | **把 3 个纯 stdlib 机械闸 job 合并为 1 个 job**（silent / mock / layer） | 各 job 11–13s（判定器本身 1–3s）；§3.3 明确要求单断言闸并入现有机械闸 | 省 2 个并发 job（抵消 A 的 +1，峰值 13→12）；runner 累计约 -20s | 失败定位从 job 级降到 step 级；无 continue-on-error 时必须逐步红 | **采纳** |
 | D | **什么都不做**（对照） | 同上基线 | 0 | `cost-guards` 仍是唯一关键路径（126–157s） | **否决**（本任务就是处置该待办） |
 | E | 拆分 cost 文件到 2 个**既有** unit job | — | 相近 | 计时断言与无关测试共享同一进程/缓存/磁盘，**会随机红** | **排除**（任务书明令） |
 | F | `pytest-xdist` / 预热 worker | — | — | 并行污染计时 | **排除**（既有结论） |
