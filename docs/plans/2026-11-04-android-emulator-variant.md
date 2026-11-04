@@ -54,53 +54,53 @@
 ### Task 1: ABI 变体守卫测试先行（RED） [Tier: 2-Standard] [Mode: AFK] [Role: Test Builder]
 
 **Files:**
-- Modify: `tests/test_ci_hardening.py`（新增 `test_android_release_abi_is_arm64_only` 与 `test_android_emulator_abi_includes_x86_64`）
+- Modify: `tests/test_ci_hardening.py`（新增 `test_android_device_flavor_abi_is_arm64_only` 与 `test_android_emulator_flavor_abi_includes_x86_64`）
 
 **Interfaces:**
-- Consumes: `ANDROID_GRADLE`（已存在的路径常量）；`buildTypes` 块文本。
-- Produces: `_extract_build_type_block(text: str, name: str) -> str`（测试内私有辅助，花括号配对）；两条断言。
+- Consumes: `ANDROID_GRADLE`（已存在的路径常量）；`productFlavors` / `buildTypes` 块文本。
+- Produces: `_gradle_block(text, header_re)`（花括号配对）、`_flavor_body(name)`、`_build_type_body(name)`、`_abi_filters(body)`；两条断言。
 
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: Negative]`: release 块出现 `x86_64` MUST 红；`defaultConfig` 仍含 `abiFilters` MUST 红。
-- [ ] `[Instinct: Positive]`: emulator 块必须同时含 `arm64-v8a` 与 `x86_64`。
-- [ ] `[Instinct: Output Stability]`: 断言 `build.gradle` 不含 `productFlavors`，避免产物改名。
+- [ ] `[Instinct: Negative]`: `device` flavor 出现 `x86_64` MUST 红；`defaultConfig` 仍含 `abiFilters` MUST 红。
+- [ ] `[Instinct: Positive]`: `emulator` flavor 必须同时含 `arm64-v8a` 与 `x86_64`。
+- [ ] `[Instinct: Output Stability]`: 断言 `emulatorRelease` 被禁用，`assembleRelease` 仍只产出一个正式 APK。
 
 **Subagent Prompt Scaffold:**
-> "Implement Task 1: ABI 变体守卫测试先行。Mode: AFK。在 tests/test_ci_hardening.py 增加两条守卫：release 的 abiFilters 只能是 arm64-v8a、emulator 必须含 x86_64，且 defaultConfig 不得再声明 abiFilters、不得出现 productFlavors。先提交测试并验证在未改 build.gradle 时 RED。"
+> "Implement Task 1: ABI 守卫测试先行。Mode: AFK。在 tests/test_ci_hardening.py 增加守卫：device flavor 的 abiFilters 只能是 arm64-v8a、emulator 必须含 x86_64，defaultConfig 不得声明 abiFilters，release buildType 不得声明 abiFilters，且 emulatorRelease 必须被禁用。先提交测试并验证在未改 build.gradle 时 RED。"
 
 **Step Breakdown:**
-- [ ] 写 `_extract_build_type_block` 与四条断言。
-- [ ] 运行 `pytest tests/test_ci_hardening.py -k "abi" -q`，确认 RED（emulator 块不存在）。
-- [ ] 提交测试（`test(android): guard release/emulator ABI boundary`）。
+- [ ] 写花括号配对辅助与四条断言。
+- [ ] 运行 `pytest tests/test_ci_hardening.py -k "abi" -q`，确认 RED。
+- [ ] 提交测试（`test(android): guard device/emulator ABI boundary`）。
 
 ---
 
-### Task 2: build.gradle 落地 emulator buildType（GREEN） [Tier: 2-Standard] [Mode: AFK] [Role: Android Build Builder]
+### Task 2: build.gradle 落地 emulator flavor（GREEN） [Tier: 2-Standard] [Mode: AFK] [Role: Android Build Builder]
 
 **Files:**
 - Modify: `android/app/build.gradle`
 
 **Interfaces:**
 - Consumes: Task 1 的守卫断言。
-- Produces: `buildTypes { debug { ... } release { ... } emulator { applicationIdSuffix ".emulator"; debuggable true; signingConfig signingConfigs.debug; ndk { abiFilters "arm64-v8a", "x86_64" } } }`；`defaultConfig` 不再含 `ndk { abiFilters }`。
+- Produces: `flavorDimensions "channel"` + `productFlavors { device { abiFilters "arm64-v8a" } emulator { applicationIdSuffix ".emulator"; abiFilters "arm64-v8a", "x86_64" } }`；`defaultConfig` 不再含 `ndk { abiFilters }`。
 
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: Output Stability]`: 不新增 flavor；`assembleDebug` / `assembleRelease` 输出路径不变。
-- [ ] `[Instinct: Full App]`: emulator 变体沿用 `defaultConfig.python`，不裁剪任何 pip 包。
+- [ ] `[Instinct: Chaquopy Constraint]`: 必须用 flavor——`getAbis` 不读 buildType，否则报 `Chaquopy requires ndk.abiFilters`。
+- [ ] `[Instinct: Full App]`: emulator flavor 沿用 `defaultConfig.python`，不裁剪任何 pip 包。
 - [ ] `[Instinct: Side Effects]`: `applicationIdSuffix` 使模拟器包无法覆盖安装正式包、也读不到正式包私有数据——必须写进文档。
 
 **Subagent Prompt Scaffold:**
-> "Implement Task 2: build.gradle 落地 emulator buildType。Mode: AFK。把 ndk.abiFilters 从 defaultConfig 下移到 debug/release（均仅 arm64-v8a）与新增 emulator（arm64-v8a + x86_64）；emulator 加 applicationIdSuffix '.emulator'、debuggable true、signingConfig signingConfigs.debug。不新增 flavor，不改 python.pip。跑 Task 1 守卫至 GREEN。"
+> "Implement Task 2: build.gradle 落地 emulator flavor。Mode: AFK。把 ndk.abiFilters 从 defaultConfig 下移到 productFlavors：device 仅 arm64-v8a、emulator 为 arm64-v8a + x86_64，emulator 加 applicationIdSuffix '.emulator'；禁用 emulatorRelease。不改 python.pip。跑 Task 1 守卫至 GREEN。"
 
 **Step Breakdown:**
-- [ ] 下移 `abiFilters`，新增 `emulator` 块。
+- [ ] 下移 `abiFilters`，新增 `device` / `emulator` flavor。
 - [ ] `pytest tests/test_ci_hardening.py -k "abi" -q` → GREEN。
-- [ ] 具名变异：把 `x86_64` 塞进 release ⇒ 守卫生 RED；还原 ⇒ GREEN（记录输出）。
-- [ ] 提交（`build(android): add emulator buildType with x86_64`）。
+- [ ] 具名变异：把 `x86_64` 塞进 `device` ⇒ 守卫 RED；还原 ⇒ GREEN（记录输出）。
+- [ ] 提交（`build(android): switch ABI selection to product flavors`）。
 
 ---
 
@@ -214,11 +214,11 @@
 - 包内：`lib/x86_64/` 5 个 `.so`；`requirements-x86_64.imy` 17,408,632 bytes，顶层包含 spacy/thinc/blis/numpy/cymem/preshed/srsly/murmurhash 全 YES。
 - 耗时：`gradle assembleDebug` 131–133 s；整个 job 约 3 分 3 秒。
 
-**Task 1-2（守卫 + buildType）— 完成。** `build.gradle` 用 `buildType emulator`（非 flavor，`app-debug.apk` / `app-release` 路径不变）；`abiFilters` 下移至 buildTypes：`debug`/`release` 仅 `arm64-v8a`，`emulator` 为 `arm64-v8a + x86_64`。
+**Task 1-2（守卫 + flavor）— 完成。** 最初按 buildType 实现，CI 实测直接报 `Chaquopy requires ndk.abiFilters`（Chaquopy 15.0.1 的 `PythonPlugin.getAbis` 只读 `defaultConfig` 与 `productFlavors`，不读 buildType）。据此改为 `productFlavors`：`device` 仅 `arm64-v8a`、`emulator` 为 `arm64-v8a + x86_64` 且带 `applicationIdSuffix ".emulator"`；`emulatorRelease` 被禁用。
 
-**具名变异**：把 `x86_64` 放进 release 的 `abiFilters` ⇒ `test_android_release_abi_is_arm64_only` RED；还原 ⇒ GREEN。
+**具名变异**：把 `x86_64` 放进 `device` flavor 的 `abiFilters` ⇒ `test_android_device_flavor_abi_is_arm64_only` RED；还原 ⇒ GREEN。
 
-**Task 3（workflow）— 完成。** `.github/workflows/android-emulator.yml` 仅 `workflow_dispatch`，产物 `DeLector-emulator-apk`，不写 `dist/DeLector-*`；守卫 `test_emulator_workflow_is_isolated_from_release` 覆盖。
+**Task 3（workflow）— 完成。** `.github/workflows/android-emulator.yml` 仅 `workflow_dispatch`，产物 `DeLector-emulator-apk`，不写 `dist/DeLector-*`；守卫 `test_emulator_workflow_is_isolated_from_release` 覆盖。临时验证分支实测 `gradle assembleEmulatorDebug` 成功（run `41813642926`），产出 `apk/emulator/debug/app-emulator-debug.apk` 且含双 ABI。
 
 **Task 4（文档）— 完成。** `docs/agents/architecture.md` 更正 `android_24` 语义并写明 `applicationIdSuffix` 副作用与「真机/模拟器均未点检」。
 
@@ -228,3 +228,6 @@
 | --- | --- | --- |
 | Task 0 workflow 用 `workflow_dispatch` 触发 | 额外挂了 `push: branches: [probe/android-x86_64-wheels]` | `workflow_dispatch` 在默认分支注册前无法通过 API 触发；探针必须跑在非默认分支。仅存在于一次性分支，未进正式 PR |
 | Task 3 计划写「常驻 workflow」为 Task 3 | 实际保留，命名 `android-emulator.yml`，并补隔离守卫 | 否则模拟器变体在 CI 上没有任何产出入口；隔离守卫钉住不碰发版路径 |
+| 用 `buildType emulator` 承载 ABI | 改为 `productFlavor emulator` | Chaquopy 的 `getAbis` 不读 buildType，buildType 方案直接构建失败；flavor 是插件唯一支持的变体级 ABI 机制 |
+| 发版 workflow 抓 `apk/debug/app-debug.apk` | 改为 `apk/device/debug/app-device-debug.apk` | flavor 必然改写输出目录；已同步改 CI 并加守卫禁止引用 `apk/emulator/`，防止发版抓错包 |
+| `assembleRelease` 路径/命名不变 | 路径变为 `apk/device/release/...`，但 `emulatorRelease` 已禁用 ⇒ 仍只产出一个正式 APK | flavor 的固有代价；最终发版产物名 `DeLector-<tag>-Android.apk` 保持不变 |
