@@ -1484,7 +1484,6 @@ def test_frontend_gates_run_in_exactly_one_shard() -> None:
         f"前端探针宿主分片 {host!r} 不在 matrix 里（现有: {matrix_names}）："
         "条件永远为假，4 条探针会静默不跑（死绿比慢更坏）"
     )
-    plan = _load_shard_plan()
     assert host not in COST_GUARD_SHARDS, (
         f"前端探针宿主分片 {host!r} 是 cost 专项分片：会把无关步骤塞回计时关键路径，"
         "抵消本轮拆分收益"
