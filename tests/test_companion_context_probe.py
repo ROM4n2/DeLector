@@ -62,6 +62,7 @@ EXPECTED_SCENARIO_CHECKS = {
     "german-entry-lock": 2,
     "user-reenable": 1,
     "cp-api-session-header": 8,
+    "cp-api-sse-frames": 23,
     "submit-stream-happy-path": 70,
     "submit-stream-error-event": 13,
     "submit-stream-reject": 12,

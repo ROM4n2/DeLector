@@ -1331,6 +1331,181 @@ async function main() {
   );
 
   endScenario();
+  /* M2. cp-api：逐帧钉死 SSE 边界与请求/回调契约，供主循环与尾包统一出口复用。 */
+  beginScenario("cp-api-sse-frames");
+  const frameEncoder = new TextEncoder();
+  async function runFrameStream(chunks, overrides = {}) {
+    const responseHeaders = overrides.responseHeaders || {};
+    const events = [];
+    const sessions = [];
+    let request = null;
+    let readerRequests = 0;
+    context.fetch = async (url, opts) => {
+      request = { url: String(url), opts };
+      return {
+        ok: overrides.ok === undefined ? true : overrides.ok,
+        status: overrides.status || 200,
+        headers: {
+          get(name) {
+            const value = responseHeaders[String(name).toLowerCase()];
+            return value === undefined ? null : value;
+          },
+        },
+        body: {
+          getReader() {
+            readerRequests += 1;
+            let index = 0;
+            return {
+              async read() {
+                if (index >= chunks.length) return { done: true, value: undefined };
+                const value = frameEncoder.encode(chunks[index]);
+                index += 1;
+                return { done: false, value };
+              },
+            };
+          },
+        },
+      };
+    };
+    let error = null;
+    try {
+      await cpApi.namespace.streamCompanionChat({
+        messages: [{ role: "user", content: "Hallo SSE" }],
+        context: { selected_text: "Der zweite Satz." },
+        session_id: "ses_request",
+        reasoning_effort: "high",
+        view: "reader",
+        context_source: "reader-state",
+        draft_text: "Entwurf",
+        card_context: "die Nacht",
+        scope_key: "article:42",
+        signal: overrides.signal || null,
+        onSessionId: (...args) => sessions.push(args),
+        onEvent: (...args) => events.push(args),
+      });
+    } catch (err) {
+      error = err;
+    }
+    return { events, sessions, request, readerRequests, error };
+  }
+
+  const frameSignal = new AbortController().signal;
+  const frames = await runFrameStream(
+    [
+      ': opening comment\n\nid: 91\n\n',
+      'event: thought\n',
+      'data: {"text":"跨chunk"}\n' +
+        'data: {"event":"tool_start","tool":"lookup","id":"payload-id"}\n' +
+        '\n' +
+        'event: delta\r\n' +
+        'data: {"text":"first"}\r\n' +
+        'data: {"text":"second"}\r\n' +
+        '\r\n' +
+        ': ignored comment\r\n' +
+        '\n' +
+        'id: 92\r\n' +
+        'data: not-json\n' +
+        'data: {"text":"after-bad"}\n' +
+        '\n' +
+        'event: done\n\n',
+      'data: {"event":"done","text":"tail"}',
+    ],
+    {
+      signal: frameSignal,
+      responseHeaders: { "x-session-id": "ses_frames", "x-history-length": "17" },
+    }
+  );
+  check(!frames.error, "M2 SSE 正常帧/非 JSON 容错路径抛异常: " + (frames.error && frames.error.message));
+  check(frames.events.length === 6, "M2 注释/空帧/id/只有 event 无 data 产生了额外回调或丢失帧");
+  check(
+    JSON.stringify(frames.events[0]) === JSON.stringify(["thought", { text: "跨chunk" }]),
+    "M2 currentEvent 未跨 chunk 保持到后续 data 行"
+  );
+  check(
+    JSON.stringify(frames.events[1]) ===
+      JSON.stringify(["tool_start", { event: "tool_start", tool: "lookup", id: "payload-id" }]),
+    "M2 data.event 覆盖或 data 内 id 字段透传回归"
+  );
+  check(
+    JSON.stringify(frames.events[2]) === JSON.stringify(["delta", { text: "first" }]),
+    "M2 CRLF 帧首个 data 行解析回归"
+  );
+  check(
+    JSON.stringify(frames.events[3]) === JSON.stringify(["delta", { text: "second" }]),
+    "M2 同一帧多个 data 行未逐行触发回调"
+  );
+  check(
+    JSON.stringify(frames.events[4]) === JSON.stringify(["delta", { text: "after-bad" }]),
+    "M2 非 JSON data 后未继续解析后续有效行"
+  );
+  check(
+    JSON.stringify(frames.events[5]) === JSON.stringify(["done", { event: "done", text: "tail" }]),
+    "M2 流结束尾包剩余 buffer 未按 event/data 解析"
+  );
+  check(frames.events.every((args) => args.length === 2), "M2 onEvent 签名不再是 (eventType, data)");
+  check(
+    JSON.stringify(frames.sessions) === JSON.stringify([["ses_frames", 17]]),
+    "M2 onSessionId/X-History-Length 回调参数回归"
+  );
+  check(
+    frames.request && frames.request.url === "/api/companion/chat" && frames.request.opts.method === "POST",
+    "M2 请求 URL/method 回归"
+  );
+  check(
+    frames.request &&
+      frames.request.opts.headers["Content-Type"] === "application/json" &&
+      frames.request.opts.headers.Accept === "text/event-stream",
+    "M2 JSON/SSE 请求头回归"
+  );
+  check(
+    frames.request &&
+      frames.request.opts.headers["X-Session-ID"] === "ses_request" &&
+      frames.request.opts.headers["X-Reasoning-Effort"] === "high",
+    "M2 session/reasoning 请求头回归"
+  );
+  check(frames.request && frames.request.opts.signal === frameSignal, "M2 AbortSignal 未原样传给 fetch");
+  check(
+    frames.request &&
+      JSON.stringify(JSON.parse(frames.request.opts.body)) ===
+        JSON.stringify({
+          messages: [{ role: "user", content: "Hallo SSE" }],
+          context: { selected_text: "Der zweite Satz." },
+          session_id: "ses_request",
+          reasoning_effort: "high",
+          view: "reader",
+          context_source: "reader-state",
+          draft_text: "Entwurf",
+          card_context: "die Nacht",
+          scope_key: "article:42",
+        }),
+    "M2 既有请求体字段或值回归"
+  );
+  check(frames.readerRequests === 1, "M2 正常响应 reader 获取次数漂移");
+
+  const silentFrames = await runFrameStream(["\n\r\n: comment-only\nid: 77\nevent: thought\n\n"], {
+    responseHeaders: { "x-session-id": "ses_history", "x-history-length": "invalid" },
+  });
+  check(!silentFrames.error, "M2 空帧/注释/id/只有 event 无 data 路径抛异常");
+  check(silentFrames.events.length === 0, "M2 无 data 帧不应触发 onEvent");
+  check(
+    JSON.stringify(silentFrames.sessions) === JSON.stringify([["ses_history", null]]),
+    "M2 非法 X-History-Length 未回退为 null"
+  );
+  check(silentFrames.readerRequests === 1, "M2 无 data 流未正常消费 reader");
+
+  const httpFailure = await runFrameStream([], {
+    ok: false,
+    status: 503,
+    responseHeaders: { "x-session-id": "ses_http", "x-history-length": "3" },
+  });
+  check(
+    httpFailure.error && httpFailure.error.message === "HTTP 503: 伴学智能体服务不可用",
+    "M2 HTTP 错误信息或拒绝路径回归"
+  );
+  check(httpFailure.readerRequests === 0, "M2 HTTP 错误后仍读取响应 body");
+  check(httpFailure.events.length === 0 && httpFailure.sessions.length === 0, "M2 HTTP 错误后仍触发公开回调");
+
+  endScenario();
   /* N. submitPrompt：真实流式事件链、异常中断、防重入与发送前上下文刷新 */
   initCompanionDrawer();
   await Promise.resolve();
