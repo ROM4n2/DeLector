@@ -27,7 +27,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = path.resolve(process.env.DELECTOR_PROBE_ROOT || path.join(__dirname, ".."));
 const JSON_MODE = process.argv.includes("--json");
 
 const fail = (msg) => {
@@ -368,10 +368,27 @@ async function instantiate(source, deps, identifier) {
 }
 
 const problems = [];
+const scenarios = {};
+const scenarioChecks = {};
 let checks = 0;
+let activeScenario = null;
+
 function check(cond, msg) {
   checks += 1;
   if (!cond) problems.push(msg);
+}
+
+function endScenario() {
+  if (!activeScenario) return;
+  const { name, startChecks, startProblems } = activeScenario;
+  scenarioChecks[name] = checks - startChecks;
+  scenarios[name] = problems.length === startProblems ? "pass" : "fail";
+  activeScenario = null;
+}
+
+function beginScenario(name) {
+  endScenario();
+  activeScenario = { name, startChecks: checks, startProblems: problems.length };
 }
 
 async function main() {
@@ -502,6 +519,7 @@ async function main() {
   };
 
   /* A. 阅读器实时选区优先 */
+  beginScenario("reader-live-selection");
   setView("reader");
   setSelection("Der zweite Satz.");
   setState({ activeSelectedRangeText: "Der erste Satz.", activeSelectedSentId: 1 });
@@ -511,14 +529,18 @@ async function main() {
   check(ctx.selectedText === "Der zweite Satz.", "A 实时选区未被优先采用");
   check(ctx.articleTitle === "Der Spiegel" && ctx.cefrLevel === "C1", "A 阅读器文章标题/CEFR 丢失");
 
+  endScenario();
   /* B. 阅读器无实时选区 → reader-state */
+  beginScenario("reader-state-fallback");
   setSelection("");
   setState({ activeSelectedRangeText: "Der erste Satz.", activeSelectedSentId: 1 });
   ctx = C.harvestStudyContext();
   check(ctx.contextSource === "reader-state", "B 无选区时未回退 reader-state");
   check(ctx.selectedText === "Der erste Satz.", "B reader-state 句子未采用");
 
+  endScenario();
   /* C. 非阅读器实时选区不得带旧文章标题/CEFR */
+  beginScenario("non-reader-live-selection");
   setView("cards");
   setSelection("Karte Wort");
   setState({ activeSelectedRangeText: "Der erste Satz.", activeSelectedSentId: 1 });
@@ -528,7 +550,9 @@ async function main() {
   check(ctx.selectedText === "Karte Wort", "C cards 实时选区未采用");
   check(ctx.articleTitle === "" && ctx.cefrLevel === "", "C cards 仍带上一篇的文章标题/CEFR（上下文串味）");
 
+  endScenario();
   /* D. 非阅读器无选区：即使 state 有旧句子也必须为空 */
+  beginScenario("non-reader-empty");
   setSelection("");
   setState({ activeSelectedRangeText: "Der erste Satz.", activeSelectedSentId: 1 });
   ctx = C.harvestStudyContext();
@@ -536,7 +560,9 @@ async function main() {
   check(ctx.contextSource === "none", "D cards 无上下文时来源不是 none");
   check(ctx.articleTitle === "" && ctx.cefrLevel === "", "D cards 空上下文仍带旧文章元数据");
 
+  endScenario();
   /* E. 切页 reset 清空 activeContext */
+  beginScenario("reset-on-switch");
   setCompanionContext("Alter Satz.", "Der Spiegel", "C1", "reader", "reader-state", "Alter Entwurf.");
   resetCompanionContextForView("cards");
   check(companionState.activeContext.selectedText === "", "E reset 未清空 selectedText");
@@ -546,7 +572,9 @@ async function main() {
   check(companionState.activeContext.contextSource === "none", "E reset 未归一 contextSource");
   check(companionState.activeContext.draftText === "", "E reset 未清空 draftText");
 
+  endScenario();
   /* F. 非阅读器无上下文：context bar 显示当前页面且快捷问句隐藏 */
+  beginScenario("drawer-context-gate");
   setView("cards");
   setState({});
   setCompanionContext("", "", "", "cards", "none");
@@ -563,7 +591,9 @@ async function main() {
     check(!chip.classList.contains("is-visible"), "F 非阅读器快捷问句仍可见");
   }
 
+  endScenario();
   /* G. 阅读器绑定句子：正常路径不回退 */
+  beginScenario("reader-path-regression");
   setView("reader");
   setState({});
   setCompanionContext("Der zweite Satz.", "Der Spiegel", "C1", "reader", "reader-state");
@@ -578,7 +608,9 @@ async function main() {
     check(chip.classList.contains("is-visible"), "G 阅读器绑定句子后快捷问句未恢复可见");
   }
 
+  endScenario();
   /* G2. 写作台草稿上下文：与 selected_text 分离，来源标记区分 selection / draft */
+  beginScenario("writer-draft-context");
   const DRAFT = "Ich habe hunger und gehe in der Schule.";
   setView("writer");
   setSelection("");
@@ -599,6 +631,8 @@ async function main() {
   ctx = C.harvestStudyContext();
   check(ctx.draftText === "", "G2 非写作页泄漏了写作草稿");
 
+  endScenario();
+  beginScenario("writer-draft-gate");
   setView("writer");
   setCompanionContext("", "", "", "writer", "writer-draft", DRAFT);
   renderContextBar();
@@ -620,7 +654,9 @@ async function main() {
     check(!chip.classList.contains("is-visible"), "G2 无草稿时检查草稿入口仍可见");
   }
 
+  endScenario();
   /* G3. 进度页：能力分区、无数据降级、写作草稿静默刷新 */
+  beginScenario("progress-partition");
   setView("progress");
   setSelection("");
   setState({});
@@ -648,6 +684,8 @@ async function main() {
     check(!chip.classList.contains("is-visible"), "G3 非进度页仍显示进度专属入口");
   }
 
+  endScenario();
+  beginScenario("writer-draft-live-refresh");
   setView("writer");
   writerEditor.textContent = DRAFT;
   refreshWriterDraftContext();
@@ -676,7 +714,9 @@ async function main() {
     "G3 词汇等级无文本时未降级提示"
   );
 
+  endScenario();
   /* G4. 卡盒页：当前卡面词条 → cardContext，卡盒专属入口分区，无词条降级 */
+  beginScenario("card-current-context");
   setView("cards");
   setSelection("");
   setState({});
@@ -704,6 +744,8 @@ async function main() {
   check(ctx.cardContext.includes("猫头鹰"), "G4 卡盒词条释义丢失");
   check(ctx.selectedText === "" && ctx.draftText === "", "G4 卡盒词条污染了 selectedText/draftText");
 
+  endScenario();
+  beginScenario("card-partition");
   setCompanionContext("", "", "", "cards", "card-current", "", ctx.cardContext);
   renderContextBar();
   const cardBar = contextBar.children.find((c) => c.className === "companion-context-text");
@@ -721,7 +763,9 @@ async function main() {
     check(!chip.classList.contains("is-visible"), "G4 卡盒页仍显示写作检查入口");
   }
 
+  endScenario();
   /* G4-b. grid 视图无当前卡面 → 不回退成旧词条 */
+  beginScenario("card-empty-degrade");
   cardState.catalog.viewMode = "grid";
   ctx = C.harvestStudyContext();
   check(ctx.cardContext === "", "G4 grid 视图不应采集卡盒词条");
@@ -747,7 +791,9 @@ async function main() {
     "G4 卡盒提议指令未要求模型给出 definition_zh 中文释义"
   );
 
+  endScenario();
   /* G5. 缺释义统一展示 + 批量确认/全部拒绝 */
+  beginScenario("definition-fallback-ui");
   const { formatCardDefinition } = cdState.namespace;
   check(formatCardDefinition({ definition_zh: "" }) === "待补充", "G5 空释义未显示待补充");
   check(formatCardDefinition({ definition_zh: "  " }) === "待补充", "G5 空白释义未显示待补充");
@@ -793,6 +839,8 @@ async function main() {
     .join("");
   check(singleText.includes("待补充"), "G5 提案卡片缺释义未显示待补充");
 
+  endScenario();
+  beginScenario("proposal-batch-actions");
   const host = makeEl("batch-host");
   const proposals = [
     { id: "p1", action: "create_vocab_cards", title: "A", payload: { cards: [] }, status: "pending" },
@@ -837,7 +885,9 @@ async function main() {
     "G5 单条 pending 不应出现批量条"
   );
 
+  endScenario();
   /* G6. 失败路径：空/畸形提议不可确认，正常提议不受影响 */
+  beginScenario("proposal-failure-paths");
   const emptyHost = makeEl("empty-host");
   renderProposalCard(
     emptyHost,
@@ -886,7 +936,9 @@ async function main() {
     "G6 正常提议确认按钮文案被误改"
   );
 
+  endScenario();
   /* G7. 全局历史分组 + 跨 scope 上下文重置 */
+  beginScenario("session-global-groups");
   setView("cards");
   context.__probe.sessionsFixture = [
     { id: "ses_cards", title: "卡盒会话", scope_key: "view:cards", created_at: "2026-11-01" },
@@ -917,6 +969,8 @@ async function main() {
   );
   check(selectEl.children[0].textContent === "＋ 新建会话", "G7 新建会话入口被挤走");
 
+  endScenario();
+  beginScenario("session-cross-scope-reset");
   setCompanionContext("Alter Satz.", "Der Spiegel", "C1", "cards", "reader-state");
   await switchSession("ses_article");
   check(companionState.currentSessionId === "ses_article", "G7 跨 scope 未切到目标会话");
@@ -936,7 +990,9 @@ async function main() {
     "G7 同 scope 切换不应清空当前上下文"
   );
 
+  endScenario();
   /* G8. 例句字段双读：Go sentence_context 与旧 context_sentence 都必须显示 */
+  beginScenario("proposal-sentence-fields");
   const goHost = makeEl("go-host");
   renderProposalCard(
     goHost,
@@ -975,7 +1031,9 @@ async function main() {
   const pyText = pyContent.children[0].children.map((n) => n.textContent || n.nodeValue || "").join("");
   check(pyText.includes("Der Hund bellt."), "G8 旧 context_sentence 例句回退失效");
 
+  endScenario();
   /* G9. 多动作 HITL：修订/周目标渲染、fail-closed 与页面快捷入口 */
+  beginScenario("proposal-multi-action");
   const revisionHost = makeEl("revision-host");
   renderProposalCard(
     revisionHost,
@@ -1053,6 +1111,8 @@ async function main() {
   check(rejectedRevisionActions.children[0].style.display === "none", "G9 拒绝后确认按钮仍可点击");
   check(rejectedRevisionActions.children[1].style.display === "none", "G9 拒绝后拒绝按钮仍可点击");
 
+  endScenario();
+  beginScenario("writer-revision-apply");
   context.__probe.streamCalls.length = 0;
   setView("writer");
   setSelection("Der Hund bellt.");
@@ -1093,7 +1153,9 @@ async function main() {
     );
   }
 
+  endScenario();
   /* H. main.js show() 必须接线 reset（静态 wiring 证据，行为由 E 覆盖） */
+  beginScenario("main-wiring");
   check(
     MAIN_SRC.includes("resetCompanionContextForView(view)"),
     "H main.js show() 未接线 resetCompanionContextForView"
@@ -1111,14 +1173,18 @@ async function main() {
     "H main.js 未把 state 暴露到 window（reader-state 上下文会失效）"
   );
 
+  endScenario();
   /* I. scope key：阅读器按文章，其它页面按 view */
+  beginScenario("scope-key");
   setView("reader");
   setState({});
   check(getCompanionScopeKey() === "article:42", "I 阅读器 scope 未按 article:<id>");
   setView("cards");
   check(getCompanionScopeKey() === "view:cards", "I 非阅读器 scope 未按 view:<name>");
 
+  endScenario();
   /* J. 切页清空旧会话指针 + main.js 接线 */
+  beginScenario("session-scope-reset");
   companionState.currentSessionId = "ses_old";
   companionState.sessions = [{ id: "ses_old" }];
   resetCompanionSessionScope();
@@ -1129,7 +1195,9 @@ async function main() {
     "J main.js show() 未接线 resetCompanionSessionScope"
   );
 
+  endScenario();
   /* K. 入口准入：german 不可唤起，非阅读器可唤起，阅读器路径正常 */
+  beginScenario("entry-gate");
   setView("german");
   context.__probe.companionToggle.length = 0;
   C.onClick({});
@@ -1137,10 +1205,6 @@ async function main() {
   context.__probe.openDrawerCalls.length = 0;
   openCompanionDrawer();
   check(context.__probe.openDrawerCalls.length === 0, "K german 视图仍可打开伴学抽屉");
-  check(
-    READER_SRC.includes('tab === "companion" && getActiveView() === "german"'),
-    "K 抽屉页签未阻断 german 视图"
-  );
 
   setView("cards");
   setSelection("Karte Wort");
@@ -1159,7 +1223,16 @@ async function main() {
   check(readerCtx && readerCtx.view === "reader", "K 阅读器入口回归：view 错误");
   check(readerCtx && readerCtx.selectedText === "Der zweite Satz.", "K 阅读器入口回归：选区丢失");
 
+  endScenario();
+  beginScenario("drawer-tab-gate");
+  check(
+    READER_SRC.includes('tab === "companion" && getActiveView() === "german"'),
+    "K 抽屉页签未阻断 german 视图"
+  );
+
+  endScenario();
   /* L. german 工作台入口彻底禁点；用户手动收起伴读必须可点回 */
+  beginScenario("avatar-disabled-css");
   const germanAvatar = STYLE_SRC.match(
     /\.companion\.is-disabled\.is-german-view\s+\.companion-avatar\s*\{[^}]*\}/
   );
@@ -1177,7 +1250,9 @@ async function main() {
     "L main.js 未按 view 精确挂 is-german-view"
   );
 
+  endScenario();
   // 行为层：german 下 onClick 直接早退，不允许借“重新启用”绕过禁用。
+  beginScenario("german-entry-lock");
   setView("german");
   C.enabled = false;
   context.__probe.companionToggle.length = 0;
@@ -1185,14 +1260,18 @@ async function main() {
   check(C.enabled === false, "L german 下点击竟然重新启用了伴读");
   check(context.__probe.companionToggle.length === 0, "L german 下点击仍唤起了抽屉");
 
+  endScenario();
   // 行为层：用户主动关闭后，在非 german 页面点击浮标应重新启用伴读。
+  beginScenario("user-reenable");
   setView("cards");
   C.enabled = false;
   C.onClick({});
   check(C.enabled === true, "L 用户关闭伴读后点击浮标未能重新启用");
   C.enabled = true;
 
+  endScenario();
   /* M. cp-api：请求携带新字段，并读取 X-Session-ID 回填 */
+  beginScenario("cp-api-session-header");
   const sse = 'event: delta\ndata: {"event":"delta","text":"hi"}\n\nevent: done\ndata: {"event":"done"}\n\n';
   let sent = false;
   let captured = null;
@@ -1251,6 +1330,7 @@ async function main() {
     "M 会话列表未按 scope_key 查询"
   );
 
+  endScenario();
   /* N. submitPrompt：真实流式事件链、异常中断、防重入与发送前上下文刷新 */
   initCompanionDrawer();
   await Promise.resolve();
@@ -1310,6 +1390,7 @@ async function main() {
     );
   }
 
+  beginScenario("submit-stream-happy-path");
   prepareSubmit("reader");
   setCompanionContext("Der zweite Satz.", "Der Spiegel", "C1", "reader", "reader-state", "", "");
   submitPrompt("Erkläre diesen Satz");
@@ -1490,6 +1571,8 @@ async function main() {
   check(companionState.inFlight === false && !companionSendBtn.disabled, "N finally 后发送状态未复位");
   check(companionState.messages.length === 2, "N finally 重复追加 assistant");
 
+  endScenario();
+  beginScenario("submit-stream-error-event");
   prepareSubmit("reader");
   submitPrompt("Fehler als Event");
   const errorEvent = streamCalls[0];
@@ -1518,6 +1601,8 @@ async function main() {
   check(companionState.inFlight === false && !companionSendBtn.disabled, "N error finally 状态未复位");
   checkCleanOutput("N error 事件链");
 
+  endScenario();
+  beginScenario("submit-stream-reject");
   prepareSubmit("reader");
   submitPrompt("Promise reject");
   const rejected = streamCalls[0];
@@ -1546,6 +1631,8 @@ async function main() {
   check(companionState.messages.length === 1, "N Promise reject 错误追加 assistant");
   checkCleanOutput("N Promise reject 链");
 
+  endScenario();
+  beginScenario("submit-stream-resume");
   prepareSubmit("reader");
   companionState.currentSessionId = null;
   submitPrompt("Resume bitte");
@@ -1582,6 +1669,8 @@ async function main() {
   check(companionState.inFlight === false && !companionSendBtn.disabled, "N 断流恢复后发送状态未复位");
   checkCleanOutput("N 断流恢复链");
 
+  endScenario();
+  beginScenario("submit-stream-resume-existing-scope");
   prepareSubmit("reader");
   companionState.currentSessionId = null;
   submitPrompt("Resume bitte");
@@ -1606,6 +1695,8 @@ async function main() {
   );
   checkCleanOutput("N 既有 scope 恢复链");
 
+  endScenario();
+  beginScenario("submit-stream-resume-stale");
   prepareSubmit("reader");
   const repeatedPromptHistory = [
     { role: "user", content: "Resume bitte" },
@@ -1629,6 +1720,8 @@ async function main() {
   );
   checkCleanOutput("N 同文重问恢复链");
 
+  endScenario();
+  beginScenario("submit-stream-turn-ownership");
   prepareSubmit("reader");
   submitPrompt("A turn");
   const oldTurn = streamCalls[0];
@@ -1665,6 +1758,8 @@ async function main() {
   check(companionState.inFlight === false && !companionSendBtn.disabled, "N 新轮结束后发送锁未复位");
   checkCleanOutput("N 新旧流所有权链");
 
+  endScenario();
+  beginScenario("submit-stream-recover-after-unsaved");
   prepareSubmit("reader");
   submitPrompt("Unsaved first turn");
   const unsavedFirst = streamCalls[0];
@@ -1688,6 +1783,8 @@ async function main() {
   check(streamCalls.length === 2, "N 首轮未落库后的恢复重发了额外模型请求");
   checkCleanOutput("N 未落库首轮后的恢复链");
 
+  endScenario();
+  beginScenario("submit-writer-latest-context");
   prepareSubmit("writer");
   const latestDraft = "Ich habe einen neuen Entwurf geschrieben.";
   setCompanionContext("", "", "", "writer", "writer-draft", "ALTER ENTWURF", "");
@@ -1712,6 +1809,8 @@ async function main() {
   check(companionState.inFlight === false && !companionSendBtn.disabled, "N writer finally 未复位");
   checkCleanOutput("N writer 链");
 
+  endScenario();
+  beginScenario("submit-cards-latest-context");
   prepareSubmit("cards");
   cardState.catalog.viewMode = "deck";
   cardState.catalog.segment = "due";
@@ -1750,6 +1849,8 @@ async function main() {
   check(companionState.inFlight === false && !companionSendBtn.disabled, "N cards finally 未复位");
   checkCleanOutput("N cards 链");
 
+  endScenario();
+  beginScenario("submit-input-guards");
   prepareSubmit("reader");
   submitPrompt();
   submitPrompt("");
@@ -1760,53 +1861,12 @@ async function main() {
   check(companionState.inFlight === false, "N 空输入错误进入 inFlight");
   check(companionSendBtn.disabled === false, "N 空输入错误禁用 send 按钮");
 
+  endScenario();
   const out = {
-    ok: true,
+    ok: problems.length === 0,
     checks,
-    scenarios: {
-      "reader-live-selection": "pass",
-      "reader-state-fallback": "pass",
-      "non-reader-live-selection": "pass",
-      "non-reader-empty": "pass",
-      "reset-on-switch": "pass",
-      "drawer-context-gate": "pass",
-      "reader-path-regression": "pass",
-      "writer-draft-context": "pass",
-      "writer-draft-gate": "pass",
-      "writer-draft-live-refresh": "pass",
-      "progress-partition": "pass",
-      "card-current-context": "pass",
-      "card-partition": "pass",
-      "card-empty-degrade": "pass",
-      "definition-fallback-ui": "pass",
-      "proposal-batch-actions": "pass",
-      "proposal-failure-paths": "pass",
-      "session-global-groups": "pass",
-      "session-cross-scope-reset": "pass",
-      "proposal-sentence-fields": "pass",
-      "proposal-multi-action": "pass",
-      "writer-revision-apply": "pass",
-      "main-wiring": "pass",
-      "scope-key": "pass",
-      "session-scope-reset": "pass",
-      "entry-gate": "pass",
-      "drawer-tab-gate": "pass",
-      "avatar-disabled-css": "pass",
-      "german-entry-lock": "pass",
-      "user-reenable": "pass",
-      "cp-api-session-header": "pass",
-      "submit-stream-happy-path": "pass",
-      "submit-stream-error-event": "pass",
-      "submit-stream-reject": "pass",
-      "submit-stream-resume": "pass",
-      "submit-stream-resume-existing-scope": "pass",
-      "submit-stream-resume-stale": "pass",
-      "submit-stream-turn-ownership": "pass",
-      "submit-stream-recover-after-unsaved": "pass",
-      "submit-writer-latest-context": "pass",
-      "submit-cards-latest-context": "pass",
-      "submit-input-guards": "pass",
-    },
+    scenarios,
+    scenarioChecks,
   };
 
   if (problems.length) {
