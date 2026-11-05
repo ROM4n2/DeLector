@@ -416,3 +416,10 @@ PR #217 已按 merge commit 合并（merge SHA b60a185，无冲突、无需 reba
 --strict-markers + 恒真断言清理交付到未合并 PR #218（https://github.com/ROM4n2/DeLector/pull/218，test/strict-markers-and-tautology，基于 b60a185），提交 fe0980a（pyproject addopts）与 ae93af2（desktop 语义断言 + 恒真闸）。
 验证：启用后全量收集 2770（基线 2765，增长来自 #216/#217 新增用例），无未注册 marker；全量 2766 passed / 4 skipped / 502.24s。RED：恒真闸先红 2 处；GREEN：desktop_shell 25 + 闸 1 passed。变异：skipif→unregistered_probe 使收集失败；语义断言改回 `is not None` 使闸红 2 处，均还原。ruff 两文件 All checks passed。PR #218 head ae93af2 run 41960590624 全 pass（Windows Smoke 按 paths skipping）。
 边界：恒真闸只覆盖 test_desktop_shell.py 无消息的 `is not None` 形态；GUI 真窗口用例仍按设计跳过。PR #218 未合并、无 tag。
+
+### 2026-11-05 13:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+三条 PR 合并完成（均 merge commit，未 squash/force）：#218 merge b59795c（master push run 41961755632 success）；#204（head 22ea85e / run 41962020250 全绿，Windows Smoke 真跑 3m46s）merge 860f0ac（master push run 41962500731 success）；#205（head 7d73189 / run 41962521867 全绿，Smoke 真跑 3m18s）merge 39d5092（master push run 41962937976 / 41962943601 均为 success）。
+计时 flake 修复交付到未合并 PR #219（https://github.com/ROM4n2/DeLector/pull/219，test/timing-cost-gate，基于 39d5092，提交 b6a5832）。根因：repeat vs first 的耗时差是**存储性能函数**（Windows 上 3k INSERT 慢 ⇒ repeat 快 36%；Linux CI INSERT 便宜 ⇒ 两段收敛，2026-11-05 run 41960965296 unit-4 出现 39.188ms > 37.527ms 随机红）。
+方案 B + 结构闸：计时阈值显式放宽到 1.25×first（依据=CI 最差反转 1.044、本地 20 轮 ratio p95 0.692 / max 0.844），仍抓 ≥25% 变慢；新增写语句计数闸（trace 回调，不改生产代码）钉 repeat 恰 1 条 wb_state upsert、first ≥ words，环境无关。本地 20 轮分布：first median 72.971ms（min 70.692/p95 77.834/max 91.060），repeat median 46.201ms（min 44.018/p95 50.862/max 76.872），ratio median 0.633。变异：unchanged 路径注入 sleep(0.05) ⇒ 计时闸红（96.7 vs 74.2，上限 92.8）；unchanged 分支多发一条 UPDATE ⇒ 写语句闸红（2980 条），均还原复绿。全量（分支等价内容）2771 collected / 2767 passed / 4 skipped / 484.93s。文档口径写进 tests/test_save_wb_state_cost.py docstring，未动 docs/agents/ci-speed-budget.md。
+徽章真实口径（干净 master 39d5092 独立全量）：2770 collected / 2766 passed / 4 skipped / 480.06s；README 徽章改为 Tests-2766/2770 Passed 并加 HTML 注释写明 HEAD/日期/命令/分母。PR #219 未合并；徽章 PR 未合并；无 tag。
