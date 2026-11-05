@@ -423,3 +423,9 @@ Caps: filesystem-read, filesystem-write, shell-exec
 计时 flake 修复交付到未合并 PR #219（https://github.com/ROM4n2/DeLector/pull/219，test/timing-cost-gate，基于 39d5092，提交 b6a5832）。根因：repeat vs first 的耗时差是**存储性能函数**（Windows 上 3k INSERT 慢 ⇒ repeat 快 36%；Linux CI INSERT 便宜 ⇒ 两段收敛，2026-11-05 run 41960965296 unit-4 出现 39.188ms > 37.527ms 随机红）。
 方案 B + 结构闸：计时阈值显式放宽到 1.25×first（依据=CI 最差反转 1.044、本地 20 轮 ratio p95 0.692 / max 0.844），仍抓 ≥25% 变慢；新增写语句计数闸（trace 回调，不改生产代码）钉 repeat 恰 1 条 wb_state upsert、first ≥ words，环境无关。本地 20 轮分布：first median 72.971ms（min 70.692/p95 77.834/max 91.060），repeat median 46.201ms（min 44.018/p95 50.862/max 76.872），ratio median 0.633。变异：unchanged 路径注入 sleep(0.05) ⇒ 计时闸红（96.7 vs 74.2，上限 92.8）；unchanged 分支多发一条 UPDATE ⇒ 写语句闸红（2980 条），均还原复绿。全量（分支等价内容）2771 collected / 2767 passed / 4 skipped / 484.93s。文档口径写进 tests/test_save_wb_state_cost.py docstring，未动 docs/agents/ci-speed-budget.md。
 徽章真实口径（干净 master 39d5092 独立全量）：2770 collected / 2766 passed / 4 skipped / 480.06s；README 徽章改为 Tests-2766/2770 Passed 并加 HTML 注释写明 HEAD/日期/命令/分母。PR #219 未合并；徽章 PR 未合并；无 tag。
+
+### 2026-11-05 13:00 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+收尾合并完成（均 merge commit，未 squash/force）：#219（head b6a5832 / run 41964881263 全绿）→ merge 49ab8fb，master push run 41970553928 success；#220 update-branch 后 head 8829a95 / run 41970820288 全绿 → merge ea9eab4，master push run 41971072399 success。
+徽章定版（干净 master ea9eab4 独立全量）：`--collect-only -q` = 2771 collected（11.89s）；`pytest tests -q` = 2767 passed / 4 skipped / 534.08s → total 2771。README 徽章 Tests-2767/2771 Passed，注释写明 HEAD ea9eab4 / 2026-11-05 / 命令 / 分母=total。核对：预期 2771 与实际一致（#219 新增 1 条结构闸用例），无差异。
+残留清理：待删本地 worktree（timing-cost-gate / badge-master / strict-markers / backup-stats-json 等已合并任务）与 strict-markers 上未推送提交 2bf6aad（内容已 cherry-pick 为 b6a5832 并合并，#219 已含其等价改动）。
