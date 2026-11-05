@@ -5,13 +5,13 @@
   **显式文件路径**，而 pytest 的 `--ignore` 只作用于目录递归、对显式传入的文件
   **无效**。实测（2026-11-04，run 41793803081）unit-1 因此多跑了 113 个本应属于
   cost/integration 的用例：日志 721 passed，而按意图应为 608。也就是说旧分片
-  既重复执行又没真正互斥。这里改成显式清单，由 `tests/test_ci_hardening.py`
+  既重复执行又没真正互斥。这里改成显式清单，由 `tests/test_ci_hardening_governance.py`
   钉住「全部用例恰好出现一次」。
 
 分片按本机 `pytest --durations=0` 实测时长配平（2026-11-04，见
 `tools/ci_shard_weights.json`）；unit-2 额外承担 6 个 Ruff/mypy 步骤（CI 约 14s），
 故其 pytest 负载刻意低于其它三个分片。新增/删除测试文件或调整分片后，
-请重跑 `tests/test_ci_hardening.py` 的分区与配平守卫。
+请重跑 `tests/test_ci_hardening_governance.py` 的分区与配平守卫。
 """
 
 from __future__ import annotations
@@ -53,7 +53,13 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_check_layer_invariants.py",
         "tests/test_check_mock_drift.py",
         "tests/test_check_silent_degradation.py",
-        "tests/test_ci_hardening.py",
+        "tests/test_ci_hardening_android.py",
+        "tests/test_ci_hardening_backup_restore.py",
+        "tests/test_ci_hardening_core.py",
+        "tests/test_ci_hardening_governance.py",
+        "tests/test_ci_hardening_infra.py",
+        "tests/test_ci_hardening_test_hygiene.py",
+        "tests/test_ci_hardening_workflow_wiring.py",
         "tests/test_companion_agent_loop.py",
         "tests/test_companion_api_contract.py",
         "tests/test_companion_context_probe.py",
@@ -211,7 +217,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
     # TODO-CI-04：cold_start 是 cost 三文件里最慢的一个（本机 49.6s、CI 约 1/3 的 pytest
     # 时间），单独放一个 runner 可把 cost pytest 从 83s 压到约 45–50s。两个分片各自只含
     # cost 文件（无 xdist、不与普通测试共享进程），计时断言语义不变；并集由
-    # tests/test_ci_hardening.py 钉住必须恰好覆盖三个 cost 文件。
+    # tests/test_ci_hardening_governance.py 钉住必须恰好覆盖三个 cost 文件。
     "cost-cold-start": (
         "tests/test_cold_start_cost.py",
     ),
