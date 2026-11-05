@@ -429,3 +429,11 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 收尾合并完成（均 merge commit，未 squash/force）：#219（head b6a5832 / run 41964881263 全绿）→ merge 49ab8fb，master push run 41970553928 success；#220 update-branch 后 head 8829a95 / run 41970820288 全绿 → merge ea9eab4，master push run 41971072399 success。
 徽章定版（干净 master ea9eab4 独立全量）：`--collect-only -q` = 2771 collected（11.89s）；`pytest tests -q` = 2767 passed / 4 skipped / 534.08s → total 2771。README 徽章 Tests-2767/2771 Passed，注释写明 HEAD ea9eab4 / 2026-11-05 / 命令 / 分母=total。核对：预期 2771 与实际一致（#219 新增 1 条结构闸用例），无差异。
 残留清理：待删本地 worktree（timing-cost-gate / badge-master / strict-markers / backup-stats-json 等已合并任务）与 strict-markers 上未推送提交 2bf6aad（内容已 cherry-pick 为 b6a5832 并合并，#219 已含其等价改动）。
+
+### 2026-11-05 15:19 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+任务 S 工具链矩阵守卫交付到未合并 PR #223（分支 test/android-toolchain-matrix-guard，基于 master 004cdfe）。在既有 tests/test_ci_hardening.py 新增 6 个用例：AGP 8.4.2 / Chaquopy 15.0.1、wrapper 8.6（gradle-8.6-bin.zip）、两 workflow gradle-version "8.6"、三处一致性（先 len(set)==1 再等于 8.6）、compileSdk 34 / minSdk 24 / 显式 buildToolsVersion 34.0.0 / device 仅 arm64-v8a / emulator 含两 ABI / emulatorRelease disabled；精确比较，失败消息含期望/实际/文件:行号/补救句。该文件 89 passed；mypy 175 files no issues。
+踩坑：首轮用 pytest.fail 做 None 分支未让 mypy 窄化（run 41985409230 unit-2 报 8 处 union-attr），改 assert match is not None 后修好；matrix fail-fast 取消了其余 job。
+变异（均还原）：AGP→8.13.0 红于 build.gradle:8；wrapper→8.13 红（wrapper + 一致性）；仅 build-release.yml gradle-version→"8.13" 红于一致性（['8.13','8.6']）。
+CI：二次 run 41985996596 全 success（Master Scope / Windows Smoke 按设计 skipped）。docs/agents/architecture.md 新增「工具链矩阵（精确钉住）」小节。分片未改（仍 unit-1）。
+边界：守卫仅在测试被运行时生效；buildToolsVersion 当前未显式声明，故该断言为条件形态。
