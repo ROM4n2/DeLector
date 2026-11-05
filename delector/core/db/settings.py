@@ -39,7 +39,7 @@ def get_setting(key: str, default: str = "", db_path: Optional[str] = None) -> s
         )
     # env 兜底**保留**（依赖调查结论）：delector/server.py 的 load_env() 会把 .env 的
     # DEEPSEEK_API_KEY 等灌进 os.environ，Docker（WORKDIR=/app）与 .env 用户会真实走
-    # 这条路（tests/test_ci_hardening.py 的 .dockerignore 守卫注释亦证实）；删掉 = 静默
+    # 这条路（tests/test_ci_hardening_infra.py 的 .dockerignore 守卫注释亦证实）；删掉 = 静默
     # 破坏既有部署。保留但加可见日志——回落不许再是无声的。
     env_val = os.environ.get(key)
     if env_val:

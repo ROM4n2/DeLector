@@ -13,7 +13,7 @@
 #   - gomod          ：agent/ 的 Go 模块依赖（与 build-agent.yml 的构建面同源）
 #
 # 格式说明：序列符 `-` 独立成行（YAML 等价写法），使 `package-ecosystem:`
-# 键位于行首——tests/test_ci_hardening.py 的守卫断言按行解析
+# 键位于行首——tests/test_ci_hardening_core.py 的守卫断言按行解析
 # `startswith("package-ecosystem:")`，`- ` 前缀会导致解析失明。
 # =============================================================================
 version: 2

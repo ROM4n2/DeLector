@@ -21,7 +21,7 @@ import pytest
 #
 # 为什么这三条落在本文件：本文件是「清单 ↔ 实现一致性」守卫的既有落点
 # （CI_REQUIRED_RUNTIMES ↔ conftest 实查项、PACKAGING_SURFACE_PATHS ↔ paths 过滤…），
-# 且计划允许「test_ci_hardening.py 或 test_server.py 择一」；test_server.py 同期另有
+# 且计划允许「test_ci_hardening_backup_restore.py 或 test_server.py 择一」；test_server.py 同期另有
 # 改动面（P1-1 的 local_storage 契约），同文件并行编辑必冲突。
 #
 # 断言纪律：两份清单**现读**（import 真对象），不手抄表名 —— 手抄的清单不随功能增长，

@@ -66,7 +66,7 @@ from typing import Callable, NamedTuple, Optional, Sequence, TextIO
 
 #: master 直推白名单：簿记 + 文档 + 版本面（与审计 P1-1 的建议清单逐项一致）。
 #: 语义：以 ``/`` 结尾 = 目录前缀；否则 = 精确文件名（亦接受 ``*`` 通配 —— 便于用 ``**``
-#: 表达「放行一切」，且该写法会被 tests/test_ci_hardening.py 的守卫**显式抓红**）。
+#: 表达「放行一切」，且该写法会被 tests/test_ci_hardening_governance.py 的守卫**显式抓红**）。
 MASTER_DIRECT_ALLOWLIST: tuple[str, ...] = (
     "WORKMEMORY/",
     "docs/",

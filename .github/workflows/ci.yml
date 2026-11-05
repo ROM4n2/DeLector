@@ -94,7 +94,7 @@ jobs:
       # 现只保留一份，挂在 `unit-2`。为什么是 unit-2：tools/ci_shards.py 的配平清单
       # 刻意把它的 pytest 负载压得比其它三个 unit 分片低（静态检查实测约 14s，
       # 加进去后仍低于关键路径）。不要为“看起来优化”把门禁挪进最慢的分片。
-      # 宿主分片被改名或删除时，tests/test_ci_hardening.py 的去重守卫会变红，
+      # 宿主分片被改名或删除时，tests/test_ci_hardening_core.py 的去重守卫会变红，
       # 静态检查不会静默消失。
       #
       # Ruff 静态门禁（2026-09-13 ruff-cleanup）。
@@ -187,7 +187,7 @@ jobs:
 
       # 全量门禁：Python 测试套件一个不漏。分片清单见 tools/ci_shards.py（显式列表，
       # 保证六个分片完整且互斥）。改动分片后必须同步更新 tools/ci_shard_weights.json
-      # 并跑 tests/test_ci_hardening.py 的分区/配平守卫。
+      # 并跑 tests/test_ci_hardening_governance.py 的分区/配平守卫。
       - name: Run full pytest suite
         run: pytest -q $(python tools/ci_shards.py ${{ matrix.suite.name }})
 
@@ -265,7 +265,7 @@ jobs:
         continue-on-error: true
         with:
           # 「打包面」路径清单：命中任一 ⇒ 点亮下面的 Windows 冒烟 job。这份清单即「闸的触发面」，
-          # MUST 与 build-release.yml 的 Windows 构建面保持同源（tests/test_ci_hardening.py 逐项
+          # MUST 与 build-release.yml 的 Windows 构建面保持同源（tests/test_ci_hardening_workflow_wiring.py 逐项
           # 钉死，防清单漂移导致"闸永不触发"——本仓有过"正则永不命中"的教训）。
           filters: |
             packaging:

@@ -149,7 +149,7 @@ _TOOLCHAIN_MATRIX = {
     "buildToolsVersion": "34.0.0",
 }
 _TOOLCHAIN_REMEDY = (
-    "若要升级工具链，需同时更新此守卫（tests/test_ci_hardening.py）与 "
+    "若要升级工具链，需同时更新此守卫（tests/test_ci_hardening_android.py）与 "
     ".github/workflows/build-release.yml、android-emulator.yml，"
     "并验证 assemble 双变体（assembleDeviceDebug / assembleEmulatorDebug）。"
 )
