@@ -77,6 +77,32 @@
 > **真机与模拟器均未点检**：目前只证明依赖可解析、APK 含 `lib/x86_64/` 与
 > `requirements-x86_64.imy`（双 ABI debug 包实测 87.87 MiB），尚未做 AVD `adb install` 与运行时语法标注验证。
 
+### 工具链矩阵（精确钉住）
+
+当前构建工具链的**精确组合**如下，`tests/test_ci_hardening.py` 的
+`test_android_agp_and_chaquopy_versions_are_pinned` /
+`test_gradle_wrapper_pins_gradle_version` /
+`test_ci_workflows_pin_gradle_version` /
+`test_gradle_version_is_consistent_across_toolchain` /
+`test_android_app_sdk_and_flavors_are_pinned`
+逐项精确比较（不做 `>=` 宽松比较）：
+
+| 项                                            | 值                          |
+| --------------------------------------------- | --------------------------- |
+| AGP（`com.android.tools.build:gradle`）       | `8.4.2`                     |
+| Gradle（wrapper `distributionUrl`）           | `8.6`（`gradle-8.6-bin.zip`） |
+| Chaquopy（`com.chaquo.python:gradle`）         | `15.0.1`                    |
+| `compileSdk`                                  | `34`                        |
+| `minSdk`                                      | `24`                        |
+| buildTools                                    | `34.0.0`                    |
+
+两个 CI workflow（`.github/workflows/build-release.yml`、`android-emulator.yml`）的
+`gradle-version:` 也是 `"8.6"`；守卫还断言它与 wrapper 解析出的版本**三者相同**
+—— CI 不读 wrapper，只改一处会让本地与 CI 的构建面分叉。
+
+升级必须同时改 `tests/test_ci_hardening.py` 里的矩阵守卫与两个 workflow，并验证
+assemble 双变体（`assembleDeviceDebug` / `assembleEmulatorDebug`）。
+
 **两个 Chaquopy 行为坑（都会导致模型静默加载失败）**：
 
 1. **`spacy.load("名称")` 在 Android 上必然报 `[E050] Can't find model`。**
