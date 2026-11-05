@@ -45,3 +45,10 @@ exclude = '(\.venv|dist|android|scratch|tools/raw|(^|/)build(/|$))'
 # `--strict --follow-imports=skip desktop.py package_windows.py conftest.py`），故裸跑 ≠ CI 同口径。
 # 且裸跑当前会因**既有 17 条无关错误**（落在 10 个既有文件）转红 ⇒ 仅作"全仓体检"，不是门禁口径。
 files = ["delector", "tests", "tools", "conftest.py", "start.py", "desktop.py", "package_windows.py"]
+
+# ── pytest 门禁 ────────────────────────────────────────────────────────────────
+# --strict-markers：未注册的 marker 直接让**收集**失败，而不是静默当作无用标记。
+# 本仓当前只用内置 marker（parametrize / skipif），把自定义 marker 写错时 CI 会立刻红；
+# 新增自定义 marker 须在 `tests/conftest.py` 或下方 `markers` 列表显式注册。
+[tool.pytest.ini_options]
+addopts = "--strict-markers"

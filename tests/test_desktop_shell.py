@@ -18,6 +18,7 @@ r"""桌面壳「入口分派与服务形态」域：2828 行原 `test_desktop_sh
 """
 
 import ast
+import os
 import sys
 import types
 from pathlib import Path
@@ -584,8 +585,14 @@ def test_debug_console_never_calls_win32_api_off_windows(
 
     def _exercise() -> None:
         mod.ensure_streams(str(tmp_path / "launch.log"), debug_console=True)
-        assert sys.stdout is not None
-        assert sys.stderr is not None
+        # 钉**语义**而非「非 None」：debug 分支、非 Windows、无控制台 ⇒ 必须退到 devnull
+        # 静默流（不写 launch.log）。只断言 `is not None` 会被「换成别的文件对象」蒙过。
+        assert getattr(sys.stdout, "name", None) == os.devnull, (
+            "非 Windows 的 debug 分支应把缺失的 stdout 绑到 devnull 静默流"
+        )
+        assert getattr(sys.stderr, "name", None) == os.devnull, (
+            "非 Windows 的 debug 分支应把缺失的 stderr 绑到 devnull 静默流"
+        )
 
     _run_with_missing_streams(monkeypatch, _exercise)
     assert not (tmp_path / "launch.log").exists()
