@@ -445,3 +445,9 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 全量 pytest tests/：2776 passed / 3 skipped / 3 failed（546.87s），失败全在 test_save_wb_state_cost.py，单独复现，系本机 delector.db 数据目录迁移环境问题，与拆分无关。
 PR #224（分支 refactor/split-ci-hardening-tests，未合并）；首轮 run 41990032304 全 success（Master Scope / Windows Smoke 按设计 skipped）。
 残余：android 守卫补救文案仍写旧文件路径（为保持失败消息逐字等价未改）；_ci_hardening_support.py 成为新的共享耦合点。
+
+### 2026-11-05 19:45 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+任务①（零代码）syntax_tree 拆分评估：实际路径 `delector/nlp_engine/syntax_tree.py`（任务书写 `core/` 系路径漂移）。radon 实测 `analyze_sentence_topology` 593–1017 / 425 行 / CC 210，`_classify_single_clause` CC 91，`build_clause_tree` CC 45，文件 MI 0.00；全仓 `.py` 无 radon 门禁。行级 AST 统计：控制语法头 106(24.9%)、docstring 21、空行注释 69、其余 229；分支统辖 313(73.6%)、无条件直线仅 61(14.4%)；79 if + 15 for + 56 BoolOp 共同推高 CC。patch 点全在消费方模块（`test_syntax_score.py` 4 处、`test_syntax_hard_api.py` 2 处），无直指 syntax_tree 内部函数的 patch；唯一私有符号外泄是 `tests/test_server_android_fallback.py:47` import `_analyze_syntax_tree_pure_python`；`_spacy_load_error` 模块全局被测试写 2 次 ⇒ 三件套不拆。计划 `docs/plans/2026-11-05-syntax-tree-split-assessment.md`，commit `338eda9` 直推 master（docs 白名单），master run `42018606759` attempt 1 success（13 success / 1 skipped），未 rerun。
+任务② Windows Smoke 心跳：新增 `tools/ci_heartbeat.py` + `ci.yml` 包装 Build/Verify 两步；纯旁路、无超时、退出码透传、无新依赖、心跳异常带 `silent-ok` 注释。首轮 run `42019581031` 红于 static-invariants（工具内 `except pass` 未带 silent-ok），补注释后 run `42020293134` 全 success（13 success / 1 skipped）。心跳原文：run `42019581031` job `127218789246` build `11:33:12 started` → `11:34:12 still running (elapsed 60s)` → `11:34:23 finished (elapsed 71s, rc=0)`；终轮 `42020293134` build 39s 只出现 start/finish（未到 60s），包装开销约 0.2s。PR #230 未合并。
+边界：心跳无法覆盖 runner/job worker 层停摆或日志整份 404；30 分钟 hang 未复现。
