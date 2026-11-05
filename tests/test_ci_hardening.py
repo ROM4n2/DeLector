@@ -2724,3 +2724,33 @@ def test_desktop_shell_has_no_tautological_stream_assertions() -> None:
         "修法：改钉对象身份（`is original_out`）或语义（`sys.stdout.name == os.devnull`），"
         "而不是改回恒真写法。"
     )
+
+
+# 本机 wheel 供给与代理地址同理：只能来自 android/local.properties 的
+# python.pipFindLinks（或构建环境），build.gradle 里不许出现字面量。
+# 2026-11-05 曾把 D:/Android/chaquo-wheels 临时写进 build.gradle；该目录在
+# CI 与其他人机器上不存在，而 ci.yml 不含 gradle 步骤 ⇒ PR 全绿、发版日才炸。
+_LOCAL_SUPPLY_LITERALS = (
+    (re.compile(r"chaquo-wheels"), "本机 wheel 目录"),
+    (re.compile(r"127\.0\.0\.1"), "本机回环地址（代理）"),
+    (re.compile(r"proxyHost"), "JVM/Gradle 代理配置键"),
+)
+
+
+def test_android_build_gradle_has_no_local_wheel_or_proxy_literals() -> None:
+    """build.gradle 不得含本机 wheel 目录或代理字面量（只能经 local.properties 注入）。"""
+    text = _read_guard_file(ANDROID_APP_BUILD_GRADLE)
+
+    offenders = [
+        f"{lineno}: {line.strip()}（命中：{name}）"
+        for lineno, line in enumerate(text.splitlines(), 1)
+        for pattern, name in _LOCAL_SUPPLY_LITERALS
+        if pattern.search(line)
+    ]
+    assert not offenders, (
+        "android/app/build.gradle 出现本机专属的 wheel/代理字面量：\n"
+        + "\n".join(offenders)
+        + "\n这些内容应写在 android/local.properties 的 python.pipFindLinks（逗号分隔目录），"
+        "仓库里只保留键名分支；否则 CI/他人机器没有该目录或代理，gradle 构建会失败，"
+        "而 ci.yml 不含 gradle 步骤 ⇒ PR 仍然全绿。"
+    )
