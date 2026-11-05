@@ -115,7 +115,118 @@ def test_android_never_downloads_model_at_import():
     )
     out = (res.stdout or "") + (res.stderr or "")
     assert "DOWNLOAD_ATTEMPTED" not in out, "Android 上不得在 import 期联网下载模型"
-    assert "ENGINE=pure_python" in out
+    assert "ENGINE=spacy" in out, (
+        "ADR-0028：Android 主路径必须与桌面同口径使用 spaCy（惰性加载），"
+        "不得再硬编码纯 Python 降级（修复前的断言是 ENGINE=pure_python）"
+    )
+
+
+def _run_android_probe(probe: str):
+    """在 `ANDROID_ROOT=/system` 的子进程里跑探针，返回合并后的 stdout/stderr。"""
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "ANDROID_ROOT": "/system", "PYTHONIOENCODING": "utf-8"}
+    res = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env
+    )
+    return (res.stdout or "") + (res.stderr or "")
+
+
+def test_android_import_selects_lazy_spacy_not_none():
+    """ADR-0028：Android 导入期必须选惰性 spaCy 代理，而不是 `nlp = None`。
+
+    哨兵同时堵死三条加载路径（spacy.load / module.load / 目录加载）：导入期一次都不许触发，
+    但导入结束后 `NLP_ENGINE` 必须是 `spacy` 且 `nlp` 非 None（可调用语义保留）。
+    """
+    probe = (
+        "import spacy, sys, os\n"
+        "def _boom(*a, **k):\n"
+        "    print('LOAD_ATTEMPTED')\n"
+        "    raise OSError('simulated')\n"
+        "spacy.load = _boom\n"
+        "import spacy.util\n"
+        "spacy.util.load_model_from_init_py = _boom\n"
+        "spacy.util.load_model_from_path = _boom\n"
+        "import spacy.cli\n"
+        "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
+        "sys.path.insert(0, os.getcwd())\n"
+        "from delector import server\n"
+        "from delector.nlp_engine import processor\n"
+        "print('ENGINE=' + processor.NLP_ENGINE)\n"
+        "print('NLP_IS_NONE=' + str(processor.nlp is None))\n"
+    )
+    out = _run_android_probe(probe)
+    lines = out.splitlines()
+    assert "LOAD_ATTEMPTED" not in out, "Android 导入期不得加载模型（ADR-0028 D2：惰性加载）"
+    assert "DOWNLOAD_ATTEMPTED" not in out, "Android 导入期不得联网下载模型（ADR-0028 D5）"
+    assert "ENGINE=spacy" in lines, f"Android 导入后引擎应为 spacy，实际输出：\n{out}"
+    assert "NLP_IS_NONE=False" in lines, f"Android 的 nlp 不得为 None（纯 Python 降级已移除），实际输出：\n{out}"
+
+
+def test_android_runtime_load_never_downloads(monkeypatch):
+    """ADR-0028 D5：Android 首次分析时本地加载失败，不得退到 `spacy.cli.download`。
+
+    门控必须在 `_load_model_with_autodownload()` **函数内部**：只删调用方的平台分支不够，
+    否则本地三级回退失败后会起 pip 子进程/联网。
+    """
+    import spacy.cli
+
+    from delector.nlp_engine import processor
+
+    calls: list[str] = []
+
+    def _boom(name):
+        raise OSError("simulated local load failure")
+
+    def _download(*args, **kwargs):
+        calls.append("DOWNLOAD_ATTEMPTED")
+
+    monkeypatch.setattr(processor, "_android_runtime", True)
+    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    monkeypatch.setattr(processor, "_nlp_resolved", False)
+    monkeypatch.setattr(processor, "_nlp_model", None)
+    monkeypatch.setattr(processor, "_nlp_error", "")
+    monkeypatch.setattr(processor, "NLP_ENGINE", "spacy")
+    monkeypatch.setattr(processor, "NLP_ENGINE_DETAIL", "")
+    monkeypatch.setattr(spacy.cli, "download", _download, raising=False)
+
+    with pytest.raises(RuntimeError):
+        processor._resolve_nlp_model()
+
+    assert calls == [], "Android 运行期禁止 spacy.cli.download（ADR-0028 D5）"
+
+
+def test_android_load_failure_is_loud_not_pure():
+    """ADR-0028 D4：Android 本地加载失败必须抛 RuntimeError，不得返回纯 Python 结果。
+
+    `RETURNED_RESULT` 就是"静默降级"的证据：修复前 Android 的 `nlp is None` 会让
+    `process_german_text` 直接走纯 Python 分支并正常返回。
+    """
+    probe = (
+        "import spacy, sys, os\n"
+        "import spacy.cli\n"
+        "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
+        "sys.path.insert(0, os.getcwd())\n"
+        "from delector import server\n"
+        "from delector.nlp_engine import processor\n"
+        "def _boom(name):\n"
+        "    raise OSError('simulated local load failure')\n"
+        "processor._load_spacy_model = _boom\n"
+        "try:\n"
+        "    server.process_german_text('Der Hund schläft.')\n"
+        "except RuntimeError:\n"
+        "    print('RAISED_RUNTIME_ERROR')\n"
+        "else:\n"
+        "    print('RETURNED_RESULT')\n"
+        "print('ENGINE=' + processor.NLP_ENGINE)\n"
+    )
+    out = _run_android_probe(probe)
+    assert "RETURNED_RESULT" not in out, f"加载失败不得静默返回纯 Python 结果，实际输出：\n{out}"
+    assert "RAISED_RUNTIME_ERROR" in out, f"加载失败必须硬失败（RuntimeError），实际输出：\n{out}"
+    assert "ENGINE=spacy(加载失败)" in out, f"失败后引擎状态必须如实反映，实际输出：\n{out}"
+
 
 
 # 模型档位契约已移到 tests/test_nlp_model_sm_only.py（ADR-0027：只支持 sm），
