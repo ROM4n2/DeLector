@@ -72,7 +72,7 @@
 
 - 旧 matrix 的 `args` 形如 `tests/test_[a-c]*.py --ignore=tests/test_articles_list_cost.py ...`。bash 会先把 glob 展开成**显式文件路径**，而 pytest 的 `--ignore` 只作用于目录递归、**对显式传入的文件无效**。
 - 实证：run `41793803081` 的 unit-1 日志 `721 passed`，按意图应为 608；差额 113 恰好等于 4 个被 ignore 文件的用例总和。unit-2 多 94（test_frontend_layers）、unit-4 多 149（server/settings/syntax_hard）。**一次 run 重复执行 356 个用例**，unit-1 的 pytest 从本该约 68s 被顶到 155.6s。
-- 改法：`tools/ci_shards.py` 显式清单（六个分片唯一事实来源）+ `tools/ci_shard_weights.json`（本机 `pytest --durations=0` 实测权重）；matrix 去掉 `args`；`tests/test_ci_hardening.py` 新增四条守卫（分区完整互斥、专项套件独占、unit 配平 ±25%、禁止退回 glob + `--ignore`）。
+- 改法：`tools/ci_shards.py` 显式清单（六个分片唯一事实来源）+ `tools/ci_shard_weights.json`（本机 `pytest --durations=0` 实测权重）；matrix 去掉 `args`；`tests/test_ci_hardening_governance.py` 新增四条守卫（分区完整互斥、专项套件独占、unit 配平 ±25%、禁止退回 glob + `--ignore`）。
 - 配平后本地全量（六分片逐一跑，2749 passed / 4 skipped）：
 
 | 分片 | 文件 | 用例 | 本机 pytest |
@@ -188,7 +188,7 @@ pre-change PR run（`41811788954` / `41813339091` / `41852745136` / `41851476946
 - 将六个 matrix 公共的 Ruff/mypy 安装与执行收敛为**现有 job 中的一份**，六个 pytest 分片仍各跑原用例，检查数量不得减少。
 - 实测重复成本 **89s**；保留单份约 **15s**，预计可省 **约 74s 累计 runner 时间**。
 - **墙钟不得写成必省 74s**：若静态检查留在当前关键路径 `unit-1`，其它分片去重不会缩短总墙钟；若移到较短既有 job 且不引入新依赖，按本样本理论上限约 **19s**，实施后必须重测。
-- 实施（2026-11-04）：六步加 `if: matrix.suite.name == 'unit-2'`，宿主是最短分片；`tests/test_ci_hardening.py` 新增去重守卫（三处变异实测 RED 后还原复绿）。
+- 实施（2026-11-04）：六步加 `if: matrix.suite.name == 'unit-2'`，宿主是最短分片；`tests/test_ci_hardening_core.py` 新增去重守卫（三处变异实测 RED 后还原复绿）。
 - 实测结果见 §1.3：累计 **92s → 14s**，墙钟**未下降**（样本波动大于收益）。
 
 ### TODO-CI-02（部分完成，2026-11-04）：Windows Smoke 步骤级判据与分段实测
@@ -218,7 +218,7 @@ pre-change PR run（`41811788954` / `41813339091` / `41852745136` / `41851476946
 - 实测（§1.5）：Python 门禁关键路径中位 **158s → 108s（-50s，-32%）**；
   `cost-guards` 中位 157s → 93s，**已不是瓶颈**；新关键路径是 unit 分片（107–117s）。
   runner 累计中位 +26s（+2.7%，cost 环境复制两份的代价）；墙钟由 smoke 支配，不单独下结论。
-- 守卫：`tests/test_ci_hardening.py` 钉住两分片并集、前端探针单一宿主、合并闸三步接线；
+- 守卫：`tests/test_ci_hardening_governance.py` 钉住两分片并集、`tests/test_ci_hardening_workflow_wiring.py` 钉住前端探针单一宿主与合并闸三步接线；
   三处具名变异（并回 cost 分片 / 去掉一条探针 `if` / 删一个判定器）实测 RED。
 - 仍未解决：unit 分片自身 77–116s 的波动成为新关键路径上限；本轮不动 unit 用例集合。
 - 不得为压关键路径删除成本断言、放宽阈值或把 cost 门禁改成警告。
