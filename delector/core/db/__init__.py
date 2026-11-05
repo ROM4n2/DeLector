@@ -12,6 +12,8 @@ r"""`delector/core/database.py` 按职责切分后的子包（database-split）�
 - `content` ← 文章 / 遇见区短文与预置种子、Anki 导出、音频缓存
 - `records` ← 考试 / 训练记录读写（exam_trials / a1_* / listen_trials / hard_sentence_trials）
 - `vocab` ← 词汇契约与富字段（A1 工作台词库与**词库缓存**、12 字段契约、reader 富字段回填）
+- `stats` ← 学习进度统计聚合（从 `routes/cards.py` 下沉的 `get_progress_stats`：跨主库与
+  progress 库只读聚合，路由层仅 re-export）
 
 纪律：
 - 切片之间与对外一律**绝对导入**（`from delector.core.db.backup import X`）。

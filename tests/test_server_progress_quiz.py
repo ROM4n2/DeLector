@@ -210,6 +210,20 @@ def test_progress_stats_after_adding_cards(client):
     assert milestones["master_10"]["unlocked"] is False  # only 1 mastered
 
 
+def test_progress_stats_reexport_is_same_function_object():
+    """路由层与 ``core/db/stats`` 暴露的必须是**同一个**函数对象。
+
+    边界：能抓「cards 拿到的不是同一个函数」（如误包一层 wrapper、重复实现、
+    re-export 丢失）；抓不到「stats 自己的实现被就地改成错误口径」——后者由本文件的
+    端点行为断言（``test_progress_stats_empty`` / ``test_progress_stats_after_adding_cards``）
+    兜住。
+    """
+    from delector.core.db import stats as db_stats
+    from delector.routes import cards as routes_cards
+
+    assert routes_cards.get_progress_stats is db_stats.get_progress_stats
+
+
 # ── v3.0 / v3.8: FSRS Spaced Repetition & Cloze Exercises ──────────────────
 
 
