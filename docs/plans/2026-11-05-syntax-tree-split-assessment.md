@@ -260,7 +260,7 @@ delector/nlp_engine/syntax_tree.py - C (0.00)
 3. **不拆 `_classify_single_clause` 与 `build_clause_tree` 的内部**。两者是 CC 91/45 的真分支源，拆分等于重写分类器；没有黄金语料前不动。
 4. **不做"一个字段一个函数"**。61 行无条件直线代码切成 10+ 次调用，净收益为负。
 5. **不把 `ClauseNode` 改成 dataclass**。与拆分无关，且会改变 `to_dict` 序列化行为。
-6. **不引入 radon 门禁**。本轮零代码；CI 无复杂度判据，拆分不会让 radon 变绿，CC 只是从主函数搬到 helper，总复杂度不变。
+6. **不引入 radon 门禁**。CI 无复杂度判据，拆分不会让 radon 变绿。**实测修正（2026-11-05）**：原句写"CC 只是从主函数搬到 helper，总复杂度不变"是未执行的推测，已被实测证伪——P1 落地后 `analyze_sentence_topology` 的 CC 从 **210 降到 86**（行数 425 → 234），并非不变；各 helper 的 CC 见 §9.1。
 
 ---
 
@@ -286,3 +286,63 @@ delector/nlp_engine/syntax_tree.py - C (0.00)
 5. 回滚：按 commit 逆序 `git revert <sha>`；因块间行范围互不重叠，单块 revert 通常无冲突。
 
 **前置依赖**：P1 不需要改任何测试；若发现任何块需要改测试，降级为 P2 并单独提交。
+
+---
+
+## 9. 执行结果与遗留（2026-11-05 实测）
+
+> 本节为事后追记：§5/§7 是执行前的**预估**，以下为 P1 落地后的**实测**；P2 经运行时计数判定**不可做**（未执行），仅作挂账。证据脚本在仓库外 `D:\Code\_artifacts\`，未提交。
+
+### 9.1 P1 已执行（已合并）
+
+P1 按 6 个可独立回滚的提交推进，PR #231（分支 `refactor/syntax-tree-p1`）以 merge commit `fa6c6c2` 合入 master。
+
+| 指标 | 拆分前 | 拆分后（实测） |
+| --- | --- | --- |
+| `syntax_tree.py` 行数 | 1,569 | **926** |
+| `syntax_tables.py` | — | **453**（7 张表 443 行 + 文件头/导入） |
+| `syntax_fields.py` | — | **347**（11 个搬移块 223 行 + `_is_subjunctive_token` 24 行 + 包装/导入） |
+| `analyze_sentence_topology` 行数 | 425（593–1017） | **234**（140–373） |
+| `analyze_sentence_topology` CC | 210 | **86** |
+
+- 搬移后各 helper 的 CC（radon）：`_is_subjunctive_token` 11、`filter_non_punct_tokens` 5、`find_main_finite_verb` 7、`detect_clause_type` 43、`allocate_infinitiv_fields` 20、`allocate_subordinate_fields` 22、`to_text` 6、`build_field_texts` 1、`build_topology_result` 6、`detect_bracket_structure` 28。
+- 与 §7 预估的偏差：主函数预估「约 215 行」→ 实测 **234 行**；文件预估「约 900 行」→ 实测 **926 行**；差额来自 facade 显式导入、调用点改写与注释，无新增逻辑。
+- 等价性证据：18/18 逐块 AST 全等（7 张 tables + 11 个搬移块；`_is_subjunctive_token` 另 1 项全等）；106 句语料 / 466 次结果比较 **0 不等**；全量 `pytest tests` **2782 passed / 3 skipped**；`mypy --follow-imports=skip` Success；`ruff check delector tools tests` All checks passed。两条变异（`INFINITIVE_CONNECTORS` 键 `anstatt`→`anstattX`；`abs(v.i - cluster[-1].i) <= 2` → `< 2`）分别被具名用例与差分语料判红，均已还原、`git diff` 为空。
+- 依赖方向：`syntax_tables` ← `syntax_fields` ← `syntax_tree`，无反向 import；两个新模块均不 import `syntax_tree`。
+
+### 9.2 P2 判定：不可做（不执行）
+
+P2-2（搬 B9，125 行）的准入条件是「语料扩到 ≥50 句并覆盖 5 级优先链兜底分支」。运行时实测：
+
+- **语料口径 106 句**：测试句 42 + `OFFICIAL_CORPUS` 64（12 篇、64 句全部纳入），**无余量可补**。
+- B9 五级优先链运行时逐级计数（真实执行；插桩版与原模块在 106 句上输出 **0 不等**，证明插桩不改行为）：
+
+| 级别 | 命中句数 |
+| --- | --- |
+| 预置（`main_fin_candidate` 非空） | 13 |
+| L1（`text.lower()` ∈ `FINITE_MODAL_AND_AUX_FORMS` 且 `tag_` ∉ {VAINF, VMINF, VVINF}） | 25 |
+| L2（`dep_ == "ROOT"` 且 `tag_` ∈ {VVFIN, VAFIN, VMFIN}） | 53 |
+| L3（`tag_` ∈ {VVFIN, VAFIN, VMFIN} 且 `dep_` ∉ {rc, re, cp}） | **0** |
+| L4（`dep_ == "ROOT"` 且 `pos_` ∈ {VERB, AUX}） | 1 |
+| L5（`pos_` ∈ {VERB, AUX} 或 `text.lower()` ∈ 有限情态/助动词表） | **0** |
+| 兜底（`fin_verb is None and tokens`） | 8 |
+| none（`tokens` 为空） | 0 |
+
+进入 B9 共 **100/106**（其余 6 句走 `is_infinitiv` / `is_subordinate` 分支）。
+
+- **L3/L5 零命中的原因**：德语主句的正常解析会把限定动词标为 `ROOT` + `VVFIN/VAFIN/VMFIN`，**L2 先命中**，L3/L5 永远轮不到；L5 即使 L1–L4 全落空，也会先被兜底（`non_punct_tokens[0]`）截走，即被兜底遮住。
+- L4 的唯一例句：`Aus diesem Grund etablieren viele moderne Unternehmen hybride Modelle mit zwei bis drei Präsenztagen pro Woche.`（`etablieren` i=3、dep=`ROOT`、tag=`VVINF`、pos=`VERB`：L2/L3 的 `tag_` 条件不满足，落到 L4）。
+- 兜底例句：`Kommst du morgen zur Party mit?`、`Lies bitte diesen deutschen Text aufmerksam durch!`。
+- **补真实语料无法解决**：要覆盖 L3/L5 只能构造 `Token` fixture（人工指定 `dep_` / `tag_` / `pos_`），真实语料补不进自然句——自然主句解析就是 L2 先命中。
+- 结论：按「行为差分」判据 **P2 不可做**；即便改以 AST 等价为主判据，也缺 L3≥2、L5≥2、L4 再补 2 的运行时证据（至少 6 例，保守 8 例），且这些证据只能来自人工 fixture，不等价于真实输入覆盖。
+
+### 9.3 遗留（挂账）
+
+- **L3 与 L5 处于「代码存在、但从未被真实输入执行」状态**（本 106 句口径下命中 0）。
+- **是否属于历史遗留死代码、能否删除——未判定，需要反证**。删除前必须证明该分支在真实语料（含更长句子、特殊断句、不同 spaCy 解析结果）中不可达，或确认它与兜底语义等价；**不可仅凭「零命中」删除**。
+- 该项不阻塞 P1 交付，P2 也不推进；后续若要处置，按独立任务补反证与回归语料。
+
+### 9.4 临时脚本（仓库外，未提交）
+
+- `D:\Code\_artifacts\p2_b9_coverage.py`：B9 五级链运行时插桩与 106 句计数。
+- `D:\Code\_artifacts\syntax_tree_instrumented.py`：运行时生成的插桩副本（相对 import 改绝对、插入 `_B9_TRACE`）；用于证明插桩不改行为（106 句 0 不等）。
