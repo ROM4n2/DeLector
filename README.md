@@ -7,13 +7,13 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-2766%2F2770%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-2767%2F2771%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（真跑数，非推算）：master@39d5092（2026-11-05），
-     命令 `python -m pytest tests -q` → 2766 passed / 4 skipped / 2770 total；
-     `python -m pytest --collect-only -q` = 2770 collected。分母用 total。
+<!-- Tests 徽章口径（真跑数，非推算）：master@ea9eab4（2026-11-05，含 #219 计时门禁），
+     命令 `python -m pytest tests -q` → 2767 passed / 4 skipped / 2771 total；
+     `python -m pytest --collect-only -q` = 2771 collected（11.89s）。分母用 total。
      环境：Windows 11 / Python 3.11（.venv）；4 skipped 为设计性 GUI/桌面会话用例。 -->
 
 <p align="center">
