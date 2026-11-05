@@ -76,12 +76,13 @@ def get_spacy_nlp() -> Any:
             _spacy_load_error = "import spacy 失败（ImportError，模块级降级占位）"
         return None
     if _nlp_instance is None:
-        # 模型档位单一事实源在 processor（ADR-0027：只支持 sm）。函数内导入避免
-        # processor ↔ syntax_tree 的模块级循环依赖。
-        from delector.nlp_engine.processor import SPACY_MODEL_NAME
+        # 模型档位与加载策略的单一事实源在 processor（ADR-0027 / ADR-0028）：句法专线必须
+        # 复用同一加载器（含 Android 本地三级回退、禁止下载），不能自己裸 spacy.load。
+        # 函数内导入避免 processor ↔ syntax_tree 的模块级循环依赖。
+        from delector.nlp_engine.processor import SPACY_MODEL_NAME, _load_spacy_model
 
         try:
-            _nlp_instance = spacy.load(SPACY_MODEL_NAME)
+            _nlp_instance, _ = _load_spacy_model(SPACY_MODEL_NAME)
             _spacy_load_error = ""
         except Exception as e:
             _spacy_load_error = f"{SPACY_MODEL_NAME}: {type(e).__name__}: {e}"

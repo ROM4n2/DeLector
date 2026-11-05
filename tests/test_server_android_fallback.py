@@ -228,6 +228,31 @@ def test_android_load_failure_is_loud_not_pure():
     assert "ENGINE=spacy(加载失败)" in out, f"失败后引擎状态必须如实反映，实际输出：\n{out}"
 
 
+def test_processor_and_syntax_tree_share_engine_status(monkeypatch):
+    """ADR-0028：句法专线必须复用 processor 的加载器，不能自己裸 `spacy.load`。
+
+    用哨兵替换 `processor._load_spacy_model`：若 `syntax_tree.get_spacy_nlp()` 仍走
+    `spacy.load`，拿到的就是另一个真实模型对象，而不是哨兵。失败分支同样要把异常
+    写进 `_spacy_load_error`（诊断语义保留）。
+    """
+    from delector.nlp_engine import processor, syntax_tree
+
+    sentinel = object()
+    monkeypatch.setattr(processor, "_load_spacy_model", lambda name: (sentinel, "sentinel"))
+    monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
+    monkeypatch.setattr(syntax_tree, "_spacy_load_error", "")
+
+    assert syntax_tree.get_spacy_nlp() is sentinel
+    assert syntax_tree.get_spacy_load_error() == ""
+
+    def _boom(name):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
+    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    assert syntax_tree.get_spacy_nlp() is None
+    assert "boom" in syntax_tree.get_spacy_load_error()
+
 
 # 模型档位契约已移到 tests/test_nlp_model_sm_only.py（ADR-0027：只支持 sm），
 # 避免同一口径在两个文件各钉一份。
