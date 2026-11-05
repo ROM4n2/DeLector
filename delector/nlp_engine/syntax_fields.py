@@ -147,6 +147,7 @@ def allocate_infinitiv_fields(
 ) -> Tuple[str, List[Token], List[Token], List[Token], List[Token], List[Token], str]:
     mf_tokens: List[Token] = []
     nf_tokens: List[Token] = []
+    vf_tokens: List[Token]
     # === 1. INFINITIVGRUPPE ===
     sentence_type = "Infinitiv"
     vf_tokens = []
@@ -194,6 +195,7 @@ def allocate_subordinate_fields(
 ) -> Tuple[str, List[Token], List[Token], List[Token], List[Token], List[Token], str]:
     mf_tokens: List[Token] = []
     nf_tokens: List[Token] = []
+    vf_tokens: List[Token]
     # === 2. SUBORDINATE CLAUSE (VL / Verbletzt) ===
     sentence_type = "VL"
     vf_tokens = []
