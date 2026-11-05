@@ -103,3 +103,8 @@ agent/coverage*
 # 唯一例外：compact 现场快照由 PreCompact hook 自动追加（每次压缩一条，属工作态
 # 而非共享状态），入库只会制造持续 diff 噪音。WORKMEMORY/ 其余文件仍 MUST 入库。
 WORKMEMORY/session-snapshot.md
+
+# Sensitive credentials & secrets
+config.yaml
+config.yml
+config.local.yaml

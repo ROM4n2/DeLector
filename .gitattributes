@@ -27,3 +27,16 @@
 *.apkg binary
 *.jks binary
 *.keystore binary
+
+# ── LF pin（dfs-bootstrap，2026-11-05）────────────────────────────────────
+# 上面的通用规则 `* text=auto eol=crlf` 会把 checkout 转成 CRLF，而 bash 钩子的
+# shebang 是 `#!/usr/bin/env bash`——CRLF 会让 git 报 "cannot spawn" 直接失效，
+# 等于密钥扫描守卫在全新克隆上静默失灵。gitattributes 后出现的规则覆盖先出现的，
+# 故这几条 MUST 置于通用规则之后。
+# `WORKMEMORY/**` 是按 dfs-bootstrap 规范对上述 CRLF 仓库契约的**定点覆盖**：
+# append-only 日志保持 LF 以免各机 checkout 口径漂移。这是对既有契约的有意例外，
+# 不是笔误。全部 blob 已是 LF（git ls-files --eol 抽查 i/lf），因此**不做**
+# `git add --renormalize .`（会重写共享的 WORKMEMORY/work.log 并与并行写入冲突）。
+.githooks/** text eol=lf
+WORKMEMORY/** text eol=lf
+*.sh text eol=lf

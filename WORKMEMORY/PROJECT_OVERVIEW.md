@@ -60,5 +60,5 @@
 ## 工作方式
 
 - 提交 Conventional Commits；禁止 `--no-verify`。
-- 语义知识检索：`search_vault` MCP 或 `python d:\Obsidian\Coding\scripts\search-vault.py`。
+- 语义知识检索：`search_vault` MCP 或 `python \"$WIKI_PATH/scripts/search-vault.py\"`。
 - 会话事件按 `PROTOCOL.md` 记入本目录 `work.log`。

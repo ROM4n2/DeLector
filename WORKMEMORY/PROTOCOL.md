@@ -2,7 +2,7 @@
 > protocol-version: 1
 
 > 本文件是协议本体，所有能读写文件的 AI agent（Claude Code / Codex / OpenCode / Antigravity / Gemini CLI / CodeBuddy / …）一律遵守。
-> 协议铁律的规范层见 vault：`d:\Obsidian\Coding\01-Rules\CROSS-AGENT-MEMORY.md`。
+> 协议铁律的规范层见 vault：`$WIKI_PATH/01-Rules/CROSS-AGENT-MEMORY.md`。
 
 ---
 
@@ -119,7 +119,7 @@ status: open
 
 ## 6. 与 vault 的蒸馏联动
 
-- WORKMEMORY 只存**状态与轨迹**；vault（d:\Obsidian\Coding）只存**规范与结论**。
+- WORKMEMORY 只存**状态与轨迹**；vault（`$WIKI_PATH`）只存**规范与结论**。
 - 会话收尾（`/vault-save` 或 agent 主动判定）时：work.log 中成熟的 PITFALL/DECISION → 按 vault 摄取流程沉淀（`save_inbox_draft` 或直写 99-Inbox）→ 在 INDEX.md 蒸馏登记节标注 `vault://<vault 路径>`（用 `vault://` 前缀说明性文字，不写 Obsidian wikilink，避免跨库断链）。
 - 反向：vault 规范更新若影响本项目工作方式，当前 agent 记一条 `NOTE` 指向 vault 路径。
 
