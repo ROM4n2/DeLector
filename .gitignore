@@ -38,6 +38,9 @@ artifact*.html
 # （内部 .gitignore 缺失或工具换版重建目录时，缓存内容会漏进 status）。
 .mypy_cache/
 .ruff_cache/
+# spaCy 模型 wheel 的本地缓存目录（tools/download_spacy_model.py 落盘、actions/cache 复用）。
+# 命中缓存时 CI 完全不访问网络；该目录只存官方 wheel，绝不入仓（不 vendor 二进制）。
+.spacy-wheel-cache/
 # 与上面同理：.superpowers 目前靠自身嵌套 .gitignore（内容 `*`）自忽略；此处补根级兜底，
 # 防止工具升级/重建目录但未写回嵌套规则时，整棵工具缓存漏进 status 被 `git add -A` 收走。
 .superpowers/
