@@ -339,3 +339,72 @@ Caps: filesystem-read, filesystem-write, shell-exec
 任务 4（伴学 SSE 断流/重连）已交付未合并 PR #203（https://github.com/ROM4n2/DeLector/pull/203），四个提交按文档/后端/前端/测试拆分：8b3c20e、ec467a8、4f63f21、b17b513；未直推 master、未打 tag。根因是 Starlette disconnect listener 在 yield 点取消响应生成器，循环后的 save_turn/create_proposal 被跳过；修复为先解析完整帧再原样转发、finally 同步保存断点，新增 X-History-Length 权威基线，前端凭 X-Session-ID 拉历史恢复，不重放模型请求。turn generation 与持久化计数防止同文旧轮、既有 scope、新旧流及乐观 user 串轮；七类 SSE 事件和帧语义不变，主动断连不后台续跑。
 验证：新旧探针先红后绿；后端禁用落库、前端缩减重试及破坏权威基线的变异均实红，还原复绿。最终 pytest 2731 passed/2 skipped；伴学 27 passed、真源码探针 335 checks/39 scenarios；全部前端探针 35/35；go vet 与 go test -race -count=1 各 10/10 包；Ruff、mypy、机械闸、七事件契约全绿；独立 reviewer 四轮边界复核最终 CLEAN PASS。PR 初始 CI run 41665396652 为 5 pass/7 pending/2 skipped/0 failed。真实浏览器与 Android 断网点检未做。
 知识库 healthcheck 已从 D:\Obsidian\Coding 正确执行：关键项全 PASS、1563/1563 wikilinks 正常；仅 DeLector 归档 5 条历史非标事件头 notice 保留，不改历史。任务 3 的原始「14 项 M 级候选」在当前交接、项目记忆、仓内文档与知识库均未检索到；为免把新造清单冒充原表，逐项复核暂停，待用户提供原表后继续。
+
+### 2026-11-04 12:27 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+用户批准的三项架构修复已按①Go SSE三端契约→②探针场景防删除→③断点快照事务化交付，未合并 PR #206（https://github.com/ROM4n2/DeLector/pull/206），未直推 master、未打 tag。实现提交分别为 689eea1（Go常量名→wire value逐项校验+生产emit覆盖）、f687dec（42场景真实插桩与逐项下界）、a94b442（user/assistant/proposals单事务，路由只组装）；本簿记另作独立文档提交。公开 save_turn 与 DB commit=True 缺省行为不变，断流无需 done 仍保存，proposal-only 与 X-History-Length 不变。
+RED/变异：Go事件改错与交换值均使总闸退出1，未emit隔离反例成立；42场景×本体/begin标记共84种删除在主工作区复验全部失败（78契约拒绝、6场景依赖运行期失败），无假绿；第二个append注入在旧实现留下user-only，新实现零残行，主工作区把user append改为commit=True后复现残行并还原复绿。各项独立 reviewer 与最终联合审查均 CLEAN PASS。
+最终验证：python -m pytest tests -q = 2741 passed/2 skipped（743.73s）；Go vet、go test -count=1与-race -count=1各10/10包；全部前端探针35/35，伴学探针335 checks/42 scenarios（此前口头39系计数错误）；Ruff、mypy、TypeScript、三闸、三端契约与index同步全绿。PR #206 初始 CI run 41773287477 = 5 pass/7 pending/2 skipped/0 failed。
+
+### 2026-11-04 13:32 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+CI速度规范与#4 SSE行解析收敛已交付未合并 PR #207（https://github.com/ROM4n2/DeLector/pull/207），未直推代码到master、未打tag。规范提交c29fcb9落docs/agents/ci-speed-budget.md并登记docs/README与CONTRIBUTING；实现85e7cfc把主chunk/尾包统一到parseLines，测试328027b新增23项SSE帧行为断言，伴学探针达358 checks/43 scenarios。currentEvent跨chunk保持是用户点名修复的唯一observable bug；onEvent签名、onSessionId、X-History-Length、AbortSignal、HTTP错误与多个data逐行回调不变。
+CI实测（run 41773483635，读取2026-11-04 12:41:53+08）：总墙钟278s含排队、job跨度230s、13执行job/2跳过/峰值13、累计914s、最长unit-1 229s；pip与Go缓存均restored successfully，pytest分片无重叠。Ruff/mypy在六个matrix重复累计89s，保留单份约15s可省约74s runner时间（墙钟不得宣称必省，理论上限约19s），仅登记TODO-CI-01；Windows Smoke无本样本实测，登记先测后收紧至≤15分钟，本轮未改workflow。
+验证：扩展探针先发现currentEvent跨chunk旧实现RED，修复后358/43全绿；事件保持、尾包、非JSON、多行处理、data.event优先级、onEvent签名6处独立变异均具名RED并还原复绿。全量pytest 2741 passed/2 skipped（761.01s）；前端探针35/35；Go vet、普通与race各10/10包；Ruff、mypy、TypeScript、三闸与契约全绿，独立reviewer CLEAN PASS。推送时SSH443与HTTPS均超时，备用SSH22成功，未改git config。
+
+### 2026-11-04 15:40 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+Android WebView 两处收窄任务交付到未合并 PR #209（fix/android-webview-external-links，基于 5cb1e07）。① debug 开关：MainActivity 仅在 BuildConfig.DEBUG 分支调 WebView.setWebContentsDebuggingEnabled(true)，release 保持关闭；② 外链真 bug：此前 WebViewClient 未覆写 shouldOverrideUrlLoading，target="_blank" 更新 chip 被吞。现覆写两个重载统一委派 handleExternalNavigation，判定抽为零 Android 依赖纯函数 WebUrlPolicy.shouldOpenExternally（回环 127.0.0.1/localhost/::1/0.0.0.0、相对路径、file://、非法 URL 留 WebView；非回环 http(s) 与 mailto 交 ACTION_VIEW；javascript:/data:/blob:/about:/未知 scheme 不外跳），startActivity 以 catch(Throwable) 包裹后仍 return true，无浏览器不崩且不替换成错误页。
+测试选型：静态断言 + javac 直跑，不引 JUnit/Robolectric（仓内无该基建、本轮不装 SDK、CI pytest 矩阵只装 Python/Node）。WebUrlPolicyTest 25 checks；Python 门禁 5 tests。变异 7 处均实测 RED 后还原复绿：回环判定反转 9 例红、scheme null 守卫反转致 4 条相对路径抛 NPE、mailto 分支停用、scheme 小写化删除、DEBUG 守卫改 if(true)、catch 收窄、WebResourceRequest 重载改名。全量 pytest 2744 passed/4 skipped（561.59s）；前端探针 32/32；四道前端机械闸 PASS；git diff --check 0。真机、模拟器、chrome://inspect 均未点检，CHANGELOG/FEATURES 只写"已修复，真机与模拟器均未点检"。提交拆为 build/fix/test/docs 四笔。
+
+### 2026-11-04 16:55 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+CI 加速第一刀（去重）交付到未合并 PR #210（ci/static-checks-dedup，基于 bd993f9）。Ruff/mypy 六步原在 matrix 公共 steps，六个 pytest 分片各装各跑；实测六份累计 92s（单份均值 15.3s）。改法：六步加 `if: matrix.suite.name == 'unit-2'`，只留最短分片一份；不新开 job（峰值并发保持 13，不破预算）、不碰关键路径 unit-1/unit-4/cost-guards、不删缓存。三样本实测（PR #209 178s / master push 241s / PR #210 224s）：**墙钟未变快**，unit-1 的 pytest 段在 129–186s 间波动，幅度大于静态检查省下的 10s；可确证收益是六分片静态累计 92s→14s（-78s runner 时间）。结论口径写在 docs/agents/ci-speed-budget.md §1.3：只报累计节省，不报墙钟提速。防死绿：tests/test_ci_hardening.py 新增去重守卫（六步同条件、唯一宿主、宿主须在 matrix），三处变异实测 RED 后还原复绿。提交 ci/test/docs 三笔，PR #210 未合并。
+
+### 2026-11-04 17:49 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+Android 模拟器变体（方案 A，完整应用含 spaCy，禁止降级）落地到未合并分支 build/android-emulator-variant。① 闸门实测（探针分支 probe/android-x86_64-wheels，独立 workflow android-emulator-probe.yml 仅 workflow_dispatch/push 探针分支）：Chaquopy 对 x86_64 全链解析成功，无 Couldn't find a matching wheel / No matching distribution；Successfully installed 清单含 spacy-3.8.7 thinc-8.3.4 blis-1.2.1 numpy-1.26.2 cymem-2.0.6 preshed-3.0.9 srsly-2.4.4 murmurhash-1.0.2，并实际装到 chaquopy-libgfortran/openblas 的 android_21_x86_64 轮子（实证 android_24 标签只是上界、可向下展开）。② APK 内含 lib/x86_64/（5 个 .so）与 requirements-x86_64.imy（17,408,632 bytes），体积 92,139,169 bytes = 87.87 MiB，gradle assembleDebug 131–133s。③ 正式变体：build.gradle 用 buildType emulator（非 flavor，保住 app-debug.apk 路径），abiFilters 从 defaultConfig 下移：debug/release 仅 arm64-v8a、emulator 为 arm64-v8a+x86_64，带 applicationIdSuffix ".emulator"（不能覆盖安装正式包、读不到正式包私有数据）。④ 守卫：tests/test_ci_hardening.py 新增 release 仅 arm64 / emulator 必含 x86_64 / 禁 productFlavors / 禁 defaultConfig abiFilters / emulator workflow 与发版隔离；具名变异「把 x86_64 塞进 release」实测 RED 后还原复绿。⑤ 新增 .github/workflows/android-emulator.yml（仅手动触发、artifact DeLector-emulator-apk、不写 dist/DeLector-*）。⑥ architecture.md L64 更正 android_24 语义。仍未验证：真机与模拟器均未 adb install，运行时 spaCy 语法标注未点检。
+
+### 2026-11-04 17:49 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+更正上一条：ABI 变体现在是 **product flavor**，不是 buildType。buildType 方案在 CI 实测直接报 `Chaquopy requires ndk.abiFilters`——Chaquopy 15.0.1 的 `PythonPlugin.getAbis` 只读 `android.defaultConfig.ndk.abiFilters` 与各 `productFlavors` 的 abiFilters，不看 buildType。最终形态：`flavorDimensions "channel"` + `device`（仅 arm64-v8a）/ `emulator`（arm64-v8a + x86_64，`applicationIdSuffix ".emulator"`），并禁用 `emulatorRelease`（assembleRelease 仍只出一个正式 APK）。产物路径随之变化：CI 抓 `apk/device/debug/app-device-debug.apk`，守卫 `tests/test_server_android_fallback.py` 禁止引用 `apk/emulator/`，防止发版抓错包；最终发行名 `DeLector-<tag>-Android.apk` 不变。已用临时验证分支实跑 `gradle assembleEmulatorDebug`（run 41813642926，success），产出 `apk/emulator/debug/app-emulator-debug.apk` 且含双 ABI。PR CI（run 41815765514，b1bb0c8）全绿。共 2748 passed / 4 skipped（本地全量，flavor 改造前）+ PR CI 分片全绿；前端探针 32/32；git diff --check 0。仍未验证：真机与模拟器均未 adb install，运行时 spaCy 语法标注未点检。
+### 2026-11-04 18:14 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #210 已按仓库习惯合并（merge commit 1f9d73f，未 squash、未 force push），head 4405c3a run 41803741662 全绿；master 已 fast-forward、ci/static-checks-dedup 远端与本地分支与 .worktrees/ci-dedup 已清理（删前确认干净）；main run 41807188429 success。
+CI 加速第二刀（关键路径）交付到未合并 PR #211（ci/critical-path-shards，基于 1f9d73f）。复核 unit-1 时发现比静态重复更严重的问题：**旧分片根本不互斥**。旧 matrix args 为 `tests/test_[a-c]*.py --ignore=...`，bash 先把 glob 展开为显式文件路径，而 pytest 的 --ignore 只作用于目录递归、对显式文件无效 ⇒ 一次 run 重复执行 356 用例（计数 721/747/330/942/316/44=3100，唯一 2744）。unit-1 多跑 113（cost/integration 的 4 个文件）、unit-4 多 149、unit-2 多 94，unit-1 pytest 被顶到 155.6s。
+改法：新增 tools/ci_shards.py 显式清单（六分片唯一事实来源）+ tools/ci_shard_weights.json（本机 pytest --durations=0 实测权重，<5ms 文件按 0.1 兜底），matrix 去掉 args，pytest 改 `pytest -q $(python tools/ci_shards.py <name>)`。不加 job、不改 required check 名、不删检查、不动缓存；unit-2 保留 14s 静态门禁并刻意把 pytest 负荷压低。
+守卫：tests/test_ci_hardening.py 新增四条——分区恰好一次且与 matrix 对齐、cost/integration 专项独占、四个 unit 分片按实测权重落在均值 ±25%、禁止 matrix.suite.args 与 test_[a-c]* glob 回退（防有人把用例挪回去或改失衡）。
+实测（run 41811788954，head 4116baa，success）：Python 门禁关键路径 188s→**145s**（-43s），unit-1 job 187→102s（pytest 155.6→55.7s），unit-4 161→89s，unit-2 116→106s（含静态），unit-3 81→107s，integration 79→87s，cost 151→143s；峰值并发仍 13。本机六分片全绿 2749 passed/4 skipped（86.4/72.3/85.2/84.1/79.3/131.0s）。原始墙钟 242s 不可比：改 .github/** 触发 Windows Smoke（230s）支配墙钟；对无 smoke 基线 178s（41793803081）推算同口径约 148s（-30s，约 -17%）。
+放弃：pytest-xdist（cost 用例是计时/基准断言、integration 起真实服务端口，并行会造 flaky）；把 cost 文件摊进 unit 分片（牺牲专项隔离、动真实检查语义）。新关键路径是 cost-guards 143s，登记 TODO-CI-04 另立计划，本轮不做。
+
+### 2026-11-04 19:38 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+知识库蒸馏：本轮四条经验已作为 99-Inbox 草稿落库（vault 侧，未晋升 01-Rules、未改既有规则）。① Chaquopy ABI 变体只能走 product flavor（getAbis 只读 defaultConfig 与 productFlavors，不读 buildType），并记 minSdk 24 经 --min-api-level 向下展开到 16、android_21 轮子可用的实证；② pytest --ignore 对显式文件路径无效，glob 分片一次 run 重复 356 用例（3100 vs 唯一 2744）；③ CI 汇报口径必须分墙钟 / 关键路径 / runner 累计，墙钟受 Windows Smoke 210-230s 支配未降；④ 崩溃语义用真实子进程 os._exit 验证（该条属 coKernel T16，已在该仓簿记，不重复记入本仓）。事实均按各仓文档与本轮 CI 样本回读核对；草稿使用仓内相对路径、未写内部会话编号；未改任何历史事件。
+
+### 2026-11-04 21:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #212（Android x86_64 emulator 变体）与 PR #213（NLP 档位收敛 sm）均以 merge commit 合并，未 squash、未 force、未改写历史：merge 6675894 / b1a19d1。合并 #212 前先把它 merge origin/master（冲突仅 work.log，17:49 更正与 18:14 两条事件按时间序并存），head run 41833602180 首次 Windows Portable Smoke 卡在 Verify 步 30m 超时被取消（构建与其余 13 job 全绿，同作业上一成功仅 3m），只重跑该失败作业后转 success；#212 合入后 #213 仍 MERGEABLE，head CI 41829026774 全绿直接合并。main CI：6675894 的 run 41840470678 因新 push 被取消（superseded，非失败），b1a19d1 的 run 41840916053 为最终权威结论。清理：远端 build/android-emulator-variant 与 feat/nlp-sm-only 已删，worktree pr212-merge / nlp-sm / android-emulator 均已移除且无占用残留，本地两分支以 merge-base --is-ancestor 验证后删除（feat/nlp-sm-only 因不在当前 HEAD 分支被 -d 拒，复核为 origin/master 祖先后用 -D）。ADR-0027 回填：§6 从「未验证、未执行」改为「已执行，结论维持 sm」（111 句、分词 111/111、等级 107/111、可分动词 10/10 且 sep_lemma 8/10、成本 2.82×/2.41×/1.91×、收益 3/111≈2.7%），新增 §7「先修评分器敏感性（OPEN、未执行）」与 §8「PyPI 同名包是 Dependency Confusion stub，真模型取官方 GitHub Release 3.8.0 wheel」；architecture.md 同步去掉「OPEN 未执行」旧口径。未改任何代码、未动 processor.py。
+
+### 2026-11-04 22:55 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+落地 Windows Smoke 的步骤级判据（PR #214，未合并）。ci.yml 的 Verify Windows Portable 加 timeout-minutes: 10（正常实测 27s、脚本内最坏约 6 分钟，10 分钟约 1.7x 最坏路径）；job 级 30 分钟护栏保持不动；其它步骤/job/脚本均未改。tests/test_ci_hardening.py 新增守卫（步骤级存在且 <=10 + job 级仍为 30），RED 实测失败 → GREEN 75 passed，变异 15 分钟触发上界断言后还原。ci-speed-budget.md 更新预算表与 TODO-CI-02（部分完成）：写明 2026-11-04 run 41833602180 attempt 1 的 job 日志不可得（GitHub 未保留、API 404），根因仍未定位、判定 hang 置信度约 0.6、最可能为 runner/job worker 层停摆；保留分段实测待办，并记 B 心跳（被取消 job 日志可能整份丢失）与 C 拆步骤仍待做；不表述为已解决卡死。CI run 41851476946 全绿，smoke 作业真跑 3m44s、Verify 步 28s；分支 ci/smoke-verify-step-timeout，head 900e439。
+
+### 2026-11-04 23:11 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #214 由用户自行合并，本轮只做收尾、未重复合并。核对：gh pr view 214 = MERGED，merge commit cf7039f0b997567a99e9213af8c36f1179208918（mergedAt 2026-11-04T15:04:37Z）。main 对应 run 41853984078（push，head cf7039f）status completed / conclusion success（createdAt 15:04:40Z、updatedAt 15:08:43Z），其中 Windows Portable Smoke (build + 真启闸) 作业 conclusion success。改动确认在 main：origin/master 的 .github/workflows/ci.yml:315 为 `timeout-minutes: 10`，tests/test_ci_hardening.py:789 为 `def test_windows_smoke_verify_step_has_bounded_timeout`。清理：远端 ci/smoke-verify-step-timeout 此前已不存在（git ls-remote 无输出）；.worktrees/ci-smoke-timeout 以 git worktree remove 移除（exit 0，Test-Path 为 False，无占用残留）；本地分支删前 merge-base --is-ancestor 对 origin/master 返回 0，git branch -d 删除成功（was 8591969）。本地 master 已 ff 至 cf7039f，与 origin/master 一致；主工作区仅余用户 Android Studio 生成的未提交改动（android/app/build.gradle、gradle-wrapper.properties、.idea/、local.properties），一字未碰。未改任何代码或 workflow，TODO-CI-02 的 B/C 待办状态未动。
+
+### 2026-11-05 01:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+TODO-CI-04 实施完成到未合并 PR #216（ci/cost-guards-split，head b1cbfb6，MERGEABLE）。计划 docs/plans/2026-11-05-ci-cost-guards-split.md：A 拆 cost 分片、B 前端探针去重、C 合并三闸抵消并发，D 什么都不做对照；排除 xdist / 摊进 unit 分片 / 减轮数。
+改动：cost 三文件拆为 cost-guards（articles+cards）与 cost-cold-start（cold）；4 条前端探针 6→1 到 unit-2（Node 安装保留：根 conftest 在 CI 下要求每个 pytest job 有 node）；silent/mock/layer 三 job 合并 static-invariants（timeout 2、无 continue-on-error、步骤名保留）；守卫钉住并集 / 单一宿主 / 三步接线，三处具名变异 RED。
+实测（口径分离）：Python 门禁关键路径中位 158s→108s（-32%）；cost-guards 中位 157s→93s，已非瓶颈（cost pytest 83s→64s + cold 28s）；新瓶颈是 unit 分片 77–108s。runner 累计中位 975.5s→1002s（+26s / +2.7%，cost 环境复制两份的代价，如实记录）。墙钟由 Windows Smoke 支配，不下结论。峰值并发 13→12。
+CI：run 41871021385 attempt 1–3 绿（样本）；终版 b1cbfb6 的 run 41876516460 pr checks 全 pass（含 Windows Smoke 3m34s）；Master Direct-Push Scope Gate 在 PR 上按设计跳过。中途两次失败（ruff F841、旧 job 名接线守卫）已修，属过程偏差。独立 reviewer APPROVED；两张 Yellow（时长注释口径、旧 job 名注释）已在 7650ddf / b1cbfb6 回修。该 run 的 cost-cold-start / unit-4 曾出现约 20 分钟 runner 侧停摆后自行恢复，与 TODO-CI-02 记录的 hang 同形态，未改代码。
+未验证/未做：PR 未合并，post-change push 样本缺失（只有 pre-change push 基线）；unit 分片波动成为新关键路径上限，本轮未处置。
+
+### 2026-11-05 11:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+S 级缺陷修复交付到未合并 PR #217（https://github.com/ROM4n2/DeLector/pull/217，fix/backup-articles-stats-json，head 502140c），按 test/fix 拆两个提交：ccc555f 守卫、502140c 修复。
+根因：`_BACKUP_TABLES["articles"]` 列清单缺 `stats_json`（schema.py 建表 DDL 内的 P1-6 列表投影列）。导出走 `SELECT *` 有值，还原按清单 DELETE + INSERT ⇒ 该列永久 NULL；列表接口 COALESCE 把 NULL 读成默认值，掩盖性能回退（数据真丢）。既有守卫只比对表集合、不比对列集合，故长期绿。
+改动：列元组补 stats_json + defaults=None（旧备份无键时回落，列表仍由 processed_json 兜底）；tests/test_ci_hardening.py 新增列级守卫（现读 PRAGMA table_info，主库+progress 库双向比对：漏列 / DDL 外列）与真实链路往返守卫（build_backup_payload→RestoreReq→_replace_tables，stats_json 逐字不变）。
+验证：RED 两条均按预期红（原文 `main/articles 备份列清单漏列：['stats_json']`、`还原前 '{"words": 3, "sentences": 1}'，还原后 None`）；具名变异两条真跑后还原（删清单列⇒列守卫红；仅还原侧剔除⇒往返红）；相关套件 120 passed、articles list 10 passed；PR CI run 41957646853 全 pass（Windows Smoke 按 paths 规则 skipping，Go/Secret/Static/六个 Python 分片均 pass）。
+未改 schema / 迁移 / schema 版本 / 备份文件格式 / 其他表语义。不选「改 schema 让迁移自愈」：迁移只在缺列时回填，还原时列已存在，根因在还原列清单。边界：DDL 新增列仍需手工登记进清单（守卫会红作为提示）；守卫不覆盖 defaults 语义与旧备份缺键的语义正确性。PR 未合并、无 tag。

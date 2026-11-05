@@ -6,7 +6,8 @@
 C2/C8 缺陷族共享同一形态：**错误 / 降级路径不可见** —— 异常被吞（``except: pass``）、
 异常类型被裸 ``except:`` 抹平、证书校验被悄悄关掉而零痕迹。这些站点已被逐个人工修复，
 但**类**此前没有机械闸 ⇒ 可以无声回长。本脚本把三条窄判据做成可测判定器：
-CI job ``silent-degradation`` 按 fail-loud 口径执行它（退出码 1 = 有未豁免站点 ⇒ job 红），
+CI job ``static-invariants``（step ``Enforce no-silent-degradation criteria``）按 fail-loud
+口径执行它（退出码 1 = 有未豁免站点 ⇒ job 红），
 本地可用 ``--report-only`` 只看清单不判红。结构照 ``tools/check_master_commit_scope.py``
 （纯 stdlib、argv 友好、0/1/2 退出码）。
 
@@ -66,7 +67,7 @@ REASON MUST 具体到「为什么此站点安全」；占位式 ``ok`` / ``inten
 # 为什么更便宜的层不够（CI 才是权威层）：
 #   `.githooks/pre-commit` 只做**暂存区密钥扫描**（另一个形态），对静默降级零覆盖；
 #   且任何本地 hook 都可被 `--no-verify` 绕过、fresh clone 上根本没有 hook。
-#   只有 CI 侧的机械闸不可绕过 —— 这就是本闸挂在 CI（job `silent-degradation`）的原因。
+#   只有 CI 侧的机械闸不可绕过 —— 这就是本闸挂在 CI（job `static-invariants`）的原因。
 #
 # 判据的固有边界（MUST 明说）：每条判据检测的是**形态（shape）**，不是某个具体 one-off；
 #   形态合规 ≠ 站点正确（一个吞错却写足日志的站点仍可能错）。发现新形态时应当**另立判据

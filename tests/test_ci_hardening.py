@@ -19,8 +19,10 @@
 
 import ast
 import importlib.util
+import json
 import re
 import subprocess
+from collections import Counter
 from pathlib import Path
 from typing import Any, NamedTuple, Sequence
 
@@ -261,6 +263,106 @@ def test_desktop_entry_mypy_gate_includes_start_entry() -> None:
     )
 
 
+# ── 静态检查去重守卫（2026-11-04，TODO-CI-01）──────────────────────────────────
+# 背景：Ruff/mypy 六步原先在 matrix 公共 steps 里，六个 pytest 分片各装各跑一遍；
+# 实测累计 92s、单份约 15s，属纯重复。2026-11 收敛为只在一个分片执行。
+# 下面这条钉住"仍然只有一份、宿主分片仍在矩阵里、六个步骤都带同一条件"：
+# 防止后续有人把静态检查复制回公共 steps（重复成本会静默回归），
+# 也防止宿主分片改名/删除后条件恒假、检查静默消失（死绿比慢更坏）。
+
+STATIC_GATE_STEP_NAMES = (
+    "Install Ruff",
+    "Ruff lint gate",
+    "Install Mypy",
+    "Mypy type gate (strict)",
+    "Mypy type gate (tests, config baseline)",
+    "Mypy type gate (desktop entry surface, strict)",
+)
+
+
+def _ci_step_blocks() -> dict[str, str]:
+    """把 ci job 的 steps 按 `- name:` 切成 {步骤名: 块文本}。"""
+    block = _ci_job_block("ci").replace("\r\n", "\n")
+    chunks = re.split(r"\n      - name: ", block)
+    steps: dict[str, str] = {}
+    for chunk in chunks[1:]:
+        steps[chunk.splitlines()[0].strip()] = chunk
+    return steps
+
+
+def test_static_gates_run_in_exactly_one_shard():
+    """Ruff/mypy 六步必须只在一份分片执行，且宿主分片真实存在于 matrix。"""
+    steps = _ci_step_blocks()
+    shards: set[str] = set()
+
+    for name in STATIC_GATE_STEP_NAMES:
+        assert name in steps, (
+            f"{CI_WORKFLOW} 缺少静态检查步骤 {name!r}：真实检查被删，不得用提速名义砍掉"
+        )
+        match = re.search(
+            r"^\s*if:\s*matrix\.suite\.name\s*==\s*'([^']+)'\s*$",
+            steps[name],
+            re.MULTILINE,
+        )
+        assert match, (
+            f"{name!r} 没有 `if: matrix.suite.name == '<分片>'` 守卫："
+            "静态检查会重新落到六个分片各跑一遍（实测六份累计 92s，单份约 15s）"
+        )
+        shards.add(match.group(1))
+
+    assert len(shards) == 1, f"六个静态步骤必须挂同一个分片，实际: {sorted(shards)}"
+
+    shard = next(iter(shards))
+    matrix_names = re.findall(r"^\s*- name:\s*(\S+)\s*$", _ci_job_block("ci"), re.MULTILINE)
+    assert shard in matrix_names, (
+        f"静态检查宿主分片 {shard!r} 不在 matrix 里（现有: {matrix_names}）："
+        "条件永远为假，Ruff/mypy 会静默不跑（死绿比慢更坏）"
+    )
+
+
+# ── 纯 stdlib 机械闸合并守卫（2026-11-05，TODO-CI-04）─────────────────────────
+# 背景：silent-degradation / mock-drift / layer-invariants 三个 job 各只跑一个秒级
+# 判定器，却各占一台 runner、各付一次 checkout + setup-python（实测 job 11–13s，
+# 其中判定器本身 1–3s）。
+# ci-speed-budget §3.3 明确要求「只为一个断言单开 job」应并入现有机械闸；本轮
+# 为抵消 cost 分片拆分新增的 1 个 job（峰值并发预算 ≤13），把它们合并成一个 job。
+# 守卫钉住：三个判定器仍逐步执行、无 continue-on-error、job 级超时仍按轻量闸预算。
+MECHANICAL_STDLIB_GATE_SCRIPTS = (
+    "tools/check_silent_degradation.py",
+    "tools/check_mock_drift.py",
+    "tools/check_layer_invariants.py",
+)
+MECHANICAL_GATES_JOB = "static-invariants"
+
+
+def test_mechanical_stdlib_gates_run_in_one_job() -> None:
+    """三个纯 stdlib 判定器必须合并在一个 job 内逐步执行，且不得容错。"""
+    text = _read_guard_file(CI_WORKFLOW)
+    block = _job_block(CI_WORKFLOW, MECHANICAL_GATES_JOB)
+
+    for script in MECHANICAL_STDLIB_GATE_SCRIPTS:
+        run_line = f"run: python3 {script}"
+        assert text.count(run_line) == 1, (
+            f"`{run_line}` 在 {CI_WORKFLOW} 出现 {text.count(run_line)} 次："
+            "合并后必须恰好接线一次（重复接线 = 白烧 runner；零次 = 检查被删）"
+        )
+        assert run_line in block, (
+            f"{MECHANICAL_GATES_JOB} 缺 `{run_line}`：真实检查被删，不得用提速名义砍掉"
+        )
+
+    assert "continue-on-error" not in block, (
+        f"{MECHANICAL_GATES_JOB} 声明了 continue-on-error：命中也不红，闸形同虚设"
+    )
+
+    match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", block, re.MULTILINE)
+    assert match, f"{MECHANICAL_GATES_JOB} 没有 timeout-minutes（会退回 360 分钟默认值）"
+    assert 0 < int(match.group(1)) <= 2, (
+        f"{MECHANICAL_GATES_JOB} 的 timeout-minutes = {match.group(1)}："
+        "轻量机械闸预算为 2 分钟（三个脚本实测 3/1/1s，job 含 checkout+setup 11–13s），"
+        "超过即为无意义等待"
+    )
+
+
 def test_mypy_config_locks_adoption_flags_and_stays_out_of_runtime_deps():
     """[tool.mypy] 必须锁住档位关键项；mypy 不得混入运行时依赖。"""
     text = _read_guard_file(MYPY_CONFIG)
@@ -331,6 +433,114 @@ def test_dockerfile_uvicorn_entrypoint_points_to_real_module():
 
 ANDROID_GRADLE = REPO_ROOT / "android" / "app" / "build.gradle"
 DELECTOR_DIR = REPO_ROOT / "delector"
+
+
+def _gradle_block(text: str, header_re: str) -> str:
+    """返回 Groovy 块 `header { ... }` 的内部文本（按花括号配对，取最外层）。
+
+    只服务于 build.gradle 这种**注释与字符串里都没有裸花括号**的文件；一旦该文件
+    出现花括号字面量，本函数会失配并显式 fail，而不是静默给出半截文本。
+    """
+    match = re.search(header_re, text)
+    if match is None:
+        raise AssertionError(f"build.gradle 里找不到块头 {header_re!r}")
+    open_brace = text.find("{", match.start())
+    depth = 0
+    for index in range(open_brace, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace + 1 : index]
+    raise AssertionError(f"块 {header_re!r} 的花括号不配对")
+
+
+def _flavor_body(name: str) -> str:
+    """取 `productFlavors { ... }` 里某个 flavor 的内部文本。"""
+    text = _read_guard_file(ANDROID_GRADLE)
+    flavors = _gradle_block(text, r"\bproductFlavors\s*\{")
+    return _gradle_block(flavors, rf"\b{re.escape(name)}\s*\{{")
+
+
+def _build_type_body(name: str) -> str:
+    """取 `buildTypes { ... }` 里某个 buildType 的内部文本。"""
+    text = _read_guard_file(ANDROID_GRADLE)
+    build_types = _gradle_block(text, r"\bbuildTypes\s*\{")
+    return _gradle_block(build_types, rf"\b{re.escape(name)}\s*\{{")
+
+
+def _abi_filters(body: str) -> list[str]:
+    """解析块内**唯一的** abiFilters 声明，返回带引号的 ABI 列表。"""
+    declarations = re.findall(r"\babiFilters\s+([^\n]+)", body)
+    assert len(declarations) == 1, (
+        f"块内应恰好有一条 abiFilters 声明，实际 {len(declarations)} 条：{declarations}"
+    )
+    return re.findall(r'"([^"]+)"', declarations[0])
+
+
+def test_android_device_flavor_abi_is_arm64_only():
+    """正式 device 渠道的 abiFilters 只允许 arm64-v8a（x86_64 会撑大正式包）。
+
+    这条闸拦的是「为了模拟器顺手把 x86_64 塞进 device」：spaCy 原生栈按 ABI
+    各占 21–29MB，双 ABI 的 debug APK 2026-11-04 实测 87.87 MiB。
+    """
+    text = _read_guard_file(ANDROID_GRADLE)
+    default_config = _gradle_block(text, r"\bdefaultConfig\s*\{")
+    assert not re.search(r"\babiFilters\s+\"", default_config), (
+        "abiFilters 不得留在 defaultConfig：它会被所有 flavor 继承，"
+        "x86_64 会渗进 device。请下移到 productFlavors 各自声明。"
+    )
+    assert "productFlavors" in text, (
+        "ABI 必须按 product flavor 声明：Chaquopy 的 getAbis 只读 defaultConfig 与 "
+        "productFlavors，完全不看 buildType，放在 buildType 会直接构建失败。"
+    )
+
+    device_abis = _abi_filters(_flavor_body("device"))
+    assert device_abis == ["arm64-v8a"], (
+        f"device 的 abiFilters 只允许 ['arm64-v8a']，实际 {device_abis}。"
+        "x86_64 属模拟器渠道，不许进正式包。"
+    )
+
+    release_body = _build_type_body("release")
+    assert not re.search(r"\babiFilters\s+\"", release_body), (
+        "release buildType 不得声明 abiFilters：Chaquopy 不读 buildType，"
+        "这里写了也无效，只会让人误以为 ABI 被改过。"
+    )
+    assert "variantBuilder.enable = false" in text, (
+        "必须禁用 emulatorRelease，否则 assembleRelease 也会产出模拟器包，"
+        "发版产物集合不再只有一个正式 APK。"
+    )
+
+
+def test_android_emulator_flavor_abi_includes_x86_64():
+    """emulator 渠道必须同时含 arm64-v8a 与 x86_64，且与正式包可共存。"""
+    body = _flavor_body("emulator")
+    emulator_abis = _abi_filters(body)
+    assert "x86_64" in emulator_abis, f"emulator 必须含 x86_64，实际 {emulator_abis}"
+    assert "arm64-v8a" in emulator_abis, f"emulator 应保留 arm64-v8a，实际 {emulator_abis}"
+    assert 'applicationIdSuffix ".emulator"' in body, (
+        "emulator 必须用 applicationIdSuffix 与正式包区分，否则无法并存安装"
+    )
+
+
+def test_emulator_workflow_is_isolated_from_release():
+    """模拟器 APK 必须有独立构建入口，且绝不复用 release 的产物路径/命名。"""
+    path = REPO_ROOT / ".github" / "workflows" / "android-emulator.yml"
+    if not path.exists():
+        pytest.fail(f"缺少模拟器构建 workflow：{path}（模拟器变体将无法产出 APK）")
+    workflow = path.read_text(encoding="utf-8")
+    assert "workflow_dispatch" in workflow, "模拟器构建必须手动触发，不得进 tag 发版链路"
+    assert "tags:" not in workflow and "push:" not in workflow, (
+        "模拟器构建不得挂 push / tag 触发：它会把 runner 分钟数烧在非发版场景"
+    )
+    assert "assembleEmulator" in workflow, "必须构建 emulator 变体（assembleEmulator）"
+    assert "DeLector-emulator-apk" in workflow, "产物 artifact 必须用模拟器专属名称"
+    assert "dist/DeLector-" not in workflow, (
+        "模拟器构建不得写 dist/DeLector-*：那些路径属发版产物，混用会让 release 抓错包"
+    )
+
 
 # pydantic v2 才有、v1 没有的名字：导入 / 装饰器 / 类属性 / 方法调用命中即 v1 下必炸。
 _PYDANTIC_V2_ONLY = {
@@ -574,6 +784,87 @@ def test_ci_job_has_bounded_timeout() -> None:
         f"jobs.ci 的 timeout-minutes = {minutes}，超过上界 {MAX_CI_JOB_TIMEOUT_MINUTES}：\n"
         "写成 3600 之类的大值等于没设护栏（比 Actions 默认的 360 分钟还宽）。"
         "\n修法：改回 15；确需更长时先查清是哪一步变慢，而不是把闸门整体放开。"
+    )
+
+
+# ── Windows Smoke「真启闸」步骤级超时（2026-11-04 hang 取证后收窄）─────────────
+# 背景：2026-11-04 run 41833602180 attempt 1 的 smoke job 卡在 Verify 步 30 分钟被
+# job 级 timeout 取消，且该 job 日志 GitHub 未保留（API 404）。脚本内部所有等待都有
+# 硬上限（健康 120s / 终止 10s / 端口 10s / 硬杀 15s），最坏路径约 6 分钟；正常
+# 实测仅 27s。10 分钟 ≈ 最坏路径的 1.7 倍 —— 是**判据线**，不是护栏。
+#
+# job 级 30 分钟 MUST 保留：它是兜底护栏，两者并存。守卫必须同时钉住「步骤级存在且
+# ≤10」和「job 级仍是 30」，防止有人只留 job 级、把判据退化成护栏式宽值。
+
+MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES = 10
+SMOKE_JOB_TIMEOUT_MINUTES = 30
+
+
+def _smoke_verify_step_block() -> str:
+    """截出 `windows-portable-smoke` 中 `Verify Windows Portable` 步骤的 YAML 块。
+
+    按缩进切分：步骤从 6 空格的 `- name:` 起，到下一个 6 空格的 `- ` 或 job 块末尾。
+    这样 `timeout-minutes` 必须写在该步骤自己身上才算数（job 级 4 空格的同名字段不匹配）。
+    """
+    lines = _ci_job_block("windows-portable-smoke").splitlines()
+    try:
+        start = next(
+            i
+            for i, line in enumerate(lines)
+            if line.lstrip().startswith("- name:") and "Verify Windows Portable" in line
+        )
+    except StopIteration:
+        pytest.fail(
+            f"{CI_WORKFLOW} 的 windows-portable-smoke 找不到 `Verify Windows Portable` 步骤：\n"
+            "该步骤真启打包产物并验包，是 Windows 打包面的最后一道闸；删掉它等于去掉真启验包。"
+            "\n修法：恢复该步骤，并在其下加 `timeout-minutes: "
+            f"{MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}`。"
+        )
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("      - "):
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_windows_smoke_verify_step_has_bounded_timeout() -> None:
+    """真启闸必须有步骤级 timeout ≤10，且 job 级 30 分钟护栏仍在。"""
+    step = _smoke_verify_step_block()
+    assert "python tools/verify_windows_portable.py" in step, (
+        "匹配到的 Verify 步骤里没有 `python tools/verify_windows_portable.py`，"
+        "守卫可能截错了块；请检查步骤名或 run 命令是否被改写。"
+    )
+
+    match = re.search(r"^\s{8}timeout-minutes:\s*(\d+)\s*$", step, re.MULTILINE)
+    assert match, (
+        f"{CI_WORKFLOW} 的 `Verify Windows Portable` 步骤没有步骤级 timeout-minutes：\n"
+        "缺少它时，一次静默卡死会一路烧到 job 级护栏 30 分钟才失败，"
+        "且被取消的 job 日志可能整份丢失（2026-11-04 已发生），事后无法定位。"
+        f"\n修法：给该步骤加 `timeout-minutes: {MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}`"
+        "（正常实测 27s、脚本内最坏约 6 分钟，10 分钟约为最坏路径的 1.7 倍）。"
+    )
+
+    minutes = int(match.group(1))
+    assert 0 < minutes <= MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES, (
+        f"`Verify Windows Portable` 的步骤级 timeout-minutes = {minutes}，"
+        f"超过判据上界 {MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}：\n"
+        "写成接近 job 级 30 的值等于把判据退化成护栏，静默卡死仍会烧满。"
+        "\n修法：回到 10；确需更长时先拿分段实测证明慢在哪，而不是放宽判据。"
+    )
+
+    job_match = re.search(r"^    timeout-minutes:\s*(\d+)\s*$", _ci_job_block("windows-portable-smoke"), re.MULTILINE)
+    assert job_match, (
+        "windows-portable-smoke 的 job 级 timeout-minutes 被删掉了：\n"
+        "步骤级 10 分钟是判据，job 级 30 分钟是兜底护栏，二者必须并存；"
+        "只留步骤级时，一旦有更早的步骤卡死就没有最后一道上界。"
+    )
+    assert int(job_match.group(1)) == SMOKE_JOB_TIMEOUT_MINUTES, (
+        f"windows-portable-smoke 的 job 级 timeout-minutes = {job_match.group(1)}，"
+        f"期望 {SMOKE_JOB_TIMEOUT_MINUTES}：\n"
+        "job 级只作护栏，不应被步骤级判据顶替或放宽；"
+        "若确要改它，先改本守卫与 ci-speed-budget.md 的书面依据。"
     )
 
 
@@ -1151,6 +1442,56 @@ def test_frontend_tsc_gate_pins_fixed_version_in_ci() -> None:
     assert not any("latest" in s for s in tsc_steps), "tsc 步不得用 typescript@latest（不可复现）。"
 
 
+# ── 前端探针去重守卫（2026-11-05，TODO-CI-04）─────────────────────────────────
+# 背景：4 条前端探针（路由契约 / index 同步 / 分层不变式 / tsc）原在 matrix 公共 steps，
+# 6 个 pytest 分片各跑一遍。它们与分片用例集合无关，属纯重复：`cost-guards` 实测为此
+# 多花 5s（直接落在关键路径上），六份累计约 30s。2026-11 收敛为只在一个分片执行。
+#
+# 注意 Node 安装**不能**一起去重：`conftest.py::pytest_sessionstart` 在 CI 下要求**每个**
+# pytest job 都有 node（缺了直接 exit 1），故 setup-node 留在公共 steps。
+FRONTEND_GATE_STEP_NAMES = (
+    "Frontend API contract gate (routes)",
+    "Frontend index.html template sync gate",
+    "Frontend layer invariants gate",
+    "Frontend API-boundary type gate (tsc)",
+)
+
+
+def test_frontend_gates_run_in_exactly_one_shard() -> None:
+    """4 条前端探针必须只在一个分片执行，宿主分片真实存在且不是 cost 专项分片。"""
+    steps = _ci_step_blocks()
+    hosts: set[str] = set()
+
+    for name in FRONTEND_GATE_STEP_NAMES:
+        assert name in steps, (
+            f"{CI_WORKFLOW} 缺少前端探针步骤 {name!r}：真实检查被删，不得用提速名义砍掉"
+        )
+        match = re.search(
+            r"^\s*if:\s*matrix\.suite\.name\s*==\s*'([^']+)'\s*$",
+            steps[name],
+            re.MULTILINE,
+        )
+        assert match, (
+            f"{name!r} 没有 `if: matrix.suite.name == '<分片>'` 守卫："
+            "前端探针会重新落到六个分片各跑一遍（实测六份累计约 30s，"
+            "其中 cost-guards 的 5s 直接压在关键路径上）"
+        )
+        hosts.add(match.group(1))
+
+    assert len(hosts) == 1, f"4 条前端探针必须挂同一个分片，实际: {sorted(hosts)}"
+
+    host = next(iter(hosts))
+    matrix_names = re.findall(r"^\s*- name:\s*(\S+)\s*$", _ci_job_block("ci"), re.MULTILINE)
+    assert host in matrix_names, (
+        f"前端探针宿主分片 {host!r} 不在 matrix 里（现有: {matrix_names}）："
+        "条件永远为假，4 条探针会静默不跑（死绿比慢更坏）"
+    )
+    assert host not in COST_GUARD_SHARDS, (
+        f"前端探针宿主分片 {host!r} 是 cost 专项分片：会把无关步骤塞回计时关键路径，"
+        "抵消本轮拆分收益"
+    )
+
+
 def _skip_to_line_end(text: str, i: int) -> int:
     """i 指向行注释的 `/`，返回行尾（换行符）下标。"""
     while i < len(text) and text[i] != "\n":
@@ -1650,6 +1991,106 @@ def test_restore_req_declares_every_backup_table() -> None:
     )
 
 
+def test_backup_column_lists_cover_schema_columns(tmp_path: Path) -> None:
+    """列级守卫：备份列清单 MUST 覆盖**建表 DDL 的每一列**（主库 + progress 库）。
+
+    上一节只比对**表集合**——表在清单里、列漏了照样全绿。articles.stats_json
+    （P1-6 列表投影列，schema.py 建表 DDL 内）就是这样漏出清单的：
+    `_replace_tables` 按清单 DELETE + INSERT ⇒ 还原后该列**永久 NULL**，
+    列表接口的 COALESCE 只是把 NULL 读成默认值，掩盖了性能回退（数据是真丢）。
+
+    判据现读 `PRAGMA table_info`（不手抄列名），与既有守卫同一纪律：清单随功能增长，
+    手抄的列集合永远滞后一步。反向也守（清单独有、DDL 没有的列会在还原时 INSERT 报错）。
+    """
+    import sqlite3
+
+    from delector.core.database import _BACKUP_TABLES, _PROGRESS_TABLES
+
+    db_path, progress_path = _fresh_db_pair(tmp_path, "cols")
+    problems: list[str] = []
+    for label, path, spec in (
+        ("main", db_path, _BACKUP_TABLES),
+        ("progress", progress_path, _PROGRESS_TABLES),
+    ):
+        conn = sqlite3.connect(path)
+        try:
+            for name, (cols, _defaults) in spec.items():
+                actual = [r[1] for r in conn.execute(f"PRAGMA table_info({name})").fetchall()]
+                missing = sorted(set(actual) - set(cols))
+                unknown = sorted(set(cols) - set(actual))
+                if missing:
+                    problems.append(f"{label}/{name} 备份列清单漏列：{missing}")
+                if unknown:
+                    problems.append(f"{label}/{name} 备份列清单含建表 DDL 中不存在的列：{unknown}")
+        finally:
+            conn.close()
+
+    assert problems == [], (
+        "备份列清单与建表 DDL 不一致（还原按清单 DELETE + INSERT ⇒ 漏列的值会永久变 NULL/默认值，"
+        "接口仍返回 ok，用户零提示）：\n  " + "\n  ".join(problems) + "\n"
+        "修法：把缺的列补进 _BACKUP_TABLES / _PROGRESS_TABLES 的列元组与 defaults，"
+        "而不是删掉本守卫。"
+    )
+
+
+def test_backup_restore_roundtrip_keeps_articles_stats_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """articles.stats_json 必须逐字度过「导出 →（RestoreReq 过滤）→ 还原」往返。
+
+    导出侧用 `SELECT *`，所以 stats_json 会进 payload；坏在还原侧按固定列清单
+    DELETE + INSERT ⇒ 不在清单里的列被丢弃、还原后为 NULL。本用例走真实链路
+    （build_backup_payload + RestoreReq + _replace_tables），在临时库里真跑。
+    """
+    from delector.core.database import _BACKUP_TABLES, _replace_tables, build_backup_payload, get_db
+    from delector.routes.main import RestoreReq
+
+    stats_value = '{"words": 3, "sentences": 1}'
+
+    src, progress_src = _fresh_db_pair(tmp_path, "src")
+    _pin_db_env(monkeypatch, src, progress_src)
+    conn = get_db(src)
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO articles (title, raw_text, processed_json, stats_json, source_url) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Stats 往返", "Ein kurzer Satz.", '{"stats": {"words": 3}}', stats_value, ""),
+            )
+    finally:
+        conn.close()
+
+    exported = build_backup_payload()
+    exported_row = next(r for r in exported["articles"] if r["title"] == "Stats 往返")
+    assert exported_row["stats_json"] == stats_value, (
+        "前置：导出侧没带 stats_json，本用例守的对象不对（先修 build_backup_payload 的读取列）"
+    )
+
+    # 换机/重装：还原进全新的空库
+    dst, progress_dst = _fresh_db_pair(tmp_path, "dst")
+    _pin_db_env(monkeypatch, dst, progress_dst)
+    req = RestoreReq(**exported)
+    payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+
+    conn = get_db(dst)
+    try:
+        with conn:
+            _replace_tables(conn, _BACKUP_TABLES, payload)
+    finally:
+        conn.close()
+
+    conn = get_db(dst)
+    try:
+        after = dict(conn.execute("SELECT * FROM articles WHERE title = 'Stats 往返'").fetchone())
+    finally:
+        conn.close()
+    assert after["stats_json"] == stats_value, (
+        f"articles.stats_json 往返后被丢弃：还原前 {stats_value!r}，还原后 {after['stats_json']!r}\n"
+        "这是 _BACKUP_TABLES['articles'] 的列清单缺 stats_json ⇒ _replace_tables 不写该列。\n"
+        "修法：把 stats_json 补进列清单（defaults 置 None 以兼容旧备份）。"
+    )
+
+
 # ── master 直推范围机械闸（P1-1：分支纪律此前没有机械闸）─────────────────────────
 # 背景：docs/reviews/2026-10-16-commit-rhythm-and-git-management-audit.md P1-1 ——
 # 2026-10-09~14 有 25 个 feat/fix/ci/test/perf 提交直推 master（含生产代码与 CI 定义），
@@ -2024,3 +2465,232 @@ def test_ci_workflow_has_master_direct_push_scope_job() -> None:
         "job 的 checkout 未取全历史：before 基线不在本地对象库 ⇒ git 取不到范围"
         "（与 master push 红事故同因）"
     )
+
+
+# ── pytest 分片完整性/配平守卫（2026-11-04，关键路径压缩）────────────────────────
+# 背景：旧 matrix 写 `tests/test_[a-c]*.py --ignore=...`。bash 会先把 glob 展开成
+# **显式文件路径**，而 pytest 的 `--ignore` 只作用于目录递归 ⇒ 被 ignore 的文件照跑。
+# 实测（run 41793803081）unit-1 因此 721 passed（按意图应为 608），unit-2 / unit-4
+# 同样重复执行 cost/integration 子集：分片既不完整也不互斥，还白烧 runner 时间。
+# 现分片成员集中在 tools/ci_shards.py（唯一事实来源），下面四条钉住：
+#   ① 全部 tests/test_*.py 恰好出现在一个分片（新增文件必须显式归位）；
+#   ② 专项分片（cost-guards / integration-heavy）不被普通分片重复收录；
+#   ③ 四个 unit 分片按实测时长配平（unit-2 另扣静态门禁 14s）；
+#   ④ workflow 不得退回 glob + --ignore 写法（那是本轮要修的根因）。
+
+CI_SHARDS_TOOL = REPO_ROOT / "tools" / "ci_shards.py"
+CI_SHARD_WEIGHTS = REPO_ROOT / "tools" / "ci_shard_weights.json"
+
+COST_GUARD_TESTS = frozenset(
+    {
+        "tests/test_articles_list_cost.py",
+        "tests/test_cards_endpoint_cost.py",
+        "tests/test_cold_start_cost.py",
+    }
+)
+INTEGRATION_TESTS = frozenset(
+    {
+        "tests/test_bench_judge_gaming.py",
+        "tests/test_frontend_layers.py",
+        "tests/test_server.py",
+        "tests/test_server_settings_security.py",
+        "tests/test_syntax_hard_api.py",
+    }
+)
+# cost 专项分片拆成两个独立 runner（TODO-CI-04）：每个分片仍只含 cost 文件，
+# 没有 xdist、也不与普通测试共享进程。两个分片的并集必须恰好覆盖 COST_GUARD_TESTS。
+COST_GUARD_SHARDS = ("cost-guards", "cost-cold-start")
+UNIT_SHARDS = ("unit-1", "unit-2", "unit-3", "unit-4")
+# unit-2 额外执行 6 个 Ruff/mypy 步骤；PR #210 实测约 14s（六步合计）
+STATIC_GATE_STEP_SECONDS = 14.0
+
+
+def _load_shard_plan() -> Any:
+    """按文件路径加载 tools/ci_shards.py（tools 不是包，避免依赖 sys.path 形状）。"""
+    spec = importlib.util.spec_from_file_location("ci_shards_plan", CI_SHARDS_TOOL)
+    assert spec is not None and spec.loader is not None, f"无法加载分片计划：{CI_SHARDS_TOOL}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ci_shards_partition_every_test_file_exactly_once() -> None:
+    """全部 tests/test_*.py 必须恰好被一个分片收录；matrix 名称与计划一致。"""
+    plan = _load_shard_plan()
+    all_tests = {p.relative_to(REPO_ROOT).as_posix() for p in REPO_ROOT.glob("tests/test_*.py")}
+
+    counts: Counter[str] = Counter()
+    for shard in plan.SHARDS:
+        for test_file in plan.resolve_shard(shard):
+            counts[test_file] += 1
+
+    duplicated = sorted(f for f, n in counts.items() if n > 1)
+    missing = sorted(all_tests - set(counts))
+    unknown = sorted(set(counts) - all_tests)
+    assert not duplicated, (
+        "以下测试文件被多个分片重复执行（runner 时间翻倍且互相掩盖失败）：\n"
+        + "\n".join(duplicated)
+    )
+    assert not missing, (
+        "以下测试文件没有被任何分片执行（漏测）：\n"
+        + "\n".join(missing)
+        + "\n新增 tests/test_*.py 后，请把它加入 tools/ci_shards.py 的对应分片。"
+    )
+    assert not unknown, (
+        "分片计划列出了不存在的测试文件：\n" + "\n".join(unknown)
+    )
+
+    matrix_names = re.findall(r"^\s*- name:\s*(\S+)\s*$", _ci_job_block("ci"), re.MULTILINE)
+    assert set(matrix_names) == set(plan.SHARDS), (
+        "ci.yml 的 matrix 分片名与 tools/ci_shards.py 不一致："
+        f"matrix={sorted(matrix_names)}，plan={sorted(plan.SHARDS)}"
+    )
+
+
+def test_ci_shards_keep_dedicated_suites_isolated() -> None:
+    """cost 专项分片（2 个）/ integration-heavy 的成员必须独占，不能被普通分片重复收录。"""
+    plan = _load_shard_plan()
+
+    missing_cost_shards = sorted(set(COST_GUARD_SHARDS) - set(plan.SHARDS))
+    assert not missing_cost_shards, (
+        f"缺少 cost 专项分片 {missing_cost_shards}：cost 门禁被并回普通分片（或分片被删），"
+        "计时断言会与无关测试共享进程。修法：在 tools/ci_shards.py 恢复 "
+        f"{sorted(COST_GUARD_SHARDS)} 两个分片。"
+    )
+    cost_union: set[str] = set()
+    for shard in COST_GUARD_SHARDS:
+        members = set(plan.resolve_shard(shard))
+        assert members, f"{shard} 分片为空：cost 门禁会静默消失"
+        non_cost = sorted(members - COST_GUARD_TESTS)
+        assert not non_cost, (
+            f"{shard} 混入了非 cost 文件 {non_cost}：计时断言必须留在**只含 cost 文件**"
+            "的专项分片里，不得与普通测试共享进程"
+        )
+        cost_union |= members
+    assert cost_union == COST_GUARD_TESTS, (
+        "两个 cost 分片的并集必须恰好覆盖 " + "、".join(sorted(COST_GUARD_TESTS))
+        + f"，实际覆盖 {sorted(cost_union)}（重复或漏项都会让成本门禁失真）"
+    )
+    assert set(plan.resolve_shard("integration-heavy")) == INTEGRATION_TESTS, (
+        "integration-heavy 分片的成员被改动：它必须恰好覆盖 " + "、".join(sorted(INTEGRATION_TESTS))
+    )
+    for shard in UNIT_SHARDS:
+        overlap = set(plan.resolve_shard(shard)) & (COST_GUARD_TESTS | INTEGRATION_TESTS)
+        assert not overlap, (
+            f"{shard} 重复收录了专项分片的用例 {sorted(overlap)}："
+            "这会让慢用例跑两遍，把该分片重新顶成关键路径"
+        )
+
+
+def test_ci_shards_are_balanced_by_measured_duration() -> None:
+    """四个 unit 分片的实测时长（含 unit-2 静态门禁）必须落在均值 ±25% 内。"""
+    plan = _load_shard_plan()
+    weights = json.loads(CI_SHARD_WEIGHTS.read_text(encoding="utf-8"))
+
+    effective = {}
+    for shard in UNIT_SHARDS:
+        total = sum(weights.get(f, 0.1) for f in plan.resolve_shard(shard))
+        if shard == "unit-2":
+            total += STATIC_GATE_STEP_SECONDS
+        effective[shard] = total
+
+    mean = sum(effective.values()) / len(effective)
+    low, high = mean * 0.75, mean * 1.25
+    outliers = {s: round(v, 1) for s, v in effective.items() if not (low <= v <= high)}
+    assert not outliers, (
+        "unit 分片负载失衡（单位：本机实测秒，unit-2 已加静态门禁 "
+        f"{STATIC_GATE_STEP_SECONDS:g}s）：{outliers}；均值 {mean:.1f}s，允许 "
+        f"{low:.1f}–{high:.1f}s。请按实测时长重新分配 tools/ci_shards.py，"
+        "并更新 tools/ci_shard_weights.json。"
+    )
+
+
+def test_ci_workflow_runs_explicit_shard_plan() -> None:
+    """ci.yml 必须调用分片计划；不得退回 glob + `--ignore`（根因是 --ignore 对显式文件无效）。"""
+    text = _read_guard_file(CI_WORKFLOW)
+
+    assert "tools/ci_shards.py" in text, "ci.yml 未调用 tools/ci_shards.py 的分片计划"
+    assert "${{ matrix.suite.args }}" not in text, "ci.yml 仍在用 matrix.suite.args（应改用显式清单）"
+    assert "tests/test_[a-c]*.py" not in text, (
+        "ci.yml 出现了 glob 分片写法：bash 展开后 `--ignore` 对显式文件无效，"
+        "会重新引入重复执行（旧 unit-1 实测 721 passed，意图 608）"
+    )
+    assert "pytest -q $(python tools/ci_shards.py ${{ matrix.suite.name }})" in text, (
+        "pytest 步骤必须按 matrix.suite.name 取显式清单"
+    )
+
+
+# ── Android 本机配置隔离（2026-11-04）─────────────────────────────────────────
+# 背景：`android/app/build.gradle` 一度被写死本机 Python 的 Windows 绝对路径
+# （C:\Users\...\python.exe）。ci.yml 里没有 gradle 步骤 ⇒ PR 全绿；但
+# build-release.yml 与 android-emulator.yml 的 Ubuntu runner 不存在该路径，
+# 于是"PR 绿、发版日炸"。本机解释器改放 android/local.properties 的可选键
+# python.buildPython（该文件已被 .gitignore 忽略，不会入库）。
+
+ANDROID_APP_BUILD_GRADLE = REPO_ROOT / "android" / "app" / "build.gradle"
+ROOT_GITIGNORE = REPO_ROOT / ".gitignore"
+
+# 同时用真实 git 语义校验忽略规则：文件不存在时 check-ignore 仍按规则匹配。
+LOCAL_ONLY_ANDROID_PATHS = (
+    "android/local.properties",
+    "android/.idea/gradle.xml",
+)
+
+# 盘符绝对路径：C:\Users\... 或 D:/Android/... 之类。前置断言排除 https://
+# 这类带字母前缀的伪匹配（"s:/" 前是字母，不入选）。
+_DRIVE_ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
+
+
+def test_android_build_gradle_has_no_machine_absolute_paths() -> None:
+    """build.gradle 不得含任何机器绝对路径，buildPython 也不得写字符串字面量。"""
+    text = _read_guard_file(ANDROID_APP_BUILD_GRADLE)
+
+    offenders = [
+        f"{lineno}: {line.strip()}"
+        for lineno, line in enumerate(text.splitlines(), 1)
+        if _DRIVE_ABSOLUTE_PATH.search(line)
+    ]
+    assert not offenders, (
+        "android/app/build.gradle 出现机器绝对路径（盘符路径）：\n"
+        + "\n".join(offenders)
+        + "\nUbuntu runner 上不存在该路径，build-release.yml / android-emulator.yml 的 "
+        "gradle 构建会失败，而 ci.yml 不含 gradle 步骤 ⇒ PR 仍然全绿。"
+        "本机解释器请写进 android/local.properties 的 python.buildPython 键。"
+    )
+
+    # 即便路径不是盘符形式，buildPython 也不许写字符串字面量：
+    # 只能来自 local.properties 的变量，否则换一台机器就不可复现。
+    assert not re.search(r"buildPython\s+[\"']", text), (
+        "android/app/build.gradle 的 buildPython 写成了字符串字面量；"
+        "它必须来自 android/local.properties 的 python.buildPython 键（文件缺失时保持不设置）。"
+    )
+
+
+def test_local_only_android_files_are_gitignored() -> None:
+    """.idea/、local.properties、*.iml 必须被根 .gitignore 忽略（含 git 语义复核）。"""
+    text = _read_guard_file(ROOT_GITIGNORE)
+    rules = {
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+    required = {"android/.idea/", "android/local.properties", "*.iml"}
+    missing = required - rules
+    assert not missing, (
+        f".gitignore 缺少本机专属 Android 文件的忽略规则：{sorted(missing)}。"
+        "android/local.properties 含 sdk.dir 绝对路径、android/.idea/ 是 IDE 本地状态，"
+        "一次 `git add -A` 就会把它们提交进历史。"
+    )
+
+    for path in LOCAL_ONLY_ANDROID_PATHS:
+        result = subprocess.run(
+            ["git", "check-ignore", "--no-index", "-q", path],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, (
+            f"git check-ignore 判定 {path} 未被忽略（exit {result.returncode}）："
+            "本机 SDK 绝对路径 / IDE 状态会被误提交。"
+        )

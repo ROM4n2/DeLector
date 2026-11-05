@@ -436,7 +436,7 @@ def test_spacy_status_reports_live_error_on_pure_path(client, monkeypatch):
     from delector.nlp_engine import syntax_tree
 
     monkeypatch.setattr(syntax_hard, "get_spacy_nlp", lambda: None)
-    syntax_tree._spacy_load_error = "md: OSError: [E050] Can't find model 'de_core_news_md'"
+    syntax_tree._spacy_load_error = "de_core_news_sm: OSError: [E050] Can't find model 'de_core_news_sm'"
     try:
         res = client.get("/api/syntax/spacy-status")
         data = res.json()

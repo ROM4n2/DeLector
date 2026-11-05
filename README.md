@@ -32,10 +32,11 @@
 **开发者 / 源码运行**：
 
 ```bash
-pip install -r requirements.txt          # 安装 Python 依赖（推荐 Python 3.11）
-python -m spacy download de_core_news_md # 下载德语 NLP 模型
-python start.py                          # 一键启动并自动打开浏览器 http://localhost:8000
-python desktop.py                        # Windows 桌面壳（原生窗口 + 托盘 + 启动 splash）
+uv venv --python 3.11                    # 创建项目级 .venv（依赖不再装进全局解释器）
+uv pip install -r requirements.lock.txt  # 按锁定清单安装依赖（含桌面壳依赖）
+uv run --no-project python -m spacy download de_core_news_sm  # 德语 NLP 模型（唯一档位；缺省自动下载 sm）
+uv run --no-project python start.py      # 一键启动并自动打开浏览器 http://localhost:8000
+uv run --no-project python desktop.py    # Windows 桌面壳（原生窗口 + 托盘 + 启动 splash）
 docker compose up -d --build             # 或 Docker 容器化一键部署
 ```
 
@@ -104,7 +105,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 | 领域             | 核心技术                                   | 说明                                                                                |
 | :--------------- | :----------------------------------------- | :---------------------------------------------------------------------------------- |
 | **后端框架**     | `FastAPI` + `Uvicorn`                      | 异步高性能 REST API                                                                 |
-| **自然语言处理** | `spaCy` (`de_core_news_md` / `sm`)         | 本地高精德语分词、词性标注、形态分析与五场域句法依存                                |
+| **自然语言处理** | `spaCy` (`de_core_news_sm`)                | 本地高精德语分词、词性标注、形态分析与五场域句法依存                                |
 | **形态学引擎**   | `delector/nlp_engine/linguistics.py`                  | 556+ 不规则动词三态表 + 复合词动态规划递归拆解                                      |
 | **拓扑句法树**   | `delector/nlp_engine/syntax_tree.py`                  | Vorfeld/LK/MF/RK/NF 五场域切分 + 5 大从句 AST 抽象语法树                            |
 | **持久化存储**   | `SQLite 3` (`delector.db` + `progress.db`) | 核心文库与时序台账双库解耦存储                                                      |

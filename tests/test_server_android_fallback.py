@@ -118,13 +118,8 @@ def test_android_never_downloads_model_at_import():
     assert "ENGINE=pure_python" in out
 
 
-def test_spacy_model_candidates_prefer_md():
-    """README 与 Dockerfile 都装 md（带词向量、标注更准），sm 只是兜底。"""
-    from delector.nlp_engine import processor as nlp
-
-    assert nlp.SPACY_MODEL_CANDIDATES == ("de_core_news_md", "de_core_news_sm")
-    # 自动下载走小模型：md 约 45MB，首启动拉它太慢
-    assert nlp.AUTO_DOWNLOAD_MODEL == "de_core_news_sm"
+# 模型档位契约已移到 tests/test_nlp_model_sm_only.py（ADR-0027：只支持 sm），
+# 避免同一口径在两个文件各钉一份。
 
 
 def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
@@ -231,8 +226,11 @@ def test_release_workflow_gates_apk_signature():
     """
     workflow = open(os.path.join(ROOT, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
     assert "keytool -printcert -jarfile" in workflow, "缺少 APK 证书指纹断言"
-    assert "app/build/outputs/apk/debug/app-debug.apk" in workflow, (
-        "APK 路径必须写死到 debug 变体，find *.apk 会随机抓到别的变体"
+    assert "app/build/outputs/apk/device/debug/app-device-debug.apk" in workflow, (
+        "APK 路径必须写死到 device flavor + debug 变体，find *.apk 会随机抓到 emulator 变体"
+    )
+    assert "apk/emulator/" not in workflow, (
+        "发版 workflow 不得引用 emulator 变体路径：会抓错包，把带 x86_64 的模拟器包发出去"
     )
     assert 'find android/app/build/outputs/apk/ -name "*.apk"' not in workflow
     assert "$RUNNER_TEMP/delector-debug.jks" in workflow, "keystore 必须解到 $RUNNER_TEMP，不能落在工作树里"
@@ -260,7 +258,7 @@ def test_android_workflow_build_and_signature_contract():
     assert "java-version: '17'" in wf or 'java-version: "17"' in wf, "工作流必须保留 JDK 17"
     assert "setup-java" in wf, "工作流必须使用 setup-java"
     # Android 构建命令（复用已有 JDK/缓存/签名，不新增平行流程）
-    assert "gradle assembleDebug" in wf or "gradle assemble" in wf, "工作流必须执行 Gradle assemble 任务"
+    assert "gradle assembleDeviceDebug" in wf, "工作流必须只构建设备渠道（assembleDeviceDebug）"
     assert "Sync Python Backend, Model, and Assets into Android Project" in wf, "Gradle 构建必须在资产生成之后执行"
     # keytool 验签
     assert "keytool -printcert -jarfile" in wf, "缺少 keytool -printcert -jarfile 验签"

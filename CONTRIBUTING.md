@@ -22,15 +22,16 @@ git config core.hooksPath .githooks
 安装 Python 核心与开发依赖：
 
 ```bash
-pip install -r requirements.txt
-python -m spacy download de_core_news_md
+uv venv --python 3.11
+uv pip install -r requirements.lock.txt
+uv run --no-project python -m spacy download de_core_news_sm
 ```
 
 启动本地服务调试：
 
 ```bash
-python start.py    # 启动 Web 服务并自动打开浏览器
-python desktop.py  # 启动 Windows 原生桌面窗口 (需 pywebview)
+uv run --no-project python start.py    # 启动 Web 服务并自动打开浏览器
+uv run --no-project python desktop.py  # 启动 Windows 原生桌面窗口（pywebview 已含在 lock 中）
 ```
 
 ---
@@ -78,6 +79,8 @@ cd agent && go vet ./... && gofmt -l . && go test -race ./... && cd ..
 # 4. 全量 Python 测试 (必须单条串行，避免并发争用数据库守卫)
 python -m pytest tests/ -q
 ```
+
+CI 闸门本身的时长、并发、缓存与新增 job 门槛见 [CI 闸门速度与并发预算](docs/agents/ci-speed-budget.md)。不得为提速删除真实检查，只能消除重复执行与无效开销。
 
 ---
 
