@@ -400,3 +400,11 @@ TODO-CI-04 实施完成到未合并 PR #216（ci/cost-guards-split，head b1cbfb
 实测（口径分离）：Python 门禁关键路径中位 158s→108s（-32%）；cost-guards 中位 157s→93s，已非瓶颈（cost pytest 83s→64s + cold 28s）；新瓶颈是 unit 分片 77–108s。runner 累计中位 975.5s→1002s（+26s / +2.7%，cost 环境复制两份的代价，如实记录）。墙钟由 Windows Smoke 支配，不下结论。峰值并发 13→12。
 CI：run 41871021385 attempt 1–3 绿（样本）；终版 b1cbfb6 的 run 41876516460 pr checks 全 pass（含 Windows Smoke 3m34s）；Master Direct-Push Scope Gate 在 PR 上按设计跳过。中途两次失败（ruff F841、旧 job 名接线守卫）已修，属过程偏差。独立 reviewer APPROVED；两张 Yellow（时长注释口径、旧 job 名注释）已在 7650ddf / b1cbfb6 回修。该 run 的 cost-cold-start / unit-4 曾出现约 20 分钟 runner 侧停摆后自行恢复，与 TODO-CI-02 记录的 hang 同形态，未改代码。
 未验证/未做：PR 未合并，post-change push 样本缺失（只有 pre-change push 基线）；unit 分片波动成为新关键路径上限，本轮未处置。
+
+### 2026-11-05 11:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+S 级缺陷修复交付到未合并 PR #217（https://github.com/ROM4n2/DeLector/pull/217，fix/backup-articles-stats-json，head 502140c），按 test/fix 拆两个提交：ccc555f 守卫、502140c 修复。
+根因：`_BACKUP_TABLES["articles"]` 列清单缺 `stats_json`（schema.py 建表 DDL 内的 P1-6 列表投影列）。导出走 `SELECT *` 有值，还原按清单 DELETE + INSERT ⇒ 该列永久 NULL；列表接口 COALESCE 把 NULL 读成默认值，掩盖性能回退（数据真丢）。既有守卫只比对表集合、不比对列集合，故长期绿。
+改动：列元组补 stats_json + defaults=None（旧备份无键时回落，列表仍由 processed_json 兜底）；tests/test_ci_hardening.py 新增列级守卫（现读 PRAGMA table_info，主库+progress 库双向比对：漏列 / DDL 外列）与真实链路往返守卫（build_backup_payload→RestoreReq→_replace_tables，stats_json 逐字不变）。
+验证：RED 两条均按预期红（原文 `main/articles 备份列清单漏列：['stats_json']`、`还原前 '{"words": 3, "sentences": 1}'，还原后 None`）；具名变异两条真跑后还原（删清单列⇒列守卫红；仅还原侧剔除⇒往返红）；相关套件 120 passed、articles list 10 passed；PR CI run 41957646853 全 pass（Windows Smoke 按 paths 规则 skipping，Go/Secret/Static/六个 Python 分片均 pass）。
+未改 schema / 迁移 / schema 版本 / 备份文件格式 / 其他表语义。不选「改 schema 让迁移自愈」：迁移只在缺列时回填，还原时列已存在，根因在还原列清单。边界：DDL 新增列仍需手工登记进清单（守卫会红作为提示）；守卫不覆盖 defaults 语义与旧备份缺键的语义正确性。PR 未合并、无 tag。
