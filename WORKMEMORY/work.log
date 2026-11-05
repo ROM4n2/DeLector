@@ -408,3 +408,11 @@ S 级缺陷修复交付到未合并 PR #217（https://github.com/ROM4n2/DeLector
 改动：列元组补 stats_json + defaults=None（旧备份无键时回落，列表仍由 processed_json 兜底）；tests/test_ci_hardening.py 新增列级守卫（现读 PRAGMA table_info，主库+progress 库双向比对：漏列 / DDL 外列）与真实链路往返守卫（build_backup_payload→RestoreReq→_replace_tables，stats_json 逐字不变）。
 验证：RED 两条均按预期红（原文 `main/articles 备份列清单漏列：['stats_json']`、`还原前 '{"words": 3, "sentences": 1}'，还原后 None`）；具名变异两条真跑后还原（删清单列⇒列守卫红；仅还原侧剔除⇒往返红）；相关套件 120 passed、articles list 10 passed；PR CI run 41957646853 全 pass（Windows Smoke 按 paths 规则 skipping，Go/Secret/Static/六个 Python 分片均 pass）。
 未改 schema / 迁移 / schema 版本 / 备份文件格式 / 其他表语义。不选「改 schema 让迁移自愈」：迁移只在缺列时回填，还原时列已存在，根因在还原列清单。边界：DDL 新增列仍需手工登记进清单（守卫会红作为提示）；守卫不覆盖 defaults 语义与旧备份缺键的语义正确性。PR 未合并、无 tag。
+
+### 2026-11-05 11:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #217 已按 merge commit 合并（merge SHA b60a185，无冲突、无需 rebase）。dependabot #204/#205 仅验证不合：均 `gh pr update-branch` 到最新 master（#204 head d0d7a9b / run 41958514640 全 pass；#205 head 9eb8407 / run 41958519440 全 pass；Windows Smoke 因 requirements.txt 属 packaging-surface 而真跑并通过）。
+依赖一致性结论：requirements.lock.txt 已钉 pytest==9.2.0 / spacy==3.8.18（L56/L67），两 PR 只把声明下限抬到 >=3.8.18 / >=9.2.0，与锁文件精确版本一致，**锁文件无需改动**（锁是解析结果快照，非声明副本；CI 装 requirements.txt，锁仅本地/文档安装路径）。两 PR 各自单行、互不冲突；均未合并。
+--strict-markers + 恒真断言清理交付到未合并 PR #218（https://github.com/ROM4n2/DeLector/pull/218，test/strict-markers-and-tautology，基于 b60a185），提交 fe0980a（pyproject addopts）与 ae93af2（desktop 语义断言 + 恒真闸）。
+验证：启用后全量收集 2770（基线 2765，增长来自 #216/#217 新增用例），无未注册 marker；全量 2766 passed / 4 skipped / 502.24s。RED：恒真闸先红 2 处；GREEN：desktop_shell 25 + 闸 1 passed。变异：skipif→unregistered_probe 使收集失败；语义断言改回 `is not None` 使闸红 2 处，均还原。ruff 两文件 All checks passed。PR #218 head ae93af2 run 41960590624 全 pass（Windows Smoke 按 paths skipping）。
+边界：恒真闸只覆盖 test_desktop_shell.py 无消息的 `is not None` 形态；GUI 真窗口用例仍按设计跳过。PR #218 未合并、无 tag。

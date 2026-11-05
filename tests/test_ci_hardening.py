@@ -2694,3 +2694,33 @@ def test_local_only_android_files_are_gitignored() -> None:
             f"git check-ignore 判定 {path} 未被忽略（exit {result.returncode}）："
             "本机 SDK 绝对路径 / IDE 状态会被误提交。"
         )
+
+
+# ── 测试代码恒真断言机械闸（2026-11-05：`sys.stdout is not None` 恒真）────────────
+# pytest 的 capture 插件必然装入非 None 的流；无控制台场景由
+# `_run_with_missing_streams` 临时置 None 后，被测代码再绑定 devnull ⇒ `is not None`
+# 恒真，抓不到「收口后流仍是 None」或「被替换成别的文件对象」这类真实回归。
+# 本闸要求改为身份 / 语义断言（例：`sys.stdout.name == os.devnull`）。
+
+DESKTOP_SHELL_TESTS = REPO_ROOT / "tests" / "test_desktop_shell.py"
+
+#: 恒真形态：**无消息**的 `assert sys.stdout is not None` / `sys.stderr is not None`。
+#: 带消息的同形断言（如"收口后 stderr 必须已绑上"）是刻意的存在性检查，不算恒真。
+_TAUTOLOGICAL_STREAM_ASSERT = re.compile(
+    r"assert\s+sys\.(?:stdout|stderr)\s+is\s+not\s+None\s*$", re.MULTILINE
+)
+
+
+def test_desktop_shell_has_no_tautological_stream_assertions() -> None:
+    """tests/test_desktop_shell.py 不得出现「流非 None」恒真断言。
+
+    判据是**现读源码**的正则扫描；改钉语义断言后本闸转绿，把断言改回恒真即转红。
+    """
+    src = _read_guard_file(DESKTOP_SHELL_TESTS)
+    offenders = _TAUTOLOGICAL_STREAM_ASSERT.findall(src)
+    assert offenders == [], (
+        f"{DESKTOP_SHELL_TESTS.name} 出现 {len(offenders)} 处恒真断言 "
+        "`assert sys.stdout/stderr is not None`：pytest capture 下恒真，对回归零区分度。\n"
+        "修法：改钉对象身份（`is original_out`）或语义（`sys.stdout.name == os.devnull`），"
+        "而不是改回恒真写法。"
+    )
