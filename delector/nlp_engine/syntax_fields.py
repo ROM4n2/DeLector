@@ -114,3 +114,102 @@ def detect_clause_type(
 
     return is_infinitiv, is_subordinate, connector_tokens
 
+
+def allocate_infinitiv_fields(
+    tokens: List[Token], connector_tokens: List[Token]
+) -> Tuple[str, List[Token], List[Token], List[Token], List[Token], List[Token], str]:
+    mf_tokens: List[Token] = []
+    nf_tokens: List[Token] = []
+    # === 1. INFINITIVGRUPPE ===
+    sentence_type = "Infinitiv"
+    vf_tokens = []
+    lk_tokens = connector_tokens
+
+    rk_candidates = [
+        t
+        for t in tokens
+        if t.tag_ in ("PTKZU", "VVINF", "VAINF", "VMINF", "VVIZU") or t.dep_ == "pm" or t.text.lower() == "zu"
+    ]
+    rk_candidates = sorted(rk_candidates, key=lambda x: x.i)
+
+    if rk_candidates:
+        rk_first_id = rk_candidates[0].i
+        rk_last_id = rk_candidates[-1].i
+        rk_tokens = [
+            t
+            for t in tokens
+            if rk_first_id <= t.i <= rk_last_id and (t in rk_candidates or t.pos_ in ("VERB", "AUX", "PART"))
+        ]
+    else:
+        rk_tokens = []
+
+    lk_ids = {t.i for t in lk_tokens}
+    rk_ids = {t.i for t in rk_tokens}
+    min_rk_id = min(rk_ids) if rk_ids else len(tokens)
+    max_rk_id = max(rk_ids) if rk_ids else -1
+
+    for t in tokens:
+        if t.i in lk_ids or t.i in rk_ids:
+            continue
+        if t.i < min_rk_id:
+            if t.i not in lk_ids:
+                mf_tokens.append(t)
+        elif t.i > max_rk_id:
+            nf_tokens.append(t)
+
+    bracket_desc = "Infinitiv-Klammer (zu + Infinitiv)"
+
+    return sentence_type, vf_tokens, lk_tokens, mf_tokens, rk_tokens, nf_tokens, bracket_desc
+
+
+def allocate_subordinate_fields(
+    tokens: List[Token], non_punct_tokens: List[Token], connector_tokens: List[Token]
+) -> Tuple[str, List[Token], List[Token], List[Token], List[Token], List[Token], str]:
+    mf_tokens: List[Token] = []
+    nf_tokens: List[Token] = []
+    # === 2. SUBORDINATE CLAUSE (VL / Verbletzt) ===
+    sentence_type = "VL"
+    vf_tokens = []
+
+    if connector_tokens:
+        lk_tokens = connector_tokens
+    else:
+        lk_tokens = [non_punct_tokens[0]] if non_punct_tokens else []
+
+    all_verbs_in_clause = [
+        t for t in tokens if t.pos_ in ("VERB", "AUX") or t.tag_ in ("PTKVZ", "PTKZU") or t.dep_ in ("svp", "pm")
+    ]
+    if all_verbs_in_clause:
+        last_verb = all_verbs_in_clause[-1]
+        cluster = [last_verb]
+        for v in reversed(all_verbs_in_clause[:-1]):
+            if abs(v.i - cluster[-1].i) <= 2:
+                cluster.append(v)
+            else:
+                break
+        cluster = sorted(cluster, key=lambda x: x.i)
+        rk_first_id = cluster[0].i
+        rk_last_id = cluster[-1].i
+        rk_tokens = [t for t in tokens if rk_first_id <= t.i <= rk_last_id]
+    else:
+        rk_tokens = []
+
+    lk_ids = {t.i for t in lk_tokens}
+    rk_ids = {t.i for t in rk_tokens}
+    min_rk_id = min(rk_ids) if rk_ids else len(tokens)
+    max_rk_id = max(rk_ids) if rk_ids else -1
+
+    for t in tokens:
+        if t.i in lk_ids or t.i in rk_ids:
+            continue
+        if t.i < min_rk_id:
+            if t.i not in lk_ids:
+                mf_tokens.append(t)
+        elif t.i > max_rk_id:
+            nf_tokens.append(t)
+
+    bracket_desc = "Nebensatz-Klammer (Subjunktor ... Verbkomplex)"
+
+    return sentence_type, vf_tokens, lk_tokens, mf_tokens, rk_tokens, nf_tokens, bracket_desc
+
+
