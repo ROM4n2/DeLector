@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from .syntax_fields import (
     allocate_infinitiv_fields,
     allocate_subordinate_fields,
+    build_field_texts,
+    build_topology_result,
     detect_clause_type,
     filter_non_punct_tokens,
     find_main_finite_verb,
@@ -378,24 +380,7 @@ def analyze_sentence_topology(
     # --------------------------------------------------------------------------
     # Format Text Strings & Bracket Detection
     # --------------------------------------------------------------------------
-    def to_text(toks: List[Token]) -> str:
-        if not toks:
-            return ""
-        res: List[str] = []
-        for t in toks:
-            if t.is_punct and t.text in (",", ".", "!", "?", ";", ":") and res:
-                res[-1] = res[-1] + t.text
-            else:
-                res.append(t.text)
-        return " ".join(res).strip()
-
-    field_texts = {
-        "vorfeld": to_text(vf_tokens),
-        "linke_klammer": to_text(lk_tokens),
-        "mittelfeld": to_text(mf_tokens),
-        "rechte_klammer": to_text(rk_tokens),
-        "nachfeld": to_text(nf_tokens),
-    }
+    field_texts = build_field_texts(vf_tokens, lk_tokens, mf_tokens, rk_tokens, nf_tokens)
 
     has_participle = any(t.tag_ in ("VVPP", "VAPP") for t in (lk_tokens + rk_tokens + mf_tokens))
     has_werden = any(
@@ -438,17 +423,18 @@ def analyze_sentence_topology(
     else:
         bracket_desc = "Einfache Verbklammer"
 
-    return {
-        "vorfeld": [format_token_dict(t) for t in vf_tokens],
-        "linke_klammer": [format_token_dict(t) for t in lk_tokens],
-        "mittelfeld": [format_token_dict(t) for t in mf_tokens],
-        "rechte_klammer": [format_token_dict(t) for t in rk_tokens],
-        "nachfeld": [format_token_dict(t) for t in nf_tokens],
-        "field_texts": field_texts,
-        "sentence_type": sentence_type,
-        "bracket_structure": bracket_desc,
-        "clause_type": clause_type,
-    }
+    return build_topology_result(
+        vf_tokens,
+        lk_tokens,
+        mf_tokens,
+        rk_tokens,
+        nf_tokens,
+        field_texts,
+        sentence_type,
+        bracket_desc,
+        clause_type,
+        format_token_dict,
+    )
 
 
 # ==============================================================================

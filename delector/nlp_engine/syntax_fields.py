@@ -6,7 +6,7 @@ DeLector - German Syntax Field Helpers.
 只读/写局部变量、不 import ``syntax_tree``（单向依赖 ``syntax_tables``）。
 """
 
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .syntax_tables import (
     FINITE_MODAL_AND_AUX_FORMS,
@@ -211,5 +211,60 @@ def allocate_subordinate_fields(
     bracket_desc = "Nebensatz-Klammer (Subjunktor ... Verbkomplex)"
 
     return sentence_type, vf_tokens, lk_tokens, mf_tokens, rk_tokens, nf_tokens, bracket_desc
+
+
+def to_text(toks: List[Token]) -> str:
+    if not toks:
+        return ""
+    res: List[str] = []
+    for t in toks:
+        if t.is_punct and t.text in (",", ".", "!", "?", ";", ":") and res:
+            res[-1] = res[-1] + t.text
+        else:
+            res.append(t.text)
+    return " ".join(res).strip()
+
+
+def build_field_texts(
+    vf_tokens: List[Token],
+    lk_tokens: List[Token],
+    mf_tokens: List[Token],
+    rk_tokens: List[Token],
+    nf_tokens: List[Token],
+) -> Dict[str, str]:
+    field_texts = {
+        "vorfeld": to_text(vf_tokens),
+        "linke_klammer": to_text(lk_tokens),
+        "mittelfeld": to_text(mf_tokens),
+        "rechte_klammer": to_text(rk_tokens),
+        "nachfeld": to_text(nf_tokens),
+    }
+    return field_texts
+
+
+def build_topology_result(
+    vf_tokens: List[Token],
+    lk_tokens: List[Token],
+    mf_tokens: List[Token],
+    rk_tokens: List[Token],
+    nf_tokens: List[Token],
+    field_texts: Dict[str, str],
+    sentence_type: str,
+    bracket_desc: str,
+    clause_type: str,
+    format_token_dict: Callable[[Any], Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "vorfeld": [format_token_dict(t) for t in vf_tokens],
+        "linke_klammer": [format_token_dict(t) for t in lk_tokens],
+        "mittelfeld": [format_token_dict(t) for t in mf_tokens],
+        "rechte_klammer": [format_token_dict(t) for t in rk_tokens],
+        "nachfeld": [format_token_dict(t) for t in nf_tokens],
+        "field_texts": field_texts,
+        "sentence_type": sentence_type,
+        "bracket_structure": bracket_desc,
+        "clause_type": clause_type,
+    }
+
 
 
