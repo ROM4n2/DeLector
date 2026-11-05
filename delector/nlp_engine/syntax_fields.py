@@ -13,11 +13,38 @@ from .syntax_tables import (
     INFINITIVE_CONNECTORS,
     INTERROGATIVE_WORDS,
     RELATIVE_PRONOUNS,
+    SUBJUNCTIVE_FORMS,
     SUBORDINATING_CONJUNCTIONS,
 )
 
 # 与 syntax_tree 的 spaCy 降级占位同义：仅用于类型注解层，运行时不作断言（红线 1）。
 Token = Any
+
+
+def _is_subjunctive_token(t: Any) -> bool:
+    """精准判断是否为虚拟式（Konjunktiv I / II）谓语动词。
+
+    严格语言学纪律：
+    1. 不定式（VVINF, VAINF, VMINF 或 VerbForm=Inf）绝非虚拟式谓语，
+       必须排除与原形同形的不定式（如 kommen, gehen, bleiben）。
+    2. 分词（VVPP, VAPP, VMPP 或 VerbForm=Part）绝非独立虚拟式谓语。
+    3. 若形态分析明确标注为直陈式 Mood=Ind（如 soll, hat, ist），绝不能判定为虚拟式。
+    4. 仅当形态标记包含 Sub，或有限动词形态命中 SUBJUNCTIVE_FORMS 且未标记 Ind 时，才视为虚拟式。
+    """
+    tag = getattr(t, "tag_", "")
+    if tag.endswith("INF") or "Inf" in getattr(t, "morph", {}).get("VerbForm", []):
+        return False
+    if tag.endswith("PP") or "Part" in getattr(t, "morph", {}).get("VerbForm", []):
+        return False
+    morph_mood = getattr(t, "morph", {}).get("Mood", [])
+    if "Ind" in morph_mood and "Sub" not in morph_mood:
+        return False
+    if "Sub" in morph_mood:
+        return True
+    text_lower = getattr(t, "text", "").lower()
+    if text_lower in SUBJUNCTIVE_FORMS and (tag.endswith("FIN") or not tag):
+        return True
+    return False
 
 
 def filter_non_punct_tokens(tokens: List[Token]) -> List[Token]:
@@ -267,4 +294,52 @@ def build_topology_result(
     }
 
 
+def detect_bracket_structure(
+    lk_tokens: List[Token],
+    rk_tokens: List[Token],
+    mf_tokens: List[Token],
+    is_infinitiv: bool,
+    is_subordinate: bool,
+) -> str:
+    has_participle = any(t.tag_ in ("VVPP", "VAPP") for t in (lk_tokens + rk_tokens + mf_tokens))
+    has_werden = any(
+        t.lemma_.lower() in ("werden", "wurde") or t.text.lower() in ("wurde", "wurden", "wird", "werden")
+        for t in (lk_tokens + rk_tokens)
+    )
+    has_sein = any(
+        t.lemma_.lower() in ("sein", "war") or t.text.lower() in ("ist", "sind", "war", "waren")
+        for t in (lk_tokens + rk_tokens)
+    )
+    has_modal = any(
+        t.tag_ in ("VMFIN", "VMINF") or t.text.lower() in FINITE_MODAL_AND_AUX_FORMS for t in (lk_tokens + rk_tokens)
+    )
+    has_sep_pfx = any(t.tag_ == "PTKVZ" for t in rk_tokens)
+    has_subjunctive = any(_is_subjunctive_token(t) for t in (lk_tokens + rk_tokens))
 
+    if has_werden and has_participle:
+        bracket_desc = "Passiv-Klammer (Vorgangspassiv)"
+    elif has_modal and has_participle and has_werden:
+        bracket_desc = "Passiv-Klammer mit Modalverb"
+    elif has_sein and has_participle:
+        bracket_desc = "Passiv-Klammer (Zustandspassiv / Perfekt)"
+    elif has_subjunctive:
+        bracket_desc = "Konjunktiv-Klammer (Irrealis / Höflichkeit)"
+    elif has_modal and (
+        has_participle
+        or any(t.tag_ in ("VVINF", "VAINF") or t.text.lower() in ("werden", "sein", "haben") for t in rk_tokens)
+    ):
+        bracket_desc = "Modalverb-Klammer"
+    elif has_sep_pfx:
+        bracket_desc = "Trennbare-Verb-Klammer (Präfix im RK)"
+    elif has_participle:
+        bracket_desc = "Perfekt/Plusquamperfekt-Klammer"
+    elif is_infinitiv:
+        bracket_desc = "Infinitiv-Klammer (zu + Inf.)"
+    elif is_subordinate:
+        bracket_desc = "Nebensatz-Klammer (Verbletzt)"
+    elif rk_tokens:
+        bracket_desc = "Zweiteilige Verbklammer"
+    else:
+        bracket_desc = "Einfache Verbklammer"
+
+    return bracket_desc
