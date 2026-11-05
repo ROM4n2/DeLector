@@ -115,16 +115,19 @@
 升级必须同时改 `tests/test_ci_hardening_android.py` 里的矩阵守卫与两个 workflow，并验证
 assemble 双变体（`assembleDeviceDebug` / `assembleEmulatorDebug`）。
 
-**两个 Chaquopy 行为坑（都会导致模型静默加载失败）**：
+**两个 Chaquopy 行为坑（第 1 条已由 2026-11-05 实测推翻，第 2 条仍成立）**：
 
-1. **`spacy.load("名称")` 在 Android 上必然报 `[E050] Can't find model`。**
-   它走 `spacy.util.is_package()`，查的是 `importlib.metadata` 的 `.dist-info`；而 CI 是把模型目录
-   直接 `cp -r` 进 Chaquopy 源码目录的，没有 dist-info。必须退到
-   `importlib.import_module(名称).load()` —— 真机上实际生效的就是这条
-   （`nlp_engine_detail` 会显示 `de_core_news_sm(module.load)`）。
-   > 2026-11-05 实测已不成立：APK 内含完整 `de_core_news_sm-3.8.0.dist-info/`（12 个文件），
-   > 设备上 `/api/syntax/spacy-status` 返回 `{"path":"spacy","error":""}`；详见
-   > `docs/agents/android-local-runtime.md`。
+1. **`spacy.load("名称")` 在 Android 上可成功；历史结论"必然 E050"已失效。**
+   2026-11-05 实测：APK 内含完整 `de_core_news_sm-3.8.0.dist-info/`（12 个文件），
+   设备上 `/api/syntax/spacy-status` 返回 `{"path":"spacy","error":""}`，`spacy.load` 能加载。
+   **Android 主分析路径与桌面同口径使用 spaCy（ADR-0028）**：删除平台硬编码 `nlp = None`，
+   走同一套 `_LazyNlp`（导入期不加载）+ 本地三级回退 + 失败硬失败（`spacy(加载失败)`）+
+   禁止运行期 `spacy.cli.download`。修复前曾硬编码纯 Python 降级（`processor.py:240-246`），已由 ADR-0028 决定移除（截至 2026-11-06：决策已定，代码未实施）。
+   主路径与句法专线 `syntax_tree.get_spacy_nlp()` 收敛到同一加载器，不再有两层语义。
+   详见 `docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`
+   与 `docs/agents/android-local-runtime.md`。
+   > 保留旧结论的适用条件：若将来 Chaquopy 再次以缺失 `.dist-info` 的方式打包，
+   > `spacy.load` 仍会 E050；届时需回退到 `importlib.import_module(名称).load()` 或补 dist-info。
 2. **Chaquopy 默认不把包的数据文件解到文件系统**（APK 内 `assets/chaquopy/build.json` 的
    `extract_packages` 若为 `[]` 即是），Python 代码直接从 `.imy` 压缩包执行，任何
    `Path(__file__).parent / "x"` 的 `open()` 都会 `FileNotFoundError`。因此 build.gradle 必须声明：

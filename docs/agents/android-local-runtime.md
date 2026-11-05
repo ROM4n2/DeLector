@@ -113,7 +113,7 @@ Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue
 & "D:\Android\sdk\platform-tools\adb.exe" -s emulator-5554 forward --remove tcp:8000
 ```
 
-本次实测返回：`/api/settings` 的 `nlp_engine` 为 `pure_python`；`/api/syntax/spacy-status` 为 `{"path":"spacy","error":""}`。两者不一致的原因见 §5 第 1 条。
+本次实测返回（**修复前**状态）：`/api/settings` 的 `nlp_engine` 为 `pure_python`；`/api/syntax/spacy-status` 为 `{"path":"spacy","error":""}`。两者不一致是"主路径纯 Python + 句法专线 spaCy"两层语义造成的；ADR-0028 已决定统一为 spaCy（见 §5 第 1 条）。
 
 ---
 
@@ -129,17 +129,14 @@ Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue
 
 ## 5. 已知问题与待决策
 
-1. **`pure_python` 降级（未修复，待用户批准）**
-   `delector/nlp_engine/processor.py:240-246` 的 `elif _android_runtime:` 按平台硬编码 `nlp = None`，主路径走纯 Python。模型与 dist-info 都在 APK 内且可加载（设备上 `/api/syntax/spacy-status` = `{"path":"spacy","error":""}`）；**无 ADR 记录**该降级；`tests/test_server_android_fallback.py` 当前**断言 `ENGINE=pure_python`**，等于把降级钉成规格。最小改动（照原方案，未执行）：
-   1. 删除 `processor.py:240-246` 的 `elif _android_runtime:` 整段，让 Android 与桌面一样走 `_LazyNlp()`（导入期仍不 `spacy.load`，冷启动不受影响）。
-   2. 在 `processor.py:96-114` 的 `_load_model_with_autodownload()` 里，Android 时不再尝试 `spacy.cli.download`（本地三级回退失败就抛 `RuntimeError`，保持“硬失败不静默”）；可复用现成的 `try_load_nlp_no_download()` 语义。
-   3. 同步更新两处过时文字：`processor.py:241-243` 注释与 `docs/agents/architecture.md:120-124` 的“没有 dist-info”。
-   4. 更新测试 `test_android_never_downloads_model_at_import`：它当前断言 `ENGINE=pure_python`；应改为“导入期不加载、绝不下载”，并允许首次使用时加载为 `spacy`。
-   5. 重建 → 装机 → 验证：`/api/settings` 的 `nlp_engine` 从 `pure_python` 变 `spacy`，`nlp_engine_detail` 出现 `de_core_news_sm(module.load)` 或 `de_core_news_sm`，冷启动 `TotalTime` 不显著变差。
+1. **`pure_python` 降级（已由 ADR-0028 决定改为 spaCy 主路径）**
+   `delector/nlp_engine/processor.py:240-246` 的 `elif _android_runtime:` 按平台硬编码 `nlp = None`，主路径走纯 Python——这是**修复前状态**。ADR-0028（`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`）已决定改为 spaCy 主路径：与桌面同口径，惰性加载 + 本地三级回退 + 失败硬失败（`spacy(加载失败)`）+ 禁止运行期 `spacy.cli.download`。截至 2026-11-06：**决策已定，代码未实施**；`tests/test_server_android_fallback.py:118` 的 `assert "ENGINE=pure_python" in out` 将随实施改为 `assert "ENGINE=spacy" in out`。
+   仍保留的硬约束：导入期不加载（启动页预算）、运行期禁止 `spacy.cli.download`（不联网/不起 pip 子进程）。**已删除**“无 dist-info ⇒ `spacy.load` 必失败”这一失效理由：APK 内含 `de_core_news_sm-3.8.0.dist-info/`（12 个文件），设备上 `spacy.load` 可成功。
+   纯 Python 的能力缺口（修复前）：`case` 恒空、无 `dep/head_*`、`topology` 仅 `mittelfeld`、`clause_tree` 单节点 `hauptsatz`、可分动词不识别；其中 `pos` 启发式会**标错**词性，判据"宁漏勿错"因此否决保留纯 Python。
+   同一进程的两层语义（主路径纯 Python；句法专线 `syntax_tree.get_spacy_nlp()` 按需加载真模型）将在实施完成后消除：两端共用同一加载器。
 2. **`delector/nlp_engine/syntax_tree.py:71-89` 裸 `spacy.load` 无三级回退**：设备上碰巧成功（dist-info 在包内），换打包方式会 `E050`。
 3. **device APK 无真机验证**：本机没有 arm64 设备，`assembleDeviceDebug` 只验证到构建产物层面。
-4. **`docs/agents/architecture.md:120-124` 已过时**：仍写“Android 上 `spacy.load("名称")` 必然报 E050、靠 `importlib` 回退”，与 2026-11-05 实测冲突；已在该段加标注，原结论未改。
-5. **PR #233 未合并**：分支 `fix/android-python-sync`，head `2a6e6ba`，CI 全绿；`tools/sync_android_sources.py` 只在那个分支上。
+4. **`docs/agents/architecture.md:120-127` 已修正**：不再声称“Android 上按名称加载模型必然失败”，改为与 2026-11-05 实测一致（APK 内含 dist-info、`spacy.load` 可成功），并指向 ADR-0028。
 
 ---
 
