@@ -30,12 +30,15 @@ poolidx _pool_index 全表 SELECT 单独计时                                  
     segment_first_ms=...
     segment_repeat_ms=...
     segment_pool_index_ms=...
+    segment_first_writes=...
+    segment_repeat_writes=...
     verdict=...
 """
 
 import json
 import os
 import random
+import re
 import shutil
 import sqlite3
 import statistics
@@ -89,6 +92,36 @@ def _median_ms(fn: Callable[[], None], rounds: int) -> float:
         fn()
         samples.append((time.perf_counter() - t0) * 1000.0)
     return statistics.median(samples)
+
+
+_WRITE_SQL = re.compile(r"^(INSERT|UPDATE|DELETE|REPLACE)\b", re.IGNORECASE)
+
+
+def _count_write_statements(fn: Callable[[], None]) -> int:
+    """执行 ``fn`` 并返回其落库的**写语句条数**（INSERT/UPDATE/DELETE/REPLACE）。
+
+    幂等性判据（2026-11-05）：repeat 路径在本机/CI 上的**耗时差**随存储性能漂移
+    （Windows 上 INSERT 较慢 ⇒ repeat 明显更快；Linux CI 上 INSERT 很便宜 ⇒ 两者接近），
+    所以「repeat 不慢于 first」单靠计时在快存储机器上会抖动。写语句条数是环境无关的
+    结构事实：首次投影 ≈ 每个词一条 INSERT + 1 条 blob upsert；幂等重复只应剩 blob upsert。
+    通过包一层 ``connection.get_db`` 给连接挂 trace 回调采集，不改生产代码。
+    """
+    from delector.core.db import connection as conn_mod
+
+    writes: List[str] = []
+    real_get_db = conn_mod.get_db
+
+    def traced_get_db(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        conn = real_get_db(*args, **kwargs)
+        conn.set_trace_callback(lambda sql: writes.append(sql) if _WRITE_SQL.match(sql.strip()) else None)
+        return conn
+
+    conn_mod.get_db = traced_get_db
+    try:
+        fn()
+    finally:
+        conn_mod.get_db = real_get_db
+    return len(writes)
 
 
 def main() -> int:
@@ -148,12 +181,19 @@ def main() -> int:
         poolidx_ms = _median_ms(lambda: _run_pool_index(conn), rounds)
         conn.close()
 
+        # 写语句计数（环境无关的幂等性判据）：此时池里已有 ~3k 行，
+        # first_save 仍是「清空 + 全量 INSERT」，repeat_save 应是「零投影写」。
+        first_writes = _count_write_statements(first_save)
+        repeat_writes = _count_write_statements(repeat_save)
+
         print(f"payload_mb={payload_mb:.2f}")
         print(f"words={words}")
         print(f"segment_blob_ms={blob_ms:.3f}")
         print(f"segment_first_ms={first_ms:.3f}")
         print(f"segment_repeat_ms={repeat_ms:.3f}")
         print(f"segment_pool_index_ms={poolidx_ms:.3f}")
+        print(f"segment_first_writes={first_writes}")
+        print(f"segment_repeat_writes={repeat_writes}")
         # 决策口径：repeat（日常保存路径）是否值得动。阈值取"可感知"量级（50ms），
         # 低于它改动的风险（事务语义/映射不变量）大于收益。
         verdict = "optimization_unnecessary" if repeat_ms < 50.0 else "worth_revisiting"
