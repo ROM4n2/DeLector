@@ -77,6 +77,18 @@
 > **真机与模拟器均未点检**：目前只证明依赖可解析、APK 含 `lib/x86_64/` 与
 > `requirements-x86_64.imy`（双 ABI debug 包实测 87.87 MiB），尚未做 AVD `adb install` 与运行时语法标注验证。
 
+### 本地构建前必须同步 Python 源码（否则 `app.imy` 为空）
+
+`android/app/src/main/python/` 与 `android/app/src/main/assets/static/` 都是生成物，被
+`.gitignore` 忽略；CI 的两个 Android job 在构建前调用
+`python tools/sync_android_sources.py`，本地构建也必须先跑同一条命令。
+
+未同步时 Chaquopy 仍会打出一个 **22 B 的 EOCD-only `app.imy`**：APK 能装、进程能起，
+但启动即报 `ModuleNotFoundError: No module named 'start'`。构建前可用
+`python tools/sync_android_sources.py --check` 自检，`--clean` 则清空生成目录后重来。
+`tests/test_android_packaging.py` 会在 APK 存在时断言 `app.imy` 非空，且顶层含
+`start.py`/`start.pyc` 与 `delector/`（Chaquopy 会把源码编译成 `.pyc` 收进包里）。
+
 ### 工具链矩阵（精确钉住）
 
 当前构建工具链的**精确组合**如下，`tests/test_ci_hardening_android.py` 的
