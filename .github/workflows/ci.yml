@@ -335,7 +335,9 @@ jobs:
         run: pytest -q tests/test_server_packaging.py tests/test_server_health.py tests/test_desktop_port_guard.py tests/test_start.py
 
       - name: Build Windows Portable
-        run: python package_windows.py
+        # 纯旁路心跳（TODO-CI-02 B）：每 60s 打一条带时间戳/阶段名的日志，供"job 被取消、
+        # 日志整份丢失"时仍能留下相位证据。包装器不改退出码、不加超时、心跳失败不致命。
+        run: python tools/ci_heartbeat.py --stage build -- python package_windows.py
 
       - name: Verify Windows Portable (真启闸)
         # 步骤级判据 10 分钟：正常实测 27s，脚本内最坏路径约 6 分钟（两次真启 ×
@@ -346,7 +348,7 @@ jobs:
         # --expect-commit 传完整 GITHUB_SHA；脚本按前缀比对产物里的短 sha（详见
         # tools/verify_windows_portable.py::commit_mismatch）。
         timeout-minutes: 10
-        run: python tools/verify_windows_portable.py --expect-commit ${{ github.sha }}
+        run: python tools/ci_heartbeat.py --stage verify -- python tools/verify_windows_portable.py --expect-commit ${{ github.sha }}
 
   # ── Go↔Python 真链路集成门禁（Task 2「CI 半」）────────────────────────────────────
   #
