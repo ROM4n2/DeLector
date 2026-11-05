@@ -782,6 +782,9 @@ def test_prep_dict_registered_in_all_package_targets():
     assert "--hidden-import=delector.data.prep_dict" in pkg
     wf = open(os.path.join(root, ".github", "workflows", "build-release.yml"), encoding="utf-8").read()
     assert wf.count("--hidden-import=delector.data.prep_dict") == 2, "Windows/Linux 两个构建都要"
-    cp_lines = [ln for ln in wf.splitlines() if "android/app/src/main/python/" in ln]
-    assert any("cp -r start.py" in ln for ln in cp_lines), "安卓缺 start.py 拷贝"
-    assert any("cp -r delector" in ln for ln in cp_lines), "安卓应整目录拷入 delector/（prep_dict.py 在包内）"
+    assert "python tools/sync_android_sources.py" in wf, "Android job 应调用统一同步脚本"
+    sync_script = open(os.path.join(root, "tools", "sync_android_sources.py"), encoding="utf-8").read()
+    assert 'python_dest / "start.py"' in sync_script, "同步脚本缺 start.py 拷贝"
+    assert '_copy_tree(delector, python_dest / "delector")' in sync_script, (
+        "同步脚本应整目录拷入 delector/（prep_dict.py 在包内）"
+    )

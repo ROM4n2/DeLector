@@ -355,22 +355,9 @@ jobs:
               f"模型要求 spaCy {compat}，与 APK 内的 {APK_SPACY} 不兼容"
           print(f"模型 compat={compat} 与 APK spaCy {APK_SPACY} 匹配")
           PY
-          mkdir -p android/app/src/main/python
-          cp -r start.py android/app/src/main/python/
-          # Phase 2 收包后整目录拷入：逐个 cp 扁平 .py 的清单已失效（且曾漏掉
-          # delector/routes/a2.py（server 静态 import 它）—— v5.3.0 的 APK 大概率
-          # 根本没有这个模块。delector/ 整目录携带全部业务模块。
-          cp -r delector android/app/src/main/python/
-          MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
-          cp -r "$MODEL_DIR" android/app/src/main/python/de_core_news_sm
-          # v5.7.7：必须连 .dist-info 一起拷。spaCy 3.8 的 is_package() 只认 pip 元数据
-          # （importlib.metadata.distribution），不碰文件系统——只拷包目录没有 dist-info，
-          # 真机 is_package('de_core_news_sm') → False → E050 "not a Python package"
-          # （v5.7.6 诊断小字实证，根因定位见 work.log）。
-          MODEL_DISTINFO=$(python -c "import glob, os, de_core_news_sm as m; base = os.path.dirname(os.path.dirname(m.__file__)); hits = glob.glob(os.path.join(base, 'de_core_news_sm-*.dist-info')); assert hits, '未找到 de_core_news_sm dist-info'; print(hits[0])")
-          cp -r "$MODEL_DISTINFO" android/app/src/main/python/
-          mkdir -p android/app/src/main/assets
-          cp -r static android/app/src/main/assets/
+          # 同步语义统一在脚本里：delector/ 必须整目录（曾漏 routes/a2.py），
+          # 模型必须连 .dist-info 一起拷（否则 spaCy 3.8 的 is_package() 为 False → E050）。
+          python tools/sync_android_sources.py
 
       - name: Derive Version from Git Tag
         id: version

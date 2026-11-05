@@ -1,3 +1,5 @@
+
+
 ### 2026-11-01 01:15 | auto-gemini-3.8-flash__hermes | WORK_END
 Caps: filesystem-read, filesystem-write, shell-exec
 事件：**闭环 dfs-debug：修复 CompanionDrawer.setReasoningEffort 未导出、Proposal 确认卡片消失及 vocab_stats 空结果缺陷**。
@@ -275,6 +277,13 @@ Status: DONE ——「修复桌宠眨眼错位并重截 README」完成。根因
 验证：post-rebase 浏览器上述 10 组 PASS；README 以 960×571 CSS 视口 ×1.5 DPR、charBlink=0ms 暂停帧重截并目检，两张均 1440×857 JPEG、无气泡/裁切；`python3 -m pytest tests/test_writer_mobile.py tests/test_pwa_manifest.py -q` = 34 passed；ruff 通过；最终 diff 仅 style.css、test_writer_mobile.py、两张图片，工作区干净，未改/未提交 CHANGELOG.md 与 FEATURES.md。
 回写检查：临时插桩已从 companion.js 完整移除；Debug Server/隔离服务已停止；调试记录、NDJSON/env、临时脚本、证据图与临时数据库文件均已删除，未入库。旧 choice 任务 WORK_START 仍由所属任务自行处理，本任务未代闭合。
 
+### 2026-11-03 15:58 | glm-5.3-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+Status: DONE ——「choice 模式缺释义空白选项修复」已入库 master。修复本体（cards.js choice 分支改 formatCardDefinition + 选项对象化 isCorrect 乱序）、行为探针 tools/cards_quiz_choice_probe.mjs、接线 tests/test_cards_quiz_choice_probe.py，均实测已在 master 树（git ls-tree/git show 验证），系 12:55 WORK_START 后的未提交改动被并行会话吸收进 PR #196（e140286）入库；具体吸收 commit 未逐一定位（推断在 6a0568c refactor(cards) 批次），CHANGELOG/FEATURES 口径同步为本会话余量提交 e7bd1cb（本地 master 领先 origin 1，未推送）。
+实测验证：新探针 10/10 绿；变异实证 revert 修复后 exit 1 且 B1/B2/C1/C2/D2 具名红；全量 pytest 2707 passed / 2 skipped（705.48s）；最终态定向 12 passed；三闸 layer/mock/silent 全 0 未豁免；ruff 通过。
+并发事实：kimi-k3.1-pro__trae 14:48-15:27 眨眼修复 worktree 任务的 WORK_START/WORK_END（已 DONE）当时未提交，随本簿记提交一并入库——该任务自陈已完成，此为落档非代闭合；其声明「不代闭合本任务」已知悉，本条即本任务自闭合。
+未做：未推送、未建 PR、未改历史；quiz 出题队列过滤策略未改（只修显示口径，维持上批裁决）。
+
 ### 2026-11-03 17:07 | kimi-k3.1-pro__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 旧条目登记：2026-11-03 12:55「choice 模式缺释义修复」WORK_START 无配对 END；其所属任务已完成，依据为 work.log 13:50/14:10/14:28 的实现与验证记录及提交 e7bd1cb936cdc4001195e701650af7fd98aafcd7（fix(cards): 测验 choice 模式缺释义卡改走「待补充」口径，根除空白选项）。仅登记，不代写 WORK_END；本任务不代闭合。
@@ -288,13 +297,6 @@ Caps: filesystem-read, filesystem-write, shell-exec
 ### 2026-11-03 17:54 | kimi-k3.1-pro__trae | NOTE (Task 1 milestone)
 Caps: filesystem-read, filesystem-write, shell-exec
 SSE 传输边界完成并本地提交 1e33428。旧实现 json-middle 复现红：assistant 期望 Hallo Eule. 实际 Eule.；缓冲累积器按空行分帧后 2/3/N/逐字节/固定种子随机分片 5/5 绿，字节转发守恒，save_turn 每轮一次，同 id proposal 去重且不同 id 不误删。独立审查发现 CRLF 回溯缺陷，补多行 data/混合空行反例与变异验证后 CLEAN PASS。最终全量 2719 passed/3 skipped；35 前端探针、三闸、go test ./...、go test -race ./...、ruff、build_index_html --check 全绿。未 push、未建 PR、未触发版面文件。
-
-### 2026-11-03 15:58 | glm-5.3-flash__trae | WORK_END
-Caps: filesystem-read, filesystem-write, shell-exec
-Status: DONE ——「choice 模式缺释义空白选项修复」已入库 master。修复本体（cards.js choice 分支改 formatCardDefinition + 选项对象化 isCorrect 乱序）、行为探针 tools/cards_quiz_choice_probe.mjs、接线 tests/test_cards_quiz_choice_probe.py，均实测已在 master 树（git ls-tree/git show 验证），系 12:55 WORK_START 后的未提交改动被并行会话吸收进 PR #196（e140286）入库；具体吸收 commit 未逐一定位（推断在 6a0568c refactor(cards) 批次），CHANGELOG/FEATURES 口径同步为本会话余量提交 e7bd1cb（本地 master 领先 origin 1，未推送）。
-实测验证：新探针 10/10 绿；变异实证 revert 修复后 exit 1 且 B1/B2/C1/C2/D2 具名红；全量 pytest 2707 passed / 2 skipped（705.48s）；最终态定向 12 passed；三闸 layer/mock/silent 全 0 未豁免；ruff 通过。
-并发事实：kimi-k3.1-pro__trae 14:48-15:27 眨眼修复 worktree 任务的 WORK_START/WORK_END（已 DONE）当时未提交，随本簿记提交一并入库——该任务自陈已完成，此为落档非代闭合；其声明「不代闭合本任务」已知悉，本条即本任务自闭合。
-未做：未推送、未建 PR、未改历史；quiz 出题队列过滤策略未改（只修显示口径，维持上批裁决）。
 
 ### 2026-11-03 18:49 | kimi-k3.1-pro__trae | NOTE (Task 2 milestone)
 Caps: filesystem-read, filesystem-write, shell-exec
@@ -314,14 +316,14 @@ Status: DONE ——「SSE 传输边界 / Go RunLoop 接线 / submitPrompt 收敛
 Caps: filesystem-read, filesystem-write, shell-exec
 refactor/companion-boundaries 已推送 origin 并设 upstream，本地/远端 SHA 均 50395d6e901ec45c220fbd9b39a2f25a01334e98；未 force、未 --no-verify、未直推 master。PR #199 以 master 为 base 创建（非 draft）：https://github.com/ROM4n2/DeLector/pull/199 。回读 state=OPEN、mergeStateStatus=UNSTABLE（初始 checks pending）；CI run 41629402030 初始 9 项 pending、4 项 pass（packaging detect/secret scan/mock drift/no silent degradation）、2 项 skipped，无失败项，未合并。并行工作区未改 CHANGELOG/FEATURES 等文件。
 
-### 2026-11-03 19:52 | kimi-k3.1-pro__trae | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec
-复核补充：2026-11-03 12:55「choice 模式缺释义修复」WORK_START 当前已有 2026-11-03 15:58 glm-5.3-flash__trae 的 WORK_END（并行追加导致其排在 17:54 事件之后），不再属于未闭合条目。所属任务已完成，依据为 PR #196 合并提交 e140286、master 提交 e7bd1cb 及 work.log 既有验证记录；本任务未参与该次验证，不代写或补写 WORK_END，也不回改 17:07 的历史 NOTE。
-
 ### 2026-11-03 19:52 | kimi-k3.1-pro__trae | WORK_START
 Caps: filesystem-read, filesystem-write, shell-exec
 任务：定案并行文档与 PR #199 工作记忆，补 v5.21.1 CHANGELOG，按版本面清单准备 patch 发版分支和 PR。
 不做范围：不合并 PR、不直推 master、不打 tag、不创建 Release；不代闭合其他 WORK_START；不改无关文件；Android 真机点检与真实浏览器 live-selection 仍如实记为未验证。
+
+### 2026-11-03 19:52 | kimi-k3.1-pro__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+复核补充：2026-11-03 12:55「choice 模式缺释义修复」WORK_START 当前已有 2026-11-03 15:58 glm-5.3-flash__trae 的 WORK_END（并行追加导致其排在 17:54 事件之后），不再属于未闭合条目。所属任务已完成，依据为 PR #196 合并提交 e140286、master 提交 e7bd1cb 及 work.log 既有验证记录；本任务未参与该次验证，不代写或补写 WORK_END，也不回改 17:07 的历史 NOTE。
 
 ### 2026-11-03 20:09 | kimi-k3.1-pro__trae | NOTE (v5.21.1 local gates)
 Caps: filesystem-read, filesystem-write, shell-exec
@@ -368,6 +370,7 @@ Android 模拟器变体（方案 A，完整应用含 spaCy，禁止降级）落�
 ### 2026-11-04 17:49 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 更正上一条：ABI 变体现在是 **product flavor**，不是 buildType。buildType 方案在 CI 实测直接报 `Chaquopy requires ndk.abiFilters`——Chaquopy 15.0.1 的 `PythonPlugin.getAbis` 只读 `android.defaultConfig.ndk.abiFilters` 与各 `productFlavors` 的 abiFilters，不看 buildType。最终形态：`flavorDimensions "channel"` + `device`（仅 arm64-v8a）/ `emulator`（arm64-v8a + x86_64，`applicationIdSuffix ".emulator"`），并禁用 `emulatorRelease`（assembleRelease 仍只出一个正式 APK）。产物路径随之变化：CI 抓 `apk/device/debug/app-device-debug.apk`，守卫 `tests/test_server_android_fallback.py` 禁止引用 `apk/emulator/`，防止发版抓错包；最终发行名 `DeLector-<tag>-Android.apk` 不变。已用临时验证分支实跑 `gradle assembleEmulatorDebug`（run 41813642926，success），产出 `apk/emulator/debug/app-emulator-debug.apk` 且含双 ABI。PR CI（run 41815765514，b1bb0c8）全绿。共 2748 passed / 4 skipped（本地全量，flavor 改造前）+ PR CI 分片全绿；前端探针 32/32；git diff --check 0。仍未验证：真机与模拟器均未 adb install，运行时 spaCy 语法标注未点检。
+
 ### 2026-11-04 18:14 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 PR #210 已按仓库习惯合并（merge commit 1f9d73f，未 squash、未 force push），head 4405c3a run 41803741662 全绿；master 已 fast-forward、ci/static-checks-dedup 远端与本地分支与 .worktrees/ci-dedup 已清理（删前确认干净）；main run 41807188429 success。
@@ -417,18 +420,18 @@ PR #217 已按 merge commit 合并（merge SHA b60a185，无冲突、无需 reba
 验证：启用后全量收集 2770（基线 2765，增长来自 #216/#217 新增用例），无未注册 marker；全量 2766 passed / 4 skipped / 502.24s。RED：恒真闸先红 2 处；GREEN：desktop_shell 25 + 闸 1 passed。变异：skipif→unregistered_probe 使收集失败；语义断言改回 `is not None` 使闸红 2 处，均还原。ruff 两文件 All checks passed。PR #218 head ae93af2 run 41960590624 全 pass（Windows Smoke 按 paths skipping）。
 边界：恒真闸只覆盖 test_desktop_shell.py 无消息的 `is not None` 形态；GUI 真窗口用例仍按设计跳过。PR #218 未合并、无 tag。
 
+### 2026-11-05 13:00 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+收尾合并完成（均 merge commit，未 squash/force）：#219（head b6a5832 / run 41964881263 全绿）→ merge 49ab8fb，master push run 41970553928 success；#220 update-branch 后 head 8829a95 / run 41970820288 全绿 → merge ea9eab4，master push run 41971072399 success。
+徽章定版（干净 master ea9eab4 独立全量）：`--collect-only -q` = 2771 collected（11.89s）；`pytest tests -q` = 2767 passed / 4 skipped / 534.08s → total 2771。README 徽章 Tests-2767/2771 Passed，注释写明 HEAD ea9eab4 / 2026-11-05 / 命令 / 分母=total。核对：预期 2771 与实际一致（#219 新增 1 条结构闸用例），无差异。
+残留清理：待删本地 worktree（timing-cost-gate / badge-master / strict-markers / backup-stats-json 等已合并任务）与 strict-markers 上未推送提交 2bf6aad（内容已 cherry-pick 为 b6a5832 并合并，#219 已含其等价改动）。
+
 ### 2026-11-05 13:20 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec
 三条 PR 合并完成（均 merge commit，未 squash/force）：#218 merge b59795c（master push run 41961755632 success）；#204（head 22ea85e / run 41962020250 全绿，Windows Smoke 真跑 3m46s）merge 860f0ac（master push run 41962500731 success）；#205（head 7d73189 / run 41962521867 全绿，Smoke 真跑 3m18s）merge 39d5092（master push run 41962937976 / 41962943601 均为 success）。
 计时 flake 修复交付到未合并 PR #219（https://github.com/ROM4n2/DeLector/pull/219，test/timing-cost-gate，基于 39d5092，提交 b6a5832）。根因：repeat vs first 的耗时差是**存储性能函数**（Windows 上 3k INSERT 慢 ⇒ repeat 快 36%；Linux CI INSERT 便宜 ⇒ 两段收敛，2026-11-05 run 41960965296 unit-4 出现 39.188ms > 37.527ms 随机红）。
 方案 B + 结构闸：计时阈值显式放宽到 1.25×first（依据=CI 最差反转 1.044、本地 20 轮 ratio p95 0.692 / max 0.844），仍抓 ≥25% 变慢；新增写语句计数闸（trace 回调，不改生产代码）钉 repeat 恰 1 条 wb_state upsert、first ≥ words，环境无关。本地 20 轮分布：first median 72.971ms（min 70.692/p95 77.834/max 91.060），repeat median 46.201ms（min 44.018/p95 50.862/max 76.872），ratio median 0.633。变异：unchanged 路径注入 sleep(0.05) ⇒ 计时闸红（96.7 vs 74.2，上限 92.8）；unchanged 分支多发一条 UPDATE ⇒ 写语句闸红（2980 条），均还原复绿。全量（分支等价内容）2771 collected / 2767 passed / 4 skipped / 484.93s。文档口径写进 tests/test_save_wb_state_cost.py docstring，未动 docs/agents/ci-speed-budget.md。
 徽章真实口径（干净 master 39d5092 独立全量）：2770 collected / 2766 passed / 4 skipped / 480.06s；README 徽章改为 Tests-2766/2770 Passed 并加 HTML 注释写明 HEAD/日期/命令/分母。PR #219 未合并；徽章 PR 未合并；无 tag。
-
-### 2026-11-05 13:00 | deepseek-v4.1-flash__trae | NOTE
-Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
-收尾合并完成（均 merge commit，未 squash/force）：#219（head b6a5832 / run 41964881263 全绿）→ merge 49ab8fb，master push run 41970553928 success；#220 update-branch 后 head 8829a95 / run 41970820288 全绿 → merge ea9eab4，master push run 41971072399 success。
-徽章定版（干净 master ea9eab4 独立全量）：`--collect-only -q` = 2771 collected（11.89s）；`pytest tests -q` = 2767 passed / 4 skipped / 534.08s → total 2771。README 徽章 Tests-2767/2771 Passed，注释写明 HEAD ea9eab4 / 2026-11-05 / 命令 / 分母=total。核对：预期 2771 与实际一致（#219 新增 1 条结构闸用例），无差异。
-残留清理：待删本地 worktree（timing-cost-gate / badge-master / strict-markers / backup-stats-json 等已合并任务）与 strict-markers 上未推送提交 2bf6aad（内容已 cherry-pick 为 b6a5832 并合并，#219 已含其等价改动）。
 
 ### 2026-11-05 15:19 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
@@ -452,7 +455,6 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 任务② Windows Smoke 心跳：新增 `tools/ci_heartbeat.py` + `ci.yml` 包装 Build/Verify 两步；纯旁路、无超时、退出码透传、无新依赖、心跳异常带 `silent-ok` 注释。首轮 run `42019581031` 红于 static-invariants（工具内 `except pass` 未带 silent-ok），补注释后 run `42020293134` 全 success（13 success / 1 skipped）。心跳原文：run `42019581031` job `127218789246` build `11:33:12 started` → `11:34:12 still running (elapsed 60s)` → `11:34:23 finished (elapsed 71s, rc=0)`；终轮 `42020293134` build 39s 只出现 start/finish（未到 60s），包装开销约 0.2s。PR #230 未合并。
 边界：心跳无法覆盖 runner/job worker 层停摆或日志整份 404；30 分钟 hang 未复现。
 
-
 ### 2026-11-05 20:42 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 任务 B（先合并 #230，再 P1 拆分）：
@@ -472,6 +474,19 @@ Status: DONE ——「syntax_tree 拆分：P1 收口 + P2 挂账（零代码）�
 ④ 证据脚本（仓库外，未提交）：`D:\Code\_artifacts\p2_b9_coverage.py`、`D:\Code\_artifacts\syntax_tree_instrumented.py`。
 ⑤ 文档：`docs/plans/2026-11-05-syntax-tree-split-assessment.md` 修正 §6 第 6 条 CC 错误结论，并新增 §9「执行结果与遗留（2026-11-05 实测）」。本轮零源码 / 零测试改动，未动 `delector/`、`tests/`、`android/`。
 回写检查：稳定结论已入上述评估文档；临时脚本与插桩副本未入库。
+
+### 2026-11-05 21:50 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+阶段七（Android 源码同步修复 A+B+C）：推进 C 前按用户边界停手（git status 出现非本会话改动：.agent-rules.md、.cursorrules、.gitignore、AGENTS.md、CLAUDE.md 与未跟踪的 docs/reviews/2026-11-05-code-quality-decoupling-review.md；HEAD 由 fa6c6c2 前移至 6694cbf）。用户确认按方案 A 继续后恢复执行，本文件只保留这一条干净记录（早前三条被 PowerShell 反引号转义破坏的事件未提交、已丢弃）。
+A：干净全量重建 clean + assembleEmulatorDebug + assembleDeviceDebug，BUILD SUCCESSFUL in 11m 1s（92 tasks: 89 executed, 3 up-to-date）。emulator APK 96,704,289 B，SHA-256 5E69BAA8CA2638ABF6D4FB37E66D18088F8EED1FF1152270748ECEFC3AACAC6D；device APK 66,454,593 B，SHA-256 6F202C6D6160B4D4FBEEEEA989AD7FCEB69DCFB2F52C2DA9BD2CCE201CA9AF91。两包 app.imy 均 15,788,426 B / 160 条目（顶层 start.pyc，delector/ 104 条），assets/static/index.html 126,785 B。装机后 pm path 拉回 SHA 与构建一致；冷启 PID 9558 存活，uvicorn 监听 127.0.0.1:8000，logcat 无 ModuleNotFoundError。
+B/C：tools/sync_android_sources.py（sync / --check / --clean，源缺失 ::error:: + rc=2）；两个 workflow 的 Sync 步骤改为调用该脚本（步骤名与 compat 断言未动）；tests/test_android_packaging.py 新增 app.imy 非空（>22 B）+ 顶层 start.py/start.pyc 与 delector/ + assets/static/index.html 闸，以及同步脚本单测（7 passed）；用旧 22 B 空包验闸真红，失败原文已留。
+待办：4 个语义提交、分支 fix/android-python-sync、PR（不合并）。
+
+### 2026-11-05 22:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+阶段七收尾：PR #233（https://github.com/ROM4n2/DeLector/pull/233）已开，不合并；head 2a6e6ba521a557bc00345b5ec5c9cc22920a78b8，MERGEABLE/CLEAN。首轮 run 42038629954 红：3 个旧守卫仍断言 workflow 内联 cp -r（test_all_backend_modules_registered_in_all_packaging_targets、test_preset_processed_data_registered_in_all_packaging_targets、test_prep_dict_registered_in_all_package_targets）；改为两步守卫（workflow 必须调用脚本 + 脚本必须单拷 start.py、整目录拷 delector/）后补第 5 个提交 2a6e6ba，未弱化覆盖。第二轮 run 42040186356 全绿：13 success（含 Windows Portable Smoke），1 skipped（Master Direct-Push Scope Gate）。
+最终模拟器包 SHA-256 5E69BAA8CA2638ABF6D4FB37E66D18088F8EED1FF1152270748ECEFC3AACAC6D（96,704,289 B），pm path 拉回一致；冷启 TotalTime 879 ms / WaitTime 881 ms，PID 10136 存活 50 s+，uvicorn 127.0.0.1:8000，NLP 走 pure_python（平台分支硬编码；后续调查证实 APK 内含模型且可加载，非缺模型），无 ModuleNotFoundError。
+本 NOTE 以 docs(workmemory): close out android python sync task 单独提交。
 
 ### 2026-11-05 22:45 | deepseek-v4.1-flash__trae | NOTE
 Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene

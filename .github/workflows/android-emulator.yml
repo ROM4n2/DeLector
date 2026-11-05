@@ -67,15 +67,9 @@ jobs:
               f"模型要求 spaCy {compat}，与 APK 内的 {APK_SPACY} 不兼容"
           print(f"模型 compat={compat} 与 APK spaCy {APK_SPACY} 匹配")
           PY
-          mkdir -p android/app/src/main/python
-          cp -r start.py android/app/src/main/python/
-          cp -r delector android/app/src/main/python/
-          MODEL_DIR=$(python -c "import de_core_news_sm, os; print(os.path.dirname(de_core_news_sm.__file__))")
-          cp -r "$MODEL_DIR" android/app/src/main/python/de_core_news_sm
-          MODEL_DISTINFO=$(python -c "import glob, os, de_core_news_sm as m; base = os.path.dirname(os.path.dirname(m.__file__)); hits = glob.glob(os.path.join(base, 'de_core_news_sm-*.dist-info')); assert hits, '未找到 de_core_news_sm dist-info'; print(hits[0])")
-          cp -r "$MODEL_DISTINFO" android/app/src/main/python/
-          mkdir -p android/app/src/main/assets
-          cp -r static android/app/src/main/assets/
+          # 同步语义统一在脚本里：整目录携带 delector/，模型必须连 dist-info 一起拷，
+          # 否则真机 spacy.load 会退化成 E050（详见 tools/sync_android_sources.py）。
+          python tools/sync_android_sources.py
 
       - name: Build emulator APK
         working-directory: ./android
