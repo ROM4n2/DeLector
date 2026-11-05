@@ -34,6 +34,24 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "bench_save_wb_state.py"
 
+#: 子进程驱动：把迁移闸看到的「旧位置」换成 tmp 空目录，再原样执行基准脚本。
+#: 成本基准只该量 save_wb_state 的耗时与写语句条数，不该依赖开发者仓库根有没有本地库；
+#: 而 ``preflight_data_dir(DATA_DIR, _REPO_ROOT)`` 的 ``_REPO_ROOT`` 由脚本自身位置推导，
+#: 无法用环境变量改道。故只在本测试的子进程里 patch init_db 所在模块的绑定
+#: （``schema._REPO_ROOT``），生产 ``preflight_data_dir`` 的语义**原样保留**——它对真实
+#: 旧位置残留继续 fail-loud，这一点另由 ``tests/test_data_dir_migration_gate.py`` 正反钉住。
+_ISOLATION_DRIVER = """\
+import os
+import runpy
+import sys
+
+sys.path.insert(0, os.getcwd())
+import delector.core.db.schema as schema
+
+schema._REPO_ROOT = sys.argv[1]
+runpy.run_path(sys.argv[2], run_name="__main__")
+"""
+
 KEYS = (
     "payload_mb",
     "words",
@@ -56,13 +74,16 @@ NUMERIC_RE = re.compile(
 
 
 def _run_bench(tmp_path: Path) -> str:
+    """跑一次基准脚本；迁移闸的「旧位置」指向 tmp 空目录（与真实仓库根解耦）。"""
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     env["DATABASE_PATH"] = str(tmp_path / "gate_wb.db")
     env["PROGRESS_DB_PATH"] = str(tmp_path / "gate_wb_progress.db")
     env["DELECTOR_DATA_DIR"] = str(tmp_path / "gate_wb_data")
+    isolated_repo_root = tmp_path / "isolated_repo_root"
+    isolated_repo_root.mkdir(exist_ok=True)
     proc = subprocess.run(
-        [sys.executable, str(SCRIPT)],
+        [sys.executable, "-c", _ISOLATION_DRIVER, str(isolated_repo_root), str(SCRIPT)],
         cwd=str(ROOT),
         env=env,
         capture_output=True,
