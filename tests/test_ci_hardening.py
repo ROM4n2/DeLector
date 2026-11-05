@@ -587,22 +587,20 @@ def _assert_pinned_version(*, text: str, path: Path, index: int, what: str, actu
 def _classpath_version(text: str, path: Path, coordinate: str, expected: str) -> tuple[str, int]:
     """从 `classpath '<group>:<artifact>:<version>'` 解析版本，返回 (版本, 下标)。"""
     match = re.search(rf"classpath\s+['\"]{re.escape(coordinate)}:([^'\"]+)['\"]", text)
-    if match is None:
-        pytest.fail(
-            f"{path} 找不到 classpath {coordinate}（期望 {expected!r}）：声明缺失或被改名。\n"
-            f"{_TOOLCHAIN_REMEDY}"
-        )
+    assert match is not None, (
+        f"{path} 找不到 classpath {coordinate}（期望 {expected!r}）：声明缺失或被改名。\n"
+        f"{_TOOLCHAIN_REMEDY}"
+    )
     return match.group(1), match.start(1)
 
 
 def _wrapper_gradle_version(text: str, path: Path) -> tuple[str, int]:
     """解析 `distributionUrl` 里的 Gradle 版本；URL 形态异常时返回整条 URL 作为实际值。"""
     url_match = re.search(r"distributionUrl=(\S+)", text)
-    if url_match is None:
-        pytest.fail(
-            f"{path} 缺少 distributionUrl 声明（期望指向 gradle-{_TOOLCHAIN_MATRIX['gradle']}-bin.zip）。\n"
-            f"{_TOOLCHAIN_REMEDY}"
-        )
+    assert url_match is not None, (
+        f"{path} 缺少 distributionUrl 声明（期望指向 gradle-{_TOOLCHAIN_MATRIX['gradle']}-bin.zip）。\n"
+        f"{_TOOLCHAIN_REMEDY}"
+    )
     version_match = re.search(r"gradle-(\d+(?:\.\d+){1,2})-bin\.zip", url_match.group(1))
     if version_match is None:
         return url_match.group(1), url_match.start(1)
@@ -612,11 +610,10 @@ def _wrapper_gradle_version(text: str, path: Path) -> tuple[str, int]:
 def _workflow_gradle_version(text: str, path: Path) -> tuple[str, int]:
     """解析 workflow 里 `gradle-version:` 的取值（去掉引号），返回 (版本, 下标)。"""
     match = re.search(r"^[ \t-]*gradle-version:\s*([^\s#]+)", text, re.MULTILINE)
-    if match is None:
-        pytest.fail(
-            f"{path} 找不到 gradle-version: 声明（期望 \"{_TOOLCHAIN_MATRIX['gradle']}\"）。\n"
-            f"{_TOOLCHAIN_REMEDY}"
-        )
+    assert match is not None, (
+        f"{path} 找不到 gradle-version: 声明（期望 \"{_TOOLCHAIN_MATRIX['gradle']}\"）。\n"
+        f"{_TOOLCHAIN_REMEDY}"
+    )
     return match.group(1).strip("\"'"), match.start()
 
 
