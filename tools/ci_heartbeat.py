@@ -39,7 +39,7 @@ def _emit(line: str) -> None:
     """写一行心跳日志；**任何异常都不得外抛**（写日志失败不应让 job 红）。"""
     try:
         print(line, flush=True)
-    except Exception:
+    except Exception:  # silent-ok: 心跳是纯旁路，写日志失败不影响子进程退出码与步骤成败
         pass
 
 
@@ -53,7 +53,7 @@ def _heartbeat_loop(stage: str, interval: float, start: float, stop: threading.E
         while not stop.wait(interval):
             elapsed = int(time.monotonic() - start)
             _emit(f"[heartbeat] {_now_hms()} {stage} still running (elapsed {elapsed}s, stage={stage})")
-    except Exception:
+    except Exception:  # silent-ok: 心跳线程是纯旁路，任何异常只停心跳、不改子进程结果
         return
 
 
@@ -111,7 +111,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if thread is not None:
         try:
             thread.join(timeout=1.0)
-        except Exception:
+        except Exception:  # silent-ok: 心跳是纯旁路，join 失败不影响子进程退出码与步骤成败
             pass
 
     elapsed = int(time.monotonic() - start)
