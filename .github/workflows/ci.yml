@@ -145,9 +145,21 @@ jobs:
         # 第一次上线就在 CI 红掉的原因，别再顺手删掉。
         run: mypy --platform win32 --strict --follow-imports=skip desktop.py package_windows.py conftest.py start.py
 
-      # 测试需要德语 spaCy 模型，与 build-release.yml 同源
-      - name: Download spaCy German model
-        run: python -m spacy download de_core_news_sm
+      # 测试需要德语 spaCy 模型，与 build-release.yml 同源。
+      # 504 治理（run 41998234884 attempt 1/2 实证）：GitHub Release 的 wheel 下载端点偶发
+      # 持续数分钟的 504，而 `python -m spacy download` 内部就是 `pip install <该 URL>`，
+      # pip 自带重试是紧密循环 ⇒ 外层加**有界**重试（3 次、15s/30s 指数退避），成功的
+      # wheel 留在缓存目录供后续 run 复用（命中时**零网络访问**）。
+      # 重试耗尽必须**响亮失败**：模型缺失会让 cost-cold-start 的 nlp_path 从 spacy 掉成
+      # pure（被测对象就变了），MUST NOT 用 continue-on-error 降级成警告。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
 
       # ── 前端跨边界门禁（ADR-0021「替代投资#3」，改口径版）─────────────────────
       # 为什么是这两条而不是「全量 checkJs」：实测全量 --allowJs --checkJs 共 219 条存量
@@ -307,7 +319,16 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pytest
           pip install -r requirements-desktop.txt
-          python -m spacy download de_core_news_sm
+
+      # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
 
       - name: Run packaging smoke tests
         # 针对 Windows 桌面启动、端口锁与健康探针的平台专属测试（全量 2670+ 测试已在 Ubuntu ci 矩阵双分片并行覆盖）。
@@ -386,8 +407,15 @@ jobs:
       # 不得 spacy.load），缺模型不会让服务起不来 —— 但会让 TestGoPythonPipelineAnalyze
       # 走 skip，或在请求内触发 spacy 自动下载而拖慢、乃至撞上 60s 超时转成 skip。
       # 显式预下载使三条集成用例都拿到真信号，避免「日志全绿但用例根本没跑」。
-      - name: Download spaCy German model
-        run: python -m spacy download de_core_news_sm
+      # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
 
       - name: Set up Go (version from agent/go.mod)
         uses: actions/setup-go@v7
