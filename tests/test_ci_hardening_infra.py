@@ -1,0 +1,515 @@
+# -*- coding: utf-8 -*-
+"""基础设施守卫：镜像构建上下文、CI 超时、Node 工具链与必需运行时清单。"""
+
+import ast
+import re
+
+import pytest
+from _ci_hardening_support import (
+    CI_WORKFLOW,
+    REPO_ROOT,
+    ROOT_CONFTEST,
+    _ci_job_block,
+    _read_guard_file,
+)
+
+# ── 镜像构建上下文守卫（2026-10-03 审计 P0-2）──────────────────────────────────
+# 背景：仓库根曾**不存在** .dockerignore，而 Dockerfile 第 14 行是 COPY . .。
+# docker build 复制的是**工作树**而非 git tree ⇒ 开发者本地的 .env（内含
+# DEEPSEEK_API_KEY 明文）与 *.db（用户真实数据）会被烤进镜像层。
+# 关键点：这不只是「镜像里有冗余文件」——delector/server.py 的 load_env() 显式读
+# os.getcwd()/.env，而 Dockerfile 的 WORKDIR 正是 /app ⇒ 容器**启动时真的会把
+# 该 key 载入 os.environ**，并被 get_setting() 的 env 兜底实际使用。
+#
+# 本守卫双向钉死：
+#   正向 —— 敏感/数据条目必须被排除（漏一条＝密钥或用户数据随镜像外流）；
+#   反向 —— 不得用 * / ** 之类过宽模式把构建必需物（Dockerfile、delector/、
+#          static/、requirements.txt）一并排掉，否则 build 会在 COPY 或 pip 阶段炸。
+
+DOCKERIGNORE = REPO_ROOT / ".dockerignore"
+
+# 必须出现在 .dockerignore 中的条目 → (为什么非排不可)
+_DOCKERIGNORE_REQUIRED: dict[str, str] = {
+    ".git": "版本库全量历史（对象、refs）不该进镜像：体积暴涨且泄露提交历史",
+    ".env": ".env 是**明文密钥**（DEEPSEEK_API_KEY）；容器 WORKDIR=/app 恰好让 "
+    "load_env() 在启动时把它载入 os.environ 并被实际使用",
+    ".env.*": ".env.* 变体（.env.local / .env.production）同样是明文密钥",
+    "*.db": "*.db 是**用户真实数据**（对话、账目）；进镜像层就是躺在镜像里的孤儿数据",
+    "*.db-wal": "SQLite WAL 旁文件也是用户数据，且会与镜像内的旧 .db 错配",
+    "*.db-shm": "SQLite 共享内存旁文件同样是用户数据",
+    "*.apk": "*.apk 是构建产物（体积大、可被反编译），镜像用不到",
+    "*.jks": "*.jks 是 Android 签名密钥：进镜像等于公开签名身份",
+    "*.keystore": "*.keystore 同为签名密钥，必须与 *.jks 一起排除",
+    "__pycache__": "__pycache__ 是宿主 Python 产出的 .pyc，与镜像内解释器版本可能不符",
+    ".cache": ".cache 是工具链缓存目录，对运行时无价值",
+    # Y6：.gitignore 已把下列本地明文敏感文件列为敏感，.dockerignore 漏排 ⇒
+    # COPY . . 仍会把它们烤进镜像层（git tree 干净 ≠ 构建上下文干净）。
+    "config.yaml": "config.yaml 在 .gitignore 的敏感清单内：本地 YAML 配置常夹明文口令/token",
+    "config.yml": "config.yml 同为 .gitignore 敏感清单内的本地明文配置",
+    "*.pem": "*.pem 是私钥/证书（PEM）：.gitignore 已列为敏感，进镜像等于公开私钥",
+    "*.key": "*.key 同为私钥材料，.gitignore 已列为敏感",
+    "*.local.json": "*.local.json 是本机私有 JSON 配置（可能夹 token），.gitignore 已列为敏感",
+    "credentials.json": "credentials.json 字面即凭据文件，.gitignore 已列为敏感",
+    "*.env": "*.env 覆盖任意 <name>.env 变体（Docker 的 * 可匹配空串，故连 .env 本身也命中）",
+}
+
+# 不得作为**整行**出现的过宽模式：会连构建必需物一起排掉
+_DOCKERIGNORE_FORBIDDEN: dict[str, str] = {
+    "*": "* 排掉一切：Dockerfile 的 COPY . . 会变成空目录，构建出的镜像无法启动",
+    "**": "** 同样过宽，构建上下文会被清空",
+    "/*": "/* 排掉仓库根下所有内容，等价于放弃构建",
+    "delector": "排掉 delector 目录 = 排掉应用本体，uvicorn delector.server:app 直接 ModuleNotFoundError",
+    "delector/": "排掉 delector 目录 = 排掉应用本体，uvicorn delector.server:app 直接 ModuleNotFoundError",
+    "static/": "排掉 static 目录 = 前端静态资源丢失，页面 404",
+    "Dockerfile": "排掉 Dockerfile 本身属于自相矛盾（它由 build context 读，"
+    "一旦被排掉、后续有人改用 COPY 就会缺文件）",
+    "requirements.txt": "排掉 requirements.txt：Dockerfile 第 10 行的 COPY requirements.txt . 会直接失败",
+    "android": "排掉 android 目录：本仓库的 Android 打包面依赖它，不该由 Docker 镜像面单方面丢弃",
+    "android/": "排掉 android 目录：本仓库的 Android 打包面依赖它，不该由 Docker 镜像面单方面丢弃",
+}
+
+
+def _dockerignore_lines() -> set[str]:
+    """返回 .dockerignore 的有效行集合（去空白、去空行、去注释）。
+
+    只做最小归一化，不解析 ! 取反/通配语义 —— 守卫要盯的是「条目在不在」，
+    而不是替 Docker 重写一遍匹配器。
+    """
+    text = _read_guard_file(DOCKERIGNORE)
+    return {s for line in text.splitlines() if (s := line.strip()) and not s.startswith("#")}
+
+
+def test_dockerignore_excludes_secrets_and_databases() -> None:
+    """.dockerignore 必须存在，并逐条排除密钥与用户数据条目。"""
+    lines = _dockerignore_lines()
+
+    # Y1：先钉"不得有取反行"，再钉条目齐全。
+    # Docker 的 .dockerignore 语义是**后出现的行胜出**，`!` 前缀表示取反。
+    # 因此在 `.env` 之后追加一行 `!.env` 会把 .env **重新纳入**构建上下文，
+    # 而下面的"条目齐全"检查仍然绿（`.env` 那行还在文件里）——纯条目断言
+    # 看不见这个旁路。守卫本身也必须零取反：排除表里出现 `!` 就没有别的
+    # 可靠信号可判（我们不替 Docker 实现匹配器）。
+    negated = sorted(s for s in lines if s.startswith("!"))
+    assert not negated, (
+        f"{DOCKERIGNORE} 出现取反条目 {negated}：取反行会让前面的排除失效——"
+        "Docker 的 .dockerignore 是后出现的行胜出，在 `.env` 之后追加 `!.env` "
+        "会把明文密钥**重新纳入**构建上下文，而条目齐全的检查仍会绿（假绿）。"
+        "修法：删掉这些 `!` 开头的行；本守卫统一以「逐条排除」表达意图，"
+        "不依赖取反语义。"
+    )
+
+    missing = [f"未排除 {needle!r}（{why}）" for needle, why in _DOCKERIGNORE_REQUIRED.items() if needle not in lines]
+    assert not missing, (
+        f"{DOCKERIGNORE} 缺少关键排除条目：\n"
+        + "\n".join(missing)
+        + "\n背景：Dockerfile 是 COPY . .，docker build 复制的是**工作树**而非 git tree，"
+        "漏排的条目会随 docker build 进入镜像层；其中 .env 会被 /app 下的 load_env() "
+        "在启动时真正载入 os.environ，*.db 则是用户真实数据。"
+        "修法：在 .dockerignore 补上缺失条目，而不是删除或跳过本测试。"
+    )
+
+
+def test_dockerignore_does_not_exclude_build_inputs() -> None:
+    """.dockerignore 不得用过宽模式把构建必需物排掉（否则 build 直接坏）。"""
+    lines = _dockerignore_lines()
+
+    offenders = [f"出现 {pattern!r}（{why}）" for pattern, why in _DOCKERIGNORE_FORBIDDEN.items() if pattern in lines]
+    assert not offenders, (
+        f"{DOCKERIGNORE} 出现了会破坏构建的过宽排除模式：\n"
+        + "\n".join(offenders)
+        + "\n.dockerignore 的职责是**逐条**排掉密钥/数据/产物，"
+        "而不是整片排除 —— 请把 * 之类改成具体条目（.git / .env / *.db / __pycache__ …）。"
+    )
+
+
+# ── CI 作业超时护栏（2026-10-04 韧性审计 P1）──────────────────────────────────
+# 背景：ci.yml 的 jobs.ci 没写 timeout-minutes，GitHub Actions 对 job 的默认上限是
+# 360 分钟（6 小时）。一条卡死的测试（例如某个网络桩永不返回）会把 runner 烧满
+# 六小时才红 —— 提交者早就改去下一件事了，"卡住的 PR 挡住 master"本身就是故障。
+#
+# 这里钉**上界**而不只是"有没有 timeout-minutes"：写成 `timeout-minutes: 3600`
+# 的护栏形同虚设（比默认还宽），且从 YAML 上看不出意图。实测单次 CI 约 2.5–3.5min，
+# 文件头注释自陈"PR 反馈预期 < 8min"，30 分钟已是 8–10 倍余量。
+
+MAX_CI_JOB_TIMEOUT_MINUTES = 30
+
+
+def test_ci_job_has_bounded_timeout() -> None:
+    """jobs.ci 必须有 timeout-minutes，且值 MUST ≤ 30（护栏必须有上界）。"""
+    block = _ci_job_block("ci")
+
+    match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", block, re.MULTILINE)
+    assert match, (
+        f"{CI_WORKFLOW} 的 jobs.ci 没有 timeout-minutes：\n"
+        "GitHub Actions 对单个 job 的默认上限是 360 分钟（6 小时），"
+        "一条卡死的测试会把 runner 烧满六小时才红——提交者早改去下一件事了。"
+        "\n修法：给 jobs.ci 加 `timeout-minutes: 15`（实测单次约 2.5–3.5min，"
+        f"本守卫允许的上界是 {MAX_CI_JOB_TIMEOUT_MINUTES}）。"
+    )
+
+    minutes = int(match.group(1))
+    assert 0 < minutes <= MAX_CI_JOB_TIMEOUT_MINUTES, (
+        f"jobs.ci 的 timeout-minutes = {minutes}，超过上界 {MAX_CI_JOB_TIMEOUT_MINUTES}：\n"
+        "写成 3600 之类的大值等于没设护栏（比 Actions 默认的 360 分钟还宽）。"
+        "\n修法：改回 15；确需更长时先查清是哪一步变慢，而不是把闸门整体放开。"
+    )
+
+
+# ── Windows Smoke「真启闸」步骤级超时（2026-11-04 hang 取证后收窄）─────────────
+# 背景：2026-11-04 run 41833602180 attempt 1 的 smoke job 卡在 Verify 步 30 分钟被
+# job 级 timeout 取消，且该 job 日志 GitHub 未保留（API 404）。脚本内部所有等待都有
+# 硬上限（健康 120s / 终止 10s / 端口 10s / 硬杀 15s），最坏路径约 6 分钟；正常
+# 实测仅 27s。10 分钟 ≈ 最坏路径的 1.7 倍 —— 是**判据线**，不是护栏。
+#
+# job 级 30 分钟 MUST 保留：它是兜底护栏，两者并存。守卫必须同时钉住「步骤级存在且
+# ≤10」和「job 级仍是 30」，防止有人只留 job 级、把判据退化成护栏式宽值。
+
+MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES = 10
+SMOKE_JOB_TIMEOUT_MINUTES = 30
+
+
+def _smoke_verify_step_block() -> str:
+    """截出 `windows-portable-smoke` 中 `Verify Windows Portable` 步骤的 YAML 块。
+
+    按缩进切分：步骤从 6 空格的 `- name:` 起，到下一个 6 空格的 `- ` 或 job 块末尾。
+    这样 `timeout-minutes` 必须写在该步骤自己身上才算数（job 级 4 空格的同名字段不匹配）。
+    """
+    lines = _ci_job_block("windows-portable-smoke").splitlines()
+    try:
+        start = next(
+            i
+            for i, line in enumerate(lines)
+            if line.lstrip().startswith("- name:") and "Verify Windows Portable" in line
+        )
+    except StopIteration:
+        pytest.fail(
+            f"{CI_WORKFLOW} 的 windows-portable-smoke 找不到 `Verify Windows Portable` 步骤：\n"
+            "该步骤真启打包产物并验包，是 Windows 打包面的最后一道闸；删掉它等于去掉真启验包。"
+            "\n修法：恢复该步骤，并在其下加 `timeout-minutes: "
+            f"{MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}`。"
+        )
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("      - "):
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_windows_smoke_verify_step_has_bounded_timeout() -> None:
+    """真启闸必须有步骤级 timeout ≤10，且 job 级 30 分钟护栏仍在。"""
+    step = _smoke_verify_step_block()
+    assert "python tools/verify_windows_portable.py" in step, (
+        "匹配到的 Verify 步骤里没有 `python tools/verify_windows_portable.py`，"
+        "守卫可能截错了块；请检查步骤名或 run 命令是否被改写。"
+    )
+
+    match = re.search(r"^\s{8}timeout-minutes:\s*(\d+)\s*$", step, re.MULTILINE)
+    assert match, (
+        f"{CI_WORKFLOW} 的 `Verify Windows Portable` 步骤没有步骤级 timeout-minutes：\n"
+        "缺少它时，一次静默卡死会一路烧到 job 级护栏 30 分钟才失败，"
+        "且被取消的 job 日志可能整份丢失（2026-11-04 已发生），事后无法定位。"
+        f"\n修法：给该步骤加 `timeout-minutes: {MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}`"
+        "（正常实测 27s、脚本内最坏约 6 分钟，10 分钟约为最坏路径的 1.7 倍）。"
+    )
+
+    minutes = int(match.group(1))
+    assert 0 < minutes <= MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES, (
+        f"`Verify Windows Portable` 的步骤级 timeout-minutes = {minutes}，"
+        f"超过判据上界 {MAX_SMOKE_VERIFY_STEP_TIMEOUT_MINUTES}：\n"
+        "写成接近 job 级 30 的值等于把判据退化成护栏，静默卡死仍会烧满。"
+        "\n修法：回到 10；确需更长时先拿分段实测证明慢在哪，而不是放宽判据。"
+    )
+
+    job_match = re.search(r"^    timeout-minutes:\s*(\d+)\s*$", _ci_job_block("windows-portable-smoke"), re.MULTILINE)
+    assert job_match, (
+        "windows-portable-smoke 的 job 级 timeout-minutes 被删掉了：\n"
+        "步骤级 10 分钟是判据，job 级 30 分钟是兜底护栏，二者必须并存；"
+        "只留步骤级时，一旦有更早的步骤卡死就没有最后一道上界。"
+    )
+    assert int(job_match.group(1)) == SMOKE_JOB_TIMEOUT_MINUTES, (
+        f"windows-portable-smoke 的 job 级 timeout-minutes = {job_match.group(1)}，"
+        f"期望 {SMOKE_JOB_TIMEOUT_MINUTES}：\n"
+        "job 级只作护栏，不应被步骤级判据顶替或放宽；"
+        "若确要改它，先改本守卫与 ci-speed-budget.md 的书面依据。"
+    )
+
+
+# ── Node 工具链显式化守卫（2026-10-05 清债轮 C 组）──────────────────────────────
+# 背景：`tests/` 下有一批 wrapper 会 `node tools/*.mjs` 真跑 .mjs 行为探针（把前端真源码
+# 切进 node:vm 沙箱执行）。但 ci.yml 此前**从不安装 node**，也没提过 setup-node ——
+# wrapper 在 CI 上"恰好真跑"靠的是 `ubuntu-latest` runner 镜像**预装**的 Node 20.x。
+#
+# 这是**隐式依赖**，且失败模式极隐蔽：node 一旦不在 PATH，`shutil.which("node")` 守卫
+# 走的是 `pytest.skip`（本地开发机没 node 不该红，是刻意设计）⇒ 在 CI 上会**静默跳过**
+# 全部探针，测试全绿而探针根本没跑。绿灯掩盖了「回归守卫没执行」，比直接红更坏。
+#
+# 故 ci.yml 显式加一步 setup-node@v4 并固定 major '20'，本守卫钉住它：
+#   1. 必须有 setup-node 步骤（防被删/被 revert 掉）；
+#   2. node-version MUST 固定 major，MUST NOT 是 latest / lts / 20.x 之类浮动值
+#      （浮动 ⇒ 不可复现构建）。
+#
+# 不引 pyyaml（沿用本文件既有的"按缩进层级切文本"手法，pyyaml 不在 requirements.txt，
+# 是 CI 内单独装的开发期工具，守卫不该把它变成硬依赖）。
+
+NODE_MAJOR = "20"
+
+
+def _setup_node_with_block() -> str:
+    """截出 ci.yml 里 setup-node 步骤的 `with:` 块（按缩进层级切文本）。
+
+    只需要「这个步骤自己的 inputs」，按缩进切比全文搜索更严：
+    别的步骤写了 `node-version` 不算数，得是 `actions/setup-node` 这步自己写。
+    """
+    text = _read_guard_file(CI_WORKFLOW)
+    lines = text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if "actions/setup-node@" in line)
+    except StopIteration:
+        pytest.fail(
+            f"{CI_WORKFLOW} 找不到 actions/setup-node 步骤：\n"
+            "tests/ 下的 .mjs 行为探针 wrapper 靠 `node tools/*.mjs` 真跑，此前靠 runner 镜像"
+            "**预装**的 Node 20.x 侥幸运行（隐式依赖）。一旦镜像不再预装，node 不在 PATH → "
+            "`shutil.which(\"node\")` 守卫 pytest.skip → 全部探针**静默跳过**、测试全绿，"
+            "而回归守卫根本没执行。\n"
+            "修法：在 jobs.ci 的 steps 里（setup-python 之后）加一步 actions/setup-node@v4 "
+            f"并固定 node-version: \"{NODE_MAJOR}\"，而不是删掉本守卫。"
+        )
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].strip() and not lines[i].startswith(" " * 8):
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_ci_workflow_installs_node_explicitly() -> None:
+    """ci.yml 必须显式安装 node —— 消除 wrapper 对 runner 预装的隐式依赖。
+
+    与 `test_ci_job_has_bounded_timeout` 同族：守卫钉的是「fail 模式」。
+    这里最隐蔽的失败模式不是红，是**绿**（探针被静默 skip），
+    所以缺这一步 MUST 立刻红。
+    """
+    text = _read_guard_file(CI_WORKFLOW)
+    assert "actions/setup-node@v" in text, (
+        f"{CI_WORKFLOW} 没有 setup-node 步骤：.mjs 探针 wrapper 将退回依赖 runner 镜像预装的 "
+        "Node —— node 缺失时它们会静默 skip（测试全绿而探针没跑）。"
+    )
+
+    block = _setup_node_with_block()
+    match = re.search(r"""node-version:\s*['"]?([^'"\s]+)['"]?""", block)
+    assert match, (
+        f"setup-node 步骤没有声明 node-version（{block!r}）：\n"
+        "不固定版本时 setup-node 会按 .nvmrc / runner 默认值解析，构建不可复现。"
+    )
+
+    version = match.group(1)
+    assert version not in ("latest", "lts/*", "lts", "*"), (
+        f"setup-node 的 node-version = {version!r}：\n"
+        "latest/lts 是浮动值，构建不可复现（今天的绿灯明天可能红，且无法二分定位）。\n"
+        f"修法：固定 major，例如 node-version: \"{NODE_MAJOR}\"。"
+    )
+    # 固定 major：纯数字或 v 前缀数字（'20' / 'v20'），拒绝 20.x / >=20 这类浮动写法
+    assert re.fullmatch(r"v?\d+", version), (
+        f"setup-node 的 node-version = {version!r}，不是固定的 major 版本：\n"
+        f"MUST 写死 major（建议 \"{NODE_MAJOR}\"，与 runner 自带的 20.x 对齐），"
+        "MUST NOT 写 20.x / >=20 / latest 之类会随时间漂移的值。"
+    )
+    assert version.lstrip("v") == NODE_MAJOR, (
+        f"setup-node 的 node-version = {version!r}，与守卫钉定的 major {NODE_MAJOR!r} 不符：\n"
+        "改 Node 大版本会让 .mjs 探针的真实执行结果变化（vm 沙箱行为与内置 API 都有差异），"
+        "属需要显式复核的变更。确需升级请同步改本守卫的 NODE_MAJOR 并复核探针。"
+    )
+
+
+def test_ci_missing_node_fails_at_session_start() -> None:
+    """根 conftest 必须让 CI 在 node 缺失时失败，而本地仍可由 wrapper skip。"""
+    text = _read_guard_file(ROOT_CONFTEST)
+    tree = ast.parse(text)
+    hook = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "pytest_sessionstart"
+        ),
+        None,
+    )
+    assert hook is not None, "根 conftest.py 缺 pytest_sessionstart：CI 缺 node 时 29 处 wrapper 会静默 skip"
+
+    block = ast.get_source_segment(text, hook)
+    assert block is not None
+    required_contract = [
+        ('os.environ.get("CI")', "检查必须只在 CI 环境启用，本地缺 node 仍应 skip"),
+        ('shutil.which("node")', "检查必须验证 node 是否真的在 PATH 上"),
+        ("pytest.exit(", "CI 缺 node 时必须立即让 pytest 非零退出，不能继续到 wrapper skip"),
+        ("returncode=1", "pytest 退出码必须明确为失败"),
+    ]
+    missing = [f"缺 {needle!r}（{why}）" for needle, why in required_contract if needle not in block]
+    assert not missing, "pytest_sessionstart 没有钉住 CI 必需的 node 运行时：\n" + "\n".join(missing)
+
+
+# ── CI 必需运行时清单守卫（2026-10 Fog 4）───────────────────────────────────────
+# 上一轮（#106）把 node 从「静默 skip」升级为「CI 下必红」，消掉了 29 处
+# `shutil.which("node")` 守卫的静默性。本节把「哪些二进制算 CI 必需」这条
+# **判据本身**钉成清单，防止两种反向劣化：
+#   1. 有人把**平台相关**的二进制（bash）也塞进 CI 必需 ⇒ 本地 Windows /
+#      无 bash 环境被误伤成红（#106 明确不做「CI 零 skip」全局禁令）；
+#   2. 有人把真正 CI 必需的项悄悄摘掉 ⇒ 又退回静默 skip。
+#
+# 判据（与 #106 一致）：**「CI 上缺了它 ⇒ 整批回归守卫静默失效」**。
+# 满足此判据 ⇒ 进清单；只是「本机恰好没装 / 该平台本就没这命令」⇒ 不进。
+
+# 判定为「CI 必需」的运行时：缺了它，CI 上大批回归守卫会静默 skip。
+CI_REQUIRED_RUNTIMES: tuple[str, ...] = ("node",)
+
+# 判定为「平台相关、非 CI 必需」的运行时：**刻意不进**清单，理由逐条钉住。
+#   bash —— CI(ubuntu) 上必然存在（ubuntu-latest 镜像自带，且 GitHub Actions
+#           的 run 步骤本身就以 bash 为默认 shell），缺失不现实；而它在
+#           tests/test_server.py:2591 的用法是 `_find_bash()` 的**最后一招**
+#           （前面还有 git-bash 路径探测 / `where bash` / PATH 扫描三套策略），
+#           其 skip 语义是「本机找不到任何可用 bash」——这是**平台相关**的
+#           合理 skip（Windows 无 Git-Bash/WSL 时就该跳），不是静默失效。
+#           故 MUST NOT 升级为 fail。
+PLATFORM_RELATED_RUNTIMES: tuple[str, ...] = ("bash",)
+
+
+def _sessionstart_source() -> str:
+    """取出根 conftest 里 pytest_sessionstart 的源码（缺失即 fail）。"""
+    text = _read_guard_file(ROOT_CONFTEST)
+    tree = ast.parse(text)
+    hook = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "pytest_sessionstart"
+        ),
+        None,
+    )
+    assert hook is not None, (
+        "根 conftest.py 缺 pytest_sessionstart：CI 缺 node 时 29 处 wrapper 会静默 skip，"
+        "测试全绿而 .mjs 探针根本没跑。"
+    )
+    block = ast.get_source_segment(text, hook)
+    assert block is not None
+    return block
+
+
+def _checked_runtimes_in_sessionstart() -> set[str]:
+    """从 pytest_sessionstart 源码里抽出被 `shutil.which(...)` 检查的运行时名。
+
+    只认**直接以字符串字面量传参**的调用（`shutil.which("node")`）。清单若被改成
+    循环/变量间接传入，这里会抽不到 ⇒ 守卫失败，属刻意的「别玩花样」。
+    """
+    return set(re.findall(r"""shutil\.which\(\s*["']([^"']+)["']\s*\)""", _sessionstart_source()))
+
+
+def test_ci_required_runtimes_manifest_matches_session_check() -> None:
+    """「CI 必需运行时」清单 MUST 与 conftest 实际检查的集合逐字一致。
+
+    双向钉：清单里有但没查（= 白写，守卫形同虚设）⇒ 红；
+    查了但清单里没有（= 有人绕过清单偷偷加项）⇒ 红。
+    """
+    actual = _checked_runtimes_in_sessionstart()
+    assert actual == set(CI_REQUIRED_RUNTIMES), (
+        f"conftest 实际检查的运行时 = {sorted(actual)}，与清单 "
+        f"{sorted(CI_REQUIRED_RUNTIMES)} 不一致。\n"
+        "清单是判据的唯一落点：漏写 = 该项退回静默 skip；多写 = 绕过清单，"
+        "下次没人知道它为什么被升级为 fail。\n"
+        "修法：改 CI_REQUIRED_RUNTIMES，或改 conftest 使两者一致。"
+    )
+
+
+@pytest.mark.parametrize("runtime", CI_REQUIRED_RUNTIMES)
+def test_ci_required_runtime_is_actually_checked(runtime: str) -> None:
+    """清单里每一项 MUST 在 session 检查里被 shutil.which 真查（防清单空转）。"""
+    assert runtime in _checked_runtimes_in_sessionstart(), (
+        f"清单把 {runtime!r} 列为 CI 必需，但 conftest 的 session 检查里没有 "
+        f"shutil.which({runtime!r})：清单与实现脱节，守卫形同虚设。"
+    )
+
+
+@pytest.mark.parametrize("runtime", PLATFORM_RELATED_RUNTIMES)
+def test_platform_related_runtime_is_not_promoted_to_fail(runtime: str) -> None:
+    """平台相关运行时 MUST NOT 被升级进「CI 必需」清单（防误伤本地 Windows）。
+
+    这是本节最要紧的一条反向钉。把它升级为 fail 的诱惑是真实的——它同样
+    长得像「CI 下缺了就静默 skip」——但判据不成立：
+
+      * bash 在 CI(ubuntu) 上必然存在（镜像自带，且 Actions 的 run 步骤默认
+        就是 bash），「CI 上缺 bash」不是现实场景；
+      * tests/test_server.py 的用法是 `_find_bash()` 的**兜底分支**（前面还有
+        三套探测策略），skip 语义是「本机找不到任何可用 bash」——Windows 上
+        没装 Git-Bash/WSL 时跳过是**正确**行为，不是回归守卫静默失效。
+
+    升级成 fail 的代价是实的：本地无 bash 的开发者会被红，且违背 #106 明确的
+    「不做 CI 零 skip 全局禁令」（会误伤平台专用用例等合理 skip）。
+    """
+    assert runtime not in CI_REQUIRED_RUNTIMES, (
+        f"{runtime!r} 被放进了 CI_REQUIRED_RUNTIMES：它是**平台相关**的合理 skip，"
+        "不是 CI 必需运行时。\n"
+        "升级为 fail 会让本地无 bash 的环境直接红，与 #106「只升级真正 CI 必需项、"
+        "不做零 skip 全局禁令」相悖。\n"
+        f"修法：从 CI_REQUIRED_RUNTIMES 移除 {runtime!r}。"
+    )
+    assert runtime not in _checked_runtimes_in_sessionstart(), (
+        f"conftest 的 session 检查里出现 shutil.which({runtime!r})："
+        f"{runtime!r} 是平台相关 skip，CI 下缺它 MUST NOT 让整个 session 失败。"
+    )
+
+
+def test_local_env_still_skips_instead_of_failing() -> None:
+    """「CI 必需」判据 MUST 仍由 CI 环境变量把关——本地缺运行时只 skip 不红。
+
+    这是 #106 的核心不变量：session 检查只在 CI 生效。判据一旦被改成恒真
+    （例如误写成 `if True and not shutil.which(...)`），本地 Windows 开发机
+    缺 node 就直接红；本测试用「判据表达式必须真的读 CI 环境变量」把它钉住。
+    """
+    block = _sessionstart_source()
+    assert 'os.environ.get("CI")' in block, (
+        "pytest_sessionstart 不再读 CI 环境变量：session 检查会在**本地**也生效，"
+        "缺运行时的开发者直接被红（#106 明确：本地仍由各 wrapper 决定是否 skip）。\n"
+        '修法：恢复 `if os.environ.get("CI") and ...` 的判据形态。'
+    )
+    # 恒真变异（`if True and ...`）会同时丢掉 CI 判据，上面一条即可杀死；
+    # 这里再钉一条「判据不得被短路成与 CI 无关的常量」，双保险。
+    assert not re.search(r"if\s+(True|1)\s*(and|:)", block), (
+        "pytest_sessionstart 的判据被短路成恒真（`if True and ...`）："
+        "session 检查会在本地也生效，与 #106 的「本地仍 skip」相悖。"
+    )
+
+
+def test_db_cleanup_needs_no_external_binary() -> None:
+    """DB 清理 MUST NOT 依赖外部 `rm` 命令（它是纯跨平台 os.remove）。
+
+    Fog 4 调研曾报「`delector/core/database.py` 约 :2086 的 test_cleanup 用
+    `shutil.which("rm")` 做守卫，是第 8 处同类漏网」。**该前提经核实不成立**：
+    全仓 `shutil.which("rm")` 命中 0 次，`def test_cleanup` 命中 0 次，
+    `delector/core/database.py` 内 `shutil.which` 命中 0 次。真实的清理实现在
+    `tests/db_cleanup.py::remove_db_files`，用的是 `os.remove`（跨平台，
+    Windows 上同样可用，不经 shell、不需要 PATH 上有 rm）。
+
+    本测试把「不依赖外部 rm」这条事实钉住：若将来有人图省事改成
+    `subprocess(["rm", ...])`，或加一条 `shutil.which("rm")` 守卫，
+    本测试立刻红——避免「Windows 上没有 rm ⇒ 静默 skip ⇒ 清理守卫失效」
+    这类新 Fog。
+    """
+    helper = REPO_ROOT / "tests" / "db_cleanup.py"
+    text = _read_guard_file(helper)
+    offenders = [
+        line.strip()
+        for line in text.splitlines()
+        if re.search(r"""shutil\.which\(\s*["']rm["']\s*\)|subprocess""", line)
+    ]
+    assert not offenders, (
+        f"tests/db_cleanup.py 出现了对外部命令的依赖：{offenders}\n"
+        "清理逻辑 MUST 继续用 os.remove（跨平台、无需 PATH 上存在 rm）。\n"
+        "改成 `subprocess(['rm', ...])` 或加 `shutil.which('rm')` 守卫会让 "
+        "Windows 上没有 rm 的环境**静默 skip**清理守卫——正是 Fog 4 要消除的那类 Fog。"
+    )
+    # 反向确认：真的在用 os.remove（守卫不是空转）
+    assert "os.remove(" in text, (
+        "tests/db_cleanup.py 不再使用 os.remove：清理实现被改动过，"
+        "请复核是否重新引入了对外部命令 / 平台专有 API 的依赖。"
+    )
