@@ -1083,10 +1083,15 @@ def test_all_backend_modules_registered_in_all_packaging_targets():
         assert wf.count(hidden) >= 2, (
             f"{mod} 未在 build-release.yml Linux/macOS 的 --hidden-import 中完整注册 (count={wf.count(hidden)})"
         )
-    # 3. Android Chaquopy：Phase 2 后整目录拷入。再逐个 cp 扁平 .py 会漏模块 ——
-    #    v5.3.0 实际漏过 routes_a2.py（server.py:233 静态 import 它），整目录拷贝修掉它。
-    assert "cp -r start.py" in wf, "Android 应单独拷贝入口 start.py"
-    assert "cp -r delector" in wf, "Android 应整目录拷入 delector/（覆盖全部 26 个业务模块）"
+    # 3. Android Chaquopy：同步语义已收敛到 tools/sync_android_sources.py。
+    #    两步式守卫：workflow 必须调用脚本；脚本必须单独拷 start.py、整目录拷 delector/。
+    #    只认 workflow 内联 cp 会随脚本化失效，只认脚本不看调用则可能"脚本在但 job 不跑"。
+    assert "python tools/sync_android_sources.py" in wf, "Android job 应调用统一同步脚本"
+    sync_script = open(os.path.join(root, "tools", "sync_android_sources.py"), encoding="utf-8").read()
+    assert 'python_dest / "start.py"' in sync_script, "同步脚本应单独拷贝入口 start.py"
+    assert '_copy_tree(delector, python_dest / "delector")' in sync_script, (
+        "同步脚本应整目录拷入 delector/（覆盖全部业务模块）"
+    )
 
     critical_apk_needles = [
         "delector/server.py",
@@ -1127,7 +1132,8 @@ def test_preset_processed_data_registered_in_all_packaging_targets():
     Python 口径（「列表 A2 → 点进去 A1」跳变复发），而本地 pytest 全绿（同 v4.8.1 / v5.2.0
     的漏模块事故同款失效面）。
 
-    Android 端（DEV-RULES §2.4 第③端）由 `build-release.yml` 的 `cp -r delector` 整目录拷贝覆盖
+    Android 端（DEV-RULES §2.4 第③端）由 `build-release.yml` 调用的
+    `tools/sync_android_sources.py` 整目录拷贝 `delector/` 覆盖
     ——`preset_processed.json` 就在 `delector/` 目录下，随整目录进 APK，故**无需**单独声明。
     """
     root = ROOT
@@ -1146,8 +1152,12 @@ def test_preset_processed_data_registered_in_all_packaging_targets():
     assert wf.count(needle) == 2, (
         f"build-release.yml 应在 Linux / macOS 两个 PyInstaller 位点各纳入一次 (count={wf.count(needle)})"
     )
-    # Android 覆盖：整目录拷贝（与四端打包同步守卫同款依据）。
-    assert "cp -r delector" in wf, "Android 端需整目录拷入 delector/ 才能带上该数据文件"
+    # Android 覆盖：workflow 调同步脚本，脚本整目录拷 delector/（与四端打包同步守卫同款依据）。
+    assert "python tools/sync_android_sources.py" in wf, "Android job 应调用统一同步脚本"
+    sync_script = open(os.path.join(root, "tools", "sync_android_sources.py"), encoding="utf-8").read()
+    assert '_copy_tree(delector, python_dest / "delector")' in sync_script, (
+        "同步脚本需整目录拷入 delector/ 才能带上该数据文件"
+    )
 
     verify = open(os.path.join(root, "tools", "verify_windows_portable.py"), encoding="utf-8").read()
     assert needle in verify, "verify_windows_portable.py 缺少对预生成数据文件的**真产物**断言"
