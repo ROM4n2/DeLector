@@ -21,7 +21,8 @@
 | 安全策略与漏洞报告 | `SECURITY.md` |
 | 产品特性全览 / 设计与实施计划 | `FEATURES.md`；`docs/specs/`（设计稿）、`docs/plans/`（在途计划；已交付的进 `docs/plans/archive/`） |
 | 文档该放哪 / docs 目录约定（分层与归档规则） | `docs/README.md` |
-| 语义知识检索与沉淀 | `search_vault` MCP 或 `python d:\Obsidian\Coding\scripts\search-vault.py`；成熟知识走 `/vault-save` |
+| 语义知识检索与沉淀 | `search_vault` MCP 或 `python \"$WIKI_PATH/scripts/search-vault.py\"`；成熟知识走 `/vault-save` |
+| 工程规范与避坑检索（3 行锚点） | `CLAUDE.md` / `.agent-rules.md` / `.cursorrules`（规范源 `$WIKI_PATH/AGENTS.md`） |
 
 ---
 
