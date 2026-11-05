@@ -7,6 +7,7 @@
   "tests/test_a2_vocab_data.py": 0.1,
   "tests/test_ai_endpoints_localhost_gate.py": 3.1,
   "tests/test_ai_polish_loop.py": 3.4,
+  "tests/test_android_packaging.py": 0.1,
   "tests/test_android_webview_policy.py": 0.8,
   "tests/test_app_version_source.py": 0.1,
   "tests/test_articles_list_contract.py": 2.2,

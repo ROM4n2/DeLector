@@ -117,6 +117,20 @@ android {
                 // 会连带拉入 thinc/blis/numpy/cymem/preshed/murmurhash/srsly。
                 // 不额外 pin numpy，让 Chaquopy 的解析器用它仓库里那份（cp310 只有 1.26.2）。
                 install "spacy==3.8.7"
+
+                // 本机可选的 wheel 本地供给（2026-11-05）：键 python.pipFindLinks 的值为逗号
+                // 分隔的目录清单，逐项转成独立的 --find-links（不要塞成一个字符串指望 pip 自拆）。
+                // 该键只写在 android/local.properties（已被 .gitignore 忽略），仓库里不留任何
+                // 字面路径；CI/他人没有这个键 ⇒ 不进分支，仍从 chaquo.com 拉取。
+                def findLinks = localProperties.getProperty("python.pipFindLinks")
+                if (findLinks) {
+                    findLinks.split(",").each { link ->
+                        def trimmed = link.trim()
+                        if (trimmed) {
+                            options("--find-links", trimmed)
+                        }
+                    }
+                }
             }
         }
     }
