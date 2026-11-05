@@ -34,6 +34,9 @@
 ⑦ 新位置 0 字节空壳 + 旧位置有数据 ⇒ **仍抛**（size 对称化，堵住静默空库）；
 ⑧ 新位置**非空** + 旧位置非空 ⇒ 不抛（对称性守卫，防改到另一极端）。
 另有 2 条接线/状态用例：模块级 ``DATA_DIR`` 与 ``_REPO_ROOT`` 同地、``init_db()`` 先跑闸后建表。
+最后两条是**方向性**补充：旧位置有库 ⇒ 必须抛且消息含判定语「检测到数据目录迁移未完成」；
+旧位置无库（全新安装）⇒ 必须放行。它们在成本基准把迁移闸与真实仓库根解耦后，继续钉住
+``preflight_data_dir`` 本身的 fail-loud 语义不被弱化。
 """
 
 import os
@@ -313,3 +316,40 @@ def test_init_db_runs_the_gate_before_creating_any_table(tmp_path: Path, monkeyp
         "闸必须在建表之前中止：一旦 CREATE TABLE 执行，空库文件就落盘了，"
         "用户看到的正是「功能正常、数据全空」且此后更难分辨的静默失败。"
     )
+
+
+def test_preflight_raises_with_migration_incomplete_wording_when_old_location_has_db(
+    tmp_path: Path,
+):
+    """正向：旧位置有非空库 + 新位置为空 ⇒ 抛出并保留判定语「检测到数据目录迁移未完成」。
+
+    与用例① 的分工：① 钉消息里的两个绝对路径与可复制的 ``cp``；本条钉**失败语义本身**
+    —— 上层日志 / 用户提示靠这句判定语识别事故形态，改掉它等于把事故重新变成「看不懂的报错」。
+    """
+    repo_root = _make_repo_root(tmp_path, legacy_bytes=b"SQLite format 3\x00legacy rows")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _preflight()(str(data_dir), str(repo_root))
+
+    message = str(excinfo.value)
+    assert "检测到数据目录迁移未完成" in message, (
+        f"迁移闸的失败消息必须保留判定语「检测到数据目录迁移未完成」，实际为：{message}"
+    )
+
+
+def test_preflight_passes_when_old_location_has_no_db(tmp_path: Path):
+    """反向：旧位置根本没有 ``delector.db``（全新安装）⇒ **不**抛，正常通过。
+
+    与正向用例互补：只证明「会拦」不足以证明「拦得准」—— 若闸退化成无条件抛，
+    正向仍绿，而所有全新安装用户都起不来；本条钉住这条不变量的另一面。
+    """
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    assert not (repo_root / "delector.db").exists(), "前提：旧位置必须没有库"
+
+    _preflight()(str(data_dir), str(repo_root))  # 不抛即通过
