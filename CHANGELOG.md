@@ -6,6 +6,21 @@
 
 **最新版本：v5.21.1（2026-11-03）**
 
+### 🛠️ 未发版 (Unreleased)
+
+#### 🧠 NLP 模型档位定案 `sm`（ADR-0027）
+
+- **代码与运行事实收敛**：`delector/nlp_engine/processor.py` 原先按 `de_core_news_md → de_core_news_sm` 顺序加载，但 CI、自动下载、Android 打包与新建 uv 环境实际只安装 `sm`，"md 优先"从未生效、只是静默回退。现改为单一常量 `SPACY_MODEL_NAME = "de_core_news_sm"`，删除候选元组与独立下载口径；`syntax_tree.get_spacy_nlp()` 复用同一常量。
+- **行为边界不变**：本地无模型时 `try_load_nlp_no_download()` 仍返回 `None`；自动下载仅在非 Android 且本地 sm 加载失败时触发，失败仍硬失败；纯 Python 降级路径未改动。
+- **口径统一**：README / CONTRIBUTING / Dockerfile / `docs/agents/` 与基准脚本中的 md 安装、md 候选描述同步为 sm；历史 ADR-0008 与归档计划的 md 记录保留不改。
+- **守卫**：新增 `tests/test_nlp_model_sm_only.py`（单一事实源、运行期与工具脚本无 md 引用、自动下载只尝试 sm、失败语义不退化）。
+- **未验证**：sm 与 md 在真实难句上的句法树/难度判定差异未做对照实验（见 ADR-0027 OPEN）。
+
+#### 📱 Android WebView 可调试性与外链修复
+
+- **Debug 构建可被 `chrome://inspect` 连接**：`MainActivity` 仅在 `BuildConfig.DEBUG` 分支调用 `WebView.setWebContentsDebuggingEnabled(true)`，release 保持关闭；`tests/test_android_webview_policy.py` 用静态断言锁住"必须被 DEBUG 守卫、只允许一次"，裸调 `true` 会立即变红。**已修复，真机与模拟器均未点检**：`chrome://inspect` 的实际连接未验证。
+- **更新 chip 外链点击无响应已修复**：此前 `WebViewClient` 未覆写 `shouldOverrideUrlLoading`，`target="_blank"` 的 GitHub Releases 链接被 WebView 自己吞掉。现覆写两个重载并统一委派给 `handleExternalNavigation`：站内回环（`127.0.0.1` / `localhost` / `::1` / `0.0.0.0`）、相对路径、`file://` 留在 WebView；其它 `http(s)` 与 `mailto:` 交系统 App；无可用 App 时静默吞掉并记日志，不崩、不把工作台替换成错误页。判定抽为零 Android 依赖纯函数 `WebUrlPolicy.shouldOpenExternally(url)`，`tests/test_android_webview_policy.py` 以 javac 直编直跑 25 条行为断言，另含静态守卫。**已修复，真机与模拟器均未点检**：外链是否真的唤起系统浏览器未验证。
+
 **v5.21.1（2026-11-03）**
 
 ### 🐞 伴学 SSE 跨 chunk 分帧修复（PR #199）

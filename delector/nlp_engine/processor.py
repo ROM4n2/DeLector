@@ -18,10 +18,11 @@ from delector.core.utils import is_android
 
 from .syntax_tree import analyze_sentence_topology, build_clause_tree, split_sentences_pure_python
 
-# md 带词向量、标注更准，是桌面端首选；sm 体积小，Android 包里装的和自动下载兜底都用它。
-# 按顺序取第一个能加载的。
-SPACY_MODEL_CANDIDATES = ("de_core_news_md", "de_core_news_sm")
-AUTO_DOWNLOAD_MODEL = "de_core_news_sm"
+# 模型档位定案（ADR-0027，2026-11-04）：只支持 de_core_news_sm。
+# 历史上的 "md 优先" 从未生效（CI、自动下载、Android 打包、uv 环境都只装 sm），
+# 只是被 sm 静默兜底 —— 代码与运行事实不符。运行期加载与自动下载共用这一个常量，
+# 不再保留候选元组或独立的下载口径。要评估 md 必须另立一次性实验（ADR-0027 OPEN）。
+SPACY_MODEL_NAME = "de_core_news_sm"
 
 # processed_json 的 schema 版本号 —— 全仓唯一真相源。
 # 惰性迁移判据（routes/main.py 的 GET /api/articles/{article_id}）按它比对：
@@ -93,24 +94,23 @@ _android_runtime = is_android()
 
 
 def _load_model_with_autodownload() -> Tuple[Any, str]:
-    """按候选顺序加载模型；候选全失败时自动下载兜底。返回 (nlp, 加载方式描述)。
+    """加载唯一模型（sm）；本地加载失败时自动下载同一模型一次兜底。返回 (nlp, 加载方式描述)。
 
     「Android 不下载」的保证由调用方给出：Android 路径根本不会走到本函数（见本块末尾的
     平台分支），故旧故障（Chaquopy 里 spacy.cli.download 起 pip 子进程阻塞启动页）不会复发。
     """
     errors: List[str] = []
-    for candidate in SPACY_MODEL_CANDIDATES:
-        try:
-            return _load_spacy_model(candidate)
-        except Exception as e:
-            errors.append(str(e))
+    try:
+        return _load_spacy_model(SPACY_MODEL_NAME)
+    except Exception as e:
+        errors.append(str(e))
     try:
         from spacy.cli import download  # type: ignore[attr-defined]  # spacy.cli 不显式导出 download
 
-        download(AUTO_DOWNLOAD_MODEL)
-        return _load_spacy_model(AUTO_DOWNLOAD_MODEL)
+        download(SPACY_MODEL_NAME)
+        return _load_spacy_model(SPACY_MODEL_NAME)
     except Exception as e:
-        errors.append(f"自动下载 {AUTO_DOWNLOAD_MODEL} -> {e}")
+        errors.append(f"自动下载 {SPACY_MODEL_NAME} -> {e}")
     raise RuntimeError("; ".join(errors))
 
 
@@ -182,7 +182,7 @@ def get_loaded_nlp() -> Any:
 
 
 def try_load_nlp_no_download() -> Any:
-    """按 `SPACY_MODEL_CANDIDATES` **只做本地加载**：能装就装（写回既有缓存），装不上就返回 None。
+    """按 `SPACY_MODEL_NAME` **只做本地加载**：能装就装（写回既有缓存），装不上就返回 None。
 
     **为什么需要这个中间态**（设计理由，勿删）：
     - 只用 `get_loaded_nlp()` 会让**桌面首次润色**也落在 `rules_only`（模型是惰性加载的，别处
@@ -202,18 +202,17 @@ def try_load_nlp_no_download() -> Any:
     with _model_lock:
         if _nlp_resolved and _nlp_model is not None:
             return _nlp_model
-        for candidate in SPACY_MODEL_CANDIDATES:
-            try:
-                model, how = _load_spacy_model(candidate)
-            except Exception:
-                # 该候选本地加载失败 ⇒ 试下一个；**绝不**退到 spacy.cli.download（见 docstring）。
-                continue
-            _nlp_model = model
-            _nlp_resolved = True
-            NLP_ENGINE = "spacy"
-            NLP_ENGINE_DETAIL = f"spaCy {getattr(spacy, '__version__', 'unknown')} + {how}"
-            return _nlp_model
-        return None
+        try:
+            model, how = _load_spacy_model(SPACY_MODEL_NAME)
+        except Exception:
+            # 本地加载失败 ⇒ 诚实返回 None；**绝不**退到 spacy.cli.download（见 docstring）。
+            return None
+        _nlp_model = model
+        _nlp_resolved = True
+        NLP_ENGINE = "spacy"
+        NLP_ENGINE_DETAIL = f"spaCy {getattr(spacy, '__version__', 'unknown')} + {how}"
+        return _nlp_model
+    return None
 
 
 class _LazyNlp:

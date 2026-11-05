@@ -99,6 +99,26 @@ def test_append_and_get_messages(conn):
     assert msgs[1]["id"] == m2["id"]
 
 
+def test_deferred_message_and_proposal_writes_roll_back_together(conn):
+    s = create_session(conn, article_id="art_1", title="Atomic Chat")
+    sid = s["id"]
+
+    append_message(conn, session_id=sid, role="user", content="Hallo", commit=False)
+    create_proposal(
+        conn,
+        session_id=sid,
+        action="create_vocab_cards",
+        title="die Eule",
+        payload={"cards": [{"word": "die Eule"}]},
+        proposal_id="prop_deferred",
+        commit=False,
+    )
+    conn.rollback()
+
+    assert get_messages(conn, session_id=sid) == []
+    assert get_proposals(conn, session_id=sid) == []
+
+
 def test_scope_key_additive_migration_and_legacy_history_readable():
     """老库没有 scope_key 列：init 必须补列，旧会话归入 view:global 且历史可读。"""
     legacy = sqlite3.connect(":memory:")
