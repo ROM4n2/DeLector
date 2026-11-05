@@ -451,3 +451,14 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 任务①（零代码）syntax_tree 拆分评估：实际路径 `delector/nlp_engine/syntax_tree.py`（任务书写 `core/` 系路径漂移）。radon 实测 `analyze_sentence_topology` 593–1017 / 425 行 / CC 210，`_classify_single_clause` CC 91，`build_clause_tree` CC 45，文件 MI 0.00；全仓 `.py` 无 radon 门禁。行级 AST 统计：控制语法头 106(24.9%)、docstring 21、空行注释 69、其余 229；分支统辖 313(73.6%)、无条件直线仅 61(14.4%)；79 if + 15 for + 56 BoolOp 共同推高 CC。patch 点全在消费方模块（`test_syntax_score.py` 4 处、`test_syntax_hard_api.py` 2 处），无直指 syntax_tree 内部函数的 patch；唯一私有符号外泄是 `tests/test_server_android_fallback.py:47` import `_analyze_syntax_tree_pure_python`；`_spacy_load_error` 模块全局被测试写 2 次 ⇒ 三件套不拆。计划 `docs/plans/2026-11-05-syntax-tree-split-assessment.md`，commit `338eda9` 直推 master（docs 白名单），master run `42018606759` attempt 1 success（13 success / 1 skipped），未 rerun。
 任务② Windows Smoke 心跳：新增 `tools/ci_heartbeat.py` + `ci.yml` 包装 Build/Verify 两步；纯旁路、无超时、退出码透传、无新依赖、心跳异常带 `silent-ok` 注释。首轮 run `42019581031` 红于 static-invariants（工具内 `except pass` 未带 silent-ok），补注释后 run `42020293134` 全 success（13 success / 1 skipped）。心跳原文：run `42019581031` job `127218789246` build `11:33:12 started` → `11:34:12 still running (elapsed 60s)` → `11:34:23 finished (elapsed 71s, rc=0)`；终轮 `42020293134` build 39s 只出现 start/finish（未到 60s），包装开销约 0.2s。PR #230 未合并。
 边界：心跳无法覆盖 runner/job worker 层停摆或日志整份 404；30 分钟 hang 未复现。
+
+
+### 2026-11-05 20:42 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+任务 B（先合并 #230，再 P1 拆分）：
+① #230 merge commit 027873c（head 1c105e0 / 最新 run 42020293134 success），master push run 42023181413 success，attempt 1，未 rerun；本地 fetch + reset --hard origin/master 后 HEAD=027873c，origin/master..master 为空（无丢失）；ci/windows-smoke-heartbeat 远端分支保留。
+② P1 拆分（delector/nlp_engine/syntax_tree.py）：engineering/budget.json 与 module_lines 守卫在全仓不存在（grep 零命中），无 443 行硬上限，故 tables 单模块即可，未改任何阈值。syntax_tables.py 453 行（7 表 443 行）；syntax_fields.py 347 行（11 块 223 行 + _is_subjunctive_token 24 行 + 包装/import）；syntax_tree.py 1569→926 行，analyze 425→234 行，CC 210→86（下降，不是不变）。依赖方向 syntax_tables←syntax_fields←syntax_tree，AST 检查无反向 import。
+③ 验证：18/18 逐块 AST 全等（另 _is_subjunctive_token 1 项全等）；106 句/466 次行为差分 0 不等；全量 2782 passed/3 skipped/551.11s；mypy --follow-imports=skip Success；ruff delector tools tests All checks passed。
+变异甲（INFINITIVE_CONNECTORS 键 anstatt→anstattX）红 test_build_clause_tree_infinitivgruppe_varieties（assert '' == 'anstatt'）；变异乙（abs(...)<=2→<2）syntax 16 passed 但语料差分 12/466 不等；均还原，git diff 空。
+④ PR #231（分支 refactor/syntax-tree-p1，7 提交=6 搬移+1 类型注解），首轮 run 42027935624 success（12 pass / 2 skip：Windows Smoke / Master Scope）。未合并；P2/P3 未动。
+边界：差分句料仅测试句+OFFICIAL_CORPUS 106 句；无 import-linter，依赖方向靠 AST 脚本；Windows Smoke 本 PR 按设计 skipped。
