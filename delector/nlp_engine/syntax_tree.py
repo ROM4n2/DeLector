@@ -16,6 +16,8 @@ Zero external API dependencies.
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from .syntax_fields import filter_non_punct_tokens, find_main_finite_verb
+
 # 语言学常量表已搬到 ``syntax_tables.py``（P1-0 纯搬移），显式导入保持原有公开名字。
 from .syntax_tables import (
     COORDINATING_CONJUNCTIONS,
@@ -198,26 +200,10 @@ def analyze_sentence_topology(
     if not tokens:
         return _empty_topology()
 
-    non_punct_tokens = [t for t in tokens if not t.is_punct and not t.is_space]
-    if not non_punct_tokens:
-        non_punct_tokens = tokens
+    non_punct_tokens = filter_non_punct_tokens(tokens)
 
     # Check if there is a main clause finite verb (e.g. following a comma in a preposed subclause)
-    has_main_finite_verb = False
-    main_fin_candidate: Optional[Token] = None
-
-    # Look for a finite verb after a comma (V2 main clause after preposed subclause)
-    for idx, t in enumerate(tokens):
-        if t.text == "," and idx + 1 < len(tokens):
-            next_tok = tokens[idx + 1]
-            if (
-                next_tok.pos_ in ("VERB", "AUX")
-                or next_tok.tag_ in ("VVFIN", "VAFIN", "VMFIN")
-                or next_tok.text.lower() in FINITE_MODAL_AND_AUX_FORMS
-            ):
-                has_main_finite_verb = True
-                main_fin_candidate = next_tok
-                break
+    has_main_finite_verb, main_fin_candidate = find_main_finite_verb(tokens)
 
     # Determine Clause Verb Order & Type
     is_infinitiv = False
