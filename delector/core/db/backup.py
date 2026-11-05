@@ -79,8 +79,18 @@ _SRS_DEFAULTS = {
 
 _BACKUP_TABLES: Dict[str, Tuple[Tuple[str, ...], Dict[str, Any]]] = {
     "articles": (
-        ("id", "title", "source_url", "raw_text", "processed_json", "created_at"),
-        {"title": "Untitled", "source_url": "", "raw_text": "", "processed_json": "{}"},
+        # stats_json（P1-6 列表投影列）必须在列清单里：导出走 `SELECT *` 能读到它，
+        # 但还原按清单 DELETE + INSERT ⇒ 漏列会让该列**永久 NULL**（COALESCE 只是
+        # 把 NULL 读成默认值，数据是真丢）。旧备份无此键 ⇒ defaults 落 None（与
+        # 旧库回填前的状态一致），列表查询照常从 processed_json 兜底。
+        ("id", "title", "source_url", "raw_text", "processed_json", "stats_json", "created_at"),
+        {
+            "title": "Untitled",
+            "source_url": "",
+            "raw_text": "",
+            "processed_json": "{}",
+            "stats_json": None,
+        },
     ),
     "vocab_cards": (
         (

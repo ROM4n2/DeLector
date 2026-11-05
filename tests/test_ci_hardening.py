@@ -1991,6 +1991,106 @@ def test_restore_req_declares_every_backup_table() -> None:
     )
 
 
+def test_backup_column_lists_cover_schema_columns(tmp_path: Path) -> None:
+    """列级守卫：备份列清单 MUST 覆盖**建表 DDL 的每一列**（主库 + progress 库）。
+
+    上一节只比对**表集合**——表在清单里、列漏了照样全绿。articles.stats_json
+    （P1-6 列表投影列，schema.py 建表 DDL 内）就是这样漏出清单的：
+    `_replace_tables` 按清单 DELETE + INSERT ⇒ 还原后该列**永久 NULL**，
+    列表接口的 COALESCE 只是把 NULL 读成默认值，掩盖了性能回退（数据是真丢）。
+
+    判据现读 `PRAGMA table_info`（不手抄列名），与既有守卫同一纪律：清单随功能增长，
+    手抄的列集合永远滞后一步。反向也守（清单独有、DDL 没有的列会在还原时 INSERT 报错）。
+    """
+    import sqlite3
+
+    from delector.core.database import _BACKUP_TABLES, _PROGRESS_TABLES
+
+    db_path, progress_path = _fresh_db_pair(tmp_path, "cols")
+    problems: list[str] = []
+    for label, path, spec in (
+        ("main", db_path, _BACKUP_TABLES),
+        ("progress", progress_path, _PROGRESS_TABLES),
+    ):
+        conn = sqlite3.connect(path)
+        try:
+            for name, (cols, _defaults) in spec.items():
+                actual = [r[1] for r in conn.execute(f"PRAGMA table_info({name})").fetchall()]
+                missing = sorted(set(actual) - set(cols))
+                unknown = sorted(set(cols) - set(actual))
+                if missing:
+                    problems.append(f"{label}/{name} 备份列清单漏列：{missing}")
+                if unknown:
+                    problems.append(f"{label}/{name} 备份列清单含建表 DDL 中不存在的列：{unknown}")
+        finally:
+            conn.close()
+
+    assert problems == [], (
+        "备份列清单与建表 DDL 不一致（还原按清单 DELETE + INSERT ⇒ 漏列的值会永久变 NULL/默认值，"
+        "接口仍返回 ok，用户零提示）：\n  " + "\n  ".join(problems) + "\n"
+        "修法：把缺的列补进 _BACKUP_TABLES / _PROGRESS_TABLES 的列元组与 defaults，"
+        "而不是删掉本守卫。"
+    )
+
+
+def test_backup_restore_roundtrip_keeps_articles_stats_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """articles.stats_json 必须逐字度过「导出 →（RestoreReq 过滤）→ 还原」往返。
+
+    导出侧用 `SELECT *`，所以 stats_json 会进 payload；坏在还原侧按固定列清单
+    DELETE + INSERT ⇒ 不在清单里的列被丢弃、还原后为 NULL。本用例走真实链路
+    （build_backup_payload + RestoreReq + _replace_tables），在临时库里真跑。
+    """
+    from delector.core.database import _BACKUP_TABLES, _replace_tables, build_backup_payload, get_db
+    from delector.routes.main import RestoreReq
+
+    stats_value = '{"words": 3, "sentences": 1}'
+
+    src, progress_src = _fresh_db_pair(tmp_path, "src")
+    _pin_db_env(monkeypatch, src, progress_src)
+    conn = get_db(src)
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO articles (title, raw_text, processed_json, stats_json, source_url) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Stats 往返", "Ein kurzer Satz.", '{"stats": {"words": 3}}', stats_value, ""),
+            )
+    finally:
+        conn.close()
+
+    exported = build_backup_payload()
+    exported_row = next(r for r in exported["articles"] if r["title"] == "Stats 往返")
+    assert exported_row["stats_json"] == stats_value, (
+        "前置：导出侧没带 stats_json，本用例守的对象不对（先修 build_backup_payload 的读取列）"
+    )
+
+    # 换机/重装：还原进全新的空库
+    dst, progress_dst = _fresh_db_pair(tmp_path, "dst")
+    _pin_db_env(monkeypatch, dst, progress_dst)
+    req = RestoreReq(**exported)
+    payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+
+    conn = get_db(dst)
+    try:
+        with conn:
+            _replace_tables(conn, _BACKUP_TABLES, payload)
+    finally:
+        conn.close()
+
+    conn = get_db(dst)
+    try:
+        after = dict(conn.execute("SELECT * FROM articles WHERE title = 'Stats 往返'").fetchone())
+    finally:
+        conn.close()
+    assert after["stats_json"] == stats_value, (
+        f"articles.stats_json 往返后被丢弃：还原前 {stats_value!r}，还原后 {after['stats_json']!r}\n"
+        "这是 _BACKUP_TABLES['articles'] 的列清单缺 stats_json ⇒ _replace_tables 不写该列。\n"
+        "修法：把 stats_json 补进列清单（defaults 置 None 以兼容旧备份）。"
+    )
+
+
 # ── master 直推范围机械闸（P1-1：分支纪律此前没有机械闸）─────────────────────────
 # 背景：docs/reviews/2026-10-16-commit-rhythm-and-git-management-audit.md P1-1 ——
 # 2026-10-09~14 有 25 个 feat/fix/ci/test/perf 提交直推 master（含生产代码与 CI 定义），
