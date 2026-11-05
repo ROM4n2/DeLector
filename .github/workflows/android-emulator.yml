@@ -41,12 +41,23 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install spaCy (APK runtime version)
+        run: pip install "spacy>=3.8,<3.9"
+
+      # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
+
       # 与 build-release.yml 的 Android job 逐项同源：同样的模型兼容断言与目录布局，
       # 否则「模拟器包能跑」证明不了正式包的同一套资产装配。
       - name: Sync Python Backend, Model, and Assets into Android Project
         run: |
-          pip install "spacy>=3.8,<3.9"
-          python -m spacy download de_core_news_sm
           python - <<'PY'
           import spacy
           APK_SPACY = "3.8.7"

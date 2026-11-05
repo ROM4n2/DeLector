@@ -35,7 +35,16 @@ jobs:
           # GTK/WebKit 的 Linux 上会直接抛异常，故绝不并入 requirements.txt，Linux/macOS
           # job 也不装它（与桌面壳正确性无关，且会让它们全红）。
           pip install -r requirements-desktop.txt
-          python -m spacy download de_core_news_sm
+
+      # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
 
       - name: Run Packaging Smoke Tests
         run: |
@@ -91,7 +100,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller pytest
-          python -m spacy download de_core_news_sm
+
+      # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
 
       - name: Run Packaging Smoke Tests
         run: |
@@ -190,7 +208,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller pytest
-          python -m spacy download de_core_news_sm
+
+      # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
 
       - name: Run Packaging Smoke Tests
         run: |
@@ -304,10 +331,21 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install spaCy (APK runtime version)
+        run: pip install "spacy>=3.8,<3.9"
+
+      # 504 治理：见 tools/download_spacy_model.py 的模块 docstring（有界重试 + wheel 缓存）。
+      - name: Restore spaCy German model wheel
+        uses: actions/cache@v4
+        with:
+          path: .spacy-wheel-cache
+          key: spacy-model-de_core_news_sm-3.8.0-${{ runner.os }}-py311
+
+      - name: Install spaCy German model (cached wheel + bounded retry)
+        run: python tools/download_spacy_model.py --cache-dir .spacy-wheel-cache
+
       - name: Sync Python Backend, Model, and Assets into Android Project
         run: |
-          pip install "spacy>=3.8,<3.9"
-          python -m spacy download de_core_news_sm
           python - <<'PY'
           import spacy
           APK_SPACY = "3.8.7"
