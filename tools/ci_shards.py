@@ -206,6 +206,12 @@ SHARDS: dict[str, tuple[str, ...]] = {
     "cost-guards": (
         "tests/test_articles_list_cost.py",
         "tests/test_cards_endpoint_cost.py",
+    ),
+    # TODO-CI-04：cold_start 是 cost 三文件里最慢的一个（本机 49.6s、CI 约 1/3 的 pytest
+    # 时间），单独放一个 runner 可把 cost pytest 从 83s 压到约 45–50s。两个分片各自只含
+    # cost 文件（无 xdist、不与普通测试共享进程），计时断言语义不变；并集由
+    # tests/test_ci_hardening.py 钉住必须恰好覆盖三个 cost 文件。
+    "cost-cold-start": (
         "tests/test_cold_start_cost.py",
     ),
 }

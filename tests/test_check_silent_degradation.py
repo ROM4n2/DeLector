@@ -471,13 +471,15 @@ def test_main_cli_missing_root_returns_two(tmp_path: Path, capsys: pytest.Captur
 
 
 def test_ci_workflow_wires_the_gate_fail_loud() -> None:
-    """ci.yml 必须有 `silent-degradation` job 真跑判定器，且 job / 步骤均无容错键。"""
+    """ci.yml 必须在 `static-invariants` job 真跑判定器，且 job / 步骤均无容错键。"""
     yaml_module = pytest.importorskip("yaml")
     workflow_path = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
     doc = yaml_module.safe_load(workflow_path.read_text(encoding="utf-8"))
     jobs = doc["jobs"]
-    assert "silent-degradation" in jobs, "ci.yml 缺少 silent-degradation job（闸没接线）"
-    job = jobs["silent-degradation"]
+    assert "static-invariants" in jobs, (
+        "ci.yml 缺少 static-invariants job（silent/mock/layer 合并后闸没接线）"
+    )
+    job = jobs["static-invariants"]
     assert "continue-on-error" not in job, "job 级容错键会让闸变摆设（fail-loud 违约）"
     runs = [str(step.get("run", "")) for step in job["steps"]]
     assert any("tools/check_silent_degradation.py" in run for run in runs), "job 未接线判定器脚本"

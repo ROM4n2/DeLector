@@ -320,6 +320,49 @@ def test_static_gates_run_in_exactly_one_shard():
     )
 
 
+# ── 纯 stdlib 机械闸合并守卫（2026-11-05，TODO-CI-04）─────────────────────────
+# 背景：silent-degradation / mock-drift / layer-invariants 三个 job 各只跑一个秒级
+# 判定器，却各占一台 runner、各付一次 checkout + setup-python（实测 job 11–13s，
+# 其中判定器本身 1–3s）。
+# ci-speed-budget §3.3 明确要求「只为一个断言单开 job」应并入现有机械闸；本轮
+# 为抵消 cost 分片拆分新增的 1 个 job（峰值并发预算 ≤13），把它们合并成一个 job。
+# 守卫钉住：三个判定器仍逐步执行、无 continue-on-error、job 级超时仍按轻量闸预算。
+MECHANICAL_STDLIB_GATE_SCRIPTS = (
+    "tools/check_silent_degradation.py",
+    "tools/check_mock_drift.py",
+    "tools/check_layer_invariants.py",
+)
+MECHANICAL_GATES_JOB = "static-invariants"
+
+
+def test_mechanical_stdlib_gates_run_in_one_job() -> None:
+    """三个纯 stdlib 判定器必须合并在一个 job 内逐步执行，且不得容错。"""
+    text = _read_guard_file(CI_WORKFLOW)
+    block = _job_block(CI_WORKFLOW, MECHANICAL_GATES_JOB)
+
+    for script in MECHANICAL_STDLIB_GATE_SCRIPTS:
+        run_line = f"run: python3 {script}"
+        assert text.count(run_line) == 1, (
+            f"`{run_line}` 在 {CI_WORKFLOW} 出现 {text.count(run_line)} 次："
+            "合并后必须恰好接线一次（重复接线 = 白烧 runner；零次 = 检查被删）"
+        )
+        assert run_line in block, (
+            f"{MECHANICAL_GATES_JOB} 缺 `{run_line}`：真实检查被删，不得用提速名义砍掉"
+        )
+
+    assert "continue-on-error" not in block, (
+        f"{MECHANICAL_GATES_JOB} 声明了 continue-on-error：命中也不红，闸形同虚设"
+    )
+
+    match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", block, re.MULTILINE)
+    assert match, f"{MECHANICAL_GATES_JOB} 没有 timeout-minutes（会退回 360 分钟默认值）"
+    assert 0 < int(match.group(1)) <= 2, (
+        f"{MECHANICAL_GATES_JOB} 的 timeout-minutes = {match.group(1)}："
+        "轻量机械闸预算为 2 分钟（三个脚本实测 3/1/1s，job 含 checkout+setup 11–13s），"
+        "超过即为无意义等待"
+    )
+
+
 def test_mypy_config_locks_adoption_flags_and_stays_out_of_runtime_deps():
     """[tool.mypy] 必须锁住档位关键项；mypy 不得混入运行时依赖。"""
     text = _read_guard_file(MYPY_CONFIG)
@@ -1399,6 +1442,56 @@ def test_frontend_tsc_gate_pins_fixed_version_in_ci() -> None:
     assert not any("latest" in s for s in tsc_steps), "tsc 步不得用 typescript@latest（不可复现）。"
 
 
+# ── 前端探针去重守卫（2026-11-05，TODO-CI-04）─────────────────────────────────
+# 背景：4 条前端探针（路由契约 / index 同步 / 分层不变式 / tsc）原在 matrix 公共 steps，
+# 6 个 pytest 分片各跑一遍。它们与分片用例集合无关，属纯重复：`cost-guards` 实测为此
+# 多花 5s（直接落在关键路径上），六份累计约 30s。2026-11 收敛为只在一个分片执行。
+#
+# 注意 Node 安装**不能**一起去重：`conftest.py::pytest_sessionstart` 在 CI 下要求**每个**
+# pytest job 都有 node（缺了直接 exit 1），故 setup-node 留在公共 steps。
+FRONTEND_GATE_STEP_NAMES = (
+    "Frontend API contract gate (routes)",
+    "Frontend index.html template sync gate",
+    "Frontend layer invariants gate",
+    "Frontend API-boundary type gate (tsc)",
+)
+
+
+def test_frontend_gates_run_in_exactly_one_shard() -> None:
+    """4 条前端探针必须只在一个分片执行，宿主分片真实存在且不是 cost 专项分片。"""
+    steps = _ci_step_blocks()
+    hosts: set[str] = set()
+
+    for name in FRONTEND_GATE_STEP_NAMES:
+        assert name in steps, (
+            f"{CI_WORKFLOW} 缺少前端探针步骤 {name!r}：真实检查被删，不得用提速名义砍掉"
+        )
+        match = re.search(
+            r"^\s*if:\s*matrix\.suite\.name\s*==\s*'([^']+)'\s*$",
+            steps[name],
+            re.MULTILINE,
+        )
+        assert match, (
+            f"{name!r} 没有 `if: matrix.suite.name == '<分片>'` 守卫："
+            "前端探针会重新落到六个分片各跑一遍（实测六份累计约 30s，"
+            "其中 cost-guards 的 5s 直接压在关键路径上）"
+        )
+        hosts.add(match.group(1))
+
+    assert len(hosts) == 1, f"4 条前端探针必须挂同一个分片，实际: {sorted(hosts)}"
+
+    host = next(iter(hosts))
+    matrix_names = re.findall(r"^\s*- name:\s*(\S+)\s*$", _ci_job_block("ci"), re.MULTILINE)
+    assert host in matrix_names, (
+        f"前端探针宿主分片 {host!r} 不在 matrix 里（现有: {matrix_names}）："
+        "条件永远为假，4 条探针会静默不跑（死绿比慢更坏）"
+    )
+    assert host not in COST_GUARD_SHARDS, (
+        f"前端探针宿主分片 {host!r} 是 cost 专项分片：会把无关步骤塞回计时关键路径，"
+        "抵消本轮拆分收益"
+    )
+
+
 def _skip_to_line_end(text: str, i: int) -> int:
     """i 指向行注释的 `/`，返回行尾（换行符）下标。"""
     while i < len(text) and text[i] != "\n":
@@ -2304,6 +2397,9 @@ INTEGRATION_TESTS = frozenset(
         "tests/test_syntax_hard_api.py",
     }
 )
+# cost 专项分片拆成两个独立 runner（TODO-CI-04）：每个分片仍只含 cost 文件，
+# 没有 xdist、也不与普通测试共享进程。两个分片的并集必须恰好覆盖 COST_GUARD_TESTS。
+COST_GUARD_SHARDS = ("cost-guards", "cost-cold-start")
 UNIT_SHARDS = ("unit-1", "unit-2", "unit-3", "unit-4")
 # unit-2 额外执行 6 个 Ruff/mypy 步骤；PR #210 实测约 14s（六步合计）
 STATIC_GATE_STEP_SECONDS = 14.0
@@ -2352,11 +2448,28 @@ def test_ci_shards_partition_every_test_file_exactly_once() -> None:
 
 
 def test_ci_shards_keep_dedicated_suites_isolated() -> None:
-    """cost-guards / integration-heavy 的成员必须独占，不能被普通分片重复收录。"""
+    """cost 专项分片（2 个）/ integration-heavy 的成员必须独占，不能被普通分片重复收录。"""
     plan = _load_shard_plan()
 
-    assert set(plan.resolve_shard("cost-guards")) == COST_GUARD_TESTS, (
-        "cost-guards 分片的成员被改动：它必须恰好覆盖 " + "、".join(sorted(COST_GUARD_TESTS))
+    missing_cost_shards = sorted(set(COST_GUARD_SHARDS) - set(plan.SHARDS))
+    assert not missing_cost_shards, (
+        f"缺少 cost 专项分片 {missing_cost_shards}：cost 门禁被并回普通分片（或分片被删），"
+        "计时断言会与无关测试共享进程。修法：在 tools/ci_shards.py 恢复 "
+        f"{sorted(COST_GUARD_SHARDS)} 两个分片。"
+    )
+    cost_union: set[str] = set()
+    for shard in COST_GUARD_SHARDS:
+        members = set(plan.resolve_shard(shard))
+        assert members, f"{shard} 分片为空：cost 门禁会静默消失"
+        non_cost = sorted(members - COST_GUARD_TESTS)
+        assert not non_cost, (
+            f"{shard} 混入了非 cost 文件 {non_cost}：计时断言必须留在**只含 cost 文件**"
+            "的专项分片里，不得与普通测试共享进程"
+        )
+        cost_union |= members
+    assert cost_union == COST_GUARD_TESTS, (
+        "两个 cost 分片的并集必须恰好覆盖 " + "、".join(sorted(COST_GUARD_TESTS))
+        + f"，实际覆盖 {sorted(cost_union)}（重复或漏项都会让成本门禁失真）"
     )
     assert set(plan.resolve_shard("integration-heavy")) == INTEGRATION_TESTS, (
         "integration-heavy 分片的成员被改动：它必须恰好覆盖 " + "、".join(sorted(INTEGRATION_TESTS))

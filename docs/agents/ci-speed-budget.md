@@ -105,6 +105,49 @@
   - `pytest-xdist`：cost 用例本身就是计时/基准断言，并行 worker 会直接污染结果；integration-heavy 会起真实服务与端口，并行化不稳。分片已经用 6 个 runner 并行，xdist 只会把「计时门禁」变成 flaky 源。
   - 把 cost 基准文件摊到 unit 分片：能让 6 个 job 更平，但会把计时门禁混进普通测试进程，牺牲专项分片的隔离语义；本轮按约束不碰真实检查。
 
+### 1.5 cost-guards 拆分与前端探针去重（2026-11-05，PR #216）
+
+实施（`docs/plans/2026-11-05-ci-cost-guards-split.md`）：
+
+- cost 专项分片拆成两个**各自只含 cost 文件**的分片：`cost-guards`（articles + cards）、
+  `cost-cold-start`（cold_start），各自独立 runner、无 xdist、不与普通测试共享进程；
+  并集仍恰好覆盖 3 个 cost 文件（守卫钉住）。
+- 4 条前端探针（routes / index 同步 / 分层 / tsc）从 6 个分片去重到 `unit-2`；
+  Node 安装仍留在公共 steps（根 `conftest.py::pytest_sessionstart` 在 CI 下要求每个
+  pytest job 都有 node）。
+- silent / mock / layer 三个秒级 stdlib 闸合并为 `static-invariants` 一个 job（三个
+  判定器仍逐步执行、无 `continue-on-error`、`timeout-minutes: 2`），用于抵消拆分新增
+  的 1 个 job。
+- **所有成本断言、轮数、阈值零改动**。
+
+样本口径：改后 = PR #216 run [`41871021385`](https://github.com/ROM4n2/DeLector/actions/runs/41871021385)
+（head `fddc327`）的 attempt 1–3（同一 SHA、同一代码，重跑取波动）；改前 = 四个
+pre-change PR run（`41811788954` / `41813339091` / `41852745136` / `41851476946`）。
+
+| 指标 | 改前 PR（4 样本） | 改后 PR #216（3 attempts） |
+| --- | --- | --- |
+| Python 门禁关键路径（最早 job → 最晚 pytest job） | 143 / 177 / 158 / 159，中位 **158s**，区间 143–177 | 107 / 117 / 108，中位 **108s**，区间 107–117 |
+| `cost-guards` job | 143 / 157 / 157 / 159，中位 **157s** | 88 / 93 / 95，中位 **93s** |
+| `cost-cold-start` job | — | 57 / 70 / 63，中位 **63s** |
+| cost pytest（单 job 内） | 83s（`41864029091` 实测；旧样本 107.9 / 118.9s） | **64s**（cost-guards）+ **28s**（cold），取 max **64s** |
+| 墙钟（run 创建 → 更新） | 203 / 228 / 239 / 242，中位 **233.5s** | 238 / 240 / 265，中位 **240s** |
+| runner 累计（所有 job 时长求和） | 962 / 973 / 978 / 1014，中位 **975.5s** | 941 / 1002 / 1014，中位 **1002s** |
+| 峰值并发 | 12–13 | **12** |
+
+结论（口径分离，不混写）：
+
+- **关键路径有真实收益**：Python span 中位 **158s → 108s（-50s，-32%）**；
+  `cost-guards` 从 143–159s 降到 88–95s，**已不是瓶颈**。新关键路径变成 unit 分片
+  （`unit-4` 107s、`unit-1` 116s 的波动样本），受 unit 分片自身 77–116s 波动限制。
+- **墙钟无语义**：所有样本都触发 Windows Portable Smoke（223–252s），墙钟由 smoke 支配，
+  不能把 233.5s → 240s 读成「变慢」，也不能读成「变快」。
+- **runner 累计略升**：中位 975.5s → 1002s（**+26s，+2.7%**）。原因：cost 环境准备
+  （checkout + setup-python + 依赖安装 ≈ 24s）被复制成两份；前端探针 6→1 与三个机械闸
+  合并只抵消了一部分。**这是本轮明确接受的代价**，不为压缩累计值牺牲计时隔离。
+- **峰值并发 12 ≤ 13**：拆分 +1 由三闸合并 -2 抵消。
+- 未采用且不要重走：把 cost 文件摊进 unit 分片（计时断言与无关测试共享进程）、
+  `pytest-xdist`（并行污染计时）、减少轮数/放宽阈值（删除或弱化真实检查）。
+
 ## 2. 可判定预算
 
 | 项目 | 预算 | 实测依据与策略 |
@@ -164,13 +207,21 @@
 - 实施：`tools/ci_shards.py` 显式清单 + `tools/ci_shard_weights.json` 权重；matrix 去掉 `args`；守卫钉住分区/独占/配平/禁止回退。
 - 实测（§1.4）：Python 门禁关键路径 **188s → 145s**（-43s），峰值并发仍为 13；unit-1 pytest 155.6s → 55.7s。
 
-### TODO-CI-04（待办）：`cost-guards` 是新关键路径（约 143s）
+### TODO-CI-04（已完成，PR #216）：`cost-guards` 是新关键路径（约 143s）
 
-- 3 个 cost 基准文件本身 107.9s（CI），环境准备约 35s；unit 分片已全部 ≤107s，进一步压缩只能动这一侧。
-- 可选项（均需另立计划与实测）：
-  - 把 3 个 cost 文件拆到 2 个既有 job 并行执行（会稀释专项分片的隔离语义，且需要按 node id 拆分文件）；
-  - 把前端探针（4 条）与 Node 安装从 6 个分片去重到一份（属真实检查的去重，不是删除；按本轮约束不做）。
-- 不得为压这 143s 删除成本断言、放宽阈值或把 cost 门禁改成警告。
+- 问题：3 个 cost 基准文件本身 107.9s（CI），环境准备约 35s，加 4 条前端探针 5s；unit 分片已全部 ≤107s。
+- 实施（2026-11-05，计划见 `docs/plans/2026-11-05-ci-cost-guards-split.md`）：
+  - cost 分片拆成 `cost-guards`（articles + cards）与 `cost-cold-start`（cold_start），
+    两个分片各自只含 cost 文件、独立 runner、无 xdist；
+  - 4 条前端探针从 6 个分片去重到 `unit-2`（Node 安装保留，根 conftest 要求）；
+  - silent / mock / layer 三闸合并为 `static-invariants`（抵消新增 job，峰值并发 12）。
+- 实测（§1.5）：Python 门禁关键路径中位 **158s → 108s（-50s，-32%）**；
+  `cost-guards` 中位 157s → 93s，**已不是瓶颈**；新关键路径是 unit 分片（107–117s）。
+  runner 累计中位 +26s（+2.7%，cost 环境复制两份的代价）；墙钟由 smoke 支配，不单独下结论。
+- 守卫：`tests/test_ci_hardening.py` 钉住两分片并集、前端探针单一宿主、合并闸三步接线；
+  三处具名变异（并回 cost 分片 / 去掉一条探针 `if` / 删一个判定器）实测 RED。
+- 仍未解决：unit 分片自身 77–116s 的波动成为新关键路径上限；本轮不动 unit 用例集合。
+- 不得为压关键路径删除成本断言、放宽阈值或把 cost 门禁改成警告。
 
 ### 明确不列为浪费的项
 
