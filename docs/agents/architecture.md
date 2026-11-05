@@ -71,7 +71,7 @@
 > 模拟器渠道（`emulator` product flavor）于 2026-11-04 加入。**必须用 flavor 而不是 buildType**：
 > Chaquopy 的 `getAbis` 只读 `defaultConfig.ndk.abiFilters` 与 `productFlavors`，放到 buildType 会直接报
 > `Chaquopy requires ndk.abiFilters`（CI 实测）。机械闸见
-> `tests/test_ci_hardening.py::test_android_device_flavor_abi_is_arm64_only` /
+> `tests/test_ci_hardening_android.py::test_android_device_flavor_abi_is_arm64_only` /
 > `test_android_emulator_flavor_abi_includes_x86_64`。构建入口是
 > `.github/workflows/android-emulator.yml`（仅手动触发，产物名 `DeLector-emulator-apk`，不碰发版路径）。
 > **真机与模拟器均未点检**：目前只证明依赖可解析、APK 含 `lib/x86_64/` 与
@@ -79,7 +79,7 @@
 
 ### 工具链矩阵（精确钉住）
 
-当前构建工具链的**精确组合**如下，`tests/test_ci_hardening.py` 的
+当前构建工具链的**精确组合**如下，`tests/test_ci_hardening_android.py` 的
 `test_android_agp_and_chaquopy_versions_are_pinned` /
 `test_gradle_wrapper_pins_gradle_version` /
 `test_ci_workflows_pin_gradle_version` /
@@ -100,7 +100,7 @@
 `gradle-version:` 也是 `"8.6"`；守卫还断言它与 wrapper 解析出的版本**三者相同**
 —— CI 不读 wrapper，只改一处会让本地与 CI 的构建面分叉。
 
-升级必须同时改 `tests/test_ci_hardening.py` 里的矩阵守卫与两个 workflow，并验证
+升级必须同时改 `tests/test_ci_hardening_android.py` 里的矩阵守卫与两个 workflow，并验证
 assemble 双变体（`assembleDeviceDebug` / `assembleEmulatorDebug`）。
 
 **两个 Chaquopy 行为坑（都会导致模型静默加载失败）**：

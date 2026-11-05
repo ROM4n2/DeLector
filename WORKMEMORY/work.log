@@ -437,3 +437,11 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 变异（均还原）：AGP→8.13.0 红于 build.gradle:8；wrapper→8.13 红（wrapper + 一致性）；仅 build-release.yml gradle-version→"8.13" 红于一致性（['8.13','8.6']）。
 CI：二次 run 41985996596 全 success（Master Scope / Windows Smoke 按设计 skipped）。docs/agents/architecture.md 新增「工具链矩阵（精确钉住）」小节。分片未改（仍 unit-1）。
 边界：守卫仅在测试被运行时生效；buildToolsVersion 当前未显式声明，故该断言为条件形态。
+
+### 2026-11-05 15:53 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+任务：拆分 tests/test_ci_hardening.py（2,988 行）→ 7 个主题测试模块 + tests/_ci_hardening_support.py（非 test_ 前缀）。只搬不改：节点 ID before 89 / after 89，集合差 0，参数化 id 一致；7 文件全绿 89 passed；mypy 181 files no issues；ruff 全过。分片：7 文件全登记 unit-1，weights 合计仍 1.4。
+变异：AGP→8.13.0 红于 test_ci_hardening_android.py（android/build.gradle:8）；app/build.gradle 塞 D:/Android/chaquo-wheels 字面量红于 test_ci_hardening_test_hygiene.py:131。均 checkout 还原。
+全量 pytest tests/：2776 passed / 3 skipped / 3 failed（546.87s），失败全在 test_save_wb_state_cost.py，单独复现，系本机 delector.db 数据目录迁移环境问题，与拆分无关。
+PR #224（分支 refactor/split-ci-hardening-tests，未合并）；首轮 run 41990032304 全 success（Master Scope / Windows Smoke 按设计 skipped）。
+残余：android 守卫补救文案仍写旧文件路径（为保持失败消息逐字等价未改）；_ci_hardening_support.py 成为新的共享耦合点。

@@ -12,7 +12,7 @@
 # 构建出无法启动的镜像）。delector/、static/、requirements.txt、Dockerfile、android/
 # 都是构建/运行必需物，不得整目录排除。
 #
-# 本文件由 tests/test_ci_hardening.py 双向守卫（正向：条目齐全 + 零取反行；反向：不得过宽）。
+# 本文件由 tests/test_ci_hardening_infra.py 双向守卫（正向：条目齐全 + 零取反行；反向：不得过宽）。
 # 纪律补充：**不得出现任何 `!` 开头的取反行**。Docker 的 .dockerignore 是后出现的行
 # 胜出，在 `.env` 之后补一行 `!.env` 会把密钥重新纳入上下文，而"条目齐全"的检查仍绿
 # （假绿）。守卫对此有专门断言。
