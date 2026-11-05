@@ -122,6 +122,9 @@ assemble 双变体（`assembleDeviceDebug` / `assembleEmulatorDebug`）。
    直接 `cp -r` 进 Chaquopy 源码目录的，没有 dist-info。必须退到
    `importlib.import_module(名称).load()` —— 真机上实际生效的就是这条
    （`nlp_engine_detail` 会显示 `de_core_news_sm(module.load)`）。
+   > 2026-11-05 实测已不成立：APK 内含完整 `de_core_news_sm-3.8.0.dist-info/`（12 个文件），
+   > 设备上 `/api/syntax/spacy-status` 返回 `{"path":"spacy","error":""}`；详见
+   > `docs/agents/android-local-runtime.md`。
 2. **Chaquopy 默认不把包的数据文件解到文件系统**（APK 内 `assets/chaquopy/build.json` 的
    `extract_packages` 若为 `[]` 即是），Python 代码直接从 `.imy` 压缩包执行，任何
    `Path(__file__).parent / "x"` 的 `open()` 都会 `FileNotFoundError`。因此 build.gradle 必须声明：
