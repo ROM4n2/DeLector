@@ -478,3 +478,9 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 A：干净全量重建 clean + assembleEmulatorDebug + assembleDeviceDebug，BUILD SUCCESSFUL in 11m 1s（92 tasks: 89 executed, 3 up-to-date）。emulator APK 96,704,289 B，SHA-256 5E69BAA8CA2638ABF6D4FB37E66D18088F8EED1FF1152270748ECEFC3AACAC6D；device APK 66,454,593 B，SHA-256 6F202C6D6160B4D4FBEEEEA989AD7FCEB69DCFB2F52C2DA9BD2CCE201CA9AF91。两包 app.imy 均 15,788,426 B / 160 条目（顶层 start.pyc，delector/ 104 条），assets/static/index.html 126,785 B。装机后 pm path 拉回 SHA 与构建一致；冷启 PID 9558 存活，uvicorn 监听 127.0.0.1:8000，logcat 无 ModuleNotFoundError。
 B/C：tools/sync_android_sources.py（sync / --check / --clean，源缺失 ::error:: + rc=2）；两个 workflow 的 Sync 步骤改为调用该脚本（步骤名与 compat 断言未动）；tests/test_android_packaging.py 新增 app.imy 非空（>22 B）+ 顶层 start.py/start.pyc 与 delector/ + assets/static/index.html 闸，以及同步脚本单测（7 passed）；用旧 22 B 空包验闸真红，失败原文已留。
 待办：4 个语义提交、分支 fix/android-python-sync、PR（不合并）。
+
+### 2026-11-05 22:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+阶段七收尾：PR #233（https://github.com/ROM4n2/DeLector/pull/233）已开，不合并；head 2a6e6ba521a557bc00345b5ec5c9cc22920a78b8，MERGEABLE/CLEAN。首轮 run 42038629954 红：3 个旧守卫仍断言 workflow 内联 cp -r（test_all_backend_modules_registered_in_all_packaging_targets、test_preset_processed_data_registered_in_all_packaging_targets、test_prep_dict_registered_in_all_package_targets）；改为两步守卫（workflow 必须调用脚本 + 脚本必须单拷 start.py、整目录拷 delector/）后补第 5 个提交 2a6e6ba，未弱化覆盖。第二轮 run 42040186356 全绿：13 success（含 Windows Portable Smoke），1 skipped（Master Direct-Push Scope Gate）。
+最终模拟器包 SHA-256 5E69BAA8CA2638ABF6D4FB37E66D18088F8EED1FF1152270748ECEFC3AACAC6D（96,704,289 B），pm path 拉回一致；冷启 TotalTime 879 ms / WaitTime 881 ms，PID 10136 存活 50 s+，uvicorn 127.0.0.1:8000，NLP 走 pure_python（平台分支硬编码；后续调查证实 APK 内含模型且可加载，非缺模型），无 ModuleNotFoundError。
+本 NOTE 以 docs(workmemory): close out android python sync task 单独提交。
