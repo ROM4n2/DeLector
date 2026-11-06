@@ -538,3 +538,65 @@ Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
 T0–T10 记录：T0 docs/adr/INDEX.md（29 份 ADR）；T1 基线清点（源片段 aria-label 11，切片 emoji 61）；T2 exam 01–07 序号；T3 exam 非注释 emoji 0；T4 nav 8 图标删除；T5 cards 空态删 🎉🛡️🎴；T6 companion 15 按钮 unnamed 0（含 4 色点 + color input）；T7 studio（A）6 aria-pressed + 5 色块 + picker 补名；T9 design-system §10；T10 回执（185 passed，sync PASS）。偏差 4 条：T2 德文括号、T6/T7 颜色控件补名、T1 计量口径（含生成物 18 / 源片段 11）；ADR-0029 §15 留痕。
 用户视觉验收 #249：「没问题，但是现在很干吧」——判定为计划预判的中间态（原型 B 列），要求走到 C 列；明确不加回装饰。下一步：实证诊断（视觉重量/间距节奏/色彩锚点，给 file:line 与数值）→ 3 个气质不同的方向（排版阶梯/间距比例/色彩锚点/分割手段/状态动效/代价）→ 独立自包含对比原型（不改 static/ 与 README）→ 回答「不加 emoji 与插画，活泼靠什么」。
 边界：第二步不改生产代码；不推进第二批（图标集 vendor、角色 SVG 化）；不碰 delector/、start.*、Android、tests/test_*、ADR-0028、spaCy spec/plan、2026-11-05 review、_artifacts/。
+### 2026-11-06 18:22 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+「很干」第二步：实证诊断 + 三方向对比原型（pending 用户选型，零生产代码改动）。
+诊断（master@4611640，坐标 static/style.css）：1) 无主次——exam 7 张模块卡共用 3655-3671 一套声明（14px/1.5px 边框/3px 4px 阴影/18px padding），全面板只有 700 与 600 两种字重；2) 选中态不可见——main.js:392-395 会加 .active，但 style.css 无 .exam-module-card.active 规则（现存 bug）；3) 节奏单一——exam section 32px(3607) ÷ 元素 16px(3652)=2.0，卡片 padding 18 ÷ gap 16=1.13；progress 32px(4524) ÷ 13.6px(4530)=2.35；4) 零锚点——exam 直接颜色声明 0 条，cards 空态(cards.js:131-154) 64px 上下 padding + 白底虚线无彩色，progress 仅 kicker(4462-4468) 11px 珊瑚 + 7px 圆点(4539-4543)。
+原型：docs/reviews/2026-11-06-dryness-contrast-prototype.html（自包含，不引用 static/，不参与构建；沿用同目录 2026-11-06-emoji-vs-typography-prototype.html 先例）。含基线/A 克制编辑排版/B 卡片层次 bento/C 只剩排版 四列 + 「试衣间」全宽切换 + 「活泼靠什么」量化回答。浏览器实测 PASS（三列无溢出、stage 切换 b/c 正常）。
+数值口径：--accent #c14a2b on #faf8f5 = 4.6:1（过 AA）；--mustard #e9b94a = 1.7:1（只能做色带）。
+推荐：A + B 的选中态动效（2px 色条 scaleY 260ms），理由是零新增颜色、可整段回退，并顺带补上 .active 缺失。
+边界：未改 static/、README.md、delector/、tests/；未跑全量 pytest；未推进第二批（图标集 vendor、角色 SVG 化）。
+
+### 2026-11-06 18:41 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+与外部实测参考库（docs/reviews/2026-11-06-external-ui-design-reference-library.md）对账：三处冲突全部判定为「校准」，并自查出我上一轮报的两个数是错的。
+1) section ÷ content：原报 4.0 是拿 64px section ÷ 16px「列间距」算的，真实行间距 40px → 实际 1.6，两端都错。定稿 48 ÷ 16 = 3.0（落在 2–3.5）。
+2) 标题 ÷ 正文：原报 40/15=2.67，但 .da h2 实际写的 28px → 真实 1.87，连参考库「应用内 2.0–3.0」下界都没到。定稿 48/16 = 3.0（同时满足首页 ≥3 与应用内上界）。
+3) 微动效：180/260 → 120/160，面板 200。理由：参考库 Linear 195 / Raycast 98 个元素样本均在 80–160，且我们的动画全是 transform/opacity 合成层，提速零成本；260ms 是状态反馈不是入场。
+唯一保留偏离：列表行距 33px，不按 3.0 撑开——7 项是扫描面非散文段落，参考库自己的列表样本（Raycast 32/4、Linear 40/4）都比散文密；按 3.0 会 >900px，手机滚两屏。缓动曲线参考库未测（§8.5），标为待测，不冒充结论。
+8 条手法对照：已含 2（颜色状态冗余、等宽 12 元数据已有雏形）；补 3（第 4 档灰阶复用既有 --ink-soft/-mute/-faint 零新 token；等宽计数；焦点调暗）；校准 3（间距、标题、动效）；不做 1（真实内容作为视觉，需要语料+产品决策）。
+焦点调暗落在句子级：非焦点 --pencil = 6.7:1 仍过 AA；刻意不用 --muted（3.4:1 对正文不达标）。
+原型已更新：docs/reviews/2026-11-06-dryness-contrast-prototype.html（新增对账表、48px 页头、专注句演示、8 条手法表）。Edge headless 实测三处 PASS。
+边界：未改 static/、README.md、参考库文档、delector/、tests/；未跑全量 pytest。
+
+### 2026-11-06 18:56 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+参考库会话更正判定后重做对账：真正分界是「应用内阅读面/文档正文」vs「营销 hero/落地页」，不是「阅读 vs 工具」。上一轮我按错基准改的两处已回退。
+改了：
+1) section/content 从「全局常数」改为按作用层取值 —— 应用内阅读面 40÷16 = 2.5（带 0.8–2.6，推荐 2.5–3.0）；应用内功能面 48÷41 = 1.17（带 0.8–2.6，刻意取低因为 7 入口要一屏扫完，分隔靠 2px 全宽横线+40px 标题）；首页/落地页保留 4.0（带 2.7–6.0）。
+2) 原型 .da h2 从 28px 修回 40px —— 这是我原型 CSS 漏写，不是规范错（规范一直是 40/15=2.67）。
+3) 补入焦点调暗：句子级，非焦点降到 --pencil = 6.7:1 仍过 AA；刻意不用 --muted（3.4:1 对正文不达标）。
+4) 补入 mono 12 做计数类元数据（3/7、词数、到期数），序号/德语名本来就是 12px mono。
+5) 原型新增「阅读面」示例块，让 2.5 与 1.17 在同屏可见。
+明确没改：40/15 = 2.67（应用内 2.0–3.4 带内）；180ms hover（核心区 140–200）；260ms 选中色条（面板档）；cubic-bezier(.22,1,.36,1)（参考库未测，标待测）；列表行距 41px；字号阶梯仍 6 档。
+8 条手法：已含 4（阶梯、颜色状态冗余、40px 标题、180ms）；本轮补 3（第 4 档灰阶复用 --ink-soft/-mute/-faint 零新 token、焦点调暗、mono 计数）；改规则 1（section/content 按层）；明确不做 1（真实内容作为视觉，需语料+产品决策）。
+教训：拿区间前必须确认该区间测的是哪个作用层，否则会把对的值改坏（本轮两次先改后撤）。
+边界：未改 static/、README.md、参考库文档、delector/、tests/；未跑全量 pytest。
+
+### 2026-11-06 19:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+方向 A 落地第一批（exam 视图）：
+1) 修复真 bug：main.js:392-395 一直 toggle .exam-module-card.active，style.css 从未有该规则。现补 ::before 2px 色条（scaleY 0→1, 260ms）+ 序号变 accent + 标签 700，三通道冗余满足 I1。
+2) exam 视图按 A 重排：容器 padding 2.5rem；.exam-topbar 下 48px + 2px 横线；h2 1.5rem/700 → 2.5rem/400 italic（40÷15=2.67）；等级页签去外框改下划线式；模块网格 auto-fill 多列卡片 → 单列目录（max-width 820px，行距 41px = 20px padding×2+1px 线），去掉边框/圆角/阴影；计数改等宽 12px。
+3) 焦点调暗：纯 CSS，.reader-p:has(.tok.sel) .reader-sent-unit:not(:has(.tok.sel)) .tok → --pencil（6.7:1，过 AA），复用已有单选态，无新增 JS 状态；作用范围限同段，去 .reader-p 即全篇。
+验证：build_index_html 3356 行；check_index_html_sync PASS；tests/test_check_index_html_sync.py 5 passed。浏览器实测 grid 820px、card 44px+760px、h2 40px italic 400。
+未做（挂账）：progress / cards 两处的按层间距与字号阶梯；第二批次（图标集 vendor、角色 SVG 化、cards 空态）。
+状态核对：#248 2132462 / #249 38433de 已合并，master head 4611640；work.log T0–T10 已在 4611640；6 个未跟踪副本此前经 --ignore-cr-at-eol 比对一致后已删，当前 untracked 仅 _artifacts/、2026-11-05 评审、两份 2026-11-06 新文档，均为有意保留。
+
+### 2026-11-06 19:38 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+方向 A 落地第一批补充（两条零风险项，均在已校准口径内）：
+1) .seg-count 0.6875rem(11px) → 0.75rem(12px) + letter-spacing .02em —— 卡片段计数器（#seg-due-count / #seg-pending-count / #seg-mastered-count / #seg-prep-count）统一 mono 12 元数据档，与 .exam-module-count 同档。
+2) #view-cards padding-top 2rem → 2.5rem —— 与 #view-exam 顶边 40px 对齐。
+验证：build_index_html 3356 行；check_index_html_sync PASS。
+刻意未做：.cards-topbar h2 未抬到 2.5rem —— 该 topbar 是三栏工具栏（返回键 + 标题 + 5 个操作按钮），在 760px 容器内 40px 标题必然挤爆；要做成 exam 那种编辑抬头必须先改 HTML 结构（标题独占一行、操作下移），属设计决策，等用户拍板。progress 视图未动 —— 它属首页/落地页作用层，按校准口径 section/content 4.0 保留。
+
+### 2026-11-06 19:52 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+用户拍板与 A 剩余落地：
+1) 焦点调暗维持段落级（.reader-p:has(.tok.sel) 保持原样），明确不做全篇调暗。
+2) .cards-topbar h2 结构改造（标题独占一行、操作下移）暂不做 —— 已登记 docs/plans/2026-11-06-frontend-de-emoji-slice1.md 的 Deferred Gap Register，注明「需先改 HTML 结构，属设计决策」。
+3) 落地：.cards-seg-btn / .cards-mode-btn 的 transition:all 0.15s ease → background-color + color，var(--dur-fast)=180ms + var(--ease-editorial)，与 .exam-level-tab 同档；去掉 all 避免卷进布局属性。
+4) 未做且不建议硬凑：#view-progress 属首页/落地页作用层，section/content 4.0 保留；#reader-content 正文只有 .reader-p、无小节标题，阅读面 2.5 没有落点，不强行造标题。ADR-0029 决策 5「tokens 只增不迁、只迁 nav/cards/reader、不扫 78 处 11px」据此未动 .dossier-panel-meta / .article-row-meta。
+T0–T10 覆盖补正：work.log:538 一行合并记录了 T0–T7、T9、T10；T8 此前只以「PR #248」形式出现在 work.log:537，未按 T8 编号记。现补：T8 = README 仅中文（独立分支 docs/readme-zh-only，merge 2132462，226→226 行，11 增 11 删，正文/表格装饰 emoji 约 8 处登记 Deferred Gap）。至此 T0–T10 全部有记录。
+验证：build_index_html 3356 行；check_index_html_sync PASS。
