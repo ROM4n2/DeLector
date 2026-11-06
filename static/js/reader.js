@@ -182,7 +182,9 @@ export async function loadArticles() {
     const data = await fetchArticles();
     if (!data.length) {
       el.innerHTML =
-        '<div class="empty-state">暂无文稿，点击上方按钮导入德语文章</div>';
+        '<div class="empty-state">暂无文稿，点击上方按钮导入德语文章' +
+        '<div class="empty-state-extra"><button class="btn btn-ghost" onclick="openSatzLab()">还没有文章？先用示例句拆一句 →</button></div>' +
+        "</div>";
       return;
     }
     el.innerHTML = data
