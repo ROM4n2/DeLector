@@ -4,7 +4,7 @@
 > **Tech Stack**: Python 3.11 / spaCy 3.8 / pytest / Android Chaquopy（Gradle 8.6 + AGP 8.4.2）
 > **Spec Reference**: `docs/specs/2026-11-06-android-spacy-parity-spec.md`；`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`
 > **Global Constraints**:
-> - 实施轮（2026-11-06）：T1–T4、T7、T8 已执行；T5/T6 因用户暂不开模拟器阻塞。T8 的产物已经 PR #237 合入 `master`（merge commit `7073bac`）。
+> - 实施轮（2026-11-06）：T1–T8 已执行；T8 的产物已经 PR #237 合入 `master`（merge commit `7073bac`）。T5/T6 在用户开启模拟器后补做（`aec79f3` 旧版 vs `e169999` 新版，5 轮/版），数字见 ADR-0028 §4.2；低端机/arm64 未覆盖。
 > - 不改 schema/协议；桌面端行为不变；模型档位仍为 `de_core_news_sm`（ADR-0027）。
 > - Android 运行期**禁止** `spacy.cli.download`/pip 子进程/联网；门控必须在 `_load_model_with_autodownload()` 内部。
 > - 加载失败**硬失败**，不得回退纯 Python（No-Silent-Failure）。
@@ -43,7 +43,7 @@
 
 - T1（文档/ADR 随 PR 提交）→ T2
 - T2（RED）→ T3
-- T1 → T5（基线测量，原定必须在 T3 改代码前；**当前 T5 被用户阻塞**：暂不开模拟器，T3 先落地，基线缺失已记录在 ADR-0028 §4.2）
+- T1 → T5（基线测量；因模拟器暂不可用而延后，2026-11-06 补做：从 #235 父提交 `aec79f3` 单独构建旧版，结果见 ADR-0028 §4.2）
 - T3（GREEN processor）→ T4（GREEN syntax_tree）
 - T4 → T6（改造后测量）
 - T4 → T7（具名变异）
@@ -204,9 +204,9 @@
 
 ---
 
-### Task 5: 基线测量（改代码前）[Tier: 3-Critical] [Mode: HITL] [Role: Measurement] [Status: blocked-by-user（未开模拟器）]
+### Task 5: 基线测量（改代码前）[Tier: 3-Critical] [Mode: HITL] [Role: Measurement] [Status: done（2026-11-06 补做）]
 
-> **状态（2026-11-06）**：用户明确暂不开模拟器，T5 未执行。因此 ADR-0028 §4.2 的三项 Android 代价均标记为 `未测量`；本轮只交付 T1–T4。
+> **状态（2026-11-06）**：用户开启模拟器后补做。基线从 #235 父提交 `aec79f3` 单独构建（master 是改造后代码，不能当基线）。设备 `Medium_Phone_API_37.0`（API 37 / x86_64），5 轮冷启 + 5 轮热分析；数字写入 ADR-0028 §4.2，原始 CSV 在 `_artifacts/t5t6-20261106/old.csv`。
 
 **Files:**
 - Read-only: 模拟器 `emulator-5554`、当前 `assembleEmulatorDebug` APK
@@ -219,8 +219,8 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: Baseline-Before-Code]`: 基线必须在 T3 改代码前采集；否则无法比较。
-- [ ] `[Instinct: Real-Numbers]`: 记录命令与原始输出，不得凭印象写数字。
+- [x] `[Instinct: Baseline-Before-Code]`: 基线从 #235 父提交 `aec79f3` 单独构建；未把 master 当基线。
+- [x] `[Instinct: Real-Numbers]`: 记录命令与原始 CSV（每版 5 轮），未凭印象写数字。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 5: 采集改造前基线。
@@ -235,18 +235,18 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (raw numbers + command outputs)."
 
 **Step Breakdown:**
-- [ ] **Step 1**: 按 §3 构建/装机/启动，登记模拟器使用。
-- [ ] **Step 2**: 记录 `am start -W` TotalTime。
-- [ ] **Step 3**: 记录 `/api/health` 首响墙钟。
-- [ ] **Step 4**: 导入 V2 主句，记录首次分析墙钟。
-- [ ] **Step 5**: 记录 RSS（`dumpsys meminfo`）。
-- [ ] **Step 6**: 把原始数字暂存到任务回执（T6 统一写入 ADR）。
+- [x] **Step 1**: 按 §3 构建/装机/启动，登记模拟器使用。
+- [x] **Step 2**: 记录冷启 `ready`（`/api/settings` 首响）与 `am start` 时序。
+- [x] **Step 3**: 记录冷启到 `/api/settings` 首响墙钟。
+- [x] **Step 4**: 固定 76 token / 6 句文本，记录首次分析墙钟。
+- [x] **Step 5**: 记录 PSS/RSS（`dumpsys meminfo`）与峰值 VmHWM（`/proc/<pid>/status`）。
+- [x] **Step 6**: 原始数字写入 `old.csv`，结论写入 ADR-0028 §4.2。
 
 ---
 
-### Task 6: 改造后测量（GREEN 完成后）[Tier: 3-Critical] [Mode: HITL] [Role: Measurement] [Status: blocked-by-user（依赖 T5）]
+### Task 6: 改造后测量（GREEN 完成后）[Tier: 3-Critical] [Mode: HITL] [Role: Measurement] [Status: done（2026-11-06）]
 
-> **状态（2026-11-06）**：T5 未执行 ⇒ T6 同样未执行；ADR-0028 §4.2 保持 `未测量`，未用桌面基准顶替。
+> **状态（2026-11-06）**：已用 master `e169999` 构建新版，与 T5 同一设备、同一文本、同一轮次完成对比；数字写入 ADR-0028 §4.2，原始 CSV 在 `_artifacts/t5t6-20261106/new.csv`。低端机与 arm64 真机未覆盖。
 
 **Files:**
 - Read-only: 模拟器、GREEN 后的 APK
@@ -259,8 +259,8 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: Honest-Delta]`: 数字不好看也照实写，不得调阈值/基线。
-- [ ] `[Instinct: Trigger-Check]`: 若耗时/内存超预估，触发 ADR-0028 §6 复审，而不是悄悄接受。
+- [x] `[Instinct: Honest-Delta]`: 数字照实写；PSS 由 248.7 MiB 升至 495.9 MiB、峰值 VmHWM 416.7→701.6 MiB 均未粉饰，未调阈值/基线。
+- [x] `[Instinct: Trigger-Check]`: 首次分析中位数由 12.6 ms 升至 1,215.6 ms；阈值仍未定，见 Open Questions [Unknown 1]。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 6: 采集改造后数据并写 ADR。
@@ -270,10 +270,10 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (before/after table + ADR diff)."
 
 **Step Breakdown:**
-- [ ] **Step 1**: 重新构建/装机 GREEN APK。
-- [ ] **Step 2**: 重复 T5 四项测量。
-- [ ] **Step 3**: 计算差值；写入 ADR-0028 §4.2。
-- [ ] **Step 4**: 若超出可接受范围，标记复审触发。
+- [x] **Step 1**: 重新构建/装机 GREEN APK（master `e169999`，45 tasks executed，SHA 已记录）。
+- [x] **Step 2**: 重复 T5 四项测量（同设备、同文本、5 轮/项）。
+- [x] **Step 3**: 计算差值；写入 ADR-0028 §4.2。
+- [x] **Step 4**: 超出可接受范围与否仍待用户定阈值；已在 Open Questions [Unknown 1] 标记。
 
 ---
 
@@ -353,7 +353,7 @@
 
 ## [NOTE] Fog of War (Not Yet Specified)
 
-- **[Unknown 1] Android 首次加载耗时/内存的可接受阈值**：需 T5/T6 实测后写入 ADR-0028 §6；在此之前阈值未定。
+- **[Unknown 1] Android 首次加载耗时/内存的可接受阈值**：T5/T6 已给出实测数字（ADR-0028 §4.2），但"可接受"仍需用户拍板；在拍板前不设阈值、不做外推。
 - **[Unknown 2] arm64 真机行为**：本机无设备；不得用 x86_64 模拟器结果替代。
 - **[Unknown 3] 低端机 OOM 基线**：无设备样本；只能记录目标模拟器 RSS，不能外推。
 
@@ -365,7 +365,7 @@
 | --- | --- | --- | --- |
 | Android 存量纯 Python 文章未重算 | 同 `3.5.0`，惰性迁移不命中；默认不重算 | 用户要求历史文章一致，或移动端上线后反馈 | Haoyu Xi |
 | arm64 真机验证 | 本机无 arm64 设备 | 有可用设备时 | maintainer |
-| 首次加载耗时/内存阈值 | 需实测后才能定 | T5/T6 测量完成 | Haoyu Xi |
+| 首次加载耗时/内存阈值 | 实测已完成，阈值需用户拍板 | 用户给出阈值 | Haoyu Xi |
 | B9 五级链 L3/L5 零命中 | 需 `Token` fixture 反证不可达 | 下一次死代码清理专项 | maintainer |
 | Android 更新 chip / PWA | 阻塞于真机与 HTTPS 假设 | 有真机与 HTTPS 环境 | maintainer |
 
