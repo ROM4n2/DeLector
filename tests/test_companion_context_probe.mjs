@@ -169,6 +169,16 @@ function makeEl(id) {
       el.listeners = el.listeners || {};
       el.listeners[type] = fn;
     },
+    setAttribute(name, value) {
+      el.attributes = el.attributes || {};
+      el.attributes[name] = String(value);
+    },
+    getAttribute(name) {
+      return el.attributes && name in el.attributes ? el.attributes[name] : null;
+    },
+    removeAttribute(name) {
+      if (el.attributes) delete el.attributes[name];
+    },
     focus() {},
     get firstChild() {
       return el.children.length ? el.children[0] : null;

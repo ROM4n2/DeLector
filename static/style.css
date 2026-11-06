@@ -170,6 +170,20 @@ a {
   text-decoration: none;
 }
 
+/* ── Lucide 图标（static/icons/lucide-sprite.svg） ──────────────
+   尺寸走 1em：图标跟随宿主按钮的 font-size，不需要为每个按钮单独定宽高。
+   颜色走 currentColor（symbol 内 stroke="currentColor"），hover/active 自动跟随。
+   pointer-events:none 让点击永远落在按钮上，图标本身不吞事件。
+   图标只做冗余通道：可访问名一律由可见文字或 aria-label 提供（不变量 I1）。 */
+.ui-ico {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 /* ── Top Metadata Ticker Strip (36px Ultra-slim) ── */
 
 .top-ticker,
@@ -7799,6 +7813,23 @@ body.drawer-open .shadow-player {
 .panel-char-btn.active {
   background: var(--ink, #1a1a1a);
   box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+}
+
+/* 角色按钮注入的是与浮球/舞台同一套 .companion-svg（模板默认 width/height:100%）。
+   面板按钮没有固定高度，不钉死尺寸会被撑成整块；这里只覆盖面板内的图标。 */
+.panel-char-btn .companion-svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* 浮球头像同理：span 本身没有宽高，svg 百分比高度会塌成 0。 */
+#companion-avatar-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  line-height: 0;
 }
 
 .panel-upload-btn {

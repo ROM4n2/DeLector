@@ -440,7 +440,9 @@ export const ShadowPlayer = {
 
   updatePlayBtn(playing) {
     const btn = document.getElementById("player-play-btn");
-    if (btn) btn.innerHTML = playing ? "⏸" : "▶";
+    if (btn) btn.innerHTML = playing
+      ? '<svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-pause"></use></svg>'
+      : '<svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-play"></use></svg>';
   },
 
   updateStatusText() {

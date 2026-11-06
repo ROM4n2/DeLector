@@ -609,3 +609,15 @@ PR #251 已合并（merge commit，未 squash）。
 - 中途红过一轮：run 42212970963 中 unit-2 真实失败 1 例 —— tests/test_exam_domain.py::test_exam_css_grid_uses_auto_fill 钉死旧的 auto-fill + minmax 多列网格；unit-1 / unit-3 / cost-guards / integration-heavy 是矩阵 fail-fast 取消（unit-1 全部 step success 后被 cancel），不算失败
 - 处置：按用户拍板的方案 A 重写断言，改名 test_exam_css_grid_is_single_column_directory，三条断言并存（grid 规则存在 / 1fr 与 max-width 820px 同时命中 / 禁止残留 repeat(auto-fill)），style.css 未动，其他用例未动
 - 本机 .venv 内有 pytest，tests/test_exam_domain.py 33 passed；全量套件由 CI 分片验证
+
+### 2026-11-06 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+ADR-0029 第二批（去字形）落地，四项范围：
+1) 图标 vendor：Lucide lucide-static v0.468.0（ISC），落 static/icons/，同文档 <use href="#id"> 引用；10 → 12 个 symbol（volume-2/volume-x/play/pause/skip-back/skip-forward/rotate-ccw/trash-2/upload/sparkles + chevron-left/right）。不引 CDN/npm，未改 path 坐标。
+2) 全部字形替换：33 个按钮（34 个 <use>，player 播放键在 play/pause 间切换）；口径从最初 23 处/8 种扩大到全量扫描结果。
+3) 角色 SVG：companion.js 4 个调用点（浮球主体 / 浮球头像 / progress 舞台 / 面板 4 个角色按钮）+ 声音开关 use 切换；CHARACTERS[*].emoji 字段删除。
+4) cards 两处空态重做（三态用 --accent/--moss/--rule 竖线 + mono eyebrow；介词矩阵去 📡/🧭），文案不变。
+5) listen-lab 测试同步（:316 去掉模式栏 emoji、:322 去掉 🔒）；另修 tests/test_companion_context_probe.mjs DOM 桩缺 setAttribute。
+风险点：内联 sprite 的 Lucide path 含坐标 4.702，撞上 test_exam_domain.py「禁硬编码 702」的裸字符串断言。处置：sprite 加 data-ui-sprite="lucide" 标记，测试仅剥离该块，其余全文逐字检查；变异验证（注入 702 词仍被抓到）通过。
+验证：build_index_html 3432 行；check_index_html_sync PASS；pytest 7 文件 98 passed；listen-lab 探针 43 断言 + 3 变异捕获；companion 探针 358 checks。
+约束遵守：未碰 android/、未跑 tools/sync_android_sources.py、未 git add -A。

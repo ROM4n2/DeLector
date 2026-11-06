@@ -1115,7 +1115,7 @@ function renderSessionReview() {
       <div class="enc-rev-row" data-hw="${esc(w.hw || "")}" data-gloss="${esc(w.gloss || "")}">
         <span class="enc-rev-front">${esc(w.hw)}</span>
         <span class="enc-rev-gloss">${esc(w.gloss || "")}</span>
-        <button class="enc-rev-speak" data-enc-speak="${esc(w.hw)}" title="发音">🔊</button>
+        <button class="enc-rev-speak" data-enc-speak="${esc(w.hw)}" title="发音" aria-label="发音"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
       </div>
     `,
     )

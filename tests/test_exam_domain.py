@@ -547,14 +547,28 @@ def test_no_hardcoded_vocab_counts_in_a1_cards_and_workbench():
 
     ADR-0011 Task 6：条数一律动态推导（catalog count_fn / 现数缓存），权威词表
     接入后条数会变。main.js 已有同款断言（test_set_exam_level_generalized_to_b1），
-    这里补齐其余两处前端词库消费源。workbench.html 现无合法数字语境冲突
-    （1712/974/702 均未出现），故沿用整串字面量模式即可，无需收窄。
+    这里补齐其余两处前端词库消费源。
+
+    收窄说明（2026-11-06）：内联 Lucide sprite 后，vendored 矢量数据里出现了
+    合法数值语境（volume-2 的 path 含坐标 ``4.702``），会撞上 ``702`` 这个
+    词条数字面量。sprite 是图标几何数据，不是给用户看的条数，故比对前只剥离
+    被 ``data-ui-sprite="lucide"`` 标记的那一个 <svg> 块；页面其余部分仍按
+    整串字面量逐一检查，检测强度不变。
     """
     a1_js = (_ROOT / "static" / "js" / "a1_cards.js").read_text(encoding="utf-8")
     wb_html = (_ROOT / "static" / "german" / "workbench.html").read_text(encoding="utf-8")
+    assert 'data-ui-sprite="lucide"' in wb_html, (
+        "workbench.html 缺少可识别的图标 sprite 标记 data-ui-sprite"
+    )
+    wb_page = re.sub(
+        r'<svg[^>]*data-ui-sprite="lucide"[^>]*>.*?</svg>',
+        "",
+        wb_html,
+        flags=re.DOTALL,
+    )
     for banned in ("1712", "974", "702"):
         assert banned not in a1_js, f"a1_cards.js 硬编码词条数 {banned}（条数必须动态推导）"
-        assert banned not in wb_html, f"workbench.html 硬编码词条数 {banned}（条数必须动态推导）"
+        assert banned not in wb_page, f"workbench.html 硬编码词条数 {banned}（条数必须动态推导）"
 
 
 def test_a1_cards_example_blocks_conditionally_rendered():

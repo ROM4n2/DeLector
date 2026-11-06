@@ -480,7 +480,9 @@ if (predicateMissing) {
   if (!indexHtml.includes(WORKBENCH_ROUTE)) {
     problems.push(`G-夹具失配：index.html 里已找不到既有工作台路由 ${WORKBENCH_ROUTE}，探针不可信`);
   }
-  const hrefs = (render(WORKBENCH_CARD).match(/href="([^"]*)"/g) || []);
+  // 只认 <a> 上的 href：卡片朗读按钮里的 <use href="#ui-ico-*"> 是 SVG 片段引用，
+  // 不是导航路由（把全部 href=" 都算进来的话，图标替换会被误判成自造路由）。
+  const hrefs = [...render(WORKBENCH_CARD).matchAll(/<a\b[^>]*\bhref="([^"]*)"/g)].map((m) => m[1]);
   const invented = hrefs.filter((h) => !h.includes(WORKBENCH_ROUTE));
   record(
     "G1-跳转未自造路由",

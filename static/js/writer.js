@@ -850,7 +850,7 @@ export async function loadWriterEssays() {
             </div>
           </div>
           <div class="writer-essay-item-actions" onclick="event.stopPropagation()">
-            <button class="btn btn-ghost btn-xs btn-del" onclick="deleteWriterEssay(${r.id}, event)" title="删除作文">🗑️</button>
+            <button class="btn btn-ghost btn-xs btn-del" onclick="deleteWriterEssay(${r.id}, event)" title="删除作文" aria-label="删除作文"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-trash-2"></use></svg></button>
           </div>
         </div>
       `;
@@ -1417,7 +1417,7 @@ export async function loadEssayVersions() {
             <span class="version-time">${timeStr}</span>
             <div class="version-actions" onclick="event.stopPropagation()">
               <button class="btn btn-ghost btn-xs version-restore-btn" onclick="restoreEssayVersion(${v.id})" title="恢复至此快照">↩ 恢复</button>
-              <button class="btn btn-ghost btn-xs btn-del" onclick="deleteEssayVersion(${v.id})" title="删除此快照">🗑️</button>
+              <button class="btn btn-ghost btn-xs btn-del" onclick="deleteEssayVersion(${v.id})" title="删除此快照" aria-label="删除此快照"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-trash-2"></use></svg></button>
             </div>
           </div>
         </div>

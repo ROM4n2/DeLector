@@ -4,7 +4,7 @@
       <div id="quiz-step-mode" class="quiz-panel">
         <div class="quiz-panel-head">
           <h3>选择考验模式</h3>
-          <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验">✕</button>
         </div>
         <div class="quiz-mode-grid">
           <button class="quiz-mode-card" onclick="startQuiz('flashcard')">
@@ -29,7 +29,7 @@
       <!-- Step 2: Quiz Runner -->
       <div id="quiz-step-run" class="quiz-panel hidden">
         <div class="quiz-runner-head">
-          <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验">✕</button>
           <div class="quiz-progress-bar-wrap">
             <div
               id="quiz-progress-fill"

@@ -268,7 +268,7 @@ function renderWords() {
       "<td>" + (w.tags || []).map(t => "<span class='tag-chip'>" + esc(t) + "</span>").join("") + "</td>" +
       "<td><button class='st-chip " + st.cls + "' data-act='state' data-id='" + w.id +
         "' title='点击切换：未学习 → 已学习 → 已稳固'>" + st.text + "</button> " +
-        "<button class='audio-btn words-audio-sm' data-act='audio' data-id='" + w.id + "' title='播放发音'>🔊</button></td>" +
+        "<button class='audio-btn words-audio-sm' data-act='audio' data-id='" + w.id + "' title='播放发音' aria-label='播放发音'><svg class='ui-ico' aria-hidden='true' focusable='false'><use href='#ui-ico-volume-2'></use></svg></button></td>" +
       "<td class='row-ops'><button data-act='edit' data-id='" + w.id + "'>编辑</button>" +
       "<button data-act='reset' data-id='" + w.id + "'>重置</button>" +
       "<button data-act='del' data-id='" + w.id + "'>删除</button></td></tr>";

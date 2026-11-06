@@ -431,7 +431,7 @@ export function renderA1PokerCard() {
                 </div>
               </div>
               <div class="card-top-actions">
-                <button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(cur.word)})" title="朗读德语">🔊</button>
+                <button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(cur.word)})" title="朗读德语" aria-label="朗读德语"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
                 <span class="cefr-badge badge-${_examVocabLevel || "A1"}">Goethe ${_examVocabLevel || "A1"}</span>
               </div>
             </div>
@@ -457,7 +457,7 @@ export function renderA1PokerCard() {
             <div class="deck-card-head">
               <div class="deck-back-lemma">${esc(cur.word)}</div>
               <div class="card-top-actions">
-                <button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(cur.example_de)})" title="朗读官方例句">🔊</button>
+                <button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(cur.example_de)})" title="朗读官方例句" aria-label="朗读官方例句"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
                 <span class="cefr-badge badge-${_examVocabLevel || "A1"}">Goethe ${_examVocabLevel || "A1"}</span>
               </div>
             </div>
@@ -525,7 +525,7 @@ export function renderA1GridView() {
         <div class="card-head">
           <div class="card-title">${esc(w.word)}</div>
           <div class="card-meta">
-            <button class="speaker-btn" onclick="playGermanAudio(${jsAttr(w.word)})" title="朗读">🔊</button>
+            <button class="speaker-btn" onclick="playGermanAudio(${jsAttr(w.word)})" title="朗读" aria-label="朗读"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
             <span class="cefr-badge badge-${_examVocabLevel || "A1"}">${_examVocabLevel || "A1"}</span>
           </div>
         </div>
@@ -570,11 +570,11 @@ export function renderA1Teil2Deck() {
       <div class="a1-prompt-box">
         <div class="a1-prompt-badge ${p.type === "W-Frage" ? "badge-w" : "badge-jn"}">${esc(p.type)}</div>
         <div class="a1-prompt-q">
-          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(p.q)})" title="朗读提问">🔊</button>
+          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(p.q)})" title="朗读提问" aria-label="朗读提问"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
           <b>问：</b>${esc(p.q)}
         </div>
         <div class="a1-prompt-a">
-          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(p.a)})" title="朗读回答">🔊</button>
+          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(p.a)})" title="朗读回答" aria-label="朗读回答"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
           <b>答：</b>${esc(p.a)}
         </div>
       </div>
@@ -653,11 +653,11 @@ export function renderA1Teil3Deck() {
       <div class="a1-prompt-box">
         <div class="a1-prompt-badge badge-w">${esc(r.style || "Bitte")}</div>
         <div class="a1-prompt-q">
-          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(r.utterance)})" title="朗读请求">🔊</button>
+          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(r.utterance)})" title="朗读请求" aria-label="朗读请求"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
           <b>提出请求：</b>${esc(r.utterance)}
         </div>
         <div class="a1-prompt-a">
-          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(r.response)})" title="朗读回应">🔊</button>
+          <button class="speaker-btn" onclick="event.stopPropagation();playGermanAudio(${jsAttr(r.response)})" title="朗读回应" aria-label="朗读回应"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
           <b>礼貌应答：</b>${esc(r.response)}
         </div>
       </div>

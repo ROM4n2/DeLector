@@ -208,7 +208,7 @@ function _vocabHtml(item, index, q) {
       <span class="search-hw">${_highlight(hw, q)}</span>
       ${pos ? `<span class="search-pos">${esc(pos)}</span>` : ""}
       ${cefr ? `<span class="search-cefr">${esc(cefr)}</span>` : ""}
-      <button class="btn btn-ghost btn-xs search-audio-btn" onclick="Search.playResult('vocab', ${index})" title="朗读词头">🔊</button>
+      <button class="btn btn-ghost btn-xs search-audio-btn" onclick="Search.playResult('vocab', ${index})" title="朗读词头" aria-label="朗读词头"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
       <button class="btn btn-ghost btn-xs search-add-btn" onclick="Search.addVocab(${index}, this)">+ 加入 FSRS 盒</button>
     </div>
     ${defZh ? `<div class="search-def">${_highlight(defZh, q)}</div>` : ""}
@@ -223,7 +223,7 @@ function _exampleHtml(item, index, q) {
   return `<div class="search-item search-item-example">
     <div class="search-item-head">
       <span class="search-pos">${_highlight(item.lemma || "", q)}</span>
-      <button class="btn btn-ghost btn-xs search-audio-btn" onclick="Search.playResult('example', ${index})" title="朗读德文例句">🔊</button>
+      <button class="btn btn-ghost btn-xs search-audio-btn" onclick="Search.playResult('example', ${index})" title="朗读德文例句" aria-label="朗读德文例句"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
     </div>
     ${de ? `<div class="search-ex-de">${_highlight(de, q)}</div>` : ""}
     ${zh ? `<div class="search-ex-zh">${_highlight(zh, q)}</div>` : ""}
@@ -239,7 +239,7 @@ function _collocHtml(item, index, q) {
   return `<div class="search-item search-item-colloc">
     <div class="search-item-head">
       <span class="search-colloc-head">${_highlight(head, q)}</span>
-      <button class="btn btn-ghost btn-xs search-audio-btn" onclick="Search.playResult('colloc', ${index})" title="朗读搭配例句">🔊</button>
+      <button class="btn btn-ghost btn-xs search-audio-btn" onclick="Search.playResult('colloc', ${index})" title="朗读搭配例句" aria-label="朗读搭配例句"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
     </div>
     ${zh ? `<div class="search-def">${_highlight(zh, q)}</div>` : ""}
     ${ex ? `<div class="search-ex-de">${_highlight(ex, q)}</div>` : ""}
