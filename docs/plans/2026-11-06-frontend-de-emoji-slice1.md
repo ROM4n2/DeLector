@@ -588,6 +588,105 @@
 
 ---
 
+## [NOTE] Emoji 残留全量清点（第二批后，2026-11-06）
+
+**本批不处理，仅记账。** 第二批只清了「无文字控件」与已点名的空态/角色字形；其余装饰性 emoji 仍大量存在。
+
+### 扫描口径
+
+- 范围：`static/` 全量（`.js` / `.html` / `.css`），**排除生成物 `static/index.html`**（避免与自己内联的分块重复计数）
+- 排除：JS 行注释、块注释、`console.*` 输出（不对用户呈现）
+- 分类：**A = 删除会丢信息**（字形本身承载状态/语义，且无中文或 `aria-label` 兜底）；**B = 纯装饰**（同句或相邻节点已有中文标签，删掉不影响理解）
+
+### 统计
+
+| 指标 | 数值 |
+|---|---|
+| UI 面残留总处数 | **376** |
+| 涉及文件 | 40 |
+| 不同字形 | 87 |
+| A 类（删除会丢信息） | **16** |
+| B 类（纯装饰、已有中文标签） | **360**（其中 57 行本身无中文，靠相邻节点承载） |
+
+> 已知点名项：`static/js/cards.js:296` 实为 `🎴 3D 扑克翻牌盒 · POKER FLIP STACK`（不是 📕 / "翻牌墨盒"，以代码为准），属 B 类。
+
+### A. 删除会丢信息（16 处，下一批优先）
+
+| 文件:行 | 字形 | 上下文 | 为什么算丢信息 |
+|---|---|---|---|
+| `static/modals/drawer.html:65` | ✕ | `<button class="drawer-close" … title="关闭工作台 (Esc)">✕` | 纯字形 + `title`，无 `aria-label`，I1 直接违规 |
+| `static/modals/import_modal.html:18` | ✕ | 同上（`closeModal()`） | 同上 |
+| `static/modals/polish_modal.html:25` | ✕ | 同上 | 同上 |
+| `static/modals/settings_modal.html:25` | ✕ | 同上（`closeSettingsModal()`） | 同上 |
+| `static/modals/version_preview_modal.html:31` | ✕ | 同上（`closeVersionPreview()`） | 同上 |
+| `static/js/main.js:725` | 🔒 | `btn.textContent = "🔒"` | 密码可见性切换，状态只由字形表达 |
+| `static/js/main.js:728` | 👁️ | `btn.textContent = "👁️"` | 同上 |
+| `static/modals/settings_modal.html:63` | 👁️ | `#btn-toggle-key-vis` 初始字形，仅 `title="显示/隐藏 Key"` | 按钮既无可见文字也无 `aria-label` |
+| `static/js/listen-lab.js:474` | ✓ ✗ | `<span class="listen-mark ok/no">` 判题标记 | 正误只靠字形 + 颜色，无文字 |
+| `static/js/listen-lab.js:476` | ✓ ✗ | 同上（第二个渲染分支） | 同上 |
+| `static/js/a1_writer.js:306` | ⚪ | `<span class="lp-icon">⚪</span>` 等级点 | 等级区分只靠颜色/字形 |
+| `static/js/a1_writer.js:428` | 🟢 ⚪ | `icon.textContent = lp.matched ? '🟢' : '⚪'` | 匹配状态只靠字形 |
+| `static/js/cp-drawer.js:372` | ✕ | `clearBtn.textContent = '✕'` | 清空按钮无文字、无 `aria-label` |
+| `static/js/cp-drawer.js:1341` | ✓ | `iconEl.textContent = '✓'` | 完成态只靠字形 |
+| `static/js/reader.js:907` | ✓ | `btn.textContent = "✓"` | 收藏/完成态只靠字形 |
+| `static/js/encounter.js:148` | ⚠ | `COVERAGE_DEGRADED_MARK = "⚠"` | 覆盖率降级标记只靠字形 |
+
+### B. 纯装饰（360 处，按文件聚合）
+
+| 文件 | 处数 | 字形 | 行号 |
+|---|---|---|---|
+| `static/german/workbench.html` | 20 | ⚠ ✓ ✗ ⭐ 📘 📗 🔥 🎉 ✕ ▶ | 24, 26, 27, 173, 389, 1297, 1300, 1355, 1358, 1363, 1387, 1932, 2101, 2103, 2504, 2508, 2522, 2530, 2535, 2630 |
+| `static/js/a1_cards.js` | 21 | ✓ 🌟 ◀ 🔀 🎲 ▶ 💬 🙋 | 167, 179, 415, 450, 483, 491, 492, 493, 494, 542, 587, 631, 632, 633, 634, 670, 712, 713, 714, 715, 751 |
+| `static/js/a1_hoeren.js` | 17 | ✓ ⚠ 🔊 🎧 ▶ 📋 🔁 ✅ ❌ 🇩 🇪 🇨 🇳 💡 📌 🔄 | 35, 59, 106, 141, 144, 158, 224, 226, 381, 413, 503, 508, 509, 512, 514, 532, 562 |
+| `static/js/a1_lesen.js` | 12 | ⚠ 📖 ✓ 📋 ✉ 🌐 🎯 🪧 ✅ ❌ 💡 🔄 | 27, 51, 97, 150, 164, 211, 254, 257, 300, 457, 462, 480 |
+| `static/js/a1_writer.js` | 10 | ✓ ✕ 🎉 📊 ⚠ | 199, 212, 229, 359, 397, 400, 410, 413, 416, 439 |
+| `static/js/cards.js` | 20 | ✓ ✕ 🛡 📚 🔀 🎴 ⚠ ✗ | 235, 236, 238, 296, 319, 336, 367, 373, 405, 435, 463, 560, 569, 587, 596, 870, 875, 979, 1243, 1309 |
+| `static/js/cloze.js` | 3 | ⚡ 💡 🏆 | 29, 113, 167 |
+| `static/js/companion.js` | 6 | ❌ ✓ 🔊 🔇 | 514, 521, 543, 553, 605, 623 |
+| `static/js/cp-drawer-proposals.js` | 2 | 📝 ✓ | 34, 125 |
+| `static/js/cp-drawer.js` | 13 | ✓ 📄 🦉 ✍ 📝 🎯 ✗ | 488, 491, 494, 503, 643, 645, 661, 666, 830, 832, 1302, 1307, 1312 |
+| `static/js/encounter.js` | 4 | ✅ ✓ 🎉 ⚠ | 360, 369, 372, 1129 |
+| `static/js/folio.js` | 3 | ✓ 🔥 ○ | 168, 387, 415 |
+| `static/js/hard-sentences.js` | 10 | 🔍 ✔ ➕ ➤ ✦ ▶ ✅ 🏁 | 315, 391, 392, 407, 413, 415, 430, 446, 658, 663 |
+| `static/js/listen-lab.js` | 14 | ▶ ✓ 🏁 ⚠ 🎙 ✗ 🎉 | 270, 276, 442, 443, 509, 510, 522, 546, 556, 558, 570, 611, 612, 624 |
+| `static/js/main.js` | 9 | ✓ 📥 ⚠ ✕ ⚡ | 616, 648, 700, 701, 704, 762, 765, 806, 811 |
+| `static/js/player.js` | 3 | ⚠ 🎙 | 50, 357, 457 |
+| `static/js/rd-syntax.js` | 2 | ➔ 🔍 | 87, 186 |
+| `static/js/reader.js` | 22 | ✓ ⚡ ⚠ 🔗 🧩 ✨ 🌳 🧭 📌 | 285, 392, 416, 446, 447, 448, 450, 451, 485, 500, 531, 561, 862, 937, 991, 1142, 1190, 1199, 1218, 1230, 1250, 1362 |
+| `static/js/search.js` | 1 | ⚠ | 325 |
+| `static/js/wb-queue.js` | 1 | 🎉 | 164 |
+| `static/js/wb-rate.js` | 1 | 🎉 | 76 |
+| `static/js/wb-views.js` | 3 | 🔥 ⭐ 📘 📗 ✓ | 113, 381, 384 |
+| `static/js/writer.js` | 28 | ✓ ⚠ ✨ 💡 ❌ 💾 ✕ | 309, 402, 405, 438, 439, 518, 527, 549, 715, 839, 840, 942, 974, 993, 1069, 1115, 1118, 1126, 1132, 1133, 1154, 1162, 1212, 1253, 1405, 1406, 1471, 1474 |
+| `static/layout/companion.html` | 1 | 💬 | 143 |
+| `static/layout/nav_desktop.html` | 3 | 🔍 🧩 ⚙ | 39, 48, 55 |
+| `static/modals/cloze_overlay.html` | 6 | ✕ 🎯 📚 ⚡ 💡 ✓ | 21, 31, 38, 45, 73, 87 |
+| `static/modals/drawer.html` | 20 | 📝 🌳 🧠 🎯 📖 🦉 ✦ 📡 ✨ ✓ ⚡ ⚖ ✍ 📊 🃏 | 16, 24, 32, 40, 48, 206, 286, 300, 337, 354, 386, 387, 388, 392, 396, 397, 398, 399, 400, 401 |
+| `static/modals/import_modal.html` | 4 | ❖ 📰 | 28, 35, 42, 49 |
+| `static/modals/player_and_tooltip.html` | 7 | 🎙 ▶ 🔂 🌳 🦉 📝 🔊 | 71, 79, 87, 149, 156, 163, 170 |
+| `static/modals/polish_modal.html` | 4 | ✓ ✨ ✕ | 18, 38, 44, 66 |
+| `static/modals/quiz_overlay.html` | 4 | ✕ ✗ ✓ | 7, 32, 69, 75 |
+| `static/modals/settings_modal.html` | 8 | ⚡ ⚙ 🤖 ⚖ 🧠 🔊 ✓ | 18, 31, 156, 157, 158, 179, 201, 254 |
+| `static/views/cards.html` | 5 | ⚔ 🗑 ⚠ 🎴 📑 | 20, 28, 40, 101, 109 |
+| `static/views/encounter.html` | 1 | 📥 | 12 |
+| `static/views/exam.html` | 5 | ◀ ▶ ⚡ | 53, 62, 120, 126, 183 |
+| `static/views/progress.html` | 5 | ⚔ 📚 💬 ✓ | 31, 38, 348, 366, 447 |
+| `static/views/reader.html` | 3 | ▶ ⚔ 📥 | 17, 25, 33 |
+| `static/views/writer.html` | 18 | 📋 💾 ✍ 🔍 ✨ ✕ ⚡ 💡 📚 📜 📊 🧭 🕒 | 33, 43, 46, 53, 60, 76, 84, 115, 130, 153, 160, 170, 178, 189, 202, 222, 239, 269 |
+
+> 另有 41 处「行内无中文但相邻节点有文案」的装饰（如 `quiz_overlay.html:11/16/21` 模式图标、`import_modal.html:114` 拖拽区 📄、`a1_cards.js:382/508` 空态 🔍、`cp-drawer.js:468/477` 分节图标），已并入上表按文件计数，不单列。
+
+### 下一批建议先动的 3 处
+
+1. **5 个模态框关闭键**（`drawer:65` / `import:18` / `polish:25` / `settings:25` / `version_preview:31`）
+   理由：唯一同时满足「纯字形 + 只有 title」的 I1 硬违规；同一个 `.drawer-close` 类一次覆盖 5 处，改动最小、可验证性最高（可加一条静态断言禁止无 `aria-label` 的 `.drawer-close`）。
+2. **`#btn-toggle-key-vis` 与 `main.js:725/728` 的 🔒/👁️**
+   理由：既是按钮的唯一可见标签，又是密码可见性状态的唯一载体；删或改一个字都会让"当前是明文还是密文"失去表达，屏幕阅读器目前只知道"按钮"。
+3. **`listen-lab.js:474/476` 的 ✓/✗ 判题标记**
+   理由：正确/错误只由字形 + `.ok/.no` 颜色承担，没有任何文字；对色觉障碍用户是双重失效，且听写/填空两条渲染路径各有一份，属同源缺陷。
+
+---
+
 ## [NOTE] Deviation Table (post-execution, filled before merge)
 
 | plan text | what was actually built | why |
