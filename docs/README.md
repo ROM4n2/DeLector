@@ -10,7 +10,7 @@
 | `plans/` | **在途**实施计划（vault-plan schema：Goal / Tech Stack / Spec Reference / Global Constraints + Task 拆分 + TDD 步骤） | 交付后 `git mv` 进 `plans/archive/` |
 | `plans/archive/` | 已交付的历史计划，含成对的 `-ledger.md`（vault-exec 执行台账）与 `-review.md`（评审子产物） | 只进不出 |
 | `specs/` | **设计稿**：统一命名 `<日期>-<主题>-design.md` | 无归档层（设计意图长期有效） |
-| `adr/` | **仓内 ADR 副本**：`<日期>-adr-XXXX-<主题>.md`（正式件在 Vault） | 无归档层 |
+| `adr/` | **仓内 ADR 副本**：`<日期>-adr-XXXX-<主题>.md`（正式件在 Vault）；状态视图见 `adr/INDEX.md` | 无归档层 |
 | `reviews/` | 审计 / 评审报告（一次性、带日期） | — |
 | `agents/` | 面向 agent 的常青文档：`architecture.md`（架构与跨端契约）、`ops.md`（运维）、`ci-speed-budget.md`（CI 闸门成本/并发预算）、以及需人工/agent 逐项填写的复测清单 | — |
 | 顶层 `*.md` | 跨领域的常青规范：`design-system.md`（设计系统；token / 排印现值以 `static/css/tokens.css` 为准）、`svg-character-spec.md`（角色 SVG 规格） | — |
