@@ -123,3 +123,47 @@ def test_bare_fragment_known_limitation():
 
 def test_bare_fragment_counterpart_keeps_subject_reading():
     assert _case_of("Kinder essen.", "Kinder") == "Nom"
+
+
+# ── 双宾否决票：第三格接收者被 parser 误标 oa 时不得改判 Acc ──────────────────
+
+
+@pytest.mark.parametrize(
+    "sentence,recipient",
+    [
+        ("Die Lehrerin gibt den Schülerinnen die Bücher.", "Schülerinnen"),
+        ("Die Lehrerin gibt den Kindern die Bücher.", "Kindern"),
+        ("Der Lehrer gibt den Studentinnen die Bücher.", "Studentinnen"),
+        ("Er gibt der Frau das Buch.", "Frau"),
+        ("Er gibt dem Kind das Buch.", "Kind"),
+    ],
+)
+def test_dative_recipient_stays_dative(sentence, recipient):
+    assert _case_of(sentence, recipient) == "Dat"
+
+
+def test_recipient_veto_does_not_block_accusative_theme():
+    sentence = "Die Lehrerin gibt den Schülerinnen die Bücher."
+    assert _case_of(sentence, "Bücher") == "Acc"
+
+
+@pytest.mark.parametrize(
+    "sentence,theme",
+    [
+        ("Die Lehrerin gibt den Schülern die Bücher.", "Bücher"),
+        ("Wir geben den Kindern Bücher.", "Bücher"),
+        ("Die Bücher gibt der Lehrer dem Schüler.", "Bücher"),
+        ("Die Bücher habe ich den Kindern gegeben.", "Bücher"),
+        ("Ich sehe die Frauen.", "Frauen"),
+        ("Ich sehe die Lehrerinnen.", "Lehrerinnen"),
+    ],
+)
+def test_syncretic_plural_accusative_still_fixed(sentence, theme):
+    assert _case_of(sentence, theme) == "Acc"
+
+
+def test_kill_switch_disables_rule(monkeypatch):
+    from delector.nlp_engine import case_resolution
+
+    monkeypatch.setattr(case_resolution, "CASE_RESOLUTION_ENABLED", False)
+    assert _case_of("Die Lehrerin gibt den Schülern die Bücher.", "Bücher") == "Nom"
