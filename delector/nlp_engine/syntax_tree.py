@@ -16,6 +16,7 @@ Zero external API dependencies.
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from .case_resolution import resolve_case
 from .syntax_fields import (
     _is_subjunctive_token,
     allocate_infinitiv_fields,
@@ -110,7 +111,7 @@ def format_token_dict(tok: Token) -> Dict[str, Any]:
         "head_id": tok.head.i,
         "head_text": tok.head.text,
         "gender": morph_dict.get("Gender", ""),
-        "case": morph_dict.get("Case", ""),
+        "case": resolve_case(tok),
         "number": morph_dict.get("Number", ""),
         "person": morph_dict.get("Person", ""),
         "tense": morph_dict.get("Tense", ""),

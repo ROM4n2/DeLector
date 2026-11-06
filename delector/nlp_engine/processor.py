@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple
 from delector.core.lexicon import get_core_cefr_level, lookup_core_vocab
 
 from . import model_loader as _model_loader
+from .case_resolution import resolve_case
 
 # 模型档位常量（ADR-0027）与加载实现（ADR-0028）的唯一真相源是 model_loader。
 # 依赖方向：processor ──> model_loader <── syntax_tree（单向，无环）。
@@ -426,7 +427,7 @@ def process_german_text(text: str) -> Dict[str, Any]:
                 "lemma": t.lemma_,
                 "pos": t.pos_,
                 "gender": morph.get("Gender", ""),
-                "case": morph.get("Case", ""),
+                "case": resolve_case(t),
                 "cefr_level": get_cefr_level(t.lemma_) if is_word else "",
                 "is_punct": t.is_punct,
                 "is_space": t.is_space,
