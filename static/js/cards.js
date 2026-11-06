@@ -140,14 +140,33 @@ export function renderCardsGrid() {
         ? "太棒了！艾宾浩斯记忆排程显示今日暂无到期卡片。您可以切换至「待复习全量」主动温故或进入文库精读新文章。"
         : "在阅读器中点击生词或语法考点，即可一键收录。";
 
+    const emptyTone =
+      cardState.catalog.segment === "due"
+        ? "var(--accent)"
+        : cardState.catalog.segment === "mastered"
+          ? "var(--moss)"
+          : "var(--rule)";
+    const emptyEyebrow =
+      cardState.catalog.segment === "due"
+        ? "TAGESPLAN · 今日"
+        : cardState.catalog.segment === "mastered"
+          ? "ARCHIV · 归档"
+          : "KATALOG · 词库";
+
     container.innerHTML = `
-      <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;box-shadow:2px 2px 0 var(--ink);">
-        <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">
-          ${emptyTitle}
+      <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+        <span aria-hidden="true" style="width:2px;flex-shrink:0;background:${emptyTone};"></span>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">
+            ${emptyEyebrow}
+          </div>
+          <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem;">
+            ${emptyTitle}
+          </div>
+          <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">
+            ${emptyDesc}
+          </p>
         </div>
-        <p style="font-size:0.8125rem;color:var(--pencil);max-width:440px;margin:0 auto;line-height:1.6;">
-          ${emptyDesc}
-        </p>
       </div>
     `;
     return;
@@ -295,9 +314,9 @@ export function renderDeckStage(vList, gList) {
                 </div>
               </div>
               <div class="card-top-actions">
-                ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(card.word)})" title="朗读单词">🔊</button>` : ""}
+                ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(card.word)})" title="朗读单词" aria-label="朗读单词"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>` : ""}
                 <span class="cefr-badge badge-${card.cefr_level || "A1"}">${card.cefr_level || "A1"}</span>
-                <button class="card-del-btn" onclick="event.stopPropagation();deleteCard(${jsAttr(card._type)}, ${card.id}, ${jsAttr(isVocab ? card.word : card.grammar_name)})" title="删除此卡片">✕</button>
+                <button class="card-del-btn" onclick="event.stopPropagation();deleteCard(${jsAttr(card._type)}, ${card.id}, ${jsAttr(isVocab ? card.word : card.grammar_name)})" title="删除此卡片" aria-label="删除此卡片">✕</button>
               </div>
             </div>
 
@@ -534,11 +553,11 @@ export function renderCatalogGrid(vList, gList) {
         <div class="memo-card-head">
           <div style="display:flex;align-items:center;gap:0.5rem;">
             <span class="memo-word">${esc(c.word)}</span>
-            <button class="speaker-btn" onclick="playGermanAudio(${jsAttr(c.word)})" title="朗读单词">🔊</button>
+            <button class="speaker-btn" onclick="playGermanAudio(${jsAttr(c.word)})" title="朗读单词" aria-label="朗读单词"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>
           </div>
           <div class="card-top-actions">
             <span class="cefr-badge badge-${c.cefr_level || "A1"}">${c.cefr_level || "A1"}</span>
-            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, ${jsAttr(c.word)})" title="删除此卡片">✕</button>
+            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, ${jsAttr(c.word)})" title="删除此卡片" aria-label="删除此卡片">✕</button>
           </div>
         </div>
         <div class="memo-def">${esc(formatCardDefinition(c))}</div>
@@ -565,7 +584,7 @@ export function renderCatalogGrid(vList, gList) {
           <span class="grammar-memo-name">${esc(c.grammar_name)}</span>
           <div class="card-top-actions">
             <span class="cefr-badge badge-${c.cefr_level || "A1"}">Goethe ${c.cefr_level || "A1"}</span>
-            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, ${jsAttr(c.grammar_name)})" title="删除此考点卡">✕</button>
+            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, ${jsAttr(c.grammar_name)})" title="删除此考点卡" aria-label="删除此考点卡">✕</button>
           </div>
         </div>
         ${c.rule_formula ? `<div class="grammar-memo-formula">${esc(c.rule_formula)}</div>` : ""}
@@ -1168,18 +1187,24 @@ function renderPrepMatrix() {
     // 三种空态要说三句不同的话：拉取失败说网络（别把传输故障说成词库缺失，
     // 那会让人去查数据集）、有过滤条件说没命中、都没有才是词库真空。
     const failed = !cardState.prep.cache;
+    const prepTone = failed ? "var(--accent)" : "var(--rule)";
     container.innerHTML = `
-      <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
-        <div style="font-size:2.5rem;margin-bottom:0.5rem;">${failed ? "📡" : "🧭"}</div>
-        <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);">
-          ${failed ? "介词矩阵加载失败" : q || cardState.prep.caseFilter ? "没有命中的搭配" : "介词搭配库尚未生成"}
-        </div>
-        ${
-          failed
-            ? `<button class="btn btn-ghost btn-sm" style="margin-top:1rem;"
+      <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+        <span aria-hidden="true" style="width:2px;flex-shrink:0;background:${prepTone};"></span>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">
+            ${failed ? "VERBINDUNG · 连接失败" : "PRÄPOSITION · 介词矩阵"}
+          </div>
+          <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);">
+            ${failed ? "介词矩阵加载失败" : q || cardState.prep.caseFilter ? "没有命中的搭配" : "介词搭配库尚未生成"}
+          </div>
+          ${
+            failed
+              ? `<button class="btn btn-ghost btn-sm" style="margin-top:1rem;"
                             onclick="window.retryPrepMatrix()">重试</button>`
-            : ""
-        }
+              : ""
+          }
+        </div>
       </div>`;
     return;
   }

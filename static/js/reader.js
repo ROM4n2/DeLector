@@ -197,7 +197,7 @@ export async function loadArticles() {
           ${renderMiniBar(a.stats)}
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
-          <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${Number(a.id)}, ${jsAttr(a.title)})" title="删除文章">🗑</button>
+          <button class="article-row-del" onclick="event.stopPropagation(); deleteArticle(${Number(a.id)}, ${jsAttr(a.title)})" title="删除文章" aria-label="删除文章"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-trash-2"></use></svg></button>
           <span class="article-row-arrow">→</span>
         </div>
       </div>`,
@@ -537,7 +537,7 @@ export function inspect(tokenId, sentId) {
               <span class="praep-kasus">+ ${esc(p.kasus)}</span>
               <span class="praep-def">${esc(p.bedeutung_zh)}</span>
               <span class="praep-example">${esc(p.beispiel)}</span>
-              <button class="praep-save" title="把这一条存成词汇卡"
+              <button class="praep-save" title="把这一条存成词汇卡" aria-label="把这一条存成词汇卡"
                       onclick="window.savePrepCollocation(${i}, this)">+</button>
             </div>
           `,

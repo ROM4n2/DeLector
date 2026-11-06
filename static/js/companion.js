@@ -9,7 +9,6 @@ export const CHARACTERS = {
   owl: {
     id: 'owl',
     name: 'Eule',
-    emoji: '🦉',
     title: '歌德猫头鹰',
     primary: '#6b4f8f',
     accent: '#e8953a',
@@ -71,7 +70,6 @@ export const CHARACTERS = {
   cat: {
     id: 'cat',
     name: 'Katze',
-    emoji: '🐱',
     title: '学者猫',
     primary: '#4f8f6b',
     accent: '#f0e6d0',
@@ -127,7 +125,6 @@ export const CHARACTERS = {
   fox: {
     id: 'fox',
     name: 'Fuchs',
-    emoji: '🦊',
     title: '灵动狐',
     primary: '#d9663f',
     accent: '#f4ede2',
@@ -171,7 +168,6 @@ export const CHARACTERS = {
   robot: {
     id: 'robot',
     name: 'Roboter',
-    emoji: '🤖',
     title: '包豪斯机甲',
     primary: '#4a6fa5',
     accent: '#9bd1f0',
@@ -454,7 +450,6 @@ export const Companion = {
         const cleanSvg = sanitizeSvg(savedCustomSvg);
         this.registerCharacter('custom', {
           name: '自定义',
-          emoji: '✨',
           title: '自定义伴读',
           primary: '#15140f',
           accent: '#ed6f5c',
@@ -494,7 +489,6 @@ export const Companion = {
     CHARACTERS[id] = {
       id,
       name: def.name || id,
-      emoji: def.emoji || '✨',
       title: def.title || def.name || id,
       primary: def.primary || '#15140f',
       accent: def.accent || '#ed6f5c',
@@ -535,7 +529,6 @@ export const Companion = {
       // 3. Register custom character
       this.registerCharacter('custom', {
         name: '自定义',
-        emoji: '✨',
         title: '自定义伴读',
         primary: '#15140f',
         accent: '#ed6f5c',
@@ -874,7 +867,7 @@ export const Companion = {
     // Floating Avatar Icon
     const avatarIcon = document.getElementById('companion-avatar-icon');
     if (avatarIcon) {
-      avatarIcon.textContent = charDef.emoji;
+      avatarIcon.innerHTML = charDef.svg;
     }
 
     // 2. Folio Stage Character SVG
@@ -921,7 +914,11 @@ export const Companion = {
     const soundIcon = document.getElementById('studio-sound-icon');
     const soundLabel = document.getElementById('studio-sound-label');
     const soundBtn = document.getElementById('studio-sound-btn');
-    if (soundIcon) soundIcon.textContent = this.soundEnabled ? '🔊' : '🔇';
+    if (soundIcon) {
+      const useEl = soundIcon.querySelector('use');
+      if (useEl) useEl.setAttribute('href', this.soundEnabled ? '#ui-ico-volume-2' : '#ui-ico-volume-x');
+      else soundIcon.textContent = this.soundEnabled ? '音量开' : '静音';
+    }
     if (soundLabel) soundLabel.textContent = this.soundEnabled ? '发声已开启' : '发声已静音';
     if (soundBtn) soundBtn.setAttribute('aria-pressed', String(this.soundEnabled));
 
@@ -949,6 +946,11 @@ export const Companion = {
         const isActive = char === this.charId;
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-pressed', String(isActive));
+        // 面板按钮没有可见文字，形象必须用 SVG 承载，不能以单个 emoji 作为唯一标签。
+        const def = CHARACTERS[char];
+        if (def && def.svg && btn.innerHTML !== def.svg) {
+          btn.innerHTML = def.svg;
+        }
       }
     });
 
@@ -960,7 +962,12 @@ export const Companion = {
     const soundBtn = document.getElementById('panel-sound');
     if (soundBtn) {
       const soundIcon = document.getElementById('panel-sound-icon');
-      if (soundIcon) soundIcon.textContent = this.soundEnabled ? '🔊' : '🔇';
+      if (soundIcon) {
+        const useEl = soundIcon.querySelector('use');
+        if (useEl) {
+          useEl.setAttribute('href', this.soundEnabled ? '#ui-ico-volume-2' : '#ui-ico-volume-x');
+        }
+      }
       soundBtn.setAttribute('aria-pressed', String(this.soundEnabled));
     }
   }

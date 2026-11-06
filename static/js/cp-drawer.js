@@ -402,7 +402,8 @@ export function renderContextBar() {
       const prevBtn = document.createElement('button');
       prevBtn.className = 'companion-nav-btn';
       prevBtn.title = '上一句 (手机快捷点选)';
-      prevBtn.textContent = '◀';
+      prevBtn.setAttribute('aria-label', '上一句');
+      prevBtn.innerHTML = '<svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-chevron-left"></use></svg>';
       prevBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const targetIdx = currentIdx > 0 ? currentIdx - 1 : sents.length - 1;
@@ -431,7 +432,8 @@ export function renderContextBar() {
       const nextBtn = document.createElement('button');
       nextBtn.className = 'companion-nav-btn';
       nextBtn.title = '下一句 (手机快捷点选)';
-      nextBtn.textContent = '▶';
+      nextBtn.setAttribute('aria-label', '下一句');
+      nextBtn.innerHTML = '<svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-chevron-right"></use></svg>';
       nextBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const targetIdx = (currentIdx >= 0 && currentIdx < sents.length - 1) ? currentIdx + 1 : 0;

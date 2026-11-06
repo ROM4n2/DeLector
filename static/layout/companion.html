@@ -14,7 +14,7 @@
         aria-label="伴读角色设置与对话"
         onclick="window.Companion.onClick()"
       >
-        <span id="companion-avatar-icon">🦉</span>
+        <span id="companion-avatar-icon" aria-hidden="true"></span>
       </button>
       <div id="companion-panel" class="companion-panel hidden">
         <div class="panel-head">
@@ -32,7 +32,7 @@
             onclick="window.Companion.setCharacter('owl')"
             title="歌德猫头鹰"
           >
-            <span aria-hidden="true">🦉</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn"
@@ -42,7 +42,7 @@
             onclick="window.Companion.setCharacter('cat')"
             title="学者猫"
           >
-            <span aria-hidden="true">🐱</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn"
@@ -52,7 +52,7 @@
             onclick="window.Companion.setCharacter('fox')"
             title="灵动狐"
           >
-            <span aria-hidden="true">🦊</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn"
@@ -62,7 +62,7 @@
             onclick="window.Companion.setCharacter('robot')"
             title="包豪斯机甲"
           >
-            <span aria-hidden="true">🤖</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn mascot-custom-btn"
@@ -74,7 +74,7 @@
             onclick="window.Companion.setCharacter('custom')"
             title="自定义角色"
           >
-            <span aria-hidden="true">✦</span>
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-sparkles"></use></svg>
           </button>
           <button
             class="panel-char-btn panel-upload-btn"
@@ -82,7 +82,7 @@
             onclick="window.Companion.triggerUpload('panel')"
             title="上传自定义 SVG 角色"
           >
-            <span aria-hidden="true">📁</span>
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-upload"></use></svg>
           </button>
           <input
             id="panel-svg-input"
@@ -149,7 +149,7 @@
             aria-pressed="true"
             onclick="window.Companion.toggleSound()"
           >
-            <span id="panel-sound-icon" aria-hidden="true">🔊</span>
+            <svg id="panel-sound-icon" class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg>
           </button>
           <button
             id="panel-hide"

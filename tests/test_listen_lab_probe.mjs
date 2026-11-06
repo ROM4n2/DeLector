@@ -313,13 +313,13 @@ async function runScenarios(cfg) {
   /* ── 行为路径 ③：模式切换 L→D（模式条三态 + 听写 UI） ── */
   const modeBar = els["listen-mode-bar"].innerHTML;
   check(
-    modeBar.includes("🎧 精听/跟读") && modeBar.includes("✍️ 听写") && modeBar.includes("⬚ 填空"),
+    modeBar.includes("精听/跟读") && modeBar.includes("听写") && modeBar.includes("填空"),
     "模式条未渲染 L/D/C 三态",
     "mode_switch",
   );
   L.setListenMode("D");
   check(stage().includes('id="listen-dict-input"'), "D 模式未渲染听写输入框", "mode_switch");
-  check(stage().includes("🔒 原文已隐藏"), "D 模式未隐藏原文（听写语义）", "mode_switch");
+  check(stage().includes("原文已隐藏"), "D 模式未隐藏原文（听写语义）", "mode_switch");
 
   /* ── 行为路径 ④：听写提交 → 六色逐字反馈（POST /api/listen/diagnose） ── */
   els["listen-dict-input"].value = "Der man geht in die Schule.";

@@ -187,7 +187,7 @@ function renderQuizQ() {
     else if (w.ipa) { const s = document.createElement("small"); s.textContent = w.ipa; info.appendChild(s); }
     if (w.ipa) {
       const ab = document.createElement("button");
-      ab.className = "audio-btn words-audio-sm"; ab.title = "听发音（拼写辅助）"; ab.textContent = "🔊";
+      ab.className = "audio-btn words-audio-sm"; ab.title = "听发音（拼写辅助）"; ab.setAttribute("aria-label", "听发音"); ab.innerHTML = "<svg class=\"ui-ico\" aria-hidden=\"true\" focusable=\"false\"><use href=\"#ui-ico-volume-2\"></use></svg>";
       ab.style.marginLeft = "8px";
       ab.onclick = () => {
         ab.classList.add("busy");

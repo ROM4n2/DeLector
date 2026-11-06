@@ -1,4 +1,14 @@
 /* ================= 主题变量 ================= */
+/* Lucide 图标（同 static/icons/lucide-sprite.svg；本页内联同一份 symbol 定义） */
+.ui-ico {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 :root{
   --bg: var(--paper, #faf8f5);
   --panel: var(--paper-card, #ffffff);

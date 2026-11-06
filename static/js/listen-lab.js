@@ -400,7 +400,7 @@ function _renderMaterialBar() {
         return `<button class="listen-material-card${active ? " active" : ""}" onclick="ListenLab.selectListenMaterial('${m.source_type}', ${Number(m.source_id)})">
           <span class="listen-badge ${esc(m.level)}">${esc(m.level)}</span>
           <span class="listen-mat-title">${esc(m.title)}</span>
-          <span class="listen-mat-src">${m.source_type === "hoeren" ? "🎧 听力句库" : "📖 分级短文"}</span>
+          <span class="listen-mat-src">${m.source_type === "hoeren" ? "听力句库" : "分级短文"}</span>
         </button>`;
       })
       .join("");
@@ -416,9 +416,9 @@ function _renderModeBar() {
   bar.innerHTML =
     `<span class="listen-bar-label">模式</span>` +
     [
-      ["L", "🎧 精听/跟读"],
-      ["D", "✍️ 听写"],
-      ["C", "⬚ 填空"],
+      ["L", "精听/跟读"],
+      ["D", "听写"],
+      ["C", "填空"],
     ]
       .map(
         ([v, label]) =>
@@ -434,7 +434,7 @@ function _renderPlayerBar() {
     bar.innerHTML = "";
     return;
   }
-  const playLabel = _q.playing ? "⏸ 暂停" : "▶ 播放";
+  const playLabel = _q.playing ? "暂停" : "播放";
   const speeds = [0.75, 0.9, 1.0, 1.1, 1.25];
   const flowHtml =
     _q.mode === "L"
@@ -445,9 +445,9 @@ function _renderPlayerBar() {
   bar.innerHTML =
     `<div class="listen-player-group">` +
     `<button class="listen-btn listen-btn-main" onclick="ListenLab.listenPlayToggle()">${playLabel}</button>` +
-    `<button class="listen-btn" onclick="ListenLab.listenPrev()" title="上一句">⏮</button>` +
-    `<button class="listen-btn" onclick="ListenLab.listenNext()" title="下一句">⏭</button>` +
-    `<button class="listen-btn" onclick="ListenLab.listenReplay()" title="重听当前句">🔁</button>` +
+    `<button class="listen-btn" onclick="ListenLab.listenPrev()" title="上一句" aria-label="上一句"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-skip-back"></use></svg></button>` +
+    `<button class="listen-btn" onclick="ListenLab.listenNext()" title="下一句" aria-label="下一句"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-skip-forward"></use></svg></button>` +
+    `<button class="listen-btn" onclick="ListenLab.listenReplay()" title="重听当前句" aria-label="重听当前句"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-rotate-ccw"></use></svg></button>` +
     `</div>` +
     `<div class="listen-player-group"><span class="listen-bar-label">语速</span>` +
     speeds
@@ -482,7 +482,7 @@ function _sentListHtml() {
       if (_q.mode === "D") {
         textHtml = d.answered
           ? esc(s)
-          : `<span class="listen-hidden">🔒 第 ${i + 1} 句 · 原文已隐藏（点击重听）</span>`;
+          : `<span class="listen-hidden">第 ${i + 1} 句 · 原文已隐藏（点击重听）</span>`;
       } else if (_q.mode === "C") {
         const item = _makeCloze(s);
         textHtml = item ? _clozeTextHtml(item) : esc(s);
@@ -516,7 +516,7 @@ function _dictationHtml() {
       <span class="listen-progress">句 ${i + 1} / ${_q.sentences.length}</span>
     </div>
     <div class="listen-dict-card">
-      <div class="listen-hidden-tip">🔒 原文已隐藏 —— 点「▶ 播放」听写，再在下方输入复现的句子</div>
+      <div class="listen-hidden-tip">原文已隐藏 —— 点「播放」听写，再在下方输入复现的句子</div>
       <div class="listen-input-row">
         <input id="listen-dict-input" class="listen-input" type="text" placeholder="输入你听到的德语句子…" autocomplete="off" autocorrect="off" onkeydown="if (event.key === 'Enter') ListenLab.listenSubmitDictation();" />
         <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenSubmitDictation()">✓ 提交判分</button>

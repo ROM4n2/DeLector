@@ -736,7 +736,7 @@
                       aria-pressed="true"
                       onclick="window.Companion.setCharacter('owl')"
                     >
-                      <span aria-hidden="true">🦉</span> Eule (歌德猫头鹰)
+                      Eule (歌德猫头鹰)
                     </button>
                     <button
                       type="button"
@@ -746,7 +746,7 @@
                       aria-pressed="false"
                       onclick="window.Companion.setCharacter('cat')"
                     >
-                      <span aria-hidden="true">🐱</span> Katze (学者猫)
+                      Katze (学者猫)
                     </button>
                     <button
                       type="button"
@@ -756,7 +756,7 @@
                       aria-pressed="false"
                       onclick="window.Companion.setCharacter('fox')"
                     >
-                      <span aria-hidden="true">🦊</span> Fuchs (灵动狐)
+                      Fuchs (灵动狐)
                     </button>
                     <button
                       type="button"
@@ -766,7 +766,7 @@
                       aria-pressed="false"
                       onclick="window.Companion.setCharacter('robot')"
                     >
-                      <span aria-hidden="true">🤖</span> Roboter (包豪斯机甲)
+                      Roboter (包豪斯机甲)
                     </button>
                     <button
                       type="button"
@@ -778,7 +778,7 @@
                       aria-pressed="false"
                       onclick="window.Companion.setCharacter('custom')"
                     >
-                      <span aria-hidden="true">✦</span> 自定义
+                      自定义
                     </button>
                     <button
                       type="button"
@@ -787,7 +787,7 @@
                       onclick="window.Companion.triggerUpload('studio')"
                       title="上传自定义 SVG 矢量伴读角色"
                     >
-                      <span aria-hidden="true">📁</span> 上传 SVG
+                      上传 SVG
                     </button>
                     <input
                       id="studio-svg-input"
@@ -896,7 +896,7 @@
                     aria-pressed="true"
                     onclick="window.Companion.toggleSound()"
                   >
-                    <span id="studio-sound-icon" aria-hidden="true">🔊</span>
+                    <svg id="studio-sound-icon" class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg>
                     <span id="studio-sound-label">发声已开启</span>
                   </button>
                   <button
@@ -1392,8 +1392,9 @@
                     )
                   "
                   title="朗读单词"
+                  aria-label="朗读单词"
                 >
-                  🔊
+                  <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg>
                 </button>
               </div>
               <span class="cefr-badge" id="d-cefr"></span>
@@ -1495,7 +1496,7 @@
                 "
                 title="朗读整句"
               >
-                🔊 朗读原句
+                朗读原句
               </button>
             </div>
             <div id="d-sent"></div>
@@ -1663,8 +1664,9 @@
               class="btn btn-ghost btn-del hidden"
               onclick="deleteCurrentNote()"
               title="删除便签"
+              aria-label="删除便签"
             >
-              🗑️
+              <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-trash-2"></use></svg>
             </button>
           </div>
         </div>
@@ -2279,32 +2281,36 @@
           class="player-btn"
           onclick="ShadowPlayer.prev()"
           title="上一句 (←)"
+          aria-label="上一句"
         >
-          ⏮
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-skip-back"></use></svg>
         </button>
         <button
           id="player-play-btn"
           class="player-btn player-btn-main"
           onclick="ShadowPlayer.toggle()"
           title="播放/暂停 (Space)"
+          aria-label="播放"
         >
-          ▶
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-play"></use></svg>
         </button>
         <button
           id="player-next-btn"
           class="player-btn"
           onclick="ShadowPlayer.next()"
           title="下一句 (→)"
+          aria-label="下一句"
         >
-          ⏭
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-skip-forward"></use></svg>
         </button>
         <button
           id="player-replay-btn"
           class="player-btn"
           onclick="ShadowPlayer.replay()"
           title="重播当前句 (R)"
+          aria-label="重播当前句"
         >
-          🔁
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-rotate-ccw"></use></svg>
         </button>
         <span id="player-status" class="player-status">句 1 / -</span>
       </div>
@@ -2446,7 +2452,7 @@
       <div id="quiz-step-mode" class="quiz-panel">
         <div class="quiz-panel-head">
           <h3>选择考验模式</h3>
-          <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验">✕</button>
         </div>
         <div class="quiz-mode-grid">
           <button class="quiz-mode-card" onclick="startQuiz('flashcard')">
@@ -2471,7 +2477,7 @@
       <!-- Step 2: Quiz Runner -->
       <div id="quiz-step-run" class="quiz-panel hidden">
         <div class="quiz-runner-head">
-          <button class="quiz-close-btn" onclick="closeQuizOverlay()">✕</button>
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验">✕</button>
           <div class="quiz-progress-bar-wrap">
             <div
               id="quiz-progress-fill"
@@ -2619,7 +2625,7 @@
               完形填空实战训练
             </h2>
           </div>
-          <button class="drawer-close" onclick="closeClozeModal()">✕</button>
+          <button class="drawer-close" onclick="closeClozeModal()" aria-label="关闭填空练习">✕</button>
         </div>
 
         <!-- Cloze Mode Switcher -->
@@ -3201,7 +3207,7 @@
         aria-label="伴读角色设置与对话"
         onclick="window.Companion.onClick()"
       >
-        <span id="companion-avatar-icon">🦉</span>
+        <span id="companion-avatar-icon" aria-hidden="true"></span>
       </button>
       <div id="companion-panel" class="companion-panel hidden">
         <div class="panel-head">
@@ -3219,7 +3225,7 @@
             onclick="window.Companion.setCharacter('owl')"
             title="歌德猫头鹰"
           >
-            <span aria-hidden="true">🦉</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn"
@@ -3229,7 +3235,7 @@
             onclick="window.Companion.setCharacter('cat')"
             title="学者猫"
           >
-            <span aria-hidden="true">🐱</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn"
@@ -3239,7 +3245,7 @@
             onclick="window.Companion.setCharacter('fox')"
             title="灵动狐"
           >
-            <span aria-hidden="true">🦊</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn"
@@ -3249,7 +3255,7 @@
             onclick="window.Companion.setCharacter('robot')"
             title="包豪斯机甲"
           >
-            <span aria-hidden="true">🤖</span>
+            <span aria-hidden="true"></span>
           </button>
           <button
             class="panel-char-btn mascot-custom-btn"
@@ -3261,7 +3267,7 @@
             onclick="window.Companion.setCharacter('custom')"
             title="自定义角色"
           >
-            <span aria-hidden="true">✦</span>
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-sparkles"></use></svg>
           </button>
           <button
             class="panel-char-btn panel-upload-btn"
@@ -3269,7 +3275,7 @@
             onclick="window.Companion.triggerUpload('panel')"
             title="上传自定义 SVG 角色"
           >
-            <span aria-hidden="true">📁</span>
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-upload"></use></svg>
           </button>
           <input
             id="panel-svg-input"
@@ -3336,7 +3342,7 @@
             aria-pressed="true"
             onclick="window.Companion.toggleSound()"
           >
-            <span id="panel-sound-icon" aria-hidden="true">🔊</span>
+            <svg id="panel-sound-icon" class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg>
           </button>
           <button
             id="panel-hide"
@@ -3350,6 +3356,76 @@
         </div>
       </div>
     </div>
+
+    <!-- ── Lucide 图标 sprite（同文档引用，见 static/icons/README.md） ── -->
+<!--
+  lucide-sprite.svg —— Lucide 图标 sprite（同文档引用，全部经 <use href="#ui-ico-*">）
+
+  来源：https://github.com/lucide-icons/lucide  lucide-static v0.468.0
+  许可：ISC（见 static/icons/LICENSE-lucide.txt）
+  只收录本项目实际用到的 12 个图标，不复制整套图标库。
+  新增图标时同步更新 static/icons/README.md 的清单与版本。
+
+  用法（同文档）：
+    <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg>
+  <use> 继承宿主 svg 的 currentColor，因此图标随按钮文字色变化；尺寸由 .ui-ico 的 1em 控制。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" data-ui-sprite="lucide" style="display:none" aria-hidden="true" focusable="false">
+  <symbol id="ui-ico-volume-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+    <path d="M16 9a5 5 0 0 1 0 6" />
+    <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+  </symbol>
+  <symbol id="ui-ico-volume-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+    <line x1="22" x2="16" y1="9" y2="15" />
+    <line x1="16" x2="22" y1="9" y2="15" />
+  </symbol>
+  <symbol id="ui-ico-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="6 3 20 12 6 21 6 3" />
+  </symbol>
+  <symbol id="ui-ico-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="14" y="4" width="4" height="16" rx="1" />
+    <rect x="6" y="4" width="4" height="16" rx="1" />
+  </symbol>
+  <symbol id="ui-ico-skip-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="19 20 9 12 19 4 19 20" />
+    <line x1="5" x2="5" y1="19" y2="5" />
+  </symbol>
+  <symbol id="ui-ico-skip-forward" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="5 4 15 12 5 20 5 4" />
+    <line x1="19" x2="19" y1="5" y2="19" />
+  </symbol>
+  <symbol id="ui-ico-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </symbol>
+  <symbol id="ui-ico-trash-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6h18" />
+    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    <line x1="10" x2="10" y1="11" y2="17" />
+    <line x1="14" x2="14" y1="11" y2="17" />
+  </symbol>
+  <symbol id="ui-ico-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" x2="12" y1="3" y2="15" />
+  </symbol>
+  <symbol id="ui-ico-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m15 18-6-6 6-6" />
+  </symbol>
+  <symbol id="ui-ico-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m9 18 6-6-6-6" />
+  </symbol>
+  <symbol id="ui-ico-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+    <path d="M20 3v4" />
+    <path d="M22 5h-4" />
+    <path d="M4 17v2" />
+    <path d="M5 18H3" />
+  </symbol>
+</svg>
 
     <script type="module" src="/js/main.js"></script>
   </body>

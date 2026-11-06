@@ -6,32 +6,36 @@
           class="player-btn"
           onclick="ShadowPlayer.prev()"
           title="上一句 (←)"
+          aria-label="上一句"
         >
-          ⏮
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-skip-back"></use></svg>
         </button>
         <button
           id="player-play-btn"
           class="player-btn player-btn-main"
           onclick="ShadowPlayer.toggle()"
           title="播放/暂停 (Space)"
+          aria-label="播放"
         >
-          ▶
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-play"></use></svg>
         </button>
         <button
           id="player-next-btn"
           class="player-btn"
           onclick="ShadowPlayer.next()"
           title="下一句 (→)"
+          aria-label="下一句"
         >
-          ⏭
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-skip-forward"></use></svg>
         </button>
         <button
           id="player-replay-btn"
           class="player-btn"
           onclick="ShadowPlayer.replay()"
           title="重播当前句 (R)"
+          aria-label="重播当前句"
         >
-          🔁
+          <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-rotate-ccw"></use></svg>
         </button>
         <span id="player-status" class="player-status">句 1 / -</span>
       </div>
