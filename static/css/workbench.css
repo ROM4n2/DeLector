@@ -321,7 +321,12 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 .audio-btn:hover{background:var(--accent-soft)}
 .audio-btn:active{transform:scale(.92)}
 .audio-btn:disabled{opacity:.4;cursor:not-allowed}
+/* 白名单：音频加载属于「正在发生的事」；reduce 下停用（见文末）。 */
 .audio-btn.busy{animation:pulse 1s infinite}
 .audio-btn.voice-bad{opacity:.6}
 @keyframes pulse{50%{opacity:.45}}
 .words-audio-sm{width:24px;height:24px;font-size:13px}
+
+@media (prefers-reduced-motion: reduce){
+  .audio-btn.busy{animation:none}
+}

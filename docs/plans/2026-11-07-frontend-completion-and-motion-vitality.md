@@ -1,6 +1,6 @@
 # 前端「补全 / 生动力」实施计划（加法批次）
 
-- **状态**：Proposed —— 待用户逐条点头，未开工
+- **状态**：In Progress —— 四项决策已拍板；M1 已实施并开 PR，T2–T8 逐项推进；T9 拆下一批
 - **日期**：2026-11-07
 - **上游**：[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)、[动效调研与模板](../reviews/2026-11-07-motion-vitality-research.md)、`../reviews/2026-11-07-motion-templates.css`、`../reviews/2026-11-07-motion-templates.js`
 - **前置批次**：第四批 B 类 390 处装饰字形清零（PR #255，扫描 0 残留）
@@ -300,7 +300,8 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 
 | # | 计划 | 实际 | 理由 |
 | --- | --- | --- | --- |
-| — | — | — | 尚未开工 |
+| 1 | M1 `pulse-linked` / `pulse-clause` 降级为「静态 2px 边 + 一次性 260ms 高亮」 | 只保留静态 2px 边，不做一次性高亮 | 停止门 #2：不给正文 `.tok` 新增任何动画；静态环 + 背景/字重已足以区分 |
+| 2 | M1 `thoughtInkPulse` 改「静态三点」 | 保留原单个静态 `.thought-pulse-dot` | DOM 里本就只有一个点；加载语义由「Eule 正在推演句子结构...」文案承担，不新增节点 |
 
 ---
 
