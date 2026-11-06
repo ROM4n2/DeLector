@@ -532,3 +532,9 @@ T7 拍板 A：progress studio 纳入切片（同一控件的第二宿主，避�
 延迟（不进本切片）：tests/test_listen_lab_probe.mjs:316 精确 emoji 断言、cards.js:1176 空态、style.css .mob-icon 死规则、图标集 vendor、角色 SVG 化。
 工作树：主树 5 个未跟踪文档与 origin/master 逐字一致（忽略 CRLF），已删除后 ff 到 a12c6e6；_artifacts/ 与 docs/reviews/2026-11-05-* 未动。
 下一步：feat/frontend-de-emoji-slice1 执行 T0→T7/T9/T10；T8 README 独立分支 docs/readme-zh-only。
+### 2026-11-06 18:09 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+第一垂直切片合并完成：PR #248（README，merge 2132462）→ PR #249（代码，merge 38433de）；两次均 merge commit、未 squash；CI 最新 head 全绿。已验证两个 merge commit 均为 origin/master 祖先（exit 0）。master 可见：index.html 7 处 exam-module-index、1 处 panel-sound-icon、1 处「角色配色：歌德紫」；companion.html 6 处 aria-pressed；progress.html 6 处；companion.js 4 处 setAttribute aria-pressed；README 10 个 H2、emoji 0、226 行。
+T0–T10 记录：T0 docs/adr/INDEX.md（29 份 ADR）；T1 基线清点（源片段 aria-label 11，切片 emoji 61）；T2 exam 01–07 序号；T3 exam 非注释 emoji 0；T4 nav 8 图标删除；T5 cards 空态删 🎉🛡️🎴；T6 companion 15 按钮 unnamed 0（含 4 色点 + color input）；T7 studio（A）6 aria-pressed + 5 色块 + picker 补名；T9 design-system §10；T10 回执（185 passed，sync PASS）。偏差 4 条：T2 德文括号、T6/T7 颜色控件补名、T1 计量口径（含生成物 18 / 源片段 11）；ADR-0029 §15 留痕。
+用户视觉验收 #249：「没问题，但是现在很干吧」——判定为计划预判的中间态（原型 B 列），要求走到 C 列；明确不加回装饰。下一步：实证诊断（视觉重量/间距节奏/色彩锚点，给 file:line 与数值）→ 3 个气质不同的方向（排版阶梯/间距比例/色彩锚点/分割手段/状态动效/代价）→ 独立自包含对比原型（不改 static/ 与 README）→ 回答「不加 emoji 与插画，活泼靠什么」。
+边界：第二步不改生产代码；不推进第二批（图标集 vendor、角色 SVG 化）；不碰 delector/、start.*、Android、tests/test_*、ADR-0028、spaCy spec/plan、2026-11-05 review、_artifacts/。
