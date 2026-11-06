@@ -134,7 +134,7 @@ Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue
    仍保留的硬约束：导入期不加载（启动页预算）、运行期禁止 `spacy.cli.download`（不联网/不起 pip 子进程）。**已删除**“无 dist-info ⇒ `spacy.load` 必失败”这一失效理由：APK 内含 `de_core_news_sm-3.8.0.dist-info/`（12 个文件），设备上 `spacy.load` 可成功。
    纯 Python 的能力缺口（修复前）：`case` 恒空、无 `dep/head_*`、`topology` 仅 `mittelfeld`、`clause_tree` 单节点 `hauptsatz`、可分动词不识别；其中 `pos` 启发式会**标错**词性，判据"宁漏勿错"因此否决保留纯 Python。
    同一进程的两层语义（主路径纯 Python；句法专线 `syntax_tree.get_spacy_nlp()` 按需加载真模型）**已消除**（`2f79ccb`）：两端共用同一加载器与失败语义。
-2. **`syntax_tree.get_spacy_nlp()` 裸 `spacy.load`（已消除，`2f79ccb`）**：现收敛到 `processor._load_spacy_model`，共用三级回退与 Android 禁下载门控；A7（`73d5442`）起 `analyze_syntax_tree` 也改为硬失败，不再回退纯 Python。
+2. **`syntax_tree.get_spacy_nlp()` 裸 `spacy.load`（已消除，`2f79ccb`）**：现收敛到统一加载器（2026-11-06 实现迁至 `model_loader.py`，`processor` 只保留转发入口），共用三级回退与 Android 禁下载门控；A7（`73d5442`）起 `analyze_syntax_tree` 也改为硬失败，不再回退纯 Python。
 3. **device APK 无真机验证**：本机没有 arm64 设备，`assembleDeviceDebug` 只验证到构建产物层面。
 4. **`docs/agents/architecture.md:120-127` 已修正**：不再声称“Android 上按名称加载模型必然失败”，改为与 2026-11-05 实测一致（APK 内含 dist-info、`spacy.load` 可成功），并指向 ADR-0028。
 
