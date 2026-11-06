@@ -36,11 +36,10 @@ def _load_spacy_model(name: str) -> Tuple[Any, str]:
     """加载指定德语模型，返回 (nlp, 加载方式描述)；全部策略失败则抛 RuntimeError。
 
     为什么不能只用 spacy.load(name)：它走 spacy.util.is_package()，查的是
-    importlib.metadata 的 .dist-info 元数据。历史上 Android 上模型是被直接拷进
-    Chaquopy 的 Python 源码目录的（见 CI 的 sync 步骤），没有 dist-info，于是即便
-    这个包 import 得动，也只会报 "[E050] Can't find model"（2026-11-05 实测当前 APK
-    已含 dist-info、`spacy.load` 可成功；保留三级回退是为了打包方式回退时不至于 E050，
-    ADR-0028）。所以按名称失败后要退到模块自身的 load()，最后退到数据目录路径。
+    importlib.metadata 的 .dist-info 元数据。当前打包（含 Android APK）已含 dist-info，
+    `spacy.load` 可用；三级回退仅防御**打包方式回退**——历史上曾把模型裸拷进 Chaquopy
+    源码目录、缺 dist-info 导致 "[E050] Can't find model"（2026-11-05 实测该问题已修复，
+    ADR-0028）。所以按名称失败后仍要退到模块自身的 load()，最后退到数据目录路径。
     """
     errors = []
     try:

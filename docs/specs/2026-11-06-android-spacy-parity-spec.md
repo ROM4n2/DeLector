@@ -24,6 +24,8 @@ elif _android_runtime:
     NLP_ENGINE_DETAIL = "Android：模型不在导入期加载（无 dist-info/避免 pip 下载），走纯 Python 降级"
 ```
 
+> **历史注释说明**：该代码块中的"无 dist-info ⇒ `spacy.load` 必失败"已被 2026-11-05 实测推翻（APK 内含 `de_core_news_sm-3.8.0.dist-info/`，`spacy.load` 可成功）。原文保留以记录当时的决策依据，不追改历史结论。
+
 因此 `process_german_text` 在 Android 上走纯 Python 分支（`processor.py:579-581`），产出与 spaCy 分支存在结构性差距：
 
 | 能力 | 纯 Python 现状 | 性质 |

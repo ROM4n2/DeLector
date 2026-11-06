@@ -5,11 +5,11 @@ import pytest
 from server_helpers import ROOT
 from wb_source import decl_body, read_source
 
-# --- Android / Chaquopy runtime: spacy is absent, everything must fall back to pure Python ---
+# --- Android / Chaquopy runtime: 导入期不加载模型；运行期本地失败硬失败，禁止下载 ---
 
 
 def test_pure_python_pipeline_without_spacy():
-    """APK 里没有 spacy，process_german_text 走纯 Python 分支。
+    """spaCy 模块缺失（模拟）时，process_german_text 走纯 Python 分支。
 
     这条分支曾因调用不存在的 lookup_core_dict 而在 import server 时就 NameError，
     导致安卓端 uvicorn 永远起不来、启动页一直卡住。
@@ -301,7 +301,8 @@ def test_syntax_tree_error_distinguishes_no_data(monkeypatch):
 
 
 def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
-    """spacy.load(名称) 查的是 .dist-info；Android 上模型是直接拷进源码目录的。
+    """spacy.load(名称) 查的是 .dist-info。历史上 Android 模型是直接拷进源码目录的；
+    2026-11-05 实测当前 APK 已含 dist-info（`spacy.load` 可成功），但打包方式回退时仍会 E050。
 
     真机实测报的就是 "[E050] Can't find model 'de_core_news_sm'"，尽管这个包
     import 得动。所以按名称失败后必须退到模块自身的 load()。
@@ -338,7 +339,7 @@ def test_android_build_extracts_spacy_data_packages():
     """Chaquopy 默认不把包的数据文件解到磁盘（build.json 的 extract_packages 为空）。
 
     这三个包都用 Path(__file__).parent 去 open() 真实文件，漏掉任何一个，
-    真机上 spaCy 就会静默退回纯 Python 路径。
+    真机上模型加载就会失败（ADR-0028：硬失败，不再静默退回纯 Python）。
     """
     gradle = open(os.path.join(ROOT, "android", "app", "build.gradle"), encoding="utf-8").read()
     extract_lines = [ln for ln in gradle.splitlines() if "extractPackages" in ln]
@@ -746,7 +747,7 @@ def test_delete_article(client):
 
 
 def test_android_spacy_module_load_fallback_static():
-    """_load_spacy_model 必须包含 module.load() 回退（Android 无 dist-info 时唯一可用路径）。"""
+    """_load_spacy_model 必须包含 module.load() 回退（打包方式回退、无 dist-info 时的兜底路径）。"""
     src = open(os.path.join(ROOT, "delector", "nlp_engine", "processor.py"), encoding="utf-8").read()
     assert "importlib.import_module" in src, "缺 importlib 回退"
     assert "module.load()" in src, "缺 module.load() 回退"
@@ -761,7 +762,7 @@ def test_android_spacy_model_dir_fallback_static():
 
 
 def test_android_spacy_download_gated_by_is_android_static():
-    """自动下载必须被 is_android() 门控，否则 Android import 期起 pip 子进程卡死。"""
+    """自动下载必须被 is_android() 门控，否则 Android 运行期起 pip 子进程卡死。"""
     src = open(os.path.join(ROOT, "delector", "nlp_engine", "processor.py"), encoding="utf-8").read()
     # 必须有 is_android 判断且在 download 之前
     assert "is_android()" in src, "缺 is_android() 判断"

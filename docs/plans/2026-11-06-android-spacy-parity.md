@@ -4,14 +4,14 @@
 > **Tech Stack**: Python 3.11 / spaCy 3.8 / pytest / Android Chaquopy（Gradle 8.6 + AGP 8.4.2）
 > **Spec Reference**: `docs/specs/2026-11-06-android-spacy-parity-spec.md`；`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`
 > **Global Constraints**:
-> - 本轮（2026-11-06 设计轮）**不执行任何任务**；本文件是后续实施 PR 的计划。
+> - 实施轮（2026-11-06）：T1–T4 与 T7 已执行并提交；T5/T6 因用户暂不开模拟器阻塞；T8 进行中。
 > - 不改 schema/协议；桌面端行为不变；模型档位仍为 `de_core_news_sm`（ADR-0027）。
 > - Android 运行期**禁止** `spacy.cli.download`/pip 子进程/联网；门控必须在 `_load_model_with_autodownload()` 内部。
 > - 加载失败**硬失败**，不得回退纯 Python（No-Silent-Failure）。
 > - 不默认重算 Android 存量纯 Python 文章；必须在 PR"已知边界"写明。
 > - 不碰 9 个外部修改文件与未跟踪的 `docs/reviews/2026-11-05-code-quality-decoupling-review.md`。
 > - 不 force push、不改历史、不直推 master。
-> **Branch**: `fix/android-spacy-main-path` — opened from `master` before Task 1, landed via PR（merge commit，不 squash）。
+> **Branch**: `fix/android-spacy-parity` — opened from `master` before Task 1, landed via PR #235（merge commit，不 squash）。
 
 ---
 
@@ -81,8 +81,8 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: History-Immutable]`: 不改写 ADR-0006/0007/0027、CHANGELOG、WORKMEMORY 归档。
-- [ ] `[Instinct: No-Old-Path]`: 全仓 grep 不得再出现 `android-pure-python-degradation` / `android-main-path-pure-python-degradation`（例外：本计划与 spec 的删除指令/“前身”说明；不得出现在 `docs/agents`、`docs/adr` 或其它计划里）。
+- [x] `[Instinct: History-Immutable]`: 不改写 ADR-0006/0007/0027、CHANGELOG、WORKMEMORY 归档。
+- [x] `[Instinct: No-Old-Path]`: 全仓 grep 不得再出现 `android-pure-python-degradation` / `android-main-path-pure-python-degradation`（例外：本计划与 spec 的删除指令/“前身”说明；不得出现在 `docs/agents`、`docs/adr` 或其它计划里）。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 1: 文档与 ADR 落位。
@@ -92,10 +92,10 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (exit code + stdout snippet)."
 
 **Step Breakdown:**
-- [ ] **Step 1**: 确认新 ADR/spec 文件存在；旧三份未跟踪文件已删除。
-- [ ] **Step 2**: `git grep --untracked -n "android-pure-python-degradation\|android-main-path-pure-python-degradation" -- docs/agents docs/adr` 期望空（本计划/spec 的“前身/删除”说明不计）。
-- [ ] **Step 3**: `git grep --untracked -n "ADR-0028" -- docs` 期望命中 ADR/spec/architecture/android-local-runtime。
-- [ ] **Step 4**: 记录 exit code；不提交（T8 统一提交）。
+- [x] **Step 1**: 确认新 ADR/spec 文件存在；旧三份未跟踪文件已删除。
+- [x] **Step 2**: `git grep --untracked -n "android-pure-python-degradation\|android-main-path-pure-python-degradation" -- docs/agents docs/adr` 期望空（本计划/spec 的“前身/删除”说明不计）。
+- [x] **Step 3**: `git grep --untracked -n "ADR-0028" -- docs` 期望命中 ADR/spec/architecture/android-local-runtime。
+- [x] **Step 4**: 记录 exit code；按语义提交（实际拆成 4 个提交，见 Deviation Table）。
 
 ---
 
@@ -111,9 +111,9 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: RED-First]`: 新测试必须在当前代码上真实变红，不得先改生产代码再补测试。
-- [ ] `[Instinct: No-New-File]`: 不新建 `test_*.py`，避免 CI 分片遗漏。
-- [ ] `[Instinct: Guard-Message]`: 第 118 行断言改为 `ENGINE=spacy`，失败消息写明"这是 ADR-0028 决策，不是回归"。
+- [x] `[Instinct: RED-First]`: 新测试必须在当前代码上真实变红，不得先改生产代码再补测试。
+- [x] `[Instinct: No-New-File]`: 不新建 `test_*.py`，避免 CI 分片遗漏。
+- [x] `[Instinct: Guard-Message]`: 第 118 行断言改为 `ENGINE=spacy`，失败消息写明"这是 ADR-0028 决策，不是回归"。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 2: 写 RED 测试。
@@ -128,10 +128,10 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (exit code + failure assertion snippets)."
 
 **Step Breakdown:**
-- [ ] **Step 1 (RED)**: 写 3 条新测试 + 改第 118 行断言。
-- [ ] **Step 2 (Verify RED)**: `pytest tests/test_server_android_fallback.py -q`；记录失败项与断言原文。
-- [ ] **Step 3**: 确认失败原因是"当前 Android 走 pure_python"，不是测试自身写错（如环境变量未生效）。
-- [ ] **Step 4 (Commit)**: 原子提交测试改动。
+- [x] **Step 1 (RED)**: 写 3 条新测试 + 改第 118 行断言。
+- [x] **Step 2 (Verify RED)**: `pytest tests/test_server_android_fallback.py -q`；记录失败项与断言原文。
+- [x] **Step 3**: 确认失败原因是"当前 Android 走 pure_python"，不是测试自身写错（如环境变量未生效）。
+- [x] **Step 4 (Commit)**: 原子提交测试改动。
 
 ---
 
@@ -148,8 +148,8 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: Download-Gate-Inside]`: 门控必须在 `_load_model_with_autodownload()` 内部；删除平台分支后，该函数首次对 Android 可达。
-- [ ] `[Instinct: No-Silent-Fallback]`: 本地加载失败必须抛 `RuntimeError`，不得回退纯 Python。
+- [x] `[Instinct: Download-Gate-Inside]`: 门控必须在 `_load_model_with_autodownload()` 内部；删除平台分支后，该函数首次对 Android 可达。
+- [x] `[Instinct: No-Silent-Fallback]`: 本地加载失败必须抛 `RuntimeError`，不得回退纯 Python。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 3: GREEN processor。
@@ -163,11 +163,11 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (exit code + pass count)."
 
 **Step Breakdown:**
-- [ ] **Step 1 (GREEN)**: 删除平台分支；Android 落入 `_LazyNlp`。
-- [ ] **Step 2 (GREEN)**: `_load_model_with_autodownload` 加 Android 本地-only 门控。
-- [ ] **Step 3 (Verify GREEN)**: `pytest tests/test_server_android_fallback.py -q` 全绿。
-- [ ] **Step 4 (Refactor)**: 更新 `processor.py:38-42`、`:241-243`、`:246` 的失效理由注释与展示字符串（"无 dist-info"删除）。
-- [ ] **Step 5 (Commit)**: 原子提交。
+- [x] **Step 1 (GREEN)**: 删除平台分支；Android 落入 `_LazyNlp`。
+- [x] **Step 2 (GREEN)**: `_load_model_with_autodownload` 加 Android 本地-only 门控。
+- [x] **Step 3 (Verify GREEN)**: `pytest tests/test_server_android_fallback.py -q` 全绿。
+- [x] **Step 4 (Refactor)**: 更新 `processor.py:38-42`、`:241-243`、`:246` 的失效理由注释与展示字符串（"无 dist-info"删除）。
+- [x] **Step 5 (Commit)**: 原子提交。
 
 ---
 
@@ -184,8 +184,8 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: One-Loader]`: 不得保留两套 `spacy.load`；`syntax_tree` 只调用 `processor._load_spacy_model`。
-- [ ] `[Instinct: Diagnostics-Preserved]`: `_spacy_load_error` 仍要能反映失败原因，供 `/api/syntax/spacy-status` 使用。
+- [x] `[Instinct: One-Loader]`: 不得保留两套 `spacy.load`；`syntax_tree` 只调用 `processor._load_spacy_model`。
+- [x] `[Instinct: Diagnostics-Preserved]`: `_spacy_load_error` 仍要能反映失败原因，供 `/api/syntax/spacy-status` 使用。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 4: GREEN syntax_tree。
@@ -196,11 +196,11 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (exit code + pass count)."
 
 **Step Breakdown:**
-- [ ] **Step 1**: 在 `syntax_tree.py` 顶部 import `processor._load_spacy_model`（或 `from .processor import _load_spacy_model`）。
-- [ ] **Step 2**: 替换 `spacy.load(SPACY_MODEL_NAME)`，保留异常写入 `_spacy_load_error`。
-- [ ] **Step 3**: 加 `test_processor_and_syntax_tree_share_engine_status`（同进程两端引擎状态一致）。
-- [ ] **Step 4 (Verify GREEN)**: `pytest tests/test_server_android_fallback.py tests/test_syntax_tree.py -q` 全绿。
-- [ ] **Step 5 (Commit)**: 原子提交。
+- [x] **Step 1**: 在 `syntax_tree.py` 顶部 import `processor._load_spacy_model`（或 `from .processor import _load_spacy_model`）。
+- [x] **Step 2**: 替换 `spacy.load(SPACY_MODEL_NAME)`，保留异常写入 `_spacy_load_error`。
+- [x] **Step 3**: 加 `test_processor_and_syntax_tree_share_engine_status`（同进程两端引擎状态一致）。
+- [x] **Step 4 (Verify GREEN)**: `pytest tests/test_server_android_fallback.py tests/test_syntax_tree.py -q` 全绿。
+- [x] **Step 5 (Commit)**: 原子提交。
 
 ---
 

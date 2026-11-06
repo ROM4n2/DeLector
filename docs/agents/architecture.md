@@ -33,7 +33,10 @@
 
 ## NLP 引擎与降级路径（**改标注逻辑前必读**）
 
-后端有两条完全不同的标注路径，**降级是静默的**：
+后端有两条完全不同的标注路径。**失败语义按阶段区分**：
+
+- **导入期缺 spaCy**（`spacy is None`）⇒ 静默纯 Python（红线 1，既有设计）；
+- **运行期模型加载失败**（主路径与句法专线，含 Android）⇒ **硬失败**：抛 `RuntimeError`，`nlp_engine` 变 `spacy(加载失败)`，不降级。
 
 1. **spaCy 路径**（正常）：分词、`doc.sents`、`lemma_`、`pos_`、`morph`（Gender/Case）、
    依存句法（`dep_`/`head`）。拓扑五场域、从句 AST、可分动词回连**全部依赖依存句法**。
@@ -42,8 +45,10 @@
    （`steigt ... ein` 会按 `steigen` 判成 B1，而不是 `einsteigen` 的 A1）。
    也就是说降级路径不只是"精度低"，而是会给出**错误**的语法标注。
 
-判断当前跑的是哪条：`GET /api/settings` 的 `nlp_engine`（`spacy` / `pure_python`）与
-`nlp_engine_detail`，或启动时 stdout 的 `[DeLector] NLP 引擎: ...`（Android 上走 `adb logcat`）。
+判断当前跑的是哪条：`GET /api/settings` 的 `nlp_engine`（`spacy` / `spacy(加载失败)` /
+`pure_python`）与 `nlp_engine_detail`，或启动时 stdout 的 `[DeLector] NLP 引擎: ...`
+（Android 上走 `adb logcat`）。`spacy(加载失败)` 是**显示值**：此时 `nlp` 仍是惰性代理、
+可调用性判断仍看 `nlp is None`（非 None），但调用会抛错。
 
 **模型档位**：`SPACY_MODEL_NAME = "de_core_news_sm"` 是唯一事实源（ADR-0027，2026-11-04 定案）。
 不存在 md 候选或 md 优先分支；`syntax_tree.get_spacy_nlp()` 复用同一常量。自动下载只在
@@ -122,7 +127,7 @@ assemble 双变体（`assembleDeviceDebug` / `assembleEmulatorDebug`）。
    设备上 `/api/syntax/spacy-status` 返回 `{"path":"spacy","error":""}`，`spacy.load` 能加载。
    **Android 主分析路径与桌面同口径使用 spaCy（ADR-0028）**：删除平台硬编码 `nlp = None`，
    走同一套 `_LazyNlp`（导入期不加载）+ 本地三级回退 + 失败硬失败（`spacy(加载失败)`）+
-   禁止运行期 `spacy.cli.download`。修复前曾硬编码纯 Python 降级（`processor.py:240-246`），已由 ADR-0028 决定移除（截至 2026-11-06：决策已定，代码未实施）。
+   禁止运行期 `spacy.cli.download`。修复前曾硬编码纯 Python 降级（`processor.py:240-246`），已由 ADR-0028 移除并落地（`af027f8`、`2f79ccb`、`73d5442`）；T5/T6 Android 测量未执行。
    主路径与句法专线 `syntax_tree.get_spacy_nlp()` 收敛到同一加载器，不再有两层语义。
    详见 `docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`
    与 `docs/agents/android-local-runtime.md`。
