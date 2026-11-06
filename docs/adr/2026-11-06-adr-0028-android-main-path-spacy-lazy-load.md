@@ -80,9 +80,9 @@ elif _android_runtime:
 
 ### 4.2 代价（必须如实记录，不许粉饰）
 
-- **首次分析多付一次模型加载**：Android **未测量**。原因：测量任务 T5/T6 未执行（用户暂不开模拟器）。桌面基准 1.5–1.7s（`processor.py:81-83`）**不得**用来顶替 Android 数字。
-- **模型常驻内存峰值**：**未测量**。原因同上（T5/T6 未执行，未采集 `adb shell dumpsys meminfo`）。
-- **低端机 OOM 风险**：**未测量**。原因同上；当前无法判断目标设备是否可用。加载失败会按 D4 硬失败。
+- **首次分析多付一次模型加载**：Android 实测（`Medium_Phone_API_37.0`，API 37，ABI `x86_64`，型号 `sdk_gphone64_x86_64`，2026-11-06，5 轮冷启，每轮 `am force-stop` 后启动）。首次分析：改造前 `aec79f3` median 12.6 ms（min 10.9 / max 16.8），改造后 master `e169999` median 1,215.6 ms（min 1,132.3 / max 2,174.4）；冷启到首次分析完成 median 由 2,837.4 ms 升至 3,977.0 ms（改造后 min 3,873.4 / max 5,592.5）。模型首次加载单独测量（`/api/syntax/spacy-status`，5 轮冷启）：改造前 median 1,047.8 ms（仅句法专线），改造后 median 1,122.8 ms（主路径与句法专线共用加载器）。
+- **模型常驻内存峰值**：Android 实测（同设备，`dumpsys meminfo` 的 TOTAL PSS / TOTAL RSS 与 `/proc/<pid>/status` 的 VmHWM）。改造前：冷启后 PSS 238.5 MiB、首次分析后 243.0 MiB、5 轮热分析后 248.7 MiB；峰值 VmHWM 416.7 MiB。改造后：冷启后 PSS 237.1 MiB、首次分析后 495.5 MiB、5 轮热分析后 495.9 MiB；峰值 VmHWM 701.6 MiB。
+- **低端机 OOM 风险**：**未覆盖**。原因：本机只有 `Medium_Phone_API_37.0`（x86_64，MemTotal 4,005,308 kB），无低端机与 arm64 真机，未改小模拟器内存冒充低端机；不得用上述模拟器数据推断低端机可用性。加载失败仍按 D4 硬失败。
 - **`syntax_tree.py:84` 裸 `spacy.load` 无三级回退**（已由 `2f79ccb` 消除）：现收敛到统一加载器，与主路径共用三级回退与 Android 禁下载门控；该加载器实现于 2026-11-06 二次重构迁至 `model_loader.py`（`processor` 只保留转发入口）。
 - **句法专线也已改为硬失败**（A7，2026-11-06）：`analyze_syntax_tree()` 在模型不可用时抛 `RuntimeError`，不再返回纯 Python 拓扑；空输入仍返回 `sentence_count: 0`（"无数据"与"分析失败"可区分）。
 - **两层口径已消除**：主路径与句法专线共用同一加载器与失败语义（`af027f8`、`2f79ccb`、A7）。

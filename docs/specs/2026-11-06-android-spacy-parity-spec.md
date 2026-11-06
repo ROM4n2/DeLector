@@ -2,7 +2,7 @@
 
 - **状态**：ACCEPTED（U2：统一为 spaCy）
 - **日期**：2026-11-06
-- **实施**：**已完成**（2026-11-06，PR #237 合入 `master`，merge commit `7073bac`；T5/T6 未执行，见 §7）
+- **实施**：**已完成**（2026-11-06，PR #237 合入 `master`，merge commit `7073bac`；T5/T6 已执行，见 §8.3、§9；低端机/arm64 未覆盖）
 - **关联**：`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`、ADR-0018 §7.6、ADR-0027
 - **范围**：本规格定义 Android 主分析路径从"纯 Python 降级"改为"spaCy 惰性加载 + 本地三级回退 + 硬失败 + 禁下载"的设计与验收；**本轮只写文档与计划，不改代码/测试/workflow**。
 - **前身**：本规格替代 2026-11-06 早先的 `2026-11-06-android-pure-python-degradation-spec.md`（该方向已由用户否决）。
@@ -211,16 +211,16 @@ elif _android_runtime:
 
 ### 8.3 测量（必须有数字）
 
-在模拟器上记录改造前后（**未执行**：T5/T6 未执行，用户暂不开模拟器；本节保留为执行清单）：
+在模拟器上记录改造前后（**已执行**，2026-11-06；设备与完整数据见 ADR-0028 §4.2，原始 CSV 见 `_artifacts/t5t6-20261106/`）：
 
 | 指标 | 采集方式 |
 | --- | --- |
-| 冷启动到 `/api/health` 首响 | PowerShell `Measure-Command { Invoke-WebRequest ... }` |
-| 首次分析墙钟 | 导入一句 V2 主句并计时 |
-| `am start -W` TotalTime | `adb shell am start -W -n org.delector.app.emulator/org.delector.app.MainActivity` |
-| 进程 RSS | `adb shell dumpsys meminfo org.delector.app.emulator` |
+| 冷启动到 `/api/settings` 首响 | `am force-stop` → `am start` → PowerShell 轮询 `Invoke-WebRequest` |
+| 首次分析墙钟 | 冷启后立即 `GET /api/encounter/texts/{id}/annotate`（固定 76 token / 6 句文本） |
+| 模型首次加载 | 冷启后 `GET /api/syntax/spacy-status` |
+| 进程内存 | `adb shell dumpsys meminfo org.delector.app.emulator`（TOTAL PSS / RSS）+ `/proc/<pid>/status` 的 VmHWM |
 
-数字写入 ADR-0028 §4.2 与 PR 描述；不得用"未实测"交差，也不得用桌面基准顶替 Android、不得写成"预计/约"。截至 2026-11-06：**T5/T6 未执行，故上述数字均未测量**。
+数字写入 ADR-0028 §4.2 与 PR 描述；不得用"未实测"交差，也不得用桌面基准顶替 Android、不得写成"预计/约"。2026-11-06 已执行：两版各 5 轮冷启 + 5 轮热分析，设备 `Medium_Phone_API_37.0`（API 37 / x86_64）；低端机与 arm64 真机未覆盖。
 
 ### 8.4 具名变异
 
@@ -236,14 +236,14 @@ elif _android_runtime:
 
 ## 9. 验收判据（可执行、可证伪）
 
-1. **状态一致**〔待 T5/T6 执行〕：模拟器 `/api/settings` 的 `nlp_engine == "spacy"`；`/api/syntax/spacy-status == {"path":"spacy","error":""}`；两者不再矛盾。
-2. **数据形状**〔待 T5/T6 执行〕：导入一句 V2 主句后 GET 文章，至少一个 token 的 `case` 非空且 `dep` 非空；`topology` 的 `vorfeld/linke_klammer/mittelfeld/rechte_klammer/nachfeld` 不全为空。
+1. **状态一致**（2026-11-06 实测通过）：模拟器 `/api/settings` 的 `nlp_engine == "spacy"`；`/api/syntax/spacy-status == {"path":"spacy","error":""}`；两者不再矛盾。
+2. **数据形状**（2026-11-06 实测通过）：导入 V2 主句 `Der alte Mann fütterte die Tauben im Park.` 后 GET 文章，`topology` 内 token 具备 `case` 与 `dep`（如 `Mann|Nom|sb`、`Tauben|Acc|oa`）；`vorfeld/linke_klammer/mittelfeld` 非空，`rechte_klammer/nachfeld` 为空但五字段不全为空。
 3. **导入期不加载**：子进程哨兵断言导入成功且 `spacy.load` 未被调用。
 4. **运行期不下载**：`DOWNLOAD_ATTEMPTED` 哨兵未出现；`_load_model_with_autodownload` 在 Android 分支不进入 `from spacy.cli import download`。
 5. **失败硬失败**：本地三级回退全部失败时抛 `RuntimeError`，`NLP_ENGINE == "spacy(加载失败)"`，**不返回**纯 Python 结果。
 6. **单一加载器**：`syntax_tree.get_spacy_nlp()` 与 `processor` 使用同一加载器；`test_processor_and_syntax_tree_share_engine_status` 绿。
 7. **桌面回归**：`pytest tests -q` 全绿；桌面 `nlp_engine` 仍为 `spacy`；桌面冷启动不因导入期加载劣化。
-8. **测量留痕**〔待 T5/T6 执行〕：ADR-0028 §4.2 与 PR 描述包含改造前后的冷启动首响、首次分析墙钟、`am start -W TotalTime`、RSS 数字。截至 2026-11-06 未执行，ADR 中相应项标记为 `未测量`。
+8. **测量留痕**（2026-11-06 已执行）：ADR-0028 §4.2 与 PR 描述包含改造前后的冷启动首响、首次分析墙钟、模型首次加载、PSS/RSS/峰值 VmHWM；原始数据 `_artifacts/t5t6-20261106/new.csv`、`old.csv`。低端机与 arm64 真机标记为 `未覆盖`。
 9. **变异验证**：§8.4 五条变异分别变红，还原后复绿。
 10. **存量边界**：PR"已知边界"明确写"Android 存量纯 Python 文章未重算，需重新导入或另立任务"。
 11. **句法专线硬失败**（A7）：模型不可用时 `analyze_syntax_tree("…")` 抛 `RuntimeError`，信息区分"模型加载失败"与"无数据"；空输入仍返回 `sentence_count: 0`；`test_syntax_tree_load_failure_is_loud_not_pure` 与 `test_syntax_tree_error_distinguishes_no_data` 绿。
