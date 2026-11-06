@@ -32,7 +32,8 @@ _DEP_TO_CASE = {"oa": "Acc", "da": "Dat"}
 
 def _morph_case(tok: Any) -> str:
     """morphologizer 给出的原始格位（无则空串）。"""
-    return tok.morph.to_dict().get("Case", "")
+    value = tok.morph.to_dict().get("Case", "")
+    return value if isinstance(value, str) else str(value or "")
 
 
 def _governing_verb(tok: Any) -> Tuple[Optional[Any], Optional[str]]:
