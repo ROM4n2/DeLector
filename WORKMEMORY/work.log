@@ -628,3 +628,16 @@ PR #252 合并完成（ADR-0029 第二批收尾）：merge commit `d7fdd2c`，�
 本批内容（细节见上一条 NOTE）：1) **33 处图标替换**，34 个 `<use>`，12 个 Lucide symbol；含 cp-drawer 上下句导航 `◀/▶` → chevron-left/right `<use>`，并补 `aria-label="上一句"/"下一句"`；2) **角色 SVG 接入**：companion.js 4 个调用点（浮球主体 / 浮球头像 / progress 舞台 / 面板 4 个角色按钮）+ 声音开关 use 切换，删除 `CHARACTERS[*].emoji`；3) **cards 空态重做**：三态用 `--accent/--moss/--rule` 竖线 + mono eyebrow，介词矩阵去 📡/🧭，文案不变；4) **测试同步**：listen-lab 探针 :316/:322 去 emoji 断言，companion 探针 DOM 桩补 setAttribute 系列。
 `test_exam_domain.py` 断言改动理由与变异验证：内联 sprite 的 Lucide volume-2 path 含坐标 `4.702`，撞上「禁硬编码词条数 702」的裸字符串断言，属误报而非回归。处置：sprite 根加 `data-ui-sprite="lucide"`，比对前只剥离该 `<svg>` 块（页面其余部分仍逐字检查），并新增「标记必须存在」断言防剥离静默失效。变异验证：仅剥离 `4.702` 后不再命中；人工注入 `702 词` 仍被抓到 —— 判定强度未降。
 操作方式：主工作区由他人占用，全程 gh API 合并 + 临时 worktree 写日志；未 `git add -A`、未碰 `android/`；临时 worktree 用后已清理。
+
+### 2026-11-06 23:13 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+ADR-0029 第三批（A 类 16 处去字形）落地，分支 `feat/frontend-de-emoji-slice3`（从 origin/master `05e1b86` 开），B 类 360 处未动。
+处置分布：**可删 2 / 需加文字 5 / 需加 aria 6 / 需加文字+aria 3**。
+1) 关闭键 5 处补 `aria-label`（drawer 关闭工作台 / import 关闭导入 / polish 关闭润色预览 / settings 关闭设置 / version_preview 关闭版本预览），§ 共用 `.drawer-close`，`✕` 保留为视觉冗余；`tests/test_frontend_guards.py` 新增 `test_modal_close_buttons_have_accessible_name`（扫 `static/modals/*.html`，DOTALL 匹配跨行开标签，要求 aria-label/aria-labelledby，命中数 ≥6 防正则失效）。
+2) 密码显隐 3 处：`main.js:719-736` 与 `settings_modal.html` 的 👁️/🔒 → 可见文字「显示/隐藏」+ `aria-label`「显示/隐藏 API 密钥」；状态同时由 `input.type` 表达。
+3) `listen-lab.js:474/476` ✓/✗ → 「✓ 正确」/「✗ 错误」，颜色仅作冗余；探针新增 4 条中文断言（D/C 各正误）。`↷` 跳过标记属 B 类未动。
+4) `a1_writer.js` 导向点 ⚪/🟢 → `.lp-status` 文字「未覆盖/已覆盖」+ `data-state`，`is-covered` 颜色保留。
+5) `reader.js:907` 收藏成功 → 「✓ 已保存」（与 :862 同构）；`cp-drawer.js:372` 解除绑定补 `aria-label`。
+6) 判为纯装饰删除：`cp-drawer.js:1341` 的 ✓（标题已写「深度推演完成」）；`encounter.js:148` 的 `COVERAGE_DEGRADED_MARK="⚠"`（同行已有「数据不完整」），同步把 2 个 enc 探针的 `MARK` 断言改为只认中文、B4 钉「文案仅一份」。
+验证：`build_index_html` 3438 行；`check_index_html_sync` PASS；pytest 受影响 10 文件 42 passed、回扩 7 文件 157 passed；`test_listen_lab_probe.mjs` 47 断言 PASS、`enc_coverage_degraded` 14 项 PASS、`enc_degraded_concurrency` 21 项 PASS、`test_companion_context_probe.mjs` 全 case pass。变异：关闭键删 aria-label → 守卫红；listen 标记改回单 ✓ → 探针红。
+约束遵守：并行 5 个子代理按文件所有权切分（index.html 仅主代理重建）、未碰 android/、未跑 sync_android_sources.py、未 `git add -A`。
