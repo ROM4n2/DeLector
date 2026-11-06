@@ -54,6 +54,8 @@ elif _android_runtime:
 6. **统一加载器**：`syntax_tree.get_spacy_nlp()`（`syntax_tree.py:71-89`）收敛到 `processor._load_spacy_model()`，保留 `_spacy_load_error` 诊断语义；消除"同一进程两套引擎"。
 7. **桌面端行为不变**：本 ADR 只改 Android 路径；桌面仍走原有惰性加载与下载兜底语义。
 
+**2026-11-06 澄清（D4 适用范围）**：D4 的"失败硬失败"适用于**所有 spaCy 调用点**，不只主分析路径。`syntax_tree.analyze_syntax_tree()` 在 `nlp is None` 时原实现返回 `_analyze_syntax_tree_pure_python(...)`，属于同一类静默降级；现改为抛 `RuntimeError`，并区分"模型加载失败"与"无数据"。理由：句法专线的纯 Python 产物同样是**错误标注**（无依存/五场域/从句树）而非"缺字段"，与宁漏勿错冲突；不澄清会留下后端唯一一处仍可静默降级的 spaCy 消费点。该澄清由用户于 2026-11-06 拍板（A7）。
+
 ---
 
 ## 3. 理由 (Rationale)
@@ -78,8 +80,9 @@ elif _android_runtime:
 - **首次分析多付一次模型加载**：Android **未测量**。原因：测量任务 T5/T6 未执行（用户暂不开模拟器）。桌面基准 1.5–1.7s（`processor.py:81-83`）**不得**用来顶替 Android 数字。
 - **模型常驻内存峰值**：**未测量**。原因同上（T5/T6 未执行，未采集 `adb shell dumpsys meminfo`）。
 - **低端机 OOM 风险**：**未测量**。原因同上；当前无法判断目标设备是否可用。加载失败会按 D4 硬失败。
-- **`syntax_tree.py:84` 裸 `spacy.load` 无三级回退**：这是独立风险；本 ADR 要求统一到 `_load_spacy_model` 后消除，但在实施完成前仍存在换打包方式触发 E050 的风险。
-- **两层口径在实施完成前仍存在**：主路径纯 Python、句法专线 spaCy；这是过渡态，不是终态。
+- **`syntax_tree.py:84` 裸 `spacy.load` 无三级回退**（已由 `2f79ccb` 消除）：现收敛到 `processor._load_spacy_model`，与主路径共用三级回退与 Android 禁下载门控。
+- **句法专线也已改为硬失败**（A7，2026-11-06）：`analyze_syntax_tree()` 在模型不可用时抛 `RuntimeError`，不再返回纯 Python 拓扑；空输入仍返回 `sentence_count: 0`（"无数据"与"分析失败"可区分）。
+- **两层口径已消除**：主路径与句法专线共用同一加载器与失败语义（`af027f8`、`2f79ccb`、A7）。
 
 ### 4.3 数据与迁移
 

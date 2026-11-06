@@ -203,6 +203,7 @@ elif _android_runtime:
 - 删除平台分支；
 - `_load_model_with_autodownload` 加 Android 本地-only 门控；
 - `syntax_tree.get_spacy_nlp` 收敛到 `_load_spacy_model`；
+- `syntax_tree.analyze_syntax_tree` 在模型不可用时抛 `RuntimeError`（A7：D4 覆盖所有 spaCy 调用点），空输入仍返回 `sentence_count: 0`；
 - 注释/展示字符串同步（删掉"无 dist-info"失效理由）。
 
 ### 8.3 测量（必须有数字）
@@ -226,6 +227,7 @@ elif _android_runtime:
 | 允许 Android 走 `spacy.cli.download` | `test_android_runtime_load_never_downloads` 变红 |
 | 本地加载失败时返回纯 Python 结果 | `test_android_load_failure_is_loud_not_pure` 变红 |
 | `syntax_tree` 改回裸 `spacy.load` | `test_processor_and_syntax_tree_share_engine_status` 变红 |
+| `syntax_tree` 加载失败回退纯 Python | `test_syntax_tree_load_failure_is_loud_not_pure` 变红 |
 
 ---
 
@@ -239,8 +241,9 @@ elif _android_runtime:
 6. **单一加载器**：`syntax_tree.get_spacy_nlp()` 与 `processor` 使用同一加载器；`test_processor_and_syntax_tree_share_engine_status` 绿。
 7. **桌面回归**：`pytest tests -q` 全绿；桌面 `nlp_engine` 仍为 `spacy`；桌面冷启动不因导入期加载劣化。
 8. **测量留痕**〔待 T5/T6 执行〕：ADR-0028 §4.2 与 PR 描述包含改造前后的冷启动首响、首次分析墙钟、`am start -W TotalTime`、RSS 数字。截至 2026-11-06 未执行，ADR 中相应项标记为 `未测量`。
-9. **变异验证**：§8.4 四条变异分别变红，还原后复绿。
+9. **变异验证**：§8.4 五条变异分别变红，还原后复绿。
 10. **存量边界**：PR"已知边界"明确写"Android 存量纯 Python 文章未重算，需重新导入或另立任务"。
+11. **句法专线硬失败**（A7）：模型不可用时 `analyze_syntax_tree("…")` 抛 `RuntimeError`，信息区分"模型加载失败"与"无数据"；空输入仍返回 `sentence_count: 0`；`test_syntax_tree_load_failure_is_loud_not_pure` 与 `test_syntax_tree_error_distinguishes_no_data` 绿。
 
 ---
 

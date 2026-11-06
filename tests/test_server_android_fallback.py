@@ -254,6 +254,48 @@ def test_processor_and_syntax_tree_share_engine_status(monkeypatch):
     assert "boom" in syntax_tree.get_spacy_load_error()
 
 
+def test_syntax_tree_load_failure_is_loud_not_pure(monkeypatch):
+    """ADR-0028 D4（2026-11-06 澄清）：句法专线加载失败也不得回退纯 Python 拓扑。
+
+    覆盖范围从"主路径"扩到"所有 spaCy 调用点"：`analyze_syntax_tree` 必须传播
+    RuntimeError，且错误信息能指明是模型加载失败、并带上底层诊断。
+    """
+    from delector.nlp_engine import processor, syntax_tree
+
+    def _boom(name):
+        raise RuntimeError("model boom")
+
+    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
+    monkeypatch.setattr(syntax_tree, "_spacy_load_error", "")
+
+    with pytest.raises(RuntimeError) as excinfo:
+        syntax_tree.analyze_syntax_tree("Der Hund schläft.")
+
+    msg = str(excinfo.value)
+    assert "加载失败" in msg, f"错误信息必须能识别为模型加载失败，实际：{msg}"
+    assert "model boom" in msg, f"错误信息必须带底层诊断，实际：{msg}"
+
+
+def test_syntax_tree_error_distinguishes_no_data(monkeypatch):
+    """ADR-0028 D4：`分析失败` 与 `无数据` 必须可区分。
+
+    空输入返回 `sentence_count: 0`（合法的"无数据"）；模型不可用则抛 RuntimeError。
+    两者不得再共用"返回空拓扑"这一条静默路径。
+    """
+    from delector.nlp_engine import syntax_tree
+
+    empty = syntax_tree.analyze_syntax_tree("   ")
+    assert empty["sentence_count"] == 0
+
+    monkeypatch.setattr(syntax_tree, "get_spacy_nlp", lambda: None)
+    monkeypatch.setattr(syntax_tree, "get_spacy_load_error", lambda: "")
+    with pytest.raises(RuntimeError) as excinfo:
+        syntax_tree.analyze_syntax_tree("Der Hund schläft.")
+
+    assert "无数据" in str(excinfo.value), f"无诊断信息时应明确是无数据，实际：{excinfo.value}"
+
+
 # 模型档位契约已移到 tests/test_nlp_model_sm_only.py（ADR-0027：只支持 sm），
 # 避免同一口径在两个文件各钉一份。
 

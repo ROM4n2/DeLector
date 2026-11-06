@@ -293,19 +293,20 @@
 - [ ] `[Instinct: No-Residual]`: 变异不得留在工作树；用 `git diff` 确认还原。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
-> "Implement Task 7: 四条具名变异。
+> "Implement Task 7: 五条具名变异。
 > Mode: AFK | Role: TDD Builder
 > Mutations:
 > 1. `processor.py` 平台分支改回 `nlp = None` → `test_android_import_selects_lazy_spacy_not_none` 应红。
 > 2. 允许 Android 走 `spacy.cli.download` → `test_android_runtime_load_never_downloads` 应红。
 > 3. 本地加载失败时返回纯 Python 结果 → `test_android_load_failure_is_loud_not_pure` 应红。
 > 4. `syntax_tree` 改回裸 `spacy.load` → `test_processor_and_syntax_tree_share_engine_status` 应红。
+> 5. `syntax_tree` 加载失败回退纯 Python（A7）→ `test_syntax_tree_load_failure_is_loud_not_pure` 应红。
 > Each: apply → run targeted test → record failure → revert → run green.
 > Verify: `git diff` 最终为空（相对 T4 提交）。
-> Return: Summary with MANDATORY Physical Execution Receipt (4 red outputs + 4 green outputs)."
+> Return: Summary with MANDATORY Physical Execution Receipt (5 red outputs + 5 green outputs)."
 
 **Step Breakdown:**
-- [ ] **Step 1-4**: 逐条应用变异、跑定向测试、记录失败、还原、复绿。
+- [ ] **Step 1-5**: 逐条应用变异、跑定向测试、记录失败、还原、复绿。
 - [ ] **Step 5**: `git diff` 确认无残留。
 - [ ] **Step 6 (Commit)**: 仅提交测试/代码正式改动，不提交变异。
 
@@ -374,7 +375,8 @@
 
 | plan text | what was actually built | why |
 | --- | --- | --- |
-| — | — | — |
+| T1 之后由 T8 统一提交 | 按语义拆成 4 个提交（`f4c09d7` docs / `ea8b6ee` tests / `af027f8` processor / `2f79ccb` syntax_tree） | 用户要求每完成一项立即提交，便于逐项审查 |
+| D4 只覆盖主分析路径 | A7 扩到所有 spaCy 调用点：`analyze_syntax_tree` 失败抛 `RuntimeError` | 用户 2026-11-06 拍板「覆盖」；纯 Python 句法树同属"错误标注" |
 
 ---
 

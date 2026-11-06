@@ -913,7 +913,15 @@ def analyze_syntax_tree(text_or_doc: Union[str, Any]) -> Dict[str, Any]:
             return {"version": "3.5.0", "sentence_count": 0, "sentences": []}
         nlp = get_spacy_nlp()
         if nlp is None:
-            return _analyze_syntax_tree_pure_python(text_or_doc)
+            # ADR-0028 D4（2026-11-06 澄清：覆盖范围从主路径扩到**所有** spaCy 调用点）：
+            # 句法专线不得再返回纯 Python 拓扑。空输入仍走上面的 `sentence_count: 0`
+            # 分支——“分析失败”与“无数据”必须可区分，不得共用同一条静默返回。
+            diag = get_spacy_load_error()
+            if diag:
+                raise RuntimeError(
+                    f"德语 spaCy 模型加载失败，句法分析不可用（硬失败，不降级到纯 Python）：{diag}"
+                )
+            raise RuntimeError("句法分析无数据：spaCy 模型未加载且没有加载失败诊断（模型/数据未初始化）")
         doc = nlp(text_or_doc)
     else:
         doc = text_or_doc
