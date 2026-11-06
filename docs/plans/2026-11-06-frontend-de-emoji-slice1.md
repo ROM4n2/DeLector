@@ -599,11 +599,16 @@
 
 | 文件 | 彩色 emoji 簇（前） | 后 | 交互控件数 | 无可见文字控件（前） | 仅有 title（WARN） |
 |---|---|---|---|---|---|
-| `static/views/exam.html` | 待填 | 0 | 待填 | 待填 | 待填 |
-| `static/layout/nav_mobile.html` | 待填 | 0 | 8 | 0 | 0 |
-| `static/js/cards.js`（空态块） | 待填 | 0 | 0 | 0 | 0 |
-| `static/layout/companion.html` | 待填 | 保留 4 角色字形 | 待填 | 待填 | 4 |
-| `static/views/progress.html`（studio 段） | 待填 | 保留 4 角色字形（T7 只补 aria） | 待填 | 待填 | 5 |
+| `static/views/exam.html` | 33（非注释；全文件 35） | 0 | 31 | 0 | 3（均有可见文字，title 仅为补充） |
+| `static/layout/nav_mobile.html` | 8 | 0 | 8 | 0 | 0 |
+| `static/js/cards.js`（空态块） | 3（🎉/🛡️/🎴） | 0 | 0 | 0 | 0 |
+| `static/layout/companion.html` | 8 | 保留 4 角色字形 | 15 | 6（`.panel-close`、`#panel-sound`、4 个 `.panel-color-dot`） | 7（4 角色 + 自定义 + 上传 + 收起） |
+| `static/views/progress.html`（studio 段） | 9（studio 段） | 保留 4 角色字形（T7 只补 aria） | 10 | 0 | 5 |
+
+**基线核对（T1 Step 3）：**
+- 源片段（排除生成物 `static/index.html`）的 `aria-label` = **11 处**，与 ADR §11.1 快照一致；另有 1 处 `aria-labelledby`（`home.html` 的 `#satz-lab`）。
+- 本切片 5 个文件的彩色 emoji 簇合计 = **61**（exam 33 + nav 8 + cards 空态 3 + companion 8 + progress studio 9），远小于全站 551，未触发 E1。
+- 4 个切片文件在 `master` 上均存在且行号与计划一致，未触发 E7。
 
 ---
 
@@ -617,3 +622,76 @@
 - Android 端 UI 验证（本切片只保证 Web 侧源片段；Android assets 随整树复制被动更新）。
 - 任何视觉回归测试基建的引入（本仓无此基建，不在此计划内新建）。
 - 角色 SVG 化、图标集 vendor、`svg-character-spec.md` 的修改。
+
+### T1 逐控件清点（明细）
+
+| 文件 | 行 | id | 删字形后可见文字 | title | 可访问名来源 | 结论 |
+|---|---|---|---|---|---|---|
+| `static/views/exam.html` | 5 | （无 id） | ← 返回文库 | — | 可见文字 | OK |
+| `static/views/exam.html` | 9 | exam-level-a1 | A1 | — | 可见文字 | OK |
+| `static/views/exam.html` | 12 | exam-card-writing | 写作专项 (Schreiben) | — | 可见文字 | OK |
+| `static/views/exam.html` | 13 | exam-card-hoeren | 听力模考 (Hörverstehen) | — | 可见文字 | OK |
+| `static/views/exam.html` | 14 | exam-card-lesen | 阅读工坊 (Leseverstehen) | — | 可见文字 | OK |
+| `static/views/exam.html` | 15 | exam-card-sprechen | 口语问答 (Sprechen) | — | 可见文字 | OK |
+| `static/views/exam.html` | 16 | exam-card-vocab | 官方考纲词表 (Wortliste) | — | 可见文字 | OK |
+| `static/views/exam.html` | 17 | exam-card-listen | 听力微训 (Hörlabor) | — | 可见文字 | OK |
+| `static/views/exam.html` | 18 | exam-card-hardsent | 长难句 (Satz-Labor) | — | 可见文字 | OK |
+| `static/views/exam.html` | 24 | exam-tab-formular | 歌德 A1 Teil 1 填表专项 (Formular-Training) | — | 可见文字 | OK |
+| `static/views/exam.html` | 31 | exam-tab-email | 歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab) | — | 可见文字 | OK |
+| `static/views/exam.html` | 52 | （无 id） | ◀ 上一题 | — | 可见文字 | OK |
+| `static/views/exam.html` | 55 | （无 id） | 随机练习 | — | 可见文字 | OK |
+| `static/views/exam.html` | 61 | （无 id） | 下一题 ▶ | — | 可见文字 | OK |
+| `static/views/exam.html` | 88 | a1-form-check-btn | 立即批改 (5 分) | — | 可见文字 | OK |
+| `static/views/exam.html` | 95 | （无 id） | 重填 | — | 可见文字 | OK |
+| `static/views/exam.html` | 119 | （无 id） | ◀ 上一题 | — | 可见文字 | OK |
+| `static/views/exam.html` | 122 | （无 id） | 随机场景 | — | 可见文字 | OK |
+| `static/views/exam.html` | 125 | （无 id） | 下一题 ▶ | — | 可见文字 | OK |
+| `static/views/exam.html` | 182 | （无 id） | ⚡ 智能诊断与判分 | — | 可见文字 | OK |
+| `static/views/exam.html` | 185 | （无 id） | 套用考场满分模板 | — | 可见文字 | OK |
+| `static/views/exam.html` | 191 | （无 id） | ️ 清空 | — | 可见文字 | OK |
+| `static/views/exam.html` | 221 | a1-tab-vocab | 官方考纲词表 (700+) | — | 可见文字 | OK |
+| `static/views/exam.html` | 228 | a1-tab-hoeren | 听力全真模考 (15题×5套) | — | 可见文字 | OK |
+| `static/views/exam.html` | 235 | a1-tab-lesen | 实用阅读工坊 (15题×6套) | — | 可见文字 | OK |
+| `static/views/exam.html` | 242 | a1-tab-teil2 | 口语 Teil 2 问答 | — | 可见文字 | OK |
+| `static/views/exam.html` | 249 | a1-tab-teil3 | 口语 Teil 3 请求 | — | 可见文字 | OK |
+| `static/views/exam.html` | 276 | exam-mode-btn-deck | 扑克牌盒 | 扑克牌叠层翻页模式 | 可见文字 | OK |
+| `static/views/exam.html` | 284 | exam-mode-btn-grid | 全景目录 | 目录全景平铺列表 | 可见文字 | OK |
+| `static/views/exam.html` | 309 | （无 id） | ⟲ 换材料 | 返回材料选择 | 可见文字 | OK |
+| `static/views/exam.html` | 330 | （无 id） | ⟲ 换材料 | 返回材料选择 | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 2 | mob-btn-home | 文库 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 10 | mob-btn-progress | 台账 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 18 | mob-btn-writer | 写作 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 26 | mob-btn-exam | 备考 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 34 | mob-btn-cards | 卡片 (0) | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 42 | mob-btn-german | 背词 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 50 | mob-btn-search | 检索 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 58 | mob-btn-settings | 设置 | — | 可见文字 | OK |
+| `static/layout/companion.html` | 11 | companion-avatar | — | — | `aria-label` | OK |
+| `static/layout/companion.html` | 22 | （无 id） | ✕ | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 27 | （无 id） | — | 歌德猫头鹰 | 仅有 title | WARN |
+| `static/layout/companion.html` | 35 | （无 id） | — | 学者猫 | 仅有 title | WARN |
+| `static/layout/companion.html` | 43 | （无 id） | — | 灵动狐 | 仅有 title | WARN |
+| `static/layout/companion.html` | 51 | （无 id） | — | 包豪斯机甲 | 仅有 title | WARN |
+| `static/layout/companion.html` | 59 | panel-btn-custom | ✦ | 自定义角色 | 仅有 title | WARN |
+| `static/layout/companion.html` | 69 | （无 id） | — | 上传自定义 SVG 角色 | 仅有 title | WARN |
+| `static/layout/companion.html` | 94 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 99 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 104 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 109 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 122 | panel-say | 说句话 | — | 可见文字 | OK |
+| `static/layout/companion.html` | 129 | panel-sound | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 136 | panel-hide | ✕ | 收起伴读悬浮球 | 仅有 title | WARN |
+| `static/views/progress.html` | 190 | （无 id） | Eule (歌德猫头鹰) | — | 可见文字 | OK |
+| `static/views/progress.html` | 198 | （无 id） | Katze (学者猫) | — | 可见文字 | OK |
+| `static/views/progress.html` | 206 | （无 id） | Fuchs (灵动狐) | — | 可见文字 | OK |
+| `static/views/progress.html` | 214 | （无 id） | Roboter (包豪斯机甲) | — | 可见文字 | OK |
+| `static/views/progress.html` | 222 | studio-btn-custom | ✦ 自定义 | — | 可见文字 | OK |
+| `static/views/progress.html` | 232 | （无 id） | 上传 SVG | 上传自定义 SVG 矢量伴读角色 | 可见文字 | OK |
+| `static/views/progress.html` | 269 | （无 id） | — | 歌德紫 | 仅有 title | WARN |
+| `static/views/progress.html` | 276 | （无 id） | — | 朱砂橘 | 仅有 title | WARN |
+| `static/views/progress.html` | 283 | （无 id） | — | 学者绿 | 仅有 title | WARN |
+| `static/views/progress.html` | 290 | （无 id） | — | 包豪斯蓝 | 仅有 title | WARN |
+| `static/views/progress.html` | 297 | （无 id） | — | 墨黑 | 仅有 title | WARN |
+| `static/views/progress.html` | 326 | （无 id） | 试听伴读鼓励 | — | 可见文字 | OK |
+| `static/views/progress.html` | 333 | studio-sound-btn | 发声已开启 | — | 可见文字 | OK |
+| `static/views/progress.html` | 342 | （无 id） | ✓ 保存伴读设置 | — | 可见文字 | OK |
