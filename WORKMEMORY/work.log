@@ -504,3 +504,12 @@ U2 拍板：Android 主分析路径统一为 spaCy（用户原话「纯python的
 落位：ADR-0028 就地重写并改名 docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md；规格 docs/specs/2026-11-06-android-spacy-parity-spec.md；计划 docs/plans/2026-11-06-android-spacy-parity.md（T5/T6 强制实测 Android 首次加载/内存/RSS）。旧三份纯 Python 草稿已删除（均未跟踪）。
 同步：docs/agents/architecture.md:118-130 与 docs/agents/android-local-runtime.md §5 第 1 条改为 spaCy 主路径；删掉已过时的「PR #233 未合并」（实为已合并 2a7867a）。
 边界：本轮零代码/零测试/零 workflow 改动；未建分支、未提交、未开 PR。存量文章仍为纯 Python 产物（同 3.5.0，惰性迁移不命中），默认不重算。
+
+### 2026-11-06 11:41 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec
+README 叙事对齐 + 首屏句子解剖台，收尾于 PR #239（base master，未合并）。
+基线：master@dd8036e（run 42155129738）。新口径：分母 2794（pytest --collect-only -q），分子 2779（七分片 678+681+348+712+316+19+25 passed），差集 15 skipped；旧 2773/2788 已废弃。
+README：徽章与注释块换成可复算口径；CI 覆盖行改为实际内容（md 路径按 ADR-0027 已删）；目录树 js/(42 模块)、tests 180 个 test_*.py；新增「工程取舍」5 条（均带 ADR/文档链接与真实数字）；「已知限制」补 Android spaCy 主路径、PROCESSED_JSON_VERSION 仍 3.5.0 不自动重算、加载耗时/内存/OOM 未测量、模型失败硬失败。
+首屏：hero 改「把德语长句拆开看」；新增 #satz-lab（3 句真实示例、五场域、格位、从句树，全部实时调 /api/syntax/analyze）；导航「拆句」入口；阅读器空态加示例入口。新增 static/js/satz-lab.js，index.html 由 build_index_html.py 重生成（sync PASS）。
+验证：tests/test_check_index_html_sync.py、test_frontend_guards.py、test_index_dom_probe.py、test_writer_mobile.py 共 47 passed；三个前端闸 PASS；浏览器实测入口/空态/三句渲染正常。
+未做：未跑全量 pytest；未启动模拟器/adb/Android 构建；未改 docs/reviews/2026-11-05-code-quality-decoupling-review.md。
