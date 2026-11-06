@@ -2,7 +2,7 @@
 """spaCy 模型加载的唯一真相源（ADR-0018 §7.6 / ADR-0027 / ADR-0028）。
 
 本模块只做「拿一个可用的 spaCy 模型」这一件事：模型名常量、本地三级回退、自动下载
-兜底（Android 禁止）、惰性加载缓存、加载失败诊断与引擎状态。
+兜底（Android 禁止）、服务就绪后后台预热、惰性加载缓存、加载失败诊断与引擎状态。
 
 依赖方向（重构前 `processor` 与 `syntax_tree` 互为反向导入，把环藏在函数内）：
 
@@ -12,7 +12,9 @@
 """
 
 import importlib
+import os
 import threading
+import time
 from pathlib import Path
 from typing import Any, List, Tuple
 
@@ -80,12 +82,33 @@ def _load_spacy_model(name: str) -> Tuple[Any, str]:
 # 为什么改惰性：桌面冷启动到 /api/health 200 约 2.6~3.1s，其中 spacy.load 模型约
 # 1.5~1.7s（约占首启 58%）。把模型加载从 import 期搬到「首次真正需要 NLP 时」，冷启动
 # 只付 import 成本；代价是首次 NLP 请求要多等一次模型加载（量化见 tools/bench_cold_start.py）。
+# 2026-11-06 修订（ADR-0028）：这个代价在 Android 实测为 +1,215.6 ms（T5/T6），故增加
+# 服务就绪后后台预热，把等待移出用户路径；首次使用仍保留同步兜底（见下方预热段）。
 # 三条硬约束：① import 期不得 spacy.load；② 首次并发调用只加载一次（互斥锁 + 双检）；
 # ③ 加载失败必须**大声失败**（抛异常），不得静默返回空结果。
 _model_lock = threading.Lock()
 _nlp_model: Any = None  # 解析成功后的真实模型对象
 _nlp_resolved = False  # 是否已解析（成功或失败都置位，保证「只加载一次」）
 _nlp_error = ""  # 解析失败原因（供错误信息与诊断）
+
+# ── 服务就绪后后台预热（ADR-0028 2026-11-06 修订）──────────────────────────────
+# 动因：Android T5/T6 实测首次分析仍多付 1,215.6 ms（改造前 12.6 ms）的模型加载。
+# 选项 B：服务就绪（uvicorn lifespan startup）后起后台线程加载，把这段时间移出用户等待；
+# 首次分析若恰好早于预热完成，仍走 `_resolve_nlp_model()` 同步兜底（同一把 `_model_lock`，
+# 只会真正加载一次）。
+# 硬约束：① 只在 lifespan 触发，import 期绝不加载；② 不阻塞启动路径与 /api/health；
+# ③ 失败语义不变（D4 硬失败，后台线程只记录诊断、不崩进程）；④ 可用环境变量整体关闭。
+PREWARM_ENV = "DELECTOR_MODEL_PREWARM"
+_PREWARM_DISABLED_VALUES = frozenset({"0", "false", "no", "off", "disabled"})
+
+# 预热起步前的静默窗口（秒）：让 uvicorn 完成 bind、首个 /api/health 与窗口出现先走完，
+# 避免后台模型加载在启动瞬间争抢 GIL。预热本身仍是纯后台，不阻塞任何请求。
+_PREWARM_GRACE_S = 0.5
+
+_prewarm_lock = threading.Lock()
+_prewarm_started = False
+_prewarm_thread = None  # type: Any  # 供测试确定性地 join；生产不依赖它
+_model_load_count = 0  # `_resolve_nlp_model` 真正进入加载入口的次数（预热/并发证据）
 
 # 平台判定：Android 运行期禁止 spacy.cli.download（Chaquopy 里会起 pip 子进程阻塞启动页）。
 # 这里先算一次，作为 `_load_model_with_autodownload` 的下载门控依据。
@@ -100,11 +123,14 @@ if spacy is None:
     NLP_ENGINE = "pure_python"
     NLP_ENGINE_DETAIL = "spaCy 未安装，使用纯 Python 降级路径（无依存句法/格标注）"
 else:
-    # spaCy 可用（桌面与 Android 同口径，ADR-0028）：惰性加载。
-    # import 期**不** spacy.load；模型于首次真正需要 NLP 时加载。
+    # spaCy 可用（桌面与 Android 同口径，ADR-0028）：服务就绪后后台预热。
+    # import 期**不** spacy.load；预热由 lifespan 触发，首次使用若仍未加载则同步兜底。
     # 故下面的 NLP_ENGINE = "spacy" 是**声明值**（模型未加载也如此），**不是**"首次加载成功才赋值"。
     NLP_ENGINE = "spacy"
-    NLP_ENGINE_DETAIL = f"spaCy {getattr(spacy, '__version__', 'unknown')} 已装（惰性加载：首次使用时加载模型）"
+    NLP_ENGINE_DETAIL = (
+        f"spaCy {getattr(spacy, '__version__', 'unknown')} 已装（服务就绪后后台预热；"
+        "预热未完成时首次使用同步加载）"
+    )
 
 print(f"[DeLector] NLP 引擎: {NLP_ENGINE} — {NLP_ENGINE_DETAIL}", flush=True)
 
@@ -158,12 +184,15 @@ def _resolve_nlp_model() -> Any:
     不代表模型已加载，见本模块导入期分支）；本函数成功时用**实际加载结果**再刷一遍，失败时
     改写为 "spacy(加载失败)"（让 live 读取方看到真实状态；理由见失败分支注释）。
     """
-    global _nlp_model, _nlp_resolved, _nlp_error, NLP_ENGINE, NLP_ENGINE_DETAIL
+    global _nlp_model, _nlp_resolved, _nlp_error, _model_load_count, NLP_ENGINE, NLP_ENGINE_DETAIL
     if _nlp_resolved:
         return _require_loaded_model()
     with _model_lock:
         if _nlp_resolved:
             return _require_loaded_model()
+        # 计数放在加载入口之前、持锁区内：预热与并发首次分析共用本函数，
+        # 因此「计数 == 1」就是「只真正加载一次」的可测证据。
+        _model_load_count += 1
         try:
             _nlp_model, how = _load_model_with_autodownload()
         except Exception as e:
@@ -189,8 +218,72 @@ def _resolve_nlp_model() -> Any:
         NLP_ENGINE = "spacy"
         NLP_ENGINE_DETAIL = f"spaCy {getattr(spacy, '__version__', 'unknown')} + {how}"
         _nlp_resolved = True
-        print(f"[DeLector] NLP 引擎（首次使用时加载）: {NLP_ENGINE} — {NLP_ENGINE_DETAIL}", flush=True)
+        print(f"[DeLector] NLP 引擎（模型已加载）: {NLP_ENGINE} — {NLP_ENGINE_DETAIL}", flush=True)
         return _nlp_model
+
+
+# ── 后台预热入口（ADR-0028 2026-11-06 修订）────────────────────────────────────
+def prewarm_enabled() -> bool:
+    """`DELECTOR_MODEL_PREWARM` 是否开启：未设置/其他值 = 开启，`0/false/no/off/disabled` = 关闭。"""
+    raw = os.environ.get(PREWARM_ENV, "")
+    return raw.strip().lower() not in _PREWARM_DISABLED_VALUES
+
+
+def get_model_load_count() -> int:
+    """返回 `_resolve_nlp_model()` 真正进入加载入口的次数（预热/首次分析共用该入口）。
+
+    只统计带自动下载兜底的主入口；`try_load_nlp_no_download()` 的本地只读加载不计入。
+    """
+    return _model_load_count
+
+
+def _prewarm_worker() -> None:
+    """后台预热线程体：**只调用统一入口** `_resolve_nlp_model()`，不另开加载路径。
+
+    - Android 禁下载门控在 `_load_model_with_autodownload()` 内部，走统一入口即自动生效。
+    - 与首次分析共用 `_model_lock`：两边只会真正加载一次，另一边等锁后复用结果。
+    - 失败不抛出到线程外（否则会留下未捕获异常栈，Android 上还可能被当成崩溃）；诊断由
+      `_resolve_nlp_model()` 写入 `_nlp_error`，首次分析仍按 D4 抛 RuntimeError。
+    """
+    if _PREWARM_GRACE_S > 0:
+        time.sleep(_PREWARM_GRACE_S)
+    print("[DeLector] 模型预热：开始（后台）", flush=True)
+    started_at = time.monotonic()
+    try:
+        _resolve_nlp_model()
+    # silent-ok: 预热失败已记入 _nlp_error 并打印诊断，首次分析仍按 D4 硬失败
+    except Exception as e:
+        elapsed_ms = (time.monotonic() - started_at) * 1000.0
+        print(f"[DeLector] 模型预热：失败（耗时 {elapsed_ms:.0f} ms）— {e}", flush=True)
+        return
+    elapsed_ms = (time.monotonic() - started_at) * 1000.0
+    print(f"[DeLector] 模型预热：完成（耗时 {elapsed_ms:.0f} ms）", flush=True)
+
+
+def start_background_prewarm() -> bool:
+    """服务就绪后启动一次后台预热；返回是否真的起了线程（幂等）。
+
+    调用点只有一个：`delector.server` 的 lifespan startup。**不得**在 import 期调用。
+    不等待加载完成 —— 启动路径与 `/api/health` 不被阻塞。
+    """
+    global _prewarm_started, _prewarm_thread
+    if not prewarm_enabled():
+        print(f"[DeLector] 模型预热：未启用（{PREWARM_ENV}=0）", flush=True)
+        return False
+    if spacy is None:
+        print("[DeLector] 模型预热：跳过（spaCy 未安装，纯 Python 路径）", flush=True)
+        return False
+    if _nlp_resolved:
+        print("[DeLector] 模型预热：跳过（模型已解析）", flush=True)
+        return False
+    with _prewarm_lock:
+        if _prewarm_started:
+            return False
+        _prewarm_started = True
+        thread = threading.Thread(target=_prewarm_worker, name="delector-model-prewarm", daemon=True)
+        _prewarm_thread = thread
+        thread.start()
+    return True
 
 
 # ── 只读 / 无下载加载助手（Task 1：给产品层「拿一个可用的 nlp」但不付下载成本）────────

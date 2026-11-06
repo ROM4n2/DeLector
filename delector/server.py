@@ -1,7 +1,8 @@
 import ipaddress
 import mimetypes
 import os
-from typing import Awaitable, Callable
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Awaitable, Callable
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
@@ -98,6 +99,7 @@ from delector.core.database import (  # noqa: E402, I001
 )
 
 # --- 2. NLP & CEFR Tagging（re-export：handler 搬走后 server 自身不再消费）---
+from delector.nlp_engine import model_loader  # noqa: E402
 from delector.nlp_engine.processor import (  # noqa: E402
     nlp,
     NLP_ENGINE,
@@ -326,6 +328,18 @@ if not STATIC_DIR or not os.path.exists(STATIC_DIR):
 
 
 # --- 7. 应用工厂 ---
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """服务就绪（lifespan startup）后触发一次后台模型预热。
+
+    只**启动线程**、不等待加载：uvicorn 的启动路径与随后首个 `/api/health` 都不被阻塞
+    （断言见 tests/test_nlp_prewarm.py 的 lifespan 用例）。放在 lifespan 而不是模块顶层，
+    是为了守住导入期不加载模型（ADR-0018 §7.6）。
+    """
+    model_loader.start_background_prewarm()
+    yield
+
+
 def create_app() -> FastAPI:
     """装配一个完整的 DeLector app。
 
@@ -337,7 +351,7 @@ def create_app() -> FastAPI:
     - 两个中间件按"先注册在内层"挂，与搬迁前完全一致（wb CORS 在外层，可短路预检）；
     - register_routes 必须早于静态挂载 —— catch-all 的 "/" 会吃掉其后所有路径。
     """
-    app = FastAPI(title="DeLector")
+    app = FastAPI(title="DeLector", lifespan=_lifespan)
     app.middleware("http")(add_frontend_no_cache_headers)
     app.middleware("http")(_wb_sync_cors)
     register_routes(app)
