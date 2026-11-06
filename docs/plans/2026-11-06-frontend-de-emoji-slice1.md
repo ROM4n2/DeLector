@@ -610,7 +610,7 @@
 
 > 已知点名项：`static/js/cards.js:296` 实为 `🎴 3D 扑克翻牌盒 · POKER FLIP STACK`（不是 📕 / "翻牌墨盒"，以代码为准），属 B 类。
 
-### A. 删除会丢信息（16 处，下一批优先）
+### A. 删除会丢信息（16 处，已于第三批清零 2026-11-06）
 
 | 文件:行 | 字形 | 上下文 | 为什么算丢信息 |
 |---|---|---|---|
@@ -630,6 +630,8 @@
 | `static/js/cp-drawer.js:1341` | ✓ | `iconEl.textContent = '✓'` | 完成态只靠字形 |
 | `static/js/reader.js:907` | ✓ | `btn.textContent = "✓"` | 收藏/完成态只靠字形 |
 | `static/js/encounter.js:148` | ⚠ | `COVERAGE_DEGRADED_MARK = "⚠"` | 覆盖率降级标记只靠字形 |
+
+> **第三批处置（2026-11-06，PR 待合）**：可删 2（cp-drawer 推演完成 ✓、encounter 覆盖率 ⚠，相邻已有中文）；需加文字 5（listen-lab 判题 2、a1_writer 导向点 2、reader 收藏 1）；需加 `aria-label` 6（5 个模态框关闭键 + cp-drawer 解除绑定）；需加文字+`aria-label` 3（密码显隐 2 + settings 初始态 1）。B 类 360 处未动。
 
 ### B. 纯装饰（360 处，按文件聚合）
 

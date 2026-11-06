@@ -17,11 +17,11 @@
  * 本探针把 encounter.js **真源码**剥 import/export 后进 node:vm 真跑（不重抄实现），
  * 直接调 `renderTextDetailAnnotated(text, annotate)`，用桩 api() / localStorage / DOM 驱动，
  * 逐条断言（只标覆盖率行，不动列表徽章 —— 徽章只有百分比、无分母，误导性弱）：
- *   B1 正常时**不含**任何降级标记（行内无 ⚠、无「数据不完整」、title 为空）；
- *   B2 fetchKnownLemmas 失败 ⇒ 含降级标记，且行内 + title **都不含技术字段名**
+ *   B1 正常时**不含**降级标注（行内无「数据不完整」、title 为空）；
+ *   B2 fetchKnownLemmas 失败 ⇒ 含降级文案「数据不完整」，且行内 + title **都不含技术字段名**
  *      （fsrs_s / lemmas / known-lemmas / /api/… / HTTP 状态码 / 英文异常名）；
- *   B3 resolveDeck 降级（本机 deck 空 + GET /api/wb/state 抛错）⇒ 含降级标记；
- *   B4 两路都降级 ⇒ 标记**只叠一份**（⚠ 与「数据不完整」各出现一次），title 给出两条原因；
+ *   B3 resolveDeck 降级（本机 deck 空 + GET /api/wb/state 抛错）⇒ 含降级文案；
+ *   B4 两路都降级 ⇒ 标注**只叠一份**（「数据不完整」只出现一次），title 给出两条原因；
  *   B5 正常路径文案**逐字未变**：仍等于去重/标注之前的字面量
  *      `已背词覆盖 12/312 词位（4%）`（防顺带改文案）。
  *
@@ -216,7 +216,6 @@ async function renderCoverageOf(env) {
 }
 
 const countOf = (s, sub) => s.split(sub).length - 1;
-const MARK = "⚠";
 const MARK_TEXT = "数据不完整";
 /** 禁止出现在用户可见文案里的技术字面量（债 4 的头号验收点：MUST 是人话）。 */
 const FORBIDDEN = [
@@ -240,7 +239,7 @@ record("B1-render", !normal.error && normal.html !== "",
     ? `renderTextDetailAnnotated 抛错：${normal.error}`
     : "覆盖率行为空（setCoverage 未写入 #enc-coverage）");
 if (!normal.error) {
-  const clean = !normal.html.includes(MARK) && !normal.html.includes(MARK_TEXT);
+  const clean = !normal.html.includes(MARK_TEXT);
   record("B1", clean, `正常路径出现了降级标记：${JSON.stringify(normal.html)}`);
   record("B1-title", !normal.title, `正常路径不该有 title：${JSON.stringify(normal.title)}`);
 }
@@ -256,7 +255,7 @@ const knownFail = await renderCoverageOf(newEnv({ knownFail: true }));
 if (knownFail.error) {
   record("B2", false, `known-lemmas 失败时 renderTextDetailAnnotated 抛错：${knownFail.error}`);
 } else {
-  const marked = knownFail.html.includes(MARK) && knownFail.html.includes(MARK_TEXT);
+  const marked = knownFail.html.includes(MARK_TEXT);
   record("B2", marked,
     `known-lemmas 失败却没有降级标记：${JSON.stringify(knownFail.html)} / title=${JSON.stringify(knownFail.title)}`);
   const bad = FORBIDDEN.filter((f) => knownFail.html.includes(f) || knownFail.title.includes(f));
@@ -273,7 +272,7 @@ const deckFail = await renderCoverageOf(newEnv({ deckEmpty: true, wbFail: true }
 if (deckFail.error) {
   record("B3", false, `镜像失败时 renderTextDetailAnnotated 抛错：${deckFail.error}`);
 } else {
-  const marked = deckFail.html.includes(MARK) && deckFail.html.includes(MARK_TEXT);
+  const marked = deckFail.html.includes(MARK_TEXT);
   record("B3", marked,
     `resolveDeck 降级却没有降级标记：${JSON.stringify(deckFail.html)} / title=${JSON.stringify(deckFail.title)}`);
   const bad = FORBIDDEN.filter((f) => deckFail.html.includes(f) || deckFail.title.includes(f));
@@ -287,10 +286,9 @@ const both = await renderCoverageOf(newEnv({ knownFail: true, deckEmpty: true, w
 if (both.error) {
   record("B4", false, `两路都降级时抛错：${both.error}`);
 } else {
-  const m1 = countOf(both.html, MARK);
   const m2 = countOf(both.html, MARK_TEXT);
-  record("B4-single-marker", m1 === 1 && m2 === 1,
-    `两路降级时标记叠了多份：⚠ x${m1}、${MARK_TEXT} x${m2} —— ${JSON.stringify(both.html)}`);
+  record("B4-single-marker", m2 === 1,
+    `两路降级时标注叠了多份：${MARK_TEXT} x${m2} —— ${JSON.stringify(both.html)}`);
   const bad = FORBIDDEN.filter((f) => both.html.includes(f) || both.title.includes(f));
   record("B4-human-copy", bad.length === 0,
     `降级文案里出现技术字面量 ${JSON.stringify(bad)}：html=${JSON.stringify(both.html)} title=${JSON.stringify(both.title)}`);

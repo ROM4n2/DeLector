@@ -303,7 +303,7 @@ export function renderA1Email() {
       .map(
         (lp, idx) => `
       <div class="a1-leitpunkt-item" id="lp-chip-${idx}">
-        <span class="lp-icon">⚪</span>
+        <span class="lp-status" data-state="pending">未覆盖</span>
         <span class="lp-text">${esc(lp)}</span>
       </div>
     `
@@ -424,8 +424,11 @@ export async function diagnoseA1Email() {
         const chip = document.getElementById(`lp-chip-${idx}`);
         if (chip) {
           chip.classList.toggle('is-covered', lp.matched);
-          const icon = chip.querySelector('.lp-icon');
-          if (icon) icon.textContent = lp.matched ? '🟢' : '⚪';
+          const status = chip.querySelector('.lp-status');
+          if (status) {
+            status.textContent = lp.matched ? '已覆盖' : '未覆盖';
+            status.dataset.state = lp.matched ? 'covered' : 'pending';
+          }
         }
       });
     }
