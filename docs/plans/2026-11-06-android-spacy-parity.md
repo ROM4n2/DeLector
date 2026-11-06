@@ -289,8 +289,8 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: Mutation-Evidence]`: 每条变异必须记录失败断言原文；还原后必须复绿。
-- [ ] `[Instinct: No-Residual]`: 变异不得留在工作树；用 `git diff` 确认还原。
+- [x] `[Instinct: Mutation-Evidence]`: 每条变异必须记录失败断言原文；还原后必须复绿。
+- [x] `[Instinct: No-Residual]`: 变异不得留在工作树；用 `git diff` 确认还原。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 7: 五条具名变异。
@@ -306,9 +306,9 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (5 red outputs + 5 green outputs)."
 
 **Step Breakdown:**
-- [ ] **Step 1-5**: 逐条应用变异、跑定向测试、记录失败、还原、复绿。
-- [ ] **Step 5**: `git diff` 确认无残留。
-- [ ] **Step 6 (Commit)**: 仅提交测试/代码正式改动，不提交变异。
+- [x] **Step 1-5**: 逐条应用变异、跑定向测试、记录失败、还原、复绿（5/5 均被抓）。
+- [x] **Step 5**: `git diff` 确认无残留。
+- [x] **Step 6 (Commit)**: 变异无正式改动，无需提交（工作树干净）。
 
 ---
 
