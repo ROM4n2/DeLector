@@ -513,3 +513,11 @@ README：徽章与注释块换成可复算口径；CI 覆盖行改为实际内�
 首屏：hero 改「把德语长句拆开看」；新增 #satz-lab（3 句真实示例、五场域、格位、从句树，全部实时调 /api/syntax/analyze）；导航「拆句」入口；阅读器空态加示例入口。新增 static/js/satz-lab.js，index.html 由 build_index_html.py 重生成（sync PASS）。
 验证：tests/test_check_index_html_sync.py、test_frontend_guards.py、test_index_dom_probe.py、test_writer_mobile.py 共 47 passed；三个前端闸 PASS；浏览器实测入口/空态/三句渲染正常。
 未做：未跑全量 pytest；未启动模拟器/adb/Android 构建；未改 docs/reviews/2026-11-05-code-quality-decoupling-review.md。
+### 2026-11-06 13:33 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+德语复数第四格误标主格：最小复现记录已落 docs/reviews/2026-11-06-german-plural-akkusativ-mislabeled-nominativ.md（一次性缺陷记录，沿用 2026-10-20 guard-escape 先例）。
+输入 `Die Lehrerin gibt den Schülern die Bücher.`，真实引擎 analyze_syntax_tree 返回 Bücher=NOUN/oa/Nom，同 NP 的 die=DET/nk/Acc；单数对照 `Die Lehrerin gibt dem Schüler das Buch.` 的 Buch=oa/Acc 正确。
+根因（实测+读码）：spaCy de_core_news_sm 3.8.0 的 morphologizer 阶段就把 Bücher 标成 Case=Nom，parser 只把 dep 改成 oa、不回写 Case；DeLector 在 syntax_tree.py:113 与 processor.py:429 直接透传 token morph，无 NP 级格位归一化。不是限定词/名词配对错位。
+最小：`Bücher geben.`（2 词）即复现；完整陈述句 `Wir geben Schülern Bücher.`（4 词）；原句词形边界 `Gibt den Schülern Bücher.` 删 den 后 Bücher=oa/Acc 不再复现。
+影响：首屏句子解剖台（satz-lab.js CASE_POS/caseLabel）与阅读器单词详情（reader.js:395-397）直接显示错标；process_german_text 也写入同一错误 case，存量 processed_json 不自动重算。Anki 导出与 /api/lookup/grammar 不读 token.case；写作规则实测本句返回空列表（dep 优先于名词 morph）。
+边界：本轮零代码改动、未跑全量 pytest、未碰 Android；未修改 docs/reviews/2026-11-05-code-quality-decoupling-review.md。
