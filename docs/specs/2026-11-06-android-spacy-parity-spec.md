@@ -2,6 +2,7 @@
 
 - **状态**：ACCEPTED（U2：统一为 spaCy）
 - **日期**：2026-11-06
+- **实施**：**已完成**（2026-11-06，PR #237 合入 `master`，merge commit `7073bac`；T5/T6 未执行，见 §7）
 - **关联**：`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`、ADR-0018 §7.6、ADR-0027
 - **范围**：本规格定义 Android 主分析路径从"纯 Python 降级"改为"spaCy 惰性加载 + 本地三级回退 + 硬失败 + 禁下载"的设计与验收；**本轮只写文档与计划，不改代码/测试/workflow**。
 - **前身**：本规格替代 2026-11-06 早先的 `2026-11-06-android-pure-python-degradation-spec.md`（该方向已由用户否决）。
@@ -100,7 +101,7 @@ elif _android_runtime:
 | D2 | `_LazyNlp` 首次调用时加载；导入期不加载。 |
 | D3 | 本地三级回退：`spacy.load` → `importlib.import_module(名称).load()` → 数据目录 glob。 |
 | D4 | 三级回退全部失败 → `RuntimeError`；`NLP_ENGINE = "spacy(加载失败)"`；不回退纯 Python。 |
-| D5 | Android 禁止 `spacy.cli.download`；门控放在 `_load_model_with_autodownload()` **内部**（`processor.py:96-114`），不只依赖调用方。 |
+| D5 | Android 禁止 `spacy.cli.download`；门控放在 `_load_model_with_autodownload()` **内部**（2026-11-06 二次重构后实现于 `model_loader.py`，原 `processor.py:96-114`），不只依赖调用方。 |
 | D6 | `syntax_tree.get_spacy_nlp()`（`syntax_tree.py:71-89`）改用统一加载器（2026-11-06 实现迁至 `model_loader.py`，`processor` 保留转发入口）；保留 `_spacy_load_error`。 |
 | D7 | 桌面端行为不变。 |
 
@@ -147,8 +148,8 @@ elif _android_runtime:
 | 组件 | 改动 |
 | --- | --- |
 | `processor.py:240-246` | 删除平台分支；Android 落入 `else: nlp = _LazyNlp()` |
-| `processor.py:96-114` | `_load_model_with_autodownload()` 内部加 Android 本地-only 门控：`if _android_runtime: return _load_spacy_model(SPACY_MODEL_NAME)` |
-| `processor.py:124-167` | `_resolve_nlp_model()` 不变（双检锁、硬失败、状态回填） |
+| `model_loader.py`（原 `processor.py:96-114`） | `_load_model_with_autodownload()` 内部加 Android 本地-only 门控：`if _android_runtime: return _load_spacy_model(SPACY_MODEL_NAME)` |
+| `model_loader.py`（原 `processor.py:124-167`） | `_resolve_nlp_model()` 不变（双检锁、硬失败、状态回填） |
 | `syntax_tree.py:71-89` | `spacy.load(SPACY_MODEL_NAME)` → 统一加载器（2026-11-06 实现迁至 `model_loader.py`）；保留 `_spacy_load_error` |
 | `routes/main.py::/api/settings` | 不变（live 读 `processor.NLP_ENGINE`） |
 | `routes/syntax_hard.py::/api/syntax/spacy-status` | 不变（统一加载器后口径一致） |

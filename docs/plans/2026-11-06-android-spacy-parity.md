@@ -4,14 +4,14 @@
 > **Tech Stack**: Python 3.11 / spaCy 3.8 / pytest / Android Chaquopy（Gradle 8.6 + AGP 8.4.2）
 > **Spec Reference**: `docs/specs/2026-11-06-android-spacy-parity-spec.md`；`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`
 > **Global Constraints**:
-> - 实施轮（2026-11-06）：T1–T4 与 T7 已执行并提交；T5/T6 因用户暂不开模拟器阻塞；T8 进行中。
+> - 实施轮（2026-11-06）：T1–T4、T7、T8 已执行；T5/T6 因用户暂不开模拟器阻塞。T8 的产物已经 PR #237 合入 `master`（merge commit `7073bac`）。
 > - 不改 schema/协议；桌面端行为不变；模型档位仍为 `de_core_news_sm`（ADR-0027）。
 > - Android 运行期**禁止** `spacy.cli.download`/pip 子进程/联网；门控必须在 `_load_model_with_autodownload()` 内部。
 > - 加载失败**硬失败**，不得回退纯 Python（No-Silent-Failure）。
 > - 不默认重算 Android 存量纯 Python 文章；必须在 PR"已知边界"写明。
 > - 不碰 9 个外部修改文件与未跟踪的 `docs/reviews/2026-11-05-code-quality-decoupling-review.md`。
 > - 不 force push、不改历史、不直推 master。
-> **Branch**: `fix/android-spacy-parity` — opened from `master` before Task 1, landed via PR #235（merge commit，不 squash）。
+> **Branch**: `fix/android-spacy-parity` — opened from `master` before Task 1。落地经过三次合并：PR #235 先把 T1–T4/T7 合入 `master`（`b13eb68`）；PR #236 的 `model_loader` 抽取误合入本分支（`dd08a95`）；PR #237 再把本分支整体合入 `master`（`7073bac`，2026-11-06），至此全部产物在 `master`。均为 merge commit，不 squash。
 
 ---
 
@@ -30,7 +30,7 @@
 
 每个 subagent brief 引用而不复述：`AGENTS.md`（文档路由）、`CLAUDE.md`（工程规范与避坑检索）、`.agent-rules.md`（红线）。本计划额外钉住：
 
-- 红线 1：运行期模型加载失败是**硬失败不降级**（`processor.py:144-161`）。
+- 红线 1：运行期模型加载失败是**硬失败不降级**（`model_loader.py` 的 `_resolve_nlp_model()`；2026-11-06 二次重构前位于 `processor.py:144-161`）。
 - 历史不可改写：ADR-0006/0007/0027、CHANGELOG、WORKMEMORY 归档、归档计划只读。
 - 测试分片：修改 `tests/test_server_android_fallback.py` 不改变文件归属；不新建 `test_*.py`。
 - Android 打包：`build.gradle` 的 `extractPackages "spacy", "thinc", "de_core_news_sm"` 不得移除。
@@ -139,10 +139,10 @@
 
 **Files:**
 - Modify: `delector/nlp_engine/processor.py:240-246`（删除平台分支）
-- Modify: `delector/nlp_engine/processor.py:96-114`（Android 本地-only 门控）
+- Modify: `delector/nlp_engine/processor.py:96-114`（Android 本地-only 门控；2026-11-06 二次重构后该实现迁至 `model_loader.py`）
 
 **Interfaces:**
-- Consumes: `_LazyNlp`（`processor.py:218-228`）、`_load_spacy_model`（`processor.py:35-77`）、`_android_runtime`（`processor.py:93`）。
+- Consumes: `_LazyNlp`、`_load_spacy_model`、`_android_runtime`。三者实施时在 `processor.py`（`218-228`/`35-77`/`93`）；2026-11-06 二次重构后实现迁至 `model_loader.py`（`processor` 保留转发入口）。
 - Produces: Android 导入期 `nlp = _LazyNlp()`、`NLP_ENGINE = "spacy"`；`_load_model_with_autodownload()` 在 `_android_runtime` 时只走本地加载，不进入 `from spacy.cli import download`。
 
 **SSOT Effect:** —
@@ -156,7 +156,7 @@
 > Mode: AFK | Role: TDD Builder
 > Goal:
 > 1. 删除 `processor.py:240-246` 的 `elif _android_runtime:` 整段，让 Android 落入 `else: nlp = _LazyNlp()`。
-> 2. 在 `_load_model_with_autodownload()`（`processor.py:96-114`）开头加 Android 本地-only 门控：
+> 2. 在 `_load_model_with_autodownload()`（实施时 `processor.py:96-114`；2026-11-06 二次重构后位于 `model_loader.py`）开头加 Android 本地-only 门控：
 >    `if _android_runtime: return _load_spacy_model(SPACY_MODEL_NAME)`（失败直接抛 RuntimeError，不下载）。
 > Constraints: 不改 `_load_spacy_model` 的三级回退；不改 `_resolve_nlp_model` 的双检锁；不改桌面下载兜底语义。
 > Verify: `pytest tests/test_server_android_fallback.py -q` 全绿；`git grep -n "spacy.cli import download" delector/nlp_engine/processor.py` 仍只在桌面分支可达。
@@ -178,25 +178,25 @@
 - Modify: `tests/test_server_android_fallback.py`（新增一致性测试）
 
 **Interfaces:**
-- Consumes: `processor._load_spacy_model(SPACY_MODEL_NAME)`；`processor.get_spacy_load_error()` / `_spacy_load_error`。
+- Consumes: `model_loader._load_spacy_model(SPACY_MODEL_NAME)`；`get_spacy_load_error()` / `_spacy_load_error`。（实施时经 `processor` 转发；2026-11-06 二次重构后 `syntax_tree` 直接依赖 `model_loader`。）
 - Produces: `syntax_tree.get_spacy_nlp()` 返回与主路径同一加载器加载的模型；保留错误诊断。
 
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [x] `[Instinct: One-Loader]`: 不得保留两套 `spacy.load`；`syntax_tree` 只调用 `processor._load_spacy_model`。
+- [x] `[Instinct: One-Loader]`: 不得保留两套 `spacy.load`；`syntax_tree` 只调用统一加载器（现为 `model_loader._load_spacy_model`，实施时经 `processor` 转发）。
 - [x] `[Instinct: Diagnostics-Preserved]`: `_spacy_load_error` 仍要能反映失败原因，供 `/api/syntax/spacy-status` 使用。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 4: GREEN syntax_tree。
 > Mode: AFK | Role: TDD Builder
-> Goal: 把 `syntax_tree.py:84` 的 `spacy.load(SPACY_MODEL_NAME)` 改为 `processor._load_spacy_model(SPACY_MODEL_NAME)`；保留 `_spacy_load_error` 诊断语义；新增 `test_processor_and_syntax_tree_share_engine_status`。
-> Constraints: 不改 `analyze_sentence_topology` 的公开签名与返回结构；不反向 import 造成环（syntax_tree 依赖 processor 是单向）。
+> Goal: 把 `syntax_tree.py:84` 的 `spacy.load(SPACY_MODEL_NAME)` 改为统一加载器（实施时经 `processor._load_spacy_model` 转发；2026-11-06 二次重构后直接依赖 `model_loader`）；保留 `_spacy_load_error` 诊断语义；新增 `test_processor_and_syntax_tree_share_engine_status`。
+> Constraints: 不改 `analyze_sentence_topology` 的公开签名与返回结构；不反向 import 造成环（二次重构后两条边都单向指向 `model_loader`）。
 > Verify: `pytest tests/test_server_android_fallback.py tests/test_syntax_tree.py -q` 全绿。
 > Return: Summary with MANDATORY Physical Execution Receipt (exit code + pass count)."
 
 **Step Breakdown:**
-- [x] **Step 1**: 在 `syntax_tree.py` 顶部 import `processor._load_spacy_model`（或 `from .processor import _load_spacy_model`）。
+- [x] **Step 1**: 在 `syntax_tree.py` 顶部 import 统一加载器（实施时 `from .processor import _load_spacy_model`；2026-11-06 二次重构后改为 `from . import model_loader`）。
 - [x] **Step 2**: 替换 `spacy.load(SPACY_MODEL_NAME)`，保留异常写入 `_spacy_load_error`。
 - [x] **Step 3**: 加 `test_processor_and_syntax_tree_share_engine_status`（同进程两端引擎状态一致）。
 - [x] **Step 4 (Verify GREEN)**: `pytest tests/test_server_android_fallback.py tests/test_syntax_tree.py -q` 全绿。
@@ -377,6 +377,8 @@
 | --- | --- | --- |
 | T1 之后由 T8 统一提交 | 按语义拆成 4 个提交（`f4c09d7` docs / `ea8b6ee` tests / `af027f8` processor / `2f79ccb` syntax_tree） | 用户要求每完成一项立即提交，便于逐项审查 |
 | D4 只覆盖主分析路径 | A7 扩到所有 spaCy 调用点：`analyze_syntax_tree` 失败抛 `RuntimeError` | 用户 2026-11-06 拍板「覆盖」；纯 Python 句法树同属"错误标注" |
+| 计划以 PR #235 一次落地 | 实际三次合并：#235 先入 `master`（`b13eb68`）；#236 的 `model_loader` 抽取误合入 `fix/android-spacy-parity`（`dd08a95`）；#237 再把分支整体合入 `master`（`7073bac`，2026-11-06） | #235/#236 合并顺序错位；#237 把 `model_loader` 补齐到 `master` |
+| 加载器实现留在 `processor.py` | 2026-11-06 二次重构抽出 `delector/nlp_engine/model_loader.py`；`processor` 只保留转发入口与兼容代理，`syntax_tree` 直接依赖 `model_loader` | 消除 `processor` ↔ `syntax_tree` 的双向依赖（函数内 import 藏环） |
 
 ---
 

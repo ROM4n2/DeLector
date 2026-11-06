@@ -2,6 +2,7 @@
 
 - **状态**：ACCEPTED
 - **日期**：2026-11-06
+- **实施**：**已完成**（2026-11-06，PR #237 合入 `master`，merge commit `7073bac`；T5/T6 未执行，见 §4.2、§8）
 - **决策者**：席皓宇 (Haoyu Xi)
 - **关联 ADR**：
   - [[0018-performance-measurement-before-runtime-swap]]（§7.6：冷启动瓶颈是 spaCy 模型加载 ≈1.47s，占首启 58%；首选修法是惰性加载）
@@ -52,8 +53,8 @@ elif _android_runtime:
 2. **惰性加载**：导入期不加载模型；首次真正需要 NLP 时才加载（`_LazyNlp` + 双检锁）。
 3. **本地三级回退**：`spacy.load(名称)` → `importlib.import_module(名称).load()` → 数据目录 glob；任一成功即用。
 4. **失败硬失败**：三级回退全部失败时抛 `RuntimeError`，`NLP_ENGINE` 变为 `"spacy(加载失败)"`；**不得**回退纯 Python（No-Silent-Failure）。
-5. **禁止运行期下载**：Android 不得调用 `spacy.cli.download`、不得起 pip 子进程、不得联网。该门控必须放在 `_load_model_with_autodownload()` **内部**（`processor.py:96-114`），不能只依赖调用方不进入该函数。
-6. **统一加载器**：`syntax_tree.get_spacy_nlp()`（`syntax_tree.py:71-89`）收敛到 `processor._load_spacy_model()`，保留 `_spacy_load_error` 诊断语义；消除"同一进程两套引擎"。（2026-11-06 二次重构：加载器实现迁至 `delector/nlp_engine/model_loader.py`，`processor` 与 `syntax_tree` 均单向依赖该模块，消除此前"函数内 import 藏环"的双向依赖；行为语义不变。）
+5. **禁止运行期下载**：Android 不得调用 `spacy.cli.download`、不得起 pip 子进程、不得联网。该门控必须放在 `_load_model_with_autodownload()` **内部**（2026-11-06 二次重构后实现于 `delector/nlp_engine/model_loader.py`，原 `processor.py:96-114`），不能只依赖调用方不进入该函数。
+6. **统一加载器**：`syntax_tree.get_spacy_nlp()`（`syntax_tree.py:71-89`）收敛到 `model_loader._load_spacy_model()`（实施时经 `processor` 转发），保留 `_spacy_load_error` 诊断语义；消除"同一进程两套引擎"。（2026-11-06 二次重构：加载器实现迁至 `delector/nlp_engine/model_loader.py`，`processor` 与 `syntax_tree` 均单向依赖该模块，消除此前"函数内 import 藏环"的双向依赖；行为语义不变。）
 7. **桌面端行为不变**：本 ADR 只改 Android 路径；桌面仍走原有惰性加载与下载兜底语义。
 
 **2026-11-06 澄清（D4 适用范围）**：D4 的"失败硬失败"适用于**所有 spaCy 调用点**，不只主分析路径。`syntax_tree.analyze_syntax_tree()` 在 `nlp is None` 时原实现返回 `_analyze_syntax_tree_pure_python(...)`，属于同一类静默降级；现改为抛 `RuntimeError`，并区分"模型加载失败"与"无数据"。理由：句法专线的纯 Python 产物同样是**错误标注**（无依存/五场域/从句树）而非"缺字段"，与宁漏勿错冲突；不澄清会留下后端唯一一处仍可静默降级的 spaCy 消费点。该澄清由用户于 2026-11-06 拍板（A7）。
@@ -165,5 +166,5 @@ elif _android_runtime:
 ## 8. 证据等级与边界
 
 - **已实测**：APK 内含 `de_core_news_sm-3.8.0.dist-info/`（12 个文件）；设备上 `/api/settings` = `pure_python`；`/api/syntax/spacy-status` = `{"path":"spacy","error":""}`（2026-11-05 交接记录；本 ADR 编写时未复跑）。
-- **代码可读**：`processor.py:240-246`、`515-576`、`572`、`636`、`96-114`；`syntax_tree.py:71-89`；`routes/articles.py:170-172`；`tests/test_server_android_fallback.py:118`。
+- **代码可读**：`processor.py:240-246`、`515-576`、`572`、`636`；`model_loader.py`（加载器实现，2026-11-06 二次重构自 `processor.py:96-114` 迁入）；`syntax_tree.py:71-89`；`routes/articles.py:170-172`；`tests/test_server_android_fallback.py:118`。
 - **未测量（T5/T6 未执行，用户暂不开模拟器）**：Android 首次模型加载耗时、内存峰值、低端机 OOM、arm64 真机行为。T5/T6 执行时必须测量；不得把"未测量"写成"预计/约"，也不得用桌面基准顶替。

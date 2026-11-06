@@ -130,7 +130,7 @@ Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue
 ## 5. 已知问题与待决策
 
 1. **`pure_python` 降级（已由 ADR-0028 改为 spaCy 主路径，已实施）**
-   `delector/nlp_engine/processor.py:240-246` 的 `elif _android_runtime:` 按平台硬编码 `nlp = None`，主路径走纯 Python——这是**修复前状态**。ADR-0028（`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`）已改为 spaCy 主路径：与桌面同口径，惰性加载 + 本地三级回退 + 失败硬失败（`spacy(加载失败)`）+ 禁止运行期 `spacy.cli.download`。截至 2026-11-06：**已实施**（`af027f8` 主路径、`2f79ccb` 共用加载器、`73d5442` 句法专线硬失败）；`tests/test_server_android_fallback.py` 的断言已是 `assert "ENGINE=spacy" in out`；**T5/T6 Android 测量未执行**。
+   `delector/nlp_engine/processor.py:240-246` 的 `elif _android_runtime:` 按平台硬编码 `nlp = None`，主路径走纯 Python——这是**修复前状态**。ADR-0028（`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`）已改为 spaCy 主路径：与桌面同口径，惰性加载 + 本地三级回退 + 失败硬失败（`spacy(加载失败)`）+ 禁止运行期 `spacy.cli.download`。截至 2026-11-06：**已实施并合并 `master`**（`af027f8` 主路径、`2f79ccb` 共用加载器、`73d5442` 句法专线硬失败；PR #237 合并 commit `7073bac`）；`tests/test_server_android_fallback.py` 的断言已是 `assert "ENGINE=spacy" in out`；**T5/T6 Android 测量未执行**。
    仍保留的硬约束：导入期不加载（启动页预算）、运行期禁止 `spacy.cli.download`（不联网/不起 pip 子进程）。**已删除**“无 dist-info ⇒ `spacy.load` 必失败”这一失效理由：APK 内含 `de_core_news_sm-3.8.0.dist-info/`（12 个文件），设备上 `spacy.load` 可成功。
    纯 Python 的能力缺口（修复前）：`case` 恒空、无 `dep/head_*`、`topology` 仅 `mittelfeld`、`clause_tree` 单节点 `hauptsatz`、可分动词不识别；其中 `pos` 启发式会**标错**词性，判据"宁漏勿错"因此否决保留纯 Python。
    同一进程的两层语义（主路径纯 Python；句法专线 `syntax_tree.get_spacy_nlp()` 按需加载真模型）**已消除**（`2f79ccb`）：两端共用同一加载器与失败语义。
