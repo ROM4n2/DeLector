@@ -905,7 +905,9 @@ export const Companion = {
     document.querySelectorAll('.mascot-choice-btn').forEach(btn => {
       const char = btn.getAttribute('data-char');
       if (char) {
-        btn.classList.toggle('active', char === this.charId);
+        const isActive = char === this.charId;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
       }
     });
 
@@ -918,8 +920,10 @@ export const Companion = {
     // 3. Sound toggle UI
     const soundIcon = document.getElementById('studio-sound-icon');
     const soundLabel = document.getElementById('studio-sound-label');
+    const soundBtn = document.getElementById('studio-sound-btn');
     if (soundIcon) soundIcon.textContent = this.soundEnabled ? '🔊' : '🔇';
     if (soundLabel) soundLabel.textContent = this.soundEnabled ? '发声已开启' : '发声已静音';
+    if (soundBtn) soundBtn.setAttribute('aria-pressed', String(this.soundEnabled));
 
     // 4. Status Tag
     const tag = document.getElementById('mascot-status-tag');
@@ -942,7 +946,9 @@ export const Companion = {
     document.querySelectorAll('.panel-char-btn').forEach(btn => {
       const char = btn.getAttribute('data-char');
       if (char) {
-        btn.classList.toggle('active', char === this.charId);
+        const isActive = char === this.charId;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
       }
     });
 
@@ -953,7 +959,9 @@ export const Companion = {
 
     const soundBtn = document.getElementById('panel-sound');
     if (soundBtn) {
-      soundBtn.textContent = this.soundEnabled ? '🔊' : '🔇';
+      const soundIcon = document.getElementById('panel-sound-icon');
+      if (soundIcon) soundIcon.textContent = this.soundEnabled ? '🔊' : '🔇';
+      soundBtn.setAttribute('aria-pressed', String(this.soundEnabled));
     }
   }
 };

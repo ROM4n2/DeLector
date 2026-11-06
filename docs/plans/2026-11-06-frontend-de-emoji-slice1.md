@@ -591,7 +591,55 @@
 
 | plan text | what was actually built | why |
 |---|---|---|
-| （空） | （空） | （执行期填写；任一行非空必须同步在 ADR-0029 追加「修正记录」） |
+| T2：`<span class="exam-module-de">Schreiben</span>`（scaffold 示例无括号） | 实际保留括号：`(Schreiben)` | 任务 Injected Instincts 明确「德文名保留在括号内」；以更具体的约束为准，信息量不降 |
+| T6：仅列 `.panel-close` / `.panel-char-btn` / `#panel-sound` / `#panel-hide` | 额外给 4 个 `.panel-color-dot` 与 `#panel-color-custom` 补 `aria-label` | 它们是「无文字、无 aria」的按钮，T6 验收第 1 条要求全部按钮可命名；不改视觉、不扩文件 |
+| T7：仅列 role 按钮与 `#studio-sound-btn` | 额外给 5 个 `.mascot-color-dot` 与 `#studio-color-picker` 补 `aria-label`，🎨 加 `aria-hidden` | 同上：T7 验收第 3 条要求 studio 段每个 button 有可见文字或 `aria-label`；颜色色块原本只有 `title` |
+| T1：`aria-label` 基线「11 处」 | 实测源片段 11 处；若把生成物 `static/index.html` 计入则为 18 处 | 计量口径差异，非基线漂移；以源片段为准（与 ADR §11.1 一致），未触发 E1 |
+
+---
+
+## [NOTE] 验收回执（T10）
+
+- **日期**：2026-11-06
+- **执行者回执**：Agent（结构项）；**人工视觉签字**：待用户（T10 为 HITL，未代签）
+- **分支**：`feat/frontend-de-emoji-slice1`
+- **提交范围**：T0–T7、T9、T10 回执；T8 在独立分支 `docs/readme-zh-only`（PR #248）
+
+### 1. ADR §6 六条失败信号（逐条）
+
+| # | 信号 | 判定 | 证据 |
+|---|---|---|---|
+| 1 | 删字形后控件既无可见文字、又无 `aria-label` / `aria-pressed` | **未触发** | `companion.html` 15 按钮 unnamed = 0；studio 区域 14 按钮 unnamed = 0；exam / nav 全部有可见文字 |
+| 2 | token 迁移导致未要求页面 >5% 视觉差异 | **未触发** | 未做 token 迁移；`style.css` 仅新增 `.exam-module-card` 邻域 3 条规则 |
+| 3 | 三个独立评审者判断「删完更空、像没做完」 | **未触发（无评审数据）** | 未组织 3 份独立评审；不以此作为通过依据，视觉判断留给用户签字 |
+| 4 | README 删 emoji 后总行数上升 | **未触发** | PR #248：226 行 → 226 行，11 行增 / 11 行删，无散文填充 |
+| 5 | 图标集 >15 个或 >12KB | **未触发** | 本切片未引入任何图标集 / SVG 资产 |
+| 6 | 第一切片 3 天未收敛 | **未触发** | 同一日内完成 T0–T7、T9 |
+
+### 2. ADR §11.2 失效条件（E1 / E2 / E7）
+
+| 条件 | 判定 | 证据 |
+|---|---|---|
+| E1：emoji 基数变化 >±20%（全站 551 → 441–661 之外） | **未触发** | 切片 5 文件合计 61 簇；源片段 `aria-label` 仍为 11 处，与 §11.1 一致 |
+| E2：垂直切片 3 天未收敛 | **未触发** | 同日收敛 |
+| E7：切片文件被重写 / 删除导致 file:line 失效 | **未触发** | 4 个文件均存在，T1 行号与执行时一致 |
+
+### 3. 不变量 I2 / I5
+
+- I2：`git diff --name-only origin/master...HEAD` 共 12 个文件，无依赖清单、无 `static/sw.js`、无 CSP。
+- I5：改动仅限 `exam.html` / `nav_mobile.html` / `cards.js` / `companion.html` / `companion.js` / `progress.html` / `style.css` + 生成物 + 4 份文档；未扫其余 37 个文件。
+
+### 4. 命令级回执
+
+- `python tools/check_index_html_sync.py` → `PASS ... sha256 契约一致`，exit 0。
+- `.venv\Scripts\python.exe -m pytest tests/test_exam_domain.py tests/test_german_workbench.py tests/test_search_ui.py tests/test_cards_state_split.py tests/test_cards_count_probe.py tests/test_check_index_html_sync.py tests/test_frontend_guards.py -q` → **185 passed, 1 warning**，exit 0。
+- emoji 计数：`exam.html` 非注释 0；`nav_mobile.html` 0；`cards.js` 空态 0；`companion.html` 仅保留 4 个角色字形；`progress.html` studio 仅保留 4 个角色字形 + 🎨（已 `aria-hidden`）。
+
+### 5. 结论
+
+- **结构验收：通过**（I1 在全部切片控件上成立；无停止门触发）。
+- **人工视觉签字：待用户**。签字前**不推广第二批**，不开始图标集 vendor，不做角色 SVG 化。
+- 已登记偏差见 `Deviation Table` 与 ADR-0029 §15。
 
 ---
 
@@ -599,11 +647,16 @@
 
 | 文件 | 彩色 emoji 簇（前） | 后 | 交互控件数 | 无可见文字控件（前） | 仅有 title（WARN） |
 |---|---|---|---|---|---|
-| `static/views/exam.html` | 待填 | 0 | 待填 | 待填 | 待填 |
-| `static/layout/nav_mobile.html` | 待填 | 0 | 8 | 0 | 0 |
-| `static/js/cards.js`（空态块） | 待填 | 0 | 0 | 0 | 0 |
-| `static/layout/companion.html` | 待填 | 保留 4 角色字形 | 待填 | 待填 | 4 |
-| `static/views/progress.html`（studio 段） | 待填 | 保留 4 角色字形（T7 只补 aria） | 待填 | 待填 | 5 |
+| `static/views/exam.html` | 33（非注释；全文件 35） | 0 | 31 | 0 | 3（均有可见文字，title 仅为补充） |
+| `static/layout/nav_mobile.html` | 8 | 0 | 8 | 0 | 0 |
+| `static/js/cards.js`（空态块） | 3（🎉/🛡️/🎴） | 0 | 0 | 0 | 0 |
+| `static/layout/companion.html` | 8 | 保留 4 角色字形 | 15 | 6（`.panel-close`、`#panel-sound`、4 个 `.panel-color-dot`） | 7（4 角色 + 自定义 + 上传 + 收起） |
+| `static/views/progress.html`（studio 段） | 9（studio 段） | 保留 4 角色字形（T7 只补 aria） | 10 | 0 | 5 |
+
+**基线核对（T1 Step 3）：**
+- 源片段（排除生成物 `static/index.html`）的 `aria-label` = **11 处**，与 ADR §11.1 快照一致；另有 1 处 `aria-labelledby`（`home.html` 的 `#satz-lab`）。
+- 本切片 5 个文件的彩色 emoji 簇合计 = **61**（exam 33 + nav 8 + cards 空态 3 + companion 8 + progress studio 9），远小于全站 551，未触发 E1。
+- 4 个切片文件在 `master` 上均存在且行号与计划一致，未触发 E7。
 
 ---
 
@@ -617,3 +670,76 @@
 - Android 端 UI 验证（本切片只保证 Web 侧源片段；Android assets 随整树复制被动更新）。
 - 任何视觉回归测试基建的引入（本仓无此基建，不在此计划内新建）。
 - 角色 SVG 化、图标集 vendor、`svg-character-spec.md` 的修改。
+
+### T1 逐控件清点（明细）
+
+| 文件 | 行 | id | 删字形后可见文字 | title | 可访问名来源 | 结论 |
+|---|---|---|---|---|---|---|
+| `static/views/exam.html` | 5 | （无 id） | ← 返回文库 | — | 可见文字 | OK |
+| `static/views/exam.html` | 9 | exam-level-a1 | A1 | — | 可见文字 | OK |
+| `static/views/exam.html` | 12 | exam-card-writing | 写作专项 (Schreiben) | — | 可见文字 | OK |
+| `static/views/exam.html` | 13 | exam-card-hoeren | 听力模考 (Hörverstehen) | — | 可见文字 | OK |
+| `static/views/exam.html` | 14 | exam-card-lesen | 阅读工坊 (Leseverstehen) | — | 可见文字 | OK |
+| `static/views/exam.html` | 15 | exam-card-sprechen | 口语问答 (Sprechen) | — | 可见文字 | OK |
+| `static/views/exam.html` | 16 | exam-card-vocab | 官方考纲词表 (Wortliste) | — | 可见文字 | OK |
+| `static/views/exam.html` | 17 | exam-card-listen | 听力微训 (Hörlabor) | — | 可见文字 | OK |
+| `static/views/exam.html` | 18 | exam-card-hardsent | 长难句 (Satz-Labor) | — | 可见文字 | OK |
+| `static/views/exam.html` | 24 | exam-tab-formular | 歌德 A1 Teil 1 填表专项 (Formular-Training) | — | 可见文字 | OK |
+| `static/views/exam.html` | 31 | exam-tab-email | 歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab) | — | 可见文字 | OK |
+| `static/views/exam.html` | 52 | （无 id） | ◀ 上一题 | — | 可见文字 | OK |
+| `static/views/exam.html` | 55 | （无 id） | 随机练习 | — | 可见文字 | OK |
+| `static/views/exam.html` | 61 | （无 id） | 下一题 ▶ | — | 可见文字 | OK |
+| `static/views/exam.html` | 88 | a1-form-check-btn | 立即批改 (5 分) | — | 可见文字 | OK |
+| `static/views/exam.html` | 95 | （无 id） | 重填 | — | 可见文字 | OK |
+| `static/views/exam.html` | 119 | （无 id） | ◀ 上一题 | — | 可见文字 | OK |
+| `static/views/exam.html` | 122 | （无 id） | 随机场景 | — | 可见文字 | OK |
+| `static/views/exam.html` | 125 | （无 id） | 下一题 ▶ | — | 可见文字 | OK |
+| `static/views/exam.html` | 182 | （无 id） | ⚡ 智能诊断与判分 | — | 可见文字 | OK |
+| `static/views/exam.html` | 185 | （无 id） | 套用考场满分模板 | — | 可见文字 | OK |
+| `static/views/exam.html` | 191 | （无 id） | ️ 清空 | — | 可见文字 | OK |
+| `static/views/exam.html` | 221 | a1-tab-vocab | 官方考纲词表 (700+) | — | 可见文字 | OK |
+| `static/views/exam.html` | 228 | a1-tab-hoeren | 听力全真模考 (15题×5套) | — | 可见文字 | OK |
+| `static/views/exam.html` | 235 | a1-tab-lesen | 实用阅读工坊 (15题×6套) | — | 可见文字 | OK |
+| `static/views/exam.html` | 242 | a1-tab-teil2 | 口语 Teil 2 问答 | — | 可见文字 | OK |
+| `static/views/exam.html` | 249 | a1-tab-teil3 | 口语 Teil 3 请求 | — | 可见文字 | OK |
+| `static/views/exam.html` | 276 | exam-mode-btn-deck | 扑克牌盒 | 扑克牌叠层翻页模式 | 可见文字 | OK |
+| `static/views/exam.html` | 284 | exam-mode-btn-grid | 全景目录 | 目录全景平铺列表 | 可见文字 | OK |
+| `static/views/exam.html` | 309 | （无 id） | ⟲ 换材料 | 返回材料选择 | 可见文字 | OK |
+| `static/views/exam.html` | 330 | （无 id） | ⟲ 换材料 | 返回材料选择 | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 2 | mob-btn-home | 文库 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 10 | mob-btn-progress | 台账 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 18 | mob-btn-writer | 写作 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 26 | mob-btn-exam | 备考 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 34 | mob-btn-cards | 卡片 (0) | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 42 | mob-btn-german | 背词 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 50 | mob-btn-search | 检索 | — | 可见文字 | OK |
+| `static/layout/nav_mobile.html` | 58 | mob-btn-settings | 设置 | — | 可见文字 | OK |
+| `static/layout/companion.html` | 11 | companion-avatar | — | — | `aria-label` | OK |
+| `static/layout/companion.html` | 22 | （无 id） | ✕ | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 27 | （无 id） | — | 歌德猫头鹰 | 仅有 title | WARN |
+| `static/layout/companion.html` | 35 | （无 id） | — | 学者猫 | 仅有 title | WARN |
+| `static/layout/companion.html` | 43 | （无 id） | — | 灵动狐 | 仅有 title | WARN |
+| `static/layout/companion.html` | 51 | （无 id） | — | 包豪斯机甲 | 仅有 title | WARN |
+| `static/layout/companion.html` | 59 | panel-btn-custom | ✦ | 自定义角色 | 仅有 title | WARN |
+| `static/layout/companion.html` | 69 | （无 id） | — | 上传自定义 SVG 角色 | 仅有 title | WARN |
+| `static/layout/companion.html` | 94 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 99 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 104 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 109 | （无 id） | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 122 | panel-say | 说句话 | — | 可见文字 | OK |
+| `static/layout/companion.html` | 129 | panel-sound | — | — | 无 | UNNAMED |
+| `static/layout/companion.html` | 136 | panel-hide | ✕ | 收起伴读悬浮球 | 仅有 title | WARN |
+| `static/views/progress.html` | 190 | （无 id） | Eule (歌德猫头鹰) | — | 可见文字 | OK |
+| `static/views/progress.html` | 198 | （无 id） | Katze (学者猫) | — | 可见文字 | OK |
+| `static/views/progress.html` | 206 | （无 id） | Fuchs (灵动狐) | — | 可见文字 | OK |
+| `static/views/progress.html` | 214 | （无 id） | Roboter (包豪斯机甲) | — | 可见文字 | OK |
+| `static/views/progress.html` | 222 | studio-btn-custom | ✦ 自定义 | — | 可见文字 | OK |
+| `static/views/progress.html` | 232 | （无 id） | 上传 SVG | 上传自定义 SVG 矢量伴读角色 | 可见文字 | OK |
+| `static/views/progress.html` | 269 | （无 id） | — | 歌德紫 | 仅有 title | WARN |
+| `static/views/progress.html` | 276 | （无 id） | — | 朱砂橘 | 仅有 title | WARN |
+| `static/views/progress.html` | 283 | （无 id） | — | 学者绿 | 仅有 title | WARN |
+| `static/views/progress.html` | 290 | （无 id） | — | 包豪斯蓝 | 仅有 title | WARN |
+| `static/views/progress.html` | 297 | （无 id） | — | 墨黑 | 仅有 title | WARN |
+| `static/views/progress.html` | 326 | （无 id） | 试听伴读鼓励 | — | 可见文字 | OK |
+| `static/views/progress.html` | 333 | studio-sound-btn | 发声已开启 | — | 可见文字 | OK |
+| `static/views/progress.html` | 342 | （无 id） | ✓ 保存伴读设置 | — | 可见文字 | OK |

@@ -656,4 +656,17 @@ DeLector 设计系统历经四个阶段的演进与提炼，确立了以**“真
 
 ---
 
+## 10. 字形与图标 (Glyph & Icon)
+
+> 本节只写可执行条款；论证、证据与失效条件见 [ADR-0029](adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)。
+
+1. **任何字形都不得是意义的唯一载体。** 删除任一 emoji / 符号后，控件的可访问名必须来自可见文字、`aria-label` 或 `aria-labelledby`；`title` 不计入。（ADR-0029 §3 第 1 条、§13.2）
+2. **有可见文字的位置，删字形、保留文字**，不把 emoji 换成 SVG。（ADR-0029 §3 第 2–3 条、§5 A 段）
+3. **无可见文字的控件，先补 `aria-label` / `aria-pressed`**，其次才考虑图标；图标只用于「补文字会改变布局契约」的场合。（ADR-0029 §3 第 3 条、§5 B/C 段）
+4. **图标只允许 inline SVG**：不使用 sprite、icon font、CSS mask 作为唯一载体；SVG 必须 `aria-hidden="true"` 或 `role="img"` + `aria-label` 二选一。（ADR-0029 §4、§5 C 段）
+5. **状态类控件必须暴露 `aria-pressed`**，且与视觉选中态在同一同步函数内更新，避免 DOM 与视觉分叉。（ADR-0029 §5 B 段、§13.2）
+6. **受保护字形**：角色身份、声音开关、播放控件在替换落地前可保留字形，但必须同时具备第 1 条的可访问名；白名单变更需新 ADR 或 ADR 修正记录。（ADR-0029 §3 第 6 条、§12）
+
+---
+
 *本规范由 DeLector 前端架构与 UI/UX 委员会统一制定并维护，作为全站组件迭代与视觉重塑的设计纲要。**Token 与排印数值的唯一真实数据源 (Single Source of Truth) 是 `static/css/tokens.css`**——本文件 §4/§5 是其同步视图，数值以该文件为准。*

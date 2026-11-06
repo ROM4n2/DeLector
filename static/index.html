@@ -732,33 +732,41 @@
                       type="button"
                       class="mascot-choice-btn active"
                       data-char="owl"
+                      aria-label="歌德猫头鹰"
+                      aria-pressed="true"
                       onclick="window.Companion.setCharacter('owl')"
                     >
-                      🦉 Eule (歌德猫头鹰)
+                      <span aria-hidden="true">🦉</span> Eule (歌德猫头鹰)
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn"
                       data-char="cat"
+                      aria-label="学者猫"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('cat')"
                     >
-                      🐱 Katze (学者猫)
+                      <span aria-hidden="true">🐱</span> Katze (学者猫)
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn"
                       data-char="fox"
+                      aria-label="灵动狐"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('fox')"
                     >
-                      🦊 Fuchs (灵动狐)
+                      <span aria-hidden="true">🦊</span> Fuchs (灵动狐)
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn"
                       data-char="robot"
+                      aria-label="包豪斯机甲"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('robot')"
                     >
-                      🤖 Roboter (包豪斯机甲)
+                      <span aria-hidden="true">🤖</span> Roboter (包豪斯机甲)
                     </button>
                     <button
                       type="button"
@@ -766,17 +774,20 @@
                       id="studio-btn-custom"
                       data-char="custom"
                       style="display: none"
+                      aria-label="自定义角色"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('custom')"
                     >
-                      ✦ 自定义
+                      <span aria-hidden="true">✦</span> 自定义
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn mascot-upload-btn"
+                      aria-label="上传自定义 SVG 角色"
                       onclick="window.Companion.triggerUpload('studio')"
                       title="上传自定义 SVG 矢量伴读角色"
                     >
-                      📁 上传 SVG
+                      <span aria-hidden="true">📁</span> 上传 SVG
                     </button>
                     <input
                       id="studio-svg-input"
@@ -811,6 +822,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #6b4f8f"
+                      aria-label="角色配色：歌德紫"
                       title="歌德紫"
                       onclick="window.Companion.setColor('#6b4f8f')"
                     ></button>
@@ -818,6 +830,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #d9663f"
+                      aria-label="角色配色：朱砂橘"
                       title="朱砂橘"
                       onclick="window.Companion.setColor('#d9663f')"
                     ></button>
@@ -825,6 +838,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #4f8f6b"
+                      aria-label="角色配色：学者绿"
                       title="学者绿"
                       onclick="window.Companion.setColor('#4f8f6b')"
                     ></button>
@@ -832,6 +846,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #4a6fa5"
+                      aria-label="角色配色：包豪斯蓝"
                       title="包豪斯蓝"
                       onclick="window.Companion.setColor('#4a6fa5')"
                     ></button>
@@ -839,6 +854,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #2c2c2c"
+                      aria-label="角色配色：墨黑"
                       title="墨黑"
                       onclick="window.Companion.setColor('#2c2c2c')"
                     ></button>
@@ -846,10 +862,11 @@
                       class="mascot-color-custom-btn"
                       title="自定义 HEX 配色"
                     >
-                      <span>🎨</span>
+                      <span aria-hidden="true">🎨</span>
                       <input
                         type="color"
                         id="studio-color-picker"
+                        aria-label="自定义角色配色"
                         style="
                           opacity: 0;
                           position: absolute;
@@ -875,9 +892,11 @@
                     type="button"
                     class="btn btn-ghost"
                     id="studio-sound-btn"
+                    aria-label="伴读发声"
+                    aria-pressed="true"
                     onclick="window.Companion.toggleSound()"
                   >
-                    <span id="studio-sound-icon">🔊</span>
+                    <span id="studio-sound-icon" aria-hidden="true">🔊</span>
                     <span id="studio-sound-label">发声已开启</span>
                   </button>
                   <button
@@ -2684,13 +2703,13 @@
           <button id="exam-level-a1" class="exam-level-tab active">A1</button>
         </div>
         <div id="exam-module-grid" class="exam-module-grid">
-          <button id="exam-card-writing" class="exam-module-card active" onclick="setExamModule('writing')">📝 写作专项 (Schreiben)</button>
-          <button id="exam-card-hoeren" class="exam-module-card" onclick="setExamModule('hoeren')">🎧 听力模考 (Hörverstehen)</button>
-          <button id="exam-card-lesen" class="exam-module-card" onclick="setExamModule('lesen')">📖 阅读工坊 (Leseverstehen)</button>
-          <button id="exam-card-sprechen" class="exam-module-card" onclick="setExamModule('sprechen')">💬 口语问答 (Sprechen)</button>
-          <button id="exam-card-vocab" class="exam-module-card" onclick="setExamModule('vocab')">📖 官方考纲词表 (Wortliste)</button>
-          <button id="exam-card-listen" class="exam-module-card" onclick="setExamModule('listen')">🎧 听力微训 (Hörlabor)</button>
-          <button id="exam-card-hardsent" class="exam-module-card" onclick="setExamModule('hardsent')">✍️ 长难句 (Satz-Labor)</button>
+          <button id="exam-card-writing" class="exam-module-card active" onclick="setExamModule('writing')"><span class="exam-module-index" aria-hidden="true">01</span><span class="exam-module-label">写作专项<span class="exam-module-de">(Schreiben)</span></span></button>
+          <button id="exam-card-hoeren" class="exam-module-card" onclick="setExamModule('hoeren')"><span class="exam-module-index" aria-hidden="true">02</span><span class="exam-module-label">听力模考<span class="exam-module-de">(Hörverstehen)</span></span></button>
+          <button id="exam-card-lesen" class="exam-module-card" onclick="setExamModule('lesen')"><span class="exam-module-index" aria-hidden="true">03</span><span class="exam-module-label">阅读工坊<span class="exam-module-de">(Leseverstehen)</span></span></button>
+          <button id="exam-card-sprechen" class="exam-module-card" onclick="setExamModule('sprechen')"><span class="exam-module-index" aria-hidden="true">04</span><span class="exam-module-label">口语问答<span class="exam-module-de">(Sprechen)</span></span></button>
+          <button id="exam-card-vocab" class="exam-module-card" onclick="setExamModule('vocab')"><span class="exam-module-index" aria-hidden="true">05</span><span class="exam-module-label">官方考纲词表<span class="exam-module-de">(Wortliste)</span></span></button>
+          <button id="exam-card-listen" class="exam-module-card" onclick="setExamModule('listen')"><span class="exam-module-index" aria-hidden="true">06</span><span class="exam-module-label">听力微训<span class="exam-module-de">(Hörlabor)</span></span></button>
+          <button id="exam-card-hardsent" class="exam-module-card" onclick="setExamModule('hardsent')"><span class="exam-module-index" aria-hidden="true">07</span><span class="exam-module-label">长难句<span class="exam-module-de">(Satz-Labor)</span></span></button>
         </div>
 
         <!-- ── 模块面板：exam-card-* 页签点击 setExamModule() 点亮对应面板 ── -->
@@ -2701,14 +2720,14 @@
               class="exam-panel-tab active"
               onclick="setExamWritingTab('formular')"
             >
-              📝 歌德 A1 Teil 1 填表专项 (Formular-Training)
+              歌德 A1 Teil 1 填表专项 (Formular-Training)
             </button>
             <button
               id="exam-tab-email"
               class="exam-panel-tab"
               onclick="setExamWritingTab('email')"
             >
-              ✉️ 歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab)
+              歌德 A1 Teil 2 30词短电邮 (E-Mail/Brief Lab)
             </button>
           </div>
 
@@ -2731,7 +2750,7 @@
                     class="btn btn-ghost btn-sm"
                     onclick="randomA1Formular()"
                   >
-                    🎲 随机练习
+                    随机练习
                   </button>
                   <button class="btn btn-ghost btn-sm" onclick="nextA1Formular()">
                     下一题 ▶
@@ -2742,12 +2761,12 @@
               <div class="a1-formular-layout">
                 <!-- Left: Reading Passage Card -->
                 <div class="a1-passage-card">
-                  <div class="a1-card-label">📖 考场情景短文 (Lesetext)</div>
+                  <div class="a1-card-label">考场情景短文 (Lesetext)</div>
                   <h3 id="a1-form-title" class="a1-form-title"></h3>
                   <p id="a1-form-scenario" class="a1-form-scenario-desc"></p>
                   <div id="a1-form-passage" class="a1-form-passage-box"></div>
                   <div class="a1-exam-tip-box">
-                    💡 <b>填表应试技巧</b>：认真阅读短文，区分姓 (Familienname)
+                    <b>填表应试技巧</b>：认真阅读短文，区分姓 (Familienname)
                     与名
                     (Vorname)，注意德语日期格式（日.月）与数字，不确定大小写时建议按原词抄写。
                   </div>
@@ -2756,7 +2775,7 @@
                 <!-- Right: Authentic German Formular Table -->
                 <div class="a1-formular-card">
                   <div class="a1-card-label">
-                    📝 官方答题表格 (Anmeldeformular)
+                    官方答题表格 (Anmeldeformular)
                   </div>
                   <div id="a1-formular-container" class="a1-formular-table"></div>
                   <div class="a1-formular-actions">
@@ -2765,10 +2784,10 @@
                       id="a1-form-check-btn"
                       onclick="checkA1Formular()"
                     >
-                      🎯 立即批改 (5 分)
+                      立即批改 (5 分)
                     </button>
                     <button class="btn btn-ghost" onclick="resetA1Formular()">
-                      🔄 重填
+                      重填
                     </button>
                   </div>
                   <div
@@ -2795,7 +2814,7 @@
                     ◀ 上一题
                   </button>
                   <button class="btn btn-ghost btn-sm" onclick="randomA1Email()">
-                    🎲 随机场景
+                    随机场景
                   </button>
                   <button class="btn btn-ghost btn-sm" onclick="nextA1Email()">
                     下一题 ▶
@@ -2808,12 +2827,12 @@
                 <div class="a1-email-editor-card">
                   <div class="a1-prompt-banner">
                     <div class="a1-card-label">
-                      📋 考场题目要求 (Aufgabenstellung)
+                      考场题目要求 (Aufgabenstellung)
                     </div>
                     <div id="a1-email-prompt" class="a1-email-prompt-text"></div>
                     <div class="a1-leitpunkte-box">
                       <div class="a1-leitpunkte-label">
-                        🎯 必须覆盖的 3 个导向点 (3 Leitpunkte):
+                        必须覆盖的 3 个导向点 (3 Leitpunkte):
                       </div>
                       <div
                         id="a1-email-leitpunkte"
@@ -2861,10 +2880,10 @@
                       class="btn btn-ghost"
                       onclick="applyA1EmailTemplate()"
                     >
-                      📋 套用考场满分模板
+                      套用考场满分模板
                     </button>
                     <button class="btn btn-ghost" onclick="clearA1Email()">
-                      🗑️ 清空
+                      清空
                     </button>
                   </div>
 
@@ -2877,12 +2896,12 @@
                 <!-- Right: Model Text & Useful Phrases -->
                 <div class="a1-email-sample-card">
                   <div class="a1-card-label">
-                    🌟 官方考纲满分范文 (Musterbrief)
+                    官方考纲满分范文 (Musterbrief)
                   </div>
                   <div id="a1-email-sample-box" class="a1-email-sample-box"></div>
 
                   <div class="a1-card-label" style="margin-top: 1rem">
-                    💬 本场景高频黄金句型
+                    本场景高频黄金句型
                   </div>
                   <div id="a1-email-phrases-box" class="a1-phrases-box"></div>
                 </div>
@@ -2898,41 +2917,41 @@
                   class="a1-mode-tab active"
                   onclick="setA1Mode('vocab')"
                 >
-                  📖 官方考纲词表 (700+)
+                  官方考纲词表 (700+)
                 </button>
                 <button
                   id="a1-tab-hoeren"
                   class="a1-mode-tab"
                   onclick="setA1Mode('hoeren')"
                 >
-                  🎧 听力全真模考 (15题×5套)
+                  听力全真模考 (15题×5套)
                 </button>
                 <button
                   id="a1-tab-lesen"
                   class="a1-mode-tab"
                   onclick="setA1Mode('lesen')"
                 >
-                  📖 实用阅读工坊 (15题×6套)
+                  实用阅读工坊 (15题×6套)
                 </button>
                 <button
                   id="a1-tab-teil2"
                   class="a1-mode-tab"
                   onclick="setA1Mode('teil2')"
                 >
-                  💬 口语 Teil 2 问答
+                  口语 Teil 2 问答
                 </button>
                 <button
                   id="a1-tab-teil3"
                   class="a1-mode-tab"
                   onclick="setA1Mode('teil3')"
                 >
-                  🙋 口语 Teil 3 请求
+                  口语 Teil 3 请求
                 </button>
                 <a
                   href="/api/a1/export/anki"
                   class="btn btn-ghost btn-xs a1-anki-export-btn"
                   title="一键导出官方歌德 A1 词表到 Anki 牌组"
-                  >📥 导出 A1 牌组</a
+                  >导出 A1 牌组</a
                 >
               </div>
               <div id="a1-topic-pills" class="a1-topic-pills"></div>
@@ -2941,7 +2960,7 @@
                   type="text"
                   class="modal-input a1-search-input"
                   id="a1-search-input"
-                  placeholder="🔍 搜索 A1 单词 / 释义 / 考纲例句 (如: Brot, fahren, 苹果)..."
+                  placeholder="搜索 A1 单词 / 释义 / 考纲例句 (如: Brot, fahren, 苹果)..."
                   oninput="searchA1Vocab(this.value)"
                 />
               </div>
@@ -2954,7 +2973,7 @@
               onclick="setA1CardViewMode('deck')"
               title="扑克牌叠层翻页模式"
             >
-              🎴 扑克牌盒
+              扑克牌盒
             </button>
             <button
               id="exam-mode-btn-grid"
@@ -2962,7 +2981,7 @@
               onclick="setA1CardViewMode('grid')"
               title="目录全景平铺列表"
             >
-              📑 全景目录
+              全景目录
             </button>
           </div>
 
@@ -2977,7 +2996,7 @@
         <section id="exam-listen" class="exam-module-panel hidden">
           <div class="listen-lab-topbar">
             <div>
-              <div class="a1-card-label">🎧 听力微训 · Hörlabor</div>
+              <div class="a1-card-label">听力微训 · Hörlabor</div>
               <div class="listen-subhead">碎片化听力精听 / 听写 / 填空 · TTS 按需合成 · 材料与遇见区/听力句库同源</div>
             </div>
             <div class="a1-topbar-actions">
@@ -2998,7 +3017,7 @@
         <section id="exam-hard-sentences" class="exam-module-panel hidden">
           <div class="hs-topbar">
             <div>
-              <div class="a1-card-label">✍️ 长难句精读 · Satz-Labor</div>
+              <div class="a1-card-label">长难句精读 · Satz-Labor</div>
               <div class="hs-subhead">跨语料难度榜 → 尝试拆解 → 揭示句法树 → 逐词释义 → 加入复习盒</div>
             </div>
             <div class="a1-topbar-actions">
@@ -3112,7 +3131,6 @@
         id="mob-btn-home"
         onclick="show('home')"
       >
-        <span class="mob-icon">📖</span>
         <span class="mob-label">文库</span>
       </button>
       <button
@@ -3120,7 +3138,6 @@
         id="mob-btn-progress"
         onclick="show('progress')"
       >
-        <span class="mob-icon">📊</span>
         <span class="mob-label">台账</span>
       </button>
       <button
@@ -3128,7 +3145,6 @@
         id="mob-btn-writer"
         onclick="show('writer')"
       >
-        <span class="mob-icon">✍️</span>
         <span class="mob-label">写作</span>
       </button>
       <button
@@ -3136,7 +3152,6 @@
         id="mob-btn-exam"
         onclick="show('exam')"
       >
-        <span class="mob-icon">🎯</span>
         <span class="mob-label">备考</span>
       </button>
       <button
@@ -3144,7 +3159,6 @@
         id="mob-btn-cards"
         onclick="show('cards')"
       >
-        <span class="mob-icon">🎴</span>
         <span class="mob-label">卡片 (<span id="mob-card-count">0</span>)</span>
       </button>
       <button
@@ -3152,7 +3166,6 @@
         id="mob-btn-german"
         onclick="show('german')"
       >
-        <span class="mob-icon">📚</span>
         <span class="mob-label">背词</span>
       </button>
       <button
@@ -3160,7 +3173,6 @@
         id="mob-btn-search"
         onclick="show('search')"
       >
-        <span class="mob-icon">🔍</span>
         <span class="mob-label">检索</span>
       </button>
       <button
@@ -3168,7 +3180,6 @@
         id="mob-btn-settings"
         onclick="openSettingsModal()"
       >
-        <span class="mob-icon">⚙️</span>
         <span class="mob-label">设置</span>
       </button>
     </nav>
@@ -3195,59 +3206,70 @@
       <div id="companion-panel" class="companion-panel hidden">
         <div class="panel-head">
           <span class="panel-title">伴读角色设置</span>
-          <button class="panel-close" onclick="window.Companion.onClick()">
-            ✕
+          <button class="panel-close" aria-label="关闭伴读设置" onclick="window.Companion.onClick()">
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
         <div class="panel-row" id="panel-characters">
           <button
             class="panel-char-btn active"
             data-char="owl"
+            aria-label="歌德猫头鹰"
+            aria-pressed="true"
             onclick="window.Companion.setCharacter('owl')"
             title="歌德猫头鹰"
           >
-            🦉
+            <span aria-hidden="true">🦉</span>
           </button>
           <button
             class="panel-char-btn"
             data-char="cat"
+            aria-label="学者猫"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('cat')"
             title="学者猫"
           >
-            🐱
+            <span aria-hidden="true">🐱</span>
           </button>
           <button
             class="panel-char-btn"
             data-char="fox"
+            aria-label="灵动狐"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('fox')"
             title="灵动狐"
           >
-            🦊
+            <span aria-hidden="true">🦊</span>
           </button>
           <button
             class="panel-char-btn"
             data-char="robot"
+            aria-label="包豪斯机甲"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('robot')"
             title="包豪斯机甲"
           >
-            🤖
+            <span aria-hidden="true">🤖</span>
           </button>
           <button
             class="panel-char-btn mascot-custom-btn"
             id="panel-btn-custom"
             data-char="custom"
             style="display: none"
+            aria-label="自定义角色"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('custom')"
             title="自定义角色"
           >
-            ✦
+            <span aria-hidden="true">✦</span>
           </button>
           <button
             class="panel-char-btn panel-upload-btn"
+            aria-label="上传自定义 SVG 角色"
             onclick="window.Companion.triggerUpload('panel')"
             title="上传自定义 SVG 角色"
           >
-            📁
+            <span aria-hidden="true">📁</span>
           </button>
           <input
             id="panel-svg-input"
@@ -3270,27 +3292,32 @@
           <button
             class="panel-color-dot"
             style="background: #6b4f8f"
+            aria-label="角色配色：紫罗兰"
             onclick="window.Companion.setColor('#6b4f8f')"
           ></button>
           <button
             class="panel-color-dot"
             style="background: #d9663f"
+            aria-label="角色配色：赭橙"
             onclick="window.Companion.setColor('#d9663f')"
           ></button>
           <button
             class="panel-color-dot"
             style="background: #4f8f6b"
+            aria-label="角色配色：苔绿"
             onclick="window.Companion.setColor('#4f8f6b')"
           ></button>
           <button
             class="panel-color-dot"
             style="background: #4a6fa5"
+            aria-label="角色配色：靛蓝"
             onclick="window.Companion.setColor('#4a6fa5')"
           ></button>
           <input
             type="color"
             id="panel-color-custom"
             class="panel-color-custom"
+            aria-label="自定义角色配色"
             onchange="window.Companion.setColor(this.value)"
           />
         </div>
@@ -3305,17 +3332,20 @@
           <button
             id="panel-sound"
             class="btn btn-ghost btn-sm"
+            aria-label="伴读发声"
+            aria-pressed="true"
             onclick="window.Companion.toggleSound()"
           >
-            🔊
+            <span id="panel-sound-icon" aria-hidden="true">🔊</span>
           </button>
           <button
             id="panel-hide"
             class="btn btn-ghost btn-sm"
+            aria-label="收起伴读悬浮球"
             onclick="window.Companion.toggleEnabled()"
             title="收起伴读悬浮球"
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
       </div>

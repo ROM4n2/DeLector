@@ -19,59 +19,70 @@
       <div id="companion-panel" class="companion-panel hidden">
         <div class="panel-head">
           <span class="panel-title">伴读角色设置</span>
-          <button class="panel-close" onclick="window.Companion.onClick()">
-            ✕
+          <button class="panel-close" aria-label="关闭伴读设置" onclick="window.Companion.onClick()">
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
         <div class="panel-row" id="panel-characters">
           <button
             class="panel-char-btn active"
             data-char="owl"
+            aria-label="歌德猫头鹰"
+            aria-pressed="true"
             onclick="window.Companion.setCharacter('owl')"
             title="歌德猫头鹰"
           >
-            🦉
+            <span aria-hidden="true">🦉</span>
           </button>
           <button
             class="panel-char-btn"
             data-char="cat"
+            aria-label="学者猫"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('cat')"
             title="学者猫"
           >
-            🐱
+            <span aria-hidden="true">🐱</span>
           </button>
           <button
             class="panel-char-btn"
             data-char="fox"
+            aria-label="灵动狐"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('fox')"
             title="灵动狐"
           >
-            🦊
+            <span aria-hidden="true">🦊</span>
           </button>
           <button
             class="panel-char-btn"
             data-char="robot"
+            aria-label="包豪斯机甲"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('robot')"
             title="包豪斯机甲"
           >
-            🤖
+            <span aria-hidden="true">🤖</span>
           </button>
           <button
             class="panel-char-btn mascot-custom-btn"
             id="panel-btn-custom"
             data-char="custom"
             style="display: none"
+            aria-label="自定义角色"
+            aria-pressed="false"
             onclick="window.Companion.setCharacter('custom')"
             title="自定义角色"
           >
-            ✦
+            <span aria-hidden="true">✦</span>
           </button>
           <button
             class="panel-char-btn panel-upload-btn"
+            aria-label="上传自定义 SVG 角色"
             onclick="window.Companion.triggerUpload('panel')"
             title="上传自定义 SVG 角色"
           >
-            📁
+            <span aria-hidden="true">📁</span>
           </button>
           <input
             id="panel-svg-input"
@@ -94,27 +105,32 @@
           <button
             class="panel-color-dot"
             style="background: #6b4f8f"
+            aria-label="角色配色：紫罗兰"
             onclick="window.Companion.setColor('#6b4f8f')"
           ></button>
           <button
             class="panel-color-dot"
             style="background: #d9663f"
+            aria-label="角色配色：赭橙"
             onclick="window.Companion.setColor('#d9663f')"
           ></button>
           <button
             class="panel-color-dot"
             style="background: #4f8f6b"
+            aria-label="角色配色：苔绿"
             onclick="window.Companion.setColor('#4f8f6b')"
           ></button>
           <button
             class="panel-color-dot"
             style="background: #4a6fa5"
+            aria-label="角色配色：靛蓝"
             onclick="window.Companion.setColor('#4a6fa5')"
           ></button>
           <input
             type="color"
             id="panel-color-custom"
             class="panel-color-custom"
+            aria-label="自定义角色配色"
             onchange="window.Companion.setColor(this.value)"
           />
         </div>
@@ -129,17 +145,20 @@
           <button
             id="panel-sound"
             class="btn btn-ghost btn-sm"
+            aria-label="伴读发声"
+            aria-pressed="true"
             onclick="window.Companion.toggleSound()"
           >
-            🔊
+            <span id="panel-sound-icon" aria-hidden="true">🔊</span>
           </button>
           <button
             id="panel-hide"
             class="btn btn-ghost btn-sm"
+            aria-label="收起伴读悬浮球"
             onclick="window.Companion.toggleEnabled()"
             title="收起伴读悬浮球"
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
       </div>

@@ -191,33 +191,41 @@
                       type="button"
                       class="mascot-choice-btn active"
                       data-char="owl"
+                      aria-label="歌德猫头鹰"
+                      aria-pressed="true"
                       onclick="window.Companion.setCharacter('owl')"
                     >
-                      🦉 Eule (歌德猫头鹰)
+                      <span aria-hidden="true">🦉</span> Eule (歌德猫头鹰)
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn"
                       data-char="cat"
+                      aria-label="学者猫"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('cat')"
                     >
-                      🐱 Katze (学者猫)
+                      <span aria-hidden="true">🐱</span> Katze (学者猫)
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn"
                       data-char="fox"
+                      aria-label="灵动狐"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('fox')"
                     >
-                      🦊 Fuchs (灵动狐)
+                      <span aria-hidden="true">🦊</span> Fuchs (灵动狐)
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn"
                       data-char="robot"
+                      aria-label="包豪斯机甲"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('robot')"
                     >
-                      🤖 Roboter (包豪斯机甲)
+                      <span aria-hidden="true">🤖</span> Roboter (包豪斯机甲)
                     </button>
                     <button
                       type="button"
@@ -225,17 +233,20 @@
                       id="studio-btn-custom"
                       data-char="custom"
                       style="display: none"
+                      aria-label="自定义角色"
+                      aria-pressed="false"
                       onclick="window.Companion.setCharacter('custom')"
                     >
-                      ✦ 自定义
+                      <span aria-hidden="true">✦</span> 自定义
                     </button>
                     <button
                       type="button"
                       class="mascot-choice-btn mascot-upload-btn"
+                      aria-label="上传自定义 SVG 角色"
                       onclick="window.Companion.triggerUpload('studio')"
                       title="上传自定义 SVG 矢量伴读角色"
                     >
-                      📁 上传 SVG
+                      <span aria-hidden="true">📁</span> 上传 SVG
                     </button>
                     <input
                       id="studio-svg-input"
@@ -270,6 +281,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #6b4f8f"
+                      aria-label="角色配色：歌德紫"
                       title="歌德紫"
                       onclick="window.Companion.setColor('#6b4f8f')"
                     ></button>
@@ -277,6 +289,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #d9663f"
+                      aria-label="角色配色：朱砂橘"
                       title="朱砂橘"
                       onclick="window.Companion.setColor('#d9663f')"
                     ></button>
@@ -284,6 +297,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #4f8f6b"
+                      aria-label="角色配色：学者绿"
                       title="学者绿"
                       onclick="window.Companion.setColor('#4f8f6b')"
                     ></button>
@@ -291,6 +305,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #4a6fa5"
+                      aria-label="角色配色：包豪斯蓝"
                       title="包豪斯蓝"
                       onclick="window.Companion.setColor('#4a6fa5')"
                     ></button>
@@ -298,6 +313,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #2c2c2c"
+                      aria-label="角色配色：墨黑"
                       title="墨黑"
                       onclick="window.Companion.setColor('#2c2c2c')"
                     ></button>
@@ -305,10 +321,11 @@
                       class="mascot-color-custom-btn"
                       title="自定义 HEX 配色"
                     >
-                      <span>🎨</span>
+                      <span aria-hidden="true">🎨</span>
                       <input
                         type="color"
                         id="studio-color-picker"
+                        aria-label="自定义角色配色"
                         style="
                           opacity: 0;
                           position: absolute;
@@ -334,9 +351,11 @@
                     type="button"
                     class="btn btn-ghost"
                     id="studio-sound-btn"
+                    aria-label="伴读发声"
+                    aria-pressed="true"
                     onclick="window.Companion.toggleSound()"
                   >
-                    <span id="studio-sound-icon">🔊</span>
+                    <span id="studio-sound-icon" aria-hidden="true">🔊</span>
                     <span id="studio-sound-label">发声已开启</span>
                   </button>
                   <button
