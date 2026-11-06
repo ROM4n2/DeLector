@@ -68,7 +68,7 @@ def test_tooling_has_no_md_package_reference() -> None:
 
 def test_autodownload_loads_only_sm(monkeypatch: pytest.MonkeyPatch) -> None:
     """本地能加载时，第一次尝试就是 sm，且不触发任何 md 尝试。"""
-    from delector.nlp_engine import processor
+    from delector.nlp_engine import model_loader, processor
 
     calls: List[str] = []
 
@@ -76,7 +76,7 @@ def test_autodownload_loads_only_sm(monkeypatch: pytest.MonkeyPatch) -> None:
         calls.append(name)
         return object(), name
 
-    monkeypatch.setattr(processor, "_load_spacy_model", fake_load)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", fake_load)
     _, how = processor._load_model_with_autodownload()
 
     assert calls == [SM], f"自动下载路径尝试了非 sm 模型：{calls}"
@@ -87,7 +87,7 @@ def test_autodownload_failure_is_loud_and_single_model(monkeypatch: pytest.Monke
     """本地加载失败时只对同一个 sm 下载一次；再失败必须抛 RuntimeError（不静默降级）。"""
     import spacy.cli
 
-    from delector.nlp_engine import processor
+    from delector.nlp_engine import model_loader, processor
 
     load_calls: List[str] = []
     download_calls: List[str] = []
@@ -96,7 +96,7 @@ def test_autodownload_failure_is_loud_and_single_model(monkeypatch: pytest.Monke
         load_calls.append(name)
         raise RuntimeError("model missing")
 
-    monkeypatch.setattr(processor, "_load_spacy_model", failing_load)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", failing_load)
     monkeypatch.setattr(spacy.cli, "download", lambda name: download_calls.append(name))
 
     with pytest.raises(RuntimeError) as excinfo:
@@ -111,7 +111,7 @@ def test_no_download_path_returns_none_without_downloading(monkeypatch: pytest.M
     """桌面润色的中间态：本地加载失败就诚实返回 None，绝不退到下载路径。"""
     import spacy.cli
 
-    from delector.nlp_engine import processor
+    from delector.nlp_engine import model_loader, processor
 
     load_calls: List[str] = []
 
@@ -119,9 +119,9 @@ def test_no_download_path_returns_none_without_downloading(monkeypatch: pytest.M
         load_calls.append(name)
         raise RuntimeError("model missing")
 
-    monkeypatch.setattr(processor, "_nlp_model", None)
-    monkeypatch.setattr(processor, "_nlp_resolved", False)
-    monkeypatch.setattr(processor, "_load_spacy_model", failing_load)
+    monkeypatch.setattr(model_loader, "_nlp_model", None)
+    monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", failing_load)
     download_calls: List[str] = []
     monkeypatch.setattr(spacy.cli, "download", lambda name: download_calls.append(name))
 
