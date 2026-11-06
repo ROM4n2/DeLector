@@ -310,7 +310,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     import sys
     import types
 
-    from delector.nlp_engine import processor as nlp
+    from delector.nlp_engine import model_loader as nlp
 
     sentinel = object()
     fake = types.ModuleType("de_fake_news_sm")
@@ -325,7 +325,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
 
 def test_load_spacy_model_reports_every_failed_strategy(monkeypatch):
     """全部失败时错误信息要带上每条策略的原因，否则真机上无从判断卡在哪。"""
-    from delector.nlp_engine import processor as nlp
+    from delector.nlp_engine import model_loader as nlp
 
     monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k: (_ for _ in ()).throw(OSError("no dist-info")))
     with pytest.raises(RuntimeError) as excinfo:
