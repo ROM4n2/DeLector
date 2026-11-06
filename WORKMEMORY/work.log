@@ -641,3 +641,11 @@ ADR-0029 第三批（A 类 16 处去字形）落地，分支 `feat/frontend-de-e
 6) 判为纯装饰删除：`cp-drawer.js:1341` 的 ✓（标题已写「深度推演完成」）；`encounter.js:148` 的 `COVERAGE_DEGRADED_MARK="⚠"`（同行已有「数据不完整」），同步把 2 个 enc 探针的 `MARK` 断言改为只认中文、B4 钉「文案仅一份」。
 验证：`build_index_html` 3438 行；`check_index_html_sync` PASS；pytest 受影响 10 文件 42 passed、回扩 7 文件 157 passed；`test_listen_lab_probe.mjs` 47 断言 PASS、`enc_coverage_degraded` 14 项 PASS、`enc_degraded_concurrency` 21 项 PASS、`test_companion_context_probe.mjs` 全 case pass。变异：关闭键删 aria-label → 守卫红；listen 标记改回单 ✓ → 探针红。
 约束遵守：并行 5 个子代理按文件所有权切分（index.html 仅主代理重建）、未碰 android/、未跑 sync_android_sources.py、未 `git add -A`。
+
+### 2026-11-06 23:29 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+PR #253 合并完成（ADR-0029 第三批）：merge commit `fa7aae2`，未 squash；base master `05e1b86` → 新 master `fa7aae2`；head `2d7944e`。合并前复查 head CI：12 success / 2 skipped（Master Direct-Push Scope Gate 仅 push→master 触发；Windows Portable Smoke 因 packaging paths-filter 为 false），0 failure、0 cancelled，mergeStateStatus=CLEAN。
+本批 A 类 16 处处置分布：**2 可删**（cp-drawer 推演完成 ✓、encounter 覆盖率 ⚠，相邻已有中文）/ **5 加文字**（listen-lab ×2、a1_writer ×2、reader ×1）/ **6 补 aria**（5 个模态框关闭键 + cp-drawer 解除难句绑定）/ **3 文字+aria**（密码显隐）。
+新增守卫：`tests/test_frontend_guards.py::test_modal_close_buttons_have_accessible_name`，扫 `static/modals/*.html`、DOTALL 跨行匹配 `<button class="...drawer-close...">`，要求 `aria-label`/`aria-labelledby`，命中数 ≥6 防正则静默失效。变异验证：删 `drawer.html` 的 aria-label → 红并点名文件；恢复 → 绿。
+三个探针从「钉字形」改为「认行为」：1) `tests/test_listen_lab_probe.mjs` 不再依赖单个 ✓/✗，新增 D/C 模式正误的中文断言（47 断言）；变异（改回单 ✓）→ 红。2) `tools/enc_coverage_degraded_probe.mjs` 删 `MARK="⚠"`，B1/B2/B3 只认「数据不完整」，B4 钉「标注有且仅一份」。3) `tools/enc_degraded_concurrency_probe.mjs` 同口径（S1–S5）。变异验证：加回 `"⚠ "` 前缀仍绿（已不依赖字形）；把「数据不完整」拼两遍 → B4 红（证明断言非恒真）。分别 14 / 21 项 PASS。
+分支 `feat/frontend-de-emoji-slice3` 本地 + 远端均已删除；临时 worktree `dlector-slice3` 已清理。B 类 360 处未动；未碰 `android/`、未 `git add -A`。
