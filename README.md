@@ -7,14 +7,15 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-2767%2F2771%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-2773%2F2788%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（真跑数，非推算）：master@ea9eab4（2026-11-05，含 #219 计时门禁），
-     命令 `python -m pytest tests -q` → 2767 passed / 4 skipped / 2771 total；
-     `python -m pytest --collect-only -q` = 2771 collected（11.89s）。分母用 total。
-     环境：Windows 11 / Python 3.11（.venv）；4 skipped 为设计性 GUI/桌面会话用例。 -->
+<!-- Tests 徽章口径（可复算，非推算）：master@aec79f3（2026-11-05，CI run 42053323367）。
+     分子 = 7 个 pytest 分片日志中 "N passed" 之和：712 + 348 + 681 + 672 + 316 + 25 + 19 = 2773；
+     分母 = `python -m pytest tests --collect-only -q` = 2788 collected，差集 15 skipped
+     （设计性 GUI / 桌面会话用例，逐条见各分片日志）。
+     环境：Windows 11 / Python 3.11（.venv）。换提交后两条命令都需重跑，不得沿用旧数。 -->
 
 <p align="center">
   <b>专为德语学习者与歌德（A1–C1）/ 德福（TestDaF）/ DSH 备考打造的学术级伴读与句法剖析系统。</b><br/>
@@ -101,6 +102,14 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 > 完整功能清单见 [FEATURES.md](FEATURES.md)。
 
+### 工程取舍（每条都有可点击出处）
+
+- **列表成本量到毫秒**：文章列表 **918 ms → 8.9 ms（约 103×）**；同批修复还包括首屏少 **383.4 KB**。出处：[ADR-0022](docs/adr/2026-10-11-adr-0022-release-gate-v5.17.0.md)。
+- **CI 只删重复、不删检查**：Ruff/mypy 从六个分片各跑一次收敛为只在 `unit-2` 跑，静态检查累计 **92 s → 14 s（-78 s runner 时间）**；墙钟未因此下降，所以不拿它宣传「变快」。出处：[CI 速度预算 §1.3](docs/agents/ci-speed-budget.md)。
+- **分片必须真互斥**：旧写法 `glob + --ignore` 对显式文件无效，一次 run **重复执行 356 个用例**；改为 `tools/ci_shards.py` 显式清单后，本地六分片 **2749 passed / 4 skipped**（2026-11-04 基线，当前总数见顶部徽章），并新增 4 条守卫。出处：[CI 速度预算 §1.4](docs/agents/ci-speed-budget.md)。
+- **模型档位用数据定**：111 句真实语料里 md 仅 **3/111（≈2.7%）** 句判定更合理，体积却是 sm 的 **2.82×**（21.16 → 59.61 MB），因此只保留 sm。出处：[ADR-0027](docs/adr/2026-11-04-adr-0027-nlp-model-sm-only.md)。
+- **发版可验证**：Android 正式包只出 **arm64-v8a**，发布前用 `keytool` 校验 APK 与 keystore 的 **SHA256 证书指纹**一致，不一致即阻断。出处：[build-release.yml](.github/workflows/build-release.yml)。
+
 > 💬 **用着顺手或别扭，都欢迎说一声**：[开一条零门槛反馈](https://github.com/ROM4n2/DeLector/issues/new?template=feedback.md)——**不用懂技术、不用建分支、不用写 `bug(scope):` 前缀**，三道判断题点一下就行，想吐槽什么随手写（留空也完全 OK）。你的反馈直接决定下一个版本做什么。
 
 ---
@@ -117,7 +126,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 | **语音合成**     | `Edge-TTS` (Microsoft Neural Voice)        | 神经级纯正德语离线本地缓存与 Web Speech 回退                                        |
 | **前端架构**     | `ES Modules / Modern CSS / Vanilla JS`     | 零 Node 构建依赖、模块化架构、原生 3D CSS 渲染                                      |
 | **记忆同步**     | `genanki`                                  | 离线生成标准 `.apkg` 记忆库                                                         |
-| **自动化测试**   | `pytest` + `httpx`                         | 全套单元与集成测试用例（数量见顶部 Tests 徽章，100% Green），CI 覆盖 md 加载路径与 Android 构建验签 |
+| **自动化测试**   | `pytest` + `httpx`                         | 7 路 pytest 分片（unit-1..4 / integration-heavy / cost-guards / cost-cold-start）跑全量用例；静态、分层、契约、密钥扫描闸 + Go race + Windows 便携包冒烟；Android 构建并校验签名指纹（NLP 只装 `de_core_news_sm`，md 路径已按 ADR-0027 删除） |
 
 ---
 
@@ -159,10 +168,10 @@ mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
 ```
 DeLector/
 ├── delector/          # 后端核心包：server.py + core/(DB·安全·版本) + nlp_engine/(spaCy·拓扑·AST) + routes/(领域路由) + services/(LLM·TTS) + tools/ + data/
-├── static/            # 前端零构建体系：index.html + layout/ + views/ + modals/ + js/(34 模块) + german/(工作台) + css/(视觉 tokens)
+├── static/            # 前端零构建体系：index.html + layout/ + views/ + modals/ + js/(42 模块) + german/(工作台) + css/(视觉 tokens)
 ├── android/           # Android 独立离线单机版工程 (Chaquopy + Gradle)
 ├── agent/             # Phase 2 Go Agent Runtime（CLI + DAG + 工具注册，预览通道）
-├── tests/             # 自动化测试套件：153 个测试文件 (2,438 passed) + 行为探针与迁移哨兵
+├── tests/             # 自动化测试套件：180 个 test_*.py（2,788 collected / 2,773 CI passed） + 行为探针与迁移哨兵
 ├── tools/             # 架构守卫工具链：六道机械闸 (分层契约/层序/Mock漂移/禁止静默降级/API契约/HTML同步) + 构建装配工具
 ├── docs/              # 仓库文档中枢：agents/(架构·运维) · specs/(设计) · plans/archive/(已归档计划) · adr/ · reviews/
 ├── WORKMEMORY/        # 共享工作记忆系统：PROJECT_OVERVIEW.md · work.log · PROTOCOL.md
