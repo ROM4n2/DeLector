@@ -377,7 +377,7 @@
 
 ---
 
-### Task 7: `companion` 第二宿主（`progress.html` studio）——**依赖用户再次拍板** [Tier: 2-Standard] [Mode: HITL] [Role: Frontend+A11y]
+### Task 7: `companion` 第二宿主（`progress.html` studio）——**已定：纳入本切片（选项 A）** [Tier: 2-Standard] [Mode: AFK] [Role: Frontend+A11y]
 
 **Files:**
 - Modify: `static/views/progress.html:192-234`（`.mascot-choice-btn` 5 个）、`339`（`#studio-sound-icon`）
@@ -390,16 +390,18 @@
 
 **SSOT Effect:** —
 
-**为什么单列：** 用户给的第一切片边界是"`companion` 声音/角色按钮"，而 studio 版是**同一个组件的第二个宿主**（`muted` 组件在 `progress` 视图里渲染）。只修 panel 会留下"同一功能两套无障碍质量"。本任务**需要用户拍板是否纳入本切片**：
+**为什么单列：** 用户给的第一切片边界是"`companion` 声音/角色按钮"，而 studio 版是**同一个组件的第二个宿主**（`muted` 组件在 `progress` 视图里渲染）。只修 panel 会留下"同一功能两套无障碍质量"。
+
+**拍板结果（2026-11-06）**：用户选择 **A（纳入）**，依据见 [ADR-0029 §14](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md#14-决策确认补充t7-纳入第一切片2026-11-06)。下表保留为决策前记录，不再作为待决事项：
 
 | 选项 | 后果 |
 |---|---|
-| A. 纳入（推荐） | 切片结束时「伴读角色选择器」在全部宿主上都合规；多改 1 个文件 + 1 个函数 |
-| B. 不纳入 | 本切片只保证 `companion.html`；`progress.html` 登记 Deferred Gap，第二批处理 |
+| A. 纳入（已选） | 切片结束时「伴读角色选择器」在全部宿主上都合规；多改 1 个文件 + 1 个函数 |
+| B. 不纳入（未选） | 本切片只保证 `companion.html`；`progress.html` 登记 Deferred Gap，第二批处理 |
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
-> "Implement Task 7（仅当用户选 A）: progress studio 角色/声音选择器补可访问名。
-> Mode: HITL | Role: Frontend+A11y
+> "Implement Task 7（用户已拍板 A，见 ADR-0029 §14）: progress studio 角色/声音选择器补可访问名。
+> Mode: AFK | Role: Frontend+A11y
 > Goal: 让 `.mascot-choice-btn` 与 `#studio-sound-icon` 所在的按钮具备与 T6 相同的可访问名契约。
 > Target Files: Modify `static/views/progress.html:192-234,339`, `static/js/companion.js:904-922`; regenerate `static/index.html`.
 > Constraint: 与 T6 逐字一致的 aria-label 文案与 aria-pressed 语义；不自创另一套。
@@ -407,8 +409,8 @@
 > Return: 摘要 + grep 回执 + 截图。"
 
 **Step Breakdown:**
-- [ ] **Step 1**：向用户确认 A/B（`AskUserQuestion`），未确认前**不写代码**。
-- [ ] **Step 2（RED，若 A）**：grep 记录现状。
+- [ ] **Step 1**：拍板已记录在 ADR-0029 §14（A），不再询问用户；grep 记录现状作为 RED 基线。
+- [ ] **Step 2（RED）**：`aria-pressed` 在 `progress.html` studio 段计数为 0。
 - [ ] **Step 3**：改 5 个角色按钮 + 声音按钮。
 - [ ] **Step 4**：改 `syncStudio()`。
 - [ ] **Step 5（GREEN）**：构建 + 同步校验 + 截图。
@@ -601,7 +603,7 @@
 | `static/layout/nav_mobile.html` | 待填 | 0 | 8 | 0 | 0 |
 | `static/js/cards.js`（空态块） | 待填 | 0 | 0 | 0 | 0 |
 | `static/layout/companion.html` | 待填 | 保留 4 角色字形 | 待填 | 待填 | 4 |
-| `static/views/progress.html`（studio 段） | 待填 | 视 T7 拍板 | 待填 | 待填 | 5 |
+| `static/views/progress.html`（studio 段） | 待填 | 保留 4 角色字形（T7 只补 aria） | 待填 | 待填 | 5 |
 
 ---
 
