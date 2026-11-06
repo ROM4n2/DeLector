@@ -325,8 +325,8 @@
 **SSOT Effect:** —
 
 **Injected Instincts:**
-- [ ] `[Instinct: Evidence]`: 不写"全量验证通过"而不给命令与输出。
-- [ ] `[Instinct: Known-Boundaries]`: PR 必须如实登记未验证项。
+- [x] `[Instinct: Evidence]`: 不写"全量验证通过"而不给命令与输出。
+- [x] `[Instinct: Known-Boundaries]`: PR 必须如实登记未验证项。
 
 **Subagent Prompt Scaffold (for /dfs-exec):**
 > "Implement Task 8: 全量验证与 PR。
@@ -342,10 +342,10 @@
 > Return: Summary with MANDATORY Physical Execution Receipt (exit codes + pass counts + git status)."
 
 **Step Breakdown:**
-- [ ] **Step 1**: 跑定向与全量测试，记录 passed/skipped。
-- [ ] **Step 2**: 跑 ruff/mypy，记录结果。
-- [ ] **Step 3**: 跑文档一致性 grep。
-- [ ] **Step 4**: `git status --porcelain` 确认只含预期文件。
+- [x] **Step 1**: 跑定向与全量测试，记录 passed/skipped。
+- [x] **Step 2**: 跑 ruff/mypy，记录结果。
+- [x] **Step 3**: 跑文档一致性 grep。
+- [x] **Step 4**: `git status --porcelain` 确认只含预期文件。
 - [ ] **Step 5**: 推送分支并开 PR。
 - [ ] **Step 6**: PR 描述补"已知边界"与测量数字。
 
