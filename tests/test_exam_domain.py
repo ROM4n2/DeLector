@@ -150,13 +150,16 @@ def test_exam_css_rules_exist():
         assert hits, "style.css 缺少 %s 规则" % sel
 
 
-def test_exam_css_grid_uses_auto_fill():
-    """.exam-module-grid 必须是自适应 grid（桌面 200px 起格，移动窄屏同款规则天然收列）。"""
+def test_exam_css_grid_is_single_column_directory():
+    """方向 A：.exam-module-grid 是单列目录（1fr + 820px 行宽上限），窄屏靠 1fr 自然收缩。"""
     rules = [(m.group(1).strip(), m.group(2)) for m in re.finditer(r"([^{}]*)\{([^{}]*)\}", _CSS)]
     grids = [d for s, d in rules if ".exam-module-grid" in s and "grid" in d]
     assert grids, "style.css 缺少 .exam-module-grid 的 grid 规则"
-    assert any("repeat(auto-fill" in d and "minmax(" in d for d in grids), (
-        "模块卡片区必须是 auto-fill + minmax 自适应 grid，实际：%r" % grids
+    assert any("grid-template-columns: 1fr" in d and "max-width: 820px" in d for d in grids), (
+        "模块区必须是单列目录：grid-template-columns: 1fr + max-width: 820px，实际：%r" % grids
+    )
+    assert not any("repeat(auto-fill" in d for d in grids), (
+        "方向 A 已改为单列目录，不得残留 repeat(auto-fill 多列自适应：%r" % grids
     )
 
 
