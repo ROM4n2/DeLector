@@ -521,3 +521,14 @@ Caps: filesystem-read, filesystem-write, shell-exec
 最小：`Bücher geben.`（2 词）即复现；完整陈述句 `Wir geben Schülern Bücher.`（4 词）；原句词形边界 `Gibt den Schülern Bücher.` 删 den 后 Bücher=oa/Acc 不再复现。
 影响：首屏句子解剖台（satz-lab.js CASE_POS/caseLabel）与阅读器单词详情（reader.js:395-397）直接显示错标；process_german_text 也写入同一错误 case，存量 processed_json 不自动重算。Anki 导出与 /api/lookup/grammar 不读 token.case；写作规则实测本句返回空列表（dep 优先于名词 morph）。
 边界：本轮零代码改动、未跑全量 pytest、未碰 Android；未修改 docs/reviews/2026-11-05-code-quality-decoupling-review.md。
+
+### 2026-11-06 17:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+前端去 Emoji 决策收尾：PR #247 已合并（merge commit a12c6e6，base master 25feb4a→a12c6e6；head 8f55806；CI 12 pass / 1 skip）。前一轮因 #245/#246 并行未写本日志，现补录。
+四项拍板（用户原话→落位）：1「先保留，但要之后做」角色 🦉🐱🦊🤖 保留、SVG 化后置，本轮补 aria-label/aria-pressed（ADR §10.1）；2「README只中文」仅中文、德文只留术语，删标题 emoji 与英文双写；3「后面按建议来可以引入」MIT/ISC 图标集（Lucide/Tabler）vendor 进仓、不引入运行时依赖；4 推广方式：垂直切片验收后推广。追加原则「ADR 是受限于当时的决策，所以后续可以推翻」「不要怕完全推翻…否定然后再否定」→ ADR §12 留痕机制（四态 + 四硬规则 + INDEX）。
+文档：ADR-0029（§10 决策确认、§11 E1–E7 有效期、§12 推翻留痕、§13 自我修正、§14 T7 纳入）；计划 docs/plans/2026-11-06-frontend-de-emoji-slice1.md（T0–T10、Deferred Gap 11 行、Deviation Table 空、不变量 I1–I5）。
+自我推翻：脚本统计→人工表（T1）；exam 拆 T2/T3；README 收窄为「仅中文」。
+T7 拍板 A：progress studio 纳入切片（同一控件的第二宿主，避免两种 a11y 质量）；ADR §14 记录，计划 T7 由 HITL 改 AFK。
+延迟（不进本切片）：tests/test_listen_lab_probe.mjs:316 精确 emoji 断言、cards.js:1176 空态、style.css .mob-icon 死规则、图标集 vendor、角色 SVG 化。
+工作树：主树 5 个未跟踪文档与 origin/master 逐字一致（忽略 CRLF），已删除后 ff 到 a12c6e6；_artifacts/ 与 docs/reviews/2026-11-05-* 未动。
+下一步：feat/frontend-de-emoji-slice1 执行 T0→T7/T9/T10；T8 README 独立分支 docs/readme-zh-only。
