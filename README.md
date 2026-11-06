@@ -7,13 +7,13 @@
   <img src="https://img.shields.io/badge/spaCy-German%20NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white" alt="spaCy" />
   <img src="https://img.shields.io/badge/CEFR-A1~C1%20Goethe-E63946?style=flat-square" alt="CEFR Ladder" />
   <img src="https://img.shields.io/badge/AI%20Model-deepseek-brightgreen?style=flat-square" alt="AI Model" />
-  <img src="https://img.shields.io/badge/Tests-2773%2F2788%20Passed-2EA44F?style=flat-square" alt="Pytest" />
+  <img src="https://img.shields.io/badge/Tests-2779%2F2794%20Passed-2EA44F?style=flat-square" alt="Pytest" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" />
 </p>
 
-<!-- Tests 徽章口径（可复算，非推算）：master@aec79f3（2026-11-05，CI run 42053323367）。
-     分子 = 7 个 pytest 分片日志中 "N passed" 之和：712 + 348 + 681 + 672 + 316 + 25 + 19 = 2773；
-     分母 = `python -m pytest tests --collect-only -q` = 2788 collected，差集 15 skipped
+<!-- Tests 徽章口径（可复算，非推算）：master@dd8036e（2026-11-06，CI run 42155129738）。
+     分子 = 7 个 pytest 分片日志中 "N passed" 之和：678 + 681 + 348 + 712 + 316 + 19 + 25 = 2779；
+     分母 = `python -m pytest tests --collect-only -q` = 2794 collected，差集 15 skipped
      （设计性 GUI / 桌面会话用例，逐条见各分片日志）。
      环境：Windows 11 / Python 3.11（.venv）。换提交后两条命令都需重跑，不得沿用旧数。 -->
 
@@ -171,7 +171,7 @@ DeLector/
 ├── static/            # 前端零构建体系：index.html + layout/ + views/ + modals/ + js/(42 模块) + german/(工作台) + css/(视觉 tokens)
 ├── android/           # Android 独立离线单机版工程 (Chaquopy + Gradle)
 ├── agent/             # Phase 2 Go Agent Runtime（CLI + DAG + 工具注册，预览通道）
-├── tests/             # 自动化测试套件：180 个 test_*.py（2,788 collected / 2,773 CI passed） + 行为探针与迁移哨兵
+├── tests/             # 自动化测试套件：180 个 test_*.py（2,794 collected / 2,779 CI passed） + 行为探针与迁移哨兵
 ├── tools/             # 架构守卫工具链：六道机械闸 (分层契约/层序/Mock漂移/禁止静默降级/API契约/HTML同步) + 构建装配工具
 ├── docs/              # 仓库文档中枢：agents/(架构·运维) · specs/(设计) · plans/archive/(已归档计划) · adr/ · reviews/
 ├── WORKMEMORY/        # 共享工作记忆系统：PROJECT_OVERVIEW.md · work.log · PROTOCOL.md
@@ -215,6 +215,9 @@ DeLector/
 - **Android 覆盖安装才生效**：含 `static/` 改动的版本必须覆盖安装（应用按 `versionCode` 判定重解包）。
 - **Android 端「检查更新」暂未验证**：桌面端可用；Android 上两条假设（Chaquopy 能否完成到公网的 HTTPS、WebView 点外链是否交给系统浏览器）从未验证 ⇒ **手机上请以本页/Releases 的版本号为准**。
 - **Android 装不回旧版**：`versionCode` 只升不降 ⇒ 装错版本只能卸载重装（会清应用私有数据，请先导出备份）。
+- **Android 主路径已统一到 spaCy**：按 [ADR-0028](docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md) 删除平台硬编码的纯 Python 降级；模型缺失/加载失败时句法专线**硬失败**，不返回近似结果。
+- **存量 Android 文章不会自动重算**：`PROCESSED_JSON_VERSION` 仍是 `3.5.0`，旧文章命不中惰性迁移判据，需要重新导入才会得到 spaCy 结果。
+- **Android 首次加载耗时、内存峰值、低端机 OOM 均未测量**：测量任务未执行，这里不写「预计」或「约」。
 
 ---
 
