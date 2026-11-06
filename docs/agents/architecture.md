@@ -59,6 +59,13 @@
 `_load_spacy_model()` 有三级回退，缺一不可：`spacy.load(名称)` →
 `importlib.import_module(名称).load()` → 按数据目录绝对路径加载。原因见 Android 一节。
 
+**加载时机（2026-11-06 修订，ADR-0028）**：导入期不加载；服务就绪（FastAPI lifespan startup）后
+由 `model_loader.start_background_prewarm()` 起 daemon 线程预热，`server.create_app()` 只负责接线。
+首次分析若早于预热完成，仍走同一入口 `_resolve_nlp_model()` 同步兜底——两边共用 `_model_lock`，
+只真正加载一次（计数见 `get_model_load_count()`）。后台线程与前台请求走同一条
+`_load_model_with_autodownload()`，因此 Android 禁下载门控自动生效；预热失败只记录诊断、不崩进程，
+首次分析仍按 D4 抛 `RuntimeError`。`DELECTOR_MODEL_PREWARM=0` 可整体关闭预热。
+
 ---
 
 ## Android 独立单机版（Chaquopy）

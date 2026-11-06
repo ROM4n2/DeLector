@@ -4,7 +4,7 @@
 - **日期**：2026-11-06
 - **实施**：**已完成**（2026-11-06，PR #237 合入 `master`，merge commit `7073bac`；T5/T6 已执行，见 §8.3、§9；低端机/arm64 未覆盖）
 - **关联**：`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`、ADR-0018 §7.6、ADR-0027
-- **范围**：本规格定义 Android 主分析路径从"纯 Python 降级"改为"spaCy 惰性加载 + 本地三级回退 + 硬失败 + 禁下载"的设计与验收；**本轮只写文档与计划，不改代码/测试/workflow**。
+- **范围**：本规格定义 Android 主分析路径从"纯 Python 降级"改为"spaCy + 本地三级回退 + 硬失败 + 禁下载"的设计与验收；**本轮只写文档与计划，不改代码/测试/workflow**。加载时机于 2026-11-06 修订为「服务就绪后后台预热 + 首次使用同步兜底」（ADR-0028 §2 澄清段），验收见 §9-12。
 - **前身**：本规格替代 2026-11-06 早先的 `2026-11-06-android-pure-python-degradation-spec.md`（该方向已由用户否决）。
 
 ---
@@ -222,6 +222,8 @@ elif _android_runtime:
 
 数字写入 ADR-0028 §4.2 与 PR 描述；不得用"未实测"交差，也不得用桌面基准顶替 Android、不得写成"预计/约"。2026-11-06 已执行：两版各 5 轮冷启 + 5 轮热分析，设备 `Medium_Phone_API_37.0`（API 37 / x86_64）；低端机与 arm64 真机未覆盖。
 
+**预热后的复测（待执行）**：后台预热实现后，必须重开模拟器、用同一设备/同一 76 token 文本/同样 5 轮冷启，复测「首次分析墙钟」「冷启到首次分析完成」「模型首次加载」「PSS/峰值 VmHWM」，与当前 master（无预热）对比；不得用单测结果替代设备测量。
+
 ### 8.4 具名变异
 
 | 变异 | 期望 |
@@ -247,6 +249,7 @@ elif _android_runtime:
 9. **变异验证**：§8.4 五条变异分别变红，还原后复绿。
 10. **存量边界**：PR"已知边界"明确写"Android 存量纯 Python 文章未重算，需重新导入或另立任务"。
 11. **句法专线硬失败**（A7）：模型不可用时 `analyze_syntax_tree("…")` 抛 `RuntimeError`，信息区分"模型加载失败"与"无数据"；空输入仍返回 `sentence_count: 0`；`test_syntax_tree_load_failure_is_loud_not_pure` 与 `test_syntax_tree_error_distinguishes_no_data` 绿。
+12. **后台预热**（2026-11-06 实施；设备收益**待复测**）：导入期不加载；服务就绪（lifespan startup）触发预热，`DELECTOR_MODEL_PREWARM=0` 可关闭；预热与首次分析共用 `_model_lock`，并发只加载一次（`get_model_load_count()` 计数为 1）；预热失败不崩进程、诊断保留、首次分析仍抛 `RuntimeError`；Android 后台路径不发起 `spacy.cli.download`。验证：`tests/test_nlp_prewarm.py` 六条用例 RED→GREEN。设备侧「首次分析等待是否下降」按 §8.3 的复测项执行，本轮未测。
 
 ---
 

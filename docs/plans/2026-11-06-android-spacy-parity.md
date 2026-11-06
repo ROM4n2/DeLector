@@ -5,7 +5,8 @@
 > **Spec Reference**: `docs/specs/2026-11-06-android-spacy-parity-spec.md`；`docs/adr/2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md`
 > **Global Constraints**:
 > - 实施轮（2026-11-06）：T1–T8 已执行；T8 的产物已经 PR #237 合入 `master`（merge commit `7073bac`）。T5/T6 在用户开启模拟器后补做（`aec79f3` 旧版 vs `e169999` 新版，5 轮/版），数字见 ADR-0028 §4.2；低端机/arm64 未覆盖。
-> - 不改 schema/协议；桌面端行为不变；模型档位仍为 `de_core_news_sm`（ADR-0027）。
+> - 追加轮（2026-11-06）：T9 实施「服务就绪后后台预热 + 首次使用同步兜底」，只把 T5/T6 实测的首次分析 +1.2s 移出用户等待，**不改变内存口径**（ADR-0028 §4.2 的 495.9 MiB PSS / 701.6 MiB 峰值仍为已接受残余风险）。设备侧收益待复测。
+> - 不改 schema/协议；桌面端功能行为不变（加载时机同为服务就绪后后台预热）；模型档位仍为 `de_core_news_sm`（ADR-0027）。
 > - Android 运行期**禁止** `spacy.cli.download`/pip 子进程/联网；门控必须在 `_load_model_with_autodownload()` 内部。
 > - 加载失败**硬失败**，不得回退纯 Python（No-Silent-Failure）。
 > - 不默认重算 Android 存量纯 Python 文章；必须在 PR"已知边界"写明。
@@ -18,7 +19,7 @@
 ## [NOTE] Decisions So Far
 
 - **U2 已拍板**：统一为 spaCy。判据：**宁漏勿错**——缺字段可接受，标错词性/格位不可接受。
-- **ADR-0028（重写）**：Android 主路径使用 `de_core_news_sm`，惰性加载；本地三级回退；失败硬失败；禁止下载。
+- **ADR-0028（重写）**：Android 主路径使用 `de_core_news_sm`；本地三级回退；失败硬失败；禁止下载。加载时机于 2026-11-06 修订为「服务就绪后后台预热 + 首次使用同步兜底」（T9），历史「惰性加载」结论保留于 ADR §3/§5。
 - **Spec（重写）**：`docs/specs/2026-11-06-android-spacy-parity-spec.md`。
 - **两层口径**：通过统一加载器消除；实施完成前仍是过渡态。
 - **存量数据**：默认不重算（同 `3.5.0`，惰性迁移不命中）。
@@ -348,6 +349,38 @@
 - [x] **Step 4**: `git status --porcelain` 确认只含预期文件。
 - [x] **Step 5**: 推送分支并开 PR（PR #235 继续用，不合并）。
 - [x] **Step 6**: PR 描述补"已知边界"与测量数字。
+
+---
+
+### Task 9: 服务就绪后后台预热（选项 B）[Tier: 2-Standard] [Mode: AFK] [Role: TDD Builder] [Status: done（2026-11-06 代码+单测；设备收益待复测）]
+
+> **状态（2026-11-06）**：按 TDD 实施「服务就绪后后台预热 + 首次使用同步兜底」，把 T5/T6 实测的首次分析 +1.2s 移出用户等待。只改耗时，不改内存：ADR-0028 §4.2 的 495.9 MiB PSS / 701.6 MiB 峰值仍为已接受残余风险。设备侧收益需重开模拟器复测（见规格 §8.3 / §9-12）。
+
+**Files:**
+- Modify: `delector/nlp_engine/model_loader.py`（预热入口、加载计数、开关、日志）
+- Modify: `delector/server.py`（FastAPI lifespan 接线）
+- Add: `tests/test_nlp_prewarm.py`（6 条）
+- Modify: `tools/ci_shards.py`、`tools/ci_shard_weights.json`（新测试登记 unit-3）
+- Modify: `docs/adr/…-0028-…`、`docs/specs/…-spacy-parity-spec.md`、`docs/agents/architecture.md`
+
+**Interfaces:**
+- Consumes: `_resolve_nlp_model()`、`_load_model_with_autodownload()`、`_model_lock`。
+- Produces: `start_background_prewarm()` → `bool`、`prewarm_enabled()` → `bool`、`get_model_load_count()` → `int`、`DELECTOR_MODEL_PREWARM`。
+
+**Injected Instincts:**
+- [x] `[Instinct: RED-First]`: 六条测试先在旧代码上真红（预热 API/lifespan 尚不存在），再实现。
+- [x] `[Instinct: No-Import-Load]`: 预热只挂 lifespan；导入期加载计数为 0。
+- [x] `[Instinct: Same-Gate]`: 后台线程走 `_load_model_with_autodownload()`，Android 不发起下载。
+- [x] `[Instinct: D4]`: 预热失败不崩进程、不降级；首次分析仍抛 `RuntimeError`。
+- [x] `[Instinct: One-Lock]`: 预热与并发首次分析共用 `_model_lock`，加载计数 = 1。
+- [x] `[Instinct: Kill-Switch]`: `DELECTOR_MODEL_PREWARM=0` 可整体关闭。
+
+**Step Breakdown:**
+- [x] **Step 1 (RED)**: 新增六条测试并跑出真实失败。
+- [x] **Step 2 (GREEN)**: `model_loader` 加预热入口/计数/开关/日志；`server` 用 lifespan 接线。
+- [x] **Step 3 (Verify)**: 目标 pytest 全绿 + `ruff check .` + `mypy --strict delector tools` + 三道机械闸。
+- [x] **Step 4 (Docs)**: ADR-0028 / 规格 §9 / `docs/agents/architecture.md` 同步。
+- [ ] **Step 5 (Device)**: 重开模拟器复测预热收益（首次分析墙钟、冷启到首次分析完成、PSS/峰值 VmHWM），本轮未执行。
 
 ---
 
