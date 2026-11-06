@@ -69,6 +69,7 @@ import {
   highlightClauseTokens,
   saveClauseAsGrammarCard,
 } from "./reader.js";
+import { initSatzLab, runSatzLab } from "./satz-lab.js";
 
 import {
   setCardSegment,
@@ -300,6 +301,19 @@ export function show(view) {
   if (view === "encounter") showView();
   if (view === "search") Search.initSearch();
   if (view === "german") ensureGermanWorkbench(); // 惰性挂载：首次进入才加载 workbench iframe
+}
+
+// 首屏句法示例入口：从任意视图回到首页并把「句子解剖台」滚进视野。
+export function openSatzLab() {
+  show("home");
+  runSatzLab();
+  // show("home") 会异步重绘文稿库；等两帧再滚动，避免滚动位置被重绘覆盖。
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const lab = document.getElementById("satz-lab");
+      if (lab) lab.scrollIntoView({ block: "start" });
+    });
+  });
 }
 
 // ── Exam Domain Module Tabs (ADR-0005 Task 2) ───────────────────────────────
@@ -1018,6 +1032,7 @@ Object.assign(window, {
 
   // Navigation & Core
   show,
+  openSatzLab,
   openModal,
   closeModal,
   openSettingsModal,
@@ -1279,6 +1294,7 @@ function showUpdateBar() {
 // ── Application Initialization ───────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   loadArticles();
+  initSatzLab();
   refreshCardCounters();
   applyTypography();
   setupDropzone();

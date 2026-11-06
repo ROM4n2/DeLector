@@ -90,6 +90,13 @@
       </div>
       <div class="nav-actions">
         <button
+          class="btn btn-ghost nav-satz-btn"
+          onclick="openSatzLab()"
+          title="用示例句体验句法拆解"
+        >
+          🧩 拆句
+        </button>
+        <button
           class="btn btn-ghost nav-settings-btn"
           onclick="openSettingsModal()"
           title="偏好与 API 设置"
@@ -112,19 +119,43 @@
           <span class="dot"></span>
           <span>CEFR IMMERSIVE WORKSPACE · 歌德备考</span>
         </div>
-        <h1>
-          德语欧标<br /><span class="accent-word">沉浸研读</span>与考点剖析
-        </h1>
+        <h1>把德语长句<span class="accent-word">拆开</span>看</h1>
         <p>
-          导入任意德语长文或备考真题，本地智能标注 CEFR
-          难度色阶（A2-C1），实时剖析歌德核心语法考点并一键沉淀为 Anki 卡片。
+          不是又一个带 CEFR 色标的阅读器。不用导入长文，下面这句现在就能拆出
+          <strong>VF/LK/MF/RK/NF 五场域</strong>、主从句树和名词格位。
         </p>
         <div class="home-cta">
-          <button class="btn btn-accent" onclick="openModal()">
+          <button class="btn btn-accent" onclick="openSatzLab()">
+            先拆一句试试 →
+          </button>
+          <button class="btn btn-ghost" onclick="openModal()">
             + 导入德语文章
           </button>
         </div>
       </div>
+
+      <!-- Satz-Labor: first-screen live syntax demo -->
+      <section id="satz-lab" class="satz-lab" aria-labelledby="satz-lab-title">
+        <div class="satz-lab-head">
+          <div>
+            <div class="satz-lab-eyebrow">SATZ-LABOR · 不用导入长文</div>
+            <h2 id="satz-lab-title">一句话，拆开看</h2>
+            <p class="satz-lab-sub">
+              五场域拓扑、主从句树、名词格位——点一句示例，本地引擎当场拆给你看。
+            </p>
+          </div>
+          <span class="satz-lab-badge">LIVE · 本地 spaCy</span>
+        </div>
+        <div
+          id="satz-lab-samples"
+          class="satz-lab-samples"
+          role="group"
+          aria-label="示例句"
+        ></div>
+        <div id="satz-lab-output" class="satz-lab-output" aria-live="polite">
+          <div class="satz-lab-placeholder">正在准备示例句…</div>
+        </div>
+      </section>
 
       <!-- Highlighter Legend -->
       <div class="cefr-legend">
