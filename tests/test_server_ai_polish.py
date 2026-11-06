@@ -530,35 +530,35 @@ def test_writer_js_surfaces_degraded_hint_and_advisories_without_toast():
 
 def test_get_loaded_nlp_is_read_only(monkeypatch):
     """`get_loaded_nlp()` 只读已加载模型：未解析/加载失败 ⇒ None，且**绝不触发加载**。"""
-    from delector.nlp_engine import processor
+    from delector.nlp_engine import model_loader, processor
 
-    monkeypatch.setattr(processor, "_nlp_resolved", False)
-    monkeypatch.setattr(processor, "_nlp_model", None)
+    monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_model", None)
     calls = {"n": 0}
 
     def _spy(name: str) -> Any:
         calls["n"] += 1
         raise RuntimeError("不应被调用")
 
-    monkeypatch.setattr(processor, "_load_spacy_model", _spy)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", _spy)
 
     assert processor.get_loaded_nlp() is None
     assert calls["n"] == 0, "get_loaded_nlp 不得触发任何加载"
 
     sentinel = object()
-    monkeypatch.setattr(processor, "_nlp_resolved", True)
-    monkeypatch.setattr(processor, "_nlp_model", sentinel)
+    monkeypatch.setattr(model_loader, "_nlp_resolved", True)
+    monkeypatch.setattr(model_loader, "_nlp_model", sentinel)
     assert processor.get_loaded_nlp() is sentinel
 
 
 def test_try_load_nlp_no_download_loads_locally(monkeypatch):
     """本地能加载 ⇒ 写入既有缓存（`_nlp_model` / `_nlp_resolved=True`）并返回模型。"""
-    from delector.nlp_engine import processor
+    from delector.nlp_engine import model_loader, processor
 
     sentinel = object()
-    monkeypatch.setattr(processor, "_nlp_resolved", False)
-    monkeypatch.setattr(processor, "_nlp_model", None)
-    monkeypatch.setattr(processor, "_load_spacy_model", lambda name: (sentinel, f"{name}(stub)"))
+    monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_model", None)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", lambda name: (sentinel, f"{name}(stub)"))
 
     assert processor.try_load_nlp_no_download() is sentinel
     assert processor.get_loaded_nlp() is sentinel
@@ -572,15 +572,15 @@ def test_try_load_nlp_no_download_never_downloads(monkeypatch):
     """
     from spacy import cli as spacy_cli
 
-    from delector.nlp_engine import processor
+    from delector.nlp_engine import model_loader, processor
 
-    monkeypatch.setattr(processor, "_nlp_resolved", False)
-    monkeypatch.setattr(processor, "_nlp_model", None)
+    monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_model", None)
 
     def _boom(name: str) -> Any:
         raise RuntimeError("no local model")
 
-    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", _boom)
 
     def _bomb(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("try_load_nlp_no_download 绝不能触发 spacy.cli.download（出网 + pip）")

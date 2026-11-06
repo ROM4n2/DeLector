@@ -109,6 +109,7 @@ def test_first_use_loads_exactly_once_across_threads(tmp_path: Path) -> None:
     code = (
         "import threading, time\n"
         "from delector.nlp_engine import processor as p\n"
+        "from delector.nlp_engine import model_loader\n"
         "counter = {'n': 0}\n"
         "lock = threading.Lock()\n"
         "def fake_loader():\n"
@@ -116,7 +117,7 @@ def test_first_use_loads_exactly_once_across_threads(tmp_path: Path) -> None:
         "        counter['n'] += 1\n"
         "    time.sleep(0.2)\n"  # 拉宽竞态窗，逼出"两次加载"
         "    return (lambda s: s.upper(), 'fake')\n"
-        "p._load_model_with_autodownload = fake_loader\n"
+        "model_loader._load_model_with_autodownload = fake_loader\n"
         "results = []\n"
         "def worker():\n"
         "    results.append(p.nlp('abc'))\n"
@@ -139,9 +140,10 @@ def test_load_failure_is_visible_not_silent(tmp_path: Path) -> None:
     """③ 加载失败必须**大声失败**：首次调用抛明确异常，绝不清空返回。"""
     code = (
         "from delector.nlp_engine import processor as p\n"
+        "from delector.nlp_engine import model_loader\n"
         "def boom():\n"
         "    raise RuntimeError('模拟：德语模型不可用')\n"
-        "p._load_model_with_autodownload = boom\n"
+        "model_loader._load_model_with_autodownload = boom\n"
         "raised = 'no'\n"
         "second = 'no'\n"
         "try:\n"
