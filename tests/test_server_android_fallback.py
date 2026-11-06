@@ -5,11 +5,11 @@ import pytest
 from server_helpers import ROOT
 from wb_source import decl_body, read_source
 
-# --- Android / Chaquopy runtime: spacy is absent, everything must fall back to pure Python ---
+# --- Android / Chaquopy runtime: 导入期不加载模型；运行期本地失败硬失败，禁止下载 ---
 
 
 def test_pure_python_pipeline_without_spacy():
-    """APK 里没有 spacy，process_german_text 走纯 Python 分支。
+    """spaCy 模块缺失（模拟）时，process_german_text 走纯 Python 分支。
 
     这条分支曾因调用不存在的 lookup_core_dict 而在 import server 时就 NameError，
     导致安卓端 uvicorn 永远起不来、启动页一直卡住。
@@ -115,7 +115,185 @@ def test_android_never_downloads_model_at_import():
     )
     out = (res.stdout or "") + (res.stderr or "")
     assert "DOWNLOAD_ATTEMPTED" not in out, "Android 上不得在 import 期联网下载模型"
-    assert "ENGINE=pure_python" in out
+    assert "ENGINE=spacy" in out, (
+        "ADR-0028：Android 主路径必须与桌面同口径使用 spaCy（惰性加载），"
+        "不得再硬编码纯 Python 降级（修复前的断言是 ENGINE=pure_python）"
+    )
+
+
+def _run_android_probe(probe: str):
+    """在 `ANDROID_ROOT=/system` 的子进程里跑探针，返回合并后的 stdout/stderr。"""
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "ANDROID_ROOT": "/system", "PYTHONIOENCODING": "utf-8"}
+    res = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env
+    )
+    return (res.stdout or "") + (res.stderr or "")
+
+
+def test_android_import_selects_lazy_spacy_not_none():
+    """ADR-0028：Android 导入期必须选惰性 spaCy 代理，而不是 `nlp = None`。
+
+    哨兵同时堵死三条加载路径（spacy.load / module.load / 目录加载）：导入期一次都不许触发，
+    但导入结束后 `NLP_ENGINE` 必须是 `spacy` 且 `nlp` 非 None（可调用语义保留）。
+    """
+    probe = (
+        "import spacy, sys, os\n"
+        "def _boom(*a, **k):\n"
+        "    print('LOAD_ATTEMPTED')\n"
+        "    raise OSError('simulated')\n"
+        "spacy.load = _boom\n"
+        "import spacy.util\n"
+        "spacy.util.load_model_from_init_py = _boom\n"
+        "spacy.util.load_model_from_path = _boom\n"
+        "import spacy.cli\n"
+        "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
+        "sys.path.insert(0, os.getcwd())\n"
+        "from delector import server\n"
+        "from delector.nlp_engine import processor\n"
+        "print('ENGINE=' + processor.NLP_ENGINE)\n"
+        "print('NLP_IS_NONE=' + str(processor.nlp is None))\n"
+    )
+    out = _run_android_probe(probe)
+    lines = out.splitlines()
+    assert "LOAD_ATTEMPTED" not in out, "Android 导入期不得加载模型（ADR-0028 D2：惰性加载）"
+    assert "DOWNLOAD_ATTEMPTED" not in out, "Android 导入期不得联网下载模型（ADR-0028 D5）"
+    assert "ENGINE=spacy" in lines, f"Android 导入后引擎应为 spacy，实际输出：\n{out}"
+    assert "NLP_IS_NONE=False" in lines, f"Android 的 nlp 不得为 None（纯 Python 降级已移除），实际输出：\n{out}"
+
+
+def test_android_runtime_load_never_downloads(monkeypatch):
+    """ADR-0028 D5：Android 首次分析时本地加载失败，不得退到 `spacy.cli.download`。
+
+    门控必须在 `_load_model_with_autodownload()` **函数内部**：只删调用方的平台分支不够，
+    否则本地三级回退失败后会起 pip 子进程/联网。
+    """
+    import spacy.cli
+
+    from delector.nlp_engine import processor
+
+    calls: list[str] = []
+
+    def _boom(name):
+        raise OSError("simulated local load failure")
+
+    def _download(*args, **kwargs):
+        calls.append("DOWNLOAD_ATTEMPTED")
+
+    monkeypatch.setattr(processor, "_android_runtime", True)
+    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    monkeypatch.setattr(processor, "_nlp_resolved", False)
+    monkeypatch.setattr(processor, "_nlp_model", None)
+    monkeypatch.setattr(processor, "_nlp_error", "")
+    monkeypatch.setattr(processor, "NLP_ENGINE", "spacy")
+    monkeypatch.setattr(processor, "NLP_ENGINE_DETAIL", "")
+    monkeypatch.setattr(spacy.cli, "download", _download, raising=False)
+
+    with pytest.raises(RuntimeError):
+        processor._resolve_nlp_model()
+
+    assert calls == [], "Android 运行期禁止 spacy.cli.download（ADR-0028 D5）"
+
+
+def test_android_load_failure_is_loud_not_pure():
+    """ADR-0028 D4：Android 本地加载失败必须抛 RuntimeError，不得返回纯 Python 结果。
+
+    `RETURNED_RESULT` 就是"静默降级"的证据：修复前 Android 的 `nlp is None` 会让
+    `process_german_text` 直接走纯 Python 分支并正常返回。
+    """
+    probe = (
+        "import spacy, sys, os\n"
+        "import spacy.cli\n"
+        "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
+        "sys.path.insert(0, os.getcwd())\n"
+        "from delector import server\n"
+        "from delector.nlp_engine import processor\n"
+        "def _boom(name):\n"
+        "    raise OSError('simulated local load failure')\n"
+        "processor._load_spacy_model = _boom\n"
+        "try:\n"
+        "    server.process_german_text('Der Hund schläft.')\n"
+        "except RuntimeError:\n"
+        "    print('RAISED_RUNTIME_ERROR')\n"
+        "else:\n"
+        "    print('RETURNED_RESULT')\n"
+        "print('ENGINE=' + processor.NLP_ENGINE)\n"
+    )
+    out = _run_android_probe(probe)
+    assert "RETURNED_RESULT" not in out, f"加载失败不得静默返回纯 Python 结果，实际输出：\n{out}"
+    assert "RAISED_RUNTIME_ERROR" in out, f"加载失败必须硬失败（RuntimeError），实际输出：\n{out}"
+    assert "ENGINE=spacy(加载失败)" in out, f"失败后引擎状态必须如实反映，实际输出：\n{out}"
+
+
+def test_processor_and_syntax_tree_share_engine_status(monkeypatch):
+    """ADR-0028：句法专线必须复用 processor 的加载器，不能自己裸 `spacy.load`。
+
+    用哨兵替换 `processor._load_spacy_model`：若 `syntax_tree.get_spacy_nlp()` 仍走
+    `spacy.load`，拿到的就是另一个真实模型对象，而不是哨兵。失败分支同样要把异常
+    写进 `_spacy_load_error`（诊断语义保留）。
+    """
+    from delector.nlp_engine import processor, syntax_tree
+
+    sentinel = object()
+    monkeypatch.setattr(processor, "_load_spacy_model", lambda name: (sentinel, "sentinel"))
+    monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
+    monkeypatch.setattr(syntax_tree, "_spacy_load_error", "")
+
+    assert syntax_tree.get_spacy_nlp() is sentinel
+    assert syntax_tree.get_spacy_load_error() == ""
+
+    def _boom(name):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
+    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    assert syntax_tree.get_spacy_nlp() is None
+    assert "boom" in syntax_tree.get_spacy_load_error()
+
+
+def test_syntax_tree_load_failure_is_loud_not_pure(monkeypatch):
+    """ADR-0028 D4（2026-11-06 澄清）：句法专线加载失败也不得回退纯 Python 拓扑。
+
+    覆盖范围从"主路径"扩到"所有 spaCy 调用点"：`analyze_syntax_tree` 必须传播
+    RuntimeError，且错误信息能指明是模型加载失败、并带上底层诊断。
+    """
+    from delector.nlp_engine import processor, syntax_tree
+
+    def _boom(name):
+        raise RuntimeError("model boom")
+
+    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
+    monkeypatch.setattr(syntax_tree, "_spacy_load_error", "")
+
+    with pytest.raises(RuntimeError) as excinfo:
+        syntax_tree.analyze_syntax_tree("Der Hund schläft.")
+
+    msg = str(excinfo.value)
+    assert "加载失败" in msg, f"错误信息必须能识别为模型加载失败，实际：{msg}"
+    assert "model boom" in msg, f"错误信息必须带底层诊断，实际：{msg}"
+
+
+def test_syntax_tree_error_distinguishes_no_data(monkeypatch):
+    """ADR-0028 D4：`分析失败` 与 `无数据` 必须可区分。
+
+    空输入返回 `sentence_count: 0`（合法的"无数据"）；模型不可用则抛 RuntimeError。
+    两者不得再共用"返回空拓扑"这一条静默路径。
+    """
+    from delector.nlp_engine import syntax_tree
+
+    empty = syntax_tree.analyze_syntax_tree("   ")
+    assert empty["sentence_count"] == 0
+
+    monkeypatch.setattr(syntax_tree, "get_spacy_nlp", lambda: None)
+    monkeypatch.setattr(syntax_tree, "get_spacy_load_error", lambda: "")
+    with pytest.raises(RuntimeError) as excinfo:
+        syntax_tree.analyze_syntax_tree("Der Hund schläft.")
+
+    assert "无数据" in str(excinfo.value), f"无诊断信息时应明确是无数据，实际：{excinfo.value}"
 
 
 # 模型档位契约已移到 tests/test_nlp_model_sm_only.py（ADR-0027：只支持 sm），
@@ -123,7 +301,8 @@ def test_android_never_downloads_model_at_import():
 
 
 def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
-    """spacy.load(名称) 查的是 .dist-info；Android 上模型是直接拷进源码目录的。
+    """spacy.load(名称) 查的是 .dist-info。历史上 Android 模型是直接拷进源码目录的；
+    2026-11-05 实测当前 APK 已含 dist-info（`spacy.load` 可成功），但打包方式回退时仍会 E050。
 
     真机实测报的就是 "[E050] Can't find model 'de_core_news_sm'"，尽管这个包
     import 得动。所以按名称失败后必须退到模块自身的 load()。
@@ -160,7 +339,7 @@ def test_android_build_extracts_spacy_data_packages():
     """Chaquopy 默认不把包的数据文件解到磁盘（build.json 的 extract_packages 为空）。
 
     这三个包都用 Path(__file__).parent 去 open() 真实文件，漏掉任何一个，
-    真机上 spaCy 就会静默退回纯 Python 路径。
+    真机上模型加载就会失败（ADR-0028：硬失败，不再静默退回纯 Python）。
     """
     gradle = open(os.path.join(ROOT, "android", "app", "build.gradle"), encoding="utf-8").read()
     extract_lines = [ln for ln in gradle.splitlines() if "extractPackages" in ln]
@@ -568,7 +747,7 @@ def test_delete_article(client):
 
 
 def test_android_spacy_module_load_fallback_static():
-    """_load_spacy_model 必须包含 module.load() 回退（Android 无 dist-info 时唯一可用路径）。"""
+    """_load_spacy_model 必须包含 module.load() 回退（打包方式回退、无 dist-info 时的兜底路径）。"""
     src = open(os.path.join(ROOT, "delector", "nlp_engine", "processor.py"), encoding="utf-8").read()
     assert "importlib.import_module" in src, "缺 importlib 回退"
     assert "module.load()" in src, "缺 module.load() 回退"
@@ -583,7 +762,7 @@ def test_android_spacy_model_dir_fallback_static():
 
 
 def test_android_spacy_download_gated_by_is_android_static():
-    """自动下载必须被 is_android() 门控，否则 Android import 期起 pip 子进程卡死。"""
+    """自动下载必须被 is_android() 门控，否则 Android 运行期起 pip 子进程卡死。"""
     src = open(os.path.join(ROOT, "delector", "nlp_engine", "processor.py"), encoding="utf-8").read()
     # 必须有 is_android 判断且在 download 之前
     assert "is_android()" in src, "缺 is_android() 判断"

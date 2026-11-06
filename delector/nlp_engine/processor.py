@@ -36,10 +36,10 @@ def _load_spacy_model(name: str) -> Tuple[Any, str]:
     """加载指定德语模型，返回 (nlp, 加载方式描述)；全部策略失败则抛 RuntimeError。
 
     为什么不能只用 spacy.load(name)：它走 spacy.util.is_package()，查的是
-    importlib.metadata 的 .dist-info 元数据。Android 上模型是被直接拷进 Chaquopy
-    的 Python 源码目录的（见 CI 的 sync 步骤），没有 dist-info，于是即便这个包
-    import 得动，也只会报 "[E050] Can't find model"——真机上就是这么退化成纯
-    Python 路径的。所以按名称失败后要退到模块自身的 load()，最后退到数据目录路径。
+    importlib.metadata 的 .dist-info 元数据。当前打包（含 Android APK）已含 dist-info，
+    `spacy.load` 可用；三级回退仅防御**打包方式回退**——历史上曾把模型裸拷进 Chaquopy
+    源码目录、缺 dist-info 导致 "[E050] Can't find model"（2026-11-05 实测该问题已修复，
+    ADR-0028）。所以按名称失败后仍要退到模块自身的 load()，最后退到数据目录路径。
     """
     errors = []
     try:
@@ -88,17 +88,20 @@ _nlp_model: Any = None  # 解析成功后的真实模型对象
 _nlp_resolved = False  # 是否已解析（成功或失败都置位，保证「只加载一次」）
 _nlp_error = ""  # 解析失败原因（供错误信息与诊断）
 
-# 平台分流：Android 导入期既不 spacy.load 也不 (spacy.cli.)download —— Chaquopy 里
-# download 会起 pip 子进程阻塞启动页。故这里先算一次，作为下方下载路径的门控依据。
+# 平台判定：Android 运行期禁止 spacy.cli.download（Chaquopy 里会起 pip 子进程阻塞启动页）。
+# 这里先算一次，作为 `_load_model_with_autodownload` 的下载门控依据。
 _android_runtime = is_android()
 
 
 def _load_model_with_autodownload() -> Tuple[Any, str]:
     """加载唯一模型（sm）；本地加载失败时自动下载同一模型一次兜底。返回 (nlp, 加载方式描述)。
 
-    「Android 不下载」的保证由调用方给出：Android 路径根本不会走到本函数（见本块末尾的
-    平台分支），故旧故障（Chaquopy 里 spacy.cli.download 起 pip 子进程阻塞启动页）不会复发。
+    Android 例外（ADR-0028 D5）：只做本地三级回退，**绝不** `spacy.cli.download`
+    （Chaquopy 里会起 pip 子进程阻塞启动页且无网络）。本地失败直接抛 RuntimeError，
+    由 `_resolve_nlp_model` 按硬失败处理，不降级纯 Python。
     """
+    if _android_runtime:
+        return _load_spacy_model(SPACY_MODEL_NAME)
     errors: List[str] = []
     try:
         return _load_spacy_model(SPACY_MODEL_NAME)
@@ -128,9 +131,9 @@ def _resolve_nlp_model() -> Any:
     uvicorn 的首批并发请求因此只触发一次 spacy.load，其余等锁后复用同一结果，不会出现
     「两次加载」或「半初始化被读到」。
 
-    引擎状态同步：`NLP_ENGINE` / `NLP_ENGINE_DETAIL` 在**导入期**已按平台分支置好（桌面为
-    **声明值** "spacy"，不代表模型已加载，见文件末尾分支）；本函数成功时用**实际加载结果**
-    再刷一遍，失败时改写为 "spacy(加载失败)"（让 live 读取方看到真实状态；理由见失败分支注释）。
+    引擎状态同步：`NLP_ENGINE` / `NLP_ENGINE_DETAIL` 在**导入期**已声明为 "spacy"（**声明值**，
+    不代表模型已加载，见文件末尾分支）；本函数成功时用**实际加载结果**再刷一遍，失败时改写为
+    "spacy(加载失败)"（让 live 读取方看到真实状态；理由见失败分支注释）。
     """
     global _nlp_model, _nlp_resolved, _nlp_error, NLP_ENGINE, NLP_ENGINE_DETAIL
     if _nlp_resolved:
@@ -221,7 +224,7 @@ class _LazyNlp:
     为什么用代理而不是把 nlp 设成 None / 改成函数：既有调用方按**值**使用 `processor.nlp`
     （`from ... import nlp` 后 `nlp(text)` 与 `nlp is None`）。代理保留「可调用」这一既有语义，
     调用方无需改代码；同时把昂贵的 spacy.load 推迟到首次真正调用。`nlp is None` 仍能区分
-    「spaCy 可用 vs 缺失/Android 降级」（后两者绑定真正的 None，见下方平台分支）。
+    「spaCy 可用 vs 未安装」（仅 spaCy 缺失时绑定真正的 None，见下方分支）。
     """
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -229,23 +232,17 @@ class _LazyNlp:
 
 
 # 导入期只做**廉价**判定（import spacy 已在模块顶部试过），绝不在此 spacy.load。
-# 此处写下的 NLP_ENGINE 是**导入期声明值**：桌面分支按平台选定为 "spacy"，**不代表模型已加载**
-# —— 模型的**真实**加载结果由 `_resolve_nlp_model` 在首次使用时回填（成功仍 "spacy"、失败改
-# "spacy(加载失败)"）。真机可用 adb logcat / GET /api/settings 确认实际走的路径。
+# 此处写下的 NLP_ENGINE 是**导入期声明值**：spaCy 可用时（桌面与 Android 同口径）为 "spacy"，
+# **不代表模型已加载**——模型的**真实**加载结果由 `_resolve_nlp_model` 在首次使用时回填
+#（成功仍 "spacy"、失败改 "spacy(加载失败)"）。真机可用 adb logcat / GET /api/settings 确认实际走的路径。
 if spacy is None:
     # 红线 1：spaCy 缺失 ⇒ 纯 Python 降级路径（既有语义，保持不变）。
     nlp: Any = None
     NLP_ENGINE = "pure_python"
     NLP_ENGINE_DETAIL = "spaCy 未安装，使用纯 Python 降级路径（无依存句法/格标注）"
-elif _android_runtime:
-    # Android：模型以裸源码目录拷贝、无 dist-info，spacy.load(名字) 必失败；导入期加载只会
-    # 白白阻塞启动页，且必须避免 spacy.cli.download 起 pip 子进程。既有行为已实际退化到纯 Python
-    #（docs/agents/architecture.md）——这里显式化：不导入期加载、不联网下载，直接降级（红线 1）。
-    nlp = None
-    NLP_ENGINE = "pure_python"
-    NLP_ENGINE_DETAIL = "Android：模型不在导入期加载（无 dist-info/避免 pip 下载），走纯 Python 降级"
 else:
-    # 桌面：惰性加载。import 期**不** spacy.load；模型于首次 process_german_text 时加载。
+    # spaCy 可用（桌面与 Android 同口径，ADR-0028）：惰性加载。
+    # import 期**不** spacy.load；模型于首次 process_german_text 时加载。
     # 故下面的 NLP_ENGINE = "spacy" 是**声明值**（模型未加载也如此），**不是**"首次加载成功才赋值"。
     nlp = _LazyNlp()
     NLP_ENGINE = "spacy"

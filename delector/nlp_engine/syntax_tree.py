@@ -76,12 +76,13 @@ def get_spacy_nlp() -> Any:
             _spacy_load_error = "import spacy 失败（ImportError，模块级降级占位）"
         return None
     if _nlp_instance is None:
-        # 模型档位单一事实源在 processor（ADR-0027：只支持 sm）。函数内导入避免
-        # processor ↔ syntax_tree 的模块级循环依赖。
-        from delector.nlp_engine.processor import SPACY_MODEL_NAME
+        # 模型档位与加载策略的单一事实源在 processor（ADR-0027 / ADR-0028）：句法专线必须
+        # 复用同一加载器（含 Android 本地三级回退、禁止下载），不能自己裸 spacy.load。
+        # 函数内导入避免 processor ↔ syntax_tree 的模块级循环依赖。
+        from delector.nlp_engine.processor import SPACY_MODEL_NAME, _load_spacy_model
 
         try:
-            _nlp_instance = spacy.load(SPACY_MODEL_NAME)
+            _nlp_instance, _ = _load_spacy_model(SPACY_MODEL_NAME)
             _spacy_load_error = ""
         except Exception as e:
             _spacy_load_error = f"{SPACY_MODEL_NAME}: {type(e).__name__}: {e}"
@@ -912,7 +913,15 @@ def analyze_syntax_tree(text_or_doc: Union[str, Any]) -> Dict[str, Any]:
             return {"version": "3.5.0", "sentence_count": 0, "sentences": []}
         nlp = get_spacy_nlp()
         if nlp is None:
-            return _analyze_syntax_tree_pure_python(text_or_doc)
+            # ADR-0028 D4（2026-11-06 澄清：覆盖范围从主路径扩到**所有** spaCy 调用点）：
+            # 句法专线不得再返回纯 Python 拓扑。空输入仍走上面的 `sentence_count: 0`
+            # 分支——“分析失败”与“无数据”必须可区分，不得共用同一条静默返回。
+            diag = get_spacy_load_error()
+            if diag:
+                raise RuntimeError(
+                    f"德语 spaCy 模型加载失败，句法分析不可用（硬失败，不降级到纯 Python）：{diag}"
+                )
+            raise RuntimeError("句法分析无数据：spaCy 模型未加载且没有加载失败诊断（模型/数据未初始化）")
         doc = nlp(text_or_doc)
     else:
         doc = text_or_doc
