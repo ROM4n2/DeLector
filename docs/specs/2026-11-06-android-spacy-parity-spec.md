@@ -237,7 +237,7 @@ elif _android_runtime:
 ## 9. 验收判据（可执行、可证伪）
 
 1. **状态一致**（2026-11-06 实测通过）：模拟器 `/api/settings` 的 `nlp_engine == "spacy"`；`/api/syntax/spacy-status == {"path":"spacy","error":""}`；两者不再矛盾。
-2. **数据形状**（2026-11-06 实测通过）：导入 V2 主句 `Der alte Mann fütterte die Tauben im Park.` 后 GET 文章，`topology` 内 token 具备 `case` 与 `dep`（如 `Mann|Nom|sb`、`Tauben|Acc|oa`）；`vorfeld/linke_klammer/mittelfeld` 非空，`rechte_klammer/nachfeld` 为空但五字段不全为空。
+2. **数据形状**（2026-11-06 实测通过）：导入 V2 主句 `Der alte Mann fütterte die Tauben im Park.` 后 GET 文章，`topology` 内至少一个 token 的 `case` 与 `dep` 同时非空；`vorfeld/linke_klammer/mittelfeld` 非空，`rechte_klammer/nachfeld` 为空但五字段不全为空。
 3. **导入期不加载**：子进程哨兵断言导入成功且 `spacy.load` 未被调用。
 4. **运行期不下载**：`DOWNLOAD_ATTEMPTED` 哨兵未出现；`_load_model_with_autodownload` 在 Android 分支不进入 `from spacy.cli import download`。
 5. **失败硬失败**：本地三级回退全部失败时抛 `RuntimeError`，`NLP_ENGINE == "spacy(加载失败)"`，**不返回**纯 Python 结果。
