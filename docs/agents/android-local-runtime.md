@@ -124,6 +124,7 @@ Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue
 | 日期 | 使用方 | 目的 | 是否已关闭 |
 | --- | --- | --- | --- |
 | 2026-11-05 | deepseek-v4.1-flash__trae | Android 源码同步修复 + pure_python 降级排查 | 用户将自行关闭（交接实测已关闭） |
+| 2026-11-06 | deepseek-v4.1-flash__trae | T5/T6 Android spaCy 实测（改造前 `aec79f3` vs master `e169999`） | 未关闭（测量中） |
 
 ---
 
