@@ -110,7 +110,7 @@ function renderStats() {
   // 1) streak 徽章
   const streak = streakDays();
   const streakEl = $("streakBadge");
-  if (streakEl) streakEl.textContent = streak > 0 ? (streak + " 天 🔥") : "0 天（开始学习吧）";
+  if (streakEl) streakEl.textContent = streak > 0 ? (streak + " 天") : "0 天（开始学习吧）";
 
   // 2) 字母热图
   const hmEl = $("letterHeatmapBox");
@@ -362,7 +362,7 @@ function renderPlan() {
 }
 
 function renderHeaderBadge() {
-  /* 首装挂起（S.words 为空）：徽标显示加载态，不得渲染成「今日已完成 ✓」的误导态。 */
+  /* 首装挂起（S.words 为空）：徽标显示加载态，不得渲染成「今日已完成」的误导态。 */
   if (A1_BOOT_PENDING) { renderA1BootLoading(); return; }
   const eod = endToday();
   /* 徽标口径必须与 buildReviewQueue 一致（同一个 wordFilters.scope）：
@@ -378,9 +378,9 @@ function renderHeaderBadge() {
   const b = $("dueBadge");
   /* 模式与待学数一体呈现：队列变短时用户要能分辨是「学完了」还是「切了范围」。
    * 待学 / 已完成两个分支都带前缀 —— 只给待学分支加的话，核心模式刷完后模式状态凭空消失。 */
-  const scopeLabel = wordFilters.scope === "core" ? "⭐核心" : (wordFilters.scope === "reader" ? "生词" : (wordFilters.scope === "a2" ? "📘A2" : (wordFilters.scope === "b1" ? "📗B1" : "全部")));
+  const scopeLabel = wordFilters.scope === "core" ? "核心" : (wordFilters.scope === "reader" ? "生词" : (wordFilters.scope === "a2" ? "A2" : (wordFilters.scope === "b1" ? "B1" : "全部")));
   b.textContent = pending > 0
     ? scopeLabel + " · 今日待学 " + pending
-    : scopeLabel + " · 今日已完成 ✓";
+    : scopeLabel + " · 今日已完成";
   b.classList.toggle("hot", pending > 0);
 }

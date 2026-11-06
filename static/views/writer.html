@@ -30,7 +30,7 @@
               onclick="aiPolishEssay()"
               title="使用 DeepSeek AI 深度润色全文"
             >
-              ✨ AI 润色全文
+              AI 润色全文
             </button>
             <!-- 取消槽位：只在流式润色进行中显示（writer.js 的 setPolishCancelVisible 切 .hidden）；
                  点击 = controller.abort() ⇒ 服务端据此取消循环任务，不再继续烧配额。 -->
@@ -40,24 +40,24 @@
               onclick="cancelAiPolish()"
               title="中止正在进行的 AI 润色（已消耗的部分不会退回）"
             >
-              ✕ 中止润色
+              中止润色
             </button>
             <button class="btn btn-ghost" onclick="analyzeWriterText(true)">
-              ⚡ 实时诊断
+              实时诊断
             </button>
             <button
               class="btn btn-ghost writer-mobile-panel-trigger"
               id="writer-mobile-panel-trigger"
               onclick="toggleWriterMobilePanel()"
             >
-              📋 问题与历史
+              问题与历史
             </button>
             <button
               class="btn btn-dark"
               id="writer-save-btn"
               onclick="saveWriterEssay()"
             >
-              💾 保存作文
+              保存作文
             </button>
           </div>
         </div>
@@ -73,7 +73,7 @@
               class="writer-mode-tab active"
               onclick="switchWriterMode('essay')"
             >
-              ✍️ 自由写作与研磨 (Freies Schreiben)
+              自由写作与研磨 (Freies Schreiben)
             </button>
           </div>
 
@@ -81,7 +81,7 @@
           <div class="writer-left" id="writer-free-left">
             <div class="writer-card-box">
               <div class="writer-box-label" style="margin-bottom: 0.5rem">
-                <span>✍️ 德语内联智能编辑器</span>
+                <span>德语内联智能编辑器</span>
                 <span id="writer-render-status" class="writer-status-pill"
                   >等待输入</span
                 >
@@ -112,7 +112,7 @@
                     onclick="toggleInlayHints()"
                     title="开启/关闭语法内联提示"
                   >
-                    💡 格提示 ON
+                    格提示 ON
                   </button>
                   <button
                     class="btn btn-ghost btn-xs"
@@ -127,7 +127,7 @@
             <!-- History / Saved Essays List -->
             <div class="writer-card-box" style="margin-top: 1.25rem">
               <div class="writer-box-label">
-                <span>📚 我的作文草稿库</span>
+                <span>我的作文草稿库</span>
                 <button
                   class="btn btn-ghost btn-xs"
                   onclick="loadWriterEssays()"
@@ -150,14 +150,14 @@
                 class="writer-tab-btn active"
                 onclick="switchWriterPanelTab('diag')"
               >
-                🔍 诊断分析
+                诊断分析
               </button>
               <button
                 id="wtab-btn-problems"
                 class="writer-tab-btn"
                 onclick="switchWriterPanelTab('problems')"
               >
-                📋 问题清单
+                问题清单
                 <span id="wtab-problems-badge" class="writer-tab-badge hidden"
                   >0</span
                 >
@@ -167,7 +167,7 @@
                 class="writer-tab-btn"
                 onclick="switchWriterPanelTab('versions')"
               >
-                📜 版本快照
+                版本快照
               </button>
             </div>
 
@@ -175,7 +175,7 @@
             <div id="wpane-diag" class="writer-pane active">
               <!-- CEFR & Summary Badge Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">📊 语言水平与质量估测</div>
+                <div class="sidebar-section-title">语言水平与质量估测</div>
                 <div id="writer-cefr" class="writer-cefr-box">
                   <div class="writer-cefr-level">CEFR —</div>
                   <div class="writer-cefr-desc">
@@ -186,12 +186,16 @@
 
               <!-- Selected Error / Detail Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">🔍 错误诊断与纠错详解</div>
+                <div class="sidebar-section-title">错误诊断与纠错详解</div>
                 <div id="writer-err-detail" class="writer-err-detail-box">
-                  <div class="writer-err-placeholder">
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem">✍️</div>
+                  <div class="writer-err-placeholder" style="display:flex;gap:1rem;text-align:left;">
+                    <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--rule);"></span>
                     <div>
-                      点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。
+                      <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">DIAGNOSE · 错误诊断</div>
+                      <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem;">点下划线，看纠错详解</div>
+                      <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">
+                        点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -199,7 +203,7 @@
 
               <!-- Sentence Navigation Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">🧭 句子导航索引</div>
+                <div class="sidebar-section-title">句子导航索引</div>
                 <div id="writer-sent-nav" class="writer-sent-nav-list">
                   <div class="writer-empty-tip" style="padding: 0.5rem 0">
                     输入文本后生成句子索引
@@ -219,7 +223,7 @@
                     align-items: center;
                   "
                 >
-                  <span>📋 全篇问题清单</span>
+                  <span>全篇问题清单</span>
                   <span
                     id="writer-problems-stat"
                     class="writer-problems-stat-pill"
@@ -236,7 +240,7 @@
             <div id="wpane-versions" class="writer-pane hidden">
               <!-- Manual Snapshot Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">💾 保存当前快照</div>
+                <div class="sidebar-section-title">保存当前快照</div>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem">
                   <input
                     id="writer-version-msg"
@@ -266,7 +270,7 @@
                     align-items: center;
                   "
                 >
-                  <span>🕒 快照历史</span>
+                  <span>快照历史</span>
                   <button
                     class="btn btn-ghost btn-xs"
                     onclick="loadEssayVersions()"

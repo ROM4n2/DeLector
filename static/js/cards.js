@@ -232,10 +232,10 @@ export function isWorkbenchSourced(card) {
 export function cardStatsTag(card) {
   const wbS = Number(card.fsrs_s);
   if (isWorkbenchSourced(card)) {
-    const masteredBadge = card.mastered ? "🛡️ 已掌握 · " : "";
-    return `${masteredBadge}📚 工作台 · s=${wbS.toFixed(1)}`;
+    const masteredBadge = card.mastered ? "已掌握 · " : "";
+    return `${masteredBadge}工作台 · s=${wbS.toFixed(1)}`;
   }
-  return `${card.mastered ? "🛡️ 已掌握" : card.due_date ? `⏳ 到期: ${card.due_date}` : "⏳ 待复习"} · ${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误`;
+  return `${card.mastered ? "已掌握" : card.due_date ? `到期: ${card.due_date}` : "待复习"} · ${card.correct_count || 0} 正 / ${card.wrong_count || 0} 误`;
 }
 
 export function renderDeckStage(vList, gList) {
@@ -293,7 +293,7 @@ export function renderDeckStage(vList, gList) {
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
       <div class="deck-meta-bar">
-        <span>🎴 3D 扑克翻牌盒 · POKER FLIP STACK</span>
+        <span>3D 扑克翻牌盒 · POKER FLIP STACK</span>
         <span class="deck-counter-badge">KARTE ${cardState.deck.index + 1} / ${total}</span>
       </div>
 
@@ -316,7 +316,7 @@ export function renderDeckStage(vList, gList) {
               <div class="card-top-actions">
                 ${isVocab ? `<button class="speaker-btn" style="font-size:1.125rem;" onclick="event.stopPropagation();playGermanAudio(${jsAttr(card.word)})" title="朗读单词" aria-label="朗读单词"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-volume-2"></use></svg></button>` : ""}
                 <span class="cefr-badge badge-${card.cefr_level || "A1"}">${card.cefr_level || "A1"}</span>
-                <button class="card-del-btn" onclick="event.stopPropagation();deleteCard(${jsAttr(card._type)}, ${card.id}, ${jsAttr(isVocab ? card.word : card.grammar_name)})" title="删除此卡片" aria-label="删除此卡片">✕</button>
+                <button class="card-del-btn" onclick="event.stopPropagation();deleteCard(${jsAttr(card._type)}, ${card.id}, ${jsAttr(isVocab ? card.word : card.grammar_name)})" title="删除此卡片" aria-label="删除此卡片"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg></button>
               </div>
             </div>
 
@@ -324,7 +324,7 @@ export function renderDeckStage(vList, gList) {
             <div class="deck-front-center">
               <div class="deck-seal-stamp">KARTEIKARTE · ${card.cefr_level || "A1"}</div>
               <div class="deck-flip-guide">
-                <div class="deck-flip-icon">🔀</div>
+                <div class="deck-flip-icon"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-refresh-cw"></use></svg></div>
                 <div class="deck-flip-prompt">点击卡片 或 按空格 (Space) 3D 翻转背面</div>
               </div>
             </div>
@@ -333,7 +333,7 @@ export function renderDeckStage(vList, gList) {
             <div class="deck-card-footer" onclick="event.stopPropagation()">
               <span class="card-stats-tag">${cardStatsTag(card)}</span>
               <button class="card-master-btn ${card.mastered ? "mastered-active" : ""}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
-                ${card.mastered ? "↺ 重返待复习" : "✓ 斩 (已掌握)"}
+                ${card.mastered ? "↺ 重返待复习" : "斩 (已掌握)"}
               </button>
             </div>
           </div>
@@ -370,7 +370,7 @@ export function renderDeckStage(vList, gList) {
               ${isWorkbenchSourced(card) ? `
                 <div class="deck-workbench-hint">
                   <span class="deck-workbench-hint-text">这张卡在工作台学习，请到工作台复习</span>
-                  <a class="deck-workbench-link" href="/german/workbench.html" onclick="event.preventDefault();window.show('german')">📚 去工作台复习</a>
+                  <a class="deck-workbench-link" href="/german/workbench.html" onclick="event.preventDefault();window.show('german')">去工作台复习</a>
                 </div>
               ` : `
               <button class="sm2-btn sm2-btn-again" onclick="event.stopPropagation();submitCardReview('${card._type}', ${card.id}, 1)" title="完全忘记，重置为 1 天">
@@ -402,7 +402,7 @@ export function renderDeckStage(vList, gList) {
           ‹ 上一张 (A)
         </button>
         <button class="btn btn-dark" id="deck-btn-flip-ctrl" style="font-size:0.75rem;padding:0.45rem 1.25rem;" onclick="toggleDeckFlip(event)">
-          ${cardState.deck.flipped ? "↶ 翻回正面 (Space)" : "🔀 翻至背面 (Space)"}
+          ${cardState.deck.flipped ? "↶ 翻回正面 (Space)" : "翻至背面 (Space)"}
         </button>
         <button class="deck-btn-nav" id="deck-btn-next" onclick="stepDeck(1)" ${cardState.deck.index >= total - 1 ? "disabled" : ""}>
           下一张 (D) ›
@@ -432,7 +432,7 @@ export async function submitCardReview(type, id, grade) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ grade, card_type: type }),
     });
-    showUndoToast(`✓ 已记录记忆评分 (FSRS 排程已更新)`);
+    showUndoToast(`已记录记忆评分 (FSRS 排程已更新)`);
     stepDeck(1);
     refreshDueCount();
     Companion.celebrate(grade >= 3 ? "review_good" : "review_hard");
@@ -460,7 +460,7 @@ export function toggleDeckFlip(e) {
   if (flipBtn) {
     flipBtn.textContent = cardState.deck.flipped
       ? "↶ 翻回正面 (Space)"
-      : "🔀 翻至背面 (Space)";
+      : "翻至背面 (Space)";
   }
 }
 
@@ -557,7 +557,7 @@ export function renderCatalogGrid(vList, gList) {
           </div>
           <div class="card-top-actions">
             <span class="cefr-badge badge-${c.cefr_level || "A1"}">${c.cefr_level || "A1"}</span>
-            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, ${jsAttr(c.word)})" title="删除此卡片" aria-label="删除此卡片">✕</button>
+            <button class="card-del-btn" onclick="deleteCard('vocab', ${c.id}, ${jsAttr(c.word)})" title="删除此卡片" aria-label="删除此卡片"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg></button>
           </div>
         </div>
         <div class="memo-def">${esc(formatCardDefinition(c))}</div>
@@ -566,7 +566,7 @@ export function renderCatalogGrid(vList, gList) {
         <div class="card-footer-actions">
           <span class="card-stats-tag">${cardStatsTag(c)}</span>
           <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" onclick="toggleMaster('vocab', ${c.id}, ${!!c.mastered})">
-            ${c.mastered ? "↺ 重返待复习" : "✓ 斩 (已掌握)"}
+            ${c.mastered ? "↺ 重返待复习" : "斩 (已掌握)"}
           </button>
         </div>
       </div>`,
@@ -584,7 +584,7 @@ export function renderCatalogGrid(vList, gList) {
           <span class="grammar-memo-name">${esc(c.grammar_name)}</span>
           <div class="card-top-actions">
             <span class="cefr-badge badge-${c.cefr_level || "A1"}">Goethe ${c.cefr_level || "A1"}</span>
-            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, ${jsAttr(c.grammar_name)})" title="删除此考点卡" aria-label="删除此考点卡">✕</button>
+            <button class="card-del-btn" onclick="deleteCard('grammar', ${c.id}, ${jsAttr(c.grammar_name)})" title="删除此考点卡" aria-label="删除此考点卡"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg></button>
           </div>
         </div>
         ${c.rule_formula ? `<div class="grammar-memo-formula">${esc(c.rule_formula)}</div>` : ""}
@@ -593,7 +593,7 @@ export function renderCatalogGrid(vList, gList) {
         <div class="card-footer-actions">
           <span class="card-stats-tag">${cardStatsTag(c)}</span>
           <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" onclick="toggleMaster('grammar', ${c.id}, ${!!c.mastered})">
-            ${c.mastered ? "↺ 重返待复习" : "✓ 斩 (已掌握)"}
+            ${c.mastered ? "↺ 重返待复习" : "斩 (已掌握)"}
           </button>
         </div>
       </div>`,
@@ -867,12 +867,12 @@ export function checkDictation() {
   if (isMatch) {
     cardState.quiz.correct++;
     fbEl.className = "quiz-dict-feedback correct";
-    fbEl.innerHTML = `✓ 拼写正确！<b>${esc(card.word)}</b>`;
+    fbEl.innerHTML = `拼写正确！<b>${esc(card.word)}</b>`;
     playGermanAudio(card.word);
   } else {
     cardState.quiz.wrong++;
     fbEl.className = "quiz-dict-feedback wrong";
-    fbEl.innerHTML = `✗ 正确拼写为：<b>${esc(card.word)}</b> (你的回答：${esc(val)})`;
+    fbEl.innerHTML = `正确拼写为：<b>${esc(card.word)}</b> (你的回答：${esc(val)})`;
   }
   fbEl.classList.remove("hidden");
   if (nextBtn) nextBtn.classList.remove("hidden");
@@ -976,7 +976,7 @@ export async function clearAudioCache() {
     }
     const res = await api("/api/audio/cache/clear", { method: "POST" });
     notify(
-      `✓ 已清理 ${res.cleared_count || 0} 个缓存音频，释放 ${res.freed_mb || 0} MB 磁盘空间！`,
+      `已清理 ${res.cleared_count || 0} 个缓存音频，释放 ${res.freed_mb || 0} MB 磁盘空间！`,
       { kind: 'success' },
     );
     updateAudioCacheInfo();
@@ -1240,7 +1240,7 @@ function renderPrepMatrix() {
                     data-word="${esc(e.lemma)}" data-praep="${esc(g.praeposition)}"
                     data-kasus="${esc(kasus)}" data-refl="${e.reflexive ? 1 : 0}"
                     data-zh="${esc(prepPlainDef(e))}" data-cefr="${esc(e.cefr || "")}"
-                    data-beispiel="${esc(e.beispiel)}">${saved ? "✓ 已存" : "+ 卡"}</button>
+                    data-beispiel="${esc(e.beispiel)}">${saved ? "已存" : "+ 卡"}</button>
           </span>
         </div>`;
             })
@@ -1306,7 +1306,7 @@ export async function savePrepCardFromMatrix(btn) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lemma, praep, kasus }),
     }).catch(() => {});
-    btn.textContent = "✓ 已存";
+    btn.textContent = "已存";
     btn.classList.add("saved");
     refreshCardCounters();
     Companion.celebrate("card_vocab");

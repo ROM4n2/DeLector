@@ -164,7 +164,7 @@ export function renderA1TopicPills() {
     const totalCount = cache.length;
     container.innerHTML = `
       <button class="a1-pill active" onclick="filterA1Topic('')">
-        🌟 全部 ${esc(_examVocabLevel)} 考纲词汇 <span class="a1-pill-count">${totalCount}</span>
+        全部 ${esc(_examVocabLevel)} 考纲词汇 <span class="a1-pill-count">${totalCount}</span>
       </button>
     `;
     return;
@@ -176,7 +176,7 @@ export function renderA1TopicPills() {
   const totalCount = a1VocabCache.length;
   let html = `
     <button class="a1-pill ${a1CurrentTopic === "" ? "active" : ""}" onclick="filterA1Topic('')">
-      🌟 全部主题 <span class="a1-pill-count">${totalCount}</span>
+      全部主题 <span class="a1-pill-count">${totalCount}</span>
     </button>
   `;
 
@@ -378,10 +378,19 @@ export function renderA1PokerCard() {
   const list = getA1CurrentList();
   if (!list.length) {
     container.innerHTML = `
-      <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
-        <div style="font-size:2.5rem;margin-bottom:0.5rem;">🔍</div>
-        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);">未找到匹配的 ${_examVocabLevel || "A1"} 考纲词汇</div>
-        <p style="color:var(--ink-mute);font-size:0.875rem;margin-top:0.5rem;">尝试清空搜索框或切换主题分类</p>
+      <div style="padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;display:flex;gap:1rem;">
+        <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">
+            KATALOG · 词库
+          </div>
+          <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem;">
+            未找到匹配的 ${_examVocabLevel || "A1"} 考纲词汇
+          </div>
+          <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">
+            尝试清空搜索框或切换主题分类
+          </p>
+        </div>
       </div>
     `;
     return;
@@ -412,7 +421,7 @@ export function renderA1PokerCard() {
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
       <div class="deck-meta-bar">
-        <span>🌟 歌德 ${_examVocabLevel || "A1"} 官方考纲词卡 · POKER FLIP</span>
+        <span>歌德 ${_examVocabLevel || "A1"} 官方考纲词卡 · POKER FLIP</span>
         <span class="deck-counter-badge">WORT ${a1CardIndex + 1} / ${total}</span>
       </div>
 
@@ -439,7 +448,7 @@ export function renderA1PokerCard() {
             <div class="deck-front-center">
               <div style="margin-bottom:0.75rem;">${genderTag}</div>
               <div class="deck-flip-guide">
-                <div class="deck-flip-icon">🔀</div>
+                <div class="deck-flip-icon"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-refresh-cw"></use></svg></div>
                 <div class="deck-flip-prompt">点击卡片 或 按空格 3D 翻转查看释义与考纲例句</div>
               </div>
             </div>
@@ -447,7 +456,7 @@ export function renderA1PokerCard() {
             <div class="deck-card-foot" style="justify-content:flex-end;" onclick="event.stopPropagation()">
               <button class="btn ${isSaved ? "btn-ghost saved" : "btn-accent"} btn-xs"
                       onclick="saveA1WordToDeck(${jsAttr(cur.lemma)}, ${jsAttr(cur.word)}, ${jsAttr(cur.pos || "")}, ${jsAttr(cur.gender || "")}, ${jsAttr(cur.plural || "")}, ${jsAttr(cur.definition_zh || "")}, ${jsAttr(cur.example_de || "")}, ${jsAttr(cur.example_zh || "")}, this)">
-                ${isSaved ? "✓ 已在复习盒" : "+ 加入 FSRS 盒"}
+                ${isSaved ? "已在复习盒" : "+ 加入 FSRS 盒"}
               </button>
             </div>
           </div>
@@ -480,7 +489,7 @@ export function renderA1PokerCard() {
               <button class="btn btn-ghost btn-xs" onclick="flipA1Card()">↩ 返回正面</button>
               <button class="btn ${isSaved ? "btn-ghost saved" : "btn-accent"} btn-xs"
                       onclick="saveA1WordToDeck(${jsAttr(cur.lemma)}, ${jsAttr(cur.word)}, ${jsAttr(cur.pos || "")}, ${jsAttr(cur.gender || "")}, ${jsAttr(cur.plural || "")}, ${jsAttr(cur.definition_zh || "")}, ${jsAttr(cur.example_de || "")}, ${jsAttr(cur.example_zh || "")}, this)">
-                ${isSaved ? "✓ 已在复习盒" : "+ 加入 FSRS 盒"}
+                ${isSaved ? "已在复习盒" : "+ 加入 FSRS 盒"}
               </button>
             </div>
           </div>
@@ -488,10 +497,10 @@ export function renderA1PokerCard() {
       </div>
 
       <div class="deck-controls-bottom">
-        <button class="deck-nav-btn" onclick="stepA1Card(-1)" title="上一张 (← / A)">◀ 上一张</button>
-        <button class="deck-nav-btn deck-btn-flip" onclick="flipA1Card()" title="翻转卡片 (Space)">🔀 翻转</button>
-        <button class="deck-nav-btn" onclick="randomA1Card()" title="随机抽词">🎲 随机</button>
-        <button class="deck-nav-btn" onclick="stepA1Card(1)" title="下一张 (→ / D)">下一张 ▶</button>
+        <button class="deck-nav-btn" onclick="stepA1Card(-1)" title="上一张 (← / A)">上一张</button>
+        <button class="deck-nav-btn deck-btn-flip" onclick="flipA1Card()" title="翻转卡片 (Space)">翻转</button>
+        <button class="deck-nav-btn" onclick="randomA1Card()" title="随机抽词">随机</button>
+        <button class="deck-nav-btn" onclick="stepA1Card(1)" title="下一张 (→ / D)">下一张</button>
       </div>
     </div>
   `;
@@ -504,9 +513,19 @@ export function renderA1GridView() {
   const list = getA1CurrentList();
   if (!list.length) {
     container.innerHTML = `
-      <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;">
-        <div style="font-size:2.5rem;margin-bottom:0.5rem;">🔍</div>
-        <div style="font-family:var(--serif-heading);font-size:1.25rem;color:var(--ink);">未找到匹配的 ${_examVocabLevel || "A1"} 考纲词汇</div>
+      <div style="padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;display:flex;gap:1rem;">
+        <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">
+            KATALOG · 词库
+          </div>
+          <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem;">
+            未找到匹配的 ${_examVocabLevel || "A1"} 考纲词汇
+          </div>
+          <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">
+            尝试清空搜索框或切换主题分类
+          </p>
+        </div>
       </div>
     `;
     return;
@@ -539,7 +558,7 @@ export function renderA1GridView() {
         <div class="card-actions" style="margin-top:0.75rem;justify-content:flex-end;">
           <button class="btn ${isSaved ? "btn-ghost saved" : "btn-accent"} btn-xs"
                   onclick="saveA1WordToDeck(${jsAttr(w.lemma)}, ${jsAttr(w.word)}, ${jsAttr(w.pos || "")}, ${jsAttr(w.gender || "")}, ${jsAttr(w.plural || "")}, ${jsAttr(w.definition_zh || "")}, ${jsAttr(w.example_de || "")}, ${jsAttr(w.example_zh || "")}, this)">
-            ${isSaved ? "✓ 已在复习盒" : "+ 加入 FSRS 盒"}
+            ${isSaved ? "已在复习盒" : "+ 加入 FSRS 盒"}
           </button>
         </div>
       </div>
@@ -584,7 +603,7 @@ export function renderA1Teil2Deck() {
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
       <div class="deck-meta-bar">
-        <span>💬 歌德 A1 口语 Teil 2 · 主题抽词对练卡</span>
+        <span>歌德 A1 口语 Teil 2 · 主题抽词对练卡</span>
         <span class="deck-counter-badge">THEMA-KARTE ${a1CardIndex + 1} / ${total}</span>
       </div>
 
@@ -603,7 +622,7 @@ export function renderA1Teil2Deck() {
                 考场任务：根据主题 <b>${esc(cur.topic_id)}</b> 与关键词 <b>${esc(cur.keyword)}</b> 向考官/搭档提问并应答。
               </div>
               <div class="deck-flip-guide" style="margin-top:1.5rem;">
-                <div class="deck-flip-icon">🔀</div>
+                <div class="deck-flip-icon"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-refresh-cw"></use></svg></div>
                 <div class="deck-flip-prompt">先在心中构思提问，点击卡片翻转核对标准 W-Frage / Ja-Nein 问答</div>
               </div>
             </div>
@@ -628,10 +647,10 @@ export function renderA1Teil2Deck() {
       </div>
 
       <div class="deck-controls-bottom">
-        <button class="deck-nav-btn" onclick="stepA1Card(-1)">◀ 上一张</button>
-        <button class="deck-nav-btn deck-btn-flip" onclick="flipA1Card()">🔀 翻转</button>
-        <button class="deck-nav-btn" onclick="randomA1Card()">🎲 随机抽题</button>
-        <button class="deck-nav-btn" onclick="stepA1Card(1)">下一张 ▶</button>
+        <button class="deck-nav-btn" onclick="stepA1Card(-1)">上一张</button>
+        <button class="deck-nav-btn deck-btn-flip" onclick="flipA1Card()">翻转</button>
+        <button class="deck-nav-btn" onclick="randomA1Card()">随机抽题</button>
+        <button class="deck-nav-btn" onclick="stepA1Card(1)">下一张</button>
       </div>
     </div>
   `;
@@ -667,7 +686,7 @@ export function renderA1Teil3Deck() {
   container.innerHTML = `
     <div class="deck-stage" id="deck-stage">
       <div class="deck-meta-bar">
-        <span>🙋 歌德 A1 口语 Teil 3 · 考场情景与物品请求卡</span>
+        <span>歌德 A1 口语 Teil 3 · 考场情景与物品请求卡</span>
         <span class="deck-counter-badge">SITUATION ${a1CardIndex + 1} / ${total}</span>
       </div>
 
@@ -684,7 +703,7 @@ export function renderA1Teil3Deck() {
               <div class="a1-situation-icon">${cur.icon}</div>
               <div class="a1-situation-desc">${esc(cur.situation)}</div>
               <div class="deck-flip-guide" style="margin-top:1.5rem;">
-                <div class="deck-flip-icon">🔀</div>
+                <div class="deck-flip-icon"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-refresh-cw"></use></svg></div>
                 <div class="deck-flip-prompt">用祈使句 (Imperativ mit Sie) 或礼貌句 (Können Sie bitte...) 提出请求</div>
               </div>
             </div>
@@ -709,10 +728,10 @@ export function renderA1Teil3Deck() {
       </div>
 
       <div class="deck-controls-bottom">
-        <button class="deck-nav-btn" onclick="stepA1Card(-1)">◀ 上一张</button>
-        <button class="deck-nav-btn deck-btn-flip" onclick="flipA1Card()">🔀 翻转</button>
-        <button class="deck-nav-btn" onclick="randomA1Card()">🎲 随机情景</button>
-        <button class="deck-nav-btn" onclick="stepA1Card(1)">下一张 ▶</button>
+        <button class="deck-nav-btn" onclick="stepA1Card(-1)">上一张</button>
+        <button class="deck-nav-btn deck-btn-flip" onclick="flipA1Card()">翻转</button>
+        <button class="deck-nav-btn" onclick="randomA1Card()">随机情景</button>
+        <button class="deck-nav-btn" onclick="stepA1Card(1)">下一张</button>
       </div>
     </div>
   `;
@@ -748,7 +767,7 @@ export async function saveA1WordToDeck(
     });
     _a1SavedLemmas.add((lemma || word).toLowerCase());
     if (btn) {
-      btn.textContent = "✓ 已在复习盒";
+      btn.textContent = "已在复习盒";
       btn.classList.add("saved");
     }
     refreshCardCounters();

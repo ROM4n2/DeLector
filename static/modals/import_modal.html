@@ -16,7 +16,7 @@
             title="关闭 (Esc)"
             aria-label="关闭导入"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
 
@@ -26,28 +26,28 @@
             class="modal-tab import-tab active"
             onclick="switchImportTab('text')"
           >
-            <span>❖ 粘贴长文</span>
+            <span>粘贴长文</span>
           </button>
           <button
             id="tab-btn-url"
             class="modal-tab import-tab"
             onclick="switchImportTab('url')"
           >
-            <span>❖ 网页链接 (URL)</span>
+            <span>网页链接 (URL)</span>
           </button>
           <button
             id="tab-btn-file"
             class="modal-tab import-tab"
             onclick="switchImportTab('file')"
           >
-            <span>❖ 文档上传</span>
+            <span>文档上传</span>
           </button>
           <button
             id="tab-btn-feed"
             class="modal-tab import-tab"
             onclick="switchImportTab('feed')"
           >
-            <span>📰 订阅外刊 (RSS)</span>
+            <span>订阅外刊 (RSS)</span>
           </button>
         </div>
 
@@ -97,7 +97,6 @@
             />
           </div>
           <div class="url-hint-box">
-            <span class="url-hint-icon">✦</span>
             <span
               >支持自动提取与正文降噪：DW
               德语之声、Spiegel、Tagesschau、DLF、Zeit 等主流德语媒体。</span
@@ -112,10 +111,13 @@
             class="dropzone"
             onclick="document.getElementById('file-input').click()"
           >
-            <div class="dropzone-icon">📄</div>
-            <div class="dropzone-title">点击或拖拽德语文档至此处</div>
-            <div class="dropzone-desc">
-              支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）
+            <div style="display:flex;gap:0.75rem;text-align:left;max-width:44ch;margin:0 auto;">
+              <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+              <div>
+                <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.35rem;">INGESTION · 文档上传</div>
+                <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">点击或拖拽德语文档至此处</div>
+                <p style="font-size:0.8125rem;color:var(--pencil);margin:0;line-height:1.65;">支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）</p>
+              </div>
             </div>
             <input
               id="file-input"

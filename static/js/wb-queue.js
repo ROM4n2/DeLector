@@ -161,7 +161,7 @@ function extraNewWords() {
   const pool = S.words.filter(w => !S.cards[w.id] && !inQueue.has(w.id) && inScopeWord(w));
   const ordered = S.settings.newOrder === "seed" ? pool : shuffle(pool);
   const ids = ordered.slice(0, 20).map(w => w.id);
-  if (!ids.length) { toast("没有未学的新词了 🎉"); return; }
+  if (!ids.length) { toast("没有未学的新词了"); return; }
   ids.forEach(id => manualExtraIds.add(id));
   revQueue = revQueue.concat(ids);
   toast("已追加 " + ids.length + " 个新词（计入今日配额）");

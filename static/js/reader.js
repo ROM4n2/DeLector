@@ -282,7 +282,7 @@ async function _openReaderBody(id, token) {
     const sentWrapper = `
       <span class="reader-sent-unit" id="sent-unit-${Number(sent.id)}" data-sent-id="${Number(sent.id)}">
         <span class="sent-text-wrap">${sentTokens}</span>
-        <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">🌳 句法</button>
+        <button class="sent-syntax-btn" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sent.id)})" title="展开德语拓扑五场域、从句树与句法雷达">句法</button>
       </span>
     `;
 
@@ -389,7 +389,7 @@ export function inspect(tokenId, sentId) {
 
   let separableHtml = "";
   if (token.separable && token.separable.sep_lemma) {
-    separableHtml = ` · 🔗 可分原形: <strong style="color:var(--accent);">${esc(token.separable.sep_lemma)}</strong>`;
+    separableHtml = ` · 可分原形: <strong style="color:var(--accent);">${esc(token.separable.sep_lemma)}</strong>`;
   }
 
   document.getElementById("d-meta").innerHTML =
@@ -413,7 +413,7 @@ export function inspect(tokenId, sentId) {
     sepDiv.id = "d-separable-box";
     sepDiv.className = "separable-banner";
     sepDiv.innerHTML = `
-      <span class="sep-tag">🔗 框形可分动词 (Satzklammer)</span>
+      <span class="sep-tag">框形可分动词 (Satzklammer)</span>
       <span class="sep-formula">合成原形: <strong>${esc(token.separable.sep_lemma)}</strong></span>
     `;
     metaEl.parentNode.insertBefore(sepDiv, metaEl.nextSibling);
@@ -443,12 +443,12 @@ export function inspect(tokenId, sentId) {
       if (res && state.selectedToken?.text === token.text) {
         // 诚实显示释义来源：空释义不再谎称 "AI 已预填"
         const SRC_LABEL = {
-          local_dict: "⚡ 歌德核心词库 (0ms)",
-          linguistics_ext: "⚡ 本地词库 · 形态学",
-          linguistics: "⚡ 本地词库 · 形态学",
+          local_dict: "歌德核心词库 (0ms)",
+          linguistics_ext: "本地词库 · 形态学",
+          linguistics: "本地词库 · 形态学",
           ai: "AI 在线释义",
-          ai_error: "⚠ AI 接口异常，暂无释义",
-          ai_exception: "⚠ AI 接口异常，暂无释义",
+          ai_error: "AI 接口异常，暂无释义",
+          ai_exception: "AI 接口异常，暂无释义",
           none: "暂无离线释义",
         };
         const dDefEl = document.getElementById("d-def");
@@ -482,7 +482,7 @@ export function inspect(tokenId, sentId) {
           stammDiv.id = "d-stammformen-box";
           stammDiv.className = "stammformen-banner";
           stammDiv.innerHTML = `
-          <span class="stamm-tag">⚡ 强变化三态</span>
+          <span class="stamm-tag">强变化三态</span>
           <span class="stamm-formula"><strong>${esc(sf.infinitiv)}</strong> — ${esc(sf.praeteritum)} — <em>${esc(sf.hilfsverb)}</em> <strong>${esc(sf.partizip2)}</strong></span>
         `;
           metaEl.parentNode.insertBefore(stammDiv, metaEl.nextSibling);
@@ -497,7 +497,7 @@ export function inspect(tokenId, sentId) {
           kompDiv.id = "d-komposita-box";
           kompDiv.className = "komposita-banner";
           kompDiv.innerHTML = `
-          <div class="komposita-title">🧩 复合词结构拆解:</div>
+          <div class="komposita-title">复合词结构拆解:</div>
           <div class="komposita-pills-row">
             ${res.komposita
               .map(
@@ -528,7 +528,7 @@ export function inspect(tokenId, sentId) {
           praepDiv.id = "d-praep-box";
           praepDiv.className = "praep-banner";
           praepDiv.innerHTML = `
-          <div class="praep-title">🧭 固定介词搭配 (Präposition + Kasus):</div>
+          <div class="praep-title">固定介词搭配 (Präposition + Kasus):</div>
           ${res.praepositionen
             .map(
               (p, i) => `
@@ -558,7 +558,7 @@ export function inspect(tokenId, sentId) {
 export function inspectSubWord(word, defZh, gender) {
   document.getElementById("d-def").value =
     `${word} (${gender ? gender + ", " : ""}${defZh})`;
-  document.getElementById("d-def-status").textContent = "🧩 已选用复合子词释义";
+  document.getElementById("d-def-status").textContent = "已选用复合子词释义";
 }
 
 // ── Drawer & Tabs ────────────────────────────────────────────────────────────
@@ -859,7 +859,7 @@ export async function saveVocab() {
       plural: state.selectedToken.plural || "",
     });
     if (btn) {
-      btn.textContent = "✓ 已保存";
+      btn.textContent = "已保存";
       btn.disabled = false;
     }
     refreshCardCounters();
@@ -904,7 +904,7 @@ export async function savePrepCollocation(index, btn) {
       definition_zh: def,
       sentence_context: p.beispiel,
     });
-    if (btn) btn.textContent = "✓ 已保存";
+    if (btn) btn.textContent = "已保存";
     refreshCardCounters();
     Companion.celebrate("card_vocab");
   } catch {
@@ -934,7 +934,7 @@ export async function saveGrammar() {
       rule_formula: state.grammarData.rule_formula,
     });
     if (btn) {
-      btn.textContent = "✓ 已加入语法卡";
+      btn.textContent = "已加入语法卡";
       btn.disabled = false;
     }
     refreshCardCounters();
@@ -988,7 +988,7 @@ export async function loadArticleNotes(articleId) {
           const badge = document.createElement("span");
           badge.className = "margin-note-badge";
           badge.dataset.noteId = note.id;
-          badge.innerHTML = `📌 随笔`;
+          badge.innerHTML = `随笔`;
           badge.title = note.note_content;
           badge.onclick = (e) => {
             e.stopPropagation();
@@ -1139,7 +1139,7 @@ export function openNoteDrawerFromSelection() {
   document.getElementById("note-quote").textContent =
     `"${state.activeSelectedRangeText}"`;
   document.getElementById("note-text-input").value = "";
-  document.getElementById("save-note-btn").textContent = "✓ 保存便签";
+  document.getElementById("save-note-btn").textContent = "保存便签";
   document.getElementById("del-note-btn").classList.add("hidden");
 
   openDrawer("note");
@@ -1187,7 +1187,7 @@ export function openNoteDrawerForExisting(noteId) {
   document.getElementById("note-badge-status").textContent = "已保存便签";
   document.getElementById("note-quote").textContent = `"${note.selected_text}"`;
   document.getElementById("note-text-input").value = note.note_content || "";
-  document.getElementById("save-note-btn").textContent = "✓ 更新便签";
+  document.getElementById("save-note-btn").textContent = "更新便签";
   document.getElementById("del-note-btn").classList.remove("hidden");
 
   openDrawer("note");
@@ -1196,7 +1196,7 @@ export function openNoteDrawerForExisting(noteId) {
 export async function aiNoteAssist() {
   if (!state.activeSelectedRangeText || !state.currentArticle) return;
   const btn = document.getElementById("note-ai-btn");
-  btn.textContent = "✨ 解析中…";
+  btn.textContent = "解析中…";
   btn.disabled = true;
 
   const sent = state.currentArticle.sentences?.find(
@@ -1215,7 +1215,7 @@ export async function aiNoteAssist() {
         document.getElementById("d-def-status") ||
         document.getElementById("note-ai-status");
       if (statusEl)
-        statusEl.textContent = "⚠ 未配置 DEEPSEEK_API_KEY，AI 解析不可用";
+        statusEl.textContent = "未配置 DEEPSEEK_API_KEY，AI 解析不可用";
       return;
     }
 
@@ -1227,7 +1227,7 @@ export async function aiNoteAssist() {
   } catch {
     notify("AI 速记解析失败，请检查网络配置", { kind: 'error' });
   } finally {
-    btn.textContent = "✨ AI 速记辅助";
+    btn.textContent = "AI 速记辅助";
     btn.disabled = false;
   }
 }
@@ -1247,7 +1247,7 @@ export async function saveCurrentNote() {
     note_content: noteText,
   });
 
-  document.getElementById("save-note-btn").textContent = "✓ 已保存";
+  document.getElementById("save-note-btn").textContent = "已保存";
   await loadArticleNotes(state.currentArticle.id);
   window.getSelection()?.removeAllRanges();
 }
@@ -1359,7 +1359,7 @@ export async function saveClauseAsGrammarCard(
       rule_formula: formula || "Satzbau",
     });
     refreshCardCounters();
-    notify(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`, { kind: 'success' });
+    notify(`已将「${label}」沉淀至 Anki 语法卡盒！`, { kind: 'success' });
   } catch (err) {
     alert("保存语法卡失败");
   }

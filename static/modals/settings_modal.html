@@ -15,7 +15,7 @@
           "
         >
           <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
-            >⚙️ 偏好与 API 设置 (Einstellungen)</span
+            >偏好与 API 设置 (Einstellungen)</span
           >
           <button
             class="drawer-close"
@@ -23,13 +23,13 @@
             title="关闭 (Esc)"
             aria-label="关闭设置"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
 
         <div class="settings-section">
           <div class="settings-section-title">
-            🤖 AI 深度剖析服务 (DeepSeek / OpenAI 兼容)
+            AI 深度剖析服务 (DeepSeek / OpenAI 兼容)
           </div>
           <p
             class="settings-tip"
@@ -155,9 +155,9 @@
               <label class="input-label" for="set-reasoning-effort">思考强度 (Reasoning Effort)</label>
               <select id="set-reasoning-effort" class="modal-input">
                 <option value="none">关闭思考 (None) - 仅常规输出</option>
-                <option value="low">⚡ 极速 (Low) - 快速要点推演</option>
-                <option value="medium" selected>⚖ 平衡 (Medium) - 标准语法场域分析</option>
-                <option value="high">🧠 深度 (High) - 德福/歌德长难句深挖</option>
+                <option value="low">极速 (Low) - 快速要点推演</option>
+                <option value="medium" selected>平衡 (Medium) - 标准语法场域分析</option>
+                <option value="high">深度 (High) - 德福/歌德长难句深挖</option>
               </select>
               <div class="hint-text">
                 调节 DeepSeek 与思维链模型的深度推演强度。
@@ -178,7 +178,7 @@
               class="btn btn-ghost"
               onclick="testApiKeyConnection()"
             >
-              ⚡ 测试连通性
+              测试连通性
             </button>
             <span
               id="test-key-feedback"
@@ -200,7 +200,7 @@
         />
 
         <div class="settings-section">
-          <div class="settings-section-title">🔊 德语发音与 TTS 朗读偏好</div>
+          <div class="settings-section-title">德语发音与 TTS 朗读偏好</div>
           <div
             style="
               display: grid;
@@ -253,7 +253,7 @@
             class="btn btn-dark"
             onclick="saveAppSettings()"
           >
-            ✓ 保存并生效
+            保存并生效
           </button>
         </div>
       </div>

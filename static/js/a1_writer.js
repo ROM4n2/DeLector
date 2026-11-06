@@ -196,7 +196,7 @@ export async function checkA1Formular() {
         }
         if (icon)
           icon.innerHTML =
-            '<span style="color:#16a34a;font-weight:bold;">✓ 正确 (+1分)</span>';
+            '<span style="color:#16a34a;font-weight:bold;">正确 (+1分)</span>';
         if (corr) corr.classList.add('hidden');
       } else {
         if (row) {
@@ -209,7 +209,7 @@ export async function checkA1Formular() {
         }
         if (icon)
           icon.innerHTML =
-            '<span style="color:#dc2626;font-weight:bold;">✕ 错误 (0分)</span>';
+            '<span style="color:#dc2626;font-weight:bold;">错误 (0分)</span>';
         if (corr) {
           corr.classList.remove('hidden');
           corr.innerHTML = `
@@ -226,7 +226,7 @@ export async function checkA1Formular() {
     if (feedbackEl) {
       feedbackEl.classList.remove('hidden');
       const scoreBadge =
-        res.score === 5 ? '🎉 满分 5 / 5' : `📊 得分: ${res.score} / 5`;
+        res.score === 5 ? '满分 5 / 5' : `得分: ${res.score} / 5`;
       feedbackEl.innerHTML = `
         <div class="a1-score-card ${res.score >= 4 ? 'score-good' : 'score-need-work'}">
           <div style="font-size:1.25rem;font-weight:700;font-family:var(--serif-heading);">${scoreBadge}</div>
@@ -356,7 +356,7 @@ export function onA1EmailInput() {
       badgeEl.textContent = '偏短 (<20词)';
       badgeEl.className = 'a1-diag-badge badge-warn';
     } else if (wordCount <= 40) {
-      badgeEl.textContent = '✓ 最佳区间 (25~35词)';
+      badgeEl.textContent = '最佳区间 (25~35词)';
       badgeEl.className = 'a1-diag-badge badge-ok';
     } else {
       badgeEl.textContent = '偏长 (>40词)';
@@ -394,10 +394,10 @@ export async function diagnoseA1Email() {
     if (greetingStatus) {
       if (res.greeting.valid) {
         greetingStatus.textContent =
-          res.greeting.type === 'formal' ? '✓ 正式尊称' : '✓ 熟人便函';
+          res.greeting.type === 'formal' ? '正式尊称' : '熟人便函';
         greetingStatus.className = 'a1-diag-badge badge-ok';
       } else {
-        greetingStatus.textContent = '✕ 缺失称呼';
+        greetingStatus.textContent = '缺失称呼';
         greetingStatus.className = 'a1-diag-badge badge-err';
       }
     }
@@ -407,13 +407,13 @@ export async function diagnoseA1Email() {
     );
     if (valedictionStatus) {
       if (res.has_valediction_comma_error) {
-        valedictionStatus.textContent = '⚠ 勿加逗号';
+        valedictionStatus.textContent = '勿加逗号';
         valedictionStatus.className = 'a1-diag-badge badge-warn';
       } else if (res.valediction.valid) {
-        valedictionStatus.textContent = '✓ 规范结语';
+        valedictionStatus.textContent = '规范结语';
         valedictionStatus.className = 'a1-diag-badge badge-ok';
       } else {
-        valedictionStatus.textContent = '✕ 缺失结语';
+        valedictionStatus.textContent = '缺失结语';
         valedictionStatus.className = 'a1-diag-badge badge-err';
       }
     }
@@ -439,7 +439,7 @@ export async function diagnoseA1Email() {
       if (!res.suggestions || !res.suggestions.length) {
         diagBox.innerHTML = `
           <div class="a1-diag-card diag-perfect">
-            <b>🎉 格式完全合规！</b> 称呼、正文大小写、结语与词数均达到满分水准。
+            <b>格式完全合规！</b> 称呼、正文大小写、结语与词数均达到满分水准。
           </div>
         `;
       } else {
@@ -447,7 +447,6 @@ export async function diagnoseA1Email() {
           .map(
             (s) => `
           <div class="a1-diag-item diag-${s.level || 'warning'}">
-            <span>${s.level === 'error' ? '🚫' : '💡'}</span>
             <div>${esc(s.message)}</div>
           </div>
         `

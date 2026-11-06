@@ -403,9 +403,9 @@ async function runScenarios(cfg) {
       "detail_analysis",
     );
   }
-  check(stage().includes("✅ 句法结构已揭示"), "揭示后未渲染揭示态", "detail_analysis");
+  check(stage().includes("句法结构已揭示"), "揭示后未渲染揭示态", "detail_analysis");
   check(stage().includes("主句") && stage().includes("关系从句"), "clause_tree 嵌套树未渲染", "detail_analysis");
-  check(stage().includes(" ➤定式 lernt"), "clause_tree 节点未渲染定式动词 finite_verb", "detail_analysis");
+  check(stage().includes(" 定式 lernt"), "clause_tree 节点未渲染定式动词 finite_verb", "detail_analysis");
   check(
     stage().includes("VF 前置场") && stage().includes("MF 中段") && stage().includes("框型"),
     "analysis.topology 未渲染（field_texts/框型）",

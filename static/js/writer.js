@@ -306,7 +306,7 @@ export function toggleInlayHints() {
   inlayEnabled = !inlayEnabled;
   const btn = document.getElementById('writer-inlay-toggle');
   if (btn) {
-    btn.textContent = inlayEnabled ? '💡 格提示 ON' : '💡 格提示 OFF';
+    btn.textContent = inlayEnabled ? '格提示 ON' : '格提示 OFF';
     btn.classList.toggle('btn-ghost', inlayEnabled);
     btn.classList.toggle('btn-secondary', !inlayEnabled);
   }
@@ -399,10 +399,10 @@ export function updateAnalysisPanels(a) {
   if (statusPill) {
     const errCount = a?.error_count || 0;
     if (errCount === 0) {
-      statusPill.textContent = '✓ 表达流畅 · 0 处待改';
+      statusPill.textContent = '表达流畅 · 0 处待改';
       statusPill.className = 'writer-status-pill status-clean';
     } else {
-      statusPill.textContent = `⚠️ 发现 ${errCount} 处语法疑点`;
+      statusPill.textContent = `发现 ${errCount} 处语法疑点`;
       statusPill.className = 'writer-status-pill status-warn';
     }
   }
@@ -435,8 +435,8 @@ export function updateAnalysisPanels(a) {
       navEl.innerHTML = a.sentences.map((s, idx) => {
         const errCount = (s.spans || []).length;
         const badge = errCount > 0
-          ? `<span class="writer-nav-badge has-err">⚠️ ${errCount} 处疑点</span>`
-          : `<span class="writer-nav-badge clean">✓ 正常</span>`;
+          ? `<span class="writer-nav-badge has-err">${errCount} 处疑点</span>`
+          : `<span class="writer-nav-badge clean">正常</span>`;
         const previewText = s.text.length > 28 ? s.text.slice(0, 28) + '...' : s.text;
         return `
           <div class="writer-nav-item" onclick="jumpToSentence(${idx})">
@@ -515,7 +515,7 @@ export function renderProblemsPanel(a) {
   }
 
   if (totalCount === 0) {
-    listEl.innerHTML = '<div class="writer-empty-tip">✓ 未发现语法疑点或搭配提醒</div>';
+    listEl.innerHTML = '<div class="writer-empty-tip">未发现语法疑点或搭配提醒</div>';
     return;
   }
 
@@ -524,7 +524,7 @@ export function renderProblemsPanel(a) {
   if (errors.length > 0) {
     html += `
       <div class="writer-problem-group-header">
-        <span>❌ 语法疑点 (${errors.length})</span>
+        <span>语法疑点 (${errors.length})</span>
         <span>点击跳转 & 修正</span>
       </div>
     `;
@@ -546,7 +546,7 @@ export function renderProblemsPanel(a) {
   if (warnings.length > 0) {
     html += `
       <div class="writer-problem-group-header">
-        <span>⚠️ 介词搭配提醒 (${warnings.length})</span>
+        <span>介词搭配提醒 (${warnings.length})</span>
         <span>请按动作方向核对</span>
       </div>
     `;
@@ -712,7 +712,7 @@ export function selectWriterSpan(arg1, arg2, evt) {
       </div>
       <div class="err-action-box" style="display:flex;flex-direction:column;gap:0.5rem;">
         <button class="btn btn-dark btn-block" id="writer-fix-span-btn" onclick="fixSelectedSpan()">
-          ✨ 一键应用修正 (${esc(sp.corrected_form)})
+          一键应用修正 (${esc(sp.corrected_form)})
         </button>
         <button class="btn btn-secondary btn-block" id="writer-save-card-btn" onclick="saveWriterErrorAsCard()">
           ＋ 存为 Anki 语法考点卡
@@ -811,9 +811,19 @@ function resetErrorDetailView() {
   const detailEl = document.getElementById('writer-err-detail');
   if (detailEl) {
     detailEl.innerHTML = `
-      <div class="writer-err-placeholder">
-        <div style="font-size:2rem;margin-bottom:0.5rem;">✍️</div>
-        <div>点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。</div>
+      <div class="writer-err-placeholder" style="text-align:left;display:flex;gap:1rem;">
+        <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">
+            FEHLERDETAIL · 错误详解
+          </div>
+          <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem;">
+            点击波浪下划线查看解析
+          </div>
+          <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">
+            点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。
+          </p>
+        </div>
       </div>
     `;
   }
@@ -836,8 +846,8 @@ export async function loadWriterEssays() {
       const cefrBadge = r.cefr_level ? `<span class="cefr-badge badge-${r.cefr_level}">${r.cefr_level}</span>` : '';
       const dateStr = (r.updated_at || r.created_at || '').slice(0, 10);
       const errPill = r.error_count > 0
-        ? `<span class="writer-essay-err-pill has-err">⚠️ ${r.error_count} 处待纠错</span>`
-        : `<span class="writer-essay-err-pill no-err">✓ 表达流畅</span>`;
+        ? `<span class="writer-essay-err-pill has-err">${r.error_count} 处待纠错</span>`
+        : `<span class="writer-essay-err-pill no-err">表达流畅</span>`;
 
       return `
         <div class="writer-essay-item ${isCurrent ? 'active' : ''}" onclick="openWriterEssay(${r.id})">
@@ -939,7 +949,7 @@ export async function saveWriterErrorAsCard() {
     await saveWritingGrammarCard(currentEssayId, selectedSpanRef.sentence_id, selectedSpanRef.span_index);
 
     if (btn) {
-      btn.textContent = '✓ 已存为 Anki 语法卡';
+      btn.textContent = '已存为 Anki 语法卡';
       btn.classList.remove('btn-accent');
       btn.classList.add('btn-secondary');
     }
@@ -971,7 +981,7 @@ export async function saveWriterEssay() {
   const origBtnText = saveBtn ? saveBtn.innerHTML : '';
   if (saveBtn) {
     saveBtn.disabled = true;
-    saveBtn.innerHTML = '💾 保存中...';
+    saveBtn.innerHTML = '保存中...';
   }
 
   try {
@@ -990,7 +1000,7 @@ export async function saveWriterEssay() {
     loadEssayVersions();
 
     if (saveBtn) {
-      saveBtn.innerHTML = '✓ 已保存';
+      saveBtn.innerHTML = '已保存';
       setTimeout(() => {
         saveBtn.disabled = false;
         saveBtn.innerHTML = origBtnText;
@@ -1066,7 +1076,7 @@ export function renderPolishReview() {
   const summaryEl = document.getElementById('polish-hunk-summary');
   if (summaryEl) {
     if (total === 0) {
-      summaryEl.innerHTML = '<span>✓ 原文表达流畅，未检测到句式或语法需调整处。</span>';
+      summaryEl.innerHTML = '<span>原文表达流畅，未检测到句式或语法需调整处。</span>';
     } else {
       summaryEl.innerHTML = `<span>共 <b>${total}</b> 处改动 · 已选定应用 <b>${acceptedCount}/${total}</b> 处</span>`;
     }
@@ -1112,10 +1122,10 @@ export function renderPolishReview() {
               </div>
               <div class="diff-decision-group">
                 <button type="button" class="diff-decision-btn btn-choice-accept ${isAccepted ? 'active' : ''}" onclick="setPolishHunk(${idx}, true)" title="采纳 AI 润色建议">
-                  ✓ 采纳润色
+                  采纳润色
                 </button>
                 <button type="button" class="diff-decision-btn btn-choice-reject ${!isAccepted ? 'active' : ''}" onclick="setPolishHunk(${idx}, false)" title="保留原文字句">
-                  ✕ 保留原句
+                  保留原句
                 </button>
               </div>
             </div>
@@ -1123,14 +1133,14 @@ export function renderPolishReview() {
               <div class="diff-side diff-old ${!isAccepted ? 'side-chosen' : 'side-discarded'}" onclick="setPolishHunk(${idx}, false)" title="点击选择保留原句">
                 <div class="diff-side-header">
                   <span class="diff-side-label label-old">原句 (Original)</span>
-                  ${!isAccepted ? '<span class="diff-chosen-tag">✓ 保留此原句</span>' : ''}
+                  ${!isAccepted ? '<span class="diff-chosen-tag">保留此原句</span>' : ''}
                 </div>
                 <div class="diff-content">${oldLinesHtml}</div>
               </div>
               <div class="diff-side diff-new ${isAccepted ? 'side-chosen' : 'side-discarded'}" onclick="setPolishHunk(${idx}, true)" title="点击选择采纳 AI 润色">
                 <div class="diff-side-header">
-                  <span class="diff-side-label label-new">✨ AI 润色 (Korrektur)</span>
-                  ${isAccepted ? '<span class="diff-chosen-tag accept-tag">✓ 采纳此润色</span>' : ''}
+                  <span class="diff-side-label label-new">AI 润色 (Korrektur)</span>
+                  ${isAccepted ? '<span class="diff-chosen-tag accept-tag">采纳此润色</span>' : ''}
                 </div>
                 <div class="diff-content">${newLinesHtml}</div>
               </div>
@@ -1151,7 +1161,7 @@ export function renderPolishReview() {
     let html = '';
     if (notes.length > 0) {
       html += `
-        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">💡 AI 润色解析与语法点评 (${notes.length} 条)</div>
+        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">AI 润色解析与语法点评 (${notes.length} 条)</div>
         <div class="writer-ai-notes-list">
           ${notes.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
         </div>
@@ -1159,7 +1169,7 @@ export function renderPolishReview() {
     }
     if (advisories.length > 0) {
       html += `
-        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">⚠️ 语法提醒（不影响采纳）(${advisories.length} 条)</div>
+        <div class="sidebar-section-title" style="margin-bottom:0.35rem;font-size:0.75rem;">语法提醒（不影响采纳）(${advisories.length} 条)</div>
         <div class="writer-ai-notes-list">
           ${advisories.map(n => `<div class="writer-ai-note-item">• ${esc(n)}</div>`).join('')}
         </div>
@@ -1171,7 +1181,7 @@ export function renderPolishReview() {
     // 那会连"有 key 但无 nlp"这条提示真实成立（格式/字数确实做了）的路径一起说糊。
     if (polishState.judge_degraded && polishState.unconverged_reason !== 'no_api_key') {
       html += `
-        <div class="writer-ai-note-item">ℹ️ 语法检查未启用：本机未加载德语模型，本次仅做格式/字数检查。</div>
+        <div class="writer-ai-note-item">语法检查未启用：本机未加载德语模型，本次仅做格式/字数检查。</div>
       `;
     }
     if (html) {
@@ -1209,7 +1219,7 @@ export async function aiPolishEssay() {
   const origBtnText = aiBtn ? aiBtn.innerHTML : '';
   if (aiBtn) {
     aiBtn.disabled = true;
-    aiBtn.innerHTML = '✨ AI 润色中...';
+    aiBtn.innerHTML = 'AI 润色中...';
   }
 
   // 超时纪律沿用 core.js 的 DEFAULT_TIMEOUT_MS（流式路径绕开 api()，但不绕开它的超时口径）
@@ -1250,7 +1260,7 @@ export async function aiPolishEssay() {
         if (typeof ev.round === 'number') {
           // 轮次分母取自服务端事件的 max_turns（不许前端写死 3）
           const total = ev.max_turns || ev.round;
-          if (aiBtn) aiBtn.innerHTML = `✨ AI 润色中…（第 ${ev.round}/${total} 轮）`;
+          if (aiBtn) aiBtn.innerHTML = `AI 润色中…（第 ${ev.round}/${total} 轮）`;
         }
       }, recv);
       if (!payload) throw new Error(lastError || '润色流结束但没有返回结果');
@@ -1402,8 +1412,8 @@ export async function loadEssayVersions() {
     listEl.innerHTML = rows.map(v => {
       const isCheckpoint = (v.message || '').startsWith('恢复到版本');
       const errPill = v.error_count > 0
-        ? `<span class="writer-essay-err-pill has-err">⚠️ ${v.error_count} 处疑点</span>`
-        : `<span class="writer-essay-err-pill no-err">✓ 0 错误</span>`;
+        ? `<span class="writer-essay-err-pill has-err">${v.error_count} 处疑点</span>`
+        : `<span class="writer-essay-err-pill no-err">0 错误</span>`;
       const timeStr = (v.created_at || '').replace('T', ' ').slice(0, 19);
 
       return `
@@ -1468,10 +1478,10 @@ export async function previewEssayVersion(versionId) {
 
     if (statusEl) {
       if (v.error_count > 0) {
-        statusEl.textContent = `⚠️ 记录了 ${v.error_count} 处语法疑点`;
+        statusEl.textContent = `记录了 ${v.error_count} 处语法疑点`;
         statusEl.className = 'writer-status-pill status-warn';
       } else {
-        statusEl.textContent = '✓ 表达流畅 · 0 错误';
+        statusEl.textContent = '表达流畅 · 0 错误';
         statusEl.className = 'writer-status-pill status-clean';
       }
     }

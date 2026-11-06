@@ -84,7 +84,7 @@ export function renderFelderSpectrum(topology, sentId) {
       ${boxes}
     </div>
     <div class="felder-bar-actions">
-      <button class="btn-open-ast-action" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sentId)})">在工作台展开从句拓扑树 AST ➔</button>
+      <button class="btn-open-ast-action" onclick="event.stopPropagation(); openSyntaxDrawerForSentence(${Number(sentId)})">在工作台展开从句拓扑树 AST</button>
     </div>
   `;
 }
@@ -183,7 +183,7 @@ export function renderClauseTreeNode(node, depth = 0, sentId) {
         ${formulaHtml}
         <div class="clause-quote-text">„${esc(node.text || "")}“</div>
         <div class="clause-node-footer">
-          <button class="btn-clause-pill" onclick="event.stopPropagation(); highlightClauseTokens(${tokenIdsJson})">🔍 聚焦高亮</button>
+          <button class="btn-clause-pill" onclick="event.stopPropagation(); highlightClauseTokens(${tokenIdsJson})">聚焦高亮</button>
           <button class="btn-clause-pill btn-save-anki" onclick="event.stopPropagation(); saveClauseAsGrammarCard(${jsAttr(clauseLabel)}, ${jsAttr(clauseFormula)}, ${jsAttr(clauseText)}, ${Number(sentId)})">+ 加入语法卡</button>
         </div>
       </div>

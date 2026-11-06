@@ -349,9 +349,9 @@ async function runScenarios(cfg) {
     check(fbHtml.includes(cls), `六色反馈缺 ${st} 的样式类 ${cls}`, "diagnose_six_status");
   }
   check(fbHtml.includes('title="变音：ü→u"'), "反馈未渲染 hint（title 属性）", "diagnose_six_status");
-  check(fbHtml.includes("✓ 3 / 8 词"), "反馈统计未按 correct/total 渲染", "diagnose_six_status");
+  check(fbHtml.includes("3 / 8 词"), "反馈统计未按 correct/total 渲染", "diagnose_six_status");
   check(
-    fbHtml.includes("✗ 错误"),
+    fbHtml.includes("错误"),
     "D 模式句子列表判题标记缺中文「错误」（字形不得是意义的唯一载体）",
     "diagnose_six_status",
   );
@@ -363,7 +363,7 @@ async function runScenarios(cfg) {
   els["listen-dict-input"].value = "Die Kinder spielen im Garten.";
   await L.listenSubmitDictation(); // idx 2：correct 2 / total 2
   check(
-    stage().includes("✓ 正确"),
+    stage().includes("正确"),
     "D 模式句子列表判题标记缺中文「正确」（字形不得是意义的唯一载体）",
     "diagnose_six_status",
   );
@@ -404,7 +404,7 @@ async function runScenarios(cfg) {
   els["listen-cloze-input"].value = "Mann"; // s0 正确答案
   L.listenSubmitCloze();
   check(
-    stage().includes("✓ 正确"),
+    stage().includes("正确"),
     "C 模式句子列表判题标记缺中文「正确」（字形不得是意义的唯一载体）",
     "cloze_mode",
   );
@@ -413,9 +413,9 @@ async function runScenarios(cfg) {
   L.listenNext(); // s2
   els["listen-cloze-input"].value = "Kind"; // 错答（答案 Kinder）
   L.listenSubmitCloze();
-  check(stage().includes("✗ 答案：Kinder"), "C 模式错答未渲染答案揭示", "cloze_mode");
+  check(stage().includes("答案：Kinder"), "C 模式错答未渲染答案揭示", "cloze_mode");
   check(
-    stage().includes("✗ 错误"),
+    stage().includes("错误"),
     "C 模式句子列表判题标记缺中文「错误」（字形不得是意义的唯一载体）",
     "cloze_mode",
   );

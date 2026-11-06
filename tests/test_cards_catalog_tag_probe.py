@@ -85,15 +85,15 @@ def test_cards_catalog_tag_probe_samples_match_tag_contract() -> None:
     out = _run()
     samples: dict[str, Any] = out["samples"]
 
-    assert samples["vocabWorkbench"] == "📚 工作台 · s=25.0", (
+    assert samples["vocabWorkbench"] == "工作台 · s=25.0", (
         f"工作台词卡的目录角标文案被改写：{samples['vocabWorkbench']!r}"
         "（它必须与卡面的工作台标记一致，而不是显示成普通卡的零正零误）"
     )
-    assert samples["vocabReader"] == "⏳ 到期: 2026-10-05 · 7 正 / 2 误", (
+    assert samples["vocabReader"] == "到期: 2026-10-05 · 7 正 / 2 误", (
         f"普通 reader 卡的目录角标文案被改写：{samples['vocabReader']!r}"
         "（正常路径文案必须逐字不变）"
     )
-    assert samples["grammarReader"] == "⏳ 到期: 2026-10-06 · 5 正 / 1 误", (
+    assert samples["grammarReader"] == "到期: 2026-10-06 · 5 正 / 1 误", (
         f"语法卡的目录角标文案被改写：{samples['grammarReader']!r}"
         "（正常路径文案必须逐字不变）"
     )

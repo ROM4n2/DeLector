@@ -613,7 +613,7 @@ export async function loadFeedItems(url) {
         <div class="feed-item-footer">
           <span class="feed-item-origin">QUELLE: ${esc(it.source || sourceName)}</span>
           <button class="btn-feed-ingest" onclick="window.ingestFeedItem(${jsAttr(encodeURIComponent(it.link))}, ${jsAttr(encodeURIComponent(it.title))}, this)">
-            📥 导入精读
+            导入精读
           </button>
         </div>
       </div>
@@ -645,7 +645,7 @@ export async function ingestFeedItem(encodedUrl, encodedTitle, btn) {
     notify(`导入外刊失败: ${e.message}`, { kind: "error" });
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "📥 导入精读";
+      btn.textContent = "导入精读";
     }
   }
 }
@@ -697,11 +697,11 @@ export async function openSettingsModal() {
       //（delector/routes/main.py::get_app_settings）。LAN 来源按存在性分支渲染 ——
       // 既不渲染字面 'undefined'、也不凭空造掩码；回环来源文案逐字不变。
       statusEl.textContent = s.api_key_masked
-        ? `✓ 当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`
-        : "✓ 当前已配置 Key（局域网不显示）。留空保存表示不修改";
+        ? `当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`
+        : "当前已配置 Key（局域网不显示）。留空保存表示不修改";
       statusEl.style.color = "#16a34a";
     } else {
-      statusEl.textContent = "⚠️ 当前未配置 API Key（AI 深度语法剖析需配置）";
+      statusEl.textContent = "当前未配置 API Key（AI 深度语法剖析需配置）";
       statusEl.style.color = "#ca8a04";
     }
   } catch (err) {
@@ -758,17 +758,17 @@ export async function testApiKeyConnection() {
       }),
     });
     if (res.success) {
-      feedback.textContent = `✓ ${res.message}`;
+      feedback.textContent = `${res.message}`;
       feedback.style.color = "#16a34a";
     } else {
-      feedback.textContent = `✕ ${res.error}`;
+      feedback.textContent = `${res.error}`;
       feedback.style.color = "#dc2626";
     }
   } catch (err) {
-    feedback.textContent = `✕ 请求异常: ${err.message}`;
+    feedback.textContent = `请求异常: ${err.message}`;
     feedback.style.color = "#dc2626";
   } finally {
-    btn.textContent = "⚡ 测试连通性";
+    btn.textContent = "测试连通性";
     btn.disabled = false;
   }
 }
@@ -809,12 +809,12 @@ export async function saveAppSettings() {
       ShadowPlayer.setVoice(voice);
     }
 
-    notify("✓ 偏好与 API 设置已成功保存并即刻生效！", { kind: "success" });
+    notify("偏好与 API 设置已成功保存并即刻生效！", { kind: "success" });
     closeSettingsModal();
   } catch (err) {
     alert("保存设置失败: " + err.message);
   } finally {
-    btn.textContent = "✓ 保存并生效";
+    btn.textContent = "保存并生效";
     btn.disabled = false;
   }
 }

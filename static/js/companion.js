@@ -511,14 +511,14 @@ export const Companion = {
     const isSvgExt = file.name && file.name.toLowerCase().endsWith('.svg');
     const isSvgMime = file.type === 'image/svg+xml' || file.type === '' || file.type === 'text/xml';
     if (!isSvgExt && !isSvgMime) {
-      if (window.showUndoToast) window.showUndoToast('❌ 仅支持上传 .svg 格式矢量图形文件');
+      if (window.showUndoToast) window.showUndoToast('仅支持上传 .svg 格式矢量图形文件');
       return;
     }
 
     // 2. Validate file size <= 64KB
     const MAX_SIZE = 64 * 1024;
     if (file.size > MAX_SIZE) {
-      if (window.showUndoToast) window.showUndoToast('❌ SVG 文件大小不能超过 64KB');
+      if (window.showUndoToast) window.showUndoToast('SVG 文件大小不能超过 64KB');
       return;
     }
 
@@ -540,7 +540,7 @@ export const Companion = {
       this.setCharacter('custom');
 
       if (window.showUndoToast) {
-        window.showUndoToast('✓ 自定义伴读角色已导入并生效');
+        window.showUndoToast('自定义伴读角色已导入并生效');
       }
       this.triggerEmotion('happy');
       this.say({
@@ -550,7 +550,7 @@ export const Companion = {
     } catch (err) {
       console.error('[Companion] SVG Upload error:', err);
       if (window.showUndoToast) {
-        window.showUndoToast('❌ SVG 解析失败: ' + (err.message || '格式损坏'));
+        window.showUndoToast('SVG 解析失败: ' + (err.message || '格式损坏'));
       }
     }
   },
@@ -602,7 +602,7 @@ export const Companion = {
     localStorage.setItem('delector_companion_sound', this.soundEnabled ? 'on' : 'off');
     this.syncStudio();
     if (window.showUndoToast) {
-      window.showUndoToast(this.soundEnabled ? '🔊 伴读发声已开启' : '🔇 伴读发声已静音');
+      window.showUndoToast(this.soundEnabled ? '伴读发声已开启' : '伴读发声已静音');
     }
   },
 
@@ -620,7 +620,7 @@ export const Companion = {
     const nameInput = document.getElementById('studio-mascot-name');
     if (nameInput) this.setName(nameInput.value);
     if (window.showUndoToast) {
-      window.showUndoToast('✓ 伴读研习工坊设置已保存生效');
+      window.showUndoToast('伴读研习工坊设置已保存生效');
     }
     this.triggerEmotion('happy');
     this.say({ de: "Danke! Ich bin bereit!", zh: "谢谢！我已经准备好了！" });

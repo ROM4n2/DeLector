@@ -31,7 +31,7 @@ export function renderProposalCard(container, proposal, onAction) {
   // 1. 标题
   const titleEl = document.createElement('div');
   titleEl.className = 'companion-proposal-title';
-  titleEl.textContent = '📝 提议：' + (proposal.title || '生成卡片');
+  titleEl.textContent = '提议：' + (proposal.title || '生成卡片');
   cardEl.appendChild(titleEl);
 
   // 2. 提议内容详情
@@ -122,7 +122,7 @@ export function renderProposalCard(container, proposal, onAction) {
       badgeEl.style.alignItems = 'center';
       badgeEl.style.color = 'var(--moss, #2e6b3e)';
       badgeEl.style.fontWeight = 'bold';
-      badgeEl.textContent = '✓ 已收录';
+      badgeEl.textContent = '已收录';
       cardEl.classList.add('is-accepted');
       cardEl.classList.remove('is-rejected');
       cardEl.style.opacity = '1';

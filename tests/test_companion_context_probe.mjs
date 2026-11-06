@@ -1623,11 +1623,11 @@ async function main() {
   happy.options.onEvent("tool_end", { tool: "analyze", summary: "拓扑已就绪", result: { status: "ok" } });
   const happyToolChips = happyTools.querySelectorAll(".companion-tool-chip");
   check(happyToolChips.length === 1, "N 工具 chip 数量错误");
-  check(happyToolChips[0].textContent === "✓ analyze 完成: 拓扑已就绪", "N 工具 chip 完成文案错误");
+  check(happyToolChips[0].textContent === "analyze 完成: 拓扑已就绪", "N 工具 chip 完成文案错误");
   const toolErrorCases = [
     {
       data: { tool: "query_dictionary", summary: "词典服务超时", result: { status: "error" } },
-      expected: "✗ query_dictionary 异常: 词典服务超时",
+      expected: "query_dictionary 异常: 词典服务超时",
       label: "status-error/summary",
     },
     {
@@ -1635,12 +1635,12 @@ async function main() {
         tool: "vocab_stats",
         result: { error_code: "UPSTREAM_ERROR", message: "词汇统计不可用" },
       },
-      expected: "✗ vocab_stats 异常: 词汇统计不可用",
+      expected: "vocab_stats 异常: 词汇统计不可用",
       label: "error-code/message",
     },
     {
       data: { tool: "get_learner_profile", result: { error_code: "NO_DETAIL" } },
-      expected: "✗ get_learner_profile 异常: 失败",
+      expected: "get_learner_profile 异常: 失败",
       label: "error-code/default",
     },
   ];
@@ -1666,7 +1666,7 @@ async function main() {
     );
     check(errorChip.textContent === testCase.expected, "N " + testCase.label + " 异常文案或回退错误");
     check(
-      happyToolChips[0].textContent === "✓ analyze 完成: 拓扑已就绪",
+      happyToolChips[0].textContent === "analyze 完成: 拓扑已就绪",
       "N " + testCase.label + " 污染了成功 chip 文案"
     );
     check(

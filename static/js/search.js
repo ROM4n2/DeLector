@@ -322,7 +322,7 @@ export function renderSearchGroups(resp) {
   const parts = [`共 ${total} 条命中`];
   if (shown !== total) parts.push(`当前展示 ${shown} 条`);
   // truncated 仅表示「语料 hard cap 未扫完」这一真异常（limit 限量走组尾信息提示）。
-  if (data.truncated) parts.push("⚠ 部分语料未扫描完");
+  if (data.truncated) parts.push("部分语料未扫描完");
   _setStatus(parts.join(" · "));
 }
 

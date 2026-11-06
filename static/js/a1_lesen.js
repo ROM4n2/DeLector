@@ -24,7 +24,7 @@ export async function initA1Lesen() {
     }
   } catch (e) {
     console.error("Failed to load A1 Lesen sets", e);
-    container.innerHTML = `<div class="p-4 text-pencil">⚠️ 无法加载阅读题库: ${esc(e.message)}</div>`;
+    container.innerHTML = `<div class="p-4 text-pencil">无法加载阅读题库: ${esc(e.message)}</div>`;
   }
 }
 
@@ -48,10 +48,10 @@ export function renderLesenHeader() {
       <div class="a1-hoeren-title-bar">
         <div class="a1-hoeren-title">
           <span class="pulse"></span>
-          <span>📖 Goethe-Zertifikat A1 · 生活阅读实战工坊 (Lesen · 15题 / 25分 / 限时25分钟)</span>
+          <span>Goethe-Zertifikat A1 · 生活阅读实战工坊 (Lesen · 15题 / 25分 / 限时25分钟)</span>
         </div>
         <div class="a1-hoeren-status-badge" id="lesen-timer-badge">
-          ⏱️ 剩余 25:00
+          剩余 25:00
         </div>
       </div>
       <div class="a1-hoeren-set-pills">
@@ -94,7 +94,7 @@ export async function selectLesenSet(setId) {
   } catch (e) {
     if (setId !== currentSetId) return;
     console.error("Failed to load lesen set", e);
-    stage.innerHTML = `<div class="p-6 text-red">⚠️ 试卷载入失败: ${esc(e.message)}</div>`;
+    stage.innerHTML = `<div class="p-6 text-red">试卷载入失败: ${esc(e.message)}</div>`;
   }
 }
 
@@ -106,12 +106,12 @@ function startLesenTimer() {
     if (_timerRemainingSec <= 0) {
       clearInterval(_examTimer);
       _examTimer = null;
-      if (badge) badge.innerText = "⏱️ 时间到！请交卷";
+      if (badge) badge.innerText = "时间到！请交卷";
     } else {
       const min = Math.floor(_timerRemainingSec / 60);
       const sec = _timerRemainingSec % 60;
       if (badge) {
-        badge.innerText = `⏱️ 剩余 ${min.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+        badge.innerText = `剩余 ${min.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
       }
     }
   }, 1000);
@@ -147,7 +147,7 @@ export function renderLesenQuestions() {
           </div>
           <div class="a1-hoeren-action-group">
             <button id="btn-lesen-submit" class="btn btn-accent" onclick="A1Lesen.submitLesenExam()">
-              ✓ 提交阅读答卷 (评分)
+              提交阅读答卷 (评分)
             </button>
           </div>
         </div>
@@ -161,7 +161,7 @@ export function renderLesenQuestions() {
       <div class="a1-hoeren-sidebar">
         <div class="a1-hoeren-side-card">
           <div class="a1-side-header">
-            <span>📋 阅读答题卡</span>
+            <span>阅读答题卡</span>
             <span id="lesen-answered-ratio">0/15</span>
           </div>
           <div class="a1-hoeren-grid-matrix">
@@ -208,7 +208,7 @@ function renderAllLesenCards(parts) {
         <div class="a1-hoeren-q-card" id="q-card-${q.id}">
           <div class="a1-q-header">
             <span class="a1-q-num">Frage ${qNum++}</span>
-            <span class="a1-q-repeat">✉️ 便条/邮件阅读</span>
+            <span class="a1-q-repeat">便条/邮件阅读</span>
           </div>
           <div class="a1-lesen-passage-box">
             ${esc(q.reading_text_de)}
@@ -251,10 +251,10 @@ function renderAllLesenCards(parts) {
         <div class="a1-hoeren-q-card" id="q-card-${q.id}">
           <div class="a1-q-header">
             <span class="a1-q-num">Frage ${qNum++}</span>
-            <span class="a1-q-repeat">🌐 网页对比选择</span>
+            <span class="a1-q-repeat">网页对比选择</span>
           </div>
           <div class="a1-lesen-need-box">
-            <strong>🎯 用户需求:</strong> ${esc(q.user_need_zh)}
+            <strong>用户需求:</strong> ${esc(q.user_need_zh)}
           </div>
           <div class="a1-lesen-dual-web">
             <div class="a1-web-card ${isA ? "selected-web" : ""}" onclick="A1Lesen.selectOption(${jsAttr(q.id)}, ${jsAttr("A")})">
@@ -297,10 +297,10 @@ function renderAllLesenCards(parts) {
         <div class="a1-hoeren-q-card" id="q-card-${q.id}">
           <div class="a1-q-header">
             <span class="a1-q-num">Frage ${qNum++}</span>
-            <span class="a1-q-repeat">🪧 公共标牌告示</span>
+            <span class="a1-q-repeat">公共标牌告示</span>
           </div>
           <div class="a1-lesen-sign-box">
-            <span class="sign-pin">📌 SCHILD / AUSHANG</span>
+            <span class="sign-pin">SCHILD / AUSHANG</span>
             <div class="sign-content">${esc(q.sign_text_de)}</div>
           </div>
           <div class="a1-lesen-statement">
@@ -454,12 +454,12 @@ function renderLesenGradedResults(graded) {
       analysisBox.innerHTML = `
         <div class="analysis-status-line">
           <span class="${d.is_correct ? "text-green" : "text-red"}">
-            ${d.is_correct ? "✅ 正确" : `❌ 错误 (您的选择: ${esc(d.user_answer || "未选")})`}
+            ${d.is_correct ? "正确" : `错误 (您的选择: ${esc(d.user_answer || "未选")})`}
           </span>
           <span class="correct-ans-tag">官方正确答案: <strong>${esc(d.correct_answer)}</strong></span>
         </div>
         <div class="analysis-explanation">
-          <strong>💡 考点线索剖析:</strong> ${esc(d.explanation_zh)}
+          <strong>考点线索剖析:</strong> ${esc(d.explanation_zh)}
         </div>
       `;
     }
@@ -477,7 +477,7 @@ function renderLesenGradedResults(graded) {
         </div>
         <div class="score-banner-right">
           <button class="btn btn-dark btn-sm" onclick="A1Lesen.selectLesenSet(${currentSetId})">
-            🔄 重测本卷
+            重测本卷
           </button>
         </div>
       </div>

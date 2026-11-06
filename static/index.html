@@ -85,7 +85,7 @@
         </button>
         <button id="nav-btn-search" class="nav-tab" onclick="show('search')">
           <span class="nav-tab-code">SUCHE</span>
-          <span class="nav-tab-label">🔍 检索</span>
+          <span class="nav-tab-label">检索</span>
         </button>
       </div>
       <div class="nav-actions">
@@ -94,14 +94,14 @@
           onclick="openSatzLab()"
           title="用示例句体验句法拆解"
         >
-          🧩 拆句
+          拆句
         </button>
         <button
           class="btn btn-ghost nav-settings-btn"
           onclick="openSettingsModal()"
           title="偏好与 API 设置"
         >
-          ⚙️ 设置
+          设置
         </button>
         <a
           href="/api/cards/export/apkg"
@@ -173,7 +173,7 @@
       <div id="article-list"></div>
 
       <div class="encounter-entry-card" onclick="show('encounter')" role="button" tabindex="0">
-        <span class="encounter-entry-emoji">🌱</span>
+        <span class="encounter-entry-emoji"></span>
         <span class="encounter-entry-title">遇见区 i+1 短文</span>
         <span class="encounter-entry-sub">手选分级德语短篇 · Begegnungszone</span>
       </div>
@@ -190,7 +190,7 @@
           ＋ 加文本
         </button>
         <button id="encounter-pull-toggle" class="btn btn-accent" onclick="encounterTogglePullPanel()">
-          📥 从电脑导入
+          从电脑导入
         </button>
       </div>
 
@@ -281,7 +281,7 @@
             title="开始/暂停全文影子跟读朗读"
             style="font-size: 0.75rem; min-height: 30px; padding: 0 0.65rem"
           >
-            ▶ 影子朗读
+            影子朗读
           </button>
           <button
             class="btn btn-accent"
@@ -289,7 +289,7 @@
             title="为当前文章生成歌德考点完形填空 / C-Test 实战训练"
             style="font-size: 0.75rem; min-height: 30px; padding: 0 0.65rem"
           >
-            ⚔ 完形实战
+            完形实战
           </button>
           <button
             class="btn btn-ghost"
@@ -297,7 +297,7 @@
             title="一键导出全文划线、词汇与考点为 Markdown 精读讲义"
             style="font-size: 0.75rem; min-height: 30px; padding: 0 0.65rem"
           >
-            📥 导出讲义
+            导出讲义
           </button>
           <div class="typo-pill">
             <button
@@ -402,7 +402,7 @@
             onclick="openQuizOverlay()"
             title="开始考验所有待复习卡片"
           >
-            ⚔ 开始考验
+            开始考验
           </button>
           <button
             id="clear-cache-btn"
@@ -410,7 +410,7 @@
             onclick="clearAudioCache()"
             title="查看并清理本地 MP3 语音缓存"
           >
-            🗑️ 缓存 (<span id="cache-size-span">0 MB</span>)
+            缓存 (<span id="cache-size-span">0 MB</span>)
           </button>
           <button
             class="btn btn-ghost"
@@ -422,7 +422,7 @@
           <button
             class="btn btn-ghost"
             onclick="document.getElementById('backup-file-input').click()"
-            title="⚠ 用备份文件整体替换当前数据——现有文章、卡片与统计会被清空"
+            title="用备份文件整体替换当前数据——现有文章、卡片与统计会被清空"
           >
             还原备份
           </button>
@@ -483,7 +483,7 @@
             onclick="setCardViewMode('deck')"
             title="扑克牌叠层翻页模式"
           >
-            🎴 扑克牌盒
+            扑克牌盒
           </button>
           <button
             id="mode-btn-grid"
@@ -491,7 +491,7 @@
             onclick="setCardViewMode('grid')"
             title="目录全景平铺列表"
           >
-            📑 全景目录
+            全景目录
           </button>
         </div>
       </div>
@@ -569,14 +569,14 @@
               onclick="openQuizOverlay()"
               title="启动错题与弱项专项测验"
             >
-              <span>⚔ 专项重测 (Quiz)</span>
+              <span>专项重测 (Quiz)</span>
             </button>
             <button
               class="btn btn-ghost"
               onclick="show('home')"
               title="进入德语外刊与文稿库"
             >
-              <span>📚 文稿研读库</span>
+              <span>文稿研读库</span>
             </button>
             <div class="folio-anchor-nav">
               <button
@@ -862,7 +862,7 @@
                       class="mascot-color-custom-btn"
                       title="自定义 HEX 配色"
                     >
-                      <span aria-hidden="true">🎨</span>
+                      <span aria-hidden="true"></span>
                       <input
                         type="color"
                         id="studio-color-picker"
@@ -886,7 +886,7 @@
                     class="btn btn-secondary"
                     onclick="window.Companion.onSay()"
                   >
-                    <span>💬 试听伴读鼓励</span>
+                    <span>试听伴读鼓励</span>
                   </button>
                   <button
                     type="button"
@@ -904,7 +904,7 @@
                     class="btn btn-accent"
                     onclick="window.Companion.saveStudioSettings()"
                   >
-                    <span>✓ 保存伴读设置</span>
+                    <span>保存伴读设置</span>
                   </button>
                 </div>
               </div>
@@ -964,8 +964,8 @@
               preserveAspectRatio="none"
             ></svg>
             <div class="dossier-chart-axis">
-              <span id="chart-axis-start">● VOR 30 TAGEN</span>
-              <span id="chart-axis-end">● HEUTE</span>
+              <span id="chart-axis-start">VOR 30 TAGEN</span>
+              <span id="chart-axis-end">HEUTE</span>
             </div>
           </div>
         </div>
@@ -985,7 +985,7 @@
               style="font-size: 0.75rem; padding: 0.35rem 0.85rem"
               onclick="openQuizOverlay()"
             >
-              ⚔ 专项重测
+              专项重测
             </button>
           </div>
           <div id="progress-errors-list" class="dossier-errors-table"></div>
@@ -1039,7 +1039,7 @@
               onclick="aiPolishEssay()"
               title="使用 DeepSeek AI 深度润色全文"
             >
-              ✨ AI 润色全文
+              AI 润色全文
             </button>
             <!-- 取消槽位：只在流式润色进行中显示（writer.js 的 setPolishCancelVisible 切 .hidden）；
                  点击 = controller.abort() ⇒ 服务端据此取消循环任务，不再继续烧配额。 -->
@@ -1049,24 +1049,24 @@
               onclick="cancelAiPolish()"
               title="中止正在进行的 AI 润色（已消耗的部分不会退回）"
             >
-              ✕ 中止润色
+              中止润色
             </button>
             <button class="btn btn-ghost" onclick="analyzeWriterText(true)">
-              ⚡ 实时诊断
+              实时诊断
             </button>
             <button
               class="btn btn-ghost writer-mobile-panel-trigger"
               id="writer-mobile-panel-trigger"
               onclick="toggleWriterMobilePanel()"
             >
-              📋 问题与历史
+              问题与历史
             </button>
             <button
               class="btn btn-dark"
               id="writer-save-btn"
               onclick="saveWriterEssay()"
             >
-              💾 保存作文
+              保存作文
             </button>
           </div>
         </div>
@@ -1082,7 +1082,7 @@
               class="writer-mode-tab active"
               onclick="switchWriterMode('essay')"
             >
-              ✍️ 自由写作与研磨 (Freies Schreiben)
+              自由写作与研磨 (Freies Schreiben)
             </button>
           </div>
 
@@ -1090,7 +1090,7 @@
           <div class="writer-left" id="writer-free-left">
             <div class="writer-card-box">
               <div class="writer-box-label" style="margin-bottom: 0.5rem">
-                <span>✍️ 德语内联智能编辑器</span>
+                <span>德语内联智能编辑器</span>
                 <span id="writer-render-status" class="writer-status-pill"
                   >等待输入</span
                 >
@@ -1121,7 +1121,7 @@
                     onclick="toggleInlayHints()"
                     title="开启/关闭语法内联提示"
                   >
-                    💡 格提示 ON
+                    格提示 ON
                   </button>
                   <button
                     class="btn btn-ghost btn-xs"
@@ -1136,7 +1136,7 @@
             <!-- History / Saved Essays List -->
             <div class="writer-card-box" style="margin-top: 1.25rem">
               <div class="writer-box-label">
-                <span>📚 我的作文草稿库</span>
+                <span>我的作文草稿库</span>
                 <button
                   class="btn btn-ghost btn-xs"
                   onclick="loadWriterEssays()"
@@ -1159,14 +1159,14 @@
                 class="writer-tab-btn active"
                 onclick="switchWriterPanelTab('diag')"
               >
-                🔍 诊断分析
+                诊断分析
               </button>
               <button
                 id="wtab-btn-problems"
                 class="writer-tab-btn"
                 onclick="switchWriterPanelTab('problems')"
               >
-                📋 问题清单
+                问题清单
                 <span id="wtab-problems-badge" class="writer-tab-badge hidden"
                   >0</span
                 >
@@ -1176,7 +1176,7 @@
                 class="writer-tab-btn"
                 onclick="switchWriterPanelTab('versions')"
               >
-                📜 版本快照
+                版本快照
               </button>
             </div>
 
@@ -1184,7 +1184,7 @@
             <div id="wpane-diag" class="writer-pane active">
               <!-- CEFR & Summary Badge Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">📊 语言水平与质量估测</div>
+                <div class="sidebar-section-title">语言水平与质量估测</div>
                 <div id="writer-cefr" class="writer-cefr-box">
                   <div class="writer-cefr-level">CEFR —</div>
                   <div class="writer-cefr-desc">
@@ -1195,12 +1195,16 @@
 
               <!-- Selected Error / Detail Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">🔍 错误诊断与纠错详解</div>
+                <div class="sidebar-section-title">错误诊断与纠错详解</div>
                 <div id="writer-err-detail" class="writer-err-detail-box">
-                  <div class="writer-err-placeholder">
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem">✍️</div>
+                  <div class="writer-err-placeholder" style="display:flex;gap:1rem;text-align:left;">
+                    <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--rule);"></span>
                     <div>
-                      点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。
+                      <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">DIAGNOSE · 错误诊断</div>
+                      <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem;">点下划线，看纠错详解</div>
+                      <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">
+                        点击编辑器中的<b>彩色波浪下划线</b>，查看错误成因与修正建议，并支持一键替换与存卡。
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1208,7 +1212,7 @@
 
               <!-- Sentence Navigation Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">🧭 句子导航索引</div>
+                <div class="sidebar-section-title">句子导航索引</div>
                 <div id="writer-sent-nav" class="writer-sent-nav-list">
                   <div class="writer-empty-tip" style="padding: 0.5rem 0">
                     输入文本后生成句子索引
@@ -1228,7 +1232,7 @@
                     align-items: center;
                   "
                 >
-                  <span>📋 全篇问题清单</span>
+                  <span>全篇问题清单</span>
                   <span
                     id="writer-problems-stat"
                     class="writer-problems-stat-pill"
@@ -1245,7 +1249,7 @@
             <div id="wpane-versions" class="writer-pane hidden">
               <!-- Manual Snapshot Card -->
               <div class="writer-sidebar-card">
-                <div class="sidebar-section-title">💾 保存当前快照</div>
+                <div class="sidebar-section-title">保存当前快照</div>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem">
                   <input
                     id="writer-version-msg"
@@ -1275,7 +1279,7 @@
                     align-items: center;
                   "
                 >
-                  <span>🕒 快照历史</span>
+                  <span>快照历史</span>
                   <button
                     class="btn btn-ghost btn-xs"
                     onclick="loadEssayVersions()"
@@ -1319,7 +1323,7 @@
             onclick="switchDrawerTab('vocab')"
             title="词汇考点"
           >
-            📖 词汇
+            词汇
           </button>
           <button
             id="d-tab-syntax"
@@ -1327,7 +1331,7 @@
             onclick="switchDrawerTab('syntax')"
             title="句法拓扑"
           >
-            🌳 句法
+            句法
           </button>
           <button
             id="d-tab-note"
@@ -1335,7 +1339,7 @@
             onclick="switchDrawerTab('note')"
             title="随笔便签"
           >
-            📝 便签
+            便签
           </button>
           <button
             id="d-tab-companion"
@@ -1343,7 +1347,7 @@
             onclick="switchDrawerTab('companion')"
             title="伴学导读"
           >
-            🦉 伴学
+            伴学
           </button>
           <button
             id="d-tab-all"
@@ -1351,7 +1355,7 @@
             onclick="switchDrawerTab('all')"
             title="全部内容"
           >
-            ✦ 全部
+            全部
           </button>
         </div>
         <div class="drawer-actions">
@@ -1369,7 +1373,7 @@
             title="关闭工作台 (Esc)"
             aria-label="关闭工作台"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
       </div>
@@ -1510,7 +1514,7 @@
             <div style="display: flex; align-items: center; gap: 0.5rem">
               <span
                 style="font-size: 0.875rem; font-weight: 700; color: var(--ink)"
-                >🌳 句法拓扑与从句树 (AST)</span
+                >句法拓扑与从句树 (AST)</span
               >
             </div>
             <span id="syntax-sent-type-badge" class="cefr-badge badge-B1"
@@ -1590,7 +1594,7 @@
           <!-- Section 2.3: Corpus Grammar Radar (Grammatik-Radar) -->
           <details id="grammar-radar-panel" class="grammar-radar-panel" style="margin-top: 1.25rem; border: 1px solid var(--rule-light); border-radius: 8px; padding: 0.5rem 0.75rem; background: var(--paper-warm);">
             <summary style="font-size: 0.75rem; font-weight: 700; color: var(--pencil); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none;">
-              📡 语料句法复杂度雷达 (Grammatik-Radar)
+              语料句法复杂度雷达 (Grammatik-Radar)
             </summary>
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 0.75rem;">
               <svg id="grammar-radar-svg" width="220" height="220" viewBox="0 0 220 220" style="overflow: visible;"></svg>
@@ -1604,7 +1608,7 @@
           <div class="sticky-word-headline">
             <span
               style="font-size: 0.875rem; font-weight: 700; color: var(--ink)"
-              >📝 精读随笔便签</span
+              >精读随笔便签</span
             >
             <span id="note-badge-status" class="cefr-badge badge-A2"
               >便签草稿</span
@@ -1641,7 +1645,7 @@
                 "
                 onclick="aiNoteAssist()"
               >
-                ✨ AI 速记辅助
+                AI 速记辅助
               </button>
             </div>
             <textarea
@@ -1658,7 +1662,7 @@
               style="flex: 1"
               onclick="saveCurrentNote()"
             >
-              ✓ 保存便签
+              保存便签
             </button>
             <button
               id="del-note-btn"
@@ -1690,22 +1694,22 @@
             <div class="companion-thinking-toolbar" id="companion-thinking-toolbar">
               <span class="companion-thinking-label">思考强度:</span>
               <div class="companion-thinking-pills">
-                <button type="button" class="thinking-pill" data-effort="low" onclick="window.CompanionDrawer?.setReasoningEffort('low')">⚡ 极速</button>
-                <button type="button" class="thinking-pill active" data-effort="medium" onclick="window.CompanionDrawer?.setReasoningEffort('medium')">⚖ 平衡</button>
-                <button type="button" class="thinking-pill" data-effort="high" onclick="window.CompanionDrawer?.setReasoningEffort('high')">🧠 深度</button>
+                <button type="button" class="thinking-pill" data-effort="low" onclick="window.CompanionDrawer?.setReasoningEffort('low')">极速</button>
+                <button type="button" class="thinking-pill active" data-effort="medium" onclick="window.CompanionDrawer?.setReasoningEffort('medium')">平衡</button>
+                <button type="button" class="thinking-pill" data-effort="high" onclick="window.CompanionDrawer?.setReasoningEffort('high')">深度</button>
               </div>
             </div>
             <div id="companion-quick-actions" class="companion-quick-actions">
-              <button class="companion-quick-chip chip-utility" onclick="window.CompanionDrawer?.syncContext()">🎯 抓取当前句</button>
+              <button class="companion-quick-chip chip-utility" onclick="window.CompanionDrawer?.syncContext()">抓取当前句</button>
               <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('请帮我分析选中文本的主从句拓扑结构与核心动词位置。')">从句拓扑问诊</button>
               <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('请帮我提取选中文本中的核心 B1/B2 动词与动介搭配，并提议制成生词卡。')">提取核心生词</button>
               <button class="companion-quick-chip context-required" onclick="window.CompanionDrawer?.sendPrompt('这个句子在德语母语者的语用习惯中具有怎样的情感色彩与正式度？')">深挖语用褒贬</button>
-              <button class="companion-quick-chip writer-draft-required" onclick="window.CompanionDrawer?.sendPrompt('请调用 writing_check 工具检查当前写作草稿的拼写、大小写、标点与从句逗号，并给出简短修改建议。')">✍️ 检查草稿</button>
-              <button class="companion-quick-chip writer-draft-required" onclick="window.CompanionDrawer?.sendWriterRevisionProposal()">📝 修订选中句</button>
-              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressProfile()">🧠 学习负荷</button>
-              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressVocabStats()">📊 词汇等级</button>
-              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressWeeklyGoal()">🎯 本周目标</button>
-              <button class="companion-quick-chip card-proposal-required" onclick="window.CompanionDrawer?.sendCardProposal()">🃏 关联生词提议</button>
+              <button class="companion-quick-chip writer-draft-required" onclick="window.CompanionDrawer?.sendPrompt('请调用 writing_check 工具检查当前写作草稿的拼写、大小写、标点与从句逗号，并给出简短修改建议。')">检查草稿</button>
+              <button class="companion-quick-chip writer-draft-required" onclick="window.CompanionDrawer?.sendWriterRevisionProposal()">修订选中句</button>
+              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressProfile()">学习负荷</button>
+              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressVocabStats()">词汇等级</button>
+              <button class="companion-quick-chip progress-required" onclick="window.CompanionDrawer?.sendProgressWeeklyGoal()">本周目标</button>
+              <button class="companion-quick-chip card-proposal-required" onclick="window.CompanionDrawer?.sendCardProposal()">关联生词提议</button>
             </div>
             <div class="companion-input-row">
               <input
@@ -1742,7 +1746,7 @@
             title="关闭 (Esc)"
             aria-label="关闭导入"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
 
@@ -1752,28 +1756,28 @@
             class="modal-tab import-tab active"
             onclick="switchImportTab('text')"
           >
-            <span>❖ 粘贴长文</span>
+            <span>粘贴长文</span>
           </button>
           <button
             id="tab-btn-url"
             class="modal-tab import-tab"
             onclick="switchImportTab('url')"
           >
-            <span>❖ 网页链接 (URL)</span>
+            <span>网页链接 (URL)</span>
           </button>
           <button
             id="tab-btn-file"
             class="modal-tab import-tab"
             onclick="switchImportTab('file')"
           >
-            <span>❖ 文档上传</span>
+            <span>文档上传</span>
           </button>
           <button
             id="tab-btn-feed"
             class="modal-tab import-tab"
             onclick="switchImportTab('feed')"
           >
-            <span>📰 订阅外刊 (RSS)</span>
+            <span>订阅外刊 (RSS)</span>
           </button>
         </div>
 
@@ -1823,7 +1827,6 @@
             />
           </div>
           <div class="url-hint-box">
-            <span class="url-hint-icon">✦</span>
             <span
               >支持自动提取与正文降噪：DW
               德语之声、Spiegel、Tagesschau、DLF、Zeit 等主流德语媒体。</span
@@ -1838,10 +1841,13 @@
             class="dropzone"
             onclick="document.getElementById('file-input').click()"
           >
-            <div class="dropzone-icon">📄</div>
-            <div class="dropzone-title">点击或拖拽德语文档至此处</div>
-            <div class="dropzone-desc">
-              支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）
+            <div style="display:flex;gap:0.75rem;text-align:left;max-width:44ch;margin:0 auto;">
+              <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+              <div>
+                <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.35rem;">INGESTION · 文档上传</div>
+                <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">点击或拖拽德语文档至此处</div>
+                <p style="font-size:0.8125rem;color:var(--pencil);margin:0;line-height:1.65;">支持 .txt, .md, .text 等纯文本文档（UTF-8 编码）</p>
+              </div>
             </div>
             <input
               id="file-input"
@@ -1895,7 +1901,7 @@
           "
         >
           <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
-            >⚙️ 偏好与 API 设置 (Einstellungen)</span
+            >偏好与 API 设置 (Einstellungen)</span
           >
           <button
             class="drawer-close"
@@ -1903,13 +1909,13 @@
             title="关闭 (Esc)"
             aria-label="关闭设置"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
 
         <div class="settings-section">
           <div class="settings-section-title">
-            🤖 AI 深度剖析服务 (DeepSeek / OpenAI 兼容)
+            AI 深度剖析服务 (DeepSeek / OpenAI 兼容)
           </div>
           <p
             class="settings-tip"
@@ -2035,9 +2041,9 @@
               <label class="input-label" for="set-reasoning-effort">思考强度 (Reasoning Effort)</label>
               <select id="set-reasoning-effort" class="modal-input">
                 <option value="none">关闭思考 (None) - 仅常规输出</option>
-                <option value="low">⚡ 极速 (Low) - 快速要点推演</option>
-                <option value="medium" selected>⚖ 平衡 (Medium) - 标准语法场域分析</option>
-                <option value="high">🧠 深度 (High) - 德福/歌德长难句深挖</option>
+                <option value="low">极速 (Low) - 快速要点推演</option>
+                <option value="medium" selected>平衡 (Medium) - 标准语法场域分析</option>
+                <option value="high">深度 (High) - 德福/歌德长难句深挖</option>
               </select>
               <div class="hint-text">
                 调节 DeepSeek 与思维链模型的深度推演强度。
@@ -2058,7 +2064,7 @@
               class="btn btn-ghost"
               onclick="testApiKeyConnection()"
             >
-              ⚡ 测试连通性
+              测试连通性
             </button>
             <span
               id="test-key-feedback"
@@ -2080,7 +2086,7 @@
         />
 
         <div class="settings-section">
-          <div class="settings-section-title">🔊 德语发音与 TTS 朗读偏好</div>
+          <div class="settings-section-title">德语发音与 TTS 朗读偏好</div>
           <div
             style="
               display: grid;
@@ -2133,7 +2139,7 @@
             class="btn btn-dark"
             onclick="saveAppSettings()"
           >
-            ✓ 保存并生效
+            保存并生效
           </button>
         </div>
       </div>
@@ -2156,7 +2162,7 @@
           "
         >
           <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
-            >✨ AI 润色审查 (AI-Politur Review)</span
+            >AI 润色审查 (AI-Politur Review)</span
           >
           <button
             class="drawer-close"
@@ -2164,7 +2170,7 @@
             title="关闭 (Esc)"
             aria-label="关闭润色预览"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
 
@@ -2177,13 +2183,13 @@
               class="btn btn-ghost btn-xs"
               onclick="acceptAllPolishHunks()"
             >
-              ✓ 全部接受
+              全部接受
             </button>
             <button
               class="btn btn-ghost btn-xs"
               onclick="rejectAllPolishHunks()"
             >
-              ✕ 全部拒绝
+              全部拒绝
             </button>
           </div>
         </div>
@@ -2205,7 +2211,7 @@
             class="btn btn-dark"
             onclick="applyPolishChanges()"
           >
-            ✓ 应用所选更改
+            应用所选更改
           </button>
         </div>
       </div>
@@ -2245,7 +2251,7 @@
             title="关闭 (Esc)"
             aria-label="关闭版本预览"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
         <div class="version-preview-meta-bar">
@@ -2330,7 +2336,7 @@
             onclick="ShadowPlayer.setVoice('de-DE-KatjaNeural')"
             title="清脆自然女声 (Katja)"
           >
-            <span class="vb-ico">👩</span><span class="vb-lbl">Katja</span>
+            <span class="vb-lbl">Katja</span>
           </button>
           <button
             id="voice-btn-conrad"
@@ -2338,7 +2344,7 @@
             onclick="ShadowPlayer.setVoice('de-DE-ConradNeural')"
             title="沉稳磁性男声 (Conrad)"
           >
-            <span class="vb-ico">👨</span><span class="vb-lbl">Conrad</span>
+            <span class="vb-lbl">Conrad</span>
           </button>
         </div>
 
@@ -2349,7 +2355,7 @@
             onclick="ShadowPlayer.setMode('shadow')"
             title="智能影子跟读（每句停顿等候跟读）"
           >
-            🎙️ 跟读
+            跟读
           </button>
           <button
             class="mode-btn"
@@ -2357,7 +2363,7 @@
             onclick="ShadowPlayer.setMode('continuous')"
             title="全文连续朗读"
           >
-            ▶ 连读
+            连读
           </button>
           <button
             class="mode-btn"
@@ -2365,7 +2371,7 @@
             onclick="ShadowPlayer.setMode('loop')"
             title="单句循环练习"
           >
-            🔂 单句
+            单句
           </button>
         </div>
 
@@ -2427,28 +2433,28 @@
         onclick="openSyntaxDrawerFromSelection()"
         title="展开德语拓扑五场域与从句树"
       >
-        🌳 句法
+        句法
       </button>
       <button
         class="tooltip-action-btn"
         onclick="askCompanionFromSelection()"
         title="向伴学助手 Eule 咨询此难句"
       >
-        🦉 问伴学
+        问伴学
       </button>
       <button
         class="tooltip-action-btn"
         onclick="openNoteDrawerFromSelection()"
         title="记录随笔便签"
       >
-        📝 随笔
+        随笔
       </button>
       <button
         class="tooltip-action-btn"
         onclick="playSelectedAudio()"
         title="真人朗读发音"
       >
-        🔊 朗读
+        朗读
       </button>
     </div>
 
@@ -2458,23 +2464,38 @@
       <div id="quiz-step-mode" class="quiz-panel">
         <div class="quiz-panel-head">
           <h3>选择考验模式</h3>
-          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验">✕</button>
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg></button>
         </div>
         <div class="quiz-mode-grid">
           <button class="quiz-mode-card" onclick="startQuiz('flashcard')">
-            <div class="quiz-mode-icon">🎴</div>
-            <div class="quiz-mode-title">闪卡自测</div>
-            <div class="quiz-mode-desc">正面看词，翻面对答案</div>
+            <div style="display:flex;gap:0.75rem;text-align:left;">
+              <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+              <div>
+                <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.35rem;">MODUS · FLASHCARD</div>
+                <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">闪卡自测</div>
+                <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">正面看词，翻面对答案</p>
+              </div>
+            </div>
           </button>
           <button class="quiz-mode-card" onclick="startQuiz('dictation')">
-            <div class="quiz-mode-icon">✍️</div>
-            <div class="quiz-mode-title">默写拼写</div>
-            <div class="quiz-mode-desc">看中文义，手写德语词</div>
+            <div style="display:flex;gap:0.75rem;text-align:left;">
+              <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+              <div>
+                <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.35rem;">MODUS · DIKTAT</div>
+                <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">默写拼写</div>
+                <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">看中文义，手写德语词</p>
+              </div>
+            </div>
           </button>
           <button class="quiz-mode-card" onclick="startQuiz('choice')">
-            <div class="quiz-mode-icon">🎯</div>
-            <div class="quiz-mode-title">四选一</div>
-            <div class="quiz-mode-desc">从四个选项中选正确释义</div>
+            <div style="display:flex;gap:0.75rem;text-align:left;">
+              <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--accent);"></span>
+              <div>
+                <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.35rem;">MODUS · AUSWAHL</div>
+                <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">四选一</div>
+                <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">从四个选项中选正确释义</p>
+              </div>
+            </div>
           </button>
         </div>
         <p class="quiz-meta-note">仅测验词汇卡，错误率高的卡片优先出现</p>
@@ -2483,7 +2504,7 @@
       <!-- Step 2: Quiz Runner -->
       <div id="quiz-step-run" class="quiz-panel hidden">
         <div class="quiz-runner-head">
-          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验">✕</button>
+          <button class="quiz-close-btn" onclick="closeQuizOverlay()" aria-label="关闭测验"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg></button>
           <div class="quiz-progress-bar-wrap">
             <div
               id="quiz-progress-fill"
@@ -2520,13 +2541,13 @@
               class="quiz-result-btn quiz-btn-wrong"
               onclick="submitFlashcard(false)"
             >
-              ✗ 不认识
+              不认识
             </button>
             <button
               class="quiz-result-btn quiz-btn-correct"
               onclick="submitFlashcard(true)"
             >
-              ✓ 认识了
+              认识了
             </button>
           </div>
         </div>
@@ -2585,7 +2606,10 @@
       <div id="quiz-step-done" class="quiz-panel hidden">
         <div id="quiz-confetti" class="quiz-confetti-canvas"></div>
         <div class="quiz-done-content">
-          <div class="quiz-done-icon">🏆</div>
+          <div style="display:flex;gap:0.75rem;justify-content:center;margin-bottom:0.5rem;text-align:left;">
+            <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--moss);"></span>
+            <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);padding-top:0.35rem;">ERGEBNIS · 本轮成绩</div>
+          </div>
           <h3 class="quiz-done-title">考验完成！</h3>
           <div class="quiz-done-stats">
             <span id="done-correct">0</span> 正确 /
@@ -2631,7 +2655,7 @@
               完形填空实战训练
             </h2>
           </div>
-          <button class="drawer-close" onclick="closeClozeModal()" aria-label="关闭填空练习">✕</button>
+          <button class="drawer-close" onclick="closeClozeModal()" aria-label="关闭填空练习"><svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg></button>
         </div>
 
         <!-- Cloze Mode Switcher -->
@@ -2641,21 +2665,21 @@
             class="cloze-mode-btn active"
             onclick="switchClozeMode('grammar')"
           >
-            🎯 语法考点挖空 (介词/连词/变位)
+            语法考点挖空 (介词/连词/变位)
           </button>
           <button
             id="cloze-mode-btn-vocab"
             class="cloze-mode-btn"
             onclick="switchClozeMode('vocab')"
           >
-            📚 核心生词盲填 (B1/B2 实词)
+            核心生词盲填 (B1/B2 实词)
           </button>
           <button
             id="cloze-mode-btn-ctest"
             class="cloze-mode-btn"
             onclick="switchClozeMode('ctest')"
           >
-            ⚡ 经典 C-Test 模式 (词尾截断)
+            经典 C-Test 模式 (词尾截断)
           </button>
         </div>
 
@@ -2683,7 +2707,7 @@
               class="btn btn-ghost"
               onclick="revealClozeHints()"
             >
-              💡 首字母提示
+              首字母提示
             </button>
             <button
               id="cloze-reset-btn"
@@ -2697,7 +2721,7 @@
               class="btn btn-accent"
               onclick="submitClozeExercise()"
             >
-              ✓ 提交判分
+              提交判分
             </button>
           </div>
         </div>
@@ -2756,7 +2780,7 @@
                 </div>
                 <div class="a1-topbar-actions">
                   <button class="btn btn-ghost btn-sm" onclick="prevA1Formular()">
-                    ◀ 上一题
+                    上一题
                   </button>
                   <button
                     class="btn btn-ghost btn-sm"
@@ -2765,7 +2789,7 @@
                     随机练习
                   </button>
                   <button class="btn btn-ghost btn-sm" onclick="nextA1Formular()">
-                    下一题 ▶
+                    下一题
                   </button>
                 </div>
               </div>
@@ -2823,13 +2847,13 @@
                 </div>
                 <div class="a1-topbar-actions">
                   <button class="btn btn-ghost btn-sm" onclick="prevA1Email()">
-                    ◀ 上一题
+                    上一题
                   </button>
                   <button class="btn btn-ghost btn-sm" onclick="randomA1Email()">
                     随机场景
                   </button>
                   <button class="btn btn-ghost btn-sm" onclick="nextA1Email()">
-                    下一题 ▶
+                    下一题
                   </button>
                 </div>
               </div>
@@ -2886,7 +2910,7 @@
 
                   <div class="a1-email-editor-actions">
                     <button class="btn btn-dark" onclick="diagnoseA1Email()">
-                      ⚡ 智能诊断与判分
+                      智能诊断与判分
                     </button>
                     <button
                       class="btn btn-ghost"
@@ -3219,7 +3243,7 @@
         <div class="panel-head">
           <span class="panel-title">伴读角色设置</span>
           <button class="panel-close" aria-label="关闭伴读设置" onclick="window.Companion.onClick()">
-            <span aria-hidden="true">✕</span>
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
         <div class="panel-row" id="panel-characters">
@@ -3339,7 +3363,7 @@
             class="btn btn-secondary btn-sm"
             onclick="window.Companion.onSay()"
           >
-            💬 说句话
+            说句话
           </button>
           <button
             id="panel-sound"
@@ -3357,7 +3381,7 @@
             onclick="window.Companion.toggleEnabled()"
             title="收起伴读悬浮球"
           >
-            <span aria-hidden="true">✕</span>
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
       </div>
@@ -3369,7 +3393,7 @@
 
   来源：https://github.com/lucide-icons/lucide  lucide-static v0.468.0
   许可：ISC（见 static/icons/LICENSE-lucide.txt）
-  只收录本项目实际用到的 12 个图标，不复制整套图标库。
+  只收录本项目实际用到的 16 个图标，不复制整套图标库。
   新增图标时同步更新 static/icons/README.md 的清单与版本。
 
   用法（同文档）：
@@ -3430,6 +3454,23 @@
     <path d="M22 5h-4" />
     <path d="M4 17v2" />
     <path d="M5 18H3" />
+  </symbol>
+  <symbol id="ui-ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </symbol>
+  <symbol id="ui-ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+    <path d="M21 3v5h-5" />
+    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+    <path d="M8 16H3v5" />
+  </symbol>
+  <symbol id="ui-ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m6 9 6 6 6-6" />
+  </symbol>
+  <symbol id="ui-ico-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 12h14" />
+    <path d="M12 5v14" />
   </symbol>
 </svg>
 

@@ -26,7 +26,7 @@ export async function switchClozeMode(mode) {
     document.getElementById(`cloze-mode-btn-${m}`)?.classList.toggle('active', m === mode);
   });
   const bodyEl = document.getElementById('cloze-content');
-  if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--pencil);font-family:var(--mono);">⚡ 正在智能分析文章语法与词法，生成实战挖空题...</div>';
+  if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--pencil);font-family:var(--mono);">正在智能分析文章语法与词法，生成实战挖空题...</div>';
   document.getElementById('cloze-score-display')?.classList.add('hidden');
 
   try {
@@ -110,7 +110,7 @@ export function revealClozeHints() {
     if (badge) badge.classList.remove('hidden');
   });
 
-  showUndoToast(`💡 已为 ${filledCount} 个空白处填入首字母提示`);
+  showUndoToast(`已为 ${filledCount} 个空白处填入首字母提示`);
 }
 
 export function resetClozeExercise() {
@@ -164,7 +164,7 @@ export async function submitClozeExercise() {
     if (pctText) pctText.textContent = `${evalRes.accuracy_pct}% 正确率`;
 
     if (evalRes.accuracy_pct >= 80) {
-      showUndoToast(`🏆 太棒了！完形实战准确率达成 ${evalRes.accuracy_pct}%！`);
+      showUndoToast(`太棒了！完形实战准确率达成 ${evalRes.accuracy_pct}%！`);
       Companion.celebrate('cloze_great', { pct: evalRes.accuracy_pct });
     }
   } catch (e) {

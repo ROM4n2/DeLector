@@ -361,7 +361,7 @@ export function renderContextBar() {
   if (text) {
     contextBarEl.style.display = 'flex';
     const icon = document.createElement('span');
-    icon.textContent = '📌';
+    icon.textContent = '';
     const textSpan = document.createElement('span');
     textSpan.className = 'companion-context-text';
     textSpan.textContent = (view === 'reader' ? '已绑定难句: „' : '已绑定文本: „') + text + '“';
@@ -370,7 +370,7 @@ export function renderContextBar() {
     clearBtn.className = 'companion-context-clear';
     clearBtn.title = '解除难句绑定';
     clearBtn.setAttribute('aria-label', '解除难句绑定');
-    clearBtn.textContent = '✕';
+    clearBtn.innerHTML = '<svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>';
     clearBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       setCompanionContext(
@@ -466,7 +466,7 @@ export function renderContextBar() {
   } else if (view === 'writer' && draft) {
     contextBarEl.style.display = 'flex';
     const icon = document.createElement('span');
-    icon.textContent = '✍️';
+    icon.textContent = '';
     const textSpan = document.createElement('span');
     textSpan.className = 'companion-context-text';
     textSpan.textContent = '已绑定当前草稿（' + draft.length + ' 字符）';
@@ -475,7 +475,7 @@ export function renderContextBar() {
   } else if (view === 'cards' && cardContext) {
     contextBarEl.style.display = 'flex';
     const icon = document.createElement('span');
-    icon.textContent = '🃏';
+    icon.textContent = '';
     const textSpan = document.createElement('span');
     textSpan.className = 'companion-context-text';
     textSpan.textContent = '已绑定当前卡盒词条';
@@ -486,13 +486,13 @@ export function renderContextBar() {
     const hint = document.createElement('span');
     hint.className = 'companion-context-hint';
     if (view === 'reader') {
-      hint.textContent = '📄 阅读器 · 未绑定句子：划选正文或点击 🦉伴学，即可让 Eule 针对性问诊。';
+      hint.textContent = '阅读器 · 未绑定句子：划选正文或点击伴学，即可让 Eule 针对性问诊。';
     } else if (view === 'writer') {
       hint.textContent =
-        '📝 写作台 · 尚未检测到草稿：先在编辑器输入正文，再点「✍️ 检查草稿」。';
+        '写作台 · 尚未检测到草稿：先在编辑器输入正文，再点「检查草稿」。';
     } else {
       hint.textContent =
-        '📄 ' + viewLabel + ' · 未绑定句子：本页仅支持自由问答，阅读器专属问诊请在阅读页使用。';
+        viewLabel + ' · 未绑定句子：本页仅支持自由问答，阅读器专属问诊请在阅读页使用。';
     }
 
     contextBarEl.appendChild(hint);
@@ -501,7 +501,7 @@ export function renderContextBar() {
     if (view === 'reader') {
       const grabBtn = document.createElement('button');
       grabBtn.className = 'companion-context-grab-btn';
-      grabBtn.textContent = '🎯 抓取当前句';
+      grabBtn.textContent = '抓取当前句';
       grabBtn.addEventListener('click', () => {
         syncCurrentContext();
       });
@@ -641,9 +641,9 @@ export function syncCurrentContext() {
         hintDiv.style.borderLeft = '3px solid var(--coral, #b44322)';
         const lbl = document.createElement('div');
         if (ctx.view === 'writer' && !ctx.selectedText) {
-          lbl.textContent = '✓ 已同步写作台草稿：';
+          lbl.textContent = '已同步写作台草稿：';
         } else {
-          lbl.textContent = ctx.view === 'reader' ? '✓ 已同步视口难句：' : '✓ 已同步当前页面文本：';
+          lbl.textContent = ctx.view === 'reader' ? '已同步视口难句：' : '已同步当前页面文本：';
         }
         const q = document.createElement('em');
         q.textContent = ctx.selectedText
@@ -659,12 +659,12 @@ export function syncCurrentContext() {
   }
   const view = getActiveView();
   if (view === 'writer') {
-    alert('写作台尚未检测到草稿。请先在编辑器输入正文，再使用「✍️ 检查草稿」。');
+    alert('写作台尚未检测到草稿。请先在编辑器输入正文，再使用「检查草稿」。');
     return;
   }
   alert(
     view === 'reader'
-      ? '未检测到当前选中文本。请在文章中点击句旁的 [🦉 伴学]，或点击单词后重试。'
+      ? '未检测到当前选中文本。请在文章中点击句旁的 [伴学]，或点击单词后重试。'
       : '当前页面未检测到选中文本；阅读器专属问诊请在阅读页使用。'
   );
 }
@@ -828,9 +828,9 @@ function createCompanionTurnController({
               c.classList.add('companion-tool-chip--error');
               c.style.borderColor = 'var(--coral, #b44322)';
               c.style.color = 'var(--coral, #b44322)';
-              c.textContent = '✗ ' + data.tool + ' 异常: ' + (data.summary || (data.result && data.result.message) || '失败');
+              c.textContent = data.tool + ' 异常: ' + (data.summary || (data.result && data.result.message) || '失败');
             } else {
-              c.textContent = '✓ ' + data.tool + ' 完成: ' + (data.summary || '已获取语言学上下文');
+              c.textContent = data.tool + ' 完成: ' + (data.summary || '已获取语言学上下文');
             }
           }
         }
@@ -1246,7 +1246,7 @@ export function createThoughtAccordion() {
 
   const arrowEl = document.createElement('span');
   arrowEl.className = 'thought-toggle-arrow';
-  arrowEl.textContent = '▾';
+  arrowEl.innerHTML = '<svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-chevron-down"></use></svg>';
 
   rightWrap.appendChild(timerEl);
   rightWrap.appendChild(arrowEl);
@@ -1300,17 +1300,17 @@ export function createThoughtAccordion() {
 
     if (elapsedSec >= 1.2 && stepEls[0].classList.contains('is-active')) {
       stepEls[0].className = 'thought-step is-done';
-      stepEls[0].textContent = '✓ 视口研读难句与上下文已锁定';
+      stepEls[0].textContent = '视口研读难句与上下文已锁定';
       stepEls[1].className = 'thought-step is-active';
     }
     if (elapsedSec >= 2.8 && stepEls[1].classList.contains('is-active')) {
       stepEls[1].className = 'thought-step is-done';
-      stepEls[1].textContent = '✓ 拓扑五场域映射分析完成';
+      stepEls[1].textContent = '拓扑五场域映射分析完成';
       stepEls[2].className = 'thought-step is-active';
     }
     if (elapsedSec >= 4.8 && stepEls[2].classList.contains('is-active')) {
       stepEls[2].className = 'thought-step is-done';
-      stepEls[2].textContent = '✓ 动词框架与从句层级定式检验';
+      stepEls[2].textContent = '动词框架与从句层级定式检验';
       stepEls[3].className = 'thought-step is-active';
     }
   }, 500);
