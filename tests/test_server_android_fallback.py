@@ -173,7 +173,7 @@ def test_android_runtime_load_never_downloads(monkeypatch):
     """
     import spacy.cli
 
-    from delector.nlp_engine import processor
+    from delector.nlp_engine import model_loader, processor
 
     calls: list[str] = []
 
@@ -183,13 +183,13 @@ def test_android_runtime_load_never_downloads(monkeypatch):
     def _download(*args, **kwargs):
         calls.append("DOWNLOAD_ATTEMPTED")
 
-    monkeypatch.setattr(processor, "_android_runtime", True)
-    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
-    monkeypatch.setattr(processor, "_nlp_resolved", False)
-    monkeypatch.setattr(processor, "_nlp_model", None)
-    monkeypatch.setattr(processor, "_nlp_error", "")
-    monkeypatch.setattr(processor, "NLP_ENGINE", "spacy")
-    monkeypatch.setattr(processor, "NLP_ENGINE_DETAIL", "")
+    monkeypatch.setattr(model_loader, "_android_runtime", True)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", _boom)
+    monkeypatch.setattr(model_loader, "_nlp_resolved", False)
+    monkeypatch.setattr(model_loader, "_nlp_model", None)
+    monkeypatch.setattr(model_loader, "_nlp_error", "")
+    monkeypatch.setattr(model_loader, "NLP_ENGINE", "spacy")
+    monkeypatch.setattr(model_loader, "NLP_ENGINE_DETAIL", "")
     monkeypatch.setattr(spacy.cli, "download", _download, raising=False)
 
     with pytest.raises(RuntimeError):
@@ -210,10 +210,10 @@ def test_android_load_failure_is_loud_not_pure():
         "spacy.cli.download = lambda *a, **k: print('DOWNLOAD_ATTEMPTED')\n"
         "sys.path.insert(0, os.getcwd())\n"
         "from delector import server\n"
-        "from delector.nlp_engine import processor\n"
+        "from delector.nlp_engine import model_loader, processor\n"
         "def _boom(name):\n"
         "    raise OSError('simulated local load failure')\n"
-        "processor._load_spacy_model = _boom\n"
+        "model_loader._load_spacy_model = _boom\n"
         "try:\n"
         "    server.process_german_text('Der Hund schläft.')\n"
         "except RuntimeError:\n"
@@ -231,14 +231,14 @@ def test_android_load_failure_is_loud_not_pure():
 def test_processor_and_syntax_tree_share_engine_status(monkeypatch):
     """ADR-0028：句法专线必须复用 processor 的加载器，不能自己裸 `spacy.load`。
 
-    用哨兵替换 `processor._load_spacy_model`：若 `syntax_tree.get_spacy_nlp()` 仍走
-    `spacy.load`，拿到的就是另一个真实模型对象，而不是哨兵。失败分支同样要把异常
-    写进 `_spacy_load_error`（诊断语义保留）。
+    用哨兵替换 `model_loader._load_spacy_model`（加载器搬家后补丁点随实现移动）：若
+    `syntax_tree.get_spacy_nlp()` 仍走 `spacy.load`，拿到的就是另一个真实模型对象，而不是
+    哨兵。失败分支同样要把异常写进 `_spacy_load_error`（诊断语义保留）。
     """
-    from delector.nlp_engine import processor, syntax_tree
+    from delector.nlp_engine import model_loader, syntax_tree
 
     sentinel = object()
-    monkeypatch.setattr(processor, "_load_spacy_model", lambda name: (sentinel, "sentinel"))
+    monkeypatch.setattr(model_loader, "_load_spacy_model", lambda name: (sentinel, "sentinel"))
     monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
     monkeypatch.setattr(syntax_tree, "_spacy_load_error", "")
 
@@ -249,7 +249,7 @@ def test_processor_and_syntax_tree_share_engine_status(monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
-    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", _boom)
     assert syntax_tree.get_spacy_nlp() is None
     assert "boom" in syntax_tree.get_spacy_load_error()
 
@@ -260,12 +260,12 @@ def test_syntax_tree_load_failure_is_loud_not_pure(monkeypatch):
     覆盖范围从"主路径"扩到"所有 spaCy 调用点"：`analyze_syntax_tree` 必须传播
     RuntimeError，且错误信息能指明是模型加载失败、并带上底层诊断。
     """
-    from delector.nlp_engine import processor, syntax_tree
+    from delector.nlp_engine import model_loader, syntax_tree
 
     def _boom(name):
         raise RuntimeError("model boom")
 
-    monkeypatch.setattr(processor, "_load_spacy_model", _boom)
+    monkeypatch.setattr(model_loader, "_load_spacy_model", _boom)
     monkeypatch.setattr(syntax_tree, "_nlp_instance", None)
     monkeypatch.setattr(syntax_tree, "_spacy_load_error", "")
 
@@ -310,7 +310,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
     import sys
     import types
 
-    from delector.nlp_engine import processor as nlp
+    from delector.nlp_engine import model_loader as nlp
 
     sentinel = object()
     fake = types.ModuleType("de_fake_news_sm")
@@ -325,7 +325,7 @@ def test_load_spacy_model_falls_back_to_module_load(monkeypatch):
 
 def test_load_spacy_model_reports_every_failed_strategy(monkeypatch):
     """全部失败时错误信息要带上每条策略的原因，否则真机上无从判断卡在哪。"""
-    from delector.nlp_engine import processor as nlp
+    from delector.nlp_engine import model_loader as nlp
 
     monkeypatch.setattr(nlp.spacy, "load", lambda *a, **k: (_ for _ in ()).throw(OSError("no dist-info")))
     with pytest.raises(RuntimeError) as excinfo:
@@ -747,8 +747,12 @@ def test_delete_article(client):
 
 
 def test_android_spacy_module_load_fallback_static():
-    """_load_spacy_model 必须包含 module.load() 回退（打包方式回退、无 dist-info 时的兜底路径）。"""
-    src = open(os.path.join(ROOT, "delector", "nlp_engine", "processor.py"), encoding="utf-8").read()
+    """`model_loader._load_spacy_model` 必须包含 module.load() 回退（打包方式回退、无 dist-info 时的兜底路径）。
+
+    实现自 2026-11-06 起位于 model_loader.py（消除 processor ↔ syntax_tree 双向依赖）；
+    本断言检查的文件随实现移动，检查内容不变。
+    """
+    src = open(os.path.join(ROOT, "delector", "nlp_engine", "model_loader.py"), encoding="utf-8").read()
     assert "importlib.import_module" in src, "缺 importlib 回退"
     assert "module.load()" in src, "缺 module.load() 回退"
     assert "spacy.load(name)" in src or "spacy.load(" in src, "缺 spacy.load(name) 首选路径"
@@ -756,14 +760,18 @@ def test_android_spacy_module_load_fallback_static():
 
 def test_android_spacy_model_dir_fallback_static():
     """模型目录 glob 回退必须存在（meta 版本与目录名不一致时的最后兜底）。"""
-    src = open(os.path.join(ROOT, "delector", "nlp_engine", "processor.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "delector", "nlp_engine", "model_loader.py"), encoding="utf-8").read()
     assert 'glob(f"{name}-*"' in src or 'glob(f"{name}-' in src, "缺模型目录 glob 兜底"
     assert "data_dirs" in src, "缺 data_dirs 变量"
 
 
 def test_android_spacy_download_gated_by_is_android_static():
-    """自动下载必须被 is_android() 门控，否则 Android 运行期起 pip 子进程卡死。"""
-    src = open(os.path.join(ROOT, "delector", "nlp_engine", "processor.py"), encoding="utf-8").read()
+    """自动下载必须被 is_android() 门控，否则 Android 运行期起 pip 子进程卡死。
+
+    门控实现位于 model_loader.py 的 `_load_model_with_autodownload()` 内部（ADR-0028 D5）；
+    检查文件随实现移动，检查语义不变。
+    """
+    src = open(os.path.join(ROOT, "delector", "nlp_engine", "model_loader.py"), encoding="utf-8").read()
     # 必须有 is_android 判断且在 download 之前
     assert "is_android()" in src, "缺 is_android() 判断"
     # 确保下载路径在 is_android 分支保护下，而非无条件

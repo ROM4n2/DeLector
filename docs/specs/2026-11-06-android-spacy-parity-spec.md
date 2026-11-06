@@ -77,7 +77,7 @@ elif _android_runtime:
 2. **惰性**：导入期不加载模型；首次真正需要 NLP 时才加载。
 3. **禁下载**：Android 运行期不得调用 `spacy.cli.download`、不得起 pip 子进程、不得联网。
 4. **硬失败**：本地三级回退全部失败时抛错，**不得**返回纯 Python 结果。
-5. **单一加载器**：`syntax_tree.get_spacy_nlp()` 收敛到 `processor._load_spacy_model()`，保留 `_spacy_load_error` 诊断。
+5. **单一加载器**：`syntax_tree.get_spacy_nlp()` 收敛到统一加载器（实现于 2026-11-06 迁至 `delector/nlp_engine/model_loader.py`，`processor` 保留转发入口），保留 `_spacy_load_error` 诊断。
 6. **可测量**：改造前后在模拟器上记录冷启动首响、首次分析墙钟、`am start -W TotalTime`、进程 RSS。
 7. **可回退**：任一实现步骤可单独 revert；不涉及 schema/协议变更。
 
@@ -101,7 +101,7 @@ elif _android_runtime:
 | D3 | 本地三级回退：`spacy.load` → `importlib.import_module(名称).load()` → 数据目录 glob。 |
 | D4 | 三级回退全部失败 → `RuntimeError`；`NLP_ENGINE = "spacy(加载失败)"`；不回退纯 Python。 |
 | D5 | Android 禁止 `spacy.cli.download`；门控放在 `_load_model_with_autodownload()` **内部**（`processor.py:96-114`），不只依赖调用方。 |
-| D6 | `syntax_tree.get_spacy_nlp()`（`syntax_tree.py:71-89`）改用 `processor._load_spacy_model()`；保留 `_spacy_load_error`。 |
+| D6 | `syntax_tree.get_spacy_nlp()`（`syntax_tree.py:71-89`）改用统一加载器（2026-11-06 实现迁至 `model_loader.py`，`processor` 保留转发入口）；保留 `_spacy_load_error`。 |
 | D7 | 桌面端行为不变。 |
 
 ---
@@ -149,7 +149,7 @@ elif _android_runtime:
 | `processor.py:240-246` | 删除平台分支；Android 落入 `else: nlp = _LazyNlp()` |
 | `processor.py:96-114` | `_load_model_with_autodownload()` 内部加 Android 本地-only 门控：`if _android_runtime: return _load_spacy_model(SPACY_MODEL_NAME)` |
 | `processor.py:124-167` | `_resolve_nlp_model()` 不变（双检锁、硬失败、状态回填） |
-| `syntax_tree.py:71-89` | `spacy.load(SPACY_MODEL_NAME)` → `processor._load_spacy_model(SPACY_MODEL_NAME)`；保留 `_spacy_load_error` |
+| `syntax_tree.py:71-89` | `spacy.load(SPACY_MODEL_NAME)` → 统一加载器（2026-11-06 实现迁至 `model_loader.py`）；保留 `_spacy_load_error` |
 | `routes/main.py::/api/settings` | 不变（live 读 `processor.NLP_ENGINE`） |
 | `routes/syntax_hard.py::/api/syntax/spacy-status` | 不变（统一加载器后口径一致） |
 
