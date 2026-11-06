@@ -600,3 +600,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 4) 未做且不建议硬凑：#view-progress 属首页/落地页作用层，section/content 4.0 保留；#reader-content 正文只有 .reader-p、无小节标题，阅读面 2.5 没有落点，不强行造标题。ADR-0029 决策 5「tokens 只增不迁、只迁 nav/cards/reader、不扫 78 处 11px」据此未动 .dossier-panel-meta / .article-row-meta。
 T0–T10 覆盖补正：work.log:538 一行合并记录了 T0–T7、T9、T10；T8 此前只以「PR #248」形式出现在 work.log:537，未按 T8 编号记。现补：T8 = README 仅中文（独立分支 docs/readme-zh-only，merge 2132462，226→226 行，11 增 11 删，正文/表格装饰 emoji 约 8 处登记 Deferred Gap）。至此 T0–T10 全部有记录。
 验证：build_index_html 3356 行；check_index_html_sync PASS。
+
+### 2026-11-06 20:12 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #251 已合并（merge commit，未 squash）。
+- 分支 feat/frontend-editorial-rhythm，head 7214436 → 合并提交 21956a1
+- 最终轮 CI run 42218648694：12 success、2 skipped（Master Direct-Push Scope Gate 仅守 master 直推；Windows Portable Smoke 因 packaging-surface 无变更跳过），0 failure、0 cancelled
+- 中途红过一轮：run 42212970963 中 unit-2 真实失败 1 例 —— tests/test_exam_domain.py::test_exam_css_grid_uses_auto_fill 钉死旧的 auto-fill + minmax 多列网格；unit-1 / unit-3 / cost-guards / integration-heavy 是矩阵 fail-fast 取消（unit-1 全部 step success 后被 cancel），不算失败
+- 处置：按用户拍板的方案 A 重写断言，改名 test_exam_css_grid_is_single_column_directory，三条断言并存（grid 规则存在 / 1fr 与 max-width 820px 同时命中 / 禁止残留 repeat(auto-fill)），style.css 未动，其他用例未动
+- 本机 .venv 内有 pytest，tests/test_exam_domain.py 33 passed；全量套件由 CI 分片验证
