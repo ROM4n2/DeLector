@@ -942,7 +942,9 @@ export const Companion = {
     document.querySelectorAll('.panel-char-btn').forEach(btn => {
       const char = btn.getAttribute('data-char');
       if (char) {
-        btn.classList.toggle('active', char === this.charId);
+        const isActive = char === this.charId;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
       }
     });
 
@@ -953,7 +955,9 @@ export const Companion = {
 
     const soundBtn = document.getElementById('panel-sound');
     if (soundBtn) {
-      soundBtn.textContent = this.soundEnabled ? '🔊' : '🔇';
+      const soundIcon = document.getElementById('panel-sound-icon');
+      if (soundIcon) soundIcon.textContent = this.soundEnabled ? '🔊' : '🔇';
+      soundBtn.setAttribute('aria-pressed', String(this.soundEnabled));
     }
   }
 };
