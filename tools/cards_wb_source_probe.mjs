@@ -250,7 +250,7 @@ const READER_CARD = {
 };
 
 /* 旧实现的 meta 行文案（**断言常量**，非实现重抄）—— 场景 3/4 拿它做逐字比对 */
-const LEGACY_READER_TAG = "⏳ 到期: 2026-10-05 · 7 正 / 2 误";
+const LEGACY_READER_TAG = "到期: 2026-10-05 · 7 正 / 2 误";
 
 /* --- 场景 1：工作台词（fsrs_s=25）必须说工作台的实话 --- */
 {
@@ -273,7 +273,7 @@ const LEGACY_READER_TAG = "⏳ 到期: 2026-10-05 · 7 正 / 2 误";
   const tag = render({ ...READER_CARD, mastered: 1, fsrs_s: 12.34, correct_count: 0, wrong_count: 0 });
   log(`[2] 工作台词(已掌握) meta: ${tag}`);
   // 期望文案是**断言常量**（裁决后的产品口径），不是被测实现的重抄。
-  const WANT = "🛡️ 已掌握 · 📚 工作台 · s=12.3";
+  const WANT = "已掌握 · 工作台 · s=12.3";
   record(
     "2-已掌握工作台词合并徽记",
     tag === WANT,

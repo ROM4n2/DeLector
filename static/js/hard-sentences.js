@@ -312,7 +312,7 @@ function _treeNodeHtml(node, depth) {
   if (!node || typeof node !== "object") return "";
   const type = node.type || "";
   const label = node.label || type;
-  const fin = node.finite_verb ? `<span class="hs-tn-verb"> ➤定式 ${esc(node.finite_verb)}</span>` : "";
+  const fin = node.finite_verb ? `<span class="hs-tn-verb"> 定式 ${esc(node.finite_verb)}</span>` : "";
   const text = node.text ? `<span class="hs-tn-text"> ｜ ${esc(node.text)}</span>` : "";
   const children = Array.isArray(node.children) && node.children.length
     ? node.children
@@ -388,8 +388,8 @@ function _renderStage() {
   const revealedZone = _q.revealed
     ? _renderRevealedZone(item)
     : `<div class="hs-reveal-zone">
-        <div class="hs-reveal-tip">🔍 先试着自己找主句 —— 想好了再点揭示，核对自己的拆解。</div>
-        <button class="hs-btn hs-btn-main" onclick="HardSentences.revealTree()">🔍 揭示句法树</button>
+        <div class="hs-reveal-tip">先试着自己找主句 —— 想好了再点揭示，核对自己的拆解。</div>
+        <button class="hs-btn hs-btn-main" onclick="HardSentences.revealTree()">揭示句法树</button>
         ${a1a2Note ? `<span class="hs-src-tag">A1/A2：精读脚手架，难度画像仅供参考</span>` : ""}
       </div>`;
 
@@ -404,15 +404,15 @@ function _renderStage() {
         <span class="hs-score">难度<b>${Math.round(Number(item.score) || 0)}</b>/100 · ${esc(_scoreLabel(item.score))}</span>
         ${_q.source === "all" ? `<span class="hs-src-tag">${esc(item.source)}#${esc(String(item.source_id))} · 第${Number(item.sentence_index) + 1}句</span>` : ""}
       </div>
-      ${item.path === "pure" ? `<div class="hs-path-note">✦ 轻量分析：难度画像为粗估，排序供参考，不必当真${_q.spacyError ? ` <span class="hs-diag" title="NLP 引擎降级原因">诊断：${esc(_q.spacyError)}</span>` : ""}</div>` : ""}
+      ${item.path === "pure" ? `<div class="hs-path-note">轻量分析：难度画像为粗估，排序供参考，不必当真${_q.spacyError ? ` <span class="hs-diag" title="NLP 引擎降级原因">诊断：${esc(_q.spacyError)}</span>` : ""}</div>` : ""}
       <div class="hs-sentence">${_sentenceHtml(item)}</div>
       <div class="hs-chips">${_dimChipsHtml(item.dimensions)}</div>
       ${revealedZone}
       <div id="hs-lookup-pop-zone"></div>
       <div class="hs-actions" style="${_q.revealed ? "" : "margin-top:0.9rem;"}">
-        <button class="hs-btn hs-btn-dark" onclick="HardSentences.addCard()" id="hs-add-card-btn">${saved ? "✔ 已加入复习盒" : "➕ 加入复习盒"}</button>
+        <button class="hs-btn hs-btn-dark" onclick="HardSentences.addCard()" id="hs-add-card-btn">${saved ? "已加入复习盒" : "加入复习盒"}</button>
         <button class="hs-btn" onclick="HardSentences.prevCard()" title="上一句">⏮ 上一句</button>
-        <button class="hs-btn hs-btn-main" onclick="HardSentences.nextCard()">下一句 ▶</button>
+        <button class="hs-btn hs-btn-main" onclick="HardSentences.nextCard()">下一句</button>
       </div>
     </div>
   `;
@@ -427,7 +427,7 @@ function _renderRevealedZone(item) {
   }
   return `
     <div class="hs-reveal-zone">
-      <div class="hs-reveal-tip">✅ 句法结构已揭示 —— 对照你的拆解。</div>
+      <div class="hs-reveal-tip">句法结构已揭示 —— 对照你的拆解。</div>
       ${treeHtml}
       ${_topologyHtml(analysis)}
     </div>
@@ -443,7 +443,7 @@ function _renderSummary() {
   }
   summary.innerHTML = `
     <div class="hs-summary">
-      <div class="hs-summary-head">🏁 本会话</div>
+      <div class="hs-summary-head">本会话</div>
       <div class="hs-summary-row">
         <span>句子 <b>${_q.items.length}</b></span>
         <span>·</span>
@@ -655,12 +655,12 @@ export async function addCard() {
       }),
     });
     _markSaved(item);
-    if (btn) btn.textContent = "✔ 已加入复习盒";
+    if (btn) btn.textContent = "已加入复习盒";
     notify("已加入复习盒", { kind: "success" });
   } catch (e) {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "➕ 加入复习盒";
+      btn.textContent = "加入复习盒";
     }
     notify(`加入复习盒失败：${e.message || "未知错误"}`, { kind: "error" });
   } finally {

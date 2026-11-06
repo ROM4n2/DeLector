@@ -73,7 +73,7 @@ function renderReview() {
     $("revEmpty").style.display = "";
     $("revEmptyText").textContent = ratedCount > 0
       ? "本轮完成：共评价 " + ratedCount + " 张卡片。稍后可回来继续或去自测。"
-      : "今日复习任务已完成 🎉";
+      : "今日复习任务已完成";
     $("btnExtra").disabled = !S.words.some(w => S.cards[w.id] && S.cards[w.id].reps > 0);
     $("btnExtraNew").disabled = !S.words.some(w => !S.cards[w.id]);
     return;

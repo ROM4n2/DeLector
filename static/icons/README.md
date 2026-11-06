@@ -12,7 +12,7 @@
 
 本目录只收录 DeLector 实际用到的图标，**不复制整套图标库、不引入 npm 依赖、不使用 CDN**。
 
-## 收录清单（12 个）
+## 收录清单（16 个）
 
 | symbol id | 图标名 | 用途 |
 | --- | --- | --- |
@@ -28,6 +28,10 @@
 | `ui-ico-sparkles` | sparkles | 自定义角色 |
 | `ui-ico-chevron-left` | chevron-left | 伴读面板「上一句」步进 |
 | `ui-ico-chevron-right` | chevron-right | 伴读面板「下一句」步进 |
+| `ui-ico-x` | x | 模态框 / 浮层关闭、卡片删除 |
+| `ui-ico-refresh-cw` | refresh-cw | 洗牌 / 换一批 |
+| `ui-ico-chevron-down` | chevron-down | 折叠面板展开箭头 |
+| `ui-ico-plus` | plus | 词条 chip 入库提示 |
 
 ## 用法
 

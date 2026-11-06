@@ -497,35 +497,35 @@ def test_no_nav_or_action_button_uses_btn_secondary():
     writer.js:905 已存为 Anki 卡）。8 个 .btn-secondary 调用点里 3 个是动作/导航，
     误用导致它们看起来像「已关闭 / 不可点」：
 
-    - index.html:184 「📚 文稿研读库」 onclick=show('home')  —— 跳转
-    - index.html:445 「⚡ 实时诊断」 onclick=analyzeWriterText(true)  —— 即时动作
-    - index.html:446 「📋 问题与历史」 唯一打开 mobile panel 的触发器，必须显眼
+    - index.html:184 「文稿研读库」 onclick=show('home')  —— 跳转
+    - index.html:445 「实时诊断」 onclick=analyzeWriterText(true)  —— 即时动作
+    - index.html:446 「问题与历史」 唯一打开 mobile panel 的触发器，必须显眼
 
     保留的合法 .btn-secondary 用途（writer.js:261, 905；index.html:1166）由
     其余测试钉着。
     """
     # 行号在 PR #15 之后已变（加了返回键），按按钮文本+onclick 锁位置而非行号
     patterns = [
-        ("📚 文稿研读库", "show('home')", "跳转到文库，不是状态"),
-        ("⚡ 实时诊断", "analyzeWriterText(true)", "即时诊断动作，不是状态"),
-        ("📋 问题与历史", "toggleWriterMobilePanel()", "唯一打开 panel 的触发器，必须显眼"),
+        ("文稿研读库", "show('home')", "跳转到文库，不是状态"),
+        ("实时诊断", "analyzeWriterText(true)", "即时诊断动作，不是状态"),
+        ("问题与历史", "toggleWriterMobilePanel()", "唯一打开 panel 的触发器，必须显眼"),
     ]
-    for emoji, onclick, why in patterns:
-        # 找最近的 <button ...>...emoji...</button> 块（中间允许 <span> 包裹）
+    for label, onclick, why in patterns:
+        # 找最近的 <button ...>...label...</button> 块（中间允许 <span> 包裹）
         block = re.search(
-            rf"<button([^>]*?)>(?:[^<]|<(?!/?button\s*>))*?{re.escape(emoji)}(?:[^<]|<(?!/?button\s*>))*?</button>",
+            rf"<button([^>]*?)>(?:[^<]|<(?!/?button\s*>))*?{re.escape(label)}(?:[^<]|<(?!/?button\s*>))*?</button>",
             INDEX,
         )
-        assert block, f"index.html 找不到含 {emoji!r} 的 <button> 块"
+        assert block, f"index.html 找不到含 {label!r} 的 <button> 块"
         attrs = block.group(1)
         assert "btn-secondary" not in attrs, (
-            f"{emoji!r} 按钮不应挂 .btn-secondary：{why}。"
+            f"{label!r} 按钮不应挂 .btn-secondary：{why}。"
             f"当前 class 含 btn-secondary 会让它渲染为「关/已完成」态"
             f"（PR #15 把 .btn-secondary 定义为淡字虚边浅底）。"
         )
         # 同时确认它有可用的外观类（btn + 至少 btn-ghost 或 btn-dark 或 btn-accent）
         assert re.search(r"\bbtn-(ghost|dark|accent)\b", attrs), (
-            f"{emoji!r} 按钮缺少可用的 btn-* 外观类（ghost/dark/accent）"
+            f"{label!r} 按钮缺少可用的 btn-* 外观类（ghost/dark/accent）"
         )
 
 

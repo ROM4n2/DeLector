@@ -356,7 +356,7 @@ export async function fetchKnownLemmas(receipt = null) {
 
 // 三态徽章文案 + class **单点定义**（渲染层不得散落 threshold / 文案字面量）。
 const I1_BADGES = {
-  i1: { cls: "enc-i1-i1", label: "✅ 正好读" },
+  i1: { cls: "enc-i1-i1", label: "正好读" },
   easy: { cls: "enc-i1-easy", label: "偏简单" },
   hard: { cls: "enc-i1-hard", label: "偏难" },
 };
@@ -365,10 +365,10 @@ const I1_BADGES = {
 const I1_HINT_GUIDE = "先在背词工作台背一些词，这里就会告诉你哪篇正好适合你";
 
 // A7：已读标记文案（卡片 meta 段内最前，**单点定义**；渲染层不得散落字面量）。
-const READ_MARK_TEXT = "✓ 已读";
+const READ_MARK_TEXT = "已读";
 
 // A7：完成态文案模板 —— ranked 全部读过时显示（n = 篇数，按 ranked 动态）。
-const I1_HINT_ALL_READ = (n) => `🎉 ${n} 篇都读过了`;
+const I1_HINT_ALL_READ = (n) => `${n} 篇都读过了`;
 
 // A7：降级文案模板 —— i+1 全被读过 → 跳过已读顺延推荐次优一篇（注入 title/bandLabel/pct）。
 const I1_HINT_FALLBACK = (title, bandLabel, pct) =>
@@ -1125,7 +1125,7 @@ function renderSessionReview() {
       <button class="enc-review-collapse" data-enc-toggle-review>收起</button>
     </div>
     <div class="enc-review-list">${rows}</div>
-    ${_sessionSyncOk ? "" : '<div class="enc-review-note">⚠ 服务端镜像同步失败，词卡已安全保存在本机。</div>'}
+    ${_sessionSyncOk ? "" : '<div class="enc-review-note">服务端镜像同步失败，词卡已安全保存在本机。</div>'}
   `;
   rv.style.display = "";
   const tg = reviewToggleEl();

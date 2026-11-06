@@ -47,7 +47,7 @@ export async function playGermanAudio(text, rate = 0.88) {
   } catch {
     if (!("speechSynthesis" in window)) {
       const statusEl = document.getElementById("player-status");
-      if (statusEl) statusEl.textContent = "⚠ 语音引擎不可用";
+      if (statusEl) statusEl.textContent = "语音引擎不可用";
       return;
     }
     window.speechSynthesis.cancel();
@@ -354,7 +354,7 @@ export const ShadowPlayer = {
     // 调用方应先 this.pause() 复位播放状态（isPlaying/按钮/高亮/计时器）。
     console.warn("[ShadowPlayer] 所有 TTS 引擎均不可用:", sent?.text);
     const el = document.getElementById("player-status");
-    if (el) el.textContent = "⚠ 语音引擎不可用";
+    if (el) el.textContent = "语音引擎不可用";
   },
 
   seekSentence(idx) {
@@ -454,6 +454,6 @@ export const ShadowPlayer = {
 
   showPauseCountdown(ms) {
     const el = document.getElementById("player-status");
-    if (el) el.textContent = `🎙️ 请跟读 (${Math.round(ms / 1000)}s)…`;
+    if (el) el.textContent = `请跟读 (${Math.round(ms / 1000)}s)…`;
   },
 };

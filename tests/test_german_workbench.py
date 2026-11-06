@@ -1533,7 +1533,7 @@ def test_core_scope_aware_header_badge():
     """顶栏「今日待学」必须与 buildReviewQueue 同口径：核心模式下只算核心词。
 
     徽标口径不跟队列走，核心模式下就会显示一堆永远进不了队列的非核心待学数
-    ——「今日待学 40」点进去只有 8 张卡，且永远清不到「今日已完成 ✓」。
+    ——「今日待学 40」点进去只有 8 张卡，且永远清不到「今日已完成」。
     实现允许调用全局 inScopeWord helper。
     变异验证：到期路 / 新词路任一处去掉 inScopeWord → 对应断言红；
               inScopeWord 内部改成无条件 true → helper 定义断言红。
@@ -1681,15 +1681,15 @@ def test_scope_segment_click_reuses_refilter_chain():
 
 
 def test_header_badge_carries_scope_mode():
-    """徽标同时承载模式与待学数：`⭐核心 · 今日待学 12` / `全部 · 今日已完成 ✓`。
+    """徽标同时承载模式与待学数：`核心 · 今日待学 12` / `全部 · 今日已完成`。
 
     pending>0 与「已完成」**两个分支都要带**前缀 —— 只给待学分支加的话，
-    核心模式刷完后徽标又变回无模式的「今日已完成 ✓」，模式状态凭空消失。
+    核心模式刷完后徽标又变回无模式的「今日已完成」，模式状态凭空消失。
     变异验证：任一分支去掉前缀变量 → 对应分支断言红；
               前缀写死成常量（不读 wordFilters.scope）→ 派生断言红。
     """
     body = _fn_body("renderHeaderBadge")
-    label = _sole_line(body, "⭐核心", "模式前缀")
+    label = _sole_line(body, 'wordFilters.scope === "core"', "模式前缀")
     assert re.search(_SCOPE_IS_CORE, label), "模式前缀必须由 wordFilters.scope === 'core' 派生，不能写死"
     assert "全部" in label, "模式前缀缺少「全部」档文案"
     m = re.match(r"\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", label)

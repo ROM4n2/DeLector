@@ -263,8 +263,8 @@ const READER_GRAMMAR = {
 
 /** 断言常量：旧实现（非工作台普通卡）在目录词汇网格里的文案 —— A3/A5 的「不回归」基准。
  *  注意末尾没有「 · 到期: …」：换用 cardStatsTag 后 due_date 由它自己渲染在前缀位。 */
-const LEGACY_READER_TAG = "⏳ 到期: 2026-10-05 · 7 正 / 2 误";
-const LEGACY_GRAMMAR_TAG = "⏳ 到期: 2026-10-06 · 5 正 / 1 误";
+const LEGACY_READER_TAG = "到期: 2026-10-05 · 7 正 / 2 误";
+const LEGACY_GRAMMAR_TAG = "到期: 2026-10-06 · 5 正 / 1 误";
 
 /** 工作台来源边界契约：期望值是测试数据，不复制被测实现的阈值表达式。 */
 const SOURCE_BOUNDARY_CASES = [

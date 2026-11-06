@@ -141,7 +141,7 @@ export function renderMarquees(stats = {}) {
       .map(
         (q) => `
       <div class="marquee-item marquee-quote">
-        <span class="marquee-dot">✦</span>
+        <span class="marquee-dot"></span>
         <span class="marquee-text-de">“${esc(q.de)}”</span>
         <span class="marquee-text-zh">${esc(q.zh)}</span>
         <span class="marquee-tag">[${esc(q.author)}]</span>
@@ -165,34 +165,29 @@ export function renderMarquees(stats = {}) {
     const totalCards = stats.total_cards || 0;
 
     const statItems = [
-      { icon: "🔥", label: "STREAK", val: `${streak} TAGE`, desc: "连续研读" },
+      { label: "STREAK", val: `${streak} TAGE`, desc: "连续研读" },
       {
-        icon: "📖",
         label: "VOKABELN",
         val: `${vocab} WÖRTER`,
         desc: "已掌握词汇",
       },
       {
-        icon: "🌳",
         label: "GRAMMATIK",
         val: `${grammar} REGELN`,
         desc: "核心语法考点",
       },
       {
-        icon: "📑",
         label: "ARTIKEL",
         val: `${articles} TEXTE`,
         desc: "精读篇数",
       },
       {
-        icon: "🎯",
         label: "GENAUIGKEIT",
         val: `${accuracy}%`,
         desc: "测验正答率",
       },
-      { icon: "⏱", label: "ZEIT", val: `${minutes} MIN`, desc: "专注学时" },
+      { label: "ZEIT", val: `${minutes} MIN`, desc: "专注学时" },
       {
-        icon: "🗂",
         label: "KARTEN",
         val: `${totalCards} GESAMT`,
         desc: "卡片总库",
@@ -203,7 +198,7 @@ export function renderMarquees(stats = {}) {
       .map(
         (s) => `
       <div class="marquee-item marquee-stat">
-        <span class="marquee-dot coral">●</span>
+        <span class="marquee-dot coral"></span>
         <span class="marquee-stat-label">${s.label}</span>
         <span class="marquee-stat-val">${s.val}</span>
         <span class="marquee-stat-desc">${s.desc}</span>
@@ -384,7 +379,7 @@ export async function loadProgress() {
           <div class="stamp-status-line">
             <span>STATUS</span>
             <span class="${m.unlocked ? "stamp-status-unlocked" : "stamp-status-locked"}">
-              ${m.unlocked ? "✓ 已加盖钢印" : "○ 待达成"}
+              ${m.unlocked ? "已加盖钢印" : "待达成"}
             </span>
           </div>
         </div>
@@ -412,7 +407,7 @@ export async function loadProgress() {
       } else {
         errorsList.innerHTML = `
           <div class="dossier-empty-state">
-            <span>✓ 暂无重点易错词汇记录（Keine Fehlerschwerpunkte）</span>
+            <span>暂无重点易错词汇记录（Keine Fehlerschwerpunkte）</span>
           </div>
         `;
       }
@@ -477,7 +472,7 @@ export function renderTrendChart(trend) {
 
   const axisStart = document.getElementById("chart-axis-start");
   if (axisStart && trend.length > 0) {
-    axisStart.textContent = `● ${trend[0].date} (START)`;
+    axisStart.textContent = `${trend[0].date} (START)`;
   }
 }
 

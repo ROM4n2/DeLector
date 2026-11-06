@@ -1372,7 +1372,7 @@ def test_settings_panel_guards_absent_api_key_masked_static():
 def test_settings_panel_loopback_rendering_path_kept_verbatim():
     """(ii) 回环来源（响应仍带 api_key_masked）的渲染路径 MUST 逐字保留。"""
     src = open(os.path.join(ROOT, "static", "js", "main.js"), encoding="utf-8").read()
-    assert "`✓ 当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`" in src, (
+    assert "`当前已配置 Key: ${s.api_key_masked}（留空保存表示不修改）`" in src, (
         "回环渲染文案被改动/删除（桌面端会静默改文案）"
     )
     assert "if (s.has_api_key)" in src, "key 存在性信号（has_api_key）必须仍是渲染分支条件"

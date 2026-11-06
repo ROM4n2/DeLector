@@ -21,10 +21,10 @@
     <h1>单词记忆工作台 <span class="sub">德语 A1 · SD1 Wortliste</span></h1>
   </div>
   <div class="seg" id="scopeSeg">
-    <button type="button" data-scope="core" class="active">⭐ A1 核心</button>
+    <button type="button" data-scope="core" class="active">A1 核心</button>
     <button type="button" data-scope="all">A1 全量</button>
-    <button type="button" data-scope="a2">📘 A2 词库</button>
-    <button type="button" data-scope="b1">📗 B1 词库</button>
+    <button type="button" data-scope="a2">A2 词库</button>
+    <button type="button" data-scope="b1">B1 词库</button>
     <button type="button" data-scope="reader">精读生词</button>
   </div>
   <span class="badge" id="dueBadge">—</span>
@@ -77,13 +77,19 @@
       </div>
     </div>
 
-    <div id="revEmpty" class="empty-box" style="display:none">
-      <div class="big">🎉</div>
-      <p id="revEmptyText">今日复习任务已完成</p>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button class="btn ghost" id="btnExtraNew">额外学新词 20 张</button>
-        <button class="btn ghost" id="btnExtra">额外复习 20 张</button>
-        <button class="btn subtle" id="btnGoQuiz">去自测</button>
+    <div id="revEmpty" class="empty-box" style="display:none;text-align:left">
+      <div style="display:flex;gap:1rem;margin-top:1.5rem;max-width:52ch">
+        <span aria-hidden="true" style="width:2px;flex-shrink:0;background:var(--moss)"></span>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem">TAGESPLAN · 今日</div>
+          <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem">复习计划</div>
+          <p id="revEmptyText" style="font-size:0.8125rem;color:var(--pencil);margin:0 0 16px;line-height:1.65">今日复习任务已完成</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn ghost" id="btnExtraNew">额外学新词 20 张</button>
+            <button class="btn ghost" id="btnExtra">额外复习 20 张</button>
+            <button class="btn subtle" id="btnGoQuiz">去自测</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -170,7 +176,7 @@
 
   <!-- F4 · 学习分析深化：4 个新面板 -->
   <div class="panel">
-    <h2>🔥 连续学习 <span id="streakBadge" style="color:var(--accent);font-size:18px"></span></h2>
+    <h2>连续学习 <span id="streakBadge" style="color:var(--accent);font-size:18px"></span></h2>
     <p class="hint" style="margin-top:6px;color:var(--muted)">连续 N 天有复习或自测记录即可点亮 streak。</p>
   </div>
   <div class="panel">
@@ -386,7 +392,7 @@
   <div class="panel" id="lanSyncPanel" style="display:none">
     <h2>LAN 同步（6 位短码，WebRTC P2P）</h2>
     <div class="guide" style="font-size:13px;line-height:1.7;color:#b8860b">
-      ⚠ 手动短码 P2P 已停用：服务端已启用配对密钥鉴权（X-WB-Key），短码端点不再对未配对请求开放。<br>
+      手动短码 P2P 已停用：服务端已启用配对密钥鉴权（X-WB-Key），短码端点不再对未配对请求开放。<br>
       进度同步请使用下方「镜像自动同步（配对密钥 · 后台静默）」——配对一次后自动后台对账，无需手动传码。
       <b>下方短码按钮为旧版遗留（保留仅为兼容旧书签/指引），点击不再生效。</b>
     </div>
@@ -1152,7 +1158,7 @@ function fsrsSelfTest() {
   pass = ok("间隔下限=1天", fsrsReview({ s: 0.01, d: 9, due: t, last: t - DAY, reps: 5, lapses: 4 }, 1, t, 0.9).due - t >= DAY) && pass;
   const c5 = fsrsReview(null, 1, t, 0.9);
   pass = ok("首评Again: S=0.212, 间隔=1天", c5.s === 0.212 && c5.due - t === DAY) && pass;
-  console.info("%c[FSRS-6 自检] " + (pass ? "全部通过 ✓" : "存在失败项 ✗"),
+  console.info("%c[FSRS-6 自检] " + (pass ? "全部通过" : "存在失败项"),
     "color:" + (pass ? "#2e9e5b" : "#d2504a"));
   return pass;
 }
@@ -1294,10 +1300,10 @@ function chooseOption(i) {
     else if (bi === i) b.classList.add("bad");
   });
   const t = logToday(); t.qz++;
-  if (opt.correct) { quiz.ok++; t.qzOk++; saveLog(); $("quizFb").innerHTML = "<div class='fb ok'>✓ 回答正确！</div>"; }
+  if (opt.correct) { quiz.ok++; t.qzOk++; saveLog(); $("quizFb").innerHTML = "<div class='fb ok'>回答正确！</div>"; }
   else { saveLog(); quiz.wrong.push(w.id); addWrong(w.id, "choice-" + quiz.dir);
     const c = quiz.opts.find(o => o.correct);
-    $("quizFb").innerHTML = "<div class='fb bad'>✗ 正确答案：" + esc(c.text) + "</div>"; }
+    $("quizFb").innerHTML = "<div class='fb bad'>正确答案：" + esc(c.text) + "</div>"; }
   $("btnQuizNext").style.display = "";
   $("btnQuizNext").textContent = quiz.idx + 1 >= quiz.ids.length ? "查看结果" : "下一题";
   $("btnQuizNext").focus();
@@ -1352,15 +1358,15 @@ function checkSpell() {
   inp.disabled = true;
   if (verdict === 2) {
     quiz.ok++; t.qzOk++; saveLog();
-    $("quizFb").innerHTML = "<div class='fb ok'>✓ 完全正确！</div>";
+    $("quizFb").innerHTML = "<div class='fb ok'>完全正确！</div>";
   } else if (verdict === 1) {
     quiz.ok++; t.qzOk++; saveLog();
-    $("quizFb").innerHTML = "<div class='fb ok'>✓ 基本正确（仅差一两个字母）· 规范拼写：" + esc(w.hw) + "</div>";
+    $("quizFb").innerHTML = "<div class='fb ok'>基本正确（仅差一两个字母）· 规范拼写：" + esc(w.hw) + "</div>";
   } else {
     quiz.wrong.push(w.id); addWrong(w.id, "spell");
     saveLog();
     const base = w.hw.split(",")[0].trim();
-    $("quizFb").innerHTML = "<div class='fb bad'>✗ 正确拼写：" + esc(base) +
+    $("quizFb").innerHTML = "<div class='fb bad'>正确拼写：" + esc(base) +
       (w.hw.includes(",") ? "（完整词条：" + esc(w.hw) + "）" : "") + "</div>";
   }
   $("btnQuizNext").style.display = "";
@@ -1384,7 +1390,7 @@ function quizFinish() {
     "</span>（正确率 " + pct + "%）";
   const listBox = $("quizWrongList");
   if (!quiz.wrong.length) {
-    listBox.innerHTML = "<p class='hint'>本轮流错题：无 🎉</p>";
+    listBox.innerHTML = "<p class='hint'>本轮流错题：无</p>";
     $("btnQuizWrongOnly").style.display = "none";
   } else {
     $("btnQuizWrongOnly").style.display = "";
@@ -1929,7 +1935,7 @@ function exRowHTML(de, zh) {
   return "<div class='ex-row'>" +
     "<input class='ex-de' placeholder='德语例句' value='" + esc(de) + "'>" +
     "<input class='ex-zh' placeholder='中文翻译' value='" + esc(zh) + "'>" +
-    "<button class='rm' type='button' title='删除此例句' aria-label='删除此例句'>✕</button></div>";
+    "<button class='rm' type='button' title='删除此例句' aria-label='删除此例句'><svg class='ui-ico' aria-hidden='true' focusable='false'><use href='#ui-ico-x'></use></svg></button></div>";
 }
 function openWordModal(id) {
   editingId = id;
@@ -2098,9 +2104,9 @@ function lanDetect() {
   $("lanSyncPanel").style.display = "block";
   lanDisableLegacyPanel();
   if (location.protocol === "file:") {
-    lanSetStatus("⚠️ file:// 下 WebRTC 不可用。请改用 http:// 访问，再使用下方「镜像自动同步（配对密钥）」配对同步。");
+    lanSetStatus("file:// 下 WebRTC 不可用。请改用 http:// 访问，再使用下方「镜像自动同步（配对密钥）」配对同步。");
   } else {
-    lanSetStatus("⚠ 手动短码模式已停用（短码端点现要求配对密钥）。请使用下方「镜像自动同步」：保存配对后自动后台对账。");
+    lanSetStatus("手动短码模式已停用（短码端点现要求配对密钥）。请使用下方「镜像自动同步」：保存配对后自动后台对账。");
   }
 }
 
@@ -2501,11 +2507,11 @@ $("btnDiagTts").addEventListener("click", async () => {
   lines.push("");
   lines.push("=== 针对性建议 ===");
   if (isContentProto) {
-    lines.push("⚠ 当前协议: " + proto + " —— 这是无声音问题的根本原因");
+    lines.push("当前协议: " + proto + " —— 这是无声音问题的根本原因");
     lines.push("  Android 11+ scoped storage 强制用 content:// 协议打开本地文件；");
     lines.push("  浏览器在 content:// 协议下禁用了 speechSynthesis 语音列表 + 跨域 Audio 加载。");
     lines.push("");
-    lines.push("  ▶ 解决方案（任选其一）：");
+    lines.push("  解决方案（任选其一）：");
     lines.push("  [A] 电脑跑本地服务器（最推荐，零依赖、数据不外泄）：");
     lines.push("      1. 电脑 cmd 进入 workbench.html 所在目录");
     lines.push("      2. 执行: python -m http.server 8000");
@@ -2519,7 +2525,7 @@ $("btnDiagTts").addEventListener("click", async () => {
     lines.push("");
     lines.push("  切换到 http:// 或 https:// 协议后，所有 TTS API 都能正常工作。");
   } else if (voicesCount === 0) {
-    lines.push("⚠ Web Speech 语音列表为空，但协议是 " + proto + "（不是 content://）");
+    lines.push("Web Speech 语音列表为空，但协议是 " + proto + "（不是 content://）");
     lines.push("  可能原因：");
     lines.push("  1. voiceschanged 事件还没触发（点击音量按钮时会重新尝试）");
     lines.push("  2. 系统真的没装语音包（Android: 设置→语言→文字转语音；iOS: 设置→辅助功能→语音）");
@@ -2527,12 +2533,12 @@ $("btnDiagTts").addEventListener("click", async () => {
     lines.push("  建议：先点任意音量按钮试一次（会触发 voices 重新加载），如果还没声音，");
     lines.push("        在系统设置里下载德语语音包");
   } else if (onlineOkCount === 0) {
-    lines.push("⚠ 所有在线 TTS 源都失败，但 Web Speech 可用");
+    lines.push("所有在线 TTS 源都失败，但 Web Speech 可用");
     lines.push("  建议：");
     lines.push("  1. 切换到「仅浏览器内置」引擎（设置页→发音引擎）");
     lines.push("  2. 检查网络/防火墙是否拦截了 dict.youdao.com / fanyi.baidu.com");
   } else {
-    lines.push("✓ 环境正常，TTS 应该能工作。如果仍无声音，请检查：");
+    lines.push("环境正常，TTS 应该能工作。如果仍无声音，请检查：");
     lines.push("  1. 手机音量是否开到适当水平");
     lines.push("  2. 是否在静音/勿扰模式");
     lines.push("  3. 浏览器是否被省电模式限制");
@@ -2627,7 +2633,7 @@ $("btnResetProgress").addEventListener("click", async () => {
   }
 });
 $("btnResetAll").addEventListener("click", async () => {
-  if (await confirmDlg("⚠️ 将清空全部数据并恢复初始词库（含自定义词与全部进度），不可撤销，确定？")) {
+  if (await confirmDlg("将清空全部数据并恢复初始词库（含自定义词与全部进度），不可撤销，确定？")) {
     for (const k in K) localStorage.removeItem(K[k]);
     location.reload();
   }
@@ -2851,6 +2857,10 @@ self.addEventListener("fetch", function (e) {
   <symbol id="ui-ico-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></symbol>
   <symbol id="ui-ico-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
   <symbol id="ui-ico-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></symbol>
+  <symbol id="ui-ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="ui-ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="ui-ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="ui-ico-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
 </svg>
 
 </body>

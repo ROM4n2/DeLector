@@ -267,13 +267,13 @@ function _playCurrent() {
   const myTok = _q.token;
   // 先渲染再写状态：_renderPlayerBar 会重建 #listen-status，顺序颠倒提示会被清空
   _renderAll();
-  _setStatus(`▶ 句 ${_q.idx + 1} / ${_q.sentences.length} · ${_q.speed}x`);
+  _setStatus(`句 ${_q.idx + 1} / ${_q.sentences.length} · ${_q.speed}x`);
 
   if (!_ttsUsable()) {
     // 三层 TTS 全不可用：停止并给出可见提示，绝不静默空转
     _stop();
     _renderAll();
-    _setStatus("⚠ 语音引擎不可用", true);
+    _setStatus("语音引擎不可用", true);
     return;
   }
   playGermanAudio(sent, _q.speed);
@@ -439,8 +439,8 @@ function _renderPlayerBar() {
   const flowHtml =
     _q.mode === "L"
       ? `<span class="listen-bar-label">节奏</span>` +
-        `<button class="listen-pill${_q.flow === "shadow" ? " active" : ""}" onclick="ListenLab.listenSetFlow('shadow')" title="播放后留跟读停顿">🎙️ 跟读</button>` +
-        `<button class="listen-pill${_q.flow === "continuous" ? " active" : ""}" onclick="ListenLab.listenSetFlow('continuous')" title="句子连续朗读">▶ 连读</button>`
+        `<button class="listen-pill${_q.flow === "shadow" ? " active" : ""}" onclick="ListenLab.listenSetFlow('shadow')" title="播放后留跟读停顿">跟读</button>` +
+        `<button class="listen-pill${_q.flow === "continuous" ? " active" : ""}" onclick="ListenLab.listenSetFlow('continuous')" title="句子连续朗读">连读</button>`
       : "";
   bar.innerHTML =
     `<div class="listen-player-group">` +
@@ -471,9 +471,9 @@ function _sentListHtml() {
         if (_q.mode === "D") {
           const diag = d.diag;
           const ok = diag && diag.correct === diag.total;
-          mark = `<span class="listen-mark ${ok ? "ok" : "no"}">${ok ? "✓ 正确" : "✗ 错误"}</span>`;
+          mark = `<span class="listen-mark ${ok ? "ok" : "no"}">${ok ? "正确" : "错误"}</span>`;
         } else if (_q.mode === "C") {
-          mark = `<span class="listen-mark ${d.ok ? "ok" : "no"}">${d.ok ? "✓ 正确" : "✗ 错误"}</span>`;
+          mark = `<span class="listen-mark ${d.ok ? "ok" : "no"}">${d.ok ? "正确" : "错误"}</span>`;
         }
       } else if (d.skipped) {
         mark = `<span class="listen-mark skip">↷</span>`;
@@ -506,8 +506,8 @@ function _dictationHtml() {
   const feedback = d.answered && d.diag
     ? `<div class="listen-feedback">
         <div class="listen-cap-row">${(d.diag.tokens || []).map(_capHtml).join("")}</div>
-        <div class="listen-fb-stat">✓ ${d.diag.correct} / ${d.diag.total} 词</div>
-        <button class="listen-btn" onclick="ListenLab.listenNext()">下一句 ▶</button>
+        <div class="listen-fb-stat">${d.diag.correct} / ${d.diag.total} 词</div>
+        <button class="listen-btn" onclick="ListenLab.listenNext()">下一句</button>
       </div>`
     : "";
   return `
@@ -519,7 +519,7 @@ function _dictationHtml() {
       <div class="listen-hidden-tip">原文已隐藏 —— 点「播放」听写，再在下方输入复现的句子</div>
       <div class="listen-input-row">
         <input id="listen-dict-input" class="listen-input" type="text" placeholder="输入你听到的德语句子…" autocomplete="off" autocorrect="off" onkeydown="if (event.key === 'Enter') ListenLab.listenSubmitDictation();" />
-        <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenSubmitDictation()">✓ 提交判分</button>
+        <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenSubmitDictation()">提交判分</button>
         <button class="listen-btn" onclick="ListenLab.listenSkip()">跳过</button>
       </div>
       ${feedback}
@@ -543,7 +543,7 @@ function _clozeHtml() {
       <div class="listen-dict-card">
         <div class="listen-hidden-tip">本句过短或全为功能词，无法挖空 —— 点击下一句继续</div>
         <div class="listen-input-row">
-          <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenNext()">下一句 ▶</button>
+          <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenNext()">下一句</button>
         </div>
       </div>
       <div class="listen-sent-list">${_sentListHtml()}</div>
@@ -552,10 +552,10 @@ function _clozeHtml() {
   const feedback = d.answered
     ? `<div class="listen-feedback">
         <div class="listen-cap-row">${d.ok
-            ? `<span class="listen-cap st-correct">✓ ${esc(item.answer)}</span>`
-            : `<span class="listen-cap st-missing">✗ 答案：${esc(item.answer)}</span>`}</div>
+            ? `<span class="listen-cap st-correct">${esc(item.answer)}</span>`
+            : `<span class="listen-cap st-missing">答案：${esc(item.answer)}</span>`}</div>
         <div class="listen-fb-stat">${d.ok ? "回答正确" : "回答有误，看答案后点下一句"}</div>
-        <button class="listen-btn" onclick="ListenLab.listenNext()">下一句 ▶</button>
+        <button class="listen-btn" onclick="ListenLab.listenNext()">下一句</button>
       </div>`
     : "";
   return `
@@ -567,7 +567,7 @@ function _clozeHtml() {
       <div class="listen-cloze-text">${_clozeTextHtml(item)}</div>
       <div class="listen-input-row">
         <input id="listen-cloze-input" class="listen-input" type="text" placeholder="填入 ___ 处的单词…" autocomplete="off" autocorrect="off" onkeydown="if (event.key === 'Enter') ListenLab.listenSubmitCloze();" />
-        <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenSubmitCloze()">✓ 校验</button>
+        <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenSubmitCloze()">校验</button>
         <button class="listen-btn" onclick="ListenLab.listenSkip()">跳过</button>
       </div>
       ${feedback}
@@ -608,8 +608,8 @@ function _renderScoreCard() {
   if (_q.mode === "L") {
     card.innerHTML = `
       <div class="listen-score-card">
-        <div class="listen-score-head">🏁 精听完成</div>
-        <div class="listen-score-row">🎉 已完整听完 ${_q.sentences.length} 句（${esc(_q.material.title)}）</div>
+        <div class="listen-score-head">精听完成</div>
+        <div class="listen-score-row">已完整听完 ${_q.sentences.length} 句（${esc(_q.material.title)}）</div>
         <div class="listen-score-actions">
           <button class="listen-btn" onclick="ListenLab.listenRestart()">↺ 再练一次</button>
           <button class="listen-btn listen-btn-dark" onclick="ListenLab.listenExit()">⟲ 换材料</button>
@@ -621,7 +621,7 @@ function _renderScoreCard() {
   const pct = _q.statTotal ? Math.round((_q.statCorrect / _q.statTotal) * 100) : 0;
   card.innerHTML = `
     <div class="listen-score-card">
-      <div class="listen-score-head">🏁 本会话成绩 · ${_q.mode === "D" ? "听写" : "填空"}</div>
+      <div class="listen-score-head">本会话成绩 · ${_q.mode === "D" ? "听写" : "填空"}</div>
       <div class="listen-score-row">
         <span>正确 <b>${_q.statCorrect}</b></span><span>/</span><span>总计 <b>${_q.statTotal}</b></span><span>·</span><span>${pct}%</span>
       </div>

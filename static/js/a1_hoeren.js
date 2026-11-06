@@ -32,7 +32,7 @@ export async function initA1Hoeren() {
     }
   } catch (e) {
     console.error("Failed to load A1 Hoeren sets", e);
-    container.innerHTML = `<div class="p-4 text-pencil">⚠️ 无法加载听力题库: ${esc(e.message)}</div>`;
+    container.innerHTML = `<div class="p-4 text-pencil">无法加载听力题库: ${esc(e.message)}</div>`;
   }
 }
 
@@ -56,7 +56,7 @@ export function renderHoerenHeader() {
       <div class="a1-hoeren-title-bar">
         <div class="a1-hoeren-title">
           <span class="pulse"></span>
-          <span>🎧 Goethe-Zertifikat A1 · 听力考场工坊 (Hörverstehen · 15题 / 25分)</span>
+          <span>Goethe-Zertifikat A1 · 听力考场工坊 (Hörverstehen · 15题 / 25分)</span>
         </div>
         <div class="a1-hoeren-status-badge" id="hoeren-status-badge">
           考场准备就绪
@@ -103,7 +103,7 @@ export async function selectHoerenSet(setId) {
   } catch (e) {
     if (setId !== currentSetId) return;
     console.error("Failed to load set", e);
-    stage.innerHTML = `<div class="p-6 text-red">⚠️ 试卷载入失败: ${esc(e.message)}</div>`;
+    stage.innerHTML = `<div class="p-6 text-red">试卷载入失败: ${esc(e.message)}</div>`;
   }
 }
 
@@ -138,10 +138,10 @@ export function renderHoerenQuestions() {
           </div>
           <div class="a1-hoeren-action-group">
             <button id="btn-hoeren-start" class="btn btn-dark" onclick="A1Hoeren.startHoerenExam()">
-              ▶ 开始模拟考 (全真流程)
+              开始模拟考 (全真流程)
             </button>
             <button id="btn-hoeren-submit" class="btn btn-accent" onclick="A1Hoeren.submitHoerenExam()">
-              ✓ 提交交卷 (评分)
+              提交交卷 (评分)
             </button>
           </div>
         </div>
@@ -155,7 +155,7 @@ export function renderHoerenQuestions() {
       <div class="a1-hoeren-sidebar">
         <div class="a1-hoeren-side-card">
           <div class="a1-side-header">
-            <span>📋 答题卡 (Antwortbogen)</span>
+            <span>答题卡 (Antwortbogen)</span>
             <span id="hoeren-answered-ratio">0/15</span>
           </div>
           <div class="a1-hoeren-grid-matrix">
@@ -221,9 +221,9 @@ function renderAllQuestionCards(allQ) {
       <div class="a1-hoeren-q-card" id="q-card-${q.id}" data-qid="${esc(q.id)}">
         <div class="a1-q-header">
           <span class="a1-q-num">Frage ${idx + 1}</span>
-          <span class="a1-q-repeat">🔁 播放 ${q.repeat_count} 遍</span>
+          <span class="a1-q-repeat">播放 ${q.repeat_count} 遍</span>
           <button class="btn btn-ghost btn-xs audio-play-btn" onclick="A1Hoeren.playSingleAudio(${jsAttr(q.id)})" title="单独朗读本题听力">
-            🔊 听力试听
+            听力试听
           </button>
         </div>
         <div class="a1-q-prompt-zh">${esc(q.prompt_zh)}</div>
@@ -378,7 +378,7 @@ function setPhaseInfo(label, sec) {
       }
     }, 1000);
   } else {
-    if (countdown) countdown.innerText = "🔊 播放中";
+    if (countdown) countdown.innerText = "播放中";
   }
 }
 
@@ -410,7 +410,7 @@ function finishExamCountdown() {
   setPhaseInfo("考试录音播放完毕，请核对答题卡并交卷", 0);
   const startBtn = document.getElementById("btn-hoeren-start");
   if (startBtn) {
-    startBtn.innerText = "✓ 录音完毕";
+    startBtn.innerText = "录音完毕";
     startBtn.disabled = false;
   }
 }
@@ -491,7 +491,7 @@ function renderGradedResults(graded) {
         .map(
           (v) => `
         <span class="a1-vocab-chip" onclick="A1Hoeren.saveVocabChip(${jsAttr(v.word)}, ${jsAttr(v.meaning)}, this)">
-          <strong>${esc(v.word)}</strong> ${v.plural ? `(${esc(v.plural)})` : ""}: ${esc(v.meaning)} ➕
+          <strong>${esc(v.word)}</strong> ${v.plural ? `(${esc(v.plural)})` : ""}: ${esc(v.meaning)} <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-plus"></use></svg>
         </span>
       `,
         )
@@ -500,18 +500,18 @@ function renderGradedResults(graded) {
       analysisBox.innerHTML = `
         <div class="analysis-status-line">
           <span class="${d.is_correct ? "text-green" : "text-red"}">
-            ${d.is_correct ? "✅ 正确" : `❌ 错误 (您的选择: ${esc(d.user_answer || "未选")})`}
+            ${d.is_correct ? "正确" : `错误 (您的选择: ${esc(d.user_answer || "未选")})`}
           </span>
           <span class="correct-ans-tag">官方答案: <strong>${esc(d.correct_answer)}</strong></span>
         </div>
         <div class="analysis-transcript-block">
-          <div class="transcript-de"><strong>🇩🇪 听力原文:</strong> ${esc(d.transcript_de)}</div>
-          <div class="transcript-zh"><strong>🇨🇳 原文对照:</strong> ${esc(d.transcript_zh)}</div>
+          <div class="transcript-de"><strong>听力原文:</strong> ${esc(d.transcript_de)}</div>
+          <div class="transcript-zh"><strong>原文对照:</strong> ${esc(d.transcript_zh)}</div>
         </div>
         <div class="analysis-explanation">
-          <strong>💡 考点深度解析:</strong> ${esc(d.explanation_zh)}
+          <strong>考点深度解析:</strong> ${esc(d.explanation_zh)}
         </div>
-        ${vocabChips ? `<div class="analysis-vocab-row"><strong>📌 考点高频生词:</strong> ${vocabChips}</div>` : ""}
+        ${vocabChips ? `<div class="analysis-vocab-row"><strong>考点高频生词:</strong> ${vocabChips}</div>` : ""}
       `;
     }
   });
@@ -529,7 +529,7 @@ function renderGradedResults(graded) {
         </div>
         <div class="score-banner-right">
           <button class="btn btn-dark btn-sm" onclick="A1Hoeren.selectHoerenSet(${currentSetId})">
-            🔄 重测本卷
+            重测本卷
           </button>
         </div>
       </div>
@@ -559,7 +559,7 @@ export async function saveVocabChip(word, meaning, el) {
       }),
     });
     if (el) {
-      el.innerHTML = `<strong>${esc(word)}</strong>: ${esc(meaning)} ✓ 已收录`;
+      el.innerHTML = `<strong>${esc(word)}</strong>: ${esc(meaning)} 已收录`;
       el.classList.remove("saving");
       el.classList.add("saved");
     }

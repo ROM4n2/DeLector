@@ -395,8 +395,8 @@ def test_read_path_alerts_use_hosted_notify():
         ("static/js/reader.js", 'alert("AI 速记解析失败，请检查网络配置")', 'notify("AI 速记解析失败，请检查网络配置"'),
         (
             "static/js/reader.js",
-            "alert(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`);",
-            "notify(`✓ 已将「${label}」沉淀至 Anki 语法卡盒！`",
+            "alert(`已将「${label}」沉淀至 Anki 语法卡盒！`);",
+            "notify(`已将「${label}」沉淀至 Anki 语法卡盒！`",
         ),
         ("static/js/writer.js", "alert('打开作文失败：'", "notify('打开作文失败：'"),
         ("static/js/writer.js", "alert('AI 润色请求失败：'", "notify('AI 润色请求失败：'"),
@@ -439,15 +439,15 @@ def test_grade_ai_and_success_alerts_use_notify():
         # 成功/轻量信息路径
         (
             "static/js/main.js",
-            'alert("✓ 偏好与 API 设置已成功保存并即刻生效！")',
-            'notify("✓ 偏好与 API 设置已成功保存并即刻生效！",',
+            'alert("偏好与 API 设置已成功保存并即刻生效！")',
+            'notify("偏好与 API 设置已成功保存并即刻生效！",',
         ),
         (
             "static/js/cards.js",
             'alert("当前本地语音缓存已是空的（0 MB）。")',
             'notify("当前本地语音缓存已是空的（0 MB）。",',
         ),
-        ("static/js/cards.js", "alert(\n      `✓ 已清理 ", "notify(\n      `✓ 已清理 "),
+        ("static/js/cards.js", "alert(\n      `已清理 ", "notify(\n      `已清理 "),
     ]
     for path, banned, required in converged:
         src = Path(path).read_text(encoding="utf-8")

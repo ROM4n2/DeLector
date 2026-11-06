@@ -15,7 +15,7 @@
           "
         >
           <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
-            >✨ AI 润色审查 (AI-Politur Review)</span
+            >AI 润色审查 (AI-Politur Review)</span
           >
           <button
             class="drawer-close"
@@ -23,7 +23,7 @@
             title="关闭 (Esc)"
             aria-label="关闭润色预览"
           >
-            ✕
+            <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
 
@@ -36,13 +36,13 @@
               class="btn btn-ghost btn-xs"
               onclick="acceptAllPolishHunks()"
             >
-              ✓ 全部接受
+              全部接受
             </button>
             <button
               class="btn btn-ghost btn-xs"
               onclick="rejectAllPolishHunks()"
             >
-              ✕ 全部拒绝
+              全部拒绝
             </button>
           </div>
         </div>
@@ -64,7 +64,7 @@
             class="btn btn-dark"
             onclick="applyPolishChanges()"
           >
-            ✓ 应用所选更改
+            应用所选更改
           </button>
         </div>
       </div>

@@ -649,3 +649,15 @@ PR #253 合并完成（ADR-0029 第三批）：merge commit `fa7aae2`，未 squa
 新增守卫：`tests/test_frontend_guards.py::test_modal_close_buttons_have_accessible_name`，扫 `static/modals/*.html`、DOTALL 跨行匹配 `<button class="...drawer-close...">`，要求 `aria-label`/`aria-labelledby`，命中数 ≥6 防正则静默失效。变异验证：删 `drawer.html` 的 aria-label → 红并点名文件；恢复 → 绿。
 三个探针从「钉字形」改为「认行为」：1) `tests/test_listen_lab_probe.mjs` 不再依赖单个 ✓/✗，新增 D/C 模式正误的中文断言（47 断言）；变异（改回单 ✓）→ 红。2) `tools/enc_coverage_degraded_probe.mjs` 删 `MARK="⚠"`，B1/B2/B3 只认「数据不完整」，B4 钉「标注有且仅一份」。3) `tools/enc_degraded_concurrency_probe.mjs` 同口径（S1–S5）。变异验证：加回 `"⚠ "` 前缀仍绿（已不依赖字形）；把「数据不完整」拼两遍 → B4 红（证明断言非恒真）。分别 14 / 21 项 PASS。
 分支 `feat/frontend-de-emoji-slice3` 本地 + 远端均已删除；临时 worktree `dlector-slice3` 已清理。B 类 360 处未动；未碰 `android/`、未 `git add -A`。
+
+### 2026-11-07 00:31 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+ADR-0029 第四批（B 类 390 处清零）落地，分支 feat/frontend-de-emoji-slice4（基于 origin/master 4477251）。
+处置分布（390 处 / 40 文件）：
+1) 直接删 354 处（只去字形与其后多余空格；不动文案/CSS/布局）。
+2) 换图标 21 处：✕×15→ui-ico-x（5 个模态框关闭键、cloze/quiz 关闭、cards 三处删除键、workbench 例句删除、cp-drawer 解除键）、🔀×4→refresh-cw、▾×1→chevron-down、➕×1→plus；sprite 12→16（含 workbench.html 内联副本），LICENSE/README 同步。
+3) 空态重做 10 处（用户口述 11，第 11 处 import_modal:100 ✦ 并入直接删）：workbench 🎉、a1_cards 🔍×2、writer.js ✍️、views/writer ✍️、quiz 模式 🎴/✍️/🎯 + 完成 🏆、import dropzone 📄；统一左 2px 竖线 + mono eyebrow + serif 标题 + 13px pencil 正文（内联，未动全局 .empty-state / style.css）。
+4) folio.js 5 个 icon 字段：renderMarquees 从未消费 s.icon，直接删字段+渲染点（连带 🔥/⏱），不新增 symbol。
+验证：全量扫描 0（40 文件全部落零）；build_index_html 3479 行；check_index_html_sync PASS；受影响 pytest 33 文件 626 passed / 1 skipped。
+探针同步（只断言文字，不删用例/不放宽）：listen-lab（✓/✗ 前缀）、companion chips、hard-sentences、cards catalog/wb source tags、german_workbench 徽标、writer_mobile 按钮定位、audit_hardening notify 文案、server 设置回环文案。
+约束：6 路子代理按文件所有权切分（index.html/sprite 仅主代理）、未碰 android/、未跑 sync_android_sources.py、未 git add -A。

@@ -24,5 +24,5 @@ Package: lucide-static v0.468.0
 Files:   static/icons/lucide-sprite.svg 的 <symbol> 片段
          static/german/workbench.html 内联的同名 sprite
 
-本项目只复制了实际用到的 12 个图标的 path 数据，未引入整套图标库、
+本项目只复制了实际用到的 16 个图标的 path 数据，未引入整套图标库、
 未引入 npm 依赖、未使用 CDN。图标路径未作修改。
