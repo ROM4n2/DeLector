@@ -822,6 +822,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #6b4f8f"
+                      aria-label="角色配色：歌德紫"
                       title="歌德紫"
                       onclick="window.Companion.setColor('#6b4f8f')"
                     ></button>
@@ -829,6 +830,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #d9663f"
+                      aria-label="角色配色：朱砂橘"
                       title="朱砂橘"
                       onclick="window.Companion.setColor('#d9663f')"
                     ></button>
@@ -836,6 +838,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #4f8f6b"
+                      aria-label="角色配色：学者绿"
                       title="学者绿"
                       onclick="window.Companion.setColor('#4f8f6b')"
                     ></button>
@@ -843,6 +846,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #4a6fa5"
+                      aria-label="角色配色：包豪斯蓝"
                       title="包豪斯蓝"
                       onclick="window.Companion.setColor('#4a6fa5')"
                     ></button>
@@ -850,6 +854,7 @@
                       type="button"
                       class="mascot-color-dot"
                       style="background: #2c2c2c"
+                      aria-label="角色配色：墨黑"
                       title="墨黑"
                       onclick="window.Companion.setColor('#2c2c2c')"
                     ></button>
@@ -857,10 +862,11 @@
                       class="mascot-color-custom-btn"
                       title="自定义 HEX 配色"
                     >
-                      <span>🎨</span>
+                      <span aria-hidden="true">🎨</span>
                       <input
                         type="color"
                         id="studio-color-picker"
+                        aria-label="自定义角色配色"
                         style="
                           opacity: 0;
                           position: absolute;
