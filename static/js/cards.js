@@ -129,8 +129,6 @@ export function renderCardsGrid() {
   if (!container) return;
 
   if (vList.length === 0 && gList.length === 0) {
-    const emptyIcon =
-      cardState.catalog.segment === "due" ? "🎉" : cardState.catalog.segment === "mastered" ? "🛡️" : "🎴";
     const emptyTitle =
       cardState.catalog.segment === "due"
         ? "今日复习任务已全部达成！"
@@ -144,7 +142,6 @@ export function renderCardsGrid() {
 
     container.innerHTML = `
       <div style="text-align:center;padding:4rem 1rem;background:var(--paper-card);border:1.5px dashed var(--rule);margin-top:1rem;box-shadow:2px 2px 0 var(--ink);">
-        <div style="font-size:2.5rem;margin-bottom:0.5rem;">${emptyIcon}</div>
         <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.35rem;">
           ${emptyTitle}
         </div>
