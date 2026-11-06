@@ -29,10 +29,10 @@
 
 ---
 
-## 🚀 快速启动 (Quick Start)
+## 快速启动
 
 > **普通用户（免装 Python，开箱即用）**：
-> - 🪟 **Windows**：前往下方 [多平台下载](#-多平台下载发布包-downloads) 取得 ZIP，解压后双击 `DeLector.exe` 即可运行独立桌面客户端（无需配环境，数据保存在本地用户目录）。
+> - 🪟 **Windows**：前往下方 [多平台下载](#多平台下载发布包) 取得 ZIP，解压后双击 `DeLector.exe` 即可运行独立桌面客户端（无需配环境，数据保存在本地用户目录）。
 > - 📱 **Android**：下载 APK 安装包，内嵌 Python 与 spaCy 离线模型，单机脱网可用。
 
 **开发者 / 源码运行**：
@@ -52,7 +52,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ---
 
-## 📦 多平台下载发布包 (Downloads)
+## 多平台下载发布包
 
 > 🚀 **v5.21.1 最新版本亮点（2026-11-03）**：
 > - **伴学 SSE 跨 chunk 分帧修复**：修复网络分片导致的 assistant 消息与 proposal 静默丢失、不落库问题，完整帧闭合后才解析。
@@ -72,7 +72,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ---
 
-## 🧭 文档导航 (Docs Map)
+## 文档导航
 
 | 需要什么 | 去哪 |
 | --- | --- |
@@ -91,7 +91,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ---
 
-## 🌟 核心特性 (Features)
+## 核心特性
 
 - **德语精读工作台**：CEFR 词阶热力图 + 0ms 歌德离线词库 + 荧光便签、AI 导读与打印级《精读指南》导出。
 - **句法拓扑与 AST**：经典五场域（VF/LK/MF/RK/NF）色谱条切分 + 5 大从句抽象语法树 + 一键制 Anki 语法卡。
@@ -114,7 +114,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ---
 
-## 🏗️ 技术栈架构 (Tech Stack)
+## 技术栈架构
 
 | 领域             | 核心技术                                   | 说明                                                                                |
 | :--------------- | :----------------------------------------- | :---------------------------------------------------------------------------------- |
@@ -130,7 +130,7 @@ docker compose up -d --build             # 或 Docker 容器化一键部署
 
 ---
 
-## 📦 数据目录与旧版迁移（桌面端 / Docker 均必读）
+## 数据目录与旧版迁移（桌面端 / Docker 均必读）
 
 **桌面端默认把数据放在用户目录、不随程序目录**：Windows 为 `%LOCALAPPDATA%\DeLector`，
 macOS / Linux 为 `~/.local/share/DeLector`；文件是 `delector.db` 与 `progress.db`。两个开关：
@@ -163,7 +163,7 @@ mkdir -p data && cp delector.db data/delector.db   # progress.db 同理
 
 ---
 
-## 📁 目录结构 (Project Layout)
+## 目录结构
 
 ```
 DeLector/
@@ -187,7 +187,7 @@ DeLector/
 
 ---
 
-## 🗺️ 版本历史 (Version History)
+## 版本历史
 
 本项目遵循语义化版本规范。完整版本历史、发版演进与回滚方案见 **[CHANGELOG.md](CHANGELOG.md)**。
 
@@ -207,7 +207,7 @@ DeLector/
 
 > 📜 历史更多版本记录（v1.0 ~ v5.13）请回溯 [CHANGELOG.md](CHANGELOG.md)。
 
-## ⚠️ 已知限制 (Known Limits)
+## 已知限制
 
 - **Win10 需先装 WebView2 运行时**（Win11 自带）：缺运行时双击 `DeLector.exe` 会提示安装后退出，不会白屏。
 - **冷启动的数字必须带「路径 × 冷/暖」两个标签**（同一个包能测出两个数，差 ≈0.67s）：**源码路径**（`python desktop.py`）暖 ≈ 5.4s / 冷 ≈ 6s；**便携产物**（你下载的 ZIP 里的 `DeLector.exe`）实测**冷 ≈ 8.5s / 暖 ≈ 6.9s**。其中约 2s 是「建服前的端口/身份校验」（防旧进程冒充新构建）——它是**新引入的显式校验，不是提速指标**；数据面已优化（文章列表 918ms → 8.9ms）。
@@ -221,6 +221,6 @@ DeLector/
 
 ---
 
-## 📄 许可证 (License)
+## 许可证
 
 本项目采用 [Apache License 2.0](LICENSE) 开源许可证。欢迎提 PR 或 Issue 参与共建！
