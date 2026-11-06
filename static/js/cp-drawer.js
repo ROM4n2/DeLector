@@ -369,6 +369,7 @@ export function renderContextBar() {
     const clearBtn = document.createElement('button');
     clearBtn.className = 'companion-context-clear';
     clearBtn.title = '解除难句绑定';
+    clearBtn.setAttribute('aria-label', '解除难句绑定');
     clearBtn.textContent = '✕';
     clearBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1338,7 +1339,6 @@ export function createThoughtAccordion() {
       boxEl.classList.remove('is-expanded');
 
       if (dotEl.parentNode) dotEl.remove();
-      iconEl.textContent = '✓';
       titleEl.textContent = `深度推演完成 (${totalSec} 秒)`;
       timerEl.textContent = '';
       if (realThoughtBuffer) {

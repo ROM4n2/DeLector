@@ -259,7 +259,6 @@ function coverageOf(doc) {
   return { html: String(el.innerHTML), title: String(el.getAttribute("title") || "") };
 }
 
-const MARK = "⚠";
 const MARK_TEXT = "数据不完整";
 /** 禁止出现在用户可见文案里的技术字面量（MUST 是人话）。 */
 const FORBIDDEN = [
@@ -318,7 +317,7 @@ const humanCopyViolations = (cov) =>
   const cov = coverageOf(doc);
   record("S1-覆盖行已渲染", cov.html.includes("已背词覆盖"),
     `覆盖率行没渲染出来：${JSON.stringify(cov.html)}`);
-  record("S1", !cov.html.includes(MARK) && !cov.html.includes(MARK_TEXT),
+  record("S1", !cov.html.includes(MARK_TEXT),
     `详情自己的 deck + known 都成功，却被标了「${MARK_TEXT}」（并发串味：别人的失败写进了模块级状态）` +
     ` —— html=${JSON.stringify(cov.html)} title=${JSON.stringify(cov.title)}`);
   record("S1-title", !cov.title,
@@ -346,7 +345,7 @@ const humanCopyViolations = (cov) =>
   await settle();
 
   const cov = coverageOf(doc);
-  record("S2", cov.html.includes(MARK) && cov.html.includes(MARK_TEXT),
+  record("S2", cov.html.includes(MARK_TEXT),
     `详情**自己**那次 deck 失败，却没有降级标记（把状态绑错了调用 / 恒 false）` +
     ` —— html=${JSON.stringify(cov.html)}`);
   record("S2-title", cov.title.trim().length > 0, `降级时 title 为空（用户看不到原因）：${JSON.stringify(cov.title)}`);
@@ -379,7 +378,7 @@ const humanCopyViolations = (cov) =>
   record("S3-详情deck成功", JSON.stringify(pool) === JSON.stringify(MIRROR_LEARNED),
     `详情 deck 应成功（实际 ${JSON.stringify(pool)}）—— 夹具失配，S3 判据不可信`);
   const cov = coverageOf(doc);
-  record("S3", cov.html.includes(MARK) && cov.html.includes(MARK_TEXT),
+  record("S3", cov.html.includes(MARK_TEXT),
     `详情**自己**那次 known-lemmas 失败，却没有降级标记 —— html=${JSON.stringify(cov.html)}`);
   record("S3-title", cov.title.trim().length > 0, `降级时 title 为空：${JSON.stringify(cov.title)}`);
   const bad = humanCopyViolations(cov);
@@ -407,7 +406,7 @@ const humanCopyViolations = (cov) =>
   await settle();
   await Promise.allSettled([detailP]);
   const snapshot = coverageOf(doc);
-  record("S4-快照时未标记", !snapshot.html.includes(MARK),
+  record("S4-快照时未标记", !snapshot.html.includes(MARK_TEXT),
     `快照时就有降级标记（列表还没失败呢）：${JSON.stringify(snapshot.html)} —— S1 的红可能是别的原因`);
   listWb.reject(new Error("Failed to fetch"));
   await settle();
@@ -418,7 +417,7 @@ const humanCopyViolations = (cov) =>
   record("S4-详情deck成功", JSON.stringify(pool) === JSON.stringify(MIRROR_LEARNED),
     `详情词池应为 ${JSON.stringify(MIRROR_LEARNED)}，实际 ${JSON.stringify(pool)}`);
   const cov = coverageOf(doc);
-  record("S4", !cov.html.includes(MARK) && !cov.html.includes(MARK_TEXT),
+  record("S4", !cov.html.includes(MARK_TEXT),
     `列表失败落在快照之后，详情却被补标了降级：${JSON.stringify(cov.html)}`);
 }
 
@@ -437,7 +436,7 @@ const humanCopyViolations = (cov) =>
   record("S5-详情deck成功", JSON.stringify(pool) === JSON.stringify(MIRROR_LEARNED),
     `详情词池应为 ${JSON.stringify(MIRROR_LEARNED)}，实际 ${JSON.stringify(pool)}`);
   const cov = coverageOf(doc);
-  record("S5", !cov.html.includes(MARK) && !cov.html.includes(MARK_TEXT),
+  record("S5", !cov.html.includes(MARK_TEXT),
     `无并发且两路都成功，却标了降级：${JSON.stringify(cov.html)}`);
   record("S5-覆盖行", cov.html.includes("已背词覆盖"), `覆盖率行文案变了：${JSON.stringify(cov.html)}`);
   void net;

@@ -134,3 +134,41 @@ def test_main_js_wires_lazy_workbench_on_german_view():
 
     show_body = _extract_function(MAIN, "export function show(")
     assert "ensureGermanWorkbench()" in show_body, "show('german') 未接线 ensureGermanWorkbench()"
+
+
+# ── ADR-0029 I1：关闭键的可访问名（字形 ✕ 不得是意义的唯一载体）────────────────
+def test_modal_close_buttons_have_accessible_name():
+    """`static/modals/*.html` 里每个 `class="drawer-close"` 按钮必须有可用名。
+
+    ADR-0029 不变量 I1：任何字形都不得是意义的唯一载体；可访问名只能来自
+    可见文字 / `aria-label` / `aria-labelledby`，`title` 不计入。
+
+    ⚠️ **结构守卫（文本结构断言），弱于行为测试**：本仓无 JS 测试基建，它只能
+    证明 "aria-label 属性存在"，**不能**证明真实浏览器里读屏真的念得出名字。
+    真实验收靠 HITL（读屏 / 无障碍树抽查）。
+    """
+    # 开标签属性可跨行，用 re.DOTALL；`[^>]*` 保证不吞掉下一个标签。
+    open_tag_re = re.compile(
+        r'<button\b[^>]*\bclass\s*=\s*"[^"]*\bdrawer-close\b[^"]*"[^>]*>',
+        re.DOTALL,
+    )
+
+    hits: list[tuple[str, str]] = []
+    for path in sorted((ROOT / "static" / "modals").glob("*.html")):
+        source = path.read_text(encoding="utf-8")
+        hits.extend((path.name, m.group(0)) for m in open_tag_re.finditer(source))
+
+    missing = [
+        (name, tag)
+        for name, tag in hits
+        if not re.search(r"\baria-label\s*=", tag)
+        and not re.search(r"\baria-labelledby\s*=", tag)
+    ]
+    assert not missing, "关闭键缺可访问名（title / ✕ 字形不计入）：\n" + "\n".join(
+        f"{name}: {tag}" for name, tag in missing
+    )
+
+    # 防正则静默失效：当前实际 6 个（drawer / import / polish / settings /
+    # version_preview + cloze_overlay），匹配数骤降说明守卫已被改瞎。
+    assert len(hits) >= 6, f"只匹配到 {len(hits)} 个 drawer-close 按钮，正则疑似失效"
+

@@ -722,10 +722,16 @@ export function toggleKeyVisibility() {
   if (!input) return;
   if (input.type === "password") {
     input.type = "text";
-    if (btn) btn.textContent = "🔒";
+    if (btn) {
+      btn.textContent = "隐藏";
+      btn.setAttribute("aria-label", "隐藏 API 密钥");
+    }
   } else {
     input.type = "password";
-    if (btn) btn.textContent = "👁️";
+    if (btn) {
+      btn.textContent = "显示";
+      btn.setAttribute("aria-label", "显示 API 密钥");
+    }
   }
 }
 

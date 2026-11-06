@@ -350,6 +350,11 @@ async function runScenarios(cfg) {
   }
   check(fbHtml.includes('title="变音：ü→u"'), "反馈未渲染 hint（title 属性）", "diagnose_six_status");
   check(fbHtml.includes("✓ 3 / 8 词"), "反馈统计未按 correct/total 渲染", "diagnose_six_status");
+  check(
+    fbHtml.includes("✗ 错误"),
+    "D 模式句子列表判题标记缺中文「错误」（字形不得是意义的唯一载体）",
+    "diagnose_six_status",
+  );
 
   /* ── 行为路径 ⑤：跳过不计分 → 成绩累加 → 会话结束落盘 POST /api/listen/trials ── */
   L.listenNext(); // idx 1
@@ -357,6 +362,11 @@ async function runScenarios(cfg) {
   check(stage().includes("↷"), "跳过句未渲染 ↷ 标记", "trials_persist");
   els["listen-dict-input"].value = "Die Kinder spielen im Garten.";
   await L.listenSubmitDictation(); // idx 2：correct 2 / total 2
+  check(
+    stage().includes("✓ 正确"),
+    "D 模式句子列表判题标记缺中文「正确」（字形不得是意义的唯一载体）",
+    "diagnose_six_status",
+  );
   L.listenNext(); // idx 3 ≥ len → _finishSession
 
   const trialReq = reqs.find((r) => r.url === "/api/listen/trials");
@@ -393,12 +403,22 @@ async function runScenarios(cfg) {
   check(stage().includes("listen-blank"), "C 模式未按挖空渲染 ___ 占位", "cloze_mode");
   els["listen-cloze-input"].value = "Mann"; // s0 正确答案
   L.listenSubmitCloze();
+  check(
+    stage().includes("✓ 正确"),
+    "C 模式句子列表判题标记缺中文「正确」（字形不得是意义的唯一载体）",
+    "cloze_mode",
+  );
   L.listenNext(); // s1 仅 4 词 → 无可挖词
   check(stage().includes("本句无可挖词"), "短句无可挖词路径未渲染提示", "cloze_mode");
   L.listenNext(); // s2
   els["listen-cloze-input"].value = "Kind"; // 错答（答案 Kinder）
   L.listenSubmitCloze();
   check(stage().includes("✗ 答案：Kinder"), "C 模式错答未渲染答案揭示", "cloze_mode");
+  check(
+    stage().includes("✗ 错误"),
+    "C 模式句子列表判题标记缺中文「错误」（字形不得是意义的唯一载体）",
+    "cloze_mode",
+  );
   L.listenNext(); // finish
   const trialReqC = reqs.filter((r) => r.url === "/api/listen/trials").pop();
   check(Boolean(trialReqC), "C 模式会话结束未 POST /api/listen/trials", "cloze_mode");

@@ -471,9 +471,9 @@ function _sentListHtml() {
         if (_q.mode === "D") {
           const diag = d.diag;
           const ok = diag && diag.correct === diag.total;
-          mark = `<span class="listen-mark ${ok ? "ok" : "no"}">${ok ? "✓" : "✗"}</span>`;
+          mark = `<span class="listen-mark ${ok ? "ok" : "no"}">${ok ? "✓ 正确" : "✗ 错误"}</span>`;
         } else if (_q.mode === "C") {
-          mark = `<span class="listen-mark ${d.ok ? "ok" : "no"}">${d.ok ? "✓" : "✗"}</span>`;
+          mark = `<span class="listen-mark ${d.ok ? "ok" : "no"}">${d.ok ? "✓ 正确" : "✗ 错误"}</span>`;
         }
       } else if (d.skipped) {
         mark = `<span class="listen-mark skip">↷</span>`;

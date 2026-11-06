@@ -904,7 +904,7 @@ export async function savePrepCollocation(index, btn) {
       definition_zh: def,
       sentence_context: p.beispiel,
     });
-    if (btn) btn.textContent = "✓";
+    if (btn) btn.textContent = "✓ 已保存";
     refreshCardCounters();
     Companion.celebrate("card_vocab");
   } catch {

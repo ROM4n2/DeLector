@@ -145,7 +145,6 @@ function hideI1Hint() {
 // **resolveDeck() 的返回值逐字不变**（仍是 deck 本体）—— 改它的返回形状
 // 会撞子计划 3 T3 的「列表/详情 deck 同源」契约（tools/enc_known_same_source_probe.mjs
 // 对 resolveDeck 打计数桩并断言两端词池逐字相等），MUST NOT 为拿状态而动它。
-const COVERAGE_DEGRADED_MARK = "⚠";
 const COVERAGE_DEGRADED_NOTE = "数据不完整";
 // 降级原因（人话；MUST NOT 出现 fsrs_s / lemmas / known-lemmas / 端点路径 / HTTP 状态码）
 const COVERAGE_DEGRADED_REASON = {
@@ -704,11 +703,11 @@ function renderCoverage(stats, degraded) {
     setCoverage(base, "");
     return;
   }
-  // 降级：**只叠一份**标记（两路都降级也只标一次），具体原因并列写进 title。
+  // 降级：**只叠一份**中文标注（两路都降级也只标一次），具体原因并列写进 title。
   // 只标这一行、列表侧徽章（enc-i1-badge）不标：徽章只有百分比、没有分母，误导性弱，
   // 且 i1 徽章按 band 文案（✅ 正好读 / 偏简单 / 偏难）表达，标了反而与「分档」语义打架。
   setCoverage(
-    `${COVERAGE_DEGRADED_MARK} ${base}· ${COVERAGE_DEGRADED_NOTE}`,
+    `${base}· ${COVERAGE_DEGRADED_NOTE}`,
     reasons.join("；"),
   );
 }
