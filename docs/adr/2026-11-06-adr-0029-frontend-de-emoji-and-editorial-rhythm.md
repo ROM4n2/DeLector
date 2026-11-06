@@ -316,3 +316,16 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 
 - 角色字形 `🦉🐱🦊🤖` 仍按 §10 决策 1 保留并只补 `aria-label` / `aria-pressed`；本切片仍不做 SVG 化。
 - 图标集 vendor、README、其余 37 个文件均不受本节影响。
+
+---
+
+## 15. 执行期修正记录（第一切片，2026-11-06）
+
+> 按 §12 留痕：以下为计划执行中与原文本的偏差，原文不删；逐行对照见计划 `Deviation Table`。
+
+| # | 原计划 | 实际 | 理由 |
+|---|---|---|---|
+| 15.1 | T2 scaffold 示例写 `Schreiben`（无括号） | 保留 `(Schreiben)` | 任务 Injected Instincts 要求「德文名保留在括号内」；具体约束优先 |
+| 15.2 | T6 文件清单只列关闭 / 角色 / 声音 / 收起 | 另补 4 个 `.panel-color-dot` 与 `#panel-color-custom` 的 `aria-label` | 验收第 1 条要求全部按钮可命名；颜色按钮原本无文字、无 `aria` |
+| 15.3 | T7 文件清单只列角色按钮与声音按钮 | 另补 5 个 `.mascot-color-dot` 与 `#studio-color-picker` 的 `aria-label` | 同上；`title` 不计入可访问名 |
+| 15.4 | T1 记 `aria-label` 基线 11 处 | 源片段实测 11 处；含生成物 `static/index.html` 为 18 处 | 计量口径差异，非基线漂移；未触发 §11.2 E1 |

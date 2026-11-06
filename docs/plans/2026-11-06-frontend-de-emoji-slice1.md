@@ -591,7 +591,55 @@
 
 | plan text | what was actually built | why |
 |---|---|---|
-| （空） | （空） | （执行期填写；任一行非空必须同步在 ADR-0029 追加「修正记录」） |
+| T2：`<span class="exam-module-de">Schreiben</span>`（scaffold 示例无括号） | 实际保留括号：`(Schreiben)` | 任务 Injected Instincts 明确「德文名保留在括号内」；以更具体的约束为准，信息量不降 |
+| T6：仅列 `.panel-close` / `.panel-char-btn` / `#panel-sound` / `#panel-hide` | 额外给 4 个 `.panel-color-dot` 与 `#panel-color-custom` 补 `aria-label` | 它们是「无文字、无 aria」的按钮，T6 验收第 1 条要求全部按钮可命名；不改视觉、不扩文件 |
+| T7：仅列 role 按钮与 `#studio-sound-btn` | 额外给 5 个 `.mascot-color-dot` 与 `#studio-color-picker` 补 `aria-label`，🎨 加 `aria-hidden` | 同上：T7 验收第 3 条要求 studio 段每个 button 有可见文字或 `aria-label`；颜色色块原本只有 `title` |
+| T1：`aria-label` 基线「11 处」 | 实测源片段 11 处；若把生成物 `static/index.html` 计入则为 18 处 | 计量口径差异，非基线漂移；以源片段为准（与 ADR §11.1 一致），未触发 E1 |
+
+---
+
+## [NOTE] 验收回执（T10）
+
+- **日期**：2026-11-06
+- **执行者回执**：Agent（结构项）；**人工视觉签字**：待用户（T10 为 HITL，未代签）
+- **分支**：`feat/frontend-de-emoji-slice1`
+- **提交范围**：T0–T7、T9、T10 回执；T8 在独立分支 `docs/readme-zh-only`（PR #248）
+
+### 1. ADR §6 六条失败信号（逐条）
+
+| # | 信号 | 判定 | 证据 |
+|---|---|---|---|
+| 1 | 删字形后控件既无可见文字、又无 `aria-label` / `aria-pressed` | **未触发** | `companion.html` 15 按钮 unnamed = 0；studio 区域 14 按钮 unnamed = 0；exam / nav 全部有可见文字 |
+| 2 | token 迁移导致未要求页面 >5% 视觉差异 | **未触发** | 未做 token 迁移；`style.css` 仅新增 `.exam-module-card` 邻域 3 条规则 |
+| 3 | 三个独立评审者判断「删完更空、像没做完」 | **未触发（无评审数据）** | 未组织 3 份独立评审；不以此作为通过依据，视觉判断留给用户签字 |
+| 4 | README 删 emoji 后总行数上升 | **未触发** | PR #248：226 行 → 226 行，11 行增 / 11 行删，无散文填充 |
+| 5 | 图标集 >15 个或 >12KB | **未触发** | 本切片未引入任何图标集 / SVG 资产 |
+| 6 | 第一切片 3 天未收敛 | **未触发** | 同一日内完成 T0–T7、T9 |
+
+### 2. ADR §11.2 失效条件（E1 / E2 / E7）
+
+| 条件 | 判定 | 证据 |
+|---|---|---|
+| E1：emoji 基数变化 >±20%（全站 551 → 441–661 之外） | **未触发** | 切片 5 文件合计 61 簇；源片段 `aria-label` 仍为 11 处，与 §11.1 一致 |
+| E2：垂直切片 3 天未收敛 | **未触发** | 同日收敛 |
+| E7：切片文件被重写 / 删除导致 file:line 失效 | **未触发** | 4 个文件均存在，T1 行号与执行时一致 |
+
+### 3. 不变量 I2 / I5
+
+- I2：`git diff --name-only origin/master...HEAD` 共 12 个文件，无依赖清单、无 `static/sw.js`、无 CSP。
+- I5：改动仅限 `exam.html` / `nav_mobile.html` / `cards.js` / `companion.html` / `companion.js` / `progress.html` / `style.css` + 生成物 + 4 份文档；未扫其余 37 个文件。
+
+### 4. 命令级回执
+
+- `python tools/check_index_html_sync.py` → `PASS ... sha256 契约一致`，exit 0。
+- `.venv\Scripts\python.exe -m pytest tests/test_exam_domain.py tests/test_german_workbench.py tests/test_search_ui.py tests/test_cards_state_split.py tests/test_cards_count_probe.py tests/test_check_index_html_sync.py tests/test_frontend_guards.py -q` → **185 passed, 1 warning**，exit 0。
+- emoji 计数：`exam.html` 非注释 0；`nav_mobile.html` 0；`cards.js` 空态 0；`companion.html` 仅保留 4 个角色字形；`progress.html` studio 仅保留 4 个角色字形 + 🎨（已 `aria-hidden`）。
+
+### 5. 结论
+
+- **结构验收：通过**（I1 在全部切片控件上成立；无停止门触发）。
+- **人工视觉签字：待用户**。签字前**不推广第二批**，不开始图标集 vendor，不做角色 SVG 化。
+- 已登记偏差见 `Deviation Table` 与 ADR-0029 §15。
 
 ---
 
