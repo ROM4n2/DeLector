@@ -50,6 +50,11 @@ except ImportError:
     Span = Any  # type: ignore[misc, assignment]
     Token = Any  # type: ignore[misc, assignment]
 
+# 模型档位与加载策略的唯一真相源（ADR-0027 / ADR-0028）：句法专线与主分析路径必须复用
+# 同一加载器（含 Android 本地三级回退、禁止下载）。依赖方向 syntax_tree ──> model_loader，
+# 不再反向 import processor（2026-11-06 抽模块消除双向依赖）。
+from . import model_loader as _model_loader  # noqa: E402  # 置于 spacy 占位之后，保持导入期无模型加载
+
 # Global cached spaCy German model instance
 _nlp_instance = None
 
@@ -76,16 +81,13 @@ def get_spacy_nlp() -> Any:
             _spacy_load_error = "import spacy 失败（ImportError，模块级降级占位）"
         return None
     if _nlp_instance is None:
-        # 模型档位与加载策略的单一事实源在 processor（ADR-0027 / ADR-0028）：句法专线必须
-        # 复用同一加载器（含 Android 本地三级回退、禁止下载），不能自己裸 spacy.load。
-        # 函数内导入避免 processor ↔ syntax_tree 的模块级循环依赖。
-        from delector.nlp_engine.processor import SPACY_MODEL_NAME, _load_spacy_model
-
+        # 加载器唯一真相源在 model_loader（与 processor 共用同一套三级回退 / Android 禁下载）。
+        # 调用时按模块属性取用，便于测试替换加载函数（patch 点：model_loader._load_spacy_model）。
         try:
-            _nlp_instance, _ = _load_spacy_model(SPACY_MODEL_NAME)
+            _nlp_instance, _ = _model_loader._load_spacy_model(_model_loader.SPACY_MODEL_NAME)
             _spacy_load_error = ""
         except Exception as e:
-            _spacy_load_error = f"{SPACY_MODEL_NAME}: {type(e).__name__}: {e}"
+            _spacy_load_error = f"{_model_loader.SPACY_MODEL_NAME}: {type(e).__name__}: {e}"
             _nlp_instance = None
     return _nlp_instance
 
