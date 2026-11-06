@@ -621,3 +621,10 @@ ADR-0029 第二批（去字形）落地，四项范围：
 风险点：内联 sprite 的 Lucide path 含坐标 4.702，撞上 test_exam_domain.py「禁硬编码 702」的裸字符串断言。处置：sprite 加 data-ui-sprite="lucide" 标记，测试仅剥离该块，其余全文逐字检查；变异验证（注入 702 词仍被抓到）通过。
 验证：build_index_html 3432 行；check_index_html_sync PASS；pytest 7 文件 98 passed；listen-lab 探针 43 断言 + 3 变异捕获；companion 探针 358 checks。
 约束遵守：未碰 android/、未跑 tools/sync_android_sources.py、未 git add -A。
+
+### 2026-11-06 22:44 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, git-branch-hygiene
+PR #252 合并完成（ADR-0029 第二批收尾）：merge commit `d7fdd2c`，未 squash；base master `236269c` → 新 master `d7fdd2c`；head `b598be2`。合并前复查 head 上 CI：12 success / 2 skipped（Master Direct-Push Scope Gate 只守 master 直推；Windows Portable Smoke 因 packaging-surface 无变更跳过），0 failure、0 cancelled；mergeStateStatus=CLEAN。分支 `feat/frontend-de-emoji-slice2` 本地 + 远端均已删除。
+本批内容（细节见上一条 NOTE）：1) **33 处图标替换**，34 个 `<use>`，12 个 Lucide symbol；含 cp-drawer 上下句导航 `◀/▶` → chevron-left/right `<use>`，并补 `aria-label="上一句"/"下一句"`；2) **角色 SVG 接入**：companion.js 4 个调用点（浮球主体 / 浮球头像 / progress 舞台 / 面板 4 个角色按钮）+ 声音开关 use 切换，删除 `CHARACTERS[*].emoji`；3) **cards 空态重做**：三态用 `--accent/--moss/--rule` 竖线 + mono eyebrow，介词矩阵去 📡/🧭，文案不变；4) **测试同步**：listen-lab 探针 :316/:322 去 emoji 断言，companion 探针 DOM 桩补 setAttribute 系列。
+`test_exam_domain.py` 断言改动理由与变异验证：内联 sprite 的 Lucide volume-2 path 含坐标 `4.702`，撞上「禁硬编码词条数 702」的裸字符串断言，属误报而非回归。处置：sprite 根加 `data-ui-sprite="lucide"`，比对前只剥离该 `<svg>` 块（页面其余部分仍逐字检查），并新增「标记必须存在」断言防剥离静默失效。变异验证：仅剥离 `4.702` 后不再命中；人工注入 `702 词` 仍被抓到 —— 判定强度未降。
+操作方式：主工作区由他人占用，全程 gh API 合并 + 临时 worktree 写日志；未 `git add -A`、未碰 `android/`；临时 worktree 用后已清理。
