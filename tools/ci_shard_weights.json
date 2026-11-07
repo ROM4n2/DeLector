@@ -92,6 +92,7 @@
   "tests/test_frontend_guards.py": 0.1,
   "tests/test_frontend_layers.py": 13.0,
   "tests/test_frontend_module_graph.py": 0.7,
+  "tests/test_frontend_port_guard.py": 0.1,
   "tests/test_frontend_security.py": 0.1,
   "tests/test_german_workbench.py": 1.4,
   "tests/test_get_endpoints_with_writes.py": 6.8,

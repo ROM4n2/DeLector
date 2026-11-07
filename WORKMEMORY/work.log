@@ -800,3 +800,12 @@ PR #266 追加（仍不合并）：ADR-0029 §16.2.4 判据由一问补成三问
 - 保留：polish_loop(4096) / companion_agent(8192) 的 max_tokens_total —— 不进入请求体，仅多轮累计刹车。
 - 断言更新（先报告后改）：test_llm_client 改为「默认 payload 不含 max_tokens」；test_ai_polish_loop 删「per-call 2×余量」「TOTAL<per-call×3」两闸，改断言每次调用 max_tokens=None；bench 两处改「不下发 / is None」。
 - 验证：相关 6 套 Python 179 passed；Go companion ok；ruff 全绿；探针仍 401（本地 key 失效），四档请求已不再携带 max_tokens。
+
+### 2026-11-07 17:12 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+前端硬编码端口取证 + 守卫（worktree D:\Code\DeLector-port-guard / fix/frontend-port-guard，PR 待开不合并）。
+- 取证结论：static/ 无「请求硬编码 8000」；统一出口 core.js:api() 原样 fetch(url)，各模块默认相对路径 ⇒ 用户报障在静态前端属误报。静态度里 8000 仅文案/占位符/第三方说明。
+- 真 bug（未改，仅报告）：tools/verify_windows_portable.py 仍假定 --server-only 固定 8000（start.py 已自动顺延）；agent/cmd/delector/job.go 与 agent.go 默认 127.0.0.1:8000 仅在独立 CLI 无参时生效；start.py 托管路径显式传实际端口。
+- Android：固定 8000 由 start.py:_android_ready 短路（PORT_CANDIDATES[0]），MainActivity 同值就绪轮询 + loadUrl，两端一致；8000 被占则启动失败，改法需端口握手，按指示只报告不改。
+- 守卫：tests/test_frontend_port_guard.py（static/** 绝对 API 带字面端口；static/js 回环带字面端口；api() 不得拼 origin）已登记 tools/ci_shards.py unit-2 + ci_shard_weights.json 0.1。
+- 验证：相关 59 passed；3 条具名变异均被捕获后已还原；未跑全量。
