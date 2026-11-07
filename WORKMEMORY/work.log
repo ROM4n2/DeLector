@@ -765,3 +765,20 @@ T9（静态补全）在 worktree dlector-t9 / feat/t9-static 实施（基于 61b
 - 坑：`.btn` 有 `transition: all .15s`，focus 后 40ms 读到的是 outline 过渡中间值（rgb(10,9,7) / offset 1px），必须等 ≥360ms 再读，否则会误判规则没生效。
 - `.lp-status`：原先无任何 CSS，补 mono 11px + 1px 同色描边芯片；pending 用 `--pencil`、covered 用 `--moss`；实测 49×21，移动端不与文本重叠。
 - 闸门：index sync PASS；test_frontend_guards + test_cards_state_split + test_german_workbench = 126 passed；a1/german/writer 相关 62 passed。
+
+### 2026-11-07 14:31 | deepseek-v4.1-flash__trae | NOTE
+沉淀批次（PR #266，**未合并**，等用户审）：分支 `docs/sediment-motion` 基于 master `1790f70`；初始 4 份文档、`static/` 零改动、未跑全量 pytest（后续追加 countUp 修复时只跑定向 2 个测试文件）。
+- ADR-0029 追加 §16「落地与失效条款」：T1–T9 的 PR #257–#265 与 merge commit 全表；4 条推翻/判错留痕（第 4 条见 16.2.4）——前三条：`section/content = 4.0` 原型实渲染 1.6 从未落像素、hover 位移真问题是文字横向跳而非推布局、循环动画实测 13 处而非 4 处；第 4 条为 TTS 音色字形误判。原文未删，按 §12.2 规则 1 追加。
+- ADR 判定：ADR-0029 §3.5 决策 5 只写「新增…动效 token」，未定义 token 集合/三件套类/降级策略 ⇒ **未覆盖**，另开 `ADR-0030`（Accepted，补充关系不取代）；INDEX 同步两行。
+- 新增 `docs/agents/motion-verification.md`：CDP 三层采样（CSSOM / `getAnimations` / reduce 模拟）、触发式采样、stagger 还原、可复现命令；写入两坑：`transition: all` 读终态须等 ≥360ms（40ms 时读到 UA 环+过渡中间值）、`index.html` 只加载 `style.css` 故 token 必须 `style.css :root` 与 `tokens.css` 双份镜像。
+- vault 归档：去 emoji 分级 → `01-Rules/FRONTEND-DESIGN-PATTERNS.md` 新增 §9（含 §9.3 外部实测区间与复现口径）；外部 UI 实测法并入 §9.3；两篇 inbox 草稿已删除。新增草稿 `99-Inbox/2026-11-07-合成数值-≠-像素判据：设计文档的常数怎么害人.md`，归档目标 `01-Rules/DESIGN-DOC-CONSTANTS-VS-PIXELS.md`。
+
+### 2026-11-07 15:05 | deepseek-v4.1-flash__trae | NOTE
+追加到 PR #266（仍未合并）：两件小修。
+- `countUp` 首帧负值：`motion.js` progress 补下界 `Math.max(0, …)`；新增 `tools/motion_count_probe.mjs`（node:vm 跑真源码，首帧时间戳早于 start 20ms）钉死「首帧 0% / 全程无负值 / 单调不减 / 终值精确 / reduce 不排 rAF」，配 `tests/test_motion_count_probe.py` 接线；`tests/test_motion_count_probe.py` 2 passed，probe wiring + json contract 10 passed。
+- ADR-0029 §16 新增 16.2.4：第四批 B 类把 `player_and_tooltip.html:52/60` 的 👩/👨 判成「相邻有 Katja/Conrad 文字 → 安全删除」**判错**；对不熟悉 TTS 音色的使用者，字形是唯一可辨载体。判据补强：删除前问「这个字形是不是某类状态或身份的唯一可辨载体」，而不是只问「旁边有没有文字」。播放器托盘未动，等专项调研。
+
+### 2026-11-07 15:40 | deepseek-v4.1-flash__trae | NOTE
+PR #266 追加（仍不合并）：ADR-0029 §16.2.4 判据由一问补成三问，原文保留。
+- 第二层根因（播放器托盘调研 PR #267）：`static/style.css:3419-3431` 在 ≤768px 把 `.voice-btn` 设为 `font-size:0`、`.vb-lbl{display:none}`；源码里 Katja/Conrad 文字在，手机断点下字宽恒为 0。当时只查源码、没查断点。
+- 三问口径：断点问（`display:none`/`font-size:0`/`visibility:hidden` 都算不在）→ 状态问（是否状态/身份的唯一可辨载体）→ 可达问（`title` 触屏不算文字，`aria-label` 只服务屏幕阅读器）。

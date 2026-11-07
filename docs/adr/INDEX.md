@@ -35,4 +35,5 @@
 | ADR-0026 | 沉浸式学术精读排版重塑与 CEFR 词阶分级视觉降噪 | Accepted | ACCEPTED | — | 2026-11-01 | [2026-11-01-adr-0026-reader-immersive-editorial-continuous-flow-and-cefr-noise-reduction.md](2026-11-01-adr-0026-reader-immersive-editorial-continuous-flow-and-cefr-noise-reduction.md) |
 | ADR-0027 | NLP 模型档位定案为 `de_core_news_sm` | Accepted | ACCEPTED | — | 2026-11-04 | [2026-11-04-adr-0027-nlp-model-sm-only.md](2026-11-04-adr-0027-nlp-model-sm-only.md) |
 | ADR-0028 | Android 主分析路径使用 spaCy 惰性加载 | Accepted | ACCEPTED | 2026-11-06 修订加载时机（正文内留痕） | 2026-11-06 | [2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md](2026-11-06-adr-0028-android-main-path-spacy-lazy-load.md) |
-| ADR-0029 | 前端去 Emoji 与编辑节奏重构——分层替换、垂直切片先行 | Accepted | Accepted | — | 2026-11-06 | [2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md](2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md) |
+| ADR-0029 | 前端去 Emoji 与编辑节奏重构——分层替换、垂直切片先行 | Accepted | Accepted | 2026-11-07 追加 §16 落地与失效条款（T1–T9；3 条数值口径失效）；动效系统由 ADR-0030 补充 | 2026-11-06 | [2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md](2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md) |
+| ADR-0030 | 前端动效系统——5 个 token、三件套类与 reduce 降级 | Accepted | Accepted | 补充 ADR-0029 §3.5 决策 5，不取代 | 2026-11-07 | [2026-11-07-adr-0030-frontend-motion-system.md](2026-11-07-adr-0030-frontend-motion-system.md) |

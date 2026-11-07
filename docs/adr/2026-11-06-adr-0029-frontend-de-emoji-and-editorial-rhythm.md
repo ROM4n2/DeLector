@@ -329,3 +329,77 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 | 15.2 | T6 文件清单只列关闭 / 角色 / 声音 / 收起 | 另补 4 个 `.panel-color-dot` 与 `#panel-color-custom` 的 `aria-label` | 验收第 1 条要求全部按钮可命名；颜色按钮原本无文字、无 `aria` |
 | 15.3 | T7 文件清单只列角色按钮与声音按钮 | 另补 5 个 `.mascot-color-dot` 与 `#studio-color-picker` 的 `aria-label` | 同上；`title` 不计入可访问名 |
 | 15.4 | T1 记 `aria-label` 基线 11 处 | 源片段实测 11 处；含生成物 `static/index.html` 为 18 处 | 计量口径差异，非基线漂移；未触发 §11.2 E1 |
+
+---
+
+## 16. 落地与失效条款（2026-11-07）
+
+> 按 §12.2 规则 1 追加：**§1–§15 原文一字不改、不删除**。本节只记录 T1–T9 的落地事实，以及执行期被实测推翻的原文与替代口径。
+
+### 16.1 T1–T9 落地清单
+
+| 项 | PR | merge commit | 落地事实 | 对应条款 |
+|---|---|---|---|---|
+| 前置 slice4 | #255 | `f423e02` | B 类 390 处装饰字形清零，扫描 0 残留；其中 `player_and_tooltip.html:52/60` 的 👩/👨 属**判错**，见 16.2.4 | §5 A/B |
+| 实施计划 | #256 | `1a40986` | T1–T9 切分、停止门、偏差表建立 | — |
+| M1 / T1 | #257 | `e840467` | 13 处 `infinite` → 7 处白名单；删除/降级 `tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse` / `pulseDot` 五个 keyframes；`.tok` 聚焦改静态 `scale(1.06)` + 2px 环 | §3.1 / §6.4 |
+| T2 | #258 | `3a2e957` | 5 个 motion token 在 `tokens.css` 与 `style.css :root` 双份镜像；`motion.js`；`.dl-enter` / `.dl-stagger` / `.dl-count`；全局 reduce 块 | §3.5 决策 5 |
+| T3 | #259 | `3936999` | 移除 30 条 hover 位移（9 条 `translate`/`translateX` + 21 条 `translateY`），改由 `background` / `border-color` / `box-shadow` / `color` 承载；保留 10 处非布局 `scale`/`rotate`；`.stat-badge` 的 `translateY(-2px)` 为唯一位移例外；全部 `:hover` 包进 `@media (hover: hover) and (pointer: fine)`，混合选择器拆分 | I1 / §6.2 |
+| T4 | #260 | `e19a11a` | `.nav-tab.active` / `.mobile-nav-btn.active` / `.dock-item.active` 增加 2px `scaleY` 左色条；`aria-current` 由 `main.js` 的 `show()` 动态同步 | I1 |
+| T5 | #261 | `8217dfd` | `enterOnce()` 一次性入场；搜索结果按**可见分组 section** 入场、`.card-grid` 首次生成入场、考试模块网格首次 `show('exam')` 入场；cap 6；动画结束自动摘类 | §3.5 / §6.5 |
+| T6 | #262 | `97f4ac3` | 6 个统计数字 520ms 一次性计数；`aria-label` 为终值、无 `aria-live`；`dataset.countPlayed` 门控 | §6.5 |
+| T7 | #263 | `4821bf3` | `.enc-popover` 入口时长改引 `--motion-enter` / `--ease-editorial`；不新增关闭动画 | §3.5 |
+| T8 | #264 | `61be846` | `.btn:active` `scale(.98)` + `--motion-press`；`.icon-btn` / `.deck-card` 本仓不存在，未加；`workbench.css` 独立 `.btn:active` 未动 | §3.5 |
+| T9 | #265 | `1790f70` | 卡片三态芯片（文字 + 颜色 + 3px 左竖线）；12 个 T3–T8 控件补 `:focus-visible` 2px `--ink` 环 + 2px offset；`.lp-status` 补芯片形状；排印按作用层验收（见 16.2 第 1 条） | I1 / §3.5 / §6.2 |
+
+### 16.2 失效与推翻原文（4 条）
+
+> 以下 4 条按 §12.2 规则 1 记为**失效/判错**：原文保留，替代口径写在这里。
+
+#### 16.2.1 `section/content = 4.0` 从未落在像素上
+
+- **原文**：外部参考评审把 `section/content` 间距比目标写作 **4.0**（`docs/reviews/2026-11-06-dryness-contrast-prototype.html`）；§3.5 据此落成「section 间距 40–64px」。
+- **实测**：该原型实际渲染是 **64 ÷ 40 = 1.6**；4.0 是按「section = 元素 × 2.5–3」倒推的**合成目标值**，从未落在任何像素上。T9 实测功能面内部块间 28–32px（1.17 档），阅读面 70 字符/行、1.85 sans / 1.95 serif。
+- **结论**：**【失效】** 4.0 不能作为验收常数。替代口径按作用层拆分：
+  1. 阅读面（reader 正文块）保持现状；
+  2. 功能面（cards 控制区、exam 列表）内部块间 28–40px 是刻意紧凑，不是欠账；
+  3. 只有 `.view` 级 padding 维持 40/64。
+- **留痕**：计划 §7 #10；`WORKMEMORY/work.log` 2026-11-07 14:12。
+
+#### 16.2.2 hover 位移的真正问题不是推布局，而是文字横向跳
+
+- **原文**：动效调研 §4 手法 2 的理由写作「用 `translate` 改布局 → 相邻行位移」；T3 原计划据此把问题定义为「推动布局」。
+- **实测**：`transform` 从不参与布局，相邻元素不会被推动。真正的问题是元素内**文字随 `translateX(2px)` 整体横向跳动**，阅读锚点跟着鼠标漂移；同时触屏 tap 后 hover 态会粘住。
+- **结论**：**【失效】**「推布局」不是主因。T3 移除 30 条 hover 位移，改由颜色/阴影/边框承载；保留 10 处非布局 `scale`/`rotate`；`.stat-badge` 的 `translateY(-2px)` 是唯一位移例外。验收改为「文字承载元素 hover 不得有位移」。
+- **留痕**：计划 §7 #4 / #5；计划 T3 验收原文。
+
+#### 16.2.3 循环动画实测 13 处，不是 4 处
+
+- **原文**：动效调研前的估计为 **4 处** `infinite`（计划 §1 D1 引用该估计）。
+- **实测**：22 个 `@keyframes`（`style.css` 19 + `workbench.css` 3）中 **13 处** `infinite`（style 12 + workbench 1）。
+- **结论**：**【失效】** 估计值被实测取代。M1 删除/降级 5 个 keyframes，`infinite` 从 13 处降到 **7 处**白名单（光标 / 眨眼 / 待机 ×2 / marquee ×2 / 音频忙碌），全部补 `prefers-reduced-motion` 降级。
+- **留痕**：调研 §8；计划 §1 D1；`WORKMEMORY/work.log` 2026-11-07。
+
+#### 16.2.4 TTS 音色字形误判为「安全删除」（判错，不单独回滚）
+
+- **原文**：第四批 B 类（#255）把 `static/views/player_and_tooltip.html:52/60` 的 👩/👨 判为「相邻已有 `Katja` / `Conrad` 文字 → 安全删除」。
+- **复盘**：文字确实在，但对**不熟悉 TTS 音色**的使用者，字形是当时唯一能区分「哪个声音」的载体。删掉后该位置只剩一块纯色方块，音色选择失去视觉锚点。用户真机点开文库文章后无法分辨对应音频设置，实测复现。
+- **结论**：**【判错·已承认】** 这不是「冗余装饰」，而是「某类身份/状态的唯一可辨载体」。B 类判据本身不完整，不是执行漂移。
+- **处置**：不在本批单独回滚该处（已另派播放器托盘重构调研，单独改会和调研结论打架）；只把判据补强进 I1 执行口径。
+- **判据补强（一句话，保留）**：**删除前不能只问「旁边有没有文字」，要问「这个字形是不是某类状态或身份的唯一可辨载体」。**
+- **第二层根因（播放器托盘调研，2026-11-07）**：`static/style.css:3419-3431` 在 `≤768px` 断点给 `.voice-btn` 设 `font-size: 0`、`.vb-lbl { display: none }`。源码里 `Katja` / `Conrad` 文字确实还在，但**手机断点下字宽恒为 0**——当时只看了源码、没看断点，这是判错的第二层原因。
+- **判据补强（三问，升级版）**：删除前必须连续过三问，任一答案是否定，字形就不是可安全删除的装饰：
+  1. **断点问**：这个文字在窄屏断点下还在吗？`display: none` / `font-size: 0` / `visibility: hidden` 都算**不在**。
+  2. **状态问**：这个字形是不是某类状态或身份（音色、模式、在线状态、性别等）的唯一可辨载体？
+  3. **可达问**：`title` 在触屏不算文字；`aria-label` 只服务屏幕阅读器、不服务肉眼。二者都不能用来证明「旁边有文字」。
+- **留痕**：本节；`WORKMEMORY/work.log` 2026-11-07 沉淀批次补记；播放器托盘调研 `docs/reviews/2026-11-07-player-tray-redesign-research.md`（PR #267，未合并）。
+
+### 16.3 未被推翻但口径收窄的条款
+
+- §3.5 的「正文 1.6 / 长读 1.9 / 行宽 45–90 字符」仍有效；T9 实测 70 字符/行、1.85 / 1.95，合格。
+- §6 失败信号 #2（未被要求修改的页面 >5% 视觉差异）仍有效，T9 未触发。
+- §11.2 E2（第一切片验收失败）未触发：T1–T9 均 CI 绿后合并。
+
+### 16.4 动效系统的归属
+
+§3.5 决策 5 只写了「新增…动效 token」，未定义 token 集合、三件套类与降级策略。该层由 **ADR-0030** 承接；本 ADR 不重复定义。ADR-0030 与本文是**新增/补充**关系，不是取代关系。
