@@ -159,6 +159,7 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/test_preset_processed_data.py",
         "tests/test_probe_json_contract.py",
         "tests/test_probe_wiring_guard.py",
+        "tests/test_processed_json_migration.py",
         "tests/test_profile_layers.py",
         "tests/test_pwa_manifest.py",
         "tests/test_pwa_update_notice.py",

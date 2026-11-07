@@ -499,6 +499,11 @@ def test_b2_legacy_data_get_migrates_exactly_once(client: TestClient, spy: SqlSp
 # ==========================================================================
 WRITE_VERBS = frozenset({"INSERT", "UPDATE", "DELETE", "REPLACE"})
 
+# 已知的写库辅助函数：调用它们等价于写（SQL 在辅助函数内部，AST 静态扫描看不到）。
+# 惰性迁移的「备份 + 回写」抽到 delector/core/db/processed_migration.py 后由它承接；
+# 重命名辅助函数会让守卫 A 的红灯亮起（found 变空），这正是期望的 fail-loud。
+WRITE_HELPER_NAMES = frozenset({"write_migrated"})
+
 # 唯一允许「GET 里带写」的端点：惰性迁移兼容（老 processed_json 首次 GET 时回写）。
 # 这个写是有意为之的，所以钉死它才有意义 —— 不能用「GET 不该有写」的粗判据，
 # 那样会把这条兼容路径逼成删掉迁移分支。
@@ -545,7 +550,12 @@ def _write_verbs_in(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> List[str]:
     """
     found: List[str] = []
     for node in ast.walk(fn):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id in WRITE_HELPER_NAMES:
+            found.append(f"HELPER:{node.func.id}")
+            continue
+        if not isinstance(node.func, ast.Attribute):
             continue
         if node.func.attr not in {"execute", "executemany", "executescript"}:
             continue

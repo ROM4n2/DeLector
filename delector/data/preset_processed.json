@@ -3091,10 +3091,10 @@
           "recommended_level": "B1",
           "word_count": 47
         },
-        "version": "3.5.0"
+        "version": "3.6.0"
       },
       "text_hash": "09e3c46f38fa55f4827071d62068144ddfa20a9ccecbc18bfd006a514306f006",
-      "version": "3.5.0"
+      "version": "3.6.0"
     },
     "22c8589af67c609dff52819ca08ad7d97fa5c6c29c04f45125e32825733d3cbb": {
       "processed": {
@@ -6321,10 +6321,10 @@
           "recommended_level": "A2",
           "word_count": 45
         },
-        "version": "3.5.0"
+        "version": "3.6.0"
       },
       "text_hash": "22c8589af67c609dff52819ca08ad7d97fa5c6c29c04f45125e32825733d3cbb",
-      "version": "3.5.0"
+      "version": "3.6.0"
     },
     "8480d20a499dfe2b6bfd56b65e3de12676ae56abc3e7dad3360cbd2bca8a6094": {
       "processed": {
@@ -9652,10 +9652,10 @@
           "recommended_level": "B1",
           "word_count": 46
         },
-        "version": "3.5.0"
+        "version": "3.6.0"
       },
       "text_hash": "8480d20a499dfe2b6bfd56b65e3de12676ae56abc3e7dad3360cbd2bca8a6094",
-      "version": "3.5.0"
+      "version": "3.6.0"
     },
     "e2010c870b54502bc28ac935605e74f271b2281bc63239f8937888d930d39917": {
       "processed": {
@@ -13434,15 +13434,15 @@
           "recommended_level": "A1",
           "word_count": 55
         },
-        "version": "3.5.0"
+        "version": "3.6.0"
       },
       "text_hash": "e2010c870b54502bc28ac935605e74f271b2281bc63239f8937888d930d39917",
-      "version": "3.5.0"
+      "version": "3.6.0"
     }
   },
-  "generated_at": "2026-11-03T01:45:37",
+  "generated_at": "2026-11-08T00:02:01",
   "model": "de_core_news_sm",
-  "processed_json_version": "3.5.0",
-  "runtime": "spaCy 3.8.16 + de_core_news_sm",
+  "processed_json_version": "3.6.0",
+  "runtime": "spaCy 3.8.18 + de_core_news_sm",
   "schema": "preset-processed/v1"
 }

@@ -5,7 +5,7 @@ import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
-import { enterOnce } from "./motion.js";
+import { countUp, enterOnce, prefersReducedMotion } from "./motion.js";
 import {
   cardState,
   enterSegment,
@@ -67,7 +67,7 @@ export function setCardViewMode(mode) {
   renderCardsGrid();
 }
 
-export async function loadCards() {
+export async function loadCards(animateCounts = false) {
   updateAudioCacheInfo();
   try {
     const [allCards, dueCards] = await Promise.all([
@@ -90,12 +90,18 @@ export async function loadCards() {
     vAll.filter((c) => c.mastered).length +
     gAll.filter((c) => c.mastered).length;
 
-  const sd = document.getElementById("seg-due-count");
-  const sp = document.getElementById("seg-pending-count");
-  const sm = document.getElementById("seg-mastered-count");
-  if (sd) sd.textContent = cardState.catalog.dueCards.due_count || 0;
-  if (sp) sp.textContent = totalPending;
-  if (sm) sm.textContent = totalMastered;
+  // 只有「斩」触发的刷新播计数（animateCounts=true）；首次加载 / 切段 /
+  // 增删卡仍走瞬时赋值，避免把一次性动效扩散到所有重渲染。
+  const setCount = (el, value) => {
+    if (!el) return;
+    const next = String(value);
+    if (el.textContent.trim() === next) return;
+    if (animateCounts) countUp(el, value);
+    else el.textContent = next;
+  };
+  setCount(document.getElementById("seg-due-count"), cardState.catalog.dueCards.due_count || 0);
+  setCount(document.getElementById("seg-pending-count"), totalPending);
+  setCount(document.getElementById("seg-mastered-count"), totalMastered);
 
   renderCardsGrid();
 }
@@ -337,7 +343,7 @@ export function renderDeckStage(vList, gList) {
             <!-- Front Footer -->
             <div class="deck-card-footer" onclick="event.stopPropagation()">
               <span class="card-stats-tag">${cardStatsTag(card)}</span>
-              <button class="card-master-btn ${card.mastered ? "mastered-active" : ""}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
+              <button class="card-master-btn ${card.mastered ? "mastered-active" : ""}" data-master-key="${card._type}-${card.id}" onclick="toggleMaster('${card._type}', ${card.id}, ${!!card.mastered})">
                 ${card.mastered ? "↺ 重返待复习" : "斩 (已掌握)"}
               </button>
             </div>
@@ -644,7 +650,7 @@ export function renderCatalogGrid(vList, gList) {
         <div class="memo-sent">${esc(c.sentence_context)}</div>
         <div class="card-footer-actions">
           <span class="card-stats-tag">${cardStatsTag(c)}</span>
-          <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" onclick="toggleMaster('vocab', ${c.id}, ${!!c.mastered})">
+          <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" data-master-key="vocab-${c.id}" onclick="toggleMaster('vocab', ${c.id}, ${!!c.mastered})">
             ${c.mastered ? "↺ 重返待复习" : "斩 (已掌握)"}
           </button>
         </div>
@@ -671,7 +677,7 @@ export function renderCatalogGrid(vList, gList) {
         <div class="memo-sent">${esc(c.sentence_context)}</div>
         <div class="card-footer-actions">
           <span class="card-stats-tag">${cardStatsTag(c)}</span>
-          <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" onclick="toggleMaster('grammar', ${c.id}, ${!!c.mastered})">
+          <button class="card-master-btn ${c.mastered ? "mastered-active" : ""}" data-master-key="grammar-${c.id}" onclick="toggleMaster('grammar', ${c.id}, ${!!c.mastered})">
             ${c.mastered ? "↺ 重返待复习" : "斩 (已掌握)"}
           </button>
         </div>
@@ -697,15 +703,60 @@ export async function deleteCard(type, id, name) {
   }
 }
 
+// 触屏 WebView 按住期间 :active 不一定生效（CDP 触摸实测为 false）；
+// pointerdown 显式给 100ms 压感，pointerup/cancel 统一清理（指针可能在按钮外抬起）。
+document.addEventListener(
+  "pointerdown",
+  (e) => {
+    const btn = e.target instanceof Element ? e.target.closest(".card-master-btn") : null;
+    if (btn && !btn.disabled) btn.classList.add("is-pressed");
+  },
+  { passive: true },
+);
+function clearMasterPressed() {
+  document
+    .querySelectorAll(".card-master-btn.is-pressed")
+    .forEach((el) => el.classList.remove("is-pressed"));
+}
+document.addEventListener("pointerup", clearMasterPressed, { passive: true });
+document.addEventListener("pointercancel", clearMasterPressed, { passive: true });
+
 export async function toggleMaster(type, id, currentMastered) {
+  const btn = document.querySelector(`.card-master-btn[data-master-key="${type}-${id}"]`);
+  if (btn?.disabled) return;
+  if (btn) btn.disabled = true;
+
+  // 落印只作用于牌盒；网格卡没有足够稳定的定位锚点，只保留按压与 toast。
+  const cardEl = btn?.closest(".deck-active-card");
+  const reduced = prefersReducedMotion();
+  const sealMs = cardEl && !reduced
+    ? parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--motion-enter"),
+      ) || 0
+    : 0;
+  if (cardEl && sealMs) cardEl.classList.add("is-mastering");
+
+  if (navigator.vibrate) navigator.vibrate(15);
+
+  const nextMastered = !currentMastered;
+  const started = performance.now();
   try {
     await api(`/api/cards/${type}/${id}/master`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mastered: !currentMastered }),
+      body: JSON.stringify({ mastered: nextMastered }),
     });
-    loadCards();
+
+    showUndoToast(nextMastered ? "已掌握 · 从待复习移除" : "已移回待复习");
+
+    // 数据快于印章时补足最短展示时间；数据慢于印章时不额外等待。
+    const rest = sealMs - (performance.now() - started);
+    if (rest > 0) await new Promise((resolve) => setTimeout(resolve, rest));
+
+    loadCards(true);
   } catch (e) {
+    cardEl?.classList.remove("is-mastering");
+    if (btn) btn.disabled = false;
     alert("更新卡片状态失败: " + e.message);
   }
 }

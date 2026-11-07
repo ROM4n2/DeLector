@@ -32,17 +32,21 @@
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(process.env.DELECTOR_PROBE_ROOT || path.join(__dirname, ".."));
 const JSON_MODE = process.argv.includes("--json");
+// 依赖桩集中在 tests/companion_probe_deps.mjs：companion.js 新增 import 只改那一处。
+const { companionDependencySources } = await import(
+  pathToFileURL(path.join(ROOT, "tests", "companion_probe_deps.mjs")).href
+);
+const DEP_SOURCES = companionDependencySources(ROOT);
 
 const COMPANION_SRC = fs.readFileSync(
   process.env.DELECTOR_COMPANION_SRC || path.join(ROOT, "static", "js", "companion.js"),
   "utf8"
 );
-const OBSTACLES_SRC = fs.readFileSync(path.join(ROOT, "static", "js", "companion-obstacles.js"), "utf8");
 
 /* ---- 最小 DOM 桩 --------------------------------------------------------- */
 function makeClassList(initial = []) {
@@ -92,6 +96,19 @@ async function boot() {
     style: {},
     offsetWidth: 0,
     offsetHeight: 0,
+    classList: makeClassList(),
+    attributes: {},
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+    getAttribute(name) {
+      return Object.prototype.hasOwnProperty.call(this.attributes, name)
+        ? this.attributes[name]
+        : null;
+    },
+    dispatchEvent() {
+      return true;
+    },
     getBoundingClientRect() {
       return { left: 0, top: 0, width: 0, height: 0 };
     }
@@ -125,6 +142,12 @@ async function boot() {
   const context = vm.createContext({
     console,
     Date: FakeDate,
+    CustomEvent: class {
+      constructor(type, init) {
+        this.type = type;
+        this.detail = init && init.detail;
+      }
+    },
     setTimeout(fn, delay = 0) {
       const id = ++state.nextTimerId;
       state.timers.set(id, { fn, due: state.now + delay });
@@ -145,25 +168,12 @@ async function boot() {
     cancelAnimationFrame() {}
   });
 
-  const playerStub = new vm.SourceTextModule(
-    "export const ShadowPlayer = { isPlaying: false };\nexport function playGermanAudio() {}\n",
-    { context, identifier: "stub:player.js" }
-  );
-  const cdStateStub = new vm.SourceTextModule(
-    "export const cardState = {};\nexport function selectSegmentLists() { return {}; }\nexport function buildDeckFromLists() { return []; }\n",
-    { context, identifier: "stub:cd-state.js" }
-  );
-  const obstacles = new vm.SourceTextModule(OBSTACLES_SRC, {
-    context,
-    identifier: "companion-obstacles.js"
-  });
   const companion = new vm.SourceTextModule(COMPANION_SRC, { context, identifier: "companion.js" });
 
-  const deps = {
-    "./player.js": playerStub,
-    "./cd-state.js": cdStateStub,
-    "./companion-obstacles.js": obstacles
-  };
+  const deps = {};
+  for (const [specifier, source] of Object.entries(DEP_SOURCES)) {
+    deps[specifier] = new vm.SourceTextModule(source, { context, identifier: specifier });
+  }
   await companion.link((specifier) => {
     if (deps[specifier]) return deps[specifier];
     throw new Error("探针未提供依赖桩: " + specifier);
