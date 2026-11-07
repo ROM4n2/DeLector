@@ -108,5 +108,13 @@ def get_effective_api_model(db_path: Optional[str] = None) -> str:
     return get_setting("API_MODEL", "deepseek-flash", db_path=db_path)
 
 
+#: 设置页三档（关闭/标准/深读）对应的存量值。旧档位 `low`（极速）与任何未知值
+#: 统一归一到 `medium`（标准），保证「UI 展示 = 后端生效值 = 实际请求值」。
+_EFFECTIVE_REASONING_EFFORTS = frozenset({"none", "medium", "high"})
+
+
 def get_effective_reasoning_effort(db_path: Optional[str] = None) -> str:
-    return get_setting("REASONING_EFFORT", "medium", db_path=db_path)
+    value = str(
+        get_setting("REASONING_EFFORT", "medium", db_path=db_path) or ""
+    ).strip().lower()
+    return value if value in _EFFECTIVE_REASONING_EFFORTS else "medium"

@@ -220,3 +220,30 @@ def test_companion_chat_defaults_reasoning_effort_to_setting(
 
     assert captured["json"]["reasoning_effort"] == "low"
     assert captured["headers"]["X-Reasoning-Effort"] == "low"
+
+
+def test_effective_reasoning_effort_normalizes_legacy_low(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """旧档位 low 必须归一为 medium，否则设置页三档无法如实展示实际请求值。"""
+    from delector.core.db import settings as settings_db
+
+    monkeypatch.setattr(settings_db, "get_setting", lambda *args, **kwargs: "low")
+
+    assert settings_db.get_effective_reasoning_effort() == "medium"
+
+
+def test_effective_reasoning_effort_keeps_three_tiers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """三档存量值原样返回，未知值回落到 medium。"""
+    from delector.core.db import settings as settings_db
+
+    for stored in ("none", "medium", "high"):
+        monkeypatch.setattr(
+            settings_db, "get_setting", lambda *args, _v=stored, **kwargs: _v
+        )
+        assert settings_db.get_effective_reasoning_effort() == stored
+
+    monkeypatch.setattr(settings_db, "get_setting", lambda *args, **kwargs: "warp")
+    assert settings_db.get_effective_reasoning_effort() == "medium"
