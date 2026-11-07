@@ -12894,3 +12894,55 @@ body.drawer-open .companion {
     padding-bottom: 11rem;
   }
 }
+
+/* ── 前端一致性收口（2026-11-07）：焦点环 / 按压反馈 / 硬编码色 ─────────────
+   本区只追加，不改写上方既有规则（另有两条线同时在改本文件）。
+   验证口径：.btn 等带 transition: all 的控件，聚焦后至少等 360ms 再读
+   computed style，否则读到的是 outline 过渡中间值。 */
+
+/* 1. 焦点环：四个此前落到 UA 默认环的控件，统一为主应用的 2px --ink + 2px offset。
+      .player-btn-main 同时带 .player-btn，一并对齐。 */
+.cards-seg-btn:focus-visible,
+.sm2-btn:focus-visible,
+.player-btn:focus-visible,
+.drawer-tab-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* 滚动容器内的例外：.drawer-tabs 是 overflow:auto，外扩 2px 会被父级裁掉，
+   且会被后绘制的相邻 tab 背景覆盖；内缩 2px 才能让环真正可见。 */
+.drawer-tab-btn:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (max-width: 1024px) {
+  /* 窄屏 .cards-seg-bar 也切成 overflow-x:auto，外扩环会被纵向裁切。 */
+  .cards-seg-btn:focus-visible {
+    outline-offset: -2px;
+  }
+}
+
+/* 2. 按压反馈：卡盒的 transform 已被翻面 / 滑动手势与行内 transform 占用，
+   故按在卡面上用独立的 scale 属性叠加，不覆盖 transform。 */
+.deck-active-card:active .deck-card-face {
+  scale: 0.99;
+  transition: scale var(--motion-press, 100ms) ease;
+}
+
+/* 3. 语义色：只有 .is-covered 表达「已覆盖」进度语义，按需求换 --moss；
+   其余 7 处同族 #15803d 属于操作按钮 / 正确性反馈 / 评分等级 /
+   「已收录」结果态，且各自与 #16a34a、#22c55e 或 rgba 绿底成对出现，
+   单改文字色会造成混源，逐处保留（见 PR 说明）。 */
+.a1-leitpunkt-item.is-covered {
+  color: var(--moss);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* reduce 下不出现按压缩放（含过渡中间态）；焦点环的 outline 过渡
+     由上方全站 reduce 规则压到 0.01ms，同样不会出现中间态。 */
+  .deck-active-card:active .deck-card-face {
+    scale: none;
+    transition: none;
+  }
+}
