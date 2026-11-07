@@ -852,3 +852,12 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - reduce 取证：四个控件 transitionDuration 均 1e-05s（聚焦后 50ms 读取无中间态）；卡面 scale:none。
 - 颜色：8 处 #15803d 只改 .a1-leitpunkt-item.is-covered → var(--moss)（computed rgb(59,110,63)）；其余 7 处为操作/正确性/评分/已收录结果态，且与 #16a34a/#22c55e/rgba 绿底成对，保留并逐条说明。
 - 验证：build_index_html.py 成功、check_index_html_sync.py PASS；相关 11 个 pytest 文件 233 passed；Edge headless+CDP 实测（本机无 Chrome）。style.css 仅末尾追加；android/ 未动。
+
+### 2026-11-07 23:18 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
+P2 桌宠禁停区/让位 PR #286（fix/companion-p2-no-parking，head d3a6280，不合并）。
+- 复审缺陷：模态挂起气泡后关闭时无条件 remove('hidden')，sheet 开 >6.5s 会让过期气泡复活。修法：say() 记 bubbleExpiresAt = Date.now()+6500，恢复前复核并丢弃过期气泡（同时清 timer/时间戳）。
+- 回归钉：tests/test_companion_bubble_resume_probe.mjs（node:vm 直跑真 companion.js + 假时钟，7 checks，含「模态开 7s 再关保持 hidden」）+ .py 接线含变异验证（过期判断改恒真 → 关键场景红）。补齐 tests/test_companion_context_probe.mjs 的 ./companion-obstacles.js 依赖桩。
+- 验证：浏览器 verify_p2.mjs 新增 mobileSheetLongClose 通过；pytest 5 passed；build_index / check_index_html_sync / check_companion_contract / check_frontend_layers / probe_wiring 全 PASS。
+- Android 模拟器 API37：强制解包后设备内 companion.js 命中 bubbleExpiresAt 5 处、运行时 guard 存在；四角命中 0、键盘态在视口内、sheet 开 7.2s 关后 hidden=true。versionCode 52101。
+- cp-state.js 的 streamStage 全仓仅声明 + reset 置 null，P2 不依赖；既存死代码，PR 中注明不在范围。

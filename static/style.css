@@ -8180,6 +8180,25 @@ body.drawer-open .shadow-player {
   pointer-events: auto !important;
 }
 
+/* 让位滑入：松手 / 编辑态聚焦后从禁停区滑到最近安全位（不瞬移） */
+.companion.is-settling {
+  transition:
+    left 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    top 0.26s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* 拖拽悬停在禁停区：半透明 + 虚线描边提示「这里不能停」 */
+.companion.is-over-no-park .companion-char {
+  opacity: 0.35;
+  outline: 2px dashed var(--ink, #1a1a1a);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.companion.is-over-no-park .companion-avatar {
+  opacity: 0.35;
+}
+
 .companion.ontop {
   z-index: 1001 !important;
 }
