@@ -24,11 +24,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(process.env.DELECTOR_PROBE_ROOT || path.join(__dirname, ".."));
 const JSON_MODE = process.argv.includes("--json");
+// 依赖桩集中在 tests/companion_probe_deps.mjs：companion.js 新增 import 只改那一处。
+const { companionDependencySources } = await import(
+  pathToFileURL(path.join(ROOT, "tests", "companion_probe_deps.mjs")).href
+);
+const DEP_SOURCES = companionDependencySources(ROOT, { realCdState: true });
 
 const fail = (msg) => {
   process.stderr.write(msg + "\n");
@@ -37,12 +42,10 @@ const fail = (msg) => {
 
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 const COMPANION_SRC = read("static/js/companion.js");
-const COMPANION_OBSTACLES_SRC = read("static/js/companion-obstacles.js");
 const CP_STATE_SRC = read("static/js/cp-state.js");
 const CP_DRAWER_SRC = read("static/js/cp-drawer.js");
 const CP_API_SRC = read("static/js/cp-api.js");
 const CP_PROPOSALS_SRC = read("static/js/cp-drawer-proposals.js");
-const CD_STATE_SRC = read("static/js/cd-state.js");
 const CARDS_SRC = read("static/js/cards.js");
 const MAIN_SRC = read("static/js/main.js");
 const READER_SRC = read("static/js/reader.js");
@@ -403,24 +406,16 @@ function beginScenario(name) {
 }
 
 async function main() {
-  const stubPlayer = await instantiate(
-    `export const ShadowPlayer = { isPlaying: false };\nexport function playGermanAudio() {}\n`,
-    {},
-    "player-stub"
-  );
-  const cdState = await instantiate(CD_STATE_SRC, {}, "cd-state.js");
-  const companionObstacles = await instantiate(
-    COMPANION_OBSTACLES_SRC,
-    {},
-    "companion-obstacles.js"
-  );
+  const depModules = {};
+  for (const [specifier, source] of Object.entries(DEP_SOURCES)) {
+    depModules[specifier] = await instantiate(source, {}, specifier);
+  }
+  const cdState = depModules["./cd-state.js"];
   const companion = await instantiate(
     COMPANION_SRC,
-    {
-      "./player.js": async () => stubPlayer,
-      "./cd-state.js": async () => cdState,
-      "./companion-obstacles.js": async () => companionObstacles
-    },
+    Object.fromEntries(
+      Object.entries(depModules).map(([specifier, mod]) => [specifier, async () => mod])
+    ),
     "companion.js"
   );
   const cpState = await instantiate(CP_STATE_SRC, {}, "cp-state.js");
