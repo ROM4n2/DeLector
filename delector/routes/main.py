@@ -21,6 +21,7 @@
 # mypy: disable-error-code="misc,untyped-decorator"
 
 import json
+import os
 from typing import Any, Dict, List, Optional
 
 import httpx as httpx
@@ -541,6 +542,20 @@ def api_syntax_stats_get() -> Any:
 _HEALTH_DETAIL_UNAVAILABLE = "本地数据库暂时不可用，请稍后重试"
 
 
+def _agent_bridge_report() -> Dict[str, Any]:
+    """如实报告伴学 agent 桥当前会走哪条路（go = 有 Go 内核可反代，python = 已降级）。
+
+    真相源就是 `dispatch_companion_stream` 读的那个环境变量，不另设一套状态：
+    未设置 ⇒ 走默认 8002（兼容手工单独启动 Go）；空串 ⇒ `start.py` 已确认 Go 起不来，
+    显式禁用反代；有值 ⇒ 反代到该地址。
+    """
+    from delector.services.companion_agent import DEFAULT_GO_AGENT_URL
+
+    raw = os.environ.get("DELECTOR_GO_AGENT_URL")
+    url = (DEFAULT_GO_AGENT_URL if raw is None else raw).strip()
+    return {"mode": "go" if url else "python", "url": url}
+
+
 @router.get("/api/health")
 def api_health() -> Any:
     """健康探针：库可用回 200，不可用回 503（Service Unavailable）。
@@ -565,6 +580,7 @@ def api_health() -> Any:
                     "detail": _HEALTH_DETAIL_UNAVAILABLE,
                     "app": "delector",
                     "version": APP_VERSION,
+                    "agent_bridge": _agent_bridge_report(),
                 },
                 ensure_ascii=False,
             ),
@@ -578,4 +594,11 @@ def api_health() -> Any:
     # 的契约是「**接受 503、只看身份**」—— 库坏但进程是 DeLector，仍算 DeLector。若 503 不带
     # 身份，`start.py` 第二次启动会把「自己的降级实例」误报成「端口被其他程序占用」并 `exit(1)`
     # —— 正是本任务要消灭的盲误判之镜像。身份之外（路径/栈/异常类名）仍只进服务端日志。
-    return {"status": "ok", "database": "ok", "app": "delector", "version": APP_VERSION}
+    return {
+        "status": "ok",
+        "database": "ok",
+        "app": "delector",
+        "version": APP_VERSION,
+        # 伴学桥如实上报：Go 内核不可用时这里必须是 python（配套启动日志的同一条事实）。
+        "agent_bridge": _agent_bridge_report(),
+    }

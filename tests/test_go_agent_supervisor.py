@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from delector.core.go_agent_supervisor import GoAgentSupervisor
+from delector.core.go_agent_supervisor import (
+    GO_AGENT_PORT_CANDIDATES,
+    GO_AGENT_SERVICE_ID,
+    GoAgentSupervisor,
+    pick_agent_port,
+)
 
 
 def test_supervisor_command_discovery_with_binary(tmp_path: Any) -> None:
@@ -48,6 +53,67 @@ def test_supervisor_command_discovery_none(tmp_path: Any) -> None:
         cmd, cwd = supervisor.find_command()
         assert cmd is None
         assert cwd == agent_dir
+
+
+def test_go_fallback_ports_are_disjoint_from_python_candidates() -> None:
+    """8002 是双方共用的历史首选；但 Go 的**顺延区间** MUST 与 Python 候选完全不重叠。"""
+    from start import PORT_CANDIDATES
+
+    overlap = set(GO_AGENT_PORT_CANDIDATES[1:]) & set(PORT_CANDIDATES)
+    assert not overlap, f"Go 顺延端口与 Python 候选重叠 {sorted(overlap)}"
+
+
+def test_pick_agent_port_never_returns_python_port() -> None:
+    """Python 顺延到 8002 时，Go MUST 跳过它选 8011（否则同端口双 bind，主服务被遮蔽）。"""
+    port = pick_agent_port(python_port=8002, probe=lambda _p: False)
+
+    assert port == 8011, f"Go 端口不得等于 Python 端口 8002，实际 {port}"
+
+
+def test_pick_agent_port_skips_busy_candidates() -> None:
+    """候选逐个顺延：8002 被陌生程序占、8011 与 Python 冲突 ⇒ 取 8012。"""
+    busy = {8002}
+
+    port = pick_agent_port(python_port=8011, probe=lambda p: p in busy)
+
+    assert port == 8012, f"应跳过被占用/冲突的候选，实际 {port}"
+
+
+def test_pick_agent_port_returns_none_when_all_busy() -> None:
+    assert pick_agent_port(python_port=8000, probe=lambda _p: True) is None
+
+
+def test_supervisor_refuses_to_bind_python_port() -> None:
+    """显式传入与 Python 相同的端口 ⇒ MUST 拒绝启动，且不拉起子进程。"""
+    supervisor = GoAgentSupervisor(port=8002, python_port=8002)
+
+    with patch("subprocess.Popen") as mock_popen:
+        assert supervisor.start(deadline_s=0.1) is False
+        mock_popen.assert_not_called()
+    assert "与 Python 主服务端口相同" in supervisor.last_error
+
+
+def test_supervisor_auto_port_excludes_python_port() -> None:
+    with patch("delector.core.go_agent_supervisor.pick_agent_port", return_value=8011) as mock_pick:
+        supervisor = GoAgentSupervisor(python_port=8002)
+
+    mock_pick.assert_called_once_with(8002)
+    assert supervisor.port == 8011
+
+
+def test_health_requires_go_agent_service_identity() -> None:
+    """`status=ok` 不足以证明是 Go Agent；service 字段必须匹配。"""
+    supervisor = GoAgentSupervisor(port=8011)
+
+    ok_other = MagicMock(status_code=200)
+    ok_other.json.return_value = {"status": "ok"}
+    with patch("delector.core.go_agent_supervisor.httpx.get", return_value=ok_other):
+        assert supervisor.is_healthy() is False
+
+    ok_go = MagicMock(status_code=200)
+    ok_go.json.return_value = {"status": "ok", "service": GO_AGENT_SERVICE_ID}
+    with patch("delector.core.go_agent_supervisor.httpx.get", return_value=ok_go):
+        assert supervisor.is_healthy() is True
 
 
 def test_supervisor_start_and_health_poll_success() -> None:

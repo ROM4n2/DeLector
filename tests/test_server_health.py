@@ -190,6 +190,19 @@ def test_health_endpoint_ok_when_db_usable(client):
     )
 
 
+def test_health_reports_agent_bridge_mode(client, monkeypatch):
+    """伴学桥必须如实上报：显式禁用 ⇒ python；有地址 ⇒ go + 该地址。"""
+    monkeypatch.setenv("DELECTOR_GO_AGENT_URL", "")
+    body = client.get("/api/health").json()
+    assert body["agent_bridge"] == {"mode": "python", "url": ""}, (
+        f"Go 内核不可用时健康检查必须报 python，实际 {body.get('agent_bridge')}"
+    )
+
+    monkeypatch.setenv("DELECTOR_GO_AGENT_URL", "http://127.0.0.1:8011")
+    body = client.get("/api/health").json()
+    assert body["agent_bridge"] == {"mode": "go", "url": "http://127.0.0.1:8011"}
+
+
 def test_health_endpoint_fails_when_db_connection_raises(client, monkeypatch, tmp_path):
     """**核心**：DB 连接抛错 ⇒ MUST 非 200，且响应体 MUST NOT 泄露路径/栈/异常类名。
 
