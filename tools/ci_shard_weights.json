@@ -22,6 +22,7 @@
   "tests/test_c9_reason_alignment.py": 0.0,
   "tests/test_cards_catalog_tag_probe.py": 0.3,
   "tests/test_cards_count_probe.py": 0.2,
+  "tests/test_cards_deck_tap_probe.py": 0.2,
   "tests/test_cards_endpoint_cost.py": 39.8,
   "tests/test_cards_quiz_choice_probe.py": 0.2,
   "tests/test_cards_state_split.py": 1.6,

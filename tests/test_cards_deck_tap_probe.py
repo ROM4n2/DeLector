@@ -8,7 +8,9 @@
 探针切 `static/js/cards.js` 真源码进 node:vm，钉死：
 - 干净 tap / 阈值内 tap 翻面且不切卡；
 - 越过阈值的左右 drag 切卡且不翻面；
-- 模糊区、纵向滚动、pointercancel、背面 tap 均无动作。
+- 模糊区、纵向滚动、pointercancel、卡面内 onclick 控件均无动作；
+- 背面 tap 翻回；
+- 首张 / 末张 tap 双向翻面，越界 drag 不切卡（不原地重渲染、不抛错）。
 """
 
 from typing import Any
@@ -32,7 +34,13 @@ _CASES = (
     "interactiveTargetIgnored",
     "verticalScrollDoesNotFlip",
     "pointerCancelDoesNothing",
-    "flippedTapDoesNothing",
+    "flippedTapFlipsBack",
+    "firstTapFlips",
+    "firstTapFlipsBack",
+    "lastTapFlips",
+    "lastTapFlipsBack",
+    "firstOverswipeDoesNotStep",
+    "lastOverswipeDoesNotStep",
 )
 
 
@@ -42,7 +50,7 @@ def _run() -> dict[str, Any]:
 
 
 def test_cards_deck_tap_probe_reports_no_failures() -> None:
-    """探针自陈全绿，且 9 个场景都在（防删场景换全绿）。"""
+    """探针自陈全绿，且 15 个场景都在（防删场景换全绿）。"""
     out = _run()
     assert_probe_clean(PROBE_NAME, out)
     assert len(scenario_keys(out)) == len(_CASES), (
@@ -64,3 +72,19 @@ def test_cards_deck_tap_probe_pins_tap_and_drag_exclusivity() -> None:
 
     right = by_name["dragRightStepsPrev"]
     assert right["ok"] is True, f"右滑仍不切卡：{right['detail']}"
+
+
+def test_cards_deck_tap_probe_pins_boundary_behavior() -> None:
+    """第三条：首/末张 tap 双向翻面，越界 drag 不许调 stepDeck。
+
+    真机事故：首张右滑越界让 index 变 -1，renderDeckStage 取到 undefined 抛错，
+    卡片被 .is-swiping-* 留在 translateX(120%)/opacity:0，用户再也翻不回来；
+    末张则是原地重渲染把 is-flipped 洗掉。
+    """
+    out = _run()
+    by_name = {str(c["name"]): c for c in out["cases"]}
+
+    for name in ("firstTapFlips", "firstTapFlipsBack", "lastTapFlips", "lastTapFlipsBack"):
+        assert by_name[name]["ok"] is True, f"{name} 未通过：{by_name[name]['detail']}"
+    for name in ("firstOverswipeDoesNotStep", "lastOverswipeDoesNotStep"):
+        assert by_name[name]["ok"] is True, f"{name} 未通过：{by_name[name]['detail']}"

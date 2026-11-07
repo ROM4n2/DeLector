@@ -246,6 +246,9 @@ export function renderDeckStage(vList, gList) {
 
   const deck = buildDeckFromLists(vList, gList);
 
+  // 上下界都要纠正：下界漏掉时 deck[index] 取到 undefined，模板串抛错 ⇒
+  // container.innerHTML 赋值没发生，旧卡片连同 .is-swiping-* 的 opacity:0 留在屏上。
+  if (cardState.deck.index < 0) cardState.deck.index = 0;
   if (cardState.deck.index >= deck.length) cardState.deck.index = Math.max(0, deck.length - 1);
   const card = deck[cardState.deck.index];
   const total = deck.length;
@@ -508,6 +511,16 @@ function attachDeckSwipeListener() {
     cardEl.style.transform = cardState.deck.flipped ? "rotateY(180deg)" : "";
   };
 
+  // 首尾越界滑动 MUST 不调 stepDeck。index 越界后 renderDeckStage 只有两条路：
+  // 首张 index=-1 取到 undefined 直接抛错 ⇒ DOM 不再重绘，卡片被 stepDeck 加的
+  // .is-swiping-* 留在 translateX(120%)/opacity:0 上，用户再也翻不回；
+  // 末张 index=total 被 clamp 成原地重渲染 ⇒ is-flipped 被洗掉。
+  // 导航按钮的 disabled 是本视图唯一的边界真相（模板按 index/total 生成）。
+  const canStep = (direction) => {
+    const btn = document.getElementById(direction > 0 ? "deck-btn-next" : "deck-btn-prev");
+    return !(btn && btn.disabled);
+  };
+
   const onPointerDown = (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     // 卡面里的按钮 / 链接 / 带内联 onclick 的控件自己处理点击，不参与翻面/滑动。
@@ -550,8 +563,10 @@ function attachDeckSwipeListener() {
       return;
     }
     if (Math.abs(dx) <= TAP_SLOP_PX) {
-      resetTransform();
-      if (!cardState.deck.flipped) toggleDeckFlip();
+      // tap 双向：正面 → 背面、背面 → 正面。旧实现只在未翻面时调 toggleDeckFlip，
+      // 背面 tap 永远没反应，用户只能找「↶ 翻回」小按钮，看起来像翻不回去。
+      toggleDeckFlip();
+      resetTransform(); // 必须在 toggle 之后：它按翻面后的状态决定是否保留 rotateY
       return;
     }
     if (cardState.deck.flipped) {
@@ -559,9 +574,11 @@ function attachDeckSwipeListener() {
       return;
     }
     if (dx < -SWIPE_COMMIT_PX) {
-      stepDeck(1);
+      if (canStep(1)) stepDeck(1);
+      else resetTransform();
     } else if (dx > SWIPE_COMMIT_PX) {
-      stepDeck(-1);
+      if (canStep(-1)) stepDeck(-1);
+      else resetTransform();
     } else {
       resetTransform();
     }
