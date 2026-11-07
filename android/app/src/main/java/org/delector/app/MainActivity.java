@@ -60,6 +60,11 @@ public class MainActivity extends AppCompatActivity {
     private NativeTTSBridge nativeTTS;
     private ValueCallback<Uri[]> filePathCallback;
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
+    /** Python 侧选定并由 {@link #PORT_FILE_ENV} 回传的监听端口；0 表示还没拿到。 */
+    private volatile int serverPort = 0;
+    private static final String PORT_FILE_NAME = "server-port.txt";
+    /** 与 start.py 的 PORT_FILE_ENV 保持同一字符串，缺一不可（由 pytest 静态守卫钉住）。 */
+    private static final String PORT_FILE_ENV = "DELECTOR_PORT_FILE";
 
     /**
      * 导出结果的出口。回调发生在 ExportSaver 的单线程池上，所以一律 post 回主线程。
@@ -379,7 +384,13 @@ public class MainActivity extends AppCompatActivity {
             File staticDir = new File(dataDir, "static");
             syncStaticAssets(dataDir, staticDir);
 
-            // B. Start Chaquopy Python runtime
+            // B. 清掉上一轮残留的端口文件：否则 8000 被占后可能先读到旧端口再轮询失败。
+            File portFile = new File(dataDir, PORT_FILE_NAME);
+            if (portFile.exists() && !portFile.delete()) {
+                Log.w("DeLector", "无法清理上一轮的端口文件: " + portFile);
+            }
+
+            // C. Start Chaquopy Python runtime
             if (!Python.isStarted()) {
                 Python.start(new AndroidPlatform(this));
             }
@@ -388,8 +399,10 @@ public class MainActivity extends AppCompatActivity {
             PyObject osModule = py.getModule("os");
             osModule.get("environ").callAttr("__setitem__", "DELECTOR_DATA_DIR", dataDir.getAbsolutePath());
             osModule.get("environ").callAttr("__setitem__", "STATIC_DIR", staticDir.getAbsolutePath());
+            // 让 Python 把真实端口写进这个文件：8000 被占时它会顺延（start.py:_android_ready）。
+            osModule.get("environ").callAttr("__setitem__", PORT_FILE_ENV, portFile.getAbsolutePath());
 
-            // C. Start server in background thread
+            // D. Start server in background thread
             new Thread(() -> {
                 try {
                     py.getModule("start").callAttr("main");
@@ -399,8 +412,8 @@ public class MainActivity extends AppCompatActivity {
                 }
             }).start();
 
-            // D. Poll for server readiness
-            pollServerReadiness();
+            // E. Poll for server readiness
+            pollServerReadiness(dataDir);
 
         } catch (Throwable t) {
             // Throwable 而非 Exception：Python.start() 载入原生库失败抛的是 UnsatisfiedLinkError
@@ -421,33 +434,63 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void pollServerReadiness() {
+    /**
+     * 从 Python 写下的端口文件里取真实监听端口。
+     * 8000 被别的程序占用时 start.py 会顺延到 8002+，这里必须跟着走，不能写死。
+     */
+    private int readServerPort(File dataDir) {
+        File file = new File(dataDir, PORT_FILE_NAME);
+        try (FileInputStream in = new FileInputStream(file)) {
+            byte[] buf = new byte[(int) Math.min(file.length(), 16)];
+            int n = in.read(buf);
+            if (n <= 0) {
+                return 0;
+            }
+            int port = Integer.parseInt(new String(buf, 0, n, StandardCharsets.US_ASCII).trim());
+            return (port > 0 && port <= 65535) ? port : 0;
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private String serverBaseUrl(int port) {
+        return "http://127.0.0.1:" + port;
+    }
+
+    private void pollServerReadiness(File dataDir) {
         for (int i = 0; i < 60; i++) {
             if (fatalError != null) {
                 return; // 服务不可能再就绪，别用超时文案盖掉真实错误
             }
-            try {
-                URL url = new URL("http://127.0.0.1:8000/api/settings");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(800);
-                conn.setReadTimeout(800);
-                conn.setRequestMethod("GET");
-                int code = conn.getResponseCode();
-                conn.disconnect();
+            // 端口文件由 Python 在选定端口、组好 server 后写入；拿到前只等，不猜 8000。
+            if (serverPort <= 0) {
+                serverPort = readServerPort(dataDir);
+            }
+            if (serverPort > 0) {
+                try {
+                    URL url = new URL(serverBaseUrl(serverPort) + "/api/settings");
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(800);
+                    conn.setReadTimeout(800);
+                    conn.setRequestMethod("GET");
+                    int code = conn.getResponseCode();
+                    conn.disconnect();
 
-                if (code >= 200 && code < 400) {
-                    isServerReady = true;
-                    mainHandler.post(() -> {
-                        statusTextView.setText("服务已就绪，正在加载工作台...");
-                        webView.loadUrl("http://127.0.0.1:8000");
-                        splashLayout.postDelayed(() -> {
-                            splashLayout.setVisibility(View.GONE);
-                            webView.setVisibility(View.VISIBLE);
-                        }, 200);
-                    });
-                    return;
+                    if (code >= 200 && code < 400) {
+                        isServerReady = true;
+                        final int readyPort = serverPort;
+                        mainHandler.post(() -> {
+                            statusTextView.setText("服务已就绪，正在加载工作台...");
+                            webView.loadUrl(serverBaseUrl(readyPort));
+                            splashLayout.postDelayed(() -> {
+                                splashLayout.setVisibility(View.GONE);
+                                webView.setVisibility(View.VISIBLE);
+                            }, 200);
+                        });
+                        return;
+                    }
+                } catch (Exception ignored) {
                 }
-            } catch (Exception ignored) {
             }
 
             try {
@@ -459,9 +502,14 @@ public class MainActivity extends AppCompatActivity {
         if (fatalError != null) {
             return;
         }
+        final int timeoutPort = serverPort;
         mainHandler.post(() -> {
-            statusTextView.setText("服务启动超时，正在重试连接...");
-            webView.loadUrl("http://127.0.0.1:8000");
+            statusTextView.setText(timeoutPort > 0
+                    ? "服务启动超时（端口 " + timeoutPort + "），正在重试连接..."
+                    : "服务启动超时，正在重试连接...");
+            if (timeoutPort > 0) {
+                webView.loadUrl(serverBaseUrl(timeoutPort));
+            }
         });
     }
 
@@ -469,16 +517,28 @@ public class MainActivity extends AppCompatActivity {
         // 上限防止服务真的起不来时无限 reload（每秒一次，永不停止）
         if (isServerReady || fatalError != null || ++reloadAttempts > 10) {
             if (!isServerReady && fatalError == null) {
+                final int failedPort = serverPort;
                 mainHandler.post(() -> {
                     splashLayout.setVisibility(View.VISIBLE);
                     webView.setVisibility(View.GONE);
                     statusTextView.setTextIsSelectable(true);
-                    statusTextView.setText("本地服务无法连接（127.0.0.1:8000）。\n请用 adb logcat 查看 python.stderr 中的堆栈。");
+                    statusTextView.setText("本地服务无法连接（127.0.0.1"
+                            + (failedPort > 0 ? ":" + failedPort : "")
+                            + "）。\n请用 adb logcat 查看 python.stderr 中的堆栈。");
                 });
             }
             return;
         }
-        mainHandler.postDelayed(() -> webView.loadUrl("http://127.0.0.1:8000"), 1000);
+        if (serverPort <= 0) {
+            serverPort = readServerPort(getFilesDir());
+        }
+        final int reloadPort = serverPort;
+        if (reloadPort <= 0) {
+            // 端口还没交出来（Python 仍在启动）：不加载 0 端口，留给下一轮重试。
+            mainHandler.postDelayed(this::checkAndReloadServer, 1000);
+            return;
+        }
+        mainHandler.postDelayed(() -> webView.loadUrl(serverBaseUrl(reloadPort)), 1000);
     }
 
     private void copyAssetFolder(String srcName, File dstDir) {

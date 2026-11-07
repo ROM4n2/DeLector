@@ -128,6 +128,12 @@ PORT_CANDIDATES: tuple[int, ...] = (8000, 8002, 8003, 8004, 8005, 8006, 8007, 80
 #: 「端口神秘被占」。故显式值也要过这道闸。
 SUPERVISOR_RESERVED_PORT: int = 8001
 
+#: 运行期端口出口：环境变量给出**文件路径**，`main()` 在选定端口、组好 server 后原子写入
+#: 十进制端口。Android 宿主（MainActivity）与 Windows 便携验收脚本都不在 Python 进程里，
+#: 拿不到 `ready.port`；端口顺延后只有这条握手能保证它们仍指向真实服务。
+#: 未设置该变量时完全不落盘 —— 普通桌面启动与单测都不产生副作用。
+PORT_FILE_ENV: str = "DELECTOR_PORT_FILE"
+
 
 @dataclass(frozen=True)
 class Ready:
@@ -226,15 +232,54 @@ def _note(message: str) -> None:
     logging.getLogger("delector").warning(message)
 
 
-def _android_ready(env: Mapping[str, str]) -> Ready:
-    """Android 的短路结果：不取锁、不探端口。
+def write_port_file(path: Optional[str], port: int) -> None:
+    """把真实端口原子写给进程外的宿主；失败只留痕，绝不阻断启动。
 
-    两个理由：① Android 的数据落点由宿主（`MainActivity`）注入 `DELECTOR_DATA_DIR`，本进程
-    替它猜一个锁目录只会造出一把与真实实例无关的锁；② 监听口由 WebView 侧约定，候选顺延在
-    移动端没有意义。返回的句柄是**降级句柄**（`_fd == -1`，`release()` 是幂等空操作），
-    这样调用方仍可统一写 `lock.release()`，不必为移动端分支记第二套约定。
+    先写 `.tmp` 再 `os.replace`：宿主可能每 600ms 轮询一次，半截文件会被判成非法端口。
     """
-    port = PORT_CANDIDATES[0]
+    if not path:
+        return
+    tmp = f"{path}.tmp"
+    try:
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(tmp, "w", encoding="ascii", newline="\n") as f:
+            f.write(f"{port}\n")
+        os.replace(tmp, path)
+    except OSError as exc:
+        _note(f"[警告] 端口文件写入失败（{path}）：{exc}；宿主可能读不到实际端口。")
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def clear_port_file(path: Optional[str]) -> None:
+    """退出时清掉端口文件：残留会让宿主把上一轮的端口当成这一轮的。"""
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _android_ready(env: Mapping[str, str], probe: Callable[[int], bool]) -> Ready:
+    """Android 的短路结果：不取锁，但**必须探端口**。
+
+    ① Android 的数据落点由宿主（`MainActivity`）注入 `DELECTOR_DATA_DIR`，本进程替它猜一个
+    锁目录只会造出一把与真实实例无关的锁；② 监听口不再由 WebView 固定约定 —— 选中的端口经
+    `PORT_FILE_ENV` 指向的文件交给宿主，因此这里与桌面共用同一套候选顺延。8000 被设备上别的
+    程序占用时仍能起来，不会和宿主错位。返回的句柄是**降级句柄**（`_fd == -1`，`release()`
+    是幂等空操作），调用方仍可统一写 `lock.release()`，不必为移动端分支记第二套约定。
+    """
+    port = _pick_port(probe, requested=None)
+    if port is None:
+        first, last = PORT_CANDIDATES[0], PORT_CANDIDATES[-1]
+        raise RuntimeError(
+            f"端口不可用：{first}–{last} 全部被其他程序占用，Android 端无法启动 DeLector。"
+        )
     record = LockRecord(
         pid=os.getpid(),
         version=_app_version(),
@@ -291,12 +336,11 @@ def claim_instance(
     端口逐个问它，答是 ⇒ 判 `AlreadyRunning`（绝不顺延起第二个服务）。拿到**真锁**时一律不调：
     锁是唯一判据（见 `tests/test_start.py::test_claim_instance_skips_identity_probe_when_lock_is_real`）。
     """
-    if is_android():
-        return _android_ready(env)
-
     # `probe` 必须在**函数体内**求值：写成默认参数 `probe=is_port_in_use` 会在 import 期把当时的
     # 函数对象焊死，测试 monkeypatch `start.is_port_in_use` 就完全失效（判据看着在跑、实际恒真）。
     probe_fn: Callable[[int], bool] = probe or is_port_in_use
+    if is_android():
+        return _android_ready(env, probe_fn)
     # 落点先解析：它既是判据（和对方的 data_dir 比），也要写进自己的记录供下一个进程读。
     data_dir = resolve_data_dir(env)
     paths = LockPaths.for_platform(env)
@@ -549,6 +593,8 @@ def main(
     ready = decision
     # 端口从此只来自 `ready.port`：横幅、浏览器、build_server、on_serving 全部用它。
     port = ready.port
+    # 进程外宿主（Android WebView / 便携验收脚本）读这条路径拿真实端口；未设置则不落盘。
+    port_file = os.environ.get(PORT_FILE_ENV)
     # `finally` 放锁是**硬要求**（不是"顺手清理"）：锁是文件级的，同进程里反复调 `main()` 的测试
     # 若漏放，后面的用例会被判「已在运行」而集体假红；真实用户侧则表现为 Ctrl+C 之后再也起不来
     # （进程还在退出中，锁仍被自己的 fd 攥着）。
@@ -580,6 +626,9 @@ def main(
         from delector.server import app
 
         server = build_server(host, port, app)
+        # 与 on_serving 同层：端口已确定、server 已组装 ⇒ 可以对外承诺这个地址。
+        # 早于 serve_in_thread 是刻意的：宿主先拿到端口再轮询健康检查，避免多等一个探测窗口。
+        write_port_file(port_file, port)
         # Task 5：端口校验已过（由 `claim_instance` 选定，被占的端口根本不会被返回）、
         # `uvicorn.Server` 已组装 ⇒ 调用方（desktop `--server-only`）据此写对外可见的地址文件。
         # 写入 MUST 晚于"确认本进程将持有该端口"：端口不可用 / 启动失败时根本到不了这里，
@@ -625,6 +674,8 @@ def main(
             sys.exit(1)
         print("[提示] 服务已停止。")
     finally:
+        # 先撤端口承诺再放锁：宿主看到文件消失就该停止轮询，不再把旧端口当成仍可服务。
+        clear_port_file(port_file)
         if agent_sup is not None:
             try:
                 agent_sup.stop()
