@@ -606,15 +606,24 @@ def main(
 
         if not android and not no_agent:
             try:
-                from delector.core.go_agent_supervisor import GoAgentSupervisor
+                from delector.core.go_agent_supervisor import DEGRADED_MESSAGE, GoAgentSupervisor
 
-                agent_sup = GoAgentSupervisor(port=8002, python_port=port)
+                # 端口由 supervisor 与 Python 实际端口互斥分配（首选 8002，冲突则 8011+）。
+                # 绝不写死 8002：Python 顺延到 8002 时，两个监听者会同端口「双 bind」，
+                # Windows 下 Go 会抢走 127.0.0.1 的全部流量，页面与 /api/health 直接 404。
+                agent_sup = GoAgentSupervisor(python_port=port)
                 if agent_sup.start():
-                    print("[伴学] Go Agent 伴学服务已自动托管启动 (http://127.0.0.1:8002)")
+                    go_agent_url = f"http://127.0.0.1:{agent_sup.port}"
+                    os.environ["DELECTOR_GO_AGENT_URL"] = go_agent_url
+                    print(f"[伴学] Go Agent 伴学服务已自动托管启动 ({go_agent_url})")
                 else:
-                    print("[伴学] 未检测到 Go 环境或启动超时，伴学功能由 Python 内核自适应兜底")
+                    # 显式清空：让 dispatch 直接走 Python 内核，而不是去连一个可能正是
+                    # 本进程（端口相同 ⇒ 自我反代死循环）的默认地址。
+                    os.environ["DELECTOR_GO_AGENT_URL"] = ""
+                    print(f"[伴学] {DEGRADED_MESSAGE}（{agent_sup.last_error}）")
             except Exception as a_err:
-                print(f"[伴学] 伴学服务托管尝试跳过 ({a_err})，由 Python 内核兜底")
+                os.environ["DELECTOR_GO_AGENT_URL"] = ""
+                print(f"[伴学] {DEGRADED_MESSAGE}（{a_err}）")
 
         host = get_bind_host()
         print_banner(port, android)

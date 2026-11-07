@@ -13002,3 +13002,207 @@ body.drawer-open .companion {
     font-size: 0.75rem;
   }
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   Writer Agent Bar · 写作区选段就地操作（2026-11-07）
+   命名空间：wab- / #writer-agent-*
+   只做「选中 → 就地操作」最小闭环。top/left 由 writer.js 按 visualViewport
+   夹取后写入；本区不做 hover-only 交互，触屏直接可点。
+   规约：本分区独立追加在文件末尾，不改动上方任何既有分区，避免并行冲突。
+   ══════════════════════════════════════════════════════════════════════════ */
+.wab-bar {
+  position: fixed;
+  z-index: 1060;
+  display: flex;
+  align-items: stretch;
+  padding: 3px;
+  max-width: calc(100vw - 16px);
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  border-radius: 4px;
+}
+
+.wab-bar.hidden {
+  display: none;
+}
+
+.wab-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.7rem;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wab-btn + .wab-btn {
+  border-left: 1px solid var(--rule);
+}
+
+.wab-btn:active {
+  background: var(--paper-tint);
+}
+
+.wab-btn.wab-close {
+  min-width: 36px;
+  padding: 0 0.5rem;
+  color: var(--pencil);
+  font-size: 1rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wab-btn:hover {
+    background: var(--paper-tint);
+  }
+}
+
+.wab-result {
+  position: fixed;
+  z-index: 1070;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  max-height: min(42vh, 320px);
+  background: var(--paper-card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  border-radius: 4px;
+}
+
+.wab-result.hidden {
+  display: none;
+}
+
+.wab-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wab-result-close {
+  min-width: 36px;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--pencil);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wab-result-body {
+  padding: 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  font-family: var(--serif-body);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.wab-selection {
+  margin-bottom: 0.5rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--rule);
+  color: var(--pencil);
+  font-style: italic;
+  word-break: break-word;
+}
+
+.wab-def {
+  margin: 0.25rem 0 0.5rem;
+  font-family: var(--serif-heading);
+  font-size: 1.25rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.wab-text {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.wab-points {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.wab-points li {
+  margin-bottom: 0.25rem;
+}
+
+.wab-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+.wab-row-label {
+  flex: 0 0 4.5em;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+}
+
+.wab-row-value {
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.wab-source {
+  margin-top: 0.6rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--rule);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.wab-hint {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.wab-error {
+  margin: 0.25rem 0;
+  color: var(--danger);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+/* 移动端：结果面板抬到底部 dock 之上，键盘（adjustPan）时再抬 keyboard inset。 */
+@media (max-width: 860px) {
+  .wab-result {
+    bottom: calc(
+      var(--writer-keyboard-inset, 0px) + 58px + 12px +
+        env(safe-area-inset-bottom, 0px)
+    );
+    max-height: min(46vh, 340px);
+  }
+}

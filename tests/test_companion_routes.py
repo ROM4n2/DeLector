@@ -866,6 +866,20 @@ def test_companion_chat_proxies_to_go_agent_when_available(
         assert captured_headers.get("x-api-key") == "sk-synced-test-key"
 
 
+def test_go_agent_bridge_skips_url_pointing_at_own_server() -> None:
+    """反代目标等于本进程端口时 MUST 跳过（否则 /api/companion/chat 自我递归）。"""
+    from types import SimpleNamespace
+
+    from delector.services.companion_agent import _targets_own_server
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(server_port=8002)))
+
+    assert _targets_own_server("http://127.0.0.1:8002", request) is True
+    assert _targets_own_server("http://127.0.0.1:8011", request) is False
+    # 拿不到端口（未建服 / 测试替身）⇒ 保持原有行为，不误杀。
+    assert _targets_own_server("http://127.0.0.1:8002", None) is False
+
+
 def test_companion_weekly_goal_empty_execute_returns_400_and_pending(
     companion_app: FastAPI,
     tmp_path: Any,

@@ -351,8 +351,8 @@ let _currentExamLevel = "A1";
  * 只开放官方考纲词表模块）。 */
 const EXAM_LEVEL_KEYS = ["a1", "a2", "b1"];
 
-/* 词表模块徽标计数缓存：initExamCatalog 拉到 catalog 后按等级填充
- *（{ A1: n1, A2: n2, B1: n3 } 形态，值全部来自 catalog count，零硬编码）。
+/* 词表模块徽标缓存：initExamCatalog 拉到 catalog 后按等级填充
+ *（{ A1: {count, unit}, A2: {...} } 形态，值全部来自 catalog，零硬编码）。
  * setExamLevel 切等级时从缓存刷徽标；catalog 未就绪时保持现有文案不动（回退语义）。 */
 let _examVocabCounts = {};
 
@@ -360,6 +360,14 @@ function formatExamCount(n) {
   return n >= 1000
     ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k"
     : String(n);
+}
+
+/* 数字 + 后端单位（「18 题」）。unit 由 catalog 单源给出；缺失/空白时
+ * 只渲染数字——绝不让 undefined / null 拼进徽标。 */
+function formatExamCountLabel(n, unit) {
+  const value = formatExamCount(n);
+  const u = typeof unit === "string" ? unit.trim() : "";
+  return u ? value + " " + u : value;
 }
 
 /* 目录标题「写作专项 (Schreiben)」→ { zh, de }，供结构化回写。
@@ -374,10 +382,10 @@ function splitExamTitle(title) {
 }
 
 function syncExamVocabBadge(level) {
-  const n = _examVocabCounts[level];
-  if (typeof n !== "number") return;
+  const entry = _examVocabCounts[level];
+  if (!entry || typeof entry.count !== "number") return;
   const badge = document.querySelector("#exam-card-vocab .exam-module-count");
-  if (badge) badge.textContent = formatExamCount(n);
+  if (badge) badge.textContent = formatExamCountLabel(entry.count, entry.unit);
 }
 
 export function setExamLevel(level) {
@@ -482,7 +490,9 @@ async function initExamCatalog() {
   levels.forEach((lv) => {
     if (!lv.id) return;
     const vocab = (lv.modules || []).find((m) => m.id === "vocab");
-    if (vocab && vocab.count > 0) _examVocabCounts[lv.id.toUpperCase()] = vocab.count;
+    if (vocab && vocab.count > 0) {
+      _examVocabCounts[lv.id.toUpperCase()] = { count: vocab.count, unit: vocab.unit };
+    }
   });
 
   // 模块卡片补强：标题按结构回写（中文名 / 德文副名各归其位）+ count 徽标。
@@ -506,9 +516,9 @@ async function initExamCatalog() {
         badge.className = "exam-module-count";
         card.appendChild(badge);
       }
-      // 单位（「18 题」）挂账：等 catalog 增加 unit 字段后在此拼接。
-      // 触发条件 = /api/exams/catalog 契约加 unit（同步 test_exam_catalog）。
-      badge.textContent = formatExamCount(m.count);
+      // 单位由后端 catalog 单源给出（题/套/词）；缺失时 formatExamCountLabel
+      // 只渲染数字，不会出现「undefined 题」。
+      badge.textContent = formatExamCountLabel(m.count, m.unit);
     }
   });
 

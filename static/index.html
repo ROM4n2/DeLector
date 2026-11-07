@@ -1301,6 +1301,57 @@
           </aside>
         </div>
       </div>
+
+      <!-- ── 选段操作条 + 就地结果（writer agent bar, 2026-11-07）─────────
+           最小闭环：选中 #ide-editor 内文本 → 浮出操作条 → 调既有查询端点 →
+           就地结果面板。动作只用已经跑通的 API（查词 / 语法 / 精读笔记）。
+           本轮不做：多轮对话、跨段批量操作、自动改写回填正文。
+           位置与键盘让位由 writer.js 的 initWriterAgentBar() 负责；
+           样式见 style.css 末尾 wab- 独立分区。 -->
+      <div
+        id="writer-agent-bar"
+        class="wab-bar hidden"
+        role="toolbar"
+        aria-label="选段操作"
+      >
+        <button type="button" class="wab-btn" data-wab-action="vocab">
+          释义
+        </button>
+        <button type="button" class="wab-btn" data-wab-action="grammar">
+          语法
+        </button>
+        <button type="button" class="wab-btn" data-wab-action="note">
+          精读
+        </button>
+        <button
+          type="button"
+          class="wab-btn wab-close"
+          data-wab-action="close"
+          aria-label="关闭选段操作条"
+        >
+          ×
+        </button>
+      </div>
+      <div
+        id="writer-agent-result"
+        class="wab-result hidden"
+        role="dialog"
+        aria-live="polite"
+        aria-label="选段操作结果"
+      >
+        <div class="wab-result-head">
+          <span id="writer-agent-result-title">结果</span>
+          <button
+            type="button"
+            class="wab-result-close"
+            id="writer-agent-result-close"
+            aria-label="关闭结果"
+          >
+            ×
+          </button>
+        </div>
+        <div id="writer-agent-result-body" class="wab-result-body"></div>
+      </div>
     </main>
 
     <div
