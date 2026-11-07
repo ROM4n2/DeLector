@@ -38,6 +38,7 @@ from delector.core.database import (
     get_effective_api_base_url,
     get_effective_api_key,
     get_effective_api_model,
+    get_effective_reasoning_effort,
     get_prep_saved,
     upsert_corpus_syntax_stats,
 )
@@ -285,6 +286,7 @@ async def lookup_grammar(req: GrammarLookupReq, request: Request) -> Any:
             response_format=llm_client.JSON_OBJECT,
             api_key=key,
             base_url=base_url,
+            reasoning_effort=get_effective_reasoning_effort(),
         )
     except llm_client.LLMError as e:
         # 失败仍 502，detail 由 client 给出（与收口前逐字一致），此处不改写语义
@@ -372,6 +374,7 @@ async def lookup_vocab(req: VocabLookupReq, request: Request) -> Dict[str, Any]:
                     response_format=llm_client.JSON_OBJECT,
                     api_key=key,
                     base_url=base_url,
+                    reasoning_effort=get_effective_reasoning_effort(),
                 )
                 res["source"] = "ai"
             except llm_client.LLMError as e:

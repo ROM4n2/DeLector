@@ -21,6 +21,7 @@ from delector.core.database import (
     get_effective_api_base_url,
     get_effective_api_key,
     get_effective_api_model,
+    get_effective_reasoning_effort,
 )
 from delector.nlp_engine import processor as _nlp_processor
 from delector.nlp_engine.processor import nlp
@@ -234,6 +235,7 @@ class _PolishReplyRecorder:
             include_usage=True,
             api_key=self._api_key,
             base_url=self._base_url,
+            reasoning_effort=get_effective_reasoning_effort(),
         )
         self._capture(reply)
         return reply

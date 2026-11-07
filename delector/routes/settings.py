@@ -119,6 +119,9 @@ async def test_api_key(settings: SettingsUpdate, request: Request) -> Dict[str, 
             parse_json=False,
             api_key=key,
             base_url=base_url,
+            # 连通性自检只证明“能连上”，不参与思考强度，固定关闭思考以免把 5 个 token
+            # 全耗在思维链上、也避免探测耗时随用户的档位设置漂移。
+            reasoning_effort="none",
         )
     except llm_client.LLMError as e:
         # 现状两条文案保持原样：传输层失败 ⇒「连接失败: <原文>」；HTTP 非 200 ⇒

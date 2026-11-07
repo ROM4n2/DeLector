@@ -15,6 +15,7 @@
 的测试在门禁上恒 skip，等于没有测试。
 """
 
+import ast
 import asyncio
 import io
 import json
@@ -379,3 +380,112 @@ def test_main_routes_converged_on_single_client() -> None:
         f"路由层必须恰好 {_EXPECTED_CONVERGED_CALLS} 处走 llm_client.chat，"
         f"实际 {code.count('llm_client.chat(')} 处"
     )
+
+
+# ── 思考强度：设置页四档 → 上游 reasoning_effort ──────────────────────────────
+# 上游合法值是 none/low/high/max；medium 会被上游吞成 high。四档必须映射到四个
+# **不同**取值，否则「平衡」和「深度」在响应上不可区分（本次任务的核心判据）。
+_REASONING_TIERS = [
+    ("none", "none"),
+    ("low", "low"),
+    ("medium", "high"),
+    ("high", "max"),
+]
+
+
+@pytest.mark.parametrize(("effort", "upstream"), _REASONING_TIERS)
+def test_reasoning_effort_maps_tiers_to_distinct_upstream_values(effort: str, upstream: str) -> None:
+    """四档必须映射成四个互不相同的上游取值（none/low/high/max）。"""
+    assert llm_client.map_reasoning_effort(effort) == upstream
+    assert len({v for _, v in _REASONING_TIERS}) == len(_REASONING_TIERS), "四档映射结果出现了重复"
+
+
+def test_reasoning_effort_unknown_and_empty_fall_back_to_balanced() -> None:
+    """未知/缺省档位回落到「平衡」的上游取值（high），不能出现空字符串发出去。"""
+    assert llm_client.map_reasoning_effort(None) == "high"
+    assert llm_client.map_reasoning_effort("") == "high"
+    assert llm_client.map_reasoning_effort("  ") == "high"
+    assert llm_client.map_reasoning_effort("bogus") == "high"
+    # 大小写/空白容错
+    assert llm_client.map_reasoning_effort(" HIGH ") == "max"
+
+
+@pytest.mark.parametrize(("effort", "upstream"), _REASONING_TIERS)
+def test_chat_payload_carries_mapped_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch, effort: str, upstream: str
+) -> None:
+    """选中档位 MUST 真正进入请求体，而不是只停留在设置页。"""
+    seen: Dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content.decode("utf-8"))
+        return _ok("{}")
+
+    _install_mock_transport(monkeypatch, handler)
+    _chat(
+        messages=_MSGS,
+        model="deepseek-flash",
+        max_tokens=8,
+        timeout=5.0,
+        api_key="k",
+        base_url=_STUB_BASE_URL,
+        reasoning_effort=effort,
+    )
+
+    assert seen["payload"]["reasoning_effort"] == upstream
+
+
+def test_chat_omits_reasoning_effort_when_not_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    """不传 `reasoning_effort` ⇒ payload 里不得出现该字段（连通性自检/harness 保持原样）。"""
+    seen: Dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content.decode("utf-8"))
+        return _ok("{}")
+
+    _install_mock_transport(monkeypatch, handler)
+    _chat(messages=_MSGS, model="m", max_tokens=8, timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
+
+    assert "reasoning_effort" not in seen["payload"]
+
+
+_GENERATION_MODULES = [
+    os.path.join("delector", "routes", "main.py"),
+    os.path.join("delector", "routes", "articles.py"),
+    os.path.join("delector", "routes", "writing.py"),
+    os.path.join("delector", "routes", "settings.py"),
+    os.path.join("delector", "services", "companion_agent.py"),
+]
+
+
+def test_all_llm_call_sites_forward_reasoning_effort() -> None:
+    """结构守卫：所有生成路径的 `llm_client.chat(...)` MUST 显式带上 `reasoning_effort=`。
+
+    防的是本次修复的核心失效模式：设置页显示某档、请求里根本没有该字段。
+    实验 harness（`tools/bench_judge_gaming.py`）刻意不带：它要钉 temperature，
+    而思考模式会忽略 temperature，混入会破坏基准语义。
+    """
+    checked = 0
+    for rel in _GENERATION_MODULES:
+        path = os.path.join(ROOT, rel)
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (
+                isinstance(func, ast.Attribute)
+                and func.attr == "chat"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "llm_client"
+            ):
+                continue
+            checked += 1
+            kwarg_names = {kw.arg for kw in node.keywords}
+            assert "reasoning_effort" in kwarg_names, (
+                f"{rel}:{node.lineno} 的 llm_client.chat 未传 reasoning_effort —— "
+                "设置页选中的档位不会进入请求体"
+            )
+
+    assert checked == 6, f"预期 6 处生成路径 llm_client.chat，实际 {checked} 处（新增路径请补 reasoning_effort）"

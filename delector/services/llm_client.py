@@ -56,6 +56,38 @@ CONNECTIVITY_MAX_TOKENS = 5
 # 结构化输出开关：4 处生成路径要，连通性自检不要 ⇒ 由调用方决定是否带上。
 JSON_OBJECT: Dict[str, str] = {"type": "json_object"}
 
+# ── 思考强度 ──────────────────────────────────────────────────────────────────
+# 依据 DeepSeek 官方 Chat Completions 文档（2026-11-07 核对）：
+#   reasoning_effort 的合法值是 `none` / `low` / `high` / `max`；
+#   `none` 关闭思考，`low`/`high`/`max` 开启且强度递增；上游会把 `medium` / `xhigh`
+#   映射为 `high`（见 docs/agents/reasoning-effort-chain.md 的取证记录）。
+#
+# 设置页四档是 none/low/medium/high，若原样透传，`medium` 会被上游吃掉成 `high`，
+# 与「深度」档同档 ⇒ 四档不可区分。故这里显式映射成四个不同的上游取值：
+#   关闭 none   → none
+#   极速 low    → low
+#   平衡 medium → high（上游默认强度）
+#   深度 high   → max
+_REASONING_EFFORT_TO_UPSTREAM: Dict[str, str] = {
+    "none": "none",
+    "low": "low",
+    "medium": "high",
+    "high": "max",
+}
+DEFAULT_REASONING_EFFORT = "medium"
+
+
+def map_reasoning_effort(effort: Optional[str]) -> str:
+    """把设置页档位映射为上游 `reasoning_effort` 取值；未知/缺省按「平衡」处理."""
+    key = (effort or "").strip().lower()
+    return _REASONING_EFFORT_TO_UPSTREAM.get(key, _REASONING_EFFORT_TO_UPSTREAM[DEFAULT_REASONING_EFFORT])
+
+
+def reasoning_payload(effort: Optional[str]) -> Dict[str, str]:
+    """生成要合入请求体的思考强度字段（单一映射出口，Go 侧有同构实现）."""
+    return {"reasoning_effort": map_reasoning_effort(effort)}
+
+
 # 失败文案与收口前逐字一致（调用方直接塞进 HTTPException(502, detail=...)）。
 _DETAIL_UPSTREAM = "AI 服务异常"
 _DETAIL_RESPONSE_NOT_JSON = "AI 服务返回非 JSON 响应"
@@ -205,6 +237,7 @@ async def chat(
     parse_json: bool = True,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     """唯一出网口：发一次 chat/completions，默认返回**解析后的 JSON dict**。
 
@@ -216,6 +249,9 @@ async def chat(
       HTTP 200、正文根本不解析 —— 探针提示词（`Sag 'OK'.`）回的就是 `OK`，不是 JSON；
       若在这里强制 `json.loads`，可用 key 会被报成「连接返回错误代码: 200 (OK)」，
       属于**顺手改坏错误语义**，故这个开关是必须的，不是可选项。
+    - `reasoning_effort`（**新增、opt-in**）：设置页档位（none/low/medium/high），经
+      `reasoning_payload` 映射后写入请求体；`None` ⇒ 不带该字段（连通性自检、实验
+      harness 等不关心思考强度的调用方保持原 payload 逐字不变）。
     - `include_usage=True`（**新增、opt-in**）：把信封的 `usage`（prompt/completion 分别记）
       合并进返回值（`{"…content 键…", "usage": {...}}`）；默认 False ⇒ 返回形状与收口前逐字
       一致。这是为实验 harness 记录**真 token 消耗**而加的唯一透出面，不改既有任何调用方的语义。
@@ -232,6 +268,8 @@ async def chat(
         payload["temperature"] = temperature
     if response_format is not None:
         payload["response_format"] = response_format
+    if reasoning_effort is not None:
+        payload.update(reasoning_payload(reasoning_effort))
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
     try:
