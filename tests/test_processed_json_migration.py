@@ -15,7 +15,7 @@ import gc
 import json
 import os
 import sys
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import pytest
 from fastapi.testclient import TestClient
@@ -95,7 +95,7 @@ def _new_payload(text: str) -> Dict[str, Any]:
 def _insert(
     db: str,
     raw_text: Any,
-    processed_json: str,
+    processed_json: Union[str, bytes],
     stats_json: Optional[str] = "auto",
 ) -> int:
     if stats_json == "auto":
