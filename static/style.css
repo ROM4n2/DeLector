@@ -475,6 +475,14 @@ a {
   transform: translateY(0);
 }
 
+/* T8：按压反馈只给可点控件（正文 .tok、考试选项文字不在此列）。
+   :active 在触屏按下即生效、抬手即消失；transform 不改变布局盒。 */
+.btn:active {
+  transform: scale(0.98);
+
+  transition: transform var(--motion-press, 100ms) ease;
+}
+
 .btn-dark {
   background: var(--ink);
 
@@ -12285,5 +12293,10 @@ body.drawer-open .companion {
   .dl-enter,
   .dl-stagger > * {
     animation: none;
+  }
+
+  /* 按压反馈在 reduce 下不缩放。 */
+  .btn:active {
+    transform: none;
   }
 }
