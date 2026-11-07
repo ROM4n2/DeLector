@@ -11965,3 +11965,44 @@ body.drawer-open .companion {
     animation: none;
   }
 }
+
+/* ── T2：动效基建 ─────────────────────────────────────────────────
+   一次性入场统一走这三件套（token 在 tokens.css）：
+   `.dl-enter` 负责单次淡入上移（时长走 token），`.dl-stagger > *` 按序号错峰，
+   `.dl-count` 只统一数字等宽，不承担动画。 */
+@keyframes dl-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-enter-shift));
+  }
+}
+
+.dl-enter {
+  animation: dl-fade-up var(--motion-enter) var(--ease-editorial) both;
+}
+
+.dl-stagger > * {
+  animation-delay: calc(var(--stagger-index, 0) * var(--motion-stagger-step));
+}
+
+.dl-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 全局 reduce 兜底：任何漏掉单独降级的规则也不产生位移或长动画。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* 入场类直接落终态，避免 .01ms 的“完成态动画”仍出现在 getAnimations()。 */
+  .dl-enter,
+  .dl-stagger > * {
+    animation: none;
+  }
+}
