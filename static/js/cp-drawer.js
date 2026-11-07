@@ -366,7 +366,9 @@ async function handleProposalAction(proposal, action) {
     throw new Error('提议缺少有效 ID');
   }
   if (action === 'reject' || action === 'discard') {
-    return await rejectProposal(proposal.id);
+    const rejected = await rejectProposal(proposal.id);
+    window.Companion?.resolveProposal?.();
+    return rejected;
   }
   if (proposal.action === 'apply_writing_revision') {
     const writerState = typeof window.getWriterRevisionState === 'function'
@@ -386,12 +388,14 @@ async function handleProposalAction(proposal, action) {
     if (res && res.content && typeof window.applyCompanionRevision === 'function') {
       window.applyCompanionRevision(res.content);
     }
+    window.Companion?.resolveProposal?.();
     return res;
   }
   const res = await executeProposal(proposal.id, proposal.action, proposal.payload);
   if (String(proposal.action || '').startsWith('create_vocab_card') && res && Number(res.created_count) > 0 && typeof window.loadCards === 'function') {
     window.loadCards();
   }
+  window.Companion?.resolveProposal?.();
   return res;
 }
 
@@ -745,7 +749,11 @@ export function initCompanionDrawer() {
   }
 
   // 初始化全局伴学浮动胶囊拖拽/点击行为
-  initFloatingCapsule();
+  // P3：拖拽是最高优先级状态，必须能从 thinking / speaking / error 抢占。
+  initFloatingCapsule({
+    onDragStart: () => window.Companion?.setDragging?.(true),
+    onDragEnd: () => window.Companion?.setDragging?.(false)
+  });
 
   renderContextBar();
   refreshSessionSelect();
@@ -868,6 +876,7 @@ function createCompanionTurnController({
       if (event === 'thought') {
         thoughtCtrl.setRealThought(data.text || '');
       } else if (event === 'tool_start') {
+        if (turnGeneration === activeTurnGeneration) window.Companion?.setToolActive?.(true);
         toolContainerEl.style.display = 'block';
         const chip = document.createElement('span');
         chip.className = 'companion-tool-chip';
@@ -875,6 +884,7 @@ function createCompanionTurnController({
         chip.textContent = data.label || ('正在调用 ' + data.tool + '...');
         toolContainerEl.appendChild(chip);
       } else if (event === 'tool_end') {
+        if (turnGeneration === activeTurnGeneration) window.Companion?.setToolActive?.(false);
         const chips = toolContainerEl.querySelectorAll('.companion-tool-chip');
         for (const c of chips) {
           if (c.dataset.tool === data.tool) {
@@ -895,6 +905,7 @@ function createCompanionTurnController({
         fullStreamText += chunk;
         typewriter.append(chunk);
       } else if (event === 'proposal') {
+        if (turnGeneration === activeTurnGeneration) window.Companion?.noteProposal?.();
         renderProposalCard(proposalsContainerEl, data.proposal, handleProposalAction);
       } else if (event === 'done') {
         completed = true;
@@ -903,6 +914,7 @@ function createCompanionTurnController({
         if (ownsTurn) {
           setPersistedHistoryCount(sessionId, persistedCount + 2);
           companionState.inFlight = false;
+          window.Companion?.endTurn?.();
           if (sendBtnEl) sendBtnEl.disabled = false;
         }
         typewriter.flush();
@@ -917,6 +929,7 @@ function createCompanionTurnController({
         thoughtCtrl.fail('研读中断');
         if (turnGeneration === activeTurnGeneration) {
           companionState.inFlight = false;
+          window.Companion?.raiseError?.('stream');
           if (sendBtnEl) sendBtnEl.disabled = false;
         }
         textBodyEl.textContent = '[异常: ' + (data.message_zh || '处理失败') + ']';
@@ -972,10 +985,13 @@ function createCompanionTurnController({
         notice.className = 'companion-resume-notice';
         notice.textContent = '连接中断，已恢复断点前的回答。';
         textBodyEl.appendChild(notice);
+        // 已恢复断点：turn 结束，但不把一次可恢复中断升级为桌宠 error。
+        window.Companion?.endTurn?.();
         return;
       }
 
       if (completed || turnGeneration !== activeTurnGeneration) return;
+      window.Companion?.raiseError?.('stream');
       textBodyEl.textContent = '[连接失败: ' + err.message + ']';
       textBodyEl.style.color = 'var(--coral, #b44322)';
     },
@@ -984,6 +1000,7 @@ function createCompanionTurnController({
       thoughtCtrl.cleanup();
       if (turnGeneration === activeTurnGeneration) {
         companionState.inFlight = false;
+        window.Companion?.endTurn?.();
         if (sendBtnEl) sendBtnEl.disabled = false;
       }
       bodyEl.scrollTop = bodyEl.scrollHeight;
@@ -1089,6 +1106,7 @@ export function submitPrompt(userText) {
   const turnGeneration = ++activeTurnGeneration;
   let minimumRecoveredMessages = persistedCountAtStart + 2;
   companionState.inFlight = true;
+  window.Companion?.beginTurn?.();
   if (!sendBtnEl) sendBtnEl = document.getElementById('companion-send-btn');
   if (sendBtnEl) sendBtnEl.disabled = true;
 
@@ -1144,13 +1162,17 @@ export function submitPrompt(userText) {
         }
       }
     },
-    onEvent: (event, data) => turnController.handleEvent(
-      event,
-      data,
-      turnGeneration,
-      streamSessionId,
-      persistedCountAtStart
-    )
+    onEvent: (event, data) => {
+      // P3：任意字节都重置看门狗；事件本身只改条件，不直接写桌宠状态。
+      window.Companion?.touchTurn?.();
+      turnController.handleEvent(
+        event,
+        data,
+        turnGeneration,
+        streamSessionId,
+        persistedCountAtStart
+      );
+    }
   }).catch((err) => {
     return turnController.handleStreamError(
       err,

@@ -9,6 +9,15 @@ import {
   collectNoParkRects,
   intersectsAny
 } from './companion-obstacles.js';
+import {
+  createLifecycleConditions,
+  resolveLifecycleState,
+  lifecycleTitle
+} from './companion-lifecycle.js';
+
+// P3 状态机定时器：看门狗只证明「在途却完全没有字节」，error 驻留避免永久红点。
+const TURN_WATCHDOG_MS = 120000;
+const ERROR_DWELL_MS = 30000;
 
 // ── SVG Character Templates (Standardized classes & dynamic CSS vars) ───────
 export const CHARACTERS = {
@@ -480,9 +489,291 @@ export const Companion = {
   lastSpeechAt: 0,
   lastPhraseKey: '',
 
+  // P3 生机状态：条件驱动，data-state 单源派生，不散落 class。
+  _conditions: createLifecycleConditions(),
+  _state: 'idle',
+  _proposalCount: 0,
+  _turnWatchdog: null,
+  _errorDwell: null,
+  _errorReason: '',
+  _bubbleSuppressedBy: '',
+  _dragReleasePending: false,
+  _bubbleResolvePending: false,
+  _lifecycleBound: false,
+
+  get state() {
+    return this._state;
+  },
+
+  get conditions() {
+    return { ...this._conditions };
+  },
+
+  _applyLifecycleState(reason) {
+    const next = resolveLifecycleState(this._conditions);
+    const prev = this._state;
+    this._state = next;
+
+    const compEl = document.getElementById('companion');
+    if (compEl) {
+      compEl.setAttribute('data-state', next);
+    }
+    const charEl = document.getElementById('companion-char');
+    if (charEl) {
+      charEl.title = lifecycleTitle(next);
+    }
+    const avatarEl = document.getElementById('companion-avatar');
+    if (avatarEl) {
+      avatarEl.setAttribute('aria-label', '伴读角色设置与对话 · ' + lifecycleTitle(next).replace('伴读 · ', ''));
+    }
+
+    // 姿态只有两个来源：data-state 与情绪类；离开 idle/speaking 时摘掉情绪类。
+    if (next !== 'idle' && next !== 'speaking') {
+      this._clearEmotionClasses();
+    }
+
+    if (prev !== next && compEl) {
+      compEl.dispatchEvent(new CustomEvent('companion:statechange', {
+        bubbles: true,
+        detail: { from: prev, to: next, reason: reason || '' }
+      }));
+    }
+  },
+
+  _clearEmotionClasses() {
+    document.querySelectorAll('.companion-char, .mascot-stage-char').forEach((el) => {
+      el.classList.remove('is-happy', 'is-wiggle', 'is-sad');
+    });
+  },
+
+  _setCondition(name, value) {
+    if (!Object.prototype.hasOwnProperty.call(this._conditions, name)) return;
+    if (this._conditions[name] === value) return;
+    this._conditions[name] = value;
+    this._applyLifecycleState(name);
+  },
+
+  _clearTurnWatchdog() {
+    if (this._turnWatchdog) {
+      clearTimeout(this._turnWatchdog);
+      this._turnWatchdog = null;
+    }
+  },
+
+  _armTurnWatchdog() {
+    this._clearTurnWatchdog();
+    if (!this._conditions.turnInFlight) return;
+    this._turnWatchdog = setTimeout(() => {
+      this._turnWatchdog = null;
+      if (this._conditions.turnInFlight) {
+        this.raiseError('watchdog');
+      }
+    }, TURN_WATCHDOG_MS);
+  },
+
+  _armErrorDwell() {
+    if (this._errorDwell) clearTimeout(this._errorDwell);
+    this._errorDwell = setTimeout(() => {
+      this._errorDwell = null;
+      this.clearError();
+    }, ERROR_DWELL_MS);
+  },
+
+  /** 新一轮开始：清掉上一轮的错误与待确认阻塞语义（proposal 卡片本身不删）。 */
+  beginTurn() {
+    this._conditions.turnInFlight = true;
+    this._conditions.toolActive = false;
+    this._conditions.errorLatched = false;
+    this._errorReason = '';
+    if (this._errorDwell) {
+      clearTimeout(this._errorDwell);
+      this._errorDwell = null;
+    }
+    this._proposalCount = 0;
+    this._conditions.proposalPending = false;
+    this._applyLifecycleState('turn-start');
+    this._armTurnWatchdog();
+  },
+
+  /** 任意 SSE 字节都证明连接还活着：看门狗重置；watchdog 型 error 自动解除。 */
+  touchTurn() {
+    if (this._conditions.errorLatched && this._errorReason === 'watchdog') {
+      this._conditions.errorLatched = false;
+      this._errorReason = '';
+      this._applyLifecycleState('watchdog-recovered');
+    }
+    this._armTurnWatchdog();
+  },
+
+  setToolActive(active) {
+    this._setCondition('toolActive', Boolean(active));
+  },
+
+  endTurn() {
+    this._conditions.turnInFlight = false;
+    this._conditions.toolActive = false;
+    this._clearTurnWatchdog();
+    this._applyLifecycleState('turn-end');
+  },
+
+  noteProposal() {
+    this._proposalCount += 1;
+    this._conditions.proposalPending = true;
+    this._applyLifecycleState('proposal');
+  },
+
+  resolveProposal() {
+    this._proposalCount = Math.max(0, this._proposalCount - 1);
+    this._conditions.proposalPending = this._proposalCount > 0;
+    this._applyLifecycleState('proposal-resolved');
+  },
+
+  raiseError(reason) {
+    this._conditions.turnInFlight = false;
+    this._conditions.toolActive = false;
+    this._conditions.errorLatched = true;
+    this._errorReason = reason || 'stream';
+    this._clearTurnWatchdog();
+    this._applyLifecycleState('error:' + this._errorReason);
+    this._armErrorDwell();
+  },
+
+  clearError() {
+    if (!this._conditions.errorLatched) return;
+    this._conditions.errorLatched = false;
+    this._errorReason = '';
+    if (this._errorDwell) {
+      clearTimeout(this._errorDwell);
+      this._errorDwell = null;
+    }
+    this._applyLifecycleState('error-clear');
+  },
+
+  setDragging(active) {
+    const next = Boolean(active);
+    if (next) {
+      this._dragReleasePending = false;
+      this._setCondition('dragging', true);
+      if (this._conditions.bubbleVisible) {
+        this._bubbleSuppressedBy = 'drag';
+        const bubble = document.getElementById('companion-bubble');
+        if (bubble) bubble.classList.add('hidden');
+        this._conditions.bubbleVisible = false;
+      }
+      return;
+    }
+    // 松手不等于落点已定：P2 的 settleIfNeeded() 在同一 pointerup 里随后执行，
+    // 可能带着 260ms 的 is-settling 滑动。dragging 要持续到 settle 结束，
+    // 否则气泡会对着旧锚点求解。微任务等到本轮事件回调结束再判断。
+    this._dragReleasePending = true;
+    queueMicrotask(() => this._releaseDragIfSettled());
+  },
+
+  _releaseDragIfSettled() {
+    if (!this._dragReleasePending) return;
+    const cap = document.getElementById('companion');
+    if (cap && cap.classList.contains('is-settling')) return; // 等 companion:settle-end
+    this._finishDragRelease();
+  },
+
+  _finishDragRelease() {
+    if (!this._dragReleasePending) return;
+    this._dragReleasePending = false;
+    this._setCondition('dragging', false);
+    this._resumeBubbleIfPending();
+  },
+
+  _onSettleEnd() {
+    const shouldResolve = this._bubbleResolvePending;
+    this._bubbleResolvePending = false;
+    const releasing = this._dragReleasePending;
+    this._finishDragRelease();
+    // 拖拽释放内部已经补过一次求解；其余场景（自动让位）在这里补。
+    if (shouldResolve && !releasing) this.repositionBubble();
+  },
+
+  _resumeBubbleIfPending() {
+    if (this._bubbleSuppressedBy !== 'drag') return;
+    if (this._isEditableFocused()) {
+      this._bubbleSuppressedBy = '';
+      return;
+    }
+    if (!bubbleExpiresAt || Date.now() >= bubbleExpiresAt) {
+      this._bubbleSuppressedBy = '';
+      return;
+    }
+    const bubble = document.getElementById('companion-bubble');
+    if (!bubble) {
+      this._bubbleSuppressedBy = '';
+      return;
+    }
+    bubble.classList.remove('hidden');
+    this._bubbleSuppressedBy = '';
+    this.repositionBubble();
+    this._setCondition('bubbleVisible', true);
+  },
+
+  _isEditableTarget(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.isContentEditable) return true;
+    const tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    return Boolean(el.closest && el.closest('[contenteditable="true"], [contenteditable=""]'));
+  },
+
+  _isEditableFocused() {
+    return this._isEditableTarget(document.activeElement);
+  },
+
+  _suppressBubbleForFocus() {
+    this._bubbleSuppressedBy = 'focus';
+    if (this.bubbleTimer) {
+      clearTimeout(this.bubbleTimer);
+      this.bubbleTimer = null;
+    }
+    bubbleExpiresAt = 0;
+    const bubble = document.getElementById('companion-bubble');
+    if (bubble) bubble.classList.add('hidden');
+    this._conditions.bubbleVisible = false;
+    this._applyLifecycleState('bubble-focus');
+  },
+
+  _onLifecycleVisibilityChange() {
+    const compEl = document.getElementById('companion');
+    if (!compEl) return;
+    const hidden = document.visibilityState === 'hidden';
+    compEl.setAttribute('data-paused', hidden ? 'true' : 'false');
+  },
+
+  _bindLifecycleListeners() {
+    if (this._lifecycleBound) return;
+    this._lifecycleBound = true;
+
+    document.addEventListener('focusin', (event) => {
+      if (this._isEditableTarget(event.target)) {
+        this._suppressBubbleForFocus();
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      this._onLifecycleVisibilityChange();
+    });
+
+    // P2 在 is-settling 摘除时派发；松弛拖拽释放与气泡求解都排在这一刻之后。
+    document.addEventListener('companion:settle-end', () => {
+      this._onSettleEnd();
+    });
+
+    this._onLifecycleVisibilityChange();
+  },
+
   sanitizeSvg,
 
   init() {
+    // P3：先建立可观测的初始状态，再渲染角色；监听器只绑一次。
+    this._bindLifecycleListeners();
+    this._applyLifecycleState('init');
+
     // 0. Restore custom character SVG from localStorage if present
     const savedCustomSvg = localStorage.getItem('delector_companion_custom_svg');
     if (savedCustomSvg) {
@@ -680,6 +971,8 @@ export const Companion = {
     if (this._suppressClickUntil && Date.now() < this._suppressClickUntil) {
       return;
     }
+    // P3：点击角色 = 用户已看到错误，立即解除 error 驻留。
+    this.clearError();
     if (navigator.vibrate) navigator.vibrate(15);
     if (!this.enabled) {
       this.toggleEnabled();
@@ -840,6 +1133,12 @@ export const Companion = {
     const bubble = document.getElementById('companion-bubble');
     const capsule = document.getElementById('companion');
     if (!bubble || !capsule) return;
+
+    // P3：settle 滑动期间锚点在动，此时求解只会得到过期位置；挂起到 settle-end 再算。
+    if (this._dragReleasePending && capsule.classList.contains('is-settling')) {
+      this._bubbleResolvePending = true;
+      return;
+    }
 
     // 写作页移动端 sheet 展开时属于模态：气泡先收起（让位），关闭后由一次
     // repositionBubble 自动恢复，不靠抬高 z-index 去盖住 sheet。
@@ -1085,18 +1384,36 @@ export const Companion = {
     if (bubble && deEl && zhEl) {
       deEl.textContent = prefixDe;
       zhEl.textContent = zh;
-      bubble.classList.remove('hidden');
-      this.repositionBubble();
-      bubble.classList.remove('pop-anim');
-      void bubble.offsetWidth; // trigger reflow
-      bubble.classList.add('pop-anim');
 
-      if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
-      bubbleExpiresAt = Date.now() + BUBBLE_TTL_MS;
-      this.bubbleTimer = setTimeout(() => {
+      // P3：拖拽 / 编辑态聚焦时气泡不出现；拖拽结束后若未过期再补显。
+      // 过期时间统一走 P2 的模块级 bubbleExpiresAt，repositionBubble 的模态守卫依赖它。
+      const suppressedByDrag = this._conditions.dragging;
+      const suppressedByFocus = this._isEditableFocused();
+      if (!suppressedByDrag && !suppressedByFocus) {
+        bubble.classList.remove('hidden');
+        this.repositionBubble();
+        bubble.classList.remove('pop-anim');
+        void bubble.offsetWidth; // trigger reflow
+        bubble.classList.add('pop-anim');
+      } else {
         bubble.classList.add('hidden');
+        this._bubbleSuppressedBy = suppressedByDrag ? 'drag' : 'focus';
+      }
+
+      if (suppressedByFocus) {
         bubbleExpiresAt = 0;
-      }, BUBBLE_TTL_MS);
+      } else {
+        bubbleExpiresAt = Date.now() + BUBBLE_TTL_MS;
+        if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
+        this.bubbleTimer = setTimeout(() => {
+          this.bubbleTimer = null;
+          bubbleExpiresAt = 0;
+          bubble.classList.add('hidden');
+          this._setCondition('bubbleVisible', false);
+        }, BUBBLE_TTL_MS);
+      }
+
+      this._setCondition('bubbleVisible', !suppressedByDrag && !suppressedByFocus);
     }
 
     // 2. Render Folio Stage Bubble if visible
@@ -1122,6 +1439,10 @@ export const Companion = {
   },
 
   triggerEmotion(emotion) {
+    // P3：情绪只允许覆盖 idle / speaking；其他状态里情绪会掩盖真实姿态。
+    if (this._state !== 'idle' && this._state !== 'speaking') return;
+    if (this._conditions.dragging) return;
+
     const chars = document.querySelectorAll('.companion-char, .mascot-stage-char');
     const cls = emotion === 'happy' ? 'is-happy' : emotion === 'wiggle' ? 'is-wiggle' : 'is-sad';
 

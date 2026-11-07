@@ -22,9 +22,6 @@ export const companionState = {
   // 是否有在途的 Agent 请求
   inFlight: false,
 
-  // 流式阶段: null | 'thinking' | 'tool' | 'streaming' | 'done' | 'error'
-  streamStage: null,
-
   // 当前调用的工具信息: { tool: string, label: string, summary: string }
   activeTool: null,
 
@@ -54,7 +51,6 @@ export const companionState = {
 export function resetCompanionSession() {
   companionState.messages = [];
   companionState.inFlight = false;
-  companionState.streamStage = null;
   companionState.activeTool = null;
   companionState.proposals = [];
 }
