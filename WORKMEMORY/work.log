@@ -730,3 +730,6 @@ T5 CI 首轮 7 个 Python shard 全红：check_frontend_layers 报 cards.js 顶�
 
 ### 2026-11-07 12:58 | deepseek-v4.1-flash__trae | NOTE
 T5 CI 二轮：7 个卡片探针仍红，根因是沙箱 mock 的 `container = { innerHTML: "" }` 没有真 DOM 必有的 dataset / querySelector，renderCatalogGrid 读 dataset 时 TypeError。按「mock 保真」修 3 个探针桩（cards_catalog_tag_probe / cards_workbench_no_review_probe / cards_wb_source_probe），补 dataset:{} 与 querySelector:()=>null；未改任何断言或期望值。相关 21 个用例全绿。
+
+### 2026-11-07 13:08 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 三轮：仅 unit-3 为真实红 —— wb_search_probe 沙箱切片 renderSearchGroups，新增的 enterOnce 未注入（ReferenceError）。补 `enterOnce: () => 0` 桩（该探针只验转义/分组，不验动画）。unit-4 与 cost-guards 是 matrix fail-fast 触发的 cancelled（日志末尾 "The operation was canceled"，进度 92% 无断言红），不是真失败。probe_json_contract + wb_search 相关 5 个用例全绿。
