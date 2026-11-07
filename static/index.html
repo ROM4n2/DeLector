@@ -2324,55 +2324,112 @@
         >
           <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-rotate-ccw"></use></svg>
         </button>
-        <span id="player-status" class="player-status">句 1 / -</span>
+      </div>
+
+      <!-- 可见状态行：句序 / 跟读倒计时 / TTS 引擎与音色降级提示。
+           曾以 0×0 隐藏，承载的信息（尤其「语音引擎不可用」）用户完全看不到。 -->
+      <div id="player-status" class="player-status" role="status" aria-live="polite">
+        <span id="player-status-text">句 1 / -</span>
+        <span id="player-voice-note" class="player-voice-note hidden"
+          >当前音色不可用，使用系统语音</span
+        >
       </div>
 
       <div class="player-right">
-        <!-- Voice selector -->
-        <div class="voice-pill">
-          <button
-            id="voice-btn-katja"
-            class="voice-btn active"
-            onclick="ShadowPlayer.setVoice('de-DE-KatjaNeural')"
-            title="清脆自然女声 (Katja)"
-          >
-            <span class="vb-lbl">Katja</span>
-          </button>
-          <button
-            id="voice-btn-conrad"
-            class="voice-btn"
-            onclick="ShadowPlayer.setVoice('de-DE-ConradNeural')"
-            title="沉稳磁性男声 (Conrad)"
-          >
-            <span class="vb-lbl">Conrad</span>
-          </button>
-        </div>
+        <div class="player-topline">
+          <!-- Voice selector：折叠态回显当前音色，点开列全部 4 个 -->
+          <div class="voice-pill">
+            <button
+              id="voice-current-btn"
+              class="voice-current-btn"
+              type="button"
+              onclick="ShadowPlayer.toggleVoiceMenu()"
+              title="选择朗读音色"
+              aria-haspopup="true"
+              aria-expanded="false"
+              aria-controls="voice-menu"
+            >
+              <span id="voice-current-label" class="voice-current-label">女声 · Katja</span>
+              <span class="voice-caret" aria-hidden="true">▾</span>
+            </button>
+            <div id="voice-menu" class="voice-menu hidden" role="radiogroup" aria-label="朗读音色">
+              <button
+                type="button"
+                class="voice-option active"
+                role="radio"
+                aria-checked="true"
+                data-voice="de-DE-KatjaNeural"
+                onclick="ShadowPlayer.setVoice('de-DE-KatjaNeural')"
+              >
+                <span class="vo-name">Katja</span>
+                <span class="vo-meta">女声 · 德国之声推荐</span>
+                <span class="vo-check" aria-hidden="true">当前</span>
+              </button>
+              <button
+                type="button"
+                class="voice-option"
+                role="radio"
+                aria-checked="false"
+                data-voice="de-DE-ConradNeural"
+                onclick="ShadowPlayer.setVoice('de-DE-ConradNeural')"
+              >
+                <span class="vo-name">Conrad</span>
+                <span class="vo-meta">男声 · 严谨沉稳</span>
+                <span class="vo-check" aria-hidden="true">当前</span>
+              </button>
+              <button
+                type="button"
+                class="voice-option"
+                role="radio"
+                aria-checked="false"
+                data-voice="de-DE-AmalaNeural"
+                onclick="ShadowPlayer.setVoice('de-DE-AmalaNeural')"
+              >
+                <span class="vo-name">Amala</span>
+                <span class="vo-meta">女声 · 自然清晰</span>
+                <span class="vo-check" aria-hidden="true">当前</span>
+              </button>
+              <button
+                type="button"
+                class="voice-option"
+                role="radio"
+                aria-checked="false"
+                data-voice="de-DE-KillianNeural"
+                onclick="ShadowPlayer.setVoice('de-DE-KillianNeural')"
+              >
+                <span class="vo-name">Killian</span>
+                <span class="vo-meta">男声 · 浑厚母语</span>
+                <span class="vo-check" aria-hidden="true">当前</span>
+              </button>
+            </div>
+          </div>
 
-        <div class="player-mode-group">
-          <button
-            class="mode-btn active"
-            data-mode="shadow"
-            onclick="ShadowPlayer.setMode('shadow')"
-            title="智能影子跟读（每句停顿等候跟读）"
-          >
-            跟读
-          </button>
-          <button
-            class="mode-btn"
-            data-mode="continuous"
-            onclick="ShadowPlayer.setMode('continuous')"
-            title="全文连续朗读"
-          >
-            连读
-          </button>
-          <button
-            class="mode-btn"
-            data-mode="loop"
-            onclick="ShadowPlayer.setMode('loop')"
-            title="单句循环练习"
-          >
-            单句
-          </button>
+          <div class="player-mode-group">
+            <button
+              class="mode-btn active"
+              data-mode="shadow"
+              onclick="ShadowPlayer.setMode('shadow')"
+              title="智能影子跟读（每句停顿等候跟读）"
+            >
+              跟读
+            </button>
+            <button
+              class="mode-btn"
+              data-mode="continuous"
+              onclick="ShadowPlayer.setMode('continuous')"
+              title="全文连续朗读"
+            >
+              连读
+            </button>
+            <button
+              class="mode-btn"
+              data-mode="loop"
+              onclick="ShadowPlayer.setMode('loop')"
+              title="单句循环练习"
+            >
+              单句
+            </button>
+          </div>
         </div>
 
         <div class="speed-pill">
@@ -2385,8 +2442,8 @@
           </button>
           <button
             class="speed-step-btn active"
-            data-speed="0.88"
-            onclick="ShadowPlayer.setSpeed(0.88)"
+            data-speed="0.8"
+            onclick="ShadowPlayer.setSpeed(0.8)"
           >
             0.8x
           </button>
