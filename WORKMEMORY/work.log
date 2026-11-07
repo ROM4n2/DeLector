@@ -827,3 +827,12 @@ PR #279 首轮 CI 红：真失败仅 unit-2 的「Mypy type gate (tests, config 
 - 修法：只改测试写法（lambda → 带注解局部函数，记录与返回值分两行），断言口径一字未动，未放松任何门禁。
 - 本地复现/复验：mypy --follow-imports=skip tests 187 files 零错误；相关 3 个测试文件 93 passed；ruff 通过。
 - 推送后新跑 42361432194 全绿（含 Windows Portable Smoke 3m33s；Master Direct-Push Scope Gate 为 PR 语境设计内 skipping），head f6b6466，未合并。
+
+### 2026-11-07 23:18 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
+P2 桌宠禁停区/让位 PR #286（fix/companion-p2-no-parking，head d3a6280，不合并）。
+- 复审缺陷：模态挂起气泡后关闭时无条件 remove('hidden')，sheet 开 >6.5s 会让过期气泡复活。修法：say() 记 bubbleExpiresAt = Date.now()+6500，恢复前复核并丢弃过期气泡（同时清 timer/时间戳）。
+- 回归钉：tests/test_companion_bubble_resume_probe.mjs（node:vm 直跑真 companion.js + 假时钟，7 checks，含「模态开 7s 再关保持 hidden」）+ .py 接线含变异验证（过期判断改恒真 → 关键场景红）。补齐 tests/test_companion_context_probe.mjs 的 ./companion-obstacles.js 依赖桩。
+- 验证：浏览器 verify_p2.mjs 新增 mobileSheetLongClose 通过；pytest 5 passed；build_index / check_index_html_sync / check_companion_contract / check_frontend_layers / probe_wiring 全 PASS。
+- Android 模拟器 API37：强制解包后设备内 companion.js 命中 bubbleExpiresAt 5 处、运行时 guard 存在；四角命中 0、键盘态在视口内、sheet 开 7.2s 关后 hidden=true。versionCode 52101。
+- cp-state.js 的 streamStage 全仓仅声明 + reset 置 null，P2 不依赖；既存死代码，PR 中注明不在范围。
