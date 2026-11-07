@@ -29,7 +29,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
         "title": "A1",
         "modules": {
             "writing": {
-                "title": "📝 写作专项 (Schreiben)",
+                "title": "写作专项 (Schreiben)",
                 "panel": "exam-writing",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: (
@@ -37,25 +37,25 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
                 ),
             },
             "hoeren": {
-                "title": "🎧 听力模考 (Hörverstehen)",
+                "title": "听力模考 (Hörverstehen)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_hoeren_dict.A1_HOEREN_SETS),
             },
             "lesen": {
-                "title": "📖 阅读工坊 (Leseverstehen)",
+                "title": "阅读工坊 (Leseverstehen)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_lesen_dict.A1_LESEN_SETS),
             },
             "sprechen": {
-                "title": "💬 口语问答 (Sprechen)",
+                "title": "口语问答 (Sprechen)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_dict.A1_SPRECHEN_TEIL2) + len(a1_dict.A1_SPRECHEN_TEIL3),
             },
             "vocab": {
-                "title": "📖 官方考纲词表 (Wortliste)",
+                "title": "官方考纲词表 (Wortliste)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_dict.GOETHE_A1_VOCAB),
@@ -66,7 +66,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
         "title": "A2",
         "modules": {
             "vocab": {
-                "title": "📖 官方考纲词表 (Wortliste)",
+                "title": "官方考纲词表 (Wortliste)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a2",
                 "count_fn": lambda: len(get_vocab_by_cefr("A2", sources={"official"})["words"]),
@@ -79,7 +79,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
         "title": "B1",
         "modules": {
             "vocab": {
-                "title": "📖 官方考纲词表 (Wortliste)",
+                "title": "官方考纲词表 (Wortliste)",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/cards",
                 "count_fn": lambda: len(get_vocab_by_cefr("B1", sources={"official"})["words"]),

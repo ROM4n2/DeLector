@@ -359,6 +359,17 @@ function formatExamCount(n) {
     : String(n);
 }
 
+/* 目录标题「写作专项 (Schreiben)」→ { zh, de }，供结构化回写。
+ * 复合卡片永远不做整段 textContent 赋值：曾因此抹掉静态序号与德文副名，
+ * 纯文本还成为 Grid 匿名项被挤进 44px 首列逐字换行（行高 133–182px、
+ * 计数徽标被顶到标题上方）。 */
+function splitExamTitle(title) {
+  const text = String(title || "").trim();
+  const m = text.match(/^(.*?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
+  if (!m) return { zh: text, de: "" };
+  return { zh: m[1].trim(), de: m[2].trim() };
+}
+
 function syncExamVocabBadge(level) {
   const n = _examVocabCounts[level];
   if (typeof n !== "number") return;
@@ -471,17 +482,30 @@ async function initExamCatalog() {
     if (vocab && vocab.count > 0) _examVocabCounts[lv.id.toUpperCase()] = vocab.count;
   });
 
-  // 模块卡片补强：标题回写 + count 徽标（卡片 id/onclick 静态接线不动，
-  // 目录若删了某模块，本地卡片原样保留——回退语义，不做删卡）。
+  // 模块卡片补强：标题按结构回写（中文名 / 德文副名各归其位）+ count 徽标。
+  // 卡片 id/onclick 静态接线不动；目录若删了某模块，本地卡片原样保留（回退语义）。
   a1.modules.forEach((m) => {
     const card = document.getElementById("exam-card-" + m.id);
     if (!card) return;
-    if (m.title) card.textContent = m.title;
+    const label = card.querySelector(".exam-module-label");
+    if (m.title && label) {
+      const { zh, de } = splitExamTitle(m.title);
+      // 只改首个文本节点，保留 .exam-module-index / .exam-module-de 的结构。
+      const textNode = label.firstChild;
+      if (textNode && textNode.nodeType === Node.TEXT_NODE) textNode.nodeValue = zh;
+      const deEl = label.querySelector(".exam-module-de");
+      if (deEl) deEl.textContent = de ? "(" + de + ")" : "";
+    }
     if (m.count > 0) {
-      const badge = document.createElement("span");
-      badge.className = "exam-module-count";
+      let badge = card.querySelector(".exam-module-count");
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "exam-module-count";
+        card.appendChild(badge);
+      }
+      // 单位（「18 题」）挂账：等 catalog 增加 unit 字段后在此拼接。
+      // 触发条件 = /api/exams/catalog 契约加 unit（同步 test_exam_catalog）。
       badge.textContent = formatExamCount(m.count);
-      card.appendChild(badge);
     }
   });
 
