@@ -340,7 +340,7 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 
 | 项 | PR | merge commit | 落地事实 | 对应条款 |
 |---|---|---|---|---|
-| 前置 slice4 | #255 | `f423e02` | B 类 390 处装饰字形清零，扫描 0 残留 | §5 A/B |
+| 前置 slice4 | #255 | `f423e02` | B 类 390 处装饰字形清零，扫描 0 残留；其中 `player_and_tooltip.html:52/60` 的 👩/👨 属**判错**，见 16.2.4 | §5 A/B |
 | 实施计划 | #256 | `1a40986` | T1–T9 切分、停止门、偏差表建立 | — |
 | M1 / T1 | #257 | `e840467` | 13 处 `infinite` → 7 处白名单；删除/降级 `tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse` / `pulseDot` 五个 keyframes；`.tok` 聚焦改静态 `scale(1.06)` + 2px 环 | §3.1 / §6.4 |
 | T2 | #258 | `3a2e957` | 5 个 motion token 在 `tokens.css` 与 `style.css :root` 双份镜像；`motion.js`；`.dl-enter` / `.dl-stagger` / `.dl-count`；全局 reduce 块 | §3.5 决策 5 |
@@ -352,9 +352,9 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 | T8 | #264 | `61be846` | `.btn:active` `scale(.98)` + `--motion-press`；`.icon-btn` / `.deck-card` 本仓不存在，未加；`workbench.css` 独立 `.btn:active` 未动 | §3.5 |
 | T9 | #265 | `1790f70` | 卡片三态芯片（文字 + 颜色 + 3px 左竖线）；12 个 T3–T8 控件补 `:focus-visible` 2px `--ink` 环 + 2px offset；`.lp-status` 补芯片形状；排印按作用层验收（见 16.2 第 1 条） | I1 / §3.5 / §6.2 |
 
-### 16.2 失效与推翻原文（3 条）
+### 16.2 失效与推翻原文（4 条）
 
-> 以下 3 条按 §12.2 规则 1 记为**失效**：原文保留，替代口径写在这里。
+> 以下 4 条按 §12.2 规则 1 记为**失效/判错**：原文保留，替代口径写在这里。
 
 #### 16.2.1 `section/content = 4.0` 从未落在像素上
 
@@ -379,6 +379,15 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 - **实测**：22 个 `@keyframes`（`style.css` 19 + `workbench.css` 3）中 **13 处** `infinite`（style 12 + workbench 1）。
 - **结论**：**【失效】** 估计值被实测取代。M1 删除/降级 5 个 keyframes，`infinite` 从 13 处降到 **7 处**白名单（光标 / 眨眼 / 待机 ×2 / marquee ×2 / 音频忙碌），全部补 `prefers-reduced-motion` 降级。
 - **留痕**：调研 §8；计划 §1 D1；`WORKMEMORY/work.log` 2026-11-07。
+
+#### 16.2.4 TTS 音色字形误判为「安全删除」（判错，不单独回滚）
+
+- **原文**：第四批 B 类（#255）把 `static/views/player_and_tooltip.html:52/60` 的 👩/👨 判为「相邻已有 `Katja` / `Conrad` 文字 → 安全删除」。
+- **复盘**：文字确实在，但对**不熟悉 TTS 音色**的使用者，字形是当时唯一能区分「哪个声音」的载体。删掉后该位置只剩一块纯色方块，音色选择失去视觉锚点。用户真机点开文库文章后无法分辨对应音频设置，实测复现。
+- **结论**：**【判错·已承认】** 这不是「冗余装饰」，而是「某类身份/状态的唯一可辨载体」。B 类判据本身不完整，不是执行漂移。
+- **处置**：不在本批单独回滚该处（已另派播放器托盘重构调研，单独改会和调研结论打架）；只把判据补强进 I1 执行口径。
+- **判据补强（一句话）**：**删除前不能只问「旁边有没有文字」，要问「这个字形是不是某类状态或身份的唯一可辨载体」。**
+- **留痕**：本节；`WORKMEMORY/work.log` 2026-11-07 沉淀批次补记。
 
 ### 16.3 未被推翻但口径收窄的条款
 
