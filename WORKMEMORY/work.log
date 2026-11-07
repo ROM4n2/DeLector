@@ -765,3 +765,10 @@ T9（静态补全）在 worktree dlector-t9 / feat/t9-static 实施（基于 61b
 - 坑：`.btn` 有 `transition: all .15s`，focus 后 40ms 读到的是 outline 过渡中间值（rgb(10,9,7) / offset 1px），必须等 ≥360ms 再读，否则会误判规则没生效。
 - `.lp-status`：原先无任何 CSS，补 mono 11px + 1px 同色描边芯片；pending 用 `--pencil`、covered 用 `--moss`；实测 49×21，移动端不与文本重叠。
 - 闸门：index sync PASS；test_frontend_guards + test_cards_state_split + test_german_workbench = 126 passed；a1/german/writer 相关 62 passed。
+
+### 2026-11-07 14:31 | deepseek-v4.1-flash__trae | NOTE
+沉淀批次（docs-only，PR #266，**未合并**，等用户审）：分支 `docs/sediment-motion` 基于 master `1790f70`；4 份文件，`static/` 零改动，未跑 pytest。
+- ADR-0029 追加 §16「落地与失效条款」：T1–T9 的 PR #257–#265 与 merge commit 全表；3 条推翻留痕——`section/content = 4.0` 原型实渲染 1.6 从未落像素、hover 位移真问题是文字横向跳而非推布局、循环动画实测 13 处而非 4 处。原文未删，按 §12.2 规则 1 追加。
+- ADR 判定：ADR-0029 §3.5 决策 5 只写「新增…动效 token」，未定义 token 集合/三件套类/降级策略 ⇒ **未覆盖**，另开 `ADR-0030`（Accepted，补充关系不取代）；INDEX 同步两行。
+- 新增 `docs/agents/motion-verification.md`：CDP 三层采样（CSSOM / `getAnimations` / reduce 模拟）、触发式采样、stagger 还原、可复现命令；写入两坑：`transition: all` 读终态须等 ≥360ms（40ms 时读到 UA 环+过渡中间值）、`index.html` 只加载 `style.css` 故 token 必须 `style.css :root` 与 `tokens.css` 双份镜像。
+- vault 归档：去 emoji 分级 → `01-Rules/FRONTEND-DESIGN-PATTERNS.md` 新增 §9（含 §9.3 外部实测区间与复现口径）；外部 UI 实测法并入 §9.3；两篇 inbox 草稿已删除。新增草稿 `99-Inbox/2026-11-07-合成数值-≠-像素判据：设计文档的常数怎么害人.md`，归档目标 `01-Rules/DESIGN-DOC-CONSTANTS-VS-PIXELS.md`。
