@@ -4735,6 +4735,7 @@ body.drawer-open .shadow-player {
 }
 
 .card-master-btn {
+  position: relative;
   background: transparent;
   border: 1px solid var(--rule);
   color: var(--ink);
@@ -4744,7 +4745,11 @@ body.drawer-open .shadow-player {
   padding: 0.25rem 0.625rem;
   cursor: pointer;
   border-radius: 2px;
-  transition: all 0.15s ease;
+  transition:
+    transform var(--motion-press) var(--ease-editorial),
+    background-color var(--motion-enter) ease,
+    border-color var(--motion-enter) ease,
+    color var(--motion-enter) ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -13410,5 +13415,77 @@ body.drawer-open .companion {
 
   .companion[data-state='sleeping'] .char-eye {
     transform: scaleY(0.1);
+  }
+}
+
+/* ── 「斩」反馈（2026-11-07）：按压 / 落印 / 命中区 ─────────────────────────
+   本区只追加，不改写上方既有规则（另有两条线同时在改本文件）。
+   时长只引用 --motion-press / --motion-enter / --motion-count，不新增 token。 */
+
+/* 命中区：视觉高度不变，用伪元素向上/下各扩 0.7rem（约 45.6px 可点高度），
+   伪元素不参与布局，因此卡片行高与网格间距不变。 */
+.card-master-btn::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.7rem;
+  bottom: -0.7rem;
+}
+
+/* 触屏 WebView 按住期间 :active 不一定生效（CDP 触摸实测为 false），
+   pointerdown 会给 .is-pressed，保证按下即有 100ms 压感。 */
+.card-master-btn:active,
+.card-master-btn.is-pressed {
+  transform: scale(0.98);
+}
+
+/* 落印：只作用于牌盒正面；180ms，scale 0.96→1，不做位移。 */
+@keyframes dl-master-seal {
+  from {
+    opacity: 0;
+    transform: scale(0.96) rotate(-2deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(0.96) rotate(-2deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-2deg);
+  }
+}
+
+.deck-active-card.is-mastering .card-front::after {
+  content: "已掌握";
+  position: absolute;
+  right: 1.25rem;
+  bottom: 4.75rem;
+  z-index: 3;
+  pointer-events: none;
+  padding: 0.2rem 0.55rem;
+  border: 2px solid var(--moss);
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--moss);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  transform: rotate(-2deg);
+  animation: dl-master-seal var(--motion-enter) var(--ease-editorial) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 按压不缩放；印章不进 getAnimations()，直接落终态。 */
+  .card-master-btn:active,
+  .card-master-btn.is-pressed {
+    transform: none;
+  }
+
+  .deck-active-card.is-mastering .card-front::after {
+    animation: none;
+    opacity: 1;
+    transform: rotate(-2deg);
   }
 }
