@@ -246,11 +246,18 @@ a {
   cursor: pointer;
   transition: color var(--dur-fast) ease;
 }
-#topbar-system:hover,
-#topbar-system:focus-visible {
+#topbar-system:focus-visible{
   color: var(--coral, var(--accent));
   text-decoration: underline;
   text-underline-offset: 0.2em;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #topbar-system:hover {
+    color: var(--coral, var(--accent));
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
 }
 #topbar-system:focus-visible {
   outline: 1px solid currentColor;
@@ -278,9 +285,11 @@ a {
   padding: 0.1rem 0.5rem;
   white-space: nowrap;
 }
-.update-chip-link:hover {
-  background: var(--coral, var(--accent));
-  color: #fff;
+@media (hover: hover) and (pointer: fine) {
+  .update-chip-link:hover {
+    background: var(--coral, var(--accent));
+    color: #fff;
+  }
 }
 
 @media (max-width: 768px) {
@@ -400,12 +409,11 @@ a {
   color: var(--pencil);
 }
 
-.btn-ghost:hover {
-  border-color: var(--ink);
-
-  color: var(--ink);
-
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .btn-ghost:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
 }
 
 /* 次要按钮 = 比 .btn-ghost 再退后一层。**必须与 ghost 有可见差异**，不是
@@ -422,12 +430,11 @@ a {
   color: var(--ink-faint);
 }
 
-.btn-secondary:hover {
-  border-color: var(--rule);
-
-  color: var(--ink-mute);
-
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .btn-secondary:hover {
+    border-color: var(--rule);
+    color: var(--ink-mute);
+  }
 }
 
 /* 尺寸第三档。必须重置 min-height —— .btn 的 36px 是 .btn-sm 唯一没盖住的
@@ -446,7 +453,7 @@ a {
 /* 破坏性操作修饰类（删作文、删快照）。静息态只给字色不给底色 ——
    删除键在被指向之前不该抢视觉焦点。hover 翻成实底而非 .card-del-btn
    那种浅底(#fde8e8)：那个是裸 button，这个是 .btn 变体，得跟
-   .btn-ghost:hover 的「加重边框 + 抬 1px」量级对齐才不显得比邻键轻。
+   .btn-ghost:hover 的「加重边框 + 实底」量级对齐才不显得比邻键轻。
    必须排在 .btn-ghost 之后 —— 两者同为单类选择器，靠源序定胜负。 */
 .btn-del {
   color: var(--danger);
@@ -454,14 +461,12 @@ a {
   border-color: rgba(176, 48, 48, 0.35);
 }
 
-.btn-del:hover {
-  background: var(--danger);
-
-  border-color: var(--danger);
-
-  color: #fef9ee;
-
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .btn-del:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fef9ee;
+  }
 }
 
 .btn-del:active {
@@ -478,12 +483,11 @@ a {
   box-shadow: 2px 2px 0 var(--pencil);
 }
 
-.btn-dark:hover {
-  background: #2d2722;
-
-  transform: translateY(-1px);
-
-  box-shadow: 3px 3px 0 var(--pencil);
+@media (hover: hover) and (pointer: fine) {
+  .btn-dark:hover {
+    background: #2d2722;
+    box-shadow: 3px 3px 0 var(--pencil);
+  }
 }
 
 .btn-accent {
@@ -494,10 +498,10 @@ a {
   box-shadow: 2px 2px 0 var(--ink);
 }
 
-.btn-accent:hover {
-  opacity: 0.92;
-
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .btn-accent:hover {
+    opacity: 0.92;
+  }
 }
 
 .btn-full {
@@ -671,14 +675,13 @@ a {
   border-radius: 3px;
   padding: 4px 9px;
   cursor: pointer;
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease;
+  transition: box-shadow var(--dur-fast) ease;
 }
 
-.satz-lab-chip:hover {
-  box-shadow: 1.5px 1.5px 0 var(--ink);
-  transform: translate(-1px, -1px);
+@media (hover: hover) and (pointer: fine) {
+  .satz-lab-chip:hover {
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+  }
 }
 
 .satz-lab-chip.is-active {
@@ -922,7 +925,7 @@ a {
   padding: 1.125rem 0.5rem;
   border-bottom: 1px solid var(--rule);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
   position: relative;
 }
 
@@ -930,9 +933,10 @@ a {
   border-top: 1px solid var(--rule);
 }
 
-.article-row:hover {
-  background: var(--paper-tint);
-  padding-left: 0.875rem;
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover {
+    background: var(--paper-tint);
+  }
 }
 
 .article-row-title {
@@ -942,11 +946,13 @@ a {
   font-style: italic;
   color: var(--ink);
   line-height: 1.35;
-  transition: color 0.12s ease;
+  transition: color var(--dur-fast) ease;
 }
 
-.article-row:hover .article-row-title {
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover .article-row-title {
+    color: var(--accent);
+  }
 }
 
 .article-row-meta {
@@ -961,14 +967,15 @@ a {
   color: var(--pencil);
   font-size: 1.25rem;
   opacity: 0.35;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
   flex-shrink: 0;
 }
 
-.article-row:hover .article-row-arrow {
-  opacity: 1;
-  color: var(--accent);
-  transform: translateX(4px);
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover .article-row-arrow {
+    opacity: 1;
+    color: var(--accent);
+  }
 }
 
 .article-row-del {
@@ -980,20 +987,24 @@ a {
   border-radius: 4px;
   cursor: pointer;
   opacity: 0.2;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
   line-height: 1;
 }
 
-.article-row:hover .article-row-del {
-  opacity: 0.6;
+@media (hover: hover) and (pointer: fine) {
+  .article-row:hover .article-row-del {
+    opacity: 0.6;
+  }
 }
 
-.article-row-del:hover {
-  opacity: 1 !important;
-  color: var(--danger) !important;
-  background: rgba(176, 48, 48, 0.08);
-  border-color: rgba(176, 48, 48, 0.2);
-  transform: scale(1.1);
+@media (hover: hover) and (pointer: fine) {
+  .article-row-del:hover {
+    opacity: 1 !important;
+    color: var(--danger) !important;
+    background: rgba(176, 48, 48, 0.08);
+    border-color: rgba(176, 48, 48, 0.2);
+    transform: scale(1.1);
+  }
 }
 
 /* Mini CEFR Bar on Article Rows & Cards */
@@ -1234,10 +1245,11 @@ body.drawer-open #view-reader {
   line-height: 1.2;
 }
 
-.typo-btn:hover {
-  color: var(--ink);
-
-  background: rgba(255, 255, 255, 0.6);
+@media (hover: hover) and (pointer: fine) {
+  .typo-btn:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.6);
+  }
 }
 
 .typo-btn.active {
@@ -1347,8 +1359,10 @@ body.drawer-open #view-reader {
   border-right: none;
 }
 
-.heatbar-seg:hover {
-  opacity: 0.85;
+@media (hover: hover) and (pointer: fine) {
+  .heatbar-seg:hover {
+    opacity: 0.85;
+  }
 }
 
 .heatbar-seg.A1 {
@@ -1503,8 +1517,10 @@ body.focus-mode .tok.focus-active {
   white-space: normal;
 }
 
-.tok:hover {
-  background: rgba(233, 132, 37, 0.2);
+@media (hover: hover) and (pointer: fine) {
+  .tok:hover {
+    background: rgba(233, 132, 37, 0.2);
+  }
 }
 
 /* ── CEFR 词阶透视：三档模式（ADR-0026 决策 2C） ─────────────────────────────
@@ -1573,10 +1589,13 @@ body.focus-mode .tok.focus-active {
 }
 
 /* 交互反馈压过一切静态词阶色（含全景热力档） */
-#reader-content .reader-p .tok:hover {
-  background: rgba(233, 132, 37, 0.2);
-
-  box-shadow: none;
+@media (hover: hover) and (pointer: fine) {
+  /* 交互反馈压过一切静态词阶色（含全景热力档） */
+  #reader-content .reader-p .tok:hover {
+    background: rgba(233, 132, 37, 0.2);
+    box-shadow: none;
+    /* 交互反馈压过一切静态词阶色（含全景热力档） */
+  }
 }
 
 .tok.sel {
@@ -1649,9 +1668,15 @@ body.focus-mode .tok.focus-active {
   transition: background 0.15s ease;
 }
 
-.drawer-resize-handle:hover::after,
-body.drawer-resizing .drawer-resize-handle::after {
+body.drawer-resizing .drawer-resize-handle::after{
   background: var(--coral, #b44322);
+}
+
+
+@media (hover: hover) and (pointer: fine) {
+  .drawer-resize-handle:hover::after {
+    background: var(--coral, #b44322);
+  }
 }
 
 body.drawer-resizing {
@@ -1787,9 +1812,11 @@ body.drawer-resizing #drawer {
   border-right: none;
 }
 
-.drawer-tab-btn:hover {
-  background: rgba(26, 23, 20, 0.08);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .drawer-tab-btn:hover {
+    background: rgba(26, 23, 20, 0.08);
+    color: var(--ink);
+  }
 }
 
 .drawer-tab-btn.active {
@@ -1820,12 +1847,12 @@ body.drawer-resizing #drawer {
   background: transparent;
 }
 
-.drawer-close:hover {
-  border-color: var(--rule);
-
-  background: rgba(26, 23, 20, 0.07);
-
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .drawer-close:hover {
+    border-color: var(--rule);
+    background: rgba(26, 23, 20, 0.07);
+    color: var(--ink);
+  }
 }
 
 .drawer-body {
@@ -1893,8 +1920,10 @@ body.drawer-resizing #drawer {
   border-radius: 999px;
 }
 
-.drawer-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(26, 23, 20, 0.4);
+@media (hover: hover) and (pointer: fine) {
+  .drawer-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(26, 23, 20, 0.4);
+  }
 }
 
 /* Word Card inside Sticky Note */
@@ -2027,15 +2056,17 @@ body.drawer-resizing #drawer {
   opacity: 0.65;
 
   transition:
-    opacity 0.14s,
-    transform 0.14s;
+    opacity var(--dur-fast),
+    transform var(--dur-fast);
 
   cursor: pointer;
 }
 
-.speaker-btn:hover {
-  opacity: 1;
-  transform: scale(1.15);
+@media (hover: hover) and (pointer: fine) {
+  .speaker-btn:hover {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 .speaker-btn-sm {
@@ -2055,15 +2086,17 @@ body.drawer-resizing #drawer {
 
   background: rgba(255, 255, 255, 0.8);
 
-  transition: all 0.12s;
+  transition: all var(--dur-fast);
 
   cursor: pointer;
 }
 
-.speaker-btn-sm:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-  background: #fff;
+@media (hover: hover) and (pointer: fine) {
+  .speaker-btn-sm:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+    background: #fff;
+  }
 }
 
 #d-meta {
@@ -2264,7 +2297,9 @@ body.drawer-resizing #drawer {
   padding: 1.125rem;
   box-shadow: 3px 4px 0 rgba(26, 23, 20, 0.12);
   position: relative;
-  transition: transform 0.15s;
+  transition:
+    box-shadow var(--dur-fast),
+    background-color var(--dur-fast);
   height: auto;
   min-height: 160px;
   word-break: break-word;
@@ -2280,8 +2315,11 @@ body.drawer-resizing #drawer {
   transform: rotate(-0.5deg);
 }
 
-.memo-card:hover {
-  transform: translateY(-2px) rotate(0deg);
+@media (hover: hover) and (pointer: fine) {
+  .memo-card:hover {
+    background: #fffdf0;
+    box-shadow: 5px 6px 0 rgba(26, 23, 20, 0.16);
+  }
 }
 
 .memo-card-head {
@@ -2538,18 +2576,22 @@ body.drawer-resizing #drawer {
   min-height: 34px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 120ms ease;
+  transition:
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
-.import-tab:hover,
-.modal-tab:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-  background: var(--paper-card);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .import-tab:hover,
+  .modal-tab:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+    background: var(--paper-card);
+  }
 }
 
 .import-tab.active,
@@ -2597,10 +2639,17 @@ body.drawer-resizing #drawer {
   transition: all 0.15s ease;
 }
 
-.dropzone:hover,
-.dropzone.dragover {
+.dropzone.dragover{
   border-color: var(--coral, var(--accent));
   background: rgba(237, 111, 92, 0.05);
+}
+
+
+@media (hover: hover) and (pointer: fine) {
+  .dropzone:hover {
+    border-color: var(--coral, var(--accent));
+    background: rgba(237, 111, 92, 0.05);
+  }
 }
 
 .dropzone-icon {
@@ -2755,9 +2804,11 @@ body.drawer-open .shadow-player {
   flex-shrink: 0;
 }
 
-.player-btn:hover {
-  border-color: var(--ink);
-  background: var(--paper-deep);
+@media (hover: hover) and (pointer: fine) {
+  .player-btn:hover {
+    border-color: var(--ink);
+    background: var(--paper-deep);
+  }
 }
 
 .player-btn-main {
@@ -2773,9 +2824,11 @@ body.drawer-open .shadow-player {
   font-size: 0.875rem;
 }
 
-.player-btn-main:hover {
-  background: var(--accent);
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .player-btn-main:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
 }
 
 .player-status {
@@ -2848,9 +2901,11 @@ body.drawer-open .shadow-player {
   border-right: none;
 }
 
-.voice-btn:hover {
-  background: var(--paper-deep);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .voice-btn:hover {
+    background: var(--paper-deep);
+    color: var(--ink);
+  }
 }
 
 .voice-btn.active {
@@ -2910,9 +2965,11 @@ body.drawer-open .shadow-player {
   border-right: none;
 }
 
-.mode-btn:hover {
-  background: var(--paper-deep);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .mode-btn:hover {
+    background: var(--paper-deep);
+    color: var(--ink);
+  }
 }
 
 .mode-btn.active {
@@ -2972,9 +3029,11 @@ body.drawer-open .shadow-player {
   border-right: none;
 }
 
-.speed-step-btn:hover {
-  background: var(--paper-deep);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .speed-step-btn:hover {
+    background: var(--paper-deep);
+    color: var(--ink);
+  }
 }
 
 .speed-step-btn.active {
@@ -3082,12 +3141,11 @@ body.drawer-open .shadow-player {
   user-select: none;
 }
 
-.margin-note-badge:hover {
-  background: #fde68a;
-
-  transform: translateY(-1px);
-
-  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+@media (hover: hover) and (pointer: fine) {
+  .margin-note-badge:hover {
+    background: #fde68a;
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+  }
 }
 
 /* Floating Selection Tooltip */
@@ -3147,11 +3205,13 @@ body.drawer-open .shadow-player {
 
   cursor: pointer;
 
-  transition: transform 0.12s;
+  transition: transform var(--dur-fast);
 }
 
-.hl-color-btn:hover {
-  transform: scale(1.2);
+@media (hover: hover) and (pointer: fine) {
+  .hl-color-btn:hover {
+    transform: scale(1.2);
+  }
 }
 
 .hl-yellow {
@@ -3211,9 +3271,11 @@ body.drawer-open .shadow-player {
 .voice-btn:last-child {
   border-right: none;
 }
-.voice-btn:hover {
-  background: var(--paper-deep);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .voice-btn:hover {
+    background: var(--paper-deep);
+    color: var(--ink);
+  }
 }
 .voice-btn.active {
   background: var(--ink);
@@ -3249,9 +3311,11 @@ body.drawer-open .shadow-player {
 .mode-btn:last-child {
   border-right: none;
 }
-.mode-btn:hover {
-  background: var(--paper-deep);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .mode-btn:hover {
+    background: var(--paper-deep);
+    color: var(--ink);
+  }
 }
 .mode-btn.active {
   background: var(--ink);
@@ -3287,9 +3351,11 @@ body.drawer-open .shadow-player {
 .speed-step-btn:last-child {
   border-right: none;
 }
-.speed-step-btn:hover {
-  background: var(--paper-deep);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .speed-step-btn:hover {
+    background: var(--paper-deep);
+    color: var(--ink);
+  }
 }
 .speed-step-btn.active {
   background: var(--amber);
@@ -3401,13 +3467,14 @@ body.drawer-open .shadow-player {
   font-weight: 600;
   cursor: pointer;
   vertical-align: middle;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
   user-select: none;
 }
-.margin-note-badge:hover {
-  background: #fde68a;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+@media (hover: hover) and (pointer: fine) {
+  .margin-note-badge:hover {
+    background: #fde68a;
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+  }
 }
 
 /* Floating Selection Tooltip */
@@ -3442,10 +3509,12 @@ body.drawer-open .shadow-player {
   border-radius: 50%;
   border: 1.5px solid #fff;
   cursor: pointer;
-  transition: transform 0.12s;
+  transition: transform var(--dur-fast);
 }
-.hl-color-btn:hover {
-  transform: scale(1.2);
+@media (hover: hover) and (pointer: fine) {
+  .hl-color-btn:hover {
+    transform: scale(1.2);
+  }
 }
 .hl-yellow {
   background: #fcd34d;
@@ -3475,8 +3544,10 @@ body.drawer-open .shadow-player {
   transition: background 0.12s;
   white-space: nowrap;
 }
-.tooltip-action-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
+@media (hover: hover) and (pointer: fine) {
+  .tooltip-action-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
 }
 
 /* Sticky note card */
@@ -3692,7 +3763,9 @@ body.drawer-open .shadow-player {
   cursor: pointer;
   text-align: left;
   transition:
-    transform var(--dur-fast) var(--ease-editorial),
+    background-color var(--dur-fast) var(--ease-editorial),
+    border-color var(--dur-fast) var(--ease-editorial),
+    box-shadow var(--dur-fast) var(--ease-editorial),
     color var(--dur-fast) var(--ease-editorial);
 }
 
@@ -3726,12 +3799,18 @@ body.drawer-open .shadow-player {
   color: var(--muted);
 }
 
-.exam-module-card:hover {
-  transform: translateX(2px);
+@media (hover: hover) and (pointer: fine) {
+  .exam-module-card:hover {
+    background: var(--paper-tint);
+    border-bottom-color: var(--ink);
+    box-shadow: 0 2px 0 var(--ink);
+  }
 }
 
-.exam-module-card:hover .exam-module-label {
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .exam-module-card:hover .exam-module-label {
+    color: var(--accent);
+  }
 }
 
 /* 选中态：左侧 2px 色条 + 序号变珊瑚 + 标签 700。
@@ -3874,8 +3953,10 @@ body.drawer-open .shadow-player {
   background: transparent;
   transition: background 0.12s ease;
 }
-.prep-row:hover {
-  background: var(--paper-deep);
+@media (hover: hover) and (pointer: fine) {
+  .prep-row:hover {
+    background: var(--paper-deep);
+  }
 }
 .prep-row-head {
   font-weight: 700;
@@ -4068,8 +4149,10 @@ body.drawer-open .shadow-player {
   border-color: var(--ink);
 }
 
-.deck-active-card:hover .deck-card-face {
-  box-shadow: 8px 8px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .deck-active-card:hover .deck-card-face {
+    box-shadow: 8px 8px 0 var(--ink);
+  }
 }
 
 /* Front Face Elements */
@@ -4105,11 +4188,13 @@ body.drawer-open .shadow-player {
 .deck-flip-icon {
   font-size: 2rem;
   opacity: 0.7;
-  transition: transform 0.3s ease;
+  transition: transform var(--dur-fast) ease;
 }
 
-.deck-active-card:hover .deck-flip-icon {
-  transform: rotate(180deg) scale(1.1);
+@media (hover: hover) and (pointer: fine) {
+  .deck-active-card:hover .deck-flip-icon {
+    transform: rotate(180deg) scale(1.1);
+  }
 }
 
 .deck-flip-prompt {
@@ -4239,16 +4324,17 @@ body.drawer-open .shadow-player {
   color: var(--ink);
   cursor: pointer;
   box-shadow: 2px 2px 0 var(--ink);
-  transition: all 0.12s ease;
+  transition: all var(--dur-fast) ease;
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
 
-.deck-btn-nav:hover:not(:disabled) {
-  background: var(--paper-deep);
-  transform: translateY(-2px);
-  box-shadow: 3px 3px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .deck-btn-nav:hover:not(:disabled) {
+    background: var(--paper-deep);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
 }
 
 .deck-btn-nav:disabled {
@@ -4284,14 +4370,15 @@ body.drawer-open .shadow-player {
   color: var(--ink);
   cursor: pointer;
   box-shadow: 2px 2px 0 var(--ink);
-  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--dur-fast) cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
 
-.deck-nav-btn:hover {
-  background: var(--paper-deep);
-  transform: translateY(-2px);
-  box-shadow: 3px 3px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .deck-nav-btn:hover {
+    background: var(--paper-deep);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
 }
 
 .deck-nav-btn:active {
@@ -4307,11 +4394,13 @@ body.drawer-open .shadow-player {
   padding: 0.65rem 1.5rem;
 }
 
-.deck-nav-btn.deck-btn-flip:hover {
-  background: var(--accent);
-  color: #ffffff;
-  border-color: var(--accent);
-  box-shadow: 3px 3px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .deck-nav-btn.deck-btn-flip:hover {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
 }
 
 @media (max-width: 640px) {
@@ -4373,15 +4462,19 @@ body.drawer-open .shadow-player {
   transition: all 0.15s ease;
 }
 
-.memo-card:hover .card-del-btn,
-.grammar-memo-card:hover .card-del-btn {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .memo-card:hover .card-del-btn,
+  .grammar-memo-card:hover .card-del-btn {
+    opacity: 1;
+  }
 }
 
-.card-del-btn:hover {
-  background: rgba(176, 48, 48, 0.1);
-  color: var(--danger);
-  border-color: var(--danger);
+@media (hover: hover) and (pointer: fine) {
+  .card-del-btn:hover {
+    background: rgba(176, 48, 48, 0.1);
+    color: var(--danger);
+    border-color: var(--danger);
+  }
 }
 
 .card-footer-actions {
@@ -4406,9 +4499,11 @@ body.drawer-open .shadow-player {
   transition: all 0.15s ease;
 }
 
-.card-master-btn:hover {
-  background: var(--paper-deep);
-  border-color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .card-master-btn:hover {
+    background: var(--paper-deep);
+    border-color: var(--ink);
+  }
 }
 
 .card-master-btn.mastered-active {
@@ -4459,8 +4554,10 @@ body.drawer-open .shadow-player {
   user-select: none;
 }
 
-.nav-tab:hover {
-  background: var(--paper-deep);
+@media (hover: hover) and (pointer: fine) {
+  .nav-tab:hover {
+    background: var(--paper-deep);
+  }
 }
 
 .nav-tab.active {
@@ -4719,15 +4816,18 @@ body.drawer-open .shadow-player {
   background: var(--paper-deep);
   color: var(--ink);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
   text-decoration: none;
   white-space: nowrap;
 }
 
-.folio-anchor-pill:hover {
-  background: var(--ink);
-  color: var(--paper);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .folio-anchor-pill:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
 }
 
 /* Right Column: 6 Core Ring Badges Exhibition Plate */
@@ -4822,14 +4922,16 @@ body.drawer-open .shadow-player {
   min-width: 0;
   overflow: hidden;
   transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+    transform var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
-.stat-badge:hover {
-  transform: translateY(-2px);
-  box-shadow: 2.5px 2.5px 0 var(--ink);
-  background: #fff;
+@media (hover: hover) and (pointer: fine) {
+  .stat-badge:hover {
+    transform: translateY(-2px);
+    box-shadow: 2.5px 2.5px 0 var(--ink);
+    background: #fff;
+  }
 }
 
 .stat-ring {
@@ -4955,8 +5057,10 @@ body.drawer-open .shadow-player {
   animation: marqueeRight 48s linear infinite;
 }
 
-.marquee-row:hover .marquee-track {
-  animation-play-state: paused;
+@media (hover: hover) and (pointer: fine) {
+  .marquee-row:hover .marquee-track {
+    animation-play-state: paused;
+  }
 }
 
 @keyframes marqueeLeft {
@@ -5202,11 +5306,19 @@ body.drawer-open .shadow-player {
   border: 1.5px solid var(--ink);
   border-left: 5px solid var(--coral, var(--cherry, #ed6f5c));
   box-shadow: 1.5px 1.5px 0 var(--ink);
-  transition: transform 0.1s ease;
+  transition:
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
-.dossier-error-row:hover {
-  transform: translateX(3px);
+@media (hover: hover) and (pointer: fine) {
+  .dossier-error-row:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+    border-left-color: var(--coral, var(--cherry, #ed6f5c));
+    box-shadow: 3px 3px 0 var(--ink);
+  }
 }
 
 .error-col-word {
@@ -5256,8 +5368,8 @@ body.drawer-open .shadow-player {
   min-height: 115px;
   position: relative;
   transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+    transform var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
 .dossier-stamp.unlocked {
@@ -5271,8 +5383,10 @@ body.drawer-open .shadow-player {
   transform: rotate(0.6deg);
 }
 
-.dossier-stamp.unlocked:hover {
-  transform: rotate(0deg) scale(1.01);
+@media (hover: hover) and (pointer: fine) {
+  .dossier-stamp.unlocked:hover {
+    transform: rotate(0deg) scale(1.01);
+  }
 }
 
 .stamp-header {
@@ -5440,9 +5554,11 @@ body.drawer-open .shadow-player {
   transition: all 0.15s ease;
 }
 
-.quiz-close-btn:hover {
-  background: var(--ink);
-  color: var(--paper);
+@media (hover: hover) and (pointer: fine) {
+  .quiz-close-btn:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
 }
 
 .quiz-mode-grid {
@@ -5458,14 +5574,15 @@ body.drawer-open .shadow-player {
   padding: 1.5rem 1rem;
   text-align: center;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
   box-shadow: 2px 2px 0 var(--ink);
 }
 
-.quiz-mode-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 4px 4px 0 var(--ink);
-  background: #fff;
+@media (hover: hover) and (pointer: fine) {
+  .quiz-mode-card:hover {
+    box-shadow: 4px 4px 0 var(--ink);
+    background: #fff;
+  }
 }
 
 .quiz-mode-icon {
@@ -5540,11 +5657,16 @@ body.drawer-open .shadow-player {
   text-align: center;
   cursor: pointer;
   user-select: none;
-  transition: transform 0.15s ease;
+  transition:
+    background-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
-.quiz-flashcard:hover {
-  transform: translateY(-2px);
+@media (hover: hover) and (pointer: fine) {
+  .quiz-flashcard:hover {
+    background: #fffdf6;
+    box-shadow: 6px 6px 0 var(--ink);
+  }
 }
 
 .quiz-big-word {
@@ -5612,9 +5734,11 @@ body.drawer-open .shadow-player {
   border-color: var(--cherry);
 }
 
-.quiz-btn-wrong:hover {
-  background: var(--cherry);
-  color: #fff;
+@media (hover: hover) and (pointer: fine) {
+  .quiz-btn-wrong:hover {
+    background: var(--cherry);
+    color: #fff;
+  }
 }
 
 .quiz-btn-correct {
@@ -5623,9 +5747,11 @@ body.drawer-open .shadow-player {
   border-color: var(--moss);
 }
 
-.quiz-btn-correct:hover {
-  background: var(--moss);
-  color: #fff;
+@media (hover: hover) and (pointer: fine) {
+  .quiz-btn-correct:hover {
+    background: var(--moss);
+    color: #fff;
+  }
 }
 
 /* Dictation */
@@ -5730,13 +5856,14 @@ body.drawer-open .shadow-player {
   font-size: 0.9375rem;
   color: var(--ink);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
 }
 
-.quiz-choice-btn:hover:not(:disabled) {
-  background: #fff;
-  transform: translateX(4px);
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .quiz-choice-btn:hover:not(:disabled) {
+    background: #fff;
+    border-color: var(--accent);
+  }
 }
 
 .quiz-choice-btn.is-correct {
@@ -6060,9 +6187,10 @@ body.drawer-open .shadow-player {
   gap: 0.15rem;
 }
 
-.sm2-btn:hover {
-  transform: translateY(-1.5px);
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .sm2-btn:hover {
+    box-shadow: 2.5px 2.5px 0 var(--ink);
+  }
 }
 
 .sm2-btn:active {
@@ -6137,12 +6265,13 @@ body.drawer-open .shadow-player {
   text-decoration: none;
   white-space: nowrap;
   box-shadow: 1.5px 1.5px 0 var(--ink);
-  transition: all 0.12s ease;
+  transition: all var(--dur-fast) ease;
 }
 
-.deck-workbench-link:hover {
-  transform: translateY(-1.5px);
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .deck-workbench-link:hover {
+    box-shadow: 2.5px 2.5px 0 var(--ink);
+  }
 }
 
 .deck-workbench-link:active {
@@ -6337,11 +6466,20 @@ body.drawer-open .shadow-player {
     transition: background 0.15s ease, width 0.15s ease;
   }
 
-  .drawer-mobile-handle:hover .drawer-mobile-pill,
   .drawer-mobile-handle:active .drawer-mobile-pill,
-  body.drawer-resizing .drawer-mobile-pill {
+
+
+  body.drawer-resizing .drawer-mobile-pill{
     background: var(--coral, #b44322);
     width: 50px;
+  }
+
+
+  @media (hover: hover) and (pointer: fine) {
+    .drawer-mobile-handle:hover .drawer-mobile-pill {
+      background: var(--coral, #b44322);
+      width: 50px;
+    }
   }
 
   .drawer-size-btn {
@@ -6360,9 +6498,15 @@ body.drawer-open .shadow-player {
     transition: all 0.12s ease;
   }
 
-  .drawer-size-btn:hover,
-  .drawer-size-btn:active {
+  .drawer-size-btn:active{
     background: rgba(26, 23, 20, 0.12);
+  }
+
+
+  @media (hover: hover) and (pointer: fine) {
+    .drawer-size-btn:hover {
+      background: rgba(26, 23, 20, 0.12);
+    }
   }
 
   /* 移动端更紧凑的抽屉头部与标签横向平滑滚动 */
@@ -6573,10 +6717,12 @@ body.drawer-open .shadow-player {
   transition: all 120ms ease;
 }
 
-.feed-source-pill:hover {
-  background: var(--paper-tint);
-  border-color: var(--ink);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .feed-source-pill:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+    color: var(--ink);
+  }
 }
 
 .feed-source-pill.active {
@@ -6636,13 +6782,14 @@ body.drawer-open .shadow-player {
   border-radius: 6px;
   box-shadow: 2px 2px 0 var(--ink);
   transition:
-    transform 120ms ease,
-    box-shadow 120ms ease;
+    background-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
-.feed-item-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 3px 3px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .feed-item-card:hover {
+    box-shadow: 3px 3px 0 var(--ink);
+  }
 }
 
 .feed-item-header {
@@ -6710,12 +6857,13 @@ body.drawer-open .shadow-player {
   border-radius: 4px;
   cursor: pointer;
   box-shadow: 1.5px 1.5px 0 var(--ink);
-  transition: all 100ms ease;
+  transition: all var(--dur-fast) ease;
 }
 
-.btn-feed-ingest:hover {
-  transform: translateY(-1px);
-  box-shadow: 2.5px 2.5px 0 var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .btn-feed-ingest:hover {
+    box-shadow: 2.5px 2.5px 0 var(--ink);
+  }
 }
 
 .btn-feed-ingest:active {
@@ -6792,12 +6940,13 @@ body.drawer-open .shadow-player {
   border-radius: 3px;
   font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--dur-fast) ease;
 }
-.komposita-pill:hover {
-  background: var(--paper-warm, #f8f6f0);
-  border-color: var(--ink, #1a1a1a);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .komposita-pill:hover {
+    background: var(--paper-warm, #f8f6f0);
+    border-color: var(--ink, #1a1a1a);
+  }
 }
 .komposita-pill .k-word {
   font-weight: 700;
@@ -6881,10 +7030,12 @@ body.drawer-open .shadow-player {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.praep-save:hover:not(:disabled) {
-  background: var(--accent, #2980b9);
-  border-color: var(--accent, #2980b9);
-  color: #fff;
+@media (hover: hover) and (pointer: fine) {
+  .praep-save:hover:not(:disabled) {
+    background: var(--accent, #2980b9);
+    border-color: var(--accent, #2980b9);
+    color: #fff;
+  }
 }
 .praep-save:disabled {
   color: var(--pencil, #7f8c8d);
@@ -6898,9 +7049,11 @@ body.drawer-open .shadow-player {
   text-decoration-color: var(--accent, #2980b9);
   text-underline-offset: 4px;
 }
-.tok.is-separable:hover {
-  background-color: rgba(41, 128, 185, 0.12);
-  border-radius: 2px;
+@media (hover: hover) and (pointer: fine) {
+  .tok.is-separable:hover {
+    background-color: rgba(41, 128, 185, 0.12);
+    border-radius: 2px;
+  }
 }
 
 /* Active Satzklammer linked pair highlight */
@@ -7050,9 +7203,11 @@ body.drawer-open .shadow-player {
   padding: 2px 4px;
   border-radius: 3px;
 }
-.btn-open-ast-action:hover {
-  text-decoration: underline;
-  background: rgba(41, 128, 185, 0.08);
+@media (hover: hover) and (pointer: fine) {
+  .btn-open-ast-action:hover {
+    text-decoration: underline;
+    background: rgba(41, 128, 185, 0.08);
+  }
 }
 
 /* Drawer Syntax Card & Detailed Felder Grid */
@@ -7167,10 +7322,11 @@ body.drawer-open .shadow-player {
   gap: 0.35rem;
 }
 
-.clause-node-box:hover {
-  border-color: var(--accent, #2980b9);
-  box-shadow: 0 2px 8px rgba(41, 128, 185, 0.12);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .clause-node-box:hover {
+    border-color: var(--accent, #2980b9);
+    box-shadow: 0 2px 8px rgba(41, 128, 185, 0.12);
+  }
 }
 
 .clause-node-top {
@@ -7239,8 +7395,10 @@ body.drawer-open .shadow-player {
   cursor: pointer;
 }
 
-.btn-clause-pill:hover {
-  background: var(--paper-accent, #f3f4f6);
+@media (hover: hover) and (pointer: fine) {
+  .btn-clause-pill:hover {
+    background: var(--paper-accent, #f3f4f6);
+  }
 }
 
 .btn-save-anki {
@@ -7250,8 +7408,10 @@ body.drawer-open .shadow-player {
   font-weight: 600;
 }
 
-.btn-save-anki:hover {
-  background: #dcfce7;
+@media (hover: hover) and (pointer: fine) {
+  .btn-save-anki:hover {
+    background: #dcfce7;
+  }
 }
 
 /* Clause Highlight in Reader */
@@ -7278,9 +7438,11 @@ body.drawer-open .shadow-player {
   transition: all 0.15s;
 }
 
-.nav-settings-btn:hover {
-  background: var(--paper-accent, #f3f4f6);
-  border-color: var(--accent, #2980b9);
+@media (hover: hover) and (pointer: fine) {
+  .nav-settings-btn:hover {
+    background: var(--paper-accent, #f3f4f6);
+    border-color: var(--accent, #2980b9);
+  }
 }
 
 .settings-modal-box {
@@ -7310,10 +7472,12 @@ body.drawer-open .shadow-player {
   transition: all 0.1s;
 }
 
-.btn-preset-pill:hover {
-  background: #dbeafe;
-  color: #1e40af;
-  border-color: #93c5fd;
+@media (hover: hover) and (pointer: fine) {
+  .btn-preset-pill:hover {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+  }
 }
 
 /* ── v3.7.0: Companion Mascot System (Eule & Friends) ─────────────── */
@@ -7357,11 +7521,13 @@ body.drawer-open .shadow-player {
   cursor: pointer;
   animation: companionIdle 4s infinite ease-in-out;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.12));
-  transition: transform 0.2s;
+  transition: transform var(--dur-fast);
 }
 
-.mascot-stage-char:hover {
-  transform: scale(1.06);
+@media (hover: hover) and (pointer: fine) {
+  .mascot-stage-char:hover {
+    transform: scale(1.06);
+  }
 }
 
 .mascot-stage-bubble {
@@ -7465,8 +7631,10 @@ body.drawer-open .shadow-player {
   transition: all 0.12s;
 }
 
-.mascot-choice-btn:hover {
-  background: var(--paper-accent, #ede8df);
+@media (hover: hover) and (pointer: fine) {
+  .mascot-choice-btn:hover {
+    background: var(--paper-accent, #ede8df);
+  }
 }
 
 .mascot-choice-btn.active {
@@ -7481,10 +7649,12 @@ body.drawer-open .shadow-player {
   border-style: dashed;
 }
 
-.mascot-upload-btn:hover {
-  background: var(--paper-accent, #ede8df);
-  border-color: var(--accent, #d9663f);
-  color: var(--accent, #d9663f);
+@media (hover: hover) and (pointer: fine) {
+  .mascot-upload-btn:hover {
+    background: var(--paper-accent, #ede8df);
+    border-color: var(--accent, #d9663f);
+    color: var(--accent, #d9663f);
+  }
 }
 
 .mascot-choice-btn.mascot-custom-btn.active {
@@ -7522,12 +7692,14 @@ body.drawer-open .shadow-player {
   border-radius: 50%;
   border: 2px solid var(--ink, #1a1a1a);
   cursor: pointer;
-  transition: transform 0.15s;
+  transition: transform var(--dur-fast);
   box-sizing: border-box;
 }
 
-.mascot-color-dot:hover {
-  transform: scale(1.2);
+@media (hover: hover) and (pointer: fine) {
+  .mascot-color-dot:hover {
+    transform: scale(1.2);
+  }
 }
 
 .mascot-color-custom-btn {
@@ -7615,7 +7787,7 @@ body.drawer-open .shadow-player {
   -webkit-user-select: none;
   animation: companionIdle 4s infinite ease-in-out;
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15));
-  transition: transform 0.15s;
+  transition: transform var(--dur-fast);
 }
 
 .companion-avatar {
@@ -7625,8 +7797,10 @@ body.drawer-open .shadow-player {
   -webkit-user-select: none;
 }
 
-.companion-char:hover {
-  transform: scale(1.1);
+@media (hover: hover) and (pointer: fine) {
+  .companion-char:hover {
+    transform: scale(1.1);
+  }
 }
 
 .companion-avatar {
@@ -7642,11 +7816,13 @@ body.drawer-open .shadow-player {
   font-size: 1.25rem;
   cursor: pointer;
   pointer-events: auto;
-  transition: transform 0.15s;
+  transition: transform var(--dur-fast);
 }
 
-.companion-avatar:hover {
-  transform: scale(1.1);
+@media (hover: hover) and (pointer: fine) {
+  .companion-avatar:hover {
+    transform: scale(1.1);
+  }
 }
 
 .companion-bubble {
@@ -7780,9 +7956,11 @@ body.drawer-open .shadow-player {
   border-style: dashed;
 }
 
-.panel-upload-btn:hover {
-  background: var(--paper-accent, #ede8df);
-  border-color: var(--accent, #d9663f);
+@media (hover: hover) and (pointer: fine) {
+  .panel-upload-btn:hover {
+    background: var(--paper-accent, #ede8df);
+    border-color: var(--accent, #d9663f);
+  }
 }
 
 .panel-char-btn.mascot-custom-btn.active {
@@ -8270,15 +8448,16 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.writer-nav-item:hover {
-  background: rgba(21, 20, 15, 0.07);
-  border-color: var(--rule);
+@media (hover: hover) and (pointer: fine) {
+  .writer-nav-item:hover {
+    background: rgba(21, 20, 15, 0.07);
+    border-color: var(--rule);
+  }
 }
 
 /* 触屏上 :hover 不触发（或点完粘住不放），只靠 hover 的行等于按下去毫无反馈。
    :active 在触屏是按下即生效、抬手即消失，是唯一可靠的按压态。
-   只改背景、不加 transform：hover 的 translateX(2px) 留给鼠标，
-   整行 flex 容器做位移会带来 1px 文字抖动，得不偿失。
+   hover 也只改背景/描边、不做位移：整行 flex 容器位移会带来文字抖动。
    -webkit-tap-highlight-color 清零：否则安卓 WebView 自带的灰块会和
    自定义按压色叠在一起闪一下。 */
 .writer-nav-item,
@@ -8367,8 +8546,10 @@ body.drawer-open .companion {
   transition: background var(--dur-fast) ease;
 }
 
-.writer-sent-block:hover {
-  background: rgba(21, 20, 15, 0.02);
+@media (hover: hover) and (pointer: fine) {
+  .writer-sent-block:hover {
+    background: rgba(21, 20, 15, 0.02);
+  }
 }
 
 .writer-sent-num {
@@ -8394,8 +8575,10 @@ body.drawer-open .companion {
   font-weight: 500;
 }
 
-.writer-err-underline:hover {
-  filter: brightness(0.92);
+@media (hover: hover) and (pointer: fine) {
+  .writer-err-underline:hover {
+    filter: brightness(0.92);
+  }
 }
 
 .writer-err-underline.active-span {
@@ -8620,9 +8803,11 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.writer-essay-item:hover {
-  background: var(--paper-tint);
-  border-color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .writer-essay-item:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+  }
 }
 
 .writer-essay-item.active {
@@ -8806,9 +8991,11 @@ body.drawer-open .companion {
   gap: 0.35rem;
 }
 
-.writer-tab-btn:hover {
-  background: var(--paper-tint);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .writer-tab-btn:hover {
+    background: var(--paper-tint);
+    color: var(--ink);
+  }
 }
 
 .writer-tab-btn.active {
@@ -8890,10 +9077,11 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.writer-problem-row:hover {
-  background: var(--paper-tint);
-  border-color: var(--ink);
-  transform: translateX(2px);
+@media (hover: hover) and (pointer: fine) {
+  .writer-problem-row:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+  }
 }
 
 .writer-problem-row:active {
@@ -8980,12 +9168,11 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.version-item:hover {
-  background: var(--paper-tint);
-  border-color: var(--ink);
-  transform: translateX(
-    2px
-  ); /* 与 .writer-problem-row:hover 保持一致 (v4.4.5) */
+@media (hover: hover) and (pointer: fine) {
+  .version-item:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+  }
 }
 
 .version-item.version-checkpoint {
@@ -9215,8 +9402,10 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.diff-decision-btn:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .diff-decision-btn:hover {
+    color: var(--ink);
+  }
 }
 
 .diff-decision-btn.btn-choice-accept.active {
@@ -9415,9 +9604,11 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.a1-mode-tab:hover {
-  background: var(--paper-tint);
-  border-color: var(--ink-faint);
+@media (hover: hover) and (pointer: fine) {
+  .a1-mode-tab:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink-faint);
+  }
 }
 
 .a1-mode-tab.active {
@@ -9451,9 +9642,11 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.a1-pill:hover {
-  border-color: var(--accent);
-  background: var(--paper-tint);
+@media (hover: hover) and (pointer: fine) {
+  .a1-pill:hover {
+    border-color: var(--accent);
+    background: var(--paper-tint);
+  }
 }
 
 .a1-pill.active {
@@ -9650,9 +9843,11 @@ body.drawer-open .companion {
   transition: all var(--dur-fast) ease;
 }
 
-.writer-mode-tab:hover {
-  background: var(--paper-tint);
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .writer-mode-tab:hover {
+    background: var(--paper-tint);
+    border-color: var(--accent);
+  }
 }
 
 .writer-mode-tab.active {
@@ -10254,9 +10449,11 @@ body.drawer-open .companion {
   transition: all 0.15s ease;
 }
 
-.a1-option-label:hover {
-  background: var(--paper-deep);
-  border-color: var(--rule);
+@media (hover: hover) and (pointer: fine) {
+  .a1-option-label:hover {
+    background: var(--paper-deep);
+    border-color: var(--rule);
+  }
 }
 
 .a1-option-label.selected {
@@ -10463,10 +10660,12 @@ body.drawer-open .companion {
   transition: all 0.1s;
 }
 
-.a1-vocab-chip:hover {
-  background: var(--amber);
-  color: #fff;
-  border-color: var(--amber);
+@media (hover: hover) and (pointer: fine) {
+  .a1-vocab-chip:hover {
+    background: var(--amber);
+    color: #fff;
+    border-color: var(--amber);
+  }
 }
 
 /* ── A1 Lesen Specific Styles ─────────────────────────────────────────────── */
@@ -10521,8 +10720,10 @@ body.drawer-open .companion {
   transition: all 0.15s ease;
 }
 
-.a1-web-card:hover {
-  border-color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .a1-web-card:hover {
+    border-color: var(--ink);
+  }
 }
 
 .a1-web-card.selected-web {
@@ -10610,10 +10811,12 @@ body.drawer-open .companion {
   user-select: none;
 }
 
-.a1-vocab-chip:hover {
-  background: var(--paper-card);
-  border-color: var(--ink);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .a1-vocab-chip:hover {
+    background: var(--paper-card);
+    border-color: var(--ink);
+    color: var(--ink);
+  }
 }
 
 .a1-vocab-chip.saved {
@@ -10769,13 +10972,16 @@ body.drawer-open .companion {
   background: var(--paper-card, #fff);
   box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.15);
   cursor: pointer;
-  transition: transform var(--dur-fast, 180ms) var(--ease-editorial, ease),
-    box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
+  transition: box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
 }
-.encounter-entry-card:hover,
-.encounter-entry-card:focus-visible {
-  transform: translate(-1px, -1px);
+.encounter-entry-card:focus-visible{
   box-shadow: 5px 5px 0 rgba(21, 20, 15, 0.18);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .encounter-entry-card:hover {
+    box-shadow: 5px 5px 0 rgba(21, 20, 15, 0.18);
+  }
 }
 .encounter-entry-emoji { font-size: 1.15rem; line-height: 1; filter: saturate(0.9); }
 .encounter-entry-title {
@@ -10841,10 +11047,13 @@ body.drawer-open .companion {
   background: var(--coral, #ed6f5c);
   color: #fff;
   box-shadow: 3px 3px 0 rgba(21, 20, 15, 0.18);
-  transition: transform var(--dur-fast, 180ms) var(--ease-editorial, ease),
-    box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
+  transition: box-shadow var(--dur-fast, 180ms) var(--ease-editorial, ease);
 }
-#encounter-add-toggle:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 rgba(21, 20, 15, 0.22); }
+@media (hover: hover) and (pointer: fine) {
+  #encounter-add-toggle:hover {
+    box-shadow: 4px 4px 0 rgba(21, 20, 15, 0.22);
+  }
+}
 
 /* ── 台账列表：CEFR 印章 + 衬线标题 + 等宽元数据，行间只用一条细墨线 ──── */
 .encounter-list {
@@ -10867,8 +11076,16 @@ body.drawer-open .companion {
   cursor: pointer;
   transition: background var(--dur-fast, 180ms) var(--ease-editorial, ease);
 }
-.encounter-card:hover { background: var(--paper-tint, #f2ece1); }
-.encounter-card:hover .encounter-card-title { color: var(--accent, #c14a2b); }
+@media (hover: hover) and (pointer: fine) {
+  .encounter-card:hover {
+    background: var(--paper-tint, #f2ece1);
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .encounter-card:hover .encounter-card-title {
+    color: var(--accent, #c14a2b);
+  }
+}
 .encounter-badge {
   font-family: var(--enc-mono);
   font-size: 0.62rem;
@@ -11104,9 +11321,11 @@ body.drawer-open .companion {
   cursor: pointer;
   border-bottom: 1px dotted rgba(176, 48, 48, 0.55);
 }
-.enc-tok.enc-unk:hover {
-  background: rgba(237, 111, 92, 0.16);
-  border-bottom-style: solid;
+@media (hover: hover) and (pointer: fine) {
+  .enc-tok.enc-unk:hover {
+    background: rgba(237, 111, 92, 0.16);
+    border-bottom-style: solid;
+  }
 }
 
 /* ── 覆盖统计：等宽数据走字条 + 芥末黄进度墨线（本区签名件）─────────── */
@@ -11247,7 +11466,11 @@ body.drawer-open .companion {
   cursor: pointer;
   transition: border-color var(--dur-fast, 180ms) var(--ease-editorial, ease);
 }
-.enc-rev-row:hover { border-color: var(--ink, #15140f); }
+@media (hover: hover) and (pointer: fine) {
+  .enc-rev-row:hover {
+    border-color: var(--ink, #15140f);
+  }
+}
 .enc-rev-front { font-family: var(--enc-body); font-weight: 700; color: var(--ink, #15140f); }
 .enc-rev-gloss { font-family: var(--enc-mono); font-size: 0.78rem; color: var(--ink-mute, #5a5448); }
 .enc-rev-speak {
@@ -11272,9 +11495,6 @@ body.drawer-open .companion {
   #encounter-add-toggle,
   .enc-rev-row { transition: none; }
   .enc-popover { animation: none; transform: none; }
-  .encounter-entry-card:hover,
-  .encounter-entry-card:focus-visible,
-  #encounter-add-toggle:hover { transform: none; }
 }
 /* 窄屏：阅读页收边距，列表元数据换行到标题下方 */
 @media (max-width: 640px) {
@@ -11345,8 +11565,10 @@ body.drawer-open .companion {
   border-radius: 2px;
 }
 
-.companion-nav-btn:hover {
-  background: rgba(26, 23, 20, 0.12);
+@media (hover: hover) and (pointer: fine) {
+  .companion-nav-btn:hover {
+    background: rgba(26, 23, 20, 0.12);
+  }
 }
 
 .companion-nav-indicator {
@@ -11358,9 +11580,11 @@ body.drawer-open .companion {
   user-select: none;
 }
 
-.companion-context-clear:hover {
-  border-color: var(--ink, #1a1a1a);
-  color: var(--coral, #b44322);
+@media (hover: hover) and (pointer: fine) {
+  .companion-context-clear:hover {
+    border-color: var(--ink, #1a1a1a);
+    color: var(--coral, #b44322);
+  }
 }
 
 .companion-context-hint {
@@ -11381,9 +11605,11 @@ body.drawer-open .companion {
   white-space: nowrap;
 }
 
-.companion-context-grab-btn:hover {
-  background: var(--ink, #1a1a1a);
-  color: var(--paper, #faf8f5);
+@media (hover: hover) and (pointer: fine) {
+  .companion-context-grab-btn:hover {
+    background: var(--ink, #1a1a1a);
+    color: var(--paper, #faf8f5);
+  }
 }
 
 .companion-drawer-body {
@@ -11565,8 +11791,10 @@ body.drawer-open .companion {
   transition: color 0.15s ease;
 }
 
-.companion-thought-header:hover {
-  color: var(--ink, #1a1a1a);
+@media (hover: hover) and (pointer: fine) {
+  .companion-thought-header:hover {
+    color: var(--ink, #1a1a1a);
+  }
 }
 
 .thought-header-left {
@@ -11802,10 +12030,12 @@ body.drawer-open .companion {
   transition: all 0.15s ease;
 }
 
-.companion-new-chat-btn:hover {
-  background: #fff;
-  border-color: var(--accent-color, #2d5a88);
-  color: var(--accent-color, #2d5a88);
+@media (hover: hover) and (pointer: fine) {
+  .companion-new-chat-btn:hover {
+    background: #fff;
+    border-color: var(--accent-color, #2d5a88);
+    color: var(--accent-color, #2d5a88);
+  }
 }
 
 .companion-thinking-toolbar {
@@ -11846,8 +12076,10 @@ body.drawer-open .companion {
   font-weight: 500;
 }
 
-.thinking-pill:hover {
-  color: var(--ink, #1a1a1a);
+@media (hover: hover) and (pointer: fine) {
+  .thinking-pill:hover {
+    color: var(--ink, #1a1a1a);
+  }
 }
 
 .thinking-pill.active {
@@ -11900,9 +12132,11 @@ body.drawer-open .companion {
   transition: border-color 0.15s, background-color 0.15s;
 }
 
-.companion-quick-chip:hover {
-  border-color: var(--ink, #1a1a1a);
-  background: var(--paper-warm, #f7f4ec);
+@media (hover: hover) and (pointer: fine) {
+  .companion-quick-chip:hover {
+    border-color: var(--ink, #1a1a1a);
+    background: var(--paper-warm, #f7f4ec);
+  }
 }
 
 .companion-quick-chip.chip-utility {

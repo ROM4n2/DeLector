@@ -62,7 +62,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
   padding:8px 18px;border-radius:9px;font-size:14px;font-weight:600;
   background:var(--accent);color:#fff;transition:filter .15s, transform .05s;
 }
-.btn:hover{filter:brightness(1.08)} .btn:active{transform:scale(.97)}
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover {
+    filter:brightness(1.08)
+  }
+} .btn:active{transform:scale(.97)}
 .btn.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
 .btn.subtle{background:var(--accent-soft);color:var(--accent)}
 .btn.danger{background:var(--again)}
@@ -92,7 +96,11 @@ header.top .sub{color:var(--muted);font-size:12.5px}
   color:var(--muted);white-space:nowrap;transition:all .15s;background:transparent;
 }
 .seg button.active{background:var(--paper-card, #ffffff);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.06)}
-.seg button:not(.active):hover{color:var(--text)}
+@media (hover: hover) and (pointer: fine) {
+  .seg button:not(.active):hover {
+    color:var(--text)
+  }
+}
 nav.tabs{
   display:flex;gap:8px;background:var(--bg);border:none;
   border-bottom:1px solid var(--line);border-radius:0;padding:0 0 2px;
@@ -107,8 +115,10 @@ nav.tabs button{
 nav.tabs button.active{
   background:transparent;color:var(--accent);border-bottom:2px solid var(--accent);
 }
-nav.tabs button:not(.active):hover{
-  background:transparent;color:var(--text);
+@media (hover: hover) and (pointer: fine) {
+  nav.tabs button:not(.active):hover {
+    background:transparent;color:var(--text);
+  }
 }
 .view{display:none;animation:fadeIn .25s ease}
 .view.active{display:block}
@@ -128,7 +138,11 @@ nav.tabs button:not(.active):hover{
   background:transparent;border:1px solid var(--line);color:var(--muted);
   display:flex;align-items:center;justify-content:center;transition:all .15s;
 }
-.arrow:hover:not(:disabled){border-color:var(--text);color:var(--text);background:var(--panel)}
+@media (hover: hover) and (pointer: fine) {
+  .arrow:hover:not(:disabled) {
+    border-color:var(--text);color:var(--text);background:var(--panel)
+  }
+}
 .arrow:disabled{opacity:.3;cursor:default}
 .flip{perspective:1300px;flex:1;height:340px}
 .flip-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.7,.3,1)}
@@ -155,9 +169,13 @@ nav.tabs button:not(.active):hover{
 .rate-btn{
   flex:1;max-width:200px;padding:12px 10px;border-radius:8px;font-size:15px;font-weight:700;
   box-shadow:0 1px 3px rgba(21, 20, 15, 0.04);
-  transition:transform .12s cubic-bezier(.22,1,.36,1), box-shadow .12s, filter .15s;
+  transition:transform var(--dur-fast) cubic-bezier(.22,1,.36,1), box-shadow var(--dur-fast), filter var(--dur-fast);
 }
-.rate-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 3px 8px rgba(21, 20, 15, 0.08);filter:brightness(0.98)}
+@media (hover: hover) and (pointer: fine) {
+  .rate-btn:hover:not(:disabled) {
+    box-shadow:0 3px 8px rgba(21, 20, 15, 0.08);filter:brightness(0.98)
+  }
+}
 .rate-btn:active:not(:disabled){transform:translateY(1px);box-shadow:none}
 .rate-btn[data-g="1"]{background:var(--again-soft, #fff0ed);border:1px solid var(--again, #b03030);color:var(--again, #b03030)}
 .rate-btn[data-g="2"]{background:var(--hard-soft, #fffbe6);border:1px solid var(--hard, #d9771c);color:var(--hard, #825c00)}
@@ -177,7 +195,11 @@ code,kbd{font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
   border:1px solid var(--line);border-radius:8px;font-size:14.5px;background:var(--panel);
   transition:all .12s;color:var(--text);cursor:pointer;
 }
-.qopt:hover:not(:disabled){border-color:var(--ink);background:var(--paper-tint, #f2ece1)}
+@media (hover: hover) and (pointer: fine) {
+  .qopt:hover:not(:disabled) {
+    border-color:var(--ink);background:var(--paper-tint, #f2ece1)
+  }
+}
 .qopt:disabled{cursor:default}
 .qopt.ok{border-color:var(--good);background:var(--good-soft);color:var(--good);font-weight:700}
 .qopt.bad{border-color:var(--again);background:var(--again-soft);color:var(--again)}
@@ -193,7 +215,11 @@ code,kbd{font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
   flex:1;min-width:220px;border:2px solid var(--line);border-radius:12px;padding:16px;
   text-align:left;transition:all .15s;background:var(--panel);
 }
-.mode-card:hover{border-color:var(--accent)}
+@media (hover: hover) and (pointer: fine) {
+  .mode-card:hover {
+    border-color:var(--accent)
+  }
+}
 .mode-card.sel{border-color:var(--accent);background:var(--accent-soft)}
 .mode-card .t{font-weight:700;font-size:15.5px;margin-bottom:4px}
 .mode-card .d{color:var(--muted);font-size:13px}
@@ -226,7 +252,11 @@ table.wtab th{
   letter-spacing:.02em;text-transform:uppercase;
 }
 table.wtab td{padding:10px 8px;border-bottom:1px solid var(--line-soft, rgba(21, 20, 15, 0.08));vertical-align:top}
-table.wtab tr:hover td{background:var(--paper-tint, #f2ece1)}
+@media (hover: hover) and (pointer: fine) {
+  table.wtab tr:hover td {
+    background:var(--paper-tint, #f2ece1)
+  }
+}
 table.wtab .hw{font-weight:700;font-family:var(--serif, "Playfair Display", Georgia, serif);color:var(--text);font-size:14.5px}
 table.wtab .ipa{color:var(--muted);font-size:12px;font-family:var(--mono, "IBM Plex Mono", Consolas, monospace)}
 table.wtab .gloss-cell{max-width:230px}
@@ -236,7 +266,11 @@ table.wtab .gloss-cell{max-width:230px}
 }
 .st-chip{display:inline-block;border-radius:5px;padding:1px 7px;font-size:11.5px;font-weight:600}
 button.st-chip{border:none;cursor:pointer;font-family:inherit}
-button.st-chip:hover{filter:brightness(0.92)}
+@media (hover: hover) and (pointer: fine) {
+  button.st-chip:hover {
+    filter:brightness(0.92)
+  }
+}
 .st-chip.new{background:var(--line);color:var(--muted)}
 .st-chip.learn{background:var(--hard-soft);color:var(--hard)}
 .st-chip.solid{background:var(--good-soft);color:var(--good)}
@@ -244,7 +278,11 @@ button.st-chip:hover{filter:brightness(0.92)}
 .wtab-scroll{max-height:62vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
 .row-ops{white-space:nowrap}
 .row-ops button{color:var(--muted);font-size:12.5px;padding:3px 7px;border-radius:6px}
-.row-ops button:hover{background:var(--accent-soft);color:var(--accent)}
+@media (hover: hover) and (pointer: fine) {
+  .row-ops button:hover {
+    background:var(--accent-soft);color:var(--accent)
+  }
+}
 /* 搜索旁路 scope 命中的「不在当前模式内」的词行
  * （docs/plans/workbench-scope-control-and-live-settings.md · Task 3）：
  * 整行淡化 + 词头后跟一枚淡色小标。颜色一律复用既有 token，不新造。 */
@@ -318,7 +356,11 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
   transition:background .15s,transform .08s, opacity .2s;
   vertical-align:middle;margin-left:4px;
 }
-.audio-btn:hover{background:var(--accent-soft)}
+@media (hover: hover) and (pointer: fine) {
+  .audio-btn:hover {
+    background:var(--accent-soft)
+  }
+}
 .audio-btn:active{transform:scale(.92)}
 .audio-btn:disabled{opacity:.4;cursor:not-allowed}
 /* 白名单：音频加载属于「正在发生的事」；reduce 下停用（见文末）。 */
