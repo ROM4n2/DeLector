@@ -352,6 +352,9 @@ def create_app() -> FastAPI:
     - register_routes 必须早于静态挂载 —— catch-all 的 "/" 会吃掉其后所有路径。
     """
     app = FastAPI(title="DeLector", lifespan=_lifespan)
+    # 静态资源指纹的算力来源：/api/health 需要知道「当前磁盘上的前端到底是哪一版」。
+    # 由工厂显式挂到 app.state，避免路由模块反向 import server（会成环）。
+    app.state.static_dir = STATIC_DIR
     app.middleware("http")(add_frontend_no_cache_headers)
     app.middleware("http")(_wb_sync_cors)
     register_routes(app)

@@ -541,40 +541,36 @@ public class MainActivity extends AppCompatActivity {
         mainHandler.postDelayed(() -> webView.loadUrl(serverBaseUrl(reloadPort)), 1000);
     }
 
-    private void copyAssetFolder(String srcName, File dstDir) {
-        try {
-            AssetManager assetManager = getAssets();
-            String[] fileList = assetManager.list(srcName);
-            if (fileList == null || fileList.length == 0) {
-                // Copy single file
-                copyAssetFile(srcName, dstDir);
+    private void copyAssetFolder(String srcName, File dstDir) throws IOException {
+        AssetManager assetManager = getAssets();
+        String[] fileList = assetManager.list(srcName);
+        if (fileList == null || fileList.length == 0) {
+            // Copy single file
+            copyAssetFile(srcName, dstDir);
+            return;
+        }
+        if (!dstDir.exists() && !dstDir.mkdirs()) {
+            throw new IOException("无法创建目录：" + dstDir);
+        }
+        for (String filename : fileList) {
+            String subSrc = srcName.isEmpty() ? filename : srcName + "/" + filename;
+            File subDst = new File(dstDir, filename);
+            String[] subList = assetManager.list(subSrc);
+            if (subList != null && subList.length > 0) {
+                copyAssetFolder(subSrc, subDst);
             } else {
-                if (!dstDir.exists()) {
-                    dstDir.mkdirs();
-                }
-                for (String filename : fileList) {
-                    String subSrc = srcName.isEmpty() ? filename : srcName + "/" + filename;
-                    File subDst = new File(dstDir, filename);
-                    String[] subList = assetManager.list(subSrc);
-                    if (subList != null && subList.length > 0) {
-                        copyAssetFolder(subSrc, subDst);
-                    } else {
-                        copyAssetFile(subSrc, subDst);
-                    }
-                }
+                copyAssetFile(subSrc, subDst);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
-    private void copyAssetFile(String srcPath, File dstFile) {
+    private void copyAssetFile(String srcPath, File dstFile) throws IOException {
         if (dstFile.exists() && dstFile.length() > 0) {
             return; // Already copied
         }
         File parent = dstFile.getParentFile();
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IOException("无法创建目录：" + parent);
         }
         try (InputStream in = getAssets().open(srcPath);
                 OutputStream out = new FileOutputStream(dstFile)) {
@@ -583,44 +579,91 @@ public class MainActivity extends AppCompatActivity {
             while ((len = in.read(buf)) > 0) {
                 out.write(buf, 0, len);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
     /**
-     * 版本感知解包 (v4.4.5)。
+     * 版本 + 内容指纹感知解包（静态资源自证）。
      *
      * APK 覆盖安装不清空 getFilesDir()，而 copyAssetFile() 见到目标已存在就跳过，
      * 于是升级后旧的 HTML/CSS/JS 永远不被覆盖。更麻烦的是新增文件仍会照常拷入，
      * 设备最终停在"新旧混合"状态——比全旧更难排查，因为版本自洽性没了。
-     * 这也是为什么用户只有卸载重装才能看到新前端：卸载才会清 filesDir。
      *
-     * 前端的 ?v= 查询串对此无效：磁盘上那份文件本身就是旧的，
-     * 请求 URL 和响应内容是一对自洽的旧配对，浏览器没有任何理由怀疑。
+     * 只比 versionCode 不够：debug/本地包的 versionCode 常年不变，内容却可能已改。
+     * 所以 marker 写成 {@code versionCode + ":" + 资产内容指纹}；指纹来自构建期
+     * 写入 APK 的 {@code static/asset-fingerprint.txt}。旧包没有该文件时退回纯
+     * versionCode 语义，避免每次启动都失配重解包。
      *
-     * 用版本标记文件做闸门：versionCode 一致走原来的跳过快路径（冷启动不多做 I/O），
-     * 不一致就把整个 static/ 删掉重解包。
+     * 解包安全：先完整解到兄弟暂存目录，校验入口文件后再整体换入；任何一步失败
+     * 都保留旧目录并记录到 {@code static.version.error}，绝不把 static/ 留在半成品。
+     * 只碰 filesDir/static 及其暂存/备份目录，用户数据库一律不碰。
      */
     private void syncStaticAssets(File dataDir, File staticDir) {
-        String expected = String.valueOf(BuildConfig.VERSION_CODE);
-        File marker = new File(dataDir, "static.version");
-
-        if (expected.equals(readVersionMarker(marker))) {
-            copyAssetFolder("static", staticDir); // 快路径：只补缺失文件
+        if (!isCanonicalStaticDir(dataDir, staticDir)) {
+            Log.w("DeLector", "静态资源目录身份不符，拒绝解包：" + staticDir);
             return;
         }
 
-        // 版本对不上（升级 / 降级 / 标记丢失）→ 整目录重来，不做逐文件比对：
-        // 资产才几 MB，而漏掉一个文件的代价是又一次"卸载重装才好"。
-        deleteStaticDir(dataDir, staticDir);
-        copyAssetFolder("static", staticDir);
+        File staging = new File(dataDir, ".delector-static.unpack");
+        File backup = new File(dataDir, ".delector-static.old");
+        // 上次换入过程中被杀：static 可能暂时不在，先恢复备份再继续，避免把唯一副本删掉。
+        recoverStaticDir(staticDir, staging, backup);
 
-        // 只在解包确实产出了入口文件时才写标记。copyAssetFolder 把 IOException
-        // 咽进 printStackTrace，没有返回值可信，所以宁可下次启动重试一遍，
-        // 也不要把一次半途失败的解包记成"已是最新"。
-        if (new File(staticDir, "index.html").exists()) {
+        String fingerprint = readBundledAssetsFingerprint();
+        String expected = fingerprint.isEmpty()
+                ? String.valueOf(BuildConfig.VERSION_CODE)
+                : BuildConfig.VERSION_CODE + ":" + fingerprint;
+        File marker = new File(dataDir, "static.version");
+
+        if (expected.equals(readVersionMarker(marker))) {
+            // 快路径：只补缺失文件；补齐失败也不影响现有目录。
+            try {
+                copyAssetFolder("static", staticDir);
+            } catch (IOException e) {
+                Log.w("DeLector", "快路径补齐静态资源失败，继续使用现有目录", e);
+            }
+            return;
+        }
+
+        try {
+            copyAssetFolder("static", staging);
+            File entry = new File(staging, "index.html");
+            if (!entry.isFile() || entry.length() == 0) {
+                throw new IOException("解包结果缺少 index.html");
+            }
+
+            // 新目录已经完整，才动旧目录。先把旧目录移开，再换入新目录；
+            // 换入失败时把旧目录搬回来，保证「至少还能跑旧前端」。
+            if (staticDir.exists() && !staticDir.renameTo(backup)) {
+                throw new IOException("无法移开旧静态目录");
+            }
+            if (!staging.renameTo(staticDir)) {
+                if (backup.exists() && !backup.renameTo(staticDir)) {
+                    Log.e("DeLector", "恢复旧静态目录失败，备份保留在 " + backup);
+                }
+                throw new IOException("无法启用新静态目录");
+            }
+            deleteRecursively(backup);
             writeVersionMarker(marker, expected);
+            clearUnpackError(dataDir);
+        } catch (IOException | RuntimeException e) {
+            deleteRecursively(staging);
+            recordUnpackError(dataDir, expected, e);
+            Log.e("DeLector", "静态资源解包失败，继续使用旧目录", e);
+        }
+    }
+
+    /** 读构建期写入 APK 的静态资源内容指纹；旧包没有该文件时返回空串。 */
+    private String readBundledAssetsFingerprint() {
+        try (InputStream in = getAssets().open("static/asset-fingerprint.txt")) {
+            byte[] buf = new byte[64];
+            int len = in.read(buf);
+            if (len <= 0) {
+                return "";
+            }
+            return new String(buf, 0, len, StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            return ""; // 旧包没有指纹文件：退回纯 versionCode 语义
         }
     }
 
@@ -629,7 +672,7 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
         try (InputStream in = new FileInputStream(marker)) {
-            byte[] buf = new byte[32];
+            byte[] buf = new byte[64];
             int len = in.read(buf);
             if (len <= 0) {
                 return null;
@@ -641,31 +684,53 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void writeVersionMarker(File marker, String versionCode) {
+    private void writeVersionMarker(File marker, String expected) {
         try (OutputStream out = new FileOutputStream(marker)) {
-            out.write(versionCode.getBytes(StandardCharsets.UTF_8));
+            out.write(expected.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    /**
-     * 只删 filesDir/static/，别的一律不碰。
-     *
-     * delector.db 和 progress.db 就躺在 filesDir 根目录、与 static/ 平级，
-     * 装着用户全部学习数据（文章、词卡语法卡、笔记、FSRS 进度、统计）。
-     * 删错一级 = 不可恢复地清空这些。所以这里硬编码校验目标身份，
-     * 不接受任何调用方传进来的路径。
-     */
-    private void deleteStaticDir(File dataDir, File staticDir) {
-        if (!staticDir.exists()) {
-            return;
+    /** 换入中断后的恢复：static 缺失就先把备份搬回来，备份搬不回来就绝不删它。 */
+    private void recoverStaticDir(File staticDir, File staging, File backup) {
+        if (!staticDir.exists() && backup.exists()) {
+            if (backup.renameTo(staticDir)) {
+                Log.w("DeLector", "已从备份恢复旧静态目录");
+            } else {
+                Log.e("DeLector", "无法从备份恢复静态目录，保留备份：" + backup);
+                return;
+            }
         }
+        deleteRecursively(staging);
+        if (staticDir.exists()) {
+            deleteRecursively(backup);
+        }
+    }
+
+    /** 失败原因落在 filesDir 根目录；只写我们自己命名的文件。 */
+    private void recordUnpackError(File dataDir, String expected, Exception error) {
+        File errorFile = new File(dataDir, "static.version.error");
+        String detail = "expected=" + expected
+                + "\ntime=" + System.currentTimeMillis()
+                + "\nerror=" + error.getClass().getSimpleName() + ": " + error.getMessage();
+        try (OutputStream out = new FileOutputStream(errorFile)) {
+            out.write(detail.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            Log.w("DeLector", "写入解包失败原因失败", e);
+        }
+    }
+
+    private void clearUnpackError(File dataDir) {
+        File errorFile = new File(dataDir, "static.version.error");
+        if (errorFile.exists() && !errorFile.delete()) {
+            Log.w("DeLector", "无法清理旧的解包失败记录：" + errorFile);
+        }
+    }
+
+    private static boolean isCanonicalStaticDir(File dataDir, File staticDir) {
         File expected = new File(dataDir, "static");
-        if (!staticDir.getAbsolutePath().equals(expected.getAbsolutePath())) {
-            return; // 身份不符，宁可不清理也不误删
-        }
-        deleteRecursively(staticDir);
+        return staticDir.getAbsolutePath().equals(expected.getAbsolutePath());
     }
 
     private static void deleteRecursively(File target) {

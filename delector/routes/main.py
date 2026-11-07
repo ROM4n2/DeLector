@@ -28,6 +28,7 @@ import httpx as httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from pydantic import BaseModel
 
+from delector.core.assets_manifest import compute_assets_fingerprint
 from delector.core.database import (
     AUDIO_CACHE_DIR as AUDIO_CACHE_DIR,
 )
@@ -556,8 +557,19 @@ def _agent_bridge_report() -> Dict[str, Any]:
     return {"mode": "go" if url else "python", "url": url}
 
 
+def _assets_fingerprint(request: Request) -> str:
+    """当前磁盘静态资源的内容指纹；解析不到目录时回空串（绝不因此让健康探针 500）。"""
+    static_dir = getattr(request.app.state, "static_dir", None)
+    if not static_dir:
+        return ""
+    try:
+        return compute_assets_fingerprint(static_dir)
+    except Exception:
+        return ""
+
+
 @router.get("/api/health")
-def api_health() -> Any:
+def api_health(request: Request) -> Any:
     """健康探针：库可用回 200，不可用回 503（Service Unavailable）。
 
     503 而非 500：语义上"依赖不可用、稍后可能自愈"，与真正的服务端缺陷区分开，
@@ -580,6 +592,7 @@ def api_health() -> Any:
                     "detail": _HEALTH_DETAIL_UNAVAILABLE,
                     "app": "delector",
                     "version": APP_VERSION,
+                    "assets_fingerprint": _assets_fingerprint(request),
                     "agent_bridge": _agent_bridge_report(),
                 },
                 ensure_ascii=False,
@@ -599,6 +612,8 @@ def api_health() -> Any:
         "database": "ok",
         "app": "delector",
         "version": APP_VERSION,
+        # 页面侧自证：前端把「随 HTML 落地的构建戳」与本字段比较，不相等即旧资源。
+        "assets_fingerprint": _assets_fingerprint(request),
         # 伴学桥如实上报：Go 内核不可用时这里必须是 python（配套启动日志的同一条事实）。
         "agent_bridge": _agent_bridge_report(),
     }

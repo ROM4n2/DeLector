@@ -871,3 +871,15 @@ P1-4 存量重算收口：PR #288（fix/stale-article-recompute，从 origin/mas
 - 实测（桌面 spaCy 3.8.18）：典型 22ms/篇，10 万字符 5.2s；init_db 69ms、create_app 16ms；二次跑 migrated=0；restore 逐字相等。
 - 测试：新增 tests/test_processed_json_migration.py（17 例）；全量 pytest 2897 passed / 9 skipped / 1 xfailed（exit 0）；ruff + mypy strict 通过。
 - 未验证：Android 模拟器单篇耗时与 PSS（本机未执行）。
+
+### 2026-11-08 01:44 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
+「静态资源更新后仍跑旧 UI」四层收口（worktree D:\Code\DeLector-asset-fp / fix/static-asset-fingerprint，基于 origin/master bf0110a，PR 待审不合并）。
+- 指纹：新增 delector/core/assets_manifest.py（SHA256 over 排序后的 相对路径+长度+内容，12 hex；HTML meta / js BUILD_STAMP 先归一化避免自指）；/api/health 与 sync 工具共用同一算法。
+- APK 资产：sync_android_sources.py 写 asset-fingerprint.txt + 注入 meta/js 戳；--check 由「存在性」改为「内容指纹比对」，仓库改 CSS 未 sync 直接非零。
+- Android：static.version marker 改为 `versionCode:资产指纹`（无指纹文件退回纯 versionCode）；staging 完整解包→校验 index.html→rename 原子换入；失败保留旧目录并写 static.version.error，新增 recoverStaticDir 处理换入中途崩溃；buffer 64。
+- SW/页面：network-first + cache:"no-cache" + waitUntil(cache.put) + skipWaiting/clients.claim；页面 build-stamp.js 三方自证（meta/js/server），失配 postMessage 清缓存并提示刷新；register 加 updateViaCache:"none"。
+- PITFALL（设备实测抓到的真 bug）：`sorted(Path)` 在 Windows 大小写不敏感、Android/Linux 敏感，`icons/README.md` vs `icons/lucide-sprite.svg` 顺序相反 ⇒ 构建期写死的指纹 3061541188d7 与设备运行期现算 cc1efb3c37f8 永不相等。修法：排序键固定为 rel.as_posix() + 回归测试 test_file_order_is_platform_independent。
+- 验证：pytest 全量 2897 passed/4 skipped/1 xfailed；ruff、mypy --strict delector tools、mypy tests 通过；干净重建后 assembleEmulatorDebug/assembleDeviceDebug、lintDeviceDebug、testDeviceDebugUnitTest 全绿（增量重建会让 APK local header 出现对齐空隙，contiguity 测试需 clean build，属既存构建行为）。
+- 模拟器（API37 emulator-5554）同 versionCode 52101 闭环：仅改 style.css --paper（#faf8f5→#faf8f4）→ sync → 重建 → 覆盖安装 → marker 52101:78c95b6c885b、health/CDP 四方指纹一致、computed --paper=#faf8f4；回退后 marker 回 52101:cc1efb3c37f8、computed 回 #faf8f5；两次均无 static.version.error，delector.db/progress.db 未动。反向 --check（改 CSS 不 sync）exit 2 报「静态资源已过期」。
+- 说明：tokens.css 的 --paper 被 style.css 同名 token 覆盖，故视觉闭环用 style.css 临时改动取证后已还原，最终 diff 未包含这两个文件。
