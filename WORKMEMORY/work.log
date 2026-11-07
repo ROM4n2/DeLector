@@ -820,3 +820,10 @@ Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
 - 验证（8000 全程被独占占住）：① 源码 E2E：端口文件=8002、/api/health 200、横幅 http://localhost:8002；② 便携产物（PyInstaller onedir，.build-info.json 用 package_windows.write_build_fingerprint 补齐）验收 16 项全 PASS，两次真启均起在 8002、端口释放、无孤儿；③ 模拟器 Medium_Phone_API_37.0：adb reverse tcp:8000 占住设备 8000（/proc/net/tcp 0A 1F40），装机启动后 files/server-port.txt=8002、host 经 adb forward 探 /api/health 200、截图确认 WebView 加载完整界面（证明未指向 8000）。模拟器已 adb emu kill 关闭并登记 android-local-runtime.md §4。
 - 测试：tests/test_start.py + test_verify_windows_portable.py + test_android_webview_policy.py + test_start_lifecycle.py + test_desktop_shell.py 共 129 passed；5 条具名变异（_android_ready 固定 8000 / write_port_file 提前 return / read_runtime_port 恒 8000 / wait_until_ready 猜 8000 / Java serverBaseUrl 固定 8000）全部被捕获后还原。未跑全量。
 - 未覆盖：arm64 真机（本机无设备）；Android 侧 WebView 未做 8000 之外的连续顺延实测（只验 8002）；桌面 Go supervisor 默认 8002 与 Python 顺延到 8002 的潜在撞端口为既有行为，未改。
+
+### 2026-11-07 18:00 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #279 首轮 CI 红：真失败仅 unit-2 的「Mypy type gate (tests, config baseline)」，2 条 func-returns-value —— 新测试里的 lambda 写成 probed.append(port) or ...，把返回 None 的 append 当值用；其余 unit-1/3/4、integration-heavy、cost-guards、cost-cold-start 为 fail-fast 连带 cancelled，不算红。
+- 修法：只改测试写法（lambda → 带注解局部函数，记录与返回值分两行），断言口径一字未动，未放松任何门禁。
+- 本地复现/复验：mypy --follow-imports=skip tests 187 files 零错误；相关 3 个测试文件 93 passed；ruff 通过。
+- 推送后新跑 42361432194 全绿（含 Windows Portable Smoke 3m33s；Master Direct-Push Scope Gate 为 PR 语境设计内 skipping），head f6b6466，未合并。
