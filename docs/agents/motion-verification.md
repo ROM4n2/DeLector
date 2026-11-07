@@ -328,13 +328,13 @@ Select-String -Path static/style.css, static/css/tokens.css -Pattern "--motion-e
 | 4 | 计数 520ms 只播一次 | 第 2/3 层 | 首次有计时；`dataset.countPlayed` 后不再播 |
 | 5 | 焦点环 2px `--ink` / offset 2px | 第 1 层 | 真实 Tab 后 **等 360ms** 读终值 |
 | 6 | reduce 下无入场、无按压缩放 | 第 3 层 | `dl-fade-up` 实例 0；`transform: none` |
-| 7 | 循环只剩 7 处白名单 | 静态 + 第 2 层 | `grep -rn "infinite" static/` = 7 行 |
+| 7 | 循环只剩 7 处白名单 | 静态 + 第 2 层 | `rg -n "infinite" static/` = 7 行 |
 | 8 | 阅读面零位移 | 第 1/2 层 | `.tok` / `.a1-option-label` 强制 `:active` 后 `transform: none` |
 
 静态闸门先跑：
 
 ```powershell
-grep -rn "infinite" static/        # 7 行白名单
+rg -n "infinite" static/           # 7 行白名单（无 rg 时用 Grep 工具）
 python tools/build_index_html.py
 python tools/check_index_html_sync.py
 ```
