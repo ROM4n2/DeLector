@@ -8132,19 +8132,67 @@ body.drawer-open .shadow-player {
   pointer-events: none;
   transform-origin: bottom right;
   z-index: 75;
+  /* 四侧求解器写入 data-side；箭头位置由 JS 用这两个变量跟随角色中心 */
+  --bubble-arrow-x: calc(100% - 32px);
+  --bubble-arrow-y: 50%;
 }
 
+/* 内容超过 45vh 时只有内层滚动（overflow 由求解器按需开启，避免短消息出现滚动条）；
+   外层必须 overflow: visible 才不会被裁掉箭头 */
+.companion-bubble-body {
+  overscroll-behavior: contain;
+}
+
+/* 默认（data-side 缺失或 top）：箭头贴气泡下沿，向下指 */
 .companion-bubble::after {
   content: "";
   position: absolute;
   bottom: -6px;
-  right: 28px;
+  top: auto;
+  right: auto;
+  left: calc(var(--bubble-arrow-x) - 4.5px);
   width: 9px;
   height: 9px;
   background: var(--paper, #faf8f5);
   border-right: 1.5px solid var(--ink, #1a1a1a);
   border-bottom: 1.5px solid var(--ink, #1a1a1a);
+  border-top: none;
+  border-left: none;
   transform: rotate(45deg);
+}
+
+/* 气泡在角色下方：箭头贴气泡上沿，向上指 */
+.companion-bubble[data-side="bottom"]::after {
+  bottom: auto;
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+  border-top: 1.5px solid var(--ink, #1a1a1a);
+  border-left: 1.5px solid var(--ink, #1a1a1a);
+}
+
+/* 气泡在角色左侧：箭头贴气泡右沿，向右指 */
+.companion-bubble[data-side="left"]::after {
+  bottom: auto;
+  left: auto;
+  right: -6px;
+  top: calc(var(--bubble-arrow-y) - 4.5px);
+  border-right: 1.5px solid var(--ink, #1a1a1a);
+  border-bottom: none;
+  border-top: 1.5px solid var(--ink, #1a1a1a);
+  border-left: none;
+}
+
+/* 气泡在角色右侧：箭头贴气泡左沿，向左指 */
+.companion-bubble[data-side="right"]::after {
+  bottom: auto;
+  left: -6px;
+  right: auto;
+  top: calc(var(--bubble-arrow-y) - 4.5px);
+  border-right: none;
+  border-bottom: 1.5px solid var(--ink, #1a1a1a);
+  border-top: none;
+  border-left: 1.5px solid var(--ink, #1a1a1a);
 }
 
 .companion-bubble-de {
