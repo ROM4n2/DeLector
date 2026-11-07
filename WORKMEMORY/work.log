@@ -842,3 +842,13 @@ Go supervisor 与 Python 顺延撞端口的静默降级已收口（worktree D:\C
 - 后端 get_effective_reasoning_effort 归一：low/未知值→medium，保证 UI 展示=生效值=请求值；抽屉胶囊同步改为三档。
 - 验证链：浏览器点击深读 → POST /api/settings 200 → GET 回读 reasoning_effort=high → reasoning_payload={"reasoning_effort":"max"}。
 - build_index_html + check_index_html_sync PASS；相关 pytest 100 passed/1 skipped；ruff 通过。
+
+### 2026-11-07 22:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+前端一致性与焦点环收口（worktree D:\Code\DeLector-focus / fix/frontend-focus-consistency，PR #285 已开不合并）。
+- 焦点环：.cards-seg-btn/.sm2-btn/.player-btn/.drawer-tab-btn 补 2px --ink；真实 Tab 取证（body 起 18 次到 seg-due；其余从前一可聚焦元素按 1 次 Tab），reflect true、offset 2px。
+- PITFALL：滚动容器内 +2px 外扩环不可见——.drawer-tabs overflow:auto 裁掉上下，且后绘制的相邻 tab 背景盖住左右；改 outline-offset:-2px 内缩后截图确认可见。窄屏 .cards-seg-bar 同理（≤1024px 也 overflow-x:auto）。
+- 按压：workbench .btn 统一 scale(.98)+var(--motion-press,100ms)+focus-visible；reduce 下 transform:none。卡盒按压落在 .deck-card-face 独立 scale(0.99)，不覆盖手势/翻面的 transform 与行内 transform。主应用 .btn 仍 .98/100ms。
+- reduce 取证：四个控件 transitionDuration 均 1e-05s（聚焦后 50ms 读取无中间态）；卡面 scale:none。
+- 颜色：8 处 #15803d 只改 .a1-leitpunkt-item.is-covered → var(--moss)（computed rgb(59,110,63)）；其余 7 处为操作/正确性/评分/已收录结果态，且与 #16a34a/#22c55e/rgba 绿底成对，保留并逐条说明。
+- 验证：build_index_html.py 成功、check_index_html_sync.py PASS；相关 11 个 pytest 文件 233 passed；Edge headless+CDP 实测（本机无 Chrome）。style.css 仅末尾追加；android/ 未动。

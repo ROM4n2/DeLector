@@ -60,13 +60,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
   padding:8px 18px;border-radius:9px;font-size:14px;font-weight:600;
-  background:var(--accent);color:#fff;transition:filter .15s, transform .05s;
+  background:var(--accent);color:#fff;transition:filter .15s, transform var(--motion-press, 100ms) ease;
 }
 @media (hover: hover) and (pointer: fine) {
   .btn:hover {
     filter:brightness(1.08)
   }
-} .btn:active{transform:scale(.97)}
+} .btn:active{transform:scale(.98)}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .btn.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
 .btn.subtle{background:var(--accent-soft);color:var(--accent)}
 .btn.danger{background:var(--again)}
@@ -371,4 +372,6 @@ input[type="range"]{width:190px;accent-color:var(--accent)}
 
 @media (prefers-reduced-motion: reduce){
   .audio-btn.busy{animation:none}
+  /* 与主应用一致：reduce 下按压不缩放，避免过渡中间态。 */
+  .btn:active{transform:none}
 }
