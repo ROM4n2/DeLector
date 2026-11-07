@@ -198,7 +198,7 @@ def test_rate_pair_rubric_is_identical_across_orders_and_call_shape_matches_loop
     assert call["model"] == ""  # 注入 chat 时不读配置（与 run_polish_loop 同约定）
     assert call["response_format"] == {"type": "json_object"}
     assert isinstance(call["timeout"], float) and call["timeout"] > 0
-    assert isinstance(call["max_tokens"], int) and call["max_tokens"] > 0
+    assert "max_tokens" not in call  # 输出预算交给上游默认，不再硬编码
 
 
 def test_request_carries_no_arm_attribution_hints() -> None:

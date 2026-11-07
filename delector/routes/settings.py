@@ -111,14 +111,15 @@ async def test_api_key(settings: SettingsUpdate, request: Request) -> Dict[str, 
         await llm_client.chat(
             [{"role": "user", "content": "Sag 'OK'."}],
             model=model,
-            # 连通性自检：沿用收口前的现值（5），它只要证明"能连上"，不是生成路径
-            max_tokens=llm_client.CONNECTIVITY_MAX_TOKENS,
             timeout=10.0,  # 收口前本端点的现值（10s），语义不变
             # 收口前本端点**只认 HTTP 200**，正文根本不解析（探针真实回的是 `OK`，
             # 不是 JSON）⇒ 不开 content 解析，否则可用 key 会被报成"连接失败"。
             parse_json=False,
             api_key=key,
             base_url=base_url,
+            # 连通性自检只证明“能连上”，不参与思考强度：固定关闭思考，避免探测耗时
+            # 随用户档位漂移。输出预算交给上游默认（不设 max_tokens）。
+            reasoning_effort="none",
         )
     except llm_client.LLMError as e:
         # 现状两条文案保持原样：传输层失败 ⇒「连接失败: <原文>」；HTTP 非 200 ⇒

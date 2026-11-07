@@ -72,13 +72,14 @@ type ToolRunner interface {
 
 // CompanionAgent 统管伴学 Agent 的原生 Tool Calling 循环与流式分发。
 type CompanionAgent struct {
-	client         *openai.Client
-	runner         ToolRunner
-	model          string
-	registry       *provider.Registry
-	fallbackClient *openai.Client
-	fallbackModel  string
-	pipeline       *TurnPipeline
+	client          *openai.Client
+	runner          ToolRunner
+	model           string
+	reasoningEffort string
+	registry        *provider.Registry
+	fallbackClient  *openai.Client
+	fallbackModel   string
+	pipeline        *TurnPipeline
 }
 
 // NewCompanionAgent 构造伴学智能体实例。
@@ -100,6 +101,12 @@ func (a *CompanionAgent) WithRegistry(reg *provider.Registry) *CompanionAgent {
 	if reg != nil {
 		a.registry = reg
 	}
+	return a
+}
+
+// WithReasoningEffort 挂载设置页的缺省思考强度（请求体显式带值时以请求为准）。
+func (a *CompanionAgent) WithReasoningEffort(effort string) *CompanionAgent {
+	a.reasoningEffort = effort
 	return a
 }
 
@@ -145,6 +152,14 @@ func (a *CompanionAgent) RunLoop(ctx context.Context, req Request, emit func(Eve
 	if req.Model != "" {
 		activeModel = req.Model
 	}
+
+	// 设置页档位 -> 上游 reasoning_effort：请求体/请求头显式值优先，其次 Agent 缺省值。
+	// 统一在这里归一化，后续 trace 与真实请求体都记录同一个「实际发出」的取值。
+	effort := req.ReasoningEffort
+	if effort == "" {
+		effort = a.reasoningEffort
+	}
+	req.ReasoningEffort = MapReasoningEffort(effort)
 
 	reg := a.Registry()
 	spec := reg.ResolveModel(activeModel, req.BaseURL)
@@ -374,11 +389,12 @@ func (a *CompanionAgent) receiveTurn(
 	fullContent *strings.Builder,
 ) (*receivedTurn, error) {
 	streamReq := openai.ChatCompletionRequest{
-		Model:      activeModel,
-		Messages:   tc.Messages,
-		Tools:      tools,
-		ToolChoice: "auto",
-		Stream:     true,
+		Model:           activeModel,
+		Messages:        tc.Messages,
+		Tools:           tools,
+		ToolChoice:      "auto",
+		Stream:          true,
+		ReasoningEffort: tc.Req.ReasoningEffort,
 	}
 
 	if activeClient == nil {
@@ -402,6 +418,8 @@ func (a *CompanionAgent) receiveTurn(
 		if a.fallbackModel != "" {
 			fallbackReq.Model = a.fallbackModel
 		}
+		// 备用通道通常是本地 Ollama，不认 DeepSeek 的 reasoning_effort；透传可能直接 400。
+		fallbackReq.ReasoningEffort = ""
 		stream, err = a.fallbackClient.CreateChatCompletionStream(ctx, fallbackReq)
 		if err != nil {
 			errStr := fmt.Sprintf("主通道失败 (%v)；备用模型 (%s) 不可达 (%v)", primaryErr, fallbackReq.Model, err)

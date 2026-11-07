@@ -30,7 +30,7 @@ from delector.services import llm_client
 # ── 轮次、超时与预算常量 ──────────────────────────────────────────────────────
 DEFAULT_MAX_TURNS: int = 3
 DEFAULT_DEADLINE_S: float = 35.0
-DEFAULT_MAX_TOKENS: int = 4096
+# 循环级累计预算：只做多轮总成本刹车，**不进入请求体**；单轮输出上限交给上游默认。
 DEFAULT_MAX_TOKENS_TOTAL: int = 8192
 CHARS_PER_TOKEN_ESTIMATE: float = 3.0
 DEFAULT_PER_CALL_TIMEOUT_S: float = 25.0
@@ -164,11 +164,17 @@ async def run_companion_agent_loop(
     chat_fn: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None,
     tools_override: Optional[Mapping[str, Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]]] = None,
     should_stop: Optional[Callable[[], bool]] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> CompanionAgentOutcome:
     """运行伴学智能体有界验证驱动循环."""
+    from delector.core.db.settings import get_effective_reasoning_effort
+
     start_time = time.monotonic()
     proposals: List[Dict[str, Any]] = []
     total_tokens = 0
+    effective_effort = (
+        reasoning_effort if reasoning_effort is not None else get_effective_reasoning_effort()
+    )
 
     def emit(event_payload: Dict[str, Any]) -> None:
         if on_event is not None:
@@ -289,9 +295,9 @@ async def run_companion_agent_loop(
                 reply_dict = await llm_client.chat(
                     messages=active_messages,
                     model=model_name,
-                    max_tokens=DEFAULT_MAX_TOKENS,
                     timeout=call_timeout,
                     response_format={"type": "json_object"},
+                    reasoning_effort=effective_effort,
                 )
         except asyncio.CancelledError:
             emit({"event": "done", "turns": turn - 1, "tokens": total_tokens, "reason": REASON_CANCELLED})
@@ -455,6 +461,7 @@ async def companion_event_stream(
     messages: List[Dict[str, Any]],
     request: Optional[Any] = None,
     context: Optional[Dict[str, Any]] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """流式产出伴学 Agent 事件帧，带客户端断连主动取消守卫."""
     events: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
@@ -467,6 +474,7 @@ async def companion_event_stream(
             on_event=events.put_nowait,
             deadline_s=DEFAULT_DEADLINE_S,
             should_stop=lambda: state["stop"],
+            reasoning_effort=reasoning_effort,
         )
 
     task = asyncio.ensure_future(_runner())
@@ -511,14 +519,22 @@ async def dispatch_companion_stream(
     messages: List[Dict[str, Any]],
     request: Optional[Any] = None,
     context: Optional[Dict[str, Any]] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """优先委托 Go Agent Runtime（方案 A 统管中枢）；未启动时平滑回退 Python 本地内核."""
+    # 函数内导入：便于测试按 `delector.core.db.settings` 打桩，也避免模块级缓存设置快照。
+    from delector.core.db.settings import get_effective_reasoning_effort
+
+    effective_effort = (
+        reasoning_effort if reasoning_effort is not None else get_effective_reasoning_effort()
+    )
     go_url = os.getenv("DELECTOR_GO_AGENT_URL", "http://127.0.0.1:8002").strip()
     if go_url:
         try:
             req_payload = {
                 "messages": messages,
                 "context": context or {},
+                "reasoning_effort": effective_effort,
             }
             from delector.core.db.settings import (
                 get_effective_api_base_url,
@@ -536,6 +552,7 @@ async def dispatch_companion_stream(
             eff_model = get_effective_api_model()
             if eff_model:
                 headers["X-Model"] = eff_model
+            headers["X-Reasoning-Effort"] = effective_effort
 
             async with httpx.AsyncClient(timeout=60.0) as client:
                 async with client.stream(
@@ -556,5 +573,7 @@ async def dispatch_companion_stream(
         except (httpx.ConnectError, httpx.TimeoutException, OSError):
             pass
 
-    async for frame in companion_event_stream(messages, request=request, context=context):
+    async for frame in companion_event_stream(
+        messages, request=request, context=context, reasoning_effort=effective_effort
+    ):
         yield frame

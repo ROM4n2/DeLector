@@ -782,3 +782,21 @@ T9（静态补全）在 worktree dlector-t9 / feat/t9-static 实施（基于 61b
 PR #266 追加（仍不合并）：ADR-0029 §16.2.4 判据由一问补成三问，原文保留。
 - 第二层根因（播放器托盘调研 PR #267）：`static/style.css:3419-3431` 在 ≤768px 把 `.voice-btn` 设为 `font-size:0`、`.vb-lbl{display:none}`；源码里 Katja/Conrad 文字在，手机断点下字宽恒为 0。当时只查源码、没查断点。
 - 三问口径：断点问（`display:none`/`font-size:0`/`visibility:hidden` 都算不在）→ 状态问（是否状态/身份的唯一可辨载体）→ 可达问（`title` 触屏不算文字，`aria-label` 只服务屏幕阅读器）。
+
+### 2026-11-07 15:52 | deepseek-v4.1-flash__trae | NOTE
+思考强度真实接线在 worktree D:\Code\DeLector-thinking / feat/reasoning-effort-wiring（基于 origin/master 766a98c），PR #277，未合并。
+- 改前：四档只落在设置 DB；companion 的 CompanionChatReq 无该字段、dispatch payload 只有 messages/context；Go 只把请求里的值写 trace，streamReq 没带；4 条 Python 生成路径也没带 ⇒ 界面显示与请求脱节。
+- 映射（Python `llm_client.map_reasoning_effort` 与 Go `companion.MapReasoningEffort` 同构）：none→none、low→low、medium→high、high→max。依据官方文档（2026-11-07）：合法值 none/low/high/max，medium/xhigh 被上游吞成 high，原样透传会让平衡/深度同档。
+- 接入：llm_client.chat(reasoning_effort=) 单点合并 payload；main/articles/writing 与伴学回退内核全部传设置值；连通性自检固定 none；companion body>X-Reasoning-Effort>设置；Go RunLoop 入口归一化并同时用于 trace 与 streamReq，Ollama 回退清空该字段。
+- 证据：Python 相关 111 passed；Go `go test -count=1 ./internal/companion/...` ok、vet clean；ruff 全绿；6 条具名变异全部被捕获后还原。
+- 未验证：四档响应差异。本地 4 份 .env 的 key 对 api.deepseek.com 全 401；探针实测四档已带不同字段发出（none/low/high/max）但未过鉴权。换有效 key 跑 `python tools/probe_reasoning_effort.py` 可补齐。取证记录 docs/agents/reasoning-effort-chain.md。
+- 风险：DEFAULT_MAX_TOKENS=4096 未改，思考 token 与正文共享预算，max 档长输出可能截断，待实测再定；bench_judge_gaming 刻意不带该字段（要钉 temperature）。
+- 过程踩坑：前 7 个 Python 文件误改到主工作树（另一条线 fix/poker-tap-flip 的工作副本），已确认 diff 仅含本次新增后按文件 git restore 精确还原，未触碰他人改动；后续全部改在 thinking worktree。
+
+### 2026-11-07 16:30 | deepseek-v4.1-flash__trae | NOTE
+拆掉请求级 max_tokens 硬编码（同 worktree D:\Code\DeLector-thinking / feat/reasoning-effort-wiring，PR #277 仍 OPEN）。
+- 删除：llm_client.DEFAULT_MAX_TOKENS=4096、CONNECTIVITY_MAX_TOKENS=5、payload 必带字段；main x2 / articles / settings / companion_agent 的 4096 / polish_loop per_call_cap / writing adapter 形参 / probe 的 4096 / bench_judge_rater RATER_MAX_TOKENS=512 / bench_judge_gaming 连通预检的 5。llm_client.chat 的 max_tokens 改为 Optional=None，仅显式传值才进 payload。
+- 四档仍只用 reasoning_effort（none/low/high/max），未加 thinking 开关二次覆盖。
+- 保留：polish_loop(4096) / companion_agent(8192) 的 max_tokens_total —— 不进入请求体，仅多轮累计刹车。
+- 断言更新（先报告后改）：test_llm_client 改为「默认 payload 不含 max_tokens」；test_ai_polish_loop 删「per-call 2×余量」「TOTAL<per-call×3」两闸，改断言每次调用 max_tokens=None；bench 两处改「不下发 / is None」。
+- 验证：相关 6 套 Python 179 passed；Go companion ok；ruff 全绿；探针仍 401（本地 key 失效），四档请求已不再携带 max_tokens。

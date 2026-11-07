@@ -27,34 +27,47 @@ import httpx as httpx
 
 from delector.core.database import get_effective_api_base_url, get_effective_api_key
 
-# ── 预算常量 ──────────────────────────────────────────────────────────────────
-# `max_tokens` 默认值**没有既有来源**：收口前全仓仅一处 max_tokens（连通性自检的 5，
-# 见 `main.py` 的 /api/settings/test-key），生成路径一处都没有 ⇒ 无"既有约定上限"可抄。
+# ── 输出预算 ──────────────────────────────────────────────────────────────────
+# **不设 `max_tokens`**：输出上限交给上游用自己的默认预算决定。
 #
-# 4096 原是**保守占位**（计划 Unknown B）。Task 4 已用实测把它**定案为保留值**，公式为：
-#
-#     DEFAULT_MAX_TOKENS  >=  2 × 单轮最坏 completion 需求
-#     单轮最坏需求        =  ceil(最坏 completion 字符数 / CHARS_PER_TOKEN_ESTIMATE)
-#                        =  ceil(2073 / 3.0) = 691 token        （实测，见下）
-#     2 × 691 = 1382      <=  4096                              （余量 2.97× ⇒ 保留）
-#
-# 实测口径（`delector/services/polish_loop.py` 的"预算实测"段有完整数字表）：
-#   - 最坏输入 = 2000 字符（`main.py:2383` 的 `req.text[:2000]`）的真实德语 A1 电子邮件；
-#   - 录制桩跑满 3 轮（不出网、不用真 Key）：completion 139 / 139 / **2073** 字符；
-#   - **没有真 tokenizer**（本机 `import tiktoken` / `import transformers` 均
-#     ModuleNotFoundError）⇒ 走字符折算，`CHARS_PER_TOKEN_ESTIMATE = 3.0` 登记为
-#     **UNVERIFIED 假设**（偏保守：德语变音字母常被 BPE 拆多 token ⇒ 高估消耗）。
-#     该常量定义在 `polish_loop` 里 —— 本模块**不能反向 import**（`polish_loop` 依赖本模块）。
-# 余量 2× 的理由：stub 基线不是真实分布，模型可能回"原文 + 译文 + 逐句讲解"这类明显更长
-# 的回复；2× 是给"回复比输入更长"这个已知情形留的，不是随手拍的倍数。
-# 这些数字由 `tests/test_ai_polish_loop.py` **现算现比**（不抄过期常量）⇒ 改这一个常量，
-# 全链路（per-call 上限 + 循环级总量）与那条闸一起跟着动。
-DEFAULT_MAX_TOKENS = 4096
-# 连通性自检沿用收口前的现值（不是生成路径，别跟着 4096 走）。
-CONNECTIVITY_MAX_TOKENS = 5
+# 不在这里硬编码任何值，也不用「模型上下文窗口多大」去推算 —— 这类知识会随模型演进
+# 过时，且思考 token 与正文共享输出预算，固定值在窗口/思考预算不同的模型上会提前截断。
+# 调用方若确有显式需要仍可传 `max_tokens=`（opt-in），但不传是默认且推荐形态。
 
 # 结构化输出开关：4 处生成路径要，连通性自检不要 ⇒ 由调用方决定是否带上。
 JSON_OBJECT: Dict[str, str] = {"type": "json_object"}
+
+# ── 思考强度 ──────────────────────────────────────────────────────────────────
+# 依据 DeepSeek 官方 Chat Completions 文档（2026-11-07 核对）：
+#   reasoning_effort 的合法值是 `none` / `low` / `high` / `max`；
+#   `none` 关闭思考，`low`/`high`/`max` 开启且强度递增；上游会把 `medium` / `xhigh`
+#   映射为 `high`（见 docs/agents/reasoning-effort-chain.md 的取证记录）。
+#
+# 设置页四档是 none/low/medium/high，若原样透传，`medium` 会被上游吃掉成 `high`，
+# 与「深度」档同档 ⇒ 四档不可区分。故这里显式映射成四个不同的上游取值：
+#   关闭 none   → none
+#   极速 low    → low
+#   平衡 medium → high（上游默认强度）
+#   深度 high   → max
+_REASONING_EFFORT_TO_UPSTREAM: Dict[str, str] = {
+    "none": "none",
+    "low": "low",
+    "medium": "high",
+    "high": "max",
+}
+DEFAULT_REASONING_EFFORT = "medium"
+
+
+def map_reasoning_effort(effort: Optional[str]) -> str:
+    """把设置页档位映射为上游 `reasoning_effort` 取值；未知/缺省按「平衡」处理."""
+    key = (effort or "").strip().lower()
+    return _REASONING_EFFORT_TO_UPSTREAM.get(key, _REASONING_EFFORT_TO_UPSTREAM[DEFAULT_REASONING_EFFORT])
+
+
+def reasoning_payload(effort: Optional[str]) -> Dict[str, str]:
+    """生成要合入请求体的思考强度字段（单一映射出口，Go 侧有同构实现）."""
+    return {"reasoning_effort": map_reasoning_effort(effort)}
+
 
 # 失败文案与收口前逐字一致（调用方直接塞进 HTTPException(502, detail=...)）。
 _DETAIL_UPSTREAM = "AI 服务异常"
@@ -198,17 +211,19 @@ async def chat(
     *,
     model: str,
     timeout: float,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
+    max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
     response_format: Optional[Dict[str, str]] = None,
     include_usage: bool = False,
     parse_json: bool = True,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     """唯一出网口：发一次 chat/completions，默认返回**解析后的 JSON dict**。
 
-    - `max_tokens` 必进 payload（收口的核心欠账）；不传则落到 `DEFAULT_MAX_TOKENS`；
+    - `max_tokens` **默认不传**：输出预算交给上游默认值；仅当调用方显式传值时
+      才写进 payload（不在本模块硬编码任何上限）；
     - `timeout` 由调用方传入并原样透传给 `httpx.AsyncClient`；
     - 失败一律 `LLMError`，调用方决定 502 / 降级文案 —— 本模块不碰 HTTP 层语义；
     - `parse_json=False`（**仅连通性自检用**）：不解析 `content`，成功只看「HTTP 200 +
@@ -216,6 +231,9 @@ async def chat(
       HTTP 200、正文根本不解析 —— 探针提示词（`Sag 'OK'.`）回的就是 `OK`，不是 JSON；
       若在这里强制 `json.loads`，可用 key 会被报成「连接返回错误代码: 200 (OK)」，
       属于**顺手改坏错误语义**，故这个开关是必须的，不是可选项。
+    - `reasoning_effort`（**新增、opt-in**）：设置页档位（none/low/medium/high），经
+      `reasoning_payload` 映射后写入请求体；`None` ⇒ 不带该字段（连通性自检、实验
+      harness 等不关心思考强度的调用方保持原 payload 逐字不变）。
     - `include_usage=True`（**新增、opt-in**）：把信封的 `usage`（prompt/completion 分别记）
       合并进返回值（`{"…content 键…", "usage": {...}}`）；默认 False ⇒ 返回形状与收口前逐字
       一致。这是为实验 harness 记录**真 token 消耗**而加的唯一透出面，不改既有任何调用方的语义。
@@ -226,12 +244,15 @@ async def chat(
     payload: Dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "max_tokens": max_tokens,
     }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
     if temperature is not None:
         payload["temperature"] = temperature
     if response_format is not None:
         payload["response_format"] = response_format
+    if reasoning_effort is not None:
+        payload.update(reasoning_payload(reasoning_effort))
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
     try:

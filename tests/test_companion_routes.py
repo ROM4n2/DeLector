@@ -263,6 +263,8 @@ def test_companion_chat_generator_close_persists_partial_turn(
     )
 
     class _Request:
+        headers: dict[str, str] = {}
+
         async def is_disconnected(self) -> bool:
             return False
 

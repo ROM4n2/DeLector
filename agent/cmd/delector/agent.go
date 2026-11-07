@@ -70,6 +70,7 @@ func newAgentCmd() *cobra.Command {
 
 			pyClient := pythonsvc.NewClient(pythonURL, nil)
 			agent := companion.NewCompanionAgent(client, pyClient, model)
+			agent.WithReasoningEffort(reasoningEffort)
 
 			if fallbackURL != "" {
 				fbCfg := openai.DefaultConfig("ollama-local")

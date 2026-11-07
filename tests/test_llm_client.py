@@ -5,7 +5,7 @@
 `httpx.AsyncClient + /chat/completions + Authorization + json.loads`，且**生成路径
 零 max_tokens**（输出上界不可控，是 Task 4 循环预算的前置欠账）。收口后本文件钉住：
 
-1. payload **MUST** 含 `max_tokens`（调用方传值或落到有界默认值）；
+1. payload **默认不含** `max_tokens`（输出预算交给上游默认）；显式传值时才透传；
 2. `timeout` 由调用方透传（保留各处现值 30/15/20/10/30 的语义空间）；
 3. HTTP 非 200 ⇒ `LLMError`（调用方据此映射成现状的 502）；
 4. 非 JSON 响应 / 非 JSON 内容 / 畸形信封各有明确失败语义。
@@ -15,6 +15,7 @@
 的测试在门禁上恒 skip，等于没有测试。
 """
 
+import ast
 import asyncio
 import io
 import json
@@ -75,8 +76,8 @@ def _chat(**kwargs: Any) -> Dict[str, Any]:
     return asyncio.run(llm_client.chat(**kwargs))
 
 
-def test_chat_payload_must_carry_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
-    """payload MUST 含 `max_tokens` —— 这是收口的核心欠账（生成路径原先零设置）。"""
+def test_chat_explicit_max_tokens_is_passed_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """显式传 `max_tokens` 时仍原样透传（opt-in）；默认形态见下一条「必须不带」。"""
     seen: Dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -97,7 +98,6 @@ def test_chat_payload_must_carry_max_tokens(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     assert out == {"definition_zh": "挑战"}
-    assert "max_tokens" in seen["payload"], "payload 必须带 max_tokens（输出上界不可控是本次要还的欠账）"
     assert seen["payload"]["max_tokens"] == 1234
     assert seen["payload"]["model"] == "deepseek-chat"
     assert seen["payload"]["messages"] == _MSGS
@@ -105,8 +105,8 @@ def test_chat_payload_must_carry_max_tokens(monkeypatch: pytest.MonkeyPatch) -> 
     assert seen["auth"] == "Bearer sk-stub"
 
 
-def test_chat_default_max_tokens_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
-    """调用方不显式给值时也要有上界（Task 4 循环预算的前置）：默认值 MUST 是正数常量。"""
+def test_chat_default_payload_has_no_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    """调用方不传时 payload MUST 不含 `max_tokens` —— 输出预算交给上游默认，禁止硬编码上限。"""
     seen: Dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -116,8 +116,9 @@ def test_chat_default_max_tokens_is_bounded(monkeypatch: pytest.MonkeyPatch) -> 
     _install_mock_transport(monkeypatch, handler)
     _chat(messages=_MSGS, model="m", timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
 
-    assert llm_client.DEFAULT_MAX_TOKENS > 0
-    assert seen["payload"]["max_tokens"] == llm_client.DEFAULT_MAX_TOKENS
+    assert "max_tokens" not in seen["payload"], (
+        f"默认请求不得带 max_tokens（应由上游决定输出预算）：{seen['payload']}"
+    )
 
 
 def test_timeout_is_passed_through(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -285,7 +286,6 @@ def test_chat_without_parse_json_returns_raw_content(monkeypatch: pytest.MonkeyP
     out = _chat(
         messages=_MSGS,
         model="m",
-        max_tokens=llm_client.CONNECTIVITY_MAX_TOKENS,
         timeout=10.0,
         parse_json=False,
         api_key="k",
@@ -379,3 +379,112 @@ def test_main_routes_converged_on_single_client() -> None:
         f"路由层必须恰好 {_EXPECTED_CONVERGED_CALLS} 处走 llm_client.chat，"
         f"实际 {code.count('llm_client.chat(')} 处"
     )
+
+
+# ── 思考强度：设置页四档 → 上游 reasoning_effort ──────────────────────────────
+# 上游合法值是 none/low/high/max；medium 会被上游吞成 high。四档必须映射到四个
+# **不同**取值，否则「平衡」和「深度」在响应上不可区分（本次任务的核心判据）。
+_REASONING_TIERS = [
+    ("none", "none"),
+    ("low", "low"),
+    ("medium", "high"),
+    ("high", "max"),
+]
+
+
+@pytest.mark.parametrize(("effort", "upstream"), _REASONING_TIERS)
+def test_reasoning_effort_maps_tiers_to_distinct_upstream_values(effort: str, upstream: str) -> None:
+    """四档必须映射成四个互不相同的上游取值（none/low/high/max）。"""
+    assert llm_client.map_reasoning_effort(effort) == upstream
+    assert len({v for _, v in _REASONING_TIERS}) == len(_REASONING_TIERS), "四档映射结果出现了重复"
+
+
+def test_reasoning_effort_unknown_and_empty_fall_back_to_balanced() -> None:
+    """未知/缺省档位回落到「平衡」的上游取值（high），不能出现空字符串发出去。"""
+    assert llm_client.map_reasoning_effort(None) == "high"
+    assert llm_client.map_reasoning_effort("") == "high"
+    assert llm_client.map_reasoning_effort("  ") == "high"
+    assert llm_client.map_reasoning_effort("bogus") == "high"
+    # 大小写/空白容错
+    assert llm_client.map_reasoning_effort(" HIGH ") == "max"
+
+
+@pytest.mark.parametrize(("effort", "upstream"), _REASONING_TIERS)
+def test_chat_payload_carries_mapped_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch, effort: str, upstream: str
+) -> None:
+    """选中档位 MUST 真正进入请求体，而不是只停留在设置页。"""
+    seen: Dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content.decode("utf-8"))
+        return _ok("{}")
+
+    _install_mock_transport(monkeypatch, handler)
+    _chat(
+        messages=_MSGS,
+        model="deepseek-flash",
+        max_tokens=8,
+        timeout=5.0,
+        api_key="k",
+        base_url=_STUB_BASE_URL,
+        reasoning_effort=effort,
+    )
+
+    assert seen["payload"]["reasoning_effort"] == upstream
+
+
+def test_chat_omits_reasoning_effort_when_not_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    """不传 `reasoning_effort` ⇒ payload 里不得出现该字段（连通性自检/harness 保持原样）。"""
+    seen: Dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content.decode("utf-8"))
+        return _ok("{}")
+
+    _install_mock_transport(monkeypatch, handler)
+    _chat(messages=_MSGS, model="m", max_tokens=8, timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
+
+    assert "reasoning_effort" not in seen["payload"]
+
+
+_GENERATION_MODULES = [
+    os.path.join("delector", "routes", "main.py"),
+    os.path.join("delector", "routes", "articles.py"),
+    os.path.join("delector", "routes", "writing.py"),
+    os.path.join("delector", "routes", "settings.py"),
+    os.path.join("delector", "services", "companion_agent.py"),
+]
+
+
+def test_all_llm_call_sites_forward_reasoning_effort() -> None:
+    """结构守卫：所有生成路径的 `llm_client.chat(...)` MUST 显式带上 `reasoning_effort=`。
+
+    防的是本次修复的核心失效模式：设置页显示某档、请求里根本没有该字段。
+    实验 harness（`tools/bench_judge_gaming.py`）刻意不带：它要钉 temperature，
+    而思考模式会忽略 temperature，混入会破坏基准语义。
+    """
+    checked = 0
+    for rel in _GENERATION_MODULES:
+        path = os.path.join(ROOT, rel)
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (
+                isinstance(func, ast.Attribute)
+                and func.attr == "chat"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "llm_client"
+            ):
+                continue
+            checked += 1
+            kwarg_names = {kw.arg for kw in node.keywords}
+            assert "reasoning_effort" in kwarg_names, (
+                f"{rel}:{node.lineno} 的 llm_client.chat 未传 reasoning_effort —— "
+                "设置页选中的档位不会进入请求体"
+            )
+
+    assert checked == 6, f"预期 6 处生成路径 llm_client.chat，实际 {checked} 处（新增路径请补 reasoning_effort）"

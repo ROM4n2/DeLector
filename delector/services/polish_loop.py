@@ -38,11 +38,11 @@
   任一处「不再下降」即停在 `no_improvement` / `judge_unreliable`。
   注意这是**桩场景**的分布（取几次证由模型自己定），不等于真实分布 —— Unknown B 的
   「真实轮次分布」仍有待有 Key 后回测，本模块只保证**上界**成立。
-- **定案**：`DEFAULT_MAX_TOKENS`（per-call）**保留 4096**（实测单轮最坏需求 ×2 仍余量充足）；
-  `DEFAULT_MAX_TOKENS_TOTAL = 4096`（= 一次满额 per-call 的量，语义好讲：
-  「整个循环最多烧掉一次满额回复的量」；它严格小于
-  `DEFAULT_MAX_TOKENS * MAX_TURNS_DEFAULT = 12288` ⇒ **循环级预算会先于**
-  「每轮上限 × 轮数」咬合，不是真空闸）；`DEFAULT_DEADLINE_S = 18.0`（严格小于
+- **定案**：请求体**不再设 per-call `max_tokens`**，输出预算交给上游默认值（固定值会
+  在上下文窗口/思考预算不同的模型上提前截断）；循环级 `DEFAULT_MAX_TOKENS_TOTAL = 4096`
+  仍保留为**多轮累计刹车**（只记账、不进入请求体）：单轮上游默认值不可预知，故不再
+  声称它先于 per-call 咬合；它只负责在累计 completion 超支时给出 `token_budget`
+  原因码；`DEFAULT_DEADLINE_S = 18.0`（严格小于
   `static/js/core.js` 的 `DEFAULT_TIMEOUT_MS / 1000 = 25.0`，留 7s 给端点回程与 toast
   ⇒ **内层先到点**，前端拿到的是人话原因码而不是 abort）。
 
@@ -96,13 +96,11 @@ MAX_TURNS_DEFAULT = 3
 # 使预算提前咬合 ⇒ 安全方向）；生产端点已接入 API 信封真实 usage 透出（PR #147），3.0 作为稳健兜底常量保留。
 CHARS_PER_TOKEN_ESTIMATE = 3.0
 
-# per-call 上限沿用 `llm_client.DEFAULT_MAX_TOKENS`（4096，Task 3 的占位值）：
-# 实测单轮最坏需求约 700~740 token（见 `tests/test_ai_polish_loop.py`），
-# 2× 余量 = ~1480 ⇒ 4096 余量充足，**保留不改**。
+# per-call **不设** `max_tokens`：单轮输出预算交给上游默认值，避免硬编码在窗口/思考
+# 预算不同的模型上提前截断。
 #
-# 循环级总量 = 一次满额 per-call 的量：
-#   DEFAULT_MAX_TOKENS_TOTAL (4096) < DEFAULT_MAX_TOKENS (4096) × MAX_TURNS_DEFAULT (3)
-# ⇒ 证明它会在「第 1~2 轮跑飞」时咬合，而不是永不触发的真空闸。
+# 循环级总量仍是内部记账刹车（不进入请求体），只累计 completion：
+#   DEFAULT_MAX_TOKENS_TOTAL = 4096
 DEFAULT_MAX_TOKENS_TOTAL = 4096
 
 # 墙钟 deadline：MUST 严格小于外层请求超时（到点次序：内层先到点才能留下人话错误）。
@@ -449,14 +447,12 @@ async def run_polish_loop(
         rounds += 1
         # 到点次序：内层 timeout 取 min(每轮默认超时, 剩余 deadline)
         per_call_timeout = min(DEFAULT_PER_CALL_TIMEOUT_S, remaining)
-        per_call_cap = min(llm_client.DEFAULT_MAX_TOKENS, budget.max_tokens_total - tokens_used)
         verdict_this_round: dict[str, Any] | None = None
 
         raw_reply = await chat_fn(
             messages=list(messages),
             model=model,
             timeout=per_call_timeout,
-            max_tokens=per_call_cap,
             response_format=llm_client.JSON_OBJECT,
         )
         tokens_used += completion_tokens_of(raw_reply if isinstance(raw_reply, dict) else {})
