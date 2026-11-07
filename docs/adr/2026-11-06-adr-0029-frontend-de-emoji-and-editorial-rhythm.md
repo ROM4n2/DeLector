@@ -329,3 +329,63 @@ inline SVG 只是 HTML/JS 字符串，不新增请求，`tools/build_index_html.
 | 15.2 | T6 文件清单只列关闭 / 角色 / 声音 / 收起 | 另补 4 个 `.panel-color-dot` 与 `#panel-color-custom` 的 `aria-label` | 验收第 1 条要求全部按钮可命名；颜色按钮原本无文字、无 `aria` |
 | 15.3 | T7 文件清单只列角色按钮与声音按钮 | 另补 5 个 `.mascot-color-dot` 与 `#studio-color-picker` 的 `aria-label` | 同上；`title` 不计入可访问名 |
 | 15.4 | T1 记 `aria-label` 基线 11 处 | 源片段实测 11 处；含生成物 `static/index.html` 为 18 处 | 计量口径差异，非基线漂移；未触发 §11.2 E1 |
+
+---
+
+## 16. 落地与失效条款（2026-11-07）
+
+> 按 §12.2 规则 1 追加：**§1–§15 原文一字不改、不删除**。本节只记录 T1–T9 的落地事实，以及执行期被实测推翻的原文与替代口径。
+
+### 16.1 T1–T9 落地清单
+
+| 项 | PR | merge commit | 落地事实 | 对应条款 |
+|---|---|---|---|---|
+| 前置 slice4 | #255 | `f423e02` | B 类 390 处装饰字形清零，扫描 0 残留 | §5 A/B |
+| 实施计划 | #256 | `1a40986` | T1–T9 切分、停止门、偏差表建立 | — |
+| M1 / T1 | #257 | `e840467` | 13 处 `infinite` → 7 处白名单；删除/降级 `tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse` / `pulseDot` 五个 keyframes；`.tok` 聚焦改静态 `scale(1.06)` + 2px 环 | §3.1 / §6.4 |
+| T2 | #258 | `3a2e957` | 5 个 motion token 在 `tokens.css` 与 `style.css :root` 双份镜像；`motion.js`；`.dl-enter` / `.dl-stagger` / `.dl-count`；全局 reduce 块 | §3.5 决策 5 |
+| T3 | #259 | `3936999` | 移除 30 条 hover 位移（9 条 `translate`/`translateX` + 21 条 `translateY`），改由 `background` / `border-color` / `box-shadow` / `color` 承载；保留 10 处非布局 `scale`/`rotate`；`.stat-badge` 的 `translateY(-2px)` 为唯一位移例外；全部 `:hover` 包进 `@media (hover: hover) and (pointer: fine)`，混合选择器拆分 | I1 / §6.2 |
+| T4 | #260 | `e19a11a` | `.nav-tab.active` / `.mobile-nav-btn.active` / `.dock-item.active` 增加 2px `scaleY` 左色条；`aria-current` 由 `main.js` 的 `show()` 动态同步 | I1 |
+| T5 | #261 | `8217dfd` | `enterOnce()` 一次性入场；搜索结果按**可见分组 section** 入场、`.card-grid` 首次生成入场、考试模块网格首次 `show('exam')` 入场；cap 6；动画结束自动摘类 | §3.5 / §6.5 |
+| T6 | #262 | `97f4ac3` | 6 个统计数字 520ms 一次性计数；`aria-label` 为终值、无 `aria-live`；`dataset.countPlayed` 门控 | §6.5 |
+| T7 | #263 | `4821bf3` | `.enc-popover` 入口时长改引 `--motion-enter` / `--ease-editorial`；不新增关闭动画 | §3.5 |
+| T8 | #264 | `61be846` | `.btn:active` `scale(.98)` + `--motion-press`；`.icon-btn` / `.deck-card` 本仓不存在，未加；`workbench.css` 独立 `.btn:active` 未动 | §3.5 |
+| T9 | #265 | `1790f70` | 卡片三态芯片（文字 + 颜色 + 3px 左竖线）；12 个 T3–T8 控件补 `:focus-visible` 2px `--ink` 环 + 2px offset；`.lp-status` 补芯片形状；排印按作用层验收（见 16.2 第 1 条） | I1 / §3.5 / §6.2 |
+
+### 16.2 失效与推翻原文（3 条）
+
+> 以下 3 条按 §12.2 规则 1 记为**失效**：原文保留，替代口径写在这里。
+
+#### 16.2.1 `section/content = 4.0` 从未落在像素上
+
+- **原文**：外部参考评审把 `section/content` 间距比目标写作 **4.0**（`docs/reviews/2026-11-06-dryness-contrast-prototype.html`）；§3.5 据此落成「section 间距 40–64px」。
+- **实测**：该原型实际渲染是 **64 ÷ 40 = 1.6**；4.0 是按「section = 元素 × 2.5–3」倒推的**合成目标值**，从未落在任何像素上。T9 实测功能面内部块间 28–32px（1.17 档），阅读面 70 字符/行、1.85 sans / 1.95 serif。
+- **结论**：**【失效】** 4.0 不能作为验收常数。替代口径按作用层拆分：
+  1. 阅读面（reader 正文块）保持现状；
+  2. 功能面（cards 控制区、exam 列表）内部块间 28–40px 是刻意紧凑，不是欠账；
+  3. 只有 `.view` 级 padding 维持 40/64。
+- **留痕**：计划 §7 #10；`WORKMEMORY/work.log` 2026-11-07 14:12。
+
+#### 16.2.2 hover 位移的真正问题不是推布局，而是文字横向跳
+
+- **原文**：动效调研 §4 手法 2 的理由写作「用 `translate` 改布局 → 相邻行位移」；T3 原计划据此把问题定义为「推动布局」。
+- **实测**：`transform` 从不参与布局，相邻元素不会被推动。真正的问题是元素内**文字随 `translateX(2px)` 整体横向跳动**，阅读锚点跟着鼠标漂移；同时触屏 tap 后 hover 态会粘住。
+- **结论**：**【失效】**「推布局」不是主因。T3 移除 30 条 hover 位移，改由颜色/阴影/边框承载；保留 10 处非布局 `scale`/`rotate`；`.stat-badge` 的 `translateY(-2px)` 是唯一位移例外。验收改为「文字承载元素 hover 不得有位移」。
+- **留痕**：计划 §7 #4 / #5；计划 T3 验收原文。
+
+#### 16.2.3 循环动画实测 13 处，不是 4 处
+
+- **原文**：动效调研前的估计为 **4 处** `infinite`（计划 §1 D1 引用该估计）。
+- **实测**：22 个 `@keyframes`（`style.css` 19 + `workbench.css` 3）中 **13 处** `infinite`（style 12 + workbench 1）。
+- **结论**：**【失效】** 估计值被实测取代。M1 删除/降级 5 个 keyframes，`infinite` 从 13 处降到 **7 处**白名单（光标 / 眨眼 / 待机 ×2 / marquee ×2 / 音频忙碌），全部补 `prefers-reduced-motion` 降级。
+- **留痕**：调研 §8；计划 §1 D1；`WORKMEMORY/work.log` 2026-11-07。
+
+### 16.3 未被推翻但口径收窄的条款
+
+- §3.5 的「正文 1.6 / 长读 1.9 / 行宽 45–90 字符」仍有效；T9 实测 70 字符/行、1.85 / 1.95，合格。
+- §6 失败信号 #2（未被要求修改的页面 >5% 视觉差异）仍有效，T9 未触发。
+- §11.2 E2（第一切片验收失败）未触发：T1–T9 均 CI 绿后合并。
+
+### 16.4 动效系统的归属
+
+§3.5 决策 5 只写了「新增…动效 token」，未定义 token 集合、三件套类与降级策略。该层由 **ADR-0030** 承接；本 ADR 不重复定义。ADR-0030 与本文是**新增/补充**关系，不是取代关系。
