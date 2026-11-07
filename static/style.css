@@ -7623,6 +7623,151 @@ body.drawer-open .shadow-player {
   }
 }
 
+/* ── Settings IA (2026-11-07): single entry + collapsible groups ───── */
+@media (max-width: 1024px) {
+  /* 移动端只保留 dock 入口：隐藏顶部「设置」，避免同屏两个入口 */
+  .nav-settings-btn {
+    display: none;
+  }
+}
+
+.settings-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.settings-modal-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.settings-group {
+  border-top: 1px solid var(--border);
+}
+
+.settings-group:first-of-type {
+  border-top: none;
+}
+
+.settings-group-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-group-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.settings-group-chevron {
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+.settings-group-toggle[aria-expanded="false"] .settings-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.settings-group-body {
+  padding-bottom: 1rem;
+}
+
+.settings-group-body[hidden] {
+  display: none;
+}
+
+.settings-group-body > .modal-field {
+  margin-top: 0.75rem;
+}
+
+.settings-tip {
+  font-size: 0.75rem;
+  color: var(--pencil);
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.settings-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.settings-inline-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.settings-key-vis-btn {
+  min-width: 44px;
+  padding: 0 0.5rem;
+}
+
+.settings-field-status {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--pencil);
+}
+
+.settings-preset-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.settings-effective-model {
+  margin-top: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  line-height: 1.4;
+}
+
+.settings-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.settings-test-feedback {
+  font-size: 0.75rem;
+  color: var(--pencil);
+  font-family: var(--mono);
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 380px) {
+  .settings-modal-box {
+    padding: 1rem;
+  }
+  .settings-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── v3.7.0: Companion Mascot System (Eule & Friends) ─────────────── */
 .folio-mascot-section {
   max-width: 1200px;

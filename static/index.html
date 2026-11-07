@@ -1890,17 +1890,14 @@
       class="modal-overlay hidden"
       onclick="if (event.target === this) closeSettingsModal();"
     >
-      <div class="modal settings-modal-box">
-        <div
-          class="modal-header"
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-          "
-        >
-          <span style="font-size: 1.125rem; font-weight: 700; color: var(--ink)"
+      <div
+        class="modal settings-modal-box"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+      >
+        <div class="modal-header settings-modal-header">
+          <span id="settings-title" class="settings-modal-title"
             >偏好与 API 设置 (Einstellungen)</span
           >
           <button
@@ -1913,131 +1910,107 @@
           </button>
         </div>
 
-        <div class="settings-section">
-          <div class="settings-section-title">
-            AI 深度剖析服务 (DeepSeek / OpenAI 兼容)
-          </div>
-          <p
-            class="settings-tip"
-            style="
-              font-size: 0.75rem;
-              color: var(--pencil);
-              margin: 0.25rem 0 0.75rem 0;
-              line-height: 1.4;
-            "
+        <section class="settings-group">
+          <button
+            type="button"
+            class="settings-group-toggle"
+            aria-expanded="true"
+            aria-controls="settings-group-ai"
+            onclick="toggleSettingsGroup(this)"
           >
-            用于选词语法深度剖析与随笔便签速记。词库、形态学、五场域拓扑、完形
-            C-Test 等功能 100% 离线，无需 API Key。
-          </p>
+            <span class="settings-group-title">AI 深度剖析与模型</span>
+            <svg class="ui-ico settings-group-chevron" aria-hidden="true" focusable="false">
+              <use href="#ui-ico-chevron-down"></use>
+            </svg>
+          </button>
+          <div class="settings-group-body" id="settings-group-ai">
+            <p class="settings-tip">
+              用于选词语法深度剖析与随笔便签速记。词库、形态学、五场域拓扑、完形
+              C-Test 等功能 100% 离线，无需 API Key。
+            </p>
 
-          <div class="modal-field" style="margin-top: 0.75rem">
-            <label class="input-label">API 密钥 (API Key)</label>
-            <div style="display: flex; gap: 0.5rem">
-              <input
-                id="set-api-key"
-                type="password"
-                class="modal-input"
-                placeholder="sk-..."
-                autocomplete="off"
-              />
-              <button
-                id="btn-toggle-key-vis"
-                class="btn btn-ghost"
-                onclick="toggleKeyVisibility()"
-                title="显示/隐藏 API 密钥"
-                aria-label="显示 API 密钥"
-                style="min-width: 44px; padding: 0 0.5rem"
-              >
-                显示
-              </button>
-            </div>
-            <span
-              id="set-key-status"
-              style="
-                font-size: 0.75rem;
-                color: var(--pencil);
-                margin-top: 0.25rem;
-                display: block;
-              "
-            ></span>
-          </div>
-
-          <div
-            style="
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 0.75rem;
-              margin-top: 0.75rem;
-            "
-          >
             <div class="modal-field">
-              <label class="input-label">接口地址 (Base URL)</label>
-              <input
-                id="set-base-url"
-                type="text"
-                class="modal-input"
-                placeholder="https://api.deepseek.com"
-              />
-              <div
-                style="
-                  display: flex;
-                  gap: 4px;
-                  margin-top: 4px;
-                  flex-wrap: wrap;
-                "
-              >
+              <label class="input-label" for="set-api-key">API 密钥 (API Key)</label>
+              <div class="settings-inline-row">
+                <input
+                  id="set-api-key"
+                  type="password"
+                  class="modal-input"
+                  placeholder="sk-..."
+                  autocomplete="off"
+                />
                 <button
-                  type="button"
-                  class="btn-preset-pill"
-                  onclick="
-                    document.getElementById('set-base-url').value =
-                      'https://api.deepseek.com'
-                  "
+                  id="btn-toggle-key-vis"
+                  class="btn btn-ghost settings-key-vis-btn"
+                  onclick="toggleKeyVisibility()"
+                  title="显示/隐藏 API 密钥"
+                  aria-label="显示 API 密钥"
                 >
-                  DeepSeek 官方
-                </button>
-                <button
-                  type="button"
-                  class="btn-preset-pill"
-                  onclick="
-                    document.getElementById('set-base-url').value =
-                      'https://api.openai.com/v1'
-                  "
-                >
-                  OpenAI
+                  显示
                 </button>
               </div>
-            </div>
-            <div class="modal-field">
-              <label class="input-label">模型名称 (Model)</label>
-              <input
-                id="set-model-name"
-                type="text"
-                class="modal-input"
-                placeholder="deepseek-v4-flash"
-              />
-              <div
-                style="
-                  display: flex;
-                  gap: 4px;
-                  margin-top: 4px;
-                  flex-wrap: wrap;
-                "
-              >
-                <button
-                  type="button"
-                  class="btn-preset-pill"
-                  onclick="
-                    document.getElementById('set-model-name').value =
-                      'deepseek-v4-flash'
-                  "
-                >
-                  deepseek-v4-flash (推荐)
-                </button>
-              </div>
+              <span id="set-key-status" class="settings-field-status"></span>
             </div>
 
-            <div class="modal-field" style="margin-top: 0.75rem;">
+            <div class="settings-grid-2">
+              <div class="modal-field">
+                <label class="input-label" for="set-base-url">接口地址 (Base URL)</label>
+                <input
+                  id="set-base-url"
+                  type="text"
+                  class="modal-input"
+                  placeholder="https://api.deepseek.com"
+                />
+                <div class="settings-preset-row">
+                  <button
+                    type="button"
+                    class="btn-preset-pill"
+                    onclick="
+                      document.getElementById('set-base-url').value =
+                        'https://api.deepseek.com'
+                    "
+                  >
+                    DeepSeek 官方
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-preset-pill"
+                    onclick="
+                      document.getElementById('set-base-url').value =
+                        'https://api.openai.com/v1'
+                    "
+                  >
+                    OpenAI
+                  </button>
+                </div>
+              </div>
+              <div class="modal-field">
+                <label class="input-label" for="set-model-name">模型名称 (Model)</label>
+                <input
+                  id="set-model-name"
+                  type="text"
+                  class="modal-input"
+                  placeholder="deepseek-flash"
+                />
+                <div class="settings-preset-row">
+                  <button
+                    type="button"
+                    class="btn-preset-pill"
+                    onclick="
+                      document.getElementById('set-model-name').value =
+                        'deepseek-flash'
+                    "
+                  >
+                    DeepSeek-Flash
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="set-effective-model" class="settings-effective-model">
+              当前生效：—
+            </div>
+
+            <div class="modal-field">
               <label class="input-label" for="set-reasoning-effort">思考强度 (Reasoning Effort)</label>
               <select id="set-reasoning-effort" class="modal-input">
                 <option value="none">关闭思考 (None) - 仅常规输出</option>
@@ -2049,88 +2022,65 @@
                 调节 DeepSeek 与思维链模型的深度推演强度。
               </div>
             </div>
-          </div>
 
-          <div
-            style="
-              margin-top: 0.875rem;
-              display: flex;
-              gap: 0.5rem;
-              align-items: center;
-            "
-          >
-            <button
-              id="btn-test-key"
-              class="btn btn-ghost"
-              onclick="testApiKeyConnection()"
-            >
-              测试连通性
-            </button>
-            <span
-              id="test-key-feedback"
-              style="
-                font-size: 0.75rem;
-                color: var(--pencil);
-                font-family: var(--mono);
-              "
-            ></span>
-          </div>
-        </div>
-
-        <hr
-          style="
-            border: none;
-            border-top: 1px solid var(--border);
-            margin: 1.25rem 0;
-          "
-        />
-
-        <div class="settings-section">
-          <div class="settings-section-title">德语发音与 TTS 朗读偏好</div>
-          <div
-            style="
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 0.75rem;
-              margin-top: 0.75rem;
-            "
-          >
-            <div class="modal-field">
-              <label class="input-label">默认发音人 (Voice)</label>
-              <select id="set-tts-voice" class="modal-input">
-                <option value="de-DE-KatjaNeural">
-                  Katja (女声 · 德国之声推荐)
-                </option>
-                <option value="de-DE-ConradNeural">
-                  Conrad (男声 · 严谨沉稳)
-                </option>
-                <option value="de-DE-AmalaNeural">
-                  Amala (女声 · 自然清晰)
-                </option>
-                <option value="de-DE-KillianNeural">
-                  Killian (男声 · 浑厚母语)
-                </option>
-              </select>
-            </div>
-            <div class="modal-field">
-              <label class="input-label">朗读语速 (Speed)</label>
-              <select id="set-tts-rate" class="modal-input">
-                <option value="-15%">0.85x 放缓 (影子跟读推荐)</option>
-                <option value="+0%" selected>1.0x 标准语速</option>
-                <option value="+15%">1.15x 挑战语速</option>
-              </select>
+            <div class="settings-actions-row">
+              <button
+                id="btn-test-key"
+                class="btn btn-ghost"
+                onclick="testApiKeyConnection()"
+              >
+                测试连通性
+              </button>
+              <span id="test-key-feedback" class="settings-test-feedback"></span>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div
-          style="
-            margin-top: 1.5rem;
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.75rem;
-          "
-        >
+        <section class="settings-group">
+          <button
+            type="button"
+            class="settings-group-toggle"
+            aria-expanded="true"
+            aria-controls="settings-group-tts"
+            onclick="toggleSettingsGroup(this)"
+          >
+            <span class="settings-group-title">德语发音与 TTS</span>
+            <svg class="ui-ico settings-group-chevron" aria-hidden="true" focusable="false">
+              <use href="#ui-ico-chevron-down"></use>
+            </svg>
+          </button>
+          <div class="settings-group-body" id="settings-group-tts">
+            <div class="settings-grid-2">
+              <div class="modal-field">
+                <label class="input-label" for="set-tts-voice">默认发音人 (Voice)</label>
+                <select id="set-tts-voice" class="modal-input">
+                  <option value="de-DE-KatjaNeural">
+                    Katja (女声 · 德国之声推荐)
+                  </option>
+                  <option value="de-DE-ConradNeural">
+                    Conrad (男声 · 严谨沉稳)
+                  </option>
+                  <option value="de-DE-AmalaNeural">
+                    Amala (女声 · 自然清晰)
+                  </option>
+                  <option value="de-DE-KillianNeural">
+                    Killian (男声 · 浑厚母语)
+                  </option>
+                </select>
+              </div>
+              <div class="modal-field">
+                <label class="input-label" for="set-tts-rate">朗读语速 (Speed)</label>
+                <select id="set-tts-rate" class="modal-input">
+                  <option value="-15%">0.85x 放缓 (影子跟读推荐)</option>
+                  <option value="+0%" selected>1.0x 标准语速</option>
+                  <option value="+15%">1.15x 挑战语速</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="settings-footer">
           <button class="btn btn-ghost" onclick="closeSettingsModal()">
             取消
           </button>

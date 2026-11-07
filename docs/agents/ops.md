@@ -150,6 +150,16 @@ TTS 链路（真机判定层）：`AndroidNativeTTS.speak`（系统 TTS，免网
 
 ---
 
+## 前端静态改动验证（工作树隔离）
+
+- 新建的 worktree 不含 `.venv`：用既有主仓解释器（`d:\Code\DeLector\.venv\Scripts\python.exe`）并把 `cwd` 设为**当前 worktree**，确保 `delector` 从本树导入；裸 `python` 可能缺 uvicorn。
+- 起验证服务用独立端口（如 8012）+ 临时 `DELECTOR_DATA_DIR`，避开并行线的 8000–8010 与已被占用的端口；不要用 `start.py`（会拉浏览器并抢实例锁）。
+- 改 `static/layout|views|modals` 后必须 `python tools/build_index_html.py` + `python tools/check_index_html_sync.py`。
+- **APK 不随 master 自动更新**：`static/` 在构建期打包进 APK。worktree 若没有 `gradlew` / 全局 `gradle`，无法重建 APK 做真机验证；此时以浏览器 393/360 实测为准，并在回报中显式标注 Android 未验。
+- 窄屏双列表单（≤360）标签换行会让两列基线错位：在 `≤380px` 断点降为单列，393 保留双列以避免无谓增高。
+
+---
+
 ## Agent 工作惯例
 
 1. **先验证再断言**：声称"已修复/已完成"前先跑验证并给出证据（复现脚本、测试输出、
