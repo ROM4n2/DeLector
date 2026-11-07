@@ -264,11 +264,24 @@
 | 自动测试 | `pytest tests/test_writer_mobile.py` → `32 passed` |
 | 生成物一致 | `build_index_html.py` + `check_index_html_sync.py` → PASS |
 
+### 8.1 模拟器装机实测（emulator-5554，411×866 CSS / dpr 2.625）
+
+| 项 | 结果 |
+| --- | --- |
+| 标题 | `#writer-title` 已是 `TEXTAREA`，高 74px（两行），右边距 374 < 411，末尾「...」完整 |
+| 闭包 | `transform: translateY(658.155px)`，面板顶边 = 866 = 视口底；页签 `rect.top 879 > 866`，完全离屏 |
+| 抽屉展开 | `rect 208→866`；三页签 `221–264`；「问题清单 / 版本快照 / 诊断分析」依次切换、高亮正常 |
+| 键盘 | 真实软键盘弹出后 `visualViewport = 554`、`--writer-vvh: 554px`、`inset 0`；编辑区 `211–371`、工具栏 `383–417`、dock `496–554`，工具栏未被压住 |
+| 遮罩 | 点击 (540,300) 后 `mobile-panel-open` 移除、transform 回 658px、scrim 淡出 |
+
+> 装机陷阱（**必看**）：APK 版本号不变时，`files/static.version` 会走「只补缺失文件」快路径，旧 `index.html` 留在设备上；同时旧 Service Worker（`delector-static-v5.21.1`）还会缓存旧 CSS。验证前必须先确认 DOM 里 `#writer-title` 是 `TEXTAREA`、CSS 里含 `top: auto`，否则测的是旧资源。
+
+
 ---
 
 ## 9. 未覆盖与风险
 
-1. **真机键盘形态**：headless 只能模拟两种视口变化；折叠屏、分屏、第三方输入法（含候选词条）仍需装机实测。
+1. **真机键盘形态**：模拟器（411×866，API 37，软键盘后可视 554px）已实测通过；折叠屏、分屏、第三方输入法（含候选词条）仍未覆盖。
 2. **安全区实际值**：模拟器 `env(safe-area-inset-bottom)=0`；刘海/home indicator 机型需在真机确认 `padding-bottom` 生效。
 3. **桌宠遮挡**：本轮未动 `#companion`，它仍可能压住工具栏右下角；按 §7 的让位规则另派实现。
 4. **横向 320px**：未纳入（低于项目现有最小支持宽度）；若支持，标题会折三行，`maxHeight 96px` 会触发内部滚动。
@@ -340,3 +353,11 @@
 6. 安全区：computed padding-bottom 含 58px + env()
 7. 控制台无报错；`build_index_html` + `check_index_html_sync` 通过
 ```
+
+### H. Android WebView 静态资源缓存（装机验证必查）
+
+- [ ] **装完先验「跑的是不是新包」**：`adb shell pm path` 的 base.apk 大小与本地 APK 一致；`assets/static/index.html` 的 md5 与构建产物一致。
+- [ ] 版本号未变时，`files/static.version` 相同会走「只补缺失文件」快路径 → 旧 `index.html` 留存。验证前清 `files/static` + 版本标记，或改版本号。
+- [ ] Service Worker（如 `delector-static-v5.21.1`）会缓存旧 CSS/JS；验证前注销旧 SW 或提升 cache 名。
+- [ ] **DOM/样式反证**：改版验证至少断言一个结构性变化（例：`#writer-title` 的 `tagName === 'TEXTAREA'`）和一个样式变化（例：sheet 计算样式含 `top: auto` / `translateY(100%)`），否则截图再像也不能证明新代码生效。
+- [ ] `adb install -r` 遇到 `INSTALL_FAILED_VERSION_DOWNGRADE` 时用 `-r -d`，**不要 uninstall**（会丢用户数据）。
