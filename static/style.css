@@ -4180,6 +4180,9 @@ body.drawer-open .shadow-player {
   grid-template-areas: "card";
   cursor: pointer;
   transform-style: preserve-3d;
+  /* 横向手势交给 Pointer Events；纵向仍允许页面滚动。
+     不加会把横滑吞成浏览器滚动并触发 pointercancel，tap/拖动都收不全。 */
+  touch-action: pan-y;
   transition:
     transform 0.5s cubic-bezier(0.2, 0.85, 0.4, 1.15),
     box-shadow 0.2s ease,

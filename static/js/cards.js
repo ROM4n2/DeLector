@@ -307,7 +307,7 @@ export function renderDeckStage(vList, gList) {
         <div class="deck-active-card ${cardState.deck.flipped ? "is-flipped" : ""}" id="deck-active-card">
 
           <!-- 🎴 FRONT FACE (正面) -->
-          <div class="deck-card-face card-front" onclick="toggleDeckFlip(event)">
+          <div class="deck-card-face card-front">
             <div class="deck-card-head">
               <div>
                 <div class="deck-word-title">${isVocab ? esc(card.word) : esc(card.grammar_name)}</div>
@@ -483,40 +483,100 @@ function attachDeckSwipeListener() {
   const cardEl = document.getElementById("deck-active-card");
   if (!cardEl) return;
 
+  // 真机事故根因（2026-11-07 Android）：旧实现只在 touchmove 里给 currentX 赋值，
+  // 干净 tap 没有 touchmove ⇒ currentX 停在初始 0，touchend 算出的 diff = -startX
+  // 恒为大幅负数 ⇒ 每次点击都被当成「左滑」跳下一张，click 再也没机会翻面。
+  // 现在改为 Pointer Events，并在 pointerdown 就把 currentX 初始化为 startX。
+  //
+  // 阈值：
+  // - TAP_SLOP_PX = 10：Android 默认 touch slop 约 8dp，取 10 留 2px 余量；
+  //   低于此值视为 tap（手指抖动），不把点击当拖动。
+  // - SWIPE_COMMIT_PX = 70：沿用旧滑动阈值（约占 390px 视口的 18%），
+  //   足以区分「想翻面」和「想切卡」，又不必拖过半屏。
+  // 10–70px 之间是模糊区：回弹，不翻面也不切卡，避免犹豫的拖动被误判。
+  const TAP_SLOP_PX = 10;
+  const SWIPE_COMMIT_PX = 70;
+
   let startX = 0;
+  let startY = 0;
   let currentX = 0;
-  let isDragging = false;
+  let pointerId = null;
+  let verticalIntent = false;
 
-  const onTouchStart = (e) => {
-    startX = e.type.includes("touch") ? e.touches[0].clientX : e.clientX;
-    isDragging = true;
+  const resetTransform = () => {
+    // 保留背面已有状态，不要把 rotateY(180deg) 抹掉。
+    cardEl.style.transform = cardState.deck.flipped ? "rotateY(180deg)" : "";
   };
 
-  const onTouchMove = (e) => {
-    if (!isDragging) return;
-    if (cardState.deck.flipped) return; // 背面有评分按钮，不处理滑动
-    currentX = e.type.includes("touch") ? e.touches[0].clientX : e.clientX;
-    const diff = currentX - startX;
-    cardEl.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg) ${cardState.deck.flipped ? "rotateY(180deg)" : ""}`;
-  };
-
-  const onTouchEnd = () => {
-    if (!isDragging) return;
-    isDragging = false;
-    if (cardState.deck.flipped) return; // 背面不触发翻页
-    const diff = currentX - startX;
-    if (diff < -70) {
-      stepDeck(1);
-    } else if (diff > 70) {
-      stepDeck(-1);
-    } else {
-      cardEl.style.transform = cardState.deck.flipped ? "rotateY(180deg)" : "";
+  const onPointerDown = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    // 卡面里的按钮 / 链接 / 带内联 onclick 的控件自己处理点击，不参与翻面/滑动。
+    if (e.target && typeof e.target.closest === "function" && e.target.closest("[onclick]")) {
+      return;
+    }
+    pointerId = e.pointerId;
+    startX = currentX = e.clientX;
+    startY = e.clientY;
+    verticalIntent = false;
+    if (typeof cardEl.setPointerCapture === "function") {
+      cardEl.setPointerCapture(e.pointerId);
     }
   };
 
-  cardEl.addEventListener("touchstart", onTouchStart, { passive: true });
-  cardEl.addEventListener("touchmove", onTouchMove, { passive: true });
-  cardEl.addEventListener("touchend", onTouchEnd);
+  const onPointerMove = (e) => {
+    if (pointerId === null || e.pointerId !== pointerId) return;
+    currentX = e.clientX;
+    const dx = currentX - startX;
+    const dy = e.clientY - startY;
+
+    // 纵向优先：这是页面滚动，不是切卡。横向动效全部回弹。
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > TAP_SLOP_PX) {
+      verticalIntent = true;
+      resetTransform();
+      return;
+    }
+    if (verticalIntent || Math.abs(dx) <= TAP_SLOP_PX) return;
+    if (cardState.deck.flipped) return; // 背面有评分按钮，不处理滑动
+    cardEl.style.transform = `translateX(${dx}px) rotate(${dx * 0.05}deg)`;
+  };
+
+  const onPointerUp = (e) => {
+    if (pointerId === null || e.pointerId !== pointerId) return;
+    const dx = currentX - startX;
+    pointerId = null;
+    if (verticalIntent) {
+      verticalIntent = false;
+      resetTransform();
+      return;
+    }
+    if (Math.abs(dx) <= TAP_SLOP_PX) {
+      resetTransform();
+      if (!cardState.deck.flipped) toggleDeckFlip();
+      return;
+    }
+    if (cardState.deck.flipped) {
+      resetTransform();
+      return;
+    }
+    if (dx < -SWIPE_COMMIT_PX) {
+      stepDeck(1);
+    } else if (dx > SWIPE_COMMIT_PX) {
+      stepDeck(-1);
+    } else {
+      resetTransform();
+    }
+  };
+
+  const onPointerCancel = () => {
+    pointerId = null;
+    verticalIntent = false;
+    resetTransform();
+  };
+
+  cardEl.addEventListener("pointerdown", onPointerDown);
+  cardEl.addEventListener("pointermove", onPointerMove);
+  cardEl.addEventListener("pointerup", onPointerUp);
+  cardEl.addEventListener("pointercancel", onPointerCancel);
 }
 
 /**
