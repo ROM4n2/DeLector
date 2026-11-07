@@ -749,3 +749,10 @@ T7（浮层过渡统一）在 worktree dlector-t7 / feat/motion-t7-popover 实�
 - static/style.css `.enc-popover`：animation 时长从 `var(--dur-fast, 180ms)` 改为 `var(--motion-enter, 180ms)`；easing 仍为 `var(--ease-editorial)`。keyframes `enc-note-in` 保持唯一，未新增第二套；`.open { display:block }` 即时关闭不变，未加 JS 定时器 / animationend。
 - CDP 实测（1440x900）：先 show('encounter') 再开浮层（隐藏视图不跑动画，T3 stat-badge 同款坑）；t40ms opacity 0.375、anims=1、duration 0.18s、timing cubic-bezier(0.22,1,0.36,1)；t360ms opacity 1、anims=0；移除 .open 后 display=none、anims=0（无关闭动画）；reduce 下 animationName=none、opacity=1、transform=none。
 - 闸门：test_encounter_ui_probes 22 passed；build 3480 行；sync PASS。
+
+### 2026-11-07 12:46 | deepseek-v4.1-flash__trae | NOTE
+T8（按压反馈）在 worktree dlector-t8 / feat/motion-t8-press 实施（基于 4821bf3）。
+- static/style.css 新增 `.btn:active { transform: scale(0.98); transition: transform var(--motion-press, 100ms) ease; }`（放在 `.btn-del:active` 之后）；全局 reduce 块追加 `.btn:active { transform: none; }`。
+- 计划选择器的偏差：`.icon-btn` / `.deck-card` 本仓不存在；实际卡片为 `.deck-active-card`，携带滑动手势 transform，纳入会与手势冲突，故不加；workbench.css 已有独立 `.btn:active { transform: scale(.97) }`（transition .05s），属独立样式源未动。登记 §7 #9。
+- CDP 实测（1440x900）：idle transform none / transition all .15s；按下 60ms matrix(0.981502…) / transitionProperty transform / duration 0.1s；释放 250ms 后 none；长按 1.2s 保持 matrix(0.98…) 且释放后 none（不粘住）；强制 :active 的 `.tok` 与 `.a1-option-label` 均 transform none（未触停止门 #2）；reduce 按下 transform none、duration 1e-05s。
+- 闸门：test_frontend_guards + test_index_dom_probe + test_writer_mobile + test_encounter_ui_probes = 65 passed；build 3480 行；sync PASS。

@@ -320,6 +320,7 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 | 6 | T3 只要求「hover 只改色/阴影」 | 另将所有 `:hover` 规则包进 `@media (hover: hover) and (pointer: fine)`，混合选择器（`:focus-visible`）拆开 | 用户硬要求：Android tap 后 hover 态会粘住，属用户可见缺陷，不是风格问题 |
 | 7 | T4 目标选择器写作 `.mobile-nav-item.active`；`aria-current` 只改模板 | 实际类为 `.mobile-nav-btn` / `.dock-item`；`aria-current` 由 `main.js` 的 `show()` 动态同步，模板只标初始 home | DOM 中没有 `.mobile-nav-item` 这个类；只写静态属性会在切换 tab 后指向错误项 |
 | 8 | T5 「对容器加 `.dl-enter`」 | 实际是外层 `#search-results` 加 `.dl-stagger`，每个**可见**分组 section 加 `.dl-enter`；卡片网格只处理 `.card-grid`，exam 网格由 `main.js` 首次 `show('exam')` 触发 | `.dl-stagger > *` 只设 `animation-delay`，动画必须落在子元素上；给外层容器再挂 `.dl-enter` 会与子项动画叠加。「搜索结果文本本身不做逐条入场」已满足 |
+| 9 | T8 目标选择器 `.btn:active`、`.icon-btn:active`、`.deck-card:active`（若存在） | 只加 `.btn:active`；`.icon-btn`、`.deck-card` 在本仓不存在（实际卡片为 `.deck-active-card`，携带滑动手势 transform，纳入会与手势打架，故不加）；`workbench.css` 已有独立 `.btn:active { transform: scale(.97) }`（transition .05s），属独立样式源，未动 | 验收「只作用可点控件」：`.tok`、`.a1-option-label` 经 CDP 强制 `:active` 实测 `transform:none`，未触停止门 #2；全局 reduce 块追加 `.btn:active { transform: none }` |
 
 ---
 
