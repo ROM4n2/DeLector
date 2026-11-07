@@ -290,7 +290,17 @@ export function initFloatingCapsule(options) {
 
     let visualLeft = 0;
     let visualTop = 0;
-    if (Number.isFinite(saved.rx) && Number.isFinite(saved.ry)) {
+    // 视口基本没变（含滚动条出现/消失的十几像素差异）时用布局坐标精确回位；
+    // 真正跨断点/跨设备时才用归一化比例，避免滚动条宽度差导致十几像素漂移。
+    const sameViewport =
+      Number.isFinite(saved.left) && Number.isFinite(saved.top) &&
+      Number.isFinite(saved.vw) && Number.isFinite(saved.vh) &&
+      Math.abs(vp.width - saved.vw) <= 32 && Math.abs(vp.height - saved.vh) <= 32;
+    if (sameViewport) {
+      const fallback = visualRectFor(saved.left, saved.top);
+      visualLeft = fallback.left;
+      visualTop = fallback.top;
+    } else if (Number.isFinite(saved.rx) && Number.isFinite(saved.ry)) {
       const spanX = Math.max(1, vp.width - width * scale);
       const spanY = Math.max(1, vp.height - height * scale);
       visualLeft = vp.left + saved.rx * spanX;
@@ -382,6 +392,10 @@ export function initFloatingCapsule(options) {
     const target = e.target;
     if (!target || typeof target.closest !== 'function') return;
     if (target.closest('.dock-item, .mobile-nav-btn, .nav-tab, #mobile-bottom-nav, #nav')) {
+      // P4：视图切换先回到记忆位置，再按新视图布局让位（沿用既有 scheduleRefresh）。
+      if (freeMove) {
+        restoreSavedPosition();
+      }
       scheduleRefresh(280);
     }
   }
@@ -590,7 +604,29 @@ export function initFloatingCapsule(options) {
   // 写作页 sheet / 底部 dock / 抽屉的开合会改变可停放区域，监听 class 变化即可
   let observer = null;
   if (typeof MutationObserver === 'function') {
-    observer = new MutationObserver(() => scheduleRefresh(120));
+    let drawerWasOpen = Boolean(document.getElementById('drawer')?.classList.contains('open'));
+    observer = new MutationObserver(() => {
+      const drawerEl = document.getElementById('drawer');
+      const drawerOpenNow = Boolean(drawerEl && drawerEl.classList.contains('open'));
+      if (drawerWasOpen && !drawerOpenNow) {
+        // P4：抽屉只是临时让位来源，关闭后回到记忆位置（开启）或默认角落（关闭）。
+        // 等抽屉滑出动画结束再求解，避免把过渡中的残影当成禁停区。
+        if (freeMove) {
+          restoreSavedPosition();
+        } else {
+          capsuleEl.style.left = '';
+          capsuleEl.style.top = '';
+          capsuleEl.style.right = '';
+          capsuleEl.style.bottom = '';
+          notifyBubble();
+        }
+        drawerWasOpen = drawerOpenNow;
+        scheduleRefresh(380);
+        return;
+      }
+      drawerWasOpen = drawerOpenNow;
+      scheduleRefresh(120);
+    });
     ['writer-panel', 'writer-mobile-panel-sheet', 'mobile-bottom-nav', 'drawer'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {

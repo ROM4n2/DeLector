@@ -1677,11 +1677,11 @@ export const Companion = {
     }
 
     // P4：自由移动开关（原生 checkbox，checked 即状态；文字同步，不靠颜色表达）
-    const freeMoveInput = document.getElementById('panel-free-move');
+    const freeMoveInput = document.getElementById('drawer-free-move');
     if (freeMoveInput) {
       freeMoveInput.checked = Boolean(this.freeMove);
     }
-    const freeMoveState = document.getElementById('panel-free-move-state');
+    const freeMoveState = document.getElementById('drawer-free-move-state');
     if (freeMoveState) {
       freeMoveState.textContent = this.freeMove ? '已开启' : '已关闭';
     }

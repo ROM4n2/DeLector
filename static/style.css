@@ -13491,22 +13491,24 @@ body.drawer-open .companion {
 }
 
 /* ── 伴读桌宠：自由移动（P4，2026-11-08） ─────────────────────────────
-   本分区只追加在 style.css 末尾，不改写上方既有规则。 */
-.panel-free-move-row {
-  align-items: center;
+   本分区只追加在 style.css 末尾，不改写上方既有规则。
+   开关位于抽屉「伴学」区顶部（桌宠自己的设置区），不进入主设置弹层。 */
+.companion-roam-row {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
 }
 
-.panel-free-move {
+.companion-roam-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--ink, #1a1a1a);
 }
 
-.panel-free-move-input {
+.companion-roam-input {
   flex: none;
   width: 16px;
   height: 16px;
@@ -13515,25 +13517,25 @@ body.drawer-open .companion {
   cursor: pointer;
 }
 
-.panel-free-move-label {
+.companion-roam-label {
   font-weight: 600;
 }
 
-.panel-free-move-state {
+.companion-roam-state {
   margin-left: auto;
   font-family: var(--mono, "JetBrains Mono", monospace);
   font-size: 0.6875rem;
   color: var(--pencil, #666);
 }
 
-.panel-free-move-hint {
-  margin: -0.25rem 0 0;
+.companion-roam-hint {
+  margin: 0.35rem 0 0;
   font-size: 0.6875rem;
   line-height: 1.5;
   color: var(--pencil, #666);
 }
 
-.panel-free-move-input:focus-visible {
+.companion-roam-input:focus-visible {
   outline: 2px solid var(--ink, #1a1a1a);
   outline-offset: 2px;
 }
