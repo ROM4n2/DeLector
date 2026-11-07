@@ -809,3 +809,21 @@ Caps: filesystem-read, filesystem-write, shell-exec
 - Android：固定 8000 由 start.py:_android_ready 短路（PORT_CANDIDATES[0]），MainActivity 同值就绪轮询 + loadUrl，两端一致；8000 被占则启动失败，改法需端口握手，按指示只报告不改。
 - 守卫：tests/test_frontend_port_guard.py（static/** 绝对 API 带字面端口；static/js 回环带字面端口；api() 不得拼 origin）已登记 tools/ci_shards.py unit-2 + ci_shard_weights.json 0.1。
 - 验证：相关 59 passed；3 条具名变异均被捕获后已还原；未跑全量。
+
+### 2026-11-07 18:10 | deepseek-v4.1-flash__trae | WORK_END
+Caps: filesystem-read, filesystem-write, shell-exec, android-build, emulator-run
+#278 已合（merge commit bc4b433）+ 端口运行时握手（worktree D:\Code\DeLector-port-runtime / fix/runtime-port-handoff，PR 待开不合并）。
+- 合并：#278 CI 逐 job 复核无 failure/cancelled（两条 skipping 为设计过滤），merge commit bc4b433，不 squash 不 rebase。
+- 矛盾根因：端口只有 start.py 知道；进程外宿主（Android MainActivity / portable 验收脚本）各自假设 8000。解法是新增 DELECTOR_PORT_FILE 握手：Python 选定端口后原子写十进制端口，宿主轮询读文件，不再猜。
+- tools/verify_windows_portable.py：删除 SERVER_PORT=8000 / HEALTH_URL 常量与「起服前端口空闲」门禁，改 child_env 注入端口文件路径 → 等文件 → 用文件里的端口探活；terminate 检查也按真实端口。
+- Android：start.py:_android_ready 改为 _pick_port 顺延（8000 被占取 8002；全占 RuntimeError 响亮失败）；MainActivity 启动前删 stale 端口文件、注入 DELECTOR_PORT_FILE、readServerPort() 轮询 1..65535 校验、serverBaseUrl(port) 拼 URL 后 loadUrl；5 处 127.0.0.1:8000 字面量清零。传参路径：Python os.environ[DELECTOR_PORT_FILE]=<filesDir>/server-port.txt → 选定端口写入 → Java FileInputStream 读文本 → serverBaseUrl 拼 http://127.0.0.1:<port>。
+- 验证（8000 全程被独占占住）：① 源码 E2E：端口文件=8002、/api/health 200、横幅 http://localhost:8002；② 便携产物（PyInstaller onedir，.build-info.json 用 package_windows.write_build_fingerprint 补齐）验收 16 项全 PASS，两次真启均起在 8002、端口释放、无孤儿；③ 模拟器 Medium_Phone_API_37.0：adb reverse tcp:8000 占住设备 8000（/proc/net/tcp 0A 1F40），装机启动后 files/server-port.txt=8002、host 经 adb forward 探 /api/health 200、截图确认 WebView 加载完整界面（证明未指向 8000）。模拟器已 adb emu kill 关闭并登记 android-local-runtime.md §4。
+- 测试：tests/test_start.py + test_verify_windows_portable.py + test_android_webview_policy.py + test_start_lifecycle.py + test_desktop_shell.py 共 129 passed；5 条具名变异（_android_ready 固定 8000 / write_port_file 提前 return / read_runtime_port 恒 8000 / wait_until_ready 猜 8000 / Java serverBaseUrl 固定 8000）全部被捕获后还原。未跑全量。
+- 未覆盖：arm64 真机（本机无设备）；Android 侧 WebView 未做 8000 之外的连续顺延实测（只验 8002）；桌面 Go supervisor 默认 8002 与 Python 顺延到 8002 的潜在撞端口为既有行为，未改。
+
+### 2026-11-07 18:00 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec
+PR #279 首轮 CI 红：真失败仅 unit-2 的「Mypy type gate (tests, config baseline)」，2 条 func-returns-value —— 新测试里的 lambda 写成 probed.append(port) or ...，把返回 None 的 append 当值用；其余 unit-1/3/4、integration-heavy、cost-guards、cost-cold-start 为 fail-fast 连带 cancelled，不算红。
+- 修法：只改测试写法（lambda → 带注解局部函数，记录与返回值分两行），断言口径一字未动，未放松任何门禁。
+- 本地复现/复验：mypy --follow-imports=skip tests 187 files 零错误；相关 3 个测试文件 93 passed；ruff 通过。
+- 推送后新跑 42361432194 全绿（含 Windows Portable Smoke 3m33s；Master Direct-Push Scope Gate 为 PR 语境设计内 skipping），head f6b6466，未合并。

@@ -18,9 +18,11 @@ r"""Windows 便携产物验收闸：完整性 + **真启一次**（ADR-0021 替�
 ================
 (a) **完整性**：产物目录定位 / `.build-info.json` 四键齐全 + commit 抗陈旧 / 无 `.env` /
     必需 WebView2 DLL / `_internal/webview` 与 `_internal/pythonnet` 存在。
-(b) **真启一次**（本闸核心）：以 ``DeLector.exe --server-only`` 起子进程，轮询
-    ``http://127.0.0.1:8000/api/health`` 直到 **200 且 ``status=="ok"`` 且 ``app=="delector"``**
-    （**身份校验**，不是"端口能连上"）；再终止它，断言**进程消失 + 端口释放 + 无孤儿**。
+(b) **真启一次**（本闸核心）：以 ``DeLector.exe --server-only`` 起子进程。端口不再固定：
+    子进程与桌面启动共用 start.py 的候选顺延，并经 ``DELECTOR_PORT_FILE`` 指向的文件写下
+    真实端口；本脚本读该文件后轮询 ``http://127.0.0.1:<port>/api/health`` 直到 **200 且
+    ``status=="ok"`` 且 ``app=="delector"``**（**身份校验**，不是"端口能连上"）；
+    再终止它，断言**进程消失 + 该端口释放 + 无孤儿**。8000 被占用时不再判红。
 (c) **无控制台语境再真启一次**（Task 5 新增，**默认开**）：以 ``CREATE_NO_WINDOW`` 起
     ``--server-only``（不为子进程分配控制台窗口），断言 ① health 就绪 ② 进程可干净终止
     ③ 数据目录生成 ``lan-address.txt``（**内容须匹配** ``^http://<IPv4>:<port>$``；探不到 LAN
@@ -136,9 +138,10 @@ MIN_COMMIT_LEN = 7
 EXE_NAME = "DeLector.exe"
 SERVER_ONLY_FLAG = "--server-only"
 
-# `--server-only` 复用 start.py：该路径固定绑 8000（不接受 --port），故此处端口是真相源。
-SERVER_PORT = 8000
-HEALTH_URL = f"http://127.0.0.1:{SERVER_PORT}/api/health"
+# `--server-only` 复用 start.py 的端口顺延（8000 被占则 8002–8010），**不再有固定端口**。
+# 真相源是子进程经 `PORT_FILE_ENV` 指向的文件写下的真实端口；本脚本只读、不猜。
+PORT_FILE_NAME = "server-port.txt"
+PORT_FILE_ENV = "DELECTOR_PORT_FILE"  # 与 start.py:PORT_FILE_ENV 同值（pytest 静态守卫钉住）
 
 # 身份锚点：与 delector/routes/main.py 的 /api/health 契约一致（app 字段）。
 IDENTITY_FIELD = "app"
@@ -426,10 +429,27 @@ def _creation_flags(mode: str) -> int:
     return _CREATE_NEW_PROCESS_GROUP if mode == "graceful" else 0
 
 
-def _probe_once() -> bool:
-    """单次健康探测：200 且身份对。连不上 / 非 JSON / 503（HTTPError）一律当"还没就绪"。"""
+def read_runtime_port(path: Path) -> Optional[int]:
+    """读子进程写下的真实端口；文件没出现 / 半截内容 / 越界一律返回 None（继续等）。
+
+    文件由 start.py 先写 `.tmp` 再 `os.replace`，正常不会读到半截；这里仍做严格解析，
+    避免把宿主机上同名残留文件里的垃圾当成端口。
+    """
     try:
-        with urllib.request.urlopen(HEALTH_URL, timeout=HEALTH_PROBE_TIMEOUT_S) as response:
+        text = path.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not text.isdigit():
+        return None
+    port = int(text)
+    return port if 0 < port <= 65535 else None
+
+
+def _probe_once(port: int) -> bool:
+    """单次健康探测：200 且身份对。连不上 / 非 JSON / 503（HTTPError）一律当"还没就绪"。"""
+    url = f"http://127.0.0.1:{port}/api/health"
+    try:
+        with urllib.request.urlopen(url, timeout=HEALTH_PROBE_TIMEOUT_S) as response:
             payload = json.loads(response.read().decode("utf-8"))
             return health_is_ready(int(response.status), payload)
     except (urllib.error.URLError, OSError, ValueError):
@@ -438,11 +458,11 @@ def _probe_once() -> bool:
         return False
 
 
-def _poll_once(proc: "subprocess.Popen[bytes]") -> str:
+def _poll_once(proc: "subprocess.Popen[bytes]", port: Optional[int]) -> str:
     """一次轮询，返回三态：ready=就绪；dead=进程已退（起不来）；pending=继续等。"""
     if proc.poll() is not None:
         return _PROBE_DEAD
-    if _probe_once():
+    if port is not None and _probe_once(port):
         return _PROBE_READY
     return _PROBE_PENDING
 
@@ -454,16 +474,28 @@ def _sleep_briefly(backoff: float, deadline: float) -> float:
     return min(backoff * BACKOFF_MAX_FACTOR, BACKOFF_MAX_S)
 
 
-def wait_until_ready(proc: "subprocess.Popen[bytes]", deadline_s: float = HEALTH_DEADLINE_S) -> Optional[float]:
-    """轮询 /api/health 直到就绪；返回自起算所需秒数；超时 / 进程早退返回 None。"""
+def wait_until_ready(
+    proc: "subprocess.Popen[bytes]",
+    port_file: Path,
+    deadline_s: float = HEALTH_DEADLINE_S,
+) -> Optional[Tuple[float, int]]:
+    """先等端口文件、再轮询 /api/health；返回 ``(起服秒数, 真实端口)``。
+
+    8000 被占时 start.py 会顺延，因此**必须先拿端口再探测**；超时 / 进程早退返回 None。
+    """
     start = time.monotonic()
     deadline = start + deadline_s
     backoff = BACKOFF_START_S
     state = _PROBE_PENDING
+    port: Optional[int] = None
     while state == _PROBE_PENDING and time.monotonic() < deadline:
-        state = _poll_once(proc)
+        if port is None:
+            port = read_runtime_port(port_file)
+        state = _poll_once(proc, port)
         backoff = _sleep_briefly(backoff, deadline)
-    return time.monotonic() - start if state == _PROBE_READY else None
+    if state != _PROBE_READY or port is None:
+        return None
+    return time.monotonic() - start, port
 
 
 def terminate_process(proc: "subprocess.Popen[bytes]", mode: str) -> StopResult:
@@ -708,6 +740,8 @@ def _child_env(data_dir: Path) -> Dict[str, str]:
         "DELECTOR_DATA_DIR": str(data_dir),
         "DATABASE_PATH": str(data_dir / "verify.db"),
         "PROGRESS_DB_PATH": str(data_dir / "verify_progress.db"),
+        # 子进程把**实际选中**的端口写到这里；8000 被占时它会顺延，脚本跟着走。
+        PORT_FILE_ENV: str(data_dir / PORT_FILE_NAME),
     }
 
 
@@ -744,7 +778,7 @@ def _check_orphans(report: Report, root_pid: int) -> None:
         report.ok("无孤儿进程", f"发现并已清掉后代 {orphans}")
 
 
-def _check_termination(report: Report, proc: "subprocess.Popen[bytes]", mode: str) -> None:
+def _check_termination(report: Report, proc: "subprocess.Popen[bytes]", mode: str, port: int) -> None:
     result = terminate_process(proc, mode)
     mode_note = "（已升级硬杀）" if result.escalated else ""
     if result.ended:
@@ -752,8 +786,8 @@ def _check_termination(report: Report, proc: "subprocess.Popen[bytes]", mode: st
     else:
         report.fail("终止进程", f"进程在 {PROCESS_END_TIMEOUT_S:.0f}s 内未结束{mode_note}")
     try:
-        release_s = wait_port_release(SERVER_PORT)
-        report.ok("端口释放", f"{SERVER_PORT} 于 {release_s:.1f}s 内释放")
+        release_s = wait_port_release(port)
+        report.ok("端口释放", f"{port} 于 {release_s:.1f}s 内释放")
     except VerifyError as exc:
         report.fail("端口释放", str(exc))
     _check_orphans(report, proc.pid)
@@ -770,15 +804,12 @@ def _check_launch(report: Report, artifact: Path, mode: str) -> None:
     if not exe.is_file():
         report.fail("真启找得到可执行文件", f"缺少 {exe}")
         return
-    if port_in_use(SERVER_PORT):
-        report.fail("起服前端口空闲", f"端口 {SERVER_PORT} 已被占用 —— 无法判定产物是否真能起服务")
-        return
     tmp_dir = Path(tempfile.mkdtemp(prefix="delector_verify_"))
     log_path = tmp_dir / "server.log"
     try:
         proc = launch_server_only(exe, log_path, _child_env(tmp_dir), mode)
-        ready_s = wait_until_ready(proc)
-        if ready_s is None:
+        ready = wait_until_ready(proc, tmp_dir / PORT_FILE_NAME)
+        if ready is None:
             detail = (
                 f"产物在 {HEALTH_DEADLINE_S:.0f}s 内未就绪（期望 /api/health 200 且 app=='delector'）；"
                 f"进程退出码={proc.poll()}。服务日志尾部：\n{_tail(log_path)}"
@@ -786,8 +817,9 @@ def _check_launch(report: Report, artifact: Path, mode: str) -> None:
             report.fail("真启 --server-only 至就绪", detail)
             _abort_launch(proc, mode)
             return
-        report.ok("真启 --server-only 至就绪", f"起服耗时 {ready_s:.1f}s（对照 ADR-0018 代理口径 2.6s）")
-        _check_termination(report, proc, mode)
+        ready_s, port = ready
+        report.ok("真启 --server-only 至就绪", f"起服耗时 {ready_s:.1f}s，端口 {port}（对照 ADR-0018 代理口径 2.6s）")
+        _check_termination(report, proc, mode, port)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -855,15 +887,12 @@ def _check_no_console_launch(report: Report, artifact: Path) -> None:
     if not exe.is_file():
         report.fail("无控制台真启找得到可执行文件", f"缺少 {exe}")
         return
-    if port_in_use(SERVER_PORT):
-        report.fail("无控制台起服前端口空闲", f"端口 {SERVER_PORT} 已被占用 —— 无法判定产物能否在无控制台语境起服务")
-        return
     tmp_dir = Path(tempfile.mkdtemp(prefix="delector_verify_noconsole_"))
     server_log = tmp_dir / "server.log"
     try:
         proc = launch_server_only(exe, server_log, _child_env(tmp_dir), NO_CONSOLE_MODE)
-        ready_s = wait_until_ready(proc)
-        if ready_s is None:
+        ready = wait_until_ready(proc, tmp_dir / PORT_FILE_NAME)
+        if ready is None:
             detail = (
                 f"产物在 {HEALTH_DEADLINE_S:.0f}s 内未就绪（期望 /api/health 200 且 app=='delector'）；"
                 f"进程退出码={proc.poll()}。服务日志尾部：\n{_tail(server_log)}"
@@ -871,8 +900,12 @@ def _check_no_console_launch(report: Report, artifact: Path) -> None:
             report.fail("无控制台真启 --server-only 至就绪", detail)
             _abort_launch(proc, NO_CONSOLE_MODE)
             return
-        report.ok("无控制台真启 --server-only 至就绪", f"起服耗时 {ready_s:.1f}s（CREATE_NO_WINDOW 语境）")
-        _check_termination(report, proc, NO_CONSOLE_MODE)
+        ready_s, port = ready
+        report.ok(
+            "无控制台真启 --server-only 至就绪",
+            f"起服耗时 {ready_s:.1f}s，端口 {port}（CREATE_NO_WINDOW 语境）",
+        )
+        _check_termination(report, proc, NO_CONSOLE_MODE, port)
         _check_lan_address(report, tmp_dir)
         _check_no_traceback(report, tmp_dir, server_log)
     finally:

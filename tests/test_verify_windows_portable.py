@@ -396,6 +396,101 @@ def test_main_appends_no_console_step_after_standard_launch(
     assert calls == ["launch", "no-console"], "no-console 步必须在普通真启之后追加"
 
 
+def test_port_file_env_matches_start_py() -> None:
+    """脚本与 start.py 必须用同一个环境变量名；改名一半会让端口握手静默失效。"""
+    import start
+
+    assert vp.PORT_FILE_ENV == start.PORT_FILE_ENV == "DELECTOR_PORT_FILE"
+
+
+def test_child_env_publishes_port_file(tmp_path: Path) -> None:
+    """子进程必须被告知往哪写端口；缺这条，8000 被占后脚本只能读空气。"""
+    env = vp._child_env(tmp_path)
+    assert env[vp.PORT_FILE_ENV] == str(tmp_path / vp.PORT_FILE_NAME)
+
+
+def test_read_runtime_port_parses_and_rejects(tmp_path: Path) -> None:
+    """端口文件是跨进程契约：只接受 1..65535 的纯数字，半截/垃圾/缺失一律当"还没写"。"""
+    path = tmp_path / vp.PORT_FILE_NAME
+    assert vp.read_runtime_port(path) is None, "文件不存在时必须 None（继续等），不能猜 8000"
+    for raw, expected in (("8010\n", 8010), (" 8002 ", 8002)):
+        path.write_text(raw, encoding="ascii")
+        assert vp.read_runtime_port(path) == expected
+    for raw in ("", "0\n", "65536\n", "80a\n", "-1\n"):
+        path.write_text(raw, encoding="ascii")
+        assert vp.read_runtime_port(path) is None, f"非法端口 {raw!r} 必须被拒"
+
+
+def test_wait_until_ready_probes_the_published_port(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """必须先读端口再探测：只探测脚本自己猜的端口，顺延后会永远等不到。"""
+    port_file = tmp_path / vp.PORT_FILE_NAME
+    port_file.write_text("8002\n", encoding="ascii")
+    probed: List[int] = []
+
+    def _record(port: int) -> bool:
+        probed.append(port)
+        return port == 8002
+
+    monkeypatch.setattr(vp, "_probe_once", _record)
+
+    result = vp.wait_until_ready(_AliveProcess(), port_file, deadline_s=1.0)
+
+    assert result is not None
+    ready_s, port = result
+    assert port == 8002 and probed == [8002], f"探测端口必须来自文件，实际 {probed}"
+    assert ready_s >= 0
+
+
+def test_wait_until_ready_never_guesses_a_port(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """端口文件没出现时一次都不能探测（尤其不能回落到 8000）。"""
+    probed: List[int] = []
+
+    def _record(port: int) -> bool:
+        probed.append(port)
+        return False
+
+    monkeypatch.setattr(vp, "_probe_once", _record)
+
+    result = vp.wait_until_ready(_AliveProcess(), tmp_path / vp.PORT_FILE_NAME, deadline_s=0.05)
+
+    assert result is None
+    assert probed == [], f"没有端口承诺时不得探测任何端口，实际 {probed}"
+
+
+def test_check_launch_does_not_gate_on_fixed_port(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """8000 被占不得判红：旧实现的「起服前端口空闲」检查必须消失，改为等子进程回传端口。"""
+    artifact = _make_artifact(tmp_path)
+    (artifact / vp.EXE_NAME).write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        vp, "port_in_use", lambda _port: pytest.fail("不得再用固定 8000 做前置门禁")
+    )
+    monkeypatch.setattr(vp, "launch_server_only", lambda *_a, **_k: _AliveProcess())
+    monkeypatch.setattr(vp, "wait_until_ready", lambda *_a, **_k: (1.5, 8002))
+    terminated: List[int] = []
+    monkeypatch.setattr(
+        vp, "_check_termination", lambda _report, _proc, _mode, port: terminated.append(port)
+    )
+
+    report = vp.Report()
+    vp._check_launch(report, artifact, "terminate")
+
+    assert report.failed is False, "端口顺延后必须照常通过"
+    assert terminated == [8002], f"终止/端口释放必须针对真实端口，实际 {terminated}"
+
+
+def test_no_fixed_server_port_constants_remain() -> None:
+    """固定端口常量一旦回来，脚本又会和 start.py 的顺延逻辑打架。"""
+    assert not hasattr(vp, "SERVER_PORT")
+    assert not hasattr(vp, "HEALTH_URL")
+
+
+class _AliveProcess:
+    """最小 Popen 替身：只实现 wait_until_ready / _poll_once 用到的 poll()。"""
+
+    def poll(self) -> None:
+        return None
+
+
 # ── MUTATION 表（防恒真自证：改坏实现 ⇒ 对应用例转红）─────────────────────────
 # | 改坏实现（verify_windows_portable.py）                     | 转红的用例                                    |
 # |------------------------------------------------------------|-----------------------------------------------|
@@ -421,3 +516,10 @@ def test_main_appends_no_console_step_after_standard_launch(
 # |                                                              | test_lan_address_state_non_ipv4_host_is_not...  |
 # | _check_no_console_launch: 去掉 os.name 守卫（非 Windows 也真启）| test_no_console_check_skips_off_windows        |
 # | main: 不接 no-console 步 / 接到普通真启之前                     | test_main_appends_no_console_step_after...     |
+# | PORT_FILE_ENV 与 start.py 改成不同字符串                        | test_port_file_env_matches_start_py            |
+# | _child_env: 不注入 PORT_FILE_ENV                                | test_child_env_publishes_port_file             |
+# | read_runtime_port: 恒返回 8000 / 不校验范围                     | test_read_runtime_port_parses_and_rejects      |
+# | wait_until_ready: 不读端口文件、直接探测 8000                   | test_wait_until_ready_probes_the_published_port|
+# | wait_until_ready: 端口缺失时也探一次默认端口                    | test_wait_until_ready_never_guesses_a_port     |
+# | _check_launch: 恢复「起服前端口空闲」前置门禁                   | test_check_launch_does_not_gate_on_fixed_port  |
+# | 恢复 SERVER_PORT / HEALTH_URL 常量                              | test_no_fixed_server_port_constants_remain     |

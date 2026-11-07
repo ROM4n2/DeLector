@@ -134,3 +134,27 @@ def test_url_policy_behaviour_with_javac(tmp_path: Path):
     assert f"checks={EXPECTED_CHECKS} failed=0" in output, (
         f"用例数不是 {EXPECTED_CHECKS}（可能被删改）:\n{output}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# 五、运行期端口交接：WebView 不得写死 8000，必须跟 Python 选中的真实端口走
+# --------------------------------------------------------------------------- #
+def test_main_activity_reads_python_published_port_instead_of_8000():
+    """8000 被设备上别的程序占时，Python 会顺延到 8002+；Java 必须读端口文件跟着走。
+
+    这是跨语言契约的静态半边（真行为由模拟器验证）：
+    - Python 侧 start.py 用 `PORT_FILE_ENV` 指向的路径原子写端口；
+    - Java 侧把这个环境变量指向 `getFilesDir()/server-port.txt`，再反复读它。
+    少任何一半，两端就会错位成「Python 监听 8002、WebView 还在打 8000」。
+    """
+    import start
+
+    src = _main_source()
+    assert "http://127.0.0.1:8000" not in src, "WebView 不得再写死 8000：必须用 serverBaseUrl(serverPort)"
+    assert f'PORT_FILE_ENV = "{start.PORT_FILE_ENV}"' in src, (
+        "Java 的环境变量名必须与 start.py:PORT_FILE_ENV 完全一致"
+    )
+    assert "PORT_FILE_NAME" in src and "readServerPort(" in src, (
+        "MainActivity 必须从端口文件读真实端口，而不是假定 8000"
+    )
+    assert "serverBaseUrl(" in src, "所有 127.0.0.1 地址都必须经 serverBaseUrl(serverPort) 拼装"

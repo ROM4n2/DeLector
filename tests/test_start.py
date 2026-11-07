@@ -358,19 +358,60 @@ def test_claim_instance_treats_equivalent_paths_as_same(tmp_path: Path, monkeypa
 def test_claim_instance_on_android_never_takes_the_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Android 短路：`Ready(8000)` 且**不**创建任何锁文件（降级句柄 `is_degraded`）。
+    """Android 短路：`Ready(PORT_CANDIDATES[0])` 且**不**创建任何锁文件（降级句柄）。
 
     Android 的数据落点由宿主注入，本进程替它猜一个锁目录只会造出一把与真实实例无关的锁。
+    `probe` 显式注入「全空闲」：不注入就会连本机 8000 是否被占一起押上，CI 与开发机的
+    结果会随机漂移。
     """
     paths = _pin_lock_dir(tmp_path, monkeypatch)
     monkeypatch.setattr(start, "is_android", lambda: True)
 
-    result = start.claim_instance({"DELECTOR_DATA_DIR": str(tmp_path / "data")})
+    result = start.claim_instance(
+        {"DELECTOR_DATA_DIR": str(tmp_path / "data")}, probe=lambda port: False
+    )
 
     assert isinstance(result, start.Ready), f"Android 应直接给 Ready，实际 {result!r}"
     assert result.port == start.PORT_CANDIDATES[0]
     assert result.lock.is_degraded, "Android 必须是降级句柄（release() 为空操作）"
     assert not Path(paths.lock).exists(), f"Android MUST NOT 创建锁文件：{paths.lock}"
+
+
+def test_claim_instance_on_android_falls_back_when_first_port_is_taken(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Android 也必须顺延：8000 被别的程序占 ⇒ 选 8002，而不是硬返回 8000。
+
+    宿主（MainActivity）改为读 `PORT_FILE_ENV` 回传的真实端口；这里少一步探端口，
+    设备上就会「Python 绑不上、Java 还在等 8000」，两端一起卡死。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(start, "is_android", lambda: True)
+
+    result = start.claim_instance(
+        {"DELECTOR_DATA_DIR": str(tmp_path / "data")},
+        probe=lambda port: port == start.PORT_CANDIDATES[0],
+    )
+
+    try:
+        assert isinstance(result, start.Ready), f"Android 应直接给 Ready，实际 {result!r}"
+        assert result.port == start.PORT_CANDIDATES[1], "首端口被占时必须顺延到下一候选"
+    finally:
+        if isinstance(result, start.Ready):
+            result.lock.release()
+
+
+def test_claim_instance_on_android_fails_loudly_when_all_ports_taken(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """候选全被占 ⇒ 响亮失败（RuntimeError），不得静默绑一个不存在的端口。"""
+    _pin_lock_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(start, "is_android", lambda: True)
+
+    with pytest.raises(RuntimeError, match="端口不可用"):
+        start.claim_instance(
+            {"DELECTOR_DATA_DIR": str(tmp_path / "data")}, probe=lambda port: True
+        )
 
 
 def test_claim_instance_releases_lock_when_probe_raises(
@@ -525,6 +566,70 @@ def test_main_serves_on_fallback_port_when_8000_is_taken_by_foreign_program(
 
     assert served == [8002], f"on_serving 必须收到顺延后的端口，实际 {served}"
     assert built == [("127.0.0.1", 8002)], f"build_server 必须建在顺延端口上，实际 {built}"
+
+
+def test_main_publishes_runtime_port_file_for_out_of_process_hosts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`PORT_FILE_ENV` 指向的文件必须在服务就绪前写下真实端口，退出时撤掉。
+
+    Android 的 WebView 宿主与 Windows 便携验收脚本都不在 Python 进程里，拿不到 `Ready.port`；
+    端口一旦顺延，它们只能靠这条文件握手，否则会继续打 8000。
+    """
+    _pin_lock_dir(tmp_path, monkeypatch)
+    built, _ = _patch_serving(monkeypatch)
+    ready = start.Ready(
+        port=8002,
+        lock=instance_lock.LockHandle(
+            paths=instance_lock.LockPaths(
+                lock=str(tmp_path / "instance.lock"), meta=str(tmp_path / "instance.json")
+            ),
+            record=instance_lock.UNKNOWN_RECORD,
+        ),
+    )
+    monkeypatch.setattr(start, "claim_instance", lambda *_a, **_k: ready)
+    monkeypatch.setattr(start, "is_android", lambda: True)
+    monkeypatch.setattr(start, "bootstrap_data_dir", lambda *_a, **_k: "")
+    port_file = tmp_path / "handoff" / "server-port.txt"
+    monkeypatch.setenv(start.PORT_FILE_ENV, str(port_file))
+    observed: list[tuple[int, str]] = []
+
+    def _on_serving(port: int) -> None:
+        observed.append((port, port_file.read_text(encoding="ascii").strip()))
+
+    start.main(on_serving=_on_serving)
+
+    assert observed == [(8002, "8002")], f"宿主必须能在服务期间读到真实端口，实际 {observed}"
+    assert not port_file.exists(), "退出后必须撤掉端口承诺，避免宿主把旧端口当成这一轮"
+
+
+def test_main_survives_runtime_port_file_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """端口文件写不进去只能留痕，**不得**阻断启动（宿主读不到是降级，不是致命）。"""
+    _pin_lock_dir(tmp_path, monkeypatch)
+    built, _ = _patch_serving(monkeypatch)
+    ready = start.Ready(
+        port=8002,
+        lock=instance_lock.LockHandle(
+            paths=instance_lock.LockPaths(
+                lock=str(tmp_path / "instance.lock"), meta=str(tmp_path / "instance.json")
+            ),
+            record=instance_lock.UNKNOWN_RECORD,
+        ),
+    )
+    monkeypatch.setattr(start, "claim_instance", lambda *_a, **_k: ready)
+    monkeypatch.setattr(start, "is_android", lambda: True)
+    monkeypatch.setattr(start, "bootstrap_data_dir", lambda *_a, **_k: "")
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x", encoding="utf-8")
+    monkeypatch.setenv(start.PORT_FILE_ENV, str(blocker / "server-port.txt"))
+    served: list[int] = []
+
+    start.main(on_serving=served.append)
+
+    assert served == [8002], "端口文件失败后仍必须正常起服"
+    assert built == [("127.0.0.1", 8002)]
 
 
 def test_main_opens_browser_for_same_instance_and_returns(
