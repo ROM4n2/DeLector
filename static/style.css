@@ -483,6 +483,24 @@ a {
   transition: transform var(--motion-press, 100ms) ease;
 }
 
+/* T9：只为 T3–T8 触及过的可聚焦控件补统一焦点环，不做全站清理。
+   outline 不参与布局；与 T3 的 hover 只改色/影不冲突。 */
+.btn:focus-visible,
+.nav-tab:focus-visible,
+.mobile-nav-btn:focus-visible,
+.dock-item:focus-visible,
+.satz-lab-chip:focus-visible,
+.speaker-btn:focus-visible,
+.speaker-btn-sm:focus-visible,
+.hl-color-btn:focus-visible,
+.article-row-del:focus-visible,
+.card-del-btn:focus-visible,
+.card-master-btn:focus-visible,
+.encounter-entry-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 .btn-dark {
   background: var(--ink);
 
