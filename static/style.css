@@ -3759,10 +3759,10 @@ body.drawer-open .shadow-player {
 /* ── Exam Domain (Prüfungsbereich, ADR-0005 Task 1) ────────────────────── */
 /* 方向 A「克制的编辑排版」（ADR-0029 / 2026-11-06 dryness 对账）。
    层级靠字号阶梯与 2px 横线，不靠卡片边框与阴影。
-   间距按作用层取值：本区属「应用内功能面」，页头下 48px ÷ 行距 41px = 1.17，
-   落在实测带 0.8–2.6 内偏低档（7 个入口要一屏扫完）。
-   标题 40px ÷ 正文 15px = 2.67，应用内阅读面带 2.0–3.4，不抬高。
-   依据见 docs/reviews/2026-11-06-dryness-contrast-prototype.html。 */
+   窄屏校准（2026-11-07 调研，docs/reviews/2026-11-07-exam-layout-redesign-research.md）：
+   桌面单列目录在 393/360 上把 7 个入口拉成两三屏（实测 944px 列表 + 248px 页头），
+   故页头压到 190px 级、行高压到 60px，让 7 个入口与正文首屏同屏。
+   编辑式身份保留：30.6px 斜体标题、2px 横线、序号列、德文副名、无边框无阴影。 */
 .exam-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -3770,28 +3770,40 @@ body.drawer-open .shadow-player {
   width: 100%;
 }
 
+/* 返回按钮独占一行：标题占满整行后，长德文词只受视口宽度约束。
+   此前按钮与标题同行，h2 作为 flex 子项 min-width:auto，
+   PRÜFUNGSDOMÄNE 在 40px 下 376.8px 只放得进 224.5/191.5px → 右侧被裁。 */
 .exam-topbar {
   display: flex;
-  align-items: flex-end;
-  gap: 1.25rem;
-  margin-bottom: 3rem;
-  padding-bottom: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.875rem;
+  padding-bottom: 0.625rem;
   border-bottom: 2px solid var(--ink);
 }
+.exam-topbar .btn {
+  min-height: 32px;
+  padding: 0 0.75rem;
+}
 .exam-topbar h2 {
+  width: 100%;
   font-family: var(--serif);
-  font-size: 2.5rem;
+  /* 30.6px（393）/ 28.1px（360）；PRÜFUNGSDOKUMENT 实测约 338/302px，
+     均小于可用宽度 353/320px。缩容优先，溢出兜底才断词。 */
+  font-size: clamp(1.75rem, 7.8vw, 2.5rem);
   font-style: italic;
   font-weight: 400;
   line-height: 1.06;
   letter-spacing: -0.02em;
   color: var(--ink);
+  overflow-wrap: break-word;
 }
 
 .exam-level-tabs {
   display: inline-flex;
   gap: 1.25rem;
-  margin-bottom: 2rem;
+  margin-bottom: 0.875rem;
 }
 
 .exam-level-tab {
@@ -3820,7 +3832,8 @@ body.drawer-open .shadow-player {
 }
 
 /* 七个入口是一张「目录」，不是七张卡片：去掉边框/阴影/圆角，
-   只用一条发丝线分隔。行距 41px = 20px padding × 2 + 1px 线。 */
+   只用一条发丝线分隔。行高 60px（方案 A）：中文 16px + 德文 11px 共 35px，
+   上下留白由固定行高吸收；7 行 = 420px，配合 190px 页头可一屏扫完。 */
 .exam-module-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -3831,18 +3844,19 @@ body.drawer-open .shadow-player {
 .exam-module-card {
   position: relative;
   display: grid;
-  grid-template-columns: 2.75rem 1fr;
-  align-items: baseline;
-  gap: 1rem;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
   width: 100%;
-  padding: 1.25rem 0;
+  min-height: 60px;
+  padding: 0 4px;
   background: none;
   border: 0;
   border-bottom: 1px solid var(--line-soft);
   border-radius: 0;
   box-shadow: none;
   font-family: var(--serif);
-  font-size: 1.25rem;
+  font-size: 1rem;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
@@ -3853,20 +3867,17 @@ body.drawer-open .shadow-player {
     color var(--dur-fast) var(--ease-editorial);
 }
 
-.exam-module-card:first-child {
-  padding-top: 0;
-}
-
 .exam-module-index {
   font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.1em;
-  color: var(--muted);
+  color: var(--pencil);
   transition: color var(--dur-fast) var(--ease-editorial);
 }
 
 .exam-module-label {
   display: block;
+  min-width: 0;
   font-weight: 400;
   line-height: 1.25;
   transition:
@@ -3876,9 +3887,10 @@ body.drawer-open .shadow-player {
 
 .exam-module-de {
   display: block;
-  margin-top: 0.25rem;
+  margin-top: 2px;
   font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
+  line-height: 1.18;
   letter-spacing: 0.02em;
   color: var(--muted);
 }
@@ -3926,16 +3938,25 @@ body.drawer-open .shadow-player {
   font-weight: 700;
 }
 
-/* 计数走等宽 12px：数字列对齐，扫描更快（参考库 8 条手法之五）。 */
+/* 计数走等宽 12px：独立第三列右对齐，与标题同行（不再被 Grid 顶到标题上方）。
+   语义暂为纯数字：单位需后端目录返回 unit 字段，见调研文档的挂账项。 */
 .exam-module-count {
   display: inline-block;
-  margin-left: 0.5rem;
+  justify-self: end;
+  white-space: nowrap;
   font-family: var(--mono);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--ink-faint);
-  vertical-align: middle;
+}
+
+/* 窄屏：容器水平内边距 20px（393/360 内容宽 353/320px）。
+   页头其余压缩已并入上面的全局规则（方案 A 对桌面同样成立）。 */
+@media (max-width: 640px) {
+  .exam-container {
+    padding: 1.25rem 1.25rem 3rem;
+  }
 }
 
 .cards-view-toggle {
