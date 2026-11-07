@@ -3,6 +3,7 @@
 
 import { esc, api } from "./core.js";
 import { Companion } from "./companion.js";
+import { countUp } from "./motion.js";
 
 let currentFolioIndex = 0;
 const FOLIO_SECTIONS = [
@@ -246,12 +247,26 @@ export async function loadProgress() {
     const stAccuracy = document.getElementById("stat-accuracy");
     const stMinutes = document.getElementById("stat-minutes");
 
-    if (stStreak) stStreak.textContent = stats.streak || 0;
-    if (stVocab) stVocab.textContent = stats.mastered_vocab || 0;
-    if (stGrammar) stGrammar.textContent = stats.mastered_grammar || 0;
-    if (stArticles) stArticles.textContent = stats.total_articles || 0;
-    if (stAccuracy) stAccuracy.textContent = `${stats.accuracy_pct || 0}%`;
-    if (stMinutes) stMinutes.textContent = stats.total_study_minutes || 0;
+    // 数字首现计数：只在会话内首次进入统计页时播放（标记挂在视图 dataset 上，
+    // 切 tab 回来不重播）。aria-label 直接给最终值，且不加 aria-live，避免读屏逐帧朗读。
+    const progressView = document.getElementById("view-progress");
+    const playCount = !!progressView && !progressView.dataset.countPlayed;
+    const fmtInt = (value) => String(Math.round(value));
+    const fmtPct = (value) => `${Math.round(value)}%`;
+    const setStat = (el, value, format) => {
+      if (!el) return;
+      el.setAttribute("aria-label", format(value));
+      if (playCount) countUp(el, value, { format });
+      else el.textContent = format(value);
+    };
+
+    setStat(stStreak, stats.streak || 0, fmtInt);
+    setStat(stVocab, stats.mastered_vocab || 0, fmtInt);
+    setStat(stGrammar, stats.mastered_grammar || 0, fmtInt);
+    setStat(stArticles, stats.total_articles || 0, fmtInt);
+    setStat(stAccuracy, stats.accuracy_pct || 0, fmtPct);
+    setStat(stMinutes, stats.total_study_minutes || 0, fmtInt);
+    if (playCount) progressView.dataset.countPlayed = "1";
 
     // Sync Companion Mascot Studio & check streak milestone
     Companion.syncStudio();

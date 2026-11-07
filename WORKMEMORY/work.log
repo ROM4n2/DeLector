@@ -733,3 +733,13 @@ T5 CI 二轮：7 个卡片探针仍红，根因是沙箱 mock 的 `container = {
 
 ### 2026-11-07 13:08 | deepseek-v4.1-flash__trae | NOTE
 T5 CI 三轮：仅 unit-3 为真实红 —— wb_search_probe 沙箱切片 renderSearchGroups，新增的 enterOnce 未注入（ReferenceError）。补 `enterOnce: () => 0` 桩（该探针只验转义/分组，不验动画）。unit-4 与 cost-guards 是 matrix fail-fast 触发的 cancelled（日志末尾 "The operation was canceled"，进度 92% 无断言红），不是真失败。probe_json_contract + wb_search 相关 5 个用例全绿。
+
+### 2026-11-07 13:30 | deepseek-v4.1-flash__trae | NOTE
+补记 T3/T4 回执（用户指出中间缺回报）：
+- T3 = PR #259，merge commit 3936999ae43a2bd4a8b46ce400728b2848f6245d，已在 master；master CI success。改动 6836670：30 条 hover 位移中 29 条移除（仅 .stat-badge 保留 translateY(-2px)），10 处非布局 scale/rotate 保留并登记 §7 #4/#5，所有 :hover 包进 @media (hover:hover) and (pointer:fine)（§7 #6）。逐页目测结论当时只在 T3 对话回报里给过、未落盘；现补：列表行/卡片上浮变静最明显（首页文章行、卡片网格、写作问题行），考试模块卡改用底色+底线+阴影后仍可辨，桌宠 scale 与 .stat-badge 上浮是仅剩的活跃点，触屏 hover 不再粘住。
+- T4 = PR #260，merge commit e19a11a2eab8772d88622d3118dd1174045b433b，已在 master；master CI success。改动 4850cae 只碰 style.css/main.js/nav 两模板：.nav-tab::before 与 .mobile-nav-btn/.dock-item::before 2px 色条 + aria-current；.tok 与正文行内元素零改动（diff 中无 .tok 选择器），符合「不能用于行内元素」。
+
+T6 实施（worktree dlector-t6 / feat/motion-t6-count-up，基于 8217dfd）：
+- progress.html 6 个 .stat-ring 静态挂 .dl-count；folio.js 用 countUp()（520ms token 默认、easeOutCubic），aria-label 直接终态，无 aria-live；#view-progress.dataset.countPlayed 只播一次。
+- CDP 实测（1440x900）：首入 t0 articles/accuracy/minutes = 1/14%/6 → t150 4/58%/23 → t600 6/80%/31；aria-label 从首帧即 6/80%/31；六项 aria-live=null、无 aria-live 祖先；font-variant-numeric=tabular-nums、宽度恒 38px；切走再回数值立即终态且 200ms 不变；reduce 下立即终态。
+- 静态闸门：build 3480 行、sync PASS、node --check PASS、check_frontend_layers PASS、59 passed。
