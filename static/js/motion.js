@@ -105,7 +105,9 @@ export function countUp(el, to, { duration, format } = {}) {
   const from = Number(String(el.textContent).replace(/[^\d.-]/g, "")) || 0;
   const start = performance.now();
   const tick = (now) => {
-    const progress = Math.min(1, (now - start) / ms);
+    // rAF 时间戳可能早于调度时取到的 performance.now()，progress 会变负；
+    // 首帧会闪出负值（Android 实测台账正答率 -2%）。下界必须夹 0。
+    const progress = Math.max(0, Math.min(1, (now - start) / ms));
     const eased = 1 - Math.pow(1 - progress, 3);
     el.textContent = fmt(from + (to - from) * eased);
     if (progress < 1) requestAnimationFrame(tick);
