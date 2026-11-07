@@ -200,9 +200,10 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 ### T6 数字首现计数
 
 **改动面**
-- `static/views/progress.html` 的 6 个 `.stat-ring`：`#stat-streak`、`#stat-mastered-vocab`、`#stat-mastered-grammar`、`#stat-articles`、`#stat-accuracy`（带 `%`）、`#stat-minutes`。
-- 调用 `countUp()` 时同时设 `aria-label` 为最终值；**不加 `aria-live`**。
-- 计数只在统计页首次进入时播放；切换 tab 回来不重播。
+- `static/views/progress.html` 的 6 个 `.stat-ring`：`#stat-streak`、`#stat-mastered-vocab`、`#stat-mastered-grammar`、`#stat-articles`、`#stat-accuracy`（带 `%`）、`#stat-minutes`；静态挂 `.dl-count`。
+- `static/js/folio.js`（统计页模块，非 `main.js`）：调用 `motion.js` 的 `countUp()`，每项同时设 `aria-label` 为最终值；**不加 `aria-live`**。
+- 计数只在统计页首次进入时播放；标记挂在 `#view-progress` 的 `dataset.countPlayed`，切换 tab 回来不重播。
+- 整数统一 `Math.round`；`#stat-accuracy` 格式为 `${整数}%`。
 
 **验收**
 - [ ] 每项 520ms、easeOutCubic、无回弹；`#stat-accuracy` 保留 `%` 与整数格式。
