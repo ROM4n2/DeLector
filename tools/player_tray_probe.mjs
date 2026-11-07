@@ -9,8 +9,15 @@
  *      且状态行（句序/倒计时/引擎不可用）不是 0×0。
  * 另加 360×800 布局验收：托盘与所有控件不得横向溢出，传输键与倍速同排。
  *
+ * 实现说明（为什么不用 CDP）：
+ *   CI 跑在 ubuntu（Node 20），本机是 Windows。硬编码 msedge.exe 会在 CI 变
+ *   ENOENT；而 Node 20 没有全局 WebSocket，CDP 还得多带一个实验 flag。这里改成
+ *   「页面自检 + `--dump-dom`」：harness 在浏览器里跑完全部交互，把标准三键
+ *   JSON 写进 <body data-probe>，Node 只负责起静态服务、拉起任意 Chromium 并
+ *   解析 DOM。跨平台、零依赖、跨 Node 版本。
+ *
  * 用法：
- *   node tools/player_tray_probe.mjs            # 人类可读
+ *   node tools/player_tray_probe.mjs            # 人类可读 + 截图证据
  *   node tools/player_tray_probe.mjs --json     # stdout 只输出 JSON
  * 任一断言失败退出码 1。
  */
@@ -18,16 +25,13 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const STATIC = path.join(ROOT, "static");
 const JSON_MODE = process.argv.includes("--json");
-const EDGE =
-  process.env.EDGE_PATH ||
-  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const SHOT_DIR = path.join(ROOT, "_artifacts", "2026-11-07-player-tray-shots");
 
 const MIME = {
@@ -41,9 +45,53 @@ const MIME = {
   ".woff2": "font/woff2",
 };
 
-const checks = [];
-function check(name, ok, detail) {
-  checks.push({ name, ok: Boolean(ok), detail });
+/** 按平台找浏览器：环境变量优先，其次常见安装路径 / PATH。 */
+function findBrowser() {
+  const explicit = process.env.PLAYER_TRAY_BROWSER || process.env.CHROME_PATH || process.env.EDGE_PATH;
+  if (explicit) {
+    if (fs.existsSync(explicit)) return explicit;
+    throw new Error(`PLAYER_TRAY_BROWSER/CHROME_PATH 指向的浏览器不存在：${explicit}`);
+  }
+
+  const absolute = {
+    win32: [
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    ],
+    darwin: [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ],
+    linux: [],
+  }[process.platform] || [];
+
+  for (const file of absolute) {
+    if (fs.existsSync(file)) return file;
+  }
+
+  const onPath = process.platform === "win32"
+    ? ["msedge.exe", "chrome.exe", "chromium.exe"]
+    : [
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "microsoft-edge",
+        "microsoft-edge-stable",
+      ];
+  for (const cmd of onPath) {
+    const probe = process.platform === "win32" ? "where" : "which";
+    const res = spawnSync(probe, [cmd], { encoding: "utf8" });
+    const hit = res.status === 0 ? res.stdout.split(/\r?\n/).map((s) => s.trim()).find(Boolean) : null;
+    if (hit && fs.existsSync(hit)) return hit;
+  }
+
+  throw new Error(
+    "找不到 Chromium/Edge/Chrome。安装任一浏览器，或用 PLAYER_TRAY_BROWSER 指定可执行文件路径。",
+  );
 }
 
 /** 从分块模板里取出 #shadow-player 整块（按 div 深度配对）。 */
@@ -78,19 +126,234 @@ function harnessHtml(trayHtml) {
 <link rel="stylesheet" href="/style.css" />
 <style>body{margin:0;background:var(--paper);}#view-reader{max-width:760px;}</style>
 </head>
-<body>
+<body data-probe-started="0">
 <div hidden>${sprite}</div>
 <main id="view-reader" class="active">
   <p>Der Mann liest jeden Morgen die Zeitung.</p>
 </main>
 ${trayHtml}
+<script>
+try { localStorage.setItem("delector_voice", "de-DE-ConradNeural"); } catch (e) {}
+document.body.setAttribute("data-probe-started", "1");
+</script>
 <script type="module">
 import { ShadowPlayer, playGermanAudio } from "/js/player.js";
-window.ShadowPlayer = ShadowPlayer;
-window.playGermanAudio = playGermanAudio;
-ShadowPlayer.init();
-document.getElementById("shadow-player").classList.remove("hidden");
-window.__playerReady = true;
+
+const checks = [];
+const check = (name, ok, detail) => checks.push({ name, ok: Boolean(ok), detail });
+const tick = (ms) => new Promise((r) => setTimeout(r, ms || 60));
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+const rect = (el) => {
+  const r = el.getBoundingClientRect();
+  return {
+    top: +r.top.toFixed(1),
+    bottom: +r.bottom.toFixed(1),
+    left: +r.left.toFixed(1),
+    right: +r.right.toFixed(1),
+    w: +r.width.toFixed(1),
+    h: +r.height.toFixed(1),
+  };
+};
+
+async function run() {
+  window.ShadowPlayer = ShadowPlayer;
+  ShadowPlayer.init();
+  document.getElementById("shadow-player").classList.remove("hidden");
+  await tick(120);
+
+  // 0) 初始化时从 localStorage 恢复音色：折叠标签与菜单选中态必须同时恢复
+  ShadowPlayer.toggleVoiceMenu();
+  await tick();
+  const restored = {
+    label: $("#voice-current-label").textContent.trim(),
+    checked: $$("#voice-menu [aria-checked='true']").map((r) => r.dataset.voice),
+  };
+  ShadowPlayer.closeVoiceMenu();
+  check(
+    "voice:restores-from-storage",
+    restored.label === "男声 · Conrad" &&
+      restored.checked.length === 1 &&
+      restored.checked[0] === "de-DE-ConradNeural",
+    restored,
+  );
+
+  // 1) 4 个音色可达 + aria-checked 唯一 + 每行 >=44px
+  ShadowPlayer.setVoice("de-DE-KatjaNeural");
+  ShadowPlayer.toggleVoiceMenu();
+  await tick();
+  const voice = {
+    count: $$("#voice-menu [role='radio']").length,
+    checked: $$("#voice-menu [role='radio'][aria-checked='true']").length,
+    labels: $$("#voice-menu [role='radio']").map(
+      (r) => (r.querySelector(".vo-name")?.textContent.trim() || "") + "/" +
+        (r.querySelector(".vo-meta")?.textContent.trim() || ""),
+    ),
+    heights: $$("#voice-menu [role='radio']").map((r) => Math.round(r.getBoundingClientRect().height)),
+    menuOpen: !$("#voice-menu").classList.contains("hidden"),
+  };
+  check("voice:4-reachable", voice.count === 4, voice.labels);
+  check("voice:aria-checked-unique", voice.checked === 1, "checked=" + voice.checked);
+  check("voice:rows>=44px", voice.heights.every((h) => h >= 44), voice.heights);
+  check("voice:menu-opens", voice.menuOpen, voice.menuOpen);
+
+  // 2) 折叠态回显当前音色；切到 Killian 后必须同步
+  ShadowPlayer.setVoice("de-DE-KillianNeural");
+  const collapsed = {
+    label: $("#voice-current-label").textContent.trim(),
+    checked: $$("#voice-menu [aria-checked='true']").map((r) => r.dataset.voice),
+    expanded: $("#voice-current-btn").getAttribute("aria-expanded"),
+    menuHidden: $("#voice-menu").classList.contains("hidden"),
+  };
+  check("voice:collapsed-label", collapsed.label === "男声 · Killian", collapsed.label);
+  check(
+    "voice:selection-syncs",
+    collapsed.checked.length === 1 && collapsed.checked[0] === "de-DE-KillianNeural",
+    collapsed.checked,
+  );
+  check("voice:menu-closed-after-pick", collapsed.expanded === "false" && collapsed.menuHidden, collapsed);
+
+  // 3) 倍速显示值与 data-speed 一致
+  const speeds = $$(".speed-step-btn").map((b) => ({
+    data: parseFloat(b.dataset.speed),
+    text: b.textContent.trim(),
+    shown: parseFloat(b.textContent.trim()),
+    w: Math.round(b.getBoundingClientRect().width),
+    h: Math.round(b.getBoundingClientRect().height),
+  }));
+  const speedMismatch = speeds.filter((s) => s.data !== s.shown);
+  check(
+    "speed:label-matches-data-speed",
+    speeds.length === 4 && speedMismatch.length === 0,
+    speedMismatch.length ? speedMismatch : speeds.map((s) => s.text + "=" + s.data),
+  );
+
+  // 4a) 音色不生效时必须可见提示（走真实 Android 原生桥分支）
+  window.AndroidNativeTTS = { speak: () => true };
+  await playGermanAudio("Hallo");
+  const note = $("#player-voice-note");
+  const noteRect = rect(note);
+  check(
+    "voice:unavailable-notice-visible",
+    !note.classList.contains("hidden") &&
+      noteRect.h > 0 &&
+      note.textContent.trim().includes("当前音色不可用"),
+    {
+      hidden: note.classList.contains("hidden"),
+      text: note.textContent.trim(),
+      w: noteRect.w,
+      h: noteRect.h,
+    },
+  );
+
+  // 4b) 状态行不是 0×0，且能承载「语音引擎不可用」
+  ShadowPlayer.speakFailed({ text: "x" });
+  const line = $("#player-status");
+  const lineText = $("#player-status-text");
+  const lineRect = rect(line);
+  const textRect = rect(lineText);
+  check(
+    "status:visible-and-reads-engine-failure",
+    lineRect.w > 0 &&
+      lineRect.h > 0 &&
+      lineText.textContent.trim() === "语音引擎不可用" &&
+      lineText.classList.contains("is-error"),
+    {
+      lineW: lineRect.w,
+      lineH: lineRect.h,
+      textW: textRect.w,
+      textH: textRect.h,
+      content: lineText.textContent.trim(),
+      error: lineText.classList.contains("is-error"),
+    },
+  );
+
+  // 5) 360×800 布局：无横向溢出；传输与倍速同排；音色与模式同排
+  const tray = $("#shadow-player");
+  const controls = $$(".player-btn, .voice-current-btn, .mode-btn, .speed-step-btn")
+    .map((el) => ({ cls: el.className, text: el.textContent.trim(), ...rect(el) }));
+  const leftRect = rect($(".player-left"));
+  const speedRect = rect($(".speed-pill"));
+  const voiceRect = rect($(".voice-pill"));
+  const modesRect = rect($(".player-mode-group"));
+  const layout = {
+    innerWidth,
+    innerHeight,
+    docScrollW: document.documentElement.scrollWidth,
+    tray: {
+      ...rect(tray),
+      scrollW: tray.scrollWidth,
+      clientW: tray.clientWidth,
+      padding: getComputedStyle(tray).padding,
+    },
+    overflow: controls.filter((c) => c.right > innerWidth + 0.5 || c.left < -0.5),
+    transportSpeedSameRow:
+      Math.abs((leftRect.top + leftRect.bottom) / 2 - (speedRect.top + speedRect.bottom) / 2) <= 1.5,
+    voiceModeSameRow:
+      Math.abs((voiceRect.top + voiceRect.bottom) / 2 - (modesRect.top + modesRect.bottom) / 2) <= 1.5,
+  };
+  check(
+    "layout:360-no-horizontal-overflow",
+    layout.innerWidth === 360 &&
+      layout.docScrollW <= 360 &&
+      layout.tray.scrollW <= layout.tray.clientW + 1 &&
+      layout.overflow.length === 0,
+    { docScrollW: layout.docScrollW, tray: layout.tray, overflow: layout.overflow },
+  );
+  check("layout:transport-and-speed-same-row", layout.transportSpeedSameRow, {
+    transportSpeedSameRow: layout.transportSpeedSameRow,
+  });
+  check("layout:voice-and-modes-same-row", layout.voiceModeSameRow, {
+    voiceModeSameRow: layout.voiceModeSameRow,
+  });
+
+  const failures = checks.filter((c) => !c.ok).length;
+  const payload = { failures, total: checks.length, cases: checks };
+  document.body.setAttribute("data-probe", encodeURIComponent(JSON.stringify(payload)));
+}
+
+run().catch((err) => {
+  document.body.setAttribute(
+    "data-probe-error",
+    encodeURIComponent(String((err && err.stack) || err)),
+  );
+});
+</script>
+</body>
+</html>`;
+}
+
+/**
+ * 外层舞台：Windows headless 会把窗口宽度钳到 ~496px，`--window-size=360` 拿不到
+ * 360px 视口。改用 360×800 的 iframe 承载 harness，内层媒体查询 / 布局都以 iframe
+ * 视口为准；外层只负责把结果属性搬上来，供 `--dump-dom` 读取。
+ */
+function stageHtml() {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>player tray probe stage</title>
+<style>html,body{margin:0;padding:0;background:#fff}iframe{display:block;width:360px;height:800px;border:0}</style>
+</head>
+<body data-stage="1">
+<iframe id="stage" src="/harness.html" width="360" height="800" scrolling="no"></iframe>
+<script>
+var stage = document.getElementById("stage");
+var timer = setInterval(function () {
+  var body = null;
+  try { body = stage.contentDocument && stage.contentDocument.body; } catch (e) { body = null; }
+  if (!body) return;
+  var err = body.getAttribute("data-probe-error");
+  var ok = body.getAttribute("data-probe");
+  if (err) {
+    document.body.setAttribute("data-probe-error", err);
+    clearInterval(timer);
+  } else if (ok) {
+    document.body.setAttribute("data-probe", ok);
+    clearInterval(timer);
+  }
+}, 50);
 </script>
 </body>
 </html>`;
@@ -102,6 +365,11 @@ function startServer(trayHtml) {
     if (url.pathname === "/harness.html") {
       res.writeHead(200, { "Content-Type": MIME[".html"] });
       res.end(harnessHtml(trayHtml));
+      return;
+    }
+    if (url.pathname === "/stage.html") {
+      res.writeHead(200, { "Content-Type": MIME[".html"] });
+      res.end(stageHtml());
       return;
     }
     const rel = decodeURIComponent(url.pathname).replace(/^\/+/, "");
@@ -119,344 +387,108 @@ function startServer(trayHtml) {
   });
 }
 
-function launchEdge(userDataDir) {
-  const child = spawn(
-    EDGE,
-    [
-      "--headless=new",
-      "--remote-debugging-port=0",
-      `--user-data-dir=${userDataDir}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--disable-gpu",
-      "--hide-scrollbars",
-      "about:blank",
-    ],
-    { stdio: ["ignore", "ignore", "pipe"] },
-  );
-  const wsUrl = new Promise((resolve, reject) => {
-    let buf = "";
-    const timer = setTimeout(() => reject(new Error("Edge 未输出 DevTools 地址")), 20000);
-    child.stderr.on("data", (chunk) => {
-      buf += chunk.toString();
-      const m = buf.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-      if (m) {
-        clearTimeout(timer);
-        resolve(m[1]);
-      }
-    });
-    child.on("exit", (code) => reject(new Error(`Edge 提前退出（${code}）`)));
-  });
-  return { child, wsUrl };
-}
+function runBrowser(browser, url, extraArgs) {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "delector-tray-probe-"));
+  const args = [
+    "--headless=new",
+    "--disable-gpu",
+    "--hide-scrollbars",
+    "--no-first-run",
+    "--no-default-browser-check",
+    `--user-data-dir=${userDataDir}`,
+    "--window-size=420,880",
+    "--virtual-time-budget=6000",
+    "--dump-dom",
+    ...extraArgs,
+    url,
+  ];
+  if (process.platform === "linux") args.unshift("--no-sandbox", "--disable-dev-shm-usage");
 
-async function waitForPageTarget(port) {
-  for (let i = 0; i < 100; i++) {
-    try {
-      const resp = await fetch(`http://127.0.0.1:${port}/json/list`);
-      const list = await resp.json();
-      const page = list.find((t) => t.type === "page");
-      if (page) return page;
-    } catch {
-      /* 端口尚未就绪 */
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("等不到 Edge page target");
-}
-
-class Cdp {
-  constructor(ws) {
-    this.ws = ws;
-    this.id = 0;
-    this.pending = new Map();
-    this.events = [];
-    ws.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data);
-      if (msg.id && this.pending.has(msg.id)) {
-        const { resolve, reject } = this.pending.get(msg.id);
-        this.pending.delete(msg.id);
-        if (msg.error) reject(new Error(JSON.stringify(msg.error)));
-        else resolve(msg.result);
-      } else if (msg.method) {
-        this.events.push(msg);
+  // 必须异步 spawn：spawnSync 会阻塞事件循环，本地静态服务无法响应浏览器请求。
+  return new Promise((resolve) => {
+    const child = spawn(browser, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (status) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+      } catch {
+        /* 浏览器可能仍持有目录句柄：清理失败不掩盖探针结论 */
       }
+      resolve({ status, stdout, stderr });
     };
-  }
-
-  send(method, params = {}) {
-    const id = ++this.id;
-    this.ws.send(JSON.stringify({ id, method, params }));
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
-  }
-
-  async eval(expression) {
-    const r = await this.send("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
+    const timer = setTimeout(() => {
+      child.kill();
+      stderr += "\n[probe] 浏览器 120s 未退出，已强制结束";
+      finish(-1);
+    }, 120000);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
     });
-    if (r.exceptionDetails) {
-      throw new Error(r.exceptionDetails.exception?.description || "Runtime.evaluate 异常");
-    }
-    return r.result.value;
-  }
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (err) => {
+      stderr += String(err);
+      finish(-1);
+    });
+    child.on("close", (code) => finish(code));
+  });
+}
+
+function readProbePayload(dom) {
+  const started = /data-stage="1"/.test(dom);
+  if (!started) throw new Error("stage 页面没有解析（data-stage 未置位）");
+  const errMatch = dom.match(/data-probe-error="([^"]*)"/);
+  if (errMatch) throw new Error("harness 自检异常：" + decodeURIComponent(errMatch[1]));
+  const match = dom.match(/data-probe="([^"]+)"/);
+  if (!match) throw new Error("harness 没有产出 data-probe 结果（自检可能未跑完）");
+  return JSON.parse(decodeURIComponent(match[1]));
 }
 
 async function main() {
+  const browser = findBrowser();
   const trayHtml = extractTrayHtml();
   const server = await startServer(trayHtml);
-  const port = server.address().port;
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "delector-tray-probe-"));
-  const { child, wsUrl } = launchEdge(userDataDir);
-  let cdp;
+  const url = `http://127.0.0.1:${server.address().port}/stage.html`;
+  let result;
   try {
-    const browserWs = await wsUrl;
-    const browserPort = Number(new URL(browserWs).port);
-    const page = await waitForPageTarget(browserPort);
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((resolve, reject) => {
-      ws.onopen = resolve;
-      ws.onerror = reject;
-    });
-    cdp = new Cdp(ws);
-    await cdp.send("Page.enable");
-    await cdp.send("Runtime.enable");
-    await cdp.send("Emulation.setDeviceMetricsOverride", {
-      width: 360,
-      height: 800,
-      deviceScaleFactor: 2,
-      mobile: true,
-    });
-    await cdp.send("Page.navigate", { url: `http://127.0.0.1:${port}/harness.html` });
-
-    let ready = false;
-    for (let i = 0; i < 100; i++) {
-      try {
-        ready = await cdp.eval("window.__playerReady === true");
-      } catch {
-        ready = false;
-      }
-      if (ready) break;
-      await new Promise((r) => setTimeout(r, 100));
+    const first = await runBrowser(browser, url, []);
+    if (first.status !== 0) {
+      throw new Error(
+        `浏览器退出码 ${first.status}\nstderr(前 800 字):\n${(first.stderr || "").slice(0, 800)}`,
+      );
     }
-    if (!ready) {
-      const errors = cdp.events
-        .filter((e) => e.method === "Runtime.exceptionThrown")
-        .map((e) => e.params.exceptionDetails?.exception?.description);
-      throw new Error(`harness 未就绪；页面异常：${errors.join(" | ") || "无"}`);
+    result = readProbePayload(first.stdout || "");
+
+    // 人类可读模式顺手留一张 360×800 证据截图；CI 的 --json 模式不写文件。
+    if (!JSON_MODE) {
+      fs.mkdirSync(SHOT_DIR, { recursive: true });
+      await runBrowser(browser, url, [
+        `--screenshot=${path.join(SHOT_DIR, "tray-360x800.png")}`,
+        "--virtual-time-budget=2000",
+      ]);
     }
-    await new Promise((r) => setTimeout(r, 250));
-
-    // 0) 刷新后从 localStorage 恢复音色：折叠标签与菜单选中态必须同时恢复
-    await cdp.eval(
-      "localStorage.setItem('delector_voice','de-DE-ConradNeural'); location.reload(); true",
-    );
-    ready = false;
-    for (let i = 0; i < 100; i++) {
-      try {
-        ready = await cdp.eval("window.__playerReady === true");
-      } catch {
-        ready = false;
-      }
-      if (ready) break;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    if (!ready) throw new Error("reload 后 harness 未就绪");
-    const restored = await cdp.eval(`(async () => {
-      window.ShadowPlayer.toggleVoiceMenu();
-      await new Promise((r) => setTimeout(r, 50));
-      const label = document.getElementById('voice-current-label').textContent.trim();
-      const checked = [...document.querySelectorAll('#voice-menu [aria-checked="true"]')]
-        .map((r) => r.dataset.voice);
-      window.ShadowPlayer.closeVoiceMenu();
-      return { label, checked };
-    })()`);
-    check(
-      "voice:restores-from-storage",
-      restored.label === "男声 · Conrad" &&
-        restored.checked.length === 1 &&
-        restored.checked[0] === "de-DE-ConradNeural",
-      restored,
-    );
-
-    // 1) 4 个音色可达 + aria-checked 唯一 + 每行 ≥44px
-    await cdp.eval("window.ShadowPlayer.setVoice('de-DE-KatjaNeural')");
-    await cdp.eval("window.ShadowPlayer.toggleVoiceMenu()");
-    const voice = await cdp.eval(`(() => {
-      const radios = [...document.querySelectorAll('#voice-menu [role="radio"]')];
-      return {
-        count: radios.length,
-        checked: radios.filter((r) => r.getAttribute('aria-checked') === 'true').length,
-        labels: radios.map((r) => r.querySelector('.vo-name')?.textContent.trim() + '/' +
-          r.querySelector('.vo-meta')?.textContent.trim()),
-        heights: radios.map((r) => Math.round(r.getBoundingClientRect().height)),
-        menuOpen: !document.getElementById('voice-menu').classList.contains('hidden'),
-      };
-    })()`);
-    check("voice:4-reachable", voice.count === 4, voice.labels);
-    check("voice:aria-checked-unique", voice.checked === 1, `checked=${voice.checked}`);
-    check("voice:rows>=44px", voice.heights.every((h) => h >= 44), voice.heights);
-    check("voice:menu-opens", voice.menuOpen, voice.menuOpen);
-
-    // 2) 折叠态回显当前音色；切到 Killian 后必须同步
-    const collapsed = await cdp.eval(`(() => {
-      window.ShadowPlayer.setVoice('de-DE-KillianNeural');
-      const label = document.getElementById('voice-current-label').textContent.trim();
-      const checked = [...document.querySelectorAll('#voice-menu [aria-checked="true"]')]
-        .map((r) => r.dataset.voice);
-      const expanded = document.getElementById('voice-current-btn').getAttribute('aria-expanded');
-      return { label, checked, expanded };
-    })()`);
-    check(
-      "voice:collapsed-label",
-      collapsed.label === "男声 · Killian",
-      collapsed.label,
-    );
-    check(
-      "voice:selection-syncs",
-      collapsed.checked.length === 1 && collapsed.checked[0] === "de-DE-KillianNeural",
-      collapsed.checked,
-    );
-    check("voice:menu-closed-after-pick", collapsed.expanded === "false", collapsed.expanded);
-
-    // 3) 倍速显示值与 data-speed 一致
-    const speeds = await cdp.eval(`(() => {
-      return [...document.querySelectorAll('.speed-step-btn')].map((b) => {
-        const r = b.getBoundingClientRect();
-        return {
-          data: parseFloat(b.dataset.speed),
-          text: b.textContent.trim(),
-          shown: parseFloat(b.textContent.trim()),
-          w: Math.round(r.width),
-          h: Math.round(r.height),
-        };
-      });
-    })()`);
-    const speedMismatch = speeds.filter((s) => s.data !== s.shown);
-    check(
-      "speed:label-matches-data-speed",
-      speeds.length === 4 && speedMismatch.length === 0,
-      speedMismatch.length ? speedMismatch : speeds.map((s) => `${s.text}=${s.data}`),
-    );
-
-    // 4a) 音色不生效时必须可见提示（走真实 Android 原生桥分支）
-    const notice = await cdp.eval(`(async () => {
-      window.AndroidNativeTTS = { speak: () => true };
-      await window.playGermanAudio('Hallo');
-      const note = document.getElementById('player-voice-note');
-      const r = note.getBoundingClientRect();
-      return {
-        hidden: note.classList.contains('hidden'),
-        text: note.textContent.trim(),
-        w: Math.round(r.width),
-        h: Math.round(r.height),
-      };
-    })()`);
-    check(
-      "voice:unavailable-notice-visible",
-      !notice.hidden && notice.h > 0 && notice.text.includes("当前音色不可用"),
-      notice,
-    );
-
-    // 4b) 状态行不是 0×0，且能承载「语音引擎不可用」
-    const status = await cdp.eval(`(() => {
-      window.ShadowPlayer.speakFailed({ text: 'x' });
-      const line = document.getElementById('player-status');
-      const text = document.getElementById('player-status-text');
-      const lr = line.getBoundingClientRect();
-      const tr = text.getBoundingClientRect();
-      return {
-        lineW: Math.round(lr.width),
-        lineH: Math.round(lr.height),
-        textW: Math.round(tr.width),
-        textH: Math.round(tr.height),
-        content: text.textContent.trim(),
-        error: text.classList.contains('is-error'),
-      };
-    })()`);
-    check(
-      "status:visible-and-reads-engine-failure",
-      status.lineW > 0 && status.lineH > 0 && status.content === "语音引擎不可用" && status.error,
-      status,
-    );
-
-    // 5) 360×800 布局：无横向溢出；传输与倍速同排
-    const layout = await cdp.eval(`(() => {
-      const tray = document.getElementById('shadow-player');
-      const rect = (el) => {
-        const r = el.getBoundingClientRect();
-        return { top: +r.top.toFixed(1), bottom: +r.bottom.toFixed(1), left: +r.left.toFixed(1), right: +r.right.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1) };
-      };
-      const controls = [...tray.querySelectorAll('.player-btn, .voice-current-btn, .mode-btn, .speed-step-btn')]
-        .map((el) => ({ cls: el.className, text: el.textContent.trim(), ...rect(el) }));
-      const left = document.querySelector('.player-left').getBoundingClientRect();
-      const speed = document.querySelector('.speed-pill').getBoundingClientRect();
-      const voice = document.querySelector('.voice-pill').getBoundingClientRect();
-      const modes = document.querySelector('.player-mode-group').getBoundingClientRect();
-      return {
-        innerWidth,
-        innerHeight,
-        docScrollW: document.documentElement.scrollWidth,
-        tray: { ...rect(tray), scrollW: tray.scrollWidth, clientW: tray.clientWidth, padding: getComputedStyle(tray).padding },
-        controls,
-        overflow: controls.filter((c) => c.right > innerWidth + 0.5 || c.left < -0.5),
-        transportSpeedSameRow: Math.abs((left.top + left.bottom) / 2 - (speed.top + speed.bottom) / 2) <= 1.5,
-        voiceModeSameRow: Math.abs((voice.top + voice.bottom) / 2 - (modes.top + modes.bottom) / 2) <= 1.5,
-      };
-    })()`);
-    check(
-      "layout:360-no-horizontal-overflow",
-      layout.innerWidth === 360 &&
-        layout.docScrollW <= 360 &&
-        layout.tray.scrollW <= layout.tray.clientW + 1 &&
-        layout.overflow.length === 0,
-      {
-        docScrollW: layout.docScrollW,
-        tray: layout.tray,
-        overflow: layout.overflow,
-      },
-    );
-    check("layout:transport-and-speed-same-row", layout.transportSpeedSameRow, {
-      transportSpeedSameRow: layout.transportSpeedSameRow,
-    });
-    check("layout:voice-and-modes-same-row", layout.voiceModeSameRow, {
-      voiceModeSameRow: layout.voiceModeSameRow,
-    });
-
-    // 证据截图
-    const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
-    fs.mkdirSync(SHOT_DIR, { recursive: true });
-    fs.writeFileSync(path.join(SHOT_DIR, "tray-360x800.png"), Buffer.from(shot.data, "base64"));
-
-    ws.close();
   } finally {
-    try {
-      cdp?.ws.close();
-    } catch {
-      /* ignore */
-    }
-    child.kill();
     server.close();
-    // Edge 进程可能还持有 user-data-dir 句柄：清理失败不掩盖探针结论。
-    try {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
   }
 
-  const failures = checks.filter((c) => !c.ok);
-  const payload = { failures: failures.length, total: checks.length, cases: checks };
+  const failures = result.cases.filter((c) => !c.ok);
   if (JSON_MODE) {
-    process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify({ failures: failures.length, total: result.total, cases: result.cases }, null, 2) + "\n",
+    );
   } else {
-    for (const c of checks) {
+    for (const c of result.cases) {
       const flag = c.ok ? "PASS" : "FAIL";
       process.stdout.write(`[${flag}] ${c.name}${c.ok ? "" : " :: " + JSON.stringify(c.detail)}\n`);
     }
     process.stdout.write(
-      `\n${checks.length - failures.length}/${checks.length} passed；截图 _artifacts/2026-11-07-player-tray-shots/tray-360x800.png\n`,
+      `\n${result.total - failures.length}/${result.total} passed；截图 _artifacts/2026-11-07-player-tray-shots/tray-360x800.png\n`,
     );
   }
   process.exit(failures.length ? 1 : 0);
