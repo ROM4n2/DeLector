@@ -243,6 +243,7 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 **改动面**
 - 卡片三态状态芯片（`static/js/cards.js` 渲染 + `static/style.css`）：文字 + 颜色 + 3px 左竖线；不改现有中文标题。（ADR §13.1 的 Deferred Gap）
 - focus 可见性：只对 T3–T8 触及的控件补 `:focus-visible` 2px `--ink` 环 + 2px offset；不做全站清理。
+- `.lp-status` 覆盖状态芯片（用户并入本批，不单独开 PR）：文字 + 颜色 + 1px 同色描边，不再只有文字（`static/style.css`）。
 - 排印节奏（**已定 B 口径**，见 §7 #10）：只改 nav / cards / reader 三个面（ADR §3.5），按作用层拆开验收：
   - **阅读面**（reader 正文块）：保持现状，实测约 70 字符/行、1.85（sans）/1.95（serif），合格，不再改。
   - **功能面**（cards 控制区、exam 列表）：内部块间 28–40px 属刻意紧凑（1.17 档），是取值不是欠账，不再改。

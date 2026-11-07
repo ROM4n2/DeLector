@@ -756,3 +756,12 @@ T8（按压反馈）在 worktree dlector-t8 / feat/motion-t8-press 实施（基�
 - 计划选择器的偏差：`.icon-btn` / `.deck-card` 本仓不存在；实际卡片为 `.deck-active-card`，携带滑动手势 transform，纳入会与手势冲突，故不加；workbench.css 已有独立 `.btn:active { transform: scale(.97) }`（transition .05s），属独立样式源未动。登记 §7 #9。
 - CDP 实测（1440x900）：idle transform none / transition all .15s；按下 60ms matrix(0.981502…) / transitionProperty transform / duration 0.1s；释放 250ms 后 none；长按 1.2s 保持 matrix(0.98…) 且释放后 none（不粘住）；强制 :active 的 `.tok` 与 `.a1-option-label` 均 transform none（未触停止门 #2）；reduce 按下 transform none、duration 1e-05s。
 - 闸门：test_frontend_guards + test_index_dom_probe + test_writer_mobile + test_encounter_ui_probes = 65 passed；build 3480 行；sync PASS。
+
+### 2026-11-07 14:12 | deepseek-v4.1-flash__trae | NOTE
+T9（静态补全）在 worktree dlector-t9 / feat/t9-static 实施（基于 61be846）。
+- 排印项按用户定 B 口径，不改代码：计划 §T9 拆成阅读面（70 字符/行、1.85/1.95 保持）/ 功能面（28–40px 为 1.17 档刻意取值）/ `.view` padding 40/64；§7 #10 点明这是第二次「合成数值 ≠ 像素判据」（第一次 section/content = 4.0）。
+- 卡片三态：cards.js 空态改 `.cards-empty` 结构，芯片文字 已完成/无卡片/已归档 + `--accent`/`--ink`/`--moss` + 3px 左竖线；实测芯片 54×24、390px 不重叠。
+- focus 环：12 个 T3–T8 控件 `outline: 2px solid var(--ink); outline-offset: 2px`；键盘 Tab 实测全部 2px ink / offset 2px；对照 `.cards-seg-btn` 仍 UA 1px auto，证明未扫全站。
+- 坑：`.btn` 有 `transition: all .15s`，focus 后 40ms 读到的是 outline 过渡中间值（rgb(10,9,7) / offset 1px），必须等 ≥360ms 再读，否则会误判规则没生效。
+- `.lp-status`：原先无任何 CSS，补 mono 11px + 1px 同色描边芯片；pending 用 `--pencil`、covered 用 `--moss`；实测 49×21，移动端不与文本重叠。
+- 闸门：index sync PASS；test_frontend_guards + test_cards_state_split + test_german_workbench = 126 passed；a1/german/writer 相关 62 passed。

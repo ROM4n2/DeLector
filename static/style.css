@@ -10218,6 +10218,26 @@ body.drawer-open .companion {
   font-weight: 600;
 }
 
+/* T9：导向点覆盖状态芯片。此前只有文字，状态没有形状；
+   文字 + 颜色 + 1px 描边三通道，颜色只作冗余（I1）。 */
+.lp-status {
+  flex-shrink: 0;
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: var(--pencil);
+  white-space: nowrap;
+}
+
+.lp-status[data-state="covered"] {
+  color: var(--moss);
+}
+
 .a1-email-live-meter {
   display: flex;
   flex-wrap: wrap;
