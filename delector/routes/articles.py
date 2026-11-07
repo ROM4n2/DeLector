@@ -25,6 +25,7 @@ from delector.core.database import (
     ingest_article,
     log_study_event,
 )
+from delector.core.db.processed_migration import needs_migration, write_migrated
 from delector.core.security import (
     PRESET_FEEDS,
     clean_html_to_article,
@@ -170,7 +171,7 @@ def _migration_lock(article_id: int) -> threading.Lock:
 
 def _needs_lazy_migration(pj: Any) -> bool:
     """惰性迁移判据（与写入端单一真相源对齐）：非 dict / 无 stats / 版本落后 ⇒ 需迁移。"""
-    return not (isinstance(pj, dict) and "stats" in pj and pj.get("version") == PROCESSED_JSON_VERSION)
+    return needs_migration(pj, PROCESSED_JSON_VERSION)
 
 
 @router.get("/api/articles/{article_id}")
@@ -180,6 +181,11 @@ def get_article(article_id: int) -> Dict[str, Any]:
         if not row:
             raise HTTPException(404, "Article not found")
         data = dict(row)
+        # 边界（旧库 / 外部导入）：文本列可能被存成 BLOB（非 UTF-8）。只在**内存**里容错解码，
+        # 绝不回写 —— 原始正文 / 旧解析结果的任何字节都不归本次迁移处置（备份仍存原始值）。
+        for _field in ("raw_text", "processed_json", "stats_json"):
+            if isinstance(data.get(_field), (bytes, bytearray)):
+                data[_field] = bytes(data[_field]).decode("utf-8", errors="replace")
         try:
             pj = json.loads(data.get("processed_json") or "{}")
         except Exception:
@@ -195,31 +201,45 @@ def get_article(article_id: int) -> Dict[str, Any]:
             # 异常整体回滚、无半写；锁只做"同篇互斥"，不改变事务边界。
             with _migration_lock(article_id):
                 fresh = conn.execute(
-                    "SELECT processed_json FROM articles WHERE id = ?", (article_id,)
+                    "SELECT processed_json, stats_json FROM articles WHERE id = ?", (article_id,)
                 ).fetchone()
                 try:
                     fresh_pj = json.loads(fresh["processed_json"]) if fresh is not None else None
                 except Exception:
                     fresh_pj = None
-                if not _needs_lazy_migration(fresh_pj):
+                if fresh is None:
+                    # 初始读之后被并发删除：不重算、不造备份行（备份表没有外键，会留孤儿）。
+                    pass
+                elif not _needs_lazy_migration(fresh_pj):
                     pj = fresh_pj  # 别的请求已迁完：直接用，不重算（这正是省掉 7/8 CPU 的那一行）
                 else:
-                    pj = process_german_text(data.get("raw_text") or "")
-                    conn.execute(
-                        # P1-6：惰性迁移同步回写 stats 投影列（否则该行列表永远走 blob 兜底）。
-                        # UPDATE 的事务边界不变：仍在 db_conn 的事务里，异常整体回滚、无半写。
-                        "UPDATE articles SET processed_json = ?, stats_json = ? WHERE id = ?",
-                        (
-                            json.dumps(pj, ensure_ascii=False),
-                            json.dumps(pj.get("stats") or {}, ensure_ascii=False),
+                    try:
+                        new_pj = process_german_text(data.get("raw_text") or "")
+                        # 备份 + UPDATE 同一事务：任何一步失败都整体回滚，绝不半写。
+                        write_migrated(
+                            conn,
                             article_id,
-                        ),
-                    )
-                    # 提交必须在释放锁之前完成：重检读的是"已提交"数据，若 commit
-                    # 留在 handler 末尾（锁外），等锁者拿锁重检时读到的仍是陈旧值 ⇒
-                    # single-flight 空转（实测 8 并发算 2 次）。提前 commit 只改提交时机、
-                    # 不改事务内容：仍只有这一条 UPDATE，异常时不走到这行、整体回滚。
-                    conn.commit()
+                            old_processed_json=fresh["processed_json"],
+                            old_stats_json=fresh["stats_json"],
+                            payload=new_pj,
+                        )
+                    except Exception as exc:
+                        # 失败保留旧结果：回滚本次事务（清掉可能已写入的备份行），继续用旧 payload。
+                        # 用户可见的是旧解析结果 + 响应字段；原因进日志，不静默。
+                        conn.rollback()
+                        data["processed_upgrade_failed"] = True
+                        logging.getLogger("delector").warning(
+                            "文章 %s 的 processed_json 重算失败，已保留旧结果（raw_text 未改动）：%r",
+                            article_id,
+                            exc,
+                        )
+                    else:
+                        pj = new_pj
+                        # 提交必须在释放锁之前完成：重检读的是"已提交"数据，若 commit
+                        # 留在 handler 末尾（锁外），等锁者拿锁重检时读到的仍是陈旧值 ⇒
+                        # single-flight 空转（实测 8 并发算 2 次）。提前 commit 只改提交时机、
+                        # 不改事务内容：仍只有备份 + UPDATE，异常时不走到这行、整体回滚。
+                        conn.commit()
         if isinstance(pj, dict):
             data.update(pj)
         return data

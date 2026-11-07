@@ -154,6 +154,19 @@ def init_db(db_path: Optional[str] = None) -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        # processed_json 版本升级的**回退快照**：惰性迁移覆盖前把上一版派生数据存一份。
+        # 单行/篇（article_id 主键），随迁移 upsert ⇒ 始终是「上一次覆盖前」的内容。
+        # 存量文章按需重算后若发现新结果更差，可用 tools/recompute_processed.py --restore
+        # 逐字写回；raw_text / 生词卡 / 批注从不经过本表，也不受重算影响。
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS processed_json_backup (
+                article_id INTEGER PRIMARY KEY,
+                processed_version TEXT,
+                processed_json TEXT NOT NULL,
+                stats_json TEXT,
+                backed_up_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS vocab_cards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
