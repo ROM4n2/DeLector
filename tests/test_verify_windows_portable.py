@@ -426,7 +426,12 @@ def test_wait_until_ready_probes_the_published_port(tmp_path: Path, monkeypatch:
     port_file = tmp_path / vp.PORT_FILE_NAME
     port_file.write_text("8002\n", encoding="ascii")
     probed: List[int] = []
-    monkeypatch.setattr(vp, "_probe_once", lambda port: probed.append(port) or port == 8002)
+
+    def _record(port: int) -> bool:
+        probed.append(port)
+        return port == 8002
+
+    monkeypatch.setattr(vp, "_probe_once", _record)
 
     result = vp.wait_until_ready(_AliveProcess(), port_file, deadline_s=1.0)
 
@@ -439,7 +444,12 @@ def test_wait_until_ready_probes_the_published_port(tmp_path: Path, monkeypatch:
 def test_wait_until_ready_never_guesses_a_port(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """端口文件没出现时一次都不能探测（尤其不能回落到 8000）。"""
     probed: List[int] = []
-    monkeypatch.setattr(vp, "_probe_once", lambda port: probed.append(port) or False)
+
+    def _record(port: int) -> bool:
+        probed.append(port)
+        return False
+
+    monkeypatch.setattr(vp, "_probe_once", _record)
 
     result = vp.wait_until_ready(_AliveProcess(), tmp_path / vp.PORT_FILE_NAME, deadline_s=0.05)
 
