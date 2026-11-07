@@ -145,12 +145,15 @@ export function renderCardsGrid() {
         ? "太棒了！艾宾浩斯记忆排程显示今日暂无到期卡片。您可以切换至「待复习全量」主动温故或进入文库精读新文章。"
         : "在阅读器中点击生词或语法考点，即可一键收录。";
 
-    const emptyTone =
+    const emptyState =
       cardState.catalog.segment === "due"
-        ? "var(--accent)"
+        ? "due"
         : cardState.catalog.segment === "mastered"
-          ? "var(--moss)"
-          : "var(--rule)";
+          ? "mastered"
+          : "pending";
+    // T9：三态芯片用文字承载语义（I1），颜色与 3px 左竖线只作冗余。
+    const emptyLabel =
+      emptyState === "due" ? "已完成" : emptyState === "mastered" ? "已归档" : "无卡片";
     const emptyEyebrow =
       cardState.catalog.segment === "due"
         ? "TAGESPLAN · 今日"
@@ -159,18 +162,12 @@ export function renderCardsGrid() {
           : "KATALOG · 词库";
 
     container.innerHTML = `
-      <div style="display:flex;gap:1rem;margin-top:1.5rem;">
-        <span aria-hidden="true" style="width:2px;flex-shrink:0;background:${emptyTone};"></span>
+      <div class="cards-empty" data-state="${emptyState}">
+        <span class="cards-empty-chip">${emptyLabel}</span>
         <div>
-          <div style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:0.5rem;">
-            ${emptyEyebrow}
-          </div>
-          <div style="font-family:var(--serif-heading);font-size:1.375rem;color:var(--ink);margin-bottom:0.5rem;">
-            ${emptyTitle}
-          </div>
-          <p style="font-size:0.8125rem;color:var(--pencil);max-width:52ch;margin:0;line-height:1.65;">
-            ${emptyDesc}
-          </p>
+          <div class="cards-empty-eyebrow">${emptyEyebrow}</div>
+          <div class="cards-empty-title">${emptyTitle}</div>
+          <p class="cards-empty-desc">${emptyDesc}</p>
         </div>
       </div>
     `;

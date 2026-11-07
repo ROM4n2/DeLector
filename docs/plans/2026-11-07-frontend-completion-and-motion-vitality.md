@@ -243,11 +243,16 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 **改动面**
 - 卡片三态状态芯片（`static/js/cards.js` 渲染 + `static/style.css`）：文字 + 颜色 + 3px 左竖线；不改现有中文标题。（ADR §13.1 的 Deferred Gap）
 - focus 可见性：只对 T3–T8 触及的控件补 `:focus-visible` 2px `--ink` 环 + 2px offset；不做全站清理。
-- 排印节奏：只改 nav / cards / reader 三个面（ADR §3.5），使用现有 token；section 间距 40–64px、正文 1.6、长读 1.9、行宽 45–90 字符。
+- `.lp-status` 覆盖状态芯片（用户并入本批，不单独开 PR）：文字 + 颜色 + 1px 同色描边，不再只有文字（`static/style.css`）。
+- 排印节奏（**已定 B 口径**，见 §7 #10）：只改 nav / cards / reader 三个面（ADR §3.5），按作用层拆开验收：
+  - **阅读面**（reader 正文块）：保持现状，实测约 70 字符/行、1.85（sans）/1.95（serif），合格，不再改。
+  - **功能面**（cards 控制区、exam 列表）：内部块间 28–40px 属刻意紧凑（1.17 档），是取值不是欠账，不再改。
+  - 只有 `.view` 级 padding 维持 40/64 这一档。
 - 不改 `static/views/` 之外的布局，不做全站 token 迁移。
 
 **验收**
 - [ ] 卡片三态在灰阶/色盲模拟下仍可区分（文字 + 线 + 颜色三通道）。（I1）
+- [ ] 阅读面按实测复核：45–90 字符/行、正文约 1.6、长读约 1.9；**不**以「section 间距 40–64px」判内部块间距，`.view` padding 维持 40/64。
 - [ ] 三个面之外的文件 0 改动；截图对比未被要求修改的页面差异 ≤5%。（ADR §6.2）
 - [ ] 无新增 `px` 硬编码间距；新值全部来自 `tokens.css`。
 - [ ] `python -m pytest tests/test_frontend_guards.py tests/test_german_workbench.py tests/test_cards_state_split.py -q` 全绿。
@@ -321,6 +326,7 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 | 7 | T4 目标选择器写作 `.mobile-nav-item.active`；`aria-current` 只改模板 | 实际类为 `.mobile-nav-btn` / `.dock-item`；`aria-current` 由 `main.js` 的 `show()` 动态同步，模板只标初始 home | DOM 中没有 `.mobile-nav-item` 这个类；只写静态属性会在切换 tab 后指向错误项 |
 | 8 | T5 「对容器加 `.dl-enter`」 | 实际是外层 `#search-results` 加 `.dl-stagger`，每个**可见**分组 section 加 `.dl-enter`；卡片网格只处理 `.card-grid`，exam 网格由 `main.js` 首次 `show('exam')` 触发 | `.dl-stagger > *` 只设 `animation-delay`，动画必须落在子元素上；给外层容器再挂 `.dl-enter` 会与子项动画叠加。「搜索结果文本本身不做逐条入场」已满足 |
 | 9 | T8 目标选择器 `.btn:active`、`.icon-btn:active`、`.deck-card:active`（若存在） | 只加 `.btn:active`；`.icon-btn`、`.deck-card` 在本仓不存在（实际卡片为 `.deck-active-card`，携带滑动手势 transform，纳入会与手势打架，故不加）；`workbench.css` 已有独立 `.btn:active { transform: scale(.97) }`（transition .05s），属独立样式源，未动 | 验收「只作用可点控件」：`.tok`、`.a1-option-label` 经 CDP 强制 `:active` 实测 `transform:none`，未触停止门 #2；全局 reduce 块追加 `.btn:active { transform: none }` |
+| 10 | T9 「section 间距 40–64px」按统一数值验收 | 拆成作用层：阅读面保持现状（实测 70 字符/行、1.85 sans / 1.95 serif）；功能面内部块间 28–40px（1.17 档）为刻意取值；只有 `.view` padding 采纳 40/64 | **已确认：用户选 B**。实测块间 28–32px 低于 40 下限 20–30%，单一数值验收会被反复当成漂移。这是**第二次同类坑**（第一次：section/content = 4.0 从未落到像素上）：**设计文档里的合成数值不等于逐元素像素判据，验收必须按作用层落到实测口径** |
 
 ---
 

@@ -483,6 +483,24 @@ a {
   transition: transform var(--motion-press, 100ms) ease;
 }
 
+/* T9：只为 T3–T8 触及过的可聚焦控件补统一焦点环，不做全站清理。
+   outline 不参与布局；与 T3 的 hover 只改色/影不冲突。 */
+.btn:focus-visible,
+.nav-tab:focus-visible,
+.mobile-nav-btn:focus-visible,
+.dock-item:focus-visible,
+.satz-lab-chip:focus-visible,
+.speaker-btn:focus-visible,
+.speaker-btn-sm:focus-visible,
+.hl-color-btn:focus-visible,
+.article-row-del:focus-visible,
+.card-del-btn:focus-visible,
+.card-master-btn:focus-visible,
+.encounter-entry-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 .btn-dark {
   background: var(--ink);
 
@@ -3626,6 +3644,64 @@ body.drawer-open .shadow-player {
   flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.75rem;
+}
+
+/* T9：卡片空态三态（文字芯片 + 颜色 + 3px 左竖线，三通道区分，I1）。
+   语义只由芯片文字承担，颜色与线宽只作冗余；改色只动 --cards-empty-tone。 */
+.cards-empty {
+  --cards-empty-tone: var(--ink);
+
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-left: 1rem;
+  border-left: 3px solid var(--cards-empty-tone);
+}
+
+.cards-empty[data-state="due"] {
+  --cards-empty-tone: var(--accent);
+}
+
+.cards-empty[data-state="mastered"] {
+  --cards-empty-tone: var(--moss);
+}
+
+.cards-empty-chip {
+  flex-shrink: 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--cards-empty-tone);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+  color: var(--cards-empty-tone);
+  white-space: nowrap;
+}
+
+.cards-empty-eyebrow {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+}
+
+.cards-empty-title {
+  font-family: var(--serif-heading);
+  font-size: 1.375rem;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.cards-empty-desc {
+  font-size: 0.8125rem;
+  color: var(--pencil);
+  max-width: 52ch;
+  margin: 0;
+  line-height: 1.65;
 }
 
 .cards-seg-bar {
@@ -10140,6 +10216,26 @@ body.drawer-open .companion {
   background: rgba(22, 163, 74, 0.08);
   color: #15803d;
   font-weight: 600;
+}
+
+/* T9：导向点覆盖状态芯片。此前只有文字，状态没有形状；
+   文字 + 颜色 + 1px 描边三通道，颜色只作冗余（I1）。 */
+.lp-status {
+  flex-shrink: 0;
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: var(--pencil);
+  white-space: nowrap;
+}
+
+.lp-status[data-state="covered"] {
+  color: var(--moss);
 }
 
 .a1-email-live-meter {
