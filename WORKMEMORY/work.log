@@ -727,3 +727,6 @@ CDP 实测（1440x900）：exam 7 项 delay 0/40/…/200/200ms、duration 180ms�
 T5 CI 首轮 7 个 Python shard 全红：check_frontend_layers 报 cards.js 顶层 `let _gridEnterPlayed` 违反「零顶层 let/var」契约（cards.js 在 MUTABLE_STATE_MODULES）。
 先试图放进 cd-state.js catalog.enterPlayed，被 test_cards_state_split 的 24 叶子逐字钉死测试拒绝（4 failed），已撤销。
 改为容器 dataset：`#cards-container.dataset.enterPlayed`，既无顶层可变状态也不动状态容器契约。gate PASS，72 passed，CDP 复测 C1/C2/C3 行为不变（43 项错峰→cleanup→切段 143 项零重播）。
+
+### 2026-11-07 12:58 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 二轮：7 个卡片探针仍红，根因是沙箱 mock 的 `container = { innerHTML: "" }` 没有真 DOM 必有的 dataset / querySelector，renderCatalogGrid 读 dataset 时 TypeError。按「mock 保真」修 3 个探针桩（cards_catalog_tag_probe / cards_workbench_no_review_probe / cards_wb_source_probe），补 dataset:{} 与 querySelector:()=>null；未改任何断言或期望值。相关 21 个用例全绿。
