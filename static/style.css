@@ -13489,3 +13489,70 @@ body.drawer-open .companion {
     transform: rotate(-2deg);
   }
 }
+
+/* ── 伴读桌宠：自由移动（P4，2026-11-08） ─────────────────────────────
+   本分区只追加在 style.css 末尾，不改写上方既有规则。 */
+.panel-free-move-row {
+  align-items: center;
+}
+
+.panel-free-move {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--ink, #1a1a1a);
+}
+
+.panel-free-move-input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ink, #1a1a1a);
+  cursor: pointer;
+}
+
+.panel-free-move-label {
+  font-weight: 600;
+}
+
+.panel-free-move-state {
+  margin-left: auto;
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 0.6875rem;
+  color: var(--pencil, #666);
+}
+
+.panel-free-move-hint {
+  margin: -0.25rem 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--pencil, #666);
+}
+
+.panel-free-move-input:focus-visible {
+  outline: 2px solid var(--ink, #1a1a1a);
+  outline-offset: 2px;
+}
+
+/* reduced-motion：恢复 / 回角落 / 让位都直接落位，不走位置过渡。 */
+@media (prefers-reduced-motion: reduce) {
+  .companion,
+  .companion.is-settling {
+    transition: none !important;
+  }
+}
+
+/* 自由移动后桌宠贴近视口边缘时，设置面板翻到角色下方 / 右侧，保持开关可达。 */
+.companion.panel-below .companion-panel {
+  bottom: auto;
+  top: calc(100% + 12px);
+}
+
+.companion.panel-align-left .companion-panel {
+  right: auto;
+  left: 0;
+}

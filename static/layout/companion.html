@@ -8,20 +8,20 @@
       <div
         id="companion-char"
         class="companion-char"
-        onclick="window.Companion.onClick()"
+        onclick="window.Companion.onClick(event)"
       ></div>
       <button
         id="companion-avatar"
         class="companion-avatar"
         aria-label="伴读角色设置与对话"
-        onclick="window.Companion.onClick()"
+        onclick="window.Companion.onClick(event)"
       >
         <span id="companion-avatar-icon" aria-hidden="true"></span>
       </button>
       <div id="companion-panel" class="companion-panel hidden">
         <div class="panel-head">
           <span class="panel-title">伴读角色设置</span>
-          <button class="panel-close" aria-label="关闭伴读设置" onclick="window.Companion.onClick()">
+          <button class="panel-close" aria-label="关闭伴读设置" onclick="window.Companion.togglePanel()">
             <svg class="ui-ico" aria-hidden="true" focusable="false"><use href="#ui-ico-x"></use></svg>
           </button>
         </div>
@@ -103,6 +103,23 @@
             oninput="window.Companion.setName(this.value)"
           />
         </div>
+        <div class="panel-row panel-free-move-row">
+          <label class="panel-free-move" for="panel-free-move">
+            <input
+              id="panel-free-move"
+              class="panel-free-move-input"
+              type="checkbox"
+              role="switch"
+              aria-describedby="panel-free-move-hint"
+              onchange="window.Companion.setFreeMove(this.checked)"
+            />
+            <span class="panel-free-move-label">自由移动</span>
+            <span id="panel-free-move-state" class="panel-free-move-state" aria-hidden="true">已关闭</span>
+          </label>
+        </div>
+        <p id="panel-free-move-hint" class="panel-free-move-hint">
+          开启后可拖到任意位置，但仍会自动避开按钮、输入框等主要操作控件。关闭时回到默认角落，位置会记住。
+        </p>
         <div class="panel-row" id="panel-colors">
           <button
             class="panel-color-dot"

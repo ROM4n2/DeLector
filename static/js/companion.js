@@ -679,10 +679,13 @@ export const Companion = {
     if (!this._dragReleasePending) return false;
     this._dragReleasePending = false;
     this._setCondition('dragging', false);
+    this.schedulePanelFit();
     return this._resumeBubbleIfPending();
   },
 
   _onSettleEnd() {
+    // 让位结束后桌宠可能换了位置，设置面板跟着重新落位。
+    this.schedulePanelFit();
     const shouldResolve = this._bubbleResolvePending;
     this._bubbleResolvePending = false;
     const solvedByRelease = this._finishDragRelease();
@@ -816,6 +819,8 @@ export const Companion = {
     this.color = localStorage.getItem('delector_companion_color') || '';
     this.soundEnabled = localStorage.getItem('delector_companion_sound') !== 'off';
     this.enabled = localStorage.getItem('delector_companion_enabled') !== 'off';
+    // P4：自由移动默认关闭；关闭时桌宠固定在默认角落，拖拽不启动。
+    this.freeMove = localStorage.getItem('delector_companion_roam') === 'on';
 
     // 2. Render initial mascot elements
     this.renderAll();
@@ -964,6 +969,30 @@ export const Companion = {
     this.syncStudio();
   },
 
+  // P4：自由移动开关。位置记忆在胶囊控制器内完成（按布局尺寸换算并持久化）。
+  setFreeMove(enabled) {
+    this.freeMove = Boolean(enabled);
+    localStorage.setItem('delector_companion_roam', this.freeMove ? 'on' : 'off');
+    const compEl = document.getElementById('companion');
+    const controller = compEl && compEl._floatingCapsuleController;
+    if (controller && typeof controller.setFreeMove === 'function') {
+      controller.setFreeMove(this.freeMove);
+    } else if (compEl) {
+      compEl.classList.toggle('is-free-move', this.freeMove);
+      compEl.setAttribute('data-free-move', this.freeMove ? 'on' : 'off');
+    }
+    this.syncPanel();
+    // 关闭时桌宠靠 CSS 过渡回角落，等过渡结束再量面板；开启是直接落位，用 rAF。
+    this.schedulePanelFit(this.freeMove ? 0 : 360);
+    if (window.showUndoToast) {
+      window.showUndoToast(
+        this.freeMove
+          ? '自由移动已开启：可拖到任意位置，落点仍会避开主要操作控件'
+          : '自由移动已关闭：伴读回到默认角落，位置已记住'
+      );
+    }
+  },
+
   saveStudioSettings() {
     const nameInput = document.getElementById('studio-mascot-name');
     if (nameInput) this.setName(nameInput.value);
@@ -1011,12 +1040,58 @@ export const Companion = {
 
   togglePanel() {
     this.panelOpen = !this.panelOpen;
+    const cap = document.getElementById('companion');
     const panel = document.getElementById('companion-panel');
+    if (cap) {
+      cap.classList.remove('panel-below', 'panel-align-left');
+    }
     if (panel) {
       panel.classList.toggle('hidden', !this.panelOpen);
     }
     if (this.panelOpen) {
       this.syncPanel();
+      if (panel) {
+        requestAnimationFrame(() => this.fitPanelInViewport());
+      }
+    }
+  },
+
+  /** 让设置面板跟随桌宠但不越出视觉视口：优先原位置（上方/右对齐），放不下再翻面。 */
+  fitPanelInViewport() {
+    const cap = document.getElementById('companion');
+    const panel = document.getElementById('companion-panel');
+    if (!cap || !panel || panel.classList.contains('hidden')) return;
+    const vp = getVisualViewport();
+    const margin = 8;
+
+    // 每次都从默认方位重新量，避免桌宠换位置后沿用上一次的翻面结果。
+    cap.classList.remove('panel-below', 'panel-align-left');
+    let rect = panel.getBoundingClientRect();
+    if (rect.top < vp.top + margin) {
+      cap.classList.add('panel-below');
+      rect = panel.getBoundingClientRect();
+    }
+    if (rect.bottom > vp.top + vp.height - margin) {
+      cap.classList.remove('panel-below');
+      rect = panel.getBoundingClientRect();
+      // 上下都放不下时优先保留能完整放下的一侧。
+      if (rect.top < vp.top + margin && panel.offsetHeight <= vp.height - margin * 2) {
+        cap.classList.add('panel-below');
+        rect = panel.getBoundingClientRect();
+      }
+    }
+
+    if (rect.left < vp.left + margin) {
+      cap.classList.add('panel-align-left');
+    }
+  },
+
+  schedulePanelFit(delay = 0) {
+    if (!this.panelOpen) return;
+    if (delay > 0) {
+      setTimeout(() => this.fitPanelInViewport(), delay);
+    } else {
+      requestAnimationFrame(() => this.fitPanelInViewport());
     }
   },
 
@@ -1599,6 +1674,16 @@ export const Companion = {
         }
       }
       soundBtn.setAttribute('aria-pressed', String(this.soundEnabled));
+    }
+
+    // P4：自由移动开关（原生 checkbox，checked 即状态；文字同步，不靠颜色表达）
+    const freeMoveInput = document.getElementById('panel-free-move');
+    if (freeMoveInput) {
+      freeMoveInput.checked = Boolean(this.freeMove);
+    }
+    const freeMoveState = document.getElementById('panel-free-move-state');
+    if (freeMoveState) {
+      freeMoveState.textContent = this.freeMove ? '已开启' : '已关闭';
     }
   }
 };
