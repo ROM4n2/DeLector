@@ -164,6 +164,8 @@ export function initFloatingCapsule(options) {
     settleTimer = setTimeout(() => {
       settleTimer = 0;
       capsuleEl.classList.remove('is-settling');
+      // P3 状态机据此把 dragging 松手与气泡求解推迟到落点稳定之后
+      document.dispatchEvent(new CustomEvent('companion:settle-end'));
     }, 320);
 
     if (notify) notifyBubble();
