@@ -672,3 +672,14 @@ M1（加法批次前置减法）实施并开 PR #257，分支 feat/motion-infini
 运行时实测（不是只查 CSS 文本）：headless Chromium + CDP 注入 13 个受影响元素，正常态 7 个白名单动画各 1 个运行实例、被删动画 gap 0；Emulation.setEmulatedMedia 切 reduce（matchMedia=true）后全部 animationName=none、getAnimations()=0，静态标记（scale/描边/色点）保留。
 静态闸门：grep infinite=7（全落白名单）；build_index_html 3479 行；check_index_html_sync PASS；pytest test_frontend_guards + test_grammatik_radar + test_writer_mobile = 43 passed。
 约束：未改 JS class 切换逻辑、未碰 android/、未跑 sync_android_sources.py、未 git add -A（worktree 内两份 B 类草稿未入库）。
+
+### 2026-11-07 09:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+M1 已 merge（#257 → master e840467，merge commit）；§7 偏差按用户结论改为「已确认：用户选择纯静态，停止门 #2 优先」，D1 表原「一次性 260ms 高亮」标注被取代。
+T2 动效基建已实施并开 PR，分支 feat/motion-t2-infra（基于 e840467）。
+1) tokens.css 新增 5 个 motion token：--motion-enter / --motion-enter-shift / --motion-press / --motion-count / --motion-stagger-step（未迁移旧 --dur-*）。
+2) style.css 新增 @keyframes dl-fade-up、.dl-enter、.dl-stagger > *、.dl-count；新增全局 reduce 兜底（animation/transition 0.01ms、iteration 1、scroll-behavior auto），并让 .dl-enter/.dl-stagger 在 reduce 下 animation:none。
+3) 新增 static/js/motion.js：prefersReducedMotion / stagger(root,{step,cap}) / countUp(el,to,{duration,format})；数值从 CSS token 读，不复制 40/520。step/cap 的调用方在 T5/T6。
+运行时实测（CDP，正常 vs reduce）：正常态 .dl-enter animationName=dl-fade-up、1 个运行实例；8 子项 index 0..5 封顶、delay 0/40/…/200ms；countUp 从 0 走到 42。reduce（matchMedia=true）下 stagger 返回 0、无 --stagger-index、animationName=none、getAnimations()=0、delay 全 0；countUp 调用瞬间即 42。
+静态闸门：node --check motion.js 通过；新 token 仅 tokens.css 定义、style.css 仅 var() 引用；build_index_html 3479 行；check_index_html_sync PASS；pytest test_frontend_module_graph + test_frontend_guards = 24 passed。
+约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A。
