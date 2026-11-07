@@ -12894,3 +12894,111 @@ body.drawer-open .companion {
     padding-bottom: 11rem;
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   Settings · Reasoning Effort Segmented Control (2026-11-07)
+   独立命名空间（.settings-reasoning-* / .settings-group-heading / -value）。
+   只新增本分区，勿与上方任何规则重排或合并。
+   ═════════════════════════════════════════════════════════════════════════════ */
+.settings-group-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.settings-group-value {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+  white-space: nowrap;
+}
+
+.settings-reasoning {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-deep);
+}
+
+.settings-reasoning-btn {
+  position: relative;
+  min-height: 44px;
+  padding: 0.5rem 0.25rem;
+  border: 0;
+  border-right: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.settings-reasoning-btn:last-child {
+  border-right: 0;
+}
+
+.settings-reasoning-btn:hover {
+  background: rgba(21, 20, 15, 0.06);
+}
+
+.settings-reasoning-btn[aria-checked="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+/* 不只用颜色表达选中：选中项底部加一条 accent 基线。 */
+.settings-reasoning-btn[aria-checked="true"]::after {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 5px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.settings-reasoning-btn:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--ink);
+  outline-offset: -3px;
+}
+
+.settings-reasoning-hint {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--pencil);
+}
+
+.settings-reasoning-status {
+  min-height: 1.1rem;
+  margin-top: 0.2rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+}
+
+.settings-reasoning-status[data-state="ok"] {
+  color: #16a34a;
+}
+
+.settings-reasoning-status[data-state="error"] {
+  color: var(--accent);
+}
+
+@media (max-width: 420px) {
+  .settings-group-value {
+    font-size: 0.625rem;
+  }
+
+  .settings-reasoning-btn {
+    min-height: 42px;
+    font-size: 0.75rem;
+  }
+}

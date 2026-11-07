@@ -384,9 +384,9 @@
             <div class="companion-thinking-toolbar" id="companion-thinking-toolbar">
               <span class="companion-thinking-label">思考强度:</span>
               <div class="companion-thinking-pills">
-                <button type="button" class="thinking-pill" data-effort="low" onclick="window.CompanionDrawer?.setReasoningEffort('low')">极速</button>
-                <button type="button" class="thinking-pill active" data-effort="medium" onclick="window.CompanionDrawer?.setReasoningEffort('medium')">平衡</button>
-                <button type="button" class="thinking-pill" data-effort="high" onclick="window.CompanionDrawer?.setReasoningEffort('high')">深度</button>
+                <button type="button" class="thinking-pill" data-effort="none" aria-pressed="false" onclick="window.CompanionDrawer?.setReasoningEffort('none')">关闭</button>
+                <button type="button" class="thinking-pill active" data-effort="medium" aria-pressed="true" onclick="window.CompanionDrawer?.setReasoningEffort('medium')">标准</button>
+                <button type="button" class="thinking-pill" data-effort="high" aria-pressed="false" onclick="window.CompanionDrawer?.setReasoningEffort('high')">深读</button>
               </div>
             </div>
             <div id="companion-quick-actions" class="companion-quick-actions">

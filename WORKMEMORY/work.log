@@ -827,3 +827,11 @@ PR #279 首轮 CI 红：真失败仅 unit-2 的「Mypy type gate (tests, config 
 - 修法：只改测试写法（lambda → 带注解局部函数，记录与返回值分两行），断言口径一字未动，未放松任何门禁。
 - 本地复现/复验：mypy --follow-imports=skip tests 187 files 零错误；相关 3 个测试文件 93 passed；ruff 通过。
 - 推送后新跑 42361432194 全绿（含 Windows Portable Smoke 3m33s；Master Direct-Push Scope Gate 为 PR 语境设计内 skipping），head f6b6466，未合并。
+
+### 2026-11-07 19:05 | deepseek-v4.1-flash__trae | NOTE
+设置页思考强度换皮（worktree D:\Code\DeLector-settings / feat/settings-reasoning-segmented，基于 origin/master d195db8）。
+- 设置页四档 <select> 换成三档 segmented（关闭/标准/深读，存量值 none/medium/high），点选即 POST 保存并 GET 回读；折叠组标题常显「思考：X」。
+- 上游映射仍只走 llm_client.map_reasoning_effort（none→none, medium→high, high→max），UI 层不复制映射。
+- 后端 get_effective_reasoning_effort 归一：low/未知值→medium，保证 UI 展示=生效值=请求值；抽屉胶囊同步改为三档。
+- 验证链：浏览器点击深读 → POST /api/settings 200 → GET 回读 reasoning_effort=high → reasoning_payload={"reasoning_effort":"max"}。
+- build_index_html + check_index_html_sync PASS；相关 pytest 100 passed/1 skipped；ruff 通过。
