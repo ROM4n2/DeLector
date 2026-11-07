@@ -221,6 +221,8 @@ a {
   color: var(--coral, var(--accent));
 }
 
+/* 顶栏状态点：仅作「System 在线」的静态标记。
+   循环呼吸会让每一页都持续动，违反 ADR-0029 §8；状态语义由左侧文字承担。 */
 .topbar-inner .pulse {
   width: 6px;
   height: 6px;
@@ -228,7 +230,6 @@ a {
   background: var(--coral, var(--accent));
   display: inline-block;
   margin-right: 6px;
-  animation: pulse 2.4s ease-in-out infinite;
 }
 
 /* 顶栏版本号兼作手动检查入口，反馈必须区别于普通元数据才能被发现。 */
@@ -271,18 +272,6 @@ a {
 .update-chip-link:hover {
   background: var(--coral, var(--accent));
   color: #fff;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.35;
-    transform: scale(0.85);
-  }
 }
 
 @media (max-width: 768px) {
@@ -1409,18 +1398,8 @@ body.focus-mode .tok.focus-active {
 
   box-shadow: 0 0 0 2px var(--ink);
 
-  animation: tokenPulse 0.7s ease-in-out infinite alternate;
-}
-
-@keyframes tokenPulse {
-  0% {
-    transform: scale(1.02);
-  }
-
-  100% {
-    transform: scale(1.1);
-    box-shadow: 0 0 8px rgba(216, 72, 43, 0.45);
-  }
+  /* 聚焦标记只保留静态 scale(1.06) + 2px ink ring；不再呼吸。
+     正文词元不得持续抢占注意力（ADR-0029 §8 / 停止门 #2）。 */
 }
 
 /* Paper Reading Canvas */
@@ -4621,26 +4600,14 @@ body.drawer-open .shadow-player {
   gap: 0.5rem;
 }
 
+/* 与顶栏状态点同义：静态圆点，不再呼吸。 */
 .folio-pulse {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--coral, var(--accent, #ed6f5c));
   display: inline-block;
-  animation: pulseDot 2.2s ease-in-out infinite;
   flex-shrink: 0;
-}
-
-@keyframes pulseDot {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.35;
-    transform: scale(0.85);
-  }
 }
 
 .folio-kicker {
@@ -4969,6 +4936,8 @@ body.drawer-open .shadow-player {
   will-change: transform;
 }
 
+/* 白名单：空态装饰滚动，只出现在无内容的空态，42s/48s 足够慢；
+   已在下方 reduce 块中关闭（ADR-0029 §8）。 */
 .marquee-row.marquee-forward .marquee-track {
   animation: marqueeLeft 42s linear infinite;
 }
@@ -6934,24 +6903,7 @@ body.drawer-open .shadow-player {
     0 0 0 2px #3b82f6,
     0 2px 6px rgba(59, 130, 246, 0.35);
   font-weight: 600;
-  animation: pulse-linked 1.8s infinite ease-in-out;
-}
-@keyframes pulse-linked {
-  0% {
-    box-shadow:
-      0 0 0 2px #60a5fa,
-      0 0 6px rgba(59, 130, 246, 0.3);
-  }
-  50% {
-    box-shadow:
-      0 0 0 3px #2563eb,
-      0 0 14px rgba(37, 99, 235, 0.55);
-  }
-  100% {
-    box-shadow:
-      0 0 0 2px #60a5fa,
-      0 0 6px rgba(59, 130, 246, 0.3);
-  }
+  /* 降级为静态 2px 蓝边：正文词元不新增一次性/循环动画（停止门 #2）。 */
 }
 
 .separable-banner {
@@ -7293,7 +7245,7 @@ body.drawer-open .shadow-player {
   background: #dcfce7;
 }
 
-/* Clause Pulse Highlight in Reader */
+/* Clause Highlight in Reader */
 .tok.clause-highlight {
   background-color: #fed7aa !important;
   color: #7c2d12 !important;
@@ -7302,25 +7254,7 @@ body.drawer-open .shadow-player {
     0 0 0 2px #f97316,
     0 2px 6px rgba(249, 115, 22, 0.3);
   font-weight: 600;
-  animation: pulse-clause 1.6s infinite ease-in-out;
-}
-
-@keyframes pulse-clause {
-  0% {
-    box-shadow:
-      0 0 0 2px #fb923c,
-      0 0 4px rgba(249, 115, 22, 0.25);
-  }
-  50% {
-    box-shadow:
-      0 0 0 3px #ea580c,
-      0 0 10px rgba(234, 88, 12, 0.45);
-  }
-  100% {
-    box-shadow:
-      0 0 0 2px #fb923c,
-      0 0 4px rgba(249, 115, 22, 0.25);
-  }
+  /* 降级为静态 2px 橙边：正文词元不新增一次性/循环动画（停止门 #2）。 */
 }
 
 /* ── Settings Modal Styles ─────────────────────────────────────────── */
@@ -7904,11 +7838,15 @@ body.drawer-open .shadow-player {
   }
 }
 
+/* 白名单：角色眨眼属于「角色身份」，4.2s 一次且只占 4% 时长；
+   reduce 下停用，见文末降级块。 */
 .char-eye {
   animation: charBlink 4.2s infinite ease-in-out;
   transform-box: view-box;
 }
 
+/* 白名单：伴读角色待机是唯一常驻角色动效（ADR-0029 §8）；
+   reduce 下停用，见文末降级块。 */
 @keyframes companionIdle {
   0%,
   100% {
@@ -11648,13 +11586,7 @@ body.drawer-open .companion {
   height: 6px;
   border-radius: 50%;
   background: var(--coral, #b44322);
-  animation: thoughtInkPulse 1.2s infinite ease-in-out;
-}
-
-@keyframes thoughtInkPulse {
-  0% { transform: scale(0.8); opacity: 0.4; }
-  50% { transform: scale(1.25); opacity: 1; }
-  100% { transform: scale(0.8); opacity: 0.4; }
+  /* 静态圆点：加载语义由旁边的「Eule 正在推演句子结构...」文案承担。 */
 }
 
 .thought-title {
@@ -11744,6 +11676,8 @@ body.drawer-open .companion {
 }
 
 /* ── 客户端自适应打字机光标 (Adaptive Typewriter Cursor) ────────── */
+/* 白名单：光标闪烁表示「正在输出」，属于正在发生的事（ADR-0029 §8）；
+   reduce 下停用，见文末降级块。 */
 .companion-typing-cursor {
   display: inline-block;
   width: 2px;
@@ -12018,4 +11952,16 @@ body.drawer-open .companion {
   padding: 0 0.9rem;
   cursor: pointer;
   font-weight: 600;
+}
+
+/* ── M1：循环白名单的 reduce 降级 ─────────────────────────────────
+   reduce 下直接落到终态：光标常亮、眼睛睁开、角色静止。
+   marquee 的降级已在 §空态滚动处单独声明。 */
+@media (prefers-reduced-motion: reduce) {
+  .companion-typing-cursor,
+  .char-eye,
+  .mascot-stage-char,
+  .companion-char {
+    animation: none;
+  }
 }

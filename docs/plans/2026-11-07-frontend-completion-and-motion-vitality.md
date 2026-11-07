@@ -1,6 +1,6 @@
 # 前端「补全 / 生动力」实施计划（加法批次）
 
-- **状态**：Proposed —— 待用户逐条点头，未开工
+- **状态**：In Progress —— 四项决策已拍板；M1 已实施并开 PR，T2–T8 逐项推进；T9 拆下一批
 - **日期**：2026-11-07
 - **上游**：[ADR-0029](../adr/2026-11-06-adr-0029-frontend-de-emoji-and-editorial-rhythm.md)、[动效调研与模板](../reviews/2026-11-07-motion-vitality-research.md)、`../reviews/2026-11-07-motion-templates.css`、`../reviews/2026-11-07-motion-templates.js`
 - **前置批次**：第四批 B 类 390 处装饰字形清零（PR #255，扫描 0 残留）
@@ -60,8 +60,8 @@
 | # | 动画 | 位置 | 用途 | 处置 | 批次 |
 | ---: | --- | --- | --- | --- | --- |
 | 1 | `tokenPulse` 0.7s | `style.css:1412`，`.tok.focus-active` | 聚焦词元呼吸 | **删除动画**；保留 `scale(1.06)` + 2px ink ring 静态标记 | M1 |
-| 2 | `pulse-linked` 1.8s | `style.css:6937`，`.tok.linked-separable` | 可分动词关联 | **降级**：静态 2px 蓝边 + 一次性 260ms 高亮 | M1 |
-| 3 | `pulse-clause` 1.6s | `style.css:7305`，`.tok.clause-highlight` | 从句高亮 | **降级**：同上，静态 2px 橙边 | M1 |
+| 2 | `pulse-linked` 1.8s | `style.css:6937`，`.tok.linked-separable` | 可分动词关联 | **降级**：静态 2px 蓝边（原「一次性 260ms 高亮」已被取代，见 §7 #1） | M1 |
+| 3 | `pulse-clause` 1.6s | `style.css:7305`，`.tok.clause-highlight` | 从句高亮 | **降级**：同上，静态 2px 橙边（不做一次性高亮） | M1 |
 | 4 | `pulse` 2.4s | `style.css:231`，`.topbar-inner .pulse` | 顶栏状态点 | **合并**到统一 `.status-dot`：仅「在线/实时」时循环，其余静态 | M1 |
 | 5 | `pulseDot` 2.2s | `style.css:4630`，`.folio-pulse` | 状态圆点 | 与 #4 合并，保留一处定义 | M1 |
 | 6 | `thoughtInkPulse` 1.2s | `style.css:11651` | 思考中指示 | **改静态三点**；加载语义由文案承担 | M1 |
@@ -300,7 +300,8 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 
 | # | 计划 | 实际 | 理由 |
 | --- | --- | --- | --- |
-| — | — | — | 尚未开工 |
+| 1 | M1 `pulse-linked` / `pulse-clause` 降级为「静态 2px 边 + 一次性 260ms 高亮」 | 只保留静态 2px 边，不做一次性高亮；计划原文的「一次性 260ms 高亮」**已被本行取代** | **已确认：用户选择纯静态，停止门 #2 优先**；不给正文 `.tok` 新增任何动画，静态环 + 背景/字重已足以区分 |
+| 2 | M1 `thoughtInkPulse` 改「静态三点」 | 保留原单个静态 `.thought-pulse-dot` | **已确认**：DOM 里本就只有一个点；加载语义由「Eule 正在推演句子结构...」文案承担，不新增节点 |
 
 ---
 

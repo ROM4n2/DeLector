@@ -661,3 +661,14 @@ ADR-0029 第四批（B 类 390 处清零）落地，分支 feat/frontend-de-emoj
 验证：全量扫描 0（40 文件全部落零）；build_index_html 3479 行；check_index_html_sync PASS；受影响 pytest 33 文件 626 passed / 1 skipped。
 探针同步（只断言文字，不删用例/不放宽）：listen-lab（✓/✗ 前缀）、companion chips、hard-sentences、cards catalog/wb source tags、german_workbench 徽标、writer_mobile 按钮定位、audit_hardening notify 文案、server 设置回环文案。
 约束：6 路子代理按文件所有权切分（index.html/sprite 仅主代理）、未碰 android/、未跑 sync_android_sources.py、未 git add -A。
+
+### 2026-11-07 08:05 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+M1（加法批次前置减法）实施并开 PR #257，分支 feat/motion-infinite-m1（基于 master 1a40986）。
+1) 删除 5 组循环：tokenPulse / pulseDot 的 @keyframes，以及 pulse-linked / pulse-clause / thoughtInkPulse 的 keyframes（5 个名字在 static/ 已 0 命中）。
+2) 静态降级：顶栏 .pulse 与 .folio-pulse 改静态圆点；.tok.focus-active 保留 scale(1.06)+2px ink ring；.linked-separable / .clause-highlight 保留静态 2px 蓝/橙边；.thought-pulse-dot 保持静态（语义由「Eule 正在推演句子结构...」承担）。
+3) 白名单 7 处保留并补 reduce：typingCursorBlink、charBlink、companionIdle ×2、marqueeLeft/Right、workbench .audio-btn.busy；每处旁有中文注释说明允许循环的理由。
+4) 偏差（写入计划 §7）：计划原写「静态边 + 一次性 260ms 高亮」，实际只做静态边 —— 停止门 #2 不给正文 .tok 新增动画；思考指示不拆三点（DOM 本就只有一个点）。
+运行时实测（不是只查 CSS 文本）：headless Chromium + CDP 注入 13 个受影响元素，正常态 7 个白名单动画各 1 个运行实例、被删动画 gap 0；Emulation.setEmulatedMedia 切 reduce（matchMedia=true）后全部 animationName=none、getAnimations()=0，静态标记（scale/描边/色点）保留。
+静态闸门：grep infinite=7（全落白名单）；build_index_html 3479 行；check_index_html_sync PASS；pytest test_frontend_guards + test_grammatik_radar + test_writer_mobile = 43 passed。
+约束：未改 JS class 切换逻辑、未碰 android/、未跑 sync_android_sources.py、未 git add -A（worktree 内两份 B 类草稿未入库）。
