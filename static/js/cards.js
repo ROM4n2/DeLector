@@ -44,7 +44,8 @@ export function getCardViewMode() {
 }
 
 // 卡片网格入场只在会话内首次渲染播一次；切段、翻页、增删卡后的重渲染都不重播。
-let _gridEnterPlayed = false;
+// 标记挂在容器 dataset 上：cards.js 受「零顶层 let/var」机械闸约束，且状态容器
+// cd-state.js 的叶子字段被测试逐字钉死（不接纳 UI 专用标记）。
 
 export function setCardSegment(seg) {
   enterSegment(seg);
@@ -606,9 +607,9 @@ export function renderCatalogGrid(vList, gList) {
   `;
 
   // 只给词汇网格做错峰（≤6 项）；语法卡与页脚标签不参与，避免整页逐块跳动。
-  if (!_gridEnterPlayed) {
+  if (!container.dataset.enterPlayed) {
     const grid = container.querySelector(".card-grid");
-    if (grid && enterOnce(grid)) _gridEnterPlayed = true;
+    if (grid && enterOnce(grid)) container.dataset.enterPlayed = "1";
   }
 }
 

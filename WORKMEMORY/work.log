@@ -722,3 +722,8 @@ T5（一次性入场 + 列表 stagger）在 worktree dlector-t5 / 分支 feat/mo
 CDP 实测（1440x900）：exam 7 项 delay 0/40/…/200/200ms、duration 180ms，cleanup 后 animationName=none、anims=0；二次 show('exam') 零重播；搜索 4 组 delay 0..120ms，cleanup 后零类，换词重渲染零重播；卡片网格 43 项 delay 封顶 200ms、cleanup 后零类，切段后 143 项零重播；reduce（matchMedia=true）下三处均 enterCount=0、opacity=1、animName=none。搜索最迟组 120ms 起播 +180ms，无「最后一项等半秒」。
 静态闸门：node --check 4 个改动 JS 通过；build_index_html 3480 行；check_index_html_sync PASS；pytest test_frontend_module_graph + test_frontend_guards + test_index_dom_probe + test_writer_mobile = 59 passed。
 约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A。
+
+### 2026-11-07 12:46 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 首轮 7 个 Python shard 全红：check_frontend_layers 报 cards.js 顶层 `let _gridEnterPlayed` 违反「零顶层 let/var」契约（cards.js 在 MUTABLE_STATE_MODULES）。
+先试图放进 cd-state.js catalog.enterPlayed，被 test_cards_state_split 的 24 叶子逐字钉死测试拒绝（4 failed），已撤销。
+改为容器 dataset：`#cards-container.dataset.enterPlayed`，既无顶层可变状态也不动状态容器契约。gate PASS，72 passed，CDP 复测 C1/C2/C3 行为不变（43 项错峰→cleanup→切段 143 项零重播）。
