@@ -3,6 +3,12 @@
 
 import { ShadowPlayer, playGermanAudio } from './player.js';
 import { cardState, selectSegmentLists, buildDeckFromLists } from './cd-state.js';
+import {
+  getCompanionViewport,
+  getAvoidPadding,
+  collectNoParkRects,
+  intersectsAny
+} from './companion-obstacles.js';
 
 // ── SVG Character Templates (Standardized classes & dynamic CSS vars) ───────
 export const CHARACTERS = {
@@ -434,23 +440,9 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-/** 视觉视口（软键盘/缩放后真正可见的区域）；不支持时退回布局视口 */
+/** 视觉视口；复用 companion-obstacles 的统一实现（含 --writer-keyboard-inset 兜底） */
 function getVisualViewport() {
-  const vv = window.visualViewport;
-  if (vv && vv.width > 0 && vv.height > 0) {
-    return {
-      left: vv.offsetLeft || 0,
-      top: vv.offsetTop || 0,
-      width: vv.width,
-      height: vv.height
-    };
-  }
-  return {
-    left: 0,
-    top: 0,
-    width: document.documentElement.clientWidth || window.innerWidth,
-    height: document.documentElement.clientHeight || window.innerHeight
-  };
+  return getCompanionViewport();
 }
 
 /** 把 computed transform-origin 解析成元素局部 px 坐标 */
@@ -471,6 +463,12 @@ function parseTransformOrigin(value, width, height) {
 }
 
 // ── Companion Mascot Singleton Controller ────────────────────────────────────
+/** 模态（写作页移动端 sheet）打开期间临时收起的气泡，关闭后自动恢复 */
+let bubbleSuspendedByModal = false;
+/** 气泡自然收起的绝对时间戳；挂起期间计时不暂停，恢复前必须复核是否已过期 */
+let bubbleExpiresAt = 0;
+const BUBBLE_TTL_MS = 6500;
+
 export const Companion = {
   charId: 'owl',
   name: '',
@@ -841,7 +839,33 @@ export const Companion = {
   repositionBubble() {
     const bubble = document.getElementById('companion-bubble');
     const capsule = document.getElementById('companion');
-    if (!bubble || !capsule || bubble.classList.contains('hidden')) return;
+    if (!bubble || !capsule) return;
+
+    // 写作页移动端 sheet 展开时属于模态：气泡先收起（让位），关闭后由一次
+    // repositionBubble 自动恢复，不靠抬高 z-index 去盖住 sheet。
+    const modalOpen = Boolean(document.querySelector('.writer-sidebar.mobile-panel-open'));
+    if (modalOpen) {
+      if (!bubble.classList.contains('hidden')) {
+        bubble.classList.add('hidden');
+        bubbleSuspendedByModal = true;
+      }
+      return;
+    }
+    if (bubbleSuspendedByModal) {
+      bubbleSuspendedByModal = false;
+      // 挂起期间计时不暂停：模态开着超过气泡 TTL 时，关闭瞬间不得让过期气泡"复活"。
+      if (bubbleExpiresAt > Date.now()) {
+        bubble.classList.remove('hidden');
+      } else {
+        bubble.classList.add('hidden');
+        bubbleExpiresAt = 0;
+        if (this.bubbleTimer) {
+          clearTimeout(this.bubbleTimer);
+          this.bubbleTimer = null;
+        }
+      }
+    }
+    if (bubble.classList.contains('hidden')) return;
 
     // 1. 清空上一轮的内联约束，回到自然尺寸再测量
     const body = bubble.querySelector('.companion-bubble-body');
@@ -865,8 +889,8 @@ export const Companion = {
     const capCs = window.getComputedStyle(capsule);
     const capLeft = parseFloat(capCs.left);
     const capTop = parseFloat(capCs.top);
-    const anchorLeft = Number.isFinite(capLeft) ? capLeft : capRect.left;
-    const anchorTop = Number.isFinite(capTop) ? capTop : capRect.top;
+    let anchorLeft = Number.isFinite(capLeft) ? capLeft : capRect.left;
+    let anchorTop = Number.isFinite(capTop) ? capTop : capRect.top;
     const origin = parseTransformOrigin(capCs.transformOrigin, capWidth, capHeight);
 
     // 用 offsetWidth/offsetHeight 量布局尺寸：它们不受 transform 影响，
@@ -885,8 +909,8 @@ export const Companion = {
     let bw = Math.min(natural.width, MAX_W);
     let bh = Math.min(natural.height, MAX_H);
 
-    const ax = capRect.left;
-    const ay = capRect.top;
+    let ax = capRect.left;
+    let ay = capRect.top;
     const aw = capRect.width;
     const ah = capRect.height;
 
@@ -901,9 +925,22 @@ export const Companion = {
     const fits = side =>
       space[side] >= (side === 'top' || side === 'bottom' ? bh : bw);
 
-    // 3. 优先方向 → 翻面；都不整放时选可用空间最大的一侧，压到该空间内部滚动
+    // 2.5 禁停区：投影出每个方向的气泡矩形，优先选「放得下且不压控件」的一侧。
+    //     避让完全基于当前可见 DOM 矩形，不做坐标硬编码。
+    const obstacles = collectNoParkRects(vp, getAvoidPadding());
+    const rectForSide = (s) => {
+      const vertical = s === 'top' || s === 'bottom';
+      const left = vertical ? ax + aw / 2 - bw / 2 : (s === 'left' ? ax - GAP - bw : ax + aw + GAP);
+      const top = vertical ? (s === 'top' ? ay - GAP - bh : ay + ah + GAP) : ay + ah / 2 - bh / 2;
+      return { left, top, width: bw, height: bh };
+    };
+    const hitsNoPark = (s) => intersectsAny(rectForSide(s), obstacles);
+
+    // 3. 优先方向 → 翻面；再避开禁停区；都不行时选可用空间最大的一侧，压到该空间内部滚动
     const order = ['top', 'bottom', 'left', 'right'];
-    let side = order.find(fits) || order.reduce(
+    let side = order.find((s) => fits(s) && !hitsNoPark(s));
+    if (!side) side = order.find(fits);
+    if (!side) side = order.reduce(
       (best, s) => (space[s] > space[best] ? s : best),
       order[0]
     );
@@ -938,6 +975,65 @@ export const Companion = {
       bubble.scrollWidth > bubble.clientWidth + 1;
     if (overflow) {
       bubble.style.pointerEvents = 'auto';
+    }
+
+    // 5.5 联合让位：上下都放不干净时（常见于写作页贴着 dock），把胶囊沿最近安全位
+    //     挪到「某一侧能完整放下气泡」的位置，而不是让气泡压在控件/编辑区上。
+    const bubbleRectAt = (anchor, s) => {
+      const bx = anchor.left + aw / 2 - bw / 2;
+      const by = s === 'top' ? anchor.top - GAP - bh : anchor.top + ah + GAP;
+      return {
+        left: clamp(bx, vp.left + MARGIN, vp.left + vp.width - MARGIN - bw),
+        top: clamp(by, vp.top + MARGIN, vp.top + vp.height - MARGIN - bh),
+        width: bw,
+        height: bh
+      };
+    };
+    const cleanAt = (anchor, s) => !intersectsAny(bubbleRectAt(anchor, s), obstacles);
+
+    if (isVertical && !cleanAt({ left: ax, top: ay }, side)) {
+      const current = { left: ax, top: ay };
+      // 候选锚点 = 当前位 + 视口角 + 每个禁停区四边（障碍已含 8/12px 外扩），
+      // 再按离当前位置的距离排序，取第一个「胶囊不压、气泡也不压」的锚点。
+      const xs = [ax, vp.left + MARGIN, vp.right - MARGIN - aw];
+      const ys = [ay, vp.top + MARGIN, vp.bottom - MARGIN - ah];
+      obstacles.forEach((o) => {
+        xs.push(o.left - aw, o.right);
+        ys.push(o.top - ah, o.bottom);
+      });
+
+      const uniq = (list) => [...new Set(list.map((v) => Math.round(v * 10) / 10))];
+      const anchors = [];
+      uniq(xs).forEach((x0) => {
+        uniq(ys).forEach((y0) => {
+          const left = clamp(x0, vp.left + MARGIN, Math.max(vp.left + MARGIN, vp.right - MARGIN - aw));
+          const top = clamp(y0, vp.top + MARGIN, Math.max(vp.top + MARGIN, vp.bottom - MARGIN - ah));
+          if (anchors.some((a) => Math.abs(a.left - left) < 1 && Math.abs(a.top - top) < 1)) return;
+          if (intersectsAny({ left, top, width: aw, height: ah }, obstacles)) return;
+          anchors.push({ left, top });
+        });
+      });
+      anchors.sort(
+        (a, b) =>
+          (a.left - current.left) ** 2 + (a.top - current.top) ** 2 -
+          ((b.left - current.left) ** 2 + (b.top - current.top) ** 2)
+      );
+
+      const controller = capsule._floatingCapsuleController;
+      for (const a of anchors) {
+        if (Math.abs(a.left - current.left) < 1 && Math.abs(a.top - current.top) < 1) continue;
+        const nextSide = ['top', 'bottom'].find((s) => cleanAt(a, s));
+        if (!nextSide) continue;
+        if (controller && typeof controller.moveToVisual === 'function') {
+          controller.moveToVisual(a);
+          ax = a.left;
+          ay = a.top;
+          anchorLeft = a.left - origin.x * (1 - scale);
+          anchorTop = a.top - origin.y * (1 - scale);
+          side = nextSide;
+        }
+        break;
+      }
     }
 
     // 6. 视觉视口坐标下的落点
@@ -996,9 +1092,11 @@ export const Companion = {
       bubble.classList.add('pop-anim');
 
       if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
+      bubbleExpiresAt = Date.now() + BUBBLE_TTL_MS;
       this.bubbleTimer = setTimeout(() => {
         bubble.classList.add('hidden');
-      }, 6500);
+        bubbleExpiresAt = 0;
+      }, BUBBLE_TTL_MS);
     }
 
     // 2. Render Folio Stage Bubble if visible
