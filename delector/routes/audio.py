@@ -3,6 +3,7 @@
 
 import asyncio
 import contextlib
+import contextvars
 import hashlib
 import logging
 import os
@@ -33,6 +34,14 @@ class TTSReq(BaseModel):
 # 朗读输入上限：局域网可达端点，防超大文本打满合成队列与磁盘缓存（场景是词/句级）
 MAX_TTS_TEXT_LEN = 1000
 
+# 本次请求里所选 voice 是否真的进了合成器（默认 True，兼容直接调用/ monkeypatch）。
+_TTS_VOICE_HONORED: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "tts_voice_honored", default=True
+)
+# 降级音频的旁路标记：缓存 key 仍含 voice，但内容来自不含 voice 的公共 URL。
+# 命中缓存时靠它继续如实回报，不能因为「有缓存」就假装音色生效。
+_NO_VOICE_MARKER_SUFFIX = ".novoice"
+
 
 async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", rate: str = "+0%") -> str:
     clean_text = text.strip()
@@ -43,6 +52,7 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
 
     cache_key = hashlib.sha256(f"{voice}_{rate}_{clean_text}".encode("utf-8")).hexdigest()
     cache_file = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.mp3")
+    no_voice_marker = cache_file + _NO_VOICE_MARKER_SUFFIX
 
     if os.path.exists(cache_file) and os.path.getsize(cache_file) > 100:
         return cache_file
@@ -80,6 +90,10 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
                     if resp.status_code == 200 and len(resp.content) > 200:
                         with open(cache_file, "wb") as f:
                             f.write(resp.content)
+                        # 这些公共 URL 不接受 voice 参数：留标记让响应头如实回报 0。
+                        with open(no_voice_marker, "wb"):
+                            pass
+                        _TTS_VOICE_HONORED.set(False)
                         prune_audio_cache()
                         return cache_file
             except Exception as exc:
@@ -90,6 +104,9 @@ async def generate_edge_tts_audio(text: str, voice: str = "de-DE-KatjaNeural", r
         raise HTTPException(500, "语音合成失败，请稍后重试")
 
     # 主路径（edge_tts 或 edge_tts_mini）成功：落地缓存后返回
+    if os.path.exists(no_voice_marker):
+        os.remove(no_voice_marker)  # 同一缓存 key 曾降级过，成功后清掉旧标记
+    _TTS_VOICE_HONORED.set(True)
     prune_audio_cache()
     return cache_file
 
@@ -130,8 +147,18 @@ async def _serve_tts(text: str, voice: str, rate: str) -> Any:
 
     async with _tts_slot():
         try:
+            _TTS_VOICE_HONORED.set(True)
             audio_path = await generate_edge_tts_audio(text, voice, rate)
-            return FileResponse(audio_path, media_type="audio/mpeg", filename="speech.mp3")
+            honored = _TTS_VOICE_HONORED.get() and not os.path.exists(
+                str(audio_path) + _NO_VOICE_MARKER_SUFFIX
+            )
+            # 前端据此决定是否显示「当前音色不可用，使用系统语音」。
+            return FileResponse(
+                audio_path,
+                media_type="audio/mpeg",
+                filename="speech.mp3",
+                headers={"X-TTS-Voice-Honored": "1" if honored else "0"},
+            )
         except HTTPException:
             raise
         except Exception:

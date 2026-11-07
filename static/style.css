@@ -2808,6 +2808,11 @@ body.drawer-open .shadow-player {
   flex-shrink: 0;
 }
 
+/* 桌面端音色 + 模式保持同一行；移动端拆成独立行容器 */
+.player-topline {
+  display: contents;
+}
+
 /* Transport Buttons — ink on paper */
 
 .player-btn {
@@ -2862,6 +2867,9 @@ body.drawer-open .shadow-player {
   }
 }
 
+/* 可见状态行：句序 / 跟读倒计时 / 音色与引擎降级提示。
+   原先 max-width:768px 下整行 display:none，导致降级提示无处可显示。 */
+
 .player-status {
   font-family: var(--mono);
 
@@ -2869,9 +2877,23 @@ body.drawer-open .shadow-player {
 
   color: var(--pencil);
 
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 
-  white-space: nowrap;
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  flex-wrap: wrap;
+
+  gap: 0 0.5rem;
+
+  flex: 1 1 auto;
+
+  min-width: 0;
+
+  line-height: 1.3;
 
   padding: 0 0.5rem;
 
@@ -2880,46 +2902,62 @@ body.drawer-open .shadow-player {
   border-right: 1px solid var(--rule);
 }
 
-/* Voice Selector — straight ledger tabs */
-
-.voice-pill {
-  display: flex;
-
-  background: var(--paper-tint);
-
-  border: 1.5px solid var(--rule);
-
-  border-radius: 2px;
-
-  padding: 0;
-
-  gap: 0;
-
-  flex-shrink: 0;
+#player-status-text {
+  white-space: nowrap;
 
   overflow: hidden;
+
+  text-overflow: ellipsis;
 }
 
-.voice-btn {
+#player-status-text.is-error {
+  color: var(--cherry);
+
+  font-weight: 700;
+}
+
+.player-voice-note {
+  color: var(--amber);
+
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+/* Voice Selector — collapsed current voice + radiogroup menu */
+
+.voice-pill {
+  position: relative;
+
+  display: flex;
+
+  flex-shrink: 0;
+}
+
+.voice-current-btn {
+  display: flex;
+
+  align-items: center;
+
+  gap: 0.3rem;
+
   font-family: var(--mono);
 
   font-size: 0.6rem;
 
   font-weight: 600;
 
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
 
   padding: 3px 8px;
 
-  border-radius: 0;
+  border: 1.5px solid var(--rule);
 
-  border: none;
+  border-radius: 2px;
 
-  border-right: 1px solid var(--rule);
+  background: var(--paper-tint);
 
-  color: var(--pencil);
-
-  background: transparent;
+  color: var(--ink);
 
   cursor: pointer;
 
@@ -2928,20 +2966,130 @@ body.drawer-open .shadow-player {
   white-space: nowrap;
 }
 
-.voice-btn:last-child {
-  border-right: none;
-}
-
 @media (hover: hover) and (pointer: fine) {
-  .voice-btn:hover {
+  .voice-current-btn:hover {
     background: var(--paper-deep);
-    color: var(--ink);
   }
 }
 
-.voice-btn.active {
+.voice-current-btn[aria-expanded="true"] {
   background: var(--ink);
+
+  border-color: var(--ink);
+
   color: #fef9ee;
+}
+
+.voice-caret {
+  font-size: 0.55rem;
+
+  line-height: 1;
+}
+
+.voice-menu {
+  position: absolute;
+
+  bottom: calc(100% + 6px);
+
+  left: 0;
+
+  z-index: 60;
+
+  min-width: 15rem;
+
+  padding: 0.25rem;
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 2px;
+
+  background: var(--paper-card);
+
+  border: 1.5px solid var(--ink);
+
+  border-radius: 2px;
+
+  box-shadow: var(--shadow-hard);
+}
+
+.voice-option {
+  display: grid;
+
+  grid-template-columns: 1fr auto;
+
+  grid-template-areas:
+    "name check"
+    "meta check";
+
+  gap: 0 0.5rem;
+
+  min-height: 44px;
+
+  padding: 0.35rem 0.5rem;
+
+  text-align: left;
+
+  border: 1px solid transparent;
+
+  border-radius: 2px;
+
+  background: transparent;
+
+  color: var(--ink);
+
+  font-family: var(--sans);
+
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .voice-option:hover {
+    background: var(--paper-tint);
+  }
+}
+
+.voice-option .vo-name {
+  grid-area: name;
+
+  font-size: 0.8125rem;
+
+  font-weight: 700;
+}
+
+.voice-option .vo-meta {
+  grid-area: meta;
+
+  font-family: var(--mono);
+
+  font-size: 0.6875rem;
+
+  color: var(--pencil);
+}
+
+.voice-option .vo-check {
+  grid-area: check;
+
+  align-self: center;
+
+  font-family: var(--mono);
+
+  font-size: 0.625rem;
+
+  color: var(--amber);
+
+  visibility: hidden;
+}
+
+.voice-option.active {
+  background: var(--paper-tint);
+
+  border-color: var(--rule);
+}
+
+.voice-option.active .vo-check {
+  visibility: visible;
 }
 
 /* Mode Group — straight ledger tabs */
@@ -3073,28 +3221,15 @@ body.drawer-open .shadow-player {
   border-color: var(--amber);
 }
 
-/* Compact on small screens */
+/* Compact on small screens（托盘行布局见文件末尾的 Tray 重构段） */
 
 @media (max-width: 768px) {
-  .player-status {
-    display: none;
-  }
-
   .shadow-player {
     padding: 0.45rem 0.5rem;
 
     width: calc(100vw - 0.5rem);
 
     gap: 0.25rem;
-  }
-
-  .mode-btn {
-    padding: 3px 5px;
-    font-size: 0.55rem;
-  }
-
-  .voice-btn {
-    padding: 3px 6px;
   }
 }
 
@@ -12675,5 +12810,84 @@ body.drawer-open .companion {
   /* 按压反馈在 reduce 下不缩放。 */
   .btn:active {
     transform: none;
+  }
+}
+
+/* ── Shadow Player Tray（B 方案）：窄屏三行布局 ─────────────────
+   行1 状态行；行2 音色折叠键 + 模式三键；行3 传输四键 + 倍速。
+   统一 `#shadow-player` 前缀：压过上方遗留的重复播放器规则。 */
+@media (max-width: 768px) {
+  #shadow-player {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.4rem;
+  }
+
+  #shadow-player .player-status {
+    order: 1;
+    display: flex;
+    flex: 0 0 100%;
+    justify-content: center;
+    padding: 0 0 0.15rem;
+    border-left: none;
+    border-right: none;
+    font-size: 0.6875rem;
+  }
+
+  #shadow-player .player-right {
+    display: contents;
+  }
+
+  #shadow-player .player-topline {
+    order: 2;
+    display: flex;
+    flex: 0 0 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  #shadow-player .player-left {
+    order: 3;
+    width: auto;
+    flex: 0 0 auto;
+    gap: 2px;
+  }
+
+  #shadow-player .player-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  #shadow-player .voice-current-btn {
+    min-height: 40px;
+    min-width: 44px;
+    padding: 0 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  #shadow-player .mode-btn {
+    min-height: 40px;
+    padding: 6px 8px;
+    font-size: 0.72rem;
+  }
+
+  #shadow-player .speed-pill {
+    order: 4;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  #shadow-player .speed-step-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px 2px;
+    font-size: 0.8rem;
+  }
+
+  /* 托盘最高约 150px（含降级提示换行），留出 11rem 底部空间 */
+  #view-reader {
+    padding-bottom: 11rem;
   }
 }

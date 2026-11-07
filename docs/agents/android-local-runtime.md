@@ -127,6 +127,7 @@ Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue
 | 2026-11-06 | deepseek-v4.1-flash__trae | T5/T6 Android spaCy 实测（改造前 `aec79f3` vs master `e169999`） | 已关闭（`adb emu kill`，进程已退） |
 | 2026-11-06 | deepseek-v4.1-flash__trae | 前端 slice2（`974279f`）刷新装机与设备侧校验（AVD 重新冷启动） | 运行中，待用户自行关闭 |
 | 2026-11-07 | deepseek-v4.1-flash__trae | 动效版前端（`1790f70`）整包刷新 + CDP/真实触摸动效实测（沿用已在跑的 `emulator-5554`，未由本会话启动） | 运行中，待用户自行关闭 |
+| 2026-11-07 | deepseek-v4.1-flash__trae | 托盘 B 方案（`766a98c` 基线）：刷新装机 + adb 真触摸切音色/播放/切倍速（沿用已在跑的 `emulator-5554`，未由本会话启动） | 运行中，待用户自行关闭 |
 
 ---
 
