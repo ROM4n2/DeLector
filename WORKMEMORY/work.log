@@ -743,3 +743,9 @@ T6 实施（worktree dlector-t6 / feat/motion-t6-count-up，基于 8217dfd）：
 - progress.html 6 个 .stat-ring 静态挂 .dl-count；folio.js 用 countUp()（520ms token 默认、easeOutCubic），aria-label 直接终态，无 aria-live；#view-progress.dataset.countPlayed 只播一次。
 - CDP 实测（1440x900）：首入 t0 articles/accuracy/minutes = 1/14%/6 → t150 4/58%/23 → t600 6/80%/31；aria-label 从首帧即 6/80%/31；六项 aria-live=null、无 aria-live 祖先；font-variant-numeric=tabular-nums、宽度恒 38px；切走再回数值立即终态且 200ms 不变；reduce 下立即终态。
 - 静态闸门：build 3480 行、sync PASS、node --check PASS、check_frontend_layers PASS、59 passed。
+
+### 2026-11-07 14:05 | deepseek-v4.1-flash__trae | NOTE
+T7（浮层过渡统一）在 worktree dlector-t7 / feat/motion-t7-popover 实施（基于 97f4ac3）。
+- static/style.css `.enc-popover`：animation 时长从 `var(--dur-fast, 180ms)` 改为 `var(--motion-enter, 180ms)`；easing 仍为 `var(--ease-editorial)`。keyframes `enc-note-in` 保持唯一，未新增第二套；`.open { display:block }` 即时关闭不变，未加 JS 定时器 / animationend。
+- CDP 实测（1440x900）：先 show('encounter') 再开浮层（隐藏视图不跑动画，T3 stat-badge 同款坑）；t40ms opacity 0.375、anims=1、duration 0.18s、timing cubic-bezier(0.22,1,0.36,1)；t360ms opacity 1、anims=0；移除 .open 后 display=none、anims=0（无关闭动画）；reduce 下 animationName=none、opacity=1、transform=none。
+- 闸门：test_encounter_ui_probes 22 passed；build 3480 行；sync PASS。

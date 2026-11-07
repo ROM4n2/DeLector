@@ -11394,7 +11394,7 @@ body.drawer-open .companion {
   padding: 0.85rem 0.95rem 0.95rem;
   font-family: var(--enc-mono);
   transform: rotate(-0.6deg);
-  animation: enc-note-in var(--dur-fast, 180ms) var(--ease-editorial, ease);
+  animation: enc-note-in var(--motion-enter, 180ms) var(--ease-editorial, ease);
 }
 @keyframes enc-note-in {
   from { opacity: 0; transform: rotate(-0.6deg) translateY(6px) scale(0.97); }
