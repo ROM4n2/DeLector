@@ -141,3 +141,82 @@ def test_companion_ollama_provider_header_forwarding(
 
     assert captured_headers.get("X-Model") == "qwen3.5:4b"
     assert captured_headers.get("X-Base-URL") == "http://127.0.0.1:11434/v1"
+
+
+def _capture_go_request(monkeypatch: pytest.MonkeyPatch, captured: dict[str, Any]) -> None:
+    """把 dispatch 发往 Go Agent 的 json/headers 捕获下来（SSE 内容给一帧 done 即可）。"""
+
+    class MockStreamResponse:
+        status_code = 200
+
+        async def aiter_bytes(self) -> AsyncIterator[bytes]:
+            yield b'event: done\ndata: {"event":"done","turns":1,"reason":"stop"}\n\n'
+
+        async def __aenter__(self) -> MockStreamResponse:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            pass
+
+    class MockAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def stream(self, method: str, url: str, **kwargs: Any) -> MockStreamResponse:
+            captured["json"] = kwargs.get("json")
+            captured["headers"] = kwargs.get("headers")
+            return MockStreamResponse()
+
+        async def __aenter__(self) -> MockAsyncClient:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            pass
+
+    monkeypatch.setattr(httpx, "AsyncClient", MockAsyncClient)
+
+
+def test_companion_chat_forwards_explicit_reasoning_effort_to_go(
+    companion_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """前端显式档位 MUST 进入发往 Go Agent 的请求体与请求头（防止界面显示与请求脱节）。"""
+    captured: dict[str, Any] = {}
+    _capture_go_request(monkeypatch, captured)
+
+    client = TestClient(companion_app)
+    with client.stream(
+        "POST",
+        "/api/companion/chat",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "reasoning_effort": "high",
+        },
+    ) as response:
+        assert response.status_code == 200
+        response.read()
+
+    assert captured["json"]["reasoning_effort"] == "high"
+    assert captured["headers"]["X-Reasoning-Effort"] == "high"
+
+
+def test_companion_chat_defaults_reasoning_effort_to_setting(
+    companion_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """请求未带档位时 MUST 回落到设置页当前值（而不是悄悄用上游默认值）。"""
+    captured: dict[str, Any] = {}
+    _capture_go_request(monkeypatch, captured)
+    monkeypatch.setattr(
+        "delector.core.db.settings.get_effective_reasoning_effort", lambda: "low"
+    )
+
+    client = TestClient(companion_app)
+    with client.stream(
+        "POST",
+        "/api/companion/chat",
+        json={"messages": [{"role": "user", "content": "Hi"}]},
+    ) as response:
+        assert response.status_code == 200
+        response.read()
+
+    assert captured["json"]["reasoning_effort"] == "low"
+    assert captured["headers"]["X-Reasoning-Effort"] == "low"

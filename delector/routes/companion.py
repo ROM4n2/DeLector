@@ -65,6 +65,8 @@ class CompanionChatReq(BaseModel):
     draft_text: Optional[str] = None
     card_context: Optional[str] = None
     scope_key: Optional[str] = None
+    # 思考强度：前端可随请求覆盖设置页档位；缺省时由后端读取当前设置。
+    reasoning_effort: Optional[str] = None
 
 
 class ProposalExecReq(BaseModel):
@@ -144,6 +146,8 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
         article_id=req.article_id, scope_key=req.scope_key
     )["id"]
     user_text = next((m.get("content", "") for m in reversed(req.messages) if m.get("role") == "user"), "")
+    # 思考强度只透传前端显式值（请求体 > 请求头）；缺省由 dispatch 统一回落到设置页。
+    effort = req.reasoning_effort or request.headers.get("X-Reasoning-Effort")
 
     # 加法式透传：view / context_source 与旧 context 合并；缺省时 context 原样不变。
     context_payload = dict(req.context or {})
@@ -163,7 +167,9 @@ async def api_companion_chat(req: CompanionChatReq, request: Request) -> Streami
         sse_events = _SSEEventAccumulator()
 
         try:
-            async for chunk in dispatch_companion_stream(req.messages, request=request, context=context_payload):
+            async for chunk in dispatch_companion_stream(
+                req.messages, request=request, context=context_payload, reasoning_effort=effort
+            ):
                 # 先解析再转发：即便客户端在 yield 点断开，最后一帧也已进入本轮快照。
                 for ev in sse_events.feed(chunk):
                     if ev.get("event") == "delta":
