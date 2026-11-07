@@ -17,11 +17,16 @@ from .model_loader import spacy as spacy
 from .syntax_tree import analyze_sentence_topology, build_clause_tree, split_sentences_pure_python
 
 # processed_json 的 schema 版本号 —— 全仓唯一真相源。
-# 惰性迁移判据（routes/main.py 的 GET /api/articles/{article_id}）按它比对：
+# 惰性迁移判据（routes/articles.py 的 GET /api/articles/{article_id}）按它比对：
 # 判据端与写入端 MUST 共用这一个常量。曾因两端各写一份字面量而漂移
 #（写入 "3.5.0" / 判据 "3.4.0"），判据恒真 ⇒ 「惰性迁移」退化成
 #「每次 GET 都重跑 spaCy 并 UPDATE articles」。改版本号只改这里。
-PROCESSED_JSON_VERSION = "3.5.0"
+#
+# 3.5.0 → 3.6.0（2026-11-07）：ADR-0028 之前 Android 主路径是纯 Python 降级，
+# 存量文章的 pos / case / topology / clause_tree 是**错或缺**的；两条分支又共用同一个
+# 版本号 ⇒ 惰性迁移认不出它们。升版本号让这些行在**首次打开时**按需重算（不在启动路径
+# 全量重算）。覆盖前旧结果快照进 processed_json_backup，回退见 tools/recompute_processed.py。
+PROCESSED_JSON_VERSION = "3.6.0"
 
 
 # ── 模型加载兼容入口（实现已迁至 `model_loader`，此处只做转发）────────────────────

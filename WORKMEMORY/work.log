@@ -861,3 +861,13 @@ P2 桌宠禁停区/让位 PR #286（fix/companion-p2-no-parking，head d3a6280�
 - 验证：浏览器 verify_p2.mjs 新增 mobileSheetLongClose 通过；pytest 5 passed；build_index / check_index_html_sync / check_companion_contract / check_frontend_layers / probe_wiring 全 PASS。
 - Android 模拟器 API37：强制解包后设备内 companion.js 命中 bubbleExpiresAt 5 处、运行时 guard 存在；四角命中 0、键盘态在视口内、sheet 开 7.2s 关后 hidden=true。versionCode 52101。
 - cp-state.js 的 streamStage 全仓仅声明 + reset 置 null，P2 不依赖；既存死代码，PR 中注明不在范围。
+
+### 2026-11-08 00:47 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, github-pr
+P1-4 存量重算收口：PR #288（fix/stale-article-recompute，从 origin/master 起，不合并）。
+- 现状：PROCESSED_JSON_VERSION 在 processor.py，两条写入分支共用；GET 惰性迁移只比版本号。ADR-0028 前 Android 纯 Python 结果的 pos/case/topology 错或缺却同标 3.5.0 ⇒ 永不重算。Android 数据在私有 SQLite delector.db（filesDir）。
+- 方案：版本 3.5.0→3.6.0；只做按需惰性重算（不启动全量）。备份表 processed_json_backup（覆盖前上一版，与 UPDATE 同事务）；失败回滚 + 200 旧结果 + processed_upgrade_failed；raw_text 只读；BLOB/坏 JSON 内存容错。新增 tools/recompute_processed.py（按批/dry-run/逐字 restore，可中断幂等）。
+- 回退：--restore 逐字写回 + 把常量改回 3.5.0（否则下次打开会再迁移）。
+- 实测（桌面 spaCy 3.8.18）：典型 22ms/篇，10 万字符 5.2s；init_db 69ms、create_app 16ms；二次跑 migrated=0；restore 逐字相等。
+- 测试：新增 tests/test_processed_json_migration.py（17 例）；全量 pytest 2897 passed / 9 skipped / 1 xfailed（exit 0）；ruff + mypy strict 通过。
+- 未验证：Android 模拟器单篇耗时与 PSS（本机未执行）。

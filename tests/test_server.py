@@ -22,6 +22,7 @@ from server_helpers import test_db_path as test_db_path
 # 用例前后钉定；本模块不再在模块级赋值
 # （契约 C1，见 docs/specs/2026-09-26-test-db-isolation-design.md §3.1）。
 from delector.core.database import db_conn
+from delector.nlp_engine.processor import PROCESSED_JSON_VERSION
 from delector.server import (
     SYSTEM_GRAMMAR_PROMPT,
     clean_html_to_article,
@@ -1106,7 +1107,7 @@ def test_syntax_analyze_endpoint(client):
 
 def test_process_german_text_includes_topology_and_clause_tree():
     processed = process_german_text("Er hat das Buch gelesen. Wenn er Zeit hat, kommt er vorbei.")
-    assert processed["version"] == "3.5.0"
+    assert processed["version"] == PROCESSED_JSON_VERSION
     assert len(processed["sentences"]) == 2
 
     s0 = processed["sentences"][0]
