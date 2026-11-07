@@ -166,8 +166,8 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 ### T4 选中态左侧色条
 
 **改动面**
-- `static/style.css`：为 `.nav-tab.active`、`.mobile-nav-item.active` 增加 `::before` 色条，复制 `.exam-module-card::before`（`:3753-3768`）的 `scaleY(0→1)`、`transform-origin: top`、`transition: transform 260ms var(--ease-editorial)`。
-- `static/layout/nav_desktop.html` / `nav_mobile.html`：仅在现有 `active` 类不变的前提下补 `aria-current="page"`（若已有则跳过）。
+- `static/style.css`：为 `.nav-tab.active`、`.mobile-nav-btn.active` / `.dock-item.active` 增加 `::before` 色条，复制 `.exam-module-card::before`（`:3753-3768`）的 `scaleY(0→1)`、`transform-origin: top`、`transition: transform 260ms var(--ease-editorial)`。
+- `static/layout/nav_desktop.html` / `nav_mobile.html`：初始 active 项标 `aria-current="page"`；`static/js/main.js` 的 `show()` 切换时同步增删 `aria-current`（静态模板只标初始项会在切换后变陈旧）。
 
 **验收**
 - [ ] active 同时有：2px 色条 + 字重/颜色变化 + `aria-current`，三者冗余，不是只靠颜色。（I1）
@@ -310,6 +310,7 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 | 4 | T3 预期只剩 `.stat-badge` 一条 transform 例外 | 另保留 10 处非布局 `scale`/`rotate`：`.article-row-del`(1.1)、`.speaker-btn`(1.15)、`.hl-color-btn` ×2(1.2)、`.deck-flip-icon`(rotate 180° + 1.1)、`.dossier-stamp.unlocked`(rotate 0° + 1.01)、`.mascot-stage-char`(1.06)、`.mascot-color-dot`(1.2)、`.companion-char`(1.1)、`.companion-avatar`(1.1)；`.stat-badge:hover` 保留 `translateY(-2px)` | 均为非布局变换，不推动相邻内容（ADR-0029）；验收判据已按用户口径改为「文字承载元素 hover 不得位移」+「非布局 scale/rotate 允许且逐处登记」，不再以「只剩 `.stat-badge`」为准 |
 | 5 | T3 估算 12 处 scale/rotate 需保留 | 实测 10 处 | 另 2 处（`.satz-lab-chip`、`.encounter-entry-card`/`#encounter-add-toggle`）实为 `translate(-1px,-1px)` 位移，按 C 一并移除；HEAD 位移类共 30 条（9 条 translate/translateX + 21 条 translateY），仅 `.stat-badge` 保留 |
 | 6 | T3 只要求「hover 只改色/阴影」 | 另将所有 `:hover` 规则包进 `@media (hover: hover) and (pointer: fine)`，混合选择器（`:focus-visible`）拆开 | 用户硬要求：Android tap 后 hover 态会粘住，属用户可见缺陷，不是风格问题 |
+| 7 | T4 目标选择器写作 `.mobile-nav-item.active`；`aria-current` 只改模板 | 实际类为 `.mobile-nav-btn` / `.dock-item`；`aria-current` 由 `main.js` 的 `show()` 动态同步，模板只标初始 home | DOM 中没有 `.mobile-nav-item` 这个类；只写静态属性会在切换 tab 后指向错误项 |
 
 ---
 
