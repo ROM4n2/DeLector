@@ -302,6 +302,7 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 | --- | --- | --- | --- |
 | 1 | M1 `pulse-linked` / `pulse-clause` 降级为「静态 2px 边 + 一次性 260ms 高亮」 | 只保留静态 2px 边，不做一次性高亮；计划原文的「一次性 260ms 高亮」**已被本行取代** | **已确认：用户选择纯静态，停止门 #2 优先**；不给正文 `.tok` 新增任何动画，静态环 + 背景/字重已足以区分 |
 | 2 | M1 `thoughtInkPulse` 改「静态三点」 | 保留原单个静态 `.thought-pulse-dot` | **已确认**：DOM 里本就只有一个点；加载语义由「Eule 正在推演句子结构...」文案承担，不新增节点 |
+| 3 | T2 新 token 只在 `tokens.css` 定义 | `tokens.css` 与 `style.css :root` 各定义一份（互为镜像） | 主应用 `index.html` 只加载 `style.css`，`tokens.css` 仅 workbench 加载；单点定义会让 `.dl-enter` 在主应用拿不到时长。仓库内两套 token 本就是镜像关系 |
 
 ---
 

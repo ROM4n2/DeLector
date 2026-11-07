@@ -90,10 +90,11 @@
   --dur-mid: 360ms;
   --dur-slow: 900ms;
 
-  /* Motion infrastructure（T2）：新增 token，不迁移旧 --dur-* */
+  /* Motion infrastructure（T2）：与 style.css :root 保持镜像 */
   --motion-enter: 180ms;
   --motion-enter-shift: 4px;
   --motion-press: 100ms;
   --motion-count: 520ms;
   --motion-stagger-step: 40ms;
+  --stagger-index: 0;
 }
