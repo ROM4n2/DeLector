@@ -5,6 +5,7 @@ import { state, esc, jsAttr, api, notify } from "./core.js";
 import { playGermanAudio } from "./player.js";
 import { Companion } from "./companion.js";
 import { refreshCardCounters } from "./reader.js";
+import { enterOnce } from "./motion.js";
 import {
   cardState,
   enterSegment,
@@ -41,6 +42,9 @@ export { getCachedVocabLemmas } from "./cd-state.js";
 export function getCardViewMode() {
   return cardState.catalog.viewMode;
 }
+
+// 卡片网格入场只在会话内首次渲染播一次；切段、翻页、增删卡后的重渲染都不重播。
+let _gridEnterPlayed = false;
 
 export function setCardSegment(seg) {
   enterSegment(seg);
@@ -600,6 +604,12 @@ export function renderCatalogGrid(vList, gList) {
       )
       .join("")}
   `;
+
+  // 只给词汇网格做错峰（≤6 项）；语法卡与页脚标签不参与，避免整页逐块跳动。
+  if (!_gridEnterPlayed) {
+    const grid = container.querySelector(".card-grid");
+    if (grid && enterOnce(grid)) _gridEnterPlayed = true;
+  }
 }
 
 export async function deleteCard(type, id, name) {

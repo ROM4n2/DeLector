@@ -178,10 +178,17 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 ### T5 一次性入场 + 列表 stagger
 
 **改动面**
-- `static/style.css`：`.dl-enter` / `.dl-stagger` 通用类（T2 已建）。
-- `static/js/search.js`：每组结果首次渲染后对容器加 `.dl-enter`，对 ≤6 个子项设 `--stagger-index`；**重渲染不重播**。
-- `static/js/cards.js`：卡片网格首次进入加 stagger；追加/翻页不加。
-- 考试模块网格 `#exam-module-grid`（`views/exam.html` 容器）：首次渲染 7 项，按 6 项封顶（第 7 项与第 6 项同延迟）。
+- `static/style.css`：`.dl-enter` / `.dl-stagger` 通用类（T2 已建，本任务不改）。
+- `static/js/motion.js`：新增 `enterOnce(root, {cap=6})` —— 挂类、分配序号、动画结束后自动摘除。
+  `.view` 靠 `display:none/block` 切换，display 变化会让 CSS 动画从头重播；不摘类就等于
+  每次切回该视图都重播。reduce 下不挂任何类，直接终态。
+- `static/js/search.js`：首次出现结果时对 `#search-results` 的**可见分组 section** 入场
+  （分组是容器，结果文本本身不逐条入场）；`_s.entered` 保证换关键词 / 切范围 / 回来都不重播。
+- `static/js/cards.js`：词汇网格 `.card-grid` 首次生成卡片时入场一次；切段、翻页、增删卡后的重渲染不加。
+- `static/js/main.js`：`#exam-module-grid` 是模板里的静态 DOM，入场由首次 `show('exam')` 触发，
+  `_examEnterPlayed` 保证只播一次（写在 HTML 上会在隐藏视图里白跑、留在类上则每次切回重播）。
+  7 项按 6 项封顶（第 7 项与第 6 项同延迟）。
+- `views/exam.html` 不改：7 个按钮与序号保持静态。
 
 **验收**
 - [ ] 单次入场 ≤6 项、间隔 40ms、单卡 180ms；第 7 项不再累加延迟。（研究 §4 手法 5）
@@ -311,6 +318,7 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 | 5 | T3 估算 12 处 scale/rotate 需保留 | 实测 10 处 | 另 2 处（`.satz-lab-chip`、`.encounter-entry-card`/`#encounter-add-toggle`）实为 `translate(-1px,-1px)` 位移，按 C 一并移除；HEAD 位移类共 30 条（9 条 translate/translateX + 21 条 translateY），仅 `.stat-badge` 保留 |
 | 6 | T3 只要求「hover 只改色/阴影」 | 另将所有 `:hover` 规则包进 `@media (hover: hover) and (pointer: fine)`，混合选择器（`:focus-visible`）拆开 | 用户硬要求：Android tap 后 hover 态会粘住，属用户可见缺陷，不是风格问题 |
 | 7 | T4 目标选择器写作 `.mobile-nav-item.active`；`aria-current` 只改模板 | 实际类为 `.mobile-nav-btn` / `.dock-item`；`aria-current` 由 `main.js` 的 `show()` 动态同步，模板只标初始 home | DOM 中没有 `.mobile-nav-item` 这个类；只写静态属性会在切换 tab 后指向错误项 |
+| 8 | T5 「对容器加 `.dl-enter`」 | 实际是外层 `#search-results` 加 `.dl-stagger`，每个**可见**分组 section 加 `.dl-enter`；卡片网格只处理 `.card-grid`，exam 网格由 `main.js` 首次 `show('exam')` 触发 | `.dl-stagger > *` 只设 `animation-delay`，动画必须落在子元素上；给外层容器再挂 `.dl-enter` 会与子项动画叠加。「搜索结果文本本身不做逐条入场」已满足 |
 
 ---
 
