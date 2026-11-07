@@ -258,7 +258,8 @@ def test_sync_script_copies_sources_and_check_rejects_incomplete_tree(
     assert not (python_dest / "delector" / "delector").exists()
 
     # 已同步的目录 --check 通过；空目录 --check 必须非零退出。
-    assert sync.main(["--android-root", str(android), "--check"]) == 0
+    # 带 --repo-root 时还会比对内容指纹（挡住「文件在但内容是旧的」）。
+    assert sync.main(["--repo-root", str(repo), "--android-root", str(android), "--check"]) == 0
     empty_android = tmp_path / "empty-android"
     assert sync.main(["--android-root", str(empty_android), "--check"]) == 2
 

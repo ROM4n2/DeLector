@@ -199,6 +199,7 @@ import * as ListenLab from "./listen-lab.js";
 import * as HardSentences from "./hard-sentences.js";
 import * as Search from "./search.js";
 import { initUpdateCheck } from "./update.js";
+import { initBuildStamp } from "./build-stamp.js";
 import { enterOnce } from "./motion.js";
 
 // ── German Workbench 惰性挂载（首屏优化）─────────────────────────────────────
@@ -1425,7 +1426,9 @@ Object.assign(window, {
 // ── PWA Service Worker Registration ──────────────────────────────────────────
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    // updateViaCache:"none"：连 sw.js 自身也不吃 HTTP 缓存。否则浏览器可能拿旧 SW 脚本
+    // 做更新检查，新版本要等缓存过期才被发现。
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
   });
   // 温和更新（M3-4）：新 SW activate 后不硬刷窗口，提示用户自行刷新，
   // 避免打断正在进行的写作/复习状态。
@@ -1477,4 +1480,6 @@ document.addEventListener("DOMContentLoaded", () => {
   bindReasoningEffortKeys();
   // 顶栏更新 chip：落后时才可见；自动路径在无新版/拿不准/失败时零可见变化。
   initUpdateCheck();
+  // 前端资源自证：页面构建戳 vs 磁盘内容指纹，失配时提示刷新（不自动打断状态）。
+  initBuildStamp();
 });

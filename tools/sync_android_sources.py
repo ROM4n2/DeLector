@@ -13,7 +13,13 @@ CI 的两个 Android job 与本地构建都必须先跑本脚本，否则 ``app.
     python tools/sync_android_sources.py --clean    # 清掉生成目录
 
 模型目录默认从当前解释器导入 ``de_core_news_sm`` 解析；若当前环境没装模型，
-用 ``--model-dir`` / ``--model-dist-info`` 显式指定（脚本只依赖标准库）。
+用 ``--model-dir`` / ``--model-dist-info`` 显式指定（脚本只依赖标准库 +
+``delector.core.assets_manifest`` 这枚叶模块）。
+
+每次同步都会重算静态资源内容指纹，写到 ``assets/static/asset-fingerprint.txt``
+并注入 ``assets/static/index.html`` 的 ``<meta name="delector-assets">``。
+APK 里的资产一旦与仓库不一致，``--check`` 会变红——这样「忘了重跑同步就打进
+旧前端」不再只能靠肉眼发现。
 """
 
 from __future__ import annotations
@@ -21,13 +27,36 @@ from __future__ import annotations
 import argparse
 import glob
 import importlib.util
+import json
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from delector.core.assets_manifest import (  # noqa: E402
+    JS_STAMP_REL_PATH,
+    compute_assets_fingerprint,
+    inject_js_stamp,
+    inject_stamp_meta,
+)
+from delector.core.version import APP_VERSION  # noqa: E402
 
 _PYTHON_DEST = Path("app/src/main/python")
 _STATIC_DEST = Path("app/src/main/assets/static")
-_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
+_IGNORE = shutil.ignore_patterns(
+    "__pycache__",
+    "*.pyc",
+    ".asset-fingerprint",
+    "asset-fingerprint.txt",
+    ".build-info.json",
+    "build-info.json",
+)
+_ASSET_FINGERPRINT_FILENAME = "asset-fingerprint.txt"
+_BUILD_INFO_FILENAME = "build-info.json"
 
 
 class SyncError(RuntimeError):
@@ -116,15 +145,41 @@ def sync(repo_root: Path, android_root: Path, model: Path, dist_info: Path) -> N
     _copy_tree(dist_info, python_dest / dist_info.name)
     _copy_tree(static, static_dest)
 
+    # 静态资源内容指纹：Android 侧 MainActivity 用它判断「版本号没变但内容变了」，
+    # 页面侧用它把构建产物与被加载的资源对齐。
+    fingerprint = compute_assets_fingerprint(static_dest, use_cache=False)
+    if not fingerprint:
+        raise SyncError("静态资源指纹计算失败（static 目录为空或不可读）")
+    (static_dest / _ASSET_FINGERPRINT_FILENAME).write_text(
+        fingerprint, encoding="utf-8"
+    )
+    inject_stamp_meta(static_dest / "index.html", fingerprint)
+    js_stamp = static_dest / JS_STAMP_REL_PATH
+    if js_stamp.is_file():
+        inject_js_stamp(js_stamp, fingerprint)
+    (static_dest / _BUILD_INFO_FILENAME).write_text(
+        json.dumps(
+            {
+                "app_version": APP_VERSION,
+                "assets_fingerprint": fingerprint,
+                "synced_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
     files, size = _dir_stats(python_dest)
     s_files, s_size = _dir_stats(static_dest)
     print(
         f"同步完成：{python_dest}（{files} 文件，{size} B）；"
-        f"{static_dest}（{s_files} 文件，{s_size} B）"
+        f"{static_dest}（{s_files} 文件，{s_size} B）；"
+        f"资产指纹 {fingerprint}"
     )
 
 
-def check(android_root: Path) -> None:
+def check(android_root: Path, repo_root: Path) -> None:
     python_dest, static_dest = _dest_paths(android_root)
     missing: list[str] = []
 
@@ -145,6 +200,22 @@ def check(android_root: Path) -> None:
     index = static_dest / "index.html"
     if not index.is_file() or index.stat().st_size == 0:
         missing.append("assets/static/index.html")
+
+    # 只查「文件在不在」挡不住「文件在但内容是旧的」——而那正是 APK 内打包
+    # 导致旧 UI 的那条路。这里比对内容指纹，仓库一改动而没重跑同步就会红。
+    expected = compute_assets_fingerprint(repo_root / "static", use_cache=False)
+    marker = static_dest / _ASSET_FINGERPRINT_FILENAME
+    stored = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+    if not stored:
+        missing.append(f"assets/static/{_ASSET_FINGERPRINT_FILENAME}")
+    elif expected and stored != expected:
+        missing.append(
+            f"静态资源已过期（仓库 {expected} ≠ APK assets {stored}），"
+            "请重新运行 python tools/sync_android_sources.py"
+        )
+    actual = compute_assets_fingerprint(static_dest, use_cache=False) if static_dest.is_dir() else ""
+    if expected and actual and actual != expected:
+        missing.append(f"assets/static 内容漂移（仓库 {expected} ≠ 目录 {actual}）")
 
     if missing:
         raise SyncError("Android 源码未同步完整，缺少：" + "、".join(missing))
@@ -198,8 +269,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.check:
-            check(android_root)
-            print("检查通过：Android 源码已同步")
+            check(android_root, repo_root)
+            print("检查通过：Android 源码已同步，静态资源指纹一致")
             return 0
         if args.clean:
             clean(android_root)

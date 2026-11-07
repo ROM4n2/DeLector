@@ -186,11 +186,19 @@ def test_readme_first_screen_images_exist():
 def test_android_reunpacks_static_assets_on_version_change():
     """APK 覆盖安装不清 getFilesDir()，而 copyAssetFile() 见目标已存在就跳过，
     于是升级后旧前端永远不被覆盖 —— 只有卸载重装才好（v4.4.5 修的就是这个）。
-    闸门是 versionCode 标记文件；标记不符就整个 static/ 删掉重解包。
+
+    闸门是 ``versionCode + ":" + 内容指纹``；指纹没变才走快路径。解包先进暂存目录，
+    失败保留旧目录并写 ``static.version.error``，不允许留下半成品。
     """
     assert "syncStaticAssets" in MAIN_ACTIVITY
     assert "BuildConfig.VERSION_CODE" in MAIN_ACTIVITY
     assert "static.version" in MAIN_ACTIVITY
+    assert "BuildConfig.VERSION_CODE + \":\" + fingerprint" in MAIN_ACTIVITY
+    assert 'getAssets().open("static/asset-fingerprint.txt")' in MAIN_ACTIVITY
+    assert "new byte[64]" in MAIN_ACTIVITY
+    assert ".delector-static.unpack" in MAIN_ACTIVITY
+    assert "static.version.error" in MAIN_ACTIVITY
+    assert "recoverStaticDir" in MAIN_ACTIVITY
     # BuildConfig 的生成在 AGP 8 各版本默认值不同，必须显式开，否则只在 CI 编译时炸
     assert "buildConfig true" in GRADLE
     # 删除范围钉死在 filesDir/static：同级就躺着 delector.db / progress.db，
