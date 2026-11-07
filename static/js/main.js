@@ -21,7 +21,10 @@ import {
   sendProgressVocabStats,
   sendProgressWeeklyGoal,
   renderContextBar,
+  REASONING_EFFORT_OPTIONS,
+  persistReasoningEffort,
   setReasoningEffort,
+  syncReasoningEffortUI,
   newSession,
   switchSession,
   refreshSessionSelect,
@@ -348,8 +351,8 @@ let _currentExamLevel = "A1";
  * 只开放官方考纲词表模块）。 */
 const EXAM_LEVEL_KEYS = ["a1", "a2", "b1"];
 
-/* 词表模块徽标计数缓存：initExamCatalog 拉到 catalog 后按等级填充
- *（{ A1: n1, A2: n2, B1: n3 } 形态，值全部来自 catalog count，零硬编码）。
+/* 词表模块徽标缓存：initExamCatalog 拉到 catalog 后按等级填充
+ *（{ A1: {count, unit}, A2: {...} } 形态，值全部来自 catalog，零硬编码）。
  * setExamLevel 切等级时从缓存刷徽标；catalog 未就绪时保持现有文案不动（回退语义）。 */
 let _examVocabCounts = {};
 
@@ -357,6 +360,14 @@ function formatExamCount(n) {
   return n >= 1000
     ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k"
     : String(n);
+}
+
+/* 数字 + 后端单位（「18 题」）。unit 由 catalog 单源给出；缺失/空白时
+ * 只渲染数字——绝不让 undefined / null 拼进徽标。 */
+function formatExamCountLabel(n, unit) {
+  const value = formatExamCount(n);
+  const u = typeof unit === "string" ? unit.trim() : "";
+  return u ? value + " " + u : value;
 }
 
 /* 目录标题「写作专项 (Schreiben)」→ { zh, de }，供结构化回写。
@@ -371,10 +382,10 @@ function splitExamTitle(title) {
 }
 
 function syncExamVocabBadge(level) {
-  const n = _examVocabCounts[level];
-  if (typeof n !== "number") return;
+  const entry = _examVocabCounts[level];
+  if (!entry || typeof entry.count !== "number") return;
   const badge = document.querySelector("#exam-card-vocab .exam-module-count");
-  if (badge) badge.textContent = formatExamCount(n);
+  if (badge) badge.textContent = formatExamCountLabel(entry.count, entry.unit);
 }
 
 export function setExamLevel(level) {
@@ -479,7 +490,9 @@ async function initExamCatalog() {
   levels.forEach((lv) => {
     if (!lv.id) return;
     const vocab = (lv.modules || []).find((m) => m.id === "vocab");
-    if (vocab && vocab.count > 0) _examVocabCounts[lv.id.toUpperCase()] = vocab.count;
+    if (vocab && vocab.count > 0) {
+      _examVocabCounts[lv.id.toUpperCase()] = { count: vocab.count, unit: vocab.unit };
+    }
   });
 
   // 模块卡片补强：标题按结构回写（中文名 / 德文副名各归其位）+ count 徽标。
@@ -503,9 +516,9 @@ async function initExamCatalog() {
         badge.className = "exam-module-count";
         card.appendChild(badge);
       }
-      // 单位（「18 题」）挂账：等 catalog 增加 unit 字段后在此拼接。
-      // 触发条件 = /api/exams/catalog 契约加 unit（同步 test_exam_catalog）。
-      badge.textContent = formatExamCount(m.count);
+      // 单位由后端 catalog 单源给出（题/套/词）；缺失时 formatExamCountLabel
+      // 只渲染数字，不会出现「undefined 题」。
+      badge.textContent = formatExamCountLabel(m.count, m.unit);
     }
   });
 
@@ -757,8 +770,8 @@ export async function openSettingsModal() {
     document.getElementById("set-model-name").value =
       s.api_model || "deepseek-flash";
     renderEffectiveModel(s.api_model);
-    const effortEl = document.getElementById("set-reasoning-effort");
-    if (effortEl) effortEl.value = s.reasoning_effort || "medium";
+    // 档位以服务端返回的生效值为准（旧值 low 由后端归一为 medium）。
+    syncReasoningEffortUI(s.reasoning_effort);
     if (s.tts_voice)
       document.getElementById("set-tts-voice").value = s.tts_voice;
     if (s.tts_rate) document.getElementById("set-tts-rate").value = s.tts_rate;
@@ -850,7 +863,6 @@ export async function saveAppSettings() {
   const key = document.getElementById("set-api-key").value.trim();
   const baseUrl = document.getElementById("set-base-url").value.trim();
   const model = document.getElementById("set-model-name").value.trim();
-  const effort = document.getElementById("set-reasoning-effort")?.value;
   const voice = document.getElementById("set-tts-voice").value;
   const rate = document.getElementById("set-tts-rate").value;
 
@@ -861,7 +873,6 @@ export async function saveAppSettings() {
     const body = {
       api_base_url: baseUrl,
       api_model: model,
-      reasoning_effort: effort,
       tts_voice: voice,
       tts_rate: rate,
     };
@@ -872,10 +883,6 @@ export async function saveAppSettings() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-
-    if (effort) {
-      setReasoningEffort(effort);
-    }
 
     // 保存后以服务端生效值回显，避免把输入框里的草稿值当成「当前生效」。
     try {
@@ -897,6 +904,81 @@ export async function saveAppSettings() {
     btn.textContent = "保存并生效";
     btn.disabled = false;
   }
+}
+
+/**
+ * 设置页点选思考强度：点选即保存，随后回读服务端生效值再渲染。
+ * 显示值不依赖前端本地状态，保存失败会回退到后端真值。
+ * @param {'none'|'medium'|'high'} effort
+ */
+export async function selectReasoningEffort(effort) {
+  const statusEl = document.getElementById("set-reasoning-status");
+  const setStatus = (text, state = "") => {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    if (state) {
+      statusEl.dataset.state = state;
+    } else {
+      delete statusEl.dataset.state;
+    }
+    clearTimeout(selectReasoningEffort._timer);
+    if (text) {
+      selectReasoningEffort._timer = setTimeout(() => {
+        statusEl.textContent = "";
+        delete statusEl.dataset.state;
+      }, 1800);
+    }
+  };
+
+  setStatus("保存中…", "pending");
+  try {
+    await persistReasoningEffort(effort);
+    // 回读服务端值：折叠态摘要与 segmented 都只认后端真实保存的值。
+    const latest = await api("/api/settings");
+    const saved = syncReasoningEffortUI(latest.reasoning_effort);
+    setStatus(`已保存：${REASONING_EFFORT_OPTIONS[saved]?.label || saved}`, "ok");
+  } catch (err) {
+    console.error("[Settings] 思考强度保存失败:", err);
+    setStatus("保存失败，已回退到后端值", "error");
+    try {
+      const latest = await api("/api/settings");
+      syncReasoningEffortUI(latest.reasoning_effort);
+    } catch (reloadErr) {
+      console.warn("[Settings] 保存失败后回读档位失败:", reloadErr);
+    }
+  }
+}
+
+/**
+ * segmented radiogroup 的键盘操作：方向键切换并用 roving tabindex 维持唯一选中项。
+ */
+export function bindReasoningEffortKeys() {
+  const group = document.getElementById("set-reasoning-effort");
+  if (!group || group.dataset.keysBound === "1") return;
+  group.dataset.keysBound = "1";
+  group.addEventListener("keydown", (event) => {
+    const radio = event.target.closest?.('[role="radio"]');
+    if (!radio || !group.contains(radio)) return;
+    const keys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const radios = Array.from(group.querySelectorAll('[role="radio"]'));
+    const current = radios.findIndex(
+      (r) => r.getAttribute("aria-checked") === "true"
+    );
+    let next = current;
+    if (event.key === "Home") {
+      next = 0;
+    } else if (event.key === "End") {
+      next = radios.length - 1;
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      next = (current + 1) % radios.length;
+    } else {
+      next = (current - 1 + radios.length) % radios.length;
+    }
+    radios[next].focus();
+    selectReasoningEffort(radios[next].dataset.effort);
+  });
 }
 
 export async function submitActiveImport() {
@@ -1127,6 +1209,7 @@ Object.assign(window, {
   toggleKeyVisibility,
   testApiKeyConnection,
   saveAppSettings,
+  selectReasoningEffort,
   switchImportTab,
   submitActiveImport,
   handleFileSelect,
@@ -1391,6 +1474,7 @@ document.addEventListener("DOMContentLoaded", () => {
   ShadowPlayer.init();
   Companion.init();
   initCompanionDrawer();
+  bindReasoningEffortKeys();
   // 顶栏更新 chip：落后时才可见；自动路径在无新版/拿不准/失败时零可见变化。
   initUpdateCheck();
 });

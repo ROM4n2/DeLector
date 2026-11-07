@@ -22,6 +22,8 @@ import {
   updateWriterEssay
 } from './wr-api.js';
 import { getErrorTypeLabel, WRITER_TABS, polishReasonText, renderWordDiff } from './wr-format.js';
+// 选段操作条不新造请求通道：查词 / 语法 / 精读笔记都复用阅读器已有的持久化层。
+import { fetchNoteAssist, lookupGrammar, lookupVocab } from './rd-api.js';
 export { getErrorTypeLabel };
 export {
   setExamWritingTab,
@@ -447,6 +449,363 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initWriterMobileLayout, { once: true });
 } else {
   initWriterMobileLayout();
+}
+
+// ── 写作区选段操作条（writer agent bar, 2026-11-07）────────────────────────
+// 最小闭环：选中 #ide-editor 内文本 → 浮出操作条 → 调既有查询端点 → 就地结果。
+// 本轮明确不做：多轮对话、跨段批量操作、自动改写回填正文。
+// 复用的是 rd-api.js 里已经在跑的请求函数，不新造通道；失败一律在结果面板
+// 里显示原文错误，不静默吞掉。
+const WAB_ACTION_META = {
+  vocab: { title: '释义', hint: '本地词库优先，未收录时才回退 AI' },
+  grammar: { title: '语法', hint: '按选中所在整句解析语法考点' },
+  note: { title: '精读', hint: '句法结构、固定搭配与中文翻译要点' }
+};
+const WAB_SOURCE_LABEL = {
+  local_dict: '歌德核心词库（离线）',
+  linguistics_ext: '本地词库 · 形态学',
+  linguistics: '本地词库 · 形态学',
+  ai: 'AI 在线释义',
+  none: '本地词库未收录，且当前未配置 API Key'
+};
+const WAB_MAX_SENTENCE = 500;
+const WAB_EDGE_GAP = 8;
+
+let wabSelection = null;
+let wabRequestToken = 0;
+let wabHideGuardUntil = 0;
+let wabShowFrame = 0;
+let wabRefreshFrame = 0;
+let wabInited = false;
+// 结果面板渲染期间选区可能已被折叠，引用文本用动作触发时的快照。
+let wabResultQuote = '';
+
+function wabEditor() {
+  return document.getElementById('ide-editor');
+}
+
+function wabViewport() {
+  const vv = window.visualViewport;
+  if (!vv) {
+    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  }
+  return { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height };
+}
+
+/** 选中所在整句：从选区前后最近的句末标点/换行截取，作为查词与语法的上下文。 */
+function wabSentenceAround(full, start, end) {
+  const isBoundary = (ch) => /[.!?。！？\n]/.test(ch);
+  let s = Math.max(0, Math.min(start, full.length));
+  while (s > 0 && !isBoundary(full[s - 1])) s--;
+  let e = Math.max(s, Math.min(end, full.length));
+  while (e < full.length && !isBoundary(full[e])) e++;
+  if (e < full.length) e++;
+  return full.slice(s, e).replace(/\s+/g, ' ').trim().slice(0, WAB_MAX_SENTENCE);
+}
+
+function wabSelectionInfo() {
+  const editor = wabEditor();
+  const sel = window.getSelection();
+  if (!editor || !sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer)) return null;
+
+  const rawText = sel.toString();
+  const text = rawText.replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+
+  const preRange = document.createRange();
+  preRange.selectNodeContents(editor);
+  preRange.setEnd(range.startContainer, range.startOffset);
+  const start = preRange.toString().length;
+  const full = editor.textContent || '';
+
+  const rect = range.getBoundingClientRect();
+  if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+
+  return {
+    text,
+    sentence: wabSentenceAround(full, start, start + rawText.length),
+    rect
+  };
+}
+
+/** 位置夹取：优先选区上方，放不下就翻到下方，再按 visualViewport 夹回屏内。 */
+function positionWriterAgentBar(rect) {
+  const bar = document.getElementById('writer-agent-bar');
+  if (!bar || bar.classList.contains('hidden')) return;
+
+  const vp = wabViewport();
+  const barRect = bar.getBoundingClientRect();
+  const barH = barRect.height || bar.offsetHeight;
+  const barW = barRect.width || bar.offsetWidth;
+
+  let top = rect.top - barH - WAB_EDGE_GAP;
+  if (top < vp.top + WAB_EDGE_GAP) top = rect.bottom + WAB_EDGE_GAP;
+  const maxTop = vp.top + vp.height - barH - WAB_EDGE_GAP;
+  if (top > maxTop) top = Math.max(vp.top + WAB_EDGE_GAP, maxTop);
+  if (top < vp.top + WAB_EDGE_GAP) top = vp.top + WAB_EDGE_GAP;
+
+  let left = rect.left + rect.width / 2 - barW / 2;
+  const maxLeft = vp.left + vp.width - barW - WAB_EDGE_GAP;
+  left = Math.max(vp.left + WAB_EDGE_GAP, Math.min(left, maxLeft));
+
+  bar.style.top = `${Math.round(top)}px`;
+  bar.style.left = `${Math.round(left)}px`;
+}
+
+function hideWriterAgentBar() {
+  wabSelection = null;
+  const bar = document.getElementById('writer-agent-bar');
+  if (bar) bar.classList.add('hidden');
+}
+
+function showWriterAgentBar() {
+  wabShowFrame = 0;
+  const bar = document.getElementById('writer-agent-bar');
+  const view = document.getElementById('view-writer');
+  if (!bar) return;
+  if (!view || !view.classList.contains('active')) {
+    hideWriterAgentBar();
+    return;
+  }
+
+  const info = wabSelectionInfo();
+  if (!info) {
+    // 触屏点操作条时，部分浏览器会先折叠选区再派发 click；这个短窗口内不收起。
+    if (Date.now() < wabHideGuardUntil) return;
+    hideWriterAgentBar();
+    return;
+  }
+
+  wabSelection = info;
+  bar.classList.remove('hidden');
+  bar.style.visibility = 'hidden';
+  positionWriterAgentBar(info.rect);
+  bar.style.visibility = '';
+}
+
+function scheduleWriterAgentBarShow() {
+  if (wabShowFrame) return;
+  wabShowFrame = requestAnimationFrame(showWriterAgentBar);
+}
+
+function refreshWriterAgentBarPosition() {
+  wabRefreshFrame = 0;
+  const bar = document.getElementById('writer-agent-bar');
+  if (!bar || bar.classList.contains('hidden')) return;
+  const info = wabSelectionInfo();
+  if (!info) {
+    hideWriterAgentBar();
+    return;
+  }
+  wabSelection = info;
+  positionWriterAgentBar(info.rect);
+}
+
+function scheduleWriterAgentBarRefresh() {
+  if (wabRefreshFrame) return;
+  wabRefreshFrame = requestAnimationFrame(refreshWriterAgentBarPosition);
+}
+
+function closeWriterAgentResult() {
+  const panel = document.getElementById('writer-agent-result');
+  if (panel) panel.classList.add('hidden');
+}
+
+function setWriterAgentResult(title, bodyHtml, kind) {
+  const panel = document.getElementById('writer-agent-result');
+  const titleEl = document.getElementById('writer-agent-result-title');
+  const bodyEl = document.getElementById('writer-agent-result-body');
+  if (!panel || !titleEl || !bodyEl) return;
+  titleEl.textContent = title;
+  bodyEl.innerHTML = bodyHtml;
+  panel.dataset.kind = kind || 'info';
+  panel.classList.remove('hidden');
+}
+
+function wabRow(label, value) {
+  if (!value) return '';
+  return (
+    '<div class="wab-row">' +
+    `<span class="wab-row-label">${esc(label)}</span>` +
+    `<span class="wab-row-value">${esc(value)}</span>` +
+    '</div>'
+  );
+}
+
+function wabSelectionQuote(text) {
+  return `<div class="wab-selection">${esc(text)}</div>`;
+}
+
+function wabSourceLine(text) {
+  return `<div class="wab-source">${esc(text)}</div>`;
+}
+
+function renderWabVocab(data) {
+  if (!data || typeof data !== 'object') {
+    return '<p class="wab-error">接口返回为空，没有可展示的释义。</p>';
+  }
+  const def = String(data.definition_zh || '').trim();
+  const source = WAB_SOURCE_LABEL[data.source] || (data.source ? String(data.source) : '来源未知');
+  const gender =
+    data.gender === 'Masc'
+      ? 'der（阳性）'
+      : data.gender === 'Fem'
+        ? 'die（阴性）'
+        : data.gender === 'Neut' || data.gender === 'Neuter'
+          ? 'das（中性）'
+          : '';
+
+  let html = wabSelectionQuote(wabResultQuote);
+  html += def
+    ? `<div class="wab-def">${esc(def)}</div>`
+    : '<p class="wab-error">该词没有查到释义。本地词库未收录，且当前没有可用的 API Key。</p>';
+  html += wabRow('词性', data.pos || '');
+  html += wabRow('性别', gender);
+  html += wabRow('复数', data.plural || '');
+  html += wabRow('等级', data.cefr_level || '');
+  if (Array.isArray(data.synonyms) && data.synonyms.length > 0) {
+    html += wabRow('同义词', data.synonyms.join(' / '));
+  }
+  html += wabSourceLine(`来源：${source}`);
+  return html;
+}
+
+function renderWabGrammar(data) {
+  if (!data || typeof data !== 'object' || !data.explanation_zh) {
+    return '<p class="wab-error">接口没有返回语法解析内容。</p>';
+  }
+  let html = wabSelectionQuote(wabResultQuote);
+  if (data.grammar_name) {
+    html += `<div class="wab-def">${esc(data.grammar_name)}</div>`;
+  }
+  html += `<p class="wab-text">${esc(data.explanation_zh)}</p>`;
+  html += wabRow('结构', data.rule_formula || '');
+  html += wabRow('等级', data.cefr_level || '');
+  if (Array.isArray(data.collocations) && data.collocations.length > 0) {
+    html += wabRow('搭配', data.collocations.join(' / '));
+  }
+  return html;
+}
+
+function renderWabNote(data) {
+  if (!data || typeof data !== 'object') {
+    return '<p class="wab-error">接口返回为空，没有可展示的精读笔记。</p>';
+  }
+  const points = Array.isArray(data.key_points) ? data.key_points.filter(Boolean) : [];
+  let html = wabSelectionQuote(wabResultQuote);
+  if (data.summary_zh) {
+    html += `<p class="wab-text">${esc(data.summary_zh)}</p>`;
+  }
+  if (points.length > 0) {
+    html +=
+      '<ul class="wab-points">' +
+      points.map((p) => `<li>${esc(p)}</li>`).join('') +
+      '</ul>';
+  }
+  if (data._stub) {
+    html += wabSourceLine('提示：当前返回的是占位内容，配置 API Key 后才会得到真实解析。');
+  }
+  return html;
+}
+
+async function runWriterAgentAction(action) {
+  const meta = WAB_ACTION_META[action];
+  const snapshot = wabSelection;
+  if (!meta || !snapshot) return;
+
+  const token = ++wabRequestToken;
+  wabResultQuote = snapshot.text;
+  // 结果面板接管后收起操作条，避免两层浮层叠在一起挡住正文。
+  hideWriterAgentBar();
+  setWriterAgentResult(
+    meta.title,
+    `<p class="wab-loading">请求中…<span class="wab-hint">${esc(meta.hint)}</span></p>`,
+    'loading'
+  );
+
+  const sentence = snapshot.sentence || snapshot.text;
+  try {
+    let data;
+    if (action === 'vocab') {
+      const payload = { sentence, target_word: snapshot.text };
+      // 单 token 才把 lemma 当自身表面形传；多词选区交给后端按表面形兜底。
+      if (!/\s/.test(snapshot.text)) payload.lemma = snapshot.text;
+      data = await lookupVocab(payload);
+    } else if (action === 'grammar') {
+      data = await lookupGrammar({ sentence, target_phrase: snapshot.text });
+    } else {
+      data = await fetchNoteAssist({ sentence, selected_text: snapshot.text });
+    }
+    if (token !== wabRequestToken) return;
+
+    const html =
+      action === 'vocab'
+        ? renderWabVocab(data)
+        : action === 'grammar'
+          ? renderWabGrammar(data)
+          : renderWabNote(data);
+    setWriterAgentResult(meta.title, html, 'ready');
+  } catch (err) {
+    if (token !== wabRequestToken) return;
+    const message = err && err.message ? err.message : String(err);
+    setWriterAgentResult(meta.title, `<p class="wab-error">请求失败：${esc(message)}</p>`, 'error');
+  }
+}
+
+function initWriterAgentBar() {
+  if (wabInited) return;
+  wabInited = true;
+
+  const bar = document.getElementById('writer-agent-bar');
+  const result = document.getElementById('writer-agent-result');
+  const editor = wabEditor();
+  if (!bar || !result || !editor) return;
+
+  // 按下操作条不抢焦点、不折叠选区；动作使用按下前捕获的文本快照。
+  bar.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    wabHideGuardUntil = Date.now() + 400;
+  });
+
+  bar.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-wab-action]');
+    if (!btn) return;
+    const action = btn.getAttribute('data-wab-action');
+    if (action === 'close') {
+      hideWriterAgentBar();
+      return;
+    }
+    runWriterAgentAction(action);
+  });
+
+  const resultClose = document.getElementById('writer-agent-result-close');
+  if (resultClose) resultClose.addEventListener('click', closeWriterAgentResult);
+
+  document.addEventListener('selectionchange', scheduleWriterAgentBarShow);
+  editor.addEventListener('scroll', scheduleWriterAgentBarRefresh, { passive: true });
+  window.addEventListener('scroll', scheduleWriterAgentBarRefresh, { passive: true });
+  window.addEventListener('resize', scheduleWriterAgentBarRefresh);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleWriterAgentBarRefresh);
+    window.visualViewport.addEventListener('scroll', scheduleWriterAgentBarRefresh);
+  }
+
+  const view = document.getElementById('view-writer');
+  if (view) {
+    new MutationObserver(() => {
+      if (view.classList.contains('active')) return;
+      hideWriterAgentBar();
+      closeWriterAgentResult();
+    }).observe(view, { attributes: true, attributeFilter: ['class'] });
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initWriterAgentBar, { once: true });
+} else {
+  initWriterAgentBar();
 }
 
 // ── Render Editor Content & Retain Caret ────────────────────────────────────

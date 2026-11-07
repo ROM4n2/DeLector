@@ -21,6 +21,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Mapping, Optional
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -32,6 +33,9 @@ DEFAULT_MAX_TURNS: int = 3
 DEFAULT_DEADLINE_S: float = 35.0
 # 循环级累计预算：只做多轮总成本刹车，**不进入请求体**；单轮输出上限交给上游默认。
 DEFAULT_MAX_TOKENS_TOTAL: int = 8192
+#: Go 伴学 Agent 的默认反代地址（`DELECTOR_GO_AGENT_URL` 未设置时使用）。
+#: 设置成空串则**显式禁用**反代（`start.py` 在 Go 启动失败时就是这么做的）。
+DEFAULT_GO_AGENT_URL: str = "http://127.0.0.1:8002"
 CHARS_PER_TOKEN_ESTIMATE: float = 3.0
 DEFAULT_PER_CALL_TIMEOUT_S: float = 25.0
 
@@ -515,6 +519,22 @@ async def companion_event_stream(
             await task
 
 
+def _targets_own_server(go_url: str, request: Optional[Any]) -> bool:
+    """反代目标是否指向本进程自己（`build_server` 把真实端口写在 `app.state.server_port`）。
+
+    `DELECTOR_GO_AGENT_URL` 是**用户可设**的边界输入，且历史上默认就是 8002；当 Python
+    自己顺延到 8002 时，不拦这一条就是无限自我反代。拿不到端口信息（测试替身 / 未建服）
+    时返回 False，保持原有行为。
+    """
+    own_port = getattr(getattr(getattr(request, "app", None), "state", None), "server_port", None)
+    if not isinstance(own_port, int):
+        return False
+    try:
+        return urlsplit(go_url).port == own_port
+    except ValueError:
+        return False
+
+
 async def dispatch_companion_stream(
     messages: List[Dict[str, Any]],
     request: Optional[Any] = None,
@@ -528,7 +548,12 @@ async def dispatch_companion_stream(
     effective_effort = (
         reasoning_effort if reasoning_effort is not None else get_effective_reasoning_effort()
     )
-    go_url = os.getenv("DELECTOR_GO_AGENT_URL", "http://127.0.0.1:8002").strip()
+    go_url = os.getenv("DELECTOR_GO_AGENT_URL", DEFAULT_GO_AGENT_URL).strip()
+    if go_url and _targets_own_server(go_url, request):
+        # 反代目标恰好是本进程：继续发请求会自我递归（Python 把 /api/companion/chat
+        # 转发给自己，再转发给自己…）。这通常意味着环境变量残留了旧端口，或是
+        # `start.py --no-agent` 且 Python 自己顺延到了 8002。
+        go_url = ""
     if go_url:
         try:
             req_payload = {

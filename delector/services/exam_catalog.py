@@ -30,6 +30,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
         "modules": {
             "writing": {
                 "title": "写作专项 (Schreiben)",
+                "unit": "题",
                 "panel": "exam-writing",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: (
@@ -38,24 +39,28 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
             },
             "hoeren": {
                 "title": "听力模考 (Hörverstehen)",
+                "unit": "套",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_hoeren_dict.A1_HOEREN_SETS),
             },
             "lesen": {
                 "title": "阅读工坊 (Leseverstehen)",
+                "unit": "套",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_lesen_dict.A1_LESEN_SETS),
             },
             "sprechen": {
                 "title": "口语问答 (Sprechen)",
+                "unit": "题",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_dict.A1_SPRECHEN_TEIL2) + len(a1_dict.A1_SPRECHEN_TEIL3),
             },
             "vocab": {
                 "title": "官方考纲词表 (Wortliste)",
+                "unit": "词",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a1",
                 "count_fn": lambda: len(a1_dict.GOETHE_A1_VOCAB),
@@ -67,6 +72,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
         "modules": {
             "vocab": {
                 "title": "官方考纲词表 (Wortliste)",
+                "unit": "词",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/a2",
                 "count_fn": lambda: len(get_vocab_by_cefr("A2", sources={"official"})["words"]),
@@ -80,6 +86,7 @@ EXAM_CATALOG: Dict[str, Dict[str, Any]] = {
         "modules": {
             "vocab": {
                 "title": "官方考纲词表 (Wortliste)",
+                "unit": "词",
                 "panel": "exam-cards-family",
                 "api_prefix": "/api/cards",
                 "count_fn": lambda: len(get_vocab_by_cefr("B1", sources={"official"})["words"]),
@@ -102,11 +109,13 @@ def _safe_count(count_fn: Optional[Callable[[], int]]) -> int:
 
 def get_catalog() -> Dict[str, Any]:
     """序列化 catalog：{"levels": [{"id", "title", "modules": [
-    {"id", "title", "panel", "api_prefix", "count"}]}]}。
+    {"id", "title", "unit", "panel", "api_prefix", "count"}]}]}。
 
     count_fn 是 Python 可调用、不可 JSON 化，故此层负责把注册表扁平化为
-    纯数据（count 取 _safe_count 结果）。等级顺序 = 注册序（dict 插入序）。
-    返回 fresh dict，调用方随意改。
+    纯数据（count 取 _safe_count 结果）。unit 是展示单位（题/套/词），
+    由后端单源给出，前端不得自行推断；注册项缺 unit 时输出空串，
+    前端只在非空时追加，避免渲染成「undefined 题」。
+    等级顺序 = 注册序（dict 插入序）。返回 fresh dict，调用方随意改。
     """
     levels: List[Dict[str, Any]] = []
     for lid, reg in EXAM_CATALOG.items():
@@ -114,6 +123,7 @@ def get_catalog() -> Dict[str, Any]:
             {
                 "id": mid,
                 "title": mod.get("title", mid),
+                "unit": mod.get("unit", ""),
                 "panel": mod.get("panel", ""),
                 "api_prefix": mod.get("api_prefix", ""),
                 "count": _safe_count(mod.get("count_fn")),

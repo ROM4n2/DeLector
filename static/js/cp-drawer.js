@@ -242,31 +242,86 @@ function renderHistoricalMessages(messages, proposals) {
   bodyEl.scrollTop = bodyEl.scrollHeight;
 }
 
+/** 设置页三档的显示文案与单行说明；value 直接落库，经后端单一映射出口转上游值。 */
+export const REASONING_EFFORT_OPTIONS = {
+  none: { label: '关闭', hint: '不输出思维链，响应最快' },
+  medium: { label: '标准', hint: '常规语法场域分析' },
+  high: { label: '深读', hint: '长难句 / 德福级推演' },
+};
+
 /**
- * 设置思维链推演深度 (low / medium / high)
+ * 归一化到三档的可选值。旧档位 `low` 视为「标准」；未知值回落到后端默认 medium。
+ * 这里只做 UI 状态归一，不复制 `llm_client.map_reasoning_effort` 的上游映射。
  * @param {string} effort
- * @returns {string}
+ * @returns {'none'|'medium'|'high'}
+ */
+export function normalizeReasoningEffort(effort) {
+  const key = String(effort || '').trim().toLowerCase();
+  if (REASONING_EFFORT_OPTIONS[key]) return key;
+  // 旧档位 low（极速）与任何未知值统一回落到「标准」。
+  return 'medium';
+}
+
+/**
+ * 把生效档位同步到所有思考强度 UI（抽屉胶囊 + 设置页 segmented + 折叠态摘要）。
+ * 纯渲染，不发请求。
+ * @param {string} effort
+ * @returns {'none'|'medium'|'high'}
+ */
+export function syncReasoningEffortUI(effort) {
+  const normalized = normalizeReasoningEffort(effort);
+  currentReasoningEffort = normalized;
+  if (companionState) {
+    companionState.reasoningEffort = normalized;
+  }
+
+  document.querySelectorAll('.thinking-pill').forEach((pill) => {
+    const checked = normalizeReasoningEffort(pill.dataset.effort) === normalized;
+    pill.classList.toggle('active', checked);
+    pill.setAttribute('aria-pressed', String(checked));
+  });
+
+  const group = document.getElementById('set-reasoning-effort');
+  if (group) {
+    group.querySelectorAll('[role="radio"]').forEach((radio) => {
+      const checked = radio.dataset.effort === normalized;
+      radio.setAttribute('aria-checked', String(checked));
+      radio.tabIndex = checked ? 0 : -1;
+    });
+  }
+
+  const option = REASONING_EFFORT_OPTIONS[normalized];
+  const hint = document.getElementById('set-reasoning-hint');
+  if (hint && option) hint.textContent = `${option.label}：${option.hint}`;
+  const summary = document.getElementById('set-reasoning-summary');
+  if (summary && option) summary.textContent = `思考：${option.label}`;
+
+  return normalized;
+}
+
+/**
+ * 设置思维链推演深度（none / medium / high）。
+ * 点选即落库，与抽屉胶囊共享同一持久化出口。
+ * @param {string} effort
+ * @returns {'none'|'medium'|'high'}
  */
 export function setReasoningEffort(effort) {
-  currentReasoningEffort = effort || 'medium';
-  if (companionState) {
-    companionState.reasoningEffort = currentReasoningEffort;
-  }
-  // 1. 同步 UI 思考强度胶囊 active 状态
-  const pills = document.querySelectorAll('.thinking-pill');
-  pills.forEach((p) => {
-    p.classList.toggle('active', p.dataset.effort === currentReasoningEffort);
-  });
-  // 2. 同步设置弹窗中的下拉框
-  const select = document.getElementById('set-reasoning-effort');
-  if (select && select.value !== currentReasoningEffort) {
-    select.value = currentReasoningEffort;
-  }
-  // 3. 异步持久化到后端设置
-  updateReasoningEffort(currentReasoningEffort).catch((err) => {
+  const normalized = syncReasoningEffortUI(effort);
+  updateReasoningEffort(normalized).catch((err) => {
     console.warn('[CompanionDrawer] Failed to persist reasoning effort:', err);
   });
-  return currentReasoningEffort;
+  return normalized;
+}
+
+/**
+ * 同 `setReasoningEffort`，但把持久化 Promise 交给调用方（设置页需要等保存完再回读）。
+ * @param {string} effort
+ * @returns {Promise<'none'|'medium'|'high'>}
+ */
+export async function persistReasoningEffort(effort) {
+  const normalized = syncReasoningEffortUI(effort);
+  await updateReasoningEffort(normalized);
+  return normalized;
 }
 
 const COMPANION_VIEW_LABELS = {
