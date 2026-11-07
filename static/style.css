@@ -5,6 +5,11 @@
 /* ── Design System v3.0 — Academic Modern Editorial & Continuous Exhibition ── */
 
 :root {
+  /* 移动端写作页：writer.js 用 visualViewport 覆盖成实时 px 值；
+     这里的默认值保证 JS 未执行/老 WebView 下仍能按 dvh 布局。 */
+  --writer-vvh: 100dvh;
+  --writer-keyboard-inset: 0px;
+
   /* Surfaces */
   --paper: #faf8f5;
   --paper-card: #ffffff;
@@ -2803,6 +2808,11 @@ body.drawer-open .shadow-player {
   flex-shrink: 0;
 }
 
+/* 桌面端音色 + 模式保持同一行；移动端拆成独立行容器 */
+.player-topline {
+  display: contents;
+}
+
 /* Transport Buttons — ink on paper */
 
 .player-btn {
@@ -2857,6 +2867,9 @@ body.drawer-open .shadow-player {
   }
 }
 
+/* 可见状态行：句序 / 跟读倒计时 / 音色与引擎降级提示。
+   原先 max-width:768px 下整行 display:none，导致降级提示无处可显示。 */
+
 .player-status {
   font-family: var(--mono);
 
@@ -2864,9 +2877,23 @@ body.drawer-open .shadow-player {
 
   color: var(--pencil);
 
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 
-  white-space: nowrap;
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  flex-wrap: wrap;
+
+  gap: 0 0.5rem;
+
+  flex: 1 1 auto;
+
+  min-width: 0;
+
+  line-height: 1.3;
 
   padding: 0 0.5rem;
 
@@ -2875,46 +2902,62 @@ body.drawer-open .shadow-player {
   border-right: 1px solid var(--rule);
 }
 
-/* Voice Selector — straight ledger tabs */
-
-.voice-pill {
-  display: flex;
-
-  background: var(--paper-tint);
-
-  border: 1.5px solid var(--rule);
-
-  border-radius: 2px;
-
-  padding: 0;
-
-  gap: 0;
-
-  flex-shrink: 0;
+#player-status-text {
+  white-space: nowrap;
 
   overflow: hidden;
+
+  text-overflow: ellipsis;
 }
 
-.voice-btn {
+#player-status-text.is-error {
+  color: var(--cherry);
+
+  font-weight: 700;
+}
+
+.player-voice-note {
+  color: var(--amber);
+
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+/* Voice Selector — collapsed current voice + radiogroup menu */
+
+.voice-pill {
+  position: relative;
+
+  display: flex;
+
+  flex-shrink: 0;
+}
+
+.voice-current-btn {
+  display: flex;
+
+  align-items: center;
+
+  gap: 0.3rem;
+
   font-family: var(--mono);
 
   font-size: 0.6rem;
 
   font-weight: 600;
 
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
 
   padding: 3px 8px;
 
-  border-radius: 0;
+  border: 1.5px solid var(--rule);
 
-  border: none;
+  border-radius: 2px;
 
-  border-right: 1px solid var(--rule);
+  background: var(--paper-tint);
 
-  color: var(--pencil);
-
-  background: transparent;
+  color: var(--ink);
 
   cursor: pointer;
 
@@ -2923,20 +2966,130 @@ body.drawer-open .shadow-player {
   white-space: nowrap;
 }
 
-.voice-btn:last-child {
-  border-right: none;
-}
-
 @media (hover: hover) and (pointer: fine) {
-  .voice-btn:hover {
+  .voice-current-btn:hover {
     background: var(--paper-deep);
-    color: var(--ink);
   }
 }
 
-.voice-btn.active {
+.voice-current-btn[aria-expanded="true"] {
   background: var(--ink);
+
+  border-color: var(--ink);
+
   color: #fef9ee;
+}
+
+.voice-caret {
+  font-size: 0.55rem;
+
+  line-height: 1;
+}
+
+.voice-menu {
+  position: absolute;
+
+  bottom: calc(100% + 6px);
+
+  left: 0;
+
+  z-index: 60;
+
+  min-width: 15rem;
+
+  padding: 0.25rem;
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 2px;
+
+  background: var(--paper-card);
+
+  border: 1.5px solid var(--ink);
+
+  border-radius: 2px;
+
+  box-shadow: var(--shadow-hard);
+}
+
+.voice-option {
+  display: grid;
+
+  grid-template-columns: 1fr auto;
+
+  grid-template-areas:
+    "name check"
+    "meta check";
+
+  gap: 0 0.5rem;
+
+  min-height: 44px;
+
+  padding: 0.35rem 0.5rem;
+
+  text-align: left;
+
+  border: 1px solid transparent;
+
+  border-radius: 2px;
+
+  background: transparent;
+
+  color: var(--ink);
+
+  font-family: var(--sans);
+
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .voice-option:hover {
+    background: var(--paper-tint);
+  }
+}
+
+.voice-option .vo-name {
+  grid-area: name;
+
+  font-size: 0.8125rem;
+
+  font-weight: 700;
+}
+
+.voice-option .vo-meta {
+  grid-area: meta;
+
+  font-family: var(--mono);
+
+  font-size: 0.6875rem;
+
+  color: var(--pencil);
+}
+
+.voice-option .vo-check {
+  grid-area: check;
+
+  align-self: center;
+
+  font-family: var(--mono);
+
+  font-size: 0.625rem;
+
+  color: var(--amber);
+
+  visibility: hidden;
+}
+
+.voice-option.active {
+  background: var(--paper-tint);
+
+  border-color: var(--rule);
+}
+
+.voice-option.active .vo-check {
+  visibility: visible;
 }
 
 /* Mode Group — straight ledger tabs */
@@ -3068,28 +3221,15 @@ body.drawer-open .shadow-player {
   border-color: var(--amber);
 }
 
-/* Compact on small screens */
+/* Compact on small screens（托盘行布局见文件末尾的 Tray 重构段） */
 
 @media (max-width: 768px) {
-  .player-status {
-    display: none;
-  }
-
   .shadow-player {
     padding: 0.45rem 0.5rem;
 
     width: calc(100vw - 0.5rem);
 
     gap: 0.25rem;
-  }
-
-  .mode-btn {
-    padding: 3px 5px;
-    font-size: 0.55rem;
-  }
-
-  .voice-btn {
-    padding: 3px 6px;
   }
 }
 
@@ -3759,10 +3899,10 @@ body.drawer-open .shadow-player {
 /* ── Exam Domain (Prüfungsbereich, ADR-0005 Task 1) ────────────────────── */
 /* 方向 A「克制的编辑排版」（ADR-0029 / 2026-11-06 dryness 对账）。
    层级靠字号阶梯与 2px 横线，不靠卡片边框与阴影。
-   间距按作用层取值：本区属「应用内功能面」，页头下 48px ÷ 行距 41px = 1.17，
-   落在实测带 0.8–2.6 内偏低档（7 个入口要一屏扫完）。
-   标题 40px ÷ 正文 15px = 2.67，应用内阅读面带 2.0–3.4，不抬高。
-   依据见 docs/reviews/2026-11-06-dryness-contrast-prototype.html。 */
+   窄屏校准（2026-11-07 调研，docs/reviews/2026-11-07-exam-layout-redesign-research.md）：
+   桌面单列目录在 393/360 上把 7 个入口拉成两三屏（实测 944px 列表 + 248px 页头），
+   故页头压到 190px 级、行高压到 60px，让 7 个入口与正文首屏同屏。
+   编辑式身份保留：30.6px 斜体标题、2px 横线、序号列、德文副名、无边框无阴影。 */
 .exam-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -3770,28 +3910,40 @@ body.drawer-open .shadow-player {
   width: 100%;
 }
 
+/* 返回按钮独占一行：标题占满整行后，长德文词只受视口宽度约束。
+   此前按钮与标题同行，h2 作为 flex 子项 min-width:auto，
+   PRÜFUNGSDOMÄNE 在 40px 下 376.8px 只放得进 224.5/191.5px → 右侧被裁。 */
 .exam-topbar {
   display: flex;
-  align-items: flex-end;
-  gap: 1.25rem;
-  margin-bottom: 3rem;
-  padding-bottom: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.875rem;
+  padding-bottom: 0.625rem;
   border-bottom: 2px solid var(--ink);
 }
+.exam-topbar .btn {
+  min-height: 32px;
+  padding: 0 0.75rem;
+}
 .exam-topbar h2 {
+  width: 100%;
   font-family: var(--serif);
-  font-size: 2.5rem;
+  /* 30.6px（393）/ 28.1px（360）；PRÜFUNGSDOKUMENT 实测约 338/302px，
+     均小于可用宽度 353/320px。缩容优先，溢出兜底才断词。 */
+  font-size: clamp(1.75rem, 7.8vw, 2.5rem);
   font-style: italic;
   font-weight: 400;
   line-height: 1.06;
   letter-spacing: -0.02em;
   color: var(--ink);
+  overflow-wrap: break-word;
 }
 
 .exam-level-tabs {
   display: inline-flex;
   gap: 1.25rem;
-  margin-bottom: 2rem;
+  margin-bottom: 0.875rem;
 }
 
 .exam-level-tab {
@@ -3820,7 +3972,8 @@ body.drawer-open .shadow-player {
 }
 
 /* 七个入口是一张「目录」，不是七张卡片：去掉边框/阴影/圆角，
-   只用一条发丝线分隔。行距 41px = 20px padding × 2 + 1px 线。 */
+   只用一条发丝线分隔。行高 60px（方案 A）：中文 16px + 德文 11px 共 35px，
+   上下留白由固定行高吸收；7 行 = 420px，配合 190px 页头可一屏扫完。 */
 .exam-module-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -3831,18 +3984,19 @@ body.drawer-open .shadow-player {
 .exam-module-card {
   position: relative;
   display: grid;
-  grid-template-columns: 2.75rem 1fr;
-  align-items: baseline;
-  gap: 1rem;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
   width: 100%;
-  padding: 1.25rem 0;
+  min-height: 60px;
+  padding: 0 4px;
   background: none;
   border: 0;
   border-bottom: 1px solid var(--line-soft);
   border-radius: 0;
   box-shadow: none;
   font-family: var(--serif);
-  font-size: 1.25rem;
+  font-size: 1rem;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
@@ -3853,20 +4007,17 @@ body.drawer-open .shadow-player {
     color var(--dur-fast) var(--ease-editorial);
 }
 
-.exam-module-card:first-child {
-  padding-top: 0;
-}
-
 .exam-module-index {
   font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.1em;
-  color: var(--muted);
+  color: var(--pencil);
   transition: color var(--dur-fast) var(--ease-editorial);
 }
 
 .exam-module-label {
   display: block;
+  min-width: 0;
   font-weight: 400;
   line-height: 1.25;
   transition:
@@ -3876,9 +4027,10 @@ body.drawer-open .shadow-player {
 
 .exam-module-de {
   display: block;
-  margin-top: 0.25rem;
+  margin-top: 2px;
   font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
+  line-height: 1.18;
   letter-spacing: 0.02em;
   color: var(--muted);
 }
@@ -3926,16 +4078,25 @@ body.drawer-open .shadow-player {
   font-weight: 700;
 }
 
-/* 计数走等宽 12px：数字列对齐，扫描更快（参考库 8 条手法之五）。 */
+/* 计数走等宽 12px：独立第三列右对齐，与标题同行（不再被 Grid 顶到标题上方）。
+   语义暂为纯数字：单位需后端目录返回 unit 字段，见调研文档的挂账项。 */
 .exam-module-count {
   display: inline-block;
-  margin-left: 0.5rem;
+  justify-self: end;
+  white-space: nowrap;
   font-family: var(--mono);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--ink-faint);
-  vertical-align: middle;
+}
+
+/* 窄屏：容器水平内边距 20px（393/360 内容宽 353/320px）。
+   页头其余压缩已并入上面的全局规则（方案 A 对桌面同样成立）。 */
+@media (max-width: 640px) {
+  .exam-container {
+    padding: 1.25rem 1.25rem 3rem;
+  }
 }
 
 .cards-view-toggle {
@@ -7602,6 +7763,151 @@ body.drawer-open .shadow-player {
   }
 }
 
+/* ── Settings IA (2026-11-07): single entry + collapsible groups ───── */
+@media (max-width: 1024px) {
+  /* 移动端只保留 dock 入口：隐藏顶部「设置」，避免同屏两个入口 */
+  .nav-settings-btn {
+    display: none;
+  }
+}
+
+.settings-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.settings-modal-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.settings-group {
+  border-top: 1px solid var(--border);
+}
+
+.settings-group:first-of-type {
+  border-top: none;
+}
+
+.settings-group-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-group-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.settings-group-chevron {
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+.settings-group-toggle[aria-expanded="false"] .settings-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.settings-group-body {
+  padding-bottom: 1rem;
+}
+
+.settings-group-body[hidden] {
+  display: none;
+}
+
+.settings-group-body > .modal-field {
+  margin-top: 0.75rem;
+}
+
+.settings-tip {
+  font-size: 0.75rem;
+  color: var(--pencil);
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.settings-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.settings-inline-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.settings-key-vis-btn {
+  min-width: 44px;
+  padding: 0 0.5rem;
+}
+
+.settings-field-status {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--pencil);
+}
+
+.settings-preset-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.settings-effective-model {
+  margin-top: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--pencil);
+  line-height: 1.4;
+}
+
+.settings-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.settings-test-feedback {
+  font-size: 0.75rem;
+  color: var(--pencil);
+  font-family: var(--mono);
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 380px) {
+  .settings-modal-box {
+    padding: 1rem;
+  }
+  .settings-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── v3.7.0: Companion Mascot System (Eule & Friends) ─────────────── */
 .folio-mascot-section {
   max-width: 1200px;
@@ -7961,19 +8267,67 @@ body.drawer-open .shadow-player {
   pointer-events: none;
   transform-origin: bottom right;
   z-index: 75;
+  /* 四侧求解器写入 data-side；箭头位置由 JS 用这两个变量跟随角色中心 */
+  --bubble-arrow-x: calc(100% - 32px);
+  --bubble-arrow-y: 50%;
 }
 
+/* 内容超过 45vh 时只有内层滚动（overflow 由求解器按需开启，避免短消息出现滚动条）；
+   外层必须 overflow: visible 才不会被裁掉箭头 */
+.companion-bubble-body {
+  overscroll-behavior: contain;
+}
+
+/* 默认（data-side 缺失或 top）：箭头贴气泡下沿，向下指 */
 .companion-bubble::after {
   content: "";
   position: absolute;
   bottom: -6px;
-  right: 28px;
+  top: auto;
+  right: auto;
+  left: calc(var(--bubble-arrow-x) - 4.5px);
   width: 9px;
   height: 9px;
   background: var(--paper, #faf8f5);
   border-right: 1.5px solid var(--ink, #1a1a1a);
   border-bottom: 1.5px solid var(--ink, #1a1a1a);
+  border-top: none;
+  border-left: none;
   transform: rotate(45deg);
+}
+
+/* 气泡在角色下方：箭头贴气泡上沿，向上指 */
+.companion-bubble[data-side="bottom"]::after {
+  bottom: auto;
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+  border-top: 1.5px solid var(--ink, #1a1a1a);
+  border-left: 1.5px solid var(--ink, #1a1a1a);
+}
+
+/* 气泡在角色左侧：箭头贴气泡右沿，向右指 */
+.companion-bubble[data-side="left"]::after {
+  bottom: auto;
+  left: auto;
+  right: -6px;
+  top: calc(var(--bubble-arrow-y) - 4.5px);
+  border-right: 1.5px solid var(--ink, #1a1a1a);
+  border-bottom: none;
+  border-top: 1.5px solid var(--ink, #1a1a1a);
+  border-left: none;
+}
+
+/* 气泡在角色右侧：箭头贴气泡左沿，向左指 */
+.companion-bubble[data-side="right"]::after {
+  bottom: auto;
+  left: -6px;
+  right: auto;
+  top: calc(var(--bubble-arrow-y) - 4.5px);
+  border-right: none;
+  border-bottom: 1.5px solid var(--ink, #1a1a1a);
+  border-top: none;
+  border-left: 1.5px solid var(--ink, #1a1a1a);
 }
 
 .companion-bubble-de {
@@ -8396,6 +8750,7 @@ body.drawer-open .companion {
 
 /* Editor Inputs */
 .writer-input-title {
+  display: block;
   width: 100%;
   font-family: var(--serif-heading);
   font-size: 1.25rem;
@@ -8407,6 +8762,10 @@ body.drawer-open .companion {
   margin-bottom: 0.75rem;
   outline: none;
   background: transparent;
+  line-height: 1.4;
+  /* textarea 默认右下角有拖拽柄且会显示滚动条；高度由 writer.js 按内容设置。 */
+  resize: none;
+  overflow-y: hidden;
   transition: border-color var(--dur-fast) ease;
 }
 
@@ -8988,58 +9347,115 @@ body.drawer-open .companion {
 
 /* Responsive adjustments */
 @media (max-width: 860px) {
-  .writer-layout {
-    grid-template-columns: 1fr;
+  /* 单一滚动容器：html。全局 .view{overflow-x:hidden} 会把 overflow-y 计算成
+     auto，于是 #view-writer 多出一个永远不滚的嵌套滚动容器；clip 不创建滚动
+     容器，横向裁切语义不变。 */
+  #view-writer {
+    overflow-x: clip !important;
+    overflow-y: visible !important;
+    padding: 1rem 1rem 0;
   }
 
-  .writer-sidebar {
-    position: static;
+  .writer-container {
+    gap: 1rem;
+  }
+
+  .writer-layout {
+    grid-template-columns: 1fr;
   }
 
   .writer-header-bar {
     flex-direction: column;
     align-items: flex-start;
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* 移动端首屏预算：eyebrow 与桌面字号在 393px 下占掉约 80px，
+     编辑框 + 工具栏就会被推到首屏之外；收掉 eyebrow 是最直接的一刀。 */
+  .writer-header-bar .hero-eyebrow {
+    display: none;
+  }
+
+  .writer-title-heading {
+    font-size: 1.35rem;
+    line-height: 1.3;
   }
 
   .writer-actions-top {
     width: 100%;
     justify-content: flex-start;
+    gap: 0.375rem;
+  }
+
+  .writer-actions-top .btn {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  .writer-mode-switcher-bar {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
   }
 
   .writer-mobile-panel-trigger {
     display: inline-flex;
   }
 
-  /* height 而不是 max-height：这个 sheet 锚在底边（bottom + 无 top），
-     高度跟内容走就意味着只能向上长 —— 切 tab、错误卡填内容、问题清单从
-     "暂无"变成 N 条，每一次都把顶边挪到新位置，整个面板在眼前跳。
-     固定成同一个矩形后内容再变也不动，代价是内容少时下方留白，
-     换来的是可预期的几何（标准 bottom sheet 也是固定 detent）。 */
+  /* bottom sheet：底边锚定 + 顶部必须显式 auto。
+     桌面基规则带 top: 4.5rem；只补 bottom 属于 over-constrained 布局，
+     bottom 会被静默忽略，sheet 顶在 4.5rem、底停在视口上方 132.5px ——
+     闭包时正好露出约 40px 页签条，还整片盖住底部 dock（z-index 1100 > 1000）。 */
   .writer-sidebar {
     position: fixed;
     z-index: 1100;
+    top: auto;
     left: 0.75rem;
     right: 0.75rem;
     bottom: 0;
     height: min(76vh, 680px);
-    /* 显式解掉基规则那个 max-height: calc(100dvh …) 帽子。不解也不会出错
-       （有 height 在，几何依然是定值），但留着就意味着读这条规则的人
-       看不出还有另一处在影响高度 —— 每个断点的几何自我描述完整比省一行重要。 */
+    /* 键盘态用 visualViewport 高度，避免 76vh 在 adjustPan 下按整屏算。 */
+    height: min(calc(var(--writer-vvh, 100dvh) * 0.76), 680px);
+    /* 显式解掉基规则那个 max-height: calc(100dvh …) 帽子。 */
     max-height: none;
     overflow-y: auto;
     padding: 0.75rem;
+    /* sheet 铺满到视口底并盖住 dock；内部留出 dock 高度 + 安全区，
+       滚到底时最后一个控件不会被 dock 或 home indicator 吃掉。 */
     padding-bottom: calc(
-      0.75rem + 58px + env(safe-area-inset-bottom, 0) + 0.5rem
+      0.75rem + 58px + env(safe-area-inset-bottom, 0px)
     );
     background: var(--paper);
     border: 1.5px solid var(--ink);
     box-shadow: 4px 4px 0 var(--ink);
+    /* 闭包：贴底 + 平移自身高度，完全离屏；不能再出现「只露一条页签」的条带。 */
     transform: translateY(100%);
     transition: transform 180ms ease;
+    overscroll-behavior: contain;
   }
 
   .writer-sidebar.mobile-panel-open {
     transform: translateY(0);
+    /* adjustPan / iOS 键盘只缩 visualViewport 时，把面板抬到键盘上沿；
+       adjustResize 下 inset 为 0，行为与 bottom:0 一致。 */
+    bottom: var(--writer-keyboard-inset, 0px);
+  }
+
+  /* 键盘态：编辑区跟随 visualViewport 收缩，避免固定 520px 把工具栏顶出屏幕。 */
+  #ide-editor {
+    min-height: 160px;
+    max-height: min(520px, calc(var(--writer-vvh, 100dvh) - 240px));
+    scroll-margin-top: 60px;
+    /* 让位目标不是编辑框本身，而是「编辑框 + 下方工具栏」整块：
+       58px dock + 12px 间隙 + 35px 工具栏，否则键盘态聚焦后工具栏会压在 dock 下面。 */
+    scroll-margin-bottom: calc(58px + 12px + 35px + 2px);
+  }
+
+  /* 单行 input 换成 textarea 后，移动端至少给两行：示例标题在 360/393 下
+     正好折成两行，不再被右侧裁切。 */
+  .writer-input-title {
+    min-height: calc(1.45em * 2);
+    line-height: 1.45;
   }
 
   .writer-panel-lock {
@@ -12394,5 +12810,84 @@ body.drawer-open .companion {
   /* 按压反馈在 reduce 下不缩放。 */
   .btn:active {
     transform: none;
+  }
+}
+
+/* ── Shadow Player Tray（B 方案）：窄屏三行布局 ─────────────────
+   行1 状态行；行2 音色折叠键 + 模式三键；行3 传输四键 + 倍速。
+   统一 `#shadow-player` 前缀：压过上方遗留的重复播放器规则。 */
+@media (max-width: 768px) {
+  #shadow-player {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.4rem;
+  }
+
+  #shadow-player .player-status {
+    order: 1;
+    display: flex;
+    flex: 0 0 100%;
+    justify-content: center;
+    padding: 0 0 0.15rem;
+    border-left: none;
+    border-right: none;
+    font-size: 0.6875rem;
+  }
+
+  #shadow-player .player-right {
+    display: contents;
+  }
+
+  #shadow-player .player-topline {
+    order: 2;
+    display: flex;
+    flex: 0 0 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  #shadow-player .player-left {
+    order: 3;
+    width: auto;
+    flex: 0 0 auto;
+    gap: 2px;
+  }
+
+  #shadow-player .player-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  #shadow-player .voice-current-btn {
+    min-height: 40px;
+    min-width: 44px;
+    padding: 0 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  #shadow-player .mode-btn {
+    min-height: 40px;
+    padding: 6px 8px;
+    font-size: 0.72rem;
+  }
+
+  #shadow-player .speed-pill {
+    order: 4;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  #shadow-player .speed-step-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px 2px;
+    font-size: 0.8rem;
+  }
+
+  /* 托盘最高约 150px（含降级提示换行），留出 11rem 底部空间 */
+  #view-reader {
+    padding-bottom: 11rem;
   }
 }

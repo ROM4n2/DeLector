@@ -3,7 +3,42 @@
 
 import { state } from "./core.js";
 
-export async function playGermanAudio(text, rate = 0.88) {
+const DEFAULT_VOICE = "de-DE-KatjaNeural";
+
+// 音色身份固定为「性别 · 姓名」：不依赖颜色或字形，读屏与视觉同一套文字。
+const VOICE_META = {
+  "de-DE-KatjaNeural": { name: "Katja", gender: "女声", style: "德国之声推荐" },
+  "de-DE-ConradNeural": { name: "Conrad", gender: "男声", style: "严谨沉稳" },
+  "de-DE-AmalaNeural": { name: "Amala", gender: "女声", style: "自然清晰" },
+  "de-DE-KillianNeural": { name: "Killian", gender: "男声", style: "浑厚母语" },
+};
+
+function voiceMeta(voice) {
+  return VOICE_META[voice] || VOICE_META[DEFAULT_VOICE];
+}
+
+function setStatusText(text, isError = false) {
+  const el = document.getElementById("player-status-text");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("is-error", isError);
+}
+
+// 音色降级提示：只在音色确实没生效时出现，绝不假装选中音色在生效。
+function setVoiceNotice(visible) {
+  const note = document.getElementById("player-voice-note");
+  if (note) note.classList.toggle("hidden", !visible);
+}
+
+// 服务器用响应头回报「voice 是否真的进了合成器」：
+// 1 = edge_tts 按所选音色合成；0 = 降级到不含 voice 的公共 URL。
+function applyVoiceHonoredHeader(resp) {
+  const flag = resp.headers.get("X-TTS-Voice-Honored");
+  if (flag === "0") setVoiceNotice(true);
+  else if (flag === "1") setVoiceNotice(false);
+}
+
+export async function playGermanAudio(text, rate = 0.8) {
   if (!text) return;
   const clean = text.trim();
 
@@ -14,7 +49,10 @@ export async function playGermanAudio(text, rate = 0.88) {
   ) {
     try {
       const ok = window.AndroidNativeTTS.speak(clean, rate);
-      if (ok) return;
+      if (ok) {
+        setVoiceNotice(true); // 原生桥不接收 voice，系统语音不是所选音色
+        return;
+      }
     } catch (e) {
       console.warn("Native TTS failed, falling back:", e);
     }
@@ -23,7 +61,7 @@ export async function playGermanAudio(text, rate = 0.88) {
   const voice =
     ShadowPlayer.voice ||
     localStorage.getItem("delector_voice") ||
-    "de-DE-KatjaNeural";
+    DEFAULT_VOICE;
   const ratePercent = Math.round((rate - 1.0) * 100);
   const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
 
@@ -34,6 +72,7 @@ export async function playGermanAudio(text, rate = 0.88) {
       body: JSON.stringify({ text: clean, voice: voice, rate: rateStr }),
     });
     if (!resp.ok) throw new Error("Neural TTS error");
+    applyVoiceHonoredHeader(resp);
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
@@ -46,10 +85,10 @@ export async function playGermanAudio(text, rate = 0.88) {
     });
   } catch {
     if (!("speechSynthesis" in window)) {
-      const statusEl = document.getElementById("player-status");
-      if (statusEl) statusEl.textContent = "语音引擎不可用";
+      setStatusText("语音引擎不可用", true);
       return;
     }
+    setVoiceNotice(true); // 兜底走系统语音，所选音色不生效
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(clean);
     utt.lang = "de-DE";
@@ -73,8 +112,8 @@ export const ShadowPlayer = {
   isPlaying: false,
   currentSentIdx: 0,
   mode: "shadow", // 'continuous' | 'shadow' | 'loop'
-  rate: 0.88,
-  voice: localStorage.getItem("delector_voice") || "de-DE-KatjaNeural",
+  rate: 0.8,
+  voice: localStorage.getItem("delector_voice") || DEFAULT_VOICE,
   audioEl: null,
   pauseTimer: null,
   utterance: null,
@@ -85,13 +124,27 @@ export const ShadowPlayer = {
   init() {
     this.audioEl = new Audio();
     const savedVoice =
-      localStorage.getItem("delector_voice") || "de-DE-KatjaNeural";
+      localStorage.getItem("delector_voice") || DEFAULT_VOICE;
     this.setVoice(savedVoice);
     if ("speechSynthesis" in window) {
       window.speechSynthesis.onvoiceschanged = () => {
         window.speechSynthesis.getVoices();
       };
     }
+    // Android 原生桥只接收 text/rate，voice 永远不生效：从一开始就如实告知。
+    if (
+      window.AndroidNativeTTS &&
+      typeof window.AndroidNativeTTS.speak === "function"
+    ) {
+      setVoiceNotice(true);
+    }
+    document.addEventListener("click", (e) => {
+      const pill = document.querySelector(".voice-pill");
+      if (pill && !pill.contains(e.target)) this.closeVoiceMenu();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") this.closeVoiceMenu();
+    });
   },
 
   reset() {
@@ -102,14 +155,21 @@ export const ShadowPlayer = {
   },
 
   setVoice(voice) {
-    this.voice = voice;
-    localStorage.setItem("delector_voice", voice);
-    const isKatja = voice.includes("Katja");
-    const isConrad = voice.includes("Conrad");
-    const btnKatja = document.getElementById("voice-btn-katja");
-    const btnConrad = document.getElementById("voice-btn-conrad");
-    if (btnKatja) btnKatja.classList.toggle("active", isKatja);
-    if (btnConrad) btnConrad.classList.toggle("active", isConrad);
+    const next = VOICE_META[voice] ? voice : DEFAULT_VOICE;
+    this.voice = next;
+    localStorage.setItem("delector_voice", next);
+
+    const meta = voiceMeta(next);
+    const label = document.getElementById("voice-current-label");
+    if (label) label.textContent = `${meta.gender} · ${meta.name}`;
+
+    document.querySelectorAll(".voice-option").forEach((btn) => {
+      const active = btn.dataset.voice === next;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-checked", active ? "true" : "false");
+    });
+    this.closeVoiceMenu();
+
     if (this.isPlaying) {
       if (this.pauseTimer) {
         clearTimeout(this.pauseTimer);
@@ -120,6 +180,27 @@ export const ShadowPlayer = {
       }
       this.speakCurrentSentence();
     }
+  },
+
+  toggleVoiceMenu() {
+    const menu = document.getElementById("voice-menu");
+    const btn = document.getElementById("voice-current-btn");
+    if (!menu || !btn) return;
+    const open = menu.classList.contains("hidden");
+    menu.classList.toggle("hidden", !open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      const active = menu.querySelector(".voice-option.active");
+      if (active) active.focus();
+    }
+  },
+
+  closeVoiceMenu() {
+    const menu = document.getElementById("voice-menu");
+    const btn = document.getElementById("voice-current-btn");
+    if (!menu || !btn) return;
+    menu.classList.add("hidden");
+    btn.setAttribute("aria-expanded", "false");
   },
 
   play() {
@@ -199,6 +280,7 @@ export const ShadowPlayer = {
       try {
         const ok = window.AndroidNativeTTS.speak(sent.text.trim(), this.rate);
         if (ok) {
+          setVoiceNotice(true); // 原生桥无 voice 参数：当前音色并未生效
           const estDuration = Math.max(1500, sent.text.length * 70);
           setTimeout(() => {
             if (!this.isPlaying) return;
@@ -226,6 +308,7 @@ export const ShadowPlayer = {
     })
       .then((resp) => {
         if (!resp.ok) throw new Error("Neural TTS error");
+        applyVoiceHonoredHeader(resp); // 服务器明确回报所选音色是否生效
         return resp.blob();
       })
       .then((blob) => {
@@ -306,6 +389,7 @@ export const ShadowPlayer = {
       this.speakFailed(sent);
       return;
     }
+    setVoiceNotice(true); // Web Speech 只能挑系统语言，不是所选 neural 音色
     this.isIntentionalCancel = true;
     window.speechSynthesis.cancel();
     this.isIntentionalCancel = false;
@@ -353,8 +437,7 @@ export const ShadowPlayer = {
     // 三层 TTS（原生 / 服务器 / Web Speech）全失败：停下并给出可见提示，绝不静默推进。
     // 调用方应先 this.pause() 复位播放状态（isPlaying/按钮/高亮/计时器）。
     console.warn("[ShadowPlayer] 所有 TTS 引擎均不可用:", sent?.text);
-    const el = document.getElementById("player-status");
-    if (el) el.textContent = "语音引擎不可用";
+    setStatusText("语音引擎不可用", true);
   },
 
   seekSentence(idx) {
@@ -446,14 +529,14 @@ export const ShadowPlayer = {
   },
 
   updateStatusText() {
-    const el = document.getElementById("player-status");
-    if (el && state.currentArticle && state.currentArticle.sentences) {
-      el.textContent = `句 ${this.currentSentIdx + 1} / ${state.currentArticle.sentences.length}`;
+    if (state.currentArticle && state.currentArticle.sentences) {
+      setStatusText(
+        `句 ${this.currentSentIdx + 1} / ${state.currentArticle.sentences.length}`,
+      );
     }
   },
 
   showPauseCountdown(ms) {
-    const el = document.getElementById("player-status");
-    if (el) el.textContent = `请跟读 (${Math.round(ms / 1000)}s)…`;
+    setStatusText(`请跟读 (${Math.round(ms / 1000)}s)…`);
   },
 };

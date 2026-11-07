@@ -428,6 +428,48 @@ export function sanitizeSvg(rawSvg) {
   return svgEl.outerHTML;
 }
 
+// ── 气泡定位几何辅助 ────────────────────────────────────────────────────────
+function clamp(value, min, max) {
+  if (max < min) return min;
+  return Math.min(Math.max(value, min), max);
+}
+
+/** 视觉视口（软键盘/缩放后真正可见的区域）；不支持时退回布局视口 */
+function getVisualViewport() {
+  const vv = window.visualViewport;
+  if (vv && vv.width > 0 && vv.height > 0) {
+    return {
+      left: vv.offsetLeft || 0,
+      top: vv.offsetTop || 0,
+      width: vv.width,
+      height: vv.height
+    };
+  }
+  return {
+    left: 0,
+    top: 0,
+    width: document.documentElement.clientWidth || window.innerWidth,
+    height: document.documentElement.clientHeight || window.innerHeight
+  };
+}
+
+/** 把 computed transform-origin 解析成元素局部 px 坐标 */
+function parseTransformOrigin(value, width, height) {
+  const parts = String(value || '').trim().split(/\s+/);
+  const resolve = (token, axisSize) => {
+    if (!token || token === 'center') return axisSize / 2;
+    if (token === 'left' || token === 'top') return 0;
+    if (token === 'right' || token === 'bottom') return axisSize;
+    const num = parseFloat(token);
+    if (!Number.isFinite(num)) return axisSize / 2;
+    return token.endsWith('%') ? (num / 100) * axisSize : num;
+  };
+  return {
+    x: resolve(parts[0], width),
+    y: resolve(parts[1] || parts[0], height)
+  };
+}
+
 // ── Companion Mascot Singleton Controller ────────────────────────────────────
 export const Companion = {
   charId: 'owl',
@@ -788,6 +830,148 @@ export const Companion = {
     this.say({ de, zh });
   },
 
+  /**
+   * 气泡四侧求解：优先 top → bottom → left → right，放不下翻面，
+   * 跨轴夹取进视口，高度按 45vh 封顶后内部滚动，箭头跟随角色中心。
+   *
+   * 气泡是 .companion（可能带 scale(0.88)）的绝对定位子元素，
+   * 因此先在「视觉视口坐标」里求解，再用 transform-origin + 缩放系数
+   * 反算回容器局部坐标，避免移动端缩放把气泡推出屏幕。
+   */
+  repositionBubble() {
+    const bubble = document.getElementById('companion-bubble');
+    const capsule = document.getElementById('companion');
+    if (!bubble || !capsule || bubble.classList.contains('hidden')) return;
+
+    // 1. 清空上一轮的内联约束，回到自然尺寸再测量
+    const body = bubble.querySelector('.companion-bubble-body');
+    const bodyEl = body || bubble;
+    bubble.style.maxWidth = '';
+    bodyEl.style.maxHeight = '';
+    bodyEl.style.overflowY = '';
+    bubble.style.pointerEvents = '';
+    bubble.style.left = '';
+    bubble.style.top = '';
+    bubble.style.right = '';
+    bubble.style.bottom = '';
+
+    const capRect = capsule.getBoundingClientRect();
+    if (!capRect.width || !capRect.height) return;
+
+    const capWidth = capsule.offsetWidth || 60;
+    const capHeight = capsule.offsetHeight || 60;
+    const scale = capRect.width / capWidth || 1;
+
+    const capCs = window.getComputedStyle(capsule);
+    const capLeft = parseFloat(capCs.left);
+    const capTop = parseFloat(capCs.top);
+    const anchorLeft = Number.isFinite(capLeft) ? capLeft : capRect.left;
+    const anchorTop = Number.isFinite(capTop) ? capTop : capRect.top;
+    const origin = parseTransformOrigin(capCs.transformOrigin, capWidth, capHeight);
+
+    // 用 offsetWidth/offsetHeight 量布局尺寸：它们不受 transform 影响，
+    // 避免 pop-anim 缩放过程中把气泡量小、误判为“放得下”后裁掉正文。
+    const natural = {
+      width: (bubble.offsetWidth || 0) * scale,
+      height: (bubble.offsetHeight || 0) * scale
+    };
+    const vp = getVisualViewport();
+
+    const MARGIN = 8;   // 视口安全边距
+    const GAP = 12;     // 角色与气泡间距
+    const MAX_W = Math.max(120, vp.width - MARGIN * 2);
+    const MAX_H = Math.min(vp.height * 0.45, vp.height - MARGIN * 2);
+
+    let bw = Math.min(natural.width, MAX_W);
+    let bh = Math.min(natural.height, MAX_H);
+
+    const ax = capRect.left;
+    const ay = capRect.top;
+    const aw = capRect.width;
+    const ah = capRect.height;
+
+    // 2. 四侧主轴可用空间
+    const space = {
+      top: ay - GAP - (vp.top + MARGIN),
+      bottom: (vp.top + vp.height - MARGIN) - (ay + ah + GAP),
+      left: ax - GAP - (vp.left + MARGIN),
+      right: (vp.left + vp.width - MARGIN) - (ax + aw + GAP)
+    };
+
+    const fits = side =>
+      space[side] >= (side === 'top' || side === 'bottom' ? bh : bw);
+
+    // 3. 优先方向 → 翻面；都不整放时选可用空间最大的一侧，压到该空间内部滚动
+    const order = ['top', 'bottom', 'left', 'right'];
+    let side = order.find(fits) || order.reduce(
+      (best, s) => (space[s] > space[best] ? s : best),
+      order[0]
+    );
+
+    const isVertical = side === 'top' || side === 'bottom';
+    const mainSpace = Math.max(48, space[side]);
+
+    // 4. 宽度封顶：只在真的超宽时写 max-width，避免把气泡钉死在自然宽度上
+    //    （钉死会因 max-content → max-width 的重新换行把高度悄悄顶高）
+    const widthCap = isVertical
+      ? MAX_W
+      : Math.max(96, Math.min(MAX_W, mainSpace));
+    if (natural.width > widthCap + 0.5) {
+      bubble.style.maxWidth = (widthCap / scale) + 'px';
+    }
+
+    // 宽度变化会改变换行与高度，先重新量一次布局尺寸
+    bw = (bubble.offsetWidth || 0) * scale;
+    bh = (bubble.offsetHeight || 0) * scale;
+
+    // 5. 高度封顶：只有超出 45vh（或侧面可用空间）时才启用内层滚动
+    const heightCap = isVertical ? Math.min(MAX_H, mainSpace) : MAX_H;
+    if (bh > heightCap + 0.5) {
+      // 气泡的 padding / 描边会占掉高度，封顶值扣掉这部分后交给内层滚动
+      const chromeH = Math.max(0, bubble.offsetHeight - bodyEl.offsetHeight);
+      bodyEl.style.maxHeight = Math.max(24, heightCap / scale - chromeH) + 'px';
+      bodyEl.style.overflowY = 'auto';
+      bh = (bubble.offsetHeight || 0) * scale;
+    }
+
+    const overflow = bodyEl.scrollHeight > bodyEl.clientHeight + 1 ||
+      bubble.scrollWidth > bubble.clientWidth + 1;
+    if (overflow) {
+      bubble.style.pointerEvents = 'auto';
+    }
+
+    // 6. 视觉视口坐标下的落点
+    let x;
+    let y;
+    if (isVertical) {
+      x = ax + aw / 2 - bw / 2;
+      y = side === 'top' ? ay - GAP - bh : ay + ah + GAP;
+      x = clamp(x, vp.left + MARGIN, vp.left + vp.width - MARGIN - bw);
+      y = clamp(y, vp.top + MARGIN, vp.top + vp.height - MARGIN - bh);
+    } else {
+      y = ay + ah / 2 - bh / 2;
+      x = side === 'left' ? ax - GAP - bw : ax + aw + GAP;
+      y = clamp(y, vp.top + MARGIN, vp.top + vp.height - MARGIN - bh);
+      x = clamp(x, vp.left + MARGIN, vp.left + vp.width - MARGIN - bw);
+    }
+
+    // 7. 视觉坐标 → 容器局部坐标（视觉 = 布局原点 + origin + scale*(局部 - origin)）
+    bubble.style.left = (origin.x + (x - anchorLeft - origin.x) / scale) + 'px';
+    bubble.style.top = (origin.y + (y - anchorTop - origin.y) / scale) + 'px';
+    bubble.style.right = 'auto';
+    bubble.style.bottom = 'auto';
+    bubble.dataset.side = side;
+
+    // 8. 箭头跟随角色中心（百分比，随气泡宽高自适应）
+    if (isVertical) {
+      const pct = clamp(((ax + aw / 2 - x) / bw) * 100, 6, 94);
+      bubble.style.setProperty('--bubble-arrow-x', pct + '%');
+    } else {
+      const pct = clamp(((ay + ah / 2 - y) / bh) * 100, 6, 94);
+      bubble.style.setProperty('--bubble-arrow-y', pct + '%');
+    }
+  },
+
   say(entry) {
     if (!entry || !entry.de) return;
     const charDef = this.getCurrentCharDef();
@@ -806,6 +990,7 @@ export const Companion = {
       deEl.textContent = prefixDe;
       zhEl.textContent = zh;
       bubble.classList.remove('hidden');
+      this.repositionBubble();
       bubble.classList.remove('pop-anim');
       void bubble.offsetWidth; // trigger reflow
       bubble.classList.add('pop-anim');

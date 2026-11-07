@@ -86,12 +86,16 @@
                   >等待输入</span
                 >
               </div>
-              <input
+              <!-- 单行 input 的 placeholder 不能换行：393px 下示例标题约 495px 宽，
+                   右侧必然被裁掉，input 自身无法补救。改用可换行的 textarea，
+                   由 writer.js 按内容自适应高度；Enter 仍按失焦保存处理，不换行。 -->
+              <textarea
                 id="writer-title"
                 class="writer-input-title"
+                rows="1"
                 placeholder="作文标题（如：Mein Urlaub in Berlin / B1 备考书信）..."
                 maxlength="80"
-              />
+              ></textarea>
               <div
                 id="ide-editor"
                 class="ide-editor"
