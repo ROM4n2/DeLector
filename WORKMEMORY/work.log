@@ -777,3 +777,8 @@ T9（静态补全）在 worktree dlector-t9 / feat/t9-static 实施（基于 61b
 追加到 PR #266（仍未合并）：两件小修。
 - `countUp` 首帧负值：`motion.js` progress 补下界 `Math.max(0, …)`；新增 `tools/motion_count_probe.mjs`（node:vm 跑真源码，首帧时间戳早于 start 20ms）钉死「首帧 0% / 全程无负值 / 单调不减 / 终值精确 / reduce 不排 rAF」，配 `tests/test_motion_count_probe.py` 接线；`tests/test_motion_count_probe.py` 2 passed，probe wiring + json contract 10 passed。
 - ADR-0029 §16 新增 16.2.4：第四批 B 类把 `player_and_tooltip.html:52/60` 的 👩/👨 判成「相邻有 Katja/Conrad 文字 → 安全删除」**判错**；对不熟悉 TTS 音色的使用者，字形是唯一可辨载体。判据补强：删除前问「这个字形是不是某类状态或身份的唯一可辨载体」，而不是只问「旁边有没有文字」。播放器托盘未动，等专项调研。
+
+### 2026-11-07 15:40 | deepseek-v4.1-flash__trae | NOTE
+PR #266 追加（仍不合并）：ADR-0029 §16.2.4 判据由一问补成三问，原文保留。
+- 第二层根因（播放器托盘调研 PR #267）：`static/style.css:3419-3431` 在 ≤768px 把 `.voice-btn` 设为 `font-size:0`、`.vb-lbl{display:none}`；源码里 Katja/Conrad 文字在，手机断点下字宽恒为 0。当时只查源码、没查断点。
+- 三问口径：断点问（`display:none`/`font-size:0`/`visibility:hidden` 都算不在）→ 状态问（是否状态/身份的唯一可辨载体）→ 可达问（`title` 触屏不算文字，`aria-label` 只服务屏幕阅读器）。
