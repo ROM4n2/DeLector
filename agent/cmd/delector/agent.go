@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ROM4n2/DeLector/agent/internal/companion"
+	"github.com/ROM4n2/DeLector/agent/internal/provider"
 	"github.com/ROM4n2/DeLector/agent/internal/pythonsvc"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
@@ -20,7 +21,7 @@ const (
 	defaultAgentPort          = 8002
 	defaultAgentPythonURL     = "http://127.0.0.1:8000"
 	defaultAgentBaseURL       = "https://api.deepseek.com"
-	defaultAgentModel         = "deepseek-flash"
+	defaultAgentModel         = provider.DeepSeekDefaultModel
 	defaultAgentFallbackURL   = "http://127.0.0.1:11434/v1"
 	defaultAgentFallbackModel = "qwen3.5:4b"
 )
@@ -48,9 +49,13 @@ func newAgentCmd() *cobra.Command {
 			if baseURL == defaultAgentBaseURL && os.Getenv("API_BASE_URL") != "" {
 				baseURL = os.Getenv("API_BASE_URL")
 			}
-			if (model == defaultAgentModel || model == "deepseek-chat") && os.Getenv("API_MODEL") != "" {
-				model = os.Getenv("API_MODEL")
-			}
+			// 模型解析优先级固定为「显式 --model > 非空 API_MODEL > 内置默认常量」。
+			// 用 Flags().Changed 区分「显式传了默认值」与「没传」：旧实现拿值与默认常量
+			// 比较，显式 --model 会被 API_MODEL 静默顶掉；空/空白 API_MODEL 不算覆盖。
+			resolvedModel, modelSource := provider.ResolveModelName(
+				model, cmd.Flags().Changed("model"), os.Getenv("API_MODEL"),
+			)
+			cmd.Printf("[delector] Model: %s (source: %s)\n", resolvedModel, modelSource)
 			if pythonURL == defaultAgentPythonURL && os.Getenv("DELECTOR_PYTHON_URL") != "" {
 				pythonURL = os.Getenv("DELECTOR_PYTHON_URL")
 			}
@@ -69,8 +74,9 @@ func newAgentCmd() *cobra.Command {
 			client := openai.NewClientWithConfig(cfg)
 
 			pyClient := pythonsvc.NewClient(pythonURL, nil)
-			agent := companion.NewCompanionAgent(client, pyClient, model)
+			agent := companion.NewCompanionAgent(client, pyClient, resolvedModel)
 			agent.WithReasoningEffort(reasoningEffort)
+			agent.WithModelSource(modelSource)
 
 			if fallbackURL != "" {
 				fbCfg := openai.DefaultConfig("ollama-local")
@@ -117,7 +123,7 @@ func newAgentCmd() *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", defaultAgentPort, "伴学 SSE 服务监听端口（默认 8002）")
 	cmd.Flags().StringVar(&pythonURL, "python-url", defaultAgentPythonURL, "Python NLP 微服务地址（默认 http://127.0.0.1:8001）")
 	cmd.Flags().StringVar(&baseURL, "base-url", defaultAgentBaseURL, "OpenAI/DeepSeek API 根地址")
-	cmd.Flags().StringVar(&model, "model", defaultAgentModel, "对话模型名称（默认 deepseek-chat）")
+	cmd.Flags().StringVar(&model, "model", defaultAgentModel, "对话模型名称（默认 "+defaultAgentModel+"；非空 API_MODEL 环境变量可覆盖）")
 	cmd.Flags().StringVar(&reasoningEffort, "reasoning-effort", "", "思考强度档位（low / medium / high）")
 	cmd.Flags().StringVar(&fallbackURL, "fallback-url", defaultAgentFallbackURL, "备用模型（如本地 Ollama）API 根地址")
 	cmd.Flags().StringVar(&fallbackModel, "fallback-model", defaultAgentFallbackModel, "备用模型名称（默认 qwen3.5:4b）")
