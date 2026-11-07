@@ -42,6 +42,7 @@
   "tests/test_cold_start_cost.py": 49.6,
   "tests/test_companion_agent_loop.py": 0.1,
   "tests/test_companion_api_contract.py": 0.1,
+  "tests/test_companion_bubble_resume_probe.py": 0.3,
   "tests/test_companion_context_probe.py": 0.3,
   "tests/test_companion_db.py": 0.1,
   "tests/test_companion_domain_tools.py": 0.0,
