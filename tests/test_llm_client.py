@@ -5,7 +5,7 @@
 `httpx.AsyncClient + /chat/completions + Authorization + json.loads`，且**生成路径
 零 max_tokens**（输出上界不可控，是 Task 4 循环预算的前置欠账）。收口后本文件钉住：
 
-1. payload **MUST** 含 `max_tokens`（调用方传值或落到有界默认值）；
+1. payload **默认不含** `max_tokens`（输出预算交给上游默认）；显式传值时才透传；
 2. `timeout` 由调用方透传（保留各处现值 30/15/20/10/30 的语义空间）；
 3. HTTP 非 200 ⇒ `LLMError`（调用方据此映射成现状的 502）；
 4. 非 JSON 响应 / 非 JSON 内容 / 畸形信封各有明确失败语义。
@@ -76,8 +76,8 @@ def _chat(**kwargs: Any) -> Dict[str, Any]:
     return asyncio.run(llm_client.chat(**kwargs))
 
 
-def test_chat_payload_must_carry_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
-    """payload MUST 含 `max_tokens` —— 这是收口的核心欠账（生成路径原先零设置）。"""
+def test_chat_explicit_max_tokens_is_passed_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """显式传 `max_tokens` 时仍原样透传（opt-in）；默认形态见下一条「必须不带」。"""
     seen: Dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -98,7 +98,6 @@ def test_chat_payload_must_carry_max_tokens(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     assert out == {"definition_zh": "挑战"}
-    assert "max_tokens" in seen["payload"], "payload 必须带 max_tokens（输出上界不可控是本次要还的欠账）"
     assert seen["payload"]["max_tokens"] == 1234
     assert seen["payload"]["model"] == "deepseek-chat"
     assert seen["payload"]["messages"] == _MSGS
@@ -106,8 +105,8 @@ def test_chat_payload_must_carry_max_tokens(monkeypatch: pytest.MonkeyPatch) -> 
     assert seen["auth"] == "Bearer sk-stub"
 
 
-def test_chat_default_max_tokens_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
-    """调用方不显式给值时也要有上界（Task 4 循环预算的前置）：默认值 MUST 是正数常量。"""
+def test_chat_default_payload_has_no_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    """调用方不传时 payload MUST 不含 `max_tokens` —— 输出预算交给上游默认，禁止硬编码上限。"""
     seen: Dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -117,8 +116,9 @@ def test_chat_default_max_tokens_is_bounded(monkeypatch: pytest.MonkeyPatch) -> 
     _install_mock_transport(monkeypatch, handler)
     _chat(messages=_MSGS, model="m", timeout=5.0, api_key="k", base_url=_STUB_BASE_URL)
 
-    assert llm_client.DEFAULT_MAX_TOKENS > 0
-    assert seen["payload"]["max_tokens"] == llm_client.DEFAULT_MAX_TOKENS
+    assert "max_tokens" not in seen["payload"], (
+        f"默认请求不得带 max_tokens（应由上游决定输出预算）：{seen['payload']}"
+    )
 
 
 def test_timeout_is_passed_through(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -286,7 +286,6 @@ def test_chat_without_parse_json_returns_raw_content(monkeypatch: pytest.MonkeyP
     out = _chat(
         messages=_MSGS,
         model="m",
-        max_tokens=llm_client.CONNECTIVITY_MAX_TOKENS,
         timeout=10.0,
         parse_json=False,
         api_key="k",

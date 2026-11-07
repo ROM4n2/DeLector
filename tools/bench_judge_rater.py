@@ -67,9 +67,6 @@ ORDER_AB = "ab"
 #: 单次盲评调用的超时（s）——与生产 ai-polish 端现值 30.0s 同值（不引入新预算口径）。
 RATER_TIMEOUT_S = 30.0
 
-#: 单次盲评调用的 completion 上限（回复是短 JSON；512 留足）。
-RATER_MAX_TOKENS = 512
-
 #: 结构化输出开关（与 `delector.services.llm_client.JSON_OBJECT` 逐字同值；本模块刻意
 #: 不 import 仓库模块 —— 见模块头「零 Key」）。
 JSON_OBJECT: dict[str, str] = {"type": "json_object"}
@@ -151,7 +148,6 @@ def rate_pair(before: str, after: str, *, order_seed: int, chat: ChatFn) -> Rati
             messages=_pair_messages(first, second),
             model="",
             timeout=RATER_TIMEOUT_S,
-            max_tokens=RATER_MAX_TOKENS,
             response_format=JSON_OBJECT,
         )
     )

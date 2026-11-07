@@ -319,7 +319,6 @@ async def note_assist(req: NoteAssistReq, request: Request) -> Any:
                 },
             ],
             model=model,
-            max_tokens=llm_client.DEFAULT_MAX_TOKENS,
             timeout=20.0,  # 收口前本端点的现值（20s），语义不变
             response_format=llm_client.JSON_OBJECT,
             api_key=key,

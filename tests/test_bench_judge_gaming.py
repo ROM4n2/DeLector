@@ -41,7 +41,7 @@
     11. **Task-5a `--real` 真跑接线**（全 stub、零 Key、零真网）：`--dry-run` 与 `--real` 互斥、
         无模式旗标 ⇒ 2；`load_env` **恰调用一次**且只住真跑分支（dry-run 用例装「调用即炸」stub）；
         真 chat 与生产 `routes.main._PolishReplyRecorder` **逐参同形**（循环 model 空串被忽略、
-        生效模型名出网、timeout/max_tokens/response_format 原样透传、单次有界、无重试）；
+        生效模型名出网、timeout/response_format 原样透传、默认不带 max_tokens、单次有界、无重试）；
         无 Key ⇒ 前置退 2 且零 chat 调用；上游 `LLMError` ⇒ 显式退 2、零部分结果、只透 `detail`
         不透 `raw`（raw 可能带凭据）；生效模型名进 `RunRecord.model`；文本/JSON 输出面与 dry-run
         同构（头行如实标注真跑模式）。
@@ -1362,9 +1362,9 @@ def test_real_run_wires_production_shaped_chat_and_records(
 
     - `load_env` **恰调用一次**（唯一载入点、只在真跑分支）；
     - `llm_client.chat` 以**生产同形 kwargs** 被调（逐参对照 `routes.main._PolishReplyRecorder`：
-      循环传入的 model 空串被忽略、以生效模型名出网；timeout / max_tokens / response_format
-      原样透传、单次有界 = min(30.0s, 剩余 deadline)；api_key / base_url 构造期绑定、
-      base_url 走 .rstrip("/")）；
+      循环传入的 model 空串被忽略、以生效模型名出网；timeout / response_format
+      原样透传、默认不下发 max_tokens、单次有界 = min(30.0s, 剩余 deadline)；api_key / base_url
+      构造期绑定、base_url 走 .rstrip("/")）；
     - 生效模型名进 `RunRecord.model`（`RealChat.model_name` 面）—— 不是 DRY_RUN_MODEL；
     - `--cases` 与 `--real` 同用照常（切片在装载后、校验前）：两篇种子 + `--cases 1` ⇒ 只跑第一篇；
     - 输出面与 dry-run 一致：`--json` = 十键 RunRecord 列表、逐篇三臂交错。
@@ -1407,7 +1407,7 @@ def test_real_run_wires_production_shaped_chat_and_records(
         assert call["temperature"] == bench.EXPERIMENT_TEMPERATURE  # ③ temperature 钉定并出网
         assert call["include_usage"] is True  # ⑦ opt-in usage 透出
         assert 0.0 < call["timeout"] <= 30.0  # 有界：min(DEFAULT_PER_CALL_TIMEOUT_S, 剩余 deadline)
-        assert 0 < call["max_tokens"] <= llm_client_module.DEFAULT_MAX_TOKENS
+        assert call["max_tokens"] is None  # 循环不再下发 per-call 上限（交给上游默认）
         assert call["messages"][0]["role"] == "system" and str(call["messages"][0]["content"]).strip()
 
     data = json.loads(captured.out)
@@ -1772,7 +1772,7 @@ def test_run_arm_defaults_temperature_to_experiment_constant(monkeypatch: pytest
 
 
 def test_run_connectivity_precheck_minimal_bounded_call_or_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """④ 预检：一次最小 chat（`parse_json=False`、`max_tokens=CONNECTIVITY_MAX_TOKENS`、有超时）；
+    """④ 预检：一次最小 chat（`parse_json=False`、不设 max_tokens、有超时）；
     成功 ⇒ None；任何 `LLMError` ⇒ `RealRunUnavailable`（调用方退 2）。"""
     import delector.services.llm_client as llm_client_module
 
@@ -1790,7 +1790,7 @@ def test_run_connectivity_precheck_minimal_bounded_call_or_failure(monkeypatch: 
     monkeypatch.setattr(llm_client_module, "chat", ok)
     assert bench.run_connectivity_precheck() is None
     assert seen["parse_json"] is False
-    assert seen["max_tokens"] == llm_client_module.CONNECTIVITY_MAX_TOKENS
+    assert "max_tokens" not in seen  # 输出预算交给上游默认，不再硬编码
     assert isinstance(seen["timeout"], float) and seen["timeout"] > 0  # 反挂死：有超时
     assert seen["base_url"] == "http://stub.invalid/v1"  # .rstrip("/")
 

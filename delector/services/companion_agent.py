@@ -30,7 +30,7 @@ from delector.services import llm_client
 # ── 轮次、超时与预算常量 ──────────────────────────────────────────────────────
 DEFAULT_MAX_TURNS: int = 3
 DEFAULT_DEADLINE_S: float = 35.0
-DEFAULT_MAX_TOKENS: int = 4096
+# 循环级累计预算：只做多轮总成本刹车，**不进入请求体**；单轮输出上限交给上游默认。
 DEFAULT_MAX_TOKENS_TOTAL: int = 8192
 CHARS_PER_TOKEN_ESTIMATE: float = 3.0
 DEFAULT_PER_CALL_TIMEOUT_S: float = 25.0
@@ -295,7 +295,6 @@ async def run_companion_agent_loop(
                 reply_dict = await llm_client.chat(
                     messages=active_messages,
                     model=model_name,
-                    max_tokens=DEFAULT_MAX_TOKENS,
                     timeout=call_timeout,
                     response_format={"type": "json_object"},
                     reasoning_effort=effective_effort,

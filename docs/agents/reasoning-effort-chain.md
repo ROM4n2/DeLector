@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | `reasoning_effort` | `none` / `low` / `high` / `max` | `none` 关闭思考；其余开启且强度递增 |
 | `thinking` | `{"type": "enabled"}` / `{"type": "disabled"}` | 思考模式开关；与 `reasoning_effort` 同时出现时以开关为准 |
-| `max_tokens` | 非思考默认 8K；思考默认 64K；上限 128K | 输出上限（含思维链占用） |
+| `max_tokens` | 上游默认（不传） | 输出上限（含思维链占用）。本项目**不设**：由上游按模型/思考预算决定，硬编码会截断 |
 
 上游对 effort 的映射表（官方原文）：
 
@@ -152,8 +152,12 @@ high   -> max  | HTTP 401 | 1.23s | ...
 
 ## 6. 已知风险与边界
 
-- `llm_client` 的 `DEFAULT_MAX_TOKENS = 4096` 未改。思考 token 与正文共享该预算，
-  「深度」档长输出理论上可能被截断；需有效 key 实测后再决定是否提高预算，**本次不拍脑袋改**。
+- **请求体不设 `max_tokens`**：输出预算交给上游默认值，代码里不再保留 per-call 硬编码
+  （原 `DEFAULT_MAX_TOKENS = 4096` / 连通性 5 / 探针 4096 均已删除）。理由：思考 token
+  与正文共享输出预算，固定值在上下文窗口或思考预算不同的模型上会提前截断；上游默认值
+  会随模型演进变化，**不得用「窗口多大」的假设去推算上限**。
+- 循环级 `max_tokens_total`（`polish_loop` 4096 / `companion_agent` 8192）保留：它们
+  **不进入请求体**，只在多轮之间累计 completion 做成本刹车；单轮输出不受其限制。
 - 实验 harness `tools/bench_judge_gaming.py` 刻意不传 `reasoning_effort`：它要钉
   `temperature`，而思考模式会忽略 `temperature`，混入会破坏基准语义。
 - 本轮不改设置 UI（另一条线在做设置信息架构），只保证参数链路不说谎。

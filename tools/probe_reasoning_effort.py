@@ -56,12 +56,11 @@ TIERS = ["none", "low", "medium", "high"]
 PROMPT = "Erkläre in zwei Sätzen, warum der Himmel blau ist."
 
 
-async def probe(tier: str, key: str, base_url: str, model: str, max_tokens: int) -> None:
+async def probe(tier: str, key: str, base_url: str, model: str) -> None:
     upstream = map_reasoning_effort(tier)
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": PROMPT}],
-        "max_tokens": max_tokens,
         "reasoning_effort": upstream,
     }
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
@@ -101,7 +100,7 @@ async def main() -> int:
     print(f"base_url={base_url} model={model} 当前档位={current}（本探针会依次覆盖四档）")
     print(f"key_len={len(key)}\n")
     for tier in TIERS:
-        await probe(tier, key, base_url, model, max_tokens=4096)
+        await probe(tier, key, base_url, model)
     return 0
 
 

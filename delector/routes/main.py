@@ -281,7 +281,6 @@ async def lookup_grammar(req: GrammarLookupReq, request: Request) -> Any:
                 {"role": "user", "content": user_content},
             ],
             model=model,
-            max_tokens=llm_client.DEFAULT_MAX_TOKENS,
             timeout=30.0,  # 收口前本端点的现值（30s），语义不变
             response_format=llm_client.JSON_OBJECT,
             api_key=key,
@@ -369,7 +368,6 @@ async def lookup_vocab(req: VocabLookupReq, request: Request) -> Dict[str, Any]:
                         {"role": "user", "content": user_content},
                     ],
                     model=model,
-                    max_tokens=llm_client.DEFAULT_MAX_TOKENS,
                     timeout=15.0,  # 收口前本端点的现值（15s），语义不变
                     response_format=llm_client.JSON_OBJECT,
                     api_key=key,

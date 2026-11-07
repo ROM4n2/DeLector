@@ -222,7 +222,6 @@ class _PolishReplyRecorder:
         messages: List[Dict[str, Any]],
         model: str,
         timeout: float,
-        max_tokens: int,
         response_format: Optional[Dict[str, str]] = None,
         **_kwargs: Any,
     ) -> Dict[str, Any]:
@@ -230,7 +229,6 @@ class _PolishReplyRecorder:
             messages=messages,
             model=get_effective_api_model(),
             timeout=timeout,
-            max_tokens=max_tokens,
             response_format=response_format,
             include_usage=True,
             api_key=self._api_key,

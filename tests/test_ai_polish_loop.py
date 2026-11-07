@@ -89,8 +89,9 @@ class Recorder:
         return [float(c["timeout"]) for c in self.calls]
 
     @property
-    def max_tokens(self) -> list[int]:
-        return [int(c["max_tokens"]) for c in self.calls]
+    def max_tokens(self) -> list[int | None]:
+        """每次调用实际下发的 `max_tokens`；不传（新契约）时为 None。"""
+        return [c["max_tokens"] for c in self.calls]
 
     def all_contents(self) -> list[str]:
         out: list[str] = []
@@ -322,8 +323,9 @@ def test_turn_limit_when_model_never_finishes() -> None:
     assert result.text == "T0"
 
 
-def test_token_budget_breaks_loop_and_clamps_per_call_cap() -> None:
-    """预算前置检查：累计 completion 超 `max_tokens_total` ⇒ `token_budget`；per-call 上限被夹到剩余量。"""
+def test_token_budget_breaks_loop_without_per_call_max_tokens() -> None:
+    """预算前置检查：累计 completion 超 `max_tokens_total` ⇒ `token_budget`；
+    且每次调用都**不再下发** per-call `max_tokens`（输出预算交给上游默认）。"""
     rec = Recorder()
     script = [{"tool_call": {"name": "known", "payload": {}}, "usage": {"completion_tokens": 60}}]
 
@@ -338,7 +340,7 @@ def test_token_budget_breaks_loop_and_clamps_per_call_cap() -> None:
     assert result.converged is False
     assert result.reason == "token_budget"
     assert result.rounds == 2
-    assert rec.max_tokens == [100, 40], f"每轮上限必须夹到 min(4096, 剩余总量)：{rec.max_tokens}"
+    assert rec.max_tokens == [None, None], f"per-call 不得再下发 max_tokens：{rec.max_tokens}"
 
 
 def test_deadline_breaks_loop_and_clamps_per_call_timeout() -> None:
@@ -664,28 +666,6 @@ def test_declared_reason_codes_match_task6_contract() -> None:
 def test_worst_case_fixture_is_exactly_endpoint_truncation_limit() -> None:
     """最坏输入口径：`main.py:2383` 的 `req.text[:2000]` ⇒ 夹具必须恰好 2000 字符。"""
     assert len(WORST_CASE_TEXT) == 2000, f"最坏输入夹具长度失真：{len(WORST_CASE_TEXT)}"
-
-
-def test_per_call_max_tokens_has_2x_headroom_over_measured_worst_turn() -> None:
-    """闸① `DEFAULT_MAX_TOKENS >= 2 × 实测单轮最坏需求`（余量 2×）。"""
-    m = measure_worst_case_three_turns()
-
-    assert m["rounds"] == MAX_TURNS_DEFAULT, f"必须真的跑满 3 轮才能谈实测：{m['rounds']}"
-    assert llm_client.DEFAULT_MAX_TOKENS >= 2 * m["per_turn_worst_tokens"], (
-        f"per-call 上限 {llm_client.DEFAULT_MAX_TOKENS} 必须留 2× 余量："
-        f"实测单轮最坏 {m['per_turn_worst_tokens']} token，2× = {2 * m['per_turn_worst_tokens']}"
-    )
-
-
-def test_cycle_token_budget_bites_before_per_call_times_turns() -> None:
-    """闸② `DEFAULT_MAX_TOKENS_TOTAL < DEFAULT_MAX_TOKENS × MAX_TURNS_DEFAULT`。
-
-    否则「每轮上限 × 轮数」永远先到点 ⇒ 循环级预算是**永不触发的真空闸**。
-    """
-    assert DEFAULT_MAX_TOKENS_TOTAL < llm_client.DEFAULT_MAX_TOKENS * MAX_TURNS_DEFAULT, (
-        f"循环级预算 {DEFAULT_MAX_TOKENS_TOTAL} 必须小于 {llm_client.DEFAULT_MAX_TOKENS}×{MAX_TURNS_DEFAULT}"
-        f"={llm_client.DEFAULT_MAX_TOKENS * MAX_TURNS_DEFAULT}，否则它是真空闸"
-    )
 
 
 def test_cycle_token_budget_covers_measured_three_turn_worst() -> None:

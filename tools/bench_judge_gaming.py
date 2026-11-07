@@ -57,7 +57,7 @@ chat → 工具分发（生产白名单）→ 证据追加 → 裁判（带 nlp�
   （`RunRecord.model` / `RunRecord.temperature`）；**temperature 显式钉定**（③，
   `EXPERIMENT_TEMPERATURE`，三臂共用）并 **opt-in** 请求 `usage` 透出（⑦）；
   对 429/5xx/传输层错做**有界重试**（②，≤2 次、指数退避 + jitter；chat 无副作用 ⇒ 幂等）；
-- 真跑前先做**连通预检**（④）：发一次最小 chat（`parse_json=False`、`max_tokens=5`），
+- 真跑前先做**连通预检**（④）：发一次最小 chat（`parse_json=False`、不设 max_tokens），
   失败即退 2（正式跑之前拦下"根本没通"的场景；预检本身用 stub 测，绝不真发请求）；
 - 真跑前 stderr 打印**非泄值**事实：`key 存在=<bool>` 与生效模型名（**绝不打印 key 本体**；
   任何输出 / 异常 / 日志都不带 key —— 「key 存在」布尔由 key 判定面归约而来）；
@@ -1100,8 +1100,8 @@ class RealChat:
 
     生产链路（`routes/main.py`）：
         key = get_effective_api_key()；recorder = _PolishReplyRecorder(key, base_url.rstrip("/"))
-        循环 → recorder(messages=…, model="", timeout=per_call, max_tokens=cap, response_format=…)
-        recorder → llm_client.chat(messages, model=get_effective_api_model(), timeout, max_tokens,
+        循环 → recorder(messages=…, model="", timeout=per_call, response_format=…)
+        recorder → llm_client.chat(messages, model=get_effective_api_model(), timeout,
                                    response_format, api_key=key, base_url=…)
 
     本类逐参一致（含「循环传入的空串 model 被忽略、以生效模型名出网」这条既有约定）；
@@ -1149,15 +1149,16 @@ class RealChat:
         messages: list[dict[str, Any]],
         model: str,
         timeout: float,
-        max_tokens: int,
+        max_tokens: int | None = None,
         response_format: dict[str, str] | None = None,
         **_kwargs: Any,
     ) -> dict[str, Any]:
         from delector.services import llm_client
 
         # 循环传入的 `model` 为空串（「注入 chat 时循环不读配置」的既有约定）⇒ 与生产一致，
-        # 以生效模型名出网；timeout / max_tokens / response_format 原样透传。Task 4：**temperature
-        # 钉定**（③）与 **usage 透出**（⑦）一并带上。
+        # 以生效模型名出网；timeout / response_format 原样透传；`max_tokens` 默认不传
+        # （输出预算交给上游默认，循环也不再下发该字段）。Task 4：**temperature 钉定**（③）
+        # 与 **usage 透出**（⑦）一并带上。
         # ② 有界重试：只对 429/5xx/传输层错、≤ MAX_RETRIES 次、指数退避 + jitter；不可重试错立即冒泡。
         attempt = 0
         while True:
@@ -1193,7 +1194,7 @@ def build_real_chat(*, temperature: float = EXPERIMENT_TEMPERATURE) -> RealChat:
 
 
 def run_connectivity_precheck() -> None:
-    """④ `--real` 连通预检：正式跑之前发**一次**最小 chat（`parse_json=False`、`max_tokens=5`）。
+    """④ `--real` 连通预检：正式跑之前发**一次**最小 chat（`parse_json=False`、不设 max_tokens）。
 
     为什么单列一步：整轮真跑很贵，若 key / 网络根本不通，应在**任何样本消耗之前**快速失败。
     成功 ⇒ 返回 None；任何 `LLMError`（含传输层）⇒ `RealRunUnavailable`（调用方退 2）。
@@ -1210,7 +1211,6 @@ def run_connectivity_precheck() -> None:
             messages=[{"role": "user", "content": "ping"}],
             model=model,
             timeout=CONNECTIVITY_PRECHECK_TIMEOUT_S,
-            max_tokens=llm_client.CONNECTIVITY_MAX_TOKENS,
             parse_json=False,
             api_key=key,
             base_url=base,
