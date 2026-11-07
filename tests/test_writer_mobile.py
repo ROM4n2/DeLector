@@ -348,7 +348,19 @@ def test_version_row_hover_matches_other_rows():
     version_item = _rule_body(r"\.version-item\s*\{", "cursor: pointer")
     assert "cursor: pointer" in version_item
     version_hover = _rule_body(r"\.version-item:hover\s*\{")
-    assert re.search(r"transform:\s*translateX\(\s*2px\s*\)", version_hover)
+    problem_hover = _rule_body(r"\.writer-problem-row:hover\s*\{")
+
+    def decls(body):
+        return sorted(d.strip() for d in body.split(";") if d.strip())
+
+    assert "transform" not in version_hover, (
+        "整行 hover 不做位移：文字承载元素的浮动会让行内文字抖动，"
+        "触屏上还会粘住不消失（T3 口径 C）"
+    )
+    assert decls(version_hover) == decls(problem_hover), (
+        "版本行与问题行的 hover 反馈必须一致（同为底色 + 描边），"
+        "否则悬停时两者又无从区分"
+    )
 
 
 def test_mobile_sheet_is_geometrically_stable():

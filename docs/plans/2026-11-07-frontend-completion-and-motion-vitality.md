@@ -145,19 +145,23 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 - [ ] `motion.js` 无第三方 import；`node --check` 通过；被引用一次以上才允许保留（未使用即删）。
 - [ ] `python -m pytest tests/test_frontend_module_graph.py tests/test_frontend_guards.py -q` 全绿。
 
-### T3 hover 收敛（只改色/阴影）
+### T3 hover 收敛（口径 C：分层收口）
 
 **改动面**
-- `static/style.css`：
-  - `.exam-module-card:hover`：去掉 `transform: translateX(2px)`，改为 `border-color` / `box-shadow` / `background`。
-  - `.stat-badge`（`:4840-4857`）：保留 `translateY(-2px)`（ADR 允许的单卡上浮），时长对齐 `--dur-fast`，并包进 `@media (hover: hover)`。
-  - 搜索分组、卡片列表行：只加 `background-color` / `border-color` 过渡。
+- `static/style.css`：**全部** hover 位移反馈（HEAD 实测 30 条：9 条 `translate`/`translateX` + 21 条 `translateY`）去掉 `transform`，改由 `background` / `border-color` / `box-shadow` / `color` 承载；`transition` 时长统一到 `--dur-fast`。
+  - `.exam-module-card:hover`：去掉 `translateX(2px)`，补 `background` / `border-bottom-color` / `box-shadow`（不能只删不留反馈）。
+  - `.stat-badge:hover`：唯一保留的 `translateY(-2px)`（ADR 允许的单卡上浮），裸 `0.15s` 换成 `--dur-fast`。
+  - 非布局的 `scale` / `rotate` 共 10 处保留，逐条登记在 §7。
+- 所有 `:hover` 规则统一包进 `@media (hover: hover) and (pointer: fine)`；与 `:focus-visible` / `:active` 混写的规则拆开，非 hover 态留在外层（安卓 tap 后 hover 粘住是用户可见缺陷）。
+- `.satz-lab-chip`、`.folio-anchor-pill` 等仍带字面时长的 hover 反馈一并 token 化。
 - 不改 `.exam-module-card::before` 的选中色条（T4 复用）。
 
 **验收**
-- [ ] `grep -n ":hover" static/style.css` 的规则块中，带 `transform` 的只剩 `.stat-badge` 与已记录的例外（每条例外写注释）。
-- [ ] 所有 hover 过渡落在 80–180ms，无 `translate` 造成相邻行位移。（研究 §4 手法 2）
-- [ ] 触屏模拟（`pointer: coarse`）下无依赖 hover 才能看见的信息。（I1：hover 不得是唯一载体）
+- [ ] 文字承载元素的 hover 不得有位移；唯一例外是 §7 登记的 `.stat-badge` 单卡上浮。
+- [ ] 非布局的 `scale` / `rotate` 允许保留，但必须逐处登记在 §7（当前 10 处），不得新增未登记项。
+- [ ] 全部 `:hover` 选择器位于 `@media (hover: hover) and (pointer: fine)` 内（脚本审计 0 条裸露）。
+- [ ] 所有 hover 反馈过渡使用 `var(--dur-fast)`，无裸 `0.15s` 等字面时长。
+- [ ] 触屏模拟（`pointer: coarse` / `hover: none`）下 hover 态不触发、不粘住；`:active` 按压反馈仍在。（I1）
 
 ### T4 选中态左侧色条
 
@@ -303,6 +307,9 @@ M1 结束后：`tokenPulse` / `pulse-linked` / `pulse-clause` / `thoughtInkPulse
 | 1 | M1 `pulse-linked` / `pulse-clause` 降级为「静态 2px 边 + 一次性 260ms 高亮」 | 只保留静态 2px 边，不做一次性高亮；计划原文的「一次性 260ms 高亮」**已被本行取代** | **已确认：用户选择纯静态，停止门 #2 优先**；不给正文 `.tok` 新增任何动画，静态环 + 背景/字重已足以区分 |
 | 2 | M1 `thoughtInkPulse` 改「静态三点」 | 保留原单个静态 `.thought-pulse-dot` | **已确认**：DOM 里本就只有一个点；加载语义由「Eule 正在推演句子结构...」文案承担，不新增节点 |
 | 3 | T2 新 token 只在 `tokens.css` 定义 | `tokens.css` 与 `style.css :root` 各定义一份（互为镜像） | 主应用 `index.html` 只加载 `style.css`，`tokens.css` 仅 workbench 加载；单点定义会让 `.dl-enter` 在主应用拿不到时长。仓库内两套 token 本就是镜像关系 |
+| 4 | T3 预期只剩 `.stat-badge` 一条 transform 例外 | 另保留 10 处非布局 `scale`/`rotate`：`.article-row-del`(1.1)、`.speaker-btn`(1.15)、`.hl-color-btn` ×2(1.2)、`.deck-flip-icon`(rotate 180° + 1.1)、`.dossier-stamp.unlocked`(rotate 0° + 1.01)、`.mascot-stage-char`(1.06)、`.mascot-color-dot`(1.2)、`.companion-char`(1.1)、`.companion-avatar`(1.1)；`.stat-badge:hover` 保留 `translateY(-2px)` | 均为非布局变换，不推动相邻内容（ADR-0029）；验收判据已按用户口径改为「文字承载元素 hover 不得位移」+「非布局 scale/rotate 允许且逐处登记」，不再以「只剩 `.stat-badge`」为准 |
+| 5 | T3 估算 12 处 scale/rotate 需保留 | 实测 10 处 | 另 2 处（`.satz-lab-chip`、`.encounter-entry-card`/`#encounter-add-toggle`）实为 `translate(-1px,-1px)` 位移，按 C 一并移除；HEAD 位移类共 30 条（9 条 translate/translateX + 21 条 translateY），仅 `.stat-badge` 保留 |
+| 6 | T3 只要求「hover 只改色/阴影」 | 另将所有 `:hover` 规则包进 `@media (hover: hover) and (pointer: fine)`，混合选择器（`:focus-visible`）拆开 | 用户硬要求：Android tap 后 hover 态会粘住，属用户可见缺陷，不是风格问题 |
 
 ---
 

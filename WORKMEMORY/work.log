@@ -689,3 +689,15 @@ T2 PR #258 CI 真实结论：unit-4 FAILURE（cost-guards CANCELLED，因失败�
 根因（不是测试过严）：主应用 static/index.html 只加载 /style.css，tokens.css 仅 workbench.html 加载；T2 把新 token 只写进 tokens.css，导致主应用运行时拿不到时长（烘焙进 CSS 的 .dl-enter 会解析失败），测试抓的是真 bug。此前 CDP 探针页手动 link 了 tokens.css，掩盖了该问题。
 修法（未放宽任何断言、未改测试）：style.css :root 补同名 motion token 与 --stagger-index（仓库两套 token 本就互为镜像），tokens.css 保持镜像；计划 §7 新增偏差行 #3。
 复验：目标用例 + module_graph + guards = 25 passed；build_index_html 3479 行；check_index_html_sync PASS。
+### 2026-11-07 11:47 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+T3（hover 收敛，口径 C）在 worktree dlector-m1 / 分支 feat/motion-t3-hover 实施。
+1) 位移类：HEAD 实测 hover transform 30 条（9 translate/translateX + 21 translateY），移除 29 条改色/边框/阴影；仅 .stat-badge 保留 translateY(-2px)（计划允许的单卡上浮），裸 0.15s → var(--dur-fast)。
+2) 非布局 scale/rotate 保留 10 处并逐条登记计划 §7：article-row-del(1.1)、speaker-btn(1.15)、hl-color-btn×2(1.2)、deck-flip-icon(rotate180+1.1)、dossier-stamp.unlocked(rotate0+1.01)、mascot-stage-char(1.06)、mascot-color-dot(1.2)、companion-char(1.1)、companion-avatar(1.1)。原估算 12 处，另 2 处实为 translate(-1px,-1px)，已按 C 移除。
+3) 全部 :hover 包进 @media (hover: hover) and (pointer: fine)：style.css 113 块 / workbench.css 11 块；与 :focus-visible 混写规则拆分，非 hover 态留外层；删除 reduce 块里已失效的 encounter transform:none。
+4) .exam-module-card 补 background/border-bottom-color/box-shadow 反馈；.satz-lab-chip/.folio-anchor-pill/.modal-tab/.import-tab/.rate-btn 等时长 token 化并去 transform 过渡。
+验收：脚本审计 hover 选择器 0 条裸露；style/workbench 规则对比 HEAD，变化项全部为预期（transform 移除、反馈替换、时长 token）。
+CDP 实测（desktop 1440x900）：article-row hover transform=none、top 397.1→397.1、底色变 paper-tint；exam-module-card transform=none、bg/底线/阴影变化；progress .stat-badge translateY(-2)、top -2px；touch 模拟（mobile:true + touch，matchMedia hover:none=true）下三者 hover 强制均零变化。
+逐页目测（截图 d:\\Code\\DeLector\\.screenshots\\t3\\）：首页/搜索列表仅底色、不位移；备考卡反馈更明显（新增底线+阴影）；统计徽章仍轻浮 2px；卡片/写作/生词本/词汇页 hover 明显变静（只剩底色/阴影/描边）。
+测试：build_index_html 3479 行；check_index_html_sync PASS；test_writer_mobile 等目标 5 文件全绿；全量 pytest 722 passed / 6 skipped / 1 failed —— 失败为 test_companion_services::test_chat_endpoint_saves_turns_to_session，已在本机 master 复现同样失败（真实 LLM 响应泄漏，非本批引入）。
+约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A；截图在 .screenshots（未跟踪）。
