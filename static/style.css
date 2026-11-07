@@ -5,6 +5,11 @@
 /* ── Design System v3.0 — Academic Modern Editorial & Continuous Exhibition ── */
 
 :root {
+  /* 移动端写作页：writer.js 用 visualViewport 覆盖成实时 px 值；
+     这里的默认值保证 JS 未执行/老 WebView 下仍能按 dvh 布局。 */
+  --writer-vvh: 100dvh;
+  --writer-keyboard-inset: 0px;
+
   /* Surfaces */
   --paper: #faf8f5;
   --paper-card: #ffffff;
@@ -8396,6 +8401,7 @@ body.drawer-open .companion {
 
 /* Editor Inputs */
 .writer-input-title {
+  display: block;
   width: 100%;
   font-family: var(--serif-heading);
   font-size: 1.25rem;
@@ -8407,6 +8413,10 @@ body.drawer-open .companion {
   margin-bottom: 0.75rem;
   outline: none;
   background: transparent;
+  line-height: 1.4;
+  /* textarea 默认右下角有拖拽柄且会显示滚动条；高度由 writer.js 按内容设置。 */
+  resize: none;
+  overflow-y: hidden;
   transition: border-color var(--dur-fast) ease;
 }
 
@@ -8988,58 +8998,115 @@ body.drawer-open .companion {
 
 /* Responsive adjustments */
 @media (max-width: 860px) {
-  .writer-layout {
-    grid-template-columns: 1fr;
+  /* 单一滚动容器：html。全局 .view{overflow-x:hidden} 会把 overflow-y 计算成
+     auto，于是 #view-writer 多出一个永远不滚的嵌套滚动容器；clip 不创建滚动
+     容器，横向裁切语义不变。 */
+  #view-writer {
+    overflow-x: clip !important;
+    overflow-y: visible !important;
+    padding: 1rem 1rem 0;
   }
 
-  .writer-sidebar {
-    position: static;
+  .writer-container {
+    gap: 1rem;
+  }
+
+  .writer-layout {
+    grid-template-columns: 1fr;
   }
 
   .writer-header-bar {
     flex-direction: column;
     align-items: flex-start;
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* 移动端首屏预算：eyebrow 与桌面字号在 393px 下占掉约 80px，
+     编辑框 + 工具栏就会被推到首屏之外；收掉 eyebrow 是最直接的一刀。 */
+  .writer-header-bar .hero-eyebrow {
+    display: none;
+  }
+
+  .writer-title-heading {
+    font-size: 1.35rem;
+    line-height: 1.3;
   }
 
   .writer-actions-top {
     width: 100%;
     justify-content: flex-start;
+    gap: 0.375rem;
+  }
+
+  .writer-actions-top .btn {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  .writer-mode-switcher-bar {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
   }
 
   .writer-mobile-panel-trigger {
     display: inline-flex;
   }
 
-  /* height 而不是 max-height：这个 sheet 锚在底边（bottom + 无 top），
-     高度跟内容走就意味着只能向上长 —— 切 tab、错误卡填内容、问题清单从
-     "暂无"变成 N 条，每一次都把顶边挪到新位置，整个面板在眼前跳。
-     固定成同一个矩形后内容再变也不动，代价是内容少时下方留白，
-     换来的是可预期的几何（标准 bottom sheet 也是固定 detent）。 */
+  /* bottom sheet：底边锚定 + 顶部必须显式 auto。
+     桌面基规则带 top: 4.5rem；只补 bottom 属于 over-constrained 布局，
+     bottom 会被静默忽略，sheet 顶在 4.5rem、底停在视口上方 132.5px ——
+     闭包时正好露出约 40px 页签条，还整片盖住底部 dock（z-index 1100 > 1000）。 */
   .writer-sidebar {
     position: fixed;
     z-index: 1100;
+    top: auto;
     left: 0.75rem;
     right: 0.75rem;
     bottom: 0;
     height: min(76vh, 680px);
-    /* 显式解掉基规则那个 max-height: calc(100dvh …) 帽子。不解也不会出错
-       （有 height 在，几何依然是定值），但留着就意味着读这条规则的人
-       看不出还有另一处在影响高度 —— 每个断点的几何自我描述完整比省一行重要。 */
+    /* 键盘态用 visualViewport 高度，避免 76vh 在 adjustPan 下按整屏算。 */
+    height: min(calc(var(--writer-vvh, 100dvh) * 0.76), 680px);
+    /* 显式解掉基规则那个 max-height: calc(100dvh …) 帽子。 */
     max-height: none;
     overflow-y: auto;
     padding: 0.75rem;
+    /* sheet 铺满到视口底并盖住 dock；内部留出 dock 高度 + 安全区，
+       滚到底时最后一个控件不会被 dock 或 home indicator 吃掉。 */
     padding-bottom: calc(
-      0.75rem + 58px + env(safe-area-inset-bottom, 0) + 0.5rem
+      0.75rem + 58px + env(safe-area-inset-bottom, 0px)
     );
     background: var(--paper);
     border: 1.5px solid var(--ink);
     box-shadow: 4px 4px 0 var(--ink);
+    /* 闭包：贴底 + 平移自身高度，完全离屏；不能再出现「只露一条页签」的条带。 */
     transform: translateY(100%);
     transition: transform 180ms ease;
+    overscroll-behavior: contain;
   }
 
   .writer-sidebar.mobile-panel-open {
     transform: translateY(0);
+    /* adjustPan / iOS 键盘只缩 visualViewport 时，把面板抬到键盘上沿；
+       adjustResize 下 inset 为 0，行为与 bottom:0 一致。 */
+    bottom: var(--writer-keyboard-inset, 0px);
+  }
+
+  /* 键盘态：编辑区跟随 visualViewport 收缩，避免固定 520px 把工具栏顶出屏幕。 */
+  #ide-editor {
+    min-height: 160px;
+    max-height: min(520px, calc(var(--writer-vvh, 100dvh) - 240px));
+    scroll-margin-top: 60px;
+    /* 让位目标不是编辑框本身，而是「编辑框 + 下方工具栏」整块：
+       58px dock + 12px 间隙 + 35px 工具栏，否则键盘态聚焦后工具栏会压在 dock 下面。 */
+    scroll-margin-bottom: calc(58px + 12px + 35px + 2px);
+  }
+
+  /* 单行 input 换成 textarea 后，移动端至少给两行：示例标题在 360/393 下
+     正好折成两行，不再被右侧裁切。 */
+  .writer-input-title {
+    min-height: calc(1.45em * 2);
+    line-height: 1.45;
   }
 
   .writer-panel-lock {
