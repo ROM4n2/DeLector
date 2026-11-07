@@ -701,3 +701,12 @@ CDP 实测（desktop 1440x900）：article-row hover transform=none、top 397.1�
 逐页目测（截图 d:\\Code\\DeLector\\.screenshots\\t3\\）：首页/搜索列表仅底色、不位移；备考卡反馈更明显（新增底线+阴影）；统计徽章仍轻浮 2px；卡片/写作/生词本/词汇页 hover 明显变静（只剩底色/阴影/描边）。
 测试：build_index_html 3479 行；check_index_html_sync PASS；test_writer_mobile 等目标 5 文件全绿；全量 pytest 722 passed / 6 skipped / 1 failed —— 失败为 test_companion_services::test_chat_endpoint_saves_turns_to_session，已在本机 master 复现同样失败（真实 LLM 响应泄漏，非本批引入）。
 约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A；截图在 .screenshots（未跟踪）。
+
+### 2026-11-07 11:56 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+T4（选中态左侧色条）完成：.nav-tab.active / .mobile-nav-btn.active / .dock-item.active 增加 ::before 2px 色条（accent/coral），scaleY(0→1)、transform-origin: top、260ms ease-editorial；两个容器补 position: relative，不改变布局盒。
+aria-current：模板只标初始 home；main.js 的 show() 切换时同步增删（计划偏差 §7-7，静态属性会在切换后陈旧）。
+实测（CDP 1440x900 / 390x844）：active 色条 matrix(1,0,0,1,0,0)，inactive matrix(1,0,0,0,0,0)；show(exam) 后色条与 aria-current 同步迁移；7 个 nav-tab 的 left/width 切换前后完全一致（无 1px 抖动）；移动端 390px 同样生效；reduce 下 ::before transitionDuration=1e-05s（即时）。
+测试：test_index_dom_probe + test_frontend_guards + test_writer_mobile 43 passed；build_index_html 3480 行；check_index_html_sync PASS。
+截图：d:\Code\DeLector\.screenshots\t4\（未跟踪）。
+约束：未碰 android/、未跑 sync_android_sources.py。

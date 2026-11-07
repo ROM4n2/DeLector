@@ -231,16 +231,28 @@ export function show(view) {
   // Top nav tabs
   document
     .querySelectorAll(".nav-tab")
-    .forEach((el) => el.classList.remove("active"));
+    .forEach((el) => {
+      el.classList.remove("active");
+      el.removeAttribute("aria-current");
+    });
   const activeNavBtn = document.getElementById("nav-btn-" + view);
-  if (activeNavBtn) activeNavBtn.classList.add("active");
+  if (activeNavBtn) {
+    activeNavBtn.classList.add("active");
+    activeNavBtn.setAttribute("aria-current", "page");
+  }
 
   // Mobile bottom nav
   document
     .querySelectorAll(".mobile-nav-btn")
-    .forEach((el) => el.classList.remove("active"));
+    .forEach((el) => {
+      el.classList.remove("active");
+      el.removeAttribute("aria-current");
+    });
   const activeMobBtn = document.getElementById("mob-btn-" + view);
-  if (activeMobBtn) activeMobBtn.classList.add("active");
+  if (activeMobBtn) {
+    activeMobBtn.classList.add("active");
+    activeMobBtn.setAttribute("aria-current", "page");
+  }
 
   const bottomNav = document.getElementById("mobile-bottom-nav");
   if (bottomNav) {
