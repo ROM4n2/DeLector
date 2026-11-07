@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ROM4n2/DeLector/agent/internal/companion"
+	"github.com/ROM4n2/DeLector/agent/internal/provider"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -31,6 +32,27 @@ func TestCompanionServerHealth(t *testing.T) {
 	}
 	if res["status"] != "ok" || res["service"] != "delector-go-companion-agent" {
 		t.Errorf("unexpected health response: %v", res)
+	}
+	if res["model"] != "m" || res["model_source"] != string(provider.ModelSourceDefault) {
+		t.Errorf("unexpected model info in health response: %v", res)
+	}
+}
+
+func TestCompanionServerHealthReportsModelSource(t *testing.T) {
+	agent := companion.NewCompanionAgent(nil, nil, "env-model").
+		WithModelSource(provider.ModelSourceEnv)
+	handler := companion.NewHandler(agent)
+
+	req := httptest.NewRequest("GET", "/api/companion/health", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	var res map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if res["model"] != "env-model" || res["model_source"] != string(provider.ModelSourceEnv) {
+		t.Errorf("health should expose startup model decision: %v", res)
 	}
 }
 
