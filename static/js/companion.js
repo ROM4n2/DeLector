@@ -671,46 +671,63 @@ export const Companion = {
 
   _releaseDragIfSettled() {
     if (!this._dragReleasePending) return;
-    const cap = document.getElementById('companion');
-    if (cap && cap.classList.contains('is-settling')) return; // 等 companion:settle-end
+    if (this._isSettling()) return; // 等 companion:settle-end
     this._finishDragRelease();
   },
 
   _finishDragRelease() {
-    if (!this._dragReleasePending) return;
+    if (!this._dragReleasePending) return false;
     this._dragReleasePending = false;
     this._setCondition('dragging', false);
-    this._resumeBubbleIfPending();
+    return this._resumeBubbleIfPending();
   },
 
   _onSettleEnd() {
     const shouldResolve = this._bubbleResolvePending;
     this._bubbleResolvePending = false;
-    const releasing = this._dragReleasePending;
-    this._finishDragRelease();
-    // 拖拽释放内部已经补过一次求解；其余场景（自动让位）在这里补。
-    if (shouldResolve && !releasing) this.repositionBubble();
+    const solvedByRelease = this._finishDragRelease();
+    if (!shouldResolve || solvedByRelease) return;
+
+    // 展示请求在 settle 期间被挂起时的补显：未过期、且未被拖拽/聚焦抑制才出现。
+    const bubble = document.getElementById('companion-bubble');
+    if (
+      bubble &&
+      bubble.classList.contains('hidden') &&
+      !this._conditions.dragging &&
+      !this._isEditableFocused() &&
+      bubbleExpiresAt > Date.now()
+    ) {
+      bubble.classList.remove('hidden');
+      this._setCondition('bubbleVisible', true);
+    }
+    this.repositionBubble();
+  },
+
+  _isSettling() {
+    const cap = document.getElementById('companion');
+    return Boolean(cap && cap.classList.contains('is-settling'));
   },
 
   _resumeBubbleIfPending() {
-    if (this._bubbleSuppressedBy !== 'drag') return;
+    if (this._bubbleSuppressedBy !== 'drag') return false;
     if (this._isEditableFocused()) {
       this._bubbleSuppressedBy = '';
-      return;
+      return false;
     }
     if (!bubbleExpiresAt || Date.now() >= bubbleExpiresAt) {
       this._bubbleSuppressedBy = '';
-      return;
+      return false;
     }
     const bubble = document.getElementById('companion-bubble');
     if (!bubble) {
       this._bubbleSuppressedBy = '';
-      return;
+      return false;
     }
     bubble.classList.remove('hidden');
     this._bubbleSuppressedBy = '';
     this.repositionBubble();
     this._setCondition('bubbleVisible', true);
+    return true;
   },
 
   _isEditableTarget(el) {
@@ -1134,14 +1151,9 @@ export const Companion = {
     const capsule = document.getElementById('companion');
     if (!bubble || !capsule) return;
 
-    // P3：settle 滑动期间锚点在动，此时求解只会得到过期位置；挂起到 settle-end 再算。
-    if (this._dragReleasePending && capsule.classList.contains('is-settling')) {
-      this._bubbleResolvePending = true;
-      return;
-    }
-
     // 写作页移动端 sheet 展开时属于模态：气泡先收起（让位），关闭后由一次
     // repositionBubble 自动恢复，不靠抬高 z-index 去盖住 sheet。
+    // 模态判断排在 settle 挂起之前：开合 sheet 时气泡必须立刻让位，不能等 260ms 滑动。
     const modalOpen = Boolean(document.querySelector('.writer-sidebar.mobile-panel-open'));
     if (modalOpen) {
       if (!bubble.classList.contains('hidden')) {
@@ -1163,6 +1175,13 @@ export const Companion = {
           this.bubbleTimer = null;
         }
       }
+    }
+
+    // P3：settle 滑动期间锚点在动，求解只会得到过期位置；挂起到 settle-end 再算。
+    // 拖拽释放与自动让位走同一条节奏，不区分来源。
+    if (this._isSettling()) {
+      if (!bubble.classList.contains('hidden')) this._bubbleResolvePending = true;
+      return;
     }
     if (bubble.classList.contains('hidden')) return;
 
@@ -1385,11 +1404,12 @@ export const Companion = {
       deEl.textContent = prefixDe;
       zhEl.textContent = zh;
 
-      // P3：拖拽 / 编辑态聚焦时气泡不出现；拖拽结束后若未过期再补显。
+      // P3：拖拽 / 编辑态聚焦 / 落点滑动期间气泡不出现；条件解除后若未过期再补显。
       // 过期时间统一走 P2 的模块级 bubbleExpiresAt，repositionBubble 的模态守卫依赖它。
       const suppressedByDrag = this._conditions.dragging;
       const suppressedByFocus = this._isEditableFocused();
-      if (!suppressedByDrag && !suppressedByFocus) {
+      const suppressedBySettle = this._isSettling();
+      if (!suppressedByDrag && !suppressedByFocus && !suppressedBySettle) {
         bubble.classList.remove('hidden');
         this.repositionBubble();
         bubble.classList.remove('pop-anim');
@@ -1397,7 +1417,10 @@ export const Companion = {
         bubble.classList.add('pop-anim');
       } else {
         bubble.classList.add('hidden');
-        this._bubbleSuppressedBy = suppressedByDrag ? 'drag' : 'focus';
+        if (suppressedByDrag) this._bubbleSuppressedBy = 'drag';
+        else if (suppressedByFocus) this._bubbleSuppressedBy = 'focus';
+        // 展示请求挂起：settle-end 时由 _onSettleEnd 补显并求解，避免先落在默认位置再跳。
+        if (suppressedBySettle) this._bubbleResolvePending = true;
       }
 
       if (suppressedByFocus) {
@@ -1413,7 +1436,10 @@ export const Companion = {
         }, BUBBLE_TTL_MS);
       }
 
-      this._setCondition('bubbleVisible', !suppressedByDrag && !suppressedByFocus);
+      this._setCondition(
+        'bubbleVisible',
+        !suppressedByDrag && !suppressedByFocus && !suppressedBySettle
+      );
     }
 
     // 2. Render Folio Stage Bubble if visible
