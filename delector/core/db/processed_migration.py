@@ -107,13 +107,3 @@ def restore_article(conn: Any, article_id: int) -> bool:
     )
     conn.execute(f"DELETE FROM {_BACKUP_TABLE} WHERE article_id = ?", (article_id,))
     return True
-
-
-def restore_all(conn: Any) -> int:
-    """回退全部有备份的文章（逐篇调用 ``restore_article``，commit 由调用方负责）。"""
-    ids = [int(r["article_id"]) for r in conn.execute(f"SELECT article_id FROM {_BACKUP_TABLE} ORDER BY article_id")]
-    restored = 0
-    for article_id in ids:
-        if restore_article(conn, article_id):
-            restored += 1
-    return restored

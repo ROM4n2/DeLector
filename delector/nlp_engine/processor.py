@@ -17,7 +17,7 @@ from .model_loader import spacy as spacy
 from .syntax_tree import analyze_sentence_topology, build_clause_tree, split_sentences_pure_python
 
 # processed_json 的 schema 版本号 —— 全仓唯一真相源。
-# 惰性迁移判据（routes/main.py 的 GET /api/articles/{article_id}）按它比对：
+# 惰性迁移判据（routes/articles.py 的 GET /api/articles/{article_id}）按它比对：
 # 判据端与写入端 MUST 共用这一个常量。曾因两端各写一份字面量而漂移
 #（写入 "3.5.0" / 判据 "3.4.0"），判据恒真 ⇒ 「惰性迁移」退化成
 #「每次 GET 都重跑 spaCy 并 UPDATE articles」。改版本号只改这里。
