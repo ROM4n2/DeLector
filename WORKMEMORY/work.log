@@ -672,3 +672,20 @@ M1（加法批次前置减法）实施并开 PR #257，分支 feat/motion-infini
 运行时实测（不是只查 CSS 文本）：headless Chromium + CDP 注入 13 个受影响元素，正常态 7 个白名单动画各 1 个运行实例、被删动画 gap 0；Emulation.setEmulatedMedia 切 reduce（matchMedia=true）后全部 animationName=none、getAnimations()=0，静态标记（scale/描边/色点）保留。
 静态闸门：grep infinite=7（全落白名单）；build_index_html 3479 行；check_index_html_sync PASS；pytest test_frontend_guards + test_grammatik_radar + test_writer_mobile = 43 passed。
 约束：未改 JS class 切换逻辑、未碰 android/、未跑 sync_android_sources.py、未 git add -A（worktree 内两份 B 类草稿未入库）。
+
+### 2026-11-07 09:45 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+M1 已 merge（#257 → master e840467，merge commit）；§7 偏差按用户结论改为「已确认：用户选择纯静态，停止门 #2 优先」，D1 表原「一次性 260ms 高亮」标注被取代。
+T2 动效基建已实施并开 PR，分支 feat/motion-t2-infra（基于 e840467）。
+1) tokens.css 新增 5 个 motion token：--motion-enter / --motion-enter-shift / --motion-press / --motion-count / --motion-stagger-step（未迁移旧 --dur-*）。
+2) style.css 新增 @keyframes dl-fade-up、.dl-enter、.dl-stagger > *、.dl-count；新增全局 reduce 兜底（animation/transition 0.01ms、iteration 1、scroll-behavior auto），并让 .dl-enter/.dl-stagger 在 reduce 下 animation:none。
+3) 新增 static/js/motion.js：prefersReducedMotion / stagger(root,{step,cap}) / countUp(el,to,{duration,format})；数值从 CSS token 读，不复制 40/520。step/cap 的调用方在 T5/T6。
+运行时实测（CDP，正常 vs reduce）：正常态 .dl-enter animationName=dl-fade-up、1 个运行实例；8 子项 index 0..5 封顶、delay 0/40/…/200ms；countUp 从 0 走到 42。reduce（matchMedia=true）下 stagger 返回 0、无 --stagger-index、animationName=none、getAnimations()=0、delay 全 0；countUp 调用瞬间即 42。
+静态闸门：node --check motion.js 通过；新 token 仅 tokens.css 定义、style.css 仅 var() 引用；build_index_html 3479 行；check_index_html_sync PASS；pytest test_frontend_module_graph + test_frontend_guards = 24 passed。
+约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A。
+
+### 2026-11-07 10:10 | deepseek-v4.1-flash__trae | NOTE
+T2 PR #258 CI 真实结论：unit-4 FAILURE（cost-guards CANCELLED，因失败被取消），失败用例 tests/test_writer_mobile.py::test_no_undefined_css_variables_in_writer_surfaces，报「用到了未定义的 CSS 变量：--motion-enter / --motion-enter-shift / --motion-stagger-step / --stagger-index」。
+根因（不是测试过严）：主应用 static/index.html 只加载 /style.css，tokens.css 仅 workbench.html 加载；T2 把新 token 只写进 tokens.css，导致主应用运行时拿不到时长（烘焙进 CSS 的 .dl-enter 会解析失败），测试抓的是真 bug。此前 CDP 探针页手动 link 了 tokens.css，掩盖了该问题。
+修法（未放宽任何断言、未改测试）：style.css :root 补同名 motion token 与 --stagger-index（仓库两套 token 本就互为镜像），tokens.css 保持镜像；计划 §7 新增偏差行 #3。
+复验：目标用例 + module_graph + guards = 25 passed；build_index_html 3479 行；check_index_html_sync PASS。
