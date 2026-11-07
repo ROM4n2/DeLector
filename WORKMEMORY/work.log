@@ -765,3 +765,13 @@ T9（静态补全）在 worktree dlector-t9 / feat/t9-static 实施（基于 61b
 - 坑：`.btn` 有 `transition: all .15s`，focus 后 40ms 读到的是 outline 过渡中间值（rgb(10,9,7) / offset 1px），必须等 ≥360ms 再读，否则会误判规则没生效。
 - `.lp-status`：原先无任何 CSS，补 mono 11px + 1px 同色描边芯片；pending 用 `--pencil`、covered 用 `--moss`；实测 49×21，移动端不与文本重叠。
 - 闸门：index sync PASS；test_frontend_guards + test_cards_state_split + test_german_workbench = 126 passed；a1/german/writer 相关 62 passed。
+
+### 2026-11-07 15:52 | deepseek-v4.1-flash__trae | NOTE
+思考强度真实接线在 worktree D:\Code\DeLector-thinking / feat/reasoning-effort-wiring（基于 origin/master 766a98c），PR #277，未合并。
+- 改前：四档只落在设置 DB；companion 的 CompanionChatReq 无该字段、dispatch payload 只有 messages/context；Go 只把请求里的值写 trace，streamReq 没带；4 条 Python 生成路径也没带 ⇒ 界面显示与请求脱节。
+- 映射（Python `llm_client.map_reasoning_effort` 与 Go `companion.MapReasoningEffort` 同构）：none→none、low→low、medium→high、high→max。依据官方文档（2026-11-07）：合法值 none/low/high/max，medium/xhigh 被上游吞成 high，原样透传会让平衡/深度同档。
+- 接入：llm_client.chat(reasoning_effort=) 单点合并 payload；main/articles/writing 与伴学回退内核全部传设置值；连通性自检固定 none；companion body>X-Reasoning-Effort>设置；Go RunLoop 入口归一化并同时用于 trace 与 streamReq，Ollama 回退清空该字段。
+- 证据：Python 相关 111 passed；Go `go test -count=1 ./internal/companion/...` ok、vet clean；ruff 全绿；6 条具名变异全部被捕获后还原。
+- 未验证：四档响应差异。本地 4 份 .env 的 key 对 api.deepseek.com 全 401；探针实测四档已带不同字段发出（none/low/high/max）但未过鉴权。换有效 key 跑 `python tools/probe_reasoning_effort.py` 可补齐。取证记录 docs/agents/reasoning-effort-chain.md。
+- 风险：DEFAULT_MAX_TOKENS=4096 未改，思考 token 与正文共享预算，max 档长输出可能截断，待实测再定；bench_judge_gaming 刻意不带该字段（要钉 temperature）。
+- 过程踩坑：前 7 个 Python 文件误改到主工作树（另一条线 fix/poker-tap-flip 的工作副本），已确认 diff 仅含本次新增后按文件 git restore 精确还原，未触碰他人改动；后续全部改在 thinking worktree。
