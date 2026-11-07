@@ -3628,6 +3628,64 @@ body.drawer-open .shadow-player {
   margin-bottom: 1.75rem;
 }
 
+/* T9：卡片空态三态（文字芯片 + 颜色 + 3px 左竖线，三通道区分，I1）。
+   语义只由芯片文字承担，颜色与线宽只作冗余；改色只动 --cards-empty-tone。 */
+.cards-empty {
+  --cards-empty-tone: var(--ink);
+
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-left: 1rem;
+  border-left: 3px solid var(--cards-empty-tone);
+}
+
+.cards-empty[data-state="due"] {
+  --cards-empty-tone: var(--accent);
+}
+
+.cards-empty[data-state="mastered"] {
+  --cards-empty-tone: var(--moss);
+}
+
+.cards-empty-chip {
+  flex-shrink: 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--cards-empty-tone);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+  color: var(--cards-empty-tone);
+  white-space: nowrap;
+}
+
+.cards-empty-eyebrow {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+}
+
+.cards-empty-title {
+  font-family: var(--serif-heading);
+  font-size: 1.375rem;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.cards-empty-desc {
+  font-size: 0.8125rem;
+  color: var(--pencil);
+  max-width: 52ch;
+  margin: 0;
+  line-height: 1.65;
+}
+
 .cards-seg-bar {
   display: inline-flex;
   border: 1.5px solid var(--ink);
