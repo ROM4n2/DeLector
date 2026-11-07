@@ -44,24 +44,105 @@ export function initFloatingCapsule(options) {
   let initialTop = 0;
   let activePointerId = null;
 
-  /** 计算并限制坐标在可视视口以内 */
-  function clampPosition(left, top) {
-    const rect = capsuleEl.getBoundingClientRect();
-    const width = rect.width || 60;
-    const height = rect.height || 60;
-    const maxLeft = Math.max(0, window.innerWidth - width);
-    const maxTop = Math.max(0, window.innerHeight - height);
+  /** 视觉视口：软键盘弹出 / 双指缩放后真正可见的区域 */
+  function getViewport() {
+    const vv = window.visualViewport;
+    if (vv && vv.width > 0 && vv.height > 0) {
+      return {
+        left: vv.offsetLeft || 0,
+        top: vv.offsetTop || 0,
+        width: vv.width,
+        height: vv.height
+      };
+    }
+    return {
+      left: 0,
+      top: 0,
+      width: document.documentElement.clientWidth || window.innerWidth,
+      height: document.documentElement.clientHeight || window.innerHeight
+    };
+  }
 
-    const clampedLeft = Math.min(Math.max(0, left), maxLeft);
-    const clampedTop = Math.min(Math.max(0, top), maxTop);
+  /** 胶囊实际缩放系数（移动端 0.88；桌面 1） */
+  function getScale() {
+    const width = capsuleEl.offsetWidth || 60;
+    const rect = capsuleEl.getBoundingClientRect();
+    return rect.width ? rect.width / width : 1;
+  }
+
+  /** 解析 computed transform-origin（用于把视觉边界换算回布局坐标） */
+  function getTransformOrigin() {
+    const width = capsuleEl.offsetWidth || 60;
+    const height = capsuleEl.offsetHeight || 60;
+    const parts = String(window.getComputedStyle(capsuleEl).transformOrigin || '')
+      .trim()
+      .split(/\s+/);
+    const resolve = (token, axisSize) => {
+      if (!token || token === 'center') return axisSize / 2;
+      if (token === 'left' || token === 'top') return 0;
+      if (token === 'right' || token === 'bottom') return axisSize;
+      const num = parseFloat(token);
+      if (!Number.isFinite(num)) return axisSize / 2;
+      return token.endsWith('%') ? (num / 100) * axisSize : num;
+    };
+    return {
+      x: resolve(parts[0], width),
+      y: resolve(parts[1] || parts[0], height)
+    };
+  }
+
+  /** 当前布局坐标（left/top），不受 transform 影响 */
+  function getLayoutPosition() {
+    const cs = window.getComputedStyle(capsuleEl);
+    const left = parseFloat(cs.left);
+    const top = parseFloat(cs.top);
+    if (Number.isFinite(left) && Number.isFinite(top)) {
+      return { left, top };
+    }
+    const rect = capsuleEl.getBoundingClientRect();
+    const scale = getScale();
+    const origin = getTransformOrigin();
+    return {
+      left: rect.left - origin.x * (1 - scale),
+      top: rect.top - origin.y * (1 - scale)
+    };
+  }
+
+  /**
+   * 计算并限制坐标在视觉视口以内。
+   * 用 offsetWidth/offsetHeight 作为布局尺寸（不受 transform 影响），
+   * 再把视觉边界换算回布局坐标：视觉 = 布局 + origin * (1 - scale)。
+   */
+  function clampPosition(left, top) {
+    const width = capsuleEl.offsetWidth || 60;
+    const height = capsuleEl.offsetHeight || 60;
+    const scale = getScale();
+    const origin = getTransformOrigin();
+    const vp = getViewport();
+
+    // 缩放使视觉框相对布局框内缩，所以 min 侧要放宽容差
+    const minLeft = vp.left - origin.x * (1 - scale);
+    const minTop = vp.top - origin.y * (1 - scale);
+    const maxLeft = vp.left + vp.width - width * scale - origin.x * (1 - scale);
+    const maxTop = vp.top + vp.height - height * scale - origin.y * (1 - scale);
+
+    const clampedLeft = Math.min(Math.max(left, minLeft), Math.max(minLeft, maxLeft));
+    const clampedTop = Math.min(Math.max(top, minTop), Math.max(minTop, maxTop));
     return { left: clampedLeft, top: clampedTop };
+  }
+
+  /** 胶囊移动后同步气泡位置（气泡求解在 companion.js 内） */
+  function notifyBubble() {
+    if (window.Companion && typeof window.Companion.repositionBubble === 'function') {
+      window.Companion.repositionBubble();
+    }
   }
 
   /** 将胶囊定位到指定坐标，或在视口内就地修正 */
   function reposition(x, y) {
-    const rect = capsuleEl.getBoundingClientRect();
-    let targetLeft = typeof x === 'number' ? x : rect.left;
-    let targetTop = typeof y === 'number' ? y : rect.top;
+    const current = getLayoutPosition();
+    const targetLeft = typeof x === 'number' ? x : current.left;
+    const targetTop = typeof y === 'number' ? y : current.top;
 
     const clamped = clampPosition(targetLeft, targetTop);
     capsuleEl.style.left = clamped.left + 'px';
@@ -72,6 +153,7 @@ export function initFloatingCapsule(options) {
     if (typeof opts.onReposition === 'function') {
       opts.onReposition(clamped);
     }
+    notifyBubble();
   }
 
   function onPointerDown(e) {
@@ -95,9 +177,9 @@ export function initFloatingCapsule(options) {
     startX = e.clientX;
     startY = e.clientY;
 
-    const rect = capsuleEl.getBoundingClientRect();
-    initialLeft = rect.left;
-    initialTop = rect.top;
+    const current = getLayoutPosition();
+    initialLeft = current.left;
+    initialTop = current.top;
     activePointerId = e.pointerId;
 
     // 优先在真实触控 target 上执行 pointerCapture，避免容器 pointer-events: none 造成拒绝
@@ -148,6 +230,7 @@ export function initFloatingCapsule(options) {
       capsuleEl.style.top = clamped.top + 'px';
       capsuleEl.style.right = 'auto';
       capsuleEl.style.bottom = 'auto';
+      notifyBubble();
     }
   }
 
@@ -180,8 +263,7 @@ export function initFloatingCapsule(options) {
       isDragging = false;
       capsuleEl.classList.remove('is-dragging');
 
-      const rect = capsuleEl.getBoundingClientRect();
-      const pos = { left: rect.left, top: rect.top };
+      const pos = getLayoutPosition();
 
       if (typeof opts.onDragEnd === 'function') {
         opts.onDragEnd(pos);
@@ -217,7 +299,7 @@ export function initFloatingCapsule(options) {
   }
 
   function onResize() {
-    // 视口尺寸变化时重新贴边校准
+    // 视口尺寸变化（含软键盘弹出导致的视觉视口变矮）时重新贴边校准
     reposition();
   }
 
@@ -225,6 +307,10 @@ export function initFloatingCapsule(options) {
   capsuleEl.addEventListener('pointerdown', onPointerDown, { passive: true });
   capsuleEl.addEventListener('click', onClick, true);
   window.addEventListener('resize', onResize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onResize);
+    window.visualViewport.addEventListener('scroll', onResize);
+  }
 
   function destroy() {
     capsuleEl.removeEventListener('pointerdown', onPointerDown);
@@ -233,6 +319,10 @@ export function initFloatingCapsule(options) {
     window.removeEventListener('pointercancel', onPointerUp);
     capsuleEl.removeEventListener('click', onClick, true);
     window.removeEventListener('resize', onResize);
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', onResize);
+      window.visualViewport.removeEventListener('scroll', onResize);
+    }
     delete capsuleEl._floatingCapsuleController;
   }
 
