@@ -690,6 +690,32 @@ export function closeModal() {
 }
 
 // ── Settings Modal ─────────────────────────────────────────────────────────
+
+/** 折叠/展开设置分组。默认展开（aria-expanded="true"）。 */
+export function toggleSettingsGroup(btn) {
+  const body = document.getElementById(btn.getAttribute("aria-controls"));
+  if (!body) return;
+  const expanded = btn.getAttribute("aria-expanded") !== "false";
+  btn.setAttribute("aria-expanded", String(!expanded));
+  body.hidden = expanded;
+}
+
+/**
+ * 回显「当前实际生效的 model」。值来自 GET /api/settings（即
+ * get_effective_api_model 的真实请求链路），不写死模型标识。
+ */
+function renderEffectiveModel(modelId) {
+  const el = document.getElementById("set-effective-model");
+  if (!el) return;
+  const id = (modelId || "").trim();
+  if (!id) {
+    el.textContent = "当前生效：未设置（将使用服务端默认值）";
+    return;
+  }
+  const label = id === "deepseek-flash" ? "DeepSeek-Flash" : id;
+  el.textContent = `当前生效：${label} · ${id}`;
+}
+
 export async function openSettingsModal() {
   const overlay = document.getElementById("settings-overlay");
   if (!overlay) return;
@@ -705,7 +731,8 @@ export async function openSettingsModal() {
     document.getElementById("set-base-url").value =
       s.api_base_url || "https://api.deepseek.com";
     document.getElementById("set-model-name").value =
-      s.api_model || "deepseek-v4-flash";
+      s.api_model || "deepseek-flash";
+    renderEffectiveModel(s.api_model);
     const effortEl = document.getElementById("set-reasoning-effort");
     if (effortEl) effortEl.value = s.reasoning_effort || "medium";
     if (s.tts_voice)
@@ -726,6 +753,7 @@ export async function openSettingsModal() {
     }
   } catch (err) {
     console.error("Failed to load settings:", err);
+    renderEffectiveModel("");
   }
 }
 
@@ -823,6 +851,14 @@ export async function saveAppSettings() {
 
     if (effort) {
       setReasoningEffort(effort);
+    }
+
+    // 保存后以服务端生效值回显，避免把输入框里的草稿值当成「当前生效」。
+    try {
+      const latest = await api("/api/settings");
+      renderEffectiveModel(latest.api_model);
+    } catch (err) {
+      console.warn("[Settings] 保存后回读生效模型失败:", err);
     }
 
     if (voice && window.ShadowPlayer) {
@@ -1063,6 +1099,7 @@ Object.assign(window, {
   closeModal,
   openSettingsModal,
   closeSettingsModal,
+  toggleSettingsGroup,
   toggleKeyVisibility,
   testApiKeyConnection,
   saveAppSettings,
