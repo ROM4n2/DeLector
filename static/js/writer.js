@@ -321,6 +321,10 @@ export function toggleInlayHints() {
 // 切到 diag 去展示错误详情（v4.4.5 B2），关闭再打开都应保留那个状态。
 let writerMobilePanelDidAutoSwitch = false;
 
+function isMobileWriterLayout() {
+  return window.matchMedia('(max-width: 860px)').matches;
+}
+
 export function toggleWriterMobilePanel() {
   const panel = document.getElementById('writer-panel');
   const sheet = document.getElementById('writer-mobile-panel-sheet');
@@ -348,6 +352,101 @@ export function closeWriterMobilePanel() {
   if (panel) panel.classList.remove('mobile-panel-open');
   if (sheet) sheet.classList.remove('open');
   document.body.classList.remove('writer-panel-lock');
+}
+
+// ── 移动端视口/键盘让位 ─────────────────────────────────────────────────────
+// Android WebView 的 adjustResize 会缩 layout viewport；adjustPan / iOS 只缩
+// visualViewport。只监听 window.resize 在后者上拿不到键盘高度，所以统一以
+// visualViewport 为准，把结果写成 CSS 变量给底部 sheet 和编辑区用。
+let writerVvFrame = 0;
+let writerMobileLayoutInited = false;
+
+function writerViewportMetrics() {
+  const vv = window.visualViewport;
+  const layoutHeight = document.documentElement.clientHeight || window.innerHeight;
+  const viewportHeight = vv ? vv.height : window.innerHeight;
+  const viewportTop = vv ? vv.offsetTop : 0;
+  const keyboardInset = Math.max(0, layoutHeight - viewportHeight - viewportTop);
+  return { viewportHeight, keyboardInset };
+}
+
+function applyWriterViewportVars() {
+  writerVvFrame = 0;
+  const root = document.documentElement;
+  const { viewportHeight, keyboardInset } = writerViewportMetrics();
+
+  root.style.setProperty('--writer-vvh', `${Math.round(viewportHeight)}px`);
+  // adjustResize：inset=0，布局视口本身就缩到键盘上沿；
+  // adjustPan / iOS：inset>0，展开的 sheet 需要整体抬到键盘上沿，
+  // 否则 bottom:0 会把它压在键盘后面。
+  root.style.setProperty('--writer-keyboard-inset', `${Math.round(keyboardInset)}px`);
+}
+
+function scheduleWriterViewportSync() {
+  if (writerVvFrame) return;
+  writerVvFrame = requestAnimationFrame(applyWriterViewportVars);
+}
+
+function autoResizeWriterTitle(title) {
+  if (!title || title.offsetParent === null) return;
+  title.style.height = 'auto';
+  const maxHeight = isMobileWriterLayout() ? 96 : 120;
+  const nextHeight = Math.min(title.scrollHeight, maxHeight);
+  title.style.height = `${nextHeight}px`;
+  title.style.overflowY = title.scrollHeight > maxHeight ? 'auto' : 'hidden';
+}
+
+function initWriterMobileLayout() {
+  if (writerMobileLayoutInited) return;
+  writerMobileLayoutInited = true;
+
+  const vv = window.visualViewport;
+  if (vv) {
+    vv.addEventListener('resize', scheduleWriterViewportSync);
+    vv.addEventListener('scroll', scheduleWriterViewportSync);
+  }
+  // 老 WebView 没有 visualViewport 时至少还能响应窗口尺寸。
+  window.addEventListener('resize', scheduleWriterViewportSync);
+  applyWriterViewportVars();
+
+  const title = document.getElementById('writer-title');
+  if (title) {
+    title.addEventListener('input', () => autoResizeWriterTitle(title));
+    title.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        title.blur();
+      }
+    });
+    autoResizeWriterTitle(title);
+  }
+
+  const editor = document.getElementById('ide-editor');
+  if (editor) {
+    editor.addEventListener('focus', () => {
+      if (!isMobileWriterLayout()) return;
+      // 等键盘动画结束再量，否则拿到的是收起态高度。
+      setTimeout(() => {
+        editor.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 320);
+    });
+  }
+
+  const view = document.getElementById('view-writer');
+  if (view) {
+    new MutationObserver(() => {
+      if (!view.classList.contains('active')) return;
+      scheduleWriterViewportSync();
+      const el = document.getElementById('writer-title');
+      if (el) autoResizeWriterTitle(el);
+    }).observe(view, { attributes: true, attributeFilter: ['class'] });
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initWriterMobileLayout, { once: true });
+} else {
+  initWriterMobileLayout();
 }
 
 // ── Render Editor Content & Retain Caret ────────────────────────────────────
@@ -880,6 +979,7 @@ export async function openWriterEssay(id) {
 
     const titleInput = document.getElementById('writer-title');
     if (titleInput) titleInput.value = essay.title || '';
+    autoResizeWriterTitle(titleInput);
     setEditorText(essay.content || '');
 
     let analysis = essay.analysis_json;
@@ -911,6 +1011,7 @@ export function clearWriterForm() {
 
   const titleInput = document.getElementById('writer-title');
   if (titleInput) titleInput.value = '';
+  autoResizeWriterTitle(titleInput);
   const editor = document.getElementById('ide-editor');
   if (editor) editor.innerHTML = '';
 
