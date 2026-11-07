@@ -710,3 +710,26 @@ aria-current：模板只标初始 home；main.js 的 show() 切换时同步增�
 测试：test_index_dom_probe + test_frontend_guards + test_writer_mobile 43 passed；build_index_html 3480 行；check_index_html_sync PASS。
 截图：d:\Code\DeLector\.screenshots\t4\（未跟踪）。
 约束：未碰 android/、未跑 sync_android_sources.py。
+
+### 2026-11-07 12:20 | deepseek-v4.1-flash__trae | NOTE
+Caps: filesystem-read, filesystem-write, shell-exec, browser-cdp
+T5（一次性入场 + 列表 stagger）在 worktree dlector-t5 / 分支 feat/motion-t5-enter-stagger 实施（基于 origin/master e19a11a）。
+1) motion.js 新增 enterOnce(root,{cap=6})：给可见直接子元素挂 .dl-enter、root 挂 .dl-stagger、序号封顶，动画结束（enter + step*(cap-1) + 50ms）后自动摘类与序号。摘类是必须的：.view 靠 display 切换，display 变化会让 CSS 动画重播，不摘就等于每次切回重播。reduce 下不挂任何类。
+2) search.js：首次出现结果时对 #search-results 的可见分组 section 入场（结果文本本身不逐条入场）；_s.entered 保证换词/切范围/回来不重播。
+3) cards.js：词汇网格 .card-grid 首次生成时入场一次（_gridEnterPlayed）；切段/翻页/增删卡重渲染不加。
+4) main.js：exam-module-grid 是模板静态 DOM，由首次 show('exam') 触发、_examEnterPlayed 只播一次（views/exam.html 不改）。
+计划 §7 新增偏差 #8（.dl-stagger 在父、.dl-enter 在可见子元素；exam 由 main.js 触发）。
+CDP 实测（1440x900）：exam 7 项 delay 0/40/…/200/200ms、duration 180ms，cleanup 后 animationName=none、anims=0；二次 show('exam') 零重播；搜索 4 组 delay 0..120ms，cleanup 后零类，换词重渲染零重播；卡片网格 43 项 delay 封顶 200ms、cleanup 后零类，切段后 143 项零重播；reduce（matchMedia=true）下三处均 enterCount=0、opacity=1、animName=none。搜索最迟组 120ms 起播 +180ms，无「最后一项等半秒」。
+静态闸门：node --check 4 个改动 JS 通过；build_index_html 3480 行；check_index_html_sync PASS；pytest test_frontend_module_graph + test_frontend_guards + test_index_dom_probe + test_writer_mobile = 59 passed。
+约束：未碰 android/、未跑 sync_android_sources.py、未 git add -A。
+
+### 2026-11-07 12:46 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 首轮 7 个 Python shard 全红：check_frontend_layers 报 cards.js 顶层 `let _gridEnterPlayed` 违反「零顶层 let/var」契约（cards.js 在 MUTABLE_STATE_MODULES）。
+先试图放进 cd-state.js catalog.enterPlayed，被 test_cards_state_split 的 24 叶子逐字钉死测试拒绝（4 failed），已撤销。
+改为容器 dataset：`#cards-container.dataset.enterPlayed`，既无顶层可变状态也不动状态容器契约。gate PASS，72 passed，CDP 复测 C1/C2/C3 行为不变（43 项错峰→cleanup→切段 143 项零重播）。
+
+### 2026-11-07 12:58 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 二轮：7 个卡片探针仍红，根因是沙箱 mock 的 `container = { innerHTML: "" }` 没有真 DOM 必有的 dataset / querySelector，renderCatalogGrid 读 dataset 时 TypeError。按「mock 保真」修 3 个探针桩（cards_catalog_tag_probe / cards_workbench_no_review_probe / cards_wb_source_probe），补 dataset:{} 与 querySelector:()=>null；未改任何断言或期望值。相关 21 个用例全绿。
+
+### 2026-11-07 13:08 | deepseek-v4.1-flash__trae | NOTE
+T5 CI 三轮：仅 unit-3 为真实红 —— wb_search_probe 沙箱切片 renderSearchGroups，新增的 enterOnce 未注入（ReferenceError）。补 `enterOnce: () => 0` 桩（该探针只验转义/分组，不验动画）。unit-4 与 cost-guards 是 matrix fail-fast 触发的 cancelled（日志末尾 "The operation was canceled"，进度 92% 无断言红），不是真失败。probe_json_contract + wb_search 相关 5 个用例全绿。

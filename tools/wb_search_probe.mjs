@@ -259,7 +259,12 @@ const documentStub = {
  * 3. 沙箱：注入被测源码切片 + DOM 桩，真跑
  * ------------------------------------------------------------------------ */
 const vmConsole = { log() {}, warn() {}, error() {}, info() {} };
-const ctx = vm.createContext({ console: JSON_MODE ? vmConsole : console, document: documentStub });
+// 入场动画与本探针无关（它只验转义 / 分组渲染）；桩返回 0 = 未播放，不触碰 DOM。
+const ctx = vm.createContext({
+  console: JSON_MODE ? vmConsole : console,
+  document: documentStub,
+  enterOnce: () => 0,
+});
 vm.runInContext(Object.values(PIECES).join("\n") + "\n", ctx, { filename: "search-slices.js" });
 
 function runRender(resp) {

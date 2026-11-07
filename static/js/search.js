@@ -31,6 +31,7 @@ import { playGermanAudio } from "./player.js";
 import { saveA1WordToDeck } from "./a1_cards.js";
 import { openReader } from "./reader.js";
 import { openText } from "./encounter.js";
+import { enterOnce } from "./motion.js";
 
 /* ── 常量 ─────────────────────────────────────────────────────────────────── */
 
@@ -53,6 +54,7 @@ const _s = {
   results: { vocab: [], example: [], colloc: [], corpus: [] },
   styled: false,
   bound: false,
+  entered: false, // 入场动画只在会话内首次结果渲染播一次（重渲染不重播）
 };
 
 /* ── 工具 ─────────────────────────────────────────────────────────────────── */
@@ -319,6 +321,9 @@ export function renderSearchGroups(resp) {
 
   const empty = el("search-empty");
   if (empty) empty.innerHTML = "";
+  // 入场只作用于四个分组 section（结果文本本身不逐条入场），且只播一次：
+  // 换关键词重渲染、切范围、离开再回来都不重播。
+  if (!_s.entered && enterOnce(el("search-results"))) _s.entered = true;
   const parts = [`共 ${total} 条命中`];
   if (shown !== total) parts.push(`当前展示 ${shown} 条`);
   // truncated 仅表示「语料 hard cap 未扫完」这一真异常（limit 限量走组尾信息提示）。

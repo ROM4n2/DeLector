@@ -196,6 +196,7 @@ import * as ListenLab from "./listen-lab.js";
 import * as HardSentences from "./hard-sentences.js";
 import * as Search from "./search.js";
 import { initUpdateCheck } from "./update.js";
+import { enterOnce } from "./motion.js";
 
 // ── German Workbench 惰性挂载（首屏优化）─────────────────────────────────────
 // index.html 的 workbench iframe 只带 data-src（不设 src）⇒ 首屏不加载它、也不启动其内部
@@ -301,6 +302,10 @@ export function show(view) {
   // 备考域入口（ADR-0005 Task 2）：A1 五模块宿主在 view-exam。徽标计数与
   // 复习盒缓存复用 loadCards（幂等 fetch，cards.js 与 a1_cards.js 都消费它）。
   if (view === "exam") {
+    if (!_examEnterPlayed) {
+      _examEnterPlayed = true;
+      enterOnce(document.getElementById("exam-module-grid"));
+    }
     loadCards();
     setExamModule();
     lazyInitExamCatalog();
@@ -333,6 +338,9 @@ export function openSatzLab() {
 // 它同时需要 setA1Mode（cards.js 链）与 setExamWritingTab（writer.js 链），
 // a1_cards.js / a1_writer.js 互不 import， mediator 只能住根模块。
 let _examModule = "writing";
+// 考试模块网格是模板里的静态 DOM：入场不能写在 HTML 上（页面加载时 view 隐藏，
+// 动画会白跑；留在类上则每次切回来都重播）。改由首次 show('exam') 时触发一次。
+let _examEnterPlayed = false;
 let _currentExamLevel = "A1";
 
 /* ADR-0011 Task 6：等级站点表 —— 加一个等级 = 在此插一项（页签点亮用小写 key）。

@@ -42,6 +42,44 @@ export function stagger(root, { step, cap = 6 } = {}) {
 }
 
 /**
+ * 一次性入场：给 root 中**可见**的直接子元素挂 `.dl-enter`，root 挂 `.dl-stagger`
+ * 并按 0..cap-1 分配 `--stagger-index`；动画结束后自动摘掉类与序号。
+ *
+ * 为什么必须摘：`.view` 靠 `display:none/block` 切换，而 display 变化会让 CSS
+ * 动画从头重播 —— 不摘类的话用户每次切回该视图都会再看一遍入场，违背
+ * 「只在首次渲染触发」。
+ *
+ * reduce 下不挂任何类，直接终态（也不留类，避免用户会话中途关掉 reduce 后突然播放）。
+ *
+ * @param {Element} root 承载入场的容器
+ * @param {{cap?: number}} [options] cap = 参与错峰的元素上限
+ * @returns {number} 实际入场的元素数（0 = 未播放）
+ */
+export function enterOnce(root, { cap = 6 } = {}) {
+  if (!root || prefersReducedMotion()) return 0;
+  const items = Array.from(root.children).filter(
+    (el) => el instanceof HTMLElement && !el.classList.contains("hidden"),
+  );
+  if (!items.length) return 0;
+  const step = tokenMs("--motion-stagger-step");
+  const enter = tokenMs("--motion-enter");
+  root.classList.add("dl-stagger");
+  items.forEach((el, i) => {
+    el.style.setProperty("--stagger-index", String(Math.min(i, cap - 1)));
+    el.classList.add("dl-enter");
+  });
+  const last = Math.min(items.length, cap) - 1;
+  setTimeout(() => {
+    root.classList.remove("dl-stagger");
+    items.forEach((el) => {
+      el.classList.remove("dl-enter");
+      el.style.removeProperty("--stagger-index");
+    });
+  }, enter + step * last + 50);
+  return items.length;
+}
+
+/**
  * 从当前文本数字递增到 `to`（只播一次，调用方负责只调一次）。
  * reduce 下直接落终态；token 缺失时同样落终态。
  *

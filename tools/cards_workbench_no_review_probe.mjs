@@ -200,7 +200,8 @@ if (stripProblems.length) fail(stripProblems);
  * 2. 沙箱：只桩 UI，被测逻辑全部来自上面的真源码切片
  * ------------------------------------------------------------------------ */
 function buildCtx() {
-  const container = { innerHTML: "" };
+  // 真 DOM 容器必有 dataset / querySelector；renderCatalogGrid 的入场逻辑会用到。
+  const container = { innerHTML: "", dataset: {}, querySelector() { return null; } };
   const sandbox = {
     console,
     document: {
