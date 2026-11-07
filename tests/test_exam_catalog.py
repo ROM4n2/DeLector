@@ -3,8 +3,10 @@
 
 端点契约：
 - GET /api/exams/catalog → {"levels": [{"id", "title", "modules": [
-  {"id", "title", "panel", "api_prefix", "count"}]}]}。纯只读导航发现层，
+  {"id", "title", "unit", "panel", "api_prefix", "count"}]}]}。纯只读导航发现层，
   **不迁移**任何 /api/a1/* 取题端点（旧契约照常可用，见 smoke 锚）。
+- `unit` 是展示单位（题/套/词），由本层单源给出，前端不得自行推断；
+  注册项缺 unit 时输出空串（前端只在非空时追加，避免「undefined 题」）。
 - count 全部由代码注册目录（exam_catalog.py 单源）从数据模块常量实时
   推导：不复制数据、不入 SQLite；数据模块缺失/重命名时 count 记 0，
   不得拖垮 server 启动。
@@ -84,8 +86,18 @@ def test_catalog_endpoint_contract(client):
     assert {"writing", "hoeren", "lesen", "sprechen", "vocab"} <= set(mods)
     for m in mods.values():
         assert m["title"], "模块 %s 缺 title" % m["id"]
+        assert m["unit"], "模块 %s 缺 unit（展示单位由后端单源给出）" % m["id"]
         assert m["panel"], "模块 %s 缺 panel（面板容器 id）" % m["id"]
         assert m["api_prefix"], "模块 %s 缺 api_prefix（取题端点前缀）" % m["id"]
+
+    # 单位语义钉死：题（写作/口语）、套（听力/阅读）、词（考纲词表）。
+    assert {mid: m["unit"] for mid, m in mods.items()} == {
+        "writing": "题",
+        "hoeren": "套",
+        "lesen": "套",
+        "sprechen": "题",
+        "vocab": "词",
+    }
 
     # count 是数据推导不是硬编码：必须等于数据模块常量的实测长度。
     assert mods["writing"]["count"] == (
@@ -101,6 +113,7 @@ def test_catalog_endpoint_contract(client):
     a2_mods = {m["id"]: m for m in a2["modules"]}
     assert "vocab" in a2_mods
     assert a2_mods["vocab"]["count"] == len(get_vocab_by_cefr("A2", sources={"official"})["words"])
+    assert a2_mods["vocab"]["unit"] == "词"
     assert a2_mods["vocab"]["api_prefix"] == "/api/a2"
 
     # ADR-0011 Task 6：B1 考纲模块注册，count 动态推导（官方精选口径 sources={"official"}，禁止硬编码）
@@ -109,6 +122,7 @@ def test_catalog_endpoint_contract(client):
     assert "vocab" in b1_mods
     assert b1_mods["vocab"]["count"] == len(get_vocab_by_cefr("B1", sources={"official"})["words"])
     assert b1_mods["vocab"]["count"] > 0, "B1 词库必须非空（数据层已就绪）"
+    assert b1_mods["vocab"]["unit"] == "词"
     assert b1_mods["vocab"]["panel"] == "exam-cards-family"
     assert b1_mods["vocab"]["api_prefix"] == "/api/cards"
 
@@ -160,9 +174,12 @@ def test_catalog_extension_point_adding_level(monkeypatch, client):
     b1 = {m["id"]: m for m in levels["B1"]["modules"]}
     assert b1["hoeren"]["count"] == 7
     assert set(b1["lesen"].keys()) == set(b1["hoeren"].keys()), (
-        "缺 count_fn 的模块也必须输出同构结构（id/title/panel/api_prefix/count）"
+        "缺 count_fn 的模块也必须输出同构结构（id/title/unit/panel/api_prefix/count）"
     )
     assert b1["lesen"]["count"] == 0
+    # 未注册 unit 的模块输出空串（不是 None / 缺字段），前端据此走「只渲染数字」兜底。
+    assert b1["hoeren"]["unit"] == ""
+    assert b1["lesen"]["unit"] == ""
 
 
 # ── 防御：count_fn 抛错（数据模块重命名）不拖垮端点 ─────────────────────────
