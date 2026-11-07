@@ -275,3 +275,32 @@ func TestRegistryConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestResolveModelNamePrecedence(t *testing.T) {
+	cases := []struct {
+		name      string
+		flagValue string
+		flagSet   bool
+		envValue  string
+		wantModel string
+		wantSrc   provider.ModelSource
+	}{
+		{"API_MODEL 未设置落回默认", "", false, "", provider.DeepSeekDefaultModel, provider.ModelSourceDefault},
+		{"API_MODEL 为空串落回默认", "", false, "", provider.DeepSeekDefaultModel, provider.ModelSourceDefault},
+		{"API_MODEL 纯空白落回默认", "", false, "   ", provider.DeepSeekDefaultModel, provider.ModelSourceDefault},
+		{"API_MODEL 有效值生效并去空白", "", false, "  deepseek-v4-flash  ", "deepseek-v4-flash", provider.ModelSourceEnv},
+		{"显式 flag 优先于 API_MODEL", "deepseek-v4-pro", true, "deepseek-v4-flash", "deepseek-v4-pro", provider.ModelSourceFlag},
+		{"显式 flag 等于默认值仍优先", provider.DeepSeekDefaultModel, true, "deepseek-v4-flash", provider.DeepSeekDefaultModel, provider.ModelSourceFlag},
+		{"flag 为空串时回落到 API_MODEL", "   ", true, "deepseek-v4-flash", "deepseek-v4-flash", provider.ModelSourceEnv},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotModel, gotSrc := provider.ResolveModelName(tc.flagValue, tc.flagSet, tc.envValue)
+			if gotModel != tc.wantModel || gotSrc != tc.wantSrc {
+				t.Errorf("ResolveModelName(%q, %v, %q) = (%q, %q), want (%q, %q)",
+					tc.flagValue, tc.flagSet, tc.envValue, gotModel, gotSrc, tc.wantModel, tc.wantSrc)
+			}
+		})
+	}
+}

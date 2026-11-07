@@ -34,9 +34,18 @@ func (sh *ServerHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	// 标准部署下 Python supervisor 会丢弃子进程 stdout/stderr，启动日志不可见；
+	// 因此把「启动默认模型 + 决策来源」也放进健康探针，运行时可直接观测。
+	// 注意：逐次请求仍可用请求体或 X-Model 头覆盖实际模型。
+	model, modelSource := "", ""
+	if sh.agent != nil {
+		model, modelSource = sh.agent.model, string(sh.agent.modelSource)
+	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":  "ok",
-		"service": "delector-go-companion-agent",
+		"status":       "ok",
+		"service":      "delector-go-companion-agent",
+		"model":        model,
+		"model_source": modelSource,
 	})
 }
 

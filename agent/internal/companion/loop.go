@@ -15,7 +15,8 @@ import (
 
 const (
 	DefaultMaxTurns = 6
-	DefaultModel    = "deepseek-flash"
+	// DefaultModel 与 provider.DeepSeekDefaultModel 同源，默认模型名只保留一处字面量。
+	DefaultModel = provider.DeepSeekDefaultModel
 )
 
 // StudyContext 承载学习者前端当前视口上下文。
@@ -75,6 +76,7 @@ type CompanionAgent struct {
 	client          *openai.Client
 	runner          ToolRunner
 	model           string
+	modelSource     provider.ModelSource
 	reasoningEffort string
 	registry        *provider.Registry
 	fallbackClient  *openai.Client
@@ -88,11 +90,12 @@ func NewCompanionAgent(client *openai.Client, runner ToolRunner, model string) *
 		model = DefaultModel
 	}
 	return &CompanionAgent{
-		client:   client,
-		runner:   runner,
-		model:    model,
-		registry: provider.NewDefaultRegistry(),
-		pipeline: NewDefaultTurnPipeline(),
+		client:      client,
+		runner:      runner,
+		model:       model,
+		modelSource: provider.ModelSourceDefault,
+		registry:    provider.NewDefaultRegistry(),
+		pipeline:    NewDefaultTurnPipeline(),
 	}
 }
 
@@ -107,6 +110,13 @@ func (a *CompanionAgent) WithRegistry(reg *provider.Registry) *CompanionAgent {
 // WithReasoningEffort 挂载设置页的缺省思考强度（请求体显式带值时以请求为准）。
 func (a *CompanionAgent) WithReasoningEffort(effort string) *CompanionAgent {
 	a.reasoningEffort = effort
+	return a
+}
+
+// WithModelSource 记录启动时默认模型名的决策来源（flag / env / default），仅供健康探针展示。
+// 逐次请求仍可通过请求体或 X-Model 头覆盖实际使用的模型。
+func (a *CompanionAgent) WithModelSource(src provider.ModelSource) *CompanionAgent {
+	a.modelSource = src
 	return a
 }
 

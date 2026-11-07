@@ -37,6 +37,35 @@ const (
 	CustomMaxOutputTokens    = 4096
 )
 
+// ModelSource 标记最终生效的默认模型名由哪一层决定（启动日志与 /health 共用）。
+type ModelSource string
+
+const (
+	// ModelSourceFlag 表示用户显式传入 --model。
+	ModelSourceFlag ModelSource = "flag"
+	// ModelSourceEnv 表示由非空 API_MODEL 环境变量注入（标准部署由 Python supervisor 写入）。
+	ModelSourceEnv ModelSource = "env"
+	// ModelSourceDefault 表示既无显式 --model 也无非空 API_MODEL，落回内置常量。
+	ModelSourceDefault ModelSource = "default"
+)
+
+// ResolveModelName 解析最终生效的模型名，优先级：显式 --model > 非空 API_MODEL > 内置默认常量。
+//
+// flagSet 记录的是「用户是否显式传了 --model」，而不是拿值与默认常量比较：显式传入的值
+// 即使恰好等于默认常量，也不会再被 API_MODEL 静默顶掉；未设置、空串或纯空白的
+// API_MODEL 一律回落到 DeepSeekDefaultModel，默认值不会被静默绕过。
+func ResolveModelName(flagValue string, flagSet bool, envValue string) (string, ModelSource) {
+	if flagSet {
+		if v := strings.TrimSpace(flagValue); v != "" {
+			return v, ModelSourceFlag
+		}
+	}
+	if v := strings.TrimSpace(envValue); v != "" {
+		return v, ModelSourceEnv
+	}
+	return DeepSeekDefaultModel, ModelSourceDefault
+}
+
 // ModelSpec 封装特定模型的静态硬件上下文配额与特性能力。
 type ReasoningEffort string
 

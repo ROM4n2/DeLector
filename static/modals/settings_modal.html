@@ -32,7 +32,10 @@
             aria-controls="settings-group-ai"
             onclick="toggleSettingsGroup(this)"
           >
-            <span class="settings-group-title">AI 深度剖析与模型</span>
+            <span class="settings-group-heading">
+              <span class="settings-group-title">AI 深度剖析与模型</span>
+              <span class="settings-group-value" id="set-reasoning-summary">思考：标准</span>
+            </span>
             <svg class="ui-ico settings-group-chevron" aria-hidden="true" focusable="false">
               <use href="#ui-ico-chevron-down"></use>
             </svg>
@@ -125,15 +128,53 @@
             </div>
 
             <div class="modal-field">
-              <label class="input-label" for="set-reasoning-effort">思考强度 (Reasoning Effort)</label>
-              <select id="set-reasoning-effort" class="modal-input">
-                <option value="none">关闭思考 (None) - 仅常规输出</option>
-                <option value="low">极速 (Low) - 快速要点推演</option>
-                <option value="medium" selected>平衡 (Medium) - 标准语法场域分析</option>
-                <option value="high">深度 (High) - 德福/歌德长难句深挖</option>
-              </select>
+              <span class="input-label" id="set-reasoning-effort-label">思考强度 (Reasoning Effort)</span>
+              <div
+                id="set-reasoning-effort"
+                class="settings-reasoning"
+                role="radiogroup"
+                aria-labelledby="set-reasoning-effort-label"
+              >
+                <button
+                  type="button"
+                  class="settings-reasoning-btn"
+                  role="radio"
+                  aria-checked="false"
+                  data-effort="none"
+                  tabindex="-1"
+                  onclick="selectReasoningEffort('none')"
+                >
+                  关闭
+                </button>
+                <button
+                  type="button"
+                  class="settings-reasoning-btn"
+                  role="radio"
+                  aria-checked="true"
+                  data-effort="medium"
+                  tabindex="0"
+                  onclick="selectReasoningEffort('medium')"
+                >
+                  标准
+                </button>
+                <button
+                  type="button"
+                  class="settings-reasoning-btn"
+                  role="radio"
+                  aria-checked="false"
+                  data-effort="high"
+                  tabindex="-1"
+                  onclick="selectReasoningEffort('high')"
+                >
+                  深读
+                </button>
+              </div>
+              <div class="settings-reasoning-hint" id="set-reasoning-hint">
+                标准：常规语法场域分析
+              </div>
+              <div class="settings-reasoning-status" id="set-reasoning-status" role="status" aria-live="polite"></div>
               <div class="hint-text">
-                调节 DeepSeek 与思维链模型的深度推演强度。
+                调节 DeepSeek 与思维链模型的深度推演强度；点选后立即保存并生效。
               </div>
             </div>
 
