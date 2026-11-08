@@ -941,10 +941,12 @@ export function renderCurrentQuizCard() {
     const correctIdx = options.findIndex((o) => o.isCorrect);
 
     if (optContainer) {
+      // 内联 onclick 只能取 window 上的桥名（main.js: selectChoiceOption）；
+      // 直接写模块内的 submitChoice 会抛 ReferenceError，反馈静默失效。
       optContainer.innerHTML = options
         .map(
           (opt, idx) => `
-        <button class="quiz-choice-btn" onclick="submitChoice(${idx}, ${correctIdx})">
+        <button class="quiz-choice-btn" onclick="selectChoiceOption(${idx}, ${correctIdx})">
           <span style="font-family:var(--mono);margin-right:0.5rem;color:var(--pencil);">${String.fromCharCode(65 + idx)}.</span>
           ${esc(opt.text)}
         </button>
